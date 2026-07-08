@@ -1,0 +1,23 @@
+PATCH 122 -- MAINMENU mouse-cursor colour: thread the dropped al=0xff (white).
+
+The at-rest mouse cursor is drawn by the masked blit FUN_0000_0db8 as `fb = sprite AND d5c2`, where
+d5c2 is the cursor colour mask set via DGROUP:0x1598 (= driver FUN_0000_2d1f).  In FUN_0000_e714 the
+screen-enter does `mov al,0xff; call [DGROUP:0x1598]` -> colour = 0xff, so the white (0xff) arrow
+sprite stays white.  Ghidra's __allregs indirect-vector site dropped al -> 2d1f received a stale 0xfe
+-> the cursor was drawn in palette index 254 (red) instead of 255 (white).  Thread al=0xff.
+asm-verified: 0xe724.
+--- a/fist.c
++++ b/fist.c
+@@ -34200,7 +34200,11 @@
+   FUN_0000_be0e(4);
+   DAT_1000_c78c = 0x100;
+   FUN_0000_e40e(param_1,param_3);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d598)))();
++  /* PATCH 122: MAINMENU cursor colour.  asm 0xe724 `mov al,0xff; call [DGROUP:0x1598]` sets the
++     mouse-cursor colour mask (d5c2, ANDed with the arrow sprite in 0db8) to 0xff = WHITE.  The
++     __allregs vector site dropped al=0xff -> 2d1f got a stale register (0xfe) -> the cursor rendered
++     in palette index 254 (red) instead of 255 (white).  Thread the colour. */
++  ((void (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_d598)))(0xff);
+   FUN_1000_38cc();
+   DAT_2000_b78e = 10;
+   uVar4 = 0xf7b8;
