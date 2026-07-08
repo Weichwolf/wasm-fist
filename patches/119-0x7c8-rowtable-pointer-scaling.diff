@@ -1,0 +1,98 @@
+PATCH 119 -- COORDINATED 0x7c8 scanline row-offset table pointer-scaling fix (DD2 "pointer scaling" class).
+
+The DGROUP:0x7c8 row-offset table maps screen row -> byte offset (row*320) for every driver sprite/
+glyph/rect blit.  It is BUILT by FUN_0000_0284 (mode-set init) and FUN_0000_02c1 (per-pitch) with
+`stos ax` = 200 WORD entries at a 2-byte stride, but Ghidra typed the store pointer `int*` (4-byte
+stride under gcc).  Readers index it at byte offset row*2 (WORD stride, e.g. FUN_0000_1091 the box
+fill reads `rowtab[y0]` as uint16_t), so the mismatched builder made every reader see rowtab[row/2]
+= HALF the intended row (the menu box/items sat at row 31 instead of 62).
+
+Fixing the builder ALONE regresses because the still-`int*`-typed *readers* then read 4 bytes of the
+word table and OR rowtab[row+1] into the high half (breaks the mode-set blit path FUN_0000_2fd7).  So
+this is one coordinated change: builder writes WORD entries at word stride (0284 + 02c1), and the
+reached reader 2fd7 reads a WORD.  FUN_0000_1091 already reads uint16_t (patch 060) -> now correct.
+The remaining literal-0x7c8 / c794 readers (putpixel/getpixel 0edc/0efa, the sprite blitters) are not
+on the menu render path (they retain their pristine base-lost form and are reconstructed when reached).
+
+asm-verified: 0x2b5 (0284 fill), 0x304a (2fd7 `add ax,[bx+0x7c8]` 16-bit load).
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1119,15 +1119,23 @@
+   *puVar5 = 0;
+   iVar3 = 0;
+   iVar4 = 100;
+-  piVar6 = (int *)&DAT_1000_c7c8;
+-  do {
+-    piVar1 = piVar6 + 1;
+-    *piVar6 = iVar3;
+-    piVar6 = piVar6 + 2;
+-    *piVar1 = iVar3 + 0x140;
+-    iVar3 = iVar3 + 0x280;
+-    iVar4 = iVar4 + -1;
+-  } while (iVar4 != 0);
++  /* PATCH 119: the DGROUP:0x7c8 scanline row-offset table is 16-bit WORD entries, not int.
++     asm 0x2b5: `xor ax,ax; mov bx,0x140; mov cx,0x64; L: stos ax; add ax,bx; stos ax; add ax,bx;
++     loop L` = 200 WORD entries rowtab[n]=n*0x140 at a 2-byte stride (stos ax = store WORD, di+=2).
++     Ghidra typed piVar6 `int*` (4-byte stride under gcc) -> the entries were written 4-byte-strided
++     AND overflowed 800 bytes into the next table; every rowtable reader (word offset row*2) then
++     read rowtab[row/2] = HALF the requested row (the menu box/glyphs/cursor at half height).
++     Write true 16-bit words at the word stride the asm and the readers agree on. */
++  {
++    undefined2 *pwVar = (undefined2 *)&DAT_1000_c7c8;
++    do {
++      pwVar[0] = (undefined2)iVar3;
++      pwVar[1] = (undefined2)(iVar3 + 0x140);
++      pwVar = pwVar + 2;
++      iVar3 = iVar3 + 0x280;
++      iVar4 = iVar4 + -1;
++    } while (iVar4 != 0);
++  }
+   _DAT_1000_c79a = 0x140;
+   return;
+ }
+@@ -1158,18 +1166,23 @@
+     if (param_1 == puVar5[1]) goto LAB_0000_02e2;
+   }
+   puVar4[1] = param_1;
+-  piVar6 = (int *)puVar4[2];
+   iVar3 = 100;
+   iVar2 = 0;
+-  do {
+-    piVar1 = piVar6 + 1;
+-    *piVar6 = iVar2;
+-    piVar6 = piVar6 + 2;
+-    *piVar1 = iVar2 + param_1;
+-    iVar2 = iVar2 + param_1 + param_1;
+-    iVar3 = iVar3 + -1;
+-    puVar5 = puVar4;
+-  } while (iVar3 != 0);
++  /* PATCH 119: per-pitch row-table build -- same WORD-stride fix as 0284, and rebase the table
++     offset puVar4[2] (a DGROUP near offset; the driver runs ES=DGROUP) onto g_mem.  asm:
++     `mov di,[node+4]; stos ax x2 per iter` -> 200 WORD entries rowtab[n]=n*pitch.  (Only reached
++     for non-320 pitches; the menu uses pitch 0x140 and returns early above.) */
++  {
++    undefined2 *pwVar = (undefined2 *)(g_mem + 0x1c000 + (uint16_t)puVar4[2]);
++    do {
++      pwVar[0] = (undefined2)iVar2;
++      pwVar[1] = (undefined2)(iVar2 + param_1);
++      pwVar = pwVar + 2;
++      iVar2 = iVar2 + param_1 + param_1;
++      iVar3 = iVar3 + -1;
++      puVar5 = puVar4;
++    } while (iVar3 != 0);
++  }
+ LAB_0000_02e2:
+   *param_2 = *puVar5;
+   LOCK();
+@@ -7632,7 +7645,10 @@
+   /* PATCH 102: base-loss.  asm 0x304a `add ax,[bx+0x7c8]` (bx=iVar1*2) reads DS:[bx+0x7c8]; the
+      driver runs with DS=DGROUP (0x1c00), so this is the DGROUP row-offset table at 0x7c8 (a BSS table
+      filled by driver init), not a raw host pointer near NULL (SEGV). */
+-  _DAT_1000_d5c8 = iVar2 + *(int *)(g_mem + 0x1c000 + iVar1 * 2 + 0x7c8);
++  /* PATCH 119: WORD read (asm 0x304a `add ax,[bx+0x7c8]` is a 16-bit load) of the now
++     word-strided rowtab -- was `*(int*)` (4-byte read) which, over a WORD table, OR'd
++     rowtab[row+1] into the high half and corrupted the dest offset. */
++  _DAT_1000_d5c8 = iVar2 + *(uint16_t *)(g_mem + 0x1c000 + iVar1 * 2 + 0x7c8);
+   iVar1 = (iVar2 + _DAT_1000_d5da) - _DAT_1000_c732;
+   if (_DAT_1000_c732 <= (uint)(iVar2 + _DAT_1000_d5da)) {
+     _DAT_1000_d5bc = _DAT_1000_d5bc - iVar1;
