@@ -1,0 +1,311 @@
+PATCH 121 -- MAINMENU version-string glyph blitter: recover the c684 entry (0x19ae) + fix the
+per-glyph blit (FUN_0000_19ea) base-losses.
+
+The bottom-of-screen version string "AF-FD 1U10" is drawn glyph-by-glyph by 5591 via the driver text
+vector c684 (= MGAVIDEO seg:0x19ae).  0x19ae is a mid-function entry Ghidra folded into FUN_0000_198e,
+so it was absent from the driver fmap and the c684 dispatch reached nothing -> no version string.
+And the glyph blit itself, FUN_0000_19ea, was decompiled with its font segment [0x71a], framebuffer
+segment [bx] (=[0x736][0]), text-state struct base [0x736] and rowtable all base-lost, plus the
+8-bits/row plot idiom (`add ah,ah; je; inc di; adc cx,cx; sub di,cx; rep stos`) mangled into a wrong
+span loop -> it would have drawn garbage even if reached.
+
+Fix: reconstruct 0x19ae (the wrapper: fb-check -> 2d6d transform + rowtable setup + 19ea + 2e12) and
+register it in the fmap so c684 resolves; reconstruct 19ea instruction-faithfully from the asm
+(0x19ea..0x1b5c) -- 1-bpp glyph bitmap (byte0 = blank flag, then one byte per row, MSB-first, set
+bits get the colour) drawn at rowtab[cursor.row]+cursor.col in the framebuffer segment, then the
+cursor-advance and the control-character (bs/lf/cr/ff/...) sub-cases.  asm-verified: 0x19ae, 0x19ea.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -355,6 +355,7 @@
+ void __allregs FUN_0000_1963(void);
+ void __allregs FUN_0000_198e(undefined2 param_1,int param_2,uint param_3,uint *param_4);
+ void __allregs FUN_0000_19ca(int param_1,undefined2 *param_2,undefined2 param_3,int param_4);
++void __allregs FUN_0000_19ae(byte param_1);
+ void __allregs FUN_0000_19ea(byte param_1);
+ void __allregs FUN_0000_1b5c(undefined1 param_1);
+ void __allregs FUN_0000_1b78(int param_1,undefined2 *param_2,undefined2 param_3,int param_4);
+@@ -4369,178 +4370,112 @@
+ }
+ 
+ 
+-/* ===== ((uint)(uintptr_t)&FUN_0000_19ea) @ 0000:19ea ===== */
++/* ===== ((uint)(uintptr_t)&FUN_0000_19ae) @ 0000:19ae ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
++void __allregs FUN_0000_19ae(byte param_1)
++
++{
++  /* PATCH 121: c684 glyph-blit ENTRY (asm 0x19ae) -- a mid-function entry Ghidra folded into
++     FUN_0000_198e, so it was missing from the driver fmap and the per-glyph text vector c684
++     (=driver 0x19ae) dispatched nowhere -> the MAINMENU version string never drew.  Reconstructed:
++     if [0x736][0]==0xa000 (framebuffer) run the coord transform 2d6d + rowtable setup then blit,
++     else blit directly.  al=param_1 = character. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t boff = *(uint16_t *)(dg + 0x736);
++  if (*(uint16_t *)(dg + boff) == 0xa000) {
++    FUN_0000_2d6d((int *)(uintptr_t)(uint16_t)(boff + 0x1c));   /* bx=[0x736]+0x1c */
++    *(uint16_t *)(dg + 0x794) = 0x7c8;
++    *(uint16_t *)(dg + 0x796) = 0x140;
++    FUN_0000_19ea(param_1);
++    FUN_0000_2e12();
++  } else {
++    FUN_0000_19ea(param_1);
++  }
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_19ea) @ 0000:19ea ===== */
+ 
+ void __allregs FUN_0000_19ea(byte param_1)
+ 
+ {
+-  undefined1 *puVar1;
+-  undefined1 uVar2;
+-  undefined2 uVar3;
+-  byte bVar4;
+-  undefined2 uVar5;
+-  undefined2 *puVar6;
+-  byte bVar7;
+-  uint uVar8;
+-  int iVar9;
+-  byte *pbVar10;
+-  undefined1 *puVar11;
+-  undefined1 *puVar12;
+-  bool bVar13;
+-  
+-  puVar6 = _DAT_1000_c736;
+-  uVar5 = _DAT_1000_c71a;
+-  uVar2 = *(undefined1 *)(_DAT_1000_c736 + 0xc);
+-  if (!CARRY1(param_1,param_1)) {
+-    uVar2 = *(undefined1 *)(_DAT_1000_c736 + 0xb);
+-  }
+-  pbVar10 = (byte *)*(undefined2 *)(_DAT_1000_c736[3] + (uint)(byte)(param_1 * '\x02'));
+-  DAT_1000_c792 = uVar2;
+-  if (*pbVar10 == 0) {
+-    bVar7 = param_1 & 0x7f;
+-    if (bVar7 == 7) {
+-      FUN_0000_2c7b();
+-    }
+-    else if (bVar7 == 8) {
+-      iVar9 = _DAT_1000_c736[10];
+-      _DAT_1000_c736[0xe] = _DAT_1000_c736[0xe] - iVar9;
+-      puVar6[0x10] = puVar6[0x10] - iVar9;
+-      iVar9 = puVar6[5] + puVar6[7] + puVar6[9];
+-      puVar6[0xf] = puVar6[0xf] - iVar9;
+-      puVar6[0x11] = puVar6[0x11] - iVar9;
+-    }
+-    else if (bVar7 == 10) {
+-      iVar9 = _DAT_1000_c736[6] + _DAT_1000_c736[8] + _DAT_1000_c736[10];
+-      _DAT_1000_c736[0xe] = _DAT_1000_c736[0xe] + iVar9;
+-      puVar6[0x10] = puVar6[0x10] + iVar9;
+-    }
+-    else if (bVar7 == 0xd) {
+-      iVar9 = _DAT_1000_c736[0xd];
+-      _DAT_1000_c736[0xf] = iVar9;
+-      puVar6[0x11] = iVar9 + puVar6[5];
+-    }
+-    else if (bVar7 == 0xc) {
+-      iVar9 = _DAT_1000_c736[0xd];
+-      _DAT_1000_c736[0xf] = iVar9;
+-      puVar6[0x11] = iVar9 + puVar6[5];
+-      iVar9 = puVar6[6] + puVar6[8] + puVar6[10];
+-      puVar6[0xe] = puVar6[0xe] + iVar9;
+-      puVar6[0x10] = puVar6[0x10] + iVar9;
++  /* PATCH 121: driver per-glyph blit (asm 0x19ea..0x1b5c) -- the version-string / text renderer.
++     Ghidra decompiled it but dropped the font segment [0x71a], the framebuffer segment [bx]
++     (=[0x736][0]), the DGROUP base of the text-state struct [0x736], and the rowtable base/width,
++     AND mangled the 8-bits/row plot idiom (`add ah,ah; je; inc di; adc cx,cx; sub di,cx; rep stos`)
++     into a wrong unrolled span loop.  Reconstructed instruction-faithfully: al=char; the glyph is a
++     1-bpp bitmap (MSB first, up to 8 px/row) in the font segment (byte0 = blank-flag, then one byte
++     per row); set bits get the colour, clear bits are transparent (the je-skip of trailing zero bits
++     is visually identical to a plain 8-bit plot). */
++  uint8_t  *dg   = g_mem + 0x1c000;
++  uint16_t  boff = *(uint16_t *)(dg + 0x736);   /* text-state struct DGROUP near offset */
++  uint8_t  *st   = dg + boff;                    /* struct base (DS = DGROUP) */
++  uint16_t  fseg = *(uint16_t *)(dg + 0x71a);    /* font segment */
++  int       hi   = (param_1 & 0x80) != 0;        /* CF from `add al,al` */
++  uint8_t   color = hi ? st[0x18] : st[0x16];    /* colour byte (hi/lo palette) */
++  dg[0x792] = color;
++  {
++    uint16_t tbl  = *(uint16_t *)(st + 6);                    /* font glyph-offset table */
++    uint16_t ch2  = (uint8_t)(param_1 + param_1);             /* al = al+al */
++    uint16_t goff = *(uint16_t *)(g_mem + ((uint32_t)fseg << 4) + (uint16_t)(tbl + ch2));
++    uint8_t *gp   = g_mem + ((uint32_t)fseg << 4) + goff;     /* glyph data */
++    if (gp[0] != 0) {                                          /* lods al; or al,al; jne -> blit */
++      uint16_t rtb   = *(uint16_t *)(dg + 0x794);              /* rowtable base (0x7c8) */
++      uint16_t row   = *(uint16_t *)(st + 0x1c);               /* cursor row */
++      uint16_t di0   = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(rtb + row * 2)) /* rowtab[row] WORD */
++                                  + *(uint16_t *)(st + 0x1e)); /* + cursor col */
++      uint16_t fbseg = *(uint16_t *)(st + 0);                  /* es = [bx] = framebuffer seg */
++      uint8_t *fb    = g_mem + ((uint32_t)fbseg << 4);
++      uint16_t pitch = *(uint16_t *)(dg + 0x796);              /* 0x140 */
++      uint8_t *bmp   = gp + 1;                                 /* rows start after the flag byte */
++      int      dx    = *(uint16_t *)(st + 0x0c) - 1;           /* height - 1 (asm dec dx; jne) */
++      uint16_t bp    = di0;
++      do {
++        uint8_t b = *bmp++;
++        uint16_t di = bp;
++        int k;
++        for (k = 0; k < 8; k++) if (b & (0x80 >> k)) fb[(uint16_t)(di + k)] = color;
++        bp = (uint16_t)(bp + pitch);
++      } while (--dx != 0);
++      { int16_t a = *(int16_t *)(st + 0x14);                   /* advance cursor by char width */
++        *(int16_t *)(st + 0x1c) = (int16_t)(*(int16_t *)(st + 0x1c) + a);
++        *(int16_t *)(st + 0x20) = (int16_t)(*(int16_t *)(st + 0x20) + a); }
++      { int16_t a = (int16_t)(*(int16_t *)(st + 0x0a) + *(int16_t *)(st + 0x0e) + *(int16_t *)(st + 0x12));
++        *(int16_t *)(st + 0x1e) = (int16_t)(*(int16_t *)(st + 0x1e) + a);
++        *(int16_t *)(st + 0x22) = (int16_t)(*(int16_t *)(st + 0x22) + a); }
++      return;
+     }
+-    else if (bVar7 == 0xe) {
+-      _DAT_1000_c736[0xf] = _DAT_1000_c736[0xf] + 1;
+-      puVar6[0x11] = puVar6[0x11] + 1;
++  }
++  {                                                            /* control-char path (asm 0x1ab7..) */
++    uint8_t c = param_1 & 0x7f;                                /* al = (char*2)>>1 = char&0x7f */
++    if (c == 7) { FUN_0000_2c7b(); return; }
++    if (c == 8) {
++      int16_t a = *(int16_t *)(st + 0x14);
++      *(int16_t *)(st + 0x1c) -= a; *(int16_t *)(st + 0x20) -= a;
++      { int16_t a2 = (int16_t)(*(int16_t *)(st + 0x0a) + *(int16_t *)(st + 0x0e) + *(int16_t *)(st + 0x12));
++        *(int16_t *)(st + 0x1e) -= a2; *(int16_t *)(st + 0x22) -= a2; }
++      return;
+     }
+-    else if (bVar7 == 0xf) {
+-      _DAT_1000_c736[0xf] = _DAT_1000_c736[0xf] + -1;
+-      puVar6[0x11] = puVar6[0x11] + -1;
++    if (c == 0xa) {
++      int16_t a = (int16_t)(*(int16_t *)(st + 0x0c) + *(int16_t *)(st + 0x10) + *(int16_t *)(st + 0x14));
++      *(int16_t *)(st + 0x1c) += a; *(int16_t *)(st + 0x20) += a; return;
++    }
++    if (c == 0xd) {
++      int16_t a = *(int16_t *)(st + 0x1a);
++      *(int16_t *)(st + 0x1e) = a;
++      *(int16_t *)(st + 0x22) = (int16_t)(a + *(int16_t *)(st + 0x0a)); return;
++    }
++    if (c == 0xc) {
++      int16_t a = *(int16_t *)(st + 0x1a);
++      *(int16_t *)(st + 0x1e) = a;
++      *(int16_t *)(st + 0x22) = (int16_t)(a + *(int16_t *)(st + 0x0a));
++      { int16_t a2 = (int16_t)(*(int16_t *)(st + 0x0c) + *(int16_t *)(st + 0x10) + *(int16_t *)(st + 0x14));
++        *(int16_t *)(st + 0x1c) += a2; *(int16_t *)(st + 0x20) += a2; }
++      return;
+     }
+-  }
+-  else {
+-    puVar11 = (undefined1 *)
+-              (*(int *)(_DAT_1000_c736[0xe] * 2 + _DAT_1000_c794) + _DAT_1000_c736[0xf]);
+-    uVar3 = *_DAT_1000_c736;
+-    iVar9 = _DAT_1000_c736[6] + -1;
+-    do {
+-      pbVar10 = pbVar10 + 1;
+-      bVar7 = *pbVar10;
+-      bVar13 = CARRY1(bVar7,bVar7);
+-      bVar4 = bVar7 * '\x02';
+-      puVar12 = puVar11;
+-      if (bVar4 != 0) {
+-        uVar8 = (uint)bVar13;
+-        puVar12 = puVar11 + (1 - uVar8);
+-        for (; uVar8 != 0; uVar8 = uVar8 - 1) {
+-          puVar1 = puVar12;
+-          puVar12 = puVar12 + 1;
+-          *puVar1 = uVar2;
+-        }
+-        bVar13 = CARRY1(bVar4,bVar4);
+-        bVar4 = bVar7 * '\x04';
+-        if (bVar4 != 0) {
+-          uVar8 = (uint)bVar13;
+-          puVar12 = puVar12 + (1 - uVar8);
+-          for (; uVar8 != 0; uVar8 = uVar8 - 1) {
+-            puVar1 = puVar12;
+-            puVar12 = puVar12 + 1;
+-            *puVar1 = uVar2;
+-          }
+-          bVar13 = CARRY1(bVar4,bVar4);
+-          bVar4 = bVar7 * '\b';
+-          if (bVar4 != 0) {
+-            uVar8 = (uint)bVar13;
+-            puVar12 = puVar12 + (1 - uVar8);
+-            for (; uVar8 != 0; uVar8 = uVar8 - 1) {
+-              puVar1 = puVar12;
+-              puVar12 = puVar12 + 1;
+-              *puVar1 = uVar2;
+-            }
+-            bVar13 = CARRY1(bVar4,bVar4);
+-            bVar4 = bVar7 * '\x10';
+-            if (bVar4 != 0) {
+-              uVar8 = (uint)bVar13;
+-              puVar12 = puVar12 + (1 - uVar8);
+-              for (; uVar8 != 0; uVar8 = uVar8 - 1) {
+-                puVar1 = puVar12;
+-                puVar12 = puVar12 + 1;
+-                *puVar1 = uVar2;
+-              }
+-              bVar13 = CARRY1(bVar4,bVar4);
+-              bVar4 = bVar7 * ' ';
+-              if (bVar4 != 0) {
+-                uVar8 = (uint)bVar13;
+-                puVar12 = puVar12 + (1 - uVar8);
+-                for (; uVar8 != 0; uVar8 = uVar8 - 1) {
+-                  puVar1 = puVar12;
+-                  puVar12 = puVar12 + 1;
+-                  *puVar1 = uVar2;
+-                }
+-                bVar13 = CARRY1(bVar4,bVar4);
+-                bVar4 = bVar7 * '@';
+-                if (bVar4 != 0) {
+-                  uVar8 = (uint)bVar13;
+-                  puVar12 = puVar12 + (1 - uVar8);
+-                  for (; uVar8 != 0; uVar8 = uVar8 - 1) {
+-                    puVar1 = puVar12;
+-                    puVar12 = puVar12 + 1;
+-                    *puVar1 = uVar2;
+-                  }
+-                  bVar13 = CARRY1(bVar4,bVar4);
+-                  bVar7 = bVar7 << 7;
+-                  if (bVar7 != 0) {
+-                    uVar8 = (uint)bVar13;
+-                    puVar12 = puVar12 + (1 - uVar8);
+-                    for (; uVar8 != 0; uVar8 = uVar8 - 1) {
+-                      puVar1 = puVar12;
+-                      puVar12 = puVar12 + 1;
+-                      *puVar1 = uVar2;
+-                    }
+-                    bVar13 = CARRY1(bVar7,bVar7);
+-                  }
+-                }
+-              }
+-            }
+-          }
+-        }
+-      }
+-      uVar8 = (uint)bVar13;
+-      puVar12 = puVar12 + (1 - uVar8);
+-      for (; uVar8 != 0; uVar8 = uVar8 - 1) {
+-        puVar1 = puVar12;
+-        puVar12 = puVar12 + 1;
+-        *puVar1 = uVar2;
+-      }
+-      puVar11 = puVar11 + _DAT_2000_c226;
+-      iVar9 = iVar9 + -1;
+-    } while (iVar9 != 0);
+-    iVar9 = puVar6[10];
+-    puVar6[0xe] = puVar6[0xe] + iVar9;
+-    puVar6[0x10] = puVar6[0x10] + iVar9;
+-    iVar9 = puVar6[5] + puVar6[7] + puVar6[9];
+-    puVar6[0xf] = puVar6[0xf] + iVar9;
+-    puVar6[0x11] = puVar6[0x11] + iVar9;
++    if (c == 0xe) { *(int16_t *)(st + 0x1e) += 1; *(int16_t *)(st + 0x22) += 1; return; }
++    if (c == 0xf) { *(int16_t *)(st + 0x1e) -= 1; *(int16_t *)(st + 0x22) -= 1; return; }
+   }
+   return;
+ }
+@@ -13541,6 +13476,7 @@
+   {0x1963u,(void*)&FUN_0000_1963},
+   {0x198eu,(void*)&FUN_0000_198e},
++  {0x19aeu,(void*)&FUN_0000_19ae},  /* PATCH 121: c684 glyph-blit entry (sorted before 0x19ca) */
+   {0x19cau,(void*)&FUN_0000_19ca},
+   {0x19eau,(void*)&FUN_0000_19ea},
+   {0x1b5cu,(void*)&FUN_0000_1b5c},
+   {0x1b78u,(void*)&FUN_0000_1b78},

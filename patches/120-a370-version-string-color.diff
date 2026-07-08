@@ -1,0 +1,82 @@
+PATCH 120 -- version-string draw (FUN_1000_a370): restore the dropped COLOR + shadow + pos2.
+
+a370 draws a text string with a black drop-shadow: it sets the cursor, draws the string in color 0
+(shadow), then draws it again one pixel up-left in the real colour.  The callers pass the colour in
+CL (`mov cl,8` for the MAINMENU version string "AF-FD 1U1Q" at e9f0 branch A; 0xd/0xa9 for the other
+screens).  Ghidra dropped the CL colour entirely, mis-rendered the `mov al,0` shadow-colour as a
+garbage `extraout_AH<<8`, and lost the pop-restored pos2 = (row-1,col-1) and the 2nd string pointer
+(both rendered as `unaff_CS`).  So a370 drew nothing useful and the version string was absent.
+
+Fix: add the colour as param_4 and reconstruct the body from the asm (0x1a370):
+  52d1(row,col); 530b(0); 5591(str);           -- shadow at (row,col), black
+  530b(color); 52d1(row-1,col-1); 5591(str);   -- main text at (row-1,col-1)
+Thread the colour at all three call sites (e9f0 A=8, e9f0 B=0xd, e459=0xa9); e459 also had its str
+arg base-lost to 0xf69 -> restored to *(DAT_2000_b75f-0x8a0).  asm-verified: 0x1a370, e9f0 ea2e/ea52,
+e459 e499/e4ae.
+--- a/fist.c
++++ b/fist.c
+@@ -2205,7 +2205,7 @@
+ void __allregs FUN_1000_a265(undefined2 param_1,undefined4 param_2,int *param_3);
+ void __allregs FUN_1000_a2e9(undefined2 param_1,undefined2 param_2,int param_3);
+ int __allregs FUN_1000_a358(int param_1,char *param_2);
+-void __allregs FUN_1000_a370(undefined2 param_1,undefined2 param_2,undefined2 param_3);
++void __allregs FUN_1000_a370(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_1000_a395(int param_1);
+ void __allregs FUN_1000_a401(int param_1);
+ void __allregs FUN_1000_a4a2(undefined2 param_1,int param_2);
+@@ -33852,7 +33852,7 @@
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c5b0)))();
+   FUN_1000_524e(0);
+   uVar1 = FUN_1000_a358(6,*(undefined2 *)(DAT_2000_b75f - 0x8a0));
+-  FUN_1000_a370(0xbf,0xa0 - (uVar1 >> 1),0xf69);
++  FUN_1000_a370(0xbf,0xa0 - (uVar1 >> 1),*(undefined2 *)(DAT_2000_b75f - 0x8a0),0xa9); /* PATCH 120: real str + cl=0xa9 (asm e499/e4ae) */
+   DAT_2000_b6d6 = DAT_2000_b6d6 | 0x22;
+   return;
+ }
+@@ -34475,11 +34475,11 @@
+   FUN_1000_524e(0);
+   if (DAT_2000_2dad != '\x01') {
+     uVar1 = FUN_1000_a358(6,0x44fe);
+-    FUN_1000_a370(0xbf,0xa0 - (uVar1 >> 1),0x44fe);
++    FUN_1000_a370(0xbf,0xa0 - (uVar1 >> 1),0x44fe,8);   /* PATCH 120: cl=8 color (asm ea2e) */
+     return;
+   }
+   uVar1 = FUN_1000_a358(6,0xbe2);
+-  FUN_1000_a370(0xbf,0xa0 - (uVar1 >> 1),0xbe2);
++  FUN_1000_a370(0xbf,0xa0 - (uVar1 >> 1),0xbe2,0xd);   /* PATCH 120: cl=0xd color (asm ea52) */
+   return;
+ }
+ 
+@@ -60631,18 +60631,22 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_a370) @ 1000:a370 ===== */
+ 
+-void __allregs FUN_1000_a370(undefined2 param_1,undefined2 param_2,undefined2 param_3)
++void __allregs FUN_1000_a370(undefined2 param_1,undefined2 param_2,undefined2 param_3,
++                             undefined2 param_4)
+ 
+ {
+-  byte extraout_AH;
+-  int unaff_CS;
+-  
+-  FUN_1000_52d1(param_1,param_2);
+-  FUN_1000_530b((uint)extraout_AH << 8);
+-  thunk_FUN_1000_5591(param_3);
+-  FUN_1000_530b(unaff_CS);
+-  FUN_1000_52d1(unaff_CS + -1,unaff_CS + -1);
+-  thunk_FUN_1000_5591(unaff_CS);
++  /* PATCH 120: version-string draw with a drop-shadow (asm 0x1a370).  Ghidra dropped: (a) the
++     incoming COLOR in cl (the callers e9f0/e459 set `mov cl,<color>`) -> added as param_4; (b) the
++     `mov al,0` that makes the FIRST draw a BLACK shadow (rendered as garbage extraout_AH<<8); (c) the
++     pop-based pos2 = (row-1,col-1) and the 2nd string arg (rendered as unaff_CS).  Faithful asm:
++       52d1(row,col); 530b(0);       5591(str)   ; shadow at (row,col) in black
++       530b(color);   52d1(row-1,col-1); 5591(str); main text at (row-1,col-1) in `color`. */
++  FUN_1000_52d1(param_1,param_2);              /* cursor = (row, col) */
++  FUN_1000_530b(0);                            /* mov al,0 -> shadow color = black */
++  thunk_FUN_1000_5591(param_3);                /* draw shadow */
++  FUN_1000_530b(param_4);                       /* real text color (cl) */
++  FUN_1000_52d1(param_1 + -1,param_2 + -1);     /* cursor = (row-1, col-1) */
++  thunk_FUN_1000_5591(param_3);                /* draw main text */
+   return;
+ }
+ 
