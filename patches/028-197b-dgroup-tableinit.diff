@@ -1,0 +1,38 @@
+FUN_0000_197b: DGROUP table init — ES/DS=DGROUP base restore + int-vs-word pointer scaling.
+
+197b (called in a loop from 14da, counter DGROUP:0x2674 = 0x42,0x40,..) initialises a DGROUP linked
+table: mov es,ds; bx=[0x2674]; di=[bx+0x27f4]; mov [di-2],di+0x40; mov cx,0x20; rep stosw es:[di]=di+0x44
+(asm 0x197b..0x1995).  ES=DS=DGROUP, di is a near DGROUP offset; every access is DGROUP-relative.  Ghidra
+dropped the DGROUP segment base (dereferenced the bare offset as a host pointer -> SIGSEGV) and typed the
+word stores as int (4-byte) in the flat model, corrupting both the stored value and the stride.  Fix:
+base every access at g_mem+0x1c000+off and store 16-bit words.  Asm-verified base-0 0x197b..0x1995.
+--- a/fist.c
++++ b/fist.c
+@@ -7774,14 +7774,20 @@
+   int iVar3;
+   int *piVar4;
+   
+-  piVar4 = (int *)*(int *)(DAT_1000_e674 + 0x27f4);
+-  piVar4[-1] = (int)(piVar4 + 0x20);
+-  piVar2 = piVar4 + 0x22;
+-  for (iVar3 = 0x20; iVar3 != 0; iVar3 = iVar3 + -1) {
+-    piVar1 = piVar4;
+-    piVar4 = piVar4 + 1;
+-    *piVar1 = (int)piVar2;
++  /* PATCH 028: ES=DS=DGROUP; bx=[0x2674] (the 14da loop counter), di=[bx+0x27f4] (a DGROUP pointer
++     table).  Then [di-2]=di+0x40; rep stosw es:[di] 0x20 words = di+0x44 (es=DGROUP).  Ghidra dropped
++     the DGROUP base (bare host ptr) and applied int (4B) scaling to the word writes.  Asm 0x197b. */
++  {
++    uint16_t bx = *(uint16_t *)(g_mem + 0x1c000 + 0x2674);
++    uint16_t di = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(bx + 0x27f4));
++    uint16_t ax = (uint16_t)(di + 0x40);
++    *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(di - 2)) = ax;   /* mov [di-2],ax */
++    ax = (uint16_t)(ax + 4);
++    for (iVar3 = 0x20; iVar3 != 0; iVar3 = iVar3 + -1) {         /* rep stosw es:[di] */
++      *(uint16_t *)(g_mem + 0x1c000 + di) = ax; di = (uint16_t)(di + 2);
++    }
+   }
++  (void)piVar1; (void)piVar2; (void)piVar4;
+   return;
+ }
+ 

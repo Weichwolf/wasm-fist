@@ -1,0 +1,109 @@
+Rebase the timer CALIBRATION functions FUN_1000_2fd3 + FUN_1000_3064 from the wrong SS static
+context (0x2ba9) to the real runtime segment (DS=SS=DGROUP=0x1c00). Class: dynamic-DS-from-SS
+(docs/stage1.md; same family as patch 006's ss:[0x70] and patch 013's dynamic-DS).
+
+ROOT CAUSE (asm-verified, base-0 0x12fd3.. and 0x13064..): both functions begin `mov ax,ss; mov ds,ax`
+so DS = SS for the rest of the body. At RUNTIME the engine runs in the DOS small model with
+SS=DS=DGROUP=0x1c00, so those `ds:[0xNN]` accesses target DGROUP (linear 0x1c000+NN). But Ghidra's
+PrepAnalysis SS context is the load-time placeholder 0x2ba9, so it based every DS-after-mov-ds-ss
+access at 0x2ba90 -> the calibration RESULTS were written to a dead data region (DAT_2000_bXXX/dXXX,
+linear 0x2bXXX) instead of the DGROUP timer block. Net effect: DAT_1000_d8b8 (the ISR's per-tick
+fractional STEP) and DAT_1000_d8c6 (the PIT divisor) stayed 0, so the INT-8 ISR's accumulator
+`d8b6 += d8b8` never carried and DGROUP:0x452 (the tick counter FUN_1000_3346 busy-waits on) never
+advanced -> boot hang. The ISR (FUN_1000_30f8/31c3) and the spin caller (FUN_1000_2ebe) already read
+these as the correct DGROUP DAT_1000_ symbols, so the writers were simply mis-based.
+
+FIX: rename each DS=SS-misbased symbol to its DGROUP counterpart (linear - 0x2ba90 + 0x1c000):
+  badc->c04c(ss:0x4c vector) d344->d8b4 bedc->c44c d354->d8c4 d356->d8c6(PIT divisor)
+  d348->d8b8(STEP) d34c->d8bc d350->d8c0 d352->d8c2(2f71's calib) d35e->d8ce
+All references to these symbols are confined to these two functions; FUN_1000_2f71 already writes
+d8c2 with the correct DGROUP base (default DS ctx), so after this the calib chain is consistent:
+2f71 -> d8c2; 3064 reads d8c2, writes d8b8/d8bc/d8c0/d8ce; 2fd3 writes c44c/d8c4/d8c6 -> ISR ticks.
+--- a/fist.c
++++ b/fist.c
+@@ -43311,15 +43311,20 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_2fd3) @ 1000:2fd3 ===== */
+ 
++/* patch 016: accessors for the DGROUP timer-block slots this rebase introduces that are not */
++/* referenced in the pristine decompile (linear DGROUP:0x1c000 + offset). */
++#define DAT_1000_c04c (*(undefined2 *)(g_mem+0x1c04c))
++#define DAT_1000_d8bc (*(undefined2 *)(g_mem+0x1d8bc))
++#define DAT_1000_d8ce (*(undefined2 *)(g_mem+0x1d8ce))
+ void __allregs FUN_1000_2fd3(void)
+ 
+ {
+   undefined1 uVar1;
+   undefined1 uVar2;
+   
+-  (*(code *)fist_icall_far((uint32_t)(DAT_2000_badc)))();
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c04c)))();
+   do {
+-    DAT_2000_d344 = '\0';
++    DAT_1000_d8b4 = '\0';
+     out(0x43,0x34);
+     out(0x40,0);
+     out(0x40,0);
+@@ -43331,13 +43336,13 @@
+     out(0x43,6);
+     uVar1 = in(0x40);
+     uVar2 = in(0x40);
+-    DAT_2000_bedc = -CONCAT11(uVar2,uVar1);
+-    DAT_2000_d354 = DAT_2000_bedc - (DAT_2000_bedc >> 5) & 0xfffe;
+-    DAT_2000_d356 = DAT_2000_d354;
++    DAT_1000_c44c = -CONCAT11(uVar2,uVar1);
++    DAT_1000_d8c4 = DAT_1000_c44c - (DAT_1000_c44c >> 5) & 0xfffe;
++    DAT_1000_d8c6 = DAT_1000_d8c4;
+     FUN_1000_30de();
+-    FUN_1000_32cb(DAT_2000_d356 + 1);
+-  } while (DAT_2000_d344 != '\0');
+-  (*(code *)fist_icall_far((uint32_t)(DAT_2000_badc)))();
++    FUN_1000_32cb(DAT_1000_d8c6 + 1);
++  } while (DAT_1000_d8b4 != '\0');
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c04c)))();
+   FUN_1000_32cb(0);
+   FUN_1000_3064();
+   return;
+@@ -43353,29 +43358,29 @@
+   uint uVar2;
+   
+   uVar1 = 0;
+-  uVar2 = DAT_2000_bedc;
+-  if (0x4dad < DAT_2000_bedc) {
++  uVar2 = DAT_1000_c44c;
++  if (0x4dad < DAT_1000_c44c) {
+     uVar1 = 0xffff;
+     uVar2 = 0x4dad;
+   }
+-  DAT_2000_d348 = (int)(CONCAT22(uVar2,uVar1) / 0x4dae);
++  DAT_1000_d8b8 = (int)(CONCAT22(uVar2,uVar1) / 0x4dae);
+   uVar1 = 0;
+-  uVar2 = DAT_2000_bedc;
+-  if (0x5d37 < DAT_2000_bedc) {
++  uVar2 = DAT_1000_c44c;
++  if (0x5d37 < DAT_1000_c44c) {
+     uVar1 = 0xffff;
+     uVar2 = 0x5d37;
+   }
+-  DAT_2000_d34c = (int)(CONCAT22(uVar2,uVar1) / 0x5d38);
++  DAT_1000_d8bc = (int)(CONCAT22(uVar2,uVar1) / 0x5d38);
+   uVar1 = 0;
+-  uVar2 = DAT_2000_bedc;
+-  if (DAT_2000_d352 <= DAT_2000_bedc) {
++  uVar2 = DAT_1000_c44c;
++  if (DAT_1000_d8c2 <= DAT_1000_c44c) {
+     uVar1 = 0xffff;
+-    uVar2 = DAT_2000_d352 - 1;
++    uVar2 = DAT_1000_d8c2 - 1;
+   }
+-  DAT_2000_d350 = (int)(CONCAT22(uVar2,uVar1) / (ulong)DAT_2000_d352);
+-  DAT_2000_d35e = (int)(0x1234de / (ulong)DAT_2000_bedc);
+-  if (DAT_2000_bedc >> 1 <= (uint)(0x1234de % (ulong)DAT_2000_bedc)) {
+-    DAT_2000_d35e = DAT_2000_d35e + 1;
++  DAT_1000_d8c0 = (int)(CONCAT22(uVar2,uVar1) / (ulong)DAT_1000_d8c2);
++  DAT_1000_d8ce = (int)(0x1234de / (ulong)DAT_1000_c44c);
++  if (DAT_1000_c44c >> 1 <= (uint)(0x1234de % (ulong)DAT_1000_c44c)) {
++    DAT_1000_d8ce = DAT_1000_d8ce + 1;
+   }
+   return;
+ }

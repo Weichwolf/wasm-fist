@@ -1,0 +1,78 @@
+MEMMGR object search/release path FUN_1000_135f/1345/18d1: reconstruct the segment-linked list
+walk (135f was folded to a constant DS -> infinite loop) and restore the CF/found propagation
+(1345 3-list chaining, 18d1 unlink-if-found).  Asm-verified 0x1135f/0x11345/0x118d1.
+--- a/fist.c
++++ b/fist.c
+@@ -39782,13 +39782,19 @@
+ undefined4 __allregs FUN_1000_1345(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_135f(param_1,param_2,(undefined2 *)&DAT_1000_d6d4);
+-  if (((bool)in_CF) && (FUN_1000_135f(param_1,param_2,(undefined2 *)&DAT_1000_d6f6), (bool)in_CF)) {
+-    FUN_1000_135f(param_1,param_2,(undefined2 *)&DAT_1000_d718);
++  /* PATCH 065: MEMMGR 3-list object search (asm 0x11345): search the node lists at DGROUP:0x16d4,
++     0x16f6, 0x1718 in turn (bp = header); return the FIRST matching node segment (135f: CF=0/found).
++     Ghidra lost the CF chaining (dead in_CF local) -> only the first list ran and the result was
++     discarded.  found <=> 135f return != 0; return the node segment (ax) or 0 (all-not-found, CF=1). */
++  int r;
++  r = FUN_1000_135f(param_1,param_2,(int)(undefined2 *)&DAT_1000_d6d4);
++  if (r == 0) {
++    r = FUN_1000_135f(param_1,param_2,(int)(undefined2 *)&DAT_1000_d6f6);
++    if (r == 0) {
++      r = FUN_1000_135f(param_1,param_2,(int)(undefined2 *)&DAT_1000_d718);
++    }
+   }
+-  return;
++  return (undefined4)(uint16_t)r;
+ }
+ 
+ 
+@@ -39797,17 +39803,21 @@
+ int __allregs FUN_1000_135f(int param_1,int param_2,int param_3)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = *(int *)(param_3 + 10);
+-  while( true ) {
+-    if (iVar1 == 0) {
+-      return 0;
++  /* PATCH 065: MEMMGR segment-linked list search (asm 0x1135f).  head = word[header+0xa]
++     (param_3 = the header struct; &DAT_1000_dXXX is the correct absolute address).  Walk the chain via
++     node.next = word[nodeseg:0xc]; match node[6]==param_2(cx) && node[8]==param_1(bx).  Return the node
++     segment (nonzero, CF=0) or 0 (not found, CF=1).  Ghidra folded the walking DS node fields into the
++     fixed DAT_1000_c006/c00c -> constant re-read -> infinite loop. */
++  uint16_t iVar1 = *(uint16_t *)(param_3 + 10);
++  while (iVar1 != 0) {
++    uint8_t *node = g_mem + ((uint32_t)iVar1 << 4);
++    if ((*(uint16_t *)(node + 6) == (uint16_t)param_2) &&
++        (*(uint16_t *)(node + 8) == (uint16_t)param_1)) {
++      return (int)iVar1;
+     }
+-    if ((*(int *)&DAT_1000_c006 == param_2) && (*(int *)&DAT_1000_c008 == param_1)) break;
+-    iVar1 = *(int *)&DAT_1000_c00c;
++    iVar1 = *(uint16_t *)(node + 0xc);
+   }
+-  return iVar1;
++  return 0;
+ }
+ 
+ 
+@@ -40451,10 +40461,11 @@
+ void __allregs FUN_1000_18d1(undefined2 param_1,undefined2 param_2,undefined2 param_3)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_1345(param_1,param_2);
+-  if (!(bool)in_CF) {
++  /* PATCH 065: MEMMGR object-release (asm 0x118d1): search via 1345; if FOUND (CF=0) set DS=the found
++     node segment and unlink it via 0d70.  Ghidra's dead in_CF=0 made `!in_CF` always true -> it always
++     called 0d70; the real gate is 1345 CF (found).  found <=> 1345 return != 0. */
++  undefined4 r = FUN_1000_1345(param_1,param_2);
++  if ((uint16_t)r != 0) {
+     FUN_1000_0d70(param_3);
+   }
+   return;

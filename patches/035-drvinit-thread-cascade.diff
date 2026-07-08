@@ -1,0 +1,91 @@
+MGAVIDEO driver init (FUN_0000_0009 + the 0x2 jmp thunk): thread the template-copy / workspace-alloc /
+method-vector-reloc cascade.
+
+The video driver's init runs entirely through DGROUP indirect method vectors whose __allregs C bodies
+dropped ALL register args.  The init (asm, MGAVIDEO image 0x9..0x91) does, in order:
+  5x  f98b(count, srcseg, slot, srcoff)   via [DGROUP:0x36]  -- copy a template from module data into a
+                                          freshly allocated DGROUP buffer (patch 034 reconstructs f98b);
+  alloc 0x46a paras -> DGROUP:0x3e4       via [DGROUP:0xd4] = FUN_1000_1917  (driver workspace);
+  alloc 0x300 bytes -> DGROUP:0x782       via [DGROUP:0xcc] = FUN_1000_182a  (scratch buffer);
+  reloc apply over [DGROUP:0x70e]         via [DGROUP:0x12] = FUN_0000_f842  (installs the driver method
+                                          vectors, incl. DGROUP:0x540 = 0xe8:load_seg = the VGA mode-set).
+With no threaded args f98b's rep-movsb wrote to host NULL -> SIGSEGV (the terminal crash).  Thread every
+call with the asm-verified immediates.  The five template srcseg immediates (0x46a/0x52c/0x54b/0x54d/0x608)
+and the reloc section's leading seg word are MZ reloc sites (module relocs 0x12/0x21/0x30/0x44/0x58 and
+0x52c0), relocated to the driver load-seg at LOAD; model that by adding (fist_mga_base>>4) at the f98b call
+sites so the engine copies from the correct absolute module segment, and apply the (already-relocated)
+method-vector section verbatim via the loader shim fist_apply_reloc_at (native_main.c).  The 0x2-offset
+thunk is a `jmp 0x9` -> it now just calls FUN_0000_0009 (no duplicated body).  This is the first driver-unit
+patch (targets the fist_mga.c assemble output).  Asm-verified against MGAVIDEO.DVR base-0 module offsets.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -763,17 +763,8 @@
+ void __allregs thunk_FUN_0000_0009(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c036)))();
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c036)))();
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c036)))();
+-  DAT_1000_c714 = DAT_1000_c714 | 0x60;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c036)))();
+-  DAT_1000_c718 = DAT_1000_c718 | 0x60;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c036)))();
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0d4)))();
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0cc)))();
+-  DAT_1000_c784 = DAT_1000_c784 | 0x60;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c012)))();
++  /* PATCH 035: driver-overlay offset 0x2 = `jmp 0x9` -> the real driver init.  Call it directly. */
++  FUN_0000_0009();
+   return;
+ }
+ 
+@@ -794,17 +785,41 @@
+ void __allregs FUN_0000_0009(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c036)))();
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c036)))();
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c036)))();
++  /* PATCH 035: faithful driver-init template-copy + workspace-alloc + method-vector reloc cascade.
++   * asm (MGAVIDEO image 0x9..0x91):
++   *   5x  mov ax,<count>; mov bx,<slot>; xor si,si; mov dx,<srcseg>; lcall [DGROUP:0x36]  (=f98b copy)
++   *   alloc mov ax,0x46a; mov bx,0x3e4; mov cx,ds; lcall [DGROUP:0xd4]   (driver workspace, FUN_1000_1917)
++   *   alloc mov ax,0x300; mov bx,0x782; mov cx,ds; lcall [DGROUP:0xcc]   (0x300 scratch, FUN_1000_182a)
++   *   reloc mov bx,[0x70e]; xor si,si; lcall [DGROUP:0x12]   (=f842 driver-local method-vector install)
++   * The __allregs indirect vector calls dropped every register arg (ax/bx/cx/dx/si), so f98b/182a ran on
++   * garbage (f98b's rep movsb wrote to host NULL -> SIGSEGV).  Thread each call with its asm-verified
++   * immediates.  The five template srcseg immediates (0x46a/0x52c/0x54b/0x54d/0x608) are MZ reloc sites
++   * (module relocs 0x12/0x21/0x30/0x44/0x58) -> the loader adds the driver load-seg at LOAD; model that by
++   * adding (fist_mga_base>>4) so the engine f98b (patch 034) copies from the correct absolute module
++   * segment.  The 2nd copy's destination buffer (DGROUP:0x70e) holds the method-vector reloc section whose
++   * leading seg word is likewise MZ-relocated (site 0x52c0); the driver-local reloc apply installs
++   * DGROUP:0x540 = 0xe8:load_seg = the VGA mode-set FUN_0000_00e8.  fist_mga_base is the module's byte
++   * load base (0x3e3a0); the DGROUP flag stores (c714/c718/c784 |= 0x60) are preserved verbatim. */
++  extern int fist_apply_reloc_at(unsigned short,unsigned short,int);
++  typedef undefined2 (*f98b_t)(int,undefined2,undefined2,undefined2);
++  typedef void (*a182a_t)(unsigned,undefined2,undefined2,undefined2,undefined2,undefined2);
++  typedef void (*a1917_t)(int,undefined2,undefined2);
++  uint16_t drvseg = (uint16_t)(fist_mga_base >> 4);
++  f98b_t f98b = (f98b_t)fist_icall_far((uint32_t)(_DAT_1000_c036));
++  f98b(0xc20,  (undefined2)(uint16_t)(0x46a + drvseg), 0x70a, 0);
++  f98b(0x1f0,  (undefined2)(uint16_t)(0x52c + drvseg), 0x70e, 0);
++  f98b(0x12,   (undefined2)(uint16_t)(0x54b + drvseg), 0x712, 0);
+   DAT_1000_c714 = DAT_1000_c714 | 0x60;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c036)))();
++  f98b(0xba4,  (undefined2)(uint16_t)(0x54d + drvseg), 0x716, 0);
+   DAT_1000_c718 = DAT_1000_c718 | 0x60;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c036)))();
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0d4)))();
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0cc)))();
++  f98b(0x1a02, (undefined2)(uint16_t)(0x608 + drvseg), 0x71a, 0);
++  ((a1917_t)fist_icall_far((uint32_t)(_DAT_1000_c0d4)))(0x46a, 0x3e4, 0x1c00);
++  ((a182a_t)fist_icall_far((uint32_t)(_DAT_1000_c0cc)))(0x300, 0x1c00, 0, 0x782, 0, 0);
+   DAT_1000_c784 = DAT_1000_c784 | 0x60;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c012)))();
++  {
++    uint16_t sec_seg = *(uint16_t *)(g_mem + 0x1c000 + 0x70e);
++    fist_apply_reloc_at(sec_seg, 0, 1);
++  }
+   return;
+ }
+ 

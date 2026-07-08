@@ -1,0 +1,41 @@
+FUN_0000_14da: zero-fill of the allocated scratch buffer — ES base restore (dynamic segment).
+
+After the 182a/184b/0a31 allocation succeeds (struct at DGROUP:0x4f0; struct[0] now holds the real
+allocated segment), 14da zeroes the buffer:  mov es,[0x4f0]; xor di,di; mov cx,(size-8)/2;
+rep stosw ax=0 ; mov cx,4; rep stosw ax=0xffff  (asm 0x14ef..0x1506). Ghidra dropped the ES segment
+base (rendered di as a bare host pointer starting at 0), so the very first store hit host address 0 ->
+SIGSEGV. Latent until patch 025/026 made the allocator return a real segment into struct[0]. Fix: base
+every store at g_mem+(es<<4)+di with es = struct[0] = DAT_1000_c4f0. Asm-verified base-0 0x14ef..0x1506.
+--- a/fist.c
++++ b/fist.c
+@@ -7150,18 +7150,20 @@
+   bool bVar5;
+   
+   FUN_1000_182a(0x1638,0x1c00,param_1,0x4f0,param_2,param_3);   /* patch 024: asm mov ax,0x2c6; inc; shl x3 = 0x1638 (16-bit alloc SIZE; Ghidra mis-rendered the immediate as &DAT_1000_d638 -> host ptr, corrupting 182a size math) */
++  /* PATCH 027: zero-fill the just-allocated buffer at ES:DI where ES = DGROUP:0x4f0 = struct[0] =
++     the segment 0a31 allocated (asm 0x14ef: mov es,[0x4f0]; xor di,di; rep stosw 0; rep stosw 0xffff).
++     Ghidra dropped the ES base (di started at host 0) -> SIGSEGV. Base the stores at g_mem+(es<<4)+di. */
+   uVar2 = DAT_1000_c4f0;
+-  puVar4 = (undefined2 *)0x0;
+-  for (iVar3 = 0xb18; iVar3 != 0; iVar3 = iVar3 + -1) {
+-    puVar1 = puVar4;
+-    puVar4 = puVar4 + 1;
+-    *puVar1 = 0;
+-  }
+-  for (iVar3 = 4; iVar3 != 0; iVar3 = iVar3 + -1) {
+-    puVar1 = puVar4;
+-    puVar4 = puVar4 + 1;
+-    *puVar1 = 0xffff;
++  {
++    uint16_t es = (uint16_t)uVar2, di = 0;
++    for (iVar3 = 0xb18; iVar3 != 0; iVar3 = iVar3 + -1) {
++      *(uint16_t *)(g_mem + ((unsigned long)es << 4) + di) = 0;      di += 2;
++    }
++    for (iVar3 = 4; iVar3 != 0; iVar3 = iVar3 + -1) {
++      *(uint16_t *)(g_mem + ((unsigned long)es << 4) + di) = 0xffff; di += 2;
++    }
+   }
++  (void)puVar1; (void)puVar4;
+   DAT_1000_e674 = 0x42;
+   do {
+     FUN_0000_197b();

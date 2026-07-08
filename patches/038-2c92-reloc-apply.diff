@@ -1,0 +1,27 @@
+FUN_0000_2c92 (mode-set finalizer): thread the driver-local method-vector reloc apply (si=0x1c8).
+
+The final call of the VGA mode-set (FUN_0000_00e8 -> FUN_0000_2c92) installs 8 more driver method vectors
+via a driver-local reloc apply (asm 0x2c9b: `mov bx,[0x70e]; mov si,0x1c8; lcall [DGROUP:0x12]` = the FAR
+applier FUN_0000_f842).  Section si=0x1c8 of the DGROUP:0x70e template buffer installs DGROUP:0x1594..
+0x15b0 (driver offsets 0x2cc7..0x2f38).  Same class as patches 035/037: the indirect `(*DAT_1000_c012)()`
+dropped bx/si and the engine f842 is inert (dropped string-op segment bases).  Apply faithfully via the
+loader shim fist_apply_reloc_at.  Asm-verified MGAVIDEO base-0 offset 0x2c9b.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -7488,7 +7488,15 @@
+   
+   _DAT_1000_d5e6 = 0x41a;
+   _DAT_1000_d5e8 = 0x41a;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c012)))();
++  /* PATCH 038: thread the driver-local method-vector reloc apply (asm 0x2c9b: mov bx,[0x70e];
++   * mov si,0x1c8; lcall [DGROUP:0x12] = FUN_0000_f842 FAR applier).  Installs 8 more driver method
++   * vectors DGROUP:0x1594..0x15b0 from section si=0x1c8 of the DGROUP:0x70e template buffer.  Same
++   * dropped-args + inert-f842 class as patches 035/037; apply faithfully via the loader shim. */
++  {
++    extern int fist_apply_reloc_at(unsigned short,unsigned short,int);
++    uint16_t sec_seg = *(uint16_t *)(g_mem + 0x1c000 + 0x70e);
++    fist_apply_reloc_at(sec_seg, 0x1c8, 1);
++  }
+   DAT_1000_d5d7 = 0;
+   uVar1 = FUN_0000_2ccd(CONCAT11(extraout_AH,1));
+   uVar1 = FUN_0000_2ccd(uVar1 & 0xff00);

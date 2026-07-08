@@ -1,0 +1,51 @@
+Reconstruct FUN_0000_1caf (resource word-copy) -- dynamic-DS rep-movsw source base loss.
+
+asm (base-0 0x1caf):
+  push ds; mov di,ds; mov es,di; mov ds,ax          ; ES=DGROUP, DS=param_1 (source segment)
+  mov cx,[ds:0]; xor si,si; mov di,0x3af0            ; count = word at param_1:0; dest DGROUP:0x3af0
+  shr cx,1; shr cx,1; adc cx,cx                      ; cx = (count>>2)*2 + ((count>>1)&1)
+  rep movsw ds:si -> es:di; pop ds; ret
+
+FUN_0000_1caf(param_1) copies N=(count>>2)*2+((count>>1)&1) words from segment param_1:0 to
+DGROUP:0x3af0, where count is the leading word at param_1:0. Reached on the boot path via
+app_entry -> FUN_0000_1c6a -> FUN_0000_1cdb -> 1caf(0x2be9) (a resource/table load). Ghidra dropped
+the DS=param_1 source base of the rep-movsw (the string-op segment-context class, cf. patches
+006/010/014) so the source pointer AND the count read collapsed to host address 0 (`*(uint*)0x0`) ->
+SIGSEGV. Rebased the source to g_mem+(param_1<<4); the dest DGROUP:0x3af0 (= &DAT_1000_faf0) was
+already correct.
+--- a/fist.c
++++ b/fist.c
+@@ -8136,21 +8136,18 @@
+ void __allregs FUN_0000_1caf(undefined2 param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  undefined2 *puVar2;
+-  int iVar3;
+-  undefined2 *puVar4;
+-  undefined2 *puVar5;
+-  
+-  puVar4 = (undefined2 *)0x0;
+-  puVar5 = (undefined2 *)&DAT_1000_faf0;
+-  for (iVar3 = (*(uint *)0x0 >> 2) * 2 + (uint)((*(uint *)0x0 >> 1 & 1) != 0); iVar3 != 0;
+-      iVar3 = iVar3 + -1) {
+-    puVar2 = puVar5;
+-    puVar5 = puVar5 + 1;
+-    puVar1 = puVar4;
+-    puVar4 = puVar4 + 1;
+-    *puVar2 = *puVar1;
++  /* asm 0x1caf: push ds; mov es,ds; mov ds,ax(param_1); mov cx,[ds:0]; xor si,si; mov di,0x3af0;
++   *   shr cx,1; shr cx,1; adc cx,cx; rep movsw ds:si -> es(DGROUP):di
++   * Copy N=(count>>2)*2+((count>>1)&1) words from segment param_1:0 to DGROUP:0x3af0, where
++   * count = word at param_1:0. Ghidra dropped the DS=param_1 source base (rep-movs seg base loss),
++   * so the source + count read as host address 0. Rebased via g_mem+(param_1<<4). */
++  uint16_t *src = (uint16_t *)(g_mem + ((uint32_t)(uint16_t)param_1 << 4));
++  uint16_t *dst = (uint16_t *)(g_mem + 0x1faf0);   /* DGROUP:0x3af0 = &DAT_1000_faf0 */
++  uint16_t count = src[0];
++  int n = (count >> 2) * 2 + (int)((count >> 1 & 1) != 0);
++  for (; n != 0; n--) {
++    *dst = *src;
++    dst++; src++;
+   }
+   return;
+ }

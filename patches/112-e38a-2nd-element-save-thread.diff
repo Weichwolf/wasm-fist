@@ -1,0 +1,33 @@
+PATCH 112: thread the MAINMENU 2nd-element SAVE far-vector args (FUN_0000_e38a).
+
+The 2nd on-screen element paint FUN_0000_e38a (asm 0xe38a..0xe39e) does
+    mov [DGROUP:0xf6f2],bx ; mov dx,0xf6ee ; lcall [DGROUP:0x5fa] ; lcall [DGROUP:0x5fe]
+where bx=param_1=the RECT descriptor near-offset (0xf790, rect {row0=62,col0=111,row1=161,col1=209} =
+the gray menu box) and dx=0xf6ee = the SAVE descriptor near-offset.  DGROUP:0x5fa = MGAVIDEO 0f1a
+(save-buffer reserve), DGROUP:0x5fe = MGAVIDEO 0f3a (save blit -> 0f62).  0f3a/2d6d/0f62 read bx as the
+RECT (verified: 2d6d asm reads [bx],[bx+2],[bx+4],[bx+6]) and dx as the SAVE descriptor, so the callee
+param order is (param_1=save, param_2=rect).  Ghidra's __allregs indirect method-vector sites dropped bx
+and dx -> 0f3a->0f62 ran with di=0 and SEGV'd at fault-addr 0x2 (the descriptor deref).  Thread bx/dx at
+both far-vector call sites (CLAUDE.md doctrine: indirect method-vector args are threaded per-patch, not by
+Ghidra pointer-typing).  Asm-verified 0xe38a..0xe39e.
+--- a/fist.c
++++ b/fist.c
+@@ -33682,9 +33682,16 @@
+ void __allregs FUN_0000_e38a(undefined2 param_1)
+ 
+ {
++  /* PATCH 112: 2nd-element SAVE (asm 0xe38a..0xe39e).  `mov [0xf6f2],bx; mov dx,0xf6ee;
++     lcall [0x5fa]; lcall [0x5fe]`.  bx=param_1=the RECT descriptor near-off (0xf790), dx=0xf6ee=the
++     SAVE descriptor near-off.  c5fa=MGAVIDEO 0f1a (save-buffer reserve: bx=rect, dx=save), c5fe=0f3a
++     (save blit: param_1=dx=save, param_2=bx=rect -- 2d6d/0f62 read bx as the rect, verified via 2d6d
++     asm reading [bx..bx+6]).  Ghidra's __allregs vector sites dropped bx and dx -> 0f3a->0f62 got di=0
++     (fault-addr 0x2).  Thread them at both far-vector call sites (CLAUDE.md per-patch indirect-vector
++     arg threading). */
+   DAT_2000_b6f2 = param_1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c5fa)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c5fe)))();
++  ((void (*)(undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c5fa)))(param_1, 0xf6ee);
++  ((void (*)(undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c5fe)))(0xf6ee, param_1);
+   DAT_2000_b6f4 = 1;
+   return;
+ }

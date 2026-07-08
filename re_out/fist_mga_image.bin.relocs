@@ -1,0 +1,12 @@
+# 9 MZ reloc sites (linear byte offset into the base-0 load module).
+# The shim (fist_dos.c AH=4B) adds (load_seg) to the 16-bit word at each
+# site at LOAD time; here they carry their base-0 module-relative value.
+0x12
+0x21
+0x30
+0x44
+0x58
+0x52c0
+0x52c8
+0x5454
+0x5488

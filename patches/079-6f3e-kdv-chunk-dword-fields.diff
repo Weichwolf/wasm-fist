@@ -1,0 +1,51 @@
+6f3e KDV decode dispatch: the chunk buffer [0x6e80] is dword-indexed here -- restore explicit
+4-byte field accesses on the byte-addressed pointer.
+
+FUN_0000_6f3e reads a KDV chunk (via 708b), then dispatches on the 4-byte MAGIC at the chunk buffer
+[0x6e80] and reads dword header fields.  In FLAT32 the pointer-valued DAT_0000_6e80 is a BYTE pointer
+(so the read path 708b's byte offsets [ebx+4]/[ebx+8] and the INT-21 buffer shadows are correct --
+see the assembler's undefined1** ptrvar rule).  6f3e, by contrast, accesses the SAME buffer with
+DWORD granularity, which Ghidra rendered as int* derefs/indices (`*DAT_6e80`, `DAT_6e80[2..4]`,
+`DAT_6e80 + 2`).  On a byte pointer those become 1-byte / +2..+4-byte accesses -> the magic compare
+reads one byte (0x78) instead of 0x4b445678, no chunk type ever matches, and the player loops reading
+without ever decoding/presenting a frame.  asm-verified (image 0x6f4b..0x6fac):
+    6f51: mov eax,[ebx]        ; magic dword           @ +0
+    6f5a: mov eax,[ebx+0x8]    ; width  dword          @ +8
+    6f62: mov eax,[ebx+0xc]    ; height dword          @ +0xc
+    6f6a: mov eax,[ebx+0x10]   ; frame-count dword     @ +0x10
+    6f7b: lea esi,[ebx+8]      ; palette source        @ +8  (rep movs 0xC0 dwords)
+    6fa1: add ebx,8            ; image RLE source      @ +8
+Restore each as an explicit `*(int *)(DAT_6e80 + <byte off>)` / `(int *)(DAT_6e80 + 8)`.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -11846,16 +11846,16 @@
+       if ((bool)in_CF) {
+         return 0xffffffff;
+       }
+-      iVar2 = *DAT_0000_6e80;
++      iVar2 = *(int *)DAT_0000_6e80;
+       if (iVar2 != 0x4b445678) break;
+-      DAT_0000_5578 = DAT_0000_6e80[2];
+-      DAT_0000_557c = DAT_0000_6e80[3];
+-      _DAT_0000_6e84 = DAT_0000_6e80[4];
++      DAT_0000_5578 = *(int *)(DAT_0000_6e80 + 8);
++      DAT_0000_557c = *(int *)(DAT_0000_6e80 + 0xc);
++      _DAT_0000_6e84 = *(int *)(DAT_0000_6e80 + 0x10);
+       in_CF = 0;
+     }
+     if (iVar2 != 0x4b445670) break;
+     in_CF = (int *)0xfffffff7 < DAT_0000_6e80;
+-    param_2 = DAT_0000_6e80 + 2;
++    param_2 = (int *)(DAT_0000_6e80 + 8);
+     param_3 = DAT_0000_6e90;
+     for (iVar2 = 0xc0; iVar2 != 0; iVar2 = iVar2 + -1) {
+       *param_3 = *param_2;
+@@ -11865,7 +11865,7 @@
+     DAT_0000_6e94 = '\x01';
+   }
+   if (iVar2 == 0x4b445669) {
+-    FUN_0000_7135((char)(DAT_0000_6e80 + 2),DAT_0000_6e80 + 2,DAT_0000_6e88);
++    FUN_0000_7135((char)(DAT_0000_6e80 + 8),(int *)(DAT_0000_6e80 + 8),DAT_0000_6e88);
+     if (DAT_0000_6e94 == '\x01') {
+       FUN_0000_746b();
+       DAT_0000_6e94 = '\0';

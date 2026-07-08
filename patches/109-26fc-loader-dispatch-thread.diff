@@ -1,0 +1,28 @@
+FUN_1000_26fc: thread cx/dx/bx into the resource-LOADER near-dispatch (2508/250d).
+
+26fc probes the DGROUP:0x740 filename with INT 21h AH=4300 across the extension-variant
+table, then on the first hit dispatches to that variant's loader via the near table
+cs:0x2b82 (asm 0x12724: `push si; mov dx,si; call cs:[di+0x2b82]`).  The loader
+2508 -> 250d does the real INT 21h AH=3D open + AX=4202 lseek-size + MEMMGR alloc
+(184b stores the seg into the element descriptor word0) + 2593 read.  It needs
+dx=si=filename-off, cx=descriptor seg, bx=descriptor off -- but the __allregs near-
+dispatch site dropped them all, so 250d opened a garbage DS:DX and the descriptor
+was written through a null far-ptr.  26fc carries (param_1=CX, param_2=DX/SI, param_3=BX);
+the loader 2508/250d __allregs order is (CX descr-seg, DX filename, BX descr-off, BP,SI,DI)
+(established by patch 100).  Thread them faithfully.  Result: 'MSPRITE6.BIN' opens+reads
+and 184b lands its segment in the descriptor word0.  Asm-verified 0x12724..0x12729.
+--- a/fist.c
++++ b/fist.c
+@@ -42649,7 +42650,11 @@
+     if (!(bool)uRam000f0012) {
+       /* iRam000f000a = the DI reg-file slot (0x0a) = a 16-bit reg; the int-wide accessor aliases the
+          adjacent BP slot (0x0c, = 0x1c00 here) in its high word -> mask to 16 bits (asm `di` is WORD). */
+-      (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b82 + ((uint16_t)iRam000f000a) * 2)))();
++      /* PATCH 109: thread cx/dx/bx into the loader (asm 0x12724: push si; mov dx,si; call cs:[di+2b82]).
++         Loader 2508/250d __allregs order = (CX descr-seg, DX filename=si, BX descr-off, BP,SI,DI). */
++      ((void (*)(undefined2,undefined2,undefined2,undefined2,undefined2,undefined2))
++       fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b82 + ((uint16_t)iRam000f000a) * 2)))
++          ((undefined2)param_1, (undefined2)(uint16_t)param_2, (undefined2)param_3, 0,0,0);
+       goto LAB_1000_272f;
+     }
+     iVar2 = iRam000f000a + 1;

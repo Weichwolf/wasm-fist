@@ -1,0 +1,95 @@
+MGAVIDEO FUN_0000_0a02 (default-palette build): restore ES/DS bases + the persistent DI across 0a50.
+
+asm 0xa02..0xa4f: builds the 256*3 = 0x300-byte default VGA palette into the buffer segment
+word[DGROUP:0x782] from the template segment word[DGROUP:0x70a].  Ghidra dropped the string-op
+segment bases (dest ES=word[0x782] from DI=0, src DS=word[0x70a] at SI=0x420) AND folded the DI
+register that persists across the seven FUN_0000_0a50 ramp calls (each stos-writes 0x60 bytes and
+advances DI) into a single unadvanced pointer.  Reconstruct: (1) rep-movs 0x18 words template:0x420
+-> buffer:0x00; (2) lodsb/shr1/stosb 0x30 bytes template:0x420 -> buffer:0x30; (3) 7x 0a50 building
+32-entry 3-byte ramps from buffer:0x60, advancing the buffer pointer 0x60 per call (0x60 + 7*0x60 =
+0x300).  FUN_0000_0a50 is faithful once given an absolute g_mem pointer (its int*-word/byte stride is
+already correct).  Asm-verified MGAVIDEO 0x0a02.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -2057,43 +2069,56 @@
+   byte *pbVar10;
+   byte *pbVar11;
+   
++  /* PATCH 048: default-palette build (asm 0xa02..0xa4f).  Ghidra dropped the string-op segment
++     bases: dest ES = the palette-buffer segment word[DGROUP:0x782] (DI from 0), source DS = the
++     template segment word[DGROUP:0x70a] (SI=0x420).  It also folded the persistent DI shared across
++     the 7 FUN_0000_0a50 ramp calls (each writes 0x60 bytes and advances DI) into a single unadvanced
++     pointer.  Reconstruct: (1) rep-movs 0x18 words template:0x420 -> buffer:0x00; (2) lodsb/shr1/
++     stosb 0x30 bytes template:0x420 -> buffer:0x30; (3) 7x FUN_0000_0a50 building 32-entry (3-byte)
++     ramps from buffer:0x60, advancing the buffer pointer 0x60 per call (0x60 + 7*0x60 = 0x300 = the
++     256*3 DAC palette).  0a50 itself is faithful once given an absolute (g_mem) pointer. */
+   uVar4 = _DAT_2000_c19a;
+-  uVar7 = _DAT_1000_c782;
+-  pbVar11 = (byte *)0x0;
+-  puVar9 = (undefined2 *)0x420;
+-  for (iVar5 = 0x18; iVar5 != 0; iVar5 = iVar5 + -1) {
+-    pbVar3 = pbVar11;
+-    pbVar11 = pbVar11 + 2;
+-    puVar1 = puVar9;
+-    puVar9 = puVar9 + 1;
+-    *(undefined2 *)pbVar3 = *puVar1;
++  {
++    unsigned short es_seg = _DAT_1000_c782;
++    unsigned short ds_seg = *(unsigned short *)(g_mem + 0x1c000 + 0x70a);
++    unsigned char *es_base = g_mem + ((unsigned long)es_seg << 4);
++    unsigned char *tmpl = g_mem + ((unsigned long)ds_seg << 4);
++    pbVar11 = es_base;
++    puVar9 = (undefined2 *)(tmpl + 0x420);
++    for (iVar5 = 0x18; iVar5 != 0; iVar5 = iVar5 + -1) {
++      pbVar3 = pbVar11;
++      pbVar11 = pbVar11 + 2;
++      puVar1 = puVar9;
++      puVar9 = puVar9 + 1;
++      *(undefined2 *)pbVar3 = *puVar1;
++    }
++    pbVar10 = tmpl + 0x420;
++    iVar5 = 0x30;
++    do {
++      pbVar3 = pbVar10;
++      pbVar10 = pbVar10 + 1;
++      pbVar2 = pbVar11;
++      pbVar11 = pbVar11 + 1;
++      *pbVar2 = *pbVar3 >> 1;
++      iVar5 = iVar5 + -1;
++    } while (iVar5 != 0);
+   }
+-  pbVar10 = (byte *)0x420;
+-  iVar5 = 0x30;
+-  do {
+-    pbVar3 = pbVar10;
+-    pbVar10 = pbVar10 + 1;
+-    pbVar2 = pbVar11;
+-    pbVar11 = pbVar11 + 1;
+-    *pbVar2 = *pbVar3 >> 1;
+-    iVar5 = iVar5 + -1;
+-  } while (iVar5 != 0);
+   uVar7 = 2;
+   uVar6 = 0;
+-  FUN_0000_0a50(0,2,pbVar11);
++  FUN_0000_0a50(0,2,pbVar11);                                       pbVar11 = pbVar11 + 0x60;
+   uVar7 = CONCAT11((char)uVar7,(char)((uint)uVar7 >> 8));
+-  FUN_0000_0a50(uVar6,uVar7,pbVar11);
++  FUN_0000_0a50(uVar6,uVar7,pbVar11);                               pbVar11 = pbVar11 + 0x60;
+   uVar8 = (undefined1)((uint)uVar7 >> 8);
+   uVar7 = CONCAT11(uVar6,(char)uVar7);
+-  FUN_0000_0a50(uVar8,uVar7,pbVar11);
++  FUN_0000_0a50(uVar8,uVar7,pbVar11);                               pbVar11 = pbVar11 + 0x60;
+   uVar6 = (undefined1)uVar7;
+   uVar7 = CONCAT11(uVar8,uVar8);
+-  FUN_0000_0a50(uVar6,uVar7,pbVar11);
++  FUN_0000_0a50(uVar6,uVar7,pbVar11);                               pbVar11 = pbVar11 + 0x60;
+   uVar8 = (undefined1)((uint)uVar7 >> 8);
+   uVar7 = CONCAT11(uVar6,(char)uVar7);
+-  FUN_0000_0a50(uVar8,uVar7,pbVar11);
++  FUN_0000_0a50(uVar8,uVar7,pbVar11);                               pbVar11 = pbVar11 + 0x60;
+   uVar7 = CONCAT11((char)uVar7,(char)((uint)uVar7 >> 8));
+-  FUN_0000_0a50(uVar8,uVar7,pbVar11);
++  FUN_0000_0a50(uVar8,uVar7,pbVar11);                               pbVar11 = pbVar11 + 0x60;
+   FUN_0000_0a50(uVar8,CONCAT11((char)((uint)uVar7 >> 8),uVar8),pbVar11);
+   return;
+ }

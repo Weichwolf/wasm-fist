@@ -1,0 +1,29 @@
+MGAVIDEO FUN_0000_2d6d (cursor rect-coord transform): restore the DS=DGROUP node-struct base.
+
+asm 0x2d6d reads the 4-word rect [y0,x0,y1,x1] at DGROUP:bx -> DGROUP:0x15ce.. .  Ghidra dropped the DS
+base (host deref of param_1=0 -> SIGSEGV) and typed the fields as int (+4 stride).  Rebase to g_mem+DGROUP
++bx with 16-bit word reads.  Asm-verified MGAVIDEO 0x2d6d.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -7156,11 +7156,17 @@
+ {
+   bool bVar1;
+   
++  /* PATCH 058: rect-coord transform (asm 0x2d6d), DS=DGROUP.  param_1 = bx = a DGROUP NEAR offset to the
++     4-word rect [y0,x0,y1,x1]; Ghidra dropped the DS base (host deref of param_1 -> SIGSEGV) and typed
++     the fields as int (param_1[1] scaled +4 not +2).  Rebase to g_mem+DGROUP+bx with 16-bit word reads. */
++  {
++  int16_t *pc = (int16_t *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1);
+   DAT_1000_d5d6 = DAT_1000_d5d6 + '\x01';
+-  _DAT_1000_d5ce = (*param_1 - _DAT_1000_d5dc) + _DAT_1000_d5de;
+-  _DAT_1000_d5d0 = (param_1[1] - _DAT_1000_d5da) + _DAT_1000_d5e0;
+-  _DAT_1000_d5d2 = param_1[2] + _DAT_1000_d5de;
+-  _DAT_1000_d5d4 = param_1[3] + _DAT_1000_d5e0;
++  _DAT_1000_d5ce = (uint16_t)((pc[0] - _DAT_1000_d5dc) + _DAT_1000_d5de);
++  _DAT_1000_d5d0 = (uint16_t)((pc[1] - _DAT_1000_d5da) + _DAT_1000_d5e0);
++  _DAT_1000_d5d2 = (uint16_t)(pc[2] + _DAT_1000_d5de);
++  _DAT_1000_d5d4 = (uint16_t)(pc[3] + _DAT_1000_d5e0);
++  }
+   bVar1 = false;
+   if (DAT_1000_d5d7 == '\0') {
+     FUN_0000_2ed7();

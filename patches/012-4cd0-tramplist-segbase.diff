@@ -1,0 +1,100 @@
+Restore FUN_1000_4cd0 (walk) + FUN_1000_4ce7 (insert) far-pointer segment bases -- SMC trampoline list.
+
+06bc registers a callback in a self-modifying-code linked list living in an un-decompiled scratch
+region (~seg 0x1000 off 0x19bb). 4cd0 walks the list from the head (DS:SI, DS=0x1000 from 106d's
+`push cs;pop ds`), following each node's forward far-pointer at [node+1] via `lds si,[si+1]` until the
+terminator marker word 0xdb8b (mov bx,bx); 4ce7 then appends the new node (ES:BX = 0x1000:param_1)
+after the last real node by splicing the far pointers. Ghidra dropped every far-pointer segment base
+(the loaded offset was dereferenced as a host pointer -> SIGSEGV) -- the "dropped far/segment base on
+string ops" class. Reconstruct all list accesses as g_mem+(seg<<4)+off with the segment threaded
+(0x1000 for this sole call path, the caller CS in the base-0 FUN_1000_* model); nodes are passed
+between 4cd0 and 4ce7 as far pointers (seg<<16|off). The thunks are inert for our C-compiled control
+flow (we never execute g_mem as code) but the list memory is kept byte-faithful to the original.
+
+--- a/fist.c	2026-07-08 01:07:12.447859965 +0200
++++ b/fist.c	2026-07-08 01:07:12.471704265 +0200
+@@ -45899,18 +45899,32 @@
+ void __allregs FUN_1000_4cd0(undefined2 param_1,int param_2)
+ 
+ {
+-  int *piVar1;
+-  int iVar2;
+-  undefined2 uVar3;
+-  
+-  uVar3 = 0x1c00;
+-  do {
+-    iVar2 = param_2;
+-    piVar1 = (int *)*(undefined4 *)(iVar2 + 1);
+-    uVar3 = (undefined2)((ulong)piVar1 >> 0x10);
+-    param_2 = (int)(int *)piVar1 + -5;
+-  } while (*piVar1 != -0x2475);
+-  FUN_1000_4ce7(param_1,iVar2);
++  /* PATCH 012: trampoline linked-list WALK -- restore the far-pointer segment bases (segment-reg /
++     dropped-far-base-on-string-op class). Asm (base-0 linear 0x14cd0):
++       mov ax,si; mov dx,ds                 ; each iter: save current node (off,seg)
++     .loop: lds si,[ds:si+1]                ; DS:SI := forward far-ptr of current node
++            lea si,[si-5]                     ; back up to next node head
++            cmpw [ds:si+5],0xdb8b             ; terminator marker (mov bx,bx)
++            jne .loop
++       mov ds,dx; mov si,ax                 ; DS:SI := last real node (before the terminator)
++       (fall into 4ce7: append new node ES:BX after it)
++     Entry DS = 0x1000 (106d: push cs;pop ds => the caller CS in the base-0 FUN_1000 model);
++     SI = head off (param_2). The new node is ES:BX (ES=0x1000, BX=param_1). Ghidra dropped the
++     far-ptr bases (dereffed the offset as a host pointer -> SIGSEGV). Nodes live in the un-decompiled
++     SMC scratch region ~0x19bb; the thunks are inert for our C control flow but the memory is kept
++     byte-faithful. Nodes are handed to 4ce7 as far pointers (seg<<16|off). */
++  unsigned seg = 0x1000;                              /* DS on entry (caller CS) */
++  unsigned off = (uint16_t)param_2;                   /* SI = head offset */
++  unsigned last_seg = seg, last_off = off;
++  for (;;) {
++    last_seg = seg; last_off = off;                   /* mov ax,si ; mov dx,ds */
++    uint32_t fp = *(uint32_t *)(g_mem + ((unsigned long)seg << 4) + off + 1);   /* lds si,[si+1] */
++    unsigned nseg = (fp >> 16) & 0xffff, noff = fp & 0xffff;
++    seg = nseg; off = (uint16_t)(noff - 5);           /* DS:SI = fp ; lea si,[si-5] */
++    if (*(uint16_t *)(g_mem + ((unsigned long)nseg << 4) + noff) == 0xdb8b) break; /* cmpw [si+5] */
++  }
++  FUN_1000_4ce7((undefined1 *)(uintptr_t)(((uint32_t)0x1000 << 16) | (uint16_t)param_1),  /* new ES:BX */
++                (int)((last_seg << 16) | last_off));                                       /* prev DS:SI */
+   return;
+ }
+ 
+@@ -45920,20 +45934,25 @@
+ void __allregs FUN_1000_4ce7(undefined1 *param_1,int param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined2 unaff_ES;
+-  
+-  *param_1 = 0xea;
+-  LOCK();
+-  uVar1 = *(undefined2 *)(param_2 + 1);
+-  *(undefined2 *)(param_2 + 1) = param_1 + 5;
+-  UNLOCK();
+-  *(undefined2 *)(param_1 + 1) = uVar1;
+-  LOCK();
+-  uVar1 = *(undefined2 *)(param_2 + 3);
+-  *(undefined2 *)(param_2 + 3) = unaff_ES;
+-  UNLOCK();
+-  *(undefined2 *)(param_1 + 3) = uVar1;
++  /* PATCH 012: trampoline list INSERT -- restore ES/DS segment bases. Asm (base-0 linear 0x14ce7):
++       movb es:[bx],0xea ; lea ax,[bx+5] ; xchg ax,[ds:si+1] ; mov es:[bx+1],ax
++       mov ax,es ; xchg ax,[ds:si+3] ; mov es:[bx+3],ax ; clc ; lret
++     Splices the new node (ES:BX) after prev (DS:SI): new.fwd := prev.fwd ; prev.fwd := (BX+5):ES.
++     Ghidra dropped the ES/DS bases (bare host-pointer stores). Sole caller 4cd0 (patch 012) hands
++     both nodes as far pointers (seg<<16|off); both segments are 0x1000 in the base-0 FUN_1000 model.
++     Class: segment-reg base loss on the SMC scratch list. */
++  unsigned new_seg  = ((uint32_t)(uintptr_t)param_1) >> 16, new_off  = (uint16_t)(uintptr_t)param_1;
++  unsigned prev_seg = ((uint32_t)param_2) >> 16,            prev_off = (uint16_t)param_2;
++  unsigned char *newp  = g_mem + ((unsigned long)new_seg  << 4) + new_off;   /* ES:BX */
++  unsigned char *prevp = g_mem + ((unsigned long)prev_seg << 4) + prev_off;  /* DS:SI */
++  uint16_t old_off, old_seg;
++  newp[0] = 0xea;                                          /* JMP FAR opcode */
++  old_off = *(uint16_t *)(prevp + 1);                      /* xchg ax,[si+1] (ax was bx+5) */
++  *(uint16_t *)(prevp + 1) = (uint16_t)(new_off + 5);
++  *(uint16_t *)(newp + 1) = old_off;                       /* new.fwd_off := prev's old fwd off */
++  old_seg = *(uint16_t *)(prevp + 3);                      /* xchg ax,[si+3] (ax was ES) */
++  *(uint16_t *)(prevp + 3) = (uint16_t)new_seg;
++  *(uint16_t *)(newp + 3) = old_seg;                       /* new.fwd_seg := prev's old fwd seg */
+   return;
+ }
+ 

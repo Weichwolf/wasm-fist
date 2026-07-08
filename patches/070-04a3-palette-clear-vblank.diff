@@ -1,0 +1,51 @@
+FUN_0000_04a3 (MGAVIDEO driver) palette-buffer clear + vblank DAC-upload service.
+
+Driver method 04a3 (reached engine cae6 -> FUN_0000_e446 -> driver 0x4a3) clears the palette buffer
+and requests a vertical-retrace DAC upload, then spins until the driver's retrace ISR clears the
+semaphore DGROUP:0x786.  Two Ghidra faults: ES = word[DGROUP:0x782] (the palette-buffer segment) was
+dropped so the 0x180-word `rep stosw` zeroed host address 0 (SIGSEGV), and the `while byte[0x786]!=0`
+retrace-wait folded to `while(true)` (the ISR that clears 0x786 runs in a context Ghidra can't see).
+The DGROUP accesses (0x780/0x782/0x786) are already correctly based -- the driver runs with DS = the
+engine DGROUP.  Reconstructed from the driver asm (0x4a3..0x4cc): zero palseg:0 for 0x300 bytes; set
+DGROUP:0x780=0x782 and DGROUP:0x786=1; then -- our port has no running driver retrace IRQ -- service
+the request exactly as the ISR FUN_0000_0b1f's `if (0x786 & 1)` branch would (out 0x3c8,0; upload the
+0x300-byte buffer to 0x3c9 via fist_vga's DAC), and clear 0x786.  (FUN_0000_0b1f, the full retrace ISR
++ descriptor-chain DAC uploader, is a separate reconstruction; only its 0x786 palette-upload branch is
+on this path.)  Asm-verified 0x4a3..0x4cc.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1429,14 +1429,27 @@
+   int iVar2;
+   undefined2 *puVar3;
+   
+-  puVar3 = (undefined2 *)0x0;
+-  for (iVar2 = 0x180; iVar2 != 0; iVar2 = iVar2 + -1) {
+-    puVar1 = puVar3;
+-    puVar3 = puVar3 + 1;
+-    *puVar1 = 0;
++  {
++    /* PATCH 070 (driver asm 0x4a3..0x4cc): clear the palette buffer + request+service a vblank DAC
++       upload.  Ghidra dropped ES=word[DGROUP:0x782] (the palette-buffer segment) so the 0x180-word
++       clear wrote to host 0, and folded the "spin until the retrace ISR clears DGROUP:0x786" wait to
++       while(true).  DGROUP accesses (0x780/0x782/0x786) are already correctly based (driver DS = engine
++       DGROUP).  Our port runs no driver vertical-retrace IRQ, so the request the ISR FUN_0000_0b1f
++       would honour (its `if (0x786 & 1)` branch: out 0x3c8,0 then upload the 0x300-byte palette buffer
++       to 0x3c9) is serviced synchronously here, then 0x786 is cleared. */
++    uint16_t palseg = *(uint16_t *)(g_mem + 0x1c782);        /* word[DGROUP:0x782] = buffer segment */
++    uint8_t *pal    = g_mem + ((uint32_t)palseg << 4);       /* palette buffer at palseg:0 */
++    int i;
++    for (i = 0; i < 0x300; i++) pal[i] = 0;                  /* rep stosw 0x180 words = 0 (es:di base) */
++    *(uint16_t *)(g_mem + 0x1c780) = 0x782;                  /* DGROUP:0x780 = 0x782 (word) */
++    *(uint16_t *)(g_mem + 0x1c786) = 1;                      /* request upload (bit0) */
++    if (*(uint16_t *)(g_mem + 0x1c786) & 1) {                /* vblank service (0b1f 0x786-branch) */
++      out(0x3c8, 0);
++      for (i = 0; i < 0x300; i++) out(0x3c9, pal[i]);
++    }
++    *(uint16_t *)(g_mem + 0x1c786) = 0;                      /* retrace ISR cleared the semaphore */
+   }
+-  do {
+-  } while( true );
++  return;
+ }
+ 
+ 

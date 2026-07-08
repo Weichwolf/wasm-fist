@@ -1,0 +1,53 @@
+MGAVIDEO FUN_0000_0410: reconstruct the palette-window merge (asm 0x410..0x43d).
+
+0410 is called at the tail of the menu-background render (FUN_0000_0340) and by 03fe.  It merges a
+window of RGB palette entries -- (0x100 - startindex) triples starting at index word[DGROUP:0x78c] --
+from a source palette segment word[DGROUP:0x790] into the driver palette buffer word[DGROUP:0x782].
+Two Ghidra faults: (a) the three DGROUP field reads carried an `ss:` segment prefix that Ghidra based
+at the wrong segment (0x2c21c/0x2c21e/0x2c220 instead of DGROUP:0x78c/0x78e/0x790); (b) the `rep movs`
+es:di (dst = palette buffer) and ds:si (src = word[0x790]) segment bases were dropped, so both pointers
+started at host 0 -> SIGSEGV once the (garbage) mis-read word[0x790] was nonzero.  es = the palette
+buffer word[DGROUP:0x782], set by every caller (0340 asm 0x371; 03fe asm 0x3fe via word[0x780]=0x782).
+Reconstructed byte-exact from the asm.  Asm-verified MGAVIDEO 0x410..0x43d.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1312,18 +1312,29 @@
+   undefined1 *puVar6;
+   undefined2 unaff_ES;
+   
+-  iVar3 = _DAT_2000_c220;
+-  if ((0x100 - _DAT_2000_c21c != 0) && (_DAT_2000_c220 != 0)) {
+-    puVar6 = (undefined1 *)(_DAT_2000_c21c * 3);
+-    puVar5 = puVar6 + _DAT_2000_c21e;
+-    for (iVar4 = (0x100 - _DAT_2000_c21c) * 3; iVar4 != 0; iVar4 = iVar4 + -1) {
+-      puVar2 = puVar6;
+-      puVar6 = puVar6 + 1;
+-      puVar1 = puVar5;
+-      puVar5 = puVar5 + 1;
+-      *puVar2 = *puVar1;
++  /* PATCH 095 (asm 0x410..0x43d): palette-window merge into the driver palette buffer.  Ghidra
++     mis-based the three DGROUP reads (the `ss:` prefix -> _DAT_2000_c21c/c21e/c220 at linear
++     0x2c21c.. instead of DGROUP:0x78c/0x78e/0x790) and dropped the rep-movs es(=palette buffer
++     word[DGROUP:0x782]):di and ds(=word[DGROUP:0x790]):si segment bases -> NULL derefs.  es is set by
++     both callers to the palette buffer: 0340 asm 0x371 `mov es,word[0x782]`; 03fe asm 0x3fe
++     `mov bx,word[0x780]; mov es,word[bx]` (word[0x780]==0x782).  Copies (0x100-idx) RGB triples
++     starting at palette index idx=word[0x78c]. */
++  {
++    uint16_t idx    = *(uint16_t *)(g_mem + 0x1c78c);      /* di = word[DGROUP:0x78c] (start index) */
++    uint16_t cnt    = 0x100 - idx;                          /* sub cx,di */
++    uint16_t srcseg = *(uint16_t *)(g_mem + 0x1c790);      /* ax = word[DGROUP:0x790] (src seg) */
++    if (cnt != 0 && srcseg != 0) {                          /* je / test-je early outs */
++      uint16_t soff   = *(uint16_t *)(g_mem + 0x1c78e);    /* si = word[DGROUP:0x78e] */
++      uint16_t esseg  = *(uint16_t *)(g_mem + 0x1c782);    /* es = palette buffer (both callers) */
++      uint32_t doff   = (uint32_t)idx * 3;                  /* di *= 3 */
++      uint8_t *dst    = g_mem + ((uint32_t)esseg  << 4) + doff;         /* es:di */
++      uint8_t *src    = g_mem + ((uint32_t)srcseg << 4) + soff + doff;  /* ds:si, si += di*3 */
++      uint32_t n      = (uint32_t)cnt * 3;                  /* cx *= 3 */
++      uint32_t k;
++      for (k = 0; k < n; k++) dst[k] = src[k];
+     }
+   }
++  (void)iVar3; (void)iVar4; (void)puVar1; (void)puVar2; (void)puVar5; (void)puVar6; (void)unaff_ES;
+   return;
+ }
+ 

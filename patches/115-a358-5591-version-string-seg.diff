@@ -1,0 +1,88 @@
+PATCH 115: rebase the version-string text renderer to the far string segment (a358 width + 5591 glyph loop).
+
+e9f0 (and e459/e4bb) draw the "AF-FD ..." version string:
+    mov ax,6 ; mov es,[DGROUP:0x70] ; mov si,<str-off> ; lcall 0xf69:0xacc8 (=FUN_1000_a358 width)
+    ... shr ax,1 ; bx=0xa0-ax/2 ; ax=0xbf ; cl=<color> ; lcall 0xf69:0xace0 (=FUN_1000_a370 draw)
+The string bytes live in the far string data segment (es=[DGROUP:0x70]=0x2d74); Ghidra dropped that ES
+base at every string read, leaving the raw offset (e.g. 0x44fe) dereferenced as a host pointer -> SEGV.
+- FUN_1000_a358 (asm 0x1a358): text-width = char-count(<=0xa0) * width; rebase si to [0x70]:off.
+- FUN_1000_5591 + its 0x1558b thunk (asm 0x15591): the glyph loop `lods es:[si]->al; c684(al)` with
+  es HARDCODED to 0x2d74 in the asm.  Rebuild the es base and pass the char in al to the per-glyph
+  blitter DGROUP:0x684 (both dropped by Ghidra: string read as host ptr, c684 called with no char).
+Asm-verified 0x1a358, 0x15591/0x1558b.  (The deeper glyph-blit subtree c684->1e88 is a further frontier.)
+--- a/fist.c
++++ b/fist.c
+@@ -49265,13 +49270,15 @@
+ void __allregs thunk_FUN_1000_5591(char *param_1)
+ 
+ {
+-  char *pcVar1;
+-  
++  /* PATCH 115: 0x1558b thunk `jmp 0x15591` -> the string glyph loop.  Same reconstruction as
++     FUN_1000_5591 (es=0x2d74 far string seg; per-glyph c684(al)). */
++  uint8_t *s = g_mem + ((uint32_t)0x2d74 << 4) + (uint16_t)(uintptr_t)param_1;
+   while( true ) {
+-    pcVar1 = param_1;
+-    param_1 = param_1 + 1;
+-    if ((*pcVar1 == '\0') || ((*pcVar1 == '$' && (*param_1 == '\0')))) break;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
++    uint8_t al = *s;
++    s = s + 1;
++    if (al == '\0') break;
++    if (al == '$' && *s == '\0') break;
++    ((void (*)(uint16_t))fist_icall_far((uint32_t)(DAT_1000_c684)))(al);
+   }
+   return;
+ }
+@@ -49282,13 +49289,17 @@
+ void __allregs FUN_1000_5591(char *param_1)
+ 
+ {
+-  char *pcVar1;
+-  
++  /* PATCH 115: string glyph loop (asm 0x15591..0x155a7).  es=0x2d74 (the far string data segment,
++     hardcoded), si=param_1 = string offset.  `lods es:[si]->al; or al,al je end; cmp al,'$'; if '$' and
++     next byte==0 -> end (skip); else c684(al)` -- the per-glyph blitter DGROUP:0x684 gets the char in al.
++     Ghidra dropped the es base (param_1 read as a host ptr -> crash) and the al char arg to c684. */
++  uint8_t *s = g_mem + ((uint32_t)0x2d74 << 4) + (uint16_t)(uintptr_t)param_1;
+   while( true ) {
+-    pcVar1 = param_1;
+-    param_1 = param_1 + 1;
+-    if ((*pcVar1 == '\0') || ((*pcVar1 == '$' && (*param_1 == '\0')))) break;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
++    uint8_t al = *s;
++    s = s + 1;
++    if (al == '\0') break;
++    if (al == '$' && *s == '\0') break;
++    ((void (*)(uint16_t))fist_icall_far((uint32_t)(DAT_1000_c684)))(al);
+   }
+   return;
+ }
+@@ -60565,17 +60576,23 @@
+ {
+   int iVar1;
+   int iVar2;
+-  undefined2 unaff_ES;
+-  
++  char *s;
++
++  /* PATCH 115: text-width calc (asm 0x1a358): counts chars (<=0xa0) at es:si and returns count*width.
++     es = the far string data segment [DGROUP:0x70] (set by every caller: `mov es,[0x70]`), which Ghidra
++     dropped (param_2 read as a host pointer -> deref crash at the raw string offset).  Rebase si to
++     g_mem + ([DGROUP:0x70]<<4) + offset. */
++  s = (char *)(g_mem + ((uint32_t)*(uint16_t *)(g_mem + 0x1c070) << 4)
++                     + (uint16_t)(uintptr_t)param_2);
+   DAT_2000_56a8 = param_1;
+   iVar1 = 0;
+   iVar2 = 0xa0;
+   do {
+-    if (*param_2 == '\0') {
++    if (*s == '\0') {
+       return iVar1;
+     }
+     iVar1 = iVar1 + param_1;
+-    param_2 = param_2 + 1;
++    s = s + 1;
+     iVar2 = iVar2 + -1;
+   } while (iVar2 != 0);
+   return iVar1;

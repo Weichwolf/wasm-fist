@@ -1,0 +1,203 @@
+PATCH 114: reconstruct the MAINMENU box+items sprite-blit path (260c clip + 26a1 dispatch + 26de blit)
+and thread the c6b4 draw call.
+
+e9f0 (MAINMENU per-frame paint) draws the gray menu box + 7 item labels via one sprite blit:
+    mov ax,0x13d8 ; mov bx,0xf790 ; lcall [DGROUP:0x6b4]     (DGROUP:0x6b4 = MGAVIDEO 0x26a1)
+ax=0x13d8 = the box sprite's byte offset into the MSPRITE6.BIN sprite directory (DGROUP:0x4f0);
+bx=0xf790 = the position/rect descriptor {row0=62,col0=111,row1=161,col1=209}.  Three driver functions
+were base-lost by Ghidra:
+
+- FUN_0000_260c (sprite CLIP calc, asm 0x260c..0x265f): dropped the sprite-directory indirection
+  `mov si,ax; mov es,[0x4f0]; les si,es:[si]; mov ax,es:[si-4]` (read the sprite-id AX as an already-
+  resolved host far-ptr -> NULL deref), the DGROUP bases of the position/clip descriptors, and never
+  returned ES:SI (the record far-ptr) or CF/ZF.  Reconstructed to resolve the record via the directory
+  and publish ES:SI + CF (clipped-out) + ZF (word[clip]==0xa000) to shim statics.  ALSO: the clip result
+  words DGROUP:0x1588..0x158e are 16-bit, but the Ghidra _DAT_1000_d58X macros are undefined4 (4-byte)
+  and their stores OVERLAP (d588's dword zeroes d58a's high half, d58c's zeroes d58e) -> wrote them as
+  uint16_t.  (Without this the column came out 0 and the box rendered at the left edge / wrapped.)
+- FUN_0000_26a1 (blit dispatcher, asm 0x26a1..0x26dd): used in_CF/in_ZF=0 locals, dropped 260c's ES:SI,
+  and read the clip coords from the wrong DGROUP base.  Reconstructed to branch on 260c's real CF/ZF and
+  read [0x1588]/[0x158a] at g_mem+0x1d588/0x1d58a (DGROUP:0x1588, not 0x1c588); ZF path runs 2d6d + the
+  row-table setup then blits.
+- FUN_0000_26de (masked sprite blit, asm 0x26de..0x2757): dropped the fb-dest ES base, the source
+  DS(=sprite seg) base, and mis-typed _DAT_1000_c724 (host deref).  Rebuilt the bases (dest =
+  word[[0x724]][0] : rowtab[row]+col ; source = recseg:recoff ; stride = word[[0x724]+4]^cx-cx), reading
+  the source seg from the 260c static; the 3 blit modes (RLE type-2 / odd-aligned / even) are the Ghidra-
+  recovered arithmetic, unchanged.
+
+Also thread e9f0's [0x6b4] far-vector call with ax=0x13d8 / bx=0xf790.  Result: the gray box + 7 item
+sprites blit to 0xA0000, centred at the reference position.  Asm-verified 0x260c..0x2757, 0x26a1..0x26dd,
+0xe9f9.
+--- a/fist.c
++++ b/fist.c
+@@ -34442,7 +34442,12 @@
+   
+   FUN_0000_e3bc(param_1,param_2);
+   FUN_0000_e38a(0xf790);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 114: box+items sprite DRAW (asm 0xe9f9: mov ax,0x13d8; mov bx,0xf790; lcall [0x6b4]=26a1).
++     ax=0x13d8 = the menu-box sprite-directory byte offset (into MSPRITE6.BIN), bx=0xf790 = the position
++     descriptor.  The __allregs vector site dropped ax/bx -> the sprite blitter (260c/26de) got a garbage
++     sprite -> SEGV.  Thread positionally so 26a1 gets param_1(ax)=0x13d8 and param_4(bx)=0xf790. */
++  ((void (*)(undefined2,undefined2,undefined2,undefined2,undefined2))
++       fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x13d8, 0, 0, 0xf790, 0);
+   FUN_1000_524e(0);
+   if (DAT_2000_2dad != '\x01') {
+     uVar1 = FUN_1000_a358(6,0x44fe);
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -6046,6 +6046,12 @@
+ 
+ /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+ 
++/* PATCH 114: outputs of FUN_0000_260c (the sprite CLIP calc) that the asm returns in ES:SI + CF/ZF but
++ * Ghidra dropped -- ES:SI = the resolved sprite-record far ptr, CF = "clipped out", ZF = (word[clip]==
++ * 0xa000).  The blit dispatchers (26a1/2660/2758...) read these. */
++static uint16_t m_260c_recseg, m_260c_recoff;
++static int m_260c_cf, m_260c_zf;
++
+ undefined4 __allregs FUN_0000_260c(undefined4 *param_1,int *param_2,int param_3)
+ 
+ {
+@@ -6053,28 +6059,50 @@
+   int iVar2;
+   int iVar3;
+   int iVar4;
+-  
+-  uVar1 = *(uint *)((int)*param_1 + -4) & _DAT_1000_d586;
+-  iVar4 = -(uVar1 >> 9);
+-  iVar2 = -(uVar1 >> 1 & 0x7f);
+-  iVar3 = iVar2 + param_2[1];
++
++  /* PATCH 114: sprite CLIP calc (asm 0x260c..0x265f).  ax=param_1 = sprite-directory BYTE offset;
++     bx=param_2 = position descriptor (DGROUP near off); di=param_3 = clip descriptor (DGROUP near off,
++     the low word of _DAT_1000_c724).  Ghidra dropped the directory indirection
++     `mov si,ax; mov es,[0x4f0]; les si,es:[si]; mov ax,es:[si-4]` (it read param_1 as an already-resolved
++     host far-ptr -> NULL deref) and the DGROUP bases of bx/di, and never returned ES:SI/CF/ZF.  Rebuild:
++     resolve the record via the [DGROUP:0x4f0] directory, publish ES:SI + CF/ZF to the shim statics. */
++  {
++  uint16_t dirseg = *(uint16_t *)(g_mem + 0x1c4f0);            /* mov es,[0x4f0] */
++  uint16_t si     = (uint16_t)(uintptr_t)param_1;             /* mov si,ax */
++  uint32_t dirlin = ((uint32_t)dirseg << 4) + si;
++  uint16_t recoff = *(uint16_t *)(g_mem + dirlin);            /* les si,es:[si] : off */
++  uint16_t recseg = *(uint16_t *)(g_mem + dirlin + 2);        /*                 seg */
++  int16_t *pos    = (int16_t *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_2);
++  int16_t *clip   = (int16_t *)(g_mem + 0x1c000 + (uint16_t)param_3);
++  m_260c_recseg = recseg; m_260c_recoff = recoff;
++  m_260c_cf = 1; m_260c_zf = 0;
++  uVar1 = *(uint16_t *)(g_mem + ((uint32_t)recseg << 4) + (uint16_t)(recoff - 4)) & (uint16_t)_DAT_1000_d586;
++  iVar4 = -(int)(uVar1 >> 9);
++  iVar2 = -(int)(uVar1 >> 1 & 0x7f);
++  iVar3 = iVar2 + pos[1];
+   if (-1 < iVar3) {
+-    _DAT_1000_d58a = iVar3;
+-    uVar1 = iVar2 + param_2[3];
+-    if (uVar1 <= *(uint *)(param_3 + 0xc)) {
+-      _DAT_1000_d58e = uVar1;
+-      iVar2 = iVar4 + *param_2;
++    /* NB the DGROUP:0x1588..0x158e clip words are 16-bit; the Ghidra _DAT_1000_d58X macros are undefined4
++       (4-byte) and their writes OVERLAP (d588's dword zeroes d58a's high half, d58c's zeroes d58e) -- write
++       them as uint16_t. */
++    *(uint16_t *)(g_mem + 0x1d58a) = (uint16_t)iVar3;
++    uVar1 = (uint16_t)(iVar2 + pos[3]);
++    if (uVar1 <= (uint16_t)clip[6]) {                          /* [di+0xc] */
++      *(uint16_t *)(g_mem + 0x1d58e) = (uint16_t)uVar1;
++      iVar2 = iVar4 + pos[0];
+       if (-1 < iVar2) {
+-        _DAT_1000_d588 = iVar2;
+-        uVar1 = iVar4 + param_2[2];
+-        if (uVar1 <= *(uint *)(param_3 + 10)) {
+-          _DAT_1000_d58c = uVar1;
+-          return;
++        *(uint16_t *)(g_mem + 0x1d588) = (uint16_t)iVar2;
++        uVar1 = (uint16_t)(iVar4 + pos[2]);
++        if (uVar1 <= (uint16_t)clip[5]) {                      /* [di+0xa] */
++          *(uint16_t *)(g_mem + 0x1d58c) = (uint16_t)uVar1;
++          m_260c_cf = 0;
++          m_260c_zf = ((uint16_t)clip[0] == 0xa000);           /* cmpw [di],0xa000 */
++          return 0;
+         }
+       }
+     }
+   }
+-  return;
++  }
++  return 0;
+ }
+ 
+ 
+@@ -6139,16 +6167,27 @@
+              undefined2 param_5)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  undefined1 in_ZF = 0;
+-  
++  /* PATCH 114: sprite blit dispatcher (asm 0x26a1..0x26dd).  ax=param_1 = sprite-directory byte offset,
++     bx=param_4 = position descriptor (DGROUP near off).  260c resolves the sprite record (ES:SI) and the
++     clipped coords ([0x1588..0x158e]) and returns CF/ZF; the je(ZF)-fallthrough path runs the coord
++     transform 2d6d + row-table setup then blits, the jne path blits from cx=0.  Ghidra used in_CF/in_ZF=0
++     locals and dropped 260c's ES:SI record ptr -> the blit got a NULL sprite.  Use the shim statics that
++     260c (patch 114) publishes.  For the MAINMENU box (ax=0x13d8, pos=0xf790) word[clip]==0xa000 => ZF=1
++     => the full path. */
+   FUN_0000_260c(param_1,param_4,_DAT_1000_c724);
+-  if (!(bool)in_CF) {
+-    if ((bool)in_ZF) {
+-                    /* WARNING: Subroutine does not return */
+-      FUN_0000_2d6d((undefined1 *)&DAT_1000_d588);
++  if (m_260c_cf == 0) {
++    if (m_260c_zf) {
++      FUN_0000_2d6d((int *)(uintptr_t)0x1588);           /* 2d6d(bx=0x1588) coord transform */
++      *(uint16_t *)(g_mem + 0x1c794) = 0x7c8;
++      *(uint16_t *)(g_mem + 0x1c796) = 0x140;
++      /* 26de(cx=0, dx=[0x158a] col, si=recoff, di=[0x1588] row) -- source seg read from m_260c_recseg.
++         NB DGROUP:0x1588 = g_mem+0x1d588 (not 0x1c588). */
++      FUN_0000_26de(0, *(uint16_t *)(g_mem + 0x1d58a),
++                    (byte *)(uintptr_t)m_260c_recoff, *(uint16_t *)(g_mem + 0x1d588));
++      FUN_0000_2e12();
++    } else {
++      FUN_0000_26de(0, 0, (byte *)(uintptr_t)m_260c_recoff, 0);   /* 26d5: di=cx=0 */
+     }
+-    FUN_0000_26de(0,param_3,param_5,param_2);
+   }
+   return;
+ }
+@@ -6192,7 +6231,6 @@
+   byte bVar1;
+   byte *pbVar2;
+   byte *pbVar3;
+-  undefined2 uVar4;
+   uint uVar5;
+   uint uVar6;
+   uint uVar7;
+@@ -6200,12 +6238,24 @@
+   int iVar9;
+   byte *pbVar10;
+   byte *pbVar11;
+-  undefined2 unaff_ES;
+-  
+-  pbVar10 = (byte *)(*(int *)(param_4 * 2 + _DAT_1000_c794) + param_2);
+-  uVar4 = *_DAT_1000_c724;
+-  iVar9 = (_DAT_1000_c724[2] ^ param_1) - param_1;
+-  uVar7 = *(uint *)(param_3 + -4);
++
++  /* PATCH 114: masked sprite blit, es:0..dst <- ds:si (asm 0x26de..0x2757).  es(entry)=SOURCE sprite seg
++     (published by 260c as m_260c_recseg); si=param_3=record offset; di=param_4=row (rowtab index);
++     dx=param_2=col; cx=param_1=stride-xor.  Ghidra dropped the fb-dest ES base and the source DS(=es
++     entry) base, and mis-typed _DAT_1000_c724 as a host ptr.  Rebuild the bases:
++       dest   = word[[0x724]][0] : (rowtab[di] + col)
++       stride = word[[0x724]+4] ^ cx - cx
++       source = m_260c_recseg : param_3  */
++  {
++  uint16_t fb_di  = *(uint16_t *)(g_mem + 0x1c724);
++  uint16_t fb_seg = *(uint16_t *)(g_mem + 0x1c000 + fb_di);
++  uint16_t rowtab = *(uint16_t *)(g_mem + 0x1c794);
++  uint16_t rowoff = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint16_t)param_4 * 2 + rowtab));
++  pbVar10 = g_mem + ((uint32_t)fb_seg << 4) + (uint16_t)(rowoff + (uint16_t)param_2);
++  iVar9 = (int)(short)((*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(fb_di + 4)) ^ param_1) - param_1);
++  param_3 = g_mem + ((uint32_t)m_260c_recseg << 4) + (uint16_t)(uintptr_t)param_3;
++  }
++  uVar7 = *(uint16_t *)(param_3 + -4);
+   uVar5 = uVar7 >> 8;
+   uVar8 = uVar7 & 0xff;
+   if (param_3[-2] == 2) {

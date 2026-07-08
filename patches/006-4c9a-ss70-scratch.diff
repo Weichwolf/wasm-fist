@@ -1,0 +1,70 @@
+Restore FUN_1000_4c9a's SS-relative dynamic-segment source pointer (Ghidra dropped the DS far-base).
+
+4c9a builds a filename by copying a template from [SS:0x70]:SI into SS:0x740. The source SEGMENT is
+held in the stack-segment scratch slot SS:0x70 (SS=DGROUP=0x1c00 after the CRT stack fixup); the asm
+does `mov ax,ss:[0x70]; mov ds,ax; lodsb ds:[si]`. Ghidra mis-resolved ss:[0x70] to a fixed absolute
+DAT_2000_bb00 (its static SS context 0x2ba9) into a dead var and dropped the `mov ds,ax`, leaving the
+source as a bare `*param_1` (param_1 = the SI offset). Dereferencing the offset as a host pointer
+SIGSEGVs for small offsets. Reconstruct the far read [DGROUP:0x70]:SI -> g_mem. The source segment
+(DGROUP:0x70) is the engine's far string/resource data group; it is seeded to its base-0 paragraph
+0x2d74 (oracle: runtime base_seg+0x2d74) by the loader role in native_main (fist_install_dgroup).
+Dest SS:0x740 = 0x1c740 (Ghidra got that right, SS=DGROUP). Class: "SS-relative dynamic-segment
+scratch" (docs/stage1.md), distinct from the DS=CS and seg-wrap classes.
+
+--- a/fist.c
++++ b/fist.c
+@@ -45859,26 +45859,36 @@
+ undefined4 __allregs FUN_1000_4c9a(char *param_1)
+ 
+ {
+-  char *pcVar1;
+   char cVar2;
+-  undefined2 uVar3;
+   int iVar4;
+-  char *pcVar5;
+-  
+-  uVar3 = DAT_2000_bb00;
+-  pcVar5 = (char *)&DAT_1000_c740;
+-  iVar4 = 0x40;
+-  do {
+-    pcVar1 = param_1;
+-    param_1 = param_1 + 1;
+-    cVar2 = *pcVar1;
+-    pcVar1 = pcVar5;
+-    pcVar5 = pcVar5 + 1;
+-    *pcVar1 = cVar2;
+-    iVar4 = iVar4 + -1;
+-  } while (iVar4 != 0 && cVar2 != '\0');
+-  *pcVar5 = '\0';
+-  return;
++  /* PATCH 006: SS-relative dynamic-segment scratch -- restore the source segment Ghidra dropped.
++     Asm (base-0 image linear 0x14c9a):
++       mov ax, ss:[0x70]      ; src segment := word at SS:0x70 (SS=DGROUP=0x1c00) = the engine's far
++                              ;   string/resource data segment (oracle: base_seg+0x2d74; base-0 => 0x2d74)
++       push ds ; mov ds,ax    ; DS := that segment
++       mov di,ss ; mov es,di  ; ES := SS (=0x1c00)
++       mov di,0x740 ; mov cx,0x40
++     .l: lodsb (ds:si) ; stosb (es:di) ; or al,al ; loopne .l   ; copy template until NUL or 64 bytes
++       mov byte es:[di],0     ; NUL-terminate
++     Ghidra mis-resolved ss:[0x70] to a fixed DAT_2000_bb00 (static SS ctx 0x2ba9) and dropped the
++     `mov ds,ax` base, dereferencing param_1 (the SI offset) as a host pointer -> SIGSEGV for small
++     offsets. Reconstruct the far read [DGROUP:0x70]:SI into g_mem; dest = SS:0x740 = 0x1c740 (which
++     Ghidra got right, SS=DGROUP). DGROUP:0x70 is seeded to the string-data segment paragraph by the
++     CRT/loader role in native_main (fist_install_dgroup). Class: docs/stage1.md "SS-relative
++     dynamic-segment scratch". */
++  {
++    unsigned src_seg = *(uint16_t *)(g_mem + 0x1c070);            /* SS:0x70 */
++    unsigned char *src = g_mem + ((unsigned long)src_seg << 4) + (uint16_t)(uintptr_t)param_1;
++    unsigned char *dst = g_mem + 0x1c740;                         /* ES:DI = SS:0x740 */
++    iVar4 = 0x40;
++    do {
++      cVar2 = (char)*src++;
++      *dst++ = (unsigned char)cVar2;
++      iVar4 = iVar4 + -1;
++    } while (iVar4 != 0 && cVar2 != '\0');
++    *dst = '\0';
++  }
++  return (undefined4)(unsigned char)cVar2;
+ }
+ 
+ 

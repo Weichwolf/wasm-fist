@@ -1,0 +1,34 @@
+e339 task-dispatch base-loss: rebase the word[aa2e:aa2c] task test to g_mem and render the
+asm-0xe366 far ljmp [DGROUP:0x58] as a far call (Ghidra typed the task ptr as host int** ->
+NULL deref, and the far jmp as near).  Asm-verified 0x0e339..0x0e36c.
+--- a/fist.c
++++ b/fist.c
+@@ -33513,14 +33513,22 @@
+ undefined2 __allregs FUN_0000_e339(void)
+ 
+ {
++  /* PATCH 067: e339 dispatches the env-supplied EXTENDER callback [ea16] with the arg block
++     [ea1a..ea1e]; then, iff word[aa2e:aa2c] (the task struct's first word) != 0 AND aa10 != 0, it
++     far-jmps the [DGROUP:0x58] vector (asm 0x0e366 `ljmp far [0x58]`).  Ghidra typed the task pointer
++     aa2c as a host `int **` and dropped the aa2e segment base (`*DAT_2000_aa2c` -> host-NULL deref when
++     the task seg is 0), and rendered the far ljmp as a near call.  Rebase the task-word test to g_mem
++     and the tail dispatch to a far call.  (The gate [ea16] = linear 0x8799 is the Doug-Huffman
++     extender's real-mode->PM callback; until a faithful extender-service handler is implemented it
++     honestly traps to 0, so aa2e:aa2c stays 0:0 and this tail is skipped.)  Asm-verified 0x0e339..0x0e36c. */
++  uint8_t *dg = g_mem + 0x1c000;
+   undefined2 uVar1;
+-  
+   uVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_2000_aa16)))();
+-  if ((*DAT_2000_aa2c != 0) && (DAT_2000_aa10 != 0)) {
+-                    /* WARNING: Could not recover jumptable at 0x0000e366. Too many branches */
+-                    /* WARNING: Treating indirect jump as call */
+-    uVar1 = (*(code *)fist_icall_near(0x0u,(uint16_t)((ulong)DAT_1000_c058)))();
+-    return uVar1;
++  { uint16_t s = *(uint16_t *)(dg+0xea2e), o = *(uint16_t *)(dg+0xea2c);
++    if (*(uint16_t *)(g_mem + ((uint32_t)s<<4) + o) != 0 && *(uint16_t *)(dg+0xea10) != 0) {
++      uint32_t fp = (uint32_t)(*(uint16_t *)(dg+0x58)) | ((uint32_t)(*(uint16_t *)(dg+0x5a)) << 16);
++      uVar1 = (*(code *)fist_icall_far(fp))();
++    }
+   }
+   return uVar1;
+ }

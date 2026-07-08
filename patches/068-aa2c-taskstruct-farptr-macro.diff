@@ -1,0 +1,28 @@
+Task-struct far-pointer macro rebase (DGROUP:0xea2c = aa2c/aa2e).
+
+The engine's intro/title TASK-CONTROL BLOCK is addressed through a 16-bit FAR pointer stored in
+DGROUP: aa2c = the near offset (always 0), aa2e = the segment (the task segment the extender's
+create-task gate returns; see fist_extender_gate / FUN_0000_e339 / FUN_0000_d99b).  Ghidra typed the
+symbol DAT_2000_aa2c as a host `int **` reading the raw 32-bit word at linear 0x2aa2c -- i.e. it read
+(aa2e<<16 | aa2c) and dereferenced THAT as a host pointer (base-loss), AND, being an `int *`, every
+`*(t*)(DAT_2000_aa2c + off)` scaled `off` by sizeof(int)=4 (pointer-scaling) -- so all ~88 task-struct
+accesses (db3f detail-level, dab0/db11/dde2/ddff/e21c/6de2/... state + entry/context/asset-name init)
+computed the wrong host address at the wrong byte offset.  These are the whole "task-struct base-loss
+family": faithfully, each `es:off(di)` with es=word[aa2e], di=word[aa2c].
+
+Rebase the macro ONCE (fixes all sites uniformly): a BYTE pointer at g_mem + (word[aa2e]<<4) +
+word[aa2c].  Byte pointer => `+ off` is a byte offset (matches the asm exactly, no ×4 scaling); the
+`iVar = DAT_2000_aa2c; *(char*)(iVar+off)` idiom then loads the correct host base too.  The raw-value
+reads use the separate `_DAT_2000_aa2c` (undefined4) macro and are untouched.  Asm-verified against
+FUN_0000_db3f (0xdb3f: `mov es,[aa2e]; mov di,[aa2c]; movw $0x50,es:0x54(di); ... es:0xcc(di)`).
+--- a/fist.c
++++ b/fist.c
+@@ -3657,7 +3657,7 @@
+ #define DAT_2000_aa18 (*(undefined2 *)(g_mem+0x2aa18))
+ #define DAT_2000_aa1a (*(undefined2 *)(g_mem+0x2aa1a))
+ #define DAT_2000_aa1c (*(undefined2 *)(g_mem+0x2aa1c))
+-#define DAT_2000_aa2c (*(int **)(g_mem+0x2aa2c))
++#define DAT_2000_aa2c ((uint8_t *)(g_mem + ((uint32_t)(*(uint16_t*)(g_mem+0x2aa2e))<<4) + *(uint16_t*)(g_mem+0x2aa2c)))
+ #define DAT_2000_aa2e (*(undefined2 *)(g_mem+0x2aa2e))
+ #define DAT_2000_aa5e (*(undefined2 *)(g_mem+0x2aa5e))
+ #define DAT_2000_aa66 (*(undefined2 *)(g_mem+0x2aa66))

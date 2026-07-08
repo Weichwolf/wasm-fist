@@ -1,0 +1,28 @@
+Install the display-list element method vectors (reloc section si=0x174) at menu/screen-enter.
+
+See the PATCH 098 comment in the hunk: DGROUP:0x388 = 0f69:0x306c = FUN_1000_26fc (the screen-
+resource OPEN) is uninstalled at boot because the original's CRT install site (FUN_1000_223c) runs
+the inert engine-C f842 and applying si=0x174 that early corrupts DGROUP (patch 091).  Install it
+in the loader-role shim (fist_ensure_dlist_vecs) at FUN_0000_e714 entry -- after boot+intro, before
+the first element paint that dispatches through DGROUP:0x344..0x394.  This lets the MGAVIDEO
+element-load thunk open MAINMENU.MRL and populate the display-list descriptor's resource segment.
+
+--- a/fist.c
++++ b/fist.c
+@@ -34015,6 +34015,16 @@
+   undefined1 uVar5;
+   undefined2 uVar6;
+   
++  /* PATCH 098: install the display-list ELEMENT method vectors (reloc section si=0x174 ->
++   * DGROUP:0x344..0x394, seg 0f69) at screen/menu-enter, before the first element paint dispatches
++   * through them.  DGROUP:0x388 = 0f69:0x306c = FUN_1000_26fc, the screen-resource OPEN the MGAVIDEO
++   * element-load thunk (driver 0x310 -> lcall [DGROUP:0x388], filename @ DGROUP:0x740) invokes to
++   * open+alloc+read a screen .MRL (e.g. MAINMENU.MRL, driver name-table idx 13) and store its loaded
++   * segment into the display-list descriptor word0.  The original Doug-Huffman CRT installs this
++   * section at load via the working far applier f842 (from FUN_1000_223c); in our port f842's C body is
++   * inert AND applying it at that early-CRT point corrupts the not-yet-ready DGROUP (breaks 5c3a --
++   * patch 091), so the loader-role shim installs it here, at the correct later time.  Idempotent. */
++  fist_ensure_dlist_vecs();
+   FUN_0000_be0e(4);
+   DAT_1000_c78c = 0x100;
+   FUN_0000_e40e(param_1,param_3);

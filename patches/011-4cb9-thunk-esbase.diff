@@ -1,0 +1,61 @@
+Restore FUN_1000_4cb9's far-JMP thunk ES base + thread the caller's CS (FUN_1000_06bc).
+
+06bc installs a self-modifying trampoline in its own code segment: `mov di,0x19bb; push cs; call 4cb9`
+then `movb es:[di],0x9a`. 4cb9 does `pop ax; pop es; push es; push ax` to load ES from the far-return
+frame (= the caller's CS, 0x1000 in the base-0 FUN_1000_* model) and LEAVES ES set on exit, then writes
+a 5-byte `JMP FAR (DI+5):ES` thunk at ES:DI. 06bc's following `movb es:[di],0x9a` overwrites the opcode
+byte with 0x9a (CALL FAR), all at ES:DI = 0x1000:0x19bb = linear 0x119bb.
+
+Two "unaff_CS/ES segment register" losses (CLAUDE.md/docs/stage1.md): (a) 4cb9 dropped the ES base so
+param_1 (=DI=0x19bb) was dereferenced as a host pointer -> SIGSEGV; (b) 06bc's unaff_CS local was
+uninitialised (=0) and the `*puVar5` store lost its ES base. Fix: 4cb9 reconstructs dst = g_mem+(ES<<4)+DI
+with ES = param_2 (the caller's CS); 06bc threads its CS (0x1000) into the 4cb9 call and bases the SMC
+store at linear 0x119bb. The trampoline bytes are byte-faithful to the original but inert for our
+C-compiled control flow (we don't execute g_mem as code) -- self-modifying-code class, flagged.
+
+--- a/fist.c	2026-07-08 00:54:11.694231908 +0200
++++ b/fist.c	2026-07-08 00:54:11.707940908 +0200
+@@ -37908,8 +37908,13 @@
+   undefined1 uVar6;
+   
+   puVar5 = (undefined1 *)0x19bb;
+-  FUN_1000_4cb9(0x19bb,unaff_CS);
+-  *puVar5 = 0x9a;
++  /* PATCH 011: this frame's CS is 0x1000 (FUN_1000_*). `push cs; call 4cb9` makes 4cb9 load ES:=0x1000
++     off the stack and LEAVE it set, so the trampoline and the following `movb es:[di],0x9a` both target
++     ES:DI = 0x1000:0x19bb = linear 0x119bb. Ghidra's unaff_CS local was uninitialised (=0) and it
++     dropped the ES base on `*puVar5`. Thread the CS (0x1000) into the 4cb9 call and base the SMC store.
++     puVar5 stays the raw DI offset 0x19bb where later passed as a data arg (140e/1af3/1dfa). */
++  FUN_1000_4cb9(0x19bb,0x1000);
++  *(g_mem + 0x119bb) = 0x9a;                              /* movb es:[0x19bb],0x9a (patch to CALL FAR) */
+   FUN_1000_106d(0x19c9);
+   uVar6 = 0;
+   uVar2 = 0;
+@@ -45887,9 +45892,24 @@
+ void __allregs FUN_1000_4cb9(undefined1 *param_1,undefined2 param_2)
+ 
+ {
+-  *param_1 = 0xea;
+-  *(undefined1 **)(param_1 + 1) = param_1 + 5;
+-  *(undefined2 *)(param_1 + 3) = param_2;
++  /* PATCH 011: restore the far-JMP thunk's ES segment base (unaff_CS/ES segment-reg class).
++     Asm (base-0 linear 0x14cb9):
++       pop ax; pop es; push es; push ax    ; ES := far-return segment (caller's CS); LEFT set on exit
++       movb es:[di], 0xea                   ; *(ES:DI) = 0xEA  (JMP FAR opcode)
++       lea ax,[di+5]; mov es:[di+1], ax     ; thunk offset = DI+5
++       mov es:[di+3], es                    ; thunk segment = ES (caller CS)
++     Ghidra dropped the ES base (param_1 = DI dereferenced as a host pointer -> SIGSEGV) and modelled
++     the stored segment as a separate param_2. Reconstruct dst = g_mem+(ES<<4)+DI; the caller passes
++     its CS in param_2. Self-modifying trampoline: the 5 bytes land in the loaded image copy in g_mem
++     (inert for our C-compiled control flow) but are byte-faithful to the original. Class:
++     docs/stage1.md / CLAUDE.md "unaff_CS/ES segment register". */
++  {
++    unsigned off = (uint16_t)(uintptr_t)param_1;                          /* DI */
++    unsigned char *dst = g_mem + ((unsigned long)(uint16_t)param_2 << 4) + off; /* ES:DI */
++    dst[0] = 0xea;                                                        /* JMP FAR opcode */
++    *(uint16_t *)(dst + 1) = (uint16_t)(off + 5);                         /* thunk offset = DI+5 */
++    *(uint16_t *)(dst + 3) = (uint16_t)param_2;                           /* thunk segment = ES */
++  }
+   return;
+ }
+ 

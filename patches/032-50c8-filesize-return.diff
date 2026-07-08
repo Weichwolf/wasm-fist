@@ -1,0 +1,52 @@
+FUN_1000_50c8 (TASK 2): return the driver-file SIZE that Ghidra dropped from the multi-register return.
+
+asm 0x150c8 is a NEAR helper that opens the driver .DVR (INT 21h AH=3D), seeks to end (AH=42/AL=02 ->
+DX:AX = file size), closes (AH=3E), and returns DX:AX = the size (`push ax; push dx; <close>; pop dx;
+pop ax; ret`). Ghidra's __allregs model returned param_8 and dropped the DX:AX size, so the caller
+FUN_1000_5051 (patch 033) fed garbage paragraphs to the driver-object allocator (DGROUP:0xd0 -> 184b),
+leaving the driver-struct load-seg field 0 -> both .DVRs REJECTed. Capture the size low word right after
+the seek int (before the close int overwrites uRam000f0000 via CONCAT11(0x3e,...)) and return it. The high
+word (uRam000f0006) is 0 for these <64KB MZ overlay modules, which the overlay loader also requires (a
+single load segment). Asm-verified base-0 0x150c8..0x150e5.
+--- a/fist.c
++++ b/fist.c
+@@ -47392,7 +47420,8 @@
+   undefined2 unaff_ES;
+   undefined2 uStack0002;
+   undefined2 uStack0004;
+-  
++  undefined2 f_size_lo;   /* PATCH 032 */
++
+   uRam000f0014 = 0x21;
+   uRam000f0000 = 0x3d00;
+   uRam000f000e = 0x1c00;
+@@ -47405,6 +47434,7 @@
+   uRam000f0010 = unaff_ES;
+   fist_int_dispatch();
+   uVar1 = uRam000f0000;
++  f_size_lo = 0;
+   if (!(bool)uRam000f0012) {
+     uStack0002 = uRam000f0000;
+     uRam000f0014 = 0x21;
+@@ -47416,6 +47446,12 @@
+     uRam000f000c = param_4;
+     fist_int_dispatch();
+     uStack0004 = uRam000f0006;
++    /* PATCH 032: asm 0x150c8 is a near fn returning DX:AX = the file SIZE (AH=42/AL=02 seek-to-end):
++       `push ax; push dx; <close>; pop dx; pop ax; ret`.  Ghidra's __allregs model returned param_8 and
++       dropped the DX:AX size, so the caller (FUN_1000_5051) fed garbage to the driver-object allocator.
++       Capture the size low word (uRam000f0006 = high; = 0 for these <64KB MZ overlay modules, which the
++       overlay loader also requires) and return it, before the close int clobbers uRam000f0000. */
++    f_size_lo = (undefined2)uRam000f0000;
+     uRam000f0000 = CONCAT11(0x3e,(char)uRam000f0000);
+     uRam000f0014 = 0x21;
+     uRam000f0002 = param_7;
+@@ -47423,7 +47459,7 @@
+     uRam000f000c = param_4;
+     uRam000f0010 = unaff_ES;
+     fist_int_dispatch();
+-    uVar1 = param_8;
++    uVar1 = f_size_lo;
+   }
+   return uVar1;
+ }

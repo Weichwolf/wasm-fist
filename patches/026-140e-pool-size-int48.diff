@@ -1,0 +1,34 @@
+FUN_1000_140e: MEMMGR pool size = the DOS AH=48 max-alloc result, not a phantom register param.
+
+140e (asm 0x1140e) grabs all available conventional memory and builds the MEMMGR pool over it:
+
+    mov ah,0x48 ; mov bx,0xffff ; int 21h   ; query -> BX = largest free block (paragraphs)
+    push bx ; mov ah,0x48 ; int 21h ; pop bx ; alloc that block  (-> AX = block segment)
+    mov [0x1758],ax                          ; save block seg
+    mov cx,0x300 ; call 0x11467              ; 1467(AX=block, CX=0x300 align, BX=size)
+
+The size handed to 1467 is BX = the AH=48 query result (the whole free block, ~23552 paras here). The
+__allregs decompiler cannot see that BX is produced by the INT 21h (the swi() intrinsic does not model
+BX out), so it treated 1467's third argument as an incoming register PARAMETER (param_7) — which arrives
+as garbage (99) from 06bc. Result: 1467 built a 99-paragraph pool inside the 23552-paragraph block, so
+the first real request larger than ~85 paragraphs (e.g. the 356-para scratch buffer at FUN_0000_14da)
+overflowed the pool -> 0a31 returned "out of memory" (CF=1) -> 184b panicked via 13e4. (Latent until
+patch 025 made 0a31 actually run; before that it hung in the folded walk.)
+
+Fix: pass the saved query result (uStack0002 = uRam000f0002 captured right after the query INT 21h =
+the BX the asm forwards) as the pool size. The pool now spans the whole allocated block. Asm-verified
+base-0 0x1140e..0x11429.
+--- a/fist.c
++++ b/fist.c
+@@ -39947,7 +39947,10 @@
+   fist_int_dispatch();
+   if (!(bool)uRam000f0012) {
+     DAT_1000_d758 = uRam000f0000;
+-    FUN_1000_1467(uRam000f0000,0x300,param_7);
++    /* PATCH 026: 1467's size = BX = the AH=48 query result (uStack0002), i.e. the whole free block,
++       NOT the phantom register param_7 (__allregs could not thread BX through the INT 21h). Asm
++       0x11429 calls 1467 with BX = the pushed/popped AH=48 max-alloc size. */
++    FUN_1000_1467(uRam000f0000,0x300,uStack0002);
+     uVar3 = DAT_1000_d758;
+     /* PATCH 014: rep movsw source segment restore (dropped far base on string op). Asm (0x1140e+0x1e):
+          mov ax,ds; mov es,ax; mov di,0x16d4; mov ds,[0x1758]; xor si,si; mov cx,0x10; rep movsw

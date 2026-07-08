@@ -1,0 +1,41 @@
+FUN_0000_20ea (sprite/cursor node-list draw walker, e714 -> 1cdb -> 20c5 -> 20ea): rebase the DGROUP
+near-offset node pointers Ghidra used as bare host pointers -> SIGSEGV.
+
+e714 (the post-intro screen/menu build) walks a node list to dispatch per-node draw handlers.  asm
+(image 0x20ea):
+    20ea: mov ds:0x3e08,bx       ; publish the current node offset
+    20ee: mov di,[bx]            ; di = node[0]  (bx = DGROUP near offset of the node)
+    20f3: call [di+0x444e]       ; near-call the handler at DGROUP:(di+0x444e), bp passed through
+    20fa: sub bx,0xc             ; previous node (12-byte stride, walking backwards)
+    20fd: cmp bx,dx ; jae 20ea   ; loop while bx >= dx (dx = low bound)
+Ghidra typed bx (param_2) and dx (param_1) as host `int *` and dereferenced the raw offsets
+(0x3b18/0x3b00) as pointers -> crash.  Rebase to DGROUP (0x1c000) near offsets: node=*(u16)(DG+bx),
+handler=*(u16)(DG+node+0x444e), dispatched via fist_icall_near; publish bx to ds:0x3e08 as a word
+(faithful to the 16-bit store); step bx-=0xc; loop while bx>=dx.  Same base-loss class as patches
+056/057 (the 201a/209e draw walkers, dispatch bases 0x3e18/0x423c); this one's dispatch base is 0x444e.
+--- a/fist.c
++++ b/fist.c
+@@ -8858,11 +8858,19 @@
+ void __allregs FUN_0000_20ea(int *param_1,int *param_2,undefined2 param_3)
+ 
+ {
++  /* asm 0x20ea: node-list walker.  bx=param_2 (node near offset in DGROUP), dx=param_1 (low bound).
++   *   mov ds:0x3e08,bx ; di=[bx] ; call near [DGROUP:di+0x444e](bp=param_3) ; bx-=0xc ; while(bx>=dx)
++   * Ghidra used bx/dx as bare host `int *` (deref of raw offset -> SIGSEGV) -- rebase to DGROUP near
++   * offsets (same class as patches 056/057's 201a/209e draw walkers, dispatch base here = 0x444e). */
++  uint16_t lo = (uint16_t)(uintptr_t)param_1;
++  uint16_t bx = (uint16_t)(uintptr_t)param_2;
+   do {
+-    DAT_1000_fe08 = param_2;
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_2 + 0x444e))))(param_3);
+-    param_2 = param_2 + -6;
+-  } while (param_1 <= param_2);
++    uint16_t node = *(uint16_t *)(g_mem + 0x1c000 + bx);                                   /* di = *bx */
++    uint16_t hoff = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(node + 0x444e));            /* [di+0x444e] */
++    *(uint16_t *)(g_mem + 0x1c000 + 0x3e08) = bx;                                          /* ds:0x3e08=bx */
++    (*(code *)fist_icall_near(0x0u,hoff))(param_3);
++    bx = (uint16_t)(bx - 0xc);
++  } while (lo <= bx);
+   return;
+ }
+ 

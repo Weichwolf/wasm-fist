@@ -1,0 +1,40 @@
+FUN_0000_024f (VGA mode-set init helper): DGROUP near-pointer base loss + int/word pointer scaling.
+
+Reached from the VGA mode-set FUN_0000_00e8 (line `FUN_0000_024f(0x726,param_3)`), just before its INT 10h
+AX=13h.  param_1 = 0x726 is a DGROUP NEAR offset (the driver runs with DS=DGROUP=0x1c00); Ghidra dropped
+the segment base and dereferenced the bare offset as a host address -> SIGSEGV.  asm 0x24f: `testw [bx];
+je 0x246` (loop body 0x246: `movw [bx],0xa000; movw [bx+4],0x140`); `xchg ax,[0x724]` (WORD store DGROUP:
+0x724=bx); `mov ax,[bx+4]`; call 02c1.  Also int-width scaling: param_1[2] scaled to byte +8 (should be
++4) and the 4-byte c724 store would clobber DGROUP:0x726.  Rebase to g_mem+DGROUP+off with 16-bit word
+accesses.  Asm-verified base-0 MGAVIDEO offset 0x24f.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -997,14 +997,21 @@
+ void __allregs FUN_0000_024f(int *param_1,undefined2 param_2)
+ 
+ {
+-  while (*param_1 == 0) {
+-    *param_1 = -0x6000;
+-    param_1[2] = 0x140;
++  /* PATCH 036: DGROUP near-pointer base loss + int/word scaling in the VGA mode-set init helper.
++   * asm 0x24f: entry `testw [bx]; je 0x246` where the loop body 0x246 does `movw [bx],0xa000;
++   * movw [bx+4],0x140`; then `xchg ax,[0x724]` (DGROUP:0x724 = bx, WORD), `mov ax,[bx+4]`, call 02c1.
++   * param_1 = bx = a DGROUP NEAR offset (0x726; DS=DGROUP=0x1c00); Ghidra dropped the segment base and
++   * dereferenced the bare 16-bit offset as a host pointer -> SIGSEGV, and typed the accesses as 4-byte
++   * `int` (param_1[2] scaled to +8, and the c724 store 4-byte -> would clobber DGROUP:0x726).  Rebase to
++   * g_mem+DGROUP+off with explicit 16-bit word accesses; word index 2 = byte +4. */
++  uint16_t off = (uint16_t)(uintptr_t)param_1;
++  uint16_t *p = (uint16_t *)(g_mem + 0x1c000 + off);
++  while (p[0] == 0) {
++    p[0] = 0xa000;
++    p[2] = 0x140;
+   }
+-  LOCK();
+-  UNLOCK();
+-  _DAT_1000_c724 = param_1;
+-  FUN_0000_02c1(param_1[2],param_2);
++  *(uint16_t *)(g_mem + 0x1c724) = off;
++  FUN_0000_02c1(p[2],param_2);
+   return;
+ }
+ 

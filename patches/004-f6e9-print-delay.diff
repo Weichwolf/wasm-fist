@@ -1,0 +1,16 @@
+Neutralize FUN_0000_f6e9's mis-recovered infinite loop (print-then-timer-delay routine).
+
+--- a/fist.c	2026-07-07 19:52:54.902336277 +0200
++++ b/fist.c	2026-07-07 19:52:54.913769572 +0200
+@@ -36026,8 +36026,9 @@
+   uRam000f000a = param_6;
+   uRam000f000c = param_4;
+   fist_int_dispatch();
+-  do {
+-  } while( true );
++  return;  /* PATCH 004: FUN_0000_f6e9 = print-banner (INT21 AH=09) then a 6-tick BIOS-timer delay
++              (0040:006C) then retf. Ghidra pruned the timer-wait blocks (flag mis-analysis) and left a
++              bogus `do{}while(true)` hard hang. Restore the return; the startup delay is a no-op here. */
+ }
+ 
+ 

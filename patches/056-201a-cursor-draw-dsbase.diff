@@ -1,0 +1,38 @@
+FUN_0000_201a (cursor-DRAW dispatch walker): restore the DS=DGROUP node + handler-vector base.
+
+asm 0x201a runs with DS=DGROUP: `mov di,[bx]; call [di+0x3e18]` dispatches a per-node draw handler via a
+near vector table at DGROUP:0x3e18.  Ghidra dropped the DS base (host-pointer derefs -> SIGSEGV) and
+mis-scaled the 0xc-byte walk stride.  Reconstruct DGROUP-based reads + a seg-0 near call to the handler.
+Asm-verified engine 0x201a.
+--- a/fist.c
++++ b/fist.c
+@@ -8683,11 +8688,24 @@
+ void __allregs FUN_0000_201a(int *param_1,int *param_2,undefined2 param_3)
+ 
+ {
+-  do {
+-    DAT_1000_fe08 = param_2;
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_2 + 0x3e18))))(param_3);
+-    param_2 = param_2 + 6;
+-  } while (param_2 <= param_1);
++  /* PATCH 056: cursor-DRAW dispatch walker (asm 0x201a), runs with DS=DGROUP.  Ghidra dropped the DS
++     base, so the node read `[bx]` and the per-node handler-vector fetch `[di+0x3e18]` (a near vector
++     table at DGROUP:0x3e18) were dereferenced as host pointers (SIGSEGV), and the walk stride 0xc bytes
++     was mis-scaled by int* arithmetic.  param_2=bx walks the DGROUP cursor node list, param_1=dx is the
++     inclusive limit, param_3 is the handler context.  Reconstruct: DGROUP-based node + vector reads, a
++     near call (seg 0) to the handler offset, and DGROUP:0x3e08 = the current node offset. */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t bx = (uint16_t)(uintptr_t)param_2;
++    uint16_t dx = (uint16_t)(uintptr_t)param_1;
++    do {
++      *(uint16_t *)(dg + 0x3e08) = bx;
++      uint16_t di  = *(uint16_t *)(dg + bx);
++      uint16_t off = *(uint16_t *)(dg + (uint16_t)(di + 0x3e18));
++      ((void (*)(undefined2))fist_icall_near(0x0u, off))(param_3);
++      bx = (uint16_t)(bx + 0xc);
++    } while (bx <= dx);
++  }
+   return;
+ }
+ 

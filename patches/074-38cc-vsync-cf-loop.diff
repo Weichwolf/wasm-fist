@@ -1,0 +1,60 @@
+FUN_1000_38cc (frame/vsync wait): CF-driven spin folded to an infinite loop.
+
+asm 0x138cc: `xor al,al; xchg al,[0x3e00]` (save+clear the frame semaphore into al), then
+`L: lcall far [DGROUP:0x40a]; jae L` (spin while the vsync/frame poll FUN_1000_35a7 returns CF=0), then
+`[0x3e00]=al` (restore).  Ghidra dropped the x86 CF and folded the loop to `while(!(bool)uVar2)` with uVar2
+a hardcoded 0 -> the frame-wait never terminates (the intro-animation player FUN_0000_e584 hangs before its
+first frame).  Thread the poll's CF via the shim global g_fist_cf (set by the reconstructed FUN_1000_35a7,
+patch 073); loop until CF==1.  DAT_1000_fe00 == DGROUP:0x3e00, so the save/clear/restore is already faithful.
+--- a/fist.c
++++ b/fist.c
+@@ -44598,37 +44598,42 @@
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_38cc) @ 1000:38cc ===== */
+ 
+ void __allregs FUN_1000_38cc(void)
+ 
+ {
+   undefined1 uVar1;
+   undefined1 uVar2;
+   
++  /* PATCH 074: frame/vsync wait -- CF-driven spin.  asm 0x138cc: `xor al,al; xchg al,[0x3e00]`
++   * (save+clear the frame semaphore into al), then `L: lcall far [DGROUP:0x40a]; jae L` (spin while the
++   * frame/vsync poll FUN_1000_35a7 returns CF=0), then `[0x3e00]=al` (restore).  Ghidra dropped the x86
++   * CF and folded the loop to `while(!(bool)uVar2)` with uVar2 a hardcoded 0 -> infinite spin.  Now
++   * DGROUP:0x40a is installed (boot reloc section 0x1d8 -> FUN_1000_35a7, reconstructed by patch 073),
++   * so thread the poll's CF via g_fist_cf and loop until CF==1.  DAT_1000_fe00 == DGROUP:0x3e00 (the
++   * save/clear/restore is faithful).  fist_timer_pump() keeps the cooperative INT-8 tick advancing while
++   * spinning (patch-017 class); on the empty-queue intro path 35a7 returns CF=1 on the first poll. */
++  extern unsigned char g_fist_cf;
+   uVar1 = DAT_1000_fe00;
+-  uVar2 = 0;
++  (void)uVar2;
+   LOCK();
+   DAT_1000_fe00 = 0;
+   UNLOCK();
+   do {
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))();
+-    fist_timer_pump();  /* PATCH 072: pump the cooperative INT-8 ISR during the driver vsync wait.
+-       The real loop exits on CF=1 from the driver vsync-poll method c40a (DGROUP:0x40a); that vector
+-       is not yet installed (traps -> 0/CF=0) so this loop does not yet terminate -- the driver
+-       vsync-poll method install is the documented next frontier.  The pump keeps the INT-8 tick alive
+-       (and lets the FIST_RUNMS frame watchdog fire) meanwhile. */
+-  } while (!(bool)uVar2);
++    fist_timer_pump();
++  } while (g_fist_cf == 0);
+   DAT_1000_fe00 = uVar1;
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_38de) @ 1000:38de ===== */
+ 
+ undefined4 __allregs FUN_1000_38de(void)
+ 
+ {
+   undefined1 uVar1;
+   undefined1 uVar2;

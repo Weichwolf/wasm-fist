@@ -1,0 +1,62 @@
+Restore dropped segment bases in FUN_0000_fe47 (FISTDATA data-path detector).
+
+fe47 chdir's to the data dir (STRSEG:0x9b/0x9c) via the CRT drive/dir helper FUN_1000_23a5 (AH=3Bh),
+records a flag at DGROUP:0x16c6, and on the copy path stores the drive letter at STRSEG:0x158. Ghidra
+dropped the DS=DGROUP base on the `movb [0x16c6]` stores (-> host deref 0x16c6 -> SIGSEGV), the ES=[0x70]
+base on `mov es:[0x158],al`, and the DGROUP base on the `lcall [0x5c]/[0x60]` service-vector reads.
+Rebase all: DGROUP 0x16c6/0x5c/0x60 and STRSEG 0x158.
+
+NB (decompile update): the chdir helper 0x23a5 and the drive-set helper 0x23bf -- previously unresolved
+near-calls rendered as no-op func_0x0001XXXX stubs -- are now real functions (FUN_1000_23a5/23bf: seeded
+via SeedServiceVecs as reloc-section-0x174 display-list-element method vectors, which they double as).
+They now execute real INT 21h AH=3Bh chdir / AH=0Eh set-drive marshalling; our shim accepts chdir and
+open_ci searches the data dirs directly regardless of CWD, so behaviour is unchanged. The copy-path
+`if (bVar5)` blocks stay dead (bVar5 = the dropped chdir CF, defaults false == the faithful reached path);
+their stores are rebased anyway for correctness. Class: DS=DGROUP / [0x70] dynamic-segment base loss.
+
+--- a/fist.c
++++ b/fist.c
+@@ -36961,6 +36961,10 @@
+   undefined2 unaff_CS;
+   bool bVar5;
+   
++  /* PATCH 009: restore the segment bases Ghidra dropped in fe47 (the FISTDATA data-path detector).
++     Rebase DGROUP:0x16c6 = g_mem+0x1d6c6; STRSEG:0x158 = g_mem+0x2d740+0x158; DGROUP:0x5c/0x60 =
++     g_mem+0x1c05c/0x1c060.  The real chdir helper FUN_1000_23a5 issues an INT 21h AH=3Bh our shim
++     accepts; the `if (bVar5)` copy-paths are dead (bVar5 = dropped chdir CF, false = faithful path). */
+   cVar1 = FUN_1000_23ba();
+   uVar3 = CONCAT11(extraout_AH,cVar1);
+   bVar5 = false;
+@@ -36976,9 +36980,9 @@
+   bVar5 = false;
+   uVar4 = 0x9c;
+   FUN_1000_23a5(uVar3 & 0xff00,param_1,0x9c,param_2,param_3,param_4,param_5,0x77);
+-  *(undefined1 *)0x16c6 = 0xff;
++  g_mem[0x1d6c6] = 0xff;
+   if (bVar5) {
+-    *(undefined1 *)0x16c6 = 0;
++    g_mem[0x1d6c6] = 0;
+     param_4 = 0x9c;
+     cVar2 = FUN_1000_23ba();
+     cVar1 = '\0';
+@@ -36988,15 +36992,15 @@
+         uVar4 = FUN_1000_2380(0,param_1,uVar4,param_2,param_3,param_4,param_5);
+         cVar1 = (char)uVar4;
+       }
+-      *(char *)0x158 = cVar1 + '@';
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)0x5c)))();
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)0x60)))();
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)0x60)))();
++      g_mem[0x2d740 + 0x158] = cVar1 + '@';
++      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(g_mem+0x1c05c))))();
++      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(g_mem+0x1c060))))();
++      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(g_mem+0x1c060))))();
+       return;
+     }
+     FUN_1000_2387(cVar2,param_1,uVar4,param_2,param_3,param_4,param_5);
+     FUN_1000_23bf(0);
+-    *(undefined1 *)0x16c6 = 0xff;
++    g_mem[0x1d6c6] = 0xff;
+   }
+   return;
+ }

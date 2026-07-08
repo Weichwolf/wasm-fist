@@ -1,0 +1,36 @@
+FUN_1000_06e3 (TASK 2): install the driver-object method-vector reloc section si=0xec (DGROUP:0x12 far).
+
+asm 0x106e6: xor bx,bx ; mov si,0xec ; lcall [DGROUP:0x12]. DGROUP:0x12 = the FAR reloc applier
+FUN_0000_f842 (0xf69:0x1b2 = linear 0xf842); it installs section si=0xec = the driver-object METHOD
+VECTORS DGROUP:0x78..0xf8 (far off:seg into the service segment 0xf69), including the driver-object
+allocator method DGROUP:0xd0 = 0xf69:0x21bb = linear 0x1184b = FUN_1000_184b (the allocator that writes
+the driver-struct load-seg field, threaded by patch 033 in FUN_1000_5051). The __allregs indirect
+service call `(*DAT_1000_c012)()` dropped BX/SI so f842 ran on garbage -> SIGSEGV; the engine's f7c3/f842
+are inert anyway (Ghidra dropped their x86 string-op DS/ES segment bases). Install the section faithfully
+from the game's own in-image reloc table (seg 0x3352:si, base-0 => identity) via the loader-role shim
+fist_apply_reloc_section(0xec, is_far=1), exactly as patch 030 at FUN_1000_5214 (si=0x2f0) and patch 022
+at FUN_1000_4b16 (si=0x274). This is the engine's own install site (app_entry -> FUN_1000_06bc -> 06e3,
+BEFORE the driver loads at 4b16 / 515e / 134e), so the timing is correct. Result: both .DVRs now populate
+--- a/fist.c
++++ b/fist.c
+@@ -38193,7 +38193,19 @@
+   
+   FUN_1000_1dfa(param_1,param_2,param_3,param_4,param_5);
+   uVar1 = 0;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
++  /* PATCH 031 (TASK 2): asm 0x106e8 = `xor bx,bx; mov si,0xec; lcall [DGROUP:0x12]` -> the FAR reloc
++     applier f842 installs the driver-object METHOD-VECTOR section si=0xec: DGROUP:0x78..0xf8 far ptrs
++     into the service seg 0xf69, incl. the driver-object allocator method DGROUP:0xd0 = 0xf69:0x21bb =
++     linear 0x1184b = FUN_1000_184b (the alloc that writes the driver-struct load_seg field).  The
++     __allregs indirect service call `(*DAT_1000_c012)()` dropped BX/SI (f842 ran on garbage -> SIGSEGV);
++     the engine's f7c3/f842 are inert (Ghidra dropped their string-op segment bases).  Install the
++     section faithfully from the game's own reloc table via the shim (as patch 030 at 5214 / patch 022
++     at 4b16).  This is the engine's own install site (app_entry: FUN_1000_06bc->06e3, before the driver
++     loads at 4b16/515e/134e), so the timing is correct. */
++  {
++    extern int fist_apply_reloc_section(unsigned short,int);
++    fist_apply_reloc_section(0xec,1);
++  }
+   FUN_1000_1384();
+   FUN_1000_1384();
+   FUN_1000_096c(uVar1);

@@ -1,0 +1,34 @@
+FUN_1000_3436/3446 free-list builder: elide the bx==0 (no-op) f842 reloc-applier calls.
+
+Both the FUN_1000_3436 spurious entry (over the hex-digit table) and its real fall-through FUN_1000_3446
+do `xor bx,bx; call [DGROUP:0x12]`.  The FAR reloc applier FUN_0000_f842 bails on bx==0 (`or bx,bx; je`),
+a genuine no-op.  Patch 043 kept these as `(*fist_icall_far(DAT_1000_c012))()`, which invokes the INERT C
+f842 decompile (Ghidra dropped its string-op DS/ES bases + the bx bail); it derefs stale-register garbage
+(param_3) and SIGSEGVs once the newly-working driver-dispatch path leaves a bad pointer in registers.
+Faithful: bx==0 -> no-op; elide both.  Applies after patch 043.
+--- a/fist.c
++++ b/fist.c
+@@ -44063,7 +44063,10 @@
+    * (&DAT_...) with host-pointer arithmetic -> wrong links + a bad-pointer store SIGSEGV.  Reconstruct
+    * with 16-bit near offsets based at g_mem+DGROUP.  The leading `lcall [DGROUP:0x12]` has bx=0 so the
+    * engine f842 bails; kept verbatim. */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
++  /* PATCH 053: bx==0 at the leading `lcall [DGROUP:0x12]` (asm: `xor bx,bx`), so the FAR reloc applier
++     FUN_0000_f842 bails immediately (`or bx,bx; je`) -- a genuine no-op.  Calling the inert C f842
++     decompile instead derefs its dropped-arg garbage (param_3) and SIGSEGVs once the driver-dispatch
++     path (now reached) leaves a bad pointer in registers.  Elide the no-op. */
+   *(uint16_t *)(g_mem + 0x1d8de) = 0;
+   *(uint16_t *)(g_mem + 0x1d8e4) = 0xffff;
+   *(uint16_t *)(g_mem + 0x1d8e6) = 0x18e4;
+@@ -44101,7 +44104,10 @@
+    * (&DAT_...) with host-pointer arithmetic -> wrong links + a bad-pointer store SIGSEGV.  Reconstruct
+    * with 16-bit near offsets based at g_mem+DGROUP.  The leading `lcall [DGROUP:0x12]` has bx=0 so the
+    * engine f842 bails; kept verbatim. */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
++  /* PATCH 053: bx==0 at the leading `lcall [DGROUP:0x12]` (asm: `xor bx,bx`), so the FAR reloc applier
++     FUN_0000_f842 bails immediately (`or bx,bx; je`) -- a genuine no-op.  Calling the inert C f842
++     decompile instead derefs its dropped-arg garbage (param_3) and SIGSEGVs once the driver-dispatch
++     path (now reached) leaves a bad pointer in registers.  Elide the no-op. */
+   *(uint16_t *)(g_mem + 0x1d8de) = 0;
+   *(uint16_t *)(g_mem + 0x1d8e4) = 0xffff;
+   *(uint16_t *)(g_mem + 0x1d8e6) = 0x18e4;

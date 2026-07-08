@@ -1,0 +1,27 @@
+MGAVIDEO driver: the screen-dimension clip bounds DGROUP:0x730 (height) and 0x732 (width) are WORD.
+
+Second half of the cursor-blit runaway (docs/stage1.md FRONTIER item #1): after patch 104 restores the
+cursor WIDTH d5da=9, the coord setup FUN_0000_2fd7 STILL clips d5bc(columns) to -1 because the screen
+WIDTH clip bound c732 (word[DGROUP:0x732]) reads 0.  2fd7 asm 0x3055/0x2f86 clamps the cursor's column
+extent to c732: `if (c732 <= iVar2 + d5da) d5bc -= (iVar2 + d5da) - c732;` -- with c732=0 the cursor is
+clamped to the (empty) right edge -> d5bc = 9 - 9... - 1 = -1 -> runaway blit.
+
+The mode-set FUN_0000_00e8 (INT 10h AX=13h) sets both dims (asm):
+  0x106  mov WORD PTR ds:0x732,0x140   (c732 = 320 = screen width)
+  0x10c  mov WORD PTR ds:0x730,0xc8    (c730 = 200 = screen height)
+Both are WORD stores; every reader is a WORD access too (0x2f86 cmp ax,WORD PTR ds:0x732; 0x2fcb
+mov ax,ds:0x732; 0x3055 sub cx,WORD PTR ds:0x732; and the 0x730 siblings).  But Ghidra typed
+_DAT_1000_c730/_DAT_1000_c732 as undefined4.  Because the two stores are adjacent and sequential, the
+DWORD store `_DAT_1000_c730 = 200` (0x000000c8) overwrites bytes 0x1c732..0x1c733 -> c732 is zeroed
+right after being set to 0x140.  Runtime: c730=200 survives, c732=0.  Same store-width Ghidra class as
+patches 092/104.  Retype both to their faithful WORD width so c730=200 and c732=320 both stand.
+Asm-verified MGAVIDEO 0x106/0x10c (stores) + 0x2f86/0x2fcb/0x3055/0x3020 (WORD reads).
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -627,4 +627,4 @@
+ #define _DAT_1000_c72e (*(undefined4 *)(g_mem+0x1c72e))
+-#define _DAT_1000_c730 (*(undefined4 *)(g_mem+0x1c730))
+-#define _DAT_1000_c732 (*(undefined4 *)(g_mem+0x1c732))
++#define _DAT_1000_c730 (*(undefined2 *)(g_mem+0x1c730))  /* PATCH 105: screen HEIGHT clip bound, WORD (asm `mov WORD PTR ds:0x730,0xc8`); undefined4 clobbered 0x732 */
++#define _DAT_1000_c732 (*(undefined2 *)(g_mem+0x1c732))  /* PATCH 105: screen WIDTH clip bound = 320, WORD (asm `mov WORD PTR ds:0x732,0x140`) */
+ #define _DAT_1000_c736 (*(int **)(g_mem+0x1c736))

@@ -1,0 +1,28 @@
+MGAVIDEO driver: _DAT_1000_c780 (DGROUP:0x780) is a 16-bit store, not 32-bit.
+
+Root cause of the "word[DGROUP:0x782] palette-buffer segment is 0 at menu-render time" symptom
+(docs/stage1.md FRONTIER issue #3).  The palette buffer IS allocated correctly by driver-init 0009
+(patch 049 -> FUN_1000_182a writes word[DGROUP:0x782] = a valid heap segment, e.g. 0x4944).  But every
+driver site that does `_DAT_1000_c780 = 0x782` (8 sites: 0340/043e/04a3/0410/...) writes a **DWORD**
+0x00000782 at g_mem+0x1c780 because Ghidra typed the overlapping `_DAT_1000_c780` symbol as undefined4.
+The high word of that dword store lands at 0x1c782 and zeroes the palette-buffer segment -> the very next
+menu render (FUN_0000_0340) then copies/uploads from segment 0.
+
+The asm is unambiguous: EVERY store to this symbol is `mov WORD PTR ds:0x780,0x782` (16-bit), e.g.
+MGAVIDEO 0x379 (in 0340), 0x43e-path, 0x4a3-path.  And the pristine driver decompile only ever WRITES
+this symbol (= 0x782), never reads it as a dword (verified: 8 identical `_DAT_1000_c780 = 0x782;`, no RHS
+use).  So the faithful width is undefined2.  This is the documented "store-width mismatch" Ghidra class
+(paired 16-bit / store-width).  Patch 070's 04a3 already worked around it with an explicit 16-bit store;
+this fixes the symbol at its macro so all 8 sites store the correct 2 bytes and stop clobbering 0x782.
+Asm-verified MGAVIDEO 0x379 (WORD store) + the 7 sibling sites.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -628,7 +628,7 @@
+ #define _DAT_1000_c730 (*(undefined4 *)(g_mem+0x1c730))
+ #define _DAT_1000_c732 (*(undefined4 *)(g_mem+0x1c732))
+ #define _DAT_1000_c736 (*(int **)(g_mem+0x1c736))
+-#define _DAT_1000_c780 (*(undefined4 *)(g_mem+0x1c780))
++#define _DAT_1000_c780 (*(undefined2 *)(g_mem+0x1c780))  /* PATCH 092: DGROUP:0x780 is a WORD store (asm `mov WORD PTR ds:0x780`); undefined4 clobbered 0x782 */
+ #define _DAT_1000_c782 (*(undefined4 *)(g_mem+0x1c782))
+ #define _DAT_1000_c788 (*(undefined4 *)(g_mem+0x1c788))
+ #define _DAT_1000_c78c (*(undefined4 *)(g_mem+0x1c78c))

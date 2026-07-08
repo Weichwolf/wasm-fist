@@ -1,0 +1,62 @@
+KDV intro end-of-stream: thread 708b's CF-out (EOF / read-error) into 6f3e's in_CF so the player
+returns -1 at the end of TITLE.KDV instead of re-parsing a stale chunk forever (the recurring
+dropped-CF Ghidra class).
+
+FUN_0000_708b (read-chunk) signals its caller via the x86 carry flag (asm-verified, image 0x708b):
+    7091: add ebx,8              ; read_offset + 8-byte chunk header
+    7094: cmp ebx,[0x937]        ; [0x937] = KDV file size
+    709a: jbe 70a0               ; room for another chunk?
+    709e: stc / 709f: ret        ; NO -> CF=1, end of stream
+    ...
+    711a: clc / 711b: ret        ; chunk read OK -> CF=0
+    70c6/710f: jb 0x5e3a         ; INT-21 read error -> FILEMGR err path (CF set)
+FUN_0000_6f3e (decode-next-frame) consumes that CF (asm 0x6f3e):
+    6f3e: call 708b
+    6f43: jae 6f4b               ; CF==0 -> parse the chunk
+    6f45: xor eax,eax/not eax/stc/ret   ; CF==1 -> return 0xffffffff (stream done)
+Ghidra dropped the flag convention (`undefined1 in_CF = 0;` never set), so at EOF 6f3e fell through
+and re-read `*[0x6e80]` = the *previous* frame's magic ('iVDK') forever -> the intro never ended and
+op 0x78 never returned "animation complete", so e584 could not advance to the menu.
+
+Faithful reconstruction: 708b publishes its CF-out to the shim global `g_ext_eof` (int native_main.c,
+same pattern as the scheduler `g_fist_cf`) on all three return paths (EOF stc, success clc, err jb);
+6f3e reads it into in_CF right after the call.  The shim's extender gate reads g_ext_eof after the
+present op to return "animation complete" -> e584 exits the intro loop -> the engine builds the menu.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -11839,10 +11839,12 @@
+   undefined4 uVar1;
+   int iVar2;
+   undefined1 in_CF = 0;
+-  
++  extern int g_ext_eof;   /* shim: 708b's CF-out (EOF / read-error); dropped by Ghidra -- threaded faithfully */
++
+   while( true ) {
+     while( true ) {
+       FUN_0000_708b(param_1,param_2,(short)param_3);
++      in_CF = (undefined1)g_ext_eof;   /* asm 6f43 `jae`: CF is set by 708b (stc@0x709e EOF / jb err) */
+       if ((bool)in_CF) {
+         return 0xffffffff;
+       }
+@@ -12093,9 +12095,12 @@
+   undefined2 unaff_ES;
+   undefined2 uVar4;
+   undefined2 extraout_var;
+-  
++  extern int g_ext_eof;   /* shim: 708b CF-out (EOF / read-error) -> 6f3e in_CF (dropped by Ghidra) */
++
+   uVar4 = 0x1c00;
++  g_ext_eof = 0;
+   if (DAT_0000_0937 < DAT_0000_5570 + 8U) {
++    g_ext_eof = 1;   /* asm 0x709e `stc`: offset+8 > filesize => end of KDV stream */
+     return 0;
+   }
+   iVar1 = FUN_0000_345c(8,&DAT_0000_6e80,param_2,0x70b0);
+@@ -12143,6 +12148,7 @@
+     fist_int_dispatch();
+     DAT_0000_5cc0 = 0;
+   }
++  g_ext_eof = 1;   /* asm jb@0x70c6/0x710f: INT-21 read error -> FILEMGR err path (CF set) */
+   iVar1 = thunk_FUN_0000_0f64(1);
+   return iVar1;
+ }

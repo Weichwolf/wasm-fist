@@ -1,0 +1,21 @@
+FUN_0000_1cdb: cursor node-list near offset (fe04) computed from the host symbol address.
+
+asm 0x1d22 sets fe04 = word[0x3afa] + 0x3af0 (a DGROUP near offset).  Ghidra rendered &DAT_1000_faf0 as
+the HOST address (g_mem+0x1faf0), so the 16-bit store truncated to garbage (0xabe0) that FUN_0000_201a
+then walked as a bogus DGROUP offset (SIGSEGV).  Use the near offset 0x3af0.  Asm-verified engine 0x1cdb.
+--- a/fist.c
++++ b/fist.c
+@@ -8187,7 +8187,12 @@
+   if (param_1 != DAT_1000_faf2) {
+     FUN_0000_1caf(param_1);
+   }
+-  DAT_1000_fe04 = (int)(undefined2 *)&DAT_1000_faf0 + param_4;
++  /* PATCH 055: fe04 is the near offset of the cursor node list = DGROUP:0x3af0 + param_4, but Ghidra
++     rendered &DAT_1000_faf0 as the HOST symbol address (g_mem+0x1faf0), so the store truncated to a
++     garbage 16-bit value (e.g. 0xabe0) that FUN_0000_201a then walked as a bogus DGROUP offset.
++     asm 0x1d22: `mov ax,ds:0x3afa; add ax,0x3af0; mov ds:0x3e04,ax` (param_4 == word[0x3afa]).  Use
++     the near offset 0x3af0. */
++  DAT_1000_fe04 = (undefined2)(0x3af0 + param_4);
+   DAT_1000_fe06 = param_3 + 0x3ae4;
+   DAT_1000_fafa = param_4;
+   DAT_1000_fafc = param_3 + -0xc;

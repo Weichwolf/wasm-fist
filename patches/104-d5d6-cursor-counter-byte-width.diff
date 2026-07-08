@@ -1,0 +1,43 @@
+MGAVIDEO driver: the four cursor show/hide counters DGROUP:0x5d6/0x5d7/0x5d8/0x5d9 are BYTE, not WORD.
+
+Root cause of the cursor-sprite-init SIGSEGV in FUN_0000_0db8 (docs/stage1.md FRONTIER item #1).
+The masked cursor blit 0db8 runs away because the cursor WIDTH d5da (word[DGROUP:0x5da], byte 0x1d5da)
+reads 0 -> the coord setup 2fd7 computes d5bc(columns) = d5da - 1 = -1 = 0xffff -> the blit's column
+counter wraps and the inner draw loop walks off the sprite/mask/framebuffer.
+
+The width IS loaded correctly: the cursor-shape select FUN_0000_2ccd reads descriptor[0]=0x09 (width)
+into word[0x1d5da] (verified live: 2ccd sets d5da=9).  But then the cursor show/hide path zeroes it.
+The four adjacent bytes 0x1d5d6..0x1d5d9 are cursor nesting/state counters; the asm accesses every one as
+a single BYTE:
+  0x2ca6  mov  BYTE PTR ds:0x15d7,0x0
+  0x2cba  mov  BYTE PTR ds:0x15d9,0xff
+  0x2cc1  mov  BYTE PTR ds:0x15d9,0x0      <- FUN_0000_2cc1, clobbers 0x15da when stored as a WORD
+  0x2cd7  inc  BYTE PTR ds:0x15d6
+  0x2ea8  shr  BYTE PTR ds:0x15d8,1
+  0x2f69  mov  BYTE PTR ds:0x15d8,0x1
+  0x2d16/2d1f/2d34/2d3d/2d64/2d6d  inc/dec BYTE PTR ds:0x15d6
+  0x2d43  test BYTE PTR ds:0x15d7,0xff
+  0x2d52  test BYTE PTR ds:0x15d6,0xff
+Ghidra typed all four DAT_1000_d5d6/d7/d8/d9 as undefined2 (it merged the adjacent byte accesses into
+word symbols), so in C `DAT_1000_d5d9 = 0` (asm `mov BYTE PTR ds:0x15d9,0`) writes TWO bytes (0x1d5d9
+AND 0x1d5da), zeroing the cursor width -> the runaway blit.  Same store-width class as patch 092
+(_DAT_1000_c780).  The overlap cascade: d5d6->d5d7, d5d7->d5d8, d5d8->d5d9, d5d9->d5da(width); fix all
+four to their faithful byte width (undefined1) so each store touches exactly its own byte.  These are
+used in C only as byte counters/flags (`== '\0'`, `+ '\x01'`, `>> 1`, `& 1`), so undefined1 is faithful.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -542,10 +542,10 @@
+ #define DAT_1000_d5bc (*(undefined2 *)(g_mem+0x1d5bc))
+ #define DAT_1000_d5c0 (*(undefined2 *)(g_mem+0x1d5c0))
+ #define DAT_1000_d5c2 (*(undefined2 *)(g_mem+0x1d5c2))
+-#define DAT_1000_d5d6 (*(undefined2 *)(g_mem+0x1d5d6))
+-#define DAT_1000_d5d7 (*(undefined2 *)(g_mem+0x1d5d7))
+-#define DAT_1000_d5d8 (*(undefined2 *)(g_mem+0x1d5d8))
+-#define DAT_1000_d5d9 (*(undefined2 *)(g_mem+0x1d5d9))
++#define DAT_1000_d5d6 (*(undefined1 *)(g_mem+0x1d5d6))  /* PATCH 104: BYTE counter (asm inc/dec/test BYTE PTR ds:0x15d6); undefined2 clobbered 0x5d7 */
++#define DAT_1000_d5d7 (*(undefined1 *)(g_mem+0x1d5d7))  /* PATCH 104: BYTE flag  (asm mov/test BYTE PTR ds:0x15d7); undefined2 clobbered 0x5d8 */
++#define DAT_1000_d5d8 (*(undefined1 *)(g_mem+0x1d5d8))  /* PATCH 104: BYTE flag  (asm shr/mov BYTE PTR ds:0x15d8); undefined2 clobbered 0x5d9 */
++#define DAT_1000_d5d9 (*(undefined1 *)(g_mem+0x1d5d9))  /* PATCH 104: BYTE flag  (asm mov BYTE PTR ds:0x15d9); undefined2 clobbered 0x5da = cursor WIDTH -> runaway 0db8 blit */
+ #define DAT_1000_dc02 (*(undefined2 *)(g_mem+0x1dc02))
+ #define DAT_1000_e070 (*(undefined2 *)(g_mem+0x1e070))
+ #define DAT_2000_2004 (*(undefined2 *)(g_mem+0x22004))

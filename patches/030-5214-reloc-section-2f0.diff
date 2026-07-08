@@ -1,0 +1,47 @@
+FUN_1000_5214: install the FAR reloc/method-vector section si=0x2f0 (dropped BX/SI on the DGROUP:0x12 service).
+
+asm 0x15214: xor bx,bx ; mov si,0x2f0 ; lcall [DGROUP:0x12] ; lret.  DGROUP:0x12 = the reloc service
+FUN_0000_f842 (verified: 0xf69:0x1b2 = linear 0xf842).  f842's caller BX is IGNORED for near/far selection:
+f842 calls f7c3 which loads BX from the table segment DGROUP:0x74 (0x3352) and loops until it is nonzero;
+the applier itself is selected by the DGROUP service SLOT (0x0a/0x0e = near f7ef/f81d; 0x12/0x16 = FAR
+f842/f860).  f842 (asm 0xf84d..): `lods ax` reads a leading SEG word (cx), then for each (off,val) pair
+writes DGROUP[off]=val and DGROUP[off+2]=seg until off==0 -- i.e. the is_far=1 semantics of
+fist_apply_reloc_section.  The __allregs indirect service call `(*DAT_1000_c012)()` dropped the BX/SI
+register args, so f842 ran with garbage and a stack-garbage section pointer -> SIGSEGV; and the engine's
+f7c3/f842 are inert anyway (Ghidra dropped their x86 string-op DS/ES segment bases).  Install the section
+faithfully from the game's own in-image relocation table (seg 0x3352:si; base-0 => identity) via the
+loader-role shim fist_apply_reloc_section(0x2f0, is_far=1), exactly as patch 022 does at 4b16 for si=0x274.
+This is the engine's own install site (app_entry stage), so the timing is correct.  (An earlier revision
+passed is_far=0 -- WRONG: the seg word was misread as an off, so DGROUP:0x468..0x4ec were never installed
+and DGROUP:0xf69/0x5bbe got garbage; verified by gdb the far vectors were 0 with is_far=0 and correct
+0x5bbe:0xf69 with is_far=1.)
+--- a/fist.c
++++ b/fist.c
+@@ -40430,20 +40430,13 @@
+ void __allregs FUN_1000_17da(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
+-  uint uVar1;
+-  bool bVar2;
+-  
+-  uVar1 = param_1 + 0xf >> 1;
+-  bVar2 = (uVar1 & 4) != 0;
+-  DAT_2000_d1ca = 0;
+-  uVar1 = FUN_1000_184b((uVar1 | (uint)(0xfff0 < param_1) << 0xf) >> 3,0x2ba9,param_2,0x1738,param_3
+-                        ,param_4);
+-  if (!bVar2) {
+-    *(undefined2 *)&DAT_1000_c002 = 0xa0;
+-    *(undefined2 *)&DAT_1000_c006 = 0;
+-    *(uint *)&DAT_1000_c008 = uVar1;
+-  }
+-  DAT_2000_d1ca = 0;
++  /* PATCH 030: asm 0x15214 = `xor bx,bx; mov si,0x2f0; lcall [DGROUP:0x12]` -> the FAR reloc applier
++     f842 (DGROUP:0x12) for section si=0x2f0 (seg word + (off,val) pairs -> DGROUP[off]=val:seg).  The
++     indirect __allregs service call dropped BX/SI (f842 ran on garbage -> walked a bogus section ->
++     SIGSEGV), and the engine's f7c3/f842 are inert (Ghidra dropped their string-op segment bases).
++     Install the section faithfully from the game's own reloc table via the shim (as patch 022 at 4b16). */
++  extern int fist_apply_reloc_section(unsigned short,int);
++  fist_apply_reloc_section(0x2f0,1);
+   return;
+ }
+ 

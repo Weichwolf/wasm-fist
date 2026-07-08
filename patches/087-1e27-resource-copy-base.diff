@@ -1,0 +1,41 @@
+FUN_0000_1e27 (resource copy, e714 -> 1e27(0x2d21,0xf7b8)): restore the segment bases + the correct
+count/source-segment struct reads that Ghidra dropped -> SIGSEGV (src NULL, dst raw host di).
+
+After the intro+fade and the 0240 delay (patches 085/086), cae6 reaches FUN_0000_e714 (a screen/menu
+build) which calls 1e27(param_1=0x2d21 source struct seg, param_2=0xf7b8 dst DGROUP offset).  asm
+(image 0x1e27):
+    1e27: push ds ; mov si,ds ; mov es,si       ; es = DGROUP (dst segment)
+    1e2c: mov ds,ax                             ; ds = param_1 (source struct segment)
+    1e2e: xor si,si                             ; source offset 0
+    1e30: mov cx,ds:0x8                         ; cx = [param_1:8]  = byte count
+    1e34: mov ds,ds:0x4                         ; ds = [param_1:4]  = source segment
+    1e43: rep movs es:[di],ds:[si]              ; copy cx bytes  DGROUP:di <- srcseg:0   (di=param_2)
+    1e47: rep movs (byte tail)
+Ghidra assumed ds=DGROUP throughout, so it (a) read the count/source-seg as DGROUP:0x8 / DGROUP:0x4
+(`DAT_1000_c008`/`c004`) instead of param_1:0x8 / param_1:0x4, (b) set the source pointer to NULL
+(dropped ds=[param_1:4]), and (c) used the destination di (param_2) as a bare host pointer (dropped
+es=DGROUP).  Faithful fix: src = ([param_1:4] << 4):0, dst = DGROUP(0x1c000)+ (uint16)param_2, count =
+[param_1:8]; the existing word+byte copy loop (net = count bytes) is preserved verbatim.
+--- a/fist.c
++++ b/fist.c
+@@ -8347,9 +8347,17 @@
+   uint uVar6;
+   undefined2 *puVar7;
+   
+-  puVar7 = (undefined2 *)0x0;
+-  uVar3 = *(uint *)&DAT_1000_c008;
+-  uVar4 = *(undefined2 *)&DAT_1000_c004;
++  /* asm 0x1e27: es=DS(=DGROUP), di=param_2 (dst near offset); ds=ax=param_1 (source struct seg), si=0;
++   * cx=[param_1:0x8] (byte count); ds=[param_1:0x4] (source segment) -> `rep movs es:[di],ds:[si]`
++   * copies cx bytes DGROUP:param_2 <- srcseg:0.  Ghidra dropped ds=[param_1:4]/es=DGROUP (rendered
++   * src=NULL, dst=raw host di) AND mis-read the count/segment as DGROUP:0x8/0x4 (DAT_1000_c008/c004)
++   * because it assumed ds=DGROUP at the `mov cx,ds:0x8` / `mov ds,ds:0x4` (ds is param_1 there). */
++  {
++    uint16_t src_seg = *(uint16_t *)(g_mem + ((uint32_t)(uint16_t)param_1 << 4) + 4);
++    uVar3 = *(uint16_t *)(g_mem + ((uint32_t)(uint16_t)param_1 << 4) + 8);
++    puVar7 = (undefined2 *)(g_mem + ((uint32_t)src_seg << 4));                        /* src srcseg:0 */
++    param_2 = (undefined2 *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_2);         /* dst DGROUP:di */
++  }
+   uVar6 = (uint)((uVar3 & 1) != 0);
+   for (iVar5 = (uVar3 >> 2) * 2 + (uint)((uVar3 >> 1 & 1) != 0); iVar5 != 0; iVar5 = iVar5 + -1) {
+     puVar2 = param_2;

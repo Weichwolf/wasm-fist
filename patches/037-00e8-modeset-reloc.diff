@@ -1,0 +1,32 @@
+FUN_0000_00e8 (VGA mode-set): thread the driver-local method-vector reloc apply (the si=8 section).
+
+After INT 10h AX=13h fires, the mode-set installs the driver's big method-vector table via a driver-local
+reloc apply (asm 0x132: `mov bx,[0x70e]; mov si,8; lcall [DGROUP:0x12]` = the FAR applier FUN_0000_f842).
+Section si=8 of the copied template at DGROUP:0x70e is 98 entries (DGROUP:0x540..0x5ee = the blit / palette
+/ present / render method vectors, far off:load_seg into the overlay), its leading seg word MZ-relocated to
+load_seg at LOAD.  The indirect `(*DAT_1000_c012)()` dropped bx/si and the engine's f842 body is inert
+(Ghidra dropped its x86 string-op DS/ES segment bases -> SIGSEGV).  Apply the section faithfully via the
+loader shim fist_apply_reloc_at (native_main.c), identical to the driver init's si=0 apply (patch 035).
+Asm-verified MGAVIDEO base-0 offset 0x132.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -913,7 +913,18 @@
+   DAT_1000_c738 = DAT_1000_c738 + -1;
+   (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c53c)))();
+   (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c426)))();
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c012)))();
++  /* PATCH 037: thread the mode-set's driver-local method-vector reloc apply.  asm 0x132:
++   *   mov bx,[0x70e]; mov si,8; lcall [DGROUP:0x12] (=FUN_0000_f842 FAR applier).  Installs the
++   *   driver's 98-entry method-vector table DGROUP:0x540..0x5ee (the blit / palette / present method
++   *   vectors) from the reloc section at buffer offset 8 of the copied template at DGROUP:0x70e (the
++   *   leading seg word is MZ-relocated to load_seg at LOAD).  The indirect (*DAT_c012)() dropped bx/si
++   *   and the engine f842 body is inert (Ghidra dropped its string-op DS/ES bases); apply faithfully
++   *   via the loader shim, matching the init's si=0 apply (patch 035). */
++  {
++    extern int fist_apply_reloc_at(unsigned short,unsigned short,int);
++    uint16_t sec_seg = *(uint16_t *)(g_mem + 0x1c000 + 0x70e);
++    fist_apply_reloc_at(sec_seg, 8, 1);
++  }
+   if ((_DAT_1000_c706 != 0x5981) && (0x30 < _DAT_1000_c242)) {
+     _DAT_1000_c5e4 = 0xbe2;
+   }

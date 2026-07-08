@@ -1,0 +1,37 @@
+Restore FUN_1000_140e's rep movsw source segment base (dropped far base on string op).
+
+After allocating + initialising a block (INT 21h AH=48 -> FUN_1000_1467), FUN_1000_140e copies 0x10
+words from the new block's segment:0 into a DGROUP table at 0x16d4: `mov es,ds; mov di,0x16d4;
+mov ds,[0x1758]; xor si,si; mov cx,0x10; rep movsw`. The source segment is the allocated block segment
+cached at DGROUP:0x1758 (= DAT_1000_d758). Ghidra kept ES:DI = DGROUP:0x16d4 (rendered &DAT_1000_d6d4)
+but dropped the DS far base, leaving the source as a bare `*(undefined2 *)0x0` -> host 0 -> SIGSEGV.
+Reconstruct src = g_mem+(DAT_1000_d758<<4)+SI and copy into DGROUP:0x16d4. The loop-carried INT reg-file
+SI/DI/CX slots are overwritten by the next fist_int_dispatch, so no post-loop value needs preserving.
+Class: docs/stage1.md "[0x70]-family dropped segment base on string ops".
+
+--- a/fist.c	2026-07-08 01:18:17.042769345 +0200
++++ b/fist.c	2026-07-08 01:18:17.058926446 +0200
+@@ -39724,14 +39724,17 @@
+     DAT_1000_d758 = uRam000f0000;
+     FUN_1000_1467(uRam000f0000,0x300,param_7);
+     uVar3 = DAT_1000_d758;
++    /* PATCH 014: rep movsw source segment restore (dropped far base on string op). Asm (0x1140e+0x1e):
++         mov ax,ds; mov es,ax; mov di,0x16d4; mov ds,[0x1758]; xor si,si; mov cx,0x10; rep movsw
++       ES:DI = DGROUP:0x16d4 (Ghidra got this right: &DAT_1000_d6d4); DS = word at DGROUP:0x1758 = the
++       block segment just allocated+initialised (DAT_1000_d758). Ghidra dropped the DS far base, leaving
++       the source as a bare `*0x0` (host 0) -> SIGSEGV. Copy 0x10 words from [DAT_1000_d758:0] into
++       DGROUP:0x16d4. Class: docs/stage1.md "[0x70]-family dropped segment base on string ops". */
+     puRam000f000a = (undefined2 *)&DAT_1000_d6d4;
+     puRam000f0008 = (undefined2 *)0x0;
+-    for (iRam000f0004 = 0x10; iRam000f0004 != 0; iRam000f0004 = iRam000f0004 + -1) {
+-      puVar2 = puRam000f000a;
+-      puRam000f000a = puRam000f000a + 1;
+-      puVar1 = puRam000f0008;
+-      puRam000f0008 = puRam000f0008 + 1;
+-      *puVar2 = *puVar1;
++    {
++      unsigned char *src = g_mem + ((unsigned long)(uint16_t)uVar3 << 4);  /* DS = DAT_1000_d758 ; SI=0 */
++      memcpy((void *)&DAT_1000_d6d4, src, 0x10 * 2);                       /* rep movsw (0x10 words) */
+     }
+     uRam000f0014 = 0x21;
+     uRam000f0000 = 0x4800;

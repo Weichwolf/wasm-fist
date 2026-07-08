@@ -1,0 +1,244 @@
+Reconstruct FUN_1000_096c (MEMMGR free-list WALKER) + FUN_1000_0dc2 (probe/tail) -- dynamic-DS chain.
+
+FUN_1000_096c walks a SEGMENT-CHAINED free list: DS is loaded from the pool-header table at SS:0x16de
+(the per-block header copy FUN_1000_140e writes; SS=DGROUP=0x1c00) and RELOADED per iteration from the
+current node's [0xc] successor word. Each node is its own paragraph; accesses are g_mem+(seg<<4)+off.
+Ghidra applied the static DS ctx and mangled the whole function to fixed DGROUP globals + `*0x0 < *0x0`
+-> SIGSEGV. Reconstructed from asm (base-0 0x1096c). The near-called helper FUN_1000_0dc2 receives the
+current node via the shared MEMMGR DS cursor (g_mm_ds) and returns CF/ZF (g_mm_cf/g_mm_zf) which the
+walker branches on; its REACHED path is the entry guard + shared tail 0x10d9e (verified: every boot-pool
+node has [2]&0x50 set, so the deep block-relocating allocator at 0x10dcd.. is never entered -- it is a
+documented follow-on and logs loudly if reached). FUN_1000_0d70 (the flag&2 unlink branch) is not reached
+on the boot path (no node has bit1 set) and is left for a follow-on. Class: docs/stage1.md "dynamic-DS
+loop-updated segment". Depends on patch 013's faithful pool build (valid free-list head 0x3402).
+--- a/fist.c
++++ b/fist.c
+@@ -38583,37 +38583,64 @@
+ }
+ 
+ 
++/* PATCH 015: MEMMGR free-list subsystem shared DS cursor + returned flags. In the asm the free-list
++   walker FUN_1000_096c and its near-called helpers FUN_1000_0dc2/0d70 pass the current node paragraph
++   through the DS register (DS persists across the near calls) and hand back CF/ZF. __allregs does not
++   thread DS, so these cooperating same-subsystem routines share it explicitly here. */
++static unsigned short g_mm_ds;   /* current free-list node paragraph (== DS in the asm) */
++static int g_mm_cf, g_mm_zf;     /* CF / ZF returned by FUN_1000_0dc2 (and 0d70) to the walker */
++
+ /* ===== ((uint)(uintptr_t)&FUN_1000_096c) @ 1000:096c ===== */
+ 
+ undefined4 __allregs FUN_1000_096c(undefined2 param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  int iVar2;
+-  bool bVar3;
+-  bool bVar4;
+-  
+-  puVar1 = (undefined2 *)&DAT_1000_d6d4;
+-  iVar2 = DAT_2000_d16e;
+-LAB_1000_0973:
+-  do {
+-    while ((*(byte *)((int)*(undefined4 *)&DAT_1000_c006 + 2) & 2) == 0) {
+-      bVar3 = *(uint *)0x0 < *(uint *)0x0;
+-      bVar4 = *(uint *)0x0 == *(uint *)0x0;
+-      if (bVar3) {
+-        FUN_1000_0dc2(param_1,puVar1);
+-        if ((!bVar3) || (bVar4)) goto LAB_1000_099a;
+-        goto LAB_1000_0973;
+-      }
+-      iVar2 = *(int *)&DAT_1000_c00c;
+-      if (iVar2 == 0) {
+-LAB_1000_099a:
+-        FUN_1000_09bc();
+-        return;
+-      }
+-    }
+-    FUN_1000_0d70(puVar1);
+-  } while( true );
++  /* PATCH 015: FUN_1000_096c = the MEMMGR free-list WALKER, faithful dynamic-DS reconstruction.
++     Asm (base-0 linear 0x1096c): SS=DGROUP=0x1c00, BP=0x16d4. DS is loaded from the pool-header table
++     at SS:0x16de (= DGROUP:0x16de, the per-block header copy FUN_1000_140e writes) and is RELOADED
++     PER-ITERATION from the current node's [0xc] word -- a segment-chained free list. Each node lives at
++     its own paragraph (seg<<4): [0]=size/key, [6:8]=a far {off,seg} guard pointer, [0xc]=next-node seg.
++     Ghidra applied the static DS ctx 0x1c00 and mangled every node access to fixed DGROUP globals
++     (`*0x0 < *0x0`, DAT_1000_c0XX), which dereferenced host 0 -> SIGSEGV. Reconstructed from the asm:
++     DS walks node segments; every access is g_mem+(seg<<4)+off. Class: docs/stage1.md "dynamic-DS
++     loop-updated segment". The near-called helpers 0dc2/0d70 receive the current node paragraph via the
++     MEMMGR-subsystem DS cursor g_mm_ds (DS persists across the near calls in the asm; here it is an
++     explicit shared cursor) and hand back the new DS + the CF/ZF the caller branches on (g_mm_cf/zf). */
++#define SS16(o) (*(uint16_t *)(g_mem + 0x1c000u + (o)))
++#define NODE16(seg,o) (*(uint16_t *)(g_mem + ((unsigned long)(uint16_t)(seg) << 4) + (o)))
++#define NODE8(seg,o)  (*(uint8_t  *)(g_mem + ((unsigned long)(uint16_t)(seg) << 4) + (o)))
++  uint16_t ds = SS16(0x16de);          /* ds = pool-header[0xa] = free-list head node paragraph */
++  uint16_t es, di, cx;
++  (void)param_1;
++LAB_0973:
++  es = SS16(0x16e0);
++  es = NODE16(es, 0xc);
++  cx = NODE16(es, 0x00);
++  for (;;) {                            /* LAB_0980 */
++    di = NODE16(ds, 0x06);              /* les di,[ds:6] : di=[ds:6], es=[ds:8] */
++    es = NODE16(ds, 0x08);
++    if (NODE8(es, di + 2) & 2) {        /* testb es:[di+2],2 ; jne -> unlink node */
++      g_mm_ds = ds;
++      FUN_1000_0d70(ds);
++      ds = g_mm_ds;
++      goto LAB_0973;
++    }
++    if (cx < NODE16(ds, 0x00)) {        /* cmp cx,[ds:0] ; jb -> 0dc2 */
++      g_mm_ds = ds;
++      FUN_1000_0dc2(ds, 0);
++      ds = g_mm_ds;
++      if (g_mm_cf == 0 || g_mm_zf) goto LAB_099a;   /* jae 099a ; je 099a */
++      goto LAB_0973;
++    }
++    ds = NODE16(ds, 0x0c);             /* mov ax,[ds:0xc] ; mov ds,ax ; or ax,ax ; jne 0980 */
++    if (ds == 0) break;
++  }
++LAB_099a:
++  FUN_1000_09bc();
++#undef SS16
++#undef NODE16
++#undef NODE8
++  return 0;
+ }
+ 
+ 
+@@ -39036,98 +39063,50 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_0dc2) @ 1000:0dc2 ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+ /* WARNING: Restarted to delay deadcode elimination for space: ram */
+ 
+ undefined2 __allregs FUN_1000_0dc2(undefined2 param_1,int param_2)
+ 
+ {
+-  uint uVar1;
+-  undefined2 uVar2;
+-  undefined2 *puVar3;
+-  undefined2 *puVar4;
+-  undefined2 uVar5;
+-  uint uVar6;
+-  undefined2 uVar7;
+-  undefined2 uVar8;
+-  uint uVar9;
+-  uint uVar10;
+-  uint uVar11;
+-  int iVar12;
+-  undefined2 *puVar13;
+-  undefined2 *puVar14;
+-  
+-  if ((*(byte *)((int)_DAT_1000_c006 + 2) & 0x50) == 0) {
+-    uVar8 = *(undefined2 *)(param_2 + 0xc);
+-    while( true ) {
+-      uVar8 = *(undefined2 *)&DAT_1000_c00c;
+-      if (DAT_1000_c000 <= *(uint *)0x0) break;
+-      if (*(uint *)0x0 + *(uint *)&DAT_1000_c004 == DAT_1000_c000) {
+-        uVar8 = FUN_1000_0ecb(DAT_1000_c004,param_1);
+-        return uVar8;
+-      }
+-      if (DAT_1000_c004 <= *(uint *)&DAT_1000_c004) {
+-        FUN_1000_0f91(0x112f,0x2043);
+-        FUN_1000_1019(0);
+-        uVar7 = DAT_1000_c00c;
+-        uVar9 = DAT_1000_c000;
+-        LOCK();
+-        uVar10 = *(uint *)0x0;
+-        *(uint *)0x0 = DAT_1000_c000;
+-        uVar6 = DAT_1000_c004;
+-        UNLOCK();
+-        LOCK();
+-        uVar1 = *(uint *)&DAT_1000_c004;
+-        DAT_1000_c000 = uVar10;
+-        *(uint *)&DAT_1000_c004 = DAT_1000_c004;
+-        UNLOCK();
+-        puVar13 = (undefined2 *)0x0;
+-        puVar14 = (undefined2 *)0x0;
+-        uVar11 = DAT_1000_c004;
+-        DAT_1000_c004 = uVar1;
+-        while (0xfff < uVar11) {
+-          for (iVar12 = -0x8000; iVar12 != 0; iVar12 = iVar12 + -1) {
+-            puVar4 = puVar14;
+-            puVar14 = puVar14 + 1;
+-            puVar3 = puVar13;
+-            puVar13 = puVar13 + 1;
+-            *puVar4 = *puVar3;
+-          }
+-          uVar9 = uVar9 + 0x1000;
+-          uVar10 = uVar10 + 0x1000;
+-          uVar11 = uVar11 - 0x1000;
+-        }
+-        for (iVar12 = uVar11 * 8; uVar5 = DAT_1000_c00e, uVar2 = DAT_1000_c00c, iVar12 != 0;
+-            iVar12 = iVar12 + -1) {
+-          puVar4 = puVar14;
+-          puVar14 = puVar14 + 1;
+-          puVar3 = puVar13;
+-          puVar13 = puVar13 + 1;
+-          *puVar4 = *puVar3;
+-        }
+-        *(undefined2 *)&DAT_1000_c00e = DAT_1000_c00e;
+-        *(undefined2 *)&DAT_1000_c00c = uVar2;
+-        *(int *)(param_2 + 4) = *(int *)(param_2 + 4) - DAT_1000_c004;
+-        FUN_1000_10dc();
+-        puVar13 = (undefined2 *)(undefined2 *)*(undefined4 *)&DAT_1000_c006;
+-        *(undefined2 *)*(undefined4 *)&DAT_1000_c006 = *(undefined2 *)0x0;
+-        uVar5 = *(undefined2 *)&DAT_1000_c00c;
+-        uVar2 = *(undefined2 *)&DAT_1000_c00e;
+-        *(undefined2 *)&DAT_1000_c00e = uVar2;
+-        *(undefined2 *)&DAT_1000_c00c = uVar5;
+-        *(int *)(param_2 + 4) = *(int *)(param_2 + 4) + *(uint *)&DAT_1000_c004;
+-        FUN_1000_1117();
+-        FUN_1000_0cce(uVar6,param_2,puVar13);
+-        FUN_1000_1019(2);
+-        FUN_1000_0f80();
+-        return uVar7;
+-      }
+-    }
+-  }
+-  if (DAT_2000_bd2e != 0) {
+-    *(undefined1 *)0xbda = 0x58;
+-  }
+-  return DAT_1000_c00c;
++  /* PATCH 015: FUN_1000_0dc2 = MEMMGR free-list probe / block allocator, faithful dynamic-DS
++     reconstruction of the REACHED path (entry guard + shared tail 0x10d9e). Asm (base-0 0x10dc2):
++     DS = the current free-list node paragraph (received via the MEMMGR DS cursor g_mm_ds set by the
++     096c walker), BP=0x16d4 (SS=DGROUP=0x1c00). It reads the node's far guard pointer [6:8] and, if
++     its target flag byte has bit 0x50 set, jumps straight to the shared tail which advances DS to the
++     node's [0xc] successor and returns CF=1 (stc), ZF=(successor==0). On the boot pool every node has
++     [2]&0x50 set, so ONLY this guard+tail path runs (verified via gdb). The deep block-relocating
++     allocator (0x10dcd..0x10eca -- a 0x1000-paragraph memmove plus list surgery through callees
++     0x10f91/0x11019/0x110dc/0x11117/0x10cce/0x10f80) is NOT reached on the boot path; a faithful
++     reconstruction of that mover + its callees is a documented follow-on. It logs loudly (no silent
++     skip) if ever reached. Ghidra had mangled the whole function to fixed DGROUP globals + `*0x0`.
++     Returns via g_mm_ds (new DS) + g_mm_cf/g_mm_zf (the CF/ZF the 096c caller branches on). */
++#define SS16(o) (*(uint16_t *)(g_mem + 0x1c000u + (o)))
++#define NODE16(seg,o) (*(uint16_t *)(g_mem + ((unsigned long)(uint16_t)(seg) << 4) + (o)))
++#define NODE8(seg,o)  (*(uint8_t  *)(g_mem + ((unsigned long)(uint16_t)(seg) << 4) + (o)))
++  uint16_t ds = g_mm_ds, es, di, ax;
++  (void)param_1; (void)param_2;
++  di = NODE16(ds, 0x06);               /* les di,[ds:6] */
++  es = NODE16(ds, 0x08);
++  if ((NODE8(es, di + 2) & 0x50) == 0) {   /* testb es:[di+2],0x50 ; jne tail (guard) */
++    static int warned;
++    if (!warned) { warned = 1;
++      fprintf(stderr, "[memmgr] FUN_1000_0dc2 deep block-relocating allocator reached "
++                      "(ds=0x%04x) -- unimplemented follow-on; falling through to free-list tail\n", ds);
++    }
++  }
++  /* --- shared tail 0x10d9e --- */
++  ax = SS16(0x29e);
++  if (ax != 0) NODE8(ax, 0xbda) = 0x58;      /* movb es:[0xbda],0x58 when ss:[0x29e]!=0 */
++  es = SS16(0x16e0);
++  es = NODE16(es, 0x0c);                      /* es = es:[0xc] (side effect only) */
++  ax = NODE16(ds, 0x0c);                       /* ax = ds:[0xc] (successor node seg) */
++  g_mm_zf = (ax == 0);                         /* or ax,ax -> ZF */
++  g_mm_ds = ax;                                /* mov ds,ax */
++  g_mm_cf = 1;                                 /* stc -> CF=1 */
++#undef SS16
++#undef NODE16
++#undef NODE8
++  return 0;
+ }
+ 
+ 

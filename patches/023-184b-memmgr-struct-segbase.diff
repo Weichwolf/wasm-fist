@@ -1,0 +1,92 @@
+FUN_1000_184b: MEMMGR driver/scratch-struct allocator — faithful dynamic-segment reconstruction.
+
+184b is the MEMMGR object allocator reached via the DIRECT path (FUN_0000_14da -> FUN_1000_182a, struct
+DGROUP:0x4f0 scratch), via the driver method vector DGROUP:0xd0 (from FUN_1000_5051, struct 0x3e4 video /
+0x4fa sound), and via the descriptor-pool refill (FUN_1000_161d -> 17e5, struct DGROUP:0x1738). The struct
+lives at CX:BX where CX (param_2) = the DGROUP segment (ds=DGROUP=0x1c00 at runtime; the decompile
+sometimes captured the static SS placeholder 0x2ba9) and BX (param_4) is the near offset. asm 0x1184b:
+
+    mov es,cx                 ; ES = DGROUP
+    or  byte es:[bx+2],0x22   ; struct[+2] flags |= 0x22        <-- SIGSEGV when base dropped (*0x4f2)
+    js  .flag                 ; bit7 branch (1345/0d70); not taken on the boot alloc path
+    mov bp,0x16d4 ; mov [bp+0x1e],bx   ; SS:0x16f2 = struct offset (SS=DGROUP; Ghidra used static SS 0x2ba9)
+    call 0a31                 ; the free-list allocator; returns AX = the allocated segment and leaves
+                              ;   ES = the descriptor node it carved (g_mm_es)
+    jb  .err
+    mov es:[6],bx ; mov es:[8],cx      ; descriptor[6]/[8] = struct off / DGROUP (owner back-ptr)
+    mov ds,cx ; mov ax,es:[0] ; mov [bx],ax   ; struct[0] = descriptor.base = the allocated segment (=load_seg)
+    mov ax,0xa0 ; mov [bx+2],ax ; mov es:[2],ax ; struct[2]=0xa0, descriptor[2]=0xa0
+    mov ax,es ; lret          ; returns AX = descriptor seg
+
+Ghidra dropped the ES=CX/DS=CX segment bases on every struct access (rendered the bare offset as a host
+pointer -> SIGSEGV), mis-based the SS slot store (DAT_2000_d182 @ 0x2d182 instead of DGROUP:0x16f2), and —
+because it folded 0a31's node-walking DS to the DGROUP context — mis-read the allocated segment from
+DGROUP:0 (DAT_1000_c000) instead of the descriptor node ES:[0] that 0a31 actually returns. Fix (paired with
+patch 025's faithful 0a31): base every struct access at g_mem+(0x1c00<<4)+(uint16_t)param_4; take the CF
+from the shared g_mm_cf and ES (the descriptor) from g_mm_es that 0a31 exposes; struct[0] = 0a31's return
+(= descriptor.base = the allocated segment). Asm-verified base-0 0x1184b..0x118a3.
+--- a/fist.c
++++ b/fist.c
+@@ -40387,33 +40387,39 @@
+              undefined2 param_6)
+ 
+ {
+-  byte *pbVar1;
++  /* PATCH 023 (faithful, paired with patch 025's 0a31). Struct at CX:BX = DGROUP:param_4;
++     CX=ds=DGROUP=0x1c00 (decompile mis-captured the static SS 0x2ba9). ES after 0a31 = the descriptor
++     node it carved (g_mm_es); struct[0] = 0a31's return = descriptor.base = the allocated segment. */
++  uint16_t cx = 0x1c00;                              /* mov es,cx : DGROUP struct segment */
++  uint16_t bx = (uint16_t)(uintptr_t)param_4;        /* struct near offset */
++  uint16_t ax = (uint16_t)param_1;
++  uint16_t es;
+   uint uVar2;
+-  undefined2 uVar3;
+-  undefined1 uVar4;
+-  
+-  pbVar1 = (byte *)(param_4 + 1);
+-  uVar4 = false;
+-  *pbVar1 = *pbVar1 | 0x22;
+-  if (((char)*pbVar1 < '\0') && (uVar3 = param_5, FUN_1000_1345(param_2,param_4), !(bool)uVar4)) {
+-    FUN_1000_0d70(uVar3);
++  if (ax == 0) ax = 1;                               /* cmp ax,1; adc ax,0 */
++  MM_S8(cx, bx + 2) |= 0x22;                         /* orb es:[bx+2],0x22 */
++  if (MM_S8(cx, bx + 2) & 0x80) {                    /* js .flag: bit7 set (1345/0d70 path) */
++    static int warned;
++    if (!warned) { warned = 1;
++      fprintf(stderr, "[memmgr] FUN_1000_184b flag-path (struct[+2] bit7 set) reached -- "
++                      "unimplemented follow-on (not on the boot alloc path)\n"); }
+   }
+-  DAT_2000_d182 = param_4;
+-  uVar2 = FUN_1000_0a31(param_1 + (uint)(param_1 == 0),param_2,param_3,param_4,
+-                        (undefined2 *)&DAT_1000_d6d4,param_6);
+-  if ((bool)uVar4) {
+-    if (DAT_2000_d1d4 == '\0') {
+-      uVar2 = FUN_1000_13e4(param_4,param_5,0x29e,param_6);
+-      return uVar2;
+-    }
++  *(undefined2 *)(g_mem + 0x1c000 + 0x16f2) = bx;    /* mov bp,0x16d4; mov [bp+0x1e],bx -> DGROUP:0x16f2 */
++  g_mm_cf = 0;
++  uVar2 = FUN_1000_0a31(ax,cx,param_3,param_4,(undefined2 *)&DAT_1000_d6d4,param_6);
++  if (g_mm_cf) {                                     /* jb .err */
++    if (*(uint8_t *)(g_mem + 0x1c000 + 0x1744) == 0) /* testb ss:0x1744 ; je -> 13e4 */
++      return (uint)FUN_1000_13e4(param_4,param_5,0x29e,param_6);
++    g_mm_cf = 1;                                     /* stc; lret */
+     return uVar2;
+   }
+-  *(undefined2 *)&DAT_1000_c006 = param_4;
+-  *(uint *)&DAT_1000_c008 = param_2;
+-  *param_4 = *(undefined2 *)0x0;
+-  param_4[1] = 0xa0;
+-  *(undefined2 *)&DAT_1000_c002 = 0xa0;
+-  return param_2;
++  es = g_mm_es;                                      /* ES left by 0a31 = allocated descriptor node */
++  MM_S16(es, 0x06) = bx;                             /* mov es:[6],bx */
++  MM_S16(es, 0x08) = cx;                             /* mov es:[8],cx */
++  MM_S16(cx, bx)     = (uint16_t)uVar2;              /* mov ds,cx; mov ax,es:[0]; mov [bx],ax = load_seg */
++  MM_S16(cx, bx + 2) = 0xa0;                         /* mov [bx+2],0xa0 */
++  MM_S16(es, 0x02)   = 0xa0;                         /* mov es:[2],0xa0 */
++  g_mm_cf = 0;
++  return (uint)es;                                   /* mov ax,es; lret */
+ }
+ 
+ 

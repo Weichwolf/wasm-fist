@@ -1,0 +1,45 @@
+FUN_1000_5051 (TASK 2): thread the driver-object allocator method call (DGROUP:0xd0 -> 184b) that
+populates the driver-struct load-seg field -- the leg-(b) gate to both .DVRs loading.
+
+asm 0x15071..0x15094: after FUN_1000_50c8 returns DX:AX = the .DVR file size (patch 032),
+  add ax,0xf ; adc dx,0 ; rcr dx;rcr ax x4   -> AX = (size + 15) >> 4 = paragraphs
+  mov bx,cs:0x5957 (driver-struct near ptr, 0x3e4 video / 0x4fa sound) ; mov cx,cs:0x595b (= DGROUP
+  0x1c00) ; lcall [DGROUP:0xd0]
+DGROUP:0xd0 = 0xf69:0x21bb = linear 0x1184b = FUN_1000_184b, the MEMMGR driver-object allocator (patch
+023): it allocates `paras` paragraphs via the now-faithful 0a31 free-list allocator (patch 025) and writes
+the allocated segment into the driver struct's load-seg field struct[0] (DGROUP:param_3[0]). The __allregs
+indirect service call dropped AX/BX/CX (and Ghidra had already dropped the paragraph computation entirely,
+calling the vector with a bare 0x1000), so struct[0] stayed 0 and FUN_1000_5014's AH=4B load got load_seg=0
+-> both .DVRs REJECTed. Thread it faithfully: DAT_1000_5955 = the real file size (patch 032); compute the
+paragraphs; call FUN_1000_184b DIRECTLY with (paras, DGROUP=0x1c00, struct near ptr) -- a direct call
+threads the register args in the callee's committed order (indirect method-vector arg-threading is done
+per-patch, per docs/stage1.md; DGROUP:0xd0 now also resolves to 184b via patch 031's si=0xec install,
+validating the vector mechanism). Verified live: SOUNDDVR.DVR load_seg=0x3a06 (fmap wired 44 fns),
+MGAVIDEO.DVR load_seg=0x3e3a (fmap wired 233 fns) -- both LOAD on the real boot path (no more REJECT).
+--- a/fist.c
++++ b/fist.c
+@@ -47361,7 +47373,23 @@
+   DAT_1000_5955 = FUN_1000_50c8(param_1,param_2,param_3,param_4,param_5,param_6,param_7,param_8);
+   if (!bVar2) {
+     uVar1 = DAT_1000_595b;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0d0)))(0x1000);
++    /* PATCH 033 (TASK 2): thread the driver-object allocator method call.  asm 0x15071..0x15094:
++     *   add ax,0xf; adc dx,0; rcr/shr x4  -> AX = (DX:AX filesize + 15) >> 4 = paragraphs
++     *   mov bx,cs:0x5957 (struct near ptr); mov cx,cs:0x595b (=DGROUP 0x1c00); call [DGROUP:0xd0]
++     * DGROUP:0xd0 = 0xf69:0x21bb = linear 0x1184b = FUN_1000_184b, the MEMMGR driver-object allocator
++     * (patch 023): it allocates `paras` paragraphs via 0a31 and writes the allocated segment into the
++     * driver struct's load-seg field struct[0] (DGROUP:param_3[0]).  The __allregs indirect service
++     * call dropped AX/BX/CX (and Ghidra had already dropped the size computation, calling it with a bare
++     * 0x1000), so struct[0] stayed 0 -> both .DVRs REJECTed (load_seg=0).  Thread it faithfully: DAT_5955
++     * = the real filesize (patch 032 fixed 50c8's dropped DX:AX return); compute paragraphs; call 184b
++     * directly with (paras, DGROUP=0x1c00, struct near ptr) -- the DIRECT call threads the register args
++     * correctly (per-patch, per docs; the DGROUP:0xd0 vector now also resolves to 184b via patch 031's
++     * si=0xec install, validating the mechanism).  Files are <64KB MZ overlays so DX(high)=0. */
++    {
++      uint16_t paras = ((uint16_t)DAT_1000_5955 + 0xf) >> 4;
++      uint16_t struct_off = (uint16_t)(uintptr_t)DAT_1000_5957;
++      FUN_1000_184b(paras, 0x1c00, 0, (undefined2 *)(uintptr_t)struct_off, 0, 0);
++    }
+     bVar2 = false;
+     *(byte *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)DAT_1000_5957 + 2) =
+         *(byte *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)DAT_1000_5957 + 2) | 0x60;

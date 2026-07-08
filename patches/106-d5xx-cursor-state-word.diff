@@ -1,0 +1,61 @@
+MGAVIDEO driver: the cursor render/clip state block DGROUP:0x5b8..0x5e4 is 16-bit WORD, not undefined4.
+
+Third and final part of the cursor-blit runaway (docs/stage1.md FRONTIER item #1).  After patches 104
+(counter bytes) and 105 (screen dims) the cursor WIDTH d5da=9 and screen bound c732=320 are correct, yet
+FUN_0000_2fd7 still produces d5bc(columns)=319, d5be=-311 -> the blit still walks off.  Root cause: the
+whole cursor render/clip state block (mouse pos d5b8/d5ba, computed extents d5bc/d5be/d5c0, blit offsets
+d5c4/d5c6/d5c8, the AND-mask d5c2, the clip rect d5ce/d5d0/d5d2/d5d4, and the source descriptor
+d5da/d5dc/d5de/d5e0/d5e2/d5e4) is typed undefined4 by Ghidra, but this is 16-bit real-mode code and EVERY
+access is a WORD (verified: objdump shows 0 `DWORD PTR ds:0x5xx` refs across all 19 symbols; e.g. 2fd7 is
+`mov ax,ds:0x15dc` / `add WORD PTR ds:0x15c4,ax` throughout).
+
+The dword typing makes reads alias adjacent fields: `_DAT_1000_d5da` (undefined4) reads width|height<<16
+= 0x000b0009 instead of 9, so 2fd7's right-edge clip `if (c732 <= (uint)(iVar2 + d5da))` sees a bogus huge
+extent, takes the clip branch it must skip (asm 0x3059 `jb 0x3063` skips it when the cursor fits), and
+mangles d5bc/d5be.  Retype the contiguous block to its faithful WORD width so every read/write touches
+exactly its own 16-bit field and the 2fd7 clip math matches the asm (d5bc=8, d5be=1, d5c0=10 at the
+top-left corner).  Same store/load-width Ghidra class as patches 092/104/105.  Asm-verified against
+MGAVIDEO 2fd7 (0x2fd7..0x3063) and the 0db8/2d6d/2dbd/2e3f consumers.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -653,21 +653,21 @@
+ #define _DAT_1000_d5b6 (*(undefined4 *)(g_mem+0x1d5b6))
+-#define _DAT_1000_d5b8 (*(undefined4 *)(g_mem+0x1d5b8))
+-#define _DAT_1000_d5ba (*(undefined4 *)(g_mem+0x1d5ba))
+-#define _DAT_1000_d5bc (*(undefined4 *)(g_mem+0x1d5bc))
+-#define _DAT_1000_d5be (*(undefined4 *)(g_mem+0x1d5be))
+-#define _DAT_1000_d5c0 (*(undefined4 *)(g_mem+0x1d5c0))
+-#define _DAT_1000_d5c2 (*(undefined4 *)(g_mem+0x1d5c2))
+-#define _DAT_1000_d5c4 (*(undefined4 *)(g_mem+0x1d5c4))
+-#define _DAT_1000_d5c6 (*(undefined4 *)(g_mem+0x1d5c6))
+-#define _DAT_1000_d5c8 (*(undefined4 *)(g_mem+0x1d5c8))
+-#define _DAT_1000_d5ce (*(undefined4 *)(g_mem+0x1d5ce))
+-#define _DAT_1000_d5d0 (*(undefined4 *)(g_mem+0x1d5d0))
+-#define _DAT_1000_d5d2 (*(undefined4 *)(g_mem+0x1d5d2))
+-#define _DAT_1000_d5d4 (*(undefined4 *)(g_mem+0x1d5d4))
+-#define _DAT_1000_d5da (*(undefined4 *)(g_mem+0x1d5da))
+-#define _DAT_1000_d5dc (*(undefined4 *)(g_mem+0x1d5dc))
+-#define _DAT_1000_d5de (*(undefined4 *)(g_mem+0x1d5de))
+-#define _DAT_1000_d5e0 (*(undefined4 *)(g_mem+0x1d5e0))
+-#define _DAT_1000_d5e2 (*(undefined4 *)(g_mem+0x1d5e2))
+-#define _DAT_1000_d5e4 (*(undefined4 *)(g_mem+0x1d5e4))
++#define _DAT_1000_d5b8 (*(undefined2 *)(g_mem+0x1d5b8))
++#define _DAT_1000_d5ba (*(undefined2 *)(g_mem+0x1d5ba))
++#define _DAT_1000_d5bc (*(undefined2 *)(g_mem+0x1d5bc))
++#define _DAT_1000_d5be (*(undefined2 *)(g_mem+0x1d5be))
++#define _DAT_1000_d5c0 (*(undefined2 *)(g_mem+0x1d5c0))
++#define _DAT_1000_d5c2 (*(undefined2 *)(g_mem+0x1d5c2))
++#define _DAT_1000_d5c4 (*(undefined2 *)(g_mem+0x1d5c4))
++#define _DAT_1000_d5c6 (*(undefined2 *)(g_mem+0x1d5c6))
++#define _DAT_1000_d5c8 (*(undefined2 *)(g_mem+0x1d5c8))
++#define _DAT_1000_d5ce (*(undefined2 *)(g_mem+0x1d5ce))
++#define _DAT_1000_d5d0 (*(undefined2 *)(g_mem+0x1d5d0))
++#define _DAT_1000_d5d2 (*(undefined2 *)(g_mem+0x1d5d2))
++#define _DAT_1000_d5d4 (*(undefined2 *)(g_mem+0x1d5d4))
++#define _DAT_1000_d5da (*(undefined2 *)(g_mem+0x1d5da))
++#define _DAT_1000_d5dc (*(undefined2 *)(g_mem+0x1d5dc))
++#define _DAT_1000_d5de (*(undefined2 *)(g_mem+0x1d5de))
++#define _DAT_1000_d5e0 (*(undefined2 *)(g_mem+0x1d5e0))
++#define _DAT_1000_d5e2 (*(undefined2 *)(g_mem+0x1d5e2))
++#define _DAT_1000_d5e4 (*(undefined2 *)(g_mem+0x1d5e4))
+ #define _DAT_1000_d5e6 (*(undefined4 *)(g_mem+0x1d5e6))

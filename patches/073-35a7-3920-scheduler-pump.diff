@@ -1,0 +1,175 @@
+FUN_1000_35a7 + FUN_1000_3920 (frame/event scheduler pump): DGROUP near-offset base-loss + dropped CF.
+
+FUN_1000_35a7 is the frame/vsync POLL that FUN_1000_38cc spins on -- the target of the reloc-section
+0x1d8 method vector DGROUP:0x40a (= 0xf69:0x3f17), newly recovered by seeding it in SeedServiceVecs.java.
+It pumps the cooperative event queue (DGROUP near-offset linked list at 0x18e0/0x18e2/0x18e4/0x18e8) and
+returns status in the x86 CF via stc/clc+lret: CF=1 when the frame semaphore [0x3e00] is set OR the event
+queue is empty ([0x18e4]==0xffff).  Ghidra typed the DGROUP node NEAR OFFSETS as host int*/int** (base-loss
++ 4-byte pointer scaling), compared the 0xffff empty-queue sentinel against a host address (&DAT_2000_bfff),
+and dropped CF.  Reconstruct faithfully with 16-bit DGROUP near offsets (base g_mem+0x1c000) per asm
+0x135a7..0x1363f, and thread CF through the shim global g_fist_cf (native_main.c).  On the intro path
+FUN_1000_3446 built an empty queue so the fast path returns CF=1 at once; the event-dispatch block is
+reconstructed but not exercised until events are queued.
+
+FUN_1000_3920 is the cooperative-yield trampoline 35a7 calls first (asm 0x13920: `push [DGROUP:0x310];
+ljmp far [DGROUP:0x48]`).  The far target 0000:0199 (FUN_0000_0199) pops the pushed word into the low half
+of the far pointer [DGROUP:0x3a:0x3c], `call far [0x3a]`, then `ljmp 0xf69:0` (0xf690 = a bare `ret`) so
+the trampoline returns to 35a7:135b1.  Net effect: [0x3a].low=[0x310]; call far [0x3c]:[0x310]; return.
+Ghidra lost the SS->DGROUP base (rendered [DGROUP:0x48] as static-SS host word DAT_2000_bad8) and the
+push/pop; reconstruct faithfully.
+
+The DGROUP:0x40a vector itself is installed at boot by the loader/CRT role (native_main.c
+fist_install_dgroup -> fist_apply_reloc_section(0x1d8,1)); the engine's own 0x1d8 sites bail (f842 on bx==0)
+or clear (f860).  See docs/stage1.md.
+--- a/fist.c
++++ b/fist.c
+@@ -44101,63 +44101,78 @@
+ /* ===== ((uint)(uintptr_t)&FUN_1000_35a7) @ 1000:35a7 ===== */
+ 
+ uint __allregs FUN_1000_35a7(void)
+ 
+ {
+   uint *puVar1;
+   undefined2 uVar2;
+   undefined2 uVar3;
+   undefined2 *puVar4;
+   uint uVar5;
+   undefined2 unaff_CS;
+   
++  /* PATCH 073: frame/event SCHEDULER pump -- reloc-section 0x1d8 method vector DGROUP:0x40a = seeded
++   * FUN_1000_35a7, the poll FUN_1000_38cc spins on (asm 0x135a7..0x1363f).  Ghidra typed the DGROUP
++   * event-queue NEAR OFFSETS (0x18e0/0x18e2/0x18e4/0x18e8 + node fields) as host int* / int** (base-loss
++   * + pointer scaling), compared the 0xffff empty-queue sentinel against a host address
++   * (&DAT_2000_bfff), and dropped the x86 CF the function returns via stc/clc+lret.  Reconstruct with
++   * 16-bit DGROUP near offsets and thread CF via g_fist_cf: CF=1 when [0x3e00]!=0 or the queue is empty
++   * ([0x18e4]==0xffff).  On the intro path the queue is empty (FUN_1000_3446 set [0x18e4]=0xffff) so the
++   * fast path returns CF=1 immediately; the dispatch block below is reconstructed faithfully but
++   * unexercised until events are queued. */
++  {
++  extern unsigned char g_fist_cf;
++  #define SDG (g_mem + 0x1c000)
++  #define SW(o) (*(uint16_t *)(SDG + (uint16_t)(o)))
++  #define SD(o) (*(uint32_t *)(SDG + (uint16_t)(o)))
++  uint16_t node, head, ax;
++  (void)puVar1; (void)uVar2; (void)uVar3; (void)puVar4; (void)unaff_CS;
++
+   if (DAT_1000_c06a != '\0') {
+-                    /* WARNING: Could not recover jumptable at 0x000135a3. Too many branches */
+-                    /* WARNING: Treating indirect jump as call */
++                    /* task-scheduler far-jmp [DGROUP:0x58]; not taken here (task[0]==0 => c06a==0) */
+     uVar5 = (*(code *)fist_icall_near(0x1000u,(uint16_t)((ulong)DAT_1000_c058)))();
+     return uVar5;
+   }
+   uVar5 = FUN_1000_3920();
+-  if (DAT_1000_fe00 == '\0') {
+-    if (DAT_1000_d8e4 != (int *)&DAT_2000_bfff) {
+-      (*(code *)fist_icall_near(0x1000u,(uint16_t)(DAT_1000_d8e0[7])))();
+-      puVar4 = DAT_1000_d8e0;
+-      DAT_1000_d8e0[7] = 0x3f7f;
+-      puVar4[8] = unaff_CS;
+-      uVar2 = DAT_1000_d8e8;
+-      LOCK();
+-      DAT_1000_d8e8 = DAT_1000_d8e0;
+-      UNLOCK();
+-      *DAT_1000_d8e0 = uVar2;
+-      DAT_1000_d8e0 = DAT_1000_d8e4;
+-      uVar3 = DAT_1000_c452;
+-      uVar2 = DAT_1000_c44e;
+-      DAT_1000_d8e4 = (int *)*DAT_1000_d8e4;
+-      if (DAT_1000_d8e4 == (int *)0xffff) {
+-        DAT_1000_d8e6 = (undefined2 *)&DAT_1000_d8e4;
+-      }
+-      puVar1 = (uint *)(DAT_1000_d8e0 + 1);
+-      DAT_1000_d8e2 = puVar1;
+-      if ((DAT_1000_d8e0[2] == 0x8b7) && ((*puVar1 & 0x800) != 0)) {
+-        DAT_1000_c738 = DAT_1000_c738 + '\x01';
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_d65e)))();
+-        DAT_1000_c738 = DAT_1000_c738 + -1;
+-        DAT_1000_c44e = uVar2;
+-        DAT_1000_c452 = uVar3;
+-        return *puVar1;
+-      }
+-      return *puVar1;
+-    }
++  if (SW(0x3e00) != 0)     { g_fist_cf = 1; return uVar5; }   /* 135b1 stc; lret */
++  if (SW(0x18e4) == 0xffff){ g_fist_cf = 1; return uVar5; }   /* 135b8 stc; lret (empty queue) */
++  node = SW(0x18e0);                                          /* 135bf */
++  (*(code *)fist_icall_far(SD((uint16_t)(node + 0xe))))();    /* 135ca lcall far [node+0xe] */
++  node = SW(0x18e0);                                          /* 135cd */
++  SW(node + 0xe)  = 0x3f7f;                                   /* 135d1 arm node callback offset */
++  SW(node + 0x10) = 0xf69;                                    /* 135d6 mov [node+0x10],cs (=0xf69) */
++  ax = SW(0x18e8);                                            /* 135e1 xchg ax,[0x18e8] */
++  SW(0x18e8) = node;
++  SW(node) = ax;                                              /* 135e5 word[node]=old[0x18e8] */
++  head = SW(0x18e4);                                          /* 135e7 */
++  ax = SW(head);                                              /* 135eb */
++  SW(0x18e4) = ax;                                            /* 135ed advance queue head */
++  if ((uint16_t)(ax + 1) == 0) SW(0x18e6) = 0x18e4;           /* 135f0 inc ax; jne */
++  SW(0x18e0) = head;                                          /* 135f9 */
++  SW(0x18e2) = (uint16_t)(head + 2);                          /* 13600 */
++  ax = SW((uint16_t)(head + 2));                              /* 13605 ax=word[head+2] */
++  if (SW((uint16_t)(head + 4)) == 0x8b7 && (ax & 0x800) != 0) {/* 13607/1361a */
++    uint16_t s452 = SW(0x452), s44e = SW(0x44e);              /* 1361f push [0x452];[0x44e] */
++    g_mem[0x1c000 + 0x738]++;                                 /* 13627 incb [0x738] */
++    (*(code *)fist_icall_far(SD(0x165e)))();                  /* 1362c lcall far [0x165e] */
++    ax = SW((uint16_t)(head + 2));                            /* 13631 */
++    g_mem[0x1c000 + 0x738]--;                                 /* 13633 decb [0x738] */
++    SW(0x44e) = s44e; SW(0x452) = s452;                       /* 13637 pop */
++  }
++  g_fist_cf = 0;                                              /* 1360e/1363f clc; lret */
++  return ax;
++  #undef SDG
++  #undef SW
++  #undef SD
+   }
+-  return uVar5;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_3638) @ 1000:3638 ===== */
+ 
+ char __allregs FUN_1000_3638(char param_1)
+ 
+ {
+   return param_1 + -0x79;
+ }
+ 
+ 
+@@ -44390,28 +44405,33 @@
+   if ((DAT_1000_fe00 == '\0') && (DAT_1000_d8e4 != -1)) {
+     return;
+   }
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_3920) @ 1000:3920 ===== */
+ 
+ undefined4 __allregs FUN_1000_3920(void)
+ 
+ {
+-                    /* WARNING: Could not recover jumptable at 0x00013925. Too many branches */
+-                    /* WARNING: Treating indirect jump as call */
+-  (*(code *)fist_icall_near(0x1000u,(uint16_t)((ulong)DAT_2000_bad8)))();
+-  return;
++  /* PATCH 073: cooperative-yield trampoline.  asm 0x13920: `push word[DGROUP:0x310]; ljmp far
++   * [DGROUP:0x48]`.  The far target (runtime 0000:0199 = FUN_0000_0199) pops the pushed word into the
++   * low half of the far pointer [DGROUP:0x3a:0x3c], `call far [0x3a]`, then `ljmp 0xf69:0` -- 0xf690 is
++   * a bare `ret`, so the whole trampoline returns to this function's caller (35a7:135b1).  Net effect:
++   * [0x3a].low = [0x310]; call far [0x3c]:[0x310]; return.  Ghidra lost the SS->DGROUP base (rendered
++   * [DGROUP:0x48] as the static-SS host word DAT_2000_bad8) and the push/pop; reconstruct faithfully.
++   * DGROUP = g_mem+0x1c000. */
++  *(uint16_t *)(g_mem + 0x1c03a) = *(uint16_t *)(g_mem + 0x1c310);    /* pop [0x310] -> [0x3a] low */
++  return (*(code *)fist_icall_far(*(uint32_t *)(g_mem + 0x1c03a)))(); /* call far [0x3a] */
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_392a) @ 1000:392a ===== */
+ 
+ /* WARNING: Removing unreachable block (ram,0x0001396e) */
+ /* WARNING: Removing unreachable block (ram,0x00013937) */
+ /* WARNING: Removing unreachable block (ram,0x0001392d) */
+ /* WARNING: Removing unreachable block (ram,0x00013973) */
+ /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+ 
+ void __allregs

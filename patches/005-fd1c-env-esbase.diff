@@ -1,0 +1,30 @@
+Restore FUN_0000_fd1c's dynamic-ES environment pointer (Ghidra dropped the ES far-base).
+
+fd1c reads 4 bytes from the DOS environment via es=[[DGROUP:0x68]:0x2c]; lods es:[si]. Ghidra
+optimised the ES loads away, leaving `pcVar4 = (char*)0x0` -> host-0 deref -> SIGSEGV. Reconstruct
+es:si against the PSP/env block the loader (native_main) seeds. See inline PATCH 005 comment.
+
+--- a/fist.c	2026-07-07 23:42:14.721255077 +0200
++++ b/fist.c	2026-07-07 23:42:14.723394277 +0200
+@@ -36592,7 +36592,20 @@
+   
+   uVar2 = FUN_1000_2380(param_1,param_2,param_3,param_4,param_5,param_6,param_7);
+   DAT_1000_c240 = (undefined1)uVar2;
+-  pcVar4 = (char *)0x0;
++  /* PATCH 005: restore the dynamic-ES far-pointer Ghidra dropped. Asm:
++       mov es,[ds:0x68]        ; es = DGROUP:0x68 = PSP segment
++       mov es,[es:0x2c]        ; es = [PSP:0x2c] = DOS environment segment
++       xor si,si ; lods es:[si]  ; read 4 bytes from the environment block
++     Ghidra optimised the two ES loads away and rendered the near read as `pcVar4 = (char*)0x0`,
++     which in the flat g_mem model dereferences host address 0 -> SIGSEGV. Reconstruct es:si:
++     es = *(u16*)[(DGROUP:0x68 << 4) + 0x2c]; pcVar4 = g_mem + (es << 4) + si(=0). The PSP + env
++     block are seeded by the DOS-loader role in native_main (FIST_PSP_SEG / FIST_ENV_SEG), so this
++     reads real environment bytes. Documented "dynamic-ES far pointer" patch class (docs/stage1.md). */
++  {
++    unsigned psp_seg = *(uint16_t *)(g_mem + 0x1c068);
++    unsigned env_seg = *(uint16_t *)(g_mem + ((unsigned long)psp_seg << 4) + 0x2c);
++    pcVar4 = (char *)(g_mem + ((unsigned long)env_seg << 4));
++  }
+   iVar3 = 4;
+   do {
+     pcVar1 = pcVar4;

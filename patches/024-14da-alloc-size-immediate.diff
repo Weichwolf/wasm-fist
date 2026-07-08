@@ -1,0 +1,20 @@
+FUN_0000_14da: alloc SIZE immediate mis-rendered as a DGROUP symbol address.
+
+14da requests a scratch buffer via a FAR call to FUN_1000_182a (lcall 0xf69:0x219a = linear 0x1182a).
+asm 0x14da: `mov ax,0x2c6; inc ax; shl ax,1 x3` => AX = (0x2c6+1)<<3 = 0x1638 = the 16-bit byte SIZE.
+Ghidra typed 182a's first (AX) param as a pointer and rendered the immediate 0x1638 as the address of
+the DGROUP symbol at that offset -> `(undefined2 *)&DAT_1000_d638`, which the flat model lowers to the
+HOST pointer g_mem+0x1d638. 182a's size arithmetic ((sz+0xf>>1|...)>>3) then ran on the host pointer
+(~0x816a...) instead of 0x1638 -> a garbage allocation size (8485490) into 184b/0a31. Class: immediate
+mis-typed as a symbol reference (pointer-vs-constant). Fix: pass the asm-verified constant 0x1638.
+--- a/fist.c
++++ b/fist.c
+@@ -7149,7 +7149,7 @@
+   undefined2 *puVar4;
+   bool bVar5;
+   
+-  FUN_1000_182a((undefined2 *)&DAT_1000_d638,0x1c00,param_1,0x4f0,param_2,param_3);
++  FUN_1000_182a(0x1638,0x1c00,param_1,0x4f0,param_2,param_3);   /* patch 024: asm mov ax,0x2c6; inc; shl x3 = 0x1638 (16-bit alloc SIZE; Ghidra mis-rendered the immediate as &DAT_1000_d638 -> host ptr, corrupting 182a size math) */
+   uVar2 = DAT_1000_c4f0;
+   puVar4 = (undefined2 *)0x0;
+   for (iVar3 = 0xb18; iVar3 != 0; iVar3 = iVar3 + -1) {

@@ -1,0 +1,72 @@
+Restore FUN_0000_f77f's double-buffer swap -- reconstruct the rep movsb segment bases (DGROUP:0x74).
+
+f77f flips the engine's low double buffer: it copies 0x3e0 bytes from the segment cached in the
+scratch slot DGROUP:0x74 (SS=DS=DGROUP=0x1c00 at runtime) into the fixed buffer at paragraph
+DGROUP+0x7d (= 0x1c7d, linear 0x1c7d0), then `xchg`-installs 0x1c7d as the new DGROUP:0x74 and passes
+the OLD segment to FUN_0000_f6da (an INT 21h AH=4A memory-resize on that block). f738 (the CRT init,
+already correct in the decompile) seeds DGROUP:0x74 = 0x3352 -> linear 0x33520, a 0x3e0-byte template
+in the image tail.
+
+Two Ghidra losses, both the "[0x70]-family dropped segment base on string ops" class (docs/stage1.md):
+(1) it ignores the segment context for x86 `rep movsb`, so the copy became a bare host-pointer walk
+from 0/0 -> SIGSEGV; (2) it aliased the ONE physical slot DGROUP:0x74 to two host addresses --
+DAT_1000_c074 (0x1c074, DS ctx 0x1c00) for the leading `mov ds,[0x74]` read and DAT_2000_bb04
+(0x2bb04, the static SS ctx 0x2ba9 after `push ss; pop ds`) for the `xchg ax,[0x74]` -- the same slot
+at runtime because SS=DS=DGROUP. The fix reconstructs both string operands as g_mem+(seg<<4) and
+routes the read/write through the true slot 0x1c074. SI/DI both end at 0x3e0 (cx exhausted), preserved
+as the puVar6/puVar7 args so the FUN_0000_f6da call stays byte-identical.
+
+--- a/fist.c	2026-07-08 00:50:03.061430660 +0200
++++ b/fist.c	2026-07-08 00:50:03.081195560 +0200
+@@ -36099,27 +36099,34 @@
+ void __allregs FUN_0000_f77f(undefined2 param_1)
+ 
+ {
+-  undefined1 *puVar1;
+-  undefined1 *puVar2;
+-  undefined2 uVar3;
+   undefined2 uVar4;
+-  int iVar5;
+   undefined1 *puVar6;
+   undefined1 *puVar7;
+-  
+-  uVar3 = DAT_1000_c074;
+-  puVar7 = (undefined1 *)0x0;
+-  puVar6 = (undefined1 *)0x0;
+-  for (iVar5 = 0x3e0; uVar4 = DAT_2000_bb04, iVar5 != 0; iVar5 = iVar5 + -1) {
+-    puVar2 = puVar7;
+-    puVar7 = puVar7 + 1;
+-    puVar1 = puVar6;
+-    puVar6 = puVar6 + 1;
+-    *puVar2 = *puVar1;
++  /* PATCH 010: DGROUP:0x74 double-buffer swap -- restore the rep movsb segment bases.
++     Asm (base-0 image linear 0xf77f):
++       mov ax,0x7c8; add ax,0xf; shr ax,1 x4   ; ax = 0x7d paragraphs
++       mov dx,ds; add ax,dx; mov es,ax         ; ES = DGROUP+0x7d = 0x1c7d (dest seg)
++       xor di,di
++       mov ds,[0x74]                           ; DS = word at DGROUP:0x74 = double-buffer src seg
++                                               ;   (f738 seeds 0x3352 -> linear 0x33520, image tail)
++       xor si,si; mov cx,0x3e0; rep movsb       ; copy 0x3e0 bytes [src:0] -> [0x1c7d:0]
++       push ss; pop ds; mov ax,es
++       xchg ax,[0x74]                           ; [0x74] <- 0x1c7d ; ax <- old src seg
++       push cs; call f6da                        ; f6da(old_seg,0,0x1c00,param_1, si=0x3e0, di=0x3e0)
++     Ghidra dropped the movsb DS/ES bases (host-0 rep movsb -> SIGSEGV) and aliased the one physical
++     slot DGROUP:0x74 to two host addresses: DAT_1000_c074 (0x1c074, DS ctx 0x1c00) for the initial
++     read and DAT_2000_bb04 (0x2bb04, post-`push ss;pop ds` static SS ctx 0x2ba9) for the xchg --
++     same slot at runtime since SS=DS=DGROUP. Reconstruct via the true slot 0x1c074, base both string
++     operands as g_mem+(seg<<4). Class: docs/stage1.md "[0x70]-family dropped segment base on string
++     ops". Dest DGROUP+0x7d = 0x1c7d -> linear 0x1c7d0. */
++  {
++    unsigned src_seg = *(uint16_t *)(g_mem + 0x1c074);       /* DGROUP:0x74 = double-buffer src seg */
++    memmove(g_mem + 0x1c7d0, g_mem + ((unsigned long)src_seg << 4), 0x3e0); /* [src:0]->[DGROUP+0x7d:0] */
++    uVar4 = (undefined2)src_seg;                             /* xchg: ax <- old [0x74] */
++    *(uint16_t *)(g_mem + 0x1c074) = 0x1c7d;                 /* xchg: [0x74] <- ES (DGROUP+0x7d) */
+   }
+-  LOCK();
+-  DAT_2000_bb04 = 0x1c7d;
+-  UNLOCK();
++  puVar6 = (undefined1 *)0x3e0;                              /* SI after rep movsb (cx exhausted) */
++  puVar7 = (undefined1 *)0x3e0;                              /* DI after rep movsb */
+   FUN_0000_f6da(uVar4,0,0x1c00,param_1,puVar6,puVar7);
+   return;
+ }

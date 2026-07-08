@@ -1,0 +1,40 @@
+MGAVIDEO FUN_0000_1963 (driver-object dispatch-vector selector): restore DGROUP + CS-relative bases.
+
+asm 0x1963: bx=word[DGROUP:0x736]; al=byte[DGROUP:bx+8]; ax*=2; if <0x10 read two CS-relative far-pointer
+tables at module offsets 0x198e/0x199e (CS = driver load_seg) and store them as far vectors into DGROUP:
+0x684/0x688 with the segment word = CS.  Ghidra dropped the DS=DGROUP base, the CS table bases (host
+offsets), and the `mov ds:0x686,cs`/`ds:0x68a,cs` segment stores (0).  Rebase to g_mem+DGROUP / g_mem+
+fist_mga_base and set the far-ptr segment = load_seg.  Asm-verified MGAVIDEO 0x1963.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -4091,12 +4091,24 @@
+ {
+   uint uVar1;
+   
+-  uVar1 = (uint)*(byte *)(_DAT_1000_c736 + 8) * 2;
+-  if (uVar1 < 0x10) {
+-    _DAT_1000_c684 = *(undefined2 *)(uVar1 + 0x198e);
+-    _DAT_1000_c686 = 0;
+-    _DAT_1000_c688 = *(undefined2 *)(uVar1 + 0x199e);
+-    _DAT_1000_c68a = 0;
++  /* PATCH 052: driver-object dispatch-vector selector (asm 0x1963).  bx = word[DGROUP:0x736] (the
++     driver-object near offset stored by FUN_0000_026e, patch 050); al = byte at DGROUP:(bx+8); ax*=2;
++     if < 0x10 index two CS-RELATIVE far-pointer tables at module offsets 0x198e / 0x199e (CS = the
++     driver code segment = load_seg) and store them as far vectors into DGROUP:0x684 / 0x688 with the
++     segment word = CS (load_seg).  Ghidra dropped the DS=DGROUP base of byte[bx+8], the CS base of the
++     two tables (rendered as host offsets), and the `mov ds:0x686,cs` / `mov ds:0x68a,cs` segment stores
++     (rendered as 0).  Rebase: DGROUP byte read, module-relative table reads (g_mem+fist_mga_base+...),
++     and the far-pointer segment = the driver load-seg (fist_mga_base>>4). */
++  {
++    uint16_t doff = *(uint16_t *)(g_mem + 0x1c736);
++    uint16_t cs   = (uint16_t)(fist_mga_base >> 4);
++    uVar1 = (uint)*(uint8_t *)(g_mem + 0x1c000 + doff + 8) * 2;
++    if (uVar1 < 0x10) {
++      _DAT_1000_c684 = *(uint16_t *)(g_mem + fist_mga_base + uVar1 + 0x198e);
++      _DAT_1000_c686 = cs;
++      _DAT_1000_c688 = *(uint16_t *)(g_mem + fist_mga_base + uVar1 + 0x199e);
++      _DAT_1000_c68a = cs;
++    }
+   }
+   return;
+ }

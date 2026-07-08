@@ -1,0 +1,30 @@
+FUN_0000_0249 (INT-8 tick-wait, called N times by FUN_0000_0240 = "delay N ticks"): reconstruct the
+SS=DGROUP tick spin that Ghidra folded to an infinite do-nothing loop -> post-fade hang in cae6.
+
+After the palette fade (patch 085) returns, cae6 reaches FUN_0000_0240(0x14) which loops 20x calling
+FUN_0000_0249.  asm (image 0x249):
+    249: mov ax,ss:0x452        ; DGROUP:0x452 = the INT-8 tick counter (SS=DGROUP)
+    24d: L: cmp ax,ss:0x452
+    252: je L                   ; spin until the tick advances
+    254: ret
+Ghidra dropped the SS segment base on both ss:0x452 reads and emitted `do{}while(true)` ("Do nothing
+block with infinite loop").  DAT_1000_c452 is the tick the cooperative INT-8 ISR maintains; pump it in
+the spin (same faithful fix as patches 017/072) so the wait elapses.
+--- a/fist.c
++++ b/fist.c
+@@ -4372,9 +4372,12 @@
+ void __allregs FUN_0000_0249(void)
+ 
+ {
+-                    /* WARNING: Do nothing block with infinite loop */
+-  do {
+-  } while( true );
++  /* asm 0x249: `mov ax,ss:0x452; L: cmp ax,ss:0x452; je L; ret` -- wait for one INT-8 tick.
++   * Ghidra dropped SS=DGROUP on both ss:0x452 accesses and folded the whole thing to an infinite
++   * do-nothing loop.  DGROUP:0x452 = DAT_1000_c452 is the tick the cooperative INT-8 ISR bumps;
++   * pump it (patch 017/072 class) so the wait elapses (FUN_0000_0240 calls this N times = delay N). */
++  undefined2 uVar1 = DAT_1000_c452;
++  while (DAT_1000_c452 == uVar1) fist_timer_pump();
+ }
+ 
+ 

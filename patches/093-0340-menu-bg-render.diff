@@ -1,0 +1,84 @@
+MGAVIDEO FUN_0000_0340: reconstruct the MAIN-MENU background render (asm 0x340..0x387).
+
+0340 is the menu/screen background paint, reached engine cae6 -> e714 -> ... -> e3bc -> (*c564)() = 0340.
+It (1) copies a 768-byte palette from the screen descriptor's resource segment into the driver palette
+buffer word[DGROUP:0x782], (2) RLE-decodes the descriptor's background IMAGE straight into the VGA
+framebuffer at 0xA0000, and (3) uploads the palette (FUN_0000_0410).  Ghidra dropped every segment base:
+
+  asm 0x340: mov es,cx ; mov ax,es:[bx]        -> uVar3 = *param_2 = word[descriptor:0] = the resource
+                                                  SEGMENT (holds 768B palette at :0, RLE image at :0x300)
+  asm 0x34b: mov ds,ax                          -> src segment for both the palette copy and the RLE blit
+  asm 0x34d: mov BYTE ss:0x786,0                -> Ghidra wrote DAT_2000_c216 (linear 0x2c216, WRONG ss
+                                                  base); real target = byte[DGROUP:0x786]
+  asm 0x353: mov es,ss:0x782 ; rep movsw 0x180  -> dst = word[DGROUP:0x782]:0 (palette buffer); Ghidra
+                                                  dropped BOTH bases -> the NULL rep-movs that SIGSEGV'd
+  asm 0x361: mov es,0xA000; xor di,di; mov cx,0xfa00 ; call FAR [DGROUP:0x336]
+             [DGROUP:0x336] = 0xf69:0x57cb (verified from the installed far vector) = the engine RLE
+             blitter.  ds:si = descriptor.word0:0x300 (si is 0x300 after the palette copy), es:di =
+             0xA000:0, runs until di reaches di+cx = 0xfa00 = 64000 = 320x200.  0x57cb is a MID-function
+             entry into FUN_1000_57be, which Ghidra mis-decoded to garbage (in/out/4a2c), so the decoder
+             is reconstructed INLINE here from the asm (0x14e5b..0x14e97): PackBits-style RLE -- a signed
+             count byte n; n>=0 => copy n+1 literal bytes; n<0 => fill (|n|+1) bytes with the next byte.
+  asm 0x379: mov WORD ds:0x780,0x782            -> word store (see patch 092); _DAT_1000_c780 now undef2
+  asm 0x37f: mov BYTE ds:0x786,1
+
+The descriptor pointer param_2 is threaded by patch 094 (e3bc sets bx=0xf6cc, cx=ds).  Asm-verified
+MGAVIDEO 0x340..0x387 + engine RLE decoder 0xf69:0x57cb.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1198,23 +1198,41 @@
+   undefined2 *puVar6;
+   undefined2 *puVar7;
+   
+-  uVar3 = *param_2;
++  /* PATCH 093 (asm 0x340..0x387): faithful menu-background render.  See patch header. */
++  uVar3 = *param_2;                                     /* ax = word[descriptor:0] = resource segment */
+   FUN_0000_2d3d();
+-  uVar4 = _DAT_2000_c212;
+-  DAT_2000_c216 = 0;
+-  puVar6 = (undefined2 *)0x0;
+-  puVar7 = (undefined2 *)0x0;
+-  for (iVar5 = 0x180; iVar5 != 0; iVar5 = iVar5 + -1) {
+-    puVar2 = puVar7;
+-    puVar7 = puVar7 + 1;
+-    puVar1 = puVar6;
+-    puVar6 = puVar6 + 1;
+-    *puVar2 = *puVar1;
++  *(uint8_t *)(g_mem + 0x1c786) = 0;                    /* mov BYTE ss:0x786,0 (Ghidra's c216 was wrong) */
++  {
++    /* palette copy: 0x180 words (768B) from descriptor.word0:0 -> word[DGROUP:0x782]:0 */
++    uint16_t src_seg = (uint16_t)uVar3;
++    uint16_t palseg  = *(uint16_t *)(g_mem + 0x1c782);  /* es = word[DGROUP:0x782] (palette buffer) */
++    uint16_t *src    = (uint16_t *)(g_mem + ((uint32_t)src_seg << 4));
++    uint16_t *dst    = (uint16_t *)(g_mem + ((uint32_t)palseg  << 4));
++    int i;
++    for (i = 0; i < 0x180; i++) dst[i] = src[i];
++    /* fb RLE-blit: [DGROUP:0x336] = 0xf69:0x57cb, es=0xA000 di=0 cx=0xfa00 ds:si=src_seg:0x300.
++       Inline reconstruction of the engine RLE decoder (0x14e5b..0x14e97), byte-exact PackBits. */
++    {
++      uint8_t  *dp  = g_mem + 0xA0000;                  /* es:di, di=0 */
++      uint16_t  di  = 0;
++      const uint16_t dxend = 0xfa00;                    /* di + cx */
++      uint8_t  *sp  = g_mem + ((uint32_t)src_seg << 4) + 0x300;  /* ds:si, si=0x300 */
++      while (di < dxend) {
++        int n = (signed char)*sp++;                     /* lods al; or al,al */
++        if (n < 0) {                                    /* RLE run: fill (|n|+1) bytes */
++          uint16_t cnt  = (uint16_t)(-n) + 1;
++          uint8_t  fill = *sp++;
++          while (cnt--) dp[di++] = fill;
++        } else {                                        /* literal run: copy (n+1) bytes */
++          uint16_t cnt = (uint16_t)n + 1;
++          while (cnt--) dp[di++] = *sp++;
++        }
++      }
++    }
+   }
+-  (*(code *)fist_icall(fist_mga_base+0x0u+(uint16_t)(*(undefined2 *)0x336)))();
+   FUN_0000_0410();
+-  _DAT_1000_c780 = 0x782;
+-  DAT_1000_c786 = 1;
++  _DAT_1000_c780 = 0x782;                               /* WORD store (patch 092) */
++  *(uint8_t *)(g_mem + 0x1c786) = 1;                    /* mov BYTE ds:0x786,1 */
+   FUN_0000_2d52();
+   return;
+ }

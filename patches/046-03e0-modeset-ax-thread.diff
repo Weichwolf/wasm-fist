@@ -1,0 +1,23 @@
+MGAVIDEO FUN_0000_03e0 (palette-set dispatch): thread AX=0 into the c580 method call.
+
+asm 0x3e0: `xor ax,ax; call [DGROUP:0x580]` -> the palette-set method DGROUP:0x580 = 0x3e3b:0x43e =
+FUN_0000_043e.  The __allregs indirect method call dropped AX=0, so 043e saw a garbage nonzero AX and
+wrongly took its palette-COPY branch (rep movsw from a garbage source segment -> SIGSEGV) instead of
+the AX==0 default-palette branch (FUN_0000_0a02).  c580 is a stable vector to 043e (verified via the
+installed DGROUP method-vector table); resolve it and pass AX=0 faithfully.  Asm-verified MGAVIDEO 0x3e0.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1267,7 +1267,12 @@
+ 
+ {
+   _DAT_1000_c78c = 0x100;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c580)))();
++  /* PATCH 046: thread AX=0 into the c580 palette-set method.  asm 0x3e0: `xor ax,ax; call
++     [DGROUP:0x580]` -> the method DGROUP:0x580 = 0x3e3b:0x43e = FUN_0000_043e.  The __allregs
++     indirect call dropped AX=0, so 043e saw a garbage nonzero AX and wrongly took its palette-COPY
++     branch (movsw from a garbage segment -> SIGSEGV) instead of the AX==0 default-palette branch
++     (FUN_0000_0a02).  Resolve the (stable) vector and pass AX=0 faithfully. */
++  ((void (*)(int,undefined2,undefined2 *))fist_icall_far((uint32_t)(_DAT_1000_c580)))(0,0,0);
+   DAT_1000_c786 = 1;
+   return;
+ }

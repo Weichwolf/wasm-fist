@@ -1,0 +1,143 @@
+MEMMGR block-table realloc/compaction (3439/345c/3584/385c/3894): byte-scale the parallel
+block-info tables (Ghidra double-scaled `&DAT + i*4` -> i*16, so the compaction copied/reindexed
+the wrong blocks and the KDV chunk buffer's 8-byte header -- the 'xVDK'/'pVDK'/'iVDK' MAGIC -- was
+not preserved across a resize, so 6f3e's magic dispatch never matched and the RLE decoder ran with
+width=height=0 -> read off the buffer end -> SIGSEGV).
+
+The extender MEMMGR keeps parallel per-block arrays indexed by block number (stride 4 bytes):
+  0x28ac = block key/handle ; 0x2a3c = block base ptr ; 0x2bcc = block size ; 0x2bd0 ...
+  0x2d5c/0x2d60 = alignment/aux ; 0x2eec = flags.  The asm indexes them `[reg*4 + 0xXXXX]` (a BYTE
+offset of reg*4).  Ghidra typed the base symbols as 4-byte scalars, so `&DAT_0000_2a3c + iVar6 * 4`
+is pointer arithmetic that scales by the element size again (byte +iVar6*16) -> wrong slot.  The
+`(&DAT_0000_28ac)[i]` indexed forms are already the correct stride-4 and are left as-is; only the
+explicit `&DAT + expr * 4` forms (2a3c / 2bd0 / 2d5c / 2d60) are wrong.  Restore each to a byte
+offset off the table base -- `(char *)&DAT_0000_XXXX + expr * 4` -- matching the asm.  (The 3661
+copy of this class is fixed in patch 078; the `(int)&DAT_0000_28a5 + ... + 3` head-block form is
+integer byte arithmetic and stays.)  asm-verified (e.g. 345c 0x350c..0x3523: mov/mov DWORD PTR
+[ebx*4+0x28ac]/[ebx*4+0x2bcc]/[ebx*4+0x2a3c]).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -3556,12 +3556,12 @@
+       do {
+         puVar1 = (undefined4 *)(&DAT_0000_28b0)[param_2];
+         (&DAT_0000_28ac)[param_2] = puVar1;
+-        uVar4 = *(uint *)(&DAT_0000_2bd0 + param_2 * 4);
++        uVar4 = *(uint *)((char *)&DAT_0000_2bd0 + param_2 * 4);
+         (&DAT_0000_2bcc)[param_2] = uVar4;
+         (&DAT_0000_2eec)[param_2] = (&DAT_0000_2eed)[param_2];
+-        *(int *)(&DAT_0000_2d5c + param_2 * 4) = *(int *)(&DAT_0000_2d60 + param_2 * 4);
++        *(int *)((char *)&DAT_0000_2d5c + param_2 * 4) = *(int *)((char *)&DAT_0000_2d60 + param_2 * 4);
+         puVar5 = (undefined4 *)*puVar1;
+-        uVar2 = *(int *)(&DAT_0000_2d60 + param_2 * 4) - 1;
++        uVar2 = *(int *)((char *)&DAT_0000_2d60 + param_2 * 4) - 1;
+         puVar6 = (undefined4 *)((uint)((int)DAT_0000_2f50 + uVar2) & ~uVar2);
+         if (((undefined4 *)*puVar1 != puVar6) && (((&DAT_0000_2eec)[param_2] & 2) != 0)) {
+           if ((undefined4 *)*puVar1 < puVar6) {
+@@ -3572,7 +3572,7 @@
+           DAT_0000_2f70 = DAT_0000_2f70 + 1;
+         }
+         *puVar1 = puVar6;
+-        *(undefined4 **)(&DAT_0000_2a3c + param_2 * 4) = puVar6;
++        *(undefined4 **)((char *)&DAT_0000_2a3c + param_2 * 4) = puVar6;
+         for (uVar2 = uVar4 >> 2; uVar2 != 0; uVar2 = uVar2 - 1) {
+           *puVar6 = *puVar5;
+           puVar5 = puVar5 + 1;
+@@ -3631,8 +3631,8 @@
+         do {
+           uVar1 = (&DAT_0000_2bcc)[iVar6];
+           puVar8 = *(undefined4 **)(&DAT_0000_28ac)[iVar6];
+-          puVar7 = *(undefined4 **)(&DAT_0000_2a3c + iVar6 * 4);
+-          *(undefined4 **)(&DAT_0000_2a3c + iVar6 * 4) = puVar8;
++          puVar7 = *(undefined4 **)((char *)&DAT_0000_2a3c + iVar6 * 4);
++          *(undefined4 **)((char *)&DAT_0000_2a3c + iVar6 * 4) = puVar8;
+           if (puVar7 != puVar8) {
+             for (uVar2 = uVar1 >> 2; uVar2 != 0; uVar2 = uVar2 - 1) {
+               *puVar8 = *puVar7;
+@@ -3657,8 +3657,8 @@
+         uVar1 = uVar1 - 1;
+         uVar2 = (&DAT_0000_2bcc)[uVar1];
+         puVar8 = *(undefined4 **)(&DAT_0000_28ac)[uVar1];
+-        puVar7 = *(undefined4 **)(&DAT_0000_2a3c + uVar1 * 4);
+-        *(undefined4 **)(&DAT_0000_2a3c + uVar1 * 4) = puVar8;
++        puVar7 = *(undefined4 **)((char *)&DAT_0000_2a3c + uVar1 * 4);
++        *(undefined4 **)((char *)&DAT_0000_2a3c + uVar1 * 4) = puVar8;
+         if (puVar7 != puVar8) {
+           uVar3 = uVar2 & 0xfffffffc;
+           uVar4 = uVar3 - 4;
+@@ -3715,12 +3715,12 @@
+   }
+   (&DAT_0000_28ac)[DAT_0000_2f54] = param_3;
+   (&DAT_0000_2bcc)[uVar1] = param_2;
+-  *(int *)(&DAT_0000_2d5c + uVar1 * 4) = param_4;
++  *(int *)((char *)&DAT_0000_2d5c + uVar1 * 4) = param_4;
+   (&DAT_0000_2eec)[uVar1] = (char)param_1;
+   uVar2 = FUN_0000_3772(param_1,param_2,param_4);
+   uVar1 = DAT_0000_2f54;
+   *(uint *)(&DAT_0000_28ac)[DAT_0000_2f54] = uVar2;
+-  *(uint *)(&DAT_0000_2a3c + uVar1 * 4) = uVar2;
++  *(uint *)((char *)&DAT_0000_2a3c + uVar1 * 4) = uVar2;
+   if (uVar2 != 0) {
+     DAT_0000_2f54 = DAT_0000_2f54 + 1;
+     if (DAT_0000_2f68 < DAT_0000_2f54) {
+@@ -3769,8 +3769,8 @@
+       do {
+         uVar1 = (&DAT_0000_2bcc)[iVar6];
+         puVar8 = *(undefined4 **)(&DAT_0000_28ac)[iVar6];
+-        puVar7 = *(undefined4 **)(&DAT_0000_2a3c + iVar6 * 4);
+-        *(undefined4 **)(&DAT_0000_2a3c + iVar6 * 4) = puVar8;
++        puVar7 = *(undefined4 **)((char *)&DAT_0000_2a3c + iVar6 * 4);
++        *(undefined4 **)((char *)&DAT_0000_2a3c + iVar6 * 4) = puVar8;
+         if (puVar7 != puVar8) {
+           for (uVar2 = uVar1 >> 2; uVar2 != 0; uVar2 = uVar2 - 1) {
+             *puVar8 = *puVar7;
+@@ -3795,8 +3795,8 @@
+       iVar6 = iVar6 + -1;
+       uVar1 = (&DAT_0000_2bcc)[iVar6];
+       puVar8 = *(undefined4 **)(&DAT_0000_28ac)[iVar6];
+-      puVar7 = *(undefined4 **)(&DAT_0000_2a3c + iVar6 * 4);
+-      *(undefined4 **)(&DAT_0000_2a3c + iVar6 * 4) = puVar8;
++      puVar7 = *(undefined4 **)((char *)&DAT_0000_2a3c + iVar6 * 4);
++      *(undefined4 **)((char *)&DAT_0000_2a3c + iVar6 * 4) = puVar8;
+       if (puVar7 != puVar8) {
+         uVar2 = uVar1 & 0xfffffffc;
+         uVar3 = uVar2 - 4;
+@@ -3854,8 +3854,8 @@
+   while( true ) {
+     puVar1 = (uint *)(&DAT_0000_28ac)[uVar5];
+     iVar2 = (&DAT_0000_2bcc)[uVar5];
+-    uVar3 = ~(*(int *)(&DAT_0000_2d5c + uVar5 * 4) - 1U);
+-    uVar6 = DAT_0000_2f50 + (*(int *)(&DAT_0000_2d5c + uVar5 * 4) - 1U) & uVar3;
++    uVar3 = ~(*(int *)((char *)&DAT_0000_2d5c + uVar5 * 4) - 1U);
++    uVar6 = DAT_0000_2f50 + (*(int *)((char *)&DAT_0000_2d5c + uVar5 * 4) - 1U) & uVar3;
+     if ((*puVar1 != uVar6) && (((&DAT_0000_2eec)[uVar5] & 2) != 0)) {
+       if (*puVar1 < uVar6) {
+         uVar5 = thunk_FUN_0000_0f64(0x389a);
+@@ -3892,11 +3892,11 @@
+     iVar3 = DAT_0000_2f60 + 1;
+     iVar2 = DAT_0000_2f54 - iVar3;
+     do {
+-      *(undefined4 *)(&DAT_0000_28ac)[iVar3] = *(undefined4 *)(&DAT_0000_2a3c + iVar3 * 4);
++      *(undefined4 *)(&DAT_0000_28ac)[iVar3] = *(undefined4 *)((char *)&DAT_0000_2a3c + iVar3 * 4);
+       iVar3 = iVar3 + 1;
+       iVar2 = iVar2 + -1;
+     } while (iVar2 != 0);
+-    DAT_0000_2f50 = *(int *)(&DAT_0000_2a3c + (DAT_0000_2f54 + -1) * 4) +
++    DAT_0000_2f50 = *(int *)((char *)&DAT_0000_2a3c + (DAT_0000_2f54 + -1) * 4) +
+                    (&DAT_0000_2bcc)[DAT_0000_2f54 + -1];
+     return 0;
+   }
+@@ -3973,12 +3973,12 @@
+   }
+   (&DAT_0000_28ac)[DAT_0000_2f54] = param_3;
+   (&DAT_0000_2bcc)[uVar1] = param_2;
+-  *(int *)(&DAT_0000_2d5c + uVar1 * 4) = param_4;
++  *(int *)((char *)&DAT_0000_2d5c + uVar1 * 4) = param_4;
+   (&DAT_0000_2eec)[uVar1] = (char)param_1;
+   uVar3 = FUN_0000_3772(param_1,param_2,param_4);
+   uVar1 = DAT_0000_2f54;
+   *(uint *)(&DAT_0000_28ac)[DAT_0000_2f54] = uVar3;
+-  *(uint *)(&DAT_0000_2a3c + uVar1 * 4) = uVar3;
++  *(uint *)((char *)&DAT_0000_2a3c + uVar1 * 4) = uVar3;
+   if (uVar3 != 0) {
+     DAT_0000_2f54 = DAT_0000_2f54 + 1;
+     if (DAT_0000_2f68 < DAT_0000_2f54) {

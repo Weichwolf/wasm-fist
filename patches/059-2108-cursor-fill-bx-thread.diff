@@ -1,0 +1,22 @@
+FUN_0000_2108 (cursor-node erase handler): thread bx into the c60a (driver rect-fill) method call.
+
+asm 0x2108: `xor al,al; lea bx,[bx+4]; call [DGROUP:0x60a]` -> the driver rect-fill FUN_0000_1091.  bx is
+the cursor-node offset the dispatcher (FUN_0000_209e/201a) just stored into DGROUP:0x3e08.  The __allregs
+indirect call dropped bx -> 1091/2d6d ran on a null pointer (SIGSEGV).  Thread bx = word[0x3e08] + 4.
+--- a/fist.c
++++ b/fist.c
+@@ -8896,7 +8896,13 @@
+ void __allregs FUN_0000_2108(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
++  /* PATCH 059: cursor-node erase handler (asm 0x2108: `xor al,al; lea bx,[bx+4]; call [DGROUP:0x60a]`
++     -> the driver rect-fill method DGROUP:0x60a = 0x3e3b:0x1091 = FUN_0000_1091).  bx is the current
++     cursor-node offset the dispatcher (FUN_0000_209e/201a) just stored into DGROUP:0x3e08; +4 skips to
++     the node's rect struct.  The __allregs indirect call dropped bx -> 1091/2d6d ran on a null pointer
++     (SIGSEGV).  Thread bx = word[DGROUP:0x3e08] + 4 (al=0 fill color is used by 1091's dropped body). */
++  uint16_t bx = (uint16_t)(*(uint16_t *)(g_mem + 0x1c000 + 0x3e08) + 4);
++  ((void (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c60a)))(bx);
+   return;
+ }
+ 

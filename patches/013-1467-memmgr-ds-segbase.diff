@@ -1,0 +1,246 @@
+Rewrite FUN_1000_1467 (MEMMGR pool/free-list builder) with FAITHFUL dynamic-DS CHAIN tracking.
+
+After INT 21h AH=48, FUN_1000_140e hands the new block segment (param_1, e.g. 0x3400) to 1467, which
+seeds a block header at ES:0 (ES pinned = block base) and then threads a doubly-linked circular
+free-list of fixed-size node paragraphs, WALKING DS through block, block+2, block+4, ... via
+`mov ds,ax; add ax,2` and a `loop`. The previous patch 013 pinned DS=param_1 for the WHOLE function,
+so every per-node write landed on the block header itself: the free list was never built, block[0x0a]
+(the list head FUN_1000_096c reads) stayed 0, and the free-list walker crashed dereferencing a null
+node segment. This version tracks DS instruction-by-instruction from the asm (base-0 0x11467..0x115f3).
+Class: docs/stage1.md "dynamic-DS loop-updated segment" (SegmentFixup handles DS=CS only, not the
+DS=<register-updated-per-node> idiom). Registers: param_1=block seg (AX->DS,ES), param_2=alignment (CX),
+param_3=size (BX). Verified at runtime: block[0x0a] = block+2 (valid free-list head) after this patch.
+
+--- a/fist.c
++++ b/fist.c
+@@ -40012,104 +40012,134 @@
+ void __allregs FUN_1000_1467(int param_1,uint param_2,int param_3)
+ 
+ {
+-  undefined2 *puVar1;
+-  undefined2 uVar2;
+-  uint uVar3;
+-  int iVar4;
+-  int iVar5;
+-  int iVar6;
+-  int iVar7;
+-  uint uVar8;
+-  uint uVar9;
+-  undefined2 *puVar10;
+-  int iVar11;
+-  
+-  puVar10 = (undefined2 *)0x0;
+-  for (iVar6 = 0x10; iVar6 != 0; iVar6 = iVar6 + -1) {
+-    puVar1 = puVar10;
+-    puVar10 = puVar10 + 1;
+-    *puVar1 = 0;
++  /* PATCH 013 (rewritten -- faithful dynamic-DS CHAIN): FUN_1000_1467 = the MEMMGR pool / free-list
++     builder. Asm (base-0 linear 0x11467): ES is pinned to the allocated block base (param_1) for the
++     whole routine, but DS WALKS a chain of node paragraphs (block, block+2, block+4, ...). It seeds a
++     block header at ES:0, then threads a doubly-linked circular free-list of fixed-size node paragraphs,
++     reassigning DS via `mov ds,ax; add ax,2` (and a `loop`) as it advances. The FIRST patch 013 pinned
++     DS=param_1 for the ENTIRE function, so every node write landed on the block header itself: the free
++     list was never built, block[0x0a] (the list head that FUN_1000_096c reads) stayed 0, and the walker
++     crashed. This version tracks DS faithfully, instruction by instruction. Class: docs/stage1.md
++     "dynamic-DS loop-updated segment". Registers: param_1=block seg (AX -> DS,ES); param_2=alignment
++     (CX); param_3=size (BX). ES base is fixed = g_mem+(param_1<<4); DS base = g_mem+(ds<<4) with ds
++     reassigned exactly as the asm does. */
++  uint16_t es = (uint16_t)param_1;                 /* ES = block base, fixed for the whole routine */
++  uint16_t ds = (uint16_t)param_1;                 /* DS walks the node chain (block, block+2, ...) */
++  uint16_t ax, dx;
++  int bx = param_3;                                /* running size (BX) */
++  uint cx = param_2;                               /* alignment, reused as the node-loop count */
++#define ES16(o) (*(uint16_t *)(g_mem + ((unsigned long)es << 4) + (o)))
++#define DS16(o) (*(uint16_t *)(g_mem + ((unsigned long)ds << 4) + (o)))
++  memset(g_mem + ((unsigned long)es << 4), 0, 0x20);   /* rep stosw 0x10 words @ ES:0 (zero header) */
++  DS16(0x18) = 0x1026;
++  DS16(0x00) = ds;                                 /* block[0]  = block seg */
++  DS16(0x02) = (uint16_t)bx;                       /* block[2]  = size */
++  bx = (uint16_t)(bx - 4);
++  DS16(0x04) = (uint16_t)bx;                       /* block[4]  = size-4 */
++  if (cx == 0) {                                   /* or cx,cx; jne */
++    ax = (uint16_t)((uint16_t)bx >> 8);
++    ax = (uint16_t)(ax + 0x1f);
++    cx = (uint16_t)(ax & 0xffe0);
+   }
+-  *(undefined2 *)&DAT_1000_c018 = 0x1026;
+-  *(int *)0x0 = param_1;
+-  *(int *)&DAT_1000_c002 = param_3;
+-  uVar8 = param_3 - 4;
+-  *(uint *)&DAT_1000_c004 = uVar8;
+-  if (param_2 == 0) {
+-    param_2 = (uVar8 >> 8) + 0x1f & 0xffe0;
+-  }
+-  uVar3 = (4 - param_2 & -(uint)(param_2 < 5)) + param_2 + 1;
+-  if (uVar8 <= uVar3 * 2) {
+-    uVar3 = 5;
+-  }
+-  *(uint *)&DAT_1000_c006 = uVar3;
+-  *(uint *)&DAT_1000_c008 = uVar3;
+-  uVar9 = uVar8 - uVar3;
+-  if ((uVar3 <= uVar8 && uVar9 != 0) && (uVar3 <= uVar9 && uVar9 - uVar3 != 0)) {
+-    *(int *)&DAT_1000_c004 = uVar9 - uVar3;
+-    iVar6 = param_1 + 2;
+-    *(int *)&DAT_1000_c00a = iVar6;
+-    *(int *)0x0 = param_1 + 4;
+-    *(undefined2 *)&DAT_1000_c002 = 0xc0;
+-    *(int *)&DAT_1000_c004 =
+-         *(int *)&DAT_1000_c008 + *(int *)&DAT_1000_c008 + *(int *)&DAT_1000_c008;
+-    *(undefined2 *)&DAT_1000_c006 = 0;
+-    *(int *)&DAT_1000_c008 = iVar6;
+-    *(undefined2 *)&DAT_1000_c00e = 0;
+-    *(undefined2 *)&DAT_1000_c00c = 0;
+-    *(undefined2 *)&DAT_1000_c010 = 1;
+-    *(int *)&DAT_1000_c006 = *(int *)&DAT_1000_c006 + -1;
+-    *(int *)&DAT_1000_c008 = *(int *)&DAT_1000_c008 + -1;
+-    *(undefined2 *)&DAT_1000_c002 = 0;
+-    iVar6 = *(int *)&DAT_1000_c008;
+-    iVar5 = param_1 + 8;
+-    iVar7 = 0;
+-    iVar4 = param_1 + 6;
+-    do {
+-      iVar11 = iVar4;
+-      iVar4 = iVar5;
+-      *(undefined2 *)&DAT_1000_c002 = 0;
+-      *(int *)&DAT_1000_c00c = iVar7;
+-      *(int *)&DAT_1000_c00e = iVar4;
+-      iVar6 = iVar6 + -1;
+-      iVar5 = iVar4 + 2;
+-      iVar7 = iVar11;
+-    } while (iVar6 != 0);
+-    *(int *)&DAT_1000_c00c = iVar11;
+-    *(undefined2 *)0x0 = 0;
+-    *(undefined2 *)&DAT_1000_c004 = 0;
+-    *(undefined2 *)&DAT_1000_c006 = 0;
+-    *(int *)&DAT_1000_c008 = iVar11;
+-    *(undefined2 *)&DAT_1000_c00e = 0;
+-    *(undefined2 *)&DAT_1000_c002 = 0x80;
+-    iVar6 = *(int *)&DAT_1000_c00c;
+-    *(int *)0x0 = iVar6 + 4;
+-    *(undefined2 *)&DAT_1000_c006 = 0;
+-    *(int *)&DAT_1000_c008 = iVar6;
+-    *(undefined2 *)&DAT_1000_c004 = *(undefined2 *)&DAT_1000_c004;
+-    *(undefined2 *)&DAT_1000_c002 = 0x80;
+-    iVar6 = *(int *)&DAT_1000_c00c;
+-    *(undefined2 *)0x0 = 0xffff;
+-    *(undefined2 *)&DAT_1000_c004 = 0;
+-    *(undefined2 *)&DAT_1000_c006 = 0;
+-    *(int *)&DAT_1000_c008 = iVar6;
+-    *(undefined2 *)&DAT_1000_c00c = 0;
+-    *(undefined2 *)&DAT_1000_c002 = 0x80;
+-    iVar5 = iVar6 + -2;
+-    *(undefined2 *)0x0 = 0xffff;
+-    *(undefined2 *)&DAT_1000_c004 = 0;
+-    *(undefined2 *)&DAT_1000_c006 = 0;
+-    *(int *)&DAT_1000_c008 = iVar5;
+-    *(undefined2 *)&DAT_1000_c00c = 0;
+-    *(undefined2 *)&DAT_1000_c002 = 0xc0;
+-    uVar2 = *(undefined2 *)&DAT_1000_c00a;
+-    *(int *)&DAT_1000_c00c = iVar5;
+-    *(undefined2 *)&DAT_1000_c00e = uVar2;
+-    *(int *)&DAT_1000_c00e = iVar6 + -4;
+-    *(undefined2 *)&DAT_1000_c00e = 0;
+-    *(int *)&DAT_1000_c008 = *(int *)&DAT_1000_c008 + -4;
+-    return;
++  /* ax = (cx>4) ? cx+1 : 5   (asm: mov ax,4; sub ax,cx; cmc; sbb dx,dx; and ax,dx; add ax,cx; inc ax) */
++  {
++    uint16_t a = (uint16_t)(4 - (uint16_t)cx);
++    uint16_t mask = ((uint16_t)cx <= 4) ? 0xffff : 0;
++    ax = (uint16_t)((a & mask) + (uint16_t)cx + 1);
+   }
++  cx = (uint16_t)(ax + ax);                        /* cx = 2*ax */
++  if ((uint16_t)cx >= (uint16_t)bx) ax = 5;        /* cmp cx,bx; jb skip; else ax=5 */
++  DS16(0x06) = ax;                                 /* block[6] = ax */
++  DS16(0x08) = ax;                                 /* block[8] = ax */
++  if ((uint16_t)bx <= ax) return;                  /* sub bx,ax; jbe bail */
++  bx = (uint16_t)((uint16_t)bx - ax);
++  if ((uint16_t)bx <= ax) return;                  /* sub bx,ax; jbe bail */
++  bx = (uint16_t)((uint16_t)bx - ax);
++  DS16(0x04) = (uint16_t)bx;                        /* block[4] = bx */
++  /* --- first two free nodes: block+2, block+4 --- */
++  ax = (uint16_t)(ds + 2);                          /* ax = block+2 */
++  es = ds;                                          /* mov es,ax (ax==block here; ES stays block) */
++  DS16(0x0a) = ax;                                  /* block[0xa] = block+2  (free-list head) */
++  ds = ax;                                          /* ds = block+2 */
++  ax = (uint16_t)(ax + 2);                          /* ax = block+4 */
++  DS16(0x00) = ax;                                  /* (block+2)[0] = block+4 */
++  DS16(0x02) = 0xc0;
++  ax = (uint16_t)(ES16(0x08) + ES16(0x08) + ES16(0x08));  /* ax = 3*block[8] */
++  DS16(0x04) = ax;
++  DS16(0x06) = 0;
++  DS16(0x08) = ds;                                  /* (block+2)[8] = block+2 */
++  DS16(0x0e) = 0;
++  DS16(0x0c) = 0;
++  DS16(0x10) = 1;
++  ES16(0x06) = (uint16_t)(ES16(0x06) - 1);          /* block[6]-- */
++  ES16(0x08) = (uint16_t)(ES16(0x08) - 1);          /* block[8]-- */
++  ax = (uint16_t)(ds + 2);                          /* ax = block+4 */
++  ds = ax;                                          /* ds = block+4 */
++  DS16(0x02) = 0;                                   /* (block+4)[2] = 0 */
++  bx = 0;
++  ax = (uint16_t)(ds + 2);                          /* ax = block+6 */
++  ds = ax;                                          /* ds = block+6 */
++  ax = (uint16_t)(ax + 2);                          /* ax = block+8 */
++  dx = 0;
++  cx = ES16(0x08);                                  /* node-loop count = block[8] */
++  /* --- middle nodes: block+6, block+8, ... (cx iterations), doubly linked via [0xc]/[0xe] --- */
++  do {
++    DS16(0x02) = (uint16_t)bx;                      /* node[2]   = 0 */
++    DS16(0x0c) = dx;                                /* node[0xc] = prev node seg */
++    DS16(0x0e) = ax;                                /* node[0xe] = next node seg (ds+2) */
++    dx = ds;                                        /* prev = current */
++    ds = ax;                                        /* advance ds */
++    ax = (uint16_t)(ax + 2);
++    cx = (uint16_t)(cx - 1);
++  } while (cx != 0);
++  ds = dx;                                          /* ds = last node written */
++  ES16(0x0c) = ds;                                  /* block[0xc] = last node seg */
++  DS16(0x00) = 0;
++  DS16(0x04) = 0;
++  DS16(0x06) = 0;
++  DS16(0x08) = ds;
++  DS16(0x0e) = 0;
++  DS16(0x02) = 0x80;
++  ds = DS16(0x0c);                                  /* ds = node[0xc] (prev) */
++  ax = (uint16_t)(ds + 4);
++  DS16(0x00) = ax;
++  DS16(0x06) = 0;
++  DS16(0x08) = ds;
++  ax = ES16(0x04);                                  /* ax = block[4] */
++  DS16(0x04) = ax;
++  DS16(0x02) = 0x80;
++  ds = DS16(0x0c);                                  /* ds = node[0xc] */
++  ax = 0xffff;
++  DS16(0x00) = 0xffff;
++  ax = (uint16_t)(ax + 1);                          /* ax = 0 */
++  DS16(0x04) = 0;
++  DS16(0x06) = 0;
++  DS16(0x08) = ds;
++  DS16(0x0c) = 0;
++  DS16(0x02) = 0x80;
++  ax = (uint16_t)(ds - 2);
++  ds = ax;                                          /* ds = ds-2 (prev paragraph) */
++  ax = 0xffff;
++  DS16(0x00) = 0xffff;
++  ax = (uint16_t)(ax + 1);                          /* ax = 0 */
++  DS16(0x04) = 0;
++  DS16(0x06) = 0;
++  DS16(0x08) = ds;
++  DS16(0x0c) = 0;
++  DS16(0x02) = 0xc0;
++  ax = ds;                                          /* ax = current ds */
++  ds = ES16(0x0a);                                  /* ds = block[0xa] = block+2 (head node) */
++  DS16(0x0c) = ax;                                  /* (block+2)[0xc] = ax */
++  dx = ds;                                          /* dx = block+2 */
++  ds = ax;                                          /* ds = ax */
++  DS16(0x0e) = dx;                                  /* node[0xe] = block+2 */
++  ax = (uint16_t)(ds - 2);
++  ds = ax;                                          /* ds = ds-2 */
++  ES16(0x0e) = ds;                                  /* block[0xe] = ds */
++  DS16(0x0e) = 0;
++  ES16(0x08) = (uint16_t)(ES16(0x08) - 4);          /* block[8] -= 4 */
++#undef ES16
++#undef DS16
+   return;
+ }
+ 

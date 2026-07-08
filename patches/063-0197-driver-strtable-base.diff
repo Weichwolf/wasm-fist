@@ -1,0 +1,46 @@
+MGAVIDEO FUN_0000_0197 (driver string-table copy): restore the DS=word[DGROUP:0x70a] source base
+and the ES=DGROUP dest base, and return the correct DGROUP seg.  Asm-verified driver 0x197.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -943,25 +943,22 @@
+ undefined2 __allregs FUN_0000_0197(undefined2 *param_1)
+ 
+ {
+-  char *pcVar1;
+-  char cVar2;
+-  undefined2 uVar3;
+-  char *pcVar4;
+-  char *pcVar5;
+-  
+-  uVar3 = _DAT_1000_c70a;
+-  if (param_1 != (undefined2 *)0xffff) {
+-    pcVar4 = (char *)*param_1;
+-    pcVar5 = (char *)0x740;
+-    do {
+-      pcVar1 = pcVar4;
+-      pcVar4 = pcVar4 + 1;
+-      cVar2 = *pcVar1;
+-      pcVar1 = pcVar5;
+-      pcVar5 = pcVar5 + 1;
+-      *pcVar1 = cVar2;
+-    } while (cVar2 != '\0');
+-    return 0x2ba9;
++  /* PATCH 063: driver string-table copy (asm 0x197).  ES=SS=DGROUP, DS=word[DGROUP:0x70a] (a driver
++     template segment allocated at init).  bx=param_1 (the caller passes ax=0x148) indexes a near-offset
++     table in that template seg; the word there is a string offset, and the NUL-terminated string is
++     copied into DGROUP:0x740.  Returns ax=DGROUP seg (0x1c00), dx=0x740 (caller ignores).  Ghidra
++     dropped the DS(template-seg) source base and the ES=DGROUP dest base (host derefs -> SIGSEGV) and
++     returned a bogus 0x2ba9 (the static SS placeholder). */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)(uintptr_t)param_1;
++  if (bx != 0xffff) {
++    uint16_t tseg  = *(uint16_t *)(dg + 0x70a);
++    uint8_t *tbase = g_mem + ((uint32_t)tseg << 4);
++    uint16_t soff  = *(uint16_t *)(tbase + bx);
++    uint8_t *src   = tbase + soff;
++    uint8_t *dst   = dg + 0x740;
++    uint8_t  c;
++    do { c = *src++; *dst++ = c; } while (c != '\0');
+   }
+   return 0x1c00;
+ }

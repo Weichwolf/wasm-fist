@@ -1,0 +1,58 @@
+FUN_0000_e584 resource-descriptor header + asset-name copy: STRSEG base restore (asm 0xe584..0xe5d5).
+
+The engine's resource/asset loader e584(far_ptr) reads a descriptor at STRSEG:bx, where STRSEG =
+word[DGROUP:0x70] (the 0x2d74 far string/resource segment the loader seeds) and bx = (uint16_t)param_1
+(the descriptor's near offset; param_1's high word is the record segment, kept as uVar7).  Ghidra typed
+the stored offset DAT_2000_b6ea as a host pointer and dropped the ES=STRSEG base on the field reads
+(es:[bx+2]/[bx+4]/[bx+6]) -> a bare-offset host deref = SIGSEGV, and dropped the DS=STRSEG base on the
+16-byte asset-name copy (`mov (%bx),%si` = si=word[STRSEG:bx]; `rep movsb` STRSEG:si -> task+0xba).
+Rebase the reads and the copy to STRSEG; b6ec = the record cursor bx+8.  The copy destination
+task+0xba uses the (now correct) DAT_2000_aa2c task-base macro.  Asm-verified 0xe584..0xe5d5.
+--- a/fist.c
++++ b/fist.c
+@@ -33808,23 +33808,28 @@
+   DAT_2000_b771 = 0;
+   DAT_2000_b6bc = DAT_1000_d8de;
+   DAT_1000_d8de = 0x3800;
+-  DAT_2000_b6ea = (int)param_1;
+-  DAT_2000_b6ec = (uint *)(DAT_2000_b6ea + 8);
+-  DAT_2000_b6e0 = *(uint *)(DAT_2000_b6ea + 2);
+-  DAT_2000_b6e2 = *(uint *)(DAT_2000_b6ea + 4);
+-  uVar7 = (undefined2)((ulong)param_1 >> 0x10);
+-  FUN_0000_be0e(*(undefined2 *)(DAT_2000_b6ea + 6));
+-  uVar4 = DAT_2000_aa2e;
+-  uVar8 = DAT_1000_c070;
+-  puVar6 = (uint *)CONCAT22(uVar7,unaff_CS);
+-  puVar10 = (undefined1 *)(DAT_2000_aa2c + 0xba);
+-  puVar9 = (undefined1 *)*unaff_CS;
+-  for (iVar5 = 0x10; iVar5 != 0; iVar5 = iVar5 + -1) {
+-    puVar2 = puVar10;
+-    puVar10 = puVar10 + 1;
+-    puVar1 = puVar9;
+-    puVar9 = puVar9 + 1;
+-    *puVar2 = *puVar1;
++  {
++    /* PATCH 071 (asm 0xe584..0xe5d5): the resource descriptor is at STRSEG:bx where STRSEG =
++       word[DGROUP:0x70] (the 0x2d74 far str/resource segment) and bx = (uint16_t)param_1.  Ghidra
++       dropped ES=STRSEG on the field reads (deref of the bare offset b6ea -> SIGSEGV) and DS=STRSEG on
++       the 16-byte asset-name copy (`mov (%bx),%si; rep movsb`).  b6ec = the record cursor (bx+8). */
++    uint8_t  *dg     = g_mem + 0x1c000;
++    uint16_t  bx     = (uint16_t)(uint32_t)param_1;
++    uint16_t  strseg = *(uint16_t *)(dg + 0x70);
++    uint8_t  *R      = g_mem + ((uint32_t)strseg << 4);
++    DAT_2000_b6ea = bx;
++    DAT_2000_b6ec = (uint *)(uintptr_t)(uint16_t)(bx + 8);
++    DAT_2000_b6e0 = *(uint16_t *)(R + bx + 2);
++    DAT_2000_b6e2 = *(uint16_t *)(R + bx + 4);
++    uVar7 = (undefined2)((ulong)param_1 >> 0x10);
++    FUN_0000_be0e(*(uint16_t *)(R + bx + 6));
++    uVar4 = DAT_2000_aa2e;
++    uVar8 = DAT_1000_c070;
++    puVar6 = (uint *)CONCAT22(uVar7,unaff_CS);
++    { uint16_t srcoff = *(uint16_t *)(R + bx);            /* si = word[STRSEG:bx] */
++      uint8_t *dst = (uint8_t *)(DAT_2000_aa2c + 0xba);   /* task+0xba (aa2c macro = real task base) */
++      uint8_t *src = R + srcoff;                          /* STRSEG:srcoff */
++      int j; for (j = 0; j < 0x10; j++) dst[j] = src[j]; }
+   }
+   FUN_1000_38cc();
+   DAT_2000_b6e8 = '\0';

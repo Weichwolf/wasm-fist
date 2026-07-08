@@ -1,0 +1,35 @@
+Byte-correct the INT-8 ISR tick guard `c446==-1 && c2a8==0` (FUN_1000_31c3 + FUN_1000_3218).
+
+The tick-bookkeeping gate in the ISR subtree is asm `inc byte [0x446]; jne skip; test byte [0x2a8],0xff;
+jne skip` (base-0 0x13256) -- a per-tick reentrancy guard (DAT_1000_c446, the "in-tick" byte, resting
+0xff; Ghidra folded the balanced inc/dec into the equivalent test `c446 == -1`) plus a byte test of
+DAT_1000_c2a8. Ghidra typed BOTH as `undefined2` (word), so `DAT_1000_c446 == -1` compares the WORD at
+0x1c446 (= c446|c447<<8 = 0x00ff, since c446=0xff and the adjacent c447=0) to 0xffff -> always false.
+The whole `d8b6 += d8b8; if (carry && sema) c452++` body was therefore skipped every tick, so DGROUP:0x452
+never advanced and FUN_1000_3346 hung -- even with the calibration (016), pump (017) and CS-based
+semaphore (018) all correct. (Verified at runtime: the ISR ran 5965x and the outer c06b-block's
+`d8be += d8c0` advanced, but d8b6 stayed 0 -> the c446 inner guard was the block.)
+
+FIX: compare the low BYTE (asm-faithful): `(uint8_t)c446 == 0xff && (uint8_t)c2a8 == 0`. Class: byte
+variable typed as word (docs/stage1.md; same family as patch 018's 2d58). The balanced inc/dec of c446
+that Ghidra dropped are inert here (nothing in the guarded body reads c446).
+--- a/fist.c
++++ b/fist.c
+@@ -43523,7 +43523,7 @@
+       (*(code *)fist_icall_near(0x1000u,(uint16_t)((ulong)DAT_1000_c058)))();
+       return;
+     }
+-    if ((DAT_1000_c446 == -1) && (DAT_1000_c2a8 == '\0')) {
++    if (((uint8_t)DAT_1000_c446 == 0xff) && ((uint8_t)DAT_1000_c2a8 == 0)) { /*patch019: byte-typed semaphores (asm: inc byte [0x446]; test byte [0x2a8])*/
+       bVar2 = CARRY2(DAT_1000_d8b6,DAT_1000_d8b8);
+       DAT_1000_d8b6 = DAT_1000_d8b6 + DAT_1000_d8b8;
+       DAT_1000_c447 = -bVar2;
+@@ -43593,7 +43593,7 @@
+       (*(code *)fist_icall_near(0x1000u,(uint16_t)((ulong)DAT_1000_c058)))();
+       return;
+     }
+-    if ((DAT_1000_c446 == -1) && (DAT_1000_c2a8 == '\0')) {
++    if (((uint8_t)DAT_1000_c446 == 0xff) && ((uint8_t)DAT_1000_c2a8 == 0)) { /*patch019: byte-typed semaphores (asm: inc byte [0x446]; test byte [0x2a8])*/
+       bVar5 = CARRY2(DAT_1000_d8b6,DAT_1000_d8b8);
+       DAT_1000_d8b6 = DAT_1000_d8b6 + DAT_1000_d8b8;
+       DAT_1000_c447 = -bVar5;

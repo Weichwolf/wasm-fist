@@ -1,0 +1,31 @@
+CRT reloc call FUN_1000_5214: thread the dropped `xor bx,bx` before its `lcall [DGROUP:0x12]` so the
+inert engine-C f842 takes its bx==0 (f7c3) path instead of dereferencing a STALE garbage bx -> SIGSEGV.
+
+Same class as patch 091 (FUN_1000_223c/449e).  asm 0x15214:  xor bx,bx ; mov si,0x2f0 ; lcall [ss:0x12]
+(the sibling 0x1521e does the matching `mov si,0x2f0; lcall [0x16]` CLEAR).  Ghidra dropped BOTH the
+`xor bx,bx` operand setup and the `mov si,0x2f0` at the bare `(*[0x12])()` site, so f842 (DGROUP:0x12,
+the FAR reloc applier) ran with a stale bx.  Before the section-0x174 seeding re-decompile the register
+state reaching 5214 happened to leave bx==0 (the site was benign, like the ~12 documented bare
+[DGROUP:0x12] sites); the re-decompile perturbed the __allregs register threading on the driver-init
+path (FUN_1000_5214 is called from the 0x5200 driver-processing cascade), so bx now arrives as a host-
+pointer garbage value that skips f842's `or bx,bx; je` bail and dereferences a stack address as the reloc
+section -> deterministic crash in f842 during the intro fast-forward.
+
+Fix: pass param_1=0 (f842's bx) so f842 deterministically takes the safe f7c3 bail -- matching the asm's
+`xor bx,bx`.  A faithful *full* apply (fist_apply_reloc_section(0x2f0,1)) is NOT done here: like patch
+091's sites this early CRT/driver-init reloc install corrupts the not-yet-ready DGROUP; the boot's real
+sections are seeded by the loader-role shim (fist_install_dgroup), so bx==0 (no re-apply) is faithful.
+--- a/fist.c
++++ b/fist.c
+@@ -48023,7 +48023,10 @@
+ void __allregs FUN_1000_5214(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
++  /* PATCH 097: asm 0x15214 `xor bx,bx; mov si,0x2f0; lcall [DGROUP:0x12]` -- Ghidra dropped the
++   * `xor bx,bx`, so this bare `(*[0x12])()` reached the inert engine-C f842 with a STALE bx.  Thread
++   * the dropped bx==0 explicitly so f842 takes its safe f7c3 bail path (patch-091 class). */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))(0);
+   return;
+ }
+ 

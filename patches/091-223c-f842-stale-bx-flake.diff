@@ -1,0 +1,52 @@
+CRT-init reloc calls FUN_1000_223c / FUN_1000_449e: thread the dropped `xor bx,bx` before their
+`lcall [DGROUP:0x12]` so the inert engine-C f842 takes its bx==0 bail (f7c3) path instead of
+dereferencing a STALE garbage bx -> the ~1/8 boot SIGSEGV flake (exposed once the KDV intro runs).
+
+asm 0x12291 (223c):  xor bx,bx ; mov si,0x174 ; call [ss:0x12]
+asm 0x144c5 (449e):  xor bx,bx ; mov si,0x24c ; call [ds:0x12]     (DGROUP:0x12 = the FAR applier f842)
+f842 entry `or bx,bx; je 0xf83f`: bx==0 branches to f7c3 (a DGROUP:0x76-flag check that returns here).
+Ghidra dropped the `xor bx,bx` operand setup at these bare `(*(code*)fist_icall_far(0x12))()` sites, so
+f842 ran with a STALE bx: ~1/8 of boots bx held nonzero host-pointer garbage that skipped the bail and
+dereferenced a stack address as the reloc "section" -> crash (fist.c:36402 `*puVar2 = *param_3`).  The
+surviving boots are exactly those where the stale bx happened to be 0.  Fix: pass param_1=0 (f842's bx)
+so both sites deterministically take the safe f7c3 bail -- matching the asm's `xor bx,bx`.
+NB: a faithful *full* apply here (fist_apply_reloc_section(si,1)) is NOT correct at this early-CRT point
+-- it corrupts the not-yet-initialised DGROUP and deterministically breaks a later f842 caller
+(FUN_1000_5c3a); the boot's real DGROUP sections are already seeded by the loader-role shim
+(fist_install_dgroup), so bx==0 (no re-apply here) is the faithful, safe behaviour.  (Other bare
+`[DGROUP:0x12]` sites carry the same dropped-`xor bx,bx`; they are only a crash risk once reached with
+garbage bx and are a documented reloc-subsystem cleanup.)
+--- a/fist.c
++++ b/fist.c
+@@ -41422,7 +41422,18 @@
+   fist_int_dispatch();
+   uStack001c = 0x1000;
+   uStack001a = 0x229b;
+-  (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c012u)))();
++  /* PATCH 091: asm 0x12291 `xor bx,bx; mov si,0x174; lcall [DGROUP:0x12]` -- the operand setup
++   * `xor bx,bx` was dropped by Ghidra, so this bare `(*[0x12])()` reached the inert engine-C f842
++   * (DGROUP:0x12) with a STALE bx.  f842's entry is `or bx,bx; je <f7c3-path>`: with bx==0 it takes
++   * the benign f7c3 branch (a DGROUP:0x76-flag check that returns here), but ~1/8 of boots bx held
++   * nonzero garbage (a host pointer) that fell into the apply loop and dereferenced a stack address as
++   * the reloc section -> SIGSEGV (the flake, surfaced once the KDV intro perturbs the register state).
++   * Thread the dropped bx==0 explicitly (pass param_1=0) so f842 deterministically takes the safe
++   * f7c3-return path -- exactly the behaviour of the 7/8 of boots where the stale bx happened to be 0.
++   * (This early-CRT reloc install is not load-bearing here: the shim's fist_install_dgroup already
++   * seeds the boot sections, and applying si=0x174 at this point instead corrupts the not-yet-ready
++   * DGROUP -- verified: a full fist_apply_reloc_section(0x174,1) here breaks a later f842 caller.) */
++  (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c012u)))(0);
+   uStack001c = 0x229e;
+   FUN_1000_288e();
+   uStack001c = 0x22a1;
+@@ -45607,7 +45618,10 @@
+   FUN_1000_4517(uRam000f0004,uRam000f0002,param_4,uRam000f0008,uRam000f000a);
+   uStack0006 = 0x1000;
+   uStack0004 = 0x44ce;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
++  /* PATCH 091: asm 0x144c5 `xor bx,bx; mov si,0x24c; lcall [DGROUP:0x12]` -- same dropped-`xor bx,bx`
++   * -> stale-garbage-bx f842 flake as FUN_1000_223c above; thread param_1=0 so f842 takes its bx==0
++   * (f7c3) bail path instead of dereferencing a garbage section pointer. */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))(0);
+   return;
+ }
+ 

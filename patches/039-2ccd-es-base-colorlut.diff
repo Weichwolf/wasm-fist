@@ -1,0 +1,55 @@
+FUN_0000_2ccd (per-index color/attribute lookup): dynamic-ES base loss + overlapping undefined4 typing.
+
+Reached from the mode-set finalizer FUN_0000_2c92.  asm 0x2ccd clamps al (>=0x10 -> 0); if al differs from
+the cached index byte [0x15b4], it swaps it in and does a table lookup: si=al*2; es=DGROUP:0x716 (the 4th
+driver template buffer, copied by the init f98b call #4); si=es:[si]; then reads 4 bytes + 2 words from
+es:si into DGROUP:0x15da/0x15dc/0x15e0/0x15de (bytes) and 0x15e2/0x15e4 (words).  Ghidra dropped the
+`mov es,[0x716]` load and the string-op ES base (the offset table was dereferenced as a bare host pointer
+-> SIGSEGV), and typed the 2-byte-stride word targets 0x15da.. as undefined4 (overlapping).  Rebase to the
+DGROUP:0x716 ES segment and use explicit 16-bit stores; [0x15b4] is a byte compare/xchg.  Asm-verified
+MGAVIDEO base-0 offset 0x2ccd.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -7519,21 +7519,28 @@
+   byte bVar2;
+   uint uVar3;
+   
+-  for (; bVar2 = (byte)param_1, 0xf < bVar2; param_1 = param_1 & 0xff00) {
+-  }
++  /* PATCH 039: dynamic-ES base loss + string-op ES base + overlapping undefined4 typing.
++   * asm 0x2ccd: clamp al (>=0x10 -> 0); if al != byte [0x15b4]: xchg [0x15b4]=al (old -> hi return
++   * byte); si=al*2; es=DGROUP:0x716 (the 4th template buffer, f98b copy #4); si=es:[si]; then read
++   * 4 bytes + 2 words from es:si into DGROUP:0x15da/0x15dc/0x15e0/0x15de (bytes) and 0x15e2/0x15e4
++   * (words) -- a per-index color/attribute lookup.  Ghidra dropped `mov es,[0x716]` and the string-op
++   * ES base (bare host deref -> SIGSEGV) and typed the 2-byte-stride WORD targets as undefined4 (they
++   * overlap).  Rebase to the DGROUP:0x716 ES segment with explicit 16-bit stores; [0x15b4] is a byte. */
++  for (;;) { bVar2 = (byte)param_1; if (bVar2 <= 0xf) break; param_1 = param_1 & 0xff00; }
+   uVar3 = param_1;
+-  if (DAT_1000_d5b4 != bVar2) {
+-    LOCK();
+-    uVar3 = CONCAT11(bVar2,DAT_1000_d5b4);
+-    UNLOCK();
+-    pbVar1 = (byte *)*(undefined2 *)((param_1 & 0xff) << 1);
+-    _DAT_1000_d5da = (uint)*pbVar1;
+-    _DAT_1000_d5dc = (uint)pbVar1[1];
+-    _DAT_1000_d5e0 = (uint)pbVar1[2];
+-    _DAT_1000_d5de = (uint)pbVar1[3];
+-    _DAT_1000_d5e2 = *(undefined2 *)(pbVar1 + 4);
+-    _DAT_1000_d5e4 = *(undefined2 *)(pbVar1 + 6);
+-    DAT_1000_d5b4 = bVar2;
++  if ((byte)DAT_1000_d5b4 != bVar2) {
++    uint16_t esseg = *(uint16_t *)(g_mem + 0x1c716);
++    uint32_t esbase = (uint32_t)esseg << 4;
++    uint16_t si = *(uint16_t *)(g_mem + esbase + (uint16_t)(bVar2 * 2));
++    uVar3 = ((uint)bVar2 << 8) | (byte)DAT_1000_d5b4;
++    pbVar1 = g_mem + esbase + si;
++    *(uint16_t *)(g_mem + 0x1d5da) = pbVar1[0];
++    *(uint16_t *)(g_mem + 0x1d5dc) = pbVar1[1];
++    *(uint16_t *)(g_mem + 0x1d5e0) = pbVar1[2];
++    *(uint16_t *)(g_mem + 0x1d5de) = pbVar1[3];
++    *(uint16_t *)(g_mem + 0x1d5e2) = *(uint16_t *)(pbVar1 + 4);
++    *(uint16_t *)(g_mem + 0x1d5e4) = *(uint16_t *)(pbVar1 + 6);
++    *(uint8_t  *)(g_mem + 0x1d5b4) = bVar2;
+   }
+   return uVar3;
+ }

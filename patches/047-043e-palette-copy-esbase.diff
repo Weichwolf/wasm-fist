@@ -1,0 +1,38 @@
+MGAVIDEO FUN_0000_043e (palette upload): restore the ES/DS string-op segment bases of the copy loop.
+
+asm 0x448: `mov es,[DGROUP:0x782]; mov ds,ax(=param_1); xor di,di; mov cx,0x180; rep movsw`.  Ghidra
+dropped both the ES dest base (the palette-buffer segment word[DGROUP:0x782]) and the DS(=param_1
+segment):SI(=param_3 offset) source base -> host-0 derefs (SIGSEGV).  Reconstruct: copy 0x180 words
+(768-byte VGA palette) from linear (param_1<<4)+param_3 into the palette-buffer segment.  This is the
+palette-SET path (reached via FUN_0000_0467 with a real palette segment); the mode-set default path is
+param_1==0 (patch 046 threads AX=0 -> FUN_0000_0a02).  Asm-verified MGAVIDEO 0x43e.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1344,13 +1349,20 @@
+   uVar3 = _DAT_1000_c782;
+   DAT_1000_c786 = 0;
+   if (param_1 != 0) {
+-    puVar5 = (undefined2 *)0x0;
+-    for (iVar4 = 0x180; iVar4 != 0; iVar4 = iVar4 + -1) {
+-      puVar2 = puVar5;
+-      puVar5 = puVar5 + 1;
+-      puVar1 = param_3;
+-      param_3 = param_3 + 1;
+-      *puVar2 = *puVar1;
++    /* PATCH 047: asm 0x448: `mov es,[DGROUP:0x782]; mov ds,ax(=param_1); xor di,di; mov cx,0x180;
++       rep movsw es:[di]<-ds:[si]`.  Ghidra dropped the ES (dest = the palette-buffer segment
++       word[DGROUP:0x782]) base AND the DS(=param_1 segment):SI(=param_3 offset) source base ->
++       host-0 derefs.  Reconstruct: copy 0x180 words (a 768-byte VGA palette) from linear
++       (param_1<<4)+param_3 into the palette buffer segment.  Asm-verified MGAVIDEO 0x43e.
++       (param_1==0 default-palette path is the mode-set path; this copy path is via FUN_0000_0467.) */
++    {
++      unsigned short es_seg = *(unsigned short *)(g_mem + 0x1c000 + 0x782);
++      unsigned char *dst = g_mem + ((unsigned long)es_seg << 4);
++      unsigned char *src = g_mem + ((unsigned long)(unsigned short)param_1 << 4)
++                                 + (unsigned short)(unsigned long)param_3;
++      for (iVar4 = 0; iVar4 < 0x180; iVar4 = iVar4 + 1)
++        *(unsigned short *)(dst + iVar4 * 2) = *(unsigned short *)(src + iVar4 * 2);
++      (void)puVar1; (void)puVar2; (void)puVar5;
+     }
+     _DAT_1000_c780 = 0x782;
+     return;

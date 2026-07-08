@@ -1,0 +1,29 @@
+MGAVIDEO driver init: resolve the palette-buffer alloc (DGROUP:0xcc = FUN_1000_182a) directly.
+
+The driver init (patch 035, FUN_0000_0009) allocates the 0x300-byte palette buffer into DGROUP:0x782 via
+the device-object allocator method `mov ax,0x300; mov bx,0x782; mov cx,ds; call [DGROUP:0xcc]` (asm 0x7d).
+DGROUP:0xcc is the si=0xec device-method-vector section target = 0xf69:0x219a = linear 0x1182a =
+FUN_1000_182a.  But that section is NOT installed at driver-init time -- verified live: DGROUP:0xcc == 0
+when FUN_0000_0009 runs (patch 031's install of the si=0xec section does not populate 0x78..0xf8, and
+FUN_1000_1917 for DGROUP:0xd4 is not even a recovered engine function; see stage1.md "0x78..0xf8 targets
+need seeding").  So `fist_icall_far(_DAT_1000_c0cc)` resolved to linear 0 -> trap -> the palette-buffer
+alloc silently no-op'd -> word[DGROUP:0x782] stayed 0 -> the mode-set default-palette upload
+(FUN_0000_0a02, patch 048) wrote to segment 0 (SIGSEGV).  Resolve the KNOWN engine target directly via
+the linear dispatcher fist_icall(0x1182a), exactly as patch 033 threads DGROUP:0xd0 = 184b for the driver
+load.  (The 0x3e4 workspace via DGROUP:0xd4 = 1917 stays a harmless trap until 1917 is recovered.)
+Asm-verified MGAVIDEO 0009 offset 0x7d; 182a param order matches the engine direct-call sites
+(param_1=count, param_2=cx=seg, param_4=bx=near-offset), verified in fist_decomp.c.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -782,7 +782,10 @@
+   DAT_1000_c718 = DAT_1000_c718 | 0x60;
+   f98b(0x1a02, (undefined2)(uint16_t)(0x608 + drvseg), 0x71a, 0);
+   ((a1917_t)fist_icall_far((uint32_t)(_DAT_1000_c0d4)))(0x46a, 0x3e4, 0x1c00);
+-  ((a182a_t)fist_icall_far((uint32_t)(_DAT_1000_c0cc)))(0x300, 0x1c00, 0, 0x782, 0, 0);
++  /* PATCH 049: DGROUP:0xcc device-alloc vector is uninstalled (== 0) at init -> resolve its known
++     target FUN_1000_182a (linear 0x1182a) directly via the dispatcher so the 0x300-byte palette
++     buffer is actually allocated into word[DGROUP:0x782] (else the mode-set palette upload segfaults). */
++  ((a182a_t)fist_icall(0x1182a))(0x300, 0x1c00, 0, 0x782, 0, 0);
+   DAT_1000_c784 = DAT_1000_c784 | 0x60;
+   {
+     uint16_t sec_seg = *(uint16_t *)(g_mem + 0x1c000 + 0x70e);

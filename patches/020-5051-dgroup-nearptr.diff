@@ -1,0 +1,54 @@
+FUN_1000_5051: DGROUP near-pointer segment-base restore + far-call vector re-base.
+
+First blocker AFTER the timer spin cleared (patches 016-019). FUN_1000_515e calls FUN_1000_5051 with
+param_3 = 0x4fa, a NEAR pointer into DGROUP (DS=0x1c00, which the function itself saves to DAT_1000_595b).
+The engine reads/writes the pointed-to structure via `ds:[bx+2]` (byte flags &0xbf|0x22|0x60) and
+`ds:[bx]` (word); Ghidra typed param_3 as a raw `undefined2 *` and dereferenced the bare offset as a
+host address -> SIGSEGV. Class: DGROUP near-pointer base loss threaded as a pointer param (docs/stage1.md).
+Fix: base every param_3 / DAT_1000_5957 deref at g_mem + 0x1c000 + offset. Additionally the final
+`call dword cs:0x5951` (far ptr assembled at linear 0x15951 from DAT_1000_5951/5953) was mis-based by
+Ghidra to DAT_2000_1951 (0x21951); read the dword at 0x15951 instead. Asm-verified base-0 0x15051..0x150c7.
+--- a/fist.c
++++ b/fist.c
+@@ -47154,24 +47154,35 @@
+   bool bVar2;
+   undefined2 uVar3;
+   
++  /* patch 020: param_3 is a DGROUP NEAR pointer (offset; DS=0x1c00 -> stored to DAT_1000_595b). Ghidra
++   * dropped the segment base and dereferenced the bare 16-bit offset as a host address -> SIGSEGV at
++   * `*(byte*)(param_3+1)`. Rebase every param_3 / DAT_1000_5957 deref to g_mem + DGROUP(0x1c000) + off
++   * (asm-verified base-0 0x15051..0x150c7: `ds:[bx+2]` byte flags, `ds:[bx]` word). Also fix the final
++   * indirect far call: asm `call dword cs:0x5951` reads the far ptr assembled at cs:0x5951 = linear
++   * 0x15951 (DAT_1000_5951 off + DAT_1000_5953 seg), which Ghidra mis-based to DAT_2000_1951 (0x21951).
++   * The bVar2 CF-error checks after FUN_1000_50c8/5014 remain a dropped-flag local (documented CF class;
++   * both succeed on the boot path -> CF=0). */
+   DAT_1000_595b = 0x1c00;
+   DAT_1000_5957 = param_3;
+   DAT_1000_5959 = param_2;
+-  *(byte *)(param_3 + 1) = *(byte *)(param_3 + 1) & 0xbf;
++  *(byte *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_3 + 2) =
++      *(byte *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_3 + 2) & 0xbf;
+   bVar2 = false;
+-  *(byte *)(param_3 + 1) = *(byte *)(param_3 + 1) | 0x22;
++  *(byte *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_3 + 2) =
++      *(byte *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_3 + 2) | 0x22;
+   DAT_1000_5955 = FUN_1000_50c8(param_1,param_2,param_3,param_4,param_5,param_6,param_7,param_8);
+   if (!bVar2) {
+     uVar1 = DAT_1000_595b;
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0d0)))(0x1000);
+     bVar2 = false;
+-    *(byte *)(DAT_1000_5957 + 1) = *(byte *)(DAT_1000_5957 + 1) | 0x60;
++    *(byte *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)DAT_1000_5957 + 2) =
++        *(byte *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)DAT_1000_5957 + 2) | 0x60;
+     uVar3 = 0x1000;
+-    FUN_1000_5014(*DAT_1000_5957,uVar1,DAT_1000_5959,param_4,param_5,param_6);
++    FUN_1000_5014(*(undefined2 *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)DAT_1000_5957),uVar1,DAT_1000_5959,param_4,param_5,param_6);
+     if (!bVar2) {
+-      DAT_1000_5953 = *DAT_1000_5957;
++      DAT_1000_5953 = *(undefined2 *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)DAT_1000_5957);
+       DAT_1000_5951 = 2;
+-      (*(code *)fist_icall_far((uint32_t)(DAT_2000_1951)))(0x1000,uVar3);
++      (*(code *)fist_icall_far(*(uint32_t *)(g_mem + 0x15951)))(0x1000,uVar3);
+     }
+   }
+   return;

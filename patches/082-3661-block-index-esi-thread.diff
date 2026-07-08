@@ -1,0 +1,42 @@
+MEMMGR block resize operates on the WRONG block: thread 3661's found block index (returned in ESI)
+into 345c/3439 instead of the __allregs-mis-threaded caller param.
+
+FUN_0000_3661 searches the block-key table [0x28ac] for a slot and returns the found block's base in
+EAX AND its INDEX in ESI (asm 0x36b7 leaves ESI = the loop index).  Its callers use that index to
+address every parallel per-block table ([0x2bcc] size, [0x2a3c] base, [0x2eec] flags) and store it to
+[0x2f60]; the asm does `call 3661 ; ... mov [0x2f60],esi ; mov eax,[esi*4+0x2bcc]`.  The __allregs
+model only returns EAX, so ESI was dropped and Ghidra threaded a stale CALLER parameter as the index
+(345c: `DAT_2f60 = param_3`; 3439: `DAT_2f60 = param_5`).  Result: resizing the KDV chunk buffer
+(which is block 3 -- key[3] = &[0x6e80]) actually ran the compaction on block 0, so the chunk buffer's
+data (its 8-byte 'xVDK'/'pVDK'/'iVDK' header) was never relocated/preserved -> 6f3e read a garbage
+magic and the RLE decoder ran with width=height=0 -> read past the buffer -> SIGSEGV.
+
+Fix (faithful to the asm's `[0x2f60] = esi`): 3661 publishes its found index to the global [0x2f60];
+345c and 3439 read it right after the call and use it as their block index.  asm-verified
+(3439 0x344d call 3661 / 0x346d mov [0x2f60],esi / 0x3473 mov eax,[esi*4+0x2bcc]).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -3611,6 +3611,7 @@
+   if (*param_3 != 0) {
+     DAT_0000_2f5c = param_6;
+     FUN_0000_3661(param_3);
++    param_5 = DAT_0000_2f60;   /* block index from 3661 (ESI), not the passed param */
+     uVar2 = param_2 + (&DAT_0000_2bcc)[param_5];
+     DAT_0000_2f60 = param_5;
+     DAT_0000_2f64 = (&DAT_0000_2bcc)[param_5] + *param_3;
+@@ -3750,6 +3751,7 @@
+   
+   DAT_0000_2f5c = param_4;
+   FUN_0000_3661(param_2);
++  param_3 = DAT_0000_2f60;   /* block index from 3661 (ESI), not the passed param */
+   DAT_0000_2f60 = param_3;
+   DAT_0000_2f64 = (&DAT_0000_2bcc)[param_3] + *param_2;
+   uVar1 = *param_2 + param_1;
+@@ -3925,6 +3927,7 @@
+     iVar2 = iVar2 + 1;
+     iVar1 = iVar1 + -1;
+   }
++  DAT_0000_2f60 = iVar2;   /* found block index (asm returns it in ESI; caller reads [0x2f60]) */
+   if (*(int *)(g_mem+fist_ext_base + 0x2a3c + iVar2 * 4) != *param_1) {
+     iVar2 = thunk_FUN_0000_0f64(0x3822);
+     return iVar2;

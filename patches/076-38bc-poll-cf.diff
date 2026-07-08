@@ -1,0 +1,43 @@
+FUN_1000_38bc (key/event poll wait): dropped poll CF -> infinite spin.
+
+asm 0x138bc: store the event mask, then `L: lcall far [DGROUP:0x40a]` (call the frame poll FUN_1000_35a7);
+`jb` return when the poll sets CF=1 (frame boundary / empty queue), else `test ax,[dd6a]; je L` loop while
+(poll_ax & mask)==0.  Ghidra dropped the x86 CF (uninitialised in_CF local), so the CF=1 early return never
+fired and, on the empty-queue intro path where the poll returns ax=0, FUN_1000_38bc spun forever (the intro
+player FUN_0000_e584 hung after posting its first frame command).  Thread the poll CF via the shim global
+g_fist_cf (set by the reconstructed FUN_1000_35a7, patch 073), same fix class as FUN_1000_38cc (patch 074).
+--- a/fist.c
++++ b/fist.c
+@@ -44594,25 +44594,29 @@
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_38bc) @ 1000:38bc ===== */
+ 
+ void __allregs FUN_1000_38bc(uint param_1)
+ 
+ {
+   uint uVar1;
+-  undefined1 in_CF = 0;
++  extern unsigned char g_fist_cf;
+   
++  /* PATCH 076: key/event poll wait.  asm 0x138bc: `mov [dd6a],ax` (mask), then
++   * `L: lcall far [DGROUP:0x40a]; jae/jb`: `jb L_ret` returns when the frame poll FUN_1000_35a7 sets
++   * CF=1, else `test ax,[dd6a]; je L` loops while (poll_ax & mask)==0.  Ghidra dropped the x86 CF
++   * (uninit `in_CF` -> the CF=1 early-return never fires), so on the empty-queue intro path (poll ax=0)
++   * the loop spun forever.  Thread the poll CF via g_fist_cf (set by FUN_1000_35a7, patch 073). */
+   DAT_1000_dd6a = param_1;
+   do {
+     uVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))();
+-    if ((bool)in_CF) {
++    if (g_fist_cf != 0) {
+       return;
+     }
+-    in_CF = 0;
+   } while ((DAT_1000_dd6a & uVar1) == 0);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_38cc) @ 1000:38cc ===== */
+ 
+ void __allregs FUN_1000_38cc(void)

@@ -1,0 +1,15 @@
+# extracted memory image (regenerate via `make image`)
+re_out/fist_image.bin
+# build outputs
+build/
+web/fist/
+*.o
+*.wasm
+# Ghidra / JDK / project DB (large, regenerable)
+third_party/ghidra*/
+third_party/jdk*/
+third_party/*_ghidra_proj/
+# host toolchains live outside the repo (~/Git/emsdk)
+# scratch
+/tmp/
+*.tmp

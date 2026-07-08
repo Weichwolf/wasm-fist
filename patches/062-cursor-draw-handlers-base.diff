@@ -1,0 +1,103 @@
+Engine cursor-draw handlers FUN_0000_2112/211d/2123/212a: restore the DGROUP (DS/SS) bases and
+thread the register-passed node ptr bx (= word[DGROUP:0x3e08], stored by the dispatcher
+FUN_0000_201a/209e) + base bp (= word[DGROUP:0x3afe]).  212a additionally restores the dropped
+INPUT ax feeding the DGROUP:0x584 driver method.  These are dispatched by register (bx/bp live),
+which the __allregs indirect-call model cannot thread -> param_1/param_2 arrived as garbage host
+pointers (SIGSEGV in 212a).  Asm-verified engine 0x2112/0x211d/0x2123/0x212a.
+--- a/fist.c
++++ b/fist.c
+@@ -8906,13 +8906,20 @@
+ undefined2 __allregs FUN_0000_2112(int param_1,int param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  uVar1 = DAT_1000_d8de;
+-  LOCK();
+-  DAT_1000_d8de = *(undefined2 *)(param_2 + *(int *)(param_1 + 2) + 1);
+-  UNLOCK();
+-  return uVar1;
++  /* PATCH 062: cursor-draw handler (asm 0x2112: `mov di,[bx+2]; mov ax,[bp+di+1];
++     xchg [ds:0x18de],ax; ret`).  Dispatched (register-passed bx,bp) from FUN_0000_209e/201a; the
++     __allregs indirect call could not thread the LIVE bx/bp registers, so param_1/param_2 arrive as
++     garbage host pointers.  bx = the current cursor-node offset the dispatcher stored at DGROUP:0x3e08;
++     bp = word[DGROUP:0x3afe] (the node-data base).  di = word[DGROUP:bx+2]; xchg node word[bp+di+1]
++     into the global at DGROUP:0x18de, returning its prior value in ax.  All DGROUP-relative. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x3e08);
++  uint16_t bp = *(uint16_t *)(dg + 0x3afe);
++  uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++  uint16_t val = *(uint16_t *)(dg + (uint16_t)(bp + di + 1));
++  uint16_t old = *(uint16_t *)(dg + 0x18de);
++  *(uint16_t *)(dg + 0x18de) = val;
++  return old;
+ }
+ 
+ 
+@@ -8921,9 +8928,16 @@
+ void __allregs FUN_0000_211d(int param_1,int param_2)
+ 
+ {
+-                    /* WARNING: Could not recover jumptable at 0x00002120. Too many branches */
+-                    /* WARNING: Treating indirect jump as call */
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(param_2 + *(int *)(param_1 + 2) + 1))))();
++  /* PATCH 062: cursor-draw handler (asm 0x211d: `mov di,[bx+2]; jmp near [bp+di+1]`).  A near tail-jump
++     to the code offset stored in the node data at [bp+di+1].  bx = DGROUP:0x3e08 (dispatcher-stored
++     node offset), bp = word[DGROUP:0x3afe].  Ghidra dropped the DS/SS bases (garbage host derefs).
++     Reconstruct DGROUP-based reads + a seg-0 near call to the handler offset. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x3e08);
++  uint16_t bp = *(uint16_t *)(dg + 0x3afe);
++  uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++  uint16_t off = *(uint16_t *)(dg + (uint16_t)(bp + di + 1));
++  (*(code *)fist_icall_near(0x0u,off))();
+   return;
+ }
+ 
+@@ -8933,10 +8947,17 @@
+ void __allregs FUN_0000_2123(int param_1,int param_2)
+ 
+ {
+-  undefined2 *puVar1;
+-  
+-  puVar1 = (undefined2 *)(param_2 + *(int *)(param_1 + 2) + 1);
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))();
++  /* PATCH 062: cursor-draw handler (asm 0x2123: `mov di,[bx+2]; call FAR [bp+di+1]`).  A FAR indirect
++     call through the off:seg vector stored in the node data at [bp+di+1] (Ghidra mis-rendered it as a
++     near call and dropped the DS/SS bases).  bx = DGROUP:0x3e08, bp = word[DGROUP:0x3afe].  Reconstruct
++     the DGROUP-based off:seg read + a far call. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x3e08);
++  uint16_t bp = *(uint16_t *)(dg + 0x3afe);
++  uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++  uint16_t off = *(uint16_t *)(dg + (uint16_t)(bp + di + 1));
++  uint16_t seg = *(uint16_t *)(dg + (uint16_t)(bp + di + 3));
++  (*(code *)fist_icall_far(((uint32_t)seg << 4) + off))();
+   return;
+ }
+ 
+@@ -8946,10 +8967,20 @@
+ void __allregs FUN_0000_212a(int param_1,int param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  uVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c584)))();
+-  *(undefined2 *)(param_2 + *(int *)(param_1 + 2) + 1) = uVar1;
++  /* PATCH 062: cursor-draw handler (asm 0x212a: `mov di,[bx+2]; mov ax,[bp+di+1]; push bx; push bp;
++     call FAR [ds:0x584]; pop bp; pop bx; mov di,[bx+2]; mov [bp+di+1],ax; ret`).  A read-modify-write of
++     the node data word at [bp+di+1] through the driver method at DGROUP:0x584.  bx = DGROUP:0x3e08
++     (dispatcher-stored node offset), bp = word[DGROUP:0x3afe].  Ghidra dropped BOTH the DS/SS bases AND
++     the INPUT ax (the `mov ax,[bp+di+1]` feeding the method) -> host-deref SIGSEGV + wrong arg.
++     Reconstruct: read node word, pass it in, store the method's returned ax back. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x3e08);
++  uint16_t bp = *(uint16_t *)(dg + 0x3afe);
++  uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++  undefined2 ax = *(uint16_t *)(dg + (uint16_t)(bp + di + 1));
++  ax = ((undefined2 (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c584)))(ax);
++  di = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++  *(uint16_t *)(dg + (uint16_t)(bp + di + 1)) = (uint16_t)ax;
+   return;
+ }
+ 

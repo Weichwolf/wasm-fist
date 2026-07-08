@@ -1,0 +1,42 @@
+3661 MEMMGR block-lookup: restore the g_mem+fist_ext_base byte-offset base on the block-info
+tables (Ghidra dropped it -> wild deref / mis-scaled index -> SIGSEGV in the KDV read path).
+
+FUN_0000_3661(param_1) looks up a MEMMGR block by pointer: it scans the block-pointer table
+[0x28ac] for param_1, then reads that block's size [0x2a3c] and (for a non-head block) its parent
+pointer [0x28a8] + parent-relative offset [0x2bc8], returning the block's base address.  It is
+reached on the KDV DECODE path via FUN_0000_708b (read chunk) -> FUN_0000_345c (realloc the chunk
+buffer) -> FUN_0000_3661.  asm-verified (image 0x3661..0x36be):
+    3695: cmp DWORD PTR [esi*4+0x2a3c], eax      ; block size table, BYTE offset esi*4
+    36a7: mov edx, DWORD PTR [esi*4+0x28a8]       ; block parent-pointer table
+    36ae: mov eax, DWORD PTR [edx]
+    36b0: add eax, DWORD PTR [esi*4+0x2bc8]       ; parent-relative offset table, BYTE offset esi*4
+All four tables are DGROUP-relative (the extender's flat base, g_mem+fist_ext_base, [0x807]=0).
+
+Two base-loss artifacts in the decompile:
+  * `*(int *)(&DAT_0000_2a3c + iVar2 * 4)` -- &DAT_0000_2a3c is an `undefined4 *` (Ghidra typed
+    0x2a3c as a 4-byte scalar), so `+ iVar2 * 4` scales by the element size (16) instead of the
+    intended 4-byte BYTE stride the asm uses (`[esi*4+0x2a3c]`) -> reads the wrong table slot.
+  * `*(int *)(iVar2 * 4 + 0x2bc8)` -- 0x2bc8 has NO symbol at all (Ghidra emitted a BARE immediate),
+    so the whole g_mem+fist_ext_base base is missing -> deref of host address ~0x2bc8 -> SIGSEGV.
+Reconstruct both as explicit byte offsets off the module base, matching the asm exactly.  The
+head-block branch ((int)&DAT_0000_28a5 + iVar2*4 + 3 == module 0x28a8 + esi*4, an `(int)&` = integer
+byte arithmetic) is already correct and is left untouched.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -3925,13 +3925,14 @@
+     iVar2 = iVar2 + 1;
+     iVar1 = iVar1 + -1;
+   }
+-  if (*(int *)(&DAT_0000_2a3c + iVar2 * 4) != *param_1) {
++  if (*(int *)(g_mem+fist_ext_base + 0x2a3c + iVar2 * 4) != *param_1) {
+     iVar2 = thunk_FUN_0000_0f64(0x3822);
+     return iVar2;
+   }
+   iVar1 = DAT_0000_090b;
+   if (iVar2 != 0) {
+-    iVar1 = **(int **)((int)&DAT_0000_28a5 + iVar2 * 4 + 3) + *(int *)(iVar2 * 4 + 0x2bc8);
++    iVar1 = **(int **)((int)&DAT_0000_28a5 + iVar2 * 4 + 3) +
++            *(int *)(g_mem+fist_ext_base + 0x2bc8 + iVar2 * 4);
+   }
+   return iVar1;
+ }

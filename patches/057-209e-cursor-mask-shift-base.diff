@@ -1,0 +1,59 @@
+FUN_0000_209e (cursor mask-shift walker): restore the DS/SS=DGROUP node + handler-vector bases.
+
+asm 0x209e (DS=DGROUP): shifts each cursor node mask byte at (bp+di) right by byte[DGROUP:0x73d] and, on
+carry-out, dispatches a per-node handler via the near vector table at DGROUP:0x423c.  Ghidra dropped the
+DS/SS bases (host derefs -> SIGSEGV) and mis-scaled the 0xc-byte walk stride.  Reconstruct DGROUP-based
+reads/writes + a seg-0 near call.  Asm-verified engine 0x209e.
+--- a/fist.c
++++ b/fist.c
+@@ -8796,21 +8796,37 @@
+ void __allregs FUN_0000_209e(int *param_1,int *param_2,int param_3)
+ 
+ {
+-  byte bVar1;
+-  byte bVar2;
+   byte in_CF;
+   
+-  do {
+-    bVar1 = *(byte *)(param_3 + param_2[1]);
+-    bVar2 = DAT_1000_c73d & 0x1f;
+-    *(byte *)(param_3 + param_2[1]) = bVar1 >> bVar2;
+-    if ((bool)(bVar2 == 0 & in_CF | (bVar2 != 0 && (bVar1 >> bVar2 - 1 & 1) != 0))) {
+-      DAT_1000_fe08 = param_2;
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_2 + 0x423c))))();
+-    }
+-    param_2 = param_2 + 6;
+-    in_CF = param_2 < param_1;
+-  } while (param_2 <= param_1);
++  /* PATCH 057: cursor mask-shift walker (asm 0x209e), DS=DGROUP.  Each node shifts its mask byte at
++     SS(=DGROUP):(bp+di) right by cl=byte[DGROUP:0x73d] (di = word[DGROUP:bx+2]); on carry-out it
++     dispatches a per-node handler via a near vector table at DGROUP:0x423c (target = word[DGROUP:
++     ([bx]+0x423c)]).  Ghidra dropped the DS/SS bases (host-pointer derefs -> SIGSEGV) and mis-scaled
++     the 0xc-byte walk stride.  Reconstruct faithfully (cl is nonzero here -> the CF==cl==0 path is
++     unreached, but preserved).  param_2=bx walker, param_1=dx inclusive limit, param_3=bp base. */
++  in_CF = 0;
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t bx = (uint16_t)(uintptr_t)param_2;
++    uint16_t dx = (uint16_t)(uintptr_t)param_1;
++    uint16_t bp = (uint16_t)param_3;
++    uint8_t cl = (uint8_t)(*(uint8_t *)(dg + 0x73d) & 0x1f);
++    do {
++      uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++      uint8_t *cell = (uint8_t *)(dg + (uint16_t)(bp + di));
++      uint8_t bVar1 = *cell;
++      uint8_t carry = (cl == 0) ? in_CF : (uint8_t)((bVar1 >> (cl - 1)) & 1);
++      *cell = (uint8_t)(bVar1 >> cl);
++      if (carry) {
++        *(uint16_t *)(dg + 0x3e08) = bx;
++        uint16_t nd  = *(uint16_t *)(dg + bx);
++        uint16_t off = *(uint16_t *)(dg + (uint16_t)(nd + 0x423c));
++        ((void (*)(void))fist_icall_near(0x0u, off))();
++      }
++      bx = (uint16_t)(bx + 0xc);
++      in_CF = (uint8_t)(bx < dx);
++    } while (bx <= dx);
++  }
+   return;
+ }
+ 

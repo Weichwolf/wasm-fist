@@ -1,0 +1,36 @@
+MGAVIDEO FUN_0000_026e (driver-object do-once init): restore the DGROUP near-offset segment base.
+
+Sibling of FUN_0000_024f.  Called by FUN_1000_5228 with bx = a DGROUP near offset (0x264c); Ghidra dropped
+the DS=DGROUP base and dereferenced the bare offset as a host pointer (SIGSEGV), typed word[bx+0x24] as an
+int index, and stored the host pointer into DGROUP:0x736 (which FUN_1000_524e reads as a near offset).
+Rebase to g_mem+DGROUP+off with 16-bit word accesses; store the offset.  Asm-verified MGAVIDEO 0x26e/0x265.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1039,14 +1039,20 @@
+ void __allregs FUN_0000_026e(int *param_1,undefined2 param_2)
+ 
+ {
+-  while (*param_1 == 0) {
+-    *param_1 = -0x6000;
+-    param_1[0x12] = 0x140;
++  /* PATCH 050: driver-object do-once init (asm 0x265/0x26e; sibling of FUN_0000_024f).  param_1 = bx =
++     a DGROUP NEAR offset (0x264c; DS=DGROUP=0x1c00) passed by FUN_1000_5228 (patch 051).  Ghidra dropped
++     the segment base and dereferenced the bare offset as a host pointer -> SIGSEGV, typed word[bx+0x24]
++     as an int index (param_1[0x12] scaled to +0x48), and stored the host pointer into DGROUP:0x736 (the
++     xchg [0x736],bx) which FUN_1000_524e later reads as a near offset.  Rebase to g_mem+DGROUP+off with
++     16-bit word accesses (word index 0x12 = byte +0x24) and store the OFFSET into DGROUP:0x736. */
++  uint16_t off = (uint16_t)(uintptr_t)param_1;
++  uint16_t *p = (uint16_t *)(g_mem + 0x1c000 + off);
++  while (p[0] == 0) {
++    p[0] = 0xa000;
++    p[0x12] = 0x140;
+   }
+-  LOCK();
+-  UNLOCK();
+-  _DAT_1000_c736 = param_1;
+-  FUN_0000_02c1(param_1[0x12],param_2);
++  *(uint16_t *)(g_mem + 0x1c736) = off;
++  FUN_0000_02c1(p[0x12],param_2);
+   return;
+ }
+ 

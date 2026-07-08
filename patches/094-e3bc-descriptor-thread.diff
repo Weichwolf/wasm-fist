@@ -1,0 +1,25 @@
+FUN_0000_e3bc: thread the screen-descriptor cx:bx into the (*c564)() = FUN_0000_0340 method call.
+
+e3bc paints a screen via the video-driver method vector DGROUP:0x564 (= MGAVIDEO FUN_0000_0340, the
+menu-background render).  asm 0xe3e2: `mov bx,0xf6cc ; mov cx,ds ; call FAR [DGROUP:0x564]` -- cx:bx is
+the on-screen descriptor at DGROUP:0xf6cc (ds = DGROUP = 0x1c00 -> linear 0x2b6cc).  The __allregs
+indirect method-vector site dropped cx:bx (only unaff_CS was passed), so 0340 got a garbage descriptor
+pointer (~g_mem-0xEC) and NULL-deref'd on its palette copy.  Thread it faithfully: 0340's C signature is
+(param_1 = the descriptor segment cx, param_2 = the descriptor pointer); 0340 uses only *param_2 = the
+descriptor's first word (its resource segment).  Descriptor pointer = g_mem + (0x1c00<<4) + 0xf6cc =
+g_mem + 0x2b6cc.  (Per-patch indirect-call arg threading, per CLAUDE.md; the c564 vector stably resolves
+to 0340 on this path.)  Asm-verified 0xe3e2..0xe3e7.
+--- a/fist.c
++++ b/fist.c
+@@ -33581,7 +33581,10 @@
+     DAT_2000_b6ce = bVar1;
+     FUN_0000_e3f8();
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c564)))(unaff_CS);
++  /* PATCH 094: thread the descriptor cx:bx=0x1c00:0xf6cc (g_mem+0x2b6cc) into the (*c564)()=0340
++     menu-background render; the __allregs vector site had dropped it -> garbage descriptor -> SIGSEGV. */
++  ((void (*)(undefined2, undefined2 *))fist_icall_far((uint32_t)(DAT_1000_c564)))
++      (0x1c00, (undefined2 *)(g_mem + 0x2b6cc));
+   DAT_2000_b6c0 = 1;
+   DAT_2000_b6c2 = 0xffff;
+   return;

@@ -1,0 +1,156 @@
+d99b DOS-environment config-blob decoder + intro-task setup: faithful asm reconstruction.
+Ghidra read the env from host NULL (pcVar10=(char*)0x0 -> SIGSEGV) and dropped the task-struct
+dynamic-segment bases.  ES=word[word[DGROUP:0x68]:0x2c] env seg; decode nibble pairs into
+DGROUP:0xea14; swap (ea16,ea18)/(ea1a,ea1c); e339 far-calls the extender gate [ea16]; build the
+intro task struct + copy the 4 asset-name templates.  Asm-verified 0x0d99b..0x0daaf.
+--- a/fist.c
++++ b/fist.c
+@@ -32847,92 +32847,66 @@
+ void __allregs FUN_0000_d99b(undefined4 param_1)
+ 
+ {
+-  undefined1 *puVar1;
+-  undefined1 *puVar2;
+-  undefined2 uVar3;
+-  undefined2 uVar4;
+-  undefined2 uVar5;
+-  int iVar6;
+-  uint uVar9;
+-  undefined4 uVar7;
+-  long lVar8;
+-  char *pcVar10;
+-  undefined1 *puVar11;
+-  undefined2 *puVar12;
+-  undefined1 *puVar13;
+-  
+-  uVar3 = *(undefined2 *)&DAT_1000_c02c;
+-  pcVar10 = (char *)0x0;
+-  puVar12 = (undefined2 *)&DAT_2000_aa14;
++  /* PATCH 066: faithful reconstruction of the DOS-environment CONFIG-BLOB decoder + intro-task setup
++     (asm 0x0d99b..0x0daaf).  Ghidra rendered the env read as `pcVar10 = (char *)0x0` -> a host-NULL
++     deref (SIGSEGV) and dropped every dynamic-segment base in the task-struct init (iVar6==0 ->
++     `*(int*)(0+6)` etc).  Faithful asm:
++       ES = word[word[DGROUP:0x68 (PSP)]:0x2c]  = the DOS environment segment (the extender points
++         PSP:0x2c at a crafted nibble blob; the loader seeds the oracle-captured real blob).
++       decode the FIRST ASCIIZ string, 4 chars/16-bit word, byte=((c0-0x30)<<4)|(c1-0x30) MSB-first,
++         into DGROUP:0xea14.. until a NUL; swap (ea16,ea18) and (ea1a,ea1c).
++       [ea16] is then a FAR ptr (our real blob -> 0x0762:0x1179 = linear 0x8799 = the Doug-Huffman
++         extender's real-mode->32-bit-PM callback GATE) with args [ea1a..ea1e].  e339 far-calls it;
++         in our port the extender role is the shim, so fist_icall_far(0x8799) honestly traps to 0
++         today (task_seg=0) -> a faithful extender-service handler is the documented next seam.
++       Build the intro task struct (DGROUP seg + DGROUP-relative near offsets 0x1548 code / 0x6d3c /
++         0xdfbc), install DGROUP:0x790/0x78e, run (*c354)()/(*c358)(); aa10=0x20; e339(); then copy the
++         four 16-byte intro asset-name templates (D02.PCX/C02.PCX/502.PAL/5.SKY at DGROUP:0xea5e/0xea66/
++         0xea74/0xea6e) into the task at +0x7a/+0x8a/+0x9a/+0xaa. */
++  uint8_t  *dg   = g_mem + 0x1c000;
++  uint16_t  psp  = *(uint16_t *)(dg + 0x68);                              /* DGROUP:0x68 = PSP seg */
++  uint16_t  eseg = *(uint16_t *)(g_mem + ((uint32_t)psp << 4) + 0x2c);    /* PSP:0x2c = env seg */
++  uint8_t  *env  = g_mem + ((uint32_t)eseg << 4);
++  uint16_t *tab  = (uint16_t *)(dg + 0xea14);
++  int si = 0;
+   do {
+-    uVar9 = (uint)((ulong)param_1 >> 0x10);
+-    param_1 = CONCAT31(CONCAT21(uVar9,pcVar10[1] - 0x30U | *pcVar10 << 4),
+-                       pcVar10[3] - 0x30U | pcVar10[2] << 4);
+-    pcVar10 = pcVar10 + 4;
+-    *puVar12 = (int)param_1;
+-    uVar5 = DAT_2000_aa1a;
+-    uVar4 = DAT_2000_aa16;
+-    puVar12 = puVar12 + 1;
+-  } while (*pcVar10 != '\0');
+-  DAT_2000_aa16 = DAT_2000_aa18;
+-  DAT_2000_aa18 = uVar4;
+-  uVar7 = CONCAT22(uVar9,DAT_2000_aa1c);
+-  DAT_2000_aa1a = DAT_2000_aa1c;
+-  DAT_2000_aa1c = uVar5;
+-  *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = uVar7;
+-  lVar8 = (ulong)uVar9 << 0x10;
+-  DAT_2000_aa10 = 0;
+-  DAT_1000_c790 = FUN_0000_e339();
+-  iVar6 = (int)lVar8;
+-  DAT_2000_aa2c = iVar6;
+-  DAT_2000_aa2e = DAT_1000_c790;
+-  *(undefined2 *)(iVar6 + 6) = 0x1c00;
+-  *(undefined2 *)(iVar6 + 8) = (undefined1 *)&DAT_1000_d548;
+-  *(undefined2 *)(iVar6 + 0x26) = 0x1c00;
+-  *(undefined2 *)(iVar6 + 0x28) = (undefined2 *)&DAT_2000_2d3c;
+-  *(undefined2 *)(iVar6 + 0x2a) = (undefined2 *)&DAT_2000_9fbc;
+-  DAT_1000_c78e = iVar6 + 0xea;
++    uint8_t bh = (uint8_t)(((uint8_t)(env[si]   - 0x30) << 4) | (uint8_t)(env[si+1] - 0x30));
++    uint8_t bl = (uint8_t)(((uint8_t)(env[si+2] - 0x30) << 4) | (uint8_t)(env[si+3] - 0x30));
++    *tab++ = (uint16_t)(((uint16_t)bh << 8) | bl);
++    si += 4;
++  } while (env[si] != '\0');
++  { uint16_t a = *(uint16_t *)(dg+0xea16), b = *(uint16_t *)(dg+0xea18);
++    *(uint16_t *)(dg+0xea16) = b; *(uint16_t *)(dg+0xea18) = a; }
++  uint16_t ea1c_old = *(uint16_t *)(dg+0xea1c);
++  { uint16_t a = *(uint16_t *)(dg+0xea1a);
++    *(uint16_t *)(dg+0xea1a) = ea1c_old; *(uint16_t *)(dg+0xea1c) = a; }
++  { uint16_t s = *(uint16_t *)(dg+0xea2e), o = *(uint16_t *)(dg+0xea2c);
++    *(uint32_t *)(g_mem + ((uint32_t)s<<4) + o + 0x3f2) = (uint32_t)ea1c_old; }
++  *(uint16_t *)(dg+0xea10) = 0;
++  { uint16_t tseg = (uint16_t)FUN_0000_e339();
++    *(uint16_t *)(dg+0xea2e) = tseg;
++    *(uint16_t *)(dg+0xea2c) = 0;
++    { uint8_t *t = g_mem + ((uint32_t)tseg << 4);
++      *(uint16_t *)(t+0x06) = 0x1c00;
++      *(uint16_t *)(t+0x08) = 0x1548;
++      *(uint16_t *)(t+0x26) = 0x1c00;
++      *(uint16_t *)(t+0x28) = 0x6d3c;
++      *(uint16_t *)(t+0x2a) = 0xdfbc; }
++    *(uint16_t *)(dg+0x790) = tseg;
++    *(uint16_t *)(dg+0x78e) = 0xea; }
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c354)))();
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c358)))();
+-  *(long *)(DAT_2000_aa2c + 0x3f2) = lVar8;
+-  DAT_2000_aa10 = 0x20;
++  { uint16_t s = *(uint16_t *)(dg+0xea2e), o = *(uint16_t *)(dg+0xea2c);
++    *(uint32_t *)(g_mem + ((uint32_t)s<<4) + o + 0x3f2) = 0; }
++  *(uint16_t *)(dg+0xea10) = 0x20;
+   FUN_0000_e339();
+-  uVar3 = DAT_2000_aa2e;
+-  puVar13 = (undefined1 *)(DAT_2000_aa2c + 0x7a);
+-  puVar11 = (undefined1 *)&DAT_2000_aa5e;
+-  for (iVar6 = 0x10; iVar6 != 0; iVar6 = iVar6 + -1) {
+-    puVar2 = puVar13;
+-    puVar13 = puVar13 + 1;
+-    puVar1 = puVar11;
+-    puVar11 = puVar11 + 1;
+-    *puVar2 = *puVar1;
+-  }
+-  puVar13 = (undefined1 *)(DAT_2000_aa2c + 0x8a);
+-  puVar11 = (undefined1 *)&DAT_2000_aa66;
+-  for (iVar6 = 0x10; iVar6 != 0; iVar6 = iVar6 + -1) {
+-    puVar2 = puVar13;
+-    puVar13 = puVar13 + 1;
+-    puVar1 = puVar11;
+-    puVar11 = puVar11 + 1;
+-    *puVar2 = *puVar1;
+-  }
+-  puVar13 = (undefined1 *)(DAT_2000_aa2c + 0x9a);
+-  puVar11 = (undefined1 *)&DAT_2000_aa74;
+-  for (iVar6 = 0x10; iVar6 != 0; iVar6 = iVar6 + -1) {
+-    puVar2 = puVar13;
+-    puVar13 = puVar13 + 1;
+-    puVar1 = puVar11;
+-    puVar11 = puVar11 + 1;
+-    *puVar2 = *puVar1;
+-  }
+-  puVar13 = (undefined1 *)(DAT_2000_aa2c + 0xaa);
+-  puVar11 = (undefined1 *)&DAT_2000_aa6e;
+-  for (iVar6 = 0x10; iVar6 != 0; iVar6 = iVar6 + -1) {
+-    puVar2 = puVar13;
+-    puVar13 = puVar13 + 1;
+-    puVar1 = puVar11;
+-    puVar11 = puVar11 + 1;
+-    *puVar2 = *puVar1;
++  { uint16_t s = *(uint16_t *)(dg+0xea2e), o = *(uint16_t *)(dg+0xea2c);
++    uint8_t *t = g_mem + ((uint32_t)s<<4) + o;
++    int j;
++    for (j = 0; j < 0x10; j++) t[0x7a + j] = dg[0xea5e + j];
++    for (j = 0; j < 0x10; j++) t[0x8a + j] = dg[0xea66 + j];
++    for (j = 0; j < 0x10; j++) t[0x9a + j] = dg[0xea74 + j];
++    for (j = 0; j < 0x10; j++) t[0xaa + j] = dg[0xea6e + j];
+   }
+   return;
+ }

@@ -1,0 +1,52 @@
+PATCH 116: rebase the display-list element method-dispatch walker FUN_0000_1e88.
+
+Reached at menu-enter via cae6 -> e714 -> 1e4b -> 1e88 (asm 0x1e88..0x1ea8): walks the node list bounded
+by DGROUP:[0x3e04]..[0x3e06] (param_1..param_2, step 0xc), and for each node calls the element's method
+`di=word[DGROUP:node]; call [DGROUP:di+0x4872]` with param_3.  Ghidra treated param_1/param_2 as host
+pointers (`*param_2` dereferenced the raw DGROUP offset 0x3b6c -> SEGV) and dropped the method-vector DS
+base.  Rebase both bounds and the vector read to g_mem+0x1c000; the near method call keeps CS=0 (the low
+engine segment the 0x4872 method table indexes) and, as in the pristine decompile, the walk returns after
+the first element (the method's CF-return that would continue the loop is not recoverable through the C
+indirect call, and in_CF was already 0).  Unblocks execution past the dispatch into the rest of e714.
+Asm-verified 0x1e88..0x1ea8, caller 0x1e4b.
+--- a/fist.c
++++ b/fist.c
+@@ -8483,19 +8483,28 @@
+ undefined2 __allregs FUN_0000_1e88(int *param_1,int *param_2,undefined2 param_3)
+ 
+ {
++  /* PATCH 116: display-list element method-dispatch walker (asm 0x1e88..0x1ea8).  bx=param_2 and
++     dx=param_1 are DGROUP near offsets bounding the node list (walked param_2 -> param_1 step 0xc);
++     each node: di=word[DGROUP:node]; call [DGROUP:di+0x4872] (the element's method) with param_3.
++     Ghidra treated param_1/param_2 as host pointers (`*param_2` -> deref of the raw offset 0x3b6c ->
++     SEGV) and dropped the method-vector DS base.  Rebase to g_mem+0x1c000.  The near method call keeps
++     CS=0 (the low engine code segment the method table indexes).  The method's CF-return (`jae` = stop)
++     is not recoverable through the C indirect call; as in the pristine decompile the walk returns after
++     the first element (in_CF=0), which is the reached menu-enter behaviour. */
+   undefined2 uVar1;
+-  undefined1 in_CF = 0;
+-  
++  uint16_t p1 = (uint16_t)(uintptr_t)param_1;
++  uint16_t p2 = (uint16_t)(uintptr_t)param_2;
++
+   do {
+-    DAT_1000_fe08 = param_2;
+-    uVar1 = (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_2 + 0x4872))))(param_3);
+-    if (!(bool)in_CF) {
+-      return uVar1;
++    *(uint16_t *)(g_mem + 0x1fe08) = p2;                                  /* DAT_1000_fe08 = param_2 */
++    {
++      uint16_t di  = *(uint16_t *)(g_mem + 0x1c000 + p2);                 /* mov di,[bx] */
++      uint16_t vec = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(di + 0x4872)); /* [di+0x4872] */
++      uVar1 = (*(code *)fist_icall_near(0x0u, vec))(param_3);
+     }
+-    param_2 = param_2 + -6;
+-    in_CF = param_2 < param_1;
+-  } while (!(bool)in_CF);
+-  return *DAT_1000_d8e2;
++    return uVar1;                                                         /* in_CF=0 in the decompile */
++  } while (p2 >= p1);
++  return *(uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1d8e2)); /* *DAT_1000_d8e2 */
+ }
+ 
+ 

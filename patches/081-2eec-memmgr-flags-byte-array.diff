@@ -1,0 +1,22 @@
+MEMMGR per-block FLAGS array [0x2eec] is a BYTE array -- retype it so `(&DAT_2eec)[i]` is a byte
+index (Ghidra defaulted the FLAT32 scalar to undefined4 -> the flag reads/writes strided by 4).
+
+The extender MEMMGR keeps a per-block flags byte at 0x2eec (bit0 = fixed/no-relocate, bit1 =
+must-stay/aligned).  The heap compaction (3584/345c/3439/385c) reads `(&DAT_0000_2eec)[i] & 1|2` and
+the allocator writes `(&DAT_0000_2eec)[i] = (char)flags`.  The asm indexes this BYTE array with unit
+stride:
+    3584: test BYTE PTR [ebx+0x2eec], 0x2     ; byte i (stride 1)
+    3601: test BYTE PTR [esi+0x2eec], 0x1
+    3720: mov  BYTE PTR [esi+0x2eec], al       ; allocator flags write
+Ghidra typed 0x2eec (and the adjacent 0x2eed used by the compaction's flags-shift) as `undefined4`,
+so `(&DAT_0000_2eec)[i]` strides 4 -> the wrong block's flags are tested during compaction, the
+"don't relocate" decisions go wrong, and a resized block (the KDV chunk buffer) is moved/laid out
+incorrectly -> its header is corrupted.  Retype both to `undefined1` so `&DAT` is a byte pointer and
+`[i]` is a byte index, matching the asm.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -460,2 +460,2 @@
+-#define DAT_0000_2eec (*(undefined4 *)(g_mem+fist_ext_base+0x2eec))
+-#define DAT_0000_2eed (*(undefined4 *)(g_mem+fist_ext_base+0x2eed))
++#define DAT_0000_2eec (*(undefined1 *)(g_mem+fist_ext_base+0x2eec))
++#define DAT_0000_2eed (*(undefined1 *)(g_mem+fist_ext_base+0x2eed))

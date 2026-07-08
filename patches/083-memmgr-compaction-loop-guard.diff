@@ -1,0 +1,52 @@
+MEMMGR compaction (345c/3439): guard the block-shift do-while loops so growing/shrinking the LAST
+block (zero blocks to relocate) does not run the loop with count 0 -> out-of-bounds walk -> SIGSEGV.
+
+The heap resize (345c) and realloc (3439) relocate the blocks that come after the resized one:
+`n = block_count - (index+1)` (backward, grow) or `block_count - index` (forward, shrink), then shift
+`n` blocks.  When the resized block is the last one (index == count-1, e.g. the KDV chunk buffer which
+is the last-allocated block) n == 0 -- nothing to move.  Ghidra rendered the shift as a bare do-while
+(`do { ... } while (iVarN != 0)`), which executes once even when the count is 0, then decrements past
+zero and walks the per-block tables ([0x28ac]/[0x2bcc]/[0x2a3c]) out of bounds -> deref of a garbage
+key -> SIGSEGV.  The companion prep routine 3584 already guards the same walk (`if (count < i+1 ||
+iVar4 == 0) return`); the caller's copy loop must too.  Guard each of the four compaction loops with
+its shift count so a 0-count resize is an in-place no-op (the faithful intent: shift N blocks, N=0 =>
+none).  asm ref: 345c 0x34fa..0x3554 (mov esi,[2f60]; inc esi; mov ebp,[2f54]; sub ebp,esi; ...; dec
+ebp; jne) -- the count is (count-(index+1)); for the last block that is 0.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -3629,7 +3629,7 @@
+         FUN_0000_3584(uVar2,param_5);
+         iVar6 = DAT_0000_2f60 + 1;
+         iVar5 = DAT_0000_2f54 - iVar6;
+-        do {
++        if (iVar5 != 0) do {
+           uVar1 = (&DAT_0000_2bcc)[iVar6];
+           puVar8 = *(undefined4 **)(&DAT_0000_28ac)[iVar6];
+           puVar7 = *(undefined4 **)((char *)&DAT_0000_2a3c + iVar6 * 4);
+@@ -3654,7 +3654,7 @@
+       FUN_0000_3584(uVar2,param_5);
+       iVar6 = DAT_0000_2f54 - (DAT_0000_2f60 + 1);
+       uVar1 = DAT_0000_2f54;
+-      do {
++      if (iVar6 != 0) do {
+         uVar1 = uVar1 - 1;
+         uVar2 = (&DAT_0000_2bcc)[uVar1];
+         puVar8 = *(undefined4 **)(&DAT_0000_28ac)[uVar1];
+@@ -3768,7 +3768,7 @@
+       FUN_0000_3584(param_1,param_3);
+       iVar6 = DAT_0000_2f60 + 1;
+       iVar5 = DAT_0000_2f54 - iVar6;
+-      do {
++      if (iVar5 != 0) do {
+         uVar1 = (&DAT_0000_2bcc)[iVar6];
+         puVar8 = *(undefined4 **)(&DAT_0000_28ac)[iVar6];
+         puVar7 = *(undefined4 **)((char *)&DAT_0000_2a3c + iVar6 * 4);
+@@ -3793,7 +3793,7 @@
+     FUN_0000_3584(param_1,param_3);
+     iVar5 = DAT_0000_2f54 - (DAT_0000_2f60 + 1);
+     iVar6 = DAT_0000_2f54;
+-    do {
++    if (iVar5 != 0) do {
+       iVar6 = iVar6 + -1;
+       uVar1 = (&DAT_0000_2bcc)[iVar6];
+       puVar8 = *(undefined4 **)(&DAT_0000_28ac)[iVar6];

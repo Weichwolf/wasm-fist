@@ -1,0 +1,34 @@
+FUN_0000_0db8 (MGAVIDEO): fix the four base-losses in the masked cursor blit (background-save + draw).
+
+0db8 draws the mouse cursor into the VGA framebuffer with a transparency mask, first saving the
+overwritten background to a restore buffer.  asm 0xdb8: ES=0xA000 (framebuffer), DS=word[DGROUP:0x716]
+(the sprite/mask/background-save segment).  di=d5c8=FB dest, si=d5c4=sprite src, bx=d5c6=mask,
+bp=0xaa4=background-save buffer.  Ghidra recovered the loop logic (mask test, row advance) correctly but
+dropped all four segment bases (used the DGROUP words as raw host pointers -> SEGV the moment the
+far-thunk dispatch reached 2d52 -> 0db8).  Rebase onto g_mem+FB / g_mem+(c716<<4).  Asm-verified
+0xdb8..0xdfc + the row-advance 0xe1c..0xe29.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -2742,10 +2742,18 @@
+   iVar4 = _DAT_1000_d5be;
+   bVar3 = DAT_1000_d5bc;
+   uVar2 = _DAT_1000_c716;
+-  pbVar9 = (byte *)0xaa4;
+-  pcVar8 = _DAT_1000_d5c6;
+-  pbVar10 = _DAT_1000_d5c4;
+-  pbVar11 = _DAT_1000_d5c8;
++  /* PATCH 103: rebase the masked cursor-blit pointers (asm 0xdb8).  ES=0xA000 = VGA framebuffer;
++     DS = word[DGROUP:0x716] = c716 = the sprite/mask/background-save segment.  di=d5c8 -> FB dest;
++     si=d5c4 -> sprite source, bx=d5c6 -> mask, bp=0xaa4 -> background-save buffer (all in c716).
++     Ghidra used the DGROUP words as raw host pointers (near NULL) -> SEGV; the loop LOGIC is correct,
++     only the four segment bases were lost. */
++  {
++    uint8_t *sseg = g_mem + (((uint32_t)(uint16_t)_DAT_1000_c716) << 4);
++    pbVar9  = sseg + 0xaa4;
++    pcVar8  = (char *)(sseg + (uint16_t)_DAT_1000_d5c6);
++    pbVar10 = sseg + (uint16_t)_DAT_1000_d5c4;
++    pbVar11 = g_mem + 0xa0000 + (uint16_t)_DAT_1000_d5c8;
++  }
+   cVar6 = DAT_1000_d5c0;
+   do {
+     *pbVar9 = *pbVar11;

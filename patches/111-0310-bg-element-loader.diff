@@ -1,0 +1,35 @@
+MGAVIDEO FUN_0000_0310: reconstruct the bg-element loader (descriptor base + name build + 26fc open).
+
+0x310 is the driver's background-element LOAD thunk (= the DGROUP:0x560 method vector, reached via
+e3bc -> e3f8).  asm 0x310..0x327:
+    mov es,cx ; or es:[bx+2],0x22   ; cx:bx = the on-screen descriptor (0x1c00:0xf6cc)
+    push cs ; call 0x197            ; MGAVIDEO name-builder: name-table[ax] -> DGROUP:0x740 (ax=0x1a ->
+                                    ;   "MAINMENU.MRL"; ax<0x24 so no digit patch)
+    mov dx,0x740 ; call [DGROUP:0x388]  ; = engine FUN_1000_26fc, the screen-resource OPEN
+Two Ghidra defects: (a) the descriptor cx segment base was dropped -> `*(byte*)(param_3+2)` deref'd
+param_3 as a raw host pointer; (b) the 26fc far-vector call dropped dx(=0x740 filename)/cx(=descr seg)/
+bx(=descr off).  Reconstruct the descriptor at g_mem+(param_2<<4)+param_3 and thread cx=param_2, dx=0x740,
+bx=param_3 into 26fc (0x740 is 26fc's INT-21 DS:DX; 26fc order = CX,DX,BX,BP -- see patch 108).  param_1
+(ax name index) already flows to 0x197.  Result: MAINMENU.MRL opens+reads, 184b stores its segment into
+descriptor 0xf6cc word0, and 0340 renders the real menu background.  Asm-verified 0x310..0x327.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1189,9 +1189,16 @@
+ void __allregs FUN_0000_0310(undefined2 param_1,undefined2 param_2,int param_3)
+ 
+ {
+-  *(byte *)(param_3 + 2) = *(byte *)(param_3 + 2) | 0x22;
++  /* PATCH 111: MGAVIDEO bg-element loader (asm 0x310..0x327): es=cx=descriptor seg (param_2),
++     bx=descriptor off (param_3); mark descr[2]|=0x22; build the 8.3 filename via 0x197(ax=param_1=name
++     index); then `mov dx,0x740; call [DGROUP:0x388]`=26fc to OPEN it.  Ghidra dropped the cx segment
++     base of the descriptor (raw host deref of param_3) and the 26fc dx/cx/bx args (empty-name open).
++     Reconstruct: descriptor = g_mem+(param_2<<4)+param_3; thread cx=param_2, dx=0x740, bx=param_3. */
++  uint8_t *S = g_mem + ((uint32_t)(uint16_t)param_2 << 4) + (uint16_t)param_3;
++  S[2] |= 0x22;
+   FUN_0000_0197(param_1);
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c388)))();
++  ((void (*)(undefined2,int,undefined2,undefined2))fist_icall_far((uint32_t)(_DAT_1000_c388)))
++      ((undefined2)param_2, 0x740, (undefined2)param_3, 0);
+   return;
+ }
+ 

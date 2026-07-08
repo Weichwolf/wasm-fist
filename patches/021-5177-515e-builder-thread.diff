@@ -1,0 +1,48 @@
+patch 021 -- FUN_1000_515e / FUN_1000_5177: thread the driver-filename BUILDER's SI arg + DX return.
+
+BLOCKER #1 leg (a). Both driver-load stubs build their overlay filename via an indirect FAR call
+through the DGROUP method slot DGROUP:0x31a (`mov si,<tmpl>; call dword ptr ds:0x31a`). That slot is
+the engine's filename builder FUN_1000_4c9a (DGROUP:0x31a = 0xf69:0x560a = linear 0x14c9a), installed
+at load by the engine's DGROUP relocation table -- which our loader now applies in full
+(native_main fist_apply_dgroup_relocs; previously only DGROUP:0x0..0x70 were seeded, so 0x31a was 0 and
+the call trapped to linear 0 => uninitialised filename). The builder copies the template from
+[DGROUP:0x70(STRSEG)]:SI into DGROUP:0x740 and returns DX=0x740 (asm 0x14c9a: `mov ax,ss:0x70; mov ds,ax;
+mov di,0x740; mov dx,di; rep lodsb/stosb`). Ghidra's __allregs indirect call dropped SI (garbage
+template) and DX (garbage filename pointer). Reconstruct both from the asm: pass SI (0x6fa video /
+0x6ea sound) and set extraout_DX = 0x740. For the video path 5177 then patches the drive letter byte
+(ds:0x743 = 'M') so DGROUP:0x740 = "..\MGAVIDEO.DVR". Asm-verified base-0 0x1515e / 0x15177 / 0x14c9a.
+--- a/fist.c
++++ b/fist.c
+@@ -47421,7 +47421,15 @@
+ {
+   undefined2 extraout_DX;
+   
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c31a)))();
++  /* patch 021: the filename BUILDER (DGROUP:0x31a -> 0xf69:0x560a = FUN_1000_4c9a, installed by the
++     DGROUP reloc table -- loader role fist_apply_dgroup_relocs) takes SI = the STRSEG template offset
++     and returns DX = the built-name buffer offset (asm 0x1515e: `mov si,0x6ea; call [ds:0x31a]`).
++     Ghidra's __allregs call dropped BOTH: SI (so the builder copied a garbage template) and the DX
++     return (extraout_DX left uninitialised). Thread SI=0x6ea ("..\SOUNDDVR.DVR" @ STRSEG:0x6ea) into
++     the call and reconstruct the builder's constant DX=0x740 (asm 0x14ca5: `mov di,0x740; mov dx,di`;
++     the builder always writes DGROUP:0x740 and returns 0x740). */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c31a)))(0x6ea);
++  extraout_DX = 0x740;
+   FUN_1000_5051(param_1,extraout_DX,0x4fa,param_2,0x6ea,param_3,param_4,param_5);
+   return;
+ }
+@@ -47446,7 +47454,14 @@
+ {
+   undefined2 extraout_DX;
+   
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c31a)))();
++  /* patch 021: same builder (DGROUP:0x31a=FUN_1000_4c9a) for the VIDEO overlay. asm 0x15177:
++     `push ax; mov si,0x6fa; call [ds:0x31a]; pop ax; mov ds:0x743,al`. Thread SI=0x6fa
++     ("..\XGAVIDEO.DVR" @ STRSEG:0x6fa) and the constant DX=0x740 return; then the drive-letter
++     byte store ds:0x743=al (='M' for chipset 0x56) overwrites the template 'X' at DGROUP:0x743
++     (=0x740+3) so DGROUP:0x740 = "..\MGAVIDEO.DVR". FUN_1000_5051 receives DX(0x740) as the
++     filename pointer for the AH=3D open + AH=4B load-overlay. */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c31a)))(0x6fa);
++  extraout_DX = 0x740;
+   (*(undefined1 *)(g_mem+0x1c743)) = param_1;
+   FUN_1000_5051(param_2,extraout_DX,0x3e4,param_3,0x6fa,param_4,param_5,param_6);
+   return;

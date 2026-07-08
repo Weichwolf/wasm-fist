@@ -1,0 +1,37 @@
+Fix the INT-8 ISR tick-gate semaphore read (FUN_1000_31c3 + FUN_1000_3218): CS-base + byte width.
+
+The engine's PIT ISR is installed as 0xf69:0x3a68 (DOS set-vector 0x08) and runs, along with its whole
+near-called subtree (31c3/3218/...), with CS=0xf69. Its tick-counting gate is `cmp byte cs:0x2d58,0xff`
+(base-0 0x13271) -> the enable semaphore at 0xf69:0x2d58 = linear 0x123e8, whose image value is 0xff
+("timer counting"; the engine's INT-21h hook FUN_1000_22ec inc/decs it around DOS calls -- and that
+hook is bypassed in our port since `int n` is intercepted directly, so 0x123e8 stays 0xff). Ghidra
+recovered these functions in the overlapping CS=0x1000 window, so it based the ref at 0x1000:0x2d58 =
+linear 0x12d58 -- which is not a semaphore at all but an opcode byte (0x0b, `or di,di`) inside an
+unrelated decompressor, AND it typed the byte compare as a word (`DAT_1000_2d58 == -1` => == 0xffff).
+Both bugs make the gate never pass, so DGROUP:0x452 never advanced even after the timer calibration
+(patch 016) and ISR pump (patch 017) were in place -> boot still hung in FUN_1000_3346.
+
+FIX: read the correct linear 0x123e8 as a BYTE compared to 0xff (asm-faithful). Class: CS-absolute
+mis-base for the 0xf69 service cluster recovered under CS=0x1000 (docs/stage1.md), plus word/byte
+type correction. Only the ISR-path readers are rebased; the (bypassed) INT-21h hook's own 0x2d58
+inc/dec is left as-is (it does not execute).
+--- a/fist.c
++++ b/fist.c
+@@ -43527,7 +43527,7 @@
+       bVar2 = CARRY2(DAT_1000_d8b6,DAT_1000_d8b8);
+       DAT_1000_d8b6 = DAT_1000_d8b6 + DAT_1000_d8b8;
+       DAT_1000_c447 = -bVar2;
+-      if ((bVar2) && (DAT_1000_2d58 == -1)) {
++      if ((bVar2) && (*(uint8_t *)(g_mem + 0x123e8) == 0xff) /*patch018: cs:0x2d58 semaphore, CS=0xf69, byte*/) {
+         DAT_1000_c452 = DAT_1000_c452 + 1;
+         DAT_1000_d8ca = DAT_1000_d8ca >> 1;
+       }
+@@ -43597,7 +43597,7 @@
+       bVar5 = CARRY2(DAT_1000_d8b6,DAT_1000_d8b8);
+       DAT_1000_d8b6 = DAT_1000_d8b6 + DAT_1000_d8b8;
+       DAT_1000_c447 = -bVar5;
+-      if ((bVar5) && (DAT_1000_2d58 == -1)) {
++      if ((bVar5) && (*(uint8_t *)(g_mem + 0x123e8) == 0xff) /*patch018: cs:0x2d58 semaphore, CS=0xf69, byte*/) {
+         DAT_1000_c452 = DAT_1000_c452 + 1;
+         DAT_1000_d8ca = DAT_1000_d8ca >> 1;
+       }

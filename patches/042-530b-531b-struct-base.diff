@@ -1,0 +1,30 @@
+FUN_1000_530b + FUN_1000_531b (engine 0x5200 driver-processing): driver-struct base loss (DGROUP:0x736).
+
+Two trivial single-store accessors reached from FUN_1000_5228 (530b(0xc) sets struct[0x16]; 531b(0xff)
+sets struct[0x18] -- clear-color / mask setup on the driver-object struct).  Same class as patches 040/041:
+Ghidra dropped the DGROUP base and dereferenced the value at [0x736] as a host address -> SIGSEGV.  Rebase
+to g_mem+DGROUP+[0x736].  Asm-verified base-0 0x1530b / 0x1531b.
+--- a/fist.c
++++ b/fist.c
+@@ -47551,7 +47551,9 @@
+ void __allregs FUN_1000_530b(undefined2 param_1)
+ 
+ {
+-  *(undefined2 *)(DAT_1000_c736 + 0x16) = param_1;
++  /* PATCH 042: engine 0x5200 driver-processing -- struct base loss (DGROUP:0x736).  asm 0x1530b:
++   * bx=[DGROUP:0x736]; [bx+0x16]=ax.  Rebase to g_mem+DGROUP+[0x736]. */
++  *(uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1c736) + 0x16) = (uint16_t)param_1;
+   return;
+ }
+ 
+@@ -47570,7 +47572,9 @@
+ void __allregs FUN_1000_531b(undefined2 param_1)
+ 
+ {
+-  *(undefined2 *)(DAT_1000_c736 + 0x18) = param_1;
++  /* PATCH 042: engine 0x5200 driver-processing -- struct base loss (DGROUP:0x736).  asm 0x1531b:
++   * bx=[DGROUP:0x736]; [bx+0x18]=ax.  Rebase to g_mem+DGROUP+[0x736]. */
++  *(uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1c736) + 0x18) = (uint16_t)param_1;
+   return;
+ }
+ 

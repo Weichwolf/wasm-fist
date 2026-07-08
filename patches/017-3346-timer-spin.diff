@@ -1,0 +1,54 @@
+Reconstruct the timer busy-wait spins FUN_1000_3346 and FUN_1000_3352 as genuine volatile re-read
+loops that cooperatively pump the engine's installed INT-8 (PIT) ISR. Class: volatile-ISR-flag spin
+(docs/stage1.md "TIMER-DRIVEN EXECUTION MODEL").
+
+FUN_1000_3346 asm (base-0 0x13346): `mov ax,ss:[0x452]; .l: cmp ax,ss:[0x452]; je .l; ret` -- it
+busy-waits until the PIT tick counter at DGROUP:0x452 (DAT_1000_c452) is advanced by the INT-8 ISR.
+Ghidra folded the two ss:[0x452] reads into one and emitted `do{}while(true)` (an unreachable-block
+"infinite loop"), so the ISR's update could never be observed. Reconstructed as a re-read spin through
+a `volatile` view of DAT_1000_c452.
+
+FUN_1000_3352 asm (base-0 0x13352): `test word ds:[0x18ca],0xffff; jne .self; ret` -- waits until the
+ISR decays DGROUP:0x18ca (d8ca, `shr [0x18ca],1` each tick) to 0. Same class; re-read volatile.
+
+The original relied on the PIT hardware IRQ asynchronously preempting these spins. Our single-threaded
+host cannot preempt C, so the platform shim provides the ISR cooperatively: fist_timer_pump()
+(tools/native_main.c) runs the engine's installed INT-8 handler (captured at DOS set-vector 0x08,
+resolved via fist_icall) whenever a host SIGALRM tick is pending, guarded against re-entry. Calling it
+from the spin body is the shim's model of "interrupts enabled -> the PIT IRQ services ticks during this
+busy-wait"; the spin CONDITION is faithful to the asm. See patch 016 for why the ISR can now actually
+advance 0x452 (the timer calibration that sets the ISR's fractional step d8b8 / PIT divisor d8c6).
+--- a/fist.c
++++ b/fist.c
+@@ -43717,9 +43717,15 @@
+ void __allregs FUN_1000_3346(void)
+ 
+ {
+-                    /* WARNING: Do nothing block with infinite loop */
+-  do {
+-  } while( true );
++  /* asm (base-0 0x13346): mov ax,ss:[0x452]; .l: cmp ax,ss:[0x452]; je .l; ret
++   * Busy-wait until the INT-8 (PIT) tick counter at DGROUP:0x452 changes. On the original the PIT
++   * IRQ preempts this loop and the ISR advances the counter; our host models that cooperatively:
++   * fist_timer_pump() runs the engine's installed INT-8 ISR when a host timer tick is pending
++   * (tools/native_main.c). Ghidra folded the two ss:[0x452] reads into `do{}while(true)`; this
++   * reconstructs the genuine volatile re-read spin so the ISR-updated value is observed. */
++  uint16_t ax_w = *(volatile undefined2 *)&DAT_1000_c452;
++  while (ax_w == *(volatile undefined2 *)&DAT_1000_c452) fist_timer_pump();
++  return;
+ }
+ 
+ 
+@@ -43728,8 +43734,10 @@
+ void __allregs FUN_1000_3352(void)
+ 
+ {
+-  do {
+-  } while (DAT_1000_d8ca != 0);
++  /* asm (base-0 0x13352): test word ds:[0x18ca],0xffff; jne .self; ret -- wait until the INT-8 ISR
++   * decays DGROUP:0x18ca (d8ca >>= 1 each tick) to 0. Same volatile-ISR-flag class as 3346; pump the
++   * cooperative timer so the ISR runs and the flag clears (re-read volatile every iteration). */
++  while (*(volatile undefined2 *)&DAT_1000_d8ca != 0) fist_timer_pump();
+   return;
+ }
+ 

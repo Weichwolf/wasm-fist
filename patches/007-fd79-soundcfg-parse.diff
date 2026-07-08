@@ -1,0 +1,104 @@
+Faithful reconstruction of FUN_0000_fd79 (SOUND.CFG parser): thread the open CF, restore the [0x70]
+string-segment base on the keyword-table reads, and fix 16-bit word pointer scaling.
+
+fd79 opens SOUND.CFG (via fefb) and, on success, parses it against a keyword table held in the engine's
+far string segment (DGROUP:0x70 -> image para 0x2d74). Four Ghidra losses converged to a SIGSEGV (incl. the dropped SI template offset):
+ (a) FLAGS: the `jb fdd8` testing the open's CF became a dead `in_CF=0` local -> the parse block ran even
+     when the open failed. Threaded from the INT reg-file CF slot uRam000f0012.
+ (b) SEGMENT: `lods es:[si]` with ES = the [0x70] string segment lost its base -> `*(int*)0x212` host
+     deref. Rebased to STRSEG (linear 0x2d740) + SI; the `mov [bx],ah` store rebased to DGROUP:bx.
+ (c) SCALING: the word table was typed `int*` (4 bytes in the flat model) -> wrong reads and stride.
+     Read uint16_t, advance by 2.
+Loop logic and the DGROUP SB-config writes (0x4f4/0x4f6/0x4f8) and error-path service icalls are
+preserved verbatim. Classes: CF-flag threading + SS/[0x70] dynamic-segment scratch + pointer scaling.
+
+--- a/fist.c
++++ b/fist.c
+@@ -36658,47 +36658,49 @@
+ void __allregs FUN_0000_fd79(void)
+ 
+ {
+-  char *pcVar1;
+-  int *piVar2;
+-  int *piVar3;
+   int iVar4;
+-  undefined2 uVar5;
+-  int *piVar6;
+-  char *pcVar7;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_0000_fefb(0,0,0,0,0,0,0,0,0);
+-  uVar5 = DAT_1000_c070;
+-  if (!(bool)in_CF) {
+-    DAT_1000_c4f4 = 0x220;
+-    DAT_1000_c4f6 = 7;
+-    DAT_1000_c4f8 = 1;
+-    piVar6 = (int *)0x212;
+-    pcVar7 = (char *)&DAT_1000_c740;
+-    do {
+-      piVar2 = piVar6;
+-      piVar6 = piVar6 + 1;
+-      if ((undefined1 *)*piVar2 == (undefined1 *)0x0) {
+-        if (DAT_1000_c249 == 'N') {
+-          DAT_1000_c4f4 = 0;
++  /* PATCH 007: faithful reconstruction of the SOUND.CFG parser. Four decompile losses converge here:
++     (0) the template offset: asm `mov si,0x89` selects the "SOUND.CFG" template (STRSEG:0x89) for the
++         filename builder; the __allregs threading dropped it (fefb was called with SI defaulted to 0 ->
++         an empty filename). Pass it as fefb's param_5 (= SI, forwarded to FUN_1000_4c9a's source offset).
++     (a) CF: the `jb fdd8` after `call fefb` (branch on the open's CF) was rendered as a dead local
++         `in_CF=0`, so the parse block ran unconditionally. Threaded from the INT reg-file CF slot
++         uRam000f0012 (fefb's last INT 21h leaves it): open fail => error path.
++     (b) SEGMENT: the keyword-table reads `lods es:[si]` (ES = the [0x70] string segment) lost their ES
++         base -> `*(int*)0x212` host deref -> SIGSEGV. Rebased to STRSEG (image para 0x2d74, linear
++         0x2d740) + SI; the `mov [bx],ah` store rebased to DGROUP:bx.
++     (c) SCALING: the word table was typed `int*` (4 bytes in the flat model) -> wrong reads/stride.
++         Read uint16_t, advance by 2.
++     Asm (0000:fd79): mov es,[0x70]; mov si,0x89; call fefb; jb fdd8; set SB port/irq/dma; mov es,[0x70];
++       mov si,0x212; mov di,0x740; loop: lodsw; test/je end; mov bx,ax; mov cl,[di]; inc di; in: lodsw;
++       test/stc/je err; cmp al,cl/jne in; mov [bx],ah; skip: lodsw/jne; jmp loop; end: cmpb[0x249],'N'
++       /movw[0x4f4],0; lcall[0x64]; clc; ret. */
++  FUN_0000_fefb(0,0,0,0,0x89,0,0,0,0);                 /* mov si,0x89(SOUND.CFG); call fefb (open+read) */
++  {
++    unsigned char *tbl = g_mem + 0x2d740 + 0x212;      /* ES:SI = STRSEG:0x212 keyword table (words) */
++    unsigned char *buf = g_mem + 0x1c740;              /* DS:DI = DGROUP:0x740 SOUND.CFG content */
++    if ((unsigned char)uRam000f0012 == 0) {            /* CF==0: open succeeded -> parse */
++      DAT_1000_c4f4 = 0x220;
++      DAT_1000_c4f6 = 7;
++      DAT_1000_c4f8 = 1;
++      for (;;) {
++        unsigned dest = *(uint16_t *)tbl; tbl += 2;    /* word: DGROUP dest offset (0 = end of table) */
++        if (dest == 0) {
++          if (DAT_1000_c249 == 'N') {
++            DAT_1000_c4f4 = 0;
++          }
++          (*(code *)fist_icall_far((uint32_t)(DAT_1000_c064)))();
++          return;
+         }
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_c064)))();
+-        return;
++        unsigned char ch = *buf++;                     /* cl = byte from SOUND.CFG buffer */
++        do {
++          iVar4 = *(uint16_t *)tbl; tbl += 2;
++          if (iVar4 == 0) goto LAB_0000_fdd8;          /* stc; je fdd5/fdd8 (error) */
++        } while ((char)iVar4 != (char)ch);
++        g_mem[0x1c000 + (uint16_t)dest] = (char)((uint)iVar4 >> 8);   /* mov [DGROUP:bx],ah */
++        do { iVar4 = *(uint16_t *)tbl; tbl += 2; } while (iVar4 != 0);
+       }
+-      pcVar1 = pcVar7;
+-      pcVar7 = pcVar7 + 1;
+-      do {
+-        piVar3 = piVar6;
+-        piVar6 = piVar6 + 1;
+-        iVar4 = *piVar3;
+-        if (iVar4 == 0) goto LAB_0000_fdd8;
+-      } while ((char)iVar4 != *pcVar1);
+-      *(undefined1 *)*piVar2 = (char)((uint)iVar4 >> 8);
+-      do {
+-        piVar2 = piVar6;
+-        piVar6 = piVar6 + 1;
+-      } while (*piVar2 != 0);
+-    } while( true );
++    }
+   }
+ LAB_0000_fdd8:
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c05c)))();

@@ -1,0 +1,184 @@
+Reconstruct FUN_1000_3a14 (joystick calibration) and its callee FUN_1000_3ebf (SMC far-JMP-thunk
+linked-list insert) faithfully from asm. Class: folded do{}while(true) infinite-loop (3a14) +
+host-deref of a DGROUP near-ptr / far-ptr list (3ebf, same family as patch 012).
+
+FUN_1000_3a14 asm (base-0 0x13a14):
+  xor bx,bx; mov si,0x200; lcall [DGROUP:0x12]   ; BX=0 => far reloc-applier f842 bails (no-op)
+  movw [0x1e1e],0 ; movb [0x300],0
+  mov ax,[0x44e]; L: cmp [0x44e],ax; je L         ; wait one PIT tick (DGROUP:0x44e, incw at ISR 0x131c4)
+  mov bx,[0x44e]; xor cx,cx; mov dx,0x201
+  L2: in al,dx; inc cx; je done; cmp [0x44e],bx; je L2
+  done: dec cx; mov [0x1e1a],cx                    ; count of joystick-port reads within one tick
+  mov al,8;  lcall [0x2d4]                          ; device method (al=8)
+  mov al,0xff; lcall [0x2d8]                        ; device method (al=0xff)
+  mov bx,0x1e20; L3: movw [bx],0xffff; add bx,0xb; cmp bx,0x1e78; jb L3   ; init the 8x 11-byte table
+  mov cx,cs; mov dx,0x4c19; mov bx,0x2ec; call 3ebf(cs,0x4c19,0x2ec)      ; register the poll thunk
+  movb [0x301],0xff; clc; lret
+
+Ghidra saw the tick-spin (mov ax,[0x44e]; cmp [0x44e],ax; je) as an infinite loop and folded the
+ENTIRE body to `(*DAT_c012)(); do{}while(true);` (six "Removing unreachable block" warnings). The
+spin is the same volatile-ISR-flag class as patch 017: DGROUP:0x44e is the PIT tick counter the
+INT-8 ISR advances (asm 0x131c4 `incw [0x44e]`). Reconstruct both spins as genuine volatile re-reads
+that cooperatively pump the timer (fist_timer_pump). The 0x201 read loop counts reads-per-tick as a
+CPU-speed baseline for later polling; with NO joystick present port 0x201 reads the no-joystick value
+(0xf0 -- buttons high, axis one-shots low; fist_vga.c), which this loop does not inspect -- it
+terminates when the tick advances (in() pumps the timer) or cx wraps (timeout). So calibration BAILS
+(returns) instead of waiting forever, matching the original's no-joystick path.
+
+FUN_1000_3ebf asm (base-0 0x13ebf): inserts a far-JMP-thunk node into a linked list.
+  param_1 (cx) = new node SEGMENT; param_2 (dx) = new node OFFSET;
+  param_3 (bx) = NEAR offset into DGROUP of the list-head far pointer.
+  head far-ptr at DGROUP:param_3 -> node; nodes are 5-byte thunks (byte[0]=0xeb jmp opcode,
+  bytes[3..4]=link off, bytes[5..6]=link seg). If the head node is a thunk, walk to the last thunk
+  and insert the new node after it (new node inherits the old link); else head-insert.
+Ghidra host-deref'd param_3 (0x2ec) and every far link as host pointers (-> SIGSEGV). Reconstructed
+memory-faithfully via g_mem+(seg<<4)+off. The thunk nodes live in the SMC scratch region and are
+inert for our C control flow (we never execute g_mem as code) but the list is kept byte-exact.
+--- a/fist.c
++++ b/fist.c
+@@ -44492,9 +44492,57 @@
+ void __allregs FUN_1000_3a14(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
+-  do {
+-  } while( true );
++  int unaff_CS = 0x1000;
++
++  /* 13a14: xor bx,bx; mov si,0x200; lcall [DGROUP:0x12] -- BX=0 => reloc-applier f842 bails (no-op). */
++
++  *(uint16_t *)(g_mem + 0x1de1e) = 0;   /* 13a1d movw [0x1e1e],0  */
++  g_mem[0x1c300] = 0;                   /* 13a23 movb [0x300],0   */
++
++  /* 13a28: mov ax,[0x44e]; L: cmp [0x44e],ax; je L -- wait one PIT tick. DGROUP:0x44e is the tick
++   * counter the INT-8 ISR advances (asm 0x131c4 incw [0x44e]); pump the cooperative timer (patch 017). */
++  {
++    uint16_t t = *(volatile uint16_t *)(g_mem + 0x1c44e);
++    while (t == *(volatile uint16_t *)(g_mem + 0x1c44e)) fist_timer_pump();
++  }
++
++  /* 13a31: mov bx,[0x44e]; xor cx,cx; mov dx,0x201
++   * L2: in al,dx; inc cx; je done; cmp [0x44e],bx; je L2; done: dec cx; mov [0x1e1a],cx
++   * Count joystick-port (0x201) reads within one PIT tick = CPU-speed baseline. No joystick =>
++   * 0x201 reads 0xf0 (no-joystick, fist_vga.c); the value is not inspected here. in() pumps the
++   * timer, so the tick advances and the loop exits (or cx wraps to 0 after 65536 reads = timeout). */
++  {
++    uint16_t bx_w = *(volatile uint16_t *)(g_mem + 0x1c44e);
++    uint16_t cx = 0;
++    for (;;) {
++      (void)in(0x201);
++      cx++;
++      if (cx == 0) break;                                        /* je done: overflow timeout */
++      if (*(volatile uint16_t *)(g_mem + 0x1c44e) != bx_w) break; /* cmp [0x44e],bx; je L2 */
++    }
++    cx = (uint16_t)(cx - 1);                                      /* dec cx */
++    *(uint16_t *)(g_mem + 0x1de1a) = cx;                          /* mov [0x1e1a],cx */
++  }
++
++  /* 13a49: mov al,8; lcall [0x2d4]   13a4f: mov al,0xff; lcall [0x2d8] -- device methods. */
++  (*(code *)fist_icall_far(*(uint32_t *)(g_mem + 0x1c2d4)))();
++  (*(code *)fist_icall_far(*(uint32_t *)(g_mem + 0x1c2d8)))();
++
++  /* 13a55: mov bx,0x1e20; L3: movw [bx],0xffff; add bx,0xb; cmp bx,0x1e78; jb L3 */
++  {
++    uint16_t bx = 0x1e20;
++    do {
++      *(uint16_t *)(g_mem + 0x1c000 + bx) = 0xffff;
++      bx = (uint16_t)(bx + 0xb);
++    } while (bx < 0x1e78);
++  }
++
++  /* 13a65: mov cx,cs; mov dx,0x4c19; mov bx,0x2ec; call 3ebf(cs,0x4c19,0x2ec) */
++  FUN_1000_3ebf(unaff_CS, 0x4c19, (int *)0x2ec);
++
++  /* 13a71: movb [0x301],0xff; clc; lret */
++  g_mem[0x1c301] = 0xff;
++  return;
+ }
+ 
+ 
+@@ -44906,46 +44954,46 @@
+ void __allregs FUN_1000_3ebf(int param_1,int param_2,int *param_3)
+ 
+ {
+-  int iVar1;
+-  char *pcVar2;
+-  char *pcVar3;
+-  undefined2 uVar4;
+-  char *pcVar5;
+-  undefined2 uVar6;
+-  
+-  pcVar2 = *(char **)param_3;
+-  pcVar3 = (char *)pcVar2;
+-  uVar4 = (int)((ulong)pcVar2 >> 0x10);
+-  if (*pcVar2 == -0x15) {
+-    do {
+-      uVar6 = uVar4;
+-      pcVar5 = pcVar3;
+-      pcVar2 = *(char **)(pcVar5 + 3);
+-      pcVar3 = (char *)pcVar2;
+-      uVar4 = (int)((ulong)pcVar2 >> 0x10);
+-    } while (*pcVar2 == -0x15);
+-    LOCK();
+-    iVar1 = *(int *)(pcVar5 + 3);
+-    *(int *)(pcVar5 + 3) = param_2;
+-    UNLOCK();
+-    *(int *)(param_2 + 3) = iVar1;
+-    LOCK();
+-    iVar1 = *(int *)(pcVar5 + 5);
+-    *(int *)(pcVar5 + 5) = param_1;
+-    UNLOCK();
+-    *(int *)(param_2 + 5) = iVar1;
++  /* asm 0x13ebf: insert a far-JMP-thunk node into a linked list (SMC family, cf. patch 012).
++   * param_1 (cx) = new node SEGMENT; param_2 (dx) = new node OFFSET;
++   * param_3 (bx) = NEAR offset into DGROUP of the list-head far pointer.
++   * Nodes are 5-byte thunks: byte[0]=0xeb jmp opcode, bytes[3..4]=link off, bytes[5..6]=link seg.
++   * Ghidra host-deref'd param_3 (0x2ec) and every far link (-> SIGSEGV); rebuild via g_mem. */
++  uint16_t head_ptr = (uint16_t)(uintptr_t)param_3;        /* DGROUP near offset of the list head */
++  uint16_t new_seg  = (uint16_t)param_1;
++  uint16_t new_off  = (uint16_t)param_2;
++  uint8_t *newnode  = g_mem + ((uint32_t)new_seg << 4) + new_off;
++  uint16_t node_off = *(uint16_t *)(g_mem + 0x1c000 + head_ptr);
++  uint16_t node_seg = *(uint16_t *)(g_mem + 0x1c000 + head_ptr + 2);
++  uint8_t *node     = g_mem + ((uint32_t)node_seg << 4) + node_off;
++
++  if (*node == 0xeb) {                                     /* 13ec3: head is a jmp thunk -> walk */
++    uint16_t cur_off = node_off, cur_seg = node_seg;
++    uint8_t *last;
++    for (;;) {
++      last = g_mem + ((uint32_t)cur_seg << 4) + cur_off;
++      uint16_t nxt_off = *(uint16_t *)(last + 3);          /* 13ecd: les bx,es:[bx+3] */
++      uint16_t nxt_seg = *(uint16_t *)(last + 5);
++      uint8_t *nxt = g_mem + ((uint32_t)nxt_seg << 4) + nxt_off;
++      if (*nxt != 0xeb) break;                             /* 13ed1: cmpb es:[bx],0xeb; je */
++      cur_off = nxt_off; cur_seg = nxt_seg;
++    }
++    /* 13ee1..13ef0: insert newnode after 'last' (newnode inherits last's old link) */
++    { uint16_t old_off = *(uint16_t *)(last + 3);
++      *(uint16_t *)(last + 3) = new_off;
++      *(uint16_t *)(newnode + 3) = old_off;
++      uint16_t old_seg = *(uint16_t *)(last + 5);
++      *(uint16_t *)(last + 5) = new_seg;
++      *(uint16_t *)(newnode + 5) = old_seg; }
+     return;
+   }
+-  LOCK();
+-  iVar1 = *param_3;
+-  *param_3 = param_2;
+-  UNLOCK();
+-  *(int *)(param_2 + 3) = iVar1;
+-  LOCK();
+-  iVar1 = param_3[1];
+-  param_3[1] = param_1;
+-  UNLOCK();
+-  *(int *)(param_2 + 5) = iVar1;
++  /* 13ef6: head-insert -- DGROUP head-ptr -> newnode; newnode.link = old head */
++  { uint16_t old_off = *(uint16_t *)(g_mem + 0x1c000 + head_ptr);
++    *(uint16_t *)(g_mem + 0x1c000 + head_ptr) = new_off;
++    *(uint16_t *)(newnode + 3) = old_off;
++    uint16_t old_seg = *(uint16_t *)(g_mem + 0x1c000 + head_ptr + 2);
++    *(uint16_t *)(g_mem + 0x1c000 + head_ptr + 2) = new_seg;
++    *(uint16_t *)(newnode + 5) = old_seg; }
+   return;
+ }
+ 

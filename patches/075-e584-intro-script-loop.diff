@@ -1,0 +1,123 @@
+FUN_0000_e584 intro animation-SCRIPT interpreter (frame loop): STRSEG base-loss + dropped 38bc CF.
+
+Patch 071 reconstructed only e584's header (up to the FUN_1000_38cc frame-sync).  The frame loop after it
+walks the intro animation script -- a table of 6-byte records at ES:[b6ec] where ES = STRSEG = the far
+resource segment word[DGROUP:0x70] (0x2d74).  Ghidra dropped ES=STRSEG (so *b6ec and the key-event record
+deref bare offsets -> SIGSEGV at build/fist.c:33951), pointer-scaled the cursor advance (uint* +3 = +12
+bytes vs the asm's +6), and dropped FUN_1000_38bc's carry (rendering its key-record read as always-taken via
+a hardcoded bVar11=false, which then deref'd a stale far pointer).  Reconstruct faithfully per asm
+0xe60b..0xe6db: base the record reads at g_mem+(STRSEG<<4), advance b6ec by 6 bytes, and gate the key-event
+block on the frame-poll carry g_fist_cf (threaded through FUN_1000_35a7 / FUN_1000_38bc, patches 073/074).
+
+Each frame command is posted to the intro TASK via FUN_0000_e2c2 (which writes EBX -> task+0x3f2, sets the
+extender service selector aa10 = 0x64, and calls the extender gate FUN_0000_e339).  The extender gate
+currently no-ops task-control ops while task[0]==0, so the intro frames are POSTED but not yet rendered --
+the actual per-frame render is the extender TASK-EXECUTION service (op 0x64), the next frontier to pixels.
+With this patch the intro loop no longer crashes: it posts its frame commands and advances (the empty-queue
+poll returns CF=1, so 38bc returns at once and the frame-delay spin is INT-8-tick bounded), letting e584
+run to completion and execution proceed past the intro.
+--- a/fist.c
++++ b/fist.c
+@@ -33942,53 +33942,67 @@
+       FUN_0000_e2c2(puVar6);
+       DAT_1000_d8de = DAT_2000_b6bc;
+       return;
+     }
+     DAT_2000_b6e6 = DAT_1000_c452;
+     iVar5 = FUN_0000_d97e(puVar6);
+     if (iVar5 != 0) goto LAB_0000_e681;
+     uVar8 = (undefined2)((ulong)puVar6 >> 0x10);
+-    puVar6 = (uint *)CONCAT22(uVar8,DAT_2000_b6ec);
+-    if (*DAT_2000_b6ec <= DAT_2000_b6e4) {
+-      puVar6 = (uint *)CONCAT22(uVar8,(uint *)(uint)*(byte *)((int)DAT_2000_b6ec + 5));
+-      FUN_0000_e2c2(puVar6);
+-      DAT_2000_b6ec = DAT_2000_b6ec + 3;
+-    }
+-    bVar11 = false;
+-    if (DAT_2000_b6e8 == '\0') {
+-      FUN_1000_38bc(0x80a);
+-      if (!bVar11) {
+-        uVar3 = ((uint *)puVar6)[1];
+-        if (((uVar3 == 1) || (uVar3 == 0x39)) || (uVar3 == 0x1c)) {
+-          DAT_2000_b771 = 0xff;
+-          goto LAB_0000_e681;
+-        }
+-        if (uVar3 == 0x3031) goto LAB_0000_e681;
++    {
++      /* PATCH 075: intro animation-SCRIPT interpreter (asm 0xe60b..0xe6db).  ES=STRSEG =
++       * word[DGROUP:0x70] (the 0x2d74 far resource segment); the 6-byte script record lives at
++       * es:[b6ec].  Ghidra dropped ES=STRSEG (so *b6ec and the key record deref bare offsets ->
++       * SIGSEGV), pointer-scaled the +6 cursor advance (uint* +3 = +12 vs the asm's +6 bytes), and
++       * dropped FUN_1000_38bc's CF (rendering its key-record read as always-taken via a hardcoded
++       * bVar11=false).  Reconstruct faithfully: base the record reads at g_mem+(STRSEG<<4), advance
++       * b6ec by 6 bytes, and gate the key-event block on the poll CF (g_fist_cf, threaded through
++       * 35a7/38bc, patches 073/074).  On the empty-queue intro path 38bc returns CF=1, so the key
++       * block is faithfully skipped (no queued event).  The frame command is posted to the intro TASK
++       * via FUN_0000_e2c2 (EBX -> task+0x3f2) -> extender service op 0x64 -- currently a no-op while
++       * task[0]==0; the actual per-frame render is the extender TASK-EXECUTION service (frontier). */
++      extern unsigned char g_fist_cf;
++      uint8_t  *R   = g_mem + ((uint32_t)(*(uint16_t *)(g_mem + 0x1c070)) << 4); /* ES = STRSEG */
++      uint16_t  cur = (uint16_t)(uintptr_t)DAT_2000_b6ec;
++      uint16_t  evt;
++      if ((uint16_t)DAT_2000_b6e4 >= *(uint16_t *)(R + cur)) {                   /* e616 draw when b6e4>=word[cur] */
++        FUN_0000_e2c2((uint32_t)*(uint8_t *)(R + (uint16_t)(cur + 5)));          /* e62a/e634 EBX=byte[cur+5] */
++        DAT_2000_b6ec = (uint *)(uintptr_t)(uint16_t)(cur + 6);                  /* e637 [b6ec] += 6 bytes */
+       }
+-      puVar6 = (uint *)CONCAT22((int)((ulong)puVar6 >> 0x10),DAT_2000_b6e6);
+-      do {
+-      fist_timer_pump();  /* PATCH 072: pump cooperative INT-8 ISR so c452 advances (ISR-maintained tick wait) */
+-      } while ((uint)((int)DAT_1000_c452 - (int)DAT_2000_b6e6) < DAT_2000_b6e0);
+-    }
+-    else {
+-      do {
+-        do {
+-          bVar12 = bVar11;
+-          FUN_1000_38bc(0x800);
+-          bVar11 = true;
+-        } while (bVar12);
+-        uVar3 = ((uint *)puVar6)[1];
+-        if (uVar3 == 2) {
+-          DAT_2000_b6e8 = '\x01';
+-          goto LAB_0000_e675;
++      if (DAT_2000_b6e8 == '\0') {
++        FUN_1000_38bc(0x80a);                                                   /* e648 key/event poll */
++        if (g_fist_cf == 0) {                                                   /* e64d jb: skip when CF=1 */
++          evt = *(uint16_t *)(g_mem + 0x1c000 + 0x18e2);                         /* poll-left active event record (=head+2) */
++          uVar3 = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(evt + 2));          /* e64f ax = word[evt+2] */
++          if ((uVar3 == 1) || (uVar3 == 0x39) || (uVar3 == 0x1c)) {
++            DAT_2000_b771 = 0xff;
++            goto LAB_0000_e681;
++          }
++          if (uVar3 == 0x3031) goto LAB_0000_e681;
+         }
+-        bVar11 = uVar3 < 0x39;
+-      } while (uVar3 != 0x39);
+-      DAT_2000_b6e8 = '\0';
++        puVar6 = (uint *)CONCAT22(uVar8,(undefined2)DAT_2000_b6e6);              /* e666 (feeds next d97e) */
++        do {
++          fist_timer_pump();  /* PATCH 072/075: pump cooperative INT-8 ISR so c452 advances */
++        } while ((uint)((int)DAT_1000_c452 - (int)DAT_2000_b6e6) < DAT_2000_b6e0);
++      }
++      else {
++        do {                                                                    /* e6c4 pause: spin for a key event */
++          do {
++            FUN_1000_38bc(0x800);
++            fist_timer_pump();
++          } while (g_fist_cf != 0);
++          evt = *(uint16_t *)(g_mem + 0x1c000 + 0x18e2);
++          uVar3 = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(evt + 2));          /* e6ce ax = word[evt+2] */
++          if (uVar3 == 2) {
++            DAT_2000_b6e8 = '\x01';
++            goto LAB_0000_e675;
++          }
++        } while (uVar3 != 0x39);                                                /* e6d6 */
++        DAT_2000_b6e8 = '\0';
++      }
+     }
+ LAB_0000_e675:
+     DAT_2000_b6e4 = DAT_2000_b6e4 + 1;
+   } while( true );
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_e6b1) @ 0000:e6b1 ===== */

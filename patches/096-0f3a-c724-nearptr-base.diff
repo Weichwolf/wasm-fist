@@ -1,0 +1,39 @@
+MGAVIDEO FUN_0000_0f3a: fix the DGROUP near-pointer base-loss + the dropped ==0xA000 branch.
+
+0f3a is a display-list screen-node handler reached in the menu paint (engine e9f0 -> e38a -> 0f3a).  It
+checks whether the node's target descriptor is the on-screen VGA framebuffer (its first word == 0xA000)
+and if so runs a flush tail.  Two Ghidra faults: (a) the DGROUP near pointer at [0x724] was typed
+`_DAT_1000_c724 = *(int**)(g_mem+0x1c724)` and dereferenced as a HOST pointer (the recurring near-offset-
+as-host-pointer class, cf. patches 056/057/088/089) -> wild deref/SIGSEGV; the asm is `mov di,ds:0x724 ;
+cmp WORD PTR [di],0xA000` i.e. di is a DGROUP near offset and [di] = word[DGROUP:di].  (b) Ghidra marked
+FUN_0000_2d6d "Subroutine does not return", so it dropped the entire ==0xA000 tail (the 0x794/0x796
+stores + FUN_0000_0f62 + FUN_0000_2e12); the asm shows 2d6d returns and execution continues.
+Reconstructed byte-exact from the asm.  Asm-verified MGAVIDEO 0x0f3a..0x0f5f.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -2816,11 +2816,21 @@
+ void __allregs FUN_0000_0f3a(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  if (*_DAT_1000_c724 == -0x6000) {
+-                    /* WARNING: Subroutine does not return */
+-    FUN_0000_2d6d(param_2);
++  /* PATCH 096 (asm 0xf3a..0xf5f): Ghidra base-lost the DGROUP near-pointer at [0x724] (typed
++     _DAT_1000_c724 as a host int** and dereferenced it) and wrongly marked FUN_0000_2d6d "does not
++     return", dropping the whole ==0xa000 branch tail.  di = word[DGROUP:0x724] (a DGROUP near offset);
++     [di] = word[DGROUP:di].  If it == 0xa000 (the on-screen VGA-framebuffer descriptor) run the flush
++     tail (0x794=0x7c8, 0x796=0x140, f62, 2e12); else just FUN_0000_0f62. */
++  uint16_t di = *(uint16_t *)(g_mem + 0x1c724);          /* mov di,ds:0x724 */
++  if (*(uint16_t *)(g_mem + 0x1c000 + di) == 0xa000) {   /* cmp WORD PTR [di],0xa000 */
++    FUN_0000_2d6d(param_2);                              /* call 0x2d6d (RETURNS -- Ghidra was wrong) */
++    *(uint16_t *)(g_mem + 0x1c794) = 0x7c8;              /* mov ds:0x794,0x7c8 */
++    *(uint16_t *)(g_mem + 0x1c796) = 0x140;              /* mov ds:0x796,0x140 */
++    FUN_0000_0f62(param_1,param_2);                      /* call 0xf62 */
++    FUN_0000_2e12();                                     /* call 0x2e12 */
++  } else {
++    FUN_0000_0f62(param_1,param_2);                      /* f5c: call 0xf62 */
+   }
+-  FUN_0000_0f62(param_1,param_2);
+   return;
+ }
+ 

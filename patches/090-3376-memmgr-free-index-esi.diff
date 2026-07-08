@@ -1,0 +1,29 @@
+MEMMGR free FUN_0000_3376 (KDV close via 6f17 at intro EOF): use 3661's found block INDEX (ESI,
+published to [0x2f60]) as the compaction start index, not the __allregs-dropped caller param -> the
+close ran the block-shift on the WRONG block and walked the tables out of bounds -> SIGSEGV.
+
+3376 frees the block whose pointer slot is *param_1, then compacts the blocks after it (identical shift
+loop to the realloc/compaction 3439/345c that patches 080/082/083 fixed).  asm (image 0x3376):
+    3388: call 3661            ; eax=freed base, ESI=block index (patch 082: also -> [0x2f60])
+    339d: mov ecx,[0x2f54]     ; block count
+    33a3: sub ecx,esi          ; blocks-to-shift = count - INDEX
+    33ab: mov ebx,esi          ; ebx = INDEX (the loop's start index)
+    ...   [ebx*4+0x28ac/0x2bcc/0x2a3c/0x2d5c], [ebx+0x2eec] ...  ; per-block tables indexed by ebx
+The __allregs model dropped ESI, so Ghidra threaded the caller's param_2 (== 0 for the KDV buffers) as
+the block index.  Freeing e.g. the KDV chunk buffer (a high block) actually compacted from block 0 ->
+tables walked past the live range -> crash.  Fix (faithful to `mov ebx,esi`, same as patch 082): read
+the index 3661 publishes to [0x2f60] right after the call and use it as param_2.  The per-table byte/
+dword scaling (patches 080/081) and the count-0 guard (`&& iVar3 != 0`, patch 083 class) are already
+correct in the pristine 3376; only the index source was wrong.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -3549,6 +3549,9 @@
+   DAT_0000_2f5c = param_3;
+   if (*param_1 != 0) {
+     DAT_0000_2f50 = (undefined4 *)FUN_0000_3661(param_1);
++    param_2 = DAT_0000_2f60;   /* PATCH 090: block index from 3661 (ESI), not the passed param
++                                * (asm 0x33ab `mov ebx,esi`) -- same __allregs-dropped-ESI class as
++                                * patch 082's 345c/3439; 3661 publishes its found index to [0x2f60]. */
+     *param_1 = 0;
+     DAT_0000_2f54 = DAT_0000_2f54 - 1;
+     iVar3 = DAT_0000_2f54 - param_2;

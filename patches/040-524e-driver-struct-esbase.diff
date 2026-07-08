@@ -1,0 +1,69 @@
+FUN_1000_524e (engine 0x5200 driver-processing): dynamic driver-struct + ES segment base loss.
+
+Reached from FUN_1000_5228 immediately AFTER the video driver init + mode-set complete (this is the
+"0x5200 cascade" the docs root-caused as the video-DRIVER dispatch surface -- it null-derefed only because
+the driver never loaded; now it does).  asm 0x1524e: bx=[DGROUP:0x736] = the driver-object struct near
+offset (populated by the driver init); ax = round(param_1) clamped to <8 else 0 (an index); `xchg [bx+4]`
+(old value -> return); es=[DGROUP:0x71a] (a driver template-buffer segment); si=word es:[idx]; then read
+bytes es:si into struct[8] (byte), [0xa],[0xc],[0x12],[0x14] (words; p[0],p[2],p[3],p[4],p[5] -- p[1] is
+skipped by an `inc si`); struct[6]=advanced si; struct[0xe]=struct[0x10]=0; then `lcall [DGROUP:0x680]`.
+Ghidra dropped the DGROUP base on the struct (dereferenced the VALUE at [0x736] as a host address) and the
+es=[0x71a] segment (the index/data table dereferenced as a host pointer) -> SIGSEGV, and mis-typed the word
+fields as uint (4-byte).  Rebase the struct to g_mem+DGROUP+[0x736] and both lookups to the DGROUP:0x71a ES
+segment with 16-bit stores.  Asm-verified base-0 0x1524e..0x152a2.
+--- a/fist.c
++++ b/fist.c
+@@ -47461,23 +47461,36 @@
+   int iVar5;
+   undefined2 *puVar6;
+   
+-  iVar5 = DAT_1000_c736;
+-  uVar3 = (param_1 >> 1 | -(uint)((param_1 & 1) != 0)) * 2;
+-  puVar6 = (undefined2 *)(uVar3 & -(uint)(uVar3 < 8));
+-  LOCK();
+-  uVar1 = *(undefined2 *)(DAT_1000_c736 + 4);
+-  *(undefined2 *)(DAT_1000_c736 + 4) = puVar6;
+-  uVar4 = DAT_1000_c71a;
+-  UNLOCK();
+-  puVar2 = (undefined1 *)*puVar6;
+-  *(undefined1 *)(iVar5 + 8) = *puVar2;
+-  *(uint *)(iVar5 + 10) = (uint)(byte)puVar2[2];
+-  *(uint *)(iVar5 + 0xc) = (uint)(byte)puVar2[3];
+-  *(uint *)(iVar5 + 0x12) = (uint)(byte)puVar2[4];
+-  *(uint *)(iVar5 + 0x14) = (uint)(byte)puVar2[5];
+-  *(int *)(iVar5 + 6) = (int)(puVar2 + 6);
+-  *(undefined2 *)(iVar5 + 0xe) = 0;
+-  *(undefined2 *)(iVar5 + 0x10) = 0;
++  /* PATCH 040: engine 0x5200 driver-processing -- dynamic-struct/ES base loss (docs/stage1.md).
++   * asm 0x1524e: bx=[DGROUP:0x736] (driver-object struct NEAR offset, populated by the driver init);
++   * ax = round(param_1) clamped to <8 else 0 = the index; xchg [bx+4] (old->return); es=[DGROUP:0x71a]
++   * (a segment, driver template buffer); si=es:[idx] (word); then read bytes es:si -> struct
++   * [8](byte),[0xa],[0xc],[0x12],[0x14] (words, p[0],p[2..5], p[1] skipped by `inc si`); struct[6]=
++   * advanced si; struct[0xe]=struct[0x10]=0; then lcall [DGROUP:0x680].  Ghidra dropped the DGROUP base
++   * on the struct (deref'd [0x736]'s VALUE as a host address) and the ES=[0x71a] segment (index table
++   * deref as host) -> SIGSEGV, and typed the word fields as uint (4-byte).  Rebase struct to
++   * g_mem+DGROUP+[0x736] and the lookups to the DGROUP:0x71a ES segment, 16-bit stores. */
++  uint16_t structoff = *(uint16_t *)(g_mem + 0x1c736);
++  uint8_t *st = g_mem + 0x1c000 + structoff;
++  uint16_t a = (uint16_t)(param_1 >> 1);
++  if (param_1 & 1) a = 0xffff;
++  a = (uint16_t)(a * 2);
++  uint16_t idx = (a < 8) ? a : 0;
++  uint16_t esseg = *(uint16_t *)(g_mem + 0x1c71a);
++  uint32_t esbase = (uint32_t)esseg << 4;
++  uVar1 = *(uint16_t *)(st + 4);
++  *(uint16_t *)(st + 4) = idx;
++  uint16_t si0 = *(uint16_t *)(g_mem + esbase + idx);
++  uint8_t *pv = g_mem + esbase + si0;
++  st[8] = pv[0];
++  *(uint16_t *)(st + 0xa) = pv[2];
++  *(uint16_t *)(st + 0xc) = pv[3];
++  *(uint16_t *)(st + 0x12) = pv[4];
++  *(uint16_t *)(st + 0x14) = pv[5];
++  *(uint16_t *)(st + 6) = (uint16_t)(si0 + 6);
++  *(uint16_t *)(st + 0xe) = 0;
++  *(uint16_t *)(st + 0x10) = 0;
++  (void)uVar3; (void)puVar6; (void)uVar4; (void)puVar2; (void)iVar5;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c680)))();
+   return uVar1;
+ }

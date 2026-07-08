@@ -1,0 +1,36 @@
+Fix FUN_0000_f738 (CRT DGROUP/BSS clear) + install the loader DGROUP service table.
+
+Re-base the segment-dropped clear pointer to DGROUP (g_mem+0x1c000), then re-install the DGROUP
+service-vector table that the clear zeroes (loader-relocated far-ptrs into seg 0xf69; oracle-
+confirmed, native_main fist_install_dgroup). See inline PATCH 001 comments.
+
+--- a/fist.c	2026-07-07 23:40:03.449500942 +0200
++++ b/fist.c	2026-07-07 23:40:03.451543341 +0200
+@@ -36077,7 +36077,13 @@
+   int iVar2;
+   undefined2 *puVar3;
+   
+-  puVar3 = (undefined2 *)0x0;
++  /* PATCH 001: FUN_0000_f738 = the CRT DGROUP/BSS clear + service-table setup. Asm:
++       push [ds:0x68]; push ds; pop es; xor di,di; mov cx,0xb57; rep stosw; pop [ds:0x68]
++     i.e. it zero-fills 0xb57 words at ES:DI with ES=DS=DGROUP (linear 0x1c000), PRESERVING the
++     PSP-seg word at DGROUP:0x68 across the clear. Ghidra dropped the ES/DI segment base, emitting a
++     null-based `puVar3 = 0` that in the flat g_mem model writes host address 0 (the image entry) ->
++     corruption. Re-base to the DGROUP linear address inside g_mem. */
++  puVar3 = (undefined2 *)(g_mem + 0x1c000);
+   for (iVar2 = 0xb57; iVar2 != 0; iVar2 = iVar2 + -1) {
+     puVar1 = puVar3;
+     puVar3 = puVar3 + 1;
+@@ -36090,6 +36096,12 @@
+   FUN_0000_f842(0,param_2,0x38,puVar3);
+   DAT_1000_d636 = 0xbf0c;
+   DAT_1000_d638 = 0xf69;
++  /* PATCH 001 (cont.): the BSS clear above zeroed DGROUP:0x0a..0x36 -- the engine's service-dispatch
++     table of relocated far-ptrs into the CRT service segment (runtime seg load_seg+0xf69). Those are
++     established by the DOS loader (the load_seg-relative segment is not engine-computable) and are
++     LIVE at runtime (oracle: DGROUP:0x12 = 0xf69:0x1b2 -> FUN_0000_f842). Re-install them here, the
++     loader role, so `call far [DGROUP:0xNN]` resolves instead of trapping to linear 0. */
++  fist_install_dgroup();
+   return;
+ }
+ 

@@ -1,0 +1,24 @@
+PATCH 118: read the FULL screen resource -- fix the 16-bit sign test in the loader read loop FUN_1000_2593.
+
+The resource read loop (asm 0x125ad..0x125d0) reads the file in 0x8000-byte chunks into ES:0, advancing
+ES by 0x800 paragraphs per chunk, and loops while the chunk was full:
+    int 21h AH=3F (read CX=0x8000) ; add 0x800,[2b62] ; or ax,ax ; js <loop>   (AX = bytes read)
+`or ax,ax; js` tests the 16-bit AX sign: a full 0x8000 read leaves AX=0x8000 (bit15 set => negative =>
+loop again); a short final read (< 0x8000) clears bit15 => exit.  Ghidra rendered the back-edge as
+`(int)uRam000f0000 < 0`, but uRam000f0000 is undefined2 (16-bit) so the `(int)` cast ZERO-extends 0x8000
+to +32768 -> the condition is false after the FIRST chunk -> only 32768 of MAINMENU.MRL's 53096 bytes were
+read.  The PackBits image was therefore truncated to ~130 of 200 rows (the bottom foreground tank + lower
+terrain were left black; render nonzero 40311/64000).  Sign-extend the 16-bit value ((short)) so the loop
+reads every chunk: MAINMENU.MRL now reads 32768 + 20328 = 53096 bytes and 0340 paints the full 320x200
+scene (nonzero 61357/64000, all 200 rows).  Asm-verified 0x125ad..0x125d0.
+--- a/fist.c
++++ b/fist.c
+@@ -42478,7 +42478,7 @@
+       in_PF = (POPCOUNT(uRam000f0000 & 0xff) & 1U) == 0;
+       in_SF = 1;
+       uVar1 = DAT_1000_2b62 + 0x800;
+-    } while ((int)uRam000f0000 < 0);
++    } while ((short)uRam000f0000 < 0);
+     DAT_1000_2b60 = uRam000f0000;
+     in_OF = SBORROW2(DAT_1000_2b62 + 0x800,0x800);
+     in_SF = (int)DAT_1000_2b62 < 0;

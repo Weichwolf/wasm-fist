@@ -1,0 +1,39 @@
+patch 022 -- FUN_1000_4b16: install the driver-overlay stream/vtable DGROUP section (BLOCKER #1 leg a).
+
+The engine wires its DGROUP indirect-call VECTOR TABLE from an in-image relocation table (seg 0x3352:0)
+in incremental sections, each applied by `mov si,<off>; call far [DGROUP:0x0a|0x12]` (near f7ef / far
+f842) when the owning subsystem initialises. Ghidra dropped the x86 string-op segment bases in the C
+f7ef/f842 (DS=table-seg, ES=DGROUP) AND the SI arg of the indirect __allregs service calls, so the
+sections never landed and the driver-filename BUILDER slot DGROUP:0x31a stayed 0 (the `call [ds:0x31a]`
+in FUN_1000_5177/515e trapped to linear 0 -> uninitialised overlay filename). 4b16 runs just before the
+MGAVIDEO/SOUNDDVR EXEC-load; reconstruct its two installs (si=0x258 near + si=0x274 far, incl. the
+builder 0x31a = 0xf69:0x560a = 4c9a) faithfully via the shim helper fist_apply_reloc_section() (applies
+the game's own reloc data; base-0 => identity). With this + patch 021 the AH=4B filename is correct and
+the overlay loads + dispatches. Asm 0x14b16.
+--- a/fist.c
++++ b/fist.c
+@@ -45902,9 +45902,24 @@
+ void __allregs FUN_1000_4b16(void)
+ 
+ {
++  /* patch 022: 4b16 installs the stream/overlay method-vector section just before the driver load:
++     `mov si,0x258; call [ds:0x0a]` (near, f7ef -> DGROUP:0x306..0x310) and
++     `mov si,0x274; call [ds:0x12]` (far,  f842 -> DGROUP:0x312..0x33e, incl. the driver-filename
++     BUILDER DGROUP:0x31a = 0xf69:0x560a = FUN_1000_4c9a). The engine's f7ef/f842 are inert (Ghidra
++     dropped their x86 string-op segment bases) and SI was dropped by the indirect __allregs service
++     calls; install faithfully here from the game's own relocation table (seg 0x3352:si; base-0 =>
++     identity). This makes DGROUP:0x31a resolve to the real builder so the AH=4B overlay filename is
++     correct ("..\MGAVIDEO.DVR" / "..\SOUNDDVR.DVR"). NOTE: the sibling device-method section
++     (06bc, si=0xec: DGROUP:0x78..0xd0 incl. 0xcc->182a / 0xd0->184b, the driver-struct allocator that
++     supplies the load SEGMENT) is deliberately NOT installed yet -- those method vectors are invoked
++     through indirect __allregs calls that still drop their AX/BX/CX register args, so 182a/184b run on
++     garbage (a base-loss + multi-arg-thread cascade = BLOCKER #1 leg (b), the next work item). */
++  extern int fist_apply_reloc_section(unsigned short,int);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c02e)))();
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00a)))();
++  fist_apply_reloc_section(0x258,0);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
++  fist_apply_reloc_section(0x274,1);
+   return;
+ }
+ 

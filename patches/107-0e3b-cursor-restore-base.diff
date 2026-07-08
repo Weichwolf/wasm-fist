@@ -1,0 +1,38 @@
+MGAVIDEO driver: FUN_0000_0e3b (cursor background RESTORE) segment base-loss.
+
+Reached right after the cursor DRAW 0db8 (patch 103) once the cursor blit no longer runs away (patches
+104/105/106).  0e3b is 0db8's inverse: it copies the saved background from the cursor's backup buffer back
+into the framebuffer before the cursor moves/redraws.  asm 0xe3b: ES=0xA000 (framebuffer), DS=word[DGROUP:
+0x716]=c716 (the sprite/mask/background-save segment); di=word[DGROUP:0x5c8]=d5c8 -> FB dest; si=0xaa4 ->
+background-save buffer (in c716); width=d5bc, height=d5c0, FB row stride 0x140:
+  e3b  mov ax,0xa000; mov es,ax
+  e40  mov di,ds:0x15c8            ; FB dest offset
+  e44  mov si,0xaa4                ; bg-save buffer offset (in c716)
+  e47  mov ax,ds:0x15bc            ; width
+  e4a  mov bx,0x140; sub bx,ax     ; FB stride - width
+  e4f  mov dx,ds:0x15c0            ; height
+  e54  mov ds,ds:0x716             ; DS = c716 (bg-save segment)
+  e58  rep movs es:[di], ds:[si]   ; restore width bytes; di += stride; dec height
+Ghidra kept the loop logic but dropped both segment bases (puVar7 = 0xaa4 host pointer, puVar8 = d5c8 host
+pointer -> SIGSEGV at fault-addr 0xaa4).  Rebase exactly like patch 103: puVar8 = g_mem + 0xA0000 + d5c8
+(FB), puVar7 = g_mem + (c716<<4) + 0xaa4 (background-save buffer).  Asm-verified 0xe3b..0xe62.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -2682,8 +2682,15 @@
+   iVar3 = _DAT_1000_d5bc;
+   uVar2 = _DAT_1000_c716;
+-  puVar7 = (undefined1 *)0xaa4;
+   iVar6 = 0x140 - _DAT_1000_d5bc;
+   iVar4 = iVar3;
+-  puVar8 = _DAT_1000_d5c8;
++  /* PATCH 107: rebase the cursor background-restore pointers (asm 0xe3b).  ES=0xA000 = framebuffer;
++     DS = word[DGROUP:0x716] = c716 = the background-save segment.  di=d5c8 -> FB dest, si=0xaa4 ->
++     background-save buffer (in c716).  Ghidra dropped both segment bases (raw host 0xaa4 / d5c8 ->
++     SEGV); the loop logic is correct, only the two bases were lost (same class as patch 103). */
++  {
++    uint8_t *sseg = g_mem + (((uint32_t)(uint16_t)_DAT_1000_c716) << 4);
++    puVar7 = sseg + 0xaa4;
++    puVar8 = g_mem + 0xa0000 + (uint16_t)_DAT_1000_d5c8;
++  }
+   iVar5 = _DAT_1000_d5c0;
+   do {

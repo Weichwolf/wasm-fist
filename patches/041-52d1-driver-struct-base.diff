@@ -1,0 +1,36 @@
+FUN_1000_52d1 (engine 0x5200 driver-processing): driver-struct base loss (DGROUP:0x736), 16-bit fields.
+
+Same class as patch 040, reached from FUN_1000_5228.  asm 0x152d1: bx=[DGROUP:0x736] (driver-object struct
+near offset); [bx+0x1c]=param_1; [bx+0x20]=param_1+[bx+0xc]; [bx+0x1e]=[bx+0x1a]=param_2; [bx+0x22]=
+param_2+[bx+0xa] (viewport / clip rectangle setup).  Ghidra dropped the DGROUP base (dereferenced the
+value at [0x736] as a host address) and typed the word fields as int (4-byte).  Rebase to
+g_mem+DGROUP+[0x736] with 16-bit accesses.  Asm-verified base-0 0x152d1..0x152ec.
+--- a/fist.c
++++ b/fist.c
+@@ -47527,12 +47527,20 @@
+ {
+   int iVar1;
+   
+-  iVar1 = DAT_1000_c736;
+-  *(int *)(DAT_1000_c736 + 0x1c) = param_1;
+-  *(int *)(iVar1 + 0x20) = param_1 + *(int *)(iVar1 + 0xc);
+-  *(int *)(iVar1 + 0x1e) = param_2;
+-  *(int *)(iVar1 + 0x1a) = param_2;
+-  *(int *)(iVar1 + 0x22) = param_2 + *(int *)(iVar1 + 10);
++  /* PATCH 041: engine 0x5200 driver-processing -- struct base loss (DGROUP:0x736), 16-bit fields.
++   * asm 0x152d1: bx=[DGROUP:0x736] (driver-object struct near offset); [bx+0x1c]=ax; [bx+0x20]=ax+
++   * [bx+0xc]; [bx+0x1e]=[bx+0x1a]=dx(param_2); [bx+0x22]=dx+[bx+0xa].  Ghidra dropped the DGROUP base
++   * (deref'd [0x736]'s value as a host address) and typed the WORD fields as int (4-byte).  Rebase to
++   * g_mem+DGROUP+[0x736] with 16-bit accesses. */
++  {
++    uint8_t *st = g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1c736);
++    *(int16_t *)(st + 0x1c) = (int16_t)param_1;
++    *(int16_t *)(st + 0x20) = (int16_t)(param_1 + *(int16_t *)(st + 0xc));
++    *(int16_t *)(st + 0x1e) = (int16_t)param_2;
++    *(int16_t *)(st + 0x1a) = (int16_t)param_2;
++    *(int16_t *)(st + 0x22) = (int16_t)(param_2 + *(int16_t *)(st + 0xa));
++  }
++  (void)iVar1;
+   return;
+ }
+ 

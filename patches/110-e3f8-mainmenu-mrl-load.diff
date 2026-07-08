@@ -1,0 +1,25 @@
+FUN_0000_e3f8: thread ax=0x1a (MAINMENU index) + cx:bx (bg descriptor) into the c560 bg-loader call.
+
+e3bc (the menu per-frame bg paint) calls e3f8 to LOAD the background before rendering it via c564=0340.
+asm 0xe3fd: `mov bx,0xf6cc ; mov cx,ds ; mov ax,0x1a ; call FAR [DGROUP:0x560]` -> MGAVIDEO 0x310, the
+bg-element loader.  ax=0x1a is the driver name-table BYTE offset 0x1a (= 13-entry index 13) = the ASCIIZ
+"MAINMENU.MRL"; cx:bx = the on-screen bg descriptor at DGROUP:0xf6cc (ds=DGROUP=0x1c00).  The __allregs
+far-vector site dropped all three (called with no args) -> 0x310 built a garbage/empty filename and never
+opened MAINMENU.MRL, so the descriptor word0 stayed 0 and 0340 painted RLE noise from segment 0.  Thread
+(param_1=ax=0x1a index, param_2=cx=0x1c00 seg, param_3=bx=0xf6cc off) faithfully.  Result: the engine
+opens 'MAINMENU.MRL' -> ok and 0340 renders the byte-exact title scene (two M1 Abrams + Mi-24 Hind +
+muzzle-flash + terrain; raw indices 62259/64000 nonzero, 177 colors, verified vs ref/main_menu.png).
+Asm-verified 0xe3fb..0xe400.
+--- a/fist.c
++++ b/fist.c
+@@ -33744,7 +33744,9 @@
+ void __allregs FUN_0000_e3f8(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
++  /* asm 0xe3fd: mov bx,0xf6cc; mov cx,ds; mov ax,0x1a; call [DGROUP:0x560] = MGAVIDEO 0x310 (bg loader).
++     ax=0x1a = name-table byte-offset 0x1a = "MAINMENU.MRL"; cx:bx = bg descriptor 0x1c00:0xf6cc. */
++  ((void (*)(undefined2,undefined2,int))fist_icall_far((uint32_t)(DAT_1000_c560)))(0x1a, 0x1c00, 0xf6cc);
+   return;
+ }
+ 

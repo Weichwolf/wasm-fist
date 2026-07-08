@@ -1,0 +1,42 @@
+Cooperative-timer pump in the intro-animation ISR-waited spins (e584 + FUN_1000_38cc).
+
+Same class as patch 017: these spins wait on state the engine's INT-8 (PIT) ISR maintains, but Ghidra
+folded them to bare spins with no pump.  Our host drives the engine's installed INT-8 ISR cooperatively
+(native_main fist_timer_pump), so a spin that never reaches a pump site hangs.  Faithful fix: pump the
+cooperative ISR inside each spin (the real ISR fires asynchronously there).
+  * FUN_0000_e584 (intro/title animation player), two frame-timing waits `while ((c452 - b6e6) < b6e0)`
+    on the INT-8 tick counter DGROUP:0x452 -- pump so c452 advances and the frame timer elapses.
+  * FUN_1000_38cc (driver frame/vsync wait) `do { (*c40a)(); } while (CF==0)` -- pump the tick.  NB the
+    real exit is CF=1 from the driver vsync-poll method c40a (DGROUP:0x40a), a driver method vector that
+    is NOT yet installed (traps -> CF=0); installing it is the documented next frontier.  Asm-verified
+    (e584 spin 0xe66a; 38cc 0x138cc `xchg;lcall[0x40a];jae`).
+--- a/fist.c
++++ b/fist.c
+@@ -33865,6 +33865,7 @@
+       }
+       puVar6 = (uint *)CONCAT22((int)((ulong)puVar6 >> 0x10),DAT_2000_b6e6);
+       do {
++      fist_timer_pump();  /* PATCH 072: pump cooperative INT-8 ISR so c452 advances (ISR-maintained tick wait) */
+       } while ((uint)((int)DAT_1000_c452 - (int)DAT_2000_b6e6) < DAT_2000_b6e0);
+     }
+     else {
+@@ -33907,6 +33908,7 @@
+     do {
+       param_1 = (uint *)CONCAT22((int)((ulong)param_1 >> 0x10),DAT_2000_b6e6);
+       do {
++      fist_timer_pump();  /* PATCH 072: pump cooperative INT-8 ISR so c452 advances (ISR-maintained tick wait) */
+       } while ((uint)((int)DAT_1000_c452 - (int)DAT_2000_b6e6) < DAT_2000_b6e0);
+ LAB_0000_e5e9:
+       DAT_1000_c462 = DAT_2000_b6e4 + 1;
+@@ -44249,6 +44251,11 @@
+   UNLOCK();
+   do {
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))();
++    fist_timer_pump();  /* PATCH 072: pump the cooperative INT-8 ISR during the driver vsync wait.
++       The real loop exits on CF=1 from the driver vsync-poll method c40a (DGROUP:0x40a); that vector
++       is not yet installed (traps -> 0/CF=0) so this loop does not yet terminate -- the driver
++       vsync-poll method install is the documented next frontier.  The pump keeps the INT-8 tick alive
++       (and lets the FIST_RUNMS frame watchdog fire) meanwhile. */
+   } while (!(bool)uVar2);
+   DAT_1000_fe00 = uVar1;
+   return;

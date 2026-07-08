@@ -1,0 +1,29 @@
+FUN_0000_14da: object-pool init loop counter — word arithmetic (Ghidra int** pointer-scaling).
+
+14da initialises an object pool by calling 197b in a loop counted down at DGROUP:0x2674:
+  movw [0x2674],0x42 ; .l: call 197b ; subw [0x2674],2 ; jae .l   (asm 0x1507..0x1515) -> 0x21 passes.
+Ghidra typed the shared slot DAT_1000_e674 as `int **`, so the decompiled `DAT_1000_e674 - 2` became
+POINTER arithmetic scaled by sizeof(int*)=4 -> the word counter fell by 8 each pass (0x42,0x3a,0x32,..),
+underflowed past 0 into 0xfff8.. and never satisfied the exit -> infinite loop.  Fix: decrement the slot
+as a 16-bit word.  Asm-verified base-0 0x1507..0x1515.
+--- a/fist.c
++++ b/fist.c
+@@ -7164,11 +7164,15 @@
+     }
+   }
+   (void)puVar1; (void)puVar4;
+-  DAT_1000_e674 = 0x42;
++  /* PATCH 029: DGROUP:0x2674 is a WORD loop counter (asm movw [0x2674],0x42; .l call 197b;
++     subw [0x2674],2; jae .l).  Ghidra typed DAT_1000_e674 as int** so `- 2` scaled by 8 bytes
++     (counter fell 0x42,0x3a,0x32,.. by 8) -> underflowed past 0 -> infinite loop.  Treat as a word. */
++  *(uint16_t *)(g_mem + 0x1c000 + 0x2674) = 0x42;
+   do {
+     FUN_0000_197b();
+-    bVar5 = 1 < DAT_1000_e674;
+-    DAT_1000_e674 = DAT_1000_e674 - 2;
++    bVar5 = 1 < *(uint16_t *)(g_mem + 0x1c000 + 0x2674);
++    *(uint16_t *)(g_mem + 0x1c000 + 0x2674) =
++        (uint16_t)(*(uint16_t *)(g_mem + 0x1c000 + 0x2674) - 2);
+   } while (bVar5);
+   return;
+ }

@@ -1,0 +1,37 @@
+Faithful fix of FUN_0000_fdf7 (FIST.CD presence/drive check) -- same losses as patch 007.
+
+fdf7 opens the CD marker "FIST.CD" (template STRSEG:0x93) and validates the drive letter. Ghidra dropped
+(0) the SI=0x93 template offset (empty filename), (a) the open CF (dead `in_CF=0` -> body ran on failed
+open), and (b) the ES base on `mov es:[0x158],al` (ES = the [0x70] string segment) -> host deref 0x158 ->
+SIGSEGV. Thread SI via fefb param_5, thread CF via reg-file slot uRam000f0012, rebase the store to
+STRSEG (linear 0x2d740)+0x158. On an HD install FIST.CD is absent => the open fails => fdf7 returns and
+the engine uses the hard-disk data path. Classes: [0x70] dynamic-segment scratch + CF-flag threading.
+
+--- a/fist.c
++++ b/fist.c
+@@ -36720,15 +36720,21 @@
+   byte bVar2;
+   undefined2 uVar3;
+   undefined2 uVar4;
+-  undefined1 in_CF = 0;
+   
++  /* PATCH 008: same class as 007 (SS/[0x70] scratch + CF-flag threading + dropped SI). fdf7 opens the
++     CD-presence marker "FIST.CD" (template STRSEG:0x93) and, if present, validates the drive letter.
++     (0) SI=0x93 threaded as fefb's param_5 (was dropped -> empty filename). (a) the open CF was a dead
++     `in_CF=0` local -> the body ran even when the open failed; threaded from reg-file slot uRam000f0012
++     (FIST.CD absent on an HD install => open fails => return, use the hard-disk data path). (b) the
++     `mov es:[0x158],al` store (ES = the [0x70] string segment) lost its base -> host deref 0x158;
++     rebased to STRSEG (linear 0x2d740)+0x158. */
+   uVar4 = 0x93;
+-  uVar1 = FUN_0000_fefb(0,0,0,0,0,0,0,0,0);
+-  if (!(bool)in_CF) {
++  uVar1 = FUN_0000_fefb(0,0,0,0,0x93,0,0,0,0);
++  if ((unsigned char)uRam000f0012 == 0) {
+     uVar3 = FUN_1000_2380(uVar1,param_1,param_2,param_3,param_4,uVar4,param_5);
+     uVar4 = FUN_1000_2387((char)uVar3,param_1,param_2,param_3,param_4,uVar4,param_5);
+     bVar2 = DAT_1000_c740;
+-    *(byte *)0x158 = DAT_1000_c740;
++    g_mem[0x2d740 + 0x158] = (byte)DAT_1000_c740;
+     if ((0x60 < bVar2) && (bVar2 < 0x7b)) {
+       bVar2 = bVar2 - 0x20;
+     }

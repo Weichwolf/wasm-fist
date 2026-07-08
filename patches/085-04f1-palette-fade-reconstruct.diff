@@ -1,0 +1,95 @@
+MGAVIDEO palette-fade FUN_0000_04f1 (post-intro, e446 -> c594=04cd -> 04d8 -> 04f1): reconstruct the
+CF==0 fade path that Ghidra folded to `do{}while(true)` -> the post-intro HANG.
+
+After the first intro (TITLE.KDV) ends, engine FUN_0000_e446 does `(*c594)(); e584(0x4404); (*c59c)()`.
+The c594 method resolves to driver FUN_0000_04cd -> 04d8 -> 04f1, a palette-fade set-up.  Ghidra
+mis-modelled 04f1 (asm image 0x4f1..0x5b6):
+  - the `call [DGROUP:0xe4]` (device-object method c0e4, args ax=0x300/bx=0x788/cx=ds) had its args
+    AND its CF-out dropped; the CF (`jb 0x587`) selects INSTANT (CF=1) vs FADE (CF=0).
+  - Ghidra invented the branch condition `bVar6 = param_2 < param_4` (false here: 0xff < 0) and
+    rendered the entire CF==0 fade body (tick-wait + DAC save + install continuation) as an infinite
+    `do{}while(true)` -> the engine hangs the moment it starts the post-intro fade.
+  - the INSTANT path's palette clear lost its ES=[c782] base (di used as a bare host pointer).
+Reconstructed faithfully from asm:
+  0x4f1 [c786]=0; [c5e8]=0; [0632]=0; [0634]=0x10000/param_1; [0638]=(param_2-param_4)+1;
+        [0636]=param_4; [063a]=param_3
+  0x52d call [DGROUP:0xe4](ax=0x300,bx=0x788,cx=ds) ; 0x531 jb 0x587 (CF -> instant)
+  FADE (0x533): wait one INT-8 tick [DGROUP:0x44e] ; inc [0x738] ; [0636]*=3 ; [0638]*=3 ;
+        out 0x3c7,0 ; read 0x300 DAC bytes -> es:[c788] ; dec [0x738] ; [c5e8]=0x5b8 (FUN_05b8) ; retf
+  INSTANT (0x587): es=[c782] ; di=[0636]*3 ; clear [0638]*3 bytes ; [c780]=0x782 ; [c786]=1 ; retf
+DGROUP:0xe4 is an as-yet uninstalled device-object method vector (== 0 at runtime, same gap class as
+patch 049's 0xcc/0xd0) so the call traps (no-op) and CF stays 0 -> the FADE path (the intended
+high-detail title behaviour).  Threaded via the shim CF global g_fist_cf so the real method's CF takes
+over once 0xe4 is installed.  The tick-wait is cooperatively pumped (patch 017/072/3a14 class); the
+fade then advances over subsequent vblanks via the c5e8 continuation dispatched by the retrace ISR.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1508,27 +1508,51 @@
+   _DAT_1000_c5e8 = 0;
+   DAT_0000_0632 = 0;
+   DAT_0000_0634 = (undefined2)(0x10000 / (ulong)(param_1 + (uint)(param_1 == 0)));
+-  bVar6 = param_2 < param_4;
+   DAT_0000_0638 = (param_2 - param_4) + 1;
+   DAT_0000_0636 = param_4;
+   DAT_0000_063a = param_3;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0e4)))(0);
+-  uVar2 = _DAT_1000_c782;
+-  if (!bVar6) {
+-    do {
+-    } while( true );
+-  }
+-  puVar5 = (undefined2 *)(DAT_0000_0636 * 3);
+-  uVar4 = DAT_0000_0638 * 3;
+-  for (uVar3 = uVar4 >> 1; uVar3 != 0; uVar3 = uVar3 - 1) {
+-    puVar1 = puVar5;
+-    puVar5 = puVar5 + 1;
+-    *puVar1 = 0;
++  /* asm 0x525: bx=0x788, cx=ds(=DGROUP 0x1c00), ax=0x300; call [DGROUP:0xe4]; the returned CF
++   * (asm `jb 0x587`) selects INSTANT (CF=1) vs FADE (CF=0).  Ghidra dropped the method's args AND
++   * its CF, inventing `bVar6 = param_2 < param_4` and folding the whole CF==0 fade body to
++   * `do{}while(true)` -> the observed post-intro hang (e446 -> 04cd -> 04d8 -> 04f1).  Reconstructed
++   * from asm (image 0x4f1..0x5b6).  DGROUP:0xe4 is an as-yet uninstalled device-object method vector
++   * (== 0, same gap class as patch 049's 0xcc/0xd0) so the call traps (no-op) and CF stays 0 -> the
++   * FADE path (the intended high-detail title behaviour); threaded via g_fist_cf so the real method's
++   * CF takes over once 0xe4 is installed. */
++  {
++    extern unsigned char g_fist_cf;
++    extern void fist_timer_pump(void);
++    g_fist_cf = 0;
++    (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0e4)))(0x300,0x788,0x1c00);
++    if (g_fist_cf == 0) {
++      /* FADE path (asm 0x533-0x586): wait one INT-8 tick (DGROUP:0x44e, cooperatively pumped -- same
++       * class as patch 017/072/3a14), SAVE the current 768-byte DAC palette into the buffer segment
++       * [c788], scale the run offset/count x3 (byte-triples), and install the per-vblank fade stepper
++       * FUN_05b8 via c5e8 -- then RETURN.  The fade advances over subsequent vblanks (the retrace ISR
++       * dispatches c5e8); it does NOT block here (the asm retfs at 0x586). */
++      unsigned short t = *(unsigned short *)(g_mem + 0x1c44e);
++      while (*(unsigned short *)(g_mem + 0x1c44e) == t) fist_timer_pump();   /* asm 0x536 je 0x536 */
++      DAT_1000_c738 = DAT_1000_c738 + 1;                                     /* asm 0x53c inc [0x738] */
++      DAT_0000_0636 = DAT_0000_0636 * 3;                                     /* asm 0x548-0x552 x3 */
++      DAT_0000_0638 = DAT_0000_0638 * 3;                                     /* asm 0x557-0x562 x3 */
++      {
++        unsigned char *pb = g_mem + (((uint32_t)(unsigned short)_DAT_1000_c788) << 4);  /* es=[0x788] */
++        int i; out(0x3c7,0);                                                 /* DAC read index = 0 */
++        for (i = 0; i < 0x300; i++) pb[i] = (unsigned char)in(0x3c9);        /* asm 0x575 read 768 */
++      }
++      DAT_1000_c738 = DAT_1000_c738 + -1;                                    /* asm 0x57c dec [0x738] */
++      DAT_1000_c5e8 = 0x5b8;                                                 /* asm 0x580 cont = 05b8 */
++      return;
++    }
+   }
+-  for (uVar4 = (uint)((uVar4 & 1) != 0); uVar4 != 0; uVar4 = uVar4 - 1) {
+-    puVar1 = puVar5;
+-    puVar5 = (undefined2 *)((int)puVar5 + 1);
+-    *(undefined1 *)puVar1 = 0;
++  /* INSTANT path (asm 0x587-0x5b6): clear the [c782]:[0636]*3 palette-buffer run ([0638]*3 bytes)
++   * and mark the op done.  (Base-loss fixed: es=[c782] seg, di=[0636]*3, cx=[0638]*3 -- Ghidra had
++   * di as a bare host pointer.) */
++  uVar2 = _DAT_1000_c782;
++  {
++    unsigned char *dst = g_mem + (((uint32_t)(unsigned short)_DAT_1000_c782) << 4) + DAT_0000_0636 * 3;
++    uVar4 = DAT_0000_0638 * 3;
++    for (uVar3 = 0; uVar3 < uVar4; uVar3 = uVar3 + 1) dst[uVar3] = 0;
+   }
+   _DAT_1000_c780 = 0x782;
+   DAT_1000_c786 = 1;

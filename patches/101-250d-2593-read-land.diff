@@ -1,0 +1,50 @@
+FUN_1000_250d / FUN_1000_2593: make the resource file READ execute + land in the allocated segment.
+
+The screen-resource loader 250d (asm 0x1250d: open / lseek-size / close / alloc-184b / read-2593) had
+two Ghidra defects that left the .MS3 (and any screen resource) allocated but never read:
+  (1) a spurious `if (!bVar8)` gate around the 2593 call -- bVar8 = (uVar2 & 4) is a mis-decode of the
+      33-bit rcr/shr paragraph-count carry chain (asm 0x1255e..0x1256c); for a 3561-byte file it goes
+      TRUE, so the read was skipped.  The asm calls 2593 UNCONDITIONALLY after the alloc succeeds
+      (0x12572 `jb .err ; call 2593`).  Gate on the real alloc carry (g_mm_cf, published by 184b).
+  (2) `DAT_1000_2b5e = *DAT_1000_2b66` dereferenced the descriptor far-ptr (typed int**) as a raw host
+      pointer -> SEGV.  The load segment is the descriptor word0 that 184b just wrote to
+      MM_S16(descr_seg, descr_off); read it via the g_mem accessor.
+And 2593 itself (asm 0x12593) reads the file into ES:0 where ES = the freshly-allocated segment, but
+Ghidra dropped ES (unaff_ES, never set) so the read went to a garbage segment.  Both callers (250d and
+the 175d-loader) publish the allocated segment in DAT_1000_2b5e immediately before the call; thread it.
+Asm-verified 0x1250d..0x12592 and 0x12593..0x1260c.
+--- a/fist.c
++++ b/fist.c
+@@ -42356,8 +42356,15 @@
+                    ) >> 1 | (uint)((uVar1 & 2) != 0) << 0xf) >> 1 | (uint)((uVar1 & 4) != 0) << 0xf,
+                   uVar7,(uVar1 | (uint)CARRY2(DAT_1000_2b62,(uint)(0xfff0 < DAT_1000_2b60)) << 0xf)
+                         >> 3,(undefined2 *)DAT_1000_2b66,param_4,uRam000f000a);
+-    if (!bVar8) {
+-      DAT_1000_2b5e = *DAT_1000_2b66;
++    /* PATCH 101: the file read (2593) is UNCONDITIONAL after a successful alloc -- asm 0x12572
++       `jb .err ; call 2593`.  The bVar8 gate was Ghidra mis-decoding the rcr/shr paragraph-carry
++       chain (it went TRUE for a 3561-byte .MS3 -> 2593 skipped -> descriptor points at an
++       allocated-but-UNREAD segment).  Gate on the real alloc CF (g_mm_cf, set by 184b) instead, and
++       read the load segment (descriptor word0, written by 184b) via the g_mem accessor -- not by
++       dereferencing the raw far-ptr DAT_1000_2b66 (int**), which is a base-loss host-deref SEGV. */
++    if (!g_mm_cf) {
++      DAT_1000_2b5e = *(undefined2 *)(g_mem + ((uint32_t)(uint16_t)param_1 << 4)
++                                            + (uint16_t)(uintptr_t)param_3);
+       uStack0008 = 0x1000;
+       uStack0006 = 0x258d;
+       FUN_1000_2593(uVar7,DAT_1000_2b64,0,param_4,uVar5,uVar6);
+@@ -42396,8 +42403,12 @@
+   uRam000f0000 = 0x3d00;
+   uRam000f000e = 0x1c00;
+   DAT_1000_2b60 = param_3;
+-  DAT_1000_2b62 = unaff_ES;
+-  DAT_1000_2b64 = unaff_ES;
++  /* PATCH 101: thread the buffer segment.  2593 (asm 0x12593) reads the file into ES:0 (ES = the
++     freshly-allocated segment set by the caller: 250d `mov es,ax`, or the 175d-loader).  Ghidra
++     dropped ES (unaff_ES) so the read landed nowhere; the allocated segment is published by both
++     callers in DAT_1000_2b5e right before the call. */
++  DAT_1000_2b62 = DAT_1000_2b5e;
++  DAT_1000_2b64 = DAT_1000_2b5e;
+   uRam000f0002 = param_3;
+   uRam000f0004 = param_1;
+   uRam000f0006 = param_2;

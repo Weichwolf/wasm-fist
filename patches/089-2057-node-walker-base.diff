@@ -1,0 +1,40 @@
+FUN_0000_2057 (sprite/cursor-DRAW node walker, forward twin of 201a/20ea; e714 -> 1cdb -> 2032 ->
+2057): rebase the DGROUP near-offset node pointers Ghidra used as bare host pointers -> SIGSEGV.
+
+asm (image 0x2057), identical shape to patch 056 (201a) / patch 088 (20ea) but walking FORWARD with
+dispatch-table base 0x402a:
+    2057: mov ds:0x3e08,bx ; di=[bx] ; call [di+0x402a](bp) ; add bx,0xc ; cmp bx,dx ; jbe 2057
+Ghidra used bx (param_2) / dx (param_1) as host int* -> deref of raw node offsets 0x3b00/0x3b18 = crash.
+Rebase to DGROUP (0x1c000): node=*(u16)(DG+bx), handler=*(u16)(DG+node+0x402a), near-dispatched via
+fist_icall_near(param_3=context); publish bx to ds:0x3e08; step bx+=0xc; loop while bx<=dx.
+--- a/fist.c
++++ b/fist.c
+@@ -8735,11 +8735,23 @@
+ void __allregs FUN_0000_2057(int *param_1,int *param_2,undefined2 param_3)
+ 
+ {
+-  do {
+-    DAT_1000_fe08 = param_2;
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_2 + 0x402a))))(param_3);
+-    param_2 = param_2 + 6;
+-  } while (param_2 <= param_1);
++  /* PATCH 089: sprite/cursor-DRAW node walker (asm 0x2057), the FORWARD twin of 201a (patch 056) and
++     20ea (patch 088), runs with DS=DGROUP.  Ghidra dropped the DS base, so the node read `[bx]` and
++     the per-node handler-vector fetch `[di+0x402a]` (a near vector table at DGROUP:0x402a) were
++     dereferenced as host pointers (SIGSEGV) and the 0xc-byte stride was int*-mis-scaled.  param_2=bx
++     walks the DGROUP node list forward, param_1=dx is the inclusive upper limit, param_3 the context. */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t bx = (uint16_t)(uintptr_t)param_2;
++    uint16_t dx = (uint16_t)(uintptr_t)param_1;
++    do {
++      *(uint16_t *)(dg + 0x3e08) = bx;                                    /* asm mov ds:0x3e08,bx */
++      uint16_t di  = *(uint16_t *)(dg + bx);                              /* di = *bx */
++      uint16_t off = *(uint16_t *)(dg + (uint16_t)(di + 0x402a));         /* [di+0x402a] */
++      ((void (*)(undefined2))fist_icall_near(0x0u, off))(param_3);
++      bx = (uint16_t)(bx + 0xc);                                          /* add bx,0xc */
++    } while (bx <= dx);
++  }
+   return;
+ }
+ 

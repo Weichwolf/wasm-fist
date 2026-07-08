@@ -1,0 +1,43 @@
+FUN_0000_153c: thread the element-registrar's driver-filename-build + resource-open registers.
+
+153c is the display-list ELEMENT registrar (main-menu path cae6 -> e714 -> e40e ->
+e42f(type 0x30) -> 153c).  It builds an 8.3 filename at DGROUP:0x740 via the MGAVIDEO
+name-table builder c550 (=driver 0x197) and opens it via the far vector DGROUP:0x388
+(=FUN_1000_26fc, screen-resource OPEN).  Three __allregs indirect-vector arg-drops,
+all threaded here faithfully from asm 0x151a..0x1552:
+  loop c550 (asm 0x1524 `mov ax,0x24`): name-table[0x24]="MSPRITES.BIN" -> 0x197 digit
+     "MSPRITE0.BIN" -> 153c loop patches [nul-5] with type digit (0x30 -> '6') ->
+     "MSPRITE6.BIN".  Ghidra dropped ax -> name-table[0]="M1CON.MRL".  VERIFIED vs the
+     real game (DOSBox open-trace): the menu opens exactly MSPRITE6.BIN here.  (The
+     docs' "index 13 = MAINMENU.MRL" idea was a misdiagnosis; MAINMENU.MRL is a
+     separate element.)
+  post-loop c550 (asm 0x1549, ax=0xffff): 0x197 `cmp ax,0xffff; je skip` = NO-OP.
+     Ghidra passed garbage 0 -> rebuilt "M1CON.MRL", clobbering the loop's name.
+     Thread ax=0xffff so 0x197 skips.
+  c388/26fc (asm 0x154f `mov dx,0x740; call [0x388]`): dropped dx/cx/bx.  26fc order
+     (CX,DX,BX,BP); descriptor is at param_2:param_4, so thread cx=param_2, dx=0x740,
+     bx=param_4.  Without dx the open used DS:DX=1c00:1c00 (empty name).
+Result: 'MSPRITE6.BIN' -> ok on the real menu path.  Asm-verified 0x151a..0x1552.
+--- a/fist.c
++++ b/fist.c
+@@ -7231,7 +7231,7 @@
+   undefined1 uVar11;
+   
+   while (param_1 != -1) {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c550)))();
++    ((undefined2 (*)(undefined2*))fist_icall_far((uint32_t)(DAT_1000_c550)))((undefined2*)0x24);
+     pcVar5 = (char *)&DAT_1000_c740;
+     do {
+       pcVar9 = pcVar5;
+@@ -7248,8 +7248,9 @@
+     uint16_t  offS = (uint16_t)(uintptr_t)param_4;
+     uint8_t  *S    = g_mem + ((uint32_t)segS << 4) + offS;
+     S[2] |= 0x22;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c550)))();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c388)))();
++    ((undefined2 (*)(undefined2*))fist_icall_far((uint32_t)(DAT_1000_c550)))((undefined2*)0xffff);
++    ((void (*)(undefined2,int,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c388)))
++        ((undefined2)param_2, 0x740, (undefined2)(uintptr_t)param_4, 0);
+     *(uint16_t *)(S + 2) |= 0xd20;
+     *(uint16_t *)(S + 4) = 0x15c2;
+     *(uint16_t *)(S + 6) = 0;                          /* CS = engine code seg (0 in base-0 image) */

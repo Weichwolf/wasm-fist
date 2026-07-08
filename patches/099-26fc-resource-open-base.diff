@@ -1,0 +1,59 @@
+FUN_1000_26fc screen-resource OPEN: restore the CS(=0f69)/DGROUP bases Ghidra+assembler dropped
+(ext-variant + near-dispatch tables cs:0x2b7e/0x2b82 and the filename byte [buf+0xa]).  Detail in
+the PATCH 099 comment.  This unblocks the load chain past 26fc into the per-extension loaders.
+
+--- a/fist.c
++++ b/fist.c
+@@ -42310,16 +42310,29 @@
+   int iVar2;
+   undefined2 unaff_ES;
+   
+-  uVar1 = *(undefined2 *)(param_2 + 10);
+-  DAT_1000_2b7e = (undefined1)uVar1;
++  /* PATCH 099 (asm 0x126fc..0x12732): FUN_1000_26fc = the screen-resource OPEN.  param_2 (dx) = a DGROUP
++   * near offset to the driver-built filename buffer (0x740).  It saves the original extension byte
++   * [buf+0xa] at cs:0x2b7e, walks the extension-variant table cs:0x2b7e (' ','!','@',0 at cs=0f69 ->
++   * linear 0x1220e), for each doing INT 21h AH=4300 (get-attr probe on DS:DX=DGROUP:buf); on the first
++   * existing variant it dispatches to its LOADER via the near table cs:0x2b82 (0f69:0x2e78/0x3230/0x365d/
++   * 0x318e -> FUN_1000_2508/28c0/2ced/281e = open+lseek-size+MEMMGR-alloc+read).  Ghidra/assembler decoded
++   * 26fc under CS=0x1000 and dropped the CS/DGROUP bases: the ext-variant + near-dispatch tables
++   * (cs:0x2b7e/0x2b82) rendered as HOST offsets and the filename byte [buf+0xa] as a host deref -> crash
++   * at the dispatch (+0x2d).  Rebase: cs-data -> g_mem+0xf690 (runtime CS=0f69 via [DGROUP:0x388]=
++   * 0f69:0x306c); filename byte -> DGROUP:buf = g_mem+0x1c000+buf; near dispatch -> fist_icall_near(0xf69,
++   * table[idx]).  param_2 stays the raw DGROUP offset for the INT-21 DX slot iRam000f0006. */
++  { uint8_t *FN = g_mem + 0x1c000 + (uint16_t)param_2;      /* filename buffer @ DGROUP:param_2 */
++    uint8_t *CX = g_mem + 0xf690;                           /* cs=0f69 data window (0x2b7e/0x2b82) */
++  uVar1 = *(uint16_t *)(FN + 10);
++  CX[0x2b7e] = (uint8_t)uVar1;
+   iVar2 = 0;
+   do {
+-    if (*(char *)(iVar2 + 0x2b7e) == '\0') {
++    if (*(char *)(CX + 0x2b7e + iVar2) == '\0') {
+ LAB_1000_272f:
+-      *(undefined2 *)(param_2 + 10) = uVar1;
++      *(uint16_t *)(FN + 10) = uVar1;
+       return;
+     }
+-    *(char *)(param_2 + 10) = *(char *)(iVar2 + 0x2b7e);
++    FN[10] = *(char *)(CX + 0x2b7e + iVar2);
+     uRam000f0014 = 0x21;
+     uRam000f0000 = 0x4300;
+     uRam000f000e = 0x1c00;
+@@ -42332,12 +42345,16 @@
+     uRam000f0010 = unaff_ES;
+     fist_int_dispatch();
+     param_2 = iRam000f0008;
++    FN = g_mem + 0x1c000 + (uint16_t)param_2;
+     if (!(bool)uRam000f0012) {
+-      (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(iRam000f000a * 2 + 0x2b82))))();
++      /* iRam000f000a = the DI reg-file slot (0x0a) = a 16-bit reg; the int-wide accessor aliases the
++         adjacent BP slot (0x0c, = 0x1c00 here) in its high word -> mask to 16 bits (asm `di` is WORD). */
++      (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b82 + ((uint16_t)iRam000f000a) * 2)))();
+       goto LAB_1000_272f;
+     }
+     iVar2 = iRam000f000a + 1;
+   } while( true );
++  }
+ }
+ 
+ 

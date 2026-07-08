@@ -1,0 +1,102 @@
+FUN_1000_3436 / FUN_1000_3446 (post-driver free-list builder): DGROUP near-offset list as host pointers.
+
+Reached from app_entry right after the 0x5200 driver-processing (FUN_1000_5228) completes.  FUN_1000_3436
+falls through into FUN_1000_3446 (Ghidra duplicated the shared tail into both C functions).  asm 0x13446
+builds a 0x3f-node free list in DGROUP from offset 0x18ea (each node 0x12 bytes, [node]=next-offset,
+0xffff-terminated) then calls FUN_1000_46b6(0x3e0b).  The list pointers are DGROUP NEAR OFFSETS, but Ghidra
+typed them as host `undefined2 *` (&DAT_1000_d8ea ...) with host-pointer arithmetic (puVar1+9), producing
+wrong link values and a bad-pointer store SIGSEGV.  Reconstruct both copies with 16-bit near offsets based
+at g_mem+DGROUP.  The leading `lcall [DGROUP:0x12]` reloc apply has bx=0 so the engine f842 bails
+immediately (kept verbatim).  Asm-verified base-0 0x13446..0x13484.
+--- a/fist.c
++++ b/fist.c
+@@ -43918,20 +43918,31 @@
+   int iVar2;
+   
+   *(byte *)(param_2 + param_4) = *(byte *)(param_2 + param_4) ^ (byte)((uint)param_1 >> 8);
++  /* PATCH 043: DGROUP near-offset free-list builder rendered as host pointers (shared tail of
++   * FUN_1000_3436 which falls through into FUN_1000_3446).  asm 0x13446: build a 0x3f-node list in
++   * DGROUP from offset 0x18ea, each node 0x12 bytes, [node]=next-offset, 0xffff-terminated, then call
++   * 46b6(0x3e0b).  The nodes are DGROUP NEAR OFFSETS; Ghidra typed them as host `undefined2 *`
++   * (&DAT_...) with host-pointer arithmetic -> wrong links + a bad-pointer store SIGSEGV.  Reconstruct
++   * with 16-bit near offsets based at g_mem+DGROUP.  The leading `lcall [DGROUP:0x12]` has bx=0 so the
++   * engine f842 bails; kept verbatim. */
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
+-  DAT_1000_d8de = 0;
+-  DAT_1000_d8e4 = 0xffff;
+-  DAT_1000_d8e6 = (undefined2 *)&DAT_1000_d8e4;
+-  DAT_1000_d8e8 = (undefined2 *)&DAT_1000_d8ea;
+-  iVar2 = 0x3f;
+-  DAT_1000_d8e0 = (undefined2 *)&DAT_1000_d8ea;
+-  do {
+-    puVar1 = DAT_1000_d8e0;
+-    DAT_1000_d8e0 = puVar1 + 9;
+-    *puVar1 = DAT_1000_d8e0;
+-    iVar2 = iVar2 + -1;
+-  } while (iVar2 != 0);
+-  *puVar1 = 0xffff;
++  *(uint16_t *)(g_mem + 0x1d8de) = 0;
++  *(uint16_t *)(g_mem + 0x1d8e4) = 0xffff;
++  *(uint16_t *)(g_mem + 0x1d8e6) = 0x18e4;
++  *(uint16_t *)(g_mem + 0x1d8e8) = 0x18ea;
++  {
++    uint16_t ax = 0x18ea, bx = ax;
++    int cx = 0x3f;
++    do {
++      bx = ax;
++      ax = (uint16_t)(ax + 0x12);
++      *(uint16_t *)(g_mem + 0x1c000 + bx) = ax;
++      cx = cx - 1;
++    } while (cx != 0);
++    *(uint16_t *)(g_mem + 0x1c000 + bx) = 0xffff;
++    *(uint16_t *)(g_mem + 0x1d8e0) = ax;
++  }
++  (void)puVar1; (void)iVar2;
+   FUN_1000_46b6(0x3e0b);
+   return;
+ }
+@@ -43945,20 +43956,31 @@
+   undefined2 *puVar1;
+   int iVar2;
+   
++  /* PATCH 043: DGROUP near-offset free-list builder rendered as host pointers (shared tail of
++   * FUN_1000_3436 which falls through into FUN_1000_3446).  asm 0x13446: build a 0x3f-node list in
++   * DGROUP from offset 0x18ea, each node 0x12 bytes, [node]=next-offset, 0xffff-terminated, then call
++   * 46b6(0x3e0b).  The nodes are DGROUP NEAR OFFSETS; Ghidra typed them as host `undefined2 *`
++   * (&DAT_...) with host-pointer arithmetic -> wrong links + a bad-pointer store SIGSEGV.  Reconstruct
++   * with 16-bit near offsets based at g_mem+DGROUP.  The leading `lcall [DGROUP:0x12]` has bx=0 so the
++   * engine f842 bails; kept verbatim. */
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
+-  DAT_1000_d8de = 0;
+-  DAT_1000_d8e4 = 0xffff;
+-  DAT_1000_d8e6 = (undefined2 *)&DAT_1000_d8e4;
+-  DAT_1000_d8e8 = (undefined2 *)&DAT_1000_d8ea;
+-  iVar2 = 0x3f;
+-  DAT_1000_d8e0 = (undefined2 *)&DAT_1000_d8ea;
+-  do {
+-    puVar1 = DAT_1000_d8e0;
+-    DAT_1000_d8e0 = puVar1 + 9;
+-    *puVar1 = DAT_1000_d8e0;
+-    iVar2 = iVar2 + -1;
+-  } while (iVar2 != 0);
+-  *puVar1 = 0xffff;
++  *(uint16_t *)(g_mem + 0x1d8de) = 0;
++  *(uint16_t *)(g_mem + 0x1d8e4) = 0xffff;
++  *(uint16_t *)(g_mem + 0x1d8e6) = 0x18e4;
++  *(uint16_t *)(g_mem + 0x1d8e8) = 0x18ea;
++  {
++    uint16_t ax = 0x18ea, bx = ax;
++    int cx = 0x3f;
++    do {
++      bx = ax;
++      ax = (uint16_t)(ax + 0x12);
++      *(uint16_t *)(g_mem + 0x1c000 + bx) = ax;
++      cx = cx - 1;
++    } while (cx != 0);
++    *(uint16_t *)(g_mem + 0x1c000 + bx) = 0xffff;
++    *(uint16_t *)(g_mem + 0x1d8e0) = ax;
++  }
++  (void)puVar1; (void)iVar2;
+   FUN_1000_46b6(0x3e0b);
+   return;
+ }

@@ -1,0 +1,103 @@
+PATCH 117: complete the main-menu frame on the normal path -- reconstruct the FUN_0000_e714 screen-enter
+tail jumptable + idle-loop CF threading, and restore the dropped CF return in FUN_1000_3907.  With this
+the menu screen-enter no longer SEGVs at e714+0x1e5 and the idle loop cooperatively pumps the INT-8 timer
+so the retrace/present fires and the palette auto-uploads -> the full colour menu renders on a NORMAL run
+(no FIST_PALNOW).
+
+e714 (asm 0xe753..0xe778):
+- The tail dispatch `mov bx,[DGROUP:0xf78e]; mov ax,cs:[bx-0x1886]; jmp ax` is a jumptable Ghidra failed
+  to recover ("Could not recover jumptable at 0x0000e778") AND mis-based: it used the state variable's
+  VALUE (DAT_2000_b78e, seen 0xa at runtime) as a host pointer (`*(DAT_2000_b78e - 0x1886)`), dereferencing
+  ~0xffffe78a -> SEGV.  The table lives at CS(=0)-relative offset -0x1886 == linear 0xe77a (8 word entries:
+  0xe78c/0xe87a/0xe93c/0xe94f/0xe78a/0xe753/0xe969/0xe97c); the state var holds a byte offset into it.
+  State 0xa -> 0xe753 == resume the idle paint loop (the steady-state menu).  Reconstructed as the outer
+  state loop: target 0xe753 continues the idle loop, 0xe78a (bare ret slot) returns, any other target is a
+  tail-dispatch to that screen handler.
+- The idle loop (e753..e76a) exit is `jb 0xe753` on the CF returned by c40a (= FUN_1000_35a7, the event
+  scheduler): loop while CF=1 (event queue empty).  Ghidra dropped the flags, so the C tested a stale
+  local (uVar5) that never cleared -> the loop either exited after one pass (SEGV at the jmp) or, once the
+  pump queued events, spun forever.  Thread the real CF via g_fist_cf: the `jae 0xe766` after 3907 gates
+  the idle-housekeeping (c52c/096c) on 3907's CF, and the loop back-edge tests 35a7's CF.
+- fist_timer_pump() is called once per idle iteration: this loop is a spin-wait for events/input (the menu
+  idle), so the cooperative INT-8 tick belongs here (same pattern as patches 017/074/086).  It advances the
+  scheduler tick, runs the present, and (with the shim's async-retrace service) uploads the palette.
+
+3907 (asm 0x13907): restore the dropped clc/stc.lret -- CF=0 when the event queue is non-empty
+([0x3e00]==0 && [0x18e4]!=0xffff), CF=1 otherwise.  Drives e714's `jae 0xe766`.
+
+Asm-verified 0xe753..0xe778 (jumptable @ 0xe77a) and 0x13907..0x1391f.
+--- a/fist.c
++++ b/fist.c
+@@ -34209,25 +34209,40 @@
+   uVar2 = 0xf7b8;
+   iVar1 = FUN_0000_1cdb(0x2d21,0xf7b8,0x88,0x10,param_2,uVar4);
+   DAT_1000_c452 = 0;
+-  do {
++  {
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
++  while( true ) {                         /* outer: jmp-table state re-entry (e753 for state 0xa) */
++  do {                                    /* idle loop e753..e76a */
+     FUN_0000_206f((char)iVar1,uVar2,param_2,uVar4);
+     uVar6 = 0xf69;
+-    FUN_1000_3907();
+-    uVar5 = in_CF;
+-    if ((bool)in_CF) {
++    FUN_1000_3907();                      /* sets g_fist_cf (queue-state) */
++    if ((bool)g_fist_cf) {                /* e75b jae 0xe766: CF set => idle housekeeping */
+       (*(code *)fist_icall_far((uint32_t)(DAT_1000_c52c)))(0xf69,uVar6);
+       uVar6 = 0xf69;
+       FUN_1000_096c(uVar3);
+-      uVar5 = in_CF;
+     }
+-    iVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69,uVar6);
+-    in_CF = 1;
+-  } while ((bool)uVar5);
++    iVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69,uVar6);  /* 35a7: sets g_fist_cf */
++    fist_timer_pump();                    /* cooperative INT-8 tick during the idle spin-wait */
++  } while ((bool)g_fist_cf);              /* e76a jb 0xe753: loop while 35a7 CF=1 (queue empty/idle) */
++  (void)uVar5; (void)in_CF;
+   FUN_0000_1e4b(iVar1,uVar2,uVar3,uVar4);
+                     /* WARNING: Could not recover jumptable at 0x0000e778. Too many branches */
+                     /* WARNING: Treating indirect jump as call */
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(DAT_2000_b78e + -0x1886))))();
+-  return;
++  /* PATCH: reconstruct the jumptable at 0xe778 (Ghidra base-loss + failed recovery).  asm 0xe76f:
++   * `mov bx,[DGROUP:0xf78e]; mov ax,cs:[bx-0x1886]; jmp ax`.  The table lives at CS(=0)-relative
++   * offset -0x1886 == 0xe77a (8 word entries); the state variable DGROUP:0xf78e (DAT_2000_b78e) holds
++   * a byte offset into it.  Ghidra used the variable's VALUE as a host pointer (dropped g_mem base +
++   * CS=0 seg) -> deref ~0xffffe78a SEGV.  state 0xa -> 0xe753 = resume the idle paint loop. */
++  {
++    uint16_t _tgt = *(uint16_t*)(g_mem + (uint16_t)((uint16_t)DAT_2000_b78e - 0x1886));
++    if (_tgt == 0xe753) continue;        /* menu idle: resume the paint loop */
++    if (_tgt == 0xe78a) return;          /* table slot: bare ret */
++    (*(code *)fist_icall_near(0x0u,_tgt))();
++    return;
++  }
++  }
++  }
+ }
+ 
+ 
+@@ -45311,15 +45326,21 @@
+ undefined4 __allregs FUN_1000_3907(void)
+ 
+ {
++  extern unsigned char g_fist_cf;
+   if (DAT_1000_c06a != '\0') {
+                     /* WARNING: Could not recover jumptable at 0x00013903. Too many branches */
+                     /* WARNING: Treating indirect jump as call */
+     (*(code *)fist_icall_near(0x1000u,(uint16_t)((ulong)DAT_1000_c058)))();
+     return;
+   }
++  /* PATCH: restore the dropped CF return (asm 0x13907: clc/lret when the event queue is non-empty,
++   * stc/lret when [0x3e00]!=0 or the queue is empty [0x18e4]==0xffff).  Ghidra dropped the flag ops.
++   * CF drives the caller's `jae` (e714 idle loop: CF=1 => run idle housekeeping c52c/096c). */
+   if ((DAT_1000_fe00 == '\0') && (DAT_1000_d8e4 != -1)) {
++    g_fist_cf = 0;   /* 1391c clc; lret (queue non-empty) */
+     return;
+   }
++  g_fist_cf = 1;     /* 1391e stc; lret (empty / [0x3e00] set) */
+   return;
+ }
+ 

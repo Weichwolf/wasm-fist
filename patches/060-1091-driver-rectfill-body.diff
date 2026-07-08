@@ -1,0 +1,68 @@
+MGAVIDEO FUN_0000_1091 + fwd decl: reconstruct the driver SOLID rect-fill body (the literal VGA
+0xA0000 pixel writer) that Ghidra dropped as "Subroutine does not return", and thread the fill
+colour (al) as a 2nd param.  Asm-verified against the driver image objdump 0x1091..0x10d0.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -331,7 +331,7 @@
+ undefined2 __allregs FUN_0000_0fe2(undefined2 param_1);
+ void __allregs FUN_0000_0fe4(undefined2 *param_1,int *param_2);
+ void __allregs FUN_0000_103e(int *param_1,int *param_2);
+-void __allregs FUN_0000_1091(undefined2 param_1);
++void __allregs FUN_0000_1091(undefined2 param_1,undefined1 param_2);
+ void __allregs FUN_0000_109d(undefined2 param_1,int param_2,undefined2 *param_3,int param_4,undefined2 *param_5, undefined1 param_6);
+ void __allregs FUN_0000_10d1(undefined2 param_1);
+ void __allregs FUN_0000_10dd(undefined2 param_1,int param_2,undefined2 *param_3,int param_4,char *param_5, undefined2 param_6);
+@@ -3077,11 +3077,50 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_1091) @ 0000:1091 ===== */
+ 
+-void __allregs FUN_0000_1091(undefined2 param_1)
++void __allregs FUN_0000_1091(undefined2 param_1,undefined1 param_2)
+ 
+ {
+-                    /* WARNING: Subroutine does not return */
+-  FUN_0000_2d6d(param_1);
++  /* PATCH 060: driver SOLID rect-fill to VGA 0xA0000 (asm 0x1091) - THE literal pixel writer.
++     Ghidra dropped the entire fill body ("Subroutine does not return", leaving only the 2d6d call).
++     Reconstructed instruction-for-instruction from the driver image (objdump 0x1091..0x10d0):
++       push ax(color); call 2d6d(bx=rect struct);         ; transform/register the dirty rect
++       di = word[DGROUP:0x7c8 + word[bx]*2] + word[bx+2];  ; rowtab[y0] + x0
++       es = 0xa000; dx = word[bx+4]-word[bx] (rows);
++       cx = word[bx+6]-word[bx+2] (cols); stride = 0x140-cols; ah=al (color word);
++       per row: rep stosw (cols>>1) ; rep stosb (cols&1) ; di += stride ; dec dx; jne.
++     bx (param_1) = a DGROUP near offset to the 4-word rect [y0,x0,y1,x1]; al (param_2) = fill color.
++     DS/SS = engine DGROUP (rect + rowtab are DGROUP-relative); ES = 0xA000 -> linear 0xA0000. */
++  uint8_t  *dg  = g_mem + 0x1c000;
++  uint16_t  bx  = (uint16_t)param_1;
++  uint8_t   col = (uint8_t)param_2;
++
++  FUN_0000_2d6d((int *)(uintptr_t)bx);
++
++  {
++    uint16_t *rect   = (uint16_t *)(dg + bx);
++    uint16_t *rowtab = (uint16_t *)(dg + 0x7c8);
++    uint8_t  *vga    = g_mem + 0xA0000;
++    uint16_t  di     = (uint16_t)(rowtab[rect[0]] + rect[1]);   /* rowtab[y0] + x0 */
++    uint16_t  rows   = (uint16_t)(rect[2] - rect[0]);           /* y1 - y0 */
++    uint16_t  cols   = (uint16_t)(rect[3] - rect[1]);           /* x1 - x0 */
++    uint16_t  stride = (uint16_t)(0x140 - cols);                /* 320 - cols */
++    uint16_t  w      = (uint16_t)(((uint16_t)col << 8) | col);  /* ah = al */
++    do {
++      uint16_t c;
++      for (c = (uint16_t)(cols >> 1); c != 0; c--) {            /* rep stosw */
++        *(uint16_t *)(vga + di) = w;
++        di = (uint16_t)(di + 2);
++      }
++      if (cols & 1) {                                           /* rep stosb (odd byte) */
++        vga[di] = col;
++        di = (uint16_t)(di + 1);
++      }
++      di   = (uint16_t)(di + stride);
++      rows = (uint16_t)(rows - 1);
++    } while (rows != 0);
++  }
++  FUN_0000_2e12();
++  return;
+ }
+ 
+ 

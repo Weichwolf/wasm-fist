@@ -1,0 +1,21 @@
+FUN_0000_2fd7 (MGAVIDEO): fix the DGROUP row-table base-loss in the blit clip/coordinate setup.
+
+2fd7 sets up the source/dest rectangle for a driver blit (d5b8/d5ba src, d5c0/d5bc/d5c8 dest, c730/c732
+screen dims).  asm 0x304a `add ax,[bx+0x7c8]` (bx = row*2) indexes a word row-offset table at
+DGROUP:0x7c8 (DS = DGROUP for the driver).  Ghidra dropped the DS base -> raw host deref near NULL ->
+SEGV as soon as the far-thunk dispatch (fist_icall) reached 2d52 -> 2fd7.  Rebase onto g_mem+DGROUP.
+Asm-verified 0x304a.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -7571,7 +7571,10 @@
+     _DAT_1000_d5c6 = _DAT_1000_d5c6 + _DAT_1000_d5be;
+     iVar2 = 0;
+   }
+-  _DAT_1000_d5c8 = iVar2 + *(int *)(iVar1 * 2 + 0x7c8);
++  /* PATCH 102: base-loss.  asm 0x304a `add ax,[bx+0x7c8]` (bx=iVar1*2) reads DS:[bx+0x7c8]; the
++     driver runs with DS=DGROUP (0x1c00), so this is the DGROUP row-offset table at 0x7c8 (a BSS table
++     filled by driver init), not a raw host pointer near NULL (SEGV). */
++  _DAT_1000_d5c8 = iVar2 + *(int *)(g_mem + 0x1c000 + iVar1 * 2 + 0x7c8);
+   iVar1 = (iVar2 + _DAT_1000_d5da) - _DAT_1000_c732;
+   if (_DAT_1000_c732 <= (uint)(iVar2 + _DAT_1000_d5da)) {
+     _DAT_1000_d5bc = _DAT_1000_d5bc - iVar1;

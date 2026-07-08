@@ -1,0 +1,57 @@
+6e0e/6e8d FIST.SET open/save: DX must be the DOS offset, not a truncated host pointer.
+
+FUN_0000_6e0e (FIST.SET settings LOAD) and FUN_0000_6e8d (FIST.SET SAVE) issue INT 21h AH=3D/3C
+open/create with DS:DX = the filename.  The asm loads DX with an immediate DOS offset:
+  6e0e: `mov $0x8a9c,%dx` (the "..\FIST.SET" template at DGROUP:0x8a9c) then AH=3D; on success
+        `mov $0x8aa8,%dx` (the 0x8b-byte config buffer DGROUP:0x8aa8) then AH=3F read / AH=3E close.
+  6e8d: same offsets with AH=3C create / AH=40 write.
+Ghidra's InstallIntFixup rendered the DX reg-file slot (uRam000f0006) as a POINTER field and assigned
+it the HOST address of the Ghidra symbol -- `pcRam000f0006 = (char *)s____FIST_SET_2000_4a9c;`
+(= g_mem+0x24a9c) and `(char *)&DAT_2000_4aa8;` (= g_mem+0x24aa8).  fist_int_dispatch reads
+R_DX = low16(that host pointer) = a garbage offset (observed 0x0b7c), so the open used DS:DX =
+0x1c00:0x0b7c = linear 0x1cb7c, whose bytes are 0x09,0x3e -> the failing open of "\t>" seen in the
+trace.  DS is already set correctly (uRam000f000e = 0x1c00 = DGROUP), so only DX was wrong.
+
+Fix: write the true 16-bit DOS offset into the DX slot (uRam000f0006), matching the asm immediates
+(0x8a9c linear 0x24a9c - DGROUP 0x1c000; 0x8aa8 linear 0x24aa8).  Class: host-pointer-into-DOS-register
+INT-reg-file artifact (a recurring class; several other sites carry it -- see docs/stage1.md).  Asm-
+verified 0x6e13/0x6e25 (6e0e) and 0x6e90/0x6ea1 (6e8d).  With this, the FIST.SET settings file loads
+(or is created) correctly instead of failing on a garbage filename.
+--- a/fist.c
++++ b/fist.c
+@@ -17679,7 +17679,7 @@
+   DAT_2000_4a95 = 0;
+   uRam000f0014 = 0x21;
+   uRam000f0000 = 0x3d00;
+-  pcRam000f0006 = (char *)s____FIST_SET_2000_4a9c;
++  uRam000f0006 = 0x8a9c;    /* PATCH 077: DX = DOS offset of "..\FIST.SET" (not host ptr) */
+   uRam000f000e = 0x1c00;
+   uRam000f0002 = param_2;
+   uRam000f0004 = param_1;
+@@ -17694,7 +17694,7 @@
+     uRam000f0014 = 0x21;
+     uRam000f0002 = uRam000f0000;
+     uRam000f0004 = 0x8b;
+-    pcRam000f0006 = (char *)&DAT_2000_4aa8;
++    uRam000f0006 = 0x8aa8;    /* PATCH 077: DX = DOS offset of the config buffer */
+     uRam000f000e = 0x1c00;
+     uRam000f0000 = CONCAT11(0x3f,(char)uRam000f0000);
+     uRam000f000c = param_3;
+@@ -17762,7 +17762,7 @@
+   uRam000f0000 = CONCAT11(0x3c,uVar1);
+   uRam000f0014 = 0x21;
+   uRam000f0004 = 0;
+-  pcRam000f0006 = (char *)s____FIST_SET_2000_4a9c;
++  uRam000f0006 = 0x8a9c;    /* PATCH 077: DX = DOS offset of "..\FIST.SET" (not host ptr) */
+   uRam000f000e = 0x1c00;
+   uRam000f0002 = param_2;
+   uRam000f0008 = param_4;
+@@ -17776,7 +17776,7 @@
+     uRam000f0014 = 0x21;
+     uRam000f0002 = uRam000f0000;
+     uRam000f0004 = 0x8b;
+-    pcRam000f0006 = (char *)&DAT_2000_4aa8;
++    uRam000f0006 = 0x8aa8;    /* PATCH 077: DX = DOS offset of the config buffer */
+     uRam000f000e = 0x1c00;
+     uRam000f0000 = CONCAT11(0x40,(char)uRam000f0000);
+     uRam000f000c = param_3;

@@ -1,0 +1,120 @@
+PATCH 113: reconstruct MGAVIDEO FUN_0000_0f62 (2nd-element background-SAVE blit).
+
+0f62 (asm 0xf62..0xfbb) is the element background-SAVE blit: es:0 (save buffer) <- ds:si (framebuffer
+rect).  di=dx=param_1 = the SAVE descriptor (DGROUP near off); bx=param_2 = the RECT descriptor.  Three
+Ghidra defects, all asm-verified:
+  (a) param_1/param_2 were typed as HOST pointers (`param_1+1`, `*param_2`), but they are DGROUP near
+      offsets -- rebase to g_mem+0x1c000+off (this is what SEGV'd once di was threaded to 0xf6ee: the
+      code deref'd host address 0xf6ee+2).
+  (b) the ES (save-buffer seg = save.w0), DS (framebuffer seg = word[[0x724]]) and DGROUP row-table base
+      [0x794] rep-movs bases were all dropped (the copy started at host NULL).
+  (c) the EARLY-RETURN idiom `jns 0xf77 ; call 0xf60` was mis-modeled: 0f60 = `pop ax; ret` pops the
+      return-into-0f62 address and FAR-RETURNS to 0f62's caller (an early return), but Ghidra rendered it
+      as a normal call and then blit unconditionally through the NULL es.
+Reconstruct faithfully: `or byte[di+2],0x20; jns -> return; test 0x10 -> 2c8b; blit`.  For the MAINMENU
+2nd element the descriptor flag byte starts 0 => after |0x20 the sign bit is clear => EARLY RETURN, so no
+save buffer is touched on first paint (the reserve method 0f1a's [DGROUP:0xcc] object-vtable slot is not
+resident this phase; the blit path is only taken when the element is marked dirty, sign bit set).  The
+signature changes from (undefined2*,int*) to (undefined2,undefined2) to carry the two DGROUP offsets.
+Asm-verified 0xf62..0xfbb (and 0xf60 the pop/ret early-return trampoline).
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -325,7 +325,7 @@
+ void __allregs FUN_0000_0f3a(undefined2 param_1,undefined2 param_2);
+ void __allregs FUN_0000_0f4c(int param_1,int param_2,undefined2 *param_3,undefined2 param_4);
+ undefined2 __allregs FUN_0000_0f60(undefined2 param_1);
+-void __allregs FUN_0000_0f62(undefined2 *param_1,int *param_2);
++void __allregs FUN_0000_0f62(undefined2 param_1,undefined2 param_2);
+ void __allregs FUN_0000_0fbc(undefined2 param_1,undefined2 param_2);
+ void __allregs FUN_0000_0fce(int param_1,int param_2,undefined2 *param_3,undefined2 param_4);
+ undefined2 __allregs FUN_0000_0fe2(undefined2 param_1);
+@@ -3029,56 +3029,42 @@
+ 
+ /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+ 
+-void __allregs FUN_0000_0f62(undefined2 *param_1,int *param_2)
++void __allregs FUN_0000_0f62(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  byte *pbVar1;
+-  undefined2 *puVar2;
+-  undefined2 *puVar3;
+-  undefined2 uVar4;
+-  undefined2 uVar5;
+-  uint uVar6;
+-  uint uVar7;
+-  int iVar8;
+-  int iVar9;
+-  undefined2 *puVar10;
+-  undefined2 *puVar11;
+-  
+-  pbVar1 = (byte *)(param_1 + 1);
+-  *pbVar1 = *pbVar1 | 0x20;
+-  if ((char)*pbVar1 < '\0') {
+-    if ((*(byte *)(param_1 + 1) & 0x10) != 0) {
+-      FUN_0000_2c8b();
+-    }
+-  }
+-  else {
+-    FUN_0000_0f60(0xf7a);
++  /* PATCH 113: MGAVIDEO background-SAVE blit (asm 0xf62..0xfbb), reconstructed.  di=dx=param_1 = the
++     SAVE descriptor (DGROUP near off); bx=param_2 = the RECT descriptor (DGROUP near off).  Ghidra
++     treated param_1/param_2 as host pointers, dropped the ES(save seg)/DS(fb seg) rep-movs bases and
++     the DGROUP row-table base [0x794], and mis-modeled the EARLY-RETURN idiom `call 0xf60` (0f60 =
++     `pop ax; ret` -- pops the return-into-0f62 address and far-returns to 0f62's caller) as a normal
++     call, so it blit unconditionally through a NULL es.  Faithful reconstruction:
++       or byte[di+2],0x20 ; jns -> EARLY RETURN ; test 0x10 -> 2c8b ; then blit fb-rect -> save es:0.
++     For the MAINMENU 2nd element the flag byte starts 0 (=> after |0x20 the sign bit is clear) so it
++     early-returns -- no save buffer needed on first paint.  The blit path (sign bit set) is rebuilt to
++     the exact es/ds/row-table semantics for later frames. */
++  uint8_t  *S = g_mem + 0x1c000 + (uint16_t)param_1;   /* save descriptor (di) */
++  int16_t  *R = (int16_t *)(g_mem + 0x1c000 + (uint16_t)param_2); /* rect descriptor (bx) */
++  S[2] |= 0x20;                                         /* or byte [di+2],0x20 */
++  if (!((int8_t)S[2] < 0)) return;                      /* jns 0xf77 -> call 0xf60 == EARLY RETURN */
++  if ((S[2] & 0x10) != 0) FUN_0000_2c8b();              /* test 0x10 ; lea ax,[di]; call 0x2c8b */
++  {
++    uint16_t save_seg  = *(uint16_t *)S;                /* mov es,[di]  = save.w0 */
++    uint16_t rowtab    = *(uint16_t *)(g_mem + 0x1c794);/* [0x794] row-offset table base (DGROUP off) */
++    uint16_t rowoff    = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint16_t)R[0] * 2 + rowtab));
++    uint32_t src       = (uint16_t)(rowoff + (uint16_t)R[1]);   /* si = rowoff + [bx+2] */
++    uint16_t fb_di     = *(uint16_t *)(g_mem + 0x1c724);        /* di=[0x724] */
++    uint16_t fb_seg    = *(uint16_t *)(g_mem + 0x1c000 + fb_di);/* ds = word[[0x724]] (=0xa000) */
++    int      rows      = (uint16_t)R[2] - (uint16_t)R[0];       /* [bx+4]-[bx] */
++    uint16_t cols      = (uint16_t)R[3] - (uint16_t)R[1];       /* [bx+6]-[bx+2] */
++    uint16_t skip      = *(uint16_t *)(g_mem + 0x1c796) - cols; /* [0x796]-cx */
++    uint8_t *dst       = g_mem + ((uint32_t)save_seg << 4);     /* es:0 */
++    uint8_t *srcp      = g_mem + ((uint32_t)fb_seg << 4) + src;
++    do {
++      for (uint16_t k = 0; k < cols; k++) *dst++ = *srcp++;
++      srcp += skip;
++      rows--;
++    } while (rows != 0);
+   }
+-  uVar4 = *param_1;
+-  puVar11 = (undefined2 *)0x0;
+-  puVar10 = (undefined2 *)(*(int *)(*param_2 * 2 + _DAT_1000_c794) + param_2[1]);
+-  iVar8 = param_2[2] - *param_2;
+-  uVar6 = param_2[3] - param_2[1];
+-  uVar5 = *_DAT_1000_c724;
+-  iVar9 = _DAT_1000_c796 - uVar6;
+-  do {
+-    for (uVar7 = uVar6 >> 1; uVar7 != 0; uVar7 = uVar7 - 1) {
+-      puVar3 = puVar11;
+-      puVar11 = puVar11 + 1;
+-      puVar2 = puVar10;
+-      puVar10 = puVar10 + 1;
+-      *puVar3 = *puVar2;
+-    }
+-    for (uVar7 = (uint)((uVar6 & 1) != 0); uVar7 != 0; uVar7 = uVar7 - 1) {
+-      puVar3 = puVar11;
+-      puVar11 = (undefined2 *)((int)puVar11 + 1);
+-      puVar2 = puVar10;
+-      puVar10 = (undefined2 *)((int)puVar10 + 1);
+-      *(undefined1 *)puVar3 = *(undefined1 *)puVar2;
+-    }
+-    puVar10 = (undefined2 *)((int)puVar10 + iVar9);
+-    iVar8 = iVar8 + -1;
+-  } while (iVar8 != 0);
+   return;
+ }
+ 

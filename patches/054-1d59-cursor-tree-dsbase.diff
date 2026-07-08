@@ -1,0 +1,60 @@
+FUN_0000_1d59 (mouse-cursor sprite-tree walker): restore the DS=word[DGROUP:0x3e02] list base.
+
+Called by FUN_0000_1cdb / FUN_0000_1c6a during INT-33h mouse-cursor init.  1cdb does `mov ds,[DGROUP:\n0x3e02]` (=0x1faf, the cursor/sprite-list segment) right before the call (asm 0x1d40); Ghidra dropped it,
+so `[bx]`/`[bx+2]` lost their DS base and were dereferenced as host pointers (SIGSEGV).  The `[bp+di]`
+byte marks are SS(=DGROUP)-based, the walk stride is 0xc bytes, and the fields are 16-bit words -- Ghidras
+int* arithmetic mis-scaled both.  Reconstruct faithfully; ax(=limit=param_1) is preserved -> the return.
+Asm-verified engine 0x1d59.
+--- a/fist.c
++++ b/fist.c
+@@ -8204,21 +8204,36 @@
+ undefined4 __allregs FUN_0000_1d59(int *param_1,int *param_2,int param_3)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  
+-  do {
+-    iVar1 = param_2[1];
+-    *(undefined1 *)(param_3 + iVar1) = 3;
+-    if (*param_2 == 4) {
+-      iVar2 = *(int *)(param_3 + iVar1 + 1);
+-      if (iVar2 != 0) {
+-        FUN_0000_1d59((int *)*(undefined2 *)(param_3 + iVar1 + 3),(int *)iVar2,param_3);
++  /* PATCH 054: mouse-cursor sprite-tree walker (asm 0x1d59), called by FUN_0000_1cdb / FUN_0000_1c6a.
++     The caller does `mov ds,[DGROUP:0x3e02]` immediately before the call (asm 0x1d40) -- word[0x3e02] =
++     0x1faf, the cursor/sprite-list segment -- which Ghidra dropped, so the `[bx]`/`[bx+2]` reads lost
++     their DS base and were dereferenced as host pointers (SIGSEGV).  The `[bp+di]` byte-mark writes are
++     SS(=DGROUP)-based, the walker stride is 0xc BYTES (`add bx,0xc`), and the fields are 16-bit WORDS
++     (Ghidra's int* arithmetic mis-scaled both).  Reconstruct: bx walks the DS=word[0x3e02] list (stride
++     0xc) up to the limit ax; each node marks byte 3 at DGROUP:(bp+di) with di = word[ds:bx+2]; if node
++     type word[ds:bx]==4 it recurses on the child (limit=word[DGROUP:bp+di+3], head=word[DGROUP:bp+di+1])
++     when the head is nonzero.  ax (=limit=param_1) is preserved across the body, so it is the return. */
++  {
++    uint16_t ds_seg = *(uint16_t *)(g_mem + 0x1c000 + 0x3e02);
++    uint8_t *dsb = g_mem + ((uint32_t)ds_seg << 4);
++    uint8_t *ssb = g_mem + 0x1c000;
++    uint16_t ax = (uint16_t)(uintptr_t)param_1;
++    uint16_t bx = (uint16_t)(uintptr_t)param_2;
++    uint16_t bp = (uint16_t)param_3;
++    do {
++      uint16_t di = *(uint16_t *)(dsb + bx + 2);
++      *(uint8_t *)(ssb + (uint16_t)(bp + di)) = 3;
++      if (*(uint16_t *)(dsb + bx) == 4) {
++        uint16_t nbx = *(uint16_t *)(ssb + (uint16_t)(bp + di + 1));
++        if (nbx != 0) {
++          uint16_t nax = *(uint16_t *)(ssb + (uint16_t)(bp + di + 3));
++          FUN_0000_1d59((int *)(uintptr_t)nax,(int *)(uintptr_t)nbx,param_3);
++        }
+       }
+-    }
+-    param_2 = param_2 + 6;
+-  } while (param_2 <= param_1);
+-  return;
++      bx = (uint16_t)(bx + 0xc);
++    } while (bx <= ax);
++  }
++  return (undefined4)(uint16_t)(uintptr_t)param_1;
+ }
+ 
+ 

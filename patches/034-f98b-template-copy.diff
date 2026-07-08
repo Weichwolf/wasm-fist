@@ -1,0 +1,75 @@
+FUN_0000_f98b: faithful reconstruction of the DGROUP:0x36 template-copy service (driver-init helper).
+
+The video driver's init (MGAVIDEO FUN_0000_0009) copies five templates from its own module data into
+freshly allocated DGROUP buffers via the engine service DGROUP:0x36 = FUN_0000_f98b (`f98b(count, srcseg,
+slot, srcoff)`).  asm 0xf98b:
+    push ds ; push ax ; push dx ; push si ; push bx ; mov cx,ds (=DGROUP)
+    lcall [DGROUP:0xcc]           ; = FUN_1000_182a : alloc `count` bytes, struct[0]=DGROUP:[slot]=seg
+    pop bx ; mov es,[ds:bx]       ; es = allocated segment (just written to DGROUP:[slot])
+    xor di,di ; pop si ; pop ds   ; ds = srcseg (pushed dx) ; si = srcoff (pushed si)
+    pop cx                        ; cx = count (pushed ax)
+    rep movsb ds:si -> es:di      ; copy `count` bytes from srcseg:srcoff to allocseg:0
+    mov ax,es ; pop ds ; lret     ; return AX = allocated segment
+Ghidra dropped the x86 string-op segment bases (dst es:di collapsed to a bare host offset starting at 0
+-> a NULL write -> SIGSEGV, the observed terminal crash of the driver init) AND the allocator's register
+args.  Reconstruct faithfully: param_1=count, param_2=srcseg (ABSOLUTE runtime seg -- the driver threads
+its MZ-relocated template segment at the call site, patch 035), param_3=slot (DGROUP near offset),
+param_4=srcoff.  The alloc goes through the real allocator FUN_1000_182a (bytes->paras->184b->0a31,
+patches 025/023) which writes the allocated segment into DGROUP:[slot]; f98b then reads it back and copies.
+The signature widens param_3/param_4 from pointer to undefined2 (16-bit near offsets, not host pointers);
+f98b has no direct C callers (only the DGROUP:0x36 vector, bypassed by the threaded driver init), so the
+fwd decl is updated in lockstep.  Asm-verified base-0 0xf98b.
+--- a/fist.c
++++ b/fist.c
+@@ -1534,7 +1534,7 @@
+ void __allregs FUN_0000_f909(int param_1,undefined2 param_2,int param_3,undefined2 param_4);
+ void __allregs FUN_0000_f932(int param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4);
+ void __allregs FUN_0000_f960(int param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4);
+-undefined2 __allregs FUN_0000_f98b(int param_1,undefined2 param_2,undefined2 *param_3,undefined1 *param_4);
++undefined2 __allregs FUN_0000_f98b(int param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ undefined2 __allregs FUN_0000_f9c0(char param_1,undefined2 param_2,undefined2 param_3,byte param_4,undefined2 param_5, undefined2 param_6,undefined2 param_7,undefined2 param_8);
+ void __allregs FUN_0000_fa06(char *param_1);
+ void __allregs FUN_0000_fa26(void);
+@@ -36445,25 +36445,25 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_f98b) @ 0000:f98b ===== */
+ 
+ undefined2 __allregs
+-FUN_0000_f98b(int param_1,undefined2 param_2,undefined2 *param_3,undefined1 *param_4)
++FUN_0000_f98b(int param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
+-  undefined1 *puVar1;
+-  undefined1 *puVar2;
+-  undefined2 uVar3;
+-  undefined1 *puVar4;
+-  
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0cc)))();
+-  uVar3 = *param_3;
+-  puVar4 = (undefined1 *)0x0;
+-  for (; param_1 != 0; param_1 = param_1 + -1) {
+-    puVar2 = puVar4;
+-    puVar4 = puVar4 + 1;
+-    puVar1 = param_4;
+-    param_4 = param_4 + 1;
+-    *puVar2 = *puVar1;
+-  }
+-  return uVar3;
++  /* PATCH 034: faithful DGROUP:0x36 template-copy service (see patch header).  Ghidra dropped the
++   * rep-movsb ES:DI/DS:SI segment bases (dst started at host 0 -> NULL write -> SIGSEGV) and the
++   * allocator args.  param_1=count(bytes), param_2=srcseg(absolute runtime seg), param_3=slot(DGROUP
++   * near offset), param_4=srcoff.  Alloc `count` bytes via FUN_1000_182a into DGROUP:[slot] (writes
++   * struct[0]=allocated seg), then copy `count` bytes srcseg:srcoff -> allocseg:0. */
++  uint16_t slot  = (uint16_t)param_3;
++  uint16_t count = (uint16_t)param_1;
++  uint16_t allocseg;
++  uint8_t *dst, *src;
++  uint16_t i;
++  FUN_1000_182a(count,0x1c00,param_2,(undefined2 *)(uintptr_t)slot,0,0);
++  allocseg = *(uint16_t *)(g_mem + 0x1c000 + slot);
++  dst = g_mem + ((uint32_t)allocseg << 4);
++  src = g_mem + ((uint32_t)(uint16_t)param_2 << 4) + (uint16_t)param_4;
++  for (i = 0; i < count; i++) dst[i] = src[i];
++  return allocseg;
+ }
+ 
+ 

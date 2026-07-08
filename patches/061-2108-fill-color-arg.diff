@@ -1,0 +1,18 @@
+FUN_0000_2108 (cursor erase handler): pass the explicit fill colour 0 to the now-2-arg
+FUN_0000_1091 (patch 060 gave 1091 a real fill body + a colour param).  asm 0x2108 sets al=0
+(`xor al,al`); without this the reconstructed fill would take a stack-garbage colour.  Applies
+on top of patch 059.
+--- a/fist.c
++++ b/fist.c
+@@ -8902,7 +8902,10 @@
+      the node's rect struct.  The __allregs indirect call dropped bx -> 1091/2d6d ran on a null pointer
+      (SIGSEGV).  Thread bx = word[DGROUP:0x3e08] + 4 (al=0 fill color is used by 1091's dropped body). */
+   uint16_t bx = (uint16_t)(*(uint16_t *)(g_mem + 0x1c000 + 0x3e08) + 4);
+-  ((void (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c60a)))(bx);
++  /* PATCH 061: 1091 now takes an explicit fill-colour 2nd param (al); the erase handler's al=0
++     (asm 0x2108 `xor al,al`).  Pass colour 0 so the reconstructed rect-fill erases (fills 0),
++     not a stack-garbage colour. */
++  ((void (*)(undefined2,undefined1))fist_icall_far((uint32_t)(DAT_1000_c60a)))(bx, 0);
+   return;
+ }
+ 

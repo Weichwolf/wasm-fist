@@ -1,0 +1,21 @@
+FUN_1000_5228 (post-mode-set video-driver dispatch): thread bx=0x264c into the c558 method call.
+
+asm 0x15228: `mov bx,0x264c; call [DGROUP:0x558]` -> the driver method DGROUP:0x558 = 0x3e3b:0x26e =
+FUN_0000_026e (patch 050).  The __allregs indirect call dropped bx, so 026e ran on a garbage near offset
+(SIGSEGV).  Pass bx=0x264c (a DGROUP near offset).  Asm-verified engine 0x15228.
+--- a/fist.c
++++ b/fist.c
+@@ -47431,7 +47431,12 @@
+ void __allregs FUN_1000_5228(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c558)))();
++  /* PATCH 051: thread bx=0x264c into the c558 driver-object-init method call.  asm 0x15228:
++     `mov bx,0x264c; call [DGROUP:0x558]` -> the driver method DGROUP:0x558 = 0x3e3b:0x26e =
++     FUN_0000_026e (do-once init of the driver-object struct at DGROUP:0x264c, then stores that near
++     offset into DGROUP:0x736, read by FUN_1000_524e).  The __allregs indirect call dropped bx -> 026e
++     ran on a garbage near offset (SIGSEGV).  Pass bx=0x264c (a DGROUP near offset). */
++  ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c558)))((int *)0x264c,0);
+   FUN_1000_524e(0);
+   FUN_1000_52d1(0,0);
+   FUN_1000_530b(0xc);
