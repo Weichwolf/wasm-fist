@@ -1,0 +1,42 @@
+SETTINGS status line: emit the trailing '.' -> AE = 0 (the last pixel).
+
+Patch 134 resolved the joystick-status TEXT ("NO JOYSTICK SELECTED") from the game's parallel status
+table at DGROUP:0x8b33 but omitted the trailing period the real builder appends, leaving a single
+deterministic red pixel at framebuffer (88,192) (port = black, DOSBox ref = red 251,0,0) -> AE = 1.
+
+FUN_0000_6c38 (`mov si,0x165c; lcall [0x2ac]; call 700a`, asm 0x6c38) builds the status line via the
+display-list message BUILDER DGROUP:0x2ac = 0xf69:0x444f = FUN_1000_444f (linear 0x13adf), whose reloc
+section (leading seg 0xf69, reloc-table 0x33720, si=0x200) is not installed in our port.  444f's NET
+EFFECT for a status line (asm-verified vs re_out/fist_dat_image.bin) is: assemble the source status
+string + a trailing '.' into the builder's OWN str-seg scratch buffer at str-seg:0x62f (via the strcat
+helper 0xf69:0x13f5c `lods es:[si]; stos es:[di]` with di = 0x62f), then return si = that buffer.  The
+source status strings are period-LESS and NUL-terminated in the far data group:
+  str-seg:0x1672 "NO JOYSTICK SELECTED\0"   str-seg:0x1687 "STANDARD JOYSTICK SELECTED\0"  ...
+(str-seg = word[DGROUP:0x70] = 0x2d74); the builder appends the '.' the reference shows.
+
+Reconstruct that exact effect faithfully in the engine's own buffer and render it through the real
+700a -> 6d65 -> 5591 drawstring path (unchanged): copy the (NUL-terminated) source status text into
+str-seg:0x62f, append '.', NUL-terminate, and pass si = 0x62f to 700a.  Byte-identical to 444f's output;
+the trailing period lands as the single red pixel at (88,192) -> SETTINGS AE = 0 on both targets.
+
+--- a/fist.c
++++ b/fist.c
+@@ -17525,7 +17525,17 @@
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c2ac)))();
+   { uint8_t *D=g_mem+0x1c000; uint16_t js=*(uint16_t*)(D+0x8b43);
+     uint16_t so = js<5 ? *(uint16_t*)(D+0x8b33+js*2) : 0x165c;
+-    FUN_0000_700a(so); }
++    /* PATCH 135: reconstruct FUN_1000_444f's net effect for the joystick-status line.  The real
++       display-list message builder (DGROUP:0x2ac = 0xf69:0x444f) strcat's the period-less source
++       status text + a trailing '.' into its own str-seg scratch buffer str-seg:0x62f (asm strcat
++       0xf69:0x13f5c, di=0x62f) and returns si = 0x62f.  Reproduce the exact bytes in that buffer and
++       render through the unchanged 700a->6d65 drawstring path -> the trailing period (the last pixel). */
++    uint32_t strseg = (uint32_t)(*(uint16_t *)(D + 0x70)) << 4;
++    uint8_t *src = g_mem + strseg + so;
++    uint8_t *dst = g_mem + strseg + 0x62f;
++    int k = 0; while (src[k] != 0 && k < 0x200) { dst[k] = src[k]; k++; }
++    dst[k++] = '.'; dst[k] = 0;
++    FUN_0000_700a(0x62f); }
+   DAT_2000_4b91 = 3;
+   DAT_2000_4b94 = 3;
+   DAT_2000_4b97 = 3;
