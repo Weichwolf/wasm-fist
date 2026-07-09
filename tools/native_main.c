@@ -239,6 +239,8 @@ void fist_timer_pump(void){
             fprintf(stderr, "[fist] FIST_RUNMS watchdog: dumping frame + exiting (video-mode=0x%02x)\n",
                     fist_vga_mode());
             if (fb) fist_dump_framebuffer(fb);
+            { const char *rw = getenv("FIST_FBRAW");
+              if (rw) { FILE *f = fopen(rw, "wb"); if (f) { fwrite(g_mem + 0xA0000, 1, 64000, f); fclose(f); } } }
             if (getenv("FIST_ROWDUMP")) {
                 uint16_t *rt = (uint16_t*)(g_mem + 0x1c000 + 0x7c8);
                 uint16_t c794 = *(uint16_t*)(g_mem + 0x1c000 + 0x794);

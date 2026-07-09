@@ -27,6 +27,7 @@ FLOWS=(
   "about|25000|22000|200:160:139:0; 800:160:139:1; 1400:160:139:0; 2000:160:138:0|$ROOT/ref/about_native320.png"
   "settings|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 2000:160:126:0|$ROOT/ref/settings_native320.png"
   "review|25000|22000|200:160:113:0; 800:160:113:1; 1400:160:113:0; 2000:160:113:0|$ROOT/ref/review_native320.png"
+  "selplayer|25000|22000|200:160:74:0; 800:160:74:1; 1400:160:74:0; 2000:160:74:0|$ROOT/ref/selplayer_native320.png"
 )
 
 run_target() { # $1=target $2=hz $3=ms $4=mouse-script $5=out.ppm ; echo rc

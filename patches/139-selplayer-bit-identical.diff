@@ -1,0 +1,235 @@
+Patch 139 — SELECT PLAYER (cc33 list dialog) bit-identical: bg composite + save/restore + list text + selection.
+
+Resolves the two remaining SELECT PLAYER blockers to AE=0 (native + wasm bit-identical), all asm-verified
+vs re_out/fist_dat_image.bin + re_out/fist_mga_image.bin:
+
+BLOCKER 1 (bg does not composite / flat olive) — ROOT CAUSE = FUN_0000_cdc4, the scrollbar-TRACK paint
+method, ran base-lost with every MGAVIDEO method-vector arg dropped, so its [0x60a]=1091 fills used
+codegen-garbage bx/al -> a WILD inverted rect (rows underflow to 65501) filled with a garbage colour
+(0x30 olive) that WIPED the whole screen every frame.  This is ALSO Blocker 2: the wild write's target
+depended on the garbage bx, so it SEGV'd ~1/8 (crash-free under -ftrivial-auto-var-init=pattern, where
+bx=0xAAAA lands inside g_mem).  cdc4 reconstructed instruction-for-instruction (asm 0xcdc4..0xce36):
+recover the element from DGROUP:0x3e08, box outline [0x61a]=11db(2), scratch rect @DGROUP:0xe873, the two
+[0x60a]=1091 track fills (colour 0) + the [0x6b4]=26a1 thumb sprite (id 0x108+a86d).  NB the scratch
+a875 store is a 16-bit WORD (asm `mov [0xe875],ax`); Ghidra's iRam0002a875 int (4-byte) store zeroed the
+adjacent a877 -> a second wild fill; faithful 16-bit store.
+
+Save/RESTORE — the SELECT PLAYER (cc33) dialog is supposed to RESTORE the terrain-only menu backdrop
+(saved by the menu's e38a(0xf790) BEFORE the item sprites) so the menu-item bars behind the dialog are
+erased.  0f1a (save-buffer RESERVE) calls the device-alloc vector [DGROUP:0xcc], UNINSTALLED in our port
+(== 0, same gap class as patch 049's palette alloc / 134's 0xe4) -> no buffer, flag sign-bit never set ->
+0f3a save-blit / 0fe4 restore-blit no-op -> item bars persisted.  0f1a reconstructed (asm 0xf1a): compute
+the save size, resolve FUN_1000_182a directly to reserve the buffer into the save descriptor (writes
+{seg,0xa0}); REUSE an already-reserved buffer so the per-frame menu save doesn't leak (the raw 182a
+frees+reallocs via the 184b bit7 free-path, an unimplemented MEMMGR follow-on here).
+
+List-box NAME text rendered as blocks: thunk_FUN_1000_5531 (the DGROUP-string glyph loop b631 uses)
+dropped the AL char arg to the per-glyph blitter [0x684] -> every glyph a stale block.  Thread al (same
+as the working 5591, patch 115).
+
+Selection HIGHLIGHT (red bar on the selected row) missing: MGAVIDEO 0x10d1 (the masked highlight fill
+that c60e dispatches) was unreconstructed ("Subroutine does not return", 1091/patch-060 class).
+Reconstructed (asm 0x10d1..0x1113): masked fill = write AL except where pixel==AH (preserve).  b5a4's
+call threaded to pass the full colour word ax=0x000e (AL=0xe red fill, AH=0 transparent key) so the black
+glyph pixels survive the highlight.
+
+Result: SELECT PLAYER AE = 0/64000 vs ref/selplayer_native320.png on native AND wasm, native<->wasm
+0-diff, deterministic (normal + pattern-init).  No engine re_out/*.c change (fist.c pristine); patches
+only fist.c + fist_mga.c via the build.  The 4 prior verify flows unchanged.
+
+--- a/fist.c
++++ b/fist.c
+@@ -31374,27 +31374,43 @@
+ void __allregs FUN_0000_cdc4(int param_1)
+ 
+ {
+-  uint uVar1;
+-  int *piVar2;
+-  
+-  piVar2 = (int *)(param_1 + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  DAT_2000_a873 = *piVar2 + 1;
+-  DAT_2000_a877 = DAT_2000_a873 + DAT_2000_a86f;
+-  iRam0002a875 = piVar2[1] + 1;
+-  DAT_2000_a879 = piVar2[3] + -1;
+-  DAT_2000_a87b = piVar2[2] - 1;
+-  if (DAT_2000_a873 < DAT_2000_a877) {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
++  /* PATCH 139: SELECT PLAYER scrollbar-TRACK paint method (asm 0xcdc4).  Dispatched by the 209e dirty-
++     walk with the element live in BX (dropped by __allregs -> param_1 garbage); recover elem from
++     DGROUP:0x3e08.  Ghidra base-lost the whole method + dropped all four MGAVIDEO method-vector args, so
++     the [0x60a]=1091 fills ran with codegen-garbage bx/al -> a WILD inverted rect (rows underflow to
++     65501) filled with a garbage colour -> WIPED the whole screen (the Blocker-1 flat-olive).
++     Reconstruct faithfully (asm 0xcdc4..0xce36):
++       lea 4(bx),bx; mov al,2; lcall [0x61a]                 ; 11db box OUTLINE colour 2, rect=elem+4
++       a873=[bx]+1; a877=a873+a86f; a875=[bx+2]+1;           ; scratch rect @DGROUP:0xe873
++       a879=[bx+6]-1; a87b=[bx+4]-1;
++       if a873<a877 { bx=0xe873; al=0; lcall [0x60a] }       ; 1091 fill track ABOVE thumb, colour 0
++       a873=a877; a877+=8; ax=0x108+a86d; bx=0xe873; lcall [0x6b4]  ; 26a1 thumb sprite
++       a873=a877; a877=a87b; if a873<a877 { bx=0xe873; al=0; lcall [0x60a] }  ; 1091 fill BELOW thumb */
++  uint8_t  *dg   = g_mem + 0x1c000;
++  uint16_t  elem = *(uint16_t *)(dg + 0x3e08);
++  uint16_t  rect_off = (uint16_t)(elem + 4);
++  int16_t  *rect = (int16_t *)(dg + rect_off);
++  (void)param_1;
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(rect_off, 2);
++  DAT_2000_a873 = rect[0] + 1;
++  DAT_2000_a877 = (uint16_t)DAT_2000_a873 + (uint16_t)DAT_2000_a86f;
++  /* NB a875 is a 16-bit WORD (`mov [0xe875],ax`); Ghidra's iRam0002a875 int (4-byte) store zeroes the
++     adjacent a877 at 0xe877 -> wild fill.  Faithful 16-bit store. */
++  *(uint16_t *)(dg + 0xe875) = (uint16_t)(rect[1] + 1);
++  DAT_2000_a879 = rect[3] - 1;
++  DAT_2000_a87b = rect[2] - 1;
++  if ((uint16_t)DAT_2000_a873 < (uint16_t)DAT_2000_a877) {
++    ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c60a)))(0xe873, 0);
+   }
+   DAT_2000_a873 = DAT_2000_a877;
+-  DAT_2000_a877 = DAT_2000_a877 + 8;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  uVar1 = DAT_2000_a877;
++  DAT_2000_a877 = (uint16_t)DAT_2000_a877 + 8;
++  ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++     fist_icall_far((uint32_t)(DAT_1000_c6b4)))((uint16_t)(0x108 + (uint16_t)DAT_2000_a86d), 0, 0,
++                                                0xe873, 0);
+   DAT_2000_a873 = DAT_2000_a877;
+   DAT_2000_a877 = DAT_2000_a87b;
+-  if (uVar1 < DAT_2000_a87b) {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
++  if ((uint16_t)DAT_2000_a873 < (uint16_t)DAT_2000_a877) {
++    ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c60a)))(0xe873, 0);
+   }
+   return;
+ }
+@@ -49350,13 +49366,18 @@
+ void __allregs thunk_FUN_1000_5531(char *param_1)
+ 
+ {
++  /* PATCH 139: DGROUP-string glyph loop (asm 0x1552b `jmp 0x15531`; body `lods ds:[si],al; lcall
++     [0x684]`).  Same per-glyph blit loop as the working 5591 (patch 115) but the string comes from DS:si
++     (a DGROUP scratch buffer, e.g. b631's copied player name at DGROUP:0x1f8c); param_1 is the flat host
++     pointer.  Ghidra dropped the AL char arg to the per-glyph blitter [DGROUP:0x684]=driver 1d23 -> every
++     glyph rendered as the same stale block (the garbled SELECT PLAYER list rows).  Thread al faithfully. */
+   char *pcVar1;
+-  
++
+   while( true ) {
+     pcVar1 = param_1;
+     param_1 = param_1 + 1;
+     if ((*pcVar1 == '\0') || ((*pcVar1 == '$' && (*param_1 == '\0')))) break;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
++    ((void (*)(uint16_t))fist_icall_far((uint32_t)(DAT_1000_c684)))((uint8_t)*pcVar1);
+   }
+   return;
+ }
+@@ -62619,7 +62640,10 @@
+       FUN_1000_52d1(DAT_2000_a887 + 1,DAT_2000_a889 + 1);
+       FUN_1000_b631((uint16_t)(idx * 0x10 + 0x3776));
+       if (idx == (uint16_t)DAT_2000_a838) {
+-        ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c60e)))(0xe887, 0xe);
++        /* PATCH 139: highlight the selected row (asm `mov al,0xe; mov ah,0; lcall [0x60e]`=mga 0x10d1
++           masked fill).  Pass the full colour WORD ax=0x000e (al=0xe red fill, ah=0 transparent key) so
++           the black glyph pixels are preserved. */
++        ((void (*)(uint16_t,uint16_t))fist_icall_far((uint32_t)(DAT_1000_c60e)))(0xe887, 0x000e);
+       }
+       DAT_2000_a887 = (uint16_t)(DAT_2000_a887 + 6);
+       idx++;
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -322,7 +322,7 @@
+ void __allregs FUN_0000_0e63(void);
+ void __allregs FUN_0000_0edc(undefined1 param_1,int *param_2);
+ undefined2 __allregs FUN_0000_0efa(int *param_1);
+-void __allregs FUN_0000_0f1a(void);
++void __allregs FUN_0000_0f1a(undefined2 param_1, undefined2 param_2);
+ void __allregs FUN_0000_0f3a(undefined2 param_1,undefined2 param_2);
+ void __allregs FUN_0000_0f4c(int param_1,int param_2,undefined2 *param_3,undefined2 param_4);
+ undefined2 __allregs FUN_0000_0f60(undefined2 param_1);
+@@ -334,7 +334,7 @@
+ void __allregs FUN_0000_103e(int *param_1,int *param_2);
+ void __allregs FUN_0000_1091(undefined2 param_1,undefined1 param_2);
+ void __allregs FUN_0000_109d(undefined2 param_1,int param_2,undefined2 *param_3,int param_4,undefined2 *param_5, undefined1 param_6);
+-void __allregs FUN_0000_10d1(undefined2 param_1);
++void __allregs FUN_0000_10d1(undefined2 param_1, undefined2 param_2);
+ void __allregs FUN_0000_10dd(undefined2 param_1,int param_2,undefined2 *param_3,int param_4,char *param_5, undefined2 param_6);
+ void __allregs FUN_0000_1114(undefined2 param_1);
+ void __allregs FUN_0000_1120(undefined2 param_1,int param_2,undefined2 *param_3,int param_4,char *param_5, undefined2 param_6);
+@@ -2935,10 +2935,32 @@
+ 
+ /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+ 
+-void __allregs FUN_0000_0f1a(void)
++void __allregs FUN_0000_0f1a(undefined2 param_1, undefined2 param_2)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0cc)))();
++  /* PATCH 139: save-buffer RESERVE (asm 0xf1a).  bx=param_1=rect descriptor offset, dx=param_2=save
++     descriptor offset (0xf6ee).  asm: size = f(rows,cols) via a byte-multiply; `mov bx,dx; mov cx,ds;
++     lcall [DGROUP:0xcc]` allocates the buffer + writes {seg@[save],0xa0@[save+2]} into the save
++     descriptor.  DGROUP:0xcc (device alloc) is UNINSTALLED in our port (== 0, the same gap class as
++     patch 049's palette alloc / patch 134's 0xe4) so the raw far call no-ops -> no buffer, flag sign
++     bit never set -> the dialog SAVE/RESTORE (0f3a save-blit / 0fe4 restore-blit via e38a/e39f) does
++     nothing, so the SELECT PLAYER (cc33) dialog never erases the underlying menu-item bars back to the
++     terrain backdrop (Blocker-1 residual).  Resolve FUN_1000_182a directly (patch-049 pattern) so the
++     save buffer IS reserved into the descriptor.  REUSE an already-reserved buffer (flag bit7 set) so
++     the per-frame menu save (e9f0 -> e38a(0xf790)) does not leak (the raw 182a frees+reallocs via the
++     184b bit7 free-path, which is an unimplemented MEMMGR follow-on in our port). */
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t  rect_off = (uint16_t)param_1;
++  uint16_t  save_off = (uint16_t)param_2;
++  int16_t  *rect = (int16_t *)(dg + rect_off);
++  uint16_t  rows = (uint16_t)(rect[2] - rect[0]);        /* [bx+4]-[bx] */
++  uint16_t  cols = (uint16_t)(rect[3] - rect[1]);        /* [bx+6]-[bx+2] */
++  uint8_t   al = (uint8_t)rows, cl = (uint8_t)cols;
++  uint8_t   ch = (uint8_t)((uint8_t)(-(int8_t)(cols >> 8)) & al);   /* neg ch; and ch,al */
++  uint16_t  sz = (uint16_t)((uint16_t)((uint16_t)al * (uint16_t)cl) + ((uint16_t)ch << 8)); /* mul cl; add ah,ch */
++  if (*(uint8_t *)(dg + (uint16_t)(save_off + 2)) & 0x80) return;   /* already reserved -> reuse */
++  { typedef void (*a182a_t)(unsigned,undefined2,undefined2,undefined2,undefined2,undefined2);
++    ((a182a_t)fist_icall(0x1182a))(sz ? sz : 1, 0x1c00, 0, save_off, 0, 0); }
+   return;
+ }
+ 
+@@ -3298,11 +3320,41 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_10d1) @ 0000:10d1 ===== */
+ 
+-void __allregs FUN_0000_10d1(undefined2 param_1)
++void __allregs FUN_0000_10d1(undefined2 param_1, undefined2 param_2)
+ 
+ {
+-                    /* WARNING: Subroutine does not return */
+-  FUN_0000_2d6d(param_1);
++  /* PATCH 139: driver MASKED rect-fill (asm 0x10d1) = the SELECT PLAYER list-box SELECTION highlight.
++     Ghidra dropped the whole body ("Subroutine does not return", same class as 1091/patch 060), leaving
++     only the 2d6d call -> the selected row never got repainted red.  Reconstructed instruction-for-
++     instruction (objdump 0x10d1..0x1113): bx=param_1=rect offset, ax=param_2=colour word (AL=fill,
++     AH=transparent KEY).  di=rowtab[y0]+x0; es=0xA000; per pixel: `cmp ah,es:[di]; je skip; stos al` --
++     write AL except where the pixel already equals AH (preserve it).  b5a4 passes AL=0xe (red), AH=0 so
++     the grey row background becomes red while the black (index 0) glyph pixels are kept. */
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t  bx = (uint16_t)param_1;
++  uint8_t   al = (uint8_t)param_2;
++  uint8_t   ah = (uint8_t)((uint16_t)param_2 >> 8);
++  FUN_0000_2d6d((int *)(uintptr_t)bx);
++  {
++    uint16_t *rect   = (uint16_t *)(dg + bx);
++    uint16_t *rowtab = (uint16_t *)(dg + 0x7c8);
++    uint8_t  *vga    = g_mem + 0xA0000;
++    uint16_t  di     = (uint16_t)(rowtab[rect[0]] + rect[1]);
++    uint16_t  rows   = (uint16_t)(rect[2] - rect[0]);
++    uint16_t  cols   = (uint16_t)(rect[3] - rect[1]);
++    uint16_t  stride = (uint16_t)(0x140 - cols);
++    do {
++      uint16_t c;
++      for (c = cols; c != 0; c--) {
++        if (vga[di] != ah) vga[di] = al;   /* cmp ah,es:[di]; je skip; stos al */
++        di = (uint16_t)(di + 1);
++      }
++      di   = (uint16_t)(di + stride);
++      rows = (uint16_t)(rows - 1);
++    } while (rows != 0);
++  }
++  FUN_0000_2e12();
++  return;
+ }
+ 
+ 
