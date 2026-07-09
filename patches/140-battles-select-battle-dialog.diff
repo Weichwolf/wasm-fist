@@ -1,0 +1,37 @@
+Stage 3: BATTLES menu item -> SELECT BATTLE .FSG file-list dialog.
+
+Clicking BATTLES (menu row 100 -> screen-state 0x2) dispatches through the e714 tail jumptable
+(image 0xe77a, state = byte offset) to _tgt 0xe87a = FUN_0000_e87a.  asm-verified vs
+re_out/fist_dat_image.bin (0xe87a):
+    call e39f                          ; save/restore the menu backdrop
+    mov  si,0x4509                     ; title string STRSEG:0x4509 = "SELECT BATTLE"
+    mov  di,0x79a9                     ; out buffer DGROUP:0x79a9 (selected 8.3 name)
+    mov  eax,0x4753462e                ; pattern ".FSG"
+    call cb7c                          ; enumerate *.FSG + run modal list dialog cc33
+    jae  0xe891                        ; CF=0 (OK) -> proceed into the mission-editor build (deferred)
+    jmp  0xe714                        ; CF=1 (CANCEL) -> back to menu-idle
+
+cb7c is the SAME list-dialog front-end as cb74 (SELECT PLAYER, patch 137); it differs only by
+`movw [DGROUP:0xe82e],0` (vs cb74's 0xffff) and reuses the entire enumerate/sort/cc33-modal/paint
+chain reconstructed by patches 137-139.  BATTLES needs only the dispatch case; the dialog is modal
+and stays open until OK/CANCEL, so the SELECT BATTLE frame is captured while cc33 spins (no editor
+cascade until OK).  The editor build (7088 + e43f/4754/... after CF=0) is a later, separate deliverable.
+--- a/fist.c	2026-07-10 01:16:49.239182697 +0200
++++ b/fist.c	2026-07-10 01:17:09.247734389 +0200
+@@ -34438,6 +34438,16 @@
+       DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
+       continue;
+     }
++    if (_tgt == 0xe87a) {                /* state 0x2: BATTLES -> SELECT BATTLE .FSG file-list dialog
++                                          * (e87a: e39f; mov si,0x4509; mov di,0x79a9; mov eax,".FSG"; call cb7c).
++                                          * cb7c enumerates *.FSG (find-first/next), builds + runs the modal
++                                          * list dialog cc33 (SAME chain as cb74/SELECT PLAYER, patch 137-139).
++                                          * The editor build (7088 + e43f/4754/... on CF=0/OK) is deferred. */
++      FUN_0000_e39f();
++      FUN_0000_cb7c(0x4753462e, 0, 0, 0, 0, 0x4509, (undefined1 *)(g_mem + 0x1c000 + 0x79a9));
++      DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
++      continue;
++    }
+     (*(code *)fist_icall_near(0x0u,_tgt))();
+     return;
+   }

@@ -1,0 +1,63 @@
+Stage 3: CAMPAIGNS menu item -> SELECT PLAYER .FPL roster dialog (player must be chosen first).
+
+Clicking CAMPAIGNS (menu row 87 -> screen-state 0x0) dispatches through the e714 tail jumptable
+(image 0xe77a, state = byte offset) to _tgt 0xe78c = FUN_0000_e78c.  asm-verified vs
+re_out/fist_dat_image.bin (0xe78c):
+    call e39f                          ; save/restore the menu backdrop
+    cmpb [DGROUP:0x6dad],1             ; player-selected flag
+    je   0xe7c6                        ; already have a player -> straight to campaign mission-select
+    mov  si,0x451a                     ; title STRSEG:0x451a = "SELECT PLAYER"
+    mov  di,0x77bc                     ; out buffer DGROUP:0x77bc
+    mov  eax,0x4c50462e                ; pattern ".FPL"
+    call cb74                          ; enumerate *.FPL + run modal list dialog cc33
+    ... (on OK: e9bd copy-name; movb [0x6dad],1; ec7e/7088 campaign mission-select) ...
+
+On a fresh boot [0x6dad]==0, so CAMPAIGNS opens the SAME SELECT PLAYER roster dialog as clicking
+SELECT PLAYER directly (state 0xe/e97c) -- identical cb74(".FPL", si=0x451a, di=0x77bc) call, reusing
+the entire enumerate/sort/cc33-modal/paint chain (patch 137-139).  The dialog is modal and stays open
+until OK/CANCEL, so the frame is captured while cc33 spins; the CAMPAIGN mission-select tail
+(ec7e/7088 after a player is picked) is a later, separate deliverable.
+
+This adds only the dispatch case for state 0x0 (previously it fell through to the raw indirect near
+call fist_icall_near(0,0xe78c) with garbage register args).
+
+@@ -34448,6 +34448,18 @@
+       DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
+       continue;
+     }
++    if (_tgt == 0xe78c) {                /* state 0x0: CAMPAIGNS -> requires a player; opens the SELECT
++                                          * PLAYER .FPL dialog first (e78c: e39f; cmpb [0x6dad],1; je 0xe7c6;
++                                          * mov si,0x451a; mov di,0x77bc; mov eax,".FPL"; call cb74).
++                                          * On a fresh boot [0x6dad]==0 -> the player-roster dialog (SAME cb74
++                                          * chain as SELECT PLAYER/patch 137).  The campaign mission-select tail
++                                          * (ec7e/7088/... after CF=0/OK, [0x6dad]:=1) is deferred. */
++      FUN_0000_e39f();
++      if (*(uint8_t *)(g_mem + 0x1c000 + 0x6dad) != 1)   /* cmpb [0x6dad],1; je 0xe7c6 */
++        FUN_0000_cb74(0x4c50462e, 0, 0, 0, 0, 0x451a, (undefined1 *)(g_mem + 0x1c000 + 0x77bc));
++      DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
++      continue;
++    }
+     (*(code *)fist_icall_near(0x0u,_tgt))();
+     return;
+   }
+--- a/fist.c	2026-07-10 01:27:52.625397783 +0200
++++ b/fist.c	2026-07-10 01:28:13.243735453 +0200
+@@ -34448,6 +34448,18 @@
+       DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
+       continue;
+     }
++    if (_tgt == 0xe78c) {                /* state 0x0: CAMPAIGNS -> requires a player; opens the SELECT
++                                          * PLAYER .FPL dialog first (e78c: e39f; cmpb [0x6dad],1; je 0xe7c6;
++                                          * mov si,0x451a; mov di,0x77bc; mov eax,".FPL"; call cb74).
++                                          * On a fresh boot [0x6dad]==0 -> the player-roster dialog (SAME cb74
++                                          * chain as SELECT PLAYER/patch 137).  The campaign mission-select tail
++                                          * (ec7e/7088/... after CF=0/OK, [0x6dad]:=1) is deferred. */
++      FUN_0000_e39f();
++      if (*(uint8_t *)(g_mem + 0x1c000 + 0x6dad) != 1)   /* cmpb [0x6dad],1; je 0xe7c6 */
++        FUN_0000_cb74(0x4c50462e, 0, 0, 0, 0, 0x451a, (undefined1 *)(g_mem + 0x1c000 + 0x77bc));
++      DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
++      continue;
++    }
+     (*(code *)fist_icall_near(0x0u,_tgt))();
+     return;
+   }
