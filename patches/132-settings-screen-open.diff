@@ -1,0 +1,598 @@
+Open the SETTINGS sub-screen: clicking the SETTINGS menu item (state 0x6) now enters its full screen
+loop and renders the SETTINGS.MRL background, mirroring the ABOUT dialog flow (patch 129).
+
+The menu-item activate (ea5a, patch 129) writes the item's target screen state to DGROUP:0xf78e; the
+e714 tail jumptable (image 0xe77a, state = byte offset) dispatches it.  SETTINGS = state 0x6 -> _tgt
+0xe94f = `e39f(); call 6a4a; jmp e714` (asm-verified vs re_out/fist_dat_image.bin) -- a full SCREEN
+(not a modal dialog like ABOUT's 7088).  6a4a builds a display list from template seg 0x2c41 (size
+0x148) and runs the standard paint/event loop until the exit flag DAT_2000_4a92 (DGROUP:0x8a92).
+
+Sub-fixes (all asm-verified):
+- e714 tail dispatch: add the _tgt==0xe94f case -> e39f(); 6a4a(0,param_2); back to menu-idle (mirror
+  of the 0xe969 ABOUT case).
+- 6a4a screen loop (asm 0x6a84..0x6aaf): thread the real CF via g_fist_cf (3907 + 35a7/c40a set it;
+  the pristine tested a disconnected local `in_CF`) and add the cooperative INT-8 pump in the spin-wait
+  -- identical reconstruction to the e714 idle loop (patch 117) and the 7088 modal loop (patch 129).
+- 6acb (SETTINGS BG element paint method, asm 0x6acb..0x6aee): the __allregs vector sites dropped every
+  register arg (same class as 71de/e3f8, patches 129/110) so the loader built an empty name and the
+  panel resource never loaded -> RLE garbage.  Thread c560(ax=0x22 idx SETTINGS.MRL, cx=0x1c00,
+  bx=0x8a96), c564(cx=0x1c00, bx=descriptor 0x8a96) and c5b0(ax=0x20, dx=word[0x8a96]) faithfully.
+  (idx 0x22 = SETTINGS.MRL: MGAVIDEO name-table index 17, byte-offset 0x22; FLDCOMP=16=0x20.)
+--- a/fist.c
++++ b/fist.c
+@@ -541,17 +541,17 @@
+ void __allregs FUN_0000_6c5f(int param_1,int param_2);
+ void __allregs FUN_0000_6c8e(void);
+ void __allregs FUN_0000_6cb6(uint param_1);
+-void __allregs FUN_0000_6cc6(void);
+-void __allregs FUN_0000_6cd5(void);
++void __allregs FUN_0000_6cc6(uint param_1);
++void __allregs FUN_0000_6cd5(uint param_1);
+ void __allregs FUN_0000_6ce4(void);
+-void __allregs FUN_0000_6ce5(void);
++void __allregs FUN_0000_6ce5(uint param_1);
+ void __allregs FUN_0000_6cf4(int param_1);
+ void __allregs FUN_0000_6d05(int param_1);
+ void __allregs FUN_0000_6d16(int param_1);
+-void __allregs FUN_0000_6d27(void);
+-void __allregs FUN_0000_6d36(void);
+-void __allregs FUN_0000_6d45(void);
+-void __allregs FUN_0000_6d54(void);
++void __allregs FUN_0000_6d27(uint param_1);
++void __allregs FUN_0000_6d36(uint param_1);
++void __allregs FUN_0000_6d45(uint param_1);
++void __allregs FUN_0000_6d54(uint16_t param_1);
+ void __allregs FUN_0000_6d65(void);
+ void __allregs FUN_0000_6d9a(uint param_1);
+ void __allregs FUN_0000_6db7(uint param_1);
+@@ -17212,24 +17212,32 @@
+   iVar3 = iVar2;
+   uVar5 = uVar4;
+   uVar8 = uVar7;
++  /* PATCH 132: SETTINGS screen event/paint loop (asm 0x6a84..0x6aaf).  Same reconstruction as the
++     e714 idle loop / 7088 modal loop (patches 117/129): (a) thread the real CF via g_fist_cf -- 3907
++     sets it (queue state), 35a7 (c40a) sets it (empty->CF=1); the decompile's disconnected `in_CF`
++     tested a stale local; (b) add the cooperative INT-8 pump so present + scripted input advance in
++     this spin-wait (wasn't in the pristine because the idle loop was disconnected).  6a9b `jb 0x6a84`
++     loops while 35a7 CF=1; falls to 1e4b dispatch when an event is ready; exits on DAT_2000_4a92!=0. */
++  {
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
+   do {
+     do {
+       FUN_0000_206f((char)iVar3,uVar5,param_2,uVar9);
+       uVar11 = 0xf69;
+-      FUN_1000_3907();
+-      uVar10 = in_CF;
+-      if ((bool)in_CF) {
++      FUN_1000_3907();                   /* sets g_fist_cf (queue-state) */
++      if ((bool)g_fist_cf) {             /* 6a8c jae 0x6a97: CF set => idle housekeeping */
+         (*(code *)fist_icall_far((uint32_t)(DAT_1000_c52c)))(0xf69,uVar11);
+         uVar11 = 0xf69;
+         FUN_1000_096c(uVar8);
+-        uVar10 = in_CF;
+       }
+-      iVar3 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69,uVar11);
+-      in_CF = 1;
+-    } while ((bool)uVar10);
++      iVar3 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69,uVar11);  /* 35a7: sets g_fist_cf */
++      fist_timer_pump();                 /* cooperative INT-8 tick during the screen spin-wait */
++    } while ((bool)g_fist_cf);           /* 6a9b jb 0x6a84: loop while 35a7 CF=1 */
++    (void)uVar10; (void)in_CF;
+     iVar3 = FUN_0000_1e4b(iVar3,uVar5,uVar8,uVar9);
+-    in_CF = 0;
+   } while (DAT_2000_4a92 == 0);
++  }
+   if (DAT_2000_4a92 == 1) {
+     FUN_0000_6e8d(uVar5,uVar8,param_1,param_2,uVar9);
+   }
+@@ -17265,10 +17273,26 @@
+ void __allregs FUN_0000_6acb(void)
+ 
+ {
++  /* PATCH 132: SETTINGS screen BG element paint method (asm 0x6acb..0x6aee).  The __allregs vector
++     sites dropped every register arg (same class as patch 129/110's 71de/e3f8 bg loaders) so the
++     loader built an empty name -> SETTINGS.MRL never loaded -> 0340 RLE-decoded zeros = garbage.
++     Faithful asm:
++       call [0x594]                                         (c594: begin frame, no args)
++       bx=0x8a96; cx=ds(=0x1c00); ax=0x22; call [0x560]     (c560: bg loader, idx 0x22 = SETTINGS.MRL)
++       bx=0x8a96; cx=ds;          call [0x564]              (c564: bg paint = 0340, descriptor 0x8a96)
++       ax=0x20;   dx=[ds:0x8a96]; call [0x5b0]              (c5b0: palette upload of the loaded .MRL) */
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c564)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c5b0)))();
++  ((void (*)(undefined2,undefined2,int))fist_icall_far((uint32_t)(DAT_1000_c560)))(0x22, 0x1c00, 0x8a96);
++  ((void (*)(undefined2, undefined2 *))fist_icall_far((uint32_t)(DAT_1000_c564)))
++      (0x1c00, (undefined2 *)(g_mem + 0x1c000 + 0x8a96));
++  /* c5b0 (ax=0x20, dx=word[0x8a96]) = the palette fade-in (mga 084e->0859->0874).  0859's `mov es,dx`
++     (Ghidra can't thread segment regs) carries dx = the loaded SETTINGS.MRL palette segment into
++     0874's copy source; publish it via the driver global g_mga_fade_es so the reconstructed 0874 can
++     find it. */
++  { extern unsigned short g_mga_fade_es;
++    g_mga_fade_es = *(uint16_t *)(g_mem + 0x1c000 + 0x8a96); }
++  ((void (*)(undefined2, undefined2))fist_icall_far((uint32_t)(DAT_1000_c5b0)))
++      (0x20, *(uint16_t *)(g_mem + 0x1c000 + 0x8a96));
+   return;
+ }
+ 
+@@ -17514,11 +17538,27 @@
+ void __allregs FUN_0000_6c5f(int param_1,int param_2)
+ 
+ {
+-  DAT_2000_4b55 = *(int *)(param_1 + 4) + 3;
+-  DAT_2000_4b59 = *(int *)(param_1 + 4) + 10;
+-  DAT_2000_4b57 = *(int *)(param_1 + 6) + 3;
+-  DAT_2000_4b5b = *(int *)(param_1 + 6) + 10;
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(int *)(param_2 + *(int *)(param_1 + 2) + 1) + 0x6c8e))))();
++  /* PATCH 132: SETTINGS control-widget element paint method (asm 0x6c5f..0x6c8d).  Computes the
++     widget's 8x8 box rect (DGROUP:0x8b55/0x8b59/0x8b57/0x8b5b = x+3,x+10,y+3,y+10) from the element
++     rect [elem+4]/[elem+6], then DISPATCHES to the control's state-specific renderer via the near
++     table `cs:[si*+0x6c8e]` where si = word[base + [elem+2] + 1] (the control's selected state).
++     bx=element (209e stored DGROUP:0x3e08); bp=base (DAT_1000_fafe).  Ghidra deref'd elem/base as host
++     pointers (base-loss) and mis-based the cs table.  Reconstruct faithfully in the offset model. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t elem = *(uint16_t *)(dg + 0x3e08);
++  uint16_t base = *(uint16_t *)(g_mem + 0x1fafe);          /* DAT_1000_fafe display-list base */
++  uint16_t x = *(uint16_t *)(dg + (uint16_t)(elem + 4));
++  uint16_t y = *(uint16_t *)(dg + (uint16_t)(elem + 6));
++  *(uint16_t *)(dg + 0x8b55) = (uint16_t)(x + 3);
++  *(uint16_t *)(dg + 0x8b59) = (uint16_t)(x + 10);
++  *(uint16_t *)(dg + 0x8b57) = (uint16_t)(y + 3);
++  *(uint16_t *)(dg + 0x8b5b) = (uint16_t)(y + 10);
++  {
++    uint16_t id = *(uint16_t *)(dg + (uint16_t)(elem + 2));
++    uint16_t si = *(uint16_t *)(dg + (uint16_t)(base + id + 1));
++    uint16_t vec = *(uint16_t *)(g_mem + (uint16_t)(si + 0x6c8e));   /* cs:[si+0x6c8e], cs=0 */
++    ((void (*)(uint16_t))fist_icall_near(0x0u, vec))(si);            /* thread si (the control state) */
++  }
+   return;
+ }
+ 
+@@ -17540,27 +17580,37 @@
+ void __allregs FUN_0000_6cb6(uint param_1)
+ 
+ {
+-  FUN_0000_6d54();
++  /* PATCH 132: SETTINGS control-state renderer (asm 0x6cb6): picks the checked/unchecked box sprite
++     for this widget and calls 6d54.  al=0xe if (si>>1)==word[0x8b43] (radio group A: this element's index matches the selected one) */
++  uint8_t *D=g_mem+0x1c000;
++  uint16_t al = ((uint16_t)((uint16_t)param_1>>1)==*(uint16_t*)(D+0x8b43))?0xe:0;
++  FUN_0000_6d54(al);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_6cc6) @ 0000:6cc6 ===== */
+ 
+-void __allregs FUN_0000_6cc6(void)
++void __allregs FUN_0000_6cc6(uint param_1)
+ 
+ {
+-  FUN_0000_6d54();
++  /* PATCH 132: SETTINGS control-state renderer (asm 0x6cc6): picks the checked/unchecked box sprite
++     for this widget and calls 6d54.  al=0xe if byte[0x8b45]!=0 (checkbox) */
++  uint8_t *D=g_mem+0x1c000; (void)param_1;
++  FUN_0000_6d54(D[0x8b45]?0xe:0);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_6cd5) @ 0000:6cd5 ===== */
+ 
+-void __allregs FUN_0000_6cd5(void)
++void __allregs FUN_0000_6cd5(uint param_1)
+ 
+ {
+-  FUN_0000_6d54();
++  /* PATCH 132: SETTINGS control-state renderer (asm 0x6cd5): picks the checked/unchecked box sprite
++     for this widget and calls 6d54.  al=0xe if byte[0x8b50]!=0 (checkbox) */
++  uint8_t *D=g_mem+0x1c000; (void)param_1;
++  FUN_0000_6d54(D[0x8b50]?0xe:0);
+   return;
+ }
+ 
+@@ -17576,10 +17626,13 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_6ce5) @ 0000:6ce5 ===== */
+ 
+-void __allregs FUN_0000_6ce5(void)
++void __allregs FUN_0000_6ce5(uint param_1)
+ 
+ {
+-  FUN_0000_6d54();
++  /* PATCH 132: SETTINGS control-state renderer (asm 0x6ce5): picks the checked/unchecked box sprite
++     for this widget and calls 6d54.  al=0xe if byte[0x8b46]!=0 (checkbox) */
++  uint8_t *D=g_mem+0x1c000; (void)param_1;
++  FUN_0000_6d54(D[0x8b46]?0xe:0);
+   return;
+ }
+ 
+@@ -17589,7 +17642,11 @@
+ void __allregs FUN_0000_6cf4(int param_1)
+ 
+ {
+-  FUN_0000_6d54();
++  /* PATCH 132: SETTINGS control-state renderer (asm 0x6cf4): picks the checked/unchecked box sprite
++     for this widget and calls 6d54.  al=0xe if (si-0x12)==word[0x8b47] (radio group B) */
++  uint8_t *D=g_mem+0x1c000;
++  uint16_t al = ((uint16_t)((uint16_t)param_1-0x12)==*(uint16_t*)(D+0x8b47))?0xe:0;
++  FUN_0000_6d54(al);
+   return;
+ }
+ 
+@@ -17599,7 +17656,11 @@
+ void __allregs FUN_0000_6d05(int param_1)
+ 
+ {
+-  FUN_0000_6d54();
++  /* PATCH 132: SETTINGS control-state renderer (asm 0x6d05): picks the checked/unchecked box sprite
++     for this widget and calls 6d54.  al=0xe if (si-0x18)==word[0x8b49] (radio group C) */
++  uint8_t *D=g_mem+0x1c000;
++  uint16_t al = ((uint16_t)((uint16_t)param_1-0x18)==*(uint16_t*)(D+0x8b49))?0xe:0;
++  FUN_0000_6d54(al);
+   return;
+ }
+ 
+@@ -17609,47 +17670,66 @@
+ void __allregs FUN_0000_6d16(int param_1)
+ 
+ {
+-  FUN_0000_6d54();
++  /* PATCH 132: SETTINGS control-state renderer (asm 0x6d16): picks the checked/unchecked box sprite
++     for this widget and calls 6d54.  al=0xe if (si-0x1e)==word[0x8b4b] (radio group D) */
++  uint8_t *D=g_mem+0x1c000;
++  uint16_t al = ((uint16_t)((uint16_t)param_1-0x1e)==*(uint16_t*)(D+0x8b4b))?0xe:0;
++  FUN_0000_6d54(al);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_6d27) @ 0000:6d27 ===== */
+ 
+-void __allregs FUN_0000_6d27(void)
++void __allregs FUN_0000_6d27(uint param_1)
+ 
+ {
+-  FUN_0000_6d54();
++  /* PATCH 132: SETTINGS control-state renderer (asm 0x6d27): picks the checked/unchecked box sprite
++     for this widget and calls 6d54.  al=0xe if byte[0x8b4d]==0 (checkbox, inverted) */
++  uint8_t *D=g_mem+0x1c000; (void)param_1;
++  FUN_0000_6d54(D[0x8b4d]?0:0xe);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_6d36) @ 0000:6d36 ===== */
+ 
+-void __allregs FUN_0000_6d36(void)
++void __allregs FUN_0000_6d36(uint param_1)
+ 
+ {
+-  FUN_0000_6d54();
++  /* PATCH 132: SETTINGS control-state renderer (asm 0x6d36): picks the checked/unchecked box sprite
++     for this widget and calls 6d54.  al=0xe if byte[0x8b4e]!=0 (checkbox) */
++  uint8_t *D=g_mem+0x1c000; (void)param_1;
++  FUN_0000_6d54(D[0x8b4e]?0xe:0);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_6d45) @ 0000:6d45 ===== */
+ 
+-void __allregs FUN_0000_6d45(void)
++void __allregs FUN_0000_6d45(uint param_1)
+ 
+ {
+-  FUN_0000_6d54();
++  /* PATCH 132: SETTINGS control-state renderer (asm 0x6d45): picks the checked/unchecked box sprite
++     for this widget and calls 6d54.  al=0xe if byte[0x8b4f]!=0 (checkbox) */
++  uint8_t *D=g_mem+0x1c000; (void)param_1;
++  FUN_0000_6d54(D[0x8b4f]?0xe:0);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_6d54) @ 0000:6d54 ===== */
+ 
+-void __allregs FUN_0000_6d54(void)
++void __allregs FUN_0000_6d54(uint16_t param_1)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 132: SETTINGS widget checkbox/radio sprite draw (asm 0x6d54): dx=0xe8; if(al!=0) dx=0xf0;
++     ax=dx; lcall [0x6b4] (=MGAVIDEO 26a1) with the box rect bx=DGROUP:0x8b55 (set by 6c5f).  Ghidra
++     dropped the sprite id (ax) and rect (bx) args -> 26a1 blit at a garbage position (hang).  Sprite
++     0xe8 = empty box, 0xf0 = selected/checked box.  26a1 sig from patch 131 (6d3d): (sprite,_,_,rect,_). */
++  uint16_t sprite = (param_1 & 0xff) ? 0xf0 : 0xe8;
++  ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++     fist_icall_far((uint32_t)(DAT_1000_c6b4)))(sprite,0,0,0x8b55,0);
+   return;
+ }
+ 
+@@ -17659,14 +17739,22 @@
+ void __allregs FUN_0000_6d65(void)
+ 
+ {
+-  undefined1 extraout_AH;
+-  undefined2 *unaff_CS;
+-  
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
++  /* PATCH 132: SETTINGS text-label element paint method (asm 0x6d65..0x6d99).  bx = the element node
++     (209e stashes it in DGROUP:0x3e08 before dispatch); x=[elem+4], y=[elem+6].  Ghidra base-lost the
++     element (unaff_CS) and dropped the string far-pointer es:si = seg[DGROUP:0x8b53]:word[DGROUP:0x8b51]
++     into the 555f drawstring (unaff_ES).  Reconstruct faithfully:
++       al=0; [0x60a]; 524e(4); 52d1(x,y) setpos; 530b(0x70) color; 555f(es:si) drawstring. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t elem = *(uint16_t *)(dg + 0x3e08);
++  uint16_t x = *(uint16_t *)(dg + (uint16_t)(elem + 4));
++  uint16_t y = *(uint16_t *)(dg + (uint16_t)(elem + 6));
++  uint16_t strseg = *(uint16_t *)(dg + 0x8b53);
++  uint16_t stroff = *(uint16_t *)(dg + 0x8b51);
++  ((void (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c60a)))(0);
+   FUN_1000_524e(4);
+-  FUN_1000_52d1(*unaff_CS,unaff_CS[1]);
+-  FUN_1000_530b(CONCAT11(extraout_AH,0x70));
+-  thunk_FUN_1000_555f(DAT_2000_4b51);
++  FUN_1000_52d1(x, y);
++  FUN_1000_530b(0x70);
++  thunk_FUN_1000_555f((char *)(g_mem + ((uint32_t)strseg << 4) + stroff));
+   return;
+ }
+ 
+@@ -34195,6 +34283,12 @@
+       DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle state after dismissal */
+       continue;
+     }
++    if (_tgt == 0xe94f) {                /* state 0x6: SETTINGS screen (e94f: e39f; 6a4a; jmp e714) */
++      FUN_0000_e39f();
++      FUN_0000_6a4a(0, param_2);         /* SETTINGS screen loop: template 0x2c41, spins until exit flag */
++      DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle state after dismissal */
++      continue;
++    }
+     (*(code *)fist_icall_near(0x0u,_tgt))();
+     return;
+   }
+@@ -49191,14 +49285,17 @@
+ void __allregs thunk_FUN_1000_555f(char *param_1)
+ 
+ {
+-  char *pcVar1;
+-  undefined2 unaff_ES;
+-  
++  /* PATCH 132: string glyph loop with a CALLER-supplied far pointer (asm 0x15557: `jmp 0x1555f`, the
++     loop body at 0x1555f reads `lods al,es:[si]`).  Same loop as the working 5591 (patch 115) but es:si
++     comes from the caller (6d65's seg[0x8b53]:word[0x8b51]), so the caller passes the FLAT pointer.
++     Ghidra dropped es (param_1 read as a host ptr) and the al char arg to the per-glyph blitter c684. */
++  uint8_t *s = (uint8_t *)param_1;
+   while( true ) {
+-    pcVar1 = param_1;
+-    param_1 = param_1 + 1;
+-    if ((*pcVar1 == '\0') || ((*pcVar1 == '$' && (*param_1 == '\0')))) break;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
++    uint8_t al = *s;
++    s = s + 1;
++    if (al == '\0') break;
++    if (al == '$' && *s == '\0') break;
++    ((void (*)(uint16_t))fist_icall_far((uint32_t)(DAT_1000_c684)))(al);
+   }
+   return;
+ }
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1981,95 +1981,57 @@
+ }
+ 
+ 
+-/* ===== ((uint)(uintptr_t)&FUN_0000_0874) @ 0000:0874 ===== */
++/* PATCH 132: the palette fade-in source segment.  ES on entry to 0874 is the loaded .MRL palette
++   segment (0859's `mov es,dx`, a segment op Ghidra can't thread; dx = the screen descriptor word0).
++   For the SETTINGS screen it is set by the engine at the c5b0 call site (FUN_0000_6acb). */
++unsigned short g_mga_fade_es = 0;
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
++/* ===== ((uint)(uintptr_t)&FUN_0000_0874) @ 0000:0874 ===== */
+ 
+ void __allregs FUN_0000_0874(int param_1,int param_2,undefined2 param_3,int param_4)
+ 
+ {
+-  undefined2 *puVar1;
+-  undefined2 *puVar2;
+-  undefined2 uVar3;
+-  undefined2 uVar4;
+-  undefined2 uVar5;
+-  uint uVar6;
+-  uint uVar7;
+-  undefined2 *puVar8;
+-  undefined2 *puVar9;
+-  undefined2 unaff_ES;
+-  bool bVar10;
+-  
+-  uVar3 = _DAT_1000_c782;
++  /* PATCH 132: palette fade-in SETUP (asm 0x874..0x945).  Ghidra dropped ALL three segment bases --
++     the rep-movs run across es=seg[DGROUP:0x782] (the present/DAC buffer), ds=seg[DGROUP:0x788] (the
++     crossfade target) and entry-ES=g_mga_fade_es (the loaded .MRL palette seg) -- rendering them as
++     near-null host copies (SEGV).  Reconstructed faithfully in the flat seg<<4 model.
++       copy1: present[off..] <- loaded[off..]          (stage the loaded palette)
++       [0xe4]: alloc/get the crossfade target buffer (CF => no target => present-only path)
++       copy2: target[off..]  <- present[off..]         (target = loaded palette)
++       copy3: zero present[off..]                       (fade starts from black)
++       set 0x780=0x782, trigger c786, wait the retrace upload, register 0946 as the per-frame fade step.
++     Settled: seg[0x782] == seg[0x788] == the loaded SETTINGS palette (the fade ramps to it). */
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
++  extern unsigned short g_mga_fade_es;
++  uint16_t off = (uint16_t)(param_4 * 3);
++  uint16_t cnt = (uint16_t)(((param_2 - param_4) + 1) * 3);
++  uint8_t *present = g_mem + ((uint32_t)(*(uint16_t *)(g_mem+0x1c782)) << 4) + off;
++  uint8_t *target  = g_mem + ((uint32_t)(*(uint16_t *)(g_mem+0x1c788)) << 4) + off;
++  uint8_t *loaded  = g_mem + ((uint32_t)g_mga_fade_es << 4) + off;
+   DAT_1000_c786 = 0;
+   _DAT_1000_c5e8 = 0;
+   DAT_0000_09bc = 0;
+   DAT_0000_09be = (undefined2)(0x10000 / (ulong)(param_1 + (uint)(param_1 == 0)));
+-  puVar8 = (undefined2 *)(param_4 * 3);
+-  DAT_0000_09c2 = ((param_2 - param_4) + 1) * 3;
+-  uVar7 = DAT_0000_09c2 & 1;
+-  puVar9 = puVar8;
+-  DAT_0000_09c0 = puVar8;
++  DAT_0000_09c0 = off;
++  DAT_0000_09c2 = cnt;
+   DAT_0000_09c4 = param_3;
+-  for (uVar6 = DAT_0000_09c2 >> 1; uVar6 != 0; uVar6 = uVar6 - 1) {
+-    puVar2 = puVar9;
+-    puVar9 = puVar9 + 1;
+-    puVar1 = puVar8;
+-    puVar8 = puVar8 + 1;
+-    *puVar2 = *puVar1;
+-  }
+-  bVar10 = false;
+-  for (uVar7 = (uint)(uVar7 != 0); uVar7 != 0; uVar7 = uVar7 - 1) {
+-    puVar2 = puVar9;
+-    puVar9 = (undefined2 *)((int)puVar9 + 1);
+-    puVar1 = puVar8;
+-    puVar8 = (undefined2 *)((int)puVar8 + 1);
+-    *(undefined1 *)puVar2 = *(undefined1 *)puVar1;
+-  }
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0e4)))(0);
+-  uVar5 = _DAT_1000_c788;
+-  uVar3 = _DAT_1000_c782;
+-  if (!bVar10) {
+-    uVar7 = DAT_0000_09c2 & 1;
+-    puVar8 = DAT_0000_09c0;
+-    puVar9 = DAT_0000_09c0;
+-    for (uVar6 = DAT_0000_09c2 >> 1; uVar6 != 0; uVar6 = uVar6 - 1) {
+-      puVar2 = puVar9;
+-      puVar9 = puVar9 + 1;
+-      puVar1 = puVar8;
+-      puVar8 = puVar8 + 1;
+-      *puVar2 = *puVar1;
+-    }
+-    for (uVar7 = (uint)(uVar7 != 0); uVar4 = _DAT_1000_c782, uVar7 != 0; uVar7 = uVar7 - 1) {
+-      puVar2 = puVar9;
+-      puVar9 = (undefined2 *)((int)puVar9 + 1);
+-      puVar1 = puVar8;
+-      puVar8 = (undefined2 *)((int)puVar8 + 1);
+-      *(undefined1 *)puVar2 = *(undefined1 *)puVar1;
+-    }
+-    uVar7 = DAT_0000_09c2 & 1;
+-    puVar8 = DAT_0000_09c0;
+-    for (uVar6 = DAT_0000_09c2 >> 1; uVar6 != 0; uVar6 = uVar6 - 1) {
+-      puVar1 = puVar8;
+-      puVar8 = puVar8 + 1;
+-      *puVar1 = 0;
+-    }
+-    for (uVar7 = (uint)(uVar7 != 0); uVar7 != 0; uVar7 = uVar7 - 1) {
+-      puVar1 = puVar8;
+-      puVar8 = (undefined2 *)((int)puVar8 + 1);
+-      *(undefined1 *)puVar1 = 0;
+-    }
++  memcpy(present, loaded, cnt);                              /* copy1: present <- loaded palette */
++  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0e4)))(0);  /* [0xe4]: get/alloc the target buffer */
++  /* [0xe4] alloc-failure (CF=1) OR no target buffer (seg788==0) => the 0x932 present-only path: the
++     loaded palette (already staged into the present buffer by copy1) is uploaded directly, no fade. */
++  if (!g_fist_cf && *(uint16_t *)(g_mem+0x1c788) != 0) {     /* 0x8de jae + a real target buffer */
++    memcpy(target, present, cnt);                            /* copy2: target <- present (loaded) */
++    memset(present, 0, cnt);                                 /* copy3: zero present (fade from black) */
+     _DAT_1000_c780 = 0x782;
+     DAT_1000_c786 = 1;
+-    do {
+-    } while (DAT_2000_c216 != '\0');
+-    _DAT_1000_c5e8 = 0x946;
++    do { fist_timer_pump(); } while (DAT_1000_c786 & 0xff);  /* wait the retrace palette upload */
++    _DAT_1000_c5e8 = 0x946;                                  /* register 0946 as the per-frame fade step */
+     return;
+   }
+-  _DAT_1000_c780 = 0x782;
++  _DAT_1000_c780 = 0x782;                                    /* 0x932: present-only (no fade) */
+   DAT_1000_c786 = 1;
+-  do {
+-  } while (DAT_2000_c216 != '\0');
++  do { fist_timer_pump(); } while (DAT_1000_c786 & 0xff);
+   return;
+ }
+ 
+@@ -2081,52 +2043,40 @@
+ void __allregs FUN_0000_0946(void)
+ 
+ {
+-  byte *pbVar1;
+-  char *pcVar2;
+-  byte *pbVar3;
+-  undefined2 uVar4;
+-  undefined2 uVar5;
+-  char cVar6;
+-  int iVar7;
+-  uint uVar8;
+-  byte *pbVar9;
+-  char *pcVar10;
+-  byte *pbVar11;
+-  bool bVar12;
+-  char local_42 [66];
+-  
+-  uVar5 = _DAT_1000_c788;
+-  uVar4 = _DAT_1000_c782;
+-  DAT_0000_09bc = -(uint)CARRY2(DAT_0000_09be,DAT_0000_09bc) | DAT_0000_09be + DAT_0000_09bc;
+-  cVar6 = '\0';
+-  uVar8 = 0;
+-  pcVar10 = local_42;
+-  iVar7 = 0x40;
+-  do {
+-    pcVar2 = pcVar10;
+-    pcVar10 = pcVar10 + 1;
+-    *pcVar2 = cVar6;
+-    bVar12 = CARRY2(uVar8,DAT_0000_09bc);
+-    uVar8 = uVar8 + DAT_0000_09bc;
+-    cVar6 = cVar6 + bVar12;
+-    iVar7 = iVar7 + -1;
+-  } while (iVar7 != 0);
+-  iVar7 = DAT_0000_09c2 - (int)DAT_0000_09c0;
+-  pbVar9 = DAT_0000_09c0;
+-  pbVar11 = DAT_0000_09c0;
+-  do {
+-    pbVar1 = pbVar9;
+-    pbVar9 = pbVar9 + 1;
+-    pbVar3 = pbVar11;
+-    pbVar11 = pbVar11 + 1;
+-    *pbVar3 = *(byte *)ZEXT24(local_42 + *pbVar1);
+-    iVar7 = iVar7 + -1;
+-  } while (iVar7 != 0);
+-  DAT_1000_c786 = 1;
++  /* PATCH 132: per-frame palette fade STEP (asm 0x946..0x9bb), registered by 0874 as _DAT_1000_c5e8
++     and invoked by the retrace ISR after each palette upload.  Ghidra dropped the two segment bases:
++     ds=seg[DGROUP:0x788] (crossfade target) and es=seg[DGROUP:0x782] (present/DAC buffer).
++       - advance the fade accumulator 0x9bc += 0x9be (saturating to 0xffff);
++       - build a 64-entry ramp table (local_42[i] = high byte of i*progress) -> maps a palette value to
++         its faded intensity at the current progress;
++       - for each byte in [off, cnt): present[i] = ramp[ target[i] ]  (fade black->target as progress->0xffff);
++       - re-arm c786 so the next retrace uploads the new present palette;
++       - when progress hits 0xffff (or 0x9c4 counts to 0): unregister (c5e8=0) and signal done (0x78a|=0x22).
++     Settled: present == target == the loaded palette. */
++  uint8_t ramp[64];
++  uint16_t off = (uint16_t)DAT_0000_09c0;
++  uint8_t *target  = g_mem + ((uint32_t)(*(uint16_t *)(g_mem+0x1c788)) << 4) + off;
++  uint8_t *present = g_mem + ((uint32_t)(*(uint16_t *)(g_mem+0x1c782)) << 4) + off;
++  uint16_t acc = DAT_0000_09bc;
++  uint32_t sum;
++  int i, n;
++  {
++    uint32_t t = (uint32_t)DAT_0000_09be + acc;
++    DAT_0000_09bc = (t > 0xffff) ? 0xffff : (uint16_t)t;      /* saturating accumulate */
++  }
++  acc = DAT_0000_09bc;
++  sum = 0;
++  for (i = 0; i < 64; i++) {                                   /* ramp[i] = (i*acc) >> 16 */
++    ramp[i] = (uint8_t)(sum >> 16);
++    sum += acc;
++  }
++  n = (int)((uint16_t)DAT_0000_09c2 - off);
++  for (i = 0; i < n; i++) present[i] = ramp[target[i] & 0x3f]; /* present = ramp[target] */
++  DAT_1000_c786 = 1;                                           /* re-arm the retrace upload */
+   if ((DAT_0000_09bc != 0xffff) && (DAT_0000_09c4 = DAT_0000_09c4 + -1, DAT_0000_09c4 != 0)) {
+     return;
+   }
+-  _DAT_1000_c5e8 = 0;
++  _DAT_1000_c5e8 = 0;                                          /* fade complete: unregister + signal */
+   DAT_1000_c78a = DAT_1000_c78a | 0x22;
+   return;
+ }
