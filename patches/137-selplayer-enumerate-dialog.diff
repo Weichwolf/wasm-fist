@@ -1,0 +1,548 @@
+PATCH 137: SELECT PLAYER file-list dialog -- open + enumerate (*.FPL) + the shared display-list
+container walkers.  Clicking SELECT PLAYER (menu row 74 -> screen-state 0xe) now opens the modal
+list dialog and enumerates the seven player files (D, GAMESWIN, JO, JOE, KKR, PP, TRT) in the exact
+DOSBox order (the engine's own bubble sort makes the order independent of the shim's find-first/next
+order).  Reconstructions (all asm-verified vs re_out/fist_dat_image.bin):
+
+  - e714 dispatch: state 0xe -> 0xe97c = e39f(); cb74(".FPL", si=0x451a title, di=DGROUP:0x77bc out).
+  - cb74/cb7c (list-dialog front-end): the search pattern "*" at DGROUP:0xe844 is completed to "*.FPL"
+    by `mov [0xe845],eax` -- a 32-bit store (asm 0xcb8e `66 a3`) that Ghidra truncated to a WORD (".F",
+    0 matches).  Store the whole dword.
+  - b756 (FILEMGR enumerate, asm 0x1b756): the get-DTA -> find-first -> copy-name -> find-next loop.
+    Fixes three base-losses/dropped-returns: the get-DTA return ES:BX (DTA seg:off from the reg-file,
+    not `unaff_ES`), the list-DEST pointer (ES=word[DGROUP:0x70]=STRSEG, dst=STRSEG:0x3776+cnt*0x10),
+    and the name-SRC pointer (DS=DTA-seg, src=DTA:BX+0x1e).
+  - b6dd (asm 0x1b6dd): the engine's own bubble-sort of the names -- base-lost (a83e/a840 were host
+    pointers 0x3776/0x3786 -> non-terminating pass).  STRSEG-based, ascending.
+  - cc33 (asm 0xcc8c..0xccb2): the modal list-dialog event loop.  Ghidra folded the two carry sources
+    (3907 @0xcc8f, c40a/35a7 @0xcca4) to constants and scrambled the break, mis-exiting to the menu.
+    Reconstructed faithfully with g_fist_cf threading + a cooperative INT-8 pump in the spin-wait.
+  - 2006 (asm 0x2006) / 208a (asm 0x208a): the recursive child-list walkers that FALL INTO the 201a
+    draw-walk / 209e paint-walk -- same base-loss class as 201a/209e (patch 056/057), reached for the
+    first time by this dialog's container element (read the current element from DGROUP:0x3e08, recurse
+    over [bp+di+1]+0x3af0 .. [bp+di+3]+0x3af0).
+  - 1d84/1d8e (asm 0x1d84/0x1d8e): the dialog-position + mark-dirty walker.  Base-lost (whole walk was
+    host-pointer-based) + WORD/int mis-scaling of every rect/link field; reconstructed with a shared
+    recursive body (move each element rect by the target delta, mark dirty, recurse into containers).
+
+The shim FILEMGR find-first/find-next (INT 21h AH=4E/4F) is implemented in re_out/fist_dos.c (not a
+patch): it enumerates the real armoredfist/(FISTDATA) files matching the DS:DX 8.3 wildcard, sorted
+ascending by 8.3 name -- reproducing DOSBox's DOS_Drive_Cache sorted enumeration (verified vs
+ref/selplayer_native320.png), deterministic and identical native<->wasm.
+
+FRONTIER (NOT yet bit-identical / NOT a verify.sh flow): the dialog OPENS + ENUMERATES correctly and
+reaches the display-list PAINT phase, but the list-dialog RENDER chain is still base-lost/unthreaded
+(the title-bar drawer ccca/b652 + the driver rect/line writers 119f/11ba/11db/1216/124b, then the
+list-box text + selection highlight, the scrollbar, and the NEW/OK/CANCEL buttons).  Clicking SELECT
+PLAYER therefore reaches this unreconstructed render and does not yet produce the DOSBox frame.  No
+verify.sh flow clicks SELECT PLAYER, so mainmenu/about/settings/review + the default boot are
+unaffected + deterministic (verified: 4/4 PASS, default rc=0).
+
+--- a/fist.c
++++ b/fist.c
+@@ -8301,32 +8301,43 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_1d84) @ 0000:1d84 ===== */
+ 
++/* PATCH 137: shared body of the dialog-position + mark-dirty walker (asm 0x1d8e/0x1d96).  bx = start
++   element offset, dx = inclusive end (both already rebased by +0x3af0); adds (dax,dcx) to each
++   element's rect [+4,+6,+8,+0xa], marks it dirty (byte[DGROUP:bp+di]=3), and recurses into a container
++   (type word[bx]==4) over its child list [bp+di+1]..[bp+di+3].  DS=DGROUP.  Fixes the base-loss (the
++   whole walk was host-pointer-based) + WORD/int mis-scaling of every rect/link field. */
++static void fist_1d84_walk(uint8_t *dg, uint16_t bx, uint16_t dx, uint16_t dax, uint16_t dcx, uint16_t bp)
++{
++  do {
++    *(uint16_t *)(dg + (uint16_t)(bx + 4))   = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(bx + 4))   + dax);
++    *(uint16_t *)(dg + (uint16_t)(bx + 6))   = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(bx + 6))   + dcx);
++    *(uint16_t *)(dg + (uint16_t)(bx + 8))   = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(bx + 8))   + dax);
++    *(uint16_t *)(dg + (uint16_t)(bx + 0xa)) = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(bx + 0xa)) + dcx);
++    uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++    dg[(uint16_t)(bp + di)] = 3;
++    if (*(uint16_t *)(dg + bx) == 4) {                  /* container -> recurse into child list */
++      uint16_t chead = *(uint16_t *)(dg + (uint16_t)(bp + di + 1));
++      if (chead != 0) {
++        uint16_t ctail = *(uint16_t *)(dg + (uint16_t)(bp + di + 3));
++        fist_1d84_walk(dg, (uint16_t)(chead + 0x3af0), (uint16_t)(ctail + 0x3af0), dax, dcx, bp);
++      }
++    }
++    bx = (uint16_t)(bx + 0xc);
++  } while (bx <= dx);
++}
++
+ undefined4 __allregs FUN_0000_1d84(int param_1,int param_2,int param_3,int param_4)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int iVar3;
+-  int *piVar4;
+-  
+-  iVar2 = param_1 - *(int *)(param_3 + 0x3af4);
+-  iVar3 = param_2 - *(int *)(param_3 + 0x3af6);
+-  piVar4 = (int *)((int)(undefined2 *)&DAT_1000_faf0 + param_3);
+-  do {
+-    piVar4[2] = piVar4[2] + iVar2;
+-    piVar4[3] = piVar4[3] + iVar3;
+-    piVar4[4] = piVar4[4] + iVar2;
+-    piVar4[5] = piVar4[5] + iVar3;
+-    *(undefined1 *)(param_4 + piVar4[1]) = 3;
+-    if (*piVar4 == 4) {
+-      iVar1 = *(int *)(param_4 + piVar4[1] + 1);
+-      if (iVar1 != 0) {
+-        iVar2 = FUN_0000_1d8e(iVar2,iVar3,*(undefined2 *)(param_4 + piVar4[1] + 3),iVar1,param_4);
+-      }
+-    }
+-    piVar4 = piVar4 + 6;
+-  } while (piVar4 <= (int *)((int)(undefined2 *)&DAT_1000_faf0 + param_3));
+-  return;
++  /* PATCH 137: dialog-position walker root (asm 0x1d84).  param_1=ax=target-x, param_2=cx=target-y,
++     param_3=bx=root element offset (rel 0x3af0), param_4=bp=dialog base.  Delta = target -
++     element.(x0,y0) (element field at [bx+0x3af4]/[bx+0x3af6] = DGROUP), then walk the root + subtree. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)param_3, bp = (uint16_t)param_4;
++  uint16_t dax = (uint16_t)(param_1 - *(uint16_t *)(dg + (uint16_t)(bx + 0x3af4)));
++  uint16_t dcx = (uint16_t)(param_2 - *(uint16_t *)(dg + (uint16_t)(bx + 0x3af6)));
++  fist_1d84_walk(dg, (uint16_t)(bx + 0x3af0), (uint16_t)(bx + 0x3af0), dax, dcx, bp);
++  return dax;
+ }
+ 
+ 
+@@ -8335,26 +8346,12 @@
+ undefined4 __allregs FUN_0000_1d8e(int param_1,int param_2,int param_3,int param_4,int param_5)
+ 
+ {
+-  int iVar1;
+-  int *piVar2;
+-  
+-  piVar2 = (int *)((int)(undefined2 *)&DAT_1000_faf0 + param_4);
+-  do {
+-    piVar2[2] = piVar2[2] + param_1;
+-    piVar2[3] = piVar2[3] + param_2;
+-    piVar2[4] = piVar2[4] + param_1;
+-    piVar2[5] = piVar2[5] + param_2;
+-    *(undefined1 *)(param_5 + piVar2[1]) = 3;
+-    if (*piVar2 == 4) {
+-      iVar1 = *(int *)(param_5 + piVar2[1] + 1);
+-      if (iVar1 != 0) {
+-        param_1 = FUN_0000_1d8e(param_1,param_2,*(undefined2 *)(param_5 + piVar2[1] + 3),iVar1,
+-                                param_5);
+-      }
+-    }
+-    piVar2 = piVar2 + 6;
+-  } while (piVar2 <= (int *)((int)(undefined2 *)&DAT_1000_faf0 + param_3));
+-  return;
++  /* PATCH 137: recursion entry of the position walker (asm 0x1d8e); adds 0x3af0 to head/limit and
++     runs the shared body.  param_1=dax, param_2=dcx, param_3=limit, param_4=head, param_5=bp. */
++  uint8_t *dg = g_mem + 0x1c000;
++  fist_1d84_walk(dg, (uint16_t)((uint16_t)param_4 + 0x3af0), (uint16_t)((uint16_t)param_3 + 0x3af0),
++                 (uint16_t)param_1, (uint16_t)param_2, (uint16_t)param_5);
++  return param_1;
+ }
+ 
+ 
+@@ -8656,20 +8653,30 @@
+ void __allregs FUN_0000_2006(int param_1,int param_2)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int *piVar3;
+-  
+-  iVar1 = *(int *)(param_2 + *(int *)(param_1 + 2) + 1);
+-  if (iVar1 != 0) {
+-    iVar2 = *(int *)(param_2 + *(int *)(param_1 + 2) + 3);
+-    piVar3 = (int *)((int)(undefined2 *)&DAT_1000_faf0 + iVar1);
+-    do {
+-      DAT_1000_fe08 = piVar3;
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*piVar3 + 0x3e18))))(param_2);
+-      piVar3 = piVar3 + 6;
+-    } while (piVar3 <= (int *)((int)(undefined2 *)&DAT_1000_faf0 + iVar2));
+-    return;
++  /* PATCH 137: recursive child-list walker (asm 0x2006) that FALLS INTO the 201a draw-walk.  Same
++     base-loss class as 201a/209e (patch 056/057) -- reached for the first time by the SELECT PLAYER
++     list dialog (its container element has a child list).  asm:
++       mov di,[bx+2]          ; di = word[DGROUP:bx+2]  (bx = current element, stored at DGROUP:0x3e08
++                              ;                           by the calling 201a walker)
++       mov bx,[bp+di+1]       ; bx = child-list HEAD offset
++       or bx,bx; je ret       ; no children -> return
++       mov dx,[bp+di+3]       ; dx = child-list TAIL/limit offset
++       add bx,0x3af0; add dx,0x3af0
++       -> fall into 201a(dx=limit, bx=head, bp)   ; recurse over the children
++     bp (the display-list base) is threaded in as param_1 (201a passes param_3=bp); the current
++     element is read from DGROUP:0x3e08.  DS=DGROUP. */
++  (void)param_2;
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t bp = (uint16_t)param_1;
++    uint16_t bx = *(uint16_t *)(dg + 0x3e08);
++    uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++    uint16_t head = *(uint16_t *)(dg + (uint16_t)(bp + di + 1));
++    if (head == 0) return;
++    uint16_t tail = *(uint16_t *)(dg + (uint16_t)(bp + di + 3));
++    head = (uint16_t)(head + 0x3af0);
++    tail = (uint16_t)(tail + 0x3af0);
++    FUN_0000_201a((int *)(uintptr_t)tail, (int *)(uintptr_t)head, bp);
+   }
+   return;
+ }
+@@ -8782,32 +8789,24 @@
+ void __allregs FUN_0000_208a(int param_1,int param_2)
+ 
+ {
+-  byte bVar1;
+-  int iVar2;
+-  uint uVar3;
+-  byte bVar4;
+-  int *piVar5;
+-  int *piVar6;
+-  bool bVar7;
+-  
+-  iVar2 = *(int *)(param_2 + *(int *)(param_1 + 2) + 1);
+-  if (iVar2 != 0) {
+-    uVar3 = *(uint *)(param_2 + *(int *)(param_1 + 2) + 3);
+-    piVar6 = (int *)((int)(undefined2 *)&DAT_1000_faf0 + iVar2);
+-    bVar7 = 0xc50f < uVar3;
+-    piVar5 = (int *)((int)(undefined2 *)&DAT_1000_faf0 + uVar3);
+-    do {
+-      bVar1 = *(byte *)(param_2 + piVar6[1]);
+-      bVar4 = DAT_1000_c73d & 0x1f;
+-      *(byte *)(param_2 + piVar6[1]) = bVar1 >> bVar4;
+-      if ((bool)(bVar4 == 0 & bVar7 | (bVar4 != 0 && (bVar1 >> bVar4 - 1 & 1) != 0))) {
+-        DAT_1000_fe08 = piVar6;
+-        (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*piVar6 + 0x423c))))();
+-      }
+-      piVar6 = piVar6 + 6;
+-      bVar7 = piVar6 < piVar5;
+-    } while (piVar6 <= piVar5);
+-    return;
++  /* PATCH 137: recursive child-list walker for the 209e PAINT dirty-walk (asm 0x208a) that FALLS INTO
++     209e -- reached for the first time by the SELECT PLAYER list dialog (its container element).  Same
++     base-loss class as 2006/209e (patch 057): read the current element from DGROUP:0x3e08 (set by the
++     calling 209e) + the walk base bp = DAT_1000_fafe; if it has a child list ([bp+di+1]!=0) recurse
++     into 209e over [bp+di+1]+0x3af0 .. [bp+di+3]+0x3af0.  DS=DGROUP.  (209e passes no args to the
++     paint method, so bp comes from the current display-list base fafe, not a register.) */
++  (void)param_1; (void)param_2;
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t bp = (uint16_t)DAT_1000_fafe;
++    uint16_t bx = *(uint16_t *)(dg + 0x3e08);
++    uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++    uint16_t head = *(uint16_t *)(dg + (uint16_t)(bp + di + 1));
++    if (head == 0) return;
++    uint16_t tail = *(uint16_t *)(dg + (uint16_t)(bp + di + 3));
++    head = (uint16_t)(head + 0x3af0);
++    tail = (uint16_t)(tail + 0x3af0);
++    FUN_0000_209e((int *)(uintptr_t)tail, (int *)(uintptr_t)head, bp);
+   }
+   return;
+ }
+@@ -30993,7 +30992,10 @@
+   bool bVar7;
+   
+   DAT_2000_a82e = 0xffff;
+-  DAT_2000_a845 = param_1;
++  /* PATCH 137: `mov [0xe845],eax` is a 32-bit store (asm 0xcb8e `66 a3`) of the full ".FPL" extension
++   * that completes the search pattern "*" -> "*.FPL" at DGROUP:0xe844; DAT_2000_a845 is typed WORD so
++   * `= param_1` truncated it to ".F" (0 matches).  Store the whole dword. */
++  *(uint32_t *)(g_mem + 0x2a845) = (uint32_t)param_1;
+   DAT_2000_a853 = param_6;
+   DAT_2000_a855 = param_7;
+   FUN_1000_b756((char)param_1,param_2,param_3,param_4,param_5,param_6,param_7);
+@@ -31042,7 +31044,8 @@
+   bool bVar7;
+   
+   DAT_2000_a82e = 0;
+-  DAT_2000_a845 = param_1;
++  /* PATCH 137: full-dword ".FSG"/".FPL" extension store (see cb74). */
++  *(uint32_t *)(g_mem + 0x2a845) = (uint32_t)param_1;
+   DAT_2000_a853 = param_6;
+   DAT_2000_a855 = param_7;
+   FUN_1000_b756((char)param_1,param_2,param_3,param_4,param_5,param_6,param_7);
+@@ -31154,35 +31157,38 @@
+   uVar6 = 0x34;
+   uVar2 = FUN_0000_1d84(0x50,100,0x34,0xe8e9);
+   DAT_2000_a85d = 0xff;
+-  do {
+-    uVar9 = in_CF;
+-    FUN_0000_206f((char)uVar2,uVar4,param_1,uVar7);
+-    FUN_1000_3907();
+-    uVar10 = uVar8;
+-    if ((bool)uVar9) {
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c52c)))(0xf69,uVar8);
+-      uVar10 = 0xf69;
+-      FUN_1000_096c(uVar6);
+-    }
+-    while( true ) {
+-      uVar8 = 0;
+-      (*(code *)fist_icall_far((uint32_t)(DAT_2000_a85b)))(uVar10);
+-      uVar2 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0);
+-      in_CF = 1;
+-      if ((bool)uVar9) break;
+-      uVar10 = 0xccad;
+-      FUN_0000_1e4b(uVar2,uVar4,uVar6,uVar7);
+-      uVar9 = DAT_2000_a85d != 0xff;
+-      if (DAT_2000_a85d != 0xff) {
+-        FUN_0000_e39f();
+-        FUN_0000_1cdb(unaff_CS,uVar5,uVar3,iVar1,param_1,uVar7);
+-        if (DAT_2000_a85d < 2) {
++  /* PATCH 137: modal list-dialog event loop (asm 0xcc8c..0xccb2).  Ghidra folded the two carry-flag
++   * sources (3907 @0xcc8f and c40a/35a7 @0xcca4) to constants (`in_CF=1`) and scrambled the break, so
++   * the loop mis-exited to the menu.  Reconstructed faithfully:
++   *   OUTER (cc8c): 206f paint; 3907 -> CF; if CF: [0x52c] + 096c housekeeping.
++   *   INNER (cc9f): a85b()=d0d7 list handler; c40a()=35a7 -> CF; if CF (queue empty) -> repaint(outer);
++   *                 else 1e4b dispatch the event; if a85d!=0xff (OK/CANCEL/NEW clicked) -> e39f + 1cdb
++   *                 + return (CF = a85d>=2).  a85d stays 0xff while spinning -> the dialog stays open. */
++  {
++    extern unsigned char g_fist_cf;
++    extern void fist_timer_pump(void);
++    (void)uVar8; (void)uVar9; (void)uVar10; (void)in_CF;
++    while( true ) {                                        /* OUTER paint loop */
++      FUN_0000_206f((char)uVar2,uVar4,param_1,uVar7);
++      FUN_1000_3907();                                    /* sets g_fist_cf */
++      if ((bool)g_fist_cf) {                              /* cc94 jae: CF set -> idle housekeeping */
++        (*(code *)fist_icall_far((uint32_t)(DAT_1000_c52c)))(0xf69);
++        FUN_1000_096c(uVar6);
++      }
++      while( true ) {                                     /* INNER event loop (cc9f) */
++        (*(code *)fist_icall_far((uint32_t)(DAT_2000_a85b)))(0);          /* d0d7 list handler */
++        uVar2 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0);  /* 35a7: sets g_fist_cf */
++        fist_timer_pump();                                /* cooperative INT-8 tick in the spin-wait */
++        if ((bool)g_fist_cf) break;                       /* cca8 jb cc8c: queue empty -> repaint */
++        FUN_0000_1e4b(uVar2,uVar4,uVar6,uVar7);           /* ccaa: dispatch the event */
++        if (DAT_2000_a85d != 0xff) {                      /* ccad: a dialog button was clicked */
++          FUN_0000_e39f();
++          FUN_0000_1cdb(unaff_CS,uVar5,uVar3,iVar1,param_1,uVar7);
+           return;
+         }
+-        return;
+       }
+     }
+-  } while( true );
++  }
+ }
+ 
+ 
+@@ -34332,6 +34338,17 @@
+       DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle state after dismissal */
+       continue;
+     }
++    if (_tgt == 0xe97c) {                /* state 0xe: SELECT PLAYER file-list dialog
++                                          * (e97c: e39f; mov si,0x451a; mov di,0x77bc; mov eax,".FPL"; call cb74).
++                                          * cb74 enumerates *.FPL (find-first/next), builds + runs the modal
++                                          * list dialog cc33 (list-box + scrollbar + NEW/OK/CANCEL), then copies
++                                          * the selected 8.3 name to di=DGROUP:0x77bc.  Tail (e9bd copy-name +
++                                          * 6a9c/6ade refresh "CURRENT PLAYER") runs only AFTER OK is clicked. */
++      FUN_0000_e39f();
++      FUN_0000_cb74(0x4c50462e, 0, 0, 0, 0, 0x451a, (undefined1 *)(g_mem + 0x1c000 + 0x77bc));
++      DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
++      continue;
++    }
+     (*(code *)fist_icall_near(0x0u,_tgt))();
+     return;
+   }
+@@ -62613,57 +62630,41 @@
+   byte *pbVar8;
+   bool bVar9;
+   
+-  DAT_2000_a842 = 0;
+-  do {
+-    uVar4 = DAT_1000_c070;
+-    DAT_2000_a842 = DAT_2000_a842 + 1;
+-    if (0x7f < DAT_2000_a842) {
+-      return;
+-    }
+-    if (DAT_2000_a834 < 2) {
+-      return;
+-    }
+-    iVar5 = DAT_2000_a834 - 1;
+-    DAT_2000_a83c = 0;
+-    DAT_2000_a83e = (byte *)0x3776;
+-    DAT_2000_a840 = (byte *)0x3786;
+-    bVar9 = false;
+-    do {
+-      iVar6 = 0x10;
+-      pbVar7 = DAT_2000_a83e;
+-      pbVar8 = DAT_2000_a840;
+-      do {
+-        if (iVar6 == 0) break;
+-        iVar6 = iVar6 + -1;
+-        pbVar2 = pbVar8;
+-        pbVar8 = pbVar8 + 1;
+-        pbVar1 = pbVar7;
+-        pbVar7 = pbVar7 + 1;
+-        bVar9 = *pbVar1 < *pbVar2;
+-      } while (*pbVar1 == *pbVar2);
+-      if (!bVar9) {
+-        DAT_2000_a83c = -1;
+-        iVar6 = 0x10;
+-        pbVar7 = DAT_2000_a83e;
+-        pbVar8 = DAT_2000_a840;
++  /* PATCH 137: bubble-sort the enumerated 8.3 names ascending (asm 0x1b6dd).  The name list lives at
++     ES=word[DGROUP:0x70] (STRSEG):0x3776, 0x10-byte entries; Ghidra dropped the ES base so a83e/a840
++     were host pointers (0x3776/0x3786) -> wild deref / non-terminating pass.  Compare adjacent 16-byte
++     entries (repz cmpsb: swap when NOT below, i.e. [si] >= [di]); repeat until a full pass makes no
++     swap (or 0x80 passes).  The engine's own sort makes the displayed order independent of the shim's
++     find-first/next order. */
++  (void)pbVar1; (void)pbVar2; (void)pbVar7; (void)pbVar8; (void)bVar3; (void)uVar4; (void)iVar6; (void)bVar9;
++  {
++    uint8_t *M = g_mem;
++    uint16_t strseg = *(uint16_t*)(M + 0x1c000 + 0x70);
++    uint8_t *base = M + ((uint32_t)strseg << 4);
++    DAT_2000_a842 = 0;
++    do {
++      DAT_2000_a842 = DAT_2000_a842 + 1;
++      if (0x7f < DAT_2000_a842) return;
++      if (DAT_2000_a834 < 2) return;
++      iVar5 = DAT_2000_a834 - 1;
++      DAT_2000_a83c = 0;
++      { uint16_t si = 0x3776, di = 0x3786;
+         do {
+-          bVar3 = *pbVar7;
+-          *pbVar7 = *pbVar8;
+-          *pbVar8 = bVar3;
+-          pbVar7 = pbVar7 + 1;
+-          pbVar8 = pbVar8 + 1;
+-          iVar6 = iVar6 + -1;
+-        } while (iVar6 != 0);
+-      }
+-      DAT_2000_a83e = DAT_2000_a83e + 0x10;
+-      bVar9 = (byte *)0xffef < DAT_2000_a840;
+-      DAT_2000_a840 = DAT_2000_a840 + 0x10;
+-      iVar5 = iVar5 + -1;
+-    } while (iVar5 != 0);
+-    if (DAT_2000_a83c == 0) {
+-      return;
+-    }
+-  } while( true );
++          uint8_t *ps = base + si, *pd = base + di;
++          int inorder = 0;                          /* all-equal -> asm `jb` not taken -> swap */
++          for (int k = 0; k < 0x10; k++)
++            if (ps[k] != pd[k]) { inorder = (ps[k] < pd[k]); break; }
++          if (!inorder) {
++            DAT_2000_a83c = -1;
++            for (int k = 0; k < 0x10; k++) { uint8_t t = ps[k]; ps[k] = pd[k]; pd[k] = t; }
++          }
++          si = (uint16_t)(si + 0x10); di = (uint16_t)(di + 0x10);
++          iVar5 = iVar5 + -1;
++        } while (iVar5 != 0);
++      }
++      if (DAT_2000_a83c == 0) return;
++    } while (1);
++  }
+ }
+ 
+ 
+@@ -62691,62 +62692,63 @@
+   undefined2 unaff_ES;
+   undefined2 uStack0006;
+   
+-  DAT_2000_a834 = 0;
+-  uRam000f0000 = CONCAT11(0x2f,param_1);
+-  uRam000f0014 = 0x21;
+-  uRam000f000e = 0x1c00;
+-  iRam000f0002 = param_4;
+-  iRam000f0004 = param_2;
+-  uRam000f0006 = param_3;
+-  puRam000f0008 = param_6;
+-  puRam000f000a = param_7;
+-  uRam000f000c = param_5;
+-  fist_int_dispatch();
+-  DAT_2000_a857 = iRam000f0002;
+-  uRam000f0000 = CONCAT11(0x4e,(char)uRam000f0000);
+-  uRam000f0014 = 0x21;
+-  iRam000f0004 = 0;
+-  uRam000f0006 = 0xe844;
+-  uRam000f000e = 0x1c00;
+-  DAT_2000_a859 = unaff_ES;
+-  uRam000f000c = param_5;
+-  uRam000f0010 = unaff_ES;
+-  fist_int_dispatch();
+-  uVar4 = DAT_2000_a859;
+-  iVar5 = iRam000f0002;
+-  uVar6 = uRam000f0006;
+-  while (uVar3 = DAT_1000_c070, DAT_2000_a859 = uVar4, iRam000f0002 = iVar5, uRam000f0006 = uVar6,
+-        !(bool)uRam000f0012) {
+-    puVar9 = (undefined1 *)(DAT_2000_a834 * 0x10 + 0x3776);
+-    puVar8 = (undefined1 *)(DAT_2000_a857 + 0x1e);
+-    for (iVar7 = 0xd; iVar7 != 0; iVar7 = iVar7 + -1) {
+-      puVar2 = puVar9;
+-      puVar9 = puVar9 + 1;
+-      puVar1 = puVar8;
+-      puVar8 = puVar8 + 1;
+-      *puVar2 = *puVar1;
+-    }
+-    DAT_2000_a834 = DAT_2000_a834 + 1;
+-    if (0x7f < DAT_2000_a834) break;
+-    uRam000f0000 = CONCAT11(0x4f,(char)DAT_2000_a834);
++  /* PATCH 137: FILEMGR file-enumeration loop (asm 0x1b756).  Faithful reconstruction of the
++   * get-DTA -> find-first -> (copy 8.3 name) -> find-next loop; fixes three Ghidra base-losses/
++   * dropped-returns proven vs re_out/fist_dat_image.bin @0x1b756:
++   *   (a) the get-DTA return ES:BX (DTA seg:off) was read as `unaff_ES`/`iRam0002` -- ES is the
++   *       reg-file ES (0xF0010) written by the shim's AH=2F, not a Ghidra pseudo-var;
++   *   (b) the list-DEST pointer `DAT_2000_a834*0x10 + 0x3776` dropped its segment base
++   *       ES=word[DGROUP:0x70] (STRSEG): `mov es,[0x70]; mov di,cnt; shl di,4; add di,0x3776`;
++   *   (c) the name-SRC pointer `DAT_2000_a857 + 0x1e` dropped its segment base DS=DTA-seg
++   *       (a859): `mov si,[0xe857]; add si,0x1e; mov ds,[0xe859]`.
++   * The copy is a `rep movsb` of 13 (0xd) bytes (the ASCIIZ 8.3 name at DTA+0x1e). */
++  {
++    extern unsigned char g_fist_cf;
++    uint8_t *M = g_mem;
++    uint16_t strseg = *(uint16_t*)(M + 0x1c000 + 0x70);   /* word[DGROUP:0x70] = STRSEG (list segment) */
++    uint16_t dta_seg, dta_off;
++    (void)uVar3; (void)uVar4; (void)uVar6; (void)iVar5; (void)puVar1; (void)puVar2;
++    (void)puVar8; (void)puVar9; (void)unaff_ES; (void)uStack0006;
++    DAT_2000_a834 = 0;
++    /* get DTA -> ES:BX */
++    uRam000f0000 = CONCAT11(0x2f,param_1);
+     uRam000f0014 = 0x21;
+-    iRam000f0002 = iVar5;
+-    iRam000f0004 = iVar7;
+-    uRam000f0006 = uVar6;
+-    puRam000f0008 = puVar8;
+-    puRam000f000a = puVar9;
++    uRam000f000e = 0x1c00;
++    iRam000f0002 = param_4;
++    iRam000f0004 = param_2;
++    uRam000f0006 = param_3;
++    puRam000f0008 = param_6;
++    puRam000f000a = param_7;
+     uRam000f000c = param_5;
++    fist_int_dispatch();
++    dta_off = *(uint16_t*)(M + 0xf0002);                  /* BX  */
++    dta_seg = *(uint16_t*)(M + 0xf0010);                  /* ES  */
++    DAT_2000_a857 = dta_off;
++    DAT_2000_a859 = dta_seg;
++    /* find first: DS:DX = 0x1c00:0xe844 (pattern), CX=0 (attr) */
++    uRam000f0000 = CONCAT11(0x4e,(char)uRam000f0000);
++    uRam000f0014 = 0x21;
++    iRam000f0004 = 0;
++    uRam000f0006 = 0xe844;
+     uRam000f000e = 0x1c00;
+-    uRam000f0010 = uVar3;
+-    uStack0006 = 0x1c00;
+     fist_int_dispatch();
+-    uVar4 = DAT_2000_a859;
+-    iVar5 = iRam000f0002;
+-    uVar6 = uRam000f0006;
++    while (!(bool)uRam000f0012) {                          /* while CF==0 (a match) */
++      uint8_t *dst = M + ((uint32_t)strseg << 4) + 0x3776 + (uint16_t)(DAT_2000_a834 * 0x10);
++      uint8_t *src = M + ((uint32_t)dta_seg << 4) + dta_off + 0x1e;
++      for (iVar7 = 0; iVar7 < 0xd; iVar7++) dst[iVar7] = src[iVar7];
++      DAT_2000_a834 = DAT_2000_a834 + 1;
++      if (0x7f < DAT_2000_a834) break;
++      /* find next (AH=4F); DS:DX/CX persist from find-first, DTA cursor advances in the shim */
++      uRam000f0000 = CONCAT11(0x4f,(char)DAT_2000_a834);
++      uRam000f0014 = 0x21;
++      iRam000f0004 = 0;
++      uRam000f0006 = 0xe844;
++      uRam000f000e = 0x1c00;
++      fist_int_dispatch();
++    }
++    (void)g_fist_cf;
+   }
+-  uStack0006 = 0xb7aa;
+   FUN_1000_b6dd();
+-  uStack0006 = 0xb7ad;
+   FUN_1000_b6a4();
+   return;
+ }

@@ -23,6 +23,7 @@
 #endif
 #include <stdlib.h>
 #include <setjmp.h>
+#include <dirent.h>
 
 /* ---- reg-file accessors (alias the exact g_mem the engine marshals through) ---- */
 #define RF(off)  (g_mem + 0xf0000u + (off))
@@ -115,6 +116,125 @@ static uint16_t g_next_seg = 0x3400;      /* linear 0x34000, above the 0x33...-b
 #define HEAP_TOP_SEG 0x9000               /* linear 0x90000, below VGA at 0xA0000 */
 
 static void set_cf(int err){ R_CF = err ? 1 : 0; }
+
+/* ================= INT 21h AH=4E/4F : FILEMGR find-first / find-next =================
+ * The engine's list dialogs (SELECT PLAYER `*.FPL`, SELECT BATTLE `*.FSG`) enumerate the game
+ * directory via INT 21h AH=4E (find first) / AH=4F (find next), reading each result's 8.3 name from
+ * the DTA at +0x1e (standard DOS Find-File DTA).  We ARE FILEMGR/DOS here, so we enumerate the REAL
+ * files under the search dirs (armoredfist/FISTDATA + armoredfist), apply the DOS 8.3 wildcard from
+ * DS:DX, de-duplicate, and return them **sorted ascending by 8.3 name (strcmp, upper-case)**.
+ *
+ * ORDER SOURCE: DOSBox serves a mounted host directory through its DOS_Drive_Cache, which stores and
+ * returns directory entries SORTED alphabetically (case-insensitive 8.3 name) -- so its find-first /
+ * find-next stream is deterministic and alphabetical regardless of host readdir order.  We reproduce
+ * exactly that order (verified against ref/selplayer_native320.png: D, GAMESWIN, JO, JOE, KKR, PP,
+ * TRT -- the seven *.FPL files in strcmp order, D selected).  This makes the enumeration deterministic
+ * and identical native<->wasm and vs the DOSBox reference, with no dependence on the host filesystem. */
+static int g_ff_trace = -1;
+static int fftrace(void){ if (g_ff_trace<0) g_ff_trace = getenv("FIST_FFTRACE")?1:0; return g_ff_trace; }
+
+#define FF_MAX 512
+static char  g_ff_names[FF_MAX][13];   /* sorted 8.3 ASCIIZ names for the current search */
+static uint32_t g_ff_size[FF_MAX];     /* file sizes (bytes) parallel to g_ff_names */
+static int   g_ff_count;               /* number of matches */
+static int   g_ff_cur;                 /* find-next cursor */
+
+/* DOS 8.3 wildcard match: pattern & name are upper-cased 8.3 forms ("NAME.EXT"); '*' and '?' honored.
+ * We normalize both to an 11-char (8+3) blank-padded FCB form and compare with '?' as any char. */
+static void to_fcb(const char *s, char out[11])
+{
+    memset(out, ' ', 11);
+    int i = 0;                      /* name part */
+    while (*s && *s != '.' && i < 8) {
+        if (*s == '*') { while (i < 8) out[i++] = '?'; break; }
+        out[i++] = (char)toupper((unsigned char)*s); ++s;
+    }
+    while (*s && *s != '.') ++s;    /* skip overflow of name part */
+    if (*s == '.') {
+        ++s; int e = 0;
+        while (*s && e < 3) {
+            if (*s == '*') { while (e < 3) out[8 + e++] = '?'; break; }
+            out[8 + e++] = (char)toupper((unsigned char)*s); ++s;
+        }
+    }
+}
+static int fcb_match(const char pat[11], const char nm[11])
+{
+    for (int i = 0; i < 11; ++i) if (pat[i] != '?' && pat[i] != nm[i]) return 0;
+    return 1;
+}
+static int ff_cmp(const void *a, const void *b)
+{ return strcmp((const char*)a, (const char*)b); }
+
+/* Build the sorted match list for the pattern at DS:DX. */
+static void ff_build(const char *pat)
+{
+    char pfcb[11]; to_fcb(pat, pfcb);
+    g_ff_count = 0; g_ff_cur = 0;
+    /* same search dirs as open_ci, most-specific first; de-dup by name so a file present in more than
+     * one search dir is listed once (matches a single DOS directory view). */
+    char d0[300]; const char *dirs[4]; int nd = 0;
+    snprintf(d0, sizeof d0, "%s/FISTDATA", datadir()); dirs[nd++] = d0;
+    dirs[nd++] = datadir(); dirs[nd++] = "."; dirs[nd++] = "FISTDATA";
+    for (int di = 0; di < nd; ++di) {
+        DIR *dp = opendir(dirs[di]); if (!dp) continue;
+        struct dirent *de;
+        while ((de = readdir(dp))) {
+            const char *fn = de->d_name;
+            if (fn[0] == '.') continue;                 /* skip ".", "..", dotfiles */
+            /* form the upper-case 8.3 name; reject names that don't fit 8.3 (DOS wouldn't see them) */
+            char base[64]; int bl = 0; const char *dot = 0;
+            for (const char *p = fn; *p; ++p) { if (*p == '.') dot = p; }
+            char nm83[13]; int ok = 1;
+            { int nlen = dot ? (int)(dot - fn) : (int)strlen(fn);
+              int elen = dot ? (int)strlen(dot + 1) : 0;
+              if (nlen < 1 || nlen > 8 || elen > 3) ok = 0;
+              if (ok) { int k = 0;
+                for (int i = 0; i < nlen; ++i) nm83[k++] = (char)toupper((unsigned char)fn[i]);
+                if (elen) { nm83[k++] = '.'; for (int i = 0; i < elen; ++i) nm83[k++] = (char)toupper((unsigned char)dot[1+i]); }
+                nm83[k] = 0; }
+            }
+            (void)base; (void)bl;
+            if (!ok) continue;
+            char nfcb[11]; to_fcb(nm83, nfcb);
+            if (!fcb_match(pfcb, nfcb)) continue;
+            /* de-dup */
+            int dup = 0; for (int i = 0; i < g_ff_count; ++i) if (!strcmp(g_ff_names[i], nm83)) { dup = 1; break; }
+            if (dup || g_ff_count >= FF_MAX) continue;
+            strcpy(g_ff_names[g_ff_count], nm83);
+            /* file size */
+            char path[600]; snprintf(path, sizeof path, "%s/%s", dirs[di], de->d_name);
+            FILE *sf = fopen(path, "rb"); long sz = 0;
+            if (sf) { fseek(sf, 0, SEEK_END); sz = ftell(sf); fclose(sf); }
+            g_ff_size[g_ff_count] = (uint32_t)sz;
+            g_ff_count++;
+        }
+        closedir(dp);
+    }
+    /* sort names ascending; keep sizes paired */
+    for (int i = 0; i < g_ff_count; ++i)
+        for (int j = i + 1; j < g_ff_count; ++j)
+            if (strcmp(g_ff_names[i], g_ff_names[j]) > 0) {
+                char tn[13]; strcpy(tn, g_ff_names[i]); strcpy(g_ff_names[i], g_ff_names[j]); strcpy(g_ff_names[j], tn);
+                uint32_t ts = g_ff_size[i]; g_ff_size[i] = g_ff_size[j]; g_ff_size[j] = ts;
+            }
+    (void)ff_cmp;
+}
+
+/* Fill the DTA (linear = get-DTA address, i.e. 0x0080:0x0000 = 0x800) with match index `idx`.
+ * DOS Find-File DTA: +0x15 attr, +0x16 time, +0x18 date, +0x1a size(dword), +0x1e name(ASCIIZ). */
+static void ff_fill_dta(int idx)
+{
+    uint32_t dta = lin(0x0080, 0x0000);   /* matches AH=2F get-DTA -> ES:BX = 0x80:0 */
+    if (dta + 0x2b > FIST_MEM_SIZE) return;
+    uint8_t *d = g_mem + dta;
+    memset(d, 0, 0x2b);
+    d[0x15] = 0x20;                                     /* archive attribute */
+    *(uint16_t*)(d + 0x16) = 0;                         /* time */
+    *(uint16_t*)(d + 0x18) = 0x2141;                    /* date (arbitrary, deterministic) */
+    *(uint32_t*)(d + 0x1a) = g_ff_size[idx];
+    strncpy((char*)(d + 0x1e), g_ff_names[idx], 12); d[0x1e + 12] = 0;
+}
 
 /* ---- INT 21h AH=4B AL=03 : load-overlay (faithful 16-bit MZ overlay loader) ----
  * The engine EXEC-loads its driver overlays (MGAVIDEO.DVR video, SOUNDDVR.DVR sound) into a segment
@@ -301,9 +421,18 @@ static void dos_int(void)
     case 0x4c: /* terminate with return code AL */
         TRACE("[dos] 4C terminate code=%d\n", R_AL);
         g_fist_exit_code = R_AL; longjmp(g_fist_exit, 1); return;
-    case 0x4e: /* find first -- no match (CF=1) until implemented */
-    case 0x4f: /* find next  -- no match */
-        R_AX=18; set_cf(1); return;                  /* 18 = no more files */
+    case 0x4e: { /* find first: build the sorted match list for DS:DX pattern, fill DTA with entry 0 */
+        char *pat = (char*)(g_mem + lin(R_DS, R_DX));
+        if (fftrace()) fprintf(stderr, "[ff] 4E find-first pattern DS:DX=%04x:%04x = '%.16s' CX=%04x\n",
+                               R_DS, R_DX, pat, R_CX);
+        ff_build(pat);
+        if (fftrace()) { fprintf(stderr, "[ff]    -> %d matches:", g_ff_count);
+            for (int i=0;i<g_ff_count && i<16;i++) fprintf(stderr, " %s", g_ff_names[i]); fprintf(stderr, "\n"); }
+        if (g_ff_count == 0) { R_AX = 18; set_cf(1); return; }   /* 18 = no more files */
+        ff_fill_dta(0); g_ff_cur = 0; R_AX = 0; set_cf(0); return; }
+    case 0x4f: { /* find next: advance the cursor set by the preceding find-first */
+        if (++g_ff_cur >= g_ff_count) { R_AX = 18; set_cf(1); return; }
+        ff_fill_dta(g_ff_cur); R_AX = 0; set_cf(0); return; }
     default:
         TRACE("[dos] UNIMPL INT21 AH=0x%02x AL=0x%02x BX=%04x CX=%04x DX=%04x\n",
               ah, R_AL, R_BX, R_CX, R_DX);
