@@ -174,6 +174,7 @@ extern uint32_t fist_mga_base;
 #define FUN_0000_2e8b m_mga_FUN_0000_2e8b
 #define FUN_0000_2ed7 m_mga_FUN_0000_2ed7
 #define FUN_0000_2f03 m_mga_FUN_0000_2f03
+#define FUN_0000_2f38 m_mga_FUN_0000_2f38
 #define FUN_0000_2fd7 m_mga_FUN_0000_2fd7
 #define FUN_0000_3068 m_mga_FUN_0000_3068
 #define FUN_0000_38c9 m_mga_FUN_0000_38c9
@@ -424,6 +425,7 @@ void __allregs FUN_0000_2e3f(int *param_1);
 void __allregs FUN_0000_2e8b(void);
 void __allregs FUN_0000_2ed7(void);
 void __allregs FUN_0000_2f03(uint param_1,undefined2 param_2);
+void __allregs FUN_0000_2f38(void);
 void __allregs FUN_0000_2fd7(void);
 void __allregs FUN_0000_3068(undefined1 param_1,uint param_2,uint param_3,uint param_4,uint param_5,uint param_6);
 void __allregs FUN_0000_38c9(int param_1,int param_2,int param_3,int param_4,undefined2 *param_5);
@@ -660,6 +662,8 @@ void __allregs FUN_0000_66dc(undefined2 param_1,uint param_2,uint param_3,byte *
 #define _DAT_1000_d5c4 (*(undefined4 *)(g_mem+0x1d5c4))
 #define _DAT_1000_d5c6 (*(undefined4 *)(g_mem+0x1d5c6))
 #define _DAT_1000_d5c8 (*(undefined4 *)(g_mem+0x1d5c8))
+#define _DAT_1000_d5ca (*(undefined4 *)(g_mem+0x1d5ca))
+#define _DAT_1000_d5cc (*(undefined4 *)(g_mem+0x1d5cc))
 #define _DAT_1000_d5ce (*(undefined4 *)(g_mem+0x1d5ce))
 #define _DAT_1000_d5d0 (*(undefined4 *)(g_mem+0x1d5d0))
 #define _DAT_1000_d5d2 (*(undefined4 *)(g_mem+0x1d5d2))
@@ -7320,6 +7324,66 @@ void __allregs FUN_0000_2f03(uint param_1,undefined2 param_2)
 }
 
 
+/* ===== ((uint)(uintptr_t)&FUN_0000_2f38) @ 0000:2f38 ===== */
+
+/* WARNING: Removing unreachable block (ram,0x00002f65) */
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_2f38(void)
+
+{
+  int iVar1;
+  undefined1 uVar2;
+  
+  if ((_DAT_1000_d5cc == _DAT_1000_d5ba) && (_DAT_1000_d5ca == _DAT_1000_d5b8)) {
+    if (_DAT_1000_d5e8 < 0) {
+      return;
+    }
+    if (DAT_1000_d5b5 == DAT_1000_d5b4) {
+      if (DAT_1000_d5d6 == -1) {
+        return;
+      }
+      DAT_1000_d5d8 = 1;
+      return;
+    }
+  }
+  while( true ) {
+    iVar1 = _DAT_1000_d5e8;
+    _DAT_1000_d5e8 = _DAT_1000_d5e6;
+    LOCK();
+    UNLOCK();
+    if (-1 < iVar1) break;
+    FUN_0000_2d52();
+  }
+  if ((char)(DAT_1000_d5d6 + '\x01') != '\0') {
+    DAT_1000_d5d8 = 1;
+    return;
+  }
+  _DAT_1000_d5ba = _DAT_1000_d5cc;
+  if (_DAT_1000_c732 <= _DAT_1000_d5cc) {
+    _DAT_1000_d5ba = _DAT_1000_c732 - 1;
+  }
+  _DAT_1000_d5b8 = _DAT_1000_d5ca;
+  if (_DAT_1000_c730 <= _DAT_1000_d5ca) {
+    _DAT_1000_d5b8 = _DAT_1000_c730 - 1;
+  }
+  DAT_1000_d5d6 = DAT_1000_d5d6 + '\x01';
+  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c3fe)))();
+  uVar2 = 0;
+  if (DAT_1000_d5d7 == '\0') {
+    FUN_0000_0e3b();
+  }
+  FUN_0000_2fd7();
+  FUN_0000_2ed7();
+  if (!(bool)uVar2) {
+    FUN_0000_0db8();
+  }
+  DAT_1000_d5d8 = 0;
+  DAT_1000_d5d6 = DAT_1000_d5d6 + -1;
+  return;
+}
+
+
 /* ===== ((uint)(uintptr_t)&FUN_0000_2fd7) @ 0000:2fd7 ===== */
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
@@ -13321,6 +13385,7 @@ const struct fist_fent fist_mga_fmap[] = {
   {0x2e8bu,(void*)&FUN_0000_2e8b},
   {0x2ed7u,(void*)&FUN_0000_2ed7},
   {0x2f03u,(void*)&FUN_0000_2f03},
+  {0x2f38u,(void*)&FUN_0000_2f38},
   {0x2fd7u,(void*)&FUN_0000_2fd7},
   {0x3068u,(void*)&FUN_0000_3068},
   {0x38c9u,(void*)&FUN_0000_38c9},

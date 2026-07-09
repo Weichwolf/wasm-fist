@@ -6604,6 +6604,66 @@ void __allregs FUN_0000_2f03(uint param_1,undefined2 param_2)
 }
 
 
+/* ===== FUN_0000_2f38 @ 0000:2f38 ===== */
+
+/* WARNING: Removing unreachable block (ram,0x00002f65) */
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_2f38(void)
+
+{
+  int iVar1;
+  undefined1 uVar2;
+  
+  if ((_DAT_1000_d5cc == _DAT_1000_d5ba) && (_DAT_1000_d5ca == _DAT_1000_d5b8)) {
+    if (_DAT_1000_d5e8 < 0) {
+      return;
+    }
+    if (DAT_1000_d5b5 == DAT_1000_d5b4) {
+      if (DAT_1000_d5d6 == -1) {
+        return;
+      }
+      DAT_1000_d5d8 = 1;
+      return;
+    }
+  }
+  while( true ) {
+    iVar1 = _DAT_1000_d5e8;
+    _DAT_1000_d5e8 = _DAT_1000_d5e6;
+    LOCK();
+    UNLOCK();
+    if (-1 < iVar1) break;
+    FUN_0000_2d52();
+  }
+  if ((char)(DAT_1000_d5d6 + '\x01') != '\0') {
+    DAT_1000_d5d8 = 1;
+    return;
+  }
+  _DAT_1000_d5ba = _DAT_1000_d5cc;
+  if (_DAT_1000_c732 <= _DAT_1000_d5cc) {
+    _DAT_1000_d5ba = _DAT_1000_c732 - 1;
+  }
+  _DAT_1000_d5b8 = _DAT_1000_d5ca;
+  if (_DAT_1000_c730 <= _DAT_1000_d5ca) {
+    _DAT_1000_d5b8 = _DAT_1000_c730 - 1;
+  }
+  DAT_1000_d5d6 = DAT_1000_d5d6 + '\x01';
+  (*_DAT_1000_c3fe)();
+  uVar2 = 0;
+  if (DAT_1000_d5d7 == '\0') {
+    FUN_0000_0e3b();
+  }
+  FUN_0000_2fd7();
+  FUN_0000_2ed7();
+  if (!(bool)uVar2) {
+    FUN_0000_0db8();
+  }
+  DAT_1000_d5d8 = 0;
+  DAT_1000_d5d6 = DAT_1000_d5d6 + -1;
+  return;
+}
+
+
 /* ===== FUN_0000_2fd7 @ 0000:2fd7 ===== */
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */

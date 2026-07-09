@@ -16,10 +16,13 @@ mangles d5bc/d5be.  Retype the contiguous block to its faithful WORD width so ev
 exactly its own 16-bit field and the 2fd7 clip math matches the asm (d5bc=8, d5be=1, d5c0=10 at the
 top-left corner).  Same store/load-width Ghidra class as patches 092/104/105.  Asm-verified against
 MGAVIDEO 2fd7 (0x2fd7..0x3063) and the 0db8/2d6d/2dbd/2e3f consumers.
---- a/fist_mga.c
-+++ b/fist_mga.c
-@@ -653,21 +653,21 @@
- #define _DAT_1000_d5b6 (*(undefined4 *)(g_mem+0x1d5b6))
+--- a/fist_mga.c	2026-07-09 03:39:38.261370678 +0200
++++ b/fist_mga.c	2026-07-09 03:39:38.293826680 +0200
+@@ -652,28 +652,28 @@
+ #define _DAT_1000_d58e (*(undefined4 *)(g_mem+0x1d58e))
+ #define _DAT_1000_d590 (*(undefined4 *)(g_mem+0x1d590))
+ #define _DAT_1000_d5b0 (*(undefined4 *)(g_mem+0x1d5b0))
+-#define _DAT_1000_d5b6 (*(undefined4 *)(g_mem+0x1d5b6))
 -#define _DAT_1000_d5b8 (*(undefined4 *)(g_mem+0x1d5b8))
 -#define _DAT_1000_d5ba (*(undefined4 *)(g_mem+0x1d5ba))
 -#define _DAT_1000_d5bc (*(undefined4 *)(g_mem+0x1d5bc))
@@ -29,6 +32,8 @@ MGAVIDEO 2fd7 (0x2fd7..0x3063) and the 0db8/2d6d/2dbd/2e3f consumers.
 -#define _DAT_1000_d5c4 (*(undefined4 *)(g_mem+0x1d5c4))
 -#define _DAT_1000_d5c6 (*(undefined4 *)(g_mem+0x1d5c6))
 -#define _DAT_1000_d5c8 (*(undefined4 *)(g_mem+0x1d5c8))
+-#define _DAT_1000_d5ca (*(undefined4 *)(g_mem+0x1d5ca))
+-#define _DAT_1000_d5cc (*(undefined4 *)(g_mem+0x1d5cc))
 -#define _DAT_1000_d5ce (*(undefined4 *)(g_mem+0x1d5ce))
 -#define _DAT_1000_d5d0 (*(undefined4 *)(g_mem+0x1d5d0))
 -#define _DAT_1000_d5d2 (*(undefined4 *)(g_mem+0x1d5d2))
@@ -39,6 +44,7 @@ MGAVIDEO 2fd7 (0x2fd7..0x3063) and the 0db8/2d6d/2dbd/2e3f consumers.
 -#define _DAT_1000_d5e0 (*(undefined4 *)(g_mem+0x1d5e0))
 -#define _DAT_1000_d5e2 (*(undefined4 *)(g_mem+0x1d5e2))
 -#define _DAT_1000_d5e4 (*(undefined4 *)(g_mem+0x1d5e4))
++#define _DAT_1000_d5b6 (*(undefined2 *)(g_mem+0x1d5b6))
 +#define _DAT_1000_d5b8 (*(undefined2 *)(g_mem+0x1d5b8))
 +#define _DAT_1000_d5ba (*(undefined2 *)(g_mem+0x1d5ba))
 +#define _DAT_1000_d5bc (*(undefined2 *)(g_mem+0x1d5bc))
@@ -48,6 +54,8 @@ MGAVIDEO 2fd7 (0x2fd7..0x3063) and the 0db8/2d6d/2dbd/2e3f consumers.
 +#define _DAT_1000_d5c4 (*(undefined2 *)(g_mem+0x1d5c4))
 +#define _DAT_1000_d5c6 (*(undefined2 *)(g_mem+0x1d5c6))
 +#define _DAT_1000_d5c8 (*(undefined2 *)(g_mem+0x1d5c8))
++#define _DAT_1000_d5ca (*(undefined2 *)(g_mem+0x1d5ca))
++#define _DAT_1000_d5cc (*(undefined2 *)(g_mem+0x1d5cc))
 +#define _DAT_1000_d5ce (*(undefined2 *)(g_mem+0x1d5ce))
 +#define _DAT_1000_d5d0 (*(undefined2 *)(g_mem+0x1d5d0))
 +#define _DAT_1000_d5d2 (*(undefined2 *)(g_mem+0x1d5d2))
@@ -59,3 +67,5 @@ MGAVIDEO 2fd7 (0x2fd7..0x3063) and the 0db8/2d6d/2dbd/2e3f consumers.
 +#define _DAT_1000_d5e2 (*(undefined2 *)(g_mem+0x1d5e2))
 +#define _DAT_1000_d5e4 (*(undefined2 *)(g_mem+0x1d5e4))
  #define _DAT_1000_d5e6 (*(undefined4 *)(g_mem+0x1d5e6))
+ #define _DAT_1000_d5e8 (*(undefined4 *)(g_mem+0x1d5e8))
+ #define _DAT_1000_d65e (*(undefined4 *)(g_mem+0x1d65e))

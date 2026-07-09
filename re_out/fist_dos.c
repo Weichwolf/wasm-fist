@@ -328,7 +328,17 @@ static void bios_video(void)
     }
 }
 
-/* ================= INT 33h : mouse ================= */
+/* ================= INT 33h : mouse =================
+ * We ARE the DOS mouse driver.  The engine (FUN_1000_392a at boot) resets us (fn 0), sets the cursor
+ * position (fn 4), reads it (fn 3), and installs a movement/button EVENT HANDLER (fn 0x14 swap /
+ * fn 0x0c set -- ES:DX = handler, CX = call mask).  After that the menu is EVENT-DRIVEN: it does NOT
+ * poll fn 3 in its idle loop -- it waits for us to far-call the installed handler on each event.  So
+ * fn 0x14/0x0c must CAPTURE the handler (fist_input_set_mouse_handler); the scripted-input driver in
+ * native_main.c then synthesizes events and far-calls it, exactly as a real mouse driver would.
+ * fn 3 returns the driver's current virtual position/buttons (kept by the scripted driver). */
+extern void     fist_input_set_mouse_handler(uint32_t handler_lin, unsigned mask);
+extern void     fist_input_mouse_state(unsigned *vx, unsigned *vy, unsigned *buttons); /* virtual coords */
+extern void     fist_input_mouse_setpos(unsigned vx, unsigned vy);
 static void mouse_int(void)
 {
     unsigned fn = R_AX;
@@ -337,10 +347,18 @@ static void mouse_int(void)
         R_AX=0xffff; R_BX=2; TRACE("[mouse] init\n"); return;
     case 0x01: /* show cursor */ case 0x02: /* hide cursor */
         return;
-    case 0x03: /* get position+buttons -> BX=buttons, CX=x, DX=y */
-        R_BX=0; R_CX=160; R_DX=100; return;
-    case 0x04: /* set position */ case 0x07: case 0x08: /* set ranges */
+    case 0x03: { /* get position+buttons -> BX=buttons, CX=virtual x, DX=virtual y */
+        unsigned vx,vy,b; fist_input_mouse_state(&vx,&vy,&b);
+        R_BX=b; R_CX=vx; R_DX=vy; return; }
+    case 0x04: /* set cursor position: CX=virtual x, DX=virtual y */
+        fist_input_mouse_setpos(R_CX, R_DX); return;
+    case 0x07: case 0x08: /* set x/y ranges */
     case 0x0f: case 0x10: /* set mickeys / conditional off */
+        return;
+    case 0x0c: /* set event handler: CX=call mask, ES:DX=handler */
+    case 0x14: /* swap event handler: CX=call mask, ES:DX=new handler (old returned in CX/ES:DX) */
+        fist_input_set_mouse_handler(((uint32_t)R_ES<<4)+R_DX, R_CX);
+        if (fn==0x14){ R_CX=0; R_ES=0; R_DX=0; }   /* no previous handler to return */
         return;
     case 0x0b: /* read motion counters -> CX=dx, DX=dy */
         R_CX=0; R_DX=0; return;

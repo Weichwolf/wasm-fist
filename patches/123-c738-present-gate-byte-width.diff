@@ -1,0 +1,35 @@
+The per-frame PRESENT gate DGROUP:0x738 (c738) is a BYTE, not undefined2 -- Ghidra's word typing
+disables the whole present body during the menu idle loop.
+
+FUN_1000_31c3 (the present) gates its body -- the async retrace/palette upload (pcRam0001c5e4 = MGAVIDEO
+0b1f), the mouse-cursor position copy (FUN_1000_3a00: dd9e/dda0 -> d5ca/d5cc), the cursor DRAW (d5b0) and
+the frame blit (c2b0) -- on `c738++; if (c738 == 0)`.  The asm is `inc BYTE ds:0x738; jne <skip>` (verified
+at 0x131cc) and the normal resting value is 0xff (-1), so the byte inc 0xff->0x00 sets ZF and the body
+RUNS.  Ghidra typed DAT_1000_c738 as undefined2 (WORD); the live word is 0x00ff (high byte c739 = 0), so
+the C computes 0x00ff + 1 = 0x0100 != 0 and the body is ALWAYS SKIPPED.  That is why, during the menu
+idle, the cursor never redraws from the mouse position and the palette needed the shim retrace workaround
+(patch 117): the entire present body was dead.  Retype c738 to its true byte width so the inc/compare
+matches the asm (0xff -> 0 -> body runs).  The 30f8 `if (c738 == -1)` folded from `inc BYTE; jne` reads the
+resting 0xff; undefined1 is unsigned (uint8_t) so `== -1` (int -1) never matches -> compare against 0xff.
+Same store/load-width Ghidra class as patches 104/105/106.  Asm-verified against FUN_1000_31c3 (0x131c3),
+FUN_1000_30f8 (0x130f8) and FUN_1000_3218.  c739 (0x739) is not a separate symbol -> byte-typing is safe.
+--- a/fist.c
++++ b/fist.c
+@@ -2570,7 +2570,7 @@
+ #define DAT_1000_c71a (*(undefined2 *)(g_mem+0x1c71a))
+ #define DAT_1000_c722 (*(undefined2 *)(g_mem+0x1c722))
+ #define DAT_1000_c736 (*(undefined2 *)(g_mem+0x1c736))
+-#define DAT_1000_c738 (*(undefined2 *)(g_mem+0x1c738))
++#define DAT_1000_c738 (*(undefined1 *)(g_mem+0x1c738))
+ #define DAT_1000_c73b (*(undefined2 *)(g_mem+0x1c73b))
+ #define DAT_1000_c73d (*(undefined2 *)(g_mem+0x1c73d))
+ #define DAT_1000_c73e (*(undefined2 *)(g_mem+0x1c73e))
+@@ -43944,7 +43944,7 @@
+   DAT_1000_d8d4 = 0;
+   uVar2 = DAT_1000_d8d2;
+   uVar4 = param_2;
+-  if (DAT_1000_c738 == -1) {
++  if (DAT_1000_c738 == 0xff) {
+     do {
+       bVar1 = in(CONCAT11((char)((uint)DAT_0000_0463 >> 8),(char)DAT_0000_0463 + '\x06'));
+       DAT_1000_d8d4 = uVar2 - 1;

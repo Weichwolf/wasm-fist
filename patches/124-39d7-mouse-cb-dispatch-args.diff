@@ -1,0 +1,22 @@
+Thread the mouse EVENT-HANDLER's button-sub-handler dispatch args (FUN_1000_39d7 -> d5ac = MGAVIDEO 2f03).
+
+FUN_1000_39d7 is the engine's INT-33h mouse event handler (installed via fn 0x14, mask 0x1f).  On a button
+event (AX & 0x7e) it far-calls the driver's click sub-handler DGROUP:0x5ac (= MGAVIDEO FUN_0000_2f03).  The
+asm (0x139d7..0x13a28) reaches `call DWORD ds:0x15ac` with AX = the DOS condition mask (event flags) and BX
+= dd9c (the masked button state, just stored two instructions earlier).  FUN_0000_2f03 reads exactly those:
+param_1 = AX (tested `& 6 / & 0x18 / & 0x60` for the left/right/middle button-event groups) and param_2 = BX
+(stored to d5b6, the live button state, then dispatched to the event-enqueue callback c3fe).  Ghidra's
+__allregs indirect-vector site dropped both operands (`(*d5ac)()`), so 2f03 saw garbage flags/buttons and
+mis-dispatched (or spuriously fired) the click.  Thread them faithfully: (param_1 = event flags, dd9c =
+button state).  Per-patch indirect-vector arg threading, CLAUDE.md doctrine.  Asm-verified at 0x13a22.
+--- a/fist.c
++++ b/fist.c
+@@ -45076,7 +45076,7 @@
+   if ((param_1 & 0x7e) == 0) {
+     return;
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5ac)))();
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5ac)))(param_1,DAT_1000_dd9c);
+   return;
+ }
+ 

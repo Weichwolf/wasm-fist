@@ -171,6 +171,17 @@ code *fist_icall(uint32_t linear)
                         if (fn2) return (code *)fn2;
                     }
                 }
+                /* LEADING-NOP MID-ENTRY.  Some registered method vectors point one or more bytes
+                 * past the recovered function start when Ghidra pinned the start on a leading `nop`
+                 * (0x90) it emitted before the real entry -- e.g. the mouse-cursor handlers d5ac =
+                 * MGAVIDEO 0x2f04 = FUN_0000_2f03 + 1 (the 0x2f03 byte is a nop).  Executing from the
+                 * function start runs the harmless nop(s) then the identical body, so resolve to the
+                 * containing function iff every intervening byte is a nop. */
+                for (uint32_t d = 1; d <= 4 && d <= off; ++d) {
+                    if (g_mem[linear - d] != 0x90) break;
+                    void *fn3 = lookup_ovl_fun(o, off - d);
+                    if (fn3) return (code *)fn3;
+                }
             }
             dump_module_vecs(o);
             snprintf(g_ovl_miss, sizeof g_ovl_miss, "%s+0x%x", o->name, off);
@@ -179,6 +190,12 @@ code *fist_icall(uint32_t linear)
     }
     void *fn = lookup_fun(linear);
     if (fn) return (code *)fn;
+    /* leading-nop mid-entry into an engine function (same class as the overlay case above). */
+    for (uint32_t d = 1; d <= 4 && d <= linear; ++d) {
+        if (g_mem[linear - d] != 0x90) break;
+        void *fn2 = lookup_fun(linear - d);
+        if (fn2) return (code *)fn2;
+    }
     g_trap_lin = linear;
     return (code *)trap_tramp;
 }

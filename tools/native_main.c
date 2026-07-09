@@ -142,6 +142,9 @@ int swi(int intno) {
 /* engine entry: app_entry @ linear 0x4 (Ghidra 0000:0004). __allregs -> 6 GP-register params. */
 extern void app_entry(undefined2, undefined2, undefined2, undefined2, undefined2, undefined2);
 
+void fist_input_pump(void);              /* scripted deterministic input (defined below) */
+extern int g_menu_ready;
+
 /* ====================== TIMER-DRIVEN EXECUTION MODEL ======================
  * The engine installs its OWN INT-8 (PIT) ISR (DOS set-vector 0x08 -> FUN_1000_30f8 @ linear 0x130f8)
  * and busy-waits on the tick counters that ISR maintains (DGROUP:0x452 in FUN_1000_3346, DGROUP:0x18ca
@@ -255,6 +258,16 @@ void fist_timer_pump(void){
                     fprintf(stderr, "[descrdump] .MS3 seg bytes: %02x %02x %02x %02x %02x %02x %02x %02x  '%.8s'\n",
                             p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],(char*)p); }
             }
+            if (getenv("FIST_INDBG")) {
+                #define GW(o) (*(uint16_t*)(g_mem+0x10000+(o)))
+                #define GB(o) (*(uint8_t*)(g_mem+0x10000+(o)))
+                fprintf(stderr,"[indbg] c738word=0x%04x c739=0x%02x | d5d9(2f03gate)=0x%02x d5d6=0x%02x d5b6=0x%02x dd9c=0x%02x d5d7=0x%02x\n",
+                    GW(0xc738), GB(0xc739), GB(0xd5d9), GB(0xd5d6), GB(0xd5b6), GB(0xdd9c), GB(0xd5d7));
+                fprintf(stderr,"[indbg] dd9e(y)=%u dda0(x)=%u dd9c(b)=%u | d5ca(cy)=%u d5cc(cx)=%u c2a8=%u c738=%d(0x%02x) | isr_runs=%ld d5b8=%u d5ba=%u d5b6=%u | d5ac=%08x c2b0=%08x d5b0=%08x\n",
+                    GW(0xdd9e),GW(0xdda0),GW(0xdd9c), GW(0xd5ca),GW(0xd5cc),GB(0xc2a8),(signed char)GB(0xc738),GB(0xc738),
+                    g_isr_runs, GW(0xd5b8),GW(0xd5ba),GW(0xd5b6),
+                    *(uint32_t*)(g_mem+0x1d5ac),*(uint32_t*)(g_mem+0x1c2b0),*(uint32_t*)(g_mem+0x1d5b0));
+            }
             if (getenv("FIST_PALDUMP")) {
                 uint16_t pseg = *(uint16_t*)(g_mem+0x1c782);
                 uint8_t *pb = g_mem + ((uint32_t)pseg<<4);
@@ -282,6 +295,116 @@ void fist_timer_pump(void){
         ((int(*)(int,int,int,int,int,int,int,int,int,int))fn)(0,0,0,0,0,0,0,0,0,0);
         g_in_isr = 0;
         g_isr_runs++;
+    }
+    fist_input_pump();
+}
+
+/* ====================== SCRIPTED DETERMINISTIC INPUT (mouse) ======================
+ * The main menu is EVENT-DRIVEN, not polled: at boot FUN_1000_392a installs a mouse EVENT HANDLER
+ * (INT 33h fn 0x14, ES:DX = 0f69:4348 = FUN_1000_39d7, call mask 0x1f = movement + all button events).
+ * A DOS mouse driver far-calls that handler on each event with AX = condition flags, CX = virtual x
+ * (0..639 for a 320-wide mode), DX = virtual y (0..199), BX = button state, SI/DI = raw mickeys.  The
+ * handler records position (DGROUP dd9e=y, dda0=x>>1) and, on a button event (AX & 0x7e), far-calls the
+ * menu's button sub-handler which hit-tests the 7 items.  We ARE the mouse driver, so scripted input is
+ * literally synthesizing those events and far-calling the captured handler -- fully faithful.
+ *
+ * DETERMINISM: the menu idle loop is a fixed point (renders the same frame every iteration -- proven
+ * native<->wasm bit-identical), so injecting an event during it gives a timing-independent result.  We
+ * key the script on the pump count AFTER menu-enter (fist_ensure_dlist_vecs); the exact count differs
+ * native vs wasm but the *outcome* (which item, which sub-screen) does not, so both converge to the same
+ * stable sub-screen frame.  FIST_MOUSE selects the script:
+ *   FIST_MOUSE="t:x:y:b; t:x:y:b; ..."   t = pump-after-ready trigger; x,y = PIXEL pos (0..319,0..199);
+ *   b = button mask (bit0=left, bit1=right).  Steps fire in order as t is crossed; each move/button
+ *   transition is delivered as the corresponding event(s).  A step with the same pos+buttons re-asserts
+ *   position (idempotent).  't' can be scaled by FIST_INPUT_SCALE (default 1). */
+int      g_menu_ready = 0;                 /* set by fist_ensure_dlist_vecs (menu-enter) */
+static uint32_t g_mouse_handler_lin = 0;   /* captured INT 33h fn 0x14/0x0c handler (linear) */
+static unsigned g_mouse_mask = 0;
+static unsigned g_vx = 0, g_vy = 0, g_vbtn = 0;   /* driver virtual mouse state (CX/DX/BX for fn 3) */
+
+void fist_input_set_mouse_handler(uint32_t handler_lin, unsigned mask){
+    g_mouse_handler_lin = handler_lin; g_mouse_mask = mask;
+    fprintf(stderr, "[input] mouse event handler installed @ linear 0x%05x mask=0x%02x\n", handler_lin, mask);
+}
+void fist_input_mouse_state(unsigned *vx, unsigned *vy, unsigned *b){ *vx=g_vx; *vy=g_vy; *b=g_vbtn; }
+void fist_input_mouse_setpos(unsigned vx, unsigned vy){ g_vx=vx; g_vy=vy; }
+
+/* exact-match resolve a handler entry to its C function, tolerating a mid-function entry a few bytes
+ * past the recovered start (e.g. FUN_1000_39d7 begins with a 1-byte `nop` before the registered
+ * 0f69:4348 entry -- running from the start executes the harmless nop then the identical body). */
+static code *resolve_entry(uint32_t lin){
+    for (unsigned d=0; d<8 && d<=lin; d++){
+        unsigned lo=0, hi=fist_fmap_n; uint32_t want=lin-d;
+        while(lo<hi){ unsigned mid=(lo+hi)>>1; uint32_t m=fist_fmap[mid].lin;
+            if(m==want) return (code*)fist_fmap[mid].fn;
+            if(m<want) lo=mid+1; else hi=mid; }
+    }
+    return 0;
+}
+
+/* Far-call the engine's mouse event handler with a synthesized event.  Param order is the __allregs
+ * order recovered for FUN_1000_39d7: (AX flags, CX x, DX y, BX buttons). */
+static int g_in_mouse_cb = 0;
+static void deliver_mouse_event(unsigned flags, unsigned vx, unsigned vy, unsigned btn){
+    if (!(g_mouse_handler_lin) || (flags & g_mouse_mask) == 0) return;
+    code *h = resolve_entry(g_mouse_handler_lin);
+    if (!h) { fprintf(stderr,"[input] handler 0x%05x unresolved\n", g_mouse_handler_lin); return; }
+    g_vx=vx; g_vy=vy; g_vbtn=btn;
+    g_in_mouse_cb = 1;
+    ((int(*)(int,int,int,int))h)((int)flags,(int)vx,(int)vy,(int)btn);
+    g_in_mouse_cb = 0;
+}
+
+/* Parsed script step */
+#define MAX_MSTEP 32
+static struct { long t; unsigned x,y,b; } g_mstep[MAX_MSTEP];
+static int  g_mstep_n = -1;    /* -1 = not parsed yet; 0 = no script */
+static int  g_mstep_i = 0;     /* next step to fire */
+static long g_ready_pumps = 0; /* pumps since menu ready */
+static unsigned g_last_btn = 0;
+
+static void parse_script(void){
+    g_mstep_n = 0;
+    const char *s = getenv("FIST_MOUSE"); if(!s) return;
+    long scale = 1; { const char *sc=getenv("FIST_INPUT_SCALE"); if(sc){ long v=atol(sc); if(v>0) scale=v; } }
+    while (*s && g_mstep_n < MAX_MSTEP){
+        while (*s==' '||*s==';'||*s=='\t') s++;
+        if(!*s) break;
+        long t=strtol(s,(char**)&s,0); if(*s==':')s++;
+        long x=strtol(s,(char**)&s,0); if(*s==':')s++;
+        long y=strtol(s,(char**)&s,0); if(*s==':')s++;
+        long b=strtol(s,(char**)&s,0);
+        g_mstep[g_mstep_n].t=t*scale; g_mstep[g_mstep_n].x=(unsigned)x;
+        g_mstep[g_mstep_n].y=(unsigned)y; g_mstep[g_mstep_n].b=(unsigned)b;
+        g_mstep_n++;
+    }
+    fprintf(stderr, "[input] FIST_MOUSE script: %d step(s)\n", g_mstep_n);
+    for(int i=0;i<g_mstep_n;i++)
+        fprintf(stderr, "  [%d] t=%ld pos=(%u,%u) btn=%u\n", i, g_mstep[i].t, g_mstep[i].x, g_mstep[i].y, g_mstep[i].b);
+}
+
+/* Called each pump (from fist_timer_pump).  Fires due script steps once the menu is up. */
+void fist_input_pump(void){
+    if (g_in_mouse_cb) return;                 /* re-entry guard (handler runs engine code) */
+    if (g_mstep_n < 0) parse_script();
+    if (g_mstep_n == 0 || !g_menu_ready || !g_mouse_handler_lin) return;
+    g_ready_pumps++;
+    while (g_mstep_i < g_mstep_n && g_ready_pumps >= g_mstep[g_mstep_i].t){
+        unsigned nx=g_mstep[g_mstep_i].x, ny=g_mstep[g_mstep_i].y, nb=g_mstep[g_mstep_i].b;
+        unsigned vx = nx*2, vy = ny;           /* mode-13h virtual coords: x doubled, y 1:1 */
+        fprintf(stderr, "[input] step %d @pump%ld -> move (%u,%u) btn %u->%u\n",
+                g_mstep_i, g_ready_pumps, nx, ny, g_last_btn, nb);
+        /* movement event first (bit0) */
+        deliver_mouse_event(0x01, vx, vy, g_last_btn);
+        /* button transitions: left=bit0 of mask, right=bit1 */
+        unsigned pressed  = nb & ~g_last_btn;
+        unsigned released = g_last_btn & ~nb;
+        if (pressed  & 1) deliver_mouse_event(0x02, vx, vy, nb);   /* left  pressed  */
+        if (released & 1) deliver_mouse_event(0x04, vx, vy, nb);   /* left  released */
+        if (pressed  & 2) deliver_mouse_event(0x08, vx, vy, nb);   /* right pressed  */
+        if (released & 2) deliver_mouse_event(0x10, vx, vy, nb);   /* right released */
+        g_last_btn = nb;
+        g_mstep_i++;
     }
 }
 
@@ -486,6 +609,7 @@ static int g_dlist_vecs_done;
 void fist_ensure_dlist_vecs(void) {
     if (g_dlist_vecs_done) return;
     g_dlist_vecs_done = 1;
+    g_menu_ready = 1;           /* menu-enter: scripted input may now be delivered */
     int n = fist_apply_reloc_section(0x174, 1);
     fprintf(stderr, "[fist] display-list element method vectors installed "
                     "(reloc section si=0x174: DGROUP:0x344..0x394 -> seg 0f69; %d entries; "
