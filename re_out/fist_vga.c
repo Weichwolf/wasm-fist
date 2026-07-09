@@ -60,6 +60,17 @@ void fist_vga_service_retrace(void)
             g_pal[i][2] = pb[i*3+2] & 0x3f;
         }
     }
+    /* The real driver retrace ISR (MGAVIDEO 0x0b1f) uploads the present palette, THEN calls the
+     * registered per-frame palette-fade step at word[DGROUP:0x5e8] (which advances the fade ramp,
+     * rewrites the present buffer, and re-arms 0x786 for the next upload).  This shim stands in for
+     * that ISR, so we invoke the fade step here.  Gate on the exact marker the SETTINGS fade setup
+     * (MGAVIDEO 0x0874) writes -- offset word 0x5e8 == 0x946 -- so no other screen's vtable slot is
+     * ever called; 0x0946 clears it to 0 when the fade completes (present == loaded-1, the settled
+     * DOSBox palette).  0x0946 does no port I/O, so this is not re-entrant into in()/out(). */
+    if (*(unsigned short *)(g_mem + 0x1c5e8) == 0x946) {
+        extern code *fist_icall_far(uint32_t);
+        ((void (*)(void))fist_icall_far(*(uint32_t *)(g_mem + 0x1c5e8)))();
+    }
 }
 
 int in(int port)

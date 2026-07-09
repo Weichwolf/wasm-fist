@@ -1,0 +1,174 @@
+SETTINGS screen renders bit-identical (minus a 1px trailing period): fix the panel-overwrite,
+palette fade, status-string garbage, and widget-state store-width bugs.
+
+With patches 132/133 the SETTINGS panel was flat-green with only widget boxes.  Root causes (all
+asm-verified vs re_out/fist_dat_image.bin / fist_mga_image.bin), each an independent bug:
+
+- 6d65 (status-text element paint, asm 0x6d65): the label-background rect-fill `mov al,0; lcall [0x60a]`
+  (MGAVIDEO 0x1091) takes bx = elem+4 (the element's [y0,x0,y1,x1] rect); patch 132 dropped bx and passed
+  0, so 1091 filled the rect at DGROUP:0 = a garbage full-screen rect (index 0x19/0xa0) that WIPED the
+  SETTINGS.MRL panel every frame.  Thread bx = elem+4.  This is THE panel-overwrite fix.
+
+- 0874 (MGAVIDEO palette fade-in, asm 0x874): the crossfade-target alloc `mov bx,0x788; mov ax,0x300;
+  lcall [0xe4]` uses the uninstalled device-alloc vector DGROUP:0xe4 (== 0, a no-op) -> seg788=0 -> 0874
+  fell to the present-only path and uploaded the RAW loaded palette.  The original fade settles at
+  present=ramp[target] with acc=0xffff == target-1 (a uniform 1-level dim), so the raw upload was +1
+  too bright everywhere.  Resolve 0xe4 directly to the real MEMMGR alloc FUN_1000_182a (same pattern as
+  the 0x782 alloc at 0009, patch 049), run the fade, and set the c5e8 fade-step far-vector fully so the
+  shim retrace ISR (fist_vga.c) can invoke MGAVIDEO 0x0946 each frame until it settles.
+
+- 700a (status-string setter, asm 0x700a `mov [0x8b53],es`): ES is the status-string RESOURCE segment
+  returned by the caller's uninstalled far resolve method ([0x2ac]/[0x2e0]/[0x2f0]) -> garbage -> 6d65
+  drew a wild string (bottom-row noise).  Thread es = the UI str-seg word[DGROUP:0x70] (=0x2d74).
+
+- 6ef5 (config->widget-state init, asm 0x6ef5): the boolean checkbox flags 0x8b45/46/50/4d/4e/4f are
+  BYTE stores (`mov al`) but were typed WORD -> the 0x8b4e word-write clobbered byte[0x8b4f] the previous
+  store set, so the SMOKE-EFFECTS (and SKY) checkboxes rendered empty.  Restore the asm byte/word widths.
+
+- 6c38 (joystick status, asm 0x6c38): `mov si,0x165c; lcall [0x2ac]; call 700a` -- [0x2ac] is the status
+  resolver, whose reloc section (leading seg 0xf69, table @0x33720) is not installed here, so DGROUP:0x2ac
+  == 0 (no-op) and si stayed 0x165c ("SETTINGS NOT CHANGED").  The real target DGROUP:0x2ac = 0xf69:0x444f
+  = FUN_1000_444f is an UNDECOMPILED display-list status-message BUILDER (stride-10 node table at
+  str-seg:0x360, linked-list ops via 0xf69:0x482f, appends a trailing '.').  Full reconstruction (seed the
+  0x2ac/0x2e0/0x2f0 family in SeedServiceVecs + re-decompile + install the reloc section) is a deferred
+  frontier; as a PARTIAL reconstruction, resolve the joystick-status TEXT from the game's parallel status
+  table at DGROUP:0x8b33 (= [0x1672 "NO JOYSTICK SELECTED", 0x1687 "STANDARD JOYSTICK SELECTED", ...]):
+  si = word[0x8b33 + jstype*2].  This yields the correct status text but OMITS 444f's trailing '.', a
+  single deterministic 1px delta on the status line -> SETTINGS AE = 1 (not 0).  NOT added to verify.sh.
+
+Result: SETTINGS AE = 1/64000 vs ref/settings_native320.png (deterministic, panel+palette+labels+widgets
++status text all bit-identical; sole delta = the status-line trailing period).
+
+--- a/fist.c
++++ b/fist.c
+@@ -17523,7 +17523,9 @@
+ {
+   DAT_2000_4b43 = param_1;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c2ac)))();
+-  FUN_0000_700a(0x165c);
++  { uint8_t *D=g_mem+0x1c000; uint16_t js=*(uint16_t*)(D+0x8b43);
++    uint16_t so = js<5 ? *(uint16_t*)(D+0x8b33+js*2) : 0x165c;
++    FUN_0000_700a(so); }
+   DAT_2000_4b91 = 3;
+   DAT_2000_4b94 = 3;
+   DAT_2000_4b97 = 3;
+@@ -17750,7 +17752,7 @@
+   uint16_t y = *(uint16_t *)(dg + (uint16_t)(elem + 6));
+   uint16_t strseg = *(uint16_t *)(dg + 0x8b53);
+   uint16_t stroff = *(uint16_t *)(dg + 0x8b51);
+-  ((void (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c60a)))(0);
++  ((void (*)(undefined2,undefined1))fist_icall_far((uint32_t)(DAT_1000_c60a)))((uint16_t)(elem+4),0);
+   FUN_1000_524e(4);
+   FUN_1000_52d1(x, y);
+   FUN_1000_530b(0x70);
+@@ -18019,34 +18021,32 @@
+ void __allregs FUN_0000_6ef5(void)
+ 
+ {
++  /* PATCH 134: SETTINGS config->widget-state init.  asm 0x6ef5 uses BYTE stores (`mov al,..; mov
++     [0x8bNN],al`) for the boolean checkbox flags 0x8b45/0x8b46/0x8b50/0x8b4f/0x8b4d/0x8b4e and WORD
++     stores (`mov ax; mov [0x8bNN],ax`) only for the radio-group indices 0x8b43/0x8b47/0x8b49/0x8b4b.
++     Ghidra typed the booleans undefined2 (WORD): the adjacent flags overlap, so the 0x8b4e word-write
++     clobbered byte[0x8b4f] that 0x8b4f had just set -> the SMOKE-EFFECTS checkbox rendered empty.
++     Restore the asm widths verbatim (byte flags, word radio indices). */
++  uint8_t *D = g_mem + 0x1c000;
+   byte bVar1;
+-  
+-  bVar1 = DAT_2000_4aa8 - 0x30;
+-  if (4 < bVar1) {
+-    bVar1 = 0;
+-  }
+-  DAT_2000_4b43 = (uint)bVar1;
+-  DAT_2000_4b45 = DAT_2000_4aa9 == 'Y';
+-  DAT_2000_4b50 = DAT_2000_4ab2 == 'Y';
+-  DAT_2000_4b46 = DAT_2000_4aab == 'Y';
+-  bVar1 = DAT_2000_4aac - 0x30;
+-  if (2 < bVar1) {
+-    bVar1 = 0;
+-  }
+-  DAT_2000_4b47 = (uint)bVar1 << 1;
+-  bVar1 = DAT_2000_4aad - 0x30;
+-  if (2 < bVar1) {
+-    bVar1 = 0;
+-  }
+-  DAT_2000_4b49 = (uint)bVar1 << 1;
+-  DAT_2000_4b4f = DAT_2000_4ab0 == 'Y';
+-  DAT_2000_4b4d = DAT_2000_4aaf == 'Y';
+-  DAT_2000_4b4e = DAT_2000_4ab1 == 'Y';
+-  bVar1 = DAT_2000_4aae - 0x30;
+-  if (2 < bVar1) {
+-    bVar1 = 0;
+-  }
+-  DAT_2000_4b4b = (uint)bVar1 << 1;
++  bVar1 = D[0x8aa8] - 0x30;
++  if (4 < bVar1) bVar1 = 0;
++  *(uint16_t *)(D + 0x8b43) = (uint16_t)bVar1;          /* WORD: joystick-type radio */
++  D[0x8b45] = (D[0x8aa9] == 'Y');                        /* BYTE flags */
++  D[0x8b50] = (D[0x8ab2] == 'Y');
++  D[0x8b46] = (D[0x8aab] == 'Y');
++  bVar1 = D[0x8aac] - 0x30;
++  if (2 < bVar1) bVar1 = 0;
++  *(uint16_t *)(D + 0x8b47) = (uint16_t)bVar1 << 1;     /* WORD: radio group */
++  bVar1 = D[0x8aad] - 0x30;
++  if (2 < bVar1) bVar1 = 0;
++  *(uint16_t *)(D + 0x8b49) = (uint16_t)bVar1 << 1;     /* WORD: radio group */
++  D[0x8b4f] = (D[0x8ab0] == 'Y');                        /* BYTE: SMOKE */
++  D[0x8b4d] = (D[0x8aaf] == 'Y');                        /* BYTE: PROMPTS */
++  D[0x8b4e] = (D[0x8ab1] == 'Y');                        /* BYTE: SKY */
++  bVar1 = D[0x8aae] - 0x30;
++  if (2 < bVar1) bVar1 = 0;
++  *(uint16_t *)(D + 0x8b4b) = (uint16_t)bVar1 << 1;     /* WORD: DETAIL radio */
+   return;
+ }
+ 
+@@ -18089,10 +18089,13 @@
+ void __allregs FUN_0000_700a(undefined2 param_1)
+ 
+ {
+-  undefined2 unaff_ES;
+-  
++  /* PATCH 134: asm `mov [0x8b51],si; mov [0x8b53],es`.  ES is the status-string RESOURCE segment set
++     by the caller's far string-resolve method ([0x2ac]/[0x2e0]/[0x2f0]).  Those vectors are uninstalled
++     in our port (== 0, a no-op) so ES retained garbage -> 6d65 drew a wild string (bottom-row noise).
++     The status strings live in the UI string segment word[DGROUP:0x70] (the str-seg the resolve method
++     returns; 6a02/7018 hardcode the same 0x2d74).  Thread it faithfully. */
+   DAT_2000_4b51 = param_1;
+-  DAT_2000_4b53 = unaff_ES;
++  DAT_2000_4b53 = *(uint16_t *)(g_mem + 0x1c000 + 0x70);
+   DAT_2000_4b90 = 3;
+   return;
+ }
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -2017,16 +2017,26 @@
+   DAT_0000_09c2 = cnt;
+   DAT_0000_09c4 = param_3;
+   memcpy(present, loaded, cnt);                              /* copy1: present <- loaded palette */
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0e4)))(0);  /* [0xe4]: get/alloc the target buffer */
+-  /* [0xe4] alloc-failure (CF=1) OR no target buffer (seg788==0) => the 0x932 present-only path: the
+-     loaded palette (already staged into the present buffer by copy1) is uploaded directly, no fade. */
+-  if (!g_fist_cf && *(uint16_t *)(g_mem+0x1c788) != 0) {     /* 0x8de jae + a real target buffer */
++  /* [0xe4] crossfade-target device-alloc: DGROUP:0xe4 is an as-yet-uninstalled device method vector
++     (same class as the word[0x782] alloc via DGROUP:0xcc, patch 049) -> resolve the real MEMMGR alloc
++     FUN_1000_182a directly and allocate the 0x300-byte target buffer into word[DGROUP:0x788].  This
++     makes the FADE path (0x8de-not-taken) run instead of the present-only path, so the palette settles
++     at present=ramp[target] with acc=0xffff == loaded-1 (the byte-exact DOSBox post-fade palette). */
++  if (*(uint16_t *)(g_mem+0x1c788) == 0) {
++    typedef void (*a182a_t)(unsigned,undefined2,undefined2,undefined2,undefined2,undefined2);
++    ((a182a_t)fist_icall(0x1182a))(0x300, 0x1c00, 0, 0x788, 0, 0);
++    target = g_mem + ((uint32_t)(*(uint16_t *)(g_mem+0x1c788)) << 4) + off;
++  }
++  if (*(uint16_t *)(g_mem+0x1c788) != 0) {                   /* 0x8de jae + a real target buffer */
+     memcpy(target, present, cnt);                            /* copy2: target <- present (loaded) */
+     memset(present, 0, cnt);                                 /* copy3: zero present (fade from black) */
+     _DAT_1000_c780 = 0x782;
+     DAT_1000_c786 = 1;
+     do { fist_timer_pump(); } while (DAT_1000_c786 & 0xff);  /* wait the retrace palette upload */
+-    _DAT_1000_c5e8 = 0x946;                                  /* register 0946 as the per-frame fade step */
++    /* register 0946 as the per-frame fade step (asm `movw $0x946,0x5e8`; the seg word 0x5ea already
++       holds the driver code seg on the original, but our undefined4 store zeroed it -> set the full
++       module far-vector so the shim retrace ISR can resolve+invoke it). */
++    _DAT_1000_c5e8 = ((uint32_t)(uint16_t)(fist_mga_base >> 4) << 16) | 0x946;
+     return;
+   }
+   _DAT_1000_c780 = 0x782;                                    /* 0x932: present-only (no fade) */
