@@ -294,6 +294,7 @@ void fist_timer_pump(void){
      * the main-menu idle) that never reach an explicit in(0x3da). */
     { extern void fist_vga_service_retrace(void); fist_vga_service_retrace(); }
     if (!g_int8_set || g_in_isr) return;
+    { extern void fist_queue_check(const char*); fist_queue_check("pre-isr"); }
     int budget = 4;
     while (g_tick_pending > 0 && budget-- > 0){
         g_tick_pending--;                         /* benign race w/ SIGALRM: at worst drops a tick */
@@ -303,8 +304,48 @@ void fist_timer_pump(void){
         ((int(*)(int,int,int,int,int,int,int,int,int,int))fn)(0,0,0,0,0,0,0,0,0,0);
         g_in_isr = 0;
         g_isr_runs++;
+        { extern void fist_queue_check(const char*); fist_queue_check("post-isr"); }
     }
     fist_input_pump();
+}
+
+/* DIAGNOSTIC (FIST_QCHK=1): validate the event-queue free-list + ready-list invariants each pump so a
+ * corruption is caught DETERMINISTICALLY at its source instead of chasing the flaky downstream SEGV.
+ * Node pool = 63 nodes @ DGROUP:0x18ea stride 0x12 (0x18ea..0x202e); links/handles = 16-bit DGROUP
+ * offsets, 0xffff sentinel; tail-slot addr 0x18e4; template/current d8e0 initial 0x2058. */
+static int qchk_valid_node(unsigned o){
+    return (o >= 0x18ea && o <= 0x202e && ((o - 0x18ea) % 0x12) == 0);
+}
+void fist_queue_check(const char *where){
+    static int on = -1; if (on < 0) on = getenv("FIST_QCHK") ? 1 : 0;
+    if (!on) return;
+    #define QG(o) (*(uint16_t*)(g_mem + 0x1c000 + (uint16_t)(o)))
+    uint16_t d8e0=QG(0x18e0), d8e2=QG(0x18e2), d8e4=QG(0x18e4), d8e6=QG(0x18e6), d8e8=QG(0x18e8), d8de=QG(0x18de);
+    /* Arm only after the free-list init (3446) has run: canonical post-init signature has tail=0x18e4 or a
+     * valid node, free-head 0xffff-or-valid, ready-head 0xffff-or-valid, and is not all-zero. */
+    static int armed = 0;
+    if (!armed){
+        int inited = (d8e6==0x18e4 || qchk_valid_node(d8e6)) &&
+                     (d8e8==0xffff || qchk_valid_node(d8e8)) &&
+                     (d8e4==0xffff || qchk_valid_node(d8e4)) &&
+                     (d8e6|d8e8|d8e4) != 0;
+        if (inited) armed = 1; else { return; }
+    }
+    int bad = 0; const char *why = "";
+    /* free list walk */
+    { unsigned o=d8e8, n=0; while (o != 0xffff){ if(!qchk_valid_node(o)){bad=1;why="free-node-invalid";break;} if(++n>65){bad=1;why="free-cycle";break;} o=QG(o); } }
+    /* ready list walk */
+    if(!bad){ unsigned o=d8e4, n=0; while (o != 0xffff){ if(!qchk_valid_node(o)){bad=1;why="ready-node-invalid";break;} if(++n>65){bad=1;why="ready-cycle";break;} o=QG(o); } }
+    /* tail must be a node or the head-slot address 0x18e4 */
+    if(!bad && d8e6!=0x18e4 && !qchk_valid_node(d8e6)){bad=1;why="tail-invalid";}
+    /* current/template must be a node or 0x2058 */
+    if(!bad && d8e0!=0x2058 && !qchk_valid_node(d8e0)){bad=1;why="current-invalid";}
+    if (bad){
+        fprintf(stderr, "[qchk] CORRUPT (%s) at %s: d8de=%04x d8e0=%04x d8e2=%04x d8e4(ready)=%04x d8e6(tail)=%04x d8e8(free)=%04x isr_runs=%ld\n",
+                why, where, d8de, d8e0, d8e2, d8e4, d8e6, d8e8, g_isr_runs);
+        _exit(77);
+    }
+    #undef QG
 }
 
 /* ====================== SCRIPTED DETERMINISTIC INPUT (mouse) ======================
@@ -477,6 +518,30 @@ int fist_apply_reloc_section(uint16_t si, int is_far) {
         if (off == 0) break;
         RW(DGROUP_LIN + off) = RW(p + 2);
         if (is_far) RW(DGROUP_LIN + off + 2) = seg;
+        p += 4; ++n;
+    }
+    #undef RW
+    return n;
+}
+/* fist_zero_reloc_section(si): the UNINSTALL counterpart of fist_apply_reloc_section, faithfully
+ * reproducing the near vector-clear applier FUN_0000_f860 -> FUN_0000_f869 (DGROUP:0x16), which the
+ * menu loop's FUN_1000_5c5f runs each iteration to tear down the method vectors that FUN_1000_5c3a
+ * (re)installs.  f860 enters f869 with cx=dx=0; f869 (asm 0xf874) skips the section's leading seg word
+ * (`add si,2`) then for each (off,val) pair writes DGROUP[off]=dx(=0), DGROUP[off+2]=cx(=0) until
+ * off==0.  Ghidra rendered the engine's f860/f869 inert (dropped the x86 string-op DS/ES bases +
+ * the BX/SI section args), so its raw `(*[c016])()` far-call ran on uninitialised register garbage ->
+ * flaky SIGSEGV, exactly like the f842 far-install case (patches 022/030/031).  Apply the tear-down
+ * faithfully from the game's own reloc table (seg 0x3352, base-0 identity).  The BX=0 entry resolves
+ * via f7c3 to the table segment then applies -- so this is a real clear, not a no-op. */
+int fist_zero_reloc_section(uint16_t si) {
+    #define RW(a) (*(uint16_t*)(g_mem + (a)))
+    uint32_t p = RELOC_TAB_LIN + si + 2;   /* skip the leading seg word (far-form section) */
+    int n = 0;
+    for (;;) {
+        uint16_t off = RW(p);
+        if (off == 0) break;
+        RW(DGROUP_LIN + off) = 0;
+        RW(DGROUP_LIN + off + 2) = 0;
         p += 4; ++n;
     }
     #undef RW

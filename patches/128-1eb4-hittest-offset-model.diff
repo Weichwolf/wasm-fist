@@ -1,0 +1,338 @@
+Reconstruct the recursive cursor HIT-TEST thunk_FUN_0000_1eb4 / FUN_0000_1eb4 (asm 0x1eab-0x1ff4) in the
+faithful 16-bit DGROUP-offset model -- the SECOND (and root) cause of the flaky static-menu SIGSEGV that
+patches 125/126 exposed, and the display-list event frontier.
+
+ROOT CAUSE.  With the event queue delivering events (patches 125/126) and the applier crashes gone
+(patch 127), the boot cursor-move now flows 1e4b -> thunk_FUN_0000_1eb4 (1e4b calls it when the event is
+targeted, param_1 & 0x7ff != 0).  Ghidra rendered 1eb4 with base-loss + pointer-scaling: the element node
+`bx`, lower bound `dx`, child-bounds base `bp` and the coord source `si` are DGROUP NEAR OFFSETS, but were
+typed host `int*`, so `*(int*)(param_5+4)` (asm `mov cx,[si+4]`, the cursor X) dereferenced the raw 16-bit
+offset as a host pointer -> a WILD read.  Whether it faulted depended on the (dropped-arg / stale-stack)
+value of that offset, so the crash was FLAKY (caught deterministically via -ftrivial-auto-var-init=pattern:
+EIP=thunk_FUN_0000_1eb4 fist.c:8532, fault ~0xffff/0x3b74).  Pointer scaling too: element fields are WORD
+offsets [bx+0/2/4/6/8/0xa] with a 0xc-BYTE stride (asm `sub bx,0xc`), but int* typing scaled every index
+x4 (param_3[2]=+8 vs [bx+4]; `param_3 += -6` = -24 vs -0xc).
+
+FIX (asm-verified vs 0x1eab-0x1ff4).  One shared recursive helper fist_hit1eb4 in the offset model
+(HG(o) = DGROUP word at offset o); both entry points forward to it.  Element rect = [elem+4]=x0,[elem+8]=x1,
+[elem+6]=y0,[elem+0xa]=y1 (signed), type [elem+0], child index [elem+2]; stride 0xc; lower bound = param_2.
+Coord source = DAT_1000_d8e2's value directly (asm: si==[0x18e2] throughout; 0x1f4c reloads [0x18e2]) so the
+cursor read is deterministic regardless of the dropped param_5.  Container (type==4) descends: child bounds
+[base + [elem+2] + 1/ +3], child element base + 0x3af0.  The feXX hover-state globals (DGROUP:0x3e04..0x3e16
+= linear 0x1fe04.., already linear-correct) drive the enter/leave/activate posts via FUN_1000_3566 and the
+element method [HG(HG(bb)+0x4660)]; the real x86 CF the walk returns (found=clc / not-found=stc) is threaded
+via g_fist_cf (Ghidra had proxied it with the bogus `0xc50f < uVar3`).  On the STATIC menu the cursor sits
+above every item rect, so the walk finds nothing and returns without posting -> the menu frame is unchanged
+(still AE=0 vs DOSBox), now deterministic + crash-free.  The method dispatch + 3566 posts only fire on a
+real hover/click (the sub-screen path).
+--- a/fist.c
++++ b/fist.c
+@@ -8519,107 +8519,107 @@
+ 
+ /* ===== thunk_FUN_0000_1eb4 @ 0000:1eab ===== */
+ 
+-undefined4 __allregs thunk_FUN_0000_1eb4(uint param_1,int *param_2,int *param_3,int param_4,int param_5)
+-
++/* PATCH 128: recursive cursor HIT-TEST reconstructed in the DGROUP-offset model (see patch header). */
++static uint8_t fist_hit1eb4(uint16_t flags, uint16_t bound, uint16_t elem, uint16_t base)
+ {
+-  int iVar1;
+-  int *piVar2;
+-  uint uVar3;
+-  int *piVar4;
+-  bool bVar5;
+-  
+-  do {
+-    if ((((param_3[2] <= *(int *)(param_5 + 4)) && (*(int *)(param_5 + 4) < param_3[4])) &&
+-        (param_3[3] <= *(int *)(param_5 + 6))) && (*(int *)(param_5 + 6) < param_3[5])) {
+-      if (*param_3 != 4) {
+-LAB_0000_1ef1:
+-        piVar2 = DAT_1000_fe14;
+-        piVar4 = DAT_1000_fe0c;
+-        if (((param_1 & 0x600) == 0) && (bVar5 = param_3 < DAT_1000_fe0c, param_3 != DAT_1000_fe0c))
+-        {
+-          LOCK();
+-          UNLOCK();
+-          DAT_1000_fe12 = DAT_1000_fe0c;
+-          DAT_1000_fe0c = param_3;
+-          FUN_1000_3566(piVar4);
+-          if (!bVar5) {
+-            bVar5 = DAT_1000_fe14 != (int *)&DAT_2000_bfff;
+-            if ((DAT_1000_fe14 == (int *)&DAT_2000_bfff) ||
+-               (bVar5 = DAT_1000_fe14 < DAT_1000_fe0c, DAT_1000_fe14 == DAT_1000_fe0c)) {
+-              FUN_1000_3566(piVar4);
+-              if (bVar5) {
+-                return;
++  extern unsigned char g_fist_cf;
++  #define HG(o) (*(uint16_t*)(g_mem + 0x1c000 + (uint16_t)(o)))
++  uint16_t coord = HG(0x18e2);
++  for (;;) {
++    int16_t cx = (int16_t)HG((uint16_t)(coord + 4));
++    if ((int16_t)HG((uint16_t)(elem + 4)) <= cx && cx < (int16_t)HG((uint16_t)(elem + 8))) {
++      int16_t cy = (int16_t)HG((uint16_t)(coord + 6));
++      if ((int16_t)HG((uint16_t)(elem + 6)) <= cy && cy < (int16_t)HG((uint16_t)(elem + 0xa))) {
++        int process = 1;
++        if (HG((uint16_t)(elem + 0)) == 4) {
++          uint16_t di = HG((uint16_t)(elem + 2));
++          uint16_t childhi = HG((uint16_t)(base + di + 3));
++          if (childhi == 0) { process = 0; }
++          else {
++            uint16_t childlo = HG((uint16_t)(base + di + 1));
++            uint8_t cf = fist_hit1eb4(flags, (uint16_t)(childlo + 0x3af0),
++                                             (uint16_t)(childhi + 0x3af0), base);
++            if (!cf) { g_fist_cf = 0; return 0; }
++          }
++        }
++        if (process) {
++          if ((flags & 0x600) == 0 && elem != HG(0x3e0c)) {
++            uint16_t oldfe0c = HG(0x3e0c);
++            HG(0x3e12) = oldfe0c;
++            HG(0x3e0c) = elem;
++            FUN_1000_3566((undefined2*)0); if (g_fist_cf) { g_fist_cf = 0; return 0; }
++            { uint16_t a = HG(0x3e14);
++              if (a == 0xffff || a == HG(0x3e0c)) {
++                FUN_1000_3566((undefined2*)0); if (g_fist_cf) { g_fist_cf = 0; return 0; }
++                HG((uint16_t)(oldfe0c + 0)) = 0x200;
++              } }
++            { uint16_t a = HG(0x3e14);
++              if (a == 0xffff || a == HG(0x3e12)) {
++                FUN_1000_3566((undefined2*)0); if (g_fist_cf) { g_fist_cf = 0; return 0; }
++                HG((uint16_t)(oldfe0c + 0)) = 0x400;
++                HG((uint16_t)(oldfe0c + 4)) = HG(0x3e0e);
++                HG((uint16_t)(oldfe0c + 6)) = HG(0x3e10);
++              } }
++            { uint16_t di2 = HG(0x18e2);
++              HG(0x3e0e) = HG((uint16_t)(di2 + 4));
++              HG(0x3e10) = HG((uint16_t)(di2 + 6)); }
++            g_fist_cf = 0; return 0;
++          }
++          {
++            uint16_t di = HG(0x3e14);
++            if (flags & 0xa) {
++              uint16_t bb = elem;
++              if (bb != di) {
++                flags |= 0x100;
++                if (di == 0xffff) {
++                  flags &= 0xfeff; HG(0x3e14) = bb; HG(0x3e16) = flags; flags |= 0x80; di = bb;
++                }
+               }
+-              *piVar4 = 0x200;
+-            }
+-            bVar5 = DAT_1000_fe14 != (int *)&DAT_2000_bfff;
+-            if ((DAT_1000_fe14 == (int *)&DAT_2000_bfff) ||
+-               (bVar5 = DAT_1000_fe14 < DAT_1000_fe12, DAT_1000_fe14 == DAT_1000_fe12)) {
+-              FUN_1000_3566(piVar4);
+-              if (bVar5) {
+-                return;
++              bb = di;
++              HG(0x3e08) = bb;
++              (*(code *)fist_icall_near(0x0u, HG((uint16_t)(HG((uint16_t)(bb + 0)) + 0x4660))))();
++              g_fist_cf = 0; return 0;
++            }
++            if (flags & 0x14) {
++              uint16_t bb = elem;
++              if (di != 0xffff) {
++                uint16_t m = (flags & 0x10) ? 8 : 2;
++                if (HG(0x3e16) & m) {
++                  HG(0x3e14) = 0xffff; flags |= 0x80;
++                  if (bb != di) { flags = (uint16_t)((flags & 0xff7f) | 0x100); bb = di; }
++                }
+               }
+-              *piVar4 = 0x400;
+-              piVar4[2] = DAT_1000_fe0e;
+-              piVar4[3] = DAT_1000_fe10;
+-            }
+-            DAT_1000_fe0e = (int16_t)QW(DAT_1000_d8e2 + 4);
+-            DAT_1000_fe10 = (int16_t)QW(DAT_1000_d8e2 + 6);
+-          }
+-          return;
+-        }
+-        if ((param_1 & 10) != 0) {
+-          if ((param_3 != DAT_1000_fe14) && (DAT_1000_fe14 == (int *)&DAT_2000_bfff)) {
+-            DAT_1000_fe16 = param_1 & 0xfeff;
+-            DAT_1000_fe14 = param_3;
+-          }
+-          DAT_1000_fe08 = DAT_1000_fe14;
+-          (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*DAT_1000_fe14 + 0x4660))))();
+-          return;
+-        }
+-        if ((param_1 & 0x14) != 0) {
+-          DAT_1000_fe08 = param_3;
+-          if (DAT_1000_fe14 != (int *)&DAT_2000_bfff) {
+-            uVar3 = 8;
+-            if ((param_1 & 0x10) == 0) {
+-              uVar3 = 2;
+-            }
+-            if (((DAT_1000_fe16 & uVar3) != 0) &&
+-               (DAT_1000_fe14 = (int *)&DAT_2000_bfff, param_3 != piVar2)) {
+-              DAT_1000_fe08 = piVar2;
++              HG(0x3e08) = bb;
++              (*(code *)fist_icall_near(0x0u, HG((uint16_t)(HG((uint16_t)(bb + 0)) + 0x4660))))();
++              g_fist_cf = 0; return 0;
++            }
++            if (flags & 0x601) {
++              uint16_t bb = elem;
++              if (di != 0xffff) {
++                flags |= 0x80;
++                if (bb != di) { flags = (uint16_t)((flags & 0xff7f) | 0x100); bb = di; }
++              }
++              HG(0x3e08) = bb;
++              (*(code *)fist_icall_near(0x0u, HG((uint16_t)(HG((uint16_t)(bb + 0)) + 0x4660))))();
++              g_fist_cf = 0; return 0;
+             }
++            g_fist_cf = 0; return 0;
+           }
+-          (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*DAT_1000_fe08 + 0x4660))))();
+-          return;
+         }
+-        if ((param_1 & 0x601) != 0) {
+-          DAT_1000_fe08 = param_3;
+-          if ((DAT_1000_fe14 != (int *)&DAT_2000_bfff) && (param_3 != DAT_1000_fe14)) {
+-            DAT_1000_fe08 = DAT_1000_fe14;
+-          }
+-          (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*DAT_1000_fe08 + 0x4660))))();
+-          return;
+-        }
+-        return;
+       }
+-      iVar1 = *(int *)(param_4 + param_3[1] + 3);
+-      if (iVar1 != 0) {
+-        uVar3 = *(uint *)(param_4 + param_3[1] + 1);
+-        bVar5 = 0xc50f < uVar3;
+-        param_1 = thunk_FUN_0000_1eb4(param_1,(int *)((int)(undefined2 *)&DAT_1000_faf0 + uVar3),
+-                                      (int *)((int)(undefined2 *)&DAT_1000_faf0 + iVar1),param_4,
+-                                      param_5);
+-        if (!bVar5) {
+-          return;
+-        }
+-        goto LAB_0000_1ef1;
+-      }
+-    }
+-    param_3 = param_3 + -6;
+-    if (param_3 < param_2) {
+-      return;
+     }
+-  } while( true );
++    elem = (uint16_t)(elem - 0xc);
++    if (elem < bound) { g_fist_cf = 1; return 1; }
++  }
++  #undef HG
++}
++
++undefined4 __allregs thunk_FUN_0000_1eb4(uint param_1,int *param_2,int *param_3,int param_4,int param_5)
++
++{
++  (void)param_5;
++  return fist_hit1eb4((uint16_t)param_1,(uint16_t)(uintptr_t)param_2,(uint16_t)(uintptr_t)param_3,
++                      (uint16_t)param_4);
+ }
+ 
+ 
+@@ -8628,103 +8628,10 @@
+ void __allregs FUN_0000_1eb4(uint param_1,int *param_2,int *param_3,int param_4,int param_5)
+ 
+ {
+-  int iVar1;
+-  int *piVar2;
+-  uint uVar3;
+-  int *piVar4;
+-  bool bVar5;
+-  
+-  do {
+-    if ((((param_3[2] <= *(int *)(param_5 + 4)) && (*(int *)(param_5 + 4) < param_3[4])) &&
+-        (param_3[3] <= *(int *)(param_5 + 6))) && (*(int *)(param_5 + 6) < param_3[5])) {
+-      if (*param_3 != 4) {
+-LAB_0000_1ef1:
+-        piVar2 = DAT_1000_fe14;
+-        piVar4 = DAT_1000_fe0c;
+-        if (((param_1 & 0x600) == 0) && (bVar5 = param_3 < DAT_1000_fe0c, param_3 != DAT_1000_fe0c))
+-        {
+-          LOCK();
+-          UNLOCK();
+-          DAT_1000_fe12 = DAT_1000_fe0c;
+-          DAT_1000_fe0c = param_3;
+-          FUN_1000_3566(piVar4);
+-          if (!bVar5) {
+-            bVar5 = DAT_1000_fe14 != (int *)&DAT_2000_bfff;
+-            if ((DAT_1000_fe14 == (int *)&DAT_2000_bfff) ||
+-               (bVar5 = DAT_1000_fe14 < DAT_1000_fe0c, DAT_1000_fe14 == DAT_1000_fe0c)) {
+-              FUN_1000_3566(piVar4);
+-              if (bVar5) {
+-                return;
+-              }
+-              *piVar4 = 0x200;
+-            }
+-            bVar5 = DAT_1000_fe14 != (int *)&DAT_2000_bfff;
+-            if ((DAT_1000_fe14 == (int *)&DAT_2000_bfff) ||
+-               (bVar5 = DAT_1000_fe14 < DAT_1000_fe12, DAT_1000_fe14 == DAT_1000_fe12)) {
+-              FUN_1000_3566(piVar4);
+-              if (bVar5) {
+-                return;
+-              }
+-              *piVar4 = 0x400;
+-              piVar4[2] = DAT_1000_fe0e;
+-              piVar4[3] = DAT_1000_fe10;
+-            }
+-            DAT_1000_fe0e = (int16_t)QW(DAT_1000_d8e2 + 4);
+-            DAT_1000_fe10 = (int16_t)QW(DAT_1000_d8e2 + 6);
+-          }
+-          return;
+-        }
+-        if ((param_1 & 10) != 0) {
+-          if ((param_3 != DAT_1000_fe14) && (DAT_1000_fe14 == (int *)&DAT_2000_bfff)) {
+-            DAT_1000_fe16 = param_1 & 0xfeff;
+-            DAT_1000_fe14 = param_3;
+-          }
+-          DAT_1000_fe08 = DAT_1000_fe14;
+-          (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*DAT_1000_fe14 + 0x4660))))();
+-          return;
+-        }
+-        if ((param_1 & 0x14) != 0) {
+-          DAT_1000_fe08 = param_3;
+-          if (DAT_1000_fe14 != (int *)&DAT_2000_bfff) {
+-            uVar3 = 8;
+-            if ((param_1 & 0x10) == 0) {
+-              uVar3 = 2;
+-            }
+-            if (((DAT_1000_fe16 & uVar3) != 0) &&
+-               (DAT_1000_fe14 = (int *)&DAT_2000_bfff, param_3 != piVar2)) {
+-              DAT_1000_fe08 = piVar2;
+-            }
+-          }
+-          (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*DAT_1000_fe08 + 0x4660))))();
+-          return;
+-        }
+-        if ((param_1 & 0x601) != 0) {
+-          DAT_1000_fe08 = param_3;
+-          if ((DAT_1000_fe14 != (int *)&DAT_2000_bfff) && (param_3 != DAT_1000_fe14)) {
+-            DAT_1000_fe08 = DAT_1000_fe14;
+-          }
+-          (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*DAT_1000_fe08 + 0x4660))))();
+-          return;
+-        }
+-        return;
+-      }
+-      iVar1 = *(int *)(param_4 + param_3[1] + 3);
+-      if (iVar1 != 0) {
+-        uVar3 = *(uint *)(param_4 + param_3[1] + 1);
+-        bVar5 = 0xc50f < uVar3;
+-        param_1 = thunk_FUN_0000_1eb4(param_1,(int)(undefined2 *)&DAT_1000_faf0 + uVar3,
+-                                      (int)(undefined2 *)&DAT_1000_faf0 + iVar1,param_4,param_5);
+-        if (!bVar5) {
+-          return;
+-        }
+-        goto LAB_0000_1ef1;
+-      }
+-    }
+-    param_3 = param_3 + -6;
+-    if (param_3 < param_2) {
+-      return;
+-    }
+-  } while( true );
++  /* PATCH 128: alternate entry (0x1eb4) of the recursive hit-test; identical body -> shared helper. */
++  (void)param_5;
++  fist_hit1eb4((uint16_t)param_1,(uint16_t)(uintptr_t)param_2,(uint16_t)(uintptr_t)param_3,
++               (uint16_t)param_4);
+ }
+ 
+ 
