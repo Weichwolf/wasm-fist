@@ -509,6 +509,18 @@ the target chain; `make help` works.
   the Huffman extender into VGA graphics mode → `tools/refcapture.sh` + `tools/dosbox.conf`, sample
   `ref/boot_frame.png`. TODO(refine): drive to a stable known frame + dump the real 320×200×8 fb+palette.
 
+**DUAL-TARGET INVARIANT LIVE (2026-07-09):** `make wasm` is GREEN (`tools/build.sh` written — emcc, same
+units as `build_native.sh`, `native_main.c` reused via `#ifdef __EMSCRIPTEN__`) and the **MAIN MENU is
+NATIVE↔WASM BIT-IDENTICAL — 0 differing bytes / identical md5**, hence AE = 0 vs the DOSBox reference on
+BOTH targets. Portability seam (all `#ifdef __EMSCRIPTEN__` in `native_main.c`): the SIGALRM host timer →
+a cooperative one-tick-per-`fist_timer_pump` time base; SIGSEGV/backtrace + `mprotect` FIST_FBTRAP compiled
+out. The sole real WASM delta is `call_indirect` signature-checking of the untyped `code` dispatch surface,
+handled at the build layer by `-sEMULATE_FUNCTION_POINTER_CASTS=1` (+ `-sBINARYEN_EXTRA_PASSES=pass-arg=
+max-func-params@64` for the 19-param `__allregs` fns) — no engine/call-site edit, output byte-identical;
+per-family arity normalization (DD2's doctrine-pure route) remains the long game. Env → node via
+`tools/wasm_pre.js` (mirrors `process.env`→`ENV`) + `-sNODERAWFS=1`. See `docs/stage1.md`. (NB `make
+verify`/`verify-wasm` still reference a not-yet-written `tools/verify.sh` — separate pre-existing gap.)
+
 **NOW — Stage 1 (crash-free real execution): implement the shim.** The build runs hollow because
 `swi()`/`in()`/`out()` are stubs. Stage 1 = make `app_entry` actually execute the game by implementing the
 DOS/hardware traps as REAL handlers (INT 21h file I/O via FILEMGR semantics → `fist_filio.c`/`fist_dos.c`;

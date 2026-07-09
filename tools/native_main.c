@@ -12,13 +12,23 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <sys/time.h>
+
+/* Portability seam: the SIGSEGV/backtrace + mprotect(FIST_FBTRAP) diagnostics and the SIGALRM/setitimer
+ * host timer are host-OS (Linux) facilities absent under emscripten/wasm.  Under __EMSCRIPTEN__ they are
+ * compiled out and the deterministic seam (fist_timer_pump / FIST_TICK_HZ) drives the tick cooperatively
+ * (one tick per pump).  Everything else (setjmp/longjmp exit, gettimeofday watchdog, the shims) is
+ * portable C shared byte-for-byte between the native and wasm builds -- so the frame they render is too. */
+#ifndef __EMSCRIPTEN__
 #include <execinfo.h>
+#include <sys/mman.h>
+#endif
 
 /* Diagnostic SIGSEGV backtrace (gated by FIST_SEGV_BT) -- gdb can't keep up with the fast tick. */
 extern long fist_dump_framebuffer(const char *path);   /* fist_vga.c (fwd for segv_bt) */
 extern int  fist_vga_mode(void);
+
+#ifndef __EMSCRIPTEN__
 /* ---- FIST_FBTRAP: write-protect a framebuffer page to catch whoever draws the menu box ---- */
-#include <sys/mman.h>
 volatile int   g_fbtrap_req = 0;          /* set at menu-enter */
 static   void *g_fbtrap_page = 0;
 static   int   g_fbtrap_hits = 0;
@@ -91,6 +101,10 @@ static void segv_bt(int sig, siginfo_t *si, void *uc) {
       if (rw) { FILE *f = fopen(rw, "wb"); if (f) { fwrite(g_mem + 0xA0000, 1, 64000, f); fclose(f); } } }
     _exit(139);
 }
+#else  /* __EMSCRIPTEN__: no mprotect/SIGSEGV diagnostics -- the fb-trap hook is a no-op */
+volatile int g_fbtrap_req = 0;
+void fbtrap_arm_hook(void) { }
+#endif
 
 uint8_t g_mem[FIST_MEM_SIZE];
 
@@ -143,13 +157,16 @@ extern void app_entry(undefined2, undefined2, undefined2, undefined2, undefined2
  * one pending ISR invocation (capped). For Stage-1 unblocking any correct-enough rate works; the knob
  * is the seam a later deterministic (instruction-counted) tick source will replace. */
 #define BIOS_TICK_LIN 0x46C
-static volatile sig_atomic_t g_tick_pending;     /* raised by SIGALRM, drained by the pump */
+static volatile sig_atomic_t g_tick_pending;     /* raised by the timer source, drained by the pump */
 #define TICK_PENDING_CAP 8
-static void tick_handler(int sig){
-    (void)sig;
-    (*(volatile uint32_t*)(g_mem+BIOS_TICK_LIN))++;              /* BIOS 18.2 Hz tick (0040:006C) */
-    if (g_tick_pending < TICK_PENDING_CAP) g_tick_pending++;     /* one INT-8 ISR invocation due */
+/* One tick of the host time base: bump the BIOS 18.2 Hz counter (0040:006C) and queue one INT-8 ISR
+ * invocation. Async-signal-safe (native SIGALRM handler) AND callable synchronously (wasm pump). */
+static void tick_advance(void){
+    (*(volatile uint32_t*)(g_mem+BIOS_TICK_LIN))++;
+    if (g_tick_pending < TICK_PENDING_CAP) g_tick_pending++;
 }
+#ifndef __EMSCRIPTEN__
+static void tick_handler(int sig){ (void)sig; tick_advance(); }
 static void start_timer(void){
     struct sigaction sa = {0}; sa.sa_handler = tick_handler; sa.sa_flags = SA_RESTART;
     sigaction(SIGALRM, &sa, 0);
@@ -159,6 +176,17 @@ static void start_timer(void){
     it.it_value = it.it_interval; setitimer(ITIMER_REAL, &it, 0);
     fprintf(stderr, "[fist] host timer started (%ld Hz SIGALRM; INT-8 ISR pumped cooperatively)\n", hz);
 }
+#else
+/* wasm has no SIGALRM/setitimer. The tick is driven COOPERATIVELY: each fist_timer_pump() advances the
+ * time base by one tick (fist_wasm_tick, called at the top of the pump). fist_timer_pump is invoked from
+ * the engine's spin-waits and port-I/O shims, so ticks accrue in lockstep with engine progress -- the
+ * same deterministic seam FIST_TICK_HZ selects on native, here at "one tick per safe point". The rendered
+ * frame does not depend on the tick RATE (the menu is static once painted), so this is native-parity. */
+static void start_timer(void){
+    fprintf(stderr, "[fist] wasm cooperative time base (one INT-8 tick per pump; no SIGALRM)\n");
+}
+void fist_wasm_tick(void){ tick_advance(); }
+#endif
 
 /* ---- the engine's installed INT-8 (PIT) ISR entry, captured at DOS set-vector 0x08 ---- */
 static uint32_t g_int8_lin;          /* linear (SEG<<4)+OFF of the installed handler */
@@ -176,6 +204,9 @@ void fist_set_int8_handler(uint32_t linear){
  * saves/restores its own state and its tick bookkeeping does not depend on incoming register operands,
  * so we invoke it with zeroed register args. It runs on the current (main) stack -- NOT from a signal. */
 void fist_timer_pump(void){
+#ifdef __EMSCRIPTEN__
+    { extern void fist_wasm_tick(void); fist_wasm_tick(); }   /* cooperative time base (no SIGALRM) */
+#endif
     { extern void fbtrap_arm_hook(void); fbtrap_arm_hook(); }
     /* Dev watchdog: FIST_RUNMS=<ms> dumps the framebuffer (FIST_FBDUMP) and exits after a wall-clock
      * deadline -- lets a first-light frame be captured while the engine is in its (non-returning) main
@@ -769,11 +800,13 @@ static void ovl_selftest(void) {
 
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
+#ifndef __EMSCRIPTEN__
     if (getenv("FIST_SEGV_BT") || getenv("FIST_FBTRAP")) {
         struct sigaction sa; memset(&sa, 0, sizeof sa);
         sa.sa_sigaction = segv_bt; sa.sa_flags = SA_SIGINFO;
         sigaction(SIGSEGV, &sa, NULL);
     }
+#endif
     load_image();
     setup_dos_env();
     ext_module_init();          /* load + register the extender KDV-player module (re_out/fist_ext.c) */
