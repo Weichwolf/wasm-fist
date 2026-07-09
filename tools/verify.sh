@@ -19,31 +19,32 @@ WHICH="${1:-both}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 pass=0; fail=0
 
-# --- FLOW TABLE: name | tickhz | runms | input(FIST_INPUT, may be empty) | dosbox-ref(may be empty) ---
-# Extend as coverage grows. The main menu is the first bit-verified surface.
+# --- FLOW TABLE: name | tickhz | runms | mouse-script(FIST_MOUSE, may be empty) | dosbox-ref(may be empty) ---
+# Extend as coverage grows.  The mouse-script field is the scripted-input program (FIST_MOUSE =
+# "pump:x:y:btn; ..."); it may contain spaces/semicolons but MUST NOT contain '|'.
 FLOWS=(
   "mainmenu|25000|22000||$ROOT/ref/main_menu_native320.png"
+  "about|25000|22000|200:160:139:0; 800:160:139:1; 1400:160:139:0; 2000:160:138:0|$ROOT/ref/about_native320.png"
 )
 
-run_target() { # $1=target $2=env-prefix $3=out.ppm ; echo rc
-  local t="$1" envp="$2" out="$3"
+run_target() { # $1=target $2=hz $3=ms $4=mouse-script $5=out.ppm ; echo rc
+  local t="$1" hz="$2" ms="$3" mouse="$4" out="$5"
   if [ "$t" = native ]; then
-    timeout 40 env $envp FIST_FBDUMP="$out" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 40 env FIST_TICK_HZ="$hz" FIST_RUNMS="$ms" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NATIVE" >/dev/null 2>&1; echo $?
   else
-    timeout 120 env $envp FIST_FBDUMP="$out" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+    timeout 120 env FIST_TICK_HZ="$hz" FIST_RUNMS="$ms" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
 }
 
 echo "== verify ($WHICH) =="
 for row in "${FLOWS[@]}"; do
   IFS='|' read -r name hz ms inp ref <<<"$row"
-  envp="FIST_TICK_HZ=$hz FIST_RUNMS=$ms"; [ -n "$inp" ] && envp="$envp FIST_INPUT=$inp"
   ok=1; detail=""
   if [ "$WHICH" != wasm ]; then
-    rc=$(run_target native "$envp" "$TMP/$name.nat.ppm"); [ "$rc" = 0 ] || { ok=0; detail+=" native-rc=$rc"; }
+    rc=$(run_target native "$hz" "$ms" "$inp" "$TMP/$name.nat.ppm"); [ "$rc" = 0 ] || { ok=0; detail+=" native-rc=$rc"; }
   fi
   if [ "$WHICH" != native ]; then
-    rc=$(run_target wasm "$envp" "$TMP/$name.wasm.ppm"); [ "$rc" = 0 ] || { ok=0; detail+=" wasm-rc=$rc"; }
+    rc=$(run_target wasm "$hz" "$ms" "$inp" "$TMP/$name.wasm.ppm"); [ "$rc" = 0 ] || { ok=0; detail+=" wasm-rc=$rc"; }
   fi
   # (2) native<->wasm bit-identical
   if [ "$WHICH" = both ] && [ -s "$TMP/$name.nat.ppm" ] && [ -s "$TMP/$name.wasm.ppm" ]; then

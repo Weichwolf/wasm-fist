@@ -1,0 +1,308 @@
+PATCH 131: render the ABOUT dialog credit TEXT + OK button (bit-identical to DOSBox) and fix the wasm
+dialog-path OOB.  Completes the ABOUT sub-screen (panel from patch 129/130 -> full credits + OK button).
+
+Root cause of the missing credits: the ABOUT dialog's paint methods for the credit-text element (nd=d4)
+and the button elements (nd=d6) are `lcall [id*2 - 0x739f]` / `lcall [id*2 - 0x7393]` -- FAR calls
+through the per-dialog method table (offset:seg word pairs).  For ABOUT (id=4) they dispatch to
+0f69:0x7606 = FUN_1000_6c96 (the credit-TEXT drawer: title + 3 credit columns + copyright, drawn via
+52d1 setpos / 5591 multi-line drawstring with the 0x0c/0x0e line-format control chars) and 0f69:0x76ad
+= FUN_1000_6d3d (the OK-button sprite draw).  Patch 129 rendered both as NEAR calls to the wrong seg-0
+offsets, so neither drew.  Restore the faithful FAR dispatch and thread the per-element register args.
+
+- 71f8 (nd=d4 credit-text paint method): FAR dispatch -> FUN_1000_6c96.
+- 7203 (nd=d6 button paint method): si=[bx+2]; ax=[bp+si+1] (button state); bx+=4; FAR dispatch ->
+  FUN_1000_6d3d(state, rect).  bx = current element (209e stored DGROUP:0x3e08); bp = base (fafe).
+- FUN_1000_6d3d: reconstruct the button sprite draw (per-state sprite table [state*2-0x7387] + [0x8be9]
+  sprite base; lcall [0x6b4] = MGAVIDEO 26a1 sprite blit with ax=sprite, bx=rect).  Ghidra base-loss.
+- e39f: thread the dropped SAVE/RESTORE-blit args (dx=save-descriptor 0xf6ee, bx=rect DAT_2000_b6f2) to
+  the [0x602] far call.  This is the WASM-OOB ROOT CAUSE: the dropped args ran 0fbc/0fe4 on garbage --
+  harmless on native (di_save garbage 0x0004, flag byte 0 -> early return) but on wasm the garbage was
+  0/0 (flag 0xa0 -> a bogus save_seg->fb copy) which wasm's bounds check trapped as "memory access out
+  of bounds".  Threading the args faithfully makes 0fe4 take its real early-return on both targets ->
+  native<->wasm identical, no OOB.
+--- a/fist.c
++++ b/fist.c
+@@ -2009,7 +2009,7 @@
+ void __allregs FUN_1000_6c96(void);
+ void __allregs FUN_1000_6d00(void);
+ undefined4 __allregs FUN_1000_6d0f(void);
+-void __allregs FUN_1000_6d3d(int param_1);
++void __allregs FUN_1000_6d3d(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5);
+ void __allregs FUN_1000_6d53(int param_1);
+ void __allregs FUN_1000_6d69(int param_1);
+ void __allregs FUN_1000_6d8c(void);
+@@ -18376,10 +18376,14 @@
+ void __allregs FUN_0000_71f8(void)
+ 
+ {
+-  undefined2 *puVar1;
+-  
+-  puVar1 = (undefined2 *)(g_mem+0x1c000+(uint16_t)((uint16_t)DAT_2000_4be5*2 - 0x739f));
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))();
++  /* PATCH 131: asm 0x71f8 is `mov bx,[0x8be5]; shl bx,1; lcall [bx-0x739f]` -- a FAR call through the
++     per-dialog method table (offset:seg WORD PAIR).  For the ABOUT dialog (id=4) this dispatches to
++     0f69:0x7606 = FUN_1000_6c96, the credit-TEXT drawer.  Patch 129 rendered it as a NEAR call to the
++     seg-0 offset (wrong 0x7606), so the credits never drew.  Restore the faithful far dispatch. */
++  uint16_t idx = (uint16_t)((uint16_t)DAT_2000_4be5*2 - 0x739f);
++  uint16_t off = *(uint16_t*)(g_mem+0x1c000+idx);
++  uint16_t seg = *(uint16_t*)(g_mem+0x1c000+(uint16_t)(idx+2));
++  (*(code *)fist_icall_far(((uint32_t)seg<<16)|off))();
+   return;
+ }
+ 
+@@ -18389,10 +18393,21 @@
+ void __allregs FUN_0000_7203(void)
+ 
+ {
+-  undefined2 *puVar1;
+-  
+-  puVar1 = (undefined2 *)(g_mem+0x1c000+(uint16_t)((uint16_t)DAT_2000_4be5*2 - 0x7393));
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))();
++  /* PATCH 131: asm 0x7203 -- nd=d6 (button) paint method: si=[bx+2]; ax=[bp+si+1] (button state);
++     bx+=4; FAR call [id*2-0x7393] (ABOUT id=4 -> 0f69:0x76ad = FUN_1000_6d3d) passing ax(state)/bx(rect).
++     bx = current element (209e stored it at DGROUP:0x3e08); bp = base (DAT_1000_fafe).  Patch 129 dropped
++     bx/bp and did a NEAR call to the wrong seg-0 target, so the OK button never drew. */
++  uint8_t *D = g_mem+0x1c000;
++  uint16_t bx = *(uint16_t*)(D+0x3e08);
++  uint16_t bp = *(uint16_t*)(g_mem+0x1fafe);            /* DAT_1000_fafe base */
++  uint16_t si = *(uint16_t*)(D+(uint16_t)(bx+2));
++  uint16_t ax = *(uint16_t*)(D+(uint16_t)((uint16_t)(bp+si)+1));
++  bx = (uint16_t)(bx+4);
++  uint16_t idx = (uint16_t)((uint16_t)DAT_2000_4be5*2 - 0x7393);
++  uint16_t off = *(uint16_t*)(D+idx);
++  uint16_t seg = *(uint16_t*)(D+(uint16_t)(idx+2));
++  ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++     fist_icall_far(((uint32_t)seg<<16)|off))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -33638,7 +33653,13 @@
+ 
+ {
+   if (DAT_2000_b6f4 == '\x01') {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c602)))();
++    /* PATCH 131: asm 0xe39f: mov bx,[0xf6f2]; mov dx,0xf6ee; lcall [0x602] -- the dialog SAVE/RESTORE
++       blit (0fbc->0fe4).  Ghidra dropped the args (bx=rect=DAT_2000_b6f2, dx=save-descriptor=0xf6ee),
++       so 0fbc/0fe4 ran on garbage: harmless on native (di_save garbage 0x0004, flag byte 0 -> early
++       return) but a wasm OOB (di_save/rect = 0, flag 0xa0 -> a bogus save_seg copy that trap-checks).
++       Thread faithfully per the driver-method (save,rect) convention (patch 112/130): param_1=save
++       descriptor (dx), param_2=rect descriptor (bx). */
++    ((void (*)(undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c602)))(0xf6ee, DAT_2000_b6f2);
+     DAT_2000_b6f0 = DAT_2000_b6f0 | 0x22;
+     DAT_2000_b6f4 = '\0';
+   }
+@@ -55372,11 +55393,19 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_6d3d) @ 1000:6d3d ===== */
+ 
+-void __allregs FUN_1000_6d3d(int param_1)
++void __allregs FUN_1000_6d3d(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5)
+ 
+ {
+-  if (*(int *)(param_1 * 2 + -0x7387) != -1) {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 131: asm 0f69:0x76ad (linear 0x16d3d) -- button sprite draw.  si=ax*2; ax=word[si-0x7387]
++     (per-state sprite index); if(ax!=0xffff){ ax += [0x8be9] (DAT_2000_4be9 sprite base); lcall [0x6b4]
++     (=MGAVIDEO 26a1) passing ax(sprite)/bx(rect) }.  Ghidra deref'd the table as a host int* (base-loss),
++     dropped the +[0x8be9] and the ax/bx args.  param_1=state(ax), param_4=rect(bx) from 7203. */
++  uint8_t *D = g_mem+0x1c000;
++  uint16_t val = *(uint16_t*)(D+(uint16_t)((uint16_t)(param_1*2) - 0x7387));
++  if (val != 0xffff) {
++    val = (uint16_t)(val + *(uint16_t*)(D+0x8be9));    /* += DAT_2000_4be9 */
++    ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++       fist_icall_far((uint32_t)(DAT_1000_c6b4)))(val,0,0,param_4,0);
+   }
+   return;
+ }
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -4667,11 +4667,19 @@
+ void __allregs FUN_0000_1d23(undefined1 param_1)
+ 
+ {
+-  if (*_DAT_1000_c736 == -0x6000) {
+-                    /* WARNING: Subroutine does not return */
+-    FUN_0000_2d6d(_DAT_1000_c736 + 0xe);
++  /* DBG reconstruct (asm 0x1d23-0x1d57): di=[0x736]; if word[di]==0xA000 { 2d6d([0x736]+0x1c);
++     [0x794]=0x7c8; [0x796]=0x140; 1d5f(param_1); 2e12 } else 1d5f(param_1).  Ghidra deref'd the value
++     at DGROUP:0x736 (a near offset) as a host pointer -> base-loss (same class as 0fbc / patch 130). */
++  uint16_t di = *(uint16_t*)(g_mem+0x1c000+0x736);
++  if (*(uint16_t*)(g_mem+0x1c000+(uint16_t)di) == 0xA000) {
++    FUN_0000_2d6d((uint16_t)(di + 0x1c));
++    *(uint16_t*)(g_mem+0x1c000+0x794) = 0x7c8;
++    *(uint16_t*)(g_mem+0x1c000+0x796) = 0x140;
++    FUN_0000_1d5f(param_1);
++    FUN_0000_2e12();
++  } else {
++    FUN_0000_1d5f(param_1);
+   }
+-  FUN_0000_1d5f(param_1);
+   return;
+ }
+ 
+@@ -4708,98 +4716,77 @@
+ void __allregs FUN_0000_1d5f(byte param_1)
+ 
+ {
+-  byte *pbVar1;
+-  byte *pbVar2;
+-  undefined2 uVar3;
+-  undefined2 uVar4;
+-  undefined2 *puVar5;
+-  char *pcVar6;
+-  byte bVar7;
+-  uint uVar8;
+-  char cVar9;
+-  uint uVar10;
+-  int iVar11;
+-  byte *pbVar12;
+-  char *pcVar13;
+-  
+-  puVar5 = _DAT_1000_c736;
+-  uVar4 = _DAT_1000_c71a;
+-  cVar9 = *(char *)(_DAT_1000_c736 + 0xc);
+-  if (!CARRY1(param_1,param_1)) {
+-    cVar9 = *(char *)(_DAT_1000_c736 + 0xb);
+-  }
+-  pbVar2 = (byte *)*(undefined2 *)(_DAT_1000_c736[3] + (uint)(byte)(param_1 * '\x02'));
+-  pbVar12 = pbVar2 + 1;
+-  bVar7 = *pbVar2;
+-  DAT_1000_c792 = cVar9;
+-  if (bVar7 == 0) {
+-    bVar7 = param_1 & 0x7f;
+-    if (bVar7 == 7) {
+-      FUN_0000_2c7b();
+-    }
+-    else if (bVar7 == 8) {
+-      iVar11 = _DAT_1000_c736[10];
+-      _DAT_1000_c736[0xe] = _DAT_1000_c736[0xe] - iVar11;
+-      puVar5[0x10] = puVar5[0x10] - iVar11;
+-      iVar11 = puVar5[5] + puVar5[7] + puVar5[9];
+-      puVar5[0xf] = puVar5[0xf] - iVar11;
+-      puVar5[0x11] = puVar5[0x11] - iVar11;
+-    }
+-    else if (bVar7 == 10) {
+-      iVar11 = _DAT_1000_c736[6] + _DAT_1000_c736[8] + _DAT_1000_c736[10];
+-      _DAT_1000_c736[0xe] = _DAT_1000_c736[0xe] + iVar11;
+-      puVar5[0x10] = puVar5[0x10] + iVar11;
+-    }
+-    else if (bVar7 == 0xd) {
+-      iVar11 = _DAT_1000_c736[0xd];
+-      _DAT_1000_c736[0xf] = iVar11;
+-      puVar5[0x11] = iVar11 + puVar5[5];
+-    }
+-    else if (bVar7 == 0xc) {
+-      iVar11 = _DAT_1000_c736[0xd];
+-      _DAT_1000_c736[0xf] = iVar11;
+-      puVar5[0x11] = iVar11 + puVar5[5];
+-      iVar11 = puVar5[6] + puVar5[8] + puVar5[10];
+-      puVar5[0xe] = puVar5[0xe] + iVar11;
+-      puVar5[0x10] = puVar5[0x10] + iVar11;
+-    }
+-    else if (bVar7 == 0xe) {
+-      _DAT_1000_c736[0xf] = _DAT_1000_c736[0xf] + 1;
+-      puVar5[0x11] = puVar5[0x11] + 1;
+-    }
+-    else if (bVar7 == 0xf) {
+-      _DAT_1000_c736[0xf] = _DAT_1000_c736[0xf] + -1;
+-      puVar5[0x11] = puVar5[0x11] + -1;
+-    }
++  /* DBG reconstruct (asm 0x1d5f-0x1e8a): the driver TEXT glyph blit + control-char handler -- the
++     credit-text renderer reached via 6c96 -> 5591 -> [DGROUP:0x684] -> 1d23 -> 1d5f.  The text-state
++     struct at DGROUP:[0x736] holds BYTE-offset fields: fbseg[+0], glyph-offtab[+6], cellW[+0xa],
++     cellH[+0xc], posX/posX2[+0xe/+0x12], lineAdv[+0x14], colorLo[+0x16]/colorHi[+0x18], startCol[+0x1a],
++     row[+0x1c], col[+0x1e], row2[+0x20], col2[+0x22].  Font seg = word[0x71a]; rowtab = word[0x794];
++     screenW = word[0x796].  Ghidra deref'd the VALUE at DGROUP:0x736 as a host int* (base-loss) and
++     word-scaled the byte fields.  Reconstructed faithfully in the offset model. */
++  uint8_t *D = g_mem + 0x1c000;
++  uint16_t s = *(uint16_t*)(D + 0x736);
++  uint16_t fontseg = *(uint16_t*)(D + 0x71a);
++  uint8_t *FS = g_mem + ((uint32_t)fontseg << 4);
++  uint8_t ch = param_1;
++#define SW(o) (*(uint16_t*)(D + (uint16_t)(s + (o))))
++  {
++    uint8_t color = (ch & 0x80) ? *(uint8_t*)(D + (uint16_t)(s + 0x18))
++                                : *(uint8_t*)(D + (uint16_t)(s + 0x16));
++    *(uint8_t*)(D + 0x792) = color;
+   }
+-  else {
+-    uVar8 = (uint)bVar7;
+-    uVar3 = *_DAT_1000_c736;
+-    iVar11 = _DAT_1000_c736[6] + -1;
+-    uVar10 = uVar8;
+-    pcVar6 = (char *)(*(int *)(_DAT_1000_c736[0xe] * 2 + _DAT_1000_c794) + _DAT_1000_c736[0xf]);
+-    do {
++  {
++    uint16_t tbl = SW(6);
++    uint16_t gidx = (uint16_t)(tbl + (uint16_t)((uint16_t)ch * 2));
++    uint16_t glyphoff = *(uint16_t*)(FS + gidx);
++    uint8_t width = *(FS + glyphoff);
++    glyphoff = (uint16_t)(glyphoff + 1);
++    if (width == 0) {
++      /* control char (asm 1d58 -> 1de8): al = char */
++      uint16_t ax;
++      switch (ch) {
++        case 0x7: FUN_0000_2c7b(); break;
++        case 0x8: ax = SW(0x14); SW(0x1c) -= ax; SW(0x20) -= ax;
++                  ax = (uint16_t)(SW(0xa)+SW(0xe)+SW(0x12)); SW(0x1e) -= ax; SW(0x22) -= ax; break;
++        case 0xa: ax = (uint16_t)(SW(0xc)+SW(0x10)+SW(0x14)); SW(0x1c) += ax; SW(0x20) += ax; break;
++        case 0xd: ax = SW(0x1a); SW(0x1e) = ax; SW(0x22) = (uint16_t)(ax + SW(0xa)); break;
++        case 0xc: SW(0x1e) = SW(0x1a); SW(0x22) = (uint16_t)(SW(0x1a) + SW(0xa));
++                  ax = (uint16_t)(SW(0xc)+SW(0x10)+SW(0x14)); SW(0x1c) += ax; SW(0x20) += ax; break;
++        case 0xe: SW(0x1e) += 1; SW(0x22) += 1; break;
++        case 0xf: SW(0x1e) -= 1; SW(0x22) -= 1; break;
++        default: break;
++      }
++      return;
++    }
++    /* glyph blit (asm 1d8b-1de7) */
++    {
++      uint16_t bp = width;
++      uint16_t rowtab = *(uint16_t*)(D + 0x794);
++      uint16_t row = SW(0x1c);
++      uint16_t di = *(uint16_t*)(D + (uint16_t)((uint16_t)(row * 2) + rowtab));
++      uint16_t fbseg = SW(0);
++      uint8_t *ES = g_mem + ((uint32_t)fbseg << 4);
++      uint8_t ah = *(uint8_t*)(D + 0x792);
++      int16_t dxr = (int16_t)((int16_t)SW(0xc) - 1);
++      uint16_t screenW = *(uint16_t*)(D + 0x796);
++      uint16_t gsi = glyphoff;
++      di = (uint16_t)(di + SW(0x1e));
+       do {
+-        pcVar13 = pcVar6;
+-        pbVar1 = pbVar12;
+-        pbVar12 = pbVar12 + 1;
+-        if (*pbVar1 != 0) {
+-          *pcVar13 = (*pbVar1 ^ 3) + cVar9;
++        uint16_t cx = bp;
++        while (cx != 0) {
++          uint8_t px = *(FS + gsi); gsi = (uint16_t)(gsi + 1);
++          if (px != 0) *(ES + di) = (uint8_t)((uint8_t)(px ^ 3) + ah);
++          di = (uint16_t)(di + 1);
++          cx = (uint16_t)(cx - 1);
+         }
+-        uVar10 = uVar10 - 1;
+-        pcVar6 = pcVar13 + 1;
+-      } while (uVar10 != 0);
+-      iVar11 = iVar11 + -1;
+-      uVar10 = uVar8;
+-      pcVar6 = pcVar13 + (_DAT_2000_c226 - uVar8) + 1;
+-    } while (iVar11 != 0);
+-    iVar11 = puVar5[10];
+-    puVar5[0xe] = puVar5[0xe] + iVar11;
+-    puVar5[0x10] = puVar5[0x10] + iVar11;
+-    iVar11 = uVar8 + 1 + puVar5[7] + puVar5[9];
+-    puVar5[0xf] = puVar5[0xf] + iVar11;
+-    puVar5[0x11] = puVar5[0x11] + iVar11;
++        di = (uint16_t)(di - bp);
++        di = (uint16_t)(di + screenW);
++        dxr = (int16_t)(dxr - 1);
++      } while (dxr != 0);
++      { uint16_t adv = SW(0x14); SW(0x1c) += adv; SW(0x20) += adv; }
++      { uint16_t adv = (uint16_t)(bp + 1 + SW(0xe) + SW(0x12)); SW(0x1e) += adv; SW(0x22) += adv; }
++    }
+   }
++#undef SW
+   return;
+ }
+ 
