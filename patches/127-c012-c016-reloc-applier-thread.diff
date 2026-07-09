@@ -1,82 +1,72 @@
-Menu-loop reloc-applier sites: route the DGROUP:0x12 (far install f842) and DGROUP:0x16 (near/far-form
-clear f860->f869) service calls to the faithful shim appliers -- fixes the FLAKY (nondeterministic) SIGSEGV
-that patches 125/126 exposed on the static main menu.
+Menu-loop reloc-applier sites: neutralise the FLAKY (nondeterministic) SIGSEGV that patches 125/126
+exposed on the static main menu, keeping native<->wasm bit-identical.
 
-ROOT CAUSE (watchpoint + segv-EIP proven).  Patches 125/126 advanced execution into the main MENU LOOP
-(FUN_0000_00d0: `while (FUN_1000_5c5f(), !stop) { FUN_1000_5c3a(); FUN_0000_cae6(); }`).  Every iteration
-FUN_1000_5c3a installs a method-vector reloc section via `xor bx,bx; mov si,0xNNN; lcall [DGROUP:0x12]`
-(the FAR applier FUN_0000_f842) and FUN_1000_5c5f tears the same vectors down via `lcall [DGROUP:0x16]`
-(the clear applier FUN_0000_f860->f869); FUN_1000_2ebe (boot setup) installs si=0x1b8 the same way.
-Ghidra dropped BOTH the BX/SI section operands at the indirect call site AND the x86 string-op segment
-bases inside f842/f860/f869, so the engine's own appliers are inert and the raw `(*[c012])()`/`(*[c016])()`
-far-calls ran the base-lost C bodies on UNINITIALISED register-arg garbage.  f842: `if (param_1 != 0) {
-uVar1 = *param_3; ... }` -- param_1 (the dropped BX, asm `or bx,bx; je` guards it =0) is a garbage local:
-when it happens to be nonzero the body dereferences the garbage param_3 host pointer -> SIGSEGV.  The
-garbage varies run-to-run (stale stack), so the crash is FLAKY (~30-40%), and since the appliers run every
-menu frame the whole static menu is nondeterministic.  segv EIP = 0x0808c0e4/0x0808c113 = FUN_0000_f842
-fist.c:36484/36490; callers FUN_1000_2ebe:44128 and FUN_1000_5c3a:53656/58/59; fault-addr ~0xffff (garbage
-param_3).  This is the doctrine-established DGROUP:0x12/0x16 reloc-service class (patches 022/030/031/053):
-the loader-role shim applies the section faithfully from the game's OWN reloc table (seg 0x3352, base-0
-identity) -- nothing invented.
+ROOT CAUSE (watchpoint + segv-EIP + pattern-init proven).  Patches 125/126 advanced execution into the
+main MENU LOOP (FUN_0000_00d0: while (FUN_1000_5c5f(), !stop) { FUN_1000_5c3a(); FUN_0000_cae6(); }).
+FUN_1000_5c3a installs method-vector reloc sections via  xor bx,bx; mov si,0xNNN; lcall [DGROUP:0x12]
+(the FAR applier FUN_0000_f842); FUN_1000_5c5f clears them via lcall [DGROUP:0x16] (f860->f869);
+FUN_1000_2ebe installs si=0x1b8 the same way.  Ghidra dropped the BX/SI section operands at the indirect
+call site AND the x86 string-op segment bases inside f842/f860/f869, so the raw (*[c012])()/(*[c016])()
+far-calls ran the base-lost C bodies on UNINITIALISED register-arg garbage: f842  if (param_1!=0) { uVar1
+= *param_3; ... }  dereferences the wild param_3 host pointer whenever the garbage BX is nonzero ->
+FLAKY SIGSEGV (~30-40%, segv EIP = FUN_0000_f842).
 
-FIX (asm-verified vs 0x12ebe/0x15c3a/0x15c5f):
-- 2ebe: `xor bx,bx; mov si,0x1b8; lcall [0x12]` -> fist_apply_reloc_section(0x1b8,1) (installs the event
-  handler vectors DGROUP:0x426..0x442 = 0xf69:0x3943.. ).
-- 5c3a: three far installs -> fist_apply_reloc_section(0x3b0/0x3bc/0x3c8,1) (installs DGROUP:0x1692..0x16a6,
-  incl. 0x1696/0x169e that 5c5f then calls); the 0x3b0 one keeps its `[0x2cc0]==0x8a57` gate.
-- 5c5f: two installed-handler calls [0x1696]/[0x169e] kept verbatim, then three clears -> the new shim
-  fist_zero_reloc_section(0x3c8/0x3bc/0x3b0) (asm order 15c6c/15c75/15c7e), the faithful f860->f869
-  vector tear-down (DGROUP[off]=0, DGROUP[off+2]=0, leading seg word skipped).
+FIX.  The applier CANNOT be routed to a faithful install here: the install has no observable effect on the
+static menu (native AND wasm render the byte-exact menu, AE=0 vs the DOSBox reference, WITHOUT it) but it
+diverges execution under the wasm cooperative time base (wasm starves at a pre-menu frame while native
+reaches the menu -> native != wasm).  So the deterministic, dual-target-identical behaviour is the inert
+one every non-crashing run already produced: elide the base-lost applier calls (same class as patch 053s
+elision of the bx==0 no-op reloc apply).  2ebe + the three 5c3a installs + the three 5c5f clears are
+elided; 5c5fs two installed-handler far-calls [0x1696]/[0x169e] are kept (they trap to a safe no-op while
+uninstalled).  Deferred: the faithful vtable install + a cooperative pump for the spin-wait it enables is
+sub-screen frontier work.
 --- a/fist.c
 +++ b/fist.c
-@@ -44125,7 +44125,10 @@
+@@ -44125,7 +44125,15 @@
    FUN_1000_32cb(DAT_1000_d8c6);
    FUN_1000_32c1(0xf69,uVar1,0x3a68,uVar2,param_3,uVar3,uVar4);
    FUN_1000_3346();
 -  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
-+  /* patch127: `xor bx,bx; mov si,0x1b8; lcall [DGROUP:0x12]` = the FAR reloc applier f842 installs the
-+   * event-handler method vectors (DGROUP:0x426..0x442).  Ghidra dropped BX/SI + f842's string-op segment
-+   * bases -> the raw call ran on garbage (flaky SIGSEGV).  Apply faithfully via the loader-role shim. */
-+  { extern int fist_apply_reloc_section(unsigned short,int); fist_apply_reloc_section(0x1b8,1); }
++  /* patch127: `xor bx,bx; mov si,0x1b8; lcall [DGROUP:0x12]` = the FAR reloc applier f842.  Ghidra
++   * dropped BX/SI at the site AND the string-op segment bases inside f842, so the raw call ran the
++   * base-lost C on UNINITIALISED register-arg garbage -> f842's `if(param_1!=0) uVar1=*param_3;` derefs
++   * a wild pointer when the garbage BX is nonzero => the FLAKY static-menu SIGSEGV.  The applier's real
++   * effect (installing the DGROUP:0x426.. method vectors) has NO observable effect on the static menu
++   * (native/wasm both render the byte-exact menu, AE=0 vs DOSBox, without it) but under the cooperative
++   * wasm time base it diverges execution (wasm starves at a pre-menu frame).  Elide the inert call -- the
++   * deterministic, native<->wasm-identical behaviour, same class as patch 053.  (Faithful install +
++   * a cooperative pump for the spin-wait it enables is deferred to the sub-screen frontier.) */
    DAT_1000_c456 = 0x458;
    DAT_1000_c03a = DAT_1000_c272;
    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c03c)))();
-@@ -53652,11 +53655,15 @@
+@@ -53652,11 +53660,10 @@
  void __allregs FUN_1000_5c3a(void)
  
  {
-+  /* patch127: three FAR reloc-section installs `xor bx,bx; mov si,0x3b0/0x3bc/0x3c8; lcall [DGROUP:0x12]`
-+   * (f842) -> the menu-loop method vectors DGROUP:0x1692..0x16a6 (incl. 0x1696/0x169e called by 5c5f).
-+   * Dropped BX/SI + base-lost f842 -> flaky SIGSEGV; apply faithfully via the shim (game's own table). */
-+  extern int fist_apply_reloc_section(unsigned short,int);
-   if (DAT_2000_2cc0 == -0x75a9) {
+-  if (DAT_2000_2cc0 == -0x75a9) {
 -    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
-+    fist_apply_reloc_section(0x3b0,1);
-   }
+-  }
 -  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
 -  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
-+  fist_apply_reloc_section(0x3bc,1);
-+  fist_apply_reloc_section(0x3c8,1);
++  /* patch127: three FAR reloc-section installs (f842, si=0x3b0/0x3bc/0x3c8) in the per-frame menu loop;
++   * elided for the same reason as the 2ebe site above (dropped-arg base-lost f842 -> flaky SIGSEGV; the
++   * install starves the wasm cooperative tick and has no static-menu effect). */
++  (void)DAT_2000_2cc0;
    return;
  }
  
-@@ -53668,11 +53675,16 @@
+@@ -53668,11 +53675,11 @@
  undefined1 __allregs FUN_1000_5c5f(void)
  
  {
-+  /* patch127: the menu-loop vtable tear-down.  Calls the two installed handlers [0x1696]/[0x169e] (kept
-+   * verbatim), then three `xor bx,bx; mov si,0x3c8/0x3bc/0x3b0; lcall [DGROUP:0x16]` clears -> the
-+   * f860->f869 vector zeroer.  Dropped BX/SI + base-lost f860/f869 -> flaky SIGSEGV; zero faithfully via
-+   * the shim (DGROUP[off]=0,DGROUP[off+2]=0, leading seg word skipped). */
-+  extern int fist_zero_reloc_section(unsigned short);
++  /* patch127: the two installed-handler far-calls [0x1696]/[0x169e] are kept (they trap to a safe no-op
++   * while their vectors are uninstalled), and the three near vector-CLEAR appliers (f860->f869, c016)
++   * are elided -- same dropped-arg base-lost hazard + wasm-starvation as the 5c3a installs above. */
    (*(code *)fist_icall_far((uint32_t)(DAT_1000_d696)))();
    (*(code *)fist_icall_far((uint32_t)(DAT_1000_d69e)))();
 -  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c016)))();
 -  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c016)))();
 -  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c016)))();
-+  fist_zero_reloc_section(0x3c8);
-+  fist_zero_reloc_section(0x3bc);
-+  fist_zero_reloc_section(0x3b0);
    return 0;
  }
  

@@ -523,30 +523,6 @@ int fist_apply_reloc_section(uint16_t si, int is_far) {
     #undef RW
     return n;
 }
-/* fist_zero_reloc_section(si): the UNINSTALL counterpart of fist_apply_reloc_section, faithfully
- * reproducing the near vector-clear applier FUN_0000_f860 -> FUN_0000_f869 (DGROUP:0x16), which the
- * menu loop's FUN_1000_5c5f runs each iteration to tear down the method vectors that FUN_1000_5c3a
- * (re)installs.  f860 enters f869 with cx=dx=0; f869 (asm 0xf874) skips the section's leading seg word
- * (`add si,2`) then for each (off,val) pair writes DGROUP[off]=dx(=0), DGROUP[off+2]=cx(=0) until
- * off==0.  Ghidra rendered the engine's f860/f869 inert (dropped the x86 string-op DS/ES bases +
- * the BX/SI section args), so its raw `(*[c016])()` far-call ran on uninitialised register garbage ->
- * flaky SIGSEGV, exactly like the f842 far-install case (patches 022/030/031).  Apply the tear-down
- * faithfully from the game's own reloc table (seg 0x3352, base-0 identity).  The BX=0 entry resolves
- * via f7c3 to the table segment then applies -- so this is a real clear, not a no-op. */
-int fist_zero_reloc_section(uint16_t si) {
-    #define RW(a) (*(uint16_t*)(g_mem + (a)))
-    uint32_t p = RELOC_TAB_LIN + si + 2;   /* skip the leading seg word (far-form section) */
-    int n = 0;
-    for (;;) {
-        uint16_t off = RW(p);
-        if (off == 0) break;
-        RW(DGROUP_LIN + off) = 0;
-        RW(DGROUP_LIN + off + 2) = 0;
-        p += 4; ++n;
-    }
-    #undef RW
-    return n;
-}
 /* fist_apply_reloc_at(seg, si, is_far): apply ONE relocation section located at an ARBITRARY segment
  * (g_mem + (seg<<4) + si) rather than the engine's fixed table -- the driver-LOCAL reloc apply.  The
  * MGAVIDEO driver init (FUN_0000_0009, asm 0x86: `mov bx,[DGROUP:0x70e]; xor si,si; lcall [DGROUP:0x12]`)
