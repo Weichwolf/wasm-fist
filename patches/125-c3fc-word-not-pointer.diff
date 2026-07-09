@@ -1,0 +1,78 @@
+FUN_0000_139e: DGROUP:0x3fc (c3fc) is a 16-bit WORD near-pointer, not a host pointer -- the 4-byte
+store corrupted the adjacent enqueue vector c3fe and broke click-to-activate.
+
+THE CLICK-ACTIVATE BLOCKER, ROOT-CAUSED (docs/stage1.md FRONTIER "the CLICK does not yet ACTIVATE").
+A menu click reaches the button sub-handler FUN_0000_2f03, which far-calls the queue-enqueue vector
+`[DGROUP:0x3fe]` (= c3fe) three times (one per button pair) to POST the button event into the display
+event queue.  c3fe is installed by reloc section si=0x1d8 (the frame/event-scheduler method vectors,
+leading seg 0xf69) as DGROUP:0x3fe = 0f69:0x3e0b = linear 0x1349b = FUN_1000_349b (the enqueue).  But at
+runtime c3fe read back as 0f69:0000 -- the SEG word (DGROUP:0x400 = 0xf69) intact, the OFF word
+(DGROUP:0x3fe) ZEROED -- so the far-call targeted 0f69:0000 and NO event was ever enqueued (verified: with
+the enqueue mis-targeted, FUN_1000_349b/34f5 are never entered on a press; the item's activate handler
+[elem+0x423c] therefore never fires).
+
+Watchpoint on DGROUP:0x3fe caught the corruptor: after f738->fist_install_dgroup applies section si=0x1d8
+(c3fe.off <- 0x3e0b, correct), the boot idle path FUN_0000_1384 -> FUN_0000_139e(0) writes
+DAT_1000_c3fc <- 0 back over c3fe.off.  Asm (0x139e):
+    139e: or ax,ax ; je 13ad
+    13a2: xchg ax,[0x264a]                 ; swap AX <-> DGROUP:0x264a  (Ghidra: DAT_1000_e64a)
+    13a6: movw [0x3fc],0x264a              ; c3fc (WORD) = near offset of e64a = 0x264a
+    13ac: ret
+    13ad: movw [0x3fc],0x712               ; c3fc (WORD) = near offset 0x712
+    13b3: xchg ax,[0x264a] ; ret
+Both are 2-byte WORD stores to DGROUP:0x3fc ONLY.  Ghidra typed DAT_1000_c3fc as `int**`, so the C store
+writes a 4-byte host pointer 0x00000712 across 0x3fc..0x3ff -> 0x3fc=0x0712, 0x3fe=0x0000: it zeroes the
+enqueue vector's offset word.  Classic store-width Ghidra artifact (same class as 104/105/106/123).
+
+FIX: retype DAT_1000_c3fc to its faithful 16-bit WORD width (a DGROUP near offset) and store the near
+offsets 0x264a / 0x712 as words (no 0x3fe spill).  Also reconstruct the sole reader FUN_0000_13b8 (the
+object dirty-list bit7-clear walker; asm 0x13b8 `mov si,[0x3fc]; mov es,[si]; ...`) to read c3fc as a near
+offset -> load the object-list SEGMENT from DGROUP:[c3fc] -> walk es:0 in the flat model (Ghidra had
+deref'd c3fc as a host pointer and started the walk at NULL).  13b8 is indirect-only (not on the click
+path) but must compile and stay faithful now that c3fc is a value.  Asm-verified vs 0x1384..0x13d1.
+--- a/fist.c
++++ b/fist.c
+@@ -2476,7 +2476,7 @@
+ #define DAT_1000_c3e0 (*(undefined2 *)(g_mem+0x1c3e0))
+ #define DAT_1000_c3e2 (*(undefined2 *)(g_mem+0x1c3e2))
+ #define DAT_1000_c3e4 (*(undefined2 *)(g_mem+0x1c3e4))
+-#define DAT_1000_c3fc (*(int **)(g_mem+0x1c3fc))
++#define DAT_1000_c3fc (*(undefined2 *)(g_mem+0x1c3fc))
+ #define DAT_1000_c3fe (*(undefined4 *)(g_mem+0x1c3fe))
+ #define DAT_1000_c40a (*(undefined4 *)(g_mem+0x1c40a))
+ #define DAT_1000_c420 (*(undefined2 *)(g_mem+0x1c420))
+@@ -7084,10 +7084,10 @@
+     LOCK();
+     DAT_1000_e64a = param_1;
+     UNLOCK();
+-    DAT_1000_c3fc = (undefined2 *)&DAT_1000_e64a;
++    DAT_1000_c3fc = 0x264a;   /* near offset of DGROUP:0x264a (e64a); WORD store, no 0x3fe spill */
+     return uVar1;
+   }
+-  DAT_1000_c3fc = (undefined2 *)0x712;
++  DAT_1000_c3fc = 0x712;      /* WORD store to DGROUP:0x3fc only (asm 0x13ad movw [0x3fc],0x712) */
+   LOCK();
+   DAT_1000_e64a = param_1;
+   UNLOCK();
+@@ -7100,12 +7100,15 @@
+ void __allregs FUN_0000_13b8(void)
+ 
+ {
+-  undefined2 uVar1;
+-  int *piVar2;
+-  
+-  uVar1 = *DAT_1000_c3fc;
+-  for (piVar2 = (int *)0x0; *piVar2 != 0; piVar2 = (int *)((int)piVar2 + *piVar2)) {
+-    *(byte *)(piVar2 + 1) = *(byte *)(piVar2 + 1) & 0x7f;
++  /* asm 0x13b8: mov si,[0x3fc]; mov es,[si]; xor si,si; walk es:0 object list clearing bit7 of [obj+2].
++   * c3fc is a DGROUP near offset whose target word holds the object-list SEGMENT (flat: seg<<4). */
++  uint16_t seg;
++  uint8_t *base;
++  uint16_t si;
++  seg = *(uint16_t *)(g_mem + 0x1c000 + DAT_1000_c3fc);
++  base = g_mem + ((uint32_t)seg << 4);
++  for (si = 0; *(uint16_t *)(base + si) != 0; si = (uint16_t)(si + *(uint16_t *)(base + si))) {
++    *(base + si + 2) &= 0x7f;
+   }
+   return;
+ }

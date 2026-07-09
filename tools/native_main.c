@@ -209,6 +209,14 @@ void fist_set_int8_handler(uint32_t linear){
 void fist_timer_pump(void){
 #ifdef __EMSCRIPTEN__
     { extern void fist_wasm_tick(void); fist_wasm_tick(); }   /* cooperative time base (no SIGALRM) */
+#else
+    /* Debug seam: FIST_COOP_TICK=1 drives the INT-8 time base COOPERATIVELY on native too (one tick
+     * per pump, exactly like wasm) so the engine can be traced under gdb without gdb having to process
+     * thousands of SIGALRM/sec. The rendered frame does not depend on the tick RATE (the menu is a fixed
+     * point once painted), so a coop-tick native run reaches the same deterministic menu/sub-screen frame
+     * as the SIGALRM-timed run -- diagnostics only; the shipped run keeps the SIGALRM timer. */
+    { static int coop = -1; if (coop < 0) coop = getenv("FIST_COOP_TICK") ? 1 : 0;
+      if (coop) tick_advance(); }
 #endif
     { extern void fbtrap_arm_hook(void); fbtrap_arm_hook(); }
     /* Dev watchdog: FIST_RUNMS=<ms> dumps the framebuffer (FIST_FBDUMP) and exits after a wall-clock

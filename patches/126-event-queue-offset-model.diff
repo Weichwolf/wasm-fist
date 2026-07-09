@@ -1,0 +1,298 @@
+Event queue subsystem: faithful 16-bit DGROUP-offset reconstruction (enqueue/drain/init) + thread the
+driver's c3fe button/cursor-move enqueue args -- unblocks the mouse event queue so a click reaches the
+display event dispatch.
+
+After patch 125 restores the enqueue vector c3fe = 349b, the button sub-handler 2f03 and the cursor-move
+redraw 2f38 finally far-call the event enqueue FUN_1000_349b -- and it SEGV'd, because the whole event
+queue was modeled with HOST POINTERS while the real code uses 16-bit DGROUP near-offset links.  The queue
+is a free list of 63 18-byte (9-word) nodes at DGROUP:0x18ea; every link/handle is a 16-bit offset (empty
+sentinel 0xffff).  The head/tail vars d8e0..d8e8 are ADJACENT DGROUP words, so Ghidra's 4-byte `int**`
+typing (a) made d8e0 overlap d8e2, and (b) truncated every stored node link to 16 bits -> the second
+enqueue read a garbage host pointer and faulted.  This path had never executed before (c3fe was corrupt),
+so the model was never exercised.
+
+FIX (asm-verified vs 0x13446 init, 0x1349b/0x134f5 enqueue, 0x13566 template-post, 0x135a7 drain):
+- Retype d8e0/d8e2/d8e4/d8e8 (and keep d8e6) to 16-bit WORD offsets; add QOFF/QW helpers (offset->host).
+- Reconstruct FUN_1000_3436/3446 (build the 63-node free list with 16-bit links, tail=&d8e4=0x18e4).
+- Reconstruct FUN_1000_349b (append event to ready TAIL) and FUN_1000_34f5 (prepend to ready HEAD; now
+  returns the node+2 handle in AX + CF via g_fist_cf, as its caller 3566 needs both).
+- Reconstruct FUN_1000_3566 (post from the d8e0 template) and FUN_1000_35a7 (drain: call the node's
+  callback [word7:word8], recycle the node to the free list, pop the ready head, publish d8e2=node+2).
+- Update the d8e2 field readers (1e73/1e88 return word[1]; the 84xx drag block; 463f) to offset access.
+- Thread the driver enqueue-vector args at 2f03 (AX = the button-transition bits param_1 & 6/0x18/0x60,
+  DX = dd9e cursor-y; asm 0x2f0e..0x2f2f) and 2f38 (AX=1 cursor-move; asm 0x2f9b) so 349b receives the
+  real event handle instead of dropped-arg garbage.
+--- a/fist.c
++++ b/fist.c
+@@ -1777,7 +1777,7 @@
+ void __allregs FUN_1000_3485(void);
+ undefined2 __allregs FUN_1000_3495(undefined2 param_1);
+ undefined2 * __allregs FUN_1000_349b(uint param_1,undefined2 param_2);
+-void __allregs FUN_1000_34f5(uint param_1);
++undefined2 __allregs FUN_1000_34f5(uint param_1);
+ void __allregs FUN_1000_3566(undefined2 *param_1);
+ uint __allregs FUN_1000_35a7(void);
+ char __allregs FUN_1000_3638(char param_1);
+@@ -2679,11 +2679,17 @@
+ #define DAT_1000_d8d2 (*(undefined2 *)(g_mem+0x1d8d2))
+ #define DAT_1000_d8d4 (*(undefined2 *)(g_mem+0x1d8d4))
+ #define DAT_1000_d8de (*(undefined2 *)(g_mem+0x1d8de))
+-#define DAT_1000_d8e0 (*(int **)(g_mem+0x1d8e0))
+-#define DAT_1000_d8e2 (*(int **)(g_mem+0x1d8e2))
+-#define DAT_1000_d8e4 (*(int **)(g_mem+0x1d8e4))
++#define DAT_1000_d8e0 (*(undefined2 *)(g_mem+0x1d8e0))
++#define DAT_1000_d8e2 (*(undefined2 *)(g_mem+0x1d8e2))
++#define DAT_1000_d8e4 (*(undefined2 *)(g_mem+0x1d8e4))
+ #define DAT_1000_d8e6 (*(undefined2 *)(g_mem+0x1d8e6))
+-#define DAT_1000_d8e8 (*(int **)(g_mem+0x1d8e8))
++#define DAT_1000_d8e8 (*(undefined2 *)(g_mem+0x1d8e8))
++/* Event queue = linked list of 18-byte (9-word) nodes at DGROUP:0x18ea; ALL links/handles are 16-bit
++ * DGROUP near offsets (empty sentinel 0xffff), NOT host pointers.  d8e0/d8e2 are ADJACENT words so the
++ * 4-byte int** typing overlapped them and truncated every node link (patch 126; init/drain already fixed
++ * in patches 043/073).  QOFF: offset->host base pointer;  QW: the 16-bit word at a DGROUP offset. */
++#define QOFF(o) (g_mem + 0x1c000 + (uint16_t)(o))
++#define QW(o)   (*(uint16_t *)QOFF(o))
+ #define DAT_1000_d8ea (*(undefined2 *)(g_mem+0x1d8ea))
+ #define DAT_1000_dd6a (*(undefined2 *)(g_mem+0x1dd6a))
+ #define DAT_1000_dd94 (*(undefined2 *)(g_mem+0x1dd94))
+@@ -8477,7 +8483,7 @@
+     piVar4 = piVar4 + -6;
+     bVar5 = piVar4 < (int *)((int)(undefined2 *)&DAT_1000_faf0 + uVar2);
+   } while (!bVar5);
+-  return *DAT_1000_d8e2;
++  return QW(DAT_1000_d8e2);
+ }
+ 
+ 
+@@ -8557,8 +8563,8 @@
+               piVar4[2] = DAT_1000_fe0e;
+               piVar4[3] = DAT_1000_fe10;
+             }
+-            DAT_1000_fe0e = *(int *)(DAT_1000_d8e2 + 4);
+-            DAT_1000_fe10 = *(int *)(DAT_1000_d8e2 + 6);
++            DAT_1000_fe0e = (int16_t)QW(DAT_1000_d8e2 + 4);
++            DAT_1000_fe10 = (int16_t)QW(DAT_1000_d8e2 + 6);
+           }
+           return;
+         }
+@@ -8663,8 +8669,8 @@
+               piVar4[2] = DAT_1000_fe0e;
+               piVar4[3] = DAT_1000_fe10;
+             }
+-            DAT_1000_fe0e = *(int *)(DAT_1000_d8e2 + 4);
+-            DAT_1000_fe10 = *(int *)(DAT_1000_d8e2 + 6);
++            DAT_1000_fe0e = (int16_t)QW(DAT_1000_d8e2 + 4);
++            DAT_1000_fe10 = (int16_t)QW(DAT_1000_d8e2 + 6);
+           }
+           return;
+         }
+@@ -13269,7 +13275,7 @@
+   uVar2 = 0;
+   do {
+     if (param_1 == *(int *)((int)(undefined2 *)&DAT_2000_2d3c + uVar2)) {
+-      bVar3 = (*(uint *)(DAT_1000_d8e2 + 2) & 0x1000) == 0;
++      bVar3 = (QW(DAT_1000_d8e2 + 2) & 0x1000) == 0;
+       if (bVar3) {
+         FUN_0000_a649(param_1,param_2);
+         if (!bVar3) {
+@@ -44923,76 +44929,71 @@
+ undefined2 * __allregs FUN_1000_349b(uint param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 *puVar1;
+-  undefined2 *puVar2;
+-  undefined2 *puVar3;
+-  
+-  puVar2 = DAT_1000_d8e8;
+-  puVar3 = (undefined2 *)(param_1 & DAT_1000_d8de);
+-  if (((puVar3 != (undefined2 *)0x0) && (DAT_1000_c2a8 == '\0')) &&
+-     (DAT_1000_d8e8 != (undefined2 *)&DAT_2000_bfff)) {
+-    DAT_1000_d8e8[1] = puVar3;
+-    DAT_1000_d8e8[2] =
+-         CONCAT11((byte)((uint)DAT_1000_df7e >> 8) | DAT_1000_d5b6 | DAT_1000_c305,
+-                  (char)DAT_1000_df7e);
+-    DAT_1000_d8e8[5] = DAT_1000_c452;
+-    DAT_1000_d8e8[3] = DAT_1000_d5b8;
+-    DAT_1000_d8e8[4] = DAT_1000_d5ba;
+-    DAT_1000_d8e8[6] = param_2;
+-    puVar1 = DAT_1000_d8e8;
+-    DAT_1000_d8e8 = (undefined2 *)*DAT_1000_d8e8;
+-    *puVar1 = 0xffff;
+-    puVar3 = DAT_1000_d8e6;
+-    LOCK();
+-    DAT_1000_d8e6 = puVar2;
+-    UNLOCK();
+-    *puVar3 = puVar2;
+-    return puVar2 + 1;
+-  }
+-  return puVar3;
++  /* Enqueue an event onto the ready-queue TAIL (asm 0x1349b).  All links are 16-bit DGROUP offsets;
++   * node = free head (d8e8); append after d8e6.  Faithful offset-model reconstruction (patch 126). */
++  extern unsigned char g_fist_cf;
++  uint16_t node, handle, old_tail, link, fl;
++  handle = (uint16_t)(param_1 & DAT_1000_d8de);
++  if (handle == 0) { g_fist_cf = 1; return (undefined2 *)0; }
++  if (DAT_1000_c2a8 != '\0') { g_fist_cf = 1; return (undefined2 *)0; }
++  node = DAT_1000_d8e8;
++  if (node == 0xffff) { g_fist_cf = 1; return (undefined2 *)0; }   /* queue full */
++  QW(node + 2) = handle;
++  fl = DAT_1000_df7e;
++  fl = (uint16_t)((fl & 0x00ff) |
++        (((uint16_t)((fl >> 8) | (uint8_t)DAT_1000_d5b6 | (uint8_t)DAT_1000_c305)) << 8));
++  QW(node + 4) = fl;
++  QW(node + 0xa) = DAT_1000_c452;
++  QW(node + 6) = DAT_1000_d5b8;
++  QW(node + 8) = DAT_1000_d5ba;
++  QW(node + 0xc) = param_2;
++  link = QW(node + 0);
++  DAT_1000_d8e8 = link;                 /* advance free head */
++  QW(node + 0) = 0xffff;
++  old_tail = DAT_1000_d8e6;
++  DAT_1000_d8e6 = node;                  /* xchg: new tail = node */
++  QW(old_tail + 0) = node;              /* link previous tail -> node */
++  g_fist_cf = 0;
++  return (undefined2 *)(uintptr_t)(uint16_t)(node + 2);
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_34f5) @ 1000:34f5 ===== */
+ 
+-void __allregs FUN_1000_34f5(uint param_1)
++undefined2 __allregs FUN_1000_34f5(uint param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  undefined2 *puVar2;
+-  undefined2 *puVar3;
+-  
+-  puVar1 = (undefined2 *)(param_1 & DAT_1000_d8de);
+-  if (puVar1 != (undefined2 *)0x0) {
+-    puVar3 = DAT_1000_d8e8;
+-    if (DAT_1000_d8e8 == (undefined2 *)&DAT_2000_bfff) {
+-      puVar1 = (undefined2 *)&DAT_1000_d8e4;
+-      do {
+-        puVar2 = puVar1;
+-        puVar1 = (undefined2 *)*puVar2;
+-      } while (puVar1 != DAT_1000_d8e6);
+-      *puVar2 = 0xffff;
+-      puVar3 = puVar1;
+-      DAT_1000_d8e6 = puVar2;
+-    }
+-    puVar3[1] = puVar1;
+-    puVar3[2] = CONCAT11((byte)((uint)DAT_1000_df7e >> 8) | DAT_1000_d5b6 | DAT_1000_c305,
+-                         (char)DAT_1000_df7e);
+-    puVar3[5] = DAT_1000_c452;
+-    puVar3[3] = DAT_1000_d5b8;
+-    puVar3[4] = DAT_1000_d5ba;
+-    DAT_1000_d8e8 = (undefined2 *)*puVar3;
+-    LOCK();
+-    UNLOCK();
+-    puVar1 = puVar3;
+-    *puVar3 = DAT_1000_d8e4;
+-    DAT_1000_d8e4 = puVar1;
+-    if (DAT_1000_d8e6 == (undefined2 *)&DAT_1000_d8e4) {
+-      DAT_1000_d8e6 = puVar3;
+-    }
+-    return;
+-  }
+-  return;
++  /* Enqueue onto the ready-queue HEAD (asm 0x134f5).  Returns node+2 (handle) in AX and CF (g_fist_cf):
++   * CF=1 on drop (masked handle 0).  Offset-model reconstruction (patch 126). */
++  extern unsigned char g_fist_cf;
++  uint16_t node, handle, link, old_head, fl;
++  handle = (uint16_t)(param_1 & DAT_1000_d8de);
++  if (handle == 0) { g_fist_cf = 1; return 0; }
++  node = DAT_1000_d8e8;
++  if (node == 0xffff) {                  /* free list empty: reclaim last-but-one ready node */
++    uint16_t bx = 0x18e4, ax = QW(bx);
++    while (ax != DAT_1000_d8e6) { bx = ax; ax = QW(bx); }
++    QW(bx) = 0xffff;
++    DAT_1000_d8e6 = bx;
++    node = ax;
++    DAT_1000_d8e8 = node;
++  }
++  QW(node + 2) = handle;
++  fl = DAT_1000_df7e;
++  fl = (uint16_t)((fl & 0x00ff) |
++        (((uint16_t)((fl >> 8) | (uint8_t)DAT_1000_d5b6 | (uint8_t)DAT_1000_c305)) << 8));
++  QW(node + 4) = fl;
++  QW(node + 0xa) = DAT_1000_c452;
++  QW(node + 6) = DAT_1000_d5b8;
++  QW(node + 8) = DAT_1000_d5ba;
++  link = QW(node + 0);
++  DAT_1000_d8e8 = link;
++  old_head = DAT_1000_d8e4;
++  DAT_1000_d8e4 = node;                  /* prepend to head */
++  QW(node + 0) = old_head;
++  if (DAT_1000_d8e6 == 0x18e4) DAT_1000_d8e6 = node;
++  g_fist_cf = 0;
++  return (uint16_t)(node + 2);
+ }
+ 
+ 
+@@ -45001,22 +45002,21 @@
+ void __allregs FUN_1000_3566(undefined2 *param_1)
+ 
+ {
+-  int iVar1;
+-  undefined2 unaff_CS;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_34f5(*(undefined2 *)(DAT_1000_d8e0 + 2));
+-  iVar1 = DAT_1000_d8e0;
+-  if (!(bool)in_CF) {
+-    *param_1 = *(undefined2 *)(DAT_1000_d8e0 + 2);
+-    param_1[1] = *(undefined2 *)(iVar1 + 4);
+-    param_1[4] = *(undefined2 *)(iVar1 + 10);
+-    param_1[2] = *(undefined2 *)(iVar1 + 6);
+-    param_1[3] = *(undefined2 *)(iVar1 + 8);
+-    *(undefined2 *)(iVar1 + 0xe) = 0x3f7f;
+-    *(undefined2 *)(iVar1 + 0x10) = unaff_CS;
+-    return;
+-  }
++  /* Post an event from the d8e0 template node onto the ready HEAD (asm 0x13566).  Offset-model (patch 126). */
++  extern unsigned char g_fist_cf;
++  uint16_t si, bx;
++  (void)param_1;
++  si = DAT_1000_d8e0;
++  bx = FUN_1000_34f5(QW(si + 2));          /* enqueue handle; returns new node+2, sets g_fist_cf */
++  if (g_fist_cf) return;
++  si = DAT_1000_d8e0;
++  QW(bx + 0) = QW(si + 2);
++  QW(bx + 2) = QW(si + 4);
++  QW(bx + 8) = QW(si + 0xa);
++  QW(bx + 4) = QW(si + 6);
++  QW(bx + 6) = QW(si + 8);
++  QW(si + 0xe) = 0x3f7f;
++  QW(si + 0x10) = 0x1000;                  /* cs = engine seg */
+   return;
+ }
+ 
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -7528,13 +7528,13 @@
+   if (DAT_1000_d5d9 == '\0') {
+     _DAT_1000_d5b6 = param_2;
+     if ((param_1 & 6) != 0) {
+-      (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c3fe)))();
++      (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c3fe)))(param_1 & 0x6,(*(uint16_t *)(g_mem+0x1dd9e)));
+     }
+     if ((param_1 & 0x18) != 0) {
+-      (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c3fe)))();
++      (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c3fe)))(param_1 & 0x18,(*(uint16_t *)(g_mem+0x1dd9e)));
+     }
+     if ((param_1 & 0x60) != 0) {
+-      (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c3fe)))();
++      (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c3fe)))(param_1 & 0x60,(*(uint16_t *)(g_mem+0x1dd9e)));
+     }
+   }
+   DAT_1000_d5d9 = DAT_1000_d5d9 + -1;
+@@ -7586,7 +7586,7 @@
+     _DAT_1000_d5b8 = _DAT_1000_c730 - 1;
+   }
+   DAT_1000_d5d6 = DAT_1000_d5d6 + '\x01';
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c3fe)))();
++  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c3fe)))(1,(*(uint16_t *)(g_mem+0x1dd9e)));
+   uVar2 = 0;
+   if (DAT_1000_d5d7 == '\0') {
+     FUN_0000_0e3b();
