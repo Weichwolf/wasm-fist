@@ -1,0 +1,542 @@
+--- a/fist.c	2026-07-09 23:08:52.695741564 +0200
++++ b/fist.c	2026-07-09 23:06:38.771729160 +0200
+@@ -2263,7 +2263,7 @@
+ void __allregs FUN_1000_b4cd(undefined2 *param_1,int param_2);
+ void __allregs FUN_1000_b4fc(int param_1);
+ void __allregs FUN_1000_b5a4(int param_1);
+-void __allregs FUN_1000_b631(char *param_1);
++void __allregs FUN_1000_b631(uint16_t param_1);        /* PATCH 138 */
+ void __allregs FUN_1000_b652(int param_1);
+ void __allregs FUN_1000_b6a4(void);
+ void __allregs FUN_1000_b6dd(void);
+@@ -8406,29 +8406,44 @@
+ undefined2 __allregs FUN_0000_1e73(undefined2 param_1,int param_2,int param_3)
+ 
+ {
+-  int iVar1;
+-  uint uVar2;
+-  undefined2 uVar3;
+-  int *piVar4;
+-  bool bVar5;
+-  
+-  iVar1 = *(int *)(param_3 + *(int *)(param_2 + 2) + 1);
+-  if (iVar1 == 0) {
+-    return param_1;
++  /* PATCH 138: container FULL-PAINT child-walker (asm 0x1e73, the [+0x4872] method-slot analog of 208a
++     [+0x423c], patch 137).  Reached for the first time by the SELECT PLAYER dialog when cc33's modal
++     loop dispatches a paint event -> 1e4b -> 1e88 -> the container's [+0x4872]=1e73.  Ghidra base-lost
++     the whole walk (`&DAT_1000_faf0 + head` host-pointer, `*piVar4` raw-offset deref -> SIGSEGV, the
++     0xc-byte stride int*-scaled).  Reconstruct in the DGROUP-offset model (DS=DGROUP, bp = the display-
++     list base DAT_1000_fafe, current element from DGROUP:0x3e08 set by the calling 1e88), then DIVE into
++     the 1e88 loop over the children (bx=head+0x3af0 DOWN to dx=tail+0x3af0, step -0xc): each child's
++     [+0x4872] method (here 0x2104 = stc;ret, a no-op that returns CF-set = continue) is called with bp;
++     the method's CF-return (threaded via g_fist_cf) stops the walk when CLEAR (asm `jae 0x1ea8`). */
++  extern unsigned char g_fist_cf;
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t  bp = (uint16_t)DAT_1000_fafe;
++  uint16_t  elem = *(uint16_t *)(dg + 0x3e08);
++  uint16_t  di = *(uint16_t *)(dg + (uint16_t)(elem + 2));
++  uint16_t  head = *(uint16_t *)(dg + (uint16_t)(bp + di + 1));
++  uint16_t  tail, bx, dx, vec;
++  (void)param_1; (void)param_2; (void)param_3;
++  if (head == 0) {
++    return 0;
+   }
+-  uVar2 = *(uint *)(param_3 + *(int *)(param_2 + 2) + 3);
+-  piVar4 = (int *)((int)(undefined2 *)&DAT_1000_faf0 + iVar1);
+-  bVar5 = 0xc50f < uVar2;
+-  do {
+-    DAT_1000_fe08 = piVar4;
+-    uVar3 = (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*piVar4 + 0x4872))))(param_3);
+-    if (!bVar5) {
+-      return uVar3;
++  tail = *(uint16_t *)(dg + (uint16_t)(bp + di + 3));
++  bx = (uint16_t)(head + 0x3af0);
++  dx = (uint16_t)(tail + 0x3af0);
++  for (;;) {
++    *(uint16_t *)(dg + 0x3e08) = bx;
++    vec = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + bx) + 0x4872));
++    g_fist_cf = 1;                                      /* default: the no-op [+0x4872] methods stc */
++    ((void (*)(undefined2))fist_icall_near(0x0u, vec))(bp);
++    if (!g_fist_cf) {                                   /* jae 0x1ea8: method returned CF clear -> stop */
++      return 0;
+     }
+-    piVar4 = piVar4 + -6;
+-    bVar5 = piVar4 < (int *)((int)(undefined2 *)&DAT_1000_faf0 + uVar2);
+-  } while (!bVar5);
+-  return QW(DAT_1000_d8e2);
++    bx = (uint16_t)(bx - 0xc);                          /* sub bx,0xc */
++    if (bx < dx) {                                      /* cmp bx,dx; jae 1e88 (continue) else stc;ret */
++      break;
++    }
++  }
++  g_fist_cf = 1;
++  return 0;
+ }
+ 
+ 
+@@ -31003,8 +31018,15 @@
+ void __allregs FUN_0000_ccca(undefined2 param_1,int param_2,undefined2 param_3)
+ 
+ {
+-  FUN_0000_e38a(param_2 + 4);
+-  FUN_1000_b652(param_3);
++  /* PATCH 138: SELECT PLAYER (list-dialog) TITLE-BAR paint method (asm 0xccca).  Dispatched by the
++     209e dirty-walk via a NEAR call (`call *0x423c(%di)`) with the element node live in BX -- but the
++     __allregs C dispatch (`fist_icall_near(...)()`) passes NO args, so param_1/2/3 (all = the dropped
++     BX) are codegen garbage.  209e DOES publish the current element to DGROUP:0x3e08 (= DAT_1000_fe08),
++     exactly as every working paint method reads it; recover the element from there.  asm: push bx;
++     lea 4(bx),bx; call e38a (save the background rect = elem+4); pop bx; lcall b652 (draw). */
++  uint16_t elem = *(uint16_t *)(g_mem + 0x1c000 + 0x3e08);
++  FUN_0000_e38a((uint16_t)(elem + 4));
++  FUN_1000_b652((uint16_t)elem);
+   return;
+ }
+ 
+@@ -31014,7 +31036,10 @@
+ void __allregs FUN_0000_ccd8(undefined2 param_1)
+ 
+ {
+-  FUN_1000_b5a4(param_1);
++  /* PATCH 138: SELECT PLAYER list-BOX paint method (asm 0xccd8) -- dispatched by the 209e dirty-walk
++     the same way as ccca; recover the element from DGROUP:0x3e08 (the dropped BX is codegen garbage). */
++  uint16_t elem = *(uint16_t *)(g_mem + 0x1c000 + 0x3e08);
++  FUN_1000_b5a4((uint16_t)elem);
+   return;
+ }
+ 
+@@ -31050,15 +31075,23 @@
+ void __allregs FUN_0000_cd1c(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  *piVar1 = *piVar1 + 1;
+-  piVar1[1] = piVar1[1] + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 138: SELECT PLAYER BUTTON/scroll-arrow paint method (asm 0xcd1c) -- box outline + icon sprite.
++     Dispatched by the 209e dirty-walk; recover the element from DGROUP:0x3e08 (dropped BX = garbage).
++     asm: lea 4(bx),bx; mov al,2; lcall [0x61a] (11db box outline colour 2); ax=0xf8+word[0xe881]
++     (sprite id); incw (bx); incw 2(bx) (inset top-left 1); lcall [0x6b4] (26a1 sprite blit ax=id,bx=rect);
++     decw (bx); decw 2(bx). */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t elem = *(uint16_t *)(dg + 0x3e08);
++  uint16_t rect_off = (uint16_t)(elem + 4);
++  int16_t *piVar1 = (int16_t *)(dg + rect_off);
++  uint16_t sprite = (uint16_t)(0xf8 + (uint16_t)DAT_2000_a881);
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(rect_off, 2);
++  piVar1[0] = (int16_t)(piVar1[0] + 1);
++  piVar1[1] = (int16_t)(piVar1[1] + 1);
++  ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++     fist_icall_far((uint32_t)(DAT_1000_c6b4)))(sprite, 0, 0, rect_off, 0);
++  piVar1[0] = (int16_t)(piVar1[0] + -1);
++  piVar1[1] = (int16_t)(piVar1[1] + -1);
+   return;
+ }
+ 
+@@ -31090,15 +31123,21 @@
+ void __allregs FUN_0000_cd70(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  *piVar1 = *piVar1 + 1;
+-  piVar1[1] = piVar1[1] + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 138: SELECT PLAYER BUTTON/scroll-arrow paint method (asm 0xcd70) -- twin of cd1c with sprite
++     base 0x118 (vs 0xf8).  Recover the element from DGROUP:0x3e08; box outline [0x61a]=11db(2) + icon
++     sprite [0x6b4]=26a1 (id=0x118+word[0xe881]) at rect inset-1. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t elem = *(uint16_t *)(dg + 0x3e08);
++  uint16_t rect_off = (uint16_t)(elem + 4);
++  int16_t *piVar1 = (int16_t *)(dg + rect_off);
++  uint16_t sprite = (uint16_t)(0x118 + (uint16_t)DAT_2000_a881);
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(rect_off, 2);
++  piVar1[0] = (int16_t)(piVar1[0] + 1);
++  piVar1[1] = (int16_t)(piVar1[1] + 1);
++  ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++     fist_icall_far((uint32_t)(DAT_1000_c6b4)))(sprite, 0, 0, rect_off, 0);
++  piVar1[0] = (int16_t)(piVar1[0] + -1);
++  piVar1[1] = (int16_t)(piVar1[1] + -1);
+   return;
+ }
+ 
+@@ -31248,15 +31287,28 @@
+ void __allregs FUN_0000_cf44(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  piVar1 = (int *)(param_1 + 4);
+-  *piVar1 = *piVar1 + 1;
+-  *(int *)(param_1 + 6) = *(int *)(param_1 + 6) + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 138: SELECT PLAYER per-element-indexed BUTTON paint method (asm 0xcf44) -- box outline (0) +
++     an icon sprite whose id comes from the element's own state via the display-list base bp.  Recover
++     the element from DGROUP:0x3e08 and the base bp from DAT_1000_fafe (209e's param_3).  asm:
++       lea 4(bx),bx; mov al,0; lcall [0x61a] (box outline, bx=rect);
++       si=word[elem+2](=di); si=word[bp+si+1]; ax=word[DGROUP:si+0xe8a9] (sprite id);
++       bx=elem+4; incw(bx);incw 2(bx); lcall [0x6b4] (26a1 sprite ax=id,bx=rect); decw;decw. */
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t  elem = *(uint16_t *)(dg + 0x3e08);
++  uint16_t  bp = (uint16_t)DAT_1000_fafe;
++  uint16_t  rect_off = (uint16_t)(elem + 4);
++  int16_t  *piVar1 = (int16_t *)(dg + rect_off);
++  uint16_t  si, sprite;
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(rect_off, 0);
++  si = *(uint16_t *)(dg + (uint16_t)(elem + 2));
++  si = *(uint16_t *)(dg + (uint16_t)(bp + si + 1));
++  sprite = *(uint16_t *)(dg + (uint16_t)(si + 0xe8a9));
++  piVar1[0] = (int16_t)(piVar1[0] + 1);
++  piVar1[1] = (int16_t)(piVar1[1] + 1);
++  ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++     fist_icall_far((uint32_t)(DAT_1000_c6b4)))(sprite, 0, 0, rect_off, 0);
++  piVar1[0] = (int16_t)(piVar1[0] + -1);
++  piVar1[1] = (int16_t)(piVar1[1] + -1);
+   return;
+ }
+ 
+@@ -31287,15 +31339,36 @@
+ void __allregs FUN_0000_cf8e(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  *piVar1 = *piVar1 + 1;
+-  piVar1[1] = piVar1[1] + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 138: SELECT PLAYER themed-BUTTON paint method (asm 0xcf8e) -- box outline (colour 0) + a
++     state-indexed icon sprite.  Recover the element from DGROUP:0x3e08 (dropped BX = garbage); Ghidra
++     also dropped the whole sprite-id selection.  asm:
++       cmpw [0xe82e],2 ; ==2 -> si=[0xe85e]; ax=word[DGROUP:si*2+0xe860]
++                       ;  >2 -> ax=0x1400
++                       ;  <2 -> si=[0x6db4]; ax=word[DGROUP:si*2+0xe866]
++       push ax; lea 4(bx),bx; mov al,0; lcall [0x61a] (11db box); pop ax;
++       incw(bx);incw 2(bx); lcall [0x6b4] (26a1 sprite ax=id,bx=rect); decw;decw. */
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t  elem = *(uint16_t *)(dg + 0x3e08);
++  uint16_t  rect_off = (uint16_t)(elem + 4);
++  int16_t  *piVar1 = (int16_t *)(dg + rect_off);
++  uint16_t  st = *(uint16_t *)(dg + 0xe82e);
++  uint16_t  sprite;
++  if (st == 2) {
++    uint16_t si = *(uint16_t *)(dg + 0xe85e);
++    sprite = *(uint16_t *)(dg + (uint16_t)((uint16_t)(si * 2) + 0xe860));
++  } else if (st > 2) {
++    sprite = 0x1400;
++  } else {
++    uint16_t si = *(uint16_t *)(dg + 0x6db4);
++    sprite = *(uint16_t *)(dg + (uint16_t)((uint16_t)(si * 2) + 0xe866));
++  }
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(rect_off, 0);
++  piVar1[0] = (int16_t)(piVar1[0] + 1);
++  piVar1[1] = (int16_t)(piVar1[1] + 1);
++  ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++     fist_icall_far((uint32_t)(DAT_1000_c6b4)))(sprite, 0, 0, rect_off, 0);
++  piVar1[0] = (int16_t)(piVar1[0] + -1);
++  piVar1[1] = (int16_t)(piVar1[1] + -1);
+   return;
+ }
+ 
+@@ -61704,53 +61777,70 @@
+ void __allregs FUN_1000_b5a4(int param_1)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int unaff_CS;
+-  
++  /* PATCH 138: SELECT PLAYER LIST-BOX drawer (asm 0x1b5a4).  param_1 = the element node (from ccd8,
++     recovered from DGROUP:0x3e08).  Ghidra mangled the whole visible-row loop (the item index was the
++     dropped BX -> unaff_CS; the scroll/cap-at-8 count, name-pointer scaling, and `loop` terminator all
++     lost) and pointer-scaled the WORD rect as int[].  Reconstructed instruction-for-instruction:
++       font 2; rect=elem+4; list bounds [0xe887]=y0+1 [0xe889]=x0+1 [0xe88d]=x1-1
++       [0x60a]=1091 FILL rect colour 8 (list background); [0x61a]=11db box OUTLINE colour 2 (border)
++       cx = min(count[0xe834]-scrolltop[0xe83a], 8) visible rows; idx = scrolltop
++       per row: [0xe88b]=top+7; 530b(0); 52d1(top+1,left+1); b631(STRSEG:0x3776+idx*0x10 name);
++                if idx==selected[0xe838]: [0x60e] highlight (bx=row rect 0xe887, al=colour 0xe);
++                top += 6; idx++. */
++  uint8_t  *dg   = g_mem + 0x1c000;
++  uint16_t  elem = (uint16_t)param_1;
++  int16_t  *rect = (int16_t *)(dg + (uint16_t)(elem + 4));
+   FUN_1000_524e(2);
+-  DAT_2000_a887 = *(int *)(param_1 + 4) + 1;
+-  DAT_2000_a889 = *(int *)(param_1 + 6) + 1;
+-  DAT_2000_a88d = *(int *)(param_1 + 10) + -1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  iVar1 = DAT_2000_a83a;
+-  do {
+-    DAT_2000_a88b = DAT_2000_a887 + 7;
+-    iVar2 = iVar1 * 0x10;
+-    FUN_1000_530b(0);
+-    FUN_1000_52d1(DAT_2000_a887 + 1,DAT_2000_a889 + 1);
+-    FUN_1000_b631(unaff_CS);
+-    if (unaff_CS == DAT_2000_a838) {
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60e)))();
+-    }
+-    DAT_2000_a887 = DAT_2000_a887 + 6;
+-    iVar1 = unaff_CS + 1;
+-  } while (iVar2 != -0x3775);
++  DAT_2000_a887 = (uint16_t)(rect[0] + 1);
++  DAT_2000_a889 = (uint16_t)(rect[1] + 1);
++  DAT_2000_a88d = (uint16_t)(rect[3] - 1);
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c60a)))((uint16_t)(elem + 4), 8);
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))((uint16_t)(elem + 4), 2);
++  {
++    uint16_t cx  = (uint16_t)((uint16_t)DAT_2000_a834 - (uint16_t)DAT_2000_a83a);
++    uint16_t idx = (uint16_t)DAT_2000_a83a;
++    if (cx > 8) cx = 8;
++    while (cx != 0) {
++      DAT_2000_a88b = (uint16_t)(DAT_2000_a887 + 7);
++      FUN_1000_530b(0);
++      FUN_1000_52d1(DAT_2000_a887 + 1,DAT_2000_a889 + 1);
++      FUN_1000_b631((uint16_t)(idx * 0x10 + 0x3776));
++      if (idx == (uint16_t)DAT_2000_a838) {
++        ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c60e)))(0xe887, 0xe);
++      }
++      DAT_2000_a887 = (uint16_t)(DAT_2000_a887 + 6);
++      idx++;
++      cx--;
++    }
++  }
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_b631) @ 1000:b631 ===== */
+ 
+-void __allregs FUN_1000_b631(char *param_1)
++void __allregs FUN_1000_b631(uint16_t param_1)
+ 
+ {
+-  undefined2 uVar1;
+-  char cVar2;
+-  int iVar3;
++  /* PATCH 138: list-item NAME copy+draw (asm 0x1b631).  param_1 = the name offset in STRSEG (=word
++     [DGROUP:0x70]); Ghidra base-lost the source (typed the offset as a host char*).  Copy 16 chars
++     from STRSEG:param_1 into the DGROUP:0x1f8c scratch, mapping the '.' to a NUL terminator, then
++     draw it.  (asm: es=word[0x70]; di=0x1f8c; cx=0x10; mov al,es:[si]; cmp 0x2e; jne; xor al,al ...) */
+   char *pcVar4;
+-  
+-  uVar1 = DAT_1000_c070;
++  int iVar3;
++  char cVar2;
++  uint16_t strseg = *(uint16_t *)(g_mem + 0x1c000 + 0x70);
++  char *src = (char *)(g_mem + ((uint32_t)strseg << 4) + param_1);
++
+   pcVar4 = (char *)&DAT_1000_df8c;
+   iVar3 = 0x10;
+   do {
+-    cVar2 = *param_1;
++    cVar2 = *src;
+     if (cVar2 == '.') {
+       cVar2 = '\0';
+     }
+     *pcVar4 = cVar2;
+-    param_1 = param_1 + 1;
++    src = src + 1;
+     pcVar4 = pcVar4 + 1;
+     iVar3 = iVar3 + -1;
+   } while (iVar3 != 0);
+@@ -61764,13 +61854,24 @@
+ void __allregs FUN_1000_b652(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61e)))();
+-  FUN_1000_52d1(*piVar1 + 4,piVar1[1] + 5);
++  int16_t *piVar1;
++
++  /* PATCH 138: SELECT PLAYER title-bar drawer (asm 0x1b652).  param_1 = the element node (from ccca,
++     recovered from DGROUP:0x3e08); the title RECT [y0,x0,y1,x1] is at elem+4 (DGROUP-relative WORDs).
++     Ghidra dropped the BX(=rect offset) + AL(=colour/style) register args of the three MGAVIDEO
++     method-vector calls, and mis-scaled the 52d1 setpos rect read (int* 4-byte stride -> read rect[2]
++     instead of rect[1]).  Thread them faithfully (asm 0x1b652..0x1b673):
++       lea 4(bx),bx           ; bx = rect offset
++       mov al,8;  lcall [0x60a] ; MGAVIDEO 0x1091 SOLID box-fill  (panel interior, colour 8)
++       mov al,1;  lcall [0x61a] ; MGAVIDEO 0x11db box OUTLINE     (outer border, colour 1)
++       mov al,4;  lcall [0x61e] ; MGAVIDEO 0x119f box OUTLINE inset-1 (inner border, colour 4)
++       ax = rect[0]+4; bx = rect[1]+5; call 52d1   ; setpos (y0+4, x0+5) */
++  uint16_t rect_off = (uint16_t)(param_1 + 4);
++  piVar1 = (int16_t *)(g_mem + 0x1c000 + rect_off);
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c60a)))(rect_off, 8);
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(rect_off, 1);
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61e)))(rect_off, 4);
++  FUN_1000_52d1(piVar1[0] + 4,piVar1[1] + 5);
+   if (DAT_2000_a82e == 2) {
+     FUN_1000_524e(4);
+     FUN_1000_530b(0x4d);
+
+--- a/fist_mga.c	2026-07-09 22:43:15.494783947 +0200
++++ b/fist_mga.c	2026-07-09 22:44:30.635734628 +0200
+@@ -340,9 +340,9 @@
+ void __allregs FUN_0000_1120(undefined2 param_1,int param_2,undefined2 *param_3,int param_4,char *param_5, undefined2 param_6);
+ void __allregs FUN_0000_1157(undefined2 param_1);
+ void __allregs FUN_0000_1162(int param_1,int *param_2,undefined2 *param_3,uint *param_4,byte param_5);
+-void __allregs FUN_0000_119f(int *param_1);
+-void __allregs FUN_0000_11ba(int *param_1);
+-void __allregs FUN_0000_11db(undefined2 param_1);
++void __allregs FUN_0000_119f(uint16_t bx, uint8_t al);        /* PATCH 138 */
++void __allregs FUN_0000_11ba(uint16_t bx, uint8_t al);        /* PATCH 138 */
++void __allregs FUN_0000_11db(uint16_t bx, uint8_t al);        /* PATCH 138 */
+ void __allregs FUN_0000_1290(undefined2 param_1);
+ void __allregs FUN_0000_1335(int *param_1);
+ void __allregs FUN_0000_1350(int *param_1);
+@@ -3315,47 +3315,110 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_119f) @ 0000:119f ===== */
+ 
+-void __allregs FUN_0000_119f(int *param_1)
++/* PATCH 138: MGAVIDEO box/rect-OUTLINE writer cluster (asm 0x119f/0x11ba/0x11db + the inner line
++   primitives 0x1216 horizontal / 0x124b vertical, which Ghidra folded into 11db "does not return").
++   Reached for the first time by the SELECT PLAYER list-dialog title bar (b652 -> [0x61a]=11db /
++   [0x61e]=119f).  Same class as 1091/patch 060: the rect arrives as a DGROUP near OFFSET in BX (typed
++   int* by Ghidra -> wild deref), and the framebuffer/rowtable/pitch bases were dropped.  bx = rect
++   offset (DGROUP-relative WORDs [y0,x0,y1,x1]); al = colour.  DS/SS = engine DGROUP (rect + rowtab
++   are DGROUP-relative); ES = the fb descriptor's word0 seg (0xA000 -> linear 0xA0000).  The fb/rowtab/
++   pitch base is the descriptor at DGROUP:word[0x724] (desc[0]=fbseg, desc[2]=row pitch), rowtab base
++   = word[DGROUP:0x794] -- identical to 1677/patch 136. */
++
++/* 0x1216 (asm): HORIZONTAL run at scanline rect[0], x=rect[1], width rect[3]-rect[1], colour al. */
++static void mga_hline_1216(uint16_t bx, uint8_t al)
++{
++  uint8_t  *dg   = g_mem + 0x1c000;
++  int16_t  *rect = (int16_t *)(dg + bx);
++  int16_t  *desc = (int16_t *)(dg + *(uint16_t *)(dg + 0x724));
++  uint8_t  *fb   = g_mem + ((uint32_t)(uint16_t)desc[0] << 4);      /* es = fbseg */
++  uint16_t  rowt = *(uint16_t *)(dg + 0x794);
++  uint16_t  di   = (uint16_t)(*(uint16_t *)(dg + (uint16_t)((uint16_t)rect[0] * 2 + rowt))
++                              + (uint16_t)rect[1]);                 /* rowtab[y0] + x0 */
++  uint16_t  w    = (uint16_t)(((uint16_t)al << 8) | al);            /* ah = al */
++  uint16_t  cx   = (uint16_t)((uint16_t)rect[3] - (uint16_t)rect[1]);
++  if ((uint16_t)rect[3] < (uint16_t)rect[1]) {                      /* jb 0x123e: negative width */
++    di = (uint16_t)(di + cx);
++    cx = (uint16_t)(-(int16_t)cx);
++  } else if (cx == 0) {                                            /* je 0x124a */
++    return;
++  }
++  { uint16_t words = (uint16_t)(cx >> 1), odd = (uint16_t)(cx & 1);
++    while (words--) { *(uint16_t *)(fb + di) = w; di = (uint16_t)(di + 2); }   /* rep stosw */
++    if (odd) { fb[di] = al; di = (uint16_t)(di + 1); } }                       /* rep stosb */
++}
++
++/* 0x124b (asm): VERTICAL run at column rect[1], scanline rect[0], height rect[2]-rect[0], colour al. */
++static void mga_vline_124b(uint16_t bx, uint8_t al)
++{
++  uint8_t  *dg   = g_mem + 0x1c000;
++  int16_t  *rect = (int16_t *)(dg + bx);
++  int16_t  *desc = (int16_t *)(dg + *(uint16_t *)(dg + 0x724));
++  uint8_t  *fb   = g_mem + ((uint32_t)(uint16_t)desc[0] << 4);
++  int16_t   step = (int16_t)(desc[2] - 1);                          /* dx = pitch-1 (stosb adds the +1) */
++  uint16_t  rowt = *(uint16_t *)(dg + 0x794);
++  uint16_t  di   = (uint16_t)(*(uint16_t *)(dg + (uint16_t)((uint16_t)rect[0] * 2 + rowt))
++                              + (uint16_t)rect[1]);
++  uint16_t  cx   = (uint16_t)((uint16_t)rect[2] - (uint16_t)rect[0]);
++  if ((uint16_t)rect[2] < (uint16_t)rect[0]) {                      /* jb 0x127a: draw upward */
++    step = (int16_t)(step + 2);
++    cx   = (uint16_t)(-(int16_t)cx);
++    di   = (uint16_t)(di - (uint16_t)step);
++    while (cx--) { fb[di] = al; di = (uint16_t)(di + 1 - (uint16_t)step); }
++    return;
++  }
++  if (cx == 0) return;                                             /* je 0x1279 */
++  while (cx--) { fb[di] = al; di = (uint16_t)(di + 1 + (uint16_t)step); }       /* stosb; add dx,di */
++}
+ 
+-{
+-  *param_1 = *param_1 + 1;
+-  param_1[1] = param_1[1] + 1;
+-  param_1[2] = param_1[2] + -1;
+-  param_1[3] = param_1[3] + -1;
+-  FUN_0000_11db(param_1);
+-  *param_1 = *param_1 + -1;
+-  param_1[1] = param_1[1] + -1;
+-  param_1[2] = param_1[2] + 1;
+-  param_1[3] = param_1[3] + 1;
+-  return;
++/* 0x11db (asm): draw the four edges of the rect outline (colour al), with the rect fields temporarily
++   swapped to reposition the bottom + right edges.  2d6d/2e12 bracket it (clip window + cursor hide/show). */
++void __allregs FUN_0000_11db(uint16_t bx, uint8_t al)
++{
++  uint8_t *dg = g_mem + 0x1c000;
++  int16_t *r  = (int16_t *)(dg + (uint16_t)bx);
++  FUN_0000_2d6d((int *)(uintptr_t)(uint16_t)bx);        /* clip + hide cursor */
++  mga_hline_1216(bx, al);                               /* top edge (y0) */
++  mga_vline_124b(bx, al);                               /* left edge (x0) */
++  { int16_t cx = (int16_t)(r[2] - 1), t = r[0]; r[0] = cx; r[2] = t; }          /* r=[y1-1,x0,y0,x1] */
++  mga_hline_1216(bx, al);                               /* bottom edge (y1-1) */
++  { int16_t cx = r[2], t = r[0]; r[0] = cx; r[2] = (int16_t)(t + 1); }          /* restore y */
++  { int16_t cx = (int16_t)(r[3] - 1), t = r[1]; r[1] = cx; r[3] = t; }          /* r=[y0,x1-1,y1,x0] */
++  mga_vline_124b(bx, al);                               /* right edge (x1-1) */
++  { int16_t cx = r[3], t = r[1]; r[1] = cx; r[3] = (int16_t)(t + 1); }          /* restore x */
++  FUN_0000_2e12();                                      /* reset clip + show cursor */
+ }
+ 
+ 
+-/* ===== ((uint)(uintptr_t)&FUN_0000_11ba) @ 0000:11ba ===== */
++/* ===== ((uint)(uintptr_t)&FUN_0000_119f) @ 0000:119f ===== */
+ 
+-void __allregs FUN_0000_11ba(int *param_1)
++/* 0x119f (asm): box outline INSET by 1px on every side, then restore. */
++void __allregs FUN_0000_119f(uint16_t bx, uint8_t al)
+ 
+ {
+-  *param_1 = *param_1 + 2;
+-  param_1[1] = param_1[1] + 2;
+-  param_1[2] = param_1[2] + -2;
+-  param_1[3] = param_1[3] + -2;
+-  FUN_0000_11db(param_1);
+-  *param_1 = *param_1 + -2;
+-  param_1[1] = param_1[1] + -2;
+-  param_1[2] = param_1[2] + 2;
+-  param_1[3] = param_1[3] + 2;
++  int16_t *r = (int16_t *)(g_mem + 0x1c000 + (uint16_t)bx);
++  r[0] = (int16_t)(r[0] + 1); r[1] = (int16_t)(r[1] + 1);
++  r[2] = (int16_t)(r[2] - 1); r[3] = (int16_t)(r[3] - 1);
++  FUN_0000_11db(bx, al);
++  r[0] = (int16_t)(r[0] - 1); r[1] = (int16_t)(r[1] - 1);
++  r[2] = (int16_t)(r[2] + 1); r[3] = (int16_t)(r[3] + 1);
+   return;
+ }
+ 
+ 
+-/* ===== ((uint)(uintptr_t)&FUN_0000_11db) @ 0000:11db ===== */
++/* ===== ((uint)(uintptr_t)&FUN_0000_11ba) @ 0000:11ba ===== */
+ 
+-void __allregs FUN_0000_11db(undefined2 param_1)
++/* 0x11ba (asm): box outline INSET by 2px on every side, then restore. */
++void __allregs FUN_0000_11ba(uint16_t bx, uint8_t al)
+ 
+ {
+-                    /* WARNING: Subroutine does not return */
+-  FUN_0000_2d6d(param_1);
++  int16_t *r = (int16_t *)(g_mem + 0x1c000 + (uint16_t)bx);
++  r[0] = (int16_t)(r[0] + 2); r[1] = (int16_t)(r[1] + 2);
++  r[2] = (int16_t)(r[2] - 2); r[3] = (int16_t)(r[3] - 2);
++  FUN_0000_11db(bx, al);
++  r[0] = (int16_t)(r[0] - 2); r[1] = (int16_t)(r[1] - 2);
++  r[2] = (int16_t)(r[2] + 2); r[3] = (int16_t)(r[3] + 2);
++  return;
+ }
+ 
+ 
