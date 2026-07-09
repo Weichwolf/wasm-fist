@@ -1,0 +1,63 @@
+Load MSPRITE0.BIN (the common widget/dialog sprite sheet) so the SETTINGS checkbox/radio boxes render.
+
+ROOT CAUSE (DOSBox open-trace + runtime directory dump verified): the SETTINGS widget draw
+(6d54 -> 26a1 -> 260c) resolves a checkbox sprite by indexing the global sprite directory
+word[DGROUP:0x4f0] at BYTE offset 0xe8/0xf0 (260c: `mov es,[ds:0x4f0]; les si,es:[si]`).  At the
+SETTINGS hang that directory was ENTIRELY EMPTY -- not even the menu box (the menu box paints via a
+fill, not this directory, so the empty directory went unnoticed until the SETTINGS widgets, its first
+real consumer).  Blitting a NULL sprite record ran 26de away (infinite loop = the reported hang).
+
+The widget sheet is MSPRITE0.BIN.  The real game loads it at boot (verified: the original's INT-21
+open-trace opens HIGH.DTL, MSPRITE0.BIN, DSOUNDS.BIN, INTRO.MS3 before the intro; a SETTINGS click
+opens ONLY SETTINGS.MRL -- there is NO per-screen widget .BIN, so the prior "load a widget .BIN on the
+SETTINGS enter" premise was wrong).  cae6 DOES call `FUN_0000_153c(0x24,0x1c00,dx=0 base,bx=0xe816
+descriptor)` (asm 0xcb07) to load it -- 153c opens it via the resource-open far vector DGROUP:0x388
+(= FUN_1000_26fc) and registers its records into word[DGROUP:0x4f0] at base 0 (patch 069's
+reconstructed registration loop, which was already correct -- it just never ran for MSPRITE0).  But
+that cae6 call runs BEFORE FUN_0000_e714 installs 0x388 (our port defers the si=0x174 vector install
+out of the inert-f842 CRT path to menu-enter, patch 098), so its `call [0x388]` open no-oped and
+MSPRITE0 never loaded.  (MSPRITE6.BIN loads fine because e42f loads it DURING e714, after the install.)
+
+FIX: load MSPRITE0.BIN at e714, immediately AFTER fist_ensure_dlist_vecs() installs 0x388 -- the same
+point MSPRITE6.BIN / MAINMENU.MRL load.  This is the faithful loader-role analog (the sheet is a
+persistent global registration; loading it one step later than the original's cae6 site has identical
+effect).  Load ONCE, guarded on directory[0x4f0]:0xe8 still being empty so menu re-entry after a
+sub-screen doesn't re-open it.  NB: we deliberately do NOT move the install into cae6 (installing
+si=0x174 before e2fc/e446 changes their dispatch and traps under wasm's call_indirect signature check;
+native tolerates it -- this was a real dual-target regression caught by verify.sh).  MSPRITE0.BIN then
+opens, registers records 0..N into directory[0x4f0] at base 0, and the SETTINGS checkbox ids 0xe8/0xf0
+(records 29/30) resolve.
+
+--- a/fist.c	2026-07-09 17:34:10.174523011 +0200
++++ b/fist.c	2026-07-09 17:35:11.539731612 +0200
+@@ -34232,6 +34232,30 @@
+    * inert AND applying it at that early-CRT point corrupts the not-yet-ready DGROUP (breaks 5c3a --
+    * patch 091), so the loader-role shim installs it here, at the correct later time.  Idempotent. */
+   fist_ensure_dlist_vecs();
++  /* PATCH 133: load MSPRITE0.BIN (the COMMON widget/dialog sprite sheet) now that the resource-open
++     far vector DGROUP:0x388 (= FUN_1000_26fc) has just been installed by fist_ensure_dlist_vecs().
++     The original loads MSPRITE0 in cae6 via `153c(0x24,0x1c00,dx=0 base,bx=0xe816 descriptor)`
++     (asm 0xcb07: mov bx,0xe816; mov dx,0; call 0x153c) -- it registers the sheet's records into the
++     global sprite directory word[DGROUP:0x4f0] (patch 069's reconstructed loop) at BASE 0, so the
++     checkbox/radio boxes land at ids 0xe8/0xf0 = records 29/30.  But in our port that cae6 call runs
++     BEFORE 0x388 is installed (the install is deferred out of the inert-f842 CRT path to menu-enter,
++     patch 098) so its `call [0x388]` open no-oped and MSPRITE0 never loaded -> directory[0x4f0] had
++     no records at 0xe8/0xf0 -> the SETTINGS widget blit (6d54->26a1->260c) resolved a NULL record and
++     ran away (the menu box paints via a fill, not this directory, so the empty directory went
++     unnoticed until the SETTINGS widgets -- the first real consumer).  We do NOT install si=0x174
++     early in cae6 (that changes e2fc/e446's dispatch and traps under wasm's call_indirect signature
++     check); instead we load MSPRITE0 HERE, right after the install, at the same point MSPRITE6.BIN and
++     MAINMENU.MRL load -- functionally identical (the sheet is a persistent global registration).
++     Load ONCE: guarded on directory[0x4f0]:0xe8 being still empty, so menu re-entry after a sub-screen
++     doesn't re-open MSPRITE0.BIN.  Verified vs the real game (DOSBox open-trace: MSPRITE0.BIN opens at
++     boot, and a SETTINGS click opens ONLY SETTINGS.MRL -- no per-screen widget .BIN). */
++  {
++    uint16_t fist_dirseg = *(uint16_t *)(g_mem + 0x1c4f0);      /* word[DGROUP:0x4f0] = sprite dir seg */
++    if (fist_dirseg == 0 ||
++        *(uint16_t *)(g_mem + ((uint32_t)fist_dirseg << 4) + 0xe8) == 0) {   /* checkbox record 29 */
++      FUN_0000_153c(0x24, 0x1c00, 0, 0xe816);                   /* MSPRITE0.BIN -> directory base 0 */
++    }
++  }
+   FUN_0000_be0e(4);
+   DAT_1000_c78c = 0x100;
+   FUN_0000_e40e(param_1,param_3);
