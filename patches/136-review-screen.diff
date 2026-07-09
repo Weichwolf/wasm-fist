@@ -1,0 +1,401 @@
+PATCH 136: REVIEW screen (vehicle encyclopedia) -- clicking REVIEW opens 7088(2); render bit-identical.
+See docs/stage1.md.  Reconstructs: e714 dispatch (state 0x4 -> e93c: 7088(2)); the dialog text/
+wireframe method 6c4c (thread the 3 dropped far-method-call args: 1091 box-fill, 294d wireframe-
+sprite blit, 161c clip/line-draw + drawstring base); the button method 6d69 (mirror 6d3d + the
+vehicle-select highlight); the MGAVIDEO driver 294d/298a (transparency sprite blit, 26a1/26de-class
+base-loss), 161c (clip-window + 4-word rect scaling), 1677 (Cohen-Sutherland clipped fill: base-loss +
+param_2 scaling + uint*->uint16_t* fill-pointer width + the in_AF flag-artifact + the DAT_0000_161b
+solid/XOR-mode flag WORD->BYTE fix).
+
+--- a/fist.c	2026-07-09 20:32:27.117069999 +0200
++++ b/fist.c	2026-07-09 20:53:00.354476304 +0200
+@@ -2011,7 +2011,7 @@
+ undefined4 __allregs FUN_1000_6d0f(void);
+ void __allregs FUN_1000_6d3d(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5);
+ void __allregs FUN_1000_6d53(int param_1);
+-void __allregs FUN_1000_6d69(int param_1);
++void __allregs FUN_1000_6d69(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5);
+ void __allregs FUN_1000_6d8c(void);
+ void __allregs FUN_1000_6da9(uint param_1);
+ void __allregs FUN_1000_6df3(uint param_1);
+@@ -34326,6 +34326,12 @@
+       DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle state after dismissal */
+       continue;
+     }
++    if (_tgt == 0xe93c) {                /* state 0x4: REVIEW dialog (e93c: e39f; mov ax,2; 7088(2); jmp e714) */
++      FUN_0000_e39f();
++      FUN_0000_7088(2, param_2);         /* modal loop: vehicle encyclopedia (id=2), spins until OK */
++      DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle state after dismissal */
++      continue;
++    }
+     (*(code *)fist_icall_near(0x0u,_tgt))();
+     return;
+   }
+@@ -55432,15 +55438,36 @@
+ void __allregs FUN_1000_6c4c(void)
+ 
+ {
++  /* PATCH 136: REVIEW dialog text/wireframe element paint method (asm 0f69:0x75bc, linear 0x16c4c).
++     Ghidra dropped all three far-method-call register args (base-loss) + the drawstring's DGROUP base.
++     asm:
++       mov al,0xa1; mov bx,0x8c45; lcall [0x60a]   ; MGAVIDEO 0x1091 rect-fill: display box (color 0xa1)
++       mov bx,[0x8be7]; shl bx,1; mov ax,[bx-0x7403]; mov bx,[bx-0x73f7]; lcall [0x6c8]
++                                                    ; MGAVIDEO 0x294d wireframe-sprite blit:
++                                                    ;   ax=sprite id [veh*2-0x7403], bx=pos [veh*2-0x73f7]
++       mov al,1; mov bx,0x8c4d; lcall [0x648]       ; MGAVIDEO 0x161c set clip window (rect @DGROUP:0x8c4d)
++       mov ax,4; call 524e / mov al,1; call 530b / mov ax,0x14; mov bx,0xd2; call 52d1
++       mov bx,[0x8be7]; shl bx,1; mov si,[bx-0x735d]; call 558b   ; drawstring spec-text[veh] */
++  uint8_t *D = g_mem+0x1c000;
++  uint16_t veh = *(uint16_t*)(D+0x8be7);          /* DAT_2000_4be7 = selected vehicle index */
++  uint16_t bx2 = (uint16_t)(veh*2);
+   undefined2 uVar1;
+-  
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c648)))();
++  /* rect-fill the wireframe display box (1091: bx=rect offset, al=color) */
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c60a)))(0x8c45, 0xa1);
++  /* wireframe sprite (294d: ax=sprite id, bx=position; other params 0, mirror 26a1) */
++  {
++    uint16_t spr = *(uint16_t*)(D+(uint16_t)(bx2-0x7403));
++    uint16_t pos = *(uint16_t*)(D+(uint16_t)(bx2-0x73f7));
++    ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++       fist_icall_far((uint32_t)(DAT_1000_c6c8)))(spr,0,0,pos,0);
++  }
++  /* set clip window (161c: al=1, bx=rect ptr @DGROUP:0x8c4d) */
++  ((void (*)(uint8_t,int*,uint16_t))fist_icall_far((uint32_t)(DAT_1000_c648)))
++     (1, (int*)(D+0x8c4d), 0);
+   uVar1 = FUN_1000_524e(4);
+   FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),1));
+   FUN_1000_52d1(0x14,0xd2);
+-  thunk_FUN_1000_5591(*(undefined2 *)(DAT_2000_4be7 * 2 + -0x735d));
++  thunk_FUN_1000_5591(*(undefined2 *)(D+(uint16_t)(bx2 - 0x735d)));
+   return;
+ }
+ 
+@@ -55559,11 +55586,25 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_6d69) @ 1000:6d69 ===== */
+ 
+-void __allregs FUN_1000_6d69(int param_1)
++void __allregs FUN_1000_6d69(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5)
+ 
+ {
+-  if (*(int *)(param_1 * 2 + -0x736b) != -1) {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 136: REVIEW dialog vehicle-select button sprite draw (asm 0f69:0x76d9, linear 0x16d69) --
++     mirror of 6d3d (ABOUT button) but with the SELECTED-vehicle highlight.  asm:
++       si=ax*2; ax=word[si-0x736b] (per-button sprite id table);
++       if(ax==0xffff) return;
++       if(si>>1(button index) == word[0x8be7]) ax+=8;   ; selected vehicle -> highlighted sprite
++       else ax+=word[0x8be9];                            ; base sprite offset (DAT_2000_4be9)
++       lcall [0x6b4] (=MGAVIDEO 26a1)  ; ax=sprite, bx=rect (bx unchanged, set by caller 7203)
++     Ghidra base-loss dropped the table base, the highlight branch, and the ax/bx args.
++     param_1=button index(ax); param_4=rect(bx) from 7203. */
++  uint8_t *D = g_mem+0x1c000;
++  uint16_t val = *(uint16_t*)(D+(uint16_t)((uint16_t)(param_1*2) - 0x736b));
++  if (val != 0xffff) {
++    if ((uint16_t)param_1 == *(uint16_t*)(D+0x8be7)) val = (uint16_t)(val+8);
++    else val = (uint16_t)(val + *(uint16_t*)(D+0x8be9));    /* += DAT_2000_4be9 */
++    ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++       fist_icall_far((uint32_t)(DAT_1000_c6b4)))(val,0,0,param_4,0);
+   }
+   return;
+ }
+
+--- a/fist_mga.c	2026-07-09 20:32:27.119060900 +0200
++++ b/fist_mga.c	2026-07-09 20:53:00.341763706 +0200
+@@ -495,7 +495,11 @@
+ #define DAT_0000_09c0 (*(undefined2 *)(g_mem+fist_mga_base+0x9c0))
+ #define DAT_0000_09c2 (*(undefined2 *)(g_mem+fist_mga_base+0x9c2))
+ #define DAT_0000_09c4 (*(undefined2 *)(g_mem+fist_mga_base+0x9c4))
+-#define DAT_0000_161b (*(undefined2 *)(g_mem+fist_mga_base+0x161b))
++/* PATCH 136: DAT_0000_161b is the 1677 solid(0)/XOR(!=0) fill-mode flag -- a BYTE (asm `testb cs:0x161b`,
++   `movb`), but Ghidra typed it undefined2 (WORD).  The adjacent byte 0x161c is the first opcode of the
++   FUN_0000_161c code (0x8b), so the WORD read = 0x8b00 != 0 -> the solid-fill check wrongly took the XOR
++   path (box 0xa1 ^ colour 1 = 0xa0 instead of the solid orange index 1 for the REVIEW title line). */
++#define DAT_0000_161b (*(uint8_t *)(g_mem+fist_mga_base+0x161b))
+ #define DAT_1000_c0d4 (*(undefined2 *)(g_mem+0x1c0d4))
+ #define DAT_1000_c2a8 (*(undefined2 *)(g_mem+0x1c2a8))
+ #define DAT_1000_c3fc (*(undefined2 *)(g_mem+0x1c3fc))
+@@ -3880,33 +3884,25 @@
+ void __allregs FUN_0000_161c(undefined1 param_1,int *param_2,undefined2 param_3)
+ 
+ {
+-  int iVar1;
+-  int local_a;
+-  int local_8;
+-  int local_6;
+-  int local_4;
+-  undefined2 uStack_2;
+-  
+-  if (*_DAT_1000_c724 == -0x6000) {
+-    iVar1 = *param_2;
+-    local_6 = param_2[2];
+-    local_a = iVar1;
+-    if (local_6 < iVar1) {
+-      local_a = local_6;
+-      local_6 = iVar1;
+-    }
+-    iVar1 = param_2[1];
+-    local_4 = param_2[3];
+-    local_8 = iVar1;
+-    if (local_4 < iVar1) {
+-      local_8 = local_4;
+-      local_4 = iVar1;
+-    }
+-    uStack_2 = param_3;
+-                    /* WARNING: Subroutine does not return */
+-    FUN_0000_2d6d(&local_a);
++  /* PATCH 136: set the wireframe CLIP WINDOW (asm 0x161c) -- the REVIEW [0x648] method.  If the target
++     descriptor (DGROUP:word[0x724]) is the framebuffer (word==0xA000), sort the element's 4-WORD rect
++     [w0,w1,w2,w3] into a min/max clip box, program it via 2d6d, set the rowtable [0x794]=0x7c8 /
++     [0x796]=0x140, then fall through to 1677.  Ghidra base-lost _DAT_1000_c724 (near offset used as an
++     int**, would deref a wild 0xa000:off ptr) and pointer-scaled param_2 (4-word rect read as int[]).
++     Rebuild both faithfully.  clip = [min(r0,r2), min(r1,r3), max(r0,r2), max(r1,r3)]. */
++  uint8_t *D = g_mem + 0x1c000;
++  uint16_t desc_off = *(uint16_t *)(D + 0x724);
++  int16_t *rect = (int16_t *)param_2;
++  if (*(uint16_t *)(D + desc_off) == 0xa000) {
++    int16_t clip[4];
++    int16_t x0 = rect[0], x1 = rect[2], y0 = rect[1], y1 = rect[3];
++    if (x1 < x0) { int16_t t = x0; x0 = x1; x1 = t; }
++    if (y1 < y0) { int16_t t = y0; y0 = y1; y1 = t; }
++    clip[0] = x0; clip[1] = y0; clip[2] = x1; clip[3] = y1;
++    FUN_0000_2d6d((int *)clip);
++    *(uint16_t *)(D + 0x794) = 0x7c8;
++    *(uint16_t *)(D + 0x796) = 0x140;
+   }
+-  uStack_2 = 0x1671;
+   FUN_0000_1677(param_1,param_2,param_3);
+   return;
+ }
+@@ -3948,8 +3944,7 @@
+ 
+ {
+   byte *pbVar1;
+-  uint *puVar2;
+-  undefined2 uVar3;
++  uint16_t *puVar2;
+   byte bVar4;
+   byte bVar5;
+   int iVar6;
+@@ -3961,8 +3956,8 @@
+   uint uVar12;
+   int iVar13;
+   byte *pbVar14;
+-  uint *puVar15;
+-  char in_AF;
++  uint16_t *puVar15;
++  char in_AF = 0;   /* PATCH 136: Ghidra flag-artifact; AF is irrelevant to the SF-based outcode but if left uninitialised (0xAA under pattern-init / stack garbage otherwise) its <<4 pollutes bit7 of the outcode byte -> the clip wrongly rejects the line (the flaky-garbage class). */
+   bool bVar16;
+   byte local_12;
+   uint local_a;
+@@ -3970,18 +3965,33 @@
+   uint local_6;
+   uint local_4;
+   undefined2 uStack_2;
+-  
++
++  /* PATCH 136: clipped rect/line filler (asm 0x1677..0x1951) -- the REVIEW box draw (via 161c): draws the
++     title separator line + wireframe-box borders, clipped to the display window.  Cohen-Sutherland outcode
++     clip + solid/XOR fill; control flow is the pristine decompile (faithful), only the BASE-LOSS / POINTER-
++     SCALING are rebuilt (same classes as 1091/26de): the DGROUP:0x724 near offset (typed by Ghidra as a
++     host int** -> wild deref) is really a near offset to the fb/clip descriptor (desc=(int16*)(DG+word
++     [0x724]); desc[0]=fb seg, desc[2]=row pitch, desc[3..6]=clip x0/y0/x1/y1); the DGROUP:0x794 rowtable
++     near offset + the dropped ES=fb-seg base rebuild the pixel address fb+rowtab[y]+x; param_2 (the 4-word
++     rect read as int[]=+4 scaling) is read as int16 words; puVar15/puVar2 (uint*=4B, but the fills
++     stosw/stosb are 16-bit) become uint16_t*. */
++  uint8_t *DG = g_mem + 0x1c000;
++  int16_t *desc = (int16_t *)(DG + *(uint16_t *)(DG + 0x724));
++  uint16_t fbseg = (uint16_t)desc[0];
++  uint16_t rowtab = *(uint16_t *)(DG + 0x794);
++  uint8_t *fb = g_mem + ((uint32_t)fbseg << 4);
++  int16_t *rect = (int16_t *)param_2;
++#define ROWOFF_1677(x) (*(uint16_t *)(DG + (uint16_t)((uint16_t)(x) * 2 + rowtab)))
+   uStack_2 = param_3;
+-  uVar3 = *_DAT_1000_c724;
+-  iVar13 = _DAT_1000_c724[2];
+-  local_a = *param_2;
+-  local_8 = param_2[1];
+-  local_6 = param_2[2];
+-  local_4 = param_2[3];
++  iVar13 = desc[2];
++  local_a = (uint16_t)rect[0];
++  local_8 = (uint16_t)rect[1];
++  local_6 = (uint16_t)rect[2];
++  local_4 = (uint16_t)rect[3];
+   local_12 = 0xff;
+   do {
+-    uVar8 = _DAT_1000_c724[3];
+-    uVar12 = _DAT_1000_c724[5] - 1;
++    uVar8 = desc[3];
++    uVar12 = desc[5] - 1;
+     uVar9 = local_a - uVar8;
+     uVar11 = uVar12 - local_a;
+     bVar4 = ((int)((uint)(byte)(((int)uVar9 < 0) << 7 | (uVar9 == 0) << 6 | in_AF << 4 |
+@@ -4003,8 +4013,8 @@
+         if (!bVar16) {
+           return;
+         }
+-        uVar8 = _DAT_1000_c724[4];
+-        uVar12 = _DAT_1000_c724[6] - 1;
++        uVar8 = desc[4];
++        uVar12 = desc[6] - 1;
+         uVar9 = local_8 - uVar8;
+         uVar11 = uVar12 - local_8;
+         bVar4 = ((char)uVar10 << 1 |
+@@ -4027,7 +4037,7 @@
+       uVar10 = CONCAT11(bVar5,bVar4);
+       if (uVar10 == 0) {
+         if (local_a == local_6) {
+-          puVar15 = (uint *)(*(int *)(local_a * 2 + _DAT_1000_c794) + local_8);
++          puVar15 = (uint16_t *)(fb + ROWOFF_1677(local_a) + local_8);
+           if (DAT_0000_161b == '\0') {
+             uVar8 = local_4 - local_8;
+             if (uVar8 != 0) {
+@@ -4068,7 +4078,7 @@
+         }
+         uVar8 = local_4 - local_8;
+         if (local_4 < local_8) {
+-          pbVar14 = (byte *)(*(int *)(local_6 * 2 + _DAT_1000_c794) + local_4);
++          pbVar14 = (fb + ROWOFF_1677(local_6) + local_4);
+           uVar8 = -uVar8;
+           uVar9 = local_6 - local_a;
+           if (local_a <= local_6) goto LAB_0000_180e;
+@@ -4081,7 +4091,7 @@
+                 uVar8 = -uVar8;
+                 local_6 = local_a;
+               }
+-              pbVar14 = (byte *)(*(int *)(local_6 * 2 + _DAT_1000_c794) + local_8);
++              pbVar14 = (fb + ROWOFF_1677(local_6) + local_8);
+               if (DAT_0000_161b != '\0') {
+                 uVar11 = uVar8 >> 1;
+                 uVar9 = uVar11 + 1;
+@@ -4112,7 +4122,7 @@
+             }
+             return;
+           }
+-          pbVar14 = (byte *)(*(int *)(local_a * 2 + _DAT_1000_c794) + local_8);
++          pbVar14 = (fb + ROWOFF_1677(local_a) + local_8);
+           uVar9 = local_a - local_6;
+           if (local_6 <= local_a) goto LAB_0000_180e;
+         }
+@@ -4191,12 +4201,12 @@
+         uVar9 = *puVar15;
+         if ((uVar10 & 8) != 0) {
+           uVar10 = uVar10 ^ 8;
+-          uVar9 = _DAT_1000_c724[3];
++          uVar9 = desc[3];
+           uVar8 = (int)(((long)(int)(uVar9 - *puVar15) * (long)iVar6) / (long)iVar7) + puVar15[1];
+         }
+         if ((uVar10 & 2) != 0) {
+           uVar10 = uVar10 ^ 2;
+-          uVar11 = _DAT_1000_c724[4];
++          uVar11 = desc[4];
+           if ((int)uVar8 < (int)uVar11) {
+             uVar9 = (int)(((long)(int)(uVar11 - puVar15[1]) * (long)iVar7) / (long)iVar6) + *puVar15
+             ;
+@@ -4205,15 +4215,15 @@
+         }
+         if ((uVar10 & 4) != 0) {
+           uVar10 = uVar10 ^ 4;
+-          if ((int)_DAT_1000_c724[5] <= (int)uVar9) {
+-            uVar9 = _DAT_1000_c724[5] - 1;
++          if ((int)desc[5] <= (int)uVar9) {
++            uVar9 = desc[5] - 1;
+             uVar8 = (int)(((long)(int)(uVar9 - *puVar15) * (long)iVar6) / (long)iVar7) + puVar15[1];
+           }
+         }
+         if ((uVar10 & 1) != 0) {
+           uVar10 = uVar10 ^ 1;
+-          if ((int)_DAT_1000_c724[6] <= (int)uVar8) {
+-            uVar8 = _DAT_1000_c724[6] - 1;
++          if ((int)desc[6] <= (int)uVar8) {
++            uVar8 = desc[6] - 1;
+             uVar9 = (int)(((long)(int)(uVar8 - puVar15[1]) * (long)iVar7) / (long)iVar6) + *puVar15;
+           }
+         }
+@@ -4224,6 +4234,7 @@
+       uVar10 = CONCAT11((char)uVar10,(char)(uVar10 >> 8));
+     } while (uVar10 != 0);
+   } while( true );
++#undef ROWOFF_1677
+ }
+ 
+ 
+@@ -6589,16 +6600,24 @@
+              undefined2 param_5)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  undefined1 in_ZF = 0;
+-  
++  /* PATCH 136: transparency sprite-blit dispatcher (asm 0x294d..0x2989) -- the REVIEW wireframe [0x6c8]
++     method.  Structurally identical to 26a1 (patch 114) but blits via 298a (transparency) not 26de.
++     ax=param_1=sprite-directory byte offset; bx=param_4=position descriptor.  260c resolves ES:SI +
++     the clipped coords ([0x1588]/[0x158a]) and returns CF/ZF; ZF=1 => the full clip path (2d6d coord
++     transform + rowtable setup) then blit, else the cx=0 path.  Ghidra used in_CF/in_ZF=0 locals and
++     dropped 260c's record ptr -> use the 260c shim statics (m_260c_cf/zf/recseg/recoff) like 26a1. */
+   FUN_0000_260c(param_1,param_4,_DAT_1000_c724);
+-  if (!(bool)in_CF) {
+-    if ((bool)in_ZF) {
+-                    /* WARNING: Subroutine does not return */
+-      FUN_0000_2d6d((undefined1 *)&DAT_1000_d588);
++  if (m_260c_cf == 0) {
++    if (m_260c_zf) {
++      FUN_0000_2d6d((int *)(uintptr_t)0x1588);            /* 2d6d(bx=0x1588) coord transform */
++      *(uint16_t *)(g_mem + 0x1c794) = 0x7c8;
++      *(uint16_t *)(g_mem + 0x1c796) = 0x140;
++      FUN_0000_298a(0, *(uint16_t *)(g_mem + 0x1d58a),
++                    (byte *)(uintptr_t)m_260c_recoff, *(uint16_t *)(g_mem + 0x1d588));
++      FUN_0000_2e12();
++    } else {
++      FUN_0000_298a(0, 0, (byte *)(uintptr_t)m_260c_recoff, 0);    /* 2981: di=cx=0 */
+     }
+-    FUN_0000_298a(0,param_3,param_5,param_2);
+   }
+   return;
+ }
+@@ -6641,7 +6660,6 @@
+ {
+   byte *pbVar1;
+   byte *pbVar2;
+-  undefined2 uVar3;
+   uint uVar4;
+   uint uVar5;
+   uint uVar6;
+@@ -6649,13 +6667,26 @@
+   byte *pbVar8;
+   byte *pbVar9;
+   byte *pbVar10;
+-  undefined2 unaff_ES;
+-  
+-  pbVar8 = (byte *)(*(int *)(param_4 * 2 + _DAT_1000_c794) + param_2);
+-  uVar3 = *_DAT_1000_c724;
+-  iVar7 = (_DAT_1000_c724[2] ^ param_1) - param_1;
+-  uVar4 = *(uint *)(param_3 + -4) >> 8;
+-  uVar6 = *(uint *)(param_3 + -4) & 0xff;
++
++  /* PATCH 136: transparency sprite blit (asm 0x298a..0x29f3) -- the REVIEW wireframe blitter (called by
++     294d, the [0x6c8]=0x294d method).  Same base-loss class as 26de (patch 114): Ghidra dropped the
++     fb-dest ES base + rowtable, the row stride, and the source DS(=entry ES=m_260c_recseg) base.  Rebuild:
++       dst    = word[[0x724]][0] : (rowtab[param_4] + param_2)      ; es=fb seg, di=rowtab[row]+col
++       stride = word[[0x724]+4] ^ cx - cx  (cx=param_1=0 => stride) ; bp = fb row pitch
++       src    = m_260c_recseg : param_3                             ; ds:si sprite record
++     header word[si-4]: low byte = width(cols), high byte = height(rows).  al==0 => transparent (skip).
++     The loop bodies are the pristine decompile (correct); only the base computations are rebuilt. */
++  {
++  uint16_t fb_di  = *(uint16_t *)(g_mem + 0x1c724);
++  uint16_t fb_seg = *(uint16_t *)(g_mem + 0x1c000 + fb_di);
++  uint16_t rowtab = *(uint16_t *)(g_mem + 0x1c794);
++  uint16_t rowoff = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint16_t)param_4 * 2 + rowtab));
++  pbVar8 = g_mem + ((uint32_t)fb_seg << 4) + (uint16_t)(rowoff + (uint16_t)param_2);
++  iVar7 = (int)(short)((*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(fb_di + 4)) ^ param_1) - param_1);
++  param_3 = g_mem + ((uint32_t)m_260c_recseg << 4) + (uint16_t)(uintptr_t)param_3;
++  }
++  uVar4 = *(uint16_t *)(param_3 + -4) >> 8;
++  uVar6 = *(uint16_t *)(param_3 + -4) & 0xff;
+   uVar5 = uVar6;
+   if (param_3[-2] != 2) {
+     do {
