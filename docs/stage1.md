@@ -5,6 +5,54 @@ resource load + pixels) and then full boot. Every engine correction = an asm-ver
 the decompile stays pristine; shim files (`re_out/fist_dos.c`, `fist_vga.c`, `tools/native_main.c`) are
 hand-written.
 
+## DONE (STAGE 3 — SUB-SCREEN OPEN) — **CLICKING "ABOUT FIST" NOW OPENS ITS DIALOG: the full event→activate→screen-state-machine→modal-loop chain works, and the ABOUT dialog PANEL (frame + button row) renders crash-free + DETERMINISTICALLY on native.** 2 new patches (129/130) + 1 shim fix (`re_out/fist_dos.c`). Menu UNCHANGED (`verify.sh both` = PASS mainmenu, native↔wasm 0-diff, md5 `3a6ff1c5`); ABOUT panel deterministic md5 `49310ace` on native. DOSBox reference `ref/about_native320.png` (via new `tools/refcapture_click.sh`). `re_out/fist.c` pristine (`61453e42`).
+
+**THE FULL CLICK→SUB-SCREEN CHAIN (all asm-verified; the frontier docs' "sub-screen open").**
+Feeding `FIST_MOUSE="200:160:139:0; 800:160:139:1; 1400:160:139:0"` (move to ABOUT FIST @ row 139, then
+press+release, spaced so the cursor position settles into the queued node before the click — the queue/
+present latency means a too-fast press enqueues STALE (0,0) node coords) drives:
+`39d7 → 2f03 → 349b(enqueue) → 35a7(drain) → 1e4b → fist_hit1eb4` → the item's activate method
+`[elem+0x4660]=ea5a` → writes screen-state `DGROUP:0xf78e = 0xc` → the e714 state jumptable
+(`state 0xc → 0xe969 = e39f(); 7088(4)`) → the **modal dialog loop 7088** → loads the panel + spins.
+- **Item identity (verified):** display-list elements 3b24(SELECT PLAYER, row 65-79) … 3b60(ABOUT FIST,
+  row 130-144) … 3b6c(QUIT). Click y=139 → 3b60 = ABOUT FIST. DOSBox click at (160,139) shows the
+  credits screen → confirms.
+- **ea5a (activate):** `aa4e` returns the flags UNCHANGED (asm push ax/pop ax around the c626 side-effect
+  call), so `(flags & 4)` gates activate-on-RELEASE (press flags 0x82 → no-op, release 0x84 → write).
+  It writes `[base+[elem+2]+1]` = 0xc = the ABOUT screen state. param_2/param_3 were DGROUP offsets
+  Ghidra deref'd as host ptrs (base-loss); the 3 `[elem+0x4660]` dispatches dropped `(flags,bb,base)`.
+- **7088 modal loop:** the dialog-builder dispatch `word[DGROUP:(id-0x73ab)]` (id=4 → 0xc30e, a legit
+  near-noop; the ABOUT list is the static template at `0x8cee` that `1cdb(0x2c56,0x8cee,…)` activates),
+  the Ghidra-mangled CF flow, + the cooperative INT-8 pump in the modal spin-wait (70d5). Plus the
+  id-indexed dispatch base-losses (71f8/7203/70fb).
+- **71de (dialog BG element):** loads FLDCOMP.MRL (idx 0x20 = the GENERIC dialog panel; there is no
+  ABOUT.MRL — the panel is shared, the credits are separate) into descriptor `0x8bce` via `[0x560]` +
+  paints via `[0x564]` — args were dropped (same class as patch 110/094 e3f8/e3bc). Without it the panel
+  resource never loaded → 0340 RLE-decoded zeros = full-screen garbage (distinct-indices 256→44 once
+  fixed).
+- **SHIM (`re_out/fist_dos.c` `open_ci`):** the engine builds DOS 8.3 names SPACE-PADDED — a 7-char base
+  → "FLDCOMP .MRL"; real INT 21h treats the space as padding and opens "FLDCOMP.MRL". Strip spaces in
+  the filename canonicalization (portable, native↔wasm). This was the actual load-failure root cause
+  (the name built correctly, the host `fopen("FLDCOMP .MRL")` failed).
+- **Driver blits (130, fist_mga.c):** 0fbc (`word[[0x724]]==0xA000` base-loss + dropped rowtable setup)
+  and 0fe4 (RESTORE blit; `call 0xfe2`=pop ax;ret EARLY-RETURN idiom Ghidra mis-modeled → base-lost copy
+  loop crash; same class as patch 113's 0f62). Plus 23bf (far-ptr `les di,ss:[0xea2c]` base-loss) and
+  92ea (element event method DGROUP-offset base-loss) reached on the transition.
+
+**FRONTIER — THE CREDIT TEXT + THE WASM DIALOG PATH.** The ABOUT panel (frame + buttons) renders, but the
+credit-TEXT elements do NOT paint, so it is NOT yet bit-identical to DOSBox (which has "ARMORED FIST" +
+~30 credit lines). Root-caused: the credits paint via the **[+0x4872] multi-element paint walk `1e88`**,
+which patch 116 hard-stops after the FIRST element (the menu-enter behaviour; later menu elements are
+painted by e9f0). The dialog needs ALL elements walked — but (a) the paint methods do NOT thread their CF
+return (so the walk can't know when to stop), and (b) walking all reaches base-lost / un-threaded paint
+methods (e.g. `ea7e`, which expects SI=element that `1e88`'s call doesn't set) → SIGSEGV. So the credits
+need: reconstruct `1e88`'s full CF-threaded walk + thread each credit element paint method's register
+args + reconstruct the base-lost ones. SEPARATELY: the **native↔wasm dialog parity** — the wasm click
+path OOBs ("memory access out of bounds") where native tolerates it (bounds-checked wasm vs the 1 MB
+g_mem), likely a modal-loop timing divergence (cooperative tick vs SIGALRM) reaching a different
+paint/blit. Both are the next iteration; the MENU flow (verify.sh) is unaffected by either. New tool:
+`tools/refcapture_click.sh` (scripted-click DOSBox reference via XTest) + `ref/about_native320.png`.
+
 ## DONE (STAGE 3 — PRIORITY REGRESSION FIX) — **THE FLAKY (nondeterministic) STATIC-MENU SIGSEGV FROM PATCHES 125/126 IS ROOT-CAUSED + FIXED: the menu is now DETERMINISTICALLY crash-free AND native↔wasm bit-identical.** 2 new patches (127/128). `bash tools/verify.sh both` = PASS mainmenu (native↔wasm 0 differing bytes + AE=0 vs DOSBox). `re_out/fist.c` pristine; shims portable.
 
 **THE REGRESSION (why it was flaky, and how each instrumentation SUPPRESSED it).** Patches 125/126 (event-queue reconstruction) made the event queue actually deliver events, which advanced execution into (a) the main MENU LOOP `FUN_0000_00d0: while (5c5f(), !stop) { 5c3a(); cae6(); }` and (b) the display-list event HIT-TEST (`1e4b -> thunk_FUN_0000_1eb4`).  Both surfaces contained latent Ghidra **base-loss + dropped-register-arg** defects that read UNINITIALISED register/stack garbage; the garbage varies run-to-run, so the resulting wild-pointer deref SIGSEGV'd only ~30-40% of runs.  Every diagnostic that touches the stack layout (gdb, `FIST_SEGV_BT`, ASan) SUPPRESSED it — the tell of an uninitialised-garbage bug.  **The tool that cracked it: `-ftrivial-auto-var-init=pattern`** (build with `ASAN=-ftrivial-auto-var-init=pattern bash tools/build_native.sh`) makes uninitialised locals a fixed 0xAAAA pattern, turning the flaky crash DETERMINISTIC and catchable under `FIST_SEGV_BT`; plus a plain-binary **core-dump** loop (`ulimit -c unlimited`, run from repo root, `FIST_TICK_HZ=100000 FIST_RUNMS=8000`) caught the bare crash EIP = `FUN_0000_f842`.

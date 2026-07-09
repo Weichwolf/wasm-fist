@@ -13,3 +13,4 @@ third_party/*_ghidra_proj/
 # scratch
 /tmp/
 *.tmp
+scratch/refcap/

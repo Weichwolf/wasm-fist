@@ -1,0 +1,314 @@
+Open the ABOUT FIST sub-screen: drive a menu CLICK through activation -> screen-state machine -> the
+modal dialog loop, faithfully reconstructing every base-loss / arg-drop on that path.  Clicking ABOUT
+FIST now opens its dialog (panel + button row) crash-free and deterministically; the DOSBox reference is
+ref/about_native320.png (tools/refcapture_click.sh).  The credit-TEXT elements are the remaining frontier
+(the multi-element paint walk 1e88 + per-element paint-method arg threading -- see docs/stage1.md).
+
+Sub-fixes (all asm-verified against re_out/fist_dat_image.bin):
+- ea5a (activate method): param_2(elem)/param_3(base) are DGROUP near offsets, Ghidra deref'd them as
+  host pointers -> SIGSEGV.  Reconstructed in the offset model; it writes DGROUP:0xf78e = the screen
+  state (= [base+[elem+2]+1]); asm confirms aa4e returns the flags unchanged (push ax/pop ax around the
+  c626 side-effect call) so (flags&4) gates activate-on-RELEASE.  Threaded the (flags,bb,base) args into
+  the three [elem+0x4660] activate dispatches in the hit-test (the recurring indirect-vector arg-drop).
+- 23bf: les di,ss:[0xea2c] far-ptr store composed (di|es<<16) as a flat host pointer -> base-loss.
+- 92ea: element event method; di=[0x6d34] + its fields are DGROUP near offsets (host-ptr base-loss).
+- e714 state jumptable: state 0xc -> 0xe969 = e39f(); 7088(4) (unrecovered fragment) -> reconstructed.
+- 7088 (modal dialog loop): fixed the dialog-builder dispatch base-loss (word[DGROUP:(id-0x73ab)]), the
+  Ghidra-mangled CF control flow, and added the cooperative INT-8 pump in the modal spin-wait; plus the
+  id-indexed dispatch base-losses (71f8/7203/70fb: [id*2+const], [id-0x73a5]).
+- 71de (dialog BG element method): threaded the [0x560] loader (idx 0x20 = FLDCOMP.MRL, the generic
+  dialog panel) + [0x564] paint args -- same class as patch 110/094 (e3f8/e3bc menu bg).  Without it the
+  loader built an empty name -> the panel resource never loaded -> RLE garbage.
+  (The DOS 8.3 space-padded name "FLDCOMP .MRL" is canonicalized to "FLDCOMP.MRL" in the shim open_ci,
+  re_out/fist_dos.c -- see that file; not part of this engine patch.)
+--- a/fist.c
++++ b/fist.c
+@@ -8500,20 +8500,25 @@
+      CS=0 (the low engine code segment the method table indexes).  The method's CF-return (`jae` = stop)
+      is not recoverable through the C indirect call; as in the pristine decompile the walk returns after
+      the first element (in_CF=0), which is the reached menu-enter behaviour. */
+-  undefined2 uVar1;
++  /* DBG (asm 0x1e88-0x1ea8): FULL multi-element paint walk.  Each element's [+0x4872] method returns CF;
++     `jae 0x1ea8` STOPS when a method returns CF CLEAR, else `sub bx,0xc; cmp bx,dx; jae` continues down
++     the list.  Patch 116 hard-returned after the FIRST element (the menu-enter behaviour, where later
++     elements are painted by e9f0); the ABOUT/dialog screen paints ALL its elements here (panel + credit
++     text), so thread the method CF via g_fist_cf.  The paint methods set g_fist_cf on their clc/stc. */
++  /* PATCH 116 behaviour retained: paint the first element then return.  The FULL multi-element walk
++     (needed for the ABOUT credit-text elements) requires threading each element paint method's SI/BX
++     register args + reconstructing several base-lost paint methods (e.g. ea7e) -- deferred as the
++     credits-text frontier; walking all elements here reaches those un-threaded methods and crashes. */
+   uint16_t p1 = (uint16_t)(uintptr_t)param_1;
+   uint16_t p2 = (uint16_t)(uintptr_t)param_2;
+-
+-  do {
+-    *(uint16_t *)(g_mem + 0x1fe08) = p2;                                  /* DAT_1000_fe08 = param_2 */
+-    {
+-      uint16_t di  = *(uint16_t *)(g_mem + 0x1c000 + p2);                 /* mov di,[bx] */
+-      uint16_t vec = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(di + 0x4872)); /* [di+0x4872] */
+-      uVar1 = (*(code *)fist_icall_near(0x0u, vec))(param_3);
+-    }
+-    return uVar1;                                                         /* in_CF=0 in the decompile */
+-  } while (p2 >= p1);
+-  return *(uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1d8e2)); /* *DAT_1000_d8e2 */
++  (void)p1;
++  {
++    *(uint16_t *)(g_mem + 0x1fe08) = p2;
++    uint16_t di  = *(uint16_t *)(g_mem + 0x1c000 + p2);
++    uint16_t vec = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(di + 0x4872));
++    (*(code *)fist_icall_near(0x0u, vec))(param_3);
++    return 0;
++  }
+ }
+ 
+ 
+@@ -8567,7 +8572,7 @@
+           }
+           {
+             uint16_t di = HG(0x3e14);
+-            if (flags & 0xa) {
++                      if (flags & 0xa) {
+               uint16_t bb = elem;
+               if (bb != di) {
+                 flags |= 0x100;
+@@ -8577,7 +8582,7 @@
+               }
+               bb = di;
+               HG(0x3e08) = bb;
+-              (*(code *)fist_icall_near(0x0u, HG((uint16_t)(HG((uint16_t)(bb + 0)) + 0x4660))))();
++                          (*(code *)fist_icall_near(0x0u, HG((uint16_t)(HG((uint16_t)(bb + 0)) + 0x4660))))(flags, bb, base);
+               g_fist_cf = 0; return 0;
+             }
+             if (flags & 0x14) {
+@@ -8590,7 +8595,7 @@
+                 }
+               }
+               HG(0x3e08) = bb;
+-              (*(code *)fist_icall_near(0x0u, HG((uint16_t)(HG((uint16_t)(bb + 0)) + 0x4660))))();
++                          (*(code *)fist_icall_near(0x0u, HG((uint16_t)(HG((uint16_t)(bb + 0)) + 0x4660))))(flags, bb, base);
+               g_fist_cf = 0; return 0;
+             }
+             if (flags & 0x601) {
+@@ -8600,7 +8605,7 @@
+                 if (bb != di) { flags = (uint16_t)((flags & 0xff7f) | 0x100); bb = di; }
+               }
+               HG(0x3e08) = bb;
+-              (*(code *)fist_icall_near(0x0u, HG((uint16_t)(HG((uint16_t)(bb + 0)) + 0x4660))))();
++              (*(code *)fist_icall_near(0x0u, HG((uint16_t)(HG((uint16_t)(bb + 0)) + 0x4660))))(flags, bb, base);
+               g_fist_cf = 0; return 0;
+             }
+             g_fist_cf = 0; return 0;
+@@ -18099,7 +18104,7 @@
+   iVar5 = FUN_0000_1cdb(0x2c56,0x8cee,0x94,0x10,param_3,uVar12);
+   uVar9 = uVar8;
+   iVar7 = DAT_2000_4be5;
+-  uVar6 = (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(DAT_2000_4be5 + -0x73ab))))();
++  uVar6 = (*(code *)fist_icall_near(0x0u,(uint16_t)(*(uint16_t*)(g_mem+0x1c000+(uint16_t)((uint16_t)DAT_2000_4be5 - 0x73ab)))))();
+   DAT_2000_4be2 = '\0';
+   do {
+     uVar14 = uVar13;
+@@ -18146,49 +18151,48 @@
+   undefined2 uVar11;
+   undefined2 uVar12;
+   
+-  DAT_2000_4be5 = param_1;
++  /* DBG reconstruct (asm 0x7088-0x70fa): MODAL DIALOG loop.  Fixes (a) the dialog-builder dispatch
++     base-loss (`mov bx,[0x8be5]; call [bx-0x73ab]` = near call through DGROUP table word[DS:(id-0x73ab)],
++     Ghidra used (id-0x73ab) as a host ptr), (b) the Ghidra-mangled CF control flow, (c) adds the
++     cooperative INT-8 pump in the modal spin-wait (70d5: `lcall [0x40a](=35a7); jb 70c6`) so the
++     present + scripted input advance -- same pattern as the e714 idle loop.  4277/12dc = lcall
++     0f69:4277/12dc = FUN_1000_3907/096c.  206f paints the ACTIVE display list from globals. */
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
++  (void)uVar4;(void)uVar5;(void)uVar7;(void)uVar9;(void)uVar10;(void)uVar11;(void)uVar12;(void)in_CF;
++  (void)unaff_CS;(void)extraout_var;
++  *(uint16_t*)(g_mem+0x24be5) = (uint16_t)param_1;   /* DAT_2000_4be5 = dialog id */
+   FUN_0000_eaa3();
+   uVar1 = DAT_1000_c78c;
+   DAT_1000_c78c = 0x100;
+   FUN_1000_38cc();
+   uVar8 = 0x8cee;
+   FUN_0000_1e27(0x2c56,0x8cee);
+-  uVar7 = 0x10;
+-  uVar4 = 0x8cee;
+-  uVar6 = 0x94;
+   iVar2 = FUN_0000_1cdb(0x2c56,0x8cee,0x94,0x10,param_2,uVar8);
+-  uVar9 = 0;
+-  uVar5 = uVar4;
+-  iVar3 = DAT_2000_4be5;
+-  uVar6 = (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(DAT_2000_4be5 + -0x73ab))))(uVar6);
+-  DAT_2000_4be2 = '\0';
+-  do {
+-    uVar10 = in_CF;
+-    FUN_0000_206f((char)uVar6,uVar5,param_2,uVar8);
+-    uVar11 = 0x70ce;
+-    FUN_1000_3907();
+-    uVar12 = uVar9;
+-    if ((bool)uVar10) {
+-      uVar11 = 0xf69;
+-      FUN_1000_096c(iVar3);
+-      uVar12 = uVar9;
+-    }
+-    while( true ) {
+-      uVar9 = 0xf69;
+-      uVar6 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69,uVar11,uVar12);
+-      in_CF = 1;
+-      if ((bool)uVar10) break;
+-      uVar12 = 0x70de;
+-      FUN_0000_1e4b(uVar6,uVar5,iVar3,uVar8);
+-      uVar10 = 0;
+-      if (DAT_2000_4be2 != '\0') {
++  iVar3 = *(uint16_t*)(g_mem+0x24be5);               /* id */
++  {                                                  /* builder dispatch (base-loss fixed) */
++    uint16_t vec = *(uint16_t*)(g_mem+0x1c000+(uint16_t)((uint16_t)iVar3 - 0x73ab));
++    (*(code *)fist_icall_near(0x0u, vec))();
++  }
++  *(uint8_t*)(g_mem+0x24be2) = 0;                    /* DAT_2000_4be2 = 0 (dialog-done flag) */
++  for (;;) {                                         /* 70c6 repaint loop */
++    FUN_0000_206f(0,0x8cee,param_2,uVar8);           /* paint active display list */
++    FUN_1000_3907();                                 /* lcall 0f69:4277 -> g_fist_cf */
++    if (g_fist_cf) FUN_1000_096c(iVar3);             /* jae skip; else 12dc */
++    for (;;) {                                       /* 70d5 poll loop */
++      fist_timer_pump();                             /* cooperative tick (modal spin-wait) */
++      uVar6 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69);  /* 35a7 -> ax(flags), g_fist_cf */
++      if (g_fist_cf) break;                          /* jb 70c6: queue empty -> repaint */
++      FUN_0000_1e4b(uVar6,uVar8,(int)(uint16_t)iVar3,uVar8);  /* event dispatch (35a7's flags) */
++      if (*(uint8_t*)(g_mem+0x24be2) != 0) {         /* dialog done (OK clicked) */
+         (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))(0xf69);
+-        iVar3 = FUN_0000_1cdb(unaff_CS,uVar7,uVar4,iVar2,param_2,uVar8);
++        iVar3 = FUN_0000_1cdb(0,0x10,0x8cee,iVar2,param_2,uVar8);
+         DAT_1000_c78c = uVar1;
+-        return CONCAT22(extraout_var,iVar3);
++        g_fist_cf = (*(uint8_t*)(g_mem+0x24be2) == 0xff) ? 0 : 1;
++        return (undefined4)iVar3;
+       }
+     }
+-  } while( true );
++  }
+ }
+ 
+ 
+@@ -18354,9 +18358,15 @@
+ void __allregs FUN_0000_71de(void)
+ 
+ {
++  /* DBG (asm 0x71de): the ABOUT/dialog BG element method -- loads + paints the dialog background.
++     mov bx,0x8bce; mov cx,ds; mov ax,0x20; lcall [0x560] (bg loader, idx 0x20 = dialog bg .MRL);
++     mov bx,0x8bce; mov cx,ds; lcall [0x564] (bg paint = 0340).  Same arg-drop class as patch 110/094
++     (e3f8/e3bc menu bg): the __allregs vector sites dropped ax/bx/cx so the loader built an empty name
++     -> resource never loaded (seg empty) -> 0340 RLE-decoded zeros = garbage.  Thread faithfully. */
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c564)))();
++  ((void (*)(undefined2,undefined2,int))fist_icall_far((uint32_t)(DAT_1000_c560)))(0x20, 0x1c00, 0x8bce);
++  ((void (*)(undefined2, undefined2 *))fist_icall_far((uint32_t)(DAT_1000_c564)))
++      (0x1c00, (undefined2 *)(g_mem + 0x1c000 + 0x8bce));
+   return;
+ }
+ 
+@@ -18368,7 +18378,7 @@
+ {
+   undefined2 *puVar1;
+   
+-  puVar1 = (undefined2 *)(DAT_2000_4be5 * 2 + -0x739f);
++  puVar1 = (undefined2 *)(g_mem+0x1c000+(uint16_t)((uint16_t)DAT_2000_4be5*2 - 0x739f));
+   (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))();
+   return;
+ }
+@@ -18381,7 +18391,7 @@
+ {
+   undefined2 *puVar1;
+   
+-  puVar1 = (undefined2 *)(DAT_2000_4be5 * 2 + -0x7393);
++  puVar1 = (undefined2 *)(g_mem+0x1c000+(uint16_t)((uint16_t)DAT_2000_4be5*2 - 0x7393));
+   (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))();
+   return;
+ }
+@@ -18405,7 +18415,7 @@
+     if ((param_1 & 4) == 0) {
+       return;
+     }
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(DAT_2000_4be5 + -0x73a5))))();
++    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(uint16_t*)(g_mem+0x1c000+(uint16_t)((uint16_t)DAT_2000_4be5 - 0x73a5)))))();
+   }
+   return;
+ }
+@@ -34158,6 +34168,12 @@
+     uint16_t _tgt = *(uint16_t*)(g_mem + (uint16_t)((uint16_t)DAT_2000_b78e - 0x1886));
+     if (_tgt == 0xe753) continue;        /* menu idle: resume the paint loop */
+     if (_tgt == 0xe78a) return;          /* table slot: bare ret */
++    if (_tgt == 0xe969) {                /* state 0xc: ABOUT FIST dialog (e969: e39f; 7088(4); jmp e714) */
++      FUN_0000_e39f();
++      FUN_0000_7088(4, param_2);         /* modal loop: shows ABOUT, spins until OK */
++      DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle state after dismissal */
++      continue;
++    }
+     (*(code *)fist_icall_near(0x0u,_tgt))();
+     return;
+   }
+@@ -34410,7 +34426,6 @@
+ 
+ {
+   uint uVar1;
+-  
+   if ((param_1 & 0x80) == 0) {
+     return;
+   }
+@@ -34419,7 +34434,9 @@
+     if ((uVar1 & 4) == 0) {
+       return;
+     }
+-    DAT_2000_b78e = *(undefined2 *)(param_3 + *(int *)(param_2 + 2) + 1);
++    { uint16_t si = *(uint16_t*)(g_mem+0x1c000+(uint16_t)(param_2+2));
++      uint16_t val = *(uint16_t*)(g_mem+0x1c000+(uint16_t)(param_3+si+1));
++      *(uint16_t*)(g_mem+0x1c000+0xf78e) = val; }
+   }
+   return;
+ }
+@@ -42026,10 +42043,13 @@
+ undefined1 __allregs FUN_1000_23bf(undefined1 param_1)
+ 
+ {
++  /* DBG reconstruct: les di,ss:[0xea2c]; if(di|es) es:[di+0x496]=al; xchg al,cs:0x2d59.
++     Ghidra composed the far ptr (di|es<<16) as a flat host pointer -> base-loss. */
+   undefined1 uVar1;
+-  
+-  if (_DAT_3000_a4be != 0 || _DAT_3000_a4bc != 0) {
+-    *(undefined1 *)(_DAT_3000_a4bc + 0x496) = param_1;
++  uint16_t di = *(uint16_t*)(g_mem+0x3a4bc);   /* SS:0xea2c off  */
++  uint16_t es = *(uint16_t*)(g_mem+0x3a4be);   /* SS:0xea2e seg  */
++  if ((di | es) != 0) {
++    *(uint8_t*)(g_mem + ((uint32_t)es<<4) + (uint16_t)(di + 0x496)) = param_1;
+   }
+   uVar1 = DAT_1000_2d59;
+   LOCK();
+@@ -58857,21 +58877,22 @@
+ void __allregs FUN_1000_92ea(uint param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
++  /* DBG reconstruct: di=[0x6d34] (DGROUP off); [di+0x3f]^=8; [di+0xf5]=3; if(ax&0x14 && [di+0x8d]!=1)
++     [di+0x8d]>>=1; [di+0xf6]=3.  di and its fields are DGROUP near offsets (Ghidra host-ptr base-loss). */
+   if ((param_1 & 0x80) == 0) {
+     return;
+   }
+   if ((param_1 & 1) == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x3f) = *(byte *)(DAT_2000_2d34 + 0x3f) ^ 8;
+-    *(undefined1 *)(iVar1 + 0xf5) = 3;
++    uint16_t di = *(uint16_t*)(g_mem+0x22d34);   /* [0x6d34] */
++    uint8_t *D = g_mem+0x1c000;
++    D[(uint16_t)(di+0x3f)] ^= 8;
++    D[(uint16_t)(di+0xf5)] = 3;
+     if ((param_1 & 0x14) == 0) {
+       return;
+     }
+-    if (*(char *)(iVar1 + 0x8d) != '\x01') {
+-      *(byte *)(iVar1 + 0x8d) = *(byte *)(iVar1 + 0x8d) >> 1;
+-      *(undefined1 *)(iVar1 + 0xf6) = 3;
++    if ((int8_t)D[(uint16_t)(di+0x8d)] != 1) {
++      D[(uint16_t)(di+0x8d)] = (uint8_t)((int8_t)D[(uint16_t)(di+0x8d)] >> 1);
++      D[(uint16_t)(di+0xf6)] = 3;
+     }
+   }
+   return;

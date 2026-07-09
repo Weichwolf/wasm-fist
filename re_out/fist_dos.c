@@ -67,9 +67,12 @@ static FILE *open_ci(const char *name, const char *mode)
      * result of the empty name is a failed open, which the engine handles as "config not present".) */
     if (!name || !name[0]) return NULL;
     { const char *b = name; for (const char *p=name; *p; ++p) if (*p=='\\'||*p=='/') b=p+1; if (!*b) return NULL; }
-    /* strip any DOS path/drive; keep the last component + honor a relative subdir. */
+    /* strip any DOS path/drive; keep the last component + honor a relative subdir.
+     * Also strip embedded spaces: the engine builds DOS 8.3 names space-PADDED (a 7-char base like
+     * "FLDCOMP" -> "FLDCOMP .MRL"); real INT 21h treats the space as padding and opens "FLDCOMP.MRL".
+     * DOS filenames never legitimately contain spaces, so dropping them is the faithful canonicalization. */
     char clean[260]; size_t j=0;
-    for (const char *p=name; *p && j<sizeof(clean)-1; ++p) clean[j++] = (*p=='\\')?'/':*p;
+    for (const char *p=name; *p && j<sizeof(clean)-1; ++p){ if(*p==' ') continue; clean[j++] = (*p=='\\')?'/':*p; }
     clean[j]=0;
     /* candidate directories to search (most-specific first) */
     const char *dirs[4]; int nd=0;

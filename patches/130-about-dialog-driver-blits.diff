@@ -1,0 +1,118 @@
+ABOUT/dialog driver blits (MGAVIDEO): reconstruct the save/restore blit path reached when the dialog
+opens, faithful to the driver asm (re_out/fist_mga_image.bin).  Part of the ABOUT-open path (patch 129).
+
+- 0fbc: `di=[0x724]; if word[di]==0xA000 { 2d6d; [0x794]=0x7c8; [0x796]=0x140; 0fe4; 2e12 }` -- Ghidra
+  composed word[[0x724]] (di|hi<<16) as a host pointer -> base-loss, and dropped the rowtable setup +
+  the 2e12 tail.
+- 0fe4: RESTORE blit save-buffer -> framebuffer.  The `call 0xfe2` (=pop ax;ret) on the jns branch is an
+  EARLY RETURN (flag sign-bit clear = nothing saved yet, first paint) -- Ghidra modeled it as a normal
+  call then ran the base-lost copy loop -> crash.  Reconstructed in the offset model (same class as
+  patch 113's 0f62).
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -3094,11 +3094,17 @@
+ void __allregs FUN_0000_0fbc(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  if (*_DAT_1000_c724 == -0x6000) {
+-                    /* WARNING: Subroutine does not return */
++  /* DBG reconstruct: di=[0x724]; if word[di]==0xA000 { 2d6d; [0x794]=0x7c8;[0x796]=0x140; 0fe4; 2e12 } else 0fe4 */
++  uint16_t di = *(uint16_t*)(g_mem+0x1c000+0x724);
++  if (*(uint16_t*)(g_mem+0x1c000+(uint16_t)di) == 0xA000) {
+     FUN_0000_2d6d(param_2);
++    *(uint16_t*)(g_mem+0x1c000+0x794) = 0x7c8;
++    *(uint16_t*)(g_mem+0x1c000+0x796) = 0x140;
++    FUN_0000_0fe4(param_1,param_2);
++    FUN_0000_2e12();
++  } else {
++    FUN_0000_0fe4(param_1,param_2);
+   }
+-  FUN_0000_0fe4(param_1,param_2);
+   return;
+ }
+ 
+@@ -3148,53 +3154,39 @@
+ void __allregs FUN_0000_0fe4(undefined2 *param_1,int *param_2)
+ 
+ {
+-  byte *pbVar1;
+-  undefined2 *puVar2;
+-  undefined2 *puVar3;
+-  undefined2 uVar4;
+-  undefined2 uVar5;
+-  uint uVar6;
+-  uint uVar7;
+-  int iVar8;
+-  int iVar9;
+-  undefined2 *puVar10;
+-  undefined2 *puVar11;
+-  
+-  pbVar1 = (byte *)(param_1 + 1);
+-  *pbVar1 = *pbVar1 | 0x20;
+-  if ((char)*pbVar1 < '\0') {
+-    if ((*(byte *)(param_1 + 1) & 0x10) != 0) {
+-      FUN_0000_2c8b();
+-    }
++  /* DBG reconstruct (asm 0xfe4-0x103d): RESTORE blit save-buffer -> framebuffer.  di=param_1 save
++     descriptor offset, bx=param_2 rect descriptor offset (both DGROUP near offsets).  The `call 0xfe2`
++     (=pop ax;ret) on the jns branch is an EARLY RETURN (flag sign-bit clear = nothing saved yet, first
++     paint) -- Ghidra modeled it as a normal call then ran the base-lost copy loop -> crash. */
++  uint16_t di_save = (uint16_t)(uintptr_t)param_1;
++  uint16_t bx_rect = (uint16_t)(uintptr_t)param_2;
++  uint8_t *flag = g_mem+0x1c000+(uint16_t)(di_save+2);
++  *flag |= 0x20;
++  if ((int8_t)*flag < 0) {                 /* sign SET -> a save exists */
++    if (*flag & 0x10) FUN_0000_2c8b();
++  } else {
++    return;                                /* jns -> call 0xfe2 = pop ax;ret = EARLY RETURN */
+   }
+-  else {
+-    FUN_0000_0fe2(0xffc);
++  {
++    uint16_t save_seg = *(uint16_t*)(g_mem+0x1c000+di_save);              /* si=[di] */
++    uint16_t fbptr    = *(uint16_t*)(g_mem+0x1c000+0x724);               /* [0x724] */
++    uint16_t fb_seg   = *(uint16_t*)(g_mem+0x1c000+fbptr);               /* es=word[[0x724]] */
++    uint16_t row      = *(uint16_t*)(g_mem+0x1c000+bx_rect);             /* [bx] */
++    uint16_t rowtab   = *(uint16_t*)(g_mem+0x1c000+0x794);               /* [0x794] */
++    uint16_t rowoff   = *(uint16_t*)(g_mem+0x1c000+(uint16_t)(row*2+rowtab));
++    uint16_t dstoff   = (uint16_t)(rowoff + *(uint16_t*)(g_mem+0x1c000+(uint16_t)(bx_rect+2)));
++    int16_t  rows     = (int16_t)(*(int16_t*)(g_mem+0x1c000+(uint16_t)(bx_rect+4)) - (int16_t)row);
++    uint16_t cols     = (uint16_t)(*(uint16_t*)(g_mem+0x1c000+(uint16_t)(bx_rect+6))
++                                 - *(uint16_t*)(g_mem+0x1c000+(uint16_t)(bx_rect+2)));
++    uint16_t skip     = (uint16_t)(*(uint16_t*)(g_mem+0x1c000+0x796) - cols);
++    uint8_t *dst = g_mem + ((uint32_t)fb_seg<<4) + dstoff;
++    uint8_t *src = g_mem + ((uint32_t)save_seg<<4);
++    do {
++      for (uint16_t k=0;k<cols;k++) *dst++ = *src++;
++      dst += skip;
++      rows--;
++    } while (rows != 0);
+   }
+-  uVar4 = *param_1;
+-  uVar5 = *_DAT_1000_c724;
+-  puVar11 = (undefined2 *)(*(int *)(*param_2 * 2 + _DAT_1000_c794) + param_2[1]);
+-  iVar8 = param_2[2] - *param_2;
+-  uVar6 = param_2[3] - param_2[1];
+-  iVar9 = _DAT_1000_c796 - uVar6;
+-  puVar10 = (undefined2 *)0x0;
+-  do {
+-    for (uVar7 = uVar6 >> 1; uVar7 != 0; uVar7 = uVar7 - 1) {
+-      puVar3 = puVar11;
+-      puVar11 = puVar11 + 1;
+-      puVar2 = puVar10;
+-      puVar10 = puVar10 + 1;
+-      *puVar3 = *puVar2;
+-    }
+-    for (uVar7 = (uint)((uVar6 & 1) != 0); uVar7 != 0; uVar7 = uVar7 - 1) {
+-      puVar3 = puVar11;
+-      puVar11 = (undefined2 *)((int)puVar11 + 1);
+-      puVar2 = puVar10;
+-      puVar10 = (undefined2 *)((int)puVar10 + 1);
+-      *(undefined1 *)puVar3 = *(undefined1 *)puVar2;
+-    }
+-    puVar11 = (undefined2 *)((int)puVar11 + iVar9);
+-    iVar8 = iVar8 + -1;
+-  } while (iVar8 != 0);
+   return;
+ }
+ 
