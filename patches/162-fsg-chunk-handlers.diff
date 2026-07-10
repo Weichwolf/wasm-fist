@@ -1,0 +1,215 @@
+PATCH 162: the FSG chunk handlers that parse a mission's <battle>.FSG into the model/unit list
+(asm 0xd7b5/0xd7da/0xd7e1/0xd87f/0xd8a9/0xd8d3/0xd8e9), dispatched by FUN_0000_d501 through the
+7-entry table DAT_2000_a9e6@0x2a9e6 {SHDR->d7b5, DCBS->d7e1, TERM->d7da, PATH->d87f, STMP->d8e9,
+PINF->d8a9, BINF->d8d3}.  Reached ONLY on the ACCEPT mission cascade (BATTLES->OK->ACCEPT) via
+4754->d501; NOT reached by any of the 19 verify flows -> behaviour-neutral for verify.
+
+Two asm-verified defect classes, both proven against re_out/fist_dat_image.bin:
+
+(1) HOST-POINTER-INTO-DOS-REGISTER (patch 077/146/156 class) in the THREE already-promoted handlers
+    (d7b5, d7e1, d87f).  Each INT-21h AH=3f read set the DX reg-file slot to `&DAT_2000_...`, a HOST
+    pointer whose low-16 (what fist_dos.c R_DX reads) is garbage.  The asm puts a DGROUP near-offset in
+    DX:  d7b5 `mov dx,0xe982`; d7e1 `mov dx,0xe9be`/`0xe9c2`/`0xe9c0`; d87f `mov dx,0x7d40`.  Fixed to
+    store the literal offset.  (The lseek branches already passed the value DAT_2000_a97a correctly.)
+
+(2) FOUR handlers Ghidra never promoted (d7da TERM, d8a9 PINF, d8d3 BINF, d8e9 STMP) -- reached only
+    through the cs-vtable-style d501 dispatch, so fist_icall_near(0,off) TRAPPED them (returned 0) and
+    their FSG chunk was silently skipped.  Reconstructed instruction-faithfully from the image and
+    fmap-registered at their linear addresses:
+      d7da TERM: byte[DGROUP:0xe974]=1; clc.
+      d8a9 PINF: if byte[0xe975]==1 read word[0xe97a] bytes -> DGROUP:0x85b6 else seek-forward.
+      d8d3 BINF: read word[0xe97a] bytes -> DGROUP:0x79cd (the .KLC/battle-info name buffer);
+                 byte[DGROUP:0x7a13]=1.
+      d8e9 STMP: if byte[0xe975]==1 read word[0xe97a] bytes -> DGROUP:0x9338 else seek-forward.
+    All use bx=handle DAT_2000_a970, DS=DGROUP(0x1c00) (the ambient reg-file DS d501 leaves set), and
+    the DX buffer as a value (never a host pointer).
+
+NB the DCBS record reader FUN_0000_d81e (asm 0xd81e) still carries a di/unaff_CS base-loss (the model
+record struct offset is FUN_1000_b1a2's DI return, which the __allregs model dropped) -- a separate
+deliverable; it only matters if the AZER1 mission carries DCBS records.
+
+--- a/fist.c
++++ b/fist.c
+@@ -1363,6 +1363,12 @@
+ undefined4 __allregs FUN_0000_d81e(undefined2 param_1,undefined2 param_2,int param_3,undefined2 param_4);
+ undefined4 __allregs FUN_0000_d84e(int *param_1);
+ undefined2 __allregs FUN_0000_d87f(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
++/* PATCH 162: FSG chunk handlers not promoted by Ghidra (reached only via the d501 dispatch table
++   DAT_2000_a9e6 -> fist_icall_near(0,off), so they trapped safely before this patch). */
++void __allregs FUN_0000_d7da(void);
++void __allregs FUN_0000_d8a9(void);
++void __allregs FUN_0000_d8d3(void);
++void __allregs FUN_0000_d8e9(void);
+ void __allregs FUN_0000_d91f(void);
+ void __allregs FUN_0000_d944(undefined4 param_1);
+ void __allregs FUN_0000_d961(undefined4 param_1);
+@@ -32653,7 +32659,10 @@
+   uRam000f0014 = 0x21;
+   uRam000f0002 = DAT_2000_a970;
+   uRam000f0004 = DAT_2000_a97a;
+-  puRam000f0006 = (undefined2 *)&DAT_2000_a982;
++  /* PATCH 162 (asm 0xd7b5 SHDR): `mov dx,0xe982` -- the INT-21h AH=3f read buffer is the DGROUP
++     near-offset 0xe982, NOT the host pointer &DAT_2000_a982 (whose low-16 is garbage in R_DX).
++     Host-ptr-into-DOS-register class (patch 077/146/156). */
++  puRam000f0006 = (undefined2 *)0xe982;
+   uRam000f000e = 0x1c00;
+   uRam000f0008 = param_3;
+   uRam000f000a = param_4;
+@@ -32686,7 +32695,8 @@
+   uRam000f0014 = 0x21;
+   uRam000f0002 = DAT_2000_a970;
+   uRam000f0004 = 2;
+-  puRam000f0006 = (undefined2 *)&DAT_2000_a9be;
++  /* PATCH 162 (asm 0xd7ec DCBS): read count -> DGROUP:0xe9be (was host-ptr &DAT_2000_a9be). */
++  puRam000f0006 = (undefined2 *)0xe9be;
+   uRam000f000e = 0x1c00;
+   uRam000f0008 = param_2;
+   uRam000f000a = param_3;
+@@ -32700,7 +32710,8 @@
+     uRam000f0014 = 0x21;
+     uRam000f0002 = DAT_2000_a970;
+     uRam000f0004 = 6;
+-    puRam000f0006 = (undefined2 *)&DAT_2000_a9c2;
++    /* PATCH 162 (asm 0xd7fa DCBS): read 6-byte record header -> DGROUP:0xe9c2. */
++    puRam000f0006 = (undefined2 *)0xe9c2;
+     uRam000f000e = 0x1c00;
+     uRam000f0008 = uVar3;
+     uRam000f000a = uVar4;
+@@ -32710,7 +32721,8 @@
+     uRam000f0014 = 0x21;
+     uRam000f0002 = DAT_2000_a970;
+     uRam000f0004 = 2;
+-    puRam000f0006 = (undefined2 *)&DAT_2000_a9c0;
++    /* PATCH 162 (asm 0xd808 DCBS): read 2-byte field -> DGROUP:0xe9c0. */
++    puRam000f0006 = (undefined2 *)0xe9c0;
+     uRam000f000e = 0x1c00;
+     uRam000f000c = param_1;
+     uRam000f0010 = unaff_ES;
+@@ -32799,7 +32811,8 @@
+     uRam000f0014 = 0x21;
+     uRam000f0002 = DAT_2000_a970;
+     uRam000f0004 = DAT_2000_a97a;
+-    puRam000f0006 = (undefined1 *)&DAT_2000_3d40;
++    /* PATCH 162 (asm 0xd88a PATH): read -> DGROUP:0x7d40 (was host-ptr &DAT_2000_3d40). */
++    puRam000f0006 = (undefined1 *)0x7d40;
+     uRam000f000e = 0x1c00;
+     fist_int_dispatch();
+     return uRam000f0000;
+@@ -32815,6 +32828,102 @@
+ }
+ 
+ 
++/* ===== PATCH 162: FSG chunk handlers reconstructed (asm-verified) ===== */
++/* These are dispatched by FUN_0000_d501 through the DAT_2000_a9e6 table.  Ghidra never promoted
++   them (reached only via the cs:vtable), so fist_icall_near(0,off) trapped them (returned 0) and the
++   FSG chunk they parse was silently skipped.  Each is a tiny INT-21h leaf: the read-buffer DGROUP
++   near-offset goes into the DX reg-file slot (0xF0006) as a value, NOT a host pointer.  DS=DGROUP
++   (0x1c00) is the ambient reg-file DS that d501 leaves set before dispatch; set explicitly here.
++   Behaviour-neutral for the 19 verify flows (ACCEPT mission-cascade only). */
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_d7da) @ 0000:d7da  (TERM chunk) ===== */
++/* asm: mov BYTE ds:0xe974,1 ; clc ; ret */
++void __allregs FUN_0000_d7da(void)
++{
++  extern unsigned char g_fist_cf;
++  DAT_2000_a974 = '\x01';
++  g_fist_cf = 0;
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_d8a9) @ 0000:d8a9  (PINF chunk) ===== */
++/* asm 0xd8a9: if byte[ds:0xe975]==1 -> INT21 AH=3f read word[ds:0xe97a] bytes into DGROUP:0x85b6;
++   else INT21 AH=42 AL=1 seek-forward word[ds:0xe97a].  bx=handle word[ds:0xe970]. clc; ret. */
++void __allregs FUN_0000_d8a9(void)
++{
++  extern unsigned char g_fist_cf;
++  if (DAT_2000_a975 == '\x01') {
++    uRam000f0014 = 0x21;
++    uRam000f0000 = CONCAT11(0x3f,(char)uRam000f0000);
++    uRam000f0002 = DAT_2000_a970;
++    uRam000f0004 = DAT_2000_a97a;
++    puRam000f0006 = (undefined2 *)0x85b6;
++    uRam000f000e = 0x1c00;
++    fist_int_dispatch();
++  }
++  else {
++    uRam000f0014 = 0x21;
++    uRam000f0000 = 0x4201;
++    uRam000f0002 = DAT_2000_a970;
++    uRam000f0004 = 0;
++    puRam000f0006 = (undefined2 *)DAT_2000_a97a;
++    uRam000f000e = 0x1c00;
++    fist_int_dispatch();
++  }
++  g_fist_cf = 0;
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_d8d3) @ 0000:d8d3  (BINF chunk) ===== */
++/* asm 0xd8d3: INT21 AH=3f read word[ds:0xe97a] bytes into DGROUP:0x79cd (the .KLC/battle-info
++   filename buffer); mov BYTE ds:0x7a13,1 ; clc ; ret.  bx=handle word[ds:0xe970]. */
++void __allregs FUN_0000_d8d3(void)
++{
++  extern unsigned char g_fist_cf;
++  uRam000f0014 = 0x21;
++  uRam000f0000 = CONCAT11(0x3f,(char)uRam000f0000);
++  uRam000f0002 = DAT_2000_a970;
++  uRam000f0004 = DAT_2000_a97a;
++  puRam000f0006 = (undefined2 *)0x79cd;
++  uRam000f000e = 0x1c00;
++  fist_int_dispatch();
++  *(unsigned char *)(g_mem + 0x23a13) = 1;   /* byte[DGROUP:0x7a13] = 1 */
++  g_fist_cf = 0;
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_d8e9) @ 0000:d8e9  (STMP chunk) ===== */
++/* asm 0xd8e9: if byte[ds:0xe975]==1 -> INT21 AH=3f read word[ds:0xe97a] bytes into DGROUP:0x9338;
++   else INT21 AH=42 AL=1 seek-forward word[ds:0xe97a].  clc; ret. */
++void __allregs FUN_0000_d8e9(void)
++{
++  extern unsigned char g_fist_cf;
++  if (DAT_2000_a975 == '\x01') {
++    uRam000f0014 = 0x21;
++    uRam000f0000 = CONCAT11(0x3f,(char)uRam000f0000);
++    uRam000f0002 = DAT_2000_a970;
++    uRam000f0004 = DAT_2000_a97a;
++    puRam000f0006 = (undefined2 *)0x9338;
++    uRam000f000e = 0x1c00;
++    fist_int_dispatch();
++  }
++  else {
++    uRam000f0014 = 0x21;
++    uRam000f0000 = 0x4201;
++    uRam000f0002 = DAT_2000_a970;
++    uRam000f0004 = 0;
++    puRam000f0006 = (undefined2 *)DAT_2000_a97a;
++    uRam000f000e = 0x1c00;
++    fist_int_dispatch();
++  }
++  g_fist_cf = 0;
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_d91f) @ 0000:d91f ===== */
+ 
+ /* WARNING: Control flow encountered bad instruction data */
+@@ -69477,10 +69586,14 @@
+   {0xd797u,(void*)&FUN_0000_d797},
+   {0xd7a6u,(void*)&FUN_0000_d7a6},
+   {0xd7b5u,(void*)&FUN_0000_d7b5},
++  {0xd7dau,(void*)&FUN_0000_d7da},   /* PATCH 162: FSG TERM handler */
+   {0xd7e1u,(void*)&FUN_0000_d7e1},
+   {0xd81eu,(void*)&FUN_0000_d81e},
+   {0xd84eu,(void*)&FUN_0000_d84e},
+   {0xd87fu,(void*)&FUN_0000_d87f},
++  {0xd8a9u,(void*)&FUN_0000_d8a9},   /* PATCH 162: FSG PINF handler */
++  {0xd8d3u,(void*)&FUN_0000_d8d3},   /* PATCH 162: FSG BINF handler */
++  {0xd8e9u,(void*)&FUN_0000_d8e9},   /* PATCH 162: FSG STMP handler */
+   {0xd91fu,(void*)&FUN_0000_d91f},
+   {0xd944u,(void*)&FUN_0000_d944},
+   {0xd961u,(void*)&FUN_0000_d961},
