@@ -1,0 +1,80 @@
+PATCH 144 -- make the list-dialog scroll-arrow auto-repeat dispatch work: retype a85b to a WORD and
+recover the DOWN auto-scroll handler FUN_0000_d103.
+
+ROOT CAUSE (runtime-traced).  The cc33 modal loop dispatches its per-frame handler slot a85b
+(DGROUP:0xe85b) every frame via `ax=[0xe85b]; call ax` (asm cc9f).  a85b is a WORD near code-offset
+(asm cc33 `mov WORD PTR [0xe85b],0xd0d7`; cd8f `mov WORD PTR [0xe85b],0xd103` on a down-arrow press).
+Ghidra typed DAT_2000_a85b as undefined4 (DWORD) -- which OVERLAPS the adjacent a85d/a85e -- so the
+dispatch read `a85b_word | (a85d,a85e)<<16` (e.g. 0x00ffd103) and fist_icall_far() mapped that bogus
+seg:off to garbage -> the trap trampoline (no-op).  d0d7 (idle, empty) happened to look identical to
+the no-op, so the working flows were unaffected, but the down-arrow's 0xd103 handler ALSO trapped ->
+the scroll never dispatched.  Fix: retype a85b to undefined2 (word); the (uint32_t)a85b dispatch then
+zero-extends to linear 0xd0d7/0xd103 and resolves via the fmap.  Init a85b to the near offset 0xd0d7
+(matches the asm) instead of a host pointer.
+
+RECOVER FUN_0000_d103 (asm 0xd103..0xd134).  Ghidra recovered FUN_0000_d107 (the throttle tail, taking
+the elapsed-tick delta as param_1) and FUN_0000_d0d8 (UP auto-repeat) but not the d103 ENTRY:
+    d103: mov ax,[0x452] ; sub ax,[0xe885]      ; ax = ticks since last scroll step
+    d10a: cmp ax,8 ; jbe 0xd134                  ; throttle: step only every >8 ticks
+    d10f..d134  == FUN_0000_d107(param_1) body   ; update [0xe885]; step [0xe83a] down 1 clamped
+So d103 = `FUN_0000_d107((uint16_t)([0x452]-[0xe885]))` -- faithful, no new logic.  Register 0xd103 in
+the fmap.  No existing flow holds the down-arrow, so this only adds behaviour on a held down-scroll;
+retyping a85b to word leaves the idle dispatch (d0d7, empty) byte-identical (zero regression to the 11
+verified flows).
+
+--- a/fist.c
++++ b/fist.c
+@@ -1314,6 +1314,7 @@
+ void __allregs FUN_0000_d092(byte param_1);
+ void __allregs FUN_0000_d0d7(void);
+ void __allregs FUN_0000_d0d8(void);
++void __allregs FUN_0000_d103(void);
+ void __allregs FUN_0000_d107(uint param_1);
+ void __allregs FUN_0000_d135(void);
+ void __allregs FUN_0000_d146(void);
+@@ -3607,7 +3608,7 @@
+ #define DAT_2000_a855 (*(undefined2 *)(g_mem+0x2a855))
+ #define DAT_2000_a857 (*(undefined2 *)(g_mem+0x2a857))
+ #define DAT_2000_a859 (*(undefined2 *)(g_mem+0x2a859))
+-#define DAT_2000_a85b (*(undefined4 *)(g_mem+0x2a85b))
++#define DAT_2000_a85b (*(undefined2 *)(g_mem+0x2a85b))    /* PATCH 144: a85b is a WORD near code-offset (asm `mov WORD PTR [0xe85b]`); undefined4 overlapped a85d/a85e -> the modal-loop dispatch read word|garbage<<16 -> always trapped, so d0d7/d103 never ran */
+ #define DAT_2000_a85d (*(undefined2 *)(g_mem+0x2a85d))
+ #define DAT_2000_a85e (*(undefined2 *)(g_mem+0x2a85e))
+ #define DAT_2000_a86c (*(undefined2 *)(g_mem+0x2a86c))
+@@ -31168,7 +31169,7 @@
+   undefined1 uVar9;
+   undefined2 uVar10;
+   
+-  DAT_2000_a85b = ((uint)(uintptr_t)&FUN_0000_d0d7);
++  DAT_2000_a85b = 0xd0d7;  /* PATCH 144: near code-offset (asm 0xcc33 `mov WORD PTR [0xe85b],0xd0d7`), not a host pointer -- the (uint32_t)a85b dispatch below now resolves linear 0xd0d7/0xd103 via the fmap */
+   DAT_2000_a881 = 0;
+   DAT_2000_a838 = 0;
+   DAT_2000_a83a = 0;
+@@ -31826,6 +31827,19 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_d103) @ 0000:d103 ===== */
++
++void __allregs FUN_0000_d103(void)
++
++{
++  /* PATCH 144: the DOWN auto-scroll ENTRY (asm 0xd103).  Computes the elapsed-tick throttle
++     delta ax=[0x452]-[0xe885] then falls through into the d107 tail (re-checks 8<delta, updates
++     [0xe885], steps [0xe83a] down one row clamped at [0xe834]-8, marks the list dirty + recomputes
++     the thumb via cef4).  The subtraction is 16-bit (jbe = unsigned) -> cast uint16_t. */
++  FUN_0000_d107((uint16_t)(DAT_1000_c452 - DAT_2000_a885));
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_d135) @ 0000:d135 ===== */
+ 
+ void __allregs FUN_0000_d135(void)
+@@ -70424,6 +70438,7 @@
+   {0xd092u,(void*)&FUN_0000_d092},
+   {0xd0d7u,(void*)&FUN_0000_d0d7},
+   {0xd0d8u,(void*)&FUN_0000_d0d8},
++  {0xd103u,(void*)&FUN_0000_d103},  /* PATCH 144: down auto-scroll entry (sorted before 0xd107) */
+   {0xd107u,(void*)&FUN_0000_d107},
+   {0xd135u,(void*)&FUN_0000_d135},
+   {0xd146u,(void*)&FUN_0000_d146},

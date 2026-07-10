@@ -44,6 +44,13 @@ FLOWS=(
   # cb7c) then CANCEL @205,140 -> menu restored.  Independently exercises cb7c's shared-body close path
   # (distinct enumerate + dialog from campaigns/cb74); the destination frame is the plain menu.
   "battles-cancel|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:140:0; 3600:205:140:1; 4200:205:140:0|$ROOT/ref/battles_cancel_native320.png"
+  # Scroll flow (patch 144): open the BATTLES SELECT BATTLE list (47 entries) then PRESS-AND-HOLD the
+  # down-scroll arrow (172,135).  The game's own auto-repeat (a85b=d103) steps the view down until it
+  # CLAMPS at the bottom (offset 39 -> UKRAINE1-8, red bar on UKRAINE1).  The clamp is a deterministic
+  # endpoint independent of the exact iteration/tick count, so native, wasm and DOSBox all settle on the
+  # identical frame.  Ref captured mid-hold (button still down) via tools/refcapture_scroll.sh so the
+  # arrow's pressed state matches; the port script holds the button through the capture (no release).
+  "battles-scroll|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:172:135:0; 3600:172:135:1|$ROOT/ref/battles_scroll_native320.png"
 )
 
 run_target() { # $1=target $2=hz $3=ms $4=mouse-script $5=out.ppm ; echo rc
