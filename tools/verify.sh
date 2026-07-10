@@ -89,6 +89,16 @@ FLOWS=(
   # tools/refcapture_ok3.sh 160 87 205 128 203 159 (3x AE=0, non-circular; DOSBox blink phase = selected
   # marker black, reproducible at SETTLE=8).  AE=0 native AND wasm; native md5 == wasm md5, deterministic.
   "campaign-missions|25000|tick=8008|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:203:159:0; 6000:203:159:1; 6600:203:159:0; 7200:203:159:0|$ROOT/ref/campaign_missions_native320.png"
+  # BATTLES -> OK -> the mission BRIEFING screen (patch 151).  TWO clicks: BATTLES (row 100) opens the
+  # SELECT BATTLE .FSG list dialog (cb7c); OK (205,128) picks the default battle AZER1 -> e87a proceeds
+  # (asm `jae 0xe891`) into `7088(0)` = the mission-briefing modal dialog (id=0).  Its SETUP FUN_0000_7162
+  # opens AZER1.FSW (INT 21h AH=3D) and reads the briefing text into STRSEG:0x452c; the text drawer 6c2d
+  # renders it ("BLOODFEUD! / AS ARMENIAN FORCES PUSH INTO AZERBAIJAN...") on the FLDCOMP panel with
+  # ACCEPT/CANCEL.  The frame is static (no blink) -> plain FIST_RUNMS dump; READ-only (7162 only reads
+  # .FSW; the editor build + its .FPL write are deferred behind ACCEPT).  ref via
+  # tools/refcapture_ok.sh 160 100 205 128 (2 independent DOSBox captures AE=0 -> deterministic,
+  # non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
+  "battles-ok|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 4800:205:128:0|$ROOT/ref/battles_ok_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================

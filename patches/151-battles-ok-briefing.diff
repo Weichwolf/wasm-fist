@@ -1,0 +1,137 @@
+PATCH 151: BATTLES -> OK -> the mission BRIEFING screen (7088 dialog id=0).
+
+Clicking BATTLES (menu row 100 -> screen-state 0x2 -> FUN_0000_e87a) opens the SELECT BATTLE .FSG list
+dialog (cb7c, patch 140).  On OK (asm e88c `jae 0xe891`) e87a proceeds into the editor build; its FIRST
+settled sub-screen is the mission BRIEFING dialog opened by `e891: mov ax,0; call 7088` -- 7088 dialog
+id=0.  asm-verified vs re_out/fist_dat_image.bin (0xe891):
+    mov  ax,0 ; call 7088          ; open the id=0 (briefing) modal dialog
+    jb   0xe931                    ; CANCEL -> menu ; ACCEPT -> the LEVEL/MISSION EDITOR build (deferred)
+
+The briefing dialog reuses the SAME 7088 modal machinery already reconstructed for ABOUT (id=4, patch
+131) and REVIEW (id=2, patch 136): 7088 builds template 0x2c56, calls the per-dialog SETUP method
+[id*2-0x73ab] (id=0 -> FUN_0000_7162), and paints the text element via [id*2-0x739f] (id=0 -> the text
+drawer FUN_1000_6c2d) and the buttons via [id*2-0x7393] (id=0 -> the button sprite draw FUN_1000_6d53).
+
+FUN_0000_7162 (the briefing SETUP) builds "<battle>.FSW" (or .FSE if [0x6db4]!=0) from the selected
+battle name (DGROUP:0x79a9), opens it (INT 21h AH=3D) and reads up to 0x1800 bytes into STRSEG:0x452c,
+where 6c2d then draws it (the same proven 5591 multi-line drawstring used by the ABOUT credits).  Its
+Ghidra base-losses, all asm-verified vs 0x7162:
+  * the default "NO ORDERS RECEIVED FOR THIS MISSION..." copy (asm `rep movsb` DGROUP:0x8caf -> ES=STRSEG
+    :0x452c): Ghidra rendered the SI/DI cursors as the reg-file slots pcRam000f0008/000a, whose 4-byte
+    host-pointer views OVERLAP (0xf0008 vs 0xf000a) -> the second write corrupts the first -> wild source
+    ptr -> SIGSEGV.  Reconstructed with plain locals for the DS:SI/ES:DI effective addresses.
+  * the AH=3D open DX: asm `mov dx,0x8bed` (DS:DX = DGROUP:0x8bed = the filename buffer, = &DAT_2000_4bed
+    linear 0x24bed).  Ghidra emitted the host pointer -> DX = low16(hostptr) garbage -> open '' fails.
+    Write the real DOS offset 0x8bed (host-pointer-into-DOS-register class, patch 077/146).
+  * FUN_1000_6d00 (clear 0x1800 bytes) and FUN_1000_6d0f (the 0x0c/0x0e control-char remap): both operate
+    on ES/DS=STRSEG(word[0x70]):0x452c but Ghidra base-lost the buffer to host 0x452c -> deref of linear
+    0x452c.  Rebase to g_mem + (STRSEG<<4) + 0x452c.
+FUN_1000_6d53 (the id=0 button sprite draw, asm 0f69:0x76c3): the exact mirror of 6d3d (patch 131) --
+`si=ax*2; ax=word[si-0x7379]; if(ax!=0xffff){ ax+=[0x8be9]; lcall [0x6b4] ax=sprite,bx=rect }` -- Ghidra
+deref'd the per-state sprite table as a host int* (base-loss) and dropped the +[0x8be9] and the ax/bx
+args.  Reconstructed like 6d3d/6d69.
+
+The dispatch case (patch 140's e87a body) is extended: after cb7c, if a85d < 2 (cc33 OK/select, vs >=2
+CANCEL) call 7088(0) -- the briefing modal.  The modal spins until ACCEPT/CANCEL; the captured frame is
+the first settled briefing frame.  The editor build (e43f/4754/459a/... after 7088 ACCEPT) stays deferred.
+The frame is READ-only (7162 only reads .FSW; no write until the editor's own save) but the flow is
+isolated anyway.  Genuine DOSBox ref ref/battles_ok_native320.png (tools/refcapture_ok.sh 160 100 205 128;
+2 independent captures AE=0 -> deterministic, non-blink).  AE=0 native AND wasm, native md5 == wasm md5.
+
+--- a/fist.c
++++ b/fist.c
+@@ -2011,7 +2011,7 @@
+ void __allregs FUN_1000_6d00(void);
+ undefined4 __allregs FUN_1000_6d0f(void);
+ void __allregs FUN_1000_6d3d(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5);
+-void __allregs FUN_1000_6d53(int param_1);
++void __allregs FUN_1000_6d53(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5);
+ void __allregs FUN_1000_6d69(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5);
+ void __allregs FUN_1000_6d8c(void);
+ void __allregs FUN_1000_6da9(uint param_1);
+@@ -18430,18 +18430,23 @@
+   pcVar6[4] = '\0';
+   FUN_1000_6d00();
+   uVar4 = DAT_1000_c070;
+-  pcRam000f0008 = (char *)s___NO_ORDERS_RECEIVED_FOR_THIS_MI_2000_4cad + 2;
+-  pcRam000f000a = (char *)0x452c;
+-  for (iRam000f0004 = 0x27; iRam000f0004 != 0; iRam000f0004 = iRam000f0004 + -1) {
+-    pcVar3 = pcRam000f000a;
+-    pcRam000f000a = pcRam000f000a + 1;
+-    pcVar1 = pcRam000f0008;
+-    pcRam000f0008 = pcRam000f0008 + 1;
+-    *pcVar3 = *pcVar1;
++  {
++    /* asm 7162: `rep movsb` (cx=0x27) DS:SI -> ES:DI = the default "NO ORDERS RECEIVED..." string ->
++     * ES(STRSEG=word[0x70]):0x452c.  Ghidra rendered the SI/DI cursors as the Ram-file slots
++     * pcRam000f0008/pcRam000f000a, but those 4-byte host-pointer slots OVERLAP in the reg file
++     * (0xf0008 vs 0xf000a) -> the second write corrupts the first -> wild source ptr -> SIGSEGV.
++     * Use plain locals for the effective addresses (the faithful DS:SI/ES:DI). */
++    char *src = (char *)s___NO_ORDERS_RECEIVED_FOR_THIS_MI_2000_4cad + 2;
++    char *dst = (char *)(g_mem + ((uint32_t)uVar4 << 4) + 0x452c);
++    for (iRam000f0004 = 0x27; iRam000f0004 != 0; iRam000f0004 = iRam000f0004 + -1) {
++      *dst = *src; dst = dst + 1; src = src + 1;
++    }
+   }
+   uRam000f0014 = 0x21;
+   uRam000f0000 = 0x3d00;
+-  puRam000f0006 = (undefined1 *)&DAT_2000_4bed;
++  puRam000f0006 = (undefined1 *)0x8bed;   /* asm `mov dx,0x8bed`: DS:DX = DGROUP:0x8bed = the filename
++                                           * buffer (= &DAT_2000_4bed, linear 0x24bed).  Ghidra emitted the
++                                           * host pointer here -> DX = garbage; write the real DOS offset. */
+   uRam000f000e = 0x1c00;
+   uRam000f0010 = uVar4;
+   uRam000f0002 = param_1;
+@@ -34531,6 +34536,10 @@
+                                           * The editor build (7088 + e43f/4754/... on CF=0/OK) is deferred. */
+       FUN_0000_e39f();
+       FUN_0000_cb7c(0x4753462e, 0, 0, 0, 0, 0x4509, (undefined1 *)(g_mem + 0x1c000 + 0x79a9));
++      if (DAT_2000_a85d < 2) {           /* cb7c OK (asm e88c `jae 0xe891`): open the mission BRIEFING */
++        FUN_0000_7088(0, 0x4509);        /* e891: mov ax,0; call 7088 -> id=0 briefing dialog (7162 loads
++                                          * <battle>.FSW -> STRSEG:0x452c; 6c2d draws it). editor build deferred. */
++      }
+       DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
+       continue;
+     }
+@@ -55805,7 +55814,7 @@
+   undefined1 *puVar4;
+   
+   uVar2 = DAT_1000_c070;
+-  puVar4 = (undefined1 *)0x452c;
++  puVar4 = g_mem + ((uint32_t)uVar2 << 4) + 0x452c;
+   for (iVar3 = 0x1800; iVar3 != 0; iVar3 = iVar3 + -1) {
+     puVar1 = puVar4;
+     puVar4 = puVar4 + 1;
+@@ -55827,7 +55836,7 @@
+   char *pcVar5;
+   
+   uVar1 = DAT_1000_c070;
+-  pcVar5 = (char *)0x452c;
++  pcVar5 = (char *)(g_mem + ((uint32_t)uVar1 << 4) + 0x452c);
+   iVar2 = 0x17ff;
+   do {
+     pcVar4 = (char *)&DAT_2000_4cd6;
+@@ -55872,11 +55881,20 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_6d53) @ 1000:6d53 ===== */
+ 
+-void __allregs FUN_1000_6d53(int param_1)
++void __allregs FUN_1000_6d53(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5)
+ 
+ {
+-  if (*(int *)(param_1 * 2 + -0x7379) != -1) {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 151: id=0 (mission-briefing) button sprite draw (asm 0f69:0x76c3, linear 0x16d53) -- the exact
++     mirror of 6d3d (ABOUT button, patch 131) / 6d69 (REVIEW, patch 136), only the per-state sprite table
++     offset differs.  asm: si=ax*2; ax=word[si-0x7379]; if(ax!=0xffff){ ax+=[0x8be9] (DAT_2000_4be9 sprite
++     base); lcall [0x6b4] (=MGAVIDEO 26a1) ax=sprite, bx=rect }.  Ghidra deref'd the table as a host int*
++     (base-loss) and dropped the +[0x8be9] and the ax/bx args.  param_1=state(ax), param_4=rect(bx). */
++  uint8_t *D = g_mem+0x1c000;
++  uint16_t val = *(uint16_t*)(D+(uint16_t)((uint16_t)(param_1*2) - 0x7379));
++  if (val != 0xffff) {
++    val = (uint16_t)(val + *(uint16_t*)(D+0x8be9));    /* += DAT_2000_4be9 */
++    ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++       fist_icall_far((uint32_t)(DAT_1000_c6b4)))(val,0,0,param_4,0);
+   }
+   return;
+ }
