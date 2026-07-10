@@ -1,0 +1,73 @@
+Stage 3: campaign mission-marker INNER-RING gray (c622/11ba) + be47 blink-phase + f338 cursor colour.
+
+Three asm-verified fixes that take the campaign MISSION-SELECT screen (f338) to AE=0 vs the genuine
+DOSBox capture (from 114/142 residual): the inner marker ring gray, the inverted selected-marker blink,
+and the wrong mouse-cursor colour on the whole screen (patch 149's far-call dummy 0xf69 set al=0x69=105).
+
+The campaign MISSION-SELECT screen (f338) rendered its 4 mission marker boxes 99.8% bit-exact; the
+residual was the marker INNER ring (drawn index-0 black by the port, dark-gray index-2 by DOSBox) plus
+an inverted selected-marker blink.  Both are asm-verified reconstruction bugs, not palette/timing fudges.
+
+ROOT CAUSE 1 -- the inner ring is ALWAYS color index 2 (gray), by the 11ba asm itself.
+  be47 draws each marker as three nested box outlines: [0x61e]=119f (inset-1, caller's al = state colour),
+  [0x61a]=11db (outer, al=0 black), [0x622]=11ba (inset-2).  The asm of 11ba (re_out/fist_mga_image.bin
+  0x11ba) is:
+      11ba: b8 02 00     mov ax,0x2          ; AX=2  -> AL=2 !!
+      11bd: 01 07        add [bx],ax          ; shrink rect by 2 (uses AX)
+      ...  (sub [bx+4],ax etc.)
+      11c9: e8 0f 00     call 0x11db          ; 11db draws with AL -- which is now 2, NOT the caller's al
+  i.e. 11ba reuses the inset amount (2) as the fill colour: `mov ax,2` clobbers AL to 2 before the
+  box-outline draw, so the innermost ring is UNCONDITIONALLY drawn palette index 2 (the dark-gray bevel
+  highlight).  Contrast 119f (inset-1) which uses `inc [bx]`/`dec [bx+4]` -- it never touches AX, so it
+  preserves the caller's al -- and 11db which push/pop's ax around the clip call.  Only 11ba clobbers al.
+  Patch 138 reconstructed 11ba as `FUN_0000_11db(bx, al)` (passing the caller's al through), which is
+  wrong: the real 11ba passes AL=2.  Fix: call 11db with the literal 2.  (11ba is reached ONLY via be47's
+  c622 -- verified: c622 has no other caller -- so this touches only the campaign markers; the SELECT
+  PLAYER title bar that first exercised patch 138 uses 11db/119f only, never 11ba.  Zero regression.)
+
+ROOT CAUSE 2 -- the selected-marker blink was inverted.  be47 asm 0x1be64:
+      cmp cx,[0x6db6]                  ; cx == selected mission index?
+      jne 1be74                        ; no -> colour by state
+      mov al,0                         ; yes: al=0 (black)
+      test [0x452],0x10
+      je  1be8a                        ; if (frame-timer bit4 CLEAR) -> draw with al=0 (black)
+      ; else fall through to 1be74 (colour by state)
+  So the SELECTED marker's inset-1 ring is BLACK when [0x452]&0x10 == 0 and the STATE colour when set --
+  patch 149 had the condition as `(tick & 0x10) != 0 -> al=0`, the opposite phase.  Fix the test.
+
+Both fixes are needed to reach AE=0 vs the genuine DOSBox capture (which shows the inner ring gray and,
+at its capture phase, the selected marker black).  The flow pins the capture tick-phase deterministically
+via FIST_DUMPTICK (see tools/verify.sh campaign-missions) so native == wasm == DOSBox.
+
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -3624,7 +3624,9 @@ void __allregs FUN_0000_11ba(uint16_t bx, uint8_t al)
+   int16_t *r = (int16_t *)(g_mem + 0x1c000 + (uint16_t)bx);
+   r[0] = (int16_t)(r[0] + 2); r[1] = (int16_t)(r[1] + 2);
+   r[2] = (int16_t)(r[2] - 2); r[3] = (int16_t)(r[3] - 2);
+-  FUN_0000_11db(bx, al);
++  /* PATCH 150: asm `mov ax,0x2` sets the inset amount AND clobbers AL to 2, so 11db draws the inner
++     ring with palette index 2 (the gray bevel highlight), NOT the caller's al.  (void)al; */
++  (void)al; FUN_0000_11db(bx, 2);
+   r[0] = (int16_t)(r[0] - 2); r[1] = (int16_t)(r[1] - 2);
+   r[2] = (int16_t)(r[2] + 2); r[3] = (int16_t)(r[3] + 2);
+   return;
+--- a/fist.c
++++ b/fist.c
+@@ -36281,4 +36281,4 @@
+   FUN_1000_38cc();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d598)))(0xf69);   /* f33d: dialog SAVE (al=0xff [0x1598]) */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))(0xf69);   /* f343: [0x1594] al=0 */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d598)))(0xff);    /* PATCH 150: f33d asm `mov al,0xff` -> cursor colour mask = WHITE index 255 (via 2d1f/d5c2 [0x1598]); patch 149 passed the far-call dummy 0xf69 -> al=0x69=105 -> the whole f338 screen drew the mouse cursor in palette index 105 not 255 (the 34px vs-DOSBox residual) */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))(0x00);    /* PATCH 150: f343 asm `mov al,0x0` (was 0xf69 -> al=0x69) */
+   FUN_0000_e40e(param_1,param_3);
+@@ -63928,7 +63928,7 @@ void __allregs FUN_1000_be47(void)
+     for (i = 0; i < (uint16_t)DAT_2000_2dd0; i = i + 1) {
+       bx = (uint16_t)(rec + 0x19);                              /* marker rect */
+-      if (i == (uint16_t)DAT_2000_2db6 && (tick & 0x10) != 0) {
+-        al = 0;                                                 /* 1be6a: selected, blink off */
++      if (i == (uint16_t)DAT_2000_2db6 && (tick & 0x10) == 0) {
++        al = 0;                                                 /* PATCH 150: 1be6a-1be72: selected marker BLACK when [0x452]&0x10 CLEAR (asm `je 1be8a`); patch 149 had the phase inverted */
+       } else {
+         st = dg[(uint16_t)(rec + 0x3b)];
+         al = (st == 0) ? 0x21 : (st == 2) ? 0x20 : 0x22;

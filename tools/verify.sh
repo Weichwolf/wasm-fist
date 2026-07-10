@@ -74,6 +74,21 @@ FLOWS=(
   # (WESTERN [red]/EASTERN radios), OK/CANCEL.  ec7e's first settled frame is the deliverable (READ-only:
   # 6ade only fires on ec7e's own OK), isolated anyway (WRITE flow); ref via tools/refcapture_ok.sh 160 87 205 128.
   "campaigns-ok|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 4800:205:128:0|$ROOT/ref/campaigns_ok_native320.png"
+  # CAMPAIGNS -> OK -> campaign-OK -> the INTRODUCTORY CAMPAIGN mission-select screen (patches 149/150).
+  # THREE clicks: CAMPAIGNS (row 87) opens the SELECT PLAYER roster; OK (205,128) picks player D and opens
+  # the SELECT A CAMPAIGN modal (ec7e); campaign-OK (203,159) runs ec7e's tail -- f0f1 parses the selected
+  # campaign's .CAM missions, e78c writes the player .FPL (6ade -> WRITE flow, isolated), and opens
+  # FUN_0000_f338 = the mission-select screen: 4 mission marker boxes (state-coloured bevel: outer black,
+  # middle state-colour, INNER gray idx 2 -- patch 150's 11ba al=2), the selected mission's name + briefing,
+  # ACCEPT/CANCEL.  The marker layer is TICK-PHASE-dependent (be47 draws on [0x452]&0xf==0; the selected
+  # marker blinks on [0x452]&0x10), so the frame is captured PHASE-PINNED via "tick=8008": dump when the
+  # engine frame-timer [0x452] first reaches 8008 (FIST_DUMPTICK) -- 8008 is 8 ticks past the mult-of-32
+  # boundary 8000, so BOTH native and wasm have caught the [0x452]==8000 be47 draw (bit4=0 -> selected
+  # marker BLACK, matching the DOSBox capture) -> the marker layer is native<->wasm bit-identical (a plain
+  # wall-clock FIST_RUNMS dump lands at a target-dependent phase and diverges).  ref via
+  # tools/refcapture_ok3.sh 160 87 205 128 203 159 (3x AE=0, non-circular; DOSBox blink phase = selected
+  # marker black, reproducible at SETTLE=8).  AE=0 native AND wasm; native md5 == wasm md5, deterministic.
+  "campaign-missions|25000|tick=8008|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:203:159:0; 6000:203:159:1; 6600:203:159:0; 7200:203:159:0|$ROOT/ref/campaign_missions_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
@@ -88,17 +103,24 @@ FLOWS=(
 #   * the repo's armoredfist/ is never mutated (`git status` stays clean after a full verify).
 # The DOSBox reference for these flows is captured the SAME way (tools/refcapture_ok.sh mounts a fresh
 # cp -a copy), so the reference and the port exercise the same initial state.  Names of write flows:
-WRITEFLOWS=" selplayer-ok selplayer-ok-kkr campaigns-ok "
+WRITEFLOWS=" selplayer-ok selplayer-ok-kkr campaigns-ok campaign-missions "
 
 is_write_flow() { case "$WRITEFLOWS" in *" $1 "*) return 0;; *) return 1;; esac; }
 
-run_target() { # $1=target $2=hz $3=ms $4=mouse-script $5=out.ppm $6=datadir(optional) ; echo rc
+run_target() { # $1=target $2=hz $3=ms/dumptick $4=mouse-script $5=out.ppm $6=datadir(optional) ; echo rc
   local t="$1" hz="$2" ms="$3" mouse="$4" out="$5" dd="${6:-}"
   local ddenv=(); [ -n "$dd" ] && ddenv=(FIST_DATADIR="$dd")
+  # The 3rd flow field is normally FIST_RUNMS (wall-clock dump deadline).  For screens whose frame has a
+  # TICK-PHASE-dependent layer (e.g. the campaign mission-marker blink FUN_1000_be47, gated on the engine
+  # frame-timer [0x452]&0xf / &0x10), a wall-clock dump lands at a target-dependent [0x452] -> native and
+  # wasm would differ.  Such flows use "tick=N": dump when the engine's own [0x452] counter first reaches
+  # N (FIST_DUMPTICK) -- identical on both targets -> the phase-dependent layer is bit-identical.  (See
+  # the campaign-missions flow.)
+  local dumpenv=(); case "$ms" in tick=*) dumpenv=(FIST_DUMPTICK="${ms#tick=}");; *) dumpenv=(FIST_RUNMS="$ms");; esac
   if [ "$t" = native ]; then
-    timeout 40 env "${ddenv[@]}" FIST_TICK_HZ="$hz" FIST_RUNMS="$ms" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 40 env "${ddenv[@]}" FIST_TICK_HZ="$hz" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NATIVE" >/dev/null 2>&1; echo $?
   else
-    timeout 120 env "${ddenv[@]}" FIST_TICK_HZ="$hz" FIST_RUNMS="$ms" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+    timeout 120 env "${ddenv[@]}" FIST_TICK_HZ="$hz" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
 }
 

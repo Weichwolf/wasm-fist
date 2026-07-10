@@ -206,38 +206,13 @@ void fist_set_int8_handler(uint32_t linear){
  * The ISR (FUN_1000_30f8) is an __allregs C function reached through the indirect-call dispatcher; it
  * saves/restores its own state and its tick bookkeeping does not depend on incoming register operands,
  * so we invoke it with zeroed register args. It runs on the current (main) stack -- NOT from a signal. */
-void fist_timer_pump(void){
-#ifdef __EMSCRIPTEN__
-    { extern void fist_wasm_tick(void); fist_wasm_tick(); }   /* cooperative time base (no SIGALRM) */
-#else
-    /* Debug seam: FIST_COOP_TICK=1 drives the INT-8 time base COOPERATIVELY on native too (one tick
-     * per pump, exactly like wasm) so the engine can be traced under gdb without gdb having to process
-     * thousands of SIGALRM/sec. The rendered frame does not depend on the tick RATE (the menu is a fixed
-     * point once painted), so a coop-tick native run reaches the same deterministic menu/sub-screen frame
-     * as the SIGALRM-timed run -- diagnostics only; the shipped run keeps the SIGALRM timer. */
-    { static int coop = -1; if (coop < 0) coop = getenv("FIST_COOP_TICK") ? 1 : 0;
-      if (coop) tick_advance(); }
-#endif
-    { extern void fbtrap_arm_hook(void); fbtrap_arm_hook(); }
-    /* Dev watchdog: FIST_RUNMS=<ms> dumps the framebuffer (FIST_FBDUMP) and exits after a wall-clock
-     * deadline -- lets a first-light frame be captured while the engine is in its (non-returning) main
-     * loop.  Runs in main context (safe for the PPM writer). */
-    static long g_deadline_ms = -2;
-    if (g_deadline_ms == -2) {
-        const char *r = getenv("FIST_RUNMS");
-        g_deadline_ms = r ? atol(r) : -1;
-        if (g_deadline_ms > 0) {
-            struct timeval tv; gettimeofday(&tv, 0);
-            g_deadline_ms += tv.tv_sec*1000L + tv.tv_usec/1000L;
-        }
-    }
-    if (g_deadline_ms > 0) {
-        struct timeval tv; gettimeofday(&tv, 0);
-        long now = tv.tv_sec*1000L + tv.tv_usec/1000L;
-        if (now >= g_deadline_ms) {
+/* Dump the framebuffer (+ optional dev diagnostics) and exit -- shared by the FIST_DUMPTICK engine-
+ * frame-timer trigger and the FIST_RUNMS wall-clock watchdog.  Runs in main context (safe for the
+ * PPM writer).  The [0x452] value is logged so a capture's tick-phase is reproducible. */
+static void fist_dump_and_exit(const char *why){
+    fprintf(stderr, "[fist] %s: dumping frame + exiting (video-mode=0x%02x, [0x452]=%u)\n",
+            why, fist_vga_mode(), *(uint16_t*)(g_mem+0x1c452));
             const char *fb = getenv("FIST_FBDUMP");
-            fprintf(stderr, "[fist] FIST_RUNMS watchdog: dumping frame + exiting (video-mode=0x%02x)\n",
-                    fist_vga_mode());
             if (fb) fist_dump_framebuffer(fb);
             { const char *rw = getenv("FIST_FBRAW");
               if (rw) { FILE *f = fopen(rw, "wb"); if (f) { fwrite(g_mem + 0xA0000, 1, 64000, f); fclose(f); } } }
@@ -278,6 +253,20 @@ void fist_timer_pump(void){
                     g_isr_runs, GW(0xd5b8),GW(0xd5ba),GW(0xd5b6),
                     *(uint32_t*)(g_mem+0x1d5ac),*(uint32_t*)(g_mem+0x1c2b0),*(uint32_t*)(g_mem+0x1d5b0));
             }
+            if (getenv("FIST_MKRDBG")) {
+                uint8_t *D = g_mem + 0x1c000;
+                fprintf(stderr,"[mkrdbg] c61a=%08x c61e=%08x c622=%08x  2dd0(count)=%u 2db6(sel)=%u [0x452]=%u\n",
+                    *(uint32_t*)(D+0x61a), *(uint32_t*)(D+0x61e), *(uint32_t*)(D+0x622),
+                    *(uint16_t*)(D+0x6dd0), *(uint16_t*)(D+0x6db6), *(uint16_t*)(D+0x452));
+                uint16_t rec=0x6dda;
+                for(int i=0;i<4;i++){
+                    fprintf(stderr,"[mkrdbg] mission %d rect(rec+0x19..0x1f): %u %u %u %u  st(rec+0x3b)=%u\n",
+                        i, *(uint16_t*)(D+(uint16_t)(rec+0x19)),*(uint16_t*)(D+(uint16_t)(rec+0x1b)),
+                        *(uint16_t*)(D+(uint16_t)(rec+0x1d)),*(uint16_t*)(D+(uint16_t)(rec+0x1f)),
+                        D[(uint16_t)(rec+0x3b)]);
+                    rec+=0xfd;
+                }
+            }
             if (getenv("FIST_PALDUMP")) {
                 uint16_t pseg = *(uint16_t*)(g_mem+0x1c782);
                 uint8_t *pb = g_mem + ((uint32_t)pseg<<4);
@@ -288,7 +277,52 @@ void fist_timer_pump(void){
                 fprintf(stderr,"  fade786=%02x\n", g_mem[0x1c786]);
             }
             _exit(0);
+}
+
+void fist_timer_pump(void){
+#ifdef __EMSCRIPTEN__
+    { extern void fist_wasm_tick(void); fist_wasm_tick(); }   /* cooperative time base (no SIGALRM) */
+#else
+    /* Debug seam: FIST_COOP_TICK=1 drives the INT-8 time base COOPERATIVELY on native too (one tick
+     * per pump, exactly like wasm) so the engine can be traced under gdb without gdb having to process
+     * thousands of SIGALRM/sec. The rendered frame does not depend on the tick RATE (the menu is a fixed
+     * point once painted), so a coop-tick native run reaches the same deterministic menu/sub-screen frame
+     * as the SIGALRM-timed run -- diagnostics only; the shipped run keeps the SIGALRM timer. */
+    { static int coop = -1; if (coop < 0) coop = getenv("FIST_COOP_TICK") ? 1 : 0;
+      if (coop) tick_advance(); }
+#endif
+    { extern void fbtrap_arm_hook(void); fbtrap_arm_hook(); }
+    /* Dev watchdog: FIST_RUNMS=<ms> dumps the framebuffer (FIST_FBDUMP) and exits after a wall-clock
+     * deadline -- lets a first-light frame be captured while the engine is in its (non-returning) main
+     * loop.  Runs in main context (safe for the PPM writer). */
+    static long g_deadline_ms = -2;
+    if (g_deadline_ms == -2) {
+        const char *r = getenv("FIST_RUNMS");
+        g_deadline_ms = r ? atol(r) : -1;
+        if (g_deadline_ms > 0) {
+            struct timeval tv; gettimeofday(&tv, 0);
+            g_deadline_ms += tv.tv_sec*1000L + tv.tv_usec/1000L;
         }
+    }
+    /* Phase-pinned dump (DETERMINISM for tick-phase-dependent screens): FIST_DUMPTICK=N dumps the frame
+     * when the engine's own INT-8 frame-timer counter [DGROUP:0x452] first reaches N -- NOT on a wall-clock
+     * deadline.  [0x452] is bumped by the engine ISR (one per drained host tick), so its value is a pure
+     * function of engine progress, IDENTICAL on native and wasm at the same logical point.  The campaign
+     * mission-marker layer (FUN_1000_be47) is drawn only when [0x452]&0xf==0 and the selected marker blinks
+     * on [0x452]&0x10, so its visible state depends solely on [0x452] mod 0x20 -- pinning the dump to a
+     * fixed [0x452] makes that layer bit-identical across targets.  (The FIST_MOUSE script is pump-gated
+     * and completes well before N; choose N large enough that both targets have settled into the modal
+     * loop -- see the campaign-missions flow comment in tools/verify.sh.)  Takes precedence over FIST_RUNMS. */
+    static long g_dumptick = -2;
+    if (g_dumptick == -2) { const char *d = getenv("FIST_DUMPTICK"); g_dumptick = d ? atol(d) : -1; }
+    if (g_dumptick > 0) {
+        uint16_t cur = *(uint16_t*)(g_mem + 0x1c452);
+        if ((long)cur >= g_dumptick) fist_dump_and_exit("FIST_DUMPTICK");
+    }
+    if (g_deadline_ms > 0) {
+        struct timeval tv; gettimeofday(&tv, 0);
+        long now = tv.tv_sec*1000L + tv.tv_usec/1000L;
+        if (now >= g_deadline_ms) fist_dump_and_exit("FIST_RUNMS watchdog");
     }
     /* Async vertical-retrace IRQ (palette upload): fires on the timer heartbeat regardless of whether
      * the engine's current loop polls in(0x3da) -- mirrors the original's async retrace ISR (FUN_0000_0b1f)
