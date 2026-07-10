@@ -16,7 +16,12 @@ static void logname(const char *tag, const char *path) {
     if (!dot) return;
     if (strcasecmp(dot, ".BIN") && strcasecmp(dot, ".MRL") && strcasecmp(dot, ".MS3") &&
         strcasecmp(dot, ".KDV") && strcasecmp(dot, ".MAL") && strcasecmp(dot, ".SKY") &&
-        strcasecmp(dot, ".KLC") && strcasecmp(dot, ".DTL") && strcasecmp(dot, ".RES"))
+        strcasecmp(dot, ".KLC") && strcasecmp(dot, ".DTL") && strcasecmp(dot, ".RES") &&
+        strcasecmp(dot, ".FSG") && strcasecmp(dot, ".FSW") && strcasecmp(dot, ".FSE") &&
+        strcasecmp(dot, ".CAM") && strcasecmp(dot, ".FPL") && strcasecmp(dot, ".MS3") &&
+        strcasecmp(dot, ".PAL") && strcasecmp(dot, ".PCX") && strcasecmp(dot, ".M00") &&
+        strcasecmp(dot, ".M08") && strcasecmp(dot, ".M16") && strcasecmp(dot, ".M32") &&
+        strcasecmp(dot, ".SET") && strcasecmp(dot, ".CFG") && strcasecmp(dot, ".MRL"))
         return;
     int fd = 2;
     char line[256];
