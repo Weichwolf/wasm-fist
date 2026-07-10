@@ -1,0 +1,84 @@
+PATCH 165: FUN_0000_1692 (asm 0x1692) -- the model-record initializer on the LOD model-load path
+(reached BATTLES->OK->ACCEPT via 4308 -> 1684 -> 1692), a pervasive DGROUP base-loss (same class as
+patches 163/164 for its neighbours 1996/19b9).  ES=DS=DGROUP; the model-record base is
+mrec = word[DGROUP:(word[DGROUP:0x2674])+0x27f4] (asm 16be) and the descriptor near-offset is
+di = word[DGROUP:(mrec+0x20)] (16c9); the es:[6]->es:[8] copy at 16e3 is a loaded-SEGMENT window, not
+DGROUP:c006/c008.  Ghidra typed DAT_1000_e674 int** and rendered mrec as DAT_1000_e674[0x13fa]
+(0x27f4/2 scaling) -> a wild host dereference (SIGSEGV, gdb-confirmed at FUN_0000_1692+231; the
+deterministic-from-repo-root crash after the `[ext] op 0x4c` display-list commands, pinned via the
+core-dump loop).  All rebuilt offsets are 16-bit -> in-bounds; the fill/broadcast logic is otherwise
+instruction-faithful (verified vs asm 0x16be..0x1718).  Behaviour-neutral for verify (model-loader
+path, unreached by the 19 flows).
+
+--- a/fist.c
++++ b/fist.c
+@@ -7616,31 +7616,46 @@
+       FUN_0000_18dc(DAT_1000_e674,8);
+       return DAT_1000_e68c;
+     }
+-    param_1 = (undefined2 *)*(int *)(DAT_1000_e674[0x13fa] + 0x20);
+-    pbVar1 = (byte *)(param_1 + 1);
+-    *pbVar1 = *pbVar1 | 0x20;
+-    if ((char)*pbVar1 < '\0') {
+-      if ((*(byte *)(param_1 + 1) & 0x10) != 0) {
+-        FUN_1000_0d2e(param_1,param_5,param_1);
++    /* PATCH 165 (asm 0x16be..0x1715): ES=DS=DGROUP; every ptr here is a DGROUP near-offset (or a
++       segment loaded from one), not a host ptr.  mrec = word[DGROUP:(word[DGROUP:0x2674])+0x27f4] =
++       the model-record base near-offset (asm 16be `mov si,[0x2674]; mov si,[si+0x27f4]`); Ghidra
++       rendered it as DAT_1000_e674[0x13fa] (int** with the 0x27f4/2=0x13fa scaling) -> a wild host
++       deref = the SIGSEGV (gdb fault at 1692+231, chain 4308->1684->1692).  The descriptor near-offset
++       di = word[DGROUP:(mrec+0x20)] (16c6/16c9).  asm 16e3 also loads ES from word[DGROUP:di] and
++       copies es:[6]->es:[8] (a SEGMENT window, NOT DGROUP:c006/c008 which Ghidra emitted).  All
++       offsets are 16-bit -> in-bounds; the fan-out/fill logic is otherwise instruction-faithful.
++       Model-loader path; not reached by the 19 verify flows (a bare host deref would already SIGSEGV
++       them).  Same DGROUP base-loss class as patches 163/164 (1996/19b9). */
++    {
++      unsigned char *dg = g_mem + 0x1c000;
++      uint16_t mrec = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4));
++      uint16_t di = *(uint16_t *)(dg + (uint16_t)(mrec + 0x20));      /* 16c9 mov di,[si] */
++      unsigned char *pb = dg + (uint16_t)(di + 2);                    /* 16cb byte[DGROUP:di+2] */
++      int i;
++      *pb |= 0x20;
++      if ((char)*pb < '\0') {                                        /* 16cf jns -> else */
++        if ((*pb & 0x10) != 0) {                                      /* 16d1 testb 0x10 */
++          FUN_1000_0d2e(di,param_5,di);                              /* 16d9 lcall f69:169e (ax=di) */
++        }
+       }
++      else {
++        FUN_0000_1724(0x16e3);                                       /* 16e0 (identity) */
++      }
++      {
++        uint16_t seg = *(uint16_t *)(dg + di);                        /* 16e3 mov es,[DGROUP:di] */
++        unsigned char *es = g_mem + ((uint32_t)seg << 4);
++        *(uint16_t *)(es + 8) = *(uint16_t *)(es + 6);               /* 16e5/16e9 es:[8]=es:[6] */
++      }
++      {                                                               /* 16f3 rep stosw: fill 0x20 words */
++        uint16_t p = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4));  /* = mrec */
++        for (i = 0x20; i != 0; i--) { *(uint16_t *)(dg + p) = di; p = (uint16_t)(p + 2); }
++      }
++      {                                                               /* 1708 orb[DGROUP:di+2]|=0x22 x0x10 */
++        uint16_t p = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4)) + 0x44);
++        for (i = 0x10; i != 0; i--) { *(dg + (uint16_t)(p + 2)) |= 0x22; p = (uint16_t)(p + 4); }
++      }
++      param_1 = (undefined2 *)(uintptr_t)di;                          /* 1717 clc; ret ax=di */
+     }
+-    else {
+-      FUN_0000_1724(0x16e3);
+-    }
+-    *(undefined2 *)&DAT_1000_c008 = *(undefined2 *)&DAT_1000_c006;
+-    piVar4 = (int *)DAT_1000_e674[0x13fa];
+-    for (iVar3 = 0x20; iVar3 != 0; iVar3 = iVar3 + -1) {
+-      piVar2 = piVar4;
+-      piVar4 = piVar4 + 1;
+-      *piVar2 = (int)param_1;
+-    }
+-    iVar5 = DAT_1000_e674[0x13fa] + 0x44;
+-    iVar3 = 0x10;
+-    do {
+-      *(byte *)(iVar5 + 2) = *(byte *)(iVar5 + 2) | 0x22;
+-      iVar5 = iVar5 + 4;
+-      iVar3 = iVar3 + -1;
+-    } while (iVar3 != 0);
+   }
+   return param_1;
+ }

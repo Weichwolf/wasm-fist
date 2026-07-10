@@ -1,0 +1,36 @@
+PATCH 164: FUN_0000_19b9 (asm 0x19b9) -- the SECOND model-struct field initializer on the LOD
+model-load path (reached BATTLES->OK->ACCEPT via 4308 -> 183f -> 19b9), the exact same DGROUP
+base-loss class as its immediate neighbour FUN_0000_1996 (patch 163) and 18dc/197b.  ES=DS=DGROUP;
+bx = word[DGROUP:0x2674] (the raw value of DAT_1000_e674, which Ghidra mis-typed `int**`);
+di = word[DGROUP:(uint16)(bx+0x27f4)] = the model-struct near-offset (asm 0x19bd `mov bx,[0x2674]`;
+0x19c1 `mov di,[bx+0x27f4]`), then a rep of `word[di+2] = word[di]` across a 16-entry / stride-4
+window (asm 0x19c5 `mov cx,0x10`; 0x19c8 `mov si,di; lodsw; mov di,si; stosw; loop`).  Ghidra dropped
+the DGROUP base so `*(undefined2*)(DAT_1000_e674 + 0x27f4)` was a wild host-pointer dereference
+(SIGSEGV, gdb-confirmed at FUN_0000_19b9+35, fault addr = a wild host ptr; core-dump-loop pinned it as
+the deterministic-from-repo-root crash after the `[ext] op 0x4c inbox=000026e4` display-list command).
+The stride-4 copy loop Ghidra recovered is instruction-faithful (verified vs asm 0x19b9..0x19d0); only
+the base is rebased through g_mem+0x1c000 here.  Behaviour-neutral for verify (model-loader path,
+unreached by the 19 flows -- a bare host deref there would already have SIGSEGV'd them).
+
+--- a/fist.c
++++ b/fist.c
+@@ -7847,7 +7847,18 @@
+   int iVar3;
+   undefined2 *puVar4;
+   
+-  puVar4 = (undefined2 *)*(undefined2 *)(DAT_1000_e674 + 0x27f4);
++  /* PATCH 164 (asm 0x19b9): ES=DS=DGROUP; every ptr here is a DGROUP near-offset, not a host ptr.
++     bx = word[DGROUP:0x2674] (the raw value of DAT_1000_e674, mis-typed int**); di =
++     word[DGROUP:(uint16)(bx+0x27f4)] = the model-struct near-offset -> rebase to g_mem+0x1c000.
++     The stride-4 word[di+2]=word[di] copy Ghidra recovered is correct; only the base was dropped
++     (a wild host deref = the SIGSEGV).  Same class as patch 163 (1996); model-loader path
++     4308->183f->19b9, not reached by the 19 verify flows. */
++  {
++    unsigned char *dg = g_mem + 0x1c000;
++    uint16_t bx = *(uint16_t *)(dg + 0x2674);
++    uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 0x27f4));
++    puVar4 = (undefined2 *)(dg + di);
++  }
+   iVar3 = 0x10;
+   do {
+     puVar1 = puVar4;

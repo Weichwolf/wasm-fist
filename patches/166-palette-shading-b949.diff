@@ -1,0 +1,47 @@
+PATCH 166: FUN_1000_b949 (asm 0x1b949) -- the palette-shading LUT builder called 0x100x from
+FUN_1000_b92d on the mission-setup path (e006 -> b92d -> b949).  b92d loads ES:DI = the create-task
+TCB window (asm 1b92d `mov es,[DGROUP:0xea2e]; mov di,[DGROUP:0xea2c]`) and passes it as param_2 --
+which the DAT_2000_aa2c far-ptr macro (patch 068) already resolves to the host pointer
+g_mem+(aa2e<<4)+aa2c, so the source-RGB reads at param_2+0xea/0xeb/0xec are correct as decompiled.
+The DEST is the shading LUT at DGROUP:[si-0xf48..-0xf46]; Ghidra dropped the DGROUP write-base so with
+param_1(=si)=0 the store `[si-0xf48]` dereferenced host address 0xfffff0b8 = the SIGSEGV
+(gdb-confirmed at FUN_1000_b949+118).  Only the three writes are rebased to
+g_mem+0x1c000+(uint16)(si-0xfNN); the luminance/shading arithmetic is preserved verbatim.
+Behaviour-neutral for verify (mission-setup path, unreached by the 19 flows).
+
+--- a/fist.c
++++ b/fist.c
+@@ -62211,15 +62211,24 @@
+   byte bVar1;
+   byte bVar2;
+   uint uVar3;
+-  undefined2 unaff_ES;
+-  
+-  bVar1 = *(byte *)(param_2 + 0xeb);
+-  bVar2 = *(byte *)(param_2 + 0xec);
+-  uVar3 = (uint)*(byte *)(param_2 + 0xea) + (uint)bVar1 * 2 + (uint)bVar2 >> 2;
+-  *(undefined1 *)(param_1 + -0xf48) =
+-       (char)(((int)(*(byte *)(param_2 + 0xea) - uVar3) >> 3) + uVar3 >> 3);
+-  *(undefined1 *)(param_1 + -0xf47) = (char)(((int)(bVar1 - uVar3) >> 3) + uVar3 >> 3);
+-  *(undefined1 *)(param_1 + -0xf46) = (char)((((int)(bVar2 - uVar3) >> 3) + uVar3) * 3 >> 4);
++  /* PATCH 166 (asm 0x1b949): the palette-shading LUT builder.  param_2 is the create-task TCB HOST
++     pointer (b92d asm 1b92d `mov es,[0xea2e]; mov di,[0xea2c]` = ES:DI = the DAT_2000_aa2c macro,
++     patch 068 -- already g_mem+(aa2e<<4)+aa2c), so the RGB reads at param_2+0xea/0xeb/0xec are correct
++     as-is.  The DEST is the shading LUT at DGROUP:[si-0xf48..-0xf46]; Ghidra dropped the DGROUP write
++     base so with param_1(=si)=0 the store `[si-0xf48]` dereferenced host 0xfffff0b8 = the SIGSEGV
++     (gdb at b949+118, chain e006->b92d->b949).  Rebase the writes to g_mem+0x1c000+(uint16)(si-0xfNN);
++     the luminance/shading arithmetic is kept verbatim.  Mission-setup path; not reached by the 19
++     verify flows. */
++  {
++    unsigned char *dg = g_mem + 0x1c000;
++    bVar1 = *(byte *)(param_2 + 0xeb);
++    bVar2 = *(byte *)(param_2 + 0xec);
++    uVar3 = (uint)*(byte *)(param_2 + 0xea) + (uint)bVar1 * 2 + (uint)bVar2 >> 2;
++    dg[(uint16_t)(param_1 + -0xf48)] =
++         (char)(((int)(*(byte *)(param_2 + 0xea) - uVar3) >> 3) + uVar3 >> 3);
++    dg[(uint16_t)(param_1 + -0xf47)] = (char)(((int)(bVar1 - uVar3) >> 3) + uVar3 >> 3);
++    dg[(uint16_t)(param_1 + -0xf46)] = (char)((((int)(bVar2 - uVar3) >> 3) + uVar3) * 3 >> 4);
++  }
+   return;
+ }
+ 

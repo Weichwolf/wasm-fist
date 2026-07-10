@@ -1,0 +1,33 @@
+PATCH 167: FUN_1000_b9b2 (asm 0x1b9b2) -- the 2nd palette-shading LUT builder, called 0x100x from
+FUN_1000_b996 on the mission-setup path (e006 -> b996 -> b9b2); the exact sibling of b949 (patch 166).
+param_2 is the create-task TCB host pointer (the DAT_2000_aa2c far-ptr macro, patch 068) so the RGB
+reads at param_2+0xea/0xeb/0xec are correct as decompiled.  Only the DEST writes to the LUT at
+DGROUP:[si-0xc48..-0xc46] had the DGROUP write-base dropped -> with param_1(=si)=0 the store
+`[si-0xc48]` dereferenced host address 0xfffff3b8 = the SIGSEGV (gdb-confirmed at FUN_1000_b9b2+...).
+The three writes are rebased to g_mem+0x1c000+(uint16)(si-0xc4N); the min/max/dither arithmetic is
+preserved verbatim.  Behaviour-neutral for verify (mission-setup path, unreached by the 19 flows).
+
+--- a/fist.c
++++ b/fist.c
+@@ -62294,9 +62294,18 @@
+     }
+     iVar3 = iVar3 + -1;
+   } while (iVar3 != 0);
+-  *(byte *)(param_1 + -0xc48) = bVar5 >> 1;
+-  *(byte *)(param_1 + -0xc47) = bVar6 >> 2;
+-  *(byte *)(param_1 + -0xc46) = bVar4 >> 2;
++  /* PATCH 167 (asm 0x1b9b2 tail): the 2nd palette-shading LUT builder (e006 -> b996 -> b9b2), the
++     exact sibling of b949 (patch 166).  param_2 is the create-task TCB host pointer (DAT_2000_aa2c
++     macro) so the RGB reads are correct; only the DEST writes to DGROUP:[si-0xc48..-0xc46] had the
++     DGROUP base dropped -> with param_1(=si)=0 `[si-0xc48]` dereferenced host 0xfffff3b8 = the SIGSEGV
++     (gdb at b9b2+... chain e006->b996->b9b2).  Rebase the three writes to g_mem+0x1c000+(uint16)
++     (si-0xc4N); the min/max/dither arithmetic is preserved verbatim.  Not reached by the 19 flows. */
++  {
++    unsigned char *dg = g_mem + 0x1c000;
++    dg[(uint16_t)(param_1 + -0xc48)] = bVar5 >> 1;
++    dg[(uint16_t)(param_1 + -0xc47)] = bVar6 >> 2;
++    dg[(uint16_t)(param_1 + -0xc46)] = bVar4 >> 2;
++  }
+   return;
+ }
+ 
