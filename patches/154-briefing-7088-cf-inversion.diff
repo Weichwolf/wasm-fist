@@ -1,0 +1,26 @@
+PATCH 154: FUN_0000_7088 exit -- correct the ACCEPT/CANCEL carry (the linchpin the mission cascade waits on).
+
+The briefing/dialog modal FUN_0000_7088 returns its OK/CANCEL verdict in the x86 carry to its caller
+(e714's BATTLES `jae 0xe891` / e87a `jb 0xe931`).  asm 0x70f4 (verified vs re_out/fist_dat_image.bin):
+    cmp  BYTE PTR ds:0x8be2, 0xff    ; DAT_2000_4be2 (7249: =1 OK/ACCEPT, =0xff CANCEL)
+    cmc                               ; 4be2==0xff -> CF=1 (CANCEL) ; 4be2==1 -> CF=0 (ACCEPT)
+    ret
+Patch 153 reconstructed this exit but emitted the INVERTED map `(4be2==0xff) ? 0 : 1` -- CANCEL->CF=0,
+ACCEPT->CF=1.  It went unnoticed because NO passing flow reads the CF after 7088 (battles-ok dumps the
+open modal; battles-cancel-briefing's e714 tail just sets b78e=10 without testing CF).  But it is exactly
+the gate the mission-start cascade branches on (`if ACCEPT run e43f..e4bb`), so with the inversion an
+ACCEPT click takes the CANCEL path and the cascade never runs.  Fixed to match the asm (`cmp;cmc`):
+ACCEPT (4be2==1) -> CF=0, CANCEL (4be2==0xff) -> CF=1.  Behaviour-neutral for the 19 covered flows
+(none consumes the post-7088 CF); it unblocks the ACCEPT cascade wiring.
+
+--- a/fist.c
++++ b/fist.c
+@@ -18318,7 +18318,7 @@
+         (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))(0xf69);
+         iVar3 = FUN_0000_1cdb(iVar2,0x8cee,0x94,0x10,param_2,uVar8);  /* PATCH 153 */
+         DAT_1000_c78c = uVar1;
+-        g_fist_cf = (*(uint8_t*)(g_mem+0x24be2) == 0xff) ? 0 : 1;
++        g_fist_cf = (*(uint8_t*)(g_mem+0x24be2) == 0xff) ? 1 : 0;  /* PATCH 154: asm 70f4 cmp;cmc */
+         return (undefined4)iVar3;
+       }
+     }

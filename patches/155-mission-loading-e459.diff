@@ -1,0 +1,52 @@
+PATCH 155: FUN_0000_e459 -- the mission LOADING-screen setup (first blocker of the ACCEPT cascade).
+
+e459 sets up + titles the "LOADING" screen (the first thing the BATTLES->OK->ACCEPT mission-start
+cascade FUN_0000_e87a runs after the briefing).  Two asm-verified Ghidra defects (vs re_out/fist_dat_image.bin
+0xe459..0xe4b8), both SIGSEGV on the wild small-pointer deref:
+  (a) e465-e481 the LOADING resource-load device methods `call [DGROUP:0x560/0x564/0x5b0]` with
+      ax=name-index 0x1c ("LOADING.MRL"), cx=ds, bx=descriptor DGROUP:0xf6d4 -- the __allregs vector
+      sites DROPPED ax/cx/bx, so the driver built a garbage filename from a stale name index.  Thread
+      them exactly as the proven menu-bg loader e3f8 (patch 110/094) and the settings loader (17314):
+      c560(0x1c,0x1c00,0xf6d4); c564(0x1c00,&desc); c5b0(4,word[desc]) (+ g_mga_fade_es like 17314).
+  (b) e494-e499 the centered LOADING-title string index: `movzx bx,byte[DGROUP:0xf75f];
+      mov si,word[DGROUP:(bx-0x8a0)]` -- Ghidra collapsed it to `word[(value@0xf75f)-0x8a0]` host-deref.
+      si is a STRSEG offset (a358/a370 already rebase via DGROUP:0x70); recover bx as the byte value and
+      si = word[DGROUP:(uint16)(bx-0x8a0)].
+Verified via the throwaway ACCEPT-cascade trace: with e459 fixed, the cascade opens LOADING.MS3 then
+LOADING.MRL -- the exact first two mission assets DOSBox opens (tools/oracle/trace_click3.sh) -- crash-free
+through e459.  e459 is reached ONLY by the ACCEPT mission cascade (not yet wired into a verify flow), so
+this is behaviour-neutral for the 19 covered flows.
+
+--- a/fist.c
++++ b/fist.c
+@@ -34074,12 +34074,25 @@
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))();
+   FUN_0000_e405();
+   DAT_2000_b6c6 = DAT_2000_b6c6 | 0x21;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c564)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c5b0)))();
++  /* PATCH 155 (asm e465-e481): LOADING-screen resource load via descriptor DGROUP:0xf6d4, name-index
++     0x1c ("LOADING.MRL").  The __allregs vector sites dropped ax/cx/bx -> garbage name -> a wild open
++     then SIGSEGV.  Thread them exactly as the menu-bg loader e3f8 (patch 110/094) / settings (17314). */
++  ((void (*)(undefined2,undefined2,int))fist_icall_far((uint32_t)(DAT_1000_c560)))(0x1c,0x1c00,0xf6d4);
++  ((void (*)(undefined2,undefined2 *))fist_icall_far((uint32_t)(DAT_1000_c564)))
++      (0x1c00,(undefined2 *)(g_mem + 0x1c000 + 0xf6d4));
++  { extern unsigned short g_mga_fade_es; g_mga_fade_es = *(uint16_t *)(g_mem + 0x1c000 + 0xf6d4); }
++  ((void (*)(undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c5b0)))
++      (0x4,*(uint16_t *)(g_mem + 0x1c000 + 0xf6d4));
+   FUN_1000_524e(0);
+-  uVar1 = FUN_1000_a358(6,*(undefined2 *)(DAT_2000_b75f - 0x8a0));
+-  FUN_1000_a370(0xbf,0xa0 - (uVar1 >> 1),*(undefined2 *)(DAT_2000_b75f - 0x8a0),0xa9); /* PATCH 120: real str + cl=0xa9 (asm e499/e4ae) */
++  {
++  /* PATCH 155 (asm e494-e499): bx=byte[DGROUP:0xf75f]; si=word[DGROUP:(bx-0x8a0)] (DS=DGROUP).  Ghidra
++     deref'd (value@0xf75f)-0x8a0 as a host ptr -> wild deref (small pointer -> SIGSEGV).  si is a STRSEG
++     offset (a358/a370 already rebase it via DGROUP:0x70). */
++  uint16_t _bx = *(uint8_t *)(g_mem + 0x1c000 + 0xf75f);
++  uint16_t _si = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(_bx - 0x8a0));
++  uVar1 = FUN_1000_a358(6,(char *)(uintptr_t)_si);
++  FUN_1000_a370(0xbf,0xa0 - (uVar1 >> 1),_si,0xa9); /* asm e4ae cl=0xa9 */
++  }
+   DAT_2000_b6d6 = DAT_2000_b6d6 | 0x22;
+   return;
+ }

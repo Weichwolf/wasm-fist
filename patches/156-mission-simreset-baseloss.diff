@@ -1,0 +1,92 @@
+PATCH 156: the ACCEPT-cascade sim-reset + FSG-open base-losses (FUN_0000_4754 / 5f52 / 0291).
+
+The mission-start cascade's setup step FUN_0000_4754 -> 4779 resets the sim state then FUN_0000_d501
+parses <battle>.FSG.  Three asm-verified base-losses (vs re_out/fist_dat_image.bin), each a SIGSEGV:
+  * 4754: the d501 open passed the filename as the HOST pointer `&DAT_2000_39a9` (truncated into the
+    16-bit INT-21h DX -> garbage) instead of the DOS offset 0x79a9.  The sibling FUN_0000_476a already
+    passes a plain offset (0x79b9); mirror it (host-pointer-into-DOS-register class, patch 077/146).
+  * 5f52 (asm): 8 near-offset entries at DGROUP:0x7d2a, each `di=word[DGROUP:0x7d2a+i*2]; byte[DGROUP:di]=0`
+    -- Ghidra deref'd the near-offset di as a host pointer.  Rebase to g_mem+0x1c000.
+  * 0291 (asm 0x291): the LFSR RNG.  SS=0x2ba9 (base 0x2ba90); a rolling word pointer ss:0x1f82 cycles
+    0x1f84..0x1f8a, v=ss:[ptr], `shr v,1`; if the shifted-out bit was set, v^=0xb400; store back;
+    ss:0x342(=DAT_2000_bdd2)=v-1; return v-1.  Ghidra deref'd ss:[bx] as a HOST pointer, used 32-bit
+    width, and mislabelled the 0x1f84/0x1f8a bound immediates as DAT_1000_df84/df8a addresses.  Rebase
+    to g_mem+0x2ba90, 16-bit.  (Load-bearing for deterministic RNG state per CLAUDE.md.)
+Verified via the throwaway ACCEPT-cascade trace: with these + patch 155, the cascade runs crash-free
+through e459 (LOADING.MS3/MRL) and the whole 4779 sim-reset (4413/5f52/9be8/b158/61f7/9d3c/b2a2/9cdb +
+0291/9a32), stopping at the shared trig helper FUN_0000_05e2 (`*(uint*)(iVar6+0x2042)` DS-table base-loss)
+-- the documented next frontier.  All three functions are reached ONLY by the ACCEPT mission cascade
+(not yet wired into a verify flow) -> behaviour-neutral for the 19 covered flows.
+
+--- a/fist.c
++++ b/fist.c
+@@ -4495,22 +4495,24 @@
+   uint uVar1;
+   uint uVar2;
+   
+-  (*(undefined2 *)(g_mem+0x2da12)) =
+-       (*(undefined2 *)(g_mem+0x2da12)) + 2;
+-  if ((uint *)&DAT_1000_df8a < (uint)(*(undefined2 *)(g_mem+0x2da12))) {
+-    (*(undefined2 *)(g_mem+0x2da12)) = SUB42(&DAT_1000_df84,0);
+-  }
+-  uVar2 = *(uint *)(*(undefined2 *)(g_mem+0x2da12));
+-  uVar1 = uVar2 >> 1;
+-  if ((uVar2 & 1) == 0) {
+-    *(uint *)(*(undefined2 *)(g_mem+0x2da12)) = uVar1;
+-    DAT_2000_bdd2 = uVar1 - 1;
+-    return;
++  /* PATCH 156 (asm 0x291): the LFSR RNG (SS=0x2ba9 -> base 0x2ba90).  ptr = ss:0x1f82 (a rolling word
++     offset cycling 0x1f84..0x1f8a); v = word ss:[ptr]; shr v,1 (CF=old bit0); if CF: v ^= 0xb400; store
++     back; ss:0x342 (=DAT_2000_bdd2) = v-1; return ax=v-1.  Ghidra deref'd ss:[bx] as a HOST pointer +
++     32-bit width + mislabelled the 0x1f84/0x1f8a immediates as DAT_1000_df84/df8a.  Rebase to g_mem+0x2ba90. */
++  {
++  uint16_t _p = *(uint16_t *)(g_mem + 0x2da12);        /* ss:0x1f82 */
++  _p = (uint16_t)(_p + 2);
++  if (_p > 0x1f8a) _p = 0x1f84;
++  *(uint16_t *)(g_mem + 0x2da12) = _p;
++  uint16_t _v = *(uint16_t *)(g_mem + 0x2ba90 + _p);   /* ss:[bx] */
++  uint16_t _cf = _v & 1;
++  _v = (uint16_t)(_v >> 1);
++  if (_cf) _v ^= 0xb400;
++  *(uint16_t *)(g_mem + 0x2ba90 + _p) = _v;
++  DAT_2000_bdd2 = (uint16_t)(_v - 1);                  /* ss:0x342 */
++  (void)uVar1;(void)uVar2;
++  return (uint16_t)(_v - 1);
+   }
+-  uVar2 = CONCAT11((byte)(uVar2 >> 9),(char)uVar1) ^ 0xb400;
+-  *(uint *)(*(undefined2 *)(g_mem+0x2da12)) = uVar2;
+-  DAT_2000_bdd2 = uVar2 - 1;
+-  return;
+ }
+ 
+ 
+@@ -13321,7 +13323,7 @@
+   undefined1 in_CF = 0;
+   
+   FUN_0000_4779();
+-  FUN_0000_d501(param_1,param_2,param_3,(undefined1 *)&DAT_2000_39a9,param_4);
++  FUN_0000_d501(param_1,param_2,param_3,(undefined1 *)0x79a9,param_4);  /* PATCH 156: DOS DX offset (mirrors 476a), not the &DAT host ptr */
+   if (!(bool)in_CF) {
+     FUN_1000_6015();
+     DAT_2000_39a8 = 1;
+@@ -15866,13 +15868,13 @@
+   int iVar1;
+   int iVar2;
+   
+-  iVar2 = 0;
+-  iVar1 = 8;
+-  do {
+-    *(undefined1 *)*(undefined2 *)((int)(undefined2 *)&DAT_2000_3d2a + iVar2) = 0;
+-    iVar2 = iVar2 + 2;
+-    iVar1 = iVar1 + -1;
+-  } while (iVar1 != 0);
++  /* PATCH 156 (asm 5f52): 8 entries at DGROUP:0x7d2a, each di=word[DGROUP:0x7d2a+i*2]; byte[DGROUP:di]=0.
++     Ghidra deref'd the near-offset di as a host pointer -> wild write.  Rebase to g_mem+0x1c000. */
++  for (iVar1 = 0; iVar1 < 8; iVar1++) {
++    uint16_t di = *(uint16_t *)(g_mem + 0x1c000 + 0x7d2a + iVar1 * 2);
++    *(uint8_t *)(g_mem + 0x1c000 + di) = 0;
++  }
++  (void)iVar2;
+   return;
+ }
+ 
