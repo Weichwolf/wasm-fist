@@ -1,0 +1,303 @@
+PATCH 159: the model-loader filename-suffix builder cluster (FUN_1000_2733/2762/2765/276e/27e2/27f7/280a,
+asm 0x12733..0x1280a) -- the exact sibling of FUN_1000_26fc (patch 099), reached on the ACCEPT mission
+cascade (BATTLES->OK->ACCEPT) via 4308->18dc->183f->19d1->2733.  NOT reached by any of the 19 verify flows
+(a bare host-ptr deref of the cs-data tables would already SIGSEGV them) -> behaviour-neutral for verify.
+
+  These seg-0f69 functions read a per-extension method vtable held in CS-relative data
+  (cs:0x2b6a current-slot + 4-slot handle table, cs:0x2b74 type table, cs:0x2b7e ext-byte + variant
+  suffixes, cs:0x2b88 attr/load / 0x2b8e open / 0x2b94 close / 0x2b9a read / 0x2ba6 seek handler-vector
+  columns).  The correct CS-data base is g_mem+0xf690 (the seg-0f69 module is loaded there: 2733's code
+  at image 0x12733 = 0xf690+0x30a3), NOT the 0x12b.. host offset Ghidra kept after decoding under
+  CS=0x1000.  The driver-built filename buffer is a DGROUP near offset (param_2) -> g_mem+0x1c000+off.
+  Widths: DAT_1000_2b7e is a BYTE (asm `mov cs:0x2b7e,al`); the slot/type/vtable entries are WORDs.
+  The OPEN handler's carry (276e) is threaded via g_fist_cf (Ghidra folded it to a stale pre-call test).
+
+  2733  = attr-probe + full LOAD: for each ext variant, INT 21h AH=4300; first hit dispatches
+          cs:[variant*2+0x2b88] (variant0 = 0f69:0x318e = `mov es,ax; call 2593` = the batch reader).
+  2762/2765 = mid-instruction re-entries into 2733's dispatch tail (di doubled / already-doubled).
+  276e  = streaming OPEN: allocate a slot, INT 21h AH=4300 probe, dispatch cs:[variant*2+0x2b8e]
+          (0f69:0x3195 open+lseek-size), store {handle,type} into the slot.
+  27e2/27f7/280a = per-slot CLOSE(0x2b94)/READ(0x2b9a)/SEEK(0x2ba6): look up the slot's type, call the
+          handler with bx=handle (handlers 0f69:0x31d7/0x31e1/0x31eb = INT 21h AH=3e/3f/42).
+
+  NB the handler-vtable targets (0f69:0x318e/0x3195/0x31d7/0x31e1/0x31eb..) are NOT yet promoted FUNs, so
+  fist_icall_near traps them safely (return 0) -- crash-free but inert: the actual model open/read is
+  unblocked once those primitives are promoted (SeedServiceVecs seed + re-decompile), the next frontier.
+
+  ALSO fixes the byte-identical sibling FUN_1000_2688 (asm 0x12688, same cs:0x2b6a/0x2b8e tables) with
+  the identical reconstruction -- a second streaming-OPEN entry that carried the same wild-deref.
+
+--- a/fist.c	2026-07-10 19:07:06.294893894 +0200
++++ b/fist.c	2026-07-10 19:22:56.367717589 +0200
+@@ -43007,27 +43007,32 @@
+   int iVar5;
+   undefined2 unaff_ES;
+   bool bVar6;
+-  
++  extern unsigned char g_fist_cf;
++  /* PATCH 159 (asm 0x12688..0x126fb): byte-identical sibling of FUN_1000_276e (same cs:0x2b6a/0x2b8e
++     open-file tables, base cs=0f69 -> g_mem+0xf690) -- a second streaming-OPEN entry.  Same base-loss +
++     folded-CF fix; behaviour-neutral (cascade-only; a bare host deref would already SIGSEGV the 19
++     flows).  Handler cs:0x2b8e[..] not yet promoted -> traps safely. */
++  { uint8_t *CX = g_mem + 0xf690;
+   iVar3 = 4;
+   uVar2 = 0;
+   do {
+     uVar4 = uVar2 + 2;
+-    bVar6 = *(int *)(uVar2 + 0x2b6c) != 0;
++    bVar6 = *(uint16_t *)(CX + 0x2b6a + uVar2 + 2) != 0;
+     iVar3 = iVar3 + -1;
+     uVar2 = uVar4;
+   } while (iVar3 != 0 && bVar6);
+   if (!bVar6) {
+-    DAT_1000_2b7e = *(undefined1 *)(param_2 + 10);
+-    uVar1 = CONCAT11((char)(param_1 >> 8),DAT_1000_2b7e);
++    CX[0x2b7e] = *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10);
++    uVar1 = CONCAT11((char)(param_1 >> 8),CX[0x2b7e]);
+     iVar5 = 0;
+-    DAT_1000_2b6a = uVar4;
++    *(uint16_t *)(CX + 0x2b6a) = uVar4;
+     do {
+-      if (*(char *)(iVar5 + 0x2b7e) == '\0') {
+-        uVar2 = CONCAT11((char)((uint)uVar1 >> 8),DAT_1000_2b7e);
+-        *(undefined1 *)(param_2 + 10) = DAT_1000_2b7e;
++      if (*(char *)(CX + 0x2b7e + iVar5) == '\0') {
++        uVar2 = CONCAT11((char)((uint)uVar1 >> 8),CX[0x2b7e]);
++        *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = CX[0x2b7e];
+         return uVar2;
+       }
+-      *(char *)(param_2 + 10) = *(char *)(iVar5 + 0x2b7e);
++      *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = *(char *)(CX + 0x2b7e + iVar5);
+       uRam000f0014 = 0x21;
+       uRam000f0000 = 0x4300;
+       uRam000f000e = 0x1c00;
+@@ -43044,13 +43049,13 @@
+       uVar1 = uRam000f0000;
+       iVar3 = iRam000f0004;
+       if (!(bool)uRam000f0012) {
+-        bVar6 = iRam000f0002 < 0;
+-        uVar1 = (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(iRam000f0002 * 2 + 0x2b8e))))();
+-        if (!bVar6) {
+-          *(undefined1 *)(param_2 + 10) = DAT_1000_2b7e;
+-          uVar2 = DAT_1000_2b6a;
+-          *(undefined2 *)(DAT_1000_2b6a + 0x2b6a) = uVar1;
+-          *(int *)(uVar2 + 0x2b74) = iVar5 << 1;
++        g_fist_cf = 0;
++        uVar1 = (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b8e + (uint16_t)iVar5 * 2)))();
++        if (!g_fist_cf) {
++          *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = CX[0x2b7e];
++          uVar2 = *(uint16_t *)(CX + 0x2b6a);
++          *(uint16_t *)(CX + 0x2b6a + uVar2) = uVar1;
++          *(uint16_t *)(CX + 0x2b74 + uVar2) = iVar5 << 1;
+           return uVar2;
+         }
+       }
+@@ -43058,6 +43063,7 @@
+     } while( true );
+   }
+   return param_1;
++  }
+ }
+ 
+ 
+@@ -43134,17 +43140,26 @@
+   undefined2 uVar1;
+   int iVar2;
+   undefined2 unaff_ES;
+-  
+-  uVar1 = *(undefined2 *)(param_2 + 10);
+-  DAT_1000_2b7e = (undefined1)uVar1;
++  /* PATCH 159 (asm 0x12733..0x1276d): the model-resource filename-suffix builder, exact sibling of
++     FUN_1000_26fc (patch 099).  SI=DX=param_2 = a DGROUP near offset to the driver-built filename
++     buffer; [buf+0xa] = the extension byte.  It saves the ext at cs:0x2b7e, walks the variant table
++     cs:0x2b7e (base cs=0f69 -> linear g_mem+0xf690), for each doing INT 21h AH=4300 get-attr on
++     DS:DX=DGROUP:buf; the first extension that exists dispatches its loader via cs:[di*2+0x2b88].
++     Ghidra decoded it under CS=0x1000 -> the cs-data tables + the [buf+0xa] byte rendered as host
++     offsets (wild deref/crash).  Rebase: cs-data -> g_mem+0xf690, filename buf -> g_mem+0x1c000+buf;
++     DAT_1000_2b7e is a BYTE (asm `mov cs:0x2b7e,al`). */
++  { uint8_t *FN = g_mem + 0x1c000 + (uint16_t)param_2;      /* filename buffer @ DGROUP:param_2 */
++    uint8_t *CX = g_mem + 0xf690;                           /* cs=0f69 data window (0x2b7e/0x2b88) */
++  uVar1 = *(uint16_t *)(FN + 10);
++  CX[0x2b7e] = (uint8_t)uVar1;
+   iVar2 = 0;
+   do {
+-    if (*(char *)(iVar2 + 0x2b7e) == '\0') {
++    if (*(char *)(CX + 0x2b7e + iVar2) == '\0') {
+ LAB_1000_276a:
+-      *(undefined2 *)(param_2 + 10) = uVar1;
++      *(uint16_t *)(FN + 10) = uVar1;
+       return;
+     }
+-    *(char *)(param_2 + 10) = *(char *)(iVar2 + 0x2b7e);
++    FN[10] = *(char *)(CX + 0x2b7e + iVar2);
+     uRam000f0014 = 0x21;
+     uRam000f0000 = 0x4300;
+     uRam000f000e = 0x1c00;
+@@ -43157,12 +43172,14 @@
+     uRam000f0010 = unaff_ES;
+     fist_int_dispatch();
+     param_2 = iRam000f0008;
++    FN = g_mem + 0x1c000 + (uint16_t)param_2;
+     if (!(bool)uRam000f0012) {
+-      (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(iRam000f000a * 2 + 0x2b88))))();
++      (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b88 + ((uint16_t)iRam000f000a) * 2)))();
+       goto LAB_1000_276a;
+     }
+     iVar2 = iRam000f000a + 1;
+   } while( true );
++  }
+ }
+ 
+ 
+@@ -43171,8 +43188,11 @@
+ void __allregs FUN_1000_2762(int param_1,int param_2,undefined2 param_3)
+ 
+ {
+-  (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(param_1 * 2 + 0x2b88))))();
+-  *(undefined2 *)(param_2 + 10) = param_3;
++  /* PATCH 159 (asm 0x12762): mid-entry into 2733's dispatch tail (add di,di; call cs:[di+0x2b88];
++     restore [buf+0xa]).  cs-data -> g_mem+0xf690, filename buffer -> g_mem+0x1c000. */
++  uint8_t *CX = g_mem + 0xf690;
++  (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b88 + (uint16_t)param_1 * 2)))();
++  *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = param_3;
+   return;
+ }
+ 
+@@ -43182,8 +43202,10 @@
+ void __allregs FUN_1000_2765(int param_1,int param_2,undefined2 param_3)
+ 
+ {
+-  (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(param_1 + 0x2b88))))();
+-  *(undefined2 *)(param_2 + 10) = param_3;
++  /* PATCH 159 (asm 0x12765): mid-instruction entry into the same call (di already doubled). */
++  uint8_t *CX = g_mem + 0xf690;
++  (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b88 + (uint16_t)param_1)))();
++  *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = param_3;
+   return;
+ }
+ 
+@@ -43202,27 +43224,35 @@
+   int iVar5;
+   undefined2 unaff_ES;
+   bool bVar6;
+-  
++  extern unsigned char g_fist_cf;
++  /* PATCH 159 (asm 0x1276e..0x127e1): the model-resource OPEN (streaming sibling of 2733's batch load).
++     Allocate a slot in the 4-entry open-file table cs:0x2b6c..0x2b72 (base cs=0f69 -> g_mem+0xf690),
++     find the extension variant that exists (INT 21h AH=4300), OPEN it via the per-variant handler
++     cs:[variant*2+0x2b8e], and record {handle @ cs:slot+0x2b6a, type=variant*2 @ cs:slot+0x2b74};
++     cs:0x2b6a[0] is the current-slot scalar.  Ghidra base-lost every cs-table + filename deref and
++     folded the OPEN handler's CF -> use g_fist_cf.  (NB the OPEN handler cs:0x2b8e[..]=0f69:0x3195.. is
++     not yet a promoted FUN -> fist_icall_near traps it safely; see PATCH 159 notes.) */
++  { uint8_t *CX = g_mem + 0xf690;
+   iVar3 = 4;
+   uVar2 = 0;
+   do {
+     uVar4 = uVar2 + 2;
+-    bVar6 = *(int *)(uVar2 + 0x2b6c) != 0;
++    bVar6 = *(uint16_t *)(CX + 0x2b6a + uVar2 + 2) != 0;      /* asm cs:[bx+0x2b6a], bx=2,4,6,8 */
+     iVar3 = iVar3 + -1;
+     uVar2 = uVar4;
+   } while (iVar3 != 0 && bVar6);
+   if (!bVar6) {
+-    DAT_1000_2b7e = *(undefined1 *)(param_2 + 10);
+-    uVar1 = CONCAT11((char)(param_1 >> 8),DAT_1000_2b7e);
++    CX[0x2b7e] = *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10);
++    uVar1 = CONCAT11((char)(param_1 >> 8),CX[0x2b7e]);
+     iVar5 = 0;
+-    DAT_1000_2b6a = uVar4;
++    *(uint16_t *)(CX + 0x2b6a) = uVar4;                       /* current-slot scalar = free slot */
+     do {
+-      if (*(char *)(iVar5 + 0x2b7e) == '\0') {
+-        uVar2 = CONCAT11((char)((uint)uVar1 >> 8),DAT_1000_2b7e);
+-        *(undefined1 *)(param_2 + 10) = DAT_1000_2b7e;
++      if (*(char *)(CX + 0x2b7e + iVar5) == '\0') {
++        uVar2 = CONCAT11((char)((uint)uVar1 >> 8),CX[0x2b7e]);
++        *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = CX[0x2b7e];
+         return uVar2;
+       }
+-      *(char *)(param_2 + 10) = *(char *)(iVar5 + 0x2b7e);
++      *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = *(char *)(CX + 0x2b7e + iVar5);
+       uRam000f0014 = 0x21;
+       uRam000f0000 = 0x4300;
+       uRam000f000e = 0x1c00;
+@@ -43239,13 +43269,13 @@
+       uVar1 = uRam000f0000;
+       iVar3 = iRam000f0004;
+       if (!(bool)uRam000f0012) {
+-        bVar6 = iRam000f0002 < 0;
+-        uVar1 = (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(iRam000f0002 * 2 + 0x2b8e))))();
+-        if (!bVar6) {
+-          *(undefined1 *)(param_2 + 10) = DAT_1000_2b7e;
+-          uVar2 = DAT_1000_2b6a;
+-          *(undefined2 *)(DAT_1000_2b6a + 0x2b6a) = uVar1;
+-          *(int *)(uVar2 + 0x2b74) = iVar5 << 1;
++        g_fist_cf = 0;
++        uVar1 = (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b8e + (uint16_t)iVar5 * 2)))();
++        if (!g_fist_cf) {
++          *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = CX[0x2b7e];
++          uVar2 = *(uint16_t *)(CX + 0x2b6a);
++          *(uint16_t *)(CX + 0x2b6a + uVar2) = uVar1;
++          *(uint16_t *)(CX + 0x2b74 + uVar2) = iVar5 << 1;
+           return uVar2;
+         }
+       }
+@@ -43253,6 +43283,7 @@
+     } while( true );
+   }
+   return param_1;
++  }
+ }
+ 
+ 
+@@ -43261,10 +43292,17 @@
+ void __allregs FUN_1000_27e2(int param_1)
+ 
+ {
+-  LOCK();
+-  *(undefined2 *)(param_1 + 0x2b6a) = 0;
+-  UNLOCK();
+-  (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(*(int *)(param_1 + 0x2b74) + 0x2b94))))();
++  /* PATCH 159 (asm 0x127e2): CLOSE slot param_1 -- take the handle out of cs:[slot+0x2b6a] (clearing
++     the slot to 0), look up the close handler cs:[type+0x2b94] (type = cs:[slot+0x2b74]) and call it
++     with bx = the old handle (asm `xchg cs:[bx+0x2b6a],ax; ... xchg bx,ax; call ax`).  cs-data ->
++     g_mem+0xf690.  The close handler 0f69:0x31d7.. (`cmp bx,1; mov ah,0x3e; int 21h`) reads bx=handle
++     -> its sole __allregs input; pass it as arg0.  (Handler not yet promoted -> traps safely.) */
++  uint8_t *CX = g_mem + 0xf690;
++  uint16_t handle = *(uint16_t *)(CX + 0x2b6a + (uint16_t)param_1);
++  uint16_t type;
++  *(uint16_t *)(CX + 0x2b6a + (uint16_t)param_1) = 0;
++  type = *(uint16_t *)(CX + 0x2b74 + (uint16_t)param_1);
++  (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b94 + type)))(handle);
+   return;
+ }
+ 
+@@ -43274,7 +43312,13 @@
+ void __allregs FUN_1000_27f7(int param_1)
+ 
+ {
+-  (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(*(int *)(param_1 + 0x2b74) + 0x2b9a))))();
++  /* PATCH 159 (asm 0x127f7): dispatch slot param_1's READ op via cs:[type+0x2b9a] with bx=handle
++     (does NOT clear the slot).  cs-data -> g_mem+0xf690.  Handler 0f69:0x31e1 (`mov ah,0x3f; int 21h`)
++     reads bx=handle (+ cx/dx from the caller's regs). */
++  uint8_t *CX = g_mem + 0xf690;
++  uint16_t handle = *(uint16_t *)(CX + 0x2b6a + (uint16_t)param_1);
++  uint16_t type = *(uint16_t *)(CX + 0x2b74 + (uint16_t)param_1);
++  (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b9a + type)))(handle);
+   return;
+ }
+ 
+@@ -43284,7 +43328,12 @@
+ void __allregs FUN_1000_280a(int param_1)
+ 
+ {
+-  (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(*(int *)(param_1 + 0x2b74) + 0x2ba6))))();
++  /* PATCH 159 (asm 0x1280a): dispatch slot param_1's SEEK op via cs:[type+0x2ba6] with bx=handle.
++     cs-data -> g_mem+0xf690.  Handler 0f69:0x31eb (`mov ax,0x4200; int 21h`) reads bx=handle. */
++  uint8_t *CX = g_mem + 0xf690;
++  uint16_t handle = *(uint16_t *)(CX + 0x2b6a + (uint16_t)param_1);
++  uint16_t type = *(uint16_t *)(CX + 0x2b74 + (uint16_t)param_1);
++  (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2ba6 + type)))(handle);
+   return;
+ }
+ 
