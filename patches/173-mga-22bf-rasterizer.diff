@@ -1,0 +1,180 @@
+PATCH 173: reconstruct the MGAVIDEO span-clip rasterizer m_mga_FUN_0000_22bf + thread its
+register args at the FUN_0000_60d9 far method-vector call site (DGROUP:0x690 = DAT_1000_c690).
+
+asm-verified vs re_out/fist_dat_image.bin (60d9) + re_out/fist_mga_image.bin (22bf/21d6).
+See the per-function comments for the full contract.  The paint dispatch 47e0 -> 60d9 -> [0x690]
+reaches 22bf with BX=0x3b4c (1d7f(0x58)) clip rect, SI=0x7ac0 source struct, DI=0x7aa4 dest struct;
+the indirect method-vector call dropped all three (CLAUDE.md: threaded per-patch as reached), so
+22bf got a garbage struct ptr and faulted at param_2+2.  Plus 22bf's scattered-locals bp-frame
+(clip rect, saved SI/DI slots, the two span-list segment bases) was modelled as pointer arithmetic
+on one host local -> clip locals uninitialised + span cursors NULL.  Reconstructed frame-faithful.
+
+Reached only by the in-mission display-list PAINT (the ACCEPT cascade), never by the 19 verify
+flows -> behaviour-neutral (verify 19/19).  re_out/fist.c + fist_mga.c stay pristine (patch-only).
+
+--- a/fist.c
++++ b/fist.c
+@@ -16129,8 +16129,18 @@
+ void __allregs FUN_0000_60d9(void)
+ 
+ {
++  /* PATCH 173: thread the MGAVIDEO rasterizer m_mga_FUN_0000_22bf register args (the far method-vector
++     call DGROUP:0x690 = DAT_1000_c690).  asm 0x60d9: `mov bx,0x58; call 1d7f (lea 0x3af4(bx),bx -> bx=
++     0x3b4c); mov si,0x7ac0; mov di,0x7aa4; lcall [0x690]`.  22bf reads BX (a 4-word DGROUP clip rect),
++     SI (the 0x1c-byte source struct), DI (the dest struct) -- all DGROUP near-offsets Ghidra dropped at
++     this indirect method-vector site (the far call passes no args, so 22bf got a garbage struct ptr and
++     faulted at param_2+2).  Thread the three DGROUP host pointers positionally to 22bf's reconstructed
++     signature (clip, param_2 source, param_3 dest). */
+   FUN_0000_1d7f();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c690)))();
++  ((void (*)(undefined2 *,undefined2 *,undefined1 *))fist_icall_far((uint32_t)(DAT_1000_c690)))(
++      (undefined2 *)(g_mem + 0x1c000 + 0x3b4c),   /* BX = 1d7f(0x58) = clip rect */
++      (undefined2 *)(g_mem + 0x1c000 + 0x7ac0),   /* SI = source struct */
++      (undefined1 *)(g_mem + 0x1c000 + 0x7aa4));  /* DI = dest struct */
+   return;
+ }
+ 
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -369,7 +369,7 @@
+ void __allregs FUN_0000_1ec9(byte param_1);
+ void __allregs FUN_0000_2004(char param_1,undefined2 *param_2,undefined2 *param_3);
+ void __allregs FUN_0000_21d6(undefined2 *param_1,uint *param_2);
+-void __allregs FUN_0000_22bf(undefined2 param_1,undefined2 *param_2,undefined1 *param_3,undefined2 param_4);
++void __allregs FUN_0000_22bf(undefined2 *clip,undefined2 *param_2,undefined1 *param_3);
+ void __allregs FUN_0000_23d8(undefined2 param_1,undefined2 *param_2);
+ void __allregs FUN_0000_2442(undefined2 *param_1);
+ void __allregs FUN_0000_24d3(undefined1 param_1,int param_2,int param_3,undefined2 *param_4,uint *param_5, undefined1 *param_6,uint param_7,undefined2 param_8);
+@@ -5288,9 +5288,18 @@
+ /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+ 
+ void __allregs
+-FUN_0000_22bf(undefined2 param_1,undefined2 *param_2,undefined1 *param_3,undefined2 param_4)
++FUN_0000_22bf(undefined2 *clip,undefined2 *param_2,undefined1 *param_3)
+ 
+ {
++  /* PATCH 173: MGAVIDEO span-clip rasterizer (asm 0x22bf, driver image re_out/fist_mga_image.bin).  The
++     paint dispatch reaches this via FUN_0000_60d9 -> far method vector DGROUP:0x690.  Two Ghidra classes,
++     both asm-verified: (a) the DROPPED register args -- BX (clip rect), SI (source), DI (dest); (b) the
++     fragile scattered-locals bp-frame -- the 4-word clip rect (bp-0x10..-0xa), the saved SI/DI slots
++     (bp-4/-6), and the two span-list SEGMENT bases were all modelled as pointer arithmetic on one host
++     local, so the clip locals read uninitialised, the segment cursors started at NULL, and the writeback
++     faulted on a garbage param_2.  Reconstructed frame-faithful: clip4[] from `clip`, host pointers for
++     param_2/param_3, es_seg/ds_seg = word[DGROUP:di_off]/word[DGROUP:si_off], span cursors rebased to
++     g_mem+(seg<<4).  The span-generator stos loop (0x2335-0x23cb) is kept instruction-faithful. */
+   byte *pbVar1;
+   undefined2 *puVar2;
+   undefined1 *puVar3;
+@@ -5304,15 +5313,25 @@
+   int iVar11;
+   int iVar12;
+   uint uVar13;
+-  undefined2 *puVar14;
+   undefined2 *puVar15;
+   uint *puVar16;
+   uint *puVar17;
+   int *piVar18;
+   int *piVar19;
+-  undefined2 uStack_2;
+-  
+-  puVar14 = &uStack_2;
++  uint8_t *D = g_mem + 0x1c000;               /* DGROUP base (SS=DS=0x1c00) */
++  int clip4[4];
++  undefined1 *param_3_orig = param_3;         /* D+di_off (the copy loop advances param_3) */
++  undefined2 es_seg;                          /* DEST span segment (word[DGROUP:di_off]) */
++  undefined2 ds_seg;                          /* SOURCE span segment (word[DGROUP:si_off]) */
++
++  /* 22c8-22e4: BX (clip) -> the 4-word clip rect -> bp-locals -0x10/-0xe/-0xc/-0xa (signed) */
++  clip4[0] = (int)(short)clip[0];
++  clip4[1] = (int)(short)clip[1];
++  clip4[2] = (int)(short)clip[2];
++  clip4[3] = (int)(short)clip[3];
++
++  /* 22e7-22f8: read source words 0/2, rep movsb 0x1c bytes SI(param_2) -> DI(param_3), then write the
++     two words back to param_2[0]/[1] (asm `mov ax,-0x1c(si)`/`mov dx,-0x1a(si)`). */
+   uVar6 = *param_2;
+   uVar7 = param_2[1];
+   puVar15 = param_2;
+@@ -5323,24 +5342,28 @@
+     puVar15 = (undefined2 *)((int)puVar15 + 1);
+     *puVar3 = *(undefined1 *)puVar2;
+   }
+-  puVar15[-0xd] = uVar7;
+-  puVar15[-0xe] = uVar6;
+-  uStack_2 = param_1;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0cc)))();
++  puVar15[-0xd] = uVar7;                       /* *(param_2+2) */
++  puVar15[-0xe] = uVar6;                       /* *(param_2+0) */
++
++  /* 22fb-2305: c0cc device method, ax=0xc00, bx=di_off (D-offset of the dest struct), cx=ds=0x1c00 */
++  ((void (*)(undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(_DAT_1000_c0cc)))(
++      0xc00, (undefined2)(uint16_t)((uint8_t *)param_3_orig - D), 0x1c00);
++
++  /* 2309-231d: si=param_2; `orb $0x20,0x2(si)`; jns -> return; else test 0x10 -> 2c8b(ax=si) */
+   pbVar1 = (byte *)(param_2 + 1);
+   *pbVar1 = *pbVar1 | 0x20;
+   if ((char)*pbVar1 < '\0') {
+-    puVar15 = &uStack_2;
+     if ((*(byte *)(param_2 + 1) & 0x10) != 0) {
+       FUN_0000_2c8b();
+-      puVar15 = puVar14;
+     }
+-    uVar6 = *(undefined2 *)*(undefined2 *)((int)puVar15 + -6);
+-    uVar7 = *(undefined2 *)*(undefined2 *)((int)puVar15 + -4);
+-    piVar18 = (int *)0x0;
++    /* 2322-232b: es = word[DGROUP:di_off] (DEST seg), ds = word[DGROUP:si_off] (SOURCE seg); the span
++       cursors run at SI=0/DI=0 in those segments -> g_mem+(seg<<4). */
++    es_seg = *(undefined2 *)param_3_orig;
++    ds_seg = *(undefined2 *)param_2;
++    piVar18 = (int *)(g_mem + ((uint32_t)(uint16_t)es_seg << 4));   /* ES:DI dest cursor */
+     uVar10 = 0;
+     iVar11 = 0;
+-    puVar16 = (uint *)0x0;
++    puVar16 = (uint *)(g_mem + ((uint32_t)(uint16_t)ds_seg << 4));  /* DS:SI source cursor */
+     while( true ) {
+       while( true ) {
+         do {
+@@ -5381,9 +5404,9 @@
+         puVar17 = puVar16;
+       }
+       puVar16 = puVar17;
+-      if ((((iVar12 < *(int *)((int)puVar15 + -0x10)) || (*(int *)((int)puVar15 + -0xc) <= iVar12))
+-          || ((int)uVar9 < *(int *)((int)puVar15 + -0xe))) ||
+-         (*(int *)((int)puVar15 + -10) <= (int)uVar13)) {
++      if ((((iVar12 < clip4[0]) || (clip4[2] <= iVar12))
++          || ((int)uVar9 < clip4[1])) ||
++         (clip4[3] <= (int)uVar13)) {
+         uVar10 = uVar13 + (uVar9 - uVar13);
+         iVar8 = (uVar9 - uVar13) * 2;
+         iVar11 = iVar12;
+@@ -5394,15 +5417,15 @@
+         }
+       }
+       else {
+-        iVar11 = uVar13 - *(int *)((int)puVar15 + -0xe);
++        iVar11 = uVar13 - clip4[1];
+         piVar19 = piVar18;
+-        if ((int)uVar13 < *(int *)((int)puVar15 + -0xe)) {
++        if ((int)uVar13 < clip4[1]) {
+           piVar19 = piVar18 + 1;
+           *piVar18 = iVar11 * -2;
+           iVar11 = 0;
+         }
+-        uVar13 = uVar9 - (iVar11 + *(int *)((int)puVar15 + -0xe));
+-        iVar11 = (iVar11 + *(int *)((int)puVar15 + -0xe)) - *(int *)((int)puVar15 + -10);
++        uVar13 = uVar9 - (iVar11 + clip4[1]);
++        iVar11 = (iVar11 + clip4[1]) - clip4[3];
+         uVar10 = -iVar11;
+         if (uVar13 <= uVar10 && -uVar13 != iVar11) {
+           uVar10 = uVar13;
+@@ -5421,7 +5444,9 @@
+       }
+     }
+     *piVar18 = 0;
+-    FUN_0000_21d6(*(undefined2 *)((int)puVar15 + -6),param_4);
++    /* 23cd: bx = saved DI (= di_off); call 21d6 -> `mov (bx),ax; mov ax,ds`, so 21d6's arg is the host
++       pointer to word[DGROUP:di_off] (= param_3_orig).  21d6's decompiled 2nd arg is spurious. */
++    FUN_0000_21d6((undefined2 *)param_3_orig,(uint *)0);
+   }
+   return;
+ }
