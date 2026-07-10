@@ -1,0 +1,87 @@
+PATCH 145 -- reconstruct FUN_0000_ce37, the SCROLLBAR TRACK/THUMB activate method (page-up /
+page-down / thumb-grab / thumb-drag / release).
+
+Clicking the scrollbar TRACK (between the arrows) SIGSEGV'd: fault-addr 0xe8ed = the dialog element
+node offset 0xe8e9 + 4 dereferenced as a HOST pointer.  ce37 is the scrollbar element's activate
+method (dispatched by the 1eb4 hit-test like ccde/cd8f): ax=event flags, bx=element node (a DGROUP
+NEAR OFFSET), si=the drained event/coord node with the click Y at [si+4].  Ghidra bound bx/si to
+int params and dereferenced them raw (`param_2+4`, `param_3+4`) -- the exact base-loss class patch
+142 fixed in ccde (list-row activate).  The decompiled CONTROL FLOW was faithful; only the memory
+model was wrong.  asm-verified vs re_out/fist_dat_image.bin (0xce37..0xcef3):
+    ce37: lea bx,[bx+4]        ; rect = elem+4 = [y0,x0,y1,x1] words
+    ce3a: mov cx,[si+4]        ; click Y from the coord node
+    press (ax&0xa), asm ceb0:  a86d=8; a86c=0xff;
+        clickY <  y0+a86f(thumb top)+2  -> call d135 (PAGE UP)
+        clickY >  y0+a86f+8             -> call d146 (PAGE DOWN)
+        else THUMB: anchor a871=clickY-a86f; a86c=0 (grabbed); dirty a8ee/a8f5=3
+    drag (a86c==0), asm ce4e:  remap clickY through the track via the 32-bit denominator a87d
+        (patch 142) -> new a83a; cef4 recomputes the thumb + dirty-marks + clamps the selection.
+    release (ax&0x14), asm ce9e: a86d=0 + dirty.
+Rebase: elem -> g_mem+0x1c000+(uint16)bx, coord node si -> word[DGROUP:0x18e2] (the ccde model);
+all rect/coord reads 16-bit words.  Logic kept 1:1 with the pristine decompile.
+
+--- a/fist.c
++++ b/fist.c
+@@ -31456,12 +31456,25 @@
+ void __allregs FUN_0000_ce37(ulong param_1,int param_2,int param_3)
+ 
+ {
+-  uint *puVar1;
++  /* PATCH 145: SCROLLBAR activate (asm 0xce37-0xcef3) -- the track/thumb press, thumb drag, and
++   * release handler.  ax=flags, bx=elem (scrollbar element node, a DGROUP NEAR OFFSET), si=the drained
++   * event/coord node (word[DGROUP:0x18e2]) with the click Y at [si+4].  Ghidra base-lost bx/si to host
++   * pointers (`param_2+4` deref of offset 0xe8e9+4 = the SIGSEGV fault addr 0xe8ed) -- the identical
++   * class patch 142 fixed in ccde/cd8f.  The decompiled LOGIC is faithful and kept 1:1:
++   *   press (ax&0xa):  a86d=8, a86c=0xff; clickY < rect.y0+a86f(thumb top)+2 -> d135 PAGE UP;
++   *                    clickY > +8 -> d146 PAGE DOWN; else grab the thumb (anchor a871, a86c=0, dirty).
++   *   drag  (a86c==0): remap clickY through the rect via the 32-bit denominator a87d (patch 142) ->
++   *                    new a83a; cef4 recomputes the thumb + dirty-marks.
++   *   release (ax&0x14): a86d=0 + dirty.
++   * rect = elem+4 words [y0,x0,y1,x1]: [bx]=y0 (elem+4), [bx+4]=y1 (elem+8).  asm-verified. */
+   uint uVar2;
+   uint uVar3;
+-  
+-  puVar1 = (uint *)(param_2 + 4);
+-  uVar3 = *(uint *)(param_3 + 4);
++  uint16_t elem = (uint16_t)param_2;
++  uint16_t si_ = *(uint16_t *)(g_mem + 0x1c000 + 0x18e2);          /* the drained coord node */
++  uint16_t y0  = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(elem + 4));
++  uint16_t y1  = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(elem + 8));
++  (void)param_3;
++  uVar3 = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(si_ + 4));    /* click Y */
+   if ((param_1 & 0x180) == 0) {
+     return;
+   }
+@@ -31473,14 +31486,14 @@
+       return;
+     }
+     if (DAT_2000_a86c == '\0') {
+-      uVar3 = (uVar3 - DAT_2000_a871) + -2 + *puVar1;
+-      if (uVar3 < *puVar1) {
++      uVar3 = (uint16_t)((uVar3 - DAT_2000_a871) + -2 + y0);
++      if (uVar3 < y0) {
+         uVar2 = 0;
+       }
+       else {
+         uVar2 = DAT_2000_a836;
+-        if (uVar3 <= *(uint *)(param_2 + 8)) {
+-          uVar2 = (uint)(DAT_2000_a87d * (ulong)(uVar3 - *puVar1) >> 0x10);
++        if (uVar3 <= y1) {
++          uVar2 = (uint)(DAT_2000_a87d * (ulong)(uVar3 - y0) >> 0x10);
+           if (DAT_2000_a836 <= uVar2) {
+             uVar2 = DAT_2000_a836;
+           }
+@@ -31498,11 +31511,11 @@
+   }
+   DAT_2000_a86d = 8;
+   DAT_2000_a86c = 0xff;
+-  if (uVar3 < *puVar1 + DAT_2000_a86f + 2) {
++  if (uVar3 < (uint16_t)(y0 + DAT_2000_a86f + 2)) {
+     FUN_0000_d135();
+     return;
+   }
+-  if (uVar3 <= *puVar1 + DAT_2000_a86f + 8) {
++  if (uVar3 <= (uint16_t)(y0 + DAT_2000_a86f + 8)) {
+     DAT_2000_a871 = uVar3 - DAT_2000_a86f;
+     DAT_2000_a86c = 0;
+     DAT_2000_a8ee = 3;

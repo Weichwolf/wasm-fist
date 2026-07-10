@@ -51,6 +51,11 @@ FLOWS=(
   # identical frame.  Ref captured mid-hold (button still down) via tools/refcapture_scroll.sh so the
   # arrow's pressed state matches; the port script holds the button through the capture (no release).
   "battles-scroll|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:172:135:0; 3600:172:135:1|$ROOT/ref/battles_scroll_native320.png"
+  # Page-scroll flow (patch 145): open the BATTLES list, then SINGLE-CLICK the scrollbar TRACK below
+  # the thumb (172,115) -> ce37 press path -> d146 PAGE DOWN (+8 rows; cef4 clamps the selection into
+  # view) -> CYPRUS2..INDIA2, red bar on CYPRUS2.  A single click is a deterministic endpoint (no hold
+  # timing); the final cursor rests on the track inside the panel, so no ghost.
+  "battles-page|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:172:115:0; 3600:172:115:1; 4200:172:115:0|$ROOT/ref/battles_page_native320.png"
 )
 
 run_target() { # $1=target $2=hz $3=ms $4=mouse-script $5=out.ppm ; echo rc
