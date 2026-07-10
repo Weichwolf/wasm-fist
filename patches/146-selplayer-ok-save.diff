@@ -1,0 +1,139 @@
+Stage 3: SELECT PLAYER "OK" -> save the player profile + set CURRENT PLAYER, then return to the menu.
+
+Clicking OK (not CANCEL) in the SELECT PLAYER .FPL list dialog runs the player-profile SAVE tail.
+asm-verified vs re_out/fist_dat_image.bin at the state-0xe handler 0xe97c (dispatched by e714's jumptable):
+    e98b: call cb74                 ; modal list dialog (enumerate .FPL + cc33)
+    e98e: jae  0xe9a6               ; CF=0 (OK: cc33 set CF=(a85d>=2), so a85d<2) -> the save tail
+    e990: cmp  al,4 ; jne 0xe9b3    ; (CANCEL/NEW handling -- not covered by this flow)
+    e9a6: call e9bd                 ; copy the selected 8.3 name -> CURRENT PLAYER, set [0x6dad]=1
+    e9a9: lcall $0xf69,$0x6a9c      ; open+read(0xe6)+checksum the .FPL   (FUN_1000_612c)
+    e9ae: lcall $0xf69,$0x6ade      ; create+write(0xe6) the .FPL         (FUN_1000_616e)  <- REAL write
+    e9b3: jmp  0xe714               ; -> menu-idle (b78e=10)
+
+Three faithful reconstructions (all asm-verified):
+ (1) FUN_0000_e9bd -- the CURRENT-PLAYER name copy.  asm reads DGROUP:0x77bc (the 8.3 name cb74 copied
+     into the caller's di=0x77bc buffer on OK) and writes ES:0xbf1 where ES=STRSEG=word[DGROUP:0x70]
+     (up to 8 chars, stop at '.'/' ', NUL-terminate), then movb [0x6dad],1.  Ghidra DROPPED the ES=STRSEG
+     base on the DESTINATION (raw host offset 0xbf1) -- rebased to STRSEG:0xbf1.  (The SOURCE was already
+     correctly based as DAT_2000_37bc == DGROUP:0x77bc, and [0x6dad]=1 as DAT_2000_2dad.)
+ (2) FUN_1000_612c (f69:6a9c) and (3) FUN_1000_616e (f69:6ade) -- the .FPL read/checksum and create/write.
+     Both marshal INT-21h through the reg-file and set the DX slot (0xf0006) to the filename buffer via
+     `puRam000f0006 = &DAT_2000_37bc/37ce` -- a HOST pointer written into a 16-bit DOS register (R_DX =
+     low16(hostptr)) -> INT-21h AH=3D/3C opened garbage.  asm 0x612c/0x616e: `mov dx,0x77bc` (open/create)
+     and `mov dx,0x77ce` (read/write buffer); R_DS is 0x1c00 (DGROUP).  Store the real DOS offsets 0x77bc /
+     0x77ce.  (host-pointer-into-DOS-register reg-file artifact, patch-077 class; the ~10-site class noted
+     in CLAUDE.md.)  FUN_1000_6199 (checksum) was already faithful (byte-stride word sum over DGROUP:0x77ce).
+
+Dispatch wiring: the e714 state-0xe97c case (patch 137) now, on OK (a85d<2), runs e9bd + 612c + 616e before
+returning b78e=10 (menu-idle).  On CANCEL (a85d>=2) it is unchanged (menu-idle, patch 143).
+
+WRITE ISOLATION (harness, not engine): 616e is a REAL create+write of the player .FPL under FISTDATA/.
+The engine keeps its faithful write behaviour; the harness isolates it -- tools/verify.sh runs the
+"selplayer-ok" WRITE flow against a fresh cp -a scratch copy of armoredfist/ ($FIST_DATADIR) so the repo
+is never mutated and every run starts from the pristine state.  The DOSBox reference (tools/refcapture_ok.sh)
+mounts the same fresh copy.  `git status` stays clean after a full verify run.
+
+--- a/fist.c
++++ b/fist.c
+@@ -34508,6 +34508,19 @@
+                                           * 6a9c/6ade refresh "CURRENT PLAYER") runs only AFTER OK is clicked. */
+       FUN_0000_e39f();
+       FUN_0000_cb74(0x4c50462e, 0, 0, 0, 0, 0x451a, (undefined1 *)(g_mem + 0x1c000 + 0x77bc));
++      /* PATCH 146: SELECT PLAYER OK path.  asm 0xe98e after `call cb74`:
++       *   jae 0xe9a6           ; CF=0 (OK, a85d<2) -> the save tail
++       *   cmp al,4 ; jne 0xe9b3; call eaac (NEW player) ...   (CANCEL/NEW: not covered here)
++       * e9a6: call e9bd        ; copy selected name -> CURRENT PLAYER, set [0x6dad]=1
++       * e9a9: lcall f69:6a9c   ; open+read+checksum the .FPL (FUN_1000_612c)
++       * e9ae: lcall f69:6ade   ; create+write the .FPL   (FUN_1000_616e)  <-- REAL disk write
++       * e9b3: jmp e714         ; back to menu-idle (b78e=10)
++       * cc33 set CF = (a85d>=2)==CANCEL; on OK (a85d<2) cb74 already copied "KKR.FPL" into DGROUP:0x77bc. */
++      if ((uint16_t)DAT_2000_a85d < 2) {   /* OK (jae) */
++        FUN_0000_e9bd();                   /* copy name -> STRSEG:0xbf1, [0x6dad]=1 */
++        FUN_1000_612c(0, 0, 0, 0, 0);      /* f69:6a9c: read+checksum player .FPL */
++        FUN_1000_616e(0, 0, 0, 0, 0, 0, 0);/* f69:6ade: create+write player .FPL (isolated in verify) */
++      }
+       DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
+       continue;
+     }
+@@ -34712,21 +34725,32 @@
+ 
+ {
+   char cVar1;
+-  undefined2 uVar2;
+   int iVar3;
+   int iVar4;
+-  
+-  uVar2 = DAT_1000_c070;
++  /* PATCH 146: e9bd copies the selected player's 8.3 name (DGROUP:0x77bc, written by cb74 on OK) into
++   * the CURRENT-PLAYER name slot STRSEG:0xbf1 (up to 8 chars, stop at '.'/' '), NUL-terminates it, and
++   * sets the player-selected flag [0x6dad]=1.  asm 0xe9bd:
++   *     mov es,[0x70]            ; ES = STRSEG = word[DGROUP:0x70]
++   *     mov cx,8 ; xor bx,bx
++   *  L: mov al,[bx+0x77bc]       ; source DGROUP:0x77bc
++   *     cmp al,'.' je end ; cmp al,' ' je end
++   *     mov es:[bx+0xbf1],al     ; dest STRSEG:0xbf1  <-- Ghidra DROPPED the ES=STRSEG base (raw 0xbf1)
++   *     inc bx ; loop
++   * end:mov es:byte[bx+0xbf1],0 ; movb [0x6dad],1
++   * The source read was correctly based (DAT_2000_37bc == DGROUP:0x77bc); only the DEST base was lost. */
++  uint16_t strseg = *(uint16_t *)(g_mem + 0x1c070);          /* ES = STRSEG (word[DGROUP:0x70]) */
++  uint8_t *src = g_mem + 0x1c000 + 0x77bc;                    /* DGROUP:0x77bc = selected 8.3 name */
++  uint8_t *dst = g_mem + ((uint32_t)strseg << 4) + 0xbf1;     /* STRSEG:0xbf1 = CURRENT PLAYER name */
+   iVar3 = 8;
+   iVar4 = 0;
+   do {
+-    cVar1 = ((undefined1 *)&DAT_2000_37bc)[iVar4];
++    cVar1 = (char)src[iVar4];
+     if ((cVar1 == '.') || (cVar1 == ' ')) break;
+-    *(char *)(iVar4 + 0xbf1) = cVar1;
++    dst[iVar4] = (uint8_t)cVar1;
+     iVar4 = iVar4 + 1;
+     iVar3 = iVar3 + -1;
+   } while (iVar3 != 0);
+-  *(undefined1 *)(iVar4 + 0xbf1) = 0;
++  dst[iVar4] = 0;
+   DAT_2000_2dad = 1;
+   return;
+ }
+@@ -54526,7 +54550,12 @@
+   DAT_2000_2dad = 1;
+   uRam000f0014 = 0x21;
+   uRam000f0000 = 0x3d00;
+-  puRam000f0006 = (undefined4 *)&DAT_2000_37bc;
++  /* PATCH 146: the INT-21h reg-file DX slot (0xf0006) is the DOS OFFSET of the filename buffer, not a
++   * host pointer.  asm 0x612c (f69:6a9c): `mov dx,0x77bc` (DS:DX = DGROUP:0x77bc = the selected 8.3
++   * name).  Ghidra typed the DX slot `undefined4*` and stored `&DAT_2000_37bc` (a HOST pointer) ->
++   * R_DX = low16(host ptr) -> INT-21h AH=3D opened garbage.  Store the real DOS offset 0x77bc; R_DS is
++   * already 0x1c00 (DGROUP) below.  (host-pointer-into-DOS-register reg-file artifact, patch-077 class.) */
++  uRam000f0006 = 0x77bc;
+   uRam000f000e = 0x1c00;
+   uRam000f0002 = param_2;
+   uRam000f0004 = param_1;
+@@ -54540,7 +54569,7 @@
+     uRam000f0014 = 0x21;
+     uRam000f0002 = uRam000f0000;
+     uRam000f0004 = 0xe6;
+-    puRam000f0006 = (undefined4 *)&DAT_2000_37ce;
++    uRam000f0006 = 0x77ce;               /* PATCH 146: AH=3F read buffer DGROUP:0x77ce (was host ptr) */
+     uRam000f000e = 0x1c00;
+     uRam000f0000 = CONCAT11(0x3f,(char)uRam000f0000);
+     uRam000f000c = param_3;
+@@ -54590,7 +54619,9 @@
+   uRam000f0000 = CONCAT11(0x3c,(char)DAT_2000_38b2);
+   uRam000f0014 = 0x21;
+   uRam000f0004 = 0;
+-  puRam000f0006 = (undefined4 *)&DAT_2000_37bc;
++  /* PATCH 146: DX = DOS offset of the filename (asm 0x616e/f69:6ade `mov dx,0x77bc`), NOT a host ptr.
++   * AH=3C create DGROUP:0x77bc.  (host-pointer-into-DOS-register reg-file artifact, see 6a9c/612c.) */
++  uRam000f0006 = 0x77bc;
+   uRam000f000e = 0x1c00;
+   uRam000f0002 = param_2;
+   uRam000f0008 = param_5;
+@@ -54603,7 +54634,7 @@
+     uRam000f0014 = 0x21;
+     uRam000f0002 = uRam000f0000;
+     uRam000f0004 = 0xe6;
+-    puRam000f0006 = (undefined4 *)&DAT_2000_37ce;
++    uRam000f0006 = 0x77ce;               /* PATCH 146: AH=40 write buffer DGROUP:0x77ce (was host ptr) */
+     uRam000f000e = 0x1c00;
+     uRam000f0000 = CONCAT11(0x40,(char)uRam000f0000);
+     uRam000f000c = param_7;
