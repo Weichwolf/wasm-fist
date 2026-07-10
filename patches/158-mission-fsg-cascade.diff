@@ -1,0 +1,109 @@
+PATCH 158: the ACCEPT mission cascade FSG-parse / mission-setup DGROUP near-offset base-losses
+(FUN_1000_6015, FUN_0000_4308).  Reached only by the ACCEPT cascade (BATTLES->OK->ACCEPT), not by the 19 verify
+flows (a bare host-ptr deref would already SIGSEGV them) -> behaviour-neutral for verify.
+
+  * FUN_1000_6015 (asm 0x16015): the object-attribute table walk.  DAT_2000_2d3c = DGROUP:0x6d3c is a
+    32-entry table of 16-bit near-offsets; each nonzero entry -> an object struct at DGROUP:off, whose
+    word[0]==0x17 selects the field pair.  Ghidra deref'd the near-offset as a host int* (wild deref ->
+    SIGSEGV in 4754 after d501 parses AZER1.FSG) and pointer-scaled the 2nd byte-store (int*+0x12/+0xe).
+
+--- a/fist.c	2026-07-10 08:07:49.413502180 +0200
++++ b/fist.c	2026-07-10 17:52:31.870771451 +0200
+@@ -12614,29 +12614,39 @@
+ 
+ {
+   undefined2 uVar1;
+-  undefined2 *puVar2;
+-  bool bVar3;
+-  undefined2 *puVar4;
+-  
+-  puVar2 = (undefined2 *)0x802;
+-  while( true ) {
+-    puVar2 = puVar2 + 3;
+-    bVar3 = false;
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar2)))();
+-    if (bVar3) break;
+-    puVar2 = puVar2 + 1;
+-    if ((undefined2 *)0xb71 < puVar2) {
+-      FUN_0000_4354();
+-      return;
++  extern unsigned char g_fist_cf;
++  /* PATCH 158 (asm 0x4308): GS = word[DGROUP:0x70] (STRSEG); forward-walk the STRSEG:0x802 table (stride
++     8 -- [+0]=lod/terminator,[+2],[+4]=model index,[+6]=near-call vector), calling each vector with
++     cx=[+0],bx=[+2],ax=[+4]; a CF return breaks into the BACKWARD 18dc(index=[+4],lod=[+0]) load loop
++     (18dc reads ax,cx).  Ghidra deref'd the STRSEG offset as a host ptr (base-loss SIGSEGV) + dropped
++     the register args; both exits fall into the 4354 tail (2d86/2d84/1676x4/1664/c0e8/c454). */
++  {
++    uint8_t *gs = g_mem + ((uint32_t)(*(uint16_t *)(g_mem + 0x1c070)) << 4);
++    uint16_t si = 0x802;
++    int broke = 0;
++    for (;;) {
++      uint16_t cx  = *(uint16_t *)(gs + si);
++      uint16_t bx  = *(uint16_t *)(gs + si + 2);
++      uint16_t ax  = *(uint16_t *)(gs + si + 4);
++      uint16_t vec = *(uint16_t *)(gs + si + 6);
++      g_fist_cf = 0;
++      (*(code *)fist_icall_near(0x0u, vec))(ax, bx, cx);
++      if (g_fist_cf) { broke = 1; break; }
++      si = (uint16_t)(si + 8);
++      if (si >= 0xb72) break;
++    }
++    if (broke) {
++      uint16_t sp = (uint16_t)(si + 8);
++      for (;;) {
++        if (sp < 8) break;
++        sp = (uint16_t)(sp - 8);
++        int16_t f0 = *(int16_t *)(gs + sp);
++        if (f0 < 0) break;
++        uint16_t ax = *(uint16_t *)(gs + sp + 4);
++        FUN_0000_18dc((int)(int16_t)ax, (int)(int16_t)f0);
++      }
+     }
+   }
+-  puVar2 = puVar2 + 1;
+-  while ((undefined2 *)((int)(undefined2 *)&DAT_1000_c006 + 1) < puVar2) {
+-    if ((int)puVar2[-4] < 0) break;
+-    puVar4 = puVar2 + -1;
+-    FUN_0000_18dc(puVar2[-2],puVar2[-4]);
+-    puVar2 = puVar4 + -3;
+-  }
+   DAT_2000_2d86 = 0;
+   DAT_2000_2d84 = 0xb72;
+   FUN_0000_1676(4,0x6d88);
+@@ -53258,25 +53268,28 @@
+ void __allregs FUN_1000_6015(void)
+ 
+ {
+-  int *piVar1;
+   byte bVar2;
+   byte bVar3;
+   int iVar4;
+   
++  /* PATCH 158 (asm 0x16015): 32-entry object table at DGROUP:0x6d3c holds 16-bit near-offsets; each
++     nonzero entry -> object struct at DGROUP:off.  Ghidra deref'd the offset as a host int* (base-loss)
++     and pointer-scaled the 2nd byte writes (piVar1+0x12 = +0x48 vs asm [di+0x24]). */
+   iVar4 = 0;
+   bVar3 = 0;
+   bVar2 = 0;
+   do {
+     do {
+-      piVar1 = (int *)*(int *)((int)(undefined2 *)&DAT_2000_2d3c + iVar4);
+-      if (piVar1 != (int *)0x0) {
+-        if (*piVar1 == 0x17) {
+-          *(byte *)((int)piVar1 + 0x23) = bVar3;
+-          *(byte *)(piVar1 + 0x12) = bVar2;
++      uint16_t di = *(uint16_t *)(g_mem + 0x1c000 + 0x6d3c + iVar4);
++      if (di != 0) {
++        uint8_t *o = (uint8_t *)(g_mem + 0x1c000 + di);
++        if (*(uint16_t *)o == 0x17) {
++          o[0x23] = bVar3;
++          o[0x24] = bVar2;
+         }
+         else {
+-          *(byte *)((int)piVar1 + 0x1b) = bVar3;
+-          *(byte *)(piVar1 + 0xe) = bVar2;
++          o[0x1b] = bVar3;
++          o[0x1c] = bVar2;
+         }
+       }
+       iVar4 = iVar4 + 2;

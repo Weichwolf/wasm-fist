@@ -20,7 +20,7 @@ through e459 (LOADING.MS3/MRL) and the whole 4779 sim-reset (4413/5f52/9be8/b158
 
 --- a/fist.c
 +++ b/fist.c
-@@ -4495,22 +4495,24 @@
+@@ -4495,22 +4495,27 @@
    uint uVar1;
    uint uVar2;
    
@@ -35,21 +35,24 @@ through e459 (LOADING.MS3/MRL) and the whole 4779 sim-reset (4413/5f52/9be8/b158
 -    *(uint *)(*(undefined2 *)(g_mem+0x2da12)) = uVar1;
 -    DAT_2000_bdd2 = uVar1 - 1;
 -    return;
-+  /* PATCH 156 (asm 0x291): the LFSR RNG (SS=0x2ba9 -> base 0x2ba90).  ptr = ss:0x1f82 (a rolling word
-+     offset cycling 0x1f84..0x1f8a); v = word ss:[ptr]; shr v,1 (CF=old bit0); if CF: v ^= 0xb400; store
-+     back; ss:0x342 (=DAT_2000_bdd2) = v-1; return ax=v-1.  Ghidra deref'd ss:[bx] as a HOST pointer +
-+     32-bit width + mislabelled the 0x1f84/0x1f8a immediates as DAT_1000_df84/df8a.  Rebase to g_mem+0x2ba90. */
++  /* PATCH 156 (asm 0x291), corrected by the patch-157 finding: the LFSR RNG runs SS=DS=DGROUP=0x1c00
++     (NOT ss:0x2ba9 -- Ghidra's SS context was wrong).  ptr = ss:0x1f82 (rolling word offset cycling
++     0x1f84..0x1f8a); v = word ss:[ptr]; shr v,1 (CF=old bit0); if CF: v ^= 0xb400; store back;
++     ss:0x342 = v-1; return ax=v-1.  PROOF of the 0x1c000 base: the seeder writes the state at
++     DAT_1000_df84.. (=DGROUP 0x1df84) and the output consumer reads DAT_1000_c342 (=DGROUP 0x1c342);
++     Ghidra even mislabelled the 0x1f84/0x1f8a bound immediates here as DAT_1000_df84/df8a (DS base).
++     Ghidra also deref'd ss:[bx] as a host pointer with 32-bit width.  Rebase all to g_mem+0x1c000. */
 +  {
-+  uint16_t _p = *(uint16_t *)(g_mem + 0x2da12);        /* ss:0x1f82 */
++  uint16_t _p = *(uint16_t *)(g_mem + 0x1df82);        /* ss:0x1f82 rolling ptr */
 +  _p = (uint16_t)(_p + 2);
 +  if (_p > 0x1f8a) _p = 0x1f84;
-+  *(uint16_t *)(g_mem + 0x2da12) = _p;
-+  uint16_t _v = *(uint16_t *)(g_mem + 0x2ba90 + _p);   /* ss:[bx] */
++  *(uint16_t *)(g_mem + 0x1df82) = _p;
++  uint16_t _v = *(uint16_t *)(g_mem + 0x1c000 + _p);   /* ss:[bx] = 0x1df84.. */
 +  uint16_t _cf = _v & 1;
 +  _v = (uint16_t)(_v >> 1);
 +  if (_cf) _v ^= 0xb400;
-+  *(uint16_t *)(g_mem + 0x2ba90 + _p) = _v;
-+  DAT_2000_bdd2 = (uint16_t)(_v - 1);                  /* ss:0x342 */
++  *(uint16_t *)(g_mem + 0x1c000 + _p) = _v;
++  DAT_1000_c342 = (uint16_t)(_v - 1);                  /* ss:0x342 = 0x1c342 (the consumer reads DAT_1000_c342) */
 +  (void)uVar1;(void)uVar2;
 +  return (uint16_t)(_v - 1);
    }

@@ -1,0 +1,148 @@
+PATCH 157: the trig library's SS=DS DGROUP base-loss (FUN_0000_05dd/05e2/0640/067a/0700/077e + the
+recursion counter DAT_2000_dad0).
+
+THE FINDING (asm-verified vs re_out/fist_dat_image.bin, definitive): this game runs SS=DS=DGROUP=0x1c00
+(classic small model).  Ghidra's PrepAnalysis set a WRONG SS context (0x2ba9), so every `ss:`-override
+DGROUP access was mislabelled to a bogus 0x2ba90-base DAT_2000_* address.  The trig library reads its
+sin/cos/atan lookup tables via `ss:[bx+0xNNNN]` -> Ghidra dropped the segment base entirely, emitting
+`*(int*)(iVar6+0x2042)` (a wild deref of low memory -> SIGSEGV) with 32-bit width (asm is a WORD load).
+
+PROOF the base is 0x1c000 (DS), not 0x2ba90:
+  * the sin table at DGROUP:0x2042 (linear 0x1e042) reads entry[64]=0x61f8=sin(22.5)*0xffff,
+    entry[128]=0xb505=sin(45)*0xffff -- a valid quarter sin table.  At 0x2ba90+0x2042=0x2dad2 it is ASCII.
+  * the recursion counter: FUN_0000_0665 does `inc BYTE ds:0x2040` (entry) / `dec BYTE ss:0x2040` (exit)
+    -- ONE balanced counter at DGROUP:0x2040 (=0x1e040).  Ghidra labelled the DS inc as DAT_1000_e040
+    (0x1e040, correct) and the SS-override dec as DAT_2000_dad0 (0x2dad0, wrong).  Same variable.
+  * (companion, see revised patch 156) the LFSR RNG state at ss:0x1f84.. is written by the seeder
+    (line ~46466: DAT_1000_df84 = 4b5e(...)) at DGROUP 0x1df84, and the RNG output ss:0x342 is read by
+    the consumer DAT_1000_c342 (0x1c342, line ~44021) -- both DS-based.
+
+FIX (all sites, asm-verified, faithful):
+  * DAT_2000_dad0 #define rebased 0x2dad0 -> 0x1e040 (aliases DAT_1000_e040 -> the inc/dec/test now hit
+    the one real counter; starts 0 in the image => the interpolation branch is taken as in the original).
+  * every trig table read rebased to g_mem+0x1c000+off and narrowed to 16-bit (int16_t/uint16_t) to match
+    the WORD load (sin 0x2042/0x2044; hi-res 0x2244/0x2246/0x2248; atan 0x2448/0x244a).
+
+Reached ONLY by the trig library (mission-cascade math + voxel), not by any of the 19 verify flows (a bare
+low-memory deref would have SIGSEGV'd them already) -> behaviour-neutral for verify; unblocks the ACCEPT
+cascade past 9a32->03a9->05e2/05dd.
+
+--- a/fist.c
++++ b/fist.c
+@@ -3820,7 +3820,7 @@
+ #define DAT_2000_d35e (*(undefined2 *)(g_mem+0x2d35e))
+ #define DAT_2000_d36e (*(undefined2 *)(g_mem+0x2d36e))
+ #define DAT_2000_d740 (*(undefined2 *)(g_mem+0x2d740))
+-#define DAT_2000_dad0 (*(undefined2 *)(g_mem+0x2dad0))
++#define DAT_2000_dad0 (*(undefined2 *)(g_mem+0x1e040)) /* PATCH 157: SS=DS=0x1c00; the trig recursion counter is DGROUP:0x2040 (=DAT_1000_e040), not ss:0x2ba90+0x2040 */
+ #define DAT_3000_26ce (*(undefined2 *)(g_mem+0x326ce))
+ #define DAT_3000_26d2 (*(undefined2 *)(g_mem+0x326d2))
+ #define DAT_3000_26d4 (*(undefined2 *)(g_mem+0x326d4))
+@@ -5095,8 +5095,8 @@
+   }
+   if (DAT_2000_dad0 == '\0') {
+     iVar6 = ((uVar3 & 0x3fff) >> 6) * 2;
+-    uVar1 = *(uint *)(iVar6 + 0x2042);
+-    uVar4 = *(int *)(iVar6 + 0x2044) - uVar1;
++    uVar1 = *(uint16_t *)(g_mem + 0x1c000 + iVar6 + 0x2042); /* PATCH 157: DGROUP sin table (SS=DS) */
++    uVar4 = (uint16_t)(*(uint16_t *)(g_mem + 0x1c000 + iVar6 + 0x2044) - uVar1); /* PATCH 157 */
+     bVar2 = (char)uVar3 << 2;
+     uVar3 = (uVar4 & 0xff) * (uint)bVar2 + 0x80 >> 8;
+     cVar5 = (char)(uVar4 >> 8) + -1;
+@@ -5108,7 +5108,7 @@
+     }
+     return uVar3 + uVar1;
+   }
+-  return *(int *)(((uVar3 & 0x3fff) >> 6) * 2 + 0x2042);
++  return *(uint16_t *)(g_mem + 0x1c000 + ((uVar3 & 0x3fff) >> 6) * 2 + 0x2042); /* PATCH 157 */
+ }
+ 
+ 
+@@ -5133,8 +5133,8 @@
+   }
+   if (DAT_2000_dad0 == '\0') {
+     iVar6 = ((uVar3 & 0x3fff) >> 6) * 2;
+-    uVar1 = *(uint *)(iVar6 + 0x2042);
+-    uVar4 = *(int *)(iVar6 + 0x2044) - uVar1;
++    uVar1 = *(uint16_t *)(g_mem + 0x1c000 + iVar6 + 0x2042); /* PATCH 157: DGROUP sin table (SS=DS) */
++    uVar4 = (uint16_t)(*(uint16_t *)(g_mem + 0x1c000 + iVar6 + 0x2044) - uVar1); /* PATCH 157 */
+     bVar2 = (char)uVar3 << 2;
+     uVar3 = (uVar4 & 0xff) * (uint)bVar2 + 0x80 >> 8;
+     cVar5 = (char)(uVar4 >> 8) + -1;
+@@ -5146,7 +5146,7 @@
+     }
+     return uVar3 + uVar1;
+   }
+-  return *(int *)(((uVar3 & 0x3fff) >> 6) * 2 + 0x2042);
++  return *(uint16_t *)(g_mem + 0x1c000 + ((uVar3 & 0x3fff) >> 6) * 2 + 0x2042); /* PATCH 157 */
+ }
+ 
+ 
+@@ -5155,7 +5155,7 @@
+ undefined2 __allregs FUN_0000_0640(uint param_1)
+ 
+ {
+-  return *(undefined2 *)((param_1 & 0xff) * 2 + 0x2042);
++  return *(undefined2 *)(g_mem + 0x1c000 + (param_1 & 0xff) * 2 + 0x2042); /* PATCH 157 */
+ }
+ 
+ 
+@@ -5197,23 +5197,23 @@
+   if (DAT_2000_dad0 == '\0') {
+     if (uVar3 < 0x2000) {
+       iVar4 = ((uVar3 & 0x3fff) >> 6) * 2;
+-      iVar1 = *(int *)(iVar4 + 0x2244);
++      iVar1 = *(int16_t *)(g_mem + 0x1c000 + iVar4 + 0x2244); /* PATCH 157 */
+       lVar2 = (ulong)(byte)((char)uVar3 << 2) * 0x100 *
+-              (ulong)(uint)(*(int *)(iVar4 + 0x2246) - iVar1);
++              (ulong)(uint)(uint16_t)(*(int16_t *)(g_mem + 0x1c000 + iVar4 + 0x2246) - iVar1); /* PATCH 157 */
+       uVar3 = (uint)lVar2;
+       return (int)((ulong)lVar2 >> 0x10) + iVar1 + (uint)CARRY2(uVar3,uVar3);
+     }
+     iVar4 = ((uVar3 & 0x3fff) >> 6) * 2;
+-    iVar1 = *(int *)(iVar4 + 0x2246);
++    iVar1 = *(int16_t *)(g_mem + 0x1c000 + iVar4 + 0x2246); /* PATCH 157 */
+     lVar2 = (ulong)(byte)((char)uVar3 << 2) * 0x100 *
+-            (ulong)(uint)(*(int *)(iVar4 + 0x2248) - iVar1);
++            (ulong)(uint)(uint16_t)(*(int16_t *)(g_mem + 0x1c000 + iVar4 + 0x2248) - iVar1); /* PATCH 157 */
+     uVar3 = (uint)lVar2;
+     return (int)((ulong)lVar2 >> 0x10) + iVar1 + (uint)CARRY2(uVar3,uVar3);
+   }
+   if (uVar3 < 0x2000) {
+-    return *(int *)(((uVar3 & 0x3fff) >> 6) * 2 + 0x2244);
++    return *(int16_t *)(g_mem + 0x1c000 + ((uVar3 & 0x3fff) >> 6) * 2 + 0x2244); /* PATCH 157 */
+   }
+-  return *(int *)(((uVar3 & 0x3fff) >> 6) * 2 + 0x2246);
++  return *(int16_t *)(g_mem + 0x1c000 + ((uVar3 & 0x3fff) >> 6) * 2 + 0x2246); /* PATCH 157 */
+ }
+ 
+ 
+@@ -5222,7 +5222,7 @@
+ undefined2 __allregs FUN_0000_0700(uint param_1)
+ 
+ {
+-  return *(undefined2 *)(((param_1 & 0x7fff) >> 7) * 2 + 0x2244);
++  return *(undefined2 *)(g_mem + 0x1c000 + ((param_1 & 0x7fff) >> 7) * 2 + 0x2244); /* PATCH 157 */
+ }
+ 
+ 
+@@ -5370,8 +5370,8 @@
+   bVar3 = (byte)(uVar1 >> 8);
+   if (DAT_2000_dad0 == '\0') {
+     iVar9 = (uint)bVar3 * 2;
+-    iVar10 = *(int *)(iVar9 + 0x2448);
+-    uVar5 = *(int *)(iVar9 + 0x244a) - iVar10;
++    iVar10 = *(int16_t *)(g_mem + 0x1c000 + iVar9 + 0x2448); /* PATCH 157 */
++    uVar5 = (uint16_t)(*(int16_t *)(g_mem + 0x1c000 + iVar9 + 0x244a) - iVar10); /* PATCH 157 */
+     bVar3 = (byte)uVar1;
+     uVar7 = (uVar5 & 0xff) * (uint)bVar3 + 0x80 >> 8;
+     cVar6 = (char)(uVar5 >> 8) + -1;
+@@ -5382,7 +5382,7 @@
+     return (((uVar7 | (uint)bVar2 << 0xf) >> 1 | (uint)((uVar11 >> 1 & 1) != 0) << 0xf) >> 1 |
+            (uint)((uVar11 >> 2 & 1) != 0) << 0xf) + (uint)((uVar7 & 2) != 0);
+   }
+-  uVar7 = *(uint *)((uint)bVar3 * 2 + 0x2448) >> 1;
++  uVar7 = (uint16_t)*(uint16_t *)(g_mem + 0x1c000 + (uint)bVar3 * 2 + 0x2448) >> 1; /* PATCH 157 */
+   return (((uVar7 | (uint)bVar2 << 0xf) >> 1 | (uint)((uVar11 >> 1 & 1) != 0) << 0xf) >> 1 |
+          (uint)((uVar11 >> 2 & 1) != 0) << 0xf) + (uint)((uVar7 & 2) != 0);
+ }
