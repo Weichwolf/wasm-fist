@@ -1,0 +1,72 @@
+PATCH 152 -- reconstruct FUN_0000_7217, the briefing/dialog ACCEPT (confirm) button activate method.
+
+Clicking ACCEPT in the BATTLES->OK mission-briefing modal (7088 id=0) SIGSEGV'd: fault-addr 0x3b32
+= the dialog element node offset dereferenced as a HOST pointer (deref of elem+2).  7217 is the
+confirm-button element's activate method, dispatched by the 1eb4 hit-test / 1e4b like ce37/ccde:
+ax=event flags (param_1), bx=element node (param_2, a DGROUP NEAR OFFSET), bp=dirty base (param_3,
+a DGROUP NEAR OFFSET).  Ghidra bound bx/bp to int params and dereferenced them raw
+(`*(int*)(param_2+2)`, `*(param_3+iVar1)`) -- the identical base-loss class patches 128/142/145 fixed
+in 1eb4/ccde/ce37.  The decompiled CONTROL FLOW is faithful and kept 1:1; only the memory model is
+rebased (elem/base -> g_mem+0x1c000+(uint16)off) and the dropped CF + the dropped confirm-dispatch AX
+threaded.  asm-verified vs re_out/fist_dat_image.bin (0x7217..0x7248):
+
+    7217: test $0x80,%ax ; je 0x7247 (stc;ret)      ; require the 0x80 event bit
+    721c: test $0x1,%ax  ; jne 0x7245 (clc;ret)      ; ignore the 0x01 bit
+    7221: mov 0x2(%bx),%si                           ; si = word[elem+2]  (hit index)
+    7224: movb $0x3,(%bp,%si)                        ; byte[base+si] = 3  (dirty-mark)
+    7227: xorw $0x8,-0x7417   (DGROUP:0x8be9)        ; DAT_2000_4be9 ^= 8
+    722c: mov 0x1(%bp,%si),%dx ; mov %dx,-0x7415     ; DAT_2000_4beb = word[base+si+1]
+    7233: test $0x4,%ax  ; jne 0x723a (else clc;ret) ; only the 0x04 (release/activate) bit fires it
+    723a: mov 0x1(%bp,%si),%ax                       ; AX = word[base+si+1] (0=OK / 1=CANCEL)
+    723d: mov -0x741b,%bx  (bx = word[DGROUP:0x8be5] = DAT_2000_4be5 = dialog id)
+    7241: call *-0x73a5(%bx)                         ; near [DGROUP:(id-0x73a5)] confirm vector
+For id=0 (briefing) word[DGROUP:0x8c5b] = 0x7249 = FUN_0000_7249, which reads AX -> sets the dialog
+exit flag DAT_2000_4be2 (=1 OK when AX<1, =0xff CANCEL when AX>=1) so 7088 returns CF=0 (ACCEPT) /
+CF=1 (CANCEL) to e87a.  Threading AX is load-bearing (without it 7249 sees garbage).  Reached ONLY by
+the modal-dialog confirm button (no existing passing flow clicks it) -> zero regression.
+
+--- a/fist.c
++++ b/fist.c
+@@ -18552,21 +18552,27 @@
+ void __allregs FUN_0000_7217(uint param_1,int param_2,int param_3)
+ 
+ {
+-  int iVar1;
+-  
+-  if ((param_1 & 0x80) == 0) {
+-    return;
+-  }
+-  if ((param_1 & 1) == 0) {
+-    iVar1 = *(int *)(param_2 + 2);
+-    *(undefined1 *)(param_3 + iVar1) = 3;
+-    DAT_2000_4be9 = DAT_2000_4be9 ^ 8;
+-    DAT_2000_4beb = *(undefined2 *)(param_3 + iVar1 + 1);
+-    if ((param_1 & 4) == 0) {
+-      return;
+-    }
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(uint16_t*)(g_mem+0x1c000+(uint16_t)((uint16_t)DAT_2000_4be5 - 0x73a5)))))();
+-  }
++  /* PATCH 152: base-loss reconstruction (asm 0x7217-0x7248).  elem=bx / base=bp are DGROUP NEAR
++   * OFFSETS, not host pointers (the SIGSEGV fault 0x3b32 = deref of elem+2); rebase to g_mem+0x1c000.
++   * Thread the dropped CF (stc when the 0x80 bit is absent) and the dropped confirm-dispatch AX
++   * (word[base+si+1] -> FUN_0000_7249 sets DAT_2000_4be2).  (patch 151 already rebased the dispatch
++   * base itself; this completes the elem/base rebase + the CF/AX threading.) */
++  extern unsigned char g_fist_cf;
++  uint16_t elem = (uint16_t)param_2;
++  uint16_t base = (uint16_t)param_3;
++  uint16_t si, ax_;
++  if ((param_1 & 0x80) == 0) { g_fist_cf = 1; return; }          /* 7247 stc;ret */
++  if ((param_1 & 1) != 0) { g_fist_cf = 0; return; }             /* 7245 clc;ret */
++  si = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(elem + 2));     /* si = word[elem+2] */
++  *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)(base + si)) = 3;      /* byte[base+si] = 3 */
++  DAT_2000_4be9 = DAT_2000_4be9 ^ 8;
++  DAT_2000_4beb = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(base + si + 1));
++  if ((param_1 & 4) == 0) { g_fist_cf = 0; return; }             /* 7238 clc;ret */
++  ax_ = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(base + si + 1));  /* AX = word[base+si+1] */
++  (*(code *)fist_icall_near(0x0u,
++     (uint16_t)(*(uint16_t *)(g_mem + 0x1c000 +
++       (uint16_t)((uint16_t)DAT_2000_4be5 - 0x73a5)))))(ax_);    /* [DGROUP:(id-0x73a5)] confirm */
++  g_fist_cf = 0;                                                 /* 7245 clc;ret */
+   return;
+ }
+ 

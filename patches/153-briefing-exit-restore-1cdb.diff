@@ -1,0 +1,36 @@
+PATCH 153 -- fix the briefing-modal (7088) EXIT display-list RESTORE call FUN_0000_1cdb.
+
+When the briefing dialog (7088, template 0x2c56) closes -- either ACCEPT or CANCEL sets the exit flag
+DAT_2000_4be2 -- its modal loop tears down the dialog display list and RESTORES the previous
+(caller's) one before returning (asm 0x70e5..0x70ed):
+    70e5: lcall *0x594          ; teardown the current (briefing) list
+    70e9: pop dx / 70ea: pop cx / 70eb: pop bx / 70ec: pop ax   ; restore the SETUP push (70b5..70b8)
+    70ed: call 0x1cdb           ; 1cdb(ax=setup-return-handle, bx,cx,dx = init geometry) = restore
+1cdb switches the active display list and returns the PREVIOUS handle; SETUP was
+    iVar2 = 1cdb(0x2c56,0x8cee,0x94,0x10,param_2,uVar8)   (param order ax,cx,dx,bx per __allregs)
+so AX popped at 0x70ec = that saved handle iVar2, and the restore must be
+    1cdb(iVar2, 0x8cee, 0x94, 0x10, param_2, uVar8)
+-- exactly the proven restore idiom in patch 142 (build 31232: `1cdb(iVar1,<same init geometry>)`;
+its comment: "The saved AX is the FIRST 1cdb's return ...; bx/cx/dx match the init call").
+
+Patch 151 reconstructed 7088's exit loop but emitted a SCRAMBLED restore
+`FUN_0000_1cdb(0,0x10,0x8cee,iVar2,param_2,uVar8)` -- param_1=0 (should be the saved handle iVar2)
+and the geometry rotated into the wrong slots -> 1cdb rebuilt from a null/garbage handle, its paint
+walker FUN_0000_201a dispatched a corrupted element whose method vector resolved to FUN_0000_9a27,
+which base-loss-dereferenced garbage -> SIGSEGV (fault 0x9ae4).  This exit path is NEVER exercised by
+any existing passing flow (battles-ok captures the OPEN briefing frame and never closes it), so the
+bug was latent; clicking ACCEPT (patch 152) is the first close.  Restoring the correct handle+geometry
+lets 7088 return cleanly to e87a with CF = (4be2==0xff ? CANCEL : ACCEPT).  Zero regression (no passing
+flow reaches this line).
+
+--- a/fist.c
++++ b/fist.c
+@@ -18316,7 +18316,7 @@
+       FUN_0000_1e4b(uVar6,uVar8,(int)(uint16_t)iVar3,uVar8);  /* event dispatch (35a7's flags) */
+       if (*(uint8_t*)(g_mem+0x24be2) != 0) {         /* dialog done (OK clicked) */
+         (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))(0xf69);
+-        iVar3 = FUN_0000_1cdb(0,0x10,0x8cee,iVar2,param_2,uVar8);
++        iVar3 = FUN_0000_1cdb(iVar2,0x8cee,0x94,0x10,param_2,uVar8);  /* PATCH 153 */
+         DAT_1000_c78c = uVar1;
+         g_fist_cf = (*(uint8_t*)(g_mem+0x24be2) == 0xff) ? 0 : 1;
+         return (undefined4)iVar3;

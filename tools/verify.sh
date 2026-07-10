@@ -99,6 +99,20 @@ FLOWS=(
   # tools/refcapture_ok.sh 160 100 205 128 (2 independent DOSBox captures AE=0 -> deterministic,
   # non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
   "battles-ok|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 4800:205:128:0|$ROOT/ref/battles_ok_native320.png"
+  # BATTLES -> OK -> briefing -> CANCEL -> menu (patches 152/153).  THREE clicks: BATTLES (row 100) opens
+  # the SELECT BATTLE .FSG list (cb7c); OK (205,128) picks AZER1 -> the mission-briefing modal (7088 id=0);
+  # CANCEL (78,186 -- the 2nd bottom button, right of ACCEPT@40,186) dismisses it.  The briefing button
+  # activate FUN_0000_7217 (patch 152: elem/base DGROUP-offset rebase + the dropped confirm-dispatch AX ->
+  # 7249 sets DAT_2000_4be2=0xff=CANCEL) fires, then 7088's exit tears down the dialog display list and
+  # RESTORES the menu's (patch 153: the 1cdb restore call `1cdb(iVar2,0x8cee,0x94,0x10,..)` -- 151 emitted a
+  # scrambled `1cdb(0,0x10,0x8cee,iVar2,..)` that base-loss-crashed FUN_0000_9a27) -> the plain main menu is
+  # restored bit-identically (only the cursor now rests at 78,186).  TICK-PINNED via "tick=2600" (FIST_DUMPTICK
+  # -- the menu-idle repaint after the dialog teardown settles by [0x452]~1280 and stays AE=0 through ~5458;
+  # a fixed tick makes it native<->wasm identical AND run-deterministic, avoiding a rare wall-clock mid-repaint
+  # catch).  READ-only (briefing 7162 only reads AZER1.FSW).  ref via
+  # tools/refcapture_ok3.sh 160 100 205 128 78 186 40 8 8 (DOSBox also returns to menu on CANCEL, cursor@78,186;
+  # 2 independent captures AE=0, non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
+  "battles-cancel-briefing|25000|tick=2600|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:78:186:0; 6000:78:186:1; 6600:78:186:0; 7200:78:186:0|$ROOT/ref/battles_cancel_briefing_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
