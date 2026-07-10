@@ -1,0 +1,59 @@
+PATCH 161: thread the model-loader callers (19d1 batch-.MAL / 1a45 streaming-.Mxx) so the FILEMGR
+cluster (patch 160) receives the load segment + filename + read args.
+
+The 3D-model LOD loader FUN_0000_1631 -> 18dc -> 183f dispatches two file paths, both of which reach the
+seg-0f69 FILEMGR through DGROUP method vectors but dropped the ES(load-seg)/DX(filename)/CX/DX(read) regs
+at the __allregs indirect-call sites (Ghidra base-loss):
+  - FUN_0000_19d1 (.MAL palette/aux): allocs 0x400 para via [0xe4] into DGROUP:[0x26e4+idx*2], sets
+    ES=that seg, then `mov bx,0x740; lcall [0x384]` = 2733 batch-LOAD.  Threaded: publish the alloc
+    segment in DAT_1000_2b5e (the ES:0 read target 2593 reads, patch 101 convention) + pass DX=filename
+    0x740 to 2733.
+  - FUN_0000_1a45 (.Mxx LOD): `mov dx,0x740; lcall [0x38c]` = 276e streaming-OPEN, then
+    `mov bx,slot; mov cx,0x10; mov dx,0x267c; lcall [0x394]` = 27f7 READ of the 16-byte model header.
+    Threaded: DX=0x740 to the open, (slot=DAT_1000_e67a, cx=0x10, dx=0x267c) to the read.
+All asm-verified vs re_out/fist_dat_image.bin (0x19d1..0x1a24, 0x1a45..).
+
+EMPIRICALLY DRIVEN (throwaway ACCEPT-cascade wiring, not committed): with 160+161 the mission cascade
+runs BATTLES->OK->ACCEPT through the FSG parse into the model loader and issues REAL INT-21h opens in the
+DOSBox order -- FLDCOMP.MRL -> LOADING.MS3 -> LOADING.MRL -> AZER1.FSG(SHDR read) -> the 3D-model loader
+(FILEMGR open on DGROUP:0x740).  BEHAVIOUR-NEUTRAL for the 19 verify flows (model loader is
+ACCEPT-cascade-only): re_out/fist.c pristine 61453e42; tools/verify.sh both = 19/19.
+--- a/fist.c
++++ b/fist.c
+@@ -7932,7 +7932,12 @@
+   uVar5 = CONCAT22(uVar6,iVar4);
+   if (!bVar7) {
+     bVar7 = false;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c384)))();
++    /* PATCH 161: 2733 batch-LOAD (asm 0x1a01 `mov es,[bx]; xor di,di; mov bx,0x740; lcall [0x384]`).
++       Publish the allocated .MAL segment (DGROUP:[0x26e4+idx*2], written by the [0xe4] alloc) in
++       DAT_1000_2b5e -- 2593 reads it for ES:0 (patch 101 convention) -- and pass DX=filename=0x740
++       (the driver-built name buffer) to 2733 (param_2=DX). */
++    DAT_1000_2b5e = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)iVar4);
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c384)))(0, 0x740, 0, 0);
+     uVar5 = CONCAT22(uVar6,iVar4);
+     DAT_1000_c748 = uVar2;
+     DAT_1000_c74a = uVar3;
+@@ -7985,7 +7990,9 @@
+   DAT_1000_e67a = 0;
+   uVar14 = (ulong)uVar13 << 0x10;
+   DAT_1000_c74a = param_1;
+-  uVar11 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c38c)))();
++  /* PATCH 161: streaming OPEN (asm 0x1a62 `mov dx,0x740; lcall [0x38c]`) = 276e; DX=filename buffer
++     0x740 -> 276e param_2.  Returns the FILEMGR slot index (stored in DAT_1000_e67a). */
++  uVar11 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c38c)))(0, 0x740, 0, 0);
+   if ((bool)uVar22) {
+ LAB_0000_1a2b:
+     DAT_1000_fad8 = DAT_1000_fad8 | 0x22;
+@@ -7999,7 +8006,10 @@
+       DAT_1000_e67c = 0;
+       uVar11 = (undefined2)((ulong)param_4 >> 0x10);
+       uVar14 = uVar14 & 0xffff0000;
+-      iVar12 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c394)))();
++      /* PATCH 161: READ (asm 0x1a74 `mov bx,[0x267a](slot); mov cx,0x10; mov dx,0x267c; lcall [0x394]`)
++         = 27f7(slot, cx=0x10 count, dx=0x267c buffer).  Reads the 16-byte model header into
++         DGROUP:0x267c (=DAT_1000_e67c); returns AX=bytes-read. */
++      iVar12 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c394)))(DAT_1000_e67a, 0x10, 0x267c);
+       do {
+         if ((bool)uVar22) goto LAB_0000_1a2b;
+         if (DAT_1000_e67c == 0) {
