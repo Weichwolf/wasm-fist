@@ -437,6 +437,31 @@ static void parse_script(void){
 /* Called each pump (from fist_timer_pump).  Fires due script steps once the menu is up. */
 void fist_input_pump(void){
     if (g_in_mouse_cb) return;                 /* re-entry guard (handler runs engine code) */
+    /* FIST_CAM_SELFTEST: once the menu is up (STRSEG string resource loaded), run the REAL campaign-list
+     * builder FUN_0000_ef5e -- which for each file A.CAM..L.CAM opens it (bd14), decrypts it via the
+     * extender op-0x80 gate (fist_extender_gate above), and parses the "DESC:" line into the campaign
+     * NAME buffer -- then dump the parsed names.  This exercises the op-0x80 .CAM decrypt + the whole
+     * parser chain end-to-end on real engine code (not a standalone stub).  Expected roster:
+     * TRAINING / OVERWATCH / CROSSED SWORDS / AEGIS / CERTAIN FURY / FIRE HAMMER / BURNING FROST. */
+    if (getenv("FIST_CAM_SELFTEST")) {
+        static int camtest_done = 0;
+        extern int g_menu_ready;
+        if (!camtest_done && g_menu_ready) {
+            extern void FUN_0000_ef5e(unsigned long, unsigned short, int);
+            camtest_done = 1;
+            fprintf(stderr, "[camtest] menu ready, STRSEG=0x%04x -- running FUN_0000_ef5e (real decrypt+parse)\n",
+                    *(uint16_t *)(g_mem + 0x1c000 + 0x70));
+            FUN_0000_ef5e(0, 0, 0);
+            for (int i = 0; i < 12; i++) {
+                uint16_t off = *(uint16_t *)(g_mem + 0x2b941 + i * 2);
+                if (off == 0) break;
+                uint8_t flag = g_mem[0x1c000 + (uint16_t)off];
+                fprintf(stderr, "[camtest] campaign %2d: loaded=%d name='%s'\n",
+                        i, flag, (char *)(g_mem + 0x1c000 + (uint16_t)off + 1));
+            }
+            if (getenv("FIST_CAM_EXIT")) { fprintf(stderr, "[camtest] done -- exiting\n"); exit(0); }
+        }
+    }
     if (g_mstep_n < 0) parse_script();
     if (g_mstep_n == 0 || !g_menu_ready || !g_mouse_handler_lin) return;
     g_ready_pumps++;
@@ -786,6 +811,49 @@ int fist_extender_gate(void) {
         fprintf(stderr, "[ext] create-task: %u bytes (0x%x paras) -> task seg 0x%04x (linear 0x%05x)\n",
                 bytes, paras, seg, (uint32_t)seg << 4);
         return seg;
+    }
+    if (op == 0x80) {
+        /* op 0x80 = the .CAM in-place DECRYPT.  Faithful C reconstruction of the Doug-Huffman
+         * extender kernel FUN_00007762/FUN_0000776e (re_out/fist_image.bin @ image 0x7762), the
+         * op-table entry [0xcb3+0x80]=0x7762 dispatched by the PM gate FUN_00000f30
+         * (`movzx ebx,bx; mov ebx,[ebx+0xcb3]; call ...`).  ASM-verified stream cipher over 8-byte
+         * blocks (keys 0xfade2bad/0xace4dead, per-block LFSR update); validated vs armoredfist/
+         * FISTDATA/A.CAM -> section-0 "DESC: TRAINING".  The engine (FIST.DAT bd14->e2a5) sets up
+         * esi=(STRSEG<<4)+0x452c (the read buffer) and ecx=len (bytes read, DGROUP:0xf810), writes
+         * buf_lin into the current-TCB inbox (TCB+0x3f2 = ebx), then invokes the gate with aa10=0x80.
+         * The buffer is passed to the handler in ESI (asm bd14 0x1bd58: esi=(STRSEG<<4)+0x452c), NOT via
+         * the TCB inbox (e2a5 writes EBX to the inbox, which bd14 leaves undefined for this op; only ops
+         * that carry a command in EBX use it).  So compute buf_lin = (word[DGROUP:0x70]<<4)+0x452c
+         * directly (0x452c is the fixed bd14 read buffer; op 0x80 is EXCLUSIVELY the .CAM decrypt --
+         * e2a5 is called only from bd14).  len = the engine's ecx = word[DGROUP:0xf810] (bytes read). */
+        uint32_t strseg = *(uint16_t *)(dg + 0x70);
+        uint32_t buf_lin = (strseg << 4) + 0x452c;      /* esi (+[0x807]=0 identity) */
+        uint16_t len = *(uint16_t *)(dg + 0xf810);
+        uint32_t blocks = (uint32_t)len >> 3;
+        uint8_t *esi = g_mem + buf_lin;                 /* [0x807]=0 identity */
+        if (blocks) {
+            uint32_t ebp = 0xace4deadu, eax = 0xfade2badu, ebx, edx;
+            for (uint32_t i = 0; i < blocks; i++) {
+                eax = eax << 1;                                 /* shl eax,1 */
+                edx = (eax & 0x80000000u) ? 0xffffffffu : 0u;   /* cdq */
+                edx &= 0xbc9abb09u;
+                eax = eax + edx + 1u;                           /* stc; adc eax,edx */
+                ebp = (ebp >> 1) | (ebp << 31);                 /* ror ebp,1 */
+                memcpy(&ebx, esi, 4);
+                ebx ^= eax;
+                ebx = (ebx & 0xffff0000u) | ((ebx & 0xffu) << 8) | ((ebx >> 8) & 0xffu); /* xchg bh,bl */
+                memcpy(esi, &ebx, 4);
+                memcpy(&ebx, esi + 4, 4);
+                ebx ^= ebp;
+                ebx = (ebx >> 16) | (ebx << 16);                /* ror ebx,16 */
+                memcpy(esi + 4, &ebx, 4);
+                esi += 8;
+            }
+        }
+        if (getenv("FIST_CAM_TRACE"))
+            fprintf(stderr, "[ext] op 0x80 .CAM decrypt: buf_lin=0x%05x len=%u blocks=%u -> '%.24s'\n",
+                    buf_lin, len, blocks, (char *)(g_mem + buf_lin));
+        return 0;
     }
     /* op != 0 = a DISPLAY-LIST / task command (0x04,0x20,0x44,0x64,0x68,0x6c,0x70,0x78,...): the engine
      * has written a command word to the TCB inbox (task+0x3f2 = EBX) and params (task+0x490..0x494), and

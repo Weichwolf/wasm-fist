@@ -1,0 +1,420 @@
+Stage 3: campaign .CAM decrypt (extender op 0x80) + the campaign-name parser chain.
+
+The CAMPAIGNS mission-select screen (FUN_0000_ec7e) lists 7 campaign names that are stored ENCRYPTED in
+armoredfist/FISTDATA/A.CAM..G.CAM.  Each name is produced by: bd14 opens the .CAM, reads it into
+STRSEG:0x452c, then calls the extender DECRYPT gate (FUN_0000_e2a5 -> op 0x80), and ef5e parses the
+decrypted "DESC:" line into the campaign name buffer.  This patch reconstructs that chain (the extender
+op-0x80 decrypt itself is the Doug-Huffman kernel FUN_00007762, wired in the shim fist_extender_gate).
+
+THE DECRYPT (extender kernel, wired in tools/native_main.c fist_extender_gate op 0x80): asm-verified from
+re_out/fist_image.bin.  The op-service dispatch table base is 0xcb3 (PM gate FUN_00000f30:
+`movzx ebx,bx; mov ebx,[ebx+0xcb3]; call [0xcaf]`, op used directly as a byte offset) -> op 0x80 =
+[0xcb3+0x80=0xd33] = 0x7762 = FUN_00007762/776e: a stream cipher over 8-byte blocks, keys 0xfade2bad
+(eax) / 0xace4dead (ebp), per-block LFSR update (shl/cdq/and 0xbc9abb09/adc; ror ebp,1; xor+bswap).
+Validated: A.CAM decrypts to "DESC:  TRAINING / CAMPMAP: INTR_.MRL / ...".  The buffer is passed in ESI =
+(word[DGROUP:0x70]<<4)+0x452c (bd14 0x1bd58), len in ECX = word[DGROUP:0xf810]; e2a5 sets aa10=0x80.
+
+ALL asm-verified vs re_out/fist_dat_image.bin (STRSEG=word[DGROUP:0x70]; parse-ptr b899=word[DGROUP:0xf899]
+is a STRSEG NEAR-OFFSET Ghidra typed int** -> host-pointer base-loss on every buffer byte; the b941 campaign
+name table and b91b keyword table are DGROUP/STRSEG near-offset tables):
+ - FUN_1000_bd14 (0x1bd14): open DX = DOS offset 0xf889 ("A.CAM") not a host ptr (patch-077/146 class);
+   the read-buffer clear -> STRSEG:0x452c (was host 0x452c = engine code); bytes-read -> DGROUP:0xf810;
+   CF (open/read fail vs success) threaded via g_fist_cf so ef5e's `jb` works.
+ - FUN_0000_efa8 skip-to-token, FUN_0000_f040 skip-to-EOL, FUN_0000_f05f copy-token->DGROUP:0xf902,
+   FUN_0000_f088 match-keyword (token vs the 19 STRSEG keyword strings b91b[i]), FUN_0000_f0b0 seek
+   section N, FUN_0000_f0cc copy-value->DGROUP:di: all rebased (source STRSEG, dest DGROUP), CF via
+   g_fist_cf (the decompile's local in_CF never reflected the real carry).
+ - FUN_0000_ef5e (0xef5e): the 12-file build loop; b941 walk (si=word[DGROUP:0xf941+bx]) rebased; per file
+   clear name-slot, bd14 (open+decrypt), seek section 0 ("DESC:"), copy name -> DGROUP:(si+1), si[0]=1.
+
+Proven end-to-end by the shim self-test FIST_CAM_SELFTEST (tools/native_main.c): once the menu is up it
+runs FUN_0000_ef5e and dumps the parsed roster -> TRAINING / OVERWATCH / CROSSED SWORDS / AEGIS /
+CERTAIN FURY / FIRE HAMMER / BURNING FROST.  The ec7e modal screen + its paint methods (ed28/edc2) +
+AE=0 flow are the documented next frontier.
+
+--- a/fist.c
++++ b/fist.c
+@@ -35019,31 +35019,33 @@
+   undefined2 *unaff_CS;
+   undefined1 uVar6;
+   
++  /* PATCH 148: build the campaign-name list (asm 0xef5e).  For each of 12 campaign files A.CAM..L.CAM
++   * (b889[0] cycles 'A'..'L'): clear the name slot (DGROUP:si[0]=0), open+read+DECRYPT via bd14 (op-0x80
++   * gate), parse section 0 ("DESC:"), and copy the campaign name into DGROUP:(si+1) with si[0]=1 (loaded).
++   * si = word[DGROUP:0xf941+bx] (name near-offset, stride 2).  Ghidra base-lost the b941 walk + the
++   * name-slot/parse-ptr host pointers; rebased to the DGROUP model.  CF propagated via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  int cx;
++  uint16_t bx;
++  uint16_t si;
++
+   s_A_CAM_2000_b889[0] = 'A';
+-  uVar6 = false;
+-  puVar4 = (undefined1 *)(param_1 & 0xffff0000);
+-  puVar2 = (undefined2 *)&DAT_1000_c00c;
+-  do {
+-    puVar3 = (undefined1 *)puVar4;
+-    puVar1 = *(undefined1 **)(puVar3 + -0x6bf);
+-    *puVar1 = 0;
+-    FUN_1000_bd14(puVar2,puVar4,param_2,puVar1,param_3,puVar3);
+-    uVar5 = (undefined2)((ulong)puVar4 >> 0x10);
+-    if (!(bool)uVar6) {
+-      FUN_0000_efa1();
+-      FUN_0000_f0b0(0);
+-      if (!(bool)uVar6) {
+-        *(undefined1 *)unaff_CS = 1;
+-        param_3 = (int)unaff_CS + 1;
+-        FUN_0000_f0cc(0x10,param_3);
+-      }
+-    }
+-    s_A_CAM_2000_b889[0] = s_A_CAM_2000_b889[0] + '\x01';
+-    uVar6 = (undefined1 *)0xfffd < puVar1;
+-    puVar4 = (undefined1 *)CONCAT22(uVar5,puVar1 + 2);
+-    puVar2 = (undefined2 *)(puVar3 + -1);
+-    unaff_CS = (undefined2 *)&DAT_1000_cf69;
+-  } while (puVar2 != (undefined2 *)0x0);
++  bx = 0;
++  for (cx = 0xc; cx != 0; cx = cx - 1) {
++    si = *(uint16_t *)(g_mem + 0x2b941 + (uint16_t)bx);       /* name near-offset (b941[bx]) */
++    g_mem[0x1c000 + (uint16_t)si] = 0;                        /* DGROUP:si[0] = 0 (empty) */
++    FUN_1000_bd14(0,0,param_2,0,param_3,0);                   /* open+read+decrypt A.CAM (CF->g_fist_cf) */
++    if (!g_fist_cf) {
++      FUN_0000_efa1();                                        /* parse ptr = STRSEG:0x452c */
++      FUN_0000_f0b0(0);                                       /* seek section 0 ("DESC:") */
++      if (!g_fist_cf) {
++        g_mem[0x1c000 + (uint16_t)si] = 1;                    /* DGROUP:si[0] = 1 (loaded flag) */
++        FUN_0000_f0cc(0x10,(char *)(uintptr_t)(uint16_t)(si + 1));  /* copy name -> DGROUP:(si+1) */
++      }
++    }
++    s_A_CAM_2000_b889[0] = s_A_CAM_2000_b889[0] + '\x01';     /* next file 'A'->'B'->... */
++    bx = bx + 2;
++  }
+   return;
+ }
+ 
+@@ -35063,28 +35065,30 @@
+ void __allregs FUN_0000_efa8(void)
+ 
+ {
++  /* PATCH 148: skip-to-token (asm 0xefa8).  es=STRSEG=word[DGROUP:0x70]; si=parse-ptr=word[DGROUP:0xf899]
++   * (a STRSEG near-offset).  Ghidra typed DAT_2000_b899 int** and read *pbVar as a raw host pointer ->
++   * STRSEG base-loss on every buffer byte.  Rebase: byte = g_mem[(STRSEG<<4)+(uint16)si]; CF via g_fist_cf
++   * (CF=1 at EOF 0x1a). */
++  extern unsigned char g_fist_cf;
+   byte bVar1;
+-  byte *pbVar2;
+-  
+-  pbVar2 = DAT_2000_b899;
++  uint32_t sb = (uint32_t)(uint16_t)DAT_1000_c070 << 4;
++  uint16_t si = *(uint16_t *)(g_mem + 0x2b899);
+   do {
+-    bVar1 = *pbVar2;
+-    if (bVar1 == 0x1a) {
+-      return;
+-    }
++    bVar1 = g_mem[sb + (uint16_t)si];
++    if (bVar1 == 0x1a) { g_fist_cf = 1; return; }
+     if (0x20 < bVar1) {
+       if (bVar1 != 0x3b) {
+-        DAT_2000_b899 = pbVar2;
++        *(uint16_t *)(g_mem + 0x2b899) = si;
++        g_fist_cf = 0;
+         return;
+       }
+       do {
+-        pbVar2 = pbVar2 + 1;
+-        if (*pbVar2 == 0x1a) {
+-          return;
+-        }
+-      } while (*pbVar2 != 0xd);
++        si = si + 1;
++        bVar1 = g_mem[sb + (uint16_t)si];
++        if (bVar1 == 0x1a) { g_fist_cf = 1; return; }
++      } while (bVar1 != 0xd);
+     }
+-    pbVar2 = pbVar2 + 1;
++    si = si + 1;
+   } while( true );
+ }
+ 
+@@ -35150,17 +35154,20 @@
+ void __allregs FUN_0000_f040(void)
+ 
+ {
+-  char *pcVar1;
+-  
+-  pcVar1 = DAT_2000_b899;
++  /* PATCH 148: skip-to-EOL (asm 0xf040).  STRSEG base-loss rebase; CF=1 at EOF, CF=0 past CR. */
++  extern unsigned char g_fist_cf;
++  unsigned char al;
++  uint32_t sb = (uint32_t)(uint16_t)DAT_1000_c070 << 4;
++  uint16_t si = *(uint16_t *)(g_mem + 0x2b899);
+   while( true ) {
+-    if (*pcVar1 == '\x1a') {
+-      return;
+-    }
+-    if (*pcVar1 == '\r') break;
+-    pcVar1 = pcVar1 + 1;
+-  }
+-  DAT_2000_b899 = pcVar1 + 1;
++    al = g_mem[sb + (uint16_t)si];
++    if (al == 0x1a) { g_fist_cf = 1; return; }
++    if (al == 0x0d) break;
++    si = si + 1;
++  }
++  si = si + 1;
++  *(uint16_t *)(g_mem + 0x2b899) = si;
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -35170,34 +35177,37 @@
+ undefined4 __allregs FUN_0000_f05f(void)
+ 
+ {
+-  char *pcVar1;
++  /* PATCH 148: copy-token-to-b902 (asm 0xf05f).  efa8 skips to a token; then copy es:[si] (STRSEG) into
++   * DGROUP:0xf902 up to ':' / 0x1a / 24 chars, NUL-terminate.  STRSEG base-loss rebase (source STRSEG,
++   * dest DGROUP); CF via g_fist_cf. */
++  extern unsigned char g_fist_cf;
+   char cVar2;
+   int iVar3;
+-  char *pcVar4;
+-  char *pcVar5;
+-  undefined2 unaff_ES;
+-  undefined1 in_CF = 0;
+-  
++  uint16_t si;
++  uint8_t *di;
++  uint32_t sb;
++
+   FUN_0000_efa8();
+-  if (!(bool)in_CF) {
+-    pcVar5 = (char *)&DAT_2000_b902;
++  if (!g_fist_cf) {
++    sb = (uint32_t)(uint16_t)DAT_1000_c070 << 4;
++    si = *(uint16_t *)(g_mem + 0x2b899);
++    di = g_mem + 0x2b902;                     /* DGROUP:0xf902 */
+     iVar3 = 0x18;
+-    pcVar4 = DAT_2000_b899;
+     while( true ) {
+-      pcVar1 = pcVar4;
+-      pcVar4 = pcVar4 + 1;
+-      cVar2 = *pcVar1;
+-      if (cVar2 == '\x1a') break;
+-      *pcVar5 = cVar2;
+-      pcVar5 = pcVar5 + 1;
++      cVar2 = g_mem[sb + (uint16_t)si];
++      si = si + 1;
++      if (cVar2 == '\x1a') { g_fist_cf = 1; return 0; }
++      *di = cVar2;
++      di = di + 1;
+       if ((cVar2 == ':') || (iVar3 = iVar3 + -1, iVar3 == 0)) {
+-        *pcVar5 = '\0';
+-        DAT_2000_b899 = pcVar4;
+-        return;
++        *di = '\0';
++        *(uint16_t *)(g_mem + 0x2b899) = si;
++        g_fist_cf = 0;
++        return 0;
+       }
+     }
+   }
+-  return;
++  return 0;
+ }
+ 
+ 
+@@ -35206,32 +35216,39 @@
+ uint __allregs FUN_0000_f088(uint param_1)
+ 
+ {
+-  char *pcVar1;
++  /* PATCH 148: match-keyword (asm 0xf088).  Compares the copied token (DGROUP:0xf902) against the 19
++   * keyword strings in STRSEG (b91b[i] = word[DGROUP:0xf91b+i] = STRSEG near-offset), char-by-char until
++   * ':' (match, return byte-index bx) or mismatch.  Ghidra typed the keyword ptr a raw host pointer ->
++   * STRSEG base-loss.  Rebase: keyword char = g_mem[(STRSEG<<4)+(uint16)di]; token from DGROUP:0xf902.
++   * CF via g_fist_cf. */
++  extern unsigned char g_fist_cf;
+   char cVar2;
+   int iVar3;
+   uint uVar4;
+-  char *pcVar5;
+-  char *pcVar6;
+-  
++  uint8_t *tok;
++  uint16_t di;
++  uint32_t sb = (uint32_t)(uint16_t)DAT_1000_c070 << 4;   /* STRSEG */
++
+   uVar4 = 0;
+   iVar3 = 0x13;
+   do {
+-    pcVar5 = (char *)&DAT_2000_b902;
+-    pcVar6 = (char *)*(undefined2 *)((int)(undefined2 *)&DAT_2000_b91b + uVar4);
++    tok = g_mem + 0x2b902;                                  /* DGROUP:0xf902 token */
++    di  = *(uint16_t *)(g_mem + 0x2b91b + (uint16_t)uVar4); /* keyword STRSEG offset */
+     while( true ) {
+-      pcVar1 = pcVar5;
+-      pcVar5 = pcVar5 + 1;
+-      cVar2 = *pcVar1;
++      cVar2 = *tok;
++      tok = tok + 1;
+       param_1 = CONCAT11((char)(param_1 >> 8),cVar2);
+-      if (cVar2 != *pcVar6) break;
++      if (cVar2 != (char)g_mem[sb + (uint16_t)di]) break;
+       if (cVar2 == ':') {
++        g_fist_cf = 0;
+         return uVar4;
+       }
+-      pcVar6 = pcVar6 + 1;
++      di = di + 1;
+     }
+     uVar4 = uVar4 + 2;
+     iVar3 = iVar3 + -1;
+     if (iVar3 == 0) {
++      g_fist_cf = 1;
+       return param_1;
+     }
+   } while( true );
+@@ -35243,27 +35260,24 @@
+ void __allregs FUN_0000_f0b0(uint param_1)
+ 
+ {
+-  undefined2 uVar1;
++  /* PATCH 148: seek section N (asm 0xf0b0).  b900=target; loop { copy token (f05f), match keyword (f088),
++   * if matched index == target -> found (CF=0); else skip line (f040) and repeat until EOF (CF=1) }.
++   * CF propagated via g_fist_cf. */
++  extern unsigned char g_fist_cf;
+   uint uVar2;
+-  undefined1 in_CF = 0;
+-  undefined1 uVar3;
+-  
++
+   DAT_2000_b900 = param_1;
+   while( true ) {
+-    uVar1 = FUN_0000_f05f();
+-    if ((bool)in_CF) {
+-      return;
+-    }
+-    uVar2 = FUN_0000_f088(uVar1);
+-    uVar3 = in_CF;
+-    if ((!(bool)in_CF) && (uVar3 = uVar2 < DAT_2000_b900, uVar2 == DAT_2000_b900)) break;
+-    FUN_0000_f040();
+-    in_CF = 0;
+-    if ((bool)uVar3) {
++    FUN_0000_f05f();
++    if (g_fist_cf) { g_fist_cf = 1; return; }            /* f0b6 jb f0c8 (EOF/error) */
++    uVar2 = FUN_0000_f088(0);
++    if ((!g_fist_cf) && (uVar2 == (uint16_t)DAT_2000_b900)) {   /* f0bd je f0ca (found) */
++      g_fist_cf = 0;
+       return;
+     }
++    FUN_0000_f040();                                     /* f0c3 skip to EOL */
++    if (g_fist_cf) { g_fist_cf = 1; return; }            /* f0c6 jae f0b3 : CF=1 (EOF) -> f0c8 */
+   }
+-  return;
+ }
+ 
+ 
+@@ -35272,20 +35286,29 @@
+ void __allregs FUN_0000_f0cc(int param_1,char *param_2)
+ 
+ {
+-  char *pcVar1;
++  /* PATCH 148: copy-value (asm 0xf0cc).  efa8 skips whitespace, then copy es:[si] (STRSEG) into DGROUP:di
++   * up to CR/0x1a/count, NUL-terminate.  param_2 = the destination DGROUP NEAR-offset (passed by ef5e as
++   * si+1); Ghidra treated it (and b899) as host pointers -> base-loss.  Rebase source STRSEG, dest DGROUP. */
+   char cVar2;
+-  undefined2 unaff_ES;
+-  
++  uint16_t si;
++  unsigned char al;
++  uint8_t *dst = g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_2;   /* DGROUP:di */
++  uint32_t sb = (uint32_t)(uint16_t)DAT_1000_c070 << 4;            /* STRSEG */
++
+   FUN_0000_efa8();
++  si = *(uint16_t *)(g_mem + 0x2b899);
+   do {
+-    pcVar1 = DAT_2000_b899 + 1;
+-    cVar2 = *DAT_2000_b899;
+-    if ((cVar2 == '\r') || (DAT_2000_b899 = pcVar1, cVar2 == '\x1a')) break;
+-    *param_2 = cVar2;
+-    param_2 = param_2 + 1;
++    al = g_mem[sb + (uint16_t)si];
++    si = si + 1;
++    if (al == 0x0d) { si = si - 1; break; }      /* f0ee dec si (leave ptr at CR) */
++    if (al == 0x1a) { break; }                   /* f0e6 (EOF) */
++    cVar2 = (char)al;
++    *dst = cVar2;
++    dst = dst + 1;
+     param_1 = param_1 + -1;
+   } while (param_1 != 0);
+-  *param_2 = '\0';
++  *dst = '\0';
++  *(uint16_t *)(g_mem + 0x2b899) = si;
+   return;
+ }
+ 
+@@ -62654,7 +62677,11 @@
+   uRam000f0014 = 0x21;
+   uRam000f0000 = 0x3d00;
+   uRam000f0002 = (undefined2)param_2;
+-  pcRam000f0006 = (char *)s_A_CAM_2000_b889;
++  /* PATCH 147: INT-21h AH=3D open, DX = DOS OFFSET of the filename "A.CAM" (asm 0x1bd14 `mov dx,0xf889`;
++   * DGROUP:0xf889 = s_A_CAM_2000_b889).  Ghidra typed the DX slot char* and stored the HOST pointer
++   * &s_A_CAM_2000_b889 -> R_DX = low16(host ptr) -> opened garbage (host-pointer-into-DOS-register
++   * reg-file artifact, patch-077/146 class).  R_DS is 0x1c00 (DGROUP), set below. */
++  uRam000f0006 = 0xf889;
+   uRam000f000e = 0x1c00;
+   uRam000f0004 = param_1;
+   uRam000f0008 = param_4;
+@@ -62667,11 +62694,13 @@
+   uVar6 = (undefined2)((ulong)param_2 >> 0x10);
+   if (!(bool)uRam000f0012) {
+     DAT_2000_b88f = uRam000f0000;
+-    puRam000f000a = (undefined1 *)0x452c;
++    /* PATCH 147: zero the read buffer at ES:DI = STRSEG:0x452c (asm 0x1bd22 `mov es,[0x70]; mov di,0x452c;
++     * mov cx,0x1800; rep stosb`).  Ghidra dropped the ES=STRSEG base -> wrote host 0x452c (engine code!).
++     * STRSEG = word[DGROUP:0x70] = DAT_1000_c070. */
++    puVar1 = g_mem + ((uint32_t)(uint16_t)DAT_1000_c070 << 4) + 0x452c;
+     for (iVar5 = 0x1800; iVar5 != 0; iVar5 = iVar5 + -1) {
+-      puVar1 = puRam000f000a;
+-      puRam000f000a = puRam000f000a + 1;
+       *puVar1 = (char)uRam000f0000;
++      puVar1 = puVar1 + 1;
+     }
+     uStack0002 = 0x1c00;
+     uRam000f0000 = CONCAT11(0x3f,(char)uRam000f0000);
+@@ -62684,7 +62713,9 @@
+     uRam000f000c = param_3;
+     fist_int_dispatch();
+     bVar3 = (bool)uRam000f0012;
+-    *(undefined2 *)0xf810 = uRam000f0000;
++    /* PATCH 147: bytes-read -> DGROUP:0xf810 (asm 0x1bd43 `mov [0xf810],ax`, DS=DGROUP).  Ghidra dropped
++     * the DGROUP base -> wrote host 0xf810 (engine code).  DGROUP:0xf810 = g_mem+0x1c000+0xf810. */
++    *(uint16_t *)(g_mem + 0x1c000 + 0xf810) = uRam000f0000;
+     if (!bVar3) {
+       uRam000f0002 = *(undefined2 *)&DAT_2000_b88f;
+       uRam000f0000 = CONCAT11(0x3e,(char)uRam000f0000);
+@@ -62694,10 +62725,11 @@
+       uRam000f000c = param_3;
+       fist_int_dispatch();
+       uVar4 = CONCAT22(extraout_var_00,uRam000f0000);
+-      if (*(int *)0xf810 != 0) {
++      if (*(uint16_t *)(g_mem + 0x1c000 + 0xf810) != 0) {   /* PATCH 147: DGROUP:0xf810 (jcxz len==0) */
+         uStack0008 = 0xbd71;
+-        uVar4 = FUN_0000_e2a5(CONCAT22(uVar6,uRam000f0002));
++        uVar4 = FUN_0000_e2a5(CONCAT22(uVar6,uRam000f0002));   /* -> op-0x80 .CAM decrypt gate */
+       }
++      { extern unsigned char g_fist_cf; g_fist_cf = 0; }      /* PATCH 147: asm 0x1bd71 clc (success) */
+       return uVar4;
+     }
+     uRam000f0002 = *(undefined2 *)&DAT_2000_b88f;
+@@ -62709,6 +62741,7 @@
+     fist_int_dispatch();
+     uVar4 = CONCAT22(extraout_var_01,uRam000f0000);
+   }
++  { extern unsigned char g_fist_cf; g_fist_cf = 1; }   /* PATCH 147: asm 0x1bd7b stc (open/read failed) */
+   return uVar4;
+ }
+ 
