@@ -1,0 +1,22 @@
+PATCH 170: FUN_0000_be75 (asm 0xbe75) -- picks FUN_0000_be0e's resource index from the 8-word
+table at DGROUP:0x9f54 indexed by the LFSR RNG (FUN_0000_0291) value & 0xe (asm 0xbe7d `mov
+bx,[DGROUP:(bx-0x60ac)]`, -0x60ac = +0x9f54).  Reached on the mission-setup cascade tail (e714
+ACCEPT -> ... -> be75).  Ghidra dropped the DGROUP base so `*(int*)((ax&0xe)+0x9f54)` was a
+wild host dereference (SIGSEGV at FUN_0000_be75, fault 0x9f60).  Rebased to g_mem+0x1c000; the
+index is 16-bit -> in-bounds.  Behaviour-neutral for verify (mission-setup path, unreached).
+
+--- a/fist.c
++++ b/fist.c
+@@ -29347,7 +29347,11 @@
+   uint uVar1;
+   
+   uVar1 = FUN_0000_0291();
+-  FUN_0000_be0e(*(undefined2 *)((uVar1 & 0xe) + 0x9f54));
++  /* PATCH 170 (asm 0xbe7d): pick be0e's arg from the 8-word table at DGROUP:0x9f54 indexed by the
++     LFSR value (ax&0xe) -- asm `mov bx,[DGROUP:(bx-0x60ac)]` (-0x60ac = +0x9f54).  Ghidra dropped the
++     DGROUP base -> `*(int*)((ax&0xe)+0x9f54)` = a wild host deref (SIGSEGV at be75, fault 0x9f60).
++     Rebase to g_mem+0x1c000; index is 16-bit -> in-bounds. */
++  FUN_0000_be0e(*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uVar1 & 0xe) + 0x9f54)));
+   return;
+ }
+ 

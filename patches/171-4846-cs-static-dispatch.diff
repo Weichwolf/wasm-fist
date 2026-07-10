@@ -1,0 +1,29 @@
+PATCH 171: FUN_0000_4846 (asm 0x4846) -- a CS-relative static method dispatch on the display-
+list paint path (459a -> 206f -> 209e -> 4846), the same class as the 0x8342 voxel dispatch
+(patch 159): Ghidra drops the `2e` CS-override prefix.  asm `mov bx,[DGROUP:0x7a40]; call word
+CS:[bx+0x4850]` -- bx = the element state selector word[DGROUP:0x7a40]; the near-call target is
+word at the STATIC table CS:0x4850 (CS=0 -> linear 0x4850 in the base-0 code image; table[0] =
+0x4854 = FUN_0000_4854).  Ghidra emitted `*(int*)(DAT_2000_3a40 + 0x4850)` (near-offset used as
+host ptr) -> the SIGSEGV at FUN_0000_4846 (fault 0x4850).  Rebased: bx from DGROUP, the table
+read from g_mem+0 (CS=0).  Behaviour-neutral for verify (paint path, unreached by the 19 flows).
+
+--- a/fist.c
++++ b/fist.c
+@@ -13325,7 +13325,16 @@
+ void __allregs FUN_0000_4846(void)
+ 
+ {
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(DAT_2000_3a40 + 0x4850))))();
++  /* PATCH 171 (asm 0x4846): a CS-relative static dispatch (same class as the 0x8342 voxel dispatch,
++     patch 159 -- Ghidra drops the `2e` CS prefix).  asm `mov bx,[DGROUP:0x7a40]; call word CS:[bx+
++     0x4850]` -- bx = word[DGROUP:0x7a40] (the element state selector), the target is word at the
++     STATIC table CS:0x4850 (CS=0 -> linear 0x4850 in the base-0 code image; table[0]=0x4854=FUN_0000
++     _4854).  Ghidra rendered it `*(int*)(DAT_2000_3a40 + 0x4850)` = a wild host deref (SIGSEGV at
++     4846, fault 0x4850; paint path 459a->206f->209e->4846).  Rebase: bx from DGROUP, the table read
++     from g_mem+0 (CS=0), both 16-bit. */
++  uint16_t bx = *(uint16_t *)(g_mem + 0x1c000 + 0x7a40);
++  uint16_t tgt = *(uint16_t *)(g_mem + (uint16_t)(bx + 0x4850));
++  (*(code *)fist_icall_near(0x0u,tgt))();
+   return;
+ }
+ 

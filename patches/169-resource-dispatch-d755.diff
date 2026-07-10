@@ -1,0 +1,48 @@
+PATCH 169: FUN_0000_d755 (asm 0xd755) -- the resource-list dispatch loop that consumes the
+c157/c164 walk (patch 168) on the mission-setup cascade tail (e006-tail -> d755).  For each
+nonzero table entry c164 returns (found near-offset in AX, CF when exhausted), d755 loads the
+entry's method-index word[DGROUP:si], doubles it, and near-calls the vector word[DGROUP:(idx*2
+-0x1998)].  Ghidra folded c164's CF/si into a spurious host-ptr walk of the (unused) param_1 arg.
+Reconstructed faithfully: c164's return + g_fist_cf drive the loop; the vector table lookup is
+rebased through g_mem+0x1c000.  param_1 (the caller's 0x4509) is a Ghidra artifact (the asm takes
+no argument).  Behaviour-neutral for verify (mission-setup path, unreached by the 19 flows).
+
+--- a/fist.c
++++ b/fist.c
+@@ -32500,15 +32500,29 @@
+ void __allregs FUN_0000_d755(int *param_1)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
++  /* PATCH 169 (asm 0xd755): the resource-list dispatch loop.  c157 inits the walk cursor; each
++     c164 yields the next nonzero table entry (found near-offset in AX = si, CF set when the count
++     is exhausted).  For each entry: di = si; s2 = word[DGROUP:di]; s2 <<= 1; call the near vector
++     word[DGROUP:(s2-0x1998)] (asm d75d `mov di,si; mov si,[di]; shl si,1; call [si-0x1998]`).
++     Ghidra folded c164's CF/si -> a spurious `param_1` host-ptr walk; the real cursor comes from
++     c164's return + g_fist_cf.  param_1 (the caller's 0x4509) is an unused Ghidra artifact (the asm
++     takes no argument).  Rebased through g_mem+0x1c000; the near-vector table lookup is faithful.
++     Not reached by the 19 flows. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = g_mem + 0x1c000;
++  undefined2 si;
++  (void)param_1;
+   FUN_0000_c157();
+   while( true ) {
+-    FUN_0000_c164();
+-    if ((bool)in_CF) break;
+-    in_CF = *param_1 < 0;
+-    param_1 = (int *)(*param_1 * 2);
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(param_1[-0xccc])))();
++    si = FUN_0000_c164();                                  /* sets g_fist_cf, returns found offset */
++    if ((bool)g_fist_cf) break;                            /* d75b jb d769 */
++    {
++      uint16_t di = (uint16_t)si;                          /* d75d mov di,si */
++      uint16_t s2 = *(uint16_t *)(dg + di);                /* d75f mov si,[di] */
++      s2 = (uint16_t)(s2 << 1);                            /* d761 shl si,1 */
++      (*(code *)fist_icall_near(0x0u,
++          (uint16_t)(*(uint16_t *)(dg + (uint16_t)(s2 - 0x1998)))))();  /* d763 call [si-0x1998] */
++    }
+   }
+   return;
+ }
