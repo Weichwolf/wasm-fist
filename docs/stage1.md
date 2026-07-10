@@ -5,6 +5,57 @@ resource load + pixels) and then full boot. Every engine correction = an asm-ver
 the decompile stays pristine; shim files (`re_out/fist_dos.c`, `fist_vga.c`, `tools/native_main.c`) are
 hand-written.
 
+## DONE (STAGE 3 — THE seg-0f69 FILEMGR IS LIVE: the variant-0 leaf primitives are reconstructed + the model-loader callers threaded, so the ACCEPT mission cascade now issues REAL INT-21h model/asset opens in DOSBox order all the way through AZER1.FSG into the 3D-model FILEMGR.  2 new patches (160/161); `re_out/fist.c` pristine `61453e42`; `bash tools/verify.sh both` = 19/19 (NO regression, behaviour-neutral — the whole FILEMGR/model-loader chain is ACCEPT-cascade-only).)
+
+**ROUTE (b) chosen + justified (reconstruct-as-C, keep pristine).**  The handoff's "~18 seg-0f69 file
+primitives" turned out to be MOSTLY already promoted by Ghidra (LOAD 0f69:0x318e=FUN_1000_281e thunk->2593,
+OPEN 0x3195=FUN_1000_2825 attr-probe+open+lseek, the variant-2 set 2ccb.. all present + fmap'd).  Only
+THREE tiny variant-0 leaves were missing (reached only through the cs:0x2b88 vtable so Ghidra never
+promoted them).  Re-decompile was rejected: it would not fix the pervasive ES base-loss across the loader
+chain (Ghidra drops ES either way) and would force re-threading 159 patches — for the sake of 3 trivial
+INT-21h stubs.
+
+**PATCH 160 — the variant-0 FILEMGR leaf primitives + cluster-dispatch register threading.**  Decoded the
+cs:0x2b88 vtable from the image (0f69:0x2b88): columns LOAD/OPEN/CLOSE/READ/WRITE/SEEK x 3 variants
+(' '/orig, '!', '@'); for LOOSE (uncompressed) files the AH=4300 attr-probe always picks variant0 = the
+plain-INT-21h set.  Reconstructed instruction-faithfully + fmap-registered at their linear addresses:
+FUN_1000_2867 (0f69:0x31d7 CLOSE `mov ah,0x3e`), FUN_1000_2871 (0x31e1 READ `mov ah,0x3f`), FUN_1000_287b
+(0x31eb SEEK `mov ax,0x4200`).  Threaded the leaf __allregs args (plain-cdecl positional) at every cluster
+vtable-dispatch site: LOAD/OPEN pass DX=filename; READ/SEEK (27f7/280a) signatures extended to (slot,cx,dx)
+so the caller's count/buffer/offset forward to the leaf.  Also decoded the FILEMGR method table from reloc
+section si=0x174: **DGROUP:0x384=2733 batch-LOAD, 0x388=26fc screen-open, 0x38c=276e streaming-OPEN,
+0x390=27e2 CLOSE, 0x394=27f7 READ**.
+
+**PATCH 161 — thread the model-loader callers 19d1(.MAL) / 1a45(.Mxx).**  The LOD loader 1631->18dc->183f
+dispatches two paths, both dropping ES/DX/CX-DX at the __allregs indirect-call sites.  19d1: allocs 0x400
+para via [0xe4] into DGROUP:[0x26e4+idx*2], sets ES=that seg, `mov bx,0x740; lcall [0x384]` = 2733 batch-load
+— threaded to publish the alloc seg in DAT_1000_2b5e (2593's ES:0 target, patch-101 convention) + pass
+DX=filename 0x740.  1a45: `mov dx,0x740; lcall [0x38c]` = 276e OPEN + `mov cx,0x10; mov dx,0x267c; lcall
+[0x394]` = 27f7 READ of the 16-byte model header — threaded DX=0x740 + (slot=DAT_1000_e67a,0x10,0x267c).
+
+**EMPIRICALLY DRIVEN (throwaway ACCEPT-cascade wiring mirroring the pristine e87a tail, FIST_CASCADE=1 +
+LD_PRELOAD opentrace; NOT committed).**  With 160+161 the mission cascade runs BATTLES(160,100)->OK(205,128)
+->ACCEPT(40,186) through the FSG parse INTO the model loader and issues REAL INT-21h opens in the DOSBox
+order: **FLDCOMP.MRL -> LOADING.MS3 -> LOADING.MRL -> AZER1.FSG (SHDR 6-byte header read) -> the 3D-model
+FILEMGR open on DGROUP:0x740**.  Advanced from patch 159's "reaches 2733" to "2733/276e ISSUE THE REAL
+open()".
+
+**THE FRONTIER — the model NAMES resolve to the MGAVIDEO driver's `MXX` TEMPLATE, not `M1_A/APACHE/ARTILL`.**
+The driver name-builder [DGROUP:0x550] runs (writes "MXX\0" to DGROUP:0x740) but produces the *unpatched*
+template because the throwaway cascade wiring feeds an incomplete model list — the real per-mission model
+indices come from the `d501` FSG chunk handlers (which open AZER1.FSG + read the SHDR but do not yet build
+the model/unit list: their reg-file DX use `&DAT_` host ptrs, unreconstructed).  The real names ARE present
+(MGAVIDEO image: "M1_A"@0x18659, "APACHE", "ARTILL", "M1CON"; the "MXX"@0x18668 template is patched with the
+model type like the MSPRITE6.BIN precedent, patch 108).  **NEXT DELIVERABLE:** (1) reconstruct the `d501`
+FSG model/unit-list handlers (the 7-entry table `DAT_2000_a9e6`@0x2a9e6 [SHDR/DCBS/TERM/PATH/STMP/PINF/BINF])
+so 4308's model-list walk yields real indices; (2) faithfully wire the e714 ACCEPT tail (mirror the pristine
+e87a body, lines ~e89b..e929, with g_fist_cf for the 7088 CF) so the cascade is a REAL flow not a throwaway;
+(3) then the model set opens by real name -> 459a -> e4bb first frame.  **VOXEL PIN (unchanged, gated on a
+real e4bb frame):** the raycaster is the top-viewport element's `[ds:0x6b4]` device method selected by the
+per-element method-id byte at `[DAT_2000_2d34+elem+0xb7]` (dispatch = the STATIC cs-table FUN_0000_8329 @
+0x8342 {0x834a,0x8358,0x836e,0x83c9}); NAMING the exact FUN still needs the runtime element-type byte, which
+needs a genuinely reached e4bb frame (past the d501 model-list + KLC/PAL/SKY load).
+
 ## DONE (STAGE 3 — THE MODEL-LOADER FILENAME-SUFFIX CLUSTER FUN_1000_2733/2762/2765/276e/27e2/27f7/280a (+ the byte-identical sibling 2688) IS RECONSTRUCTED — the 0xf690 CS-data rebase + byte/word widths + the OPEN-handler CF, all asm-verified.  1 new patch (159); `re_out/fist.c` pristine `61453e42`; `bash tools/verify.sh both` = 19/19 (NO regression).  ALSO a hard PIN correction: the in-mission paint-method dispatch table `0x8342` is a STATIC cs-relative table, not a runtime-installed DGROUP one.)
 
 **PATCH 159 — the model-resource filename-suffix builder cluster (asm 0x12688/0x12733..0x1280a), the exact sibling of FUN_1000_26fc (patch 099).**  Reached on the ACCEPT mission cascade via 4308->18dc->183f->19d1->2733; NOT reached by the 19 verify flows (a bare host-ptr deref of the cs-data tables would already SIGSEGV them) -> behaviour-neutral.  These seg-0f69 functions read a per-extension method vtable in CS-relative data: cs:0x2b6a current-slot + 4-slot handle table, cs:0x2b74 type table, cs:0x2b7e ext-byte + variant suffixes, and the handler-vector COLUMNS cs:0x2b88 attr/LOAD / 0x2b8e open / 0x2b94 close / 0x2b9a read / 0x2ba6 seek.  The correct CS-data base is **g_mem+0xf690** (the seg-0f69 module is loaded there: 2733's code at image 0x12733 = 0xf690+0x30a3), NOT the 0x12b.. host offset Ghidra kept after decoding under CS=0x1000.  The driver-built filename buffer is a DGROUP near offset (param_2) -> g_mem+0x1c000+off.  Widths: DAT_1000_2b7e is a BYTE (asm `mov cs:0x2b7e,al`); slot/type/vtable entries are WORDs.  276e/2688's OPEN-handler carry threaded via g_fist_cf (Ghidra folded it to a stale pre-call test).  Roles: 2733 = attr-probe + full LOAD (variant0 = 0f69:0x318e = `mov es,ax; call 2593`); 2762/2765 = mid-instruction re-entries into 2733's dispatch tail; 276e/2688 = streaming OPEN (slot-alloc + variant probe + 0f69:0x3195 open); 27e2/27f7/280a = per-slot CLOSE/READ/SEEK via cs:0x2b94/0x2b9a/0x2ba6 with bx=handle (handlers 0f69:0x31d7/0x31e1/0x31eb = INT 21h AH=3e/3f/42).
