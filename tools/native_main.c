@@ -645,6 +645,21 @@ void fist_install_dgroup(void) {
  * 074) spins on it -- faithful to `do { call far [DGROUP:0x40a] } while(jae)`. */
 unsigned char g_fist_cf;
 
+/* Event-queue node handle returned by FUN_1000_3566 (asm 0x13566: `call 0xf69:0x3ed6` returns the
+ * freshly-allocated queue node in BX).  The __allregs model returns void, so the reconstructed 3566
+ * (patch 126) publishes BX here and the hit-test FUN_0000_1eb4 (asm 0x1f20/0x1f39 `mov [bx],0x200/0x400`)
+ * writes the synthesized LEAVE/ENTER event record into THAT node -- not into the old hover element
+ * (the patch-128 `oldfe0c` write was a reconstruction bug that clobbered the element node's word0). */
+unsigned short g_fist_ev_node;
+
+/* Current PAINT-walk base (bp) published by the 209e dirty-walk before each paint-method dispatch.
+ * The container child-walk FUN_0000_208a reads bp as a live register in the asm (preserved from 209e
+ * through `call [di+0x423c]`), but the __allregs model passes no args to paint methods, so patch 137
+ * shortcut-read the GLOBAL DAT_1000_fafe instead -- which is the MENU base (f7b8) while the modal dialog
+ * is up (the cursor redraw updates fafe), so the dialog's container repaint after a row-select walked
+ * the wrong element list and the red selection bar never moved.  Publish the real walk bp here. */
+unsigned short g_fist_paintbp;
+
 /* fist_ensure_dlist_vecs(): install reloc section si=0x174 -- the DISPLAY-LIST ELEMENT method vectors
  * DGROUP:0x344..0x394 (far pointers into the engine service seg 0f69, incl. DGROUP:0x388 = 0f69:0x306c
  * = FUN_1000_26fc, the RESOURCE OPEN the driver's element-load thunk calls to open+alloc+read a screen

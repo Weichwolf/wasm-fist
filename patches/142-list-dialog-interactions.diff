@@ -1,0 +1,295 @@
+Stage 3: SELECT PLAYER list-dialog INTERACTIONS -- row-select (red bar moves), OK/CANCEL button
+activate, and the event-queue / dirty-repaint fixes that make dialog-internal clicks work.
+
+Clicking a dialog element (row / OK / CANCEL / arrow) now recurses the hit-test into the dialog's
+child elements and dispatches their [elem+0x4660] activate methods faithfully.  All asm-verified vs
+re_out/fist_dat_image.bin.  Fixes (root causes):
+
+ - FUN_1000_3566 + FUN_0000_1eb4 (hit-test): the LEAVE (0x200) / ENTER (0x400) synthesized event
+   records are written into the QUEUE NODE that 3566 allocates (asm returns it in BX), NOT into the
+   old hover element.  The patch-128 `oldfe0c` write clobbered a dialog CONTAINER node's word0 (cls=4
+   -> 0x400), so the hit-test never recursed into the container's buttons/rows.  3566 publishes BX in
+   the shim global g_fist_ev_node; the hit-test writes the event fields there.
+
+ - FUN_0000_cf6b (OK/CANCEL activate): base-lost result store rebased to the DGROUP model
+   (a85d = low byte of word[base + word[elem+2] + 1]); cc33 exits on a85d != 0xff.
+
+ - FUN_0000_ccde (list-row activate): coord read rebased -- si = the drained event node
+   word[DGROUP:0x18e2] (Ghidra bound it to param_3=base); row = byteTab[0xe88f + ((clickY-y0)>>1)]
+   + scroll-top; on change: a838 = row, d066() marks the list dirty.
+
+ - FUN_0000_cc33 (modal loop EXIT): the button-click exit rebuild `1cdb` had a dropped saved handle
+   (`unaff_CS` garbage) + scrambled arg order -> wild deref.  Mirror the init call with ax := iVar1;
+   set CF = (a85d >= 2) (CANCEL >= 2 -> menu, OK < 2 -> proceed).
+
+ - FUN_0000_20d6 / FUN_0000_2043: the container PAINT / FORWARD-paint child-setup walkers (fall into
+   20ea / 2057) were base-lost host-pointer derefs -> SIGSEGV on the dialog exit repaint.  Rebased to
+   the DGROUP model, reusing the already-correct 20ea / 2057.
+
+ - a87d: a 32-bit DWORD scroll-range denominator typed undefined2 (WORD) -> `a87d = 0x10000`
+   truncated to 0 -> cef4 divide-by-zero (SIGFPE) on the first row-select.  -> uint32_t.
+
+ - a8ee / a8f4 / a8f5: BYTE element dirty-masks (asm `mov BYTE PTR`) typed undefined2 (WORD) ->
+   writing 3 clobbered the adjacent child-list head/link word -> the container child-walk found no
+   children and the list never repainted on a selection change.  -> uint8_t.
+
+ - FUN_0000_209e / FUN_0000_208a: the container child-walk read its base from the GLOBAL
+   DAT_1000_fafe, which holds the MENU base (f7b8) while the modal dialog is up (the cursor redraw
+   updates fafe) -> the repaint walked the wrong element list.  209e publishes the live walk base bp
+   in the shim global g_fist_paintbp; 208a reads it (the asm uses the preserved bp register).
+
+Shim: tools/native_main.c defines g_fist_ev_node + g_fist_paintbp (companions to g_fist_cf).
+
+--- a/fist.c
++++ b/fist.c
+@@ -3618,7 +3618,11 @@
+ #define DAT_2000_a877 (*(undefined2 *)(g_mem+0x2a877))
+ #define DAT_2000_a879 (*(undefined2 *)(g_mem+0x2a879))
+ #define DAT_2000_a87b (*(undefined2 *)(g_mem+0x2a87b))
+-#define DAT_2000_a87d (*(undefined2 *)(g_mem+0x2a87d))
++/* PATCH 142: a87d is a 32-bit DWORD scroll-range denominator (asm b6a4 `mov dword[0xe87d],0x10000`,
++ * cef4 `div DWORD PTR [0xe87d]`).  Ghidra typed it undefined2 (WORD) so `a87d = 0x10000` truncated to 0
++ * -> cef4 divide-by-zero (SIGFPE) on the first list row-select/scroll.  Occupies 0xe87d..0xe880; a881 is
++ * at 0xe881 (no overlap). */
++#define DAT_2000_a87d (*(uint32_t *)(g_mem+0x2a87d))
+ #define DAT_2000_a881 (*(undefined2 *)(g_mem+0x2a881))
+ #define DAT_2000_a883 (*(undefined2 *)(g_mem+0x2a883))
+ #define DAT_2000_a885 (*(undefined2 *)(g_mem+0x2a885))
+@@ -3627,9 +3631,9 @@
+ #define DAT_2000_a88b (*(undefined2 *)(g_mem+0x2a88b))
+ #define DAT_2000_a88d (*(undefined2 *)(g_mem+0x2a88d))
+ #define DAT_2000_a8ad (*(undefined2 *)(g_mem+0x2a8ad))
+-#define DAT_2000_a8ee (*(undefined2 *)(g_mem+0x2a8ee))
+-#define DAT_2000_a8f4 (*(undefined2 *)(g_mem+0x2a8f4))
+-#define DAT_2000_a8f5 (*(undefined2 *)(g_mem+0x2a8f5))
++#define DAT_2000_a8ee (*(uint8_t *)(g_mem+0x2a8ee))    /* PATCH 142: BYTE element dirty-mask (asm `mov BYTE PTR`); WORD typing clobbered the adjacent child-list head/link -> no repaint on row-select/scroll */
++#define DAT_2000_a8f4 (*(uint8_t *)(g_mem+0x2a8f4))    /* PATCH 142: BYTE element dirty-mask (asm `mov BYTE PTR`); WORD typing clobbered the adjacent child-list head/link -> no repaint on row-select/scroll */
++#define DAT_2000_a8f5 (*(uint8_t *)(g_mem+0x2a8f5))    /* PATCH 142: BYTE element dirty-mask (asm `mov BYTE PTR`); WORD typing clobbered the adjacent child-list head/link -> no repaint on row-select/scroll */
+ #define DAT_2000_a8f6 (*(undefined2 *)(g_mem+0x2a8f6))
+ #define DAT_2000_a8f7 (*(undefined2 *)(g_mem+0x2a8f7))
+ #define DAT_2000_a8f8 (*(undefined2 *)(g_mem+0x2a8f8))
+@@ -8561,6 +8565,12 @@
+         }
+         if (process) {
+           if ((flags & 0x600) == 0 && elem != HG(0x3e0c)) {
++            /* PATCH 142: the LEAVE (0x200) / ENTER (0x400) event records are written into the QUEUE
++             * NODE that FUN_1000_3566 just allocated (asm 0x1f20/0x1f39 `mov [bx],..` where bx is the
++             * 3566 return), NOT into the old hover element -- the patch-128 `oldfe0c` write clobbered
++             * a dialog CONTAINER's word0 (cls=4 -> 0x400), killing hit-test recursion into its buttons
++             * and list rows.  3566 publishes its BX in g_fist_ev_node. */
++            extern unsigned short g_fist_ev_node;
+             uint16_t oldfe0c = HG(0x3e0c);
+             HG(0x3e12) = oldfe0c;
+             HG(0x3e0c) = elem;
+@@ -8568,14 +8578,14 @@
+             { uint16_t a = HG(0x3e14);
+               if (a == 0xffff || a == HG(0x3e0c)) {
+                 FUN_1000_3566((undefined2*)0); if (g_fist_cf) { g_fist_cf = 0; return 0; }
+-                HG((uint16_t)(oldfe0c + 0)) = 0x200;
++                HG((uint16_t)(g_fist_ev_node + 0)) = 0x200;
+               } }
+             { uint16_t a = HG(0x3e14);
+               if (a == 0xffff || a == HG(0x3e12)) {
+                 FUN_1000_3566((undefined2*)0); if (g_fist_cf) { g_fist_cf = 0; return 0; }
+-                HG((uint16_t)(oldfe0c + 0)) = 0x400;
+-                HG((uint16_t)(oldfe0c + 4)) = HG(0x3e0e);
+-                HG((uint16_t)(oldfe0c + 6)) = HG(0x3e10);
++                HG((uint16_t)(g_fist_ev_node + 0)) = 0x400;
++                HG((uint16_t)(g_fist_ev_node + 4)) = HG(0x3e0e);
++                HG((uint16_t)(g_fist_ev_node + 6)) = HG(0x3e10);
+               } }
+             { uint16_t di2 = HG(0x18e2);
+               HG(0x3e0e) = HG((uint16_t)(di2 + 4));
+@@ -8740,22 +8750,20 @@
+ void __allregs FUN_0000_2043(int param_1,int param_2)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int *piVar3;
+-  
+-  iVar1 = *(int *)(param_2 + *(int *)(param_1 + 2) + 1);
+-  if (iVar1 != 0) {
+-    iVar2 = *(int *)(param_2 + *(int *)(param_1 + 2) + 3);
+-    piVar3 = (int *)((int)(undefined2 *)&DAT_1000_faf0 + iVar1);
+-    do {
+-      DAT_1000_fe08 = piVar3;
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*piVar3 + 0x402a))))(param_2);
+-      piVar3 = piVar3 + 6;
+-    } while (piVar3 <= (int *)((int)(undefined2 *)&DAT_1000_faf0 + iVar2));
+-    return;
+-  }
+-  return;
++  /* PATCH 142: container FORWARD-paint child-setup (asm 0x2043-0x2056), FALLS THROUGH into the 2057
++   * forward node-list walker (twin of 20d6->20ea).  bx=elem(param_1), bp=base(param_2): di=word[elem+2];
++   * childlo=word[base+di+1]; if 0 return; childhi=word[base+di+3]; walk childlo+0x3af0..childhi+0x3af0
++   * FORWARD dispatching each node's [+0x402a] method.  Ghidra base-lost (DGROUP offsets as host pointers
++   * -> SIGSEGV).  Reached by the cc33 dialog EXIT repaint after a button click; reuse the correct 2057. */
++  uint16_t elem = (uint16_t)param_1;
++  uint16_t base = (uint16_t)param_2;
++  uint16_t di   = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(elem + 2));
++  uint16_t childlo = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(base + di + 1));
++  uint16_t childhi;
++  if (childlo == 0) return;
++  childhi = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(base + di + 3));
++  FUN_0000_2057((int *)(uintptr_t)(uint16_t)(childhi + 0x3af0),
++                (int *)(uintptr_t)(uint16_t)(childlo + 0x3af0), base);
+ }
+ 
+ 
+@@ -8812,8 +8820,13 @@
+      paint method, so bp comes from the current display-list base fafe, not a register.) */
+   (void)param_1; (void)param_2;
+   {
++    extern unsigned short g_fist_paintbp;
+     uint8_t *dg = g_mem + 0x1c000;
+-    uint16_t bp = (uint16_t)DAT_1000_fafe;
++    /* PATCH 142: bp is the live PAINT-walk base (asm reads the bp register preserved from 209e), NOT the
++     * global DAT_1000_fafe -- while the modal dialog is up fafe holds the MENU base (f7b8, updated by the
++     * cursor redraw), so a row-select repaint walked the wrong element list and the red bar never moved.
++     * Use the base 209e published for this dispatch. */
++    uint16_t bp = g_fist_paintbp;
+     uint16_t bx = *(uint16_t *)(dg + 0x3e08);
+     uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 2));
+     uint16_t head = *(uint16_t *)(dg + (uint16_t)(bp + di + 1));
+@@ -8854,7 +8867,10 @@
+       uint8_t carry = (cl == 0) ? in_CF : (uint8_t)((bVar1 >> (cl - 1)) & 1);
+       *cell = (uint8_t)(bVar1 >> cl);
+       if (carry) {
++        extern unsigned short g_fist_paintbp;
+         *(uint16_t *)(dg + 0x3e08) = bx;
++        g_fist_paintbp = bp;                                 /* PATCH 142: publish the walk base (bp is a
++                                                              * live register the paint methods read) */
+         uint16_t nd  = *(uint16_t *)(dg + bx);
+         uint16_t off = *(uint16_t *)(dg + (uint16_t)(nd + 0x423c));
+         ((void (*)(void))fist_icall_near(0x0u, off))();
+@@ -8883,22 +8899,20 @@
+ void __allregs FUN_0000_20d6(int param_1,int param_2)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int *piVar3;
+-  
+-  iVar1 = *(int *)(param_2 + *(int *)(param_1 + 2) + 3);
+-  if (iVar1 != 0) {
+-    iVar2 = *(int *)(param_2 + *(int *)(param_1 + 2) + 1);
+-    piVar3 = (int *)((int)(undefined2 *)&DAT_1000_faf0 + iVar1);
+-    do {
+-      DAT_1000_fe08 = piVar3;
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*piVar3 + 0x444e))))(param_2);
+-      piVar3 = piVar3 + -6;
+-    } while ((int *)((int)(undefined2 *)&DAT_1000_faf0 + iVar2) <= piVar3);
+-    return;
+-  }
+-  return;
++  /* PATCH 142: container PAINT child-setup (asm 0x20d6-0x20e9), FALLS THROUGH into the 20ea node-list
++   * walker.  bx=elem(param_1), bp=base(param_2): di=word[elem+2]; childhi=word[base+di+3]; if 0 return;
++   * childlo=word[base+di+1]; walk childlo+0x3af0..childhi+0x3af0 dispatching each node's [+0x444e]
++   * method.  Ghidra base-lost the whole thing (DGROUP offsets deref'd as host pointers -> SIGSEGV).
++   * Reached first by the cc33 dialog EXIT repaint after a button click; reuse the correct 20ea. */
++  uint16_t elem = (uint16_t)param_1;
++  uint16_t base = (uint16_t)param_2;
++  uint16_t di   = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(elem + 2));
++  uint16_t childhi = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(base + di + 3));
++  uint16_t childlo;
++  if (childhi == 0) return;
++  childlo = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(base + di + 1));
++  FUN_0000_20ea((int *)(uintptr_t)(uint16_t)(childlo + 0x3af0),
++                (int *)(uintptr_t)(uint16_t)(childhi + 0x3af0), base);
+ }
+ 
+ 
+@@ -31198,7 +31212,14 @@
+         FUN_0000_1e4b(uVar2,uVar4,uVar6,uVar7);           /* ccaa: dispatch the event */
+         if (DAT_2000_a85d != 0xff) {                      /* ccad: a dialog button was clicked */
+           FUN_0000_e39f();
+-          FUN_0000_1cdb(unaff_CS,uVar5,uVar3,iVar1,param_1,uVar7);
++          /* PATCH 142: exit rebuild 1cdb (asm ccbb: `pop dx/cx/bx/ax; call 1cdb`).  The saved AX is the
++           * FIRST 1cdb's return (iVar1, pushed at cc74); bx/cx/dx match the init call.  Ghidra dropped
++           * the saved handle -> `unaff_CS` (garbage) + a scrambled arg order -> wild deref on the
++           * button-click exit (never reached until the click activate worked).  Mirror the init call
++           * with ax := iVar1, and set CF = (a85d >= 2) (ccbe: OK<2 / CANCEL>=2). */
++          (void)unaff_CS; (void)uVar5; (void)uVar3;
++          FUN_0000_1cdb(iVar1,0xe8e9,0x40,0x10,param_1,uVar7);
++          g_fist_cf = (unsigned char)(DAT_2000_a85d >= 2);
+           return;
+         }
+       }
+@@ -31254,13 +31275,27 @@
+ void __allregs FUN_0000_ccde(uint param_1,int param_2,int param_3)
+ 
+ {
++  /* PATCH 142: LIST-BOX row activate (asm 0xccde-0xcd1b).  ax=flags, bx=elem(list box), si=the drained
++   * event/coord node (word[DGROUP:0x18e2]).  Ghidra base-lost the two coord reads ([si+4] click-Y,
++   * [bx+4] list y0) as host-pointer derefs of DGROUP offsets AND wrongly bound the si operand to
++   * param_3 (=base) instead of the coord node.  Faithful rebase:
++   *   row = byteTab[DGROUP:0xe88f + ((clickY - listY0) >> 1)] + a83a(scroll top);
++   *   if row != a838(current sel): a838 = row; d066() marks the list dirty (the next paint draws the red
++   *   bar on the new row); else double-click (<0x19 ticks) -> a85d = 0 (OK). */
+   int iVar1;
+-  
++  uint16_t elem = (uint16_t)param_2;
++  uint16_t si;
++  int16_t clickY, listY0;
++  (void)param_3;
++
+   if ((param_1 & 10) != 0) {
+-    iVar1 = (uint)*(byte *)(((uint)(*(int *)(param_3 + 4) - *(int *)(param_2 + 4)) >> 1) + 0xe88f) +
+-            DAT_2000_a83a;
++    si = *(uint16_t *)(g_mem + 0x1c000 + 0x18e2);                       /* the drained coord node */
++    clickY = (int16_t)*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(si + 4));
++    listY0 = (int16_t)*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(elem + 4));
++    iVar1 = (uint)*(uint8_t *)(g_mem + 0x1c000 +
++              (uint16_t)((uint16_t)((uint16_t)(clickY - listY0) >> 1) + 0xe88f)) + DAT_2000_a83a;
+     if (iVar1 == DAT_2000_a838) {
+-      if ((uint)(DAT_1000_c452 - DAT_2000_a883) < 0x19) {
++      if ((uint16_t)(DAT_1000_c452 - DAT_2000_a883) < 0x19) {
+         DAT_2000_a85d = 0;
+         return;
+       }
+@@ -31539,18 +31574,30 @@
+ void __allregs FUN_0000_cf6b(uint param_1,int param_2,int param_3)
+ 
+ {
++  /* PATCH 142: OK/CANCEL button activate (asm 0xcf6b-0xcf8d).  ax=flags(param_1), bx=elem(param_2),
++   * bp=base(param_3), dl=0xe.  Ghidra base-lost the result store `si=[bx+2]; ax=[bp+si+1]; [0xe85d]=al`
++   * (treated the DGROUP elem/base offsets as host pointers).  Rebase: si = word[elem+2] (the button's
++   * result-code data offset), a85d = low byte of word[base+si+1].  cc33's modal loop exits on
++   * a85d != 0xff, returning CF = (a85d >= 2): CANCEL (>=2) -> caller returns to the menu, OK (<2)
++   * proceeds.  aa4e = the transient button-flash. */
++  extern unsigned char g_fist_cf;
+   uint uVar1;
+-  
+-  if ((param_1 & 0x80) == 0) {
++  uint16_t elem = (uint16_t)param_2, base = (uint16_t)param_3, si;
++
++  if ((param_1 & 0x80) == 0) {           /* cf6e: not the activate pass -> stc */
++    g_fist_cf = 1;
+     return;
+   }
+-  if ((param_1 & 1) == 0) {
+-    uVar1 = FUN_0000_aa4e(param_1);
+-    if ((uVar1 & 0x14) == 0) {
++  if ((param_1 & 1) == 0) {              /* cf70: skip on a MOVE (bit0) */
++    uVar1 = FUN_0000_aa4e(param_1);      /* cf75: flash button rect (aa4e returns flags unchanged) */
++    if ((uVar1 & 0x14) == 0) {           /* cf7a: store only on press/release-select */
++      g_fist_cf = 0;
+       return;
+     }
+-    DAT_2000_a85d = (undefined1)*(undefined2 *)(param_3 + *(int *)(param_2 + 2) + 1);
++    si = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(elem + 2));
++    DAT_2000_a85d = *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)(base + si + 1));
+   }
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -45230,6 +45277,7 @@
+   si = DAT_1000_d8e0;
+   bx = FUN_1000_34f5(QW(si + 2));          /* enqueue handle; returns new node+2, sets g_fist_cf */
+   if (g_fist_cf) return;
++  { extern unsigned short g_fist_ev_node; g_fist_ev_node = bx; }  /* PATCH 142: publish BX (asm returns it) */
+   si = DAT_1000_d8e0;
+   QW(bx + 0) = QW(si + 2);
+   QW(bx + 2) = QW(si + 4);

@@ -30,6 +30,12 @@ FLOWS=(
   "selplayer|25000|22000|200:160:74:0; 800:160:74:1; 1400:160:74:0; 2000:160:74:0|$ROOT/ref/selplayer_native320.png"
   "battles|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 2000:160:100:0|$ROOT/ref/battles_native320.png"
   "campaigns|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 2000:160:87:0|$ROOT/ref/campaigns_native320.png"
+  # Interaction flows (patch 142): open a list dialog, then CLICK A ROW inside it -> the red selection
+  # bar moves to the clicked row.  Two different dialogs (SELECT PLAYER via CAMPAIGNS row 87 selecting
+  # KKR; SELECT BATTLE via BATTLES row 100 selecting AZER5).  The dialog covers the menu-item click
+  # position (rows 87/100 are inside the panel), so no cursor ghost remains.
+  "campaigns-select|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:130:119:0; 3600:130:119:1; 4200:130:119:0; 4800:130:119:0|$ROOT/ref/campaigns_select_native320.png"
+  "battles-select|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:130:119:0; 3600:130:119:1; 4200:130:119:0; 4800:130:119:0|$ROOT/ref/battles_select_native320.png"
 )
 
 run_target() { # $1=target $2=hz $3=ms $4=mouse-script $5=out.ppm ; echo rc
