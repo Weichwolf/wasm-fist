@@ -1,0 +1,77 @@
+PATCH 172: STATEFUL ACCEPT-CASCADE DIAGNOSTIC HARNESS (env-gated FIST_CASCADE, DEFAULT OFF).
+
+This is a DIAGNOSTIC harness, NOT a permanent flow-wiring (that is step 4, held until the cascade is
+crash-free end-to-end).  It exists so future iterations stop rebuilding the throwaway ACCEPT-tail wiring
+by hand: with FIST_CASCADE=1 in the environment, a REAL scripted-click route
+    BATTLES(160,100) -> OK(205,128) -> ACCEPT(40,186)
+runs the mission-start cascade instead of returning to the menu.  The three clicks establish the REAL
+selected-battle state (cb7c->cc33 sets DGROUP:0xe834/0xe838 + the .FSG name), so the cascade runs with a
+genuine mission selection -- a direct FUN_0000_e87a(0,0,0,0) probe does NOT work (cc33 stalls in the
+FILEMGR .FSG enumeration because no battle is selected; documented probe artifact).
+
+The inserted block is a FAITHFUL MIRROR of the pristine FUN_0000_e87a ACCEPT tail (re_out/fist.c
+0xe89b..0xe929, lines 34124-34160): after the id=0 briefing modal FUN_0000_7088 returns with CF=0
+(ACCEPT -- patch 154's cmp;cmc semantics, exposed here via the shim global g_fist_cf), it runs the
+LOADING-screen setup + sim-reset + FSG parse + model-loader + display-list paint exactly as the pristine
+e87a body does.  Concrete arg substitution for this dispatch context (the BATTLES state, param_1=param_3=
+param_4=0): uVar1=high16(param_3)=0 -> uVar3=CONCAT22(0,8)=8; uVar4=0x4509; uVar6=0xf69; uVar2=0x157c;
+the 459a seg arg=0x1c00; the filename ptr = &DAT_2000_39a9 (as pristine; 4754's real open uses the DOS
+offset 0x79a9 directly per patch 156, so this ptr is faithful-but-unused-for-filename).
+
+Because the whole block is gated behind getenv("FIST_CASCADE") (NULL by default), it is BEHAVIOUR-NEUTRAL
+for the 19 verify flows (they never set FIST_CASCADE) -- verify.sh both stays 19/19, native<->wasm
+bit-identical, no covered path changes.  getenv is available (ghidra_compat.h includes <stdlib.h>) and
+portable to wasm (ENV mirrored via tools/wasm_pre.js).  Reproducible: run from the REPO ROOT with
+    FIST_CASCADE=1 FIST_TICK_HZ=25000 FIST_RUNMS=<bounded> \
+    FIST_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0" /tmp/fist_native
+
+--- a/fist.c
++++ b/fist.c
+@@ -34770,6 +34770,47 @@
+       if (DAT_2000_a85d < 2) {           /* cb7c OK (asm e88c `jae 0xe891`): open the mission BRIEFING */
+         FUN_0000_7088(0, 0x4509);        /* e891: mov ax,0; call 7088 -> id=0 briefing dialog (7162 loads
+                                           * <battle>.FSW -> STRSEG:0x452c; 6c2d draws it). editor build deferred. */
++        /* PATCH 172: env-gated ACCEPT-cascade DIAGNOSTIC harness (FIST_CASCADE, default OFF).  On ACCEPT
++         * (g_fist_cf==0 after 7088 -- patch 154 cmp;cmc), run the mission-start cascade, a FAITHFUL mirror
++         * of the pristine FUN_0000_e87a tail (0xe89b..0xe929).  Behaviour-neutral (gated) -> verify 19/19. */
++        {
++          extern unsigned char g_fist_cf;
++          if (g_fist_cf == 0 && getenv("FIST_CASCADE")) {
++            FUN_0000_e43f();
++            DAT_2000_b6ce = DAT_2000_b6ce | 0x22;
++            (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
++            (*(code *)fist_icall_far((uint32_t)(DAT_1000_d598)))();
++            DAT_2000_2da5 = 0;
++            FUN_0000_be67();
++            FUN_0000_be0e(8);
++            FUN_0000_e459();
++            DAT_2000_5450 = 3;
++            DAT_2000_5452 = 3;
++            FUN_0000_4754(0, 8, 0, (undefined1 *)&DAT_2000_39a9);
++            FUN_1000_63b8();
++            FUN_0000_e006(8);
++            FUN_0000_d755(0x4509);
++            FUN_0000_9d26(8);
++            (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0e8)))(0xf69, 0xf69);
++            DAT_1000_d57e = DAT_1000_d57e | 0x21;
++            FUN_0000_be67();
++            (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))(0xf69);
++            FUN_0000_be75();
++            DAT_2000_2da9 = 1;
++            DAT_2000_2ce7 = 1;
++            FUN_0000_5d12();
++            FUN_0000_459a(0x1c00, 0x157c, 0x4509, (undefined1 *)&DAT_2000_39a9);
++            (*(code *)fist_icall_far((uint32_t)(DAT_1000_c59c)))(0xf69);
++            FUN_0000_1631(0x157c);
++            FUN_0000_be86();
++            FUN_0000_be67();
++            FUN_1000_616e(0, 0, 0, 0, 0, 0, 0);
++            FUN_1000_6220();
++            FUN_0000_e4bb(0x4509);
++            FUN_0000_be67();
++            FUN_1000_616e(0, 0, 0, 0, 0, 0, 0);
++          }
++        }
+       }
+       DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
+       continue;
