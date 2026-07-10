@@ -36,6 +36,10 @@ FLOWS=(
   # position (rows 87/100 are inside the panel), so no cursor ghost remains.
   "campaigns-select|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:130:119:0; 3600:130:119:1; 4200:130:119:0; 4800:130:119:0|$ROOT/ref/campaigns_select_native320.png"
   "battles-select|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:130:119:0; 3600:130:119:1; 4200:130:119:0; 4800:130:119:0|$ROOT/ref/battles_select_native320.png"
+  # Close flow (patch 143): open the CAMPAIGNS list dialog, then click CANCEL -> the dialog closes and
+  # the plain main menu is restored (the CANCEL button @205,140 is the final cursor rest position, so no
+  # ghost).  Exercises the cb74/cb7c OK/CANCEL return-to-menu path (previously a base-lost SIGSEGV).
+  "cancel|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:205:140:0; 3600:205:140:1; 4200:205:140:0|$ROOT/ref/cancel_native320.png"
 )
 
 run_target() { # $1=target $2=hz $3=ms $4=mouse-script $5=out.ppm ; echo rc

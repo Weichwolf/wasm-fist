@@ -1,0 +1,138 @@
+Stage 3: OK/CANCEL dialog CLOSE path -- fix the CANCEL return-to-menu SIGSEGV in the shared
+cb74/cb7c list-dialog front-end (all asm-verified vs re_out/fist_dat_image.bin).
+
+ROOT CAUSE (FIST_SEGV_BT + pattern-init deterministic repro; fault-addr 0x3776, EIP in cb74).
+FUN_0000_cb74 and FUN_0000_cb7c share one code body from cb82 (two entry points differing only by the
+DAT_2000_a82e flag).  Its tail, after the modal loop cc33 returns, copies the selected 8.3 name to the
+caller's dest.  The asm:
+
+    cb9e: call 0xcc33            ; modal list dialog
+    cba1: jb   0xcbcb            ; CF (CANCEL, a85d>=2) -> SKIP the copy, return a85d
+    cba3: mov  di,[0xe855]       ; dest = ds:di (caller's DGROUP dest ptr == param_7)
+    cba7: mov  es,[0x70]         ; src seg = STRSEG (word[DGROUP:0x70])
+    cbab: mov  si,[0xe838]       ; si = a838 (selected row)
+    cbaf: shl  si,4
+    cbb2: add  si,0x3776         ; src = STRSEG:(a838*0x10 + 0x3776)
+    cbb6..cbbe: rep movsb 13     ; copy 13 bytes es:si -> ds:di
+    cbc0: pop  [0x452]; clc; ret
+    cbc6: (a834==0) mov [0xe85d],4
+    cbcb: pop  [0x452]; mov al,[0xe85d]; stc; ret
+
+Ghidra (a) DROPPED the `jb cbcb` branch (bVar7 hardcoded false) so the copy ran unconditionally, and
+(b) BASE-LOST the source: `es:si` became the raw host pointer `a838*0x10 + 0x3776` == 0x3776 for the
+first row -> deref of linear 0x3776 -> SIGSEGV on the return-to-menu after CANCEL.  It also invented
+`DAT_1000_c452 = unaff_CS` for the `push/pop [0x452]` save/restore -> clobbered the click-timestamp
+c452 with an uninitialised value (the flaky-garbage class of patches 125-128; deterministic only under
+-ftrivial-auto-var-init=pattern, which is why plain gdb masked it).
+
+FIX (faithful): thread cc33's carry (the shim global g_fist_cf, set by cc33's patch-142 exit to
+a85d>=2 == CANCEL); on CANCEL skip the copy and return a85d.  On OK/select copy 13 bytes from the
+correctly-based source STRSEG:(a838*0x10+0x3776) to param_7 (the caller's DGROUP dest pointer, held in
+di unchanged across the call).  Preserve c452 across the call (save/restore, matching push/pop [0x452]).
+Applied to BOTH cb74 and cb7c (shared body).  cbd4 carries the same idiom but is on the mission-load
+path (not the menu dispatch) and is not reached by any covered flow -- left as documented latent debt.
+
+NOTE the return value / CF is IGNORED by the e714 dispatch cases (they set b78e=10 = menu-idle and
+continue regardless), so CANCEL cleanly restores the plain menu; a genuine DOSBox CANCEL capture
+(ref/cancel_native320.png, CAMPAIGNS dialog -> CANCEL @205,140) is AE=0 on both targets.
+
+--- a/fist.c	2026-07-10 03:57:44.576860023 +0200
++++ b/fist.c	2026-07-10 03:58:14.771733347 +0200
+@@ -31027,32 +31027,35 @@
+   *(uint32_t *)(g_mem + 0x2a845) = (uint32_t)param_1;
+   DAT_2000_a853 = param_6;
+   DAT_2000_a855 = param_7;
++  /* PATCH 143: cb74/cb7c share the tail from cb82.  cb82 `push [0x452]` saves the click-timestamp
++   * DGROUP:0x452 across the enumerate + modal loop; cbc0/cbcb `pop [0x452]` restore it.  Ghidra invented
++   * `DAT_1000_c452 = unaff_CS` (garbage) instead -> clobbered c452 with an uninitialised value. */
++  { extern unsigned char g_fist_cf; uint16_t saved452 = DAT_1000_c452;
+   FUN_1000_b756((char)param_1,param_2,param_3,param_4,param_5,param_6,param_7);
+-  bVar7 = false;
+   if (DAT_2000_a834 == 0) {
+     DAT_2000_a85d = 4;
+   }
+   else {
+-    FUN_0000_cc33(param_6);
++    FUN_0000_cc33(param_6);                 /* modal loop; sets g_fist_cf = (a85d>=2) == CANCEL */
+     uVar3 = DAT_1000_c070;
+-    if (!bVar7) {
+-      puVar5 = (undefined1 *)(DAT_2000_a838 * 0x10 + 0x3776);
+-      iVar4 = 0xd;
+-      puVar6 = DAT_2000_a855;
+-      do {
+-        puVar1 = puVar5;
+-        puVar5 = puVar5 + 1;
+-        uVar2 = *puVar1;
+-        *puVar6 = uVar2;
+-        puVar6 = puVar6 + 1;
+-        iVar4 = iVar4 + -1;
+-      } while (iVar4 != 0);
+-      DAT_1000_c452 = unaff_CS;
++    /* PATCH 143: THE CANCEL CRASH.  asm cba1 `jb 0xcbcb` -- on CF (CANCEL) SKIP the name-copy and return
++     * a85d.  Ghidra dropped the branch (bVar7 always false) AND base-lost the copy loop: source is
++     * es:si = STRSEG(word[DGROUP:0x70]) : (a838*0x10 + 0x3776), which it deref'd as the raw host pointer
++     * 0x3776 -> SIGSEGV on the return-to-menu after CANCEL.  Dest di = param_7 (the caller's DGROUP dest
++     * ptr, unchanged through the call). */
++    if (!g_fist_cf) {
++      uint16_t strseg = *(uint16_t *)(g_mem + 0x1c070);
++      uint8_t *src = g_mem + ((uint32_t)strseg << 4) + (uint16_t)(DAT_2000_a838 * 0x10 + 0x3776);
++      uint8_t *dst = (uint8_t *)param_7;
++      uVar2 = 0;
++      for (iVar4 = 0; iVar4 < 0xd; iVar4++) { uVar2 = src[iVar4]; dst[iVar4] = uVar2; }
++      DAT_1000_c452 = saved452;
+       return uVar2;
+     }
++    g_fist_cf = 0;                           /* consumed */
+   }
+-  DAT_1000_c452 = unaff_CS;
+-  return DAT_2000_a85d;
++  DAT_1000_c452 = saved452;
++  return DAT_2000_a85d; }
+ }
+ 
+ 
+@@ -31077,32 +31080,28 @@
+   *(uint32_t *)(g_mem + 0x2a845) = (uint32_t)param_1;
+   DAT_2000_a853 = param_6;
+   DAT_2000_a855 = param_7;
++  /* PATCH 143: cb7c shares cb74's tail (see cb74) -- CANCEL (CF from cc33) skips the base-lost name copy. */
++  { extern unsigned char g_fist_cf; uint16_t saved452 = DAT_1000_c452;
+   FUN_1000_b756((char)param_1,param_2,param_3,param_4,param_5,param_6,param_7);
+-  bVar7 = false;
+   if (DAT_2000_a834 == 0) {
+     DAT_2000_a85d = 4;
+   }
+   else {
+     FUN_0000_cc33(param_6);
+     uVar3 = DAT_1000_c070;
+-    if (!bVar7) {
+-      puVar5 = (undefined1 *)(DAT_2000_a838 * 0x10 + 0x3776);
+-      iVar4 = 0xd;
+-      puVar6 = DAT_2000_a855;
+-      do {
+-        puVar1 = puVar5;
+-        puVar5 = puVar5 + 1;
+-        uVar2 = *puVar1;
+-        *puVar6 = uVar2;
+-        puVar6 = puVar6 + 1;
+-        iVar4 = iVar4 + -1;
+-      } while (iVar4 != 0);
+-      DAT_1000_c452 = unaff_CS;
++    if (!g_fist_cf) {
++      uint16_t strseg = *(uint16_t *)(g_mem + 0x1c070);
++      uint8_t *src = g_mem + ((uint32_t)strseg << 4) + (uint16_t)(DAT_2000_a838 * 0x10 + 0x3776);
++      uint8_t *dst = (uint8_t *)param_7;
++      uVar2 = 0;
++      for (iVar4 = 0; iVar4 < 0xd; iVar4++) { uVar2 = src[iVar4]; dst[iVar4] = uVar2; }
++      DAT_1000_c452 = saved452;
+       return uVar2;
+     }
++    g_fist_cf = 0;
+   }
+-  DAT_1000_c452 = unaff_CS;
+-  return DAT_2000_a85d;
++  DAT_1000_c452 = saved452;
++  return DAT_2000_a85d; }
+ }
+ 
+ 
