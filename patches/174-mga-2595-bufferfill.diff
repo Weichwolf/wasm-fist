@@ -1,0 +1,44 @@
+PATCH 174: reconstruct the MGAVIDEO buffer-fill scas loop m_mga_FUN_0000_2595 + thread its args
+at the FUN_0000_47e0 far method-vector call (DGROUP:0x6a8 = DAT_1000_c6a8).  asm-verified vs
+re_out/fist_mga_image.bin (2595) + re_out/fist_dat_image.bin (47e0 0x480d).  Sibling of the 22bf
+dropped-arg/segment-base-loss class (patch 173): the in-mission display-list PAINT dispatch 47e0
+calls this method with ax=0xff (al search byte / ah=0 replacement) + si=0x7a42 (its word0 is the
+ES fill-buffer segment); the indirect vector dropped both -> garbage ptr -> fault at es:0x300.
+Cascade-only (unreached by the 19 verify flows) -> behaviour-neutral.  Sources stay pristine.
+
+--- a/fist.c
++++ b/fist.c
+@@ -13458,7 +13458,12 @@
+     FUN_0000_60d9();
+     DAT_2000_3aa2 = -1;
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))();
++  /* PATCH 174: thread the MGAVIDEO buffer-fill method 2595 (DGROUP:0x6a8 = DAT_1000_c6a8) register args.
++     asm 0x480d: `mov ax,0xff; mov si,0x7a42; lcall [0x6a8]`.  2595 reads AX (the search/replace byte pair
++     al=0xff/ah=0) and SI (a DGROUP near-offset whose word0 is the ES buffer segment).  The indirect
++     method-vector site dropped both -> 2595 ran on a garbage struct ptr and faulted deref'ing es:0x300. */
++  ((void (*)(undefined2,undefined2 *))fist_icall_far((uint32_t)(DAT_1000_c6a8)))(
++      0xff, (undefined2 *)(g_mem + 0x1c000 + 0x7a42));
+   DAT_2000_3a44 = DAT_2000_3a44 | 0x25;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
+   return;
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -5944,10 +5944,14 @@
+   char *pcVar10;
+   bool bVar11;
+   
+-  uVar2 = *param_2;
++  /* PATCH 174: MGAVIDEO buffer-fill scas loop (asm 0x2595): `mov (si),es; mov di,0x300; mov cx,0xfa00`;
++     scans 64000 bytes of ES:0x300 replacing al(=(char)param_1=0xff) with ah(=(char)(param_1>>8)=0).
++     Ghidra kept `uVar2 = *param_2` (= the ES segment word[DGROUP:si]) but LOST the base -> the es:di
++     cursor `pcVar3` started at host 0x300 -> SIGSEGV.  Rebase the cursor to g_mem+(es_seg<<4)+0x300. */
++  uVar2 = *param_2;                                   /* es_seg = word[DGROUP:si_off] */
+   iVar7 = 0;
+-  iVar5 = -0x600;
+-  pcVar3 = (char *)0x300;
++  iVar5 = -0x600;                                     /* cx = 0xfa00 = 64000 */
++  pcVar3 = (char *)(g_mem + ((uint32_t)(uint16_t)uVar2 << 4) + 0x300);  /* ES:0x300 */
+   do {
+     while( true ) {
+       pcVar9 = pcVar3;
