@@ -1,0 +1,375 @@
+Stage 3: the SELECT A CAMPAIGN modal screen (ec7e) render + CAMPAIGNS->OK dispatch wiring.
+
+Clicking OK in the SELECT PLAYER roster reached from CAMPAIGNS now opens FUN_0000_ec7e, the "SELECT A
+CAMPAIGN" modal screen: a left LIST of the 7 decrypted campaign names (TRAINING [red-selected] .. BURNING
+FROST, parsed by patch 147's ef5e chain), a right HARDWARE group (WESTERN [red] / EASTERN radios), and
+OK / CANCEL.  Its first settled frame is bit-identical (AE=0) to a genuine DOSBox capture on native + wasm.
+
+All asm-verified vs re_out/fist_dat_image.bin.  The recurring class here is the b941 campaign-name table
+walk: `si = word[DGROUP:0xf941 + bx]` yields a DGROUP NEAR-OFFSET that Ghidra dereferenced as a HOST
+pointer (fault 0xfffff941).  Rebase every byte read of that offset to g_mem[0x1c000 + (uint16)si]; the
+parsed name lives at DGROUP:(si+1).
+
+ - DAT_2000_b848 retyped undefined2 -> uint8_t: ec7e's exit flag is a BYTE (asm `movb [0xf848]`); the WORD
+   store at ec7e entry (`DAT_2000_b848 = 0`) clobbered the adjacent HARDWARE-icon rect at DGROUP:0xf849
+   (ed14/ee67/eeab draw from 0xf849/0xf812/0xf81a).  0=idle / 1=OK / 0xff=CANCEL.
+
+ - FUN_0000_ec7e (0xec7e): the modal screen.  Fix the b941 walk base-loss (find the first LOADED campaign
+   from [0x77d6]); reconstruct the CF-driven modal loop faithfully (mirror the proven cc33 loop, patch 137):
+   206f paint -> 3907 -> if g_fist_cf: 096c -> inner poll [DGROUP:0x40a]=35a7 (sets g_fist_cf, patch 073):
+   CF=1 (frame due) repaints, CF=0 dispatches events (1e4b) until b848 is set (OK/CANCEL).  Exit CF to the
+   caller = (b848==0xff)==CANCEL.  f0f1 (the OK submenu) is unreached on the first frame.
+
+ - FUN_0000_ed28 (0xed28): the campaign-LIST paint method (cdc4-lesson).  Ghidra base-lost the b941 walk and
+   DROPPED the selection-bar colour (`al=0xf8 if row==[0x77d6]` -> c60a fill) and the glyph colour
+   (`al=0x1f/0x20 from byte[DGROUP:0x77da+row]&0x80` -> c684).  Reconstructed: per LOADED row draw the
+   selection bar (c60a), the hardware-type glyph (52d1 setpos + c684), and the NAME (52d1 + the DGROUP-string
+   drawstring thunk_FUN_1000_5531 = f69:0x5e9b, patch 139) from DGROUP:(si+1).
+
+ - FUN_0000_edc2 (0xedc2): the list HIT-TEST / row-select.  click Y at [si+4] where si = the drained coord
+   node word[DGROUP:0x18e2] (Ghidra bound it to param_2, base-loss, ccde class/patch 142); row = ((Y-0x60)/7)
+   *2; if LOADED and != [0x77d6] -> select (b882=3 BYTE dirty, [0x77d6]=row).
+
+ - FUN_0000_ed14 / ee67 / eeab: the HARDWARE box + WESTERN/EASTERN radio-icon PAINT methods.  Ghidra dropped
+   the c6b4 sprite/rect args (ax=sprite id, bx=DGROUP rect; c6b4 sig per patch 139).  ed14 -> 0x13e0@0xf849;
+   ee67 (WESTERN) -> (DAT_2000_2db4!=0 ? 0x13c8 : 0x13d0)@0xf812; eeab (EASTERN) -> the opposite @0xf81a.
+
+ - FUN_0000_ef39: the campaign-screen KEYBOARD accel handler (off the mouse-driven flow, reconstructed
+   faithfully): the scancode is at [si+2], si=word[DGROUP:0x18e2]; match (key&0xf77f) against the 11-entry
+   b851 accel table (stride 4) with a 16-bit compare -> near-dispatch.
+
+ - e78c dispatch case (state 0x0 CAMPAIGNS): after cb74 returns OK (a85d<2) copy the name into CURRENT
+   PLAYER (e9bd) + read the .FPL (6a9c/612c), then call ec7e (e7c6).  On OK or CANCEL of ec7e -> menu-idle
+   (the ec7e-OK tail 6ade write + f338/7088 mission subscreen is a separate deliverable).
+
+The radios ee7c/eec0 and OK eeef / CANCEL ef14 were verified faithful in the decompile (all DGROUP vars via
+correct DAT_2000_ accessors) -- no change.  New verify.sh WRITE flow `campaigns-ok`
+(ref/campaigns_ok_native320.png).
+
+--- a/fist.c
++++ b/fist.c
+@@ -3741,7 +3741,7 @@
+ #define DAT_2000_b80c (*(undefined2 *)(g_mem+0x2b80c))
+ #define DAT_2000_b80e (*(undefined2 *)(g_mem+0x2b80e))
+ #define DAT_2000_b80f (*(undefined2 *)(g_mem+0x2b80f))
+-#define DAT_2000_b848 (*(undefined2 *)(g_mem+0x2b848))
++#define DAT_2000_b848 (*(uint8_t *)(g_mem+0x2b848))    /* PATCH 148: ec7e's campaign-screen dispatch flag is a BYTE (asm `movb [0xf848]`); undefined2 WORD stores clobbered the adjacent HARDWARE-icon rect at DGROUP:0xf849 (ed14/ee67 use 0xf849/0xf812) -> corrupt paint.  0=idle,1=OK,0xff=CANCEL. */
+ #define DAT_2000_b851 (*(undefined2 *)(g_mem+0x2b851))
+ #define DAT_2000_b882 (*(undefined2 *)(g_mem+0x2b882))
+ #define DAT_2000_b885 (*(undefined2 *)(g_mem+0x2b885))
+@@ -34541,9 +34541,24 @@
+                                           * chain as SELECT PLAYER/patch 137).  The campaign mission-select tail
+                                           * (ec7e/7088/... after CF=0/OK, [0x6dad]:=1) is deferred. */
+       FUN_0000_e39f();
+-      if (*(uint8_t *)(g_mem + 0x1c000 + 0x6dad) != 1)   /* cmpb [0x6dad],1; je 0xe7c6 */
++      if (*(uint8_t *)(g_mem + 0x1c000 + 0x6dad) != 1) {  /* cmpb [0x6dad],1; je 0xe7c6 */
++        /* e796-e7a2: open the SELECT PLAYER .FPL roster (cb74).  On CANCEL/NEW (a85d>=2) -> menu. */
+         FUN_0000_cb74(0x4c50462e, 0, 0, 0, 0, 0x451a, (undefined1 *)(g_mem + 0x1c000 + 0x77bc));
+-      DAT_2000_b78e = 10;                /* jmp e714: back to menu-idle after dismissal */
++        if ((uint16_t)DAT_2000_a85d >= 2) {  /* e7a5 jae..e7a7: not the OK button -> back to menu */
++          DAT_2000_b78e = 10;
++          continue;
++        }
++        /* e7b9-e7c1: OK -> copy the chosen name into CURRENT PLAYER, [0x6dad]=1, read+checksum .FPL. */
++        FUN_0000_e9bd();                 /* e7b9: copy name -> STRSEG:0xbf1, [0x6dad]=1 */
++        FUN_1000_612c(0, 0, 0, 0, 0);    /* e7c1 f69:6a9c: read+checksum the player .FPL */
++      }
++      /* PATCH 148: e7c6: call ec7e = the SELECT A CAMPAIGN modal screen (list of decrypted campaign
++       * names + HARDWARE radios + OK/CANCEL).  ec7e spins its own modal loop (first settled frame is the
++       * deliverable); it returns CF=(b848==0xff)==CANCEL.  The ec7e-OK tail (6ade write + f338/7088 the
++       * deeper mission subscreen) is a separate deliverable -> on both OK and CANCEL we return to the
++       * menu-idle here (b78e=10). */
++      FUN_0000_ec7e(0, 0, 0);            /* e7c6 */
++      DAT_2000_b78e = 10;                /* e870/e7c9 -> back to menu-idle after dismissal */
+       continue;
+     }
+     (*(code *)fist_icall_near(0x0u,_tgt))();
+@@ -35208,57 +35223,61 @@
+   undefined2 uVar8;
+   undefined2 uVar9;
+   
++  /* PATCH 148: the SELECT A CAMPAIGN modal screen (asm 0xec7e).  Ghidra base-lost the campaign-name
++   * table walk (`si=word[DGROUP:0xf941+bx]; cmpb [si],0` -> si a DGROUP near-offset read as a HOST
++   * pointer, fault 0xfffff941) and mismodelled the CF-driven modal loop (paint/poll) with static
++   * booleans.  Reconstructed faithfully (asm 0xec7e..0xecff), mirroring the proven cc33 modal loop
++   * (patch 137): the poll [DGROUP:0x40a]=35a7 sets g_fist_cf (patch 073) so the loop repaints (206f)
++   * when CF=1 (a frame is due) and dispatches events (1e4b) when CF=0.  b848 is the exit flag
++   * (1=OK / 0xff=CANCEL, patch-148 byte retype).  f0f1 (the OK submenu) is unreached on the first
++   * frame (b848 stays 0 while spinning).  CF to the caller (e78c: `jb e870`) = (b848==0xff)==CANCEL. */
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
++  uint16_t bx, si_off;
++  int cx;
++  (void)uVar2; (void)uVar3; (void)uVar5; (void)uVar6; (void)uVar7; (void)uVar8; (void)uVar9;
++  (void)unaff_CS; (void)pcVar4;
++
+   FUN_1000_38cc();
+   FUN_0000_e40e(param_2,param_3);
+   FUN_0000_ef5e(param_1,param_2,param_3);
+-  uVar2 = (undefined2)((ulong)param_1 >> 0x10);
+-  iVar1 = 0xc;
+-  do {
+-    pcVar4 = (char *)*(undefined2 *)((int)(undefined2 *)&DAT_2000_b941 + DAT_2000_37d6);
+-    uVar6 = false;
+-    if (*pcVar4 != '\0') break;
+-    DAT_2000_37d6 = DAT_2000_37d6 + 2;
+-    uVar6 = DAT_2000_37d6 < 0x18;
+-    if (!(bool)uVar6) {
+-      DAT_2000_37d6 = 0;
+-    }
+-    iVar1 = iVar1 + -1;
+-  } while (iVar1 != 0);
+-  uVar5 = 0xf87d;
+-  FUN_0000_1e27(0x2d30,0xf87d);
+-  uVar3 = CONCAT22(uVar2,0x10);
+-  uVar2 = 0xf87d;
+-  iVar1 = FUN_0000_1cdb(0x2d30,0xf87d,0x70,0x10,pcVar4,uVar5);
+-  DAT_2000_b848 = '\0';
+-  do {
+-    uVar7 = uVar6;
+-    FUN_0000_206f((char)iVar1,uVar2,pcVar4,uVar5);
+-    uVar9 = 0xf69;
+-    uVar8 = 0xecce;
+-    FUN_1000_3907();
+-    if ((bool)uVar7) {
+-      uVar8 = 0xf69;
+-      FUN_1000_096c((int)uVar3);
+-    }
+-    while( true ) {
+-      iVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69,uVar8,uVar9);
+-      uVar6 = 1;
+-      if ((bool)uVar7) break;
+-      uVar9 = 0xecde;
+-      FUN_0000_1e4b(iVar1,uVar2,(int)uVar3,uVar5);
+-      uVar7 = 0;
+-      if (DAT_2000_b848 != '\0') {
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))(0xf69);
+-        if (DAT_2000_b848 == -1) {
++  /* walk the campaign-name table from [0x77d6], find the first LOADED name (byte[DGROUP:si]!=0) */
++  bx = (uint16_t)DAT_2000_37d6;
++  for (cx = 0xc; cx != 0; cx = cx - 1) {
++    si_off = *(uint16_t *)((char *)&DAT_2000_b941 + bx);        /* b941[bx] = name near-offset */
++    if (g_mem[0x1c000 + si_off] != 0) break;                    /* found a loaded campaign */
++    bx = bx + 2;
++    if (bx >= 0x18) bx = 0;
++  }
++  DAT_2000_37d6 = bx;                                           /* eca5: [0x77d6] = bx */
++  FUN_0000_1e27(0x2d30,0xf87d);                                 /* ecaf: template copy */
++  iVar1 = FUN_0000_1cdb(0x2d30,0xf87d,0x70,0x10,0,0);           /* ecbe: build display list */
++  DAT_2000_b848 = 0;                                            /* ecc1: exit flag idle */
++  while( true ) {                                               /* OUTER paint loop (ecc6) */
++    FUN_0000_206f((char)iVar1,0xf87d,0,0);                      /* paint dirty elements */
++    FUN_1000_3907();                                            /* ecc9: sets g_fist_cf */
++    if ((bool)g_fist_cf) {                                      /* ecce jae: CF set -> housekeeping */
++      FUN_1000_096c(0);                                         /* ecd0: 096c */
++    }
++    while( true ) {                                             /* INNER event loop (ecd5) */
++      iVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69);  /* ecd5: poll -> g_fist_cf */
++      fist_timer_pump();                                        /* cooperative INT-8 tick in the spin */
++      if ((bool)g_fist_cf) break;                              /* ecd9 jb ecc6: frame due -> repaint */
++      FUN_0000_1e4b(iVar1,0xf87d,0x10,0);                       /* ecdb: dispatch the event */
++      if (DAT_2000_b848 != 0) {                                 /* ecde/ece3: a button was clicked */
++        (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))(0xf69);        /* ece5: close */
++        if (DAT_2000_b848 == 0xff) {                            /* ece9: CANCEL (stc) */
++          g_fist_cf = 1;
+           return;
+         }
+-        FUN_0000_e39f();
+-        FUN_0000_f0f1(uVar2,uVar3,param_2,pcVar4,uVar5,unaff_CS);
+-        DAT_2000_2db6 = 0;
++        FUN_0000_e39f();                                        /* ecf2: OK */
++        FUN_0000_f0f1(0,0,param_2,0,0,0);                       /* ecf5: campaign submenu parser */
++        DAT_2000_2db6 = 0;                                      /* ecf8 */
++        g_fist_cf = 0;                                          /* ecfe clc: OK */
+         return;
+       }
+     }
+-  } while( true );
++  }
+ }
+ 
+ 
+@@ -35289,9 +35308,14 @@
+ void __allregs FUN_0000_ed14(undefined2 param_1,undefined2 param_2)
+ 
+ {
++  /* PATCH 148: HARDWARE-group box paint (asm 0xed14): e3bc/e38a save the backdrop (they read fixed
++   * DGROUP descriptors 0xf6cc/0xf6ee, so param_1/param_2 are ignored), then c6b4 blits sprite 0x13e0
++   * at rect DGROUP:0xf849.  Ghidra dropped the c6b4 ax(sprite)/bx(rect) args -> garbage draw.  Thread
++   * ax=0x13e0, bx=0xf849 (c6b4 signature per patch 139: (ax,_,_,bx,_)). */
+   FUN_0000_e3bc(param_1,param_2);
+   FUN_0000_e38a(0xf849);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++     fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x13e0, 0, 0, 0xf849, 0);
+   return;
+ }
+ 
+@@ -35307,30 +35331,44 @@
+   int iVar4;
+   undefined2 uVar5;
+   
+-  FUN_1000_524e(2);
+-  uVar5 = 0xf69;
+-  FUN_1000_530b(0xff);
+-  DAT_2000_b891 = 0x60;
+-  DAT_2000_b895 = 0x67;
+-  iVar2 = 0xc;
+-  DAT_2000_b887 = 0;
+-  do {
+-    pcVar1 = (char *)*(undefined2 *)((int)(undefined2 *)&DAT_2000_b941 + DAT_2000_b887);
+-    if (*pcVar1 != '\0') {
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))(0xf69,pcVar1,iVar2,uVar5);
+-      uVar3 = 0xf69;
+-      FUN_1000_52d1(DAT_2000_b891 + 1,DAT_2000_b893 + 8);
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))(0xf69,uVar3);
+-      iVar4 = 0xf69;
+-      FUN_1000_52d1(DAT_2000_b891 + 1,DAT_2000_b893 + 0x10);
+-      iVar2 = 0xf69;
+-      thunk_FUN_1000_5531(iVar4 + 1);
+-    }
+-    DAT_2000_b891 = DAT_2000_b891 + 7;
+-    DAT_2000_b895 = DAT_2000_b895 + 7;
+-    DAT_2000_b887 = DAT_2000_b887 + 2;
+-    iVar2 = iVar2 + -1;
+-  } while (iVar2 != 0);
++  /* PATCH 148: campaign-LIST paint (asm 0xed28), the cdc4-lesson method for template 0x2d30.  Walk the
++   * 12-entry b941 name table; for each LOADED name draw a per-row selection bar + hardware-type glyph +
++   * the campaign NAME.  Ghidra base-lost the b941 walk (si a DGROUP near-offset read as host ptr) AND
++   * DROPPED the selection-bar colour logic (`al=0xf8 if row==[0x77d6]`) and the glyph colour
++   * (`al=0x1f/0x20 from byte[0x77da+row]&0x80`), passing garbage to c60a/c684.  Reconstructed
++   * faithfully; the drawstring is thunk_FUN_1000_5531 (=f69:0x5e9b, patch 139) fed the flat host ptr to
++   * DGROUP:(si+1) (the parsed name).  524e(2)/530b(0xff) set the draw mode/colour; b891/b893/b895 are
++   * the per-row rect (y0/x0/y1). */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t bx, si_off;
++    uint8_t  al;
++    (void)pcVar1; (void)iVar2; (void)iVar4; (void)uVar3; (void)uVar5;
++    FUN_1000_524e(2);                               /* ed2b */
++    FUN_1000_530b(0xff);                             /* ed33 */
++    DAT_2000_b891 = 0x60;                            /* ed38: row rect y0 */
++    DAT_2000_b895 = 0x67;                            /* ed3e: row rect y1 */
++    DAT_2000_b887 = 0;                               /* ed47: table byte-offset */
++    for (iVar2 = 0xc; iVar2 != 0; iVar2 = iVar2 - 1) {
++      bx = (uint16_t)DAT_2000_b887;
++      si_off = *(uint16_t *)((char *)&DAT_2000_b941 + bx);   /* b941[bx] name near-offset */
++      if (dg[si_off] != 0) {                                 /* ed56: name loaded */
++        /* ed5c-ed6d: selection-bar fill (al=0xf8 if this row is the current selection [0x77d6]) */
++        al = (bx == (uint16_t)DAT_2000_37d6) ? 0xf8 : 0;
++        ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c60a)))(0xf891, al);
++        /* ed71-ed92: hardware-type glyph at (b891+1, b893+8), colour 0x1f/0x20 from byte[0x77da+row]&0x80 */
++        FUN_1000_52d1(DAT_2000_b891 + 1, DAT_2000_b893 + 8);
++        al = (dg[0x77da + (bx >> 1)] & 0x80) ? 0x1f : 0x20;
++        ((void (*)(uint16_t))fist_icall_far((uint32_t)(DAT_1000_c684)))(al);
++        /* ed96-edaa: the campaign NAME at (b891+1, b893+0x10), from DGROUP:(si+1) */
++        FUN_1000_52d1(DAT_2000_b891 + 1, DAT_2000_b893 + 0x10);
++        thunk_FUN_1000_5531((char *)(dg + (uint16_t)(si_off + 1)));
++      }
++      DAT_2000_b891 = DAT_2000_b891 + 7;             /* edaf */
++      DAT_2000_b895 = DAT_2000_b895 + 7;             /* edb4 */
++      DAT_2000_b887 = DAT_2000_b887 + 2;             /* edba */
++    }
++  }
+   return;
+ }
+ 
+@@ -35344,20 +35382,25 @@
+   int iVar2;
+   int iVar3;
+   
++  /* PATCH 148: campaign-LIST hit-test (asm 0xedc2), the row-select method for template 0x2d30.  ax=flags
++   * (param_1); the click Y is at [si+4] where si is the DRAINED event/coord node word[DGROUP:0x18e2]
++   * (Ghidra wrongly bound the si operand to param_2, base-loss).  row = ((clickY-0x60) / 7)*2; if that
++   * campaign is LOADED and != the current selection [0x77d6] -> select it (b882=3 dirty, [0x77d6]=row).
++   * Same b941-walk host-ptr base-loss as ec7e/ed28; mirrors the ccde row-activate (patch 142). */
++  (void)param_2; (void)uVar1;
+   if ((param_1 & 0x180) != 0) {
+-    uVar1 = *(int *)(param_2 + 4) - 0x60;
+-    iVar3 = 0;
+-    iVar2 = 0xc;
+-    do {
+-      if (uVar1 < 7) break;
+-      iVar3 = iVar3 + 2;
+-      uVar1 = uVar1 - 7;
+-      iVar2 = iVar2 + -1;
+-    } while (iVar2 != 0);
+-    if (*(char *)*(undefined2 *)((int)(undefined2 *)&DAT_2000_b941 + iVar3) != '\0') {
+-      if (iVar3 != DAT_2000_37d6) {
+-        DAT_2000_b882 = 3;
+-        DAT_2000_37d6 = iVar3;
++    uint16_t si = *(uint16_t *)(g_mem + 0x1c000 + 0x18e2);              /* drained coord node */
++    int16_t  ay = (int16_t)*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(si + 4)) - 0x60;
++    uint16_t bx = 0;
++    for (iVar2 = 0xc; iVar2 != 0; iVar2 = iVar2 - 1) {
++      if (ay < 7) break;
++      bx = bx + 2;
++      ay = ay - 7;
++    }
++    if (g_mem[0x1c000 + *(uint16_t *)((char *)&DAT_2000_b941 + bx)] != 0) {   /* row LOADED */
++      if (bx != (uint16_t)DAT_2000_37d6) {
++        *(uint8_t *)(g_mem + 0x2b882) = 3;                             /* b882 dirty (BYTE) */
++        DAT_2000_37d6 = bx;
+       }
+       return;
+     }
+@@ -35383,7 +35426,11 @@
+ void __allregs FUN_0000_ee67(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 148: WESTERN hardware-radio icon paint (asm 0xee67): sprite 0x13c8 if [0x6db4](=DAT_2000_2db4)
++   * != 0 else 0x13d0, at rect DGROUP:0xf812.  Ghidra dropped the c6b4 ax(sprite)/bx(rect) args. */
++  uint16_t ax = ((uint16_t)DAT_2000_2db4 != 0) ? 0x13c8 : 0x13d0;
++  ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++     fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax, 0, 0, 0xf812, 0);
+   return;
+ }
+ 
+@@ -35415,7 +35462,11 @@
+ void __allregs FUN_0000_eeab(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 148: EASTERN hardware-radio icon paint (asm 0xeeab): sprite 0x13c8 if [0x6db4](=DAT_2000_2db4)
++   * == 0 else 0x13d0 (opposite of ee67/WESTERN), at rect DGROUP:0xf81a.  Ghidra dropped the c6b4 args. */
++  uint16_t ax = ((uint16_t)DAT_2000_2db4 == 0) ? 0x13c8 : 0x13d0;
++  ((void (*)(uint16_t,uint16_t,uint16_t,uint16_t,uint16_t))
++     fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax, 0, 0, 0xf81a, 0);
+   return;
+ }
+ 
+@@ -35510,19 +35561,24 @@
+ 
+ {
+   int iVar1;
+-  uint *puVar2;
+-  
++  uint16_t *pw;
++  (void)param_2;
++  /* PATCH 148: campaign-screen keyboard handler (asm 0xef39).  ax=flags; the scancode word is at [si+2]
++   * where si is the event node word[DGROUP:0x18e2] (Ghidra base-lost it as param_2 host ptr).  Match
++   * (scancode & 0xf77f) against the 11-entry b851 accel table (stride 4: [0]=key word, [2]=near handler
++   * offset) -> near-dispatch the handler.  16-bit compare (asm `cmp ax,[bx]`); Ghidra's uint (4-byte)
++   * compare pulled in the adjacent handler word.  Off the mouse-driven flow but reconstructed faithfully. */
+   if ((param_1 & 0x2000) == 0) {
+-    puVar2 = (uint *)&DAT_2000_b851;
+-    iVar1 = 0xb;
+-    while ((*(uint *)(param_2 + 2) & 0xf77f) != *puVar2) {
+-      puVar2 = puVar2 + 2;
+-      iVar1 = iVar1 + -1;
+-      if (iVar1 == 0) {
++    uint16_t key = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(*(uint16_t *)(g_mem + 0x1c000 + 0x18e2) + 2))
++                   & 0xf77f;
++    pw = (uint16_t *)&DAT_2000_b851;
++    for (iVar1 = 0xb; iVar1 != 0; iVar1 = iVar1 - 1) {
++      if (key == pw[0]) {
++        (*(code *)fist_icall_near(0x0u, pw[1]))();
+         return;
+       }
++      pw = pw + 2;
+     }
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(puVar2[1])))();
+   }
+   return;
+ }

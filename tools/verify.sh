@@ -67,6 +67,13 @@ FLOWS=(
   # STRSEG:(a838*0x10+0x3776)) + the .FPL I/O for a different profile (KKR.FPL) -> the menu draws
   # "CURRENT PLAYER:KKR".  Isolated (write flow); ref via tools/refcapture_ok3.sh 160 74 130 119 205 128.
   "selplayer-ok-kkr|25000|22000|200:160:74:0; 800:160:74:1; 1400:160:74:0; 2400:130:119:0; 2800:130:119:1; 3200:130:119:0; 3800:205:128:0; 4200:205:128:1; 4600:205:128:0; 5000:205:128:0|$ROOT/ref/selplayer_ok_kkr_native320.png"
+  # CAMPAIGNS -> OK -> the SELECT A CAMPAIGN screen (patch 148).  Click CAMPAIGNS (row 87) to open the
+  # SELECT PLAYER roster, then OK (205,128) to pick the default player D -> e78c copies the name + reads
+  # the .FPL, then opens FUN_0000_ec7e = the campaign modal screen: a left LIST of the 7 decrypted campaign
+  # names (TRAINING [red-selected]..BURNING FROST, from patch 147's ef5e chain), a right HARDWARE group
+  # (WESTERN [red]/EASTERN radios), OK/CANCEL.  ec7e's first settled frame is the deliverable (READ-only:
+  # 6ade only fires on ec7e's own OK), isolated anyway (WRITE flow); ref via tools/refcapture_ok.sh 160 87 205 128.
+  "campaigns-ok|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 4800:205:128:0|$ROOT/ref/campaigns_ok_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
