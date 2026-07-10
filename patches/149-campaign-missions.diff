@@ -1,0 +1,1084 @@
+Stage 3: the campaign MISSION-SELECT screen (f338 "INTRODUCTORY CAMPAIGN") + the ec7e-OK dispatch tail
++ the FUN_0000_f0f1 .CAM mission-record parser.
+
+Clicking OK in the SELECT A CAMPAIGN screen (ec7e) now runs its tail: f0f1 parses the selected campaign's
+.CAM into the mission-record table, e78c writes the player .FPL (6ade) and opens FUN_0000_f338 = the
+"INTRODUCTORY CAMPAIGN" modal screen -- a left column of mission rows (state-coloured marker box + the
+map-thumbnail background baked into the screen .MRL), the selected mission's name + two briefing lines at
+the bottom, and ACCEPT/CANCEL.  Its first settled frame is bit-identical (AE=0) to a genuine DOSBox capture
+on native + wasm.  The deeper ACCEPT->7088 screen / mission start is a separate deliverable.
+
+All asm-verified vs re_out/fist_dat_image.bin (+ re_out/fist_mga_image.bin for the box primitives).
+
+THE .CAM MISSION PARSER (FUN_0000_f0f1 + handlers, asm 0xf0f1..0xf334).  f0f1 reopens the selected
+campaign's .CAM (filename letter [0xf889]='A'+campaign) via bd14 (open + op-0x80 decrypt, patch 147), then
+walks its keyword tokens: f05f copies a token to DGROUP:0xf902, f088 matches it against the 19 STRSEG
+keyword strings (b91b[]) returning a byte-index bx, and the handler at word[DGROUP:0xf822+bx] fills the
+mission-record table (records at DGROUP:0x6dda, stride 0xfd, count [0x6dd0]).  Ghidra base-lost the whole
+family -- the handler dispatch `*(word*)(bx-0x7de)` (bx used as a host pointer), every `[0xf89b]+off`
+record write (record base used as a host pointer), the STRSEG base of efd8/f00c, and folded all the carry
+flags to a static false so the loop never terminated / dispatched garbage.  Reconstructed faithfully:
+ - efd8 (skip-to-digit) / f00c (atoi): rebase source to STRSEG (word[DGROUP:0x70]<<4), set CF via g_fist_cf.
+ - f0f1: dispatch = word[DGROUP:0xf822+bx]; loop CF via g_fist_cf.
+ - the record handlers f146/f154/f1a1/f1ec/f24a/f282/f299/f2c0/f2e7/f30e: rebase every record field write
+   to g_mem+0x1c000+(uint16)([0xf89b]+off); CF via g_fist_cf.  (f0cc already rebases its DGROUP-offset arg,
+   patch 147, so the pure-copy handlers f1da/f202/f214/f226/f238/f25d/f26f were already correct.)
+
+THE f338 SCREEN (asm 0xf338 + FUN_1000_bd7e/bdbe/be47/bea4, the cdc4-lesson method set).
+ - FUN_0000_f338: the modal loop, reconstructed like ec7e/cc33 (patch 137/148) -- Ghidra folded the carry
+   to a static in_CF so it never terminated.  Template 0x2d37 at DGROUP:0xfa77; dispatch flag ba56
+   (0=idle,1=ACCEPT,0xff=CANCEL); bd7e runs at entry.
+ - FUN_1000_bd7e (mission availability): rebase the record base (0x6dda); the required-count read (rec+0x31)
+   is a WORD.
+ - FUN_1000_bdbe (bottom selected box): thread the dropped [0x60a] fill (rect 0xfa80, colour 0); rebase the
+   record base (Ghidra used `unaff_CS`) to 0x6dda + [0x6db6]*[0xfa88]; draw name (rec+0) + the two 0x3e-byte
+   briefing lines (rec+0x7c, rec+0xbc) with the 0xf8->0x17 colour fixup.
+ - FUN_1000_be47 (per-mission marker boxes): reconstruct the dropped al(state colour)/bx(rect rec+0x19)
+   args for the [0x61e]/[0x61a]/[0x622] box primitives (sig (rect,colour), same family as 119f/11db); the
+   selected mission blinks on [0x452]&0x10; colour by availability rec+0x3b (0->0x21/2->0x20/else 0x22).
+ - FUN_1000_bea4 (hover hit-test): rebase the record base for the rect test.
+
+DISPATCH (e78c, state 0x0 CAMPAIGNS): after ec7e returns OK (CF=0) -> 6ade (write .FPL) + b6c0=0 + f338.
+Both f338 outcomes return to menu-idle here (the deeper 7088 mission subscreen / mission start is deferred).
+
+--- a/fist.c
+--- a/fist.c
++++ b/fist.c
+@@ -3761,8 +3761,8 @@
+ #define DAT_2000_ba50 (*(undefined2 *)(g_mem+0x2ba50))
+ #define DAT_2000_ba54 (*(undefined2 *)(g_mem+0x2ba54))
+ #define DAT_2000_ba56 (*(undefined2 *)(g_mem+0x2ba56))
+-#define DAT_2000_ba7c (*(undefined2 *)(g_mem+0x2ba7c))
+-#define DAT_2000_ba7d (*(undefined2 *)(g_mem+0x2ba7d))
++#define DAT_2000_ba7c (*(uint8_t *)(g_mem+0x2ba7c))    /* PATCH 149: per-element dirty BYTE (asm movb); was undefined2 WORD -> ba7c=3 clobbered the adjacent bottom-box dirty byte ba7d (patch-142 a8ee class) so bdbe never repainted */
++#define DAT_2000_ba7d (*(uint8_t *)(g_mem+0x2ba7d))    /* PATCH 149: bottom-box dirty BYTE (asm movb); see ba7c */
+ #define DAT_2000_ba80 (*(undefined2 *)(g_mem+0x2ba80))
+ #define DAT_2000_ba82 (*(undefined2 *)(g_mem+0x2ba82))
+ #define DAT_2000_ba88 (*(undefined2 *)(g_mem+0x2ba88))
+@@ -34558,6 +34558,16 @@
+        * deeper mission subscreen) is a separate deliverable -> on both OK and CANCEL we return to the
+        * menu-idle here (b78e=10). */
+       FUN_0000_ec7e(0, 0, 0);            /* e7c6 */
++      /* PATCH 149: on ec7e OK (CF=0), write the player's campaign .FPL (6ade), clear b6c0, and open the
++       * campaign MISSION-SELECT screen f338 ("INTRODUCTORY CAMPAIGN": mission list + map-thumbnail bg +
++       * per-mission briefings + ACCEPT/CANCEL).  f338's first settled frame is the deliverable; its
++       * ACCEPT path (the deeper 7088 screen + mission start, e7dd..) is a SEPARATE deliverable, so both
++       * f338 outcomes here return to the menu-idle.  6ade is a real .FPL write -> WRITE flow (isolated). */
++      if (!g_fist_cf) {                  /* e7c9 jae: ec7e OK (not CANCEL) */
++        FUN_1000_616e(0, 0, 0, 0, 0, 0, 0);  /* e7cd f69:6ade: create+write the campaign .FPL */
++        DAT_2000_b6c0 = 0;               /* e7d2: [0xf6c0] = 0 */
++        FUN_0000_f338(0, 0, 0);          /* e7d8: the INTRODUCTORY CAMPAIGN mission-select modal screen */
++      }
+       DAT_2000_b78e = 10;                /* e870/e7c9 -> back to menu-idle after dismissal */
+       continue;
+     }
+@@ -35633,7 +35643,11 @@
+ void __allregs FUN_0000_efa1(void)
+ 
+ {
+-  DAT_2000_b899 = 0x452c;
++  /* PATCH 149: reset parse cursor to STRSEG:0x452c (asm 0xefa1 = `movw [0xf899],0x452c`, a 2-BYTE store).
++   * DAT_2000_b899 is typed int** (4 bytes), so the macro assignment wrote 0x0000452c across 0x2b899..0x2b89c
++   * and ZEROED the adjacent record ptr b89b (0x2b89b) -- f0f1 then built the mission records at DGROUP:0xfd
++   * instead of 0x6dda (low-memory corruption -> crash).  Write exactly 2 bytes, matching the asm. */
++  *(uint16_t *)(g_mem + 0x2b899) = 0x452c;
+   return;
+ }
+ 
+@@ -35676,29 +35690,28 @@
+ void __allregs FUN_0000_efd8(void)
+ 
+ {
+-  byte bVar1;
+-  byte *pbVar2;
+-  
+-  pbVar2 = DAT_2000_b899;
+-  do {
+-    bVar1 = *pbVar2;
+-    if (bVar1 == 0x1a) {
+-      return;
+-    }
+-    if ((0x2f < bVar1) && (bVar1 < 0x3a)) {
+-      if (bVar1 != 0x3b) {
+-        DAT_2000_b899 = pbVar2;
++  /* PATCH 149: skip-to-DIGIT (asm 0xefd8).  es=STRSEG=word[DGROUP:0x70]; si=parse cursor word[DGROUP:0xf899];
++   * scan es:[si] to the first '0'..'9' (leaving the cursor on it) or EOF(0x1a).  Ghidra typed b899 a host
++   * pointer -> STRSEG base-loss, and folded the carry away.  Rebase STRSEG + set CF (1=EOF, 0=found). */
++  extern unsigned char g_fist_cf;
++  unsigned char al;
++  uint32_t sb = (uint32_t)(uint16_t)DAT_1000_c070 << 4;      /* STRSEG<<4 */
++  uint16_t si = *(uint16_t *)(g_mem + 0x2b899);
++  while( true ) {
++    al = g_mem[sb + (uint16_t)si];
++    if (al == 0x1a) { g_fist_cf = 1; return; }               /* effc stc: EOF */
++    if (al >= 0x30 && al <= 0x39) {                           /* digit */
++      if (al != 0x3b) {                                       /* faithful (0x3b never in [0x30,0x39]) */
++        *(uint16_t *)(g_mem + 0x2b899) = si;
++        g_fist_cf = 0;                                        /* eff8 clc: found */
+         return;
+       }
+-      do {
+-        pbVar2 = pbVar2 + 1;
+-        if (*pbVar2 == 0x1a) {
+-          return;
+-        }
+-      } while (*pbVar2 != 0xd);
++      do { si = si + 1; al = g_mem[sb + (uint16_t)si];
++           if (al == 0x1a) { g_fist_cf = 1; return; }
++      } while (al != 0x0d);
+     }
+-    pbVar2 = pbVar2 + 1;
+-  } while( true );
++    si = si + 1;
++  }
+ }
+ 
+ 
+@@ -35707,23 +35720,24 @@
+ int __allregs FUN_0000_f00c(void)
+ 
+ {
+-  byte bVar1;
+-  int iVar2;
+-  byte *pbVar3;
+-  
+-  iVar2 = 0;
+-  pbVar3 = DAT_2000_b899;
++  /* PATCH 149: atoi (asm 0xf00c).  es=STRSEG; si=cursor word[DGROUP:0xf899]; accumulate digits *radix
++   * (radix = word[DGROUP:0xfa50]) until a non-digit (cursor left on it, CF=0) or EOF(0x1a, CF=1).  Same
++   * STRSEG base-loss + dropped carry as efd8. */
++  extern unsigned char g_fist_cf;
++  unsigned char bl;
++  int ax = 0;
++  uint32_t sb = (uint32_t)(uint16_t)DAT_1000_c070 << 4;
++  uint16_t si = *(uint16_t *)(g_mem + 0x2b899);
+   while( true ) {
+-    bVar1 = *pbVar3;
+-    if (bVar1 == 0x1a) {
+-      return iVar2;
+-    }
+-    if ((bVar1 < 0x30) || (0x39 < bVar1)) break;
+-    iVar2 = iVar2 * DAT_2000_ba50 + (uint)(byte)(bVar1 - 0x30);
+-    pbVar3 = pbVar3 + 1;
++    bl = g_mem[sb + (uint16_t)si];
++    if (bl == 0x1a) { g_fist_cf = 1; return ax; }            /* f03e stc: EOF */
++    if (bl < 0x30 || bl > 0x39) break;
++    ax = ax * (uint16_t)DAT_2000_ba50 + (int)(bl - 0x30);
++    si = si + 1;
+   }
+-  DAT_2000_b899 = pbVar3;
+-  return iVar2;
++  *(uint16_t *)(g_mem + 0x2b899) = si;
++  g_fist_cf = 0;                                             /* f03c clc */
++  return ax;
+ }
+ 
+ 
+@@ -35903,37 +35917,40 @@
+   undefined1 uVar3;
+   undefined1 uVar4;
+   
+-  DAT_2000_2db8 = DAT_2000_37d6;
+-  DAT_2000_2dbe = DAT_2000_37d6;
+-  DAT_2000_2dd0 = 0;
+-  DAT_2000_2dc0 = 0;
+-  s_A_CAM_2000_b889[0] = (char)(DAT_2000_37d6 >> 1) + 'A';
+-  uVar3 = false;
+-  DAT_2000_b89b = 0x6cdd;
+-  FUN_1000_bd14(param_1,param_2,param_3,param_4,param_5,param_6);
+-  if ((bool)uVar3) {
+-    return;
++  /* PATCH 149: the campaign .CAM SECTION parser (asm 0xf0f1).  Reopens the SELECTED campaign's .CAM
++   * (filename letter [0xf889]='A'+campaign) via bd14 (open+op-0x80 decrypt), then walks its keyword
++   * tokens: f05f copies a token to DGROUP:0xf902, f088 matches it against the 19 STRSEG keyword strings
++   * (b91b[]) returning a byte-index bx, and the handler at word[DGROUP:0xf822+bx] fills the mission-record
++   * table (records at DGROUP:0x6dda, stride 0xfd, count [0x6dd0]).  Ghidra base-lost the handler dispatch
++   * `*(word*)(bx-0x7de)` (bx a small index used as a host pointer) and folded every carry to a static
++   * false so the loop never terminated / dispatched garbage.  Reconstructed faithfully: dispatch =
++   * word[DGROUP:0xf822+bx]; CF via g_fist_cf (bd14/f05f/f088/f040 all set it, patch 147/149). */
++  extern unsigned char g_fist_cf;
++  uint16_t bx, h;
++  (void)uVar1; (void)uVar2; (void)uVar3; (void)uVar4;
++  DAT_2000_2db8 = DAT_2000_37d6;               /* f0f4 [0x6db8] = selected campaign */
++  DAT_2000_2dbe = DAT_2000_37d6;               /* f0f7 [0x6dbe] */
++  DAT_2000_2dd0 = 0;                            /* f0fa [0x6dd0] = mission count */
++  DAT_2000_2dc0 = 0;                            /* f100 [0x6dc0] = campaign DESC (byte) */
++  s_A_CAM_2000_b889[0] = (char)(DAT_2000_37d6 >> 1) + 'A';   /* f105 [0xf889] filename letter */
++  DAT_2000_b89b = 0x6cdd;                       /* f10f [0xf89b] record ptr (first MISSION -> 0x6dda) */
++  FUN_1000_bd14(param_1,param_2,param_3,param_4,param_5,param_6);  /* f118 open+decrypt .CAM (CF->g_fist_cf) */
++  if (g_fist_cf) { return; }                    /* f11d jb f13b: open/decrypt failed */
++  FUN_0000_efa1();                              /* f11f init parse cursor */
++  while( true ) {
++    FUN_0000_f05f();                            /* f122 copy next token -> DGROUP:0xf902 */
++    if (g_fist_cf) { g_fist_cf = 0; return; }   /* f125 jb f13d: no more tokens (done, clc) */
++    bx = (uint16_t)FUN_0000_f088(0);            /* f127 match keyword -> byte-index bx */
++    if (g_fist_cf) {                            /* f12a jb f136: unknown keyword */
++      FUN_0000_f040();                          /* f136 skip to EOL */
++      if (g_fist_cf) { return; }                /* f139/f13b: EOF (CF=1) */
++      continue;                                 /* f139 jae f122 */
++    }
++    h = *(uint16_t *)(g_mem + 0x1c000 + 0xf822 + (uint16_t)bx);  /* f12e handler = word[DGROUP:0xf822+bx] */
++    (*(code *)fist_icall_near(0x0u,h))();       /* dispatch the keyword handler */
++    if (!g_fist_cf) { continue; }               /* f132 jae f122 */
++    g_fist_cf = 0; return;                       /* f134 jmp f13d (clc) */
+   }
+-  FUN_0000_efa1();
+-  do {
+-    while( true ) {
+-      uVar4 = uVar3;
+-      uVar1 = FUN_0000_f05f();
+-      if ((bool)uVar4) {
+-        return;
+-      }
+-      uVar2 = FUN_0000_f088(uVar1);
+-      if ((bool)uVar4) break;
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(uVar2 - 0x7de))))();
+-      uVar3 = 0;
+-      if ((bool)uVar4) {
+-        return;
+-      }
+-    }
+-    FUN_0000_f040();
+-    uVar3 = 0;
+-  } while (!(bool)uVar4);
+-  return;
+ }
+ 
+ 
+@@ -35952,7 +35969,9 @@
+ void __allregs FUN_0000_f146(void)
+ 
+ {
+-  FUN_0000_f0cc(0x10,(undefined1 *)&DAT_2000_2dc0);
++  /* PATCH 149: DESC handler (asm 0xf146): copy the value token to DGROUP:0x6dc0.  f0cc (patch 147) rebases
++   * its DGROUP-OFFSET arg; the pristine passed the host address &DAT_2000_2dc0 -> low16 garbage.  Pass 0x6dc0. */
++  FUN_0000_f0cc(0x10,(char *)(uintptr_t)0x6dc0);
+   FUN_0000_f040();
+   return;
+ }
+@@ -35967,25 +35986,34 @@
+   int iVar2;
+   int iVar3;
+   
+-  iVar3 = DAT_2000_b89b;
+-  DAT_2000_2dd0 = DAT_2000_2dd0 + 1;
+-  iVar2 = DAT_2000_b89b + 0xfd;
+-  puVar1 = (undefined1 *)(DAT_2000_b89b + 0x138);
+-  DAT_2000_b89b = iVar2;
+-  *puVar1 = 0;
+-  *(undefined1 *)(iVar3 + 0x179) = 0;
+-  *(undefined1 *)(iVar3 + 0x1b9) = 0;
+-  *(undefined1 *)(iVar3 + 0x1f9) = 0;
+-  *(undefined1 *)(iVar3 + 0x130) = 0xff;
+-  *(undefined1 *)(iVar3 + 0x131) = 0xff;
+-  *(undefined1 *)(iVar3 + 0x132) = 2;
+-  *(undefined1 *)(iVar3 + 0x133) = 2;
+-  *(undefined1 *)(iVar3 + 0x134) = 2;
+-  *(undefined1 *)(iVar3 + 0x135) = 2;
+-  *(undefined1 *)(iVar3 + 0x136) = 2;
+-  *(undefined1 *)(iVar3 + 0x137) = 2;
+-  FUN_0000_f0cc(0x18,iVar2);
+-  FUN_0000_f040();
++  /* PATCH 149: MISSION handler (asm 0xf154): bump the count, advance the record ptr by 0xfd, clear
++   * next-record flags (+0x3b/+0x7c/+0xbc/+0xfc), set the availability/state defaults (+0x33=+0x34=0xff,
++   * +0x35..+0x3a=2), then copy the 0x18-byte mission NAME.  iVar3 = OLD record base, so the pristine's
++   * OLD+0x138 == NEW+0x3b etc. -- correct offsets, just base-lost (record base used as a host ptr).
++   * Rebase to g_mem+0x1c000; f0cc rebases its offset arg. */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t old = (uint16_t)DAT_2000_b89b;
++    uint16_t nw;
++    (void)iVar3; (void)iVar2; (void)puVar1;
++    DAT_2000_2dd0 = DAT_2000_2dd0 + 1;
++    nw = (uint16_t)(DAT_2000_b89b + 0xfd);
++    DAT_2000_b89b = nw;
++    dg[(uint16_t)(old + 0x138)] = 0;     /* new+0x3b */
++    dg[(uint16_t)(old + 0x179)] = 0;     /* new+0x7c */
++    dg[(uint16_t)(old + 0x1b9)] = 0;     /* new+0xbc */
++    dg[(uint16_t)(old + 0x1f9)] = 0;     /* new+0xfc */
++    dg[(uint16_t)(old + 0x130)] = 0xff;  /* new+0x33 */
++    dg[(uint16_t)(old + 0x131)] = 0xff;  /* new+0x34 */
++    dg[(uint16_t)(old + 0x132)] = 2;     /* new+0x35 */
++    dg[(uint16_t)(old + 0x133)] = 2;
++    dg[(uint16_t)(old + 0x134)] = 2;
++    dg[(uint16_t)(old + 0x135)] = 2;
++    dg[(uint16_t)(old + 0x136)] = 2;
++    dg[(uint16_t)(old + 0x137)] = 2;     /* new+0x3a */
++    FUN_0000_f0cc(0x18,(char *)(uintptr_t)nw);
++    FUN_0000_f040();
++  }
+   return;
+ }
+ 
+@@ -35995,31 +36023,23 @@
+ void __allregs FUN_0000_f1a1(void)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  undefined1 in_CF = 0;
+-  bool bVar3;
+-  
+-  FUN_0000_efd8();
+-  if (!(bool)in_CF) {
+-    iVar2 = FUN_0000_f00c();
+-    iVar1 = DAT_2000_b89b;
+-    if (!(bool)in_CF) {
+-      *(uint *)(DAT_2000_b89b + 0x19) = iVar2 - 5U;
+-      bVar3 = 0xfff5 < iVar2 - 5U;
+-      *(int *)(iVar1 + 0x1d) = iVar2 + 5;
+-      FUN_0000_efd8();
+-      if (!bVar3) {
+-        iVar2 = FUN_0000_f00c();
+-        iVar1 = DAT_2000_b89b;
+-        if (!bVar3) {
+-          *(int *)(DAT_2000_b89b + 0x1b) = iVar2 + -5;
+-          *(int *)(iVar1 + 0x1f) = iVar2 + 5;
+-          FUN_0000_f040();
+-        }
+-      }
+-    }
+-  }
++  /* PATCH 149: mission MAP-COORDS handler (asm 0xf1a1): read two numbers, store each as a +/-5 rect into
++   * the record: X -> [rec+0x19]=X-5,[rec+0x1d]=X+5 ; Y -> [rec+0x1b]=Y-5,[rec+0x1f]=Y+5.  Record base
++   * (b89b) base-lost + carry folded; rebase to g_mem+0x1c000, CF via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  uint8_t *dg = g_mem + 0x1c000;
++  int v; uint16_t rec;
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  v = FUN_0000_f00c(); if (g_fist_cf) return;
++  rec = (uint16_t)DAT_2000_b89b;
++  *(int16_t *)(dg + (uint16_t)(rec + 0x19)) = (int16_t)(v - 5);
++  *(int16_t *)(dg + (uint16_t)(rec + 0x1d)) = (int16_t)(v + 5);
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  v = FUN_0000_f00c(); if (g_fist_cf) return;
++  rec = (uint16_t)DAT_2000_b89b;
++  *(int16_t *)(dg + (uint16_t)(rec + 0x1b)) = (int16_t)(v - 5);
++  *(int16_t *)(dg + (uint16_t)(rec + 0x1f)) = (int16_t)(v + 5);
++  FUN_0000_f040();
+   return;
+ }
+ 
+@@ -36040,17 +36060,13 @@
+ void __allregs FUN_0000_f1ec(void)
+ 
+ {
++  /* PATCH 149: number -> word[rec+0x31] (asm 0xf1ec).  base-loss + CF. */
++  extern unsigned char g_fist_cf;
+   int iVar1;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_0000_efd8();
+-  if (!(bool)in_CF) {
+-    iVar1 = FUN_0000_f00c();
+-    if (!(bool)in_CF) {
+-      *(int *)(DAT_2000_b89b + 0x31) = iVar1;
+-      FUN_0000_f040();
+-    }
+-  }
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  iVar1 = FUN_0000_f00c(); if (g_fist_cf) return;
++  *(int16_t *)(g_mem + 0x1c000 + (uint16_t)(DAT_2000_b89b + 0x31)) = (int16_t)iVar1;
++  FUN_0000_f040();
+   return;
+ }
+ 
+@@ -36104,15 +36120,11 @@
+ void __allregs FUN_0000_f24a(void)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
+-  FUN_0000_efd8();
+-  if (!(bool)in_CF) {
+-    FUN_0000_f00c();
+-    if (!(bool)in_CF) {
+-      FUN_0000_f040();
+-    }
+-  }
++  /* PATCH 149: read+discard a number (asm 0xf24a).  CF via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  FUN_0000_f00c(); if (g_fist_cf) return;
++  FUN_0000_f040();
+   return;
+ }
+ 
+@@ -36144,17 +36156,13 @@
+ void __allregs FUN_0000_f282(void)
+ 
+ {
++  /* PATCH 149: byte -> [rec+0xfc] (asm 0xf282).  base-loss + CF. */
++  extern unsigned char g_fist_cf;
+   int iVar1;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_0000_efd8();
+-  if (!(bool)in_CF) {
+-    iVar1 = FUN_0000_f00c();
+-    if (!(bool)in_CF) {
+-      *(undefined1 *)(DAT_2000_b89b + 0xfc) = (char)iVar1;
+-      FUN_0000_f040();
+-    }
+-  }
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  iVar1 = FUN_0000_f00c(); if (g_fist_cf) return;
++  g_mem[0x1c000 + (uint16_t)(DAT_2000_b89b + 0xfc)] = (uint8_t)iVar1;
++  FUN_0000_f040();
+   return;
+ }
+ 
+@@ -36164,24 +36172,16 @@
+ void __allregs FUN_0000_f299(void)
+ 
+ {
++  /* PATCH 149: two bytes -> [rec+0x33],[rec+0x34] (asm handler).  base-loss + CF via g_fist_cf. */
++  extern unsigned char g_fist_cf;
+   int iVar1;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_0000_efd8();
+-  if (!(bool)in_CF) {
+-    iVar1 = FUN_0000_f00c();
+-    if (!(bool)in_CF) {
+-      *(undefined1 *)(DAT_2000_b89b + 0x33) = (char)iVar1;
+-      FUN_0000_efd8();
+-      if (!(bool)in_CF) {
+-        iVar1 = FUN_0000_f00c();
+-        if (!(bool)in_CF) {
+-          *(undefined1 *)(DAT_2000_b89b + 0x34) = (char)iVar1;
+-          FUN_0000_f040();
+-        }
+-      }
+-    }
+-  }
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  iVar1 = FUN_0000_f00c(); if (g_fist_cf) return;
++  g_mem[0x1c000 + (uint16_t)(DAT_2000_b89b + 0x33)] = (uint8_t)iVar1;
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  iVar1 = FUN_0000_f00c(); if (g_fist_cf) return;
++  g_mem[0x1c000 + (uint16_t)(DAT_2000_b89b + 0x34)] = (uint8_t)iVar1;
++  FUN_0000_f040();
+   return;
+ }
+ 
+@@ -36191,24 +36191,16 @@
+ void __allregs FUN_0000_f2c0(void)
+ 
+ {
++  /* PATCH 149: two bytes -> [rec+0x35],[rec+0x36] (asm handler).  base-loss + CF via g_fist_cf. */
++  extern unsigned char g_fist_cf;
+   int iVar1;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_0000_efd8();
+-  if (!(bool)in_CF) {
+-    iVar1 = FUN_0000_f00c();
+-    if (!(bool)in_CF) {
+-      *(undefined1 *)(DAT_2000_b89b + 0x35) = (char)iVar1;
+-      FUN_0000_efd8();
+-      if (!(bool)in_CF) {
+-        iVar1 = FUN_0000_f00c();
+-        if (!(bool)in_CF) {
+-          *(undefined1 *)(DAT_2000_b89b + 0x36) = (char)iVar1;
+-          FUN_0000_f040();
+-        }
+-      }
+-    }
+-  }
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  iVar1 = FUN_0000_f00c(); if (g_fist_cf) return;
++  g_mem[0x1c000 + (uint16_t)(DAT_2000_b89b + 0x35)] = (uint8_t)iVar1;
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  iVar1 = FUN_0000_f00c(); if (g_fist_cf) return;
++  g_mem[0x1c000 + (uint16_t)(DAT_2000_b89b + 0x36)] = (uint8_t)iVar1;
++  FUN_0000_f040();
+   return;
+ }
+ 
+@@ -36218,24 +36210,16 @@
+ void __allregs FUN_0000_f2e7(void)
+ 
+ {
++  /* PATCH 149: two bytes -> [rec+0x37],[rec+0x38] (asm handler).  base-loss + CF via g_fist_cf. */
++  extern unsigned char g_fist_cf;
+   int iVar1;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_0000_efd8();
+-  if (!(bool)in_CF) {
+-    iVar1 = FUN_0000_f00c();
+-    if (!(bool)in_CF) {
+-      *(undefined1 *)(DAT_2000_b89b + 0x37) = (char)iVar1;
+-      FUN_0000_efd8();
+-      if (!(bool)in_CF) {
+-        iVar1 = FUN_0000_f00c();
+-        if (!(bool)in_CF) {
+-          *(undefined1 *)(DAT_2000_b89b + 0x38) = (char)iVar1;
+-          FUN_0000_f040();
+-        }
+-      }
+-    }
+-  }
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  iVar1 = FUN_0000_f00c(); if (g_fist_cf) return;
++  g_mem[0x1c000 + (uint16_t)(DAT_2000_b89b + 0x37)] = (uint8_t)iVar1;
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  iVar1 = FUN_0000_f00c(); if (g_fist_cf) return;
++  g_mem[0x1c000 + (uint16_t)(DAT_2000_b89b + 0x38)] = (uint8_t)iVar1;
++  FUN_0000_f040();
+   return;
+ }
+ 
+@@ -36245,24 +36229,16 @@
+ void __allregs FUN_0000_f30e(void)
+ 
+ {
++  /* PATCH 149: two bytes -> [rec+0x39],[rec+0x3a] (asm handler).  base-loss + CF via g_fist_cf. */
++  extern unsigned char g_fist_cf;
+   int iVar1;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_0000_efd8();
+-  if (!(bool)in_CF) {
+-    iVar1 = FUN_0000_f00c();
+-    if (!(bool)in_CF) {
+-      *(undefined1 *)(DAT_2000_b89b + 0x39) = (char)iVar1;
+-      FUN_0000_efd8();
+-      if (!(bool)in_CF) {
+-        iVar1 = FUN_0000_f00c();
+-        if (!(bool)in_CF) {
+-          *(undefined1 *)(DAT_2000_b89b + 0x3a) = (char)iVar1;
+-          FUN_0000_f040();
+-        }
+-      }
+-    }
+-  }
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  iVar1 = FUN_0000_f00c(); if (g_fist_cf) return;
++  g_mem[0x1c000 + (uint16_t)(DAT_2000_b89b + 0x39)] = (uint8_t)iVar1;
++  FUN_0000_efd8(); if (g_fist_cf) return;
++  iVar1 = FUN_0000_f00c(); if (g_fist_cf) return;
++  g_mem[0x1c000 + (uint16_t)(DAT_2000_b89b + 0x3a)] = (uint8_t)iVar1;
++  FUN_0000_f040();
+   return;
+ }
+ 
+@@ -36290,44 +36266,45 @@
+   undefined2 uVar6;
+   undefined2 uVar7;
+   
++  /* PATCH 149: the campaign MISSION-SELECT modal screen (asm 0xf338), the "INTRODUCTORY CAMPAIGN"
++   * screen: a full-screen background .MRL (its 4 map-thumbnail squares baked in, loaded by the f3a3
++   * enter method via [0x560]/[0x564]) + a per-mission marker/name loop (be47) + the selected mission's
++   * name & 2 briefing lines (bdbe) + ACCEPT/CANCEL.  Same CF-driven modal loop as ec7e/cc33 (patch
++   * 137/148): Ghidra folded the carry to a static in_CF so the loop never terminated / dispatched.
++   * Reconstructed faithfully.  Dispatch flag ba56 (0=idle,1=ACCEPT,0xff=CANCEL).  bd7e computes each
++   * mission's availability byte (rec+0x3b) at entry.  On ACCEPT (bf45, the deeper 7088 screen) / CANCEL
++   * the caller e78c handles the return (first settled frame is the deliverable). */
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
++  int iVar1;
++  (void)uVar1; (void)uVar2; (void)uVar3; (void)uVar4; (void)uVar5; (void)uVar6; (void)uVar7; (void)in_CF;
+   FUN_1000_38cc();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d598)))(0xf69);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))(0xf69);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d598)))(0xf69);   /* f33d: dialog SAVE (al=0xff [0x1598]) */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))(0xf69);   /* f343: [0x1594] al=0 */
+   FUN_0000_e40e(param_1,param_3);
+-  uVar4 = 0xfa77;
+-  FUN_0000_1e27(0x2d37,0xfa77);
+-  uVar3 = 0x10;
+-  uVar2 = 0xfa77;
+-  FUN_0000_1cdb(0x2d37,0xfa77,100,0x10,param_2,uVar4);
+-  uVar1 = FUN_1000_bd7e();
+-  DAT_2000_ba56 = '\0';
+-  do {
+-    uVar5 = in_CF;
+-    FUN_0000_206f((char)uVar1,uVar2,param_2,uVar4);
+-    uVar7 = 0xf69;
+-    uVar6 = 0xf376;
+-    FUN_1000_3907();
+-    if ((bool)uVar5) {
+-      uVar6 = 0xf69;
+-      FUN_1000_096c(uVar3);
+-    }
+-    while( true ) {
+-      uVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69,uVar6,uVar7);
+-      in_CF = 1;
+-      if ((bool)uVar5) break;
+-      uVar7 = 0xf386;
+-      FUN_0000_1e4b(uVar1,uVar2,uVar3,uVar4);
+-      uVar5 = 0;
+-      if (DAT_2000_ba56 != '\0') {
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))(0xf69);
+-        if (DAT_2000_ba56 != -1) {
+-          FUN_1000_bf45();
+-          return;
+-        }
+-        return;
++  FUN_0000_1e27(0x2d37,0xfa77);                                  /* f352: template copy */
++  iVar1 = FUN_0000_1cdb(0x2d37,0xfa77,100,0x10,param_2,0xfa77);  /* f361: build display list */
++  FUN_1000_bd7e();                                               /* f364: mission availability calc */
++  DAT_2000_ba56 = 0;                                             /* f369: exit flag idle */
++  while( true ) {                                                /* OUTER paint loop (f36e) */
++    FUN_0000_206f((char)iVar1,0xfa77,param_2,0xfa77);            /* paint dirty elements */
++    FUN_1000_3907();                                             /* f371: sets g_fist_cf */
++    if ((bool)g_fist_cf) {                                       /* f376 jae: CF -> housekeeping */
++      FUN_1000_096c(0x10);                                       /* f378: 096c */
++    }
++    while( true ) {                                              /* INNER event loop (f37d) */
++      iVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69);  /* f37d: poll -> g_fist_cf */
++      fist_timer_pump();                                         /* cooperative INT-8 tick in the spin */
++      if ((bool)g_fist_cf) break;                                /* f381 jb f36e: frame due -> repaint */
++      FUN_0000_1e4b(iVar1,0xfa77,0x10,0xfa77);                   /* f383: dispatch the event */
++      if (DAT_2000_ba56 != 0) {                                  /* f386/f38b: a button was clicked */
++        (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))(0xf69);        /* f38d: close */
++        if (DAT_2000_ba56 == 0xff) { g_fist_cf = 1; return; }    /* f391/f39f: CANCEL (stc) */
++        FUN_1000_bf45();                                         /* f398: ACCEPT -> load selected mission */
++        g_fist_cf = 0; return;                                   /* f39d clc: ACCEPT */
+       }
+     }
+-  } while( true );
++  }
+ }
+ 
+ 
+@@ -36360,18 +36337,19 @@
+   undefined1 *puVar4;
+   undefined1 *puVar5;
+   
++  /* PATCH 149: f338 screen ENTER (asm 0xf3a3).  Teardown [0x594], copy the 0x10-byte campaign header
++   * (DGROUP:0x6dc0 -> DGROUP:0x740, both already correct host pointers), then load + display the full-
++   * screen background .MRL via the bg loader [0x560] (0340) + descriptor/palette apply [0x564].  Ghidra
++   * DROPPED the [0x560]/[0x564] args -> the loader built an empty name and 0340 RLE-decoded garbage
++   * (SIGSEGV).  Thread faithfully (asm f3b4: bx=0xfa52 descriptor, cx=ds, ax=0xffff = reload the
++   * descriptor's current resource); sigs per the menu bg load (patch: c560=(idx,seg,off),
++   * c564=(seg,&descriptor)). */
++  (void)puVar1; (void)puVar2; (void)puVar4; (void)puVar5; (void)iVar3;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))();
+-  puVar4 = (undefined1 *)&DAT_2000_2dc0;
+-  puVar5 = (undefined1 *)&DAT_1000_c740;
+-  for (iVar3 = 0x10; iVar3 != 0; iVar3 = iVar3 + -1) {
+-    puVar2 = puVar5;
+-    puVar5 = puVar5 + 1;
+-    puVar1 = puVar4;
+-    puVar4 = puVar4 + 1;
+-    *puVar2 = *puVar1;
+-  }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c564)))();
++  memcpy(g_mem + 0x1c000 + 0x740, g_mem + 0x1c000 + 0x6dc0, 0x10);   /* campaign header copy */
++  ((void (*)(undefined2,undefined2,int))fist_icall_far((uint32_t)(DAT_1000_c560)))(0xffff, 0x1c00, 0xfa52);
++  ((void (*)(undefined2,undefined2 *))fist_icall_far((uint32_t)(DAT_1000_c564)))
++      (0x1c00, (undefined2 *)(g_mem + 0x1c000 + 0xfa52));
+   DAT_2000_ba54 = DAT_2000_ba54 | 0x22;
+   return;
+ }
+@@ -49604,13 +49582,16 @@
+ void __allregs thunk_FUN_1000_5547(char *param_1)
+ 
+ {
++  /* PATCH 149: DGROUP-string drawstring via the EMBOSSED glyph blitter [DGROUP:0x688]=driver 1e8d (asm
++     0x1552b class, mirror of thunk_5531/patch 139 but c688 not c684).  Ghidra dropped the AL char arg to
++     the per-glyph blitter -> every glyph rendered garbage (SIGSEGV in 1ec9).  Thread al faithfully. */
+   char *pcVar1;
+-  
++
+   while( true ) {
+     pcVar1 = param_1;
+     param_1 = param_1 + 1;
+     if ((*pcVar1 == '\0') || ((*pcVar1 == '$' && (*param_1 == '\0')))) break;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c688)))();
++    ((void (*)(uint16_t))fist_icall_far((uint32_t)(DAT_1000_c688)))((uint8_t)*pcVar1);
+   }
+   return;
+ }
+@@ -63864,23 +63845,30 @@
+   int iVar5;
+   int iVar6;
+   
+-  bVar1 = ((undefined1 *)&DAT_2000_37da)[DAT_2000_2db8 >> 1];
++  /* PATCH 149: mission availability calc (asm 0x1bd7e).  For each mission: state (rec+0x3b) = the
++   * campaign-progress byte [0x77ea+idx] (or the record's own if 0xff), forced to 2 (=LOCKED) when the
++   * campaign's completed-count [0x6dba] < the record's required-count word[rec+0x31].  Ghidra base-lost
++   * the record base (0x6dda used as a host ptr); rebase to g_mem+0x1c000; the +0x31 read is a WORD. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t rec;
++  (void)iVar6;
++  bVar1 = ((undefined1 *)&DAT_2000_37da)[DAT_2000_2db8 >> 1];    /* [0x77da + campaign] */
+   iVar5 = (DAT_2000_2db8 >> 1) << 3;
+-  iVar6 = 0x6dda;
++  rec = 0x6dda;
+   iVar4 = DAT_2000_2dd0;
+   DAT_2000_2dba = (uint)bVar1;
+   do {
+-    cVar2 = ((undefined1 *)&DAT_2000_37ea)[iVar5];
++    cVar2 = ((undefined1 *)&DAT_2000_37ea)[iVar5];              /* [0x77ea + idx] */
+     if (cVar2 == -1) {
+-      cVar2 = *(char *)(iVar6 + 0x3b);
++      cVar2 = (char)dg[(uint16_t)(rec + 0x3b)];
+     }
+     uVar3 = 1;
+-    if ((cVar2 != '\x01') && (uVar3 = 0, (uint)bVar1 < *(uint *)(iVar6 + 0x31))) {
++    if ((cVar2 != '\x01') && (uVar3 = 0, (uint)bVar1 < *(uint16_t *)(dg + (uint16_t)(rec + 0x31)))) {
+       uVar3 = 2;
+     }
+     ((undefined1 *)&DAT_2000_37ea)[iVar5] = uVar3;
+-    *(undefined1 *)(iVar6 + 0x3b) = uVar3;
+-    iVar6 = iVar6 + 0xfd;
++    dg[(uint16_t)(rec + 0x3b)] = uVar3;
++    rec = rec + 0xfd;
+     iVar5 = iVar5 + 1;
+     iVar4 = iVar4 + -1;
+   } while (iVar4 != 0);
+@@ -63893,32 +63881,28 @@
+ void __allregs FUN_1000_bdbe(void)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int unaff_CS;
+-  
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
++  /* PATCH 149: BOTTOM selected-mission box (asm 0x1bdbe).  Fill the box ([0x60a] rect DGROUP:0xfa80,
++   * colour 0), then draw the selected mission NAME (record+0) and its two 0x3e-byte briefing lines
++   * (record+0x7c, record+0xbc), remapping any 0xf8 (selection red) glyph to 0x17 first.  Ghidra dropped
++   * the [0x60a] fill args and base-lost the record base as `unaff_CS` (garbage); rebase to the record
++   * offset = 0x6dda + [0x6db6]*[0xfa88], and thread the [0x60a] rect/colour (c60a sig = (rect,colour)). */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t rec = (uint16_t)(DAT_2000_2db6 * (uint16_t)DAT_2000_ba88 + 0x6dda);
++  int iVar1, iVar2;
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c60a)))(0xfa80, 0);
+   FUN_1000_524e(4);
+   FUN_1000_530b(0x23);
+   FUN_1000_52d1(DAT_2000_ba80,DAT_2000_ba82);
+-  thunk_FUN_1000_5547(DAT_2000_2db6 * DAT_2000_ba88 + 0x6dda);
++  thunk_FUN_1000_5547((char *)(dg + rec));                       /* mission name (record+0) */
+   FUN_1000_530b(0x26);
+   FUN_1000_52d1(DAT_2000_ba80 + 7,DAT_2000_ba82);
+-  iVar2 = 0;
+-  iVar1 = 0x3f;
+-  do {
+-    if (*(char *)(iVar2 + unaff_CS + 0x7c) == -8) {
+-      *(undefined1 *)(iVar2 + unaff_CS + 0x7c) = 0x17;
+-    }
+-    if (*(char *)(iVar2 + unaff_CS + 0xbc) == -8) {
+-      *(undefined1 *)(iVar2 + unaff_CS + 0xbc) = 0x17;
+-    }
+-    iVar2 = iVar2 + 1;
+-    iVar1 = iVar1 + -1;
+-  } while (iVar1 != 0);
+-  thunk_FUN_1000_5547(unaff_CS + 0x7c);
++  for (iVar2 = 0, iVar1 = 0x3f; iVar1 != 0; iVar2 = iVar2 + 1, iVar1 = iVar1 - 1) {
++    if (dg[(uint16_t)(rec + 0x7c + iVar2)] == 0xf8) dg[(uint16_t)(rec + 0x7c + iVar2)] = 0x17;
++    if (dg[(uint16_t)(rec + 0xbc + iVar2)] == 0xf8) dg[(uint16_t)(rec + 0xbc + iVar2)] = 0x17;
++  }
++  thunk_FUN_1000_5547((char *)(dg + (uint16_t)(rec + 0x7c)));    /* briefing line 1 */
+   FUN_1000_52d1(DAT_2000_ba80 + 0xd,DAT_2000_ba82);
+-  thunk_FUN_1000_5547(unaff_CS + 0xbc);
++  thunk_FUN_1000_5547((char *)(dg + (uint16_t)(rec + 0xbc)));    /* briefing line 2 */
+   return;
+ }
+ 
+@@ -63928,14 +63912,31 @@
+ void __allregs FUN_1000_be47(void)
+ 
+ {
+-  uint uVar1;
+-  
++  /* PATCH 149: LEFT-column per-mission marker boxes (asm 0x1be47).  When the frame-timer low nibble is
++   * 0 ([0x452]&0xf), for each mission draw a state-coloured inset box ([0x61e]) + outline ([0x61a]) +
++   * box/line ([0x622]) at the record's marker rect (record+0x19).  Colour: the SELECTED mission blinks
++   * (al=0 when [0x452]&0x10) else by availability byte rec+0x3b (0->0x21 available, 2->0x20 locked,
++   * else 0x22).  Ghidra dropped the al(colour)/bx(rect) args + base-lost the record base.  Rebase +
++   * thread (c61e/c61a/c622 sig = (rect,colour), same family as 119f/11db). */
++  uint16_t tick = *(uint16_t *)(g_mem + 0x1c452);
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t rec, bx; uint8_t al, st;
+   DAT_2000_ba7c = 3;
+-  if ((DAT_1000_c452 & 0xf) == 0) {
+-    for (uVar1 = 0; uVar1 < DAT_2000_2dd0; uVar1 = uVar1 + 1) {
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61e)))();
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c622)))();
++  if ((tick & 0xf) == 0) {
++    uint16_t i;
++    rec = 0x6dda;
++    for (i = 0; i < (uint16_t)DAT_2000_2dd0; i = i + 1) {
++      bx = (uint16_t)(rec + 0x19);                              /* marker rect */
++      if (i == (uint16_t)DAT_2000_2db6 && (tick & 0x10) != 0) {
++        al = 0;                                                 /* 1be6a: selected, blink off */
++      } else {
++        st = dg[(uint16_t)(rec + 0x3b)];
++        al = (st == 0) ? 0x21 : (st == 2) ? 0x20 : 0x22;
++      }
++      ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61e)))(bx, al);
++      ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(bx, 0);
++      ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c622)))(bx, 0);
++      rec = rec + 0xfd;
+     }
+   }
+   return;
+@@ -63947,26 +63948,25 @@
+ void __allregs FUN_1000_bea4(uint param_1,uint param_2)
+ 
+ {
++  /* PATCH 149: mission-row HOVER hit-test (asm 0x1bea4).  param_1=cursor X, param_2=cursor Y; find the
++   * mission whose marker rect (record+0x19=y0,+0x1d=y1,+0x1b=x0,+0x1f=x1) contains the cursor and, if it
++   * is not already selected and not LOCKED (rec+0x3b!=2), select it (dirty ba7c/ba7d).  Ghidra base-lost
++   * the record base (0x6dda as host ptr); rebase to g_mem+0x1c000. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t rec = 0x6dda;
+   uint uVar1;
+-  int iVar2;
+-  
+   uVar1 = 0;
+-  iVar2 = 0x6dda;
+   while( true ) {
+-    if (DAT_2000_2dd0 <= uVar1) {
+-      return;
+-    }
+-    if ((((*(uint *)(iVar2 + 0x19) <= param_2) && (param_2 <= *(uint *)(iVar2 + 0x1d))) &&
+-        (*(uint *)(iVar2 + 0x1b) <= param_1)) && (param_1 <= *(uint *)(iVar2 + 0x1f))) break;
++    if (DAT_2000_2dd0 <= uVar1) { return; }
++    if (((*(uint16_t *)(dg + (uint16_t)(rec + 0x19)) <= param_2) &&
++         (param_2 <= *(uint16_t *)(dg + (uint16_t)(rec + 0x1d)))) &&
++        ((*(uint16_t *)(dg + (uint16_t)(rec + 0x1b)) <= param_1) &&
++         (param_1 <= *(uint16_t *)(dg + (uint16_t)(rec + 0x1f))))) break;
+     uVar1 = uVar1 + 1;
+-    iVar2 = iVar2 + 0xfd;
+-  }
+-  if (uVar1 == DAT_2000_2db6) {
+-    return;
+-  }
+-  if (*(char *)(iVar2 + 0x3b) == '\x02') {
+-    return;
++    rec = rec + 0xfd;
+   }
++  if (uVar1 == DAT_2000_2db6) { return; }
++  if (dg[(uint16_t)(rec + 0x3b)] == 2) { return; }
+   DAT_2000_2db6 = uVar1;
+   DAT_2000_ba7c = 3;
+   DAT_2000_ba7d = 3;
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -4879,16 +4879,23 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_1e8d) @ 0000:1e8d ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ void __allregs FUN_0000_1e8d(undefined1 param_1)
+-
+ {
+-  if (*_DAT_1000_c736 == -0x6000) {
+-                    /* WARNING: Subroutine does not return */
+-    FUN_0000_2d6d(_DAT_1000_c736 + 0xe);
++  /* PATCH 149: EMBOSSED-text wrapper (asm 0x1e8d, the [DGROUP:0x688] sibling of the [0x684] wrapper
++     1d23/patch 131): s=[DGROUP:0x736]; if word[s]==0xA000 { 2d6d(s+0x1c); [0x794]=0x7c8; [0x796]=0x140;
++     1ec9; 2e12 } else 1ec9.  Ghidra deref'd the VALUE at DGROUP:0x736 (a near offset) as a host pointer
++     -> base-loss (never exercised until f338's bottom selected-mission briefing box). */
++  uint8_t *D = g_mem + 0x1c000;
++  uint16_t s = *(uint16_t *)(D + 0x736);
++  if (*(uint16_t *)(D + (uint16_t)s) == 0xA000) {
++    FUN_0000_2d6d((uint16_t)(s + 0x1c));
++    *(uint16_t *)(D + 0x794) = 0x7c8;
++    *(uint16_t *)(D + 0x796) = 0x140;
++    FUN_0000_1ec9(param_1);
++    FUN_0000_2e12();
++  } else {
++    FUN_0000_1ec9(param_1);
+   }
+-  FUN_0000_1ec9(param_1);
+   return;
+ }
+ 
+@@ -4940,121 +4947,80 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_1ec9) @ 0000:1ec9 ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ void __allregs FUN_0000_1ec9(byte param_1)
+-
+ {
+-  byte *pbVar1;
+-  byte *pbVar2;
+-  undefined2 uVar3;
+-  undefined2 uVar4;
+-  undefined2 *puVar5;
+-  byte bVar6;
+-  uint uVar7;
+-  int iVar8;
+-  undefined2 uVar9;
+-  char cVar10;
+-  uint uVar11;
+-  undefined1 uVar12;
+-  char cVar13;
+-  byte *pbVar14;
+-  char *pcVar15;
+-  char *pcVar16;
+-  
+-  puVar5 = _DAT_1000_c736;
+-  uVar4 = _DAT_1000_c71a;
+-  uVar9 = _DAT_1000_c736[0xc];
+-  if (!CARRY1(param_1,param_1)) {
+-    uVar9 = _DAT_1000_c736[0xb];
+-  }
+-  pbVar2 = (byte *)*(undefined2 *)(_DAT_1000_c736[3] + (uint)(byte)(param_1 * '\x02'));
+-  pbVar14 = pbVar2 + 1;
+-  bVar6 = *pbVar2;
+-  _DAT_1000_c792 = uVar9;
+-  if (bVar6 == 0) {
+-    bVar6 = param_1 & 0x7f;
+-    if (bVar6 == 7) {
+-      FUN_0000_2c7b();
+-    }
+-    else if (bVar6 == 8) {
+-      iVar8 = _DAT_1000_c736[10];
+-      _DAT_1000_c736[0xe] = _DAT_1000_c736[0xe] - iVar8;
+-      puVar5[0x10] = puVar5[0x10] - iVar8;
+-      iVar8 = puVar5[5] + puVar5[7] + puVar5[9];
+-      puVar5[0xf] = puVar5[0xf] - iVar8;
+-      puVar5[0x11] = puVar5[0x11] - iVar8;
+-    }
+-    else if (bVar6 == 10) {
+-      iVar8 = _DAT_1000_c736[6] + _DAT_1000_c736[8] + _DAT_1000_c736[10];
+-      _DAT_1000_c736[0xe] = _DAT_1000_c736[0xe] + iVar8;
+-      puVar5[0x10] = puVar5[0x10] + iVar8;
+-    }
+-    else if (bVar6 == 0xd) {
+-      iVar8 = _DAT_1000_c736[0xd];
+-      _DAT_1000_c736[0xf] = iVar8;
+-      puVar5[0x11] = iVar8 + puVar5[5];
+-    }
+-    else if (bVar6 == 0xc) {
+-      iVar8 = _DAT_1000_c736[0xd];
+-      _DAT_1000_c736[0xf] = iVar8;
+-      puVar5[0x11] = iVar8 + puVar5[5];
+-      iVar8 = puVar5[6] + puVar5[8] + puVar5[10];
+-      puVar5[0xe] = puVar5[0xe] + iVar8;
+-      puVar5[0x10] = puVar5[0x10] + iVar8;
+-    }
+-    else if (bVar6 == 0xe) {
+-      _DAT_1000_c736[0xf] = _DAT_1000_c736[0xf] + 1;
+-      puVar5[0x11] = puVar5[0x11] + 1;
+-    }
+-    else if (bVar6 == 0xf) {
+-      _DAT_1000_c736[0xf] = _DAT_1000_c736[0xf] + -1;
+-      puVar5[0x11] = puVar5[0x11] + -1;
++  /* PATCH 149: the EMBOSSED/shadowed TEXT glyph blitter (asm 0x1ec9-0x1ff3), the [DGROUP:0x688] sibling
++     of the transparent [0x684] blitter 1d5f (patch 131).  Same text-state struct at DGROUP:[0x736]
++     (byte-offset fields: fbseg[+0], glyphtab[+6], cellW[+0xa], cellH[+0xc], posX/posX2[+0xe/+0x12],
++     lineAdv[+0x14], colorLo[+0x16]/colorHi[+0x18], startCol[+0x1a], row[+0x1c]/col[+0x1e], row2[+0x20]/
++     col2[+0x22]) and the same control-char handler, but the glyph blit writes a TWO-TONE glyph: fill =
++     (fontbyte ^ 3) + colorLow, and the transparent (fontbyte==0) + right-border pixels = colorHigh (the
++     emboss shadow).  Ghidra deref'd the DGROUP:0x736 value as a host int* (base-loss) and word-scaled the
++     byte fields.  Reconstructed faithfully in the offset model. */
++  uint8_t *D = g_mem + 0x1c000;
++  uint16_t s = *(uint16_t *)(D + 0x736);
++#define SW(o) (*(uint16_t *)(D + (uint16_t)(s + (o))))
++  uint16_t fontseg = *(uint16_t *)(D + 0x71a);
++  uint8_t *FS = g_mem + ((uint32_t)fontseg << 4);
++  uint8_t ch = param_1;
++  uint16_t cx = (ch & 0x80) ? SW(0x18) : SW(0x16);   /* colour word */
++  uint8_t cl = (uint8_t)cx;                          /* fill colour (low) */
++  uint8_t chh = (uint8_t)(cx >> 8);                  /* emboss/shadow colour (high) */
++  uint16_t tbloff, glyphoff;
++  uint8_t width;
++  *(uint16_t *)(D + 0x792) = cx;
++  tbloff = (uint16_t)(SW(6) + (uint16_t)((uint16_t)ch * 2));
++  glyphoff = *(uint16_t *)(FS + tbloff);
++  width = *(FS + glyphoff);
++  glyphoff = (uint16_t)(glyphoff + 1);
++  if (width == 0) {                                  /* control char (asm 0x1f5f), al = ch */
++    uint16_t ax;
++    switch (ch) {
++      case 0x7: FUN_0000_2c7b(); break;
++      case 0x8: ax = SW(0x14); SW(0x1c) -= ax; SW(0x20) -= ax;
++                ax = (uint16_t)(SW(0xa) + SW(0xe) + SW(0x12)); SW(0x1e) -= ax; SW(0x22) -= ax; break;
++      case 0xa: ax = (uint16_t)(SW(0xc) + SW(0x10) + SW(0x14)); SW(0x1c) += ax; SW(0x20) += ax; break;
++      case 0xd: ax = SW(0x1a); SW(0x1e) = ax; SW(0x22) = (uint16_t)(ax + SW(0xa)); break;
++      case 0xc: SW(0x1e) = SW(0x1a); SW(0x22) = (uint16_t)(SW(0x1a) + SW(0xa));
++                ax = (uint16_t)(SW(0xc) + SW(0x10) + SW(0x14)); SW(0x1c) += ax; SW(0x20) += ax; break;
++      case 0xe: SW(0x1e) += 1; SW(0x22) += 1; break;
++      case 0xf: SW(0x1e) -= 1; SW(0x22) -= 1; break;
++      default: break;
+     }
++    return;
+   }
+-  else {
+-    uVar7 = (uint)bVar6;
+-    pcVar15 = (char *)(*(int *)(_DAT_1000_c736[0xe] * 2 + _DAT_1000_c794) + _DAT_1000_c736[0xf]);
+-    uVar3 = *_DAT_1000_c736;
+-    uVar11 = CONCAT11((char)(_DAT_1000_c736[6] + -1),(char)((uint)(_DAT_1000_c736[6] + -1) >> 8));
++  {                                                  /* glyph blit (asm 0x1ef5-0x1f57) */
++    uint16_t bp = width;
++    uint16_t rowtab = *(uint16_t *)(D + 0x794);
++    uint16_t row = SW(0x1c);
++    uint16_t di = *(uint16_t *)(D + (uint16_t)((uint16_t)(row * 2) + rowtab));
++    uint16_t fbseg = SW(0);
++    uint8_t *ES = g_mem + ((uint32_t)fbseg << 4);
++    uint16_t screenW = *(uint16_t *)(D + 0x796);
++    uint8_t dh = (uint8_t)((SW(0xc) - 1) & 0xff);    /* cellH-1 rows */
++    uint16_t gsi = glyphoff;
++    di = (uint16_t)(di + SW(0x1e));
+     do {
+-      uVar11 = uVar11 | uVar7;
+-      do {
+-        while( true ) {
+-          pcVar16 = pcVar15;
+-          pbVar1 = pbVar14;
+-          pbVar14 = pbVar14 + 1;
+-          cVar13 = (char)((uint)uVar9 >> 8);
+-          uVar12 = (undefined1)(uVar11 >> 8);
+-          if (*pbVar1 == 0) break;
+-          *pcVar16 = (*pbVar1 ^ 3) + (char)uVar9;
+-          cVar10 = (char)uVar11 + -1;
+-          uVar11 = CONCAT11(uVar12,cVar10);
+-          pcVar15 = pcVar16 + 1;
+-          if (cVar10 == '\0') goto LAB_0000_1f33;
+-        }
+-        *pcVar16 = cVar13;
+-        cVar10 = (char)uVar11 + -1;
+-        uVar11 = CONCAT11(uVar12,cVar10);
+-        pcVar15 = pcVar16 + 1;
+-      } while (cVar10 != '\0');
+-LAB_0000_1f33:
+-      pcVar16[1] = cVar13;
+-      pcVar15 = pcVar16 + 1 + (_DAT_2000_c226 - uVar7);
+-      cVar13 = (char)(uVar11 >> 8) + -1;
+-      uVar11 = CONCAT11(cVar13,(char)uVar11);
+-    } while (cVar13 != '\0');
+-    iVar8 = puVar5[10];
+-    puVar5[0xe] = puVar5[0xe] + iVar8;
+-    puVar5[0x10] = puVar5[0x10] + iVar8;
+-    iVar8 = uVar7 + 1 + puVar5[7] + puVar5[9];
+-    puVar5[0xf] = puVar5[0xf] + iVar8;
+-    puVar5[0x11] = puVar5[0x11] + iVar8;
++      uint8_t dl = width;
++      while (1) {
++        uint8_t fb = *(FS + gsi); gsi = (uint16_t)(gsi + 1);
++        if (fb == 0) ES[di] = chh;                              /* transparent -> emboss */
++        else         ES[di] = (uint8_t)((uint8_t)(fb ^ 3) + cl);/* fill */
++        di = (uint16_t)(di + 1);
++        dl = (uint8_t)(dl - 1);
++        if (dl == 0) break;
++      }
++      ES[di] = chh;                                             /* 1f33: right-border emboss */
++      di = (uint16_t)(di - bp);
++      di = (uint16_t)(di + screenW);
++      dh = (uint8_t)(dh - 1);
++    } while (dh != 0);
++    { uint16_t adv = SW(0x14); SW(0x1c) += adv; SW(0x20) += adv; }
++    { uint16_t adv = (uint16_t)(bp + 1 + SW(0xe) + SW(0x12)); SW(0x1e) += adv; SW(0x22) += adv; }
+   }
++#undef SW
+   return;
+ }
+-
+-
+ /* ===== ((uint)(uintptr_t)&FUN_0000_2004) @ 0000:2004 ===== */
+ 
+ /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
