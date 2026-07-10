@@ -40,6 +40,10 @@ FLOWS=(
   # the plain main menu is restored (the CANCEL button @205,140 is the final cursor rest position, so no
   # ghost).  Exercises the cb74/cb7c OK/CANCEL return-to-menu path (previously a base-lost SIGSEGV).
   "cancel|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:205:140:0; 3600:205:140:1; 4200:205:140:0|$ROOT/ref/cancel_native320.png"
+  # Close flow via the OTHER list-dialog front-end: BATTLES opens the SELECT BATTLE .FSG list (47 entries,
+  # cb7c) then CANCEL @205,140 -> menu restored.  Independently exercises cb7c's shared-body close path
+  # (distinct enumerate + dialog from campaigns/cb74); the destination frame is the plain menu.
+  "battles-cancel|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:140:0; 3600:205:140:1; 4200:205:140:0|$ROOT/ref/battles_cancel_native320.png"
 )
 
 run_target() { # $1=target $2=hz $3=ms $4=mouse-script $5=out.ppm ; echo rc
