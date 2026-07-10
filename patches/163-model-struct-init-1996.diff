@@ -1,0 +1,32 @@
+PATCH 163: FUN_0000_1996 (asm 0x1996) -- the model-struct field initializer on the LOD model-load
+path (reached BATTLES->OK->ACCEPT via 4308 -> 183f -> 1996), a pure DGROUP base-loss (the same class
+as its neighbours 18dc/197b).  ES=DS=DGROUP; bx=word[DGROUP:0x2674] (the raw value of DAT_1000_e674,
+which Ghidra mis-typed `int**`), di=word[DGROUP:(uint16)(bx+0x27f4)] = the model-struct near-offset,
+then a fan-out broadcast of the struct words.  Ghidra dropped the DGROUP base so `*(DAT_1000_e674 +
+0x27f4)` was a wild host-pointer dereference (SIGSEGV, gdb-confirmed at FUN_0000_1996+35).  The
+recovered fan-out logic is otherwise instruction-faithful (verified vs the asm 0x1996..0x19b8); only
+the base is rebased through g_mem+0x1c000 here.  Behaviour-neutral for verify (model-loader path,
+unreached by the 19 flows -- a bare host deref there would already have SIGSEGV'd them).
+
+--- a/fist.c
++++ b/fist.c
+@@ -7815,8 +7815,17 @@
+   undefined2 uVar3;
+   int iVar4;
+   undefined2 *puVar5;
+-  
+-  puVar2 = (undefined2 *)*(undefined2 *)(DAT_1000_e674 + 0x27f4);
++  /* PATCH 163 (asm 0x1996): ES=DS=DGROUP; every ptr here is a DGROUP near-offset, not a host ptr.
++     bx = word[DGROUP:0x2674] (the raw value of DAT_1000_e674, which Ghidra mis-typed int**);
++     di = word[DGROUP:(uint16)(bx+0x27f4)] = the model-struct near-offset -> rebase to g_mem+0x1c000.
++     The fan-out logic Ghidra recovered is correct; only the base was dropped (a wild host deref =
++     the SIGSEGV).  Model-loader path 4308->183f->1996; not reached by the 19 verify flows. */
++  {
++    unsigned char *dg = g_mem + 0x1c000;
++    uint16_t bx = *(uint16_t *)(dg + 0x2674);
++    uint16_t di = *(uint16_t *)(dg + (uint16_t)(bx + 0x27f4));
++    puVar2 = (undefined2 *)(dg + di);
++  }
+   uVar1 = *puVar2;
+   puVar2[1] = uVar1;
+   puVar5 = puVar2 + 3;
