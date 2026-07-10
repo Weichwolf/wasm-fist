@@ -1,0 +1,202 @@
+PATCH 160: the seg-0f69 FILEMGR variant-0 leaf primitives + cluster-dispatch register threading.
+
+The model/KLC/PAL/SKY loads run through the seg-0f69 FILEMGR: 2733 (batch LOAD, DGROUP:0x384), 276e
+(streaming OPEN, DGROUP:0x38c), 27e2 (CLOSE, 0x390), 27f7 (READ, 0x394), 280a (SEEK).  Each dispatches
+a per-extension-variant leaf handler from the cs:0x2b88.. vtable (base cs=0f69 -> g_mem+0xf690).  For
+LOOSE (uncompressed) data files the AH=4300 attr-probe always selects variant0 (the ORIGINAL extension
+char; the '!'/'@' packed variants at cs:0x2b7f/0x2b80 are only reached if variant0 is absent), whose
+column is the plain-INT-21h leaf set decoded from the image at 0f69:0x2b88:
+  LOAD  0x318e = FUN_1000_281e (thunk -> 2593 open+read+close; already recovered)
+  OPEN  0x3195 = FUN_1000_2825 (attr-probe+open+lseek-size+seek-0 -> AX=handle; already recovered)
+  CLOSE 0x31d7, READ 0x31e1, SEEK 0x31eb  <- the three tiny stubs Ghidra did NOT promote (reached only
+                                              through the vtable) -- reconstructed here + fmap-registered.
+Route (b) chosen (reconstruct-as-C, keep re_out/fist.c pristine) over re-decompile: only 3 trivial
+INT-21h stubs are missing, they call the already-promoted 2593, and re-decompile would NOT fix the
+pervasive ES/register base-loss across the model-loader chain (Ghidra drops ES either way) while forcing
+a re-thread of 159 patches.
+
+Reconstructed (asm-verified vs re_out/fist_dat_image.bin):
+- FUN_1000_2867 (0f69:0x31d7): CLOSE -- `cmp bx,1; jb ret; mov ah,0x3e; int 21h` (bx=handle).
+- FUN_1000_2871 (0f69:0x31e1): READ  -- `mov ah,0x3f; int 21h` (bx=handle, cx=count, dx=buf, ds=DGROUP).
+- FUN_1000_287b (0f69:0x31eb): SEEK  -- `mov ax,0x4200; int 21h` (bx=handle, cx:dx=offset).
+Registered at their linear addresses (0x12867/0x12871/0x1287b) in fist_fmap[] so fist_icall_near(0xf69,
+off) resolves them instead of trapping to 0.
+
+Cluster-dispatch register threading (the leaves are __allregs = plain-cdecl positional; the args must be
+passed at each vtable-dispatch site since fist_icall crosses the register-threading boundary):
+- 2733 LOAD dispatch: pass DX=filename (param_2); 281e forwards to 2593, ES(load_seg) via DAT_1000_2b5e
+  (published by the caller 19d1, read by 2593 per patch 101).
+- 276e + 2688 OPEN dispatch: pass DX=filename (param_2) to 2825.
+- 27f7 READ / 280a SEEK: signatures extended to (slot, cx, dx) so the caller-supplied cx=count/dx=buffer
+  (offset for SEEK) forward to the READ/SEEK leaf; return AX passed back.
+
+BEHAVIOUR-NEUTRAL for the 19 verify flows: the whole cluster is reached only on the ACCEPT mission
+cascade (4308->18dc->183f->19d1/1a45->2733/276e), which no verify flow drives.  Makes the FILEMGR
+primitives REAL/resolvable; the model set actually opening needs the 19d1/1a45/183f ES+filename threading
+(the next patch), which feeds these now-consistent cluster methods.
+--- a/fist.c
++++ b/fist.c
+@@ -1714,10 +1714,13 @@
+ void __allregs FUN_1000_2765(int param_1,int param_2,undefined2 param_3);
+ uint __allregs FUN_1000_276e(uint param_1,int param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_1000_27e2(int param_1);
+-void __allregs FUN_1000_27f7(int param_1);
+-void __allregs FUN_1000_280a(int param_1);
++int  __allregs FUN_1000_27f7(int param_1,int param_2,int param_3);  /* PATCH 160: slot,cx,dx */
++int  __allregs FUN_1000_280a(int param_1,int param_2,int param_3);  /* PATCH 160: slot,cx,dx */
+ void __allregs FUN_1000_281e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+ undefined2 __allregs FUN_1000_2825(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
++void __allregs FUN_1000_2867(int param_1);                         /* PATCH 160: FILEMGR v0 CLOSE */
++int __allregs FUN_1000_2871(int param_1,int param_2,int param_3);  /* PATCH 160: FILEMGR v0 READ  */
++int __allregs FUN_1000_287b(int param_1,int param_2,int param_3);  /* PATCH 160: FILEMGR v0 SEEK  */
+ void __allregs FUN_1000_288e(void);
+ void __allregs FUN_1000_2890(void);
+ void __allregs FUN_1000_2891(int param_1,uint param_2);
+@@ -43050,7 +43053,9 @@
+       iVar3 = iRam000f0004;
+       if (!(bool)uRam000f0012) {
+         g_fist_cf = 0;
+-        uVar1 = (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b8e + (uint16_t)iVar5 * 2)))();
++        /* PATCH 160: OPEN dispatch (2688 sibling) -> variant0 2825; thread DX=filename (param_2). */
++        uVar1 = (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b8e + (uint16_t)iVar5 * 2)))
++                    (0, (uint16_t)param_2, 0, 0, 0);
+         if (!g_fist_cf) {
+           *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = CX[0x2b7e];
+           uVar2 = *(uint16_t *)(CX + 0x2b6a);
+@@ -43174,7 +43179,12 @@
+     param_2 = iRam000f0008;
+     FN = g_mem + 0x1c000 + (uint16_t)param_2;
+     if (!(bool)uRam000f0012) {
+-      (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b88 + ((uint16_t)iRam000f000a) * 2)))();
++      /* PATCH 160: LOAD dispatch (asm 0x1275e `mov ax,es; mov dx,si; call cs:0x2b88[di]`).  variant0 =
++         0f69:0x318e = FUN_1000_281e (thunk that sets ES:=AX then calls 2593 open+read+close into ES:0).
++         Thread DX=filename (param_2); ES(=load_seg) is published in DAT_1000_2b5e by the caller (19d1),
++         which 2593 reads (patch 101).  281e forwards p1..p6 to 2593 (p2=DX=filename). */
++      (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b88 + ((uint16_t)iRam000f000a) * 2)))
++          (0, (uint16_t)param_2, 0, 0, 0, 0);
+       goto LAB_1000_276a;
+     }
+     iVar2 = iRam000f000a + 1;
+@@ -43270,7 +43280,11 @@
+       iVar3 = iRam000f0004;
+       if (!(bool)uRam000f0012) {
+         g_fist_cf = 0;
+-        uVar1 = (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b8e + (uint16_t)iVar5 * 2)))();
++        /* PATCH 160: OPEN dispatch (asm 0x127b0 `mov dx,si; call cs:0x2b8e[bx]`).  variant0 =
++           0f69:0x3195 = FUN_1000_2825 (attr-probe + open + lseek-size + seek-0 -> AX=handle, CF on
++           miss).  2825's DX(=filename) is its param_2; thread param_2 (the DGROUP filename buffer). */
++        uVar1 = (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b8e + (uint16_t)iVar5 * 2)))
++                    (0, (uint16_t)param_2, 0, 0, 0);
+         if (!g_fist_cf) {
+           *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = CX[0x2b7e];
+           uVar2 = *(uint16_t *)(CX + 0x2b6a);
+@@ -43309,32 +43323,32 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_27f7) @ 1000:27f7 ===== */
+ 
+-void __allregs FUN_1000_27f7(int param_1)
++int __allregs FUN_1000_27f7(int param_1,int param_2,int param_3)
+ 
+ {
+-  /* PATCH 159 (asm 0x127f7): dispatch slot param_1's READ op via cs:[type+0x2b9a] with bx=handle
++  /* PATCH 159/160 (asm 0x127f7): dispatch slot param_1's READ op via cs:[type+0x2b9a] with bx=handle
+      (does NOT clear the slot).  cs-data -> g_mem+0xf690.  Handler 0f69:0x31e1 (`mov ah,0x3f; int 21h`)
+-     reads bx=handle (+ cx/dx from the caller's regs). */
++     reads bx=handle + cx/dx from the caller's regs -> PATCH 160 forwards param_2(cx=count)/param_3
++     (dx=buffer) to the READ leaf and returns AX=bytes-read. */
+   uint8_t *CX = g_mem + 0xf690;
+   uint16_t handle = *(uint16_t *)(CX + 0x2b6a + (uint16_t)param_1);
+   uint16_t type = *(uint16_t *)(CX + 0x2b74 + (uint16_t)param_1);
+-  (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b9a + type)))(handle);
+-  return;
++  return (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b9a + type)))(handle,param_2,param_3);
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_280a) @ 1000:280a ===== */
+ 
+-void __allregs FUN_1000_280a(int param_1)
++int __allregs FUN_1000_280a(int param_1,int param_2,int param_3)
+ 
+ {
+-  /* PATCH 159 (asm 0x1280a): dispatch slot param_1's SEEK op via cs:[type+0x2ba6] with bx=handle.
+-     cs-data -> g_mem+0xf690.  Handler 0f69:0x31eb (`mov ax,0x4200; int 21h`) reads bx=handle. */
++  /* PATCH 159/160 (asm 0x1280a): dispatch slot param_1's SEEK op via cs:[type+0x2ba6] with bx=handle.
++     cs-data -> g_mem+0xf690.  Handler 0f69:0x31eb (`mov ax,0x4200; int 21h`) reads bx=handle + cx:dx
++     offset from the caller -> PATCH 160 forwards param_2(cx=off-hi)/param_3(dx=off-lo), returns DX:AX. */
+   uint8_t *CX = g_mem + 0xf690;
+   uint16_t handle = *(uint16_t *)(CX + 0x2b6a + (uint16_t)param_1);
+   uint16_t type = *(uint16_t *)(CX + 0x2b74 + (uint16_t)param_1);
+-  (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2ba6 + type)))(handle);
+-  return;
++  return (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2ba6 + type)))(handle,param_2,param_3);
+ }
+ 
+ 
+@@ -43412,6 +43426,56 @@
+ }
+ 
+ 
++/* ===== PATCH 160: seg-0f69 FILEMGR variant-0 leaf primitives (asm 0x12867/0x12871/0x1287b) ===== */
++/* The model/KLC/PAL/SKY loads go through the seg-0f69 FILEMGR (2733 batch-load / 276e streaming-open /
++   27e2 close / 27f7 read / 280a seek), which dispatch per-extension-variant leaf handlers held in the
++   cs:0x2b88.. vtable (base cs=0f69 -> g_mem+0xf690).  For LOOSE (uncompressed) data files the attr-probe
++   picks variant0 (the ORIGINAL extension char), whose column is the plain-INT-21h leaf set:
++      LOAD 0x318e=FUN_1000_281e (thunk->2593), OPEN 0x3195=FUN_1000_2825 (both already recovered),
++      CLOSE 0x31d7, READ 0x31e1, SEEK 0x31eb.
++   Ghidra promoted 281e/2825 (+ the variant-2 set 2ccb..) but not the three tiny CLOSE/READ/SEEK stubs
++   below (they are reached only through the vtable).  Reconstructed instruction-faithfully from the image
++   and registered in the fmap so fist_icall_near(0xf69,off) resolves them.  Each takes bx=handle as arg0
++   (+ cx=count/dx=buf for READ; cx:dx=offset for SEEK) -- the caller-supplied regs the cluster forwards. */
++
++/* ===== 0f69:0x31d7 = linear 0x12867 : CLOSE (cmp bx,1; jb ret; mov ah,0x3e; int 21h) ===== */
++void __allregs FUN_1000_2867(int param_1)
++{
++  if ((uint16_t)param_1 >= 1) {                 /* asm: cmp bx,1 ; jb .ret */
++    uRam000f0014 = 0x21;
++    uRam000f0000 = 0x3e00;                       /* AH=3e close */
++    uRam000f0002 = param_1;                      /* BX = handle */
++    fist_int_dispatch();
++  }
++  return;
++}
++
++/* ===== 0f69:0x31e1 = linear 0x12871 : READ (mov ah,0x3f; int 21h) -> AX=bytes ===== */
++int __allregs FUN_1000_2871(int param_1,int param_2,int param_3)
++{
++  uRam000f0014 = 0x21;
++  uRam000f0000 = 0x3f00;                          /* AH=3f read */
++  uRam000f0002 = param_1;                         /* BX = handle */
++  uRam000f0004 = param_2;                         /* CX = count  */
++  iRam000f0006 = param_3;                         /* DX = buffer (DGROUP) */
++  uRam000f000e = 0x1c00;                          /* DS = DGROUP (small model) */
++  fist_int_dispatch();
++  return uRam000f0000;
++}
++
++/* ===== 0f69:0x31eb = linear 0x1287b : SEEK (mov ax,0x4200; int 21h) -> DX:AX=pos ===== */
++int __allregs FUN_1000_287b(int param_1,int param_2,int param_3)
++{
++  uRam000f0014 = 0x21;
++  uRam000f0000 = 0x4200;                          /* AL=0 whence=SET */
++  uRam000f0002 = param_1;                         /* BX = handle */
++  uRam000f0004 = param_2;                         /* CX = offset hi */
++  iRam000f0006 = param_3;                         /* DX = offset lo */
++  fist_int_dispatch();
++  return uRam000f0000;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_1000_288e) @ 1000:288e ===== */
+ 
+ void __allregs FUN_1000_288e(void)
+@@ -71079,6 +71143,9 @@
+   {0x1280au,(void*)&FUN_1000_280a},
+   {0x1281eu,(void*)&FUN_1000_281e},
+   {0x12825u,(void*)&FUN_1000_2825},
++  {0x12867u,(void*)&FUN_1000_2867},   /* PATCH 160: FILEMGR v0 CLOSE (0f69:0x31d7) */
++  {0x12871u,(void*)&FUN_1000_2871},   /* PATCH 160: FILEMGR v0 READ  (0f69:0x31e1) */
++  {0x1287bu,(void*)&FUN_1000_287b},   /* PATCH 160: FILEMGR v0 SEEK  (0f69:0x31eb) */
+   {0x1288eu,(void*)&FUN_1000_288e},
+   {0x12890u,(void*)&FUN_1000_2890},
+   {0x12891u,(void*)&FUN_1000_2891},
