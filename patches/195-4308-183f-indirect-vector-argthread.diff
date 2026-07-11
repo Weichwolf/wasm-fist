@@ -1,0 +1,55 @@
+PATCH 195: thread FUN_0000_183f's args at the FUN_0000_4308 model-list indirect-vector call site
+(the documented __allregs indirect-method-vector arg-scramble class).
+
+FUN_0000_4308 (patch 158) forward-walks the mission model/unit table at STRSEG(word[DGROUP:0x70]):0x802,
+stride 8: [+0]=flags/lod, [+2], [+4]=model-name index, [+6]=near-call vector.  The asm sets the machine
+registers CX=[+0], BX=[+2], AX=[+4] and does `call gs:[si+6]` -- so the target reads AX/BX/CX from real
+registers.  Patch 158 rendered this as the positional C call `(*fist_icall_near(0,vec))(ax,bx,cx)`.
+
+For the model-loader target vec==0x183f this SCRAMBLES the args.  FUN_0000_183f's __allregs varnode order
+is NON-canonical: `mov [0x2674],ax` (e674=AX=param_1), `mov [0x2676],bx` (e676=BX=param_4), `mov [0x2678],cx`
+(e678=CX=param_2) at asm 0x1845..0x184c.  A positional `(ax,bx,cx)` cdecl call lands param_1=ax, param_2=bx,
+param_3=cx -> so param_4 (=e676, the model-name INDEX) receives NOTHING (garbage, observed 0xe110) and
+param_2 (=e678, the LOD flag tested `&8`) receives bx instead of cx.  Result: e676 garbage -> the c550
+name-builder (patch 196) builds the stub "MXX" -> every mission-model open fails (observed: 48 empty +
+4 'MXX' failed opens on the ACCEPT cascade).
+
+FIX: dispatch vec==0x183f as a DIRECT call in 183f's true positional order:
+  FUN_0000_183f(ax, cx, /*p3*/0, bx, /*p5*/0)
+    param_1 = AX = [+4]  (e674)
+    param_2 = CX = [+0]  (e678, the &8 LOD-load gate)
+    param_4 = BX = [+2]  (e676, the model-name index)
+param_3/param_5 are the ambient DX/SI registers, which 4308 does NOT define before `call gs:[si]` (asm
+0x431f) -- genuinely ambient.  They are asm-verified DEAD on this path: 183f only reads AX/BX/CX at entry;
+FUN_0000_19d1 (183f's callee via param_5) reads only AX/BX; FUN_0000_1a45 (via param_3) reads only
+AX/BX/CX at entry (its "param_3" is a Ghidra scattered-local/high-half artifact, no register load) -> 0
+is faithful and deterministic.  The generic positional path is kept for the other vecs (e.g. 0x4397, which
+reads AX=param_1 and threads correctly positionally).
+
+OBSERVED (FIST_CASCADE 3-click BATTLES->OK->ACCEPT from repo root, with patch 196): e676 now carries the
+real model index (0x0100 APACHE, 0x0108 HIND, 0x0130 TARGETS, ...) and the FULL mission unit roster opens
+'-> ok': M1_A..M1_E/M1_DEAD (.M00/.M08/.MAL), M3_*, T80_*, BMP_*, APACHE, HIND, MUZZLE, SHOT, EXPLODE,
+ARTILL, TARGETS.  Crash-free (RC=124 timeout, no SIGSEGV; multiple repros).  Reached ONLY on the ACCEPT
+cascade -> behaviour-neutral for the 19 verify flows (mainmenu md5 3a6ff1c5 unchanged, default boot rc=0).
+RESIDUAL RISK (per doctrine): the loaded model geometry is not yet render/AE-verifiable (voxel raycaster
+still downstream, gated on the c33c object-render dispatch + op-0xc consumer) -- gated on the observed
+crash-free real-name opens + the asm-fidelity of the register mapping.  Sources stay pristine; fist.c via
+build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -12915,7 +12915,13 @@
+       uint16_t ax  = *(uint16_t *)(gs + si + 4);
+       uint16_t vec = *(uint16_t *)(gs + si + 6);
+       g_fist_cf = 0;
+-      (*(code *)fist_icall_near(0x0u, vec))(ax, bx, cx);
++      if (vec == 0x183f) {
++        /* 183f varnode order: p1=AX([+4]), p2=CX([+0]), p4=BX([+2]); p3=DX/p5=SI ambient (asm-verified
++           dead: 183f reads only AX/BX/CX, 19d1 only AX/BX, 1a45 only AX/BX/CX) -> pass 0 (patch 195). */
++        FUN_0000_183f(ax, cx, 0, bx, 0);
++      } else {
++        (*(code *)fist_icall_near(0x0u, vec))(ax, bx, cx);
++      }
+       if (g_fist_cf) { broke = 1; break; }
+       si = (uint16_t)(si + 8);
+       if (si >= 0xb72) break;

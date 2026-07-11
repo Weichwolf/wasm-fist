@@ -1,0 +1,36 @@
+PATCH 196: thread the DROPPED model-name INDEX (ax=bx) into the c550 driver name-builder call in the
+mission model-loader FUN_0000_1a45 and its extension-builder sibling FUN_0000_19d1 (patch-108 class).
+
+The mission model loader builds each model's DOS filename into the DGROUP:0x740 buffer via the MGAVIDEO
+driver name-builder DGROUP:0x550 (=DAT_1000_c550, driver 0x197 -- the name-table lookup + digit
+substitution).  Both call sites are asm `push ax; mov ax,bx; lcall [0x550]` (1a45 @ 0x1a51..0x1a54; 19d1
+@ 0x19d1..0x19d4) -> c550 takes AX = the model-name INDEX, sourced from the caller's BX.  For both,
+BX = word[DGROUP:0x2676] = DAT_1000_e676 (183f loads `mov bx,[0x2676]` at asm 0x185b/0x186a before each
+call, and neither 1a45/19d1 writes [0x2676] before its c550 call).
+
+Ghidra dropped the AX arg (rendered `(*c550)()`), so c550 ran on a stale AX and built only the driver's
+"MXX" stub template into 0x740 -> every mission-model open failed.  c550's signature is
+`undefined2 (*)(undefined2*)` (patch 108), so thread AX = DAT_1000_e676.
+
+OBSERVED (with patch 195, FIST_CASCADE cascade from repo root): the buffer now builds the REAL model
+names ('APACHE', 'HIND', 'TARGETS', 'M1_A', 'M3_D', 'T80_B', 'BMP_C', 'MUZZLE', 'SHOT', ...); after the
+subsequent LOD-suffix write (`DAT_1000_c74a=param_1` -> name[0xa]="00"/"08"/"16"/"32") the loader opens
+the full unit roster '-> ok' (M1_A.M08, M1_B.M00, APACHE.MAL, HIND.MAL, T80_DEAD.MAL, ...).  Crash-free.
+Reached ONLY on the ACCEPT cascade -> behaviour-neutral for the 19 verify flows (mainmenu md5 3a6ff1c5
+unchanged, default boot rc=0).  asm-verified vs re_out/fist_dat_image.bin.  Sources stay pristine;
+fist.c via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -7970,4 +7970,4 @@
+   uVar6 = (undefined2)((ulong)param_2 >> 0x10);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c550)))();
++  ((undefined2 (*)(undefined2*))fist_icall_far((uint32_t)(DAT_1000_c550)))((undefined2*)DAT_1000_e676);
+   uVar3 = DAT_1000_c74a;
+   uVar2 = DAT_1000_c748;
+@@ -8039,4 +8039,4 @@
+   DAT_1000_fad2 = param_2 * 2 + 0x26e4;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c550)))();
++  ((undefined2 (*)(undefined2*))fist_icall_far((uint32_t)(DAT_1000_c550)))((undefined2*)DAT_1000_e676);
+   DAT_1000_e67a = 0;
+   uVar14 = (ulong)uVar13 << 0x10;
