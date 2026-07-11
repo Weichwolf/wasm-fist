@@ -1,0 +1,35 @@
+Extender FILEMGR buffered-reader init FUN_0000_5f17 (image 0x5f17): the buffer SIZE word
+[0x5560] is the integer 0x400, but Ghidra base-lost the immediate into the host pointer
+`s_KKKK_0000_0005 + 0x3fb` (= g_mem+fist_ext_base+0x400).  In the Route-1 host-pointers-in-slots
+model that poisons [0x5560] into a huge host-pointer value; the `>>1` then yields garbage, and
+every downstream `[0x5560] + [0x5564]` / `[0x5560] - x` in the buffered reader FUN_0000_5fbe /
+terrain reader FUN_0000_643c computes an off-buffer address -> the observed 643c OOB write
+(0xc3ee4a8; the bogus size == the 68475568-byte read count).  asm ground truth (objdump):
+    5f17: mov  DWORD [0x5560], 0x400   ; SIZE = 0x400 (a bare immediate, NOT a pointer)
+    5f21: shr  DWORD [0x5560], 1       ; SIZE >>= 1  -> 0x200
+    5f2d: mov  ecx,[0x5560]
+    5f33: cmp  ecx, 0x400 ; jbe 5f52   ; SIZE <= 0x400 -> use the static 0x5898 buffer
+    5f52: mov  eax, 0x5898             ; static buffer ptr -> [0x5564]  (host ptr via &DAT_5898)
+    5f5e: add  eax,[0x5560] ; [0x5568] = ptr + SIZE  (buffer END)
+[0x5560] is thus an INTEGER size (0x200 after the shr); [0x5564]=host bufptr, [0x5568]=host end.
+Keeping [0x5560] a small integer makes `[0x5564]+[0x5560]` a valid host end pointer and the
+`(short)` reg-file truncations in 5fbe cancel correctly (bufptr and read cursor share high bits;
+the remaining count < SIZE < 2^16).  Fix = store the literal 0x400 (and the `<= 0x400` bound as
+< 0x401) instead of the base-lost host pointers; leaves [0x5560] a small integer masquerading as
+a pointer, so no macro/type ripple.  Flat32-module base-loss-of-immediate class; never exercised
+before op-0x18 (KDV streams via direct reads, not this buffered reader).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -8885,10 +8885,10 @@ undefined4 __allregs FUN_0000_5f17(uint param_1)
+ {
+   int iVar1;
+   
+-  PTR_LAB_0000_5560 = s_KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK_0000_0005 + 0x3fb;
++  PTR_LAB_0000_5560 = (undefined *)0x400;
+   do {
+     PTR_LAB_0000_5560 = (undefined *)((uint)PTR_LAB_0000_5560 >> 1);
+-    if (PTR_LAB_0000_5560 < s_KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK_0000_0005 + 0x3fc) {
++    if (PTR_LAB_0000_5560 < (undefined *)0x401) {
+       DAT_0000_5564 = &DAT_0000_5898;
+       break;
+     }
