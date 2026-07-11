@@ -1,0 +1,80 @@
+PATCH 198: the FUN_0000_d501 FSG chunk-type DISPATCH-TABLE match (pointer-scaling).
+
+Second latent bug in the mission-scenario parser FUN_0000_d501, exposed once patch 197 fixed the
+chunk-header read so the "SHDR" magic finally passes and the typed-chunk loop runs.  Ground-truth
+under gdb (FIST_COOP_TICK cascade): with patch 197 the magic read yields "SHDR" and the loop is
+entered, but the handler dispatch never fires and d501 spins -- no chunk ever matches, so every
+chunk is seek-skipped, TERM is never dispatched, a974 never set, and the loop seeks past EOF forever.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin, 0xd549): the chunk-type dispatch table at
+DGROUP:0xe9e6 is 7 entries of 6 BYTES each -- {typeLo:u16, typeHi:u16, near-handler:u16}.  The asm
+matcher `bx=0xe9e6; cx=7; L: ax=[bx]; cmp ax,[0xe976]; jne N; ax=[bx+2]; cmp ax,[0xe978]; je HIT;
+N: add bx,6; loop L` compares 16-bit typeLo/typeHi, stride 6, handler at [entry+4] (HIT: ax=[bx+4];
+call ax).  Ghidra typed the walker piVar5 as int* (4-byte): *piVar5 reads 4 bytes (0x52444853 for
+"SHDR") that can never equal the 2-byte a976 (0x4853); piVar5[1] reads the handler word not typeHi;
+piVar5[2] reads into the NEXT entry; and piVar5+3 advances 12 bytes = TWO entries.  Every field and
+the stride are mis-scaled -> the match is dead.  Int-typed-table / pointer-scaling artifact.
+
+FIX: rebase the inner match to a WORD-offset walk over DGROUP:0xe9e6, stride 6, comparing 16-bit
+typeLo==a976 && typeHi==a978, dispatching the near handler at [off+4].  On a match the asm dispatches
+then `jb 0xd565` (seek the remainder only if the handler returns CF=1); ALL seven handlers of this
+table provably `clc` before `ret` (SHDR d7b5 / DCBS d7e1 / TERM d7da / PATH d87f / STMP d8e9 / PINF
+d8a9 / BINF d8d3, verified in the disassembly), so the jb is never taken -> a match falls straight to
+LAB_0000_d57e (no seek), reproduced by `goto LAB_0000_d57e`.  No match -> the for-loop exhausts and
+falls through to the existing seek path (asm 0xd565), unchanged.  The rest of the loop (seek, the
+a974-terminate close+field-copy, the 6-byte header re-read) is already faithful and kept.
+
+OBSERVED (FIST_CASCADE 3-click BATTLES->OK->ACCEPT from repo root, gdb FIST_COOP_TICK, patches
+197+198): the SHDR chunk now MATCHES the dispatch table (table@0xe9e6 e0={4853,5244,h=d7b5} vs chunk
+a976=4853 a978=5244) and dispatches its handler FUN_0000_d7b5 -- previously (198 absent) NO chunk
+matched and d501 spun with no dispatch.  This is the first time the FSG typed-chunk dispatch fires.
+The parse advancing all the way to the BINF map-name chunk (which reads "D32.KLC"/"C32.KLC"/"532.pal"/
+"5.SKY" into DGROUP:0x79cd and sets byte[0x7a13]=1) is still gated by a SEPARATE, PRE-EXISTING
+downstream blocker: the cooperative timer pump re-enters the uninitialised-geometry mission paint
+(e714 -> 459a -> 1eb4 hit-test -> 4aaa -> MGAVIDEO FUN_0000_25d1, a `*(int*)(y*2+0x7c8)` rowtable
+host-ptr base-loss / op-0x4c present spin) DURING d7b5's chunk read, so d7b5 does not return and DCBS
+..BINF are not reached -- the D32.KLC open is therefore NOT yet observed (documented as the next
+frontier).  Behaviour-neutral for the 19 verify flows (d501 is reached only by the ACCEPT mission
+cascade -- on no covered menu path) -> verify 19/19, default boot rc=0, mainmenu md5 unchanged.
+Sources re_out/fist.c stay pristine.
+
+--- a/fist.c
++++ b/fist.c
+@@ -32804,19 +32804,25 @@
+       do {
+         uVar7 = uRam000f000a;
+         puVar6 = puRam000f0008;
+-        piVar5 = (int *)&DAT_2000_a9e6;
+-        iVar4 = 7;
+-        do {
+-          if ((*piVar5 == DAT_2000_a976) &&
+-             (bVar8 = (uint)piVar5[1] < DAT_2000_a978, piVar5[1] == DAT_2000_a978)) {
+-            uVar1 = (*(code *)fist_icall_near(0x0u,(uint16_t)(piVar5[2])))();
+-            puRam000f0006 = (undefined2 *)extraout_DX;
+-            if (!bVar8) goto LAB_0000_d57e;
+-            break;
++        /* PATCH 198 (asm 0xd549): the FSG chunk-type dispatch table at DGROUP:0xe9e6 is 7 entries
++           of 6 BYTES {typeLo:u16, typeHi:u16, near-handler:u16}.  Ghidra typed the walker int*
++           (4-byte) -> *piVar5(4B) never == the 2B a976 AND the +3 stride (12B) skipped entries ->
++           NO chunk matched (pointer-scaling).  WORD-offset walk: match 16-bit typeLo/typeHi,
++           dispatch [off+4].  All 7 handlers clc (CF=0) so the asm `jb 0xd565` (seek-on-CF) is never
++           taken -> a match falls straight to LAB_0000_d57e; no match falls through to the seek. */
++        {
++          unsigned short m198_off = 0xe9e6;
++          for (iVar4 = 7; iVar4 != 0; iVar4 = iVar4 + -1) {
++            if ((*(unsigned short *)(g_mem + 0x1c000 + m198_off) == DAT_2000_a976) &&
++                (*(unsigned short *)(g_mem + 0x1c000 + m198_off + 2) == DAT_2000_a978)) {
++              uVar1 = (*(code *)fist_icall_near
++                                  (0x0u,*(unsigned short *)(g_mem + 0x1c000 + m198_off + 4)))();
++              puRam000f0006 = (undefined2 *)extraout_DX;
++              goto LAB_0000_d57e;
++            }
++            m198_off = m198_off + 6;
+           }
+-          piVar5 = piVar5 + 3;
+-          iVar4 = iVar4 + -1;
+-        } while (iVar4 != 0);
++        }
+         uRam000f0014 = 0x21;
+         uRam000f0000 = 0x4201;
+         uRam000f0002 = DAT_2000_a970;

@@ -1,0 +1,61 @@
+PATCH 197: the FUN_0000_d501 FSG-chunk-header INT-21h read buffer (host-ptr-into-DOS-register).
+
+THE MISSION MAP (D32.KLC/C32.KLC/532.pal/5.SKY) NEVER LOADED because the mission-scenario parser
+FUN_0000_d501 (<battle>.FSG chunk reader) could not even read its own chunk headers.  Ground-truth
+under gdb (FIST_COOP_TICK cascade): d501 opens AZER1.FSG -> ok (CF=0, handle=8), but the 6-byte
+"SHDR"-magic read returned '????' (0x3f3f) instead of "SHDR", so the magic check
+`DAT_2000_a976 == 0x4853 && DAT_2000_a978 == 0x5244` FAILED and d501 returned early -- the whole
+typed-chunk loop (SHDR/DCBS/PATH/STMP/PINF/BINF/TERM) never ran.  Because it never ran, the BINF
+chunk handler FUN_0000_d8d3 (patch 162: reads the map-name block "D32.KLC","C32.KLC","532.pal",
+"5.SKY" into DGROUP:0x79cd and sets byte[DGROUP:0x7a13]=1) never fired, so FUN_1000_63b8 (gated on
+byte[0x7a13]==1) never staged the map names into the extender TCB, so no terrain/palette/sky was
+ever opened and the mission-viewport SRC geometry descriptor at DGROUP:0x7ac0 stayed all-zero
+(60d9 -> mga 0x22bf copies 0x7ac0 -> 0x7aa4, an all-zero source -> DST stays 0 -> no render).
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin): the chunk-header reads at 0xd51e (magic)
+and 0xd53e (loop re-read) are `mov cx,6 ; mov dx,0xe976 ; mov bx,[0xe970] ; mov ah,0x3f ; int 21h`
+-- the INT-21h AH=3f read buffer is the DGROUP near-offset 0xe976 (= DAT_2000_a976).  Ghidra
+rendered the `mov dx,0xe976` immediate as the HOST POINTER `&DAT_2000_a976` (g_mem+0x2a976), whose
+low-16 lands in R_DX = garbage -> the read went to lin(0x1c00, garbage), not DGROUP:0xe976, so
+a976/a978 kept their uninitialised '????'.  Exactly the host-pointer-into-DOS-register INT-reg-file
+artifact of patch 077/146/156/162 -- and precisely the SAME class patch 162 already fixed in the
+chunk HANDLERS (d7b5 `0xe982`, d7e1 `0xe9be/0xe9c2/0xe9c0`, d87f `0x7d40`) but MISSED here in d501's
+own two header reads (d501 was never on a live path before -- the FSG chunk parse is a new frontier).
+
+FIX: write the DOS offset 0xe976 into the R_DX (buffer) reg-file slot at both reads, mirroring
+patch 162.  Two sites: 0xd51e (SHDR magic read) and 0xd53e (per-chunk header re-read in the loop).
+
+OBSERVED (FIST_CASCADE 3-click BATTLES->OK->ACCEPT from repo root, gdb FIST_COOP_TICK): d501 opens
+AZER1.FSG -> ok (CF=0, handle=8) and the 6-byte SHDR magic read now yields "SHDR" (previously '????'
+= 0x3f3f), so the magic check `a976==0x4853 && a978==0x5244` PASSES and the typed-chunk loop is
+entered instead of d501 returning immediately.  The actual per-chunk DISPATCH additionally requires
+patch 198 (the chunk-type-match pointer-scaling fix); with 197 alone the loop is entered but no chunk
+matches yet.  Behaviour-neutral for the 19 verify flows: d501 is reached only by the ACCEPT mission
+cascade (the .FSG parse is on no covered menu path) -> verify stays 19/19, default boot rc=0, mainmenu
+md5 unchanged.  Sources re_out/fist.c stay pristine.
+
+--- a/fist.c
++++ b/fist.c
+@@ -32103,7 +32103,10 @@
+     uRam000f0014 = 0x21;
+     uRam000f0002 = uRam000f0000;
+     iRam000f0004 = 6;
+-    puRam000f0006 = (undefined2 *)&DAT_2000_a976;
++    /* PATCH 197 (asm 0xd51e SHDR magic read): the INT-21h AH=3f read buffer is the DGROUP near-
++       offset 0xe976 (DAT_2000_a976), NOT the host pointer &DAT_2000_a976 (low-16 garbage in R_DX).
++       Host-ptr-into-DOS-register class (patch 077/156/162). */
++    puRam000f0006 = (undefined2 *)0xe976;
+     uRam000f000e = 0x1c00;
+     uRam000f0000 = CONCAT11(0x3f,(char)uRam000f0000);
+     uRam000f000c = param_3;
+@@ -32173,7 +32176,9 @@
+         uRam000f0014 = 0x21;
+         uRam000f0002 = DAT_2000_a970;
+         iRam000f0004 = 6;
+-        puRam000f0006 = (undefined2 *)&DAT_2000_a976;
++        /* PATCH 197 (asm 0xd53e chunk-header re-read): same DGROUP near-offset 0xe976 buffer
++           (was host-ptr &DAT_2000_a976). */
++        puRam000f0006 = (undefined2 *)0xe976;
+         uRam000f000e = 0x1c00;
+         uRam000f000c = param_3;
+         fist_int_dispatch();
