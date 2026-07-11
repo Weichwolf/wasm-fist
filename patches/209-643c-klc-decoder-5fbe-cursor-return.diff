@@ -1,0 +1,138 @@
+Extender KLC terrain/colormap RLE decoder FUN_0000_643c (+ the split fragments
+FUN_0000_6481 / FUN_0000_6542) drops the buffered-reader FUN_0000_5fbe's RETURN
+cursor at all 9 refill sites, and FUN_0000_5fbe itself returns garbage.
+
+FUN_0000_5fbe (the extender FILEMGR buffered reader) compacts the unconsumed tail
+to the buffer start and refills; BOTH asm exit branches converge at
+    602b: mov esi,[0x5564]   ; esi = buffer START (after compact+refill)
+    6031: ret
+so it ALWAYS returns esi = DAT_0000_5564.  Ghidra emitted the non-error return as
+`CONCAT31(in_register_00000009,param_3)` (garbage) -> fixed to `DAT_0000_5564`.
+
+Every decoder refill is the idiom
+    cmp esi,[0x5568]; jb skip; call 5fbe   (or `push cont; jmp 5fbe`)
+    skip: <use esi as the read cursor>
+i.e. when the cursor reaches the buffer end [0x5568], 5fbe refills and the cursor
+is reset to [0x5564].  Ghidra dropped the return at every site (keeping the stale
+end-of-buffer cursor -> off-buffer read -> the observed 643c OOB / hang), and at
+the tail-jump sites (`push 0x651f/0x657b; jmp 5fbe`, which RESUME the loop, not
+return) it mangled the resume into a `return`.  Fix: thread 5fbe's return into the
+per-site cursor (piVar15/puVar16/puVar17 in 643c; pbVar13/pbVar12/pbVar11/pbVar10/
+param_5 in 6481/6542) and drop the spurious `return` so the loop continues.  The
+eax accumulator (param_1/puVar5) is preserved by 5fbe (push/pop eax..ebx) and is
+left untouched -- only the ESI cursor is reloaded, exactly as the asm does.
+
+asm ground truth (objdump re_out/fist_image.bin):
+    5fbe reader   : 602b mov esi,[0x5564]; 6031 ret   (single logical return = esi)
+    643c hdr      : 6468 call 5fbe -> 646d lods eax (magic "KLC1")   cursor=esi
+    643c pal-copy : 65c8 cmp esi,[0x5568]; 65d0 call 5fbe; 65d5 movsd
+    643c decode   : 65f9 cmp esi,[0x5568]; 6601 call 5fbe; 6606 <decode>
+    6481 row-rle  : 6517 cmp esi,[0x5568]; jae 652b (push 651f;jmp 5fbe -> RESUME)
+    6481 term     : 6553 cmp esi,[0x5568]; jb 6560; 655b call 5fbe
+    6481 pal-copy : 6573 cmp esi,[0x5568]; jae 6535 (push 657b;jmp 5fbe -> RESUME)
+Verified: D32.KLC (heightmap), C32.KLC (colormap) and 5.SKY all decode through
+FUN_0000_643c (callers re_out/fist_ext.c FUN staging: TCB+0x7a/+0x8a/+0xaa).
+Flat32-module host-pointer-cursor / dropped-return class; never exercised before
+op-0x18 (KDV streams via direct reads, not this buffered reader).
+
+diff --git a/re_out/fist_ext.c b/re_out/fist_ext.c
+index a4bac29..bdc737b 100644
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -9023,7 +9023,7 @@ FUN_0000_5fbe(undefined4 param_1,short param_2,undefined1 param_3,short param_4,
+     fist_int_dispatch();
+   }
+   if (!(bool)uRam000f0012) {
+-    return (undefined8 *)CONCAT31(in_register_00000009,param_3);
++    return (undefined8 *)DAT_0000_5564;
+   }
+   if (DAT_0000_5cc0 != 0) {
+     uRam000f0000 = CONCAT11(0x3e,param_3);
+@@ -10176,7 +10176,7 @@ FUN_0000_643c(uint *param_1,undefined2 param_2,undefined2 param_3,undefined2 par
+     uVar6 = FUN_0000_5f17(uVar5);
+     DAT_0000_5568 = (uint *)((int)DAT_0000_5568 + -0x12);
+     piVar15 = (int *)(PTR_LAB_0000_5560 + DAT_0000_5564);
+-    FUN_0000_5fbe(uVar6,param_2,(char)param_3,(short)param_5,piVar15,(short)param_7,0x646d);
++    piVar15 = (int *)FUN_0000_5fbe(uVar6,param_2,(char)param_3,(short)param_5,piVar15,(short)param_7,0x646d);
+     if (*piVar15 != 0x31434c4b) {
+       uVar6 = FUN_0000_5e3a((char)*piVar15,param_2,param_3,(short)param_5,(short)(piVar15 + 1),
+                            (short)param_7);
+@@ -10196,7 +10196,7 @@ FUN_0000_643c(uint *param_1,undefined2 param_2,undefined2 param_3,undefined2 par
+         if (DAT_0000_5568 <= puVar16) {
+           puVar7 = FUN_0000_5fbe((int)lVar4,(short)iVar9,(char)((ulonglong)lVar4 >> 0x20),
+                                 (short)param_5,puVar16,(short)puVar19,0x65d5);
+-          lVar4 = CONCAT44(uVar6,puVar7);
++          puVar16 = (uint *)puVar7;
+         }
+         uVar5 = (uint)lVar4;
+         puVar17 = puVar16 + 1;
+@@ -10216,7 +10216,7 @@ FUN_0000_643c(uint *param_1,undefined2 param_2,undefined2 param_3,undefined2 par
+         uVar10 = uVar11 >> 2;
+         do {
+           if (DAT_0000_5568 <= puVar17) {
+-            FUN_0000_5fbe(uVar5,(short)uVar10,(char)uVar11,(short)param_5,puVar17,(short)param_7,
++            puVar17 = (uint *)FUN_0000_5fbe(uVar5,(short)uVar10,(char)uVar11,(short)param_5,puVar17,(short)param_7,
+                          0x6606);
+           }
+           uVar13 = uVar8 & 0xffff03ff;
+@@ -10492,8 +10492,7 @@ FUN_0000_6481(uint param_1,ushort param_2,undefined2 param_3,int param_4,undefin
+           do {
+             while( true ) {
+               if (DAT_0000_5568 <= pbVar13) {
+-                puVar5 = FUN_0000_5fbe(puVar5,0,0,(short)pbVar11,pbVar13,(short)pbVar15,0x651f);
+-                return puVar5;
++                pbVar13 = (byte *)FUN_0000_5fbe(puVar5,0,0,(short)pbVar11,pbVar13,(short)pbVar15,0x651f);
+               }
+               pbVar12 = pbVar13 + 1;
+               bVar1 = *pbVar13;
+@@ -10521,7 +10520,7 @@ LAB_0000_654a:
+           uVar8 = uVar8 - 1;
+         } while (uVar8 != 0);
+         if (DAT_0000_5568 <= pbVar12) {
+-          puVar5 = FUN_0000_5fbe(puVar5,0,0,(short)pbVar11,pbVar12,(short)pbVar15,0x6560);
++          pbVar12 = (byte *)FUN_0000_5fbe(puVar5,0,0,(short)pbVar11,pbVar12,(short)pbVar15,0x6560);
+         }
+         param_5 = SUB42(pbVar11,0);
+         param_3 = (undefined2)uVar10;
+@@ -10536,9 +10535,8 @@ LAB_0000_654a:
+         puVar17 = &DAT_0000_5598;
+         do {
+           if (DAT_0000_5568 <= pbVar12) {
+-            puVar5 = FUN_0000_5fbe(param_1,(short)iVar9,(char)uVar10,param_5,pbVar12,(short)puVar17,
++            pbVar12 = (byte *)FUN_0000_5fbe(param_1,(short)iVar9,(char)uVar10,param_5,pbVar12,(short)puVar17,
+                                   0x657b);
+-            return puVar5;
+           }
+           param_7 = puVar17 + 1;
+           param_6 = pbVar12 + 4;
+@@ -10647,7 +10645,7 @@ LAB_0000_654a:
+     param_7 = param_7 + -1;
+     if (param_7 == 0) {
+       if (DAT_0000_5568 <= pbVar11) {
+-        param_1 = FUN_0000_5fbe(param_1,0,(char)param_3,uVar9,pbVar11,(short)pbVar13,0x6560);
++        pbVar11 = (byte *)FUN_0000_5fbe(param_1,0,(char)param_3,uVar9,pbVar11,(short)pbVar13,0x6560);
+       }
+       pbVar10 = pbVar11 + 1;
+       uVar5 = CONCAT31((int3)((uint)param_1 >> 8),*pbVar11);
+@@ -10658,9 +10656,8 @@ LAB_0000_654a:
+         puVar14 = &DAT_0000_5598;
+         do {
+           if (DAT_0000_5568 <= pbVar10) {
+-            puVar4 = FUN_0000_5fbe(uVar5,(short)iVar8,(char)param_3,uVar9,pbVar10,(short)puVar14,
++            pbVar10 = (byte *)FUN_0000_5fbe(uVar5,(short)iVar8,(char)param_3,uVar9,pbVar10,(short)puVar14,
+                                   0x657b);
+-            return puVar4;
+           }
+           puVar2 = puVar14 + 1;
+           pbVar11 = pbVar10 + 4;
+@@ -10713,9 +10710,8 @@ LAB_0000_654a:
+ LAB_0000_6517:
+     while( true ) {
+       if (DAT_0000_5568 <= param_5) {
+-        puVar4 = FUN_0000_5fbe(param_1,(short)param_2,(char)param_3,(short)pbVar10,param_5,
++        param_5 = (byte *)FUN_0000_5fbe(param_1,(short)param_2,(char)param_3,(short)pbVar10,param_5,
+                               (short)pbVar13,0x651f);
+-        return puVar4;
+       }
+       pbVar11 = param_5 + 1;
+       bVar1 = *param_5;
