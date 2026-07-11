@@ -1,0 +1,44 @@
+PATCH 201: base-loss fix for the mission-viewport enter-dirty-mark FUN_1000_8daa (asm 0x18daa).
+
+8daa asm: `mov di,[0x6d34]; mov si,[bx+2]; mov BYTE [bp+si],3` then sets the 22dd mission-viewport
+context (d54a=4, d550=..., d552=0x9134).  Reached on the ACCEPT cascade `e006 -> 42cc -> 4308 ->
+8b07 -> 8daa` once the AZER1.FSG parse completes (patches 197-200).  4308 walks the STRSEG:0x802
+table (stride 8) and dispatches the generic vector as `(*fist_icall_near(0,vec))(ax,bx,cx)`, so the
+far-thunk 8b07 -> 8daa arrives with param_1=ax (table[+4]) and param_2=bx (table[+2] = the element
+descriptor near-offset).  The bp used by the store is NOT a passed register -- it is the current
+display-node base, published by the dispatcher at word[DGROUP:0x3afe] and recovered LIVE (the same
+class as patch 062's cursor-draw handlers 2112/211d/2123/212a).  DS=SS=DGROUP=0x1c00, so
+si=word[DGROUP:bx+2] and the store is byte[DGROUP:bp+si]=3.
+
+Ghidra base-lost BOTH operands (param_1/param_2 rendered as host pointers): the read
+`*(int*)(param_1+2)` dereferenced the absolute host address 0x8b03 (=ax 0x8b01 +2) -> SIGSEGV.
+Observed (FIST_CASCADE 3-click route, patched vs pristine): param_1=0x8b01, param_2=0x87f,
+word[0x3afe]=0x8cee (a valid display-node base, cf. patch 153's 0x8cee), word[0x881]=0x4073 -> the
+store lands at DGROUP:0x8cee+0x4073=0xcd61 (a sane dirty-mark byte).  With the fix the wild deref is
+gone and execution advances off the model-load path into the 63b8 map-name staging.
+
+Reached only on the ACCEPT cascade (the 19 verify flows never enter the mission viewport, else the
+pre-patch wild deref would crash them -> they stay 19/19) -> behaviour-neutral.  Sources stay
+pristine; fist.c via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -59833,6 +59833,17 @@
+   iVar1 = DAT_2000_2d34;
+-  *(undefined1 *)(param_2 + *(int *)(param_1 + 2)) = 3;
++  /* PATCH 201: mission-viewport enter-dirty-mark (asm 0x18daa `mov di,[0x6d34]; mov si,[bx+2];
++     mov BYTE [bp+si],3`).  4308 dispatches the STRSEG:0x802 vector as (ax,bx,cx) -> 8b07 -> 8daa
++     with param_1=ax (table[+4]) and param_2=bx (table[+2] = the element descriptor near-offset);
++     bp is the display-node base published at word[DGROUP:0x3afe] (recovered LIVE, patch-062 class).
++     DS=SS=DGROUP.  Ghidra base-lost both operands (`*(int*)(0x8b03)` wild deref SIGSEGV). */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t bx = (uint16_t)param_2;                            /* real bx = table[+2] */
++    uint16_t bp = *(uint16_t *)(dg + 0x3afe);                   /* node base (dispatcher-published) */
++    uint16_t si = *(uint16_t *)(dg + (uint16_t)(bx + 2));       /* si = word[DGROUP:bx+2] */
++    *(uint8_t *)(dg + (uint16_t)(bp + si)) = 3;                 /* byte[DGROUP:bp+si] = 3 */
++  }
+   if (DAT_1000_d548 == 0) {
+     if ((DAT_2000_2d16 & 1) == 0) {
+       FUN_1000_a80b(0xf,iVar1);
+       DAT_1000_d54a = 4;
