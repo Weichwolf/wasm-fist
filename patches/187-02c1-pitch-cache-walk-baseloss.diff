@@ -1,0 +1,120 @@
+PATCH 187 -- rebase the MGAVIDEO pitch-cache MRU list walk/unlink FUN_0000_02c1 onto DGROUP near
+offsets (the NEXT FRONTIER from patches 185/186: the mission-viewport rowtable-pitch method reached
+via c55c from the first 22dd command handler FUN_0000_2322).
+
+FUN_0000_02c1 (mga, asm 0x02c1-0x02f4 in re_out/fist_mga_image.bin) caches a per-pitch scanline
+rowtable in an MRU linked list.  The driver runs DS=ES=DGROUP (0x1c00); the list head is the WORD at
+DGROUP:0x798 and every node lives at a DGROUP NEAR OFFSET with fields [+0]=next-link, [+2]=pitch,
+[+4]=rowtable-offset.  asm:
+
+    2d0: mov bx,0x798        ; bx = head slot addr
+    2d3: mov dx,[bx]         ; dx = link          (LOOP TOP)
+    2d5: or dx,dx / je 0x2f5 ; empty/tail -> build
+    2d9: mov si,bx / mov bx,dx
+    2dd: cmp [bx+2],ax / jne 0x2d3   ; pitch match? else loop
+    2e2: mov ax,[bx] / mov [si],ax   ; unlink cur (prev->next = cur->next)
+    2e6: mov ax,bx / xchg ax,[0x798] / mov [bx],ax   ; move cur to head
+    2ee: mov ax,[bx+4] / mov [0x794],ax              ; publish rowtable offset
+    2f5: mov [bx+2],ax ; mov di,[bx+4] ; stos ax x2 loop 0x64 ; jmp 2e2  ; build 200 WORD entries
+
+Patch 119 fixed ONLY the per-pitch BUILD stos loop (the `piVar6 = (int*)puVar4[2]` int-stride bug),
+NOT the walk/unlink: Ghidra typed the list links as host pointers (`puVar5 = *puVar4`; `param_2`,
+`puVar5` = raw near offsets, e.g. param_2=0x66ac) so `*param_2 = *puVar5` wild-dereferenced ->
+SIGSEGV (build/fist_mga.c LAB_0000_02e2).  The menu returns early at pitch 0x140 (the list is never
+walked there); the mission viewport uses a non-0x140 pitch, so the walk runs on the ACCEPT cascade.
+
+This rewrites the whole walk + unlink + move-to-front + build as a faithful transliteration in the
+DGROUP-offset model, tracking `prev` (si) and `cur` (bx) as uint16_t near offsets and rebasing every
+node/head access onto g_mem+0x1c000.  Field offsets, the move-to-front xchg, and the build stos loop
+are instruction-faithful.  `param_2` (a Ghidra-spurious 2nd register input, immediately overwritten
+by the walk) is unused.  Behaviour-neutral for the 19 verify flows: 02c1 returns at the 0x140 early
+exit on the menu path (the walk/build below is unreachable there); the pre-patch wild deref would
+already SIGSEGV any flow that reached it.
+
+asm-verified vs re_out/fist_mga_image.bin 0x2c1-0x30e.
+--- a/fist_mga.c	2026-07-11 04:49:12.654372583 +0200
++++ b/fist_mga.c	2026-07-11 04:49:39.519716570 +0200
+@@ -1169,37 +1169,54 @@
+     _DAT_1000_c794 = 0x7c8;
+     return;
+   }
+-  puVar5 = (undefined2 *)&DAT_1000_c798;
+-  while (puVar4 = puVar5, puVar5 = (undefined2 *)*puVar4, puVar5 != (undefined2 *)0x0) {
+-    param_2 = puVar4;
+-    if (param_1 == puVar5[1]) goto LAB_0000_02e2;
+-  }
+-  puVar4[1] = param_1;
+-  iVar3 = 100;
+-  iVar2 = 0;
+-  /* PATCH 119: per-pitch row-table build -- same WORD-stride fix as 0284, and rebase the table
+-     offset puVar4[2] (a DGROUP near offset; the driver runs ES=DGROUP) onto g_mem.  asm:
+-     `mov di,[node+4]; stos ax x2 per iter` -> 200 WORD entries rowtab[n]=n*pitch.  (Only reached
+-     for non-320 pitches; the menu uses pitch 0x140 and returns early above.) */
++  /* PATCH 187: rebase the WHOLE MRU pitch-cache list walk + unlink + move-to-front onto DGROUP
++     near offsets (patch 119 fixed only the per-pitch BUILD loop, not the walk/unlink).  asm
++     0x2d0-0x2f4 (re_out/fist_mga_image.bin), driver runs DS=ES=DGROUP:
++       head word at DGROUP:0x798; each node at a DGROUP near offset; fields:
++         [+0] = next-link (near offset), [+2] = pitch, [+4] = rowtable near offset.
++     Ghidra typed the links as host pointers (`puVar5 = *puVar4`; `*param_2 = *puVar5`, param_2
++     = the raw near offset e.g. 0x66ac) -> SIGSEGV.  Faithful transliteration below; `param_2`
++     (a Ghidra-spurious 2nd reg input, immediately overwritten by the walk) is unused. */
+   {
+-    undefined2 *pwVar = (undefined2 *)(g_mem + 0x1c000 + (uint16_t)puVar4[2]);
+-    do {
+-      pwVar[0] = (undefined2)iVar2;
+-      pwVar[1] = (undefined2)(iVar2 + param_1);
+-      pwVar = pwVar + 2;
+-      iVar2 = iVar2 + param_1 + param_1;
+-      iVar3 = iVar3 + -1;
+-      puVar5 = puVar4;
+-    } while (iVar3 != 0);
++    uint16_t prev = 0x798;                                        /* si */
++    uint16_t cur  = 0x798;                                        /* bx */
++    uint16_t link = *(uint16_t *)(g_mem + 0x1c000 + 0x798);       /* dx = word[DGROUP:0x798] */
++    (void)param_2; (void)puVar4; (void)puVar5; (void)piVar1; (void)piVar6;
++    while (link != 0) {                                           /* 0x2d3 walk */
++      prev = cur;                                                 /* si = bx */
++      cur  = link;                                                /* bx = dx */
++      if (param_1 == *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(cur + 2)))
++        goto found;                                              /* 0x2dd cmp [bx+2],ax */
++      link = *(uint16_t *)(g_mem + 0x1c000 + cur);                /* dx = word[DGROUP:bx] */
++    }
++    /* 0x2f5 build: repurpose node `cur` (its next-link is 0 = LRU tail); `prev` is its
++       predecessor.  Set the node's pitch + fill its 200-entry WORD rowtable rowtab[n]=n*pitch. */
++    *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(cur + 2)) = (uint16_t)param_1;   /* [bx+2]=ax */
++    {
++      uint16_t di_off = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(cur + 4));   /* di=[bx+4] */
++      undefined2 *pwVar = (undefined2 *)(g_mem + 0x1c000 + di_off);
++      iVar2 = 0;
++      iVar3 = 100;
++      do {                                                        /* 0x306 stos loop */
++        pwVar[0] = (undefined2)iVar2;
++        pwVar[1] = (undefined2)(iVar2 + param_1);
++        pwVar = pwVar + 2;
++        iVar2 = iVar2 + param_1 + param_1;
++        iVar3 = iVar3 + -1;
++      } while (iVar3 != 0);
++    }
++found:
++    /* 0x2e2 tail: unlink `cur`, move it to the head, publish its rowtable offset in c794. */
++    {
++      uint16_t next    = *(uint16_t *)(g_mem + 0x1c000 + cur);           /* ax=[bx] cur->next */
++      uint16_t oldhead;
++      *(uint16_t *)(g_mem + 0x1c000 + prev) = next;                      /* [si]=ax */
++      oldhead = *(uint16_t *)(g_mem + 0x1c000 + 0x798);                  /* xchg ax,[0x798] */
++      *(uint16_t *)(g_mem + 0x1c000 + 0x798) = cur;
++      *(uint16_t *)(g_mem + 0x1c000 + cur) = oldhead;                    /* [bx]=old head */
++      _DAT_1000_c794 = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(cur + 4)); /* c794=[bx+4] */
++    }
+   }
+-LAB_0000_02e2:
+-  *param_2 = *puVar5;
+-  LOCK();
+-  UNLOCK();
+-  puVar4 = puVar5;
+-  *puVar5 = _DAT_1000_c798;
+-  _DAT_1000_c798 = puVar4;
+-  _DAT_1000_c794 = puVar5[2];
+   return;
+ }
+ 
