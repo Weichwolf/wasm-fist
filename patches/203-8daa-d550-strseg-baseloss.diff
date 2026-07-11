@@ -1,0 +1,36 @@
+PATCH 203: base-loss fix for the SECOND operand in FUN_1000_8daa -- the d550 detail-LOD lookup
+(asm 0x18dd3..0x18ded), exposed once patch 201/202 let 8daa run past the a80b context load.
+
+8daa's first-entry branch computes DAT_1000_d550 from the current object + the STRSEG LOD table:
+    mov ax,[di+0x89]; add ax,0x400; mov bl,ah; and bx,0xf8; shr bx,1; shr bx,1;
+    mov gs,[0x70]; mov ax,gs:[bx+0x2700]; mov [0x1550],ax
+di = iVar1 = DAT_2000_2d34 (object near-offset, 0 on the setup pass), so `[di+0x89]` is DS=DGROUP
+relative and `gs:[bx+0x2700]` is STRSEG (gs=word[DGROUP:0x70]) relative.  Ghidra dropped BOTH bases:
+`*(int *)(iVar1 + 0x89)` deref'd absolute host 0x89 (SIGSEGV) and the table read `*(undefined2*)(..+
+0x2700)` lost the STRSEG segment.  Rebase the object read onto DGROUP and the table read onto STRSEG.
+
+Reached on the ACCEPT cascade immediately after patch 202 (a80b returns, 8daa continues to d550).
+Behaviour-neutral for the 19 verify flows (mission viewport never entered).  Observed: the 0x89
+SIGSEGV in 8daa is gone; d550/d552 are set and 8daa RETURNS -> the 4308 table walk continues.
+Sources stay pristine; fist.c via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -59848,6 +59848,15 @@
+       FUN_1000_a80b(0xf,iVar1);
+       DAT_1000_d54a = 4;
+-      DAT_1000_d550 = *(undefined2 *)(((*(int *)(iVar1 + 0x89) + 0x400U >> 8 & 0xf8) >> 2) + 0x2700)
+-      ;
++      /* PATCH 203: d550 detail-LOD lookup (asm 0x18dd3): ax=word[DGROUP:di+0x89]+0x400;
++         idx=((ax>>8)&0xf8)>>2; d550=word[STRSEG:idx+0x2700] (STRSEG=word[DGROUP:0x70]).  Ghidra
++         base-lost the object read (absolute 0x89 SIGSEGV) and the STRSEG table read. */
++      {
++        uint8_t *dg = g_mem + 0x1c000;
++        uint16_t di = (uint16_t)iVar1;
++        uint16_t ax = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(di + 0x89)) + 0x400);
++        uint16_t idx = (uint16_t)(((ax >> 8) & 0xf8) >> 2);
++        uint16_t strseg = *(uint16_t *)(dg + 0x70);
++        DAT_1000_d550 = *(uint16_t *)(g_mem + ((uint32_t)strseg << 4) + (uint16_t)(idx + 0x2700));
++      }
+       DAT_1000_d552 = 0x9134;
+       return;

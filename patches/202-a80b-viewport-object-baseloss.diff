@@ -1,0 +1,42 @@
+PATCH 202: base-loss fix for the mission-viewport context loader FUN_1000_a80b (asm 0x1a80b).
+
+a80b is called by the viewport enter-dirty-mark handlers 8390/842d/8463/8daa as `a80b(0xf, iVar1)`
+with iVar1 = DAT_2000_2d34 (the current mission object, a DGROUP near-offset; 0 on the viewport-SETUP
+pass -- 466c only assigns a real object during the later per-object walk).  asm 0x1a80b copies the
+object's fields into the d548-family viewport-context globals:
+    mov [d554],di; mov ax,[di+0x26]->[d558]; mov eax,[di+4]->[d55a]; [di+8]->[d55e];
+    [di+0xc]->[d562]; mov al,[di+0x8d]->[d54a]
+All `[di+N]` reads are DS-relative (DS=DGROUP=0x1c00, no segment override) -- Ghidra dropped the base
+and rendered them as absolute host derefs `*(...)(param_2 + N)`, so with di=0 the first read
+`*(int*)(0 + 0x26)` faults at host address 0x26 (SIGSEGV).  The store targets DAT_1000_d5xx are already
+correctly based (they ARE the DGROUP:0x15xx globals).  Rebase only the object reads onto DGROUP.
+
+Reached on the ACCEPT cascade right after the patch-201 8daa fix (8daa's first-entry branch calls
+a80b(0xf,DAT_2000_2d34)).  Behaviour-neutral for the 19 verify flows (they never enter the mission
+viewport).  Observed: the 0x26 SIGSEGV in a80b is gone; execution advances further into the
+viewport-context setup.  Sources stay pristine; fist.c via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -62400,9 +62400,16 @@
+   DAT_1000_d554 = param_2;
+   DAT_1000_d54c = 1;
+-  DAT_1000_d558 = *(undefined2 *)(param_2 + 0x26);
+-  _DAT_1000_d55a = *(undefined4 *)(param_2 + 4);
+-  DAT_1000_d55e = *(undefined4 *)(param_2 + 8);
+-  DAT_1000_d562 = *(undefined4 *)(param_2 + 0xc);
+-  DAT_1000_d54a = *(undefined1 *)(param_2 + 0x8d);
++  /* PATCH 202: the object-field reads `[di+N]` are DS-relative (DS=DGROUP); di=param_2 is the object
++     near-offset (0 on the viewport-setup pass).  Ghidra base-lost them (`*(int*)(0x26)` SIGSEGV).
++     Rebase onto DGROUP; the d5xx store targets are already the DGROUP:0x15xx globals. */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t di = (uint16_t)param_2;
++    DAT_1000_d558 = *(uint16_t *)(dg + (uint16_t)(di + 0x26));
++    _DAT_1000_d55a = *(uint32_t *)(dg + (uint16_t)(di + 4));
++    DAT_1000_d55e = *(uint32_t *)(dg + (uint16_t)(di + 8));
++    DAT_1000_d562 = *(uint32_t *)(dg + (uint16_t)(di + 0xc));
++    DAT_1000_d54a = *(uint8_t *)(dg + (uint16_t)(di + 0x8d));
++  }
+   return;
+ }
