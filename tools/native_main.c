@@ -717,6 +717,17 @@ void fist_install_dgroup(void) {
  * 074) spins on it -- faithful to `do { call far [DGROUP:0x40a] } while(jae)`. */
 unsigned char g_fist_cf;
 
+/* Extender FILEMGR find/open CARRY flag (patch 210).  The extender's find-first chain
+ * FUN_0000_6250 / 5d50 / 5cc2 / 5c98 signals found (clc, CF=0) vs not-found (stc, CF=1)
+ * purely through the x86 CF; the __allregs model returns AX/void, not flags, so Ghidra
+ * dropped the CF at every level (5c98's in_CF hardcoded 0, 5d50 void, 5cc2/6250 no CF)
+ * -> 89b0's four .MEG RAM-size probes always read "found" and bumped the detail/LOD word
+ * [0x8490] from the TCB base 0x0b up to 0xc.  The reconstructed chain publishes each
+ * function's clc/stc here; the immediate synchronous call order (89b0->5c98->5cc2->5d50
+ * ->6250) makes a single global exact.  Distinct from g_fist_cf (engine seg-0 paint CF);
+ * no engine code runs between producer and consumer in this extender-local chain. */
+unsigned char g_ext_find_cf;
+
 /* Event-queue node handle returned by FUN_1000_3566 (asm 0x13566: `call 0xf69:0x3ed6` returns the
  * freshly-allocated queue node in BX).  The __allregs model returns void, so the reconstructed 3566
  * (patch 126) publishes BX here and the hit-test FUN_0000_1eb4 (asm 0x1f20/0x1f39 `mov [bx],0x200/0x400`)
@@ -994,7 +1005,8 @@ int fist_extender_gate(void) {
             m_ext_FUN_0000_89b0(inbox, inbox, inbox);
             g_fist_ext_int = 0;
             *(uint32_t *)(xb + 0xc93) = save_c93;
-            fprintf(stderr, "[ext] op 0x18 MAP-LOAD returned\n");
+            fprintf(stderr, "[ext] op 0x18 MAP-LOAD returned; detail[0x8490]=0x%x dim[0x8494]=%u (base=0x0b => 2048)\n",
+                    *(uint32_t *)(xb + 0x8490), *(uint32_t *)(xb + 0x8494));
         }
         return 0;
     }

@@ -136,7 +136,11 @@ typedef int code();
  *   0x110000..0x160000  extender MEMMGR heap (KDV chunk + 64000 decode + 768 palette buffers)
  * so g_mem grows to 0x180000.  The engine's own footprint (<= reg-file 0xf0014, VGA fb 0xA0000)
  * is unchanged and entirely below 0x100000 -- growing the array does not perturb it. */
-#define FIST_MEM_SIZE 0x200000u
+#define FIST_MEM_SIZE 0x1000000u  /* 16 MB: grown from 2 MB to host the mission LOD build -- the
+                                   * bc06/9ec0 2x2 upsamplers expand D32.KLC to a ~2 MB heightmap
+                                   * and C32.KLC to a 2048x2048 (~4 MB) colormap in the extender heap,
+                                   * on top of the ~300 KB palette-reduction buffers, and the 345c
+                                   * doubling realloc holds old+new simultaneously (peak ~old+new). */
 extern uint8_t g_mem[FIST_MEM_SIZE];
 #define GMEM(lin) ((void *)(g_mem + (lin)))   /* linear address -> host pointer into g_mem */
 
@@ -148,7 +152,10 @@ extern uint8_t g_mem[FIST_MEM_SIZE];
 #define FIST_EXT_IMG_SIZE  0xbf90u     /* re_out/fist_image.bin (49040 B) */
 #define FIST_EXT_SPAN      0x10000u    /* image + FLAT32 off-image scratch window (fmap key range) */
 #define FIST_EXT_HEAP      0x110000u   /* extender MEMMGR bump-heap base (linear) */
-#define FIST_EXT_HEAP_TOP  0x1f0000u   /* extender MEMMGR bump-heap top  (linear).  Grown from 0x160000
+#define FIST_EXT_HEAP_TOP  0xf80000u   /* extender MEMMGR bump-heap top  (linear).  Grown 0x1f0000->0xf80000
+                                        * (~14 MB heap) for the per-map D32/C32 LOD build (heightmap ~2 MB +
+                                        * colormap ~4 MB + the 345c doubling-realloc old+new peak).
+                                        * PRIOR NOTE: grown from 0x160000
                                         * to hold the extender task-setup allocator FUN_0000_84c0's
                                         * ~300 KB of persistent palette-reduction buffers (the 64 KB
                                         * color-distance matrix [0xbc90] + bc94/3909/390d/3918) PLUS the

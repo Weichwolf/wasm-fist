@@ -1,0 +1,204 @@
+Extender FILEMGR find-first CARRY-FLAG chain: 89b0's four .MEG RAM-size probes
+must leave the detail/LOD word [0x8490] at the TCB base (TCB+0x59 = 0x0b) but
+Ghidra dropped the x86 CF at every level of the find chain, so every probe read
+"found" and bumped detail 0x0b -> 0xc (=> a 4096x4096 = 8 MB heightmap instead of
+2048x2048 = 2 MB, the bc06 LOD-upsampler heap overflow).
+
+Root cause (asm-verified vs re_out/fist_image.bin): the extender find chain
+    89b0 -> 5c98 -> 5cc2 -> 5d50 -> 6250
+signals found (clc, CF=0) vs not-found (stc, CF=1) purely through the x86 CF.
+The __allregs model returns AX/void, not flags, so:
+  * 5c98's `in_CF` was hardcoded 0 -> always returned 0xffffffff "found";
+  * 5d50 was `void` (dropped its own clc/stc AND 6250's bVar6);
+  * 5cc2's bVar3 was hardcoded false;
+  * 89b0's uVar10 was hardcoded 0 -> `if(!(bool)uVar10)` always taken -> bump.
+The real 4E find-first result IS computed correctly in 5d50 (uRam000f0012 = the
+shim R_CF after fist_int_dispatch); it was just never propagated up.
+
+asm ground truth (objdump re_out/fist_image.bin):
+    89b0 probe : 89e7 call 5c98 ; 89ec jb <skip> ; 89f5 mov [0x8490],N   (bump on CF CLEAR)
+    5c98       : 5ca0 call 5cc2 ; 5ca5 jb 5cae ; (found) eax=-1,clc ; (nf) eax=0,stc
+    5cc2       : 5d1f call 5d50 ; 5d24 jae 5d4f(found->ret CF=0) ; ... 5d4e stc(nf)
+    5d50       : 5df4 int21 ; 5df8 jae 5e19(found) ; 5e10 call 6250 ; 5e34 clc(found) 5e38 stc(nf)
+    6250       : 63ca/638f clc(found) ; 63f6 stc(nf) ; 641b fatal->nf
+
+Fix: thread the CF through a dedicated shim global `g_ext_find_cf`
+(tools/native_main.c), written at each function's clc/stc and read by its caller
+in the exact synchronous call order (no engine code runs between producer and
+consumer in this extender-local chain, so a single global is exact).  Distinct
+from g_fist_cf (the engine seg-0 paint CF).
+
+DUAL-PATH: this chain is SHARED with the default-boot KDV intro (TITLE.KDV find-
+first).  For a file that EXISTS the 4E succeeds (CF clear at 5d50's int) -> the
+success branch is taken without ever calling 6250 -> g_ext_find_cf=0 (found),
+unchanged behaviour.  Only the failing .MEG probes now correctly flip to CF=1.
+Validated: default boot plays the KDV intro (395 frames, rc=0) AND the mission
+cascade keeps detail=0x0b.  Flat32-module dropped-CARRY class; never exercised
+before op-0x18 (89b0) reached the .MEG probes.
+
+diff --git a/fist_ext.c b/fist_ext.c
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -8599,13 +8599,15 @@
+ FUN_0000_5c98(undefined2 param_1,undefined2 param_2,undefined4 param_3,undefined2 param_4)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
++  undefined1 in_CF;
++  extern unsigned char g_ext_find_cf;     /* PATCH 210: 5cc2's CF (found=0/notfound=1) */
++
+   FUN_0000_5cc2(0x4e00,0x33,param_1,param_2,param_3,param_4);
+-  if (!(bool)in_CF) {
++  in_CF = g_ext_find_cf;                   /* asm 0x5ca5 jb: use 5cc2's returned CF */
++  if (!(bool)in_CF) {                      /* CF clear (found) -> eax=-1, clc */
+     return 0xffffffff;
+   }
+-  return 0;
++  return 0;                                /* CF set (not found) -> eax=0, stc */
+ }
+ 
+ 
+@@ -8623,7 +8625,8 @@
+   undefined2 unaff_ES;
+   bool bVar3;
+   undefined2 extraout_var;
+-  
++  extern unsigned char g_ext_find_cf;     /* PATCH 210: 5cc2 propagates 5d50's CF up to 5c98 */
++
+   uRam000f0000 = CONCAT11(0x1a,(char)param_1);
+   uRam000f0014 = 0x21;
+   uRam000f0006 = (undefined2)DAT_0000_0927; *(undefined4 *)(g_mem+0xf002c) = (undefined4)(DAT_0000_0927);
+@@ -8643,20 +8646,23 @@
+     DAT_0000_6238 = &DAT_0000_6228;
+     DAT_0000_6228 = *(char *)(DAT_0000_0c93 + 0x496) + '@';
+   }
+-  bVar3 = false;
++  g_ext_find_cf = 1;                       /* default: asm 0x5d4e stc (no path found) */
++  bVar3 = true;
+   uVar2 = uRam000f0002;
+   if (PTR_DAT_0000_6234 != (undefined *)0x0) {
+     PTR_DAT_0000_6230 = PTR_DAT_0000_6234;
+     FUN_0000_5d50(DAT_0000_5cbc,DAT_0000_5cbe,uVar1,uRam000f0002,param_4,DAT_0000_5cb8,0x5d24);
+-    if (!bVar3) {
++    bVar3 = (bool)g_ext_find_cf;            /* 5d50's returned CF */
++    if (!bVar3) {                          /* asm 0x5d24 jae 0x5d4f: CF clear (found) -> ret */
+       return;
+     }
+   }
+   if (DAT_0000_6238 != (undefined1 *)0x0) {
+     PTR_DAT_0000_6230 = DAT_0000_6238;
+     FUN_0000_5d50(DAT_0000_5cbc,DAT_0000_5cbe,uVar1,uVar2,param_4,DAT_0000_5cb8,0x5d4c);
++    bVar3 = (bool)g_ext_find_cf;
+   }
+-  return;
++  return;                                  /* g_ext_find_cf holds 5cc2's output CF */
+ }
+ 
+ 
+@@ -8677,7 +8683,8 @@
+   undefined2 unaff_ES;
+   bool bVar6;
+   byte *pbName6250;   /* PATCH 205: saved original member-name ptr (asm 5d51 push esi) */
+-  
++  extern unsigned char g_ext_find_cf;     /* PATCH 210: 5d50 in (6250's CF) + out (own clc/stc) */
++
+   pbName6250 = param_6;   /* PATCH 205: 6250 reads the name via lodsb from ESI = the ORIGINAL
+                           * param_6 (the asm saves it: 5d51 `push esi` / 5df6 `pop esi`); the copy
+                           * loop below advances param_6, and Ghidra passed the garbage CONCAT22
+@@ -8734,14 +8741,16 @@
+     if ((!(bool)uRam000f0012) ||
+        ((((char)(DAT_0000_5cbc >> 8) != '<' &&
+          (bVar6 = false, PTR_s_RESOURCE_RES_0000_622c != (undefined *)0x0)) &&
+-        (uVar2 = FUN_0000_6250(param_5,pbName6250), !bVar6)))) {
++        (uVar2 = FUN_0000_6250(param_5,pbName6250), bVar6 = (bool)g_ext_find_cf, !bVar6)))) {
+       DAT_0000_5cc0 = uVar2;
+       if ((char)(DAT_0000_5cbc >> 8) != '<') {
+         DAT_0000_5cb4 = s_FILEMGR__Unable_to_find_or_open___0000_5e7a + 0x22;
+       }
++      g_ext_find_cf = 0;                   /* asm 0x5e34 clc -> FOUND */
+       return;
+     }
+   }
++  g_ext_find_cf = 1;                       /* asm 0x5e38 stc -> NOT FOUND */
+   return;
+ }
+ 
+@@ -9378,7 +9387,8 @@
+   undefined2 unaff_ES;
+   undefined2 uVar14;
+   undefined2 extraout_var;
+-  
++  extern unsigned char g_ext_find_cf;     /* PATCH 210: publish 6250's found/notfound CF (clc/stc) */
++
+   uVar14 = 0x1c00;
+   iVar7 = 0xc;
+   pbVar12 = (byte *)&DAT_0000_6244;
+@@ -9436,6 +9446,7 @@
+     if (DAT_0000_623c != (uint *)0x0) {
+       uVar5 = FUN_0000_3376(&DAT_0000_623c,puVar9,0x63f6);
+     }
++    g_ext_find_cf = 1;                     /* asm 0x63f6 stc -> NOT FOUND */
+     return uVar5;
+   }
+   DAT_0000_5cc0 = uRam000f0000;
+@@ -9509,6 +9520,7 @@
+               DAT_0000_5cc0 = 0;
+             }
+             uVar5 = FUN_0000_3376(&DAT_0000_623c,puVar10,0x63ca);
++            g_ext_find_cf = 0;             /* asm 0x63ca clc -> FOUND */
+             return uVar5;
+           }
+           uRam000f0006 = (undefined2)puVar9[7]; *(undefined4 *)(g_mem+0xf002c) = (undefined4)(puVar9[7]);
+@@ -9526,6 +9538,7 @@
+           puVar9 = (uint *)CONCAT22(uVar11,uRam000f0008);
+           if (!(bool)uRam000f0012) {
+             FUN_0000_3376(&DAT_0000_623c,puVar9,0x638f);
++            g_ext_find_cf = 0;             /* asm 0x638f/0x6395 clc -> FOUND */
+             return DAT_0000_5cc0;
+           }
+         }
+@@ -9544,6 +9557,7 @@
+     DAT_0000_5cc0 = 0;
+   }
+   uVar5 = thunk_FUN_0000_0f64(((uint)(uintptr_t)&FUN_0000_641b));
++  g_ext_find_cf = 1;                       /* asm 0x641b fatal/error path -> NOT FOUND */
+   return uVar5;
+ }
+ 
+@@ -13160,29 +13174,34 @@
+   uint uVar8;
+   int iVar9;
+   undefined1 uVar10;
+-  
++  extern unsigned char g_ext_find_cf;     /* PATCH 210: 5c98's CF per .MEG RAM-size probe */
++
+   FUN_0000_3322(&LAB_0000_bc98,param_2,0x89bb);
+   uVar10 = 0;
+   FUN_0000_36bf(1,0,&LAB_0000_bc98,1,0x89d2);
+   _DAT_0000_8490 = (uint)*(byte *)(DAT_0000_0c93 + 0x59);
+   iVar3 = DAT_0000_0c93;
+   FUN_0000_5c98((short)DAT_0000_0c93,(short)param_1,s_4_MEG_0000_84a0,(short)param_3);
++  uVar10 = g_ext_find_cf;                 /* asm 0x89ec jb: bump only on CF clear (probe found) */
+   uVar5 = (undefined2)iVar3;
+   if (!(bool)uVar10) {
+     DAT_0000_395c = '\x01';
+     _DAT_0000_8490 = 9;
+   }
+   FUN_0000_5c98(uVar5,(short)param_1,s_8_MEG_0000_84a6,(short)param_3);
++  uVar10 = g_ext_find_cf;
+   if (!(bool)uVar10) {
+     DAT_0000_395c = '\x01';
+     _DAT_0000_8490 = 10;
+   }
+   FUN_0000_5c98(uVar5,(short)param_1,s_16_MEG_0000_84ac,(short)param_3);
++  uVar10 = g_ext_find_cf;
+   if (!(bool)uVar10) {
+     DAT_0000_395c = '\x02';
+     _DAT_0000_8490 = 0xb;
+   }
+   FUN_0000_5c98(uVar5,(short)param_1,s_40_MEG_0000_84b3,(short)param_3);
++  uVar10 = g_ext_find_cf;
+   if (!(bool)uVar10) {
+     DAT_0000_395c = '\x03';
+     _DAT_0000_8490 = 0xc;
