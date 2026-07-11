@@ -1,0 +1,63 @@
+PATCH 185: COORDINATED RETYPE of the in-mission COMMAND/SCRIPT-INTERPRETER cursor DAT_2000_0a86
+(DGROUP:0x4a86) from a 4-byte host `int**` to a 16-bit DGROUP near-offset (DD2 "pointer scaling"
+class; direct precedent = patch 119's 0x7c8 rowtable retype).
+
+The interpreter FUN_0000_22dd runs a dispatch loop over a table of command-handler near-offsets:
+  asm 0x22f3:  mov  bx,[0x4a86]        ; bx = the cursor WORD (a DGROUP near-offset)
+       0x22f7:  call word ptr [bx]      ; call word[DGROUP:bx]  (double indirection, DS=DGROUP=0x1c00)
+       0x22f9:  testw $0xffff,0x450     ; loop while c450 != 0
+       0x22ff:  jne 0x22f3
+The cursor is (re)loaded/advanced by:
+  0x22c9 / 0x230a:  mov ax,[0x4a88]; mov [0x4a86],ax     -> DAT_2000_0a86 = DAT_2000_0a88   (WORD copy)
+  0x23b2..0x23ba:   mov bl,[0x1549]; mov ax,[bx+0x4a88]; mov [0x4a86],ax
+                    -> DAT_2000_0a86 = word[DGROUP:0x4a88 + d549]   (already correct RHS)
+  0x231c (+~33 sites): addw $0x2,0x4a86  -> DAT_2000_0a86 += 2       (advance one word/entry)
+  0x23ba FUN_0000_23ba: mov [0x4a86],ax -> DAT_2000_0a86 = param_1
+
+Ghidra typed the 0x4a86 slot `int**` (a 4-byte host pointer), so:
+ - the dispatch call `(uint16_t)(*DAT_2000_0a86)` wild-derefed the near-offset value as a host int*
+   (SIGSEGV in the cascade), instead of the double indirection word[DGROUP:word[DGROUP:0x4a86]];
+ - every `DAT_2000_0a86 = DAT_2000_0a86 + 2` advanced the cursor by 2*sizeof(int)=8 bytes (int**
+   pointer arithmetic) instead of 2 (one word/table entry).
+
+The fix is one all-or-nothing coordinated change built on the macro retype: the slot becomes a
+`uint16_t`, so every `+2` advance and every load site (0a88 copy, d549-indexed load, 23ba param
+store) become correct value arithmetic automatically; only the dispatch call (double indirection)
+and the one stray `(undefined2*)` cast at 0x2307's C site are hand-fixed to match the asm.
+
+Cascade-only / behaviour-neutral for the 19 verify flows: the interpreter loop is guarded by
+byte[DGROUP:0x1548] (DAT_1000_d548) > 0 which is 0 during the menu (the menu never runs a mission
+command script), so 22dd falls through to the `DAT_2000_0a86 = DAT_2000_0a88` reset and returns.
+The pre-patch wild deref would already SIGSEGV the 19 flows if this loop were reached in them ->
+they are 19/19.  Default boot rc=0, mainmenu md5 3a6ff1c5 unchanged.  Sources stay pristine
+(re_out/fist.c md5 61453e42); fist.c via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -2849,7 +2849,7 @@
+ #define DAT_1000_fe14 (*(int **)(g_mem+0x1fe14))
+ #define DAT_1000_fe16 (*(undefined2 *)(g_mem+0x1fe16))
+ #define DAT_2000_0a84 (*(undefined2 *)(g_mem+0x20a84))
+-#define DAT_2000_0a86 (*(int **)(g_mem+0x20a86))
++#define DAT_2000_0a86 (*(uint16_t *)(g_mem+0x20a86))  /* PATCH 185: 22dd script-interpreter cursor = a WORD DGROUP near-offset, not an int** host ptr */
+ #define DAT_2000_0a88 (*(undefined2 *)(g_mem+0x20a88))
+ #define DAT_2000_0aba (*(undefined2 *)(g_mem+0x20aba))
+ #define DAT_2000_0ac8 (*(undefined2 *)(g_mem+0x20ac8))
+@@ -9426,12 +9426,15 @@
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
+     DAT_1000_c450 = 3;
+     do {
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*DAT_2000_0a86)))(uVar1);
++      /* PATCH 185: asm 0x22f3 `mov bx,[0x4a86]; call word ptr [bx]` -- bx = the cursor WORD near-offset
++         (DAT_2000_0a86), target = word[DGROUP:bx] (double indirection, DS=DGROUP=0x1c00).  Ghidra typed
++         0a86 int** so `*DAT_2000_0a86` wild-derefed the near-offset as a host pointer. */
++      (*(code *)fist_icall_near(0x0u,*(uint16_t *)(g_mem+0x1c000+(uint16_t)DAT_2000_0a86)))(uVar1);
+     } while (DAT_1000_c450 != 0);
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(0);
+     return;
+   }
+-  DAT_2000_0a86 = (undefined2 *)DAT_2000_0a88;
++  DAT_2000_0a86 = DAT_2000_0a88;  /* PATCH 185: WORD copy (asm 0x2307 `mov ax,[0x4a88]; mov [0x4a86],ax`), not a ptr cast */
+   if (DAT_1000_d548 != -0x80) {
+     return;
+   }
