@@ -1,0 +1,172 @@
+PATCH 192: promote + reconstruct the 22dd mission-viewport handler at 0000:23f2.
+
+The in-mission 22dd threaded-code interpreter (FUN_0000_22dd) dispatches its handlers through the cursor
+`fist_icall_near(0, word[DGROUP:word[0x4a86]])`.  After patch 189 re-seeds the cursor to the mission
+handler stream, the FIRST dispatched target is 0x23ea -- an engine MID-ENTRY Ghidra never promoted (it is
+reached only through the 22dd handler-offset table, never by a direct call), so it missed the fmap and
+fist_icall_near trapped it as a no-op -> the cursor never advanced (it re-dispatches 0x23ea forever, so the
+main thread hangs in 22dd while the async op-0x4c present pump spins).  Confirmed live: FIST_TRACE_TRAPS=1
+on the ACCEPT cascade logs `[icall] TRAP unmapped indirect call -> linear 0x023ea`.
+
+0x23ea (`mov bx,0x6c34; jmp 0x23f2`), 0x23e5 (`bx,0x6c30`) and 0x23ef (`bx,0x6c2c`) are three mid-entries
+into a shared body at 0x23f2 -- a fixed-point trig/normalise handler.  asm 0x23e5..0x2470 (verified vs
+re_out/fist_dat_image.bin), DS=SS=DGROUP=0x1c00:
+  ax=word[DG:bx]; dx=0; cl=byte[0x154a]; if(cl>1) dx:ax=ax*cl;          (scale)
+  cl=0; normalise dx:ax to MSB-set (byte-shift-left-8 while dh==0, then bit-shift-left-1), cl=shiftcount;
+  cl+=byte[0x154c]; ch=-(cl&0xf8); cl&=7; shr dx:ax by cl;              (align to exponent granularity)
+  call 0xcbe (extract 16-bit mantissa->ax + byte-exponent->dx); dl+=ch; dl+=byte[bx+2];
+  store ax->[0x6c26], dx->[0x6c28];                                     (the scaled/normalised coord)
+  ax=word[0x1558]; call 0x5bc(cos)->[0x6c1e]/[0x6c20]; call 0x5b7(sin)->[0x6c22]/[0x6c24];
+  call 0x374(octant)->[0x6c2a]; addw 2,[0x4a86].                        (advance the interpreter cursor)
+
+Helpers 0xcbe (mantissa/exponent extract) and 0x374 (octant = ((-angle+0x4000) rol 3) & 7) are tiny
+register-only transforms -> inlined faithfully (norm_cbe / oct_374).  The cos/sin wrappers 0x5bc/0x5b7
+reuse the patch-157 sin-table core FUN_0000_05e2 for the mantissa (ax) and reproduce the wrapper's DROPPED
+exponent word: 0x5e2 returns CF=1 (saturation, |value|==1.0) signalled by ax==0xffff, else CF=0; the
+wrapper then sets dl=0xf0 (CF=0) or dl=0 (CF=1, with ax=1) and dh=cwtd sign of the arg passed to 0x5e2
+(cos: word[0x1558]; sin: (-word[0x1558]) with +0x4000 to ah, i.e. cos of the 90deg-shifted angle -- 0x5b7
+falls through into 0x5bc).  So dx = sign:0xf0 (normal) or sign:0x00 (saturation).
+
+OBSERVATION GATE (per doctrine -- the fixed-point OUTPUT is not render-verifiable yet, the very next
+handler 0x41d0 posts an op-0xc extender display-list record that is still a wall): with FIST_TRACE_TRAPS=1
+on the cascade the trap moves FORWARD from linear 0x023ea to linear 0x041d0 -- i.e. the interpreter now
+runs 23f2 to its `addw 2,[0x4a86]` and dispatches the NEXT handler.  Structurally asm-faithful.
+
+Behaviour-neutral for the 19 verify flows: the handler is reached only through the d548-gated 22dd loop
+(d548==0 in the menu, verified), and 0x23ea/0x23e5/0x23ef have no direct callers -- adding fmap entries +
+new bodies cannot change any covered path.  verify.sh both stays 19/19; default boot rc=0; mainmenu md5
+3a6ff1c5 unchanged.  Sources stay pristine (re_out/fist.c 61453e42); fist.c via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -226,6 +226,10 @@
+ void __allregs FUN_0000_22bb(void);
+ void __allregs FUN_0000_22dd(void);
+ void __allregs FUN_0000_2322(undefined2 param_1);
++void __allregs FUN_0000_23e5(undefined2 param_1);   /* PATCH 192: 22dd trig handler mid-entry */
++void __allregs FUN_0000_23ea(undefined2 param_1);   /* PATCH 192 */
++void __allregs FUN_0000_23ef(undefined2 param_1);   /* PATCH 192 */
++void __allregs FUN_0000_23f2(uint16_t bx);          /* PATCH 192: shared body */
+ void __allregs FUN_0000_2380(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_0000_2387(int param_1,undefined2 param_2,int param_3);
+ void __allregs FUN_0000_23ba(undefined2 param_1);
+@@ -9443,6 +9447,109 @@
+ }
+ 
+ 
++/* ===== PATCH 192: the 22dd mission-viewport trig/normalise handler @ 0000:23f2 (+ mid-entries) ===== */
++
++/* 0x0cbe: normalise dx:ax -> 16-bit mantissa in *ax, byte-exponent in *dx (0x08 or 0x10);
++ * dx==0 -> unchanged. */
++static void m192_norm_cbe(uint16_t *ax, uint16_t *dx)
++{
++  uint16_t A = *ax, D = *dx;
++  if (D == 0) return;                    /* or dx,dx; je 0xccc (unchanged) */
++  if ((D >> 8) != 0) {                   /* dh!=0: ax=dx; dx=0x10 */
++    *ax = D; *dx = 0x10; return;
++  }
++  /* dh==0, dl!=0: al=ah; ah=dl; dx=8 -> ax = (old dl)<<8 | (old ah) */
++  *ax = (uint16_t)(((D & 0xff) << 8) | (A >> 8));
++  *dx = 0x08;
++}
++
++/* 0x0374: octant = ((-angle + 0x4000) rol 3) & 7. */
++static uint16_t m192_oct_374(uint16_t a)
++{
++  a = (uint16_t)(-(int)a);                                   /* neg ax */
++  a = (uint16_t)((a & 0x00ff) | ((((a >> 8) + 0x40) & 0xff) << 8)); /* add 0x40,ah (byte) */
++  a = (uint16_t)((a << 1) | (a >> 15));                      /* rol ax,1 */
++  a = (uint16_t)((a << 1) | (a >> 15));
++  a = (uint16_t)((a << 1) | (a >> 15));
++  return (uint16_t)(a & 7);                                  /* and 7 */
++}
++
++/* 0x05bc (cos) / 0x05b7 (sin) wrapper contract: ax = table mantissa (patch-157 FUN_0000_05e2), dx =
++ * exponent word the __allregs decompile drops.  0x5e2 returns CF=1 on |value|==1.0 saturation (signalled
++ * by ax==0xffff); the wrapper then sets ax=1,dl=0 (CF=1) or dl=0xf0 (CF=0), dh=cwtd sign of `arg`. */
++static void m192_trig(uint16_t arg, uint16_t *ax_out, uint16_t *dx_out)
++{
++  int v = FUN_0000_05e2((uint)arg);
++  uint16_t dh = (arg & 0x8000) ? 0xff00 : 0x0000;   /* cwtd of the 0x5e2 argument */
++  if ((uint16_t)v == 0xffff) { *ax_out = 1;            *dx_out = dh;        }  /* jb 0x5c4: ax=1, dl=0 */
++  else                       { *ax_out = (uint16_t)v;  *dx_out = dh | 0xf0; }  /* dl=0xf0 */
++}
++
++void __allregs FUN_0000_23f2(uint16_t bx)   /* bx = 0x6c34 / 0x6c30 / 0x6c2c (mid-entry selects) */
++{
++  uint8_t *DG = g_mem + 0x1c000;
++  uint16_t ax = *(uint16_t *)(DG + bx);       /* mov (bx),ax */
++  uint16_t dx = 0;                            /* xor dx,dx */
++  uint8_t  cl = *(DG + 0x154a);               /* mov cx,dx; mov cl,[0x154a] -> cx = 0x00:cl */
++  if (cl > 1) {                               /* cmp 1; jbe -> skip */
++    uint32_t p = (uint32_t)ax * (uint32_t)cl; /* mul cx */
++    ax = (uint16_t)p; dx = (uint16_t)(p >> 16);
++  }
++  cl = 0;                                     /* xor cl,cl */
++  if ((dx >> 8) == 0) {                       /* or dh,dh; jne 0x2418 */
++    do {                                      /* byte-shift dx:ax left 8, cl+=8, while dh==0 */
++      uint32_t da = (((uint32_t)dx << 16) | ax) << 8;
++      dx = (uint16_t)(da >> 16); ax = (uint16_t)da;
++      cl += 8;
++    } while ((dx >> 8) == 0);
++  }
++  if (!(dx & 0x8000)) {                       /* js 0x2422 -> skip if MSB already set */
++    do {                                      /* bit-shift dx:ax left 1, cl+=1, until MSB set */
++      cl += 1;
++      uint32_t da = (((uint32_t)dx << 16) | ax) << 1;
++      dx = (uint16_t)(da >> 16); ax = (uint16_t)da;
++    } while (!(dx & 0x8000));
++  }
++  cl = (uint8_t)(cl + *(DG + 0x154c));        /* add [0x154c],cl */
++  uint8_t ch = (uint8_t)(-(int)(cl & 0xf8));  /* ch=cl; and 0xf8,ch; neg ch */
++  cl = (uint8_t)(cl + ch);                    /* add ch,cl -> cl = cl & 7 */
++  while (cl != 0) {                           /* je 0x2439 -> skip; else shr dx:ax by cl */
++    uint32_t da = (((uint32_t)dx << 16) | ax) >> 1;
++    dx = (uint16_t)(da >> 16); ax = (uint16_t)da;
++    cl -= 1;
++  }
++  m192_norm_cbe(&ax, &dx);                     /* call 0xcbe */
++  {
++    uint8_t dl = (uint8_t)dx;
++    dl = (uint8_t)(dl + ch);                   /* add ch,dl */
++    dl = (uint8_t)(dl + *(DG + bx + 2));       /* add [bx+2],dl */
++    dx = (uint16_t)((dx & 0xff00) | dl);
++  }
++  *(uint16_t *)(DG + 0x6c26) = ax;             /* mov ax,[0x6c26] */
++  *(uint16_t *)(DG + 0x6c28) = dx;             /* mov dx,[0x6c28] */
++  {
++    uint16_t angle = *(uint16_t *)(DG + 0x1558);
++    uint16_t tax, tdx;
++    m192_trig(angle, &tax, &tdx);              /* call 0x5bc (cos of angle) */
++    *(uint16_t *)(DG + 0x6c1e) = tax;
++    *(uint16_t *)(DG + 0x6c20) = tdx;
++    {
++      uint16_t adj = (uint16_t)(-(int)angle);  /* 0x5b7: neg ax; add 0x40,ah (byte) */
++      adj = (uint16_t)((adj & 0x00ff) | ((((adj >> 8) + 0x40) & 0xff) << 8));
++      m192_trig(adj, &tax, &tdx);              /* call 0x5b7 (sin = cos of angle+90deg) */
++      *(uint16_t *)(DG + 0x6c22) = tax;
++      *(uint16_t *)(DG + 0x6c24) = tdx;
++    }
++    *(uint16_t *)(DG + 0x6c2a) = m192_oct_374(angle);  /* call 0x374 (octant) */
++  }
++  *(uint16_t *)(DG + 0x4a86) += 2;             /* addw 2,[0x4a86] -- advance the 22dd cursor */
++}
++
++void __allregs FUN_0000_23e5(undefined2 param_1) { (void)param_1; FUN_0000_23f2(0x6c30); }
++void __allregs FUN_0000_23ea(undefined2 param_1) { (void)param_1; FUN_0000_23f2(0x6c34); }
++void __allregs FUN_0000_23ef(undefined2 param_1) { (void)param_1; FUN_0000_23f2(0x6c2c); }
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_2322) @ 0000:2322 ===== */
+ 
+ void __allregs FUN_0000_2322(undefined2 param_1)
+@@ -70057,6 +70164,9 @@
+   {0x23bau,(void*)&FUN_0000_23ba},
+   {0x23beu,(void*)&FUN_0000_23be},
+   {0x23cdu,(void*)&FUN_0000_23cd},
++  {0x23e5u,(void*)&FUN_0000_23e5},   /* PATCH 192: 22dd trig handler mid-entries */
++  {0x23eau,(void*)&FUN_0000_23ea},
++  {0x23efu,(void*)&FUN_0000_23ef},
+   {0x2486u,(void*)&FUN_0000_2486},
+   {0x24e2u,(void*)&FUN_0000_24e2},
+   {0x2538u,(void*)&FUN_0000_2538},
