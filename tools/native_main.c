@@ -276,6 +276,19 @@ static void fist_dump_and_exit(const char *why){
                 for (int i=36;i<48;i++) fprintf(stderr," %02x", pb[i]);
                 fprintf(stderr,"  fade786=%02x\n", g_mem[0x1c786]);
             }
+            if (getenv("FIST_GEOMDUMP")) {
+                /* Deterministic (tick-anchored via FIST_DUMPTICK) probe of the mission viewport geometry:
+                 * word[DGROUP:0x7ac0] = the 0x1c-byte SRC descriptor (60d9->mga 22bf SOURCE), word[0x7aa4]
+                 * = the DEST viewport rect.  Nonzero here => the viewport pipeline is live. */
+                uint8_t *D = g_mem + 0x1c000;
+                fprintf(stderr,"[geomdump] [0x452]=%u  src 0x7ac0(0x1c bytes):",
+                        *(uint16_t*)(D+0x452));
+                for (int i=0;i<0x1c;i+=2) fprintf(stderr," %04x", *(uint16_t*)(D+0x7ac0+i));
+                fprintf(stderr,"\n[geomdump] dst 0x7aa4(0x1c bytes):");
+                for (int i=0;i<0x1c;i+=2) fprintf(stderr," %04x", *(uint16_t*)(D+0x7aa4+i));
+                fprintf(stderr,"\n[geomdump] ptrs d552(0x1552)=%04x d556a(0x156a)=%04x  d548(0x1548 flags)=%02x\n",
+                        *(uint16_t*)(D+0x1552), *(uint16_t*)(D+0x156a), D[0x1548]);
+            }
             _exit(0);
 }
 
@@ -830,6 +843,41 @@ static void ext_module_init(void) {
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
+    /* ------------------------------------------------------------------------------------------------
+     * FIST_GEOMDUMP -- deterministic mission-viewport geometry probe (default OFF, read-only).
+     * The op-0x4c present pump spins in the extender gate WITHOUT ever calling fist_timer_pump, so the
+     * tick-anchored FIST_DUMPTICK/FIST_RUNMS watchdogs never fire there.  This gate IS reached each
+     * present iteration, so it is the deterministic anchor: (1) log every change of the STRSEG word
+     * [DGROUP:0x70] (the base for 4308's model table @STRSEG:0x802); (2) on the FIRST mission-phase op
+     * (0x18/0x0c) dump the model/unit table + the viewport geometry descriptors word[0x7ac0] (SRC, the
+     * 60d9->mga-0x2604/22bf source) and word[0x7aa4] (DST); (3) sample the geometry + DAT_2000_3aa2
+     * (the 60d9 one-shot guard: 0xffff once 60d9 has run) periodically on op 0x4c.  FINDING: geometry
+     * stays 0 and 3aa2 stays 0 across the whole cascade -- the copier 60d9 is never reached and the SRC
+     * descriptor 0x7ac0 is never populated, INDEPENDENT of the (now-working) model load. */
+    if (getenv("FIST_GEOMDUMP")) {
+        static uint16_t last70 = 0xabcd;
+        uint16_t cur70 = *(uint16_t*)(dg + 0x70);
+        if (cur70 != last70) { fprintf(stderr,"[geom] STRSEG word[0x70] %04x -> %04x (at op 0x%02x)\n", last70, cur70, op); last70 = cur70; }
+        if (op == 0x18 || op == 0x0c) {
+            static int done = 0;
+            if (!done) { done = 1;
+                uint16_t s = cur70; uint8_t *mt = g_mem + ((uint32_t)s << 4) + 0x802;
+                fprintf(stderr, "[geom] FIRST mission op=0x%02x  STRSEG=%04x  model-table @%04x:0x802:\n", op, s, s);
+                for (int i=0;i<12;i++){ uint16_t *e = (uint16_t*)(mt + i*8);
+                    if (!e[0] && !e[1] && !e[2] && !e[3]) { fprintf(stderr,"[geom]  entry %d ALL-ZERO (end)\n", i); break; }
+                    fprintf(stderr,"[geom]  entry %d: flags=%04x [+2]=%04x nameidx=%04x vec=%04x\n", i, e[0],e[1],e[2],e[3]); }
+                fprintf(stderr,"[geom] SRC word[0x7ac0]=%04x  DST word[0x7aa4]=%04x  d552=%04x d556a=%04x d548=%02x\n",
+                    *(uint16_t*)(dg+0x7ac0), *(uint16_t*)(dg+0x7aa4), *(uint16_t*)(dg+0x1552), *(uint16_t*)(dg+0x156a), dg[0x1548]);
+            }
+        }
+        if (op == 0x4c) {
+            static int n4c = 0;
+            if (++n4c % 50 == 1)
+                fprintf(stderr,"[geom] op4c #%d  3aa2(60d9-ran)=%04x  SRC[0x7ac0]=%04x DST[0x7aa4]=%04x  d552=%04x d548=%02x\n",
+                    n4c, *(uint16_t*)(g_mem+0x23aa2), *(uint16_t*)(dg+0x7ac0), *(uint16_t*)(dg+0x7aa4),
+                    *(uint16_t*)(dg+0x1552), dg[0x1548]);
+        }
+    }
     if (op == 0) {                                  /* CREATE TASK */
         uint16_t bytes = *(uint16_t *)(dg + 0xea1a);
         uint16_t paras = (uint16_t)((bytes + 15u) >> 4);
