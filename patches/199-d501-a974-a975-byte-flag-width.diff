@@ -1,0 +1,48 @@
+PATCH 199: the FUN_0000_d501 FSG-parse terminator flags a974/a975 are BYTEs, not WORDs
+(store-width / paired-16-bit typing class; the ROOT of the "parse stops after SHDR" blocker).
+
+Exposed once patches 197/198 fixed the d501 chunk-header read + type-dispatch so the SHDR chunk
+finally MATCHED and dispatched its handler d7b5.  Empirically (shim AZER1.FSG handle trace) the
+parser then read ONLY the 6-byte SHDR magic + the 54-byte SHDR body and immediately CLOSED the file
+at pos=60 -- it never advanced to DCBS/PATH/STMP/PINF/BINF/TERM, so the map-name block (BINF) was
+never read, 63b8 never staged the map names, and D32.KLC/C32.KLC/532.pal/5.SKY never loaded.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin): the FSG loop-terminator flag DGROUP:0xe974
+(DAT_2000_a974) and the SHDR-empty flag DGROUP:0xe975 (DAT_2000_a975) are BYTE flags in every access:
+  d516  c6 06 74 e9 00   mov  BYTE PTR [0xe974],0     (d501: clear terminator)
+  d57e  80 3e 74 e9 00   cmp  BYTE PTR [0xe974],0     (d501: loop-exit test -> je read-next-chunk)
+  d7da  c6 06 74 e9 01   mov  BYTE PTR [0xe974],1     (TERM handler: set terminator)
+  d7c7  c6 06 75 e9 01   mov  BYTE PTR [0xe975],1     (d7b5 SHDR: a982==0 flag)
+  d7d3  c6 06 75 e9 00   mov  BYTE PTR [0xe975],0
+  d87f/d8a9/d8e9  80 3e 75 e9 01  cmp BYTE PTR [0xe975],1   (PATH/PINF/STMP readers)
+Ghidra typed BOTH as `undefined2` (WORD).  Because they are ADJACENT (0xe974 / 0xe975), the WORD
+DAT_2000_a974 spans bytes [0xe974..0xe975] and the WORD DAT_2000_a975 spans [0xe975..0xe976] --
+overlapping each other AND the chunk-type low byte a976.  Sequence that breaks the parse:
+  1. d501 sets byte[0xe974]=0 (via the WORD store, high byte = byte[0xe975] left intact).
+  2. SHDR handler d7b5 executes `DAT_2000_a975 = DAT_2000_a982 == 0`.  The SHDR body's first word is
+     0 (verified: buf[0..3]=00000000), so a975 = 1 -- but the WORD store writes 0x0001 to
+     [0xe975..0xe976], i.e. byte[0xe975] = 1.
+  3. d501's terminator test `if (DAT_2000_a974 != 0)` reads the WORD [0xe974..0xe975] = (byte[0xe975]
+     << 8) | byte[0xe974] = 0x0100 != 0 -> the loop FINALIZES after SHDR instead of continuing.
+The byte flag is 0 (correct); the spurious high byte from the overlapping a975 makes the WORD nonzero.
+
+FIX: type both macros `undefined1` (BYTE), matching every asm access.  All C uses are already
+byte-valued (`= '\0'`, `!= '\0'`, `= '\x01'`, `== '\x01'`) so no site changes.  With this, a974 stays
+0 across SHDR/DCBS/PATH/STMP/PINF/BINF and is set to 1 only by the TERM handler d7da -> d501 parses
+the whole scenario file.  VERIFIED (shim AZER1.FSG trace, FIST_CASCADE 3-click route): the parse now
+advances SHDR(6+54) -> DCBS header(6) -> DCBS sub-records, reaching the DCBS unit-database handler
+(d7e1->d81e).  Behaviour-neutral for the 19 covered flows: a974/a975 are touched only inside the FSG
+chunk parser (d501 + the chunk handlers), which is off the menu/dialog paths (verify 19/19).
+--- a/fist.c
++++ b/fist.c
+@@ -3646,8 +3646,8 @@
+ #define DAT_2000_a96e (*(undefined2 *)(g_mem+0x2a96e))
+ #define DAT_2000_a970 (*(undefined2 *)(g_mem+0x2a970))
+ #define DAT_2000_a972 (*(undefined2 *)(g_mem+0x2a972))
+-#define DAT_2000_a974 (*(undefined2 *)(g_mem+0x2a974))
+-#define DAT_2000_a975 (*(undefined2 *)(g_mem+0x2a975))
++#define DAT_2000_a974 (*(undefined1 *)(g_mem+0x2a974))
++#define DAT_2000_a975 (*(undefined1 *)(g_mem+0x2a975))
+ #define DAT_2000_a976 (*(undefined2 *)(g_mem+0x2a976))
+ #define DAT_2000_a978 (*(undefined2 *)(g_mem+0x2a978))
+ #define DAT_2000_a97a (*(undefined2 *)(g_mem+0x2a97a))
