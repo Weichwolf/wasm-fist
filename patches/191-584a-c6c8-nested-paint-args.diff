@@ -1,0 +1,50 @@
+PATCH 191: thread the DROPPED nested-paint args of FUN_0000_584a's `[DGROUP:0x6c8]=294d` call (asm 0x587f).
+
+584a (patch 181, the 209e-dispatched viewport paint node) ends `push ax; lea bx,[bx+4]; mov al,0; call
+[0x61a]; pop ax; inc [bx]; inc [bx+2]; call [0x6c8]; dec [bx]; dec [bx+2]`.  The nested method
+`call [0x6c8]` = MGAVIDEO FUN_0000_294d (the transparency sprite-blit dispatcher, patch 136) is reached
+with ax = the POPPED unmasked value (the sprite-directory byte offset = 294d param_1) and bx = node+4
+(the position descriptor = 294d param_4).  Patch 181 emitted the far-vector call with NO args, so 294d
+-> 298a blitted a GARBAGE sprite (runaway width/height from an unloaded header) -> the flaky
+127/128-class SIGSEGV in m_mga_FUN_0000_298a (the documented "298a runaway due to uninitialised
+geometry").  Thread ax (unmasked, saved before the al=0 mask) and bx into the c6c8 call per 294d's
+__allregs contract (param_1=ax sprite-dir, param_4=bx position).
+
+OBSERVED: with the args threaded, 294d/298a blit a sane sprite -> the paint walk 459a completes
+crash-free -> the mission-screen 22dd interpreter now RUNS and advances past 2322 to dispatch the next
+handler (0x23ea).  5/5 cascade repros crash-free (was flaky ~50% SIGSEGV).  Reached only on the ACCEPT
+cascade -> behaviour-neutral for the 19 flows.  Sources stay pristine; fist.c via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -15354,13 +15354,16 @@
+   if ((*(uint16_t *)(dg + (uint16_t)(si + 0x7cdc)) & 1) &&         /* testw [si+0x7cdc],1; je */
+       ((*(uint8_t *)(dg + 0x6dab) & 2) == 0))                      /* testb [0x6dab],2; jne */
+     ax = 0xfd0;                                                    /* mov ax,0xfd0 */
+-  bx = (uint16_t)(bx + 4);                                         /* lea bx,[bx+4] */
+-  ax = (uint16_t)(ax & 0xff00);                                    /* mov al,0 */
+-  /* tail (5870-5888): c61a(ax); bump the DGROUP:[bx]/[bx+2] words; nested c6c8; restore. */
+-  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))(ax);
++  uint16_t ax_full = ax;                                          /* 586f: push ax (UNMASKED sprite-dir off) */
++  bx = (uint16_t)(bx + 4);                                         /* 5870: lea bx,[bx+4] */
++  /* tail (5873-5888): mov al,0; c61a(ax&0xff00); pop ax; bump [bx]/[bx+2]; c6c8(ax,bx); restore.
++     PATCH 190: the nested paint method [0x6c8]=294d (587f `call [0x6c8]`) is reached with ax=the popped
++     UNMASKED value (sprite-directory offset = 294d param_1) and bx=node+4 (position descriptor = 294d
++     param_4).  Patch 181 dropped BOTH -> 294d/298a blitted a garbage sprite (runaway 298a SIGSEGV). */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))((uint16_t)(ax & 0xff00));
+   *(uint16_t *)(dg + bx)                     += 1;                 /* incw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2))     += 1;                 /* incw [bx+2] */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
++  ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax_full,0,0,bx,0);
+   *(uint16_t *)(dg + bx)                     -= 1;                 /* decw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2))     -= 1;                 /* decw [bx+2] */
+   return;
+@@ -58557,7 +58560,7 @@
+   int iVar2;
+   undefined2 unaff_CS;
+   undefined2 uVar3;
+-  
++
+   *(undefined1 *)(param_4 + *(int *)((int)param_3 + 2)) = 3;
+   iVar2 = DAT_2000_2d34;
+   if (DAT_1000_d548 == 0) {

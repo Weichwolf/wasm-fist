@@ -1,0 +1,39 @@
+PATCH 190: base-loss fix for the per-node display-list PAINT handler FUN_0000_57a9 (asm 0x57a9).
+
+57a9 is dispatched by 209e's display-list walk via `fist_icall_near(0x0,off)()` with NO register args
+(the patch-180/181/182/183 class).  asm: `lea bx,[bx+4]; push bx; xor al,al; call [0x60a]; mov ax,4;
+call 524e; pop bx; mov ax,[bx]; mov bx,[bx+2]; call 52d1; mov al,0x27; call 530b; mov si,0x7a52;
+call 5531`.  bx (the node offset) is published by 209e to DGROUP:0x3e08 (patch 180); DS=DGROUP so the
+`mov ax,[bx]`/`mov bx,[bx+2]` reads are DGROUP-relative at node+4.  Ghidra dropped bx -> modelled the
+two 52d1 args as `*unaff_CS`/`unaff_CS[1]` (a wild host-pointer deref -> SIGSEGV).  Rebase onto the
+DGROUP node.
+
+Reached only on the ACCEPT mission cascade (the menu's display-list nodes never select the 57a9 paint
+method, else the pre-patch wild deref would crash the 19 flows -> they stay 19/19) -> behaviour-neutral.
+OBSERVED: the cascade paint walk advanced from the 57a9 crash to the next node (584a/294d/298a).
+Sources stay pristine; fist.c via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -15260,13 +15260,16 @@
+ void __allregs FUN_0000_57a9(void)
+ 
+ {
+-  undefined1 extraout_AH;
+-  undefined2 *unaff_CS;
+-  
++  /* PATCH 190: 57a9 is a 209e-dispatched paint-node handler (asm 0x57a9): `lea bx,[bx+4]; push bx;
++     xor al,al; call [0x60a]; mov ax,4; call 524e; pop bx; mov ax,[bx]; mov bx,[bx+2]; call 52d1;
++     mov al,0x27; call 530b; mov si,0x7a52; call 5531`.  bx = node offset + 4; 209e publishes the node
++     to DGROUP:0x3e08 (patch 180); DS=DGROUP.  Ghidra dropped bx -> unaff_CS wild-deref at 52d1. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
+   FUN_1000_524e(4);
+-  FUN_1000_52d1(*unaff_CS,unaff_CS[1]);
+-  FUN_1000_530b(CONCAT11(extraout_AH,0x27));
++  FUN_1000_52d1(*(uint16_t *)(dg + bx), *(uint16_t *)(dg + (uint16_t)(bx + 2)));
++  FUN_1000_530b(0x27);
+   thunk_FUN_1000_5531((undefined1 *)&DAT_2000_3a52);
+   return;
+ }
