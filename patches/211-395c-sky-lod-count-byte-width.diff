@@ -1,0 +1,53 @@
+PATCH 211: the extender map-load sky-LOD-count flag DAT_0000_395c is a BYTE, not undefined4
+(store-width / paired-16-bit typing class; the ROOT of the bdc4 sky-upsampler OOB -- the previously
+HELD frontier).  Same class as patches 092/104/105/123/199.
+
+Exposed once the map-load reached 89b0's THIRD upsample pass (the sky block).  With C32.KLC/5.SKY
+open, 89b0's colormap upsampler (bdc4 loop) completes correctly, then the sky block
+`if (DAT_0000_395c != '\0') { ... while(...) bdc4(DAT_3911); }` SIGSEGVs ~2 MB past the 16 MB g_mem
+end.  The prior iteration attributed this to bdc4's reverse-walk pointer arithmetic and HELD it as
+"not a safe single-turn commit".  RE-ROOT-CAUSED HERE with a live trace of the dim progression: bdc4
+is FAITHFUL -- it doubles BOTH X and Y correctly every call (colormap 512^2 -> 1024^2 -> 2048^2 clean;
+sky 128x1024 -> 256x2048 -> 512x4096).  The OOB is NOT in bdc4; it is the sky LOOP CONTROL reading a
+mis-typed flag.
+
+ROOT CAUSE (asm-verified vs re_out/fist_image.bin).  Every access to ds:0x395c is a BYTE op:
+  7670  c6 05 5c 39 00 00 01  mov  BYTE PTR ds:0x395c,1      (task-setup default: 395c = 1)
+  7690  a2 5c 39 00 00        mov  ds:0x395c,al               (395c = TCB+0xcc, byte)
+  89ee  c6 05 5c 39 00 00 01  mov  BYTE PTR ds:0x395c,1       (89b0: 4.MEG found)
+  8a0b  c6 05 5c 39 00 00 01  mov  BYTE PTR ds:0x395c,1       (89b0: 8.MEG found)
+  8a28  c6 05 5c 39 00 00 02  mov  BYTE PTR ds:0x395c,2       (89b0: 16.MEG found)
+  8a45  c6 05 5c 39 00 00 03  mov  BYTE PTR ds:0x395c,3       (89b0: 40.MEG found)
+  8d39  80 3d 5c 39 00 00 00  cmp  BYTE PTR ds:0x395c,0       (sky-block GUARD)
+  8d9d  8a 0d 5c 39 00 00     mov  cl,BYTE PTR ds:0x395c       (sky-loop COUNT read)
+Ghidra typed DAT_0000_395c as `undefined4` (DWORD).  0x395c holds a BYTE = the sky LOD doubling count
+(1..3 = number of times the sky is 2x-upsampled).  The bytes at 0x395d..0x395f are adjacent unrelated
+data, so the DWORD read is nonzero garbage even when the byte is 0.  Break sequence:
+  1. The sky-block GUARD `if (DAT_0000_395c != '\0')` reads the DWORD.  With byte[0x395c]=0 but
+     byte[0x395d..f] != 0 the DWORD is nonzero -> the guard WRONGLY passes and the sky block runs.
+  2. The sky-loop count `iVar3 = CONCAT31(DAT_0937>>8, DAT_0000_395c); cVar1 = (char)iVar3 - 1` takes
+     the low byte (=0) -> cVar1 = (char)0 - 1 = 0xff = 255 -> the loop runs ~255 times, doubling the
+     sky plane unboundedly (128x1024 -> ... -> 512x4096 = 8 MB) until it walks off g_mem -> SIGSEGV.
+The byte is the correct count; the spurious high bytes from the DWORD read make the guard fire.
+
+FIX: type the macro `undefined1` (BYTE), matching every asm access.  All C uses are already byte-valued
+(`= '\x01'`, `= '\x02'`, `= '\x03'`, `!= '\0'`, and the CONCAT31 low-byte read) so no site changes.
+With the byte typing the guard `if (byte[0x395c] != 0)` reads the real count, and the loop runs exactly
+`count-1` bounded doublings (1->0, 2->1, 3->2 iterations) -- bdc4 (already faithful) then upsamples the
+sky the correct number of times, in bounds.
+
+VERIFIED (FIST_CASCADE 3-click route, live dim trace): the bdc4 sky OOB is GONE; 89b0's third pass
+runs bounded and the map-load setup RETURNS.  Behaviour-neutral for the 19 covered flows: 0x395c is
+touched only inside the extender op-0x18 map-load (89b0 + the sky block), which is mission-cascade only
+and never posted on the menu/mission-select paths (verify 19/19, default boot rc=0, mainmenu unchanged).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -495,7 +495,7 @@
+ #define DAT_0000_3918 (*(undefined4 *)(g_mem+fist_ext_base+0x3918))
+ #define DAT_0000_391c (*(undefined4 *)(g_mem+fist_ext_base+0x391c))
+ #define DAT_0000_3924 (*(undefined4 *)(g_mem+fist_ext_base+0x3924))
+-#define DAT_0000_395c (*(undefined4 *)(g_mem+fist_ext_base+0x395c))
++#define DAT_0000_395c (*(undefined1 *)(g_mem+fist_ext_base+0x395c))
+ #define DAT_0000_395d (*(undefined4 *)(g_mem+fist_ext_base+0x395d))
+ #define DAT_0000_4a5c (*(undefined4 *)(g_mem+fist_ext_base+0x4a5c))
+ #define DAT_0000_4a60 (*(undefined4 *)(g_mem+fist_ext_base+0x4a60))
