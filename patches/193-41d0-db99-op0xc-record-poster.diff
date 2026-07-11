@@ -1,0 +1,188 @@
+PATCH 193: promote + reconstruct the 22dd op-0xc display-list geometry-record poster (0x41d0 -> db99 ->
+ddff), advancing the mission-viewport interpreter one more handler (trap 0x041d0 -> 0x03fba, observed).
+
+The in-mission 22dd threaded-code interpreter (FUN_0000_22dd) dispatches handlers through the cursor
+`fist_icall_near(0, word[DGROUP:word[0x4a86]])`.  After patch 192 the FIRST handler 0x23ea (trig) runs and
+the cursor advances to 0x41d0 -- an engine MID-ENTRY Ghidra never promoted (reached only through the 22dd
+handler-offset table), so fist_icall_near trapped it and the cursor never advanced.  Confirmed live:
+FIST_TRACE_TRAPS=1 on the ACCEPT cascade logged `[icall] TRAP unmapped indirect call -> linear 0x041d0`.
+
+0x41d0 (`call 0xdb99; word[0x4b9e]=0; addw 2,[0x4a86]; ret`) posts an op-0xc display-list GEOMETRY record
+to the Doug-Huffman extender.  The real work is the record builder 0xdb99 and its common prolog 0xddff.
+asm-verified vs re_out/fist_dat_image.bin (DS=SS=DGROUP=0x1c00):
+
+  ddff: es:di = word[0xea2e]:word[0xea2c] (extender TCB record base = the patch-068 DAT_2000_aa2c macro);
+        si=word[0x156a] (dst geom DGROUP NEAR-OFFSET) -> record[0x0e/0x12/0x22/0x24/0x10/0x14/0x1e/0x20/0x2]
+        (width/height halves + origin); si=word[0x1552] (src geom=0x7aa4) -> record[0x16..0x1c].
+        Ghidra typed DAT_1000_d56a as int** (host ptr) so `DAT_1000_d56a[3]` wild-dereffed the near-offset
+        -- base-loss (the patch-186 class); rebased onto g_mem+0x1c000+near_offset with uint16 fields.
+  db99: call ddff; si=0x1548 (immediate) -> copy d548 struct [0x12..0x1c] -> record[0x2c..0x36];
+        record[0x38]=word[0x7b1c]; record[0x3e]=word[0x7b18]>>2; record[2]=word[word[0x156a]]; record[4]=0;
+        inbox(record+0x3f2)=EBX; op(word[0xea10])=0xc; call e339 (-> 0x8799 gate -> fist_extender_gate).
+
+EBX ("inbox", record+0x3f2) IS PROVABLY DEAD FOR OP 0xc.  The extender PM gate FUN_00000f30
+(re_out/fist_image.bin) does `ebx=[current-TCB+0x3f2]; call handler`, but the op-0xc handler
+[0xcb3+0xc]=0x78f0's FIRST instruction is `mov ebx,[0xc93]` -- it overwrites ebx with the current-TCB
+before any use.  0x78f0 then reads the RECORD fields (+0x2/+0x4 render-target seg:off, +0x1e width,
++0x22 height -- exactly the fields db99/ddff build) and renders the viewport.  So the value posted in EBX
+is never observed for op 0xc; db99's `mov %ebx,%gs:0x3f2(%si)` writes the ambient carried hand-asm
+register (db99 never sets EBX) which the flat-C model drops -- since it is provably unread we write 0 and
+DO NOT fabricate a value.  The op-0xc CONSUMER (0x78f0, Route-1 extender work) is located but not wired
+here: fist_extender_gate logs op 0xc and returns 0, and 0x41d0 advances the cursor regardless (crash-free)
+-- wiring the extender renderer awaits a verifiable frame (the geometry it reads is still the uninitialised
+0x7aa4/0x156a viewport rect; the render is not bit-verifiable until the voxel raycaster + AE).
+
+OBSERVATION GATE (per doctrine -- render not yet verifiable): with FIST_TRACE_TRAPS=1 on the cascade the
+trap moves FORWARD from linear 0x041d0 to linear 0x03fba (the NEXT 22dd handler), `[ext] service op 0x0c
+... inbox=00000000` fires once (db99 built the record + posted op 0xc), and there is no SEGV.  Structurally
+asm-faithful.
+
+Behaviour-neutral for the 19 verify flows: the handler is reached only through the d548-gated 22dd loop
+(d548==0 in the menu), and 0x41d0/db99 have no direct callers -- the ddff base-loss fix only changes a
+function that was WRONG (wild host-ptr deref) and is reached only on the mission path.  verify.sh both
+stays 19/19; default boot rc=0; mainmenu md5 3a6ff1c5 unchanged.  Sources stay pristine (re_out/fist.c
+61453e42); fist.c via build/.
+
+--- a/fist.c	2026-07-11 10:34:44.318137847 +0200
++++ b/fist.c	2026-07-11 10:35:51.630608650 +0200
+@@ -1386,6 +1386,8 @@
+ void __allregs FUN_0000_db3f(undefined4 param_1);
+ void __allregs FUN_0000_dde2(undefined4 param_1);
+ void __allregs FUN_0000_ddff(void);
++void __allregs FUN_0000_db99(void);   /* PATCH 193: op-0xc display-list geom-record poster */
++void __allregs FUN_0000_41d0(void);   /* PATCH 193: 22dd handler (calls db99) */
+ void __allregs FUN_0000_de70(undefined4 param_1);
+ void __allregs FUN_0000_de89(undefined4 param_1);
+ void __allregs FUN_0000_df00(undefined1 param_1);
+@@ -33858,37 +33860,92 @@
+ void __allregs FUN_0000_ddff(void)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  undefined2 *puVar3;
+-  int iVar4;
+-  undefined2 uVar5;
+-  uint uVar6;
+-  
+-  uVar5 = DAT_2000_aa2e;
+-  iVar4 = DAT_2000_aa2c;
+-  puVar3 = DAT_1000_d56a;
+-  iVar1 = DAT_1000_d56a[3];
+-  *(int *)(DAT_2000_aa2c + 0xe) = iVar1;
+-  iVar2 = puVar3[5];
+-  *(int *)(iVar4 + 0x12) = iVar2;
+-  uVar6 = iVar2 - iVar1;
+-  *(uint *)(iVar4 + 0x22) = uVar6;
+-  *(int *)(iVar4 + 0x24) = (uVar6 >> 1) + iVar1;
+-  iVar1 = puVar3[4];
+-  *(int *)(iVar4 + 0x10) = iVar1;
+-  iVar2 = puVar3[6];
+-  *(int *)(iVar4 + 0x14) = iVar2;
+-  uVar6 = iVar2 - iVar1;
+-  *(uint *)(iVar4 + 0x1e) = uVar6;
+-  *(int *)(iVar4 + 0x20) = (uVar6 >> 1) + iVar1;
+-  *(undefined2 *)(iVar4 + 2) = *puVar3;
+-  *(undefined2 *)(iVar4 + 4) = 0;
+-  iVar1 = DAT_1000_d552;
+-  *(undefined2 *)(iVar4 + 0x16) = *(undefined2 *)(DAT_1000_d552 + 4);
+-  *(undefined2 *)(iVar4 + 0x18) = *(undefined2 *)(iVar1 + 6);
+-  *(undefined2 *)(iVar4 + 0x1a) = *(undefined2 *)(iVar1 + 8);
+-  *(undefined2 *)(iVar4 + 0x1c) = *(undefined2 *)(iVar1 + 10);
++  /* PATCH 193: base-loss reconstruction (the patch-186 class).  asm 0xddff (DS=DGROUP=0x1c00):
++   *   es:di = word[0xea2e]:word[0xea2c] (the extender-TCB display-list record base = DAT_2000_aa2c);
++   *   si = word[0x156a] (dst geom struct DGROUP NEAR-OFFSET) -> build record fields from [si+N];
++   *   then si = word[0x1552] (src geom near-offset = 0x7aa4) -> copy [si+4..0xa] into the record.
++   * Ghidra typed DAT_1000_d56a as int** (host ptr) so `DAT_1000_d56a[3]` wild-dereffed the near-offset.
++   * Rebase both geom structs onto g_mem+0x1c000+near_offset, uint16 fields at the asm byte offsets. */
++  uint8_t  *rec = DAT_2000_aa2c;                                       /* es:di record base */
++  uint16_t *dst = (uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1d56a)); /* word[0x156a] */
++  uint16_t *src;
++  uint16_t ax, bx;
++  ax = dst[3];                              /* word[si+6] */
++  *(uint16_t *)(rec + 0x0e) = ax;
++  bx = dst[5];                              /* word[si+0xa] */
++  *(uint16_t *)(rec + 0x12) = bx;
++  bx = (uint16_t)(bx - ax);
++  *(uint16_t *)(rec + 0x22) = bx;
++  *(uint16_t *)(rec + 0x24) = (uint16_t)((bx >> 1) + ax);
++  ax = dst[4];                              /* word[si+8] */
++  *(uint16_t *)(rec + 0x10) = ax;
++  bx = dst[6];                              /* word[si+0xc] */
++  *(uint16_t *)(rec + 0x14) = bx;
++  bx = (uint16_t)(bx - ax);
++  *(uint16_t *)(rec + 0x1e) = bx;
++  *(uint16_t *)(rec + 0x20) = (uint16_t)((bx >> 1) + ax);
++  *(uint16_t *)(rec + 0x02) = dst[0];       /* word[si] */
++  *(uint16_t *)(rec + 0x04) = 0;
++  src = (uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1d552)); /* word[0x1552] */
++  *(uint16_t *)(rec + 0x16) = src[2];       /* word[si2+4] */
++  *(uint16_t *)(rec + 0x18) = src[3];       /* word[si2+6] */
++  *(uint16_t *)(rec + 0x1a) = src[4];       /* word[si2+8] */
++  *(uint16_t *)(rec + 0x1c) = src[5];       /* word[si2+0xa] */
++  return;
++}
++
++
++/* ===== PATCH 193: the op-0xc display-list geometry-record poster @ 0000:db99 (+ its 22dd
++ * handler 0x41d0).  asm-verified vs re_out/fist_dat_image.bin.
++ *
++ * db99 builds a display-list geometry record into the extender TCB at es:di=word[0xea2e]:word[0xea2c]
++ * (= DAT_2000_aa2c), posts op 0xc (word[0xea10]=0xc), and calls e339 (-> the 0x8799 extender gate ->
++ * fist_extender_gate op 0xc).  The extender-side CONSUMER of op 0xc is FUN @0x78f0 in re_out/fist_image.bin
++ * (op-table [0xcb3+0xc]=0x78f0): it reads the CURRENT-TCB record fields (+0x2/+0x4 render target seg:off,
++ * +0x1e width, +0x22 height) and renders the viewport -- Route-1 extender work, not yet wired here (the
++ * gate logs op 0xc and returns 0; 0x41d0 advances the cursor regardless -- crash-free, per docs).
++ *
++ * EBX / "inbox" (rec+0x3f2) IS PROVABLY DEAD FOR OP 0xc: the PM gate FUN_00000f30 loads
++ * ebx=[current-TCB+0x3f2] then calls the handler, but the op-0xc handler 0x78f0's FIRST instruction is
++ * `mov ebx,[0xc93]` (overwrite ebx with the current-TCB) -- so the posted EBX value is never observed for
++ * op 0xc.  db99 does `mov %ebx,%gs:0x3f2(%si)` with EBX = the ambient carried hand-asm register (db99
++ * itself never sets it); since it is provably unread we write 0 and DO NOT fabricate a value. ===== */
++
++void __allregs FUN_0000_db99(void)
++
++{
++  uint8_t *rec;
++  uint8_t *d548 = g_mem + 0x1d548;          /* si = 0x1548 (immediate near offset) */
++  FUN_0000_ddff();                          /* build record[0x0e..0x24] from the geom structs */
++  rec = DAT_2000_aa2c;                      /* es:di record base (ea2c/ea2e unchanged by ddff) */
++  *(uint16_t *)(rec + 0x2c) = *(uint16_t *)(d548 + 0x12);   /* d548 struct [0x12..0x1c] */
++  *(uint16_t *)(rec + 0x2e) = *(uint16_t *)(d548 + 0x14);
++  *(uint16_t *)(rec + 0x30) = *(uint16_t *)(d548 + 0x16);
++  *(uint16_t *)(rec + 0x32) = *(uint16_t *)(d548 + 0x18);
++  *(uint16_t *)(rec + 0x34) = *(uint16_t *)(d548 + 0x1a);
++  *(uint16_t *)(rec + 0x36) = *(uint16_t *)(d548 + 0x1c);
++  /* dbd1 `mov 0x1558,%ax` is DEAD (immediately overwritten by the 0x7b1c load). */
++  *(uint16_t *)(rec + 0x38) = *(uint16_t *)(g_mem + 0x23b1c);              /* word[0x7b1c] */
++  *(uint16_t *)(rec + 0x3e) = (uint16_t)(*(uint16_t *)(g_mem + 0x23b18) >> 2); /* word[0x7b18]>>2 */
++  *(uint16_t *)(rec + 0x02) = *(uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1d56a)); /* word[word[0x156a]] */
++  *(uint16_t *)(rec + 0x04) = 0;
++  *(uint32_t *)(rec + 0x3f2) = 0;           /* inbox = EBX (provably dead for op 0xc; see header) */
++  DAT_2000_aa10 = 0xc;                      /* word[0xea10] = op 0xc */
++  FUN_0000_e339();
++  return;
++}
++
++
++/* PATCH 193: the 22dd mission-viewport handler @ 0000:41d0 (`call db99; word[0x4b9e]=0; addw 2,[0x4a86]`).
++ * A 22dd mid-entry Ghidra never promoted -> fist_icall_near(0,0x41d0) trapped; the interpreter cursor
++ * never advanced past it (the async op-0x4c present pump spins).  Promoting + reconstructing it advances
++ * the cursor to the next handler (observed via FIST_TRACE_TRAPS -- the trap moves forward). */
++void __allregs FUN_0000_41d0(void)
++
++{
++  FUN_0000_db99();
++  *(uint16_t *)(g_mem + 0x1c000 + 0x4b9e) = 0;
++  DAT_2000_0a86 = (uint16_t)(DAT_2000_0a86 + 2);   /* addw 2,[0x4a86] */
+   return;
+ }
+ 
+@@ -70239,6 +70296,7 @@
+   {0x418au,(void*)&FUN_0000_418a},
+   {0x41a4u,(void*)&FUN_0000_41a4},
+   {0x41aeu,(void*)&FUN_0000_41ae},
++  {0x41d0u,(void*)&FUN_0000_41d0},   /* PATCH 193: 22dd op-0xc geom-record handler */
+   {0x4222u,(void*)&FUN_0000_4222},
+   {0x422eu,(void*)&FUN_0000_422e},
+   {0x4237u,(void*)&FUN_0000_4237},
