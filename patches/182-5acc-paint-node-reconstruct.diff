@@ -1,0 +1,43 @@
+PATCH 182: reconstruct the per-node display-list PAINT handler FUN_0000_5acc (asm 0x5acc-0x5aea).
+
+Dispatched by 209e via `fist_icall_near(0x0,off)()` with NO register args -> Ghidra base-lost bx (the
+dropped param_1 as a host pointer -> *(int*)(param_1+4) wild-deref -> SIGSEGV, param_1=0x8054039).  bx
+(node offset) is published by 209e to DGROUP:0x3e08; SS=DS=DGROUP.  Sibling of 584a (patch 181): bx+=4,
+c61a (al=0), computes c6c8's ax arg = 0xf88+word[DGROUP:0x7b9c], bump DGROUP:[bx]/[bx+2] around the
+nested c6c8, restore.
+
+Reached only on the ACCEPT mission cascade (the 19 flows never select 5acc as a paint method, else the
+pre-patch wild deref would crash them -> 19/19) -> behaviour-neutral.  Sources pristine; fist.c via build/.
+
+--- a/fist.c	2026-07-11 03:08:57.109189069 +0200
++++ b/fist.c	2026-07-11 03:09:21.103714958 +0200
+@@ -15532,15 +15532,20 @@
+ void __allregs FUN_0000_5acc(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  *piVar1 = *piVar1 + 1;
+-  piVar1[1] = piVar1[1] + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 182: reconstruct the per-node display-list PAINT handler FUN_0000_5acc (asm 0x5acc-0x5aea),
++     dispatched by 209e via `fist_icall_near(0x0,off)()` with NO args -> bx base-lost (param_1 host-ptr
++     -> `*(int*)(param_1+4)` wild-deref, SIGSEGV).  bx (node offset) published by 209e to DGROUP:0x3e08;
++     SS=DS=DGROUP.  Sibling of 584a (patch 181) but with no head; computes c6c8's ax arg (=0xf88+
++     word[DGROUP:0x7b9c]) between the incw's. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);        /* lea bx,[bx+4] */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))(0);  /* mov al,0; c61a (ax hi undefined) */
++  uint16_t ax = (uint16_t)(0xf88 + *(uint16_t *)(dg + 0x7b9c));    /* mov ax,0xf88; add ax,[0x7b9c] */
++  *(uint16_t *)(dg + bx)                 += 1;                     /* incw [bx] */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2)) += 1;                     /* incw [bx+2] */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax); /* c6c8(ax) */
++  *(uint16_t *)(dg + bx)                 -= 1;                     /* decw [bx] */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2)) -= 1;                     /* decw [bx+2] */
+   return;
+ }
+ 

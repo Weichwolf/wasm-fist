@@ -1,0 +1,56 @@
+PATCH 181: reconstruct the per-node display-list PAINT handler FUN_0000_584a (asm 0x584a-0x5888).
+
+584a is dispatched by 209e's display-list walk via `fist_icall_near(0x0,off)()` with NO register args.
+Ghidra kept only the TAIL (0x5870-0x5888: c61a(ax); bump DGROUP:[bx]/[bx+2]; nested c6c8; restore) and
+DROPPED the whole HEAD (0x584a-0x586f, which computes the c61a arg ax from the nested element), and it
+base-lost bx (treated the dropped param_1 as a host pointer -> *(int*)(param_1+4) wild-deref -> SIGSEGV,
+param_1=0x8054039).  bx (node offset) is published by 209e to DGROUP:0x3e08, bp (walk base) to
+g_fist_paintbp (patch 142); SS=DS=DGROUP.  Reconstructed as a faithful transliteration.
+
+Reached only on the ACCEPT mission cascade (the menu's display-list nodes never select the 584a paint
+method, else the pre-patch wild deref would crash the 19 flows -> they are 19/19) -> behaviour-neutral.
+Sources stay pristine; fist.c via build/.
+
+--- a/fist.c	2026-07-11 03:06:44.120081886 +0200
++++ b/fist.c	2026-07-11 03:07:03.679714846 +0200
+@@ -15328,15 +15328,32 @@
+ void __allregs FUN_0000_584a(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  *piVar1 = *piVar1 + 1;
+-  piVar1[1] = piVar1[1] + 1;
++  /* PATCH 181: reconstruct the per-node display-list PAINT handler FUN_0000_584a (asm 0x584a-0x5888),
++     dispatched by 209e via `fist_icall_near(0x0,off)()` with NO args.  Ghidra DROPPED the whole head
++     (0x584a-0x586f, the c61a arg computation) and base-lost bx (treated param_1 as a host pointer ->
++     `*(int*)(param_1+4)` wild-deref, SIGSEGV).  bx (node offset) is published by 209e to DGROUP:0x3e08,
++     bp (walk base) to g_fist_paintbp (patch 142); SS=DS=DGROUP.  Faithful transliteration below. */
++  extern unsigned short g_fist_paintbp;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x3e08);
++  uint16_t bp = g_fist_paintbp;
++  /* head (584a-586f): ax = the c61a argument, from the nested element si. */
++  uint16_t si = *(uint16_t *)(dg + (uint16_t)(bx + 2));            /* mov si,[bx+2] */
++  si = *(uint16_t *)(dg + (uint16_t)(bp + si + 1));                /* mov si,[bp+si+1] */
++  uint16_t ax = *(uint16_t *)(dg + (uint16_t)(si + 0x7cba));       /* mov ax,[si+0x7cba] */
++  if (si == *(uint16_t *)(dg + 0x7c52)) ax = (uint16_t)(ax + 8);   /* cmp si,[0x7c52]; add ax,8 */
++  if ((*(uint16_t *)(dg + (uint16_t)(si + 0x7cdc)) & 1) &&         /* testw [si+0x7cdc],1; je */
++      ((*(uint8_t *)(dg + 0x6dab) & 2) == 0))                      /* testb [0x6dab],2; jne */
++    ax = 0xfd0;                                                    /* mov ax,0xfd0 */
++  bx = (uint16_t)(bx + 4);                                         /* lea bx,[bx+4] */
++  ax = (uint16_t)(ax & 0xff00);                                    /* mov al,0 */
++  /* tail (5870-5888): c61a(ax); bump the DGROUP:[bx]/[bx+2] words; nested c6c8; restore. */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))(ax);
++  *(uint16_t *)(dg + bx)                     += 1;                 /* incw [bx] */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2))     += 1;                 /* incw [bx+2] */
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  *(uint16_t *)(dg + bx)                     -= 1;                 /* decw [bx] */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2))     -= 1;                 /* decw [bx+2] */
+   return;
+ }
+ 

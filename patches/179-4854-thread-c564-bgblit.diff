@@ -1,0 +1,32 @@
+PATCH 179: thread the c564 background-blit method-vector args at FUN_0000_4854 (asm 0x487e).
+
+On the ACCEPT mission cascade the in-mission paint 4854's final method vector `lcall [DGROUP:0x564]`
+(c564) dispatches to MGAVIDEO FUN_0000_0340 (palette-copy + PackBits full-screen background blit to
+0xA000).  The asm loads bx=0x7a42 (descriptor offset) / cx=ds (descriptor segment) before the call, but
+the indirect method vector dropped both -> 0340's param_2 (the descriptor, dereferenced at *param_2 =
+descriptor.word0 = resource segment) received the raw value 0x2bed (4854's dropped/uninitialised param_1
+on the 47e0 else-branch) -> SIGSEGV.  Threaded param_2 = g_mem+(ds<<4)+0x7a42 (= DGROUP:0x7a42, the same
+descriptor c560/47e0 opened the resource into); param_1 (=cx=ds) is unused by 0340.
+
+Behaviour-neutral for the 19 verify flows: 4854's c564 is 0/uninstalled in the menu (fist_icall_far(0)
+still traps no-op).  Sole site (14 c564 sites; only 4854 passed unaff_CS,param_1).  Sources stay pristine.
+
+--- a/fist.c	2026-07-11 02:56:01.201276578 +0200
++++ b/fist.c	2026-07-11 03:00:23.219716052 +0200
+@@ -13551,7 +13551,15 @@
+   }
+   s_WVSOUNDS_BIN_2000_aa94[0xd] = 'B';
+   s_WVSOUNDS_BIN_2000_aa94[0xe] = 'z';
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c564)))(unaff_CS,param_1);
++  /* PATCH 179: thread the c564 background-blit method-vector args (asm 0x4875 `mov bx,0x7a42 ;
++     mov cx,ds ; lcall [0x564]`).  In the ACCEPT mission cascade c564 = mga FUN_0000_0340 (the
++     palette-copy + PackBits full-screen background blit): param_2 = the descriptor cx:bx = DGROUP:0x7a42
++     (its word0 = the resource segment opened by c560/47e0).  The indirect method vector dropped bx/cx,
++     so 0340 deref'd param_2 = the raw value 0x2bed (4854's dropped param_1) -> SIGSEGV at `*param_2`.
++     Thread param_2 = g_mem+(ds<<4)+0x7a42; param_1 (=cx=ds) is unused by 0340.  Behaviour-neutral for
++     the 19 verify flows: 4854's c564 is 0/uninstalled in the menu (fist_icall_far(0) traps no-op). */
++  ((void (*)(undefined2,undefined2 *))fist_icall_far((uint32_t)(DAT_1000_c564)))(
++      0x1c00, (undefined2 *)(g_mem + 0x1c000 + 0x7a42));
+   FUN_0000_dad2();
+   return;
+ }

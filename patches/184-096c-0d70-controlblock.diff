@@ -1,0 +1,29 @@
+PATCH 184: fix the MEMMGR free-list walker FUN_1000_096c's call to the unlink helper FUN_1000_0d70.
+
+0d70's param_1 is the MEMMGR CONTROL BLOCK, addressed BP-relative in the asm (0x10d7c `add [bp+4],ax`,
+0x10d7f `decw [bp+0x10]`, SS=DGROUP, BP=0x16d4 -- the invariant MEMMGR frame).  The current free-list
+node is a SEPARATE input passed via the g_mm_ds cursor (0d70 reads [ds:4/6/8/c/e]).  096c's patch-015
+reconstruction wrongly passed `ds` (the node paragraph, e.g. 0x39de) as 0d70's param_1, so 0d70's
+`ctl=(uint8_t*)param_1` wild-deref'd host address 0x39de at 0x10d7c -> SIGSEGV.  Pass the control block
+g_mem+0x1c000+0x16d4 instead (= 0a31's ctl in patch 175: gdb-verified param_5=g_mem+0x1D6D4=DGROUP:0x16d4).
+
+Reached on the ACCEPT mission cascade (459a's post-paint 096c free walk hits an unlink node); the unlink
+branch is not taken by the 19 boot/menu MEMMGR walks (else the pre-patch wild deref would crash them ->
+19/19) -> behaviour-neutral.  Sources pristine; fist.c via build/.
+
+--- a/fist.c	2026-07-11 03:13:34.479715704 +0200
++++ b/fist.c	2026-07-11 03:13:45.723715709 +0200
+@@ -39623,7 +39623,12 @@
+     es = NODE16(ds, 0x08);
+     if (NODE8(es, di + 2) & 2) {        /* testb es:[di+2],2 ; jne -> unlink node */
+       g_mm_ds = ds;
+-      FUN_1000_0d70(ds);
++      /* PATCH 184: FUN_1000_0d70's param_1 is the MEMMGR CONTROL BLOCK (BP-relative: `add [bp+4],ax`,
++         `decw [bp+0x10]` with SS=DGROUP, BP=0x16d4 -- the invariant MEMMGR frame), NOT the current node.
++         The node is passed via g_mm_ds (set above).  096c wrongly passed `ds` (a node paragraph, e.g.
++         0x39de) as param_1 -> 0d70's `ctl=(uint8_t*)param_1` wild-deref'd host 0x39de -> SIGSEGV.  Same
++         truncation/mis-arg class as patch 175 (0bd1); 0a31's ctl (patch 175) = g_mem+0x1c000+0x16d4 too. */
++      FUN_1000_0d70((int)(uintptr_t)(g_mem + 0x1c000 + 0x16d4));
+       ds = g_mm_ds;
+       goto LAB_0973;
+     }

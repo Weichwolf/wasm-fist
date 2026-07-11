@@ -1,0 +1,130 @@
+PATCH 178: faithful 16-bit reconstruction of the MGAVIDEO run-length MASK fill FUN_0000_2595
+(supersedes patch 174's body).  asm-verified vs re_out/fist_mga_image.bin 0x2595-0x25d0.
+
+Patch 174 rebased the ES buffer base correctly but modelled di/cx as 32-bit host pointers + an `int`
+counter seeded to -0x600 (= 0xfa00 read as a SIGNED 16-bit).  The asm's `sub cx,bx ; jcxz` is 16-bit:
+cx is the total byte budget and di/cx WRAP inside the 64KB es segment, so the scan is intrinsically
+bounded to the buffer.  The 32-bit model never wrapped and the counter never reached 0 -> the cursor
+ran off the end of g_mem -> SIGSEGV (gdb-confirmed: pcVar9 reached g_mem+0x184C00, past g_mem, with a
+valid es_seg=0x55ac buffer of real RLE mask data).
+
+Reconstructed as a direct transliteration with uint16_t di/cx: NEGATIVE control byte = one scasb
+candidate (cx-=|ctl|+1, replace es:[di] if ==al); NON-NEGATIVE = a run of (ctl+1) bytes, repnz scasb
+replacing every al match with ah.  al=(byte)param_1, ah=(byte)(param_1>>8).
+
+Reached only on the ACCEPT mission cascade (the in-mission display-list PAINT via 47e0), unreached by
+the 19 verify flows -> behaviour-neutral.  Sources stay pristine; fist_mga.c via build/.
+
+--- a/fist_mga.c	2026-07-11 02:56:01.197936578 +0200
++++ b/fist_mga.c	2026-07-11 02:57:05.615714848 +0200
+@@ -5932,67 +5932,51 @@
+ void __allregs FUN_0000_2595(undefined2 param_1,undefined2 *param_2)
+ 
+ {
+-  char *pcVar1;
+-  undefined2 uVar2;
+-  char *pcVar3;
+-  char cVar4;
+-  int iVar5;
+-  char cVar6;
+-  int iVar7;
+-  undefined1 uVar8;
+-  char *pcVar9;
+-  char *pcVar10;
+-  bool bVar11;
+-  
+-  /* PATCH 174: MGAVIDEO buffer-fill scas loop (asm 0x2595): `mov (si),es; mov di,0x300; mov cx,0xfa00`;
+-     scans 64000 bytes of ES:0x300 replacing al(=(char)param_1=0xff) with ah(=(char)(param_1>>8)=0).
+-     Ghidra kept `uVar2 = *param_2` (= the ES segment word[DGROUP:si]) but LOST the base -> the es:di
+-     cursor `pcVar3` started at host 0x300 -> SIGSEGV.  Rebase the cursor to g_mem+(es_seg<<4)+0x300. */
+-  uVar2 = *param_2;                                   /* es_seg = word[DGROUP:si_off] */
+-  iVar7 = 0;
+-  iVar5 = -0x600;                                     /* cx = 0xfa00 = 64000 */
+-  pcVar3 = (char *)(g_mem + ((uint32_t)(uint16_t)uVar2 << 4) + 0x300);  /* ES:0x300 */
+-  do {
+-    while( true ) {
+-      pcVar9 = pcVar3;
+-      if (iVar5 == 0) {
+-        return;
+-      }
+-      cVar6 = *pcVar9;
+-      uVar8 = (undefined1)((uint)iVar7 >> 8);
+-      pcVar10 = pcVar9 + 1;
+-      cVar4 = (char)((uint)param_1 >> 8);
+-      if (-1 < cVar6) break;
+-      cVar6 = -cVar6;
+-      iVar7 = CONCAT11(uVar8,cVar6);
+-      pcVar3 = pcVar10;
+-      if (-1 < cVar6) {
+-        iVar7 = CONCAT11(uVar8,cVar6 + '\x01');
+-        iVar5 = iVar5 - iVar7;
+-        pcVar3 = pcVar9 + 2;
+-        if ((char)param_1 == *pcVar10) {
+-          pcVar9[1] = cVar4;
++  /* PATCH 178 (supersedes patch 174's reconstruction): MGAVIDEO run-length MASK fill (asm 0x2595).
++     `mov es,[si] ; mov di,0x300 ; xor bx,bx ; mov cx,0xfa00` then a stream of signed control bytes at
++     es:[di++]: NEGATIVE ctl -> a single scasb candidate (cx -= |ctl|+1, replace es:[di] if == al);
++     NON-NEGATIVE ctl -> a run of (ctl+1) bytes, `repnz scasb` replacing EVERY match of al with ah.
++     al = (byte)param_1 (search), ah = (byte)(param_1>>8) (replace).  cx (the 16-bit total byte budget)
++     terminates the whole thing via `jcxz`.  **DI AND CX ARE 16-BIT** (they wrap inside the 64KB es
++     segment) so the scan can NEVER leave the buffer.  Patch 174 modelled di/cx as 32-bit pointers +
++     an `int` counter seeded to -0x600 (0xfa00 as *signed* 16-bit): the counter never reached 0, the
++     32-bit cursor never wrapped, and it ran off the end of g_mem -> SIGSEGV.  Faithful transliteration
++     with uint16_t di/cx below; buffer base = g_mem+(es_seg<<4), es_seg = word[DGROUP:si_off]=*param_2. */
++  uint8_t  *es = g_mem + ((uint32_t)(uint16_t)(*param_2) << 4);   /* mov es,[si] */
++  uint16_t di = 0x300;
++  uint16_t cx = 0xfa00;
++  uint8_t  al = (uint8_t)param_1;
++  uint8_t  ah = (uint8_t)((uint16_t)param_1 >> 8);
++  for (;;) {                                        /* 0x259f */
++    if (cx == 0) return;                            /* jcxz 0x25d0 (lret) */
++    uint8_t bl = es[di++];                           /* mov bl,es:[di] ; inc di */
++    if (bl & 0x80) {                                 /* jns not taken -> NEGATIVE control */
++      bl = (uint8_t)(-(int8_t)bl);                   /* neg bl */
++      if (bl & 0x80) continue;                       /* js 0x259f (bl was 0x80) */
++      bl++;                                          /* inc bl */
++      cx = (uint16_t)(cx - bl);                      /* sub cx,bx (bx==bl, bh=0) */
++      uint8_t v = es[di++];                          /* scasb: cmp al,es:[di] ; inc di */
++      if (al != v) continue;                         /* jne 0x259f */
++      es[(uint16_t)(di - 1)] = ah;                   /* mov es:[di-1],ah */
++      continue;                                      /* jmp 0x259f */
++    } else {                                         /* NON-NEGATIVE control -> 0x25ba */
++      bl++;                                          /* inc bl */
++      cx = (uint16_t)(cx - bl);                      /* sub cx,bx */
++      uint16_t run = bl;                             /* run length to scan (repnz counter) */
++      for (;;) {                                     /* 0x25be */
++        int matched = 0;
++        while (run != 0) {                           /* repnz scasb (repeat while not equal) */
++          uint8_t v = es[di++];
++          run--;
++          if (v == al) { matched = 1; break; }       /* ZF=1 -> stop */
+         }
+-      }
++        if (!matched) break;                         /* jne 0x259f (ran out, no match) */
++        es[(uint16_t)(di - 1)] = ah;                 /* mov es:[di-1],ah */
++        if (run == 0) break;                         /* or bx,bx ; jne 0x25be */
++      }                                              /* else scan the rest of the run */
++      continue;
+     }
+-    iVar7 = CONCAT11(uVar8,cVar6 + '\x01');
+-    iVar5 = iVar5 - iVar7;
+-    bVar11 = iVar5 == 0;
+-code_r0x000025c0:
+-    do {
+-      if (iVar7 != 0) {
+-        iVar7 = iVar7 + -1;
+-        pcVar1 = pcVar10;
+-        pcVar10 = pcVar10 + 1;
+-        bVar11 = (char)param_1 == *pcVar1;
+-        if (!bVar11) goto code_r0x000025c0;
+-      }
+-      pcVar3 = pcVar10;
+-      if (!bVar11) break;
+-      pcVar10[-1] = cVar4;
+-      bVar11 = iVar7 == 0;
+-    } while (!bVar11);
+-  } while( true );
++  }
+ }
+ 
+ 

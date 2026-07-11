@@ -1,0 +1,101 @@
+PATCH 183: reconstruct the per-node display-list PAINT handlers FUN_0000_5b41 / 5bb6 / 5c2b (asm
+0x5b41 / 0x5bb6 / 0x5c2b) -- three exact siblings of 5acc (patch 182), differing only in the ax constant
+(0xf98 / 0xfa8 / 0xfb8).
+
+Each is dispatched by 209e's display-list walk via fist_icall_near(0x0,off)() with NO register args ->
+Ghidra base-lost bx (dropped param_1 as a host pointer -> *(int*)(param_1+4) wild-deref -> SIGSEGV).  bx
+(node offset) is published by 209e to DGROUP:0x3e08; SS=DS=DGROUP.  Body: bx+=4; c61a(al=0); compute
+c6c8's ax arg = const+word[DGROUP:0x7b9c]; bump DGROUP:[bx]/[bx+2] around the nested c6c8; restore.
+
+Reached only on the ACCEPT mission cascade (the 19 flows never select these paint methods, else the
+pre-patch wild deref would crash them -> 19/19) -> behaviour-neutral.  Sources pristine; fist.c via build/.
+
+--- a/fist.c	2026-07-11 03:10:41.531715637 +0200
++++ b/fist.c	2026-07-11 03:10:57.812513464 +0200
+@@ -15585,15 +15585,19 @@
+ void __allregs FUN_0000_5b41(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  *piVar1 = *piVar1 + 1;
+-  piVar1[1] = piVar1[1] + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 183: reconstruct the per-node display-list PAINT handler FUN_0000_5b41 (asm 0x5b41), an exact
++     sibling of 5acc (patch 182) with ax const 0xf98.  Dispatched by 209e via fist_icall_near(0x0,off)()
++     with NO args -> bx base-lost (param_1 host-ptr -> *(int*)(param_1+4) wild-deref, SIGSEGV).  bx (node
++     offset) published by 209e to DGROUP:0x3e08; SS=DS=DGROUP. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);        /* lea bx,[bx+4] */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))(0);  /* mov al,0; c61a */
++  uint16_t ax = (uint16_t)(0xf98 + *(uint16_t *)(dg + 0x7b9c));      /* mov ax,0xf98; add ax,[0x7b9c] */
++  *(uint16_t *)(dg + bx)                 += 1;                     /* incw [bx] */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2)) += 1;                     /* incw [bx+2] */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax); /* c6c8(ax) */
++  *(uint16_t *)(dg + bx)                 -= 1;                     /* decw [bx] */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2)) -= 1;                     /* decw [bx+2] */
+   return;
+ }
+ 
+@@ -15633,15 +15637,19 @@
+ void __allregs FUN_0000_5bb6(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  *piVar1 = *piVar1 + 1;
+-  piVar1[1] = piVar1[1] + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 183: reconstruct the per-node display-list PAINT handler FUN_0000_5bb6 (asm 0x5bb6), an exact
++     sibling of 5acc (patch 182) with ax const 0xfa8.  Dispatched by 209e via fist_icall_near(0x0,off)()
++     with NO args -> bx base-lost (param_1 host-ptr -> *(int*)(param_1+4) wild-deref, SIGSEGV).  bx (node
++     offset) published by 209e to DGROUP:0x3e08; SS=DS=DGROUP. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);        /* lea bx,[bx+4] */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))(0);  /* mov al,0; c61a */
++  uint16_t ax = (uint16_t)(0xfa8 + *(uint16_t *)(dg + 0x7b9c));      /* mov ax,0xfa8; add ax,[0x7b9c] */
++  *(uint16_t *)(dg + bx)                 += 1;                     /* incw [bx] */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2)) += 1;                     /* incw [bx+2] */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax); /* c6c8(ax) */
++  *(uint16_t *)(dg + bx)                 -= 1;                     /* decw [bx] */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2)) -= 1;                     /* decw [bx+2] */
+   return;
+ }
+ 
+@@ -15681,15 +15689,19 @@
+ void __allregs FUN_0000_5c2b(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  *piVar1 = *piVar1 + 1;
+-  piVar1[1] = piVar1[1] + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 183: reconstruct the per-node display-list PAINT handler FUN_0000_5c2b (asm 0x5c2b), an exact
++     sibling of 5acc (patch 182) with ax const 0xfb8.  Dispatched by 209e via fist_icall_near(0x0,off)()
++     with NO args -> bx base-lost (param_1 host-ptr -> *(int*)(param_1+4) wild-deref, SIGSEGV).  bx (node
++     offset) published by 209e to DGROUP:0x3e08; SS=DS=DGROUP. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);        /* lea bx,[bx+4] */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))(0);  /* mov al,0; c61a */
++  uint16_t ax = (uint16_t)(0xfb8 + *(uint16_t *)(dg + 0x7b9c));      /* mov ax,0xfb8; add ax,[0x7b9c] */
++  *(uint16_t *)(dg + bx)                 += 1;                     /* incw [bx] */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2)) += 1;                     /* incw [bx+2] */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax); /* c6c8(ax) */
++  *(uint16_t *)(dg + bx)                 -= 1;                     /* decw [bx] */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2)) -= 1;                     /* decw [bx+2] */
+   return;
+ }
+ 

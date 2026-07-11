@@ -1,0 +1,38 @@
+PATCH 180: base-loss fix for the per-node display-list PAINT handler FUN_0000_4937 (asm 0x4937).
+
+4937 is dispatched by 209e's display-list walk via `fist_icall_near(0x0,off)()` with NO register args.
+Its first statement (asm `mov si,[bx+2] ; movb ss:[bp+si],3`) needs bx (the node offset) and bp (the
+walk base), which Ghidra emitted as dropped params param_1/param_2 -> `*(int*)(param_1+2)` was a wild
+host deref (SIGSEGV, param_1=0).  209e already publishes bx to DGROUP:0x3e08 and bp to g_fist_paintbp
+(patch 142); read them here.  SS=DGROUP so [bp+si] is DGROUP-relative.  The rest of the body already
+uses correct DAT_ accessors.
+
+Reached only on the ACCEPT mission cascade (the menu's display-list nodes never select the 4937 paint
+method, else the pre-patch wild deref would crash the 19 flows -> they are 19/19) -> behaviour-neutral.
+Sources stay pristine; fist.c via build/.
+
+--- a/fist.c	2026-07-11 03:02:50.709295122 +0200
++++ b/fist.c	2026-07-11 03:03:00.639715220 +0200
+@@ -13641,8 +13641,20 @@
+ 
+ {
+   byte bVar1;
+-  
+-  *(undefined1 *)(param_2 + *(int *)(param_1 + 2)) = 3;
++
++  /* PATCH 180: base-loss fix (asm 0x4937: `mov si,[bx+2] ; movb ss:[bp+si],3`).  4937 is a per-node
++     display-list PAINT handler dispatched by 209e's walk via `fist_icall_near(0x0,off)()` with NO args,
++     so its bx (node offset) / bp (walk base) register inputs were dropped -> param_1/param_2 = garbage ->
++     `*(int*)(param_1+2)` wild-deref (SIGSEGV, param_1=0).  209e publishes bx to DGROUP:0x3e08 and bp to
++     g_fist_paintbp (patch 142); read them here.  SS=DGROUP so [bp+si] is DGROUP-relative. */
++  {
++    extern unsigned short g_fist_paintbp;
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t bx = *(uint16_t *)(dg + 0x3e08);
++    uint16_t bp = g_fist_paintbp;
++    uint16_t si = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++    *(uint8_t *)(dg + (uint16_t)(bp + si)) = 3;
++  }
+   bVar1 = DAT_1000_d548;
+   if ((DAT_2000_3c08 == 2) || (DAT_2000_3a40 != 0)) {
+     return;

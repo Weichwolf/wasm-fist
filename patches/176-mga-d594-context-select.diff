@@ -1,0 +1,45 @@
+PATCH 176: recover the MGAVIDEO context-SELECT far entry d594 = 0x3e3b:0x2cc7 (the 47e0 paint dispatch's per-object context switch).
+
+The context-select BODY 0x2ccd (FUN_0000_2ccd) is already reconstructed correctly (base-loss fixed by
+patch 039: es=word[DGROUP:0x716] object table -> es:[idx*2] record -> six driver-locals 0x15da..0x15e4).
+But the 0x2cc7 FAR WRAPPER (asm `call 0x2ccd; lret`) was never promoted by Ghidra -- it is reached ONLY
+through the d594 method vector -- so fist_icall_far(DAT_1000_d594) trapped it as a no-op and the
+per-object context never switched.  The 47e0 paint dispatch then filled the wrong (2nd-object) off-screen
+page in 2595 and faulted (si=0x7a82 vs the set-up 0x7a42).
+
+Fix: add m_mga_FUN_0000_2cc7 (= FUN_0000_2ccd(al)) + its mga-fmap entry (sorted, between 0x2cc1/0x2ccd).
+Asm-verified vs re_out/fist_mga_image.bin 0x2cc7.
+
+Behaviour-neutral for the 19 verify flows: the wrapper is reached only through the d594 far vector, which
+is 0/uninstalled in the menu (fist_icall_far(0) still traps).  Sources stay pristine; fist_mga.c via build/.
+
+--- a/fist_mga.c	2026-07-11 02:48:27.819435207 +0200
++++ b/fist_mga.c	2026-07-11 02:49:23.187715011 +0200
+@@ -7388,6 +7388,19 @@
+   return uVar3;
+ }
+ 
++/* PATCH 176: the d594 context-SELECT far entry @ 0000:2cc7 (asm `call 0x2ccd; lret`).
++ * MGAVIDEO per-object context-SELECT method (far vector DGROUP:0x594 = DAT_1000_d594).  The engine's
++ * 47e0 display-list PAINT dispatch calls it with al=1 (select the paint object) then al=0 (restore).
++ * Ghidra never promoted the 0x2cc7 far wrapper (reached ONLY through the d594 method vector), so
++ * fist_icall_far trapped it as a no-op -> the per-object context (the six object-record driver-locals
++ * 0x15da..0x15e4, loaded by 0x2ccd from the ES:[0x716] object table) never switched -> 2595 filled the
++ * wrong (2nd-object) off-screen page.  The wrapper body is just `call 0x2ccd; lret` -> FUN_0000_2ccd(al).
++ * Registered in the mga fmap (sorted between 0x2cc1 and 0x2ccd) so d594 resolves here. */
++static uint __allregs m_mga_FUN_0000_2cc7(uint param_1)
++{
++  return FUN_0000_2ccd(param_1);
++}
++
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_2d1f) @ 0000:2d1f ===== */
+ 
+@@ -13681,6 +13694,7 @@
+   {0x2c8bu,(void*)&FUN_0000_2c8b},
+   {0x2c92u,(void*)&FUN_0000_2c92},
+   {0x2cc1u,(void*)&FUN_0000_2cc1},
++  {0x2cc7u,(void*)&m_mga_FUN_0000_2cc7},   /* PATCH 176: d594 context-select far entry */
+   {0x2ccdu,(void*)&FUN_0000_2ccd},
+   {0x2d1fu,(void*)&FUN_0000_2d1f},
+   {0x2d3du,(void*)&FUN_0000_2d3d},

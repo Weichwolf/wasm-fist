@@ -1,0 +1,50 @@
+PATCH 177: thread FUN_0000_47e0's dropped device-method register args (asm 0x47e0-0x4822).
+
+47e0 is the in-mission display-list PAINT dispatch.  Its four indirect far method-vector calls dropped
+every register arg (the standard __allregs indirect-method-vector class).  Threaded per the asm + each
+callee's contract (patch 174 already threaded the 5th, c6a8=2595):
+ - [d594](al=1)  asm 0x47e0: context-SELECT the paint object (mga 0x2cc7 wrapper -> 0x2ccd, patch 176).
+ - [c560](ax=8,cx=ds,bx=0x7a42)  asm 0x47e6: mga 0x0310 resource-open -> descriptor DGROUP:0x7a42
+   (its word0 = the off-screen fill-buffer segment 2595 then fills).
+ - [c68c](al=0xff,bx=0x7ac0,si=0x7a42)  asm 0x47f9: MGAVIDEO offset-0 no-op; args inert but threaded.
+ - [d594](al=0)  asm 0x481c: context-SELECT restore.
+
+Behaviour-neutral for the 19 verify flows: d594/c560/c68c are 0/uninstalled in the menu (gdb-verified),
+so fist_icall_far(0) still traps no-op regardless of the threaded args.  re_out sources stay pristine.
+
+--- a/fist.c	2026-07-11 02:48:27.822948807 +0200
++++ b/fist.c	2026-07-11 02:50:54.375714798 +0200
+@@ -13451,10 +13451,20 @@
+ void __allregs FUN_0000_47e0(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
++  /* PATCH 177: thread FUN_0000_47e0's dropped device-method register args (asm 0x47e0-0x4822).
++     The indirect far method-vectors dropped every register arg; threaded per the asm + each callee's
++     __allregs contract.  Behaviour-neutral for the 19 verify flows: d594/c560/c68c are 0/uninstalled
++     in the menu, so fist_icall_far(0) still traps no-op regardless of args. */
++  /* asm 0x47e0: `mov al,1 ; lcall [0x1594]` -> d594 = mga 0x2cc7 context-SELECT (patch 176), al=1. */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_d594)))(1);
++  /* asm 0x47e6: `mov bx,0x7a42 ; mov cx,ds ; mov ax,8 ; lcall [0x560]` -> c560 = mga 0x0310 resource-open
++     (FUN_0000_0310(param_1=ax=name-idx, param_2=cx=seg, param_3=bx=off)); opens name-idx 8 into the
++     descriptor at DGROUP:0x7a42 (its word0 = the off-screen fill-buffer segment that 2595 then fills). */
++  ((void (*)(undefined2,undefined2,int))fist_icall_far((uint32_t)(DAT_1000_c560)))(8, 0x1c00, 0x7a42);
+   if (DAT_2000_3aa2 == '\0') {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
++    /* asm 0x47f9: `mov bx,0x7ac0 ; mov al,0xff ; mov si,0x7a42 ; lcall [0x68c]` -> c68c = MGAVIDEO
++       offset-0 no-op (`ret`); args (al=0xff, bx=0x7ac0, si=0x7a42) threaded faithfully but inert. */
++    ((void (*)(undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c68c)))(0xff, 0x7ac0, 0x7a42);
+     FUN_0000_60d9();
+     DAT_2000_3aa2 = -1;
+   }
+@@ -13465,7 +13475,8 @@
+   ((void (*)(undefined2,undefined2 *))fist_icall_far((uint32_t)(DAT_1000_c6a8)))(
+       0xff, (undefined2 *)(g_mem + 0x1c000 + 0x7a42));
+   DAT_2000_3a44 = DAT_2000_3a44 | 0x25;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
++  /* asm 0x481c: `mov al,0 ; lcall [0x1594]` -> d594 context-SELECT restore (al=0). */
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_d594)))(0);
+   return;
+ }
+ 
