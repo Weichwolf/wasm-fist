@@ -1,0 +1,255 @@
+PATCH 200: the DCBS unit-database chunk handler chain (b21d/b1a2/d81e/43c1) -- DGROUP
+near-offset-as-host-pointer base-losses + the dropped DI record-slot thread.
+
+Exposed once patch 199 let FUN_0000_d501 parse past SHDR: the very first DCBS ("Deployment"
+unit database) record dispatched d7e1 -> d81e -> b1a2 -> b21d, which SIGSEGV'd because the whole
+DCBS record chain is hand-asm that threads the object/slot pointer through DS-relative near-offsets
+and the DI register -- all base-lost by Ghidra (near-offset used as a host pointer -> wild deref).
+
+ASM-verified vs re_out/fist_dat_image.bin (DS=SS=DGROUP=0x1c00):
+ - FUN_1000_b21d (0x1b21d): the roster INSERT.  bx=ax=obj near-offset; registers it in the friendly
+   roster (slot table DGROUP:0xa022 stride 0x37, presence flags DAT_2000_a2f7[]) or enemy roster
+   (0xc05c stride 0xfb, flags DAT_2000_a38d[]) per the team bit byte[obj-0x19ec]&1; stores obj at
+   word[di], slot index at word[di+2]; returns the slot near-offset in DI and CF (full at 0x96).
+   Ghidra base-lost byte[obj-0x19ec] and the slot pointer (`(int*)0xa022` host deref -> SIGSEGV),
+   typed the slot stores int(4B) at [di]/[di+4] not WORD at [di]/[di+2], and dropped the DI output.
+ - FUN_1000_b1a2 (0x1b1a2): calls b21d(obj) -> di; publishes {di, cx} into the DGROUP:0x9fbc/0x9fbe
+   index tables at word[idx*2]; zeroes the slot body (0x33 friendly / 0xf7 enemy).  Threads b21d's
+   DI as its own return; base-lost DS accesses rebased.
+ - FUN_0000_d81e (0xd81e): allocates the slot via b1a2 -> di, saves word[di+2], reads the record
+   body (a9c2-2 bytes) into DS:(di+2), restores [di+2], processes via 43c1(di).  DI (Ghidra
+   unaff_CS) rebased.
+ - FUN_0000_43c1 (0x43c1): the unit-record installer -- sets type/state flags [di+0x16]/[di+0x17],
+   registers di in the cell-index table DGROUP:0x6d3c (=&DAT_2000_2d3c), runs c296.  di rebased and
+   the param_1[N] word indexes (uint*=N*4) corrected to the 2-byte asm stride.
+
+VERIFIED (shim AZER1.FSG handle trace, FIST_CASCADE 3-click route): the FSG parse now runs to
+COMPLETION -- 268 handle-8 reads through the whole DCBS record set (record bodies 249B enemy / 53B
+friendly, matching the 0xfb/0x37 slot strides), then PATH/STMP/PINF/BINF/TERM -> d501 returns
+normally (finalize path, a974 set by the TERM handler).  Execution advances off the parser entirely
+into the model-load path e006->42cc->4308, where the next frontier is the model-element enter-dirty
+mark FUN_1000_8daa (the FUN_1000_8390/842d base-loss class -- a separate subsystem, held).
+Behaviour-neutral for the 19 covered flows: b21d/b1a2/d81e/43c1 run only inside the mission FSG
+DCBS parse, off the menu/dialog paths (verify 19/19).
+--- a/fist.c	2026-07-10 08:07:49.413502180 +0200
++++ b/fist.c	2026-07-11 16:54:25.833079507 +0200
+@@ -12703,31 +12703,33 @@
+ void __allregs FUN_0000_43c1(uint *param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  if (*param_1 == 0x17) {
+-    *(byte *)(param_1 + 0xb) = (byte)param_1[0xb] | 0x40;
+-    *(byte *)((int)param_1 + 0x17) = *(byte *)((int)param_1 + 0x17) | 0x24;
+-    iVar1 = (uint)*(byte *)((int)param_1 + 0x23) << 2;
+-    iVar1 = CONCAT11((char)((uint)iVar1 >> 8),(char)iVar1 + (char)param_1[0x12]);
+-    if (iVar1 != 0) {
+-      ((undefined2 *)&DAT_2000_2d3c)[iVar1] = param_1;
+-    }
+-    return;
+-  }
+-  if ((param_1[0xb] & 0x20) == 0) {
+-    return;
+-  }
+-  if (DAT_2000_2db4 != 0) {
+-    *param_1 = *param_1 ^ 2;
+-  }
+-  FUN_0000_c296(param_1);
+-  if (DAT_2000_2db4 != 0) {
+-    *(byte *)(param_1 + 0xb) = (byte)param_1[0xb] ^ 8;
+-  }
+-  iVar1 = (uint)*(byte *)((int)param_1 + 0x1b) << 2;
+-  ((undefined2 *)&DAT_2000_2d3c)
+-  [CONCAT11((char)((uint)iVar1 >> 8),(char)iVar1 + (char)param_1[0xe])] = param_1;
++  /* PATCH 200: DCBS unit-record installer (asm 0x43c1-0x4412; DS=DGROUP=0x1c00).  param_1 = di =
++     the roster slot's DGROUP near-offset.  For a type-0x17 record sets state flags [di+0x16]|=0x40,
++     [di+0x17]|=0x24 and registers di in the cell-index table DGROUP:0x6d3c (=&DAT_2000_2d3c) at
++     word [ (byte[di+0x23]<<2 + byte[di+0x24]) << 1 ]; otherwise (if [di+0x16]&0x20) toggles a bit,
++     runs c296, and registers via byte[di+0x1b]/[di+0x1c].  Pristine base-lost di (host-deref ->
++     SIGSEGV) and mis-scaled the param_1[N] word indexes (uint* = N*4 vs the 2-byte stride the asm
++     uses); reconstructed with explicit DGROUP-based byte/word offsets. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  unsigned int bx;
++  if (*(unsigned short *)(dg + (unsigned short)di) == 0x17) {
++    dg[(unsigned short)(di + 0x16)] |= 0x40;
++    dg[(unsigned short)(di + 0x17)] |= 0x24;
++    bx = (unsigned int)dg[(unsigned short)(di + 0x23)] << 2;
++    bx = (bx & 0xff00) | (unsigned char)(bx + dg[(unsigned short)(di + 0x24)]);
++    bx = (unsigned short)(bx << 1);
++    if (bx != 0) *(unsigned short *)(dg + (unsigned short)(bx + 0x6d3c)) = (unsigned short)di;
++    return;
++  }
++  if ((dg[(unsigned short)(di + 0x16)] & 0x20) == 0) return;
++  if (DAT_2000_2db4 != 0) *(unsigned short *)(dg + (unsigned short)di) ^= 2;
++  FUN_0000_c296((int *)(uintptr_t)di);
++  if (DAT_2000_2db4 != 0) dg[(unsigned short)(di + 0x16)] ^= 8;
++  bx = (unsigned int)dg[(unsigned short)(di + 0x1b)] << 2;
++  bx = (bx & 0xff00) | (unsigned char)(bx + dg[(unsigned short)(di + 0x1c)]);
++  bx = (unsigned short)(bx << 1);
++  *(unsigned short *)(dg + (unsigned short)(bx + 0x6d3c)) = (unsigned short)di;
+   return;
+ }
+ 
+@@ -32731,25 +32733,27 @@
+ undefined4 __allregs FUN_0000_d81e(undefined2 param_1,undefined2 param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  undefined1 uVar1;
+-  undefined2 unaff_ES;
+-  int unaff_CS;
+-  
+-  uVar1 = FUN_1000_b1a2(DAT_2000_a9c0,DAT_2000_a9c6,DAT_2000_a9c4,param_3);
+-  iRam000f0006 = param_3 + 2;
++  /* PATCH 200: DCBS per-record READER (asm 0xd81e; DS=DGROUP=0x1c00).  Allocates the object's
++     roster slot via b1a2 -> the slot's DGROUP near-offset (asm DI, now b1a2's return), saves the
++     slot index word [di+2], reads the record body (a9c2-2 bytes from the FSG handle a970) into
++     DS:(di+2), restores [di+2] (the read clobbered it with the body's first word), then processes
++     the slot via 43c1(di).  Pristine base-lost DI (rendered as unaff_CS + the param_3/param_4
++     mis-attributions) so the [di+2] save/restore wild-dereffed. */
++  undefined2 unaff_ES;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)FUN_1000_b1a2(DAT_2000_a9c0,DAT_2000_a9c6,DAT_2000_a9c4,0);
++  unsigned short saved = *(unsigned short *)(dg + (unsigned short)(di + 2));
++  iRam000f0006 = (unsigned short)(di + 2);
+   iRam000f0004 = DAT_2000_a9c2 + -2;
+-  uRam000f0000 = CONCAT11(0x3f,uVar1);
++  uRam000f0000 = 0x3f00;
+   uRam000f0014 = 0x21;
+   uRam000f0002 = DAT_2000_a970;
+   uRam000f000e = 0x1c00;
+-  uRam000f0008 = param_2;
+-  iRam000f000a = param_3;
+-  uRam000f000c = param_1;
+   uRam000f0010 = unaff_ES;
+   fist_int_dispatch();
+-  *(undefined2 *)(unaff_CS + 2) = param_4;
+-  FUN_0000_43c1(unaff_CS);
+-  return;
++  *(unsigned short *)(dg + (unsigned short)(di + 2)) = saved;
++  FUN_0000_43c1((uint *)(uintptr_t)di);
++  return 0;
+ }
+ 
+ 
+@@ -61217,27 +61221,28 @@
+ undefined4 __allregs FUN_1000_b1a2(undefined2 param_1,undefined2 param_2,int param_3,int *param_4)
+ 
+ {
+-  int iVar1;
+-  int *piVar2;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_b21d(param_1);
+-  if ((bool)in_CF) {
+-    return;
+-  }
+-  ((undefined2 *)&DAT_2000_9fbc)[param_3 * 2] = param_4;
+-  ((undefined2 *)&DAT_2000_9fbe)[param_3 * 2] = param_2;
+-  iVar1 = 0x33;
+-  if ((*(byte *)(*param_4 + -0x19ec) & 1) != 0) {
+-    iVar1 = 0xf7;
+-  }
+-  piVar2 = param_4 + 2;
+-  do {
+-    *(undefined1 *)piVar2 = 0;
+-    piVar2 = (int *)((int)piVar2 + 1);
+-    iVar1 = iVar1 + -1;
+-  } while (iVar1 != 0);
+-  return;
++  /* PATCH 200: DCBS record INSERT wrapper (asm 0x1b1a2; DS=DGROUP=0x1c00).
++     param_1=ax=a9c0 object near-offset; param_2=cx=a9c6 value; param_3=bx=a9c4 index.
++     Calls b21d(obj) -> the slot near-offset (asm DI, now b21d's return) + g_fist_cf(full).
++     On OK: publishes {slot,value} into the DGROUP:0x9fbc/0x9fbe index tables at word [idx*2],
++     reads the object back from the slot, and zeroes the slot body (0x33 friendly / 0xf7 enemy
++     bytes).  Pristine base-lost every DS-relative access and mis-took DI for the param_4 pointer. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int obj = (unsigned short)param_1;
++  unsigned int idx = (unsigned short)param_3;
++  unsigned int di, bobj, cnt, si;
++  (void)param_4;
++  di = (unsigned short)FUN_1000_b21d(obj);
++  if (g_fist_cf) return di;   /* full -> CF=1; di left in the register (asm retf) */
++  *(unsigned short *)(dg + (unsigned short)(0xdfbc + idx * 4)) = (unsigned short)di;
++  *(unsigned short *)(dg + (unsigned short)(0xdfbe + idx * 4)) = (unsigned short)param_2;
++  bobj = *(unsigned short *)(dg + (unsigned short)di);
++  cnt = 0x33;
++  if (dg[(unsigned short)(bobj - 0x19ec)] & 1) cnt = 0xf7;
++  si = (unsigned short)(di + 4);
++  do { dg[(unsigned short)si] = 0; si = (unsigned short)(si + 1); cnt = cnt - 1; } while (cnt != 0);
++  return di;
+ }
+ 
+ 
+@@ -61318,40 +61323,39 @@
+ undefined4 __allregs FUN_1000_b21d(int param_1)
+ 
+ {
+-  int iVar1;
+-  int *piVar2;
+-  
+-  if ((*(byte *)(param_1 + -0x19ec) & 1) == 0) {
+-    if (DAT_2000_a294 == 0x96) {
+-      return;
+-    }
++  /* PATCH 200: DCBS object-registry INSERT (asm 0x1b21d-0x1b293; DS=DGROUP=0x1c00).
++     bx=ax=param_1 = the object's DGROUP near-offset.  Registers the object into the friendly
++     roster (slot table DGROUP:0xa022 stride 0x37, presence-flags DAT_2000_a2f7[]) or the enemy
++     roster (DGROUP:0xc05c stride 0xfb, flags DAT_2000_a38d[]), keyed on the team bit
++     byte[obj-0x19ec]&1.  Returns the allocated slot's DGROUP near-offset (asm leaves it in DI,
++     consumed by the callers b1a2/b1d6/b1df); sets g_fist_cf=1 when the roster is FULL (0x96),
++     else 0.  Pristine Ghidra base-lost the DS-relative object team flag, the slot-table pointer
++     di (=(int*)0xa022/0xc05c host deref -> SIGSEGV), typed the slot stores int (4B) at [di]/[di+4]
++     instead of WORD at [di]/[di+2], and dropped the DI output entirely. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int obj = (unsigned short)param_1;
++  unsigned int di, idx;
++  if ((dg[(unsigned short)(obj - 0x19ec)] & 1) == 0) {
++    if (DAT_2000_a294 == 0x96) { g_fist_cf = 1; return 0; }
+     DAT_2000_a294 = DAT_2000_a294 + 1;
+-    if (DAT_2000_a298 < DAT_2000_a294) {
+-      DAT_2000_a298 = DAT_2000_a294;
+-    }
+-    piVar2 = (int *)0xa022;
+-    for (iVar1 = 0; ((undefined1 *)&DAT_2000_a2f7)[iVar1] != '\0'; iVar1 = iVar1 + 1) {
+-      piVar2 = (int *)((int)piVar2 + 0x37);
+-    }
+-    ((undefined1 *)&DAT_2000_a2f7)[iVar1] = 1;
++    if ((unsigned short)DAT_2000_a298 < (unsigned short)DAT_2000_a294) DAT_2000_a298 = DAT_2000_a294;
++    idx = 0; di = 0xa022;
++    while (dg[(unsigned short)(0xe2f7 + idx)] != 0) { idx = idx + 1; di = (unsigned short)(di + 0x37); }
++    dg[(unsigned short)(0xe2f7 + idx)] = 1;
+   }
+   else {
+-    if (DAT_2000_a296 == 0x96) {
+-      return;
+-    }
++    if (DAT_2000_a296 == 0x96) { g_fist_cf = 1; return 0; }
+     DAT_2000_a296 = DAT_2000_a296 + 1;
+-    if (DAT_2000_a29a < DAT_2000_a296) {
+-      DAT_2000_a29a = DAT_2000_a296;
+-    }
+-    piVar2 = (int *)0xc05c;
+-    for (iVar1 = 0; ((undefined1 *)&DAT_2000_a38d)[iVar1] != '\0'; iVar1 = iVar1 + 1) {
+-      piVar2 = (int *)((int)piVar2 + 0xfb);
+-    }
+-    ((undefined1 *)&DAT_2000_a38d)[iVar1] = 1;
+-  }
+-  *piVar2 = param_1;
+-  piVar2[1] = iVar1;
+-  return;
++    if ((unsigned short)DAT_2000_a29a < (unsigned short)DAT_2000_a296) DAT_2000_a29a = DAT_2000_a296;
++    idx = 0; di = 0xc05c;
++    while (dg[(unsigned short)(0xe38d + idx)] != 0) { idx = idx + 1; di = (unsigned short)(di + 0xfb); }
++    dg[(unsigned short)(0xe38d + idx)] = 1;
++  }
++  *(unsigned short *)(dg + (unsigned short)di) = (unsigned short)obj;
++  *(unsigned short *)(dg + (unsigned short)(di + 2)) = (unsigned short)idx;
++  g_fist_cf = 0;
++  return di;
+ }
+ 
+ 
