@@ -1,0 +1,27 @@
+Terrain palette-remap FUN_0000_ac70 (extender op-0x18 MAP-LOAD, via 9f70->bc9c): base + correct
+the three palette-distance dword tables (module offsets 0xa060/0xa460/0xa860, byte stride 4).  asm acb7
+`mov edi,[0xa060+eax*4]; add edi,[0xa460+eax*4]; add edi,[0xa860+eax*4]` (eax = byte-0xf).  Ghidra
+base-lost the FIRST table to the bare int 0xa060 (near-NULL host ptr -> SIGSEGV on the first sum) and
+emitted the other two as undefined4* + N*4 (pointer arith = N*16 bytes, 4x over-scaled).  All three
+rebuilt as byte arithmetic g_mem+fist_ext_base+0xNNNN + N*4.  Flat32-module base-loss + pointer-scaling
+class; never exercised before (op-0x18 map-load terrain path).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -15098,9 +15098,14 @@
+       cVar3 = *pcVar6;
+       pcVar2 = pcVar6 + 2;
+       pcVar6 = pcVar6 + 3;
+-      uVar7 = *(int *)((uint)(byte)(cVar3 - 0xf) * 4 + 0xa060) +
+-              *(int *)(&DAT_0000_a460 + (uint)(byte)(*pcVar1 - 0xf) * 4) +
+-              *(int *)(&DAT_0000_a860 + (uint)(byte)(*pcVar2 - 0xf) * 4);
++      /* PATCH 207: three dword palette-distance tables at flat32 module offsets 0xa060/0xa460/0xa860,
++       * indexed by (byte-0xf) with BYTE stride 4 (asm acb7 `mov edi,[0xa060+eax*4]` / add [0xa460+eax*4]
++       * / add [0xa860+eax*4]).  Ghidra base-lost 0xa060 to a bare int (near-NULL -> SIGSEGV) AND scaled
++       * the a460/a860 forms as undefined4* + N*4 (= N*16 bytes, 4x over).  Rebuild all three as byte
++       * arithmetic base+N*4 on the module base. */
++      uVar7 = *(int *)(g_mem+fist_ext_base+0xa060 + (uint)(byte)(cVar3 - 0xf) * 4) +
++              *(int *)(g_mem+fist_ext_base+0xa460 + (uint)(byte)(*pcVar1 - 0xf) * 4) +
++              *(int *)(g_mem+fist_ext_base+0xa860 + (uint)(byte)(*pcVar2 - 0xf) * 4);
+       if (uVar7 < uVar5) break;
+       iVar4 = iVar4 + -1;
+       if (iVar4 == 0) {

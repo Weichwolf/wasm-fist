@@ -797,6 +797,7 @@ static uint16_t g_ext_next_seg = EXT_TASK_POOL_BASE;
 extern void m_ext_FUN_0000_11cb(int, int, int, int, int);   /* KDV OPEN wrapper */
 extern void m_ext_FUN_0000_11dd(int, int, int);             /* KDV DECODE+PRESENT wrapper */
 extern void m_ext_FUN_0000_6f17(int, int, int, int, int, int); /* KDV close/free wrapper */
+extern void m_ext_FUN_0000_89b0(unsigned, unsigned, unsigned); /* op-0x18 MAP-LOAD setup (terrain/pal/sky) */
 static int  g_ext_ready;      /* module image loaded + slots seeded */
 static int  g_kdv_open;       /* TITLE.KDV opened (once) */
 static long g_kdv_frames;     /* frames decoded (diagnostic) */
@@ -935,6 +936,43 @@ int fist_extender_gate(void) {
         if (getenv("FIST_CAM_TRACE"))
             fprintf(stderr, "[ext] op 0x80 .CAM decrypt: buf_lin=0x%05x len=%u blocks=%u -> '%.24s'\n",
                     buf_lin, len, blocks, (char *)(g_mem + buf_lin));
+        return 0;
+    }
+    if (op == 0x18 && g_ext_ready) {
+        /* op 0x18 = MAP-LOAD.  op-table @ fist_image.bin:0xcb3[0x18] -> 0x10ca
+         *   (`movl $0x10a0, ds:0xd82 ; call 0x89b0`).  0x89b0 (the extender map-load setup) reads the
+         * current-TCB [0xc93], probes memory ("4.MEG".."40.MEG") for the terrain LOD, sets the resource
+         * dir to "PAL.RES", and opens/loads the map via its own 32-bit-flat FILEMGR (FUN_00005c98/5cc2/
+         * 5d50 -> INT 21h AH=4E/3D/3F, serviced by fist_dos.c dos_int_ext with g_fist_ext_int set):
+         *   TCB+0x9a = "532.pal" (palette)   [FUN_00006032]
+         *   TCB+0x7a = "D32.KLC" (heightmap) [FUN_0000643c]
+         *   TCB+0x8a = "C32.KLC" (colormap)  [FUN_0000643c]
+         *   TCB+0xaa = "5.SKY"   (sky)       [conditional on DAT_395c]
+         * FUN_1000_63b8 staged those names into the ENGINE current-TCB (DAT_2000_aa2c + 0x7a/0x8a/0x9a/
+         * 0xaa), so point the extender current-TCB [0xc93] at aa2c (host pointer; [0x807]=0 identity ->
+         * TCB-relative name buffers are real host strings that ext_addr() passes straight to open_ci).
+         * The gate passes EBX = TCB inbox (word[aa2c+0x3f2]); 0x89b0's param_1/2/3 are handle/flags
+         * passthroughs that do NOT reach the FILEMGR name path (the name pointer is read from the TCB),
+         * so the file opens are faithful regardless.  Runs ONCE per mission (guarded) to match the single
+         * real map load.  Behaviour-neutral for the 19 covered flows (op 0x18 is mission-cascade only). */
+        static int map_loaded = 0;
+        if (!map_loaded) {
+            map_loaded = 1;
+            uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+            uint32_t inbox   = *(uint32_t *)(g_mem + tcb_lin + 0x3f2);
+            uint8_t *xb = g_mem + FIST_EXT_BASE;
+            uint32_t save_c93 = *(uint32_t *)(xb + 0xc93);
+            *(uint32_t *)(xb + 0xc93) = (uint32_t)(uintptr_t)(g_mem + tcb_lin);   /* extender cur-TCB */
+            *(uint32_t *)(xb + 0xd82) = 0x10a0;                                    /* mirror 0x10ca */
+            fprintf(stderr, "[ext] op 0x18 MAP-LOAD: TCB @0x%05x  '%.13s'/'%.13s'/'%.13s'/'%.13s'  [+0x54]=%02x [+0x59]=%02x\n",
+                    tcb_lin, g_mem+tcb_lin+0x7a, g_mem+tcb_lin+0x8a, g_mem+tcb_lin+0x9a, g_mem+tcb_lin+0xaa,
+                    g_mem[tcb_lin+0x54], g_mem[tcb_lin+0x59]);
+            g_fist_ext_int = 1;                    /* extender-mode flat FILEMGR INT 21h */
+            m_ext_FUN_0000_89b0(inbox, inbox, inbox);
+            g_fist_ext_int = 0;
+            *(uint32_t *)(xb + 0xc93) = save_c93;
+            fprintf(stderr, "[ext] op 0x18 MAP-LOAD returned\n");
+        }
         return 0;
     }
     /* op != 0 = a DISPLAY-LIST / task command (0x04,0x20,0x44,0x64,0x68,0x6c,0x70,0x78,...): the engine

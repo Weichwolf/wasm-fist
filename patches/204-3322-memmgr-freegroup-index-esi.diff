@@ -1,0 +1,29 @@
+MEMMGR free-group FUN_0000_3322 (extender op-0x18 MAP-LOAD prologue, first call in FUN_0000_89b0):
+use 3661's found block INDEX (ESI, published to [0x2f60]) as the free-loop start index, not the
+__allregs-dropped ESI that Ghidra threaded as the caller's param_2 -> the free loop ran with a wild
+start index (count - garbage) and dereferenced an invalid block-table slot -> SIGSEGV in 3376.
+
+Exact SAME dropped-ESI class as patch 090 (3376) and patch 082 (3661/345c).  asm (image 0x3322):
+    3322: mov eax,[esp]          ; caller marker -> [0x2f5c]
+    332a: call 3661              ; ESI = found block index (patch 082 also publishes it to [0x2f60])
+    332f: mov ecx,[0x2f54]       ; live block count
+    3335: or ecx,ecx ; je ret    ; nothing to free
+    3339: sub ecx,esi            ; iVar1 = count - INDEX      (INDEX = ESI, NOT param_2)
+    333b: add esi,ecx ; dec esi  ; iVar2 = INDEX + iVar1 = count ; then count-1 in the loop
+    3340: mov edx,[0x28ac+esi*4] ; block ptr -> free via 3376
+    3347: call 3376 ; loop
+The __allregs model dropped 3661's ESI result; only EDX (=&bc98) is set at the 3322 call site
+(89b0: `lea edx,0xbc98; call 3322`).  Fix (faithful to `sub ecx,esi`): read 3661's published index
+[0x2f60] and use it as param_2.  Never exercised before (3322 runs only on the now-wired op-0x18 load).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -3512,6 +3512,9 @@
+   
+   DAT_0000_2f5c = param_3;
+   FUN_0000_3661(param_1);
++  param_2 = DAT_0000_2f60;   /* PATCH 204: free-loop start index from 3661 (ESI), not the passed
++                              * param (asm 0x3339 `sub ecx,esi`) -- same __allregs-dropped-ESI class
++                              * as patch 090's 3376; 3661 publishes its found index to [0x2f60]. */
+   if (DAT_0000_2f54 != 0) {
+     iVar1 = DAT_0000_2f54 - param_2;
+     iVar2 = param_2 + iVar1;

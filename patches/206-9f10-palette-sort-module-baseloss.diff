@@ -1,0 +1,42 @@
+FILEMGR/terrain palette-sort FUN_0000_9f10 (extender op-0x18 MAP-LOAD, post-532.pal): base the
+flat32 module offset 0x5598 (the palette work buffer &DAT_0000_5598).  9f10 sorts the palette entries
+[DAT_28a5..0xff] by luminance (r + 2g + b) and swaps each into place.  asm 9f18 `mov esi,0x5598; add
+esi,eax*3` builds a BASED pointer into the palette buffer, but Ghidra emitted `pbVar9 = pbVar6 + 0x5598`
+with 0x5598 as a bare integer -> pbVar9 was a near-NULL host pointer and the inner luminance read
+`*pbVar10` wild-dereferenced -> SIGSEGV.  Fix: pbVar9 = &DAT_0000_5598 + DAT_28a5*3 (based); pbVar6
+(the best-match cursor, asm edx=eax*3) is overwritten to the based edi on the first inner comparison
+(r+2g+b < 0x400 always holds for a real palette), so initialize it based too -- the degenerate
+no-better-match self-swap is then a harmless no-op.  Flat32-module base-loss class; never exercised
+before (reached only on the now-wired op-0x18 map load, after the palette resource load).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -14486,8 +14486,12 @@
+   byte *pbVar9;
+   byte *pbVar10;
+   
+-  pbVar6 = (byte *)(DAT_0000_28a5 * 3);
+-  pbVar9 = pbVar6 + 0x5598;
++  /* PATCH 206: base the flat32 module offset 0x5598 (palette buffer &DAT_0000_5598); asm 9f18
++   * `mov esi,0x5598; add esi,eax*3` = based pal ptr.  Ghidra rendered it as the bare int 0x5598
++   * so pbVar9 was a near-NULL host ptr -> wild deref.  edx(best-match)=eax*3 is overwritten to the based
++   * edi on the 1st inner hit, so init pbVar6 based (degenerate self-swap is a no-op). */
++  pbVar9 = (byte *)&DAT_0000_5598 + DAT_0000_28a5 * 3;
++  pbVar6 = pbVar9;
+   iVar4 = 0xff - DAT_0000_28a5;
+   do {
+     iVar5 = iVar4 + 1;
+@@ -14536,8 +14540,12 @@
+   byte *pbVar9;
+   byte *pbVar10;
+   
+-  pbVar6 = (byte *)(DAT_0000_28a5 * 3);
+-  pbVar9 = pbVar6 + 0x5598;
++  /* PATCH 206: base the flat32 module offset 0x5598 (palette buffer &DAT_0000_5598); asm 9f18
++   * `mov esi,0x5598; add esi,eax*3` = based pal ptr.  Ghidra rendered it as the bare int 0x5598
++   * so pbVar9 was a near-NULL host ptr -> wild deref.  edx(best-match)=eax*3 is overwritten to the based
++   * edi on the 1st inner hit, so init pbVar6 based (degenerate self-swap is a no-op). */
++  pbVar9 = (byte *)&DAT_0000_5598 + DAT_0000_28a5 * 3;
++  pbVar6 = pbVar9;
+   iVar4 = 0xff - DAT_0000_28a5;
+   do {
+     iVar5 = iVar4 + 1;

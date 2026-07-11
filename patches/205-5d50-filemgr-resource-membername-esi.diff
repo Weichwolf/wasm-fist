@@ -1,0 +1,35 @@
+FILEMGR resource-archive lookup FUN_0000_5d50 (extender op-0x18 MAP-LOAD, palette 532.pal from the
+XOR-encoded PAL.RES archive): pass the ORIGINAL member-name pointer to FUN_0000_6250, not the
+__allregs-garbage param_3.  When the direct findfirst on a member name fails and a resource dir
+(PTR_s_RESOURCE_RES_0000_622c = "PAL.RES") is set, 5d50 calls 6250 (the archive-member opener) which
+reads the name char-by-char via `lodsb` from ESI.  In the asm ESI is the incoming name pointer, SAVED at
+entry (5d51 `push esi`) and RESTORED just before the call (5df6 `pop esi`) because the uppercase-copy
+loop consumes it.  Ghidra dropped that save/restore and, worse, threaded 6250's ESI param as 5cc2's
+uVar1 = CONCAT22(extraout_var, R_DX) -- a bogus 0x4e00b480 -> 6250's `*param_2` wild-dereferenced ->
+SIGSEGV.  Fix: capture param_6 (the incoming name = TCB+0x9a "532.pal") at entry and pass it to 6250.
+This path was never exercised before (KDV's TITLE.KDV is a standalone file found by the first findfirst,
+so 5d50's resource-archive branch never ran).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -8666,7 +8666,12 @@
+   byte *pbVar5;
+   undefined2 unaff_ES;
+   bool bVar6;
++  byte *pbName6250;   /* PATCH 205: saved original member-name ptr (asm 5d51 push esi) */
+   
++  pbName6250 = param_6;   /* PATCH 205: 6250 reads the name via lodsb from ESI = the ORIGINAL
++                          * param_6 (the asm saves it: 5d51 `push esi` / 5df6 `pop esi`); the copy
++                          * loop below advances param_6, and Ghidra passed the garbage CONCAT22
++                          * param_3 (uVar1 = R_DX|extraout) as the resource-member name. */
+   DAT_0000_5cb4 = s_FILEMGR__Unable_to_find_or_open___0000_5e7a + 0x3d;
+   if ((char)(param_1 >> 8) != '<') {
+     DAT_0000_5cb4 = s_FILEMGR__Unable_to_find_or_open___0000_5e7a;
+@@ -8719,7 +8724,7 @@
+     if ((!(bool)uRam000f0012) ||
+        ((((char)(DAT_0000_5cbc >> 8) != '<' &&
+          (bVar6 = false, PTR_s_RESOURCE_RES_0000_622c != (undefined *)0x0)) &&
+-        (uVar2 = FUN_0000_6250(param_5,param_3), !bVar6)))) {
++        (uVar2 = FUN_0000_6250(param_5,pbName6250), !bVar6)))) {
+       DAT_0000_5cc0 = uVar2;
+       if ((char)(DAT_0000_5cbc >> 8) != '<') {
+         DAT_0000_5cb4 = s_FILEMGR__Unable_to_find_or_open___0000_5e7a + 0x22;
