@@ -1,0 +1,486 @@
+Reconstruct the MEMMGR deep block-relocating allocator FUN_1000_0dc2 (0x10dcd..0x10eca) + the exact-
+adjacent variant FUN_1000_0ecb (0x10ecb) + the free-list surgery callees FUN_1000_10dc (0x110dc sorted
+insert), FUN_1000_1117 (0x11117 insert+coalesce), FUN_1000_0cce (0x10cce split/return-remainder) and
+FUN_1000_1019 (0x11019 relocation-notify hook).  Supersedes patch 015's deep-path stub (which logged
+"unimplemented follow-on" and fell through the guard tail).
+
+WHAT IT DOES.  When a free-list node's owner-guard flag [es:di+2]&0x50 is CLEAR (the mission-load path;
+on the boot pool every node has it SET so 0dc2 always takes the fast guard-tail -- see below), 0dc2 runs
+the deep allocator: walk the sorted free list for a hole with base < the node's base and size >= the
+node's size; relocate the node's CONTENTS down into the hole (0x1000-paragraph rep-movsw block move ->
+mm_block_move()); swap the base/size fields; unlink both the node and the hole node; reinsert each into
+the sorted list (10dc plain-insert for the node, 1117 insert+coalesce for the hole); split the leftover
+back onto the free list (0cce, popping a paragraph off the descriptor pool at DGROUP:0x16e2); and return
+CF=0.  The exact-adjacent case (hole.end == node.base) branches to 0ecb, which grows the hole's base past
+the relocated node instead of splitting.  1019 is the per-block relocation-notify hook: if
+mask[0x1748+bx] & the owner descriptor's [di+2] flags, it FAR-calls the owner's relocation callback
+[di+4] so the owner can fix its pointer to the moved block (uninstalled -> fist_icall_far no-ops, the
+faithful non-error path).
+
+MODEL.  SS=DS=DGROUP=0x1c00, BP=0x16d4.  Node paragraph fields: [0]=base seg (sort key) [2]=flags
+[4]=size (paragraphs) [6:8]=owner far ptr [0xc]=next-seg [0xe]=prev-seg.  Control frame:
+[bp+4]=free-total=MM_ABS16(0x16d8), [bp+0xc]=anchor=MM_ABS16(0x16e0); desc pool head=MM_ABS16(0x16e2),
+count=MM_ABS16(0x16dc).  All node/frame accesses go through the patch-025 MM_S16/MM_S8/MM_ABS16 macros
+and the shared g_mm_ds/g_mm_es/g_mm_cf/g_mm_zf cursors (DS/ES/CF/ZF are not __allregs-threaded across the
+near calls, so these cooperating same-subsystem routines share them explicitly, exactly as patches
+015/025 already do for 096c/0a31/0d70/1114).  asm-verified vs re_out/fist_dat_image.bin
+0x10cce/0x10dc2/0x10ecb/0x110dc/0x11117/0x11019.
+
+BEHAVIOUR-NEUTRALITY (covered flows).  The whole deep chain (0dc2-deep, 0ecb, 10dc, 1117, 0cce, and the
+1019 node-cursor read) is reached ONLY on the ACCEPT mission-load cascade: the boot MEMMGR pool nodes all
+have [2]&0x50 set, so 0dc2's guard-tail is always taken on the 19 covered flows and these functions are
+DEAD there.  PROOF: the Ghidra-mangled bodies this patch replaces deref host address 0 (`*(uint*)0x0`)
+and would SIGSEGV at -O0 if executed -- yet all 19 flows are 19/19 and default boot is bit-identical
+(mainmenu md5 3a6ff1c5, verified after this patch).  1019 (also called by FUN_1000_0d2e(0xe)) and 0cce
+(also called by FUN_1000_18e4/0e8b) stay behaviour-neutral on boot: the mainmenu md5 is unchanged.
+
+RESIDUAL RISK (documented per doctrine -- honest reporting).  The deep relocate mutates the heap on the
+ACCEPT cascade, which is NOT yet AE=0, so the block move + list surgery cannot be BIT-verified
+render-correct.  It is validated by: (a) the patch-015 "0dc2 ... unimplemented follow-on" warning
+VANISHING; (b) NO SIGSEGV in the reconstruction across repeated cascade runs (deep path fires once,
+ds=0x39d6, crash-free); (c) the boot MEMMGR invariants + mainmenu bit-identity unchanged; (d) verify.sh
+19/19 native<->wasm bit-identical.  The op-0x4c display-list frame loop does NOT yet terminate (the
+mission viewport geometry at DGROUP:0x7aa4 is still uninitialised -- the next frontier), but its inbox
+range advances (0x26e4..0x2764) and the alloc now completes instead of stalling in the guard tail.
+
+--- a/fist.c
++++ b/fist.c
+@@ -40040,46 +40040,69 @@
+ }
+ 
+ 
++/* PATCH 188: MEMMGR deep block-relocating allocator (0dc2 deep path) + its callees.
++   Faithful transliteration of the free-list surgery at 0x10cce/0x10dc2/0x10ecb/0x110dc/0x11117/0x11019
++   (SS=DS=DGROUP=0x1c00, BP=0x16d4).  Node paragraph = its own segment; fields:
++     [0]=base seg (sort key)  [2]=flags  [4]=size (paragraphs)  [6:8]=owner-descriptor far ptr
++     [0xc]=next-node seg  [0xe]=prev-node seg.
++   Control frame: [bp+4]=free-total=MM_ABS16(0x16d8), [bp+0xc]=list-anchor=MM_ABS16(0x16e0),
++     [bp+0x10]=free-count=MM_ABS16(0x16e4); descriptor pool: head=MM_ABS16(0x16e2), count=MM_ABS16(0x16dc).
++   ALL of these run ONLY on the mission-load cascade deep path: the boot pool nodes all have [2]&0x50 set
++   so 0dc2's guard tail is always taken and the deep path + 0ecb + 10dc + 1117 + 0cce + 1019 are DEAD on
++   every one of the 19 covered flows (proven: 19/19 pass with the crash-prone Ghidra-mangled `*0x0` bodies
++   these replace -- if they were reached on a covered flow they would already SIGSEGV).  So the
++   reconstruction is behaviour-NEUTRAL for the covered flows by construction; correctness is exercised
++   only on the ACCEPT cascade.  RESIDUAL RISK (documented per doctrine): the cascade is not AE=0 so the
++   heap-move cannot be bit-verified -- it is validated by (a) the "0dc2 unimplemented" warning vanishing,
++   (b) no SIGSEGV in the reconstruction, (c) the boot MEMMGR invariants unchanged, (d) verify.sh 19/19. */
++
++/* Paragraph-granular block relocation (asm 0x10e2b..0x10e60 / 0x10efa..0x10f27: rep movsw forward,
++   cx paragraphs from src_seg:0 to dst_seg:0).  dst_seg < src_seg on the deep path (the free hole is
++   below the node) so a forward copy is corruption-free; memmove is used for overlap safety. */
++static void mm_block_move(uint16_t dst_seg, uint16_t src_seg, uint16_t para)
++{
++  memmove(g_mem + ((unsigned long)dst_seg << 4),
++          g_mem + ((unsigned long)src_seg << 4),
++          (size_t)para * 16u);
++}
++
+ /* ===== ((uint)(uintptr_t)&FUN_1000_0cce) @ 1000:0cce ===== */
+ 
+ void __allregs FUN_1000_0cce(uint param_1,int param_2,undefined2 param_3)
+ 
+ {
+-  int *piVar1;
+-  undefined2 uVar2;
+-  undefined2 uVar3;
+-  int iVar4;
+-  undefined2 in_DX;
+-  bool bVar5;
+-  
+-  if (DAT_1000_c004 < param_1) {
+-    return;
+-  }
+-  if (param_1 == DAT_1000_c004) {
+-    return;
+-  }
+-  if (DAT_2000_d16c < 3) {
+-    bVar5 = false;
+-    FUN_1000_161d(0,in_DX,param_2,param_3);
+-    if (bVar5) {
+-      return;
++  /* PATCH 188: split the just-allocated node (g_mm_ds), returning the (size-param_1) remainder to the
++     free list as a fresh node carved from a descriptor popped off the desc pool.  asm 0x10cce..0x10d29.
++     param_1 = allocated size (paragraphs).  Cascade-only (see block header). */
++  uint16_t ds = g_mm_ds;
++  uint16_t size = (uint16_t)param_1;
++  uint16_t head, nd, ax;
++  (void)param_2; (void)param_3;
++  if (size > MM_S16(ds, 0x04)) { g_mm_cf = 1; return; }   /* cmp ax,[ds:4]; ja 0x10d2c (stc) */
++  if (size == MM_S16(ds, 0x04)) return;                    /* je 0x10ccd (nothing to split) */
++  if (MM_ABS16(0x16dc) < 3) {                              /* cmpw ss:0x16dc,3; jb refill 0x10cc2 */
++    static int refilled;
++    if (!refilled) { refilled = 1;
++      fprintf(stderr, "[memmgr] 0cce descriptor-pool refill path taken (count=%u)\n", MM_ABS16(0x16dc));
+     }
++    FUN_1000_161d(0, 0, 0, 0);                             /* xor ax,ax; call 0x1161d */
++    if (g_mm_cf) return;                                    /* jae 0x10cde else ret */
+   }
+-  uVar3 = DAT_2000_d172;
+-  uVar2 = *(undefined2 *)&DAT_1000_c00c;
+-  *(undefined2 *)&DAT_1000_c00e = 0;
+-  DAT_2000_d16c = DAT_2000_d16c - 1;
+-  piVar1 = (int *)0x0;
+-  DAT_2000_d172 = uVar2;
+-  *piVar1 = DAT_1000_c000 + param_1;
+-  LOCK();
+-  UNLOCK();
+-  iVar4 = DAT_1000_c004 - param_1;
+-  DAT_1000_c004 = param_1;
+-  *(int *)&DAT_1000_c004 = iVar4;
+-  *(undefined2 *)&DAT_1000_c002 = 0x8082;
+-  *(int *)(param_2 + 4) = *(int *)(param_2 + 4) + *(int *)&DAT_1000_c004;
+-  FUN_1000_1114(param_2);
++  /* --- split 0x10cde --- pop a descriptor paragraph off the pool head --- */
++  head = MM_ABS16(0x16e2);                                 /* ax = ss:0x16e2 (pool head) */
++  nd   = MM_S16(head, 0x0c);                               /* es=head; es=es:[0xc] (head.next) */
++  MM_S16(nd, 0x0e) = 0;                                    /* movw es:[0xe],0 */
++  MM_ABS16(0x16e2) = nd;                                   /* mov ss:0x16e2,es (advance pool head) */
++  MM_ABS16(0x16dc) = (uint16_t)(MM_ABS16(0x16dc) - 1);     /* decw ss:0x16dc */
++  nd = head;                                               /* es = ax = the popped descriptor = new node */
++  MM_S16(nd, 0x00) = (uint16_t)(MM_S16(ds, 0x00) + size);  /* es:[0] = curnode.base + size */
++  { uint16_t t = MM_S16(ds, 0x04); MM_S16(ds, 0x04) = size; ax = (uint16_t)(t - size); } /* xchg [ds:4]; sub */
++  MM_S16(nd, 0x04) = ax;                                   /* es:[4] = remainder */
++  MM_S16(nd, 0x02) = 0x8082;                               /* movw es:[2],0x8082 (free flags) */
++  MM_ABS16(0x16d8) = (uint16_t)(MM_ABS16(0x16d8) + MM_S16(nd, 0x04)); /* add [bp+4],es:[4] */
++  g_mm_es = nd;                                            /* ES = new node for 1114 */
++  FUN_1000_1114((int)(uintptr_t)(g_mem + 0x1c000 + 0x16d4)); /* call 0x11114 (insert+coalesce) */
++  g_mm_cf = 0;                                             /* clc */
+   return;
+ }
+ 
+@@ -40167,12 +40190,62 @@
+   di = NODE16(ds, 0x06);               /* les di,[ds:6] */
+   es = NODE16(ds, 0x08);
+   if ((NODE8(es, di + 2) & 0x50) == 0) {   /* testb es:[di+2],0x50 ; jne tail (guard) */
+-    static int warned;
+-    if (!warned) { warned = 1;
+-      fprintf(stderr, "[memmgr] FUN_1000_0dc2 deep block-relocating allocator reached "
+-                      "(ds=0x%04x) -- unimplemented follow-on; falling through to free-list tail\n", ds);
++    /* ===== DEEP block-relocating allocator (asm 0x10dcd..0x10eca) -- PATCH 188 =====
++       Find a free hole (base < this node's base) large enough for this node's size, relocate the node's
++       CONTENTS down into the hole, swap the base/size fields, unlink both nodes, reinsert each into the
++       sorted free list (10dc / 1117 coalesce), split the remainder back (0cce), and return CF=0.  The
++       exact-adjacent case (hole.end == node.base) branches to 0ecb.  Cascade-only (see 0cce header). */
++    uint16_t cur = ds, cx, dx, cand, save_next, save_cx, srcbase, dstbase, gdi, ges, nxt, prv, ce;
++    cx = NODE16(cur, 0x04);            /* mov cx,[ds:4] (node size = request, paragraphs) */
++    dx = NODE16(cur, 0x00);            /* mov dx,[ds:0] (node base key) */
++    es = SS16(0x16e0);                 /* es = list anchor [bp+0xc] */
++    for (;;) {                          /* walk 0x10dd8 */
++      es = NODE16(es, 0x0c);           /* es = es.next */
++      ax = NODE16(es, 0x00);           /* cand base */
++      if (ax >= dx) goto tail;         /* jae 0x10d9e (passed insert point / not found) */
++      ce = (uint16_t)(ax + NODE16(es, 0x04));  /* cand end */
++      if (ce == dx) {                  /* je 0x10dbf -> 0ecb (exact adjacent) */
++        g_mm_ds = cur; g_mm_es = es;
++        FUN_1000_0ecb(0, 0);           /* relocate/coalesce; sets g_mm_ds/cf/zf, CF=0 */
++        return 0;
++      }
++      if (cx > NODE16(es, 0x04)) continue;  /* ja 0x10dd8 (hole too small) */
++      break;                            /* FOUND a big-enough hole */
+     }
++    cand = es;
++    FUN_1000_0f91(0x112f, 0x2043);      /* debug (gated off) */
++    g_mm_ds = cur; g_mm_es = cand; FUN_1000_1019(0);   /* relocation-notify hook bx=0 */
++    save_next = NODE16(cur, 0x0c);      /* push [ds:0xc] (node.next, restored at 0x10ec5) */
++    /* swap base fields (0x10e0d xchg): node.base <-> cand.base */
++    srcbase = NODE16(cur, 0x00);        /* si = node base (relocation SOURCE) */
++    { uint16_t t = NODE16(cand, 0x00); NODE16(cand, 0x00) = srcbase; dstbase = t; } /* cand.base=node.base; dst=old cand base */
++    NODE16(cur, 0x00) = dstbase;        /* node.base = old cand base */
++    /* swap size fields (0x10e1c xchg): node.size <-> cand.size */
++    save_cx = NODE16(cur, 0x04);        /* cx = node size = paragraphs to move */
++    { uint16_t t = NODE16(cand, 0x04); NODE16(cand, 0x04) = save_cx; NODE16(cur, 0x04) = t; }
++    mm_block_move(dstbase, srcbase, save_cx);   /* relocate node contents into the hole */
++    /* unlink node (0x10e63..0x10e73) */
++    nxt = NODE16(cur, 0x0c); prv = NODE16(cur, 0x0e);
++    NODE16(nxt, 0x0e) = prv; NODE16(prv, 0x0c) = nxt;
++    ax = NODE16(cur, 0x04);             /* node size (now = old cand size) */
++    SS16(0x16d8) = (uint16_t)(SS16(0x16d8) - ax);   /* sub [bp+4],ax (free-total) */
++    g_mm_es = cur; g_mm_ds = prv; FUN_1000_10dc();  /* insert node; g_mm_ds -> node */
++    ds = g_mm_ds;
++    gdi = NODE16(ds, 0x06); ges = NODE16(ds, 0x08); NODE16(ges, gdi) = NODE16(ds, 0x00); /* *guard=node.base */
++    /* unlink candnode (0x10e8d..0x10e9d) */
++    nxt = NODE16(cand, 0x0c); prv = NODE16(cand, 0x0e);
++    NODE16(nxt, 0x0e) = prv; NODE16(prv, 0x0c) = nxt;
++    ax = NODE16(cand, 0x04);            /* candnode size (now = old node size) */
++    SS16(0x16d8) = (uint16_t)(SS16(0x16d8) + ax);   /* add [bp+4],ax */
++    g_mm_es = cand; g_mm_ds = prv; FUN_1000_1117(); /* insert+coalesce candnode */
++    /* split remainder off node (0x10ead call 0cce with ax = orig node size) */
++    g_mm_ds = cur; FUN_1000_0cce(save_cx, (int)(uintptr_t)(g_mem + 0x1c000 + 0x16d4), 0);
++    g_mm_ds = cur; g_mm_es = cur; FUN_1000_1019(2); /* relocation-notify hook bx=2 */
++    FUN_1000_0f80();                    /* debug (gated off) */
++    g_mm_zf = (save_next == 0); g_mm_ds = save_next; g_mm_cf = 0; /* or ax,ax; mov ds,ax; ret CF=0 */
++    return 0;
+   }
++tail:
+   /* --- shared tail 0x10d9e --- */
+   ax = SS16(0x29e);
+   if (ax != 0) NODE8(ax, 0xbda) = 0x58;      /* movb es:[0xbda],0x58 when ss:[0x29e]!=0 */
+@@ -40219,63 +40292,39 @@
+ undefined2 __allregs FUN_1000_0ecb(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined2 *puVar2;
+-  undefined2 *puVar3;
+-  undefined2 uVar4;
+-  undefined2 uVar5;
+-  int iVar6;
+-  int iVar7;
+-  uint uVar8;
+-  int iVar9;
+-  undefined2 *puVar10;
+-  undefined2 *puVar11;
+-  undefined2 unaff_ES;
+-  
+-  FUN_1000_0f91(0x112f,0x2053);
+-  FUN_1000_1019(0);
+-  uVar5 = DAT_1000_c00c;
+-  uVar8 = DAT_1000_c004;
+-  iVar6 = DAT_1000_c000;
+-  iVar7 = *(int *)0x0;
+-  LOCK();
+-  UNLOCK();
+-  DAT_1000_c000 = iVar7;
+-  *(int *)0x0 = iVar7 + DAT_1000_c004;
+-  puVar10 = (undefined2 *)0x0;
+-  puVar11 = (undefined2 *)0x0;
+-  while (0xfff < uVar8) {
+-    for (iVar9 = -0x8000; iVar9 != 0; iVar9 = iVar9 + -1) {
+-      puVar3 = puVar11;
+-      puVar11 = puVar11 + 1;
+-      puVar2 = puVar10;
+-      puVar10 = puVar10 + 1;
+-      *puVar3 = *puVar2;
+-    }
+-    iVar6 = iVar6 + 0x1000;
+-    iVar7 = iVar7 + 0x1000;
+-    uVar8 = uVar8 - 0x1000;
+-  }
+-  for (iVar9 = uVar8 * 8; uVar4 = DAT_1000_c00e, uVar1 = DAT_1000_c00c, iVar9 != 0;
+-      iVar9 = iVar9 + -1) {
+-    puVar3 = puVar11;
+-    puVar11 = puVar11 + 1;
+-    puVar2 = puVar10;
+-    puVar10 = puVar10 + 1;
+-    *puVar3 = *puVar2;
+-  }
+-  *(undefined2 *)&DAT_1000_c00e = DAT_1000_c00e;
+-  *(undefined2 *)&DAT_1000_c00c = uVar1;
+-  FUN_1000_10dc();
+-  *(undefined2 *)*(undefined4 *)&DAT_1000_c006 = *(undefined2 *)0x0;
+-  uVar4 = *(undefined2 *)&DAT_1000_c00c;
+-  uVar1 = *(undefined2 *)&DAT_1000_c00e;
+-  *(undefined2 *)&DAT_1000_c00e = uVar1;
+-  *(undefined2 *)&DAT_1000_c00c = uVar4;
+-  FUN_1000_1117();
+-  FUN_1000_1019(2);
++  /* PATCH 188: MEMMGR EXACT-ADJACENT relocate/coalesce (0dc2 deep case candnode.end == curnode.base).
++     asm 0x10ecb..0x10f7f.  Entry via g_mm_ds = curnode, g_mm_es = candnode.  Relocates curnode's
++     contents down into the candidate free hole, grows the candidate base past it, unlinks + reinserts
++     both nodes, returns g_mm_ds = curnode.next, CF=0.  Cascade-only (see 0cce block header). */
++  uint16_t ds = g_mm_ds;                 /* curnode */
++  uint16_t cand = g_mm_es;               /* candnode (saved across the move: asm push es @0x10ef4) */
++  uint16_t cx, di, si, ax, save_next, save_ds, gdi, ges, nxt, prv;
++  (void)param_1; (void)param_2;
++  FUN_1000_0f91(0x112f, 0x2053);         /* debug (gated off) */
++  g_mm_ds = ds; g_mm_es = cand; FUN_1000_1019(0);  /* notify hook bx=0 */
++  save_next = MM_S16(ds, 0x0c);          /* push [ds:0xc] (curnode.next) */
++  cx = MM_S16(ds, 0x04);                 /* mov cx,[ds:4] (curnode size) */
++  di = MM_S16(cand, 0x00); si = di;      /* mov di/si,es:[0] (candnode base) */
++  { uint16_t t = MM_S16(ds, 0x00); MM_S16(ds, 0x00) = si; si = t; } /* xchg si,[ds:0]: curnode.base=candbase; si=old curbase */
++  ax = (uint16_t)(di + cx);              /* add ax,cx (candbase + curnode size) */
++  MM_S16(cand, 0x00) = ax;               /* mov es:[0],ax (grow candidate base) */
++  mm_block_move(di, si, cx);             /* relocate curnode data: dst=candbase, src=old curbase, cx para */
++  /* unlink curnode (asm pop es = curnode seg @0x10f29) */
++  nxt = MM_S16(ds, 0x0c); prv = MM_S16(ds, 0x0e);
++  MM_S16(nxt, 0x0e) = prv; MM_S16(prv, 0x0c) = nxt;
++  g_mm_es = ds; g_mm_ds = prv; FUN_1000_10dc();  /* insert curnode; g_mm_ds -> curnode */
++  ds = g_mm_ds;
++  gdi = MM_S16(ds, 0x06); ges = MM_S16(ds, 0x08); MM_S16(ges, gdi) = MM_S16(ds, 0x00); /* *guard = curnode.base */
++  save_ds = ds;                          /* push ds (curnode) @0x10f4c */
++  /* unlink candnode (asm pop es = candnode @0x10f4b) */
++  nxt = MM_S16(cand, 0x0c); prv = MM_S16(cand, 0x0e);
++  MM_S16(nxt, 0x0e) = prv; MM_S16(prv, 0x0c) = nxt;
++  g_mm_es = cand; g_mm_ds = prv; FUN_1000_1117();  /* insert+coalesce candnode */
++  ds = save_ds;                          /* pop ds (curnode) @0x10f64 */
++  g_mm_ds = ds; g_mm_es = ds; FUN_1000_1019(2);        /* notify hook bx=2 */
+   FUN_1000_0f80();
+-  return uVar5;
++  g_mm_zf = (save_next == 0); g_mm_ds = save_next; g_mm_cf = 0;  /* or ax,ax; mov ds,ax; ret CF=0 */
++  return save_next;
+ }
+ 
+ 
+@@ -40339,13 +40388,25 @@
+ void __allregs FUN_1000_1019(int param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  undefined2 uVar2;
+-  
+-  uVar2 = (undefined2)((ulong)_DAT_1000_c006 >> 0x10);
+-  if ((*(uint *)((int)_DAT_1000_c006 + 2) & *(uint *)(param_1 + 0x1748)) != 0) {
+-    puVar1 = (undefined2 *)((int)_DAT_1000_c006 + 4);
+-    (*(code *)fist_icall_near(0x1000u,(uint16_t)(*puVar1)))();
++  /* PATCH 188: MEMMGR block-relocation NOTIFY hook.  asm 0x11019: reads the current node's owner
++     descriptor far ptr (DS:DI = node[6:8]); if (mask[0x1748+bx] & descriptor[di+2]) it FAR-calls the
++     owner's relocation callback descriptor[di+4] with AX=node.base, DX=candnode.base so the owner can
++     fix up its pointer to the moved block.  Cascade-only (see 0cce block header).  If the callback
++     vector is 0/uninstalled fist_icall_far no-ops (the faithful non-error path). */
++  uint16_t ds  = g_mm_ds;                       /* current node paragraph */
++  uint16_t es  = g_mm_es;                        /* candidate node (source of DX = es:[0]) */
++  uint16_t dx  = MM_S16(ds, 0x00);              /* mov dx,[ds:0] (node base) */
++  uint16_t gdi = MM_S16(ds, 0x06);              /* lds di,[ds:6] : di */
++  uint16_t gds = MM_S16(ds, 0x08);              /*               : ds' = descriptor seg */
++  uint16_t mask = MM_ABS16(0x1748 + (uint16_t)param_1);   /* mov ax,ss:0x1748(bx) */
++  if (mask & MM_S16(gds, gdi + 2)) {            /* test ax,[di+2] ; je skip */
++    uint32_t tgt = *(uint32_t *)(g_mem + ((unsigned long)gds << 4) + (uint16_t)(gdi + 4)); /* [di+4] */
++    static int fired;
++    if (!fired) { fired = 1;
++      fprintf(stderr, "[memmgr] 1019 relocation-notify callback fired (bx=%d tgt=%08x)\n",
++              param_1, tgt);
++    }
++    (*(code *)fist_icall_far(tgt))(dx, MM_S16(es, 0x00));  /* lcall [di+4] (ax=node.base, dx=cand.base) */
+   }
+   return;
+ }
+@@ -40471,22 +40532,19 @@
+ void __allregs FUN_1000_10dc(void)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined2 unaff_ES;
+-  undefined2 uVar2;
+-  
+-  for (uVar2 = 0x1c00; *(uint *)0x0 < *(uint *)0x0; uVar2 = *(undefined2 *)&DAT_1000_c00c) {
+-  }
+-  do {
+-    uVar2 = *(undefined2 *)&DAT_1000_c00e;
+-  } while (*(uint *)0x0 < *(uint *)0x0);
+-  *(undefined2 *)&DAT_1000_c00e = uVar2;
+-  LOCK();
+-  uVar1 = *(undefined2 *)&DAT_1000_c00c;
+-  *(undefined2 *)&DAT_1000_c00c = unaff_ES;
+-  UNLOCK();
+-  *(undefined2 *)&DAT_1000_c00c = uVar1;
+-  *(undefined2 *)&DAT_1000_c00e = unaff_ES;
++  /* PATCH 188: MEMMGR sorted-list insert WITHOUT coalesce.  asm 0x110dc..0x1110f: walk DS forward
++     ([0xc]) while node.base > cur.base, then backward ([0xe]) while node.base < cur.base, then splice
++     ES (g_mm_es) in between; return DS = ES (node).  Walk starts from the caller's DS (g_mm_ds).
++     Cascade-only (see 0cce block header). */
++  uint16_t es = g_mm_es, ds = g_mm_ds, key = MM_S16(es, 0x00), old;
++  while (key > MM_S16(ds, 0x00)) ds = MM_S16(ds, 0x0c);   /* 0x110e6 ja: walk next */
++  while (key < MM_S16(ds, 0x00)) ds = MM_S16(ds, 0x0e);   /* 0x110ec jb: walk prev */
++  MM_S16(es, 0x0e) = ds;                                  /* mov es:[0xe],ds (node.prev=ds) */
++  old = MM_S16(ds, 0x0c); MM_S16(ds, 0x0c) = es;          /* xchg es,[ds:0xc] : old=ds.next; ds.next=node */
++  MM_S16(es, 0x0c) = old;                                 /* mov es:[0xc],ax (node.next=old ds.next) */
++  ds = old;                                               /* mov ds,ax */
++  MM_S16(ds, 0x0e) = es;                                  /* mov [0xe],es (oldnext.prev=node) */
++  g_mm_ds = es;                                           /* mov ax,es; mov ds,ax */
+   return;
+ }
+ 
+@@ -40574,59 +40632,52 @@
+ undefined2 __allregs FUN_1000_1117(void)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined2 uVar2;
+-  undefined2 unaff_ES;
+-  undefined2 uVar3;
+-  
+-  for (uVar3 = 0x1c00; *(uint *)0x0 < *(uint *)0x0; uVar3 = *(undefined2 *)&DAT_1000_c00c) {
++  /* PATCH 188: MEMMGR sorted-list insert + forward/backward COALESCE.  asm 0x11117..0x111df -- IDENTICAL
++     body to FUN_1000_1114 (which is 0x11114 = `mov ds,[bp+0xc]` then falls into 0x11117) except 1117
++     starts the walk from the CALLER's DS (g_mm_ds), not the anchor.  Reuses the patch-025-verified 1114
++     reconstruction logic.  Cascade-only (see 0cce block header). */
++  uint16_t es = g_mm_es, ds = g_mm_ds, ax, old;
++  ax = MM_S16(es, 0x00);                                  /* mov ax,es:[0] */
++  while (ax > MM_S16(ds, 0x00)) ds = MM_S16(ds, 0x0c);    /* 0x11121 ja */
++  while (ax < MM_S16(ds, 0x00)) ds = MM_S16(ds, 0x0e);    /* 0x1112b jb */
++  MM_S16(es, 0x0e) = ds;                                  /* mov es:[0xe],ds */
++  old = MM_S16(ds, 0x0c); MM_S16(ds, 0x0c) = es; MM_S16(es, 0x0c) = old; /* xchg [0xc]; es:[0xc]=old */
++  ds = old;                                               /* mov ds,ax */
++  MM_S16(ds, 0x0e) = es;                                  /* mov [0xe],es */
++  /* forward coalesce: node.base+node.size == ds.base (ds = node.next) */
++  ax = (uint16_t)(MM_S16(es, 0x00) + MM_S16(es, 0x04));
++  if (MM_S16(ds, 0x00) == ax) {                           /* cmp [0],ax ; jne 0x1118e */
++    uint16_t s = (uint16_t)(MM_S16(ds, 0x04) + MM_S16(es, 0x04));
++    if (s >= MM_S16(ds, 0x04)) {                          /* jb 0x1118e (no overflow) */
++      uint16_t t;
++      MM_S16(es, 0x04) = s;                               /* mov es:[4],ax (merged size) */
++      t = ds; ds = MM_ABS16(0x16e2); MM_S16(ds, 0x0e) = t;/* recycle ds into desc pool */
++      ds = t; old = MM_ABS16(0x16e2); MM_ABS16(0x16e2) = t;
++      { uint16_t tmp = MM_S16(ds, 0x0c); MM_S16(ds, 0x0c) = old; old = tmp; }
++      MM_S16(ds, 0x0e) = 0;
++      MM_ABS16(0x16dc) = (uint16_t)(MM_ABS16(0x16dc) + 1);
++      ds = old; MM_S16(ds, 0x0e) = es; MM_S16(es, 0x0c) = ds;
++    }
+   }
+-  do {
+-    uVar3 = *(undefined2 *)&DAT_1000_c00e;
+-  } while (*(uint *)0x0 < *(uint *)0x0);
+-  *(undefined2 *)&DAT_1000_c00e = uVar3;
+-  LOCK();
+-  uVar1 = *(undefined2 *)&DAT_1000_c00c;
+-  *(undefined2 *)&DAT_1000_c00c = unaff_ES;
+-  UNLOCK();
+-  *(undefined2 *)&DAT_1000_c00c = uVar1;
+-  *(undefined2 *)&DAT_1000_c00e = unaff_ES;
+-  if ((*(int *)0x0 + *(int *)&DAT_1000_c004 == *(int *)0x0) &&
+-     (!CARRY2(*(uint *)&DAT_1000_c004,*(uint *)&DAT_1000_c004))) {
+-    *(int *)&DAT_1000_c004 = *(uint *)&DAT_1000_c004 + *(uint *)&DAT_1000_c004;
+-    *(undefined2 *)&DAT_1000_c00e = uVar1;
+-    LOCK();
+-    UNLOCK();
+-    LOCK();
+-    uVar3 = *(undefined2 *)&DAT_1000_c00c;
+-    uVar2 = uVar1;
+-    *(undefined2 *)&DAT_1000_c00c = DAT_2000_d172;
+-    DAT_2000_d172 = uVar2;
+-    UNLOCK();
+-    *(undefined2 *)&DAT_1000_c00e = 0;
+-    DAT_2000_d16c = DAT_2000_d16c + 1;
+-    *(undefined2 *)&DAT_1000_c00e = unaff_ES;
+-    *(undefined2 *)&DAT_1000_c00c = uVar3;
+-  }
+-  uVar3 = *(undefined2 *)&DAT_1000_c00e;
+-  if ((*(int *)0x0 + *(int *)&DAT_1000_c004 == *(int *)0x0) &&
+-     (!CARRY2(*(uint *)&DAT_1000_c004,*(uint *)&DAT_1000_c004))) {
+-    *(int *)&DAT_1000_c004 = *(uint *)&DAT_1000_c004 + *(uint *)&DAT_1000_c004;
+-    *(undefined2 *)&DAT_1000_c00e = unaff_ES;
+-    LOCK();
+-    UNLOCK();
+-    LOCK();
+-    uVar1 = *(undefined2 *)&DAT_1000_c00c;
+-    uVar2 = unaff_ES;
+-    *(undefined2 *)&DAT_1000_c00c = DAT_2000_d172;
+-    DAT_2000_d172 = uVar2;
+-    UNLOCK();
+-    DAT_2000_d16c = DAT_2000_d16c + 1;
+-    *(undefined2 *)&DAT_1000_c00e = uVar3;
+-    *(undefined2 *)&DAT_1000_c00c = uVar1;
+-    return uVar3;
++  /* backward coalesce: ds = node.prev; ds.base+ds.size == node.base */
++  ds = MM_S16(es, 0x0e);
++  ax = (uint16_t)(MM_S16(ds, 0x00) + MM_S16(ds, 0x04));
++  if (MM_S16(es, 0x00) == ax) {                           /* cmp es:[0],ax ; jne 0x111da */
++    uint16_t s = (uint16_t)(MM_S16(es, 0x04) + MM_S16(ds, 0x04));
++    if (s >= MM_S16(es, 0x04)) {                          /* jb 0x111da */
++      uint16_t t;
++      MM_S16(ds, 0x04) = s;
++      t = es; es = MM_ABS16(0x16e2); MM_S16(es, 0x0e) = t;
++      es = t; old = MM_ABS16(0x16e2); MM_ABS16(0x16e2) = t;
++      { uint16_t tmp = MM_S16(es, 0x0c); MM_S16(es, 0x0c) = old; old = tmp; }
++      MM_ABS16(0x16dc) = (uint16_t)(MM_ABS16(0x16dc) + 1);
++      es = old; MM_S16(es, 0x0e) = ds; MM_S16(ds, 0x0c) = es;
++      g_mm_es = ds; g_mm_ds = ds;
++      return (undefined2)ds;
++    }
+   }
+-  return unaff_ES;
++  g_mm_es = es; g_mm_ds = es;
++  return (undefined2)es;
+ }
+ 
+ 
