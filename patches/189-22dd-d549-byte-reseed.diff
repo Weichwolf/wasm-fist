@@ -1,0 +1,66 @@
+PATCH 189: fix the 22dd script-interpreter cursor RE-SEED -- d549 is read as a BYTE, not a 16-bit word.
+
+The in-mission command/script interpreter FUN_0000_22dd dispatches handlers through a cursor
+(DAT_2000_0a86, the patch-185 uint16 DGROUP near-offset).  Each handler's tail RE-SEEDS the cursor
+for the next script phase from a d549-indexed pointer table.  asm 0x23b0-0x23bd (shared by the tails
+of FUN_0000_2322 and its mid-entry siblings FUN_0000_2380 / FUN_0000_2387):
+
+    xor bx,bx            ; bx = 0
+    mov bl,[0x1549]      ; bx = BYTE d549  (zero-extended -- ONLY the low byte)
+    mov ax,[0x4a88+bx]   ; ax = word[DGROUP:0x4a88 + d549]   (the next handler-offset sub-table)
+    mov [0x4a86],ax      ; cursor = ax
+
+d549 is a BYTE.  Ghidra (and patch 186's reconstruction of the 2322 tail) read DAT_1000_d549 as the
+16-bit WORD at DGROUP:0x1549.  But the adjacent byte d54a (DGROUP:0x154a) is NONZERO on the mission
+path -- FUN_1000_67e3 sets d54a = byte[0x23b19] (observed d54a = 0x02) -- so the 16-bit read yields
+0x021e instead of 0x1e, and word[0x4a88 + 0x021e] = word[0x4ca6] = 0x0000.  The cursor is then set to
+0, the 22dd loop dispatches word[DGROUP:0] = 0 (an unresolved near target that traps to 0), the cursor
+never advances, and the interpreter spins forever inside e714 -> 459a -> 22dd (the "op-0x4c frame
+loop" hang -- the extender op-0x4c posts are the async timer-pump present, NOT the primary blocker).
+
+Fix (asm-verified, base-loss/width class -- same idiom as patch 119's byte/word table fixes): read
+d549 as a BYTE and index the DGROUP table at 0x4a88 explicitly.  Applied at all three re-seed sites:
+the patch-186 2322 tail, and the two pristine mid-entry siblings FUN_0000_2380 / FUN_0000_2387 (which
+share the identical 0x23b0-0x23bd tail asm and carried the same Ghidra 16-bit + &0a88-host-ptr form).
+
+VALIDATED (FIST_CASCADE=1 + the patch-172 3-click route, from repo root): pre-189 the 22dd loop
+dispatches handler 0x2322 ONCE then spins on cursor=0/tgt=0 forever (trace: 199x `cur=0000 tgt=0000`).
+Post-189 the cursor correctly advances 0x4aae -> word[0x4a88+0x1e]=0x6c8e and the loop dispatches the
+NEXT handler (tgt=0x23ea).  The new frontier is that handler: 0x23ea (+ its mid-entry siblings 0x23e5
+/0x23ef) is an UNPROMOTED engine mid-function entry (`mov bx,0x6c34; jmp 0x23f2` -- a fixed-point
+coordinate/scaling handler) that Ghidra never recovered, so it traps; recovering + reconstructing it
+is the next step toward populating the viewport geometry.
+
+CASCADE-ONLY / BEHAVIOUR-NEUTRAL: the 22dd interpreter is gated by byte[DGROUP:0x1548] (d548) > 0,
+which is 0 on the menu and every one of the 19 verified flows (the re-seed is never reached there).
+default boot rc=0, mainmenu md5 unchanged, verify.sh both = 19/19.
+
+--- a/fist.c
++++ b/fist.c
+@@ -9501,7 +9501,7 @@
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c55c)))(dst[2]);  /* mov ax,[di+4]; lcall [0x55c] */
+   DAT_2000_2b72 = 0;
+   DAT_2000_2b74 = 0xffff;
+-  DAT_2000_0a86 = *(uint16_t *)(g_mem + 0x1c000 + 0x4a88 + (uint)(uint16_t)DAT_1000_d549);
++  DAT_2000_0a86 = *(uint16_t *)(g_mem + 0x1c000 + 0x4a88 + (uint)*(uint8_t *)(g_mem + 0x1d549));  /* PATCH 189: d549 is a BYTE (asm `xor bx,bx; mov bl,[0x1549]`), not the 16-bit word (whose high byte d54a!=0 -> wrong index -> cursor=0 -> trap) */
+   return;
+ }
+ 
+@@ -9524,7 +9524,7 @@
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c55c)))(0xf69,param_4);
+   DAT_2000_2b72 = 0;
+   DAT_2000_2b74 = 0xffff;
+-  DAT_2000_0a86 = *(undefined2 *)((int)(undefined2 *)&DAT_2000_0a88 + (uint)DAT_1000_d549);
++  DAT_2000_0a86 = *(uint16_t *)(g_mem + 0x1c000 + 0x4a88 + (uint)*(uint8_t *)(g_mem + 0x1d549));  /* PATCH 189: 22dd re-seed (asm 0x23b0 `xor bx,bx; mov bl,[0x1549]; mov ax,[0x4a88+bx]`): d549 read as a BYTE into the near-offset table; Ghidra used &0a88 host-ptr + the 16-bit d549 (d54a in high byte) -> wrong index -> cursor=0 -> trap */
+   return;
+ }
+ 
+@@ -9543,7 +9543,7 @@
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c55c)))();
+   DAT_2000_2b72 = 0;
+   DAT_2000_2b74 = 0xffff;
+-  DAT_2000_0a86 = *(undefined2 *)((int)(undefined2 *)&DAT_2000_0a88 + (uint)DAT_1000_d549);
++  DAT_2000_0a86 = *(uint16_t *)(g_mem + 0x1c000 + 0x4a88 + (uint)*(uint8_t *)(g_mem + 0x1d549));  /* PATCH 189: 22dd re-seed (asm 0x23b0 `xor bx,bx; mov bl,[0x1549]; mov ax,[0x4a88+bx]`): d549 read as a BYTE into the near-offset table; Ghidra used &0a88 host-ptr + the 16-bit d549 (d54a in high byte) -> wrong index -> cursor=0 -> trap */
+   return;
+ }
+ 
