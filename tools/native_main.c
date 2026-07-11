@@ -798,6 +798,7 @@ extern void m_ext_FUN_0000_11cb(int, int, int, int, int);   /* KDV OPEN wrapper 
 extern void m_ext_FUN_0000_11dd(int, int, int);             /* KDV DECODE+PRESENT wrapper */
 extern void m_ext_FUN_0000_6f17(int, int, int, int, int, int); /* KDV close/free wrapper */
 extern void m_ext_FUN_0000_89b0(unsigned, unsigned, unsigned); /* op-0x18 MAP-LOAD setup (terrain/pal/sky) */
+extern void m_ext_FUN_0000_84c0(unsigned);                     /* extender task-setup allocator (bc90 matrix etc.) */
 static int  g_ext_ready;      /* module image loaded + slots seeded */
 static int  g_kdv_open;       /* TITLE.KDV opened (once) */
 static long g_kdv_frames;     /* frames decoded (diagnostic) */
@@ -967,6 +968,28 @@ int fist_extender_gate(void) {
             fprintf(stderr, "[ext] op 0x18 MAP-LOAD: TCB @0x%05x  '%.13s'/'%.13s'/'%.13s'/'%.13s'  [+0x54]=%02x [+0x59]=%02x\n",
                     tcb_lin, g_mem+tcb_lin+0x7a, g_mem+tcb_lin+0x8a, g_mem+tcb_lin+0x9a, g_mem+tcb_lin+0xaa,
                     g_mem[tcb_lin+0x54], g_mem[tcb_lin+0x59]);
+            /* DRIVE THE EXTENDER TASK-SETUP ALLOCATOR (the located bc90 gate).  The original runs
+             * FUN_0000_84c0 during the extender exec/task-load (fist_image.bin spawn routines 0dee/... ->
+             * 84c0), BEFORE 89b0's map-load.  84c0 allocates, via the seeded bump allocator FUN_0000_36bf/
+             * 3772 ([0x90b]/[0x90f]), the persistent palette-reduction working buffers -- the 64 KB
+             * color-distance MATRIX at [0xbc90] (0x10000-aligned, so bc9c's low-16 (col<<8|row) index math
+             * lands in the 64 KB block), bc94/85c0/85c4/3909/390d/3918 -- and sets the bc98 FREE-CHECKPOINT
+             * that 89b0's opening 3322(&bc98) releases to.  This port had never driven 84c0, so [0xbc90]=0
+             * -> bc9c wrote through a near-NULL ptr (SIGSEGV).  [0xc93] is still the extender task here
+             * (0x90000), so 84c0's TCB+0x488 reset lands on the extender task, not the engine mission TCB.
+             * Runs once (map_loaded guard).  84c0 does no INT-21 (pure allocation) -> no ext-mode needed. */
+            /* Task-load reinit of the extender bump allocator (FUN_0000_2f7c): the original runs 84c0 at
+             * a FRESH task-load (registry empty), so bc90..bc98 register at indices 0..7 with the bc98
+             * FREE-CHECKPOINT LAST -> 89b0's opening 3322(&bc98) then frees only per-map blocks ABOVE the
+             * checkpoint, keeping the matrix.  This port reaches op 0x18 with a STALE size-0 bc98 already
+             * registered at index 0 (a leftover checkpoint from the intro/menu heap), so without the reset
+             * 84c0's own bc98 registration DEDUPES away, bc98 stays at index 0, and 3322(&bc98) frees the
+             * whole registry (indices 0..7) -> zeroes [0xbc90] -> bc9c NULL-writes (SIGSEGV).  Forcing
+             * 2f50=0 makes 84c0's first 36bf call 2f7c (2f50=[0x90b], 2f54=0) -> fresh registry, bc98 at
+             * index 7.  Verified: 3661(&bc98)->idx 7, 3322 preserves bc90.  The KDV intro heap is done by
+             * op 0x18 (2f54 was already 1, cursor already at base) -> the reset only drops the stale marker. */
+            *(uint32_t*)(xb+0x2f50) = 0;
+            m_ext_FUN_0000_84c0(inbox);
             g_fist_ext_int = 1;                    /* extender-mode flat FILEMGR INT 21h */
             m_ext_FUN_0000_89b0(inbox, inbox, inbox);
             g_fist_ext_int = 0;

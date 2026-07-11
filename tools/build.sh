@@ -44,7 +44,8 @@ for c in $UNITS_C; do
 done
 [ "$err" = 1 ] && { echo "build aborted (compile errors)"; exit 1; }
 
-# Link. g_mem[0x180000] is a 1.5 MB static array; INITIAL_MEMORY + growth cover it plus the C heap.
+# Link. g_mem[0x200000] is a 2 MB static array (grown to host the extender terrain-load heap);
+# INITIAL_MEMORY + growth cover it plus the C heap.
 # EXIT_RUNTIME=1 so main()'s return (or the FIST_RUNMS _exit) terminates the node process, like native.
 # NODERAWFS=1 gives node's real filesystem so the harness's relative paths (re_out/*.bin, armoredfist/*)
 # resolve from the repo root exactly as native. wasm_pre.js mirrors process.env into ENV for getenv().
