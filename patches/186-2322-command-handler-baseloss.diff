@@ -1,0 +1,133 @@
+PATCH 186: base-loss + pointer-scaling reconstruction of FUN_0000_2322, the FIRST command handler
+dispatched by the in-mission command/script interpreter FUN_0000_22dd (via the patch-185 0a86 cursor).
+
+With patch 185 the 22dd dispatch loop resolves its double-indirection target correctly and calls into
+the real handler stream; the first handler is FUN_0000_2322 (a viewport/element geometry setup + a
+driver rowtable-pitch method call).  asm 0x2322:
+    mov di,[0x156a]     ; di = DAT_1000_d56a  -- a 16-bit DGROUP NEAR-OFFSET to the dest struct
+    mov bx,[0x1552]     ; bx = DAT_1000_d552  -- a 16-bit DGROUP NEAR-OFFSET to the src struct
+    ... all [di+N]/[bx+N] field reads/writes are DS-relative (DS=DGROUP=0x1c00) ...
+    mov ax,[di+4]; lcall [0x55c]   ; call the driver rowtable-pitch method (c55c = mga 0x02c1)
+
+Ghidra typed DAT_1000_d56a `int**` (a 4-byte HOST pointer) and DAT_1000_d552 `undefined2` used as
+`*(int*)(d552+N)`, so `DAT_1000_d56a[7] = *(int*)(DAT_1000_d552+0x14)` wild-dereffed the near-offset
+as a host address (SIGSEGV).  On top of the base-loss it used Ghidra 2-byte-int element indexing
+(`piVar7[7]` = +14 in Ghidra, +28 under gcc), so every field access also doubled its byte offset.
+
+Fix (base-loss/width class, mirrors patches 180/181/182): rebase both structs onto
+g_mem+0x1c000+near_offset, read/write uint16 fields at the asm byte offsets, and pass the struct to
+its callees (23be, 0d2e, 195d) as the DGROUP OFFSET + segment far-pair the asm forms
+(`lea ax/bx,[di]; mov cx,ds`), not a host pointer.  The tail method call `lcall [0x55c]` is threaded
+ax = dst[2] (asm `mov ax,[di+4]`).
+
+VALIDATED by driving the ACCEPT cascade (FIST_CASCADE=1 + the patch-172 3-click route, from repo
+root): pre-186 the cascade SIGSEGVs inside 2322 at the first field write; post-186 it advances
+THROUGH 2322 -- the 22dd loop dispatches, 2322 sets the struct up, and c55c dispatches into the
+MGAVIDEO pitch-cache method mga 0x02c1 (which then faults in ITS OWN unrelated linked-list base-loss:
+the next frontier).  So 2322 itself now runs crash-free.
+
+Cascade-only / behaviour-neutral for the 19 verify flows: FUN_0000_2322 has NO direct callers (grep
+build/*.c); it is reached ONLY through 22dd's dispatch loop, gated by byte[DGROUP:0x1548]
+(DAT_1000_d548) > 0 which is 0 in the menu (verified: 22dd breakpoint shows d548=0 on the menu path).
+The pre-patch wild deref would already SIGSEGV the 19 flows if this handler were reached -> they are
+19/19.  Default boot rc=0, mainmenu md5 3a6ff1c5 unchanged.  Sources stay pristine
+(re_out/fist.c md5 61453e42); fist.c via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -9448,57 +9448,60 @@
+ void __allregs FUN_0000_2322(undefined2 param_1)
+ 
+ {
+-  byte *pbVar1;
++  /* PATCH 186: base-loss + pointer-scaling reconstruction of the first 22dd command handler.
++     asm 0x2322: `mov di,[0x156a]` / `mov bx,[0x1552]` -- di=DAT_1000_d56a and bx=DAT_1000_d552 are
++     16-bit DGROUP NEAR-OFFSETS to two structs, all field reads/writes DS-relative (DS=DGROUP=0x1c00).
++     Ghidra typed d56a `int**` (a 4-byte host ptr) -> `DAT_1000_d56a[7] = *(int*)(DAT_1000_d552+0x14)`
++     wild-dereffed the near-offset as a host address (SIGSEGV at fist.c line ~9463), AND used 2-byte-int
++     element indexing (Ghidra `int`=2B, gcc=4B) so every `piVar7[n]`/`*(int*)` doubled its offset.
++     Rebase both structs onto g_mem+0x1c000 and use uint16 field accesses at the asm byte offsets.
++     Callees receive the struct as an offset+segment far-pair (asm `lea ax/bx,[di]; mov cx,ds`), so
++     they get di_off (the DGROUP offset), not a host pointer. */
+   long lVar2;
+   int iVar3;
+   uint uVar4;
+   int iVar5;
+   undefined2 uVar6;
+-  int *piVar7;
+-  int *piVar8;
+-  int *unaff_CS;
+-  
+-  piVar7 = DAT_1000_d56a;
+-  iVar5 = DAT_1000_d552;
+-  DAT_1000_d56a[7] = *(int *)(DAT_1000_d552 + 0x14);
+-  iVar3 = *(int *)(iVar5 + 10) - *(int *)(iVar5 + 6);
+-  piVar7[4] = 0;
+-  piVar7[6] = iVar3;
+-  piVar7[2] = iVar3;
+-  uVar4 = (*(int *)(iVar5 + 8) - *(int *)(iVar5 + 4)) + *(int *)(iVar5 + 0x16);
+-  piVar7[3] = 0;
+-  piVar7[5] = uVar4;
+-  if ((*piVar7 != 0) && (*piVar7 != DAT_1000_c722)) {
+-    lVar2 = (ulong)uVar4 * (ulong)(uint)piVar7[6];
++  uint16_t di_off = *(uint16_t *)(g_mem + 0x1d56a);   /* d56a struct DGROUP offset (di) */
++  uint16_t bx_off = *(uint16_t *)(g_mem + 0x1d552);   /* d552 struct DGROUP offset (bx) */
++  uint16_t *dst = (uint16_t *)(g_mem + 0x1c000 + di_off);
++  uint16_t *src = (uint16_t *)(g_mem + 0x1c000 + bx_off);
++  byte *dstb = (byte *)dst;
++
++  dst[7] = src[0xa];                 /* [di+0xe] = [bx+0x14] */
++  iVar3 = (short)src[5] - (short)src[3];  /* [bx+0xa] - [bx+6] */
++  dst[4] = 0;                        /* [di+8] */
++  dst[6] = iVar3;                    /* [di+0xc] */
++  dst[2] = iVar3;                    /* [di+4] */
++  uVar4 = (uint)(((short)src[4] - (short)src[2]) + (short)src[0xb]);  /* [bx+8]-[bx+4]+[bx+0x16] */
++  dst[3] = 0;                        /* [di+6] */
++  dst[5] = (uint16_t)uVar4;          /* [di+0xa] */
++  if ((dst[0] != 0) && (dst[0] != DAT_1000_c722)) {
++    /* asm 0x235a `mul word[di+0xc]`: AX still holds uVar4 (unchanged since 0x2347) -> dx:ax = uVar4*dst[6].
++       16-bit unsigned multiply -> mask uVar4 to 16 bits (it is a 32-bit host int here). */
++    lVar2 = (ulong)(uint16_t)uVar4 * (ulong)(uint)dst[6];
+     uVar6 = (undefined2)((ulong)lVar2 >> 0x10);
+     DAT_2000_0a84 = (uint)lVar2;
+-    *(byte *)(piVar7 + 1) = *(byte *)(piVar7 + 1) & 0xfe;
+-    pbVar1 = (byte *)(piVar7 + 1);
+-    *pbVar1 = *pbVar1 | 0x20;
+-    if ((char)*pbVar1 < '\0') {
+-      piVar8 = piVar7;
+-      if ((*(byte *)(piVar7 + 1) & 0x10) != 0) {
+-        FUN_1000_0d2e(piVar7,param_1,piVar7);
+-        piVar8 = piVar7;
+-        unaff_CS = (int *)&DAT_1000_cf69;
++    dstb[2] = dstb[2] & 0xfe;
++    dstb[2] = dstb[2] | 0x20;
++    if ((char)dstb[2] < '\0') {       /* jns 0x2379: sign bit set -> inner 0d2e branch */
++      if ((dstb[2] & 0x10) != 0) {
++        FUN_1000_0d2e(di_off,param_1,di_off);   /* lea ax,[di]; lcall 0xf69:0x169e */
+       }
+     }
+     else {
+-      FUN_0000_23be(uVar6,param_1,piVar7);
+-      piVar8 = piVar7;
++      FUN_0000_23be(uVar6,param_1,di_off);      /* call 0x23be: bx=di offset */
+     }
+-    piVar7 = unaff_CS;
+-    unaff_CS = (int *)&DAT_1000_cf69;
+-    iVar5 = FUN_1000_195d(0x1c00,piVar8);
++    iVar5 = FUN_1000_195d(0x1c00,di_off);       /* lea bx,[di]; mov cx,ds; lcall 0xf69:0x22cd */
+     if ((uint)(iVar5 << 4) < DAT_2000_0a84) {
+-      FUN_0000_23be(uVar6,param_1,piVar7);
++      FUN_0000_23be(uVar6,param_1,di_off);      /* call 0x23be */
+     }
+   }
+-  *(byte *)(piVar7 + 1) = *(byte *)(piVar7 + 1) | 0x60;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c55c)))(unaff_CS);
++  dstb[2] = dstb[2] | 0x60;           /* orb 0x60,[di+2] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c55c)))(dst[2]);  /* mov ax,[di+4]; lcall [0x55c] */
+   DAT_2000_2b72 = 0;
+   DAT_2000_2b74 = 0xffff;
+-  DAT_2000_0a86 = *(undefined2 *)((int)(undefined2 *)&DAT_2000_0a88 + (uint)DAT_1000_d549);
++  DAT_2000_0a86 = *(uint16_t *)(g_mem + 0x1c000 + 0x4a88 + (uint)(uint16_t)DAT_1000_d549);
+   return;
+ }
+ 
