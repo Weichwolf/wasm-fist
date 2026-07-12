@@ -1,0 +1,154 @@
+FUN_0000_b152 (current/player-object debug/HUD stats printer, reached via ab03's di==DAT_2000_3ae0 tail,
+patch 246): dropped text-vector value args + object/indexed base-loss (SIGSEGV).
+
+ROOT CAUSE (asm-verified 0xb152-0xb268): b152 emits the current object's fields through the text-panel
+far vectors ([0x298] setup, [0x26e] set-pos/format AX, [0x284] print-word AX, [0x286] print-byte AL).
+Ghidra dropped EVERY AX/AL value arg (calls became `()`) and base-lost the di reloads (DAT_2000_5a06 =
+near offset), the [di+off] object reads, the -0x7a60/+0x7d2a indexed reads, the [bx+6] resource deref,
+the -0x6606 panel-resource read and [0x97ee].  gdb crash at the -0x7a60 read (di as host ptr).  Fully
+reconstructed from asm: object = g_mem+0x1c000+di; each print value threaded into the vector's arg0.
+(The text vectors trap to no-op if uninstalled -> no wild deref either way.)  Mission-cascade only.
+--- a/fist.c	2026-07-12 17:27:14.122606903 +0200
++++ b/fist.c	2026-07-12 17:27:14.154442106 +0200
+@@ -27700,87 +27700,63 @@
+ void __allregs FUN_0000_b152(int param_1)
+ 
+ {
+-  undefined2 uStack0002;
+-  undefined2 uStack0004;
+-  undefined2 uStack0006;
+-  undefined2 uStack0008;
+-  undefined2 uStack000c;
+-  undefined2 uStack000e;
+-  undefined2 uStack0010;
+-  undefined2 uStack0012;
+-  undefined2 uStack0014;
+-  undefined2 uStack0016;
+-  undefined2 uStack0018;
+-  undefined2 uStack001a;
+-  undefined2 uStack001c;
+-  undefined2 uStack001e;
+-  undefined2 uStack0020;
+-  undefined2 uStack0022;
+-  undefined2 uStack0024;
+-  undefined2 uStack0026;
+-  undefined2 uStack0028;
+-  undefined2 uStack002a;
+-  undefined2 uStack002c;
+-  undefined2 uStack002e;
+-  undefined2 uStack0030;
+-  
+-  DAT_2000_5a06 = param_1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c298)))(param_1);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c286)))();
+-  uStack0002 = 0xb186;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack0004 = 0xb191;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))();
+-  uStack0006 = 0xb198;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack0008 = *(undefined2 *)((uint)*(byte *)(DAT_2000_5a06 + 0x1b) * 2 + -0x7a60);
+-  uStack0006 = 0xb1ab;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))();
+-  uStack0008 = 0xb1b2;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack000c = 0xb1ba;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))();
+-  uStack000e = 0xb1c1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack0010 = 0xb1d6;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))();
+-  uStack0012 = 0xb1dd;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack0014 = 0xb1e4;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))();
+-  uStack0016 = 0xb1eb;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack0018 = 0xb1f6;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))();
+-  uStack001a = 0xb1fd;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack001c = 0xb209;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))();
+-  uStack001e = 0xb210;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack0020 = 0xb21d;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))();
+-  uStack0022 = 0xb224;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack0024 = 0xb230;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))();
+-  uStack0026 = 0xb237;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack0028 = 0xb243;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))();
+-  uStack002a = 0xb24a;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack002c = 0xb255;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c286)))();
+-  uStack002e = 0xb25c;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))();
+-  uStack0030 = 0xb267;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c286)))();
++  /* PATCH 249: current/player-object debug/HUD stats printer (asm 0xb152-0xb268; DS=DGROUP=0x1c00),
++   * called by ab03 when di==DAT_2000_3ae0.  It emits the object's fields through the text-panel far
++   * vectors [0x298] setup, [0x26e] set-format/pos (AX=code), [0x284] print-word (AX), [0x286]
++   * print-byte (AL).  Ghidra DROPPED every AX/AL value arg (calls rendered `()`), base-lost the object
++   * reads ([di+off], di reloaded from DAT_2000_5a06 near offset), the -0x7a60/+0x7d2a indexed reads,
++   * the [bx+6] resource deref, the -0x6606 panel-resource read and the 0x97ee global.  Reconstructed
++   * from asm: object = g_mem+0x1c000+di; threaded the print value into each vector's arg0.  (If the
++   * text vectors are uninstalled the calls trap to no-op; either way no wild deref.) */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  unsigned char *o;
++  uint16_t si, bxp;
++  DAT_2000_5a06 = di;                                                        /* b153 mov [0x9a06],di */
++  si = *(uint16_t *)(dg + (uint16_t)((uint)(unsigned char)DAT_2000_578a * 2 - 0x6606)); /* b157-b15f */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c298)))((int)di, 0xc, 0xa, (int)si);      /* b163/b166/b169 */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0xd0a);              /* b16d/b170 */
++  o = dg + DAT_2000_5a06;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c286)))((uint)o[0x43]);      /* b178 al=[di+0x43] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0xe0a);
++  o = dg + DAT_2000_5a06;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))(*(uint16_t *)(o + 0x57)); /* b18a ax=[di+0x57] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0xf0a);
++  o = dg + DAT_2000_5a06;
++  bxp = *(uint16_t *)(dg + (uint16_t)((uint)o[0x1b] * 2 - 0x7a60));         /* b19c-b1a2 */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))(bxp);               /* b1a7 (ax pushed) */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0x100a);            /* b1ab */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))(*(uint16_t *)(dg + (uint16_t)(bxp + 6))); /* b1b2 pop bx; b1b3 ax=[bx+6] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0x110a);
++  o = dg + DAT_2000_5a06;
++  bxp = *(uint16_t *)(dg + (uint16_t)((uint)o[0x1b] * 2 + 0x7d2a));        /* b1c5/b1cb bx=[bx+0x7d2a] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))((uint)*(unsigned char *)(dg + bxp)); /* b1cf ax=byte[bx] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0x120a);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))(*(uint16_t *)(dg + 0x97ee)); /* b1dd ax=[0x97ee] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0x130a);
++  o = dg + DAT_2000_5a06;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))(*(uint16_t *)(o + 0x53)); /* b1ef ax=[di+0x53] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0x140a);
++  o = dg + DAT_2000_5a06;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))(*(uint16_t *)(o + 0x9d)); /* b201 ax=[di+0x9d] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0x150a);
++  o = dg + DAT_2000_5a06;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))((uint)o[0x94]);     /* b214 movzbw [di+0x94] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0x160a);
++  o = dg + DAT_2000_5a06;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))((uint)o[0x45]);     /* b228 movzbw [di+0x45] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0x170a);
++  o = dg + DAT_2000_5a06;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c284)))((uint)o[0x43]);     /* b23b movzbw [di+0x43] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0x1809);            /* b243 */
++  o = dg + DAT_2000_5a06;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c286)))((uint)o[0x1b]);     /* b24e al=[di+0x1b] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c26e)))(0x180c);            /* b255 */
++  o = dg + DAT_2000_5a06;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c286)))((uint)o[0x1c]);     /* b260 al=[di+0x1c] */
+   return;
+ }
+ 
+-
+ /* ===== ((uint)(uintptr_t)&FUN_0000_b26a) @ 0000:b26a ===== */
+ 
+ undefined4 __allregs FUN_0000_b26a(void)

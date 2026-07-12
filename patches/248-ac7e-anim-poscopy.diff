@@ -1,0 +1,36 @@
+FUN_0000_ac7e (animation position-copy sub-handler, reached via ac75's byte[di+0x43] table, patch 247):
+DGROUP near-offset + object base-loss (SIGSEGV).
+
+ROOT CAUSE (asm-verified 0xac7e-0xac9d): ac7e copies a resource coord pair into the object.  si =
+word[DS:0x9798] (= DAT_2000_5798, a DGROUP NEAR OFFSET that ab03 loads from the animation table); the
+object is at DS:DI (di=near offset in param_1).  Ghidra typed DAT_2000_5798 as a host char* and di as a
+host pointer -> wild derefs.  Fix: object = g_mem+0x1c000+di; resource = g_mem+0x1c000+DAT_2000_5798;
+dword copies [si+0xc]->[di+0x49], [si+0x10]->[di+0x4d] + orw bit1 of [di+0x40].  Mission-cascade only.
+--- a/fist.c	2026-07-12 17:22:45.974960764 +0200
++++ b/fist.c	2026-07-12 17:22:46.003415065 +0200
+@@ -26900,13 +26900,18 @@
+ void __allregs FUN_0000_ac7e(int param_1)
+ 
+ {
+-  char *pcVar1;
+-  
+-  pcVar1 = DAT_2000_5798;
+-  if (*DAT_2000_5798 != '\0') {
+-    *(undefined4 *)(param_1 + 0x49) = *(undefined4 *)(DAT_2000_5798 + 0xc);
+-    *(undefined4 *)(param_1 + 0x4d) = *(undefined4 *)(pcVar1 + 0x10);
+-    *(uint *)(param_1 + 0x40) = *(uint *)(param_1 + 0x40) | 2;
++  /* PATCH 248: animation position-copy sub-handler (asm 0xac7e-0xac9d; DS=DGROUP=0x1c00), dispatched
++   * by ac75's byte[di+0x43] table.  di in param_1 (near offset) -> object = g_mem+0x1c000+di.
++   * si = word[DS:0x9798] (= DAT_2000_5798, a DGROUP NEAR OFFSET set by ab03) -> resource at
++   * g_mem+0x1c000+si.  Ghidra typed DAT_2000_5798 as a host char* AND di as a host pointer -> SIGSEGV.
++   * Copies dwords [si+0xc]->[di+0x49], [si+0x10]->[di+0x4d] (movl) + sets bit1 of [di+0x40]. */
++  unsigned char *dg248 = (unsigned char *)g_mem + 0x1c000;
++  unsigned char *o248 = dg248 + (uint16_t)(uintptr_t)param_1;
++  unsigned char *sp248 = dg248 + (uint16_t)(uintptr_t)DAT_2000_5798;
++  if (*(char *)sp248 != '\0') {                                  /* ac82 cmpb [si],0; je ac9d */
++    *(undefined4 *)(o248 + 0x49) = *(undefined4 *)(sp248 + 0xc); /* ac87/ac8a/ac8d */
++    *(undefined4 *)(o248 + 0x4d) = *(undefined4 *)(sp248 + 0x10);/* ac91/ac95 */
++    *(uint16_t *)(o248 + 0x40) = *(uint16_t *)(o248 + 0x40) | 2; /* ac99 orw [di+0x40],2 */
+   }
+   return;
+ }
