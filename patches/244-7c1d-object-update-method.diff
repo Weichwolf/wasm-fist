@@ -1,0 +1,57 @@
+FUN_0000_7c1d (the FIRST per-object UPDATE method, dispatched by c0e5, patch 243): base-lost object
+pointer + absolute-host CS-table reads -> SIGSEGV on the first per-frame update (459a->c0ca->c0e5->7c1d).
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin 0x7c1d-0x7c90; gdb crash at fist.c:20574,
+param_4=0x8074xxxx garbage host addr).  c0e5 (patch 243) dispatches each object's UPDATE method with
+`(int)di` (the object near-offset) as arg0 -> lands in 7c1d's param_1 (di=0xC05C observed), exactly like
+d755->7bcf (patch 169/219).  But Ghidra typed 7c1d to read the object base from param_4 (a DROPPED
+register = garbage) and read its two CS-relative dispatch tables at 0x7c91 / 0x7d92 as ABSOLUTE HOST
+offsets.  The asm object base is DS:DI (DS=DGROUP=0x1c00), and the two tables are CS-relative (CS=0):
+
+    7c1d: mov al,[di+0x1d]; mov [di+0xd],al ...          ; object fields, DS:DI-relative
+    7c47: addb [di+0x3d],2                               ; bump state
+    7c4b: mov bl,[di+0x3d]; and bx,0x1e                  ; table1 index (even, 0..0x1e)
+    7c51: call *cs:0x7c91(%bx)                           ; near call word cs:[0x7c91+bx], DI live
+    7c56: mov bl,[di+0x3e]; xor bh,bh                    ; table2 index (byte)
+    7c5b: call *cs:0x7d92(%bx)                           ; near call word cs:[0x7d92+bx], DI live
+
+FIX: the object host pointer = g_mem+0x1c000+di; the whole body + every callee call is already
+object-relative (host-pointer correct), so re-point param_4 at it (single assignment, body untouched).
+The two CS tables live in CS=0 -> read the word entry at g_mem+0x7c91+(byte[di+0x3d]&0x1e) /
+g_mem+0x7d92+byte[di+0x3e], dispatched near with di (the object offset) live in arg0 (matching the
+c0e5/d755 convention so a reconstructed dg+di target receives it as param_1).  Mission-cascade only
+(459a is never reached by the 19 menu flows).
+--- a/fist.c	2026-07-12 16:37:46.822840828 +0200
++++ b/fist.c	2026-07-12 16:38:04.472559815 +0200
+@@ -20005,6 +20005,15 @@
+   undefined4 uVar3;
+   undefined2 uStack0002;
+   
++  /* PATCH 244: object base = DS:DI (DS=DGROUP=0x1c00); di arrives in param_1 from c0e5 (patch 243).
++   * Ghidra read it from param_4 (dropped register).  Re-point param_4 at the object host pointer;
++   * the body + callee calls are all object-relative so they become correct verbatim.  The two
++   * CS-relative dispatch tables (0x7c91/0x7d92, CS=0) are fixed to g_mem base below. */
++  {
++    unsigned char *_dg244 = (unsigned char *)g_mem + 0x1c000;
++    uint16_t _di244 = (uint16_t)(uintptr_t)param_1;
++    param_4 = (int)(intptr_t)(_dg244 + _di244);
++  }
+   *(undefined1 *)(param_4 + 0xd) = *(undefined1 *)(param_4 + 0x1d);
+   *(undefined1 *)(param_4 + 0xa7) = (char)((uint)*(undefined2 *)(param_4 + 0x38) >> 8);
+   if (*(char *)(param_4 + 0x3c) != '\0') {
+@@ -20019,9 +20028,13 @@
+   FUN_0000_a358(param_4);
+   *(char *)(param_4 + 0x3d) = *(char *)(param_4 + 0x3d) + '\x02';
+   uVar2 = CONCAT22(uVar4,(uint)*(byte *)(param_4 + 0x3d)) & 0xffff001e;
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)((int)uVar2 + 0x7c91))))();
++  /* PATCH 244: CS-relative table1 (CS=0) word[g_mem+0x7c91+(byte[di+0x3d]&0x1e)], DI live */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)((unsigned char *)g_mem + 0x7c91 + ((uint)uVar2 & 0x1e))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+   uVar3 = CONCAT22((int)(uVar2 >> 0x10),(uint)*(byte *)(param_4 + 0x3e));
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(byte *)(param_4 + 0x3e) + 0x7d92))))();
++  /* PATCH 244: CS-relative table2 (CS=0) word[g_mem+0x7d92+byte[di+0x3e]], DI live */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)((unsigned char *)g_mem + 0x7d92 + *(byte *)(param_4 + 0x3e))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+   uStack0002 = 0;
+   FUN_1000_a0a4(uVar1,uVar3,param_4);
+   if (*(char *)(param_4 + 0x92) == '\0') {

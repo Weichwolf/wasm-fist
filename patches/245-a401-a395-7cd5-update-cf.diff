@@ -1,0 +1,133 @@
+FUN_1000_a401 / a395 / FUN_0000_7cd5 (per-object UPDATE cascade, reached via c0e5->7c1d, patches 243/244):
+GS-relative table base-loss SIGSEGV in a401 + dropped return-CF in a401/a395 that 7cd5 consumes.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin; gdb crash at fist.c a401 line +0x2b84 access).
+7c1d's first callee 7cd5 (asm 0x7cd5) runs the object's steering/limit update: `lcall a401; jae..; lcall
+a395; jb..; lcall a1d6; obj[4]+=obj[0x59]; obj[8]+=obj[0x5b]`.  The two lcalls return a condition in CF
+(x86 stc/clc + lret) that 7cd5 branches on (a401 CF=1 -> obj[0xcb]=3; a395 CF=0 -> obj[0xca]=3 + 76e8).
+Ghidra has no x86-16 flag convention -> folded CF to a constant 0 (in_CF) AND, in a401, base-lost the
+GS-segment table lookup (asm 1a446 `mov 0x70,%gs`; gs = word[DGROUP:0x70] = the STRSEG resource segment)
+to an ABSOLUTE HOST offset `+0x2b84` -> wild deref SIGSEGV on the first per-frame object update.
+
+FIX (all three, asm-verified): (a401) reconstruct the GS-relative colour/limit-table read at gs<<4 base
+(word[gs:0x2b84+idx] then byte[gs:clamp+off]) + set g_fist_cf per return point (1a49e stc=adjusted /
+1a4a0 clc=early); (a395, pure object-relative, no crash) set g_fist_cf per return (1a3fd clc=moved /
+1a3ff stc=early); (7cd5) branch on g_fist_cf instead of the folded in_CF.  Object accesses are all
+DS:DI-relative (host-pointer correct via the object pointer 7c1d threads).  Mission-cascade only.
+--- a/fist.c	2026-07-12 16:42:00.560373259 +0200
++++ b/fist.c	2026-07-12 16:42:42.071429487 +0200
+@@ -20100,14 +20100,16 @@
+ void __allregs FUN_0000_7cd5(undefined2 param_1,int param_2)
+ 
+ {
++  extern unsigned char g_fist_cf;   /* PATCH 245: a401/a395 return CF via lret (stc/clc) */
+   undefined1 in_CF = 0;
++  (void)in_CF;
+   
+   FUN_1000_a401(param_2);
+-  if ((bool)in_CF) {
++  if ((bool)g_fist_cf) {              /* 7cda jae skip; CF=1 (a401 adjusted 0x55) -> obj[0xcb]=3 */
+     *(undefined1 *)(param_2 + 0xcb) = 3;
+   }
+   FUN_1000_a395(param_2);
+-  if (!(bool)in_CF) {
++  if (!(bool)g_fist_cf) {             /* 7ce6 jb skip; CF=0 (a395 moved) -> obj[0xca]=3 + 76e8 */
+     *(undefined1 *)(param_2 + 0xca) = 3;
+     FUN_0000_76e8();
+   }
+@@ -60006,12 +60008,14 @@
+ void __allregs FUN_1000_a395(int param_1)
+ 
+ {
++  extern unsigned char g_fist_cf;   /* PATCH 245: a395 returns CF (1a3fd clc=moved / 1a3ff stc=early) */
+   uint uVar1;
+   int iVar2;
+   uint uVar3;
+   
+   if ((((*(byte *)(param_1 + 0x19) & 6) != 0) || ((*(byte *)(param_1 + 0x19) & 0x10) != 0)) ||
+      (*(int *)(param_1 + 0x5d) == 0)) {
++    g_fist_cf = 1;                 /* 1a399/1a39f/1a3a5 -> 1a3ff stc */
+     return;
+   }
+   if ((*(byte *)(param_1 + 0x1a) & 0x80) == 0) {
+@@ -60021,8 +60025,10 @@
+     iVar2 = ((uVar1 - 0xb6 & -(uint)(uVar1 < 0xb6)) + 0xb6 ^ uVar3) - uVar3;
+     if (iVar2 != 0) {
+       *(int *)(param_1 + 0x26) = *(int *)(param_1 + 0x26) + iVar2;
++      g_fist_cf = 0;               /* 1a3c9 add; 1a3cc jmp 1a3fd clc */
+       return;
+     }
++    g_fist_cf = 1;                 /* 1a3c7 je 1a3ff stc */
+     return;
+   }
+   uVar1 = *(uint *)(param_1 + 0x89);
+@@ -60042,6 +60048,7 @@
+   *(int *)(param_1 + 0x30) = *(int *)(param_1 + 0x30) + uVar1;
+   *(int *)(param_1 + 0x89) = *(int *)(param_1 + 0x89) - uVar1;
+   *(int *)(param_1 + 0x8b) = *(int *)(param_1 + 0x8b) - uVar1;
++  g_fist_cf = 0;                   /* 1a3fd clc */
+   return;
+ }
+ 
+@@ -60051,10 +60058,12 @@
+ void __allregs FUN_1000_a401(int param_1)
+ 
+ {
++  extern unsigned char g_fist_cf;   /* PATCH 245: a401 returns CF (1a49e stc=adjusted / 1a4a0 clc=early) */
+   uint uVar1;
+   uint uVar2;
+   
+   if ((*(byte *)(param_1 + 0x3d) & 3) != 0) {
++    g_fist_cf = 0;                  /* 1a405 jne 1a4a0 clc */
+     return;
+   }
+   if ((((*(byte *)(param_1 + 0x19) & 0x10) != 0) || ((*(byte *)(param_1 + 0x19) & 6) == 6)) ||
+@@ -60068,7 +60077,18 @@
+   if (0x1f < uVar2) {
+     uVar2 = 0x1f;
+   }
+-  uVar1 = (uint)*(byte *)(uVar2 + *(int *)((*(byte *)(param_1 + 0x90) & 3) * 2 + 0x2b84));
++  /* PATCH 245: GS-relative colour/limit table (asm 1a446 mov 0x70,gs; 1a44a mov gs:0x2b84(si),si;
++   * 1a44f movzbw gs:(bx,si),dx).  gs = word[DGROUP:0x70] (STRSEG/resource segment);
++   * si = (byte[obj+0x90]&3)*2; off = word[gs:0x2b84+si]; uVar1 = byte[gs:(clamped uVar2)+off].
++   * Ghidra base-lost both the word and byte reads to absolute host offsets -> SIGSEGV. */
++  {
++    unsigned char *dg245 = (unsigned char *)g_mem + 0x1c000;
++    unsigned int gs245 = *(uint16_t *)(dg245 + 0x70);
++    unsigned char *gsb245 = (unsigned char *)g_mem + ((unsigned long)gs245 << 4);
++    unsigned int idx245 = (*(byte *)(param_1 + 0x90) & 3) * 2;
++    unsigned int off245 = *(uint16_t *)(gsb245 + 0x2b84 + idx245);
++    uVar1 = (uint)*(byte *)(gsb245 + (uVar2 & 0x1f) + off245);
++  }
+   uVar2 = *(int *)(param_1 + 0x57) >> 2;
+   if ((int)uVar1 < (int)uVar2) {
+     uVar2 = uVar1;
+@@ -60076,10 +60096,12 @@
+   uVar1 = *(uint *)(param_1 + 0x55);
+   if (uVar2 == uVar1 || (int)uVar2 < (int)uVar1) {
+     if (uVar2 == uVar1) {
++      g_fist_cf = 0;                /* 1a464 je 1a4a0 clc */
+       return;
+     }
+     if ((((*(uint *)(param_1 + 0x55) & 0x8000) != 0) && ((*(byte *)(param_1 + 0x19) & 6) != 0)) &&
+        ((*(byte *)(param_1 + 0x3d) & 0xc) != 0)) {
++      g_fist_cf = 0;                /* 1a477 jne 1a4a0 clc */
+       return;
+     }
+     *(int *)(param_1 + 0x55) = *(int *)(param_1 + 0x55) + -1;
+@@ -60087,6 +60109,7 @@
+   else {
+     if ((((*(uint *)(param_1 + 0x55) & 0x8000) == 0) && ((*(byte *)(param_1 + 0x19) & 6) != 0)) &&
+        ((*(byte *)(param_1 + 0x3d) & 0xc) != 0)) {
++      g_fist_cf = 0;                /* 1a48f jne 1a4a0 clc */
+       return;
+     }
+     *(int *)(param_1 + 0x55) = *(int *)(param_1 + 0x55) + 1;
+@@ -60094,6 +60117,7 @@
+   if (*(int *)(param_1 + 0x55) != 0) {
+     *(uint *)(param_1 + 0x40) = *(uint *)(param_1 + 0x40) & 0xffef;
+   }
++  g_fist_cf = 1;                    /* 1a49e stc */
+   return;
+ }
+ 
