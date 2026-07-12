@@ -1,0 +1,65 @@
+FUN_0000_c0e5 (per-frame display-object UPDATE walk): base-lost table walk -> SIGSEGV once the frame loop
+began rendering (patch 242 let 459a break to the per-frame update path 459a->c0ca->c0e5).
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin 0xc0e5; gdb-observed crash at build/fist.c c0e5 line
+after patch 242).  c0e5 walks the 182-entry runtime display-object table at DGROUP:0xdfbc (= DAT_2000_9fbc),
+the SAME table FUN_0000_d755 (patch 169) walks, with a STRIDE OF 4 bytes, and for each nonzero slot
+dispatches the object's per-type UPDATE method:
+
+    c105:  mov  si,0xdfbc          ; table base (DGROUP near offset)
+    c108:  mov  cx,0xb6            ; 182 entries
+    c10b:  mov  di,[si]            ; di = object near-offset
+    c10d:  or   di,di; je skip
+    c113:  mov  bx,[di]            ; bx = object TYPE index
+    c115:  shl  bx,1
+    c117:  call [bx-0x1bac]        ; near call word[DGROUP:(type*2-0x1bac)]  (DI live = object offset)
+    c11d:  add  si,4              ; STRIDE = 4
+    c120:  loop c10b
+
+Ghidra typed the walk cursor as a host `int*` (`piVar2`), so `*(int *)*piVar2` double-derefed a DGROUP near
+offset as a host pointer (wild), and used stride 8 (int*+2) instead of 4.  Reconstruct faithfully with DGROUP
+near offsets (base g_mem+0x1c000), stride 4, DI threaded as the dispatch arg (the object offset is live in DI
+across the call, exactly like d755's amendment).  This is the per-frame per-object think/update; the method
+base -0x1bac differs from d755's -0x1998 (a different method set: UPDATE vs registration).  Mission-cascade
+only (459a is never reached by the 19 menu flows).
+--- a/fist.c
++++ b/fist.c
+@@ -29742,15 +29742,29 @@
+   if (DAT_2000_569c != 0) {
+     DAT_2000_569c = DAT_2000_569c + -1;
+   }
+-  piVar2 = (int *)&DAT_2000_9fbc;
+-  iVar1 = 0xb6;
+-  do {
+-    if ((int *)*piVar2 != (int *)0x0) {
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(int *)*piVar2 * 2 + -0x1bac))))();
+-    }
+-    piVar2 = piVar2 + 2;
+-    iVar1 = iVar1 + -1;
+-  } while (iVar1 != 0);
++  /* PATCH 243: per-frame display-object UPDATE walk (asm 0xc105-0xc122; DS=DGROUP=0x1c00).  Table @
++   * DGROUP:0xdfbc (= DAT_2000_9fbc), 0xb6=182 entries, STRIDE 4 (Ghidra used int*+2 = 8).  Each slot
++   * WORD is an object near-offset di=word[si]; if nonzero dispatch its per-type UPDATE method
++   * word[DGROUP:(word[di]*2 - 0x1bac)] as a near call with DI (the object offset) live.  Ghidra
++   * base-lost the walk (double host deref, stride 8) -> SIGSEGV once 459a rendered frames (patch 242).
++   * Same table as FUN_0000_d755 (patch 169), different method base. */
++  {
++    unsigned char *dg = g_mem + 0x1c000;
++    uint16_t si = 0xdfbc;
++    int cx = 0xb6;
++    do {
++      uint16_t di = *(uint16_t *)(dg + si);                /* c10b mov di,[si] */
++      if (di != 0) {                                       /* c10d or di,di; je */
++        uint16_t bx = *(uint16_t *)(dg + di);              /* c113 mov bx,[di] (object type) */
++        bx = (uint16_t)(bx << 1);                          /* c115 shl bx,1 */
++        (*(code *)fist_icall_near(0x0u,
++            (uint16_t)(*(uint16_t *)(dg + (uint16_t)(bx - 0x1bac)))))((int)di); /* c117 call [bx-0x1bac] */
++      }
++      si = (uint16_t)(si + 4);                             /* c11d add si,4 */
++      cx = cx + -1;
++    } while (cx != 0);                                     /* c120 loop */
++  }
++  (void)iVar1; (void)piVar2;
+   return;
+ }
+ 

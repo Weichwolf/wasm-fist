@@ -1,0 +1,47 @@
+FUN_0000_459a (the in-mission SETUP/VIEW modal frame loop): dropped scheduler-poll CF -> infinite spin
+(the "op-0x60 stall").
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin 0x459a; gdb-observed live spin on the FIST_CASCADE
+mission route).  459a is the modal frame loop the ACCEPT/mission-start cascade runs (both call sites --
+build/fist.c e714:35299 and :35459 -- are the mission path, right after FUN_0000_5d12 and before the
+FUN_0000_1631 3D-model LOD loader + FUN_0000_e4bb in-mission HUD loop; NO menu flow reaches 459a).  Its
+per-frame structure: paint (206f) -> drain the event queue via the scheduler poll `lcall [DGROUP:0x40a]`
+(= FUN_1000_35a7) dispatching each event with 1e4b -> when the queue empties, break to the render (22dd)
++ next-frame (4691).  The asm inner drain loop is:
+
+    45d6:  lcall  *0x40a        ; scheduler poll FUN_1000_35a7 (sets x86 CF)
+    45da:  jb     0x45e1        ; CF=1 (empty queue / frame boundary) -> break out to render
+    45dc:  call   0x1e4b        ; else dispatch the drained event
+    45df:  jmp    0x45c8        ; loop
+
+Ghidra dropped the x86 CF the poll returns (folded the `bVar4` guard to a constant `false`), so `if (bVar4)
+break` NEVER fired: on the empty-queue mission-setup path the loop spun forever calling the poll +
+1e4b(empty-marker), never reaching the 22dd render or advancing to the next frame.  Observed live: after the
+op-0x54 roster + op-0x60 registrations + the .MAL/MSN2.MS3/MSPRITE5.BIN/CCV.MRL loads, execution wedged in
+FUN_1000_35a7 -> FUN_1000_3920 (cooperative yield) reached from FUN_0000_459a, never advancing.
+
+FIX (same class as patches 073/074/076 for the sibling poll-spins 38bc/38cc, and ec7e/cc33/f338): thread the
+poll CF via the shim global g_fist_cf (set by the reconstructed FUN_1000_35a7 -- g_fist_cf=1 when the event
+queue is empty).  This lets the drain loop break to the 22dd render each frame and advance the cascade into
+FUN_0000_1631 -> FUN_0000_e4bb (the gameplay frame loop).
+--- a/fist.c
++++ b/fist.c
+@@ -12967,6 +12967,7 @@
+   int iVar2;
+   undefined2 in_register_0000000e;
+   undefined4 uVar3;
++  extern unsigned char g_fist_cf;
+   bool bVar4;
+   undefined2 uVar5;
+   undefined2 uVar6;
+@@ -12998,6 +12999,10 @@
+           bVar4 = false;
+         } while (DAT_1000_c2a8 != '\0');
+         uVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(uVar5,uVar6);
++        /* PATCH 242: the scheduler poll [DGROUP:0x40a]=FUN_1000_35a7 returns x86 CF (jb 0x45e1); Ghidra
++         * dropped it (bVar4 folded false) -> the drain loop never broke to the 22dd render (op-0x60 stall).
++         * Thread the poll CF: CF=1 (empty queue) -> break out and render this frame. */
++        bVar4 = g_fist_cf != 0;
+         if (bVar4) break;
+         FUN_0000_1e4b(uVar1,param_1,(int)uVar3,param_4);
+       }
