@@ -1,0 +1,113 @@
+PATCH 281: the object-DESTROY notifier FUN_0000_a93e + the wreck-object field copy FUN_1000_b10c --
+dropped b1df carry + leaked far-call segment (a93e) and DGROUP base-loss + int-scaling (b10c), reached
+from the damage subsystem (b39c->c336) when an object dies (the collision/damage path, patch 271).
+
+ASM-verified (asm 0xa93e-0xa99f, 0x1b10c-0x1b156; DS=DGROUP=0x1c00).  a93e: di=the destroyed object X,
+live in DI across all calls (param_2).  Ghidra dropped b1df's roster-full CARRY (local in_CF stayed 0)
+and leaked the far-call SEGMENT word 0xf69 into iVar1/the literal args, so the player-object identity
+test + b10c's source + 60f9/60e5/5fca/b354 all ran on 0xf69 instead of X.  Threaded b1df's carry via
+g_fist_cf and pass the live object X everywhere 0xf69 leaked.  b10c: si=DEST/di=SOURCE near offsets
+(a93e's `mov si,di` makes both == X), copies position/orientation + sets the wreck flags/fields; Ghidra
+host-ptr-deref'd both and int-scaled the source (int* +2 => +8 vs asm [di+4]).  Both rebuilt in the
+DGROUP model.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -27220,31 +27220,37 @@
+ void __allregs FUN_0000_a93e(undefined4 param_1,undefined2 param_2)
+ 
+ {
++  /* PATCH 281: the object-DESTROY notifier (asm 0xa93e-0xa99f; DS=DGROUP=0x1c00), reached from the
++   * damage subsystem (b39c->c336) when an object dies.  di=the destroyed object X near offset, live in
++   * DI across all calls (param_2).  Ghidra (a) dropped b1df's roster-full CARRY (the local in_CF stayed
++   * 0), and (b) leaked the far-call SEGMENT word 0xf69 into `iVar1`/the literal `0xf69` args -- so the
++   * player-object identity test, b10c's source, 60f9/60e5/5fca/b354 all ran on 0xf69 instead of X.
++   * FIX: thread b1df's carry via g_fist_cf and pass the live object X (di) everywhere 0xf69 leaked.
++   * b1df zeroes X's body then b10c(X,X) re-inits it as a wreck (asm `mov si,di` -> si==di==X). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_2;   /* destroyed object X near offset */
+   int iVar1;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_610e(param_2);
+-  FUN_0000_ba33(0x9c5d,param_2);
+-  FUN_0000_ba33(0x9c3d,param_2);
++  FUN_1000_610e((int)di);
++  FUN_0000_ba33(0x9c5d,(int)di);
++  FUN_0000_ba33(0x9c3d,(int)di);
+   FUN_0000_be8b(9,param_1);
+-  FUN_1000_b1df(0x17,param_2);
+-  iVar1 = 0xf69;
+-  if ((bool)in_CF) {
+-    FUN_1000_60e5(0xf69);
++  FUN_1000_b1df(0x17,(int *)(uintptr_t)di);
++  if ((bool)g_fist_cf) {                        /* b1df stc = roster full (asm a961 jae taken when CF=0) */
++    FUN_1000_60e5((int)di);
+   }
+   else {
+-    FUN_1000_b10c(param_2,0xf69);
+-    FUN_1000_60f9(param_2,iVar1);
++    FUN_1000_b10c((int)di,(int *)(uintptr_t)di);
++    FUN_1000_60f9((int)di,(int)di);
+   }
+-  if (iVar1 == DAT_2000_2d34) {
++  if (di == *(unsigned short *)(dg + 0x6d34)) {  /* X == the player object? */
+     FUN_1000_a5c4();
+     FUN_0000_500f();
+     FUN_0000_5087();
+-    FUN_1000_5fca(iVar1);
++    FUN_1000_5fca((int *)(uintptr_t)di);
+     FUN_0000_bedc();
+-    iVar1 = 0xf69;
+   }
+-  iVar1 = FUN_1000_b354(iVar1);
++  iVar1 = FUN_1000_b354((int)di);
+   FUN_1000_b2d3(iVar1);
+   FUN_1000_697e();
+   return;
+@@ -63578,21 +63584,30 @@
+ void __allregs FUN_1000_b10c(int param_1,int *param_2)
+ 
+ {
+-  int iVar1;
+-  
+-  *(undefined4 *)(param_1 + 4) = *(undefined4 *)(param_2 + 2);
+-  *(undefined4 *)(param_1 + 8) = *(undefined4 *)(param_2 + 4);
+-  *(undefined4 *)(param_1 + 0xc) = *(undefined4 *)(param_2 + 6);
+-  *(int *)(param_1 + 0x10) = param_2[0x13];
+-  *(undefined1 *)(param_1 + 0x23) = *(undefined1 *)((int)param_2 + 0x1b);
+-  *(undefined1 *)(param_1 + 0x24) = (char)param_2[0xe];
+-  *(byte *)(param_1 + 0x16) = *(byte *)(param_1 + 0x16) | 0x40;
+-  *(byte *)(param_1 + 0x17) = *(byte *)(param_1 + 0x17) | 4;
+-  *(undefined2 *)(param_1 + 0x14) = 0x100;
+-  *(undefined2 *)(param_1 + 0x21) = 0x300;
+-  iVar1 = *param_2;
+-  *(int *)(param_1 + 0x1d) = iVar1;
+-  *(undefined2 *)(param_1 + 0x1b) = *(undefined2 *)(iVar1 * 2 + -0x6159);
++  /* PATCH 281: the wreck-object field copy (asm 0x1b10c-0x1b156; DS=DGROUP=0x1c00), called from a93e
++   * when an object is destroyed.  si=DEST near offset in param_1, di=SOURCE near offset in param_2;
++   * copies the source's position/orientation (di+4/+8/+0xc dwords, +0x26 word) into the dest, sets the
++   * wreck flags (si+0x16|0x40, si+0x17|4), the fixed fields si+0x14=0x100 / si+0x21=0x300, and the type
++   * si+0x1d=word[di] + its height LUT word[DG:(word[di]*2-0x6159)].  Ghidra host-ptr-deref'd both AND
++   * int-scaled the source (int* +2 => +8 vs asm [di+4]).  Rebuilt in the DGROUP model. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_1;                 /* dest */
++  unsigned int di = (unsigned short)(uintptr_t)param_2;      /* source */
++  unsigned int bx;
++  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(di + 4));
++  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(di + 8));
++  *(unsigned int *)(dg + (unsigned short)(si + 0xc)) = *(unsigned int *)(dg + (unsigned short)(di + 0xc));
++  *(unsigned short *)(dg + (unsigned short)(si + 0x10)) = *(unsigned short *)(dg + (unsigned short)(di + 0x26));
++  dg[(unsigned short)(si + 0x23)] = dg[(unsigned short)(di + 0x1b)];
++  dg[(unsigned short)(si + 0x24)] = dg[(unsigned short)(di + 0x1c)];
++  dg[(unsigned short)(si + 0x16)] |= 0x40;
++  dg[(unsigned short)(si + 0x17)] |= 4;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x14)) = 0x100;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x21)) = 0x300;
++  bx = *(unsigned short *)(dg + di);
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1d)) = (unsigned short)bx;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) =
++      *(unsigned short *)(dg + (unsigned short)((unsigned short)(bx << 1) - 0x6159));
+   return;
+ }
+ 

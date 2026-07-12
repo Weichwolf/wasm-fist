@@ -1,0 +1,111 @@
+PATCH 284: the "find interacting object" proximity walk FUN_0000_bb1b + the per-type INTERACTION dispatch
+FUN_0000_c14f -- DGROUP near-offset base-loss (SIGSEGV), reached from the object-type update b5e7; plus a
+minimal b5e7 arg fix (its two bb1b calls passed the uninitialised param_5 instead of the real object).
+
+ASM-verified (asm 0xbb1b-0xbb63, 0xc14f-0xc156; DS=DGROUP=0x1c00).  bb1b (a0ab twin): di=SELF near
+offset in param_1; walks the 182-entry table @0xdfbc (stride 4), range-tests candidates via 0ea9 (host-
+pointer coords) and, on a hit, dispatches c14f(si); Ghidra base-lost the walk (host-int stride 8) and
+mis-nested the single loop.  c14f (a19e twin): si=object near offset; tail-jumps a type-specific handler
+word[DG:(word[si]*2-0x1ae8)] with the object live -> passes it as a HOST POINTER (its handlers expect
+one); Ghidra deref'd *param_1 host-ptr + dropped the arg.  b5e7 is dispatched by c0e5 with the object in
+param_1 but reads it from the uninitialised param_5 (Ghidra host-ptr base-loss); its two bb1b calls now
+pass (uint16)param_1 (the real object near offset).  0ea9/c14f carry via g_fist_cf.  (b5e7's own body
+still reads the uninitialised param_5 -- a separate pending base-loss; this patch only makes the walk
+crash-free.)  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -29084,7 +29084,7 @@
+         *(int *)((int)param_5 + 0x23) = *(int *)((int)param_5 + 0x23) + -1;
+         return;
+       }
+-      FUN_0000_bb1b(param_5,0xb64c);
++      FUN_0000_bb1b((int)(unsigned short)param_1,0xb64c);  /* PATCH 284: self object = param_1 near offset (c0e5's arg0), not the uninitialised param_5 */
+       if (!bVar3) {
+         return;
+       }
+@@ -29764,33 +29764,39 @@
+ void __allregs FUN_0000_bb1b(int param_1,int *param_2)
+ 
+ {
+-  int iVar1;
+-  int *piVar2;
+-  int *piVar3;
+-  int *piVar4;
+-  bool bVar5;
+-  
+-  piVar2 = (int *)0xb6;
+-  piVar4 = (int *)&DAT_2000_9fbc;
+-  do {
+-    do {
+-      do {
+-        if (piVar2 == (int *)0x0) {
+-          return;
+-        }
+-        iVar1 = *piVar4;
+-        piVar4 = piVar4 + 2;
+-        piVar3 = (int *)((int)piVar2 + -1);
+-        piVar2 = piVar3;
+-      } while (((iVar1 == 0) || ((*(byte *)(iVar1 + 0x16) & 0x40) == 0)) || (param_1 == iVar1));
+-      bVar5 = 0xfeff < *(uint *)(iVar1 + 0x14);
+-      FUN_0000_0ea9(*(uint *)(iVar1 + 0x14) + 0x100,param_1 + 4,iVar1 + 4);
+-    } while (!bVar5);
+-    FUN_0000_c14f(iVar1);
+-    piVar2 = piVar4;
+-    piVar4 = param_2;
+-  } while (!bVar5);
+-  DAT_2000_5a25 = piVar3;
++  /* PATCH 284: the "find interacting object" proximity walk (asm 0xbb1b-0xbb63; DS=DGROUP=0x1c00) --
++   * twin of a0ab (patch 271).  di=SELF object near offset in param_1.  Walks the 182-entry object table
++   * @DGROUP:0xdfbc (stride 4); for each candidate si with [si+0x16]&0x40 set and si!=self, runs the
++   * range test 0ea9(cx=[si+0x14]+0x100, di+4, si+4) [host-pointer coords, like a0ab->08e8] and, on a
++   * hit (CF=1), the per-type interaction dispatch c14f(si); the first si whose c14f also returns CF=1 is
++   * stored to DAT_2000_5a25 and the walk returns CF=1.  Ghidra base-lost the whole walk (host-int stride
++   * 8, near offsets deref'd as host pointers) and mis-nested the single loop.  Rebuilt in the DGROUP
++   * model; 0ea9/c14f return CF via the shim global g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  unsigned int bx = 0xdfbc;
++  int cx = 0xb6;
++  unsigned int si;
++  (void)param_2;
++  while (cx != 0) {
++    si = *(unsigned short *)(dg + bx);
++    bx = (unsigned short)(bx + 4);
++    cx = cx + -1;
++    if (si == 0) continue;
++    if ((dg[(unsigned short)(si + 0x16)] & 0x40) == 0) continue;
++    if (di == si) continue;
++    FUN_0000_0ea9((unsigned short)(*(unsigned short *)(dg + (unsigned short)(si + 0x14)) + 0x100),
++                  (uint *)(dg + (unsigned short)(di + 4)),
++                  (uint *)(dg + (unsigned short)(si + 4)));
++    if (!(bool)g_fist_cf) continue;                 /* bb4f jae bb21 (CF=0 -> continue) */
++    FUN_0000_c14f((int *)(uintptr_t)si);
++    if (!(bool)g_fist_cf) continue;                 /* bb5a jae bb21 */
++    DAT_2000_5a25 = (unsigned short)si;             /* bb5c mov word[0x9a25],si */
++    g_fist_cf = 1;                                  /* bb60 stc */
++    return;
++  }
++  g_fist_cf = 0;                                    /* bb62 clc */
+   return;
+ }
+ 
+@@ -30658,9 +30664,15 @@
+ void __allregs FUN_0000_c14f(int *param_1)
+ 
+ {
+-                    /* WARNING: Could not recover jumptable at 0x0000c153. Too many branches */
+-                    /* WARNING: Treating indirect jump as call */
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_1 * 2 + -0x1ae8))))();
++  /* PATCH 284: the per-object-type INTERACTION dispatch (asm 0xc14f-0xc156; DS=DGROUP=0x1c00), called
++   * from bb1b.  si=object near offset in param_1; asm `mov bx,[si]; shl bx,1; jmp [bx-0x1ae8]` tail-jumps
++   * to a type-specific handler word[DG:(word[si]*2-0x1ae8)] with SI (the object) live.  Ghidra deref'd
++   * *param_1 as a host pointer + dropped the object arg.  The handlers read the object as a HOST POINTER,
++   * so pass g_mem+0x1c000+si; the handler's carry flows back to bb1b via g_fist_cf. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)(uintptr_t)param_1;
++  uint16_t vec = *(uint16_t *)(dg + (unsigned short)((unsigned short)(*(uint16_t *)(dg + si) << 1) - 0x1ae8));
++  (*(code *)fist_icall_near(0x0u,vec))((int)(intptr_t)(dg + si));
+   return;
+ }
+ 

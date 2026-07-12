@@ -1,0 +1,35 @@
+PATCH 282: the per-object ANIMATION-METHOD dispatch FUN_0000_ab88 -- DGROUP near-offset base-loss +
+dropped object arg (SIGSEGV), reached from the object animation update ab03 (patch 246).
+
+ASM-verified (asm 0xab88-0xab90; DS=DGROUP=0x1c00): di=object near offset in param_1; `movzx bx,
+byte[di+0x43]; call [bx-0x67f0]` selects an animation-update method from the near-vector table
+word[DG:(0x9810+byte[di+0x43])] and calls it with DI (the object) live.  Ghidra deref'd byte[di+0x43]
+as a host pointer (SIGSEGV) and dropped the object arg.  The dispatch targets (ab91/abb7/abde) read the
+object as a HOST POINTER in param_4 (they feed 0541->0731/0927/0b71 host pointers), so this passes
+g_mem+0x1c000+di there.  The animation angle inputs (ab03's live ax/bx/cx) are not captured through the
+untyped dispatch -> passed 0 (zero interpolation delta this frame: crash-free, animation-state only).
+Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -27512,7 +27512,20 @@
+ void __allregs FUN_0000_ab88(int param_1)
+ 
+ {
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(byte *)(param_1 + 0x43) + 0x9810))))();
++  /* PATCH 282: the per-object ANIMATION-METHOD dispatch (asm 0xab88-0xab90; DS=DGROUP=0x1c00), reached
++   * from ab03 (patch 246).  di=object near offset in param_1; asm `movzx bx,byte[di+0x43]; call
++   * [bx-0x67f0]` selects an animation-update method from the near-vector table word[DG:(0x9810+
++   * byte[di+0x43])] and calls it with DI (the object) live.  Ghidra deref'd byte[di+0x43] as a host
++   * pointer (SIGSEGV) AND dropped the object arg.  The dispatch targets (ab91/abb7/abde) read the object
++   * as a HOST POINTER in param_4 (they call 0541 with [obj+4]/[obj+0x49] host pointers -> 0731/0927/
++   * 0b71), so pass g_mem+0x1c000+di there.  (The animation angle inputs param_1..3 -- ab03's live
++   * ax/bx/cx -- are not captured through the untyped dispatch; passed 0, so the interpolation runs with
++   * a zero delta this frame: crash-free, animation-state only.) */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  unsigned int idx = dg[(unsigned short)(di + 0x43)];
++  uint16_t vec = *(uint16_t *)(dg + (unsigned short)(0x9810 + idx));
++  (*(code *)fist_icall_near(0x0u,vec))(0,0,0,(int)(intptr_t)(dg + di));
+   return;
+ }
+ 

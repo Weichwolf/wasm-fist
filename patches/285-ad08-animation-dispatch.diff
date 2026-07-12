@@ -1,0 +1,29 @@
+PATCH 285: a per-object ANIMATION-METHOD dispatch FUN_0000_ad08 -- DGROUP near-offset base-loss +
+dropped object arg (SIGSEGV), dispatched by ab03; twin of ab88 (patch 282) with the vector table at
+DGROUP:0x9820.
+
+ASM-verified (asm 0xad08-0xad10; DS=DGROUP=0x1c00): di=object near offset in param_1; `movzx bx,
+byte[di+0x43]; call [bx-0x67e0]` selects word[DG:(0x9820+byte[di+0x43])] and calls it with DI live.
+Ghidra deref'd byte[di+0x43] host-ptr (SIGSEGV) + dropped the object; the targets (ad11 etc.) read the
+object as a HOST POINTER, so pass g_mem+0x1c000+di.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -27799,7 +27799,17 @@
+ void __allregs FUN_0000_ad08(int param_1)
+ 
+ {
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(byte *)(param_1 + 0x43) + 0x9820))))();
++  /* PATCH 285: a per-object ANIMATION-METHOD dispatch (asm 0xad08-0xad10; DS=DGROUP=0x1c00), dispatched
++   * by ab03 -- twin of ab88 (patch 282) with the vector table at DGROUP:0x9820.  di=object near offset
++   * in param_1; `movzx bx,byte[di+0x43]; call [bx-0x67e0]` selects the method word[DG:(0x9820+
++   * byte[di+0x43])] and calls it with DI live.  Ghidra deref'd byte[di+0x43] as a host pointer (SIGSEGV)
++   * and dropped the object arg; the targets (ad11 etc.) read the object as a HOST POINTER, so pass
++   * g_mem+0x1c000+di. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  unsigned int idx = dg[(unsigned short)(di + 0x43)];
++  uint16_t vec = *(uint16_t *)(dg + (unsigned short)(0x9820 + idx));
++  (*(code *)fist_icall_near(0x0u,vec))(0,0,0,(int)(intptr_t)(dg + di));
+   return;
+ }
+ 

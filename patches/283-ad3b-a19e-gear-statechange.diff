@@ -1,0 +1,58 @@
+PATCH 283: the landing-gear state method FUN_0000_ad3b + the per-object-type STATE-CHANGE dispatch
+FUN_0000_a19e -- DGROUP near-offset base-loss (SIGSEGV), reached from the object animation update ab03.
+
+ASM-verified (asm 0xad3b-0xad61, 0xa19e-0xa1a6; DS=DGROUP=0x1c00): di=object near offset.  ad3b toggles
+the gear-state byte[di+0x90] via a19e when altitude word[di+0x34] crosses 0xe00; Ghidra host-ptr-deref'd
+param_1 + read [di+0x34] as a 32-bit int (asm WORD).  a19e dispatches a type-specific method
+word[DG:(word[di]*2-0x69a2)] with DI live; Ghidra deref'd *param_1 host-ptr + dropped the object arg --
+its targets (a1a7 etc.) read the object as a HOST POINTER, so it now passes g_mem+0x1c000+di.  Both
+rebased to the DGROUP model.  (a19e's al gear-direction selector is dropped through its 1-param sig:
+gear-state only, non-crashing.)  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -26145,7 +26145,15 @@
+ void __allregs FUN_0000_a19e(int *param_1)
+ 
+ {
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_1 * 2 + -0x69a2))))();
++  /* PATCH 283: the per-object-type STATE-CHANGE method dispatch (asm 0xa19e-0xa1a6; DS=DGROUP=0x1c00).
++   * di=object near offset in param_1; asm `mov bx,[di]; shl bx,1; call [bx-0x69a2]` selects a type-
++   * specific method from word[DG:(word[di]*2-0x69a2)] and calls it with DI live.  Ghidra deref'd
++   * *param_1 as a host pointer (SIGSEGV) and dropped the object arg.  The dispatch targets (a1a7 etc.)
++   * read the object as a HOST POINTER, so pass g_mem+0x1c000+di. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  uint16_t vec = *(uint16_t *)(dg + (unsigned short)((unsigned short)(*(uint16_t *)(dg + di) << 1) - 0x69a2));
++  (*(code *)fist_icall_near(0x0u,vec))((int)(intptr_t)(dg + di));
+   return;
+ }
+ 
+@@ -27888,16 +27896,23 @@
+ void __allregs FUN_0000_ad3b(int param_1)
+ 
+ {
+-  if (*(byte *)(param_1 + 0x90) < 2) {
+-    if (*(int *)(param_1 + 0x34) < 0xe00) {
+-      if (*(char *)(param_1 + 0x90) == '\0') {
++  /* PATCH 283: the landing-gear state method (asm 0xad3b-0xad61; DS=DGROUP=0x1c00), dispatched by ab03.
++   * di=object near offset in param_1; when the gear-state byte[di+0x90] is <2 and the altitude word
++   * [di+0x34] crosses 0xe00 in the wrong direction, retracts/extends via a19e.  Ghidra deref'd param_1
++   * as a host pointer + read [di+0x34] as a 32-bit int (asm WORD).  Rebased to the DGROUP model.  (The
++   * asm al=1/0 gear-direction selector is dropped through a19e's 1-param sig -- gear-state only.) */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  if (dg[(unsigned short)(di + 0x90)] < 2) {
++    if ((int)*(short *)(dg + (unsigned short)(di + 0x34)) < 0xe00) {
++      if (dg[(unsigned short)(di + 0x90)] == '\0') {
+         return;
+       }
+     }
+-    else if (*(char *)(param_1 + 0x90) == '\x01') {
++    else if (dg[(unsigned short)(di + 0x90)] == '\x01') {
+       return;
+     }
+-    FUN_0000_a19e(param_1);
++    FUN_0000_a19e((int *)(uintptr_t)di);
+   }
+   return;
+ }
