@@ -1118,6 +1118,59 @@ int fist_extender_gate(void) {
         g_fist_ext_int = 0;
         return 0;
     }
+    /* ------------------------------------------------------------------------------------------------
+     * THE PER-FRAME 3D VOXEL RENDER IS EXTENDER-SIDE (located this iteration; RECON in docs/stage1.md).
+     * op 0x0c -> op-table[fist_image.bin:0xcb3 + op] = dword 0x10eb -> trampoline `call 0x78f0`.
+     * FUN_0000_78f0 sets fb ptr 90ec = TCB[4]+TCB[2]*16+[0x807], viewport 90f0/90f4/90f8 = TCB[0x1e]/[0x22],
+     * then calls 85d0 (camera state from TCB 0x2c/0x30/0x34/0x38/0x3e) + 93c0 (perspective texture-map of
+     * colormap DAT_85b8 into 90ec).  Sibling render ops: op 0x10 -> 7940->8fa0 (rotated variant),
+     * op 0x08 -> 8df0/3931, op 0x44 -> 7660 (sky).  This is the NovaLogic Voxel Space engine living in the
+     * Doug-Huffman extender image, exactly analogous to the KDV FMV player -- the engine (FIST.DAT) only
+     * POSTS display objects (op 0x54 roster) + camera/present ops; it does NOT do the 3D projection.
+     *
+     * FIST_R3D (default OFF -> default boot + the 19 verify flows are byte-untouched): a DIAGNOSTIC seam
+     * that drives the located render for op 0x0c.  Replicates 78f0 but (a) points [0xc93] at the mission
+     * TCB (ea2e:ea2c), (b) forces 90ec = host &g_mem[0xA0000] (78f0's TCB[2]:[4] real-mode linear is not
+     * a host ptr in this model), (c) sources the viewport from TCB+0x1e/+0x22, forcing a bounded 320x200
+     * when 0 (the upstream viewport-dimension setup is not yet reconstructed -- a SCAFFOLD to exercise the
+     * pipeline).  RESULT (runtime-verified): the pipeline runs CRASH-FREE and fills all 64000 fb bytes,
+     * BUT with a single color -- because the colormap at [0x85b8] holds only {0,4} across its whole 4 MB
+     * (dwords==4, not terrain texels): the C32.KLC colormap DATA is not yet delivered by the extender
+     * map-load (89b0/643c) even though the LOD build completes structurally (detail 0xb / dim 2048).  So
+     * this is NOT yet recognizable first pixels -- the true remaining gate is the colormap data path (and
+     * the faithful viewport-dimension source), UPSTREAM of this now-validated render.  NOT accepted; kept
+     * gated as the next-iteration seam. */
+    if (op == 0x0c && g_ext_ready && getenv("FIST_R3D")) {
+        uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        uint8_t *tcb = g_mem + tcb_lin;
+        uint8_t *xb  = g_mem + FIST_EXT_BASE;
+        uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
+        uint16_t vw = *(uint16_t*)(tcb+0x1e), vh = *(uint16_t*)(tcb+0x22);
+        if (vw == 0) vw = 320;  if (vw > 320) vw = 320;
+        if (vh == 0) vh = 200;  if (vh > 200) vh = 200;
+        *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)tcb;                 /* mission camera TCB */
+        *(uint32_t*)(xb+0x90ec) = (uint32_t)(uintptr_t)(g_mem + 0xA0000); /* VGA framebuffer */
+        *(uint32_t*)(xb+0x90f0) = vw;
+        *(uint32_t*)(xb+0x90f4) = vw >> 1;
+        *(uint32_t*)(xb+0x90f8) = vh;
+        m_ext_FUN_0000_85d0();                                            /* camera setup from TCB */
+        m_ext_FUN_0000_93c0();                                            /* colormap texture-map -> fb */
+        *(uint32_t*)(xb+0xc93) = save_c93;
+        if (getenv("FIST_R3D_PROBE")) {
+            static int rn = 0;
+            if (rn++ < 4) {
+                uint8_t *fb = g_mem + 0xA0000; long nz = 0; int hist[256] = {0};
+                for (long i = 0; i < 64000; i++) { if (fb[i]) nz++; hist[fb[i]]++; }
+                int colors = 0; for (int c = 0; c < 256; c++) if (hist[c]) colors++;
+                uint8_t *cm = (uint8_t*)(uintptr_t)*(uint32_t*)(xb+0x85b8);
+                int cmhist[256] = {0}; for (long i = 0; i < 0x400000; i += 37) cmhist[cm[i]]++;
+                int cmcolors = 0; for (int c = 0; c < 256; c++) if (cmhist[c]) cmcolors++;
+                fprintf(stderr, "[r3d] op0x0c RENDER vw=%u vh=%u cam2c=%08x cam3e=%04x 85b8=%08x -> fb nonzero=%ld/64000 fb-colors=%d ; colormap distinct-colors(4MB)=%d\n",
+                        vw, vh, *(uint32_t*)(tcb+0x2c), *(uint16_t*)(tcb+0x3e), *(uint32_t*)(xb+0x85b8), nz, colors, cmcolors);
+            }
+        }
+        return 0;
+    }
     fprintf(stderr, "[ext] service op 0x%02x (display-list cmd) inbox=%08x args %04x/%04x/%04x\n", op,
             *(uint32_t *)(g_mem + ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c) + 0x3f2),
             *(uint16_t *)(dg + 0xea1a), *(uint16_t *)(dg + 0xea1c), *(uint16_t *)(dg + 0xea1e));
