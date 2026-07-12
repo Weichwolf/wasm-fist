@@ -1167,6 +1167,10 @@ int fist_extender_gate(void) {
                 int cmcolors = 0; for (int c = 0; c < 256; c++) if (cmhist[c]) cmcolors++;
                 fprintf(stderr, "[r3d] op0x0c RENDER vw=%u vh=%u cam2c=%08x cam3e=%04x 85b8=%08x -> fb nonzero=%ld/64000 fb-colors=%d ; colormap distinct-colors(4MB)=%d\n",
                         vw, vh, *(uint32_t*)(tcb+0x2c), *(uint16_t*)(tcb+0x3e), *(uint32_t*)(xb+0x85b8), nz, colors, cmcolors);
+                /* FIST_R3D_DUMP: dump the rendered mission framebuffer NOW (the RUNMS watchdog cannot
+                 * fire post-render because the mission loop does not re-enter fist_timer_pump).  For the
+                 * AE-vs-oracle baseline measurement. */
+                { const char *dp = getenv("FIST_R3D_DUMP"); if (dp && rn==1) fist_dump_framebuffer(dp); }
             }
         }
         return 0;
