@@ -15,7 +15,7 @@ echo "[build_native] sources from $SRCDIR"
 # -m32: 16-bit engine composes 20-bit linear / far pointers into 32-bit ints -> 32-bit host.
 # -w plus the permissive flags: the decompile is faithful C with Ghidra type looseness (int<->ptr,
 #   implicit decls, return-type slack) that is NOT a correctness signal at this stage.
-F="-m32 -no-pie -g -O0 $ASAN -std=gnu11 -w \
+F="-m32 -no-pie -g -O0 $ASAN -std=gnu11 -w ${FIST_XCFLAGS:-} \
   -fno-strict-aliasing -Wno-int-conversion -Wno-implicit-function-declaration \
   -Wno-builtin-declaration-mismatch -Wno-return-type -Wno-return-mismatch -Wno-incompatible-pointer-types"
 

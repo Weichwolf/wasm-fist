@@ -4,8 +4,11 @@ nonzero table entry c164 returns (found near-offset in AX, CF when exhausted), d
 entry's method-index word[DGROUP:si], doubles it, and near-calls the vector word[DGROUP:(idx*2
 -0x1998)].  Ghidra folded c164's CF/si into a spurious host-ptr walk of the (unused) param_1 arg.
 Reconstructed faithfully: c164's return + g_fist_cf drive the loop; the vector table lookup is
-rebased through g_mem+0x1c000.  param_1 (the caller's 0x4509) is a Ghidra artifact (the asm takes
-no argument).  Behaviour-neutral for verify (mission-setup path, unreached by the 19 flows).
+rebased through g_mem+0x1c000.  DI stays live across the `call [si-0x1998]` (asm keeps di = the
+object near-offset), so it is threaded as the dispatched per-type method's arg0 (the per-patch
+indirect threading; the callees 7bcf/... read DI as their object near-offset).  param_1 (the
+caller's 0x4509) is a Ghidra artifact (the asm takes no argument).  Behaviour-neutral for verify
+(mission-setup path, unreached by the 19 flows).
 
 --- a/fist.c
 +++ b/fist.c
@@ -41,7 +44,7 @@ no argument).  Behaviour-neutral for verify (mission-setup path, unreached by th
 +      uint16_t s2 = *(uint16_t *)(dg + di);                /* d75f mov si,[di] */
 +      s2 = (uint16_t)(s2 << 1);                            /* d761 shl si,1 */
 +      (*(code *)fist_icall_near(0x0u,
-+          (uint16_t)(*(uint16_t *)(dg + (uint16_t)(s2 - 0x1998)))))();  /* d763 call [si-0x1998] */
++          (uint16_t)(*(uint16_t *)(dg + (uint16_t)(s2 - 0x1998)))))((int)di);  /* d763 call [si-0x1998]; DI live -> arg0 */
 +    }
    }
    return;

@@ -1,0 +1,34 @@
+PATCH 226: reconstruct FUN_0000_bcbf (a display-object per-type init method dispatched by d755) -- a
+DGROUP-near-offset base-loss (b433 DI-split class).  Asm-verified vs re_out/fist_dat_image.bin 0xbcbf-0xbcd4.
+
+Near-calls bcd5(di) then conditionally updates object flags (byte[di+0x19]&4).  Ghidra kept DI in param_1
+for the call but used the garbage param_2 for the body -> SIGSEGV.  DI (= param_1) is the object offset;
+rebased through g_mem+0x1c000.  Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows (reached ONLY via
+the mission display-setup walk d755).  Default boot rc=0, mainmenu unchanged.  Sources pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -29110,11 +29110,19 @@
+ void __allregs FUN_0000_bcbf(undefined4 param_1,int param_2)
+ 
+ {
+-  FUN_0000_bcd5(param_1,param_2);
+-  if ((*(byte *)(param_2 + 0x19) & 4) != 0) {
+-    *(byte *)(param_2 + 0x16) = *(byte *)(param_2 + 0x16) | 1;
+-    *(byte *)(param_2 + 0x16) = *(byte *)(param_2 + 0x16) & 0xf9;
+-    *(byte *)(param_2 + 0x17) = *(byte *)(param_2 + 0x17) & 0xf7;
++  /* PATCH 226: display-object per-type init method (asm 0xbcbf-0xbcd4; DS=DGROUP=0x1c00), dispatched by
++     d755 with di (the object near-offset) live.  Near-calls bcd5(di) then conditionally clears/sets object
++     flags on byte[di+0x16]/[di+0x17] gated by byte[di+0x19]&4.  Ghidra kept DI in param_1 for the call
++     but used the garbage param_2 for the body -> SIGSEGV.  DI (= param_1) is the object offset; rebased
++     through g_mem+0x1c000. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  (void)param_2;
++  FUN_0000_bcd5(param_1,param_2);                                /* call bcd5 (di live) */
++  if ((dg[(unsigned short)(di + 0x19)] & 4) != 0) {             /* testb [di+0x19],4; je */
++    dg[(unsigned short)(di + 0x16)] |= 1;                       /* orb  [di+0x16],1 */
++    dg[(unsigned short)(di + 0x16)] &= 0xf9;                    /* andb [di+0x16],0xf9 */
++    dg[(unsigned short)(di + 0x17)] &= 0xf7;                    /* andb [di+0x17],0xf7 */
+   }
+   return;
+ }

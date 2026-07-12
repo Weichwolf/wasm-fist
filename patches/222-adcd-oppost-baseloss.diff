@@ -1,0 +1,38 @@
+PATCH 222: reconstruct FUN_1000_adcd (asm 0x1adcd = 0f69:0xb73d) -- the display-object op-0x54 command
+poster's DI base-loss.  Asm-verified vs re_out/fist_dat_image.bin 0x1adcd-0x1adda.
+
+Reached from b433 (patch 221) and the other display-object methods (14769/24497/24653/27871/27910/28127/
+29061/29138 -- all cascade-only).  adcd posts the object's display-list command via e1d1 (which writes
+TCB+0x3f2 = the inbox, sets op 0x54, calls the extender gate e339) then stores the gate's AL result at
+DGROUP:di+0xd.  Ghidra dropped the DI base of that store (used the unaff_CS placeholder -> an
+uninitialized-var store, deterministic SIGSEGV at 0xfefeff0b under -ftrivial-auto-var-init=pattern) and
+the `lea di,[di+4]` applied to e1d1's arg.  Reconstructed faithfully with the explicit g_mem+0x1c000
+base + the +4 object-body offset.
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows (all callers are mission display-setup methods,
+never reached on the menu/mission-select paths).  Default boot rc=0, mainmenu unchanged.  Sources
+pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -60874,11 +60874,16 @@
+ void __allregs FUN_1000_adcd(undefined4 param_1)
+ 
+ {
+-  undefined1 uVar1;
+-  int unaff_CS;
+-  
+-  uVar1 = FUN_0000_e1d1(param_1);
+-  *(undefined1 *)(unaff_CS + 0xd) = uVar1;
++  /* PATCH 222: adcd (asm 0x1adcd = 0f69:0xb73d): post the object's op-0x54 display-list command via
++     e1d1, then store the gate's AL result into the object.  asm: `push di; lea di,[di+4]; lcall e1d1;
++     pop di; mov [di+0xd],al`.  Ghidra dropped the DI base (used the unaff_CS placeholder -> an
++     uninitialized-var store -> SIGSEGV at [unaff_CS+0xd]) and the +4 on e1d1's arg.  DS=DGROUP=0x1c00;
++     param_1 = di (the object near-offset).  e1d1 gets di+4 (the object body, past the 2-word header);
++     the AL result lands at DGROUP:di+0xd. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  unsigned char al = (unsigned char)FUN_0000_e1d1((int)(unsigned short)(di + 4)); /* lea di,[di+4]; lcall e1d1 */
++  dg[(unsigned short)(di + 0xd)] = al;                                            /* mov [di+0xd],al */
+   return;
+ }
+ 

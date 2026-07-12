@@ -1,0 +1,50 @@
+PATCH 219: reconstruct FUN_0000_7bcf (a display-object per-type INIT method dispatched by d755's
+near-vector, patch 169) -- the same DGROUP-near-offset base-loss class as the c296 roster family
+(215/216/217/218).  Asm-verified vs re_out/fist_dat_image.bin 0x7bcf-0x7c08.
+
+Reached after patch 169's d755 dispatch was fixed to THREAD di (the object near-offset) into the called
+per-type method (the asm keeps DI live across `call [si-0x1998]`; 169 previously called it with `()` so
+7bcf got garbage 0xbf -> SIGSEGV).  With di threaded, 7bcf runs on the real object slot.  Ghidra treated
+di as a HOST pointer (`*(param_1+0x1a)=...`) -> SIGSEGV; DS=DGROUP=0x1c00, every [di+N] is a DS-relative
+byte/word field.  Reconstructed with the explicit g_mem+0x1c000 base + the asm byte/word widths (the
+0x6dae==2 branch + the seg-0x2c7f template copy to DGROUP:di+0xbf via 1e27's near-offset dst).
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows (reached ONLY via the FIST_CASCADE mission
+display-setup walk d755).  Default boot rc=0, mainmenu unchanged.  Sources pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -19979,17 +19979,24 @@
+ void __allregs FUN_0000_7bcf(int param_1)
+ 
+ {
+-  *(byte *)(param_1 + 0x1a) = *(byte *)(param_1 + 0x1a) & 0xef;
+-  if (DAT_2000_2dae == '\x02') {
+-    *(byte *)(param_1 + 0x1a) = *(byte *)(param_1 + 0x1a) | 0x10;
++  /* PATCH 219: display-object per-type init method (asm 0x7bcf-0x7c08; DS=DGROUP=0x1c00), dispatched by
++     d755's near-vector (patch 169 now threads di) with di (the object near-offset) live.  param_1 = di.
++     Same DGROUP-near-offset base-loss class as the c296 roster family (7b91/8744/973a/8f9f); Ghidra
++     treated di as a HOST pointer -> SIGSEGV.  Reconstructed with the explicit g_mem+0x1c000 base + the
++     asm byte/word widths (the 0x6dae==2 branch + the seg-0x2c7f template copy to DGROUP:di+0xbf via 1e27). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  dg[(unsigned short)(di + 0x1a)] &= 0xef;                        /* andb [di+0x1a],0xef */
++  if (DAT_2000_2dae == '\x02') {                                 /* cmpb [0x6dae],2 ; jne */
++    dg[(unsigned short)(di + 0x1a)] |= 0x10;                      /* orb  [di+0x1a],0x10 */
+   }
+-  *(undefined2 *)(param_1 + 0x87) = 0x800;
+-  *(byte *)(param_1 + 0x1a) = *(byte *)(param_1 + 0x1a) | 1;
+-  *(undefined2 *)(param_1 + 0x9d) = 0;
+-  *(undefined2 *)(param_1 + 0x97) = 0;
+-  *(uint *)(param_1 + 0x40) = *(uint *)(param_1 + 0x40) | 1;
+-  *(undefined1 *)(param_1 + 0x36) = 0;
+-  FUN_0000_1e27(0x2c7f,param_1 + 0xbf);
++  *(unsigned short *)(dg + (unsigned short)(di + 0x87)) = 0x800;  /* movw [di+0x87],0x800 */
++  dg[(unsigned short)(di + 0x1a)] |= 1;                           /* orb  [di+0x1a],1 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x9d)) = 0;      /* movw [di+0x9d],0 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x97)) = 0;      /* movw [di+0x97],0 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x40)) |= 1;     /* orw  [di+0x40],1 */
++  dg[(unsigned short)(di + 0x36)] = 0;                            /* movb [di+0x36],0 */
++  FUN_0000_1e27(0x2c7f, (undefined2 *)(uintptr_t)(unsigned short)(di + 0xbf)); /* ax=0x2c7f; di+=0xbf; call 1e27 */
+   return;
+ }
+ 

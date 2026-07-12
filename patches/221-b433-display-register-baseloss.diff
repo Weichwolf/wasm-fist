@@ -1,0 +1,62 @@
+PATCH 221: reconstruct FUN_0000_b433 (a display-object per-type init/registration method dispatched by
+d755's near-vector) -- a DGROUP-near-offset base-loss + the Ghidra DI param-split.  Asm-verified vs
+re_out/fist_dat_image.bin 0xb433-0xb480.
+
+Reached as d755's display-object walk reaches the FRIENDLY roster objects (di=0xa022).  b433 far-calls
+0f69:0xb73d (FUN_1000_adcd) with di live, reads a byte[di+0x19] index into a DGROUP lookup table (0x9cdf)
+to set word[di+0x12], sets word[di+0x1f]=5, and APPENDS di to one of two per-team registration tables
+(counts 0x9ccb/0x9ccd, arrays 0x9ccf/0x9cd7) with flag updates.  Ghidra split the single DI register
+across param_1 (kept for the far call) and param_2 (used for the body) -- param_2 got garbage (0x33) so
+every [param_2+N] host-deref'd -> SIGSEGV.  DI (= param_1 = 0xa022) is the real object offset; rebased
+through g_mem+0x1c000 with the asm byte/word widths.
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows (reached ONLY via the mission display-setup
+walk d755).  Default boot rc=0, mainmenu unchanged.  Sources pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -28022,22 +28022,33 @@
+ void __allregs FUN_0000_b433(undefined4 param_1,int param_2)
+ 
+ {
+-  FUN_1000_adcd(param_1);
+-  *(undefined2 *)(param_2 + 0x12) = *(undefined2 *)((uint)*(byte *)(param_2 + 0x19) * 2 + -0x6321);
+-  *(undefined2 *)(param_2 + 0x1f) = 5;
+-  if ((*(byte *)(param_2 + 0x16) & 8) == 0) {
+-    ((undefined2 *)&DAT_2000_5ccf)[DAT_2000_5ccb] = param_2;
+-    DAT_2000_5ccb = DAT_2000_5ccb + 1;
++  /* PATCH 221: display-object per-type init/registration method (asm 0xb433-0xb480; DS=DGROUP=0x1c00),
++     dispatched by d755 with di (the object near-offset) live.  Ghidra split DI across param_1 (the far
++     call) and param_2 (the body) -- param_2 got a garbage reg (0x33) so `byte[param_2+0x19]` etc.
++     host-deref'd -> SIGSEGV.  DI is the real object offset (= param_1 = 0xa022 friendly slot).  Rebased
++     through g_mem+0x1c000: the byte[di+0x19] index into the DGROUP lookup table at 0x9cdf, and the two
++     registration tables (counts 0x9ccb/0x9ccd, arrays 0x9ccf/0x9cd7).  The far lcall 0f69:0xb73d =
++     FUN_1000_adcd(di). */
++  (void)param_2;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  FUN_1000_adcd((int)di);                                                          /* lcall 0f69:0xb73d */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x12)) =
++      *(unsigned short *)(dg + (unsigned short)(dg[(unsigned short)(di + 0x19)] * 2 + 0x9cdf)); /* [di+0x12]=word[0x9cdf+2*byte[di+0x19]] */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x1f)) = 5;                        /* movw [di+0x1f],5 */
++  if ((dg[(unsigned short)(di + 0x16)] & 8) == 0) {                                 /* testb [di+0x16],8; jne */
++    *(unsigned short *)(dg + (unsigned short)(*(unsigned short *)(dg + 0x9ccb) * 2 + 0x9ccf)) = (unsigned short)di; /* [0x9ccf+2*cnt]=di */
++    *(unsigned short *)(dg + 0x9ccb) += 1;                                          /* incw [0x9ccb] */
+     return;
+   }
+-  ((undefined2 *)&DAT_2000_5cd7)[DAT_2000_5ccd] = param_2;
+-  DAT_2000_5ccd = DAT_2000_5ccd + 1;
+-  if (*(char *)(param_2 + 0x19) != '\x01') {
+-    *(byte *)(param_2 + 0x16) = *(byte *)(param_2 + 0x16) | 0x46;
++  *(unsigned short *)(dg + (unsigned short)(*(unsigned short *)(dg + 0x9ccd) * 2 + 0x9cd7)) = (unsigned short)di; /* [0x9cd7+2*cnt]=di */
++  *(unsigned short *)(dg + 0x9ccd) += 1;                                            /* incw [0x9ccd] */
++  if (dg[(unsigned short)(di + 0x19)] != 1) {                                       /* cmpb [di+0x19],1; je */
++    dg[(unsigned short)(di + 0x16)] |= 0x46;                                        /* orb [di+0x16],0x46 */
+     return;
+   }
+-  *(byte *)(param_2 + 0x16) = *(byte *)(param_2 + 0x16) & 0xf9;
+-  *(byte *)(param_2 + 0x17) = *(byte *)(param_2 + 0x17) & 0xe7;
++  dg[(unsigned short)(di + 0x16)] &= 0xf9;                                          /* andb [di+0x16],0xf9 */
++  dg[(unsigned short)(di + 0x17)] &= 0xe7;                                          /* andb [di+0x17],0xe7 */
+   return;
+ }
+ 

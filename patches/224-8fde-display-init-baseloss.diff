@@ -1,0 +1,45 @@
+PATCH 224: reconstruct FUN_0000_8fde (a display-object per-type INIT method dispatched by d755's
+near-vector) -- a d755-dispatched display-object init (auto-gen, asm-faithful).  Same DGROUP-near-offset base-loss class as 7bcf/8791.  Asm-verified vs
+re_out/fist_dat_image.bin 0x8fde.  Ghidra treated di (the object near-offset) as a HOST pointer -> SIGSEGV;
+rebased through g_mem+0x1c000 with the asm byte/word widths.  Cascade-only => BEHAVIOUR-NEUTRAL for the 19
+verify flows (reached ONLY via the mission display-setup walk d755).  Default boot rc=0, mainmenu unchanged.
+Sources pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -22852,21 +22852,26 @@
+ void __allregs FUN_0000_8fde(int param_1)
+ 
+ {
+-  *(byte *)(param_1 + 0x1a) = *(byte *)(param_1 + 0x1a) & 0xef;
++  /* PATCH 224: display-object per-type init method (asm 0x8fde; DS=DGROUP=0x1c00), dispatched by d755's
++     near-vector with di (the object near-offset) live -- same DGROUP-near-offset base-loss class as
++     7bcf/8791 (Ghidra treated di as a HOST pointer -> SIGSEGV).  Reconstructed vs re_out/fist_dat_image.bin
++     with the explicit g_mem+0x1c000 base + the asm byte/word widths. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  dg[(unsigned short)(di + 0x1a)] &= 0xef;                    /* andb $0xef,0x1a(%di) */
+   if (DAT_2000_2dae == '\x02') {
+-    *(byte *)(param_1 + 0x1a) = *(byte *)(param_1 + 0x1a) | 0x10;
++    dg[(unsigned short)(di + 0x1a)] |= 0x10;                    /* orb $0x10,0x1a(%di) */
+   }
+-  *(undefined2 *)(param_1 + 0x87) = 0x800;
+-  *(undefined2 *)(param_1 + 0x9d) = 0;
+-  *(undefined2 *)(param_1 + 0x97) = 0;
+-  *(uint *)(param_1 + 0x40) = *(uint *)(param_1 + 0x40) | 1;
+-  *(undefined1 *)(param_1 + 0x36) = 0;
+-  *(byte *)(param_1 + 0x1a) = *(byte *)(param_1 + 0x1a) | 1;
+-  FUN_0000_1e27(0x2cc2,param_1 + 0xbe);
++  *(unsigned short *)(dg + (unsigned short)(di + 0x87)) = 0x800;/* movw $0x800,0x87(%di) */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x9d)) = 0x0;/* movw $0x0,0x9d(%di) */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x97)) = 0x0;/* movw $0x0,0x97(%di) */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x40)) |= 0x1;/* orw $0x1,0x40(%di) */
++  dg[(unsigned short)(di + 0x36)] = 0x0;                      /* movb $0x0,0x36(%di) */
++  dg[(unsigned short)(di + 0x1a)] |= 0x1;                     /* orb $0x1,0x1a(%di) */
++  FUN_0000_1e27(0x2cc2, (undefined2 *)(uintptr_t)(unsigned short)(di + 0xbe)); /* ax=0x2cc2; di+=0xbe; call 1e27 */
+   return;
+ }
+ 
+-
+ /* ===== ((uint)(uintptr_t)&FUN_0000_902c) @ 0000:902c ===== */
+ 
+ void __allregs FUN_0000_902c(undefined4 param_1,undefined4 param_2,undefined4 param_3,int param_4)

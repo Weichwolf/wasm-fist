@@ -1,0 +1,55 @@
+PATCH 225: reconstruct FUN_0000_bcd5 (a display-object per-type init method dispatched by d755) -- a
+DGROUP-near-offset base-loss + the Ghidra DI param-split (b433 class) + a scrambled adcd arg.  Asm-verified
+vs re_out/fist_dat_image.bin 0xbcd5-0xbd08.
+
+Reached as d755's display-object walk continues.  bcd5 indexes three DGROUP subtype tables off byte[di+0x19]
+into di+0x12/0x14/0x1b, far-calls FUN_1000_adcd(di), and sets object flags.  Ghidra split the single DI
+register across param_1 (kept for the far call) and param_2 (used for the body -> garbage -> SIGSEGV), and
+scrambled adcd's arg to byte[di+0x19].  DI (= param_1) is the object offset; rebased through g_mem+0x1c000
+with the asm byte/word widths.
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows (reached ONLY via the mission display-setup walk
+d755).  Default boot rc=0, mainmenu unchanged.  Sources pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -29125,20 +29125,26 @@
+ void __allregs FUN_0000_bcd5(undefined4 param_1,int param_2)
+ 
+ {
+-  byte bVar1;
+-  int iVar2;
+-  ulong uVar3;
+-  
+-  uVar3 = CONCAT22((int)((ulong)param_1 >> 0x10),(uint)*(byte *)(param_2 + 0x19) << 1) & 0xffff001e;
+-  iVar2 = (int)uVar3;
+-  *(undefined2 *)(param_2 + 0x12) = *(undefined2 *)(iVar2 + -0x6131);
+-  *(undefined2 *)(param_2 + 0x14) = *(undefined2 *)(iVar2 + -0x6109);
+-  bVar1 = *(byte *)(param_2 + 0x19);
+-  *(undefined1 *)(param_2 + 0x1b) = *(undefined1 *)(bVar1 + 0x9edf);
+-  FUN_1000_adcd(CONCAT22((int)(uVar3 >> 0x10),(uint)bVar1));
+-  *(byte *)(param_2 + 0x17) = *(byte *)(param_2 + 0x17) | 0x14;
+-  *(byte *)(param_2 + 0x16) = *(byte *)(param_2 + 0x16) | 0x42;
+-  *(byte *)(param_2 + 0x16) = *(byte *)(param_2 + 0x16) | 0xc;
++  /* PATCH 225: display-object per-type init method (asm 0xbcd5-0xbd08; DS=DGROUP=0x1c00), dispatched by
++     d755 with di (the object near-offset) live.  Reads byte[di+0x19] (object subtype) to index three
++     DGROUP tables -- word[0x9ecf]/word[0x9ef7] by (subtype*2)&0x1e, byte[0x9edf] by subtype -- into
++     di+0x12/di+0x14/di+0x1b, far-calls 0f69:0xb73d = FUN_1000_adcd(di), then sets flags.  Ghidra split
++     DI across param_1 (far call) and param_2 (body -> garbage 0x367 -> SIGSEGV) AND scrambled adcd's arg
++     to byte[di+0x19] instead of di.  DI (= param_1) is the object offset; rebased through g_mem+0x1c000. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  unsigned int bx = (unsigned int)((dg[(unsigned short)(di + 0x19)] << 1) & 0x1e);   /* bx=(byte[di+0x19]*2)&0x1e */
++  (void)param_2;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x12)) = *(unsigned short *)(dg + (unsigned short)(bx + 0x9ecf)); /* [di+0x12]=word[0x9ecf+bx] */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x14)) = *(unsigned short *)(dg + (unsigned short)(bx + 0x9ef7)); /* [di+0x14]=word[0x9ef7+bx] */
++  {
++    unsigned int bx2 = dg[(unsigned short)(di + 0x19)];                              /* movzbw [di+0x19] */
++    dg[(unsigned short)(di + 0x1b)] = dg[(unsigned short)(bx2 + 0x9edf)];            /* [di+0x1b]=byte[0x9edf+bx2] */
++  }
++  FUN_1000_adcd((int)di);                                                            /* lcall 0f69:0xb73d */
++  dg[(unsigned short)(di + 0x17)] |= 0x14;                                           /* orb [di+0x17],0x14 */
++  dg[(unsigned short)(di + 0x16)] |= 0x42;                                           /* orb [di+0x16],0x42 */
++  dg[(unsigned short)(di + 0x16)] |= 0xc;                                            /* orb [di+0x16],0xc */
+   return;
+ }
+ 
