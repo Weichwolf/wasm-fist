@@ -1,0 +1,54 @@
+PATCH 217: reconstruct FUN_0000_973a (a DCBS per-type object INIT method dispatched by c296's tail
+near-vector, object-type 3) -- the same DGROUP-near-offset base-loss class as 7b91/8744/973a (patches
+215/216/217).  Asm-verified vs re_out/fist_dat_image.bin 0x973a.
+
+Reached as the DCBS roster-install cascade advances (43c1 -> c296 -> per-type dispatch
+word[DGROUP:(word[di]*2-0x1b20)]).  Ghidra base-lost di (param_1 treated as a HOST pointer -> SIGSEGV);
+DS=DGROUP=0x1c00, every [di+N] is a DS-relative byte/word field.  Reconstructed with the explicit
+g_mem+0x1c000 base + the asm byte/word widths (the 1e27 tail copies a seg template into DGROUP:di+off,
+a near-offset dst which 1e27 bases internally, patch 087).  Validated by the crash advancing strictly
+forward (COOP_TICK, deterministic).
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows (reached ONLY via the FIST_CASCADE FSG DCBS
+parse).  Default boot rc=0, mainmenu unchanged.  Sources pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -23993,19 +23993,25 @@
+ void __allregs FUN_0000_973a(int param_1)
+ 
+ {
+-  *(undefined2 *)(param_1 + 0xad) = 300;
+-  *(undefined2 *)(param_1 + 0xaf) = 400;
+-  *(undefined2 *)(param_1 + 0xb1) = 4;
+-  *(undefined1 *)(param_1 + 0xbb) = 0xc;
+-  *(undefined2 *)(param_1 + 0xb3) = 2000;
+-  *(undefined1 *)(param_1 + 0xf9) = 0x14;
+-  *(undefined1 *)(param_1 + 0x8d) = 1;
+-  *(undefined2 *)(param_1 + 0x87) = 0x780;
+-  *(undefined2 *)(param_1 + 0x14) = 0x400;
+-  *(undefined1 *)(param_1 + 0xb5) = 1;
+-  *(undefined1 *)(param_1 + 0xb6) = 1;
+-  *(byte *)(param_1 + 0x16) = *(byte *)(param_1 + 0x16) | 8;
+-  FUN_0000_1e27(0x2ce4,param_1 + 0xbc);
++  /* PATCH: DCBS per-type object init method (asm 0x973a; DS=DGROUP=0x1c00), dispatched by c296's tail
++     near-vector with di (the object near-offset) live.  param_1 = di.  Every [di+N] is a DS-relative
++     byte/word field; Ghidra base-lost di (host-deref -> SIGSEGV).  Reconstructed with the explicit
++     DGROUP base + the asm byte/word widths (1e27 tail = seg-template copy, near-offset dst). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  *(unsigned short *)(dg + (unsigned short)(di + 0xad)) = 0x12c;/* movw $0x12c,0xad(%di) */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xaf)) = 0x190;/* movw $0x190,0xaf(%di) */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xb1)) = 0x4;  /* movw $0x4,0xb1(%di) */
++  dg[(unsigned short)(di + 0xbb)] = 0xc;                        /* movb $0xc,0xbb(%di) */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xb3)) = 0x7d0;/* movw $0x7d0,0xb3(%di) */
++  dg[(unsigned short)(di + 0xf9)] = 0x14;                       /* movb $0x14,0xf9(%di) */
++  dg[(unsigned short)(di + 0x8d)] = 0x1;                        /* movb $0x1,0x8d(%di) */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x87)) = 0x780;/* movw $0x780,0x87(%di) */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x14)) = 0x400;/* movw $0x400,0x14(%di) */
++  dg[(unsigned short)(di + 0xb5)] = 0x1;                        /* movb $0x1,0xb5(%di) */
++  dg[(unsigned short)(di + 0xb6)] = 0x1;                        /* movb $0x1,0xb6(%di) */
++  dg[(unsigned short)(di + 0x16)] |= 0x8;                       /* orb $0x8,0x16(%di) */
++  FUN_0000_1e27(0x2ce4, (undefined2 *)(uintptr_t)(unsigned short)(di + 0xbc)); /* ax=0x2ce4; di+=0xbc; call 1e27 */
+   return;
+ }
+ 
