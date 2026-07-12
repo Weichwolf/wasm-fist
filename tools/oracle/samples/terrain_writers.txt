@@ -1,0 +1,62 @@
+# vga A0000 writers over armed window: 20 distinct IPs
+# cpu.pmode=0  vga.mode=3
+
+WRITER lin=10009260 cs=002b eip=00009260 count=2641608 off=[0656..6b65] firstval=dc
+  code@lin-16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+WRITER lin=10009275 cs=002b eip=00009275 count=2641608 off=[0657..6b66] firstval=dc
+  code@lin-16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+WRITER lin=00051052 cs=4ec3 eip=00002422 count=159541 off=[931a..e8c8] firstval=02
+  code@lin-16: 72 f2 74 26 87 de 8e da 8b c8 d1 e9 1b c0 d1 e9 | f3 66 a5 13 c9 f3 a5 2b c8 f3 a4 87 de 8e dd ad d1 e8 73 de d1 e8 72 d0 eb c1 1f e8 4b 0a cb cc 53 80 0e 7e 15 22 b8 00 20 bb 7c 15 8c d9 ff 1e 
+
+WRITER lin=000506bd cs=4ec3 eip=00001a8d count=45781 off=[0c94..8814] firstval=0d
+  code@lin-16: 74 09 47 13 c9 2b f9 f3 aa 02 e4 47 13 c9 2b f9 | f3 aa 36 03 2e 96 07 8b fd 4a 75 9d 1f 8b 47 14 01 47 1c 01 47 20 8b 47 0a 03 47 0e 03 47 12 01 47 1e 01 47 22 5d 5b 59 5a c3 3c 07 75 05 e8 bd 
+
+WRITER lin=00050672 cs=4ec3 eip=00001a42 count=33516 off=[0c94..880f] firstval=0d
+  code@lin-16: 8e 1e 1a 07 8a 24 46 02 e4 74 4b 47 13 c9 2b f9 | f3 aa 02 e4 74 40 47 13 c9 2b f9 f3 aa 02 e4 74 35 47 13 c9 2b f9 f3 aa 02 e4 74 2a 47 13 c9 2b f9 f3 aa 02 e4 74 1f 47 13 c9 2b f9 f3 aa 02 e4 
+
+WRITER lin=000509ed cs=4ec3 eip=00001dbd count=33192 off=[331a..69b6] firstval=0d
+  code@lin-16: cd eb 04 47 49 74 0c ac 0a c0 74 f7 34 03 02 c4 | aa e2 f4 2b fd 36 03 3e 96 07 4a 75 e2 1f 8b 47 14 01 47 1c 01 47 20 8b c5 40 03 47 0e 03 47 12 01 47 1e 01 47 22 5d 5b 59 5a c3 3c 07 75 05 e8 
+
+WRITER lin=0004fa8a cs=4ec3 eip=00000e5a count=22572 off=[e767..f3ef] firstval=01
+  code@lin-16: bb 40 01 2b d8 8b 16 c0 15 1e 8e 1e 16 07 8b c8 | f3 a4 03 fb 4a 75 f7 1f c3 b8 00 a0 8e c0 8b 3e c8 15 8b 36 c4 15 8b 1e c6 15 bd a4 0a a0 bc 15 8a 26 c0 15 8a 2e c2 15 8b 16 be 15 1e 8e 1e 16 
+
+WRITER lin=0005067d cs=4ec3 eip=00001a4d count=15987 off=[0c95..8808] firstval=0d
+  code@lin-16: 47 13 c9 2b f9 f3 aa 02 e4 74 40 47 13 c9 2b f9 | f3 aa 02 e4 74 35 47 13 c9 2b f9 f3 aa 02 e4 74 2a 47 13 c9 2b f9 f3 aa 02 e4 74 1f 47 13 c9 2b f9 f3 aa 02 e4 74 14 47 13 c9 2b f9 f3 aa 02 e4 
+
+WRITER lin=0004fa24 cs=4ec3 eip=00000df4 count=14592 off=[e767..f3ee] firstval=00
+  code@lin-16: 8a 05 3e 88 46 00 45 f6 07 ff 75 16 43 ac 22 c5 | aa fe c9 74 23 26 8a 05 3e 88 46 00 45 f6 07 ff 74 ea 43 46 47 fe c9 74 0f 26 8a 05 3e 88 46 00 45 f6 07 ff 75 ec eb d4 58 03 f2 03 da 86 cc 2b 
+
+WRITER lin=0005179b cs=4ec3 eip=00002b6b count=10944 off=[2da0..3a20] firstval=0d
+  code@lin-16: 8e d8 8e 46 00 8b 6e 04 51 8b ca ac 0a c0 74 05 | aa e2 f8 eb 03 47 e2 f3 2b fa 03 fd 59 e2 e9 1f c3 1e 8c c0 8e d8 8e 46 00 8b 6e 04 33 c0 51 8b d7 ac 03 f8 ac 8b c8 e3 0d ac 0a c0 74 05 aa e2 
+
+WRITER lin=0004fad7 cs=4ec3 eip=00000ea7 count=7296 off=[e767..f3ee] firstval=00
+  code@lin-16: 3a c5 74 08 0a c0 74 04 3e 88 46 00 45 ac 22 c5 | aa fe c9 74 1b f6 07 ff 74 e2 43 26 8a 05 3e 88 46 00 45 46 47 fe c9 74 07 f6 07 ff 74 ce eb ea 58 03 f2 03 da 86 cc 2b f8 81 c7 40 01 86 cc fe 
+
+WRITER lin=0005105b cs=4ec3 eip=0000242b count=5882 off=[9319..ca19] firstval=02
+  code@lin-16: c8 d1 e9 1b c0 d1 e9 f3 66 a5 13 c9 f3 a5 2b c8 | f3 a4 87 de 8e dd ad d1 e8 73 de d1 e8 72 d0 eb c1 1f e8 4b 0a cb cc 53 80 0e 7e 15 22 b8 00 20 bb 7c 15 8c d9 ff 1e cc 00 5b 1e 33 c0 8e 06 7c 
+
+WRITER lin=00051057 cs=4ec3 eip=00002427 count=2943 off=[9462..c98a] firstval=03
+  code@lin-16: de 8e da 8b c8 d1 e9 1b c0 d1 e9 f3 66 a5 13 c9 | f3 a5 2b c8 f3 a4 87 de 8e dd ad d1 e8 73 de d1 e8 72 d0 eb c1 1f e8 4b 0a cb cc 53 80 0e 7e 15 22 b8 00 20 bb 7c 15 8c d9 ff 1e cc 00 5b 1e 33 
+
+WRITER lin=00050825 cs=4ec3 eip=00001bf5 count=2280 off=[94f2..99fe] firstval=00
+  code@lin-16: 1e 1a 07 ac 8a e0 0b d5 02 e4 1a c0 22 c1 32 c5 | aa fe ca 74 5b 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 4e 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 41 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 34 02 e4 1a c0 
+
+WRITER lin=00050832 cs=4ec3 eip=00001c02 count=2280 off=[94f3..99ff] firstval=00
+  code@lin-16: c1 32 c5 aa fe ca 74 5b 02 e4 1a c0 22 c1 32 c5 | aa fe ca 74 4e 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 41 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 34 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 27 02 e4 1a c0 
+
+WRITER lin=0005083f cs=4ec3 eip=00001c0f count=2280 off=[94f4..9a00] firstval=0f
+  code@lin-16: c1 32 c5 aa fe ca 74 4e 02 e4 1a c0 22 c1 32 c5 | aa fe ca 74 41 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 34 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 27 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 1a 02 e4 1a c0 
+
+WRITER lin=0005084c cs=4ec3 eip=00001c1c count=2280 off=[94f5..9a01] firstval=00
+  code@lin-16: c1 32 c5 aa fe ca 74 41 02 e4 1a c0 22 c1 32 c5 | aa fe ca 74 34 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 27 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 1a 02 e4 1a c0 22 c1 32 c5 aa fe ca 74 0d 02 e4 1a c0 
+
+WRITER lin=0005143c cs=4ec3 eip=0000280c count=224 off=[be7e..c74b] firstval=01
+  code@lin-16: 8b 44 fc 33 d2 8a d0 80 7c fe 02 74 13 90 8b ca | a4 83 ef 02 e2 fa 03 fa 03 fd fe cc 75 f0 1f c3 33 c9 8a cc 33 c0 8b d7 8b fa ac 2b f8 ac 91 e3 06 a4 83 ef 02 e2 fa 91 03 d5 e2 ec 1f c3 53 8b 
+
+WRITER lin=0004fcf0 cs=4ec3 eip=000010c0 count=161 off=[8303..8aaf] firstval=00
+  code@lin-16: 4f 02 8b f1 bb 40 01 2b d9 58 8a e0 8b ce d1 e9 | f3 ab 13 c9 f3 aa 03 fb 4a 75 f1 e8 44 1d 5b 5e cb 56 53 50 e8 96 1c 8b 3f 03 ff 8b bd c8 07 03 7f 02 b8 00 a0 8e c0 8b 57 04 2b 17 8b 47 06 2b 
+
+WRITER lin=00051346 cs=4ec3 eip=00002716 count=112 off=[be65..c731] firstval=01
+  code@lin-16: fe 02 74 31 8b ce 23 cf d1 e9 72 14 8b ca d1 e9 | f3 a5 13 c9 f3 a4 2b fa 03 fd 48 75 ef 1f c3 90 a4 8b ca 49 d1 e9 f3 a5 13 c9 f3 a4 2b fa 03 fd 48 75 ed 1f c3 8b c8 33 c0 90 8b d7 ac 03 f8 ac 

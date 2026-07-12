@@ -1,0 +1,158 @@
+--- /tmp/debs/orig_extract/dosbox-0.74-3/src/hardware/vga_memory.cpp	2019-05-02 19:01:18.000000000 +0200
++++ src/hardware/vga_memory.cpp	2026-07-12 22:37:14.698458708 +0200
+@@ -27,6 +27,107 @@
+ #include "pic.h"
+ #include "inout.h"
+ #include "setup.h"
++#include "regs.h"
++#include "cpu.h"
++#include <signal.h>
++#include <stdio.h>
++
++/* ==== wasm-fist oracle instrumentation: capture the terrain-pixel WRITER ==== */
++/* Logs, over an armed window, a per-instruction-pointer histogram of writes to  */
++/* the mode-13h framebuffer (linear 0xA0000), plus dumps guest RAM + VRAM so the */
++/* voxel writer's identity (image+offset) and data flow can be resolved offline. */
++struct FistWEnt { Bit32u lin, cs, eip, count, minoff, maxoff, firstval; };
++#define FIST_NENT 8192
++static FistWEnt fist_ent[FIST_NENT];
++static int fist_nent = 0;
++static volatile int fist_req = 0;   /* 1=arm/reset, 2=dump */
++static int fist_armed = 0;
++static bool fist_inited = false;
++static char fist_prefix[512];
++
++static void fist_sig(int s) { fist_req = (s == SIGUSR1) ? 1 : 2; }
++
++static void fist_dump(void) {
++	char path[600];
++	/* 1. writer histogram + code bytes */
++	snprintf(path, sizeof path, "%s.writers.txt", fist_prefix);
++	FILE *f = fopen(path, "w");
++	if (f) {
++		fprintf(f, "# vga A0000 writers over armed window: %d distinct IPs\n", fist_nent);
++		fprintf(f, "# cpu.pmode=%d  vga.mode=%d\n", (int)cpu.pmode, (int)vga.mode);
++		/* simple selection sort by count desc */
++		for (int i = 0; i < fist_nent; i++) {
++			int mx = i;
++			for (int j = i + 1; j < fist_nent; j++)
++				if (fist_ent[j].count > fist_ent[mx].count) mx = j;
++			FistWEnt t = fist_ent[i]; fist_ent[i] = fist_ent[mx]; fist_ent[mx] = t;
++		}
++		for (int i = 0; i < fist_nent && i < 64; i++) {
++			FistWEnt *e = &fist_ent[i];
++			fprintf(f, "\nWRITER lin=%08x cs=%04x eip=%08x count=%u off=[%04x..%04x] firstval=%02x\n",
++				e->lin, e->cs, e->eip, e->count, e->minoff, e->maxoff, e->firstval & 0xff);
++			fprintf(f, "  code@lin-16: ");
++			for (int k = -16; k < 48; k++) {
++				if (k == 0) fprintf(f, "| ");
++				fprintf(f, "%02x ", mem_readb(e->lin + k));
++			}
++			fprintf(f, "\n");
++		}
++		fclose(f);
++	}
++	/* 2. guest physical RAM (heightmap/colormap/camera live here) */
++	snprintf(path, sizeof path, "%s.ram.bin", fist_prefix);
++	f = fopen(path, "wb");
++	if (f) {
++		Bitu bytes = MEM_TotalPages() * 4096;
++		if (bytes > 16u * 1024 * 1024) bytes = 16u * 1024 * 1024;
++		fwrite(MemBase, 1, bytes, f);
++		fclose(f);
++	}
++	/* 3. VGA linear video memory (raw mode-13h/chain4 layout) */
++	snprintf(path, sizeof path, "%s.vram.bin", fist_prefix);
++	f = fopen(path, "wb");
++	if (f) { fwrite(vga.mem.linear, 1, 256 * 1024, f); fclose(f); }
++	/* 4. DAC palette (256*3, 6-bit) */
++	snprintf(path, sizeof path, "%s.pal.bin", fist_prefix);
++	f = fopen(path, "wb");
++	if (f) { fwrite(vga.dac.rgb, 1, sizeof(vga.dac.rgb), f); fclose(f); }
++	fprintf(stderr, "[fist-oracle] dumped %s.{writers.txt,ram.bin,vram.bin,pal.bin}\n", fist_prefix);
++}
++
++static INLINE void fist_vgawrite(PhysPt addr, Bitu val) {
++	if (GCC_UNLIKELY(!fist_inited)) {
++		fist_inited = true;
++		signal(SIGUSR1, fist_sig);
++		signal(SIGUSR2, fist_sig);
++		const char *p = getenv("FISTLOG");
++		snprintf(fist_prefix, sizeof fist_prefix, "%s", p ? p : "/tmp/fistlog");
++	}
++	if (GCC_UNLIKELY(fist_req)) {
++		if (fist_req == 1) { fist_nent = 0; fist_armed = 1; }
++		else { fist_dump(); fist_armed = 0; }
++		fist_req = 0;
++	}
++	if (!fist_armed) return;
++	Bit32u off = addr & 0x1ffff;
++	if (off >= 0x10000) return;             /* only the visible 320x200 range */
++	Bit32u ipl = SegPhys(cs) + reg_eip;
++	Bit32u csv = SegValue(cs), eipv = reg_eip;
++	for (int i = 0; i < fist_nent; i++) {
++		if (fist_ent[i].lin == ipl) {
++			fist_ent[i].count++;
++			if (off < fist_ent[i].minoff) fist_ent[i].minoff = off;
++			if (off > fist_ent[i].maxoff) fist_ent[i].maxoff = off;
++			return;
++		}
++	}
++	if (fist_nent < FIST_NENT) {
++		FistWEnt *e = &fist_ent[fist_nent++];
++		e->lin = ipl; e->cs = csv; e->eip = eipv; e->count = 1;
++		e->minoff = e->maxoff = off; e->firstval = val;
++	}
++}
++/* ==== end oracle instrumentation ==== */
+ 
+ 
+ #ifndef C_VGARAM_CHECKED
+@@ -377,6 +478,7 @@
+ 			return readHandler<Bit32u>( addr );
+ 	}
+ 	void writeb(PhysPt addr, Bitu val ) {
++		fist_vgawrite(addr,val);
+ 		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
+ 		addr += vga.svga.bank_write_full;
+ 		addr = CHECKED(addr);
+@@ -385,6 +487,7 @@
+ 		writeCache<Bit8u>( addr, val );
+ 	}
+ 	void writew(PhysPt addr,Bitu val) {
++		fist_vgawrite(addr,val);
+ 		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
+ 		addr += vga.svga.bank_write_full;
+ 		addr = CHECKED(addr);
+@@ -399,6 +502,7 @@
+ 		writeCache<Bit16u>( addr, val );
+ 	}
+ 	void writed(PhysPt addr,Bitu val) {
++		fist_vgawrite(addr,val);
+ 		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
+ 		addr += vga.svga.bank_write_full;
+ 		addr = CHECKED(addr);
+@@ -433,6 +537,7 @@
+ 		flags=PFLAG_NOCODE;
+ 	}
+ 	void writeb(PhysPt addr,Bitu val) {
++		fist_vgawrite(addr,val);
+ 		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
+ 		addr += vga.svga.bank_write_full;
+ 		addr = CHECKED2(addr);
+@@ -440,6 +545,7 @@
+ 		writeHandler(addr+0,(Bit8u)(val >> 0));
+ 	}
+ 	void writew(PhysPt addr,Bitu val) {
++		fist_vgawrite(addr,val);
+ 		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
+ 		addr += vga.svga.bank_write_full;
+ 		addr = CHECKED2(addr);
+@@ -448,6 +554,7 @@
+ 		writeHandler(addr+1,(Bit8u)(val >> 8));
+ 	}
+ 	void writed(PhysPt addr,Bitu val) {
++		fist_vgawrite(addr,val);
+ 		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
+ 		addr += vga.svga.bank_write_full;
+ 		addr = CHECKED2(addr);
