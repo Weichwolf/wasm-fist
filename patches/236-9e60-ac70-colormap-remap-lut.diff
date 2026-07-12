@@ -1,0 +1,136 @@
+Colormap remap-LUT corruption FUN_0000_9e60 / FUN_0000_ac70 (extender op-0x18 MAP-LOAD, the
+C32.KLC colormap DATA gate to first in-mission terrain pixels).  ROOT CAUSE (runtime-proven with
+stage-by-stage buffer dumps + asm-verified vs re_out/fist_image.bin):
+
+  The C32.KLC colormap DECODES CORRECTLY -- FUN_0000_643c fills the 512x512 buffer at DAT_85b8 with
+  262144 real texels / 248 distinct palette indices.  The corruption is the palette-reduction REMAP
+  pass FUN_0000_9ec0 -> FUN_0000_9e60, which rebuilds every texel through a 256-entry remap LUT
+  (DAT_85c0).  9e60 fills the LUT: for each source palette entry it sets ac68/69/6a = the entry's RGB,
+  calls the nearest-colour search FUN_0000_ac70, and stores the result (asm 9ea5 `mov [edi],bl`).
+
+  Two interlocking dropped-register bugs collapsed the LUT to the single constant 0x04:
+   (1) FUN_0000_ac70 leaves the nearest reduced-palette index in EBX/BL (asm acdc `mov ebx,ebp`,
+       ebp = the palette index walked in lockstep with esi), but the pristine decompile (and patch
+       207, which fixed only the distance tables) tracked ONLY the best DISTANCE (edx/uVar5) and
+       DROPPED both the ebp index counter and the `mov ebx,ebp` return.
+   (2) With ac70 returning nothing, 9e60's `mov [edi],bl` had no source -- Ghidra substituted the
+       phantom param_1 (= AL live-in = the constant 4 that 9ec0 passes), so EVERY LUT entry = 4.
+
+  Post-9ec0 the whole 512x512 colormap became 0x04, then bdc4 upsampled it to a uniform 2048x2048
+  0x04 plane -> the located voxel render (93c0) drew ONE colour.
+
+FIX (asm-verified, 0xac70..0xace5 + 0x9e60):
+   - ac70: restore the ebp index counter (start = DAT_ac64, +1 per iter) and the ebx best-index
+     capture on each improvement (`edx=edi; ebx=ebp; if(edi==0) return`), and RETURN ebx.  Return
+     type void -> undefined4.
+   - 9e60: store the low byte of ac70's return (`*param_3 = (undefined1)FUN_0000_ac70();`) instead of
+     the phantom param_1.
+
+Class: dropped multi-register return (extraout / __allregs) + phantom-arg substitution -- the docs'
+taxonomy.  Cascade-only (9e60/ac70/9ec0 reached ONLY via the op-0x18 mission map-load palette
+reduction; the 19 menu/dialog verify flows never load a mission map) => behaviour-neutral: verify
+19/19, default boot unchanged, mainmenu 3a6ff1c5.  Verified live: post-9ec0 the colormap holds the
+real remapped terrain indices (multi-colour), not a uniform 0x04.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -377,7 +377,7 @@
+ void __allregs FUN_0000_a478(undefined4 param_1);
+ void __allregs FUN_0000_a9b1(undefined4 param_1,char param_2,char *param_3,undefined2 param_4,undefined4 *param_5, char *param_6,int param_7,uint param_8);
+ void __allregs FUN_0000_ab11(char *param_1,int param_2,int param_3,undefined4 *param_4,undefined1 *param_5, undefined6 *param_6,int param_7,int param_8);
+-void __allregs FUN_0000_ac70(void);
++undefined4 __allregs FUN_0000_ac70(void);
+ byte * __allregs FUN_0000_ad1e(uint param_1,undefined4 param_2,byte *param_3,undefined2 param_4);
+ undefined4 __allregs FUN_0000_ae84(undefined4 param_1,undefined2 param_2,undefined1 *param_3);
+ uint __allregs caseD_0(uint param_1,uint param_2,short param_3,byte *param_4);
+@@ -14429,8 +14429,12 @@
+     DAT_0000_ac68 = param_2[3];
+     DAT_0000_ac69 = param_2[4];
+     DAT_0000_ac6a = param_2[5];
+-    FUN_0000_ac70();
+-    *param_3 = param_1;
++    /* PATCH 236: store ac70's RESULT (the nearest reduced-palette index, EBX/BL) into the remap LUT,
++     * not the phantom param_1.  asm 9ea5 `mov BYTE PTR [edi],bl` -- bl = low byte of ac70's returned
++     * ebx.  Ghidra dropped ac70's ebx return and rendered the store as `*param_3 = param_1` (param_1 =
++     * AL live-in = the constant 4 passed by 9ec0), collapsing the entire colormap remap to a single
++     * palette index.  With ac70 now returning ebx (patch above), the LUT is built correctly. */
++    *param_3 = (undefined1)FUN_0000_ac70();
+     iVar1 = iVar1 + -1;
+     param_2 = param_2 + 3;
+   } while (iVar1 != 0);
+@@ -15119,7 +15123,7 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_ac70) @ 0000:ac70 ===== */
+ 
+-void __allregs FUN_0000_ac70(void)
++undefined4 __allregs FUN_0000_ac70(void)
+ 
+ {
+   char *pcVar1;
+@@ -15129,35 +15133,46 @@
+   uint uVar5;
+   char *pcVar6;
+   uint uVar7;
+-  
++  int ebp_idx;
++  int ebx_best;
++
+   bRam0000acb6 = DAT_0000_ac68 >> 1;
+   bRam0000acc0 = DAT_0000_ac69 >> 1;
+   bRam0000acca = DAT_0000_ac6a >> 1;
+   iVar4 = (DAT_0000_ac60 + 1) - DAT_0000_ac64;
++  /* PATCH 236: ac70 RETURNS the nearest reduced-palette index in EBX/BL (asm acdc `mov ebx,ebp`;
++   * ebp = the palette index, walked in lockstep with esi at `&4f60 + ebp*3`).  The pristine decompile
++   * (and patch 207) tracked only the best DISTANCE (uVar5=edx) and DROPPED both the index counter and
++   * the `mov ebx,ebp` return -- so 9e60's `mov [edi],bl` had no source and Ghidra substituted its
++   * phantom param_1 (=const 4), poisoning the whole colormap remap LUT to a single value.  Restore the
++   * index tracking + return (asm 0xac70..0xace5).  ebx starts 0 (asm leaves it garbage until the first
++   * improvement, but edx=0xffffffff guarantees iteration 1 always improves -> ebx is always set). */
++  ebp_idx = DAT_0000_ac64;
++  ebx_best = 0;
+   pcVar6 = &DAT_0000_4f60 + DAT_0000_ac64 * 3;
+   uVar5 = 0xffffffff;
+   do {
+-    while( true ) {
+-      pcVar1 = pcVar6 + 1;
+-      cVar3 = *pcVar6;
+-      pcVar2 = pcVar6 + 2;
+-      pcVar6 = pcVar6 + 3;
+-      /* PATCH 207: three dword palette-distance tables at flat32 module offsets 0xa060/0xa460/0xa860,
+-       * indexed by (byte-0xf) with BYTE stride 4 (asm acb7 `mov edi,[0xa060+eax*4]` / add [0xa460+eax*4]
+-       * / add [0xa860+eax*4]).  Ghidra base-lost 0xa060 to a bare int (near-NULL -> SIGSEGV) AND scaled
+-       * the a460/a860 forms as undefined4* + N*4 (= N*16 bytes, 4x over).  Rebuild all three as byte
+-       * arithmetic base+N*4 on the module base. */
+-      uVar7 = *(int *)(g_mem+fist_ext_base+0xa060 + (uint)(byte)(cVar3 - 0xf) * 4) +
+-              *(int *)(g_mem+fist_ext_base+0xa460 + (uint)(byte)(*pcVar1 - 0xf) * 4) +
+-              *(int *)(g_mem+fist_ext_base+0xa860 + (uint)(byte)(*pcVar2 - 0xf) * 4);
+-      if (uVar7 < uVar5) break;
+-      iVar4 = iVar4 + -1;
+-      if (iVar4 == 0) {
+-        return;
+-      }
++    pcVar1 = pcVar6 + 1;
++    cVar3 = *pcVar6;
++    pcVar2 = pcVar6 + 2;
++    pcVar6 = pcVar6 + 3;
++    /* PATCH 207: three dword palette-distance tables at flat32 module offsets 0xa060/0xa460/0xa860,
++     * indexed by (byte-0xf) with BYTE stride 4 (asm acb7 `mov edi,[0xa060+eax*4]` / add [0xa460+eax*4]
++     * / add [0xa860+eax*4]).  Ghidra base-lost 0xa060 to a bare int (near-NULL -> SIGSEGV) AND scaled
++     * the a460/a860 forms as undefined4* + N*4 (= N*16 bytes, 4x over).  Rebuild all three as byte
++     * arithmetic base+N*4 on the module base. */
++    uVar7 = *(int *)(g_mem+fist_ext_base+0xa060 + (uint)(byte)(cVar3 - 0xf) * 4) +
++            *(int *)(g_mem+fist_ext_base+0xa460 + (uint)(byte)(*pcVar1 - 0xf) * 4) +
++            *(int *)(g_mem+fist_ext_base+0xa860 + (uint)(byte)(*pcVar2 - 0xf) * 4);
++    if (uVar7 < uVar5) {                 /* asm acd4 jb acda: better match */
++      uVar5 = uVar7;                     /* edx = edi (best distance) */
++      ebx_best = ebp_idx;                /* ebx = ebp (best index) */
++      if (uVar7 == 0) return ebx_best;   /* asm ace0 je ace5: exact match, done */
+     }
+-  } while ((uVar7 != 0) && (iVar4 = iVar4 + -1, uVar5 = uVar7, iVar4 != 0));
+-  return;
++    ebp_idx = ebp_idx + 1;               /* inc ebp */
++    iVar4 = iVar4 + -1;                  /* loop (dec ecx) */
++  } while (iVar4 != 0);
++  return ebx_best;
+ }
+ 
+ 

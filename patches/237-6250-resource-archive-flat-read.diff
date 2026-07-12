@@ -1,0 +1,63 @@
+PAL.RES resource-archive member resolution FUN_0000_6250 (extender op-0x18 MAP-LOAD, the 532.pal
+palette load that feeds the colormap palette-reduction).  ROOT CAUSE (runtime-proven + asm-verified vs
+re_out/fist_image.bin 0x62c0/0x6314):
+
+  6032 loads 532.pal (a MEMBER of the XOR-encoded PAL.RES archive) into the palette buffer 5598, which
+  9f70 reduces into the terrain sub-palette that ac70 searches.  6250 OPENS PAL.RES fine (handle ok,
+  CF=0) but then FAILS to find the 532.pal member -> 6032 returns handle 0, 5598 stays EMPTY, the
+  reduction produces a zero LUT, and every colormap texel remaps to one index (uniform terrain).
+
+  6250 reads the RESOURCE-archive header (16 B) then the directory ((count+1)*16 B) into the heap
+  buffer DAT_623c via INT 21h AH=3F.  Two flat32 host-pointer bugs corrupted both reads:
+   (1) EDX32 (the AH=3F buffer address, f002c) was written as SUB42(DAT_623c,0) = the LOW 16 BITS of the
+       bump-alloc HOST pointer.  ext_addr() routes >=0x10000 raw but a low-16 value as a MODULE OFFSET
+       -> both reads landed at the wrong flat address.  asm 62c0/6314 both `mov edx,[0x623c]` (full ptr).
+   (2) The directory read COUNT (ECX32, f0028) was dropped to uVar5=0 -> 0 bytes read.  asm: 6303 inc
+       ecx; 6304 shl ecx,4 -> ecx = (DAT_6240+1)*0x10 is PUSHed, and the 6313 `pop ecx` (which Ghidra
+       lost) restores it as the read count.
+
+  With the header read fixed the 'RESO'/'URCE' magic passes; with the directory read + count fixed the
+  16-byte member entries populate and the XOR'd-name match finds 532.pal.
+
+FIX (asm-verified): at both AH=3F sites write EDX32 = the full DAT_623c host pointer (not SUB42); at the
+directory read write ECX32 = (DAT_6240+1)*0x10.  Class: the docs' 32-bit-flat INT-21 host-pointer
+(short)-truncation + dropped-register-count gap -- shared extender FILEMGR, never exercised until the
+op-0x18 map-load palette member resolution (KDV uses direct file opens, not archive members).
+
+Cascade-only (6250 archive-member path reached ONLY via the op-0x18 mission map-load; the 19 menu/dialog
+verify flows never resolve an archive member) => behaviour-neutral: verify 19/19, default boot rc=0
+(KDV's direct TITLE.KDV opens do NOT take the 6250 archive path -> unaffected), mainmenu 3a6ff1c5.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -9455,7 +9455,12 @@
+   uRam000f0014 = 0x21;
+   uRam000f0002 = DAT_0000_5cc0; *(undefined4 *)(g_mem+0xf0024) = (undefined4)(DAT_0000_5cc0);
+   uRam000f0004 = 0x10; *(undefined4 *)(g_mem+0xf0028) = (undefined4)(0x10);
+-  uRam000f0006 = SUB42(DAT_0000_623c,0); *(undefined4 *)(g_mem+0xf002c) = (undefined4)(SUB42(DAT_0000_623c,0));
++  /* PATCH 237: EDX32 = the FULL heap buffer pointer DAT_623c (asm 62c0 `mov edx,[0x623c]`), not the
++   * low-16 SUB42.  DAT_623c is a bump-alloc HOST pointer (Route-1 host-ptrs-in-slots); ext_addr()
++   * routes >=0x10000 raw but a low-16 value as a module offset -> the RESOURCE-archive HEADER read
++   * landed at the wrong flat address, so *DAT_623c held garbage, the 'RESO'/'URCE' magic check failed,
++   * and the 532.pal member was never found (6032 -> empty palette -> zero remap LUT -> uniform terrain). */
++  uRam000f0006 = SUB42(DAT_0000_623c,0); *(undefined4 *)(g_mem+0xf002c) = (undefined4)DAT_0000_623c;
+   uRam000f0008 = (ushort)puVar9; *(undefined4 *)(g_mem+0xf0030) = (undefined4)(puVar9);
+   uRam000f000c = param_1;
+   uRam000f000e = uVar14;
+@@ -9474,11 +9479,15 @@
+         DAT_0000_6240 = DAT_0000_623c[3];
+         uVar5 = 0;
+         iVar7 = FUN_0000_345c((DAT_0000_6240 + 1) * 0x10,&DAT_0000_623c,puVar9,0x6313);
+-        uRam000f0004 = uVar5; *(undefined4 *)(g_mem+0xf0028) = (undefined4)(uVar5);
++        /* PATCH 237: directory read COUNT = (DAT_6240+1)*0x10 (asm 6303 inc ecx; 6304 shl ecx,4 -> the
++         * ecx pushed before 345c and popped at 6313 IS the read byte count).  Ghidra dropped the pop and
++         * left the read count uVar5=0 -> 0 bytes read -> the directory buffer stayed empty.  EDX32 = full
++         * DAT_623c host pointer (asm 6314 `mov edx,[0x623c]`), not the low-16 SUB42. */
++        uRam000f0004 = (undefined2)((DAT_0000_6240 + 1) * 0x10); *(undefined4 *)(g_mem+0xf0028) = (undefined4)((DAT_0000_6240 + 1) * 0x10);
+         uRam000f0000 = CONCAT11(0x3f,(char)iVar7);
+         uRam000f0014 = 0x21;
+         uRam000f0002 = DAT_0000_5cc0; *(undefined4 *)(g_mem+0xf0024) = (undefined4)(DAT_0000_5cc0);
+-        uRam000f0006 = SUB42(DAT_0000_623c,0); *(undefined4 *)(g_mem+0xf002c) = (undefined4)(SUB42(DAT_0000_623c,0));
++        uRam000f0006 = SUB42(DAT_0000_623c,0); *(undefined4 *)(g_mem+0xf002c) = (undefined4)DAT_0000_623c;
+         uRam000f0008 = (ushort)puVar9; *(undefined4 *)(g_mem+0xf0030) = (undefined4)(puVar9);
+         uRam000f000c = param_1;
+         uRam000f000e = uVar14;

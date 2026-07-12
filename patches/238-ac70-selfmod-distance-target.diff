@@ -1,0 +1,47 @@
+Terrain palette-reduction distance FUN_0000_ac70 self-modifying-code target (extender op-0x18 MAP-LOAD,
+the final gate to real terrain pixels).  ROOT CAUSE (asm-verified vs re_out/fist_image.bin 0xac70..0xace5
++ image data 0xa060/0xa460/0xa860):
+
+  ac70 finds the nearest reduced-palette index to a target colour.  The three tables a060/a460/a860 are
+  STATIC weighted-squared LODs baked into the extender image (a060[k]=(31k)^2, a460[k]=(43k)^2, ...), and
+  the per-colour distance is a060[pal_R - T] + a460[pal_G - T'] + a860[pal_B - T''].  The subtrahends T
+  are the IMMEDIATE bytes of the three `sub al,0xf` instructions (asm acb5/acbf/acc9) -- and ac70's
+  PROLOGUE self-modifies them: `mov ds:0xacb6,al` / `ds:0xacc0,al` / `ds:0xacca,al` write the TARGET
+  colour R/G/B (>>1) into those immediate bytes (0xacb6/acc0/acca are the imm8 fields of the sub insns).
+  So the real distance is (pal - target)^2, weighted.
+
+  Ghidra does not model self-modifying code: it baked the literal 0xf into all three subtractions, making
+  the distance TARGET-INDEPENDENT.  Every source colour then mapped to the single palette entry of minimum
+  weighted magnitude (the darkest, index ~134) -> the colormap remap LUT was uniform -> the voxel render
+  drew ONE colour.
+
+FIX (asm-verified): subtract the SAME bytes ac70 writes -- bRam0000acb6/acc0/acca (= target R/G/B >>1,
+set in ac70's prologue) -- instead of the constant 0xf.  Class: self-modifying-code immediate (the docs'
+DOS-voodoo SMC taxonomy), on top of the ac70 index-return (patch 236) it depends on.
+
+Cascade-only (ac70 reached ONLY via the op-0x18 mission map-load palette reduction) => behaviour-neutral:
+verify 19/19, default boot unchanged, mainmenu 3a6ff1c5.  Verified live: the colormap remap produces 19
+distinct terrain indices (was 1) and the op-0x0c voxel render draws 18-colour terrain (FIST_R3D probe).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -15170,9 +15170,17 @@
+      * / add [0xa860+eax*4]).  Ghidra base-lost 0xa060 to a bare int (near-NULL -> SIGSEGV) AND scaled
+      * the a460/a860 forms as undefined4* + N*4 (= N*16 bytes, 4x over).  Rebuild all three as byte
+      * arithmetic base+N*4 on the module base. */
+-    uVar7 = *(int *)(g_mem+fist_ext_base+0xa060 + (uint)(byte)(cVar3 - 0xf) * 4) +
+-            *(int *)(g_mem+fist_ext_base+0xa460 + (uint)(byte)(*pcVar1 - 0xf) * 4) +
+-            *(int *)(g_mem+fist_ext_base+0xa860 + (uint)(byte)(*pcVar2 - 0xf) * 4);
++    /* PATCH 238: ac70's per-target color distance is computed via SELF-MODIFYING CODE.  a060/a460/a860
++     * are STATIC weighted-squared tables (a060[k]=(31k)^2, a460[k]=(43k)^2, ...); the asm distance is
++     * a060[pal_R - T] where T is the immediate byte of `sub al,0xf` at 0xacb5 -- and ac70's prologue
++     * OVERWRITES that immediate (byte at 0xacb6) with the target R/2 (`mov ds:0xacb6,al`), likewise
++     * 0xacc0/0xacca for G/B.  So the real subtrahend is the TARGET color (halved), not 0xf.  Ghidra does
++     * not model the self-modification and baked the literal 0xf -> the distance became target-INDEPENDENT
++     * -> every source colour mapped to the single darkest palette index (uniform terrain).  Restore the
++     * target subtrahend by reading the same bytes ac70 writes (bRam0000acb6/acc0/acca = target R/G/B >>1). */
++    uVar7 = *(int *)(g_mem+fist_ext_base+0xa060 + (uint)(byte)(cVar3 - (char)bRam0000acb6) * 4) +
++            *(int *)(g_mem+fist_ext_base+0xa460 + (uint)(byte)(*pcVar1 - (char)bRam0000acc0) * 4) +
++            *(int *)(g_mem+fist_ext_base+0xa860 + (uint)(byte)(*pcVar2 - (char)bRam0000acca) * 4);
+     if (uVar7 < uVar5) {                 /* asm acd4 jb acda: better match */
+       uVar5 = uVar7;                     /* edx = edi (best distance) */
+       ebx_best = ebp_idx;                /* ebx = ebp (best index) */
