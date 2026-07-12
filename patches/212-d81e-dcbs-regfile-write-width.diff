@@ -1,0 +1,58 @@
+PATCH 212: correct the FUN_0000_d81e DCBS-record reader reg-file WRITE WIDTH (the ROOT of the
+STRSEG=0 mission crash).  CORRECTS patch 200.  (store-width-mismatch class, docs Ghidra taxonomy.)
+
+CORRECTED FRONTIER DIAGNOSIS.  The stated frontier ("the engine's mission data segment / STRSEG is
+never allocated, so word[DGROUP:0x70] stays 0") is REFUTED by hard runtime evidence: STRSEG
+(DGROUP:0x70) is a CONSTANT 0x2d74 -- the engine's link-time far string/resource data segment, read
+in 60+ sites, NEVER set by a plain store (see tools/native_main.c fist_install_dgroup, and the shim's
+own "never set by a plain store in the engine" note).  It is NOT re-pointed per mission.  On the
+ACCEPT cascade it is 0x2d74 through the menu and the whole extender map load, then gets CLOBBERED to 0
+by a stray INT-21h AH=3F read into DGROUP:0x0.  A gdb watchpoint on g_mem+0x1c070 caught the writer:
+the FSG parser FUN_0000_4754 -> FUN_0000_d501 (chunk dispatch) -> "DCBS" handler FUN_0000_d7e1 ->
+FUN_0000_d81e reads a 247/249-byte object record with DS:DX = 0x1c00:0x0000 (n=249, handle 8).
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin; a defect INTRODUCED by patch 200's d81e
+reconstruction).  The asm sets two SEPARATE 16-bit registers before the read:
+    d832  mov dx,di ; add dx,2      ; DX = di+2  (the roster-slot buffer, di = FUN_1000_b1a2 return)
+    d837  mov cx,[a9c2] ; sub cx,2  ; CX = record body length
+Patch 200 wrote them via the FOUR-BYTE reg-file accessors `iRam000f0006` (DX, 0xf0006) and
+`iRam000f0004` (CX, 0xf0004).  The reg-file packs the 16-bit registers 2 bytes apart
+(AX 0xf0000, BX 0xf0002, CX 0xf0004, DX 0xf0006), so the 4-byte CX store at 0xf0004 spans
+0xf0004..0xf0007 and its ZERO high word OVERWRITES DX at 0xf0006..7 -- undoing the di+2 that the
+line above just set.  Result: DX=0 -> the record read lands at DGROUP:0x0000 and walks over
+DGROUP:0x70 (STRSEG) with the file bytes.  With STRSEG=0 the downstream FUN_0000_4308 mission-model
+table walk (GS=STRSEG:0x802) dispatched segment-0 garbage -> the 7bcf/8daa/a80b crashes the docs
+flagged as "STRSEG=0 garbage dispatch".
+
+FIX: write CX and DX with the 2-byte accessors `uRam000f0004`/`uRam000f0006` so each 16-bit register
+is stored independently (no spill).  di (= b1a2's roster-slot near-offset, 0xa022+/0xc05c+, verified
+sane at runtime) then reaches DX intact and the record read lands in its roster slot.
+
+OBSERVED (FIST_CASCADE 3-click BATTLES->OK->ACCEPT from repo root).  Before: STRSEG 0x2d74->0 at the
+FSG parse, then a garbage 4308 walk crash.  After: a gdb g_mem+0x1c070 watchpoint sees NO clobber,
+STRSEG STAYS 0x2d74, the DCBS records read into their roster slots (di sane), and execution advances
+through the extender map load and the op-0x64 display-list-command service + the si=0x174 display-list
+element-method-vector install into a NEW, deeper frontier: the MEMMGR alloc flag-path FUN_1000_184b
+(struct[+2] bit7 set) -- an unimplemented shim follow-on, the next task.  BEHAVIOUR-NEUTRAL for the 19
+verify flows (d81e runs only on the FSG mission parse, reached only under FIST_CASCADE; verify.sh both
+stays 19/19, default boot rc=0, mainmenu 3a6ff1c5 unchanged).
+
+--- a/fist.c
++++ b/fist.c
+@@ -33463,8 +33463,14 @@
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned int di = (unsigned short)FUN_1000_b1a2(DAT_2000_a9c0,DAT_2000_a9c6,DAT_2000_a9c4,0);
+   unsigned short saved = *(unsigned short *)(dg + (unsigned short)(di + 2));
+-  iRam000f0006 = (unsigned short)(di + 2);
+-  iRam000f0004 = DAT_2000_a9c2 + -2;
++  /* PATCH 212 (CORRECTS patch 200): CX and DX are separate 16-bit registers (asm d832 `mov dx,di;
++     add dx,2` / d837 `mov cx,[a9c2]; sub cx,2`).  Patch 200 wrote them via the 4-BYTE reg-file
++     accessors iRam000f0006/iRam000f0004; the CX write at 0xf0004 (4 bytes -> 0xf0004..0xf0007)
++     SPILLS its zero high word into DX (0xf0006..7), zeroing the di+2 buffer offset -> the DCBS
++     record read (INT21 AH=3F) landed at DGROUP:0x0 and CLOBBERED STRSEG@0x70 (0x2d74->0).  Use the
++     2-byte accessors so each 16-bit register is written independently (store-width-mismatch class). */
++  uRam000f0006 = (unsigned short)(di + 2);
++  uRam000f0004 = (unsigned short)(DAT_2000_a9c2 + -2);
+   uRam000f0000 = 0x3f00;
+   uRam000f0014 = 0x21;
+   uRam000f0002 = DAT_2000_a970;
