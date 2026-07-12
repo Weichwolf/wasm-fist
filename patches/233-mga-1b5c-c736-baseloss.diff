@@ -1,0 +1,55 @@
+PATCH 233: faithful reconstruction of the MGAVIDEO HUD-text glyph entry FUN_0000_1b5c -- resolve the
+_DAT_1000_c736 host-pointer/width base-loss (asm-verified vs re_out/fist_mga_image.bin 0x1b5c-0x1b8f).
+
+FRONTIER CORRECTION: the docs' "3068+5181" cascade anchor is STALE.  With the current patch series the
+mission-start cascade (FIST_CASCADE) runs PAST the c6b4 3D-viewport render dispatch (which returns early --
+geometry word[DGROUP:0x7ac0] is still 0, so mga:0x3068 is NOT yet reached) and crashes deeper, in the
+6686 viewport STATUS-TEXT draw: 6686 -> 55ae -> [DGROUP:0x688] glyph vector -> mga:0x1b5c, at
+`if (*_DAT_1000_c736 == -0x6000)` (RIP 0x811db84 = 1b5c+36).
+
+ROOT CAUSE (watchpoint-proven on g_mem+0x1c736): the text-state pointer at DGROUP:0x736 is a 16-bit NEAR
+OFFSET (asm `mov di,ds:0x736; cmp WORD PTR [di],0xa000`), but Ghidra typed `_DAT_1000_c736` as a 4-byte
+`int**`.  Byte[2] of that 4-byte slot is 0x1c738 = the SEPARATE retrace re-entry counter DAT_1000_c738,
+which the palette/vsync ISR FUN_0000_0b1f inc/decrements every frame -- so the composed "pointer" oscillated
+0x00264c / 0x01264c / 0xff264c and *_DAT_1000_c736 dereferenced an unmapped address.  (This is the same
+DGROUP:[0x736] base-loss class patch 131 fixed for the ABOUT-dialog twin FUN_0000_1d23/1d5f; 1b5c is the
+HUD/viewport twin -- it blits via 1b98 + resets the clip box via 2e12 instead of 1d5f.)
+
+FIX: read c736 as a uint16_t near-offset and rebase every access through g_mem+0x1c000, mirroring patch 131;
+restore the 0x794/0x796 stores + the 2e12 tail that Ghidra dropped.  2e12 is a pure-DGROUP clip-box reset
+(no base-loss).  Advances the cascade past 1b5c to the glyph plotter 1b98 (the next base-loss, same class).
+
+Cascade-only (FIST_CASCADE, default OFF) => BEHAVIOUR-NEUTRAL for the 19 verify flows (the menu/dialog text
+draws via 1d23, not 1b5c).  Sources pristine; fist_mga.c via build/.  Portable C.
+--- a/fist_mga.c	2026-07-09 03:39:38.308456381 +0200
++++ b/fist_mga.c	2026-07-12 05:21:35.588478176 +0200
+@@ -4345,11 +4345,25 @@
+ void __allregs FUN_0000_1b5c(undefined1 param_1)
+ 
+ {
+-  if (*_DAT_1000_c736 == -0x6000) {
+-                    /* WARNING: Subroutine does not return */
+-    FUN_0000_2d6d(_DAT_1000_c736 + 0xe);
++  /* PATCH 233: HUD-text glyph entry (asm 0x1b5c-0x1b8f; DS=DGROUP=0x1c00).  Twin of 1d23 (patch 131).
++     The text-state pointer at DGROUP:0x736 is a 16-bit NEAR OFFSET, not a host int** -- Ghidra's 4-byte
++     typing spanned into the adjacent retrace counter DAT_1000_c738 (byte[2] of the "pointer", inc/dec'd
++     every frame by the 0b1f palette ISR) so *_DAT_1000_c736 dereferenced garbage (crash mga:1b5c+36 on
++     the 6686 viewport status-text draw).  Read c736 as a WORD offset + rebase through g_mem+0x1c000; if
++     the context's first word == 0xA000 (attached to the screen framebuffer) flush the pending scroll
++     (2d6d(off+0x1c)) and set rowtab word[0x794]=0x7c8 / pitch word[0x796]=0x140, then blit the glyph via
++     1b98 and finalize the clip box via 2e12 (both dropped by Ghidra). */
++  uint8_t *D = g_mem + 0x1c000;
++  uint16_t di = *(uint16_t *)(D + 0x736);                 /* mov di,ds:0x736 (near offset) */
++  if (*(uint16_t *)(D + (uint16_t)di) == 0xA000) {        /* cmp WORD [di],0xa000; jne 1b8b */
++    FUN_0000_2d6d((uint16_t)(di + 0x1c));                 /* lea bx,[di+0x1c]; call 2d6d */
++    *(uint16_t *)(D + 0x794) = 0x7c8;                     /* mov ds:0x794,0x7c8  (rowtab) */
++    *(uint16_t *)(D + 0x796) = 0x140;                     /* mov ds:0x796,0x140  (pitch=320) */
++    FUN_0000_1b98(param_1);                               /* call 1b98 (glyph blit) */
++    FUN_0000_2e12();                                      /* call 2e12 (clip-box reset) */
++    return;
+   }
+-  FUN_0000_1b98(param_1);
++  FUN_0000_1b98(param_1);                                 /* else: just blit the glyph */
+   return;
+ }
+ 

@@ -1,0 +1,225 @@
+PATCH 234: faithful reconstruction of the MGAVIDEO HUD-text glyph plotter FUN_0000_1b98 -- the 1bpp
+bit-expander font blitter (asm-verified vs re_out/fist_mga_image.bin 0x1b98-0x1d22).
+
+Reached via 1b5c (patch 233) on the 6686 viewport status-text path (55ae -> [DGROUP:0x688] -> 1b5c -> 1b98).
+It is the 1-bit-per-pixel twin of the byte-font blitter 1d5f (patch 131): same text-state struct at the
+DGROUP:0x736 NEAR OFFSET, same control-char cursor ops, but the glyph pixels come from a 1bpp bitmap
+expanded MSB-first (add ah,ah; sbb al,al; and al,cl; xor al,ch; stos) rather than a byte-per-pixel font.
+
+Ghidra broke it two ways: (a) the DGROUP:0x736 host-pointer/width base-loss (the DAT_1000_c738 retrace
+counter overlaps byte[2] of the 4-byte "pointer" -- see patch 233); (b) the blit inner loop was
+mis-decompiled into an int-scaled CONCAT11 cascade against _DAT_2000_c226.  Rebuilt faithfully in the
+DGROUP-offset model (SW(o) = word at g_mem+0x1c000 + (uint16)(s+o)); full asm map in the function comment.
+The control-char switch (chars 7/8/a/d/c/e/f) is the same cursor arithmetic as 1d5f, case for case.
+
+Advances the cascade past 1b98; the HUD status string now blits without the wild deref.  Cascade-only
+(FIST_CASCADE default OFF) => BEHAVIOUR-NEUTRAL for the 19 verify flows (menu/dialog text draws via 1d5f).
+Sources pristine; fist_mga.c via build/.  Portable C.
+--- a/fist_mga.c	2026-07-09 03:39:38.308456381 +0200
++++ b/fist_mga.c	2026-07-12 05:29:56.943267158 +0200
+@@ -4386,137 +4386,78 @@
+ void __allregs FUN_0000_1b98(byte param_1)
+ 
+ {
+-  byte bVar1;
+-  byte *pbVar2;
+-  byte *pbVar3;
+-  undefined2 uVar4;
+-  uint uVar5;
+-  undefined2 uVar6;
+-  undefined2 *puVar7;
+-  int iVar8;
+-  byte bVar9;
+-  byte bVar10;
+-  char cVar11;
+-  uint uVar12;
+-  char cVar13;
+-  byte *pbVar14;
+-  byte *pbVar15;
+-  
+-  puVar7 = _DAT_1000_c736;
+-  uVar6 = _DAT_1000_c71a;
+-  _DAT_1000_c792 = _DAT_1000_c736[0xc];
+-  if (!CARRY1(param_1,param_1)) {
+-    _DAT_1000_c792 = _DAT_1000_c736[0xb];
+-  }
+-  pbVar3 = (byte *)*(undefined2 *)(_DAT_1000_c736[3] + (uint)(byte)(param_1 * '\x02'));
+-  if (*pbVar3 == 0) {
+-    bVar9 = param_1 & 0x7f;
+-    if (bVar9 == 7) {
+-      FUN_0000_2c7b();
+-    }
+-    else if (bVar9 == 8) {
+-      iVar8 = _DAT_1000_c736[10];
+-      _DAT_1000_c736[0xe] = _DAT_1000_c736[0xe] - iVar8;
+-      puVar7[0x10] = puVar7[0x10] - iVar8;
+-      iVar8 = puVar7[5] + puVar7[7] + puVar7[9];
+-      puVar7[0xf] = puVar7[0xf] - iVar8;
+-      puVar7[0x11] = puVar7[0x11] - iVar8;
+-    }
+-    else if (bVar9 == 10) {
+-      iVar8 = _DAT_1000_c736[6] + _DAT_1000_c736[8] + _DAT_1000_c736[10];
+-      _DAT_1000_c736[0xe] = _DAT_1000_c736[0xe] + iVar8;
+-      puVar7[0x10] = puVar7[0x10] + iVar8;
+-    }
+-    else if (bVar9 == 0xd) {
+-      iVar8 = _DAT_1000_c736[0xd];
+-      _DAT_1000_c736[0xf] = iVar8;
+-      puVar7[0x11] = iVar8 + puVar7[5];
+-    }
+-    else if (bVar9 == 0xc) {
+-      iVar8 = _DAT_1000_c736[0xd];
+-      _DAT_1000_c736[0xf] = iVar8;
+-      puVar7[0x11] = iVar8 + puVar7[5];
+-      iVar8 = puVar7[6] + puVar7[8] + puVar7[10];
+-      puVar7[0xe] = puVar7[0xe] + iVar8;
+-      puVar7[0x10] = puVar7[0x10] + iVar8;
+-    }
+-    else if (bVar9 == 0xe) {
+-      _DAT_1000_c736[0xf] = _DAT_1000_c736[0xf] + 1;
+-      puVar7[0x11] = puVar7[0x11] + 1;
+-    }
+-    else if (bVar9 == 0xf) {
+-      _DAT_1000_c736[0xf] = _DAT_1000_c736[0xf] + -1;
+-      puVar7[0x11] = puVar7[0x11] + -1;
++  /* PATCH 234: faithful reconstruction of the MGAVIDEO HUD-text glyph plotter FUN_0000_1b98 (asm-verified
++     vs re_out/fist_mga_image.bin 0x1b98-0x1d22).  The 1bpp-font bit-expander twin of 1d5f (patch 131, the
++     byte-font blitter) reached via 1b5c (patch 233).  Ghidra's C was doubly broken: (a) the text-state
++     pointer at DGROUP:0x736 is a 16-bit NEAR OFFSET, not a host int** (the DAT_1000_c738 retrace-counter
++     overlap, see patch 233); (b) the whole glyph blit was mis-decompiled into an int-scaled CONCAT
++     cascade.  Rebuilt in the DGROUP-offset model (SW(o) = word at g_mem+0x1c000+(s+o)); asm map:
++        s=word[0x736]; color=(ch&0x80)?SW(0x18):SW(0x16) -> byte[0x792]; glyph table SW(6), font seg
++        word[0x71a]; goff=word[FS + SW(6)+ch*2]; width=FS[goff++]; if width==0 -> control char (1c7e).
++        blit: di=rowtab[SW(0x1c)]+SW(0x1e) (rowtab=word[0x794]); ES=SW(0)<<4 (0xA000); cl=colorLo^colorHi,
++        ch=colorHi; for (cellH-1) rows: read a glyph byte, expand the top cellW(<=8) bits MSB-first
++        (px = ((bit?0xff:0)&cl)^ch) into ES[di++], then di += pitch word[0x796]; advance cursor by SW(0x14)
++        (row) and SW(0xa)+SW(0xe)+SW(0x12) (col).  Control chars (7/8/a/d/c/e/f) = the same cursor ops as
++        1d5f case-for-case. */
++  uint8_t *D = g_mem + 0x1c000;
++  uint16_t s = *(uint16_t *)(D + 0x736);
++  uint16_t fontseg = *(uint16_t *)(D + 0x71a);
++  uint8_t *FS = g_mem + ((uint32_t)fontseg << 4);
++  uint8_t ch = param_1;
++#define SW(o) (*(uint16_t *)(D + (uint16_t)(s + (o))))
++  /* color select: add al,al -> CF=bit7; jb keeps SW(0x18) (colorHi), else SW(0x16) (colorLo) */
++  uint16_t color = (ch & 0x80) ? SW(0x18) : SW(0x16);
++  *(uint16_t *)(D + 0x792) = color;                  /* mov WORD PTR ds:0x792,cx (word, both bytes) */
++  /* glyph lookup: si = SW(6) + ch*2 (8-bit index); goff = word[FS+si]; width = FS[goff++] */
++  uint16_t gi = (uint16_t)(SW(6) + (uint16_t)(uint8_t)(ch * 2));
++  uint16_t goff = *(uint16_t *)(FS + gi);
++  uint8_t width = *(FS + goff);
++  goff = (uint16_t)(goff + 1);
++  if (width == 0) {
++    /* control char (asm 1c7e): al recovered = ch */
++    switch (ch) {
++      case 0x7: FUN_0000_2c7b(); break;
++      case 0x8: { uint16_t ax = SW(0x14); SW(0x1c) -= ax; SW(0x20) -= ax;
++                  ax = (uint16_t)(SW(0xa) + SW(0xe) + SW(0x12)); SW(0x1e) -= ax; SW(0x22) -= ax; } break;
++      case 0xa: { uint16_t ax = (uint16_t)(SW(0xc) + SW(0x10) + SW(0x14)); SW(0x1c) += ax; SW(0x20) += ax; } break;
++      case 0xd: { uint16_t ax = SW(0x1a); SW(0x1e) = ax; SW(0x22) = (uint16_t)(ax + SW(0xa)); } break;
++      case 0xc: { SW(0x1e) = SW(0x1a); SW(0x22) = (uint16_t)(SW(0x1a) + SW(0xa));
++                  uint16_t ax = (uint16_t)(SW(0xc) + SW(0x10) + SW(0x14)); SW(0x1c) += ax; SW(0x20) += ax; } break;
++      case 0xe: SW(0x1e) += 1; SW(0x22) += 1; break;
++      case 0xf: SW(0x1e) -= 1; SW(0x22) -= 1; break;
++      default: break;
+     }
++    return;
+   }
+-  else {
+-    pbVar14 = (byte *)(*(int *)(_DAT_1000_c736[0xe] * 2 + _DAT_1000_c794) + _DAT_1000_c736[0xf]);
+-    uVar4 = *_DAT_1000_c736;
+-    bVar10 = (byte)((uint)_DAT_1000_c792 >> 8);
+-    bVar9 = (byte)_DAT_1000_c792 ^ bVar10;
+-    uVar12 = CONCAT11((char)(_DAT_1000_c736[6] + -1),(char)((uint)(_DAT_1000_c736[6] + -1) >> 8));
+-    uVar5 = _DAT_1000_c736[5];
+-    do {
+-      pbVar3 = pbVar3 + 1;
+-      bVar1 = *pbVar3;
+-      uVar12 = uVar12 | uVar5;
+-      pbVar15 = pbVar14 + 1;
+-      *pbVar14 = -CARRY1(bVar1,bVar1) & bVar9 ^ bVar10;
+-      cVar13 = (char)uVar12;
+-      cVar11 = '\0';
+-      if (cVar13 != '\x01') {
+-        pbVar2 = pbVar15;
+-        pbVar15 = pbVar14 + 2;
+-        *pbVar2 = -CARRY1(bVar1 * '\x02',bVar1 * '\x02') & bVar9 ^ bVar10;
+-        cVar11 = '\0';
+-        if (cVar13 != '\x02') {
+-          pbVar2 = pbVar15;
+-          pbVar15 = pbVar14 + 3;
+-          *pbVar2 = -CARRY1(bVar1 * '\x04',bVar1 * '\x04') & bVar9 ^ bVar10;
+-          cVar11 = '\0';
+-          if (cVar13 != '\x03') {
+-            pbVar2 = pbVar15;
+-            pbVar15 = pbVar14 + 4;
+-            *pbVar2 = -CARRY1(bVar1 * '\b',bVar1 * '\b') & bVar9 ^ bVar10;
+-            cVar11 = '\0';
+-            if (cVar13 != '\x04') {
+-              pbVar2 = pbVar15;
+-              pbVar15 = pbVar14 + 5;
+-              *pbVar2 = -CARRY1(bVar1 * '\x10',bVar1 * '\x10') & bVar9 ^ bVar10;
+-              cVar11 = '\0';
+-              if (cVar13 != '\x05') {
+-                pbVar2 = pbVar15;
+-                pbVar15 = pbVar14 + 6;
+-                *pbVar2 = -CARRY1(bVar1 * ' ',bVar1 * ' ') & bVar9 ^ bVar10;
+-                cVar11 = '\0';
+-                if (cVar13 != '\x06') {
+-                  pbVar2 = pbVar15;
+-                  pbVar15 = pbVar14 + 7;
+-                  *pbVar2 = -CARRY1(bVar1 * '@',bVar1 * '@') & bVar9 ^ bVar10;
+-                  cVar11 = '\0';
+-                  if (cVar13 != '\a') {
+-                    pbVar2 = pbVar15;
+-                    pbVar15 = pbVar14 + 8;
+-                    *pbVar2 = -CARRY1(bVar1 << 7,bVar1 << 7) & bVar9 ^ bVar10;
+-                    cVar11 = cVar13 + -8;
+-                  }
+-                }
+-              }
+-            }
+-          }
+-        }
++  /* glyph blit (asm 1bc4-1c7d) */
++  {
++    uint16_t rowtab = *(uint16_t *)(D + 0x794);
++    uint16_t di = *(uint16_t *)(D + (uint16_t)((uint16_t)(SW(0x1c) * 2) + rowtab));
++    di = (uint16_t)(di + SW(0x1e));
++    uint16_t fbseg = SW(0);
++    uint8_t *ES = g_mem + ((uint32_t)fbseg << 4);
++    uint16_t colw = *(uint16_t *)(D + 0x792);          /* cx = word[0x792] */
++    uint8_t chi = (uint8_t)(colw >> 8);                /* ch */
++    uint8_t clo = (uint8_t)((uint8_t)colw ^ chi);      /* xor cl,ch */
++    uint16_t cellW = SW(0xa);
++    uint16_t rows = (uint16_t)(SW(0xc) - 1);           /* dh = cellH-1 */
++    uint16_t screenW = *(uint16_t *)(D + 0x796);
++    for (; rows != 0; rows = (uint16_t)(rows - 1)) {
++      uint8_t gb = *(FS + goff); goff = (uint16_t)(goff + 1);
++      uint16_t n = cellW; if (n > 8) n = 8;            /* dl = cellW, unrolled 8x max */
++      for (uint16_t k = 0; k < n; k++) {
++        uint8_t bit = (uint8_t)(gb & 0x80); gb = (uint8_t)(gb << 1);   /* add ah,ah -> CF */
++        uint8_t px = (uint8_t)(((bit ? 0xff : 0x00) & clo) ^ chi);     /* sbb al,al; and al,cl; xor al,ch */
++        *(ES + di) = px;                                                /* stos es:[di] */
++        di = (uint16_t)(di + 1);
+       }
+-      pbVar14 = pbVar15 + (_DAT_2000_c226 - uVar5);
+-      cVar13 = (char)(uVar12 >> 8) + -1;
+-      uVar12 = CONCAT11(cVar13,cVar11);
+-    } while (cVar13 != '\0');
+-    iVar8 = puVar7[10];
+-    puVar7[0xe] = puVar7[0xe] + iVar8;
+-    puVar7[0x10] = puVar7[0x10] + iVar8;
+-    iVar8 = puVar7[5] + puVar7[7] + puVar7[9];
+-    puVar7[0xf] = puVar7[0xf] + iVar8;
+-    puVar7[0x11] = puVar7[0x11] + iVar8;
++      di = (uint16_t)(di - cellW);                     /* sub di,bp */
++      di = (uint16_t)(di + screenW);                   /* add di,ss:0x796 */
++    }
++    { uint16_t ax = SW(0x14); SW(0x1c) += ax; SW(0x20) += ax; }
++    { uint16_t ax = (uint16_t)(SW(0xa) + SW(0xe) + SW(0x12)); SW(0x1e) += ax; SW(0x22) += ax; }
+   }
++#undef SW
+   return;
+ }
+ 
