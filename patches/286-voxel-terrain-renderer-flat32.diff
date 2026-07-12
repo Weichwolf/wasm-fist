@@ -1,0 +1,78 @@
+Voxel TERRAIN renderer (extender FUN_0000_9200 + its projection FUN_0000_8120) flat32 memory-model
+reconstruction -- the oracle-proven cockpit terrain writer (docs/oracle_terrain_writer.md).
+
+The opaque-LOD voxel ground renderer 9200 (op 0x09 -> 82c0 = 8120 projection -> 9200 texel walk ->
+82d0 teardown) was decompiled but NEVER exercised in the port, so three flat32 base-losses were
+latent.  All asm-verified vs re_out/fist_image.bin:
+
+  * 8120 (0x8120): the per-heading SIN/COS projection table lives at image 0x9450 (asm 0x81af
+    'lea ebx,[ebx*4+0x9450]'; reads [ebx]/[ebx+4]/[ebx+0x200]/[ebx+0x204]).  Ghidra base-lost two
+    reads (&FUN_0000_944b -> a HOST function pointer; bare 0x9454 -> a host address) and 4x-over-
+    scaled the other two (&DAT_0000_9650 + iVar4 with iVar4 already = idx*4).  All four rebuilt as
+    byte arithmetic on g_mem+fist_ext_base.
+  * 9200 (0x9200) horizon table: DAT_0000_9114 holds a FLAT image offset (8deb: (&PTR_748c)[detail]
+    = 0x7568 for detail 1, the byte sky-skip table baked in the image; skip[0]=6 matches the oracle
+    first-column ground truth).  The per-column read must be module-base-relative.
+  * 9200 colormap sampler: SELF-MODIFYING code (stub 91e5 patches DAT_0000_3918 = the colormap base
+    into the 'mov al,[eax+disp]' displacement at run time); Ghidra baked the pre-patch literal
+    0x7fffffff.  DAT_0000_3918 is a Route-1 host pointer to the loaded colormap -> colormap[texcoord].
+
+Extender-side, driven only by the FIST_R3D2 diagnostic seam (default OFF) -> behaviour-neutral for
+the default boot + all verify flows (engine fist.c untouched).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -12960,14 +12960,20 @@
+   iVar5 = (DAT_0000_90e4 + 0x40000000U & 0x7fffff) << 8;
+   uVar2 = (uint)~(DAT_0000_90e4 << 9) >> 1;
+   iVar4 = (DAT_0000_90e4 + 0x40000000U >> 0x17) * 4;
++  /* PATCH 286: 8120's per-heading projection reads a fixed-point SIN/COS table baked in the extender
++   * image at offset 0x9450 (asm 0x81af `lea ebx,[ebx*4+0x9450]`; reads [ebx]/[ebx+4]/[ebx+0x200]/
++   * [ebx+0x204] = 0x9450/0x9454/0x9650/0x9654 + idx*4, iVar4=idx*4).  Ghidra base-lost two of them
++   * (`&FUN_0000_944b`+5 = a HOST function pointer, and bare `0x9454` = a host address) -> SIGSEGV, and
++   * OVER-SCALED the other two (`&DAT_0000_9650 + iVar4`: undefined4* pointer arith multiplies iVar4 by
++   * 4 again -> 0x9650 + idx*16).  Rebuild all four as byte arithmetic on the module base. */
+   DAT_0000_9104 = (int)((ulonglong)
+-                       ((longlong)*(int *)(((uint)(uintptr_t)&FUN_0000_944b) + iVar4 + 5) * (longlong)(int)uVar2) >> 0x20
+-                      ) + (int)((ulonglong)((longlong)*(int *)(iVar4 + 0x9454) * (longlong)iVar5) >>
++                       ((longlong)*(int *)(g_mem+fist_ext_base+0x9450 + iVar4) * (longlong)(int)uVar2) >> 0x20
++                      ) + (int)((ulonglong)((longlong)*(int *)(g_mem+fist_ext_base+0x9454 + iVar4) * (longlong)iVar5) >>
+                                0x20);
+   DAT_0000_9104 = DAT_0000_9104 * 2;
+-  DAT_0000_9108 = (int)((ulonglong)((longlong)*(int *)(&DAT_0000_9650 + iVar4) * (longlong)(int)uVar2)
++  DAT_0000_9108 = (int)((ulonglong)((longlong)*(int *)(g_mem+fist_ext_base+0x9650 + iVar4) * (longlong)(int)uVar2)
+                       >> 0x20) +
+-                 (int)((ulonglong)((longlong)*(int *)(&DAT_0000_9654 + iVar4) * (longlong)iVar5) >>
++                 (int)((ulonglong)((longlong)*(int *)(g_mem+fist_ext_base+0x9654 + iVar4) * (longlong)iVar5) >>
+                       0x20);
+   DAT_0000_9108 = DAT_0000_9108 * 2;
+   DAT_0000_90c0 = 0x1000000;
+@@ -13733,7 +13739,10 @@
+   uVar8 = DAT_0000_90d4;
+   puVar9 = DAT_0000_90a8;
+   do {
+-    DAT_0000_910c = (uint)*(byte *)(iVar2 + DAT_0000_9114);
++    /* PATCH 286: horizon/sky-skip table -- DAT_0000_9114 holds a FLAT image offset (8deb sets it to
++     * (&PTR_748c)[detail] = 0x7568 for detail 1, a byte table baked in the extender image), so the
++     * per-column read must be module-base-relative, not a host deref of 0x7568. */
++    DAT_0000_910c = (uint)*(byte *)(g_mem+fist_ext_base + DAT_0000_9114 + iVar2);
+     uVar5 = uVar6;
+     uVar7 = uVar8;
+     if (DAT_0000_910c != 0) {
+@@ -13747,11 +13756,15 @@
+     }
+     iVar4 = (DAT_0000_90f0 >> 1) - DAT_0000_910c;
+     do {
++      /* PATCH 286: SELF-MODIFYING colormap sampler.  The asm is `mov al,[eax+disp]` where the stub
++       * 91e5 patches `disp = DAT_0000_3918` (the colormap base) into the code at run time; Ghidra baked
++       * the pre-patch literal 0x7fffffff.  DAT_0000_3918 is a Route-1 HOST pointer to the loaded
++       * colormap buffer -> sample colormap[texcoord]. */
+       puVar1 = puVar9 + 1;
+-      *puVar9 = *(undefined1 *)(((uVar5 >> 0x18) << 8 | uVar7 >> 0x18) + 0x7fffffff);
++      *puVar9 = *(undefined1 *)((uint8_t*)(uintptr_t)DAT_0000_3918 + ((uVar5 >> 0x18) << 8 | uVar7 >> 0x18));
+       puVar9 = puVar9 + 2;
+       *puVar1 = *(undefined1 *)
+-                 (((uVar5 + param_2 >> 0x18) << 8 | uVar7 + param_1 >> 0x18) + 0x7fffffff);
++                 ((uint8_t*)(uintptr_t)DAT_0000_3918 + ((uVar5 + param_2 >> 0x18) << 8 | uVar7 + param_1 >> 0x18));
+       uVar5 = uVar5 + param_2 + param_2;
+       uVar7 = uVar7 + param_1 + param_1;
+       iVar4 = iVar4 + -1;

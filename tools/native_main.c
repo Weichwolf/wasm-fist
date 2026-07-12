@@ -810,6 +810,10 @@ extern void m_ext_FUN_0000_11dd(int, int, int);             /* KDV DECODE+PRESEN
 extern void m_ext_FUN_0000_6f17(int, int, int, int, int, int); /* KDV close/free wrapper */
 extern void m_ext_FUN_0000_89b0(unsigned, unsigned, unsigned); /* op-0x18 MAP-LOAD setup (terrain/pal/sky) */
 extern void m_ext_FUN_0000_84c0(unsigned);                     /* extender task-setup allocator (bc90 matrix etc.) */
+extern void m_ext_FUN_0000_8deb(void);                         /* voxel viewport setup (90a8/90f0/90f8/9114) */
+extern void m_ext_FUN_0000_82b8(int, int);                     /* OPAQUE-LOD voxel terrain render (8120->9200->82d0) */
+extern void m_ext_FUN_0000_8120(void);                         /* voxel camera->projection (steps 90b8/90bc/90d4/90d8) */
+extern void m_ext_FUN_0000_9200(int, int);                     /* voxel per-column texel walk (the terrain writer) */
 static int  g_ext_ready;      /* module image loaded + slots seeded */
 static int  g_kdv_open;       /* TITLE.KDV opened (once) */
 static long g_kdv_frames;     /* frames decoded (diagnostic) */
@@ -1150,6 +1154,95 @@ int fist_extender_gate(void) {
         if (ef) { static int en = 0; if (en++ == 0) { fist_dump_framebuffer(ef);
             const char *er = getenv("FIST_ENGFB_RAW");
             if (er) { FILE *f = fopen(er, "wb"); if (f) { fwrite(g_mem + 0xA0000, 1, 64000, f); fclose(f); } } } }
+    }
+    /* FIST_R3D2 (diagnostic): the OPAQUE-LOD voxel terrain render (oracle: FUN_0000_9200 via 82b8/82c0,
+     * the DOMINANT fb writer in the ORIGINAL).  Drives 8deb (viewport setup) -> 85d0 (camera) ->
+     * 82b8 (8120 projection -> 9200 texel walk -> 82d0 teardown), TCB from the mission ea2e:ea2c.
+     * Dumps the colormap[0x3918] + horizon[0x9114] contents to answer whether the DATA is delivered. */
+    if (op == 0x0c && g_ext_ready && getenv("FIST_R3D2")) {
+        static int r2 = 0;
+        uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        uint8_t *tcb = g_mem + tcb_lin;
+        uint8_t *xb  = g_mem + FIST_EXT_BASE;
+        uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
+        *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)tcb;
+        if (r2 == 0) {
+            fprintf(stderr, "[r3d2] TCB @0x%05x rect[16/18/1a/1c]=%d/%d/%d/%d detail[cd]=%u [cf]=%u "
+                    "cam[2c/30/34]=%d/%d/%u ang[38/3a/3c/3e]=%u/%d/%d/%u\n",
+                    tcb_lin, *(int16_t*)(tcb+0x16),*(int16_t*)(tcb+0x18),*(int16_t*)(tcb+0x1a),*(int16_t*)(tcb+0x1c),
+                    tcb[0xcd], tcb[0xcf], *(int32_t*)(tcb+0x2c),*(int32_t*)(tcb+0x30),*(uint32_t*)(tcb+0x34),
+                    *(uint16_t*)(tcb+0x38),*(int16_t*)(tcb+0x3a),*(int16_t*)(tcb+0x3c),*(uint16_t*)(tcb+0x3e));
+            /* viewport setup (8deb: 90a8 dest, 90f0 colh, 90f8 vieww, 90ac adv, 9114 horizon table) */
+            m_ext_FUN_0000_8deb();
+            m_ext_FUN_0000_85d0();
+            uint32_t cm  = *(uint32_t*)(xb+0x3918);   /* colormap base (host ptr in Route-1 slot) */
+            uint32_t hz  = *(uint32_t*)(xb+0x9114);   /* horizon table base (host ptr) */
+            uint32_t dst = *(uint32_t*)(xb+0x90a8);   /* dest (host ptr = fb + off) */
+            fprintf(stderr, "[r3d2] after setup: 90a8(dst)=%08x 90f0(colh)=%u 90f8(vieww)=%u 90ac(adv)=%u "
+                    "9114(hz)=%08x 3918(cm)=%08x 85b8=%08x\n",
+                    dst, *(uint32_t*)(xb+0x90f0), *(uint32_t*)(xb+0x90f8), *(uint32_t*)(xb+0x90ac),
+                    hz, cm, *(uint32_t*)(xb+0x85b8));
+            /* colormap content histogram (host ptr; the sampler indexes only the first 64KB = 256x256) */
+            if (cm > 0x1000 && cm < 0xffffffff) {
+                uint8_t *cmp = (uint8_t*)(uintptr_t)cm; int h[256]={0}; int nd=0; long nz64=0;
+                for (long i=0;i<0x10000;i++){ if(cmp[i])nz64++; if(!h[cmp[i]])nd++; h[cmp[i]]++; }
+                long nz4m=0; for(long i=0;i<0x400000;i+=17) if(cmp[i]) nz4m++;
+                long firstnz=-1; for(long i=0;i<0x400000;i++) if(cmp[i]){firstnz=i;break;}
+                fprintf(stderr, "[r3d2] colormap[0x3918] first64KB nonzero=%ld/65536 distinct=%d ; 4MB-sampled-nonzero=%ld/%d first-nonzero-off=0x%lx (=%ld) 391c(size)=%u 38ed=%u 38f1=%u\n",
+                        nz64, nd, nz4m, 0x400000/17, firstnz, firstnz,
+                        *(uint32_t*)(xb+0x391c), *(uint32_t*)(xb+0x38ed), *(uint32_t*)(xb+0x38f1));
+            }
+            if (hz > 0x1000 && hz < 0x100000) {   /* flat module offset, not a host ptr */
+                uint8_t *hzp = xb + hz;
+                fprintf(stderr, "[r3d2] horizon[0x9114]=+0x%x first20 cols=", hz);
+                for(int i=0;i<20;i++) fprintf(stderr,"%u ",hzp[i]);
+                fprintf(stderr,"\n");
+            }
+        }
+        if (getenv("FIST_R3D2_RENDER")) {
+            /* Viewport dims: the engine's ddff viewport-configure (writes TCB+0x16..0x1c) is a separate
+             * unreconstructed frontier, so the TCB rect is 0 and 8deb yields colh/vieww=0.  Force the
+             * ORACLE-captured cockpit-windshield terrain viewport (docs/oracle_terrain_writer.md): 81
+             * columns x 288 col-height, dest = fb+0x650, per-column advance 32 -> reproduces the oracle
+             * write span [0x0656..0x6b66].  (FIST_R3D2_VW/VH/DST override for experimentation.) */
+            m_ext_FUN_0000_8deb();        /* selects horizon table 9114 from TCB[0xcd] detail */
+            m_ext_FUN_0000_85d0();        /* camera position/angle from TCB */
+            unsigned vw = getenv("FIST_R3D2_VW") ? (unsigned)strtoul(getenv("FIST_R3D2_VW"),0,0) : 81;
+            unsigned ch = getenv("FIST_R3D2_VH") ? (unsigned)strtoul(getenv("FIST_R3D2_VH"),0,0) : 288;
+            unsigned dst= getenv("FIST_R3D2_DST")? (unsigned)strtoul(getenv("FIST_R3D2_DST"),0,0): 0x650;
+            *(uint32_t*)(xb+0x90f8) = vw;                                         /* view width (columns) */
+            *(uint32_t*)(xb+0x90f0) = ch;                                         /* column height */
+            *(uint32_t*)(xb+0x90ac) = 0x140 - ch;                                /* dest advance */
+            *(uint32_t*)(xb+0x90a8) = (uint32_t)(uintptr_t)(g_mem + 0xA0000 + dst);/* dest ptr */
+            m_ext_FUN_0000_8120();        /* projection: 90d4/90d8/90b8/90bc from camera */
+            /* 9200's params are the per-TEXEL u/v steps 8120 leaves in registers esi/ebp
+             * (asm 0x8247 `mov esi,edx`=high(90c0*9104); 0x8251 `mov ebp,edx`=high(90c0*9108)).
+             * The __allregs C model returns void from 8120, so recompute them from the stored
+             * 90c0/9104/9108 and pass (param_1=ebp, param_2=esi) as 9200 expects. */
+            { int32_t c0 = *(int32_t*)(xb+0x90c0), v04 = *(int32_t*)(xb+0x9104), v08 = *(int32_t*)(xb+0x9108);
+              int32_t esi = (int32_t)(((int64_t)c0 * v04) >> 32);
+              int32_t ebp = (int32_t)(((int64_t)c0 * v08) >> 32);
+              m_ext_FUN_0000_9200(ebp, esi); }
+            if (r2 == 0) {
+                uint8_t *fb = g_mem+0xA0000; long nz=0; int h[256]={0}; int nd=0;
+                for(long i=0;i<64000;i++){ if(fb[i]){nz++;} if(!h[fb[i]])nd++; h[fb[i]]++; }
+                uint32_t u7=*(uint32_t*)(xb+0x90d4), u5=*(uint32_t*)(xb+0x90d8);
+                uint32_t tc0 = ((u5>>0x18)<<8) | (u7>>0x18);
+                uint8_t *cmp = (uint8_t*)(uintptr_t)*(uint32_t*)(xb+0x3918);
+                fprintf(stderr,"[r3d2] RENDER vw=%u ch=%u -> fb nonzero=%ld/64000 distinct=%d 90d4=%08x 90d8=%08x 90b8=%08x 90bc=%08x tc0=%04x cm[tc0]=%02x\n",
+                        vw, ch, nz, nd, u7,u5,*(uint32_t*)(xb+0x90b8),*(uint32_t*)(xb+0x90bc), tc0, cmp[tc0&0xffff]);
+                /* histogram of fb rows 5..86 (the rendered voxel viewport = 9200's output only) */
+                { int vh[256]={0}; int vnd=0; long vnz=0;
+                  for(long r=5;r<86;r++) for(long c=0;c<320;c++){ uint8_t p=fb[r*320+c]; if(p)vnz++; if(!vh[p])vnd++; vh[p]++; }
+                  fprintf(stderr,"[r3d2] viewport rows5-86: nonzero=%ld/%d distinct=%d\n", vnz, 81*320, vnd); }
+                { extern void out(int,int); uint8_t *mp = xb + 0x5598;
+                  out(0x3c8,0); for(int pi=0;pi<768;pi++) out(0x3c9,mp[pi]); }
+                const char *dp = getenv("FIST_R3D2_DUMP"); if (dp) fist_dump_framebuffer(dp);
+            }
+        }
+        *(uint32_t*)(xb+0xc93) = save_c93;
+        r2++;
+        return 0;
     }
     if (op == 0x0c && g_ext_ready && getenv("FIST_R3D")) {
         uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
