@@ -1,0 +1,52 @@
+PATCH 231: reconstruct FUN_1000_6686 (viewport RENDER dispatch) -- a DGROUP-near-offset base-loss + dropped
+device-method selector.  Asm-verified vs re_out/fist_dat_image.bin 0x16686-0x166cc.
+
+Bumps a re-entrancy counter around the FAR video-driver device method lcall [DGROUP:0x6b4] (the per-element
+render dispatch; recon "the [ds:0x6b4] device method"), passing the ax selector (0x1350/0x1348 by byte
+[0x6dac]), then runs the viewport methods 524e/530b/52d1/55ae.  Ghidra base-lost the bx context (host-deref
+-> SIGSEGV), widened the WORD counters to int, dropped the ax selector + the device-call arg, and base-lost
+the 55ae si.  Rebased through g_mem+0x1c000 with the asm widths.
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows.  Default boot rc=0, mainmenu unchanged.  Sources
+pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -54173,18 +54173,26 @@
+ void __allregs FUN_1000_6686(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  *piVar1 = *piVar1 + 1;
+-  *(int *)(param_1 + 6) = *(int *)(param_1 + 6) + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
+-  FUN_1000_524e(2);
+-  FUN_1000_530b(0xe);
+-  FUN_1000_52d1(3,0x136);
+-  thunk_FUN_1000_55ae(*(undefined2 *)((uint)DAT_2000_3b1e * 2 + 0x7bae));
++  /* PATCH 231: viewport RENDER dispatch (asm 0x16686; DS=DGROUP=0x1c00).  bx = param_1 = the viewport
++     context near-offset.  ax = the device-method selector (0x1350, or 0x1348 if byte[0x6dac]!=0); bumps a
++     re-entrancy counter at [bx+4]/[bx+6] around the FAR video-driver device method lcall [DGROUP:0x6b4]
++     (ax live), then restores it and runs the viewport methods 524e(2)/530b(0xe)/52d1(3,0x136)/55ae(si)
++     where si = word[DGROUP:(byte[0x7b1e]*2 + 0x7bae)].  Ghidra base-lost bx (host-deref -> SIGSEGV at the
++     incw), widened the WORD counters to int, DROPPED the ax selector + the device-call arg, and base-lost
++     the 55ae si.  Rebased through g_mem+0x1c000 with the asm widths. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int bx = (unsigned short)(uintptr_t)param_1;
++  unsigned int ax = (dg[0x6dac] == 0) ? 0x1350 : 0x1348;               /* mov ax,0x1350; cmpb [0x6dac],0; je; mov ax,0x1348 */
++  bx = (unsigned short)(bx + 4);                                       /* lea bx,[bx+4] */
++  *(unsigned short *)(dg + (unsigned short)bx) += 1;                   /* incw [bx] */
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 1;             /* incw [bx+2] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))((int)ax);       /* lcall [DGROUP:0x6b4] (ax live) */
++  *(unsigned short *)(dg + (unsigned short)bx) -= 1;                   /* decw [bx] */
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 1;             /* decw [bx+2] */
++  FUN_1000_524e(2);                                                    /* mov ax,2; call 524e */
++  FUN_1000_530b(0xe);                                                  /* mov ax,0xe; call 530b */
++  FUN_1000_52d1(3,0x136);                                              /* mov ax,3; mov bx,0x136; call 52d1 */
++  thunk_FUN_1000_55ae(*(undefined2 *)(dg + (unsigned short)(dg[0x7b1e] * 2 + 0x7bae))); /* si=word[0x7bae+byte[0x7b1e]*2]; call 55a8 */
+   return;
+ }
+ 

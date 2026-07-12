@@ -1,0 +1,62 @@
+PATCH 228: reconstruct FUN_0000_502f (object-render setup) -- a DGROUP-near-offset base-loss + a Ghidra
+shared-ret control-flow misread.  Asm-verified vs re_out/fist_dat_image.bin 0x502f-0x5078.
+
+Reached as the mission render prep enumerates the roster objects (di=0xc05c enemy slot).  502f guards the
+object then publishes it into the 0x7ae0 render fields + far-calls the seg-0xf69 service 0x703d
+(FUN_1000_66cd) with a per-object service-id, and marks 0x87bd/0x87d6.  Ghidra base-lost di (host-deref ->
+SIGSEGV) and merged the guard-fail ret so it wrongly wrote on that path; reconstructed faithfully with the
+early returns, the explicit g_mem+0x1c000 base, and the asm byte/word widths.
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows.  Default boot rc=0, mainmenu unchanged.  Sources
+pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -14155,24 +14155,31 @@
+ void __allregs FUN_0000_502f(int *param_1)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  if ((((param_1 == (int *)0x0) || (*param_1 == 0x17)) || ((*(byte *)(param_1 + 0xb) & 1) != 0)) ||
+-     ((*(byte *)(param_1 + 0xb) & 0x20) == 0)) {
+-    DAT_2000_3ae0 = (int *)0x0;
++  /* PATCH 228: object-render setup (asm 0x502f-0x5078; DS=DGROUP=0x1c00).  di = ax = the object near-offset.
++     Guards: return early (asm `je/jne 5078`) if di==0, word[di]==0x17, byte[di+0x16]&1, or !(byte[di+0x16]
++     &0x20) -- Ghidra restructured the shared ret so it wrongly zeroed 0x7ae0 AND wrote 0x87bd/0x87d6 on the
++     guard-FAIL path; the asm writes NOTHING on guard-fail.  On pass: publish the object into 0x7ae0, copy
++     byte[di+0x1b]->0x7ae2, set 0x7ae7=0xfa, pick a service-id si (0xc84, or byte[di+0x43]-indexed table
++     0x86bc if word[di+0x40]&1), far-call 0f69:0x703d=FUN_1000_66cd(si), then set 0x87bd/0x87d6=3.  Ghidra
++     base-lost di (host-deref -> SIGSEGV at 0xc05c) and mis-scaled the word accesses.  Rebased through
++     g_mem+0x1c000 with the asm byte/word widths. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  if (di == 0) return;                                                 /* or ax,ax; je 5078 */
++  if (*(unsigned short *)(dg + di) == 0x17) return;                    /* cmpw [di],0x17; je */
++  if (dg[(unsigned short)(di + 0x16)] & 1) return;                     /* testb [di+0x16],1; jne */
++  if ((dg[(unsigned short)(di + 0x16)] & 0x20) == 0) return;           /* testb [di+0x16],0x20; je */
++  *(unsigned short *)(dg + 0x7ae0) = (unsigned short)di;               /* mov [0x7ae0],ax */
++  dg[0x7ae2] = dg[(unsigned short)(di + 0x1b)];                        /* mov dl,[di+0x1b]; mov [0x7ae2],dl */
++  *(unsigned short *)(dg + 0x7ae7) = 0xfa;                             /* movw [0x7ae7],0xfa */
++  {
++    unsigned int si = 0xc84;                                           /* mov si,0xc84 */
++    if (*(unsigned short *)(dg + (unsigned short)(di + 0x40)) & 1)     /* testw [di+0x40],1; je */
++      si = *(unsigned short *)(dg + (unsigned short)(dg[(unsigned short)(di + 0x43)] + 0x86bc)); /* si=word[0x86bc+byte[di+0x43]] */
++    FUN_1000_66cd((int)si);                                           /* lcall 0f69:0x703d */
+   }
+-  else {
+-    DAT_2000_3ae2 = *(undefined1 *)((int)param_1 + 0x1b);
+-    DAT_2000_3ae7 = 0xfa;
+-    uVar1 = 0xc84;
+-    if ((param_1[0x20] & 1U) != 0) {
+-      uVar1 = *(undefined2 *)(*(byte *)((int)param_1 + 0x43) + 0x86bc);
+-    }
+-    DAT_2000_3ae0 = param_1;
+-    FUN_1000_66cd(uVar1);
+-  }
+-  DAT_2000_47bd = 3;
+-  DAT_2000_47d6 = 3;
++  dg[0x87bd] = 3;                                                      /* movb [0x87bd],3 */
++  dg[0x87d6] = 3;                                                      /* movb [0x87d6],3 */
+   return;
+ }
+ 

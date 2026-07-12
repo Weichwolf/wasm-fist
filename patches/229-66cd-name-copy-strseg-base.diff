@@ -1,0 +1,62 @@
+PATCH 229: reconstruct FUN_1000_66cd (asm 0x166cd = 0f69:0x703d) -- the object model-name copy's dropped
+ES=STRSEG source base.  Asm-verified vs re_out/fist_dat_image.bin 0x166cd-0x166f1.
+
+Called by 502f (patch 228) with si = the object's STRSEG name offset.  66cd copies the NUL-terminated name
+from ES:[si] (ES = word[DGROUP:0x70] = STRSEG) into the render name buffer DGROUP:0x7a52 and sets
+word[0x7a50]=0x168 / byte[0x87c2]=3.  Ghidra dropped the ES=STRSEG segment base (`*param_1` host-deref of
+the raw si -> SIGSEGV); rebased src = g_mem + (STRSEG<<4) + si, dst through g_mem+0x1c000.
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows.  Default boot rc=0, mainmenu unchanged.  Sources
+pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -54194,29 +54194,27 @@
+ undefined4 __allregs FUN_1000_66cd(char *param_1)
+ 
+ {
+-  char cVar1;
+-  undefined2 uVar2;
+-  int iVar3;
+-  char *pcVar4;
+-  
+-  uVar2 = DAT_1000_c070;
+-  pcVar4 = (char *)&DAT_2000_3a52;
+-  iVar3 = 0x50;
++  /* PATCH 229: object model-name copy (asm 0x166cd = 0f69:0x703d; DS=DGROUP=0x1c00).  Copies a
++     NUL-terminated string from ES:[si] into the render name buffer DGROUP:0x7a52 (<=0x50 bytes), where
++     ES = word[DGROUP:0x70] = STRSEG and si = param_1 (the STRSEG string offset from 502f), then sets
++     word[0x7a50]=0x168 and byte[0x87c2]=3.  Ghidra DROPPED the ES=STRSEG segment base on the source
++     (`*param_1` = a host deref of the raw si -> SIGSEGV).  Rebased: src = g_mem + (STRSEG<<4) + si. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int strseg = *(unsigned short *)(dg + 0x70);              /* mov es,[0x70] */
++  unsigned char *src = (unsigned char *)g_mem + ((unsigned int)strseg << 4);
++  unsigned int si = (unsigned short)(uintptr_t)param_1;              /* si = param */
++  unsigned int di = 0x7a52;                                          /* mov di,0x7a52 */
++  int cx = 0x50;                                                     /* mov cx,0x50 */
+   do {
+-    cVar1 = *param_1;
+-    param_1 = param_1 + 1;
+-    *pcVar4 = cVar1;
+-    pcVar4 = pcVar4 + 1;
+-    if (cVar1 == '\0') {
+-      DAT_2000_3a50 = 0x168;
+-      DAT_2000_47c2 = 3;
+-      return;
+-    }
+-    iVar3 = iVar3 + -1;
+-  } while (iVar3 != 0);
+-  DAT_2000_47c2 = 3;
+-  DAT_2000_3a50 = 0x168;
+-  return;
++    unsigned char al = src[(unsigned short)si];                      /* mov al,es:[si] */
++    si++;                                                            /* inc si */
++    dg[(unsigned short)di] = al;                                     /* mov [di],al */
++    di++;                                                            /* inc di */
++    if (al == 0) break;                                              /* or al,al; je */
++  } while (--cx != 0);                                               /* loop */
++  dg[0x87c2] = 3;                                                    /* movb [0x87c2],3 */
++  *(unsigned short *)(dg + 0x7a50) = 0x168;                          /* movw [0x7a50],0x168 */
++  return 0;
+ }
+ 
+ 

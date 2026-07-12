@@ -1,0 +1,68 @@
+PATCH 232: reconstruct FUN_1000_55ae + thunk_FUN_1000_55ae (the STRSEG string-DRAW loop) -- a dropped
+ES=STRSEG source base + the dropped char arg to the char-draw device method.  Asm-verified vs
+re_out/fist_dat_image.bin 0x155a8-0x155c4.
+
+Called by the viewport render (6686, patch 231) + others to draw a NUL-terminated STRSEG string one char
+at a time via the FAR device method lcall [DGROUP:0x688].  Ghidra base-lost the source (`*param_1` host
+deref of the raw si) and dropped the AL char arg to the draw call.  Rebased src = g_mem + (0x2d74<<4) + si
+(ES is the hardcoded STRSEG 0x2d74); al threaded into the draw.  Both the entry thunk (0x155a8) and the
+loop body (0x155ae) share this body.
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows.  Default boot rc=0, mainmenu unchanged.  Sources
+pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -48700,13 +48700,19 @@
+ void __allregs thunk_FUN_1000_55ae(char *param_1)
+ 
+ {
+-  char *pcVar1;
+-  
+-  while( true ) {
+-    pcVar1 = param_1;
+-    param_1 = param_1 + 1;
+-    if ((*pcVar1 == '\0') || ((*pcVar1 == '$' && (*param_1 == '\0')))) break;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c688)))();
++  /* PATCH 232: string-DRAW loop (asm 0x155ae; DS=DGROUP=0x1c00, ES=STRSEG=0x2d74 hardcoded).  Reads
++     ES:[si] chars (si = param_1, a STRSEG offset), stops at NUL (or '$' followed by NUL), and draws each
++     via the FAR char-draw device method lcall [DGROUP:0x688] with al (the char) live.  Ghidra base-lost
++     the source (`*pcVar1` = a host deref of the raw si) and dropped the al arg to the draw call.  Rebased
++     src = g_mem + (0x2d74<<4) + si; al threaded into the draw. */
++  unsigned char *src = (unsigned char *)g_mem + (0x2d74 << 4);
++  unsigned int si = (unsigned short)(uintptr_t)param_1;
++  while (1) {
++    unsigned char al = src[(unsigned short)si];                    /* lods es:[si],al */
++    si++;
++    if (al == 0) break;                                            /* or al,al; je */
++    if (al == '$' && src[(unsigned short)si] == 0) break;          /* cmp '$'; testb es:[si] */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c688)))((int)al); /* lcall [0x688] (al live) */
+   }
+   return;
+ }
+@@ -48717,13 +48723,19 @@
+ void __allregs FUN_1000_55ae(char *param_1)
+ 
+ {
+-  char *pcVar1;
+-  
+-  while( true ) {
+-    pcVar1 = param_1;
+-    param_1 = param_1 + 1;
+-    if ((*pcVar1 == '\0') || ((*pcVar1 == '$' && (*param_1 == '\0')))) break;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c688)))();
++  /* PATCH 232: string-DRAW loop (asm 0x155ae; DS=DGROUP=0x1c00, ES=STRSEG=0x2d74 hardcoded).  Reads
++     ES:[si] chars (si = param_1, a STRSEG offset), stops at NUL (or '$' followed by NUL), and draws each
++     via the FAR char-draw device method lcall [DGROUP:0x688] with al (the char) live.  Ghidra base-lost
++     the source (`*pcVar1` = a host deref of the raw si) and dropped the al arg to the draw call.  Rebased
++     src = g_mem + (0x2d74<<4) + si; al threaded into the draw. */
++  unsigned char *src = (unsigned char *)g_mem + (0x2d74 << 4);
++  unsigned int si = (unsigned short)(uintptr_t)param_1;
++  while (1) {
++    unsigned char al = src[(unsigned short)si];                    /* lods es:[si],al */
++    si++;
++    if (al == 0) break;                                            /* or al,al; je */
++    if (al == '$' && src[(unsigned short)si] == 0) break;          /* cmp '$'; testb es:[si] */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c688)))((int)al); /* lcall [0x688] (al live) */
+   }
+   return;
+ }
