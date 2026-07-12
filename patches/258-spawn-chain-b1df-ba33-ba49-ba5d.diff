@@ -1,0 +1,432 @@
+PATCH 258: the projectile SPAWN-record chain (b583/b51f -> ba49 -> ba33 -> ba5d + b1df/registrar) --
+DGROUP near-offset-as-host-pointer base-losses + the host-pointer-truncated DI arg (SIGSEGV in b1df).
+
+Exposed once the per-frame object UPDATE walk (patch 243, c0e5) reached a type-E emitter object whose
+action method (b583, patch 257) spawns a projectile.  The whole spawn chain threads the object through
+the DI register as a DGROUP near offset; patch 257 had turned b583's object into a HOST pointer for its
+own field derefs, so passing it as a 16-bit call arg TRUNCATED it (g_mem+0x1c000 low16 folded into the
+value: real near offset 0xad74 -> corrupt 0x2eb4), and b1df then deref'd that corrupt near offset as a
+host int* -> SIGSEGV at FUN_1000_b1df+0x152.
+
+ASM-verified vs re_out/fist_dat_image.bin (DS=SS=DGROUP=0x1c00):
+ - b583 (0xb583): asm b5d8/b5de pass DI = the object NEAR OFFSET to bbb7/ba49.  Recover it from the
+   host pointer param_2 (= g_mem+0x1c000+di, invariant across the sector loop) instead of truncating.
+ - FUN_0000_ba49 (0xba49): di=object near offset in param_3 (asm leaves si=di=object after ba33);
+   writes the launch velocity dword[si+4]/[si+8] from DAT_2000_5c7f/5c83.  Ghidra used the host object
+   ptr param_2 and 16-bit-truncated the dwords.  Rebuilt in the DGROUP model, full dword reads.
+ - FUN_0000_ba33 (0xba33): registers the object via b1df(4,di) then installs the spawn template via
+   ba5d.  Threaded b1df's CF (g_fist_cf) that Ghidra dropped, and fixed ba5d's template/object args
+   (unaff_CS garbage).
+ - FUN_0000_ba5d (0xba5d): template->object field copy (bx=template near, si=di=object near).  Ghidra
+   base-lost every DS access (host-ptr deref).  Rebuilt with explicit DGROUP byte/word offsets; the 3
+   trailing dword self-copies (di==si) kept verbatim.
+ - FUN_1000_b1df (0x1b1df): the display-object registrar.  di=object near offset in param_2; b21d
+   (patch 200) already returns the roster slot + g_fist_cf.  Finds a free slot in the 182-entry table
+   @ DGROUP:0xdfbc (stride 4), stores the near offset, bumps the refcount, zeroes the object body.
+   Ghidra deref'd the near offset as a host int* (*param_2 -> SIGSEGV), walked the table at host-int
+   stride 8, and dropped b21d's CF.
+ - b51f (0xb51f): its own asm b57f ba49 call passes DI = the restored original object; thread
+   (uint16)param_1 instead of the dropped unaff_CS.
+
+NOTE (documented deviation, not fixed here): b51f's asm sets c31e's object = SI = DAT_2000_5a25 (the
+bb64-found target), but the committed chain dispatches c31e on the original object (param_1).  Left as
+observed to keep b583 reachable/crash-free; revisit with the bb64 DAT_5a25 population.  Mission-cascade
+only (the 19 menu/dialog flows never register a spawn object).
+@@ -28845,7 +28845,9 @@
+       if (bVar2) {
+         *(byte *)(param_2 + 0x1b) = *(byte *)(param_2 + 0x1b) | DAT_2000_5c7d;
+         FUN_0000_c31e(0,10,param_1,DAT_2000_5a25);
+-        FUN_0000_ba49(0x9c15,param_1,unaff_CS);
++        /* PATCH 258: thread di=object near offset (asm b57f: ba49 with the restored original
++         * object in DI) instead of the dropped unaff_CS. */
++        FUN_0000_ba49(0x9c15,param_1,(uint16_t)(uintptr_t)param_1);
+       }
+     }
+   }
+@@ -28886,8 +28888,13 @@
+       param_1 = (ulong)uVar2;
+       if (bVar6) {
+         *(byte *)(param_2 + 0x1b) = *(byte *)(param_2 + 0x1b) | DAT_2000_5c7d;
+-        FUN_0000_bbb7(0,10,param_2);
+-        param_1 = FUN_0000_ba49(0x9c15,puVar5,param_2);
++        /* PATCH 258: asm b5d8/b5de pass DI = the object NEAR OFFSET to bbb7/ba49; patch 257 turned
++         * param_2 into a host pointer, so passing param_2 as a 16-bit arg TRUNCATED it to a corrupt
++         * near offset (g_mem+0x1c000 low16 folded in) and mis-registered the spawned object.  Recover
++         * the near offset from param_2 (= g_mem+0x1c000+di, invariant across the loop). */
++        FUN_0000_bbb7(0,10,(uint16_t)((intptr_t)param_2 - (intptr_t)((unsigned char *)g_mem + 0x1c000)));
++        param_1 = FUN_0000_ba49(0x9c15,puVar5,
++                    (uint16_t)((intptr_t)param_2 - (intptr_t)((unsigned char *)g_mem + 0x1c000)));
+       }
+     }
+     uVar4 = uVar4 + 1;
+@@ -29471,14 +29478,17 @@
+ undefined2 __allregs FUN_0000_ba33(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 unaff_CS;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_b1df(4,param_2);
+-  if (!(bool)in_CF) {
+-    FUN_0000_ba5d(unaff_CS,param_2,param_1);
++  /* PATCH 258: spawn-record dispatch (asm 0xba33; DS=DGROUP=0x1c00).  di=object near offset in
++   * param_2, ax=template near offset in param_1.  Registers the object via b1df(4,di) (which sets
++   * g_fist_cf on roster-full) and, on success, installs the template into the object via ba5d.
++   * Ghidra dropped b1df's CF (local in_CF never set) and mis-attributed ba5d's template/object args
++   * (unaff_CS garbage host deref). */
++  extern unsigned char g_fist_cf;
++  FUN_1000_b1df(4,(int *)(uintptr_t)(uint16_t)param_2);
++  if (!(bool)g_fist_cf) {
++    FUN_0000_ba5d((undefined2 *)(uintptr_t)(uint16_t)param_1,(int)(uint16_t)param_2,0);
+   }
+-  return unaff_CS;
++  return 0;
+ }
+ 
+ 
+@@ -29487,10 +29497,18 @@
+ undefined4 __allregs FUN_0000_ba49(undefined2 param_1,int param_2,undefined2 param_3)
+ 
+ {
++  /* PATCH 258: spawn-record + launch-velocity write (asm 0xba49; DS=DGROUP=0x1c00).  di=object near
++   * offset in param_3 (asm leaves si=di=object after ba33); param_1=template near offset.  After ba33
++   * registers the object, writes the launch velocity dword[si+4]/[si+8] from DAT_2000_5c7f/5c83.
++   * Ghidra used param_2 (a host object ptr) for the [si+*] writes and truncated DAT_5c7f/83 to 16
++   * bits; rebuilt in the DGROUP model with the full dword reads. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_3;
++  (void)param_2;
+   FUN_0000_ba33(param_1,param_3);
+-  *(undefined4 *)(param_2 + 4) = DAT_2000_5c7f;
+-  *(undefined4 *)(param_2 + 8) = DAT_2000_5c83;
+-  return;
++  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(g_mem + 0x25c7f);
++  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(g_mem + 0x25c83);
++  return 0;
+ }
+ 
+ 
+@@ -29499,28 +29517,36 @@
+ void __allregs FUN_0000_ba5d(undefined2 *param_1,int param_2,int param_3)
+ 
+ {
+-  undefined1 uVar1;
+-  uint uVar2;
+-  int iVar3;
+-  
+-  *(undefined1 *)(param_2 + 0x19) = 0;
+-  *(undefined2 *)(param_2 + 0x10) = *param_1;
+-  *(undefined1 *)(param_2 + 0x1e) = *(undefined1 *)(param_1 + 1);
+-  *(undefined2 *)(param_2 + 0x1a) = param_1[3];
+-  uVar1 = *(undefined1 *)((int)param_1 + 3);
+-  *(undefined1 *)(param_2 + 0x1f) = uVar1;
+-  *(undefined1 *)(param_2 + 0x20) = uVar1;
+-  iVar3 = param_1[2];
+-  if (iVar3 == -1) {
+-    uVar2 = FUN_0000_0291();
+-    iVar3 = (uVar2 & 0xff) + 0x200;
+-  }
+-  *(int *)(param_2 + 0x12) = iVar3;
+-  *(undefined2 *)(param_2 + 0x14) = 0x800;
+-  *(undefined2 *)(param_2 + 0x1c) = 0;
+-  *(undefined4 *)(param_2 + 4) = *(undefined4 *)(param_3 + 4);
+-  *(undefined4 *)(param_2 + 8) = *(undefined4 *)(param_3 + 8);
+-  *(undefined4 *)(param_2 + 0xc) = *(undefined4 *)(param_3 + 0xc);
++  /* PATCH 258: template->object copy (asm 0xba5d; DS=DGROUP=0x1c00).  bx=template near offset in
++   * param_1, si=di=object near offset in param_2.  Copies the spawn-template fields into the object
++   * and seeds the fixed launch state (0x14=0x800, life 0x12 from template word[bx+4] or a random
++   * 0x200+rand&0xff when 0xffff).  Ghidra base-lost every DS-relative access (template/object treated
++   * as host pointers -> SIGSEGV).  Rebuilt with explicit DGROUP byte/word offsets.  The trailing three
++   * dword copies are asm [si+N]<-[di+N] with di==si (self-copies), kept verbatim. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int bx = (unsigned short)(uintptr_t)param_1;   /* template near offset */
++  unsigned int si = (unsigned short)param_2;              /* object near offset (si==di) */
++  unsigned int ax;
++  unsigned char u;
++  (void)param_3;
++  dg[(unsigned short)(si + 0x19)] = 0;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x10)) = *(unsigned short *)(dg + (unsigned short)bx);
++  dg[(unsigned short)(si + 0x1e)] = dg[(unsigned short)(bx + 2)];
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1a)) = *(unsigned short *)(dg + (unsigned short)(bx + 6));
++  u = dg[(unsigned short)(bx + 3)];
++  dg[(unsigned short)(si + 0x1f)] = u;
++  dg[(unsigned short)(si + 0x20)] = u;
++  ax = *(unsigned short *)(dg + (unsigned short)(bx + 4));
++  if (ax == 0xffff) {
++    unsigned int r = FUN_0000_0291();
++    ax = (r & 0xff) + 0x200;
++  }
++  *(unsigned short *)(dg + (unsigned short)(si + 0x12)) = (unsigned short)ax;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x14)) = 0x800;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1c)) = 0;
++  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(si + 4));
++  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(si + 8));
++  *(unsigned int *)(dg + (unsigned short)(si + 0xc)) = *(unsigned int *)(dg + (unsigned short)(si + 0xc));
+   return;
+ }
+ 
+@@ -63515,32 +63541,39 @@
+ int __allregs FUN_1000_b1df(undefined2 param_1,int *param_2)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int *piVar3;
+-  undefined1 in_CF = 0;
+-  
+-  iVar1 = FUN_1000_b21d(param_1);
+-  if ((bool)in_CF) {
+-    return iVar1;
+-  }
+-  iVar1 = 0;
+-  for (piVar3 = (int *)&DAT_2000_9fbc; (*piVar3 != 0 || (piVar3[1] != 0)); piVar3 = piVar3 + 2) {
+-    iVar1 = iVar1 + 1;
+-  }
+-  *piVar3 = (int)param_2;
+-  piVar3[1] = piVar3[1] + 1;
+-  iVar2 = 0x33;
+-  if ((*(byte *)(*param_2 + -0x19ec) & 1) != 0) {
+-    iVar2 = 0xf7;
+-  }
+-  piVar3 = param_2 + 2;
++  /* PATCH 258: display-object registrar (asm 0x1b1df; DS=DGROUP=0x1c00).  param_1=type key (ax),
++   * param_2=object NEAR OFFSET (di).  Calls b21d (roster insert; sets g_fist_cf when the roster is
++   * full) then finds a free slot in the 182-entry table @ DGROUP:0xdfbc (stride 4: word[si]==0 &&
++   * word[si+2]==0), stores the object near-offset there, bumps the slot refcount, and zeroes the
++   * object body (0x33 or 0xf7 bytes per byte[word[di]-0x19ec]&1).  Ghidra base-lost the whole thing:
++   * the near-offset object was deref'd as a host int* (*param_2 -> SIGSEGV), the table was walked at
++   * host-int stride 8, and b21d's CF was dropped (local in_CF never set). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_2;
++  unsigned int si, cx, bx;
++  int count;
++  FUN_1000_b21d(param_1);
++  if (g_fist_cf) { g_fist_cf = 1; return 0; }
++  si = 0xdfbc; count = 0;
++  while (*(unsigned short *)(dg + (unsigned short)si) != 0 ||
++         *(unsigned short *)(dg + (unsigned short)(si + 2)) != 0) {
++    si = (unsigned short)(si + 4);
++    count = count + 1;
++  }
++  *(unsigned short *)(dg + (unsigned short)si) = (unsigned short)di;
++  *(unsigned short *)(dg + (unsigned short)(si + 2)) =
++      (unsigned short)(*(unsigned short *)(dg + (unsigned short)(si + 2)) + 1);
++  bx = *(unsigned short *)(dg + (unsigned short)di);
++  cx = (dg[(unsigned short)(bx - 0x19ec)] & 1) ? 0xf7 : 0x33;
++  si = (unsigned short)(di + 4);
+   do {
+-    *(undefined1 *)piVar3 = 0;
+-    piVar3 = (int *)((int)piVar3 + 1);
+-    iVar2 = iVar2 + -1;
+-  } while (iVar2 != 0);
+-  return iVar1;
++    dg[(unsigned short)si] = 0;
++    si = (unsigned short)(si + 1);
++    cx = cx - 1;
++  } while (cx != 0);
++  g_fist_cf = 0;
++  return count;
+ }
+ 
+ 
+--- a/fist.c
++++ b/fist.c
+@@ -28845,7 +28845,9 @@
+       if (bVar2) {
+         *(byte *)(param_2 + 0x1b) = *(byte *)(param_2 + 0x1b) | DAT_2000_5c7d;
+         FUN_0000_c31e(0,10,param_1,DAT_2000_5a25);
+-        FUN_0000_ba49(0x9c15,param_1,unaff_CS);
++        /* PATCH 258: thread di=object near offset (asm b57f: ba49 with the restored original
++         * object in DI) instead of the dropped unaff_CS. */
++        FUN_0000_ba49(0x9c15,param_1,(uint16_t)(uintptr_t)param_1);
+       }
+     }
+   }
+@@ -28886,8 +28888,13 @@
+       param_1 = (ulong)uVar2;
+       if (bVar6) {
+         *(byte *)(param_2 + 0x1b) = *(byte *)(param_2 + 0x1b) | DAT_2000_5c7d;
+-        FUN_0000_bbb7(0,10,param_2);
+-        param_1 = FUN_0000_ba49(0x9c15,puVar5,param_2);
++        /* PATCH 258: asm b5d8/b5de pass DI = the object NEAR OFFSET to bbb7/ba49; patch 257 turned
++         * param_2 into a host pointer, so passing param_2 as a 16-bit arg TRUNCATED it to a corrupt
++         * near offset (g_mem+0x1c000 low16 folded in) and mis-registered the spawned object.  Recover
++         * the near offset from param_2 (= g_mem+0x1c000+di, invariant across the loop). */
++        FUN_0000_bbb7(0,10,(uint16_t)((intptr_t)param_2 - (intptr_t)((unsigned char *)g_mem + 0x1c000)));
++        param_1 = FUN_0000_ba49(0x9c15,puVar5,
++                    (uint16_t)((intptr_t)param_2 - (intptr_t)((unsigned char *)g_mem + 0x1c000)));
+       }
+     }
+     uVar4 = uVar4 + 1;
+@@ -29471,14 +29478,17 @@
+ undefined2 __allregs FUN_0000_ba33(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 unaff_CS;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_b1df(4,param_2);
+-  if (!(bool)in_CF) {
+-    FUN_0000_ba5d(unaff_CS,param_2,param_1);
++  /* PATCH 258: spawn-record dispatch (asm 0xba33; DS=DGROUP=0x1c00).  di=object near offset in
++   * param_2, ax=template near offset in param_1.  Registers the object via b1df(4,di) (which sets
++   * g_fist_cf on roster-full) and, on success, installs the template into the object via ba5d.
++   * Ghidra dropped b1df's CF (local in_CF never set) and mis-attributed ba5d's template/object args
++   * (unaff_CS garbage host deref). */
++  extern unsigned char g_fist_cf;
++  FUN_1000_b1df(4,(int *)(uintptr_t)(uint16_t)param_2);
++  if (!(bool)g_fist_cf) {
++    FUN_0000_ba5d((undefined2 *)(uintptr_t)(uint16_t)param_1,(int)(uint16_t)param_2,0);
+   }
+-  return unaff_CS;
++  return 0;
+ }
+ 
+ 
+@@ -29487,10 +29497,18 @@
+ undefined4 __allregs FUN_0000_ba49(undefined2 param_1,int param_2,undefined2 param_3)
+ 
+ {
++  /* PATCH 258: spawn-record + launch-velocity write (asm 0xba49; DS=DGROUP=0x1c00).  di=object near
++   * offset in param_3 (asm leaves si=di=object after ba33); param_1=template near offset.  After ba33
++   * registers the object, writes the launch velocity dword[si+4]/[si+8] from DAT_2000_5c7f/5c83.
++   * Ghidra used param_2 (a host object ptr) for the [si+*] writes and truncated DAT_5c7f/83 to 16
++   * bits; rebuilt in the DGROUP model with the full dword reads. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_3;
++  (void)param_2;
+   FUN_0000_ba33(param_1,param_3);
+-  *(undefined4 *)(param_2 + 4) = DAT_2000_5c7f;
+-  *(undefined4 *)(param_2 + 8) = DAT_2000_5c83;
+-  return;
++  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(g_mem + 0x25c7f);
++  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(g_mem + 0x25c83);
++  return 0;
+ }
+ 
+ 
+@@ -29499,28 +29517,36 @@
+ void __allregs FUN_0000_ba5d(undefined2 *param_1,int param_2,int param_3)
+ 
+ {
+-  undefined1 uVar1;
+-  uint uVar2;
+-  int iVar3;
+-  
+-  *(undefined1 *)(param_2 + 0x19) = 0;
+-  *(undefined2 *)(param_2 + 0x10) = *param_1;
+-  *(undefined1 *)(param_2 + 0x1e) = *(undefined1 *)(param_1 + 1);
+-  *(undefined2 *)(param_2 + 0x1a) = param_1[3];
+-  uVar1 = *(undefined1 *)((int)param_1 + 3);
+-  *(undefined1 *)(param_2 + 0x1f) = uVar1;
+-  *(undefined1 *)(param_2 + 0x20) = uVar1;
+-  iVar3 = param_1[2];
+-  if (iVar3 == -1) {
+-    uVar2 = FUN_0000_0291();
+-    iVar3 = (uVar2 & 0xff) + 0x200;
+-  }
+-  *(int *)(param_2 + 0x12) = iVar3;
+-  *(undefined2 *)(param_2 + 0x14) = 0x800;
+-  *(undefined2 *)(param_2 + 0x1c) = 0;
+-  *(undefined4 *)(param_2 + 4) = *(undefined4 *)(param_3 + 4);
+-  *(undefined4 *)(param_2 + 8) = *(undefined4 *)(param_3 + 8);
+-  *(undefined4 *)(param_2 + 0xc) = *(undefined4 *)(param_3 + 0xc);
++  /* PATCH 258: template->object copy (asm 0xba5d; DS=DGROUP=0x1c00).  bx=template near offset in
++   * param_1, si=di=object near offset in param_2.  Copies the spawn-template fields into the object
++   * and seeds the fixed launch state (0x14=0x800, life 0x12 from template word[bx+4] or a random
++   * 0x200+rand&0xff when 0xffff).  Ghidra base-lost every DS-relative access (template/object treated
++   * as host pointers -> SIGSEGV).  Rebuilt with explicit DGROUP byte/word offsets.  The trailing three
++   * dword copies are asm [si+N]<-[di+N] with di==si (self-copies), kept verbatim. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int bx = (unsigned short)(uintptr_t)param_1;   /* template near offset */
++  unsigned int si = (unsigned short)param_2;              /* object near offset (si==di) */
++  unsigned int ax;
++  unsigned char u;
++  (void)param_3;
++  dg[(unsigned short)(si + 0x19)] = 0;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x10)) = *(unsigned short *)(dg + (unsigned short)bx);
++  dg[(unsigned short)(si + 0x1e)] = dg[(unsigned short)(bx + 2)];
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1a)) = *(unsigned short *)(dg + (unsigned short)(bx + 6));
++  u = dg[(unsigned short)(bx + 3)];
++  dg[(unsigned short)(si + 0x1f)] = u;
++  dg[(unsigned short)(si + 0x20)] = u;
++  ax = *(unsigned short *)(dg + (unsigned short)(bx + 4));
++  if (ax == 0xffff) {
++    unsigned int r = FUN_0000_0291();
++    ax = (r & 0xff) + 0x200;
++  }
++  *(unsigned short *)(dg + (unsigned short)(si + 0x12)) = (unsigned short)ax;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x14)) = 0x800;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1c)) = 0;
++  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(si + 4));
++  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(si + 8));
++  *(unsigned int *)(dg + (unsigned short)(si + 0xc)) = *(unsigned int *)(dg + (unsigned short)(si + 0xc));
+   return;
+ }
+ 
+@@ -63515,32 +63541,39 @@
+ int __allregs FUN_1000_b1df(undefined2 param_1,int *param_2)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int *piVar3;
+-  undefined1 in_CF = 0;
+-  
+-  iVar1 = FUN_1000_b21d(param_1);
+-  if ((bool)in_CF) {
+-    return iVar1;
+-  }
+-  iVar1 = 0;
+-  for (piVar3 = (int *)&DAT_2000_9fbc; (*piVar3 != 0 || (piVar3[1] != 0)); piVar3 = piVar3 + 2) {
+-    iVar1 = iVar1 + 1;
+-  }
+-  *piVar3 = (int)param_2;
+-  piVar3[1] = piVar3[1] + 1;
+-  iVar2 = 0x33;
+-  if ((*(byte *)(*param_2 + -0x19ec) & 1) != 0) {
+-    iVar2 = 0xf7;
+-  }
+-  piVar3 = param_2 + 2;
++  /* PATCH 258: display-object registrar (asm 0x1b1df; DS=DGROUP=0x1c00).  param_1=type key (ax),
++   * param_2=object NEAR OFFSET (di).  Calls b21d (roster insert; sets g_fist_cf when the roster is
++   * full) then finds a free slot in the 182-entry table @ DGROUP:0xdfbc (stride 4: word[si]==0 &&
++   * word[si+2]==0), stores the object near-offset there, bumps the slot refcount, and zeroes the
++   * object body (0x33 or 0xf7 bytes per byte[word[di]-0x19ec]&1).  Ghidra base-lost the whole thing:
++   * the near-offset object was deref'd as a host int* (*param_2 -> SIGSEGV), the table was walked at
++   * host-int stride 8, and b21d's CF was dropped (local in_CF never set). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_2;
++  unsigned int si, cx, bx;
++  int count;
++  FUN_1000_b21d(param_1);
++  if (g_fist_cf) { g_fist_cf = 1; return 0; }
++  si = 0xdfbc; count = 0;
++  while (*(unsigned short *)(dg + (unsigned short)si) != 0 ||
++         *(unsigned short *)(dg + (unsigned short)(si + 2)) != 0) {
++    si = (unsigned short)(si + 4);
++    count = count + 1;
++  }
++  *(unsigned short *)(dg + (unsigned short)si) = (unsigned short)di;
++  *(unsigned short *)(dg + (unsigned short)(si + 2)) =
++      (unsigned short)(*(unsigned short *)(dg + (unsigned short)(si + 2)) + 1);
++  bx = *(unsigned short *)(dg + (unsigned short)di);
++  cx = (dg[(unsigned short)(bx - 0x19ec)] & 1) ? 0xf7 : 0x33;
++  si = (unsigned short)(di + 4);
+   do {
+-    *(undefined1 *)piVar3 = 0;
+-    piVar3 = (int *)((int)piVar3 + 1);
+-    iVar2 = iVar2 + -1;
+-  } while (iVar2 != 0);
+-  return iVar1;
++    dg[(unsigned short)si] = 0;
++    si = (unsigned short)(si + 1);
++    cx = cx - 1;
++  } while (cx != 0);
++  g_fist_cf = 0;
++  return count;
+ }
+ 
+ 

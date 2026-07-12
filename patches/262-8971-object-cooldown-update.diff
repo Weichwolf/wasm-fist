@@ -1,0 +1,32 @@
+PATCH 262: object cooldown->state UPDATE method FUN_0000_8971 -- DGROUP near-offset-as-host-pointer
+base-loss (SIGSEGV), dispatched by the 87df type-B UPDATE template (patch 250) during the per-frame
+object walk.
+
+ASM-verified (asm 0x8971; DS=DGROUP=0x1c00), di=object near offset in param_1: when byte[di+0xa8]!=0
+decrement it and, on reaching 0, set byte[di+0xcd]=3.  Ghidra deref'd di as a host char* -> SIGSEGV;
+rebased to the DGROUP byte model.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -22472,13 +22472,15 @@
+ void __allregs FUN_0000_8971(int param_1)
+ 
+ {
+-  char *pcVar1;
+-  
+-  if (*(char *)(param_1 + 0xa8) != '\0') {
+-    pcVar1 = (char *)(param_1 + 0xa8);
+-    *pcVar1 = *pcVar1 + -1;
+-    if (*pcVar1 == '\0') {
+-      *(undefined1 *)(param_1 + 0xcd) = 3;
++  /* PATCH 262: object cooldown->state UPDATE method (asm 0x8971; DS=DGROUP=0x1c00), dispatched by the
++   * 87df type-B template.  di=object near offset in param_1: when byte[di+0xa8]!=0 decrement it, and on
++   * reaching 0 set byte[di+0xcd]=3.  Ghidra deref'd di as a host char* -> SIGSEGV; rebased to DGROUP. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  if (dg[(unsigned short)(di + 0xa8)] != 0) {
++    dg[(unsigned short)(di + 0xa8)] = (unsigned char)(dg[(unsigned short)(di + 0xa8)] - 1);
++    if (dg[(unsigned short)(di + 0xa8)] == 0) {
++      dg[(unsigned short)(di + 0xcd)] = 3;
+     }
+   }
+   return;

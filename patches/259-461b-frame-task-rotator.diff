@@ -1,0 +1,41 @@
+PATCH 259: the per-frame BACKGROUND-TASK ROTATOR FUN_0000_461b -- FAR-vector-through-DGROUP base-loss
+(SIGSEGV) reached once the object UPDATE walk (patches 243-258) completes a frame and 459a runs its
+render tail.
+
+459a's frame loop (asm 0x45b4-0x4612) ends each frame with: c0ca (update walk) -> 461b (this rotator)
+-> then 4603 lcall [0x52c] -> 4607 lcall f69:12dc (scheduler) -> 460c call 22dd (the render dispatch).
+461b was the immediate crash after the update walk was made crash-free.
+
+ASM-verified vs re_out/fist_dat_image.bin (DS=DGROUP=0x1c00): 461b increments word[DGROUP:0x6ce8] and
+`lcall [dword DGROUP:(0x6cea + (n&7)*4)]` -- a round-robin over an 8-entry FAR-vector table at
+DGROUP:0x6cea.  Ghidra treated the table address as a host pointer, read only the low word, and emitted
+a NEAR call, so *puVar1 wild-dereffed -> SIGSEGV.  Rebuilt as the faithful FAR dispatch through the
+DGROUP table.  The 8 task slots are not registered on this cascade path (the table is 0), so
+fist_icall_far(0) honest-traps (no-op return, the established "uninstalled vector" convention) and the
+frame proceeds to 22dd.  Populating the background-task list is deferred.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -13385,11 +13385,19 @@
+ void __allregs FUN_0000_461b(void)
+ 
+ {
+-  undefined2 *puVar1;
+-  
++  /* PATCH 259: per-frame background-task ROTATOR (asm 0x461b; DS=DGROUP=0x1c00).  Each frame it
++   * increments word[DGROUP:0x6ce8] and FAR-calls one of 8 far vectors from the round-robin table at
++   * DGROUP:0x6cea: `lcall [dword DGROUP:(0x6cea + (n&7)*4)]`.  Ghidra base-lost it -- treated
++   * 0x6cea+(n&7)*4 as a HOST pointer, read only the low WORD, and emitted a NEAR call -> *puVar1
++   * dereferenced host 0x6cea..0x6d06 -> SIGSEGV.  Rebuilt as the faithful FAR dispatch through the
++   * DGROUP table.  The 8 task slots are not registered on this cascade path yet, so the table is 0
++   * and fist_icall_far(0) honest-traps (no-op return) -- behaviour-neutral for reaching the render;
++   * populating the background-task list is deferred subsystem work. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int bx;
+   DAT_2000_2ce8 = DAT_2000_2ce8 + 1;
+-  puVar1 = (undefined2 *)((DAT_2000_2ce8 & 7) * 4 + 0x6cea);
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))();
++  bx = (unsigned short)(((unsigned short)DAT_2000_2ce8 & 7) << 2);
++  (*(code *)fist_icall_far(*(uint32_t *)(dg + (unsigned short)(0x6cea + bx))))();
+   return;
+ }
+ 

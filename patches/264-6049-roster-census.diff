@@ -1,0 +1,55 @@
+PATCH 264: the roster-census background task FUN_1000_6049 -- table-entry-as-host-pointer base-loss
+(SIGSEGV), dispatched by the 461b frame rotator (patch 259).
+
+ASM-verified (asm 0x16049; DS=DGROUP=0x1c00): walks the 32-entry cell-index table at DGROUP:0x6d3c
+(=&DAT_2000_2d3c) in two halves of 16, counting non-null entries whose object type word[DG:entry] !=
+0x17 into DAT_2000_2d38 (friendly) / bRam00022d39 (enemy) and updating the peaks DAT_2000_2d3a/2d3b.
+Ghidra read each entry as an int (4B stride) and deref'd the near-offset entry as a host int*
+(*piVar1) -> SIGSEGV.  Rebuilt: WORD table entries; each is a DGROUP near offset -> word[DG:entry].
+Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -55440,7 +55440,15 @@
+ undefined2 __allregs FUN_1000_6049(undefined2 param_1)
+ 
+ {
+-  int *piVar1;
++  /* PATCH 264: the roster census background task (asm 0x16049; DS=DGROUP=0x1c00), dispatched by the
++   * 461b frame rotator.  Walks the 32-entry cell-index table at DGROUP:0x6d3c (=&DAT_2000_2d3c; two
++   * halves of 16), and for each non-null entry counts those whose object type word[DG:entry] != 0x17
++   * into the friendly count DAT_2000_2d38 / enemy count bRam00022d39, updating the peak trackers
++   * DAT_2000_2d3a/2d3b.  Ghidra read each table entry as an int (4B) and then deref'd the near-offset
++   * entry as a host int* (*piVar1) -> SIGSEGV.  Rebuilt: WORD table entries indexed by word; each entry
++   * is a DGROUP near offset -> word[DG:entry]. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short *tab = (unsigned short *)&DAT_2000_2d3c;
+   int iVar2;
+   int iVar3;
+   
+@@ -55449,20 +55457,20 @@
+   iVar3 = 0;
+   iVar2 = 0x10;
+   do {
+-    piVar1 = (int *)*(int *)((int)(undefined2 *)&DAT_2000_2d3c + iVar3);
+-    if ((piVar1 != (int *)0x0) && (*piVar1 != 0x17)) {
++    unsigned short di = tab[iVar3];
++    if ((di != 0) && (*(unsigned short *)(dg + (unsigned short)di) != 0x17)) {
+       DAT_2000_2d38 = DAT_2000_2d38 + 1;
+     }
+-    iVar3 = iVar3 + 2;
++    iVar3 = iVar3 + 1;
+     iVar2 = iVar2 + -1;
+   } while (iVar2 != 0);
+   iVar2 = 0x10;
+   do {
+-    piVar1 = (int *)*(int *)((int)(undefined2 *)&DAT_2000_2d3c + iVar3);
+-    if ((piVar1 != (int *)0x0) && (*piVar1 != 0x17)) {
++    unsigned short di = tab[iVar3];
++    if ((di != 0) && (*(unsigned short *)(dg + (unsigned short)di) != 0x17)) {
+       bRam00022d39 = bRam00022d39 + 1;
+     }
+-    iVar3 = iVar3 + 2;
++    iVar3 = iVar3 + 1;
+     iVar2 = iVar2 + -1;
+   } while (iVar2 != 0);
+   if (DAT_2000_2d3a < DAT_2000_2d38) {

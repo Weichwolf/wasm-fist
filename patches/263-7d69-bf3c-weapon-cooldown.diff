@@ -1,0 +1,57 @@
+PATCH 263: object weapon-cooldown UPDATE method FUN_0000_7d69 + its firing helper FUN_0000_bf3c --
+DGROUP near-offset-as-host-pointer base-loss (SIGSEGV), reached from the 7c1d type-A UPDATE template
+(patch 244).
+
+ASM-verified (DS=DGROUP=0x1c00), di=object near offset:
+ - 7d69 (0x7d69): decrements byte[di+0xa8]; on reaching 0, if the mount slot word[di+byte[di+0x91]+0xad]
+   is armed, calls bf3c(byte[DG:(byte[di+0x91]>>1)+0x8f0a], byte[di+0x91]>>1, di) and sets byte[di+0xdb]
+   =3.  Ghidra deref'd di and the mount table as host pointers (+int width on the word slot).
+ - bf3c (0xbf3c): the player-weapon sound poster (di==DAT_2000_2d34 player gate -> e2c2).  Its single
+   di deref byte[di+0x16] was a host-ptr base-loss; rebased to DGROUP (the rest is DAT-accessor /
+   near-offset-compare code, already correct).
+Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -20772,16 +20772,22 @@
+ void __allregs FUN_0000_7d69(int param_1)
+ 
+ {
+-  char *pcVar1;
+-  uint uVar2;
+-  
+-  if (*(char *)(param_1 + 0xa8) != '\0') {
+-    pcVar1 = (char *)(param_1 + 0xa8);
+-    *pcVar1 = *pcVar1 + -1;
+-    if ((*pcVar1 == '\0') && (*(int *)((uint)*(byte *)(param_1 + 0x91) + param_1 + 0xad) != 0)) {
+-      uVar2 = (uint)(*(byte *)(param_1 + 0x91) >> 1);
+-      FUN_0000_bf3c(*(undefined1 *)(uVar2 + 0x8f0a),uVar2,param_1);
+-      *(undefined1 *)(param_1 + 0xdb) = 3;
++  /* PATCH 263: object weapon-cooldown UPDATE method (asm 0x7d69; DS=DGROUP=0x1c00), dispatched by the
++   * 7c1d type-A template.  di=object near offset in param_1.  When byte[di+0xa8] reaches 0 and the
++   * per-mount word[di + byte[di+0x91] + 0xad] slot is armed, fires bf3c(sound=byte[DG:(mount>>1)+0x8f0a],
++   * mount>>1, di) and sets byte[di+0xdb]=3.  Ghidra deref'd di and the mount table as host pointers ->
++   * SIGSEGV (and int width on the word slot).  Rebuilt in the DGROUP model. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  unsigned int bx;
++  if (dg[(unsigned short)(di + 0xa8)] != 0) {
++    dg[(unsigned short)(di + 0xa8)] = (unsigned char)(dg[(unsigned short)(di + 0xa8)] - 1);
++    bx = dg[(unsigned short)(di + 0x91)];
++    if ((dg[(unsigned short)(di + 0xa8)] == 0) &&
++        (*(unsigned short *)(dg + (unsigned short)(di + bx + 0xad)) != 0)) {
++      bx = bx >> 1;
++      FUN_0000_bf3c(dg[(unsigned short)(bx + 0x8f0a)],(unsigned short)bx,param_1);
++      dg[(unsigned short)(di + 0xdb)] = 3;
+     }
+   }
+   return;
+@@ -30219,7 +30225,8 @@
+   undefined2 in_register_0000000e;
+   
+   if ((((DAT_2000_2da2 == -1) && (param_3 == DAT_2000_2d34)) &&
+-      ((*(byte *)(param_3 + 0x16) & 8) == 0)) &&
++      /* PATCH 263: di=object near offset in param_3; byte[di+0x16] was a host-ptr deref (base-loss). */
++      ((((unsigned char *)g_mem + 0x1c000)[(unsigned short)((unsigned short)param_3 + 0x16)] & 8) == 0)) &&
+      ((param_1 != -1 && (0x1d < (uint)(DAT_1000_c452 - DAT_2000_5fca))))) {
+     DAT_2000_5fca = DAT_1000_c452;
+     FUN_0000_e2c2(CONCAT22(in_register_0000000e,param_2));

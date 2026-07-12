@@ -1,0 +1,49 @@
+PATCH 265: object reload/ammo UPDATE method FUN_0000_8886 -- DGROUP near-offset-as-host-pointer
+base-loss (SIGSEGV), dispatched by the 87df type-B UPDATE template (patch 250).
+
+ASM-verified (asm 0x8886; DS=DGROUP=0x1c00), di=object near offset in param_2.  Gated on
+!(word[DG:0x6cde]&0xff0): either arms the reload bit byte[di+0x19]|=1, or (bit already set) while the
+mount word[di+0xad]!=2 and ammo byte[di+0xbb]!=0 clears the bit, advances the mount, decrements ammo,
+fires bf3c(0x17,..,di) and sets byte[di+0xd6]=3.  Ghidra deref'd di as host pointers (+int width on
+word[di+0xad]) -> SIGSEGV; rebuilt in the DGROUP model.  bf3c is the patch-263 firing helper.
+Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -22377,19 +22377,29 @@
+ void __allregs FUN_0000_8886(undefined2 param_1,int param_2)
+ 
+ {
++  /* PATCH 265: object reload/ammo UPDATE method (asm 0x8886; DS=DGROUP=0x1c00), dispatched by the 87df
++   * type-B template.  di=object near offset in param_2.  Gated on !(word[DG:0x6cde]&0xff0), it either
++   * arms the reload bit (byte[di+0x19]|=1) or, while the mount word[di+0xad]!=2 and ammo byte[di+0xbb]!=0,
++   * advances the mount and fires bf3c(0x17,...,di).  Ghidra deref'd di as host pointers (and int width
++   * on word[di+0xad]) -> SIGSEGV.  Rebuilt in the DGROUP model. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_2;
+   if ((DAT_2000_2cde & 0xff0) == 0) {
+-    if ((*(byte *)(param_2 + 0x19) & 1) == 0) {
+-      if ((*(int *)(param_2 + 0xad) != 2) && (*(char *)(param_2 + 0xbb) != '\0')) {
+-        *(byte *)(param_2 + 0x19) = *(byte *)(param_2 + 0x19) | 1;
++    if ((dg[(unsigned short)(di + 0x19)] & 1) == 0) {
++      if ((*(unsigned short *)(dg + (unsigned short)(di + 0xad)) != 2) &&
++          (dg[(unsigned short)(di + 0xbb)] != 0)) {
++        dg[(unsigned short)(di + 0x19)] = (unsigned char)(dg[(unsigned short)(di + 0x19)] | 1);
+       }
+     }
+     else {
+-      while ((*(int *)(param_2 + 0xad) != 2 && (*(char *)(param_2 + 0xbb) != '\0'))) {
+-        *(byte *)(param_2 + 0x19) = *(byte *)(param_2 + 0x19) & 0xfe;
+-        *(int *)(param_2 + 0xad) = *(int *)(param_2 + 0xad) + 1;
+-        *(char *)(param_2 + 0xbb) = *(char *)(param_2 + 0xbb) + -1;
++      while ((*(unsigned short *)(dg + (unsigned short)(di + 0xad)) != 2) &&
++             (dg[(unsigned short)(di + 0xbb)] != 0)) {
++        dg[(unsigned short)(di + 0x19)] = (unsigned char)(dg[(unsigned short)(di + 0x19)] & 0xfe);
++        *(unsigned short *)(dg + (unsigned short)(di + 0xad)) =
++            (unsigned short)(*(unsigned short *)(dg + (unsigned short)(di + 0xad)) + 1);
++        dg[(unsigned short)(di + 0xbb)] = (unsigned char)(dg[(unsigned short)(di + 0xbb)] - 1);
+         FUN_0000_bf3c(0x17,param_1,param_2);
+-        *(undefined1 *)(param_2 + 0xd6) = 3;
++        dg[(unsigned short)(di + 0xd6)] = 3;
+       }
+     }
+   }

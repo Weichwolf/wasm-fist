@@ -1,0 +1,78 @@
+PATCH 261: the object flap/animation UPDATE sub-tree (a202 -> a1e9/a26d -> a2a8) -- DGROUP
+near-offset-as-host-pointer base-loss (SIGSEGV), reached from the 7c1d type-A UPDATE template (patch
+244) during the per-frame object walk for objects with the flap flag set.
+
+ASM-verified vs re_out/fist_dat_image.bin (DS=DGROUP=0x1c00), di=object near offset:
+ - FUN_0000_a202 (0xa202): tests byte[di+0x19]&0x20 / &0x40 and runs a1e9 (flap-up) or a26d (flap-down)
+   with DAT_2000_5602 temporarily set to the fast rate DAT_2000_5604.  byte[di+0x19] base-lost.
+ - FUN_0000_a1e9 (0xa1e9): word[di+0x38] += DAT_2000_5602, signed-clamped to 0x238c.  di base-lost +
+   int-width (asm WORD).
+ - FUN_0000_a2a8 (0xa2a8): when word[di+0x97]!=0 clears it and word[di+0x38].  di base-lost + width.
+FUN_0000_a233 (rate stepper) and FUN_0000_a26d (-> a233) are pure DGROUP-accessor functions, already
+correct.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -26165,11 +26165,17 @@
+ void __allregs FUN_0000_a1e9(int param_1)
+ 
+ {
++  /* PATCH 261: the flap-angle integrator (asm 0xa1e9; DS=DGROUP=0x1c00).  di=object near offset in
++   * param_1.  word[di+0x38] += DAT_2000_5602, clamped (signed) to 0x238c.  Ghidra deref'd di as a host
++   * int* -> SIGSEGV and used int width; rebuilt in the DGROUP model (WORD). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
+   FUN_0000_a233();
+   FUN_0000_a2a8(param_1);
+-  *(int *)(param_1 + 0x38) = *(int *)(param_1 + 0x38) + DAT_2000_5602;
+-  if (0x238c < *(int *)(param_1 + 0x38)) {
+-    *(undefined2 *)(param_1 + 0x38) = 0x238c;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x38)) =
++      (unsigned short)(*(unsigned short *)(dg + (unsigned short)(di + 0x38)) + DAT_2000_5602);
++  if (0x238c < (short)*(unsigned short *)(dg + (unsigned short)(di + 0x38))) {
++    *(unsigned short *)(dg + (unsigned short)(di + 0x38)) = 0x238c;
+   }
+   return;
+ }
+@@ -26180,16 +26186,22 @@
+ void __allregs FUN_0000_a202(int param_1)
+ 
+ {
++  /* PATCH 261: object flap/animation UPDATE method (asm 0xa202; DS=DGROUP=0x1c00), dispatched by the
++   * 7c1d type-A template.  di (object near offset) arrives in param_1; Ghidra deref'd it as a host
++   * pointer (byte[param_1+0x19]) -> SIGSEGV.  Rebased byte[di+0x19] to the DGROUP model; DAT_2000_5602/
++   * 5604 are already-resolved accessors; a1e9/a26d take the object through param_1. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
+   undefined2 uVar1;
+   
+   uVar1 = DAT_2000_5602;
+-  if ((*(byte *)(param_1 + 0x19) & 0x20) != 0) {
++  if ((dg[(unsigned short)(di + 0x19)] & 0x20) != 0) {
+     DAT_2000_5602 = DAT_2000_5604;
+     FUN_0000_a1e9(param_1);
+     DAT_2000_5602 = uVar1;
+     return;
+   }
+-  if ((*(byte *)(param_1 + 0x19) & 0x40) == 0) {
++  if ((dg[(unsigned short)(di + 0x19)] & 0x40) == 0) {
+     return;
+   }
+   DAT_2000_5602 = DAT_2000_5604;
+@@ -26300,9 +26312,14 @@
+ undefined4 __allregs FUN_0000_a2a8(int param_1)
+ 
+ {
+-  if (*(int *)(param_1 + 0x97) != 0) {
+-    *(undefined2 *)(param_1 + 0x97) = 0;
+-    *(undefined2 *)(param_1 + 0x38) = 0;
++  /* PATCH 261: the flap-reset helper (asm 0xa2a8; DS=DGROUP=0x1c00).  di=object near offset in param_1;
++   * when word[di+0x97]!=0 clears it and word[di+0x38].  Ghidra deref'd di as a host int* -> SIGSEGV;
++   * rebuilt in the DGROUP model (WORD). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0x97)) != 0) {
++    *(unsigned short *)(dg + (unsigned short)(di + 0x97)) = 0;
++    *(unsigned short *)(dg + (unsigned short)(di + 0x38)) = 0;
+   }
+   return;
+ }

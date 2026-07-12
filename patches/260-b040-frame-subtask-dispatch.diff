@@ -1,0 +1,48 @@
+PATCH 260: the per-frame subtask DISPATCH loop FUN_1000_b040 -- record-cursor + CS-relative
+method-table base-loss (SIGSEGV), reached from the 461b frame rotator (patch 259) via the background
+task b02a.
+
+b02a (0x1b02a) decrements a cooldown DAT_2000_5ce5 and, when it expires, calls b040 with bx=0x9dc7 (a
+DGROUP near offset).  b040 (asm 0x1b040) walks 16 subtask records at DGROUP:0x9dc7 (stride 0xe) and for
+each NEAR-calls `[CS:(word[bx]-0x4637)]` (CS=0x1000).  Ghidra base-lost the record cursor (param_1 =
+&DAT_2000_5dc7 host ptr, int stride 7=28B vs the asm 0xe=14B) AND the CS-relative jump-table read
+(rendered `*(undefined2*)(si-0x4637)` -> host deref of a tiny address -> SIGSEGV).  Rebuilt faithfully
+in the DGROUP/CS model; the method-offset table is at CS=0x1000 (the dispatched subtasks 0xb059/0xb062/
+... sit immediately after b040 in the seg-0x1000 region).  The asm testb [0x6dab],0 guard is dead
+(always false) and elided.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -63382,14 +63382,26 @@
+ void __allregs FUN_1000_b040(int *param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = 0x10;
++  /* PATCH 260: per-frame subtask DISPATCH loop (asm 0x1b040; DS=DGROUP=0x1c00, CS=0x1000).  A
++   * background task (reached via b02a from the 461b rotator) that walks 16 subtask records at
++   * DGROUP:0x9dc7 (stride 0xe) and, for each, NEAR-calls the method whose offset lives in the
++   * CS-relative jump table: `mov si,[bx]; call [CS:(si-0x4637)]`.  Ghidra base-lost BOTH the record
++   * cursor (param_1 = &DAT_2000_5dc7 host ptr deref'd + int stride 7=28B vs the asm's 0xe=14B) and the
++   * CS-relative table read (`*(undefined2*)(si-0x4637)` -> host deref of a tiny address -> SIGSEGV).
++   * Rebuilt: bx = the DGROUP near offset of param_1; the method-offset table is at CS=0x1000 (the
++   * dispatched subtasks 0xb059/0xb062/... sit immediately after this function in the seg-0x1000
++   * region).  asm 0x1b040 testb [0x6dab],0 is a dead (always-false) guard, elided. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned char *cs = (unsigned char *)g_mem + 0x10000;   /* CS = 0x1000 */
++  unsigned int bx = (unsigned short)((intptr_t)param_1 - (intptr_t)dg);
++  int cx = 0x10;
+   do {
+-    (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(*param_1 + -0x4637))))();
+-    param_1 = param_1 + 7;
+-    iVar1 = iVar1 + -1;
+-  } while (iVar1 != 0);
++    unsigned short si = *(unsigned short *)(dg + (unsigned short)bx);
++    unsigned short off = *(unsigned short *)(cs + (unsigned short)(si - 0x4637));
++    (*(code *)fist_icall_near(0x1000u,off))();
++    bx = (unsigned short)(bx + 0xe);
++    cx = cx + -1;
++  } while (cx != 0);
+   return;
+ }
+ 
