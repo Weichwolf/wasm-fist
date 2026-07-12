@@ -1,0 +1,148 @@
+Voxel COLORMAP-TILE BUILDER (extender FUN_0000_6980 + its ray/LUT builder FUN_0000_395e) flat32
+memory-model reconstruction -- the map->tile fill that patch 286's renderer 9200 samples.
+
+DIAGNOSIS CORRECTION.  The 256x256 colormap tile at DAT_0000_3918 that the oracle-proven terrain
+renderer FUN_0000_9200 samples is NOT filled by ad1e (a general 2D point/span primitive rasterizer,
+op 0x40, never posted) as previously hypothesised.  It is built by the two-plane VOXEL rasterizer
+FUN_0000_6980 (dispatched by op 0x08 -> handler 0x10e0 = `call 8df0; call 3931`; 3931 = 85d0 camera
++ 6980 build), which walks the map height plane at [0x85bc] and colour plane at [0x85bc+0x100000]
+through the camera and writes terrain colour runs (via the per-depth write-pointer table 4a60[],
+initialised to DAT_3918 + row*38ed) into the tile.  op 0x08 is NEVER posted by the port's render
+dispatch (only op 0x0c fires once) so the tile stays 0 -> black terrain.  6980 + its ray-table/
+height-LUT builder 395e were decompiled but never exercised, so their flat32 base-losses were latent.
+
+All asm-verified vs re_out/fist_image.bin:
+  * 395e (0x395e): the LUT dest pointer (asm 3979 `mov edi,ds:0x3909`) and the ray-table copies /
+    reads at 0x4624/0x3e24/0x3a24/0x4224 (asm `[esi*4+off]`) were Ghidra base-lost (bare small ints
+    -> near-NULL writes -> SIGSEGV).  Rebuilt as g_mem+fist_ext_base + off + idx*4; the LUT dest is
+    the host-pointer value *(uint*)(base+0x3909).
+  * 6980 (0x6980): (a) the per-heading SIN/COS projection table at image 0x9450 (same base-loss class
+    as patch 286's 8120: `&FUN_0000_944b`+5 host fn-ptr, bare 0x9454 host addr, and `&DAT_9650`+idx*4
+    4x-over-scaled) -> byte arithmetic on the module base; (b) the ray tables 0x4224/0x4624 base;
+    (c) the SELF-MODIFIED height->screenrow LUT lookups (asm `mov eax,0x7fffffff`(SMC=[0x3909]|bl);
+    `add al,[esi+ecx]`(=+height); `mov al,[eax]`) which Ghidra baked as CONCAT31(0x7fffff,h-1) ->
+    rebuilt from the SMC value _uRam00006add computed at entry (asm 6a04); (d) the backward-pass
+    y-buffer/write-ptr tables 0x4e5f/0x4a5c (Ghidra used undefined4* *4 scaling vs asm byte/dword
+    edx-offset); (e) a Ghidra CONTROL-FLOW artifact: the forward->backward transition entered the
+    backward fill loop with a STALE forward v-accumulator (uVar6) instead of the masked texcoord
+    computed at LAB_6b50 (asm 6b3d->6b50 computes before the first backward fill) -> the forward-loop
+    exit now `goto LAB_0000_6b50` (crash: color read with uVar6=raw-accumulator 0x1d25bfa2).
+
+Extender-side, driven ONLY by the FIST_R3D2 diagnostic seam (FIST_R3D2_BUILD, default OFF) ->
+behaviour-neutral for the default boot + all verify flows (engine fist.c untouched, ad1e untouched).
+Driven, the builder fills the tile crash-free (nz=50350/65536) and 9200 renders a coherent horizon-
+masked desert-terrain-coloured viewport.  NOT yet coherent multi-texture terrain: the seam drives it
+with the intro TCB (0x90000) whose mission camera is degenerate (height 0, heading 0) so the voxel
+walk collapses to ~4 bands -- the real mission-camera source + the engine render-dispatch posting
+op 0x08/0x24 are the remaining (separate) frontiers.  The mid-entry fall-through fragments 6b03/6b83/
+6bf7/6977 (jump targets inside 6980, never called as functions) are left base-lost (unobserved).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -4352,12 +4352,12 @@
+   _DAT_0000_3928 = (DAT_0000_38f1 - 1U & 0xffffff) * 0x80 + 0x100;
+   iVar9 = 0;
+   iVar6 = _FUN_0000_3a20;
+-  puVar10 = LAB_0000_3909;
++  puVar10 = (undefined1 *)(*(uint *)(g_mem+fist_ext_base+0x3909));
+   do {
+-    *(undefined4 *)(iVar9 * 4 + 0x4624) = *(undefined4 *)(iVar9 * 4 + 0x3e24);
+-    lVar1 = (ulonglong)*(uint *)(iVar9 * 4 + 0x3a24) * (ulonglong)DAT_0000_90c0;
++    *(undefined4 *)(g_mem+fist_ext_base+0x4624 + iVar9 * 4) = *(undefined4 *)(g_mem+fist_ext_base+0x3e24 + iVar9 * 4);
++    lVar1 = (ulonglong)*(uint *)(g_mem+fist_ext_base+0x3a24 + iVar9 * 4) * (ulonglong)DAT_0000_90c0;
+     uVar2 = (uint)lVar1 >> 0x18 | (int)((ulonglong)lVar1 >> 0x20) << 8;
+-    *(uint *)(iVar9 * 4 + 0x4224) = uVar2;
++    *(uint *)(g_mem+fist_ext_base+0x4224 + iVar9 * 4) = uVar2;
+     uVar2 = (int)(0xffffffff / (longlong)(int)uVar2) << 5;
+     iVar5 = 0x80;
+     uVar8 = 0;
+@@ -10968,16 +10968,16 @@
+   uVar12 = ~(DAT_0000_90e0 << 9) >> 1;
+   iVar5 = (DAT_0000_90e0 >> 0x17) * 4;
+   DAT_0000_90fc = (int)((ulonglong)
+-                       ((longlong)*(int *)(((uint)(uintptr_t)&FUN_0000_944b) + iVar5 + 5) * (longlong)(int)uVar12) >>
++                       ((longlong)*(int *)(g_mem+fist_ext_base+0x9450 + iVar5) * (longlong)(int)uVar12) >>
+                       0x20) +
+-                 (int)((ulonglong)((longlong)*(int *)(iVar5 + 0x9454) * (longlong)iVar14) >> 0x20);
++                 (int)((ulonglong)((longlong)*(int *)(g_mem+fist_ext_base+0x9454 + iVar5) * (longlong)iVar14) >> 0x20);
+   DAT_0000_90fc = DAT_0000_90fc * 2;
+   DAT_0000_9100 = (int)((ulonglong)
+-                       ((longlong)*(int *)(&DAT_0000_9650 + iVar5) * (longlong)(int)uVar12) >> 0x20)
+-                 + (int)((ulonglong)((longlong)*(int *)(&DAT_0000_9654 + iVar5) * (longlong)iVar14)
++                       ((longlong)*(int *)(g_mem+fist_ext_base+0x9650 + iVar5) * (longlong)(int)uVar12) >> 0x20)
++                 + (int)((ulonglong)((longlong)*(int *)(g_mem+fist_ext_base+0x9654 + iVar5) * (longlong)iVar14)
+                         >> 0x20);
+   DAT_0000_9100 = DAT_0000_9100 * 2;
+-  _uRam00006add = CONCAT31((int3)((uint)LAB_0000_3909 >> 8),-(byte)((uint)DAT_0000_90dc >> 0x19));
++  _uRam00006add = CONCAT31((int3)((*(uint *)(g_mem+fist_ext_base+0x3909)) >> 8),-(byte)((uint)DAT_0000_90dc >> 0x19));
+   puVar13 = &DAT_0000_4e60;
+   _uRam00006b5d = _uRam00006add;
+   for (uVar12 = DAT_0000_38f1 >> 2; uVar12 != 0; uVar12 = uVar12 - 1) {
+@@ -11003,12 +11003,12 @@
+   uVar12 = 0;
+ LAB_0000_6a60:
+   iVar14 = DAT_0000_85bc;
+-  uVar6 = *(uint *)(uVar12 * 4 + 0x4624) >> 1;
++  uVar6 = *(uint *)(g_mem+fist_ext_base + 0x4624 + uVar12 * 4) >> 1;
+   uVar10 = DAT_0000_90d8 +
+            (int)((ulonglong)((longlong)(int)uVar6 * (longlong)DAT_0000_9100) >> 0x20) * -2;
+   uVar9 = DAT_0000_90d4 +
+           (int)((ulonglong)((longlong)(int)uVar6 * (longlong)DAT_0000_90fc) >> 0x20) * -2;
+-  iVar5 = *(int *)(uVar12 * 4 + 0x4224);
++  iVar5 = *(int *)(g_mem+fist_ext_base + 0x4224 + uVar12 * 4);
+   uRam00006ad2 = (undefined4)((ulonglong)((longlong)iVar5 * (longlong)DAT_0000_9100) >> 0x20);
+   uRam00006ad8 = (undefined4)((ulonglong)((longlong)iVar5 * (longlong)DAT_0000_90fc) >> 0x20);
+   iVar5 = ram0x000038fd;
+@@ -11018,7 +11018,7 @@
+   uRam00006b58 = uRam00006ad8;
+   do {
+     uVar7 = (uVar11 >> 0x16) << 10 | uVar6 >> 0x16;
+-    bVar3 = *(byte *)CONCAT31(0x7fffff,*(char *)(iVar14 + uVar7) + -1);
++    bVar3 = *(byte *)(uintptr_t)((_uRam00006add & 0xffffff00) | (((uint)(byte)_uRam00006add + (uint)(byte)*(char *)(iVar14 + uVar7)) & 0xff));
+     if (*(byte *)((int)&DAT_0000_4e60 + iVar5) < bVar3) {
+       LOCK();
+       bVar1 = *(byte *)((int)&DAT_0000_4e60 + iVar5);
+@@ -11032,11 +11032,11 @@
+       }
+       (&DAT_0000_4a60)[iVar5] = puVar16;
+       iVar8 = ram0x000038fd;
+-      if (iVar5 + 1 == DAT_0000_3905) break;
++      if (iVar5 + 1 == DAT_0000_3905) goto LAB_0000_6b50;
+     }
+     else {
+       iVar8 = ram0x000038fd;
+-      if (iVar5 + 1 == DAT_0000_3905) break;
++      if (iVar5 + 1 == DAT_0000_3905) goto LAB_0000_6b50;
+     }
+     iVar5 = iVar5 + 1;
+     uVar6 = uVar6 + 0x7fffffff;
+@@ -11044,24 +11044,24 @@
+   } while( true );
+   while( true ) {
+     LOCK();
+-    bVar1 = (&DAT_0000_4e5f)[iVar8];
+-    (&DAT_0000_4e5f)[iVar8] = bVar3;
++    bVar1 = *(byte *)(g_mem+fist_ext_base + 0x4e5f + iVar8);
++    *(byte *)(g_mem+fist_ext_base + 0x4e5f + iVar8) = bVar3;
+     UNLOCK();
+     uVar4 = *(undefined1 *)(iVar14 + 0x100000 + uVar6);
+-    puVar16 = *(undefined1 **)(&DAT_0000_4a5c + iVar8 * 4);
++    puVar16 = *(undefined1 **)(g_mem+fist_ext_base + 0x4a5c + iVar8 * 4);
+     for (uVar6 = (uint)(byte)(bVar3 - bVar1); uVar6 != 0; uVar6 = uVar6 - 1) {
+       *puVar16 = uVar4;
+       puVar16 = puVar16 + 1;
+     }
+-    *(undefined1 **)(&DAT_0000_4a5c + iVar8 * 4) = puVar16;
++    *(undefined1 **)(g_mem+fist_ext_base + 0x4a5c + iVar8 * 4) = puVar16;
+     iVar8 = iVar8 + -1;
+     if (iVar8 == DAT_0000_3901) break;
+ LAB_0000_6b50:
+     uVar9 = uVar9 + 0x80000001;
+     uVar10 = uVar10 + 0x7fffffff;
+     uVar6 = (uVar10 >> 0x16) << 10 | uVar9 >> 0x16;
+-    bVar3 = *(byte *)CONCAT31(0x7fffff,*(char *)(iVar14 + uVar6) + -1);
+-    if (bVar3 <= (byte)(&DAT_0000_4e5f)[iVar8]) {
++    bVar3 = *(byte *)(uintptr_t)((_uRam00006add & 0xffffff00) | (((uint)(byte)_uRam00006add + (uint)(byte)*(char *)(iVar14 + uVar6)) & 0xff));
++    if (bVar3 <= *(byte *)(g_mem+fist_ext_base + 0x4e5f + iVar8)) {
+       iVar8 = iVar8 + -1;
+       if (iVar8 == DAT_0000_3901) break;
+       goto LAB_0000_6b50;

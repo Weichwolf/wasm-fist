@@ -860,6 +860,21 @@ static void ext_module_init(void) {
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
+    /* FIST_OPHIST -- temporary op histogram + 3918 tile-fill probe (read-only diagnostic). */
+    if (getenv("FIST_OPHIST")) {
+        static long ophist[0x100]; static long total;
+        static int firstseen[0x100];
+        ophist[op & 0xff]++; total++;
+        if (!firstseen[op&0xff]) { firstseen[op&0xff]=1; fprintf(stderr,"[ophist] FIRST op 0x%02x (total=%ld)\n", op, total); }
+        if ((total % 2000) == 0 || (op==0x40) || (op==0x24) || (op==0x0c)) {
+            uint8_t *xb = g_mem + 0x100000; /* FIST_EXT_BASE */
+            uint32_t cm = *(uint32_t*)(xb+0x3918);
+            long nz=0; int seen[256]={0}, dist=0;
+            if (cm) { uint8_t *t=(uint8_t*)(uintptr_t)cm; for(int i=0;i<65536;i++){ if(t[i]){nz++;} if(!seen[t[i]]){seen[t[i]]=1;dist++;} } }
+            fprintf(stderr,"[ophist] total=%ld op40(ad1e)=%ld op24(9200)=%ld op0c=%ld op18=%ld op54=%ld op60=%ld op44=%ld | tile3918 nz=%ld dist=%d\n",
+                total, ophist[0x40], ophist[0x24], ophist[0x0c], ophist[0x18], ophist[0x54], ophist[0x60], ophist[0x44], nz, dist);
+        }
+    }
     /* ------------------------------------------------------------------------------------------------
      * FIST_GEOMDUMP -- deterministic mission-viewport geometry probe (default OFF, read-only).
      * The op-0x4c present pump spins in the extender gate WITHOUT ever calling fist_timer_pump, so the
@@ -1198,6 +1213,20 @@ int fist_extender_gate(void) {
                 for(int i=0;i<20;i++) fprintf(stderr,"%u ",hzp[i]);
                 fprintf(stderr,"\n");
             }
+            /* FIST_R3D2 tile-builder (6980) upstream-state probe: are the loop bounds / ray tables /
+             * LUT / map planes populated so the real builder CAN run? */
+            {
+              uint32_t b85bc=*(uint32_t*)(xb+0x85bc), b3909=*(uint32_t*)(xb+0x3909), b390d=*(uint32_t*)(xb+0x390d);
+              fprintf(stderr,"[r3d2] BUILDER-STATE 3901=%u 3905=%u 38fd=%u 3a20=%u 38ed=%u 38f1=%u | 85bc=%08x 3909=%08x 390d=%08x 395d(clr)=%u\n",
+                *(uint32_t*)(xb+0x3901), *(uint32_t*)(xb+0x3905), *(uint16_t*)(xb+0x38fd), *(uint32_t*)(xb+0x3a20),
+                *(uint32_t*)(xb+0x38ed), *(uint32_t*)(xb+0x38f1), b85bc, b3909, b390d, xb[0x395d]);
+              fprintf(stderr,"[r3d2] ray4224:"); for(int i=0;i<6;i++) fprintf(stderr," %d",*(int32_t*)(xb+0x4224+i*4));
+              fprintf(stderr," | ray4624:"); for(int i=0;i<6;i++) fprintf(stderr," %d",*(int32_t*)(xb+0x4624+i*4));
+              if (b85bc>0x1000 && b85bc<0xffffffff){ uint8_t*mp=(uint8_t*)(uintptr_t)b85bc;
+                long hnz=0,cnz=0; for(long i=0;i<0x40000;i++){ if(mp[i])hnz++; if(mp[0x100000+i])cnz++; }
+                fprintf(stderr," | mapHEIGHT[85bc]nz/256k=%ld mapCOLOR[+1M]nz/256k=%ld",hnz,cnz); }
+              fprintf(stderr,"\n");
+            }
         }
         if (getenv("FIST_R3D2_RENDER")) {
             /* Viewport dims: the engine's ddff viewport-configure (writes TCB+0x16..0x1c) is a separate
@@ -1207,6 +1236,40 @@ int fist_extender_gate(void) {
              * write span [0x0656..0x6b66].  (FIST_R3D2_VW/VH/DST override for experimentation.) */
             m_ext_FUN_0000_8deb();        /* selects horizon table 9114 from TCB[0xcd] detail */
             m_ext_FUN_0000_85d0();        /* camera position/angle from TCB */
+            /* FIST_R3D2_BUILD: drive the REAL colormap-tile BUILDER FUN_0000_6980 (op 0x08 -> 3931 ->
+             * 6980), which the port never posts.  It voxel-rasterizes the map (height plane at [0x85bc],
+             * color plane at +0x100000) through the camera into the 256x256 tile at DAT_3918 that 9200
+             * samples.  Reconstructed (build/fist_ext.c) with the patch-286-class base-losses fixed. */
+            if (getenv("FIST_R3D2_BUILD")) {
+                /* CAMERA OVERRIDE experiment: the intro TCB (0x90000) has a degenerate camera
+                 * (height 0, heading 0) -> the voxel walk collapses to a few bands.  Inject a
+                 * plausible altitude/heading to test whether the builder produces coherent
+                 * multi-colour terrain with a valid camera (proves the builder, isolates the
+                 * camera-source frontier). */
+                { uint8_t *tcb2 = (uint8_t*)(uintptr_t)*(uint32_t*)(xb+0xc93);
+                  const char *cz=getenv("FIST_R3D2_CAMZ"), *ca=getenv("FIST_R3D2_ANG");
+                  if (cz) *(int32_t*)(tcb2+0x34) = (int32_t)strtol(cz,0,0);
+                  if (ca) *(uint16_t*)(tcb2+0x38) = (uint16_t)strtoul(ca,0,0);
+                  m_ext_FUN_0000_85d0(); /* re-read camera after override */ }
+                extern void m_ext_FUN_0000_6980(void);
+                m_ext_FUN_0000_6980();
+                uint32_t cmb = *(uint32_t*)(xb+0x3918);
+                if (r2==0 && cmb>0x1000) { uint8_t*t=(uint8_t*)(uintptr_t)cmb; long nz=0; int h[256]={0},nd=0;
+                    for(int i=0;i<65536;i++){ if(t[i])nz++; if(!h[t[i]]){h[t[i]]=1;nd++;} }
+                    fprintf(stderr,"[r3d2] AFTER-BUILD tile3918 nz=%ld/65536 distinct=%d (first row: ",nz,nd);
+                    for(int i=0;i<16;i++) fprintf(stderr,"%02x ",t[i]); fprintf(stderr,")\n");
+                    /* tile texel histogram (which indices) */
+                    fprintf(stderr,"[r3d2] tile indices:"); for(int v=0;v<256;v++) if(h[v]) fprintf(stderr," %02x(%d)",v,h[v]); fprintf(stderr,"\n");
+                    /* color-plane vs 85b8 distinctness */
+                    uint32_t b85bc=*(uint32_t*)(xb+0x85bc), b85b8=*(uint32_t*)(xb+0x85b8);
+                    { uint8_t*cp=(uint8_t*)(uintptr_t)(b85bc+0x100000); int hc[256]={0},ndc=0;
+                      for(int i=0;i<0x40000;i++) if(!hc[cp[i]]){hc[cp[i]]=1;ndc++;}
+                      uint8_t*c8=(uint8_t*)(uintptr_t)b85b8; int h8[256]={0},nd8=0;
+                      for(int i=0;i<0x40000;i++) if(!h8[c8[i]]){h8[c8[i]]=1;nd8++;}
+                      fprintf(stderr,"[r3d2] colorPlane[85bc+1M] distinct/256k=%d ; 85b8 distinct/256k=%d\n",ndc,nd8); }
+                    /* first terrain column: sample tile row 6 (oracle first index expect 0xdc) */
+                    fprintf(stderr,"[r3d2] tile col0 depth-run rows: "); for(int r=0;r<20;r++) fprintf(stderr,"%02x ",t[r*256]); fprintf(stderr,"\n"); }
+            }
             unsigned vw = getenv("FIST_R3D2_VW") ? (unsigned)strtoul(getenv("FIST_R3D2_VW"),0,0) : 81;
             unsigned ch = getenv("FIST_R3D2_VH") ? (unsigned)strtoul(getenv("FIST_R3D2_VH"),0,0) : 288;
             unsigned dst= getenv("FIST_R3D2_DST")? (unsigned)strtoul(getenv("FIST_R3D2_DST"),0,0): 0x650;
