@@ -1,0 +1,54 @@
+PATCH 215: reconstruct FUN_0000_7b91 (the DCBS TANK-object per-type INIT method dispatched by c296's
+tail near-vector) -- the next DGROUP-near-offset base-loss in the DCBS object-init family.  Asm-verified
+vs re_out/fist_dat_image.bin 0x7b91-0x7bce.
+
+Reached only after patch 214 makes c296's per-type dispatch fire with di (the object near-offset) live.
+7b91 was pristine Ghidra: `*(param_1 + 0xad) = 0xf` etc. with param_1 = di (0xc05c) treated as a HOST
+pointer -> SIGSEGV.  DS=DGROUP=0x1c00; every `[di+N]` is a DS-relative byte/word field (the asm uses
+movw/movb at 0xad/0xaf/0xb1/0xb3/0x8d/0xb5/0x87/0x14/0x16).  The tail copies a seg-0x2c7f template into
+the object body at DGROUP:di+0xbf via 1e27 (patch 087: 1e27 takes a NEAR-OFFSET dst and bases it
+internally, so di+0xbf is passed as the near offset).  Reconstructed with the explicit DGROUP base +
+the asm byte/word widths.
+
+Validated by the crash advancing: DCBS record 0 (enemy slot 0xc05c) now installs FULLY (c296 + 7b91
+both return), and record 1 (0xc157 = 0xc05c+0xfb, the enemy stride) advances to a DIFFERENT per-type
+init method (FUN_0000_8744 -- the next same-class base-loss = the new frontier).
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows (same reachability as 214: DCBS parse only).
+Sources pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -20490,16 +20490,23 @@
+ void __allregs FUN_0000_7b91(int param_1)
+ 
+ {
+-  *(undefined2 *)(param_1 + 0xad) = 0xf;
+-  *(undefined2 *)(param_1 + 0xaf) = 0x14;
+-  *(undefined2 *)(param_1 + 0xb1) = 2000;
+-  *(undefined2 *)(param_1 + 0xb3) = 5;
+-  *(undefined1 *)(param_1 + 0x8d) = 1;
+-  *(undefined1 *)(param_1 + 0xb5) = 0x14;
+-  *(undefined2 *)(param_1 + 0x87) = 0x800;
+-  *(undefined2 *)(param_1 + 0x14) = 0x400;
+-  *(byte *)(param_1 + 0x16) = *(byte *)(param_1 + 0x16) & 0xf7;
+-  FUN_0000_1e27(0x2c7f,param_1 + 0xbf);
++  /* PATCH 215: DCBS TANK-object per-type init method (asm 0x7b91-0x7bce; DS=DGROUP=0x1c00), dispatched
++     by c296's tail near-vector with di (the object near-offset) live.  param_1 = di.  Every [di+N] is a
++     DS-relative byte/word field; Ghidra base-lost di (host-deref -> SIGSEGV at param_1=0xc05c).  The
++     tail copies a 0x2c7f-seg template into the object body at DGROUP:di+0xbf via 1e27 (near-offset dst,
++     which 1e27 bases internally).  Reconstructed with the explicit DGROUP base + the asm byte/word widths. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  *(unsigned short *)(dg + (unsigned short)(di + 0xad)) = 0xf;    /* movw [di+0xad],0xf */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xaf)) = 0x14;   /* movw [di+0xaf],0x14 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xb1)) = 2000;   /* movw [di+0xb1],0x7d0 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xb3)) = 5;      /* movw [di+0xb3],5 */
++  dg[(unsigned short)(di + 0x8d)] = 1;                            /* movb [di+0x8d],1 */
++  dg[(unsigned short)(di + 0xb5)] = 0x14;                         /* movb [di+0xb5],0x14 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x87)) = 0x800;  /* movw [di+0x87],0x800 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x14)) = 0x400;  /* movw [di+0x14],0x400 */
++  dg[(unsigned short)(di + 0x16)] &= 0xf7;                        /* andb [di+0x16],0xf7 */
++  FUN_0000_1e27(0x2c7f, (undefined2 *)(uintptr_t)(unsigned short)(di + 0xbf)); /* ax=0x2c7f; di+=0xbf; call 1e27 */
+   return;
+ }
+ 

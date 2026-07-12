@@ -1,0 +1,98 @@
+PATCH 214: reconstruct FUN_0000_c296 (the DCBS unit-record OBJECT INITIALIZER) -- the DGROUP-near-offset
+base-loss that is the ROOT of the "downstream SIGALRM-timing crash".  Asm-verified vs
+re_out/fist_dat_image.bin 0xc296-0xc2f1.
+
+ROOT-CAUSE OF THE "TIMING CRASH" (proven, NOT tick re-entrancy).  With the DCBS record chain reading
+correctly (patches 200/212), the installer FUN_0000_43c1 (patch 200) reaches its c296 leg:
+`FUN_0000_c296((int*)di)` where di is the roster slot's DGROUP NEAR-OFFSET (e.g. 0xc05c enemy slot 0,
+stride 0xfb; 0xa022 friendly).  c296 was pristine Ghidra: it treats param_1 as a HOST pointer and
+derefs `*(param_1 + 0x6d)` -> wild write -> SIGSEGV.  The cascade run's `rc=139` was NONDETERMINISTIC
+(rc=1 vs rc=139) ONLY because the async SIGALRM tick perturbs WHEN the process reaches this deterministic
+bug; under `FIST_COOP_TICK=1` (no async tick) AND under the plain binary run through gdb (SIGALRM
+passed), the crash is IDENTICAL and deterministic: `d81e -> 43c1 -> c296 (param_1=0xc05c) : *(param_1+0x6d)`.
+So the documented "SIGALRM-timing crash that runs clean under gdb+COOP_TICK" is this c296 base-loss, not a
+genuine tick re-entrancy -- the async timing merely masked it on some runs (survive-to-timeout).
+
+THE FIX (faithful, same class as 43c1/8daa base-loss reconstructions 200/201/202/203).  DS=DGROUP=0x1c00,
+di = the near-offset; every `[di+N]` is a DS-relative byte/word field (Ghidra also int*-scaled the
+`param_1[N]`/`*param_1` forms -- e.g. asm `[di+0x90]` rendered `param_1+0x48`, a /2 scaling).  Rebuilt
+from the raw asm with the explicit `g_mem+0x1c000+di` base and the real byte/word widths.  The tail
+dispatches the object's per-type INIT method through the DGROUP near-vector table
+word[DGROUP:(word[di]*2 - 0x1b20)]; the `call [bx-0x1b20]` keeps DI live, so di is threaded as the
+callee's first arg (`typedef int code()` -> the per-type method's DI param -- the per-patch indirect
+threading the doctrine prescribes).  Validated by the crash advancing strictly forward into the
+dispatched method (FUN_0000_7b91 for the TANK type -- patch 215), di correctly = 0xc05c.
+
+Cascade-only => BEHAVIOUR-NEUTRAL for the 19 verify flows (c296 is reached ONLY via the DCBS FSG parse
+`4754 -> d501 -> d7e1 -> d81e -> 43c1`, which runs only on the FIST_CASCADE ACCEPT path; the 19 flows
+stop at the menu/briefing and never parse a mission .FSG).  Default boot rc=0, mainmenu unchanged.
+Sources pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -30481,29 +30488,43 @@
+ void __allregs FUN_0000_c296(int *param_1)
+ 
+ {
+-  undefined1 uVar1;
+-  
+-  uVar1 = FUN_0000_0291();
+-  *(undefined1 *)((int)param_1 + 0x6d) = uVar1;
+-  *(undefined1 *)(param_1 + 0x48) = 0;
+-  *(undefined1 *)(param_1 + 0x43) = 1;
+-  *(undefined1 *)(param_1 + 0xd) = 1;
+-  *(undefined2 *)((int)param_1 + 0x8b) = 0;
+-  *(undefined1 *)((int)param_1 + 0x8d) = 1;
+-  *(undefined1 *)(param_1 + 0x54) = 0;
+-  param_1[9] = 0x28;
+-  if (DAT_2000_2dae == '\x02') {
+-    *(byte *)(param_1 + 0xd) = *(byte *)(param_1 + 0xd) | 0x10;
+-  }
+-  uVar1 = FUN_0000_0291();
+-  *(undefined1 *)(param_1 + 0x21) = uVar1;
+-  *(undefined1 *)(param_1 + 0x1f) = 0;
+-  *(undefined2 *)((int)param_1 + 0x5d) = 0xffff;
+-  *(byte *)(param_1 + 0xb) = *(byte *)(param_1 + 0xb) | 0x60;
+-  *(byte *)(param_1 + 0xb) = *(byte *)(param_1 + 0xb) | 6;
+-  *(byte *)((int)param_1 + 0x17) = *(byte *)((int)param_1 + 0x17) | 0x34;
+-  param_1[0x20] = param_1[0x20] | 1;
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_1 * 2 + -0x1b20))))();
++  /* PATCH 214: DCBS unit-record object initializer (asm 0xc296-0xc2f1; DS=DGROUP=0x1c00).  param_1 =
++     di = the roster slot's DGROUP NEAR-OFFSET (e.g. 0xc05c enemy slot 0 / 0xa022 friendly), passed by
++     43c1.  Every [di+N] is a DS-relative byte/word field; Ghidra base-lost di (host-deref -> SIGSEGV
++     at param_1=0xc05c -- the "timing crash" root) and int*-scaled the param_1[N]/*param_1 forms.
++     Reconstructed with the explicit DGROUP base + the asm's real byte/word offsets+widths.  The tail
++     dispatches the object's per-type init method through the DGROUP near-vector table
++     word[DGROUP:(word[di]*2 - 0x1b20)]. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  unsigned char al;
++  unsigned int idx;
++  al = (unsigned char)FUN_0000_0291();                        /* call 0x291 */
++  dg[(unsigned short)(di + 0x6d)] = al;                       /* mov  [di+0x6d],al */
++  dg[(unsigned short)(di + 0x90)] = 0;                        /* movb [di+0x90],0 */
++  dg[(unsigned short)(di + 0x86)] = 1;                        /* movb [di+0x86],1 */
++  dg[(unsigned short)(di + 0x1a)] = 1;                        /* movb [di+0x1a],1 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x8b)) = 0;  /* movw [di+0x8b],0 */
++  dg[(unsigned short)(di + 0x8d)] = 1;                        /* movb [di+0x8d],1 */
++  dg[(unsigned short)(di + 0xa8)] = 0;                        /* movb [di+0xa8],0 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x12)) = 0x28; /* movw [di+0x12],0x28 */
++  if (DAT_2000_2dae == '\x02') {                             /* cmpb [0x6dae],2 ; jne */
++    dg[(unsigned short)(di + 0x1a)] |= 0x10;                 /* orb  [di+0x1a],0x10 */
++  }
++  al = (unsigned char)FUN_0000_0291();                        /* call 0x291 */
++  dg[(unsigned short)(di + 0x42)] = al;                       /* mov  [di+0x42],al */
++  dg[(unsigned short)(di + 0x3e)] = 0;                        /* movb [di+0x3e],0 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x5d)) = 0xffff; /* movw [di+0x5d],0xffff */
++  dg[(unsigned short)(di + 0x16)] |= 0x60;                    /* orb  [di+0x16],0x60 */
++  dg[(unsigned short)(di + 0x16)] |= 0x06;                    /* orb  [di+0x16],0x06 */
++  dg[(unsigned short)(di + 0x17)] |= 0x34;                    /* orb  [di+0x17],0x34 */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x40)) |= 1; /* orw  [di+0x40],1 */
++  idx = *(unsigned short *)(dg + (unsigned short)di);         /* mov  bx,[di] */
++  idx = (unsigned short)(idx << 1);                           /* shl  bx,1 */
++  /* NEAR call [bx-0x1b20]: the object's per-type init method reads DI (the object near-offset) live
++     across the call; thread di as the first arg (typedef int code() -> the callee's DI param). */
++  (*(code *)fist_icall_near(0x0u,
++      *(unsigned short *)(dg + (unsigned short)(idx - 0x1b20))))((int)di);
+   return;
+ }
+ 
