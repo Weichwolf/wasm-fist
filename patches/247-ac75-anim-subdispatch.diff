@@ -1,0 +1,24 @@
+FUN_0000_ac75 (per-object animation sub-dispatch, reached via ab03's frame table, patch 246):
+di base-loss (SIGSEGV).
+
+ROOT CAUSE (asm-verified 0xac75): ac75 dispatches word[DS:byte[di+0x43]-0x6800] (DS=DGROUP=0x1c00) as
+a near call with di (object near-offset) live.  Ghidra read byte[di+0x43] from di-as-host-pointer and
+the table at an absolute host offset (0x9800).  Fix: object/table via g_mem+0x1c000 base; di live in
+arg0.  Mission-cascade only.
+--- a/fist.c	2026-07-12 16:56:17.611551406 +0200
++++ b/fist.c	2026-07-12 16:56:17.622504506 +0200
+@@ -26890,7 +26890,13 @@
+ void __allregs FUN_0000_ac75(int param_1)
+ 
+ {
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(byte *)(param_1 + 0x43) + 0x9800))))();
++  /* PATCH 247: per-object animation sub-dispatch (asm 0xac75: movzbw [di+0x43],bx; call *-0x6800(bx)).
++   * di in param_1 (near offset); DS=DGROUP=0x1c00.  Table @ DS:0x9800 (=-0x6800), byte-indexed word
++   * entry; Ghidra base-lost it to a host offset.  Near call with di live. */
++  unsigned char *dg247 = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di247 = (uint16_t)(uintptr_t)param_1;
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)(dg247 + (uint16_t)(*(byte *)(dg247 + di247 + 0x43) + 0x9800))))((int)di247);
+   return;
+ }
+ 

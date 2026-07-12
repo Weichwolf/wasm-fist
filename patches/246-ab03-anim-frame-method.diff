@@ -1,0 +1,84 @@
+FUN_0000_ab03 (per-object animation-frame UPDATE method, dispatched by 7c1d's CS-table1, patch 244):
+object + indexed-table + sub-dispatch base-loss (SIGSEGV) and WORD-width bugs.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin 0xab03-0xab81; gdb crash reading [di+0x42] with
+di=near-offset 0x C05C as a host pointer).  ab03 is one of 7c1d's table1 entries; c0e5/7c1d dispatch it
+with di (the object near-offset) in arg0.  Ghidra treated di as a host pointer for every [di+off] field,
+base-lost the DS-relative indexed table read (word[DS:byte[di+0x1b]*2-0x7a60]) and the two frame
+sub-dispatch tables (near call word[DS:idx-0x6704 / idx-0x6724], idx=(byte[di+0x42]&0xf)*2), and read
+the position-history rotation (0x26..0x2e) as 4-byte int where the asm is movswl (WORD sign-extend) /
+WORD store.  Fix: object = g_mem+0x1c000+di; rebase the object fields + the -0x7a60 read + the two
+sub-dispatch table reads to the DGROUP base; WORD widths for the rotation; sub-dispatch targets called
+near with di live.  The DAT_2000_* accessors (5a08/578c/578a/5796/5798/3d2a/3ae0) are already correctly
+resolved (0x2000-base offset == 0x1c00:off) and stay verbatim.  Mission-cascade only.
+--- a/fist.c	2026-07-12 16:55:05.775176910 +0200
++++ b/fist.c	2026-07-12 16:55:05.790504410 +0200
+@@ -26696,33 +26696,46 @@
+   int iVar3;
+   int iVar4;
+   
+-  DAT_2000_5a08 = param_1;
+-  _DAT_2000_578c = FUN_0000_0291();
+-  if (DAT_2000_578a == '\0') {
+-    *(char *)(param_1 + 0x42) = *(char *)(param_1 + 0x42) + '\x01';
+-    if ((*(byte *)(param_1 + 0x42) & 0xf) == 0) {
+-      iVar4 = *(int *)(param_1 + 0x2c);
+-      iVar1 = *(int *)(param_1 + 0x2a);
+-      *(int *)(param_1 + 0x2c) = iVar1;
+-      iVar2 = *(int *)(param_1 + 0x28);
+-      *(int *)(param_1 + 0x2a) = iVar2;
+-      iVar3 = *(int *)(param_1 + 0x26);
+-      *(int *)(param_1 + 0x28) = iVar3;
+-      *(undefined2 *)(param_1 + 0x2e) =
+-           (int)((ulong)((long)iVar4 + (long)iVar1 + (long)iVar2 + (long)iVar3) >> 2);
++  /* PATCH 246: per-object animation-frame method (asm 0xab03-0xab81; DS=DGROUP=0x1c00), dispatched
++   * by 7c1d table1.  di arrives in param_1 (near offset); object = g_mem+0x1c000+di.  Ghidra base-lost
++   * every [di+off] object field, the -0x7a60 indexed table read (word[DS:byte[di+0x1b]*2-0x7a60]) and
++   * the two frame sub-dispatch tables (word[DS:idx-0x6704 / -0x6724]) to absolute host offsets; the
++   * position-history rotation (0x26..0x2e) reads WORD sign-extended (movswl) / stores WORD (Ghidra
++   * used 4-byte int).  The DAT_2000_* accessors are already resolved (0x2000-base == 0x1c00:off+0x4000)
++   * so they stay verbatim.  di stored to DAT_2000_5a08 (near offset) + compared to DAT_2000_3ae0. */
++  unsigned char *dg246 = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di246 = (uint16_t)(uintptr_t)param_1;
++  unsigned char *o246 = dg246 + di246;
++  (void)iVar1; (void)iVar2; (void)iVar3;
++  DAT_2000_5a08 = di246;                        /* ab03 mov [0x9a08],di (near offset) */
++  _DAT_2000_578c = FUN_0000_0291();             /* ab07/ab0a */
++  if (DAT_2000_578a == '\0') {                  /* ab0d cmpb [0x978a],0; jne ab78 */
++    o246[0x42] = (unsigned char)(o246[0x42] + 1); /* ab14 incb [di+0x42] */
++    if ((o246[0x42] & 0xf) == 0) {              /* ab17 testb 0xf; jne ab4a */
++      int a = *(short *)(o246 + 0x2c);          /* ab1d movswl [di+0x2c] */
++      int b = *(short *)(o246 + 0x2a);          /* ab22 movswl [di+0x2a] */
++      int c = *(short *)(o246 + 0x28);          /* ab2d movswl [di+0x28] */
++      int d = *(short *)(o246 + 0x26);          /* ab38 movswl [di+0x26] */
++      *(uint16_t *)(o246 + 0x2c) = (uint16_t)b; /* ab2a mov [di+0x2c],bx */
++      *(uint16_t *)(o246 + 0x2a) = (uint16_t)c; /* ab35 mov [di+0x2a],bx */
++      *(uint16_t *)(o246 + 0x28) = (uint16_t)d; /* ab40 mov [di+0x28],bx */
++      *(uint16_t *)(o246 + 0x2e) =
++           (uint16_t)((unsigned int)(a + b + c + d) >> 2); /* ab43 shr eax,2; ab47 mov [di+0x2e],ax */
+     }
+-    DAT_2000_5796 = *(undefined2 *)((uint)*(byte *)(param_1 + 0x1b) * 2 + -0x7a60);
+-    DAT_2000_5798 = ((undefined2 *)&DAT_2000_3d2a)[*(byte *)(param_1 + 0x1b)];
+-    iVar4 = (*(byte *)(param_1 + 0x42) & 0xf) * 2;
+-    if ((*(uint *)(param_1 + 0x40) & 1) == 0) {
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(iVar4 + -0x6704))))();
++    DAT_2000_5796 = *(uint16_t *)(dg246 + (uint16_t)((uint)o246[0x1b] * 2 - 0x7a60)); /* ab50 mov ax,[bx-0x7a60] */
++    DAT_2000_5798 = ((undefined2 *)&DAT_2000_3d2a)[o246[0x1b]];                        /* ab57 mov ax,[bx+0x7d2a] */
++    iVar4 = (o246[0x42] & 0xf) * 2;             /* ab5e movzbw; shl 1; and 0x1e */
++    if ((*(uint16_t *)(o246 + 0x40) & 1) == 0) { /* ab67 testw 1; je ab74 */
++      (*(code *)fist_icall_near(0x0u,
++          *(uint16_t *)(dg246 + (uint16_t)(iVar4 - 0x6704))))((int)di246); /* ab74 call [bx-0x6704], DI live */
+     }
+     else {
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(iVar4 + -0x6724))))();
++      (*(code *)fist_icall_near(0x0u,
++          *(uint16_t *)(dg246 + (uint16_t)(iVar4 - 0x6724))))((int)di246); /* ab6e call [bx-0x6724], DI live */
+     }
+   }
+-  if (param_1 == DAT_2000_3ae0) {
+-    FUN_0000_b152(param_1);
++  if (di246 == DAT_2000_3ae0) {                 /* ab78 cmp [0x7ae0],di; jne */
++    FUN_0000_b152((int)di246);                  /* ab7e call b152 (DI live) */
+   }
+   return;
+ }
