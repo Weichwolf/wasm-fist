@@ -1,0 +1,29 @@
+PATCH 279: the kill/loss census incrementer FUN_1000_610e -- DGROUP near-offset base-loss (SIGSEGV),
+reached from the damage-notify a93e when an object is destroyed (the collision/damage path opened by the
+a0ab proximity search, patch 271).
+
+ASM-verified (asm 0x1610e-0x1612b; DS=DGROUP=0x1c00): di=object near offset in param_1; bumps the
+enemy-kill / own-loss counters [DG:0x799e]/[DG:0x79a2]/[DG:0x799a] based on the object's [di+0x16]&8 flag
+and the reference object word[DG:0xe3b2]'s flag.  Ghidra host-ptr-deref'd both di and the DAT_2000_a3b2
+near-offset value -> SIGSEGV.  Rebased to the DGROUP model.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -55775,9 +55775,16 @@
+ void __allregs FUN_1000_610e(int param_1)
+ 
+ {
+-  if ((*(byte *)(param_1 + 0x16) & 8) == 0) {
++  /* PATCH 279: the kill/loss census incrementer (asm 0x1610e-0x1612b; DS=DGROUP=0x1c00), reached from the
++   * damage-notify a93e when an object is destroyed.  di=object near offset in param_1; when the object is
++   * NOT [di+0x16]&8 (not friendly?) bumps the enemy-kill counter [DG:0x799e] and, if the reference object
++   * word[DG:0xe3b2] is also not &8, [DG:0x79a2]; else the own-loss counter [DG:0x799a].  Ghidra host-ptr-
++   * deref'd both di and the DAT_2000_a3b2 near-offset value.  Rebased to the DGROUP model. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  if ((dg[(unsigned short)(di + 0x16)] & 8) == 0) {
+     DAT_2000_399e = DAT_2000_399e + 1;
+-    if ((*(byte *)(DAT_2000_a3b2 + 0x16) & 8) == 0) {
++    if ((dg[(unsigned short)((unsigned short)DAT_2000_a3b2 + 0x16)] & 8) == 0) {
+       DAT_2000_39a2 = DAT_2000_39a2 + 1;
+     }
+     return;

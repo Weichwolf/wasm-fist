@@ -1,0 +1,186 @@
+PATCH 274: the object TARGET-ENGAGEMENT subtree -- a657 + its base-lost callees FUN_1000_a265
+(aim-vector), a25b (flap-clear), bf15 (weapon-event poster) -- DGROUP near-offset base-loss (SIGSEGV),
+reached from the object-type-A UPDATE template 7c1d (patch 244) via 7d08.
+
+ASM-verified (asm 0xa657-0xa6da, 0x1a265-0x1a2e8, 0xa25b, 0xbf15-0xbf3b; DS=DGROUP=0x1c00).  a657's
+SELF near offset arrives in param_2 (7d08 forwards 7c1d's arg0) with ax=param_1=0x1f40; Ghidra mapped
+self to the uninitialised param_5 -> wild deref SIGSEGV at the first `word[di+0x97]` load, and host-ptr-
+deref'd the TARGET object.  The three callees were the same class: a265 additionally int-scaled every
+field (int* +2 => +8 vs asm [di+4]); a25b's [di+0x8b] store and bf15's [di+0x16] flag deref were raw
+host-ptr derefs while bf15's identity guard `cmp di,ds:0x6d34` needs the near offset.  All rebuilt in the
+DGROUP model with the object passed as a near offset to every object-method callee (a265/e20a/bf3c/bf15/
+a4a2/a25b).  a265's +0x38/+0x99 heading writes keep a18e's undefined4 return imprecisely (aim-state only,
+non-crashing).  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -26254,8 +26254,13 @@
+ void __allregs FUN_0000_a25b(int param_1)
+ 
+ {
+-  FUN_0000_a2a8(param_1);
+-  *(undefined2 *)(param_1 + 0x8b) = 0;
++  /* PATCH 274: object flap-clear helper (asm 0xa25b; DS=DGROUP=0x1c00).  di=object near offset in
++   * param_1 (asm reads DI); calls a2a8 (near-offset, patch 261) then clears WORD[di+0x8b].  Ghidra
++   * deref'd the 0x8b store as a host pointer -> SIGSEGV; rebase to the DGROUP model. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  FUN_0000_a2a8((int)di);
++  *(unsigned short *)(dg + (unsigned short)(di + 0x8b)) = 0;
+   return;
+ }
+ 
+@@ -26932,43 +26937,53 @@
+ FUN_0000_a657(uint param_1,undefined2 param_2,undefined4 param_3,undefined4 param_4,int param_5)
+ 
+ {
++  /* PATCH 274: the object TARGET-ENGAGEMENT method (asm 0xa657-0xa6da; DS=DGROUP=0x1c00), dispatched
++   * via 7d08 from the object-type-A UPDATE template (7c1d).  di=SELF near offset arrives in param_2
++   * (7d08 forwards its arg0), ax=param_1; asm reads DI + word[di+0x97]=the TARGET near offset.  Ghidra
++   * mapped self to the uninitialised param_5 (wild deref SIGSEGV) and host-ptr-deref'd the target.
++   * Rebuilt in the DGROUP model; every object-method callee gets the near offset (a265/e20a/bf3c/bf15/
++   * a4a2/a25b -- all reconstructed to the near-offset convention). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_2;    /* self object near offset */
++  unsigned int tgt;
+   undefined1 uVar1;
+-  int iVar2;
+   undefined2 uVar3;
+-  
+-  if ((param_5 == DAT_2000_2d34) || ((DAT_2000_2cde & 7) == 0)) {
+-    iVar2 = *(int *)(param_5 + 0x97);
++  int iVar2;
++  (void)param_5;
++  if ((di == *(unsigned short *)(dg + 0x6d34)) || ((DAT_2000_2cde & 7) == 0)) {
++    tgt = *(unsigned short *)(dg + (unsigned short)(di + 0x97));
+     DAT_2000_56fc = param_1;
+-    if (iVar2 != 0) {
+-      if (((*(byte *)(iVar2 + 0x16) & 1) == 0) && ((*(byte *)(iVar2 + 0x16) & 2) != 0)) {
+-        if ((*(byte *)(iVar2 + 0x16) & 0x20) != 0) {
+-          *(undefined1 *)(iVar2 + 0x36) = 0xff;
++    if (tgt != 0) {
++      if (((dg[(unsigned short)(tgt + 0x16)] & 1) == 0) &&
++          ((dg[(unsigned short)(tgt + 0x16)] & 2) != 0)) {
++        if ((dg[(unsigned short)(tgt + 0x16)] & 0x20) != 0) {
++          dg[(unsigned short)(tgt + 0x36)] = 0xff;
+         }
+-        FUN_1000_a265(param_2,param_3,param_5);
+-        if (*(uint *)(param_5 + 0x99) <= DAT_2000_56fc) {
+-          iVar2 = FUN_0000_e20a(param_4,param_5);
++        FUN_1000_a265(param_2,param_3,(int *)(uintptr_t)di);
++        if (*(unsigned short *)(dg + (unsigned short)(di + 0x99)) <= DAT_2000_56fc) {
++          iVar2 = FUN_0000_e20a(param_4,(int *)(uintptr_t)di);
+           if (iVar2 != 0) {
+             return;
+           }
+         }
+-        FUN_0000_bf3c(0x13,(int)param_4,param_5);
++        FUN_0000_bf3c(0x13,(int)param_4,(int)di);
+         uVar3 = 0x3020;
+       }
+       else {
+         DAT_2000_2db0 = 0;
+-        if ((*(byte *)(iVar2 + 0x16) & 0x20) != 0) {
++        if ((dg[(unsigned short)(tgt + 0x16)] & 0x20) != 0) {
+           uVar1 = 0x16;
+-          if ((*(byte *)(iVar2 + 0x16) & 8) == 0) {
++          if ((dg[(unsigned short)(tgt + 0x16)] & 8) == 0) {
+             uVar1 = 0x1e;
+           }
+-          FUN_0000_bf15(uVar1,(int)param_4,param_5);
++          FUN_0000_bf15(uVar1,(int)param_4,(int)di);
+         }
+         uVar3 = 0x2ffa;
+       }
+-      FUN_1000_a4a2(uVar3,param_5);
+-      *(undefined2 *)(param_5 + 0x97) = 0;
++      FUN_1000_a4a2(uVar3,(int)di);
++      *(unsigned short *)(dg + (unsigned short)(di + 0x97)) = 0;
+       if (DAT_2000_4b4d != '\x01') {
+-        FUN_0000_a25b(param_5);
++        FUN_0000_a25b((int)di);
+       }
+       return;
+     }
+@@ -30238,9 +30253,14 @@
+ void __allregs FUN_0000_bf15(char param_1,undefined2 param_2,int param_3)
+ 
+ {
++  /* PATCH 274: weapon-event poster (asm 0xbf15-0xbf3b; DS=DGROUP=0x1c00) -- twin of bf3c (patch 263).
++   * di=object near offset in param_3; the identity guard `cmp di,ds:0x6d34` needs the near offset while
++   * the flag deref byte[di+0x16] was a host-ptr deref (base-loss).  Rebased to the DGROUP model. */
+   undefined2 in_register_0000000e;
+-  
+-  if (((param_3 == DAT_2000_2d34) && ((*(byte *)(param_3 + 0x16) & 8) == 0)) && (param_1 != -1)) {
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_3;
++  if (((di == *(unsigned short *)(dg + 0x6d34)) &&
++       ((dg[(unsigned short)(di + 0x16)] & 8) == 0)) && (param_1 != -1)) {
+     DAT_2000_5fca = DAT_1000_c452;
+     FUN_0000_e2c2(CONCAT22(in_register_0000000e,param_2));
+   }
+@@ -62204,35 +62224,46 @@
+ void __allregs FUN_1000_a265(undefined2 param_1,undefined4 param_2,int *param_3)
+ 
+ {
+-  int *piVar1;
++  /* PATCH 274: the target aiming-vector calc (asm 0x1a265-0x1a2e8; DS=DGROUP=0x1c00), called from the
++   * a657 engagement method.  di=SELF near offset in param_3, si=TARGET word[di+0x97].  Ghidra host-ptr-
++   * deref'd both AND int-scaled every field (param_3 int* +2 => +8 vs asm [di+4]).  Rebuilt: fills the
++   * DGROUP self/target vectors @0x9684 (self X/Y/Z) and @0x9690 (target X/Y/Z, +the per-type height LUTs
++   * word[type*2-0x1a40] / word[(byte&3)*2-0x6151 | type*2-0x1a78]), calls the angle solver a18e over the
++   * two vector buffers, and writes the aim result back to self word[di+0x9b]/+0x38/+0x99.  (The +0x38/
++   * +0x99 heading bytes keep a18e's undefined4 return imprecisely -- aim-state only, non-crashing.) */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_3;   /* self */
++  unsigned int si = *(unsigned short *)(dg + (unsigned short)(di + 0x97)); /* target */
++  unsigned int bx;
+   uint uVar2;
+   undefined2 uVar3;
+   int iVar4;
+-  int unaff_CS;
+-  
+-  piVar1 = (int *)*(int *)((int)param_3 + 0x97);
+-  if (piVar1 == (int *)0x0) {
++  if (si == 0) {
+     return;
+   }
+-  DAT_2000_5684 = *(undefined4 *)(param_3 + 2);
+-  DAT_2000_5688 = *(undefined4 *)(param_3 + 4);
+-  DAT_2000_568c = (ulong)*(uint *)(*param_3 * 2 + -0x1a40) + *(long *)(param_3 + 6);
+-  DAT_2000_5690 = *(undefined4 *)(piVar1 + 2);
+-  DAT_2000_5694 = *(undefined4 *)(piVar1 + 4);
+-  if (*piVar1 == 0x1a) {
+-    iVar4 = (*(byte *)((int)piVar1 + 0x19) & 3) * 2;
+-    uVar2 = *(uint *)(iVar4 + -0x6151);
++  DAT_2000_5684 = *(unsigned int *)(dg + (unsigned short)(di + 4));
++  DAT_2000_5688 = *(unsigned int *)(dg + (unsigned short)(di + 8));
++  bx = (unsigned short)(*(unsigned short *)(dg + di) << 1);
++  DAT_2000_568c = (ulong)*(unsigned short *)(dg + (unsigned short)(bx - 0x1a40))
++                  + *(unsigned int *)(dg + (unsigned short)(di + 0xc));
++  DAT_2000_5690 = *(unsigned int *)(dg + (unsigned short)(si + 4));
++  DAT_2000_5694 = *(unsigned int *)(dg + (unsigned short)(si + 8));
++  if (*(unsigned short *)(dg + si) == 0x1a) {
++    bx = (unsigned short)((dg[(unsigned short)(si + 0x19)] & 3) << 1);
++    uVar2 = *(unsigned short *)(dg + (unsigned short)(bx - 0x6151));
+   }
+   else {
+-    iVar4 = *piVar1 * 2;
+-    uVar2 = *(uint *)(iVar4 + -0x1a78);
++    bx = (unsigned short)(*(unsigned short *)(dg + si) << 1);
++    uVar2 = *(unsigned short *)(dg + (unsigned short)(bx - 0x1a78));
+   }
+-  DAT_2000_5698 = (ulong)uVar2 + *(long *)(piVar1 + 6);
++  iVar4 = (int)bx;
++  DAT_2000_5698 = (ulong)uVar2 + *(unsigned int *)(dg + (unsigned short)(si + 0xc));
+   uVar3 = FUN_0000_a18e(param_1,(int)param_2,iVar4,(undefined4 *)&DAT_2000_5684,
+                         (undefined4 *)&DAT_2000_5690);
+-  *(undefined2 *)(unaff_CS + 0x9b) = uVar3;
+-  *(int *)(unaff_CS + 0x38) = iVar4;
+-  *(undefined2 *)(unaff_CS + 0x99) = (int)CONCAT31((int3)param_2,(char)((uint)param_1 >> 8));
++  *(unsigned short *)(dg + (unsigned short)(di + 0x9b)) = uVar3;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x38)) = (unsigned short)iVar4;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x99)) =
++      (unsigned short)((((uint)param_2 & 0xff) << 8) | (((uint)param_1 >> 8) & 0xff));
+   return;
+ }
+ 

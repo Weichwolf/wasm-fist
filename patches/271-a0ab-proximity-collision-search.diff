@@ -1,0 +1,185 @@
+PATCH 271: the per-object PROXIMITY/COLLISION search FUN_1000_a0ab (+ its guard FUN_0000_a631) --
+full DGROUP near-offset base-loss (SIGSEGV in the object-table walk), reached from the object-type-B
+UPDATE method 87df (patch 250) via its CS-table dispatch.
+
+ASM-verified (asm 0x1a0ab-0x1a173 for a0ab, 0xa631 for a631; DS=DGROUP=0x1c00).  ROOT: 87df's CS-table
+dispatch (`call [g_mem+0x8858+...]`) invokes a631 with the SELF-object NEAR OFFSET as the single
+positional arg (di in param_1); a631's asm reads the DI register, which Ghidra mapped to the
+uninitialised param_3 -> a wild object pointer forwarded into a0ab.  a0ab then base-lost its ENTIRE
+body: the 182-entry object table @DGROUP:0xdfbc was walked with stride 8 (asm 4) and its WORD near
+offsets deref'd as host pointers (the observed SIGSEGV at the walk while-condition), and the a17e
+distance-return DX (a callee output, not an input param) was folded into a phantom `uVar3` loop guard.
+
+FIX: a631 reads di from param_1 and rebases its guard word[DGROUP:0x6d34].  a0ab is rebuilt faithfully in
+the DGROUP-offset model: walk @0xdfbc stride 4; for each candidate si with flag [si+0x16]&0x40 set /
+&0x10 clear / si!=self, measure distance via 08e8 (== a17e's body: DAT_1000_c458=dist, DAT_1000_c45a=DX;
+host-pointer args as 08e8 requires), skip on DX!=0 (too far); if dist < (radii+0x100)>>1 -> COLLISION,
+else if within 0x1e00 -> b059 proximity.  The collision handler mutates SELF (di): sets bit [di+0x62],
+for target-type word[si]==0x15 halves velocity [di+0x55]/[di+0x57] + posts c047(0x30)/c31e(si), else
+posts c047(0x2d) + pushes the object back ([di+4]-=movsx[di+0x59]<<5, [di+8]-=movsx[di+0x5b]<<5) + flips
+[di+0x55] + clears [di+0x57], then sets the cooldown byte[di+0x93]=4.  Mission-cascade only (a0ab is the
+per-frame object proximity search, unreached by the 19 menu/dialog flows).
+--- a/fist.c
++++ b/fist.c
+@@ -26210,8 +26210,14 @@
+ void __allregs FUN_0000_a631(undefined2 param_1,undefined4 param_2,int param_3)
+ 
+ {
+-  if (param_3 != DAT_2000_2d34) {
+-    FUN_1000_a0ab(param_1,param_2,param_3);
++  /* PATCH 271: the object near-offset DI arrives in param_1 (FUN_0000_87df's CS-table dispatch calls
++   * this with the near offset as the single positional arg -- di in param_1, not the DI register that
++   * Ghidra mapped to the uninitialised param_3).  asm 0xa631: `cmp di,ds:0x6d34; je; call a0ab`.
++   * Rebase the guard word[DGROUP:0x6d34] and forward di to a0ab in param_1. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  if ((unsigned short)di != *(unsigned short *)(dg + 0x6d34)) {
++    FUN_1000_a0ab((int)di,param_2,(int *)(uintptr_t)di);
+   }
+   return;
+ }
+@@ -59731,72 +59737,79 @@
+ void __allregs FUN_1000_a0ab(undefined2 param_1,undefined4 param_2,int *param_3)
+ 
+ {
+-  int *piVar1;
+-  uint uVar2;
+-  undefined2 in_register_0000000a;
+-  undefined4 uVar3;
+-  uint uVar4;
+-  undefined2 uVar5;
+-  int *piVar6;
+-  int *piVar7;
+-  int *unaff_CS;
+-  int iStack_4;
+-  int *piStack_2;
+-  
+-  uVar3 = CONCAT22(in_register_0000000a,param_1);
+-  param_3[0x20] = param_3[0x20] & 0xfff7;
+-  if (*(char *)((int)param_3 + 0x93) != '\0') {
+-    *(char *)((int)param_3 + 0x93) = *(char *)((int)param_3 + 0x93) + -1;
+-    return;
+-  }
+-  uVar5 = (undefined2)((ulong)param_2 >> 0x10);
+-  piStack_2 = (int *)&DAT_2000_9fbc;
+-  iStack_4 = 0xb6;
+-  while( true ) {
+-    do {
+-      do {
+-        piVar6 = param_3;
+-        piVar7 = unaff_CS;
+-        if (iStack_4 == 0) {
+-          *(byte *)(piVar6 + 0x31) = *(byte *)(piVar6 + 0x31) & 0xfd;
+-          return;
+-        }
+-        piVar1 = (int *)*piStack_2;
+-        piStack_2 = piStack_2 + 2;
+-        iStack_4 = iStack_4 + -1;
+-        unaff_CS = piVar7;
+-        param_3 = piVar6;
+-      } while ((((piVar1 == (int *)0x0) || ((*(byte *)(piVar1 + 0xb) & 0x40) == 0)) ||
+-               ((*(byte *)(piVar1 + 0xb) & 0x10) != 0)) || (piVar6 == piVar1));
+-      uVar2 = FUN_0000_a17e(piVar1 + 2,piVar6 + 2);
+-      unaff_CS = (int *)0x0;
+-      param_3 = piVar7;
+-    } while ((int)uVar3 != 0);
+-    uVar4 = piVar7[10] + piVar6[10] + 0x100U >> 1;
+-    if (uVar2 < uVar4) break;
+-    if (uVar2 - uVar4 < 0x1e01) {
+-      iStack_4 = 0;
+-      FUN_0000_b059(uVar3,uVar4,piVar6,piVar7);
+-      unaff_CS = (int *)0x0;
+-      param_3 = piVar7;
+-    }
+-  }
+-  if ((*(byte *)(piVar7 + 0x31) & 2) == 0) {
+-    *(byte *)(piVar7 + 0x31) = *(byte *)(piVar7 + 0x31) | 2;
+-    if (*piVar6 == 0x15) {
+-      *(int *)((int)piVar7 + 0x55) = *(int *)((int)piVar7 + 0x55) >> 1;
+-      *(int *)((int)piVar7 + 0x57) = *(int *)((int)piVar7 + 0x57) >> 1;
+-      FUN_0000_c047(0x30,CONCAT22(uVar5,iStack_4),piVar7);
+-      FUN_0000_c31e(0,0,0,piVar7);
+-      return;
+-    }
+-    FUN_0000_c047(0x2d,CONCAT22(uVar5,iStack_4),piVar7);
+-    *(long *)(piVar7 + 2) = *(long *)(piVar7 + 2) + (long)*(int *)((int)piVar7 + 0x59) * -0x20;
+-    *(long *)(piVar7 + 4) = *(long *)(piVar7 + 4) + (long)*(int *)((int)piVar7 + 0x5b) * -0x20;
+-    *(int *)((int)piVar7 + 0x55) = -*(int *)((int)piVar7 + 0x55);
+-    *(undefined2 *)((int)piVar7 + 0x57) = 0;
++  /* PATCH 271: the per-object PROXIMITY/COLLISION search (asm 0x1a0ab-0x1a173; DS=DGROUP=0x1c00).
++   * di = SELF object near offset, arriving in param_1 (a631 forwards the near offset; Ghidra base-lost
++   * the WHOLE body -- di/si table near-offsets deref'd as host pointers, the table walk stride 8 vs
++   * asm 4, and the a17e-return DX (not an input param) folded into a phantom `uVar3` guard).  Rebuilt
++   * faithfully in the DGROUP-offset model: walk the 182-entry object table @DGROUP:0xdfbc (stride 4),
++   * for each candidate `si` with flag bit 0x40 set / 0x10 clear / not self, measure the manhattan-ish
++   * distance via 08e8 (== a17e's body: writes DAT_1000_c458=dist / DAT_1000_c45a=DX, host-ptr args),
++   * skip if DX!=0 (too far); if dist < (radii+0x100)>>1 -> COLLISION (break); else if within 0x1e00 ->
++   * b059 proximity/splash.  The collision handler mutates SELF (di): bit di+0x62, velocity flip
++   * di+0x55/0x57, position push-back di+4/di+8, and for target-type 0x15 halves velocity + posts
++   * c047(0x30)/c31e.  Callees keep the object as a near offset (di/si), matching their asm. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;      /* self object near offset */
++  unsigned int bx;
++  int cx;
++  unsigned int si;
++  int collided = 0;
++  unsigned int hit_si = 0;
++  (void)param_2; (void)param_3;
++
++  *(unsigned short *)(dg + (unsigned short)(di + 0x40)) &= 0xfff7;   /* a0ab and word[di+0x40],0xfff7 */
++  if (dg[(unsigned short)(di + 0x93)] != 0) {                        /* a0af cmp byte[di+0x93],0 */
++    dg[(unsigned short)(di + 0x93)]--;                              /* a0b6 dec; retf */
++    return;
++  }
++  bx = 0xdfbc;                                                       /* a0c0 mov bx,0xdfbc */
++  cx = 0xb6;                                                         /* a0c3 mov cx,0xb6 */
++  while (cx != 0) {                                                  /* a0ca or cx,cx; je a0bb */
++    si = *(unsigned short *)(dg + bx);                               /* a0ce mov si,[bx] */
++    bx = (unsigned short)(bx + 4);                                   /* a0d0 add bx,4 */
++    cx = cx + -1;                                                    /* a0d3 dec cx */
++    if (si == 0) continue;                                           /* a0d4 or si,si; je a0ca */
++    if ((dg[(unsigned short)(si + 0x16)] & 0x40) == 0) continue;     /* a0da test [si+0x16],0x40; je */
++    if ((dg[(unsigned short)(si + 0x16)] & 0x10) != 0) continue;     /* a0e0 test 0x10; jne */
++    if (di == si) continue;                                          /* a0e6 cmp di,si; je */
++    FUN_0000_08e8((long *)(dg + (unsigned short)(si + 4)),           /* a0f2 call a17e(si+4,di+4) */
++                  (long *)(dg + (unsigned short)(di + 4)));
++    if ((unsigned short)DAT_1000_c45a != 0) continue;                /* a0f9 or dx,dx; jne a0c8 */
++    {
++      unsigned int dist = (unsigned short)DAT_1000_c458;
++      unsigned int thr = (unsigned short)((*(unsigned short *)(dg + (unsigned short)(di + 0x14))
++                          + *(unsigned short *)(dg + (unsigned short)(si + 0x14)) + 0x100) >> 1);
++      if (dist < thr) { collided = 1; hit_si = si; break; }          /* a10b jb a119 (collision) */
++      if ((unsigned short)(dist - thr) > 0x1e00) continue;           /* a10d cmp ax,0x1e00; ja a0c8 */
++      FUN_0000_b059((long)0,(unsigned short)(dist - thr),(unsigned short)si,(int)di); /* a112 call b059 */
++    }
++  }
++  if (!collided) {                                                   /* loop exhausted -> a0bb */
++    dg[(unsigned short)(di + 0x62)] &= 0xfd;                         /* and byte[di+0x62],0xfd; retf */
++    return;
++  }
++  si = hit_si;                                                       /* other object (a119 collision) */
++  if ((dg[(unsigned short)(di + 0x62)] & 2) == 0) {                  /* a11b test [di+0x62],2; jne a154 */
++    dg[(unsigned short)(di + 0x62)] |= 2;                            /* a121 or [di+0x62],2 */
++    if (*(unsigned short *)(dg + si) == 0x15) {                      /* a125 cmp word[si],0x15; je a15a */
++      *(short *)(dg + (unsigned short)(di + 0x55)) =                 /* a15a sar word[di+0x55],1 */
++          (short)(*(short *)(dg + (unsigned short)(di + 0x55)) >> 1);
++      *(short *)(dg + (unsigned short)(di + 0x57)) =                 /* a15d sar word[di+0x57],1 */
++          (short)(*(short *)(dg + (unsigned short)(di + 0x57)) >> 1);
++      FUN_0000_c047(0x30,0,(int)di);                                 /* a161 mov ax,0x30; call c047 */
++      FUN_0000_c31e(0,0,(int *)(dg + si),(int)si);                   /* a16e xor ax; xor bx; call c31e (si=other) */
++      return;
++    }
++    FUN_0000_c047(0x2d,0,(int)di);                                   /* a12a mov ax,0x2d; call c047 */
++    *(int *)(dg + (unsigned short)(di + 4)) -=                       /* a132 movsx eax,[di+0x59]; shl 5; sub [di+4] */
++        (int)(*(short *)(dg + (unsigned short)(di + 0x59))) << 5;
++    *(int *)(dg + (unsigned short)(di + 8)) -=                       /* a13f movsx eax,[di+0x5b]; shl 5; sub [di+8] */
++        (int)(*(short *)(dg + (unsigned short)(di + 0x5b))) << 5;
++    *(short *)(dg + (unsigned short)(di + 0x55)) =                   /* a14c neg word[di+0x55] */
++        (short)(-*(short *)(dg + (unsigned short)(di + 0x55)));
++    *(unsigned short *)(dg + (unsigned short)(di + 0x57)) = 0;       /* a14f mov word[di+0x57],0 */
+   }
+-  *(undefined1 *)((int)piVar7 + 0x93) = 4;
++  dg[(unsigned short)(di + 0x93)] = 4;                               /* a154 mov byte[di+0x93],4; retf */
+   return;
+ }
+ 

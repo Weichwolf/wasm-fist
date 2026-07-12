@@ -1,0 +1,26 @@
+PATCH 280: a damage-event poster FUN_0000_be8b -- DGROUP near-offset base-loss (SIGSEGV), twin of c047
+(patch 268); reached from the damage-notify a93e on the collision/damage path (patch 271).
+
+ASM-verified (asm 0xbe8b-0xbeb6; DS=DGROUP=0x1c00): param_1 is a small DGROUP-relative descriptor index
+(asm bx=ax=param_1; `mov ax,[bx-0x601f]` reads the damage-type byte al=word[DG:(param_1+0x9fe1)]).
+Ghidra deref'd (param_1-0x601f) as a host pointer -> SIGSEGV; rebased to the DGROUP model, posting the
+extender damage event via e2c2 when the type is valid (!=0xff, <0x10).  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -30191,10 +30191,14 @@
+ undefined4 __allregs FUN_0000_be8b(int param_1,undefined4 param_2)
+ 
+ {
++  /* PATCH 280: a damage-event poster (asm 0xbe8b-0xbeb6; DS=DGROUP=0x1c00) -- twin of c047 (patch 268).
++   * param_1 is a small DGROUP-relative descriptor index (asm bx=ax=param_1; `mov ax,[bx-0x601f]` reads
++   * the damage type byte al=word[DG:(param_1+0x9fe1)]); Ghidra deref'd (param_1-0x601f) as a host pointer
++   * -> SIGSEGV when the collision/damage path reaches it (patch 271).  Rebased to the DGROUP model. */
+   byte bVar1;
+-  
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   if (param_1 != -1) {
+-    bVar1 = (byte)*(undefined2 *)(param_1 + -0x601f);
++    bVar1 = (byte)*(unsigned short *)(dg + (unsigned short)((unsigned short)param_1 + 0x9fe1));
+     DAT_2000_5fdd = param_1;
+     if ((bVar1 != 0xff) && (bVar1 < 0x10)) {
+       FUN_0000_e2c2(CONCAT22((int)((ulong)param_2 >> 0x10),param_1));

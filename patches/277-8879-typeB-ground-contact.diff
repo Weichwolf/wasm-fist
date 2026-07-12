@@ -1,0 +1,24 @@
+PATCH 277: the object-type-B ground-contact sub-update FUN_0000_8879 -- DGROUP near-offset base-loss
+(SIGSEGV), dispatched by 87df (patch 250).
+
+ASM-verified (asm 0x8879-0x8885; DS=DGROUP=0x1c00): di=object near offset in param_1; when [di+0x16]&8
+(on-ground) sets word[di+0xb1]=0x4b.  Ghidra deref'd param_1 as a host pointer -> SIGSEGV; rebased to the
+DGROUP model.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -22370,8 +22370,13 @@
+ void __allregs FUN_0000_8879(int param_1)
+ 
+ {
+-  if ((*(byte *)(param_1 + 0x16) & 8) != 0) {
+-    *(undefined2 *)(param_1 + 0xb1) = 0x4b;
++  /* PATCH 277: object-type-B ground-contact sub-update (asm 0x8879-0x8885; DS=DGROUP=0x1c00), dispatched
++   * by 87df.  di=object near offset in param_1; when [di+0x16]&8 (landed/on-ground) sets the recovery
++   * timer word[di+0xb1]=0x4b.  Ghidra deref'd param_1 as a host pointer -> SIGSEGV; rebased. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  if ((dg[(unsigned short)(di + 0x16)] & 8) != 0) {
++    *(unsigned short *)(dg + (unsigned short)(di + 0xb1)) = 0x4b;
+   }
+   return;
+ }

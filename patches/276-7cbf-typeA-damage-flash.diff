@@ -1,0 +1,28 @@
+PATCH 276: the object-type-A damage-flash sub-update FUN_0000_7cbf -- DGROUP near-offset base-loss
+(SIGSEGV), dispatched by the 7c1d template (patch 244); twin of 88ce (patch 275).
+
+ASM-verified (asm 0x7cbf-0x7cd4; DS=DGROUP=0x1c00): di=object near offset in param_1; calls 9ffc then
+arms the two damage-flash timers [di+0xcc]/[di+0xcd]=3 unless [di+0x3d]&0xe0.  Ghidra deref'd param_1 as
+a host pointer -> SIGSEGV; rebased to the DGROUP model.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -20673,10 +20673,15 @@
+ void __allregs FUN_0000_7cbf(int param_1)
+ 
+ {
+-  FUN_1000_9ffc(param_1);
+-  if ((*(byte *)(param_1 + 0x3d) & 0xe0) == 0) {
+-    *(undefined1 *)(param_1 + 0xcc) = 3;
+-    *(undefined1 *)(param_1 + 0xcd) = 3;
++  /* PATCH 276: object-type-A damage-flash sub-update (asm 0x7cbf-0x7cd4; DS=DGROUP=0x1c00), dispatched
++   * by 7c1d -- twin of 88ce (patch 275) with flash timers at [di+0xcc]/[di+0xcd].  di=object near offset
++   * in param_1; Ghidra deref'd it as a host pointer -> SIGSEGV.  Rebased to the DGROUP model. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  FUN_1000_9ffc((int)di);
++  if ((dg[(unsigned short)(di + 0x3d)] & 0xe0) == 0) {
++    dg[(unsigned short)(di + 0xcc)] = 3;
++    dg[(unsigned short)(di + 0xcd)] = 3;
+   }
+   return;
+ }

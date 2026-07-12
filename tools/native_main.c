@@ -1140,6 +1140,17 @@ int fist_extender_gate(void) {
      * this is NOT yet recognizable first pixels -- the true remaining gate is the colormap data path (and
      * the faithful viewport-dimension source), UPSTREAM of this now-validated render.  NOT accepted; kept
      * gated as the next-iteration seam. */
+    /* FIST_ENGFB (diagnostic, default OFF): dump the ENGINE-side framebuffer (0xA0000) at the FIRST
+     * op-0x0c gate -- captured BEFORE any FIST_R3D extender-render seam runs, so it is purely whatever the
+     * engine's own mission render pass (459a->22dd->2322 voxel column engine) wrote.  The RUNMS/DUMPTICK
+     * watchdogs cannot fire in-mission (the modal loop never re-enters fist_timer_pump), so this gate is
+     * the only in-mission capture point.  Shim-only; does not touch the engine or the 19 verify flows. */
+    if (op == 0x0c && g_ext_ready) {
+        const char *ef = getenv("FIST_ENGFB");
+        if (ef) { static int en = 0; if (en++ == 0) { fist_dump_framebuffer(ef);
+            const char *er = getenv("FIST_ENGFB_RAW");
+            if (er) { FILE *f = fopen(er, "wb"); if (f) { fwrite(g_mem + 0xA0000, 1, 64000, f); fclose(f); } } } }
+    }
     if (op == 0x0c && g_ext_ready && getenv("FIST_R3D")) {
         uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
         uint8_t *tcb = g_mem + tcb_lin;

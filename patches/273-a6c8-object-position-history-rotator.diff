@@ -1,0 +1,56 @@
+PATCH 273: the object position-history ring rotator FUN_1000_a6c8 -- DGROUP near-offset base-loss
+(SIGSEGV), dispatched via aa37 from the object-type-B UPDATE method 87df (patch 250).
+
+ASM-verified (asm 0x1a6c8-0x1a721; DS=DGROUP=0x1c00): di=object near offset in param_1 (aa37 forwards
+it faithfully); a6c8's asm reads DI and Ghidra deref'd param_1 as a host pointer -> SIGSEGV.  Every 0xc
+frames it clears the counter [di+0x6d] and shifts the object's 7-sample WORD position history down two
+paired lanes (0x82<-0x7e<-0x7a<-0x76<-0x72<-0x6e<-[di+5]; 0x84<-0x80<-0x7c<-0x78<-0x74<-0x70<-[di+9]).
+Pure DGROUP-offset rebase.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -62647,21 +62647,30 @@
+ void __allregs FUN_1000_a6c8(int param_1)
+ 
+ {
+-  *(char *)(param_1 + 0x6d) = *(char *)(param_1 + 0x6d) + '\x01';
+-  if (0xb < *(byte *)(param_1 + 0x6d)) {
+-    *(undefined1 *)(param_1 + 0x6d) = 0;
+-    *(undefined2 *)(param_1 + 0x82) = *(undefined2 *)(param_1 + 0x7e);
+-    *(undefined2 *)(param_1 + 0x84) = *(undefined2 *)(param_1 + 0x80);
+-    *(undefined2 *)(param_1 + 0x7e) = *(undefined2 *)(param_1 + 0x7a);
+-    *(undefined2 *)(param_1 + 0x80) = *(undefined2 *)(param_1 + 0x7c);
+-    *(undefined2 *)(param_1 + 0x7a) = *(undefined2 *)(param_1 + 0x76);
+-    *(undefined2 *)(param_1 + 0x7c) = *(undefined2 *)(param_1 + 0x78);
+-    *(undefined2 *)(param_1 + 0x76) = *(undefined2 *)(param_1 + 0x72);
+-    *(undefined2 *)(param_1 + 0x78) = *(undefined2 *)(param_1 + 0x74);
+-    *(undefined2 *)(param_1 + 0x72) = *(undefined2 *)(param_1 + 0x6e);
+-    *(undefined2 *)(param_1 + 0x74) = *(undefined2 *)(param_1 + 0x70);
+-    *(undefined2 *)(param_1 + 0x6e) = *(undefined2 *)(param_1 + 5);
+-    *(undefined2 *)(param_1 + 0x70) = *(undefined2 *)(param_1 + 9);
++  /* PATCH 273: object position-history ring rotator (asm 0x1a6c8-0x1a721; DS=DGROUP=0x1c00), dispatched
++   * via aa37 from the object-type-B UPDATE (87df).  di=object near offset in param_1 (asm reads DI);
++   * Ghidra deref'd it as a host pointer -> SIGSEGV.  Every 0xc frames it shifts the 7-slot WORD position
++   * history (0x82<-0x7e<-0x7a<-0x76<-0x72<-0x6e<-[di+5], and the paired +2 lane 0x84<-0x80<-...<-[di+9]).
++   * Pure DGROUP-offset rebase; no other change. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  dg[(unsigned short)(di + 0x6d)] = dg[(unsigned short)(di + 0x6d)] + 1;
++  if (0xb < dg[(unsigned short)(di + 0x6d)]) {
++    dg[(unsigned short)(di + 0x6d)] = 0;
++#define A6C8W(o) (*(unsigned short *)(dg + (unsigned short)(di + (o))))
++    A6C8W(0x82) = A6C8W(0x7e);
++    A6C8W(0x84) = A6C8W(0x80);
++    A6C8W(0x7e) = A6C8W(0x7a);
++    A6C8W(0x80) = A6C8W(0x7c);
++    A6C8W(0x7a) = A6C8W(0x76);
++    A6C8W(0x7c) = A6C8W(0x78);
++    A6C8W(0x76) = A6C8W(0x72);
++    A6C8W(0x78) = A6C8W(0x74);
++    A6C8W(0x72) = A6C8W(0x6e);
++    A6C8W(0x74) = A6C8W(0x70);
++    A6C8W(0x6e) = A6C8W(5);
++    A6C8W(0x70) = A6C8W(9);
++#undef A6C8W
+   }
+   return;
+ }

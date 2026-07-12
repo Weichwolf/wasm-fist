@@ -1,0 +1,56 @@
+PATCH 272: the object-type-A weapon-cooldown emitter FUN_0000_a9a0 -- DGROUP near-offset base-loss
+(SIGSEGV), dispatched by the 7c1d object-type-A UPDATE template (patch 244).
+
+ASM-verified (asm 0xa9a0-0xa9e9; DS=DGROUP=0x1c00): di=object near offset arrives in param_1 (7c1d
+dispatches its per-object methods with the near offset as arg0), but a9a0's asm reads DI and Ghidra
+mapped the object to the uninitialised param_2 -> host-pointer deref SIGSEGV.  a9a0 advances two
+cooldown counters ([di+0xa6] gated on [di+0x19]&6, [di+0x52] gated on &0x10), clearing the corresponding
+[di+0x19] bits at rollover (0x40 / 0x70) and posting the weapon-cooldown event via bf3c(0x1b)/bf3c(0x23),
+all guarded by [di+0x3d]&0xe0 == 0.  Rebased every [di+off] to the DGROUP model; bf3c keeps the object
+as a near offset (param_3), matching patch 263.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -27221,22 +27221,29 @@
+ void __allregs FUN_0000_a9a0(undefined2 param_1,int param_2)
+ 
+ {
+-  if ((*(byte *)(param_2 + 0x3d) & 0xe0) == 0) {
+-    if (((*(byte *)(param_2 + 0x19) & 6) != 0) &&
+-       (*(char *)(param_2 + 0xa6) = *(char *)(param_2 + 0xa6) + '\x01',
+-       0x3f < *(byte *)(param_2 + 0xa6))) {
+-      *(undefined1 *)(param_2 + 0xa6) = 0;
+-      *(byte *)(param_2 + 0x19) = *(byte *)(param_2 + 0x19) & 0xf9;
+-      if ((*(byte *)(param_2 + 0x19) & 0x10) == 0) {
+-        FUN_0000_bf3c(0x1b,param_1,param_2);
++  /* PATCH 272: object-type-A weapon-cooldown emitter (asm 0xa9a0-0xa9e9; DS=DGROUP=0x1c00), dispatched
++   * by the 7c1d template.  di = object near offset in param_1 (asm reads DI); Ghidra mapped it to the
++   * uninitialised param_2 -> host deref SIGSEGV.  Rebased all [di+off] to the DGROUP model; bf3c keeps
++   * the object as a near offset (param_3), matching patch 263.  Mission-cascade only. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  (void)param_2;
++  if ((dg[(unsigned short)(di + 0x3d)] & 0xe0) == 0) {
++    if (((dg[(unsigned short)(di + 0x19)] & 6) != 0) &&
++       (dg[(unsigned short)(di + 0xa6)] = dg[(unsigned short)(di + 0xa6)] + 1,
++        0x3f < dg[(unsigned short)(di + 0xa6)])) {
++      dg[(unsigned short)(di + 0xa6)] = 0;
++      dg[(unsigned short)(di + 0x19)] = dg[(unsigned short)(di + 0x19)] & 0xf9;
++      if ((dg[(unsigned short)(di + 0x19)] & 0x10) == 0) {
++        FUN_0000_bf3c(0x1b,param_1,(int)di);
+       }
+     }
+-    if (((*(byte *)(param_2 + 0x19) & 0x10) != 0) &&
+-       (*(char *)(param_2 + 0x52) = *(char *)(param_2 + 0x52) + '\x01',
+-       0x6f < *(byte *)(param_2 + 0x52))) {
+-      *(undefined1 *)(param_2 + 0x52) = 0;
+-      *(byte *)(param_2 + 0x19) = *(byte *)(param_2 + 0x19) & 0xef;
+-      FUN_0000_bf3c(0x23,param_1,param_2);
++    if (((dg[(unsigned short)(di + 0x19)] & 0x10) != 0) &&
++       (dg[(unsigned short)(di + 0x52)] = dg[(unsigned short)(di + 0x52)] + 1,
++        0x6f < dg[(unsigned short)(di + 0x52)])) {
++      dg[(unsigned short)(di + 0x52)] = 0;
++      dg[(unsigned short)(di + 0x19)] = dg[(unsigned short)(di + 0x19)] & 0xef;
++      FUN_0000_bf3c(0x23,param_1,(int)di);
+     }
+   }
+   return;

@@ -1,0 +1,80 @@
+PATCH 275: the object-type-B damage-flash sub-update FUN_0000_88ce + the roll-rate integrator
+FUN_1000_9ffc -- DGROUP near-offset base-loss (SIGSEGV), dispatched by 87df (patch 250).
+
+ASM-verified (asm 0x88ce-0x88e3, 0x19ffc-0x1a022; DS=DGROUP=0x1c00): di=object near offset in param_1;
+both funcs deref'd param_1 as a host pointer -> SIGSEGV.  88ce calls 9ffc then arms the two damage-flash
+timers [di+0xc6]/[di+0xc7]=3 unless [di+0x3d]&0xe0.  9ffc decays the roll accumulator [di+0x5d] by
+(|[di+0x55]|>>4) clamped at 0 and steps the bank byte [di+0x5f] up (cap 0xf8) when roll rate >= 0x3c
+(signed) else down to 0.  Rebased both to the DGROUP model.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -22412,10 +22412,15 @@
+ void __allregs FUN_0000_88ce(int param_1)
+ 
+ {
+-  FUN_1000_9ffc(param_1);
+-  if ((*(byte *)(param_1 + 0x3d) & 0xe0) == 0) {
+-    *(undefined1 *)(param_1 + 0xc6) = 3;
+-    *(undefined1 *)(param_1 + 199) = 3;
++  /* PATCH 275: object-type-B damage-flash sub-update (asm 0x88ce-0x88e3; DS=DGROUP=0x1c00), dispatched
++   * by 87df.  di=object near offset in param_1; calls 9ffc then, unless [di+0x3d]&0xe0 set, arms the
++   * two damage-flash timers [di+0xc6]/[di+0xc7]=3.  Rebased to the DGROUP model. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  FUN_1000_9ffc((int)di);
++  if ((dg[(unsigned short)(di + 0x3d)] & 0xe0) == 0) {
++    dg[(unsigned short)(di + 0xc6)] = 3;
++    dg[(unsigned short)(di + 0xc7)] = 3;
+   }
+   return;
+ }
+@@ -61871,28 +61876,32 @@
+ void __allregs FUN_1000_9ffc(int param_1)
+ 
+ {
+-  uint *puVar1;
+-  uint uVar2;
+-  uint uVar3;
+-  
+-  uVar3 = *(uint *)(param_1 + 0x55);
+-  if ((uVar3 & 0x8000) != 0) {
+-    uVar3 = -uVar3;
++  /* PATCH 275: object roll-rate integrator (asm 0x19ffc-0x1a022; DS=DGROUP=0x1c00), called from 88ce.
++   * di=object near offset in param_1; decays the roll accumulator [di+0x5d] by |[di+0x55]|>>4 (clamped
++   * at 0) and steps the bank-angle byte [di+0x5f] up (cap 0xf8) when the roll rate [di+0x55] >= 0x3c,
++   * else down to 0.  Ghidra deref'd param_1 as a host pointer + word-scaled [di+0x55] wrong.  Rebuilt in
++   * the DGROUP model with the asm WORD/BYTE widths and signed 0x3c compare. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  unsigned int ax = *(unsigned short *)(dg + (unsigned short)(di + 0x55));
++  unsigned int old;
++  if ((ax & 0x8000) != 0) {
++    ax = (unsigned short)(-(int)ax);
+   }
+-  puVar1 = (uint *)(param_1 + 0x5d);
+-  uVar2 = *puVar1;
+-  *puVar1 = *puVar1 - (uVar3 >> 4);
+-  if (uVar2 < uVar3 >> 4) {
+-    *(undefined2 *)(param_1 + 0x5d) = 0;
++  ax = ax >> 4;
++  old = *(unsigned short *)(dg + (unsigned short)(di + 0x5d));
++  *(unsigned short *)(dg + (unsigned short)(di + 0x5d)) = (unsigned short)(old - ax);
++  if (old < ax) {
++    *(unsigned short *)(dg + (unsigned short)(di + 0x5d)) = 0;
+   }
+-  if (0x3b < *(int *)(param_1 + 0x55)) {
+-    if (*(byte *)(param_1 + 0x5f) < 0xf8) {
+-      *(char *)(param_1 + 0x5f) = *(char *)(param_1 + 0x5f) + '\x01';
++  if (0x3b < (int)*(short *)(dg + (unsigned short)(di + 0x55))) {
++    if (dg[(unsigned short)(di + 0x5f)] < 0xf8) {
++      dg[(unsigned short)(di + 0x5f)] = dg[(unsigned short)(di + 0x5f)] + 1;
+     }
+     return;
+   }
+-  if (*(char *)(param_1 + 0x5f) != '\0') {
+-    *(char *)(param_1 + 0x5f) = *(char *)(param_1 + 0x5f) + -1;
++  if (dg[(unsigned short)(di + 0x5f)] != 0) {
++    dg[(unsigned short)(di + 0x5f)] = dg[(unsigned short)(di + 0x5f)] - 1;
+   }
+   return;
+ }
