@@ -1,0 +1,95 @@
+PATCH 235: fix FUN_1000_6448 / FUN_1000_6499 (HUD info-panel player/vehicle string builder) --
+the DGROUP:0x7ae0 current-player NEAR-OFFSET base-loss + 0x7c2e vehicle-name table base-loss.
+
+Reached by the mission-start cascade after the 6686 viewport status-text path (patches 231/232/233/234).
+DAT_2000_3ae0 = word[DGROUP:0x7ae0] is published by FUN_0000_502f (patch 228) as a 16-bit NEAR OFFSET
+of the current-player object struct within DGROUP -- Ghidra typed it int** (host pointer, 4-byte) so
+every deref (*DAT_2000_3ae0, [di+0x1b], [di+0x1c], [di+0x40]) was base-lost + int-scaled, and the
+vehicle-name dword table at DGROUP:0x7c2e (mov 0x7c2e(%bx),%eax; bx=word[di]<<2) plus the DGROUP string
+args 0x7c1e/0x7c23 to thunk_FUN_1000_5531 (which derefs its arg as a host ptr == DS:[si]) dropped the
+g_mem+0x1c000 base.  Asm-verified vs re_out/fist_dat_image.bin 0x164a4-0x16506 (both funcs share the tail).
+
+Cascade-only (FIST_CASCADE default OFF; 6448/6499 = the in-mission HUD info panel, unreached by the 19
+menu/dialog flows) => BEHAVIOUR-NEUTRAL for verify.  Sources pristine (re_out/fist.c); build via patch.
+
+--- a/fist.c
++++ b/fist.c
+@@ -55986,19 +55986,29 @@
+   thunk_FUN_1000_5591(uVar1);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
+   FUN_1000_52d1(DAT_2000_3c16,DAT_2000_3c18);
+-  if (DAT_2000_3ae0 != (int *)0x0) {
+-    DAT_2000_3c20 = (*(byte *)((int)DAT_2000_3ae0 + 0x1b) & 3) + 0x31;
+-    DAT_2000_3c25 = (char)DAT_2000_3ae0[0xe] + '1';
+-    DAT_2000_3c27 = *(undefined4 *)(*DAT_2000_3ae0 * 4 + 0x7c2e);
+-    DAT_2000_3c2c = 0x55;
+-    if ((DAT_2000_3ae0[0x20] & 1U) != 0) {
+-      DAT_2000_3c2c = 0x41;
++  /* PATCH 235: HUD info-panel player/vehicle string builder (asm 0x164a4-0x16506).  DAT_2000_3ae0 =
++     word[DGROUP:0x7ae0] is the current-player object NEAR OFFSET (published by 502f, patch 228), NOT a
++     host pointer -> deref through dg=g_mem+0x1c000.  Ghidra base-lost di, int-scaled the WORD fields
++     ([di+0x1c] read as [0xe]*4, [di+0x40] as [0x20]*4), and dropped the g_mem+0x1c000 base on the 0x7c2e
++     vehicle-name dword table AND on the 0x7c1e/0x7c23 DGROUP string args to 5531 (which derefs its arg as
++     a host ptr == DS:[si] = g_mem+0x1c000+si; &DAT_2000_3c2c already equalled dg+0x7c2c so it was fine). */
++  {
++    unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++    unsigned int di = *(unsigned short *)(dg + 0x7ae0);              /* mov 0x7ae0,%di */
++    if (di != 0) {                                                  /* or %di,%di; je */
++      dg[0x7c20] = (dg[(unsigned short)(di + 0x1b)] & 3) + 0x31;    /* mov 0x1b(%di),%al; and 3; add 0x31 */
++      dg[0x7c25] = dg[(unsigned short)(di + 0x1c)] + 0x31;          /* mov 0x1c(%di),%al; add 0x31 */
++      *(unsigned int *)(dg + 0x7c27) =                              /* mov 0x7c2e(%bx),%eax; mov [0x7c27] */
++        *(unsigned int *)(dg + 0x7c2e + (*(unsigned short *)(dg + di) << 2)); /* bx = word[di]<<2 */
++      dg[0x7c2c] = 0x55;                                            /* movb [0x7c2c],'U' */
++      if (*(unsigned short *)(dg + (unsigned short)(di + 0x40)) & 1) /* testw 0x40(%di),1 */
++        dg[0x7c2c] = 0x41;                                          /* movb [0x7c2c],'A' */
++      thunk_FUN_1000_5531((char *)(dg + 0x7c1e));                   /* mov si,0x7c1e; call 552b */
++      FUN_1000_52d1(DAT_2000_3c16,DAT_2000_3c1c + -4);
++      thunk_FUN_1000_5531((char *)(dg + 0x7c2c));                   /* mov si,0x7c2c; call 552b */
++      FUN_1000_52d1(DAT_2000_3c16,DAT_2000_3c18 + 0xe);
++      thunk_FUN_1000_5531((char *)(dg + 0x7c23));                   /* mov si,0x7c23; call 552b */
+     }
+-    thunk_FUN_1000_5531(0x7c1e);
+-    FUN_1000_52d1(DAT_2000_3c16,DAT_2000_3c1c + -4);
+-    thunk_FUN_1000_5531((undefined1 *)&DAT_2000_3c2c);
+-    FUN_1000_52d1(DAT_2000_3c16,DAT_2000_3c18 + 0xe);
+-    thunk_FUN_1000_5531(0x7c23);
+   }
+   return;
+ }
+@@ -56010,19 +56020,24 @@
+ 
+ {
+   FUN_1000_52d1(param_1,param_2);
+-  if (DAT_2000_3ae0 != (int *)0x0) {
+-    DAT_2000_3c20 = (*(byte *)((int)DAT_2000_3ae0 + 0x1b) & 3) + 0x31;
+-    DAT_2000_3c25 = (char)DAT_2000_3ae0[0xe] + '1';
+-    DAT_2000_3c27 = *(undefined4 *)(*DAT_2000_3ae0 * 4 + 0x7c2e);
+-    DAT_2000_3c2c = 0x55;
+-    if ((DAT_2000_3ae0[0x20] & 1U) != 0) {
+-      DAT_2000_3c2c = 0x41;
++  /* PATCH 235: identical HUD player/vehicle string block as 6448 (shared asm tail 0x164a4-0x16506). */
++  {
++    unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++    unsigned int di = *(unsigned short *)(dg + 0x7ae0);
++    if (di != 0) {
++      dg[0x7c20] = (dg[(unsigned short)(di + 0x1b)] & 3) + 0x31;
++      dg[0x7c25] = dg[(unsigned short)(di + 0x1c)] + 0x31;
++      *(unsigned int *)(dg + 0x7c27) =
++        *(unsigned int *)(dg + 0x7c2e + (*(unsigned short *)(dg + di) << 2));
++      dg[0x7c2c] = 0x55;
++      if (*(unsigned short *)(dg + (unsigned short)(di + 0x40)) & 1)
++        dg[0x7c2c] = 0x41;
++      thunk_FUN_1000_5531((char *)(dg + 0x7c1e));
++      FUN_1000_52d1(DAT_2000_3c16,DAT_2000_3c1c + -4);
++      thunk_FUN_1000_5531((char *)(dg + 0x7c2c));
++      FUN_1000_52d1(DAT_2000_3c16,DAT_2000_3c18 + 0xe);
++      thunk_FUN_1000_5531((char *)(dg + 0x7c23));
+     }
+-    thunk_FUN_1000_5531(0x7c1e);
+-    FUN_1000_52d1(DAT_2000_3c16,DAT_2000_3c1c + -4);
+-    thunk_FUN_1000_5531((undefined1 *)&DAT_2000_3c2c);
+-    FUN_1000_52d1(DAT_2000_3c16,DAT_2000_3c18 + 0xe);
+-    thunk_FUN_1000_5531(0x7c23);
+   }
+   return;
+ }
