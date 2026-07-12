@@ -1,0 +1,100 @@
+PATCH 239: faithful reconstruction of the MGAVIDEO pixel-mask span HIT-TEST FUN_0000_25d1
+(asm-verified vs re_out/fist_mga_image.bin 0x25d1-0x2603).
+
+Dispatched as the MGA far method vector DGROUP:0x6ac from the ENGINE cursor hit-test path
+1eb4 -> 4aaa (patch 240 threads 4aaa's dropped cx/dx/bx args + captures this function's CF).
+Under FIST_COOP_TICK=1 in-mission it SIGSEGVs because Ghidra dropped BOTH:
+  (a) the DGROUP rebase of the 0x7c8 scanline-offset-table read `add dx,[si+0x7c8]` -- rendered as
+      a bare near-NULL `*(int*)(param_1*2+0x7c8)` (deref of ~0x8bc -> SIGSEGV); patch-119/121 class;
+  (b) the `push ds; mov ds,[bx]` span-data SEGMENT load -- rendered the span walk from a host
+      `(uint*)0x0` (NULL deref) and at 4-byte `uint*` stride instead of the asm 2-byte `lods ax`.
+Rebuilt in the DGROUP-offset model: rowtable at DGROUP:0x7c8 (word entries); span segment =
+word[DGROUP:bx]; span WORDs walked from that segment offset 0.  Returns x86 CF via g_fist_cf
+(stc=found/1, clc=not-found/0) which 4aaa consumes (`jb 0x4ae3` -> DGROUP:0x7aea).
+
+asm map:
+   si=cx; si+=si; dx += word[DG + cx*2 + 0x7c8]         ; target position
+   di=0; ds = word[DG + bx]; S = ds<<4; si=0; ax=0
+ L_add:  di += ax
+ L_load: ax = word[S+si]; si += 2
+         b0 = ax&1; ax >>= 1
+         if (b0==0) { if(ax==0) ret clc; if(dx<di) ret clc; di+=ax; if(dx>=di) goto L_load; ret stc; }
+         b1 = ax&1; ax >>= 1
+         if (b1==0) { di += ax; goto L_load; }           ; jae 0x25e2 (add di,ax) then reload
+         ax = word[S+si]; si += 2; di += ax; goto L_load  ; 0x25ed
+
+Cascade-only: reached only via the in-mission 0x200-flag cursor track (the menu/dialog clicks take
+4aaa's 0x180 branch, never [0x6ac]); the walk is bounded (uint16 si, seg<<4 <= 0xffff0) so it is
+crash-free for any input -> gives FIST_COOP_TICK=1 a deterministic no-crash anchor.  BEHAVIOUR-NEUTRAL
+for the 19 verify flows.  Source pristine; fist_mga.c via build/.  Portable C.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -5792,41 +5792,34 @@
+ void __allregs FUN_0000_25d1(int param_1,int param_2,undefined2 *param_3)
+ 
+ {
+-  uint uVar1;
+-  uint uVar2;
+-  uint uVar3;
+-  uint *puVar4;
+-  uint *puVar5;
+-  uint uVar6;
+-  
+-  uVar3 = param_2 + *(int *)(param_1 * 2 + 0x7c8);
+-  uVar6 = 0;
+-  puVar4 = (uint *)0x0;
+-  uVar1 = 0;
+-  do {
+-    uVar6 = uVar6 + uVar1;
+-    puVar5 = puVar4;
+-    while( true ) {
+-      while( true ) {
+-        puVar4 = puVar5 + 1;
+-        uVar1 = *puVar5;
+-        uVar2 = uVar1 >> 1;
+-        if ((uVar1 & 1) != 0) break;
+-        if ((uVar2 == 0) || (uVar3 < uVar6)) {
+-          return;
+-        }
+-        uVar6 = uVar6 + uVar2;
+-        puVar5 = puVar4;
+-        if (uVar3 < uVar6) {
+-          return;
+-        }
+-      }
+-      uVar1 = uVar1 >> 2;
+-      if ((uVar2 & 1) == 0) break;
+-      uVar6 = uVar6 + *puVar4;
+-      puVar5 = puVar5 + 2;
++  /* PATCH 239: faithful asm reconstruction (re_out/fist_mga_image.bin 0x25d1-0x2603).  Ghidra dropped
++     the DGROUP rebase of the 0x7c8 rowtable read AND the `mov ds,[bx]` span-segment load (walked a host
++     (uint*)0x0 at 4-byte stride).  Rebuilt in the DGROUP-offset model; returns CF via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  uint8_t *D = g_mem + 0x1c000;
++  uint16_t cx = (uint16_t)param_1;
++  uint16_t dx = (uint16_t)((uint16_t)param_2 + *(uint16_t *)(D + (uint16_t)(cx * 2 + 0x7c8)));
++  uint16_t di = 0, ax = 0, si = 0;
++  uint16_t seg = *(uint16_t *)(D + (uint16_t)(uintptr_t)param_3);   /* mov ds,[bx] */
++  uint8_t *S = g_mem + ((uint32_t)seg << 4);
++  di = (uint16_t)(di + ax);                             /* L_add entry (ax==0) */
++ L_load:
++  ax = *(uint16_t *)(S + si); si = (uint16_t)(si + 2);  /* lods ax */
++  {
++    uint16_t b0 = ax & 1; ax = (uint16_t)(ax >> 1);     /* shr ax,1 */
++    if (b0 == 0) {                                       /* jae 0x25f2 */
++      if (ax == 0)  { g_fist_cf = 0; return; }           /* je 0x2601  -> clc */
++      if (dx < di)  { g_fist_cf = 0; return; }           /* jb 0x2601  -> clc */
++      di = (uint16_t)(di + ax);                          /* add di,ax */
++      if (dx >= di) goto L_load;                          /* jae 0x25e4 */
++      g_fist_cf = 1; return;                              /* stc (found) */
+     }
+-  } while( true );
++    uint16_t b1 = ax & 1; ax = (uint16_t)(ax >> 1);     /* shr ax,1 */
++    if (b1 == 0) { di = (uint16_t)(di + ax); goto L_load; }   /* jae 0x25e2: add di,ax; reload */
++    ax = *(uint16_t *)(S + si); si = (uint16_t)(si + 2); /* 0x25ed: lods ax */
++    di = (uint16_t)(di + ax);                            /* add di,ax */
++    goto L_load;                                          /* jmp 0x25e4 */
++  }
+ }
+ 
+ 

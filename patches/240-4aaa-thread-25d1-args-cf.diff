@@ -1,0 +1,42 @@
+PATCH 240: thread FUN_0000_4aaa's dropped 0x6ac-vector (25d1) register args + capture its CF return
+(asm-verified vs re_out/fist_dat_image.bin 0x4aaa-0x4ae9).
+
+4aaa is the display-element ACTIVATE method dispatched by the cursor hit-test 1eb4 (via
+`call [di+0x4660]`, si preserved = the cursor-coord node HG(0x18e2)).  On the 0x200/bit0 track the asm
+sets up the MGA pixel-mask span hit-test 25d1 and consumes its carry:
+   4acd: mov bx,0x7aa4          ; bx = the geometry/mask buffer near offset
+   4ad0: mov cx,[si+4]          ; cx = word[coord+4]  (cursor x, si = HG(0x18e2))
+   4ad3: mov dx,[si+6]          ; dx = word[coord+6]  (cursor y)
+   4ad6: call DWORD ds:0x6ac    ; -> MGA FUN_0000_25d1 (patch 239)
+   4ada: jb   0x4ae3            ; CF=1 -> DGROUP:0x7aea = 1 (hit)
+   4adc: mov  BYTE ds:0x7aea,0  ; else 0 (miss)
+Ghidra dropped all three register args (rendered the indirect call `()`) AND folded the CF test to a
+hardcoded-false `bVar1` (`jb 0x4ae3` -> never sets 0x7aea=1).  Thread cx/dx/bx faithfully (25d1's C
+positional order = param_1=cx, param_2=dx, param_3=bx-near-offset) and read the carry back via the
+shared g_fist_cf global that patch 239's 25d1 publishes.  Only the 0x200/bit0 branch changes; the menu
+CLICK path (0x180 -> code_r0x00004abe) and the 0x400 miss path are byte-untouched -> BEHAVIOUR-NEUTRAL
+for the 19 verify flows (this branch is the in-mission cursor-track hit-test, unreached by the menu).
+Source pristine; fist.c via build/.  Portable C.
+--- a/fist.c
++++ b/fist.c
+@@ -13527,8 +13527,18 @@
+   if ((param_1 & 0x180) == 0) {
+     if ((param_1 & 0x400) == 0) {
+       if (((param_1 & 0x200) == 0) && ((param_1 & 1) == 0)) goto code_r0x00004abe;
+-      bVar1 = false;
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6ac)))();
++      /* PATCH 240: thread the dropped 25d1 args (bx=0x7aa4, cx=[coord+4], dx=[coord+6];
++         coord = the cursor-coord node HG(0x18e2), preserved in si from the 1eb4 hit-test) and read
++         its carry via g_fist_cf (asm `jb 0x4ae3`). */
++      {
++        extern unsigned char g_fist_cf;
++        uint16_t si = *(uint16_t *)(g_mem + 0x1c000 + 0x18e2);
++        int cxv = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(si + 4));
++        int dxv = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(si + 6));
++        g_fist_cf = 0;
++        (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6ac)))(cxv,dxv,(undefined2 *)(uintptr_t)0x7aa4);
++        bVar1 = (g_fist_cf != 0);
++      }
+       if (bVar1) {
+         DAT_2000_3aea = 1;
+         return;
