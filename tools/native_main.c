@@ -1155,6 +1155,16 @@ int fist_extender_gate(void) {
         *(uint32_t*)(xb+0x90f8) = vh;
         m_ext_FUN_0000_85d0();                                            /* camera setup from TCB */
         m_ext_FUN_0000_93c0();                                            /* colormap texture-map -> fb */
+        /* MISSION DAC PALETTE UPLOAD.  The colormap-remap LUT (ext 9e60/9ec0) reduces the C32.KLC
+         * colormap texels to nearest indices in the MISSION VGA palette at ext+0x5598 -- the raw 6-bit
+         * 256x3 palette loaded from 532.pal by the op-0x18 map-load (FUN_0000_6032).  So the framebuffer
+         * bytes that 93c0 writes are indices into 5598; the DAC must hold 5598 for them to become visible
+         * colours.  (The engine's own retrace-upload buffer word[DGROUP:0x782] carries a grayscale ramp
+         * here, NOT the mission palette -- the mission palette lives extender-side.)  Install it to the
+         * VGA DAC via the real port path (mirrors the extender KDV uploader 746b, sourced from 5598;
+         * 532.pal is already 6-bit so no >>2).  Idempotent, once per rendered frame. */
+        { extern void out(int,int); uint8_t *mp = xb + 0x5598;
+          out(0x3c8, 0); for (int pi = 0; pi < 768; pi++) out(0x3c9, mp[pi]); }
         *(uint32_t*)(xb+0xc93) = save_c93;
         if (getenv("FIST_R3D_PROBE")) {
             static int rn = 0;
@@ -1171,6 +1181,21 @@ int fist_extender_gate(void) {
                  * fire post-render because the mission loop does not re-enter fist_timer_pump).  For the
                  * AE-vs-oracle baseline measurement. */
                 { const char *dp = getenv("FIST_R3D_DUMP"); if (dp && rn==1) fist_dump_framebuffer(dp); }
+                if (getenv("FIST_R3D_PROBE") && rn==1) {
+                    /* VIEWPORT-DIM FRONTIER (frontier 2, docs/stage1.md).  The engine's viewport-configure
+                     * FUN_0000_ddff writes TCB+0x1e(width)/+0x22(height) from the rect at word[DGROUP:0x156a]
+                     * (=DAT_1000_d56a) fields WORD [+6/+8/+a/+c] (asm 0xde0b.., objdump-verified).  Ghidra
+                     * typed d56a int** -> the reads int-scaled + base-lost.  BUT the deeper root is upstream:
+                     * this rect's viewport sub-rect fields are NEVER populated (all 0 below), and ddff is a
+                     * method-vector target not observed running in-mission -> TCB dims stay 0, so the seam
+                     * forces 320x200.  Reported for the next iteration. */
+                    uint16_t rp = *(uint16_t*)(g_mem+0x1d56a);
+                    uint8_t *rr = g_mem+0x1c000+rp;
+                    fprintf(stderr, "[vp] d56a=%04x rect[0,x1,y1,x2,y2]=%d,%d,%d,%d,%d ; TCB+0x1e(w)=%u +0x22(h)=%u (0 => seam forces 320x200)\n",
+                        rp, *(int16_t*)(rr+0), *(int16_t*)(rr+6), *(int16_t*)(rr+8),
+                        *(int16_t*)(rr+0xa), *(int16_t*)(rr+0xc),
+                        *(uint16_t*)(tcb+0x1e), *(uint16_t*)(tcb+0x22));
+                }
             }
         }
         return 0;
