@@ -1,0 +1,63 @@
+PATCH 213: reconstruct FUN_1000_184b's bit7 flag-path (the 1345/0d70 unlink prefix that patch 023
+stubbed with a warn-and-fall-through).  Asm-verified vs re_out/fist_dat_image.bin 0x11837..0x1184b.
+
+THE BIT7 BRANCH (asm).  184b's entry (0x1184b) ORs 0x22 into the struct flag byte es:[bx+2] and, if
+the RESULT has bit7 set (the caller pre-set it), takes `js 0x11837` -- a BACKWARD jump to a prologue
+block that UNLINKS an already-allocated node for this (cx,bx) struct before the normal (re)allocation:
+
+    11837  push ax ; push bx ; push cx ; push bp      ; save the alloc registers
+    1183b  call 0x11345                               ; r = 1345(...) : search the 3 free lists
+    1183e  jb   0x11845                               ; CF=1 (not found) -> skip the unlink
+    11840  mov  ds,ax                                 ; DS = found node segment (1345 returns ax)
+    11842  call 0x10d70                               ; unlink the node from the free list
+    11845  pop bp ; pop cx ; pop bx ; pop ax          ; restore
+    11849  jmp  0x11860                               ; fall through to the normal alloc (mov bp,0x16d4;
+                                                      ;   mov [bp+0x1e],bx ; call 0a31 ; ...)
+
+So the bit7 path is a PREFIX: free the stale allocation, then re-allocate.  The current stub already
+falls through to 0x11860 (structurally the `jmp 0x11860`), so the ONLY missing work is the 1345 search
++ 0d70 unlink itself -- both already reconstructed for the boot/release paths:
+  - 1345 (patch 065): the 3-list object search 0x11345->135f.  asm 135f matches node[6]==BX && node[8]==CX
+    and returns the node segment (CF=0/found) or 0 (CF=1).  184b's main path writes es:[6]=bx (near
+    offset) / es:[8]=cx (DGROUP seg) into the descriptor it carves, so the search keys here are
+    param_1=cx (=node[8]) and param_2=bx (=node[6]) -> FUN_1000_1345(cx, bx) (identical arg order to the
+    original Ghidra `FUN_1000_1345(param_2, param_4)`; found <=> return != 0).
+  - 0d70 (patches 025/184): the free-list unlink.  Its param_1 is the MEMMGR CONTROL BLOCK
+    (BP-relative frame, g_mem+0x1c000+0x16d4); the node to unlink is passed via the g_mm_ds cursor.  The
+    asm sets DS=the found node (`mov ds,ax`) before the call, so g_mm_ds = (uint16_t)r here (exactly the
+    096c pattern in patch 184: set g_mm_ds=node, call 0d70(ctl)).
+
+Ghidra had folded this whole branch into `if(((char)*pbVar1<'\0') && (uVar3=param_5, FUN_1000_1345(...),
+!(bool)uVar4)) FUN_1000_0d70(uVar3)` -- with uVar4 a dead hardcoded-false (=> the CF gate inverted) and
+0d70 handed param_5 (the wrong argument).  This reconstruction restores the faithful CF gate (found ->
+unlink) and the correct control-block/node split, then falls through to the alloc exactly as the asm.
+
+Reached on the ACCEPT mission cascade (the mission-setup device alloc arrives with struct[+2] bit7 set,
+per docs/stage1.md).  Behaviour-neutral for the 19 boot/menu MEMMGR flows: they never set bit7 (the
+stub's warn never fired on them; default boot rc=0 + all 19 flows PASS unchanged).  cx/bx/ax are C
+locals (not the reg-file), so the 1345/0d70 calls do not perturb the fall-through alloc; g_mm_cf is
+re-cleared before 0a31 as before.  Sources pristine; fist.c via build/.
+--- a/fist.c
++++ b/fist.c
+@@ -41837,11 +41837,16 @@
+   uint uVar2;
+   if (ax == 0) ax = 1;                               /* cmp ax,1; adc ax,0 */
+   MM_S8(cx, bx + 2) |= 0x22;                         /* orb es:[bx+2],0x22 */
+-  if (MM_S8(cx, bx + 2) & 0x80) {                    /* js .flag: bit7 set (1345/0d70 path) */
+-    static int warned;
+-    if (!warned) { warned = 1;
+-      fprintf(stderr, "[memmgr] FUN_1000_184b flag-path (struct[+2] bit7 set) reached -- "
+-                      "unimplemented follow-on (not on the boot alloc path)\n"); }
++  if (MM_S8(cx, bx + 2) & 0x80) {                    /* js .flag: bit7 set (1345/0d70 unlink prefix) */
++    /* PATCH 213 (asm 0x11837): a node for this (cx,bx) struct is already allocated + flagged for
++       release -- search the free lists and, if FOUND, unlink it, THEN fall through to the alloc
++       (asm jmp 0x11860).  1345(cx=DGROUP seg -> node[8], bx=near off -> node[6]); 0d70's arg = the
++       MEMMGR control block (g_mem+0x1c000+0x16d4, patch 184); the node is passed via g_mm_ds. */
++    undefined4 r = FUN_1000_1345(cx, bx);            /* call 1345 : search the 3 free lists */
++    if ((uint16_t)r != 0) {                          /* jb 0x11845: skip the unlink when NOT found */
++      g_mm_ds = (uint16_t)r;                         /* mov ds,ax : DS = found node segment */
++      FUN_1000_0d70((int)(uintptr_t)(g_mem + 0x1c000 + 0x16d4)); /* call 0d70 : unlink from free list */
++    }
+   }
+   *(undefined2 *)(g_mem + 0x1c000 + 0x16f2) = bx;    /* mov bp,0x16d4; mov [bp+0x1e],bx -> DGROUP:0x16f2 */
+   g_mm_cf = 0;
