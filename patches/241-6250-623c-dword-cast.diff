@@ -1,0 +1,55 @@
+PATCH 241: DWORD (uint*) casts on FUN_0000_6250's RESOURCE-archive header/directory derefs of DAT_623c
+(asm-verified vs re_out/fist_image.bin; completes what PATCH 237's description promised).
+
+THE DETERMINISM ROOT of the collapsed in-mission colormap (uniform terrain).  DAT_623c is assembled as
+`undefined1*` (byte pointer -- deliberately, for the twin 62fd byte path), but 6250 reads the PAL.RES
+archive HEADER magic and the member COUNT as 32-bit dwords (asm 62d0 `lods eax`; 16-byte directory entry
+stride).  Ghidra typed DAT_623c `uint*` in these expressions, so once the assemble macro made it byte*,
+`*DAT_623c` read ONE BYTE (0x52='R') and the compare `== 0x4f534552` ('RESO') NEVER matched -> the
+'RESO'/'URCE' magic check failed DETERMINISTICALLY -> the 532.pal member was never resolved -> 6032's
+5598 palette stayed empty -> the 9e60/ac70 colormap remap LUT collapsed to a single index -> the op-0x0c
+voxel render drew a UNIFORM terrain.  (NB: this is NOT the "623c overwrite" the prior notes hypothesised
+-- the header read is always byte-correct 'RESOURCE1'; the defect is the byte-vs-dword deref width.)
+
+PATCH 237 fixed the AH=3F buffer ADDRESS (EDX32 = full DAT_623c pointer, not the low-16 SUB42) and its
+header CLAIMS "localized (uint*) casts for 6250 only", but its committed diff OMITS them.  241 supplies
+exactly those casts on the direct DAT_623c dword derefs (the member-match walk already goes through the
+uint* locals puVar9/puVar10, which now initialise correctly).  RUNTIME-VERIFIED: magic passes, directory
+reads (count=32), member resolves (find_cf=0, size=768), 5598 loads 524/768 nonzero, and op-0x0c renders
+colormap distinct=31 / fb-colors=18 -- STABLE every run (no longer heap/tick-dependent).  Cascade-only
+(reached only via the op-0x18 mission map-load) -> BEHAVIOUR-NEUTRAL for the 19 menu/dialog flows.
+Source pristine; fist_ext.c via build/.  Portable C.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -9440,10 +9440,20 @@
+   if (!(bool)uRam000f0012) {
+-    uVar6 = *DAT_0000_623c;
+-    puVar9 = DAT_0000_623c + 1;
++    /* PATCH 241: DWORD (uint*) casts on the RESOURCE-archive header/directory derefs of DAT_623c.
++       DAT_623c is assembled as undefined1* (byte*, for the twin 62fd), but 6250 reads the header magic
++       and the member-count as 32-bit words (asm 62d0 `lods eax`, 16-byte entry stride).  Ghidra typed
++       DAT_623c uint* here, so `*DAT_623c` read one BYTE (0x52 ='R') != the dword magic 0x4f534552
++       -> the 'RESO'/'URCE' check DETERMINISTICALLY failed -> 532.pal never resolved -> 5598 palette
++       empty -> the colormap remap LUT collapsed -> uniform terrain.  These localized casts are what
++       PATCH 237's description promised ("localized (uint*) casts for 6250 only") but its committed diff
++       omitted (237 fixed only the EDX32 buffer address).  With them the magic passes, the directory
++       reads, the member resolves (find_cf=0, size=768), the palette loads (524/768 nonzero) and the
++       colormap renders 18+ terrain colours -- verified stable across runs. */
++    uVar6 = *(uint *)DAT_0000_623c;
++    puVar9 = (uint *)DAT_0000_623c + 1;
+     if (uVar6 == 0x4f534552) {
+-      puVar9 = DAT_0000_623c + 2;
+-      uVar6 = DAT_0000_623c[1];
++      puVar9 = (uint *)DAT_0000_623c + 2;
++      uVar6 = ((uint *)DAT_0000_623c)[1];
+       if (uVar6 == 0x45435255) {
+-        puVar9 = DAT_0000_623c + 4;
+-        DAT_0000_6240 = DAT_0000_623c[3];
++        puVar9 = (uint *)DAT_0000_623c + 4;
++        DAT_0000_6240 = ((uint *)DAT_0000_623c)[3];
+         uVar5 = 0;
+@@ -9466,3 +9476,3 @@
+           uVar8 = DAT_0000_6240;
+-          puVar10 = DAT_0000_623c + -4;
++          puVar10 = (uint *)DAT_0000_623c + -4;   /* PATCH 241: dword stride (member-dir walk) */
+           do {
