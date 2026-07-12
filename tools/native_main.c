@@ -860,6 +860,57 @@ static void ext_module_init(void) {
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
+    /* FIST_R3D2_V18 -- DETERMINISTIC terrain-pipeline validation at MAP-LOAD time (avoids the flaky,
+     * slow op-0x0c gate).  After 2 op-0x18 map-loads have completed (both KLC planes populated), on the
+     * next non-0x18 op run the FULL voxel pipeline ONCE with the oracle camera + oracle ray tables:
+     * 8deb viewport -> 85d0 camera -> 6980 tile build -> 8120 projection -> 9200 render.  Then compare
+     * the built tile against the oracle tile and dump the framebuffer.  Proves builder+renderer fidelity
+     * independent of the engine's per-frame dispatch + the flaky object walk. */
+    if (getenv("FIST_R3D2_V18") && g_ext_ready) {
+        static int nseen18 = 0, done = 0;
+        if (op == 0x18) nseen18++;
+        else if (nseen18 >= 1 && !done && op == 0x54) {   /* first roster op after the (single) map-load */
+            done = 1;
+            uint8_t *xb = g_mem + FIST_EXT_BASE;
+            uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+            uint8_t *tcb = g_mem + tcb_lin;
+            uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
+            *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)tcb;
+            /* inject oracle camera */
+            *(int32_t*)(tcb+0x2c)=609696; *(int32_t*)(tcb+0x30)=1112229; *(int32_t*)(tcb+0x34)=29184;
+            *(uint16_t*)(tcb+0x38)=19745; *(uint16_t*)(tcb+0x3a)=0; *(uint16_t*)(tcb+0x3c)=128;
+            *(uint16_t*)(tcb+0x3e)=256; *(uint8_t*)(tcb+0xcf)=0; *(uint8_t*)(tcb+0xcd)=1;
+            /* inject oracle ray tables 3a24/3e24 (detail base curve; port never builds them) */
+            { const char *r3=getenv("FIST_R3D2_RAY3A24"), *r7=getenv("FIST_R3D2_RAY3E24");
+              if (r3){FILE*f=fopen(r3,"rb"); if(f){fread(xb+0x3a24,1,256*4,f);fclose(f);}}
+              if (r7){FILE*f=fopen(r7,"rb"); if(f){fread(xb+0x3e24,1,256*4,f);fclose(f);}}
+              *(uint32_t*)(xb+0x90c4)=0; }
+            m_ext_FUN_0000_8deb(); m_ext_FUN_0000_85d0();
+            /* force oracle viewport (8deb yields 0 from an empty TCB rect) */
+            *(uint32_t*)(xb+0x90f8)=81; *(uint32_t*)(xb+0x90f0)=288; *(uint32_t*)(xb+0x90ac)=0x140-288;
+            *(uint32_t*)(xb+0x90a8)=(uint32_t)(uintptr_t)(g_mem+0xA0000+0x650);
+            extern void m_ext_FUN_0000_6980(void);
+            m_ext_FUN_0000_6980();
+            uint32_t cmb=*(uint32_t*)(xb+0x3918);
+            { uint8_t*t=(uint8_t*)(uintptr_t)cmb; long nz=0; int h[256]={0},nd=0;
+              for(int i=0;i<65536;i++){if(t[i])nz++; if(!h[t[i]]){h[t[i]]=1;nd++;}}
+              fprintf(stderr,"[v18] TILE-BUILD nz=%ld/65536 distinct=%d\n",nz,nd);
+              const char*tr=getenv("FIST_R3D2_TILEREF");
+              if(tr){FILE*rf=fopen(tr,"rb"); if(rf){static uint8_t ref[0x10000]; size_t n=fread(ref,1,0x10000,rf);fclose(rf);
+                if(n==0x10000){long same=0; int hr[256]={0},ndr=0; for(int i=0;i<0x10000;i++){if(t[i]==ref[i])same++; if(!hr[ref[i]]){hr[ref[i]]=1;ndr++;}}
+                  fprintf(stderr,"[v18] TILE-vs-ORACLE identical=%ld/65536 (%.1f%%) ref-distinct=%d\n",same,100.0*same/65536,ndr);}}} }
+            m_ext_FUN_0000_8120();
+            { int32_t c0=*(int32_t*)(xb+0x90c0),v04=*(int32_t*)(xb+0x9104),v08=*(int32_t*)(xb+0x9108);
+              int32_t esi=(int32_t)(((int64_t)c0*v04)>>32), ebp=(int32_t)(((int64_t)c0*v08)>>32);
+              m_ext_FUN_0000_9200(ebp,esi); }
+            { uint8_t*fb=g_mem+0xA0000; int vh[256]={0}; int vnd=0; long vnz=0;
+              for(long r=5;r<86;r++)for(long c=0;c<320;c++){uint8_t p=fb[r*320+c]; if(p)vnz++; if(!vh[p])vnd++; vh[p]++;}
+              fprintf(stderr,"[v18] RENDER viewport rows5-86 nonzero=%ld distinct=%d\n",vnz,vnd); }
+            { extern void out(int,int); uint8_t*mp=xb+0x5598; out(0x3c8,0); for(int pi=0;pi<768;pi++) out(0x3c9,mp[pi]); }
+            const char*dp=getenv("FIST_R3D2_DUMP"); if(dp) fist_dump_framebuffer(dp);
+            *(uint32_t*)(xb+0xc93)=save_c93;
+        }
+    }
     /* FIST_OPHIST -- temporary op histogram + 3918 tile-fill probe (read-only diagnostic). */
     if (getenv("FIST_OPHIST")) {
         static long ophist[0x100]; static long total;
@@ -1181,7 +1232,11 @@ int fist_extender_gate(void) {
         uint8_t *xb  = g_mem + FIST_EXT_BASE;
         uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
         *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)tcb;
-        if (r2 == 0) {
+        if (r2 == 0) fprintf(stderr,"[r3d2] engine-cam 4e1c=%d 4e20=%d 4e24=%d 4e34=%d | d548struct[12/16/1a]=%d/%d/%d | 7b1c(head)=%u 7b18(foc)=%u 4d0e=%d\n",
+            *(int32_t*)(g_mem+0x24e1c),*(int32_t*)(g_mem+0x24e20),*(int32_t*)(g_mem+0x24e24),*(int32_t*)(g_mem+0x24e34),
+            *(int32_t*)(g_mem+0x1d55a),*(int32_t*)(g_mem+0x1d55e),*(int32_t*)(g_mem+0x1d562),
+            *(uint16_t*)(g_mem+0x23b1c),*(uint16_t*)(g_mem+0x23b18),*(int16_t*)(g_mem+0x24d0e));
+        if (r2 == 0 && getenv("FIST_R3D2_PROBE")) {
             fprintf(stderr, "[r3d2] TCB @0x%05x rect[16/18/1a/1c]=%d/%d/%d/%d detail[cd]=%u [cf]=%u "
                     "cam[2c/30/34]=%d/%d/%u ang[38/3a/3c/3e]=%u/%d/%d/%u\n",
                     tcb_lin, *(int16_t*)(tcb+0x16),*(int16_t*)(tcb+0x18),*(int16_t*)(tcb+0x1a),*(int16_t*)(tcb+0x1c),
@@ -1250,7 +1305,36 @@ int fist_extender_gate(void) {
                   const char *cz=getenv("FIST_R3D2_CAMZ"), *ca=getenv("FIST_R3D2_ANG");
                   if (cz) *(int32_t*)(tcb2+0x34) = (int32_t)strtol(cz,0,0);
                   if (ca) *(uint16_t*)(tcb2+0x38) = (uint16_t)strtoul(ca,0,0);
+                  /* FULL oracle-camera injection (validation scaffold): the live AZER1 camera
+                   * captured from the DOSBox RAM dump = X=609696 Y=1112229 alt=29184 head=19745
+                   * roll=128 foc=256 detail=0.  Fields: TCB+0x2c(X) 0x30(Y) 0x34(alt) 0x38(head)
+                   * 0x3a(pitch) 0x3c(roll) 0x3e(foc) 0xcf(detail). */
+                  const char *cx=getenv("FIST_R3D2_CAMX"), *cy=getenv("FIST_R3D2_CAMY"),
+                             *cp=getenv("FIST_R3D2_PITCH"), *crl=getenv("FIST_R3D2_ROLL"),
+                             *cf=getenv("FIST_R3D2_FOC"), *cdt=getenv("FIST_R3D2_DETAIL");
+                  if (getenv("FIST_R3D2_ORACLE")) {
+                      *(int32_t*)(tcb2+0x2c)=609696; *(int32_t*)(tcb2+0x30)=1112229;
+                      *(int32_t*)(tcb2+0x34)=29184; *(uint16_t*)(tcb2+0x38)=19745;
+                      *(uint16_t*)(tcb2+0x3a)=0; *(uint16_t*)(tcb2+0x3c)=128;
+                      *(uint16_t*)(tcb2+0x3e)=256; *(uint8_t*)(tcb2+0xcf)=0;
+                  }
+                  if (cx) *(int32_t*)(tcb2+0x2c)=(int32_t)strtol(cx,0,0);
+                  if (cy) *(int32_t*)(tcb2+0x30)=(int32_t)strtol(cy,0,0);
+                  if (cp) *(uint16_t*)(tcb2+0x3a)=(uint16_t)strtoul(cp,0,0);
+                  if (crl)*(uint16_t*)(tcb2+0x3c)=(uint16_t)strtoul(crl,0,0);
+                  if (cf) *(uint16_t*)(tcb2+0x3e)=(uint16_t)strtoul(cf,0,0);
+                  if (cdt)*(uint8_t*)(tcb2+0xcf)=(uint8_t)strtoul(cdt,0,0);
                   m_ext_FUN_0000_85d0(); /* re-read camera after override */ }
+                /* RAY-TABLE injection (validation): 0x3a24/0x3e24 are the detail-level base ray-angle
+                 * tables built at map/detail-init by a builder the port doesn't yet drive (the image
+                 * ships them as placeholder 1s -> 395e divides 0xffffffff/uVar2 with uVar2=0 -> SIGFPE).
+                 * They are camera-INDEPENDENT.  Inject the oracle-captured tables to validate the
+                 * camera+builder+renderer, isolating the ray-builder as a separate frontier. */
+                { const char *r3=getenv("FIST_R3D2_RAY3A24"), *r7=getenv("FIST_R3D2_RAY3E24");
+                  if (r3){ FILE*f=fopen(r3,"rb"); if(f){ fread(xb+0x3a24,1,256*4,f); fclose(f);} }
+                  if (r7){ FILE*f=fopen(r7,"rb"); if(f){ fread(xb+0x3e24,1,256*4,f); fclose(f);} }
+                  /* force 395e to rebuild the 4224/4624 LUT from the injected source */
+                  if (r3||r7) *(uint32_t*)(xb+0x90c4) = ~*(uint32_t*)(xb+0x90c0); }
                 extern void m_ext_FUN_0000_6980(void);
                 m_ext_FUN_0000_6980();
                 uint32_t cmb = *(uint32_t*)(xb+0x3918);
@@ -1268,7 +1352,13 @@ int fist_extender_gate(void) {
                       for(int i=0;i<0x40000;i++) if(!h8[c8[i]]){h8[c8[i]]=1;nd8++;}
                       fprintf(stderr,"[r3d2] colorPlane[85bc+1M] distinct/256k=%d ; 85b8 distinct/256k=%d\n",ndc,nd8); }
                     /* first terrain column: sample tile row 6 (oracle first index expect 0xdc) */
-                    fprintf(stderr,"[r3d2] tile col0 depth-run rows: "); for(int r=0;r<20;r++) fprintf(stderr,"%02x ",t[r*256]); fprintf(stderr,"\n"); }
+                    fprintf(stderr,"[r3d2] tile col0 depth-run rows: "); for(int r=0;r<20;r++) fprintf(stderr,"%02x ",t[r*256]); fprintf(stderr,"\n");
+                    /* compare against a reference tile (oracle 0x44200 dump) if provided */
+                    const char *tr=getenv("FIST_R3D2_TILEREF");
+                    if (tr) { FILE*rf=fopen(tr,"rb"); if(rf){ static uint8_t ref[0x10000]; size_t n=fread(ref,1,0x10000,rf); fclose(rf);
+                        if(n==0x10000){ long same=0; for(int i=0;i<0x10000;i++) if(t[i]==ref[i]) same++;
+                            fprintf(stderr,"[r3d2] TILE-vs-ORACLE: identical bytes=%ld/65536 (%.1f%%)  ref[0:8]=",same,100.0*same/65536);
+                            for(int i=0;i<8;i++) fprintf(stderr,"%02x ",ref[i]); fprintf(stderr,"\n"); } } } }
             }
             unsigned vw = getenv("FIST_R3D2_VW") ? (unsigned)strtoul(getenv("FIST_R3D2_VW"),0,0) : 81;
             unsigned ch = getenv("FIST_R3D2_VH") ? (unsigned)strtoul(getenv("FIST_R3D2_VH"),0,0) : 288;
