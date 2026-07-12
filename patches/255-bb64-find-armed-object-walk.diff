@@ -1,0 +1,94 @@
+FUN_0000_bb64 ("find armed display object" table walk, reached via b51f's spawn path, patch 253):
+c0e5/d755 base-loss walk class (SIGSEGV) + 0ea9 return-CF mis-model.
+
+ROOT CAUSE (asm-verified 0xbb64-0xbbb6): bb64 scans the 182-entry display-object table @ DGROUP:0xdfbc
+for an armed object (flag 0x40) within range, to record DAT_2000_5a25 for a spawn.  Same class as
+c0e5/d755: Ghidra double-derefed the near-offset cursor as a host int* at stride 8 (asm is WORD si=[bx],
+STRIDE 4), treated the object near-offset as a host pointer, and mis-modeled 0ea9's return CF (asm bbab
+jae) as the dist-overflow bVar7.  Rebuilt via the g_mem+0x1c000 DGROUP base with stride 4; 0ea9's CF is
+consumed through g_fist_cf (0ea9 already threads it); DAT_2000_5a25 = si (near offset).  Returns CF via
+g_fist_cf.  Mission-cascade only.
+--- a/fist.c	2026-07-12 18:08:12.508545920 +0200
++++ b/fist.c	2026-07-12 18:08:12.527910920 +0200
+@@ -28963,47 +28963,45 @@
+ ulong __allregs FUN_0000_bb64(ulong param_1)
+ 
+ {
+-  int iVar1;
+-  undefined2 uVar2;
+-  uint uVar3;
+-  undefined2 uVar4;
+-  undefined2 extraout_var;
+-  int iVar5;
+-  int *piVar6;
+-  bool bVar7;
+-  
+-  piVar6 = (int *)&DAT_2000_9fbc;
+-  iVar5 = 0xb6;
+-LAB_0000_bb6b:
+-  do {
+-    do {
+-      if (iVar5 == 0) {
+-        return param_1;
++  /* PATCH 255: "find armed display object" walk over the 182-entry table @ DGROUP:0xdfbc (asm
++   * 0xbb64-0xbbb6; DS=DGROUP=0x1c00) - same base-loss class as c0e5/d755.  Ghidra double-derefed the
++   * near-offset cursor as a host int* at stride 8 (asm is WORD si=[bx], STRIDE 4) and treated the
++   * object near-offset si as a host pointer, and mis-modeled 0ea9's return CF as the dist-overflow
++   * bVar7.  Rebuilt: si = word[DGROUP:bx]; skip if 0 or (byte[si+0x16]&0x40)==0; state gate on
++   * DAT_2000_5c7e; range-test via 0ea9(dist,&5c7f,obj+4) which returns CF in g_fist_cf; on CF=1 record
++   * DAT_2000_5a25 = si (near offset) and return.  Mission-cascade only. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = 0xdfbc;
++  int cx = 0xb6;
++  while (cx != 0) {
++    uint16_t si = *(uint16_t *)(dg + bx);            /* bb6f mov si,[bx] */
++    bx = (uint16_t)(bx + 4);                         /* bb71 add bx,4 (STRIDE 4) */
++    cx = cx + -1;                                    /* bb74 dec cx */
++    if (si == 0) continue;                           /* bb75 or si,si; je */
++    if ((dg[(uint16_t)(si + 0x16)] & 0x40) == 0) continue; /* bb79 testb [si+0x16],0x40; je */
++    {
++      unsigned char al = (unsigned char)DAT_2000_5c7e;      /* bb7f al=[0x9c7e] */
++      unsigned char ah = dg[(uint16_t)(si + 0x16)];         /* bb82 ah=[si+0x16] */
++      if (al != 2) {                                        /* bb85 cmp al,2; je bb95 */
++        if (al != 0) ah = (unsigned char)(ah ^ 8);          /* bb89 cmp al,0; je; bb8d xor ah,8 */
++        if ((ah & 8) == 0) continue;                        /* bb90 test ah,8; je bb6b */
+       }
+-      iVar1 = *piVar6;
+-      piVar6 = piVar6 + 2;
+-      iVar5 = iVar5 + -1;
+-    } while ((iVar1 == 0) || ((*(byte *)(iVar1 + 0x16) & 0x40) == 0));
+-    uVar4 = (undefined2)(param_1 >> 0x10);
+-    uVar2 = CONCAT11(*(undefined1 *)(iVar1 + 0x16),DAT_2000_5c7e);
+-    param_1 = CONCAT22(uVar4,uVar2);
+-    if (DAT_2000_5c7e != '\x02') {
+-      if (DAT_2000_5c7e != '\0') {
+-        param_1 = CONCAT22(uVar4,uVar2) ^ 0x800;
++      {
++        uint dist = (uint)*(uint16_t *)(dg + (uint16_t)(si + 0x14)) + 0x200; /* bb98 cx=[si+0x14]+0x200 */
++        FUN_0000_0ea9(dist, (uint *)&DAT_2000_5c7f, (uint *)(dg + (uint16_t)(si + 4))); /* bba5 call 0ea9(cx,&5c7f,si+4) */
++        if ((bool)g_fist_cf) {                              /* bbab jae bb6b (CF=0 continue); else found */
++          DAT_2000_5a25 = si;                               /* bbad mov [0x9a25],si (near offset) */
++          g_fist_cf = 1;                                    /* bbb2 stc */
++          return param_1;
++        }
+       }
+-      if ((param_1 & 0x800) == 0) goto LAB_0000_bb6b;
+     }
+-    bVar7 = 0xfdff < *(uint *)(iVar1 + 0x14);
+-    uVar3 = FUN_0000_0ea9(*(uint *)(iVar1 + 0x14) + 0x200,(undefined4 *)&DAT_2000_5c7f,iVar1 + 4);
+-    param_1 = CONCAT22(extraout_var,uVar3);
+-    if (bVar7) {
+-      DAT_2000_5a25 = iVar1;
+-      return param_1;
+-    }
+-  } while( true );
++  }
++  g_fist_cf = 0;                                            /* bbb5 clc */
++  return param_1;
+ }
+ 
+-
+ /* ===== ((uint)(uintptr_t)&FUN_0000_bbb7) @ 0000:bbb7 ===== */
+ 
+ void __allregs FUN_0000_bbb7(undefined2 param_1,undefined2 param_2,undefined2 param_3)

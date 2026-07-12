@@ -1,0 +1,21 @@
+FUN_0000_b583 (object action method, reached via c31e's -0x1ab0 action-dispatch, patch 256): object
+base-loss via non-canonical param mapping (SIGSEGV), b355 family.
+
+ROOT CAUSE (asm-verified 0xb583): b583 scans the object's 8 sector-bits and, for each armed one,
+range-tests + spawns via bbb7/ba49.  di (object near offset) arrives in param_1 from c31e's dispatch;
+Ghidra maps b583's DI varnode to param_2 -> garbage deref.  Fix: re-point param_2 at g_mem+0x1c000+di
+(param_1 keeps its own low16=di logic).  Mission-cascade only.
+--- a/fist.c	2026-07-12 18:10:39.259013069 +0200
++++ b/fist.c	2026-07-12 18:10:39.277257369 +0200
+@@ -28192,6 +28192,11 @@
+   undefined4 *puVar5;
+   bool bVar6;
+   
++  /* PATCH 257: object action method (asm 0xb583; b355 family), dispatched by c31e's -0x1ab0 table with
++   * di (object near offset) in param_1.  Ghidra maps this fn's DI varnode to param_2 -> re-point param_2
++   * at the object host pointer g_mem+0x1c000+di.  param_1 keeps its own low16=di logic.  DAT_2000_*
++   * accessors already resolved.  Mission-cascade only. */
++  param_2 = (int)(intptr_t)((unsigned char *)g_mem + 0x1c000 + (uint16_t)param_1);
+   iVar3 = 8;
+   uVar4 = 0;
+   do {

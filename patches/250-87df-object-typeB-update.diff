@@ -1,0 +1,45 @@
+FUN_0000_87df (object-type-B per-frame UPDATE method, dispatched by c0e5 for object-1, patch 243):
+same base-loss template as 7c1d (patch 244) for a different object type.
+
+ROOT CAUSE (asm-verified 0x87df-0x8857; gdb crash at [di+0xd] with di=near-offset 0xC157): 87df is the
+UPDATE method for a second object type (a vehicle), structurally identical to 7c1d - same object fields
+[di+0xd/0x1d/0x38/0xa7/0x3c/0x3d/0x3e/0x92/0x17/0x96], same two CS-relative dispatch tables (here at
+0x8858 / 0x898b), same shared callees a358/a57a/a9ea/a0a4.  Ghidra read the object base from param_4
+(dropped register) and the CS tables at absolute host offsets.  Fix mirrors patch 244: object host
+pointer = g_mem+0x1c000+di re-pointed into param_4; the two CS tables at g_mem+0x8858/0x898b, dispatched
+near with di live.  Mission-cascade only.
+--- a/fist.c	2026-07-12 17:56:54.047813997 +0200
++++ b/fist.c	2026-07-12 17:56:54.066510903 +0200
+@@ -21599,6 +21599,16 @@
+   undefined4 uVar3;
+   undefined2 uVar5;
+   
++  /* PATCH 250: object-type-B per-frame UPDATE method (asm 0x87df-0x8857); SAME template as 7c1d
++   * (patch 244) for a different object type.  di in param_1 (near offset) -> object host pointer
++   * g_mem+0x1c000+di re-pointed into param_4 (body + callee calls are object-relative -> correct
++   * verbatim).  The two CS-relative dispatch tables (CS=0) live at g_mem+0x8858 (=-0x77a8) and
++   * g_mem+0x898b (=-0x7675), fixed below. */
++  {
++    unsigned char *_dg250 = (unsigned char *)g_mem + 0x1c000;
++    uint16_t _di250 = (uint16_t)(uintptr_t)param_1;
++    param_4 = (int)(intptr_t)(_dg250 + _di250);
++  }
+   *(undefined1 *)(param_4 + 0xd) = *(undefined1 *)(param_4 + 0x1d);
+   *(undefined1 *)(param_4 + 0xa7) = (char)((uint)*(undefined2 *)(param_4 + 0x38) >> 8);
+   if (*(char *)(param_4 + 0x3c) != '\0') {
+@@ -21615,9 +21625,13 @@
+   FUN_0000_a358(param_4);
+   *(char *)(param_4 + 0x3d) = *(char *)(param_4 + 0x3d) + '\x02';
+   uVar2 = CONCAT22(uVar4,(uint)*(byte *)(param_4 + 0x3d)) & 0xffff001e;
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)((int)uVar2 + -0x77a8))))(uVar5);
++  /* PATCH 250: CS-relative table1 (CS=0) word[g_mem+0x8858+(byte[di+0x3d]&0x1e)], DI live */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)((unsigned char *)g_mem + 0x8858 + ((uint)uVar2 & 0x1e))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+   uVar3 = CONCAT22((int)(uVar2 >> 0x10),(uint)*(byte *)(param_4 + 0x3e));
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(byte *)(param_4 + 0x3e) + 0x898b))))();
++  /* PATCH 250: CS-relative table2 (CS=0) word[g_mem+0x898b+byte[di+0x3e]], DI live */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)((unsigned char *)g_mem + 0x898b + *(byte *)(param_4 + 0x3e))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+   FUN_1000_a0a4(uVar1,uVar3,param_4);
+   if (*(char *)(param_4 + 0x92) == '\0') {
+     if ((*(byte *)(param_4 + 0x17) & 0x80) == 0) goto LAB_0000_8842;

@@ -1,0 +1,21 @@
+FUN_0000_b51f (object-type-E per-frame UPDATE method, dispatched by c0e5 for object di=0xA27F, patch
+243): object base-loss via non-canonical param mapping (SIGSEGV at [di+0x19]), b355 family.
+
+ROOT CAUSE (asm-verified 0xb51f-0xb582): b51f is a fifth object type's UPDATE method (periodic emitter:
+every 0x20 ticks, offset the object position and spawn via bb64/c31e/ba49).  c0e5 dispatches di in
+param_1, but Ghidra maps b51f's DI varnode to param_2 -> garbage deref.  Fix: re-point param_2 at
+g_mem+0x1c000+di; param_1 stays the near offset for the c31e/ba49 spawn calls.  Mission-cascade only.
+--- a/fist.c	2026-07-12 18:03:59.334817565 +0200
++++ b/fist.c	2026-07-12 18:03:59.350572064 +0200
+@@ -28159,6 +28159,11 @@
+   undefined2 unaff_CS;
+   bool bVar2;
+   
++  /* PATCH 253: object-type-E per-frame UPDATE method (asm 0xb51f-0xb582; b355 family).  c0e5 dispatches
++   * di (object near offset) in param_1; Ghidra maps this fn's DI varnode to param_2 -> re-point param_2
++   * at the object host pointer g_mem+0x1c000+di.  param_1 stays the near offset (passed on to c31e/ba49).
++   * The DAT_2000_* accessors are already resolved.  Mission-cascade only. */
++  param_2 = (int)(intptr_t)((unsigned char *)g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1);
+   *(char *)(param_2 + 0x19) = *(char *)(param_2 + 0x19) + '\x01';
+   if ((*(byte *)(param_2 + 0x19) & 0x1f) == 0) {
+     uVar1 = (uint)(*(byte *)(param_2 + 0x19) >> 5);

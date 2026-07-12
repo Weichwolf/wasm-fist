@@ -1,0 +1,36 @@
+FUN_0000_c31e (object action-dispatch, reached via b51f's spawn / bb64-found target, patch 253):
+double-deref base-loss + wrong dispatch arg (SIGSEGV).
+
+ROOT CAUSE (asm-verified 0xc31e-0xc334): c31e dispatches an object's type-indexed action method.
+param_3 is the object near offset (si); asm sets di=si (object live), si=word[DS:si] (type), and calls
+word[DS:type*2-0x1ab0] with DI=object.  Ghidra double-derefed *param_3 as a host int* (wild) and passed
+param_4 to the method instead of the object.  Fix: object = g_mem+0x1c000+param_3; action method =
+word[DGROUP:type*2-0x1ab0], near-called with di (object) live.  Mission-cascade only.
+--- a/fist.c	2026-07-12 18:09:46.260324416 +0200
++++ b/fist.c	2026-07-12 18:09:46.279587416 +0200
+@@ -30007,10 +30007,21 @@
+ void __allregs FUN_0000_c31e(undefined2 param_1,undefined2 param_2,int *param_3,undefined2 param_4)
+ 
+ {
+-  DAT_2000_5bd9 = param_2;
+-  DAT_2000_5bdb = param_1;
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_3 * 2 + -0x1ab0))))(param_4);
+-  FUN_0000_60f4();
++  /* PATCH 256: object action-dispatch (asm 0xc31e-0xc334; DS=DGROUP=0x1c00).  param_3 = object near
++   * offset (si); di=si (object) is live across the dispatch.  type = word[DS:si]; the action method =
++   * word[DS:type*2-0x1ab0], called near with di (object) live - Ghidra double-derefed *param_3 as a
++   * host int* and passed param_4 instead of the object.  DAT_2000_5bd9/5bdb store param_2/param_1
++   * (already-resolved accessors).  Mission-cascade only. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_3;
++  uint16_t type;
++  (void)param_4;
++  DAT_2000_5bd9 = param_2;                                  /* c31e mov [0x9bd9],bx */
++  DAT_2000_5bdb = param_1;                                  /* c322 mov [0x9bdb],ax */
++  type = *(uint16_t *)(dg + di);                            /* c328 mov si,[si] */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)(dg + (uint16_t)((uint16_t)(type << 1) - 0x1ab0))))((int)di); /* c32a shl si,1; c32c call [si-0x1ab0], DI live */
++  FUN_0000_60f4();                                          /* c331 call 60f4 */
+   return;
+ }
+ 

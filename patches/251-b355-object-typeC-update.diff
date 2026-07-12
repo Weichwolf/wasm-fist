@@ -1,0 +1,23 @@
+FUN_0000_b355 (object-type-C per-frame UPDATE method, dispatched by c0e5 for object di=0xA022, patch
+243): object base-loss via non-canonical param mapping (SIGSEGV at incw [di+0x1b]).
+
+ROOT CAUSE (asm-verified 0xb355-0xb381): b355 is a third object type's UPDATE method (counter/throttle
++ state-bit clear).  c0e5 dispatches di (object near offset) in param_1, but Ghidra maps b355's DI
+varnode to param_2 -> param_2 is a dropped/garbage register -> wild deref.  Fix: re-point param_2 at
+the object host pointer g_mem+0x1c000+di derived from param_1 (body + ext 9caa call are DS:DI-relative
+-> correct verbatim).  Mission-cascade only.
+--- a/fist.c	2026-07-12 18:01:30.728054244 +0200
++++ b/fist.c	2026-07-12 18:01:30.744378344 +0200
+@@ -27924,6 +27924,12 @@
+ void __allregs FUN_0000_b355(undefined4 param_1,int param_2)
+ 
+ {
++  /* PATCH 251: object-type-C per-frame UPDATE method (asm 0xb355-0xb381).  c0e5 dispatches di (object
++   * near offset) in param_1; Ghidra maps this function's DI varnode to param_2 -> re-point param_2 at
++   * the object host pointer g_mem+0x1c000+di (body + callees are DS:DI-object-relative -> correct
++   * verbatim).  Simple template: increment [di+0x1b] counter, throttle [di+0x1d] via ext 9caa, clear
++   * state bits when [di+0x19]==1.  Mission-cascade only. */
++  param_2 = (int)(intptr_t)((unsigned char *)g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1);
+   *(int *)(param_2 + 0x1b) = *(int *)(param_2 + 0x1b) + 1;
+   if (((*(uint *)(param_2 + 0x1b) & 0x3f) == 0) && (0x80 < *(uint *)(param_2 + 0x1d))) {
+     FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(uint *)(param_2 + 0x1d)),param_2);

@@ -1,0 +1,45 @@
+FUN_0000_97d5 (object-type-D per-frame UPDATE method, dispatched by c0e5 for object di=0xC252, patch
+243): 7c1d template with a DS/CS mixed dispatch-table base-loss (SIGSEGV into a garbage code pointer).
+
+ROOT CAUSE (asm-verified 0x97d5-0x9857): 97d5 is a fourth object type's UPDATE method, structurally the
+7c1d template.  Ghidra read the object from param_4 (dropped register) and base-lost BOTH dispatch
+tables - table1 is DS-relative (asm 9810 `call [ds:bx-0x67b2]` -> DGROUP:0x984e) and table2 is
+CS-relative (asm 9818 `call cs:[bx-0x666f]` -> CS=0:0x9991, which Ghidra mis-rendered via the
+DGROUP-based symbol s_..._2000_597d giving a +0x1c000 wild pointer).  Fix: object = g_mem+0x1c000+di
+into param_4; table1 at g_mem+0x1c000+(0x984e+idx), table2 at g_mem+(0x9991+byte); both DI-live.
+Mission-cascade only.
+--- a/fist.c	2026-07-12 18:03:08.521453805 +0200
++++ b/fist.c	2026-07-12 18:03:08.548749606 +0200
+@@ -24041,6 +24041,15 @@
+   undefined4 uVar3;
+   undefined2 uVar5;
+   
++  /* PATCH 252: object-type-D per-frame UPDATE method (asm 0x97d5-0x9857); 7c1d template.  di in
++   * param_1 -> object host pointer g_mem+0x1c000+di re-pointed into param_4.  Dispatch tables:
++   * table1 is DS-relative (9810 call [ds:bx-0x67b2]) -> g_mem+0x1c000+(0x984e+idx); table2 is
++   * CS-relative (9818 call cs:[bx-0x666f]) -> g_mem+(0x9991+byte).  Both DI-live. */
++  {
++    unsigned char *_dg252 = (unsigned char *)g_mem + 0x1c000;
++    uint16_t _di252 = (uint16_t)(uintptr_t)param_1;
++    param_4 = (int)(intptr_t)(_dg252 + _di252);
++  }
+   *(undefined1 *)(param_4 + 0xd) = *(undefined1 *)(param_4 + 0x1d);
+   *(undefined1 *)(param_4 + 0xa7) = (char)((uint)*(undefined2 *)(param_4 + 0x38) >> 8);
+   if (*(char *)(param_4 + 0x3c) != '\0') {
+@@ -24058,10 +24067,13 @@
+   *(char *)(param_4 + 0x3d) = *(char *)(param_4 + 0x3d) + '\x02';
+   uVar2 = CONCAT31((int3)(((ulong)uVar4 << 0x10) >> 8),*(undefined1 *)(param_4 + 0x3d)) & 0xffffff1e
+   ;
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)((int)uVar2 + -0x67b2))))(uVar5);
++  /* PATCH 252: table1 DS-relative word[DGROUP:0x984e+(byte[di+0x3d]&0x1e)], DI live */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)((unsigned char *)g_mem + 0x1c000 + (uint16_t)(0x984e + ((uint)uVar2 & 0x1e)))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+   uVar3 = CONCAT22((int)(uVar2 >> 0x10),(uint)*(byte *)(param_4 + 0x3e));
+-  (**(code **)((char *)s_INHIBIT_OFF_ACTION__ACT_CTR__PIN_2000_597d + 0x14 +
+-              *(byte *)(param_4 + 0x3e)))();
++  /* PATCH 252: table2 CS-relative word[cs=0:0x9991+byte[di+0x3e]], DI live */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)((unsigned char *)g_mem + (uint16_t)(0x9991 + *(byte *)(param_4 + 0x3e)))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+   FUN_1000_a0a4(uVar1,uVar3,param_4);
+   if (*(char *)(param_4 + 0x92) == '\0') {
+     if ((*(byte *)(param_4 + 0x17) & 0x80) == 0) goto LAB_0000_9838;

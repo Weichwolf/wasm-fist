@@ -1,0 +1,20 @@
+FUN_0000_a46e (object animation sub-handler, reached via 87df's dispatch table, patch 250): object
+base-loss via non-canonical param mapping (SIGSEGV at [di+0x3d]).
+
+ROOT CAUSE (asm-verified 0xa46e-0xa486): one of the type-B (87df) object's per-frame animation
+sub-handlers - clears/decays state bits and, when armed, pulses via ext 9caa (ax=0x300).  di arrives
+in param_1 from 87df's table dispatch; Ghidra maps a46e's DI varnode to param_2 -> garbage deref.  Fix:
+re-point param_2 at g_mem+0x1c000+di.  Mission-cascade only.
+--- a/fist.c	2026-07-12 18:05:00.995326812 +0200
++++ b/fist.c	2026-07-12 18:05:01.006503112 +0200
+@@ -25954,6 +25954,10 @@
+ void __allregs FUN_0000_a46e(undefined4 param_1,int param_2)
+ 
+ {
++  /* PATCH 254: object animation sub-handler (asm 0xa46e-0xa486), reached via 87df's dispatch table.
++   * di (object near offset) arrives in param_1; Ghidra maps this fn's DI varnode to param_2 -> re-point
++   * param_2 at g_mem+0x1c000+di.  Object-relative body + ext 9caa call.  Mission-cascade only. */
++  param_2 = (int)(intptr_t)((unsigned char *)g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1);
+   if (((*(byte *)(param_2 + 0x3d) & 0x60) == 0) && ((*(byte *)(param_2 + 0x1a) & 0x40) != 0)) {
+     FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),0x300),param_2);
+   }
