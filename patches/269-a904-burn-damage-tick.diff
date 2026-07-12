@@ -1,0 +1,54 @@
+PATCH 269: the object burn/secondary-damage tick FUN_0000_a904 -- DGROUP base-loss + non-canonical
+param map + int-scaled cell table (SIGSEGV), an indirect-dispatched object method reached during the
+damage/destroy cascade.
+
+ASM-verified (asm 0xa904; DS=DGROUP=0x1c00): di=object near offset arrives in param_1 (param_2 is a
+dropped garbage register).  While the object is on fire (byte[di+0x16]&8) and not destroyed
+(!(byte[di+0x3d]&0xe0)), it decrements the burn timer byte[di+0x36], advances byte[di+0x37], probes the
+round-robin cell-index slot word[DG:(0x6d3c+(byte[di+0x37]&0xf)*2)], and if that object is not type
+0x17 and e200 reports lethal, marks byte[di+0x36]=0xff.  Ghidra deref'd di (mis-mapped to param_2) and
+the cell entry (near offset) as host pointers -> SIGSEGV.  Rebuilt: di=param_1; WORD cell entries ->
+word[DG:entry].  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -27144,21 +27144,29 @@
+ void __allregs FUN_0000_a904(undefined4 param_1,int param_2)
+ 
+ {
+-  int *piVar1;
++  /* PATCH 269: object burn/secondary-damage tick (asm 0xa904; DS=DGROUP=0x1c00), an indirect-dispatched
++   * object method: di=object near offset arrives in param_1 (param_2 is a dropped garbage reg).  While
++   * on fire (byte[di+0x16]&8, not already destroyed byte[di+0x3d]&0xe0), decrements the burn timer
++   * byte[di+0x36], advances byte[di+0x37], and probes the round-robin cell-index slot
++   * word[DG:(0x6d3c+(byte[di+0x37]&0xf)*2)]; if that object isn't type 0x17 and e200 reports lethal,
++   * marks byte[di+0x36]=0xff.  Ghidra deref'd di (mis-mapped to param_2) and the cell entry as host
++   * pointers -> SIGSEGV.  Rebuilt: di=param_1; WORD cell table -> word[DG:entry]. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  unsigned int bx, ent;
+   int iVar2;
+-  ulong uVar3;
+   
+-  if (((*(byte *)(param_2 + 0x3d) & 0xe0) == 0) && ((*(byte *)(param_2 + 0x16) & 8) != 0)) {
+-    if (*(char *)(param_2 + 0x36) != '\0') {
+-      *(char *)(param_2 + 0x36) = *(char *)(param_2 + 0x36) + -1;
++  if (((dg[(unsigned short)(di + 0x3d)] & 0xe0) == 0) && ((dg[(unsigned short)(di + 0x16)] & 8) != 0)) {
++    if (dg[(unsigned short)(di + 0x36)] != 0) {
++      dg[(unsigned short)(di + 0x36)] = (unsigned char)(dg[(unsigned short)(di + 0x36)] - 1);
+     }
+-    *(char *)(param_2 + 0x37) = *(char *)(param_2 + 0x37) + '\x01';
+-    uVar3 = CONCAT31((int3)((ulong)param_1 >> 8),*(undefined1 *)(param_2 + 0x37)) & 0xffff000f;
+-    piVar1 = (int *)((undefined2 *)&DAT_2000_2d3c)[(int)uVar3];
+-    if ((piVar1 != (int *)0x0) && (*piVar1 != 0x17)) {
+-      iVar2 = FUN_0000_e200((int *)CONCAT22((int)(uVar3 >> 0x10),piVar1),param_2);
++    dg[(unsigned short)(di + 0x37)] = (unsigned char)(dg[(unsigned short)(di + 0x37)] + 1);
++    bx = ((unsigned int)dg[(unsigned short)(di + 0x37)] & 0xf) << 1;
++    ent = *(unsigned short *)(dg + (unsigned short)(0x6d3c + bx));
++    if ((ent != 0) && (*(unsigned short *)(dg + (unsigned short)ent) != 0x17)) {
++      iVar2 = FUN_0000_e200((int *)(uintptr_t)ent,(undefined2)di);
+       if (iVar2 != 0) {
+-        *(undefined1 *)(param_2 + 0x36) = 0xff;
++        dg[(unsigned short)(di + 0x36)] = 0xff;
+       }
+     }
+   }

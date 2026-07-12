@@ -1,0 +1,89 @@
+PATCH 267: the three damage hit-reaction methods a02d/a064/a080 -- DGROUP near-offset-as-host-pointer
+base-loss (SIGSEGV), called from the damage-application function b39c (patch 266).
+
+ASM-verified (DS=DGROUP=0x1c00), di=object near offset in param_2:
+ - a02d (0x1a02d): 'catch fire' -- byte[di+0x19] |= byte[DG:(rand&7)+0x964e], word[di+0x57]=0,
+   word[di+0x55] >>= 1 (signed).  Also returns the roll in AX (consumed by b39c).
+ - a064 (0x1a064): 'lose track' -- on a rare roll byte[di+0x19] |= 0x10.
+ - a080 (0x1a080): 'immobilize' -- on a roll byte[di+0x19] |= 8, byte[di+0x1a] = (x&0xef)|0x20.
+All three deref'd di as a host pointer (and a02d its flag LUT) -> SIGSEGV; rebuilt in the DGROUP model.
+bf3c is the patch-263 firing helper.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -61858,19 +61858,26 @@
+ undefined4 __allregs FUN_1000_a02d(undefined2 param_1,int param_2)
+ 
+ {
++  /* PATCH 267: hit-reaction 'catch fire' (asm 0x1a02d; DS=DGROUP=0x1c00).  di=object near offset in
++   * param_2; sets a random fire flag bit byte[di+0x19]|=byte[DG:(rand&7)+0x964e], clears word[di+0x57]
++   * and halves word[di+0x55].  Ghidra deref'd di and the flag LUT as host pointers -> SIGSEGV. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_2;
+   uint uVar1;
+   
+   uVar1 = FUN_0000_b26a();
+   if ((DAT_2000_5bd9 == 10) || ((uVar1 & 0x78) == 0)) {
+-    if ((*(byte *)(param_2 + 0x19) & 6) == 0) {
++    if ((dg[(unsigned short)(di + 0x19)] & 6) == 0) {
+       FUN_0000_bf3c(0x1a,param_1,param_2);
+       uVar1 = 0;
+     }
+-    *(byte *)(param_2 + 0x19) = *(byte *)(param_2 + 0x19) | *(byte *)((uVar1 & 7) + 0x964e);
+-    *(undefined2 *)(param_2 + 0x57) = 0;
+-    *(int *)(param_2 + 0x55) = *(int *)(param_2 + 0x55) >> 1;
++    dg[(unsigned short)(di + 0x19)] =
++        (unsigned char)(dg[(unsigned short)(di + 0x19)] | dg[(unsigned short)((uVar1 & 7) + 0x964e)]);
++    *(unsigned short *)(dg + (unsigned short)(di + 0x57)) = 0;
++    *(short *)(dg + (unsigned short)(di + 0x55)) =
++        (short)(*(short *)(dg + (unsigned short)(di + 0x55))) >> 1;
+   }
+-  return;
++  return uVar1;
+ }
+ 
+ 
+@@ -61879,13 +61886,17 @@
+ void __allregs FUN_1000_a064(undefined2 param_1,int param_2)
+ 
+ {
++  /* PATCH 267: hit-reaction 'lose track' (asm 0x1a064; DS=DGROUP=0x1c00).  di=object near offset in
++   * param_2; on a rare roll sets byte[di+0x19]|=0x10.  di deref base-loss -> SIGSEGV. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_2;
+   uint uVar1;
+   
+-  if ((*(byte *)(param_2 + 0x19) & 0x10) == 0) {
++  if ((dg[(unsigned short)(di + 0x19)] & 0x10) == 0) {
+     uVar1 = FUN_0000_b26a();
+     if ((uVar1 & 0xf8) == 0) {
+       FUN_0000_bf3c(0x22,param_1,param_2);
+-      *(byte *)(param_2 + 0x19) = *(byte *)(param_2 + 0x19) | 0x10;
++      dg[(unsigned short)(di + 0x19)] = (unsigned char)(dg[(unsigned short)(di + 0x19)] | 0x10);
+     }
+   }
+   return;
+@@ -61897,15 +61908,20 @@
+ void __allregs FUN_1000_a080(undefined2 param_1,int param_2)
+ 
+ {
++  /* PATCH 267: hit-reaction 'immobilize' (asm 0x1a080; DS=DGROUP=0x1c00).  di=object near offset in
++   * param_2; on a roll sets byte[di+0x19]|=8 and adjusts byte[di+0x1a] (&0xef | 0x20).  di deref
++   * base-loss -> SIGSEGV. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_2;
+   uint uVar1;
+   
+-  if ((*(byte *)(param_2 + 0x19) & 8) == 0) {
++  if ((dg[(unsigned short)(di + 0x19)] & 8) == 0) {
+     uVar1 = FUN_0000_b26a();
+     if ((uVar1 & 0x78) == 0) {
+       FUN_0000_bf3c(0x1c,param_1,param_2);
+-      *(byte *)(param_2 + 0x19) = *(byte *)(param_2 + 0x19) | 8;
+-      *(byte *)(param_2 + 0x1a) = *(byte *)(param_2 + 0x1a) & 0xef;
+-      *(byte *)(param_2 + 0x1a) = *(byte *)(param_2 + 0x1a) | 0x20;
++      dg[(unsigned short)(di + 0x19)] = (unsigned char)(dg[(unsigned short)(di + 0x19)] | 8);
++      dg[(unsigned short)(di + 0x1a)] = (unsigned char)(dg[(unsigned short)(di + 0x1a)] & 0xef);
++      dg[(unsigned short)(di + 0x1a)] = (unsigned char)(dg[(unsigned short)(di + 0x1a)] | 0x20);
+     }
+   }
+   return;

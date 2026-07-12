@@ -1,0 +1,76 @@
+PATCH 270: the object-type-C spawn-child UPDATE FUN_1000_9caa + a b1d6 CF fix -- DGROUP base-loss +
+dropped-object-identity (SIGSEGV), dispatched by the b355 type-C template (patch 251).
+
+ASM-verified (asm 0x19caa; DS=DGROUP=0x1c00): di=object near offset in param_2.  When DAT_2000_4b4f==1
+it registers the object as a display object via b1d6 (a guarded fall-through into b1df that leaves
+si=di=object and sets g_fist_cf on roster-full) and, on success, seeds the spin word[di+0x12]=(rand&
+0x3f)+low16(param_1), word[di+0x14]=that*4, clears byte[di+0x19]/word[di+0x1a] and bumps dword[di+0xc]
++=0x300.  Ghidra deref'd di as a host pointer (SIGSEGV) and split the single object into iVar4/iVar5=
+unaff_CS (the [+4]/[+8] copies are asm si<-di self-copies, elided).  b1d6 also gains its asm stc
+(g_fist_cf=1) on the roster-full path so 9caa's success test is faithful.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -61526,34 +61526,35 @@
+ ulong __allregs FUN_1000_9caa(ulong param_1,int param_2)
+ 
+ {
++  /* PATCH 270: object-type-C spawn-child UPDATE (asm 0x19caa; DS=DGROUP=0x1c00), dispatched by b355.
++   * di=object near offset in param_2; when the mission gate DAT_2000_4b4f==1 it registers the object as
++   * a display object via b1d6 (-> b1df; leaves si=di=object, sets g_fist_cf on roster-full) and, on
++   * success, seeds its spin word[di+0x12]=(rand&0x3f)+(low16 param_1), word[di+0x14]=that*4, clears
++   * byte[di+0x19]/word[di+0x1a] and bumps dword[di+0xc]+=0x300.  Ghidra base-lost di (host deref ->
++   * SIGSEGV) and split the single object into iVar4/iVar5=unaff_CS (the [+4]/[+8] copies are asm
++   * si<-di with si==di, i.e. no-ops -> elided).  Rebuilt in the DGROUP model. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  extern unsigned char g_fist_cf;
++  unsigned int di = (unsigned short)param_2;
++  unsigned int ax0 = (unsigned short)param_1;
+   uint uVar1;
+   int iVar2;
+-  undefined2 extraout_var;
+   ulong uVar3;
+-  int iVar4;
+-  int iVar5;
+-  int unaff_CS;
+-  bool bVar6;
+   
+-  bVar6 = DAT_2000_4b4f == '\0';
+   if (DAT_2000_4b4f == '\x01') {
+-    iVar4 = param_2;
+-    FUN_1000_b1d6(0x11,param_2);
+-    if (!bVar6) {
+-      iVar5 = unaff_CS;
++    FUN_1000_b1d6(0x11,(int *)(uintptr_t)di);
++    if (!(bool)g_fist_cf) {
+       uVar1 = FUN_0000_b26a();
+-      iVar2 = (uVar1 & 0x3f) + unaff_CS;
+-      *(int *)(iVar4 + 0x12) = iVar2;
+-      *(int *)(iVar4 + 0x14) = iVar2 * 4;
+-      *(undefined1 *)(iVar4 + 0x19) = 0;
+-      *(undefined2 *)(iVar4 + 0x1a) = 0;
+-      *(undefined4 *)(iVar4 + 4) = *(undefined4 *)(iVar5 + 4);
+-      *(undefined4 *)(iVar4 + 8) = *(undefined4 *)(iVar5 + 8);
+-      uVar3 = *(long *)(iVar5 + 0xc) + 0x300;
+-      *(ulong *)(iVar4 + 0xc) = uVar3;
++      iVar2 = (int)((uVar1 & 0x3f) + ax0);
++      *(unsigned short *)(dg + (unsigned short)(di + 0x12)) = (unsigned short)iVar2;
++      *(unsigned short *)(dg + (unsigned short)(di + 0x14)) = (unsigned short)(iVar2 << 2);
++      dg[(unsigned short)(di + 0x19)] = 0;
++      *(unsigned short *)(dg + (unsigned short)(di + 0x1a)) = 0;
++      uVar3 = (ulong)(*(unsigned int *)(dg + (unsigned short)(di + 0xc)) + 0x300);
++      *(unsigned int *)(dg + (unsigned short)(di + 0xc)) = (unsigned int)uVar3;
+       return uVar3;
+     }
+-    param_1 = CONCAT22(extraout_var,param_2);
++    param_1 = (ulong)di;
+   }
+   return param_1;
+ }
+@@ -63601,6 +63602,7 @@
+   
+   bVar4 = DAT_2000_a294 < 0x78;
+   if (!bVar4) {
++    { extern unsigned char g_fist_cf; g_fist_cf = 1; }  /* PATCH 270: asm b1d6 stc when roster full */
+     return param_1;
+   }
+   iVar1 = FUN_1000_b21d(param_1);

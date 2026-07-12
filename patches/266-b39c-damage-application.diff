@@ -1,0 +1,138 @@
+PATCH 266: the DAMAGE-APPLICATION function FUN_1000_b39c -- DGROUP near-offset-as-host-pointer
+base-loss + int-scaled field indices + a DROPPED table-A near offset (SIGSEGV), reached via the object
+action dispatch c31e -> c336 during the per-frame object walk when a projectile hits a target.
+
+ASM-verified (asm 0x1b39c; DS=DGROUP=0x1c00): di=target object near offset in param_3, bx=param_2,
+ax=param_1.  Rolls a random damage value from the weapon damage record (word[DG:(param_2+word[DG:(word
+[di]*2+0xe3b8)])]+param_1), scales it by the type table-A entry (word[DG:(word[di]*2+0xe3c0)] + the
+armour LUT DAT_5bd7) and the current-target modifier DAT_5606, accumulates into byte[di+0x3a], and on
+overflow/>=100 runs the destroy path (c047(0x2d)/a93e) else the hit reactions a02d/a064/a080 + the
+player HUD damage flash (DAT_1000_c73e).  Ghidra deref'd the object/record near offsets as host
+pointers (*param_3 -> SIGSEGV), int-scaled the param_3[] field indices (param_3[0x20]=+0x80 vs asm
+word[di+0x40]; param_3+0x1d=+0x74 vs asm byte[di+0x3a]) and DROPPED table-A entirely (the phantom
+unaff_CS = the pushed dx).  Rebuilt faithfully in the DGROUP model.  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -63831,59 +63831,76 @@
+ void __allregs FUN_1000_b39c(int param_1,int param_2,int *param_3)
+ 
+ {
+-  byte *pbVar1;
+-  byte bVar2;
+-  byte bVar3;
+-  uint uVar4;
+-  undefined2 uVar5;
+-  byte *pbVar6;
+-  undefined2 in_register_0000000e;
+-  undefined4 uVar7;
+-  int unaff_CS;
+-  
+-  param_3[0x20] = param_3[0x20] | 0x20;
+-  pbVar6 = (byte *)(*(int *)(param_2 + *(int *)(*param_3 * 2 + -0x1c48)) + param_1);
+-  uVar4 = FUN_0000_b26a();
+-  uVar7 = CONCAT22(in_register_0000000e,unaff_CS);
++  /* PATCH 266: the DAMAGE-APPLICATION function (asm 0x1b39c; DS=DGROUP=0x1c00).  di=target object near
++   * offset in param_3, bx=param_2, ax=param_1.  Computes a random damage value from the weapon's
++   * damage record and the type/armour tables, accumulates it into byte[di+0x3a], and on overflow/>=100
++   * runs the destroy path (c047(0x2d)/a93e) else the hit reactions (a02d/a064/a080) + player HUD flash.
++   * Ghidra mangled the WHOLE thing: it deref'd the object/record near offsets as host pointers (SIGSEGV
++   * at *param_3), int-scaled the param_3[] field indices (param_3[0x20]=+0x80 vs asm word[di+0x40];
++   * param_3+0x1d=+0x74 vs asm byte[di+0x3a]), and DROPPED the table-A near offset entirely (the phantom
++   * `unaff_CS`, actually the pushed dx = word[DG:(word[di]*2+0xe3c0)]).  Rebuilt faithfully. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_3;
++  unsigned int bx0 = (unsigned short)param_2;
++  unsigned int ax0 = (unsigned short)param_1;
++  unsigned int si, bxA, siB, bx, ax, dx;
++  unsigned char al, ah, oldv;
++  int r;
++
++  *(unsigned short *)(dg + (unsigned short)(di + 0x40)) |= 0x20;   /* word[di+0x40] |= 0x20 */
++  si = (unsigned int)(*(unsigned short *)(dg + di)) << 1;          /* si = word[di]*2 */
++  bxA = *(unsigned short *)(dg + (unsigned short)(si + 0xe3c0));   /* table A (near offset), asm push dx */
++  siB = *(unsigned short *)(dg + (unsigned short)(si + 0xe3b8));   /* table B */
++  bx = *(unsigned short *)(dg + (unsigned short)(bx0 + siB));      /* damage-record base */
++  bx = (unsigned short)(bx + ax0);                                /* += param_1 -> record near offset */
++  ax = (unsigned int)FUN_0000_b26a() & 0xff;                      /* random */
++  dx = dg[(unsigned short)(bx + 1)];
++  ax = (ax * dx) >> 8;
++  dx = (unsigned int)dg[(unsigned short)bx] + 1;
++  ax = ax + dx;
++  dx = dg[(unsigned short)(bxA + (unsigned short)DAT_2000_5bd7)]; /* armour table [bxA + DAT_5bd7] */
++  ax = (ax * dx) >> 8;
+   DAT_2000_5606 = DAT_2000_a3ae;
+-  if ((*(byte *)(DAT_2000_a3b2 + 0x16) & 8) != 0) {
++  if ((dg[(unsigned short)((unsigned short)DAT_2000_a3b2 + 0x16)] & 8) != 0) {
+     DAT_2000_5606 = DAT_2000_a3b0;
+   }
+-  pbVar1 = (byte *)(param_3 + 0x1d);
+-  bVar3 = *pbVar1;
+-  bVar2 = (byte)(((((uVar4 & 0xff) * (uint)pbVar6[1] >> 8) + *pbVar6 + 1) *
+-                  (uint)*(byte *)(unaff_CS + DAT_2000_5bd7) >> 8) * DAT_2000_5606 >> 8);
+-  *pbVar1 = *pbVar1 + bVar2;
+-  if ((!CARRY1(bVar3,bVar2)) && (*(byte *)(param_3 + 0x1d) < 100)) {
+-    DAT_2000_56aa = bVar2;
+-    uVar5 = FUN_0000_b26a();
+-    if ((byte)uVar5 <= *(byte *)((int)uVar7 + 2)) {
+-      uVar5 = FUN_1000_a02d((int)uVar7,param_3);
+-    }
+-    if ((byte)((uint)uVar5 >> 8) <= *(byte *)((int)uVar7 + 3)) {
+-      FUN_1000_a064((int)uVar7,param_3);
++  ax = (ax * (unsigned int)(unsigned short)DAT_2000_5606) >> 8;
++  al = (unsigned char)ax;
++  oldv = dg[(unsigned short)(di + 0x3a)];
++  {
++    unsigned int sum = (unsigned int)oldv + al;
++    dg[(unsigned short)(di + 0x3a)] = (unsigned char)sum;
++    if ((sum > 0xff) || (dg[(unsigned short)(di + 0x3a)] >= 0x64)) {   /* jb / jae -> destroyed */
++      FUN_0000_c047(0x2d,(int)bxA,param_3);
++      FUN_0000_a93e((int)bxA,param_3);
++      return;
+     }
+-    bVar3 = FUN_0000_b26a();
+-    if (bVar3 <= *(byte *)((int)uVar7 + 4)) {
+-      FUN_1000_a080((int)uVar7,param_3);
++  }
++  DAT_2000_56aa = al;
++  r = FUN_0000_b26a();
++  if ((unsigned char)r <= dg[(unsigned short)(bxA + 2)]) {
++    r = FUN_1000_a02d((int)bxA,param_3);
++  }
++  if ((unsigned char)((unsigned int)r >> 8) <= dg[(unsigned short)(bxA + 3)]) {
++    FUN_1000_a064((int)bxA,param_3);
++  }
++  ah = (unsigned char)FUN_0000_b26a();
++  if (ah <= dg[(unsigned short)(bxA + 4)]) {
++    FUN_1000_a080((int)bxA,param_3);
++  }
++  if ((di == (unsigned short)DAT_2000_2d34) && ((dg[(unsigned short)(di + 0x17)] & 2) == 0)) {
++    DAT_1000_c73e = 4;
++    dg[(unsigned short)(di + 0x95)] = 4;
++    if (1 < DAT_2000_56aa) {
++      DAT_1000_c73e = 0x14;
++      dg[(unsigned short)(di + 0x95)] = 0x14;
+     }
+-    if ((param_3 == DAT_2000_2d34) && ((*(byte *)((int)param_3 + 0x17) & 2) == 0)) {
+-      DAT_1000_c73e = 4;
+-      *(undefined1 *)((int)param_3 + 0x95) = 4;
+-      if (1 < DAT_2000_56aa) {
+-        DAT_1000_c73e = 0x14;
+-        *(undefined1 *)((int)param_3 + 0x95) = 0x14;
+-      }
+-      uVar5 = 0x12;
+-      if (DAT_2000_5bd9 == 0xc) {
+-        uVar5 = 0x2a;
+-      }
+-      FUN_0000_c047(uVar5,uVar7,param_3);
++    ax = 0x12;
++    if (DAT_2000_5bd9 == 0xc) {
++      ax = 0x2a;
+     }
+-    return;
++    FUN_0000_c047(ax,(int)bxA,param_3);
+   }
+-  FUN_0000_c047(0x2d,uVar7,param_3);
+-  FUN_0000_a93e(uVar7,param_3);
+   return;
+ }
+ 

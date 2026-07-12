@@ -1,0 +1,21 @@
+PATCH 268: the damage-notify poster FUN_0000_c047 -- DGROUP near-offset-as-host-pointer base-loss
+(SIGSEGV), called from the damage-application function b39c (patch 266) and its callees.
+
+ASM-verified (asm 0xc047; DS=DGROUP=0x1c00): when the object di==DAT_2000_5fdf, reads the damage-type
+byte al=word[DG:(param_1+0x9fe1)] (param_1 = a DGROUP near offset, asm bx=ax=param_1) and, if it is a
+valid type (!=0xff, <0x10), posts an extender damage event via e2c2.  Ghidra deref'd param_1 as a host
+pointer (*(u2*)(param_1-0x601f)) -> SIGSEGV; rebased word[DG:(param_1+0x9fe1)].  Mission-cascade only.
+--- a/fist.c
++++ b/fist.c
+@@ -30353,7 +30353,10 @@
+   byte bVar1;
+   
+   if (param_3 == DAT_2000_5fdf) {
+-    bVar1 = (byte)*(undefined2 *)(param_1 + -0x601f);
++    /* PATCH 268: param_1 is a DGROUP near offset (asm 0xc053 mov -0x601f(%bx),%ax; bx=ax=param_1);
++     * Ghidra deref'd it as a host pointer -> SIGSEGV.  Rebase word[DG:(param_1+0x9fe1)]. */
++    bVar1 = (byte)*(unsigned short *)((unsigned char *)g_mem + 0x1c000 +
++              (unsigned short)((unsigned short)param_1 + 0x9fe1));
+     DAT_2000_5fdd = param_1;
+     if ((bVar1 != 0xff) && (bVar1 < 0x10)) {
+       FUN_0000_e2c2(CONCAT22((int)((ulong)param_2 >> 0x10),param_1));
