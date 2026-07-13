@@ -1,6 +1,6 @@
---- /tmp/debs/orig_extract/dosbox-0.74-3/src/hardware/vga_memory.cpp	2019-05-02 19:01:18.000000000 +0200
-+++ src/hardware/vga_memory.cpp	2026-07-13 03:20:09.146485463 +0200
-@@ -27,6 +27,162 @@
+--- src/hardware/vga_memory.cpp	2019-05-02 19:01:18.000000000 +0200
++++ src/hardware/vga_memory.cpp	2026-07-13 06:11:36.046502775 +0200
+@@ -27,6 +27,188 @@
  #include "pic.h"
  #include "inout.h"
  #include "setup.h"
@@ -29,12 +29,31 @@
 +volatile int fist_mem_armed = 0;              /* referenced by include/mem.h host_writeb gate */
 +static Bit32u fist_tile_lo = 0x175200, fist_tile_hi = 0x185200;
 +
++/* ---- targeted WATCH: capture writer flat-IP + near-call stack backtrace for a
++ * specific phys range (env FIST_WATCHPHYS, +/- FIST_WATCHSPAN bytes).  Used to
++ * find the mission-entry cockpit-view ACTIVATE source: who writes DGROUP:4d0e. */
++static Bit32u fist_watch_lo = 0, fist_watch_hi = 0;
++static int    fist_watch_hits = 0;
++
 +static void fist_sig(int s) { fist_req = (s == SIGUSR1) ? 1 : 2; }
 +
 +/* Records the CS:EIP of any guest write whose physical target lands in the tile
 + * range.  Called (gated on fist_mem_armed) from host_writeb in include/mem.h. */
 +extern "C" void fist_memrec(Bit8u *off, Bit8u val) {
 +	Bit32u ph = (Bit32u)(off - MemBase);
++	if (fist_watch_hi && ph >= fist_watch_lo && ph < fist_watch_hi && fist_watch_hits < 40000) {
++		fist_watch_hits++;
++		char wpath[600]; snprintf(wpath, sizeof wpath, "%s.watch.txt", fist_prefix);
++		FILE *wf = fopen(wpath, "a");
++		if (wf) {
++			Bit32u ssb = SegPhys(ss), flatip = SegPhys(cs) + reg_eip;
++			fprintf(wf, "WATCH ph=%08x val=%02x flatip=%08x cs=%04x eip=%08x ss=%04x sp=%08x stack:",
++				ph, val, flatip, SegValue(cs), reg_eip, SegValue(ss), reg_esp);
++			for (int k = 0; k < 20; k++) fprintf(wf, " %04x", mem_readw(ssb + reg_esp + k * 2));
++			fprintf(wf, "\n");
++			fclose(wf);
++		}
++	}
 +	if (ph < fist_tile_lo || ph >= fist_tile_hi) return;
 +	Bit32u ipl = SegPhys(cs) + reg_eip, off16 = ph - fist_tile_lo;
 +	for (int i = 0; i < fist_nment; i++) {
@@ -134,6 +153,13 @@
 +		snprintf(fist_prefix, sizeof fist_prefix, "%s", p ? p : "/tmp/fistlog");
 +		const char *tp = getenv("FIST_TILEPHYS");
 +		if (tp) { fist_tile_lo = (Bit32u)strtoul(tp, 0, 0); fist_tile_hi = fist_tile_lo + 0x10000; }
++		const char *wp = getenv("FIST_WATCHPHYS");
++		if (wp) {
++			Bit32u c = (Bit32u)strtoul(wp, 0, 0);
++			const char *ws = getenv("FIST_WATCHSPAN");
++			Bit32u span = ws ? (Bit32u)strtoul(ws, 0, 0) : 0x20;
++			fist_watch_lo = c - span; fist_watch_hi = c + span;
++		}
 +	}
 +	if (GCC_UNLIKELY(fist_req)) {
 +		if (fist_req == 1) { fist_nent = 0; fist_armed = 1; fist_nment = 0; fist_mem_armed = 1; }
@@ -163,7 +189,7 @@
  
  
  #ifndef C_VGARAM_CHECKED
-@@ -377,6 +533,7 @@
+@@ -377,6 +559,7 @@
  			return readHandler<Bit32u>( addr );
  	}
  	void writeb(PhysPt addr, Bitu val ) {
@@ -171,7 +197,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -385,6 +542,7 @@
+@@ -385,6 +568,7 @@
  		writeCache<Bit8u>( addr, val );
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -179,7 +205,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -399,6 +557,7 @@
+@@ -399,6 +583,7 @@
  		writeCache<Bit16u>( addr, val );
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -187,7 +213,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -433,6 +592,7 @@
+@@ -433,6 +618,7 @@
  		flags=PFLAG_NOCODE;
  	}
  	void writeb(PhysPt addr,Bitu val) {
@@ -195,7 +221,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -440,6 +600,7 @@
+@@ -440,6 +626,7 @@
  		writeHandler(addr+0,(Bit8u)(val >> 0));
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -203,7 +229,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -448,6 +609,7 @@
+@@ -448,6 +635,7 @@
  		writeHandler(addr+1,(Bit8u)(val >> 8));
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -211,7 +237,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
---- /tmp/debs/orig_extract/dosbox-0.74-3/include/mem.h	2019-05-02 19:01:20.000000000 +0200
+--- include/mem.h	2019-05-02 19:01:20.000000000 +0200
 +++ include/mem.h	2026-07-13 03:20:25.670485480 +0200
 @@ -93,13 +93,18 @@
  static INLINE Bit32u host_readd(HostPt off) {
