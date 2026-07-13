@@ -273,6 +273,31 @@ code *fist_icall_near(uint16_t seg, uint16_t off)
             }
         }
     }
+    /* FIST_CURTRACE (diagnostic, default OFF): trace the 22dd render-pass cursor-walk handler sequence.
+     * 22dd dispatches `fist_icall_near(0, word[DGROUP:word[DGROUP:0x4a86]])` -- the cursor 0x4a86 points
+     * into a per-render-PHASE script array (word[0x4a88+d549]); each handler advances 0x4a86 by 2.  Log
+     * every distinct near target after map-load with the current d548/d549/a814 so we can see which render
+     * PHASE the walk runs.  KEY (this iteration, oracle-proven): the original's settled cockpit renders in
+     * render phase d549=0x1c (its script @0x6c82 includes the object renderer 0x286e), while the port stays
+     * in phase 0x1e (d549=0x1e from 67e3) because it reads d548 as a positive WORD -> 22dd never RESEEDs
+     * (never consults d549).  Read-only, behaviour-neutral. */
+    if (seg == 0 && getenv("FIST_CURTRACE")) {
+        extern int g_fist_after_map;
+        if (g_fist_after_map) {
+            uint8_t *dg = g_mem + 0x1c000;
+            uint16_t cur = *(uint16_t *)(dg + 0x4a86);
+            /* only log the 22dd-family script handlers (offsets < 0x4400, the render-pass range) */
+            if (off < 0x4400) {
+                static uint32_t seen[2048]; static int nseen; int dup = 0;
+                for (int i = 0; i < nseen; i++) if (seen[i] == off) { dup = 1; break; }
+                if (!dup) {
+                    if (nseen < 2048) seen[nseen++] = off;
+                    fprintf(stderr, "[cur] tgt=0x%04x cursor=0x%04x d548=0x%02x d549=0x%02x a814=%d\n",
+                        off, cur, *(uint8_t*)(dg+0x1548), *(uint8_t*)(dg+0x1549), *(uint8_t*)(dg+0xe814));
+                }
+            }
+        }
+    }
     return fist_icall(((uint32_t)seg << 4) + off);
 }
 
