@@ -1,4 +1,4 @@
-PATCH 304: reconstruct the remaining 209e paint-walk chain of the op-0x24 cockpit-view render -- the
+PATCH 305: reconstruct the remaining 209e paint-walk chain of the op-0x24 cockpit-view render -- the
 sibling viewport DIRTY method + the cockpit-panel/HUD element sprite/text paint methods that the walk
 dispatches before FUN_1000_795c (the op-0x24 windshield poster).  Each was a base-lost SIGSEGV crash on
 the genuine BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1 run, cleared in dispatch order (the crash
@@ -54,7 +54,7 @@ build loop -> 1630/3eb3) -- the pinned next frontier (see docs/stage1.md).
 +  uint16_t di_veh, ax_sprite, bx_elem;
 +  uint8_t *E;
 +
-+  /* PATCH 304: FUN_0000_790f (asm 0x790f) -- sibling of 7561/7582 (cockpit HUD sprite paint, 209e-walk
++  /* PATCH 305: FUN_0000_790f (asm 0x790f) -- sibling of 7561/7582 (cockpit HUD sprite paint, 209e-walk
 +     arg-less).  Same idiom: di=DAT_2000_2d34 vehicle; ax=byte[di+0x3f]+0x160 (sprite id, Ghidra DROPPED
 +     it); bx=element node+4 (DGROUP:0x3e08); word[bx]+=3; word[bx+2]+=7; mga 0x26a1(ax,bx); restore.
 +     Rebase onto g_mem+0x1c000 + thread the (ax,0,0,bx,0) args (DS=DGROUP=0x1c00). */
@@ -87,7 +87,7 @@ build loop -> 1630/3eb3) -- the pinned next frontier (see docs/stage1.md).
 +  uint16_t bx_elem, si_off, ax_sprite, pos;
 +  uint8_t  bl, *V;
 +
-+  /* PATCH 304: FUN_0000_79bf (asm 0x79bf) -- cockpit HUD sprite paint (209e-walk arg-less), same class
++  /* PATCH 305: FUN_0000_79bf (asm 0x79bf) -- cockpit HUD sprite paint (209e-walk arg-less), same class
 +     as 7e3e/7561.  asm: si=word[bx+2]; bl=byte[bp+si+1] (element sprite variant, bx=element node ->
 +     DGROUP:0x3e08, bp=walk base -> g_fist_paintbp); ax=word[DGROUP:(bl+0x8efe)] (sprite-base table,
 +     -0x7102 wraps to 16-bit 0x8efe); di=DAT_2000_2d34 vehicle; if(bl==byte[di+0x91]) ax+=8 else
@@ -126,7 +126,7 @@ build loop -> 1630/3eb3) -- the pinned next frontier (see docs/stage1.md).
 +  uint16_t di_veh, ax_sprite, bx_elem;
 +  uint8_t *E;
 +
-+  /* PATCH 304: FUN_1000_7561 (asm 0x17561) -- cockpit HUD sprite paint, dispatched ARG-LESS by the
++  /* PATCH 305: FUN_1000_7561 (asm 0x17561) -- cockpit HUD sprite paint, dispatched ARG-LESS by the
 +     209e paint walk (param garbage).  asm: `di=[0x6d34]` (DAT_2000_2d34 vehicle near off);
 +     `ax=byte[di+0x3f]+0x140` (sprite id -- Ghidra DROPPED it entirely); `bx=element node +4` (the walk
 +     publishes the node to DGROUP:0x3e08, cf. 7b04/795c); `word[bx]+=2; word[bx+2]+=6` nudge the sprite
@@ -160,7 +160,7 @@ build loop -> 1630/3eb3) -- the pinned next frontier (see docs/stage1.md).
 +  uint16_t di_veh, ax_sprite, bx_elem;
 +  uint8_t *E;
 +
-+  /* PATCH 304: FUN_1000_7582 (asm 0x17582) -- sibling of 7561 (cockpit HUD sprite paint, 209e-walk
++  /* PATCH 305: FUN_1000_7582 (asm 0x17582) -- sibling of 7561 (cockpit HUD sprite paint, 209e-walk
 +     arg-less).  Same idiom, sprite id `byte[di+0x3f]+0x150`, rect y-nudge +0x2c.  Ghidra also mangled
 +     the restore (`&DAT_2000_bfd4 + piVar1[1]` -- bogus; asm 0x1759e `subw $0x2c,0x2(%bx)`). */
 +  di_veh    = (uint16_t)DAT_2000_2d34;
@@ -186,7 +186,7 @@ build loop -> 1630/3eb3) -- the pinned next frontier (see docs/stage1.md).
 +  extern unsigned short g_fist_paintbp;
 +  uint16_t bx_elem, si_off, di_veh, strseg, ax_v, bx_i;
 +
-+  /* PATCH 304: FUN_1000_7a38 (asm 0x17a38) -- sibling viewport DIRTY method (same class as 795c/79f5),
++  /* PATCH 305: FUN_1000_7a38 (asm 0x17a38) -- sibling viewport DIRTY method (same class as 795c/79f5),
 +     dispatched ARG-LESS by the 209e dirty-walk.  Ghidra base-lost the whole node/vehicle model:
 +     asm `mov di,[0x6d34]` (di = vehicle NEAR offset, DAT_2000_2d34), `mov si,[bx+2]; movb [bp+si],3`
 +     dirty-mark where bx = the walk element node (published to DGROUP:0x3e08) and bp = the walk base
@@ -236,7 +236,7 @@ build loop -> 1630/3eb3) -- the pinned next frontier (see docs/stage1.md).
 +  uint8_t *dg = g_mem + 0x1c000;
 +  uint16_t di_veh, b90;
 +
-+  /* PATCH 304: FUN_1000_7b71 (asm 0x17b71) -- cockpit-panel sub-element paint (dispatched by the 209e
++  /* PATCH 305: FUN_1000_7b71 (asm 0x17b71) -- cockpit-panel sub-element paint (dispatched by the 209e
 +     walk chain).  Thread the dropped mga sprite-blit far-vector args (Ghidra's __allregs indirect
 +     dispatch drops every register arg -> the mga methods ran on garbage):
 +       c6b4 -> mga 0x26a1 icon sprite   (ax=0x2c0, bx=0x8f12)         asm 0x17b71/17b74/17b77
@@ -277,7 +277,7 @@ build loop -> 1630/3eb3) -- the pinned next frontier (see docs/stage1.md).
 +  uint16_t bx_elem, si_off, ax_val, x, y;
 +  uint8_t bl;
 +
-+  /* PATCH 304: FUN_1000_7dae (asm 0x17dae) -- cockpit HUD numeric-readout element paint (209e-walk
++  /* PATCH 305: FUN_1000_7dae (asm 0x17dae) -- cockpit HUD numeric-readout element paint (209e-walk
 +     arg-less).  asm: si=word[bx+2]; bl=byte[bp+si+1] (bx=element node -> DGROUP:0x3e08, bp=walk base ->
 +     g_fist_paintbp); ax=word[DGROUP:(bl + DAT_2000_2d34 + 0xad)] (per-weapon count from the player
 +     vehicle -- Ghidra DROPPED the whole calc); 52d1(word[elem+4], word[elem+6]) setpos; 524e(2);
@@ -311,7 +311,7 @@ build loop -> 1630/3eb3) -- the pinned next frontier (see docs/stage1.md).
 +  uint8_t *dg = g_mem + 0x1c000;
 +  uint16_t bx_elem, x, y, si, di_veh, b91;
 +
-+  /* PATCH 304: FUN_1000_7df8 (asm 0x17df8) -- cockpit HUD text/label element paint (209e-walk arg-less).
++  /* PATCH 305: FUN_1000_7df8 (asm 0x17df8) -- cockpit HUD text/label element paint (209e-walk arg-less).
 +     asm: al=0; bx=element node+4 (published to DGROUP:0x3e08); (*c60a)(bx,al=0) = mga 1091 rect fill;
 +     x=word[bx], y=word[bx+2]; 52d1(x,y) setpos; 524e(2); 530b(0xe); di=DAT_2000_2d34 vehicle; select
 +     the label string si:  si=0x232a; if(word[di + byte[di+0x91] + 0xad]!=0){ si=0x231c;

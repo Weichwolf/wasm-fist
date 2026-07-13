@@ -1,0 +1,57 @@
+304 -- FUN_0000_2144: the boot window-descriptor allocator passes a HOST POINTER (&DAT_1000_d56c) as the
+MEMMGR out-struct near-offset, whose 16-bit truncation is g_mem-BASE-DEPENDENT -> under some link layouts
+it aliases the MENU-BACKGROUND descriptor DGROUP:0xf6cc and marks it "already loaded", so MAINMENU.MRL is
+never loaded and the menu renders with a stale grayscale palette.  This is the pre-existing LATENT
+determinism bug that the paint-walk patch (305) exposes via its layout shift.
+
+THE CLASS: host-pointer-into-DGROUP-near-offset base-loss (cf. patches 077/146/complete d56c family).
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin 0x2171..0x2184; DS=DGROUP=0x1c00):
+    2171: b8 01 00        mov ax,0x1
+    2174: bb 6c 15        mov bx,0x156c      <- bx = the DGROUP NEAR OFFSET 0x156c (the d56a/d56c
+    2177: 8c d9           mov cx,ds          <     window-descriptor control block), NOT a pointer
+    2179: 9a 9a 21 69 0f  call 0xf69:0x219a  <- FUN_1000_182a(ax=1, cx=ds, dx=size, bx=0x156c) -> 184b
+    217e: c7 06 6a 15 6c 15  mov WORD ds:0x156a,0x156c
+  FUN_1000_184b (the MEMMGR node allocator) takes its out-struct near-offset as `bx = (uint16_t)param_4`
+  and stores the allocated segment + flags there: `MM_S16(cx,bx)=seg; MM_S16(cx,bx+2)=0xa0` (bit7 = the
+  "allocated/loaded" flag).  So param_4 MUST be the DGROUP near offset 0x156c.
+  Ghidra rendered `mov bx,0x156c` as `&DAT_1000_d56c` -- the ADDRESS of the DGROUP:0x156c global, which in
+  the flat model is the HOST pointer g_mem+0x1d56c.  184b truncates it (`bx=(uint16_t)(uintptr_t)param_4`),
+  and low16(g_mem+0x1d56c) DEPENDS ON THE g_mem LINK BASE.  With most layouts it lands on a harmless
+  offset, but when the base makes it 0xf6cc it writes seg+0xa0 into the MENU-BG descriptor DGROUP:0xf6cc/
+  0xf6ce.  Then FUN_0000_e3bc (the menu-bg element paint method, asm 0xe3c..) reads `b6ce|0x20`: bit7 set
+  -> takes the "already loaded" branch and SKIPS FUN_0000_e3f8 (the MGAVIDEO 0x310 bg-loader that opens
+  MAINMENU.MRL), so the descriptor keeps whatever stale (grayscale) data is at its heap block.  Result:
+  the menu paints the correct pixel indices through the wrong (grayscale) palette -> AE=62144 vs the
+  DOSBox reference.
+
+PROOF (deterministic outside gdb): the WORKING layout opens MAINMENU.MRL (descseg palette 3c 31 1c =
+colour); the BROKEN layout never opens it (descseg palette 0c 0c 0c = grayscale).  A watchpoint on the
+menu-bg descriptor flags byte DGROUP:0xf6ce showed the corrupting write comes from 184b (via 182a from
+2144, param_4=0xf6cc) in the broken layout only.  `-ftrivial-auto-var-init=zero`/`pattern` "fix" it only
+because they grow every function and shift the g_mem base off 0xf6cc -- a coincidence, NOT a real fix.
+
+THE FIX (faithful to `mov bx,0x156c`): pass the DGROUP near offset 0x156c literally, so 184b addresses the
+intended d56a/d56c control block base-INDEPENDENTLY and never touches the menu-bg descriptor.  184b's other
+callers already pass param_4 as an offset value (low16 = the DGROUP offset), so this matches the convention.
+(The adjacent `DAT_1000_d56a = &DAT_1000_d56c` at 2144 is the same near-offset artifact but is FB-neutral
+-- d56a's readers use it as a valid in-g_mem pointer -- and is left untouched to minimise the change; only
+the corrupting 184b write target is corrected.  extraout_DX = the leftover DX size arg is likewise
+FB-neutral and unchanged.)
+
+EFFECT: MAINMENU.MRL now loads on EVERY layout -> the menu palette is the colour palette -> menu md5
+3a6ff1c5 / AE=0 under default, -ftrivial-auto-var-init=pattern, =zero, AND with patch 305's layout shift.
+Behaviour-neutral for all 19 verify flows (all reach the menu the same way) -> verify.sh both = 19/19,
+native<->wasm bit-identical.
+
+--- a/fist.c
++++ b/fist.c
+@@ -9019,7 +9019,7 @@
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c032)))(0);
+   }
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00a)))(unaff_CS);
+-  FUN_1000_182a(1,0x1c00,extraout_DX,(undefined2 *)&DAT_1000_d56c,param_1,param_2);
++  FUN_1000_182a(1,0x1c00,extraout_DX,(undefined2 *)0x156c,param_1,param_2);
+   DAT_1000_d56a = (undefined2 *)&DAT_1000_d56c;
+   DAT_1000_d600 = 0;
+   DAT_1000_d602 = 0x80;
