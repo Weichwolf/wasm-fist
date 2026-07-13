@@ -863,9 +863,11 @@ static void ext_module_init(void) {
             g_ext_ready ? "READY" : "(SHORT READ)");
 }
 
+int g_fist_after_map = 0;   /* set once op 0x18 (map load) has fired -> roster probe gate */
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
+    if (op == 0x18) g_fist_after_map = 1;
     /* FIST_OP0C_BT (diagnostic, default OFF, behaviour-neutral): characterize the per-frame mission
      * render post op 0x0c.  The engine's 459a mission loop posts op 0x0c every outer iteration
      * (db99/patch193 -> 78f0 -> 85d0 + 93c0 flat-affine MAP-WARP of colormap 85b8).  This seam proves

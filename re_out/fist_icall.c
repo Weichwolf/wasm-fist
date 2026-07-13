@@ -210,6 +210,69 @@ code *fist_icall_far(uint32_t farptr)
 /* NEAR call [mem]: only the offset is stored; the segment is the caller's CS (passed by the site). */
 code *fist_icall_near(uint16_t seg, uint16_t off)
 {
+    /* FIST_ROSTER (diagnostic, default OFF): the display-element dirty/paint walkers (208a/209e via
+     * 206f; 2006/201a via 1ff5) store the current roster entry near-offset E in DAT_1000_fe08
+     * (g_mem+0x1fe08) right before dispatching a per-element method.  The element's class base is
+     * word0 = word[DGROUP:E]; its PAINT method = word[DGROUP:(word0+0x3e18)], its DIRTY method =
+     * word[DGROUP:(word0+0x423c)].  This probe logs every dispatched (word0, method) pair to enumerate
+     * the live roster.  KEY FINDING (this recon): the op-0x24 windshield poster 6f1f is the *DIRTY*
+     * (+0x423c) method of class word0==0xe8 (slot DGROUP:0x4324 = 0x73b9 -> 6f1f), NOT a +0x3e18 paint
+     * method of class 0x50c as previously believed.  Class 0xe8 is ABSENT from the port's mission
+     * roster (FIST_ROSTER_SCAN confirms no word0==0xe8 element) because the in-mission game loop
+     * FUN_0000_e4bb -- which builds the 0x2d1d cockpit template that carries the windshield element --
+     * is never reached (its marker c78c stays 0x50, not 0x100).  Read-only, behaviour-neutral. */
+    static int rst = -1;
+    extern int g_fist_after_map;
+    if (rst < 0) rst = getenv("FIST_ROSTER") ? 1 : 0;
+    /* FIST_ROSTER_SCAN: one-shot scan (at the cockpit-paint dispatch off==0x4937) of the display-list
+     * working array DGROUP:0x3800..0x4000 for any element whose word0 (class base) is 0xe8 (the
+     * player-vehicle windshield-viewport class -> dirty 0x73b9 -> 6f1f -> df0e -> op 0x24).  Also prints
+     * the e4bb marker c78c (0x100 iff the in-mission game loop ran) and the 0x2d1d cockpit-template
+     * descriptor.  Read-only. */
+    if (rst && getenv("FIST_ROSTER_SCAN") && g_fist_after_map && off == 0x4937) {
+        static int scanned = 0;
+        if (!scanned) { scanned = 1;
+            uint8_t *dg = g_mem + 0x1c000;
+            fprintf(stderr, "[rscan] e4bb-marker c78c=0x%04x  2d1d-desc srcseg[+4]=0x%04x cnt[+8]=0x%04x\n",
+                *(uint16_t*)(dg+0x78c), *(uint16_t*)(dg+0x2d1d+4), *(uint16_t*)(dg+0x2d1d+8));
+            fprintf(stderr, "[rscan] scanning DGROUP:0x3800..0x4000 for word0==0xe8 ...\n");
+            for (uint32_t o = 0x3800; o < 0x4000; o += 2) {
+                uint16_t w = *(uint16_t *)(dg + o);
+                if (w == 0xe8)
+                    fprintf(stderr, "[rscan]  @0x%04x word0=0xe8 rec: %04x %04x %04x %04x %04x %04x\n", o,
+                        *(uint16_t*)(dg+o), *(uint16_t*)(dg+o+2), *(uint16_t*)(dg+o+4),
+                        *(uint16_t*)(dg+o+6), *(uint16_t*)(dg+o+8), *(uint16_t*)(dg+o+0xa));
+            }
+            fprintf(stderr, "[rscan] done.\n");
+        }
+    }
+    if (rst && seg == 0 && (!getenv("FIST_ROSTER_MISSION") || g_fist_after_map)) {
+        uintptr_t base = (uintptr_t)g_mem;
+        uintptr_t fe08 = (uintptr_t)(uint32_t)(*(uint32_t *)(g_mem + 0x1fe08));  /* piVar host ptr */
+        (void)base;
+        /* fe08 holds a rebased NEAR offset E (small).  Roster entry at DGROUP:E -> class base word0 =
+         * word[DGROUP:E]; method = word[DGROUP:(word0 + 0x3e18)] (paint) or +0x423c (dirty). */
+        uint16_t E = (uint16_t)fe08;
+        if (fe08 < 0x1c000) {                 /* near offset, not a host pointer */
+            uint8_t *dg = g_mem + 0x1c000;
+            uint16_t word0 = *(uint16_t *)(dg + E);
+            if ((uint32_t)word0 + 0x4240 < 0x1c000) {   /* class base near, in DGROUP range */
+                uint16_t slotP = *(uint16_t *)(dg + word0 + 0x3e18);
+                uint16_t slotD = *(uint16_t *)(dg + word0 + 0x423c);
+                int isP = (slotP == off), isD = (slotD == off);
+                if (isP || isD) {
+                    static uint32_t seen[1024]; static int nseen; int dup = 0;
+                    uint32_t key = ((uint32_t)word0 << 16) | off;
+                    for (int i = 0; i < nseen; i++) if (seen[i] == key) { dup = 1; break; }
+                    if (!dup) {
+                        if (nseen < 1024) seen[nseen++] = key;
+                        fprintf(stderr, "[roster] E=0x%04x word0=0x%04x paint(+3e18@0x%04x)=0x%04x dirty(+423c@0x%04x)=0x%04x -> %s 0x%04x\n",
+                                E, word0, (uint16_t)(word0+0x3e18), slotP, (uint16_t)(word0+0x423c), slotD, isP?"PAINT":"DIRTY", off);
+                    }
+                }
+            }
+        }
+    }
     return fist_icall(((uint32_t)seg << 4) + off);
 }
 
