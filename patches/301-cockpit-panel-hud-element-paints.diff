@@ -1,0 +1,134 @@
+PATCH 301: reconstruct the cockpit-panel + HUD element PAINT methods dispatched by the 209e dirty-walk
+during the in-mission 459a paint pass (reached after patch 300 builds the cockpit template).  Each is a
+display-element method dispatched ARG-LESS by 209e (which publishes bx=element node -> DGROUP:0x3e08 and
+bp=walk base -> g_fist_paintbp, patch 142); Ghidra's __allregs indirect dispatch dropped every register
+arg / base-lost the DAT_2000_2d34 vehicle near offset -> wild derefs (SIGSEGV).  All asm-verified vs
+re_out/fist_dat_image.bin (DS=DGROUP=0x1c00), each OBSERVED reached + its crash cleared on the genuine
+AZER1 ACCEPT run:
+
+  7a98 (0x17a98): cockpit-panel paint helper -- thread the dropped mga method-vector args (d594=2cc7
+                  begin/end al; c560=0310 bg-loader ax/cx/bx; c6a8=2595 mask-fill ax/si=0x8e84).  c68c
+                  (DGROUP:0x68c) is UNINSTALLED in the port (should be mga 0x2004) -> left a faithful
+                  no-op (documented debt; installing it pulls in the [DGROUP:0xcc] device-alloc gap).
+  7544 (0x1754f): thread the c564=mga 0x0340 cockpit-background-blit descriptor (bx=0x8e84).
+  7b04 (0x17b04): sibling element -> 52d1([elem+4]+1,[elem+6]+6); rebase element + DAT_2000_2d34.
+  7896 (0x7896):  thread the c6bc=mga 0x279d sprite blit (ax=0x380+byte[veh+0x3f], bx=0x8ef6).
+  7ca9 (0x17ca9): cockpit HUD text -- thunk_5531 got a bare DGROUP near offset 0x96b5 (patch-293 class).
+  7e3e (0x17e3e): weapon/status sprite -- Ghidra dropped the whole sprite-id computation + bp/di reads;
+                  faithful transliteration threading c6b4(ax=sprite,bx=elem+4).
+
+MISSION-PATH ONLY (459a paint pass, d548-gated) -> behaviour-neutral for the 19 verify flows.
+
+--- a/fist.c
++++ b/fist.c
+@@ -20074,7 +20089,15 @@
+ void __allregs FUN_0000_7896(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6bc)))();
++  /* PATCH 301: thread the dropped sprite-blit args (asm 0x7896 `mov di,[0x6d34]; movzx ax,[di+0x3f];
++     add ax,0x380; mov bx,0x8ef6; lcall [0x6bc]`).  c6bc = mga FUN_0000_279d(param_1=ax=sprite-directory
++     byte offset = 0x380 + byte[vehicle+0x3f], param_3=bx=0x8ef6 position descriptor).  di=DAT_2000_2d34
++     = the player-vehicle NEAR offset -> rebase.  Without the args 279d resolved a garbage sprite (260c)
++     -> 27de wild deref (SIGSEGV). */
++  {
++    uint16_t sprite = (uint16_t)(0x380 + *(uint8_t *)(g_mem + 0x1c000 + 0x3f + (uint16_t)(uintptr_t)DAT_2000_2d34));
++    ((void (*)(uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6bc)))(sprite, 0, 0x8ef6, 0);
++  }
+   return;
+ }
+ 
+@@ -58037,7 +58060,14 @@
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a4)))();
+   s_WVSOUNDS_BIN_2000_aa94[0xd] = -0x7c;
+   s_WVSOUNDS_BIN_2000_aa94[0xe] = -0x72;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c564)))();
++  /* PATCH 301: thread the c564 cockpit-background-blit descriptor (asm 0x1754f `mov bx,0x8e84 ;
++     mov [0xeaa1],bx ; mov cx,ds ; lcall [0x564]`).  c564 = mga FUN_0000_0340 (palette-copy + PackBits
++     bg blit); param_2 = descriptor cx:bx = DGROUP:0x8e84, dropped by the __allregs vector -> 0340
++     deref'd `*param_2` on a wild 0x77f70000 -> SIGSEGV.  Same idiom as patch 094/179.  (c594=mga 0x4a3
++     void, d5a4=mga 0x2d69, d5a8=mga 0x2e0e run crash-free with their non-literal incoming bx.) */
++  *(uint16_t *)(g_mem + 0x1c000 + 0xeaa1) = 0x8e84;   /* mov [0xeaa1],bx */
++  ((void (*)(undefined2,undefined2 *))fist_icall_far((uint32_t)(DAT_1000_c564)))(
++      0x1c00, (undefined2 *)(g_mem + 0x1c000 + 0x8e84));
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a8)))();
+   return;
+ }
+@@ -58604,12 +58670,19 @@
+ {
+   undefined2 uVar1;
+   undefined1 extraout_AH;
+-  
+-  FUN_1000_52d1(*(int *)(param_1 + 4) + 1,*(int *)(param_1 + 6) + 6);
++  uint8_t *dg = g_mem + 0x1c000;
++  uint8_t *E;
++
++  /* PATCH 301: cockpit sibling element paint (asm 0x17b04, reached 209e -> 7820 -> 7b04).  bx = element
++     node (published by the 209e walk at DGROUP:0x3e08); `lea bx,[bx+4]; mov ax,[bx]; inc; mov bx,[bx+2];
++     add bx,6` -> 52d1([elem+4]+1, [elem+6]+6).  Rebase the element deref + the DAT_2000_2d34 (vehicle
++     near offset) `test [di+0x40],1` onto g_mem+0x1c000+off. */
++  E = dg + *(uint16_t *)(dg + 0x3e08);
++  FUN_1000_52d1((int)*(int16_t *)(E + 4) + 1,(int)*(int16_t *)(E + 6) + 6);
+   uVar1 = FUN_1000_524e(2);
+   FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0xf));
+   uVar1 = 0x2d64;
+-  if ((*(uint *)(DAT_2000_2d34 + 0x40) & 1) != 0) {
++  if ((*(uint16_t *)(dg + 0x40 + (uint16_t)(uintptr_t)DAT_2000_2d34) & 1) != 0) {
+     FUN_1000_530b(CONCAT11(extraout_AH,0xe));
+     uVar1 = 0x2d71;
+   }
+@@ -58767,9 +58840,13 @@
+   FUN_1000_524e(2);
+   FUN_1000_52d1(0x59,0x9b);
+   FUN_1000_530b(CONCAT11(extraout_AH,0x2a));
+-  thunk_FUN_1000_5531(0x96b5);
++  /* PATCH 301: cockpit HUD text element (asm 0x17ca9, reached 209e -> 78af -> 7ca9).  thunk_FUN_1000_5531
++     is the per-glyph drawstring (`lods ds:(si)`, DS=DGROUP); the bare DGROUP near offset 0x96b5 landed on
++     host addr 0x96b5 -> SIGSEGV (patch-293 class).  Rebase g_mem+0x1c000+0x96b5.  Also rebase the
++     DAT_2000_2d34 (vehicle near offset) `word[di+0x89]` read. */
++  thunk_FUN_1000_5531((char *)(g_mem + 0x1c000 + 0x96b5));
+   FUN_1000_530b(CONCAT11(extraout_AH_00,0xf));
+-  uVar1 = FUN_0000_a186(*(undefined2 *)(DAT_2000_2d34 + 0x89));
++  uVar1 = FUN_0000_a186(*(uint16_t *)(g_mem + 0x1c000 + 0x89 + (uint16_t)(uintptr_t)DAT_2000_2d34));
+   FUN_0000_02e8(uVar1,(undefined1 *)&DAT_1000_df8c);
+   thunk_FUN_1000_5531((undefined1 *)&DAT_1000_df8e);
+   return;
+@@ -58906,14 +58983,30 @@
+ void __allregs FUN_1000_7e3e(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  *piVar1 = *piVar1 + 1;
+-  *(int *)(param_1 + 6) = *(int *)(param_1 + 6) + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 301: cockpit weapon/status sprite element paint (asm 0x17e3e, reached 209e -> 13b8 -> 7b15 ->
++     7e3e).  Dispatched arg-less; bx = element node (DGROUP:0x3e08), bp = walk base (g_fist_paintbp),
++     di = DAT_2000_2d34 vehicle.  Ghidra dropped the entire sprite-id computation + the bp/di reads and
++     modelled param_1 as the element -> the c6b4 blit ran on garbage.  Faithful transliteration:
++       bp += word[bx+2]; dl = byte[bp+1] (element sprite variant);
++       ax = 0x278 (dl==1) / 0x288 (dl==2) / 0x298 (else);
++       ax += 8 if dl==byte[veh+0x8d] else ax += byte[veh+0x3f];
++       bx=elem+4; inc word[bx]/word[bx+2]; c6b4(ax=sprite, bx=position); dec back. */
++  uint8_t *dg = g_mem + 0x1c000;
++  extern unsigned short g_fist_paintbp;
++  uint16_t bx = *(uint16_t *)(dg + 0x3e08);
++  uint16_t bp = (uint16_t)(g_fist_paintbp + *(uint16_t *)(dg + (uint16_t)(bx + 2)));
++  uint8_t *V = dg + (uint16_t)(uintptr_t)DAT_2000_2d34;
++  uint8_t dl = *(uint8_t *)(dg + (uint16_t)(bp + 1));
++  uint16_t ax = (dl == 1) ? 0x278 : (dl == 2) ? 0x288 : 0x298;
++  if (dl == V[0x8d]) ax += 8; else ax += V[0x3f];
++  {
++    uint16_t pos = (uint16_t)(bx + 4);
++    (*(uint16_t *)(dg + pos))++;
++    (*(uint16_t *)(dg + (uint16_t)(pos + 2)))++;
++    ((void (*)(uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax, pos);
++    (*(uint16_t *)(dg + pos))--;
++    (*(uint16_t *)(dg + (uint16_t)(pos + 2)))--;
++  }
+   return;
+ }
+ 

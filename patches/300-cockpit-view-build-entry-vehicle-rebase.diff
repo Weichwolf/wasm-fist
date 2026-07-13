@@ -1,0 +1,100 @@
+PATCH 300: reconstruct the cockpit-view BUILD ENTRY chain (5d43 -> 44be -> 466c -> 7751) so the mission
+ACCEPT path enters the per-vehicle cockpit-template builder without SIGSEGV.  The recurring DGROUP
+near-offset base-loss class: DAT_2000_3ae0 / DAT_2000_2d34 hold the player-vehicle NEAR OFFSET (0xc05c,
+DS=DGROUP=0x1c00) but the build fns deref them RAW as host pointers.  Reached (gdb, genuine
+BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1) via 459a -> 5cce -> 5d43 -> 44be -> 466c -> 7740 ->
+1cdb -> 1ff5 -> 201a -> 7751; patch 299 unblocked the 2ce7 gate so this chain now runs.  All asm-verified
+vs re_out/fist_dat_image.bin (DS=DGROUP=0x1c00):
+
+  5d43 (0x5d43): `mov di,[0x7ae0]; cmp [di],3; test [di+0x16],1/8` -> rebase g_mem+0x1c000+off.
+  44be (0x44be): `andb 0x17(%di),0xfd; orb 0x1,0x1a(%di)` -> rebase the two di byte derefs.
+  466c (0x466c): `mov si,[di]` (vehicle type) + dispatch near[si*2+0x6d7c] (per-vehicle template builder
+                 7740/8791) -> rebase *param_1 and the DGROUP method-table read.
+  7751 (0x77a1): `mov di,[0x6d34]; movb [di+0x3f],0; movb [di+0xa0],0; orb [di+0x1a],0x20` -> rebase.
+
+MISSION-PATH ONLY (d548/2ce7-gated); the 19 verify flows are menu/pre-mission and never enter 459a's
+cockpit build -> behaviour-neutral.
+
+--- a/fist.c
++++ b/fist.c
+@@ -13174,9 +13174,14 @@
+ void __allregs FUN_0000_44be(int param_1)
+ 
+ {
+-  *(byte *)(param_1 + 0x17) = *(byte *)(param_1 + 0x17) & 0xfd;
+-  *(byte *)(param_1 + 0x1a) = *(byte *)(param_1 + 0x1a) | 1;
+-  FUN_0000_466c(param_1);
++  byte *pbVeh;
++
++  /* PATCH 300: param_1 = player-vehicle NEAR OFFSET (di, DS=DGROUP=0x1c00), asm 0x44be
++     `andb 0x17(%di),0xfd; orb 0x1,0x1a(%di)` -> rebase the two di byte derefs g_mem+0x1c000+off. */
++  pbVeh = (byte *)(g_mem + 0x1c000 + (uint16_t)param_1);
++  pbVeh[0x17] = pbVeh[0x17] & 0xfd;
++  pbVeh[0x1a] = pbVeh[0x1a] | 1;
++  FUN_0000_466c((int *)param_1);
+   FUN_0000_bedc();
+   return;
+ }
+@@ -13464,10 +13469,15 @@
+ undefined4 __allregs FUN_0000_466c(int *param_1)
+ 
+ {
+-  DAT_2000_2d32 = *param_1 * 2;
++  /* PATCH 300: param_1 = player-vehicle NEAR OFFSET (di, DS=DGROUP=0x1c00).  asm 0x466c:
++       mov [0x6d34],di ; mov [0x9fdf],di ; mov si,[di] ; shl si,1 ; mov [0x6d32],si ;
++       call [si+0x6d7c]  (per-vehicle cockpit-template builder, DGROUP near dispatch).
++     Ghidra deref'd *param_1 (vehicle type) and [DAT_2000_2d32+0x6d7c] as HOST pointers -> rebase
++     both onto g_mem+0x1c000+off.  2d34/5fdf keep the near offset (their readers rebase). */
++  DAT_2000_2d32 = (uint)*(unsigned short *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1) * 2;
+   DAT_2000_2d34 = param_1;
+-  DAT_2000_5fdf = param_1;
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(DAT_2000_2d32 + 0x6d7c))))();
++  DAT_2000_5fdf = (uint16_t)(uintptr_t)param_1;
++  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(g_mem + 0x1c000 + (uint16_t)(DAT_2000_2d32 + 0x6d7c)))))();
+   DAT_2000_569e = 0;
+   DAT_2000_569c = 0x3c;
+   return;
+@@ -16036,17 +16046,21 @@
+ 
+ {
+   undefined2 uVar1;
+-  
++  uint *puVeh;
++
+   if (DAT_2000_3ae0 == (uint *)0x0) {
+     uVar1 = 0xcfa;
+   }
+   else {
+-    if ((3 < *DAT_2000_3ae0) || ((DAT_2000_3ae0[0xb] & 1) != 0)) goto LAB_0000_5d7c;
+-    if ((DAT_2000_3ae0[0xb] & 8) == 0) {
++    /* PATCH 300: DAT_2000_3ae0 holds the player-vehicle NEAR OFFSET (DS=DGROUP=0x1c00),
++       asm 0x5d43 `mov di,[0x7ae0]; cmp [di],3; test [di+0x16],1/8` -> rebase g_mem+0x1c000+off. */
++    puVeh = (uint *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)DAT_2000_3ae0);
++    if ((3 < *puVeh) || ((puVeh[0xb] & 1) != 0)) goto LAB_0000_5d7c;
++    if ((puVeh[0xb] & 8) == 0) {
+       DAT_2000_2dab = 0;
+       DAT_2000_3ae9 = 0;
+       DAT_2000_3b1e = 0;
+-      FUN_0000_44be(DAT_2000_3ae0);
++      FUN_0000_44be((int)(uintptr_t)DAT_2000_3ae0);
+       return;
+     }
+     uVar1 = 0xd0c;
+@@ -19818,11 +19832,12 @@
+   DAT_2000_2d16 = 0;
+   DAT_2000_2d18 = 0;
+   *(undefined1 *)(DAT_2000_aa2c + 0xcd) = 1;
+-  iVar4 = DAT_2000_2d34;
+-  *(undefined1 *)(DAT_2000_2d34 + 0x3f) = 0;
+-  *(undefined1 *)(iVar4 + 0xa0) = 0;
+-  pbVar1 = (byte *)(iVar4 + 0x1a);
+-  *pbVar1 = *pbVar1 | 0x20;
++  /* PATCH 300: DAT_2000_2d34 = player-vehicle NEAR OFFSET (di, DS=DGROUP=0x1c00), asm 0x77a1
++     `mov di,[0x6d34]; movb [di+0x3f],0; movb [di+0xa0],0; orb [di+0x1a],0x20` -> rebase g_mem+0x1c000+off. */
++  pbVar1 = (byte *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)DAT_2000_2d34);
++  pbVar1[0x3f] = 0;
++  pbVar1[0xa0] = 0;
++  pbVar1[0x1a] = pbVar1[0x1a] | 0x20;
+   return;
+ }
+ 

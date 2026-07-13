@@ -1,0 +1,172 @@
+PATCH 303: reconstruct the MGAVIDEO cockpit-sprite BLIT CHAIN (279d dispatcher + 27de RLE blitter) +
+expose the 260c cx output, reached 209e -> 7896 (patch 301) -> c6bc -> 279d -> 260c -> 27de on the AZER1
+ACCEPT mission path.  Both 279d/27de were base-lost by Ghidra (host-ptr derefs of the sprite record /
+the VGA dest / the DGROUP rowtable) -> SIGSEGV; reconstructed as faithful SEGMENTED transliterations
+(uint16 wrap keeps every cursor in its 64KB segment -> memory-safe).  asm-verified vs
+re_out/fist_mga_image.bin:
+
+  260c (0x260c): publish m_260c_cx = iVar4 (= -(hdr>>9), the sprite top-row offset the asm computes as
+                 `mov cl,ah; xor ch,ch; neg cx`) for 279d's ZF=0 blit path.  No behaviour change to the
+                 existing 260c callers (26a1/294d/... in the menus) -- an added static store only.
+  279d (0x279d): sprite blit dispatcher (sibling of 294d/patch 136): ax=sprite dir offset, bx=position;
+                 260c resolves ES:SI (m_260c_recoff) + clip + CF/ZF; ZF=1 -> 2d6d coord transform + 27de,
+                 ZF=0 -> 27de(...,cx).  Use the 260c shim statics, not the dropped param.
+  27de (0x27de): run-length sprite blitter -- src=DS:SI=m_260c_recseg:recoff, dest=ES:di (ES=word[c724],
+                 di=rowtable[param_4]+col-1 decreasing 1/px), stride=word[c724+4]; header word[si-4] =
+                 run length / row count, word[si-2]==2 selects the skip/count RLE encoding.
+
+MISSION-PATH ONLY (dispatched only by the cockpit paint chain; 279d/27de were unreached/crashing before)
+-> behaviour-neutral for the 19 verify flows.
+
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -6001,6 +6001,8 @@
+  * 0xa000).  The blit dispatchers (26a1/2660/2758...) read these. */
+ static uint16_t m_260c_recseg, m_260c_recoff;
+ static int m_260c_cf, m_260c_zf;
++static int m_260c_cx;   /* PATCH 303: cx (=-(uVar1>>9)=iVar4, the sprite top-row offset) -- the asm's
++                         * `mov cl,ah; xor ch,ch; neg cx` value read by the 279d ZF=0 blit path as di. */
+ 
+ undefined4 __allregs FUN_0000_260c(undefined4 *param_1,int *param_2,int param_3)
+ 
+@@ -6028,6 +6030,7 @@
+   m_260c_cf = 1; m_260c_zf = 0;
+   uVar1 = *(uint16_t *)(g_mem + ((uint32_t)recseg << 4) + (uint16_t)(recoff - 4)) & (uint16_t)_DAT_1000_d586;
+   iVar4 = -(int)(uVar1 >> 9);
++  m_260c_cx = iVar4;                                        /* PATCH 303: publish cx (=neg ah) */
+   iVar2 = -(int)(uVar1 >> 1 & 0x7f);
+   iVar3 = iVar2 + pos[1];
+   if (-1 < iVar3) {
+@@ -6335,16 +6338,27 @@
+ FUN_0000_279d(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  undefined1 in_ZF = 0;
+-  
++  /* PATCH 303: MGAVIDEO cockpit-sprite blit dispatcher (asm 0x279d..0x27dd), reached 209e -> 7896 ->
++     c6bc -> 279d.  Structurally identical to 294d (patch 136)/26a1 (patch 114): ax=param_1 = sprite-
++     directory byte offset; bx=param_3 = position descriptor (DGROUP near off).  260c resolves ES:SI
++     (m_260c_recoff) + the clip words [0x1588..0x158e] + CF/ZF.  Ghidra used in_CF/in_ZF=0 locals and
++     passed the sprite record as a dropped param_4 -> wild deref in 27de; use the 260c shim statics.
++       CF=1 (clipped) -> nothing.
++       ZF=1 -> full-clip path: 2d6d(0x1588) coord transform, set [0x794]/[0x796], 27de(0,d58e,recoff,d588), 2e12.
++       ZF=0 -> simple path (27d1): 27de(0,d58e,recoff,cx) where cx=m_260c_cx (di=cx). */
+   FUN_0000_260c(param_1,param_3,_DAT_1000_c724);
+-  if (!(bool)in_CF) {
+-    if ((bool)in_ZF) {
+-                    /* WARNING: Subroutine does not return */
+-      FUN_0000_2d6d((undefined1 *)&DAT_1000_d588);
++  if (m_260c_cf == 0) {
++    if (m_260c_zf) {
++      FUN_0000_2d6d((int *)(uintptr_t)0x1588);              /* 2d6d(bx=0x1588) coord transform */
++      *(uint16_t *)(g_mem + 0x1c794) = 0x7c8;
++      *(uint16_t *)(g_mem + 0x1c796) = 0x140;
++      FUN_0000_27de(0, *(uint16_t *)(g_mem + 0x1d58e),
++                    (byte *)(uintptr_t)m_260c_recoff, *(uint16_t *)(g_mem + 0x1d588));
++      FUN_0000_2e12();
++    } else {
++      FUN_0000_27de(0, *(uint16_t *)(g_mem + 0x1d58e),
++                    (byte *)(uintptr_t)m_260c_recoff, m_260c_cx);
+     }
+-    FUN_0000_27de(0,_DAT_1000_d58e,param_4,param_2);
+   }
+   return;
+ }
+@@ -6385,54 +6399,50 @@
+ uint __allregs FUN_0000_27de(uint param_1,int param_2,byte *param_3,int param_4)
+ 
+ {
+-  byte *pbVar1;
+-  byte *pbVar2;
+-  undefined2 uVar3;
+-  char cVar4;
+-  uint uVar5;
+-  uint uVar6;
+-  uint uVar7;
+-  int iVar8;
+-  byte *pbVar9;
+-  byte *pbVar10;
+-  undefined2 unaff_ES;
+-  
+-  pbVar9 = (byte *)(*(int *)(param_4 * 2 + _DAT_1000_c794) + param_2 + -1);
+-  uVar3 = *_DAT_1000_c724;
+-  iVar8 = (_DAT_1000_c724[2] ^ param_1) - param_1;
+-  uVar6 = *(uint *)(param_3 + -4);
+-  uVar7 = uVar6 & 0xff;
+-  uVar5 = uVar7;
+-  if (param_3[-2] != 2) {
++  /* PATCH 303: MGAVIDEO run-length sprite blitter (asm 0x27de..0x2839), reached 209e->7896->279d->27de.
++     SEGMENTED -- Ghidra base-lost every base:
++       src  = DS:SI = m_260c_recseg:m_260c_recoff (the 260c-resolved sprite record; Ghidra deref'd
++              param_3 raw as a host ptr -> SIGSEGV).  Header word[si-4] = low run length / high row count;
++              word[si-2]==2 selects the skip/count RLE encoding.
++       dest = ES:di, ES = word[DGROUP:c724] (clip descriptor dest seg), di = rowtable[param_4] + param_2 - 1
++              (rowtable base = word[DGROUP:0x794], DGROUP-relative), di DECREASES 1/px (movsb + `sub di,2`).
++       stride bp = word[DGROUP:c724+4] ^ cx - cx  (cx = param_1).
++     di is 16-bit (wraps inside the 64KB dest segment -> memory-safe).  Faithful asm transliteration. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t c724off = (uint16_t)(uintptr_t)_DAT_1000_c724;
++  uint16_t es_seg  = *(uint16_t *)(dg + c724off);
++  uint16_t stride  = (uint16_t)((*(uint16_t *)(dg + (uint16_t)(c724off + 4)) ^ (uint16_t)param_1) - (uint16_t)param_1);
++  uint16_t rowbase = *(uint16_t *)(dg + 0x794);
++  uint16_t di      = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(rowbase + (uint16_t)(param_4 * 2))) + param_2 - 1);
++  uint8_t *dst     = g_mem + ((uint32_t)es_seg << 4);
++  uint16_t si      = m_260c_recoff;
++  uint8_t *src     = g_mem + ((uint32_t)m_260c_recseg << 4);
++  uint16_t hdr     = *(uint16_t *)(src + (uint16_t)(si - 4));
++  uint16_t runlen  = hdr & 0xff;
++  uint8_t  rows    = (uint8_t)(hdr >> 8);
++
++  if (*(uint8_t *)(src + (uint16_t)(si - 2)) != 2) {
+     do {
+-      do {
+-        pbVar1 = param_3;
+-        param_3 = param_3 + 1;
+-        *pbVar9 = *pbVar1;
+-        pbVar9 = pbVar9 + -1;
+-        uVar5 = uVar5 - 1;
+-      } while (uVar5 != 0);
+-      pbVar9 = pbVar9 + iVar8 + uVar7;
+-      cVar4 = (char)(uVar6 >> 8) + -1;
+-      uVar6 = CONCAT11(cVar4,(char)uVar6);
+-      uVar5 = uVar7;
+-    } while (cVar4 != '\0');
+-    return uVar6;
++      uint16_t n = runlen;
++      do { dst[di] = src[si]; si = (uint16_t)(si + 1); di = (uint16_t)(di - 1); n--; } while (n != 0);
++      di = (uint16_t)(di + runlen + stride);
++      rows--;
++    } while (rows != 0);
++    return 0;
++  }
++  {
++    uint16_t dx = di;
++    uint8_t r = rows;
++    do {
++      di = dx;
++      uint8_t skip = src[si]; si = (uint16_t)(si + 1);
++      di = (uint16_t)(di - skip);
++      uint8_t cnt = src[si]; si = (uint16_t)(si + 1);
++      while (cnt != 0) { dst[di] = src[si]; si = (uint16_t)(si + 1); di = (uint16_t)(di - 1); cnt--; }
++      dx = (uint16_t)(dx + stride);
++      r--;
++    } while (r != 0);
+   }
+-  uVar6 = uVar6 >> 8;
+-  do {
+-    pbVar2 = param_3 + 1;
+-    pbVar10 = pbVar9 + -(uint)*param_3;
+-    param_3 = param_3 + 2;
+-    for (uVar5 = (uint)*pbVar2; uVar5 != 0; uVar5 = uVar5 - 1) {
+-      pbVar1 = param_3;
+-      param_3 = param_3 + 1;
+-      *pbVar10 = *pbVar1;
+-      pbVar10 = pbVar10 + -1;
+-    }
+-    pbVar9 = pbVar9 + iVar8;
+-    uVar6 = uVar6 - 1;
+-  } while (uVar6 != 0);
+   return 0;
+ }
+ 

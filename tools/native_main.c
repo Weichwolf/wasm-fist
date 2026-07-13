@@ -342,6 +342,16 @@ void fist_timer_pump(void){
      * that uploads word[DGROUP:0x782] to the DAC ~70Hz.  Without this the DAC stays black in loops (e.g.
      * the main-menu idle) that never reach an explicit in(0x3da). */
     { extern void fist_vga_service_retrace(void); fist_vga_service_retrace(); }
+    /* EXTENDER frame-ready handshake (we ARE the Doug-Huffman extender).  On the mission cockpit path
+     * FUN_1000_a84c sets d549(0x1549)=0x1c + FUN_1000_795c sets d548(0x1548)=1 ("cockpit view, waiting
+     * for the next frame").  The extender's 32-bit-PM flight model -- which is NOT in FIST.DAT -- signals
+     * "frame data ready" by OR-ing bit7 into that handshake byte (via the TCB+8 pointer d99b installed),
+     * i.e. d548: 1 -> 0x81.  That is exactly the gate FUN_1000_795c tests to run a20d(camera) + df0e ->
+     * aa10=0x24 -> e339 -> the extender 9200 windshield voxel render.  Emulate the always-ready extender
+     * here.  GATED on d549==0x1c (the cockpit view, only ever set on the in-mission 459a path) so it is
+     * strictly behaviour-neutral for the 19 menu/pre-mission verify flows. */
+    if (g_mem[0x1c000 + 0x1549] == 0x1c && g_mem[0x1c000 + 0x1548] == 1)
+        g_mem[0x1c000 + 0x1548] = 0x81;
     if (!g_int8_set || g_in_isr) return;
     { extern void fist_queue_check(const char*); fist_queue_check("pre-isr"); }
     int budget = 4;

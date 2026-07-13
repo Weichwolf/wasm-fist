@@ -1,0 +1,196 @@
+PATCH 302: reconstruct the op-0x24 WINDSHIELD POSTER (FUN_1000_795c), its sibling viewport dirty method
+(79f5), and the cockpit-view CAMERA LOADER (a84c) -- the keystone of the op-0x24 terrain path.  Paired
+with the shim's extender frame-ready handshake in tools/native_main.c (fist_timer_pump: on the mission
+cockpit path a84c/795c set d549=0x1c + d548=1; the Doug-Huffman extender's PM flight model -- absent from
+FIST.DAT -- OR-s bit7 -> d548=0x81, the gate 795c tests to run a20d(camera) + df0e -> aa10=0x24 -> e339
+-> the extender 9200 voxel windshield.  Emulated in the shim, gated on d549==0x1c so it is behaviour-
+neutral for the 19 pre-mission flows).  All asm-verified vs re_out/fist_dat_image.bin (DS=DGROUP=0x1c00):
+
+  795c (0x1795c): class-0x11a viewport DIRTY method = the op-0x24 poster.  Dispatched arg-less; read
+                  bx=element (DGROUP:0x3e08) + bp=walk base (g_fist_paintbp) instead of the garbage
+                  params; `mov si,[bx+2]; mov [bp+si],3` dirty-mark; rebase every DAT_2000_2d34 deref;
+                  d548 handshake -> a84c (frame 0) then a20d + df0e(ebx=element node, di=vehicle).
+  79f5 (0x179f5): sibling viewport dirty method (same idiom); rebase dirty-mark + thread c694(0,0x8ec9).
+  a84c (0x1a84c): COCKPIT-VIEW selector (d549=0x1c) -- loads the mission camera (d55a=X/d55e=Y/d562,d566=Z)
+                  from the player-vehicle object; rebase every [di+off] + the sub-object si=word[di+0x97]
+                  + the two negative-offset DGROUP tables; the compare `piVar1+6` is the dword [si+0xc]
+                  (16-bit int index, not host +0x18).
+
+MISSION-PATH ONLY (d548/d549-gated) -> behaviour-neutral for the 19 verify flows.
+
+--- a/fist.c
++++ b/fist.c
+@@ -58478,11 +58508,25 @@
+   int iVar2;
+   undefined2 unaff_CS;
+   undefined2 uVar3;
+-  
+-  *(undefined1 *)(param_4 + *(int *)((int)param_3 + 2)) = 3;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx_elem, bp_base, si_off;
++  extern unsigned short g_fist_paintbp;
++
++  /* PATCH 302: FUN_1000_795c (asm 0x1795c) -- the class-0x11a viewport DIRTY method = the op-0x24
++     WINDSHIELD POSTER.  Dispatched ARG-LESS by the 209e dirty-walk, which publishes the element node
++     bx -> DGROUP:0x3e08 and the walk base bp -> g_fist_paintbp (patch 142); read them here (the params
++     are garbage).  asm 0x1795c `mov si,[bx+2]; mov [bp+si],3` marks the element dirty (SS=DS=DGROUP).
++     Rebase every DAT_2000_2d34 (player-vehicle NEAR offset) deref onto g_mem+0x1c000+off.  d548
++     handshake: frame 0 -> a84c (cockpit-view + camera 0x155a/155e/1562); the extender sets d548=0x81
++     -> the next dispatch runs a20d (per-frame camera) + df0e -> aa10=0x24 -> e339 -> extender 9200
++     renders the terrain.  df0e's inbox value (ebx) = the element node bx; its 3rd arg (di) = vehicle. */
++  bx_elem = *(uint16_t *)(dg + 0x3e08);
++  bp_base = g_fist_paintbp;
++  si_off  = *(uint16_t *)(dg + (uint16_t)(bx_elem + 2));       /* mov si,[bx+2] */
++  *(uint8_t *)(dg + (uint16_t)(bp_base + si_off)) = 3;         /* mov [bp+si],3 */
+   iVar2 = DAT_2000_2d34;
+   if (DAT_1000_d548 == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x17) = *(byte *)(DAT_2000_2d34 + 0x17) & 0xfd;
++    *(byte *)(dg + 0x17 + (uint16_t)(uintptr_t)DAT_2000_2d34) &= 0xfd;
+     DAT_1000_d548 = 1;
+     DAT_1000_d552 = 0x8e91;
+     FUN_1000_a84c(iVar2);
+@@ -58493,17 +58537,18 @@
+     return;
+   }
+   if ((DAT_1000_d548 & 0x7f) == 1) {
+-    if ((*(byte *)(DAT_2000_2d34 + 0x1a) & 0x20) != 0) {
+-      *(byte *)(DAT_2000_2d34 + 0x1a) = *(byte *)(DAT_2000_2d34 + 0x1a) & 0xdf;
++    if ((*(byte *)(dg + 0x1a + (uint16_t)(uintptr_t)DAT_2000_2d34) & 0x20) != 0) {
++      *(byte *)(dg + 0x1a + (uint16_t)(uintptr_t)DAT_2000_2d34) &= 0xdf;
+       unaff_CS = 0;
+       FUN_0000_a329(iVar2);
+     }
+     uVar3 = unaff_CS;
+     uVar1 = FUN_1000_a20d(iVar2);
+-    FUN_0000_df0e(uVar1,param_3,iVar2);
++    FUN_0000_df0e(uVar1,(undefined4)(uint32_t)bx_elem,iVar2);
+     DAT_2000_2d14 = DAT_2000_2d14 + 1;
+     DAT_1000_d548 = 0;
+-    if ((((*(byte *)(DAT_2000_2d34 + 0x1a) & 1) != 0) && (9 < (*(undefined2 *)(g_mem+0x2561a)) + 5U)) &&
++    if ((((*(byte *)(dg + 0x1a + (uint16_t)(uintptr_t)DAT_2000_2d34) & 1) != 0) &&
++         (9 < (*(undefined2 *)(g_mem+0x2561a)) + 5U)) &&
+        ((*(undefined2 *)(g_mem+0x2561a)) + 5U < 0x51)) {
+       DAT_2000_4ee6 = (*(undefined2 *)(g_mem+0x2561a));
+       DAT_2000_4eea = (*(undefined2 *)(g_mem+0x2561a)) + 0xb;
+@@ -58521,7 +58566,15 @@
+ void __allregs FUN_1000_79f5(undefined2 param_1,int param_2,int param_3)
+ 
+ {
+-  *(undefined1 *)(param_3 + *(int *)(param_2 + 2)) = 3;
++  /* PATCH 302: sibling viewport DIRTY method (asm 0x179f5) -- same class as 795c (op-0x24 poster).
++     Dispatched arg-less by the 209e walk (bx=element node -> DGROUP:0x3e08, bp=walk base ->
++     g_fist_paintbp); `mov si,[bx+2]; mov [bp+si],3` marks dirty.  The (d548&0x7f)==3 render branch
++     threads the dropped c694 descriptor bx=0x8ec9 (asm 0x17a0b). */
++  uint8_t *dg = g_mem + 0x1c000;
++  extern unsigned short g_fist_paintbp;
++  uint16_t bx = *(uint16_t *)(dg + 0x3e08);
++  uint16_t si = *(uint16_t *)(dg + (uint16_t)(bx + 2));
++  *(uint8_t *)(dg + (uint16_t)(g_fist_paintbp + si)) = 3;
+   if (DAT_1000_d548 == 0) {
+     if ((DAT_2000_2d16 & 1) != 0) {
+       FUN_1000_a8d7();
+@@ -58534,7 +58587,7 @@
+       return;
+     }
+     if ((DAT_1000_d548 & 0x7f) == 3) {
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c694)))();
++      ((void (*)(uint,uint))fist_icall_far((uint32_t)(DAT_1000_c694)))(0,0x8ec9);
+       DAT_1000_d548 = 0;
+       FUN_1000_a722(0x77,0x32);
+     }
+@@ -58580,19 +58633,32 @@
+ void __allregs FUN_1000_7a98(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
++  /* PATCH 301: cockpit-panel paint helper (asm 0x17a98) -- thread the dropped indirect method-vector
++     args (Ghidra's __allregs indirect dispatch drops every register arg -> the mga methods ran on
++     garbage; c6a8=mga 0x2595 mask-fill SIGSEGV'd on a wild `es = word[si]<<4`).  Verified vs
++     re_out/fist_mga_image.bin + the oracle DGROUP vector dump (scratch/oracle/act4d0e.ram.bin):
++       d594 -> mga 0x2cc7 (al=1 begin / al=0 end)          asm 0x17a98 mov al,1 ; 0x17afd mov al,0
++       c560 -> mga 0x0310 bg-loader (ax=name 0, cx=ds seg, bx=descr 0x8e84)   asm 0x17a9e..17aa6
++       c68c -> mga 0x2004 instrument-sprite draw (bx,al,si=0x8e84) x3         asm 0x17ab1..17ad4
++       c6a8 -> mga 0x2595 run-length mask-fill (ax, si=0x8e84) x3             asm 0x17ada..17af4
++     si/bx=0x8e84 are DGROUP near offsets (DS=DGROUP=0x1c00).  c68c (DGROUP:0x68c) is UNINSTALLED in
++     the port (holds 0 -> no-op) -- the port never reached this cockpit-build path so its device-method
++     vector was never installed; installing mga 0x2004 pulls in the [DGROUP:0xcc] device-alloc gap
++     (patch-049/134 class), so it is left as the faithful no-op here (cockpit instruments unpainted =
++     documented debt) and does NOT block the op-0x24 terrain walk. */
++  ((void (*)(uint))            fist_icall_far((uint32_t)(DAT_1000_d594)))(1);
++  ((void (*)(uint,uint,uint))  fist_icall_far((uint32_t)(DAT_1000_c560)))(0,0x1c00,0x8e84);
+   if (DAT_2000_4e90 == '\0') {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();   /* uninstalled -> no-op (debt, see above) */
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
+     DAT_2000_4e90 = -1;
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))();
++  ((void (*)(uint,undefined2*)) fist_icall_far((uint32_t)(DAT_1000_c6a8)))(0xfd,  (undefined2*)(g_mem+0x1c000+0x8e84));
++  ((void (*)(uint,undefined2*)) fist_icall_far((uint32_t)(DAT_1000_c6a8)))(0xfe,  (undefined2*)(g_mem+0x1c000+0x8e84));
++  ((void (*)(uint,undefined2*)) fist_icall_far((uint32_t)(DAT_1000_c6a8)))(0x50ff,(undefined2*)(g_mem+0x1c000+0x8e84));
+   DAT_2000_4e86 = DAT_2000_4e86 | 0x25;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
++  ((void (*)(uint))            fist_icall_far((uint32_t)(DAT_1000_d594)))(0);
+   return;
+ }
+ 
+@@ -63081,29 +63174,39 @@
+ void __allregs FUN_1000_a84c(int param_1)
+ 
+ {
+-  int *piVar1;
+   uint uVar2;
+-  
++  uint8_t *V;
++  uint32_t eax;
++
++  /* PATCH 302: FUN_1000_a84c (asm 0x1a84c) = the COCKPIT-VIEW selector (d549=0x1c) -- loads the mission
++     camera (d55a=X, d55e=Y, d562/d566=Z) from the player-vehicle object.  param_1 (di) = the vehicle
++     NEAR OFFSET (DS=DGROUP=0x1c00) -> rebase every [di+off] deref onto V=g_mem+0x1c000+off.  The
++     sub-object si=word[di+0x97] and the two negative-offset DGROUP tables ([bx-0x6151]/[bx-0x1a78]) are
++     also DGROUP-relative WORD reads; the compare `*(long*)(piVar1+6)` is the dword [si+0xc] (Ghidra's
++     int*+6 = +0xc under 16-bit int, +0x18 on the host -> must use explicit +0xc). */
++  V = g_mem + 0x1c000 + (uint16_t)param_1;
+   DAT_1000_d549 = 0x1c;
+-  DAT_1000_d54a = *(undefined1 *)(param_1 + 0x86);
++  DAT_1000_d54a = V[0x86];
+   DAT_1000_d54b = 0;
+   DAT_1000_d54c = 0;
+-  DAT_1000_d554 = param_1;
+-  _DAT_1000_d55a = *(undefined4 *)(param_1 + 4);
+-  DAT_1000_d55e = *(undefined4 *)(param_1 + 8);
+-  DAT_1000_d562 = (ulong)*(uint *)(param_1 + 0x87) + *(long *)(param_1 + 0xc);
+-  DAT_1000_d566 = *(undefined4 *)(param_1 + 0xc);
+-  DAT_1000_d558 = *(undefined2 *)(param_1 + 0x10);
+-  if ((*(int *)(param_1 + 0x97) != 0) && (*(char *)(param_1 + 0x86) != '\x01')) {
+-    piVar1 = (int *)*(int *)(param_1 + 0x97);
+-    if (*piVar1 == 0x1a) {
+-      uVar2 = *(uint *)((*(byte *)((int)piVar1 + 0x19) & 3) * 2 + -0x6151);
++  DAT_1000_d554 = (uint16_t)param_1;
++  _DAT_1000_d55a = *(uint32_t *)(V + 4);
++  DAT_1000_d55e = *(uint32_t *)(V + 8);
++  DAT_1000_d562 = (uint32_t)(*(uint16_t *)(V + 0x87)) + *(uint32_t *)(V + 0xc);
++  DAT_1000_d566 = *(uint32_t *)(V + 0xc);
++  DAT_1000_d558 = *(uint16_t *)(V + 0x10);
++  if ((*(uint16_t *)(V + 0x97) != 0) && ((signed char)V[0x86] != '\x01')) {
++    uint16_t si = *(uint16_t *)(V + 0x97);
++    uint8_t *S = g_mem + 0x1c000 + si;
++    eax = *(uint32_t *)(S + 0xc);
++    if (*(uint16_t *)S == 0x1a) {
++      uVar2 = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint16_t)((S[0x19] & 3) * 2) - 0x6151));
+     }
+     else {
+-      uVar2 = *(uint *)(*piVar1 * 2 + -0x1a78);
++      uVar2 = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint16_t)(*(uint16_t *)S * 2) - 0x1a78));
+     }
+-    if (DAT_1000_d562 <= *(long *)(piVar1 + 6) + (ulong)uVar2) {
+-      DAT_1000_d562 = *(long *)(piVar1 + 6) + (ulong)uVar2;
++    if ((uint32_t)DAT_1000_d562 <= eax + uVar2) {
++      DAT_1000_d562 = eax + uVar2;
+     }
+   }
+   return;
