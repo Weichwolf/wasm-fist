@@ -1077,6 +1077,24 @@ int fist_extender_gate(void) {
             *(uint32_t *)(xb + 0xc93) = save_c93;
             fprintf(stderr, "[ext] op 0x18 MAP-LOAD returned; detail[0x8490]=0x%x dim[0x8494]=%u (base=0x0b => 2048)\n",
                     *(uint32_t *)(xb + 0x8490), *(uint32_t *)(xb + 0x8494));
+            if (getenv("FIST_MAPPROBE")) {
+                /* Distinct-count each terrain buffer right after 89b0 (Part-1b collapse verdict). */
+                struct { const char *nm; uint32_t off; long n; } B[] = {
+                    {"85b8(colormap)",0x85b8, 0x400000}, {"85bc(height)",0x85bc, 0x400000},
+                    {"85bc+1M",0x85bc, 0}, {"bc90(blendmtx)",0xbc90, 0x10000},
+                    {"3918(tile)",0x3918, 0x10000},
+                };
+                for (int bi=0; bi<5; bi++) {
+                    uint32_t base = *(uint32_t*)(xb+B[bi].off);
+                    if (bi==2) base += 0x100000;   /* 85bc+1M */
+                    long n = bi==2 ? 0x100000 : B[bi].n;
+                    if (!base) { fprintf(stderr,"[mapprobe] %-14s ptr=0 (unallocated)\n", B[bi].nm); continue; }
+                    uint8_t *p=(uint8_t*)(uintptr_t)base; int h[256]={0},d=0; long nz=0;
+                    for (long i=0;i<n;i++){ if(p[i])nz++; if(!h[p[i]]){h[p[i]]=1;d++;} }
+                    fprintf(stderr,"[mapprobe] %-14s ptr=%08x distinct=%d nonzero=%ld/%ld\n",
+                            B[bi].nm, base, d, nz, n);
+                }
+            }
         }
         return 0;
     }

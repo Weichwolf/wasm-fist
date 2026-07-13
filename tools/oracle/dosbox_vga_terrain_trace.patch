@@ -1,6 +1,6 @@
 --- /tmp/debs/orig_extract/dosbox-0.74-3/src/hardware/vga_memory.cpp	2019-05-02 19:01:18.000000000 +0200
-+++ src/hardware/vga_memory.cpp	2026-07-12 22:37:14.698458708 +0200
-@@ -27,6 +27,107 @@
++++ src/hardware/vga_memory.cpp	2026-07-13 03:20:09.146485463 +0200
+@@ -27,6 +27,162 @@
  #include "pic.h"
  #include "inout.h"
  #include "setup.h"
@@ -22,7 +22,35 @@
 +static bool fist_inited = false;
 +static char fist_prefix[512];
 +
++/* ---- tile-3918 (extender flat 0x44200 => guest-phys 0x175200) write recorder ---- */
++struct FistMEnt { Bit32u ip, cs, eip, count, minoff, maxoff; Bit8u firstval; };
++static FistMEnt fist_ment[FIST_NENT];
++static int fist_nment = 0;
++volatile int fist_mem_armed = 0;              /* referenced by include/mem.h host_writeb gate */
++static Bit32u fist_tile_lo = 0x175200, fist_tile_hi = 0x185200;
++
 +static void fist_sig(int s) { fist_req = (s == SIGUSR1) ? 1 : 2; }
++
++/* Records the CS:EIP of any guest write whose physical target lands in the tile
++ * range.  Called (gated on fist_mem_armed) from host_writeb in include/mem.h. */
++extern "C" void fist_memrec(Bit8u *off, Bit8u val) {
++	Bit32u ph = (Bit32u)(off - MemBase);
++	if (ph < fist_tile_lo || ph >= fist_tile_hi) return;
++	Bit32u ipl = SegPhys(cs) + reg_eip, off16 = ph - fist_tile_lo;
++	for (int i = 0; i < fist_nment; i++) {
++		if (fist_ment[i].ip == ipl) {
++			fist_ment[i].count++;
++			if (off16 < fist_ment[i].minoff) fist_ment[i].minoff = off16;
++			if (off16 > fist_ment[i].maxoff) fist_ment[i].maxoff = off16;
++			return;
++		}
++	}
++	if (fist_nment < FIST_NENT) {
++		FistMEnt *e = &fist_ment[fist_nment++];
++		e->ip = ipl; e->cs = SegValue(cs); e->eip = reg_eip; e->count = 1;
++		e->minoff = e->maxoff = off16; e->firstval = val;
++	}
++}
 +
 +static void fist_dump(void) {
 +	char path[600];
@@ -69,7 +97,32 @@
 +	snprintf(path, sizeof path, "%s.pal.bin", fist_prefix);
 +	f = fopen(path, "wb");
 +	if (f) { fwrite(vga.dac.rgb, 1, sizeof(vga.dac.rgb), f); fclose(f); }
-+	fprintf(stderr, "[fist-oracle] dumped %s.{writers.txt,ram.bin,vram.bin,pal.bin}\n", fist_prefix);
++	/* 5. tile-3918 (phys range) writers: CS:EIP histogram + code bytes */
++	snprintf(path, sizeof path, "%s.tilewriters.txt", fist_prefix);
++	f = fopen(path, "w");
++	if (f) {
++		fprintf(f, "# tile writers over armed window, phys=[%08x..%08x): %d distinct IPs\n",
++			fist_tile_lo, fist_tile_hi, fist_nment);
++		for (int i = 0; i < fist_nment; i++) {
++			int mx = i;
++			for (int j = i + 1; j < fist_nment; j++)
++				if (fist_ment[j].count > fist_ment[mx].count) mx = j;
++			FistMEnt t = fist_ment[i]; fist_ment[i] = fist_ment[mx]; fist_ment[mx] = t;
++		}
++		for (int i = 0; i < fist_nment && i < 48; i++) {
++			FistMEnt *e = &fist_ment[i];
++			fprintf(f, "\nTILEWRITER lin=%08x cs=%04x eip=%08x count=%u tileoff=[%04x..%04x] firstval=%02x\n",
++				e->ip, e->cs, e->eip, e->count, e->minoff, e->maxoff, e->firstval & 0xff);
++			fprintf(f, "  code@lin-16: ");
++			for (int k = -16; k < 48; k++) {
++				if (k == 0) fprintf(f, "| ");
++				fprintf(f, "%02x ", mem_readb(e->ip + k));
++			}
++			fprintf(f, "\n");
++		}
++		fclose(f);
++	}
++	fprintf(stderr, "[fist-oracle] dumped %s.{writers.txt,tilewriters.txt,ram.bin,vram.bin,pal.bin}\n", fist_prefix);
 +}
 +
 +static INLINE void fist_vgawrite(PhysPt addr, Bitu val) {
@@ -79,10 +132,12 @@
 +		signal(SIGUSR2, fist_sig);
 +		const char *p = getenv("FISTLOG");
 +		snprintf(fist_prefix, sizeof fist_prefix, "%s", p ? p : "/tmp/fistlog");
++		const char *tp = getenv("FIST_TILEPHYS");
++		if (tp) { fist_tile_lo = (Bit32u)strtoul(tp, 0, 0); fist_tile_hi = fist_tile_lo + 0x10000; }
 +	}
 +	if (GCC_UNLIKELY(fist_req)) {
-+		if (fist_req == 1) { fist_nent = 0; fist_armed = 1; }
-+		else { fist_dump(); fist_armed = 0; }
++		if (fist_req == 1) { fist_nent = 0; fist_armed = 1; fist_nment = 0; fist_mem_armed = 1; }
++		else { fist_dump(); fist_armed = 0; fist_mem_armed = 0; }
 +		fist_req = 0;
 +	}
 +	if (!fist_armed) return;
@@ -108,7 +163,7 @@
  
  
  #ifndef C_VGARAM_CHECKED
-@@ -377,6 +478,7 @@
+@@ -377,6 +533,7 @@
  			return readHandler<Bit32u>( addr );
  	}
  	void writeb(PhysPt addr, Bitu val ) {
@@ -116,7 +171,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -385,6 +487,7 @@
+@@ -385,6 +542,7 @@
  		writeCache<Bit8u>( addr, val );
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -124,7 +179,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -399,6 +502,7 @@
+@@ -399,6 +557,7 @@
  		writeCache<Bit16u>( addr, val );
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -132,7 +187,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -433,6 +537,7 @@
+@@ -433,6 +592,7 @@
  		flags=PFLAG_NOCODE;
  	}
  	void writeb(PhysPt addr,Bitu val) {
@@ -140,7 +195,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -440,6 +545,7 @@
+@@ -440,6 +600,7 @@
  		writeHandler(addr+0,(Bit8u)(val >> 0));
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -148,7 +203,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -448,6 +554,7 @@
+@@ -448,6 +609,7 @@
  		writeHandler(addr+1,(Bit8u)(val >> 8));
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -156,3 +211,24 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
+--- /tmp/debs/orig_extract/dosbox-0.74-3/include/mem.h	2019-05-02 19:01:20.000000000 +0200
++++ include/mem.h	2026-07-13 03:20:25.670485480 +0200
+@@ -93,13 +93,18 @@
+ static INLINE Bit32u host_readd(HostPt off) {
+ 	return *(Bit32u *)off;
+ }
++extern volatile int fist_mem_armed;               /* wasm-fist tile-write trace */
++extern "C" void fist_memrec(Bit8u *off, Bit8u val);
+ static INLINE void host_writeb(HostPt off,Bit8u val) {
++	if (fist_mem_armed) fist_memrec(off, val);
+ 	*(Bit8u *)(off)=val;
+ }
+ static INLINE void host_writew(HostPt off,Bit16u val) {
++	if (fist_mem_armed) { fist_memrec(off,(Bit8u)val); fist_memrec(off+1,(Bit8u)(val>>8)); }
+ 	*(Bit16u *)(off)=val;
+ }
+ static INLINE void host_writed(HostPt off,Bit32u val) {
++	if (fist_mem_armed) { fist_memrec(off,(Bit8u)val); fist_memrec(off+1,(Bit8u)(val>>8)); fist_memrec(off+2,(Bit8u)(val>>16)); fist_memrec(off+3,(Bit8u)(val>>24)); }
+ 	*(Bit32u *)(off)=val;
+ }
+ 
