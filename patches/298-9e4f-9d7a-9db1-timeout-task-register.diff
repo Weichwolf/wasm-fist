@@ -1,0 +1,223 @@
+PATCH 298: the object-timeout BACKGROUND-TASK-REGISTRATION chain 461b->9e4f->9d7a->9db1 --
+three interlocking DGROUP-near-offset base-losses that SIGSEGV in 9db1 (di=0) once patch 295's
+cooperative timer-pump makes [DGROUP:0x452] advance on the genuine BATTLES(160,100)->OK(205,128)->
+ACCEPT(40,186) AZER1 run (op 0x0c climbs; the sim step reaches the 461b rotator which dispatches
+FUN_1000_9e4f).  gdb core: SIGSEGV in FUN_0000_9db1 `*param_3`, param_3=near-offset-as-host-ptr.
+
+ASM-verified vs re_out/fist_dat_image.bin (DS=SS=DGROUP=0x1c00):
+
+ FUN_1000_9e4f (0x19e4f): two 16-entry timeout SCANNERS.  asm `mov bx,0x9464; mov cx,0x10; L:
+   cmpw [bx],0; je next; mov ax,[0x452]; sub [bx+2],ax; cmp ax,0xb4; jb next; mov ax,[0x944c];
+   lcall 9d7a; movw [0x945c],0; decw [0x9450]; movw [bx],0; jmp out; next: add bx,0xc; loop L`.
+   Ghidra typed the entry table int* -> STRIDE 24 (`piVar2+6`) + timestamp `piVar2[1]`=+4 and
+   dropped the ax type key at the 9d7a lcall.  It is a WORD table, STRIDE 0xc, object at word[bx],
+   timestamp at word[bx+2]; timed-out iff word[bx]!=0 && (uint16)(c452-word[bx+2])>=0xb4.  Fixed the
+   pointer type/stride and threaded the per-table type key (word[0x944c] / word[0x944e]).  The
+   control flow (break/return, unconditional 545c/545e inc, conditional 5454/5456 dec) was correct.
+
+ FUN_0000_9d7a (0x9d7a): asm `mov di,[bx]`(object near-off); a4a2(0x2fa0,di); pop ax(=type key);
+   push di; lcall b1df(ax,di) [returns x86 CF]; pop si(=di); jb done; call 9db1`.  Ghidra dropped
+   the ax type key (fed b1df the 0xf69 lcall segment), HARDCODED in_CF=0 (folded-CF class -> always
+   called 9db1), and passed 9db1 a wrong arg set.  Threaded param_2=type key into b1df, replaced the
+   dropped CF with g_fist_cf (set by the patch-258 b1df), and pass 9db1 the entry near-offset (bx,
+   survives the 9d7b/9d99 push/pop into 9db1's ebx) + the object near-offset for both di and si.
+
+ FUN_0000_9db1 (0x9db1-0x9e2a): the object initializer.  di==si==object (asm 9d85/9d96); bx=entry
+   offset=ebx.  Sets flag byte[di+0x16], zeroes fields, copies the two template dwords from
+   DGROUP:0x943c / 0x9444 (selected by flag bit3) into [di+4]/[di+8], pulls word[si+0x97]->[di+0x1f]
+   + dwords [si+4]/[si+8] -> [di+0x26]/[di+0x2a], then `lea di,[di+4]; call e1d1` posts the op-0x54
+   DISPLAY-LIST command (e1d1 writes gs:[TCB+0x3f2]=ebx=entry-off, aa10=0x54, calls e339) and stores
+   its return byte at object+0xd.  Ghidra base-lost di/si (deref'd near-offsets as host int*) and the
+   tail (unaff_CS / in_register_0000000e garbage).  Rebased di/si onto g_mem+0x1c000; the e1d1 op-0x54
+   post is already reconstructed (extender gate default case = faithful TCB inbox post, return 0).
+
+OBSERVED reached on the AZER1 ACCEPT run (461b rotator -> 9e4f).  MISSION-PATH ONLY (d548-gated); the
+19 verify flows never enter 459a -> behaviour-neutral.
+
+--- a/fist.c
++++ b/fist.c
+@@ -995,7 +995,7 @@
+ void __allregs FUN_0000_9d26(undefined4 param_1);
+ void __allregs FUN_0000_9d3c(void);
+ void __allregs FUN_0000_9d74(undefined2 param_1);
+-void __allregs FUN_0000_9d7a(undefined2 *param_1);
++void __allregs FUN_0000_9d7a(undefined2 *param_1,undefined2 param_2); /* PATCH 298: +type-key (ax) */
+ void __allregs FUN_0000_9da1(int param_1);
+ void __allregs FUN_0000_9db1(undefined2 param_1,int param_2,int *param_3);
+ void __allregs FUN_0000_9e2b(undefined4 param_1,int param_2);
+@@ -25606,20 +25606,31 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_9d7a) @ 0000:9d7a ===== */
+ 
+-void __allregs FUN_0000_9d7a(undefined2 *param_1)
++void __allregs FUN_0000_9d7a(undefined2 *param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined2 uVar2;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_66cd(0x2b6d);
+-  uVar1 = *param_1;
+-  FUN_1000_a4a2(0x2fa0,uVar1);
+-  uVar2 = uVar1;
+-  FUN_1000_b1df(0xf69,uVar1);
+-  if (!(bool)in_CF) {
+-    FUN_0000_9db1(uVar1,0xf69,uVar2);
++  /* PATCH 298: object-timeout expiry handler (asm 0x9d7a-0x9da0; DS=DGROUP=0x1c00).
++   *   param_1 = HOST ptr to the timeout-table entry (9e4f); word[entry] = the object's
++   *             DGROUP near-offset (asm 9d85 `mov di,[bx]`).
++   *   param_2 = ax = the type key (word[0x944c] first loop / word[0x944e] second) -- asm
++   *             9d8c `mov ax,[0x944c]; pop ax` restores it into ax before the b1df lcall.
++   * Sequence: 66cd(0x2b6d); a4a2(0x2fa0,obj); b1df(typekey,obj) [sets g_fist_cf = roster
++   * full]; on CF=0 register/init the object via 9db1.  Ghidra dropped the ax type key (fed
++   * b1df the 0xf69 lcall segment), hardcoded in_CF=0 (folded-CF class), and passed 9db1 a
++   * wrong arg set (0xf69 for si, no entry offset for the e1d1 ebx post).  bx (the entry
++   * near-offset) survives 9d7a's push/pop into 9db1's ebx (asm 9d7b/9d99). */
++  extern unsigned char g_fist_cf;
++  undefined2 obj;
++  unsigned int entry_off;
++
++  FUN_1000_66cd((char *)0x2b6d);
++  obj = *param_1;
++  FUN_1000_a4a2(0x2fa0,obj);
++  FUN_1000_b1df(param_2,(int *)(uintptr_t)(unsigned short)obj);
++  if (!(bool)g_fist_cf) {
++    entry_off = (unsigned short)((unsigned char *)param_1 - ((unsigned char *)g_mem + 0x1c000));
++    FUN_0000_9db1((undefined2)entry_off,(int)(unsigned short)obj,
++                  (int *)(uintptr_t)(unsigned short)obj);
+   }
+   return;
+ }
+@@ -25644,36 +25655,50 @@
+ void __allregs FUN_0000_9db1(undefined2 param_1,int param_2,int *param_3)
+ 
+ {
+-  undefined1 uVar1;
+-  undefined4 *puVar2;
+-  undefined2 in_register_0000000e;
+-  int unaff_CS;
+-  
+-  if (*param_3 != DAT_2000_544c) {
+-    *(byte *)(param_3 + 0xb) = *(byte *)(param_3 + 0xb) | 8;
+-  }
+-  *(byte *)(param_3 + 0xb) = *(byte *)(param_3 + 0xb) | 0x90;
+-  *(byte *)(param_3 + 0xb) = *(byte *)(param_3 + 0xb) | 0x46;
+-  *(undefined2 *)((int)param_3 + 0x23) = 0;
+-  param_3[8] = 0;
+-  *(undefined1 *)(param_3 + 0x18) = 0;
+-  *(undefined2 *)((int)param_3 + 0x1d) = 0x60;
+-  param_3[10] = 0x300;
+-  *(undefined1 *)(param_3 + 0x19) = 0x1a;
+-  puVar2 = (undefined4 *)&DAT_2000_543c;
+-  if ((*(byte *)(param_3 + 0xb) & 8) != 0) {
+-    puVar2 = (undefined4 *)&DAT_2000_5444;
+-  }
+-  *(undefined4 *)(param_3 + 2) = *puVar2;
+-  *(undefined4 *)(param_3 + 4) = puVar2[1];
+-  *(undefined2 *)((int)param_3 + 0x1f) = 0;
+-  if (*(int *)(param_2 + 0x97) != 0) {
+-    *(int *)((int)param_3 + 0x1f) = *(int *)(param_2 + 0x97);
+-  }
+-  *(undefined4 *)(param_3 + 0x13) = *(undefined4 *)(param_2 + 4);
+-  *(undefined4 *)(param_3 + 0x15) = *(undefined4 *)(param_2 + 8);
+-  uVar1 = FUN_0000_e1d1(CONCAT22(in_register_0000000e,param_1));
+-  *(undefined1 *)(unaff_CS + 0xd) = uVar1;
++  /* PATCH 298: object initializer + op-0x54 TCB command post (asm 0x9db1-0x9e2a;
++   * DS=DGROUP=0x1c00).
++   *   param_3 = di = object DGROUP near-offset (9d7a leaves di=word[entry]).
++   *   param_2 = si = object DGROUP near-offset (9d7a: `pop si` = di, so si==di).
++   *   param_1 = bx = the timeout-table entry near-offset; it is ebx at the e1d1 tail
++   *             (asm 9e23 `call e1d1` posts gs:[TCB+0x3f2]=ebx via op 0x54).
++   * Sets the object flag byte[di+0x16] (|8 iff word[di]!=word[0x944c], then |0x90 |0x46),
++   * zeroes several fields, copies the two template dwords from DGROUP:0x943c / 0x9444
++   * (selected by flag bit3) into [di+4]/[di+8], pulls word[si+0x97] into [di+0x1f] and the
++   * dwords [si+4]/[si+8] into [di+0x26]/[di+0x2a], then posts the op-0x54 display-list
++   * command (e1d1 -> e339, ebx=entry offset) and stores its return byte at object+0xd.
++   * Ghidra base-lost di/si (deref'd the near-offsets as host int*) and the tail (unaff_CS /
++   * in_register garbage).  All offsets are asm byte offsets; the pristine int*-scaled
++   * offsets match (param_3+0xb=+0x16, param_3[8]=+0x10, param_3+2=+4, +0x13=+0x26, ...). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_3;
++  unsigned int si = (unsigned short)param_2;
++  unsigned char *o = dg + di;
++  unsigned char *s = dg + si;
++  unsigned int tbl;
++  unsigned char alv;
++
++  if (*(unsigned short *)o != *(unsigned short *)(dg + 0x944c)) {
++    o[0x16] |= 8;
++  }
++  o[0x16] |= 0x90;
++  o[0x16] |= 0x46;
++  *(unsigned short *)(o + 0x23) = 0;
++  *(unsigned short *)(o + 0x10) = 0;
++  o[0x30] = 0;
++  *(unsigned short *)(o + 0x1d) = 0x60;
++  *(unsigned short *)(o + 0x14) = 0x300;
++  o[0x32] = 0x1a;
++  tbl = (o[0x16] & 8) ? 0x9444 : 0x943c;
++  *(unsigned int *)(o + 4) = *(unsigned int *)(dg + tbl);
++  *(unsigned int *)(o + 8) = *(unsigned int *)(dg + tbl + 4);
++  *(unsigned short *)(o + 0x1f) = 0;
++  if (*(unsigned short *)(s + 0x97) != 0) {
++    *(unsigned short *)(o + 0x1f) = *(unsigned short *)(s + 0x97);
++  }
++  *(unsigned int *)(o + 0x26) = *(unsigned int *)(s + 4);
++  *(unsigned int *)(o + 0x2a) = *(unsigned int *)(s + 8);
++  alv = (unsigned char)FUN_0000_e1d1((unsigned int)(unsigned short)param_1);
++  o[0xd] = alv;
+   return;
+ }
+ 
+@@ -61907,17 +61932,29 @@
+ void __allregs FUN_1000_9e4f(void)
+ 
+ {
++  /* PATCH 298: the two object-timeout SCANNERS (asm 0x19e4f-0x19efb; DS=DGROUP=0x1c00).
++   * Each scans a 16-entry timeout table (bx=0x9464 / 0x9524; asm `mov cx,0x10; ... add
++   * bx,0xc; loop`) for the first entry whose object timed out, then dispatches 9d7a with the
++   * per-table type key (word[0x944c] / word[0x944e]).
++   * BUG (Ghidra): typed the entry table `int*` -> STRIDE 24 (`piVar2+6`) and the timestamp at
++   * `piVar2[1]`=+4; the ASM is a WORD table, STRIDE 0xc (12B), the object near-offset at
++   * word[bx] and the timestamp at word[bx+2].  Timed-out iff word[bx]!=0 &&
++   * (uint16)(c452 - word[bx+2]) >= 0xb4 (asm `mov ax,[0x452]; sub [bx+2],ax; cmp ax,0xb4;
++   * jb next`).  On a hit: 9d7a(entry,typekey); reset 545c/545e; dec 5450/5452; word[bx]=0;
++   * exit the loop (asm `jmp 0x19ea9`/`0x19efb`).  The control flow (break/return, the
++   * unconditional inc + conditional dec) already matched. */
+   int iVar1;
+-  int *piVar2;
+-  
++  undefined2 *piVar2;
++
+   if (DAT_2000_5454 == 0) {
+     DAT_2000_545c = DAT_2000_545c + 1;
+     if ((0x77 < DAT_2000_545c) && (DAT_2000_5450 != 0)) {
+-      piVar2 = (int *)&DAT_2000_5464;
++      piVar2 = (undefined2 *)&DAT_2000_5464;
+       iVar1 = 0x10;
+       do {
+-        if ((*piVar2 != 0) && (0xb3 < (uint)(DAT_1000_c452 - piVar2[1]))) {
+-          FUN_0000_9d7a(piVar2);
++        if ((*piVar2 != 0) &&
++            (0xb3 < (unsigned short)(DAT_1000_c452 - piVar2[1]))) {
++          FUN_0000_9d7a(piVar2,DAT_2000_544c);
+           DAT_2000_545c = 0;
+           DAT_2000_5450 = DAT_2000_5450 + -1;
+           *piVar2 = 0;
+@@ -61934,11 +61971,12 @@
+   if (DAT_2000_5456 == 0) {
+     DAT_2000_545e = DAT_2000_545e + 1;
+     if ((0x77 < DAT_2000_545e) && (DAT_2000_5452 != 0)) {
+-      piVar2 = (int *)&DAT_2000_5524;
++      piVar2 = (undefined2 *)&DAT_2000_5524;
+       iVar1 = 0x10;
+       do {
+-        if ((*piVar2 != 0) && (0xb3 < (uint)(DAT_1000_c452 - piVar2[1]))) {
+-          FUN_0000_9d7a(piVar2);
++        if ((*piVar2 != 0) &&
++            (0xb3 < (unsigned short)(DAT_1000_c452 - piVar2[1]))) {
++          FUN_0000_9d7a(piVar2,DAT_2000_544e);
+           DAT_2000_545e = 0;
+           DAT_2000_5452 = DAT_2000_5452 + -1;
+           *piVar2 = 0;
