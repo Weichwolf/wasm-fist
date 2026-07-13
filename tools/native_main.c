@@ -866,6 +866,26 @@ static void ext_module_init(void) {
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
+    /* FIST_OP0C_BT (diagnostic, default OFF, behaviour-neutral): characterize the per-frame mission
+     * render post op 0x0c.  The engine's 459a mission loop posts op 0x0c every outer iteration
+     * (db99/patch193 -> 78f0 -> 85d0 + 93c0 flat-affine MAP-WARP of colormap 85b8).  This seam proves
+     * the loop is a TIGHT RE-POST SPIN with NO simulation advance: it dumps the caller backtrace once,
+     * then samples the engine frame-timer [DGROUP:0x452] + render cursor [0xea86] + camera heading
+     * [0x7b1c] + the current-TCB camera (ea2e:ea2c +0x2c X / +0x34 alt).  OBSERVED: [0x452] stays 1 and
+     * the camera stays frozen across MILLIONS of posts -- because 459a's spin never pumps the cooperative
+     * INT-8 tick, so c452 never advances, so 459a's `2ce2 += (c452-2ce0)` elapsed-tick delta is 0, so the
+     * per-tick sim step (c0ca/461b flight model) NEVER runs.  See docs/stage1.md. */
+    if (op == 0x0c && getenv("FIST_OP0C_BT")) { static long n; n++;
+        if (n == 1) {
+        void *bt[24]; int k = backtrace(bt, 24);
+        fprintf(stderr, "=== op0c backtrace (aa2c=%04x aa2e=%04x d548=%02x d549=%02x) ===\n",
+            *(uint16_t*)(dg+0xea2c), *(uint16_t*)(dg+0xea2e), dg[0x1548], dg[0x1549]);
+        backtrace_symbols_fd(bt, k, 2); }
+        if ((n % 100000) == 1) fprintf(stderr, "[op0c] n=%ld frame[0x452]=%u cursor[0xea86]=%04x 7b1c(head)=%u tcb+2c(X)=%d tcb+34(alt)=%d\n",
+            n, *(uint16_t*)(g_mem+0x1c452), *(uint16_t*)(dg+0xea86),
+            *(uint16_t*)(g_mem+0x23b1c),
+            *(int32_t*)(g_mem + (((uint32_t)*(uint16_t*)(dg+0xea2e)<<4)+*(uint16_t*)(dg+0xea2c)) + 0x2c),
+            *(int32_t*)(g_mem + (((uint32_t)*(uint16_t*)(dg+0xea2e)<<4)+*(uint16_t*)(dg+0xea2c)) + 0x34)); }
     /* FIST_R3D2_V18 -- DETERMINISTIC terrain-pipeline validation at MAP-LOAD time (avoids the flaky,
      * slow op-0x0c gate).  After 2 op-0x18 map-loads have completed (both KLC planes populated), on the
      * next non-0x18 op run the FULL voxel pipeline ONCE with the oracle camera + oracle ray tables:
