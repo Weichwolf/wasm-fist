@@ -1,0 +1,203 @@
+PATCH 294: reconstruct the MGAVIDEO cockpit-panel RLE sprite blitter FUN_0000_23d8 (asm-verified vs
+re_out/fist_mga_image.bin 0x23d8-0x2440) + thread the engine 4937 c694 call's dropped bx=0x7aa4 descriptor
+arg.  Clears the patch-293 frontier: the 459a mission paint pass now runs 4937's c694 cockpit-panel blit
+crash-free instead of SIGSEGV-ing at m_mga_FUN_0000_23d8.
+
+ORACLE VERDICT (decisive -- settles the recurring "0x7aa4 viewport geometry all-zero" question).  Ran the
+instrumented DOSBox on the genuine BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1 mission path
+(tools/oracle/trace_activate.sh, engine guest-phys load base 0x11190 located by finding fist_dat_image.bin
+content at phys 0x11590; DGROUP asm-offset Z -> phys 0x11190+0x1c000+Z).  At the settled AZER1 cockpit frame
+(frame.png = full terrain + HUD + radar):
+  - DGROUP:0x7aa4 (DST desc, phys 0x34c34) = 28 bytes ALL ZERO; DGROUP:0x7ac0 (SRC, 0x34c50) = ALL ZERO.
+  - DAT_2000_3aa2 gate (phys 0x34c32) = 0 -> the 60d9 SRC->DST viewport-geometry copier NEVER RAN.
+  - d548 (0x1548, phys 0x2e6d8) = 0x81 -> 4937's blit gate (bit7 set, low==1) IS satisfied -> the ORIGINAL
+    reaches the c694 blit WITH the empty descriptor.
+  - the fb-writer histogram shows 23d8's own rep-movs (eip 0x2422/0x2427/0x242b) DO write 0xA000 -> the
+    original runs 23d8 crash-free on the empty descriptor.
+VERDICT: the descriptor is GENUINELY EMPTY (no upstream populator exists -- 3aa2 gate never fires in either
+target).  The original does not crash because 23d8 is a segmented real-mode blitter: word[desc]=0 -> BP=0 ->
+DS=seg 0 (real-mode IVT, all valid memory) -> the RLE control stream terminates; ES=0xA000 writes are valid
+VGA.  So the fix is NOT an upstream populator -- it is a FAITHFUL 23d8 that handles the empty descriptor
+exactly as the original (simulated both seg-0 decodes: original terminates in 193 steps, the port's g_mem
+low-code seg-0 terminates in 99 steps -- both crash-free, di/si/bx stay in g_mem bounds via 16-bit wrap).
+
+THE BUG (asm-verified vs re_out/fist_mga_image.bin).  FUN_0000_23d8 (0x23d8-0x2440):
+  23e5 mov es,0xa000 ; 23ea xor di,di ; 23ec mov bp,[bx] (ctrl seg) ; 23f0 mov dx,[0x156c] (pixel seg)
+  23f4 mov bx,[bx+0x1a] (pixel off) ; 23f7 mov ds,bp ; then an RLE decode with rep movsw/movsb copying
+  pixel_seg:SI -> ES:DI, control words lods'd from ctrl_seg:SI.
+Ghidra rendered the whole thing with HOST pointers: puVar11 (control cursor) inits to 0 with the BP segment
+base DROPPED and mis-typed uint* (4-byte read/stride vs the asm's 2-byte lods); puVar12 (dest) inits to 0
+with ES=0xA000 dropped; puVar10 (pixel src) = param_2[0xd] as a host pointer with the DX segment base
+dropped -> NULL/host-ptr derefs -> SIGSEGV.  The decode-COUNT logic (words=(a>>2)*2+((a>>1)&1), bytes=a&1
+where a=ctrlword>>1) was correct; only the three segment bases + the control-cursor width were wrong.
+
+FIX.
+ (1) fist_mga.c FUN_0000_23d8: exact asm translation with 16-bit registers (uint16 wrap) and g_mem-relative
+     segment bases -- ctrl=g_mem+(word[desc]<<4), pix=g_mem+((uint16)_DAT_1000_d56c<<4), fb=g_mem+0xA0000;
+     the descriptor is a DGROUP near offset (both callers pass a value) -> desc=g_mem+0x1c000+(uint16)param_2.
+     2e3f (clip setup, pure-DGROUP, safe on the zero descriptor) + 2e8b (teardown) unchanged.
+ (2) fist.c FUN_0000_4937: `(*c694)(0xf69)` -> `(*c694)(0,0x7aa4)` -- asm 0x498e sets bx=0x7aa4 (param_2);
+     ax (param_1) is unused by 23d8, pass 0.
+
+BEHAVIOUR-NEUTRAL for the 19 verify flows: 4937's c694 blit branch is reached only via the d548-gated 459a
+mission paint pass (d548 bit7), which no covered flow enters (ACCEPT is never clicked; d548==0 outside a
+mission).  Both edits only rebase reads that were wild host-ptr derefs (crashes) + thread a dropped arg, so
+they cannot change any covered flow.  Sources stay pristine (fist.c 61453e42, fist_mga.c 75c6d726).
+
+--- a/fist.c
++++ b/fist.c
+@@ -13823,7 +13823,12 @@
+   if ((DAT_1000_c452 != DAT_2000_3adc) && (DAT_2000_3adc = DAT_1000_c452, (bVar1 & 0x7f) == 1)) {
+     FUN_1000_65c2();
+     FUN_0000_4da3();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c694)))(0xf69);
++    /* PATCH 294: thread bx=0x7aa4 (DST viewport descriptor DGROUP near offset) into the c694
++       cockpit-panel sprite-blit method (mga FUN_0000_23d8).  asm 0x498e `mov $0x7aa4,%bx; 0x4991
++       lcall *0x694` -- Ghidra dropped bx and emitted the far-seg 0xf69 as the (unused) param_1=AX,
++       leaving param_2=BX (the descriptor) uninitialised garbage -> SIGSEGV.  param_1(AX) is unused
++       by 23d8 (`xor ax,ax` at 23f9); pass 0.  desc 0x7aa4 is oracle-proven empty (patch 294). */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c694)))(0,0x7aa4);
+     DAT_2000_2d14 = DAT_2000_2d14 + 1;
+     DAT_2000_3aec = FUN_0000_413a();
+     DAT_1000_d548 = 0;
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -5431,79 +5431,66 @@
+ void __allregs FUN_0000_23d8(undefined2 param_1,undefined2 *param_2)
+ 
+ {
+-  uint *puVar1;
+-  undefined2 *puVar2;
+-  uint *puVar3;
+-  undefined2 *puVar4;
+-  undefined2 uVar5;
+-  undefined2 uVar6;
+-  uint uVar7;
+-  uint uVar8;
+-  int iVar9;
+-  undefined2 *puVar10;
+-  uint *puVar11;
+-  undefined2 *puVar12;
+-  bool bVar13;
+-  
+-  _DAT_1000_d584 = _DAT_1000_d584 + 1;
+-  FUN_0000_2e3f(param_2 + 2);
+-  uVar6 = _DAT_1000_d56c;
+-  puVar12 = (undefined2 *)0x0;
+-  uVar5 = *param_2;
+-  puVar11 = (uint *)0x0;
+-  puVar10 = (undefined2 *)param_2[0xd];
+-  uVar7 = 0;
+-LAB_0000_23fd:
+-  do {
+-    puVar10 = (undefined2 *)((int)puVar10 + uVar7);
+-    puVar12 = (undefined2 *)((int)puVar12 + uVar7);
+-    puVar1 = puVar11;
+-    puVar11 = puVar11 + 1;
+-    uVar8 = *puVar1 >> 1;
+-    bVar13 = uVar8 == 0;
+-    if ((*puVar1 & 1) == 0) goto LAB_0000_2414;
+-    while (uVar7 = uVar8 >> 1, (uVar8 & 1) != 0) {
+-      while( true ) {
+-        puVar10 = (undefined2 *)((int)puVar10 + uVar7);
+-        puVar3 = puVar11 + 1;
+-        puVar12 = (undefined2 *)((int)puVar12 + *puVar11);
+-        puVar11 = puVar11 + 2;
+-        uVar8 = *puVar3 >> 1;
+-        bVar13 = uVar8 == 0;
+-        if ((*puVar3 & 1) != 0) break;
++  /* PATCH 294 faithful reconstruction (asm-verified vs re_out/fist_mga_image.bin 0x23d8-0x2440):
++     the segmented real-mode RLE sprite blitter.  Ghidra dropped all three segment bases
++     (control-stream DS<-BP=word[desc]; pixel-stream DS<-DX=word[0x156c]; dest ES=0xA000) and
++     mis-typed the control cursor as uint* (4-byte) -> host-ptr NULL deref (patch-293 frontier).
++     Rebuilt as an exact asm translation with explicit 16-bit registers + g_mem-relative segment
++     bases.  ORACLE-PROVEN (docs/oracle): the engine 4937 c694 caller passes desc=DGROUP:0x7aa4,
++     which is GENUINELY EMPTY (word[desc]=0; the 60d9 copier's 3aa2 gate never fires) in BOTH the
++     original AND the port -> BP=0 -> the ctrl stream is read from seg 0 (real-mode IVT in the
++     original / g_mem low code in the port); the RLE terminates crash-free (no populator upstream).
++     desc arrives as a DGROUP near-offset value (both callers pass a value) -> g_mem+0x1c000+off. */
++  uint8_t  *desc = g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_2;
++  uint8_t  *fb, *ctrl, *pix;
++  uint16_t ax, a, words, bytes, si, di, bx, k;
++
++  _DAT_1000_d584 = _DAT_1000_d584 + 1;                         /* 23d8 incw 0x1584 */
++  FUN_0000_2e3f((int *)(desc + 4));                            /* 23dd/23e0 bx=desc+4; call 2e3f */
++
++  fb   = g_mem + 0xA0000;                                      /* 23e5 ES=0xA000 */
++  di   = 0;                                                    /* 23ea xor di,di */
++  ctrl = g_mem + ((uint32_t)(*(uint16_t *)(desc + 0)) << 4);   /* 23ec BP=word[desc]; 23f7 DS=BP */
++  si   = 0;                                                    /* 23ee xor si,si */
++  pix  = g_mem + ((uint32_t)((uint16_t)_DAT_1000_d56c) << 4);  /* 23f0 DX=word[0x156c] pixel seg */
++  bx   = *(uint16_t *)(desc + 0x1a);                           /* 23f4 BX=word[desc+0x1a] pixel off */
++  ax   = 0;                                                    /* 23f9 xor ax,ax */
++
++LAB_0000_23fd:                                                 /* 23fd decode loop head */
++  bx = (uint16_t)(bx + ax);                                   /* 23fd add bx,ax */
++  di = (uint16_t)(di + ax);                                   /* 23ff add di,ax */
++  ax = *(uint16_t *)(ctrl + si); si = (uint16_t)(si + 2);     /* 2401 lods ctrl */
++  if ((ax & 1) == 0) { ax = (uint16_t)(ax >> 1); goto LAB_0000_2414; }  /* 2402/04 shr;jae 2414 */
++  ax = (uint16_t)(ax >> 1);
++LAB_0000_2406:
++  if ((ax & 1) == 0) { ax = (uint16_t)(ax >> 1); goto LAB_0000_23fd; }  /* 2406/08 shr;jae 23fd */
++  ax = (uint16_t)(ax >> 1);
++LAB_0000_240a:
++  bx = (uint16_t)(bx + ax);                                   /* 240a add bx,ax */
++  ax = *(uint16_t *)(ctrl + si); si = (uint16_t)(si + 2);     /* 240c lods */
++  di = (uint16_t)(di + ax);                                   /* 240d add di,ax */
++  ax = *(uint16_t *)(ctrl + si); si = (uint16_t)(si + 2);     /* 240f lods */
++  if ((ax & 1) != 0) { ax = (uint16_t)(ax >> 1); goto LAB_0000_2406; }  /* 2410/12 shr;jb 2406 */
++  ax = (uint16_t)(ax >> 1);
+ LAB_0000_2414:
+-        do {
+-          if (bVar13) {
+-            FUN_0000_2e8b();
+-            return;
+-          }
+-          uVar7 = (uint)((uVar8 & 1) != 0);
+-          for (iVar9 = (uVar8 >> 2) * 2 + (uint)((uVar8 >> 1 & 1) != 0); iVar9 != 0;
+-              iVar9 = iVar9 + -1) {
+-            puVar4 = puVar12;
+-            puVar12 = puVar12 + 1;
+-            puVar2 = puVar10;
+-            puVar10 = puVar10 + 1;
+-            *puVar4 = *puVar2;
+-          }
+-          for (; uVar7 != 0; uVar7 = uVar7 - 1) {
+-            puVar4 = puVar12;
+-            puVar12 = (undefined2 *)((int)puVar12 + 1);
+-            puVar2 = puVar10;
+-            puVar10 = (undefined2 *)((int)puVar10 + 1);
+-            *(undefined1 *)puVar4 = *(undefined1 *)puVar2;
+-          }
+-          puVar1 = puVar11;
+-          puVar11 = puVar11 + 1;
+-          uVar7 = *puVar1;
+-          uVar8 = uVar7 >> 1;
+-          bVar13 = uVar8 == 0;
+-        } while ((uVar7 & 1) == 0);
+-        uVar7 = uVar7 >> 2;
+-        if ((uVar8 & 1) == 0) goto LAB_0000_23fd;
+-      }
+-    }
+-  } while( true );
++  if (ax == 0) { FUN_0000_2e8b(); return; }                   /* 2414 je 243c -> teardown+ret */
++  a = ax;
++  words = (uint16_t)((a >> 2) * 2 + ((a >> 1) & 1));          /* 241a-2427 rep movsw count */
++  bytes = (uint16_t)(a & 1);                                  /* 2429-242b rep movsb count */
++  for (k = 0; k < words; k = (uint16_t)(k + 1)) {             /* copy pix->fb (word) */
++    *(uint16_t *)(fb + di) = *(uint16_t *)(pix + bx);
++    di = (uint16_t)(di + 2); bx = (uint16_t)(bx + 2);
++  }
++  for (k = 0; k < bytes; k = (uint16_t)(k + 1)) {             /* copy pix->fb (byte) */
++    *(uint8_t *)(fb + di) = *(uint8_t *)(pix + bx);
++    di = (uint16_t)(di + 1); bx = (uint16_t)(bx + 1);
++  }
++  ax = *(uint16_t *)(ctrl + si); si = (uint16_t)(si + 2);     /* 2431 lods (DS=BP restored) */
++  if ((ax & 1) == 0) { ax = (uint16_t)(ax >> 1); goto LAB_0000_2414; }  /* 2432/34 shr;jae 2414 */
++  ax = (uint16_t)(ax >> 1);
++  if ((ax & 1) != 0) { ax = (uint16_t)(ax >> 1); goto LAB_0000_240a; }  /* 2436/38 shr;jb 240a */
++  ax = (uint16_t)(ax >> 1);
++  goto LAB_0000_23fd;                                         /* 243a jmp 23fd */
+ }
+ 
+ 
