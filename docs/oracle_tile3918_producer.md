@@ -1,5 +1,72 @@
 # Oracle recon — the DEFINITIVE tile-3918 producer + the mission-TCB camera source
 
+> ## CORRECTION 3 (2026-07-13, patch-291 iteration) — THE PRODUCER IS DEFINITIVELY `bc9c` (+ `bc06`), PROVEN BY A PER-BYTE LAST-WRITER MAP. CORRECTION 2's "a LATE fog-LUT pass the backtrace missed" is DISPROVEN. There is NO late producer.
+>
+> **Method (decisive, non-circular, byte-exact).** The DOSBox oracle was extended with a **per-byte
+> LAST-WRITER map** over the whole tile phys range `[0x175200..0x185200)` that **never disarms and has no
+> hit cap** (the prior recorders capped at 40000 hits on the verbose `.watch.txt`; the per-IP histogram was
+> fine but nobody read its coverage): for each of the 65536 tile bytes it records the CS:EIP and value of
+> the **last** write, armed before ACCEPT (map-load) and dumped at the settled frame. Tooling:
+> `dosbox_vga_terrain_trace.patch` (`fist_lastip`/`fist_lastval` + `.lastwriters.txt`/`.lastval.bin`);
+> sample `tools/oracle/samples/tile3918_lastwriters.txt`.
+>
+> **RESULT — the per-byte final-value map == the oracle tile EXACTLY (65536/65536, 212 distinct), and the
+> ONLY owning IPs are `bc9c` + `bc06`:**
+> - `bcf6`+`bcf2` (= `FUN bc9c`) own **61952** bytes = **exactly tile rows 14..255** (242·256).
+> - `bc74`+`bc7a` (= `FUN bc06`) own **3584** bytes = **exactly tile rows 0..13** (14·256).
+> - Counts sum to **exactly 65536**; **zero** unowned bytes; **zero** zero-valued bytes → every final tile
+>   byte was written **inside the armed window** by bc9c/bc06. No pre-window pre-set, no late overwrite,
+>   no missed producer. CORRECTION 2's premise "the real fog producer runs AFTER the bc9c/bc06 window" is
+>   FALSE.
+>
+> **THE SYMMETRY PARADOX — the recon's "bc9c is 100% symmetric ⇒ can't make a 15.7%-symmetric tile"
+> disproof is REFUTED by the empirical owner counts, but the exact non-symmetry mechanism is NOT the naive
+> aligned-matrix window.** `bc9c` writes symmetric PAIRS (`mov [ecx],bl; xchg ch,cl; mov [ecx],bl`) with
+> `ecx = ([bc90] & 0xffff0000) | (ch<<8|cl)` — i.e. into a single 64 KB-aligned block, `M[ch][cl] =
+> ac70((pal[ch]+pal[cl])/2)`. The recon reasoned "a symmetric writer ⇒ symmetric buffer". But the tile
+> pointer `ds:0x3918 = 0x44200` is **NOT 64 KB-aligned** (low16 = `0x4200`), so what the renderer samples
+> as `tile[r][c]` is a **diagonal-offset window** of `M`, and `tile[r][c]` vs `tile[c][r]` read *different*
+> `M` cells → the window is not symmetric. This is why the recon measured 15.7% and wrongly concluded bc9c
+> couldn't be the producer. **CAVEAT (honest, not yet pinned):** the tile spans ext `0x45000..0x541ff` =
+> rows 14..255, which **crosses the `0x50000` 64 KB boundary**, yet a single `bc9c` call with a fixed
+> `[bc90]` can only fill one 64 KB block. The exact `[bc90]` progression (a second `0x9f70`/`bc9c`
+> invocation for the upper block, or a `[bc90]` advance) is **not resolved from the static disasm**, and a
+> naive `tile[r][c]=M[r+66][c]` symmetric-window test scores only 4% — so do NOT assume the clean single-
+> matrix window. What IS proven byte-exactly: **bc9c owns every final byte of rows 14..255 and bc06 owns
+> rows 0..13** (the exact `242·256`/`14·256` owner counts). Pinning the `[bc90]` progression across the
+> block boundary is a static-disasm follow-up (trace `[bc90]` writes / the `0x9f70` call multiplicity), but
+> it does not change the producer identity.
+>
+> **The producer call site (image-verified, `re_out/fist_image.bin`):** the tile-build fn `FUN 0x9f70`:
+> `rep movs 0x5598→0x5260` (copy the 256-entry mission palette), copy `5260`→`[c93]+0xea` (display palette),
+> `call 0xa033` (**rebuild** the `ac70` reduce LUTs `a060/a460/a860/4f60` from the *fresh* `5260` — so any
+> offline `ac70` using the *dumped* `a060` tables is garbage, they are per-map rebuilt), `ac64=[0x28a5]=80`,
+> `ac60=0xff`, then `call 0xbc9c` (the pairwise blend fill + `bd0e`/`bd62` which build the *separate* 32-row
+> depth-SHADE LUTs at `ds:0xbc94`, NOT the tile). `bc06` does the leading LOD block (rows 0..13). No fog /
+> haze attenuation pass exists — the "depth-fog LUT" appearance is entirely the +0x4200 window of the blend
+> matrix (row = the `ch` palette axis shifted by 66; the ramp is `pal[r+66]`).
+>
+> **PORT STATUS / next step (honest):** the port already runs the REAL `bc9c` (patch 289) via `89b0`, and
+> `tools/native_main.c` already carries the `FIST_TILEWIN=0x4200` window seam. **But the port never reaches
+> the real map-load op `0x18`** — a normal flow drives ops `0x00/0x04/0x20/0x44/0x64/0x68/0x6c/0x70/0x74/
+> 0x78/0x80` but NOT `0x18` (verified via `FIST_OPHIST`), because the **mission-start cascade is the
+> documented unfinished frontier** (LOADING deliverable; CLAUDE.md status). Without op `0x18` the mission
+> palette `5598`/colormap/KLC are never loaded, so the tile build cannot run with correct inputs in the
+> port yet. **Byte-exact tile reproduction + retiring the `bc90→3918` shim alias is therefore GATED behind
+> the mission-start cascade reaching op `0x18`** — at which point the fix is to let the REAL `bc9c` (via
+> `89b0`) fill the blend block and have `[3918]` window it exactly as the original does (reproduce the
+> `[bc90]`/`[3918]` base+low16 relationship faithfully; the `FIST_TILEWIN` seam already exists), with NO
+> separate fog producer to reconstruct. The exact `[bc90]` progression across the `0x50000` block boundary
+> (see CAVEAT above) should be pinned first via a `[bc90]`-write trace at map-load. This iteration DID NOT
+> touch the pristine engine/ext/port sources.
+>
+> Everything below (CORRECTION 1, CORRECTION 2, and the original recon) is superseded on the producer
+> question by this correction. The `4f60`/`5260`/`ac64`/dLUT byte-exactness (CORRECTION 2 (A)) still stands
+> as a correct prerequisite; the `85b8` colormap collapse (CORRECTION 2 (E)) is likewise gated behind op
+> `0x18` for the same reason.
+>
+> ---
+>
 > ## CORRECTION 2 (2026-07-13, patch-290 iteration) — the `4f60`/`ac64` GATE IS DISPROVEN BY BYTE EVIDENCE (the port already reproduces it exactly), AND `bc9c` is DEFINITIVELY not the producer. Tile 3918 is a STATIC atmospheric depth-fog LUT built by a LATE map-load pass that the oracle backtrace never captured.
 >
 > **This supersedes CORRECTION 1's "the build-time `4f60` is the gate" claim.** Measured directly from the

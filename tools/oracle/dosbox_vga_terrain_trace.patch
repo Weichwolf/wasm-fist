@@ -1,6 +1,6 @@
 --- src/hardware/vga_memory.cpp	2019-05-02 19:01:18.000000000 +0200
-+++ src/hardware/vga_memory.cpp	2026-07-13 07:00:00.000000000 +0200
-@@ -27,6 +27,312 @@
++++ src/hardware/vga_memory.cpp	2026-07-13 09:12:00.000000000 +0200
+@@ -27,6 +27,354 @@
  #include "pic.h"
  #include "inout.h"
  #include "setup.h"
@@ -28,6 +28,12 @@
 +static int fist_nment = 0;
 +volatile int fist_mem_armed = 0;              /* referenced by include/mem.h host_writeb gate */
 +static Bit32u fist_tile_lo = 0x175200, fist_tile_hi = 0x185200;
++/* ---- PER-BYTE LAST-WRITER map over the tile phys range (never disarms, no cap): for
++ * each of the 0x10000 tile bytes record the CS:EIP and value of the LAST write.  This
++ * decisively identifies the code that leaves each final tile byte, robust to overwrite
++ * ordering (bc9c/bc06 symmetric fill vs. a late fog producer). */
++static Bit32u fist_lastip[0x10000];
++static Bit8u  fist_lastval[0x10000];
 +
 +/* ---- targeted WATCH: capture writer flat-IP + near-call stack backtrace for a
 + * specific phys range (env FIST_WATCHPHYS, +/- FIST_WATCHSPAN bytes).  Used to
@@ -136,6 +142,8 @@
 +	}
 +	if (ph < fist_tile_lo || ph >= fist_tile_hi) return;
 +	Bit32u ipl = SegPhys(cs) + reg_eip, off16 = ph - fist_tile_lo;
++	/* per-byte LAST-writer (decisive: who owns each final tile byte) */
++	if (off16 < 0x10000) { fist_lastip[off16] = ipl; fist_lastval[off16] = val; }
 +	for (int i = 0; i < fist_nment; i++) {
 +		if (fist_ment[i].ip == ipl) {
 +			fist_ment[i].count++;
@@ -225,6 +233,39 @@
 +		}
 +		fclose(f);
 +	}
++	/* 5b. PER-BYTE LAST-WRITER: dump the final-value map (compare == oracle tile) + a
++	 * histogram of which CS:EIP OWNS each final tile byte (decisive producer id). */
++	snprintf(path, sizeof path, "%s.lastval.bin", fist_prefix);
++	f = fopen(path, "wb");
++	if (f) { fwrite(fist_lastval, 1, sizeof fist_lastval, f); fclose(f); }
++	snprintf(path, sizeof path, "%s.lastwriters.txt", fist_prefix);
++	f = fopen(path, "w");
++	if (f) {
++		/* histogram distinct last-writer IPs over [0..0xffff] */
++		struct { Bit32u ip, count, minoff, maxoff; } h[256]; int nh = 0;
++		for (Bit32u o = 0; o < 0x10000; o++) {
++			Bit32u ip = fist_lastip[o];
++			if (!ip) continue;
++			int j; for (j = 0; j < nh; j++) if (h[j].ip == ip) break;
++			if (j == nh && nh < 256) { h[nh].ip = ip; h[nh].count = 0; h[nh].minoff = o; h[nh].maxoff = o; nh++; }
++			if (j < 256) { h[j].count++; if (o < h[j].minoff) h[j].minoff = o; if (o > h[j].maxoff) h[j].maxoff = o; }
++		}
++		fprintf(f, "# PER-BYTE LAST-WRITER over tile [%08x..%08x): %d distinct owning IPs\n",
++			fist_tile_lo, fist_tile_lo + 0x10000, nh);
++		for (int i = 0; i < nh; i++) {  /* selection sort by count desc */
++			int mx = i; for (int j = i + 1; j < nh; j++) if (h[j].count > h[mx].count) mx = j;
++			{ Bit32u ti=h[i].ip,tc=h[i].count,tmn=h[i].minoff,tmx=h[i].maxoff;
++			  h[i]=h[mx]; h[mx].ip=ti;h[mx].count=tc;h[mx].minoff=tmn;h[mx].maxoff=tmx; }
++		}
++		for (int i = 0; i < nh; i++) {
++			fprintf(f, "\nLASTWRITER lin=%08x extip=%05x count=%u tileoff=[%04x..%04x]\n",
++				h[i].ip, h[i].ip & 0xfffff, h[i].count, h[i].minoff, h[i].maxoff);
++			fprintf(f, "  code@lin-16: ");
++			for (int k = -16; k < 48; k++) { if (k==0) fprintf(f,"| "); fprintf(f, "%02x ", mem_readb(h[i].ip + k)); }
++			fprintf(f, "\n");
++		}
++		fclose(f);
++	}
 +	/* 6. CR3-AWARE flat-address (tile-3918) writers: histogram + backtrace + map */
 +	if (fist_wf_span) {
 +		snprintf(path, sizeof path, "%s.flatwriters.txt", fist_prefix);
@@ -286,7 +327,8 @@
 +	}
 +	if (GCC_UNLIKELY(fist_req)) {
 +		if (fist_req == 1) { fist_nent = 0; fist_armed = 1; fist_nment = 0; fist_mem_armed = 1;
-+			fist_nfent = 0; fist_wf_lastcr3 = 0xffffffffu; fist_wf_lasten = -1; }
++			fist_nfent = 0; fist_wf_lastcr3 = 0xffffffffu; fist_wf_lasten = -1;
++			memset(fist_lastip, 0, sizeof fist_lastip); memset(fist_lastval, 0, sizeof fist_lastval); }
 +		else { fist_dump(); fist_armed = 0; fist_mem_armed = 0; }
 +		fist_req = 0;
 +	}
@@ -313,7 +355,7 @@
  
  
  #ifndef C_VGARAM_CHECKED
-@@ -377,6 +683,7 @@
+@@ -377,6 +725,7 @@
  			return readHandler<Bit32u>( addr );
  	}
  	void writeb(PhysPt addr, Bitu val ) {
@@ -321,7 +363,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -385,6 +692,7 @@
+@@ -385,6 +734,7 @@
  		writeCache<Bit8u>( addr, val );
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -329,7 +371,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -399,6 +707,7 @@
+@@ -399,6 +749,7 @@
  		writeCache<Bit16u>( addr, val );
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -337,7 +379,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -433,6 +742,7 @@
+@@ -433,6 +784,7 @@
  		flags=PFLAG_NOCODE;
  	}
  	void writeb(PhysPt addr,Bitu val) {
@@ -345,7 +387,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -440,6 +750,7 @@
+@@ -440,6 +792,7 @@
  		writeHandler(addr+0,(Bit8u)(val >> 0));
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -353,7 +395,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -448,6 +759,7 @@
+@@ -448,6 +801,7 @@
  		writeHandler(addr+1,(Bit8u)(val >> 8));
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -361,24 +403,3 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
---- include/mem.h	2019-05-02 19:01:20.000000000 +0200
-+++ include/mem.h	2026-07-13 03:20:25.670485480 +0200
-@@ -93,13 +93,18 @@
- static INLINE Bit32u host_readd(HostPt off) {
- 	return *(Bit32u *)off;
- }
-+extern volatile int fist_mem_armed;               /* wasm-fist tile-write trace */
-+extern "C" void fist_memrec(Bit8u *off, Bit8u val);
- static INLINE void host_writeb(HostPt off,Bit8u val) {
-+	if (fist_mem_armed) fist_memrec(off, val);
- 	*(Bit8u *)(off)=val;
- }
- static INLINE void host_writew(HostPt off,Bit16u val) {
-+	if (fist_mem_armed) { fist_memrec(off,(Bit8u)val); fist_memrec(off+1,(Bit8u)(val>>8)); }
- 	*(Bit16u *)(off)=val;
- }
- static INLINE void host_writed(HostPt off,Bit32u val) {
-+	if (fist_mem_armed) { fist_memrec(off,(Bit8u)val); fist_memrec(off+1,(Bit8u)(val>>8)); fist_memrec(off+2,(Bit8u)(val>>16)); fist_memrec(off+3,(Bit8u)(val>>24)); }
- 	*(Bit32u *)(off)=val;
- }
- 
