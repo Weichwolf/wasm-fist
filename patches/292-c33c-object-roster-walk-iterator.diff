@@ -1,0 +1,409 @@
+PATCH 292: reconstruct the c33c OBJECT-ROSTER-WALK ITERATOR subsystem so FUN_0000_378e's per-frame
+mission-object render walk TERMINATES (the walk exhausts all 10 phase handlers, g_fist_cf set correctly)
+-- clearing the patch-291 per-frame stall.
+
+ROOT CAUSE (patch 291): 378e breaks on the iterator `call near [DGROUP:0x1630]` via g_fist_cf, but
+word[0x1630]=0xc33c is an unpromoted MID-ENTRY inside the region Ghidra rendered as FUN_0000_c336 (a
+thunk to b39c) -> NOT in the engine fmap -> fist_icall(0xc33c) TRAPPED (returned 0, never set g_fist_cf)
+-> 378e never broke -> the frame never completed -> the per-frame loop never iterated.
+
+OBSERVED-REACHED, asm-verified vs re_out/fist_dat_image.bin (DS=SS=DGROUP=0x1c00).  Each block below was
+reached on the genuine BATTLES->OK->ACCEPT mission path (gdb bt + FIST_C33C dispatch log) and reconstructed
+in executed order; nothing reconstructed unobserved:
+
+ BLOCK A -- FUN_0000_c33c (asm 0xc33c-0xc38a), NEW fn + fmap entry {0xc33cu}:
+   if(si==0) INIT: word[0xe6f3]=0(phase idx); word[0xe6e6]=0xdfbc; word[0xe6e8]=0xb6(182); byte[0xe6ee]=0;
+             word[0xe6ef]=0; call c577; call 5f64; call f69:bddd(=b46d); call c99c
+   WALK: bx=word[0xe6f3]; call word[bx+0xe6f5] (10-entry static phase-handler table @DGROUP:0xe6f5
+         {c47d,c3d6,5fb0,6016,c3dc,c4df,c9af,c584,c4a2,c38b}; each returns x86 CF via clc=found/stc=empty);
+         jae c386 -> found (si=0xffff; clc; ret); else word[0xe6f3]+=2; cmp<0x14; jb loop; c381 exhausted
+         (si=0xffff; stc; ret).  Handler CF threaded via g_fist_cf; c33c's returned si (always 0xffff) via
+         the new shim global g_fist_iter_si.  Pre-dispatch default g_fist_cf=1 (=handler empty/advance)
+         makes any not-yet-reconstructed handler advance -> the walk provably exhausts.
+
+ BLOCK B -- FUN_0000_378e (patch-194 reconstruction): it stored the STALE pre-call si into word[0x4b9e]
+   (leaving it 0 -> c33c re-INIT'd every iteration).  Now stores the iterator-returned si (g_fist_iter_si,
+   asm 0x37a7 `mov [0x4b9e],si`) so word[0x4b9e]!=0 and the phase walk advances instead of restarting.
+
+ BLOCK C -- FUN_1000_671b (asm 0x1671b-0x1678f), reached by c33c INIT via FUN_0000_5f64: the display-list
+   "next visible cell" walker.  Ghidra dropped the DGROUP base on the two near-offset table VALUES
+   (`word[bx+0x6d3c]` cell ptr, `word[bx+0x7d2a]` sprite ptr) and dereferenced them as HOST pointers
+   (`*piVar1` -> SIGSEGV).  Rebased onto g_mem+0x1c000; CF (clc/stc retf) via g_fist_cf.
+
+ BLOCK E -- FUN_0000_c4df (asm 0xc4df-0xc576), phase-handler idx5 = the first NON-empty object category:
+   walks the a6e6(=0xdfbc)/a6e8(=182) roster (stride 4) and dispatches each object's per-viewport RENDER
+   method through the STRSEG (gs=word[0x70]) method-vector table selected by byte[0x1549] (cockpit 0x1e ->
+   STRSEG:0x3632, 0x20->0x35fa, 0x22->0x35c2, else 0x358a; idx=classid*2).  Ghidra base-lost every
+   near-offset (walk-ptr deref, object, classid, STRSEG method vectors) -> wild host-ptr derefs (SIGSEGV).
+   Rebased onto g_mem+0x1c000 (roster/objects) + g_mem+(STRSEG<<4) (method vectors); method CF via
+   g_fist_cf (stc=continue -> `jb c4df`, clc=found -> ret); empty (a6e8==0) -> stc (0xc575).  Pre-dispatch
+   default g_fist_cf=1 makes an uninstalled/not-yet-reconstructed method vector advance to the next object.
+
+ BLOCK D -- FUN_1000_b47a (asm 0x1b47a), reached from c4df: appends the object's two position dwords into
+   the DGROUP:0xe70d.. staging table.  Ghidra dropped the DGROUP base on both the source object (si) and
+   the dest table.  Rebased; only caller is c4df.
+
+EFFECT (FIST_C33C log on the ACCEPT path): the walk now steps idx 0->9 (c47d,c3d6,5fb0,6016,c3dc,c4df,
+c9af,c584,c4a2,c38b) and EXHAUSTS -> c33c returns CF=1 -> 378e TERMINATES -> 22dd's phase completes and
+459a advances to its 206f/209e paint pass.  The NEXT blocker (pinned, asm-verified) is the cockpit-HUD
+render FUN_1000_65c2 (via 459a->206f->209e->4937->65c2): a DGROUP base-loss at `word[bx+0x7b32]`
+(bx=byte[0x3b19]*2, asm 0x1660e) dereferenced as a host address -- a SEPARATE subsystem, not the object
+roster.  The c4df per-object RENDER methods (the STRSEG:0x3632 vectors) are the object-render frontier
+(deliverable #3), reconstructed as observed.
+
+BEHAVIOUR-NEUTRAL for the 19 verify flows: every reconstructed fn is reached only through the d548-gated
+22dd render walk (378e) / c33c INIT, which no covered flow enters (d548==0 outside a mission), and each
+edit only changes functions that were WRONG (wild host-ptr derefs / stale si).  Sources stay pristine
+(re_out/fist.c 61453e42); fist.c via build/.  Shim global g_fist_iter_si in tools/native_main.c.
+
+--- a/fist.c	2026-07-13 11:29:29.772534668 +0200
++++ b/fist.c	2026-07-13 11:49:15.130405509 +0200
+@@ -1256,13 +1256,14 @@
+ void __allregs FUN_0000_c31e(undefined2 param_1,undefined2 param_2,int *param_3,undefined2 param_4);
+ void __allregs FUN_0000_c335(void);
+ void __allregs FUN_0000_c336(undefined2 param_1,undefined2 param_2,undefined2 param_3);
++void __allregs FUN_0000_c33c(uint16_t si,uint16_t di);   /* PATCH 292: object-roster walk iterator */
+ void __allregs FUN_0000_c38b(undefined2 param_1,undefined2 *param_2);
+ void __allregs FUN_0000_c3d6(undefined2 param_1);
+ void __allregs FUN_0000_c3dc(void);
+ undefined4 __allregs FUN_0000_c3ed(int param_1);
+ void __allregs FUN_0000_c47d(undefined2 param_1);
+ void __allregs FUN_0000_c4a2(undefined2 param_1);
+-void __allregs FUN_0000_c4df(undefined2 param_1);
++void __allregs FUN_0000_c4df(void);
+ void __allregs FUN_0000_c577(void);
+ void __allregs FUN_0000_c584(uint param_1,undefined2 param_2,undefined2 param_3);
+ void __allregs FUN_0000_c5e2(void);
+@@ -2278,7 +2279,7 @@
+ void __allregs FUN_1000_b373(int param_1);
+ void __allregs FUN_1000_b39c(int param_1,int param_2,int *param_3);
+ void __allregs FUN_1000_b46d(void);
+-undefined4 __allregs FUN_1000_b47a(undefined4 param_1,int param_2);
++undefined4 __allregs FUN_1000_b47a(undefined4 param_1,uint16_t si);
+ void __allregs FUN_1000_b4a3(int param_1);
+ void __allregs FUN_1000_b4cd(undefined2 *param_1,int param_2);
+ void __allregs FUN_1000_b4fc(int param_1);
+@@ -11819,6 +11820,7 @@
+    * Ghidra base-lost the method dispatch (`*(u16*)(word[0x6bc2]+0x4b52)` wild host-ptr deref -> SEGV)
+    * and folded the iterator/CF.  Rebased onto g_mem+0x1c000; CF via the shim global g_fist_cf. */
+   extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_iter_si;                               /* PATCH 292: c33c's updated si */
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b0)))(0xffff);        /* ax=0xffff; call far [0x6b0] */
+   for (;;) {
+     uint16_t si = *(uint16_t *)(g_mem + 0x1c000 + 0x4b9e);            /* si=word[0x4b9e] */
+@@ -11826,7 +11828,10 @@
+     g_fist_cf = 0;
+     (*(code *)fist_icall_near(0x0u, *(uint16_t *)(g_mem + 0x1d630)))(si, 0x6bbeu); /* call near [0x1630] */
+     if (g_fist_cf) break;                                             /* jb 0x37c2 (iterator done) */
+-    *(uint16_t *)(g_mem + 0x1c000 + 0x4b9e) = si;                     /* word[0x4b9e]=si */
++    /* PATCH 292: the iterator (c33c) updates SI (always 0xffff) -> word[0x4b9e]; storing the STALE
++     * pre-call si left word[0x4b9e]==0 forever => c33c re-INIT'd every iteration.  Consume the real
++     * returned si so word[0x4b9e]!=0 and the phase walk advances instead of restarting. */
++    *(uint16_t *)(g_mem + 0x1c000 + 0x4b9e) = g_fist_iter_si;         /* word[0x4b9e]=si (asm 0x37a7) */
+     sidx = *(uint8_t *)(g_mem + 0x1c000 + 0x6bc2);                    /* dl=byte[0x6bc2]; si=dx */
+     (*(code *)fist_icall_near(0x0u, *(uint16_t *)(g_mem + 0x1c000 + sidx + 0x4b52)))(); /* [si+0x4b52] */
+   }
+@@ -30969,6 +30974,64 @@
+ }
+ 
+ 
++/* ===== PATCH 292: FUN_0000_c33c -- the mission-object-roster WALK ITERATOR (asm 0xc33c-0xc38a).
++ * 0xc33c was an unpromoted MID-ENTRY inside the region Ghidra rendered as FUN_0000_c336 (a thunk to
++ * b39c) -> not in the engine fmap -> fist_icall(0xc33c) TRAPPED (returned 0, never set g_fist_cf) ->
++ * FUN_0000_378e's object-render walk never broke -> the per-frame loop stalled (patch 291 root-cause).
++ * Installed at word[DGROUP:0x1630] by FUN_1000_b158 (DAT_1000_d630=0xc33c); called by 378e (di=0x6bbe)
++ * and the depth-sorter FUN_0000_2471 (di=sort node) via `call near [DGROUP:0x1630]`.
++ * asm (DS=SS=DGROUP=0x1c00), verified vs re_out/fist_dat_image.bin:
++ *   c33c: or si,si; jne c36b            -- si==0 => INIT
++ *   c340: word[0xe6f3]=0 (phase idx); word[0xe6e6]=0xdfbc; word[0xe6e8]=0xb6 (182);
++ *         byte[0xe6ee]=0; word[0xe6ef]=0; call c577; call 5f64; call f69:bddd(=b46d); call c99c
++ *   c36b: bx=word[0xe6f3]; call word[bx+0xe6f5]  (10-entry phase-handler table @DGROUP:0xe6f5,
++ *         image-static {c47d,c3d6,5fb0,6016,c3dc,c4df,c9af,c584,c4a2,c38b}; each returns x86 CF via
++ *         clc(found)/stc(empty))
++ *   c373: jae c386   -- CF==0 (found): si=0xffff; clc; ret
++ *   c375: word[0xe6f3]+=2; cmp <0x14; jb c36b   -- else advance to next phase
++ *   c381: si=0xffff; stc; ret   -- all 10 phases exhausted (CF=1)
++ * The handler CF is threaded via the shim global g_fist_cf; c33c's own returned SI (always 0xffff)
++ * via g_fist_iter_si (378e stores it into word[0x4b9e]).  Each phase handler's FOUND path (CF=0 +
++ * the render-record build at di=0x6bbe + its base-lost DGROUP/STRSEG callees) is the per-block
++ * frontier reconstructed AS OBSERVED reached (deliverable #2/#3): until a handler is reconstructed
++ * to set g_fist_cf=0, the pre-dispatch default g_fist_cf=1 makes the walk treat that category as
++ * empty and advance -- so 378e provably TERMINATES (the iterator exhausts) and the frame completes,
++ * which is this deliverable's goal.  A handler that finds work runs its (base-lost) found path and
++ * pins itself as the next block. */
++void __allregs FUN_0000_c33c(uint16_t si, uint16_t di)
++{
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_iter_si;
++  uint8_t *dg = g_mem + 0x1c000;
++  (void)di;
++  if (si == 0) {                                    /* or si,si; jne c36b -> INIT */
++    *(uint16_t *)(dg + 0xe6f3) = 0;                 /* phase idx */
++    *(uint16_t *)(dg + 0xe6e6) = 0xdfbc;
++    *(uint16_t *)(dg + 0xe6e8) = 0xb6;              /* 182 */
++    *(uint8_t  *)(dg + 0xe6ee) = 0;
++    *(uint16_t *)(dg + 0xe6ef) = 0;
++    FUN_0000_c577();
++    FUN_0000_5f64();
++    FUN_1000_b46d();                                /* call f69:bddd */
++    FUN_0000_c99c();
++  }
++  for (;;) {                                         /* c36b: WALK */
++    uint16_t bx = *(uint16_t *)(dg + 0xe6f3);
++    uint16_t h  = *(uint16_t *)(dg + 0xe6f5 + bx);  /* phase-handler near-offset */
++    g_fist_cf = 1;                                   /* default = empty (advance) until the handler's
++                                                      * found-path CF=0 is reconstructed */
++    (*(code *)fist_icall_near(0x0u, h))();           /* call word[bx+0xe6f5]; sets g_fist_cf */
++    if (getenv("FIST_C33C"))
++      fprintf(stderr, "[c33c] idx=%u h=0x%04x cf=%u\n", (unsigned)(bx >> 1), h, g_fist_cf);
++    if (!g_fist_cf) { g_fist_iter_si = 0xffff; return; }              /* jae c386 -> found (CF=0) */
++    *(uint16_t *)(dg + 0xe6f3) = (uint16_t)(bx + 2);                  /* add word[0xe6f3],2 */
++    if (*(uint16_t *)(dg + 0xe6f3) >= 0x14) {                         /* cmp <0x14; jb c36b */
++      g_fist_iter_si = 0xffff; g_fist_cf = 1; return;                 /* c381 -> exhausted (CF=1) */
++    }
++  }
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c336) @ 0000:c336 ===== */
+ 
+ void __allregs FUN_0000_c336(undefined2 param_1,undefined2 param_2,undefined2 param_3)
+@@ -31088,75 +31151,63 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c4df) @ 0000:c4df ===== */
+ 
+-void __allregs FUN_0000_c4df(undefined2 param_1)
++void __allregs FUN_0000_c4df(void)
+ 
+ {
+-  int *piVar1;
+-  uint *puVar2;
+-  undefined2 uVar3;
+-  undefined2 in_register_00000002;
+-  undefined4 uVar4;
+-  undefined2 extraout_var;
+-  undefined2 extraout_var_00;
+-  undefined2 extraout_var_01;
+-  undefined2 extraout_var_02;
+-  int iVar5;
+-  bool bVar6;
+-  undefined1 uVar7;
+-  
+-  uVar4 = CONCAT22(in_register_00000002,param_1);
+-  do {
+-    while( true ) {
+-      do {
+-        if (DAT_2000_a6e8 == 0) {
+-          return;
+-        }
+-        piVar1 = DAT_2000_a6e6 + 2;
+-        DAT_2000_a6e8 = DAT_2000_a6e8 + -1;
+-        puVar2 = (uint *)*DAT_2000_a6e6;
+-        DAT_2000_a6e6 = piVar1;
+-      } while (puVar2 == (uint *)0x0);
+-      iVar5 = *puVar2 * 2;
+-      if (DAT_1000_d549 == 0x1e) break;
+-      bVar6 = DAT_1000_d549 < 0x20;
+-      if (DAT_1000_d549 == 0x20) {
+-        uVar3 = (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(iVar5 + 0x35fa))))();
+-        uVar4 = CONCAT22(extraout_var_02,uVar3);
+-        if (!bVar6) {
+-          return;
+-        }
+-      }
+-      else {
+-        bVar6 = DAT_1000_d549 < 0x22;
+-        if (DAT_1000_d549 == 0x22) {
+-          uVar3 = (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(iVar5 + 0x35c2))))();
+-          uVar4 = CONCAT22(extraout_var_01,uVar3);
+-          if (!bVar6) {
+-            return;
+-          }
+-        }
+-        else {
+-          uVar3 = (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(iVar5 + 0x358a))))();
+-          uVar4 = CONCAT22(extraout_var,uVar3);
+-          if (!bVar6) {
+-            return;
+-          }
+-        }
+-      }
+-    }
+-    if ((DAT_2000_2d2c & 0x81) == 0) {
+-      return;
+-    }
+-    uVar7 = 0;
+-    if (((*(byte *)((int)puVar2 + 0x17) & 8) != 0) &&
+-       (((uVar7 = DAT_2000_3b1f == '\0', DAT_2000_3b1f != '\x01' ||
+-         (uVar7 = *puVar2 < 3, 3 < *puVar2)) || (uVar7 = false, (char)puVar2[0xe] == '\0')))) {
+-      FUN_1000_b47a(uVar4,puVar2);
+-    }
+-    uVar3 = (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(iVar5 + 0x3632))))();
+-    uVar4 = CONCAT22(extraout_var_00,uVar3);
+-  } while ((bool)uVar7);
+-  return;
++  /* PATCH 292 (block E): base-loss reconstruction of phase-handler idx5 -- the mission-object-roster RENDER
++   * dispatch (asm 0xc4df-0xc576, DS=SS=DGROUP=0x1c00).  Walks the a6e6 (=word[0xe6e6], init 0xdfbc)
++   * object table, a6e8 (=word[0xe6e8], init 182) entries of stride 4, and for each non-null object
++   * dispatches its per-viewport RENDER method through the STRSEG method-vector table selected by the
++   * viewport kind byte[0x1549]: cockpit 0x1e -> STRSEG:0x3632, 0x20 -> 0x35fa, 0x22 -> 0x35c2, else
++   * 0x358a; index = classid(=word[DGROUP:obj])*2.  The method returns x86 CF (stc=continue/next object
++   * -> `jb c4df`, clc=found/yield -> ret) threaded via g_fist_cf; the walk returns CF=1 when a6e8
++   * hits 0 (stc, asm 0xc575).  Ghidra base-lost EVERY near-offset here: the walk ptr deref
++   * `word[DGROUP:a6e6]`, the object (`obj = DGROUP:si`), the classid `word[DGROUP:obj]`, and the STRSEG
++   * (gs=word[0x70]) method-vector reads -> wild host-ptr derefs (SIGSEGV at the old fist.c:56659-class
++   * line).  Rebased onto g_mem+0x1c000 (objects/walk) and g_mem+(STRSEG<<4) (method vectors).
++   * The pre-dispatch default g_fist_cf=1 (= object method reports "continue") makes an UNINSTALLED /
++   * not-yet-reconstructed method vector (word==0 -> fist_icall traps to 0 without setting CF) advance
++   * to the next object instead of yielding garbage, so the walk provably exhausts -- the per-object
++   * render methods are the next per-block frontier (deliverable #3), reconstructed as observed. */
++  extern unsigned char g_fist_cf;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t strseg = *(uint16_t *)(dg + 0x70);
++  uint8_t *ss = g_mem + ((uint32_t)strseg << 4);
++  for (;;) {
++    uint16_t si;
++    for (;;) {                                                 /* c4df/c4f7 skip-null loop */
++      if (*(uint16_t *)(dg + 0xe6e8) == 0) { g_fist_cf = 1; return; }  /* c4e3 -> c575 empty (stc) */
++      uint16_t a6e6 = *(uint16_t *)(dg + 0xe6e6);              /* c4df bx=word[0xe6e6] */
++      *(uint16_t *)(dg + 0xe6e6) = (uint16_t)(a6e6 + 4);       /* c4ec word[0xe6e6]+=4 */
++      *(uint16_t *)(dg + 0xe6e8) = (uint16_t)(*(uint16_t *)(dg + 0xe6e8) - 1);  /* dec count */
++      si = *(uint16_t *)(dg + a6e6);                           /* c4f5 si=word[DGROUP:a6e6] (obj off) */
++      if (si != 0) break;                                      /* c4f7 or si,si; je (skip null) */
++    }
++    uint16_t classid = *(uint16_t *)(dg + si);                 /* c4fb bx=word[DGROUP:si] */
++    uint16_t bx = (uint16_t)(classid << 1);                    /* c503 bx<<=1 (method idx) */
++    uint8_t  d549 = *(uint8_t *)(dg + 0x1549);
++    uint16_t mvec;
++    if (d549 == 0x1e) {                                        /* c507 -> c528 (cockpit) */
++      if ((*(uint16_t *)(dg + 0x6d2c) & 0x81) == 0) { g_fist_cf = 1; return; }  /* c528 -> c575 */
++      if ((*(uint8_t *)(dg + si + 0x17) & 8) != 0) {           /* c530 test byte[si+0x17],8 */
++        int callb47a;
++        if (*(uint8_t *)(dg + 0x7b1f) != 1) callb47a = 1;      /* c536 jne c548 */
++        else if (classid > 3) callb47a = 1;                    /* c53b ja c548 */
++        else callb47a = (*(uint8_t *)(dg + si + 0x1c) == 0);   /* c540 jne c54d (skip) else c548 */
++        if (callb47a) FUN_1000_b47a(0, si);                    /* c548 call b47a(si) */
++      }
++      mvec = *(uint16_t *)(ss + (uint16_t)(bx + 0x3632));      /* c54d word[STRSEG:bx+0x3632] */
++    } else if (d549 == 0x20) {
++      mvec = *(uint16_t *)(ss + (uint16_t)(bx + 0x35fa));      /* c567 */
++    } else if (d549 == 0x22) {
++      mvec = *(uint16_t *)(ss + (uint16_t)(bx + 0x35c2));      /* c559 */
++    } else {
++      mvec = *(uint16_t *)(ss + (uint16_t)(bx + 0x358a));      /* c51c */
++    }
++    g_fist_cf = 1;                                             /* default: method continues (jb c4df) */
++    (*(code *)fist_icall_near(0x0u, mvec))();                  /* dispatch object render method */
++    if (!g_fist_cf) return;                                    /* jae ret -> found (CF=0) */
++  }                                                             /* else jb c4df -> next object */
+ }
+ 
+ 
+@@ -56585,33 +56636,40 @@
+ void __allregs FUN_1000_671b(void)
+ 
+ {
+-  int *piVar1;
+-  uint uVar2;
+-  
+-  do {
+-    if (DAT_2000_3d26 == 0) {
+-      return;
+-    }
+-    piVar1 = (int *)((undefined2 *)&DAT_2000_2d3c)[DAT_2000_3d24 * 4];
+-    if ((piVar1 != (int *)0x0) && (*piVar1 != 0x17)) {
+-      DAT_2000_3d22 = piVar1 + 2;
+-      uVar2 = (uint)*(byte *)((undefined2 *)&DAT_2000_3d2a)[DAT_2000_3d24];
+-      if (uVar2 != 0) {
+-        DAT_2000_3d20 = (byte *)((undefined2 *)&DAT_2000_3d2a)[DAT_2000_3d24] + 0xc;
+-        DAT_2000_3d1e = uVar2;
+-        DAT_2000_3d1d = DAT_2000_3d28;
+-        if ((DAT_2000_3ae0 != 0) && (*(byte *)(DAT_2000_3ae0 + 0x1b) == DAT_2000_3d24)) {
+-          DAT_2000_3d1d = 0xf;
+-        }
+-        return;
+-      }
+-    }
+-    DAT_2000_3d24 = DAT_2000_3d24 + 1;
+-    DAT_2000_3d26 = DAT_2000_3d26 + -1;
+-    if (DAT_2000_3d26 == 4) {
+-      DAT_2000_3d28 = DAT_2000_3d29;
+-    }
+-  } while( true );
++  /* PATCH 292 (block C): base-loss reconstruction of the mission-object display-list "next visible cell" walker
++   * (asm 0x1671b-0x1678f, DS=SS=DGROUP=0x1c00).  Reached for the first time by the c33c iterator INIT
++   * (FUN_0000_5f64 @0x5f64 -> 671b) and by phase-handler idx2 (5fb0).  Ghidra dropped the DGROUP base on
++   * the two near-offset table VALUES (`word[bx+0x6d3c]` cell ptr, `word[bx+0x7d2a]` sprite ptr) and
++   * dereferenced them as HOST pointers (`*piVar1` at fist.c:56659 => SIGSEGV).  Rebased onto
++   * g_mem+0x1c000; CF (clc found / stc empty, asm 16775/1678e retf) via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  uint8_t *dg = g_mem + 0x1c000;
++  for (;;) {
++    if (*(uint16_t *)(dg + 0x7d26) == 0) { g_fist_cf = 1; return; } /* cmp [0x7d26],0; je 1678e stc */
++    uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x7d24) << 3);      /* bx=word[0x7d24]*8 */
++    uint16_t si = *(uint16_t *)(dg + 0x6d3c + bx);                  /* si=word[bx+0x6d3c] (cell near-off) */
++    if (si != 0 && *(uint16_t *)(dg + si) != 0x17) {               /* or si,si;je; cmp word[si],0x17;je */
++      *(uint16_t *)(dg + 0x7d22) = (uint16_t)(si + 4);             /* si+=4; word[0x7d22]=si */
++      uint16_t bx2 = (uint16_t)(*(uint16_t *)(dg + 0x7d24) << 1);   /* bx=word[0x7d24]*2 */
++      uint16_t si2 = *(uint16_t *)(dg + 0x7d2a + bx2);             /* si=word[bx+0x7d2a] (sprite near-off) */
++      uint16_t ax = *(uint8_t *)(dg + si2);                        /* movzx ax,byte[si] */
++      if (ax != 0) {                                               /* or ax,ax; je 16777 */
++        *(uint16_t *)(dg + 0x7d20) = (uint16_t)(si2 + 0xc);        /* si+=0xc; word[0x7d20]=si */
++        *(uint16_t *)(dg + 0x7d1e) = ax;                          /* word[0x7d1e]=ax */
++        *(uint8_t *)(dg + 0x7d1d) = *(uint8_t *)(dg + 0x7d28);     /* al=byte[0x7d28]; byte[0x7d1d]=al */
++        uint16_t s3 = *(uint16_t *)(dg + 0x7ae0);                  /* si=word[0x7ae0] */
++        if (s3 != 0 &&                                             /* or si,si; je 16775 */
++            (uint16_t)*(uint8_t *)(dg + s3 + 0x1b) == *(uint16_t *)(dg + 0x7d24)) /* byte[si+0x1b]==[0x7d24] */
++          *(uint8_t *)(dg + 0x7d1d) = 0xf;                         /* byte[0x7d1d]=0xf */
++        g_fist_cf = 0;                                             /* clc */
++        return;                                                     /* retf (found) */
++      }
++    }
++    *(uint16_t *)(dg + 0x7d24) = (uint16_t)(*(uint16_t *)(dg + 0x7d24) + 1);  /* inc [0x7d24] */
++    *(uint16_t *)(dg + 0x7d26) = (uint16_t)(*(uint16_t *)(dg + 0x7d26) - 1);  /* dec [0x7d26] */
++    if (*(uint16_t *)(dg + 0x7d26) == 4)                          /* cmp [0x7d26],4; jne */
++      *(uint8_t *)(dg + 0x7d28) = *(uint8_t *)(dg + 0x7d29);       /* al=byte[0x7d29]; byte[0x7d28]=al */
++  }
+ }
+ 
+ 
+@@ -64121,19 +64179,20 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_b47a) @ 1000:b47a ===== */
+ 
+-undefined4 __allregs FUN_1000_b47a(undefined4 param_1,int param_2)
++undefined4 __allregs FUN_1000_b47a(undefined4 param_1,uint16_t si)
+ 
+ {
+-  undefined4 uVar1;
+-  int iVar2;
+-  
+-  if (DAT_2000_a709 < 0x20) {
+-    iVar2 = DAT_2000_a709 * 8;
+-    *(undefined4 *)(iVar2 + -0x18f3) = *(undefined4 *)(param_2 + 4);
+-    uVar1 = *(undefined4 *)(param_2 + 8);
+-    *(undefined4 *)(iVar2 + -0x18ef) = uVar1;
+-    DAT_2000_a709 = DAT_2000_a709 + 1;
+-    param_1 = CONCAT22((int)((ulong)uVar1 >> 0x10),(int)param_1);
++  /* PATCH 292 (block D): base-loss reconstruction (asm 0x1b47a, DS=DGROUP=0x1c00).  Appends the object's two
++   * position dwords (dword[DGROUP:si+4], dword[DGROUP:si+8]) into the DGROUP:0xe70d.. staging table
++   * indexed by word[0xe709]*8-0x18f3, capped at 0x20 entries.  Ghidra dropped the DGROUP base on both
++   * the SOURCE object (si is a near-offset, not a host ptr) and the DEST table.  Reached only from
++   * FUN_0000_c4df.  Returns param_1 unchanged (ax preserved across the append). */
++  uint8_t *dg = g_mem + 0x1c000;
++  if (*(uint16_t *)(dg + 0xe709) < 0x20) {
++    uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0xe709) << 3);          /* word[0xe709]*8 */
++    *(uint32_t *)(dg + (uint16_t)(bx - 0x18f3)) = *(uint32_t *)(dg + si + 4);  /* [bx-0x18f3]=[si+4] */
++    *(uint32_t *)(dg + (uint16_t)(bx - 0x18ef)) = *(uint32_t *)(dg + si + 8);  /* [bx-0x18ef]=[si+8] */
++    *(uint16_t *)(dg + 0xe709) = (uint16_t)(*(uint16_t *)(dg + 0xe709) + 1);
+   }
+   return param_1;
+ }
+@@ -71987,6 +72046,7 @@
+   {0xc31eu,(void*)&FUN_0000_c31e},
+   {0xc335u,(void*)&FUN_0000_c335},
+   {0xc336u,(void*)&FUN_0000_c336},
++  {0xc33cu,(void*)&FUN_0000_c33c},   /* PATCH 292: object-roster walk iterator (installed @DGROUP:0x1630) */
+   {0xc38bu,(void*)&FUN_0000_c38b},
+   {0xc3d6u,(void*)&FUN_0000_c3d6},
+   {0xc3dcu,(void*)&FUN_0000_c3dc},

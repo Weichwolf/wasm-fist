@@ -717,6 +717,12 @@ void fist_install_dgroup(void) {
  * 074) spins on it -- faithful to `do { call far [DGROUP:0x40a] } while(jae)`. */
 unsigned char g_fist_cf;
 
+/* PATCH 292: the mission-object-roster iterator FUN_0000_c33c returns its updated SI register (always
+ * 0xffff on both the found and exhausted exits -- asm 0xc381/0xc386 `mov si,0xffff`) here; its caller
+ * FUN_0000_378e stores it into word[DGROUP:0x4b9e] (asm 0x37a7 `mov [0x4b9e],si`) so the NEXT iterator
+ * call sees si!=0 and skips the re-INIT (word[0x4b9e]==0 is the once-per-frame INIT trigger). */
+unsigned short g_fist_iter_si;
+
 /* Extender FILEMGR find/open CARRY flag (patch 210).  The extender's find-first chain
  * FUN_0000_6250 / 5d50 / 5cc2 / 5c98 signals found (clc, CF=0) vs not-found (stc, CF=1)
  * purely through the x86 CF; the __allregs model returns AX/void, not flags, so Ghidra
