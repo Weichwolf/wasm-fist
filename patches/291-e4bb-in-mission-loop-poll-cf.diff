@@ -1,0 +1,94 @@
+FUN_0000_e4bb (the in-mission HUD/per-frame render+event loop): restore the dropped empty-queue CF break +
+the cooperative INT-8 pump (the folded-CF class of patch 242's 459a loop / patch 137's cc33 loop).
+
+REACHABILITY (honest): e4bb is the cascade tail (e43f->...->459a->1631->e4bb).  This iteration proved
+execution does NOT yet reach e4bb -- it hangs UPSTREAM in FUN_0000_459a's per-frame render tail (22dd ->
+378e object-walk, whose iterator word[DGROUP:0x1630]=0xc33c is an unreconstructed mid-entry that traps, so
+378e's while(true) never breaks; see docs/stage1.md).  This patch fixes e4bb's own folded-CF loop from the
+asm (below) so it is correct the moment 459a completes; it is landed ahead of reachability exactly like the
+project's other asm-verified CF-fold reconstructions (patch 073's unexercised dispatch block, etc.).  It is
+BEHAVIOUR-NEUTRAL for every current path (e4bb has no live caller yet), so verify stays 19/19.
+
+asm-verified vs re_out/fist_dat_image.bin (0xe4bb..0xe525):
+    e4f7: call 0x206f              OUTER: PAINT the display list (posts extender op 0x0c/0x4c per frame)
+    e4fa: lcall $0xf69,$0x4277     3907 -> CF
+    e4ff: jae  0xe506              if CF clear skip; else ...
+    e501: lcall $0xf69,$0x12dc     096c housekeeping
+    e506: cmpb $0x0,-0x941         INNER: if (b6bf != 0) ...
+    e50b: jne  0xe4f7                ... -> repaint (b6bf = repaint-due flag)
+    e50d: lcall *0x40a             c40a = 35a7 (frame/event scheduler poll) -> CF
+    e511: jb   0xe4f7              if CF set (queue EMPTY) -> repaint          <-- DROPPED BY GHIDRA
+    e513: call 0x1e4b              1e4b: dispatch the drained event
+    e516: testb $0xff,-0x942       test b6be (exit flag)
+    e51b: je   0xe506              if b6be == 0 -> inner top
+    e51d: lcall *0x594             c594 teardown
+    e521: lcall *0x15a0            d5a0 teardown
+    e525: ret
+
+Ghidra folded the two carry sources (3907 @e4fa, c40a/35a7 @e50d) to constants: the pristine renders the
+`e511 jb 0xe4f7` empty-queue repaint break as `in_CF = 1; if (bVar5) break;` with bVar5 permanently false,
+so the inner event loop NEVER breaks to OUTER on an empty queue -> 206f runs exactly ONCE -> the extender
+per-frame op 0x0c is posted once and the mission never advances to a second frame.  It also never pumps the
+INT-8 tick, so no timer/input event is ever queued (the tick's ISR runs only from fist_timer_pump).
+
+Reconstruct faithfully (identical to the cc33 modal loop, patch 137, and the 459a modal loop, patch 242):
+thread g_fist_cf for both poll sites (3907 and 35a7 return the x86 CF via the shim global -- patch 073) and
+call fist_timer_pump() in the inner spin-wait.  Now the queue empties (or a frame event fires) -> c40a
+returns CF=1 -> break -> OUTER 206f repaints -> op 0x0c re-posts (the intended per-frame iteration, once
+459a's upstream render is un-blocked -- the c33c object-walk subsystem, docs/stage1.md).
+
+Native<->wasm bit-identical (the cooperative pump is the shared __EMSCRIPTEN__ tick seam already used by
+every modal loop).  verify stays 19/19.
+--- a/fist.c
++++ b/fist.c
+@@ -33731,24 +33731,34 @@
+   DAT_2000_b6be = '\0';
+   DAT_2000_b6f5 = 0;
+   DAT_2000_b6bf = '\0';
+-  do {
+-    FUN_0000_206f((char)iVar1,uVar2,param_1,uVar4);
+-    iVar1 = FUN_1000_3907();
+-    if ((bool)in_CF) {
+-      iVar1 = FUN_1000_096c(uVar3);
+-    }
+-    while (bVar5 = false, in_CF = bVar5, DAT_2000_b6bf == '\0') {
+-      iVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69);
+-      in_CF = 1;
+-      if (bVar5) break;
+-      iVar1 = FUN_0000_1e4b(iVar1,uVar2,uVar3,uVar4);
+-      if (DAT_2000_b6be != '\0') {
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))(0xf69);
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a0)))(0xf69);
+-        return;
++  /* PATCH 291: in-mission per-frame render/event loop (asm 0xe4f7..0xe525).  Ghidra folded the empty-queue
++   * repaint break (`e511 jb 0xe4f7`) to a dead `if(bVar5)break` -> the inner loop never repaints (op 0x0c
++   * posted once) and never pumps the tick.  Reconstruct faithfully (cf. cc33 patch 137, 459a patch 242):
++   * thread g_fist_cf (3907/35a7 return CF via the shim global, patch 073) + a cooperative INT-8 pump. */
++  {
++    extern unsigned char g_fist_cf;
++    extern void fist_timer_pump(void);
++    (void)in_CF; (void)bVar5;
++    while( true ) {                                        /* OUTER paint loop (e4f7) */
++      FUN_0000_206f((char)iVar1,uVar2,param_1,uVar4);      /* posts extender op 0x0c/0x4c per frame */
++      FUN_1000_3907();                                     /* e4fa: sets g_fist_cf */
++      if ((bool)g_fist_cf) {                               /* e4ff jae: CF set -> housekeeping */
++        iVar1 = FUN_1000_096c(uVar3);                      /* e501 */
++      }
++      while( true ) {                                      /* INNER event loop (e506) */
++        if (DAT_2000_b6bf != '\0') break;                 /* e506/e50b: repaint-due -> OUTER */
++        iVar1 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c40a)))(0xf69);  /* e50d: 35a7 -> g_fist_cf */
++        fist_timer_pump();                                 /* cooperative INT-8 tick in the spin-wait */
++        if ((bool)g_fist_cf) break;                        /* e511 jb: queue empty -> OUTER (repaint) */
++        iVar1 = FUN_0000_1e4b(iVar1,uVar2,uVar3,uVar4);    /* e513: dispatch the event */
++        if (DAT_2000_b6be != '\0') {                      /* e516/e51b: exit flag */
++          (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))(0xf69);   /* e51d */
++          (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a0)))(0xf69);   /* e521 */
++          return;
++        }
+       }
+     }
+-  } while( true );
++  }
+ }
+ 
+ 
