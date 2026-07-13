@@ -1,0 +1,63 @@
+299 -- the DGROUP:0x2ce4..0x2ce7 mission-render-state variable cluster is mistyped (oversized stores
+clobber the adjacent enter-cockpit-view flag) -> the in-mission voxel windshield (op 0x24) is unblocked.
+
+THE KEYSTONE OF THE op-0x24 WINDSHIELD FRONTIER (DOSBox instruction-trace + gdb verified). This is the
+adjacent-variable store-width class (cf. patches 104/105/123 store-width, 092 c780 undefined4->undefined2)
+that has blocked the in-mission voxel windshield for six recon iterations, each of which misattributed it
+(e4bb / class-0xe8 / d552 viewport-descriptor / 22dd d548 -- all DISPROVEN below).
+
+GROUND TRUTH (DOSBox instruction trace of the ORIGINAL at the settled AZER1 cockpit; engine DGROUP phys
+0x2d190; scratch/oracle/aa10.watch.txt watches the gate-op selector aa10=DGROUP:0xea10=phys 0x3bba0):
+  - op 0x24 (extender 9200 windshield voxel) IS posted 256x by the engine's df0e (eip 0xdf70), dispatched
+    by the 209e DIRTY paint-walk (`call *0x423c(%di)`) at display roster node DGROUP:0x3b3c whose class
+    base word0 = 0x11a and whose dirty method = 0x77dc -> FUN_1000_795c -> df0e -> aa10=0x24 -> e339.
+    (NOT the 22dd render-cursor walk, NOT a d552 viewport-descriptor path, NOT class 0xe8, NOT e4bb.)
+  - FUN_1000_795c (the class-0x11a viewport dirty method) carries the WHOLE op-0x24 mechanism inline:
+    on d548==0 it inits (d548=1; d552=0x8e91; a84c(vehicle) cockpit-view); on d548==0x81 it runs a20d
+    (camera) + df0e -> op 0x24.  Its d548 reads are already (char)-cast -> 22dd's separate d548 mistype is
+    ORTHOGONAL to op-0x24.
+  - The class-0x11a viewport ELEMENT is built by FUN_0000_466c(player_vehicle) (sets 2d34=vehicle,
+    dispatches near[type*2+0x6d7c] -> the per-vehicle cockpit-template builder -> 1cdb -> 1caf template
+    copy).  Verified live (scratch/oracle/node3b3c.watch.txt): the writer of the 0x11a class into node
+    3b3c is 1caf @ eip 0x1cc3, called from INSIDE 459a (stack ret 0x45a3), NOT e4bb.  Reached via
+    459a -> 5cce -> 5d43 -> 44be -> 466c, gated in 5cce on `DAT_2000_2ce7 == 1`.
+
+PORT ROOT CAUSE (gdb, genuine BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1 run):
+  - FUN_0000_5cce runs 215532x with DAT_2000_3ae0 == 0xc05c (correct player vehicle) and the byte at
+    DGROUP:0x6ce7 == 1 at ENTRY -- yet 5d43/44be/466c/795c/a84c are reached 0 times (op24=0), so the
+    class-0x11a element / windshield is never built (1cdb/1caf run 270k/71k times for OTHER templates).
+  - A watchpoint on byte 0x6ce7 shows FUN_0000_4886 (the cockpit view-enter, which also sets
+    DAT_1000_c78c=0x50 -- the oracle's cockpit screen-state) CLEARS 2ce7 to 0 between the cascade set and
+    the 5cce test, so `if (2ce7==1)` is false and the whole cockpit build is skipped.
+
+ASM-VERIFIED WIDTHS (re_out/fist_dat_image.bin; the whole DGROUP:0x2ce4..0x2ce8 cluster):
+  0x6ce4 (2ce4): WORD  -- `call *0x6ce4` (459a sim-step) + `movw $0x5db8/$0xc30e/$0x773e,0x6ce4`
+  0x6ce6 (2ce6): BYTE  -- `movb $2/$1/$0,0x6ce6`, `cmpb $1/$2,0x6ce6`
+  0x6ce7 (2ce7): BYTE  -- `movb $1/$0,0x6ce7`, `cmpb $1,0x6ce7`
+  0x6ce8 (2ce8): WORD  -- `incw 0x6ce8`, `mov 0x6ce8,%bx`   (already correct)
+Ghidra oversized THREE of them: 2ce4 undefined4 (a 4-byte store spans 0x6ce4..0x6ce7 -> zeroes 2ce6 AND
+2ce7), 2ce6 undefined2 (a 2-byte store spans 0x6ce6..0x6ce7 -> zeroes 2ce7), 2ce7 undefined2 (a 2-byte
+READ spans 0x6ce7..0x6ce8 -> the test picks up the 2ce8 counter's low byte).  In FUN_0000_4886, both
+`DAT_2000_2ce6 = 2` (word store) and `DAT_2000_2ce4 = 0x5db8` (dword store) therefore clobber the
+enter-cockpit flag 2ce7 the cascade just set.  Retyping 2ce4->undefined2, 2ce6->undefined1,
+2ce7->undefined1 makes every store/read exactly the asm width: no cross-clobber, and 2ce7's test reads
+only its own byte.  2ce4 as a WORD near-code-offset is still dispatched identically (`(*2ce4)()` reads the
+same low 16 bits 0xc30e/0x773e).
+
+BEHAVIOUR-NEUTRAL for the 19 verify flows: 2ce7 is a mission flag (5cce/5cf0 only), 2ce6/2ce4 are
+mission-render state; every covered flow is menu/pre-mission (no 459a mission loop, no cockpit view-enter),
+and native<->wasm stays bit-identical (verified).
+
+--- a/fist.c
++++ b/fist.c
+@@ -2925,7 +2925,7 @@
+ #define DAT_2000_2ce0 (*(undefined2 *)(g_mem+0x22ce0))
+ #define DAT_2000_2ce2 (*(undefined2 *)(g_mem+0x22ce2))
+-#define DAT_2000_2ce4 (*(undefined4 *)(g_mem+0x22ce4))
+-#define DAT_2000_2ce6 (*(undefined2 *)(g_mem+0x22ce6))
+-#define DAT_2000_2ce7 (*(undefined2 *)(g_mem+0x22ce7))
++#define DAT_2000_2ce4 (*(undefined2 *)(g_mem+0x22ce4))
++#define DAT_2000_2ce6 (*(undefined1 *)(g_mem+0x22ce6))
++#define DAT_2000_2ce7 (*(undefined1 *)(g_mem+0x22ce7))
+ #define DAT_2000_2ce8 (*(undefined2 *)(g_mem+0x22ce8))
+ #define DAT_2000_2d0f (*(undefined2 *)(g_mem+0x22d0f))
