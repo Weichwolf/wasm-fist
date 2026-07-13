@@ -1,0 +1,211 @@
+# CR3-aware flat writers, flat=[00044200..00054200): 141 distinct IPs
+# final flat->phys map (npg=17, cr3=000058aa, paging=0):
+#   flatpg 00044000 -> physpg 00044000
+#   flatpg 00045000 -> physpg 00045000
+#   flatpg 00046000 -> physpg 00046000
+#   flatpg 00047000 -> physpg 00047000
+#   flatpg 00048000 -> physpg 00048000
+#   flatpg 00049000 -> physpg 00049000
+#   flatpg 0004a000 -> physpg 0004a000
+#   flatpg 0004b000 -> physpg 0004b000
+#   flatpg 0004c000 -> physpg 0004c000
+#   flatpg 0004d000 -> physpg 0004d000
+#   flatpg 0004e000 -> physpg 0004e000
+#   flatpg 0004f000 -> physpg 0004f000
+#   flatpg 00050000 -> physpg 00050000
+#   flatpg 00051000 -> physpg 00051000
+#   flatpg 00052000 -> physpg 00052000
+#   flatpg 00053000 -> physpg 00053000
+#   flatpg 00054000 -> physpg 00054000
+
+FLATWRITER lin=0004f429 cs=4ec3 eip=000007f9 count=16384 flatoff=[f0d0..f3cd] firstval=00
+  code@lin-16: 03 f6 03 f0 8b fe 2e 8a 26 4a 08 8b d9 ac 36 d7 | aa 8b da ac 36 d7 aa 8b dd ac 36 d7 aa fe cc 75 ea 5d 1f c6 06 86 07 01 2e a1 3c 08 2e 0b 06 40 08 2e 0b 06 44 08 74 0b 2e ff 0e 4c 08 74 04 8b 
+  stack: fe36 2d19 0000 0201 0403 0605 0807 0a09 0c0b 0e0d 100f 1211 1413 1615 1817 1a19 1c1b 1e1d 201f 2221
+
+FLATWRITER lin=0004f42f cs=4ec3 eip=000007ff count=16384 flatoff=[f0d1..f3ce] firstval=00
+  code@lin-16: 2e 8a 26 4a 08 8b d9 ac 36 d7 aa 8b da ac 36 d7 | aa 8b dd ac 36 d7 aa fe cc 75 ea 5d 1f c6 06 86 07 01 2e a1 3c 08 2e 0b 06 40 08 2e 0b 06 44 08 74 0b 2e ff 0e 4c 08 74 04 8b e5 5d c3 c7 06 e8 
+  stack: fe36 2d19 0000 0201 0403 0605 0807 0a09 0c0b 0e0d 100f 1211 1413 1615 1817 1a19 1c1b 1e1d 201f 2221
+
+FLATWRITER lin=0004f435 cs=4ec3 eip=00000805 count=16384 flatoff=[f0d2..f3cf] firstval=00
+  code@lin-16: d9 ac 36 d7 aa 8b da ac 36 d7 aa 8b dd ac 36 d7 | aa fe cc 75 ea 5d 1f c6 06 86 07 01 2e a1 3c 08 2e 0b 06 40 08 2e 0b 06 44 08 74 0b 2e ff 0e 4c 08 74 04 8b e5 5d c3 c7 06 e8 05 00 00 80 0e 8a 
+  stack: fe36 2d19 0000 0201 0403 0605 0807 0a09 0c0b 0e0d 100f 1211 1413 1615 1817 1a19 1c1b 1e1d 201f 2221
+
+FLATWRITER lin=0004b739 cs=4ab0 eip=00000c39 count=3630 flatoff=[9364..9365] firstval=06
+  code@lin-16: 0e 8e 06 06 00 8b 1e 08 00 a1 0a 00 e9 d8 fe c3 | ff 0e 14 00 75 54 e8 1b ff 0a c0 74 b1 89 16 14 00 80 fd ff 74 3d 8a dd 32 ff 38 bf 11 01 75 23 c6 87 11 01 00 8a 87 34 00 38 87 2a 00 74 0b 8a 
+  stack: 0a37 01df 2d19 3abf 2082 2d19 f6c4 18fe 16d4 4a38 59cc 56be 3b84 4a38 12fb 2082 3246 2d19 70d5 1119
+
+FLATWRITER lin=0004f0e5 cs=4ec3 eip=000004b5 count=3072 flatoff=[f0d0..f3cf] firstval=00
+  code@lin-16: 06 86 07 00 36 8e 06 82 07 33 ff b9 80 01 33 c0 | f3 ab 36 c7 06 80 07 82 07 36 c6 06 86 07 01 36 f6 06 86 07 ff 75 f8 cb 0e e8 07 00 0e e8 f1 04 72 fa cb bb 00 00 b9 ff 00 ba ff ff 0e e8 0c 00 
+  stack: 70e9 1119 0088 f7b8 0010 3e3a 0100 e897 cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0
+
+FLATWRITER lin=0004f5c1 cs=4ec3 eip=00000991 count=3072 flatoff=[f0d0..f3cf] firstval=00
+  code@lin-16: 8b 36 c0 09 8b fe 2e 8b 0e c2 09 2b ce ac 36 d7 | aa e2 fa 1f c6 06 86 07 01 2e 83 3e bc 09 ff 74 0b 2e ff 0e c4 09 74 04 8b e5 5d c3 c7 06 e8 05 00 00 80 0e 8a 07 22 8b e5 5d c3 ff ff 00 40 00 
+  stack: 2d19 0000 0000 0101 0101 0202 0202 0303 0303 0404 0404 0505 0505 0606 0606 0707 0707 0808 0808 0909
+
+FLATWRITER lin=000222c1 cs=2082 eip=00001aa1 count=2556 flatoff=[102e..634f] firstval=3e
+  code@lin-16: 3b 06 00 00 77 f6 8e 1e 0e 00 3b 06 00 00 72 f6 | 26 8c 1e 0e 00 8c c0 87 06 0c 00 26 a3 0c 00 8e d8 8c 06 0e 00 26 a1 00 00 26 03 06 04 00 3b 06 00 00 75 39 a1 04 00 26 03 06 04 00 72 2f 26 a3 
+  stack: 170b 4a38 21b5 f7b8 2d19 9f1c 008e 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119
+
+FLATWRITER lin=000222c8 cs=2082 eip=00001aa8 count=2556 flatoff=[118c..650d] firstval=3a
+  code@lin-16: 1e 0e 00 3b 06 00 00 72 f6 26 8c 1e 0e 00 8c c0 | 87 06 0c 00 26 a3 0c 00 8e d8 8c 06 0e 00 26 a1 00 00 26 03 06 04 00 3b 06 00 00 75 39 a1 04 00 26 03 06 04 00 72 2f 26 a3 04 00 8c d8 36 8e 1e 
+  stack: 170b 4a38 21b5 f7b8 2d19 9f1c 008e 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119
+
+FLATWRITER lin=000222cc cs=2082 eip=00001aac count=2556 flatoff=[102c..634d] firstval=54
+  code@lin-16: 06 00 00 72 f6 26 8c 1e 0e 00 8c c0 87 06 0c 00 | 26 a3 0c 00 8e d8 8c 06 0e 00 26 a1 00 00 26 03 06 04 00 3b 06 00 00 75 39 a1 04 00 26 03 06 04 00 72 2f 26 a3 04 00 8c d8 36 8e 1e e2 16 a3 0e 
+  stack: 170b 4a38 21b5 f7b8 2d19 9f1c 008e 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119
+
+FLATWRITER lin=000222d2 cs=2082 eip=00001ab2 count=2556 flatoff=[102e..634f] firstval=3a
+  code@lin-16: 8c 1e 0e 00 8c c0 87 06 0c 00 26 a3 0c 00 8e d8 | 8c 06 0e 00 26 a1 00 00 26 03 06 04 00 3b 06 00 00 75 39 a1 04 00 26 03 06 04 00 72 2f 26 a3 04 00 8c d8 36 8e 1e e2 16 a3 0e 00 8e d8 36 87 06 
+  stack: 170b 4a38 21b5 f7b8 2d19 9f1c 008e 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119
+
+FLATWRITER lin=00021d00 cs=2082 eip=000014e0 count=2468 flatoff=[0f68..6349] firstval=19
+  code@lin-16: a1 0c 00 a3 0c 00 8c db 8e d8 89 1e 0e 00 8e da | 26 8f 06 08 00 26 8f 06 06 00 26 a1 00 00 eb 04 8e 1e 0c 00 3b 06 00 00 77 f6 eb 04 8e 1e 0e 00 3b 06 00 00 72 f6 26 8c 1e 0e 00 a1 0c 00 8c 06 
+  stack: 9f1c 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034
+
+FLATWRITER lin=00021d05 cs=2082 eip=000014e5 count=2468 flatoff=[0f66..6347] firstval=1c
+  code@lin-16: 00 8c db 8e d8 89 1e 0e 00 8e da 26 8f 06 08 00 | 26 8f 06 06 00 26 a1 00 00 eb 04 8e 1e 0c 00 3b 06 00 00 77 f6 eb 04 8e 1e 0e 00 3b 06 00 00 72 f6 26 8c 1e 0e 00 a1 0c 00 8c 06 0c 00 26 a3 0c 
+  stack: 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02
+
+FLATWRITER lin=00021d26 cs=2082 eip=00001506 count=2468 flatoff=[0f6e..634f] firstval=50
+  code@lin-16: 00 00 77 f6 eb 04 8e 1e 0e 00 3b 06 00 00 72 f6 | 26 8c 1e 0e 00 a1 0c 00 8c 06 0c 00 26 a3 0c 00 8e d8 8c 06 0e 00 b8 a0 80 26 a3 02 00 26 c7 06 06 00 00 00 26 8c 06 08 00 26 a1 04 00 29 46 04 
+  stack: 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02
+
+FLATWRITER lin=00021d2e cs=2082 eip=0000150e count=2468 flatoff=[0f6c..634d] firstval=36
+  code@lin-16: 0e 00 3b 06 00 00 72 f6 26 8c 1e 0e 00 a1 0c 00 | 8c 06 0c 00 26 a3 0c 00 8e d8 8c 06 0e 00 b8 a0 80 26 a3 02 00 26 c7 06 06 00 00 00 26 8c 06 08 00 26 a1 04 00 29 46 04 ff 46 10 26 a1 00 00 1f 
+  stack: 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02
+
+FLATWRITER lin=00021d32 cs=2082 eip=00001512 count=2468 flatoff=[0f6c..634d] firstval=4e
+  code@lin-16: 00 00 72 f6 26 8c 1e 0e 00 a1 0c 00 8c 06 0c 00 | 26 a3 0c 00 8e d8 8c 06 0e 00 b8 a0 80 26 a3 02 00 26 c7 06 06 00 00 00 26 8c 06 08 00 26 a1 04 00 29 46 04 ff 46 10 26 a1 00 00 1f 5a f8 c3 c4 
+  stack: 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02
+
+FLATWRITER lin=00021d38 cs=2082 eip=00001518 count=2468 flatoff=[104e..64af] firstval=36
+  code@lin-16: 1e 0e 00 a1 0c 00 8c 06 0c 00 26 a3 0c 00 8e d8 | 8c 06 0e 00 b8 a0 80 26 a3 02 00 26 c7 06 06 00 00 00 26 8c 06 08 00 26 a1 04 00 29 46 04 ff 46 10 26 a1 00 00 1f 5a f8 c3 c4 3e 06 00 26 f6 45 
+  stack: 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02
+
+FLATWRITER lin=00021d3f cs=2082 eip=0000151f count=2468 flatoff=[0f62..6343] firstval=a0
+  code@lin-16: 06 0c 00 26 a3 0c 00 8e d8 8c 06 0e 00 b8 a0 80 | 26 a3 02 00 26 c7 06 06 00 00 00 26 8c 06 08 00 26 a1 04 00 29 46 04 ff 46 10 26 a1 00 00 1f 5a f8 c3 c4 3e 06 00 26 f6 45 02 02 75 0b a1 0c 00 
+  stack: 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02
+
+FLATWRITER lin=00021d43 cs=2082 eip=00001523 count=2468 flatoff=[0f66..6347] firstval=00
+  code@lin-16: a3 0c 00 8e d8 8c 06 0e 00 b8 a0 80 26 a3 02 00 | 26 c7 06 06 00 00 00 26 8c 06 08 00 26 a1 04 00 29 46 04 ff 46 10 26 a1 00 00 1f 5a f8 c3 c4 3e 06 00 26 f6 45 02 02 75 0b a1 0c 00 8e d8 0b c0 
+  stack: 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02
+
+FLATWRITER lin=00021d4a cs=2082 eip=0000152a count=2468 flatoff=[0f68..6349] firstval=36
+  code@lin-16: 0e 00 b8 a0 80 26 a3 02 00 26 c7 06 06 00 00 00 | 26 8c 06 08 00 26 a1 04 00 29 46 04 ff 46 10 26 a1 00 00 1f 5a f8 c3 c4 3e 06 00 26 f6 45 02 02 75 0b a1 0c 00 8e d8 0b c0 75 ec f9 c3 e8 86 01 
+  stack: 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02
+
+FLATWRITER lin=000229ff cs=2082 eip=000021df count=2468 flatoff=[0f66..6347] firstval=1c
+  code@lin-16: d7 bd d4 16 89 5e 1e e8 c8 f1 72 29 59 5b 8c dd | 26 89 1e 06 00 26 89 0e 08 00 8e d9 26 a1 00 00 89 07 b8 a0 00 89 47 02 26 a3 02 00 8e dd 8c c0 07 1f 5d 5a cb 59 5b 07 1f 5d 5a 36 f6 06 44 17 
+  stack: 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000
+
+FLATWRITER lin=00022a04 cs=2082 eip=000021e4 count=2468 flatoff=[0f68..6349] firstval=19
+  code@lin-16: 5e 1e e8 c8 f1 72 29 59 5b 8c dd 26 89 1e 06 00 | 26 89 0e 08 00 8e d9 26 a1 00 00 89 07 b8 a0 00 89 47 02 26 a3 02 00 8e dd 8c c0 07 1f 5d 5a cb 59 5b 07 1f 5d 5a 36 f6 06 44 17 ff 74 02 f9 cb 
+  stack: 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000
+
+FLATWRITER lin=00022a17 cs=2082 eip=000021f7 count=2468 flatoff=[0f62..6343] firstval=a0
+  code@lin-16: 08 00 8e d9 26 a1 00 00 89 07 b8 a0 00 89 47 02 | 26 a3 02 00 8e dd 8c c0 07 1f 5d 5a cb 59 5b 07 1f 5d 5a 36 f6 06 44 17 ff 74 02 f9 cb be 9e 02 e9 3a fb e8 e9 f9 72 07 1e 8e d8 e8 bb f4 1f cb 
+  stack: 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000
+
+FLATWRITER lin=0004ef8f cs=4ec3 eip=0000035f count=2304 flatoff=[f0d0..f3cf] firstval=00
+  code@lin-16: 06 86 07 00 36 8e 06 82 07 33 f6 33 ff b9 80 01 | f3 a5 b8 00 a0 8e c0 33 ff b9 00 fa 36 ff 1e 36 03 1f 36 8e 06 82 07 e8 97 00 c7 06 80 07 82 07 c6 06 86 07 01 e8 cb 29 cb 50 53 51 80 4f 02 20 
+  stack: 2d19 e47a 1119 e8c1 cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0 0000 0000 00c8 0140
+
+FLATWRITER lin=00021cb8 cs=2082 eip=00001498 count=2278 flatoff=[0f4e..634f] firstval=00
+  code@lin-16: f9 c3 8b c8 8c da 36 a1 e2 16 8e d8 8e 1e 0c 00 | c7 06 0e 00 00 00 36 8c 1e e2 16 36 ff 0e dc 16 8e d8 26 a1 00 00 a3 00 00 03 c1 26 a3 00 00 89 0e 04 00 26 29 0e 04 00 8c d8 8e c0 8e da eb 18 
+  stack: 2d19 9f1c 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0
+
+FLATWRITER lin=00021cce cs=2082 eip=000014ae count=2278 flatoff=[0f60..6341] firstval=be
+  code@lin-16: 36 8c 1e e2 16 36 ff 0e dc 16 8e d8 26 a1 00 00 | a3 00 00 03 c1 26 a3 00 00 89 0e 04 00 26 29 0e 04 00 8c d8 8e c0 8e da eb 18 8c da 26 8e 1e 0e 00 26 a1 0c 00 a3 0c 00 8c db 8e d8 89 1e 0e 00 
+  stack: 2d19 9f1c 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0
+
+FLATWRITER lin=00021cd3 cs=2082 eip=000014b3 count=2278 flatoff=[1020..6341] firstval=4c
+  code@lin-16: 36 ff 0e dc 16 8e d8 26 a1 00 00 a3 00 00 03 c1 | 26 a3 00 00 89 0e 04 00 26 29 0e 04 00 8c d8 8e c0 8e da eb 18 8c da 26 8e 1e 0e 00 26 a1 0c 00 a3 0c 00 8c db 8e d8 89 1e 0e 00 8e da 26 8f 06 
+  stack: 2d19 9f1c 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0
+
+FLATWRITER lin=00021cd7 cs=2082 eip=000014b7 count=2278 flatoff=[0f64..6345] firstval=8e
+  code@lin-16: 16 8e d8 26 a1 00 00 a3 00 00 03 c1 26 a3 00 00 | 89 0e 04 00 26 29 0e 04 00 8c d8 8e c0 8e da eb 18 8c da 26 8e 1e 0e 00 26 a1 0c 00 a3 0c 00 8c db 8e d8 89 1e 0e 00 8e da 26 8f 06 08 00 26 8f 
+  stack: 2d19 9f1c 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0
+
+FLATWRITER lin=00021cdb cs=2082 eip=000014bb count=2278 flatoff=[1024..6345] firstval=22
+  code@lin-16: a1 00 00 a3 00 00 03 c1 26 a3 00 00 89 0e 04 00 | 26 29 0e 04 00 8c d8 8e c0 8e da eb 18 8c da 26 8e 1e 0e 00 26 a1 0c 00 a3 0c 00 8c db 8e d8 89 1e 0e 00 8e da 26 8f 06 08 00 26 8f 06 06 00 26 
+  stack: 2d19 9f1c 4a38 0000 21d9 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0
+
+FLATWRITER lin=0004f06a cs=4ec3 eip=0000043a count=2112 flatoff=[f1c0..f3cf] firstval=01
+  code@lin-16: 8e d8 8b c7 03 ff 03 f8 03 f7 8b c1 03 c9 03 c8 | f3 a4 1f c3 c6 06 86 07 00 0b c0 74 16 1e 8e 06 82 07 8e d8 33 ff b9 80 01 f3 a5 1f c7 06 80 07 82 07 cb e8 a2 05 c7 06 80 07 82 07 cb 0e e8 d3 
+  stack: 2d19 0379 7ecc 2082 7819 1119 20ba c11b 3b0c 3ce0 207e 45b7 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007
+
+FLATWRITER lin=0004acd2 cs=4ab0 eip=000001d2 count=1815 flatoff=[695c..695c] firstval=00
+  code@lin-16: 2e 8e 1e 5a 00 ff 1e 42 04 1f cb ea f6 3b 82 20 | 2e fe 06 5c 00 75 07 1e 2e ff 16 c2 05 1f 2e fe 0e 5c 00 eb e6 0e e8 48 06 cb 3d ff ff 74 06 1e e8 ff 08 1f cb 1e e8 99 0a 1f cb 33 f6 9c fa 06 
+  stack: 3abf 2082 2d19 f6c4 18fe 16d4 4a38 59cc 56be 3b84 4a38 12fb 2082 3246 2d19 70d5 1119 0088 f7b8 0010
+
+FLATWRITER lin=0004ace0 cs=4ab0 eip=000001e0 count=1815 flatoff=[695c..695c] firstval=ff
+  code@lin-16: 82 20 2e fe 06 5c 00 75 07 1e 2e ff 16 c2 05 1f | 2e fe 0e 5c 00 eb e6 0e e8 48 06 cb 3d ff ff 74 06 1e e8 ff 08 1f cb 1e e8 99 0a 1f cb 33 f6 9c fa 06 2e 8e 06 31 08 26 39 06 06 00 75 06 26 89 
+  stack: 3abf 2082 2d19 f6c4 18fe 16d4 4a38 59cc 56be 3b84 4a38 12fb 2082 3246 2d19 70d5 1119 0088 f7b8 0010
+
+FLATWRITER lin=00021f1c cs=2082 eip=000016fc count=1306 flatoff=[104e..64af] firstval=4a
+  code@lin-16: 01 46 04 ff 4e 10 8c d8 8e 06 0c 00 8e 1e 0e 00 | 26 8c 1e 0e 00 8c 06 0c 00 06 8e c0 e8 79 03 1f f8 c3 36 a1 9e 02 85 c0 74 08 8e c0 26 c6 06 da 0b 58 8e 46 0c 26 8e 06 0c 00 a1 0c 00 0b c0 8e 
+  stack: 21b5 f7b8 2d19 9f1c 008e 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0
+
+FLATWRITER lin=00021f21 cs=2082 eip=00001701 count=1306 flatoff=[11ac..630d] firstval=38
+  code@lin-16: 10 8c d8 8e 06 0c 00 8e 1e 0e 00 26 8c 1e 0e 00 | 8c 06 0c 00 06 8e c0 e8 79 03 1f f8 c3 36 a1 9e 02 85 c0 74 08 8e c0 26 c6 06 da 0b 58 8e 46 0c 26 8e 06 0c 00 a1 0c 00 0b c0 8e d8 f9 c3 e9 09 
+  stack: 21b5 f7b8 2d19 9f1c 008e 2d19 9f1c 2d19 2d19 f7b8 0000 2ee2 2082 be37 1119 0008 e8be 1119 cb35 00e0
+
+FLATWRITER lin=00022286 cs=2082 eip=00001a66 count=1184 flatoff=[0f6e..632f] firstval=44
+  code@lin-16: 3b 06 00 00 77 f6 8e 1e 0e 00 3b 06 00 00 72 f6 | 26 8c 1e 0e 00 8c c0 87 06 0c 00 26 a3 0c 00 8e d8 8c 06 0e 00 8c c0 8e d8 c3 8c d8 8e c0 8e 5e 0c 26 a1 00 00 eb 04 8e 1e 0c 00 3b 06 00 00 77 
+  stack: 18b1 4a42 4a52 1317 2d19 460c 1119 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0
+
+FLATWRITER lin=0002228d cs=2082 eip=00001a6d count=1184 flatoff=[0f6c..632d] firstval=40
+  code@lin-16: 1e 0e 00 3b 06 00 00 72 f6 26 8c 1e 0e 00 8c c0 | 87 06 0c 00 26 a3 0c 00 8e d8 8c 06 0e 00 8c c0 8e d8 c3 8c d8 8e c0 8e 5e 0c 26 a1 00 00 eb 04 8e 1e 0c 00 3b 06 00 00 77 f6 8e 1e 0e 00 3b 06 
+  stack: 18b1 4a42 4a52 1317 2d19 460c 1119 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0
+
+FLATWRITER lin=00022291 cs=2082 eip=00001a71 count=1184 flatoff=[0f6c..632d] firstval=52
+  code@lin-16: 06 00 00 72 f6 26 8c 1e 0e 00 8c c0 87 06 0c 00 | 26 a3 0c 00 8e d8 8c 06 0e 00 8c c0 8e d8 c3 8c d8 8e c0 8e 5e 0c 26 a1 00 00 eb 04 8e 1e 0c 00 3b 06 00 00 77 f6 8e 1e 0e 00 3b 06 00 00 72 f6 
+  stack: 18b1 4a42 4a52 1317 2d19 460c 1119 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0
+
+FLATWRITER lin=00022297 cs=2082 eip=00001a77 count=1184 flatoff=[0f6e..64af] firstval=40
+  code@lin-16: 8c 1e 0e 00 8c c0 87 06 0c 00 26 a3 0c 00 8e d8 | 8c 06 0e 00 8c c0 8e d8 c3 8c d8 8e c0 8e 5e 0c 26 a1 00 00 eb 04 8e 1e 0c 00 3b 06 00 00 77 f6 8e 1e 0e 00 3b 06 00 00 72 f6 26 8c 1e 0e 00 8c 
+  stack: 18b1 4a42 4a52 1317 2d19 460c 1119 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0
+
+FLATWRITER lin=0002207a cs=2082 eip=0000185a count=1134 flatoff=[0f60..6321] firstval=c1
+  code@lin-16: ff 36 0c 00 8b 0e 04 00 26 a1 00 00 8b f8 8b f0 | 87 36 00 00 03 c1 26 a3 00 00 06 1e 8e de 8e c7 33 f6 8b fe eb 17 8b c1 b9 00 80 f3 a5 8b c8 8c d8 05 00 10 8e d8 8c c0 05 00 10 8e c0 81 e9 00 
+  stack: 4a52 1317 2d19 460c 1119 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0 0000 0000
+
+FLATWRITER lin=00022080 cs=2082 eip=00001860 count=1134 flatoff=[1400..6221] firstval=dc
+  code@lin-16: 04 00 26 a1 00 00 8b f8 8b f0 87 36 00 00 03 c1 | 26 a3 00 00 06 1e 8e de 8e c7 33 f6 8b fe eb 17 8b c1 b9 00 80 f3 a5 8b c8 8c d8 05 00 10 8e d8 8c c0 05 00 10 8e c0 81 e9 00 10 73 e3 81 c1 00 
+  stack: 4a52 1317 2d19 460c 1119 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0 0000 0000
+
+FLATWRITER lin=000220c3 cs=2082 eip=000018a3 count=1134 flatoff=[0f6e..64af] firstval=44
+  code@lin-16: d1 e1 d1 e1 f3 a5 07 26 8e 1e 0c 00 26 a1 0e 00 | a3 0e 00 8c d9 8e d8 89 0e 0c 00 e8 9b 01 c4 3e 06 00 a1 00 00 26 89 05 07 1e 26 8e 1e 0c 00 26 a1 0e 00 a3 0e 00 8c d9 8e d8 89 0e 0c 00 e8 b3 
+  stack: 4a42 4a52 1317 2d19 460c 1119 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0 0000
+
+FLATWRITER lin=000220ca cs=2082 eip=000018aa count=1134 flatoff=[0f6c..632d] firstval=52
+  code@lin-16: 26 8e 1e 0c 00 26 a1 0e 00 a3 0e 00 8c d9 8e d8 | 89 0e 0c 00 e8 9b 01 c4 3e 06 00 a1 00 00 26 89 05 07 1e 26 8e 1e 0c 00 26 a1 0e 00 a3 0e 00 8c d9 8e d8 89 0e 0c 00 e8 b3 01 1f 8c d8 8e c0 bb 
+  stack: 4a42 4a52 1317 2d19 460c 1119 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0 0000
+
+FLATWRITER lin=000220e6 cs=2082 eip=000018c6 count=1134 flatoff=[102e..61ef] firstval=70
+  code@lin-16: 00 00 26 89 05 07 1e 26 8e 1e 0c 00 26 a1 0e 00 | a3 0e 00 8c d9 8e d8 89 0e 0c 00 e8 b3 01 1f 8c d8 8e c0 bb 02 00 e8 aa 00 e8 0e 00 8e 46 0c 26 8e 06 0c 00 58 0b c0 8e d8 c3 36 a1 9e 02 85 c0 
+  stack: 4a40 4a52 1317 2d19 460c 1119 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0 0000
+
+FLATWRITER lin=000220ed cs=2082 eip=000018cd count=1134 flatoff=[622c..650d] firstval=36
+  code@lin-16: 26 8e 1e 0c 00 26 a1 0e 00 a3 0e 00 8c d9 8e d8 | 89 0e 0c 00 e8 b3 01 1f 8c d8 8e c0 bb 02 00 e8 aa 00 e8 0e 00 8e 46 0c 26 8e 06 0c 00 58 0b c0 8e d8 c3 36 a1 9e 02 85 c0 74 08 8e c0 26 80 06 
+  stack: 4a40 4a52 1317 2d19 460c 1119 e90c cb35 00e0 0034 3d02 2d19 3ae0 0007 0000 0000 3ae0 000c 3ae0 0000
+
+FLATWRITER lin=000222ef cs=2082 eip=00001acf count=1054 flatoff=[1024..6345] firstval=df
+  code@lin-16: 3b 06 00 00 75 39 a1 04 00 26 03 06 04 00 72 2f | 26 a3 04 00 8c d8 36 8e 1e e2 16 a3 0e 00 8e d8 36 87 06 e2 16 87 06 0c 00 c7 06 0e 00 00 00 36 ff 06 dc 16 8e d8 8c 06 0e 00 26 8c 1e 0c 00 26 
+  stack: 170b 4a38 155a 13db ffff 2d19 157c 2d19 0000 21d9 2d19 157c 1000 2d19 0003 0000 20f8 2082 42d8 1119
+
+FLATWRITER lin=000222fa cs=2082 eip=00001ada count=1054 flatoff=[0f4e..628f] firstval=3a
+  code@lin-16: 06 04 00 72 2f 26 a3 04 00 8c d8 36 8e 1e e2 16 | a3 0e 00 8e d8 36 87 06 e2 16 87 06 0c 00 c7 06 0e 00 00 00 36 ff 06 dc 16 8e d8 8c 06 0e 00 26 8c 1e 0c 00 26 8e 1e 0e 00 a1 00 00 03 06 04 00 
+  stack: 170b 4a38 155a 13db ffff 2d19 157c 2d19 0000 21d9 2d19 157c 1000 2d19 0003 0000 20f8 2082 42d8 1119
+
+FLATWRITER lin=00022304 cs=2082 eip=00001ae4 count=1054 flatoff=[102c..634d] firstval=2e
+  code@lin-16: d8 36 8e 1e e2 16 a3 0e 00 8e d8 36 87 06 e2 16 | 87 06 0c 00 c7 06 0e 00 00 00 36 ff 06 dc 16 8e d8 8c 06 0e 00 26 8c 1e 0c 00 26 8e 1e 0e 00 a1 00 00 03 06 04 00 26 3b 06 00 00 75 39 26 a1 04 
+  stack: 170b 4a38 155a 13db ffff 2d19 157c 2d19 0000 21d9 2d19 157c 1000 2d19 0003 0000 20f8 2082 42d8 1119
+
+FLATWRITER lin=00022308 cs=2082 eip=00001ae8 count=1054 flatoff=[102e..634f] firstval=00
+  code@lin-16: e2 16 a3 0e 00 8e d8 36 87 06 e2 16 87 06 0c 00 | c7 06 0e 00 00 00 36 ff 06 dc 16 8e d8 8c 06 0e 00 26 8c 1e 0c 00 26 8e 1e 0e 00 a1 00 00 03 06 04 00 26 3b 06 00 00 75 39 26 a1 04 00 03 06 04 
+  stack: 170b 4a38 155a 13db ffff 2d19 157c 2d19 0000 21d9 2d19 157c 1000 2d19 0003 0000 20f8 2082 42d8 1119
+
+FLATWRITER lin=00022315 cs=2082 eip=00001af5 count=1054 flatoff=[102e..64cf] firstval=30
+  code@lin-16: 06 0c 00 c7 06 0e 00 00 00 36 ff 06 dc 16 8e d8 | 8c 06 0e 00 26 8c 1e 0c 00 26 8e 1e 0e 00 a1 00 00 03 06 04 00 26 3b 06 00 00 75 39 26 a1 04 00 03 06 04 00 72 2f a3 04 00 8c c0 36 8e 06 e2 16 
+  stack: 170b 4a38 155a 13db ffff 2d19 157c 2d19 0000 21d9 2d19 157c 1000 2d19 0003 0000 20f8 2082 42d8 1119

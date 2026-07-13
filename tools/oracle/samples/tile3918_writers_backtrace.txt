@@ -1,0 +1,25 @@
+# tile writers over armed window, phys=[00175200..00185200): 6 distinct IPs
+
+TILEWRITER lin=1000bcf6 cs=002b eip=0000bcf6 count=32791 tileoff=[0e00..ffff] firstval=50
+  code@lin-16: 00 00 53 51 52 e8 80 ef ff ff 5a 59 88 19 86 cd | 88 19 86 cd 5b fe c5 75 b7 fe c1 75 9f e8 06 00 00 00 e8 55 00 00 00 c3 8b 0d 94 bc 00 00 32 ed 32 c9 8a f5 c0 e6 03 f6 d6 0f b6 c1 8d 84 40 98 
+  stack: 0000 0000 9fbd 0000 8b62 0000 10d9 0000 0f57 0000 bf04 0000 002b 0033 e022 e8d9 1119 cb35 00e0 0034
+
+TILEWRITER lin=1000bcf2 cs=002b eip=0000bcf2 count=29403 tileoff=[0e00..fff1] firstval=50
+  code@lin-16: 88 15 6a ac 00 00 53 51 52 e8 80 ef ff ff 5a 59 | 88 19 86 cd 88 19 86 cd 5b fe c5 75 b7 fe c1 75 9f e8 06 00 00 00 e8 55 00 00 00 c3 8b 0d 94 bc 00 00 32 ed 32 c9 8a f5 c0 e6 03 f6 d6 0f b6 c1 
+  stack: 0000 0000 9fbd 0000 8b62 0000 10d9 0000 0f57 0000 bf04 0000 002b 0033 e022 e8d9 1119 cb35 00e0 0034
+
+TILEWRITER lin=1000bc7a cs=002b eip=0000bc7a count=5728 tileoff=[0000..0c5f] firstval=12
+  code@lin-16: 00 00 2b f5 2b fd 2b fd 8a 06 88 07 02 e0 d0 dc | 3e 88 64 3d 00 8a e0 e2 e9 4a 75 c8 d1 25 7c 55 00 00 c3 2e 8b c0 00 00 01 00 00 00 02 00 60 4e 07 00 8b 0d 90 bc 00 00 0f b6 c1 66 8b 9c 40 98 
+  stack: 8bee 0000 10d9 0000 0f57 0000 bf04 0000 002b 0033 e022 e8d9 1119 cb35 00e0 0034 3d02 2d19 3ae0 0007
+
+TILEWRITER lin=1000bc30 cs=002b eip=0000bc30 count=5376 tileoff=[0001..0dff] firstval=07
+  code@lin-16: 8a 26 03 f5 4e 83 ef 02 8a 06 88 07 02 e0 d0 dc | 88 67 01 8a e0 e2 ed 4a 75 e2 5e 5f d1 25 78 55 00 00 8b 2d 78 55 00 00 03 f5 03 fd 8b d5 52 a1 7c 55 00 00 f7 e5 5a 03 f0 8b c8 d1 e0 03 f8 4e 
+  stack: 4e60 0007 4e60 0007 8bee 0000 10d9 0000 0f57 0000 bf04 0000 002b 0033 e022 e8d9 1119 cb35 00e0 0034
+
+TILEWRITER lin=1000bc2a cs=002b eip=0000bc2a count=5376 tileoff=[0000..0dfe] firstval=07
+  code@lin-16: 8b d5 8b cd 2b f5 8a 26 03 f5 4e 83 ef 02 8a 06 | 88 07 02 e0 d0 dc 88 67 01 8a e0 e2 ed 4a 75 e2 5e 5f d1 25 78 55 00 00 8b 2d 78 55 00 00 03 f5 03 fd 8b d5 52 a1 7c 55 00 00 f7 e5 5a 03 f0 8b 
+  stack: 4e60 0007 4e60 0007 8bee 0000 10d9 0000 0f57 0000 bf04 0000 002b 0033 e022 e8d9 1119 cb35 00e0 0034
+
+TILEWRITER lin=1000bc74 cs=002b eip=0000bc74 count=5024 tileoff=[0000..0dff] firstval=13
+  code@lin-16: 24 31 8b 0d 7c 55 00 00 2b f5 2b fd 2b fd 8a 06 | 88 07 02 e0 d0 dc 3e 88 64 3d 00 8a e0 e2 e9 4a 75 c8 d1 25 7c 55 00 00 c3 2e 8b c0 00 00 01 00 00 00 02 00 60 4e 07 00 8b 0d 90 bc 00 00 0f b6 
+  stack: 8bee 0000 10d9 0000 0f57 0000 bf04 0000 002b 0033 e022 e8d9 1119 cb35 00e0 0034 3d02 2d19 3ae0 0007

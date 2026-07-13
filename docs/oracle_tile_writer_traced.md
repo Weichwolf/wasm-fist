@@ -1,3 +1,12 @@
+> **PARTLY SUPERSEDED (2026-07-13) by `docs/oracle_tile3918_producer.md`.** That doc pins the producer
+> DEFINITIVELY with backtraces + a physical-stability proof and CORRECTS two premises below: (1) the tile is
+> a **256×256 pairwise PALETTE-BLEND LUT** built by `bc9c` reading the **mission palette `ds:0x5598`** — the
+> `bc06`/`bc5a` "averaging upsample of the colormap" is a secondary LOD block, NOT the dominant fill, and the
+> source is the **palette**, not the colormap `85b8`; (2) the "paging moves the buffer" caveat is DISPROVEN —
+> the tile is at a FIXED phys `0x175200` via a data-SEGMENT base `0x131000` (ext-ptr `0x44200`), stable across
+> map-load and dump. The camera source (mission TCB @ phys `0x10000`, fields `+0x2c/0x30/0x34/0x38/0x3e`) is
+> also captured there. Read the new doc first.
+
 # Oracle recon — the tile-3918 WRITER traced on the original + the port-side collapse verdict
 
 **Date:** 2026-07-13 · **Method:** instrumented-DOSBox general-memory write-trace of a live AZER1 mission

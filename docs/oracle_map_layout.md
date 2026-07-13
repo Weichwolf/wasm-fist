@@ -1,3 +1,9 @@
+> **UPDATED (2026-07-13) by `docs/oracle_tile3918_producer.md`.** The "open follow-up" below (which IP fills
+> tile 3918 at detail 11) is now ANSWERED: extender `bc9c` builds it at map-load as a **pairwise palette-blend
+> LUT** from the mission palette `ds:0x5598` (NOT from `85b8`/`85bc`), physically stable at phys `0x175200`
+> (ext data-seg base `0x131000` + ext-ptr `0x44200`) — NOT paged. The `flat==phys−0x131000` "CR3 key" below is
+> actually a **fixed data-segment base `0x131000`**, not a page-table mapping. See the new doc.
+
 # Oracle recon — the voxel MAP-BUFFER LAYOUT, resolved from the ORIGINAL
 
 **Date:** 2026-07-13 · **Method:** flat→physical resolution of the instrumented-DOSBox RAM dump

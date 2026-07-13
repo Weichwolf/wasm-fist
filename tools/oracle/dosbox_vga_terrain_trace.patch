@@ -1,6 +1,6 @@
 --- src/hardware/vga_memory.cpp	2019-05-02 19:01:18.000000000 +0200
-+++ src/hardware/vga_memory.cpp	2026-07-13 06:11:36.046502775 +0200
-@@ -27,6 +27,188 @@
++++ src/hardware/vga_memory.cpp	2026-07-13 07:00:00.000000000 +0200
+@@ -27,6 +27,312 @@
  #include "pic.h"
  #include "inout.h"
  #include "setup.h"
@@ -23,7 +23,7 @@
 +static char fist_prefix[512];
 +
 +/* ---- tile-3918 (extender flat 0x44200 => guest-phys 0x175200) write recorder ---- */
-+struct FistMEnt { Bit32u ip, cs, eip, count, minoff, maxoff; Bit8u firstval; };
++struct FistMEnt { Bit32u ip, cs, eip, count, minoff, maxoff; Bit8u firstval; Bit16u stk[20]; };
 +static FistMEnt fist_ment[FIST_NENT];
 +static int fist_nment = 0;
 +volatile int fist_mem_armed = 0;              /* referenced by include/mem.h host_writeb gate */
@@ -34,6 +34,72 @@
 + * find the mission-entry cockpit-view ACTIVATE source: who writes DGROUP:4d0e. */
 +static Bit32u fist_watch_lo = 0, fist_watch_hi = 0;
 +static int    fist_watch_hits = 0;
++
++/* ---- CR3-AWARE flat-address watch: find who writes a FLAT LINEAR address
++ * (e.g. tile 3918 = ext flat 0x44200) REGARDLESS of which physical frame backs
++ * it.  The extender's PM paging moves its flat buffers under a fixed physical
++ * range, so a fixed-phys watch (above) is confounded at map-load vs dump time.
++ * This walks the guest CR3 page tables on every CR3 change (and periodically) to
++ * keep the flat->phys mapping current, then records writers by FLAT offset. */
++struct FistFEnt { Bit32u ip, cs, eip, count, minoff, maxoff; Bit8u firstval; Bit16u stk[20]; };
++static FistFEnt fist_fent[FIST_NENT];
++static int      fist_nfent = 0;
++static Bit32u   fist_wf_base = 0, fist_wf_span = 0;
++#define FIST_MAXWP 64
++static Bit32u   fist_wf_flatpg[FIST_MAXWP], fist_wf_physpg[FIST_MAXWP];
++static int      fist_wf_npg = 0;
++static Bit32u   fist_wf_lastcr3 = 0xffffffffu;
++static int      fist_wf_lasten = -1;
++static Bit32u   fist_wf_seq = 0;
++
++/* 2-level (and 4MB-PSE) guest page-table walk for the CURRENT CR3.  Reads page-
++ * table entries straight out of guest physical RAM (MemBase[phys]).  Returns
++ * 0xFFFFFFFF when paging is on but the page is not present. */
++static Bit32u fist_flat_to_phys(Bit32u lin) {
++	if (!paging.enabled) return lin;                 /* identity when paging off */
++	Bit32u cr3 = (Bit32u)paging.cr3 & 0xfffff000u;
++	Bit32u pde = host_readd(MemBase + cr3 + ((lin >> 22) & 0x3ff) * 4);
++	if (!(pde & 1)) return 0xffffffffu;              /* PDE not present */
++	if (pde & 0x80) return (pde & 0xffc00000u) | (lin & 0x003fffffu); /* 4MB PSE page */
++	Bit32u pte = host_readd(MemBase + (pde & 0xfffff000u) + ((lin >> 12) & 0x3ff) * 4);
++	if (!(pte & 1)) return 0xffffffffu;              /* PTE not present */
++	return (pte & 0xfffff000u) | (lin & 0xfffu);
++}
++
++/* recompute the flat->phys page map for the watched flat range under current CR3 */
++static void fist_wf_remap(void) {
++	fist_wf_npg = 0;
++	Bit32u start = fist_wf_base & ~0xfffu;
++	Bit32u end   = (fist_wf_base + fist_wf_span + 0xfffu) & ~0xfffu;
++	for (Bit32u l = start; l < end && fist_wf_npg < FIST_MAXWP; l += 0x1000) {
++		Bit32u p = fist_flat_to_phys(l);
++		fist_wf_flatpg[fist_wf_npg] = l;
++		fist_wf_physpg[fist_wf_npg] = (p == 0xffffffffu) ? 0xffffffffu : (p & ~0xfffu);
++		fist_wf_npg++;
++	}
++	fist_wf_lastcr3 = (Bit32u)paging.cr3;
++	fist_wf_lasten  = (int)paging.enabled;
++}
++
++/* record a writer that hit the watched FLAT range (histogram + first backtrace) */
++static void fist_flatrec(Bit32u foff, Bit8u val) {
++	Bit32u ipl = SegPhys(cs) + reg_eip;
++	for (int i = 0; i < fist_nfent; i++) {
++		if (fist_fent[i].ip == ipl) {
++			fist_fent[i].count++;
++			if (foff < fist_fent[i].minoff) fist_fent[i].minoff = foff;
++			if (foff > fist_fent[i].maxoff) fist_fent[i].maxoff = foff;
++			return;
++		}
++	}
++	if (fist_nfent < FIST_NENT) {
++		FistFEnt *e = &fist_fent[fist_nfent++];
++		e->ip = ipl; e->cs = SegValue(cs); e->eip = reg_eip; e->count = 1;
++		e->minoff = e->maxoff = foff; e->firstval = val;
++		Bit32u ssb = SegPhys(ss);
++		for (int k = 0; k < 20; k++) e->stk[k] = mem_readw(ssb + reg_esp + k * 2);
++	}
++}
 +
 +static void fist_sig(int s) { fist_req = (s == SIGUSR1) ? 1 : 2; }
 +
@@ -54,6 +120,20 @@
 +			fclose(wf);
 +		}
 +	}
++	if (fist_wf_span) {
++		/* CR3-aware: re-map on CR3/paging-enable change or every 64K writes */
++		if ((Bit32u)paging.cr3 != fist_wf_lastcr3 || (int)paging.enabled != fist_wf_lasten
++		    || ((fist_wf_seq++ & 0xffffu) == 0)) fist_wf_remap();
++		Bit32u phpg = ph & ~0xfffu;
++		for (int i = 0; i < fist_wf_npg; i++) {
++			if (fist_wf_physpg[i] == phpg) {
++				Bit32u flataddr = fist_wf_flatpg[i] + (ph & 0xfffu);
++				if (flataddr >= fist_wf_base && flataddr < fist_wf_base + fist_wf_span)
++					fist_flatrec(flataddr - fist_wf_base, val);
++				break;
++			}
++		}
++	}
 +	if (ph < fist_tile_lo || ph >= fist_tile_hi) return;
 +	Bit32u ipl = SegPhys(cs) + reg_eip, off16 = ph - fist_tile_lo;
 +	for (int i = 0; i < fist_nment; i++) {
@@ -68,6 +148,8 @@
 +		FistMEnt *e = &fist_ment[fist_nment++];
 +		e->ip = ipl; e->cs = SegValue(cs); e->eip = reg_eip; e->count = 1;
 +		e->minoff = e->maxoff = off16; e->firstval = val;
++		Bit32u ssb = SegPhys(ss);
++		for (int k = 0; k < 20; k++) e->stk[k] = mem_readw(ssb + reg_esp + k * 2);
 +	}
 +}
 +
@@ -137,11 +219,46 @@
 +				if (k == 0) fprintf(f, "| ");
 +				fprintf(f, "%02x ", mem_readb(e->ip + k));
 +			}
++			fprintf(f, "\n  stack:");
++			for (int k = 0; k < 20; k++) fprintf(f, " %04x", e->stk[k]);
 +			fprintf(f, "\n");
 +		}
 +		fclose(f);
 +	}
-+	fprintf(stderr, "[fist-oracle] dumped %s.{writers.txt,tilewriters.txt,ram.bin,vram.bin,pal.bin}\n", fist_prefix);
++	/* 6. CR3-AWARE flat-address (tile-3918) writers: histogram + backtrace + map */
++	if (fist_wf_span) {
++		snprintf(path, sizeof path, "%s.flatwriters.txt", fist_prefix);
++		f = fopen(path, "w");
++		if (f) {
++			fprintf(f, "# CR3-aware flat writers, flat=[%08x..%08x): %d distinct IPs\n",
++				fist_wf_base, fist_wf_base + fist_wf_span, fist_nfent);
++			fprintf(f, "# final flat->phys map (npg=%d, cr3=%08x, paging=%d):\n",
++				fist_wf_npg, (Bit32u)paging.cr3, (int)paging.enabled);
++			for (int i = 0; i < fist_wf_npg; i++)
++				fprintf(f, "#   flatpg %08x -> physpg %08x\n", fist_wf_flatpg[i], fist_wf_physpg[i]);
++			for (int i = 0; i < fist_nfent; i++) {
++				int mx = i;
++				for (int j = i + 1; j < fist_nfent; j++)
++					if (fist_fent[j].count > fist_fent[mx].count) mx = j;
++				FistFEnt t = fist_fent[i]; fist_fent[i] = fist_fent[mx]; fist_fent[mx] = t;
++			}
++			for (int i = 0; i < fist_nfent && i < 48; i++) {
++				FistFEnt *e = &fist_fent[i];
++				fprintf(f, "\nFLATWRITER lin=%08x cs=%04x eip=%08x count=%u flatoff=[%04x..%04x] firstval=%02x\n",
++					e->ip, e->cs, e->eip, e->count, e->minoff, e->maxoff, e->firstval & 0xff);
++				fprintf(f, "  code@lin-16: ");
++				for (int k = -16; k < 48; k++) {
++					if (k == 0) fprintf(f, "| ");
++					fprintf(f, "%02x ", mem_readb(e->ip + k));
++				}
++				fprintf(f, "\n  stack:");
++				for (int k = 0; k < 20; k++) fprintf(f, " %04x", e->stk[k]);
++				fprintf(f, "\n");
++			}
++			fclose(f);
++		}
++	}
++	fprintf(stderr, "[fist-oracle] dumped %s.{writers.txt,tilewriters.txt,flatwriters.txt,ram.bin,vram.bin,pal.bin}\n", fist_prefix);
 +}
 +
 +static INLINE void fist_vgawrite(PhysPt addr, Bitu val) {
@@ -160,9 +277,16 @@
 +			Bit32u span = ws ? (Bit32u)strtoul(ws, 0, 0) : 0x20;
 +			fist_watch_lo = c - span; fist_watch_hi = c + span;
 +		}
++		const char *wf = getenv("FIST_WATCHFLAT");
++		if (wf) {
++			fist_wf_base = (Bit32u)strtoul(wf, 0, 0);
++			const char *wfs = getenv("FIST_WATCHFLATSPAN");
++			fist_wf_span = wfs ? (Bit32u)strtoul(wfs, 0, 0) : 0x100;
++		}
 +	}
 +	if (GCC_UNLIKELY(fist_req)) {
-+		if (fist_req == 1) { fist_nent = 0; fist_armed = 1; fist_nment = 0; fist_mem_armed = 1; }
++		if (fist_req == 1) { fist_nent = 0; fist_armed = 1; fist_nment = 0; fist_mem_armed = 1;
++			fist_nfent = 0; fist_wf_lastcr3 = 0xffffffffu; fist_wf_lasten = -1; }
 +		else { fist_dump(); fist_armed = 0; fist_mem_armed = 0; }
 +		fist_req = 0;
 +	}
@@ -189,7 +313,7 @@
  
  
  #ifndef C_VGARAM_CHECKED
-@@ -377,6 +559,7 @@
+@@ -377,6 +683,7 @@
  			return readHandler<Bit32u>( addr );
  	}
  	void writeb(PhysPt addr, Bitu val ) {
@@ -197,7 +321,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -385,6 +568,7 @@
+@@ -385,6 +692,7 @@
  		writeCache<Bit8u>( addr, val );
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -205,7 +329,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -399,6 +583,7 @@
+@@ -399,6 +707,7 @@
  		writeCache<Bit16u>( addr, val );
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -213,7 +337,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -433,6 +618,7 @@
+@@ -433,6 +742,7 @@
  		flags=PFLAG_NOCODE;
  	}
  	void writeb(PhysPt addr,Bitu val) {
@@ -221,7 +345,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -440,6 +626,7 @@
+@@ -440,6 +750,7 @@
  		writeHandler(addr+0,(Bit8u)(val >> 0));
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -229,7 +353,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -448,6 +635,7 @@
+@@ -448,6 +759,7 @@
  		writeHandler(addr+1,(Bit8u)(val >> 8));
  	}
  	void writed(PhysPt addr,Bitu val) {

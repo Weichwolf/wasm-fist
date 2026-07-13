@@ -14,3 +14,4 @@ third_party/*_ghidra_proj/
 /tmp/
 *.tmp
 scratch/refcap/
+scratch/oracle/
