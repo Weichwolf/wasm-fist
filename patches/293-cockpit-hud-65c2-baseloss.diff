@@ -1,0 +1,71 @@
+PATCH 293: reconstruct FUN_1000_65c2 (cockpit-HUD status render) so the 459a mission paint pass clears its
+first two SIGSEGVs -- fix (A) the DGROUP near-offset base-loss on the `word[bx+0x7b32]` read (asm 0x1660e)
+and (B) the three cockpit-HUD drawstring calls that pass the "GOALS:/TIME REMAINING" text as a bare DGROUP
+near offset (0x86cc) to thunk_FUN_1000_5531, which derefs its arg as a HOST pointer.
+
+OBSERVED-REACHED, asm-verified vs re_out/fist_dat_image.bin (DS=SS=DGROUP=0x1c00).  On the genuine
+BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) mission path (op 0x18 MAP-LOAD fires, op 0x0c per-frame render
+entered), 459a's paint pass 459a->206f->209e->4937->65c2 (gdb bt + core confirmed both faults) crashes in
+FUN_1000_65c2.
+
+(A) ASM (FUN_1000_65c2 = linear 0x165c2):
+  16600: 80 3e 18 7b 00   cmpb  $0x0,0x7b18        ; if byte[DS:0x7b18]!=0 skip
+  16605: 75 13            jne   0x1661a
+  16607: 0f b6 1e 19 7b   movzbw 0x7b19,%bx        ; bx = byte[DS:0x7b19]
+  1660c: d1 e3            shl   $1,%bx             ; bx <<= 1
+  1660e: 8b b7 32 7b      mov   0x7b32(%bx),%si    ; si = word[DS:bx+0x7b32]   <-- BASE-LOST
+  16612: 0b f6            or    %si,%si
+  16614: 74 04            je    0x1661a            ; if si==0 skip
+  16616: ff 1e a0 04      lcall *0x4a0             ; lcall [DS:0x4a0] = DAT_1000_c4a0
+DS=DGROUP=0x1c00 -> linear = 0x1c000+off:  0x7b18->0x23b18=DAT_2000_3b18 (byte compared, correct);
+0x7b19->0x23b19 (byte index, correct, g_mem+0x23b19); 0x7b32->0x23b32 (the word table -- Ghidra DROPPED
+the base -> bare host addr 0x7b32 -> `*(int*)((uint)byte*2 + 0x7b32)` deref'd a wild pointer -> SIGSEGV).
+Fix: rebase the word read onto g_mem + 0x1c000 + 0x7b32 = g_mem + ...*2 + 0x23b32.
+
+(B) ASM: 1664f `mov $0x86cc,%si; call 0x1552b` (x3, also 16659/16663-region).  thunk_FUN_1000_5531 (=1000:552b)
+is the per-glyph drawstring: `lods %ds:(%si),%al ... lcall [0x684]` -- it reads the string byte-by-byte at
+DS:SI (DS=DGROUP).  The C thunk derefs param_1 as a plain host char*, so the bare near offset 0x86cc landed
+on host address 0x86cc -> SIGSEGV (movzbl (%eax) with eax=0x86cd).  DGROUP:0x86cc = image 0x246cc =
+"         GOALS:  \x0cTIME REMAINING:00:00\0" (the cockpit HUD status text; the adjacent DAT_2000_46db=
+DGROUP:0x86db it writes is the time field).  Other callers of this thunk already pass g_mem-based `&DAT_*`
+host pointers, so the faithful fix is at the 65c2 call sites: pass g_mem + 0x1c000 + 0x86cc = g_mem+0x246cc.
+
+No other base-loss in 65c2 (all remaining refs are correctly-based DAT_/FUN_ syms; the c558/c6c8 method-vector
+arg drops are downstream method calls that returned fine).
+
+BEHAVIOUR-NEUTRAL for the 19 verify flows: FUN_1000_65c2 (the cockpit-HUD render) is reached only via the
+459a paint pass on the d548-gated mission path, which no covered flow enters (ACCEPT is never clicked).  Both
+edits only rebase reads that were wild host-ptr derefs (crashes), so they cannot change any covered flow.
+Sources stay pristine (re_out/fist.c 61453e42); fist.c is patched into build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -54142,7 +54142,7 @@
+   uVar1 = FUN_1000_524e(0);
+   FUN_1000_530b(uVar1 & 0xff00);
+   FUN_1000_52d1(0xa5,0xb);
+-  if (((char)DAT_2000_3b18 == '\0') && (*(int *)((uint)(*(undefined1 *)(g_mem+0x23b19)) * 2 + 0x7b32) != 0)) {
++  if (((char)DAT_2000_3b18 == '\0') && (*(int *)(g_mem + (uint)(*(undefined1 *)(g_mem+0x23b19)) * 2 + 0x23b32) != 0)) {
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c4a0)))();
+   }
+   FUN_1000_524e(2);
+@@ -54152,16 +54152,16 @@
+   FUN_1000_4b04((undefined1 *)&DAT_1000_df8c);
+   DAT_2000_46db = DAT_1000_df8f;
+   FUN_1000_658b();
+-  thunk_FUN_1000_5531(0x86cc);
++  thunk_FUN_1000_5531((char *)(g_mem + 0x246cc));
+   iVar4 = 0;
+   FUN_1000_52d1(0,0xffff);
+   iVar2 = 0;
+-  thunk_FUN_1000_5531(0x86cc);
++  thunk_FUN_1000_5531((char *)(g_mem + 0x246cc));
+   uVar5 = 0;
+   FUN_1000_52d1(iVar4 + -1,iVar2 + -1);
+   uVar3 = 0;
+   FUN_1000_530b(CONCAT11(extraout_AH_00,0xe));
+-  thunk_FUN_1000_5531(0x86cc);
++  thunk_FUN_1000_5531((char *)(g_mem + 0x246cc));
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c558)))(0,uVar3,uVar5);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(0);
+   return;
