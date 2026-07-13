@@ -1,5 +1,41 @@
 # Oracle recon — the DEFINITIVE tile-3918 producer + the mission-TCB camera source
 
+> ## CORRECTION (2026-07-13, implementation iteration) — the "symmetric pairwise palette-blend" model does NOT reproduce the observed tile; the real gate is UPSTREAM (the build-time display palette)
+>
+> Reconstructing bc9c per this doc and byte-comparing against the oracle ref
+> (`scratch/oracle/oracle_tile3918.bin`, re-verified == phys `0x175200` in FOUR RAM dumps) DISPROVES the
+> symmetric-blend producer as the *complete* story. Measured facts:
+> - **The oracle tile is NON-SYMMETRIC** — only 9252/65536 cells satisfy `t[r][c]==t[c][r]` (15.7 % in the
+>   pure-bc9c region rows/cols 14–255). But bc9c writes a **symmetric** pair (`[ecx]=bl; xchg ch,cl; [ecx]=bl`
+>   ⇒ `t[ch][cl]==t[cl][ch]`). A symmetric writer cannot produce a 15.7%-symmetric buffer.
+> - The **window/low-16 reconciliation** ("bc9c fills the `0x40000`-aligned block, tile `[3918]=0x44200`
+>   windows it at linear `+0x4200`=row 66") is also **disproven**: the port's aligned symmetric fill windowed
+>   at `0x4200` matches the oracle **1.1 %**; the best window offset is `0` at **32.6 %** — i.e. even col-0
+>   alignment only gets the ~½ the symmetry allows, and the values are substantially off.
+> - **ROOT CAUSE (oracle-proven), the tile is built from a BUILD-TIME display palette the port does not
+>   reproduce.** Oracle `t[i][i]=ac70(pal[i])`: diag = `[63,53,51,48,73,75,…]` — **low** indices, with
+>   `pal[0]=white ⇒ 63`. So at build time `4f60[63]=white` and the search start `ac64<63`. But:
+>   * the **dump-time** `4f60` has entries **0..79 ZERO, 80..255 = mission colours** (176 nonzero) and the
+>     dump-time reserved-count `28a5=ac64=80` — a DIFFERENT palette state than at build;
+>   * the **port's** `a033` builds `4f60 = mission_pal>>1` (only entries 0..23 nonzero, since the mission
+>     `5598` palette is only 24 colours) and reads the dump-time `ac64=80` ⇒ ac70 searches the empty 80..255
+>     reserved range ⇒ returns a CONSTANT (diag=80, or 0 with ac64=0). Three different `4f60` states, none
+>     the build-time one.
+> - ⇒ **The true frontier is upstream: the extender's DISPLAY-PALETTE (`4f60`) construction + the
+>   reserved-count/`ac64` handling at map-load** — the full 256-entry display palette with system colours in
+>   the reserved 0..79 band (white@63) that `bc9c`/`ac70` consult at build time. The tile (and the terrain
+>   colours) cannot be byte-correct until `4f60` at build time is correct. `bc9c` (patch 289, the dropped
+>   `ac70` return) is a correct **prerequisite**, not the producer.
+> - **Patch 289 stands** (asm-verified bug fix; tile empty→175 distinct real blended indices; mission-path
+>   only; 19/19 verify PASS, mainmenu `3a6ff1c5`, native↔wasm bit-identical). It does NOT achieve byte-match
+>   and no terrain flow is accepted. The **mission-TCB camera repoint (deliverable 2) was NOT pursued** —
+>   without a byte-correct tile it cannot produce coherent terrain, so it is deferred behind the 4f60 gate.
+>
+> The rest of this doc (below) is the prior recon; treat its "symmetric palette-blend" claim as the
+> **partial/incorrect** premise this correction supersedes.
+
+---
+
 **Date:** 2026-07-13 · **Method:** CR3-aware flat-address watch + fixed-phys tile-writer trace **with
 20-word near-call backtraces** on a live AZER1 mission of the ORIGINAL, driven BATTLES→OK→ACCEPT (armed
 before ACCEPT = map-load), plus offline disassembly of the extender image (`re_out/fist_image.bin`) and

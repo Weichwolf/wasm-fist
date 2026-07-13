@@ -1,0 +1,58 @@
+Voxel PALETTE-BLEND TILE builder (extender FUN_0000_bc9c) -- restore ac70's dropped index return so
+the 256x256 pairwise-blend LUT (tile DAT_0000_3918) is filled with real nearest-palette indices.
+
+DEFINITIVE PRODUCER (docs/oracle_tile3918_producer.md, CR3-aware fixed-phys oracle capture):
+tile 3918 is a 256x256 pairwise PALETTE-BLEND LUT built at MAP-LOAD by bc9c:
+    tile[cl + 256*ch] = tile[ch + 256*cl] = ac70( (pal[cl] + pal[ch]) / 2 )
+where pal = the 256-entry 6-bit VGA MISSION palette at ext ds:0x5598 and ac70 = the nearest-palette
+reverse-lookup (patch 288's a060/a460/a860 + 0x4f60, verified working -> 85b8 = 112 distinct desert).
+
+ASM (re_out/fist_image.bin 0xbc9c..0xbd0d), the write of the blended index:
+    bceb: call 0xac70            ; ac70 returns the nearest palette index in BL
+    bcf2: mov  [ecx],bl          ; tile[ch*256+cl] = index
+    bcf4: xchg ch,cl
+    bcf6: mov  [ecx],bl          ; tile[cl*256+ch] = index  (symmetric mirror)
+
+BUG (flat32 decompile, dropped __allregs multi-register return -- same class patch 236 fixed for
+9e60): the pristine bc9c body reads
+    bVar12 = bVar11;             ; bVar11 = pal[cl].R (a blend input, NOT the result)
+    FUN_0000_ac70();             ; return VALUE dropped
+    *pbVar8 = bVar12;            ; writes pal[cl].R over the tile
+so the tile filled with palette RED bytes (55 distinct) instead of blended indices, AND the renderer
+9200 (which SMC-samples ds:0x3918) saw an empty/wrong tile -> black terrain.  The blend triple
+ac68/ac69/ac6a and the symmetric CONCAT pointer math are already faithful (verified vs asm; the base
+ds:0xbc90 low-16 = 0 so cl/ch index the 64 KB dest correctly); ONLY the write source was wrong.
+
+FIX: consume ac70's return (already typed `undefined4` by patch 236) as the blended index and write it
+to both symmetric slots -- exactly asm `bl = ac70(); [ecx]=bl; xchg; [ecx]=bl`.
+
+EFFECT: with [ds:0xbc90] pointed at the tile buffer at build time (the shim's "bc90 REUSED = tile"
+alias, tools/native_main.c op-0x18), tile 3918 goes from EMPTY (distinct=1) to distinct=175/176 with
+real blended indices (was writing palette-red bytes = 55 distinct).  Class: dropped multi-register
+__allregs return.
+
+HONEST STATUS (measured vs scratch/oracle/oracle_tile3918.bin, verified stable == phys 0x175200 in
+four RAM dumps): this is NOT yet byte-exact (best 32.6% identical at window=0).  The oracle tile is
+NON-symmetric (15.7% symmetric in the pure bc9c region) whereas bc9c writes a SYMMETRIC pairwise LUT --
+so the doc's "symmetric pairwise palette-blend" model does NOT alone reproduce the observed tile, and
+the window/low-16-offset reconciliation (bc9c fills 0x40000-aligned, tile windows at 0x4200) is also
+disproven (0x4200 -> 1.1% match).  ROOT CAUSE, oracle-proven: the tile is built from a BUILD-TIME
+DISPLAY palette 4f60 the port does not reproduce -- oracle build-time 4f60 has system colours (white at
+index 63) in the reserved 0..79 range and ac64<63, while the port's a033 builds 4f60 = mission_pal>>1
+(only 0..23 nonzero) and reads the dump-time reserved-count 80.  The true frontier is UPSTREAM: the
+display-palette construction + reserved-count/ac64 handling at map-load.  Patch 289 remains a correct,
+asm-verified fix (the dropped ac70 return is unambiguously a bug); it is a prerequisite, not the whole
+producer.  Mission-path only (op 0x18 / bc9c) -> the 19 menu verify flows are byte-untouched.
+
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -16866,8 +16866,7 @@
+       DAT_0000_ac69 = (byte)(bVar3 + 1) >> 1 | (CARRY1(bVar4,bVar5) || 0xfe < bVar3) << 7;
+       bVar3 = bVar12 + bVar1;
+       DAT_0000_ac6a = (byte)(bVar3 + 1) >> 1 | (CARRY1(bVar12,bVar1) || 0xfe < bVar3) << 7;
+-      bVar12 = bVar11;
+-      FUN_0000_ac70();
++      bVar12 = (byte)FUN_0000_ac70();
+       *pbVar8 = bVar12;
+       cVar9 = (char)((uint)pbVar8 >> 8);
+       cVar7 = (char)pbVar8;

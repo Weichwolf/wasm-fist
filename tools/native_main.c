@@ -1046,6 +1046,7 @@ int fist_extender_gate(void) {
             uint32_t save_c93 = *(uint32_t *)(xb + 0xc93);
             *(uint32_t *)(xb + 0xc93) = (uint32_t)(uintptr_t)(g_mem + tcb_lin);   /* extender cur-TCB */
             *(uint32_t *)(xb + 0xd82) = 0x10a0;                                    /* mirror 0x10ca */
+            { const char *a=getenv("FIST_AC64OVR"); if(a) g_mem[tcb_lin+0x54]=(uint8_t)strtoul(a,0,0); }
             fprintf(stderr, "[ext] op 0x18 MAP-LOAD: TCB @0x%05x  '%.13s'/'%.13s'/'%.13s'/'%.13s'  [+0x54]=%02x [+0x59]=%02x\n",
                     tcb_lin, g_mem+tcb_lin+0x7a, g_mem+tcb_lin+0x8a, g_mem+tcb_lin+0x9a, g_mem+tcb_lin+0xaa,
                     g_mem[tcb_lin+0x54], g_mem[tcb_lin+0x59]);
@@ -1071,9 +1072,28 @@ int fist_extender_gate(void) {
              * op 0x18 (2f54 was already 1, cursor already at base) -> the reset only drops the stale marker. */
             *(uint32_t*)(xb+0x2f50) = 0;
             m_ext_FUN_0000_84c0(inbox);
+            /* "bc90 REUSED = tile 0x44200 during the build" (docs/oracle_tile3918_producer.md):
+             * the ORIGINAL builds the pairwise palette-blend LUT (bc9c) into the SAME 64 KB buffer that
+             * ds:0x3918 points at -- ds:0xbc90 aliases the tile during map-load.  The port's 84c0
+             * allocated bc90 (082c0000) and 3918 (082f0000) as SEPARATE buffers, so patch-289's fixed
+             * bc9c wrote the blend LUT into bc90 while the renderer 9200 (SMC-sampling ds:0x3918) saw an
+             * empty tile.  Alias bc90 -> the tile buffer for the build so bc9c fills what 9200 samples.
+             * (bc9c/bd0e/bd62 use bc94 for the depth-shade LUTs, a different slot, so bc90 is free to
+             * carry the tile ptr through the build.)  Saved/restored around 89b0. */
+            uint32_t save_bc90 = *(uint32_t *)(xb + 0xbc90);
+            uint32_t save_3918 = *(uint32_t *)(xb + 0x3918);
+            uint32_t tile3918  = save_3918;
+            /* Experiment FIST_TILEWIN: the ORIGINAL's [3918]=0x44200 is NOT 64KB-aligned; bc9c writes a
+             * symmetric matrix into the 64KB-aligned block [bc90]=0x40000, and [3918] windows it at linear
+             * offset 0x4200 (=row 66).  Port Route-1 pointers are 64KB-aligned (low16=0) so the window
+             * offset is lost.  With FIST_TILEWIN=0x4200: build into the aligned base, then window [3918]. */
+            uint32_t win = getenv("FIST_TILEWIN") ? (uint32_t)strtoul(getenv("FIST_TILEWIN"),0,0) : 0;
+            if (tile3918) *(uint32_t *)(xb + 0xbc90) = tile3918;   /* bc90 REUSED = tile aligned base */
             g_fist_ext_int = 1;                    /* extender-mode flat FILEMGR INT 21h */
             m_ext_FUN_0000_89b0(inbox, inbox, inbox);
             g_fist_ext_int = 0;
+            *(uint32_t *)(xb + 0xbc90) = save_bc90;
+            if (win && tile3918) *(uint32_t *)(xb + 0x3918) = tile3918 + win;  /* window the tile */
             *(uint32_t *)(xb + 0xc93) = save_c93;
             fprintf(stderr, "[ext] op 0x18 MAP-LOAD returned; detail[0x8490]=0x%x dim[0x8494]=%u (base=0x0b => 2048)\n",
                     *(uint32_t *)(xb + 0x8490), *(uint32_t *)(xb + 0x8494));
@@ -1093,6 +1113,19 @@ int fist_extender_gate(void) {
                     for (long i=0;i<n;i++){ if(p[i])nz++; if(!h[p[i]]){h[p[i]]=1;d++;} }
                     fprintf(stderr,"[mapprobe] %-14s ptr=%08x distinct=%d nonzero=%ld/%ld\n",
                             B[bi].nm, base, d, nz, n);
+                }
+                /* Dump the built 3918 tile and byte-compare vs the oracle reference. */
+                uint32_t t3918 = *(uint32_t*)(xb+0x3918);
+                if (t3918) {
+                    const char *td = getenv("FIST_TILEDUMP");
+                    if (td) { FILE *f=fopen(td,"wb"); if(f){ fwrite((void*)(uintptr_t)t3918,1,0x10000,f); fclose(f);
+                        fprintf(stderr,"[mapprobe] tile3918 dumped -> %s\n",td); } }
+                    const char *tr = getenv("FIST_TILEREF");
+                    if (tr) { FILE *f=fopen(tr,"rb"); if(f){ static uint8_t ref[0x10000]; size_t rn=fread(ref,1,0x10000,f); fclose(f);
+                        if(rn==0x10000){ uint8_t*t=(uint8_t*)(uintptr_t)t3918; long same=0; int hr[256]={0},ndr=0;
+                            for(int i=0;i<0x10000;i++){ if(t[i]==ref[i])same++; if(!hr[ref[i]]){hr[ref[i]]=1;ndr++;} }
+                            fprintf(stderr,"[mapprobe] tile3918-vs-ORACLE identical=%ld/65536 (%.1f%%) ref-distinct=%d\n",
+                                    same,100.0*same/65536,ndr); } } }
                 }
             }
         }
