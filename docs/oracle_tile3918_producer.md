@@ -1,6 +1,64 @@
 # Oracle recon — the DEFINITIVE tile-3918 producer + the mission-TCB camera source
 
-> ## CORRECTION (2026-07-13, implementation iteration) — the "symmetric pairwise palette-blend" model does NOT reproduce the observed tile; the real gate is UPSTREAM (the build-time display palette)
+> ## CORRECTION 2 (2026-07-13, patch-290 iteration) — the `4f60`/`ac64` GATE IS DISPROVEN BY BYTE EVIDENCE (the port already reproduces it exactly), AND `bc9c` is DEFINITIVELY not the producer. Tile 3918 is a STATIC atmospheric depth-fog LUT built by a LATE map-load pass that the oracle backtrace never captured.
+>
+> **This supersedes CORRECTION 1's "the build-time `4f60` is the gate" claim.** Measured directly from the
+> port's own `89b0` map-load (temporary `FIST_PALDUMP2` seam, reverted) against the committed oracle RAM
+> dumps (extender DGROUP @ guest-phys `0x131000`):
+>
+> **(A) The `4f60`/`ac64` premise is DISPROVEN — the port's display palette is ALREADY byte-exact.**
+> - port `4f60` (the halved display palette `ac70` searches) == oracle `4f60` **768/768** bytes (band
+>   `[80..255]` **528/528**, reserved `[0..79]` **240/240**, both all-zero in the reserved band).
+> - port `5260` (the sorted display palette, = bc9c's blend source at build time) == oracle `5260` **768/768**.
+> - port `ac64` = **80** == oracle `ac64` = **80** (both = `28a5` = mission-TCB `[+0x54]`).
+> - port `ac70` distance LUTs `a060`/`a460`/`a860` == oracle **3072/3072**.
+> - **Build-time `ac64` = 80 CONFIRMED (CORRECTION 1's "ac64<63" was an artifact):** the pure `bc9c`
+>   search region (tile rows 14..255) is cleanly in `[80..255]`; the only sub-80 values (37..79) live
+>   EXCLUSIVELY in the `bc06` LOD region (rows 0..13, which does not call `ac70`). CORRECTION 1 read the
+>   raw 24-colour mission palette `5598` instead of the 176-colour sorted display palette `5260`/`4f60`
+>   that `a033` actually builds and `bc9c`/`ac70` actually consult.
+>
+> **(B) With ALL of bc9c's inputs proven byte-exact, bc9c STILL gives only 32.6% (100% symmetric).**
+> - port `bc9c` → tile **32.6%** match (21333/65536), **100.0% symmetric** (`mov [ecx],bl; xchg ch,cl;
+>   mov [ecx],bl` writes `t[a][b]==t[b][a]` by construction; inner loop starts `ch=cl` = upper triangle
+>   + mirror).
+> - oracle tile is **15.7% symmetric** (9194/58564 in rows 14..255). A symmetric writer cannot make a
+>   15.7%-symmetric buffer, and correct inputs don't help → **bc9c is not the producer**, full stop.
+>
+> **(C) Tile 3918 is a STATIC atmospheric DEPTH-FOG LUT, not a pairwise blend.** Structure (measured):
+> for each column `c`, tile rows 14..~90 are a CONSTANT base-band index and rows ~91..255 are a monotonic
+> BRIGHTENING ramp (haze) — e.g. col 80: rows14-90=`80`, then 81,82,…,155; col 100: rows14-90=`85`, then
+> 92,…,195. Row = depth/distance, col = colormap value. The tile is **byte-identical across two
+> different-camera settled frames** (`activate` vs `act4d0e`, TCB `[+0x2c]`=`0x9248a` vs `0x92f40`) →
+> **built once at map-load, sampled per-frame** by `6977` (builds 256 row-pointers `4a60[i]=3918+i*0x100`,
+> `38ed`=`0x100`, `391c`=`0x10000`) → renderer `6980` (op-0x09 per-frame entry `3931`→`85d0`→`6980`).
+>
+> **(D) By dump time the bc9c symmetric fill is GONE — everything is post-processed.** At dump `bc90`
+> (0x40000 block) is only **3.1% symmetric** (201 distinct) and `bc94` **2.1%** — neither holds bc9c's
+> symmetric output. The oracle writer-backtrace (`tile3918_writers_backtrace.txt`) caught ONLY `bc9c`
+> (`bcf2`/`bcf6`, tileoff `0e00..ffff`) + `bc06` (`bc2a`/`bc30`/`bc74`/`bc7a`, `0000..0dff`) inside its
+> ARMED WINDOW → **the real fog-LUT producer runs AFTER that window and was never traced.**
+>
+> **(E) Secondary layer:** the port's colormap `85b8` still collapses to **89 distinct** (oracle **254**) —
+> the tile's per-column base index is a colormap→palette remap the port also gets wrong, an independent bug.
+>
+> **CORRECTED FRONTIER (patch-290 pins, no engine change — forcing a fix on the disproven bc9c/4f60 model
+> would be a band-aid):**
+> 1. Re-instrument the oracle to trace phys `0x175200` writers PAST the `bc9c`/`bc06` pass all the way to
+>    the dump (arm-late / never-disarm), to CATCH the post-bc9c fog-LUT producer. Candidate families:
+>    `bd0e`/`bd62` (shade `ac70(pal·brightness)` into `bc94`) generalized to 256 depth levels, and a
+>    distance/haze attenuation pass keyed on the mission fog colour.
+> 2. Fix the colormap `85b8` collapse (89→254 distinct) — its `643c` decode + `9ec0`/`ac70` reduce — since
+>    the fog LUT's per-column base index is derived from it.
+> 3. Only then is the tile reachable byte-exact; the shim's `bc90→3918` alias (which forces bc9c to stomp
+>    the tile symmetric) must be RETIRED in favour of driving the real producer into `3918`.
+>
+> The `4f60`/`5260`/`ac64`/dLUT reconstruction is DONE (byte-exact); it is a correct prerequisite, not the
+> producer. Everything below (and CORRECTION 1) is superseded on the "producer" question.
+>
+> ---
+>
+> ## CORRECTION 1 (2026-07-13, implementation iteration) — the "symmetric pairwise palette-blend" model does NOT reproduce the observed tile; the real gate is UPSTREAM (the build-time display palette)
 >
 > Reconstructing bc9c per this doc and byte-comparing against the oracle ref
 > (`scratch/oracle/oracle_tile3918.bin`, re-verified == phys `0x175200` in FOUR RAM dumps) DISPROVES the
