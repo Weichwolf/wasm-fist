@@ -1,0 +1,61 @@
+Colormap palette-reduction FUN_0000_ac70 -- two flat32 memory-model artifacts that COLLAPSED the
+remapped colormap (extender op-0x18 MAP-LOAD; the C32.KLC-palette -> display-palette reduction whose
+output is the terrain colormap 85b8 that the voxel renderer 9200 samples).  ROOT-CAUSED with stage-by-
+stage buffer probes + a faithful from-scratch Python replica of ac70 (bit-exact vs re_out/fist_image.bin
+0xac70..0xace5 + the static distance tables a060/a460/a860 + the display palette 4f60):
+
+  With patches 236 (ac70 ebx index-return) + 238 (self-mod distance target) applied, the reduce still
+  collapsed the 512x512 C32.KLC colormap from 248 distinct texels down to 19 (target ~82) -- the remap
+  LUT mapped almost every source colour to a handful of WRONG (too-bright) display indices (233/253)
+  instead of the desert range (121..204).  The display palette 4f60 and the a060 distance tables were
+  proven BIT-IDENTICAL to the ORIGINAL's runtime state (0/768 diff vs the oracle terrain.ram.bin at
+  flat 0x4f60), so the corruption was purely in ac70's two remaining flat32-model type artifacts:
+
+  (1) POINTER SCALING (the docs' int*x4 class).  `pcVar6 = &DAT_0000_4f60 + DAT_0000_ac64 * 3` walks
+      the display palette from entry ac64 (=reserved count, 80).  In the flat32 module `&DAT_0000_4f60`
+      has type `undefined4 *` (scalars default to 4 B), so `+ ac64*3` scaled by 4 -> pcVar6 landed at
+      byte 4f60+960 (entry 320, inside the adjacent UN-halved 5260 palette) instead of 4f60+240
+      (entry 80).  The per-colour distance was then computed against wrong, wrong-scaled palette bytes.
+      FIX: cast to (char *) so the `+ ac64*3` is byte arithmetic (asm `lea esi,[ebp+ebp*2+0x4f60]`).
+
+  (2) 4-BYTE READ OF A BYTE TARGET.  ac70's prologue self-modifies the distance subtrahends from the
+      query colour: asm `mov al,ds:0xac68; shr al,1; mov ds:0xacb6,al` -- a BYTE read of ac68.  In the
+      flat32 module DAT_0000_ac68/69/6a default to `undefined4` (4 B), and ac68/ac69/ac6a are only ONE
+      byte apart, so `DAT_0000_ac68 >> 1` read 4 overlapping bytes (e.g. 0x0E1518 = {24,21,14,0}) and
+      the shift pulled bit 0 of the adjacent ac69 byte (21, odd) into bit 7 of the result -> 0x8C=140
+      instead of 24>>1=12.  Every odd adjacent channel corrupted the target -> wrong nearest match.
+      FIX: mask to the low byte before the shift (`(DAT_0000_ac68 & 0xff) >> 1`), matching the asm's
+      byte read.
+
+  With both fixes the remap LUT is BIT-EXACT to the faithful replica (i=1->145, 2->128, 3->152,
+  4->169, 5->183, 6->204, 7->133, 8->121 -- the desert indices) and the colormap 85b8 goes 36 -> 112
+  distinct (LUT 82 distinct, +blend upsample), landing in the oracle's dominant 128..163 desert range.
+
+Class: pointer-scaling (int*x4) + store/load-width (undefined4 vs byte) -- both the docs' flat32
+memory-model taxonomy.  Cascade-only (ac70 reached ONLY via the op-0x18 mission map-load palette
+reduction; the 19 menu/dialog verify flows never load a mission map) => behaviour-neutral for the
+covered flows: default boot unchanged, mainmenu 3a6ff1c5.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -15168,9 +15168,9 @@
+   int ebp_idx;
+   int ebx_best;
+ 
+-  bRam0000acb6 = DAT_0000_ac68 >> 1;
+-  bRam0000acc0 = DAT_0000_ac69 >> 1;
+-  bRam0000acca = DAT_0000_ac6a >> 1;
++  bRam0000acb6 = (DAT_0000_ac68 & 0xff) >> 1;
++  bRam0000acc0 = (DAT_0000_ac69 & 0xff) >> 1;
++  bRam0000acca = (DAT_0000_ac6a & 0xff) >> 1;
+   iVar4 = (DAT_0000_ac60 + 1) - DAT_0000_ac64;
+   /* PATCH 236: ac70 RETURNS the nearest reduced-palette index in EBX/BL (asm acdc `mov ebx,ebp`;
+    * ebp = the palette index, walked in lockstep with esi at `&4f60 + ebp*3`).  The pristine decompile
+@@ -15181,7 +15181,7 @@
+    * improvement, but edx=0xffffffff guarantees iteration 1 always improves -> ebx is always set). */
+   ebp_idx = DAT_0000_ac64;
+   ebx_best = 0;
+-  pcVar6 = &DAT_0000_4f60 + DAT_0000_ac64 * 3;
++  pcVar6 = (char *)&DAT_0000_4f60 + DAT_0000_ac64 * 3;
+   uVar5 = 0xffffffff;
+   do {
+     pcVar1 = pcVar6 + 1;
