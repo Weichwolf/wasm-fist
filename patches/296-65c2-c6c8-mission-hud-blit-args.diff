@@ -1,0 +1,52 @@
+FUN_1000_65c2 (cockpit-HUD render): the [DGROUP:0x6c8] method-vector call (= FUN_0000_294d, the mga
+transparency sprite-blit) is dispatched with NO args -> 294d resolves a GARBAGE sprite id -> SIGSEGV in
+298a (the recurring dropped-indirect-arg class).
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ image 0x165c2..0x165e9 = FUN_1000_65c2 head;
+OBSERVED reached on the genuine BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1 run once patch 295's
+cooperative timer-pump makes the 459a SIM STEP execute; gdb core bt =
+459a->206f->209e->4937->65c2->m_mga_294d->m_mga_298a, SIGSEGV at fist_mga.c:6745, param_3=0x91d7001).
+65c2's asm:
+
+    165c2: mov  bx,[0x156a]        ; c554 arg
+    165c6: lcall [0x554]           ; (*c554)()
+    165ca: push bx
+    165cb: mov  ax,[0x156c]; mov [0x7aee],ax
+    165d1: mov  ax,[0x1578]; mov [0x7b12],ax
+    165d7: mov  bx,0x7aee
+    165da: lcall [0x558]           ; (*c558)(bx=0x7aee viewport descriptor)
+    165de: push bx
+    165df: mov  bx,0x7c3e          ; <-- BX = position descriptor (294d param_4)
+    165e2: mov  ax,0x1358          ; <-- AX = sprite-directory byte offset (294d param_1)
+    165e5: lcall [0x6c8]           ; (*c6c8)() = FUN_0000_294d(ax,_,_,bx,_)
+
+Ghidra emitted `(*fist_icall_far(DAT_1000_c6c8))()` with NO args, so 294d received uninitialised __allregs
+register slots (param_1=0x9b3d, param_4=0x6e26 in the crash) instead of the asm's ax=0x1358/bx=0x7c3e.
+294d does `FUN_0000_260c(param_1,param_4,...)` to resolve the sprite record; a garbage id resolves to a wild
+m_260c_recoff, and 298a's `param_3 = g_mem+(recseg<<4)+recoff` lands off g_mem -> wild deref.
+
+FIX (identical to patch 190 for the SAME c6c8=294d method: 294d param_1<-ax, param_4<-bx -- also patch 136's
+6c4c REVIEW dispatch and the 294d contract "ax=sprite-directory byte offset; bx=position descriptor").
+Thread the two literal register values into the indirect call.  294d uses only param_1 and param_4
+(FUN_0000_260c(param_1,param_4,c724)); the other slots are don't-cares (pass 0), matching patch 190's
+5-arg cast (uint,uint,uint,uint,uint).
+
+BEHAVIOUR-NEUTRAL for the 19 verify flows: 65c2 is reached only through the d548-gated 459a mission paint
+pass (459a->206f->209e->4937->65c2), which no covered flow enters (d548==0 outside a mission); the edit only
+threads the dropped args on that mission-only path.  native<->wasm bit-identity preserved (no covered flow
+reaches 65c2).
+--- a/fist.c
++++ b/fist.c
+@@ -56533,7 +56533,11 @@
+   DAT_2000_3aee = DAT_1000_d56c;
+   DAT_2000_3b12 = DAT_1000_d578;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c558)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
++  /* PATCH 296: thread the dropped indirect-call args (asm 0x165df mov bx,0x7c3e; 0x165e2 mov ax,0x1358;
++   * 0x165e5 lcall [0x6c8]).  [0x6c8]=FUN_0000_294d(param_1=ax=sprite-dir offset, param_4=bx=position
++   * descriptor); Ghidra dropped both -> 294d resolved a garbage sprite id -> 298a wild deref (SIGSEGV).
++   * Same mapping as patch 190 (5844 nested paint) and the 294d contract (patch 136). */
++  ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x1358,0,0,0x7c3e,0);
+   uVar1 = FUN_1000_524e(0);
+   FUN_1000_530b(uVar1 & 0xff00);
+   FUN_1000_52d1(0xa5,0xb);

@@ -1,0 +1,55 @@
+FUN_0000_4691 (the per-frame ~480-tick housekeeping block, run at the tail of each 459a mission-loop
+iteration): three DGROUP near-offset base-losses -> SIGSEGV in FUN_0000_02c5 (`*param_2=0` on a raw offset).
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ image 0x4691..0x46dd; OBSERVED reached on the
+genuine BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1 run once patch 295's cooperative pump makes
+[0x452] advance -- the block gates on `[0x452]-[0x6d1a] >= 0x1e0` (~480 ticks), NEVER true while [0x452]
+was frozen; gdb core bt = 459a->4691->02c5, SIGSEGV at fist.c:4553 `*param_2=0`, param_2=0x6d0a).  4691:
+
+    4691: mov ax,[0x452]; sub ax,[0x6d1a]; cmp ax,0x1e0; jb 0x46dd   ; every ~480 ticks
+    469d: mov [0x6d1a],[0x452]; mov ax,[0x6d14]; movw [0x6d14],0; push ax
+    46ad: shr ax,1 x3                            ; ax = uVar1>>3
+    46b3: mov si,0x6d0a; call 0x2c5              ; 02c5(ax, si=0x6d0a DGROUP off) -> movb [si],0
+    46b9: movb [0x6d0f],0x2e; pop bx; and bx,7; shl bx,1
+    46c4: mov ax,[bx+0x6d1c]; mov [0x6d10],ax    ; read DGROUP:(bx+0x6d1c)
+    46cb: movb [0x6d12],0
+    46d0: mov si,0x6d0c; mov bx,0xa; mov cx,5; call [0x298]   ; (*c298)(si=0x6d0c,bx=0xa,cx=5)
+
+Three near-offset (DS=DGROUP=0x1c00) values were dereferenced as HOST addresses:
+  1. FUN_0000_02c5(uVar1>>3, 0x6d0a): 02c5's `movb [si],0` writes DGROUP:si; its contract (every OTHER
+     caller -- 13876/19298/21319/21554/21654) passes a HOST pointer `&DAT_1000_df8c`, but 4691 passed the
+     raw offset 0x6d0a -> *param_2=0 wrote host 0x6d0a -> SIGSEGV.  Pass g_mem+0x1c000+0x6d0a.
+  2. `*(undefined2 *)((uVar1&7)*2 + 0x6d1c)` (46c4 `mov ax,[bx+0x6d1c]`): host read of ~0x6d1c -> SIGSEGV.
+     Rebase onto g_mem+0x1c000+(uint16)((uVar1&7)*2+0x6d1c).
+  3. (*c298)() dropped si=0x6d0c/bx=0xa/cx=5 (46d0..46d9).  c298's __allregs order = (di,bx,cx,si) per the
+     threaded site fist.c:28553 (b152: di preserved, si set, bx=0xc, cx=0xa -> `(di,0xc,0xa,si)`).  4691
+     does not set di, so pass 0 (a defined value; the other no-arg c298 sites 27419/30796 tolerate it and
+     it is the periodic status-panel setup whose destination is si=0x6d0c, not di).
+
+FIX: rebase the two host-ptr derefs onto g_mem+0x1c000 and thread the c298 register args.  All faithful to
+the asm; no control-flow change.
+
+BEHAVIOUR-NEUTRAL for the 19 verify flows: 4691 runs only from the mission frame loops (459a:13327 /
+45f7:13357), and its `[0x452]-[0x6d1a]>=0x1e0` gate needs the pumped mission loop advancing [0x452] by ~480
+ticks -- no menu/default-boot flow reaches it (they never enter 459a).  native<->wasm bit-identity preserved.
+--- a/fist.c
++++ b/fist.c
+@@ -13485,11 +13485,15 @@
+   if (0x1df < (uint)(DAT_1000_c452 - DAT_2000_2d1a)) {
+     DAT_2000_2d1a = DAT_1000_c452;
+     DAT_2000_2d14 = 0;
+-    FUN_0000_02c5(uVar1 >> 3,0x6d0a);
++    /* PATCH 297: DGROUP near-offset base-losses (asm 0x46b3/0x46c4/0x46d0, DS=DGROUP=0x1c00).  02c5's
++     * `movb [si],0` writes DGROUP:si -> pass the HOST pointer (its contract; every other caller passes
++     * &DAT_1000_df8c).  Rebase the [bx+0x6d1c] read.  Thread the dropped (*c298) args si=0x6d0c/bx=0xa/
++     * cx=5 in the (di,bx,cx,si) order (cf. fist.c:28553; di unset -> 0). */
++    FUN_0000_02c5(uVar1 >> 3,(undefined1 *)(g_mem + 0x1c000 + 0x6d0a));
+     DAT_2000_2d0f = 0x2e;
+-    DAT_2000_2d10 = *(undefined2 *)((uVar1 & 7) * 2 + 0x6d1c);
++    DAT_2000_2d10 = *(undefined2 *)(g_mem + 0x1c000 + (uint16_t)((uVar1 & 7) * 2 + 0x6d1c));
+     DAT_2000_2d12 = 0;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c298)))();
++    ((void (*)(int,int,int,int))fist_icall_far((uint32_t)(DAT_1000_c298)))(0,0xa,5,0x6d0c);
+   }
+   return;
+ }

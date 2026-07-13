@@ -1,0 +1,69 @@
+FUN_0000_459a (the in-mission fixed-timestep frame/sim loop): the per-frame SIM STEP never runs because
+the cooperative INT-8 tick counter [DGROUP:0x452] is never advanced -> a HOLLOW re-post spin.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin 0x459a..0x45f6; gdb + FIST_OP0C_BT observed on the
+genuine BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1 run -- commit 42809f7's characterization).
+459a is a fixed-timestep game loop:
+
+    459a: mov  2ce0, [0x452]          ; snapshot the frame-timer tick
+    459d: mov  2ce2, 0                ; elapsed-tick accumulator
+    ...
+    OUTER (45a6):
+      call 206f                       ; per-frame paint/event setup
+      45b?: add 2ce2, ([0x452]-2ce0)  ; accumulate ticks elapsed since last frame
+            mov 2ce0, [0x452]
+      for(; 2ce2!=0; 2ce2--) {        ; run the SIM STEP once PER elapsed tick
+        <inner event drain: lcall [0x40a] poll; jb; call 1e4b>   ; (patch 242 CF)
+        cmp ([0x452]-2ce0), 9; ja ... ; call [2ce4]  ; <- THE SIM STEP (flight model / camera)
+        call c0ca; call 461b;
+      }
+      call [c52c]; call 096c; call 22dd (RENDER, posts op 0x0c/present); call 4691
+    jmp OUTER
+
+[DGROUP:0x452] (=DAT_1000_c452) is bumped ONLY by the engine's INT-8 (PIT) ISR.  In the original that ISR
+fires ASYNCHRONOUSLY off the hardware timer -- during the per-frame render/present (the 22dd op-0x0c pass
+blocks on the extender present/vsync), so between two OUTER iterations several ticks elapse, `2ce2 +=
+([0x452]-2ce0)` is > 0, and the `for(;2ce2!=0;)` SIM STEP `call [2ce4]` runs.  In this port the tick is
+driven COOPERATIVELY: the INT-8 ISR runs only when fist_timer_pump() drains a pending host tick (the
+established cooperative-tick seam, tools/native_main.c; wasm = one tick/pump, native = SIGALRM-accumulated).
+459a's outer loop never calls fist_timer_pump() -> [0x452] frozen at 1 -> `2ce2 += 0` -> the `for(;2ce2!=0;)`
+SIM STEP runs ZERO times -> the flight model never runs -> the camera (7b1c heading / TCB+0x2c,+0x34) stays
+degenerate -> every frame identical while 22dd re-posts op 0x0c forever (the ~2.7M-post hollow spin).
+
+FIX (the same cooperative-pump substitution as patches 073/074 [38bc/38cc], 137 [cc33], 242 [459a poll CF],
+291 [e4bb in-mission loop] -- all thread fist_timer_pump() into the exact spin/wait where the original
+relied on the async INT-8 ISR).  The pump belongs in the OUTER do-loop, NOT the inner event drain: the inner
+drain is nested inside `for(; 2ce2!=0; )`, which is skipped entirely while [0x452] is frozen (2ce2==0), so a
+pump there would deadlock.  Pump once per OUTER iteration = one INT-8 tick delivered per rendered frame,
+faithfully standing in for the async tick that the original's render/present pass lets fire.  This advances
+[0x452], makes `2ce2 += ([0x452]-2ce0) > 0`, and the `for(;2ce2!=0;) call [2ce4]` SIM STEP runs per tick ->
+the flight model executes and the camera advances frame-to-frame.
+
+BEHAVIOUR-NEUTRAL for the 19 verify flows: BOTH 459a call sites are the mission path (e714 ACCEPT cascade,
+after 5d12 / before 1631+e4bb -- patch 242 header); NO menu/default-boot flow reaches 459a (battles-ok dumps
+with the briefing modal still open; battles-cancel-briefing takes CF=1 and skips the cascade).  So this pump
+cannot perturb any covered flow's cooperative-tick timing -> native<->wasm bit-identity preserved.
+--- a/fist.c
++++ b/fist.c
+@@ -13276,6 +13276,7 @@
+   undefined2 in_register_0000000e;
+   undefined4 uVar3;
+   extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
+   bool bVar4;
+   undefined2 uVar5;
+   undefined2 uVar6;
+@@ -13288,6 +13289,13 @@
+   DAT_2000_2ce2 = 0;
+   iVar2 = DAT_1000_c452;
+   do {
++    /* PATCH 295: cooperative INT-8 tick.  459a is a fixed-timestep loop whose SIM STEP `call [2ce4]` runs
++     * `2ce2 += ([0x452]-2ce0)` times per frame; [0x452] (=DAT_1000_c452) is bumped only by the INT-8 ISR,
++     * driven cooperatively via fist_timer_pump().  The original's async ISR fires during the render/present;
++     * our substitute is one pump per OUTER iteration (one tick per rendered frame).  Placed in the OUTER
++     * loop, NOT the inner event drain -- the drain is gated by `for(;2ce2!=0;)`, skipped while [0x452] is
++     * frozen, so a pump there would deadlock.  This makes [0x452] advance and the flight-model SIM STEP run. */
++    fist_timer_pump();
+     FUN_0000_206f((char)iVar2,param_1,param_3,param_4);
+     LOCK();
+     UNLOCK();
