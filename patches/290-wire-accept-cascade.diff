@@ -1,0 +1,50 @@
+PATCH 290: WIRE the mission-start ACCEPT cascade onto the genuine executed path (retire the FIST_CASCADE
+diagnostic gate).  This is the "step 4" that PATCH 172 explicitly deferred ("permanent flow-wiring, held
+until the cascade is crash-free end-to-end").  That precondition is now met: with the cascade reconstructed
+by patches 154-289 it runs deterministically and crash-free from ACCEPT through the extender MAP-LOAD.
+
+WHAT IT DOES (asm-verified vs re_out/fist_dat_image.bin, the pristine FUN_0000_e87a ACCEPT tail 0xe89b..
+0xe929): the BATTLES dispatch (e714 _tgt==0xe87a) opens SELECT BATTLE (cb7c) then, on OK (a85d<2), the id=0
+mission-BRIEFING modal FUN_0000_7088(0,0x4509).  7088 returns the ACCEPT/CANCEL verdict in the x86 carry
+(patch 154: `cmp ds:0x8be2,0xff; cmc` -> 4be2==1 ACCEPT -> CF=0; ==0xff CANCEL -> CF=1), surfaced via the
+shim global g_fist_cf.  On ACCEPT (CF==0) the pristine e87a runs the mission-start cascade e43f -> (LOADING
+setup) e459 -> 4754 (d501 FSG parse) -> e006/d755/9d26 -> 459a -> 1631 (LOD models) -> e4bb (in-mission
+loop).  Patch 172 mirrored that tail faithfully but behind getenv("FIST_CASCADE"); patch 290 removes the
+env condition so a real ACCEPT click runs it, exactly as the original does.
+
+EFFECT: the ACCEPT path now POSTS extender op 0x18 (MAP-LOAD) -- verified via FIST_OPHIST (default flow now
+shows `FIRST op 0x18`): `[ext] op 0x18 MAP-LOAD: TCB 'D32.KLC'/'C32.KLC'/'532.pal'/'5.SKY'`, tile3918
+nz=65536 dist=175, then op 0x54 roster + op 0x0c per-frame render entry.  Crash-free + deterministic (two
+serial runs byte-identical ophist; no SIGSEGV).
+
+BEHAVIOUR-NEUTRAL for the 19 verify flows: NO covered flow clicks ACCEPT.  battles-ok clicks OK then dumps
+while the id=0 briefing modal 7088 is STILL OPEN (7088 spins until ACCEPT/CANCEL) -> control never reaches
+the cascade block.  battles-cancel-briefing clicks CANCEL (78,186) -> 7088 returns CF=1 -> the `if
+(g_fist_cf==0)` block is skipped.  Default boot never opens the briefing.  verify.sh both = 19/19,
+native<->wasm bit-identical.  (The in-mission per-frame render loop after the first op 0x0c does not yet
+advance frames -- the op-0x4c present pump spins without re-posting ops; that is the documented next
+frontier, separate from reaching op 0x18.)
+
+--- a/fist.c
++++ b/fist.c
+@@ -35550,12 +35550,16 @@
+       if (DAT_2000_a85d < 2) {           /* cb7c OK (asm e88c `jae 0xe891`): open the mission BRIEFING */
+         FUN_0000_7088(0, 0x4509);        /* e891: mov ax,0; call 7088 -> id=0 briefing dialog (7162 loads
+                                           * <battle>.FSW -> STRSEG:0x452c; 6c2d draws it). editor build deferred. */
+-        /* PATCH 172: env-gated ACCEPT-cascade DIAGNOSTIC harness (FIST_CASCADE, default OFF).  On ACCEPT
+-         * (g_fist_cf==0 after 7088 -- patch 154 cmp;cmc), run the mission-start cascade, a FAITHFUL mirror
+-         * of the pristine FUN_0000_e87a tail (0xe89b..0xe929).  Behaviour-neutral (gated) -> verify 19/19. */
++        /* PATCH 172 + PATCH 290 (wired): the ACCEPT-cascade is now the GENUINE executed path (no env
++         * gate).  On ACCEPT (g_fist_cf==0 after the id=0 briefing modal 7088 returns -- patch 154's
++         * cmp;cmc CF), run the mission-start cascade, a FAITHFUL mirror of the pristine FUN_0000_e87a
++         * ACCEPT tail (asm 0xe89b..0xe929).  No verify flow clicks ACCEPT (battles-ok dumps the still-open
++         * 7088 modal so the cascade block is never reached; battles-cancel-briefing takes CANCEL -> CF=1
++         * so the block is skipped), hence behaviour-neutral for the 19 flows.  It makes op 0x18 (extender
++         * MAP-LOAD: D32/C32.KLC + 532.pal + 5.SKY) fire on the real ACCEPT path. */
+         {
+           extern unsigned char g_fist_cf;
+-          if (g_fist_cf == 0 && getenv("FIST_CASCADE")) {
++          if (g_fist_cf == 0) {
+             FUN_0000_e43f();
+             DAT_2000_b6ce = DAT_2000_b6ce | 0x22;
+             (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
