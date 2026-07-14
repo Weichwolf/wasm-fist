@@ -1110,7 +1110,52 @@ int fist_extender_gate(void) {
                     fprintf(stderr,"[palcmp] dumped /tmp/pal_eng782.bin + /tmp/pal_ext5598.bin\n");
                 }
             }
+            if (getenv("FIST_MISSFB_TFOLLOW")) {
+                /* Reverse-verify the extender terrain-follow (0x8650): sample the loaded heightmap
+                 * (ext ds:0x85bc, a 2048x2048 host buffer) at the camera XY per 0x8650's index math
+                 * tile = ((camX<<13)>>(32-detail)) & mask, idx=((tileY&mask)<<detail)+(tileX&mask), then
+                 * derive the height-byte -> world-Z scale that yields the oracle settled alt ~24832
+                 * (camZ 26880 - eyeLUT 2048).  Sampled at BOTH the LIVE render camera (+2c/+30) and the
+                 * ORACLE XY (599178/1115651) so the scale is oracle-anchored, independent of the (wrong)
+                 * live Y.  Read-only diagnostic. */
+                uint32_t detail = *(uint32_t*)(xb+0x8490);
+                uint32_t mask   = *(uint32_t*)(xb+0x849c);
+                uint32_t hmbase = *(uint32_t*)(xb+0x85bc);
+                uint8_t *hm = (uint8_t*)(uintptr_t)hmbase;
+                fprintf(stderr,"[tfollow] detail=%u mask=0x%x hmbase=%08x\n",detail,mask,hmbase);
+                struct { const char*nm; int32_t x,y; } P[] = {
+                    {"live(+2c/+30)", *(int32_t*)(tcb+0x2c), *(int32_t*)(tcb+0x30)},
+                    {"oracle",        599178,               1115651},
+                };
+                for (int pi=0; hm && pi<2; pi++) {
+                    uint32_t tx = ((uint32_t)P[pi].x << 13) >> (32-detail);
+                    uint32_t ty = ((uint32_t)(-(int32_t)((uint32_t)P[pi].y<<13))) >> (32-detail);
+                    uint32_t idx = (((ty & mask) << detail) + (tx & mask));
+                    uint8_t h = hm[idx & 0x3fffff];
+                    fprintf(stderr,"[tfollow] %-14s X=%d Y=%d tile(%u,%u) idx=%u h=%u  h<<8=%u h<<9=%u h*192=%u\n",
+                        P[pi].nm, P[pi].x, P[pi].y, tx, ty, idx, h, h<<8, h<<9, h*192);
+                }
+            }
             if (getenv("FIST_MISSFB_RENDER")) {
+                /* FIST_MISSFB_TFSETTLE: apply the asm+oracle-VERIFIED extender terrain-follow to the
+                 * RENDER camera before 85d0.  Optionally FIST_MISSFB_ORACLEXY forces the oracle XY (pipeline
+                 * control), else uses the live render camera.  Z is settled to the heightmap surface:
+                 * camZ = (heightmap[((tileY&mask)<<detail)+(tileX&mask)] << 8) + eyeLUT(2048). */
+                if (getenv("FIST_MISSFB_TFSETTLE")) {
+                    if (getenv("FIST_MISSFB_ORACLEXY")) { *(int32_t*)(tcb+0x2c)=599178; *(int32_t*)(tcb+0x30)=1115651;
+                        *(uint16_t*)(tcb+0x38)=19745; *(int16_t*)(tcb+0x3c)=128; *(uint16_t*)(tcb+0x3e)=256; tcb[0xcf]=0; tcb[0xcd]=1; }
+                    uint32_t detail=*(uint32_t*)(xb+0x8490), mask=*(uint32_t*)(xb+0x849c);
+                    uint8_t *hm=(uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0x85bc));
+                    int32_t cx=*(int32_t*)(tcb+0x2c), cy=*(int32_t*)(tcb+0x30);
+                    uint32_t tx=((uint32_t)cx<<13)>>(32-detail), ty=((uint32_t)(-(int32_t)((uint32_t)cy<<13)))>>(32-detail);
+                    uint8_t h = hm ? hm[(((ty&mask)<<detail)+(tx&mask))&0x3fffff] : 0;
+                    if (hm) *(int32_t*)(tcb+0x34) = (h<<8) + 2048;
+                    fprintf(stderr,"[tfsettle] cam=%d/%d/%d h=%u settledZ=%u\n",cx,cy,*(int32_t*)(tcb+0x34),h,(h<<8)+2048);
+                    { const char *r3=getenv("FIST_MISSFB_RAY3A24"), *r7=getenv("FIST_MISSFB_RAY3E24");
+                      if (r3){FILE*f=fopen(r3,"rb"); if(f){fread(xb+0x3a24,1,256*4,f);fclose(f);}}
+                      if (r7){FILE*f=fopen(r7,"rb"); if(f){fread(xb+0x3e24,1,256*4,f);fclose(f);}}
+                      if (r3||r7){ *(uint32_t*)(xb+0x90c4)=0; fprintf(stderr,"[tfsettle] ray tables injected\n"); } }
+                }
                 m_ext_FUN_0000_8deb();
                 m_ext_FUN_0000_85d0();
                 if (!getenv("FIST_MISSFB_LIVEVP")) {   /* force the oracle windshield geometry */
