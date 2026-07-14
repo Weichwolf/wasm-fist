@@ -733,6 +733,15 @@ unsigned char g_fist_cf;
  * call sees si!=0 and skips the re-INIT (word[0x4b9e]==0 is the once-per-frame INIT trigger). */
 unsigned short g_fist_iter_si;
 
+/* PATCH 324: the reticle-graticule line-clip helper FUN_0000_3d99 (asm 0x3d99) draws two clipped
+ * line-halves and returns the FIRST half's result in CX (asm: `push ax` after half-1's `call 0xdb5`,
+ * then `pop cx` after half-2) and the SECOND half's result in AX.  The __allregs model threads only AX
+ * (the return); Ghidra dropped the CX output, so its caller FUN_0000_3d4c stored a stale sign-flag value
+ * into word[DGROUP:0x6c38] instead of half-1's clipped-X.  3d99 publishes half-1's db5 result here; 3d4c
+ * (its only reticle caller, synchronous) reads it into word[0x6c38] so 3a68 can pass it as 3a92's column
+ * (cx).  Set-then-read in the same call chain -> a single global is exact. */
+int g_fist_r_cx;
+
 /* Extender FILEMGR find/open CARRY flag (patch 210).  The extender's find-first chain
  * FUN_0000_6250 / 5d50 / 5cc2 / 5c98 signals found (clc, CF=0) vs not-found (stc, CF=1)
  * purely through the x86 CF; the __allregs model returns AX/void, not flags, so Ghidra
