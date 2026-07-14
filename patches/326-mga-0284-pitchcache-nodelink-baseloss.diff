@@ -1,0 +1,87 @@
+PATCH 326: fix the pitch-cache MRU free-list node-LINK base-loss in FUN_0000_0284 (MGAVIDEO driver) that
+zeroed the engine STRSEG word[DGROUP:0x70] mid-mission -> the flaky reticle-sprite SIGSEGV.
+
+Root cause (asm-verified vs re_out/fist_mga_image.bin 0x284-0x2c1; driver DS=ES=DGROUP=0x1c00; runtime
+localized on the default `make native` mission run BATTLES(160,100)->OK(205,128)->ACCEPT(40,186), AZER1):
+
+  FUN_0000_0284 builds the 8-entry pitch->rowtable MRU free list at DGROUP:0x798.  Each 6-byte node is
+  {[+0]=next-link (DGROUP near offset), [+2]=pitch, [+4]=rowtable near offset}.  asm 0x291:
+      mov ax,di ; add ax,6 ; stosw     ; [di] = di+6  (near offset of the NEXT node)
+  Ghidra modelled the walk over HOST pointers (`puVar2 = (undefined2*)&DAT_1000_c798`), so the link store
+      *puVar5 = puVar5 + 3;
+  wrote the low 16 bits of a HOST pointer as the link -> garbage (runtime: word[0x798]=0x28fe, not 0x79e).
+
+  The MENU never exposes this (FUN_0000_02c1 shortcuts pitch 0x140 -> rowtable 0x7c8 and returns without
+  walking the list).  But the MISSION requests a non-320 viewport pitch (0x202): 02c1 walks the garbage
+  links, matches no node, reaches its build path with the free node's rowtable offset word[cur+4]=0, and
+  fills 200 words at DGROUP:0x0000 -> a deterministic block-zero of DGROUP[0x006..~0x196] that ZEROES the
+  STRSEG word[DGROUP:0x70] (0x2d74 -> 0) and the low service vectors.  The reticle setter FUN_1000_7a38
+  then reads `gs = word[DGROUP:0x70] = 0` and computes d550 = gs:[0x2360+bx] = garbage read from low
+  g_mem -> a bogus reticle sprite id -> FUN_0000_3a0f -> 26a1 -> 260c resolves a NULL/garbage sprite-
+  directory record -> the 26de masked-blit runs away from a garbage header -> SIGSEGV fault ~0x91de000
+  (~1/2 on the default SIGALRM run; clean under -ftrivial-auto-var-init=pattern -- the downstream header
+  read at linear 0xfffc is the flaky part; the STRSEG zeroing itself is deterministic).
+
+Fix: reconstruct the free-list init faithfully in the DGROUP near-offset model -- node@di {link=di+6,
+pitch=0xffff, rowtable=dx (stride 0x190)}, last node link=0 (asm 0x2a4 `mov word[di-6],0`).  The 0x7c8
+rowtable fill (patch 119) and word[0x79a]=0x140 are the original's next steps, unchanged.
+
+RESULT (default make native, AZER1 ACCEPT): STRSEG word[0x70] now stays 0x2d74 across the whole mission
+(0 flips over 150k+ op-gate calls); 02c1's build path fills a real per-pitch rowtable buffer (0x7c8+k*400)
+instead of DGROUP:0; the reticle draws a valid record.  The reticle STRSEG-zeroing crash is eliminated
+(crash rate ~50% -> the residual is a DIFFERENT, deeper reticle-sprite-sheet-load blocker -- see
+docs/stage1.md).  DRIVER/MISSION-path only (the menu never walks the list) -> byte-identical for the 24
+menu/settings verify flows.  Sources stay pristine (re_out/fist_mga.c 75c6d726); applied via build/.
+
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1113,19 +1113,36 @@
+   undefined2 *puVar5;
+   int *piVar6;
+   
+-  iVar4 = 0x7c8;
+-  iVar3 = 8;
+-  puVar2 = (undefined2 *)&DAT_1000_c798;
+-  do {
+-    puVar5 = puVar2;
+-    *puVar5 = puVar5 + 3;
+-    puVar5[1] = 0xffff;
+-    puVar5[2] = iVar4;
+-    iVar4 = iVar4 + 400;
+-    iVar3 = iVar3 + -1;
+-    puVar2 = puVar5 + 3;
+-  } while (iVar3 != 0);
+-  *puVar5 = 0;
++  /* PATCH 326: pitch-cache MRU free-list init (asm 0x288-0x2a8, re_out/fist_mga_image.bin; driver
++     DS=ES=DGROUP=0x1c00).  The node LINK is `[di]=di+6` (asm 0x291 `mov ax,di; add ax,6; stosw`) -- a
++     DGROUP NEAR OFFSET to the next 6-byte node.  Ghidra modelled the list over HOST pointers
++     (`puVar2 = &DAT_1000_c798`) so `*puVar5 = puVar5 + 3` stored the low 16 bits of a host pointer as the
++     link -> garbage (word[0x798] became e.g. 0x28fe, not 0x79e).  Unfixed the list is unusable: the MENU
++     is unaffected (FUN_0000_02c1 shortcuts pitch 0x140 -> rowtable 0x7c8 and never walks the list), but a
++     MISSION requests a non-320 viewport pitch (0x202) -> 02c1 walks the garbage links, matches nothing,
++     and its build path fills the free node's rowtable offset word[cur+4]=0 at DGROUP:0x0000, ZEROING the
++     STRSEG word[DGROUP:0x70] (2d74->0) + the service vectors.  Then the reticle setter FUN_1000_7a38
++     reads `gs=word[0x70]=0` and d550 = gs:[0x2360+bx] = garbage from low g_mem -> a bogus reticle sprite
++     id -> FUN_0000_3a0f -> 26a1 -> 260c resolves a NULL/garbage record -> 26de OOB (fault ~0x91de000):
++     the flaky reticle crash.  Reconstruct the 8-node free list faithfully -- node@di {link = di+6
++     near-offset, pitch = 0xffff (empty), rowtable = dx}, dx stride 0x190 (400 = 200-word rowtable), last
++     node link = 0 (asm 0x2a4 `mov word[di-6],0`).  The rowtable fill + word[0x79a]=0x140 below are the
++     original's next steps, unchanged.  DRIVER/MISSION path only (the menu never walks the list) -> the 24
++     menu/settings verify flows are byte-identical. */
++  {
++    uint16_t di = 0x798;               /* mov di,0x798  (first node near offset) */
++    uint16_t dx = 0x7c8;               /* mov dx,0x7c8  (first rowtable offset)   */
++    int cx = 8;                        /* mov cx,8      (8 nodes)                 */
++    do {
++      *(uint16_t *)(g_mem + 0x1c000 + di)               = (uint16_t)(di + 6);   /* [di]   = next node offset */
++      *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(di+2)) = 0xffff;               /* [di+2] = pitch (empty)    */
++      *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(di+4)) = dx;                   /* [di+4] = rowtable offset  */
++      di = (uint16_t)(di + 6);
++      dx = (uint16_t)(dx + 0x190);
++    } while (--cx != 0);
++    *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(di - 6)) = 0;                    /* mov word[di-6],0 : last node link=0 */
++  }
++  (void)iVar4; (void)iVar3; (void)puVar2; (void)puVar5;
+   iVar3 = 0;
+   iVar4 = 100;
+   /* PATCH 119: the DGROUP:0x7c8 scanline row-offset table is 16-bit WORD entries, not int.
