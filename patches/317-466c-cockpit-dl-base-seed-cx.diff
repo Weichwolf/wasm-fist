@@ -1,0 +1,31 @@
+--- a/fist.c
++++ b/fist.c
+@@ -13623,7 +13623,27 @@
+   DAT_2000_2d32 = (uint)*(unsigned short *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1) * 2;
+   DAT_2000_2d34 = param_1;
+   DAT_2000_5fdf = (uint16_t)(uintptr_t)param_1;
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(g_mem + 0x1c000 + (uint16_t)(DAT_2000_2d32 + 0x6d7c)))))();
++  /* PATCH 317: thread the per-vehicle cockpit-builder's DL-BASE SEED (cx) + redraw context (si,di).
++     asm 0x466c: `mov [0x6d34],di ; mov si,[di] ; shl si,1 ; mov [0x6d32],si ; mov cx,[0x6d34] ;
++     call [si+0x6d7c]`.  The dispatched builder (e.g. FUN_0000_7740, asm 0x7740) does `add cx,0xbf`
++     and passes cx+0xbf to 1cdb as the display-list BASE (= DAT_1000_fafe, the 209e/79bf paint walk base).
++     Ghidra rendered the register-indirect dispatch as an ARG-LESS call, DROPPING cx/si/di, so 7740's cx
++     was leftover garbage (0x8953) -> base 0x8a12, a STATIC DGROUP table whose bytes are the recurring
++     `00 XX 69 YY` pattern.  FUN_0000_79bf then reads its HUD-sprite variant `bl=byte[bp+si+1]` = 0x69 (an
++     ODD index into the WORD-aligned sprite-base table @DGROUP:0x8efe -> the straddled garbage word
++     word[0x8f67]=0xd003 -> a wild sprite-directory byte-offset -> whole-frame cockpit splatter, ~6353 px
++     idx>=80).  The correct cx = DAT_2000_2d34 (=vehicle-node near offset 0xc05c) -> base 0xc11b, the zeroed
++     per-vehicle cockpit-DL state region: variant bytes are the real EVEN indices 0/2/4/6 -> sprites
++     0x1f0/0x208/0x210/0x220 (the 4 distinct dashboard indicators), and the cockpit renders CLEAN (idx>=80
++     drops 6353->4).  Thread cx=di=DAT_2000_2d34 (param_1), si=DAT_2000_2d32 (param_2), di=DAT_2000_2d34
++     (param_3) per 7740's __allregs order (cx/si/di); the extra positional args are cdecl-harmless for any
++     other per-vehicle builder.  MISSION-PATH ONLY (466c is only reached inside the in-mission cockpit
++     build) -> behaviour-neutral for the 19 menu/pre-mission verify flows. */
++  {
++    uint16_t vcx = (uint16_t)(uintptr_t)DAT_2000_2d34;   /* mov cx,ds:0x6d34 (vehicle-node near off) */
++    uint16_t vsi = (uint16_t)DAT_2000_2d32;              /* si = word[0x6d32] = vehicletype*2       */
++    ((void (*)(uint,uint,uint))fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(g_mem + 0x1c000 + (uint16_t)(DAT_2000_2d32 + 0x6d7c)))))(vcx, vsi, vcx);
++  }
+   DAT_2000_569e = 0;
+   DAT_2000_569c = 0x3c;
+   return;
