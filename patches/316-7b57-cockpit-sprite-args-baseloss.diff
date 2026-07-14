@@ -1,0 +1,36 @@
+--- a/fist.c
++++ b/fist.c
+@@ -56141,7 +56141,32 @@
+ void __allregs FUN_1000_7b57(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6bc)))();
++  /* PATCH 316: FUN_1000_7b57 (asm 0x17b57) -- a 209e paint-walk cockpit-HUD sprite element paint method,
++     the sibling of 75c2 (patch 315): Ghidra rendered it as a single ARG-LESS indirect call through the
++     [0x6bc]=mga 279d transparency-sprite blit vector, DROPPING ax (sprite id) and bx (position descriptor).
++     279d->260c then read the position from the UNINITIALISED bx register slot -> a FLAKY run-to-run sprite
++     position (clipped off-screen vs splattered), the second (residual) source of the mission-FB cockpit
++     nondeterminism after 315.  Asm-verified vs re_out/fist_dat_image.bin (DS=DGROUP=0x1c00):
++        17b57: push bx                 ; save the 209e element node
++        17b58: mov  di,[0x6d34]        ; di = DAT_2000_2d34 player-vehicle NEAR offset
++        17b5c: mov  bl,[di+0x64]       ; bl = byte[DGROUP:(di+0x64)]
++        17b5f: and  bx,0xf             ; bx = bl & 0xf
++        17b62: shl  bx,1               ; bx <<= 1   (even word index 0..0x1e)
++        17b64: mov  ax,[bx-0x70c2]     ; ax = word[DGROUP:(uint16)(idx-0x70c2)] = sprite-base table @0x8f3e
++        17b68: pop  bx                 ; restore the element node
++        17b69: lea  bx,[bx+4]          ; bx = element node + 4  -> 279d position descriptor
++        17b6c: lcall [0x6bc]           ; 279d(ax=sprite, bx=pos)   (c6bc, param_1=ax / param_3=bx)
++     Rebase onto g_mem+0x1c000; recover the element node from DGROUP:0x3e08 (published by 209e before the
++     dispatch); thread (sprite,0,pos,0) per 279d's __allregs signature. */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t di    = (uint16_t)(uintptr_t)DAT_2000_2d34;
++    uint8_t  bl    = *(uint8_t *)(dg + (uint16_t)(di + 0x64));
++    uint16_t idx   = (uint16_t)((bl & 0xf) << 1);
++    uint16_t sprite = *(uint16_t *)(dg + (uint16_t)(idx - 0x70c2));
++    uint16_t pos   = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);
++    ((void (*)(uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6bc)))(sprite, 0, pos, 0);
++  }
+   return;
+ }
+ 

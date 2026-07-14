@@ -1,0 +1,42 @@
+--- a/fist.c
++++ b/fist.c
+@@ -55600,7 +55600,38 @@
+ void __allregs FUN_1000_75c2(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6bc)))();
++  /* PATCH 315: FUN_1000_75c2 (asm 0x175c2) -- a 209e paint-walk cockpit-HUD sprite element paint method,
++     dispatched ARG-LESS by the walk (like 7561/7896/79bf).  Ghidra rendered the whole body as a single
++     no-arg indirect call through the [0x6bc]=mga 279d transparency-sprite blit vector, DROPPING both
++     register args: ax (sprite-directory byte offset) and bx (position descriptor).  279d->260c then
++     resolved the position descriptor from the UNINITIALISED bx register slot, so the sprite blitted at a
++     FLAKY run-to-run position -- clipped off-screen on some runs (clean cockpit), splattered over the
++     framebuffer on others (the whole-frame cockpit-noise nondeterminism, ge80 6353 vs 11385).  This was
++     THE dominant flaky-uninit source of the mission-FB run-to-run scramble.  Asm-verified vs
++     re_out/fist_dat_image.bin (DS=DGROUP=0x1c00):
++        175c2: push bx                 ; save the 209e element node (also published @DGROUP:0x3e08)
++        175c3: mov  di,[0x6d34]        ; di = DAT_2000_2d34 player-vehicle NEAR offset
++        175c7: mov  bx,[di+0x5d]       ; bx = word[DGROUP:(di+0x5d)]
++        175ca: mov  bl,bh              ;         175cc: shr  bl,4               ;  |  idx = (((bh>>4) & 0xf) + 1) & 0x1e   (even word index)
++        175cf: and  bx,0xf             ;  |
++        175d2: inc  bx                 ;  |
++        175d3: and  bx,0x1e            ; /
++        175d6: mov  ax,[bx-0x7096]     ; ax = word[DGROUP:(uint16)(idx-0x7096)] = sprite-base table @0x8f6a
++        175da: pop  bx                 ; restore the element node
++        175db: lea  bx,[bx+4]          ; bx = element node + 4  -> 279d position descriptor
++        175de: lcall [0x6bc]           ; 279d(ax=sprite, bx=pos)   (c6bc, param_1=ax / param_3=bx)
++     Rebase onto g_mem+0x1c000; recover the element node from DGROUP:0x3e08 (published by 209e before the
++     dispatch, cf. patches 311/305/301); thread (sprite,0,pos,0) per 279d's __allregs signature. */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t di    = (uint16_t)(uintptr_t)DAT_2000_2d34;
++    uint16_t w     = *(uint16_t *)(dg + (uint16_t)(di + 0x5d));
++    uint8_t  bh    = (uint8_t)(w >> 8);
++    uint16_t idx   = (uint16_t)((((bh >> 4) & 0xf) + 1) & 0x1e);
++    uint16_t sprite = *(uint16_t *)(dg + (uint16_t)(idx - 0x7096));
++    uint16_t pos   = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);
++    ((void (*)(uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6bc)))(sprite, 0, pos, 0);
++  }
+   return;
+ }
+ 
