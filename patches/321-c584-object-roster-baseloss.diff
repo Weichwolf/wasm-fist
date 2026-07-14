@@ -1,0 +1,59 @@
+--- a/fist.c	2026-07-14 18:48:27.186714508 +0200
++++ b/fist.c	2026-07-14 18:54:39.558400272 +0200
+@@ -30231,28 +30231,42 @@
+ void __allregs FUN_0000_c584(uint param_1,undefined2 param_2,undefined2 param_3)
+ 
+ {
+-  int *piVar1;
+-  int iVar2;
+-  
+-  if ((DAT_2000_2d2c & 0x80) != 0) {
+-    while (iVar2 = DAT_2000_a6ec, DAT_2000_a6ea != 0x40) {
+-      piVar1 = (int *)*(int *)((int)(undefined2 *)&DAT_2000_2d3c + DAT_2000_a6ea);
+-      if ((piVar1 == (int *)0x0) || (*piVar1 == 0x17)) {
+-        DAT_2000_a6ea = DAT_2000_a6ea + 8;
++  /* PATCH 321: object-roster phase-7 handler (asm 0xc584-0xc5e1, DS=DGROUP=0x1c00) BASE-LOSS + CF thread.
++     `mov si,[bx+0x6d3c]` makes si a DGROUP NEAR OFFSET (the roster object node); Ghidra read the 8-byte
++     table slot as a 32-bit host pointer (piVar1) and deref'd [si]/[si+0x16]/[si+0x36] as host addresses ->
++     native TOLERATED the wild read (garbage-driven but deterministic control flow, so the FB was stable),
++     wasm bounds-TRAPPED -> the mission never reached the op-0x24 cockpit post on wasm (native<->wasm mission
++     parity was impossible; every prior verify flow is menu-only so this never surfaced).  Rebased the three
++     object derefs to DGROUP-relative (g_mem+0x1c000+si) and threaded the x86 CF the c33c iterator reads via
++     g_fist_cf (clc=FOUND asm c5cf / stc=EMPTY asm c5e0).  c8c2's object arg is the near offset: ca2f does
++     s=dg+(uint16)param_4 (patch 310), so the wild ptr's low16 happened to be the right offset -- now passed
++     cleanly.  MISSION-PATH ONLY (c584 is a c33c object-roster phase handler reached only inside the
++     in-mission render walk 378e) -> behaviour-neutral for the menu/pre-mission verify flows (verified). */
++  extern unsigned char g_fist_cf;
++  uint8_t *dg = g_mem + 0x1c000;
++  if ((DAT_2000_2d2c & 0x80) != 0) {                                /* c584: word[0x6d2c]&0x80 */
++    while (DAT_2000_a6ea != 0x40) {                                 /* c58c/c591 */
++      int iVar2 = (uint16_t)DAT_2000_a6ec;
++      uint16_t si = *(uint16_t *)(dg + 0x6d3c + (uint16_t)DAT_2000_a6ea); /* c593/c597: object near offset */
++      if ((si == 0) || (*(uint16_t *)(dg + si) == 0x17)) {          /* c59b/c59f: null / type 0x17 -> skip */
++        DAT_2000_a6ea = DAT_2000_a6ea + 8;                          /* c5d1 */
+         DAT_2000_a6ec = DAT_2000_a6ec + 8;
+       }
+       else {
+-        param_1 = param_1 & 0xff;
+-        DAT_2000_a6ea = DAT_2000_a6ea + 8;
+-        DAT_2000_a6ec = DAT_2000_a6ec + 8;
+-        if ((((DAT_2000_2dab & 2) != 0) || ((*(byte *)(piVar1 + 0xb) & 8) == 0)) ||
+-           ((char)piVar1[0x1b] != '\0')) {
+-          FUN_0000_c8c2(param_1,iVar2,param_2,piVar1,param_3);
++        param_1 = param_1 & 0xff;                                   /* c5a4: xor ah,ah */
++        DAT_2000_a6ea = DAT_2000_a6ea + 8;                          /* c5ac */
++        DAT_2000_a6ec = DAT_2000_a6ec + 8;                          /* c5b1 */
++        if (((DAT_2000_2dab & 2) != 0) ||                          /* c5b6: byte[0x6dab]&2 */
++            ((*(byte *)(dg + si + 0x16) & 8) == 0) ||              /* c5bd: byte[si+0x16]&8==0 */
++            ((char)*(byte *)(dg + si + 0x36) != '\0')) {           /* c5c3: byte[si+0x36]!=0 */
++          FUN_0000_c8c2(param_1,iVar2,param_2,si,param_3);          /* c5c9 */
++          g_fist_cf = 0;                                            /* c5cf clc: FOUND */
+           return;
+         }
+       }
+     }
+   }
++  g_fist_cf = 1;                                                    /* c5dd/c5e0 stc: EMPTY */
+   return;
+ }
+ 
