@@ -1378,6 +1378,18 @@ int fist_extender_gate(void) {
             *(uint32_t *)(xb + 0xc93) = save_c93;
             fprintf(stderr, "[ext] op 0x18 MAP-LOAD returned; detail[0x8490]=0x%x dim[0x8494]=%u (base=0x0b => 2048)\n",
                     *(uint32_t *)(xb + 0x8490), *(uint32_t *)(xb + 0x8494));
+            if (getenv("FIST_CMDUMP")) {
+                uint32_t cmb = *(uint32_t*)(xb+0x85b8);
+                if (cmb) { FILE *f=fopen(getenv("FIST_CMDUMP"),"wb"); if(f){ fwrite((void*)(uintptr_t)cmb,1,0x400000,f); fclose(f);
+                    fprintf(stderr,"[cmdump] 85b8 colormap dumped -> %s\n", getenv("FIST_CMDUMP")); } }
+            }
+            if (getenv("FIST_PALDUMP")) {
+                FILE *f=fopen(getenv("FIST_PALDUMP"),"wb");
+                if(f){ fwrite(xb+0x5598,1,768,f); fwrite(xb+0x4f60,1,768,f); fwrite(xb+0x5260,1,768,f);
+                       fwrite(xb+0xa060,1,1024,f); fwrite(xb+0xa460,1,1024,f); fwrite(xb+0xa860,1,1024,f); fclose(f);
+                    fprintf(stderr,"[paldump] 5598/4f60/5260/a060/a460/a860 dumped 28a5=%d ac64=%d ac60=%d\n",
+                       (int)g_mem[FIST_EXT_BASE+0x28a5],(int)g_mem[FIST_EXT_BASE+0xac64],(int)g_mem[FIST_EXT_BASE+0xac60]); }
+            }
             if (getenv("FIST_MAPPROBE")) {
                 /* Distinct-count each terrain buffer right after 89b0 (Part-1b collapse verdict). */
                 struct { const char *nm; uint32_t off; long n; } B[] = {
