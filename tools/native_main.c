@@ -1035,6 +1035,17 @@ int fist_extender_gate(void) {
      *     cockpit/HUD paint chain drew).
      *   - upload the mission DAC palette (ext+0x5598, 6-bit) so the dumped colours are the mission palette;
      *   - dump 0xA0000 (FIST_MISSFB=path) via the shared 6->8 VGA expander, then _exit(0).                */
+    if (op == 0x24 && getenv("FIST_OP24TRACE") && g_ext_ready) {
+        static int nt = 0;
+        if (nt < 14) {
+            uint32_t tl = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+            uint8_t *t = g_mem + tl;
+            fprintf(stderr,"[op24t #%d] glob 9614/18/1c=%d/%d/%d  TCB+2c/30/34=%d/%d/%d  +d2/d6/da=%d/%d/%d\n",
+                ++nt, *(int32_t*)(dg+0x9614),*(int32_t*)(dg+0x9618),*(int32_t*)(dg+0x961c),
+                *(int32_t*)(t+0x2c),*(int32_t*)(t+0x30),*(int32_t*)(t+0x34),
+                *(int32_t*)(t+0xd2),*(int32_t*)(t+0xd6),*(int32_t*)(t+0xda));
+        }
+    }
     if (op == 0x24 && getenv("FIST_MISSFB") && g_ext_ready) {
         static int nseen = 0;
         long want = getenv("FIST_MISSFB_N") ? atol(getenv("FIST_MISSFB_N")) : 1;
@@ -1069,6 +1080,20 @@ int fist_extender_gate(void) {
                 fprintf(stderr,"[missfb] tile3918 nz=%ld/65536 distinct=%d  ray3a24[0..3]=%d/%d/%d/%d ray3e24[0]=%d 90c0=%08x 90c4=%08x\n",
                     nz,nd,*(int32_t*)(xb+0x3a24),*(int32_t*)(xb+0x3a28),*(int32_t*)(xb+0x3a2c),*(int32_t*)(xb+0x3a30),
                     *(int32_t*)(xb+0x3e24),*(uint32_t*)(xb+0x90c0),*(uint32_t*)(xb+0x90c4));
+                if (getenv("FIST_VEHPROBE")) {
+                    uint16_t di = *(uint16_t*)(dg+0x6d34);
+                    uint16_t typ = *(uint16_t*)(dg+di);
+                    uint16_t bx = (uint16_t)(typ<<1);
+                    fprintf(stderr,"[vehprobe] node2d34 di=0x%04x  type[di]=%u  pos[di+4/8/c]=%d/%d/%d  LUT[bx-1a40]=%u  hdg[di+38]=%u ang[di+10]=%u\n",
+                        di, typ, *(int32_t*)(dg+(uint16_t)(di+4)), *(int32_t*)(dg+(uint16_t)(di+8)),
+                        *(int32_t*)(dg+(uint16_t)(di+0xc)), *(uint16_t*)(dg+(uint16_t)(bx-0x1a40)),
+                        *(uint16_t*)(dg+(uint16_t)(di+0x38)), *(uint16_t*)(dg+(uint16_t)(di+0x10)));
+                    fprintf(stderr,"[vehprobe] cam globals 9614/9618/961c = %d/%d/%d\n",
+                        *(int32_t*)(dg+0x9614), *(int32_t*)(dg+0x9618), *(int32_t*)(dg+0x961c));
+                    fprintf(stderr,"[vehprobe] TCB +2c/30/34=%d/%d/%d  +d2/d6/da=%d/%d/%d\n",
+                        *(int32_t*)(tcb+0x2c),*(int32_t*)(tcb+0x30),*(int32_t*)(tcb+0x34),
+                        *(int32_t*)(tcb+0xd2),*(int32_t*)(tcb+0xd6),*(int32_t*)(tcb+0xda));
+                }
             }
             if (getenv("FIST_MISSFB_PALCMP")) {
                 uint8_t *ep = g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4);
