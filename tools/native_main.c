@@ -905,6 +905,32 @@ int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
     if (op == 0x18) g_fist_after_map = 1;
+    /* ------------------------------------------------------------------------------------------------
+     * MISSION-PALETTE ARCHITECTURE (residual #1, RESOLVED this iteration -- see docs/stage1.md).
+     * The ORIGINAL uses ONE physical VGA DAC carrying BOTH the cockpit/HUD colours AND the terrain
+     * gradient.  The two producers occupy DISJOINT, complementary index ranges (proven from the DATA):
+     *   - the ENGINE cockpit/HUD palette word[DGROUP:0x782] defines colours ONLY for idx 0..79 (51 coloured
+     *     entries span 13..79) and is BLACK for 80..255 -- the engine leaves the terrain band undefined;
+     *   - the terrain colormap (532.pal's C32.KLC -> tile3918) samples ONLY idx 80..255 (min index=80, 0%
+     *     of texels below 80); 532.pal (loaded by the extender at op 0x18 into ext+0x5598) is fully coloured.
+     * So the single coherent mission DAC = word[0x782][0..79] (cockpit) + 532.pal[80..255] (terrain), a
+     * partial merge at the data-dictated boundary 80 (NOT the predecessor's full-palette EXTPAL swap, which
+     * made the cockpit noise).  The FIST_MISSFB_MERGEPAL seam below builds exactly this DAC for measurement.
+     *
+     * NOT applied as a default behavioural change THIS iteration -- MEASURED, standalone it REGRESSES the
+     * settled mission frame with NO offsetting benefit (terrain is not rendered), because two SEPARATE
+     * residuals still block a coherent frame:
+     *   (A) the op-0x24 RENDER-WINDSHIELD service (8deb->85d0->8120->9200 terrain into 0xA0000) can't be
+     *       wired: the LIVE mission CAMERA is degenerate (TCB Y off ~40x, alt ~9x -- residual #2, a192->0459),
+     *       so 9200 overpaints the cockpit -- a wired default render measures full AE 59997 / terrain 25361 /
+     *       cockpit 32344 vs the no-render baseline 35212 / 22349 / 11963 (the terrain-region AE WORSENS,
+     *       25361 vs 22349: degenerate-camera terrain matches the reference LESS than a black window does);
+     *   (B) the port's COCKPIT PAINT writes stray >=80 indices (idx195/232/254, ~6.4-11.4k px/frame) that
+     *       the REFERENCE cockpit does NOT have (ref rows 88-200 = 0% 532.pal terrain colours, 25% dark),
+     *       so applying 532.pal to the global DAC colours those cockpit pixels brown -> +998 cockpit AE.
+     * Landing the partial merge belongs WITH the camera+render fix (so terrain lands in idx-80..255 pixels
+     * while the cockpit-paint >=80 bug is separately corrected).  The proven mechanism is banked in the
+     * FIST_MISSFB_MERGEPAL measurement seam. */
     /* FIST_OP0C_BT (diagnostic, default OFF, behaviour-neutral): characterize the per-frame mission
      * render post op 0x0c.  The engine's 459a mission loop posts op 0x0c every outer iteration
      * (db99/patch193 -> 78f0 -> 85d0 + 93c0 flat-affine MAP-WARP of colormap 85b8).  This seam proves
@@ -1018,6 +1044,21 @@ int fist_extender_gate(void) {
             uint8_t *tcb = g_mem + tcb_lin;
             uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
             *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)tcb;
+            if (getenv("FIST_MISSFB_FBIDX")) {
+                /* histogram of framebuffer INDICES in the cockpit region (rows 88-200): how many pixels
+                 * use index>=80 (the terrain band the palette merge fills)?  Read-only diagnostic. */
+                uint8_t *fb = g_mem + 0xA0000; long ge80=0, tot=0; int h[256]={0};
+                for (int r=88;r<200;r++) for (int c=0;c<320;c++){ uint8_t p=fb[r*320+c]; tot++; if(p>=80){ge80++; h[p]++;} }
+                fprintf(stderr,"[fbidx] cockpit rows88-200: pixels>=80 = %ld/%ld  top idx>=80:",ge80,tot);
+                for(int k=0;k<3;k++){int bi=-1,bv=0; for(int i=80;i<256;i++) if(h[i]>bv){bv=h[i];bi=i;} if(bi>=0){fprintf(stderr," idx%d(%dpx)",bi,bv); h[bi]=0;}}
+                fprintf(stderr,"\n");
+                if (getenv("FIST_MISSFB_FBDUMP")) {
+                    FILE*ff=fopen("/tmp/fb_idx.bin","wb"); if(ff){fwrite(fb,1,64000,ff);fclose(ff);}
+                    uint8_t *ep2 = g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4);
+                    FILE*fp=fopen("/tmp/pal_merged.bin","wb"); if(fp){fwrite(ep2,1,768,fp);fclose(fp);}
+                    fprintf(stderr,"[fbidx] dumped /tmp/fb_idx.bin + /tmp/pal_merged.bin (ge80=%ld)\n",ge80);
+                }
+            }
             if (getenv("FIST_MISSFB_PROBE")) {
                 fprintf(stderr,"[missfb] op24 post #%d  TCB @0x%05x cam[2c/30/34]=%d/%d/%d ang[38/3a/3c/3e]=%u/%d/%d/%u detail[cd/cf]=%u/%u\n",
                     nseen, tcb_lin, *(int32_t*)(tcb+0x2c),*(int32_t*)(tcb+0x30),*(int32_t*)(tcb+0x34),
@@ -1038,27 +1079,41 @@ int fist_extender_gate(void) {
                 fprintf(stderr,"  ext[0..7]:"); for(int i=0;i<9;i++) fprintf(stderr," %02x",mp[i]); fprintf(stderr,"\n");
                 fprintf(stderr,"[palcmp] eng idx0xdc(220)*3:"); for(int i=0;i<9;i++) fprintf(stderr," %02x",ep[220*3+i]);
                 fprintf(stderr,"  ext idx0xdc:"); for(int i=0;i<9;i++) fprintf(stderr," %02x",mp[220*3+i]); fprintf(stderr,"\n");
+                if (getenv("FIST_MISSFB_PALDUMP")) {
+                    FILE*f1=fopen("/tmp/pal_eng782.bin","wb"); if(f1){fwrite(ep,1,768,f1);fclose(f1);}
+                    FILE*f2=fopen("/tmp/pal_ext5598.bin","wb"); if(f2){fwrite(mp,1,768,f2);fclose(f2);}
+                    fprintf(stderr,"[palcmp] dumped /tmp/pal_eng782.bin + /tmp/pal_ext5598.bin\n");
+                }
             }
             if (getenv("FIST_MISSFB_RENDER")) {
                 m_ext_FUN_0000_8deb();
                 m_ext_FUN_0000_85d0();
-                *(uint32_t*)(xb+0x90f8)=81; *(uint32_t*)(xb+0x90f0)=288;
-                *(uint32_t*)(xb+0x90ac)=0x140-288;
-                *(uint32_t*)(xb+0x90a8)=(uint32_t)(uintptr_t)(g_mem+0xA0000+0x650);
+                if (!getenv("FIST_MISSFB_LIVEVP")) {   /* force the oracle windshield geometry */
+                    *(uint32_t*)(xb+0x90f8)=81; *(uint32_t*)(xb+0x90f0)=288;
+                    *(uint32_t*)(xb+0x90ac)=0x140-288;
+                    *(uint32_t*)(xb+0x90a8)=(uint32_t)(uintptr_t)(g_mem+0xA0000+0x650);
+                }
                 m_ext_FUN_0000_8120();
                 { int32_t c0=*(int32_t*)(xb+0x90c0),v04=*(int32_t*)(xb+0x9104),v08=*(int32_t*)(xb+0x9108);
                   int32_t esi=(int32_t)(((int64_t)c0*v04)>>32), ebp=(int32_t)(((int64_t)c0*v08)>>32);
                   m_ext_FUN_0000_9200(ebp,esi); }
             }
-            /* DAC palette for the dump.  The mission cockpit/HUD (drawn by the ENGINE mga driver) uses the
-             * live engine DAC buffer word[DGROUP:0x782]; the extender terrain (9200) writes indices meant
-             * for the extender mission palette ext+0x5598.  These are TWO DIFFERENT 256-entry palettes in
-             * the port (identical only 12/768 bytes) -- the unreconciled-mission-palette residual (see
-             * FIST_MISSFB_PALCMP + docs/stage1.md).  Default: upload the engine DAC (correct cockpit);
-             * FIST_MISSFB_EXTPAL uploads ext+0x5598 (correct terrain, cockpit becomes noise). */
+            /* DAC palette for the dump.  Options (residual #1 -- the mission-palette architecture):
+             *   default          : the engine DAC word[DGROUP:0x782] (cockpit correct, terrain 80..255 BLACK)
+             *   FIST_MISSFB_EXTPAL: ext+0x5598 = full 532.pal (terrain correct, cockpit becomes NOISE)
+             *   FIST_MISSFB_MERGEPAL: the COHERENT single mission DAC -- engine 0..79 (cockpit) + 532.pal
+             *                       80..255 (terrain), the data-dictated partial merge.  This is the DAC the
+             *                       ORIGINAL uses; the correct measurement palette once terrain renders. */
             { extern void out(int,int);
-              uint8_t *mp = getenv("FIST_MISSFB_EXTPAL") ? (xb+0x5598)
-                          : (g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4));
+              uint8_t *eng = g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4);
+              uint8_t *ext = xb + 0x5598;
+              static uint8_t merged[768];
+              uint8_t *mp;
+              if (getenv("FIST_MISSFB_MERGEPAL")) {
+                  for (int i=0;i<80*3;i++)  merged[i]=eng[i]&0x3f;   /* cockpit band 0..79  = engine */
+                  for (int i=80*3;i<768;i++) merged[i]=ext[i]&0x3f;  /* terrain band 80..255 = 532.pal */
+                  mp = merged;
+              } else mp = getenv("FIST_MISSFB_EXTPAL") ? ext : eng;
               out(0x3c8,0); for(int pi=0;pi<768;pi++) out(0x3c9, mp[pi] & 0x3f); }
             *(uint32_t*)(xb+0xc93)=save_c93;
             { const char *fbp=getenv("FIST_MISSFB"); if(fbp) fist_dump_framebuffer(fbp); }
