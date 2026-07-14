@@ -1,0 +1,114 @@
+PATCH 314 -- FUN_0000_18dc LOD-model flag setter base-loss (raw host deref of DGROUP data).
+
+FUN_0000_18dc (asm 0x18dc) sets the visibility/dirty bits (|0x22) on a vehicle's LOD-model
+sub-object flag records.  DS=DGROUP=0x1c00.  asm-verified vs re_out/fist_dat_image.bin:
+
+  18f9: bx = word[ds:0x2674] (=param_1); bx<<=1; lea bx,[bx+0x26e4]; or [bx+2],0x22   ; flag tbl
+  190b: mov di, WORD PTR [bx+0x27f4]            ; di = word[DGROUP:(param_1+0x27f4)]  (WORD read)
+  1912: or [si+2],0x22  (si=di+0x40)            ; or byte[DGROUP:(di+0x42)]
+  1927: loop 4x: or [si+2],0x22; si+=0x10       ; di+0x46/0x56/0x66/0x76
+  192f: or [si+2],0x22                          ; di+0x86
+  193a: mov WORD [bx+0x276c],0                  ; word[DGROUP:(param_1+0x276c)] = 0
+
+Ghidra dropped the DGROUP segment base AND typed `di` as a host `int`, emitting the raw host
+derefs `*(int *)(DAT_1000_e674 + 0x27f4)` / `*(int *)(param_1 + 0x27f4)`.  With param_1 a small
+DGROUP index that address is ~0x27f4 -> SIGSEGV (pattern-init reproduced it: fault 0x27f4,
+EIP in 18dc); on the default build the raw derefs land at wild host addresses and OR 0x22 into
+uninitialised stack/heap -> the flaky mission-object-flag corruption class.
+
+Fix: reconstruct faithfully -- rebase every DGROUP deref onto V=g_mem+0x1c000, read `di` as a
+16-bit word, and 16-bit-wrap every effective address (exactly the asm's `mov di,[bx+0x27f4]`
++ `or byte ptr [si+2]`).  Behaviour-identical structure (the 4x/4x/8x |0x22 walks are the
+pristine decompile); only the addressing is corrected.  Sibling flag-walkers 197b/1996/19b9
+were already rebased (patch 028); this fixes their dispatcher.
+
+--- a/fist.c
++++ b/fist.c
+@@ -7822,54 +7822,55 @@
+ void __allregs FUN_0000_18dc(int param_1,int param_2)
+ 
+ {
+-  byte *pbVar1;
++  /* PATCH 314: FUN_0000_18dc (asm 0x18dc) = the LOD-model VISIBILITY/DIRTY-flag setter (|0x22).  DS=DGROUP.
++     Ghidra dropped the DGROUP base + read di as a host `int`: asm 0x190b `mov di,[bx+0x27f4]` is a WORD read
++     from DGROUP:(param_1+0x27f4), and every `or [si+2],0x22` is a byte |= into DGROUP:(di+off).  The raw
++     host derefs `*(int*)(param_1+0x27f4)` faulted under pattern-init (fault 0x27f4, param_1~0) and land at
++     wild host addresses on the default build (flaky-uninit corruption class).  Rebase onto V=g_mem+0x1c000,
++     read di as a 16-bit word, and 16-bit-wrap every effective address, exactly as the asm does. */
++  uint16_t p1 = (uint16_t)param_1;
++  uint8_t *V = g_mem + 0x1c000;
++  uint16_t di, si;
+   int iVar2;
+-  int iVar3;
+-  int iVar4;
+-  
++
+   DAT_1000_e674 = param_1;
+   DAT_1000_e678 = param_2;
+   if ((param_2 == 0) || (param_2 == 8)) {
+-    ((undefined1 *)&DAT_1000_e6e6)[param_1 * 2] = ((undefined1 *)&DAT_1000_e6e6)[param_1 * 2] | 0x22
+-    ;
+-    pbVar1 = (byte *)(*(int *)(DAT_1000_e674 + 0x27f4) + 0x42);
+-    *pbVar1 = *pbVar1 | 0x22;
+-    iVar2 = 4;
+-    iVar4 = *(int *)(DAT_1000_e674 + 0x27f4) + 0x44;
+-    do {
+-      iVar3 = iVar4;
+-      *(byte *)(iVar3 + 2) = *(byte *)(iVar3 + 2) | 0x22;
+-      iVar2 = iVar2 + -1;
+-      iVar4 = iVar3 + 0x10;
+-    } while (iVar2 != 0);
+-    *(byte *)(iVar3 + 0x12) = *(byte *)(iVar3 + 0x12) | 0x22;
++    V[(uint16_t)(0x26e6 + p1 * 2)] |= 0x22;                     /* flag table DGROUP:0x26e6[p1] */
++    di = *(uint16_t *)(V + (uint16_t)(p1 + 0x27f4));            /* di = word[DGROUP:(p1+0x27f4)] */
++    V[(uint16_t)(di + 0x42)] |= 0x22;
++    di = *(uint16_t *)(V + (uint16_t)(p1 + 0x27f4));
++    si = (uint16_t)(di + 0x44);
++    for (iVar2 = 4; iVar2 != 0; iVar2--) {                      /* or [si+2]; si+=0x10 (x4) */
++      V[(uint16_t)(si + 2)] |= 0x22;
++      si = (uint16_t)(si + 0x10);
++    }
++    V[(uint16_t)(si + 2)] |= 0x22;                              /* final or [di+0x86] */
+     FUN_0000_197b();
+-    *(undefined2 *)(DAT_1000_e674 + 0x276c) = 0;
++    *(uint16_t *)(V + (uint16_t)(p1 + 0x276c)) = 0;
+     return;
+   }
+   if (param_2 == 0x10) {
+-    iVar4 = *(int *)(param_1 + 0x27f4) + 0x4c;
+-    iVar2 = 4;
++    di = *(uint16_t *)(V + (uint16_t)(p1 + 0x27f4));
+     DAT_1000_e678 = 0x10;
+-    do {
+-      *(byte *)(iVar4 + 2) = *(byte *)(iVar4 + 2) | 0x22;
+-      iVar4 = iVar4 + 0x10;
+-      iVar2 = iVar2 + -1;
+-    } while (iVar2 != 0);
++    si = (uint16_t)(di + 0x4c);
++    for (iVar2 = 4; iVar2 != 0; iVar2--) {
++      V[(uint16_t)(si + 2)] |= 0x22;
++      si = (uint16_t)(si + 0x10);
++    }
+     FUN_0000_1996();
+     return;
+   }
+   if (param_2 != 0x20) {
+     return;
+   }
+-  iVar4 = *(int *)(param_1 + 0x27f4) + 0x48;
+-  iVar2 = 8;
++  di = *(uint16_t *)(V + (uint16_t)(p1 + 0x27f4));
+   DAT_1000_e678 = 0x20;
+-  do {
+-    *(byte *)(iVar4 + 2) = *(byte *)(iVar4 + 2) | 0x22;
+-    iVar4 = iVar4 + 8;
+-    iVar2 = iVar2 + -1;
+-  } while (iVar2 != 0);
++  si = (uint16_t)(di + 0x48);
++  for (iVar2 = 8; iVar2 != 0; iVar2--) {
++    V[(uint16_t)(si + 2)] |= 0x22;
++    si = (uint16_t)(si + 8);
++  }
+   FUN_0000_19b9();
+   return;
+ }

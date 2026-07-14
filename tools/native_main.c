@@ -905,6 +905,23 @@ int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
     if (op == 0x18) g_fist_after_map = 1;
+    /* FIST_VEHWATCH (diagnostic, default OFF): poll the player-vehicle node veh+8 (Y) at every op-gate
+     * entry; report the FIRST transition to a wild value (>0x01000000; correct AZER1 Y=0x116F1D). */
+    if (getenv("FIST_VEHWATCH")) {
+        static uint32_t vprev = 0; static int reported = 0;
+        uint16_t nd = *(uint16_t *)(dg + 0x6d34);
+        if (nd) {
+            uint32_t v = *(uint32_t *)(g_mem + 0x1c000 + (uint16_t)(nd + 8));
+            if (v != vprev) {
+                if (v > 0x01000000 && !reported) {
+                    fprintf(stderr, "[vehwatch] veh+8 WENT WILD: %u (0x%08x) at op=0x%x (was 0x%08x)\n",
+                            v, v, op, vprev);
+                    reported = 1;
+                }
+                vprev = v;
+            }
+        }
+    }
     /* ------------------------------------------------------------------------------------------------
      * MISSION-PALETTE ARCHITECTURE (residual #1, RESOLVED this iteration -- see docs/stage1.md).
      * The ORIGINAL uses ONE physical VGA DAC carrying BOTH the cockpit/HUD colours AND the terrain

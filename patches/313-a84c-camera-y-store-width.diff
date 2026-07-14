@@ -1,0 +1,62 @@
+PATCH 313 -- FUN_1000_a84c camera-coordinate STORE-WIDTH truncation (Y/Z high word zeroed).
+
+The cockpit-view camera loader FUN_1000_a84c (asm 0x1a84c) copies the player-vehicle
+node's 32-bit fixed-point position into the render-camera globals d55a(X)/d55e(Y)/
+d562(Z+eye)/d566(Z-raw).  asm-verified vs re_out/fist_dat_image.bin:
+
+  1a866: 66 8b 45 04    mov  eax, DWORD PTR [di+0x4]   ; X
+  1a86a: 66 a3 5a 15    mov  ds:0x155a, eax            ; 32-bit store
+  1a86e: 66 8b 45 08    mov  eax, DWORD PTR [di+0x8]   ; Y  (= 1142557 at AZER1 spawn)
+  1a872: 66 a3 5e 15    mov  ds:0x155e, eax            ; 32-bit store  <-- Y
+  1a876: 66 0f b7 ..    movzx eax, WORD PTR [di+0x87]  ; eye-height LUT
+  1a87c: 66 03 45 0c    add  eax, DWORD PTR [di+0xc]   ; + posZ
+  1a880: 66 a3 62 15    mov  ds:0x1562, eax            ; 32-bit store  <-- Z+eye
+  1a884: 66 8b 45 0c    mov  eax, DWORD PTR [di+0xc]
+  1a888: 66 a3 66 15    mov  ds:0x1566, eax            ; 32-bit store  <-- Z-raw
+
+Every one of ds:0x155a/0x155e/0x1562/0x1566 is a 32-bit (66-prefixed) store.  Ghidra
+typed DAT_1000_d55e / DAT_1000_d562 / DAT_1000_d566 as `undefined2` (WORD), so the C
+assignment `DAT_1000_d55e = *(uint32_t*)(V+8)` TRUNCATED the full Y to its low 16 bits
+(1142557 = 0x00116F1D -> 0x6F1D = 28445), zeroing the high word ds:0x1560.  The X global
+was already the wide `_DAT_1000_d55a` (undefined4) alias, so X survived; Y/Z did not.
+
+The truncation is faithful-fatal: FUN_1000_dd15 copies these globals into the render-
+camera TCB+0x2c/0x30/0x34 (paired 16-bit words incl. the high word 0x1560/0x1564), and
+FUN_0000_3d4c / FUN_0000_3ce1 read *(g_mem+0x1d560) and *(g_mem+0x1d564) AS the Y/Z high
+words -- they expect a populated 32-bit value.  With the truncation the render camera Y
+reads 28445 (low16) instead of 1142557, placing the terrain-follow at the wrong tile.
+
+Fix: store the full 32 bits to 0x155e/0x1562/0x1566 (and read the full 32 bits in the
+d562 clamp compare), exactly as the asm does.  Behaviour-neutral for the 19 menu/pre-
+mission verify flows (a84c runs only on the in-mission cockpit-view select, d549=0x1c).
+
+--- a/fist.c
++++ b/fist.c
+@@ -63647,9 +63647,13 @@
+   DAT_1000_d54c = 0;
+   DAT_1000_d554 = (uint16_t)param_1;
+   _DAT_1000_d55a = *(uint32_t *)(V + 4);
+-  DAT_1000_d55e = *(uint32_t *)(V + 8);
+-  DAT_1000_d562 = (uint32_t)(*(uint16_t *)(V + 0x87)) + *(uint32_t *)(V + 0xc);
+-  DAT_1000_d566 = *(uint32_t *)(V + 0xc);
++  /* PATCH 313: asm 0x1a872/0x1a880/0x1a888 are 32-bit (66-prefixed) stores; Ghidra typed
++     DAT_1000_d55e/d562/d566 as undefined2 -> the Y/Z high word was truncated to 0 (Y
++     1142557 -> 28445).  Write the full 32 bits so the render-camera copy dd15 + the
++     downstream *(0x1d560)/*(0x1d564) high-word reads get the correct value. */
++  *(uint32_t *)(g_mem + 0x1d55e) = *(uint32_t *)(V + 8);
++  *(uint32_t *)(g_mem + 0x1d562) = (uint32_t)(*(uint16_t *)(V + 0x87)) + *(uint32_t *)(V + 0xc);
++  *(uint32_t *)(g_mem + 0x1d566) = *(uint32_t *)(V + 0xc);
+   DAT_1000_d558 = *(uint16_t *)(V + 0x10);
+   if ((*(uint16_t *)(V + 0x97) != 0) && ((signed char)V[0x86] != '\x01')) {
+     uint16_t si = *(uint16_t *)(V + 0x97);
+@@ -63661,8 +63665,8 @@
+     else {
+       uVar2 = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint16_t)(*(uint16_t *)S * 2) - 0x1a78));
+     }
+-    if ((uint32_t)DAT_1000_d562 <= eax + uVar2) {
+-      DAT_1000_d562 = eax + uVar2;
++    if (*(uint32_t *)(g_mem + 0x1d562) <= eax + uVar2) {   /* PATCH 313: full-width clamp */
++      *(uint32_t *)(g_mem + 0x1d562) = eax + uVar2;
+     }
+   }
+   return;
