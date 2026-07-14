@@ -1,0 +1,177 @@
+PATCH 323: fix the three mission-render BASE-LOSSES the now-iterating 459a loop (patch 322) reaches for
+the first time -- so the mission survives past c452=1 into sustained per-frame iteration.
+
+With patch 322 the 22dd render script advances (41df no longer traps), so 459a's OUTER loop runs to
+completion and re-enters via patch-295's pump -> c452 advances.  Each new frame drives the mission PAINT
+walk (206f->209e) and the 22dd script into functions never before executed, exposing three Ghidra
+base-losses that SIGSEGV on the default build (mission-path only; the 24 menu flows never reach them).
+All asm-verified vs re_out/fist_dat_image.bin, DS=SS=DGROUP=0x1c00.
+
+(1) FUN_1000_a722 (asm 0x1a733, mission HUD text method, reached via 79f5 when (d548&0x7f)==3 -- a state
+    the iterating render now enters): `mov di,[0x6d34]; mov ax,[di+0x26]` -- di=word[DGROUP:0x6d34] is the
+    player-vehicle node NEAR OFFSET (0xc05c); Ghidra's DAT_2000_2d34 macro is *(int**) so
+    `DAT_2000_2d34 + 0x26` deref'd (int*)0xc05c + 0x98 as a host address -> SIGSEGV.  Rebase: read the
+    near-offset word and index g_mem+0x1c000+(uint16)(vn+0x26).
+
+(2) FUN_0000_3a0f (asm 0x3a0f, reticle-draw 22dd script handler): bx=word[0x156a] is the dst-geom NEAR
+    OFFSET (Ghidra DAT_1000_d56a is *(int**) -> host-ptr deref -> SIGSEGV) -> rebase g_mem+0x1c000+
+    (uint16)off for the [bx+6/0xa/0xe/8/0xf/0xc] reads.  Second base-loss: the reticle method dispatch
+    `mov ax,[0x1550]; si=ax&7; ax^=si; si+=si; mov si,cs:[si+0x3a52]; mov bx,0x6c16; lcall [si]` -- the
+    CS-image method-vector table @0x3a52 = {0x6b4,0x6b8,0x6bc,0x6c0,0x6c8,0x6cc,0x6d0,0x6d4} (DGROUP
+    far-vector offsets; [0x6b4]=MGAVIDEO 26a1 sprite/box blit); Ghidra read the table at host address
+    0x3a52 (wild) and dropped ax/bx.  Rebase the table read to g_mem+0x3a52 and the vector to the DGROUP
+    far-ptr; thread 26a1(ax,0,0,bx=0x6c16,0) per the patch-305 convention (0x6c16 = the DAT_2000_2c16..
+    reticle rect this fn just populated).
+
+(3) FUN_0000_3fbf (asm 0x3fbf, crosshair/reticle PLOT, called by 3a0f) -- the near-twin of the already-
+    reconstructed FUN_0000_3fba (patch 194) but WITHOUT the cursor advance: si=word[0x1552] /
+    di=word[0x156a] are dst/src geom NEAR OFFSETS (Ghidra int* / int** -> host-ptr deref -> SIGSEGV);
+    the plot address is rowtab[cx]+dx inside the page-seg es=word[word[0x156a]].  Rebased onto
+    g_mem+0x1c000 exactly as 3fba; plot es:[di] (page-seg<<4); the je branch far-calls [0x159c]/[0x15a0].
+
+RESULT (default `make native`, mission ACCEPT path BATTLES(160,100)->OK(205,128)->ACCEPT(40,186)): the
+459a loop iterates -- under the fast cooperative tick (FIST_COOP_TICK) c452 climbs 1 -> 314, op 0x24 (the
+windshield-render post) re-posts, and the mission FB CHANGES frame-to-frame (op-0x24 post #1 vs #2 differ
+by AE=209 px = the advancing HUD/radar sim).  Default (25000 Hz SIGALRM) is crash-free (3/3 exit 124 =
+spins, no core).  NEXT BLOCKER PINNED: the render script then reaches the unregistered handler 0x3a68 (the
+reticle-GRATICULE loop: iterator [0x1630] over di=0x6bbe + 3a92 line-draw + 3d4c) -> traps to a no-op ->
+cursor freezes at c452=314 (the same 41df class, but its [0x1630] list iterator also floods op 0x1c and
+needs its own reconstruction) -- the pinned next step for sustained iteration.
+
+MISSION-PATH ONLY (a722 is a d548-gated HUD method; 3a0f/3fbf are 22dd render-script handlers reached only
+inside the in-mission 459a loop) -> strictly behaviour-neutral for the 24 menu/pre-mission verify flows.
+Sources stay pristine (re_out/fist.c 61453e42); patched via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -12131,16 +12131,29 @@
+ void __allregs FUN_0000_3a0f(void)
+ 
+ {
+-  undefined2 *puVar1;
+-  
+-  DAT_2000_2c16 = *(undefined2 *)(DAT_1000_d56a + 6);
+-  DAT_2000_2c1a = *(undefined2 *)(DAT_1000_d56a + 10);
+-  DAT_2000_2c18 = (int)*(char *)(DAT_1000_d56a + 0xe) + *(int *)(DAT_1000_d56a + 8);
+-  DAT_2000_2c1c = (int)*(char *)(DAT_1000_d56a + 0xf) + *(int *)(DAT_1000_d56a + 0xc);
+-  puVar1 = (undefined2 *)*(undefined2 *)((DAT_1000_d550 & 7) * 2 + 0x3a52);
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))(0);
++  /* PATCH 323: reticle-draw 22dd script handler (asm 0x3a0f, DS=DGROUP=0x1c00).  Two base-losses reached
++     for the first time by the now-iterating mission loop: (1) bx=word[0x156a] is the dst-geom NEAR OFFSET
++     (Ghidra's DAT_1000_d56a is *(int**) -> host-ptr deref -> SIGSEGV); rebase g_mem+0x1c000+(uint16)off.
++     (2) the reticle method dispatch `mov ax,[0x1550]; si=ax&7; ax^=si; si+=si; mov si,cs:[si+0x3a52];
++     mov bx,0x6c16; lcall [si]` -- the CS-image table @0x3a52 = {0x6b4,0x6b8,0x6bc,0x6c0,0x6c8,0x6cc,
++     0x6d0,0x6d4} (DGROUP method-vector offsets, [0x6b4]=MGAVIDEO 26a1 sprite/box blit ax=id/bx=rect);
++     Ghidra read the table at a host address 0x3a52 (wild) and dropped the ax/bx thread.  Rebase the table
++     read to g_mem+0x3a52 and the vector to the DGROUP far-ptr; thread 26a1(ax,0,0,bx=0x6c16,0) per the
++     patch-305 convention (rect near offset 0x6c16 = the DAT_2000_2c16.. block this fn just populated). */
++  uint8_t *g = g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(g + 0x156a);        /* word[0x156a] dst-geom near offset */
++  uint16_t ax, idx, voff;
++  DAT_2000_2c16 = *(uint16_t *)(g + (uint16_t)(bx + 6));
++  DAT_2000_2c1a = *(uint16_t *)(g + (uint16_t)(bx + 0xa));
++  DAT_2000_2c18 = (uint16_t)((int16_t)(int8_t)g[(uint16_t)(bx + 0xe)] + *(int16_t *)(g + (uint16_t)(bx + 8)));
++  DAT_2000_2c1c = (uint16_t)((int16_t)(int8_t)g[(uint16_t)(bx + 0xf)] + *(int16_t *)(g + (uint16_t)(bx + 0xc)));
++  ax = *(uint16_t *)(g + 0x1550);                 /* word[0x1550] = DAT_1000_d550 */
++  idx = ax & 7;
++  ax ^= idx;                                      /* xor ax,si (si=ax&7 before doubling) */
++  voff = *(uint16_t *)(g_mem + 0x3a52 + idx * 2); /* cs:[si+0x3a52] near-offset method table */
++  ((void (*)(uint,uint,uint,uint,uint))fist_icall_far(*(uint32_t *)(g + voff)))(ax, 0, 0, 0x6c16, 0);
+   FUN_0000_3fbf();
+-  DAT_2000_0a86 = DAT_2000_0a86 + 2;
++  DAT_2000_0a86 = (uint16_t)(DAT_2000_0a86 + 2);
+   return;
+ }
+ 
+@@ -12670,36 +12683,48 @@
+ void __allregs FUN_0000_3fbf(void)
+ 
+ {
+-  uint uVar1;
+-  uint uVar2;
+-  undefined1 *puVar3;
+-  
+-  uVar1 = DAT_1000_d5b8 - *(int *)(DAT_1000_d552 + 4);
+-  if (uVar1 < (uint)DAT_1000_d56a[5]) {
+-    DAT_2000_2b6e = uVar1 - ((uint)DAT_1000_d56a[5] >> 1);
+-    uVar2 = DAT_1000_d5ba - *(int *)(DAT_1000_d552 + 6);
+-    if (uVar2 < (uint)DAT_1000_d56a[6]) {
+-      DAT_2000_2b70 = uVar2 - ((uint)DAT_1000_d56a[6] >> 1);
+-      puVar3 = (undefined1 *)
+-               (*(int *)((uVar1 + *(int *)(DAT_1000_d552 + 0xc)) * 2 + DAT_1000_c794) +
+-               ((uint)DAT_1000_d56a[6] >> 1) + DAT_2000_2b70 + *(int *)(DAT_1000_d552 + 0xe));
+-      if (*DAT_1000_d56a == DAT_1000_c722) {
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_d59c)))();
+-        LOCK();
+-        DAT_2000_2b76 = *puVar3;
+-        *puVar3 = 0xff;
+-        UNLOCK();
+-        DAT_2000_2b74 = puVar3;
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a0)))();
+-        return;
+-      }
+-      LOCK();
+-      DAT_2000_2b76 = *puVar3;
+-      *puVar3 = 0xff;
+-      UNLOCK();
+-      DAT_2000_2b74 = puVar3;
+-    }
++  /* PATCH 323: crosshair/reticle PLOT (asm 0x3fbf, DS=DGROUP=0x1c00) -- near-twin of the reconstructed
++     3fba (patch 194) but called by 3a0f (no cursor advance).  Base-losses reached for the first time by
++     the now-iterating mission loop: si=word[0x1552] / di=word[0x156a] are dst/src geom NEAR OFFSETS
++     (Ghidra DAT_1000_d552 int* / d56a int** -> host-ptr deref SIGSEGV); the plot address is
++     rowtab[cx]+dx inside the page-seg es=word[word[0x156a]].  Rebased onto g_mem+0x1c000; plot es:[di]. */
++  uint16_t si_off = *(uint16_t *)(g_mem + 0x1d552);
++  uint16_t di_off = *(uint16_t *)(g_mem + 0x1d56a);
++  uint8_t *src = g_mem + 0x1c000 + si_off;
++  uint8_t *dst = g_mem + 0x1c000 + di_off;
++  uint16_t ax, cx, dx, di, es;
++  ax = (uint16_t)(*(uint16_t *)(g_mem + 0x1d5b8) - *(uint16_t *)(src + 4));   /* word[0x15b8]-[si+4] */
++  if (ax >= *(uint16_t *)(dst + 0xa)) return;                           /* cmp [di+0xa]; jae ret */
++  cx = ax;
++  dx = (uint16_t)(*(uint16_t *)(dst + 0xa) >> 1);
++  ax = (uint16_t)(ax - dx);
++  *(uint16_t *)(g_mem + 0x22b6e) = ax;                                  /* word[0x6b6e]=ax */
++  ax = (uint16_t)(*(uint16_t *)(g_mem + 0x1d5ba) - *(uint16_t *)(src + 6));   /* word[0x15ba]-[si+6] */
++  if (ax >= *(uint16_t *)(dst + 0xc)) return;                           /* cmp [di+0xc]; jae ret */
++  dx = (uint16_t)(*(uint16_t *)(dst + 0xc) >> 1);
++  ax = (uint16_t)(ax - dx);
++  dx = (uint16_t)(dx + ax);                                             /* add dx,ax */
++  *(uint16_t *)(g_mem + 0x22b70) = ax;                                  /* word[0x6b70]=ax */
++  cx = (uint16_t)(cx + *(uint16_t *)(src + 0xc));                       /* add cx,[si+0xc] */
++  dx = (uint16_t)(dx + *(uint16_t *)(src + 0xe));                       /* add dx,[si+0xe] */
++  es = *(uint16_t *)(g_mem + 0x1c000 + di_off);                         /* ax=word[di]=page seg; es=ax */
++  ax = es;
++  di = (uint16_t)(cx + cx);                                             /* di=cx*2 */
++  di = (uint16_t)(di + *(uint16_t *)(g_mem + 0x1c794));                 /* add di,word[0x794] */
++  di = *(uint16_t *)(g_mem + 0x1c000 + di);                            /* di=rowtab[cx] (word[DGROUP:di]) */
++  di = (uint16_t)(di + dx);                                             /* add di,dx */
++  if (ax == *(uint16_t *)(g_mem + 0x1c722)) {                           /* cmp ax,word[0x722]; je 0x4022 */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_d59c)))();             /* lcall [0x159c] */
++    es = *(uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1d56a));  /* es=word[word[0x156a]] */
++    { uint8_t *p = g_mem + (((uint32_t)es << 4) + di);
++      *(uint8_t *)(g_mem + 0x22b76) = *p; *p = 0xff; }                  /* xchg es:[di],0xff */
++    *(uint16_t *)(g_mem + 0x22b74) = di;                                /* word[0x6b74]=di */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a0)))();             /* lcall [0x15a0] */
++    return;
+   }
++  { uint8_t *p = g_mem + (((uint32_t)es << 4) + di);
++    *(uint8_t *)(g_mem + 0x22b76) = *p; *p = 0xff; }                    /* xchg es:[di],0xff */
++  *(uint16_t *)(g_mem + 0x22b74) = di;                                  /* word[0x6b74]=di */
+   return;
+ }
+ 
+@@ -63709,7 +63734,12 @@
+   FUN_1000_52d1(param_1,param_2);
+   FUN_1000_524e(2);
+   FUN_1000_530b(unaff_CS);
+-  uVar1 = FUN_0000_a186(*(undefined2 *)(DAT_2000_2d34 + 0x26));
++  /* PATCH 323: base-loss.  asm 0x1a733 `mov di,[0x6d34]; mov ax,[di+0x26]` -- di=word[DGROUP:0x6d34] is
++     the player-vehicle node NEAR OFFSET (0xc05c); Ghidra's DAT_2000_2d34 macro is *(int**) so
++     `DAT_2000_2d34 + 0x26` deref'd (int*)0xc05c+0x98 as a host address -> SIGSEGV.  Read the near-offset
++     word and rebase g_mem+0x1c000+(uint16)(vn+0x26). */
++  uVar1 = FUN_0000_a186(*(uint16_t *)(g_mem + 0x1c000 +
++            (uint16_t)(*(uint16_t *)(g_mem + 0x22d34) + 0x26)));
+   uVar2 = 0;
+   FUN_0000_02e8(uVar1,(undefined1 *)&DAT_1000_df8c);
+   _DAT_1000_df91 = 0x17;

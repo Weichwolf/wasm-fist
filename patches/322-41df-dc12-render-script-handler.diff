@@ -1,0 +1,157 @@
+PATCH 322: promote + reconstruct the missing 22dd render-script handler 0x41df (-> dc12 object/vehicle
+geometry-record poster) so FUN_0000_22dd RETURNS and the 459a mission loop ITERATES (c452 advances).
+
+THE ACTUAL ROOT CAUSE (asm + gdb verified; the predecessor's "spin in the op-0x4c present pump inside the
+extender gate" premise was a MISDIAGNOSIS).  The mission ACCEPT path reaches FUN_0000_459a (the fixed-
+timestep mission game loop).  Its OUTER do-loop already pumps the cooperative INT-8 tick every frame
+(patch 295: `fist_timer_pump()` at the top), then renders via FUN_0000_22dd().  BUT 22dd NEVER RETURNS:
+
+  22dd (asm 0x22dd, DS=DGROUP): render branch does `c450=3; do { call word[DGROUP:word[0x4a86]] }
+  while(c450!=0)` -- a threaded-code interpreter walking a per-phase script table (cursor DAT_2000_0a86,
+  each handler advances the cursor +2; the phase terminator 23ce clears c450 -> loop exits).
+
+gdb on the live spin (BATTLES(160,100)->OK(205,128)->ACCEPT(40,186), FIST_TICK_HZ=25000): the do-while
+calls fist_icall_near(0, 0x41df) forever, cursor frozen, c452==1.  The phase-0x20 script from the cursor is
+[41df, 378e, 23ce] -- 378e/23ce are registered, but 0x41df is a script MID-ENTRY Ghidra never promoted, so
+fist_icall(0x41df) misses the fmap (g_mem[0x41de]==0xc3, not a leading nop) and returns the no-op
+trap_tramp -> the cursor never advances -> the interpreter spins -> 22dd never returns -> 459a's outer
+loop (and its patch-295 pump) never re-runs -> c452 frozen at 1 -> the per-tick flight model (c0ca/461b) +
+terrain-follow never run.  EXACT same class as patch 193 (0x41d0) and patch 306 (0x41c7).
+
+0x41df (asm, verified vs re_out/fist_dat_image.bin): `call dc12; movw 0,[0x4b9e]; addw 2,[0x4a86]; ret`
+-- identical shape to 0x41d0, calling dc12 instead of db99.
+
+FUN_0000_dc12 (asm 0xdc12-0xdd14) -- the OBJECT/VEHICLE geometry-record poster, sibling of db99:
+  - call ddff (the shared record prolog); es:di = word[0xea2e]:word[0xea2c] = the extender-TCB record base
+    (patch-068 DAT_2000_aa2c macro).
+  - copy the camera fields d548-struct [0x12..0x1c] -> rec[0x2c..0x36]; rec[0x38]=word[0x1558]; rec[0x58]=5.
+  - si = word[0x6d34] = the player-vehicle node NEAR OFFSET (DAT_2000_2d34).  Object-delta select:
+      * node[0x1c]!=0 (object): bx=word[DGROUP:node[0x1b]*8+0x6d3c]; if bx!=0 -> ax=b112(obj,veh),
+        rec[0x56]=ax, rec[0x58]|=2.
+      * else (non-object): bx=word[DGROUP:node[0x1b]*2+0x7d2a]; if byte[DGROUP:bx]!=0 ->
+        ax=0731(bx+0xc, veh+4)+0x80@ah, rec[0x56]=ax, rec[0x58]|=2.
+      * both tables empty (dc9a): if node[0x19]&0x80 -> rec[0x58]=(|2)&0xfb; rec[0x56]=word[veh+0x8e];
+        rec[0x58]|=2.  (bit7 clear -> je dcb7: rec[0x56]/rec[0x58] untouched.)
+  - rec[0x3e]=byte[0x154a]<<6 (ah=[0x154a];al=0;shr ax,2); rec[0x2]=word[DGROUP:word[0x156a]] (page seg);
+    rec[0x4]=0; inbox rec[0x3f2]=EBX; op word[0xea10] = (word[0xea12]!=0 ? 0x10 : 0x5c); call e339.
+
+BASE-LOSS: the vehicle/object near offsets index DGROUP -> rebased g_mem+0x1c000+off; b112/0731 (the
+already-reconstructed object-delta helpers) take those as host pointers (param_1<->si, param_2<->di,
+matched vs the af1c b112 call site: b112(other,self) => here b112(object,vehnode)).  EBX inbox is PROVABLY
+DEAD for these display-list ops (the PM op-handler reloads ebx=[0xc93] before use, per patch 193's op-0xc
+analysis) -> written 0, not fabricated.  Live-verified on AZER1: node[0x1c]==0 && node[0x19]&0x80 -> the
+word[veh+0x8e] path (b112/0731 skipped this frame; both branches reconstructed for faithfulness).
+
+RESULT (default `make native`, mission ACCEPT path): 22dd returns, the 459a outer loop iterates, c452
+advances one tick per frame (patch 295's pump), op 0x24 re-posts every frame, and the mission FB changes
+frame-to-frame (the flight-model sim + radar now advance).  MISSION-PATH ONLY (the 22dd render script is
+reached only inside the d548-gated in-mission 459a loop) -> strictly behaviour-neutral for the 24 menu/
+pre-mission verify flows (d548==0 in the menu; 41df/dc12 have no menu callers).  Sources stay pristine
+(re_out/fist.c 61453e42); patched via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -1391,6 +1391,8 @@
+ void __allregs FUN_0000_41c7(void);   /* PATCH 306: phase-0x1c render-script handler (script entry 1) */
+ void __allregs FUN_0000_db99(void);   /* PATCH 193: op-0xc display-list geom-record poster */
+ void __allregs FUN_0000_41d0(void);   /* PATCH 193: 22dd handler (calls db99) */
++void __allregs FUN_0000_dc12(void);   /* PATCH 322: op-0x10/0x5c object-geom record poster */
++void __allregs FUN_0000_41df(void);   /* PATCH 322: 22dd handler (calls dc12) */
+ void __allregs FUN_0000_40ec(void);   /* PATCH 194: crosshair-erase */
+ void __allregs FUN_0000_3fba(void);   /* PATCH 194: crosshair-draw handler */
+ void __allregs FUN_0000_41ee(void);   /* PATCH 194: 22dd handler (calls 49b5) */
+@@ -34864,6 +34866,86 @@
+   return;
+ }
+ 
++/* PATCH 322: FUN_0000_dc12 -- the 22dd render-script OBJECT/VEHICLE geometry-record poster (asm 0xdc12,
++ * DS=SS=DGROUP=0x1c00).  Sibling of db99 (patch 193): calls the record prolog ddff, copies the camera
++ * fields into the extender-TCB record (es:di = word[0xea2e]:word[0xea2c] = DAT_2000_aa2c), computes the
++ * player-object relative geometry (b112/0731 object-delta helpers, already reconstructed), and posts op
++ * 0x10 (ea12!=0) / op 0x5c (ea12==0) to the Doug-Huffman extender via e339.  Base-loss rebasing: the
++ * vehicle/object near offsets (word[0x6d34]=veh node; word[bx*8+0x6d3c]; word[bx*2+0x7d2a]) index DGROUP
++ * -> g_mem+0x1c000+off; b112/0731 take those as host pointers (param_1<->si, param_2<->di, matched vs the
++ * af1c call site: b112(other,self) => b112(object,vehnode); 0731(si-ptr,di-ptr)).  EBX inbox (rec+0x3f2)
++ * is provably dead for these display-list ops (the PM op-handler reloads ebx=[0xc93] first, per patch 193)
++ * -> written 0, not fabricated. */
++void __allregs FUN_0000_dc12(void)
++{
++  uint8_t *rec;
++  uint8_t *d548 = g_mem + 0x1d548;                 /* si=0x1548 (immediate) */
++  uint16_t vn, bx, ax;
++  int done = 0;
++  FUN_0000_ddff();                                 /* build record[0x0e..0x24] */
++  rec = DAT_2000_aa2c;                             /* ea2c/ea2e unchanged by ddff */
++  *(uint16_t *)(rec + 0x2c) = *(uint16_t *)(d548 + 0x12);   /* d548 struct [0x12..0x1c] */
++  *(uint16_t *)(rec + 0x2e) = *(uint16_t *)(d548 + 0x14);
++  *(uint16_t *)(rec + 0x30) = *(uint16_t *)(d548 + 0x16);
++  *(uint16_t *)(rec + 0x32) = *(uint16_t *)(d548 + 0x18);
++  *(uint16_t *)(rec + 0x34) = *(uint16_t *)(d548 + 0x1a);
++  *(uint16_t *)(rec + 0x36) = *(uint16_t *)(d548 + 0x1c);
++  *(uint16_t *)(rec + 0x38) = *(uint16_t *)(g_mem + 0x1d558);   /* word[0x1558] */
++  rec[0x58] = 5;                                   /* movb es:[di+0x58],5 */
++  vn = *(uint16_t *)(g_mem + 0x1c000 + 0x6d34);    /* si = word[0x6d34] veh node near offset */
++  {
++    uint8_t *node = g_mem + 0x1c000 + vn;
++    if (node[0x1c] != 0) {                         /* dc5a: object branch (8-byte stride table 0x6d3c) */
++      bx = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(node[0x1b] * 8 + 0x6d3c));
++      if (bx != 0) {                               /* dc6b or bx,bx; je dc9a */
++        ax = (uint16_t)FUN_0000_b112(g_mem + 0x1c000 + bx, g_mem + 0x1c000 + vn); /* b112(obj,veh) */
++        *(uint16_t *)(rec + 0x56) = ax;            /* dcae */
++        rec[0x58] |= 2;                            /* dcb2 */
++        done = 1;
++      }
++    } else {                                       /* dc7b: non-object branch (2-byte stride table 0x7d2a) */
++      bx = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(node[0x1b] * 2 + 0x7d2a));
++      if (g_mem[0x1c000 + bx] != 0) {              /* dc85 cmpb [bx],0; je dc9a */
++        ax = (uint16_t)FUN_0000_0731((uint *)(g_mem + 0x1c000 + (uint16_t)(bx + 0xc)),   /* si=bx+0xc */
++                                     (uint *)(g_mem + 0x1c000 + (uint16_t)(vn + 4)));     /* di=veh+4 */
++        ax = (uint16_t)((ax & 0xff) | (((ax >> 8) + 0x80) << 8));   /* dc94 add ah,0x80 */
++        *(uint16_t *)(rec + 0x56) = ax;            /* dcae */
++        rec[0x58] |= 2;                            /* dcb2 */
++        done = 1;
++      }
++    }
++    if (!done) {                                   /* dc9a: both object tables empty */
++      if (node[0x19] & 0x80) {                     /* dc9a testb [si+0x19],0x80; je dcb7 */
++        rec[0x58] = (uint8_t)((rec[0x58] | 2) & 0xfb);           /* dca0 orb 2; dca5 andb 0xfb */
++        *(uint16_t *)(rec + 0x56) = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(vn + 0x8e)); /* dcaa [si+0x8e] */
++        rec[0x58] |= 2;                            /* dcb2 */
++      }
++      /* else dc9e je dcb7: rec+0x56 / rec+0x58 left unchanged */
++    }
++  }
++  *(uint16_t *)(rec + 0x3e) = (uint16_t)(g_mem[0x1d54a] << 6);  /* dcb7 ah=[0x154a];al=0;shr ax,2 */
++  *(uint16_t *)(rec + 0x02) = *(uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1d56a)); /* word[word[0x156a]] */
++  *(uint16_t *)(rec + 0x04) = 0;                   /* dcce */
++  *(uint32_t *)(rec + 0x3f2) = 0;                  /* inbox = EBX (provably dead for op 0x10/0x5c) */
++  DAT_2000_aa10 = (DAT_2000_aa12 != 0) ? 0x10 : 0x5c;  /* dcd4 cmpw [0xea12],0 -> op 0x10 / 0x5c */
++  FUN_0000_e339();
++  return;
++}
++
++/* PATCH 322: the 22dd render-script handler @ 0000:41df (`call dc12; word[0x4b9e]=0; addw 2,[0x4a86]; ret`).
++ * A 22dd script MID-ENTRY Ghidra never promoted -> fist_icall_near(0,0x41df) trapped to a no-op -> the
++ * interpreter cursor (DAT_2000_0a86) never advanced past it -> FUN_0000_22dd's `c450=3; do{call[cursor]}
++ * while(c450!=0)` do-while spun forever (the phase terminator 23ce that clears c450 was never reached),
++ * freezing the whole 459a mission loop (c452 stuck at 1, so patch-295's per-frame pump never re-runs).
++ * Sibling of 41d0 (patch 193) / 41c7 (patch 306); posts the object/vehicle geometry record via dc12. */
++void __allregs FUN_0000_41df(void)
++{
++  FUN_0000_dc12();
++  *(uint16_t *)(g_mem + 0x1c000 + 0x4b9e) = 0;
++  DAT_2000_0a86 = (uint16_t)(DAT_2000_0a86 + 2);   /* addw 2,[0x4a86] */
++  return;
++}
++
+ 
+ /* ===== PATCH 194: complete the mission-viewport 22dd handler sub-list 1 (0x3fba crosshair-draw,
+  * 0x40ec crosshair-erase, 0x41ee -> 49b5, 0x23ce terminate).  asm-verified vs re_out/fist_dat_image.bin,
+@@ -71858,6 +71940,7 @@
+   {0x41aeu,(void*)&FUN_0000_41ae},
+   {0x41c7u,(void*)&FUN_0000_41c7},   /* PATCH 306: 22dd phase-0x1c handler (dd15 camera->TCB copy) */
+   {0x41d0u,(void*)&FUN_0000_41d0},   /* PATCH 193: 22dd op-0xc geom-record handler */
++  {0x41dfu,(void*)&FUN_0000_41df},   /* PATCH 322: 22dd op-0x10/0x5c object-geom-record handler */
+   {0x41eeu,(void*)&FUN_0000_41ee},   /* PATCH 194: 22dd handler (calls 49b5) */
+   {0x4222u,(void*)&FUN_0000_4222},
+   {0x422eu,(void*)&FUN_0000_422e},
