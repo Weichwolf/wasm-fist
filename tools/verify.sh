@@ -38,6 +38,30 @@ FLOWS=(
   # only on ACCEPT).  ref via tools/refcapture_click2.sh 160 126 181 23 (2 independent DOSBox captures
   # AE=0 -> deterministic, non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
   "settings-sky|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:23:0; 3600:181:23:1; 4200:181:23:0; 4800:181:23:0|$ROOT/ref/settings_sky_native320.png"
+  # SETTINGS RADIO toggle (patch 319): open SETTINGS (160,126), then CLICK the MEDIUM DETAIL radio
+  # (181,52).  The default DETAIL is HIGH (lit); clicking MEDIUM runs the ACTIVATE handler 6af0 -> 6b27
+  # (now threads the handler id BX -> the radio handlers, patch 319) -> 6bcc(bx=0x14) -> 6eb8(2): sets
+  # the DETAIL state word 0x8b47=2, updates the bottom status line to "DETAIL SET TO MEDIUM" via 7018
+  # (reading the per-value status id from DGROUP:0x8b3f -- 6eb8's DGROUP base-loss fixed by 319), and
+  # marks the 3 DETAIL radio widgets dirty (BYTE, retyped by 319).  The dirty-walk 209e re-paints the 3
+  # radios via 6cf4 -> the lit indicator MOVES from HIGH (dark) to MEDIUM (lit) bit-identically.  Static
+  # frame (no blink) -> plain FIST_RUNMS dump.  READ-only (a radio persists only on ACCEPT).  ref via
+  # tools/refcapture_click2.sh 160 126 181 52 40 8 8 (2 independent DOSBox captures AE=0 -> deterministic,
+  # non-circular).  AE=0 native AND wasm; native md5 == wasm md5, deterministic (5x single md5).
+  "settings-detail-med|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:52:0; 3600:181:52:1; 4200:181:52:0; 4800:181:52:0|$ROOT/ref/settings_detail_med_native320.png"
+  # SETTINGS RADIO toggle (patch 319), SOUND-FX group (3 radios): open SETTINGS, click the MEDIUM SOUND-FX
+  # radio (246,150).  Default SOUND FX = HIGH (lit); the click -> 6af0 -> 6b27 -> 6bde(bx=0x1e..) ->
+  # 6ee2: SOUND-FX state word 0x8b4b, marks the 3 SOUND-FX widgets dirty (4bc1/4bc4/4bc7, BYTE) -> the
+  # lit indicator MOVES HIGH->MEDIUM (6d16 renderer).  No status change (SOUND has no 7018 status line).
+  # ref via tools/refcapture_click2.sh 160 126 246 150 40 8 8 (2x AE=0, non-circular).  AE=0 both targets.
+  "settings-sound-fx-med|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:246:150:0; 3600:246:150:1; 4200:246:150:0; 4800:246:150:0|$ROOT/ref/settings_sound_fx_med_native320.png"
+  # SETTINGS RADIO toggle (patch 319), MUSIC group (2 radios): open SETTINGS, click the OFF MUSIC radio
+  # (181,136).  Default MUSIC = ON (lit); the click -> 6b27 -> 6bd5 -> 6ed4: MUSIC state word 0x8b49,
+  # marks the 2 MUSIC widgets dirty (uRam00024bb8/4bbb, BYTE) -> the lit indicator MOVES ON->OFF (6d05
+  # renderer).  ref via tools/refcapture_click2.sh 160 126 181 136 40 8 8 (2x AE=0, non-circular).  AE=0
+  # both targets.  (Together detail-med/sound-fx-med/music-off exercise every patch-319 change: the 6b27
+  # arg thread, the 6eb8 status base-loss, and all 8 radio dirty-flag BYTE retypings.)
+  "settings-music-off|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:136:0; 3600:181:136:1; 4200:181:136:0; 4800:181:136:0|$ROOT/ref/settings_music_off_native320.png"
   "review|25000|22000|200:160:113:0; 800:160:113:1; 1400:160:113:0; 2000:160:113:0|$ROOT/ref/review_native320.png"
   "selplayer|25000|22000|200:160:74:0; 800:160:74:1; 1400:160:74:0; 2000:160:74:0|$ROOT/ref/selplayer_native320.png"
   "battles|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 2000:160:100:0|$ROOT/ref/battles_native320.png"

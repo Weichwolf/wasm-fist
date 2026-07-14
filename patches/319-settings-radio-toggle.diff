@@ -1,0 +1,103 @@
+SETTINGS RADIO toggles: clicking a DETAIL / SOUND-FX / MUSIC radio moves it + re-renders bit-identically.
+
+The SKY checkbox toggle was bit-verified (patch 318), but the DETAIL / SOUND / MUSIC RADIO groups did
+not respond to a click: the near-handler dispatch FUN_0000_6b27 dropped the handler-id register the
+radio handlers need, and the DETAIL handler FUN_0000_6eb8 had a DGROUP base-loss (SIGSEGV) plus the
+radio widgets' dirty flags were WORD-typed (the patch 318 store-width class).  Three asm-verified fixes
+(vs re_out/fist_dat_image.bin, DS=DGROUP=0x1c00); each radio now moves the lit indicator + updates the
+status line byte-identically to the DOSBox reference (flows settings-detail-med / settings-sound-fx-med
+/ settings-music-off).
+
+1. FUN_0000_6b27 (asm 0x6b27: `call WORD PTR cs:[bx+0x6b2d]`).  The near-handler dispatch is entered
+   with BX (the handler id, = param_1) STILL LIVE, and the radio handlers read it:
+     6bcc: `sub bx,0x12; mov ax,bx; call 6eb8`   (DETAIL LOW/MED/HIGH -> value 0/2/4)
+     6bd5: `sub bx,0x18; mov ax,bx; call 6ed4`   (MUSIC OFF/ON)
+     6bde: `sub bx,0x1e; mov ax,bx; call 6ee2`   (SOUND-FX OFF/MED/HIGH)
+   Ghidra emitted the dispatch ARG-LESS -> the radio handlers ran on a garbage bx.  Thread bx=param_1
+   into the dispatched handler (the checkbox handlers 6b60/6bb1/6be7/6c02/6c1d take void and ignore the
+   extra cdecl arg).  (The handler-id -> near-offset table read was already rebased by patch 318.)
+
+2. FUN_0000_6eb8 (asm 0x6eb8: the DETAIL radio handler).  `a3 47 8b mov ds:0x8b47,ax` stores the value;
+   `8b b7 3d 8b mov si,[bx-0x74c3]` (bx=ax, DS=DGROUP) reads the per-value status-string id from
+   word[DGROUP:(param_1-0x74c3)] = 0x8b3d/0x8b3f/0x8b41 and 7018 sets the bottom status ("DETAIL SET TO
+   LOW/MEDIUM/HIGH").  Ghidra dropped the DGROUP base -> `*(int*)(param_1-0x74c3)` = a raw host deref of
+   the near-offset (fault 0xffff8b3f for MEDIUM).  Rebase to g_mem+0x1c000+(uint16)(param_1-0x74c3).
+
+3. The radio/checkbox widget DIRTY flags are BYTEs (asm `c6 06 .. 03  mov BYTE PTR ds:0xNN,0x3`) but
+   were typed WORD (the patch 318 / 104 / 134 store-width class): the WORD `= 3` writes 0x0003, whose
+   high byte clobbers the adjacent widget's renderer-index byte -> the dirty-walk 209e re-paints the
+   WRONG renderer (a garbage sprite / no indicator move).  Retype to BYTE the eight radio dirty flags
+   that are ONLY ever written `= 3`: 0x8bac/0x8baf/0x8bb2 (DETAIL, 6eb8), 0x8bb8/0x8bbb (MUSIC, 6ed4),
+   0x8bc1/0x8bc4/0x8bc7 (SOUND-FX, 6ee2).
+
+The state renderers (6cf4 DETAIL / 6d05 MUSIC / 6d16 SOUND-FX / 6ce5 SKY) and the sprite blit 6d54 were
+already reconstructed (patch 132); this patch just makes the click reach them with the right state.
+
+Result: byte-identical to the DOSBox reference on all three new flows (AE=0 native + wasm, native<->wasm
+0-diff, deterministic 5x single md5).  Reached only by clicking a radio inside SETTINGS -> the prior
+flows are behaviour-neutral (6b27's extra arg is ignored by every non-radio handler; 6eb8/the radio
+dirty flags are touched only on a radio click; settings / settings-sky unchanged).
+
+--- a/fist.c
++++ b/fist.c
+@@ -3304,14 +3304,14 @@
+ #define DAT_2000_4ba0 (*(undefined2 *)(g_mem+0x24ba0))
+ #define DAT_2000_4ba3 (*(undefined2 *)(g_mem+0x24ba3))
+ #define DAT_2000_4ba9 (*(undefined1 *)(g_mem+0x24ba9))   /* PATCH 318: SKY widget dirty-flag is a BYTE (asm mov byte,3); the WORD `=3` clobbered the renderer-index byte 0x8baa -> re-paint dispatched the wrong renderer */
+-#define DAT_2000_4bac (*(undefined2 *)(g_mem+0x24bac))
+-#define DAT_2000_4baf (*(undefined2 *)(g_mem+0x24baf))
+-#define DAT_2000_4bb2 (*(undefined2 *)(g_mem+0x24bb2))
++#define DAT_2000_4bac (*(undefined1 *)(g_mem+0x24bac))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
++#define DAT_2000_4baf (*(undefined1 *)(g_mem+0x24baf))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
++#define DAT_2000_4bb2 (*(undefined1 *)(g_mem+0x24bb2))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+ #define DAT_2000_4bb5 (*(undefined2 *)(g_mem+0x24bb5))
+-#define DAT_2000_4bbb (*(undefined2 *)(g_mem+0x24bbb))
+-#define DAT_2000_4bc1 (*(undefined2 *)(g_mem+0x24bc1))
+-#define DAT_2000_4bc4 (*(undefined2 *)(g_mem+0x24bc4))
+-#define DAT_2000_4bc7 (*(undefined2 *)(g_mem+0x24bc7))
++#define DAT_2000_4bbb (*(undefined1 *)(g_mem+0x24bbb))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
++#define DAT_2000_4bc1 (*(undefined1 *)(g_mem+0x24bc1))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
++#define DAT_2000_4bc4 (*(undefined1 *)(g_mem+0x24bc4))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
++#define DAT_2000_4bc7 (*(undefined1 *)(g_mem+0x24bc7))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+ #define DAT_2000_4bca (*(undefined2 *)(g_mem+0x24bca))
+ #define DAT_2000_4bd0 (*(undefined2 *)(g_mem+0x24bd0))
+ #define DAT_2000_4bd4 (*(undefined2 *)(g_mem+0x24bd4))
+@@ -3969,7 +3969,7 @@
+ #define uRam0001c290 (*(undefined2 *)(g_mem+0x1c290))
+ #define uRam0001c466 (*(undefined2 *)(g_mem+0x1c466))
+ #define uRam00022bc8 (*(undefined2 *)(g_mem+0x22bc8))
+-#define uRam00024bb8 (*(undefined2 *)(g_mem+0x24bb8))
++#define uRam00024bb8 (*(undefined1 *)(g_mem+0x24bb8))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+ #define uRam00024bbe (*(undefined2 *)(g_mem+0x24bbe))
+ #define uRam000f0000 (*(undefined2 *)(g_mem+0xf0000))
+ #define uRam000f0001 (*(undefined2 *)(g_mem+0xf0001))
+@@ -17896,8 +17896,11 @@
+ {
+   /* PATCH 318: near-handler dispatch `call WORD PTR cs:[bx+0x6b2d]` -- the handler-id -> near-offset
+      table is at CS=0 image offset 0x6b2d (the engine image loads at g_mem+0); Ghidra deref'd it as a
+-     host address.  Rebase to g_mem+(uint16)(param_1+0x6b2d). */
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(uint16_t *)(g_mem + (uint16_t)(param_1 + 0x6b2d)))))();
++     host address.  Rebase to g_mem+(uint16)(param_1+0x6b2d).
++     PATCH 319: the dispatch is `call cs:[bx+0x6b2d]` with BX (=param_1, the handler id) STILL LIVE --
++     the radio handlers 6bcc/6bd5/6bde read it (`sub bx,0x12/0x18/0x1e; mov ax,bx`); Ghidra dropped the
++     arg.  Thread bx=param_1 into the dispatched handler (checkbox handlers take void and ignore it). */
++  (*(void (*)(int))fist_icall_near(0x0u,(uint16_t)(*(uint16_t *)(g_mem + (uint16_t)(param_1 + 0x6b2d)))))(param_1);
+   return;
+ }
+ 
+@@ -18563,8 +18566,14 @@
+ void __allregs FUN_0000_6eb8(int param_1)
+ 
+ {
++  /* PATCH 319: DETAIL LOW/MED/HIGH radio handler (asm 0x6eb8).  ax(=param_1)=this radio's value
++     0/2/4 -> store to the DETAIL state word[0x8b47]; then read the per-value status-string id from the
++     DGROUP table `mov si,[bx-0x74c3]` (DS=DGROUP=0x1c00, bx=ax) = word[DGROUP:(param_1-0x74c3)]
++     (0x8b3d/0x8b3f/0x8b41) and set the bottom status line via 7018; then mark the 3 DETAIL radio
++     widgets dirty (BYTE, retyped above).  Ghidra dropped the DGROUP base on the status read -> a raw
++     host deref of the near-offset 0x8b3f (fault 0xffff8b3f).  Rebase to g_mem+0x1c000. */
+   DAT_2000_4b47 = param_1;
+-  FUN_0000_7018(*(undefined2 *)(param_1 + -0x74c3));
++  FUN_0000_7018(*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(param_1 + -0x74c3)));
+   DAT_2000_4bac = 3;
+   DAT_2000_4baf = 3;
+   DAT_2000_4bb2 = 3;
