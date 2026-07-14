@@ -1,0 +1,127 @@
+PATCH 306: register + reconstruct the phase-0x1c render-script handler 0x41c7 and its callee dd15 =
+the per-frame CAMERA -> extender-TCB copy (the LIVE mission camera feed the op-0x24 9200 voxel
+renderer needs).  asm-verified vs re_out/fist_dat_image.bin (DS=DGROUP=0x1c00).
+
+The in-mission 22dd render-cursor-walk dispatches the phase-0x1c script @DGROUP:0x6c82 =
+[23ef,41c7,2471,286e,3b59,23ce,...] via `call word[DGROUP:cursor]`.  Script entry 1 = 0x41c7, an
+UNPROMOTED engine mid-entry (Ghidra never recovered it -> the fist_icall fmap TRAPPED it -> the
+handler's own `addw $2,[0x4a86]` cursor-advance never ran -> the 22dd loop SPUN FOREVER -> 459a never
+completed the frame -> the 209e paint walk / op-0x24 poster was never reached).  This was the pinned
+frontier (gdb-verified spin at 0x2471=off 9329 dispatch, cursor stuck at entry 1).
+
+  FUN_0000_41c7 (asm 0x41c7): `call dd15; addw $2,[0x4a86]; ret` -- feed the camera, advance the cursor.
+  FUN_0000_dd15 (asm 0xdd15-0xddc3): structurally identical to db99 (patch 193) -- ddff() builds the
+    viewport geom record into the extender TCB (es:di = word[0xea2e]:word[0xea2c] = DAT_2000_aa2c), then
+    the mission camera block DGROUP:0x155a (= d548+0x12, the SAME source db99 copies) is written to
+    rec+0x2c..0x36 (32-bit X/Y/Z), rec+0x38/0x3e/0x3c/0x3a (heading/detail from the word[0x6d34]
+    descriptor + byte[0x154a]), and extender op 8 (display-list setup) is posted via e339.  Base-loss
+    rebase: every si/bx near-offset -> g_mem+0x1c000+off; TCB = DAT_2000_aa2c (patch 068).  The +0x3f2
+    inbox EBX low16 = the sar-computed value (high16 caller-ambient, op-8 handler overwrites it per the
+    op-0xc/db99 precedent -> not fabricated).
+
+Both are registered in the fist_icall fmap (the unpromoted-mid-entry class, patches 121/193/292).
+OBSERVED-REACHED on the genuine BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1 run: op 0x08 now
+POSTS and the cursor advances past 41c7 to entry 2 (0x2471, the next frontier -> patch 307).
+MISSION-PATH ONLY (the 22dd interpreter is gated by byte[DGROUP:0x1548] d548 > 0, which is 0 on the
+menu + every one of the 19 verify flows) -> strictly behaviour-neutral (verify.sh both = 19/19).
+
+--- a/fist.c
++++ b/fist.c
+@@ -1387,6 +1387,8 @@
+ void __allregs FUN_0000_db3f(undefined4 param_1);
+ void __allregs FUN_0000_dde2(undefined4 param_1);
+ void __allregs FUN_0000_ddff(void);
++void __allregs FUN_0000_dd15(void);   /* PATCH 306: phase-0x1c camera->extender-TCB copy */
++void __allregs FUN_0000_41c7(void);   /* PATCH 306: phase-0x1c render-script handler (script entry 1) */
+ void __allregs FUN_0000_db99(void);   /* PATCH 193: op-0xc display-list geom-record poster */
+ void __allregs FUN_0000_41d0(void);   /* PATCH 193: 22dd handler (calls db99) */
+ void __allregs FUN_0000_40ec(void);   /* PATCH 194: crosshair-erase */
+@@ -34466,6 +34598,80 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_dd15) @ 0000:dd15 ===== */
++
++void __allregs FUN_0000_dd15(void)
++
++{
++  /* PATCH 306: FUN_0000_dd15 (asm 0xdd15-0xddc3) -- the phase-0x1c render-script CAMERA->extender-TCB
++     copy, dispatched by the 22dd render-cursor-walk handler 0x41c7.  Structurally identical to db99
++     (patch 193): ddff() builds the viewport geom record into the TCB (es:di = word[0xea2e]:word[0xea2c]
++     = DAT_2000_aa2c), then the mission camera block at DGROUP:0x155a (= d548+0x12, the same source db99
++     copies) is written to rec+0x2c..0x36 (32-bit X/Y/Z), and the extender op 8 (display-list setup) is
++     posted via e339.  dd15 additionally sets rec+0x3c/0x3a (near/detail plane, from the word[0x6d34]
++     descriptor struct) and rec+0x3e (from byte[0x154a]).  Ghidra never promoted 0xdd15 (unpromoted
++     mid-entry, class 121/193/292) -> registered in the fist_icall fmap.  Base-loss rebase: every si/bx
++     near-offset -> g_mem+0x1c000+off; TCB = DAT_2000_aa2c.  asm-verified vs re_out/fist_dat_image.bin
++     (DS=DGROUP=0x1c00). */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint8_t *rec;
++  uint16_t si, ax, bx;
++  uint8_t  bh;
++  FUN_0000_ddff();                                      /* dd15: call ddff */
++  rec = DAT_2000_aa2c;                                  /* es:di = word[0xea2e]:word[0xea2c] */
++  /* camera block si=0x155a -> rec+0x2c..0x36 (asm dd20-dd48) */
++  *(uint16_t *)(rec + 0x2c) = *(uint16_t *)(dg + 0x155a);
++  *(uint16_t *)(rec + 0x2e) = *(uint16_t *)(dg + 0x155c);
++  *(uint16_t *)(rec + 0x30) = *(uint16_t *)(dg + 0x155e);
++  *(uint16_t *)(rec + 0x32) = *(uint16_t *)(dg + 0x1560);
++  *(uint16_t *)(rec + 0x34) = *(uint16_t *)(dg + 0x1562);
++  *(uint16_t *)(rec + 0x36) = *(uint16_t *)(dg + 0x1564);
++  *(uint16_t *)(rec + 0x38) = *(uint16_t *)(dg + 0x1558);                     /* dd4c */
++  *(uint16_t *)(rec + 0x3e) = (uint16_t)((uint16_t)*(uint8_t *)(dg + 0x154a) << 8); /* dd53: ah=byte[0x154a], al=0 */
++  si = *(uint16_t *)(dg + 0x156a);                                            /* dd5d */
++  *(uint16_t *)(rec + 0x02) = *(uint16_t *)(dg + si);                         /* word[DGROUP:si] */
++  *(uint16_t *)(rec + 0x04) = 0;
++  si = *(uint16_t *)(dg + 0x6d34);                                            /* dd6d: descriptor near-offset */
++  *(uint16_t *)(rec + 0x3c) = *(uint16_t *)(dg + (uint16_t)(si + 0x22));      /* dd71 */
++  ax = *(uint16_t *)(dg + (uint16_t)(si + 0x24));                             /* dd78 */
++  bx = *(uint8_t *)(dg + (uint16_t)(si + 0x3c));                              /* dd7b: movzbw bx,byte[si+0x3c] */
++  bx &= 0xfffe;
++  bx = *(uint16_t *)(dg + (uint16_t)(bx - 0x155d));                           /* dd83: word[DGROUP:(bx-0x155d)] */
++  bh = (uint8_t)((bx >> 8) + *(uint8_t *)(dg + (uint16_t)(si + 0xa7)));       /* dd87: add bh,byte[si+0xa7] */
++  bx = (uint16_t)(((uint16_t)bh << 8) | (bx & 0xff));
++  bx = (uint16_t)(((int16_t)bx) >> 2);                                        /* dd8b: sar bx,2 (signed) */
++  ax = (uint16_t)(ax + bx);                                                   /* dd8e: add ax,bx */
++  *(uint16_t *)(rec + 0x3a) = ax;                                            /* dd90 */
++  if (*(uint8_t *)(dg + (uint16_t)(si + 0x17)) & 2) {                         /* dd94: testb [si+0x17],2 */
++    *(uint16_t *)(rec + 0x3c) = 0;
++    *(uint16_t *)(rec + 0x3a) = *(uint16_t *)(dg + 0x8d0a);
++  }
++  /* ddb1: `mov gs:[si+0x3f2],ebx` -- rec+0x3f2 = the extender command inbox (EBX).  Low16 = the computed
++     bx (dd8b sar result); the high16 is caller-ambient and the op-8 PM handler follows the op-0xc pattern
++     (its handler overwrites ebx first, provably dead -- patch 193's ddff/db99 note) -> write the computed
++     low16 without fabricating the high half. */
++  *(uint32_t *)(rec + 0x3f2) = (uint32_t)(uint16_t)bx;
++  *(uint16_t *)(dg + 0xea10) = 8;                                             /* ddb9: op = 8 */
++  FUN_0000_e339();                                                           /* ddc0 */
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_41c7) @ 0000:41c7 ===== */
++
++void __allregs FUN_0000_41c7(void)
++
++{
++  /* PATCH 306: FUN_0000_41c7 (asm 0x41c7): the phase-0x1c render-script handler at script entry 1
++     (DGROUP:0x6c82 = [23ef,41c7,2471,286e,3b59,23ce,...]) -- `call dd15; addw $2,[0x4a86]; ret`.
++     dd15 feeds the live mission camera to the extender TCB; the addw advances the 22dd render-cursor
++     (DAT_2000_0a86, the patch-185 uint16 near-offset) to the next script entry.  Ghidra never promoted
++     0x41c7 -> registered in the fist_icall fmap so the 22dd loop's `call word[DGROUP:cursor]` resolves it
++     (else the cursor never advances -> infinite spin, the pinned frontier).  asm-verified. */
++  FUN_0000_dd15();
++  DAT_2000_0a86 = (uint16_t)(DAT_2000_0a86 + 2);   /* addw $2,[0x4a86] */
++}
++
++
+ /* ===== PATCH 193: the op-0xc display-list geometry-record poster @ 0000:db99 (+ its 22dd
+  * handler 0x41d0).  asm-verified vs re_out/fist_dat_image.bin.
+  *
+@@ -71364,6 +71587,7 @@
+   {0x418au,(void*)&FUN_0000_418a},
+   {0x41a4u,(void*)&FUN_0000_41a4},
+   {0x41aeu,(void*)&FUN_0000_41ae},
++  {0x41c7u,(void*)&FUN_0000_41c7},   /* PATCH 306: 22dd phase-0x1c handler (dd15 camera->TCB copy) */
+   {0x41d0u,(void*)&FUN_0000_41d0},   /* PATCH 193: 22dd op-0xc geom-record handler */
+   {0x41eeu,(void*)&FUN_0000_41ee},   /* PATCH 194: 22dd handler (calls 49b5) */
+   {0x4222u,(void*)&FUN_0000_4222},

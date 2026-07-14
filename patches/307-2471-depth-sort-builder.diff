@@ -1,0 +1,150 @@
+PATCH 307: register + reconstruct FUN_0000_2471 = the phase-0x1c render-script DEPTH-SORT builder
+(script entry 2 @DGROUP:0x6c82).  asm-verified vs re_out/fist_dat_image.bin (DS=ES=DGROUP=0x1c00).
+
+After patch 306 advanced the 22dd cursor past 0x41c7 it stalled on entry 2 = 0x2471 (another unpromoted
+engine mid-entry -> fmap TRAP -> no cursor advance -> spin).  2471 walks the mission-object roster via
+the c33c iterator (call near [DGROUP:0x1630], patch 292; CF via g_fist_cf, returned si via
+g_fist_iter_si -- the 378e/patch-292 idiom), projects each found object (3eb3 -> e189 extender op-0x50),
+computes its view distance (8e8 -> DAT_1000_c458/c45a), inserts it into a distance-sorted singly-linked
+node list (DGROUP:0x4ba2..), then advances the render cursor.  Ghidra never promoted 0x2471 -> registered
+in the fist_icall fmap.  Base-loss rebase: es=DS=DGROUP; every bx/di/si near-offset -> g_mem+0x1c000+off.
+
+OBSERVED-REACHED on the genuine BATTLES->OK->ACCEPT AZER1 run: the roster is EMPTY on the first cockpit
+frame (c33c returns CF on the first call, gdb-confirmed via a FIST_2471DBG probe -> zero FOUND), so the
+loop exits immediately and the found body (3eb3/8e8/insertion-sort) is DORMANT.  The found body is
+reconstructed faithfully from the asm for completeness; its 3eb3->e189 op-0x50 point projection is the
+extender projection service (not yet wired -> imprecise, a documented residual analogous to a20d's
+a192/0459), so a POPULATED roster's depth-sort is a pending refinement, not exercised on the reached path.
+EFFECT: the 22dd cursor advances 41c7->2471->286e->3b59->23ce (23ce sets c450=0 -> the 22dd FRAME
+COMPLETES) -> 459a proceeds into the 209e paint walk and reaches the op-0x24 poster 795c.  MISSION-PATH
+ONLY (d548-gated) -> behaviour-neutral (verify.sh both = 19/19).
+
+--- a/fist.c
++++ b/fist.c
+@@ -9691,6 +9700,118 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_2471) @ 0000:2471 ===== */
++
++void __allregs FUN_0000_2471(void);
++void __allregs FUN_0000_2471(void)
++{
++  /* PATCH 307: FUN_0000_2471 (asm 0x2471-0x2537) -- the phase-0x1c render-script DEPTH-SORT builder
++     (script entry 2 @DGROUP:0x6c82).  Walks the mission-object roster via the c33c iterator (call near
++     [DGROUP:0x1630], patch 292); for each found object it projects it (3eb3 -> e189 extender op-0x50),
++     computes the view distance (8e8), and inserts it into a distance-sorted singly-linked list of nodes
++     (DGROUP:0x4ba2..), then advances the 22dd render cursor.  Ghidra never promoted 0x2471 -> registered
++     in the fist_icall fmap (else the 22dd cursor never advances past entry 2 -> infinite spin, the pinned
++     frontier).  Base-loss rebase: es=DS=DGROUP; every bx/di/si near-offset -> g_mem+0x1c000+off; c33c CF
++     via g_fist_cf + returned si via g_fist_iter_si (378e/patch-292 idiom).  asm-verified vs
++     re_out/fist_dat_image.bin (DS=ES=DGROUP=0x1c00).
++
++     OBSERVED-REACHED on the genuine BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1 run: the roster
++     is EMPTY on the first cockpit frame (c33c returns CF on the first call, gdb-confirmed), so the loop
++     exits immediately and the FOUND body (3eb3 projection + 8e8 + insertion sort) is DORMANT.  The found
++     body is reconstructed faithfully from the asm for completeness; its 3eb3->e189 op-0x50 point
++     projection is the extender projection service (not yet wired -> returns an imprecise projection, a
++     documented residual analogous to a20d's a192/0459), so a POPULATED roster's depth-sort is a pending
++     refinement, not exercised on the reached path. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_iter_si;
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t bx, di, si, cx, ax, dx;
++  /* 2471: word[0x6c6d] = word[0x6c62] with the low byte +1 (frame tag) */
++  ax = *(uint16_t *)(dg + 0x6c62);
++  ax = (uint16_t)((ax & 0xff00) | (uint8_t)((ax & 0xff) + 1));
++  *(uint16_t *)(dg + 0x6c6d) = ax;
++  *(uint16_t *)(dg + 0x4ba0) = 0;             /* list head = 0 */
++  *(uint16_t *)(dg + 0x4b9e) = 0;             /* iterator cursor = 0 (=> c33c INIT) */
++  bx = 0x4ba2;                                /* node array base */
++  for (;;) {                                  /* 2486: loop top */
++    si = *(uint16_t *)(dg + 0x4b9e);
++    di = bx;
++    *(uint16_t *)(dg + (uint16_t)(di + 0x1e)) = 0xffff;   /* node distance = MAX */
++    *(uint16_t *)(dg + (uint16_t)(di + 0x20)) = 0xffff;
++    /* 2496: call near [0x1630] = c33c(si, di) -> CF (done) + updated si (g_fist_iter_si) */
++    g_fist_cf = 0;
++    (*(code *)fist_icall_near(0x0u, *(uint16_t *)(dg + 0x1630)))(si, di);
++    if (g_fist_cf) break;                     /* 249c: jb 0x2512 (roster exhausted) */
++    si = g_fist_iter_si;
++    *(uint16_t *)(dg + 0x4b9e) = si;          /* 249e */
++    di = (uint16_t)((di + 1) & 0xfffe);       /* 24a2 */
++    *(uint16_t *)(dg + bx) = di;              /* 24a6: word[bx]=di */
++    /* 24a8: inline 3eb3(node=bx) -> CF = (edx == -1) (asm 0x3eb3): project the node via e189 op-0x50. */
++    {
++      uint8_t  *nd = dg + bx;
++      uint32_t e_edx;
++      /* si=bx+0xa (coord ptr), dx=word[bx+6]; ebx (ambient) -> e189 op-0x50 projection.  e189 returns
++         the projected coordinate in edx (ax/cx are the extraout multi-return, dropped by the current
++         reconstruction -> stored as 0 pending the op-0x50 service). */
++      e_edx = (uint32_t)FUN_0000_e189((uint32_t)(uint16_t)bx);
++      *(uint16_t *)(nd + 0x26) = 0;                       /* [bx+0x26]=ax (extraout, residual) */
++      *(uint16_t *)(nd + 0x28) = 0;                       /* [bx+0x28]=cx (extraout, residual) */
++      *(uint32_t *)(nd + 0x2a) = e_edx;                   /* [bx+0x2a]=edx */
++      *(uint16_t *)(nd + 0x2e) = (uint16_t)(bx + 0xa);    /* [bx+0x2e]=si (OFFSET bx+0xa) */
++      *(uint16_t *)(nd + 0x30) = di;                      /* [bx+0x30]=di */
++      if (e_edx == 0xffffffff) continue;                  /* 24ad: jb 0x2486 (behind camera) */
++    }
++    /* 24af: 8e8(si=0x155a camera, di=bx+0xa node) -> ax:dx = view distance (in DAT_1000_c458/c45a) */
++    FUN_0000_08e8((long *)(dg + 0x155a), (long *)(dg + (uint16_t)(bx + 0xa)));
++    ax = (uint16_t)DAT_1000_c458;
++    dx = (uint16_t)DAT_1000_c45a;
++    /* 24ba: 32-bit compare (word[bx+0x20]:word[bx+0x1e]) - (dx:ax); if below -> skip (already nearer) */
++    if ((uint32_t)(((uint32_t)*(uint16_t *)(dg + (uint16_t)(bx + 0x20)) << 16) |
++                   *(uint16_t *)(dg + (uint16_t)(bx + 0x1e)))
++        < (uint32_t)(((uint32_t)dx << 16) | ax))
++      continue;
++    *(uint16_t *)(dg + (uint16_t)(bx + 0x1e)) = ax;       /* 24c4: store distance */
++    *(uint16_t *)(dg + (uint16_t)(bx + 0x20)) = dx;
++    /* 24ca..24d9: clamp (ax:dx) -= (dh:dl:ch:cl of word[bx+6]); if negative clamp to 0 */
++    {
++      cx = *(uint16_t *)(dg + (uint16_t)(bx + 6));
++      int32_t d32 = (int32_t)(((uint32_t)dx << 16) | ax) - (int32_t)(uint16_t)cx;
++      if (d32 < 0) d32 = 0;
++      ax = (uint16_t)d32; dx = (uint16_t)((uint32_t)d32 >> 16);
++      *(uint16_t *)(dg + (uint16_t)(bx + 0x22)) = ax;
++      *(uint16_t *)(dg + (uint16_t)(bx + 0x24)) = dx;
++      cx = ax;
++    }
++    FUN_0000_2565((int)ax, dx, (int)(int16_t)cx);         /* 24e3: debug (no-op if word[0x29e]==0) */
++    /* 24e6..2507: insertion-sort node bx into the distance-ordered list at word[0x4ba0] */
++    {
++      uint16_t sptr = 0x4ba0;                             /* si = &head */
++      di = *(uint16_t *)(dg + 0x4ba0);                    /* di = head */
++      if (bx != 0x4ba2) {
++        for (;;) {                                        /* 24f1 */
++          uint32_t nd_d = (((uint32_t)*(uint16_t *)(dg + (uint16_t)(di + 0x24)) << 16) |
++                           *(uint16_t *)(dg + (uint16_t)(di + 0x22)));
++          if ((uint32_t)(((uint32_t)dx << 16) | cx) >= nd_d) break;  /* jae 0x2503 */
++          sptr = di;
++          di = *(uint16_t *)(dg + di);                    /* di = word[di] (next) */
++          if (di == 0) break;
++        }
++      }
++      *(uint16_t *)(dg + sptr) = bx;                      /* 2503: word[si]=bx */
++      { uint16_t tmp = *(uint16_t *)(dg + bx);            /* 2505: xchg word[bx],di */
++        *(uint16_t *)(dg + bx) = di; di = tmp; }
++      bx = di;                                            /* 2507: bx=di */
++    }
++    if (bx >= 0x6a92) break;                              /* 2509: jae 0x2512 */
++  }
++  /* 2526 tail: cursor cleanup + ADVANCE.  (The 0x29e debug-render branch at 2516-2521 is skipped when
++     word[0x29e]==0.) */
++  *(uint16_t *)(dg + 0x4b9e) = *(uint16_t *)(dg + 0x4ba0);   /* word[0x4b9e]=word[0x4ba0] */
++  DAT_2000_0a86 = (uint16_t)(DAT_2000_0a86 + 2);              /* addw $2,[0x4a86] */
++  FUN_0000_2565(0, 0, 0xffff);                               /* 2534: 2565(bx=0xffff) */
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_2486) @ 0000:2486 ===== */
+ 
+ void __allregs FUN_0000_2486(uint param_1,undefined4 param_2,uint *param_3)
+@@ -71291,6 +71513,7 @@
+   {0x23e5u,(void*)&FUN_0000_23e5},   /* PATCH 192: 22dd trig handler mid-entries */
+   {0x23eau,(void*)&FUN_0000_23ea},
+   {0x23efu,(void*)&FUN_0000_23ef},
++  {0x2471u,(void*)&FUN_0000_2471},
+   {0x2486u,(void*)&FUN_0000_2486},
+   {0x24e2u,(void*)&FUN_0000_24e2},
+   {0x2538u,(void*)&FUN_0000_2538},

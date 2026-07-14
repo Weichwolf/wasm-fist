@@ -1,0 +1,143 @@
+PATCH 308: advance the op-0x24 WINDSHIELD POSTER path -- the base-loss reconstructions the 209e paint
+walk hits inside FUN_1000_795c after patches 306/307 complete the 22dd frame + reach the poster, plus
+the 22dd d548 SIGNED-BYTE fix.  asm-verified vs re_out/fist_dat_image.bin (DS=DGROUP=0x1c00).  Each block
+was OBSERVED-REACHED as a SIGSEGV on the genuine BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1 run
+and cleared in dispatch order (the crash frontier advanced past each).
+
+ (A) FUN_0000_a329 (asm 0xa329-0xa33f) -- the class-0x11a viewport DIRTY sub-dispatch 795c calls with
+     di = the player-vehicle node (DAT_2000_2d34 = word[0x6d34], a DGROUP NEAR OFFSET): testb [di+0x1a],
+     0x10 -> dab0; else cmpw [di],2 (jae) -> db11 else db02 (all far-return tail calls; dab0/db02/db11
+     use the rebased TCB, patch 068).  Ghidra deref'd param_1 as a host pointer (fault 0xc090) AND scaled
+     the byte offset 0x1a as param_1[0xd] (uint=4B).  Rebase di -> g_mem+0x1c000+low16(param_1).
+
+ (B) FUN_1000_a20d (asm 0x1a20d-0x1a264) -- the per-frame CAMERA feed 795c calls before df0e posts op
+     0x24 (a265/patch-274 class): di = the vehicle node; write the camera position to DGROUP:0x9614/
+     0x9618/0x961c from dword[di+4]/[di+8]/[di+0xc] + the per-type height LUT word[word[di]*2-0x1a40],
+     then add the angle-rotated deltas from a192(word[di+0x10],0xaaa) with heading word[di+0x38].  Ghidra
+     host-ptr-deref'd param_1 (fault 0xc064) AND int-scaled every field.  Rebase di -> g_mem+0x1c000;
+     fields at the asm byte offsets.  NB a192->0459 is a 3-in/3-out rotation whose current 0459
+     reconstruction returns only ax faithfully (dx/cx = the extraout multi-return, dropped), so the
+     0x9618/0x961c deltas use the input dx=0xaaa/heading -- a DOCUMENTED camera-fidelity residual
+     (non-crashing; terrain renders from the correct base position).
+
+ (C) 22dd d548 SIGNED-BYTE fix (asm 0x22dd `cmpb $1,[0x1548]; jl` + 0x230d `cmpb $0x80,[0x1548]; je`).
+     The phase-complete handler 0x23ce does `orb $0x80,[0x1548]` so d548 becomes 0x80..0xff (NEGATIVE);
+     Ghidra typed DAT_1000_d548 undefined2, so `'\0' < DAT_1000_d548` read the WORD (d549 in the high
+     byte => 0x1c80 > 0) and wrongly took the render branch instead of the re-seed branch on the frame
+     AFTER 23ce armed bit7 (recon Finding 3).  Read the low BYTE, signed, at both compare sites.
+
+MISSION-PATH ONLY (a329/a20d run only inside the d548/d549-gated op-0x24 poster; the d548 compare is
+0 on the menu) -> strictly behaviour-neutral for the 19 menu/pre-mission verify flows (verify.sh both =
+19/19).  HONEST: op 0x24 does NOT yet POST -- the poster path now runs 795c->a329->a20d->a192 and the
+frontier is the FUN_0000_0459 rotation trig (a stack-frame function whose `register0x00000010` stack
+base is undefined in the __allregs flat model + its 3rd (cx) register input is dropped by the a192
+thunk), and, with the d548 re-seed now correct, the re-seeded roster-phase path (c9af/c3dc/cae6).  These
+deeper op-0x24 render-subsystem functions are the pinned next frontier (see docs/stage1.md).
+
+--- a/fist.c
++++ b/fist.c
+@@ -9432,7 +9434,12 @@
+ {
+   undefined2 uVar1;
+ 
+-  if ('\0' < DAT_1000_d548) {
++  /* PATCH 308: d548 is a SIGNED BYTE (asm 0x22dd `cmpb $1,[0x1548]; jl 0x2307`), not the 16-bit word.
++     The phase-complete handler 0x23ce does `orb $0x80,[0x1548]` -> d548 becomes 0x80..0xff (NEGATIVE);
++     Ghidra typed DAT_1000_d548 undefined2, so `'\0' < DAT_1000_d548` read the WORD (d549 in the high
++     byte => 0x1c80 > 0) and wrongly took the render branch instead of the re-seed branch on the frame
++     AFTER 23ce armed bit7.  Read the low BYTE, signed. */
++  if (0 < (int)*(int8_t *)(g_mem + 0x1d548)) {
+     uVar1 = DAT_1000_d56a;
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
+     DAT_1000_c450 = 3;
+@@ -9446,10 +9453,12 @@
+     return;
+   }
+   DAT_2000_0a86 = DAT_2000_0a88;  /* PATCH 185: WORD copy (asm 0x2307 `mov ax,[0x4a88]; mov [0x4a86],ax`), not a ptr cast */
+-  if (DAT_1000_d548 != -0x80) {
++  /* PATCH 308: asm 0x230d `cmpb $0x80,[0x1548]; je 0x2315` -- BYTE compare (Ghidra's word `!= -0x80`
++     mis-fired: e.g. d548=0x0080 word 0x1c80 != 0xff80 -> never cleared). */
++  if (*(uint8_t *)(g_mem + 0x1d548) != 0x80) {
+     return;
+   }
+-  DAT_1000_d548 = 0;
++  *(uint8_t *)(g_mem + 0x1d548) = 0;
+   return;
+ }
+ 
+@@ -26507,11 +26628,22 @@
+ void __allregs FUN_0000_a329(uint *param_1)
+ 
+ {
+-  if ((param_1[0xd] & 0x10) == 0) {
++  /* PATCH 308: base-loss + pointer-scaling reconstruction.  asm 0xa329 (DS=DGROUP=0x1c00):
++       testb [di+0x1a],0x10; jne .a333; call dab0; lret
++     .a333: cmpw [di],2; jae .a33c; call db02; lret
++     .a33c: call db11; lret
++     di = the player-vehicle/object node (DAT_2000_2d34 = word[0x6d34], a DGROUP NEAR OFFSET); Ghidra
++     deref'd param_1 as a host pointer (fault 0xc090) AND scaled the byte offset 0x1a as param_1[0xd]
++     (uint=4B => +0x34).  Rebase di onto g_mem+0x1c000+low16(param_1); byte/word fields at the asm
++     offsets.  Reached this iteration on the genuine BATTLES->OK->ACCEPT AZER1 run inside the op-0x24
++     poster FUN_1000_795c (class-0x11a viewport DIRTY).  dab0/db02/db11 use the rebased TCB (patch 068),
++     so they run correctly once di lands. */
++  uint8_t *nd = g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1;
++  if ((*(uint8_t *)(nd + 0x1a) & 0x10) == 0) {
+     FUN_0000_dab0();
+     return;
+   }
+-  if (*param_1 < 2) {
++  if (*(uint16_t *)(nd + 0) < 2) {
+     FUN_0000_db02();
+     return;
+   }
+@@ -62624,20 +62830,36 @@
+ undefined4 __allregs FUN_1000_a20d(int *param_1)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int iVar3;
+-  
+-  DAT_2000_5614 = *(long *)(param_1 + 2);
+-  DAT_2000_5618 = *(long *)(param_1 + 4);
+-  DAT_2000_561c = (ulong)*(uint *)(*param_1 * 2 + -0x1a40) + *(long *)(param_1 + 6);
+-  iVar2 = param_1[0x1c];
+-  iVar3 = 0xaaa;
+-  iVar1 = FUN_0000_a192(iVar2,0xaaa);
+-  DAT_2000_5614 = DAT_2000_5614 + (long)iVar1 * 0x10;
+-  DAT_2000_5618 = DAT_2000_5618 + (long)iVar3 * 0x10;
+-  DAT_2000_561c = DAT_2000_561c + (long)iVar2 * 0x10;
+-  return;
++  /* PATCH 308: base-loss + pointer-scaling reconstruction (a265/patch-274 class).  asm 0x1a20d
++     (DS=DGROUP=0x1c00): di = the player-vehicle node (param_1, a DGROUP NEAR OFFSET); write the
++     per-frame CAMERA position to DGROUP:0x9614/0x9618/0x961c (the extender camera globals df0e posts
++     for op 0x24) from the vehicle fields dword[di+4]/[di+8]/[di+0xc] + the per-type height LUT
++     word[word[di]*2-0x1a40], then add the angle-rotated deltas from a192(word[di+0x10], dx=0xaaa) with
++     the vehicle heading word[di+0x38].  Ghidra host-ptr-deref'd param_1 (fault 0xc064) AND int-scaled
++     every field (param_1+2 => +8 vs asm dword[di+4]).  Rebase di onto g_mem+0x1c000; fields at the asm
++     byte offsets.  Reached this iteration on the genuine BATTLES->OK->ACCEPT AZER1 run inside the op-0x24
++     poster 795c -- this is the LIVE per-frame camera feed for 9200.
++     NB: a192 -> 0459 is a 3-in/3-out rotation; the current 0459 reconstruction returns only ax faithfully
++     (dx/cx outputs dropped -- the multi-return `extraout_` class), so the 0x9618/0x961c deltas use the
++     input dx=0xaaa / heading, a DOCUMENTED camera-fidelity residual (non-crashing; the terrain still
++     renders from the correct base position).  asm-verified 0x1a20d-0x1a264. */
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  uint16_t bx, ax_in, cx_in;
++  int      ax_ret;
++  *(uint32_t *)(dg + 0x9614) = *(uint32_t *)(dg + (uint16_t)(di + 4));      /* dword[di+4] */
++  *(uint32_t *)(dg + 0x9618) = *(uint32_t *)(dg + (uint16_t)(di + 8));      /* dword[di+8] */
++  bx = (uint16_t)(*(uint16_t *)(dg + di) << 1);                            /* bx = word[di]<<1 */
++  *(uint32_t *)(dg + 0x961c) =
++      (uint32_t)*(uint16_t *)(dg + (uint16_t)(bx - 0x1a40))                 /* movzwl word[bx-0x1a40] */
++      + *(uint32_t *)(dg + (uint16_t)(di + 0xc));                           /* + dword[di+0xc] */
++  ax_in = *(uint16_t *)(dg + (uint16_t)(di + 0x10));                        /* ax = word[di+0x10] */
++  cx_in = *(uint16_t *)(dg + (uint16_t)(di + 0x38));                        /* cx = word[di+0x38] (heading) */
++  ax_ret = FUN_0000_a192(ax_in, 0xaaa);                                     /* a192(ax, dx=0xaaa) */
++  *(uint32_t *)(dg + 0x9614) += (uint32_t)(int32_t)((int)(int16_t)ax_ret << 4); /* += movsx(ax)<<4 */
++  *(uint32_t *)(dg + 0x9618) += (uint32_t)(int32_t)((int)(int16_t)0xaaa << 4);  /* += movsx(dx)<<4  (residual) */
++  *(uint32_t *)(dg + 0x961c) += (uint32_t)(int32_t)((int)(int16_t)cx_in << 4);  /* += movsx(cx)<<4  (residual) */
++  return 0;
+ }
+ 
+ 
