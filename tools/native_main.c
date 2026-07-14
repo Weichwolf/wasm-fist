@@ -992,6 +992,80 @@ int fist_extender_gate(void) {
         }
     }
     /* ------------------------------------------------------------------------------------------------
+     * FIST_MISSFB -- SETTLED mission-frame FB capture (default OFF, behaviour-neutral for the 19 flows).
+     * The in-mission 459a loop posts op 0x24 (the windshield-render post) exactly once, then spins on the
+     * op-0x4c present pump WITHOUT re-entering fist_timer_pump (so the FIST_RUNMS/FIST_DUMPTICK wall-clock
+     * watchdogs never fire in-mission -- prior FB-dump seams could not capture a settled mission frame).
+     * The deterministic "settled" mission frame is therefore the Nth op-0x24 post (FIST_MISSFB_N, default
+     * 1): a pure post-count -> DETERMINISTIC and native<->wasm-safe.  At that post:
+     *   - FIST_MISSFB_PROBE: log the LIVE mission TCB camera (ea2e:ea2c +0x2c X /+0x30 Y /+0x34 alt /
+     *     +0x38 heading /..) + the terrain-pipeline state (tile3918 fill, ray tables 3a24/3e24) so the
+     *     camera/ray residual can be pinned vs the oracle (docs/oracle_terrain_writer.md: X=609696
+     *     Y=1112229 alt=29184 head=19745 roll=128 foc=256 detail=0).
+     *   - FIST_MISSFB_RENDER: run the real extender windshield render from the LIVE TCB (NO oracle
+     *     injection): 85d0 camera -> 8120 projection -> 9200 texel walk into the cockpit windshield window
+     *     (81 cols x 288 col-height, dest fb+0x650 -- the camera-INDEPENDENT cockpit windshield geometry,
+     *     docs/oracle_terrain_writer.md).  Off by default the FB is dumped AS-IS (whatever the engine's
+     *     cockpit/HUD paint chain drew).
+     *   - upload the mission DAC palette (ext+0x5598, 6-bit) so the dumped colours are the mission palette;
+     *   - dump 0xA0000 (FIST_MISSFB=path) via the shared 6->8 VGA expander, then _exit(0).                */
+    if (op == 0x24 && getenv("FIST_MISSFB") && g_ext_ready) {
+        static int nseen = 0;
+        long want = getenv("FIST_MISSFB_N") ? atol(getenv("FIST_MISSFB_N")) : 1;
+        if (++nseen == want) {
+            uint8_t *xb = g_mem + FIST_EXT_BASE;
+            uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+            uint8_t *tcb = g_mem + tcb_lin;
+            uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
+            *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)tcb;
+            if (getenv("FIST_MISSFB_PROBE")) {
+                fprintf(stderr,"[missfb] op24 post #%d  TCB @0x%05x cam[2c/30/34]=%d/%d/%d ang[38/3a/3c/3e]=%u/%d/%d/%u detail[cd/cf]=%u/%u\n",
+                    nseen, tcb_lin, *(int32_t*)(tcb+0x2c),*(int32_t*)(tcb+0x30),*(int32_t*)(tcb+0x34),
+                    *(uint16_t*)(tcb+0x38),*(int16_t*)(tcb+0x3a),*(int16_t*)(tcb+0x3c),*(uint16_t*)(tcb+0x3e),
+                    tcb[0xcd],tcb[0xcf]);
+                uint32_t cm=*(uint32_t*)(xb+0x3918); long nz=0; int h[256]={0},nd=0;
+                if(cm){uint8_t*t=(uint8_t*)(uintptr_t)cm; for(int i=0;i<65536;i++){if(t[i])nz++; if(!h[t[i]]){h[t[i]]=1;nd++;}}}
+                fprintf(stderr,"[missfb] tile3918 nz=%ld/65536 distinct=%d  ray3a24[0..3]=%d/%d/%d/%d ray3e24[0]=%d 90c0=%08x 90c4=%08x\n",
+                    nz,nd,*(int32_t*)(xb+0x3a24),*(int32_t*)(xb+0x3a28),*(int32_t*)(xb+0x3a2c),*(int32_t*)(xb+0x3a30),
+                    *(int32_t*)(xb+0x3e24),*(uint32_t*)(xb+0x90c0),*(uint32_t*)(xb+0x90c4));
+            }
+            if (getenv("FIST_MISSFB_PALCMP")) {
+                uint8_t *ep = g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4);
+                uint8_t *mp = xb + 0x5598;
+                int same=0; for(int i=0;i<768;i++) if(ep[i]==mp[i]) same++;
+                fprintf(stderr,"[palcmp] word0x782 seg=%04x  ext5598 : identical bytes=%d/768\n",*(uint16_t*)(dg+0x782),same);
+                fprintf(stderr,"[palcmp] eng[0..7 idx0-2]:"); for(int i=0;i<9;i++) fprintf(stderr," %02x",ep[i]);
+                fprintf(stderr,"  ext[0..7]:"); for(int i=0;i<9;i++) fprintf(stderr," %02x",mp[i]); fprintf(stderr,"\n");
+                fprintf(stderr,"[palcmp] eng idx0xdc(220)*3:"); for(int i=0;i<9;i++) fprintf(stderr," %02x",ep[220*3+i]);
+                fprintf(stderr,"  ext idx0xdc:"); for(int i=0;i<9;i++) fprintf(stderr," %02x",mp[220*3+i]); fprintf(stderr,"\n");
+            }
+            if (getenv("FIST_MISSFB_RENDER")) {
+                m_ext_FUN_0000_8deb();
+                m_ext_FUN_0000_85d0();
+                *(uint32_t*)(xb+0x90f8)=81; *(uint32_t*)(xb+0x90f0)=288;
+                *(uint32_t*)(xb+0x90ac)=0x140-288;
+                *(uint32_t*)(xb+0x90a8)=(uint32_t)(uintptr_t)(g_mem+0xA0000+0x650);
+                m_ext_FUN_0000_8120();
+                { int32_t c0=*(int32_t*)(xb+0x90c0),v04=*(int32_t*)(xb+0x9104),v08=*(int32_t*)(xb+0x9108);
+                  int32_t esi=(int32_t)(((int64_t)c0*v04)>>32), ebp=(int32_t)(((int64_t)c0*v08)>>32);
+                  m_ext_FUN_0000_9200(ebp,esi); }
+            }
+            /* DAC palette for the dump.  The mission cockpit/HUD (drawn by the ENGINE mga driver) uses the
+             * live engine DAC buffer word[DGROUP:0x782]; the extender terrain (9200) writes indices meant
+             * for the extender mission palette ext+0x5598.  These are TWO DIFFERENT 256-entry palettes in
+             * the port (identical only 12/768 bytes) -- the unreconciled-mission-palette residual (see
+             * FIST_MISSFB_PALCMP + docs/stage1.md).  Default: upload the engine DAC (correct cockpit);
+             * FIST_MISSFB_EXTPAL uploads ext+0x5598 (correct terrain, cockpit becomes noise). */
+            { extern void out(int,int);
+              uint8_t *mp = getenv("FIST_MISSFB_EXTPAL") ? (xb+0x5598)
+                          : (g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4));
+              out(0x3c8,0); for(int pi=0;pi<768;pi++) out(0x3c9, mp[pi] & 0x3f); }
+            *(uint32_t*)(xb+0xc93)=save_c93;
+            { const char *fbp=getenv("FIST_MISSFB"); if(fbp) fist_dump_framebuffer(fbp); }
+            _exit(0);
+        }
+    }
+    /* ------------------------------------------------------------------------------------------------
      * FIST_GEOMDUMP -- deterministic mission-viewport geometry probe (default OFF, read-only).
      * The op-0x4c present pump spins in the extender gate WITHOUT ever calling fist_timer_pump, so the
      * tick-anchored FIST_DUMPTICK/FIST_RUNMS watchdogs never fire there.  This gate IS reached each
