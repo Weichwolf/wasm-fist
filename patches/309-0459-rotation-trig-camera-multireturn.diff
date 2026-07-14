@@ -1,0 +1,158 @@
+PATCH 309: reconstruct FUN_0000_0459 = the 3-in/3-out fixed-point ROTATION TRIG the per-frame camera
+feed (FUN_1000_a20d -> a192 -> 0459) uses to rotate the view-offset deltas by the vehicle heading, and
+wire its faithful multi-return into a20d.  asm-verified vs re_out/fist_dat_image.bin 0x459-0x4c7
+(DS=SS=DGROUP=0x1c00).
+
+0459 is a STACK-FRAME function (asm 0x459 `mov bp,sp`; four PUSHes build the locals [bp-2..bp-8]).
+Ghidra could not resolve the SS stack base in the __allregs flat model -> it emitted the unbound global
+`register0x00000010` for every [bp-N] access (a deref of host address -6/-8 => SIGSEGV the instant the
+function is executed), AND -- because a192 is a bare far thunk (`call 0x459; lret`) that Ghidra typed
+2-arg -- it DROPPED the cx (heading) register INPUT and the dx/cx register OUTPUTS (the `extraout_`
+multi-return class).  Inputs: ax=param_1 (angle A), dx=param_2 (magnitude M, 0xaaa), cx=heading H.
+Trig helpers: FUN_0000_05e2 = signed fixed-point SIN core (magnitude in ax; CF -- "value==1.0, skip the
+mul" -- signalled by the sole reachable return 0xffff, asm je 0x632 / CARRY2 -> return -1,stc);
+FUN_0000_05dd(x) = 05e2(0x4000-x) = COS.  The sine SIGN is the input angle's bit15 (asm `cwd` at 0x5e2
+entry, BEFORE the C wrapper's 0x7fff mask); for 05dd the cwd sees the pre-folded (0x4000-x).  Outputs
+(asm 0x4c1/0x4c3/0x4c4 `mov ax,dx; pop dx; pop cx`): ax = block-4 5dd(L2); dx = block-3 5e2(L2);
+cx = block-1 5e2(H), where L2 = 0x4000-A.
+
+Reconstructed with real C locals (the [bp-N] frame) + the cx input threaded from the shim global
+g_fist_rot_h (set by a20d, the immediate synchronous caller) + the dx/cx outputs published into
+g_fist_rot_dx/g_fist_rot_cx.  FUN_1000_a20d now sets g_fist_rot_h = the vehicle heading word[di+0x38]
+(asm 0x1a232) and uses 0459's rotated dx/cx returns for the 0x9618/0x961c camera deltas -- resolving the
+patch-308 documented `dx=0xaaa` camera-fidelity residual.  The object-projection a192 callers
+(FUN_1000_addb / fist.c 60861/60907, the DORMANT per-object path) don't set g_fist_rot_h and ignore the
+dx/cx outputs, so they are unchanged (non-crashing; heading imprecise-as-before, same dropped-cx class).
+
+MISSION-PATH ONLY (a20d runs only inside the d548/d549-gated op-0x24 poster 795c) + a latent-crash
+removal (register0x00000010 -> a real frame) -> strictly behaviour-neutral for the 19 menu/pre-mission
+verify flows (verify.sh both = 19/19).  Shim globals in tools/native_main.c.
+
+--- a/fist.c	2026-07-14 02:58:39.708624966 +0200
++++ b/fist.c	2026-07-14 03:00:19.058423155 +0200
+@@ -4795,42 +4795,63 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_0459) @ 0000:0459 ===== */
+ 
+ int __allregs FUN_0000_0459(undefined2 param_1,uint param_2)
+-
+ {
+-  uint uVar1;
+-  uint uVar2;
+-  uint uVar3;
+-  bool bVar4;
+-  
+-  uVar2 = (int)param_2 >> 0xf;
+-  bVar4 = (param_2 ^ uVar2) < uVar2;
+-  uVar1 = FUN_0000_05e2(param_1);
+-  uVar3 = *(uint *)((int)register0x00000010 + -6);
+-  if (!bVar4) {
+-    uVar3 = (uint)((ulong)uVar1 * (ulong)uVar3 >> 0x10);
+-  }
+-  uVar3 = (uVar3 ^ uVar2 ^ *(uint *)((int)register0x00000010 + -8)) -
+-          (uVar2 ^ *(uint *)((int)register0x00000010 + -8));
+-  uVar1 = FUN_0000_05dd(*(undefined2 *)((int)register0x00000010 + -4));
+-  *(uint *)((int)register0x00000010 + -8) = *(uint *)((int)register0x00000010 + -8) ^ uVar3;
+-  uVar2 = (uint)((ulong)uVar1 * (ulong)*(uint *)((int)register0x00000010 + -6) >> 0x10);
+-  bVar4 = uVar2 != 0;
+-  *(uint *)((int)register0x00000010 + -6) = uVar2;
+-  uVar1 = FUN_0000_05e2(*(undefined2 *)((int)register0x00000010 + -2));
+-  uVar3 = *(uint *)((int)register0x00000010 + -6);
+-  if (!bVar4) {
+-    uVar3 = (uint)((ulong)uVar1 * (ulong)uVar3 >> 0x10);
+-  }
+-  uVar2 = uVar2 ^ *(uint *)((int)register0x00000010 + -8);
+-  bVar4 = (uVar3 ^ uVar2) < uVar2;
+-  uVar2 = (uVar3 ^ uVar2) - uVar2;
+-  uVar1 = FUN_0000_05dd(*(undefined2 *)((int)register0x00000010 + -2));
+-  uVar3 = *(uint *)((int)register0x00000010 + -6);
+-  if (!bVar4) {
+-    uVar3 = (uint)((ulong)uVar1 * (ulong)uVar3 >> 0x10);
+-  }
+-  return (uVar3 ^ uVar2 ^ *(uint *)((int)register0x00000010 + -8)) -
+-         (uVar2 ^ *(uint *)((int)register0x00000010 + -8));
++  /* PATCH 309: faithful reconstruction of the 3-in/3-out rotation trig (asm 0x459-0x4c7,
++     DS=SS=DGROUP; a stack-frame function `mov bp,sp` + four PUSHes forming locals [bp-2..bp-8]).
++     Ghidra could not model the SS stack base -> emitted `register0x00000010 + off` (an unbound global
++     = deref of address -6/-8 => SIGSEGV if ever reached) AND dropped the cx (heading) input + the
++     dx/cx multi-return outputs.  Inputs: ax=param_1 (angle A), dx=param_2 (magnitude M), cx=heading H
++     (dropped by the a192 thunk -> read from the shim global g_fist_rot_h, set by the a20d caller).
++     05e2 = signed fixed-point SIN core (returns the magnitude in ax and CF via the special value
++     0xffff==1.0 -- the ONLY reachable 0xffff, asm je 0x632 / CARRY2 -> return -1,stc); 05dd(x) =
++     05e2(0x4000 - x) = COS.  The sine SIGN is the input angle's bit15 (asm `cwd` at 0x5e2 entry,
++     BEFORE the 0x7fff mask the C wrapper applies) -- for 05dd the cwd sees the pre-folded 0x4000-x.
++     Outputs (asm 0x4c1/0x4c3/0x4c4): ax = block-4 (05dd(L2)); dx = block-3 (05e2(L2)); cx = block-1
++     (05e2(H)).  asm-verified vs re_out/fist_dat_image.bin 0x459..0x4c7. */
++  extern unsigned short g_fist_rot_h, g_fist_rot_dx, g_fist_rot_cx;
++  uint16_t A  = (uint16_t)param_1;
++  uint16_t M  = (uint16_t)param_2;
++  uint16_t H  = g_fist_rot_h;
++  uint16_t L2 = (uint16_t)(0x4000 - A);        /* [bp-2]: neg ax; add $0x40,ah  (cos-angle of A) */
++  uint16_t L6 = (uint16_t)(((uint16_t)((short)M >> 15)) ^ M);
++  uint16_t L8 = (uint16_t)((short)M >> 15);    /* [bp-8]: sign mask of M (cwd/xor/sbb abs idiom) */
++  L6 = (uint16_t)(L6 - L8);                    /* [bp-6]: abs(M) */
++  uint16_t v, sgn, prod;
++  int cx_out, dx_out, ax_out;
++
++  /* block 1 (asm 0x46b-0x480): 5e2(H) -> cx output */
++  v    = (uint16_t)FUN_0000_05e2(H);
++  sgn  = (uint16_t)(H & 0x8000 ? 0xffff : 0);              /* dx = sign(H) from 5e2's entry cwd */
++  prod = (v == 0xffff) ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);  /* jb skips mul */
++  sgn  = (uint16_t)(sgn ^ L8);
++  prod = (uint16_t)((prod ^ sgn) - sgn);                  /* xor dx,cx; sbb dx,cx (apply sign) */
++  cx_out = (short)prod;                                    /* push dx @0x480 -> pop cx @0x4c4 */
++
++  /* block 2 (asm 0x481-0x491): 5dd(H) -> V2 in L6, fold sign into L8 */
++  v    = (uint16_t)FUN_0000_05dd(H);
++  sgn  = (uint16_t)((uint16_t)(0x4000 - H) & 0x8000 ? 0xffff : 0);  /* sign(0x4000-H) */
++  L8   = (uint16_t)(L8 ^ sgn);                            /* xor [bp-8],dx */
++  L6   = (v == 0xffff) ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);   /* mov [bp-6],dx (V2) */
++
++  /* block 3 (asm 0x494-0x4aa): 5e2(L2) -> dx output */
++  v    = (uint16_t)FUN_0000_05e2(L2);
++  sgn  = (uint16_t)(L2 & 0x8000 ? 0xffff : 0);
++  prod = (v == 0xffff) ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);
++  sgn  = (uint16_t)(sgn ^ L8);
++  prod = (uint16_t)((prod ^ sgn) - sgn);                  /* xor dx,cx; sub dx,cx */
++  dx_out = (short)prod;                                    /* push dx @0x4aa -> pop dx @0x4c3 */
++
++  /* block 4 (asm 0x4ab-0x4c1): 5dd(L2) -> ax output */
++  v    = (uint16_t)FUN_0000_05dd(L2);
++  sgn  = (uint16_t)((uint16_t)(0x4000 - L2) & 0x8000 ? 0xffff : 0);
++  prod = (v == 0xffff) ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);
++  sgn  = (uint16_t)(sgn ^ L8);
++  prod = (uint16_t)((prod ^ sgn) - sgn);
++  ax_out = (short)prod;                                    /* mov ax,dx @0x4c1 */
++
++  g_fist_rot_dx = (uint16_t)dx_out;
++  g_fist_rot_cx = (uint16_t)cx_out;
++  return ax_out;
+ }
+ 
+ 
+@@ -62843,6 +62864,10 @@
+      (dx/cx outputs dropped -- the multi-return `extraout_` class), so the 0x9618/0x961c deltas use the
+      input dx=0xaaa / heading, a DOCUMENTED camera-fidelity residual (non-crashing; the terrain still
+      renders from the correct base position).  asm-verified 0x1a20d-0x1a264. */
++  /* PATCH 309: a192->0459 is now the FAITHFUL 3-in/3-out rotation.  Set the heading (0459's cx input)
++     via g_fist_rot_h before the a192 call, and use the rotated dx/cx OUTPUTS (published into
++     g_fist_rot_dx/g_fist_rot_cx) for the 0x9618/0x961c deltas -- the camera-fidelity residual resolved. */
++  extern unsigned short g_fist_rot_h, g_fist_rot_dx, g_fist_rot_cx;
+   uint8_t  *dg = g_mem + 0x1c000;
+   uint16_t di = (uint16_t)(uintptr_t)param_1;
+   uint16_t bx, ax_in, cx_in;
+@@ -62855,10 +62880,11 @@
+       + *(uint32_t *)(dg + (uint16_t)(di + 0xc));                           /* + dword[di+0xc] */
+   ax_in = *(uint16_t *)(dg + (uint16_t)(di + 0x10));                        /* ax = word[di+0x10] */
+   cx_in = *(uint16_t *)(dg + (uint16_t)(di + 0x38));                        /* cx = word[di+0x38] (heading) */
+-  ax_ret = FUN_0000_a192(ax_in, 0xaaa);                                     /* a192(ax, dx=0xaaa) */
+-  *(uint32_t *)(dg + 0x9614) += (uint32_t)(int32_t)((int)(int16_t)ax_ret << 4); /* += movsx(ax)<<4 */
+-  *(uint32_t *)(dg + 0x9618) += (uint32_t)(int32_t)((int)(int16_t)0xaaa << 4);  /* += movsx(dx)<<4  (residual) */
+-  *(uint32_t *)(dg + 0x961c) += (uint32_t)(int32_t)((int)(int16_t)cx_in << 4);  /* += movsx(cx)<<4  (residual) */
++  g_fist_rot_h = cx_in;                                                     /* mov cx,[di+0x38] -> 0459 cx input */
++  ax_ret = FUN_0000_a192(ax_in, 0xaaa);                                     /* a192(ax, dx=0xaaa, cx=heading) */
++  *(uint32_t *)(dg + 0x9614) += (uint32_t)(int32_t)((int)(int16_t)ax_ret << 4);       /* += movsx(ax)<<4 */
++  *(uint32_t *)(dg + 0x9618) += (uint32_t)(int32_t)((int)(int16_t)g_fist_rot_dx << 4); /* += movsx(dx)<<4 */
++  *(uint32_t *)(dg + 0x961c) += (uint32_t)(int32_t)((int)(int16_t)g_fist_rot_cx << 4); /* += movsx(cx)<<4 */
+   return 0;
+ }
+ 

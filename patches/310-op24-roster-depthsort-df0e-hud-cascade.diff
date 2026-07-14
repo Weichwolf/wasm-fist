@@ -1,0 +1,614 @@
+PATCH 310: the MISSION-OBJECT DEPTH-SORT render-record subsystem + the op-0x24 WINDSHIELD POSTER df0e +
+the cockpit-HUD viewport paint cascade -- the register-threading + near-offset base-loss reconstructions
+that let the phase-0x1c 22dd frame COMPLETE, the 209e paint walk reach FUN_1000_795c, and op 0x24 POST so
+the extender 9200 voxel renderer runs on the REAL loop.  asm-verified vs re_out/fist_dat_image.bin
+(DS=ES=SS=DGROUP=0x1c00); each block OBSERVED-REACHED as a SIGSEGV on the genuine
+BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) AZER1 run and cleared in dispatch order (the crash frontier
+advanced past each; op 0x24 now posts, op24(9200)=1, tile3918 nz=65536).
+
+MISSION-PATH ONLY: this whole subsystem runs only inside the d548/d549-gated in-mission 459a render (the
+22dd interpreter is gated by byte[DGROUP:0x1548] d548>0, which is 0 on the menu + every one of the 19
+verify flows; the object-render walk c33c/c4df + writers are never invoked outside a mission) -> strictly
+behaviour-neutral for the 19 menu/pre-mission verify flows (verify.sh both = 19/19).
+
+(1) THE DEPTH-SORT RENDER-RECORD SUBSYSTEM (register threading).  2471 (patch 307) walks the mission-object
+    roster via c33c, which dispatches per-phase handlers (c4df = the per-object RENDER dispatch) that build
+    a ~0x32-byte render-command record INTO the 2471 node (DGROUP:0x4ba2..0x6a92 pool) via the STRSEG-vtable
+    per-type method (c681 etc.) -> c962/ca2f writer family.  THREE registers are LIVE across the TWO indirect
+    dispatches (c33c `call [DGROUP:0xe6f5+bx]`, c4df `call [STRSEG:type*2+0x358a/..]`) that the __allregs flat
+    model passes no args over: the dest cursor di (2471 node, advanced by every record write), the source
+    object si, and the per-type record code dx (c4df dl=byte[DGROUP:classid-0x1b74], dropped by the prior
+    c4df reconstruction).  Threaded via shim globals g_fist_render_di (in/out) / g_fist_render_si /
+    g_fist_render_dx (tools/native_main.c): c33c publishes di, c4df publishes si+dx, the writers advance di.
+    2471 reads the advanced di back for the node link (asm 0x24a2).  Reconstructed + rebased (ES=DGROUP,
+    near offsets -> g_mem+0x1c000): the record writers ca2f/ca6b/caab (base record, di+=0x32), the builders
+    c962/c97f/c8e8/c8ff/c945/c8c2/c8d5 (ca2f/ca6b + rep-movsb variable copy + append), the method wrapper
+    c681, and the c4df/c33c/2471 threading.  Ghidra had deref'd param_4/param_5 as host pointers (the ca2f
+    SIGSEGV fault 0xf8a2) AND used the UN-advanced di for the copy dest.
+
+(2) THE op-0x24 POSTER FUN_0000_df0e (asm 0xdf55-0xdfb7).  Reached by 459a->206f->209e->77dc->795c after (1)
+    completes the 22dd frame.  param_3 (di) = the player-vehicle node (DAT_2000_2d34 = 0xc05c, a DGROUP NEAR
+    OFFSET); Ghidra deref'd it as a host pointer (SIGSEGV fault 0xc090) AND scaled the byte offset 0x1a as
+    param_3[0xd] (uint=4B).  Rebase onto g_mem+0x1c000: byte[di+0x1a]&0x10 selects op 0x24 (bit clear) vs
+    0x28/0x2c; word[di]<=1 => 0x2c.  The camera reads DAT_2000_5614/5618/561c (=DGROUP:0x9614/0x9618/0x961c)
+    are the LIVE per-frame camera a20d/df0e write to the extender TCB+0xd2/0xd6/0xda -> 9200 renders from
+    the live camera.  EFFECT: aa10=0x24; e339() posts op 0x24 to the extender (inbox=the 0x3b3c viewport
+    node) -> 9200 windshield voxel renderer runs (op24>0, tile3918 nz=65536).
+
+(3) THE COCKPIT-HUD VIEWPORT PAINT CASCADE (795c sibling viewports, same vehicle near-offset base-loss).
+    After df0e posts op 0x24, 795c/77eb dispatch the sibling viewport dirty/paint methods; each derefs the
+    player-vehicle near offset DAT_2000_2d34 (=word[0x6d34]=0xc05c) as a host pointer.  Reconstructed
+    (rebase g_mem+0x1c000, asm byte/word widths): 78ca (cockpit-status HUD; +0x1a/+0x97/+0xa8/+0x99),
+    a2e9 (heading readout, [veh+0x38] is a WORD Ghidra widened), a4e9 (+0x19 status strings + DGROUP:0x9782
+    table), a547 (+0x1b/+0x1c + the DGROUP:0x9672 string), a8d7 (0x20-view camera loader +4/+8/+0x8d/+0x26),
+    and the driver-state accessor 5313 (word[word[DGROUP:0x736]+0x16], a driver near offset).
+
+After (1)-(3) the AZER1 cockpit frame runs the 795c paint chain CRASH-FREE with op 0x24 posting each frame
+and 9200 rendering the windshield terrain from the live camera.  Shim globals in tools/native_main.c.
+
+--- a/fist.c	2026-07-14 03:33:23.609080661 +0200
++++ b/fist.c	2026-07-14 03:26:10.654424133 +0200
+@@ -9765,8 +9765,11 @@
+     if (g_fist_cf) break;                     /* 249c: jb 0x2512 (roster exhausted) */
+     si = g_fist_iter_si;
+     *(uint16_t *)(dg + 0x4b9e) = si;          /* 249e */
+-    di = (uint16_t)((di + 1) & 0xfffe);       /* 24a2 */
+-    *(uint16_t *)(dg + bx) = di;              /* 24a6: word[bx]=di */
++    /* PATCH 310: di at 0x24a2 is the c33c-RETURNED cursor (advanced by the object-render record build,
++       not bx+1).  Read it from g_fist_render_di, then round UP to even (asm `inc di; and 0xfffe,di`). */
++    { extern unsigned short g_fist_render_di;
++      di = (uint16_t)((g_fist_render_di + 1) & 0xfffe); }
++    *(uint16_t *)(dg + bx) = di;              /* 24a6: word[bx]=di (node link = next free node) */
+     /* 24a8: inline 3eb3(node=bx) -> CF = (edx == -1) (asm 0x3eb3): project the node via e189 op-0x50. */
+     {
+       uint8_t  *nd = dg + bx;
+@@ -31246,8 +31249,10 @@
+ {
+   extern unsigned char g_fist_cf;
+   extern unsigned short g_fist_iter_si;
++  extern unsigned short g_fist_render_di;
+   uint8_t *dg = g_mem + 0x1c000;
+-  (void)di;
++  g_fist_render_di = di;    /* PATCH 310: the node cursor (di=2471 node bx) is the render-record dest;
++                               the writers advance it, 2471 reads it back for the node link. */
+   if (si == 0) {                                    /* or si,si; jne c36b -> INIT */
+     *(uint16_t *)(dg + 0xe6f3) = 0;                 /* phase idx */
+     *(uint16_t *)(dg + 0xe6e6) = 0xdfbc;
+@@ -31413,7 +31418,13 @@
+    * not-yet-reconstructed method vector (word==0 -> fist_icall traps to 0 without setting CF) advance
+    * to the next object instead of yielding garbage, so the walk provably exhausts -- the per-object
+    * render methods are the next per-block frontier (deliverable #3), reconstructed as observed. */
++  /* PATCH 310: publish the object (si) + per-type record code (dx = byte[DGROUP:classid-0x1b74], asm
++     0xc4fd `mov dl,[bx-0x1b74]`, dropped by the prior reconstruction) into the shim globals so the
++     ARG-LESS STRSEG method dispatch (c681 etc.) sees them; di flows via g_fist_render_di (set by c33c,
++     advanced by the writers).  These record the LIVE registers the flat model drops at the indirect
++     dispatch. */
+   extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
+   uint8_t *dg = g_mem + 0x1c000;
+   uint16_t strseg = *(uint16_t *)(dg + 0x70);
+   uint8_t *ss = g_mem + ((uint32_t)strseg << 4);
+@@ -31428,6 +31439,8 @@
+       if (si != 0) break;                                      /* c4f7 or si,si; je (skip null) */
+     }
+     uint16_t classid = *(uint16_t *)(dg + si);                 /* c4fb bx=word[DGROUP:si] */
++    g_fist_render_si = si;                                     /* c4df object -> method */
++    g_fist_render_dx = *(uint8_t *)(dg + (uint16_t)(classid - 0x1b74)); /* dl=byte[DGROUP:classid-0x1b74] */
+     uint16_t bx = (uint16_t)(classid << 1);                    /* c503 bx<<=1 (method idx) */
+     uint8_t  d549 = *(uint8_t *)(dg + 0x1549);
+     uint16_t mvec;
+@@ -31542,8 +31555,12 @@
+ FUN_0000_c681(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
++  /* PATCH 310: object-render method wrapper (asm 0xc681), dispatched ARG-LESS by c4df -> source the
++     per-type code (dx) + object (si) from the shim globals c4df published; di flows via g_fist_render_di. */
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
+   DAT_2000_a3b4 = 0x3e800;
+-  FUN_0000_c962(param_2,0x14,0,param_3,param_4);
++  FUN_0000_c962(g_fist_render_dx,0x14,0,g_fist_render_si,0);
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;
+   return;
+ }
+ 
+@@ -31671,11 +31688,12 @@
+              undefined2 *param_5)
+ 
+ {
+-  undefined2 unaff_ES;
+-  
++  /* PATCH 310: ca2f-only builder (asm 0xc8c2, kind 0x10) -- append param_2 (bx) at the advanced di. */
++  extern unsigned short g_fist_render_di;
++  uint8_t *dg = g_mem + 0x1c000;
+   DAT_2000_a3b4 = 0xffffffff;
+-  FUN_0000_ca2f(CONCAT11((char)((uint)param_1 >> 8),0x10),param_2,param_3,param_4,param_5);
+-  *param_5 = param_2;
++  FUN_0000_ca2f(CONCAT11((char)((uint)param_1 >> 8),0x10),param_2,param_3,param_4,(int)(intptr_t)param_5);
++  { uint16_t di = g_fist_render_di; *(uint16_t *)(dg + di) = (uint16_t)param_2; g_fist_render_di = (uint16_t)(di + 2); }
+   return;
+ }
+ 
+@@ -31689,9 +31707,12 @@
+ {
+   undefined2 unaff_ES;
+   
++  /* PATCH 310: ca2f-only builder (asm 0xc8d5, kind 0xe) -- append 0 at the advanced di. */
++  extern unsigned short g_fist_render_di;
++  uint8_t *dg = g_mem + 0x1c000;
+   DAT_2000_a3b4 = 0xffffffff;
+-  FUN_0000_ca2f(CONCAT11((char)((uint)param_1 >> 8),0xe),param_2,param_3,param_4,param_5);
+-  *param_5 = 0;
++  FUN_0000_ca2f(CONCAT11((char)((uint)param_1 >> 8),0xe),param_2,param_3,param_4,(int)(intptr_t)param_5);
++  { uint16_t di = g_fist_render_di; *(uint16_t *)(dg + di) = 0; g_fist_render_di = (uint16_t)(di + 2); }
+   return;
+ }
+ 
+@@ -31708,18 +31729,16 @@
+   undefined1 *puVar4;
+   undefined2 unaff_ES;
+   
+-  FUN_0000_ca2f(CONCAT11((char)param_1,2),param_2,param_3,param_4,param_5);
+-  puVar4 = (undefined1 *)(param_4 + *(int *)(param_2 + -7000));
+-  iVar3 = *(int *)(param_1 + 0x276c);
+-  if (iVar3 != 0) {
+-    for (; iVar3 != 0; iVar3 = iVar3 + -1) {
+-      puVar2 = param_5;
+-      param_5 = param_5 + 1;
+-      puVar1 = puVar4;
+-      puVar4 = puVar4 + 1;
+-      *puVar2 = *puVar1;
+-    }
+-  }
++  /* PATCH 310: c962-class builder (asm 0xc8e8, kind 2) -- copy only, NO trailing append. */
++  extern unsigned short g_fist_render_di;
++  uint8_t  *dg = g_mem + 0x1c000;
++  FUN_0000_ca2f(CONCAT11((char)param_1,2),param_2,param_3,param_4,(int)(intptr_t)param_5);
++  uint16_t di  = g_fist_render_di;
++  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));
++  for (unsigned i = 0; i < cnt; i++)
++    *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
++  g_fist_render_di = (uint16_t)(di + cnt);
+   return;
+ }
+ 
+@@ -31736,19 +31755,18 @@
+   undefined1 *puVar4;
+   undefined2 unaff_ES;
+   
+-  FUN_0000_ca6b(CONCAT11((char)param_1,6),param_2,param_3,param_4,param_5);
+-  puVar4 = (undefined1 *)(param_4 + *(int *)(param_2 + -7000));
+-  iVar3 = *(int *)(param_1 + 0x276c);
+-  if (iVar3 != 0) {
+-    for (; iVar3 != 0; iVar3 = iVar3 + -1) {
+-      puVar2 = param_5;
+-      param_5 = (undefined2 *)((int)param_5 + 1);
+-      puVar1 = puVar4;
+-      puVar4 = puVar4 + 1;
+-      *(undefined1 *)puVar2 = *puVar1;
+-    }
+-  }
+-  *param_5 = *(undefined2 *)(param_4 + 0x26);
++  /* PATCH 310: ca6b-class builder (asm 0xc8ff, kind 6) -- append word[si+0x26]. */
++  extern unsigned short g_fist_render_di;
++  uint8_t  *dg = g_mem + 0x1c000;
++  FUN_0000_ca6b(CONCAT11((char)param_1,6),param_2,param_3,param_4,(int)(intptr_t)param_5);
++  uint16_t di  = g_fist_render_di;
++  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));
++  for (unsigned i = 0; i < cnt; i++)
++    *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
++  di = (uint16_t)(di + cnt);
++  *(uint16_t *)(dg + di) = *(uint16_t *)(dg + (uint16_t)(param_4 + 0x26));
++  g_fist_render_di = (uint16_t)(di + 2);
+   return;
+ }
+ 
+@@ -31765,19 +31783,18 @@
+   undefined1 *puVar4;
+   undefined2 unaff_ES;
+   
+-  FUN_0000_ca2f(CONCAT11((char)param_1,0xc),param_2,param_3,param_4,param_5);
+-  puVar4 = (undefined1 *)(param_4 + *(int *)(param_2 + -7000));
+-  iVar3 = *(int *)(param_1 + 0x276c);
+-  if (iVar3 != 0) {
+-    for (; iVar3 != 0; iVar3 = iVar3 + -1) {
+-      puVar2 = param_5;
+-      param_5 = (undefined2 *)((int)param_5 + 1);
+-      puVar1 = puVar4;
+-      puVar4 = puVar4 + 1;
+-      *(undefined1 *)puVar2 = *puVar1;
+-    }
+-  }
+-  *param_5 = *(undefined2 *)(param_4 + 0x12);
++  /* PATCH 310: c962-class builder (asm 0xc945, kind 0xc) -- append word[si+0x12]. */
++  extern unsigned short g_fist_render_di;
++  uint8_t  *dg = g_mem + 0x1c000;
++  FUN_0000_ca2f(CONCAT11((char)param_1,0xc),param_2,param_3,param_4,(int)(intptr_t)param_5);
++  uint16_t di  = g_fist_render_di;
++  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));
++  for (unsigned i = 0; i < cnt; i++)
++    *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
++  di = (uint16_t)(di + cnt);
++  *(uint16_t *)(dg + di) = *(uint16_t *)(dg + (uint16_t)(param_4 + 0x12));
++  g_fist_render_di = (uint16_t)(di + 2);
+   return;
+ }
+ 
+@@ -31788,25 +31805,21 @@
+ FUN_0000_c962(int param_1,int param_2,undefined2 param_3,int param_4,undefined2 *param_5)
+ 
+ {
+-  undefined1 *puVar1;
+-  undefined2 *puVar2;
+-  int iVar3;
+-  undefined1 *puVar4;
+-  undefined2 unaff_ES;
+-  
+-  FUN_0000_ca2f(CONCAT11((char)param_1,8),param_2,param_3,param_4,param_5);
+-  puVar4 = (undefined1 *)(param_4 + *(int *)(param_2 + -7000));
+-  iVar3 = *(int *)(param_1 + 0x276c);
+-  if (iVar3 != 0) {
+-    for (; iVar3 != 0; iVar3 = iVar3 + -1) {
+-      puVar2 = param_5;
+-      param_5 = (undefined2 *)((int)param_5 + 1);
+-      puVar1 = puVar4;
+-      puVar4 = puVar4 + 1;
+-      *(undefined1 *)puVar2 = *puVar1;
+-    }
+-  }
+-  *param_5 = *(undefined2 *)(param_4 + 0x12);
++  /* PATCH 310: base-loss + di-thread (asm 0xc962-0xc97e).  ca2f builds the base record (kind 8) and
++     advances g_fist_render_di; then rep-movsb word[DGROUP:param_1+0x276c] bytes from the source
++     (param_4=si + word[DGROUP:param_2-0x1b58]) to the advanced di, then append word[si+0x12].  All near
++     offsets rebased to DGROUP; di from the shim global (in/out). */
++  extern unsigned short g_fist_render_di;
++  uint8_t  *dg = g_mem + 0x1c000;
++  FUN_0000_ca2f(CONCAT11((char)param_1,8),param_2,param_3,param_4,(int)(intptr_t)param_5);
++  uint16_t di  = g_fist_render_di;                                  /* advanced by ca2f */
++  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));  /* cx (unsigned copy count) */
++  for (unsigned i = 0; i < cnt; i++)                                /* rep movsb ds:si -> es:di */
++    *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
++  di = (uint16_t)(di + cnt);
++  *(uint16_t *)(dg + di) = *(uint16_t *)(dg + (uint16_t)(param_4 + 0x12)); /* stos word[si+0x12] */
++  g_fist_render_di = (uint16_t)(di + 2);
+   return;
+ }
+ 
+@@ -31823,19 +31836,18 @@
+   undefined1 *puVar4;
+   undefined2 unaff_ES;
+   
+-  FUN_0000_ca2f(CONCAT11((char)param_1,8),param_2,param_3,param_4,param_5);
+-  puVar4 = (undefined1 *)(param_4 + *(int *)(param_2 + -7000));
+-  iVar3 = *(int *)(param_1 + 0x276c);
+-  if (iVar3 != 0) {
+-    for (; iVar3 != 0; iVar3 = iVar3 + -1) {
+-      puVar2 = param_5;
+-      param_5 = (undefined2 *)((int)param_5 + 1);
+-      puVar1 = puVar4;
+-      puVar4 = puVar4 + 1;
+-      *(undefined1 *)puVar2 = *puVar1;
+-    }
+-  }
+-  *param_5 = 0x70;
++  /* PATCH 310: c962 variant (asm 0xc97f) -- final appended word = 0x70 (a class tag) not word[si+0x12]. */
++  extern unsigned short g_fist_render_di;
++  uint8_t  *dg = g_mem + 0x1c000;
++  FUN_0000_ca2f(CONCAT11((char)param_1,8),param_2,param_3,param_4,(int)(intptr_t)param_5);
++  uint16_t di  = g_fist_render_di;
++  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));
++  for (unsigned i = 0; i < cnt; i++)
++    *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
++  di = (uint16_t)(di + cnt);
++  *(uint16_t *)(dg + di) = 0x70;
++  g_fist_render_di = (uint16_t)(di + 2);
+   return;
+ }
+ 
+@@ -31898,20 +31910,31 @@
+ FUN_0000_ca2f(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4,int param_5)
+ 
+ {
+-  undefined2 unaff_ES;
+-  
+-  *(int *)(param_5 + 2) = param_4;
+-  *(undefined2 *)(param_5 + 4) = param_1;
+-  *(uint *)(param_5 + 6) = *(uint *)(param_4 + 0x14) >> 8;
+-  *(undefined2 *)(param_5 + 8) = *(undefined2 *)(param_4 + 0x10);
+-  *(undefined4 *)(param_5 + 10) = *(undefined4 *)(param_4 + 4);
+-  *(undefined4 *)(param_5 + 0xe) = *(undefined4 *)(param_4 + 8);
+-  *(undefined4 *)(param_5 + 0x12) = *(undefined4 *)(param_4 + 0xc);
+-  *(undefined2 *)(param_5 + 0x16) = 0;
+-  *(undefined2 *)(param_5 + 0x18) = 0;
+-  *(undefined2 *)(param_5 + 0x1a) = param_3;
+-  *(undefined2 *)(param_5 + 0x1c) = param_2;
+-  *(undefined4 *)(param_5 + 0x1e) = DAT_2000_a3b4;
++  /* PATCH 310: base-loss + di-thread (asm 0xca2f-0xca6a, ES=DS=DGROUP).  dest cursor di and source
++     object si are DGROUP NEAR OFFSETS; di is threaded via the shim global g_fist_render_di (the whole
++     depth-sort writer chain advances the SAME register -- ca2f leaves di at start+0x32; asm `add
++     $2,di` before the first stos, 12 stores to [di+2..di+0x22), then `add $0x10,di`).  Ghidra deref'd
++     param_4/param_5 as host pointers (SIGSEGV @ param_5+2 = 0xf8a2). */
++  extern unsigned short g_fist_render_di;
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t  di = g_fist_render_di;
++  uint16_t  si = (uint16_t)param_4;
++  uint8_t  *d  = dg + di;
++  uint8_t  *s  = dg + si;
++  *(uint16_t *)(d + 2)    = si;                                   /* [di+2]=si (source offset) */
++  *(uint16_t *)(d + 4)    = (uint16_t)param_1;                    /* [di+4]=header (dl<<8|kind) */
++  *(uint16_t *)(d + 6)    = (uint16_t)(*(uint16_t *)(s + 0x14) >> 8);
++  *(uint16_t *)(d + 8)    = *(uint16_t *)(s + 0x10);
++  *(uint32_t *)(d + 0xa)  = *(uint32_t *)(s + 4);
++  *(uint32_t *)(d + 0xe)  = *(uint32_t *)(s + 8);
++  *(uint32_t *)(d + 0x12) = *(uint32_t *)(s + 0xc);
++  *(uint16_t *)(d + 0x16) = 0;
++  *(uint16_t *)(d + 0x18) = 0;
++  *(uint16_t *)(d + 0x1a) = (uint16_t)param_3;                    /* bp */
++  *(uint16_t *)(d + 0x1c) = (uint16_t)param_2;                    /* bx */
++  *(uint32_t *)(d + 0x1e) = (uint32_t)DAT_2000_a3b4;
++  g_fist_render_di = (uint16_t)(di + 0x32);                       /* di ended at +0x22; add $0x10 */
++  (void)param_5;
+   return;
+ }
+ 
+@@ -31922,20 +31945,28 @@
+ FUN_0000_ca6b(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4,int param_5)
+ 
+ {
+-  undefined2 unaff_ES;
+-  
+-  *(int *)(param_5 + 2) = param_4;
+-  *(undefined2 *)(param_5 + 4) = param_1;
+-  *(uint *)(param_5 + 6) = *(uint *)(param_4 + 0x14) >> 8;
+-  *(undefined2 *)(param_5 + 8) = *(undefined2 *)(param_4 + 0x10);
+-  *(undefined4 *)(param_5 + 10) = *(undefined4 *)(param_4 + 4);
+-  *(undefined4 *)(param_5 + 0xe) = *(undefined4 *)(param_4 + 8);
+-  *(undefined4 *)(param_5 + 0x12) = *(undefined4 *)(param_4 + 0xc);
+-  *(undefined2 *)(param_5 + 0x16) = *(undefined2 *)(param_4 + 0x34);
+-  *(undefined2 *)(param_5 + 0x18) = *(undefined2 *)(param_4 + 0x32);
+-  *(undefined2 *)(param_5 + 0x1a) = param_3;
+-  *(undefined2 *)(param_5 + 0x1c) = param_2;
+-  *(undefined4 *)(param_5 + 0x1e) = DAT_2000_a3b4;
++  /* PATCH 310: ca2f variant (asm 0xca6b) -- fields [di+0x16]/[di+0x18] = word[si+0x34]/word[si+0x32]
++     instead of 0.  Same base-loss + di-thread. */
++  extern unsigned short g_fist_render_di;
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t  di = g_fist_render_di;
++  uint16_t  si = (uint16_t)param_4;
++  uint8_t  *d  = dg + di;
++  uint8_t  *s  = dg + si;
++  *(uint16_t *)(d + 2)    = si;
++  *(uint16_t *)(d + 4)    = (uint16_t)param_1;
++  *(uint16_t *)(d + 6)    = (uint16_t)(*(uint16_t *)(s + 0x14) >> 8);
++  *(uint16_t *)(d + 8)    = *(uint16_t *)(s + 0x10);
++  *(uint32_t *)(d + 0xa)  = *(uint32_t *)(s + 4);
++  *(uint32_t *)(d + 0xe)  = *(uint32_t *)(s + 8);
++  *(uint32_t *)(d + 0x12) = *(uint32_t *)(s + 0xc);
++  *(uint16_t *)(d + 0x16) = *(uint16_t *)(s + 0x34);
++  *(uint16_t *)(d + 0x18) = *(uint16_t *)(s + 0x32);
++  *(uint16_t *)(d + 0x1a) = (uint16_t)param_3;
++  *(uint16_t *)(d + 0x1c) = (uint16_t)param_2;
++  *(uint32_t *)(d + 0x1e) = (uint32_t)DAT_2000_a3b4;
++  g_fist_render_di = (uint16_t)(di + 0x32);
++  (void)param_5;
+   return;
+ }
+ 
+@@ -31945,20 +31976,27 @@
+ void __allregs FUN_0000_caab(undefined2 param_1,undefined2 param_2,int param_3,int param_4)
+ 
+ {
+-  undefined2 unaff_ES;
+-  
+-  *(undefined2 *)(param_4 + 2) = 0;
+-  *(undefined2 *)(param_4 + 4) = param_1;
+-  *(undefined2 *)(param_4 + 6) = 0;
+-  *(undefined2 *)(param_4 + 8) = 0;
+-  *(undefined4 *)(param_4 + 10) = *(undefined4 *)(param_3 + 4);
+-  *(undefined4 *)(param_4 + 0xe) = *(undefined4 *)(param_3 + 8);
+-  *(undefined4 *)(param_4 + 0x12) = *(undefined4 *)(param_3 + 0xc);
+-  *(undefined2 *)(param_4 + 0x16) = 0;
+-  *(undefined2 *)(param_4 + 0x18) = 0;
+-  *(undefined2 *)(param_4 + 0x1a) = param_2;
+-  *(undefined2 *)(param_4 + 0x1c) = 0;
+-  *(undefined4 *)(param_4 + 0x1e) = DAT_2000_a3b4;
++  /* PATCH 310: ca2f-class writer (asm 0xcaab) -- simplified record (no rotation fields); base-loss +
++     di-thread.  param_3=si (source), param_4=di (dest, via the shim global); param_1=header, param_2=bp. */
++  extern unsigned short g_fist_render_di;
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t  di = g_fist_render_di;
++  uint16_t  si = (uint16_t)param_3;
++  uint8_t  *d  = dg + di;
++  uint8_t  *s  = dg + si;
++  *(uint16_t *)(d + 2)    = 0;
++  *(uint16_t *)(d + 4)    = (uint16_t)param_1;
++  *(uint16_t *)(d + 6)    = 0;
++  *(uint16_t *)(d + 8)    = 0;
++  *(uint32_t *)(d + 0xa)  = *(uint32_t *)(s + 4);
++  *(uint32_t *)(d + 0xe)  = *(uint32_t *)(s + 8);
++  *(uint32_t *)(d + 0x12) = *(uint32_t *)(s + 0xc);
++  *(uint16_t *)(d + 0x16) = 0;
++  *(uint16_t *)(d + 0x18) = 0;
++  *(uint16_t *)(d + 0x1a) = (uint16_t)param_2;
++  *(uint16_t *)(d + 0x1c) = 0;
++  *(uint32_t *)(d + 0x1e) = (uint32_t)DAT_2000_a3b4;
++  g_fist_render_di = (uint16_t)(di + 0x32);
+   return;
+ }
+ 
+@@ -34905,24 +34943,31 @@
+     return;
+   }
+   DAT_2000_b6b9 = 1;
+-  *(undefined4 *)(DAT_2000_aa2c + 0xd2) = DAT_2000_5614;
+-  *(undefined4 *)(iVar1 + 0xd6) = DAT_2000_5618;
+-  *(undefined4 *)(iVar1 + 0xda) = DAT_2000_561c;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d59c)))();
+-  if ((param_3[0xd] & 0x10) == 0) {
+-    *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_2;
+-    DAT_2000_aa10 = 0x24;
+-    FUN_0000_e339();
+-  }
+-  else if (*param_3 < 2) {
+-    *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_2;
+-    DAT_2000_aa10 = 0x2c;
+-    FUN_0000_e339();
+-  }
+-  else {
+-    *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_2;
+-    DAT_2000_aa10 = 0x28;
+-    FUN_0000_e339();
++  *(undefined4 *)(DAT_2000_aa2c + 0xd2) = DAT_2000_5614;   /* TCB camera X = DGROUP:0x9614 (a20d) */
++  *(undefined4 *)(iVar1 + 0xd6) = DAT_2000_5618;           /*           Y = 0x9618 */
++  *(undefined4 *)(iVar1 + 0xda) = DAT_2000_561c;           /*           Z = 0x961c */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d59c)))();  /* lcall [DGROUP:0x159c] */
++  /* PATCH 310: param_3 (di) = the player-vehicle node (DAT_2000_2d34 = 0xc05c, a DGROUP NEAR OFFSET);
++     Ghidra deref'd it as a host pointer (SIGSEGV fault 0xc090 = 0xc05c+0x34) AND scaled the byte offset
++     0x1a as param_3[0xd] (uint=4B).  Rebase onto g_mem+0x1c000; byte[di+0x1a]&0x10 selects op 0x24 (bit
++     clear) vs op 0x28/0x2c (bit set, word[di]<=1 => 0x2c else 0x28).  asm-verified 0xdf55-0xdfb7. */
++  {
++    uint8_t *nd = g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_3;
++    if ((*(uint8_t *)(nd + 0x1a) & 0x10) == 0) {
++      *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_2;
++      DAT_2000_aa10 = 0x24;
++      FUN_0000_e339();
++    }
++    else if (*(uint16_t *)nd < 2) {
++      *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_2;
++      DAT_2000_aa10 = 0x2c;
++      FUN_0000_e339();
++    }
++    else {
++      *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_2;
++      DAT_2000_aa10 = 0x28;
++      FUN_0000_e339();
++    }
+   }
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a0)))();
+   DAT_2000_5618 = CONCAT22(*(undefined2 *)(DAT_2000_aa2c + 0xd6),(undefined2)DAT_2000_5618);
+@@ -50805,7 +50850,9 @@
+ undefined2 __allregs FUN_1000_5313(void)
+ 
+ {
+-  return *(undefined2 *)(DAT_1000_c736 + 0x16);
++  /* PATCH 310: asm 0x15313 `mov bx,[DGROUP:0x736]; mov ax,[bx+0x16]`.  word[0x736] is a driver-state
++     NEAR OFFSET (DS=DGROUP); Ghidra deref'd its value as a host pointer.  Rebase onto g_mem+0x1c000. */
++  return *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)DAT_1000_c736 + 0x16);
+ }
+ 
+ 
+@@ -58743,19 +58790,23 @@
+   undefined2 uVar1;
+   int iVar2;
+   
++  /* PATCH 310: DAT_2000_2d34 (=word[DGROUP:0x6d34]) is the player-vehicle NEAR OFFSET (0xc05c); Ghidra
++     deref'd it as a host pointer (SIGSEGV fault 0xc0c4).  Rebase onto g_mem+0x1c000; the cockpit-status
++     HUD paint (asm 0x178ca-0x1795b) reads veh[+0x1a]/[+0x97]/[+0xa8]/[+0x99] at the asm byte offsets. */
++  uint8_t *veh = g_mem + 0x1c000 + (uint16_t)DAT_2000_2d34;
+   FUN_1000_524e(6);
+   uVar1 = 0xd;
+-  if ((*(byte *)(DAT_2000_2d34 + 0x1a) & 0x10) != 0) {
++  if ((*(uint8_t *)(veh + 0x1a) & 0x10) != 0) {   /* testb $0x10,[di+0x1a] */
+     uVar1 = 0xe0;
+   }
+   FUN_1000_530b(uVar1);
+-  iVar2 = DAT_2000_2d34;
+-  if (*(int *)(DAT_2000_2d34 + 0x97) != 0) {
+-    if (*(char *)(DAT_2000_2d34 + 0xa8) == '\0') {
++  iVar2 = (int)(uint16_t)DAT_2000_2d34;            /* near offset for a2e9 */
++  if (*(uint16_t *)(veh + 0x97) != 0) {            /* cmpw $0,[di+0x97] */
++    if (*(uint8_t *)(veh + 0xa8) == 0) {
+       FUN_1000_a7e0(0x4b,0x96);
+     }
+     FUN_1000_52d1(0x4e,0xa0);
+-    FUN_0000_02e8(*(int *)(iVar2 + 0x99) << 2,(undefined1 *)&DAT_1000_df8c);
++    FUN_0000_02e8((int)*(uint16_t *)(veh + 0x99) << 2,(undefined1 *)&DAT_1000_df8c);
+     thunk_FUN_1000_5531((undefined1 *)&DAT_1000_df8d);
+   }
+   FUN_1000_a2e9(0x28,0x114,iVar2);
+@@ -62950,12 +63001,15 @@
+   int iVar3;
+   bool bVar4;
+   
++  /* PATCH 310: param_3 = vehicle NEAR OFFSET (0xc05c); rebase onto g_mem+0x1c000.  [di+0x38] is a WORD
++     (asm 0x1a2f2 `mov ax,[di+0x38]`, heading) -- Ghidra widened it to uint AND host-ptr-deref'd param_3
++     (SIGSEGV).  The neg is 16-bit then movzwl (asm 0x1a309/0x1a30b). */
+   FUN_1000_52d1(param_1,param_2);
+   DAT_1000_df96 = 0x20;
+-  uVar1 = *(uint *)(param_3 + 0x38);
++  uVar1 = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)param_3 + 0x38);
+   if ((uVar1 != 0) && (DAT_1000_df96 = 0x2b, (uVar1 & 0x8000) != 0)) {
+     DAT_1000_df96 = 0x2d;
+-    uVar1 = -uVar1;
++    uVar1 = (uint16_t)-uVar1;
+   }
+   iVar3 = 0;
+   for (uVar2 = (ulong)uVar1 * 10; 0x71b < uVar2; uVar2 = uVar2 - 0x71c) {
+@@ -63190,14 +63244,20 @@
+ {
+   int unaff_CS;
+   
++  /* PATCH 310: vehicle near-offset base-loss (asm 0x1a4e9, di=word[0x6d34]).  byte[veh+0x19]&6 indexes
++     the DGROUP:0x9782 word table; +0x19 bits 0x10/8 gate two status strings (the `unaff_CS+0x19` in the
++     Ghidra output is di+0x19, same vehicle). */
++  uint8_t *veh = g_mem + 0x1c000 + (uint16_t)DAT_2000_2d34;
+   FUN_1000_52d1(param_1,param_2);
+-  thunk_FUN_1000_5591(*(undefined2 *)((*(byte *)(DAT_2000_2d34 + 0x19) & 6) + 0x9782));
+-  if ((*(byte *)(unaff_CS + 0x19) & 0x10) != 0) {
++  thunk_FUN_1000_5591(*(uint16_t *)(g_mem + 0x1c000 +
++                       (uint16_t)((*(uint8_t *)(veh + 0x19) & 6) + 0x9782)));
++  if ((*(uint8_t *)(veh + 0x19) & 0x10) != 0) {
+     thunk_FUN_1000_5591(0x3103);
+   }
+-  if ((*(byte *)(DAT_2000_2d34 + 0x19) & 8) != 0) {
++  if ((*(uint8_t *)(veh + 0x19) & 8) != 0) {
+     thunk_FUN_1000_5591(0x3113);
+   }
++  (void)unaff_CS;
+   return;
+ }
+ 
+@@ -63235,16 +63295,18 @@
+   undefined2 unaff_CS;
+   
+   if (DAT_2000_569c != 0) {
++    /* PATCH 310: vehicle near-offset base-loss (asm 0x1a547, di=word[0x6d34]); byte[veh+0x1b]/[+0x1c]. */
++    { uint8_t *veh = g_mem + 0x1c000 + (uint16_t)DAT_2000_2d34;
+     DAT_2000_5680 = param_1 + 9;
+-    DAT_2000_5675 = (*(byte *)(DAT_2000_2d34 + 0x1b) & 3) + 0x7c;
+-    DAT_2000_567a = (*(byte *)(DAT_2000_2d34 + 0x1c) & 3) + 0x7c;
++    DAT_2000_5675 = (*(uint8_t *)(veh + 0x1b) & 3) + 0x7c;
++    DAT_2000_567a = (*(uint8_t *)(veh + 0x1c) & 3) + 0x7c; }
+     DAT_2000_567c = param_1;
+     FUN_1000_524e(0);
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
+     FUN_1000_5313();
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+     FUN_1000_52d1(DAT_2000_567c + 2,DAT_2000_567e + 2);
+-    thunk_FUN_1000_5531(0x9672);
++    thunk_FUN_1000_5531((char *)(g_mem + 0x1c000 + 0x9672));  /* PATCH 310: DGROUP:0x9672 string (DS:si) */
+     FUN_1000_524e(unaff_CS);
+   }
+   return;
+@@ -63581,10 +63643,13 @@
+   DAT_1000_d54b = 0;
+   DAT_1000_d54c = 0;
+   DAT_1000_d554 = 0;
+-  _DAT_1000_d55a = *(undefined4 *)(DAT_2000_2d34 + 4);
+-  DAT_1000_d55e = *(undefined4 *)(DAT_2000_2d34 + 8);
+-  DAT_1000_d54a = *(undefined1 *)(DAT_2000_2d34 + 0x8d);
+-  DAT_1000_d558 = *(undefined2 *)(DAT_2000_2d34 + 0x26);
++  /* PATCH 310: 0x20-view camera loader (asm 0x1a8d7, di=word[0x6d34] vehicle NEAR OFFSET); rebase the
++     camera-source vehicle derefs onto g_mem+0x1c000 (dword[+4]/[+8], byte[+0x8d], word[+0x26]). */
++  { uint8_t *veh = g_mem + 0x1c000 + (uint16_t)DAT_2000_2d34;
++  _DAT_1000_d55a = *(uint32_t *)(veh + 4);
++  DAT_1000_d55e = *(uint32_t *)(veh + 8);
++  DAT_1000_d54a = *(uint8_t  *)(veh + 0x8d);
++  DAT_1000_d558 = *(uint16_t *)(veh + 0x26); }
+   return;
+ }
+ 

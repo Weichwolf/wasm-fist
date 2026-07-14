@@ -759,6 +759,33 @@ unsigned short g_fist_ev_node;
  * the wrong element list and the red selection bar never moved.  Publish the real walk bp here. */
 unsigned short g_fist_paintbp;
 
+/* PATCH 309: the 3-in/3-out rotation FUN_0000_0459 (a192 thunk -> 0459) camera-delta trig.
+ * a20d feeds a192(ax=word[di+0x10], dx=0xaaa) with the vehicle heading cx=word[di+0x38] (asm 0x1a232
+ * `mov cx,[di+0x38]`), but a192's C sig was 2-arg so Ghidra DROPPED the cx input; and 0459 returns 3
+ * values (ax=X, dx=Y, cx=Z rotation deltas -- asm 0x4c1/0x4c3/0x4c4 `mov ax,dx; pop dx; pop cx`) but
+ * __allregs returns only ax, so the dx/cx outputs were dropped (the `extraout_` multi-return class).
+ * a20d sets g_fist_rot_h = cx (the heading) before calling a192; 0459 reads it as its 3rd (cx) input
+ * and publishes the dx/cx rotation outputs here (the immediate a20d/a192/0459 chain is synchronous, so
+ * a single global set is exact).  Distinct from the object-projection a192 callers (addb/60861 etc.),
+ * which don't set g_fist_rot_h and ignore the dx/cx outputs -> unchanged (non-crashing, imprecise-as-
+ * before for those dormant paths). */
+unsigned short g_fist_rot_h;    /* input: 0459's cx (heading) */
+unsigned short g_fist_rot_dx;   /* output: 0459's dx (Y delta) */
+unsigned short g_fist_rot_cx;   /* output: 0459's cx (Z delta) */
+
+/* PATCH 310: the mission-object DEPTH-SORT render-record builder threads three registers as LIVE
+ * values through TWO indirect dispatches the __allregs flat model passes no args across:
+ *   2471(di=node bx) -> c33c(di) -> `call [DGROUP:0xe6f5+bx]` (phase handler, e.g. c4df)
+ *   c4df(si=object, di=node) -> `call [STRSEG:type*2+0x358a/..]` (per-type record method, e.g. c681)
+ *   c681 -> c962 -> ca2f  (build the ~0x32-byte record INTO the node at ES:di, ES=DS=DGROUP)
+ * The dest cursor di (2471 node pool DGROUP:0x4ba2..0x6a92) is advanced by ca2f/c962 and flows BACK to
+ * 2471 (asm 0x24a2 uses the c33c-returned di for the node link).  di is the single source of truth here
+ * (in/out); si = the source object near-offset; dx = the per-type record code (c4df dl=byte[type-0x1b74]).
+ * All are DGROUP near offsets (2471 asm 0x2481 `push ds; pop es` => ES=DGROUP). */
+unsigned short g_fist_render_si;   /* c4df->method: source object near-offset */
+unsigned short g_fist_render_di;   /* 2471<->writers: dest node cursor (in/out, advanced by ca2f/c962) */
+unsigned short g_fist_render_dx;   /* c4df->method->c962: per-type record code (dl=byte[type-0x1b74]) */
+
 /* fist_ensure_dlist_vecs(): install reloc section si=0x174 -- the DISPLAY-LIST ELEMENT method vectors
  * DGROUP:0x344..0x394 (far pointers into the engine service seg 0f69, incl. DGROUP:0x388 = 0f69:0x306c
  * = FUN_1000_26fc, the RESOURCE OPEN the driver's element-load thunk calls to open+alloc+read a screen
