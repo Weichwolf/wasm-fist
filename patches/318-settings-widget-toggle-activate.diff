@@ -1,0 +1,122 @@
+SETTINGS toggle interactions: clicking the SKY checkbox toggles it and re-renders bit-identically.
+
+Clicking a widget inside the SETTINGS screen SIGSEGV'd in the display-list element ACTIVATE handler
+FUN_0000_6af0 at `*(int*)(param_2+6)` (fault-addr 0x3bae).  Reconstructing the click->toggle->re-paint
+path fixed three asm-verified defects (vs re_out/fist_dat_image.bin); the SKY checkbox now toggles its
+state, updates the status line, and re-paints its indicator OFF -- byte-identical to the DOSBox
+reference (flow settings-sky).
+
+1. FUN_0000_6af0 (asm 0x6af0..0x6b26) -- the element ACTIVATE method, dispatched by the hit-test
+   fist_hit1eb4 via `[element+0x4660]` (asm 0x1f8c: `mov ds:0x3e08,bx; mov di,[bx]; call [di+0x4660]`)
+   with AX=event flags, BX=element (a DGROUP NEAR OFFSET), BP=walk-base (DGROUP offset).  The dispatch
+   already threads (flags, elem, base) (patch 142), but 6af0 used elem/base as RAW HOST POINTERS
+   (base-loss).  Rebase to g_mem+0x1c000; thread the CF; call the "pressed" flash via [DGROUP:0x626]
+   with the widget rect (bx=elem+4).
+
+2. FUN_0000_6b27 (asm 0x6b27: `call WORD PTR cs:[bx+0x6b2d]`) -- the near-handler dispatch (id ->
+   handler: 6bb1=SKY, 6b60/6be7/6c02/6c1d=other checkboxes, 6bcc/6bd5/6bde=DETAIL radios).  Ghidra
+   deref'd `param_1+0x6b2d` as a host address; rebase to the CS=0 image base g_mem+(uint16)(param_1+
+   0x6b2d).
+
+3. TWO store-width bugs (the patch 104/134 class), exposed for the first time by reaching the toggle:
+   - The SKY checkbox STATE flag 0x8b46 (DAT_2000_4b46) is a BYTE (asm `xor byte`/`cmp byte`) but was
+     typed WORD -> the SKY handler 6bb1's word XOR/compare pulled in the adjacent DETAIL byte 0x8b47
+     (=0x04): word 0x0401->0x0400, so the state byte 0x8b46=0 (correct) yet word!=0 -> the wrong status
+     string ("SKY ENABLED") + kept the indicator lit.  Retype to BYTE (only 6bb1 uses this macro).
+   - The SKY widget DIRTY flag 0x8ba9 (DAT_2000_4ba9) is a BYTE (asm `mov byte,3`) but was typed WORD
+     -> `= 3` wrote 0x0003 as a word, clobbering the adjacent renderer-index byte 0x8baa (0x10->0) so
+     the dirty-walk 209e re-paint dispatched the WRONG renderer (6cb6 instead of 6ce5=SKY) -> the
+     indicator never re-rendered OFF.  Retype to BYTE (this macro is only ever written `= 3`).
+
+The "pressed" flash (6af0's [DGROUP:0x626] call = MGAVIDEO FUN_0000_1290, the box-outline XOR draw) is
+kept at its current pristine state (a stub -> its cursor-hide 2d6d): 1290's box-outline body is dropped
+by Ghidra ("does not return"), and its sibling [0x626] box-wrapper callers 64a4/aa4e (dialog box draws
+on the list-dialog paint paths, e.g. BATTLES) carry pre-existing DROPPED element args -- reconstructing
+1290 to actually draw surfaces those as garbage-rect corruption (a flake in the battles/campaigns
+flows).  The flash is a 1-frame XOR transient that is repainted before the frame settles (verified: the
+DOSBox settled reference shows no flash), so the box-outline draw is absent from every verified frame;
+reconstructing 1290 + threading the 64a4/aa4e box-wrapper element args is a separate deferred deliverable.
+
+Result: byte-identical to the DOSBox reference (flow settings-sky, AE=0 native + wasm, native<->wasm
+0-diff, deterministic).  Reached only by clicking inside SETTINGS -> the 19 prior flows are
+behaviour-neutral (6af0/6b27 are widget-click-only; 4b46 is read only by 6bb1; 4ba9 is only ever
+written =3; 1290 is untouched -> battles/campaigns unaffected).
+
+--- a/fist.c
++++ b/fist.c
+@@ -3280,7 +3280,7 @@
+ #define DAT_2000_4ab2 (*(undefined2 *)(g_mem+0x24ab2))
+ #define DAT_2000_4b43 (*(undefined2 *)(g_mem+0x24b43))
+ #define DAT_2000_4b45 (*(undefined2 *)(g_mem+0x24b45))
+-#define DAT_2000_4b46 (*(undefined2 *)(g_mem+0x24b46))
++#define DAT_2000_4b46 (*(undefined1 *)(g_mem+0x24b46))   /* PATCH 318: SKY checkbox state is a BYTE (asm xor/cmp byte); WORD typing pulled in the adjacent DETAIL byte 0x8b47 -> wrong toggle status + kept the indicator lit */
+ #define DAT_2000_4b47 (*(undefined2 *)(g_mem+0x24b47))
+ #define DAT_2000_4b49 (*(undefined2 *)(g_mem+0x24b49))
+ #define DAT_2000_4b4b (*(undefined2 *)(g_mem+0x24b4b))
+@@ -3303,7 +3303,7 @@
+ #define DAT_2000_4b9d (*(undefined2 *)(g_mem+0x24b9d))
+ #define DAT_2000_4ba0 (*(undefined2 *)(g_mem+0x24ba0))
+ #define DAT_2000_4ba3 (*(undefined2 *)(g_mem+0x24ba3))
+-#define DAT_2000_4ba9 (*(undefined2 *)(g_mem+0x24ba9))
++#define DAT_2000_4ba9 (*(undefined1 *)(g_mem+0x24ba9))   /* PATCH 318: SKY widget dirty-flag is a BYTE (asm mov byte,3); the WORD `=3` clobbered the renderer-index byte 0x8baa -> re-paint dispatched the wrong renderer */
+ #define DAT_2000_4bac (*(undefined2 *)(g_mem+0x24bac))
+ #define DAT_2000_4baf (*(undefined2 *)(g_mem+0x24baf))
+ #define DAT_2000_4bb2 (*(undefined2 *)(g_mem+0x24bb2))
+@@ -17859,21 +17859,32 @@
+ void __allregs FUN_0000_6af0(uint param_1,int param_2,int param_3)
+ 
+ {
+-  int iVar1;
+-  
+-  if ((param_1 & 0x80) == 0) {
+-    return;
+-  }
+-  if ((param_1 & 1) == 0) {
+-    iVar1 = param_2 + 4;
+-    *(int *)(param_2 + 6) = *(int *)(param_2 + 6) + 0xc;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c626)))();
+-    *(int *)(iVar1 + 2) = *(int *)(iVar1 + 2) + -0xc;
+-    if ((param_1 & 4) == 0) {
+-      return;
++  /* PATCH 318: display-list element ACTIVATE method (asm 0x6af0..0x6b26) = the SETTINGS-widget click
++     handler.  Dispatched by fist_hit1eb4 via [element+0x4660] with AX=param_1 (event flags), BX=param_2
++     (element DGROUP near offset), BP=param_3 (walk-base DGROUP offset).  Ghidra used param_2/param_3 as
++     raw host pointers (`*(int*)(param_2+6)` -> deref of the raw offset 0x3ba8 -> SIGSEGV).  Rebase to
++     g_mem+0x1c000; thread the CF.  The [DGROUP:0x626] "pressed" flash (mga 1290) is a 1-frame XOR
++     transient repainted before the frame settles (NOT in any verified frame); it is left at its pristine
++     state (1290's box-outline body is Ghidra-dropped + its sibling [0x626] callers 64a4/aa4e carry
++     pre-existing dropped element args) -> call it with the widget rect (bx=elem+4) but do not depend on
++     the draw. */
++  extern unsigned char g_fist_cf;
++  uint8_t *dg = g_mem + 0x1c000;
++  if ((param_1 & 0x80) == 0) { g_fist_cf = 1; return; }        /* test ax,0x80; je -> stc,ret */
++  if ((param_1 & 1) != 0) { g_fist_cf = 0; return; }           /* test ax,1; jne 0x6b23 -> clc,ret */
++  {
++    uint16_t rect = (uint16_t)(param_2 + 4);                    /* lea bx,[bx+4] */
++    *(int16_t *)(dg + (uint16_t)(rect + 2)) += 0xc;             /* add [bx+2],0xc  ([elem+6]) */
++    ((void (*)(uint16_t))fist_icall_far((uint32_t)(DAT_1000_c626)))(rect);   /* call [DGROUP:0x626] flash */
++    *(int16_t *)(dg + (uint16_t)(rect + 2)) += -0xc;            /* sub [bx+2],0xc */
++    if ((param_1 & 4) == 0) { g_fist_cf = 0; return; }          /* test ax,4; je -> clc,ret */
++    {
++      uint16_t si = *(uint16_t *)(dg + (uint16_t)(param_2 + 2));         /* si=[elem+2] */
++      uint16_t bx = *(uint16_t *)(dg + (uint16_t)(param_3 + si + 1));    /* bx=[bp+si+1] handler id */
++      FUN_0000_6b27(bx);                                        /* call 6b27 (near-handler dispatch) */
+     }
+-    FUN_0000_6b27(*(undefined2 *)(param_3 + *(int *)(param_2 + 2) + 1));
+   }
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -17883,7 +17894,10 @@
+ void __allregs FUN_0000_6b27(int param_1)
+ 
+ {
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(param_1 + 0x6b2d))))();
++  /* PATCH 318: near-handler dispatch `call WORD PTR cs:[bx+0x6b2d]` -- the handler-id -> near-offset
++     table is at CS=0 image offset 0x6b2d (the engine image loads at g_mem+0); Ghidra deref'd it as a
++     host address.  Rebase to g_mem+(uint16)(param_1+0x6b2d). */
++  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(uint16_t *)(g_mem + (uint16_t)(param_1 + 0x6b2d)))))();
+   return;
+ }
+ 

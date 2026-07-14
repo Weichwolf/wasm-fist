@@ -26,6 +26,18 @@ FLOWS=(
   "mainmenu|25000|22000||$ROOT/ref/main_menu_native320.png"
   "about|25000|22000|200:160:139:0; 800:160:139:1; 1400:160:139:0; 2000:160:138:0|$ROOT/ref/about_native320.png"
   "settings|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 2000:160:126:0|$ROOT/ref/settings_native320.png"
+  # SETTINGS toggle interaction (patch 318): open SETTINGS (160,126), then CLICK the SKY checkbox
+  # (181,23) -> the display-list element ACTIVATE handler 6af0 -> 6b27 -> 6bb1 toggles the SKY state
+  # byte (0x8b46 1->0), sets the status "SKY DISABLED", marks the widget dirty (0x8ba9), and the
+  # dirty-walk 209e re-paints the indicator OFF (dark).  The state/status/indicator all match DOSBox
+  # bit-identically.  Root fixes: 6af0/6b27 DGROUP base-loss + the [0x626] box-outline XOR flash
+  # (mga 1290), the checkbox-flag WORD->byte store-width bug (the XOR/compare pulled in an adjacent
+  # byte -> wrong toggle direction + kept the indicator lit), and the widget dirty-flag WORD->byte
+  # bug (the `=3` word write clobbered the adjacent renderer-index byte -> the re-paint dispatched the
+  # wrong renderer).  Static frame (no blink) -> plain FIST_RUNMS dump.  READ-only (settings persist
+  # only on ACCEPT).  ref via tools/refcapture_click2.sh 160 126 181 23 (2 independent DOSBox captures
+  # AE=0 -> deterministic, non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
+  "settings-sky|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:23:0; 3600:181:23:1; 4200:181:23:0; 4800:181:23:0|$ROOT/ref/settings_sky_native320.png"
   "review|25000|22000|200:160:113:0; 800:160:113:1; 1400:160:113:0; 2000:160:113:0|$ROOT/ref/review_native320.png"
   "selplayer|25000|22000|200:160:74:0; 800:160:74:1; 1400:160:74:0; 2000:160:74:0|$ROOT/ref/selplayer_native320.png"
   "battles|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 2000:160:100:0|$ROOT/ref/battles_native320.png"
