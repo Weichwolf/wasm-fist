@@ -1,0 +1,68 @@
+PATCH 325 -- fix the DAT_1000_d56a descriptor-POINTER base-loss so FUN_0000_2322's per-frame MEMMGR free
+of the dst-geom descriptor SUCCEEDS -> the mission loop iterates sustained past the ~2-frame limit.
+
+THE CLASS: host-pointer-into-DGROUP-near-offset base-loss (cf. patch 304 for the SIBLING descriptor at
+FUN_0000_2144's 182a call, and the whole d56c family). Here it is the POINTER-TO-the-descriptor
+DAT_1000_d56a (Ghidra `int**`) and 0d2e's owner/SS constant.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin; DS=SS=DGROUP=0x1c00):
+
+(A) The init in FUN_0000_2144 (asm 0x217e):
+      217e: c7 06 6a 15 6c 15   mov WORD ds:0x156a,0x156c
+    stores the 16-bit NEAR OFFSET 0x156c into word[DGROUP:0x156a] -- the descriptor HANDLE that
+    FUN_1000_182a(owner=0x1c00, handle=0x156c) just registered (patch 304).  Ghidra rendered it as
+    `DAT_1000_d56a = (undefined2 *)&DAT_1000_d56c`, and the macro is `*(int**)(g_mem+0x1d56a)`, so on
+    -m32 this writes the 4-byte HOST POINTER g_mem+0x1d56c across g_mem+0x1d56a..0x1d56d:
+      word[0x156a] = low16(g_mem+0x1d56c)   -> garbage (0x26cc) instead of 0x156c
+      word[0x156c] = high16(g_mem+0x1d56c)  -> CLOBBERS the descriptor word0 (the seg 182a wrote!)
+    FUN_0000_2322 (patch 186) reads `di_off = word[0x156a]` as the descriptor near offset and passes it
+    to the MEMMGR free FUN_1000_0d2e as the handle -> garbage handle -> 0d2e's search never finds the
+    node -> the MEMMGR fatal path (13e4/f9fa) -> crash within ~2 frames.
+
+(B) FUN_1000_0d2e (asm 0x10d2e) computes the search OWNER from the live SS:
+      10d36: 8b d8   mov ax,bx-handle... (ax = handle 0x156c from 2322's `lea ax,[di]`)
+      10d38: 8c d1   mov ss,cx           <- cx = SS = 0x1c00 (the real owner)
+      10d3a: 8e d9   mov ds,cx
+      10d3c: e8..    call 0x11345        <- 1345(bx=handle 0x156c, cx=owner 0x1c00)
+    1345/135f (patch 065) match node[6]==handle && node[8]==owner; the registered node is
+    {h6=0x156c, o8=0x1c00}.  Ghidra hardcoded `FUN_1000_1345(0x2ba9,param_1)` using its WRONG SS context
+    constant 0x2ba9 (real SS=DS=DGROUP=0x1c00) -> owner mismatch -> not found even with a good handle.
+
+THE FIX (all faithful to the asm):
+
+1. The DAT_1000_d56a macro: read the 16-bit near offset at word[0x156a] and rebase onto DS=DGROUP=0x1c00
+   (g_mem+0x1c000+off) -- exactly the asm `[bx]` addressing where bx=word[0x156a], DS=0x1c00.  This yields
+   the IDENTICAL descriptor pointer (g_mem+0x1d56c when off==0x156c) for every existing `DAT_1000_d56a[n]`
+   / `*DAT_1000_d56a` deref user, so all ~80 field accesses are byte-for-byte unchanged; only the STORAGE
+   at word[0x156a] now holds the 16-bit handle the free needs.
+
+2. The init: store ONLY the 16-bit near offset 0x156c into word[0x156a] (faithful to `mov WORD [0x156a],
+   0x156c`), so word[0x156c] (the descriptor word0 = the seg 182a wrote) is preserved and word[0x156a]
+   holds the real handle.
+
+3. FUN_1000_0d2e: owner 0x2ba9 -> 0x1c00 (the real SS from `mov ss,cx`).
+
+RESULT: 2322's per-frame free finds the registered node {h6=0x156c,o8=0x1c00} -> 0d2e's success path
+(0d70 unlink) instead of the 13e4 fatal -> sustained mission iteration.
+
+Behaviour is descriptor-deref-identical everywhere (the pointer computed is unchanged); the only observable
+delta is (a) word[0x156a]=0x156c (a stored handle, not read for pixels) and (b) 2322's free no longer
+crashing.  Menu flows do not exercise the mission dst-geom free -> neutral.
+
+--- a/fist.c
++++ b/fist.c
+@@ -2604,3 +2604,3 @@
+ #define DAT_1000_d566 (*(undefined2 *)(g_mem+0x1d566))
+-#define DAT_1000_d56a (*(int **)(g_mem+0x1d56a))
++#define DAT_1000_d56a ((int *)(g_mem+0x1c000+(*(uint16_t *)(g_mem+0x1d56a))))  /* PATCH 325: near-offset word[0x156a] rebased onto DGROUP:0x1c00 (asm [bx], bx=word[0x156a], DS=0x1c00) */
+ #define DAT_1000_d56c (*(undefined2 *)(g_mem+0x1d56c))
+@@ -9023,4 +9023,4 @@
+-  DAT_1000_d56a = (undefined2 *)&DAT_1000_d56c;
++  *(uint16_t *)(g_mem+0x1d56a) = 0x156c;  /* PATCH 325: asm `mov WORD [0x156a],0x156c` -- store the 16-bit near-offset handle, not a host pointer (which clobbered word[0x156a] AND word[0x156c]) */
+   DAT_1000_d600 = 0;
+   DAT_1000_d602 = 0x80;
+   DAT_1000_d604 = 0;
+@@ -38996,2 +38996,2 @@
+-  uVar1 = FUN_1000_1345(0x2ba9,param_1);
++  uVar1 = FUN_1000_1345(0x1c00,param_1);  /* PATCH 325: owner = SS = DGROUP = 0x1c00 (asm `mov ss,cx`); Ghidra's 0x2ba9 was the wrong SS context constant */
+   if (!(bool)in_CF) {
