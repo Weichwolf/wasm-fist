@@ -1,0 +1,46 @@
+--- a/fist.c
++++ b/fist.c
+@@ -55620,8 +55620,41 @@
+ void __allregs FUN_1000_75e3(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
++  /* PATCH 311: the cockpit-HUD transparency-sprite PAINT METHOD (asm 0x175e3 = 0xf69:0x7f53), a 209e
++     paint-walk element handler.  Ghidra rendered it as two NO-ARG indirect calls through the [0x6c8]=294d
++     transparency-sprite-blit method vector, DROPPING both register args: ax (sprite-directory byte offset)
++     and bx (position descriptor).  294d -> 260c then resolved the sprite record from a GARBAGE directory
++     index (recseg out of the g_mem range), so the downstream 298a blit's rebased source/dest walked into
++     the host `ref` global -> SIGSEGV (fault 0x91db000) -- the DEFAULT-build op-0x24 blocker.  Asm-verified
++     vs re_out/fist_dat_image.bin (DS=SS=DGROUP=0x1c00):
++        175e3: lea  bx,[bx+4]         ; bx = element node (209e walker) + 4  -> 260c position descriptor
++        175e6: mov  ax,0x330          ; first sprite = directory byte offset 0x330
++        175e9: lcall [0x6c8]          ; 294d(ax=0x330, bx=pos)
++        175ed: mov  di,[0x6d34]
++        175f1: mov  si,[di+0x55]
++        175f4: test si,0x8000 / neg   ; si = abs(si)
++        175fc: shr  si,2 / and 0xfffe ; even index
++        17603: cmp  si,0x18 / clamp   ; si = min(si,0x18)
++        1760b: mov  ax,[si-0x70dc]    ; ax = word[DGROUP:(uint16)(si+0x8f24)]  (2nd, value-driven sprite)
++        1760f: lcall [0x6c8]          ; 294d(ax=table[si], bx=pos)
++     Entry bx = the 209e near-dispatch walker element, recovered from DGROUP:0x3e08 (209e publishes it
++     there before the near call; the live register is lost across the flat-C dispatch -- cf. patches
++     305/136/139).  The [0x6c8] method (c6c8 = 0x3e3b:0x294d = m_mga_FUN_0000_294d) is threaded PER-PATCH:
++     294d uses ax=param_1 (dir offset) and bx=param_4 (position descriptor); param_2/param_3/param_5
++     (cx/dx) are unused by 294d -> pass 0.  MISSION-COCKPIT PATH ONLY (d548/d549-gated) -> behaviour-neutral
++     for the 19 pre-mission verify flows. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);            /* lea bx,[bx+4] */
++  ((void (*)(undefined2,undefined2,undefined2,undefined2,undefined2))
++     fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x330,0,0,bx,0);       /* 294d(ax=0x330,bx=pos) */
++  uint16_t di  = *(uint16_t *)(dg + 0x6d34);                           /* mov di,[0x6d34] */
++  int16_t  si  = *(int16_t  *)(dg + (uint16_t)(di + 0x55));            /* mov si,[di+0x55] */
++  if ((uint16_t)si & 0x8000) si = (int16_t)-si;                        /* test 0x8000 / neg */
++  uint16_t usi = (uint16_t)(((uint16_t)si >> 2) & 0xfffe);             /* shr 2 / and 0xfffe */
++  if (usi > 0x18) usi = 0x18;                                          /* cmp 0x18 / clamp */
++  uint16_t ax2 = *(uint16_t *)(dg + (uint16_t)(usi + 0x8f24));         /* mov ax,[si-0x70dc] */
++  ((void (*)(undefined2,undefined2,undefined2,undefined2,undefined2))
++     fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax2,0,0,bx,0);         /* 294d(ax=table[si],bx=pos) */
+   return;
+ }
+ 

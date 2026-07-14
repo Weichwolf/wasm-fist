@@ -1,0 +1,119 @@
+--- a/fist.c
++++ b/fist.c
+@@ -58908,7 +58908,13 @@
+        ((*(undefined2 *)(g_mem+0x2561a)) + 5U < 0x51)) {
+       DAT_2000_4ee6 = (*(undefined2 *)(g_mem+0x2561a));
+       DAT_2000_4eea = (*(undefined2 *)(g_mem+0x2561a)) + 0xb;
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6d8)))(0,unaff_CS,uVar3);
++      /* PATCH 312: thread the [0x6d8]=2ae9 method args (asm 0x179d9..0x179e8): bx=0x8ee6 (position
++       * descriptor), ax = (byte[DGROUP:[2d34]+0x1a] & 0x10) ? 0x10 : 8 (sprite-directory offset).  Ghidra
++       * dropped both -> 2ae9->260c resolved a NULL sprite -> 2b1e derefs param_2-4 (SIGSEGV).  2ae9 uses
++       * ax=param_1, bx=param_2; param_3 unused. */
++      ((void (*)(undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c6d8)))
++        (((*(byte *)(g_mem + 0x1c000 + (uint16_t)(0x1a + (uint16_t)(uintptr_t)DAT_2000_2d34)) & 0x10) != 0)
++           ? 0x10 : 8, 0x8ee6, uVar3);
+       param_2 = extraout_DX;
+     }
+     FUN_1000_78ca(param_1,param_2);
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -6968,16 +6968,23 @@
+ void __allregs FUN_0000_2ae9(undefined2 param_1,undefined2 param_2,undefined2 param_3)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  undefined1 in_ZF = 0;
+-  
++  /* PATCH 312: the [0x6d8] cockpit-HUD transparency-sprite METHOD (asm 0x2ae9).  Structurally identical to
++     294d (patch 136): ax=param_1 = sprite-directory byte offset; bx=param_2 = position descriptor (DGROUP
++     near off 0x8ee6).  260c resolves ES:SI + CF/ZF; ZF=1 => the 2d6d coord-transform + rowtable-setup full
++     path, ZF=0 => the direct path; BOTH blit via 2b1e(bx=0x1588, si=m_260c_recoff).  Ghidra used the
++     in_CF/in_ZF=0 flag artifact (always-false) and passed 2b1e the raw host address &DAT_1000_d588 + the
++     dropped param_3 -- use the 260c shim statics (m_260c_cf/zf/recoff) like 294d. */
+   FUN_0000_260c(param_1,param_2,_DAT_1000_c724);
+-  if (!(bool)in_CF) {
+-    if ((bool)in_ZF) {
+-                    /* WARNING: Subroutine does not return */
+-      FUN_0000_2d6d((undefined1 *)&DAT_1000_d588);
++  if (m_260c_cf == 0) {
++    if (m_260c_zf) {
++      FUN_0000_2d6d((int *)(uintptr_t)0x1588);              /* 2d6d(bx=0x1588) coord transform */
++      *(uint16_t *)(g_mem + 0x1c794) = 0x7c8;
++      *(uint16_t *)(g_mem + 0x1c796) = 0x140;
++      FUN_0000_2b1e((int *)(uintptr_t)0x1588,(byte *)(uintptr_t)m_260c_recoff);
++      FUN_0000_2e12();
++    } else {
++      FUN_0000_2b1e((int *)(uintptr_t)0x1588,(byte *)(uintptr_t)m_260c_recoff);   /* 2b16: ZF=0 direct */
+     }
+-    FUN_0000_2b1e((undefined1 *)&DAT_1000_d588,param_3);
+   }
+   return;
+ }
+@@ -7021,7 +7028,6 @@
+ {
+   byte *pbVar1;
+   byte *pbVar2;
+-  undefined2 uVar3;
+   int iVar4;
+   byte bVar8;
+   uint uVar5;
+@@ -7030,17 +7036,40 @@
+   byte *pbVar9;
+   byte *pbVar10;
+   byte *pbVar11;
+-  undefined2 unaff_ES;
+   
+-  bVar8 = (byte)(*(uint *)(param_2 + -4) >> 8);
+-  uVar7 = *(uint *)(param_2 + -4) & 0xff;
+-  uVar6 = (uint)bVar8;
+-  pbVar9 = (byte *)((*(int *)((((uint)(*param_1 + param_1[2]) >> 1) - (uint)(bVar8 >> 1)) * 2 +
+-                             _DAT_1000_c794) + ((uint)(param_1[1] + param_1[3]) >> 1)) -
+-                   (uVar7 >> 1));
++  /* PATCH 312: transparency sprite blit (asm 0x2b1e..0x2ba9) -- the 2ae9([0x6d8]) cockpit-HUD blitter.
++     SAME base-loss class as 298a (patch 136): Ghidra dropped the fb-dest ES base + rowtable, the row
++     stride, and the source ES(=m_260c_recseg) base, and read c794/c724 as host pointers.  bx=param_1 =
++     the position descriptor (DGROUP near off 0x1588); si=param_2 = the 260c-resolved record offset
++     (source ES:SI = m_260c_recseg:param_2).  Rebuild the base computations:
++        dst-row  di = word[DGROUP:[0x724]][0] : rowtab[((pos[0]+pos[2])/2 - rows/2)]  (es=fb seg 0xA000)
++        dst-col     += (pos[1]+pos[3])/2 - cols/2
++        stride   iVar4 = word[DGROUP:[0x724]+4]  (=0x140)
++        src         = m_260c_recseg : param_2
++     header word[recseg:recoff-4]: high byte = rows(uVar6), low byte = cols(uVar7); al==0 => transparent.
++     The rowtable base [0x794] is a WORD near-offset (0x7c8) that Ghidra read as undefined4 (picking up
++     0x0140 from the adjacent [0x796]) -- mask to (uint16_t).  The loop bodies are the pristine decompile. */
++  {
++    uint8_t *dg     = g_mem + 0x1c000;
++    int16_t *pos    = (int16_t *)(dg + (uint16_t)(uintptr_t)param_1);           /* bx=DGROUP pos descriptor */
++    uint16_t fb_di  = *(uint16_t *)(dg + 0x724);
++    uint16_t fb_seg = *(uint16_t *)(dg + fb_di);                               /* word[DGROUP:[0x724]] = fb seg */
++    uint16_t pitch  = *(uint16_t *)(dg + (uint16_t)(fb_di + 4));               /* c724[+4] = row pitch */
++    uint16_t rowtab = *(uint16_t *)(g_mem + 0x1c794);                          /* 0x7c8 (low16 only) */
++    uint16_t rowidx;
++    uint16_t rowoff;
++    uint16_t col;
++    param_2 = g_mem + ((uint32_t)m_260c_recseg << 4) + (uint16_t)(uintptr_t)param_2;   /* src ES:SI */
++    bVar8   = (byte)(*(uint16_t *)(param_2 + -4) >> 8);                        /* rows */
++    uVar7   = *(uint16_t *)(param_2 + -4) & 0xff;                              /* cols */
++    uVar6   = (uint)bVar8;
++    rowidx  = (uint16_t)((uint16_t)((uint16_t)(pos[0] + pos[2]) >> 1) - (uint16_t)(bVar8 >> 1));
++    rowoff  = *(uint16_t *)(dg + (uint16_t)(rowidx * 2 + rowtab));             /* add di,di; add [0x794]; mov [di] */
++    col     = (uint16_t)((uint16_t)((uint16_t)(pos[1] + pos[3]) >> 1) - (uint16_t)(uVar7 >> 1));
++    pbVar9  = g_mem + ((uint32_t)fb_seg << 4) + (uint16_t)(rowoff + col);
++    iVar4   = (int)pitch;
++  }
+   if (param_2[-2] != 2) {
+-    uVar3 = *_DAT_1000_c724;
+-    iVar4 = _DAT_1000_c724[2];
+     uVar5 = uVar7;
+     do {
+       do {
+@@ -7059,8 +7088,7 @@
+     } while (uVar6 != 0);
+     return;
+   }
+-  uVar3 = *_DAT_1000_c724;
+-  iVar4 = _DAT_1000_c724[2];
++  /* PATCH 312: iVar4 (row pitch) already recovered above; drop the base-lost _DAT_1000_c724 reads. */
+   do {
+     pbVar10 = param_2 + 1;
+     pbVar11 = pbVar9 + *param_2;
