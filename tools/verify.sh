@@ -62,6 +62,18 @@ FLOWS=(
   # both targets.  (Together detail-med/sound-fx-med/music-off exercise every patch-319 change: the 6b27
   # arg thread, the 6eb8 status base-loss, and all 8 radio dirty-flag BYTE retypings.)
   "settings-music-off|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:136:0; 3600:181:136:1; 4200:181:136:0; 4800:181:136:0|$ROOT/ref/settings_music_off_native320.png"
+  # SETTINGS joystick-TYPE radio toggle (patch 320), CONTROL column (5 radios): open SETTINGS (160,126),
+  # click the STD JOYSTICK radio (35,34).  Default = NO JOYSTICK (lit).  The click -> 6af0 -> 6b27 ->
+  # 6b55 (base-loss fixed by 320): reads the type index (1) via byte[DGROUP:0x8b5f+1], calls 6c38 ->
+  # stores word[0x8b43]=1, marks the 5 joystick radios dirty (0x8b91/94/97/9a/9d, BYTE-retyped by 320),
+  # and builds the status line via the 444f message net-effect.  The dirty-walk 209e re-paints via the
+  # joystick-radio renderer 6cb6 (`si>>1 == [0x8b43]`) -> the lit indicator MOVES NO->STD.  With no
+  # joystick present (shim + DOSBox-under-xvfb both) the device does not respond -> status = "STANDARD
+  # JOYSTICK NOT RESPONDING!" (typename node1 "STANDARD" + str-seg:0x41f " JOYSTICK NOT RESPONDING!").
+  # ref via tools/refcapture_click2.sh 160 126 35 34 40 10 10 (2 independent DOSBox captures AE=0,
+  # non-circular; port md5 139294fd != any circular self-compare).  AE=0 native AND wasm; native md5 ==
+  # wasm md5, deterministic (3x single md5).
+  "settings-joystick|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:34:0; 3600:35:34:1; 4200:35:34:0; 4800:35:34:0|$ROOT/ref/settings_joystick_native320.png"
   "review|25000|22000|200:160:113:0; 800:160:113:1; 1400:160:113:0; 2000:160:113:0|$ROOT/ref/review_native320.png"
   "selplayer|25000|22000|200:160:74:0; 800:160:74:1; 1400:160:74:0; 2000:160:74:0|$ROOT/ref/selplayer_native320.png"
   "battles|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 2000:160:100:0|$ROOT/ref/battles_native320.png"

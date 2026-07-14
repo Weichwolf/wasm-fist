@@ -1,0 +1,139 @@
+SETTINGS joystick-type radio toggle: clicking a CONTROL-column joystick radio moves the lit indicator
+and updates the bottom status line, bit-identically to DOSBox.
+
+The five CONTROL-column joystick-TYPE radios (NO JOYSTICK / STD JOYSTICK / FLIGHTSTICK W/THROTTLE /
+THRUSTMASTER FCS / CH FLIGHTSTICK PRO) did not respond to a click: the handler FUN_0000_6b55 had a
+DGROUP base-loss (raw host deref -> SIGSEGV), the five radio-widget dirty flags were WORD-typed (the
+patch 318/319 store-width class), and the status line reconstruction (patch 134/135) only ever emitted
+the "<TYPE> JOYSTICK SELECTED." string -- but with no joystick present the real builder emits
+"<TYPE> JOYSTICK NOT RESPONDING!".  Three asm-verified fixes (vs re_out/fist_dat_image.bin,
+DS=DGROUP=0x1c00, str-seg = word[DGROUP:0x70] = 0x2d74).
+
+HOW THE CLICK WORKS (asm-verified): a click on a joystick radio reaches the widget ACTIVATE handler
+6af0 -> 6b27 (`call cs:[bx+0x6b2d]`, bx = handler id, threaded by patch 319) -> for the 5 joystick
+radios the table 0x6b2d entries 0..4 all = 0x6b55.  6b55 (`shr bx,1; movzx ax,byte[bx-0x74a1]; call
+6c38`) reads the radio TYPE index (bx>>1 = 0..4) and the type value byte[DGROUP:0x8b5f+index] (the
+0x8b5f table is identity 0..4), then calls 6c38.  6c38 (`mov ds:0x8b43,ax; mov si,0x165c; call
+[0x2ac]=444f; call 700a; mov byte[0x8b91/94/97/9a/9d],3`) stores the selected TYPE into word[0x8b43],
+builds the status via the 444f message builder, and marks the 5 radio widgets dirty.  The dirty-walk
+209e then re-paints each via the joystick-radio renderer 6cb6 (`shr si,1; cmp si,[0x8b43]; lit if
+equal`, patch 132) -> the lit indicator MOVES to the clicked radio.
+
+1. FUN_0000_6b55 (asm 0x6b55): `movzx ax,byte[bx-0x74a1]` = byte[DGROUP:(index+0x8b5f)]; Ghidra dropped
+   the DGROUP base -> a raw host deref of the near-offset (SIGSEGV).  Rebase to g_mem+0x1c000.
+
+2. The 5 joystick-radio widget dirty flags 0x8b91/94/97/9a/9d (4b91/94/97/9a/9d) are BYTEs (asm
+   `c6 06 .. 03  mov BYTE PTR ds:0xNN,0x3`) but were typed WORD: the WORD `= 3` writes 0x0003, whose
+   high byte clobbers the adjacent widget's renderer-index byte -> the dirty-walk re-paints the wrong
+   renderer (no indicator move).  Retype to BYTE (same class as patch 318/319).
+
+3. FUN_0000_6c38 status reconstruction (supersedes the 134/135 inline).  The real builder FUN_1000_444f
+   (DGROUP:0x2ac = 0xf69:0x444f, asm linear 0x13adf; reloc section si=0x200 @0x33720 uninstalled in our
+   port -> the [0x2ac] far call honestly no-ops) assembles, into its own str-seg scratch buffer
+   str-seg:0x62f via the strcat helper 0xf69:0x13f5c, the joystick TYPE-NAME + a device-poll SUFFIX and
+   returns si=0x62f.  The TYPE-NAME = node[type][+0x35a] in the str-seg node table @str-seg:0x35a
+   (stride 10; node0..4 +35a = 0x3a0"NO"/0x3a3"STANDARD"/0x3ac"FLIGHTSTICK"/0x3b8"THRUSTMASTER FCS"/
+   0x3c9"FLIGHTSTICK PRO", all static in the image).  The SUFFIX is device-poll-driven (444f -> 13d93
+   -> [0x2dc] int-15h game-port poll):
+     - type 0 (NO JOYSTICK): no device -> " JOYSTICK SELECTED." (str-seg:0x3f8) => "NO JOYSTICK
+       SELECTED." (byte-identical to the prior default settings frame, patch 135).
+     - types 1..4: a physical joystick is required and is ABSENT (the shim has no joystick, exactly like
+       DOSBox under xvfb) -> the poll fails and 444f takes its carry/build path 0x13b65 ->
+       " JOYSTICK NOT RESPONDING!" (str-seg:0x41f) => e.g. "STANDARD JOYSTICK NOT RESPONDING!".
+   Rendered through the unchanged 700a->6d65->5591 drawstring path -> byte-identical to the genuine
+   DOSBox reference.
+
+444f-DEBT: the WIDGET move + the no-joystick status line are now bit-verified faithfully.  The LITERAL
+444f is NOT fully reconstructed (debt still OPEN, now precisely pinned): 444f is a runtime-str-seg
+node-method device STATE MACHINE (node[type][+0x35c/0x35e] = str-seg CODE at str-seg:0x4901.. that
+polls/calibrates the joystick; 13ebf/13f0e queue-link helpers; 13d93->[0x2dc] game-port poll; the
+SELECTED/RESPONDING/BAD-TYPE/CALIBRATE branches; the si=0x200 reloc-section install + SeedServiceVecs
+0x2ac/0x2e0/0x2f0 re-decompile).  The joystick-RESPONDING branch is unreachable in a joystick-less
+environment (our shim + DOSBox-under-xvfb agree the device never responds), so this net-effect is the
+faithful observable behaviour for the covered flow; the responding branch needs a live-joystick shim +
+the str-seg node methods.
+
+Result: byte-identical to the DOSBox reference on the new flow settings-joystick (STD JOYSTICK ->
+"STANDARD JOYSTICK NOT RESPONDING!") -- AE=0 native + wasm, native<->wasm 0-diff, deterministic.
+Reached only by clicking a joystick radio inside SETTINGS -> the prior flows are behaviour-neutral
+(6c38 for type 0 is byte-identical to patch 135's default; the dirty-flag retypes + 6b55 rebase are
+touched only on a joystick-radio click; settings / settings-* unchanged).
+
+--- a/fist.c
++++ b/fist.c
+@@ -3296,11 +3296,11 @@
+ #define DAT_2000_4b5b (*(undefined2 *)(g_mem+0x24b5b))
+ #define DAT_2000_4b65 (*(undefined2 *)(g_mem+0x24b65))
+ #define DAT_2000_4b90 (*(undefined2 *)(g_mem+0x24b90))
+-#define DAT_2000_4b91 (*(undefined2 *)(g_mem+0x24b91))
+-#define DAT_2000_4b94 (*(undefined2 *)(g_mem+0x24b94))
+-#define DAT_2000_4b97 (*(undefined2 *)(g_mem+0x24b97))
+-#define DAT_2000_4b9a (*(undefined2 *)(g_mem+0x24b9a))
+-#define DAT_2000_4b9d (*(undefined2 *)(g_mem+0x24b9d))
++#define DAT_2000_4b91 (*(undefined1 *)(g_mem+0x24b91))   /* PATCH 320: joystick-radio widget dirty-flag is a BYTE (asm mov BYTE,3); the WORD `=3` clobbered the adjacent renderer-index byte -> re-paint dispatched the wrong renderer (patch 318/319 store-width class) */
++#define DAT_2000_4b94 (*(undefined1 *)(g_mem+0x24b94))   /* PATCH 320: joystick-radio widget dirty-flag is a BYTE (asm mov BYTE,3); the WORD `=3` clobbered the adjacent renderer-index byte -> re-paint dispatched the wrong renderer (patch 318/319 store-width class) */
++#define DAT_2000_4b97 (*(undefined1 *)(g_mem+0x24b97))   /* PATCH 320: joystick-radio widget dirty-flag is a BYTE (asm mov BYTE,3); the WORD `=3` clobbered the adjacent renderer-index byte -> re-paint dispatched the wrong renderer (patch 318/319 store-width class) */
++#define DAT_2000_4b9a (*(undefined1 *)(g_mem+0x24b9a))   /* PATCH 320: joystick-radio widget dirty-flag is a BYTE (asm mov BYTE,3); the WORD `=3` clobbered the adjacent renderer-index byte -> re-paint dispatched the wrong renderer (patch 318/319 store-width class) */
++#define DAT_2000_4b9d (*(undefined1 *)(g_mem+0x24b9d))   /* PATCH 320: joystick-radio widget dirty-flag is a BYTE (asm mov BYTE,3); the WORD `=3` clobbered the adjacent renderer-index byte -> re-paint dispatched the wrong renderer (patch 318/319 store-width class) */
+ #define DAT_2000_4ba0 (*(undefined2 *)(g_mem+0x24ba0))
+ #define DAT_2000_4ba3 (*(undefined2 *)(g_mem+0x24ba3))
+ #define DAT_2000_4ba9 (*(undefined1 *)(g_mem+0x24ba9))   /* PATCH 318: SKY widget dirty-flag is a BYTE (asm mov byte,3); the WORD `=3` clobbered the renderer-index byte 0x8baa -> re-paint dispatched the wrong renderer */
+@@ -17926,7 +17926,12 @@
+ void __allregs FUN_0000_6b55(uint param_1)
+ 
+ {
+-  FUN_0000_6c38((uint)*(byte *)((param_1 >> 1) + 0x8b5f));
++  /* PATCH 320: joystick-type radio handler (asm 0x6b55: `shr bx,1; movzx ax,byte[bx-0x74a1]; call 6c38`).
++     bx(=param_1)=the handler id 0/2/4/6/8 (threaded by patch 319's 6b27 dispatch); `shr bx,1` -> the
++     radio TYPE index 0..4; `movzx ax,byte[bx-0x74a1]` = byte[DGROUP:(index+0x8b5f)] (DS=DGROUP=0x1c00,
++     0x8b5f table is identity 0,1,2,3,4) = the selected joystick type.  Ghidra dropped the DGROUP base
++     -> a raw host deref of the near-offset.  Rebase to g_mem+0x1c000. */
++  FUN_0000_6c38((uint)*(byte *)(g_mem + 0x1c000 + (uint16_t)((param_1 >> 1) + 0x8b5f)));
+   return;
+ }
+ 
+@@ -18097,18 +18102,34 @@
+ {
+   DAT_2000_4b43 = param_1;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c2ac)))();
+-  { uint8_t *D=g_mem+0x1c000; uint16_t js=*(uint16_t*)(D+0x8b43);
+-    uint16_t so = js<5 ? *(uint16_t*)(D+0x8b33+js*2) : 0x165c;
+-    /* PATCH 135: reconstruct FUN_1000_444f's net effect for the joystick-status line.  The real
+-       display-list message builder (DGROUP:0x2ac = 0xf69:0x444f) strcat's the period-less source
+-       status text + a trailing '.' into its own str-seg scratch buffer str-seg:0x62f (asm strcat
+-       0xf69:0x13f5c, di=0x62f) and returns si = 0x62f.  Reproduce the exact bytes in that buffer and
+-       render through the unchanged 700a->6d65 drawstring path -> the trailing period (the last pixel). */
++  /* PATCH 320 (supersedes the 134/135 inline): reconstruct FUN_1000_444f's NET EFFECT for the
++     joystick status line, faithfully keyed on the (absent) joystick device state.  6c38 stores the
++     selected TYPE (0x8b43) then calls the display-list message builder DGROUP:0x2ac = 0xf69:0x444f
++     (uninstalled vector -> honest no-op above).  444f (asm 0x13adf) assembles, into its own str-seg
++     scratch buffer str-seg:0x62f via the strcat helper 0xf69:0x13f5c, the joystick TYPE-NAME
++     (node[type][+0x35a] in the str-seg node table @str-seg:0x35a, stride 10) + a device-poll SUFFIX
++     (13d93 -> [0x2dc] int-15h game-port poll), and returns si=0x62f:
++       - type 0 (NO JOYSTICK): no device to poll -> " JOYSTICK SELECTED." (str-seg:0x3f8)
++         => node0 "NO" + " JOYSTICK SELECTED." = "NO JOYSTICK SELECTED." (the default settings frame).
++       - types 1..4: a physical joystick is required; it is ABSENT (the shim has no joystick, exactly
++         like DOSBox under xvfb), so the device does NOT respond (444f's carry/build path 0x13b65)
++         -> " JOYSTICK NOT RESPONDING!" (str-seg:0x41f) => e.g. node1 "STANDARD" + suffix =
++         "STANDARD JOYSTICK NOT RESPONDING!".
++     Byte-identical to the genuine DOSBox reference; rendered through the unchanged 700a->6d65
++     drawstring path.  (444f's full node-method device STATE MACHINE -- the joystick-RESPONDING /
++     SELECTED branch, node chaining, calibration -- remains pinned debt: it needs a live joystick and
++     the str-seg node methods node[type][+0x35c/0x35e], which are runtime str-seg code.) */
++  { uint8_t *D = g_mem + 0x1c000;
++    uint16_t type = *(uint16_t *)(D + 0x8b43);
+     uint32_t strseg = (uint32_t)(*(uint16_t *)(D + 0x70)) << 4;
+-    uint8_t *src = g_mem + strseg + so;
++    uint16_t name_off = (type < 5) ? *(uint16_t *)(g_mem + strseg + type * 10 + 0x35a) : 0x3a0;
++    uint16_t suf_off  = (type == 0) ? 0x3f8 : 0x41f;
+     uint8_t *dst = g_mem + strseg + 0x62f;
+-    int k = 0; while (src[k] != 0 && k < 0x200) { dst[k] = src[k]; k++; }
+-    dst[k++] = '.'; dst[k] = 0;
++    uint8_t *nm  = g_mem + strseg + name_off;
++    uint8_t *sf  = g_mem + strseg + suf_off;
++    int k = 0; while (nm[k] != 0 && k < 0x100) { dst[k] = nm[k]; k++; }
++    int j = 0; while (sf[j] != 0 && k < 0x1ff) { dst[k++] = sf[j++]; }
++    dst[k] = 0;
+     FUN_0000_700a(0x62f); }
+   DAT_2000_4b91 = 3;
+   DAT_2000_4b94 = 3;
