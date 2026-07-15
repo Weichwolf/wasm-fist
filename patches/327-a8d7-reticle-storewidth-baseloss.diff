@@ -1,0 +1,78 @@
+PATCH 327 -- fix the FUN_1000_a8d7 (reticle-appear transition) STORE-WIDTH artifact so the reticle-state
+block is written at the ASM byte widths and d550 (the reticle sprite id) is NOT transiently clobbered
+-> kills the ~1/6 flaky mission-cockpit SIGSEGV in m_mga_FUN_0000_26de (the pinned patch-326 blocker).
+
+THE CLASS: store-width byte-vs-word (cf. patch 313 a84c vehicle-Y d55e/d562/d566 WORD->byte; patch
+104/134 cursor-state store-width).  The DAT_2000_2d34 host-ptr base-loss on the same fn's vehicle derefs
+was ALREADY fixed by patch 310 (kept intact); this patch is store-width ONLY.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ 0x1a8d7; DS=SS=DGROUP=0x1c00, seg-0xf69 fn):
+
+  1a8d7: c6 06 48 15 03   movb  0x3,[0x1548]       ; BYTE
+  1a8dc: c6 06 49 15 20   movb  0x20,[0x1549]      ; BYTE
+  1a8e1: c6 06 4f 15 fd   movb  0xfd,[0x154f]      ; BYTE  <-- the crash bug
+  1a8e6: c6 06 4b 15 00   movb  0x0,[0x154b]       ; BYTE
+  1a8eb: c6 06 4c 15 00   movb  0x0,[0x154c]       ; BYTE
+  1a8f0: c7 06 54 15 0000 movw  0x0,[0x1554]       ; WORD
+  1a8f6: 8b 3e 34 6d      mov   di,[0x6d34]         ; di = vehicle-node NEAR OFFSET (patch 310 rebase)
+  1a8fa..1a906:           mov   eax,[di+4/+8]; mov [0x155a],eax / [0x155e],eax   ; two DWORD stores
+  1a90a: 8a 85 8d 00      mov   al,[di+0x8d]; mov [0x154a],al                    ; BYTE
+  1a911: 8b 45 26         mov   ax,[di+0x26]; mov [0x1558],ax                    ; WORD
+  1a917: lret
+
+DAT_1000_d548/d549/d54a/d54b/d54c/d54f are all typed undefined2 (WORD); the asm writes them as BYTEs.
+The load-bearing one is `movb 0xfd,[0x154f]`: rendered as the WORD store `DAT_1000_d54f = 0xfd`, it
+writes byte 0x154f=0xfd AND byte 0x1550=0 -> it CLOBBERS the low byte of d550 (=DGROUP:0x1550, the
+reticle sprite id, read by FUN_0000_3a0f as `word[0x1550]` -> method `cs:0x3a52[d550&7]` -> 26a1 ->
+260c).  A valid id (e.g. 0x378, dir slot 55ac:6b2d) becomes 0x300 -> an EMPTY dir slot -> 260c resolves
+the sprite record to {recseg=0,recoff=0} -> patch-114's 26de reads a bogus header from g_mem[0xfffc] and
+walks source off g_mem -> SIGSEGV (~0x91de000).  Additionally `DAT_1000_d55e = *(uint32_t*)(veh+8)` has
+a WORD LHS (undefined2 macro) but the asm is a DWORD store -> it DROPS the high half, so d560 (word
+[0x1560], read by the 260c-clip fn @ fist.c ~11967) never lands.
+
+FIX: reconstruct the body at the exact asm widths (byte stores to 0x1548/0x1549/0x154f/0x154b/0x154c/
+0x154a via explicit g_mem addressing; d55e as a DWORD store).  d550 is now preserved across the
+transition (no adjacent WORD spill), so a valid reticle id survives -> 260c resolves a real record.
+Patch 310's DAT_2000_2d34 near-offset rebase is preserved.
+
+MISSION-PATH ONLY: a8d7 is the reticle-appear transition, called by the d548/d549-gated dirty methods
+inside the in-mission 459a render loop -> strictly behaviour-neutral for the 24 menu/pre-mission verify
+flows.  Sources stay pristine (re_out/fist.c 61453e42); patched via build/.
+
+--- a/fist.c
++++ b/fist.c
+@@ -64006,15 +64006,21 @@
+ {
+-  DAT_1000_d548 = 3;
+-  DAT_1000_d549 = 0x20;
+-  DAT_1000_d54f = 0xfd;
+-  DAT_1000_d54b = 0;
+-  DAT_1000_d54c = 0;
+-  DAT_1000_d554 = 0;
+-  /* PATCH 310: 0x20-view camera loader (asm 0x1a8d7, di=word[0x6d34] vehicle NEAR OFFSET); rebase the
+-     camera-source vehicle derefs onto g_mem+0x1c000 (dword[+4]/[+8], byte[+0x8d], word[+0x26]). */
+-  { uint8_t *veh = g_mem + 0x1c000 + (uint16_t)DAT_2000_2d34;
+-  _DAT_1000_d55a = *(uint32_t *)(veh + 4);
+-  DAT_1000_d55e = *(uint32_t *)(veh + 8);
+-  DAT_1000_d54a = *(uint8_t  *)(veh + 0x8d);
+-  DAT_1000_d558 = *(uint16_t *)(veh + 0x26); }
++  /* PATCH 327: store-WIDTH -- the reticle state block 0x1548..0x154f is written by `movb` (BYTE) in the
++     asm (0x1a8d7) but DAT_1000_d54x are typed undefined2 (WORD).  `DAT_1000_d54f = 0xfd` (WORD) spilled
++     byte 0x1550 = the LOW BYTE of d550 (reticle sprite id) to 0 -> a valid id (0x378) -> 0x300 -> empty
++     dir slot -> 260c {recseg=0,recoff=0} -> 26de reads g_mem[0xfffc] header + walks off g_mem -> SIGSEGV
++     (~1/6).  Write each at its asm BYTE width so d550 is preserved; d55e is a DWORD store so the high
++     half (word[0x1560]=d560, read by the 260c-clip fn) lands.  (Patch 310 already rebased the
++     DAT_2000_2d34 vehicle derefs -- kept.) */
++  { uint8_t *dg = g_mem + 0x1c000;
++  dg[0x1548] = 3;                     /* movb [0x1548],3 */
++  dg[0x1549] = 0x20;                  /* movb [0x1549],0x20 */
++  dg[0x154f] = 0xfd;                  /* movb [0x154f],0xfd (was WORD -> clobbered d550 low byte) */
++  dg[0x154b] = 0;                     /* movb [0x154b],0 */
++  dg[0x154c] = 0;                     /* movb [0x154c],0 */
++  *(uint16_t *)(dg + 0x1554) = 0;     /* movw [0x1554],0 */
++  { uint8_t *veh = dg + (uint16_t)DAT_2000_2d34;
++  *(uint32_t *)(dg + 0x155a) = *(uint32_t *)(veh + 4);    /* mov eax,[di+4]; [0x155a]=eax */
++  *(uint32_t *)(dg + 0x155e) = *(uint32_t *)(veh + 8);    /* mov eax,[di+8]; [0x155e]=eax (DWORD -> d560) */
++  dg[0x154a] = *(uint8_t *)(veh + 0x8d);                  /* mov al,[di+0x8d]; movb [0x154a],al */
++  *(uint16_t *)(dg + 0x1558) = *(uint16_t *)(veh + 0x26); /* mov ax,[di+0x26]; [0x1558]=ax */ } }
+   return;
