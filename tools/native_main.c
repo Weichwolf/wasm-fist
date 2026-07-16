@@ -27,6 +27,38 @@
 extern long fist_dump_framebuffer(const char *path);   /* fist_vga.c (fwd for segv_bt) */
 extern int  fist_vga_mode(void);
 
+/* -----------------------------------------------------------------------------------------------
+ * fist_preload_blockA -- reproduce the extender's block-A preload (the COLORMAP blend matrix).
+ *
+ * GROUND TRUTH (docs/oracle_bc90_capture.md; LIVE build-time DOSBox capture): the 64K colour-blend
+ * matrix bdc4 reads at ext-flat [bc90]=0x10000 ("block A", 256 distinct) is NOT built by bc9c at
+ * map-load -- it is PRELOADED before the menu by a `rep movsd` memcpy in the Doug-Huffman extender's
+ * own resident code (lin 0x4708, cs 0x0008), src fs:[0x1f0], filling all 64K.  That extender code is
+ * NOT part of fist_image.bin (which is only the 32-bit APP image, data-base file 0x583a) -- the
+ * extender's role in this port is the hand-written shim, so the preload is reproduced here.
+ *
+ * The 64K SOURCE is BAKED in the game's own data file DSOUNDS.BIN at offset 0xe00 -- proven byte-exact
+ * vs tools/oracle/samples/oracle_bdc4_matrix_blockA_0x141000.bin.  The engine (FIST.DAT; the "DSOUNDS"
+ * string is at fist_dat_image.bin 0x306) opens DSOUNDS.BIN at boot and the extender copies its [0xe00:]
+ * region into [bc90].  We reproduce that copy from the REAL DSOUNDS.BIN (faithful: the game's own data,
+ * NOT a hardcoded oracle-sample paste).  Returns the number of bytes copied.
+ */
+static long fist_preload_blockA(void *dst)
+{
+    if (!dst) return 0;
+    const char *dd = getenv("FIST_DATADIR"); if (!dd) dd = "armoredfist";
+    char p[512]; FILE *f = 0;
+    const char *sub[] = { "/FISTDATA/DSOUNDS.BIN", "/DSOUNDS.BIN", 0 };
+    for (int i = 0; sub[i] && !f; i++) { snprintf(p, sizeof p, "%s%s", dd, sub[i]); f = fopen(p, "rb"); }
+    if (!f) f = fopen("armoredfist/FISTDATA/DSOUNDS.BIN", "rb");
+    if (!f) { fprintf(stderr, "[blockA] DSOUNDS.BIN not found under datadir '%s'\n", dd); return 0; }
+    long n = 0;
+    if (fseek(f, 0xe00, SEEK_SET) == 0) n = (long)fread(dst, 1, 0x10000, f);
+    fclose(f);
+    if (n != 0x10000) fprintf(stderr, "[blockA] short read %ld/65536 from DSOUNDS.BIN\n", n);
+    return n;
+}
+
 #ifndef __EMSCRIPTEN__
 /* ---- FIST_FBTRAP: write-protect a framebuffer page to catch whoever draws the menu box ---- */
 volatile int   g_fbtrap_req = 0;          /* set at menu-enter */
@@ -1437,6 +1469,22 @@ int fist_extender_gate(void) {
              * op 0x18 (2f54 was already 1, cursor already at base) -> the reset only drops the stale marker. */
             *(uint32_t*)(xb+0x2f50) = 0;
             m_ext_FUN_0000_84c0(inbox);
+            /* PRELOAD BLOCK A -- the extender's `rep movsd` memcpy (@lin 0x4708, src fs:[0x1f0]) fills
+             * [bc90]=0x10000 with the 64K colour-blend matrix from DSOUNDS.BIN[0xe00:] before the menu;
+             * bdc4 (the colormap spatial-upsampler) reads it later.  84c0 has now allocated the [bc90]
+             * buffer; populate it with the game's own DSOUNDS.BIN block A (see fist_preload_blockA).  The
+             * subsequent build aliases [bc90] -> the tile buffer for bc9c, then restores [bc90]=save_bc90
+             * (the block-A buffer we just filled), so block A survives the map-load unclobbered. */
+            {
+                uint32_t bA = *(uint32_t *)(xb + 0xbc90);
+                long bn = fist_preload_blockA((void *)(uintptr_t)bA);
+                if (getenv("FIST_BLKADUMP") && bA) {
+                    FILE *f = fopen(getenv("FIST_BLKADUMP"), "wb");
+                    if (f) { fwrite((void *)(uintptr_t)bA, 1, 0x10000, f); fclose(f);
+                        fprintf(stderr, "[blkadump] port block A ([bc90] preload target) 64KB (%ld copied) -> %s\n",
+                                bn, getenv("FIST_BLKADUMP")); }
+                }
+            }
             /* "bc90 REUSED = tile 0x44200 during the build" (docs/oracle_tile3918_producer.md):
              * the ORIGINAL builds the pairwise palette-blend LUT (bc9c) into the SAME 64 KB buffer that
              * ds:0x3918 points at -- ds:0xbc90 aliases the tile during map-load.  The port's 84c0
