@@ -62,6 +62,19 @@ static void segv_bt(int sig, siginfo_t *si, void *uc) {
     unsigned long esp = (unsigned long)u->uc_mcontext.gregs[7  /*REG_ESP*/];
     fprintf(stderr, "\n[segv] signal %d fault-addr %p EIP=0x%08lx EBP=0x%08lx ESP=0x%08lx\n",
             sig, si->si_addr, eip, ebp, esp);
+    /* EBP-chain walk: gcc -O0 gives every C fn a real frame, so the chain is exact (FIST_SEGV_EBP). */
+    if (getenv("FIST_SEGV_EBP")) {
+        unsigned long fp = ebp;
+        fprintf(stderr, "[segv] EBP-chain return addrs:\n");
+        for (int i = 0; i < 40 && fp > 0x1000 && fp < 0xffffffff; i++) {
+            unsigned long *f = (unsigned long *)fp;
+            unsigned long ret = f[1];
+            if (ret > 0x08048000 && ret < 0x08800000) fprintf(stderr, "  #%d 0x%08lx\n", i, ret);
+            unsigned long nf = f[0];
+            if (nf <= fp) break;   /* frames grow downward toward higher addresses on unwind */
+            fp = nf;
+        }
+    }
     /* Walk saved return addresses off the stack (frameless engine: scan a window) */
     unsigned long *sp = (unsigned long *)esp;
     fprintf(stderr, "[segv] stack return-addr candidates (map with nm /tmp/fist_native):\n");
