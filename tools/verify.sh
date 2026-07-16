@@ -26,19 +26,19 @@ FLOWS=(
   # INTRO FMV (TITLE.KDV) -- the settled "ARMORED FIST" title card.  The Doug-Huffman extender's KDV player
   # (Route-1 module fist_ext.c) decodes+blits TITLE.KDV; the stream ends on a ~25-frame HOLD of the fully
   # formed title (frames ~370..394 identical) before the engine fades to the main menu.  Pinned by FRAME
-  # INDEX 385 (well inside the hold) via kdvframe=385 -> FIST_KDV=1 + FIST_KDV_DUMPFRAME (the decode-ahead
-  # seam runs the real decoder back-to-back to frame 385, timing-independent -> native and wasm produce the
-  # IDENTICAL frame, unlike a wall-clock dump which would land on a target-dependent throttled frame).  The
-  # genuine 1:1 320x200 DOSBox reference is captured by tools/refcapture_intro.sh, which bursts across the
-  # hold and selects the longest non-terminal stable hold (the title) by DOSBox-internal pixel signature
-  # (never compared to the port -> non-circular; two independent DOSBox runs agree AE=0).  READ-only.
-  # AE=0 native AND wasm; native md5 == wasm md5 (0-diff).
-  # PENDING (backed out d846564's claim): the FIST_KDV_DUMPFRAME decode-ahead seam HANGS in the real build --
-  # m_ext_FUN_0000_11dd() called standalone back-to-back (right after KDV OPEN, before the per-frame op-0x78
-  # drive) blocks on its first call (verified: 90s no-frame timeout, dumpframe-hits=0, op-0x78 never reached).
-  # The genuine ref (ref/intro_title_native320.png) + refcapture_intro.sh stand; the frame-pin mechanism needs
-  # to drive the REAL op-0x78 present path frame-by-frame to N, not call 11dd standalone. Re-enable when fixed.
-  # "intro|25000|kdvframe=385||$ROOT/ref/intro_title_native320.png"
+  # INDEX 385 (well inside the hold) via kdvframe=385 -> FIST_KDV=1 + FIST_KDV_DUMPFRAME.  The frame-pin
+  # (native_main.c op-0x78 gate) lets e584 drive the NORMAL frame-1 present (which warms the decoder), then
+  # streams the remaining presents DIRECTLY via 11dd to frame 385 and dumps -- frame-COUNT gated off the
+  # deterministic KDV stream, so native and wasm produce the IDENTICAL frame (timing-independent) and it
+  # sidesteps e584's cooperative-tick throttle crawl / skip-keypress abort.  (This replaces d846564's hung
+  # seam, which called 11dd standalone BEFORE the first present set up the decode -> blocked on its first
+  # call.)  The genuine 1:1 320x200 DOSBox reference is captured by tools/refcapture_intro.sh, which bursts
+  # across the hold and selects the longest non-terminal stable hold (the title) by DOSBox-internal pixel
+  # signature (never compared to the port -> non-circular; two independent DOSBox runs agree AE=0).
+  # READ-only.  AE=0 native AND wasm; native md5 == wasm md5 (0-diff).  Needs re_out/fist_image.bin (the
+  # extender/KDV player image, a `make kernel-image` build artifact -- gitignored, like the other images).
+  # Native reaches frame 385 in ~0.05 s, wasm in ~0.2 s (well within the 40 s / 120 s timeouts).
+  "intro|25000|kdvframe=385||$ROOT/ref/intro_title_native320.png"
   "mainmenu|25000|22000||$ROOT/ref/main_menu_native320.png"
   "about|25000|22000|200:160:139:0; 800:160:139:1; 1400:160:139:0; 2000:160:138:0|$ROOT/ref/about_native320.png"
   "settings|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 2000:160:126:0|$ROOT/ref/settings_native320.png"

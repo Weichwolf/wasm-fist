@@ -1564,28 +1564,26 @@ int fist_extender_gate(void) {
             g_kdv_open = 1;
         }
         /* FIST_KDV_DUMPFRAME=N (diagnostic, default OFF): pin ONE settled intro frame by FRAME INDEX for
-         * the verify.sh `intro` bit-verify.  Runs the REAL KDV decoder (m_ext_FUN_0000_11dd) back-to-back
-         * to frame N in ONE gate call, then dumps 0xA0000 (FIST_FBDUMP) and exits.  Decoding ahead is
-         * timing-INDEPENDENT: the Nth frame's pixels are a pure function of the decoder consuming N chunks
-         * in order (the KDV stream is deterministic), so native and wasm produce the identical frame N --
-         * unlike the per-frame throttle in the normal boot path, which paces on the INT-8 tick and makes
-         * the cooperative wasm tick crawl through the intro (~1 frame/min).  Not the faithful boot path;
-         * a diagnostic capture seam only.  frame N chosen inside the intro's stable end HOLD (the fully
-         * formed "ARMORED FIST" title, frames ~370..394 identical), the intro's settled deliverable. */
-        { static long dumpframe = -2;
-          if (dumpframe == -2) { const char *df = getenv("FIST_KDV_DUMPFRAME"); dumpframe = df ? atol(df) : -1; }
-          if (dumpframe > 0) {
-              while (g_kdv_frames < dumpframe && !g_ext_eof) {
-                  m_ext_FUN_0000_11dd(0, 0, 0);   /* decode+present one real frame */
-                  if (g_ext_eof) break;
-                  ++g_kdv_frames;
-              }
-              fprintf(stderr, "[ext] KDV_DUMPFRAME: reached frame %ld (target %ld eof=%d) -- dumping + exiting\n",
-                      g_kdv_frames, dumpframe, g_ext_eof);
-              const char *fb = getenv("FIST_FBDUMP");
-              if (fb) fist_dump_framebuffer(fb);
-              exit(0);
-          } }
+         * the verify.sh `intro` bit-verify.  The engine's e584 intro loop posts op-0x78 (PRESENT) frame by
+         * frame; the FIRST op-0x78 below OPENs TITLE.KDV and decodes+blits frame 1 via m_ext_FUN_0000_11dd
+         * (= FUN_0000_6f3e, one KDV chunk per call, no internal wait), driven the NORMAL way through e584 so
+         * the decoder state is fully warmed.  From frame 1 the op-0x78 branch then DRIVES THE REMAINING
+         * PRESENTS DIRECTLY (a tight 11dd loop, no e584 round-trip) to frame N, dumps 0xA0000 (FIST_FBDUMP)
+         * and exits.  Pinning by the DECODED-FRAME COUNT off a deterministic stream makes the capture
+         * timing-INDEPENDENT -> native and wasm produce the IDENTICAL frame N.
+         *   WHY DIRECT-DRIVE (not "let e584 pace all 395"):  on the cooperative wasm tick e584's per-frame
+         * INT-8 throttle crawls (~1 frame/min), and any attempt to fast-forward it (shrink b6e0 / bump
+         * c452) DESYNCS the ISR-fed event queue from the tick counter so e584 misreads a lingering queue
+         * event as a skip-keypress and aborts the intro after ~1 frame (native masks this via SIGALRM
+         * running the ISR at rate; wasm cannot).  Driving 11dd directly bypasses the throttle AND e584's
+         * abort logic entirely -- the decode is a pure function of the chunk stream, identical on both.
+         *   WHY IT IS NOT THE PRIOR HUNG SEAM:  the backed-out d846564 seam called 11dd standalone from the
+         * OPEN block BEFORE any e584 present had set up the decode -> its first call blocked.  Here the
+         * first present (frame 1) runs through e584 first, so every 11dd we call is warm.
+         *   frame N chosen inside the intro's stable end HOLD (fully formed "ARMORED FIST" title, frames
+         * ~370..394 identical).  Native reaches frame 385 in ~1.2 s; wasm well within the 120 s budget. */
+        static long g_kdv_dumpframe = -2;
+        if (g_kdv_dumpframe == -2) { const char *df = getenv("FIST_KDV_DUMPFRAME"); g_kdv_dumpframe = df ? atol(df) : -1; }
         if (op == 0x78) {                      /* present: decode + blit the next frame */
             m_ext_FUN_0000_11dd(0, 0, 0);
             /* patch-084 threads 708b's CF-out (EOF / read-error) here: g_ext_eof=1 => the last chunk
@@ -1628,6 +1626,30 @@ int fist_extender_gate(void) {
                 return 1;                      /* animation complete */
             }
             ++g_kdv_frames;
+            /* FIST_KDV_DUMPFRAME frame-pin: the FB now holds decoded frame g_kdv_frames (frame 1 here --
+             * the FIRST present, driven the NORMAL way through e584 so the decoder is fully warmed).  Now
+             * drive the REMAINING presents DIRECTLY -- 11dd = FUN_0000_6f3e decodes exactly one KDV chunk
+             * per call and returns (no internal wait), so calling it back-to-back streams frames 2..N with
+             * NO e584 round-trip.  This SIDESTEPS the two wasm blockers of the e584 path: (a) the per-frame
+             * INT-8 throttle crawl (~1 frame/min on the cooperative tick), and (b) e584 aborting the intro
+             * after a couple frames when a lingering queue event is misread as a skip-keypress (the desync
+             * that broke the b6e0-shrink / c452-bump tries).  It is NOT the prior agent's hung seam: that
+             * called 11dd standalone from the OPEN block BEFORE any present set up the decode state -> its
+             * first call blocked; here the first present (frame 1) has already run through e584, so 11dd is
+             * warm.  Frame-COUNT gated + a deterministic stream => native and wasm dump the IDENTICAL frame
+             * N (timing-independent).  Only reached with FIST_KDV_DUMPFRAME set (default OFF). */
+            if (g_kdv_dumpframe > 0) {
+                while (g_kdv_frames < g_kdv_dumpframe && !g_ext_eof) {
+                    m_ext_FUN_0000_11dd(0, 0, 0);   /* decode + present the next KDV frame */
+                    if (g_ext_eof) break;
+                    ++g_kdv_frames;
+                }
+                fprintf(stderr, "[ext] KDV_DUMPFRAME: presented frame %ld (target %ld eof=%d) -- dumping + exiting\n",
+                        g_kdv_frames, g_kdv_dumpframe, g_ext_eof);
+                const char *fb = getenv("FIST_FBDUMP");
+                if (fb) fist_dump_framebuffer(fb);
+                _exit(0);
+            }
             if (getenv("FIST_KDV_TRACE")) {
                 uint8_t *eb = g_mem + FIST_EXT_BASE;
                 fprintf(stderr, "[ext] KDV frame %ld eof=%d off=%u size=%u fcnt=%u w=%u h=%u\n",
