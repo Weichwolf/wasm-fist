@@ -1467,6 +1467,27 @@ int fist_extender_gate(void) {
                 if (cmb) { FILE *f=fopen(getenv("FIST_CMDUMP"),"wb"); if(f){ fwrite((void*)(uintptr_t)cmb,1,0x400000,f); fclose(f);
                     fprintf(stderr,"[cmdump] 85b8 colormap dumped -> %s\n", getenv("FIST_CMDUMP")); } }
             }
+            /* FIST_MTXDUMP: dump the 64 KB blend matrix that bc9c filled + bdc4 read (aliased at 0x3918). */
+            if (getenv("FIST_MTXDUMP")) {
+                uint32_t mb = save_3918;
+                if (mb) { FILE *f=fopen(getenv("FIST_MTXDUMP"),"wb"); if(f){ fwrite((void*)(uintptr_t)mb,1,0x10000,f); fclose(f);
+                    fprintf(stderr,"[mtxdump] blend matrix (3918/bc90 build buf) 64KB dumped -> %s\n", getenv("FIST_MTXDUMP")); } }
+            }
+            /* FIST_AC70PROBE: call the BUILT ac70 with a controlled target to check the nearest-index result. */
+            if (getenv("FIST_AC70PROBE")) {
+                extern uint32_t m_ext_FUN_0000_ac70(void);
+                uint8_t sv60=xb[0xac60], sv64=xb[0xac64];
+                uint32_t sv60d=*(uint32_t*)(xb+0xac60), sv64d=*(uint32_t*)(xb+0xac64);
+                *(uint32_t*)(xb+0xac64)=80; *(uint32_t*)(xb+0xac60)=255;
+                for (int i=80;i<88;i++){
+                    xb[0xac68]=xb[0x5260+i*3]; xb[0xac69]=xb[0x5260+i*3+1]; xb[0xac6a]=xb[0x5260+i*3+2];
+                    uint32_t r=m_ext_FUN_0000_ac70();
+                    fprintf(stderr,"[ac70probe] i=%d pal5260=(%d,%d,%d) 4f60=(%d,%d,%d) ac70=%u  acb6/c0/ca=%d/%d/%d\n",
+                        i,xb[0x5260+i*3],xb[0x5260+i*3+1],xb[0x5260+i*3+2],
+                        xb[0x4f60+i*3],xb[0x4f60+i*3+1],xb[0x4f60+i*3+2],r&0xff,xb[0xacb6],xb[0xacc0],xb[0xacca]);
+                }
+                *(uint32_t*)(xb+0xac60)=sv60d; *(uint32_t*)(xb+0xac64)=sv64d;
+            }
             if (getenv("FIST_PALDUMP")) {
                 FILE *f=fopen(getenv("FIST_PALDUMP"),"wb");
                 if(f){ fwrite(xb+0x5598,1,768,f); fwrite(xb+0x4f60,1,768,f); fwrite(xb+0x5260,1,768,f);
