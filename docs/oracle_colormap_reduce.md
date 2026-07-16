@@ -83,3 +83,28 @@ FIST_CMDUMP=/tmp/portcm.bin FIST_PALDUMP=/tmp/portpal.bin FIST_MTXDUMP=/tmp/port
 # oracle: scratch/oracle/activate.ram.bin, ext base 0x131000; colormap ptr [0x85b8]=0x474e60 (+base),
 #   tile/blend-matrix at 0x44200 (+base), 4f60/5260/a060 at those ext offsets.
 ```
+
+## CORRECTION 2 (3rd colormap iteration — bdc4 is FAITHFUL; frontier relocates to bc9c; STOP offline-chasing)
+The prior section pinned `FUN_0000_bdc4` (the colormap spatial upsample) as the unfaithful reconstruction.
+That is **DISPROVEN**: an instruction-exact emulator of `0xbdc4..0xbed1` AND the Ghidra C (`fist_ext.c:16965`)
+AGREE bit-for-behavior — both give distinct=89 on a symmetric blend matrix and distinct=256 on the oracle's
+matrix. **bdc4's C == the asm; it needs no change.** The prior "harness proof bdc4 is broken" was doubly
+flawed: its base input was the port's already-blocky FINAL output downsampled, and its `correctM` was a
+SYMMETRIC blend matrix that is NOT what the oracle feeds bdc4.
+
+**Relocated frontier:** bdc4 reads the 64K-aligned matrix at `[0xbc90]` (=0x10000). Decisive test (faithful
+bdc4, varying only the matrix, on a blocky base): symmetric `correctM` -> 89; port `3918` -> 154; **oracle's
+real `bc90` matrix -> 256 distinct.** So the collapse is that the port's `bc9c` writes a SYMMETRIC blend
+`M[a][b]=ac70((pal[a]+pal[b])/2)`, but the oracle's `bc90` is an **ASYMMETRIC 256-distinct table with a
+non-identity diagonal `[124,104,138,139,...]`**.
+
+**⚠️ CAVEAT — this CONFLICTS with the prior "bc9c byte-proven faithful / tile3918 (0x44200) byte-matches the
+oracle 212-distinct" claim (docs/oracle_tile3918_producer.md).** The colormap root has now flip-flopped
+THREE times this session (reduce-LUT -> bdc4 -> bc9c-matrix), each on OFFLINE/settled-RAM-dump analysis, and
+each disproving the last. That pattern says offline analysis of the settled dump is NOT converging — the
+settled dump is blind to build-time state, and "the oracle matrix" reconstructed offline may not be what
+bc9c should produce. **RESOLUTION REQUIRES the not-yet-built instrumented `dosbox-fist` to capture the
+oracle's `bc90` matrix (and bc9c's live inputs) AT BUILD TIME in the running original** — both colormap
+agents were blocked on exactly this (dosbox-fist absent, port op-0x18 flaky). Until that tooling exists,
+do NOT sink more offline colormap recon iterations; the honest next step for the colormap is BUILDING the
+instrumented DOSBox capture, not another settled-dump reinterpretation. Pivoted away this iteration.
