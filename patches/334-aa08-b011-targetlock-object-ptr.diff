@@ -1,0 +1,449 @@
+PATCH 334: the flight-model per-object ANIMATION-METHOD family (ab03-dispatched) -- object read from the
+WRONG param slot / near-offset base-loss.  Fixes the TARGET-LOCK method FUN_1000_aa08 (the crash the task
+named -- the sibling of patch 328's ab88 branch) + its LOS-query builders e1f0/e21c + bearing b112, and the
+proximity/collision-slot method FUN_1000_a9b9 (the first crash to MIGRATE once aa08 stopped faulting).
+
+THE CRASH (exact chains, FIST_SEGV_BT+FIST_SEGV_EBP + nm/addr2line, default `make native` AZER1 ACCEPT run
+BATTLES(160,100)->OK(205,128)->ACCEPT(40,186), FIST_COOP_TICK=1 FIST_TICK_HZ=25000):
+  aa08:  459a -> c0ca -> c0e5 -> 7c1d -> ab03 -> b011 -> aa08,  fault-addr ~0xc, EIP FUN_1000_aa08+0x3d
+         (`DAT_2000_5938 = *param_5`), ~1-2/24 ACCEPT runs.
+  a9b9:  ...7c1d -> ab03 -> b053 -> a9b9,  fault-addr ~0xfe74, EIP FUN_1000_a9b9+0x17 (surfaced once aa08 fixed).
+ROOT CAUSE: ab03 (patch 246) dispatches its frame-phase per-object method via a NEAR indirect call
+`call *[DGROUP:0x98dc|0x98fc + idx]` keeping the OBJECT live in DI and threads it to the callee as arg0 (a
+DGROUP NEAR OFFSET).  index 6 == 0xb011 = `call 0xf69:0xb378` = FUN_1000_aa08 (b011 forwards its params);
+index 13 == 0xb053 = `call 0xf69:0xb329` = FUN_1000_a9b9.  aa08's asm reads its object from DI, but Ghidra
+bound aa08's DI varnode to param_5 while b011 forwards arg0 as param_1 -> aa08 dereferenced a GARBAGE
+param_5; a9b9 gets the object in param_1 (correct slot) but Ghidra used it as a HOST pointer with NO DGROUP
+rebase.  Both are the class documented in docs/stage1.md as "methods that read their object from the
+uninitialised param_5 / a base-lost near offset instead of the rebased object" -- the same class patch 328
+fixed on the ab88->ab91->0541 branch.
+
+FIXES (each asm-verified vs re_out/fist_dat_image.bin; DS=SS=DGROUP=0x1c00; CS=0):
+
+(a) FUN_1000_aa08 (asm 0x1aa08-0x1ab7e) -- the per-object TARGET-LOCK / nearest-hostile selection method.
+    Reconstructed 1:1: object = g_mem+0x1c000+di (di = the near offset delivered in param_1); every
+    [di+off]/[si+off] field, the four word0*2-indexed per-type tables (-0x6764/-0x68d2/-0x68ca/-0x68c2) and
+    the DGROUP:0xdfbc candidate-list walk rebased to the DGROUP base; the DAT_2000_59xx scratch globals
+    kept (already correctly based).  Calls the LOS query e1f0 + the range helper 08e8 (== a17e's sole
+    trampoline target, `a17e: call 0x8e8; retf`) + the bearing b112 with the object/candidate HOST pointers,
+    and bf3c with the NEAR offset (it compares to the DGROUP-offset player DAT_2000_2d34).  The range word is
+    08e8's stored DAT_1000_c458/c45a (== its dx:ax return, asm 0x91d/0x920).
+
+(b) FUN_0000_e1f0 (asm 0xe1f0-0xe1ff) -- passes the CANDIDATE (param_6) + OBJECT (param_7) HOST pointers to
+    e21c and returns its result.  Ghidra CONCAT22-mangled the candidate, typed param_6/param_7 uint16_t
+    (truncating the host pointers) and dropped the return.  (Its other caller a77e is the pinned base-lost
+    sibling target-lock -- unchanged, and already reached the base-lost e21c before this patch.)
+
+(c) FUN_0000_e21c (asm 0xe21c-0xe2a4) -- the LOS/range-query builder: writes the candidate/object coords
+    into the extender TCB (param_2 = DAT_2000_aa2c) and POSTS op 0x58 via e339.  int*N pointer-scaling
+    (piVar2+2 => +8 where the asm reads +4) restored to the asm's +4/+8/+0xc byte offsets; the three
+    per-type height-table reads ([di-0x6151]/[di-0x1a78]/[bx-0x1a40] are DGROUP near offsets) rebased;
+    return type void -> int (Ghidra dropped e339's result).
+
+(d) FUN_0000_b112 (asm 0xb112-0xb122) -- bearing(best->object) via 0731 (patch 328, host-ptr) + the dropped
+    `add ah,0x80` bias + the dropped return.  Reached only once a target is locked.
+
+(e) FUN_1000_a9b9 (asm 0x1a9b9-0x1aa07) -- the per-object PROXIMITY/COLLISION-slot registration method.
+    Object = g_mem+0x1c000+di (param_1 near offset); the DGROUP:0x6d3a/0x6d3c collision-slot table
+    read+store (Ghidra read the WORD entry as int** -> host pointer) rebased + WORD store widths; the
+    candidate `[si+off]` reads rebased.
+
+SCOPE / HONESTY:
+  - MISSION-PATH ONLY: aa08/a9b9/e1f0/e21c/b112 run only on the in-mission 459a flight tick -> behaviour-
+    neutral for the 24 menu/settings verify flows (verified native 24/24 + wasm 24/24, native<->wasm 0-diff).
+  - The op-0x58 LOS service lives in the Doug-Huffman extender's 32-bit PM code, NOT in FIST.DAT (like the
+    op-0x24 windshield voxel / op-0x18 map); the shim gate returns 0 for it (the documented extender
+    frontier), so aa08 currently reads every candidate as "not visible" and its a17e/b112/bf3c tail stays
+    dead.  The FIST.DAT engine code above is reconstructed faithfully; the missing LOS is the pinned
+    extender-side deliverable -- NOT a guard/band-aid in the engine.  There is NO mission-cockpit DOSBox
+    reference, so the bar is asm-faithfulness + crash-freedom + zero regression.
+  - PINNED (the residual, NOT fixed here -- a genuinely separate multi-fn subsystem): the SAME ab03
+    frame-phase table (0x98dc/0x98fc) dispatches ~7 more base-lost per-object AI-behaviour twins --
+    ab82->ab7f (draw-mode state machine), ad2f/ae66 (further [di+0x43]/[di+0x45] sub-dispatchers), af97,
+    ae32, ae5c, afa2 -- all sharing the object + DAT_2000_5796 (class-descriptor near offset) base-loss and
+    each calling deeper AI/weapon/projectile code (b26a/8711/96c0/a286/a6e3/e2c2).  Fixing aa08+a9b9 dropped
+    the ACCEPT SIGSEGV from ~1-2/24 (aa08-dominant) to ~1/20 (now ab7f in this family).  Reconstructing the
+    whole family is the next bounded (oracle-less) deliverable; b111 is a `ret` stub (safe), ab88/aa08/a9b9/
+    ad08/ad3b/ac75 are already handled.
+--- a/fist.c
++++ b/fist.c
+@@ -1388,10 +1388,10 @@
+ undefined4 __allregs FUN_0000_e189(undefined4 param_1);
+ char __allregs FUN_0000_e1a6(undefined4 param_1,int param_2);
+ undefined4 __allregs FUN_0000_e1d1(undefined4 param_1);
+-undefined4 __allregs FUN_0000_e1f0(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined4 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
++undefined4 __allregs FUN_0000_e1f0(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined4 param_4, undefined2 param_5,int *param_6,int *param_7);   /* PATCH 334: param_6/param_7 are candidate/object HOST pointers */
+ undefined4 __allregs FUN_0000_e200(undefined4 param_1,undefined2 param_2);
+ undefined4 __allregs FUN_0000_e20a(undefined4 param_1,int *param_2);
+-void __allregs FUN_0000_e21c(int *param_1,int param_2,int *param_3);
++int __allregs FUN_0000_e21c(int *param_1,int param_2,int *param_3);   /* PATCH 334: returns e339's op-0x58 result */
+ undefined4 __allregs FUN_0000_e2a5(undefined4 param_1);
+ void __allregs FUN_0000_e2c2(undefined4 param_1);
+ void __allregs FUN_0000_e2df(undefined4 param_1);
+@@ -27669,8 +27669,13 @@
+ undefined4 __allregs FUN_0000_b112(int param_1,int param_2)
+ 
+ {
+-  FUN_0000_0731(param_1 + 4,param_2 + 4);
+-  return;
++  /* PATCH 334: bearing(best-target -> object).  asm 0xb112-0xb122: push si/di; lea si,[si+4];
++   * lea di,[di+4]; call 0731; add ah,0x80; retf.  param_1 = si = best-target HOST ptr, param_2 = di =
++   * object HOST ptr; 0731 (patch 328, host-ptr point structs) returns the raw bearing in AX, `add ah,0x80`
++   * biases it by 0x8000.  Ghidra dropped both the +0x8000 bias and the return (the __allregs AX-only
++   * model).  (Reached only when a target is locked, i.e. once op-0x58 LOS is implemented.) */
++  return (undefined4)(uint16_t)((uint16_t)FUN_0000_0731((uint *)(uintptr_t)(param_1 + 4),
++                                                        (uint *)(uintptr_t)(param_2 + 4)) + 0x8000);
+ }
+ 
+ 
+@@ -33392,11 +33397,17 @@
+ 
+ undefined4 __allregs
+ FUN_0000_e1f0(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined4 param_4,
+-             undefined2 param_5,undefined2 param_6,undefined2 param_7)
++             undefined2 param_5,int *param_6,int *param_7)
+ 
+ {
+-  FUN_0000_e21c(CONCAT22((int)((ulong)param_4 >> 0x10),param_6),DAT_2000_aa2c,param_7);
+-  return;
++  /* PATCH 334: asm 0xe1f0-0xe1ff -- push si; mov bx,si (candidate); load gs:si = extender TCB
++   * (DGROUP:0xea2e/0xea2c); call e21c; retf.  Passes the CANDIDATE (param_6) and OBJECT (param_7) HOST
++   * pointers to e21c, which builds+posts the extender LOS/range query (op 0x58) and returns its result.
++   * Ghidra CONCAT22-mangled the candidate pointer and typed param_6/param_7 as uint16_t (truncating the
++   * host pointers) and dropped the return.  (Its other caller a77e is the pinned base-lost sibling
++   * target-lock -- unchanged/unreached; it already reached the base-lost e21c before this patch.) */
++  (void)param_1; (void)param_2; (void)param_3; (void)param_4; (void)param_5;
++  return (undefined4)FUN_0000_e21c(param_6,(int)DAT_2000_aa2c,param_7);
+ }
+ 
+ 
+@@ -33446,30 +33457,39 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_e21c) @ 0000:e21c ===== */
+ 
+-void __allregs FUN_0000_e21c(int *param_1,int param_2,int *param_3)
++int __allregs FUN_0000_e21c(int *param_1,int param_2,int *param_3)
+ 
+ {
+-  uint uVar1;
+-  int *piVar2;
+-  undefined2 in_GS;
+-  
+-  piVar2 = (int *)param_1;
+-  *(undefined4 *)(param_2 + 0xde) = *(undefined4 *)(piVar2 + 2);
+-  *(undefined4 *)(param_2 + 0xe2) = *(undefined4 *)(piVar2 + 4);
+-  if (*piVar2 == 0x1a) {
+-    uVar1 = *(uint *)((*(byte *)((int)piVar2 + 0x19) & 3) * 2 + -0x6151);
+-  }
+-  else {
+-    uVar1 = *(uint *)(*piVar2 * 2 + -0x1a78);
+-  }
+-  *(long *)(param_2 + 0xe6) = (ulong)uVar1 + *(long *)(piVar2 + 6);
+-  *(undefined4 *)(param_2 + 0xd2) = *(undefined4 *)(param_3 + 2);
+-  *(undefined4 *)(param_2 + 0xd6) = *(undefined4 *)(param_3 + 4);
+-  *(long *)(param_2 + 0xda) = (ulong)*(uint *)(*param_3 * 2 + -0x1a40) + *(long *)(param_3 + 6);
+-  *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_1;
+-  DAT_2000_aa10 = 0x58;
+-  FUN_0000_e339();
+-  return;
++  /* PATCH 334: build + POST the extender LOS/range query (op 0x58).  asm 0xe21c-0xe2a4.
++   * param_1 = candidate HOST ptr (bx), param_3 = object HOST ptr (di), param_2 = the extender TCB base
++   * (DAT_2000_aa2c, post-068 = g_mem+(word[0xea2e]<<4)+word[0xea2c], i.e. the gs:si target).  Ghidra
++   * pointer-scaled the +4/+8/+0xc DWORD reads as int*(x4) (piVar2+2 => +8 where the asm reads +4) and
++   * base-lost the three per-type height-table reads ([di-0x6151]/[di-0x1a78]/[bx-0x1a40] are DGROUP
++   * near offsets).  Writes the candidate/object coords into the TCB, posts op 0x58, returns e339's
++   * result.  The op-0x58 LOS service is the extender's PM code (absent from FIST.DAT); the gate returns
++   * 0 for it -> "not visible" (documented extender frontier). */
++  unsigned char *dg   = (unsigned char *)g_mem + 0x1c000;
++  unsigned char *cand = (unsigned char *)param_1;
++  unsigned char *obj  = (unsigned char *)param_3;
++  unsigned char *tcb  = (unsigned char *)(uintptr_t)(uint32_t)param_2;
++  uint16_t w; uint32_t tbl;
++
++  *(uint32_t *)(tcb + 0xde) = *(uint32_t *)(cand + 4);          /* e21d/e221 gs:[si+0xde] = [bx+4] */
++  *(uint32_t *)(tcb + 0xe2) = *(uint32_t *)(cand + 8);          /* e227/e22b */
++  w = *(uint16_t *)cand;                                        /* e231 mov di,[bx] (candidate word0) */
++  if (w == 0x1a)                                                /* e233/e236 */
++    tbl = *(uint16_t *)(dg + (uint16_t)((cand[0x19] & 3) * 2 - 0x6151)); /* e238-e241 */
++  else
++    tbl = *(uint16_t *)(dg + (uint16_t)(w * 2 - 0x1a78));       /* e249-e24b */
++  *(uint32_t *)(tcb + 0xe6) = tbl + *(uint32_t *)(cand + 0xc);  /* e251/e255 */
++  *(uint32_t *)(tcb + 0xd2) = *(uint32_t *)(obj + 4);           /* e25d/e261 */
++  *(uint32_t *)(tcb + 0xd6) = *(uint32_t *)(obj + 8);           /* e267/e26b */
++  w = *(uint16_t *)obj;                                         /* e271 mov bx,[di] (object word0) */
++  tbl = *(uint16_t *)(dg + (uint16_t)(w * 2 - 0x1a40));         /* e273/e275 */
++  *(uint32_t *)(tcb + 0xda) = tbl + *(uint32_t *)(obj + 0xc);   /* e27b/e27f */
++  *(uint32_t *)(tcb + 0x3f2) = (uint32_t)(uintptr_t)param_1;    /* e291 inbox (ebx) = candidate */
++  DAT_2000_aa10 = 0x58;                                         /* e299/e29c op = 0x58 */
++  return (int)(uint16_t)FUN_0000_e339();                        /* e2a0 call e339 -> LOS result */
+ }
+ 
+ 
+@@ -60570,37 +60590,38 @@
+ void __allregs FUN_1000_a9b9(int param_1)
+ 
+ {
+-  int *piVar1;
+-  int iVar2;
+-  int iVar3;
+-  
+-  if (*(char *)(param_1 + 0x1c) != '\0') {
+-    iVar2 = (uint)*(byte *)(param_1 + 0x1b) << 2;
+-    iVar2 = CONCAT11((char)((uint)iVar2 >> 8),(char)iVar2 + *(char *)(param_1 + 0x1c));
+-    iVar3 = iVar2 * 2;
+-    piVar1 = *(int **)((undefined1 *)&DAT_2000_2d3a + iVar3);
+-    if (piVar1 != (int *)0x0) {
+-      if (*piVar1 == 0x17) {
+-        *(char *)(piVar1 + 0x12) = (char)piVar1[0x12] + '\x01';
++  /* PATCH 334: the per-object PROXIMITY/COLLISION-slot registration method (asm 0x1a9b9-0x1aa07;
++   * DS=DGROUP=0x1c00), an ab03 animation twin (0x98dc/0x98fc index 13 == 0xb053 = `call 0xf69:0xb329`
++   * = this).  ab03 delivers the OBJECT in param_1 (correct slot), but Ghidra used param_1 as a HOST
++   * pointer with NO DGROUP rebase -> `*(char*)(param_1+0x1c)` dereferenced a small near offset (SIGSEGV
++   * fault ~0xfe74, chain 7c1d->ab03->b053->a9b9).  Same class the ab88/aa08 branches carry; a9b9 SURFACED
++   * once aa08 (patch 334a) stopped crashing first.  Reconstructed 1:1: object = g_mem+0x1c000+di; the
++   * DGROUP:0x6d3a/0x6d3c collision-slot table read+store (Ghidra read the WORD entry as int** -> host
++   * pointer) rebased to the DGROUP base + WORD store widths; the candidate `[si+off]` reads rebased. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;                        /* object NEAR offset (ab03 arg0) */
++  unsigned char *obj = dg + di;
++
++  if (*(uint8_t *)(obj + 0x1c) != 0) {                    /* 1a9b9 cmp [di+0x1c],0; je 1aa07 */
++    uint16_t idx = (uint16_t)(uint8_t)((obj[0x1b] << 2) + obj[0x1c]); /* 1a9bf-1a9c6 (bl byte add) */
++    uint16_t bx  = (uint16_t)(idx * 2);                   /* 1a9c9 shl bx,1 */
++    uint16_t si  = *(uint16_t *)(dg + (uint16_t)(bx + 0x6d3a)); /* 1a9cb mov si,[bx+0x6d3a] */
++    unsigned char *cand = dg + si;
++    if (si != 0) {                                        /* 1a9cf or si,si; je 1a9f8 */
++      if (*(uint16_t *)cand == 0x17) {                    /* 1a9d3 cmp WORD [si],0x17; je 1a9f5 */
++        *(uint8_t *)(cand + 0x24) += 1;                   /* 1a9f5 inc [si+0x24] */
+       }
+       else {
+-        if ((*(byte *)(param_1 + 0x19) & 0x10) != 0) {
+-          return;
+-        }
+-        if ((*(byte *)(param_1 + 0x19) & 6) != 0) {
+-          return;
+-        }
+-        if (((*(byte *)((int)piVar1 + 0x19) & 0x10) == 0) &&
+-           ((*(byte *)((int)piVar1 + 0x19) & 6) == 0)) {
+-          return;
+-        }
+-        *(char *)(piVar1 + 0xe) = (char)piVar1[0xe] + '\x01';
++        if ((obj[0x19] & 0x10) != 0) return;              /* 1a9d8 test [di+0x19],0x10; jne 1aa07 */
++        if ((obj[0x19] & 6) != 0) return;                 /* 1a9de test [di+0x19],6; jne 1aa07 */
++        if ((cand[0x19] & 0x10) == 0 && (cand[0x19] & 6) == 0) return; /* 1a9e4/1a9ea */
++        *(uint8_t *)(cand + 0x1c) += 1;                   /* 1a9f0 inc [si+0x1c] */
+       }
+     }
+-    *(int *)((undefined1 *)&DAT_2000_2d3a + iVar3) = param_1;
+-    ((undefined2 *)&DAT_2000_2d3c)[iVar2] = piVar1;
+-    *(char *)(param_1 + 0x1c) = *(char *)(param_1 + 0x1c) + -1;
+-    *(uint *)(param_1 + 0x40) = *(uint *)(param_1 + 0x40) & 0xfffd;
++    *(uint16_t *)(dg + (uint16_t)(bx + 0x6d3a)) = di;     /* 1a9f8 mov [bx+0x6d3a],di */
++    *(uint16_t *)(dg + (uint16_t)(bx + 0x6d3c)) = si;     /* 1a9fc mov [bx+0x6d3c],si */
++    *(uint8_t *)(obj + 0x1c) -= 1;                        /* 1aa00 dec [di+0x1c] */
++    *(uint16_t *)(obj + 0x40) &= 0xfffd;                  /* 1aa03 and WORD [di+0x40],0xfffd */
+   }
+   return;
+ }
+@@ -60613,92 +60634,120 @@
+              int *param_5)
+ 
+ {
+-  byte bVar1;
+-  char cVar2;
+-  int *piVar3;
+-  int iVar4;
+-  uint uVar5;
+-  byte *pbVar6;
+-  int *piVar8;
+-  byte *pbVar7;
+-  
+-  DAT_2000_5934 = '\0';
+-  DAT_2000_5938 = *param_5;
+-  DAT_2000_56ab = *(byte *)(param_5 + 0xb) & 8;
+-  pbVar6 = (byte *)(*param_5 * 2);
+-  pbVar7 = (byte *)CONCAT22((int)((ulong)param_3 >> 0x10),pbVar6);
+-  DAT_2000_5944 = *(int *)(pbVar6 + -0x6764);
+-  uVar5 = *(uint *)(pbVar6 + -0x68d2);
+-  if ((1 < DAT_2000_2dae) &&
+-     (uVar5 = *(uint *)(pbVar6 + -0x68ca), (*(byte *)(param_5 + 0xd) & 0x10) != 0)) {
+-    uVar5 = *(uint *)(pbVar6 + -0x68c2);
+-  }
+-  DAT_2000_593c = 0;
+-  DAT_2000_5940 = (int *)0x0;
+-  DAT_2000_593e = 0xffff;
+-  DAT_2000_5942 = 0xffff;
+-  DAT_2000_5935 = 0xff;
+-  DAT_2000_5a0c = (byte *)&DAT_2000_9fbc;
+-  DAT_2000_5a0a = 0xb6;
+-  DAT_2000_5936 = param_5;
+-  DAT_2000_593a = uVar5;
+-  while (piVar8 = DAT_2000_5936, DAT_2000_5a0a != 0) {
+-    DAT_2000_5a0a = DAT_2000_5a0a + -1;
+-    pbVar7 = (byte *)CONCAT22((int)((ulong)pbVar7 >> 0x10),DAT_2000_5a0c);
+-    pbVar6 = DAT_2000_5a0c + 4;
+-    piVar8 = *(int **)DAT_2000_5a0c;
+-    DAT_2000_5a0c = pbVar6;
+-    if (((piVar8 != (int *)0x0) && ((*(byte *)(piVar8 + 0xb) & 4) != 0)) &&
+-       ((uVar5 = CONCAT11((char)(uVar5 >> 8),(char)piVar8[0xb]) & 0xff08,
+-        (byte)uVar5 != DAT_2000_56ab && (piVar8 != DAT_2000_5936)))) {
+-      iVar4 = FUN_0000_e1f0(uVar5,param_1,param_2,pbVar7,param_4,piVar8,DAT_2000_5936);
+-      uVar5 = 0;
+-      if (iVar4 != 0) {
+-        pbVar7 = (byte *)CONCAT22((int)((ulong)pbVar7 >> 0x10),(byte *)(*piVar8 + DAT_2000_5944));
+-        bVar1 = *(byte *)(*piVar8 + DAT_2000_5944);
+-        uVar5 = CONCAT11((char)((uint)iVar4 >> 8),bVar1);
+-        if (bVar1 <= DAT_2000_5935) {
+-          if (bVar1 != DAT_2000_5935) {
+-            DAT_2000_593e = 0xffff;
+-            DAT_2000_5942 = 0xffff;
+-            DAT_2000_5935 = bVar1;
+-          }
+-          uVar5 = FUN_0000_a17e(piVar8 + 2,DAT_2000_5936 + 2);
+-          piVar8 = (int *)0x0;
+-          if ((((char)((uint)param_2 >> 8) == '\0') &&
+-              (uVar5 = CONCAT11((char)param_2,(char)(uVar5 >> 8)), uVar5 <= DAT_2000_593a)) &&
+-             (uVar5 < DAT_2000_593e)) {
+-            DAT_2000_593c = 0;
+-            DAT_2000_5934 = DAT_2000_5934 + '\x01';
+-            DAT_2000_593e = uVar5;
++  /* PATCH 334: the per-object TARGET-LOCK / nearest-hostile selection method (asm 0x1aa08-0x1ab7e;
++   * DS=DGROUP=0x1c00), dispatched by ab03's frame-phase table (DGROUP:0x98dc/0x98fc index 6 == 0xb011
++   * -> `call 0xf69:0xb378` -> this fn).  ab03 (patch 246) keeps the OBJECT live in DI across its near
++   * dispatch and delivers it as arg0 (b011 forwards it as param_1); Ghidra had aa08 read its object
++   * from the DI VARNODE = param_5, which ab03 never threads -> aa08 dereferenced a GARBAGE param_5
++   * (`DAT_2000_5938 = *param_5`, fist.c line ~64362, fault-addr low ~0xc, ~1/12 on the always-run
++   * 459a->c0ca->c0e5->7c1d->ab03->b011->aa08 flight tick).  This is the SIBLING of the ab88 branch
++   * patch 328 fixed (ab88->ab91->0541 read the object from the WRONG param slot for the same reason).
++   * Reconstructed 1:1 from the asm: object = g_mem+0x1c000+di (di = the near offset in param_1); every
++   * [di+off]/[si+off] field, the four word0*2-indexed per-type tables (-0x6764/-0x68d2/-0x68ca/-0x68c2)
++   * and the DGROUP:0xdfbc candidate-list walk are rebased to the DGROUP base; the LOS query e1f0 and the
++   * range helper 08e8 (== a17e's sole callee, `a17e: call 0x8e8; retf`) + the bearing b112 are called
++   * with the object/candidate HOST pointers (they deref host pointers); bf3c gets the NEAR offset (it
++   * compares to the DGROUP-offset player DAT_2000_2d34).  The range result is 08e8's DAT_1000_c458/c45a
++   * (== its dx:ax return, asm 0x91d/0x920).  NB the e1f0 LOS lives in the extender's op-0x58 PM service
++   * (not in FIST.DAT); our gate returns 0 for it (the documented extender frontier), so every candidate
++   * currently reads "not visible" and the a17e/b112/bf3c tail stays dead -- crash-free and honest.
++   * The DAT_2000_59xx scratch globals are already correctly DGROUP-based (0x2000-base == DGROUP:off+
++   * 0x4000); written here via explicit dg+off accessors to control the asm's byte/word widths. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;            /* object NEAR offset (ab03 arg0) */
++  unsigned char *obj = dg + di;
++  uint16_t w0 = *(uint16_t *)obj;                        /* 1aa11 mov ax,[di]          */
++  uint16_t rgate, cursor, cnt, si, best, rax;
++  (void)param_2; (void)param_3; (void)param_4; (void)param_5;
++
++  *(uint8_t  *)(dg + 0x9934) = 0;                        /* 1aa08 count = 0            */
++  *(uint16_t *)(dg + 0x9936) = di;                       /* 1aa0d [0x9936] = di        */
++  *(uint16_t *)(dg + 0x9938) = w0;                       /* 1aa13 [0x9938] = word0     */
++  *(uint8_t  *)(dg + 0x96ab) = obj[0x16] & 8;            /* 1aa16 [0x96ab] = [di+0x16]&8 */
++  *(uint16_t *)(dg + 0x9944) = *(uint16_t *)(dg + (uint16_t)(w0*2 - 0x6764)); /* 1aa22 */
++  rgate = *(uint16_t *)(dg + (uint16_t)(w0*2 - 0x68d2));                      /* 1aa29 */
++  if (*(uint8_t *)(dg + 0x6dae) >= 2) {                  /* 1aa2d cmp BYTE [0x6dae],2  */
++    rgate = *(uint16_t *)(dg + (uint16_t)(w0*2 - 0x68ca));                    /* 1aa34 */
++    if (obj[0x1a] & 0x10)                                /* 1aa38 test [di+0x1a],0x10  */
++      rgate = *(uint16_t *)(dg + (uint16_t)(w0*2 - 0x68c2));                  /* 1aa3e */
++  }
++  *(uint16_t *)(dg + 0x993a) = rgate;                    /* 1aa42 [0x993a] = range gate */
++  *(uint16_t *)(dg + 0x993c) = 0;                        /* 1aa45 */
++  *(uint16_t *)(dg + 0x9940) = 0;                        /* 1aa4b best target = 0      */
++  *(uint16_t *)(dg + 0x993e) = 0xffff;                   /* 1aa51 */
++  *(uint16_t *)(dg + 0x9942) = 0xffff;                   /* 1aa57 */
++  *(uint8_t  *)(dg + 0x9935) = 0xff;                     /* 1aa5d */
++  cursor = 0xdfbc;                                        /* 1aa62 list cursor near off */
++  cnt    = 0xb6;                                          /* 1aa68 count 182           */
++  rax = 0;
++  while (cnt != 0) {                                      /* 1aa6e/1aa73                */
++    unsigned char *cand;
++    cnt--;                                                /* 1aa77 */
++    si = *(uint16_t *)(dg + cursor);                      /* 1aa84 mov si,[bx]          */
++    cursor += 4;                                          /* 1aa7f add [0x9a0c],4       */
++    if (si == 0) continue;                                /* 1aa86 or si,si; je         */
++    cand = dg + si;
++    if ((cand[0x16] & 4) == 0) continue;                  /* 1aa8a test [si+0x16],4; je  */
++    if ((cand[0x16] & 8) == *(uint8_t *)(dg + 0x96ab)) continue; /* 1aa90-1aa99         */
++    if (si == *(uint16_t *)(dg + 0x9936)) continue;       /* 1aa9b cmp si,[0x9936]; je   */
++    rax = (uint16_t)FUN_0000_e1f0(0,0,0,0,0,
++              (int *)(uintptr_t)cand,(int *)(uintptr_t)obj); /* 1aaa5 call e1f0 (LOS op 0x58) */
++    if (rax != 0) {                                       /* 1aaaa or ax,ax; je 1aafd    */
++      uint8_t rank = *(uint8_t *)(dg + (uint16_t)(*(uint16_t *)cand + *(uint16_t *)(dg+0x9944))); /* 1aaae-1aab4 */
++      if (rank <= *(uint8_t *)(dg + 0x9935)) {            /* 1aab6 cmp; ja -> 1aafd      */
++        if (rank != *(uint8_t *)(dg + 0x9935)) {          /* 1aabc je -> skip reset      */
++          *(uint16_t *)(dg + 0x993e) = 0xffff;            /* 1aabe */
++          *(uint16_t *)(dg + 0x9942) = 0xffff;            /* 1aac4 */
++          *(uint8_t  *)(dg + 0x9935) = rank;              /* 1aaca */
++        }
++        FUN_0000_08e8((long *)(uintptr_t)(cand + 4),(long *)(uintptr_t)(obj + 4)); /* 1aad8 a17e->08e8 */
++        {
++          uint16_t rlo = DAT_1000_c458, rhi = DAT_1000_c45a;   /* 08e8 dx:ax == c45a:c458 */
++          if ((uint8_t)(rhi >> 8) == 0) {                 /* 1aade or dh,dh; jne -> 1aafd */
++            rax = (uint16_t)(((rhi & 0xff) << 8) | ((rlo >> 8) & 0xff)); /* 1aae2 al=ah; ah=dl */
++            if (rax <= *(uint16_t *)(dg + 0x993a) &&       /* 1aae6 cmp; ja -> 1aafd      */
++                rax <  *(uint16_t *)(dg + 0x993e)) {        /* 1aaec cmp; jae -> 1aafd     */
++              *(uint16_t *)(dg + 0x993e) = rax;            /* 1aaf2 */
++              *(uint16_t *)(dg + 0x993c) = si;             /* 1aaf5 [0x993c] = si         */
++              *(uint8_t  *)(dg + 0x9934) += 1;             /* 1aaf9 inc count             */
++            }
+           }
+         }
+       }
+-      if (((*(byte *)((int)piVar8 + 0x17) & 8) != 0) && (uVar5 < DAT_2000_5942)) {
+-        DAT_2000_5940 = piVar8;
+-        DAT_2000_5942 = uVar5;
+-      }
+     }
++    /* after_los @ 1aafd (rax = octant range, or e1f0's return if bailed above): */
++    if ((cand[0x17] & 8) == 0) continue;                  /* 1aafd test [si+0x17],8; je   */
++    if (rax >= *(uint16_t *)(dg + 0x9942)) continue;      /* 1ab05 cmp; jae               */
++    *(uint16_t *)(dg + 0x9942) = rax;                     /* 1ab0d */
++    *(uint16_t *)(dg + 0x9940) = si;                      /* 1ab10 best = si              */
++  }
++  /* 1ab17: tail */
++  *(uint8_t *)(obj + 0x19) &= 0x7f;                       /* 1ab1b and [di+0x19],0x7f     */
++  best = *(uint16_t *)(dg + 0x9940);                      /* 1ab1f si = best              */
++  if (best != 0) {                                        /* 1ab23 or si,si; je 1ab34     */
++    *(uint8_t *)(obj + 0x19) |= 0x80;                     /* 1ab27 or [di+0x19],0x80      */
++    *(uint16_t *)(obj + 0x8e) =                           /* 1ab30 mov [di+0x8e],ax       */
++        (uint16_t)FUN_0000_b112((int)(intptr_t)(dg + best),(int)(intptr_t)obj); /* 1ab2b call b112 */
+   }
+-  *(byte *)((int)DAT_2000_5936 + 0x19) = *(byte *)((int)DAT_2000_5936 + 0x19) & 0x7f;
+-  piVar3 = DAT_2000_5940;
+-  if (DAT_2000_5940 != (int *)0x0) {
+-    *(byte *)((int)piVar8 + 0x19) = *(byte *)((int)piVar8 + 0x19) | 0x80;
+-    iVar4 = FUN_0000_b112(piVar3,piVar8);
+-    piVar8[0x47] = iVar4;
+-  }
+-  cVar2 = DAT_2000_5934;
+-  iVar4 = piVar8[0x4a];
+-  *(char *)(piVar8 + 0x4a) = DAT_2000_5934;
+-  if (((char)iVar4 == '\0') && (cVar2 != '\0')) {
+-    FUN_0000_bf3c(0xe,(byte *)pbVar7,piVar8);
+-  }
+-  iVar4 = DAT_2000_593c;
+-  *(int *)((int)piVar8 + 0x9d) = DAT_2000_593c;
+-  if (((((piVar8[0x20] & 1U) != 0) && (iVar4 != *(int *)((int)piVar8 + 0x97))) &&
+-      ((int *)*(int *)((int)piVar8 + 0x97) != (int *)0x0)) &&
+-     (DAT_2000_5935 < *(byte *)(*(int *)*(int *)((int)piVar8 + 0x97) + DAT_2000_5944))) {
+-    *(undefined2 *)((int)piVar8 + 0x97) = 0;
++  {
++    uint8_t newc = *(uint8_t *)(dg + 0x9934);             /* 1ab34 al = count             */
++    uint8_t oldc = *(uint8_t *)(obj + 0x94);              /* 1ab37 ah = [di+0x94]         */
++    *(uint8_t *)(obj + 0x94) = newc;                      /* 1ab3b mov [di+0x94],al       */
++    if (oldc == 0 && newc != 0)                           /* 1ab3f/1ab43                  */
++      FUN_0000_bf3c(0xe,0,(int)(uint16_t)di);             /* 1ab47 al=0xe; call bf3c (di near) */
++  }
++  {
++    uint16_t v = *(uint16_t *)(dg + 0x993c);              /* 1ab4e ax = [0x993c]          */
++    *(uint16_t *)(obj + 0x9d) = v;                        /* 1ab51 mov [di+0x9d],ax       */
++    if ((*(uint16_t *)(obj + 0x40) & 1) != 0 &&           /* 1ab55 test [di+0x40],1; je   */
++        v != *(uint16_t *)(obj + 0x97)) {                 /* 1ab5a cmp ax,[di+0x97]; je   */
++      uint16_t s97 = *(uint16_t *)(obj + 0x97);           /* 1ab62 si = [di+0x97]         */
++      if (s97 != 0) {                                     /* 1ab66 or si,si; je           */
++        uint8_t r = *(uint8_t *)(dg + (uint16_t)(*(uint16_t *)(dg + s97) + *(uint16_t *)(dg+0x9944))); /* 1ab6a-1ab70 */
++        if (r > *(uint8_t *)(dg + 0x9935))                /* 1ab72 cmp; jbe               */
++          *(uint16_t *)(obj + 0x97) = 0;                  /* 1ab78 mov [di+0x97],0        */
++      }
++    }
+   }
+   return;
+ }

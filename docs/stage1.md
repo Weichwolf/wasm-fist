@@ -1,5 +1,21 @@
 # Stage 1 — making the engine execute (running notes)
 
+## STATUS (STAGE 3 — **patch 334: the ACCEPT-path aa08/b011 SIGSEGV is FIXED; the residual migrated to the pinned ab03 AI-twin family**)
+The `~1/12` in-mission SIGSEGV `459a->c0ca->c0e5->7c1d->ab03->b011->FUN_1000_aa08` (`*param_5`, the TARGET-LOCK
+method reading its object from the wrong param slot — the SIBLING of the ab88 branch patch 328 fixed) is
+reconstructed 1:1 (**patch 334**: aa08 + its LOS-query builders e1f0/e21c + bearing b112, object = near
+offset in param_1 -> host ptr; the op-0x58 LOS is the extender frontier, gate-no-op -> "not visible").
+The crash then MIGRATED to `b053->FUN_1000_a9b9` (proximity/collision slot, base-loss) — also fixed in 334.
+**Measured (default `make native`, ACCEPT COOP flow): BEFORE ~1-2/24 (aa08-dominant) -> AFTER 19/20** (the
+one residual is now `ab82->FUN_1000_ab7f`). pristine UNCHANGED (`61453e42`/`0051cb56`/`75c6d726`); `make
+check` all patches apply; `verify.sh native`=24/24 AND `wasm`=24/24, native<->wasm 0-diff, ZERO regression.
+**PINNED (the residual — a genuinely separate multi-fn subsystem):** the SAME ab03 frame-phase table
+(0x98dc/0x98fc) dispatches ~7 more base-lost per-object AI-behaviour twins — `ab82->ab7f` (draw-mode state
+machine), `ad2f`/`ae66` ([di+0x43]/[di+0x45] sub-dispatchers), `af97`, `ae32`, `ae5c`, `afa2` — all sharing
+the object + `DAT_2000_5796` (class-descriptor near offset) base-loss and each calling deeper AI/weapon/
+projectile code (`b26a`/`8711`/`96c0`/`a286`/`a6e3`/`e2c2`).  Each is a bounded (oracle-less) base-loss
+reconstruction like aa08/a9b9; `b111` is a `ret` stub (safe); ab88/aa08/a9b9/ad08/ad3b/ac75 already handled.
+
 ## RECON (STAGE 3 — **THE 85b8 COLORMAP "COLLAPSE" (89 vs oracle 254) IS RE-ROOT-CAUSED: it is NOT the reduce inputs and NOT the reduce LUT (both identical/inherently 81-distinct) — it is the SPATIAL UPSAMPLE. The prior "irreconcilable contradiction / needs a reduce-point 4f60 capture" premise is DISPROVEN. Full detail + repro: `docs/oracle_colormap_reduce.md`. Engine PRISTINE (`61453e42`/`0051cb56`/`75c6d726`); only shim `tools/native_main.c` gained two default-OFF, op-0x18-gated diagnostics (`FIST_MTXDUMP`/`FIST_AC70PROBE`).**)
 
 **HEADLINE (measured, decisive — see `docs/oracle_colormap_reduce.md`).** (1) The reduce INPUTS are byte-identical port↔oracle AND stable: `4f60` (176 distinct, written once by `a033`, never overwritten) == oracle 768/768; `5260`/`a060`/`a460`/`a860` == oracle; `ac64`=80; reduce-time source `5598`=`C32.KLC` palette `>>2`=252 distinct (port keeps it at op-0x18 end; oracle overwrites it to 25 distinct *post-reduce*, which is why the settled dump looked collapsed). The "dump 4f60=32 distinct ≠ build 4f60" premise was a mis-measurement. (2) The reduce LUT `9e60`/`ac70` is **inherently 81-distinct at ANY ac64 (0/15/40/63/80)** — physically incapable of the oracle's 254, so the richness is NOT in the reduce. (BUILT `ac70` verified correct via a standalone harness → identity.) (3) The oracle colormap is a **SMOOTH 254-distinct gradient**, the port a **BLOCKY 89-distinct replication of the 81-value LUT** (same map, pixel-aligned). Base-512 (every-4th) = oracle 206–234 distinct at ALL phases vs port 80–88. ⇒ the divergence is the **`bdc4` colormap upsample** (task option 3: a spatial dither/detail the port omits): the port's C `bdc4` (even fed a correct symmetric blend matrix in a standalone harness) still yields blocky 89, so it is the unfaithful reconstruction to fix — reconstruct `FUN_0000_bdc4` (asm `0xbdc4..0xbed1`, 2 passes incl. the pass-2 `test al,1` parity-dither) EXACTLY. **SECONDARY (real, ties to `docs/oracle_tile3918_producer.md`):** the port's blend matrix `bc90`/tile3918 (read by `bdc4`) is CORRUPTED (asymmetric 10% vs `bc9c`'s 100%; diagonal ≈i+22 vs the oracle tile's identity `80,80,81,81,…`) — but a *correct* matrix does NOT fix the colormap, so it is a separate frontier. Prior status:
