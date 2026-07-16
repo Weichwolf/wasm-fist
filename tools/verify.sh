@@ -23,6 +23,17 @@ pass=0; fail=0
 # Extend as coverage grows.  The mouse-script field is the scripted-input program (FIST_MOUSE =
 # "pump:x:y:btn; ..."); it may contain spaces/semicolons but MUST NOT contain '|'.
 FLOWS=(
+  # INTRO FMV (TITLE.KDV) -- the settled "ARMORED FIST" title card.  The Doug-Huffman extender's KDV player
+  # (Route-1 module fist_ext.c) decodes+blits TITLE.KDV; the stream ends on a ~25-frame HOLD of the fully
+  # formed title (frames ~370..394 identical) before the engine fades to the main menu.  Pinned by FRAME
+  # INDEX 385 (well inside the hold) via kdvframe=385 -> FIST_KDV=1 + FIST_KDV_DUMPFRAME (the decode-ahead
+  # seam runs the real decoder back-to-back to frame 385, timing-independent -> native and wasm produce the
+  # IDENTICAL frame, unlike a wall-clock dump which would land on a target-dependent throttled frame).  The
+  # genuine 1:1 320x200 DOSBox reference is captured by tools/refcapture_intro.sh, which bursts across the
+  # hold and selects the longest non-terminal stable hold (the title) by DOSBox-internal pixel signature
+  # (never compared to the port -> non-circular; two independent DOSBox runs agree AE=0).  READ-only.
+  # AE=0 native AND wasm; native md5 == wasm md5 (0-diff).
+  "intro|25000|kdvframe=385||$ROOT/ref/intro_title_native320.png"
   "mainmenu|25000|22000||$ROOT/ref/main_menu_native320.png"
   "about|25000|22000|200:160:139:0; 800:160:139:1; 1400:160:139:0; 2000:160:138:0|$ROOT/ref/about_native320.png"
   "settings|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 2000:160:126:0|$ROOT/ref/settings_native320.png"
@@ -188,7 +199,15 @@ run_target() { # $1=target $2=hz $3=ms/dumptick $4=mouse-script $5=out.ppm $6=da
   # wasm would differ.  Such flows use "tick=N": dump when the engine's own [0x452] counter first reaches
   # N (FIST_DUMPTICK) -- identical on both targets -> the phase-dependent layer is bit-identical.  (See
   # the campaign-missions flow.)
-  local dumpenv=(); case "$ms" in tick=*) dumpenv=(FIST_DUMPTICK="${ms#tick=}");; *) dumpenv=(FIST_RUNMS="$ms");; esac
+  # The 3rd field is FIST_RUNMS (wall-clock dump) unless it is tick=N (FIST_DUMPTICK, engine-frame-timer
+  # phase pin) or kdvframe=N (the intro FMV: drive the KDV player and dump the Nth decoded frame -- see the
+  # intro flow).  kdvframe pins by FRAME INDEX (native<->wasm identical, timing-independent; the decode-ahead
+  # seam in native_main.c reaches frame N with no throttle wait).
+  local dumpenv=(); case "$ms" in
+    kdvframe=*) dumpenv=(FIST_KDV=1 FIST_KDV_DUMPFRAME="${ms#kdvframe=}");;
+    tick=*) dumpenv=(FIST_DUMPTICK="${ms#tick=}");;
+    *) dumpenv=(FIST_RUNMS="$ms");;
+  esac
   if [ "$t" = native ]; then
     timeout 40 env "${ddenv[@]}" FIST_TICK_HZ="$hz" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NATIVE" >/dev/null 2>&1; echo $?
   else

@@ -1563,6 +1563,29 @@ int fist_extender_gate(void) {
             m_ext_FUN_0000_11cb(0, 0, 0, 0, 0);
             g_kdv_open = 1;
         }
+        /* FIST_KDV_DUMPFRAME=N (diagnostic, default OFF): pin ONE settled intro frame by FRAME INDEX for
+         * the verify.sh `intro` bit-verify.  Runs the REAL KDV decoder (m_ext_FUN_0000_11dd) back-to-back
+         * to frame N in ONE gate call, then dumps 0xA0000 (FIST_FBDUMP) and exits.  Decoding ahead is
+         * timing-INDEPENDENT: the Nth frame's pixels are a pure function of the decoder consuming N chunks
+         * in order (the KDV stream is deterministic), so native and wasm produce the identical frame N --
+         * unlike the per-frame throttle in the normal boot path, which paces on the INT-8 tick and makes
+         * the cooperative wasm tick crawl through the intro (~1 frame/min).  Not the faithful boot path;
+         * a diagnostic capture seam only.  frame N chosen inside the intro's stable end HOLD (the fully
+         * formed "ARMORED FIST" title, frames ~370..394 identical), the intro's settled deliverable. */
+        { static long dumpframe = -2;
+          if (dumpframe == -2) { const char *df = getenv("FIST_KDV_DUMPFRAME"); dumpframe = df ? atol(df) : -1; }
+          if (dumpframe > 0) {
+              while (g_kdv_frames < dumpframe && !g_ext_eof) {
+                  m_ext_FUN_0000_11dd(0, 0, 0);   /* decode+present one real frame */
+                  if (g_ext_eof) break;
+                  ++g_kdv_frames;
+              }
+              fprintf(stderr, "[ext] KDV_DUMPFRAME: reached frame %ld (target %ld eof=%d) -- dumping + exiting\n",
+                      g_kdv_frames, dumpframe, g_ext_eof);
+              const char *fb = getenv("FIST_FBDUMP");
+              if (fb) fist_dump_framebuffer(fb);
+              exit(0);
+          } }
         if (op == 0x78) {                      /* present: decode + blit the next frame */
             m_ext_FUN_0000_11dd(0, 0, 0);
             /* patch-084 threads 708b's CF-out (EOF / read-error) here: g_ext_eof=1 => the last chunk
