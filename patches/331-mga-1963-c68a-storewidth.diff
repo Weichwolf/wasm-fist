@@ -1,0 +1,38 @@
+PATCH 331: mga FUN_0000_1963 (dispatch-vector selector, asm 0x1963) store-width -- the four method-vector
+word stores c684/c686/c688/c68a are typed undefined4 (DWORD) by Ghidra but the asm is WORD (0x197a `mov
+ds:0x684,ax` / 0x197d `mov ds:0x686,cs` / 0x1986 `mov ds:0x688,ax` / 0x1989 `mov ds:0x68a,cs`).  The final
+DWORD store `_DAT_1000_c68a = cs` writes bytes 0x1c68a..0x1c68d; its top two bytes (0x1c68c) ZERO the
+adjacent driver method vector DGROUP:0x68c that patch 037's mode-set reloc apply had installed as the
+cockpit-instrument sprite-bbox analyzer mga:0x2004 (section-B entry (0x68c,0x2004), verified live via
+fist_apply_reloc_at + a gdb watchpoint: 1963 <- FUN_1000_524e <- 5228 zeroes 0x1c68c after boot).  With
+0x68c zeroed, c68c (=DGROUP:0x68c, called x3 by FUN_1000_7a98) dispatched a no-op ret instead of 0x2004,
+so the windshield child rect 0x8e91 stayed empty and the reticle geometry (0x156c, populated FROM 0x8e91
+by FUN_0000_2322) never got its 288x81 bbox.  Fix: explicit WORD stores (store-width class, patches
+104/105/123).  Mission-path only (0x68c is a cockpit-instrument vector) -> behaviour-neutral for the 24
+menu/settings flows.  asm-verified vs re_out/fist_mga_image.bin.
+
+--- a/fist_mga.c	2026-07-16 23:12:14.986181800 +0200
++++ b/fist_mga.c	2026-07-16 23:24:04.020123668 +0200
+@@ -4439,10 +4439,18 @@
+     uint16_t cs   = (uint16_t)(fist_mga_base >> 4);
+     uVar1 = (uint)*(uint8_t *)(g_mem + 0x1c000 + doff + 8) * 2;
+     if (uVar1 < 0x10) {
+-      _DAT_1000_c684 = *(uint16_t *)(g_mem + fist_mga_base + uVar1 + 0x198e);
+-      _DAT_1000_c686 = cs;
+-      _DAT_1000_c688 = *(uint16_t *)(g_mem + fist_mga_base + uVar1 + 0x199e);
+-      _DAT_1000_c68a = cs;
++      /* PATCH 331: c684/c686/c688/c68a are WORD stores in the asm (0x197a `mov ds:0x684,ax`,
++         0x197d `mov ds:0x686,cs`, 0x1986 `mov ds:0x688,ax`, 0x1989 `mov ds:0x68a,cs`), but the
++         Ghidra defines type them undefined4 (DWORD).  The DWORD store `_DAT_1000_c68a = cs` wrote 4
++         bytes to 0x1c68a, whose top 2 bytes ZEROED the ADJACENT method vector DGROUP:0x68c (offset
++         word) that patch 037's mode-set reloc apply installed as mga:0x2004 -> c68c(=DGROUP:0x68c)
++         dispatched a no-op ret instead of the cockpit-instrument bbox analyzer FUN_0000_2004, so the
++         reticle-geometry source rect (child 0x8e91) never populated.  Use explicit WORD stores
++         (store-width class, patches 104/105/123). */
++      *(uint16_t *)(g_mem + 0x1c684) = *(uint16_t *)(g_mem + fist_mga_base + uVar1 + 0x198e);
++      *(uint16_t *)(g_mem + 0x1c686) = cs;
++      *(uint16_t *)(g_mem + 0x1c688) = *(uint16_t *)(g_mem + fist_mga_base + uVar1 + 0x199e);
++      *(uint16_t *)(g_mem + 0x1c68a) = cs;
+     }
+   }
+   return;

@@ -1,0 +1,362 @@
+PATCH 332: reconstruct MGAVIDEO mga FUN_0000_2004 (cockpit-instrument sprite BOUNDING-BOX analyzer, asm
+0x2004-0x21d5) + its finalizer FUN_0000_21d6 (asm 0x21d6-0x22be).  2004 scans the loaded instrument sheet
+(container.word0) row-by-row for the sprite key byte, tracks min/max X,Y, and writes the bbox into the
+child view record at [+4]=minY [+6]=minX [+8]=maxY+1 [+0xa]=maxX [+0x14]=parity -- the fields
+FUN_0000_2322 reads to populate the reticle geometry DGROUP:0x156c (width=maxX-minX, height=(maxY+1-minY)).
+Both were Ghidra WRECKS (the two [DGROUP:0xcc] device-allocs arg-dropped to NULL scratch, the [0x336] row
+unpacker mis-called as a near mga vector, all segment bases lost onto host NULL, the repnz/repz scas
+run-scan + the RLE compaction on NULL pointers).  Reconstructed faithfully vs re_out/fist_mga_image.bin:
+  - [0xcc] device-alloc resolved to the engine allocator FUN_1000_182a directly (uninstalled vector,
+    patch-049 class): alloc1 0xc00 -> word[child] (child.word0 = the compiled-sprite buffer, part (e)),
+    alloc2 0x140 -> word[0x1590] (per-row scratch);
+  - [0x336] = 0xf69:0x57cb PackBits row unpacker reconstructed inline (patch-093 idiom, di+cx terminator);
+  - DS=word[child] (buf1), ES=word[0x1590] (buf2), sheet=word[container]; scas run-scan + min/max bbox +
+    the 0x2110-0x2136 even-rounding/parity, then the 0x2139-0x21a5 buf1 column re-encode;
+  - 21d6 rebased onto buf1seg with WORD stride (pristine logic 1:1; Ghidra had it on host-NULL uint* 4B);
+    the trailing [0xd4] realloc is an uninstalled no-op (buffer just not shrunk -- harmless).
+The bbox locals are FINAL at asm 0x2136 (the re-encode + 21d6 only build the drawable sprite, bounded to
+buf1's segment -> crash-free even if imperfect; no mission-cockpit pixel reference exists).  Paired with
+patch 331 (which stops 1963 from zeroing DGROUP:0x68c=mga:0x2004) and patch 333 (which threads the c68c
+args) -> the reticle geometry populates 288x81.  Mission-path only -> behaviour-neutral for the 24 flows.
+
+--- a/fist_mga.c	2026-07-16 23:12:14.986181800 +0200
++++ b/fist_mga.c	2026-07-16 23:29:59.805618950 +0200
+@@ -5035,142 +5035,144 @@
+ void __allregs FUN_0000_2004(char param_1,undefined2 *param_2,undefined2 *param_3)
+ 
+ {
+-  uint uVar1;
+-  char *pcVar2;
+-  undefined2 uVar3;
+-  undefined2 uVar4;
+-  uint *puVar5;
+-  undefined2 uVar6;
+-  byte bVar7;
+-  byte bVar8;
+-  int iVar9;
+-  uint uVar10;
+-  uint uVar11;
+-  int iVar12;
+-  int iVar13;
+-  uint uVar14;
+-  uint *puVar15;
+-  uint *puVar16;
+-  char *pcVar17;
+-  undefined2 uVar18;
+-  uint local_16;
+-  char *local_14;
+-  undefined2 local_12;
+-  uint local_10;
+-  char *local_e;
+-  uint local_c;
+-  char *local_a;
+-  
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0cc)))();
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0cc)))();
+-  uVar6 = _DAT_1000_d590;
+-  local_c = 0;
+-  local_a = (char *)0x0;
+-  local_10 = 0xffff;
+-  local_e = (char *)0xffff;
+-  uVar3 = *param_3;
+-  uVar4 = *param_2;
+-  puVar15 = (uint *)0x0;
+-  *(undefined2 *)0x0 = 0;
+-  local_16 = 0;
+-  iVar12 = 200;
+-LAB_0000_2060:
+-  uVar18 = 0x2073;
+-  (*(code *)fist_icall(fist_mga_base+0x0u+(uint16_t)(*(undefined2 *)0x336)))();
+-  pcVar17 = (char *)0x0;
+-  local_14 = (char *)0x0;
+-  iVar13 = 0x141;
+-  puVar16 = puVar15;
+-code_r0x00002083:
+-  if (iVar13 != 0) goto code_r0x00002083__2;
+-  goto code_r0x00002085;
+-code_r0x00002083__2:
+-  iVar13 = iVar13 + -1;
+-  pcVar2 = pcVar17;
+-  pcVar17 = pcVar17 + 1;
+-  if (param_1 != *pcVar2) goto code_r0x00002083;
+-code_r0x00002085:
+-  pcVar17 = pcVar17 + -1;
+-  LOCK();
+-  UNLOCK();
+-  *puVar16 = ((int)local_14 - (int)pcVar17) * -4 | 3;
+-  puVar16[1] = -((int)local_14 - (int)pcVar17);
+-  puVar15 = puVar16 + 2;
+-  if (iVar13 != 0) {
+-    iVar13 = iVar13 + 1;
+-    local_10 = (local_16 - local_10 & -(uint)(local_16 < local_10)) + local_10;
+-    local_e = pcVar17 + ((int)local_e - (int)pcVar17 & -(uint)(local_e < pcVar17));
+-    local_14 = pcVar17;
+-    do {
+-      if (iVar13 == 0) break;
+-      iVar13 = iVar13 + -1;
+-      pcVar2 = local_14;
+-      local_14 = local_14 + 1;
+-    } while (param_1 == *pcVar2);
+-    local_14 = local_14 + -1;
+-    LOCK();
+-    UNLOCK();
+-    iVar9 = (int)local_14 - (int)pcVar17;
+-    *puVar15 = iVar9 * 2;
+-    puVar15 = puVar16 + 3;
+-    for (; iVar9 != 0; iVar9 = iVar9 + -1) {
+-      pcVar2 = pcVar17;
+-      pcVar17 = pcVar17 + 1;
+-      *pcVar2 = '\0';
+-    }
+-    local_c = (local_16 - local_c & -(uint)(local_c <= local_16)) + local_c;
+-    local_a = pcVar17 + ((int)local_a - (int)pcVar17 & -(uint)(pcVar17 <= local_a));
+-    if (iVar13 == 0) goto LAB_0000_2106;
+-    iVar13 = iVar13 + 1;
+-    puVar16 = puVar15;
+-    goto code_r0x00002083;
++  /* PATCH 332: MGAVIDEO cockpit-instrument sprite BOUNDING-BOX analyzer (asm 0x2004-0x21d5).  Scans the
++     loaded instrument sheet (container.word0) row-by-row for the sprite key byte `id` (param_1), tracks
++     the min/max X,Y where it appears, and writes the bbox into the child view record (param_2) at
++     [+4]=minY [+6]=minX(even) [+8]=maxY+1 [+0xa]=maxX(even) [+0x14]=parity -- exactly the fields
++     FUN_0000_2322 reads to populate the reticle geometry 0x156c ([+4]=[+c]=maxX-minX=width,
++     [+a]=(maxY+1-minY)+src[+0x16]=height).  Ghidra rendered this a WRECK (both [DGROUP:0xcc] device-allocs
++     arg-dropped -> NULL scratch, the [DGROUP:0x336] row unpacker mis-called as a near mga vector, every
++     segment base lost, the repnz/repz scas run-scan onto NULL).  Reconstructed faithfully vs
++     re_out/fist_mga_image.bin:
++       - [0xcc] (uninstalled) resolved to the engine allocator FUN_1000_182a directly (patch-049 class):
++         alloc1 0xc00 -> word[child] (= child.word0, the compiled-sprite buffer / part (e)); alloc2 0x140
++         -> word[0x1590] (the per-row scratch);
++       - [0x336] = 0xf69:0x57cb PackBits row unpacker reconstructed inline (patch-093 idiom, di+cx end);
++       - DS = word[child] (buf1), ES = word[0x1590] (buf2), sheet = word[container].
++     param_2 = child host ptr, param_3 = container host ptr (as passed by FUN_1000_7a98 / FUN_0000_767c,
++     patch 333).  The geometry locals are FINAL at asm 0x2136; the 0x2139-0x21a5 buf1 column re-encode +
++     the 0x21d6 finalizer build the drawable compiled sprite (bounded to buf1's segment -> crash-free). */
++  typedef void (*a182a_t)(unsigned,undefined2,undefined2,undefined2,undefined2,undefined2);
++  uint8_t  id       = (uint8_t)param_1;
++  uint16_t childoff = (uint16_t)((uint8_t*)param_2 - (g_mem + 0x1c000));
++  uint16_t *dg      = (uint16_t*)(g_mem + 0x1c000);
++
++  /* asm 0x200e / 0x201c: two [DGROUP:0xcc] device-allocs -> resolve 182a (uninstalled vector, patch 049) */
++  ((a182a_t)fist_icall(0x1182a))(0xc00, 0x1c00, 0, childoff, 0, 0);
++  ((a182a_t)fist_icall(0x1182a))(0x140, 0x1c00, 0, 0x1590,   0, 0);
++
++  uint16_t minY = 0xffff, minX = 0xffff, maxY = 0, maxX = 0;       /* bp-0xe/-0xc/-0xa/-8 */
++  uint16_t sheetSeg = *(uint16_t*)param_3;                         /* word[container] */
++  uint16_t sheetOff = 0x300;                                       /* bp-0x18 */
++  uint16_t buf2seg  = dg[0x1590/2];                                /* word[0x1590] (alloc2) */
++  uint16_t buf1seg  = *(uint16_t*)param_2;                         /* word[child]  (alloc1) */
++  uint8_t *esb = g_mem + ((uint32_t)buf2seg  << 4);                /* ES = buf2 */
++  uint8_t *dsb = g_mem + ((uint32_t)buf1seg  << 4);                /* DS = buf1 */
++  uint8_t *shb = g_mem + ((uint32_t)sheetSeg << 4);                /* sheet */
++  uint16_t si = 0;                                                 /* buf1 write cursor */
++  uint16_t rowScanPos = 0;                                         /* bp-0x12 */
++  int rowIdx = 0;                                                  /* bp-0x14 */
++  int rowCounter = 0xc8;                                           /* cx=200 */
++  uint16_t parity = 0;
++  *(uint16_t*)(dsb+0) = 0;                                         /* asm 0x2053 */
++
++  do {                                                             /* LAB_2060 (per row) */
++    { uint16_t d = 0;                                              /* [0x336]=57cb unpack one 0x140 row */
++      for (;;) {
++        int8_t c = (int8_t)shb[sheetOff++];
++        if (c < 0) { uint16_t n=(uint16_t)(uint8_t)(-c)+1; uint8_t fb=shb[sheetOff++]; while(n--) esb[d++]=fb; }
++        else       { uint16_t n=(uint16_t)(uint8_t)c+1;   while(n--) esb[d++]=shb[sheetOff++]; }
++        if (d >= 0x140) break;
++      }
++    }
++    { uint16_t di = 0; rowScanPos = 0; int cx = 0x141;             /* 2069/207a/207d */
++      for (;;) {                                                   /* code_2080 */
++        while (cx != 0) { cx--; uint8_t m = esb[di]; di=(uint16_t)(di+1); if (m==id) break; } /* repnz scas */
++        di = (uint16_t)(di - 1);                                   /* 2085 */
++        { uint16_t ax = di, tmp = rowScanPos; rowScanPos = ax; ax = tmp;   /* 2088 xchg */
++          ax = (uint16_t)(0 - (uint16_t)(ax - di));                /* 208b sub / 208d neg */
++          uint16_t dx = ax;
++          ax = (uint16_t)((ax << 2) | 3);                          /* 2091/2093/2095 */
++          *(uint16_t*)(dsb+si) = ax; si=(uint16_t)(si+2);          /* 2097/2099 */
++          *(uint16_t*)(dsb+si) = dx; si=(uint16_t)(si+2);          /* 209c/209e */
++        }
++        if (cx == 0) break;                                        /* 20a1 jcxz -> LAB_2106 */
++        cx++;                                                      /* 20a3 */
++        if ((uint16_t)rowIdx < minY) minY = (uint16_t)rowIdx;      /* 20a4 minY=min(rowIdx,minY) */
++        if (di < minX) minX = di;                                  /* 20b5 minX=min(di,minX) */
++        while (cx != 0) { cx--; uint8_t m = esb[di]; di=(uint16_t)(di+1); if (m!=id) break; } /* repz scas */
++        di = (uint16_t)(di - 1);                                   /* 20c8 */
++        { int savecx = cx;                                         /* 20c9 push cx */
++          uint16_t ax = di, tmp = rowScanPos; rowScanPos = di; di = tmp;  /* 20cc xchg */
++          uint16_t idlen = (uint16_t)(ax - di);                    /* 20cf/20d1 */
++          *(uint16_t*)(dsb+si) = (uint16_t)(idlen << 1); si=(uint16_t)(si+2);  /* 20d3/20d5/20d7 */
++          for (uint16_t k=0;k<idlen;k++){ esb[di]=0; di=(uint16_t)(di+1); }    /* 20da rep stos 0 */
++          cx = savecx;                                             /* 20de pop cx */
++        }
++        if ((uint16_t)rowIdx > maxY) maxY = (uint16_t)rowIdx;      /* 20df maxY=max(rowIdx,maxY) */
++        if (di > maxX) maxX = di;                                  /* 20f1 maxX=max(di,maxX) */
++        if (cx == 0) break;                                        /* 2100 jcxz -> LAB_2106 */
++        cx++;                                                      /* 2102 */
++      }                                                            /* 2103 jmp code_2080 */
++    }
++    rowIdx++;                                                      /* 2106 LAB_2106 */
++    rowCounter--;                                                  /* 210a */
++  } while (rowCounter != 0);                                       /* 210b */
++
++  *(uint16_t*)(dsb+si) = 0; si=(uint16_t)(si+2);                   /* 2110 terminator */
++  maxY = (uint16_t)(maxY + 1);                                     /* 2117 inc [bp-0xa] */
++  { uint8_t parLow = (uint8_t)(minX & 1);                          /* 211a-2126 */
++    minX = (uint16_t)(minX & 0xfffe);
++    uint16_t m1 = (uint16_t)(maxX + 1);                            /* 2129-2136 */
++    uint16_t mnew = (uint16_t)((m1 & 0xff00) | (m1 & 0x00fe));
++    uint8_t parHigh = (uint8_t)(maxX - mnew);
++    maxX = mnew;
++    parity = (uint16_t)(parLow | ((uint16_t)parHigh << 8));
+   }
+-LAB_0000_2106:
+-  local_16 = local_16 + 1;
+-  iVar12 = iVar12 + -1;
+-  if (iVar12 == 0) {
+-    *puVar15 = 0;
+-    bVar7 = (byte)local_e;
+-    bVar8 = (byte)local_e & 0xfe;
+-    local_e = (char *)((uint)local_e & 0xfffe);
+-    uVar10 = (uint)(local_a + 1) & 0xfffe;
+-    local_12 = CONCAT11((char)local_a - (char)uVar10,bVar8 ^ bVar7);
+-    puVar15 = (uint *)0x0;
+-    for (uVar14 = local_10; uVar14 != 0; uVar14 = uVar14 - 1) {
+-      *puVar15 = 3;
+-      puVar15 = puVar15 + 2;
+-    }
+-    while (*puVar15 != 0) {
+-      uVar14 = *puVar15 >> 2;
+-      *puVar15 = (uVar14 - (int)local_e) * 4 | 3;
+-      puVar16 = puVar15 + 2;
+-      puVar5 = puVar15;
+-      for (; puVar15 = puVar16, uVar14 < 0x140; uVar14 = uVar14 + uVar11) {
+-        puVar16 = puVar15 + 1;
+-        uVar1 = *puVar15;
+-        uVar11 = uVar1 >> 1;
+-        if ((uVar1 & 1) != 0) {
+-          uVar11 = uVar1 >> 2;
+-          puVar16 = puVar15 + 2;
++
++  /* asm 0x2139-0x21a5: buf1 column re-encode (compile the sprite relative to its bbox; DS=ES=buf1).
++     Does NOT touch the bbox locals -> geometry already final.  Bounded to buf1's segment. */
++  { uint16_t rd = 0, wr = 0, cnt = minY;
++    while (cnt) { *(uint16_t*)(dsb+rd) = 3; rd=(uint16_t)(rd+4); cnt--; }          /* 2144-214d */
++    uint16_t climit = (uint16_t)(0x140 - maxX);                                    /* 214f */
++    for (;;) {                                                                     /* 2155 */
++      wr = rd;
++      uint16_t a = *(uint16_t*)(dsb+rd); rd=(uint16_t)(rd+2);                       /* 2157 lods */
++      if (a == 0) break;                                                           /* 2158 */
++      uint16_t dv = (uint16_t)(a >> 2);                                            /* 215c/2160 */
++      a = (uint16_t)((((uint16_t)(dv - minX)) << 2) | 3);                          /* 2162-2169 */
++      *(uint16_t*)(dsb+wr) = a; wr=(uint16_t)(wr+2);                               /* 216b stos */
++      rd = (uint16_t)(rd + 2);                                                     /* 216c */
++      wr = (uint16_t)(wr - 2);                                                     /* 216f */
++      if (dv < 0x140) {                                                            /* 2172 jae 218c */
++        for (;;) {                                                                 /* 2178 */
++          wr = rd;
++          uint16_t b = *(uint16_t*)(dsb+rd); rd=(uint16_t)(rd+2);                   /* 217a lods */
++          if (b & 1) { b = (uint16_t)(b >> 2); rd=(uint16_t)(rd+2); }              /* 217b/217f/2181 */
++          else       { b = (uint16_t)(b >> 1); }
++          dv = (uint16_t)(dv + b);                                                 /* 2184 */
++          if (dv >= 0x140) break;                                                  /* 2186 jb 2178 */
+         }
+-        puVar5 = puVar15;
+       }
+-      puVar15 = puVar5 + 1;
+-      if ((*puVar5 & 1) != 0) {
+-        *puVar5 = ((*puVar5 >> 2) - (0x140 - uVar10)) * 4 | 3;
+-        puVar15 = puVar5 + 2;
+-      }
+-    }
+-    param_2[2] = local_10;
+-    param_2[3] = local_e;
+-    param_2[4] = local_c + 1;
+-    param_2[5] = uVar10;
+-    param_2[10] = local_12;
+-    bRam0001d592 = bRam0001d592 | 0x22;
+-    FUN_0000_21d6(param_2,uVar18);
+-    return;
++      rd = wr;                                                                     /* 218c mov si,di */
++      uint16_t e = *(uint16_t*)(dsb+rd); rd=(uint16_t)(rd+2);                       /* 218e lods */
++      if (e & 1) {                                                                 /* 218f shr;jae 21a3 */
++        e = (uint16_t)(e >> 2);                                                    /* 218f+2193 */
++        e = (uint16_t)((((uint16_t)(e - climit)) << 2) | 3);                       /* 2195-219b */
++        *(uint16_t*)(dsb+wr) = e; wr=(uint16_t)(wr+2);                             /* 219d stos */
++        rd = (uint16_t)(rd + 2);                                                   /* 219e */
++      }
++    }
+   }
+-  goto LAB_0000_2060;
++
++  ((uint16_t*)param_2)[2]   = minY;                                                /* 21a8 [+4] */
++  ((uint16_t*)param_2)[3]   = minX;                                                /* 21b1 [+6] */
++  ((uint16_t*)param_2)[4]   = maxY;                                                /* 21b7 [+8] */
++  ((uint16_t*)param_2)[5]   = maxX;                                                /* 21bd [+0xa] */
++  ((uint16_t*)param_2)[0xa] = parity;                                             /* 21c3 [+0x14] */
++  *(uint8_t*)(g_mem + 0x1c000 + 0x1592) |= 0x22;                                   /* 21c9 */
++  FUN_0000_21d6(param_2, (uint*)0);                                                /* 21ce (bx=child) */
++  return;
+ }
+ 
+ 
+@@ -5181,24 +5183,34 @@
+ void __allregs FUN_0000_21d6(undefined2 *param_1,uint *param_2)
+ 
+ {
+-  uint *puVar1;
+-  undefined2 uVar2;
++  /* PATCH 332: compiled-sprite RLE compaction finalizer (asm 0x21d6-0x22be).  DS=ES=word[child]=buf1seg
++     (child.word0, the buffer FUN_0000_2004's scan built); si(read)/di(write)/out cursor start at buf1:0
++     and compact in place, then [DGROUP:0xd4] reallocs buf1 to the used size.  Ghidra base-lost every
++     pointer to host NULL (`(uint*)0x0`) and pointer-scaled them (uint*=4B vs the asm word=2B), so it
++     NULL-deref'd.  Rebase all cursors onto buf1seg with WORD stride; [0xd4] is an uninstalled no-op
++     (harmless -- the buffer just is not shrunk).  Logic 1:1 with the pristine decompile. */
++  uint16_t *puVar1;
++  uint16_t uVar2;
+   uint uVar3;
+   uint uVar4;
+   int iVar5;
+   uint uVar6;
+   uint uVar7;
+   uint uVar8;
+-  uint *puVar9;
+-  uint *puVar10;
+-  uint *puVar11;
++  uint16_t *puVar9;
++  uint16_t *puVar10;
++  uint16_t *puVar11;
++  uint16_t *out;
+   bool bVar12;
+   int local_6;
+   int local_4;
+-  
+-  uVar2 = *param_1;
+-  puVar9 = (uint *)0x0;
+-  puVar11 = (uint *)0x0;
++
++  uVar2 = *(uint16_t*)param_1;                                    /* child.word0 = buf1seg */
++  { uint16_t *B = (uint16_t*)(g_mem + ((uint32_t)uVar2 << 4));
++    puVar9 = B;
++    puVar11 = B;
++    out = B;
++  }
+   local_4 = 0;
+   local_6 = 0;
+   do {
+@@ -5255,7 +5267,7 @@
+     }
+     uVar4 = uVar4 >> 1;
+     if (uVar4 == 0) {
+-      *param_2 = 0;
++      *out = 0;
+       (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0d4)))();
+       return;
+     }
+@@ -5282,7 +5294,7 @@
+       puVar1 = puVar11;
+       puVar11 = puVar11 + 1;
+       *puVar1 = iVar5 * 2;
+-      param_2 = puVar11;
++      out = puVar11;
+     }
+   } while( true );
+ }

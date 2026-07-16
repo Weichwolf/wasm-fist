@@ -1,0 +1,62 @@
+PATCH 333: thread the c68c=mga:0x2004 (cockpit-instrument bbox analyzer) method-vector args in the two
+callers FUN_1000_7a98 (windshield, container 0x8e84, children 0x8e91/0x8ead/0x8ec9) and FUN_0000_767c
+(reticle sources, container 0x8d54, children 0x8d60/0x8d2c/0x8d10).  asm 0x17ab1/0x767c: al=id, bx=child,
+si=container (DGROUP near offsets -> host ptrs).  Ghidra's __allregs indirect dispatch dropped every
+register arg, so the calls were arg-less no-ops (patch 301/302 left them so because DGROUP:0x68c was 0);
+patch 331 restores 0x68c=mga:0x2004, so without the args these would dispatch the analyzer on garbage
+registers.  767c also gets its d594/c560/c6a8 args threaded (identical idiom to 7a98/patch 301, it was
+pristine).  Together with 331 (un-zero 0x68c) + 332 (reconstruct 2004) this populates the reticle geometry
+DGROUP:0x156c to 288x81.  Mission-path only -> behaviour-neutral for the 24 menu/settings flows.
+
+--- a/fist.c	2026-07-16 23:12:14.992575200 +0200
++++ b/fist.c	2026-07-16 23:32:21.159981132 +0200
+@@ -20158,19 +20158,23 @@
+ void __allregs FUN_0000_767c(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
++  /* PATCH 333: RETICLE-sources cockpit-panel paint helper (asm 0x767c) -- identical idiom to
++     FUN_1000_7a98 (patch 301/302): thread every dropped indirect method-vector arg.  container 0x8d54,
++     sheet name-index 0xc, children 0x8d60/0x8d2c/0x8d10.  Now that patch 331 keeps DGROUP:0x68c=mga:0x2004
++     installed, the arg-less c68c calls would otherwise dispatch the bbox analyzer on garbage registers. */
++  ((void(*)(uint))            fist_icall_far((uint32_t)(DAT_1000_d594)))(1);                       /* al=1 */
++  ((void(*)(uint,uint,uint))  fist_icall_far((uint32_t)(DAT_1000_c560)))(0xc, 0x1c00, 0x8d54);     /* ax=0xc,cx=ds,bx=descr */
+   if (DAT_2000_4d0c == '\0') {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
++    ((void(*)(uint,undefined2*,undefined2*))fist_icall_far((uint32_t)(DAT_1000_c68c)))(0xff, (undefined2*)(g_mem+0x1c000+0x8d60), (undefined2*)(g_mem+0x1c000+0x8d54));
++    ((void(*)(uint,undefined2*,undefined2*))fist_icall_far((uint32_t)(DAT_1000_c68c)))(0xfe, (undefined2*)(g_mem+0x1c000+0x8d2c), (undefined2*)(g_mem+0x1c000+0x8d54));
++    ((void(*)(uint,undefined2*,undefined2*))fist_icall_far((uint32_t)(DAT_1000_c68c)))(0xfd, (undefined2*)(g_mem+0x1c000+0x8d10), (undefined2*)(g_mem+0x1c000+0x8d54));
+     DAT_2000_4d0c = -1;
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))();
++  ((void(*)(uint,undefined2*)) fist_icall_far((uint32_t)(DAT_1000_c6a8)))(0xfd,   (undefined2*)(g_mem+0x1c000+0x8d54));
++  ((void(*)(uint,undefined2*)) fist_icall_far((uint32_t)(DAT_1000_c6a8)))(0xfe,   (undefined2*)(g_mem+0x1c000+0x8d54));
++  ((void(*)(uint,undefined2*)) fist_icall_far((uint32_t)(DAT_1000_c6a8)))(0x50ff, (undefined2*)(g_mem+0x1c000+0x8d54));
+   DAT_2000_4d56 = DAT_2000_4d56 | 0x25;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
++  ((void(*)(uint))            fist_icall_far((uint32_t)(DAT_1000_d594)))(0);
+   return;
+ }
+ 
+@@ -59542,9 +59546,13 @@
+   ((void (*)(uint))            fist_icall_far((uint32_t)(DAT_1000_d594)))(1);
+   ((void (*)(uint,uint,uint))  fist_icall_far((uint32_t)(DAT_1000_c560)))(0,0x1c00,0x8e84);
+   if (DAT_2000_4e90 == '\0') {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();   /* uninstalled -> no-op (debt, see above) */
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
++    /* PATCH 333: thread the c68c=mga:0x2004 args (asm 0x17ab1..0x17ad4: al=id, bx=child, si=container --
++       DGROUP near offsets -> host ptrs).  Patch 331 keeps DGROUP:0x68c=mga:0x2004 installed, so these now
++       dispatch the sprite-bbox analyzer to populate the windshield children 0x8e91/0x8ead/0x8ec9 under
++       container 0x8e84 -> FUN_0000_2322 copies 0x8e91's 288x81 bbox into the reticle geometry 0x156c. */
++    ((void(*)(uint,undefined2*,undefined2*))fist_icall_far((uint32_t)(DAT_1000_c68c)))(0xff, (undefined2*)(g_mem+0x1c000+0x8e91), (undefined2*)(g_mem+0x1c000+0x8e84));
++    ((void(*)(uint,undefined2*,undefined2*))fist_icall_far((uint32_t)(DAT_1000_c68c)))(0xfe, (undefined2*)(g_mem+0x1c000+0x8ead), (undefined2*)(g_mem+0x1c000+0x8e84));
++    ((void(*)(uint,undefined2*,undefined2*))fist_icall_far((uint32_t)(DAT_1000_c68c)))(0xfd, (undefined2*)(g_mem+0x1c000+0x8ec9), (undefined2*)(g_mem+0x1c000+0x8e84));
+     DAT_2000_4e90 = -1;
+   }
+   ((void (*)(uint,undefined2*)) fist_icall_far((uint32_t)(DAT_1000_c6a8)))(0xfd,  (undefined2*)(g_mem+0x1c000+0x8e84));
