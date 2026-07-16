@@ -1,6 +1,39 @@
---- src/hardware/vga_memory.cpp	2019-05-02 19:01:18.000000000 +0200
-+++ src/hardware/vga_memory.cpp	2026-07-13 09:12:00.000000000 +0200
-@@ -27,6 +27,354 @@
+# wasm-fist DOSBox oracle instrumentation (apply with: patch -p0 < this  from inside dosbox-0.74-3/)
+# Instruments VGA 0xA0000 writers (fist_vgawrite) AND normal-RAM writers (fist_memrec via the
+# include/mem.h host_writeb/w/d hook) so extender data buffers (blend matrix, tile, colormap) can be
+# captured by PHYSICAL/FLAT address.  Env: FISTLOG, FIST_TILEPHYS (per-byte last-writer 64K window),
+# FIST_WATCHPHYS/SPAN, FIST_WATCHFLAT/SPAN (CR3-aware), FIST_MEMARM_BOOT (arm the RAM recorder at
+# process START, for buffers built before the first VGA write).  SIGUSR1=arm/reset, SIGUSR2=dump.
+--- include/mem.h
++++ include/mem.h
+@@ -93,13 +93,24 @@
+ static INLINE Bit32u host_readd(HostPt off) {
+ 	return *(Bit32u *)off;
+ }
++#ifdef __cplusplus
++extern "C" void fist_memrec(Bit8u *off, Bit8u val);
++extern volatile int fist_mem_armed;
++#define FIST_MEMREC(o,v) do{ if(fist_mem_armed) fist_memrec((Bit8u*)(o),(Bit8u)(v)); }while(0)
++#else
++#define FIST_MEMREC(o,v) do{}while(0)
++#endif
+ static INLINE void host_writeb(HostPt off,Bit8u val) {
++	FIST_MEMREC(off,val);
+ 	*(Bit8u *)(off)=val;
+ }
+ static INLINE void host_writew(HostPt off,Bit16u val) {
++	FIST_MEMREC(off,(Bit8u)val); FIST_MEMREC(off+1,(Bit8u)(val>>8));
+ 	*(Bit16u *)(off)=val;
+ }
+ static INLINE void host_writed(HostPt off,Bit32u val) {
++	FIST_MEMREC(off,(Bit8u)val); FIST_MEMREC(off+1,(Bit8u)(val>>8));
++	FIST_MEMREC(off+2,(Bit8u)(val>>16)); FIST_MEMREC(off+3,(Bit8u)(val>>24));
+ 	*(Bit32u *)(off)=val;
+ }
+ 
+--- src/hardware/vga_memory.cpp
++++ src/hardware/vga_memory.cpp
+@@ -27,6 +27,374 @@
  #include "pic.h"
  #include "inout.h"
  #include "setup.h"
@@ -302,6 +335,26 @@
 +	fprintf(stderr, "[fist-oracle] dumped %s.{writers.txt,tilewriters.txt,flatwriters.txt,ram.bin,vram.bin,pal.bin}\n", fist_prefix);
 +}
 +
++/* FIST_MEMARM_BOOT: arm the per-byte RAM last-writer recorder from process START
++ * (before the first VGA write), so buffers built during very-early extender init
++ * (e.g. the [bc90]=0x10000 blend matrix at phys 0x141000, built before the menu and
++ * thus unreachable by SIGUSR1) get a per-byte last-writer capture.  Env-gated, default
++ * OFF -> behaviour-neutral for every normal capture.  Reads FISTLOG + FIST_TILEPHYS. */
++__attribute__((constructor)) static void fist_boot_arm(void) {
++	if (!getenv("FIST_MEMARM_BOOT")) return;
++	signal(SIGUSR1, fist_sig);
++	signal(SIGUSR2, fist_sig);
++	const char *p = getenv("FISTLOG");
++	snprintf(fist_prefix, sizeof fist_prefix, "%s", p ? p : "/tmp/fistlog");
++	const char *tp = getenv("FIST_TILEPHYS");
++	if (tp) { fist_tile_lo = (Bit32u)strtoul(tp, 0, 0); fist_tile_hi = fist_tile_lo + 0x10000; }
++	fist_inited = true;
++	fist_armed  = 1;   /* VGA-write histogram armed too (harmless) */
++	fist_mem_armed = 1;   /* the RAM last-writer recorder is LIVE from boot */
++	fprintf(stderr, "[fist-oracle] FIST_MEMARM_BOOT: RAM recorder armed at process start, tile=[%08x..%08x)\n",
++		fist_tile_lo, fist_tile_hi);
++}
++
 +static INLINE void fist_vgawrite(PhysPt addr, Bitu val) {
 +	if (GCC_UNLIKELY(!fist_inited)) {
 +		fist_inited = true;
@@ -355,7 +408,7 @@
  
  
  #ifndef C_VGARAM_CHECKED
-@@ -377,6 +725,7 @@
+@@ -377,6 +745,7 @@
  			return readHandler<Bit32u>( addr );
  	}
  	void writeb(PhysPt addr, Bitu val ) {
@@ -363,7 +416,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -385,6 +734,7 @@
+@@ -385,6 +754,7 @@
  		writeCache<Bit8u>( addr, val );
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -371,7 +424,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -399,6 +749,7 @@
+@@ -399,6 +769,7 @@
  		writeCache<Bit16u>( addr, val );
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -379,7 +432,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -433,6 +784,7 @@
+@@ -433,6 +804,7 @@
  		flags=PFLAG_NOCODE;
  	}
  	void writeb(PhysPt addr,Bitu val) {
@@ -387,7 +440,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -440,6 +792,7 @@
+@@ -440,6 +812,7 @@
  		writeHandler(addr+0,(Bit8u)(val >> 0));
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -395,7 +448,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -448,6 +801,7 @@
+@@ -448,6 +821,7 @@
  		writeHandler(addr+1,(Bit8u)(val >> 8));
  	}
  	void writed(PhysPt addr,Bitu val) {

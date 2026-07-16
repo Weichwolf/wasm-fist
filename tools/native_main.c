@@ -1457,6 +1457,16 @@ int fist_extender_gate(void) {
             g_fist_ext_int = 1;                    /* extender-mode flat FILEMGR INT 21h */
             m_ext_FUN_0000_89b0(inbox, inbox, inbox);
             g_fist_ext_int = 0;
+            /* FIST_BC90DUMP (default OFF): dump the 64 KB buffer bc9c just filled -- the LIVE [bc90]
+             * target (during the map-load build [bc90] is aliased to the tile buffer, so this == the
+             * port's bc9c blend-matrix output).  Compared byte-for-byte against the ORACLE's live bc9c
+             * output (tools/oracle/trace_bc90.sh, phys 0x175200) to settle the bc9c faithfulness verdict. */
+            if (getenv("FIST_BC90DUMP")) {
+                uint32_t bb = *(uint32_t *)(xb + 0xbc90);
+                if (bb) { FILE *f=fopen(getenv("FIST_BC90DUMP"),"wb");
+                    if(f){ fwrite((void*)(uintptr_t)bb,1,0x10000,f); fclose(f);
+                        fprintf(stderr,"[bc90dump] port bc9c matrix (live [bc90] target) 64KB -> %s\n", getenv("FIST_BC90DUMP")); } }
+            }
             *(uint32_t *)(xb + 0xbc90) = save_bc90;
             if (win && tile3918) *(uint32_t *)(xb + 0x3918) = tile3918 + win;  /* window the tile */
             *(uint32_t *)(xb + 0xc93) = save_c93;
