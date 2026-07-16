@@ -755,6 +755,24 @@ unsigned short g_fist_iter_si;
  * (cx).  Set-then-read in the same call chain -> a single global is exact. */
 int g_fist_r_cx;
 
+/* PATCH 328: the flight-model BEARING/RANGE math chain (0541 -> 0731/077e bearing + 0927 -> 0b71/0baf
+ * range) returns its results in AX *and* the non-AX registers CX/DX/BX, which the __allregs prototype
+ * model (AX/EAX only) drops.  Each is published by the producer and consumed by its single, synchronous
+ * caller one call later, so a plain global is exact (same discipline as g_fist_r_cx above):
+ *   g_fist_b71_dx/cx/bx : FUN_0000_0b71's 48-bit squared-delta (ax:dx:cx) + the accumulator word
+ *                         selector BX (asm 0xb90/0xb92/0xba4/0xba6/0xb96/0xbaa) -> read by FUN_0000_0927.
+ *   g_fist_baf_dx       : FUN_0000_0baf's DX (provably 0 on every exit -- asm 0xbf8 `mov dx,cx` with
+ *                         cx==0, and 0xc2d `pop dx` restoring the 0 input) -> read by FUN_0000_0927's
+ *                         `shl ax,1; rcl dx,1` (0x989) and `mov dl,ah` (0x9a5) result paths.
+ *   g_fist_0927_dx      : FUN_0000_0927's range HIGH word (the DX of its dx:ax return) -> read by 0541.
+ *   g_fist_0541_cx/dx   : FUN_0000_0541's range_lo/range_hi (asm 0x548 `mov cx,ax` + 0927's DX) -> read
+ *                         by ab91/abb7/abde/ac09 for their `shl edx,8; mov dl,ch; mov [di+0x53],dx`
+ *                         range store. */
+uint16_t g_fist_b71_dx, g_fist_b71_cx, g_fist_b71_bx;
+uint16_t g_fist_baf_dx;
+uint16_t g_fist_0927_dx;
+uint16_t g_fist_0541_cx, g_fist_0541_dx;
+
 /* Extender FILEMGR find/open CARRY flag (patch 210).  The extender's find-first chain
  * FUN_0000_6250 / 5d50 / 5cc2 / 5c98 signals found (clc, CF=0) vs not-found (stc, CF=1)
  * purely through the x86 CF; the __allregs model returns AX/void, not flags, so Ghidra

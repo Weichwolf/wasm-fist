@@ -1,0 +1,65 @@
+PATCH 329: the MGAVIDEO pitch-cache STATE STORE-WIDTH (DGROUP:0x794 / 0x796) -- patch 326's second root:
+`mov ds:0x796,ax` was emitted as a 4-byte store and wiped word[DGROUP:0x798], the head of the pitch->
+rowtable MRU free list, so any non-320 viewport pitch made FUN_0000_02c1 `rep stosw` 200 words at
+DGROUP:0x0000 -> the documented DGROUP[0x000..0x18f] block-zero -> STRSEG word[DGROUP:0x70] = 0.
+
+ASM (re_out/fist_mga_image.bin; driver DS=ES=DGROUP=0x1c00) -- every access to both slots is a WORD:
+    0x2c1: a3 96 07           mov ds:0x796,ax           ; opcode A3 = mov moffs16,ax  (02c1 entry)
+    0x2c9: c7 06 94 07 c8 07  mov WORD PTR ds:0x794,0x7c8  ; the pitch==0x140 shortcut
+    0x2f1: a3 94 07           mov ds:0x794,ax           ; publish the found node's rowtable offset
+Ghidra typed `_DAT_1000_c794` / `_DAT_1000_c796` `undefined4`.  `_DAT_1000_c796 = param_1` therefore wrote
+0x796..0x799, clobbering word[DGROUP:0x798] -- the head link of the 8-node free list FUN_0000_0284 builds
+(patch 326) -- to 0 on the FIRST 02c1 call (watchpoint-confirmed: `0284` sets word[0x798]=0x79e at
+mode-set, then the very next `02c1(param_1=320)` from 024f/00e8 sets it to 0).  `_DAT_1000_c794 = 0x7c8`
+likewise wrote over 0x796 (the current pitch).
+
+WHY IT MATTERS (the failure chain, runtime-traced end-to-end):
+  free list head = 0  ->  02c1's walk (asm 0x2d3 `mov dx,[bx]; or dx,dx; je 0x2f5`) terminates at the HEAD
+  CELL itself (cur = 0x798)  ->  the build path (asm 0x2f5) takes `di = [bx+4]` = word[DGROUP:0x79c] = 0 as
+  the node's rowtable buffer and `rep stosw`s 200 words at DGROUP:0x0000  ->  the deterministic
+  DGROUP[0x000..0x18f] block-zero patch 326 documents  ->  the engine STRSEG word[DGROUP:0x70] goes
+  0x2d74 -> 0  ->  the object-roster RENDER dispatch FUN_0000_c4df (`mov gs,[0x70]; call [gs:bx+0x358a]`,
+  patch 292) reads its per-class method vector out of ENGINE CODE at linear 0x358a instead of the real
+  table at STRSEG:0x358a (image 0x30cca = c5fc c5fc c5fc c5fc c694 c66e ...)  ->  it dispatches whatever
+  code byte pair it finds (e.g. classid 0x10 -> `8b 1e 20 57` -> vector 0x2057 = FUN_0000_2057, the
+  sprite-draw node walker) with garbage args -> SIGSEGV.
+Patch 326 fixed 0284's free-list node LINKS (the list is now built correctly); this fixes the store that
+then WIPED it.  The MENU never requests a non-320 pitch (02c1 short-circuits at `cmp ax,0x140`), which is
+why the block-zero is mission-only and why the 24 menu/settings flows never saw it.
+
+The rest of the driver already treats both slots as WORDs (the mode-set init `mov ds:0x794,0x7c8` /
+`mov ds:0x796,0x140` and the blit reads `[0x794]` row-table base / `[0x796]`-cx pitch skip), so the
+`undefined4` typing was internally inconsistent as well.  Retyping to `undefined2` also fixes the three
+readers at 0x2e2's tail / the two blitters, which had been reading `word[0x794] | word[0x796]<<16`.
+
+MISSION-PATH ONLY -> behaviour-neutral for the 24 menu/settings verify flows (verified native 24/24 +
+wasm 24/24, native<->wasm 0-diff).
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -640,8 +640,24 @@
+ #define _DAT_1000_c788 (*(undefined4 *)(g_mem+0x1c788))
+ #define _DAT_1000_c78c (*(undefined4 *)(g_mem+0x1c78c))
+ #define _DAT_1000_c792 (*(undefined4 *)(g_mem+0x1c792))
+-#define _DAT_1000_c794 (*(undefined4 *)(g_mem+0x1c794))
+-#define _DAT_1000_c796 (*(undefined4 *)(g_mem+0x1c796))
++/* PATCH 329: the MGAVIDEO pitch-cache STATE words DGROUP:0x794 (current row-offset-table near offset)
++ * and DGROUP:0x796 (current pitch) are 16-bit WORDs -- every asm access is a WORD:
++ *   0x2c1: a3 96 07           mov ds:0x796,ax          (opcode A3 = mov moffs16,ax)
++ *   0x2c9: c7 06 94 07 c8 07  mov WORD PTR ds:0x794,0x7c8
++ *   0x2f1: a3 94 07           mov ds:0x794,ax
++ * Ghidra typed BOTH `undefined4`, so `_DAT_1000_c796 = param_1` (asm 0x2c1) wrote FOUR bytes over
++ * 0x796..0x799 and CLOBBERED word[DGROUP:0x798] -- the head of the 8-node pitch->rowtable MRU FREE LIST
++ * that FUN_0000_0284 builds (patch 326) -- to 0 on the very first 02c1 call, and `_DAT_1000_c794 = 0x7c8`
++ * (asm 0x2c9) then wrote over 0x796 (the pitch) as well.  With the free list destroyed, any request for a
++ * non-320 pitch makes 02c1's walk terminate immediately at the HEAD CELL itself (cur = 0x798, its link
++ * being 0), so the build path takes the head cell's `[bx+4]` = word[DGROUP:0x79c] = 0 as its rowtable
++ * buffer and `rep stosw`s 200 words at DGROUP:0x0000 -- the deterministic DGROUP[0x000..0x18f] block-zero
++ * patch 326 documents, which ZEROES the engine STRSEG word[DGROUP:0x70] (0x2d74 -> 0).  Patch 326 fixed
++ * 0284's free-list node LINKS; this is the second root that then wiped the list the driver had just built.
++ * The rest of the driver already treats both slots as WORDs (fist_mga.c 0x2d1e/0x2d33 mode-set init and
++ * the 0x3095/0x3102 blit reads), so the undefined4 typing was internally inconsistent too. */
++#define _DAT_1000_c794 (*(undefined2 *)(g_mem+0x1c794))
++#define _DAT_1000_c796 (*(undefined2 *)(g_mem+0x1c796))
+ #define _DAT_1000_c798 (*(undefined4 *)(g_mem+0x1c798))
+ #define _DAT_1000_c79a (*(undefined4 *)(g_mem+0x1c79a))
+ #define _DAT_1000_cc1a (*(undefined4 *)(g_mem+0x1cc1a))

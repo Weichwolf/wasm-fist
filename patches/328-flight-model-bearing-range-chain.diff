@@ -1,0 +1,813 @@
+PATCH 328: the flight-model BEARING/RANGE (vertex-emit) chain -- FUN_0000_0541's si/di pointer TRUNCATION
+(the crash root), plus the coordinated recovery of the dropped CX/DX/BX register outputs and the int*N
+pointer-scaling / 16-bit-width artifacts through 0731 / 0927 / 0b71 / 0baf and the four DGROUP:0x9810
+animation methods ab91 / abb7 / abde / ac09.
+
+THE CRASH (exact chain, FIST_SEGV_EBP + nm/addr2line on the default `make native` AZER1 ACCEPT run):
+  459a -> c0ca -> c0e5 -> 7c1d -> ab03 -> ab88 -> ab91 -> 0541 -> 0731, SIGSEGV fault-addr ~0x3e09 /
+  0x40b9 / 0x42d9 / 0x4a09 in FUN_0000_0731 (+0x15), ~2-5/15 ACCEPT runs (layout-flaky).
+ROOT CAUSE: `undefined2` is `uint16_t` (re_out/ghidra_compat.h:30).  Ghidra typed FUN_0000_0541's SI/DI
+params from their 16-bit register varnodes as `undefined2`, so the object POINTER its callers pass
+(ab88/patch 282 passes g_mem+0x1c000+di; ab91 then passes obj+4 / obj+0x49) was TRUNCATED TO ITS LOW 16
+BITS at the call boundary.  FUN_0000_0731 -- whose own params are `uint *` (32-bit) -- then dereferenced
+that 16-bit stub as a host address: the observed fault addrs are exactly low16(obj)+0x49+0xc, i.e. the
+truncated `di` plus 0731's (mis-scaled) 4th word read.  Nothing else in the chain truncates: 0927's si/di
+are `int` and 0b71's are `uint *`, both 32-bit.  This is why the fault address is layout-dependent (it is
+low16 of a g_mem address) and why the crash is flaky rather than deterministic.
+
+FIXES (each asm-verified vs re_out/fist_dat_image.bin; DS=SS=DGROUP=0x1c00; CS=0):
+
+(a) FUN_0000_0541 (asm 0x541-0x54b) -- si/di widened from `undefined2` to the 32-bit pointer the asm's
+    SI/DI carry (THE crash fix), and 0541's dropped CX/DX outputs published: asm `call 0x731` (AX=bearing),
+    `push ax; call 0x927` (dx:ax=range), `mov cx,ax`, `pop ax` => OUT: AX=bearing, CX=range_lo, DX=range_hi.
+    The __allregs model returns AX only, so CX/DX were lost.
+
+(b) FUN_0000_0731 (asm 0x731-0x748) -- int*N POINTER-SCALING: the point struct is four 16-bit WORDS (two
+    32-bit coords at +0 and +4) and the asm reads [di]/[di+2]/[di+4]/[di+6], but Ghidra typed the pointers
+    `uint *` and indexed [1]/[2]/[3] = +4/+8/+12.  Also emitted a bare `return;` from a non-void function
+    (the 077e tail-call's AX survived only by codegen accident) -> made explicit.
+
+(c) FUN_0000_0b71 (asm 0xb71-0xbae) -- returns the 48-bit squared delta in AX:DX:CX plus the accumulator
+    word selector in BX; the model threads AX only, so Ghidra dropped dx/cx/bx (both non-AX exits
+    degenerated to `return 0`).  Same `uint *` +4-vs-+2 scaling as 0731.  Reconstructed 1:1; dx/cx/bx
+    published for 0927.
+
+(d) FUN_0000_0927 (asm 0x927-0x9d5) -- reconstructed 1:1.  Because 0b71's dx/cx/bx were dropped, Ghidra
+    bound them to 0927's own DEAD INPUT registers (param_2/param_1/param_3), i.e. it stored the CALLER's
+    stale cx/dx into the DGROUP:0x2034 accumulator and used a stale bx as the accumulator offset; it also
+    fused the two independent `add bx,0x2034` bases into one `int *` walk (piVar7 + 0x101a = +0x4068
+    bytes) and lost the 4th accumulator word.  0927's own DX output (the range HIGH word) is published.
+
+(e) FUN_0000_0baf (asm 0xbaf-0xc30) -- the integer square root under (d).  Ghidra rendered the whole
+    routine over 32-bit C `int`/`uint`, so every `shl ax,1`/`rcl dx,1` carry became a bit-31 test
+    (`param_1 < 0`) where the asm tests bit 15 of a 16-bit register, and the bits shifted out of ax/dx
+    never reached the remainder -> a wrong root for every radicand.  Reconstructed at the asm's 16-bit
+    widths.  Both exits provably return DX=0 (asm 0xbf8 `mov ax,bp; mov dx,cx` with cx==0 at both loop
+    exits; 0xc2d `pop dx` restoring the 0 input) -- which is what 0927's 0x989/0x9a5 paths rely on.
+
+(f) FUN_0000_ab88 (asm 0xab88-0xab90) -- the DGROUP:0x9810 dispatch (image 0x25810) =
+    {ab91,abb7,ac09,abde,ac5d,ac72,ac73,ac74,ad11,ad28,ad2a,ad29,ad2b,ad2c,ad2d,ad2e}.  Patch 282's
+    arg-less `(*code)(0,0,0,obj)` put the object in slot 4 -- right for ab91/abb7 (di==param_4) but WRONG
+    for ac09/abde, whose __allregs varnode order puts di in param_3 (they ran with obj=0).  None of the
+    16 targets has a direct caller, so each is now dispatched with its own signature; DI is the only live
+    input in all of them (cx/dx/bx are dead on entry -- every use is an output of their own 0541 call).
+
+(g) FUN_0000_ad08 (asm 0xad08-0xad10) + FUN_0000_ad11 (asm 0xad11-0xad27) -- ab88's twin table
+    DGROUP:0x9820 (image 0x25820) = {ad11,ad28,ad2a,ad29,ad2b,ad2c,ad2d,ad2e}: patch 285's
+    `(*code)(0,0,0,obj)` has the identical slot defect (ad11 takes di as param_1 -> it ran with 0 and
+    faulted on `test WORD [di+0x40],2`, fault-addr 0x40); ad28..ad2e are `c3` ret-stubs, so one arg is
+    exact.  ad11 is the SOLE READER of the [di+0x53] word (h) restores: its `cmp WORD [di+0x53],0x30` and
+    `and WORD [di+0x40],0xfffd` were 4-byte `uint` accesses -- the read pulled [di+0x55]/[di+0x56] in as
+    high bits (so the test was essentially never true) and the store clobbered [di+0x42], the animation
+    frame counter ab03 increments (patch 246).
+
+(h) FUN_0000_ab91 / abb7 / abde / ac09 (asm 0xab91 / 0xabb7 / 0xabde / 0xac09) -- the RANGE store
+    `shl edx,0x8; mov dl,ch; mov WORD [di+0x53],dx`: `shl edx,8` leaves DX = (DL_old << 8) (EDX's high
+    half is shifted away and never stored), then `mov dl,ch` fills the low byte, so the stored word is
+    ((range_hi & 0xff) << 8) | ((range_lo >> 8) & 0xff) == (uint16_t)(range32 >> 8) -- consumed by ad11
+    (`cmp WORD [di+0x53],0x30`).  Ghidra folded that store onto each method's own DEAD INPUT cx/dx, so
+    with ab88 passing 0,0 it wrote a constant 0 every tick.  Threaded from 0541's real CX/DX.  Also:
+    abde/ac09's `mov bx,WORD [di+0x97]` is a DGROUP NEAR OFFSET read as a 4-byte `int` and used as a host
+    pointer (base-loss) -> rebased; their `mov WORD [di+0x53],dx` / `[di+0x30],ax` / `or WORD [di+0x40]`
+    were emitted as 4-byte `int` stores (store-width class, clobbering [di+0x55]/[di+0x42]) -> restored to
+    the asm widths; and ac09's frame-count limit walk `mov bx,[0x9796]; mov bx,[bx]; cmp al,[bx-0x66b2]`
+    (two chained DGROUP near offsets) was a host deref with -0x66b2 scaled by 4 (`int *` arithmetic) ->
+    rebased onto DS=DGROUP.
+
+SCOPE / HONESTY:
+  - MISSION-PATH ONLY: 0541/0731/0927/0b71/0baf are the in-mission flight/AI bearing+range helpers and
+    ab88's 0x9810 methods run only on the 459a in-mission tick -> behaviour-neutral for the 24 menu /
+    settings verify flows (verified native 24/24 + wasm 24/24, native<->wasm 0-diff).
+  - There is NO mission-cockpit DOSBox pixel reference, so the acceptance bar here is asm-faithfulness +
+    crash-freedom + zero regression; the pixel bit-verify defers to when such a reference exists.
+  - DOCUMENTED LATENT DEBT (same class, NOT touched -- each needs its own caller-asm verification):
+    FUN_0000_0426 / 0539 / 059a forward si/di to 0731 through `undefined2` params and carry the identical
+    truncation; FUN_0000_a77e models its object si as a host pointer throughout while the asm (0xa7fa
+    `mov si,[bx]`, 0xa853 `mov si,[0x96f0]`) uses DGROUP near offsets, so its 0541 call is base-lost both
+    before and after this patch (its behaviour class -- deref of a bogus small pointer -- is unchanged;
+    it was not reached in any of the runs measured here).
+--- a/fist.c
++++ b/fist.c
+@@ -75,7 +75,7 @@
+ void __allregs FUN_0000_04e7(uint param_1,uint param_2,uint param_3,uint param_4);
+ void __allregs FUN_0000_04f4(undefined2 param_1,int param_2,int param_3);
+ undefined2 __allregs FUN_0000_0539(char param_1,undefined2 param_2,undefined2 param_3,byte param_4,undefined2 *param_5, undefined2 param_6,undefined2 param_7);
+-undefined2 __allregs FUN_0000_0541(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
++undefined2 __allregs FUN_0000_0541(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4, int param_5);   /* PATCH 328: si/di are 32-bit object pointers, not undefined2 (uint16_t) */
+ undefined2 __allregs FUN_0000_054c(undefined2 param_1,int param_2,int param_3);
+ undefined2 __allregs FUN_0000_056d(undefined2 param_1);
+ undefined2 __allregs FUN_0000_0578(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4,int param_5);
+@@ -5002,15 +5002,32 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_0541) @ 0000:0541 ===== */
+ 
+ undefined2 __allregs
+-FUN_0000_0541(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
+-             undefined2 param_5)
++FUN_0000_0541(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4,
++             int param_5)
+ 
+ {
+   undefined2 uVar1;
+-  
+-  uVar1 = FUN_0000_0731(param_4,param_5);
+-  FUN_0000_0927(param_1,param_2,param_3,param_4,param_5);
+-  return uVar1;
++
++  /* PATCH 328 -- THE CRASH ROOT.  asm 0x541-0x54b:
++   *     541: e8 ed 01   call 0x731      ; ax = bearing(si->di)
++   *     544: 50         push ax
++   *     545: e8 df 03   call 0x927      ; dx:ax = range(si,di)
++   *     548: 8b c8      mov cx,ax       ; cx = range LOW word
++   *     54a: 58         pop ax          ; ax = bearing
++   *     54b: c3         ret             ; OUT: AX=bearing, CX=range_lo, DX=range_hi
++   * si/di are the two point-struct pointers, threaded unchanged into BOTH 0731 and 0927.  Ghidra typed
++   * them from the 16-bit SI/DI varnodes as `undefined2` (= uint16_t, ghidra_compat.h:30), so every caller
++   * that passes an object POINTER (ab88 patch 282 passes g_mem+0x1c000+di) had it TRUNCATED to its low
++   * 16 bits -> 0731 dereferenced a 16-bit stub address (fault ~0x3e09/0x40b9/0x42d9/0x4a09 == low16(obj)
++   * +0x49+n) -> the flaky in-mission SIGSEGV on the always-run flight tick
++   * (459a->c0ca->c0e5->7c1d->ab03->ab88->ab91->0541->0731).  Widened to the 32-bit pointer the asm's SI/DI
++   * actually carry.  Ghidra ALSO dropped 0541's CX/DX outputs (the __allregs model returns AX only), which
++   * ab91/abb7/abde/ac09 need for their `mov [di+0x53],dx` range store -> published here. */
++  extern uint16_t g_fist_0541_cx, g_fist_0541_dx, g_fist_0927_dx;
++  uVar1 = FUN_0000_0731((uint *)(intptr_t)param_4,(uint *)(intptr_t)param_5);   /* 541 */
++  g_fist_0541_cx = (uint16_t)FUN_0000_0927(param_1,param_2,param_3,param_4,param_5); /* 545/548 mov cx,ax */
++  g_fist_0541_dx = g_fist_0927_dx;                                             /* 0927's DX survives */
++  return uVar1;                                                                /* 54a pop ax */
+ }
+ 
+ 
+@@ -5308,9 +5325,28 @@
+ undefined4 __allregs FUN_0000_0731(uint *param_1,uint *param_2)
+ 
+ {
+-  FUN_0000_077e(*param_2 - *param_1,(param_2[3] - param_1[3]) - (uint)(param_2[2] < param_1[2]),
+-                (param_2[1] - param_1[1]) - (uint)(*param_2 < *param_1),param_2[2] - param_1[2]);
+-  return;
++  /* PATCH 328: the BEARING helper -- 32-bit (X,Y) delta di-si -> 077e (arctangent).  asm 0x731-0x748:
++   *     731: 8b 05      mov ax,[di]        733: 2b 04      sub ax,[si]
++   *     735: 8b 55 02   mov dx,[di+2]      738: 1b 54 02   sbb dx,[si+2]
++   *     73b: 8b 5d 04   mov bx,[di+4]      73e: 2b 5c 04   sub bx,[si+4]
++   *     741: 8b 4d 06   mov cx,[di+6]      744: 1b 4c 06   sbb cx,[si+6]
++   *     747: eb 35      jmp 0x77e          ; tail-call, args (ax,cx,dx,bx)
++   * The point struct is FOUR 16-bit WORDS (two 32-bit coords at +0 and +4).  Ghidra typed the pointers
++   * `uint *` (4-byte) and indexed them [1]/[2]/[3] -> it read +4/+8/+12 where the asm reads +2/+4/+6
++   * (int*N pointer-scaling class) -> a bearing computed from the wrong words.  It also emitted a bare
++   * `return;` from a non-void fn (the AX tail-call return survived only by codegen accident).
++   * param_1=si, param_2=di (Ghidra's own `*param_2 - *param_1` fixes the order). */
++  const unsigned char *si = (const unsigned char *)param_1;
++  const unsigned char *di = (const unsigned char *)param_2;
++  uint16_t s0 = *(uint16_t *)(si + 0), s2 = *(uint16_t *)(si + 2);
++  uint16_t s4 = *(uint16_t *)(si + 4), s6 = *(uint16_t *)(si + 6);
++  uint16_t d0 = *(uint16_t *)(di + 0), d2 = *(uint16_t *)(di + 2);
++  uint16_t d4 = *(uint16_t *)(di + 4), d6 = *(uint16_t *)(di + 6);
++  uint16_t ax = (uint16_t)(d0 - s0);                        /* 731/733           */
++  uint16_t dx = (uint16_t)(d2 - s2 - (uint16_t)(d0 < s0));  /* 735/738 (sbb)     */
++  uint16_t bx = (uint16_t)(d4 - s4);                        /* 73b/73e           */
++  uint16_t cx = (uint16_t)(d6 - s6 - (uint16_t)(d4 < s4));  /* 741/744 (sbb)     */
++  return (undefined4)(uint16_t)FUN_0000_077e(ax,cx,dx,bx);  /* 747 jmp 0x77e     */
+ }
+ 
+ 
+@@ -5608,60 +5644,116 @@
+ int __allregs FUN_0000_0927(uint param_1,uint param_2,int param_3,int param_4,int param_5)
+ 
+ {
+-  uint *puVar1;
+-  uint uVar2;
+-  uint uVar3;
+-  int iVar5;
+-  uint uVar6;
+-  int *piVar7;
+-  uint uVar4;
+-  
+-  DAT_1000_e034 = 0;
+-  DAT_1000_e03a = 0;
+-  DAT_1000_e03c = 0;
+-  iVar5 = FUN_0000_0b71(param_4,param_5);
+-  piVar7 = (int *)((int)(undefined2 *)&DAT_1000_e034 + param_3);
+-  *piVar7 = iVar5;
+-  *(uint *)((int)(undefined2 *)&DAT_1000_e036 + param_3) = param_2;
+-  *(uint *)((int)(undefined2 *)&DAT_1000_e038 + param_3) = param_1;
+-  uVar6 = FUN_0000_0b71(param_4 + 4,param_5 + 4);
+-  puVar1 = (uint *)(piVar7 + 0x101a);
+-  uVar2 = *puVar1;
+-  *puVar1 = *puVar1 + uVar6;
+-  puVar1 = (uint *)(piVar7 + 0x101b);
+-  uVar3 = *puVar1;
+-  uVar4 = *puVar1;
+-  *puVar1 = uVar4 + param_2 + (uint)CARRY2(uVar2,uVar6);
+-  puVar1 = (uint *)(piVar7 + 0x101c);
+-  uVar4 = (uint)(CARRY2(uVar3,param_2) || CARRY2(uVar4 + param_2,(uint)CARRY2(uVar2,uVar6)));
+-  uVar2 = *puVar1;
+-  uVar3 = *puVar1;
+-  *puVar1 = uVar3 + param_1 + uVar4;
+-  piVar7[0x101d] = piVar7[0x101d] + (uint)(CARRY2(uVar2,param_1) || CARRY2(uVar3 + param_1,uVar4));
+-  if ((char)DAT_1000_e03c != '\0') {
+-    iVar5 = FUN_0000_0baf((DAT_1000_e038 >> 1 | (uint)((DAT_1000_e03a & 1) != 0) << 0xf) >> 1 |
+-                          (uint)((DAT_1000_e03a >> 1 & 1) != 0) << 0xf,
+-                          (DAT_1000_e03a >> 1 | 0x8000) >> 1);
+-    if (-1 < iVar5) {
+-      return 0;
+-    }
+-    return -1;
+-  }
+-  if (DAT_1000_e03a != 0) {
+-    FUN_0000_0baf(DAT_1000_e038,DAT_1000_e03a);
+-    return 0;
+-  }
+-  if (DAT_1000_e038 == 0) {
+-    iVar5 = FUN_0000_0baf(DAT_1000_e034,DAT_1000_e036);
+-    return iVar5;
++  /* PATCH 328: the RANGE helper -- sqrt(dX^2 + dY^2) between the two point structs, returned as the
++   * 32-bit DX:AX that 0541 hands to ab91/abb7/abde/ac09 for their `mov [di+0x53],dx` range store.
++   * asm 0x927-0x9d5 (DS=DGROUP=0x1c00; the 64-bit accumulator is DGROUP:0x2034..0x203a with the
++   * overflow/"big" flag byte at DGROUP:0x203c == DAT_1000_e034..e03c, correctly based already):
++   *     927: 33 c0 xor ax,ax ; a3 34 20 mov [0x2034],ax ; a3 3a 20 mov [0x203a],ax ; a3 3c 20 mov [0x203c],ax
++   *     932: e8 3c 02  call 0xb71                  ; dX term  -> ax:dx:cx, bx = word selector (0 or 2)
++   *     935: 81 c3 34 20 add bx,0x2034
++   *     939: 89 07 / 89 57 02 / 89 4f 04   mov [bx],ax ; [bx+2],dx ; [bx+4],cx
++   *     941: 8d 74 04 / 8d 7d 04  lea si,[si+4] ; lea di,[di+4]
++   *     947: e8 27 02  call 0xb71                  ; dY term
++   *     94a: 81 c3 34 20 add bx,0x2034
++   *     94e: 01 07 / 11 57 02 / 11 4f 04 / 83 57 06 00  add [bx],ax ; adc [bx+2],dx ; adc [bx+4],cx ; adc [bx+6],0
++   *     95a: 8d 74 fc / 8d 7d fc  lea si,[si-4] ; lea di,[di-4]
++   *     960: bb 34 20 mov bx,0x2034 ; 80 7f 08 01 cmp BYTE [bx+8],1
++   *     967: 8b 07 / 8b 57 02 / 8b 4f 04 / 8b 5f 06   ax=[0x2034] dx=[0x2036] cx=[0x2038] bx=[0x203a]
++   *     972: 73 38 jae 0x9ac | 974: 0b db or bx,bx / 75 5b jne 0x9d3 | 978: e3 20 jcxz 0x99a
++   *     97a: 0a ed or ch,ch / 75 20 jne 0x99e
++   *     97e: 8a c4/8a e2/8a d6/8a f1  (48-bit value >> 8 into dx:ax) ; e8 26 02 call 0xbaf (isqrt)
++   *     989: d1 e0/d1 d2 x4  -> dx:ax = sqrt<<4 ; c3 ret
++   *     99a: e8 12 02 call 0xbaf ; c3 ret                              ; dx:ax = isqrt(dx:ax)
++   *     99e: 8b c2/8b d1 (ax=dx, dx=cx) ; call 0xbaf ; 8a d4/8a e0/32 c0 -> dx:ax = sqrt<<8 ; ret
++   *     9ac: f9 stc ; rcr bx/cx/dx/ax ,1 ; d1 eb shr bx,1 ; rcr cx/dx/ax ,1     ; v64 = (v64>>2)|(1<<62)
++   *     9bd: 8b c1/8b d3 (ax=cx, dx=bx) ; call 0xbaf ; 8b d0 mov dx,ax ; 33 c0 xor ax,ax
++   *     9c8: d1 e2 shl dx,1 ; 72 01 jb 0x9cd ; c3 ret | 9cd: b8 ff ff mov ax,0xffff ; 8b d0 mov dx,ax ; ret
++   *     9d3: 8b c1/8b d3 ; call 0xbaf ; 8b d0 mov dx,ax ; 33 c0 xor ax,ax ; c3 ret
++   * WHY IT WAS WRONG: 0b71 returns ax:dx:cx:bx, but the __allregs model threads only AX, so Ghidra bound
++   * 0b71's DROPPED dx/cx/bx outputs to 0927's own dead INPUT registers (param_2/param_1/param_3) -- i.e.
++   * it stored the CALLER's stale cx/dx into the accumulator and used a stale bx as the accumulator
++   * offset -- then fused the two independent `add bx,0x2034` bases into one `int *` walk (piVar7 +
++   * 0x101a/0x101b/0x101c = +0x4068 bytes) and lost the 4th accumulator word entirely.  Reconstructed 1:1
++   * from the asm above.  0927's DX output (the range HIGH word) is likewise dropped by the model -> it is
++   * published for 0541.  param_1/param_2/param_3 (cx/dx/bx) are DEAD on entry -- every use in the asm is
++   * an OUTPUT of the 0b71 calls -- so they are referenced only to keep the signature.
++   * (FUN_0000_0baf, the 32-/64-bit integer square root, is register-only and already faithful; asm
++   * 0xbf8 `mov ax,bp; mov dx,cx` with cx==0 at both loop exits, and 0xc2d `pop dx` on the dx==0 path,
++   * mean 0baf ALWAYS returns DX=0 -- which is what the 0x986 `shl ax,1; rcl dx,1` x4 relies on.) */
++  extern uint16_t g_fist_b71_dx, g_fist_b71_cx, g_fist_b71_bx, g_fist_0927_dx, g_fist_baf_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned char *si = (unsigned char *)(intptr_t)param_4;
++  unsigned char *di = (unsigned char *)(intptr_t)param_5;
++  uint16_t ax, dx, cx, bx;
++  uint16_t *p;
++  uint32_t t;
++  (void)param_1; (void)param_2; (void)param_3;   /* cx/dx/bx: dead on entry (0b71 outputs in the asm) */
++
++  *(uint16_t *)(dg + 0x2034) = 0;                        /* 929 mov [0x2034],ax (ax=0) */
++  *(uint16_t *)(dg + 0x203a) = 0;                        /* 92c mov [0x203a],ax        */
++  *(uint16_t *)(dg + 0x203c) = 0;                        /* 92f mov [0x203c],ax        */
++
++  ax = (uint16_t)FUN_0000_0b71((uint *)si,(uint *)di);   /* 932 call 0xb71 (dX)        */
++  dx = g_fist_b71_dx; cx = g_fist_b71_cx; bx = g_fist_b71_bx;
++  p = (uint16_t *)(dg + (uint16_t)(0x2034 + bx));        /* 935 add bx,0x2034          */
++  p[0] = ax; p[1] = dx; p[2] = cx;                       /* 939/93b/93e                */
++
++  ax = (uint16_t)FUN_0000_0b71((uint *)(si + 4),(uint *)(di + 4)); /* 941/944/947 (dY) */
++  dx = g_fist_b71_dx; cx = g_fist_b71_cx; bx = g_fist_b71_bx;
++  p = (uint16_t *)(dg + (uint16_t)(0x2034 + bx));        /* 94a add bx,0x2034          */
++  t = (uint32_t)p[0] + ax;        p[0] = (uint16_t)t;    /* 94e add [bx],ax            */
++  t = (uint32_t)p[1] + dx + (t >> 16); p[1] = (uint16_t)t; /* 950 adc [bx+2],dx        */
++  t = (uint32_t)p[2] + cx + (t >> 16); p[2] = (uint16_t)t; /* 953 adc [bx+4],cx        */
++  t = (uint32_t)p[3] + 0  + (t >> 16); p[3] = (uint16_t)t; /* 956 adc [bx+6],0         */
++
++  ax = *(uint16_t *)(dg + 0x2034);                       /* 967 mov ax,[bx]            */
++  dx = *(uint16_t *)(dg + 0x2036);                       /* 969 mov dx,[bx+2]          */
++  cx = *(uint16_t *)(dg + 0x2038);                       /* 96c mov cx,[bx+4]          */
++  bx = *(uint16_t *)(dg + 0x203a);                       /* 96f mov bx,[bx+6]          */
++
++  if (*(uint8_t *)(dg + 0x203c) >= 1) {                  /* 963 cmp BYTE [bx+8],1; 972 jae 0x9ac */
++    /* 9ac: stc; rcr bx,cx,dx,ax ,1   then   9b5: shr bx,1; rcr cx,dx,ax ,1  (64-bit) */
++    uint64_t v = ((uint64_t)bx << 48) | ((uint64_t)cx << 32) | ((uint64_t)dx << 16) | ax;
++    v = (v >> 1) | 0x8000000000000000ull;                /* 9ac stc + rcr chain        */
++    v = v >> 1;                                          /* 9b5 shr/rcr chain          */
++    ax = (uint16_t)(v >> 32);                            /* 9bd mov ax,cx              */
++    dx = (uint16_t)(v >> 48);                            /* 9bf mov dx,bx              */
++    dx = (uint16_t)FUN_0000_0baf(ax,dx);                 /* 9c1 call 0xbaf; 9c4 mov dx,ax */
++    ax = 0;                                              /* 9c6 xor ax,ax              */
++    if (dx & 0x8000) {                                   /* 9c8 shl dx,1; 9ca jb 0x9cd */
++      ax = 0xffff; dx = 0xffff;                          /* 9cd/9d0 saturate           */
++    } else {
++      dx = (uint16_t)(dx << 1);                          /* 9c8 shl dx,1 (kept)        */
++    }
++    g_fist_0927_dx = dx;
++    return (int)ax;
++  }
++  if (bx != 0) {                                         /* 974 or bx,bx; 976 jne 0x9d3 */
++    dx = (uint16_t)FUN_0000_0baf(cx,bx);                 /* 9d3 mov ax,cx; 9d5 mov dx,bx; 9d7 call 0xbaf; 9da mov dx,ax */
++    g_fist_0927_dx = dx;
++    return 0;                                            /* 9dc xor ax,ax              */
++  }
++  if (cx == 0) {                                         /* 978 jcxz 0x99a              */
++    ax = (uint16_t)FUN_0000_0baf(ax,dx);                 /* 99a call 0xbaf; 99d ret     */
++    g_fist_0927_dx = g_fist_baf_dx;                      /* dx = 0baf's DX              */
++    return (int)ax;
++  }
++  if ((uint8_t)(cx >> 8) != 0) {                         /* 97a or ch,ch; 97c jne 0x99e */
++    uint16_t r = (uint16_t)FUN_0000_0baf(dx,cx);         /* 99e mov ax,dx; 9a0 mov dx,cx; 9a2 call 0xbaf */
++    g_fist_0927_dx = (uint16_t)((g_fist_baf_dx & 0xff00) | ((r >> 8) & 0xff)); /* 9a5 mov dl,ah */
++    return (int)(uint16_t)(r << 8);                      /* 9a7 mov ah,al; 9a9 xor al,al */
+   }
+-  if ((char)(DAT_1000_e038 >> 8) == '\0') {
+-    iVar5 = FUN_0000_0baf(CONCAT11((char)DAT_1000_e036,(char)((uint)DAT_1000_e034 >> 8)),
+-                          CONCAT11((char)DAT_1000_e038,(char)((uint)DAT_1000_e036 >> 8)));
+-    return iVar5 << 4;
++  {
++    /* 97e: al=ah; ah=dl; dl=dh; dh=cl  == the 48-bit accumulator (cx:dx:ax) shifted right by 8 */
++    uint16_t nax = (uint16_t)((ax >> 8) | (dx << 8));    /* 97e mov al,ah; 980 mov ah,dl */
++    uint16_t ndx = (uint16_t)((dx >> 8) | (cx << 8));    /* 982 mov dl,dh; 984 mov dh,cl */
++    uint32_t v;
++    nax = (uint16_t)FUN_0000_0baf(nax,ndx);              /* 986 call 0xbaf              */
++    v = ((uint32_t)g_fist_baf_dx << 16) | nax;
++    v = v << 4;                                          /* 989-997 shl ax,1; rcl dx,1 (x4) */
++    g_fist_0927_dx = (uint16_t)(v >> 16);
++    return (int)(uint16_t)v;
+   }
+-  iVar5 = FUN_0000_0baf(DAT_1000_e036,DAT_1000_e038);
+-  return iVar5 << 8;
+ }
+ 
+ 
+@@ -5928,32 +6020,55 @@
+ int __allregs FUN_0000_0b71(uint *param_1,uint *param_2)
+ 
+ {
+-  int iVar1;
+-  uint uVar2;
+-  bool bVar3;
+-  
+-  iVar1 = *param_1 - *param_2;
+-  uVar2 = (param_1[1] - param_2[1]) - (uint)(*param_1 < *param_2);
+-  bVar3 = uVar2 == 0;
+-  if ((int)uVar2 < 0) {
+-    bVar3 = iVar1 == 0;
+-    iVar1 = -iVar1;
+-    if (bVar3) {
+-      uVar2 = -uVar2;
+-      bVar3 = uVar2 == 0;
+-    }
+-    else {
+-      uVar2 = uVar2 ^ 0xffff;
+-      bVar3 = uVar2 == 0;
+-    }
+-  }
+-  if (!bVar3) {
+-    if ((char)(uVar2 >> 8) == '\0') {
+-      return 0;
+-    }
+-    return 0;
+-  }
+-  return iVar1 * iVar1;
++  /* PATCH 328: the SQUARED-DELTA term of the range accumulator.  asm 0xb71-0xbae (si=param_1, di=param_2):
++   *     b71: 8b 04      mov ax,[si]        b73: 8b 54 02   mov dx,[si+2]
++   *     b76: 2b 05      sub ax,[di]        b78: 1b 55 02   sbb dx,[di+2]     ; 32-bit delta si-di
++   *     b7b: 79 07      jns 0xb84
++   *     b7d: f7 d8      neg ax   / b7f: 73 ec jae 0xb6d (ax==0 -> b6d: f7 da neg dx) / b81: 83 f2 ff xor dx,0xffff
++   *                                                                          ; = 32-bit negate -> abs
++   *     b84: 74 13      je  0xb99          ; high word == 0 -> delta fits in 16 bits
++   *     b86: 0a f6      or dh,dh / b88: 75 16 jne 0xba0
++   *     b8a: 8a c4/8a e2  mov al,ah; mov ah,dl   ; ax = delta>>8
++   *     b8e: f7 e0      mul ax             ; dx:ax = ax*ax
++   *     b90: 8b ca/8b d0/33 c0/8b d8  mov cx,dx; mov dx,ax; xor ax,ax; mov bx,ax  ; OUT (0, lo, hi, bx=0)
++   *     b99: f7 e0      mul ax ; 33 c9 xor cx,cx ; 8b d9 mov bx,cx  ; OUT (lo, hi, 0, bx=0)
++   *     ba0: 8b c2 mov ax,dx ; f7 e0 mul ax ; 8b ca/8b d0/33 c0 ; bb 02 00 mov bx,2 ; f9 stc ; OUT bx=2
++   * The 48-bit square is returned in AX:DX:CX and the accumulator BYTE-offset selector in BX (0 or 2)
++   * -- the __allregs model returns AX only, so Ghidra DROPPED dx/cx/bx entirely (both non-AX exits
++   * degenerated to `return 0`) and its caller 0927 then wrote its own dead INPUT cx/dx/bx into the
++   * accumulator instead.  It also read the point struct through `uint *` (4-byte) indexing -> param_1[1]
++   * is +4 where the asm reads +2 (int*N pointer-scaling).  Reconstructed 1:1; dx/cx/bx published for 0927.
++   * (b71's CF -- `stc` at 0xbad -- is dead: 0927's `add bx,0x2034` at 0x935/0x94a never tests it.) */
++  extern uint16_t g_fist_b71_dx, g_fist_b71_cx, g_fist_b71_bx;
++  const unsigned char *si = (const unsigned char *)param_1;
++  const unsigned char *di = (const unsigned char *)param_2;
++  uint32_t a = (uint32_t)*(uint16_t *)(si + 0) | ((uint32_t)*(uint16_t *)(si + 2) << 16);
++  uint32_t b = (uint32_t)*(uint16_t *)(di + 0) | ((uint32_t)*(uint16_t *)(di + 2) << 16);
++  uint32_t v = a - b;                                     /* b76/b78            */
++  uint16_t ax, dx;
++  uint32_t sq;
++  if (v & 0x80000000u) { v = (uint32_t)(0u - v); }         /* b7b..b81 (32-bit negate = abs) */
++  ax = (uint16_t)v; dx = (uint16_t)(v >> 16);
++  if (dx == 0) {                                           /* b84 je 0xb99       */
++    sq = (uint32_t)ax * (uint32_t)ax;                      /* b99 mul ax         */
++    g_fist_b71_dx = (uint16_t)(sq >> 16);                  /* dx = hi            */
++    g_fist_b71_cx = 0;                                     /* b9b xor cx,cx      */
++    g_fist_b71_bx = 0;                                     /* b9d mov bx,cx      */
++    return (int)(uint16_t)sq;                              /* ax = lo            */
++  }
++  if ((uint8_t)(dx >> 8) == 0) {                           /* b86 or dh,dh; jne  */
++    uint16_t t = (uint16_t)((ax >> 8) | (dx << 8));        /* b8a mov al,ah; mov ah,dl */
++    sq = (uint32_t)t * (uint32_t)t;                        /* b8e mul ax         */
++    g_fist_b71_cx = (uint16_t)(sq >> 16);                  /* b90 mov cx,dx      */
++    g_fist_b71_dx = (uint16_t)sq;                          /* b92 mov dx,ax      */
++    g_fist_b71_bx = 0;                                     /* b94/b96            */
++    return 0;                                              /* b94 xor ax,ax      */
++  }
++  sq = (uint32_t)dx * (uint32_t)dx;                        /* ba0 mov ax,dx; mul ax */
++  g_fist_b71_cx = (uint16_t)(sq >> 16);                    /* ba4 mov cx,dx      */
++  g_fist_b71_dx = (uint16_t)sq;                            /* ba6 mov dx,ax      */
++  g_fist_b71_bx = 2;                                       /* baa mov bx,2       */
++  return 0;                                                /* ba8 xor ax,ax      */
+ }
+ 
+ 
+@@ -5962,70 +6077,76 @@
+ int __allregs FUN_0000_0baf(int param_1,uint param_2)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  uint uVar3;
+-  int iVar4;
+-  uint uVar5;
+-  uint uVar6;
+-  uint uVar7;
+-  bool bVar8;
+-  
+-  if (param_2 == 0) {
+-    uVar5 = 0;
+-    iVar2 = 8;
+-    iVar4 = 0;
+-    do {
+-      while( true ) {
+-        bVar8 = param_1 < 0;
+-        iVar1 = param_1 << 1;
+-        param_1 = param_1 << 2;
+-        uVar5 = (uVar5 << 1 | (uint)bVar8) << 1 | (uint)(iVar1 < 0);
+-        iVar1 = iVar4 * 2;
+-        if ((uint)(iVar4 * 4) < uVar5) break;
+-        iVar2 = iVar2 + -1;
+-        iVar4 = iVar1;
+-        if (iVar2 == 0) {
+-          return iVar1;
+-        }
+-      }
+-      uVar5 = (uVar5 + iVar4 * -4) - 1;
+-      iVar2 = iVar2 + -1;
+-      iVar4 = iVar1 + 1;
+-    } while (iVar2 != 0);
+-    return iVar1 + 1;
+-  }
+-  uVar5 = 0;
+-  uVar7 = 0;
+-  iVar2 = 0x10;
+-  iVar4 = 0;
+-  do {
+-    while( true ) {
+-      iVar1 = param_1 << 1;
+-      uVar3 = param_2 << 1 | (uint)(param_1 < 0);
+-      bVar8 = (int)uVar5 < 0;
+-      uVar6 = uVar5 << 1 | (uint)((int)param_2 < 0);
+-      param_1 = param_1 << 2;
+-      param_2 = uVar3 << 1 | (uint)(iVar1 < 0);
+-      uVar5 = uVar6 << 1 | (uint)((int)uVar3 < 0);
+-      uVar7 = (uVar7 << 1 | (uint)bVar8) << 1 | (uint)((int)uVar6 < 0);
+-      iVar1 = iVar4 * 2;
+-      uVar3 = (uint)(iVar1 < 0);
+-      if ((uVar3 <= uVar7) && ((uVar3 < uVar7 || ((uint)(iVar4 * 4) < uVar5)))) break;
+-      iVar2 = iVar2 + -1;
+-      iVar4 = iVar1;
+-      if (iVar2 == 0) {
+-        return iVar1;
+-      }
++  /* PATCH 328: the integer SQUARE ROOT under 0927's range computation (restoring shift-and-subtract).
++   * asm 0xbaf-0xc30 (register-only; ax=param_1, dx=param_2):
++   *   baf: 0b d2 or dx,dx ; bb1: 74 4f je 0xc02
++   *   --- 32-bit radicand dx:ax (dx != 0), 16 iterations, remainder di:si, root bp ---
++   *   bb8: 33 f6 xor si,si ; 8b fe mov di,si ; 8b ee mov bp,si ; b9 10 00 mov cx,0x10
++   *   bc8: 51 push cx
++   *   bc9: d1 e0/d1 d2/d1 d6/d1 d7  shl ax,1; rcl dx,1; rcl si,1; rcl di,1     (x2 -> radicand<<2)
++   *   bd9: d1 e5 shl bp,1 ; bdb: 8b dd mov bx,bp ; bdd: 33 c9 xor cx,cx
++   *   bdf: d1 e3 shl bx,1 ; d1 d1 rcl cx,1                                     ; cx:bx = bp<<1
++   *   be3: 3b f9 cmp di,cx ; 72 dd jb 0xbc4 | be7: 77 04 ja 0xbed | be9: 3b f3 cmp si,bx ; 76 d7 jbe 0xbc4
++   *   bed: 83 c5 01 add bp,1 ; f9 stc ; 1b f3 sbb si,bx ; 1b f9 sbb di,cx
++   *   bc4 / bf5: 59 pop cx ; 49 dec cx (e2 d0 loop 0xbc8)  -- BOTH branches: 16 iterations
++   *   bf8: 8b c5 mov ax,bp ; 8b d1 mov dx,cx          ; CX==0 at BOTH exits -> DX=0
++   *   --- 16-bit radicand ax (dx == 0), 8 iterations, remainder dx, root bp ---
++   *   c06: 33 d2 xor dx,dx ; 8b ea mov bp,dx ; b9 08 00 mov cx,8
++   *   c12: d1 e0/d1 d2 shl ax,1; rcl dx,1  (x2) ; c1a: d1 e5 shl bp,1 ; 8b dd mov bx,bp ; d1 e3 shl bx,1
++   *   c20: 3b d3 cmp dx,bx ; 76 eb jbe 0xc0f ; c24: 45 inc bp ; f9 stc ; 1b d3 sbb dx,bx
++   *   c2a: 8b c5 mov ax,bp ; 5a pop dx (restores the ORIGINAL dx == 0) -> DX=0
++   * Ghidra rendered the whole routine over 32-bit C `int`/`uint` locals, so every `shl ax,1`/`rcl dx,1`
++   * carry became a bit-31 test (`param_1 < 0`) where the asm tests bit 15 of a 16-bit register -- the
++   * documented "16-bit wraparound where bit-identity needs uint16_t" class -- and the bits shifted out of
++   * ax/dx were never carried into the remainder, so the root was wrong for every radicand.  Reconstructed
++   * 1:1 at the asm's 16-bit widths.  DX is 0 on EVERY exit (see above), which is exactly what 0927's
++   * `call 0xbaf; shl ax,1; rcl dx,1 (x4)` at 0x986 and `mov dl,ah` at 0x9a5 rely on. */
++  extern uint16_t g_fist_baf_dx;
++  uint16_t ax = (uint16_t)param_1, dx = (uint16_t)param_2;
++  uint16_t si, di, bp, bx, cx, c0, c1, c2;
++  uint32_t r;
++  int n, k, sub;
++
++  g_fist_baf_dx = 0;                                       /* bf8 mov dx,cx (cx==0) / c2d pop dx */
++  if (dx != 0) {                                           /* baf/bb1                    */
++    si = 0; di = 0; bp = 0;                                /* bb8/bba/bbc                */
++    for (n = 0x10; n != 0; n--) {                          /* bbe mov cx,0x10 / bc4 / bf6 */
++      for (k = 0; k < 2; k++) {                            /* bc9-bd8: shl/rcl chain x2  */
++        c0 = (uint16_t)(ax >> 15); ax = (uint16_t)(ax << 1);
++        c1 = (uint16_t)(dx >> 15); dx = (uint16_t)((dx << 1) | c0);
++        c2 = (uint16_t)(si >> 15); si = (uint16_t)((si << 1) | c1);
++        di = (uint16_t)((di << 1) | c2);
++      }
++      bp = (uint16_t)(bp << 1);                            /* bd9                        */
++      bx = bp;                                             /* bdb                        */
++      cx = (uint16_t)(bx >> 15); bx = (uint16_t)(bx << 1); /* bdd/bdf/be1 xor cx,cx; shl bx,1; rcl cx,1 */
++      if (di < cx)      sub = 0;                           /* be3/be5 jb  -> no subtract */
++      else if (di > cx) sub = 1;                           /* be7 ja                     */
++      else              sub = (si > bx);                   /* be9/beb jbe -> no subtract */
++      if (sub) {
++        bp = (uint16_t)(bp + 1);                           /* bed add bp,1               */
++        r = (uint32_t)si - (uint32_t)bx - 1u;              /* bf0/bf1 stc; sbb si,bx     */
++        si = (uint16_t)r;
++        r = (uint32_t)di - (uint32_t)cx - ((r >> 16) & 1u); /* bf3 sbb di,cx             */
++        di = (uint16_t)r;
++      }
++    }
++    return (int)(uint16_t)bp;                              /* bf8 mov ax,bp              */
++  }
++  dx = 0; bp = 0;                                          /* c06/c08                    */
++  for (n = 8; n != 0; n--) {                               /* c0a mov cx,8 / c0f / c28   */
++    for (k = 0; k < 2; k++) {                              /* c12-c19 shl ax,1; rcl dx,1 x2 */
++      c0 = (uint16_t)(ax >> 15); ax = (uint16_t)(ax << 1);
++      dx = (uint16_t)((dx << 1) | c0);
++    }
++    bp = (uint16_t)(bp << 1);                              /* c1a                        */
++    bx = (uint16_t)(bp << 1);                              /* c1c/c1e mov bx,bp; shl bx,1 */
++    if (dx > bx) {                                         /* c20/c22 jbe 0xc0f          */
++      bp = (uint16_t)(bp + 1);                             /* c24 inc bp                 */
++      dx = (uint16_t)((uint32_t)dx - (uint32_t)bx - 1u);   /* c25/c26 stc; sbb dx,bx     */
+     }
+-    bVar8 = uVar5 < (uint)(iVar4 * 4);
+-    iVar4 = uVar5 + iVar4 * -4;
+-    uVar5 = iVar4 - 1;
+-    uVar7 = (uVar7 - uVar3) - (uint)(bVar8 || iVar4 == 0);
+-    iVar2 = iVar2 + -1;
+-    iVar4 = iVar1 + 1;
+-  } while (iVar2 != 0);
+-  return iVar1 + 1;
++  }
++  return (int)(uint16_t)bp;                                /* c2a mov ax,bp              */
+ }
+ 
+ 
+@@ -27954,7 +28075,23 @@
+   unsigned int di = (unsigned short)param_1;
+   unsigned int idx = dg[(unsigned short)(di + 0x43)];
+   uint16_t vec = *(uint16_t *)(dg + (unsigned short)(0x9810 + idx));
+-  (*(code *)fist_icall_near(0x0u,vec))(0,0,0,(int)(intptr_t)(dg + di));
++  /* PATCH 328: the arg-less `(*code)(0,0,0,obj)` above put the object in slot 4 -- correct for ab91/abb7
++   * (di == param_4) but WRONG for ac09/abde, whose __allregs varnode order puts di in param_3 (they got
++   * obj=0 and dereferenced a null object).  The whole DGROUP:0x9810 table (image 0x25810) is
++   * {ab91,abb7,ac09,abde,ac5d,ac72,ac73,ac74,ad11,ad28,ad2a,ad29,ad2b,ad2c,ad2d,ad2e} and NONE of them has
++   * any direct caller, so each is dispatched here with its own signature; DI is the only live input in all
++   * of them (cx/dx/bx are dead on entry -- every use is an output of their 0541 call), and the remaining
++   * targets (ac5d/ad11 + the `ret`-only stubs) all take di as param_1. */
++  {
++    int obj = (int)(intptr_t)(dg + di);
++    switch (vec) {
++    case 0xab91: FUN_0000_ab91(0,0,0,obj); break;
++    case 0xabb7: FUN_0000_abb7(0,0,0,obj); break;
++    case 0xac09: FUN_0000_ac09(0,0,obj);   break;
++    case 0xabde: FUN_0000_abde(0,0,obj);   break;
++    default:     (*(code *)fist_icall_near(0x0u,vec))(obj); break;
++    }
++  }
+   return;
+ }
+ 
+@@ -27965,14 +28102,31 @@
+ 
+ {
+   undefined2 uVar1;
+-  
+-  if ((*(uint *)(param_4 + 0x40) & 2) != 0) {
+-    uVar1 = FUN_0000_0541(param_1,(int)param_2,param_3,param_4 + 4,param_4 + 0x49);
+-    if ((*(uint *)(param_4 + 0x40) & 1) != 0) {
+-      *(undefined2 *)(param_4 + 0x30) = uVar1;
+-    }
+-    *(undefined2 *)(param_4 + 0x53) = (int)CONCAT31((int3)param_2,(char)((uint)param_1 >> 8));
+-  }
++
++  /* PATCH 328: the per-object BEARING/RANGE animation method (asm 0xab91-0xabb6; di=param_4 = the object,
++   * dispatched by ab88 patch 282):
++   *     ab91: f7 45 40 02 00  test WORD [di+0x40],2 ; ab96: 74 1e je 0xabb6
++   *     ab98: 57 push di ; ab99: 8d 75 04 lea si,[di+4] ; ab9c: 8d 7d 49 lea di,[di+0x49]
++   *     ab9f: e8 9f 59 call 0x541      ; -> AX=bearing, CX=range_lo, DX=range_hi
++   *     aba2: 5f pop di
++   *     aba3: f7 45 40 01 00 test WORD [di+0x40],1 ; aba8: 74 03 je 0xabad
++   *     abaa: 89 45 30  mov WORD [di+0x30],ax                    ; bearing
++   *     abad: 66 c1 e2 08  shl edx,0x8 ; abb1: 8a d5 mov dl,ch ; abb3: 89 55 53 mov WORD [di+0x53],dx
++   * The `shl edx,8; mov dl,ch` pair builds the RANGE word: `shl edx,8` leaves DX = (DL_old << 8) (EDX's
++   * high half is shifted away and never stored), then `mov dl,ch` fills the low byte -> the stored word is
++   * ((range_hi & 0xff) << 8) | ((range_lo >> 8) & 0xff) == (uint16_t)(range32 >> 8), consumed by ad11
++   * (`cmp WORD [di+0x53],0x30`).  Ghidra dropped 0541's CX/DX outputs (the __allregs model returns AX
++   * only) and folded the store onto ab91's own DEAD INPUT cx/dx (param_1/param_2) instead -> ab88 passes
++   * 0,0 so [di+0x53] was stored as a constant 0 every tick.  Thread 0541's real CX/DX. */
++  extern uint16_t g_fist_0541_cx, g_fist_0541_dx;
++  if ((*(uint16_t *)(param_4 + 0x40) & 2) != 0) {          /* ab91 test WORD [di+0x40],2 */
++    uVar1 = FUN_0000_0541(param_1,(int)param_2,param_3,param_4 + 4,param_4 + 0x49); /* ab99/ab9c/ab9f */
++    if ((*(uint16_t *)(param_4 + 0x40) & 1) != 0) {        /* aba3 test WORD [di+0x40],1 */
++      *(uint16_t *)(param_4 + 0x30) = uVar1;               /* abaa mov WORD [di+0x30],ax */
++    }
++    *(uint16_t *)(param_4 + 0x53) =
++        (uint16_t)(((uint16_t)(g_fist_0541_dx & 0xff) << 8) | ((g_fist_0541_cx >> 8) & 0xff));
++  }                                                        /* abad/abb1/abb3             */
+   return;
+ }
+ 
+@@ -27983,15 +28137,20 @@
+ 
+ {
+   undefined2 uVar1;
+-  
+-  if ((*(uint *)(param_4 + 0x40) & 1) == 0) {
++
++  /* PATCH 328: ab91's sibling (asm 0xabb7-0xabdd), identical body behind an extra `test WORD [di+0x40],1`
++   * gate: abc7 lea si,[di+4]; abca lea di,[di+0x49]; abcd call 0x541; abd1 mov WORD [di+0x30],ax;
++   * abd4 shl edx,8; abd8 mov dl,ch; abda mov WORD [di+0x53],dx.  Same dropped-0541-CX/DX defect. */
++  extern uint16_t g_fist_0541_cx, g_fist_0541_dx;
++  if ((*(uint16_t *)(param_4 + 0x40) & 1) == 0) {          /* abb7/abbc                  */
+     return;
+   }
+-  if ((*(uint *)(param_4 + 0x40) & 2) != 0) {
+-    uVar1 = FUN_0000_0541(param_1,(int)param_2,param_3,param_4 + 4,param_4 + 0x49);
+-    *(undefined2 *)(param_4 + 0x30) = uVar1;
+-    *(undefined2 *)(param_4 + 0x53) = (int)CONCAT31((int3)param_2,(char)((uint)param_1 >> 8));
+-  }
++  if ((*(uint16_t *)(param_4 + 0x40) & 2) != 0) {          /* abbf/abc4                  */
++    uVar1 = FUN_0000_0541(param_1,(int)param_2,param_3,param_4 + 4,param_4 + 0x49); /* abc7/abca/abcd */
++    *(uint16_t *)(param_4 + 0x30) = uVar1;                 /* abd1                       */
++    *(uint16_t *)(param_4 + 0x53) =
++        (uint16_t)(((uint16_t)(g_fist_0541_dx & 0xff) << 8) | ((g_fist_0541_cx >> 8) & 0xff));
++  }                                                        /* abd4/abd8/abda             */
+   return;
+ }
+ 
+@@ -28004,19 +28163,35 @@
+   undefined2 uVar1;
+   int iVar2;
+   uint uVar3;
+-  
+-  if ((*(uint *)(param_3 + 0x40) & 1) == 0) {
++
++  /* PATCH 328: the LEAD-object bearing/range animation method (asm 0xabde-0xac08; di=param_3 = the object):
++   *     abde: f7 45 40 01 00 test WORD [di+0x40],1 ; abe3: 75 01 jne 0xabe6 ; abe5: c3 ret
++   *     abe6: 8b 9d 97 00 mov bx,WORD [di+0x97]      ; bx = the TARGET object's DGROUP NEAR OFFSET
++   *     abea: 57 push di ; abeb: 8d 75 04 lea si,[di+4] ; abee: 8d 7f 04 lea di,[bx+4]
++   *     abf1: e8 4d 59 call 0x541 ; abf4: 5f pop di ; abf5: 89 45 30 mov WORD [di+0x30],ax
++   *     abf8: 66 c1 e2 08 shl edx,0x8 ; abfc: 8a d5 mov dl,ch ; abfe: 83 ea 1e sub dx,0x1e
++   *     ac01: 73 02 jae 0xac05 ; ac03: 33 d2 xor dx,dx ; ac05: 89 55 53 mov WORD [di+0x53],dx
++   * Three artifacts: (1) word[di+0x97] is a 16-bit NEAR OFFSET read as a 4-byte `int` and then used as a
++   * HOST pointer (`*(int*)(param_3+0x97) + 4` = 0541's di) -- DGROUP near-offset base-loss; (2) the
++   * dropped 0541 CX/DX (see ab91) folded onto the dead input cx/dx; (3) `mov WORD [di+0x53],dx` emitted as
++   * a 4-byte `int` store, which clobbers [di+0x55]/[di+0x56] (store-width class). */
++  extern uint16_t g_fist_0541_cx, g_fist_0541_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx;
++  if ((*(uint16_t *)(param_3 + 0x40) & 1) == 0) {          /* abde/abe3                  */
+     return;
+   }
+-  uVar1 = FUN_0000_0541(param_1,(int)param_2,*(int *)(param_3 + 0x97),param_3 + 4,
+-                        *(int *)(param_3 + 0x97) + 4);
+-  *(undefined2 *)(param_3 + 0x30) = uVar1;
+-  uVar3 = (uint)CONCAT31((int3)param_2,(char)((uint)param_1 >> 8));
+-  iVar2 = uVar3 - 0x1e;
+-  if (uVar3 < 0x1e) {
+-    iVar2 = 0;
++  bx = *(uint16_t *)(param_3 + 0x97);                      /* abe6 mov bx,WORD [di+0x97] */
++  uVar1 = FUN_0000_0541(param_1,(int)param_2,bx,param_3 + 4,
++                        (int)(intptr_t)(dg + (uint16_t)(bx + 4)));  /* abeb/abee/abf1     */
++  *(uint16_t *)(param_3 + 0x30) = uVar1;                   /* abf5                       */
++  uVar3 = (uint)(uint16_t)(((uint16_t)(g_fist_0541_dx & 0xff) << 8) |
++                           ((g_fist_0541_cx >> 8) & 0xff)); /* abf8/abfc                 */
++  iVar2 = (int)(uint16_t)(uVar3 - 0x1e);                   /* abfe sub dx,0x1e           */
++  if (uVar3 < 0x1e) {                                      /* ac01 jae 0xac05            */
++    iVar2 = 0;                                             /* ac03 xor dx,dx             */
+   }
+-  *(int *)(param_3 + 0x53) = iVar2;
++  *(uint16_t *)(param_3 + 0x53) = (uint16_t)iVar2;         /* ac05 mov WORD [di+0x53],dx */
+   return;
+ }
+ 
+@@ -28028,27 +28203,56 @@
+ {
+   int iVar1;
+   uint uVar2;
+-  
+-  if ((*(uint *)(param_3 + 0x40) & 1) == 0) {
++
++  /* PATCH 328: the REAR-facing (bearing+0x8000) one-shot animation method (asm 0xac09-0xac5c;
++   * di=param_3 = the object):
++   *     ac09: test WORD [di+0x40],1 ; jne 0xac11 ; ret
++   *     ac11: f7 45 40 40 00 test WORD [di+0x40],0x40 ; ac16: 75 2e jne 0xac46
++   *     ac18: 83 4d 40 40 or WORD [di+0x40],0x40 ; ac1c: c6 45 44 00 mov BYTE [di+0x44],0
++   *     ac20: 8b 9d 97 00 mov bx,WORD [di+0x97]     ; the TARGET object's DGROUP NEAR OFFSET
++   *     ac25: 8d 75 04 lea si,[di+4] ; ac28: 8d 7f 04 lea di,[bx+4] ; ac2b: e8 13 59 call 0x541
++   *     ac2f: 05 00 80 add ax,0x8000 ; ac32: 89 45 30 mov WORD [di+0x30],ax
++   *     ac35: 66 c1 e2 08 shl edx,0x8 ; ac39: 8a d5 mov dl,ch ; ac3b: 83 ea 1e sub dx,0x1e
++   *     ac3e: 73 02 jae 0xac42 ; ac40: 33 d2 xor dx,dx ; ac42: 89 55 53 mov WORD [di+0x53],dx
++   *     ac46: fe 45 44 inc BYTE [di+0x44] ; ac49: 8a 45 44 mov al,[di+0x44]
++   *     ac4c: 8b 1e 96 97 mov bx,WORD [0x9796] ; ac50: 8b 1f mov bx,WORD [bx] ; ac52: 3a 87 4e 99 cmp al,BYTE [bx-0x66b2]
++   *     ac56: 72 04 jb 0xac5c ; ac58: 83 65 40 bf and WORD [di+0x40],0xffbf
++   * Same three artifacts as abde ([di+0x97] near-offset base-loss / dropped 0541 CX/DX / 4-byte stores
++   * where the asm writes WORDs), PLUS the frame-count limit walk: DGROUP:0x9796 (== DAT_2000_5796, which
++   * ab03 patch 246 fills from word[DS:byte[di+0x1b]*2-0x7a60]) is a 16-bit NEAR OFFSET and `mov bx,[bx]`
++   * chases a SECOND near offset, but Ghidra typed DAT_2000_5796 `int **` and emitted
++   * `*(byte *)(*DAT_2000_5796 + -0x66b2)` = a host deref of the near offset with -0x66b2 scaled by 4
++   * (`int *` arithmetic).  Rebased onto DS=DGROUP; the byte lives at DGROUP:(uint16_t)(bx-0x66b2). */
++  extern uint16_t g_fist_0541_cx, g_fist_0541_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx;
++  if ((*(uint16_t *)(param_3 + 0x40) & 1) == 0) {          /* ac09/ac0e                  */
++    return;
++  }
++  if ((*(uint16_t *)(param_3 + 0x40) & 0x40) == 0) {       /* ac11/ac16                  */
++    *(uint16_t *)(param_3 + 0x40) = (uint16_t)(*(uint16_t *)(param_3 + 0x40) | 0x40); /* ac18 */
++    *(unsigned char *)(param_3 + 0x44) = 0;                /* ac1c mov BYTE [di+0x44],0  */
++    bx = *(uint16_t *)(param_3 + 0x97);                    /* ac20 mov bx,WORD [di+0x97] */
++    iVar1 = FUN_0000_0541(param_1,(int)param_2,bx,param_3 + 4,
++                          (int)(intptr_t)(dg + (uint16_t)(bx + 4)));  /* ac25/ac28/ac2b   */
++    *(uint16_t *)(param_3 + 0x30) = (uint16_t)(iVar1 + 0x8000); /* ac2f add ax,0x8000; ac32 mov WORD [di+0x30],ax */
++    uVar2 = (uint)(uint16_t)(((uint16_t)(g_fist_0541_dx & 0xff) << 8) |
++                             ((g_fist_0541_cx >> 8) & 0xff)); /* ac35/ac39               */
++    iVar1 = (int)(uint16_t)(uVar2 - 0x1e);                 /* ac3b sub dx,0x1e           */
++    if (uVar2 < 0x1e) {                                    /* ac3e jae 0xac42            */
++      iVar1 = 0;                                           /* ac40 xor dx,dx             */
++    }
++    *(uint16_t *)(param_3 + 0x53) = (uint16_t)iVar1;       /* ac42 mov WORD [di+0x53],dx */
+     return;
+   }
+-  if ((*(uint *)(param_3 + 0x40) & 0x40) == 0) {
+-    *(uint *)(param_3 + 0x40) = *(uint *)(param_3 + 0x40) | 0x40;
+-    *(undefined1 *)(param_3 + 0x44) = 0;
+-    iVar1 = FUN_0000_0541(param_1,(int)param_2,*(int *)(param_3 + 0x97),param_3 + 4,
+-                          *(int *)(param_3 + 0x97) + 4);
+-    *(int *)(param_3 + 0x30) = iVar1 + -0x8000;
+-    uVar2 = (uint)CONCAT31((int3)param_2,(char)((uint)param_1 >> 8));
+-    iVar1 = uVar2 - 0x1e;
+-    if (uVar2 < 0x1e) {
+-      iVar1 = 0;
+-    }
+-    *(int *)(param_3 + 0x53) = iVar1;
+-    return;
+-  }
+-  *(char *)(param_3 + 0x44) = *(char *)(param_3 + 0x44) + '\x01';
+-  if (*(byte *)(*DAT_2000_5796 + -0x66b2) <= *(byte *)(param_3 + 0x44)) {
+-    *(uint *)(param_3 + 0x40) = *(uint *)(param_3 + 0x40) & 0xffbf;
++  *(unsigned char *)(param_3 + 0x44) = (unsigned char)(*(unsigned char *)(param_3 + 0x44) + 1); /* ac46 */
++  {
++    uint16_t b0 = *(uint16_t *)(dg + 0x9796);              /* ac4c mov bx,WORD [0x9796]  */
++    uint16_t b1 = *(uint16_t *)(dg + b0);                  /* ac50 mov bx,WORD [bx]      */
++    unsigned char lim = dg[(uint16_t)(b1 - 0x66b2)];       /* ac52 cmp al,BYTE [bx-0x66b2] */
++    if (lim <= *(unsigned char *)(param_3 + 0x44)) {       /* ac56 jb 0xac5c             */
++      *(uint16_t *)(param_3 + 0x40) = (uint16_t)(*(uint16_t *)(param_3 + 0x40) & 0xffbf); /* ac58 */
++    }
+   }
+   return;
+ }
+@@ -28230,7 +28434,13 @@
+   unsigned int di = (unsigned short)param_1;
+   unsigned int idx = dg[(unsigned short)(di + 0x43)];
+   uint16_t vec = *(uint16_t *)(dg + (unsigned short)(0x9820 + idx));
+-  (*(code *)fist_icall_near(0x0u,vec))(0,0,0,(int)(intptr_t)(dg + di));
++  /* PATCH 328: ab88's twin carried the identical defect -- the arg-less `(*code)(0,0,0,obj)` put the
++   * object in slot 4, but the whole DGROUP:0x9820 table (image 0x25820) is
++   * {ad11,ad28,ad2a,ad29,ad2b,ad2c,ad2d,ad2e} and its ONLY non-stub target FUN_0000_ad11 takes di as
++   * param_1 -> ad11 ran with param_1 == 0 and faulted on `test WORD [di+0x40],2` (fault-addr 0x40).
++   * None of the eight has a direct caller and DI is the only live input in all of them (ad28..ad2e are
++   * `c3` ret-stubs), so one arg is exact. */
++  (*(code *)fist_icall_near(0x0u,vec))((int)(intptr_t)(dg + di));
+   return;
+ }
+ 
+@@ -28240,9 +28450,18 @@
+ void __allregs FUN_0000_ad11(int param_1)
+ 
+ {
+-  if (((*(uint *)(param_1 + 0x40) & 2) != 0) && (*(uint *)(param_1 + 0x53) < 0x31)) {
+-    FUN_1000_ac0a(param_1);
+-    *(uint *)(param_1 + 0x40) = *(uint *)(param_1 + 0x40) & 0xfffd;
++  /* PATCH 328: the RANGE consumer -- the sole reader of the [di+0x53] word ab91/abb7 store.  asm
++   * 0xad11-0xad27 (di=param_1 = the object, dispatched by ad08):
++   *     ad11: f7 45 40 02 00  test WORD [di+0x40],2 ; ad16: 74 0f je 0xad27
++   *     ad18: 83 7d 53 30     cmp  WORD [di+0x53],0x30 ; ad1c: 77 09 ja 0xad27
++   *     ad1e: 9a 7a b5 69 0f  call 0xf69:0xb57a ; ad23: 83 65 40 fd and WORD [di+0x40],0xfffd
++   * Both accesses are 4-byte `uint` in the decompile where the asm uses WORDs (store-width class): the
++   * `[di+0x53]` READ pulled in [di+0x55]/[di+0x56] as high bits, so `< 0x31` was essentially never true,
++   * and the `[di+0x40] &= 0xfffd` 4-byte STORE clobbered [di+0x42] -- the animation frame counter ab03
++   * increments (`inc BYTE [di+0x42]`, patch 246).  Restored to the asm widths. */
++  if (((*(uint16_t *)(param_1 + 0x40) & 2) != 0) && (*(uint16_t *)(param_1 + 0x53) < 0x31)) {
++    FUN_1000_ac0a(param_1);                                  /* ad1e lcall 0xf69:0xb57a */
++    *(uint16_t *)(param_1 + 0x40) = (uint16_t)(*(uint16_t *)(param_1 + 0x40) & 0xfffd); /* ad23 */
+   }
+   return;
+ }
