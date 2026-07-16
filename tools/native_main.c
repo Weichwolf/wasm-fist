@@ -1103,6 +1103,50 @@ int fist_extender_gate(void) {
                 *(int32_t*)(t+0xd2),*(int32_t*)(t+0xd6),*(int32_t*)(t+0xda));
         }
     }
+    /* FIST_RETDUMP (diagnostic, default OFF): at op-0x24 post N (settled AZER1 frame, same anchor as
+     * FIST_MISSFB) dump the reticle geometry descriptor at word[0x156a]=0x156c and its SOURCE struct at
+     * word[0x1552], then _exit(0).  This is the bit-verify seam for the reticle-geometry-populator work.
+     * FINDING (this iteration): the descriptor WRITER FUN_0000_2322 (patch 186) is faithful -- it copies
+     * width/height into desc[+4]/[+a]/[+c] FROM the source struct d552; those land 0 only because the
+     * SOURCE (the child view record 0x8e91, one of 0x8e91/0x8ead/0x8ec9 under container 0x8e84) is never
+     * populated.  Its rect is written by MGAVIDEO mga 0x2004 = DGROUP:0x68c (asm 0x21a8-0x21c9: the sprite
+     * bounding-box -> child[+4/+6/+8/+a/+14]), which is UNINSTALLED in the port (vec [0x68c]=mga:0 no-op,
+     * device-alloc [0xcc]=0, per-child sprite word0 not assigned) -- the documented cockpit-instrument
+     * DEVICE subsystem debt (patches 301/302).  The 288x81 values are the loaded instrument-sheet sprite
+     * bounding box (data-derived), not asm immediates.  See docs/stage1.md. */
+    if (op == 0x24 && getenv("FIST_RETDUMP") && g_fist_after_map) {
+        static int nr = 0;
+        long wr = getenv("FIST_RETDUMP_N") ? atol(getenv("FIST_RETDUMP_N")) : 1;
+        if (++nr >= wr) {
+            uint16_t h = *(uint16_t*)(dg+0x156a);
+            uint16_t s = *(uint16_t*)(dg+0x1552);
+            uint8_t *desc = dg + h;
+            uint8_t *src  = dg + s;
+            fprintf(stderr,"[retdump] op24 post #%ld  handle word[0x156a]=%04x  desc[0..f]:", wr, h);
+            for(int i=0;i<16;i++) fprintf(stderr," %02x", desc[i]);
+            fprintf(stderr,"\n[retdump] desc fields word0=%04x [+2]=%04x [+4]=%04x [+6]=%04x [+8]=%04x [+a]=%04x [+c]=%04x [+e]=%04x\n",
+                *(uint16_t*)(desc+0),*(uint16_t*)(desc+2),*(uint16_t*)(desc+4),*(uint16_t*)(desc+6),
+                *(uint16_t*)(desc+8),*(uint16_t*)(desc+0xa),*(uint16_t*)(desc+0xc),*(uint16_t*)(desc+0xe));
+            fprintf(stderr,"[retdump] SRC word[0x1552]=%04x  src[0..1b]:", s);
+            for(int i=0;i<0x1c;i++) fprintf(stderr," %02x", src[i]);
+            fprintf(stderr,"\n[retdump] src fields [+4]=%04x [+6]=%04x [+8]=%04x [+a]=%04x [+14]=%04x [+16]=%04x\n",
+                *(uint16_t*)(src+4),*(uint16_t*)(src+6),*(uint16_t*)(src+8),*(uint16_t*)(src+0xa),
+                *(uint16_t*)(src+0x14),*(uint16_t*)(src+0x16));
+            fprintf(stderr,"[retdump] vecs [0x68c]=%08x [0xcc]=%08x [0x560]=%08x [0x694]=%08x  child8e91.w0=%04x cont8e84.w0=%04x  d0c(8d0c)=%02x d90(8e90)=%02x\n",
+                *(uint32_t*)(dg+0x68c),*(uint32_t*)(dg+0xcc),*(uint32_t*)(dg+0x560),*(uint32_t*)(dg+0x694),
+                *(uint16_t*)(dg+0x8e91),*(uint16_t*)(dg+0x8e84),dg[0x8d0c],dg[0x8e90]);
+            { uint16_t cands[] = {0x7aa4,0x8d10,0x8d2c,0x8d60,0x8e84,0x8e91,0x8ead,0x8ec9};
+              for (unsigned k=0;k<sizeof(cands)/sizeof(cands[0]);k++){
+                uint8_t *c = dg + cands[k];
+                fprintf(stderr,"[retdump] cand %04x:", cands[k]);
+                for(int i=0;i<0x1c;i++) fprintf(stderr," %02x", c[i]);
+                fprintf(stderr,"  w=(a-6)=%d h=((8-4)+16)=%d\n",
+                    (int16_t)(*(uint16_t*)(c+0xa)-*(uint16_t*)(c+6)),
+                    (int16_t)((*(uint16_t*)(c+8)-*(uint16_t*)(c+4))+*(uint16_t*)(c+0x16)));
+              } }
+            _exit(0);
+        }
+    }
     if (op == 0x24 && getenv("FIST_MISSFB") && g_ext_ready) {
         static int nseen = 0;
         long want = getenv("FIST_MISSFB_N") ? atol(getenv("FIST_MISSFB_N")) : 1;
