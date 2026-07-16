@@ -33,7 +33,12 @@ FLOWS=(
   # hold and selects the longest non-terminal stable hold (the title) by DOSBox-internal pixel signature
   # (never compared to the port -> non-circular; two independent DOSBox runs agree AE=0).  READ-only.
   # AE=0 native AND wasm; native md5 == wasm md5 (0-diff).
-  "intro|25000|kdvframe=385||$ROOT/ref/intro_title_native320.png"
+  # PENDING (backed out d846564's claim): the FIST_KDV_DUMPFRAME decode-ahead seam HANGS in the real build --
+  # m_ext_FUN_0000_11dd() called standalone back-to-back (right after KDV OPEN, before the per-frame op-0x78
+  # drive) blocks on its first call (verified: 90s no-frame timeout, dumpframe-hits=0, op-0x78 never reached).
+  # The genuine ref (ref/intro_title_native320.png) + refcapture_intro.sh stand; the frame-pin mechanism needs
+  # to drive the REAL op-0x78 present path frame-by-frame to N, not call 11dd standalone. Re-enable when fixed.
+  # "intro|25000|kdvframe=385||$ROOT/ref/intro_title_native320.png"
   "mainmenu|25000|22000||$ROOT/ref/main_menu_native320.png"
   "about|25000|22000|200:160:139:0; 800:160:139:1; 1400:160:139:0; 2000:160:138:0|$ROOT/ref/about_native320.png"
   "settings|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 2000:160:126:0|$ROOT/ref/settings_native320.png"
