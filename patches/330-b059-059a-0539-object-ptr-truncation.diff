@@ -1,0 +1,120 @@
+PATCH 330: the mission-ACCEPT AI-object route into FUN_0000_0731 -- widen the SI/DI object-pointer params
+of FUN_0000_b059 / FUN_0000_059a / FUN_0000_0539 from `undefined2` (uint16_t) to the 32-bit pointer the
+asm registers actually carry.  Same class as patch 328's FUN_0000_0541 fix (`undefined2` = uint16_t,
+re_out/ghidra_compat.h:30 -> a pointer passed through an undefined2 param is TRUNCATED to its low 16 bits
+at the C call boundary; FUN_0000_0731 then dereferences the 16-bit stub as a host address -> a low-address
+SIGSEGV).  Each fix is asm-verified vs re_out/fist_dat_image.bin (DS=SS=DGROUP=0x1c00; CS=0).
+
+(a) FUN_0000_b059 -- THE remaining mission-ACCEPT crash (chain: ...->FUN_1000_a0ab->FUN_0000_b059->
+    FUN_0000_b112->FUN_0000_0731, fault ~0xa99a, ~1/15, layout-flaky).
+    asm 0xb059:
+        b059: 0e            push cs
+        b05a: e8 b5 00      call 0xb112        ; b112 takes SI,DI; b059 does NOT touch SI/DI before it
+        b05d: 2b 45 10      sub 0x10(%di),%ax  ; DI is the object b059 dereferences throughout
+        ...(0x59(%di)/0x5b/0x45/0x26/0x40(%di))
+    FUN_0000_b112 (asm 0xb112: push si; push di; lea 0x4(%si),%si; lea 0x4(%di),%di; call 0x731) reads
+    (%di)-(%si) via 0731, so BOTH SI and DI are object pointers.  In the C, b059 calls
+    FUN_0000_b112(param_3, param_4): b112's params are already `int`, so param_3 = SI, param_4 = DI (b059
+    already types param_4 `int`).  param_3 (SI) was `undefined2` -> the candidate object pointer was
+    truncated to 16 bits.
+    PROOF it is exactly this truncation (not a base-loss): the sibling walker FUN_0000_af1c walks the SAME
+    object list (DAT_2000_9fbc @ DGROUP:0xdfbc) and calls FUN_0000_b112(piVar5, param_2) with piVar5 read
+    the SAME way (`(int *)*table`) but passed through b112's full-width `int` params -> af1c is crash-free.
+    The ONLY difference on the crashing FUN_1000_a0ab path is b059's `undefined2 param_3` truncating that
+    same candidate pointer.  Widened undefined2->int (param_4 already int; b059 itself never uses param_3
+    except to forward it to b112, so no other site changes).
+
+(b) FUN_0000_059a -- asm 0x59a: push ax; call 0x731; pop dx; sub ax,dx; ... .  0731 reads (%si)-(%di)
+    from the two register pointers; the C calls FUN_0000_0731(param_2, param_3) -> param_2 = SI, param_3 =
+    DI.  Both were `undefined2`.  CALLER-VERIFIED truncation: the five direct callers pass
+    FUN_0000_059a(<bearing>, (undefined2 *)&DAT_1000_d55a, DAT_2000_0b9e + 10) -- &DAT_1000_d55a is
+    g_mem+0x1d55a (a full host pointer, DGROUP:0xd55a) and DAT_2000_0b9e is `int **` (its value +10 is a
+    full object pointer); both were truncated to low16 by the undefined2 params.  param_1 (AX = reference
+    bearing) is a genuine 16-bit value and is left `int` unchanged.  Widened param_2/param_3 undefined2->int.
+
+(c) FUN_0000_0539 -- falls through into the shared FUN_0000_0541 tail (asm 0x541: call 0x731; push ax;
+    call 0x927; mov ax,cx; pop ax; ret), which patch 328 already reconstructed.  0539's entry supplies the
+    same SI/DI in registers (its enter/stack-copy prologue does not touch SI/DI); the C forwards them as
+    FUN_0000_0731(param_6, param_7) AND FUN_0000_0927(param_2, param_3, uVar3, param_6, param_7) (0927's
+    param_4/param_5 = si/di, already `int` per patch 328).  param_6/param_7 were `undefined2` -> truncated
+    exactly as 0541's param_4/param_5 were before 328.  Widened param_6/param_7 undefined2->int.
+
+All three widenings pass the full 32-bit pointer to FUN_0000_0731 / b112 / 0927 through the already-existing
+implicit int->pointer conversion (same as patch 328's b112 `FUN_0000_0731(param_1 + 4, param_2 + 4)` with
+`int` param_1 -> `uint *`).  Native == wasm (pure C type change).
+
+SCOPE / HONESTY:
+  - MISSION-PATH ONLY: b059/059a/0539 are in-mission flight/AI bearing helpers -> behaviour-neutral for the
+    24 menu/settings verify flows (verified native 24/24 + wasm 24/24, native<->wasm 0-diff).
+  - There is NO mission-cockpit DOSBox pixel reference; the acceptance bar is asm-faithfulness + crash-
+    freedom + zero regression (per the project's documented mission-path doctrine).
+  - NOT LANDED THIS ITERATION (named, per the "name the exact field" rule):
+    * FUN_0000_0426 -- carries the SAME undefined2 param_3 truncation into 0731, but its C body is
+      INDEPENDENTLY mis-rendered by Ghidra beyond the truncation: it substitutes FUN_0000_05b7's return
+      (iVar1) for the %di object reads the asm actually does at 0x436/0x43c (`mov 0x8(%di),%ax` /
+      `mov 0xa(%di),%dx`) and derefs `*(int*)(iVar1+10)` where the asm uses DI.  Widening param_3 alone
+      would be a partial thread through a mis-rendered body -> it needs a full 0426 reconstruction, not a
+      single width fix.
+    * FUN_0000_a77e -- its object pointer is stored into 16-bit GAME-WORD DGROUP slots
+      (DAT_2000_56f0 / DAT_2000_56f2 are `undefined2` accessors, re_out/fist.c) so the flat-model host
+      pointer is truncated at STORE time (asm 0xa79e `mov %ax,0x96f0` legitimately stores a 16-bit near
+      offset), PLUS the 0541 call carries int*-scaling errors (`piVar6 + 2` = +8 B and `param_5 + 2` =
+      +8 B where the asm `lea 0x4(%si)` / `lea 0x4(%di)` = +4 B).  A faithful fix needs full-width shim
+      storage for the object pointer (the game-word slot cannot be widened without clobbering the adjacent
+      word 0x96f2) + the scaling correction across the whole walk -- a multi-field reconstruction, not a
+      single asm-determined width.  It was not reached in any measured ACCEPT run, so a fix cannot be
+      crash-confirmed this iteration.
+--- a/fist.c
++++ b/fist.c
+@@ -74,13 +74,13 @@
+ uint __allregs FUN_0000_046e(uint param_1,uint param_2,int param_3);
+ void __allregs FUN_0000_04e7(uint param_1,uint param_2,uint param_3,uint param_4);
+ void __allregs FUN_0000_04f4(undefined2 param_1,int param_2,int param_3);
+-undefined2 __allregs FUN_0000_0539(char param_1,undefined2 param_2,undefined2 param_3,byte param_4,undefined2 *param_5, undefined2 param_6,undefined2 param_7);
++undefined2 __allregs FUN_0000_0539(char param_1,undefined2 param_2,undefined2 param_3,byte param_4,undefined2 *param_5, int param_6,int param_7);   /* PATCH 330: param_6 (SI) / param_7 (DI) are 32-bit object ptrs fed to 0731 & 0927 (shared 0541 tail), not undefined2 */
+ undefined2 __allregs FUN_0000_0541(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4, int param_5);   /* PATCH 328: si/di are 32-bit object pointers, not undefined2 (uint16_t) */
+ undefined2 __allregs FUN_0000_054c(undefined2 param_1,int param_2,int param_3);
+ undefined2 __allregs FUN_0000_056d(undefined2 param_1);
+ undefined2 __allregs FUN_0000_0578(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4,int param_5);
+ undefined2 __allregs FUN_0000_058e(undefined2 param_1,undefined2 param_2,int param_3,undefined2 param_4,int param_5, undefined2 param_6);
+-byte __allregs FUN_0000_059a(int param_1,undefined2 param_2,undefined2 param_3);
++byte __allregs FUN_0000_059a(int param_1,int param_2,int param_3);   /* PATCH 330: param_2 (SI) / param_3 (DI) are 32-bit object ptrs fed to 0731, not undefined2 (callers pass &DAT_1000_d55a / DAT_2000_0b9e+10) */
+ int __allregs FUN_0000_05b7(int param_1);
+ int __allregs FUN_0000_05bc(undefined2 param_1);
+ undefined4 __allregs FUN_0000_05ca(int param_1);
+@@ -1144,7 +1144,7 @@
+ void __allregs FUN_0000_b011(undefined2 param_1,undefined2 param_2,undefined4 param_3,undefined2 param_4, undefined2 param_5);
+ void __allregs FUN_0000_b017(int param_1);
+ void __allregs FUN_0000_b053(undefined2 param_1);
+-void __allregs FUN_0000_b059(long param_1,undefined2 param_2,undefined2 param_3,int param_4);
++void __allregs FUN_0000_b059(long param_1,undefined2 param_2,int param_3,int param_4);   /* PATCH 330: param_3 (SI = candidate object ptr, fed to b112->0731) is a 32-bit pointer, not undefined2 (uint16_t) */
+ void __allregs FUN_0000_b0be(int param_1);
+ void __allregs FUN_0000_b111(void);
+ undefined4 __allregs FUN_0000_b112(int param_1,int param_2);
+@@ -4973,7 +4973,7 @@
+ 
+ undefined2 __allregs
+ FUN_0000_0539(char param_1,undefined2 param_2,undefined2 param_3,byte param_4,undefined2 *param_5,
+-             undefined2 param_6,undefined2 param_7)
++             int param_6,int param_7)   /* PATCH 330: param_6/param_7 widened undefined2->int (see decl) */
+ 
+ {
+   char cVar1;
+@@ -5094,7 +5094,7 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_059a) @ 0000:059a ===== */
+ 
+-byte __allregs FUN_0000_059a(int param_1,undefined2 param_2,undefined2 param_3)
++byte __allregs FUN_0000_059a(int param_1,int param_2,int param_3)   /* PATCH 330: param_2/param_3 widened undefined2->int (see decl) */
+ 
+ {
+   int iVar1;
+@@ -29049,7 +29049,7 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_b059) @ 0000:b059 ===== */
+ 
+-void __allregs FUN_0000_b059(long param_1,undefined2 param_2,undefined2 param_3,int param_4)
++void __allregs FUN_0000_b059(long param_1,undefined2 param_2,int param_3,int param_4)   /* PATCH 330: param_3 widened undefined2->int (see decl) */
+ 
+ {
+   int iVar1;
