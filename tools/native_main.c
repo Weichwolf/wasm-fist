@@ -1531,6 +1531,14 @@ int fist_extender_gate(void) {
                 if (mb) { FILE *f=fopen(getenv("FIST_MTXDUMP"),"wb"); if(f){ fwrite((void*)(uintptr_t)mb,1,0x10000,f); fclose(f);
                     fprintf(stderr,"[mtxdump] blend matrix (3918/bc90 build buf) 64KB dumped -> %s\n", getenv("FIST_MTXDUMP")); } }
             }
+            /* FIST_BBDUMP: dump the 64KB-aligned BLOCK BASE that bc9c wrote (bc9c masks its dest to
+             * `[bc90] & 0xffff0000 | (ch<<8|cl)`, so the flat M[ch][cl] matrix lives at the block base,
+             * NOT at the +0x4200-windowed tile pointer that FIST_BC90DUMP/FIST_MTXDUMP read). */
+            if (getenv("FIST_BBDUMP")) {
+                uint32_t bbase = save_3918 & 0xffff0000u;
+                if (bbase) { FILE *f=fopen(getenv("FIST_BBDUMP"),"wb"); if(f){ fwrite((void*)(uintptr_t)bbase,1,0x10000,f); fclose(f);
+                    fprintf(stderr,"[bbdump] bc9c block-base (flat M[ch][cl]) 64KB @%#x -> %s\n", bbase, getenv("FIST_BBDUMP")); } }
+            }
             /* FIST_AC70PROBE: call the BUILT ac70 with a controlled target to check the nearest-index result. */
             if (getenv("FIST_AC70PROBE")) {
                 extern uint32_t m_ext_FUN_0000_ac70(void);

@@ -1,5 +1,36 @@
 # Oracle bc9c/bc90 LIVE capture — the 3× colormap flip-flop is settled: the bdc4 matrix is NOT bc9c's output
 
+> ## FINDING (2026-07-16, bc9c-faithfulness settled) — **THE PORT'S bc9c/ac70 ARE ALREADY BYTE-FAITHFUL. The `port_bc9c_matrix.bin` "176 distinct / diag all-80" is a DUMP-WINDOWING artifact, NOT a code bug. NO bc9c/ac70 patch was warranted.**
+>
+> **Method (offline, decisive).** Dumped the port's bc9c inputs at the exact bc9c call (gdb break on
+> `m_ext_FUN_0000_bc9c`, mission AZER1): `5598==5260==sorted-display` (0..79 zero, 80..255 reduced),
+> `4f60==5260>>1`, `a060/a460/a860` static, `ac64=80 ac60=255` — all **byte-identical** between bc9c-time
+> and the post-89b0 `FIST_PALDUMP`. Reconstructed bc9c+ac70 offline in python (SMC target-subtrahend
+> `sub al,target>>1`, `dist=a060[ΔR]+a460[ΔG]+a860[ΔB]`, symmetric-pair fill). Dumped the port's actual
+> bc9c **block base** (the 64 KB-aligned buffer bc9c writes — `[bc90] & 0xffff0000 | (ch<<8|cl)`, NOT the
+> `+0x4200`-windowed tile pointer that `FIST_BC90DUMP`/`FIST_MTXDUMP` read) via the new default-OFF
+> `FIST_BBDUMP` seam.
+>
+> **RESULT.**
+> - **Port bc9c block-base == the faithful offline reconstruction: 65536/65536 = 100.0%.** The patch-238
+>   SMC-distance + patch-289 ac70-return are correct; bc9c/ac70 have no residual bug.
+> - **Port bc9c block-base, windowed at offset `0xf200`, == the oracle block-B sample on the bc9c region
+>   (rows 14..255) = 61952/61952 = 100.0% byte-exact.** The ONLY mismatch under that window is rows 0..13
+>   (3584 bytes = exactly `14*256`) — **bc06's LOD-upsample region** (`FUN_0000_bc06`, called with the
+>   heightmap ptr `85bc`), which the port writes into a SEPARATE buffer, so the tile's rows 0..13 stay
+>   bc9c's `M[242..255]` instead of bc06's output.
+>
+> **So the port's bc9c matrix IS the oracle's, up to (a) the `0xf200` tile window and (b) bc06 rows 0..13.**
+> The committed `port_bc9c_matrix.bin` (diag all-80, 176 distinct) is the `+0x4200`-windowed dump of a
+> DIFFERENT alignment — a measurement artifact, not the "collapse" it appeared to be.
+>
+> **Residual / next blocker (NOT bc9c):** byte-matching the FULL block-B needs (1) the tile-pointer/window
+> geometry pinned — empirically `blockB[i] = M[(i+0xf200)&0xffff]`, i.e. oracle tile row 14 aligns with
+> `M[0]`; the `[bc90]`/`[3918]` offset that yields it is the extender-allocator (`84c0`) layout follow-up
+> the CAVEAT below already flags; (2) `bc06`'s heightmap-LOD block to overlap the tile buffer at rows 0..13
+> the way the original's bump allocator lays it out. Both are memory-layout/LOD work, not a `bc9c`/`ac70`
+> code fix. Repro: `FIST_BBDUMP=<f>` on the mission flow dumps bc9c's true block base.
+
 **Date:** 2026-07-16 · **Method:** a LIVE build-time capture in the running ORIGINAL under an instrumented
 DOSBox (`tools/oracle/dosbox_vga_terrain_trace.patch`, extended this iteration with a `host_writeb` RAM
 last-writer hook + a boot-time arm), driving BATTLES→OK→ACCEPT into the AZER1 map-load
