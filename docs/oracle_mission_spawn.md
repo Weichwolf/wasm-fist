@@ -1,5 +1,50 @@
 # Oracle frame-matched AZER1 mission SPAWN capture — the port's black terrain is a RENDER bug, not a flight-model gap
 
+> ## ORACLE TERRAIN DAC CAPTURE + VERDICT (2026-07-17, palette iteration) — **THE PALETTE PREMISE IS
+> CONFIRMED (532.pal is the WRONG terrain palette) AND ITS FAITHFUL SOURCE IS FOUND: the oracle's live VGA
+> DAC[80..255] at spawn == the port's own ext+0x5260 (SORTED-DISPLAY palette), byte-exact 528/528. BUT
+> swapping the shim merge 5598→5260 REGRESSES the frame — the palette was NEVER the dominant residual; the
+> 9200 SAMPLER/INDEX is (~80% of the terrain colour spread). Per the camera-orientation precedent, the
+> default keeps 5598; the faithful 5260 is a reproduction seam (`FIST_MISSFB_PAL5260=1`).**
+>
+> **Captured the oracle's actual VGA DAC at the spawn frame.** The instrumented DOSBox already dumps
+> `vga.dac.rgb` (256×3, 6-bit) on SIGUSR2 → `<prefix>.pal.bin` (`tools/oracle/capture_mission_spawn.sh`;
+> sample committed `tools/oracle/samples/oracle_mission_spawn_dac.pal.bin`, md5 `d7017fa1`). Terrain band
+> DAC[80..255] mean 8-bit = **(119.5,104.1,79.8)**; e.g. idx80=(4,0,12) idx125=(60,65,77) idx180=(142,121,36)
+> idx255=(255,255,219).
+>
+> **What it IS (numerically diffed vs the loaded game palettes, ext base phys 0x131000):**
+> - **oracle DAC[80..255] == port ext+0x5260 : 528/528 byte-exact** (mean (119.5,104.1,79.8) = oracle).
+> - oracle DAC[80..255] == port ext+0x5598 (532.pal) : **14/528** (mean (113.9,83.1,56.5)) → **532.pal is
+>   NOT the terrain palette.** The full 768 DAC also matches the guest palette shadow @ phys 0x532d0
+>   (768/768) and the oracle's own ext+0x5260 @ phys 0x136260 (band-exact).
+> - ext+0x4f60 (5260>>1) : 4/528. So the DAC band is unambiguously **5260**, the SORTED-DISPLAY palette.
+>
+> **ASM source of 5260 (FUN_0000_9f65, `re_out/fist_ext.c`):** the map-load palette-finalise calls
+> FUN_0000_9f10 (sort ext+0x5598 IN-PLACE by luminance R+2G+B), then copies the sorted table into ext+0x5260
+> (`puVar6=&DAT_0000_5260; for(0xc0 dwords) *puVar6=*puVar5;` — 768 B from 5598) and into the per-frame
+> display palette TCB+0xea. So 5260 is the display palette the ORIGINAL uploads to the DAC — real
+> game-computed data (the port's own op-0x18 map-load produces it), NOT an oracle paste.
+>
+> **THE HONEST TWIST — the faithful palette does NOT fix the colour (it regresses it):**
+> - Default (5598): spawn md5 `b15766c0`, terrain mean rows8-88 **(107.6,78.7,56.6)**, full SAD 5.29M.
+> - Faithful (5260): spawn md5 `0a2b1d59`, terrain mean **(81.7,68.5,50.6)** — DARKER, FURTHER from oracle
+>   (122.5,111.9,89.0); full SAD **5.53M** (worse). full-AE diff-px 33253→33180.
+> - **Why:** per-index analysis — at the positions where the port renders each terrain index i, the oracle's
+>   colour there is ~(120,110,80) for MANY distinct i (80,82,83,84,87,89,91,…). The port renders SCRAMBLED
+>   indices vs the oracle, so no single palette reconciles them: |oracle_at_portpx − 5260[i]| = 142/px vs
+>   |… − 5598[i]| = 133/px. An IDEAL per-index remap (the docs' "59% palette") leaves **23.6/chan
+>   sampler-locked** (~80% of the terrain colour spread 29.4) — and that ideal remap is NOT the faithful
+>   palette. 5598 was masking the sampler bug by being a brighter (wrong) table.
+> - **CONCLUSION:** the "59% palette / 41% sampler" decomposition was an ideal-remap UPPER BOUND, not
+>   realizable with the true palette. The dominant, true residual is the **9200 sampler / tile3918 index**
+>   (the port samples different texels than the oracle) — owners: colormap-groundtruth / voxel-projection /
+>   terrain-color-fidelity. The palette is faithful (5260) and one flag (`FIST_MISSFB_PAL5260=1`) away, but
+>   landing it regresses the metric with no colour benefit → not landed (camera-orientation precedent).
+>   Repro: `tools/oracle/capture_mission_spawn.sh` (oracle DAC) + `FIST_MISSFB_PALDUMP`/`FIST_PALDUMP`
+>   (port 5260/5598) + `FIST_MISSFB_FBIDX FIST_MISSFB_FBDUMP` (port indices).
+
+
 > ## CAPTURE + INJECT VERDICT (2026-07-17, camera-orientation iteration) — **THE COLOUR RESIDUAL IS NOT THE
 > CAMERA/ORIENTATION/PROJECTION. Proven by direct injection of the ORACLE spawn camera + projection + tile
 > + horizon — the port terrain STILL renders (110,81,58) vs oracle (122,111,89).** The residual is

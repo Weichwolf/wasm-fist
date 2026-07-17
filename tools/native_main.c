@@ -1225,17 +1225,28 @@ int fist_extender_gate(void) {
          * band 0..79; indices 80..255 are BLACK, so the correctly-rendered voxel terrain displayed
          * black (the "windshield collapse" was a palette-band artifact, NOT a render bug -- 9200 fills
          * the full windshield, verified 25341/25600 non-black once the terrain band is coloured).
-         * The real terrain palette is 532.pal, loaded by the extender at op 0x18 into ext+0x5598; the
-         * original mission DAC is the coherent single palette = word[0x782][0..79] (cockpit, engine) +
-         * 532.pal[80..255] (terrain).  The port never bridged 532.pal into the DAC.  Merge it here
-         * (extender-role, faithful source + asm boundary) so the retrace ISR uploads the coherent
-         * mission DAC and the terrain renders in colour.  Measured net improvement in EVERY region
-         * (windshield AE 7.80M->3.62M, cockpit AE 1.510M->1.464M, full AE 9.71M->5.29M vs the oracle
-         * spawn frame).  Residual = terrain-colour FIDELITY (browns too dark: the tile3918/85b8
-         * colormap-collapse, 175 vs 212 distinct) -- a separate documented frontier. */
+         * PALETTE FINDING (2026-07-17, oracle DAC capture) -- the FAITHFUL terrain DAC is the extender's
+         * SORTED-DISPLAY palette at ext+0x5260, NOT 532.pal (ext+0x5598).  PROVEN byte-exact: the oracle's
+         * live VGA DAC[80..255] at the AZER1 spawn frame (instrumented DOSBox SIGUSR2 vga.dac dump,
+         * tools/oracle/capture_mission_spawn.sh -> mspawn.pal.bin, sample committed) == the port's own
+         * ext+0x5260 band 528/528 (mean 8bit (119.5,104.1,79.8) = oracle exact), while 5598 (532.pal)
+         * matches only 14/528 (mean (113.9,83.1,56.5)).  ASM: the map-load palette-finalise FUN_0000_9f65
+         * calls FUN_0000_9f10 (sort ext+0x5598 in-place by luminance R+2G+B) then copies the sorted table
+         * into ext+0x5260 (`puVar6=&DAT_0000_5260; for(0xc0 dwords) *puVar6=*puVar5;`) and into the
+         * per-frame display palette TCB+0xea -- 5260 is what the ORIGINAL uploads to the DAC.
+         * BUT swapping the merge to 5260 REGRESSES the composite spawn frame (terrain mean rows8-88
+         * 107.6,78.7,56.6 -> 81.7,68.5,50.6, further from oracle 122.5,111.9,89.0; full SAD 5.29M->5.53M),
+         * because the ~80%-dominant residual is the 9200 SAMPLER/INDEX, not the palette: the port renders
+         * SCRAMBLED indices vs the oracle (many distinct idx 80..179 all land where the oracle shows one
+         * bright ~(120,110,80) terrain colour).  An ideal PER-INDEX remap (the docs' "59% palette") leaves
+         * 23.6/chan sampler-locked and is NOT the real palette -- the faithful 5260 gives 142/px vs 5598's
+         * 133/px.  So per the camera-orientation precedent (don't land a faithful change that regresses the
+         * metric with no colour benefit), the default keeps 5598; FIST_MISSFB_PAL5260=1 flips to the
+         * faithful source for reproduction.  TRUE frontier = the 9200 sampler/tile3918 (colormap-groundtruth,
+         * voxel-projection/terrain-color-fidelity), not the palette. */
         { uint8_t *eng782  = g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4);
-          uint8_t *ext5598 = xb + 0x5598;
-          if (*(uint16_t*)(dg+0x782)) for (int i=80*3;i<768;i++) eng782[i] = ext5598[i] & 0x3f; }
+          uint8_t *extpal  = xb + (getenv("FIST_MISSFB_PAL5260") ? 0x5260 : 0x5598);
+          if (*(uint16_t*)(dg+0x782)) for (int i=80*3;i<768;i++) eng782[i] = extpal[i] & 0x3f; }
     }
     if (op == 0x24 && getenv("FIST_OP24TRACE") && g_ext_ready) {
         static int nt = 0;
