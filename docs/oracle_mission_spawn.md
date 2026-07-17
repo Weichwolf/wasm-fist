@@ -1,5 +1,63 @@
 # Oracle frame-matched AZER1 mission SPAWN capture — the port's black terrain is a RENDER bug, not a flight-model gap
 
+> ## FRAME-MATCHED VERDICT (2026-07-17, the definitive re-capture) — **THE FRAME-SKEW IS ELIMINATED, THE
+> ORACLE SPAWN IS NOW SELF-CONSISTENT, AND IT OVERTURNS THE 9200-VADDR PREMISE: the camera pitch/roll fix
+> does NOT make the port's terrain indices match. Every 9200 input (camera → globals → depth-step → tile) is
+> byte-exact yet the port samples the tile's DARK rows (mean 123) while the oracle samples the LIGHT rows
+> (mean 185). The residual is a DEEPER STRUCTURAL difference in the 9200 texel-walk / its paged-out per-row
+> depth-step, NOT the camera, NOT the V-base, NOT frame-skew, NOT the tile, NOT the palette.** Engine PRISTINE
+> (61453e42/0051cb56/75c6d726); NO change lands (a camera fix REGRESSES the metric → doctrine forbids it).
+>
+> **(A) TOOLING FIX — frame-matched capture.** `capture_mission_spawn.sh` now DERIVES the reference from the
+> `.vram.bin`+`.pal.bin` that the instrumented DOSBox writes ATOMICALLY inside the ONE SIGUSR2 handler
+> (`fist_dump()` writes ram+vram+dac at the same guest instruction). The old flaw was ONLY the reference PNG
+> (X11 `import -window root`, grabbed a few frames earlier on the moving camera). The derived reference is
+> trivially self-consistent (raw→DAC == PNG by construction). New outputs:
+> `tools/oracle/samples/oracle_mission_spawn_framematched{_idx.bin,.png,.vram.bin}` (idx[n]=vram[((n>>2)<<4)|(n&3)],
+> mode-13h chain-4). Chain-4 proof: max nonzero vram off 0x3e7f3 == ((63999>>2)<<4)|3. The committed DAC
+> `oracle_mission_spawn_dac.pal.bin` is byte-identical to the frame-matched pal → the palette was already
+> stable/matched. The old X11 ref `ref/mission_azer1_spawn_native320.png` differs from the frame-matched
+> derived PNG by **AE 9948/64000** (the skew, exactly as predicted; static cockpit matches, moving terrain differs).
+>
+> **(B) THE FRAME-MATCHED ORACLE SPAWN GROUND TRUTH (self-consistent, one SIGUSR2 tick).** TCB@phys0x10000
+> X=584402 Y=1141913 alt=12544 head=26729 **+0x3a(pitch)=512 +0x3c(roll)=256** +0x3e(foc)=256. Projection
+> (ext base phys0x131000): `90d4=b1c0a498 90d8=39331d90` (**V-base hi=0x39 = tile row 57**, NOT the docs'
+> speculated row 122) `9104=7ff62180 9108=fcdbd542 90b8=fff9b7aa 90bc=00ffec42 90c0=01000000 90f8=81
+> 3918=00044200`. Derived frame terrain rows8-88: **mean 162, band(idx>=80) mean 185, distinct 94**; band top
+> idx **179(3158)/151(2611)/163(1556)/228(1215)/156(1123)/183(969)** = the LIGHT/HIGH tile rows. **So the
+> RAM globals (row 57) ARE self-consistent with the VRAM (light terrain) — the "row 57 samples the dark rows"
+> claim in the 9200-VADDR verdict was wrong; the V-address MARCHES from row 57 up into the light rows.**
+>
+> **(C) PORT vs FRAME-MATCHED ORACLE (spawn op-0x24 post #1, `/tmp/fist_fc/fist_native`, DEFAULT build).**
+> Compared the port raw 0xA0000 index buffer (`FIST_MISSFB_FBIDX/FBDUMP`) against the frame-matched oracle
+> `oracle_mission_spawn_framematched_idx.bin`, terrain band rows8-88 idx>=80 (22055 px):
+> | port config | band exact-match | port band mean | full-frame idx-AE |
+> |---|---|---|---|
+> | DEFAULT | 83 (**0.38%**) | 127.3 | 33145 |
+> | +camera inject (`FIST_ISO_3A=512 FIST_ISO_PITCH=256`) | 8 (**0.04%**) | 129.5 | 33220 |
+> | +camera **+** oracle live tile (`FIST_ISO_TILE`) | 2 (**0.01%**) | 123.0 | — |
+> oracle band mean = **185.3**; port band top idx **102/144/118/97/99/105** = the tile's DARK/LOW rows.
+> **DECISIVE:** the camera inject makes the port's OWN 8120 emit the frame-matched oracle globals byte-exact
+> (`FIST_R3D_GDUMP`: default `90d8=2dc548e0`(row45) `9104=6c24295e 9108=447acd50`; inject `90d8=39331d90`(row57)
+> `9104=7ff62180 9108=fcdbd542` — all == oracle; esi/ebp therefore oracle-exact `0x007ff621/0xfffcdbd5`), and
+> the oracle tile is byte-injected — **yet the port still renders mean-123 dark terrain, 0.01% match.** The
+> camera fix does NOT reduce the residual; it slightly WORSENS it.
+>
+> **(D) THE PIN (brutally honest).** With byte-exact camera+globals+depth-step+tile and a self-consistent
+> frame-matched reference, the port's 9200 V-address marches from row 57 up to only ~row 126 (linear
+> edx+=esi, ~144 texels × ~0.5/texel), sampling tile rows 57-126 (idx 80-144, mean 123). The oracle reaches
+> tile rows up to ~248 (idx 179 dominant, mean 185). **Same esi, same texel count, DIFFERENT V-span → the
+> oracle's real 9200 accumulates V with a perspective-GROWING step that the port's decompiled/shim 9200 +
+> its inline `esi=(90c0*9104)>>32; 9200(ebp,esi)` per-row-step reconstruction does NOT replicate.** This
+> confirms the rendered-index verdict's localization (the paged-out per-row depth-step / the 9200 texel-walk)
+> as the TRUE residual, and refutes camera/V-base/frame-skew/tile/palette. **Owner: voxel-9200-vaddr /
+> voxel-depth-step / voxel-projection.** Part B (port camera): the render TCB +0x3a/+0x3c are never written on
+> the mission path (the flight-model rotated-camera bridge a20d/a192/0459 threads only heading +0x38, not
+> pitch/roll) → stale 0/-256 → 90d8 row 45. A real defect, but AE-neutral-to-worse → not landed (no band-aid).
+> Repro: `DOSBOX=/tmp/debs/dosbox-fist tools/oracle/capture_mission_spawn.sh` (frame-matched); port
+> `FIST_ISO=1 FIST_ISO_3A=512 FIST_ISO_PITCH=256 FIST_ISO_TILE=<fm_tile> FIST_MISSFB_FBIDX FIST_MISSFB_FBDUMP`.
+
+
 > ## RAW-INDEX VERDICT (2026-07-17, the "raw 0xA0000 vs port" iteration) — **THE 8-ITERATION PARADOX IS
 > RESOLVED, AND *NOT* IN THE "PNG-INVERSION IS THE FLAW" DIRECTION. The port's rendered terrain indices
 > genuinely DIFFER from the oracle's RAW VGA index buffer (0.31% match) — the PNG-inversion was NOT the flaw.
