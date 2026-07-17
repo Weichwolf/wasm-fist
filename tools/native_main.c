@@ -1216,6 +1216,23 @@ int fist_extender_gate(void) {
         }
         { int32_t c0 = *(int32_t*)(xb+0x90c0), v04 = *(int32_t*)(xb+0x9104), v08 = *(int32_t*)(xb+0x9108);
           int32_t esi = (int32_t)(((int64_t)c0*v04)>>32), ebp = (int32_t)(((int64_t)c0*v08)>>32);
+          /* FIST_R3D_GDUMP (diagnostic, default OFF): dump the exact global state 9200 reads, at the
+           * moment of the terrain texel-walk call, so the port-vs-oracle rendered-index localization
+           * can verify projection-global injection actually reaches 9200. */
+          if (getenv("FIST_R3D_GDUMP")) {
+              uint8_t *ht=(uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0x9114));
+              fprintf(stderr,"[r3d] 90d4=%08x 90d8=%08x 90b8=%08x 90bc=%08x 90c0=%08x 9104=%08x 9108=%08x "
+                  "90f0=%u 90f8=%u 9114=%08x hz[0..8]=",
+                  *(uint32_t*)(xb+0x90d4),*(uint32_t*)(xb+0x90d8),*(uint32_t*)(xb+0x90b8),*(uint32_t*)(xb+0x90bc),
+                  *(uint32_t*)(xb+0x90c0),*(uint32_t*)(xb+0x9104),*(uint32_t*)(xb+0x9108),
+                  *(uint32_t*)(xb+0x90f0),*(uint32_t*)(xb+0x90f8),*(uint32_t*)(xb+0x9114));
+              if(ht) for(int i=0;i<9;i++) fprintf(stderr,"%d,",ht[i]);
+              fprintf(stderr," param(ebp,esi)=%d,%d\n",ebp,esi);
+          }
+          /* FIST_R3D_PSCALE (diagnostic): scale 9200's depth-step params to probe the sampler-address
+           * localization (NUM/DEN as integer ratio, e.g. "2/1"). Default OFF -> behaviour-neutral. */
+          if (getenv("FIST_R3D_PSCALE")) { long n=1,d=1; sscanf(getenv("FIST_R3D_PSCALE"),"%ld/%ld",&n,&d);
+              if(d){ esi=(int32_t)((int64_t)esi*n/d); ebp=(int32_t)((int64_t)ebp*n/d); } }
           m_ext_FUN_0000_9200(ebp, esi); }
         *(uint32_t*)(xb+0xc93) = save_c93;
         /* ------------------------------------------------------------------------------------------

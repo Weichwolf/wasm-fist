@@ -1,5 +1,55 @@
 # Oracle frame-matched AZER1 mission SPAWN capture — the port's black terrain is a RENDER bug, not a flight-model gap
 
+> ## RENDERED-INDEX COMPARISON VERDICT (2026-07-17, the experiment that resolves the 6-iteration paradox) —
+> **THE PORT'S RENDERED TERRAIN INDICES DO *NOT* MATCH THE ORACLE'S. The residual is the 9200 SAMPLER, NOT
+> the DAC palette — and NOT the projection globals/camera/tile either. This OVERTURNS the prior "59% palette
+> + 41% sampler" decomposition: it is ~100% the texel-walk.**
+>
+> **Method (both at the AZER1 spawn frame, same camera).** PORT index buffer = 0xA0000 dumped raw
+> (`FIST_MISSFB_FBIDX FIST_MISSFB_FBDUMP` -> `/tmp/fb_idx.bin`, the 8-bit palette indices BEFORE fist_vga's
+> DAC). ORACLE index buffer = the committed spawn ref `ref/mission_azer1_spawn_native320.png` INVERTED
+> through the committed oracle DAC `tools/oracle/samples/oracle_mission_spawn_dac.pal.bin` (6->8 bit
+> `(v<<2)|(v>>4)`). The inversion is EXACT and unambiguous: nearest-DAC distance = **0.0 for all 64000 px**,
+> and DAC[80..255] (the terrain band) is **176/176 distinct RGB** -> every terrain-band index is recovered
+> uniquely (the only DAC RGB-collisions are in the cockpit band 4/5/26/27/28/47/54, irrelevant to terrain).
+>
+> **RESULT (terrain rows 8-88):**
+> - **Zero-mask (terrain silhouette) is 100% IDENTICAL** — port 303 black px == oracle 303 black px at the
+>   identical positions. The projection/coverage is correct.
+> - **Indices DIFFER** — overall exact-index match **10.4%**; in the *true* oracle terrain band (idx>=80)
+>   the match is **0.2%**. The low-index matches (3,7,18,19) are the sky/haze band, not the terrain.
+> - Port terrain indices are COLLAPSED into a narrow LOW band (mean ~117, mostly 83-106); the oracle spans
+>   textured HIGH indices (mean ~183, 130-225). Port per-screen-row mean is nearly CONSTANT with depth
+>   (121->108 over rows 8-88); the oracle's varies (189->130). Not a spatial shift (best dx=dy=0), not a
+>   clean remap (port->oracle function purity 35%), moderate corr 0.74.
+>
+> **The tile CONTENT is not the cause.** The port's live bc9c block-base tile == the oracle blockB tile on
+> the top values (80/111/102/125/97/105/144 identical); both span 80-255. `FIST_TILEWRAP=0xf200` does NOT
+> improve the index match (9.7% ~ baseline). So the SAME tile is sampled at DIFFERENT addresses.
+>
+> **The projection globals are not the cause (decisive).** Injecting the byte-exact captured oracle globals
+> (`FIST_ISO=1 FIST_ISO_PROJ=1 FIST_ISO_HZ=1`) — VERIFIED via the new `FIST_R3D_GDUMP` seam to reach 9200
+> as 90d4=b1c0a498 90d8=39331d90 90b8=fff9b7aa 90bc=00ffec42 9104=7ff62180 9108=fcdbd542, all == the docs'
+> oracle capture — leaves the port at meanidx 117 / band-match **0.02%** (i.e. WORSE, not better). Camera
+> orientation inject (`FIST_ISO_3A=512 FIST_ISO_PITCH=256`) gives the IDENTICAL output (it produces the same
+> globals). Scaling the depth-step params (`FIST_R3D_PSCALE`) is not the fix either: 2/1 -> 0.5%, 1/2 -> 0%.
+>
+> **LOCALIZATION (the precise pin).** With byte-exact oracle globals AND byte-exact tile AND identical
+> silhouette, `FUN_0000_9200` still samples the wrong texels. The one input NOT recoverable from the image
+> is 9200's `param_1`/`param_2` — the per-row DEPTH STEP passed by `FUN_0000_82b8`'s caller, which is
+> **Doug-Huffman-extender 32-bit-PM code PAGED OUT of `fist_image.bin`**. The shim reconstructs it inline
+> (`native_main.c` ~1219) as `esi=(90c0*9104)>>32, ebp=(90c0*9108)>>32; 9200(ebp,esi)` — a best-guess that
+> does NOT reproduce the oracle ray march. NB 8120 DOUBLES 9104/9108 at its tail (`9104*=2; 9108*=2`, ext
+> 0x8120 12967/12972) then uses iVar4/iVar5=(90c0*9104/9108)>>32 to build the per-COLUMN step 90b8/90bc; the
+> shim reuses those SAME quantities as the per-ROW step — plausibly the defect, but not fixable by a uniform
+> scale (the ratio/sign is also off). **Next experiment = capture the REAL param_1/param_2 at 9200's entry
+> in the running original** (instrument the DOSBox 9200-entry, read ESI/EBP/stack) — that is the ground truth
+> the reconstruction lacks. Banked repro seams (default-OFF): `FIST_MISSFB_FBIDX`/`FBDUMP` (port indices),
+> `FIST_R3D_GDUMP` (9200 globals), `FIST_R3D_PSCALE` (param scale), `FIST_ISO_PROJ`/`FIST_ISO_HZ` (oracle
+> globals), `capture_mission_spawn.sh` (oracle DAC/RAM/VRAM). **STOP re-testing the palette (5260) — it can
+> only matter once the indices match, which they do not.**
+
+
 > ## ORACLE TERRAIN DAC CAPTURE + VERDICT (2026-07-17, palette iteration) — **THE PALETTE PREMISE IS
 > CONFIRMED (532.pal is the WRONG terrain palette) AND ITS FAITHFUL SOURCE IS FOUND: the oracle's live VGA
 > DAC[80..255] at spawn == the port's own ext+0x5260 (SORTED-DISPLAY palette), byte-exact 528/528. BUT
