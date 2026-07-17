@@ -1,5 +1,61 @@
 # Oracle frame-matched AZER1 mission SPAWN capture — the port's black terrain is a RENDER bug, not a flight-model gap
 
+> ## 9200 DEPTH-STEP VERDICT (2026-07-17, the "capture param_1/param_2" iteration) — **THE 9200 DEPTH-STEP
+> IS ALREADY FAITHFUL. The task premise ("the shim guesses the per-row depth step wrong") is REFUTED by
+> disassembly + camera-injection + offline sim. NO shim/engine change warranted; the divergence is UPSTREAM
+> in the TCB camera pitch/roll, and there is a deeper ground-truth INCONSISTENCY that overturns the
+> 6-iteration inject premise.** GROUND TRUTH captured/derived; engine PRISTINE (61453e42/0051cb56/75c6d726).
+>
+> **(0) 82b8/8120/9200 layout, from the disassembly of `re_out/fist_image.bin` (extender flat, base 0):**
+> `82b8 = 8120(projection) -> 9200(render) -> 82d0(teardown)` — ONE call renders the WHOLE frame; there is
+> NO paged-out per-column caller. **9200 is affine-per-scanline (Mode-7 style):** outer loop = `90f8`(=81)
+> iterations, inner = `90f0/2 - horizon` texels ×2 px. Tile lookup = `M[(edx>>24)<<8 | (ebx>>24)]`, tile
+> base = `DAT_0000_3918` (host ptr; patch 286 rebased the SMC `0x7fffffff`). **esi/ebp (=param_2/param_1)
+> are the per-INNER-texel step; `90b8/90bc` are the per-OUTER step.** 8120's tail (asm 0x8239-0x8251):
+> `esi = high32(90c0 * 9104)`, `ebp = high32(90c0 * 9108)` (signed imul), then `90b8 = (ebp*90b4)>>16`,
+> `90bc = (esi*90b4)>>16`. The shim (`native_main.c` ~1217) calls `m_ext_FUN_0000_8120()` THEN computes
+> esi/ebp with this EXACT formula and calls `9200(ebp,esi)` — a faithful reproduction of 82b8's body.
+>
+> **(1) THE REAL param_1/param_2 (ground truth) = `param_1(ebp)=0xfffcdbd5`, `param_2(esi)=0x007ff621`.**
+> Derived from the RAM-captured oracle globals `90c0=0x01000000 9104=0x7ff62180 9108=0xfcdbd542` and
+> INDEPENDENTLY cross-validated: the RAM-captured `90b8=0xfff9b7aa == 2*ebp` and `90bc=0x00ffec42 == 2*esi`
+> EXACTLY (an independent capture confirms the derivation). The shim's formula reproduces these bit-exactly
+> when fed the oracle 90c0/9104/9108, so the shim's depth-step is NOT a guess — it is the asm.
+> (A DOSBox 9200-entry breakpoint would read the same ESI/EBP = the same values; it adds nothing beyond
+> what the RAM-captured globals already pin, and would NOT resolve the inconsistency in (4).)
+>
+> **(2) WHY the DEFAULT port diverges = the TCB CAMERA PITCH/ROLL, not the depth-step.** `FIST_R3D_GDUMP` on
+> the DEFAULT build shows the port's own 8120 produces `9104=6c24295e 9108=447acd50` (9108 sign FLIPPED vs
+> oracle 0xfcdbd542) → wrong-direction sampling. Root cause: 8120 reads TCB `+0x3c`(roll)/`+0x3a`(pitch);
+> the port has `+0x3a=0 +0x3c=-256`, the oracle spawn has `+0x3a=512 +0x3c=256` (already flagged ✗ in the
+> camera-orientation table below). **Injecting the oracle angles (`FIST_ISO=1 FIST_ISO_3A=512
+> FIST_ISO_PITCH=256`) makes the port's OWN 8120 reproduce ALL oracle projection globals byte-exact**
+> (`9104/9108/90d4/90d8/90b8/90bc` all == oracle). So the port's 8120 + depth-step are faithful; the lever
+> is the camera pitch/roll init (owner: camera-orientation / flightmodel-*), NOT 9200.
+>
+> **(3) BUT the camera is AE-NEUTRAL.** Full-frame AE (spawn, `ref/mission_azer1_spawn_native320.png`):
+> default `33253`, camera-inject `33277` (≈identical). So fixing the camera angles does NOT fix the terrain
+> colour either — consistent with the camera-orientation iteration's "identical output" note.
+>
+> **(4) THE DEEPER INCONSISTENCY (overturns the 6-iteration inject premise).** With the correct camera →
+> byte-exact oracle globals AND the oracle live tile injected (`FIST_ISO_TILE=oracle_bc9c_matrix_blockB`),
+> the port's 9200 STILL gives band(idx>=80) exact-match **0.000%** vs the oracle PNG-inverted indices.
+> Direct comparison of the port terrain band (rows 8-88): port 150 distinct, mean **124**, range 83-255;
+> oracle PNG 176 distinct, mean **183**, range 80-252. The port samples the tile RICHLY (150 distinct, close
+> to oracle's 176) but SYSTEMATICALLY DARKER (mean 124 vs 183) and positionally unaligned. **Since every
+> 9200 input (esi/ebp/90d4/90d8/90b8/90bc/90f0/90f8/9114/horizon + the oracle tile) is byte-exact yet the
+> output is still wrong, the captured "oracle globals + oracle DAC + ref PNG" are MUTUALLY INCONSISTENT** —
+> the globals the 6 iterations injected cannot reproduce the PNG frame. The residual is therefore NOT the
+> depth-step and NOT reachable by injecting these captures; it is either (a) a wrong-tick globals capture
+> (the RAM dump not frame-matched to the PNG) or (b) the tile ADDRESS/WINDOW geometry (`[3918]` offset /
+> the `0xf200` window / bc06 rows 0..13 from `docs/oracle_bc90_capture.md`) so the same tile is sampled at
+> different addresses. **The next productive step is a frame-matched re-capture (globals + DAC + VRAM at the
+> IDENTICAL SIGUSR2 tick) so the three ground-truths are self-consistent, THEN re-diff — not another
+> depth-step experiment.** Banked seams unchanged; new one-liner repro of this verdict:
+> `FIST_ISO=1 FIST_ISO_3A=512 FIST_ISO_PITCH=256 FIST_ISO_TILE=<blockB.bin> FIST_MISSFB_FBIDX
+> FIST_MISSFB_FBDUMP` -> `/tmp/fb_idx.bin`, invert the ref PNG through the DAC, band-diff rows 8-88.
+
+
 > ## RENDERED-INDEX COMPARISON VERDICT (2026-07-17, the experiment that resolves the 6-iteration paradox) —
 > **THE PORT'S RENDERED TERRAIN INDICES DO *NOT* MATCH THE ORACLE'S. The residual is the 9200 SAMPLER, NOT
 > the DAC palette — and NOT the projection globals/camera/tile either. This OVERTURNS the prior "59% palette
