@@ -27,26 +27,19 @@ FLOWS=(
   # (Route-1 module fist_ext.c) decodes+blits TITLE.KDV; the stream ends on a ~25-frame HOLD of the fully
   # formed title (frames ~370..394 identical) before the engine fades to the main menu.  Pinned by FRAME
   # INDEX 385 (well inside the hold) via kdvframe=385 -> FIST_KDV=1 + FIST_KDV_DUMPFRAME.  The frame-pin
-  # (native_main.c op-0x78 gate) lets e584 drive the NORMAL frame-1 present (which warms the decoder), then
-  # streams the remaining presents DIRECTLY via 11dd to frame 385 and dumps -- frame-COUNT gated off the
-  # deterministic KDV stream, so native and wasm produce the IDENTICAL frame (timing-independent) and it
-  # sidesteps e584's cooperative-tick throttle crawl / skip-keypress abort.  (This replaces d846564's hung
-  # seam, which called 11dd standalone BEFORE the first present set up the decode -> blocked on its first
-  # call.)  The genuine 1:1 320x200 DOSBox reference is captured by tools/refcapture_intro.sh, which bursts
-  # across the hold and selects the longest non-terminal stable hold (the title) by DOSBox-internal pixel
-  # signature (never compared to the port -> non-circular; two independent DOSBox runs agree AE=0).
+  # (native_main.c) BYPASSES e584 ENTIRELY: the display-list SETUP ops (0x20/0x04/0x44/0x68/0x6c/0x70)
+  # flow through the extender gate ONCE and establish the decoder state (asset name "TITLE.KDV" at the intro
+  # task +0xBA); on op 0x70 -- the LAST setup op, fired BEFORE e584 enters its throttled per-frame present
+  # loop -- the gate OPENs the stream and streams frames 1..385 DIRECTLY via a tight 11dd loop (one KDV chunk
+  # per call), dumps 0xA0000, and exits.  It NEVER waits for an e584-posted op-0x78 present, so frame delivery
+  # is fully TIMING-INDEPENDENT: the wasm cooperative tick's e584 throttle crawl / skip-keypress abort is
+  # sidestepped, and frame 385 (a pure function of consuming 385 chunks) is byte-IDENTICAL native<->wasm in
+  # <0.3 s on both.  The genuine 1:1 320x200 DOSBox reference is captured by tools/refcapture_intro.sh, which
+  # bursts across the hold and selects the longest non-terminal stable hold (the title) by DOSBox-internal
+  # pixel signature (never compared to the port -> non-circular; two independent DOSBox runs agree AE=0).
   # READ-only.  AE=0 native AND wasm; native md5 == wasm md5 (0-diff).  Needs re_out/fist_image.bin (the
   # extender/KDV player image, a `make kernel-image` build artifact -- gitignored, like the other images).
-  # Native reaches frame 385 in ~0.05 s AND is AE=0 vs the ref (independently confirmed).  BUT the wasm side
-  # HANGS: on the cooperative wasm tick, e584's frame-1 throttle crawls (~1 frame/min) and the direct-drive
-  # only takes over AFTER frame 1, so wasm never reaches frame 385 in the 120 s budget (independently
-  # measured: >2 min, no frame, rc=124).  The frame CONTENT is bit-verified on native; the wasm DELIVERY of
-  # frame 1 is the blocker (fast-forwarding e584's throttle desyncs the ISR event queue -> e584 aborts the
-  # intro).  A verify FLOW must pass BOTH targets (native<->wasm is the hard invariant), so this stays
-  # DISABLED until the wasm frame-1 delivery is solved (drive frame 1 itself without e584's throttle, or make
-  # the cooperative tick advance the first present in-budget without the event-queue desync).  Native
-  # bit-verify + the genuine ref/refcapture_intro.sh stand as banked recon.
-  # "intro|25000|kdvframe=385||$ROOT/ref/intro_title_native320.png"
+  "intro|25000|kdvframe=385||$ROOT/ref/intro_title_native320.png"
   "mainmenu|25000|22000||$ROOT/ref/main_menu_native320.png"
   "about|25000|22000|200:160:139:0; 800:160:139:1; 1400:160:139:0; 2000:160:138:0|$ROOT/ref/about_native320.png"
   "settings|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 2000:160:126:0|$ROOT/ref/settings_native320.png"

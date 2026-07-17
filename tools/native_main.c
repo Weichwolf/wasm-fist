@@ -1812,6 +1812,45 @@ int fist_extender_gate(void) {
      * (escape hatch for A/B'ing the black-FB default).  */
     static int kdv_drive = -1;
     if (kdv_drive < 0) { const char *e = getenv("FIST_KDV"); kdv_drive = (e && e[0] == '0') ? 0 : 1; }
+    /* INTRO FRAME-PIN (FIST_KDV_DUMPFRAME=N, default OFF): dump the Nth decoded TITLE.KDV frame for the
+     * verify.sh `intro` bit-verify, BYPASSING e584 ENTIRELY.  The display-list SETUP ops
+     * (0x20/0x04/0x44/0x68/0x6c/0x70) flow through this gate ONCE, in order, and establish everything the
+     * KDV player needs (the asset name "TITLE.KDV" at the intro task +0xBA, the display list) BEFORE e584
+     * enters its per-frame PRESENT loop.  op 0x70 is the LAST setup op; by the time it reaches us the setup
+     * is complete, so the decoder runs WARM (the "11dd hangs if called standalone BEFORE the setup" hazard
+     * only applies when 11dd is driven ahead of these ops -- the backed-out d846564 seam).  We open the
+     * stream and stream frames 1..N via a tight 11dd loop (= FUN_0000_6f3e, one KDV chunk per call, no
+     * internal wait), dump 0xA0000, and _exit(0) -- WITHOUT ever waiting for an e584-posted op-0x78 present.
+     * This is the crux vs the earlier op-0x78-triggered seam: op 0x70 fires BEFORE e584's cooperative-tick
+     * per-frame throttle (which crawls ~1 frame/min on the wasm tick and, if fast-forwarded, desyncs the ISR
+     * event queue -> e584 aborts the intro), so frame delivery is fully timing-INDEPENDENT.  Pinning by the
+     * DECODED-FRAME COUNT off the deterministic KDV stream makes frame N a pure function of consuming N
+     * chunks -> native and wasm produce the byte-IDENTICAL frame N (both in <0.3 s).  Frame N is chosen
+     * inside the stable end HOLD (fully formed "ARMORED FIST" title, frames ~370..394 identical). */
+    if (kdv_drive && op == 0x70 && g_ext_ready && !g_kdv_done) {
+        static long df = -2;
+        if (df == -2) { const char *e = getenv("FIST_KDV_DUMPFRAME"); df = e ? atol(e) : -1; }
+        if (df > 0) {
+            g_fist_ext_int = 1;                    /* extender-mode INT 21h (flat FILEMGR) for the player */
+            /* OPEN: point the extender current-TCB [0xc93] at a dedicated block and copy the engine-written
+             * asset name (intro task +0xBA = "TITLE.KDV") into it (same OPEN as the op-0x78 path below). */
+            memcpy(g_ext_kdv_tcb + 0xBA, g_mem + 0x90000 + 0xBA, 16);
+            *(uint32_t *)(g_mem + FIST_EXT_BASE + 0xc93) = (uint32_t)(uintptr_t)g_ext_kdv_tcb;
+            fprintf(stderr, "[ext] KDV_DUMPFRAME setup-drive: OPEN (asset '%.13s')\n", g_ext_kdv_tcb + 0xBA);
+            m_ext_FUN_0000_11cb(0, 0, 0, 0, 0);
+            g_kdv_open = 1;
+            while (g_kdv_frames < df && !g_ext_eof) {
+                m_ext_FUN_0000_11dd(0, 0, 0);      /* decode + blit the next KDV frame */
+                if (g_ext_eof) break;
+                ++g_kdv_frames;
+            }
+            fprintf(stderr, "[ext] KDV_DUMPFRAME setup-drive: presented frame %ld (target %ld eof=%d) -- dumping + exiting\n",
+                    g_kdv_frames, df, g_ext_eof);
+            const char *fb = getenv("FIST_FBDUMP");
+            if (fb) fist_dump_framebuffer(fb);
+            _exit(0);
+        }
+    }
     if (kdv_drive && (op == 0x64 || op == 0x78) && g_ext_ready) {
         /* Intro already finished: keep signalling "animation complete" so e584 stays out of its loop
          * (the present op 0x78 return gates e584; nonzero => proceed to the menu). */
