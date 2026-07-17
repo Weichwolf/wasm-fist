@@ -1233,6 +1233,41 @@ int fist_extender_gate(void) {
            * localization (NUM/DEN as integer ratio, e.g. "2/1"). Default OFF -> behaviour-neutral. */
           if (getenv("FIST_R3D_PSCALE")) { long n=1,d=1; sscanf(getenv("FIST_R3D_PSCALE"),"%ld/%ld",&n,&d);
               if(d){ esi=(int32_t)((int64_t)esi*n/d); ebp=(int32_t)((int64_t)ebp*n/d); } }
+          /* FIST_INJECT_ALLGLOBALS (diagnostic, DEFAULT OFF) -- THE DECISIVE INPUT-STATE TEST.
+           * The runtime-9200 capture (docs/oracle_runtime_9200_capture.md) proved the port's compiled
+           * FUN_0000_9200 is BYTE-IDENTICAL to the oracle's running renderer.  9200's rendered INDEX
+           * output is therefore a PURE FUNCTION of {90d4,90d8 (U/V base), esi/ebp (per-texel step),
+           * 90b8/90bc (per-column step), 90f0/90f8 (counts), the horizon table @9114, the 256x256
+           * colormap tile @3918}.  90a8/90ac are DEST geometry (host fb pointer + advance), NOT value-
+           * determining -- left untouched so pixels land where the port already draws them.  This seam
+           * overwrites the COMPLETE value-determining set with the FRAME-MATCHED oracle byte values
+           * (scratch/oracle/mspawn.ram.bin @ ext phys 0x131000, self-consistent with the committed
+           * oracle_mission_spawn_framematched_idx.bin), BYPASSING 8120 entirely, and sets esi/ebp
+           * DIRECTLY (not via the 90c0*9104 derivation).  If the resulting raw 0xA0000 index buffer
+           * then matches the frame-matched oracle idx, the divergence is INPUT-STATE (8120/camera);
+           * if it stays unchanged, the affine renderer + these globals cannot reproduce the oracle. */
+          if (getenv("FIST_INJECT_ALLGLOBALS")) {
+              *(uint32_t*)(xb+0x90b4)=0x00020000; *(uint32_t*)(xb+0x90b8)=0xfff9b7aa;
+              *(uint32_t*)(xb+0x90bc)=0x00ffec42; *(uint32_t*)(xb+0x90c0)=0x01000000;
+              *(uint32_t*)(xb+0x90d4)=0xb1c0a498; *(uint32_t*)(xb+0x90d8)=0x39331d90;
+              *(uint32_t*)(xb+0x90e8)=0x02000000; *(uint32_t*)(xb+0x90ac)=0x00000020;
+              *(uint32_t*)(xb+0x90f0)=0x00000120; *(uint32_t*)(xb+0x90f8)=0x00000051;
+              *(uint32_t*)(xb+0x9104)=0x7ff62180; *(uint32_t*)(xb+0x9108)=0xfcdbd542;
+              esi=0x007ff621; ebp=(int32_t)0xfffcdbd5;   /* frame-matched oracle per-texel step */
+              /* horizon table: 9114 is EXT-RELATIVE (0x7568 < 0x100000) in the port -> xb+off */
+              { static const uint8_t hz[81]={6,4,3,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,8,9,9};
+                uint32_t hp=*(uint32_t*)(xb+0x9114); uint8_t*ht=(hp<0x100000)?(xb+hp):(uint8_t*)(uintptr_t)hp;
+                memcpy(ht,hz,81); }
+              /* colormap tile @3918: HOST pointer (patch 286).  FIST_INJECT_TILE=<64KB file> */
+              { uint32_t cm=*(uint32_t*)(xb+0x3918); uint8_t*t=(cm&&cm<0x100000)?(xb+cm):(uint8_t*)(uintptr_t)cm;
+                const char*tf=getenv("FIST_INJECT_TILE");
+                if(t&&tf){FILE*f=fopen(tf,"rb"); if(f){fread(t,1,65536,f);fclose(f);}} }
+              if (getenv("FIST_R3D_GDUMP2"))
+                  fprintf(stderr,"[inject] post-override 90d4=%08x 90d8=%08x 90b8=%08x 90bc=%08x 90f0=%u 90f8=%u "
+                      "esi=%08x ebp=%08x 3918=%08x\n",
+                      *(uint32_t*)(xb+0x90d4),*(uint32_t*)(xb+0x90d8),*(uint32_t*)(xb+0x90b8),*(uint32_t*)(xb+0x90bc),
+                      *(uint32_t*)(xb+0x90f0),*(uint32_t*)(xb+0x90f8),(uint32_t)esi,(uint32_t)ebp,*(uint32_t*)(xb+0x3918));
+          }
           m_ext_FUN_0000_9200(ebp, esi); }
         *(uint32_t*)(xb+0xc93) = save_c93;
         /* ------------------------------------------------------------------------------------------
