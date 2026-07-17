@@ -33,7 +33,7 @@
  
 --- src/hardware/vga_memory.cpp
 +++ src/hardware/vga_memory.cpp
-@@ -27,6 +27,374 @@
+@@ -27,6 +27,458 @@
  #include "pic.h"
  #include "inout.h"
  #include "setup.h"
@@ -142,10 +142,77 @@
 +
 +static void fist_sig(int s) { fist_req = (s == SIGUSR1) ? 1 : 2; }
 +
++/* ==== wasm-fist 9200 globals<->VRAM FRAME-MATCHED capture (env FIST_R9200CAP) ====
++ * Captures, for the first N terrain frames, a SELF-CONSISTENT triple from ONE 9200
++ * invocation: the projection globals it READ + the VRAM it WROTE + the DAC + the
++ * colormap tile it sampled.  Frame-matching is exact by construction:
++ *   - the extender per-frame render is 82b8 = { 8120(projection); 9200(render); 82d0() }.
++ *   - on the FIRST 0xA0000 write of a 9200 pass (lin in [0x10009200,0x100092a0), the
++ *     opaque-LOD texel writer) we snapshot the ext-flat globals 0x9000..0x9200 + the
++ *     ESI/EBP registers (the CONSTANT per-texel u/v step, invariant across the whole
++ *     9200 call) into a shadow -> these are frame F's exact render inputs.
++ *   - when 8120 NEXT executes (a RAM write with lin in [0x10008120,0x10008260) = the
++ *     projection recompute for frame F+1, which by 82b8's order runs BEFORE 9200-F+1),
++ *     the VRAM still holds frame F's terrain, so we dump the shadow globals + the
++ *     current VRAM/DAC/tile -> the globals and the VRAM are from the SAME 9200 call. */
++static int      r9200_cap = 0;
++static int      r9200_inpass = 0, r9200_have = 0, r9200_passno = 0, r9200_maxpass = 16;
++static Bit8u    r9200_glob[0x200];        /* ext[0x9000..0x9200] snapshot (frame F) */
++static Bit32u   r9200_esi = 0, r9200_ebp = 0, r9200_hzptr = 0;
++static Bit8u    r9200_hz[256];            /* horizon table contents (frame F) */
++static Bit32u   r9200_base = 0x10000000;  /* extender flat base = SegPhys(cs) at the write */
++
++static void r9200_snapshot(void) {
++	r9200_base = SegPhys(cs);              /* = 0x10000000 for the flat PM code selector */
++	for (int i = 0; i < 0x200; i++) r9200_glob[i] = mem_readb(r9200_base + 0x9000 + i);
++	r9200_esi = reg_esi; r9200_ebp = reg_ebp;             /* constant per-texel u/v step */
++	r9200_hzptr = mem_readd(r9200_base + 0x9114);
++	Bit32u ht = r9200_base + (r9200_hzptr & 0x00ffffffu); /* ext-relative horizon pointer */
++	for (int i = 0; i < 256; i++) r9200_hz[i] = mem_readb(ht + i);
++}
++
++static void r9200_dump(void) {
++	char path[700];
++	/* .cap = hdr(magic,passno,esi,ebp,hzptr) + glob[0x200] + hz[256] + tile[65536] */
++	snprintf(path, sizeof path, "%s.pass%02d.cap", fist_prefix, r9200_passno);
++	FILE *f = fopen(path, "wb");
++	if (f) {
++		Bit32u hdr[5] = { 0x43323952u /*'R92C'*/, (Bit32u)r9200_passno, r9200_esi, r9200_ebp, r9200_hzptr };
++		fwrite(hdr, 4, 5, f);
++		fwrite(r9200_glob, 1, 0x200, f);
++		fwrite(r9200_hz, 1, 256, f);
++		static Bit8u tile[65536];          /* colormap tile @ ext-flat 0x44200 (SMC 3918 base) */
++		for (int i = 0; i < 65536; i++) tile[i] = mem_readb(r9200_base + 0x44200 + i);
++		fwrite(tile, 1, 65536, f);
++		fclose(f);
++	}
++	snprintf(path, sizeof path, "%s.pass%02d.vram.bin", fist_prefix, r9200_passno);
++	f = fopen(path, "wb"); if (f) { fwrite(vga.mem.linear, 1, 256*1024, f); fclose(f); }
++	snprintf(path, sizeof path, "%s.pass%02d.pal.bin", fist_prefix, r9200_passno);
++	f = fopen(path, "wb"); if (f) { fwrite(vga.dac.rgb, 1, sizeof(vga.dac.rgb), f); fclose(f); }
++	Bit32u g4  = *(Bit32u*)(r9200_glob+0x1d4), g8  = *(Bit32u*)(r9200_glob+0x1d8);
++	Bit32u gb8 = *(Bit32u*)(r9200_glob+0x1b8), gbc = *(Bit32u*)(r9200_glob+0x1bc);
++	Bit32u gf0 = *(Bit32u*)(r9200_glob+0x1f0), gf8 = *(Bit32u*)(r9200_glob+0x1f8);
++	fprintf(stderr, "[r92cap] pass %02d esi=%08x ebp=%08x 90d4=%08x 90d8=%08x(row%d) 90b8=%08x 90bc=%08x "
++		"90f0=%u 90f8=%u hzptr=%08x vga.mode=%d pmode=%d\n",
++		r9200_passno, r9200_esi, r9200_ebp, g4, g8, (g8>>24)&0xff, gb8, gbc, gf0, gf8,
++		r9200_hzptr, (int)vga.mode, (int)cpu.pmode);
++}
++/* ==== end 9200 frame-matched capture ==== */
++
 +/* Records the CS:EIP of any guest write whose physical target lands in the tile
 + * range.  Called (gated on fist_mem_armed) from host_writeb in include/mem.h. */
 +extern "C" void fist_memrec(Bit8u *off, Bit8u val) {
 +	Bit32u ph = (Bit32u)(off - MemBase);
++	/* 9200 frame-matched capture: 8120 recomputing frame F+1's globals = frame F boundary */
++	if (r9200_cap && r9200_have) {
++		Bit32u lin = SegPhys(cs) + reg_eip;
++		if (lin >= 0x10008120 && lin < 0x10008260) {
++			if (r9200_passno < r9200_maxpass) { r9200_dump(); r9200_passno++; }
++			r9200_have = 0; r9200_inpass = 0;
++			if (r9200_passno >= r9200_maxpass) r9200_cap = 0;   /* stop after N frames */
++		}
++	}
 +	if (fist_watch_hi && ph >= fist_watch_lo && ph < fist_watch_hi && fist_watch_hits < 40000) {
 +		fist_watch_hits++;
 +		char wpath[600]; snprintf(wpath, sizeof wpath, "%s.watch.txt", fist_prefix);
@@ -348,6 +415,12 @@
 +	snprintf(fist_prefix, sizeof fist_prefix, "%s", p ? p : "/tmp/fistlog");
 +	const char *tp = getenv("FIST_TILEPHYS");
 +	if (tp) { fist_tile_lo = (Bit32u)strtoul(tp, 0, 0); fist_tile_hi = fist_tile_lo + 0x10000; }
++	const char *wp = getenv("FIST_WATCHPHYS");
++	if (wp) { Bit32u c=(Bit32u)strtoul(wp,0,0); const char*ws=getenv("FIST_WATCHSPAN");
++		Bit32u span=ws?(Bit32u)strtoul(ws,0,0):0x20; fist_watch_lo=c-span; fist_watch_hi=c+span; }
++	const char *wf = getenv("FIST_WATCHFLAT");
++	if (wf) { fist_wf_base=(Bit32u)strtoul(wf,0,0); const char*wfs=getenv("FIST_WATCHFLATSPAN");
++		fist_wf_span=wfs?(Bit32u)strtoul(wfs,0,0):0x100; }
 +	fist_inited = true;
 +	fist_armed  = 1;   /* VGA-write histogram armed too (harmless) */
 +	fist_mem_armed = 1;   /* the RAM last-writer recorder is LIVE from boot */
@@ -376,6 +449,17 @@
 +			fist_wf_base = (Bit32u)strtoul(wf, 0, 0);
 +			const char *wfs = getenv("FIST_WATCHFLATSPAN");
 +			fist_wf_span = wfs ? (Bit32u)strtoul(wfs, 0, 0) : 0x100;
++		}
++		if (getenv("FIST_R9200CAP")) {
++			r9200_cap = 1; fist_mem_armed = 1;   /* arm the RAM hook so the 8120 sentinel fires */
++			const char *mp = getenv("FIST_R9200MAX"); if (mp) r9200_maxpass = atoi(mp);
++		}
++	}
++	/* 9200 frame-matched capture: snapshot frame F's globals on its first terrain write */
++	if (r9200_cap) {
++		Bit32u lin = SegPhys(cs) + reg_eip;
++		if (lin >= 0x10009200 && lin < 0x100092a0 && !r9200_inpass) {
++			r9200_inpass = 1; r9200_snapshot(); r9200_have = 1;
 +		}
 +	}
 +	if (GCC_UNLIKELY(fist_req)) {
@@ -408,7 +492,7 @@
  
  
  #ifndef C_VGARAM_CHECKED
-@@ -377,6 +745,7 @@
+@@ -377,6 +829,7 @@
  			return readHandler<Bit32u>( addr );
  	}
  	void writeb(PhysPt addr, Bitu val ) {
@@ -416,7 +500,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -385,6 +754,7 @@
+@@ -385,6 +838,7 @@
  		writeCache<Bit8u>( addr, val );
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -424,7 +508,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -399,6 +769,7 @@
+@@ -399,6 +853,7 @@
  		writeCache<Bit16u>( addr, val );
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -432,7 +516,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -433,6 +804,7 @@
+@@ -433,6 +888,7 @@
  		flags=PFLAG_NOCODE;
  	}
  	void writeb(PhysPt addr,Bitu val) {
@@ -440,7 +524,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -440,6 +812,7 @@
+@@ -440,6 +896,7 @@
  		writeHandler(addr+0,(Bit8u)(val >> 0));
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -448,7 +532,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -448,6 +821,7 @@
+@@ -448,6 +905,7 @@
  		writeHandler(addr+1,(Bit8u)(val >> 8));
  	}
  	void writed(PhysPt addr,Bitu val) {

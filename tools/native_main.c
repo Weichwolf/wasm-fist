@@ -1268,6 +1268,44 @@ int fist_extender_gate(void) {
                       *(uint32_t*)(xb+0x90d4),*(uint32_t*)(xb+0x90d8),*(uint32_t*)(xb+0x90b8),*(uint32_t*)(xb+0x90bc),
                       *(uint32_t*)(xb+0x90f0),*(uint32_t*)(xb+0x90f8),(uint32_t)esi,(uint32_t)ebp,*(uint32_t*)(xb+0x3918));
           }
+          /* FIST_INJECT_CAPFILE (diagnostic, DEFAULT OFF) -- THE globals<->VRAM FRAME-MATCHED
+           * validation.  Loads a self-consistent (globals, tile, horizon) triple captured from
+           * ONE oracle 9200 invocation (tools/oracle/capture_9200_framematched.sh -> .cap:
+           * hdr[magic,passno,esi,ebp,hzptr] + ext[0x9000..0x9200] + horizon[256] + tile[65536]),
+           * overwrites the port's value-determining projection globals (NOT 90a8, the port's HOST
+           * fb dest ptr) + esi/ebp DIRECT + the horizon + the 3918 colormap tile, and renders the
+           * port's faithful 9200.  If the port's raw 0xA0000 idx then reproduces the SAME 9200
+           * call's VRAM, the renderer+globals path is proven end-to-end (methodology validated). */
+          if (getenv("FIST_INJECT_CAPFILE")) {
+              FILE*cf=fopen(getenv("FIST_INJECT_CAPFILE"),"rb");
+              if(cf){
+                  unsigned char cap[20+0x200+256];
+                  if(fread(cap,1,sizeof cap,cf)==sizeof cap){
+                      uint32_t cesi=*(uint32_t*)(cap+8), cebp=*(uint32_t*)(cap+12);
+                      unsigned char*cg=cap+20;                 /* cg[o-0x9000] == ext[o] */
+                      #define CG(o) (*(uint32_t*)(cg+((o)-0x9000)))
+                      *(uint32_t*)(xb+0x90b4)=CG(0x90b4); *(uint32_t*)(xb+0x90b8)=CG(0x90b8);
+                      *(uint32_t*)(xb+0x90bc)=CG(0x90bc); *(uint32_t*)(xb+0x90c0)=CG(0x90c0);
+                      *(uint32_t*)(xb+0x90d4)=CG(0x90d4); *(uint32_t*)(xb+0x90d8)=CG(0x90d8);
+                      *(uint32_t*)(xb+0x90e8)=CG(0x90e8); *(uint32_t*)(xb+0x90ac)=CG(0x90ac);
+                      *(uint32_t*)(xb+0x90f0)=CG(0x90f0); *(uint32_t*)(xb+0x90f8)=CG(0x90f8);
+                      *(uint32_t*)(xb+0x9104)=CG(0x9104); *(uint32_t*)(xb+0x9108)=CG(0x9108);
+                      esi=(int32_t)cesi; ebp=(int32_t)cebp;
+                      #undef CG
+                      { uint32_t hp=*(uint32_t*)(xb+0x9114); uint8_t*ht=(hp&&hp<0x100000)?(xb+hp):(uint8_t*)(uintptr_t)hp;
+                        if(ht) memcpy(ht,cap+20+0x200,128); }
+                      if(!getenv("FIST_INJECT_CAP_NOTILE")){
+                        uint32_t cm=*(uint32_t*)(xb+0x3918); uint8_t*t=(cm&&cm<0x100000)?(xb+cm):(uint8_t*)(uintptr_t)cm;
+                        static unsigned char tile[65536];
+                        if(fread(tile,1,65536,cf)==65536 && t) memcpy(t,tile,65536); }
+                  }
+                  fclose(cf);
+              }
+              if(getenv("FIST_R3D_GDUMP2"))
+                  fprintf(stderr,"[capinj] 90d4=%08x 90d8=%08x 90b8=%08x 90bc=%08x esi=%08x ebp=%08x 90f0=%u 90f8=%u 3918=%08x\n",
+                      *(uint32_t*)(xb+0x90d4),*(uint32_t*)(xb+0x90d8),*(uint32_t*)(xb+0x90b8),*(uint32_t*)(xb+0x90bc),
+                      (uint32_t)esi,(uint32_t)ebp,*(uint32_t*)(xb+0x90f0),*(uint32_t*)(xb+0x90f8),*(uint32_t*)(xb+0x3918));
+          }
           m_ext_FUN_0000_9200(ebp, esi); }
         *(uint32_t*)(xb+0xc93) = save_c93;
         /* ------------------------------------------------------------------------------------------
