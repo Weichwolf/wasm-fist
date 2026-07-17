@@ -1211,6 +1211,14 @@ int fist_extender_gate(void) {
             *(uint16_t*)(tcb+0x3a) = 384;   /* pitch */
             *(uint16_t*)(tcb+0x3c) = 256;   /* roll  */
         }
+        /* FIST_FULLCAM (diagnostic sweep): override the FULL render-camera position to an
+         * oracle frame-match value (X/Y/alt/head/foc/det).  Format "X:Y:alt:head:foc:det". */
+        if (getenv("FIST_FULLCAM")) {
+            long cv[6]={0,0,0,0,0,0}; const char*s=getenv("FIST_FULLCAM"); int i=0;
+            while(s && *s && i<6){ cv[i++]=strtol(s,(char**)&s,0); if(*s==':')s++; }
+            *(int32_t*)(tcb+0x2c)=cv[0]; *(int32_t*)(tcb+0x30)=cv[1]; *(int32_t*)(tcb+0x34)=cv[2];
+            *(uint16_t*)(tcb+0x38)=(uint16_t)cv[3]; *(uint16_t*)(tcb+0x3e)=(uint16_t)cv[4]; tcb[0xcc]=(uint8_t)cv[5];
+        }
         /* FIST_ISO -- CAMERA vs RAY-TABLE isolation seam (diagnostic, default OFF, applied on every
          * op-0x24 post so post #1 = the dumped spawn frame reflects the override).  Overrides the LIVE
          * TCB camera and/or the ray tables before the SAME default render chain, to pin whether the
@@ -1283,6 +1291,8 @@ int fist_extender_gate(void) {
             static uint8_t pre[0x10000]; int wantdump = getenv("FIST_TILEFILL_TDUMP") && tl;
             if (wantdump) memcpy(pre,tl,0x10000);
             m_ext_FUN_0000_6980();
+            if (getenv("FIST_TILEDUMP") && tl) { static int done=0; if(!done){done=1;
+                FILE*f=fopen(getenv("FIST_TILEDUMP"),"wb"); if(f){fwrite(tl,1,0x10000,f);fclose(f);} } }
             if (wantdump) { static int td=0; if(!td){td=1;
                 long chg=0,cnz=0; int seen[256]={0},d0=0;
                 for(int col=0;col<256;col++)for(int row=0;row<160;row++){int i=col*256+row;
