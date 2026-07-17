@@ -6,7 +6,23 @@
 # process START, for buffers built before the first VGA write).  SIGUSR1=arm/reset, SIGUSR2=dump.
 --- include/mem.h
 +++ include/mem.h
-@@ -93,13 +93,24 @@
+@@ -84,7 +84,15 @@
+ 
+ #else
+ 
++#ifdef __cplusplus
++extern "C" void fist_memread(Bit8u *off);
++extern volatile int fist_memread_armed;
++#define FIST_MEMREAD_HR(o) do{ if(fist_memread_armed) fist_memread((Bit8u*)(o)); }while(0)
++#else
++#define FIST_MEMREAD_HR(o) do{}while(0)
++#endif
+ static INLINE Bit8u host_readb(HostPt off) {
++	FIST_MEMREAD_HR(off);
+ 	return *(Bit8u *)off;
+ }
+ static INLINE Bit16u host_readw(HostPt off) {
+@@ -93,13 +101,24 @@
  static INLINE Bit32u host_readd(HostPt off) {
  	return *(Bit32u *)off;
  }
@@ -33,7 +49,7 @@
  
 --- src/hardware/vga_memory.cpp
 +++ src/hardware/vga_memory.cpp
-@@ -27,6 +27,458 @@
+@@ -27,6 +27,671 @@
  #include "pic.h"
  #include "inout.h"
  #include "setup.h"
@@ -197,22 +213,21 @@
 +		"90f0=%u 90f8=%u hzptr=%08x vga.mode=%d pmode=%d\n",
 +		r9200_passno, r9200_esi, r9200_ebp, g4, g8, (g8>>24)&0xff, gb8, gbc, gf0, gf8,
 +		r9200_hzptr, (int)vga.mode, (int)cpu.pmode);
-+	/* ---- LIGHT-TILE PHYS RESOLUTION (wasm-fist light-tile source hunt): translate the render-time
-+	 * tile linear address (ext base r9200_base + 0x44200 = 0x10044200) through the CURRENT CR3 to the
-+	 * phys page that actually backs the tile 9200 sampled this frame (paging remaps ext-flat 0x44200 to
-+	 * a DIFFERENT phys page at render time than the fixed 0x175200 the fixed-phys watch assumed).  Also
-+	 * resolve+dump the 0x689a resample SOURCE (ds:0x3911) that the light tile is resampled FROM, and
-+	 * dump the full RAM once so the source's own builder can be pinned by a phys last-writer. */
++	/* ---- LIGHT-TILE PHYS RESOLUTION: translate the render-time tile linear address
++	 * (ext base r9200_base + 0x44200 = 0x10044200) through the CURRENT CR3 to the phys
++	 * page that actually backs the tile 9200 sampled this frame. Print + dump full RAM
++	 * once so the light tile's builder/source can be pinned by a phys last-writer. */
 +	{
 +		Bit32u tlin = r9200_base + 0x44200;
 +		Bit32u tph  = fist_flat_to_phys(tlin);
 +		Bit32u tsmc = mem_readd(r9200_base + 0x3918);  /* the SMC tile base ds:0x3918 */
 +		Bit32u smclin = r9200_base + (tsmc & 0x00ffffffu);
 +		Bit32u smcph  = fist_flat_to_phys(smclin);
-+		Bit32u src3911 = mem_readd(r9200_base + 0x3911);   /* 0x689a resample SOURCE ptr */
-+		Bit32u p3916   = mem_readd(r9200_base + 0x3916);   /* detail column-shift */
-+		Bit32u p391c   = mem_readd(r9200_base + 0x391c);   /* tile byte-count */
-+		Bit32u disp3958= mem_readd(r9200_base + 0x3958);   /* [0x3958] = 0x6877 const-fill OR 0x689a resample */
++		/* the 0x689a resample SOURCE = ds:0x3911; detail params ds:0x3916/0x391c; dispatch ds:0x3958 */
++		Bit32u src3911 = mem_readd(r9200_base + 0x3911);
++		Bit32u p3916   = mem_readd(r9200_base + 0x3916);
++		Bit32u p391c   = mem_readd(r9200_base + 0x391c);
++		Bit32u disp3958= mem_readd(r9200_base + 0x3958);
 +		Bit32u srclin  = r9200_base + (src3911 & 0x00ffffffu);
 +		Bit32u srcph   = fist_flat_to_phys(srclin);
 +		fprintf(stderr, "[r92phys] pass %02d cr3=%08x paging=%d  tile_lin=%08x->phys=%08x  "
@@ -235,16 +250,179 @@
 +				Bitu bytes = MEM_TotalPages() * 4096;
 +				if (bytes > 16u*1024*1024) bytes = 16u*1024*1024;
 +				fwrite(MemBase, 1, bytes, f); fclose(f);
++				fprintf(stderr, "[r92phys] dumped full RAM %s (%lu bytes)\n", path, (unsigned long)bytes);
 +			}
 +		}
 +	}
 +}
 +/* ==== end 9200 frame-matched capture ==== */
 +
++/* ==== wasm-fist 6980 voxel-raycaster FRAME-MATCHED input capture (env FIST_R6980CAP) ====
++ * The colour gate.  The 9200 .cap captures the AFFINE renderer's tile-space camera at
++ * 9200-entry -- but 8120 runs between 6980 (the voxel tile-fill) and 9200 and OVERWRITES
++ * the shared 90d4/90d8 slots, so the .cap globals are USELESS for 6980 (world-space).
++ * This capture snapshots 6980's OWN world camera + depth ramps + the render-time colormap,
++ * read through LIVE paging AT 6980 execution (mid-fill) -- so the colormap dumped is the
++ * exact bytes 6980 dereferences THIS frame, not the frame-skewed 8120-boundary page a full
++ * RAM dump catches.  6980's colour source is a FIXED displacement (6b1a: mov al,[esi+ecx+
++ * 0x100000], esi=[0x85bc]) -- no SMC redirect -- and 6980 stores that byte verbatim (6b2b/
++ * 6bab: rep stos al).  We ALSO accumulate 6980's actual tile stores into a shadow, so the
++ * dumped shadow IS 6980's true render-time output (== the colormap bytes it read).
++ *   entry range 0x10006980..0x10006c00 = the 6980 body; stores at 0x10006b2b / 0x10006bab.
++ * Dumps at the paired 9200-entry (so the completed tile + this frame's world camera + the
++ * 9200 pass number all line up with the existing r92 .cap tile of the same passno). */
++static int    r6980_cap = 0;
++static int    r6980_active = 0;             /* 6980 snapshot captured this frame, awaiting 9200 */
++static Bit32u r6980_base = 0x10000000;
++static Bit8u  r6980_ext[0x200];             /* ext[0x9000..0x9200] at 6980 time (world camera) */
++static Bit32u r6980_g[16];                  /* 85bc,85b8,3909,3918,38ed,38f1,38fd,3901,3905,3a20,90c0,90dc,90e0,90fc,9100,90c4 */
++static Bit32u r6980_ramp[4*256];            /* 3a24[256], 3e24[256], 4224[256], 4624[256] */
++static Bit8u  r6980_shadow[0x10000];        /* 6980's ACTUAL tile stores (offset<-flat 0x44200) */
++static int    r6980_mapdumped = 0;
++
++/* read-side capture of the 6980 colour load `mov al,[esi+ecx+0x100000]` (6b1a/6b9a):
++ * records the REAL effective address the CPU dereferences + the value it gets, resolving
++ * the dark-plane paradox (my mem_readb of the same flat addr reads dark, but the store is
++ * light).  Armed only during the settled 6980 pass; capped sample buffer. */
++volatile int fist_memread_armed = 0;
++static Bit32u r6980_rd_phys[64], r6980_rd_flat[64], r6980_rd_esi[64];
++static Bit8u  r6980_rd_val[64];
++static int    r6980_rd_n = 0;
++static Bit32u r6980_rd_valhist[256];
++static int    r6980_rd_total = 0;
++extern "C" void fist_memread(Bit8u *off) {
++	Bit32u lin = SegPhys(cs) + reg_eip;
++	if (lin != 0x10006b1a && lin != 0x10006b9a) return;
++	Bit32u ph = (Bit32u)(off - MemBase);
++	Bit8u v = *off;
++	r6980_rd_valhist[v]++; r6980_rd_total++;
++	if (r6980_rd_n < 64) {
++		r6980_rd_phys[r6980_rd_n] = ph;
++		r6980_rd_flat[r6980_rd_n] = reg_esi + reg_ecx + 0x100000;  /* the flat EA the asm forms */
++		r6980_rd_esi[r6980_rd_n]  = reg_esi;
++		r6980_rd_val[r6980_rd_n]  = v;
++		r6980_rd_n++;
++	}
++}
++
++static void r6980_snapshot(void) {
++	r6980_base = SegPhys(cs);
++	for (int i = 0; i < 0x200; i++) r6980_ext[i] = mem_readb(r6980_base + 0x9000 + i);
++	static const Bit32u go[16] = {0x85bc,0x85b8,0x3909,0x3918,0x38ed,0x38f1,0x38fd,0x3901,
++	                              0x3905,0x3a20,0x90c0,0x90dc,0x90e0,0x90fc,0x9100,0x90c4};
++	for (int i = 0; i < 16; i++) r6980_g[i] = mem_readd(r6980_base + go[i]);
++	for (int i = 0; i < 256; i++) {
++		r6980_ramp[      i] = mem_readd(r6980_base + 0x3a24 + i*4);
++		r6980_ramp[256 + i] = mem_readd(r6980_base + 0x3e24 + i*4);
++		r6980_ramp[512 + i] = mem_readd(r6980_base + 0x4224 + i*4);
++		r6980_ramp[768 + i] = mem_readd(r6980_base + 0x4624 + i*4);
++	}
++	memset(r6980_shadow, 0, sizeof r6980_shadow);
++	r6980_active = 1;
++	/* arm the read-side capture for the settled passes only (keeps the hot read path fast) */
++	if (r9200_passno >= 8 && r6980_rd_total == 0) fist_memread_armed = 1;
++}
++
++/* Dump the RENDER-TIME map + proj through LIVE paging AT the colormap-read moment
++ * (the first 6b2b/6bab tile store, i.e. right after the 6b1a colormap read).  The
++ * extender re-pages its runtime buffers (proven: the proj at flat 0x24200 reads as
++ * an unmapped/zero page at 6980-ENTRY but is valid at render time), so the colormap
++ * plane [0x85bc]+0x100000 the snapshot-time read caught was the wrong page.  Reading
++ * it here, at the moment 6980 actually dereferences it, gives the exact bytes it reads. */
++static void r6980_mapdump(void) {
++	if (r6980_mapdumped) return;
++	r6980_mapdumped = 1;
++	Bit32u hb = mem_readd(r6980_base + 0x85bc);   /* re-read live: [0x85bc] */
++	char p[700];
++	static Bit8u plane[0x400000];
++	struct { Bit32u off; Bit32u len; const char *nm; } planes[4] = {
++		{0x000000,0x400000,"hm"}, {0x100000,0x100000,"cm"},
++		{0x400000,0x400000,"reduce"}, {0x800000,0x100000,"plane8"} };
++	for (int k = 0; k < 4; k++) {
++		for (Bit32u i = 0; i < planes[k].len; i++)
++			plane[i] = mem_readb(r6980_base + hb + planes[k].off + i);
++		snprintf(p, sizeof p, "%s.r6980.map_%s.bin", fist_prefix, planes[k].nm);
++		FILE *f = fopen(p, "wb"); if (f) { fwrite(plane, 1, planes[k].len, f); fclose(f); }
++	}
++	Bit32u pj = mem_readd(r6980_base + 0x3909) & 0xffffff00u;
++	static Bit8u proj[0x10000];
++	for (Bit32u i = 0; i < 0x10000; i++) proj[i] = mem_readb(r6980_base + pj + i);
++	snprintf(p, sizeof p, "%s.r6980.proj.bin", fist_prefix);
++	FILE *f = fopen(p, "wb"); if (f) { fwrite(proj, 1, 0x10000, f); fclose(f); }
++	int pjnz=0; for (int i=0;i<0x10000;i++) if(proj[i]) pjnz++;
++	/* the color read `mov al,[esi+ecx+0x100000]` uses DS; dump the colormap via DS base
++	 * (== the exact linear the CPU reads) to resolve the dark-plane paradox. */
++	Bit32u dsb = SegPhys(ds), esb = SegPhys(es), csb = SegPhys(cs);
++	static Bit8u cmds[0x100000];
++	for (Bit32u i = 0; i < 0x100000; i++) cmds[i] = mem_readb(dsb + hb + 0x100000 + i);
++	snprintf(p, sizeof p, "%s.r6980.map_cm_ds.bin", fist_prefix);
++	f = fopen(p, "wb"); if (f) { fwrite(cmds, 1, 0x100000, f); fclose(f); }
++	int cmmax=0; for(int i=0;i<0x100000;i++) if(cmds[i]>cmmax) cmmax=cmds[i];
++	fprintf(stderr, "[r6980] map @store: [85bc]=%08x [3909]=%08x proj_nz=%d  CS=%08x DS=%08x ES=%08x  cm_ds_max=%d\n",
++		hb, mem_readd(r6980_base + 0x3909), pjnz, csb, dsb, esb, cmmax);
++}
++
++static void r6980_dump(int passno) {
++	char p[700];
++	snprintf(p, sizeof p, "%s.r6980.pass%02d.bin", fist_prefix, passno);
++	FILE *f = fopen(p, "wb");
++	if (f) {
++		Bit32u hdr[2] = { 0x38393652u /*'R698'*/, (Bit32u)passno };
++		fwrite(hdr, 4, 2, f);
++		fwrite(r6980_ext, 1, 0x200, f);           /* world camera ext[0x9000..0x9200] */
++		fwrite(r6980_g, 4, 16, f);                /* named globals */
++		fwrite(r6980_ramp, 4, 4*256, f);          /* 3a24/3e24/4224/4624 */
++		static Bit8u tile[0x10000];               /* completed tile (live 0x44200) */
++		for (int i = 0; i < 0x10000; i++) tile[i] = mem_readb(r6980_base + 0x44200 + i);
++		fwrite(tile, 1, 0x10000, f);
++		fwrite(r6980_shadow, 1, 0x10000, f);      /* 6980's actual stores = its colormap reads */
++		fclose(f);
++	}
++	/* gate-A one-line summary: 6980's stored values (its colormap reads) light or dark? */
++	int nw=0; long sum=0; int mn=255,mx=0; int seen[256]; memset(seen,0,sizeof seen);
++	for (int i=0;i<0x10000;i++){ if(r6980_shadow[i]){ nw++; int v=r6980_shadow[i]; sum+=v; if(v<mn)mn=v; if(v>mx)mx=v; seen[v]=1; } }
++	int dist=0; for(int i=0;i<256;i++) dist+=seen[i];
++	Bit32u g4=*(Bit32u*)(r6980_ext+0x1d4), g8=*(Bit32u*)(r6980_ext+0x1d8);
++	fprintf(stderr,"[r6980] pass %02d 90d4=%08x 90d8=%08x 90dc=%08x nstores=%d val(mean=%ld min=%d max=%d dist=%d)%s\n",
++		passno, g4, g8, r6980_g[11], nw, nw?sum/nw:0, nw?mn:0, mx, dist, mx>=140?"  <- LIGHT":"  <- dark");
++	/* read-side capture report: what the 6b1a/6b9a colour load actually dereferenced */
++	if (fist_memread_armed && r6980_rd_total > 0) {
++		int rmn=255,rmx=0; long rs=0; for(int i=0;i<256;i++){ if(r6980_rd_valhist[i]){ if(i<rmn)rmn=i; if(i>rmx)rmx=i; rs+=(long)i*r6980_rd_valhist[i]; } }
++		fprintf(stderr,"[r6980rd] pass %02d nreads=%d colorval(mean=%ld min=%d max=%d)  samples(flat->phys=val):",
++			passno, r6980_rd_total, r6980_rd_total?rs/r6980_rd_total:0, rmn, rmx);
++		for (int i=0;i<8 && i<r6980_rd_n;i++)
++			fprintf(stderr," %08x->%08x=%02x(esi=%08x)", r6980_rd_flat[i], r6980_rd_phys[i], r6980_rd_val[i], r6980_rd_esi[i]);
++		fprintf(stderr,"\n");
++		/* dump the phys-page(s) the colour read actually hit, 1MB from the first sample's page */
++		if (r6980_rd_n > 0) {
++			Bit32u pg = r6980_rd_phys[0] & 0xfff00000u;  /* 1MB-aligned base of the real colormap */
++			static Bit8u realcm[0x100000];
++			for (Bit32u i=0;i<0x100000;i++) realcm[i]=MemBase[pg+i];  /* guest-phys direct */
++			char pp[700]; snprintf(pp,sizeof pp,"%s.r6980.realcm_phys%08x.bin",fist_prefix,pg);
++			FILE *rf=fopen(pp,"wb"); if(rf){ fwrite(realcm,1,0x100000,rf); fclose(rf); }
++		}
++		fist_memread_armed = 0;   /* one settled pass is enough; restore the fast read path */
++	}
++}
++/* ==== end 6980 capture ==== */
++
 +/* Records the CS:EIP of any guest write whose physical target lands in the tile
 + * range.  Called (gated on fist_mem_armed) from host_writeb in include/mem.h. */
 +extern "C" void fist_memrec(Bit8u *off, Bit8u val) {
 +	Bit32u ph = (Bit32u)(off - MemBase);
++	/* 6980 capture: snapshot on the first 6980-body write of a frame; accumulate its stores */
++	if (r6980_cap) {
++		Bit32u lin = SegPhys(cs) + reg_eip;
++		if (lin >= 0x10006980 && lin < 0x10006c00) {
++			if (!r6980_active) r6980_snapshot();
++			if (lin == 0x10006b2b || lin == 0x10006bab) {  /* the two rep-stos tile writers */
++				r6980_mapdump();   /* dump colormap at render-time paging (first store) */
++				/* es:[edi] with es base flat: edi = flat linear offset; tile base flat 0x44200 */
++				Bit32u foff = reg_edi - 0x44200;
++				if (foff < 0x10000) r6980_shadow[foff] = val;
++			}
++		}
++	}
 +	/* 9200 frame-matched capture: 8120 recomputing frame F+1's globals = frame F boundary */
 +	if (r9200_cap && r9200_have) {
 +		Bit32u lin = SegPhys(cs) + reg_eip;
@@ -495,12 +673,22 @@
 +			r9200_cap = 1; fist_mem_armed = 1;   /* arm the RAM hook so the 8120 sentinel fires */
 +			const char *mp = getenv("FIST_R9200MAX"); if (mp) r9200_maxpass = atoi(mp);
 +		}
++		if (getenv("FIST_R6980CAP")) {
++			r6980_cap = 1; fist_mem_armed = 1;   /* arm the RAM hook so 6980-body writes are seen */
++		}
 +	}
 +	/* 9200 frame-matched capture: snapshot frame F's globals on its first terrain write */
 +	if (r9200_cap) {
 +		Bit32u lin = SegPhys(cs) + reg_eip;
 +		if (lin >= 0x10009200 && lin < 0x100092a0 && !r9200_inpass) {
 +			r9200_inpass = 1; r9200_snapshot(); r9200_have = 1;
++			/* 6980 pair-dump: this frame's 6980 filled the tile; the world camera was
++			 * snapshotted during 6980; dump both now with the r9200 pass number so the
++			 * 6980 inputs, the completed tile, and the r92 .cap tile all share passno. */
++			if (r6980_cap && r6980_active && r9200_passno < r9200_maxpass) {
++				r6980_dump(r9200_passno);   /* same passno as the r92 .cap dumped at 8120-F+1 */
++				r6980_active = 0;
++			}
 +		}
 +	}
 +	if (GCC_UNLIKELY(fist_req)) {
@@ -533,7 +721,7 @@
  
  
  #ifndef C_VGARAM_CHECKED
-@@ -377,6 +829,7 @@
+@@ -377,6 +1042,7 @@
  			return readHandler<Bit32u>( addr );
  	}
  	void writeb(PhysPt addr, Bitu val ) {
@@ -541,7 +729,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -385,6 +838,7 @@
+@@ -385,6 +1051,7 @@
  		writeCache<Bit8u>( addr, val );
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -549,7 +737,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -399,6 +853,7 @@
+@@ -399,6 +1066,7 @@
  		writeCache<Bit16u>( addr, val );
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -557,7 +745,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -433,6 +888,7 @@
+@@ -433,6 +1101,7 @@
  		flags=PFLAG_NOCODE;
  	}
  	void writeb(PhysPt addr,Bitu val) {
@@ -565,7 +753,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -440,6 +896,7 @@
+@@ -440,6 +1109,7 @@
  		writeHandler(addr+0,(Bit8u)(val >> 0));
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -573,7 +761,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -448,6 +905,7 @@
+@@ -448,6 +1118,7 @@
  		writeHandler(addr+1,(Bit8u)(val >> 8));
  	}
  	void writed(PhysPt addr,Bitu val) {
