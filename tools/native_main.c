@@ -1181,6 +1181,7 @@ int fist_extender_gate(void) {
                 tcb[0xcd]=1; tcb[0xcf]=0;
             }
             if (getenv("FIST_ISO_PITCH")) *(int16_t*)(tcb+0x3c)=(int16_t)strtol(getenv("FIST_ISO_PITCH"),0,0);
+            if (getenv("FIST_ISO_3A"))    *(int16_t*)(tcb+0x3a)=(int16_t)strtol(getenv("FIST_ISO_3A"),0,0);
             if (getenv("FIST_ISO_FOC"))   *(uint16_t*)(tcb+0x3e)=(uint16_t)strtoul(getenv("FIST_ISO_FOC"),0,0);
             if (getenv("FIST_ISO_HEAD"))  *(uint16_t*)(tcb+0x38)=(uint16_t)strtoul(getenv("FIST_ISO_HEAD"),0,0);
             if (getenv("FIST_ISO_RAYZERO")) { memset(xb+0x3a24,0,256*4); memset(xb+0x3e24,0,256*4); *(uint32_t*)(xb+0x90c4)=0; }
@@ -1194,6 +1195,25 @@ int fist_extender_gate(void) {
         m_ext_FUN_0000_8deb();
         m_ext_FUN_0000_85d0();
         m_ext_FUN_0000_8120();
+        /* FIST_ISO_PROJ (diagnostic): overwrite the post-8120 projection globals + horizon table with the
+         * captured ORACLE spawn values (RAM dump docs/oracle_mission_spawn.md), bypassing the port's 8120,
+         * to prove whether the full renderer input state (projection + horizon) is the complete colour fix. */
+        if (getenv("FIST_ISO_PROJ")) {
+            *(uint32_t*)(xb+0x90b8)=0xfff9b7aa; *(uint32_t*)(xb+0x90bc)=0x00ffec42;
+            *(uint32_t*)(xb+0x90d4)=0xb1c0a498; *(uint32_t*)(xb+0x90d8)=0x39331d90;
+            *(uint32_t*)(xb+0x90b4)=0x00020000; *(uint32_t*)(xb+0x90c0)=0x01000000;
+            *(uint32_t*)(xb+0x9104)=0x7ff62180; *(uint32_t*)(xb+0x9108)=0xfcdbd542;
+            *(uint32_t*)(xb+0x90e8)=0x02000000;
+            if (getenv("FIST_ISO_HZ")) {
+                static const uint8_t hz[81]={6,4,3,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,8,9,9};
+                uint32_t hp=*(uint32_t*)(xb+0x9114); uint8_t*ht=(hp&&hp<0x100000)?(xb+hp):(uint8_t*)(uintptr_t)hp;
+                if(ht) memcpy(ht,hz,81);
+            }
+        }
+        if (getenv("FIST_ISO_TILE")) {   /* load a 64KB tile into the 3918 colormap buffer (oracle live tile) */
+            uint32_t cm=*(uint32_t*)(xb+0x3918); uint8_t*t=(cm&&cm<0x100000)?(xb+cm):(uint8_t*)(uintptr_t)cm;
+            if(t){FILE*f=fopen(getenv("FIST_ISO_TILE"),"rb"); if(f){fread(t,1,65536,f);fclose(f);}}
+        }
         { int32_t c0 = *(int32_t*)(xb+0x90c0), v04 = *(int32_t*)(xb+0x9104), v08 = *(int32_t*)(xb+0x9108);
           int32_t esi = (int32_t)(((int64_t)c0*v04)>>32), ebp = (int32_t)(((int64_t)c0*v08)>>32);
           m_ext_FUN_0000_9200(ebp, esi); }

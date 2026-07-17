@@ -1,5 +1,61 @@
 # Oracle frame-matched AZER1 mission SPAWN capture — the port's black terrain is a RENDER bug, not a flight-model gap
 
+> ## CAPTURE + INJECT VERDICT (2026-07-17, camera-orientation iteration) — **THE COLOUR RESIDUAL IS NOT THE
+> CAMERA/ORIENTATION/PROJECTION. Proven by direct injection of the ORACLE spawn camera + projection + tile
+> + horizon — the port terrain STILL renders (110,81,58) vs oracle (122,111,89).** The residual is
+> DOWNSTREAM: ~59% is the PALETTE, ~41% is a residual sampler/index difference (both deep subsystems).
+>
+> **Captured oracle spawn render-camera TCB orientation** (RAM dump `SIGUSR2` at frame-1, TCB @ phys 0x10000,
+> X@+0x2c — X=584282 Y=1142097 alt=12800, matches the committed spawn):
+>
+> | field | oracle spawn | port live spawn | match? |
+> |---|---|---|---|
+> | +0x38 heading | **26729** (0x6869) | 26729 | ✓ |
+> | +0x3a | **512** (0x0200) | 0 | ✗ |
+> | +0x3c | **256** (0x0100) | -256 (0xff00) | ✗ |
+> | +0x3e foc | **256** (0x0100) | 256 | ✓ |
+>
+> **Captured oracle spawn projection globals** (extender base phys 0x131000; the state 9200 walks):
+> `90b8=0xfff9b7aa 90bc=0x00ffec42 90d4=0xb1c0a498 90d8=0x39331d90 90b4=0x00020000 90c0=0x01000000
+> 9104=0x7ff62180 9108=0xfcdbd542 90e8=0x02000000`, view width `90f8=81`, colheight `90f0=288`,
+> horizon table `9114→0x7568` = `[6,4,3,2,1, 0×64, 1,2,3,4,5,6,7,8,8,9,9]`, colormap base `3918=0x44200`.
+> **Oracle live tile3918** (ext-flat 0x44200 = phys 0x175200, 64 KB): 212 distinct, min idx 37 max 249,
+> top idx 80(6926)/111(1703)/102(1539)/125(1513)/97(1245).
+>
+> **INJECT-CONFIRMATION (FIST_ISO_* diagnostic seams in `tools/native_main.c`, default OFF; port spawn frame,
+> `FIST_MISSFB_N=1`, terrain band rows 8-88, oracle ref `ref/mission_azer1_spawn_native320.png`):**
+> - **The port's 8120 is BYTE-EXACT correct.** Injecting the oracle orientation (`FIST_ISO_3A=512
+>   FIST_ISO_PITCH=256`) makes the port's 8120 produce the oracle projection globals BYTE-FOR-BYTE
+>   (90d4=b1c0a498, 90d8=39331d90, 90b8=fff9b7aa, 90bc=00ffec42 — all identical to the oracle). So the
+>   only camera defect is the port's wrong live 0x3a/0x3c; 8120 transforms it faithfully.
+> - Yet the colour barely moves: baseline terrain mean **(107.6,78.7,56.6)** → orientation-inject
+>   **(110.5,80.7,58.4)** → +projection+horizon **(110.5,80.7,58.4)** (identical — because injected
+>   orientation already yields the oracle projection) → +oracle-tile **(110.4,81.0,58.6)**. Oracle =
+>   **(122.5,111.9,89.0)**. Every full injection saturates ~76% short of the oracle colour.
+> - **Coverage is fine** (port 319 / oracle 318 cols filled; the "narrow window" premise is outdated).
+> - **A spatial shift search is flat** (142–148 mean-abs-diff/px for every dy∈[-8,8], dx∈[-8,8]) → NOT a
+>   projection/alignment offset; it is a uniform colour shift (oracle brighter + greener everywhere).
+> - **Decomposition** (port tile+proj indices vs oracle ref): an IDEAL per-index palette drops the residual
+>   from ~147 to **60.5** mean-abs-diff/px → **~59% of the colour error is the PALETTE** (532.pal is likely
+>   the WRONG terrain palette for AZER1 — the port hardcodes it in the shim merge), and **~41% (60.5/px) is
+>   a residual sampler/index difference** that survives even with the oracle tile + oracle projection
+>   injected (the port's 9200 samples slightly different texels; camera XY is NOT injected — port
+>   583982/1142557 vs oracle 584282/1142097).
+>
+> **CONSEQUENCE.** The task premise "the residual is the CAMERA/depth-projection" is **DISPROVEN by
+> injection**. Fixing the port's wrong orientation (0x3a/0x3c) is a genuine defect but does NOT fix the
+> colour (it slightly WORSENS the per-pixel AE: inject AE 5.37M vs baseline 5.29M, because the
+> palette/sampler residual dominates and the current port orientation happens to align marginally better).
+> The orientation is written by the extender flight-model (absent in the port); the render TCB +0x2c/0x30/
+> 0x34 are bridged by dd15/a84c but +0x38..+0x3e (orientation) are NOT — that bridge is extender-role
+> (a20d rotated camera / flight-model init), a deep subsystem, not a clean base-loss. **No engine/default
+> change lands this iteration** (doctrine: no band-aid; the fix doesn't move the acceptance metric and would
+> regress the deterministic spawn md5 with no colour benefit). Owners of the real frontier: the terrain
+> PALETTE (which .PAL AZER1's colormap uses vs the hardcoded 532.pal merge) + the 9200 sampler/index
+> fidelity. Diagnostic seams committed: `FIST_ISO_3A` (TCB+0x3a), `FIST_ISO_PROJ` (force oracle projection
+> globals post-8120), `FIST_ISO_HZ` (oracle horizon), `FIST_ISO_TILE=<64KB file>` (force the 3918 colormap).
+
+
 > ## VERDICT (2026-07-17) — **THE ORACLE RENDERS FULL VOXEL TERRAIN + SKY AT FRAME-1 / SPAWN.** The
 > port's black windshield is a **render-wire + camera-Z bug fixable NOW** — it does NOT need the
 > extender flight-model to first drive/settle the vehicle. Proven by a genuine frame-matched DOSBox
