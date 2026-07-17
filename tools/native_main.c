@@ -980,6 +980,38 @@ static void ext_module_init(void) {
             g_ext_ready ? "READY" : "(SHORT READ)");
 }
 
+/* FUN_0000_689a -- the extender's per-frame PERSPECTIVE tile-RESAMPLE (sky/horizon rows 160-255).
+ * Absent from the port's fist_ext.c decompile (paged-out PM code); reconstructed from the exact pinned
+ * asm formula (tools/oracle/sim_lighttile_689a.py, verified ~100% on the sky rows vs the frame-matched
+ * capture).  It fills the WHOLE 256x256 colormap tile @[0x3918] column-major from the static 128KB decoded
+ * 5.SKY source @[0x3911] (built by 89b0's tail under [0x395c]!=0), which FUN_0000_6980 then overlays on
+ * the terrain rows 0-159.  Globals: 90c0 scale, 90b0/90b4 projection, 90dc/90e0 world angle; 38ed/38f1=256. */
+static void fist_ext_689a(uint8_t *xb) {
+    uint32_t src_p = *(uint32_t*)(xb+0x3911), tile_p = *(uint32_t*)(xb+0x3918);
+    if (!src_p || !tile_p) return;
+    uint8_t *src  = (src_p <0x100000)?(xb+src_p ):(uint8_t*)(uintptr_t)src_p;
+    uint8_t *tile = (tile_p<0x100000)?(xb+tile_p):(uint8_t*)(uintptr_t)tile_p;
+    uint32_t c0=*(uint32_t*)(xb+0x90c0), b0=*(uint32_t*)(xb+0x90b0), b4=*(uint32_t*)(xb+0x90b4);
+    uint32_t dc=*(uint32_t*)(xb+0x90dc), e0=*(uint32_t*)(xb+0x90e0);
+    enum { D38ed=256, D38f1=256 };
+    uint32_t ebp0 = (uint32_t)(((uint64_t)c0 * (uint64_t)b0) >> 16);          /* mul + shrd 16 (u) */
+    int32_t  esi0 = (int32_t)(((int64_t)(int32_t)ebp0 * (int64_t)(int32_t)b4) >> 16); /* imul + shrd 16 (s) */
+    uint32_t ebp  = ebp0 << 3;
+    uint32_t edx  = (uint32_t)(-(int32_t)e0) - (uint32_t)((D38ed>>1) * esi0);  /* [0x910c] */
+    uint32_t ebx0 = (dc>>3) - (uint32_t)((uint32_t)(D38f1>>1) * ebp);          /* [0x9110] */
+    int out=0;
+    for (int col=0; col<D38f1; col++) {
+        uint32_t srccol = ((edx>>22)&0x3ff)<<7;
+        uint32_t ebx = ebx0;
+        for (int k=0;k<(D38ed>>1);k++) {
+            tile[out]   = src[(srccol+((ebx>>25)&0x7f))&0x1ffff]; ebx+=ebp;
+            tile[out+1] = src[(srccol+((ebx>>25)&0x7f))&0x1ffff]; ebx+=ebp;
+            out+=2;
+        }
+        edx += (uint32_t)esi0;
+    }
+}
+
 int g_fist_after_map = 0;   /* set once op 0x18 (map load) has fired -> roster probe gate */
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
@@ -1194,6 +1226,56 @@ int fist_extender_gate(void) {
         /* the decompiled extender render chain (viewport -> camera -> projection -> texel walk) */
         m_ext_FUN_0000_8deb();
         m_ext_FUN_0000_85d0();
+        /* FIST_TILEFILL (EXPERIMENTAL, default OFF) -- run the per-frame terrain TILE-FILL
+         * FUN_0000_6980 (NovaLogic voxel raycaster) BEFORE 9200 samples the tile, so 9200 walks a
+         * freshly-built terrain tile instead of the stale map-load tile.  6980 reads the camera set by
+         * 85d0 + the colour source at [0x85bc]+coord+0x100000.  Two shim seeds needed for a faithful
+         * native march (both are paged-out engine constants absent from fist_image.bin):
+         *   (a) the source depth ramps 3a24/3e24 (all-1 in the image, paged-boot-filled) -- banked from
+         *       the frame-matched capture; 6980->395e recomputes 4224/4624 from these + the native 90c0.
+         *   (b) a CONTIGUOUS heightmap+colormap buffer: the real extender maps the colormap at
+         *       HM_base+0x100000, but the port's Route-1 map-load allocs [0x85bc]/[0x85b8] separately, so
+         *       6980's [0x85bc]+0x100000 colour read lands in the wrong buffer.  Build HM[0..1MB] +
+         *       colormap[0..1MB]@+0x100000 and point [0x85bc] there for the 6980 call. */
+        if (getenv("FIST_TILEFILL")) {
+            static int seeded=0;
+            if (!seeded) { seeded=1;
+                FILE*rf=fopen(getenv("FIST_TILEFILL_RAMPS")?getenv("FIST_TILEFILL_RAMPS"):"tools/oracle/samples/voxel6980_ramps.bin","rb");
+                if(rf){ static uint8_t rb[4096]; if(fread(rb,1,4096,rf)==4096){ memcpy(xb+0x3a24,rb,1024); memcpy(xb+0x3e24,rb+1024,1024);} fclose(rf);
+                    fprintf(stderr,"[tilefill] seeded ramps 3a24/3e24 from bank\n"); }
+                /* 90b0/90b4 = paged-out projection constants (no writer in fist_image.bin; camera-independent).
+                 * 689a's perspective resample + 8120's projection read them.  Seed the banked values. */
+                *(uint32_t*)(xb+0x90b0)=0x00003d00; *(uint32_t*)(xb+0x90b4)=0x00020000;
+            }
+            static uint8_t *hmcm=0; static uint32_t hm_src=0;
+            uint32_t hmb=*(uint32_t*)(xb+0x85bc), cmb=*(uint32_t*)(xb+0x85b8);
+            const char*rf2=getenv("FIST_TILEFILL_RED");   /* override colour source (e.g. light reduce) */
+            if (hmb && cmb) {
+                if(!hmcm) hmcm=(uint8_t*)malloc(0x200000);
+                if(hmb!=hm_src){ memcpy(hmcm,(void*)(uintptr_t)hmb,0x100000); hm_src=hmb; }
+                if(rf2){ FILE*f=fopen(rf2,"rb"); if(f){fread(hmcm+0x100000,1,0x100000,f);fclose(f);} }
+                else memcpy(hmcm+0x100000,(void*)(uintptr_t)cmb,0x100000);
+            }
+            *(uint32_t*)(xb+0x90c4)=0;   /* force 395e proj rebuild from the seeded ramps + native 90c0 */
+            /* 689a fills the WHOLE tile (sky rows 160-255 exact; terrain rows 0-159 then overlaid by 6980) */
+            if (!getenv("FIST_TILEFILL_NO689A")) fist_ext_689a(xb);
+            uint32_t s85bc=*(uint32_t*)(xb+0x85bc);
+            if(hmcm) *(uint32_t*)(xb+0x85bc)=(uint32_t)(uintptr_t)hmcm;
+            /* 6980 (NovaLogic voxel raycaster) overlays terrain rows 0-159 on top of 689a's tile */
+            extern void m_ext_FUN_0000_6980(void);
+            uint32_t tp=*(uint32_t*)(xb+0x3918);
+            uint8_t *tl=(tp&&tp<0x100000)?(xb+tp):(uint8_t*)(uintptr_t)tp;
+            static uint8_t pre[0x10000]; int wantdump = getenv("FIST_TILEFILL_TDUMP") && tl;
+            if (wantdump) memcpy(pre,tl,0x10000);
+            m_ext_FUN_0000_6980();
+            if (wantdump) { static int td=0; if(!td){td=1;
+                long chg=0,cnz=0; int seen[256]={0},d0=0;
+                for(int col=0;col<256;col++)for(int row=0;row<160;row++){int i=col*256+row;
+                    if(tl[i]!=pre[i])chg++; if(tl[i]){cnz++; if(!seen[tl[i]]){seen[tl[i]]=1;d0++;}}}
+                fprintf(stderr,"[tilefill] 6980 wrote rows0-159: changed=%ld nz=%ld distinct=%d  proj[0x3909]=%08x 90c0=%08x 90fc=%08x 9100=%08x\n",
+                    chg,cnz,d0,*(uint32_t*)(xb+0x3909),*(uint32_t*)(xb+0x90c0),*(uint32_t*)(xb+0x90fc),*(uint32_t*)(xb+0x9100)); } }
+            *(uint32_t*)(xb+0x85bc)=s85bc;
+        }
         m_ext_FUN_0000_8120();
         /* FIST_ISO_PROJ (diagnostic): overwrite the post-8120 projection globals + horizon table with the
          * captured ORACLE spawn values (RAM dump docs/oracle_mission_spawn.md), bypassing the port's 8120,
@@ -1335,7 +1417,11 @@ int fist_extender_gate(void) {
          * faithful source for reproduction.  TRUE frontier = the 9200 sampler/tile3918 (colormap-groundtruth,
          * voxel-projection/terrain-color-fidelity), not the palette. */
         { uint8_t *eng782  = g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4);
-          uint8_t *extpal  = xb + (getenv("FIST_MISSFB_PAL5260") ? 0x5260 : 0x5598);
+          /* ext+0x5260 = the extender's SORTED-DISPLAY palette (asm 9f65 sorts 5598->5260 by luminance
+           * and uploads 5260 -- the FAITHFUL terrain DAC).  It only helped once the tile-fill produced the
+           * correct light tile (the earlier "5260 regresses" was measured against the stale dark tile), so
+           * select it when the tile-fill is active. */
+          uint8_t *extpal  = xb + ((getenv("FIST_MISSFB_PAL5260")||getenv("FIST_TILEFILL")) ? 0x5260 : 0x5598);
           if (*(uint16_t*)(dg+0x782)) for (int i=80*3;i<768;i++) eng782[i] = extpal[i] & 0x3f; }
     }
     if (op == 0x24 && getenv("FIST_OP24TRACE") && g_ext_ready) {
@@ -1766,6 +1852,8 @@ int fist_extender_gate(void) {
              * oracle source (docs/oracle_tilesource_builder.md). */
             if (getenv("FIST_FORCE395C"))
                 g_mem[FIST_EXT_BASE+0x395c] = (uint8_t)strtoul(getenv("FIST_FORCE395C"),0,0);
+            else if (getenv("FIST_TILEFILL"))   /* tile-fill needs 89b0 to build ds:0x3911 (5.SKY) for 689a */
+                g_mem[FIST_EXT_BASE+0x395c] = 1;
             g_fist_ext_int = 1;                    /* extender-mode flat FILEMGR INT 21h */
             m_ext_FUN_0000_89b0(inbox, inbox, inbox);
             g_fist_ext_int = 0;
