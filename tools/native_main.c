@@ -1164,6 +1164,32 @@ int fist_extender_gate(void) {
             uint8_t  h  = hm[(((ty & mask) << detail) + (tx & mask)) & 0x3fffff];
             *(int32_t*)(tcb+0x34) = (h << 8) + 1792;   /* FIST_EYE_HT = 7<<8 (oracle spawn alt 12800) */
         }
+        /* FIST_ISO -- CAMERA vs RAY-TABLE isolation seam (diagnostic, default OFF, applied on every
+         * op-0x24 post so post #1 = the dumped spawn frame reflects the override).  Overrides the LIVE
+         * TCB camera and/or the ray tables before the SAME default render chain, to pin whether the
+         * port's divergent terrain-colour is driven by the CAMERA (position/orientation) or the RAY/
+         * projection tables (3a24/3e24).  8120/9200 read the camera from the TCB (0x2c/0x30/0x34 XY/alt,
+         * 0x38 heading, 0x3a/0x3c pitch, 0x3e foc) + baked const tables; 3a24/3e24 are read by 395e (not
+         * in this chain) -- so RAYZERO is the irrelevance test. */
+        if (getenv("FIST_ISO")) {
+            if (getenv("FIST_ISO_CAMXY")) {   /* full V18 settled oracle camera (position too) */
+                *(int32_t*)(tcb+0x2c)=609696; *(int32_t*)(tcb+0x30)=1112229; *(int32_t*)(tcb+0x34)=29184;
+            }
+            if (getenv("FIST_ISO_CAM")) {      /* oracle ORIENTATION only (keep spawn XY/alt) */
+                *(uint16_t*)(tcb+0x38)=19745; *(uint16_t*)(tcb+0x3a)=0;
+                *(uint16_t*)(tcb+0x3c)=128;   *(uint16_t*)(tcb+0x3e)=256;
+                tcb[0xcd]=1; tcb[0xcf]=0;
+            }
+            if (getenv("FIST_ISO_PITCH")) *(int16_t*)(tcb+0x3c)=(int16_t)strtol(getenv("FIST_ISO_PITCH"),0,0);
+            if (getenv("FIST_ISO_FOC"))   *(uint16_t*)(tcb+0x3e)=(uint16_t)strtoul(getenv("FIST_ISO_FOC"),0,0);
+            if (getenv("FIST_ISO_HEAD"))  *(uint16_t*)(tcb+0x38)=(uint16_t)strtoul(getenv("FIST_ISO_HEAD"),0,0);
+            if (getenv("FIST_ISO_RAYZERO")) { memset(xb+0x3a24,0,256*4); memset(xb+0x3e24,0,256*4); *(uint32_t*)(xb+0x90c4)=0; }
+            if (getenv("FIST_ISO_RAYFF"))   { memset(xb+0x3a24,0xff,256*4); memset(xb+0x3e24,0xff,256*4); *(uint32_t*)(xb+0x90c4)=0; }
+            { const char *r3=getenv("FIST_ISO_RAY3A24"), *r7=getenv("FIST_ISO_RAY3E24");
+              if (r3){FILE*f=fopen(r3,"rb"); if(f){fread(xb+0x3a24,1,256*4,f);fclose(f);}}
+              if (r7){FILE*f=fopen(r7,"rb"); if(f){fread(xb+0x3e24,1,256*4,f);fclose(f);}}
+              if (r3||r7) *(uint32_t*)(xb+0x90c4)=0; }
+        }
         /* the decompiled extender render chain (viewport -> camera -> projection -> texel walk) */
         m_ext_FUN_0000_8deb();
         m_ext_FUN_0000_85d0();
@@ -1275,6 +1301,12 @@ int fist_extender_gate(void) {
                     nseen, tcb_lin, *(int32_t*)(tcb+0x2c),*(int32_t*)(tcb+0x30),*(int32_t*)(tcb+0x34),
                     *(uint16_t*)(tcb+0x38),*(int16_t*)(tcb+0x3a),*(int16_t*)(tcb+0x3c),*(uint16_t*)(tcb+0x3e),
                     tcb[0xcd],tcb[0xcf]);
+                if (getenv("FIST_ISO_812DUMP")) { extern void m_ext_FUN_0000_944b(void);
+                    fprintf(stderr,"[812] 9104=%08x 9108=%08x 90e4=%08x 90b4=%08x  &944b=%08x g_mem+ext+0x9450=%08x tbl9450[0..3]=%08x%08x%08x%08x tbl9650[0..3]=%08x%08x%08x%08x\n",
+                        *(uint32_t*)(xb+0x9104),*(uint32_t*)(xb+0x9108),*(uint32_t*)(xb+0x90e4),*(uint32_t*)(xb+0x90b4),
+                        (uint32_t)(uintptr_t)&m_ext_FUN_0000_944b,(uint32_t)(uintptr_t)(xb+0x9450),
+                        *(uint32_t*)(xb+0x9450),*(uint32_t*)(xb+0x9454),*(uint32_t*)(xb+0x9458),*(uint32_t*)(xb+0x945c),
+                        *(uint32_t*)(xb+0x9650),*(uint32_t*)(xb+0x9654),*(uint32_t*)(xb+0x9658),*(uint32_t*)(xb+0x965c)); }
                 uint32_t cm=*(uint32_t*)(xb+0x3918); long nz=0; int h[256]={0},nd=0;
                 if(cm){uint8_t*t=(uint8_t*)(uintptr_t)cm; for(int i=0;i<65536;i++){if(t[i])nz++; if(!h[t[i]]){h[t[i]]=1;nd++;}}}
                 fprintf(stderr,"[missfb] tile3918 nz=%ld/65536 distinct=%d  ray3a24[0..3]=%d/%d/%d/%d ray3e24[0]=%d 90c0=%08x 90c4=%08x\n",
@@ -1402,6 +1434,23 @@ int fist_extender_gate(void) {
               } else mp = getenv("FIST_MISSFB_EXTPAL") ? ext : eng;
               out(0x3c8,0); for(int pi=0;pi<768;pi++) out(0x3c9, mp[pi] & 0x3f); }
             *(uint32_t*)(xb+0xc93)=save_c93;
+            if (getenv("FIST_MISSFB_MEAN")) {
+                /* terrain-band (rows 8-88) mean RGB through the merged mission DAC (same merge as the
+                 * DAC upload above): the docs' isolation metric.  Oracle render mean = (122,106,71);
+                 * default port = (109,78,54).  Also report non-black px + distinct indices. */
+                uint8_t *fb = g_mem + 0xA0000;
+                uint8_t *eng = g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4);
+                uint8_t *ext = xb + 0x5598;
+                static uint8_t pal[768];
+                for (int i=0;i<80*3;i++)  pal[i]=(eng[i]&0x3f);
+                for (int i=80*3;i<768;i++) pal[i]=(ext[i]&0x3f);
+                long sr=0,sg=0,sb=0,nb=0; int hh[256]={0},nd=0;
+                for (int r=8;r<88;r++) for (int c=0;c<320;c++){ uint8_t p=fb[r*320+c];
+                    if(!hh[p]){hh[p]=1;nd++;} if(p){ nb++;
+                        sr+=(pal[p*3]<<2)|(pal[p*3]>>4); sg+=(pal[p*3+1]<<2)|(pal[p*3+1]>>4); sb+=(pal[p*3+2]<<2)|(pal[p*3+2]>>4);} }
+                fprintf(stderr,"[missfb-mean] terrain rows8-88 nonblack=%ld/25600 distinct=%d mean RGB=(%ld,%ld,%ld)\n",
+                    nb, nd, nb?sr/nb:0, nb?sg/nb:0, nb?sb/nb:0);
+            }
             { const char *fbp=getenv("FIST_MISSFB"); if(fbp) fist_dump_framebuffer(fbp); }
             _exit(0);
         }

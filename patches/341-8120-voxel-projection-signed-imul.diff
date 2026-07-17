@@ -1,0 +1,46 @@
+Voxel-projection setup FUN_0000_8120 (extender) -- SIGNED-MULTIPLY Ghidra artifact that produced the
+WRONG per-column u-step 90b8 and skewed the u/v accumulator inits 90d4/90d8 (the camera->projection
+chain the windshield voxel renderer 9200 walks; docs/oracle_terrain_writer.md pins the oracle's live
+post-8120 globals).
+
+ROOT CAUSE (asm 0x8120-0x828d vs re_out/fist_image.bin).  8120 computes the projection coefficients
+9104/9108 (sin/cos table dot-products, both SIGNED and frequently NEGATIVE) then forms:
+    esi = (90c0 * 9104) >> 32        ; asm 8239: mov 90c0,ebx; mov ebx,eax; imull 0x9104; mov edx,esi
+    ebp = (90c0 * 9108) >> 32        ; asm 8249: imull 0x9108; mov edx,ebp
+    90b8 = (ebp * 90b4) >> 16        ; asm 8259: imul ebx(=90b4); shrd $0x10  (SIGNED imul)
+    90bc = (esi * 90b4) >> 16
+and the u/v inits 90d4/90d8 = (90e8 * 9104|9108) >> 32, all via the x86 SIGNED `imull`.
+Ghidra typed DAT_0000_9104/9108/90e8/90b4 as `undefined4` (== uint32_t, UNSIGNED), so `(longlong)DAT_...`
+ZERO-extends a negative coefficient instead of sign-extending it.  Proven live: with the oracle settled
+camera (docs/oracle_terrain_writer.md X=609696 Y=1112229 alt=29184 head=19745 roll=128 foc=256) the port
+built 9108=0xfe6de2e0 (negative); the zero-extended `(longlong)9108` gave 90b8=0x01fcdbc4, whereas the
+oracle capture is 0xfffcdbc4 -- off by exactly +0x02000000 (one flipped high half).  90bc matched (its
+coefficient 9104=0x7ffd8858 is positive, so the missing sign-extension was invisible there).
+
+FIX: cast each coefficient to signed `int` before the `(longlong)` widening so the widening sign-extends,
+matching the SIGNED `imull`.  After the fix, under the same oracle camera, 90b8 = 0xfffcdbc4 (byte-exact
+oracle) and 90d4/90d8 move onto the oracle's sign/high-half (a8e16b60/387f0ce0 vs the oracle 9ee19cb8/
+385fa2a0 -- the residual low bits are the un-injected oracle pitch 0x3a).  No band-aid: `int` == the
+32-bit register the imul reads.  ZERO effect on the current default spawn frame (the port's live spawn
+camera keeps that render byte-identical, md5 b15766c0) -- this is the latent projection-math correctness
+the eventual camera fix requires; verify.sh 24/24 unaffected (8120 is in-mission-only, no menu flow calls it).
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -12973,11 +12973,11 @@
+   DAT_0000_90c0 = 0x1000000;
+-  DAT_0000_90d4 = (int)((ulonglong)((longlong)DAT_0000_90e8 * (longlong)DAT_0000_9104) >> 0x20) * 8 +
++  DAT_0000_90d4 = (int)((ulonglong)((longlong)(int)DAT_0000_90e8 * (longlong)(int)DAT_0000_9104) >> 0x20) * 8 +
+                  -0x80000000;
+-  DAT_0000_90d8 = (int)((ulonglong)((longlong)DAT_0000_90e8 * (longlong)DAT_0000_9108) >> 0x20) * -8 +
++  DAT_0000_90d8 = (int)((ulonglong)((longlong)(int)DAT_0000_90e8 * (longlong)(int)DAT_0000_9108) >> 0x20) * -8 +
+                  -0x80000000;
+-  iVar4 = (int)((ulonglong)((longlong)DAT_0000_9104 * 0x1000000) >> 0x20);
+-  iVar5 = (int)((ulonglong)((longlong)DAT_0000_9108 * 0x1000000) >> 0x20);
+-  lVar1 = (longlong)iVar5 * (longlong)DAT_0000_90b4;
++  iVar4 = (int)((ulonglong)((longlong)(int)DAT_0000_9104 * 0x1000000) >> 0x20);
++  iVar5 = (int)((ulonglong)((longlong)(int)DAT_0000_9108 * 0x1000000) >> 0x20);
++  lVar1 = (longlong)iVar5 * (longlong)(int)DAT_0000_90b4;
+   DAT_0000_90b8 = (uint)lVar1 >> 0x10 | (int)((ulonglong)lVar1 >> 0x20) << 0x10;
+-  lVar1 = (longlong)iVar4 * (longlong)DAT_0000_90b4;
++  lVar1 = (longlong)iVar4 * (longlong)(int)DAT_0000_90b4;
+   DAT_0000_90bc = (uint)lVar1 >> 0x10 | (int)((ulonglong)lVar1 >> 0x20) << 0x10;
