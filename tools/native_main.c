@@ -772,6 +772,14 @@ void fist_install_dgroup(void) {
  * 074) spins on it -- faithful to `do { call far [DGROUP:0x40a] } while(jae)`. */
 unsigned char g_fist_cf;
 
+/* PATCH 335: the c0e5 per-object UPDATE walk (patch 243) dispatches each object method keeping the LIST
+ * CURSOR live in SI and the object near-offset in DI (passed as arg0).  A few of those methods (b5e7 and
+ * its mid-entry twin b60f) additionally read `[si+0x10]` off the live cursor on their object-destruct
+ * branch (DAT_2000_5bd7 = (-[di+0x10]-[si+0x10])>>0xc).  The __allregs C dispatch threads only DI, so the
+ * cursor SI is lost; c0e5 publishes it here per iteration and the method reads it (faithful to the live
+ * register).  A DGROUP near-offset into the 0xdfbc object list. */
+unsigned short g_fist_c0e5_si;
+
 /* PATCH 292: the mission-object-roster iterator FUN_0000_c33c returns its updated SI register (always
  * 0xffff on both the found and exhausted exits -- asm 0xc381/0xc386 `mov si,0xffff`) here; its caller
  * FUN_0000_378e stores it into word[DGROUP:0x4b9e] (asm 0x37a7 `mov [0x4b9e],si`) so the NEXT iterator

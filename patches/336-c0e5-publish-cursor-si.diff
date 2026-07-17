@@ -1,0 +1,17 @@
+PATCH 336: publish the c0e5 object-UPDATE walk's live LIST CURSOR (SI) so the dispatched per-object
+methods that read `[si+0x10]` (the b5e7 patch-335 destruct branch DAT_2000_5bd7 = (-[di+0x10]-[si+0x10])
+>>0xc, and its mid-entry twin b60f) get the faithful cursor.  c0e5 (patch 243) dispatches each method
+threading only DI (the object near offset, arg0); the __allregs C call cannot carry the live SI register,
+so c0e5 stores it into the shim global g_fist_c0e5_si per iteration (asm 0xc10b `mov di,[si]` -- the
+cursor SI stays live in the register across `call [bx-0x1bac]`).  A DGROUP near offset into the 0xdfbc
+object list.  Mission-cascade only -> behaviour-neutral for the 24 menu/settings verify flows.
+--- a/fist.c	2026-07-17 02:27:26.394866883 +0200
++++ b/fist.c	2026-07-17 02:27:26.420575083 +0200
+@@ -31308,6 +31308,7 @@
+     int cx = 0xb6;
+     do {
+       uint16_t di = *(uint16_t *)(dg + si);                /* c10b mov di,[si] */
++        { extern unsigned short g_fist_c0e5_si; g_fist_c0e5_si = si; }  /* PATCH 336: publish live cursor (SI) for b5e7 destruct branch */
+       if (di != 0) {                                       /* c10d or di,di; je */
+         uint16_t bx = *(uint16_t *)(dg + di);              /* c113 mov bx,[di] (object type) */
+         bx = (uint16_t)(bx << 1);                          /* c115 shl bx,1 */

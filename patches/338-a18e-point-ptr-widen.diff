@@ -1,0 +1,38 @@
+PATCH 338: FUN_0000_a18e -- the point-struct projection trampoline (asm 0xa18e: `call 0x578; retf`)
+truncated its two POINT-STRUCT POINTER params to 16 bits.  a18e's param_4/param_5 were typed undefined2
+(uint16_t), so when addb (patch 337) calls a18e(param_1,param_2,param_3, obj+4, &DAT_2000_5690) the two
+HOST pointers get truncated to their low 16 bits; a18e forwards them to 0578 -> 0731, which dereferences
+`*param_1`/`*param_2` -> SIGSEGV at the truncated near-address (fault ~0xfcac on the
+b5e7->addb->a18e->0578->0731 flight-tick chain).  Same class as patch 328/330 (undefined2 point-struct
+pointer truncation).
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ 0xa18e; DS=SS=DGROUP=0x1c00): a18e is a pure
+`call 0x578; retf` forwarder; 0578 already types param_4/param_5 `int` and 0731 takes `uint*`.  All three
+a18e call sites (fist.c 59919/60855/60903 + addb) pass HOST pointers (&DAT_2000_568x/569x, param_3+4,
+obj+4) as param_4/param_5.  The only truncation is a18e's undefined2 param typing.
+
+FIX: widen a18e's param_4/param_5 (both the forward decl and the definition) to `int` (matching 0578's
+int params), so the 32-bit host pointer passes through intact.  Behaviour-neutral for the 24 verify flows
+(mission-cascade only).
+--- a/fist.c	2026-07-17 02:38:06.238856304 +0200
++++ b/fist.c	2026-07-17 02:38:06.260575203 +0200
+@@ -1011,7 +1011,7 @@
+ int __allregs FUN_0000_a182(undefined2 param_1,undefined2 param_2);
+ undefined4 __allregs FUN_0000_a186(undefined2 param_1);
+ undefined2 __allregs FUN_0000_a18a(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+-undefined4 __allregs FUN_0000_a18e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
++undefined4 __allregs FUN_0000_a18e(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4, int param_5);   /* PATCH 338: host point-struct pointers (were truncated to 16 bits) */
+ int __allregs FUN_0000_a192(undefined2 param_1,undefined2 param_2);
+ int __allregs FUN_0000_a196(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+ int __allregs FUN_0000_a19a(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+@@ -25400,8 +25400,8 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_a18e) @ 0000:a18e ===== */
+ 
+ undefined4 __allregs
+-FUN_0000_a18e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
+-             undefined2 param_5)
++FUN_0000_a18e(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4,
++             int param_5)   /* PATCH 338 */
+ 
+ {
+   FUN_0000_0578(param_1,param_2,param_3,param_4,param_5);

@@ -1,0 +1,185 @@
+PATCH 335: FUN_0000_b5e7 (+ its mid-entry twin b60f) -- the object-type-F per-frame UPDATE method
+dispatched by the c0e5 -0x1bac object-update loop (patch 243).  FULL object-relative reconstruction: the
+object (DI) was bound to the never-threaded param_5 -> SIGSEGV on the ACCEPT flight tick.  The b355/b51f
+family, and the FIRST crash on the ACCEPT flight tick under ASLR-off.
+
+THE CRASH (deterministic, `setarch -R` + warm datadir, default `make native` AZER1 ACCEPT
+BATTLES(160,100)->OK(205,128)->ACCEPT(40,186), FIST_COOP_TICK=1 FIST_TICK_HZ=25000):
+  459a -> c0ca -> c0e5 -> b5e7,  fault-addr 0x2d then (deeper) the `mov bx,[di]` unaff_CS deref, 5/5 runs.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ 0xb5e7-0xb6c8; DS=SS=DGROUP=0x1c00; CS=0):
+b5e7 is a per-type object UPDATE method reached from c0e5 (`mov di,[si]; mov bx,[di]; shl bx,1;
+call [bx-0x1bac]`, DI=object near offset live, SI=list cursor live -- patch 243).  Ghidra bound b5e7's
+DI varnode to param_5 (c0e5 threads only DI, as param_1 -> param_5 uninitialised/null under ASLR-off ->
+top `*(int*)(param_5+0x2d)` faults) and the SI varnode to param_4; it ALSO lost e1a6's sign flag (the
+`js b691` explosion-init branch), lost bb1b's CF (`jb b653`), and emitted a spurious
+`unaff_CS = &DAT_1000_cf69` in place of the `mov bx,[di]` object-word0 reads (so `*unaff_CS*2-0x6423`
+faults once past the top).  Same class as the sibling c0e5 methods 7c1d/87df/b355/97d5/b51f
+(patches 244/250/251/252/253).
+
+THE FIX (full reconstruction, all asm-cited inline):
+  - object = g_mem+0x1c000+di (di = param_1); every [di+off] read/store at its asm width (WORD/DWORD/BYTE).
+  - the b691 branch's `mov bx,[di]; mov ax,[bx-0x6423]` rebased to word[DGROUP:(word0*2-0x6423)] (was
+    the spurious unaff_CS host deref); param_5=unaff_CS artifacts dropped (the object never changes).
+  - e1a6 returns a signed char -> `(char)e1a6(...) < 0` reproduces `js b691` (Ghidra folded it to the
+    always-false bVar3, so it took the b691 branch whenever [di+0xd]<0x80 regardless of e1a6).
+  - bb1b returns CF via g_fist_cf -> `jb b653` faithful (Ghidra's bVar3=false always returned).
+  - the destruct-branch DAT_2000_5bd7 = (-[di+0x10]-[si+0x10])>>0xc uses the LIVE c0e5 cursor SI,
+    published by c0e5 in the shim global g_fist_c0e5_si (the __allregs dispatch threads only DI).
+  - the tail b354/b2ef (lcall 0xf69:0xbcc4/0xbc5f) takes the object.
+
+Mission-cascade only (the in-mission 459a flight tick) -> behaviour-neutral for the 24 menu/settings
+verify flows.  b60f (a Ghidra mid-function entry that shares b5e7's tail body) carries the same class;
+it is a separate decompiled fn and is threaded next if it surfaces.
+
+--- a/fist.c
++++ b/fist.c
+@@ -29707,68 +29707,86 @@
+   int *unaff_CS;
+   bool bVar3;
+   
+-  *(int *)((int)param_5 + 0x2d) = *(int *)((int)param_5 + 0x2d) + 1;
+-  if (*(uint *)((int)param_5 + 0x2d) < 0x1e0) {
+-    if (0x27 < *(uint *)((int)param_5 + 0x2d)) {
+-      *(undefined2 *)((int)param_5 + 0x2f) = 0;
+-    }
+-    if (*param_5 == 0xb) {
+-      *(char *)(param_5 + 0xd) = (char)param_5[0xd] + '\x01';
+-      *(byte *)(param_5 + 0xd) = *(byte *)(param_5 + 0xd) & 3;
+-    }
+-    if (((*(byte *)((int)param_5 + 0x17) & 1) != 0) || ((*(uint *)((int)param_5 + 0x2d) & 0xf) == 0)
+-       ) {
+-      unaff_CS = (int *)&DAT_1000_cf69;
+-      FUN_1000_addb(param_1,param_2,(int)param_3,param_5);
+-    }
+-    *(long *)(param_5 + 2) = *(long *)(param_5 + 2) + (long)*(int *)((int)param_5 + 0x1d);
+-    *(long *)(param_5 + 4) = *(long *)(param_5 + 4) + (long)*(int *)((int)param_5 + 0x1f);
+-    *(long *)(param_5 + 6) = *(long *)(param_5 + 6) + (long)*(int *)((int)param_5 + 0x21);
+-    bVar3 = (int)(*(uint *)((int)param_5 + 0xd) - 0x80) < 0;
+-    if ((*(uint *)((int)param_5 + 0xd) < 0x80) && (FUN_0000_e1a6(param_3,param_5), bVar3)) {
+-      if (*param_5 == 7) {
+-        uVar2 = 0x9c05;
+-      }
+-      else {
+-        FUN_1000_a4a2(0x2e33,*(undefined2 *)((int)param_5 + 0x27));
+-        param_3 = CONCAT22((int)((ulong)param_3 >> 0x10),*unaff_CS * 2);
+-        uVar2 = *(undefined2 *)(*unaff_CS * 2 + -0x6423);
+-        param_5 = unaff_CS;
+-      }
+-    }
+-    else {
+-      uVar2 = (undefined2)((ulong)param_3 >> 0x10);
+-      bVar3 = false;
+-      if (*(int *)((int)param_5 + 0x23) != 0) {
+-        *(int *)((int)param_5 + 0x23) = *(int *)((int)param_5 + 0x23) + -1;
+-        return;
+-      }
+-      FUN_0000_bb1b((int)(unsigned short)param_1,0xb64c);  /* PATCH 284: self object = param_1 near offset (c0e5's arg0), not the uninitialised param_5 */
+-      if (!bVar3) {
+-        return;
+-      }
+-      if (*(int *)((int)param_5 + 0x27) == DAT_2000_5a25) {
+-        return;
+-      }
+-      DAT_2000_5bd7 = (uint)(-*(int *)(param_4 + 0x10) - param_5[8]) >> 0xc;
+-      param_3 = CONCAT22(uVar2,(uint)*(byte *)((int)param_5 + 0x29));
+-      FUN_0000_bbb7((uint)*(byte *)(param_5 + 0x15),(uint)*(byte *)((int)param_5 + 0x29),param_5);
+-      if (*param_5 == 7) {
+-        uVar2 = 0x9c45;
+-      }
+-      else {
+-        uVar2 = *(undefined2 *)((int)param_5 + 0x27);
+-        FUN_1000_a4a2(0x2e27,uVar2);
+-        FUN_0000_bfce(uVar2);
+-        uVar2 = 0x9c4d;
+-        param_5 = (int *)&DAT_1000_cf69;
+-      }
+-    }
+-    FUN_0000_ba33(uVar2,param_5);
+-    FUN_0000_be8b(0xf,param_3);
+-  }
+-  iVar1 = FUN_1000_b354(param_5);
+-  FUN_1000_b2ef(iVar1);
++  /* PATCH 335: object-type-F per-frame UPDATE method (asm 0xb5e7-0xb6c8; b355/b51f family), dispatched by
++   * the c0e5 -0x1bac loop (patch 243) keeping DI=object near offset live (delivered as param_1) and SI=the
++   * live list cursor (published in g_fist_c0e5_si).  Ghidra bound this fn's DI varnode to param_5 (null
++   * under ASLR-off -> SIGSEGV at the top [di+0x2d]) and SI to param_4, lost e1a6's SIGN flag (js) and
++   * bb1b's CF, and emitted a spurious `unaff_CS = &DAT_1000_cf69` for the `mov bx,[di]` object-word0 reads.
++   * Reconstructed 1:1: object = g_mem+0x1c000+di; every [di+off] read/store at its asm width; the word0*2
++   * DGROUP table read (-0x6423) rebased; e1a6 returns a signed char (js -> the b691 explosion-init branch);
++   * bb1b returns CF via g_fist_cf; the destruct branch [si+0x10] uses the live c0e5 cursor.  The tail
++   * b354/b2ef (lcall 0xf69:0xbcc4/0xbc5f) takes the object.  Mission-cascade only -> behaviour-neutral. */
++  {
++    extern unsigned char g_fist_cf;
++    extern unsigned short g_fist_c0e5_si;
++    unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++    uint16_t di = (uint16_t)(uintptr_t)param_1;
++    unsigned char *obj = dg + di;
++    int p3hi = (int)((ulong)param_3 >> 0x10);
++    uint16_t uv2;
++
++    *(uint16_t *)(obj + 0x2d) += 1;                                   /* b5e7 incw [di+0x2d] */
++    if (*(uint16_t *)(obj + 0x2d) < 0x1e0) {                          /* b5ea cmpw 0x1e0; jae b6be */
++      if (*(uint16_t *)(obj + 0x2d) >= 0x28)                          /* b5f3 cmpw 0x28; jb b5fe */
++        *(uint16_t *)(obj + 0x2f) = 0;                                /* b5f9 movw [di+0x2f],0 */
++      if (*(uint16_t *)obj == 0xb) {                                  /* b5fe cmpw [di],0xb */
++        obj[0x1a] = (unsigned char)(obj[0x1a] + 1);                   /* b603 incb [di+0x1a] */
++        obj[0x1a] &= 3;                                               /* b606 andb [di+0x1a],3 */
++      }
++      if ((obj[0x17] & 1) != 0 || (*(uint16_t *)(obj + 0x2d) & 0xf) == 0) /* b60a/b610 */
++        FUN_1000_addb(param_1, param_2, (int)param_3, (int)(intptr_t)obj); /* b617 lcall addb (di=object) */
++      *(int32_t *)(obj + 4) += *(int16_t *)(obj + 0x1d);              /* b61c movswl [di+0x1d]; add [di+4] */
++      *(int32_t *)(obj + 8) += *(int16_t *)(obj + 0x1f);              /* b625 */
++      *(int32_t *)(obj + 0xc) += *(int16_t *)(obj + 0x21);            /* b62e */
++
++      int go691 = 0;                                                  /* b637/b641 */
++      if (*(uint16_t *)(obj + 0xd) < 0x80) {                          /* b637 cmpw [di+0xd],0x80; jae b643 */
++        if ((char)FUN_0000_e1a6(param_3, (int)(intptr_t)obj) < 0)     /* b63e call e1a6; b641 js b691 */
++          go691 = 1;
++      }
++      if (go691) {                                                    /* b691 explosion-init branch */
++        if (*(uint16_t *)obj == 7) {                                  /* b691 cmpw [di],7; je b6b2 */
++          uv2 = 0x9c05;                                               /* b6b2 */
++        } else {
++          FUN_1000_a4a2(0x2e33, *(uint16_t *)(obj + 0x27));           /* b696-b69d (di=[di+0x27]; ax=0x2e33) */
++          uint16_t w0 = *(uint16_t *)obj;                             /* b6a3 mov bx,[di] */
++          param_3 = CONCAT22(p3hi, (uint16_t)(w0 * 2));               /* b6a5 shl bx,1 -> param_3 low */
++          uv2 = *(uint16_t *)(dg + (uint16_t)(w0 * 2 - 0x6423));      /* b6a7 mov ax,[bx-0x6423] */
++        }
++        FUN_0000_ba33(uv2, (int)(intptr_t)obj);                       /* b6b5 call ba33 (ax=uv2, di=object) */
++        FUN_0000_be8b(0xf, param_3);                                  /* b6b8 ax=0xf; call be8b */
++      } else {                                                        /* b643 destruct branch */
++        if (*(uint16_t *)(obj + 0x23) != 0) {                         /* b643 cmpw [di+0x23],0; jne b64f */
++          *(uint16_t *)(obj + 0x23) -= 1;                             /* b64f decw [di+0x23] */
++          return;                                                     /* b652 ret */
++        }
++        FUN_0000_bb1b((int)(unsigned short)param_1, 0xb64c);          /* b649 call bb1b (patch 284: self=param_1) */
++        if (!(unsigned char)g_fist_cf) return;                        /* b64c jb b653 (CF=0 -> b64e ret) */
++        if (*(uint16_t *)(obj + 0x27) == DAT_2000_5a25) return;       /* b653 cmp [di+0x27],[0x9a25]; je ret */
++        {
++          uint16_t si = g_fist_c0e5_si;                               /* live c0e5 cursor (SI) */
++          DAT_2000_5bd7 = (uint16_t)((uint16_t)(- *(int16_t *)(obj + 0x10)
++                              - *(int16_t *)(dg + (uint16_t)(si + 0x10))) >> 0xc); /* b65c-b667 */
++        }
++        param_3 = CONCAT22(p3hi, (uint16_t)obj[0x29]);                /* b66b bx=[di+0x29] (live into be8b) */
++        FUN_0000_bbb7((uint)obj[0x2a], (uint)obj[0x29], (int)(intptr_t)obj); /* b66b-b673 (ax=[di+0x2a],bx=[di+0x29]) */
++        if (*(uint16_t *)obj == 7) {                                  /* b676 cmpw [di],7; je b6ad */
++          uv2 = 0x9c45;                                               /* b6ad */
++        } else {
++          uv2 = *(uint16_t *)(obj + 0x27);                            /* b67c mov di,[di+0x27] */
++          FUN_1000_a4a2(0x2e27, uv2);                                 /* b67f-b682 */
++          FUN_0000_bfce(uv2);                                         /* b688 call bfce */
++          uv2 = 0x9c4d;                                               /* b68c */
++        }
++        FUN_0000_ba33(uv2, (int)(intptr_t)obj);                       /* b6b5 call ba33 */
++        FUN_0000_be8b(0xf, param_3);                                  /* b6b8 be8b */
++      }
++    }
++    {
++      int iv1 = FUN_1000_b354((int)(intptr_t)obj);                    /* b6be lcall 0xf69:0xbcc4 (di=object) */
++      FUN_1000_b2ef(iv1);                                             /* b6c3 lcall 0xf69:0xbc5f */
++    }
++  }
+   return;
+ }
+ 

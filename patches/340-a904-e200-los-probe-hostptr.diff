@@ -1,0 +1,45 @@
+PATCH 340: the a904->e200->e21c LOS-probe path -- pass HOST pointers to the e21c LOS-query builder
+(patch 334, host-pointer convention) from this second caller path.  a904 (already reconstructed by
+patch 269, object di in param_1) forwarded its candidate cell entry and its object as NEAR OFFSETS to
+e200, and e200 typed its object param `undefined2` (truncating it); e21c then dereferenced [cand+4]/
+[obj+4] at the near-address -> SIGSEGV (fault ~0xc15b, chain c0e5->7c1d->a904->e200->e21c).  The crash
+MIGRATED here once patch 339 cleared the ab7f twin.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ 0xa904/0xe200; DS=SS=DGROUP=0x1c00):
+a904 keeps bx=candidate (near offset word[DGROUP:(...+0x6d3c)]) and di=object live and falls into e21c
+via e200.  e21c (patch 334) dereferences its candidate/object params as HOST pointers.  Patch 269's a904
+passed them as raw near offsets (`(int*)ent`, `(undefined2)di`), and e200's undefined2 object param
+truncated further.
+
+THE FIX (two spots): a904's e200 call rebases both the candidate (dg+ent) and the object (dg+di) to
+host pointers; e200's param_2 (object) widened undefined2 -> int so the 32-bit host pointer passes intact.
+Mission-cascade only -> behaviour-neutral for the 24 verify flows.
+--- a/fist.c	2026-07-17 02:49:09.571810192 +0200
++++ b/fist.c	2026-07-17 02:50:07.164575279 +0200
+@@ -1412,7 +1412,7 @@
+ char __allregs FUN_0000_e1a6(undefined4 param_1,int param_2);
+ undefined4 __allregs FUN_0000_e1d1(undefined4 param_1);
+ undefined4 __allregs FUN_0000_e1f0(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined4 param_4, undefined2 param_5,int *param_6,int *param_7);   /* PATCH 334: param_6/param_7 are candidate/object HOST pointers */
+-undefined4 __allregs FUN_0000_e200(undefined4 param_1,undefined2 param_2);
++undefined4 __allregs FUN_0000_e200(undefined4 param_1,int param_2);   /* PATCH 340 */
+ undefined4 __allregs FUN_0000_e20a(undefined4 param_1,int *param_2);
+ int __allregs FUN_0000_e21c(int *param_1,int param_2,int *param_3);   /* PATCH 334: returns e339's op-0x58 result */
+ undefined4 __allregs FUN_0000_e2a5(undefined4 param_1);
+@@ -27759,7 +27759,7 @@
+     bx = ((unsigned int)dg[(unsigned short)(di + 0x37)] & 0xf) << 1;
+     ent = *(unsigned short *)(dg + (unsigned short)(0x6d3c + bx));
+     if ((ent != 0) && (*(unsigned short *)(dg + (unsigned short)ent) != 0x17)) {
+-      iVar2 = FUN_0000_e200((int *)(uintptr_t)ent,(undefined2)di);
++      iVar2 = FUN_0000_e200((int *)(uintptr_t)(dg + (unsigned short)ent),(int)(intptr_t)(dg + di));  /* PATCH 340: e21c wants HOST ptrs (rebase candidate + object near offsets) */
+       if (iVar2 != 0) {
+         dg[(unsigned short)(di + 0x36)] = 0xff;
+       }
+@@ -35676,7 +35676,7 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_e200) @ 0000:e200 ===== */
+ 
+-undefined4 __allregs FUN_0000_e200(undefined4 param_1,undefined2 param_2)
++undefined4 __allregs FUN_0000_e200(undefined4 param_1,int param_2)   /* PATCH 340: object HOST ptr (was undefined2->truncated) */
+ 
+ {
+   FUN_0000_e21c(param_1,DAT_2000_aa2c,param_2);

@@ -1,0 +1,97 @@
+PATCH 339: FUN_1000_ab7f -- the per-object DRAW-MODE state machine (an ab03 frame-phase animation twin,
+0x98fc/0x98dc -> ab82 -> ab7f), object + class-descriptor near-offset base-loss.  The task-named twin.
+The crash MIGRATED here (chain c0e5->7c1d->ab03->ab82->ab7f, fault ~0xcb78) once patches 335-338 cleared
+the shallower c0e5->b5e7->addb->a18e->0731 chain.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ 0x1ab7f-0x1ac09; DS=SS=DGROUP=0x1c00; seg-0xf69):
+ab03 (patch 246) dispatches its frame-phase method keeping the OBJECT in DI (delivered as arg0); ab82
+forwards it to ab7f as param_1.  ab7f reads [di+0x40/0x19/0x45/0x97/0x1c] and writes the draw-mode
+selector obj[0x43], and consults the class descriptor DAT_2000_5796 (DGROUP:0x9796, a NEAR OFFSET written
+by ab03).  Ghidra dereferenced param_1 as a host pointer (SIGSEGV at [di+0x40]) and DAT_2000_5796 (and
+its *DAT_2000_5796 / DAT_2000_5796[1] chases) as host pointers.  Same class as aa08/a9b9 (patch 334).
+
+THE FIX: object = g_mem+0x1c000+di; A = word[DGROUP:0x9796]; *DAT_2000_5796 = word[DGROUP:A],
+DAT_2000_5796[1] = word[DGROUP:A+2]; the -0x66ba/-0x66aa rank-table byte reads rebased to DGROUP; b26a
+returns the rank byte in AL.  Mission-cascade only (the 459a flight tick) -> behaviour-neutral for the
+24 verify flows.
+--- a/fist.c	2026-07-17 02:42:56.308791289 +0200
++++ b/fist.c	2026-07-17 02:43:56.208576134 +0200
+@@ -60711,43 +60711,44 @@
+ {
+   byte bVar1;
+   
+-  if ((*(uint *)(param_1 + 0x40) & 1) != 0) {
+-    if (*DAT_2000_5796 == 3) {
+-      *(undefined1 *)(param_1 + 0x43) = 0xe;
+-      return;
+-    }
+-    if ((*(byte *)(param_1 + 0x19) & 6) != 0) {
+-      *(undefined1 *)(param_1 + 0x43) = 0xc;
+-      return;
+-    }
+-    if ((*(uint *)(param_1 + 0x40) & 0x10) != 0) {
+-      *(undefined1 *)(param_1 + 0x43) = 10;
+-      return;
+-    }
+-    if (*(char *)(param_1 + 0x45) != '\0') {
+-      *(undefined1 *)(param_1 + 0x43) = 8;
+-      return;
+-    }
+-    if (((*(uint *)(param_1 + 0x40) & 0x40) != 0) ||
+-       (((*(uint *)(param_1 + 0x40) & 0x20) != 0 &&
+-        (*(uint *)(param_1 + 0x40) = *(uint *)(param_1 + 0x40) & 0xffdf,
+-        DAT_2000_578c <= *(byte *)(*DAT_2000_5796 + -0x66ba))))) {
+-      *(undefined1 *)(param_1 + 0x43) = 4;
+-      return;
+-    }
+-    if (*(int *)(param_1 + 0x97) != 0) {
+-      bVar1 = FUN_0000_b26a();
+-      if (bVar1 < *(byte *)(DAT_2000_5796[1] + -0x66aa)) {
+-        *(undefined1 *)(param_1 + 0x43) = 6;
+-        return;
++  /* PATCH 339: ab7f -- the per-object DRAW-MODE state machine (asm 0x1ab7f-0x1ac09; seg-0xf69), an
++   * ab03 animation twin (0x98fc/0x98dc index -> ab82 -> ab7f), sets obj[0x43] (the draw-mode selector
++   * ab88 later dispatches).  Ghidra dereferenced the object DI (delivered in param_1 by ab82/ab03) as a
++   * host pointer (SIGSEGV `[di+0x40]`, fault ~0xcb78) and dereferenced the class-descriptor near offset
++   * DAT_2000_5796 (DGROUP:0x9796, written by ab03 patch 246) as a host pointer.  Reconstructed 1:1:
++   * object = g_mem+0x1c000+di; A = word[DGROUP:0x9796] (the class-descriptor near offset); *DAT_2000_5796
++   * = word[DGROUP:A], DAT_2000_5796[1] = word[DGROUP:A+2]; the -0x66ba/-0x66aa rank-table bytes rebased
++   * to DGROUP.  Same class as aa08/a9b9 (patch 334).  Mission-cascade only. */
++  {
++    unsigned char *dg  = (unsigned char *)g_mem + 0x1c000;
++    uint16_t di = (uint16_t)(uintptr_t)param_1;
++    unsigned char *obj = dg + di;
++    uint16_t A = *(uint16_t *)(dg + 0x9796);                        /* DAT_2000_5796 value (near offset) */
++
++    if ((*(uint16_t *)(obj + 0x40) & 1) != 0) {                     /* 1ab7f testw [di+0x40],1; je 1abdc */
++      if (*(uint16_t *)(dg + A) == 3) { obj[0x43] = 0xe; return; }  /* 1ab8a cmpw [bx],3; je 1ac05 */
++      if ((obj[0x19] & 6) != 0)       { obj[0x43] = 0xc; return; }  /* 1ab8f testb [di+0x19],6 */
++      if ((*(uint16_t *)(obj + 0x40) & 0x10) != 0) { obj[0x43] = 0xa; return; } /* 1ab95 */
++      if (obj[0x45] != 0)             { obj[0x43] = 8; return; }    /* 1ab9c cmpb [di+0x45],0 */
++      if ((*(uint16_t *)(obj + 0x40) & 0x40) != 0) { obj[0x43] = 4; return; }   /* 1aba2 */
++      if ((*(uint16_t *)(obj + 0x40) & 0x20) != 0) {                /* 1aba9 testw 0x20; je 1abc3 */
++        *(uint16_t *)(obj + 0x40) &= 0xffdf;                        /* 1abb0 andw [di+0x40],0xffdf */
++        uint16_t B = *(uint16_t *)(dg + A);                         /* 1abb4-1abb8 bx=[0x9796];bx=[bx] */
++        if (DAT_2000_578c <= *(uint8_t *)(dg + (uint16_t)(B - 0x66ba))) { /* 1abba-1abc1 cmp;jbe 1abf1 */
++          obj[0x43] = 4; return;                                    /* 1abf1 */
++        }
++      }
++      if (*(uint16_t *)(obj + 0x97) != 0) {                         /* 1abc3 cmpw [di+0x97],0; je 1abdc */
++        uint8_t bVar1 = (uint8_t)FUN_0000_b26a();                   /* 1abca lcall b26a */
++        uint16_t Cc = *(uint16_t *)(dg + (uint16_t)(A + 2));        /* 1abcf-1abd3 bx=[0x9796];bx=[bx+2] */
++        if (bVar1 < *(uint8_t *)(dg + (uint16_t)(Cc - 0x66aa))) {   /* 1abd6 cmp;jb 1abec */
++          obj[0x43] = 6; return;                                    /* 1abec */
++        }
+       }
+     }
++    if (obj[0x1c] == 0) { obj[0x43] = 0; return; }                  /* 1abdc cmpb [di+0x1c],0; jne 1abe7 */
++    obj[0x43] = 2;                                                  /* 1abe7 movb [di+0x43],2 */
+   }
+-  if (*(char *)(param_1 + 0x1c) == '\0') {
+-    *(undefined1 *)(param_1 + 0x43) = 0;
+-    return;
+-  }
+-  *(undefined1 *)(param_1 + 0x43) = 2;
+   return;
+ }
+ 

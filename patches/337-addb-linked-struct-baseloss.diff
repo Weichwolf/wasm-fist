@@ -1,0 +1,73 @@
+PATCH 337: FUN_1000_addb -- the per-object position/velocity advance helper called by b5e7 (patch 335)
+on the c0e5 flight tick.  Object base-loss on the LINKED STRUCT it chases: `si = word[di+0x2f]` is a
+DGROUP near offset that Ghidra dereferenced raw as a host pointer (SIGSEGV fault ~0x2016 at [si+0x16]),
+and the `pop di` that restores the object after the a18e projection call was emitted as a spurious
+`unaff_CS`.  The crash MIGRATED here from b5e7 once patch 335 made b5e7 pass the real object.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ 0x1addb-0x1ae3b; DS=SS=DGROUP=0x1c00): b5e7
+calls `lcall 0xf69:0xb74b` = addb with DI=object (host ptr via param_4).  addb loads `si=[di+0x2f]`
+(a near offset to a linked target struct), reads [si+0x16]/[si+4]/[si+8]/[si+0xc], projects via a18e,
+then (after `pop di` = object) writes the advance to [di+0x1d/0x1f/0x21].  Ghidra kept param_4=object
+correct but dereferenced the [di+0x2f] near offset raw and lost the pop di.
+
+THE FIX: object = param_4 (host ptr); the linked struct si=word[di+0x2f] rebased to g_mem+0x1c000+si;
+the spurious unaff_CS replaced by the object; the on-screen window test done 16-bit as the asm does.
+Mission-cascade only (the 459a flight tick) -> behaviour-neutral for the 24 verify flows.
+--- a/fist.c	2026-07-17 02:31:11.704853515 +0200
++++ b/fist.c	2026-07-17 02:33:28.544576085 +0200
+@@ -64701,23 +64701,38 @@
+   undefined2 uVar2;
+   int unaff_CS;
+   
+-  iVar1 = *(int *)(param_4 + 0x2f);
+-  if (iVar1 == 0) {
+-    return;
+-  }
+-  if ((*(byte *)(iVar1 + 0x16) & 1) == 0) {
+-    DAT_2000_5690 = *(undefined4 *)(iVar1 + 4);
+-    DAT_2000_5694 = *(undefined4 *)(iVar1 + 8);
+-    DAT_2000_5698 = *(long *)(iVar1 + 0xc) + *(long *)(param_4 + 0x31);
+-    iVar1 = FUN_0000_a18e(param_1,param_2,param_3,param_4 + 4,(undefined4 *)&DAT_2000_5690);
+-    param_4 = unaff_CS;
+-    if ((iVar1 - *(int *)(unaff_CS + 0x10)) + 0xb6U < 0x16c) {
+-      uVar2 = *(undefined2 *)(unaff_CS + 0x1b);
+-      iVar1 = FUN_0000_a192(param_3,uVar2);
+-      *(int *)(unaff_CS + 0x1d) = iVar1;
+-      *(undefined2 *)(unaff_CS + 0x1f) = uVar2;
+-      *(undefined2 *)(unaff_CS + 0x21) = param_3;
+-      return;
++  /* PATCH 337: addb -- the object-position/velocity advance helper (asm 0x1addb-0x1ae3b; seg-0xf69),
++   * called by b5e7 (patch 335) with the OBJECT host pointer in param_4.  Ghidra base-lost the linked
++   * struct `si = [di+0x2f]` (a DGROUP NEAR OFFSET -> dereferenced raw as a host pointer: `[si+0x16]`
++   * faulted at ~0x2016) and emitted a spurious `unaff_CS` in place of the `pop di` that restores the
++   * object after the a18e call.  Reconstructed 1:1: object = param_4 (host ptr); the linked struct
++   * si=word[di+0x2f] rebased to g_mem+0x1c000+si; unaff_CS -> the object; the a18e projection + the
++   * 0xb6..0x16c on-screen window test (16-bit) + the a192 velocity write kept verbatim. */
++  {
++    unsigned char *dg  = (unsigned char *)g_mem + 0x1c000;
++    unsigned char *obj = (unsigned char *)(uintptr_t)param_4;      /* b5e7 passes the object host ptr */
++    uint16_t off = *(uint16_t *)(obj + 0x2f);                      /* 1addb mov si,[di+0x2f] (near offset) */
++    if (off == 0) return;                                          /* 1adde or si,si; je ret */
++    {
++      unsigned char *sp = dg + off;                                /* rebase the linked struct */
++      if ((sp[0x16] & 1) == 0) {                                   /* 1ade2 testb [si+0x16],1; jne clear */
++        DAT_2000_5690 = *(uint32_t *)(sp + 4);                     /* 1adea */
++        DAT_2000_5694 = *(uint32_t *)(sp + 8);                     /* 1adf2 */
++        DAT_2000_5698 = *(uint32_t *)(sp + 0xc) + *(uint32_t *)(obj + 0x31); /* 1adfa/1adfe */
++        {
++          int r = FUN_0000_a18e(param_1, param_2, param_3,
++                                (int)(intptr_t)(obj + 4), (undefined4 *)&DAT_2000_5690); /* 1ae0d */
++          uint16_t s = (uint16_t)((uint16_t)r - *(uint16_t *)(obj + 0x10) + 0xb6);       /* 1ae13-1ae18 */
++          if (s < 0x16c) {                                         /* 1ae1c cmp 0x16c; jb 1ae28 */
++            uint16_t uv2 = *(uint16_t *)(obj + 0x1b);              /* 1ae2a mov dx,[di+0x1b] */
++            int r2 = FUN_0000_a192(param_3, uv2);                  /* 1ae2d (cx=bx=param_3, dx=uv2) */
++            *(uint16_t *)(obj + 0x1d) = (uint16_t)r2;              /* 1ae32 mov [di+0x1d],ax */
++            *(uint16_t *)(obj + 0x1f) = uv2;                       /* 1ae35 mov [di+0x1f],dx */
++            *(uint16_t *)(obj + 0x21) = (uint16_t)param_3;         /* 1ae38 mov [di+0x21],cx(=bx=param_3) */
++            return;
++          }
++        }
++      }
+     }
+   }
+   *(undefined2 *)(param_4 + 0x2f) = 0;

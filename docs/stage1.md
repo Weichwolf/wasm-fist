@@ -1,5 +1,41 @@
 # Stage 1 — making the engine execute (running notes)
 
+## STATUS (STAGE 3 — **patches 335-340: the ACCEPT-path flight-tick SIGSEGV FAMILY is ELIMINATED — the whole c0e5/ab03 per-object-method base-loss chain is reconstructed, and the ACCEPT COOP flow is DETERMINISTICALLY crash-free through 42s of gameplay on the worst-case (ASLR-off) layout**)
+**MEASUREMENT METHOD (the crack for this iteration):** the residual flight-tick SIGSEGVs are
+UNINITIALISED-garbage-dependent (~1/20 on the default ASLR-on layout, layout-flaky — patch 330's caveat).
+Building the DEFAULT `make native` and running the ACCEPT COOP flow under **`setarch -R` (ASLR OFF) + a
+warm shared datadir** makes the garbage DETERMINISTIC → every base-lost twin faults 100% when present, so
+each fix can be verified by re-running (fault GONE) and the crash MIGRATES to the next twin. This is the
+worst-case layout; clearing it there ⇒ robustly crash-free on the default ASLR-on layout.
+
+**THE FAMILY (each an asm-verified per-object-method base-loss, in migration order):**
+- **335 `FUN_0000_b5e7`** (+ mid-entry twin b60f) — object-type-F UPDATE method dispatched by the c0e5
+  `-0x1bac` loop; DI (object) bound to the never-threaded param_5 (null → fault 0x2d), e1a6 sign-flag +
+  bb1b CF dropped, spurious `unaff_CS` for the `mov bx,[di]` word0 reads. Full object-relative rebuild.
+- **336 `FUN_0000_c0e5`** — publish the live LIST CURSOR (SI) into the shim global `g_fist_c0e5_si` so
+  b5e7's destruct branch `[si+0x10]` gets the faithful cursor (the __allregs dispatch threads only DI).
+- **337 `FUN_1000_addb`** — the linked-struct `si=[di+0x2f]` near offset deref'd raw (fault 0x2016) +
+  `pop di`→`unaff_CS`; object=param_4 host ptr, struct rebased.
+- **338 `FUN_0000_a18e`** — the point-struct projection trampoline truncated its two POINTER params to
+  16 bits (undefined2) → 0578→0731 deref'd 0xfcac; widened param_4/param_5 to full-width.
+- **339 `FUN_1000_ab7f`** — the task-named ab03 DRAW-MODE twin; object DI + class-descriptor near offset
+  `DAT_2000_5796` (DGROUP:0x9796) deref'd as host ptrs (fault 0xcb78). Same class as aa08/a9b9 (334).
+- **340 a904/e200/e21c** — the second e21c LOS-query caller path: a904 (patch 269) forwarded its candidate
+  cell-entry near offset + object as near offsets, and e200 truncated the object (undefined2), so e21c
+  (patch 334, host-ptr convention) deref'd [cand/obj+4]=0xc15b. Rebase both to host ptrs + widen e200.
+
+**MEASURED (default `make native`, ASLR-off deterministic, `setarch -R` + warm datadir, ACCEPT COOP
+BATTLES(160,100)→OK(205,128)→ACCEPT(40,186), FIST_COOP_TICK=1 FIST_TICK_HZ=25000):** BEFORE (post-334) =
+DETERMINISTIC crash `c0e5→b5e7` fault 0x2d 5/5; AFTER (335-340) = **10/10 (N=4000) + 10/10 (22s window) +
+5/5 (42s deep window) crash-free**, the family faults (b5e7/addb/0731/ab7f/a904/e200/e21c) all GONE.
+pristine UNCHANGED (`61453e42`/`0051cb56`/`75c6d726`); `make check` = 340 patches apply; `verify.sh native`
+= 24/24 (+ `both` native↔wasm 0-diff, ZERO regression — all fixes mission-cascade-only). Shim: one new
+global `g_fist_c0e5_si` in `tools/native_main.c` (loader-role cursor publish for 336).
+**PINNED (deeper, not yet surfaced at 42s):** the remaining ab03/ae5c/ad2f-dispatched twins (ae32, ae5c,
+af97, afa2, ad2f, ae66) share the identical object + DAT_2000_5796 near-offset base-loss and each call
+deeper AI/weapon code (0291/a6e3/8711/96c0/a286); reconstruct as reached (same template). The op-0x58 LOS
+service is the documented extender PM frontier (gate-no-op → "not visible"). Prior status:
+
 ## STATUS (STAGE 3 — **patch 334: the ACCEPT-path aa08/b011 SIGSEGV is FIXED; the residual migrated to the pinned ab03 AI-twin family**)
 The `~1/12` in-mission SIGSEGV `459a->c0ca->c0e5->7c1d->ab03->b011->FUN_1000_aa08` (`*param_5`, the TARGET-LOCK
 method reading its object from the wrong param slot — the SIBLING of the ab88 branch patch 328 fixed) is
