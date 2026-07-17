@@ -1755,9 +1755,35 @@ int fist_extender_gate(void) {
              * offset is lost.  With FIST_TILEWIN=0x4200: build into the aligned base, then window [3918]. */
             uint32_t win = getenv("FIST_TILEWIN") ? (uint32_t)strtoul(getenv("FIST_TILEWIN"),0,0) : 0;
             if (tile3918) *(uint32_t *)(xb + 0xbc90) = tile3918;   /* bc90 REUSED = tile aligned base */
+            /* FIST_FORCE395C (default OFF, DIAGNOSTIC): 89b0's tail builds ds:0x3911 (the 689a source)
+             * only when [0x395c]!=0.  [0x395c] is set by the 5c98 .MEG-file findfirst probe (4/8/16/40.MEG),
+             * which finds nothing in our data dir -> 395c stays 0 -> the source build is skipped.  Forcing
+             * a nonzero detail here lets us test whether the port's OWN 89b0 3911-build reproduces the
+             * oracle source (docs/oracle_tilesource_builder.md). */
+            if (getenv("FIST_FORCE395C"))
+                g_mem[FIST_EXT_BASE+0x395c] = (uint8_t)strtoul(getenv("FIST_FORCE395C"),0,0);
             g_fist_ext_int = 1;                    /* extender-mode flat FILEMGR INT 21h */
             m_ext_FUN_0000_89b0(inbox, inbox, inbox);
             g_fist_ext_int = 0;
+            /* FIST_DS3911DUMP (default OFF, READ-ONLY): dump the port's ds:0x3911 SOURCE buffer -- the
+             * static map-load buffer the extender's per-frame perspective tile-resample FUN_0000_689a
+             * samples (`add esi,[0x3911]` @ ext 0x6933).  89b0's tail (re_out/fist_ext.c ~13268) builds it:
+             * open TCB+0xaa asset -> 9ec0 read into [0x3911] -> bdc4 upsample per detail level.  Byte-
+             * compared against the oracle ground truth tools/oracle/samples/oracle_lighttile_source_ds3911_static.bin
+             * (docs/oracle_lighttile_source.md).  0x937 = the allocation size 36bf reserved. */
+            if (getenv("FIST_DS3911DUMP")) {
+                uint32_t src  = *(uint32_t *)(xb + 0x3911);
+                uint32_t sz   = *(uint32_t *)(xb + 0x937);
+                uint8_t *sp   = (src && src < 0x100000) ? (xb + src) : (uint8_t *)(uintptr_t)src;
+                fprintf(stderr, "[ds3911] [0x3911]=%08x  [0x937]size=%u (0x%x)  [0x395c]detail=%u  TCB[+0xcc]=%u [+0xd1]=%u [0x3958]=%08x\n",
+                        src, sz, sz, (unsigned)g_mem[FIST_EXT_BASE+0x395c],
+                        (unsigned)g_mem[tcb_lin+0xcc], (unsigned)g_mem[tcb_lin+0xd1],
+                        *(uint32_t*)(g_mem+FIST_EXT_BASE+0x3958));
+                if (src) { FILE *f=fopen(getenv("FIST_DS3911DUMP"),"wb");
+                    if(f){ long n = sz && sz <= 0x40000 ? sz : 0x40000; fwrite(sp,1,n,f); fclose(f);
+                        fprintf(stderr,"[ds3911] port source buffer %ld B -> %s\n", n, getenv("FIST_DS3911DUMP")); } }
+                if (getenv("FIST_DS3911EXIT")) { fflush(stderr); _exit(0); }
+            }
             /* FIST_BC90DUMP (default OFF): dump the 64 KB buffer bc9c just filled -- the LIVE [bc90]
              * target (during the map-load build [bc90] is aliased to the tile buffer, so this == the
              * port's bc9c blend-matrix output).  Compared byte-for-byte against the ORACLE's live bc9c
