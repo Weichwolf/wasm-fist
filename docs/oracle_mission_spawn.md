@@ -1,5 +1,56 @@
 # Oracle frame-matched AZER1 mission SPAWN capture — the port's black terrain is a RENDER bug, not a flight-model gap
 
+> ## 9200 V-SPAN — FINAL VERDICT (2026-07-17, 12th/last colour iteration) — **THE MECHANISM IS *NOT* THE
+> HORIZON TABLE (9114) NOR THE COUNT (90f0); IT IS THAT THE RECONSTRUCTED 9200 IS A CONSTANT-SCALE AFFINE
+> WHILE THE ORACLE'S WINDSHIELD TERRAIN IS A PERSPECTIVE RENDER. The perspective renderer is NOT in any
+> available image (paged-out Doug-Huffman extender PM) → NOT asm-derivable → definitive pin, no patch.**
+> Repro: `python3 tools/oracle/vspan_derive.py` (uses the committed frame-matched samples + two default-build
+> port dumps `FIST_BBDUMP`/`FIST_MISSFB_FBIDX`). Engine PRISTINE unchanged (`61453e42`/`0051cb56`/`75c6d726`).
+>
+> **PORT MACHINERY VALIDATED (the first time the port's terrain is reproduced exactly, offline).** `FUN_0000_9200`
+> is an asm-exact CONSTANT-SCALE affine (Mode-7) walk called ONCE for the whole window (`82b8 = {8120();
+> 9200(p1,p2); 82d0()}` passes a single `param_1/param_2 = ebp/esi` straight through; 9200's outer loop sweeps
+> all 81 scanlines with a per-scanline BASE step `90b8/90bc` but a CONSTANT inner step `esi/ebp`). Its clean
+> per-pixel map is `V(r,c)=90d8 + r·90b8 + c·esi`, `U(r,c)=90d4 − r·90bc + c·ebp`, `idx=tile[(V>>24)&255,(U>>24)&255]`.
+> Simulating that map with the **default-build globals** (`90d8=0x2dc548e0 90d4=0x7b463980 90b8=0x0088f59a
+> 90bc=0x00d84852`, `esi=(90c0=0x01000000·9104=0x6c24295e)>>32=7087145`, `ebp=(·9108=0x447acd50)>>32=4487885`,
+> `90f0=288 90f8=81 9114=ext:0x7568`) reproduces the port's rendered terrain window (288×81 @ screen (16,5))
+> at **99.3–99.8 %**. So the port's affine + the shim-guessed `esi/ebp` + 8120's `90b8/90bc/90d8/90d4` = EXACTLY
+> what the port draws.
+>
+> **TASK OPTIONS (a) HORIZON / (b) COUNT ARE RULED OUT.** The window is genuinely 288×81 (the 99.3 % alignment
+> is at the full 288-wide window; `90f0=288`=viewport width, `90f8=81`=scanlines, both = `TCB+0x1e/+0x22`, set
+> by 78e7). The horizon table `9114`→ext `0x7568` only skips the leftmost `horizon[r]` px per scanline — the
+> simulation IGNORES horizon and still matches 99.8 %, so `9114` is negligible for the terrain band. Neither
+> `90f0` nor `9114` is the mechanism.
+>
+> **THE V-SPAN CLAIM REFINED.** The prior pin ("port marches V to only row 126") is INACCURATE: the validated
+> port simulation samples tile V-rows **45–209** (165 distinct) — it DOES reach the light rows. The real
+> difference is the port's affine screen→tile map lands on DARKER texels (terrain mean idx 127) than the
+> oracle's map (mean 186) in the same window.
+>
+> **NO AFFINE REPRODUCES THE ORACLE.** port-params 0.4 %; broad offset-only search 2.9 %; general 6-param
+> hill-climb incl. rotation 4.5 % — while the same machinery self-reproduces the PORT at 99.8 %. CAVEAT: the
+> texture-lookup match surface is pathological (a 1-tile-pixel error scrambles ~all indices); the optimiser
+> recovers even *synthetic* known-affines only ~10–13 %, so this is necessary but not sufficient on its own.
+>
+> **DECISIVE OPTIMISER-INDEPENDENT EVIDENCE — the oracle is PERSPECTIVE, the port is FLAT AFFINE.** Per-screen
+> -row (top→bottom) luminance: PORT `69 68 68 67 66 65 64 62 60 59 58` (flat) vs ORACLE `135 138 145 138 119
+> 99 103 94 96 91 92` (a strong ~42-lum top→bottom depth gradient). Per-row horizontal texture activity
+> (texel/pixel scale proxy): PORT bottom/top ratio **0.92** (constant scale = affine) vs ORACLE **0.51**
+> (declines toward the viewer = perspective magnification). The oracle's depth-varying texture scale + depth
+> shading is the classic voxel/perspective signature a constant-scale affine cannot produce.
+>
+> **MECHANISM (pinned).** The windshield terrain in the running game is a PERSPECTIVE render (per-texel depth
+> divide → the tile step grows toward the viewer; + depth shading). The asm-exact affine `9200` (`edx+=esi`
+> constant, one call) has no room for that — and no affine parametrisation of `9200`'s inputs reproduces it.
+> The true perspective routine is absent from `re_out/fist_image.bin` and both `.DVR`s (the paged-out
+> Doug-Huffman extender PM code, consistent with the "task+0x3f2 read by nothing in FIST.DAT" finding). It is
+> therefore **NOT asm-derivable** — the honest close of the mission-terrain-colour investigation. Secondary,
+> AE-neutral (do NOT band-aid): the render-camera TCB `+0x3a/+0x3c` pitch/roll are never written on the
+> mission path (stale 0/−256), but fixing them only re-parametrises the affine and cannot add perspective.
+
+
 > ## FRAME-MATCHED VERDICT (2026-07-17, the definitive re-capture) — **THE FRAME-SKEW IS ELIMINATED, THE
 > ORACLE SPAWN IS NOW SELF-CONSISTENT, AND IT OVERTURNS THE 9200-VADDR PREMISE: the camera pitch/roll fix
 > does NOT make the port's terrain indices match. Every 9200 input (camera → globals → depth-step → tile) is
