@@ -1132,6 +1132,47 @@ int fist_extender_gate(void) {
      *     cockpit/HUD paint chain drew).
      *   - upload the mission DAC palette (ext+0x5598, 6-bit) so the dumped colours are the mission palette;
      *   - dump 0xA0000 (FIST_MISSFB=path) via the shared 6->8 VGA expander, then _exit(0).                */
+    /* ------------------------------------------------------------------------------------------------
+     * DEFAULT-PATH WINDSHIELD VOXEL RENDER (extender role).  The real Doug-Huffman extender's op-0x24
+     * PM service renders the perspective voxel terrain into 0xA0000 (oracle-proven the dominant AZER1
+     * fb writer; docs/oracle_terrain_writer.md + voxel-render-is-engine-side pin).  The engine posts
+     * op 0x24 from df0e once the cockpit view is active; here we emulate the extender by driving the
+     * decompiled render chain 8deb(viewport) -> 85d0(camera from TCB 0x2c/0x30 XY, 0x34 alt) ->
+     * 8120(projection) -> 9200(per-column texel walk).  This runs on the CANONICAL default build (no
+     * env gate) whenever a mission map is loaded, so gameplay draws terrain.
+     *
+     * CAMERA-Z TERRAIN-FOLLOW (asm 0x8650 + oracle spawn frame).  The absent 32-bit-PM flight model
+     * would write TCB+0x34 (the render altitude 85d0 reads) each frame as the terrain surface height
+     * under the camera XY plus the vehicle eye height.  No [c93+0x34] write exists in fist_image.bin
+     * (verified -- it is paged out), so the value is oracle-anchored: at spawn h=heightmap[camXY]=43,
+     * oracle alt=12800 = (43+7)<<8, i.e. alt = (h<<8) + FIST_EYE_HT where FIST_EYE_HT = 7<<8 = 1792
+     * (the M1A2 eye height, 7 world units, in the extender's <<8 world scale).  Heightmap index math =
+     * 0x8650's own: tile = (camXY<<13)>>(32-detail), idx = ((tileY&mask)<<detail)+(tileX&mask). */
+    if (op == 0x24 && g_ext_ready && g_fist_after_map) {
+        uint8_t  *xb  = g_mem + FIST_EXT_BASE;
+        uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        uint8_t  *tcb = g_mem + tcb_lin;
+        uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
+        *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)tcb;
+        /* terrain-follow camera-Z (0x8650 index math, oracle-anchored eye) */
+        uint32_t detail = *(uint32_t*)(xb+0x8490), mask = *(uint32_t*)(xb+0x849c);
+        uint8_t *hm = (uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0x85bc));
+        if (hm && detail) {
+            int32_t cx = *(int32_t*)(tcb+0x2c), cy = *(int32_t*)(tcb+0x30);
+            uint32_t tx = ((uint32_t)cx << 13) >> (32-detail);
+            uint32_t ty = ((uint32_t)(-(int32_t)((uint32_t)cy<<13))) >> (32-detail);
+            uint8_t  h  = hm[(((ty & mask) << detail) + (tx & mask)) & 0x3fffff];
+            *(int32_t*)(tcb+0x34) = (h << 8) + 1792;   /* FIST_EYE_HT = 7<<8 (oracle spawn alt 12800) */
+        }
+        /* the decompiled extender render chain (viewport -> camera -> projection -> texel walk) */
+        m_ext_FUN_0000_8deb();
+        m_ext_FUN_0000_85d0();
+        m_ext_FUN_0000_8120();
+        { int32_t c0 = *(int32_t*)(xb+0x90c0), v04 = *(int32_t*)(xb+0x9104), v08 = *(int32_t*)(xb+0x9108);
+          int32_t esi = (int32_t)(((int64_t)c0*v04)>>32), ebp = (int32_t)(((int64_t)c0*v08)>>32);
+          m_ext_FUN_0000_9200(ebp, esi); }
+        *(uint32_t*)(xb+0xc93) = save_c93;
+    }
     if (op == 0x24 && getenv("FIST_OP24TRACE") && g_ext_ready) {
         static int nt = 0;
         if (nt < 14) {
