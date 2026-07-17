@@ -1680,6 +1680,23 @@ int fist_extender_gate(void) {
             }
             *(uint32_t *)(xb + 0xbc90) = save_bc90;
             if (win && tile3918) *(uint32_t *)(xb + 0x3918) = tile3918 + win;  /* window the tile */
+            /* FIST_TILEWRAP (default OFF): faithful WRAPPED window of bc9c's 64KB block.
+             * The ORIGINAL's [3918] tile ptr windows bc9c's aligned block M at a 16-bit-offset that
+             * WRAPS at 64KB (the extender allocator's [bc90]/[3918] geometry across the 0x50000 block
+             * boundary).  The port's flat pointers can't 16-bit-wrap, and the non-wrapped `+win` seam
+             * above reads out-of-block garbage.  Measurement/repro proof (this iteration): the live
+             * bc9c block-base wrapped at 0xf200 == the oracle tile (rows 14..255 = 61952/61952 byte-
+             * exact; rows 0..13 = bc06's LOD region, a separate buffer-overlap follow-up).  Materialize
+             * the wrapped window into the tile buffer the 9200 sampler reads (in place; M/block-base is
+             * consumed only by the tile sampler after this point -- bdc4 reads the separate block A). */
+            if (getenv("FIST_TILEWRAP") && tile3918) {
+                uint32_t tw = (uint32_t)strtoul(getenv("FIST_TILEWRAP"),0,0);
+                uint8_t *M = (uint8_t *)(uintptr_t)tile3918;
+                uint8_t *tmp = (uint8_t *)malloc(0x10000);   /* heap: no static/BSS layout footprint */
+                if (tmp) { memcpy(tmp, M, 0x10000);
+                    for (uint32_t i = 0; i < 0x10000; i++) M[i] = tmp[(i + tw) & 0xffff];
+                    free(tmp); }
+            }
             *(uint32_t *)(xb + 0xc93) = save_c93;
             fprintf(stderr, "[ext] op 0x18 MAP-LOAD returned; detail[0x8490]=0x%x dim[0x8494]=%u (base=0x0b => 2048)\n",
                     *(uint32_t *)(xb + 0x8490), *(uint32_t *)(xb + 0x8494));

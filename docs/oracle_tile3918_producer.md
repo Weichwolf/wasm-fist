@@ -1,5 +1,43 @@
 # Oracle recon — the DEFINITIVE tile-3918 producer + the mission-TCB camera source
 
+> ## CORRECTION 4 (2026-07-17, tile-window MEASURED + the "tile is the render residual" premise DISPROVEN) — the tile window IS mis-pointed (byte-exact fix known), but CORRECTING it does NOT improve the render; the dominant colour residual is the `85b8` COLORMAP collapse (interlocking, gated).
+>
+> **The exact tile window (byte-exact, this iteration).** The port's `84c0` allocator lays `[3918]` as a
+> 64 KB-ALIGNED pointer (`low16 = 0`, e.g. `0x82f0000`), so `9200` samples bc9c's block `M` at **window 0**.
+> The original's `[3918] = 0x44200` is unaligned and the tile spans the `0x50000` 64 KB boundary with a
+> **16-bit-offset WRAP** inside bc9c's block → the effective sampled window is **`0xf200` (= 242 tile-rows;
+> so oracle tile row 14 aligns with `M` row 0)**. PROVEN by a full offline rotation scan of the LIVE port
+> block-base (`FIST_BBDUMP`, deterministic md5 `df10e603`) vs `oracle_bc9c_matrix_blockB_0x175200.bin`:
+> **`oracle_tile[i] == M[(i+0xf200)&0xffff]` for rows 14..255 = 61952/61952 = 100.0%** (rows 0..13 = bc06's
+> LOD region, a separate buffer-overlap follow-up; window 0 = the naive port = 32.6%). So the port tile at
+> `[3918]` is the oracle tile **shifted by `0xf200` bytes, WITH 16-bit wrap.** The `&0xffff` wrap is
+> load-bearing: the pre-existing `FIST_TILEWIN` seam (`[3918]=base+win`, NO wrap) reads out-of-block garbage
+> (`0/3584` in-bounds at `0xf200`) — which is why every prior `TILEWIN` test showed no effect. The new
+> default-OFF **`FIST_TILEWRAP=0xf200`** seam (`tools/native_main.c`, op-0x18 map-load) materializes the
+> correct WRAPPED window into the tile buffer the sampler reads (rows 14..255 byte-exact to the oracle).
+>
+> **BUT correcting the window does NOT improve the rendered spawn frame — MEASURED (4 combos, spawn post #1,
+> covered region 25297 px, oracle mean (124,113,90)):**
+> | build | covered-region SAD vs oracle | terrain mean rows8-88 |
+> |---|---|---|
+> | base 5598 (current default, "scrambled" tile 32.6%) | **3.41M** | (107,79,58) — CLOSEST |
+> | base 5260 (faithful palette) | 3.52M | (81,68,51) |
+> | **wrap 0xf200** 5598 (tile 89% oracle) | 3.79M — WORSE | (102,75,56) |
+> | wrap 0xf200 + 5260 | 3.97M — WORST | (72,61,47) |
+>
+> Full-frame AE is flat (29285→29280). Making the tile **byte-exact to the oracle moves the render AWAY from
+> the oracle** (darker), and the faithful `5260` palette makes it worse, alone or combined. This **DISPROVES**
+> the premise "the residual is the 9200 sampler reading scrambled tile3918 indices; NOT the palette."
+>
+> **Why (interlocking bugs):** the render index = `tile[depth][col]`, `col` = the terrain COLORMAP `85b8`.
+> `FIST_MAPPROBE` shows the port's `85b8` texture collapses to **89 distinct vs oracle 254** — so `col` is
+> WRONG. A byte-exact tile sampled at the WRONG `col` gives darker/wrong colours; the current "scrambled"
+> tile happens to land closer under the wrong `col`. The tile-window fix is **NECESSARY but gated behind the
+> `85b8` colormap fix** (the `bdc4` block-A→85b8 upsample collapse — see `colormap-groundtruth`); fixing
+> either alone can't help / can hurt. **Also a stale-doc correction:** the "port covers only ~2150 px of the
+> windshield vs oracle ~25300" residual is GONE — the port now covers **25297/25600 px = full width** (same
+> as the oracle). Repro: `FIST_TILEWRAP=0xf200`, `FIST_MISSFB_PAL5260=1`, `FIST_BBDUMP`, `FIST_MAPPROBE`.
+>
 > ## CORRECTION 3 (2026-07-13, patch-291 iteration) — THE PRODUCER IS DEFINITIVELY `bc9c` (+ `bc06`), PROVEN BY A PER-BYTE LAST-WRITER MAP. CORRECTION 2's "a LATE fog-LUT pass the backtrace missed" is DISPROVEN. There is NO late producer.
 >
 > **Method (decisive, non-circular, byte-exact).** The DOSBox oracle was extended with a **per-byte
