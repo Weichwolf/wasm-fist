@@ -94,3 +94,41 @@ Patch 295c3bf (shim, in-mission-guarded) wired 9200 + the oracle-exact camera-Z 
 - **Later op-0x24 posts are NON-deterministic** (post #30 md5 varies `20692847`/`aac4b376`) because the live camera XY BLOWS UP (66M/331M) — the wall-clock-dependent flight-model over-run (only visible now that terrain renders). Post #1/spawn is stable; later frames need the camera-XY determinism (a separate frontier).
 - verify.sh both = 24/24 (in-mission guard → menu flows unaffected); pristine engine unchanged.
 **RANKED spawn-frame residuals (vs ref/mission_azer1_spawn_native320.png):** (1) **render coverage** — the voxel terrain covers only ~2150 px of the windshield vs the oracle's ~25300 (the ~81-col window / horizon / clip — WHY does the port cover a fraction of the width the oracle fills? = the biggest residual); (2) **tile palette ~2× too dark** (browns 60,32,12 vs 125,109,77 — the tile3918/85b8 colormap-collapse, 175 vs 212 distinct — NOT block A which is byte-exact); (3) **sky band** (blue 93,97,117 rows 8-20, `.SKY`-fed, absent); (4) camera projection / horizon position; (5) later-post camera-XY determinism.
+
+> ## CORRECTION (2026-07-17, colour-fidelity iteration) — RESIDUAL #2 IS **NOT** A PALETTE BUG **NOR A TILE-CONTENT BUG**; IT IS THE RENDERER SAMPLING THE **DARK ROWS** OF A CORRECT TILE (the depth-row / camera-projection geometry = residual #1/#4). No palette or bc9c fix warranted this iteration.
+>
+> **Method (decisive, mostly offline; live spawn frame deterministic md5 `b15766c0`, FULL-frame AE 33253).**
+> Captured the default 92a2692 spawn (`setarch -R FIST_COOP_TICK=1 FIST_TICK_HZ=25000 …
+> FIST_MISSFB_N=1`, ext image `re_out/fist_image.bin` present — it is gitignored, `make kernel-image` in a
+> fresh worktree first or g_ext_ready stays false and NO op-0x24 post fires). Dumped the fb indices
+> (`FIST_MISSFB_FBIDX/FBDUMP`), the merged DAC (`pal_merged.bin`), the live tile (`FIST_MTXDUMP`) and the
+> bc9c block-base (`FIST_BBDUMP`), and mapped everything through the loaded 532.pal.
+>
+> **(a) PALETTE RULED OUT.** The mission DAC band 80..255 is byte-exact 532.pal (`FIST_MISSFB_PALCMP`:
+> eng782 == ext5598 in the terrain band, e.g. idx220), the 6→8 expansion is correct VGA bit-replication,
+> and **532.pal CONTAINS the oracle browns** — the oracle's (125,109,77) is idx 90/106/170 (dist ≤13),
+> its (117,101,48) is **exactly idx 180**. So the light tans the oracle shows are reachable; the palette
+> is not the problem.
+>
+> **(b) TILE CONTENT RULED OUT.** The port bc9c block-base (`FIST_BBDUMP`) windowed at **0xf200 == oracle
+> blockB rows 14..255 = 61952/61952 (100%)** (rows 0..13 = bc06 LOD, the known separate gap), and — mapped
+> through 532.pal — the port block-base and the oracle blockB have **IDENTICAL colour distribution**: same
+> mean RGB **(120,88,61)** and identical top-5 indices+counts (idx80 6885/6926, idx111 1703, idx102 1539,
+> idx125 1513, idx97 1245). The 175-vs-212 distinct is only in the rare tail. bc9c is fine for colour.
+>
+> **(c) THE REAL DEFECT = the renderer samples the DARK rows of the tile.** The port RENDER's terrain-band
+> mean is **(109,78,54)** — BELOW the tile-content mean (120,88,61); its top rendered indices are 83
+> (65,48,12), 118 (85,40,24), 151 (44,28,24) = the DARK end. The oracle RENDER is **(122,106,71)** — ABOVE
+> the tile mean, GREENER than the tile content, i.e. it samples the LIGHT/green rows. Since the tile the two
+> read is byte-equal in content, the divergence is **which texels the ray-march / depth-projection selects**
+> (the tile's row axis IS the depth-shade ramp; the port picks deeper/darker rows). Empirically **no window
+> offset fixes it**: `FIST_TILEWIN`/a faithful wrap-around rotation (new default-OFF `FIST_TILEROT` seam,
+> tested 0x4200/0xf200) move the render mean by ≤6 and never reach (122,106,71); FULL AE stays 33248..33279.
+>
+> **VERDICT.** Residual #2 as originally phrased ("tile palette 2× too dark") is a **red herring** — the
+> per-pixel (60,32,12) vs (125,109,77) top-colour was a geometry artifact (different coords sample different
+> texels). Colour fidelity is **GATED behind residual #1/#4** (the windshield coverage + camera/depth
+> projection): once the port samples the same texels as the oracle, the identical tile+palette will produce
+> the identical colours. Owners: camera-settle-render / windshield-render-wire / voxel-render-coverage.
+> **No engine/ext/shim change lands** (the `FIST_TILEROT` experiment did not help → reverted; pristine
+> `61453e42`/`0051cb56`/`75c6d726` unchanged).
