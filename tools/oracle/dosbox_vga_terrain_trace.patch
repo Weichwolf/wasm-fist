@@ -197,6 +197,47 @@
 +		"90f0=%u 90f8=%u hzptr=%08x vga.mode=%d pmode=%d\n",
 +		r9200_passno, r9200_esi, r9200_ebp, g4, g8, (g8>>24)&0xff, gb8, gbc, gf0, gf8,
 +		r9200_hzptr, (int)vga.mode, (int)cpu.pmode);
++	/* ---- LIGHT-TILE PHYS RESOLUTION (wasm-fist light-tile source hunt): translate the render-time
++	 * tile linear address (ext base r9200_base + 0x44200 = 0x10044200) through the CURRENT CR3 to the
++	 * phys page that actually backs the tile 9200 sampled this frame (paging remaps ext-flat 0x44200 to
++	 * a DIFFERENT phys page at render time than the fixed 0x175200 the fixed-phys watch assumed).  Also
++	 * resolve+dump the 0x689a resample SOURCE (ds:0x3911) that the light tile is resampled FROM, and
++	 * dump the full RAM once so the source's own builder can be pinned by a phys last-writer. */
++	{
++		Bit32u tlin = r9200_base + 0x44200;
++		Bit32u tph  = fist_flat_to_phys(tlin);
++		Bit32u tsmc = mem_readd(r9200_base + 0x3918);  /* the SMC tile base ds:0x3918 */
++		Bit32u smclin = r9200_base + (tsmc & 0x00ffffffu);
++		Bit32u smcph  = fist_flat_to_phys(smclin);
++		Bit32u src3911 = mem_readd(r9200_base + 0x3911);   /* 0x689a resample SOURCE ptr */
++		Bit32u p3916   = mem_readd(r9200_base + 0x3916);   /* detail column-shift */
++		Bit32u p391c   = mem_readd(r9200_base + 0x391c);   /* tile byte-count */
++		Bit32u disp3958= mem_readd(r9200_base + 0x3958);   /* [0x3958] = 0x6877 const-fill OR 0x689a resample */
++		Bit32u srclin  = r9200_base + (src3911 & 0x00ffffffu);
++		Bit32u srcph   = fist_flat_to_phys(srclin);
++		fprintf(stderr, "[r92phys] pass %02d cr3=%08x paging=%d  tile_lin=%08x->phys=%08x  "
++			"ds:3918=%08x smclin=%08x->phys=%08x  ds:3911(SRC)=%08x srclin=%08x->phys=%08x "
++			"ds:3916=%08x ds:391c=%08x ds:3958(disp)=%08x\n",
++			r9200_passno, (Bit32u)paging.cr3, (int)paging.enabled, tlin, tph, tsmc, smclin, smcph,
++			src3911, srclin, srcph, p3916, p391c, disp3958);
++		{ /* dump the 0x689a resample SOURCE (256KB from ds:0x3911, paging-translated) */
++			static Bit8u src[0x40000];
++			for (int i = 0; i < 0x40000; i++) src[i] = mem_readb(srclin + i);
++			char sp[700]; snprintf(sp, sizeof sp, "%s.pass%02d.src3911.bin", fist_prefix, r9200_passno);
++			FILE *sf = fopen(sp, "wb"); if (sf) { fwrite(src, 1, 0x40000, sf); fclose(sf); }
++		}
++		static int ramdumped = 0;
++		if (!ramdumped) {
++			ramdumped = 1;
++			snprintf(path, sizeof path, "%s.pass%02d.ram.bin", fist_prefix, r9200_passno);
++			f = fopen(path, "wb");
++			if (f) {
++				Bitu bytes = MEM_TotalPages() * 4096;
++				if (bytes > 16u*1024*1024) bytes = 16u*1024*1024;
++				fwrite(MemBase, 1, bytes, f); fclose(f);
++			}
++		}
++	}
 +}
 +/* ==== end 9200 frame-matched capture ==== */
 +
