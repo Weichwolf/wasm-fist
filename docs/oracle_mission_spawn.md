@@ -1,5 +1,51 @@
 # Oracle frame-matched AZER1 mission SPAWN capture — the port's black terrain is a RENDER bug, not a flight-model gap
 
+> ## RAW-INDEX VERDICT (2026-07-17, the "raw 0xA0000 vs port" iteration) — **THE 8-ITERATION PARADOX IS
+> RESOLVED, AND *NOT* IN THE "PNG-INVERSION IS THE FLAW" DIRECTION. The port's rendered terrain indices
+> genuinely DIFFER from the oracle's RAW VGA index buffer (0.31% match) — the PNG-inversion was NOT the flaw.
+> The render is STRUCTURALLY DIFFERENT: with byte-exact oracle inputs injected, the port's 9200 samples the
+> tile's DARK (low) rows while the oracle samples the LIGHT (high) rows. This is a 9200 texel-ROW addressing
+> bug, NOT a DAC/palette/LUT bug.** Engine PRISTINE (61453e42/0051cb56/75c6d726); no change lands (band-aids
+> forbidden; the fix is a faithful 9200-inner-loop reversal, owner: voxel-projection / voxel-depth-step).
+>
+> **(1) RAW oracle index-buffer extraction (ground truth, NOT PNG-inverted).** `capture_mission_spawn.sh`
+> dumps `<pfx>.vram.bin` (raw `vga.mem.linear`, 256 KB) + `<pfx>.pal.bin` (DAC) at the SIGUSR2 tick. The
+> mode is **DOSBox `vga.mode=3` = M_VGA (mode-13h CHAINED)** (from `<pfx>.writers.txt`). DOSBox's chain-4
+> store spreads framebuffer pixel `n` (n=0..63999) to `vga.mem.linear` at **`lin = ((n>>2)<<4) | (n&3)`** —
+> proven decisively: the frame's max nonzero offset is `0x3e7f3`, which is EXACTLY `((63999>>2)<<4)|3`, and
+> the whole-vram nonzero count 56894 == the PNG's 56897, distinct 136 == 136. **Oracle index buffer =
+> `idx[n] = vram[((n>>2)<<4)|(n&3)]`.**
+>
+> **(2) SANITY CHECK PASSES — raw → DAC == ref PNG.** Mapping the extracted `idx` through the dumped DAC
+> reproduces the freshly-captured `oracle_spawn.png` at **86.4% overall, 98.7% on the STATIC cockpit (rows
+> 88-200), 90.9% sky**; all 64000 PNG colours are present in the DAC (0 unresolved). The ~31% terrain
+> residual is pure FRAME-SKEW (the capture grabs the PNG, THEN fires SIGUSR2 after a `sleep 1`, so the vram
+> is a slightly later voxel frame — the camera drove ~500 units). So the committed DAC + the ref PNG + the
+> vram are MUTUALLY CONSISTENT for the static frame — the docs-(4) "mutually inconsistent captures" worry
+> is disproven for the palette/DAC; the layout+DAC are correct.
+>
+> **(3) THE PRIMARY DELIVERABLE — RAW port-vs-oracle index match (both from real 0xA0000).** Port buffer =
+> `FIST_MISSFB_FBIDX FIST_MISSFB_FBDUMP` → `/tmp/fb_idx.bin` (spawn post #1, deterministic). Region match:
+> cockpit **76.7%**, sky **54%**, **terrain (rows 8-88) 7.6%**, and in the true terrain band (idx>=80) only
+> **0.31%** — essentially IDENTICAL to the prior 0.2% PNG-inverted number. **=> The PNG-inversion was NOT
+> the methodology flaw; the render genuinely diverges.** Injecting byte-exact oracle projection globals +
+> horizon (`FIST_ISO_PROJ FIST_ISO_HZ`) + the FRAME-MATCHED oracle tile (`FIST_ISO_TILE`, extracted from the
+> same RAM dump @ phys 0x175200) leaves the band-match at **0.00%** — every 9200 input byte-exact, output
+> still wrong.
+>
+> **(4) THE PIN (precise, decisive).** The oracle terrain output indices are ALL in the tile (only sky/fog
+> idx 0-33/251/252 aren't) → **no colour LUT; the render is pure tile sampling.** Oracle terrain is dominated
+> by idx **179 (3069px) / 151 (2627) / 163 (1494) / 156 / 228 / 183** — which live in the tile's **HIGH rows
+> (179 @ rows 122-248, 151 @ 101-242, 163 @ 116-242) = the LIGHT/textured band**. The port (even with the
+> oracle tile injected) is dominated by idx **102 (922) / 144 / 118 / 105 / 97** — the tile's **LOW rows (97
+> @ 14-155, 102 @ 14-186, 80 @ 3-100) = the DARK band** (port idx 80 count in the render ≈ 0 though the tile
+> is 80-dominated; oracle idx 80 ≈ 321). **Same tile, byte-exact projection → `FUN_0000_9200` addresses the
+> wrong colormap ROW (the `(edx>>24)` V-address is systematically LOW).** This confirms the colour-fidelity
+> iteration's "port samples the DARK rows of a correct tile" thesis with the RAW ground truth, and refutes
+> "palette / DAC / PNG-inversion" as the cause. Repro seams (all default-OFF): oracle `capture_mission_spawn.sh`
+> (`.vram.bin`+`.pal.bin`), de-interleave `idx[n]=vram[((n>>2)<<4)|(n&3)]`; port `FIST_MISSFB_FBIDX/FBDUMP`;
+> inject `FIST_ISO=1 FIST_ISO_PROJ=1 FIST_ISO_HZ=1 FIST_ISO_TILE=<64KB@0x175200>`.
+>
 > ## 9200 DEPTH-STEP VERDICT (2026-07-17, the "capture param_1/param_2" iteration) — **THE 9200 DEPTH-STEP
 > IS ALREADY FAITHFUL. The task premise ("the shim guesses the per-row depth step wrong") is REFUTED by
 > disassembly + camera-injection + offline sim. NO shim/engine change warranted; the divergence is UPSTREAM
