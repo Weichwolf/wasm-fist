@@ -2445,6 +2445,140 @@ static void ovl_selftest(void) {
     fprintf(stderr, "[selftest] done (overlay load + reloc + register + fmap wiring + dispatch resolve).\n");
 }
 
+/* ============================================================================================
+ * FIST_6980PROVE -- STANDALONE integration-readiness proof for the mission-terrain colour fix.
+ * (default OFF; runs BEFORE the engine boot and _exit()s, so it cannot touch the 25 verify flows.)
+ *
+ * Feeds the port's REAL FUN_0000_6980 (m_ext_FUN_0000_6980) the FRAME-MATCHED render-time inputs
+ * captured by FIST_R6980CAP (docs/oracle_colour_gate.md) and byte-compares its tile output to the
+ * banked oracle 6980 shadow (== 6980's actual render-time stores, byte-exact ground truth).
+ *
+ * The 3 real-port fixes this exercises:
+ *   (1) COLORMAP -> LIGHT REDUCE:  6980's colour read `mov al,[esi+ecx+0x100000]` must return the
+ *       bdc4 LIGHT reduce (max 228), not the port's dark C32 (max 104).  Here we place the captured
+ *       LIGHT reduce at [0x85bc]+0x100000 (FIST_6980PROVE=dark places the C32 to show the baseline).
+ *   (2) RAMPS-BANK:  3a24/3e24/4224/4624 are paged-boot-filled (all-1 in fist_image.bin) -> banked
+ *       here from the capture at ext_base+off.  90c0==90c4 in the capture, so 6980 skips 395e and
+ *       consumes 4224/4624 directly (the faithful render-time path).
+ *   (3) PROJ-SMC-MODEL:  patches/342 threads [0x3909]'s VALUE (the proj host ptr) + the per-depth
+ *       +0x100 SMC base into the two colour-column lookups (Ghidra emitted the static 0x7fffffff
+ *       immediate + a byte-deref of LAB_3909 -> wild deref/SIGSEGV).  Same patch rebases 6980's
+ *       un-based in-image data refs (0x9454 matrix, 0x4224/0x4624 ramps) to g_mem+fist_ext_base.
+ *
+ * Bundle layout (tools/oracle/samples/voxel6980_framematched_pass08.bin.gz):
+ *   'C69G' + passno(4) + ext[0x9000..0x9200](0x200) + 16 named globals(64) + ramps 4*256(4096)
+ *   + proj(0xfa00) + HM(1MB) + LIGHT-reduce(1MB) + dark-C32(1MB) + tile(64K) + shadow(64K)
+ * ============================================================================================ */
+static void pv_rd(FILE *p, void *dst, size_t n, const char *what) {
+    size_t got = fread(dst, 1, n, p);
+    if (got != n) { fprintf(stderr, "[6980prove] FATAL short read of %s: %zu/%zu\n", what, got, n); _exit(2); }
+}
+static void fist_6980_prove(void) {
+    const char *mode = getenv("FIST_6980PROVE");
+    int use_dark = mode && strcmp(mode, "dark") == 0;
+    FILE *p = popen("gzip -dc tools/oracle/samples/voxel6980_framematched_pass08.bin.gz", "r");
+    if (!p) { fprintf(stderr, "[6980prove] FATAL: cannot popen the bundle\n"); _exit(2); }
+    char magic[4]; pv_rd(p, magic, 4, "magic");
+    if (memcmp(magic, "C69G", 4) != 0) { fprintf(stderr, "[6980prove] FATAL: bad magic\n"); _exit(2); }
+    uint32_t passno; pv_rd(p, &passno, 4, "passno");
+    static uint8_t ext[0x200]; static uint32_t g[16]; static uint32_t ramp[1024];
+    static uint8_t proj[0xfa00];
+    static uint8_t HM[0x100000], RED[0x100000], CM[0x100000], tile_o[0x10000], shadow[0x10000];
+    pv_rd(p, ext, 0x200, "ext");         pv_rd(p, g, 64, "g");        pv_rd(p, ramp, 4096, "ramp");
+    pv_rd(p, proj, 0xfa00, "proj");      pv_rd(p, HM, 0x100000, "HM"); pv_rd(p, RED, 0x100000, "RED");
+    pv_rd(p, CM, 0x100000, "CM");        pv_rd(p, tile_o, 0x10000, "tile"); pv_rd(p, shadow, 0x10000, "shadow");
+    pclose(p);
+    #define GE(off) (*(uint32_t*)(ext + ((off) - 0x9000)))
+
+    uint8_t *xb = g_mem + FIST_EXT_BASE;
+
+    /* (1) colormap buffer: HM at +0, colour source at +0x100000; [0x85bc] = host ptr */
+    uint8_t *hmcm = (uint8_t*)malloc(0x200000);
+    memcpy(hmcm,            HM,                       0x100000);
+    memcpy(hmcm + 0x100000, use_dark ? CM : RED,      0x100000);
+    *(uint32_t*)(xb + 0x85bc) = (uint32_t)(uintptr_t)hmcm;
+    *(uint32_t*)(xb + 0x85b8) = (uint32_t)(uintptr_t)(hmcm + 0x400000); /* unused by 6980, kept sane */
+
+    /* proj table @ [0x3909], 0x100-aligned (the SMC base masks the low byte) */
+    uint8_t *projraw = (uint8_t*)malloc(0x10200);
+    uint8_t *projbuf = (uint8_t*)(((uintptr_t)projraw + 0xff) & ~(uintptr_t)0xff);
+    memset(projbuf, 0, 0x10000); memcpy(projbuf, proj, 0xfa00);
+    *(uint32_t*)(xb + 0x3909) = (uint32_t)(uintptr_t)projbuf;
+
+    /* tile scratch @ [0x3918] (zeroed: 6980 overlays terrain spans, so the compare is direct) */
+    uint8_t *tile = (uint8_t*)calloc(1, 0x10000);
+    *(uint32_t*)(xb + 0x3918) = (uint32_t)(uintptr_t)tile;
+    /* per-depth y-buffer save @ [0x390d] (250*0x100) */
+    uint8_t *ybuf = (uint8_t*)calloc(1, 0x10000);
+    *(uint32_t*)(xb + 0x390d) = (uint32_t)(uintptr_t)ybuf;
+
+    /* (2) banked ramps at ext_base+off (patch-342 rebases 6980's reads here) */
+    memcpy(xb + 0x3a24, &ramp[0],   256*4);
+    memcpy(xb + 0x3e24, &ramp[256], 256*4);
+    memcpy(xb + 0x4224, &ramp[512], 256*4);
+    memcpy(xb + 0x4624, &ramp[768], 256*4);
+
+    /* world camera + scale (6980 recomputes 90fc/9100 from 90e0 + the image matrix) */
+    *(uint32_t*)(xb + 0x90d4) = GE(0x90d4); *(uint32_t*)(xb + 0x90d8) = GE(0x90d8);
+    *(uint32_t*)(xb + 0x90dc) = GE(0x90dc); *(uint32_t*)(xb + 0x90e0) = GE(0x90e0);
+    *(uint32_t*)(xb + 0x90c0) = g[10];      *(uint32_t*)(xb + 0x90c4) = g[15]; /* ==90c0 -> skip 395e */
+
+    /* scalars */
+    *(uint32_t*)(xb + 0x38ed) = g[4];  *(uint32_t*)(xb + 0x38f1) = g[5];
+    *(uint32_t*)(xb + 0x38fd) = g[6];  *(uint32_t*)(xb + 0x3901) = g[7];
+    *(uint32_t*)(xb + 0x3905) = g[8];  *(uint32_t*)(xb + 0x3a20) = g[9];
+
+    /* ---- run the REAL port 6980 ---- */
+    extern void m_ext_FUN_0000_6980(void);
+    m_ext_FUN_0000_6980();
+
+    /* geometry sanity: 6980 recomputes 90fc/9100 from 90e0 + the image matrix */
+    fprintf(stderr, "[6980prove] pass %u mode=%s | recomputed 90fc=%08x 9100=%08x  (capture ad301958/9e669af4)\n",
+            passno, use_dark ? "dark-C32(baseline)" : "LIGHT-reduce(fix)",
+            *(uint32_t*)(xb + 0x90fc), *(uint32_t*)(xb + 0x9100));
+
+    /* byte-compare tile vs the oracle 6980 shadow (both start from 0 -> full-64K compare is exact) */
+    long same = 0, tnz = 0, snz = 0, both = 0, mism = 0, over = 0, under = 0;
+    for (int i = 0; i < 0x10000; i++) {
+        uint8_t t = tile[i], s = shadow[i];
+        if (t == s) same++;
+        if (t) tnz++;
+        if (s) snz++;
+        if (t && s) { both++; if (t != s) mism++; }
+        if (t && !s) over++;
+        if (!t && s) under++;
+    }
+    fprintf(stderr,
+        "[6980prove] tile-vs-shadow: byte-exact %ld/65536 (%.4f%%) | tile_nz=%ld shadow_nz=%ld "
+        "both_nz=%ld mism=%ld over=%ld under=%ld\n",
+        same, 100.0 * same / 65536.0, tnz, snz, both, mism, over, under);
+    /* also: over the shadow's own footprint (rows 0-159 terrain), how many match? */
+    long fnz = 0, fmatch = 0;
+    for (int i = 0; i < 0x10000; i++) if (shadow[i]) { fnz++; if (tile[i] == shadow[i]) fmatch++; }
+    fprintf(stderr, "[6980prove] over-shadow-footprint: %ld/%ld (%.4f%%) exact where 6980 wrote\n",
+            fmatch, fnz, fnz ? 100.0 * fmatch / fnz : 0.0);
+
+    /* ---- DECISIVE COLOUR GATE (value-set containment, geometry-independent) ---- */
+    /* what colour values did the port's 6980 emit, and are they LIGHT (in the reduce) or dark C32? */
+    int seenT[256] = {0}, seenS[256] = {0}, seenR[256] = {0}, seenC[256] = {0};
+    long tsum = 0; int tmin = 255, tmax = 0, tdist = 0;
+    for (int i = 0; i < 0x10000; i++) if (tile[i]) { int v = tile[i]; if (!seenT[v]) { seenT[v] = 1; tdist++; } tsum += v; if (v < tmin) tmin = v; if (v > tmax) tmax = v; }
+    for (int i = 0; i < 0x10000; i++) if (shadow[i]) seenS[shadow[i]] = 1;
+    for (int i = 0; i < 0x100000; i++) { seenR[RED[i]] = 1; seenC[CM[i]] = 1; }
+    int inR = 0, inC = 0, inS = 0;
+    for (int v = 0; v < 256; v++) if (seenT[v]) { if (seenR[v]) inR++; if (seenC[v]) inC++; if (seenS[v]) inS++; }
+    fprintf(stderr, "[6980prove] PORT tile value-set: distinct=%d mean=%.1f min=%d max=%d\n",
+            tdist, tnz ? (double)tsum / tnz : 0.0, tdist ? tmin : 0, tmax);
+    fprintf(stderr, "[6980prove]   contained in LIGHT-reduce(max228): %d/%d | dark-C32(max104): %d/%d | oracle-shadow: %d/%d\n",
+            inR, tdist, inC, tdist, inS, tdist);
+    fprintf(stderr, "[6980prove]   COLOUR VERDICT: the port's 6980 emitted %s colours\n",
+            (tmax > 104) ? "LIGHT (>dark-C32 max 104) == the reduce; the colour fix WORKS through the real 6980"
+                         : "DARK (<=104); the colour source is still the dark C32");
+    const char *dp = getenv("FIST_6980PROVE_DUMP");
+    if (dp) { FILE *df = fopen(dp, "wb"); if (df) { fwrite(tile, 1, 0x10000, df); fclose(df); fprintf(stderr, "[6980prove] dumped port tile -> %s\n", dp); } }
+    #undef GE
+}
+
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
 #ifndef __EMSCRIPTEN__
@@ -2457,6 +2591,7 @@ int main(int argc, char **argv) {
     load_image();
     setup_dos_env();
     ext_module_init();          /* load + register the extender KDV-player module (re_out/fist_ext.c) */
+    if (getenv("FIST_6980PROVE")) { fist_6980_prove(); return 0; }
     if (getenv("FIST_OVL_SELFTEST")) { ovl_selftest(); return 0; }
     if (getenv("FIST_NORUN")) {
         fprintf(stderr, "[fist] FIST_NORUN set: link/load OK, not entering engine.\n");
