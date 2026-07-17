@@ -1754,7 +1754,11 @@ int fist_extender_gate(void) {
              * offset 0x4200 (=row 66).  Port Route-1 pointers are 64KB-aligned (low16=0) so the window
              * offset is lost.  With FIST_TILEWIN=0x4200: build into the aligned base, then window [3918]. */
             uint32_t win = getenv("FIST_TILEWIN") ? (uint32_t)strtoul(getenv("FIST_TILEWIN"),0,0) : 0;
-            if (tile3918) *(uint32_t *)(xb + 0xbc90) = tile3918;   /* bc90 REUSED = tile aligned base */
+            /* FIST_NOTILEALIAS (default OFF, DIAGNOSTIC): skip the bc90->tile3918 alias so bdc4 reads the
+             * preloaded BLOCK A -> the 254-distinct LIGHT reduce lands at [0x85b8] instead of the 89-collapse
+             * (colormap-groundtruth part 2).  Measures the reduce source's distinct-count.  Corrupts the tile
+             * build (bc9c writes to blockA), so tile metrics are invalid under this flag -- reduce-only test. */
+            if (tile3918 && !getenv("FIST_NOTILEALIAS")) *(uint32_t *)(xb + 0xbc90) = tile3918;   /* bc90 REUSED = tile aligned base */
             /* FIST_FORCE395C (default OFF, DIAGNOSTIC): 89b0's tail builds ds:0x3911 (the 689a source)
              * only when [0x395c]!=0.  [0x395c] is set by the 5c98 .MEG-file findfirst probe (4/8/16/40.MEG),
              * which finds nothing in our data dir -> 395c stays 0 -> the source build is skipped.  Forcing
@@ -1820,6 +1824,18 @@ int fist_extender_gate(void) {
                 uint32_t cmb = *(uint32_t*)(xb+0x85b8);
                 if (cmb) { FILE *f=fopen(getenv("FIST_CMDUMP"),"wb"); if(f){ fwrite((void*)(uintptr_t)cmb,1,0x400000,f); fclose(f);
                     fprintf(stderr,"[cmdump] 85b8 colormap dumped -> %s\n", getenv("FIST_CMDUMP")); } }
+            }
+            /* FIST_HMDUMP (default OFF, READ-ONLY): dump the port's OWN op-0x18-decoded HEIGHTMAP as 6980
+             * addresses it -- [0x85bc] first 1MB (the coord layout hm[(v>>22)<<10|(u>>22)]).  Byte-compared
+             * to the capture HM (voxel6980_framematched_pass08) to settle whether the port's own contiguous
+             * map differs from the flat frame-boundary capture. */
+            if (getenv("FIST_HMDUMP")) {
+                uint32_t hb = *(uint32_t*)(xb+0x85bc);
+                if (hb) { FILE *f=fopen(getenv("FIST_HMDUMP"),"wb"); if(f){ fwrite((void*)(uintptr_t)hb,1,0x100000,f); fclose(f);
+                    fprintf(stderr,"[hmdump] port [0x85bc] heightmap first 1MB -> %s\n", getenv("FIST_HMDUMP")); }
+                    uint32_t cb=*(uint32_t*)(xb+0x85bc)+0x100000;
+                    FILE *g2=fopen("/tmp/port_CM.bin","wb"); if(g2){ fwrite((void*)(uintptr_t)cb,1,0x100000,g2); fclose(g2); } }
+                if (getenv("FIST_HMEXIT")) { fflush(stderr); _exit(0); }
             }
             /* FIST_MTXDUMP: dump the 64 KB blend matrix that bc9c filled + bdc4 read (aliased at 0x3918). */
             if (getenv("FIST_MTXDUMP")) {
@@ -2488,6 +2504,15 @@ static void fist_6980_prove(void) {
     pv_rd(p, proj, 0xfa00, "proj");      pv_rd(p, HM, 0x100000, "HM"); pv_rd(p, RED, 0x100000, "RED");
     pv_rd(p, CM, 0x100000, "CM");        pv_rd(p, tile_o, 0x10000, "tile"); pv_rd(p, shadow, 0x10000, "shadow");
     pclose(p);
+    /* FIST_6980PROVE_HM=<file> (default OFF): override the capture HM with the port's OWN op-0x18-decoded
+     * heightmap (dumped via FIST_HMDUMP) -- isolates whether the port's own contiguous map fixes the
+     * over-draw.  FIST_6980PROVE_RED=<file> likewise overrides the LIGHT reduce (colour slot). */
+    { const char *hf=getenv("FIST_6980PROVE_HM");
+      if (hf) { FILE *h=fopen(hf,"rb"); if(h){ size_t n=fread(HM,1,0x100000,h); fclose(h);
+        fprintf(stderr,"[6980prove] overrode HM from %s (%zu B)\n", hf, n); } } }
+    { const char *rf=getenv("FIST_6980PROVE_RED");
+      if (rf) { FILE *h=fopen(rf,"rb"); if(h){ size_t n=fread(RED,1,0x100000,h); fclose(h);
+        fprintf(stderr,"[6980prove] overrode RED reduce from %s (%zu B)\n", rf, n); } } }
     #define GE(off) (*(uint32_t*)(ext + ((off) - 0x9000)))
 
     uint8_t *xb = g_mem + FIST_EXT_BASE;
@@ -2522,6 +2547,10 @@ static void fist_6980_prove(void) {
     *(uint32_t*)(xb + 0x90d4) = GE(0x90d4); *(uint32_t*)(xb + 0x90d8) = GE(0x90d8);
     *(uint32_t*)(xb + 0x90dc) = GE(0x90dc); *(uint32_t*)(xb + 0x90e0) = GE(0x90e0);
     *(uint32_t*)(xb + 0x90c0) = g[10];      *(uint32_t*)(xb + 0x90c4) = g[15]; /* ==90c0 -> skip 395e */
+    /* FIST_6980PROVE_BUILDPROJ (default OFF): force 90c4!=90c0 so 6980 REBUILDS the proj table via 395e
+     * from the banked ramps 3a24/3e24 + 90c0 (instead of consuming the injected capture proj).  Tests
+     * whether the injected capture proj is a degenerate/frame-skewed artifact. */
+    if (getenv("FIST_6980PROVE_BUILDPROJ")) { *(uint32_t*)(xb + 0x90c4) = g[10] ^ 1; fprintf(stderr,"[6980prove] forcing 395e proj rebuild from banked ramps\n"); }
 
     /* scalars */
     *(uint32_t*)(xb + 0x38ed) = g[4];  *(uint32_t*)(xb + 0x38f1) = g[5];
@@ -2574,8 +2603,24 @@ static void fist_6980_prove(void) {
     fprintf(stderr, "[6980prove]   COLOUR VERDICT: the port's 6980 emitted %s colours\n",
             (tmax > 104) ? "LIGHT (>dark-C32 max 104) == the reduce; the colour fix WORKS through the real 6980"
                          : "DARK (<=104); the colour source is still the dark C32");
+    /* ---- compare vs the DENSE render-time tile tile_o (the REAL ground truth; the "shadow" is a
+     * SPARSE/incomplete capture = tile_o with ~88% zeroed, so the shadow over-draw metric above is a
+     * span-start artifact).  tile_o is fully populated (65536 nz, mean ~199, 66 distinct). ---- */
+    { long dsame=0,dboth=0,dmis=0,dunder=0,dtnz=0,donz=0;
+      int dR=0; long dsum=0; int dmn=255,dmx=0,dd=0; int seenTd[256]={0};
+      for (int i=0;i<0x10000;i++){ uint8_t t=tile[i],o=tile_o[i];
+        if(t==o) dsame++; if(t)dtnz++; if(o)donz++;
+        if(t&&o){dboth++; if(t!=o)dmis++;} if(!t&&o)dunder++; }
+      for (int i=0;i<0x10000;i++) if(tile[i]){int v=tile[i]; if(!seenTd[v]){seenTd[v]=1;dd++;} dsum+=v; if(v<dmn)dmn=v; if(v>dmx)dmx=v;}
+      fprintf(stderr,"[6980prove] vs-DENSE-tile_o: byte-exact %ld/65536 (%.2f%%) | port_nz=%ld tile_o_nz=%ld both=%ld mism=%ld under=%ld\n",
+        dsame,100.0*dsame/65536.0,dtnz,donz,dboth,dmis,dunder);
+      fprintf(stderr,"[6980prove] vs-DENSE-tile_o: port coverage=%.1f%% of tile_o | port distinct=%d mean=%.1f max=%d  tile_o mean~199 max252 distinct66\n",
+        donz?100.0*dboth/donz:0.0, dd, dtnz?(double)dsum/dtnz:0.0, dmx);
+    }
     const char *dp = getenv("FIST_6980PROVE_DUMP");
     if (dp) { FILE *df = fopen(dp, "wb"); if (df) { fwrite(tile, 1, 0x10000, df); fclose(df); fprintf(stderr, "[6980prove] dumped port tile -> %s\n", dp); } }
+    const char *op2 = getenv("FIST_6980PROVE_ODUMP");
+    if (op2) { FILE *df = fopen(op2, "wb"); if (df) { fwrite(tile_o, 1, 0x10000, df); fclose(df); fprintf(stderr, "[6980prove] dumped dense tile_o -> %s\n", op2); } }
     #undef GE
 }
 
