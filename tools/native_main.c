@@ -1172,6 +1172,24 @@ int fist_extender_gate(void) {
           int32_t esi = (int32_t)(((int64_t)c0*v04)>>32), ebp = (int32_t)(((int64_t)c0*v08)>>32);
           m_ext_FUN_0000_9200(ebp, esi); }
         *(uint32_t*)(xb+0xc93) = save_c93;
+        /* ------------------------------------------------------------------------------------------
+         * MISSION DAC TERRAIN BAND (extender role).  9200 samples the terrain colormap (tile 0x3918),
+         * which contains ONLY palette indices 80..255 (min index=80, asm/oracle-verified -- the
+         * cockpit uses 0..79).  The engine's DAC mirror word[DGROUP:0x782] holds ONLY the cockpit
+         * band 0..79; indices 80..255 are BLACK, so the correctly-rendered voxel terrain displayed
+         * black (the "windshield collapse" was a palette-band artifact, NOT a render bug -- 9200 fills
+         * the full windshield, verified 25341/25600 non-black once the terrain band is coloured).
+         * The real terrain palette is 532.pal, loaded by the extender at op 0x18 into ext+0x5598; the
+         * original mission DAC is the coherent single palette = word[0x782][0..79] (cockpit, engine) +
+         * 532.pal[80..255] (terrain).  The port never bridged 532.pal into the DAC.  Merge it here
+         * (extender-role, faithful source + asm boundary) so the retrace ISR uploads the coherent
+         * mission DAC and the terrain renders in colour.  Measured net improvement in EVERY region
+         * (windshield AE 7.80M->3.62M, cockpit AE 1.510M->1.464M, full AE 9.71M->5.29M vs the oracle
+         * spawn frame).  Residual = terrain-colour FIDELITY (browns too dark: the tile3918/85b8
+         * colormap-collapse, 175 vs 212 distinct) -- a separate documented frontier. */
+        { uint8_t *eng782  = g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4);
+          uint8_t *ext5598 = xb + 0x5598;
+          if (*(uint16_t*)(dg+0x782)) for (int i=80*3;i<768;i++) eng782[i] = ext5598[i] & 0x3f; }
     }
     if (op == 0x24 && getenv("FIST_OP24TRACE") && g_ext_ready) {
         static int nt = 0;
@@ -1262,6 +1280,22 @@ int fist_extender_gate(void) {
                 fprintf(stderr,"[missfb] tile3918 nz=%ld/65536 distinct=%d  ray3a24[0..3]=%d/%d/%d/%d ray3e24[0]=%d 90c0=%08x 90c4=%08x\n",
                     nz,nd,*(int32_t*)(xb+0x3a24),*(int32_t*)(xb+0x3a28),*(int32_t*)(xb+0x3a2c),*(int32_t*)(xb+0x3a30),
                     *(int32_t*)(xb+0x3e24),*(uint32_t*)(xb+0x90c0),*(uint32_t*)(xb+0x90c4));
+                /* FIST_MISSFB_VP: LIVE voxel viewport geometry (set by 8deb from TCB rect) vs the
+                 * oracle-forced 90f8=81/90f0=288/90ac=-208.  Also the TCB viewport rect 0x16/18/1a/1c
+                 * and the horizon-table 9114 pointer + first bytes. */
+                {
+                  uint16_t vl=*(uint16_t*)(tcb+0x16),vt=*(uint16_t*)(tcb+0x18),vr=*(uint16_t*)(tcb+0x1a),vb=*(uint16_t*)(tcb+0x1c);
+                  uint32_t hz=*(uint32_t*)(xb+0x9114);
+                  fprintf(stderr,"[missfb-vp] 90f8(rows)=%u 90f0(width)=%u 90ac=%d 90a8=%08x 90d4=%08x 90d8=%08x 90b8=%08x 90bc=%08x 90ec=%08x\n",
+                    *(uint32_t*)(xb+0x90f8),*(uint32_t*)(xb+0x90f0),*(int32_t*)(xb+0x90ac),
+                    *(uint32_t*)(xb+0x90a8),*(uint32_t*)(xb+0x90d4),*(uint32_t*)(xb+0x90d8),
+                    *(uint32_t*)(xb+0x90b8),*(uint32_t*)(xb+0x90bc),*(uint32_t*)(xb+0x90ec));
+                  fprintf(stderr,"[missfb-vp] TCBrect L/T/R/B=%u/%u/%u/%u (w=%d h=%d)  9114ptr=%08x hz[cols 0,10,20,40,60,80]=",vl,vt,vr,vb,vr-vl,vb-vt,hz);
+                  /* hz may be an ext-relative offset (<FIST_EXT_BASE) or a host pointer */
+                  { uint8_t *hp = (hz && hz < 0x100000) ? (xb+hz) : (uint8_t*)(uintptr_t)hz;
+                    if (hp && (uintptr_t)hp>0x10000) { int cc[6]={0,10,20,40,60,80}; for(int i=0;i<6;i++) fprintf(stderr,"%d,",hp[cc[i]]); } }
+                  fprintf(stderr,"\n");
+                }
                 if (getenv("FIST_VEHPROBE")) {
                     uint16_t di = *(uint16_t*)(dg+0x6d34);
                     uint16_t typ = *(uint16_t*)(dg+di);
