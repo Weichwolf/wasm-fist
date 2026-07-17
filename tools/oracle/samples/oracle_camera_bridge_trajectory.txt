@@ -1,0 +1,329 @@
+# Oracle AZER1 windshield render-camera capture (render-time TCB @ flat 0x10000, 8120 reads +0x3a pitch/+0x3c roll)
+# Method: capture_9200_framematched.sh + [r92cam] instrumentation; per-9200-frame; deterministic.
+[seg] csb=10000000 dsb=10000000 ssb=00000000  [0xc93] via cs=f0010000 via ds=f0010000  cr3=0000e000 paging=1  TCB flat la=00010000 -> phys=00010000 (identity if paging-off = la)
+# --- first 30 frames (spawn -> settling); ref frame = pitch(+3a)=384 roll(+3c)=256 (frames ~4-22, alt 12800) ---
+X=583982 Y=1142557 alt=3328 head=26729 pitch(+3a)=384 roll(+3c)=384 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584012 Y=1142511 alt=13056 head=26729 pitch(+3a)=384 roll(+3c)=384 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584027 Y=1142488 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=384 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584042 Y=1142465 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584042 Y=1142465 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584057 Y=1142442 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584072 Y=1142419 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584087 Y=1142396 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584087 Y=1142396 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584102 Y=1142373 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584117 Y=1142350 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584132 Y=1142327 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584132 Y=1142327 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584147 Y=1142304 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584162 Y=1142281 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584177 Y=1142258 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584192 Y=1142235 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584207 Y=1142212 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584222 Y=1142189 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584222 Y=1142189 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584237 Y=1142166 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584252 Y=1142143 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584267 Y=1142120 alt=12800 head=26729 pitch(+3a)=512 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584282 Y=1142097 alt=12800 head=26729 pitch(+3a)=512 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584297 Y=1142074 alt=12800 head=26729 pitch(+3a)=512 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584312 Y=1142051 alt=12800 head=26729 pitch(+3a)=512 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584312 Y=1142051 alt=12800 head=26729 pitch(+3a)=512 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584327 Y=1142028 alt=12800 head=26729 pitch(+3a)=512 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584342 Y=1142005 alt=12800 head=26729 pitch(+3a)=512 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+X=584357 Y=1141982 alt=12544 head=26729 pitch(+3a)=512 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+# --- distinct (pitch,roll) states with frame counts across the whole 1725-frame drive ---
+      3 p3a=384 r3c=384
+     19 p3a=384 r3c=256
+     19 p3a=512 r3c=256
+     16 p3a=512 r3c=128
+      7 p3a=512 r3c=0
+      1 p3a=640 r3c=0
+     15 p3a=640 r3c=-128
+      9 p3a=768 r3c=-128
+      1 p3a=640 r3c=-128
+     26 p3a=768 r3c=-128
+      1 p3a=768 r3c=-256
+      2 p3a=896 r3c=-256
+      1 p3a=896 r3c=-384
+      6 p3a=768 r3c=-384
+      7 p3a=896 r3c=-384
+      2 p3a=896 r3c=-512
+      4 p3a=1024 r3c=-512
+     10 p3a=896 r3c=-512
+      3 p3a=1024 r3c=-512
+      1 p3a=1152 r3c=-512
+      9 p3a=1152 r3c=-640
+      2 p3a=1152 r3c=-512
+      9 p3a=1152 r3c=-640
+      6 p3a=1280 r3c=-640
+      7 p3a=1408 r3c=-640
+     18 p3a=1536 r3c=-640
+      1 p3a=1536 r3c=-768
+      7 p3a=1664 r3c=-768
+     12 p3a=1664 r3c=-640
+      6 p3a=1664 r3c=-768
+      8 p3a=1792 r3c=-768
+      9 p3a=1792 r3c=-640
+      8 p3a=1920 r3c=-640
+      1 p3a=1920 r3c=-768
+      8 p3a=1920 r3c=-896
+      1 p3a=1792 r3c=-896
+     19 p3a=1792 r3c=-768
+      3 p3a=1920 r3c=-768
+      4 p3a=1920 r3c=-896
+     19 p3a=1792 r3c=-768
+      8 p3a=1920 r3c=-768
+      1 p3a=1792 r3c=-768
+     20 p3a=1792 r3c=-640
+      7 p3a=1920 r3c=-640
+      4 p3a=1792 r3c=-512
+      9 p3a=1792 r3c=-640
+      6 p3a=1792 r3c=-512
+      7 p3a=1792 r3c=-640
+      1 p3a=1664 r3c=-640
+      1 p3a=1664 r3c=-512
+     10 p3a=1792 r3c=-512
+     15 p3a=1664 r3c=-512
+      1 p3a=1536 r3c=-512
+      5 p3a=1536 r3c=-384
+     22 p3a=1664 r3c=-384
+     10 p3a=1536 r3c=-256
+      3 p3a=1664 r3c=-256
+      8 p3a=1536 r3c=-256
+      6 p3a=1664 r3c=-256
+      1 p3a=1536 r3c=-256
+     14 p3a=1536 r3c=-128
+      1 p3a=1536 r3c=0
+     12 p3a=1664 r3c=0
+      6 p3a=1664 r3c=128
+     14 p3a=1664 r3c=256
+      6 p3a=1792 r3c=256
+      2 p3a=1664 r3c=256
+      2 p3a=1664 r3c=384
+     11 p3a=1536 r3c=384
+     12 p3a=1536 r3c=512
+      1 p3a=1664 r3c=512
+      1 p3a=1536 r3c=640
+      5 p3a=1536 r3c=768
+      1 p3a=1536 r3c=896
+      8 p3a=1536 r3c=768
+     12 p3a=1664 r3c=768
+      4 p3a=1536 r3c=896
+      8 p3a=1664 r3c=896
+      1 p3a=1664 r3c=768
+      8 p3a=1536 r3c=768
+      7 p3a=1664 r3c=768
+      8 p3a=1664 r3c=896
+      1 p3a=1792 r3c=896
+      7 p3a=1792 r3c=1024
+      5 p3a=1792 r3c=896
+      3 p3a=1920 r3c=896
+      4 p3a=2048 r3c=896
+     13 p3a=1920 r3c=1024
+      1 p3a=2048 r3c=1024
+      7 p3a=2048 r3c=1280
+      1 p3a=2176 r3c=1280
+      1 p3a=2176 r3c=1152
+      5 p3a=2048 r3c=1152
+     11 p3a=2048 r3c=1280
+      8 p3a=2048 r3c=1152
+      1 p3a=2176 r3c=1152
+      2 p3a=2176 r3c=1280
+      7 p3a=2304 r3c=1280
+      1 p3a=2176 r3c=1152
+      6 p3a=2176 r3c=1280
+      8 p3a=2304 r3c=1280
+      7 p3a=2304 r3c=1408
+      3 p3a=2432 r3c=1280
+      5 p3a=2560 r3c=1280
+      6 p3a=2560 r3c=1408
+      1 p3a=2560 r3c=1280
+     10 p3a=2432 r3c=1280
+      7 p3a=2432 r3c=1408
+      1 p3a=2560 r3c=1408
+      7 p3a=2560 r3c=1280
+      1 p3a=2560 r3c=1408
+      2 p3a=2688 r3c=1408
+     10 p3a=2688 r3c=1536
+      1 p3a=2688 r3c=1408
+      4 p3a=2560 r3c=1408
+      3 p3a=2560 r3c=1536
+      6 p3a=2688 r3c=1536
+      5 p3a=2816 r3c=1536
+      4 p3a=2816 r3c=1408
+      7 p3a=2816 r3c=1536
+      1 p3a=2944 r3c=1536
+      9 p3a=2944 r3c=1664
+      1 p3a=2944 r3c=1536
+      9 p3a=2816 r3c=1536
+      7 p3a=2944 r3c=1536
+      3 p3a=2816 r3c=1536
+     10 p3a=2816 r3c=1408
+     10 p3a=2944 r3c=1536
+      1 p3a=2944 r3c=1408
+      3 p3a=2816 r3c=1408
+      9 p3a=2816 r3c=1280
+      8 p3a=2816 r3c=1408
+      9 p3a=2816 r3c=1280
+      9 p3a=2944 r3c=1280
+      1 p3a=2944 r3c=1152
+      2 p3a=3072 r3c=1152
+      1 p3a=3072 r3c=1024
+      6 p3a=2944 r3c=1024
+     13 p3a=2944 r3c=1152
+      8 p3a=2944 r3c=1024
+      1 p3a=2880 r3c=1024
+      1 p3a=3008 r3c=1152
+      3 p3a=2880 r3c=1408
+      1 p3a=2752 r3c=1408
+      1 p3a=2752 r3c=1536
+      1 p3a=2496 r3c=1792
+      2 p3a=2624 r3c=1792
+      2 p3a=2496 r3c=1920
+      2 p3a=2368 r3c=2048
+      1 p3a=2368 r3c=2176
+      1 p3a=2240 r3c=2176
+      2 p3a=2240 r3c=2304
+      1 p3a=2112 r3c=2432
+      1 p3a=1984 r3c=2432
+      1 p3a=1856 r3c=2560
+      4 p3a=1728 r3c=2688
+      2 p3a=1472 r3c=2816
+      1 p3a=1344 r3c=2816
+      3 p3a=1088 r3c=3072
+      1 p3a=960 r3c=3072
+      1 p3a=704 r3c=3072
+      2 p3a=576 r3c=3072
+      1 p3a=448 r3c=3072
+      4 p3a=320 r3c=3072
+     11 p3a=448 r3c=3072
+      4 p3a=320 r3c=3072
+      1 p3a=320 r3c=2944
+      4 p3a=320 r3c=2816
+      5 p3a=448 r3c=2944
+      5 p3a=512 r3c=2944
+      7 p3a=512 r3c=2816
+      1 p3a=640 r3c=2816
+      6 p3a=512 r3c=2816
+      3 p3a=512 r3c=2688
+      1 p3a=512 r3c=2560
+      6 p3a=512 r3c=2688
+      6 p3a=768 r3c=2688
+      6 p3a=640 r3c=2688
+      6 p3a=640 r3c=2560
+      2 p3a=768 r3c=2560
+      2 p3a=640 r3c=2560
+      1 p3a=768 r3c=2560
+      5 p3a=768 r3c=2688
+      5 p3a=768 r3c=2432
+      6 p3a=896 r3c=2432
+      1 p3a=768 r3c=2432
+      5 p3a=896 r3c=2432
+      1 p3a=1600 r3c=2432
+      1 p3a=1376 r3c=2432
+      3 p3a=1280 r3c=2432
+      1 p3a=1184 r3c=2432
+      1 p3a=1088 r3c=2432
+      2 p3a=992 r3c=2432
+      1 p3a=896 r3c=2560
+      1 p3a=832 r3c=2432
+      4 p3a=768 r3c=2432
+     13 p3a=768 r3c=2304
+      6 p3a=768 r3c=2176
+     10 p3a=768 r3c=2304
+      2 p3a=896 r3c=2304
+      6 p3a=896 r3c=2176
+      7 p3a=768 r3c=2048
+      1 p3a=768 r3c=2176
+      3 p3a=896 r3c=2176
+      2 p3a=896 r3c=2048
+      6 p3a=896 r3c=1920
+      1 p3a=1024 r3c=1920
+      5 p3a=1024 r3c=2048
+      6 p3a=896 r3c=2048
+     10 p3a=896 r3c=2176
+      4 p3a=1024 r3c=2176
+      9 p3a=896 r3c=2176
+     12 p3a=896 r3c=2048
+      5 p3a=768 r3c=2048
+      4 p3a=768 r3c=2176
+      4 p3a=768 r3c=2048
+      1 p3a=640 r3c=2048
+      5 p3a=768 r3c=2048
+      1 p3a=704 r3c=2048
+     10 p3a=576 r3c=2048
+      2 p3a=576 r3c=1920
+     11 p3a=576 r3c=2048
+      3 p3a=576 r3c=1920
+      5 p3a=576 r3c=2048
+      4 p3a=576 r3c=2176
+      6 p3a=704 r3c=2176
+      1 p3a=576 r3c=2176
+      4 p3a=704 r3c=2176
+      4 p3a=704 r3c=2304
+      2 p3a=704 r3c=2176
+      9 p3a=704 r3c=2304
+      6 p3a=576 r3c=2304
+      4 p3a=576 r3c=2432
+      4 p3a=576 r3c=2304
+      7 p3a=448 r3c=2304
+      5 p3a=320 r3c=2304
+      3 p3a=320 r3c=2432
+      2 p3a=320 r3c=2304
+     10 p3a=320 r3c=2432
+      4 p3a=192 r3c=2432
+      5 p3a=192 r3c=2560
+      1 p3a=192 r3c=2432
+      3 p3a=192 r3c=2560
+      1 p3a=64 r3c=2560
+      6 p3a=192 r3c=2560
+      1 p3a=64 r3c=2560
+      9 p3a=192 r3c=2560
+      1 p3a=192 r3c=2432
+      9 p3a=192 r3c=2560
+      5 p3a=64 r3c=2560
+      5 p3a=64 r3c=2688
+      1 p3a=64 r3c=2560
+      1 p3a=64 r3c=2688
+      8 p3a=-64 r3c=2688
+      9 p3a=-192 r3c=2688
+      2 p3a=-192 r3c=2560
+     12 p3a=-192 r3c=2688
+      2 p3a=-192 r3c=2560
+      4 p3a=-192 r3c=2688
+      3 p3a=-192 r3c=2560
+      1 p3a=-192 r3c=2688
+      1 p3a=-320 r3c=2688
+     14 p3a=-192 r3c=2688
+      1 p3a=-192 r3c=2560
+      5 p3a=-192 r3c=2688
+      2 p3a=-320 r3c=2688
+      5 p3a=-320 r3c=2560
+      4 p3a=-320 r3c=2432
+      5 p3a=-448 r3c=2432
+      1 p3a=-576 r3c=2432
+      7 p3a=-448 r3c=2432
+      2 p3a=-448 r3c=2304
+     11 p3a=-448 r3c=2560
+      2 p3a=-448 r3c=2432
+      4 p3a=-448 r3c=2560
+      2 p3a=-448 r3c=2432
+      2 p3a=-448 r3c=2560
+      2 p3a=-576 r3c=2560
+      8 p3a=-576 r3c=2432
+      5 p3a=-704 r3c=2432
+      1 p3a=-704 r3c=2304
+     18 p3a=-704 r3c=2432
+      3 p3a=-704 r3c=2304
+      1 p3a=-704 r3c=2432
+      6 p3a=-832 r3c=2432
+      5 p3a=-960 r3c=2432
+     17 p3a=0 r3c=512
+     34 p3a=128 r3c=640
+     16 p3a=256 r3c=640
+     12 p3a=384 r3c=640
+      6 p3a=384 r3c=512
+     27 p3a=512 r3c=512
+     17 p3a=512 r3c=640
+      5 p3a=512 r3c=768

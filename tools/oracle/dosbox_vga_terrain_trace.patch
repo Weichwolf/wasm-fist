@@ -1,9 +1,3 @@
-# wasm-fist DOSBox oracle instrumentation (apply with: patch -p0 < this  from inside dosbox-0.74-3/)
-# Instruments VGA 0xA0000 writers (fist_vgawrite) AND normal-RAM writers (fist_memrec via the
-# include/mem.h host_writeb/w/d hook) so extender data buffers (blend matrix, tile, colormap) can be
-# captured by PHYSICAL/FLAT address.  Env: FISTLOG, FIST_TILEPHYS (per-byte last-writer 64K window),
-# FIST_WATCHPHYS/SPAN, FIST_WATCHFLAT/SPAN (CR3-aware), FIST_MEMARM_BOOT (arm the RAM recorder at
-# process START, for buffers built before the first VGA write).  SIGUSR1=arm/reset, SIGUSR2=dump.
 --- include/mem.h
 +++ include/mem.h
 @@ -84,7 +84,15 @@
@@ -49,7 +43,7 @@
  
 --- src/hardware/vga_memory.cpp
 +++ src/hardware/vga_memory.cpp
-@@ -27,6 +27,671 @@
+@@ -27,6 +27,784 @@
  #include "pic.h"
  #include "inout.h"
  #include "setup.h"
@@ -177,6 +171,24 @@
 +static Bit32u   r9200_esi = 0, r9200_ebp = 0, r9200_hzptr = 0;
 +static Bit8u    r9200_hz[256];            /* horizon table contents (frame F) */
 +static Bit32u   r9200_base = 0x10000000;  /* extender flat base = SegPhys(cs) at the write */
++/* ==== wasm-fist CAMERA capture: the render-time TCB camera 8120 reads at 9200-entry ==== */
++static Bit32u   r9200_tcbptr = 0;         /* value at ext ds:[0xc93] = current-TCB ptr */
++static Bit32u   r9200_cam_a[8], r9200_cam_b[8]; /* +0x2c..+0x3e read 2 ways (ext-rel / abs) */
++
++/* FAULT-FREE physical read of a guest LINEAR address: translate via the current CR3
++ * (page tables read straight from MemBase, no guest fault) then read physical RAM.
++ * Returns 0 for an unmapped page or out-of-range phys.  Avoids the "Pagefault didn't
++ * correct table" that mem_readw() triggers when it walks an unmapped TCB linear. */
++static Bit32u fist_safe_readn(Bit32u lin, int n) {
++	Bit32u v = 0;
++	for (int i = 0; i < n; i++) {
++		Bit32u ph = fist_flat_to_phys(lin + i);
++		Bit8u b = 0;
++		if (ph != 0xffffffffu && ph < (Bit32u)(MEM_TotalPages()*4096)) b = host_readb(MemBase + ph);
++		v |= (Bit32u)b << (8*i);
++	}
++	return v;
++}
 +
 +static void r9200_snapshot(void) {
 +	r9200_base = SegPhys(cs);              /* = 0x10000000 for the flat PM code selector */
@@ -185,6 +197,58 @@
 +	r9200_hzptr = mem_readd(r9200_base + 0x9114);
 +	Bit32u ht = r9200_base + (r9200_hzptr & 0x00ffffffu); /* ext-relative horizon pointer */
 +	for (int i = 0; i < 256; i++) r9200_hz[i] = mem_readb(ht + i);
++	/* the current-TCB pointer 8120 uses: ds:[0xc93]; camera fields at TCB+0x2c..+0x3e.
++	 * The extender DATA selector base may differ from CS base -> read [0xc93] via DS base. */
++	Bit32u dsb = SegPhys(ds), csb = SegPhys(cs), ssb = SegPhys(ss);
++	Bit32u c93_cs = fist_safe_readn(csb + 0xc93, 4);
++	Bit32u c93_ds = fist_safe_readn(dsb + 0xc93, 4);
++	r9200_tcbptr = c93_ds ? c93_ds : c93_cs;    /* prefer the DS-based read */
++	/* the CPU forms the EA as (DS_base + ebx + off) mod 2^32: with DS_base=0x10000000
++	 * and ebx=0xf0010000 this WRAPS to low linear 0x00010000 (the real-mode TCB). */
++	Bit32u la = (dsb + r9200_tcbptr) & 0xffffffffu;  /* wrapped DS-relative = the TCB linear */
++	Bit32u lb = r9200_tcbptr;                         /* raw (fallback) */
++	{
++		char cp[700]; snprintf(cp, sizeof cp, "%s.cam.txt", fist_prefix);
++		FILE *cf = fopen(cp, "a");
++		if (cf) {
++			fprintf(cf, "[seg] csb=%08x dsb=%08x ssb=%08x  [0xc93] via cs=%08x via ds=%08x  cr3=%08x paging=%d  TCB flat la=%08x -> phys=%08x (identity if paging-off = la)\n",
++				csb, dsb, ssb, c93_cs, c93_ds, (Bit32u)paging.cr3, (int)paging.enabled, la, fist_flat_to_phys(la));
++			/* hex window around ds:0xc90 to see the pointer + neighbours */
++			fprintf(cf, "[hex ds:0xc80] ");
++			for (int i=0;i<0x30;i++) fprintf(cf, "%02x ", (Bit8u)fist_safe_readn(dsb+0xc80+i,1));
++			fprintf(cf, "\n");
++			fflush(cf); fclose(cf);
++		}
++	}
++	/* fields: [0]=+0x2c X(32) [1]=+0x30 Y(32) [2]=+0x34 alt(32) [3]=+0x38 head(16)
++	 *         [4]=+0x3a pitch(16) [5]=+0x3c roll(16) [6]=+0x3e foc(16) [7]=+0xcc detail(8) */
++	r9200_cam_a[0]=fist_safe_readn(la+0x2c,4); r9200_cam_a[1]=fist_safe_readn(la+0x30,4); r9200_cam_a[2]=fist_safe_readn(la+0x34,4);
++	r9200_cam_a[3]=fist_safe_readn(la+0x38,2); r9200_cam_a[4]=fist_safe_readn(la+0x3a,2); r9200_cam_a[5]=fist_safe_readn(la+0x3c,2);
++	r9200_cam_a[6]=fist_safe_readn(la+0x3e,2); r9200_cam_a[7]=fist_safe_readn(la+0xcc,1);
++	r9200_cam_b[0]=fist_safe_readn(lb+0x2c,4); r9200_cam_b[1]=fist_safe_readn(lb+0x30,4); r9200_cam_b[2]=fist_safe_readn(lb+0x34,4);
++	r9200_cam_b[3]=fist_safe_readn(lb+0x38,2); r9200_cam_b[4]=fist_safe_readn(lb+0x3a,2); r9200_cam_b[5]=fist_safe_readn(lb+0x3c,2);
++	r9200_cam_b[6]=fist_safe_readn(lb+0x3e,2); r9200_cam_b[7]=fist_safe_readn(lb+0xcc,1);
++	/* print IMMEDIATELY at the first-9200-write moment so a mid-mission pagefault
++	 * (before the deferred 8120 dump boundary) does not lose the camera capture. */
++	{
++		static int camwrites = 0;
++		if (camwrites == 0) {   /* dump the FIRST-frame VRAM+DAC so the ref frame can be matched */
++			char vp[700];
++			snprintf(vp, sizeof vp, "%s.frame1.vram.bin", fist_prefix);
++			FILE *vf = fopen(vp, "wb"); if (vf) { fwrite(vga.mem.linear, 1, 256*1024, vf); fclose(vf); }
++			snprintf(vp, sizeof vp, "%s.frame1.pal.bin", fist_prefix);
++			vf = fopen(vp, "wb"); if (vf) { fwrite(vga.dac.rgb, 1, sizeof(vga.dac.rgb), vf); fclose(vf); }
++		}
++		char cp[700]; snprintf(cp, sizeof cp, "%s.cam.txt", fist_prefix);
++		FILE *cf = fopen(cp, "a");
++		if (cf) {
++			fprintf(cf, "[r92cam-now #%d] tcbptr=%08x la=%08x lb=%08x  A[ext-rel]: X=%d Y=%d alt=%d head=%u pitch(+3a)=%d roll(+3c)=%d foc=%u det=%u | B[abs]: X=%d Y=%d alt=%d head=%u pitch=%d roll=%d foc=%u det=%u\n",
++				camwrites++, r9200_tcbptr, la, lb,
++				(int)r9200_cam_a[0],(int)r9200_cam_a[1],(int)r9200_cam_a[2],r9200_cam_a[3],(Bit16s)r9200_cam_a[4],(Bit16s)r9200_cam_a[5],r9200_cam_a[6],r9200_cam_a[7],
++				(int)r9200_cam_b[0],(int)r9200_cam_b[1],(int)r9200_cam_b[2],r9200_cam_b[3],(Bit16s)r9200_cam_b[4],(Bit16s)r9200_cam_b[5],r9200_cam_b[6],r9200_cam_b[7]);
++			fflush(cf); fclose(cf);
++		}
++	}
 +}
 +
 +static void r9200_dump(void) {
@@ -213,6 +277,14 @@
 +		"90f0=%u 90f8=%u hzptr=%08x vga.mode=%d pmode=%d\n",
 +		r9200_passno, r9200_esi, r9200_ebp, g4, g8, (g8>>24)&0xff, gb8, gbc, gf0, gf8,
 +		r9200_hzptr, (int)vga.mode, (int)cpu.pmode);
++	fprintf(stderr, "[r92cam] pass %02d tcbptr=%08x  A[ext-rel]: X=%d Y=%d alt=%d head=%u pitch(+3a)=%d roll(+3c)=%d foc=%u det=%u\n",
++		r9200_passno, r9200_tcbptr,
++		(int)r9200_cam_a[0], (int)r9200_cam_a[1], (int)r9200_cam_a[2], r9200_cam_a[3],
++		(Bit16s)r9200_cam_a[4], (Bit16s)r9200_cam_a[5], r9200_cam_a[6], r9200_cam_a[7]);
++	fprintf(stderr, "[r92cam] pass %02d              B[abs   ]: X=%d Y=%d alt=%d head=%u pitch(+3a)=%d roll(+3c)=%d foc=%u det=%u\n",
++		r9200_passno,
++		(int)r9200_cam_b[0], (int)r9200_cam_b[1], (int)r9200_cam_b[2], r9200_cam_b[3],
++		(Bit16s)r9200_cam_b[4], (Bit16s)r9200_cam_b[5], r9200_cam_b[6], r9200_cam_b[7]);
 +	/* ---- LIGHT-TILE PHYS RESOLUTION: translate the render-time tile linear address
 +	 * (ext base r9200_base + 0x44200 = 0x10044200) through the CURRENT CR3 to the phys
 +	 * page that actually backs the tile 9200 sampled this frame. Print + dump full RAM
@@ -290,8 +362,13 @@
 +static int    r6980_rd_n = 0;
 +static Bit32u r6980_rd_valhist[256];
 +static int    r6980_rd_total = 0;
++static Bit32u r6980_hm_phys0 = 0;   /* first heightmap-read (6aeb) phys, 1MB page banked */
 +extern "C" void fist_memread(Bit8u *off) {
 +	Bit32u lin = SegPhys(cs) + reg_eip;
++	if (lin == 0x10006aeb || lin == 0x10006b6b) {  /* heightmap reads `add al,[esi+ecx]` (both loops) */
++		if (!r6980_hm_phys0) r6980_hm_phys0 = (Bit32u)(off - MemBase);
++		return;
++	}
 +	if (lin != 0x10006b1a && lin != 0x10006b9a) return;
 +	Bit32u ph = (Bit32u)(off - MemBase);
 +	Bit8u v = *off;
@@ -395,11 +472,27 @@
 +		fprintf(stderr,"\n");
 +		/* dump the phys-page(s) the colour read actually hit, 1MB from the first sample's page */
 +		if (r6980_rd_n > 0) {
-+			Bit32u pg = r6980_rd_phys[0] & 0xfff00000u;  /* 1MB-aligned base of the real colormap */
-+			static Bit8u realcm[0x100000];
-+			for (Bit32u i=0;i<0x100000;i++) realcm[i]=MemBase[pg+i];  /* guest-phys direct */
-+			char pp[700]; snprintf(pp,sizeof pp,"%s.r6980.realcm_phys%08x.bin",fist_prefix,pg);
++			/* Dump the real colormap + heightmap the CPU actually read, GUEST-PHYS direct (MemBase):
++			 * mem_readb of these flat addrs is UNRELIABLE (returns the dark map-load page, not the
++			 * page the CPU's PM-paged read hit).  The read hook captured the true phys the CPU read;
++			 * dump the 1MB-aligned page holding it.  Colour read phys = flat(esi+coord+0x100000);
++			 * height read phys = flat(esi+coord).  We record coord=0's phys for each and dump the
++			 * page, reconstructing coord-indexing offline from the flat->phys stride. */
++			Bit32u cpg = r6980_rd_phys[0] & 0xfff00000u;
++			Bit32u hpg = r6980_hm_phys0   & 0xfff00000u;
++			static Bit8u realcm[0x100000], realhm[0x100000];
++			for (Bit32u i=0;i<0x100000;i++){ realcm[i]=MemBase[cpg+i]; realhm[i]=MemBase[hpg+i]; }
++			char pp[700];
++			snprintf(pp,sizeof pp,"%s.r6980.realcm.bin",fist_prefix);
 +			FILE *rf=fopen(pp,"wb"); if(rf){ fwrite(realcm,1,0x100000,rf); fclose(rf); }
++			snprintf(pp,sizeof pp,"%s.r6980.realhm.bin",fist_prefix);
++			rf=fopen(pp,"wb"); if(rf){ fwrite(realhm,1,0x100000,rf); fclose(rf); }
++			int cmx=0,hmx=0; for(int i=0;i<0x100000;i++){ if(realcm[i]>cmx)cmx=realcm[i]; if(realhm[i]>hmx)hmx=realhm[i]; }
++			/* the intra-page offset of coord=0's colour read = phys - 1MB base; the colormap for
++			 * coord starts at (phys0 - (flat0 low bits within page)).  Emit both so the offline
++			 * reproduction can align coord->buffer index exactly. */
++			fprintf(stderr,"[r6980rd2] cm_phys=%08x(pg %08x off %05x flat %08x) hm_phys=%08x(pg %08x off %05x) realcm_max=%d realhm_max=%d\n",
++				r6980_rd_phys[0], cpg, r6980_rd_phys[0]-cpg, r6980_rd_flat[0], r6980_hm_phys0, hpg, r6980_hm_phys0-hpg, cmx, hmx);
 +		}
 +		fist_memread_armed = 0;   /* one settled pass is enough; restore the fast read path */
 +	}
@@ -670,7 +763,12 @@
 +			fist_wf_span = wfs ? (Bit32u)strtoul(wfs, 0, 0) : 0x100;
 +		}
 +		if (getenv("FIST_R9200CAP")) {
-+			r9200_cap = 1; fist_mem_armed = 1;   /* arm the RAM hook so the 8120 sentinel fires */
++			r9200_cap = 1;
++			/* FIST_R92_NOMEMARM: skip the per-byte RAM last-writer hook (huge core=normal
++			 * overhead + flaky mission-load pagefault).  The [r92cam-now] print fires at the
++			 * first-9200-write snapshot, so the deferred 8120 dump (which needs the hook) is
++			 * not required for the camera capture. */
++			if (!getenv("FIST_R92_NOMEMARM")) fist_mem_armed = 1;
 +			const char *mp = getenv("FIST_R9200MAX"); if (mp) r9200_maxpass = atoi(mp);
 +		}
 +		if (getenv("FIST_R6980CAP")) {
@@ -680,6 +778,15 @@
 +	/* 9200 frame-matched capture: snapshot frame F's globals on its first terrain write */
 +	if (r9200_cap) {
 +		Bit32u lin = SegPhys(cs) + reg_eip;
++		/* per-frame re-arm (works without the RAM hook / 8120 sentinel): the 9200 writer
++		 * marches fb offsets upward across a frame and RESTARTS at ~column-0 (off ~0x656)
++		 * on the next frame; a large backward jump => new frame => re-snapshot the camera. */
++		if (lin >= 0x10009200 && lin < 0x100092a0) {
++			static Bit32u last9200off = 0;
++			Bit32u o = addr & 0x1ffff;
++			if (o + 0x400 < last9200off) r9200_inpass = 0;  /* frame restarted */
++			last9200off = o;
++		}
 +		if (lin >= 0x10009200 && lin < 0x100092a0 && !r9200_inpass) {
 +			r9200_inpass = 1; r9200_snapshot(); r9200_have = 1;
 +			/* 6980 pair-dump: this frame's 6980 filled the tile; the world camera was
@@ -721,7 +828,7 @@
  
  
  #ifndef C_VGARAM_CHECKED
-@@ -377,6 +1042,7 @@
+@@ -377,6 +1155,7 @@
  			return readHandler<Bit32u>( addr );
  	}
  	void writeb(PhysPt addr, Bitu val ) {
@@ -729,7 +836,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -385,6 +1051,7 @@
+@@ -385,6 +1164,7 @@
  		writeCache<Bit8u>( addr, val );
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -737,7 +844,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -399,6 +1066,7 @@
+@@ -399,6 +1179,7 @@
  		writeCache<Bit16u>( addr, val );
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -745,7 +852,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -433,6 +1101,7 @@
+@@ -433,6 +1214,7 @@
  		flags=PFLAG_NOCODE;
  	}
  	void writeb(PhysPt addr,Bitu val) {
@@ -753,7 +860,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -440,6 +1109,7 @@
+@@ -440,6 +1222,7 @@
  		writeHandler(addr+0,(Bit8u)(val >> 0));
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -761,7 +868,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -448,6 +1118,7 @@
+@@ -448,6 +1231,7 @@
  		writeHandler(addr+1,(Bit8u)(val >> 8));
  	}
  	void writed(PhysPt addr,Bitu val) {

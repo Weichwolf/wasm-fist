@@ -1196,6 +1196,21 @@ int fist_extender_gate(void) {
             uint8_t  h  = hm[(((ty & mask) << detail) + (tx & mask)) & 0x3fffff];
             *(int32_t*)(tcb+0x34) = (h << 8) + 1792;   /* FIST_EYE_HT = 7<<8 (oracle spawn alt 12800) */
         }
+        /* CAMERA PITCH/ROLL bridge (the render camera's ATTITUDE, TCB+0x3a/+0x3c).
+         * 8120 reads +0x3a (pitch) -> 90e8 and +0x3c (roll) -> 90e4, i.e. the horizon tilt/
+         * height of the perspective projection.  The absent 32-bit-PM flight model writes them
+         * each frame (the tank settling/climbing over AZER1); PROVEN paged out -- there is NO
+         * store to +0x3a/+0x3c in EITHER static image (0 in re_out/fist.c, 0 in re_out/fist_image.bin;
+         * only 8120 @0x8126/0x8132 READS them), and the engine feeds only heading +0x38 via a20d.
+         * Direct DOSBox capture at the AZER1 windshield render (docs/oracle_camera_bridge.md,
+         * tools/oracle/capture_9200_framematched.sh + the [r92cam] instrumentation): the ref/AE-min
+         * frame (oracle alt=12800, matching the seed above) holds +0x3a=384 / +0x3c=256; the port's
+         * LIVE camera is stale +0x3a=0 / +0x3c=-256.  Oracle-anchored spawn seed, exactly like the
+         * alt terrain-follow above; gated with FIST_TILEFILL so the default frame is unchanged. */
+        if (getenv("FIST_TILEFILL")) {
+            *(uint16_t*)(tcb+0x3a) = 384;   /* pitch */
+            *(uint16_t*)(tcb+0x3c) = 256;   /* roll  */
+        }
         /* FIST_ISO -- CAMERA vs RAY-TABLE isolation seam (diagnostic, default OFF, applied on every
          * op-0x24 post so post #1 = the dumped spawn frame reflects the override).  Overrides the LIVE
          * TCB camera and/or the ray tables before the SAME default render chain, to pin whether the
