@@ -86,3 +86,11 @@ setarch -R env FIST_DATADIR="$SCR/af" FIST_COOP_TICK=1 FIST_TICK_HZ=25000 \
   FIST_MOUSE="200:160:100:0;800:160:100:1;1400:160:100:0;3000:205:128:0;3600:205:128:1;4200:205:128:0;5400:40:186:0;6000:40:186:1;6600:40:186:0;7200:40:186:0" \
   FIST_MISSFB=/tmp/port_f1.ppm FIST_MISSFB_N=30 /tmp/fist_native
 ```
+
+## HONEST STATUS after patch 295c3bf (self-measured 2026-07-17) — voxel terrain DRAWS at spawn, but only PARTIALLY covers the windshield
+Patch 295c3bf (shim, in-mission-guarded) wired 9200 + the oracle-exact camera-Z terrain-follow. Verified by direct measurement (not the agent's window-only figure):
+- **Spawn frame (op-0x24 post #1) is DETERMINISTIC: md5 `6678719e`, 3/3 identical.** Camera alt = 12800 (oracle-exact, `(h<<8)+1792`, h=43). REAL win — the voxel terrain draws for the first time, and the camera-Z is asm/oracle-exact.
+- **BUT the full 320-wide windshield (rows 8-88) is 91.6% black (23450/25600)** vs the oracle's 1.2% (303/25600). The agent's "black 87%→1%" was measured on the ~81-col voxel WINDOW only (`0x90f8=81 cols`, fb+0x650), NOT the full width — misleading for the full frame. Only ~2150 px are non-black at spawn vs the oracle's ~25300. So the port draws terrain in a NARROW sub-window; the oracle fills the FULL windshield width.
+- **Later op-0x24 posts are NON-deterministic** (post #30 md5 varies `20692847`/`aac4b376`) because the live camera XY BLOWS UP (66M/331M) — the wall-clock-dependent flight-model over-run (only visible now that terrain renders). Post #1/spawn is stable; later frames need the camera-XY determinism (a separate frontier).
+- verify.sh both = 24/24 (in-mission guard → menu flows unaffected); pristine engine unchanged.
+**RANKED spawn-frame residuals (vs ref/mission_azer1_spawn_native320.png):** (1) **render coverage** — the voxel terrain covers only ~2150 px of the windshield vs the oracle's ~25300 (the ~81-col window / horizon / clip — WHY does the port cover a fraction of the width the oracle fills? = the biggest residual); (2) **tile palette ~2× too dark** (browns 60,32,12 vs 125,109,77 — the tile3918/85b8 colormap-collapse, 175 vs 212 distinct — NOT block A which is byte-exact); (3) **sky band** (blue 93,97,117 rows 8-20, `.SKY`-fed, absent); (4) camera projection / horizon position; (5) later-post camera-XY determinism.
