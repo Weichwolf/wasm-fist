@@ -1,0 +1,89 @@
+PATCH 343 -- FUN_0000_6980 (NovaLogic Voxel-Space column raycaster): model the SMC-patched PER-RAY
+STEP + fix the rotation-multiply SIGNEDNESS.  Two interlocking defect classes patch 342 did NOT
+cover; together they were the ROOT CAUSE of the mission-terrain "solid-column / few-dark-colours"
+residual.  Mission-path only (6980 is never reached by the 25 menu/intro/settings verify flows);
+default boot unaffected.
+
+DEFECT A -- SMC PER-RAY STEP (asm-verified vs re_out/fist_image.bin @ ext 0x6980..0x6bf6, LE:32 PM):
+  ; the inner span-loop's coordinate step is SELF-MODIFYING: written per depth into the add/sub imms
+  6a9d: imul ds:0x9100     ; edx = (4224[d] * 9100) >> 32   (signed)
+  6aa3: mov ds:0x6ad2,edx  ; -> IMM32 operand of `add ebx,IMM32` @ 6ad0   (fwd X step)
+  6aa9: mov ds:0x6b52,edx  ; -> IMM32 operand of `sub ebx,IMM32` @ 6b50   (rev X step, copy)
+  6ab1: imul ds:0x90fc     ; edx = (4224[d] * 90fc) >> 32   (signed)
+  6ab7: mov ds:0x6ad8,edx  ; -> IMM32 operand of `sub ebp,IMM32` @ 6ad6   (fwd Y step)
+  6abd: mov ds:0x6b58,edx  ; -> IMM32 operand of `add ebp,IMM32` @ 6b56   (rev Y step, copy)
+  6ad0: add ebx,0x7fffffff ; ebx += [6ad2]      6ad6: sub ebp,0x7fffffff ; ebp -= [6ad8]
+  6b50: sub ebx,0x7fffffff ; ebx -= [6b52]      6b56: add ebp,0x7fffffff ; ebp += [6b58]
+Ghidra could not model the SMC -> it stepped the ray by the UN-PATCHED static immediates
+(`uVar6 + 0x7fffffff` / `uVar11 + 0x80000001`, a ~2^31 garbage step), so EVERY screen column swept
+the identical (depth-center) coordinate -> the tile was written with byte-identical content in every
+column (the "solid column").  ALSO the SMC operand stores uRam00006ad2/6ad8/6b52/6b58 are typed
+undefined2 (16-bit) while the operands are 32-bit IMM32 -> a 16-bit store truncates the signed step;
+widened to full 32-bit here.
+
+DEFECT B -- ROTATION-MULTIPLY SIGNEDNESS: the world-rotation basis DAT_0000_90fc/9100 is typed
+undefined4 (== uint32_t), so `(longlong)DAT_0000_9100` ZERO-extends (0x9e669af4 -> +2.65e9) while
+the asm `imul ds:0x9100` is SIGNED (0x9e669af4 -> -1.64e9).  The step/center then used the wrong sign
+(e.g. fwd X step +4036 unsigned vs -2488 signed) -> the ray marched a too-narrow coordinate range
+(port tile max colour 151, distinct 22 vs the asm-faithful 228 / ~59).  Cast the rotation operands to
+signed `(int)` at the center (6a72..6a91) and step (6a9d/6ab1) multiplies to match the signed imul.
+(Ghidra "signed imul/sar semantics" artifact class.)
+
+THE FIX (faithful, control-flow 1:1): store the full 32-bit SIGNED step into the SMC operand slots
+(0x6ad2/0x6ad8 fwd, 0x6b52/0x6b58 rev = the asm copies), consume them in the inner-loop sweep with
+the asm's exact signs, and sign-extend the rotation operands.  Proven standalone: FIST_6980PROVE
+(tools/native_main.c) -> the port's real 6980 tile goes from 5 distinct solid columns to a depth-
+varied terrain matching a from-scratch asm-faithful Python march of 6980 byte-for-byte.
+
+NB the sibling voxel functions (other switch-case decompiles at ext ~0x6d80..) carry the identical
+static-step + unsigned-rotation classes + are un-rebased; they are NOT reached (op-0x24 wiring not
+landed) and left as documented latent debt -- fix them when their path lands.
+
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -11049,17 +11049,17 @@
+   iVar14 = DAT_0000_85bc;
+   uVar6 = *(uint *)(g_mem+fist_ext_base + 0x4624 + uVar12 * 4) >> 1;
+   uVar10 = DAT_0000_90d8 +
+-           (int)((ulonglong)((longlong)(int)uVar6 * (longlong)DAT_0000_9100) >> 0x20) * -2;
++           (int)((ulonglong)((longlong)(int)uVar6 * (longlong)(int)DAT_0000_9100) >> 0x20) * -2;
+   uVar9 = DAT_0000_90d4 +
+-          (int)((ulonglong)((longlong)(int)uVar6 * (longlong)DAT_0000_90fc) >> 0x20) * -2;
++          (int)((ulonglong)((longlong)(int)uVar6 * (longlong)(int)DAT_0000_90fc) >> 0x20) * -2;
+   iVar5 = *(int *)(g_mem+fist_ext_base + 0x4224 + uVar12 * 4);
+-  uRam00006ad2 = (undefined4)((ulonglong)((longlong)iVar5 * (longlong)DAT_0000_9100) >> 0x20);
+-  uRam00006ad8 = (undefined4)((ulonglong)((longlong)iVar5 * (longlong)DAT_0000_90fc) >> 0x20);
++  *(int *)(g_mem+fist_ext_base+0x6ad2) = (int)((ulonglong)((longlong)iVar5 * (longlong)(int)DAT_0000_9100) >> 0x20);
++  *(int *)(g_mem+fist_ext_base+0x6ad8) = (int)((ulonglong)((longlong)iVar5 * (longlong)(int)DAT_0000_90fc) >> 0x20);
+   iVar5 = ram0x000038fd;
+   uVar6 = uVar9;
+   uVar11 = uVar10;
+-  uRam00006b52 = uRam00006ad2;
+-  uRam00006b58 = uRam00006ad8;
++  *(int *)(g_mem+fist_ext_base+0x6b52) = *(int *)(g_mem+fist_ext_base+0x6ad2);
++  *(int *)(g_mem+fist_ext_base+0x6b58) = *(int *)(g_mem+fist_ext_base+0x6ad8);
+   do {
+     uVar7 = (uVar11 >> 0x16) << 10 | uVar6 >> 0x16;
+     bVar3 = *(byte *)(uintptr_t)((_uRam00006add & 0xffffff00) | (((uint)(byte)_uRam00006add + (uint)(byte)*(char *)(iVar14 + uVar7)) & 0xff));
+@@ -11083,8 +11083,8 @@
+       if (iVar5 + 1 == DAT_0000_3905) goto LAB_0000_6b50;
+     }
+     iVar5 = iVar5 + 1;
+-    uVar6 = uVar6 + 0x7fffffff;
+-    uVar11 = uVar11 + 0x80000001;
++    uVar6 = uVar6 + *(int *)(g_mem+fist_ext_base+0x6ad2);
++    uVar11 = uVar11 - *(int *)(g_mem+fist_ext_base+0x6ad8);
+   } while( true );
+   while( true ) {
+     LOCK();
+@@ -11101,8 +11101,8 @@
+     iVar8 = iVar8 + -1;
+     if (iVar8 == DAT_0000_3901) break;
+ LAB_0000_6b50:
+-    uVar9 = uVar9 + 0x80000001;
+-    uVar10 = uVar10 + 0x7fffffff;
++    uVar9 = uVar9 - *(int *)(g_mem+fist_ext_base+0x6b52);
++    uVar10 = uVar10 + *(int *)(g_mem+fist_ext_base+0x6b58);
+     uVar6 = (uVar10 >> 0x16) << 10 | uVar9 >> 0x16;
+     bVar3 = *(byte *)(uintptr_t)((_uRam00006add & 0xffffff00) | (((uint)(byte)_uRam00006add + (uint)(byte)*(char *)(iVar14 + uVar6)) & 0xff));
+     if (bVar3 <= *(byte *)(g_mem+fist_ext_base + 0x4e5f + iVar8)) {
