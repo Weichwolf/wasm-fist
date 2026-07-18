@@ -1273,11 +1273,17 @@ int fist_extender_gate(void) {
             static uint8_t *hmcm=0; static uint32_t hm_src=0;
             uint32_t hmb=*(uint32_t*)(xb+0x85bc), cmb=*(uint32_t*)(xb+0x85b8);
             const char*rf2=getenv("FIST_TILEFILL_RED");   /* override colour source (e.g. light reduce) */
+            const char*hf2=getenv("FIST_TILEFILL_HM");    /* DIAGNOSTIC: override heightmap (frame-match) */
             if (hmb && cmb) {
                 if(!hmcm) hmcm=(uint8_t*)malloc(0x200000);
                 if(hmb!=hm_src){ memcpy(hmcm,(void*)(uintptr_t)hmb,0x100000); hm_src=hmb; }
+                if(hf2){ FILE*f=fopen(hf2,"rb"); if(f){fread(hmcm,1,0x100000,f);fclose(f); hm_src=0;} }
                 if(rf2){ FILE*f=fopen(rf2,"rb"); if(f){fread(hmcm+0x100000,1,0x100000,f);fclose(f);} }
                 else memcpy(hmcm+0x100000,(void*)(uintptr_t)cmb,0x100000);
+                /* FIST_TILEFILL_CMDUMP=path : bank the port's LIVE colour source ([0x85b8], 1MB) read-only */
+                if(getenv("FIST_TILEFILL_CMDUMP")){ static int cd=0; if(!cd){cd=1;
+                    FILE*f=fopen(getenv("FIST_TILEFILL_CMDUMP"),"wb"); if(f){fwrite(hmcm+0x100000,1,0x100000,f);fclose(f);}
+                    FILE*g=fopen("/tmp/port_hm.bin","wb"); if(g){fwrite(hmcm,1,0x100000,g);fclose(g);} } }
             }
             *(uint32_t*)(xb+0x90c4)=0;   /* force 395e proj rebuild from the seeded ramps + native 90c0 */
             /* 689a fills the WHOLE tile (sky rows 160-255 exact; terrain rows 0-159 then overlaid by 6980) */
