@@ -2,6 +2,33 @@
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
 
+## 22. Iteration 16 — CADENCE FIXED. The menu music now plays at the correct TEMPO: the MIDI sequencer advances at the driver music-timer rate (258.3 Hz), LOCKED to the OPL sample clock, not once per engine INT-8 tick (was ~4773 Hz, ~18× too fast). Pure shim calibration (fist_opl.c/fist_sb.c) — the 4 hard md5s + no re-decompile UNCHANGED; 26 video flows byte-identical, mainmenu native↔wasm 0-diff (`3a6ff1c5`). NOT bit-exact (OPL voice-map residual = follow-up #2); wasm sound-dispatch still absent (follow-up #3). (2026-07-18)
+
+**THE FIX (shim only — `re_out/fist_opl.c` + `re_out/fist_sb.c`; NO engine/driver patch, NO re-decompile):**
+- **Root cause (iter-15 §21):** `native_main.c` drove the sequencer advance `0a28`→`0c39` once per drained engine INT-8 tick, LOCKED 1:1 with `fist_opl_tick` sample generation → ~9.24 generated samples per seq-advance → the seq consumed one MIDI delta every 9.24 samples ≈ 4773 delta/s (= the engine PIT rate 1193182/250). The oracle plays the menu song ~18× slower.
+- **Fix:** decouple the two. `fist_snd_isr_tick` no longer calls `0a28`; the advance is factored into `fist_snd_seq_advance()` (fist_sb.c) and driven from `fist_opl_tick()` (fist_opl.c) via a fractional accumulator: **advance the sequencer once per `opl_rate / MUSIC_HZ` generated samples**, so the tempo is independent of the engine-tick / fast-forward rate and locked to the 44100 Hz sample clock.
+
+**DERIVATION of MUSIC_HZ (asm-firm base + objective oracle selection of the sub-divider):**
+- **Asm-firm:** the SOUNDDVR timer ISR runs at **7231.4 Hz** — PIT ch0 set to divisor **0xa5=165, mode 3** (`fist_snd_image.bin` 0x6f6/0x714). The INT8 handler (0x5c5) runs the digital sample mixer `[0x5c0]` (`0x2765`, a 3-voice resampled PCM-through-OPL player) EVERY tick; a retrace-calibrated down-counter (`0x5b6/0x5b8` = measured_retrace_ticks/165 − 2 ≈ 101 → ~70 Hz) gates the game chain `[0x42e]`. The MIDI music advance `0a28` (→`0c39`, which decrements the delay `[ds:0x14]` by 1 per call — asm-firm) is a fixed **sub-division** of the 7231.4 Hz ISR.
+- **Not statically isolable:** `0a28`'s only in-image reference is the `[0x5c2]=0a28` store; its caller `cs:0x1d2` (`call [cs:0x5c2]`) is dead-in-image (installed/chained externally at runtime — confirmed only by the §14 oracle backtrace). So the exact per-call divider `k` cannot be read from the SOUNDDVR image.
+- **Objective selection:** sweep the integer ISR sub-divisions `7231.4/k` and pick `k` by best envelope cross-correlation of the port menu-music region vs the DOSBox OPL oracle (`ref/audio_menu_oracle.wav`). Clean xcorr peak at **k=28**:
+
+  | div k | 26 | 27 | **28** | 29 | 30 |
+  |---|---|---|---|---|---|
+  | Hz | 278.1 | 267.8 | **258.3** | 249.4 | 241.0 |
+  | env xcorr | 0.240 | 0.284 | **0.333** | 0.289 | (falls) |
+  | onset-rate /s | 85.4 | 77.9 | **78.5** | 81.4 | — |
+
+  k=28 → **258.3 Hz** = **170.7 samples/seq-advance**; its onset-rate (78/s) also matches the oracle's (76.6/s). Default `MUSIC_DIV_DEFAULT=28.0`; env `FIST_MUSIC_DIV` / `FIST_MUSIC_HZ` re-select (for re-tuning once the voice-map lands).
+
+**VERIFIED (native, setarch -R, FIST_SB=1, FIST_TICK_HZ=25000):** default plays the melody at 258.3 Hz (seq-advances 20114 / 77.88 s emulated = 258.3 Hz; 10692 OPL writes, 4190 key-ons, varied fnums). Tempo is now in the oracle's ballpark (onset-rate 78/s vs 76.6/s), not 18× off (~1400/s).
+
+**HONEST — NOT bit-exact; the two named residuals:**
+- **#2 VOICE-MAP / velocity (blocks bit-exact):** the port menu music is sparser/quieter than the oracle (WAV peak ~7000 vs 6714 is close, but RMS is lower and the envelope xcorr ceilings at 0.33 even at the correct tempo) — the timbre differs because the device-3 voice→OPL-channel / instrument-patch reconstruction (patch 359) is incomplete. This CONFOUNDS a finer tempo pin and is the frontier before bit-exact. (The oracle `ref/audio_menu_oracle.wav` is phase-UNPINNED and includes menu-click SFX, and is NOT a clean single loop — autocorr peak 0.20 — so "3758 deltas/12.738 s = 295 Hz" of §21 is unreliable; the xcorr-peak method above supersedes it.)
+- **#3 WASM sound-dispatch (blocks the audio-menu verify flow):** under wasm+FIST_SB the menu is reached (`[0x452]`=59052, mode 0x13) but NO `out(0x388)` ever fires → the device-3 OPL method-vector dispatch (`10a6`/`10e3`/`0f99` via `[ds:0x1a5/0x1b3/0x1c1]`, and `0a28` via `fist_icall`) never engages under `call_indirect` — needs the `-sEMULATE_FUNCTION_POINTER_CASTS` / per-family arity normalization the engine vectors use. Video path (FIST_SB off) is native↔wasm 0-diff. **No `audio-menu` verify flow added** (correctly gated on native↔wasm audio 0-diff, which needs this fix).
+
+**No-regression:** 4 hard md5s (`61453e42`/`0051cb56`/`75c6d726`/`e6d610c5`) UNCHANGED; `make check` = all patches apply; FIST_OPL/FIST_SB default-OFF → mainmenu native AE=0 + wasm AE=0, native↔wasm md5 `3a6ff1c5` (0-diff). All changes are FIST_SB/OPL-gated shim (fist_opl.c/fist_sb.c).
+
 ## 21. Iteration 15 — THE MENU MUSIC PLAYS. The MIDI sequencer is faithfully driver-DS-rebased (patch 359); the port synthesizes a REAL `MAINMENU.MS3`-driven melody through the SOUNDDVR sequencer + DBOPL. Milestone: engine-driven notes with correct pitches (129267 OPL writes, 64423 key-ons, WAV peak 4885 vs oracle 6714). Remaining = cadence/phase-pin (tempo ~16× fast) + wasm sound-dispatch. 3 hard md5s + `fist_snd.c` (e6d610c5) UNCHANGED, no re-decompile. 26 video flows byte-identical, native↔wasm 0-diff. (2026-07-18)
 
 **HEADLINE: the §20 premise was STALE.** §20 named the one missing function as the song-init parse `0x0b10`. But it was ALREADY reconstructed by **patch 350** (folded into `0af4`): runtime-proven the driver song fields are set correctly — `[ds:0x6]`=song seg `0x4c24`, `[ds:0xc]`=cursor `0x30` (MIDI stream start), `[ds:0xe]`=`0xffff` (playing), `[ds:0x14]`=1. **The ACTUAL gap was the un-rebased SEQUENCER.** `0af4`/`0a28`/`0c94` were driver-DS-rebased (patches 350/351/358) but `0c39` (sequencer), `0b5d` (MIDI reader) and `0cf3` (program-change) were left in Ghidra's ENGINE-DGROUP model (`_DAT_1000_cNN`), so:

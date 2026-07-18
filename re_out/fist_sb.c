@@ -153,16 +153,10 @@ void fist_snd_isr_tick(void)
     code *fn = fist_icall(fist_snd_base + 0x3ddu);
     if (fn) ((int(*)(int,int,int,int,int,int,int,int,int,int))fn)(0,0,0,0,0,0,0,0,0,0);
 
-    /* Drive the device-3 per-tick VOICE/ENVELOPE ADVANCE (FUN_0000_0a28, patch 358) -- the note-STREAM
-     * + OPL-fnum feed the melody needs.  In the real driver this is dispatched from the timer ISR at
-     * cs:0x1d2 via `call [cs:0x5c2]` (= 0x0a28 for device 3); we own the PIT, so we drive it directly
-     * each tick.  It walks the 10 device-3 voices and, when a voice's computed note changes, dispatches
-     * slot4 [ds:0x1b3] = FUN_0000_10a6 (writes the OPL A0/B0 fnum from cs:0x9dd) -> real pitches for the
-     * 42 posted notes.  Behaviour-neutral until device 3 is selected (FIST_SB) + voices activated. */
-    {
-        code *adv = fist_icall(fist_snd_base + 0xa28u);
-        if (adv) ((int(*)(int,int,int,int))adv)(0,0,0,0);
-    }
+    /* NB the device-3 VOICE/ENVELOPE + MIDI-sequencer advance (FUN_0000_0a28 -> 0c39, patches 358/359)
+     * is NO LONGER driven here (once-per-engine-INT8-tick made the tempo ~16x too fast -- iter 15 §21).
+     * It is now driven at the driver MUSIC-TIMER rate, locked to the OPL sample clock, from
+     * fist_opl_tick() -> fist_snd_seq_advance() below.  See docs/audio.md §22. */
 
     /* diagnostic snapshot of the sequencer state (FIST_SND_DIAG): max arm reached, any voice active,
      * note-table offset populated?  Answers "is the sequencer FED?" without gdb. */
@@ -176,13 +170,34 @@ void fist_snd_isr_tick(void)
     }
 }
 unsigned g_snd_seq_maxarm, g_snd_seq_active, g_snd_seq_isrruns;
+
+/* ---- MUSIC-TIMER cadence (iteration 16) ----
+ * The MIDI sequencer + per-voice envelope advance FUN_0000_0a28 (-> 0c39 fetch/decode + per-voice
+ * OPL A0/B0 fnum reprogram) does ONE music-tick per call.  The SOUNDDVR timer ISR runs at 7231.4 Hz
+ * (PIT ch0 divisor 0xa5=165, asm 0x6f6/0x714 in fist_snd_image.bin) and the music advance is a fixed
+ * sub-division of it; the exact per-call divider is not isolable from the SOUNDDVR image alone (the
+ * 0a28 invoker cs:0x1d2 via [cs:0x5c2] is dead-in-image -- installed/chained externally at runtime),
+ * so the effective MUSIC_HZ is selected among the asm-grounded ISR sub-divisions 7231.4/k by best
+ * xcorr vs the DOSBox OPL oracle (ref/audio_menu_oracle.wav).  Driven from fist_opl_tick(), locked to
+ * the OPL sample clock (advance once per opl_rate/MUSIC_HZ generated samples) so the tempo is
+ * independent of the engine-tick / fast-forward rate.  Behaviour-neutral until device 3 is selected
+ * (FIST_SB) + the song is playing ([ds:0xe]!=0). */
+unsigned g_snd_seq_advances;
+void fist_snd_seq_advance(void)
+{
+    extern int fist_opl_enabled(void);
+    if (!g_snd_isr_seg || !fist_opl_enabled()) return;
+    code *adv = fist_icall(fist_snd_base + 0xa28u);
+    if (adv) { ((int(*)(int,int,int,int))adv)(0,0,0,0); g_snd_seq_advances++; }
+}
+
 void fist_snd_diag(void)
 {
     if (!getenv("FIST_SND_DIAG")) return;
     fprintf(stderr, "[snd-diag] arm-bumps=%u isr-runs=%u max-arm=%u voice-active-hits=%u "
-            "note-table[0x4fe]=0x%04x\n",
+            "note-table[0x4fe]=0x%04x seq-advances=%u\n",
             g_snd_arm_bumps, g_snd_seq_isrruns, g_snd_seq_maxarm, g_snd_seq_active,
-            *(unsigned short*)(g_mem + 0x1c4fe));
+            *(unsigned short*)(g_mem + 0x1c4fe), g_snd_seq_advances);
 }
 
 /* SB DSP base port (default 0x220; the ports 0x2x0..0x2xF window).  The engine derives the base from

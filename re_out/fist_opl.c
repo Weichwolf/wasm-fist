@@ -54,6 +54,25 @@ static int  g_rate_set = 0;
 static double g_samp_acc = 0.0;
 int fist_vga_pit0_div(void);
 
+/* MUSIC-TIMER cadence (iteration 16): the MIDI sequencer advance FUN_0000_0a28 (-> 0c39) is driven at
+ * the driver music-timer rate, LOCKED to this OPL sample clock (not once per engine INT-8 tick, which
+ * ran ~16x too fast -- docs/audio.md §21/§22).  The SOUNDDVR timer ISR is 7231.4 Hz (PIT div 0xa5=165);
+ * the music advance is a fixed sub-division of it.  MUSIC_HZ = 7231.4/k, k selected by best xcorr vs the
+ * oracle (default k below); env FIST_MUSIC_HZ overrides for the sweep.  We advance the sequencer once
+ * per (g_rate / MUSIC_HZ) generated samples via a fractional accumulator. */
+#define SND_ISR_HZ (PIT_HZ / 165.0)          /* 7231.4 Hz -- SOUNDDVR PIT ch0 = 165 (asm-firm) */
+/* MUSIC_DIV: the music-tick is a fixed sub-division of the 7231.4 Hz ISR.  The exact divider is not
+ * isolable statically (the 0a28 invoker cs:0x1d2/[0x5c2] is dead-in-image -> installed externally at
+ * runtime), so it is selected among the integer ISR sub-divisions by best cross-correlation of the
+ * menu-music ENVELOPE vs the DOSBox OPL oracle (ref/audio_menu_oracle.wav): div 26..30 give xcorr
+ * {0.240,0.284,0.333,0.289,...} -> a clean peak at 28 = 258.3 Hz (170.7 samples/seq-advance), whose
+ * onset-rate (78/s) also matches the oracle's (76.6/s).  Before this fix the sequencer advanced once
+ * per engine INT-8 tick (~4773 Hz -> ~18x too fast).  Env FIST_MUSIC_DIV / FIST_MUSIC_HZ re-select. */
+#define MUSIC_DIV_DEFAULT 28.0               /* 7231.4/28 = 258.3 Hz -- xcorr-peak-selected */
+static double g_seq_acc = 0.0;
+static double g_samples_per_seq = 0.0;
+extern void fist_snd_seq_advance(void);
+
 /* ================= register write latch ================= */
 static int g_latch;          /* value last written to 0x388 (the AdLib register index) */
 static unsigned g_a0_writes, g_b0_writes, g_keyon_writes;  /* diag: fnum-lo / block+fnum-hi / key-on */
@@ -157,11 +176,25 @@ int fist_opl_in(int port)
 void fist_opl_tick(void)
 {
     if (!fist_opl_enabled() || !g_rate_set) return;
+    if (g_samples_per_seq == 0.0) {
+        double hz = SND_ISR_HZ / MUSIC_DIV_DEFAULT;
+        const char *e = getenv("FIST_MUSIC_HZ"); if (e) { double v = atof(e); if (v > 0) hz = v; }
+        const char *d = getenv("FIST_MUSIC_DIV"); if (d) { double v = atof(d); if (v > 0) hz = SND_ISR_HZ / v; }
+        g_samples_per_seq = (double)g_rate / hz;
+        if (opltrace()) fprintf(stderr, "[opl] MUSIC_HZ=%.2f -> %.3f samples/seq-advance\n", hz, g_samples_per_seq);
+    }
     int div = fist_vga_pit0_div();
     g_samp_acc += (double)g_rate * (double)div / PIT_HZ;
     unsigned n = (unsigned)g_samp_acc;
     if (n > 65536) n = 65536;           /* guard a pathological divisor */
-    if (n) { g_samp_acc -= n; emit_block(n); }
+    if (n) {
+        g_samp_acc -= n;
+        /* advance the MIDI sequencer at MUSIC_HZ, locked to the sample clock (once per
+         * g_samples_per_seq generated samples) -- BEFORE emitting so the block reflects the writes */
+        g_seq_acc += n;
+        while (g_seq_acc >= g_samples_per_seq) { g_seq_acc -= g_samples_per_seq; fist_snd_seq_advance(); }
+        emit_block(n);
+    }
 }
 
 /* fist_opl_pump: retained for the port-I/O pump path but generation is driven per-tick (fist_opl_tick),
