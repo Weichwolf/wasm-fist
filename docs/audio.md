@@ -1,6 +1,83 @@
-# AUDIO subsystem — recon + shim foundation (iterations 1–13)
+# AUDIO subsystem — recon + shim foundation (iterations 1–14)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
+
+## 20. Iteration 14 — ORACLE out(0x388) BACKTRACE: THE MENU BGM IS SOLVED. It is the MIDI song EMBEDDED IN `MAINMENU.MS3`, sequenced by SOUNDDVR.DVR and synthesized through the OPL. Both prior misattributions are corrected. NOT extender-resident — 100% FIST.DAT + SOUNDDVR (wireable via patches). READ-ONLY recon, 4 hard md5s UNCHANGED. (2026-07-18)
+
+**HEADLINE: instrumented DOSBox (`adlib.cpp` hook logging guest CS:IP + stack backtrace on every 0x388/
+0x389 write), booted the ORIGINAL to the menu, captured ~4500 OPL writes over 41 s of music (2236 SEL +
+2236 DATA). Every write comes from ONE leaf out-pair primitive; the stack backtrace + a 4 MB guest-RAM
+dump decode the full call chain and the note source slot-for-slot. The menu melody is a real MIDI stream
+inside `MAINMENU.MS3`. No engine/shim/patch touched; 4 hard md5s unchanged
+(`61453e42`/`0051cb56`/`75c6d726`/`e6d610c5`).**
+
+**TOOLING (committed, reproducible):** `tools/oracle/dosbox_opl_trace.patch` (hooks `Module::PortWrite` in
+`src/hardware/adlib.cpp`), `tools/oracle/trace_opl.sh` (drives to the menu, dumps), `tools/oracle/
+README_opl.md`. Build reuses the terrain-oracle sysroot. Env `FISTOPLLOG=<prefix>`, default OFF.
+
+**THE LEAF WRITER — SOUNDDVR.DVR `0x0f21` (this boot: load seg `0x4ab0`, so flat `0x4ba21`).** Both
+distinct CS:IPs in the histogram (`4ab0:0f29` = `out 0x388`, `4ab0:0f38` = `out 0x389`) are inside this one
+primitive. Confirmed by matching its bytes (`8a c4 ba 88 03 ee` = `mov al,ah; mov dx,0x388; out dx,al`)
+against every image — UNIQUE hit in `re_out/fist_snd_image.bin` @ file `0x0f24` (= driver offset). So the
+whole OPL stream is posted by SOUNDDVR, NEAR-called from within seg `0x4ab0` (the sequencer shares CS).
+`AX` = `{AH=register, AL=data}`; the primitive pushes cx/dx/ax + two `cs:0x5a6` delay loops.
+
+**THE CALL CHAIN (asm-verified from the backtrace + `fist_snd_image.bin` disasm) — all SOUNDDVR offsets:**
+```
+timer ISR (device-init 0x78 registers bx=0x3d6 ISR)
+  -> 0x0a28  per-tick voice/envelope ADVANCE  (mov ds,cs:0x831 = driver DATA seg 0x4d55)
+       0xa2d: if [DS:0xe]!=0  -> call 0x0c39   (the SEQUENCER; [DS:0xe]=0xffff = "song playing")
+       0xa96: dispatch [ds:0x1b3] = 0x10a6     (per-voice fnum ADVANCE = vibrato/pitch env)
+  -> 0x0c39  MIDI SEQUENCER
+       decw [DS:0x14] (delay); if !=0 ret      ([DS:0x14] = ticks-until-next-event)
+       0xc3f: call 0x0b5d  FETCH NEXT EVENT (the MIDI reader)
+       per channel: [DS:0x2a+ch]=cur note, [DS:0x111+ch]=active; call 0x0aa7 -> 0x10e3 (KEY ON/OFF)
+  -> 0x0b5d  MIDI EVENT READER
+       es=[DS:0x6] (song seg), bx=[DS:0xc] (cursor); ax = es:[bx] (word)
+       cmp ax,0x2fff -> END OF SONG (stop). else cl=al&0xf0 (MIDI status), ch=al&0x0f (channel):
+         0x90 note-on (vel->[0x16+ch]) | 0x80 note-off | 0xc0 program-change (call 0xcf3)
+         0xe0 pitch-bend (->[0xb8+ch], read by 0x0a28) | 0xb0 control | 0xd0 pressure
+```
+Voice methods (indirect via `[ds:0x1b3]`/`[ds:...]`): **`0x10a6`** SET PITCH — reads the note→fnum table at
+driver **`DS:0x9dd`** (`note*2`), writes `A0` (fnum-lo) + `B0` (block/fnum-hi). **`0x10e3`** KEY ON/OFF +
+velocity — writes `0x40` (TL/volume) + `B0` key bit. **`0x0f99`** PROGRAM INSTRUMENT — reads a 16-byte FM
+patch at driver **`DS:0x1dd + patch*16`** → both operators (`0x20/40/60/80/E0`) + `0xC0`. Channel/op-slot
+maps at `DS:0xc01` (voice→OPL chan) / `DS:0xbe6`/`0xbef`/`0xbf8` (op1/op2/chan reg offsets). All these
+tables are STATIC driver data (present in `fist_snd_image.bin`), runtime-verified populated (note 0x24 →
+fnum 0x172; monotonic 12-TET table).
+
+**THE NOTE SOURCE = `MAINMENU.MS3` (RUNTIME-PROVEN, not a guess).** Read the live driver DATA seg
+(`cs:0x831`=`0x4d55`): `[DS:0x6]` song seg = `0x59cc`, `[DS:0xc]` cursor = `0x312` (mid-song), `[DS:0xe]` =
+`0xffff` (playing). The song bytes at `0x59cc0` = **`4d 53 33 2d 4b 47 46 27 39 31 …`** = "MS3-KGF'91" and
+match `armoredfist/FISTDATA/MAINMENU.MS3` (3561 B) BYTE-FOR-BYTE. **`MAINMENU.MS3` is a KGF'91 music
+container**, layout:
+- `0x00-0x0f`: 13-byte sig `"MS3-KGF'91\x0a\x0d\x1a"` + header fields (`ff ff 02 …`)
+- `0x10-0x1f`: 16-byte per-channel enable/config table
+- `0x20-0x2f`: 16-byte initial patch/note table (`5c 5b 60 58 5e 5a 5a 5a 26 5e …`)
+- `0x30+`   : the MIDI event stream (`91 24 40 00 | 95 49 31 00 | 99 24 39 00 | 85 0a | 81 04 …`)
+
+**THE TRIGGER PATH (corrects §19).** §19 was RIGHT that `e714 → be0e(4)` opens `MAINMENU.MS3` (via
+`[DGROUP:0x378]=c378=250d`) and hands it to the driver via `ax=2, bx=0, es=[DGROUP:0x9f1c], lcall
+[DGROUP:0x510] = c510 = SOUNDDVR 0x01ec`. It was WRONG that this is "garbage": `0x01ec` (`cmp ax,0xffff; je
+stop; else call 0x0af4`) → **`0x0af4` is the legitimate song-register**: `test al,1` — `al&1==0` (port
+passes `ax=2`) → the FULL song-init at `0x0b10` (reads the channel/note tables, sets `[DS:0x6]`=song seg,
+cursor→`0x30`, `[DS:0xe]=0xffff`, `[DS:0x14]=1`); `al&1` → the one-shot SFX-descriptor store at `0x0b04`.
+So the .MS3 is the SONG, not a "screen script fed as a garbage descriptor."
+
+**VERDICT — 100% FIST.DAT + SOUNDDVR (patch-wireable), NOT extender-resident.** The port already reaches
+the correct trigger with the correct file (`be0e→c510→01ec→0af4`) and drives `0x0a28` per tick (§18). The
+ONE structural gap: **`0x0b00` (the `0x0af4→0x0b10` song-init parse) is ABSENT from the port decomp**
+(`grep FUN_0000_0b00 re_out/fist_snd_decomp.c` = 0 hits, while `0af4/0b5d/0c39/0aa7/10a6/10e3/0f99/01ec`
+all exist) — matching §19's symptom that the port "copies a 0x20-byte descriptor" instead of parsing the
+KGF'91 container. **NEXT ITERATION:** reconstruct `0x0af4`'s `0x0b10` branch faithfully (parse `MAINMENU.MS3`:
+channel table `@+0x10`, note table `@+0x20`, cursor→`+0x30`, set `[DS:0x6/0xc/0xe/0x14]`), then let the
+already-present sequencer (`0x0c39`/`0x0b5d`) + voice methods (`10a6`/`10e3`/`0f99` reading tables
+`0x9dd`/`0x1dd`) play it. Then the OPL synth (fist_opl.c/DBOPL) renders the melody → wavcompare vs
+`ref/audio_menu_oracle.wav`.
+
+**No-regression:** READ-ONLY recon. No `re_out/*.c` or `patches/` change. 4 hard md5s unchanged
+(`61453e42`/`0051cb56`/`75c6d726`/`e6d610c5`). Only `tools/oracle/` (new OPL instrumentation) + this doc +
+memory added.
 
 ## 19. Iteration 13 — DECISIVE RECON, TWO PREMISES DEBUNKED (no engine patch, 4 hard md5s UNCHANGED). op=6 is DEVICE SHUTDOWN, not "play music" (the iter-11/12 target is a dead end). The menu-scene trigger e714→be0e(4) DOES fire — but it feeds the raw `MAINMENU.MS3` header to the OPL as a "sound descriptor" → garbage → the "2 notes" are noise, not music. The real menu-BGM note source is MISATTRIBUTED and needs the oracle out(0x388) backtrace (2026-07-18)
 

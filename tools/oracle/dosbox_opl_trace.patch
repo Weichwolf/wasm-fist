@@ -1,0 +1,103 @@
+--- src/hardware/adlib.cpp	2019-05-02 19:01:18.000000000 +0200
++++ src/hardware/adlib.cpp	2026-07-18 13:09:40.867293792 +0200
+@@ -29,6 +29,92 @@
+ #include "mem.h"
+ #include "dbopl.h"
+ 
++/* ==== wasm-fist oracle instrumentation: capture the OPL-register WRITER ====
++ * Logs, for every guest write to the AdLib/OPL ports (0x388 register-select /
++ * 0x389 data), the guest CS:IP, PIC timestamp, port, value, and the resolved
++ * OPL register (so the A0/B0 fnum + key-on melody stream can be separated from
++ * the init burst and mapped back to the FIST.DAT / SOUNDDVR code offset).
++ * Continuous write to $FISTOPLLOG (default off => behaviour-neutral).  Also a
++ * per-CS:IP histogram dumped on SIGUSR2 to $FISTOPLLOG.writers.txt.  Defined in
++ * the GLOBAL namespace so the regs.h Segs/cpu_regs globals resolve. */
++#include "regs.h"
++#include "cpu.h"
++#include "pic.h"
++#include <signal.h>
++#include <stdio.h>
++static FILE *fist_opl_f = 0;
++static bool  fist_opl_init = false;
++static Bit32u fist_opl_seq = 0;
++static Bit8u  fist_opl_pending = 0;   /* last register selected via 0x388 */
++struct FistOplEnt { Bit32u cs, eip, count; };
++#define FIST_OPL_NENT 4096
++static FistOplEnt fist_opl_ent[FIST_OPL_NENT];
++static int fist_opl_nent = 0;
++static volatile int fist_opl_dump = 0;
++static void fist_opl_sig(int s){ (void)s; fist_opl_dump = 1; }
++
++static void fist_opl_hook( Bitu port, Bitu val ) {
++	if ( !fist_opl_init ) {
++		fist_opl_init = true;
++		const char *p = getenv("FISTOPLLOG");
++		if ( p && *p ) { fist_opl_f = fopen(p, "w"); }
++		signal(SIGUSR2, fist_opl_sig);
++	}
++	if ( fist_opl_dump ) {
++		fist_opl_dump = 0;
++		const char *p = getenv("FISTOPLLOG");
++		char path[600];
++		snprintf(path, sizeof path, "%s.writers.txt", p ? p : "/tmp/fistopl");
++		FILE *g = fopen(path, "w");
++		if ( g ) {
++			fprintf(g, "# OPL-write CS:IP histogram: %d distinct IPs\n", fist_opl_nent);
++			for ( int i = 0; i < fist_opl_nent; i++ )
++				fprintf(g, "cs=%04x:%04x flat=%08x count=%u\n",
++					fist_opl_ent[i].cs, fist_opl_ent[i].eip,
++					(fist_opl_ent[i].cs<<4)+fist_opl_ent[i].eip, fist_opl_ent[i].count);
++			fclose(g);
++		}
++		/* dump low 4 MB of guest physical RAM for offline code decode */
++		char rp[600]; snprintf(rp, sizeof rp, "%s.ram.bin", p ? p : "/tmp/fistopl");
++		FILE *rf = fopen(rp, "wb");
++		if ( rf ) {
++			for ( Bit32u a = 0; a < 0x400000; a++ ) { Bit8u b = mem_readb(a); fputc(b, rf); }
++			fclose(rf);
++		}
++		if ( fist_opl_f ) fflush(fist_opl_f);
++	}
++	Bit32u csv = SegValue(cs), eipv = reg_eip;
++	Bit32u flat = SegPhys(cs) + reg_eip;
++	int isdata = (int)(port & 1);
++	Bit8u reg = fist_opl_pending;
++	if ( !isdata ) fist_opl_pending = (Bit8u)val;   /* 0x388: register select */
++	if ( fist_opl_f ) {
++		fprintf(fist_opl_f, "%u t=%u cs=%04x:%04x flat=%08x port=%03x val=%02x %s reg=%02x",
++			fist_opl_seq++, (Bit32u)PIC_Ticks, csv, eipv, flat,
++			(Bit32u)port, (Bit32u)val, isdata ? "DATA" : "SEL ", isdata ? reg : (Bit8u)val);
++		if ( isdata ) {
++			/* guest-stack backtrace: return addresses of the caller chain.  The
++			 * OPL primitive is a leaf out-pair helper, so [SS:SP+k] holds the
++			 * melody poster's return address.  Log ss:sp + 12 stack words as
++			 * flat return-address candidates (cs<<4+off style near returns). */
++			Bit32u ssb = SegPhys(ss); Bit16u sp = reg_sp;
++			fprintf(fist_opl_f, " ss=%04x:%04x stk=", SegValue(ss), sp);
++			for ( int k = 0; k < 12; k++ ) {
++				Bit16u w = mem_readw( ssb + (Bit16u)(sp + 2*k) );
++				fprintf(fist_opl_f, "%04x,", w);
++			}
++		}
++		fprintf(fist_opl_f, "\n");
++	}
++	int i;
++	for ( i = 0; i < fist_opl_nent; i++ )
++		if ( fist_opl_ent[i].cs == csv && fist_opl_ent[i].eip == eipv ) { fist_opl_ent[i].count++; break; }
++	if ( i == fist_opl_nent && fist_opl_nent < FIST_OPL_NENT ) {
++		fist_opl_ent[i].cs = csv; fist_opl_ent[i].eip = eipv; fist_opl_ent[i].count = 1;
++		fist_opl_nent++;
++	}
++}
++
+ namespace OPL2 {
+ 	#include "opl.cpp"
+ 
+@@ -443,6 +529,7 @@
+ 
+ 
+ void Module::PortWrite( Bitu port, Bitu val, Bitu iolen ) {
++	fist_opl_hook( port, val );
+ 	//Keep track of last write time
+ 	lastUsed = PIC_Ticks;
+ 	//Maybe only enable with a keyon?
