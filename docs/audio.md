@@ -1,6 +1,93 @@
-# AUDIO subsystem — recon + shim foundation (iterations 1–12)
+# AUDIO subsystem — recon + shim foundation (iterations 1–13)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
+
+## 19. Iteration 13 — DECISIVE RECON, TWO PREMISES DEBUNKED (no engine patch, 4 hard md5s UNCHANGED). op=6 is DEVICE SHUTDOWN, not "play music" (the iter-11/12 target is a dead end). The menu-scene trigger e714→be0e(4) DOES fire — but it feeds the raw `MAINMENU.MS3` header to the OPL as a "sound descriptor" → garbage → the "2 notes" are noise, not music. The real menu-BGM note source is MISATTRIBUTED and needs the oracle out(0x388) backtrace (2026-07-18)
+
+**HEADLINE: this iteration ran the actual code (setarch -R + gdb, FIST_COOP_TICK=1 to reach the menu
+without the SIGALRM flood) and DISPROVED the two premises the last several iterations were built on. NO
+engine change was made — the finding is that the target was wrong. 4 hard-pristine md5s UNCHANGED
+(`61453e42`/`0051cb56`/`75c6d726`/`e6d610c5`), tree clean, default mainmenu AE=0 (md5 `3a6ff1c5`).**
+
+**FINDING 1 — `op=6` (`FUN_1000_50e6`, reached via `516f`/`518d`) is the DEVICE SHUTDOWN command, NOT
+"start music". AIRTIGHT (image scan + driver disasm + call-graph):**
+- There are EXACTLY TWO op-dispatch sites in the whole engine (scan for `c7 06 51 59 <imm>` = `movw
+  imm,cs:0x5951`): **op=2 @ `0x150bb`** (in `FUN_1000_5051`, the device LOAD) and **op=6 @ `0x150fd`**
+  (in `50e6`). The dispatch itself is `lcall *cs:0x5951` = a FAR call to `{off = word[cs:0x5951] = op,
+  seg = word[cs:0x5953] = the device/object seg}` → i.e. it calls `deviceseg:op`, indexing the driver's
+  method jump-table at offset `op`.
+- The 0x4fa device object's seg = the SOUNDDVR load seg (`0x3a07`). Driver base: `off 0 ret / 1 lret /
+  **2 → jmp 0x78** / **6 → jmp 0xc1** / 9 lret`. So op=2 → driver `0x78`, op=6 → driver `0xc1`.
+- **Driver `0x78` (op=2) = DEVICE INIT**: installs the far reloc section (`lcall [DGROUP:0x12]=f842`),
+  registers the timer-ISR (`bx=0x3d6; lcall [DGROUP:0xf4]=107a`), MEMMGR-searches the work-obj
+  (`ax=0x413; bx=0x4fa; lcall [DGROUP:0xd4]=1917`). This runs at boot (`app_entry→515e→5051`).
+- **Driver `0xc1` (op=6) = DEVICE SHUTDOWN**: `lcall [0x50c]=019a` which **CLEARS** the reloc sections
+  op=2 installed (`mov si,0x22; lcall [0x16]=f860`; `mov si,0x4e; lcall [0x2a]`), then `lcall [0x520]`,
+  re-registers the ISR (`bx=0x3d6; lcall [0xf8]`), clears section 0xa, and pokes the status byte. Clearing
+  what init installed = **teardown**, not play.
+- **`50e6`'s ONLY callers are `516f`(0x4fa) and `518d`(0x3e4); a full image word-scan finds ZERO indirect
+  references** (not in any DGROUP vector or dispatch table). `516f`/`518d` are called ONLY inside the
+  `app_entry`/`FUN_0000_0007`/`FUN_0000_00d0` TEARDOWN sequence — immediately before the `INT 21h AH=4C00`
+  program-exit (`00d0` ends with `fist_int_dispatch()` on `uRam000f0000=0x4c00`). So op=6 fires ONCE, at
+  QUIT. It is CORRECTLY never reached during the menu. **The iter-11/12 hunt for "why op=6 isn't reached"
+  chased a shutdown command.** Do NOT force it.
+
+**FINDING 2 — the menu-SCENE activation `e714 → FUN_0000_be0e(4)` DOES fire (runtime-proven), and it is
+the load of `MAINMENU.MS3` — but the port then hands the raw .MS3 to the OPL synth as a "sound
+descriptor" → garbage.** (NB `be0e`'s arg is BX in the asm but a normal C param in the flat port — read
+it with gdb `p param_1`, NOT `$ebx`/`$eax`, which are meaningless host regs. An earlier count that read
+`$eax` produced the bogus "arg=40 / be0e(4) never fires" — that was a gdb mistake, corrected here.)
+- `FUN_0000_be0e(4)` (asm 0xbe0e; `mov bx,4; call be0e`) is the FIRST statement of `e714` and fires at
+  menu-enter (gdb `p param_1` = 4). It: (a) `dx=[DGROUP:0x9f30]`(=`0x9f6e`, the filename off), `bx=0x9f1c`,
+  `cx=ds`, `lcall [DGROUP:0x378]` = **`c378 = 0f69:250d`** (`FUN_1000_250d`, the generic resource
+  OPEN+READ) → opens **`MAINMENU.MS3`** (INT 21h AH=3D, DS:DX=`1c00:9f6e`) and stores its loaded seg in
+  `DGROUP:0x9f1c`; then (b) `ax=[DGROUP:0x9f32]`(=2), `bx=0`, `es=[DGROUP:0x9f1c]`, `lcall [DGROUP:0x510]`
+  = **`c510 = 3a07:01ec`** (the SOUNDDVR note-register, installed legitimately by the driver's own config
+  section 0x22 — NOT a patch-348 collision) → `01ec`→`0af4` copies a 0x20-byte "sound descriptor" from
+  `ES:BX` = **`MAINMENU.MS3` : 0**.
+- Runtime dump at `0af4`: `DGROUP[0x9f1c]=0x4c24`, and `0x4c240` (seg:0) = `4d 53 33 2d 4b 47 46 27 39 31
+  0a 0d 1a ff ff 02 …` = the ASCII **"MS3-KGF'91"** header. So the driver reads the SCREEN-SCRIPT file
+  header as an FM sound descriptor → garbage. That garbage is the source of the "2 stray key-ons" (peak
+  330) — it is NOISE, not the menu melody. **§17's "42 device-3 note posts" and iter-12's "note-ON feed"
+  are both this same garbage path.**
+
+**RUNTIME COUNTS (setarch -R, FIST_COOP_TICK=1 + FIST_TICK_HZ=1 so gdb reaches the menu; FIST_SB/OPL=1;
+`p param_1` for be0e):** `be0e(4)`=1 (fires), `01ec`=3, `0af4`=2 (register from the .MS3 header),
+`0966`=2, `0997`=2 (note-ON alloc), `0cfb`=2 (voice-reset), `0aa7`=43, `10a6`=2148 (the shim's per-tick
+0a28 advance thrashing the garbage voices). **`50e6`/`516f`/`518d` = 0 (correctly — teardown-only).**
+System-1 (the ISR cs:0x60 sequencer): note-table `DGROUP:0x4fe`=0, `voice-active`=0 — and a full
+image+driver scan confirms **NOTHING in FIST.DAT or SOUNDDVR writes `DGROUP:0x4fe` absolutely** (it is
+`add bx,[es:0x4fe]`-READ by the ISR only; it must be set register-indirectly via the device-object
+pointer, `obj+4` where obj=DGROUP:0x4fa — a store not yet located/reached). WAV: peak 330 vs oracle 6714
+= MISMATCH (unchanged; the shim/pipeline are all default-OFF, so the video flows are byte-identical).
+
+**WHERE THE MENU BGM ACTUALLY COMES FROM = STILL OPEN (honest).** Two candidate systems, both currently
+dead, and static RE has now produced TWO wrong attributions (op=6, and the be0e→OPL handoff), so the
+premises can no longer be trusted:
+1. **System-2 (device-3 direct voices, be0e):** the `be0e(4)`→`.MS3`→`0af4` handoff reads the .MS3 HEADER,
+   not a sound descriptor. Either `250d` should return a PARSED sound structure (not the raw file) for
+   this source, or `be0e(4)` is the menu SFX context (button blips) and not the continuous BGM at all.
+2. **System-1 (ISR sequencer, note-table `DGROUP:0x4fe`):** never populated; the writer is register-
+   indirect (obj+4) and unlocated/unreached.
+
+**NEXT ITERATION — STOP static-guessing the entry point; use the ORACLE microscope.** The only decisive
+way to break this (after two misattributions) is a backtrace of the ORIGINAL's `out 0x388/0x389` writes:
+either (a) rebuild DOSBox with a one-line log of the guest `CS:IP` in the OPL port handler (`adlib.cpp`),
+boot the original to the menu, capture the CS:IP stream, and map it back to FIST.DAT/SOUNDDVR offsets; or
+(b) `qemu-system-i386 -s -S` + an I/O watch on 0x388. That names the EXACT engine/driver function that
+posts the continuous menu melody. Only then wire it faithfully. (DOSBox source is NOT present locally —
+`/usr/bin/dosbox` binary only; QEMU IS present at `/usr/bin/qemu-system-i386`.)
+
+**GDB METHOD NOTE (load-bearing for all future audio tracing):** the SIGALRM host timer (25000 Hz) floods
+gdb so hard the menu is never reached under breakpoints. `FIST_COOP_TICK=1` STILL arms the SIGALRM (it
+only ADDS a cooperative pump), so ALSO set `FIST_TICK_HZ=1` → 1 SIGALRM/s → gdb runs fast AND the coop
+pump drives the intro/menu to completion in seconds. And the port is flat C: engine "registers" are C
+params on the host stack — read `p param_1`, never `$eax`/`$ebx`.
+
+**No-regression:** NO engine patch, NO re-decompile. `make check` = 358 patches apply; default mainmenu
+native AE=0 (md5 `3a6ff1c5`); 4 hard md5s unchanged. wasm unaffected by construction (no engine/shim
+edit). HONEST: still no menu melody — but the last iterations' target (op=6) is a shutdown command, and
+the real BGM source needs the oracle backtrace, not another static guess.
 
 ## 18. Iteration 12 — the FNUM PATH IS FIXED + DRIVEN (patch 358): the per-tick voice-envelope advance FUN_0000_0a28 now dispatches the frequency method 10a6 → real OPL A0/B0 fnum writes fire (A0-A8: 0 → 29). HONEST: STILL NO MELODY — the note-ON FEED never runs (the engine's op=6 play trigger 516f→50e6 is NEVER reached; 0966/0997 note-post = ~0). §17's "42 note posts" is DISPROVEN at runtime (2026-07-18)
 
