@@ -1098,7 +1098,7 @@ int fist_extender_gate(void) {
         else if (op==0x54 && !did_roster){ did_roster=1; tag="roster1"; }
         else if (op==0x50 && !did_op50){ did_op50=1; tag="op50"; }
         if (tag){ char path[512]; snprintf(path,sizeof path,"%s.%s.bin",pfx,tag);
-          FILE *f=fopen(path,"wb"); if(f){ fwrite(g_mem+0x1c000,1,0x2200,f); fclose(f);
+          FILE *f=fopen(path,"wb"); if(f){ fwrite(g_mem+0x1c000,1,0x10000,f); fclose(f);
             fprintf(stderr,"[dgdump] wrote %s (op=0x%x)\n",path,op); } }
       } }
     /* FIST_VEHWATCH (diagnostic, default OFF): poll the player-vehicle node veh+8 (Y) at every op-gate
