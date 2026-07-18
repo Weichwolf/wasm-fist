@@ -213,8 +213,13 @@ static void tick_advance(void){
     (*(volatile uint32_t*)(g_mem+BIOS_TICK_LIN))++;
     if (g_tick_pending < TICK_PENDING_CAP) g_tick_pending++;
 }
+/* Set once the mission (cockpit view d549==0x1c) is entered: from then on the INT-8 time base is driven
+ * purely COOPERATIVELY (one tick per fist_timer_pump, exactly like wasm) and the async SIGALRM stops
+ * contributing, so [0x452] and the whole live mission sim evolve in lockstep native<->wasm.  See the
+ * MISSION-COOP note in fist_timer_pump. */
+static volatile sig_atomic_t g_mission_coop = 0;
 #ifndef __EMSCRIPTEN__
-static void tick_handler(int sig){ (void)sig; tick_advance(); }
+static void tick_handler(int sig){ (void)sig; if (g_mission_coop) return; tick_advance(); }
 static void start_timer(void){
     struct sigaction sa = {0}; sa.sa_handler = tick_handler; sa.sa_flags = SA_RESTART;
     sigaction(SIGALRM, &sa, 0);
@@ -365,9 +370,28 @@ void fist_timer_pump(void){
      * per pump, exactly like wasm) so the engine can be traced under gdb without gdb having to process
      * thousands of SIGALRM/sec. The rendered frame does not depend on the tick RATE (the menu is a fixed
      * point once painted), so a coop-tick native run reaches the same deterministic menu/sub-screen frame
-     * as the SIGALRM-timed run -- diagnostics only; the shipped run keeps the SIGALRM timer. */
-    { static int coop = -1; if (coop < 0) coop = getenv("FIST_COOP_TICK") ? 1 : 0;
-      if (coop) tick_advance(); }
+     * as the SIGALRM-timed run -- diagnostics only; the shipped run keeps the SIGALRM timer.
+     *
+     * MISSION-COOP (default ON in-mission): the MENUS are timing-independent fixed points, so native's
+     * SIGALRM cadence and wasm's cooperative cadence converge to the same frame -- but the MISSION is a
+     * live sim that keeps evolving every INT-8 tick, so the two cadences reach DIFFERENT sim states at the
+     * same logical point (native drains up-to-4 wall-clock ticks/pump -> [0x452]=1 at map-load; wasm
+     * advances exactly 1 tick/pump -> [0x452]=274).  That tick-count divergence is what makes the in-mission
+     * DGROUP (event queue + object subsystem) differ native<->wasm.  Fix: once the cockpit view is active
+     * (d549==0x1c, the same in-mission gate the frame-ready handshake below uses), drive native's tick
+     * EXACTLY like wasm -- one tick per pump, discarding any SIGALRM-accumulated pending -- so [0x452] and
+     * the whole mission sim evolve in lockstep on both targets.  Behaviour-neutral for the 28 menu/settings/
+     * intro/editor flows (they never set d549==0x1c).  FIST_NOMISSIONCOOP=1 opts out (keeps SIGALRM). */
+    { static int coop = -1, nomc = -1;
+      if (coop < 0) coop = getenv("FIST_COOP_TICK") ? 1 : 0;
+      if (nomc < 0) nomc = getenv("FIST_NOMISSIONCOOP") ? 1 : 0;
+      int in_mission = (g_mem[0x1c000 + 0x1549] == 0x1c);
+      if (coop) { tick_advance(); }
+      else if (in_mission && !nomc) {           /* wasm-parity cadence: one tick per pump, no SIGALRM */
+          if (!g_mission_coop) { g_mission_coop = 1; g_tick_pending = 0; }  /* transition: stop async ticks, flush menu-phase leftover */
+          tick_advance();
+      }
+    }
 #endif
     { extern void fbtrap_arm_hook(void); fbtrap_arm_hook(); }
     { extern void fist_sb_pump(void); fist_sb_pump(); }   /* SB auto-init stream: raise completion IRQ (FIST_SB) */

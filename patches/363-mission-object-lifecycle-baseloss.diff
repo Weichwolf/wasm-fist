@@ -1,0 +1,128 @@
+PATCH 363: mission per-object display-list LIFECYCLE cluster -- the DAT_2000_9fbc object-slot table
+(DGROUP:0xdfbc, 182 entries, STRIDE 4; each nonzero slot is a DGROUP near-offset to an object struct)
+base-loss family, asm-verified vs re_out/fist_dat_image.bin (DS=SS=DGROUP=0x1c00).  Four leaf/helper
+methods dispatched from the c0e5 per-frame object walk (patch 243) read a slot as a HOST pointer instead
+of a DGROUP near-offset:
+
+  FUN_1000_b2d3 @0x1b2d3  set-state:   mov di,[bx-0x2044]; mov word[di],0x13; or byte[di+0x16],1; ...
+  FUN_0000_c0ba @0xc0ba   lifetime:    dec byte[di+0x17]; if 0 -> b354(di) -> b2ef
+  FUN_1000_b354 @0x1b354  find-index:  si=0xdfbc; cmp word[si],di; si+=4; loop   (Ghidra strode int*+8, int-cmp)
+  FUN_1000_b2ef @0x1b2ef  destroy:     or byte[di+0x16],1; clear slot; dec 0xdfbe; remove from a2f7/a38d live-list
+
+On native the small near-offset used as a host pointer lands in unmapped low memory -> SIGSEGV once the
+mission sim reaches the object-roster phase (c0e5 -> c0ba -> b354/b2ef, and c0e5 -> ... -> b2d3).  On wasm
+the same 16-bit address is inside linear memory so the writes SILENTLY CORRUPT DGROUP -> the display-list
+object state is wrong -> the FUN_0000_20d6 child-walk dispatches wild method offsets -> the extender op-0x50
+projection loop spins ~1241x -> recursive FUN_0000_2486 stack overflow (the wasm mission-render blocker).
+Same root, two symptoms.
+
+FIX: rebase every object near-offset to g_mem+0x1c000+off (the DGROUP base) and restore the asm field
+widths/strides (b354: word compare + stride-4; b2ef: byte[di+0x16], word[di+2] subindex).  The table reads
+(&DAT_2000_9fbc = g_mem+0x29fbc = DGROUP:0xdfbc; &DAT_2000_9fbe the adjacent counter) are already correctly
+based -- only the near-offset's use as a pointer was wrong.  Same class + fix pattern as the c0e5 walk
+(patch 243) and patches 335-340.  Behaviour-neutral for the 28 verify flows (mission-object path only).
+--- a/fist.c	2026-07-18 19:42:50.739294331 +0200
++++ b/fist.c	2026-07-18 20:26:36.096207583 +0200
+@@ -29692,13 +29692,11 @@
+ void __allregs FUN_0000_c0ba(int param_1)
+ 
+ {
+-  char *pcVar1;
+-  int iVar2;
+-  
+-  pcVar1 = (char *)(param_1 + 0x17);
+-  *pcVar1 = *pcVar1 + -1;
+-  if (*pcVar1 == '\0') {
+-    iVar2 = FUN_1000_b354(param_1);
++  /* PATCH 363: per-object lifetime tick.  asm 0xc0ba: dec byte[di+0x17]; jne; else b354(di)->b2ef.
++   * di=param_1 is the object near-offset; Ghidra used (char*)(param_1+0x17) as a host ptr (base-loss). */
++  unsigned char *dg = g_mem + 0x1c000;
++  if (--dg[(unsigned short)(param_1 + 0x17)] == 0) {
++    int iVar2 = FUN_1000_b354(param_1);
+     FUN_1000_b2ef(iVar2);
+   }
+   return;
+@@ -61397,13 +61395,15 @@
+ void __allregs FUN_1000_b2d3(int param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  
+-  puVar1 = (undefined2 *)((undefined2 *)&DAT_2000_9fbc)[param_1 * 2];
+-  if (puVar1 != (undefined2 *)0x0) {
+-    *puVar1 = 0x13;
+-    *(byte *)(puVar1 + 0xb) = *(byte *)(puVar1 + 0xb) | 1;
+-    *(undefined1 *)((int)puVar1 + 0x17) = 4;
++  /* PATCH 363: asm 0x1b2d3 `mov di,[bx-0x2044]` (bx=param_1<<2) -> di=word[DGROUP:0xdfbc+param_1*4], the
++   * per-object slot table DAT_2000_9fbc (182 entries, stride 4).  di is a DGROUP NEAR-OFFSET; Ghidra used
++   * it as a host pointer -> wild deref.  Rebase to g_mem+0x1c000+di (cf. the c0e5 walk, patch 243). */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)((undefined2 *)&DAT_2000_9fbc)[param_1 * 2];
++  if (off != 0) {
++    *(undefined2 *)(dg + off) = 0x13;
++    dg[(unsigned short)(off + 0x16)] |= 1;
++    dg[(unsigned short)(off + 0x17)] = 4;
+   }
+   return;
+ }
+@@ -61414,19 +61414,24 @@
+ void __allregs FUN_1000_b2ef(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)((undefined2 *)&DAT_2000_9fbc)[param_1 * 2];
+-  if (piVar1 != (int *)0x0) {
+-    *(byte *)(piVar1 + 0xb) = *(byte *)(piVar1 + 0xb) | 1;
++  /* PATCH 363: object-DESTROY method, asm 0x1b2ef.  di=word[DGROUP:0xdfbc+param_1*4] (DAT_2000_9fbc
++   * object near-offset).  Ghidra used di as a host int* (base-loss) + int*-scaled fields.  Rebase to
++   * DGROUP; asm widths: or byte[di+0x16],1; clear slot; dec 0xdfbe counter; then by object-type flag
++   * byte[type-0x19ec] remove subindex word[di+2] from the a2f7/a294 or a38d/a296 live-lists. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)((undefined2 *)&DAT_2000_9fbc)[param_1 * 2];
++  if (off != 0) {
++    unsigned short type = *(unsigned short *)(dg + off);
++    unsigned short sub  = *(unsigned short *)(dg + (unsigned short)(off + 2));
++    dg[(unsigned short)(off + 0x16)] |= 1;
+     ((undefined2 *)&DAT_2000_9fbc)[param_1 * 2] = 0;
+     ((undefined2 *)&DAT_2000_9fbe)[param_1 * 2] = ((undefined2 *)&DAT_2000_9fbe)[param_1 * 2] + -1;
+-    if ((*(byte *)(*piVar1 + -0x19ec) & 1) == 0) {
+-      ((undefined1 *)&DAT_2000_a2f7)[piVar1[1]] = 0;
++    if ((dg[(unsigned short)(0xe614 + type)] & 1) == 0) {
++      ((undefined1 *)&DAT_2000_a2f7)[sub] = 0;
+       DAT_2000_a294 = DAT_2000_a294 + -1;
+     }
+     else {
+-      ((undefined1 *)&DAT_2000_a38d)[piVar1[1]] = 0;
++      ((undefined1 *)&DAT_2000_a38d)[sub] = 0;
+       DAT_2000_a296 = DAT_2000_a296 + -1;
+     }
+   }
+@@ -61468,18 +61473,18 @@
+ int __allregs FUN_1000_b354(int param_1)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int *piVar3;
+-  
+-  piVar3 = (int *)&DAT_2000_9fbc;
+-  iVar1 = 0;
+-  iVar2 = 0xb6;
++  /* PATCH 363: find the table index of object near-offset param_1.  asm 0x1b354: si=0xdfbc; ax=0; cx=0xb6;
++   * cmp word[si],di; je; si+=4; inc ax; loop.  Ghidra typed the cursor int* -> strode +2 (=+8 bytes, asm
++   * is +4) and int-compared (4 bytes, asm is a word).  Restore word compare + stride-4. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short si = 0xdfbc;
++  int iVar1 = 0;
++  int iVar2 = 0xb6;
+   do {
+-    if (*piVar3 == param_1) {
++    if (*(unsigned short *)(dg + si) == (unsigned short)param_1) {
+       return iVar1;
+     }
+-    piVar3 = piVar3 + 2;
++    si = (unsigned short)(si + 4);
+     iVar1 = iVar1 + 1;
+     iVar2 = iVar2 + -1;
+   } while (iVar2 != 0);
