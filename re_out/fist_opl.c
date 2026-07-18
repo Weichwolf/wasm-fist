@@ -42,6 +42,24 @@ int fist_opl_enabled(void)
 static int g_tr = -1;
 static int opltrace(void){ if(g_tr<0) g_tr = getenv("FIST_OPL_TRACE")?1:0; return g_tr; }
 
+/* Full OPL register-write log (diagnostic; env FIST_OPL_REGLOG=<path>).  One line per 0x389 DATA write:
+ * "<seq> <sampletime> reg=<rr> val=<vv>".  Used to compare the port's OPL-write stream slot-for-slot vs
+ * the DOSBox oracle capture (tools/oracle/trace_opl.sh).  Default OFF -> zero effect. */
+static FILE *g_reglog;
+static int   g_reglog_init;
+static unsigned long g_reg_seq;
+extern unsigned g_snd_seq_advances;
+static void reglog_write(unsigned reg, unsigned val)
+{
+    if (!g_reglog_init) {
+        g_reglog_init = 1;
+        const char *p = getenv("FIST_OPL_REGLOG");
+        if (p && *p) g_reglog = fopen(p, "w");
+    }
+    if (g_reglog)
+        fprintf(g_reglog, "%lu adv=%u reg=%02x val=%02x\n", g_reg_seq++, g_snd_seq_advances, reg, val);
+}
+
 /* OPL sample rate: DOSBox default mixer rate = 44100 (the oracle WAV rate). */
 static int  g_rate = 44100;
 static int  g_rate_set = 0;
@@ -63,12 +81,18 @@ int fist_vga_pit0_div(void);
 #define SND_ISR_HZ (PIT_HZ / 165.0)          /* 7231.4 Hz -- SOUNDDVR PIT ch0 = 165 (asm-firm) */
 /* MUSIC_DIV: the music-tick is a fixed sub-division of the 7231.4 Hz ISR.  The exact divider is not
  * isolable statically (the 0a28 invoker cs:0x1d2/[0x5c2] is dead-in-image -> installed externally at
- * runtime), so it is selected among the integer ISR sub-divisions by best cross-correlation of the
- * menu-music ENVELOPE vs the DOSBox OPL oracle (ref/audio_menu_oracle.wav): div 26..30 give xcorr
- * {0.240,0.284,0.333,0.289,...} -> a clean peak at 28 = 258.3 Hz (170.7 samples/seq-advance), whose
- * onset-rate (78/s) also matches the oracle's (76.6/s).  Before this fix the sequencer advanced once
- * per engine INT-8 tick (~4773 Hz -> ~18x too fast).  Env FIST_MUSIC_DIV / FIST_MUSIC_HZ re-select. */
-#define MUSIC_DIV_DEFAULT 28.0               /* 7231.4/28 = 258.3 Hz -- xcorr-peak-selected */
+ * runtime).  ITER-17 pinned it OBJECTIVELY from the DOSBox OPL-writer oracle's OWN register stream
+ * (tools/oracle/trace_opl.sh -> a full CS:IP + reg/val + PIC-ms capture, docs/audio.md §23): the
+ * oracle emits exactly ONE MAINMENU.MS3 loop -- 588 REAL note-ons (key-on B0-B8|0x20 that is preceded
+ * by a 0x40-0x55 level write, i.e. NOT a 0a28 fnum-modulation B0 rewrite) ~= the song's 585 note-ons
+ * -- over a 62.7 s music span.  So the delta-tick rate = 3758 ticks / 62.7 s = 60.0 Hz, and the real
+ * note-on rate = 9.38/s.  The port advances the sequencer once per music-tick (one delta decrement),
+ * so MUSIC_HZ MUST be ~60 Hz -> div = 7231.4/60 = 120.  (7231.4/120 = 60.3 Hz -> note-on rate
+ * 60.3 * 585/3758 = 9.38/s, matching the oracle exactly.)  The prior div=28 (258.3 Hz) came from a
+ * WAV-envelope xcorr sweep against ref/audio_menu_oracle.wav -- but that reference is a 12.7 s STEREO
+ * clip with menu-click SFX and no clean loop (§23), so its xcorr peak was spurious and ~4.3x too fast.
+ * Env FIST_MUSIC_DIV / FIST_MUSIC_HZ re-select. */
+#define MUSIC_DIV_DEFAULT 120.0              /* 7231.4/120 = 60.3 Hz -- oracle real-note-on-rate-pinned */
 static double g_seq_acc = 0.0;
 static double g_samples_per_seq = 0.0;
 extern void fist_snd_seq_advance(void);
@@ -154,6 +178,7 @@ void fist_opl_out(int port, int val)
         fist_dbopl_write((unsigned)g_latch, (unsigned char)val);
         g_writes++;
         unsigned r = g_latch & 0xff;
+        reglog_write(r, (unsigned)val);
         if (r >= 0xa0 && r <= 0xa8) g_a0_writes++;          /* fnum-low */
         if (r >= 0xb0 && r <= 0xb8) { g_b0_writes++; if (val & 0x20) g_keyon_writes++; }
         if (opltrace() && g_writes <= 200)
@@ -203,6 +228,7 @@ void fist_opl_pump(void) { }
 
 void fist_opl_flush(void)
 {
+    if (g_reglog) { fclose(g_reglog); g_reglog = NULL; }
     if (!g_wav) return;
     long end = ftell(g_wav);
     fseek(g_wav, 4, SEEK_SET);              wav_wr32(g_wav, (unsigned)(end-8));
