@@ -1,0 +1,115 @@
+SOUNDDVR.DVR sound-source REGISTER (asm 0x1ec / 0xaf4): read the engine-published AX/BX/ES and rebase
+the descriptor copy to the driver's own data segment.
+
+The register method is reached via the engine be0e (patch 349) through DGROUP:0x510 -> 01ec -> 0af4.
+The __allregs indirect-vector dispatch dropped the register args, so:
+  * 01ec's `param_1 != -1` gate (asm 0x1ec: `cmp ax,0xffff`) ran on garbage AX -> read g_snd_reg_ax.
+  * 0af4 (asm 0xaf4) copies a 0x20-byte sound descriptor from ES:BX into the driver struct with ES =
+    the descriptor SEGMENT (a dropped `unaff_ES`), BX the offset (0), AX the sound value.  Additionally
+    every `ds:` access is to the DRIVER data segment (cs:[0x831]<<4 = load_seg+0x2a5), which Ghidra
+    rendered as a mix of engine-DGROUP DAT_1000_cNN and host-absolute derefs.
+
+Asm 0xaf4 (verified vs re_out/fist_snd_image.bin):
+    af4: mov ds, cs:[0x831]          ; DS = driver data seg
+    af9: test al,1; je 0xb10
+    afd: cmpw [ds:0xe],0; je 0xb10
+    b04: mov [ds:0x4],ax; mov [ds:0x0],es; mov [ds:0x2],bx; ret     ; (queued path)
+    b10: mov [ds:0xa],ax; mov [ds:0x8],bx; mov [ds:0x6],es
+    b1b: si=bx+0x10
+    b26: rep: al=es:[si]; [ds:bx+0x20]=al   (0x10 bytes)
+    b34: rep: al=es:[si]; [ds:bx+0x2a]=al; [ds:bx+0x34]=0xff  (0x10 bytes)
+    b49: [ds:0xc]=si
+    b4d: call 0xc94(ax)              ; ax.lo = last byte read
+    b50: [ds:0x14]=1 ; [ds:0xe]=0xffff
+
+Reached only under FIST_SB (c510 is populated only by the FIST_SB-gated 014e section install); the
+default boot never enters here -> the 26 video flows stay byte-identical.
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -614,7 +614,8 @@
+ void __allregs FUN_0000_01ec(int param_1,undefined2 param_2)
+ 
+ {
+-  if (param_1 != -1) {
++  extern unsigned short g_snd_reg_ax;                 /* PATCH 350: AX threaded by be0e/be67 */
++  if ((short)g_snd_reg_ax != -1) {
+     FUN_0000_0af4(param_1,param_2);
+     return;
+   }
+@@ -1542,45 +1543,39 @@
+ void __allregs FUN_0000_0af4(uint param_1,int param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  int iVar2;
+-  int iVar3;
+-  uint uVar4;
+-  undefined1 *puVar5;
+-  undefined2 unaff_ES;
+-  
+-  uVar1 = DAT_0000_0831;
+-  if (((param_1 & 1) != 0) && (*(int *)&DAT_1000_c00e != 0)) {
+-    *(uint *)&DAT_1000_c004 = param_1;
+-    *(undefined2 *)0x0 = unaff_ES;
+-    *(int *)&DAT_1000_c002 = param_2;
++  /* PATCH 350: driver-DS rebase + engine-published AX/BX/ES (patch 349). */
++  extern unsigned short g_snd_reg_ax,g_snd_reg_bx,g_snd_reg_es;
++  uint32_t dbase  = ((uint32_t)(uint16_t)DAT_0000_0831) << 4;   /* ds:0 = driver data seg */
++  uint32_t esbase = ((uint32_t)g_snd_reg_es) << 4;              /* ES = descriptor segment */
++  uint8_t *D  = (uint8_t*)(g_mem + dbase);
++  uint16_t ax = g_snd_reg_ax;
++  uint16_t bx = g_snd_reg_bx;                                   /* descriptor OFFSET */
++  uint16_t si;
++  int i;
++
++  (void)param_1; (void)param_2;
++  if (((ax & 1) != 0) && (*(int16_t*)(D + 0xe) != 0)) {
++    *(uint16_t*)(D + 0x4) = ax;               /* mov [ds:0x4],ax */
++    *(uint16_t*)(D + 0x0) = g_snd_reg_es;     /* mov [ds:0x0],es */
++    *(uint16_t*)(D + 0x2) = bx;               /* mov [ds:0x2],bx */
+     return;
+   }
+-  *(uint *)&DAT_1000_c00a = param_1;
+-  *(int *)&DAT_1000_c008 = param_2;
+-  *(undefined2 *)&DAT_1000_c006 = unaff_ES;
+-  puVar5 = (undefined1 *)(param_2 + 0x10);
+-  iVar3 = 0;
+-  iVar2 = 0x10;
+-  do {
+-    param_1 = CONCAT11((char)(param_1 >> 8),*puVar5);
+-    *(undefined1 *)(iVar3 + 0x20) = *puVar5;
+-    iVar3 = iVar3 + 1;
+-    puVar5 = puVar5 + 1;
+-    iVar2 = iVar2 + -1;
+-  } while (iVar2 != 0);
+-  uVar4 = 0;
+-  do {
+-    param_1 = CONCAT11((char)(param_1 >> 8),*puVar5);
+-    *(undefined1 *)(uVar4 + 0x2a) = *puVar5;
+-    *(undefined1 *)(uVar4 + 0x34) = 0xff;
+-    puVar5 = puVar5 + 1;
+-    uVar4 = uVar4 + 1;
+-  } while (uVar4 < 0x10);
+-  *(undefined2 *)&DAT_1000_c00c = puVar5;
+-  FUN_0000_0c94(param_1);
+-  *(undefined2 *)&DAT_1000_c014 = 1;
+-  *(undefined2 *)&DAT_1000_c00e = 0xffff;
++  *(uint16_t*)(D + 0xa) = ax;                 /* mov [ds:0xa],ax */
++  *(uint16_t*)(D + 0x8) = bx;                 /* mov [ds:0x8],bx */
++  *(uint16_t*)(D + 0x6) = g_snd_reg_es;       /* mov [ds:0x6],es */
++  si = (uint16_t)(bx + 0x10);
++  for (i = 0; i < 0x10; i++) {                /* es:si -> ds:0x20 (0x10 bytes) */
++    uint8_t b = g_mem[esbase + si];
++    ax = (ax & 0xff00) | b; D[0x20 + i] = b; si++;
++  }
++  for (i = 0; i < 0x10; i++) {                /* es:si -> ds:0x2a; ds:0x34=0xff */
++    uint8_t b = g_mem[esbase + si];
++    ax = (ax & 0xff00) | b; D[0x2a + i] = b; D[0x34 + i] = 0xff; si++;
++  }
++  *(uint16_t*)(D + 0xc) = si;                 /* mov [ds:0xc],si */
++  FUN_0000_0c94(ax);
++  *(uint16_t*)(D + 0x14) = 1;
++  *(uint16_t*)(D + 0xe) = 0xffff;
+   return;
+ }
+ 

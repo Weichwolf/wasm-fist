@@ -1,0 +1,51 @@
+Engine FUN_0000_be0e / be67: thread AX/BX/ES for the sound-source REGISTER indirect call
+(DGROUP:0x510 -> driver 01ec -> 0af4).
+
+be0e is the engine's "activate object" helper: it loads the object's resource via the c378 vector
+(patch 100) and then registers/plays its sound via the c510 vector.  Asm-verified vs
+re_out/fist_dat_image.bin 0xbe0e:
+
+    be25: mov  [DGROUP:0x9fd9], bx            ; DAT_2000_5fd9 = id
+    be29: push bx
+    be2a: mov  dx, [DGROUP:0x9f2c+id]         ; (c378 resource-load arg, patch 100)
+    ...   lcall *0x378
+    be3d: pop  bx                             ; bx = id
+    be3e: mov  ax, [DGROUP:0x9f2e+id]         ; AX = the sound value
+    be42: xor  bx, bx                         ; BX = 0 (descriptor offset)
+    be44: mov  es, [DGROUP:0x9f1c]            ; ES = descriptor segment
+    be48: lcall *0x510                        ; -> 01ec -> 0af4 (sound-source register)
+
+The __allregs indirect method-vector dispatch drops AX/BX/ES (ES is the unaff_CS/ES segment-reg class
+ApplyConv cannot thread), so the register call runs on garbage.  Publish the exact three values to shim
+globals (re_out/fist_sb.c) for the driver methods 01ec/0af4 to read -- the documented per-patch
+indirect-method-vector threading.  be67 is the flush entry (asm 0xbe67: `mov ax,0xffff; lcall *0x510`)
+-> publish AX=0xffff.
+
+Harmless on the DEFAULT boot: DGROUP:0x510 is populated with the driver register method only under
+FIST_SB (the driver's 014e section-0x22 install is FIST_SB-gated, patch 348); on the default boot c510
+stays 0 -> the indirect call no-ops and the globals are unread.  So the 26 video flows stay byte-identical.
+--- a/fist.c
++++ b/fist.c
+@@ -30856,6 +30856,14 @@
+        fist_icall_far((uint32_t)(DAT_1000_c378)))
+           (0x1c00, *(undefined2 *)(g_mem + 0x1c000 + param_1 + 0x9f2c), 0x9f1c, 0, 0, 0);
+       _DAT_2000_5f1e = _DAT_2000_5f1e | 800;
++      /* PATCH 349: thread AX/BX/ES for the sound-source REGISTER (c510 -> 01ec -> 0af4).
++         asm 0xbe3e: ax=word[DGROUP:0x9f2e+id]; be42: xor bx,bx (bx=0); be44: es=word[DGROUP:0x9f1c].
++         The __allregs indirect-vector dispatch drops them; publish to shim globals so the driver
++         methods read the real values.  No-op on the default boot (c510==0). */
++      { extern unsigned short g_snd_reg_ax,g_snd_reg_bx,g_snd_reg_es;
++        g_snd_reg_ax = *(uint16_t*)(g_mem + 0x1c000u + (uint16_t)(param_1 + 0x9f2e));
++        g_snd_reg_bx = 0;
++        g_snd_reg_es = *(uint16_t*)(g_mem + 0x1c000u + 0x9f1c); }
+       (*(code *)fist_icall_far((uint32_t)(DAT_1000_c510)))();
+       FUN_0000_be58();
+     }
+@@ -30893,6 +30901,7 @@
+ void __allregs FUN_0000_be67(void)
+ 
+ {
++  { extern unsigned short g_snd_reg_ax; g_snd_reg_ax = 0xffff; }  /* PATCH 349: AX=0xffff flush (asm 0xbe67) */
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c510)))();
+   DAT_2000_5fd9 = 0xffff;
+   return;

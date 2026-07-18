@@ -1,0 +1,122 @@
+SOUNDDVR.DVR voice-reset chain (asm 0xc94 / 0xca9 / 0xaa7): driver-DS rebase so the sound-source
+register's tail (0af4 -> 0c94 all-voices-off) completes faithfully.
+
+Reached for the first time now that the register 0af4 (patch 350) runs to completion instead of taking
+a garbage early-return.  All three are the MGAVIDEO-031-072 driver base-loss class: every `ds:` access
+is to the DRIVER data segment (cs:[0x831]<<4), which Ghidra rendered as engine-DGROUP DAT_1000_cNN or
+host-absolute derefs (SIGSEGV at host 0x111 in 0ca9).  Asm-verified vs re_out/fist_snd_image.bin:
+
+  0xc94: mov ds,cs:[0x831]; movw [ds:0xe],0; movw [ds:0x4],0; call 0xca9
+  0xca9: mov ds,cs:[0x831]; for i=0..9 { [ds:i+0xb8]=0; if [ds:i+0x111]==0 -> 0aa7(al, i<<8) }
+  0xaa7: mov ds,cs:[0x831]; per-voice stop; TAIL `jmp *0x1a5` == a NEAR indirect jump through the
+         device per-voice method vector driver_ds:0x1a5 (device-select-populated; near, not far ->
+         fist_icall(fist_snd_base+vec)).  Unwired the slot is 0 -> driver app_entry no-op.
+
+The Ghidra C for 0ca9 folded the byte index (bx) and the counter (ch<<8) into one variable (iVar4 =
+iVar2 inside the if); the asm keeps bx==ch==i each iteration -> reconstructed the clean loop.
+
+Reached only under FIST_SB (the register path is populated only by the FIST_SB-gated 014e section
+install); the default boot never enters here -> the 26 video flows stay byte-identical.
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -1516,25 +1516,27 @@
+ undefined4 __allregs FUN_0000_0aa7(undefined2 param_1,uint param_2)
+ 
+ {
++  /* PATCH 351: driver-DS rebase (0aa7 all-voices per-voice stop).  The tail `jmp *0x1a5` (asm 0xae2/
++     0xaec) is a NEAR indirect jump through the DEVICE per-voice method vector at driver_ds:0x1a5
++     (populated by device-select 0872/088f); unwired it is 0 -> the driver app_entry no-op. */
++  uint32_t dbase = ((uint32_t)(uint16_t)DAT_0000_0831) << 4;
++  uint8_t *D = (uint8_t*)(g_mem + dbase);
+   uint uVar1;
+   char cVar2;
+-  
++  uint16_t vec;
++
+   uVar1 = param_2 >> 8;
+-  if ((_DAT_1000_c010 == 0) && (cVar2 = (char)((uint)param_1 >> 8), cVar2 != '\0')) {
+-    *(undefined2 *)(uVar1 * 2 + 0x90) = *(undefined2 *)(uVar1 * 2 + 0xa4);
+-    *(undefined1 *)(uVar1 + 0x107) = 1;
+-    *(char *)(uVar1 + 0xc2) = cVar2 + *(char *)(uVar1 + 0xd6);
+-    *(undefined1 *)(uVar1 + 0xcc) = 0xff;
+-                    /* WARNING: Could not recover jumptable at 0x00000ae2. Too many branches */
+-                    /* WARNING: Treating indirect jump as call */
+-    (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c1a5)))();
+-    return;
+-  }
+-  *(undefined1 *)(uVar1 + 0x107) = 0;
+-                    /* WARNING: Could not recover jumptable at 0x00000aec. Too many branches */
+-                    /* WARNING: Treating indirect jump as call */
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c1a5)))();
+-  return;
++  if ((*(uint16_t*)(D + 0x10) == 0) && (cVar2 = (char)((uint)param_1 >> 8), cVar2 != '\0')) {
++    *(uint16_t *)(D + uVar1 * 2 + 0x90) = *(uint16_t *)(D + uVar1 * 2 + 0xa4);
++    D[uVar1 + 0x107] = 1;
++    D[uVar1 + 0xc2] = cVar2 + *(char *)(D + uVar1 + 0xd6);
++    D[uVar1 + 0xcc] = 0xff;
++    vec = *(uint16_t *)(D + 0x1a5);
++    return (*(code *)fist_icall(fist_snd_base + vec))();
++  }
++  D[uVar1 + 0x107] = 0;
++  vec = *(uint16_t *)(D + 0x1a5);
++  return (*(code *)fist_icall(fist_snd_base + vec))();
+ }
+ 
+ 
+@@ -1763,11 +1765,11 @@
+ void __allregs FUN_0000_0c94(undefined2 param_1)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  uVar1 = DAT_0000_0831;
+-  *(undefined2 *)&DAT_1000_c00e = 0;
+-  *(undefined2 *)&DAT_1000_c004 = 0;
++  /* PATCH 351: driver-DS rebase (0c94 clears [ds:0xe]/[ds:0x4] then 0ca9 all-voices-off). */
++  uint32_t dbase = ((uint32_t)(uint16_t)DAT_0000_0831) << 4;
++  uint8_t *D = (uint8_t*)(g_mem + dbase);
++  *(uint16_t *)(D + 0xe) = 0;
++  *(uint16_t *)(D + 0x4) = 0;
+   FUN_0000_0ca9(param_1,0xca8);
+   return;
+ }
+@@ -1778,26 +1780,20 @@
+ void __allregs FUN_0000_0ca9(uint param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  int iVar2;
+-  char cVar3;
+-  int iVar4;
+-  
+-  uVar1 = DAT_0000_0831;
+-  iVar4 = 0;
+-  iVar2 = 0;
+-  do {
+-    cVar3 = (char)((uint)iVar2 >> 8);
+-    param_1 = param_1 & 0xff;
+-    *(undefined1 *)(iVar4 + 0xb8) = 0;
+-    if (*(char *)(iVar4 + 0x111) == '\0') {
+-      param_1 = FUN_0000_0aa7(param_1,iVar2);
+-      cVar3 = (char)((uint)param_2 >> 8);
+-      iVar4 = iVar2;
++  /* PATCH 351: driver-DS rebase (0ca9 all-voices-off: loop i=0..9, clear [ds:i+0xb8], and if
++     [ds:i+0x111]==0 call 0aa7(al, i<<8)).  Ghidra folded bx and ch<<8 into one var; reconstructed
++     faithfully from asm 0xca9 (bx==ch==i each iteration; CL=0 into 0aa7). */
++  uint32_t dbase = ((uint32_t)(uint16_t)DAT_0000_0831) << 4;
++  uint8_t *D = (uint8_t*)(g_mem + dbase);
++  uint16_t ax = (uint16_t)(param_1 & 0xff);
++  int i;
++  (void)param_2;
++  for (i = 0; i < 10; i++) {
++    D[i + 0xb8] = 0;
++    if (D[i + 0x111] == 0) {
++      ax = (uint16_t)(FUN_0000_0aa7((uint16_t)(ax & 0xff),(uint)(i << 8)) & 0xff);
+     }
+-    iVar2 = (uint)(byte)(cVar3 + 1U) << 8;
+-    iVar4 = iVar4 + 1;
+-  } while ((byte)(cVar3 + 1U) < 10);
++  }
+   return;
+ }
+ 

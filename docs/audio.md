@@ -1,12 +1,103 @@
-# AUDIO subsystem — recon + shim foundation (iterations 1–5)
+# AUDIO subsystem — recon + shim foundation (iterations 1–6)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
-This is a multi-iteration subsystem. Iter 5 (§11) advanced the SOUNDDVR driver dispatch two methods
-deeper under FIST_SB (the device-config method 014e + its dispatcher 0833 are asm-exactly reconstructed;
-the menu SIGSEGV moves from 0833 to the sound-source REGISTER method 0af4) — crash-free and NO-REGRESSION
-to the 26 video flows on both targets. Still no PCM: the register path 0af4 needs an engine-side DROPPED
-SEGMENT (ES = the sound-descriptor source seg) and the device-select + SB device methods are not in the
-driver fmap. The exact remaining chain to the SB `out()` is mapped below.
+This is a multi-iteration subsystem. **Iter 6 (§12) is a DECISIVE BACKEND CORRECTION: the menu background
+music is OPL2/OPL3 FM SYNTHESIS (port 0x388/0x389), NOT SB-DMA digital** — A/B oracle-proven (oplmode=none
+-> silent; oplmode=auto -> music, only variable changed).  `fist_sb.c` (SB-DMA -> PCM decoder) is the
+WRONG shim for the menu music; bit-exact menu music needs a NEW OPL emulator (`fist_opl.c`).  Iter 6 also
+landed the faithful sound-source REGISTER + voice-reset (patches 349/350/351, gated FIST_SB, no-regression)
+and re-mapped the driver: device 4 = MPU-401(0x330)+OPL(0x388) MUSIC; device 5 = null; the real SB DSP
+(base 0x220) at driver 0x2820 is a SEPARATE DIGITAL device (SFX/voice).  §11's "device 4 = SB / 0d49 =
+first SB out" is DEBUNKED (0d49 = the MPU-401 writer 0x330).  See §12 (top).
+
+## 12. Iteration 6 — DECISIVE: the menu music is OPL FM (not SB-DMA); driver re-mapped; register+voice-reset landed (2026-07-18)
+
+**THE DECISIVE FINDING (oracle A/B, airtight — only `oplmode` changed between the two runs):**
+
+| DOSBox config (sbtype=sb16, base 220, irq 7, dma 1) | menu WAV |
+|---|---|
+| `oplmode=auto` (OPL on) | peak 6710, 96.5% non-silent — **MUSIC** |
+| `oplmode=none` (OPL off, SB-DMA fully intact) | peak **0** — **SILENT** |
+
+Removing the OPL synth removes the music; the SB DSP+DMA path (base 0x220) left fully enabled produces
+nothing.  **=> the menu background music is OPL2/OPL3 FM SYNTHESIS via port 0x388/0x389, NOT SB-DMA
+digital.**  Iteration 2's "menu music IS SB-DMA" was WRONG: it used `sbtype=none`, which in DOSBox
+disables the OPL too (oplmode=auto follows sbtype), so it could not distinguish FM from digital.
+
+**Consequence: `fist_sb.c` (SB-DMA -> PCM decode) is the WRONG shim for the menu music.**  Bit-exact menu
+music requires a NEW **`fist_opl.c`** — an OPL2/OPL3 register-level emulator fed by the driver's
+`out(0x388, reg); out(0x389, val)` writes (the classic AdLib idiom, driver code at 0xf21).  `fist_sb.c`
+stays valid for the in-mission DIGITAL SFX/voice path (the real SB DSP at driver 0x2820, base 0x220),
+which is a SEPARATE device blocked behind the mission-wasm divergence.
+
+**CORRECTED DRIVER MAP (asm-verified vs re_out/fist_snd_image.bin — supersedes §11's device table):**
+- **Device selection is a per-device method-vector table** at driver_ds:0x17d..0x1d1 (7 method slots,
+  indexed by `device*2`), copied into the live slots ds:0x17b/0x189/0x197/0x1a5/0x1b3/0x1c1/0x1cf by the
+  device-select 088f (asm 0x8c3).  The 7 devices:
+  | dev | slot0 | slot1 | slot2 | slot3 | slot4 | slot5 | slot6 | backend |
+  |---|---|---|---|---|---|---|---|---|
+  | 0 | 0871×7 | | | | | | | **null / default (all `ret`)** |
+  | 1 | 1235 | 123f | 1240 | 1247 | 1261 | 127f | 1280 | (0xc0 DMA-port writes) |
+  | 2 | 1206 | 11b9 | 1224 | 1163 | 113d | 113c | 11a4 | (0x388 OPL, 0x2000 region) |
+  | 3 | 104f | 10a5 | 1082 | 10e3 | 10a6 | 0f99 | 0f48 | (0x388 OPL detect 0xf54) |
+  | **4** | **0ea8** | **0dc9** | **0e7b** | **0dca** | **0e13** | **0e53** | **0ef5** | **MPU-401 0x330 (0d49) + OPL 0x388 (0xf21)** |
+  | 5 | 128x | | | | | | | **null (all `ret`)** |
+- **The real SB DSP (digital) backend is at driver 0x2820** (`out 0x226,1;in;out 0x226,0` = DSP reset at
+  base+6 => base 0x220; `out 0x22c,0xd1` speaker-on; DMA via `[0x128d/0x128f/0x1291]` far vectors at the
+  0x1d44 segment).  It is reached via the 0x80-command device-select `0a14` (from 00fd), NOT the 0x30
+  music path — a DIFFERENT device layer for SFX/voice.  `0d49` = the MPU-401 MIDI writer (`out 0x330`,
+  poll `0x331`), NOT the SB DSP writer (§11 mislabelled it).
+
+**LANDED (patches 349/350/351, FIST_SB-gated; 4 pristine md5s UNCHANGED 61453e42/0051cb56/75c6d726/
+abcafc9d; mainmenu AE=0 native+wasm, native<->wasm md5 `3a6ff1c5`; about AE=0):**
+- **349 (engine be0e/be67)** — thread AX/BX/ES for the sound-source REGISTER indirect call (asm 0xbe3e:
+  `ax=word[DGROUP:0x9f2e+id]; xor bx,bx; es=word[DGROUP:0x9f1c]; lcall *0x510`).  The __allregs indirect
+  method-vector dispatch dropped them (ES is the unaff_CS/ES class); publish to shim globals
+  `g_snd_reg_ax/bx/es` (fist_sb.c).  No-op on the default boot (c510==0).
+- **350 (driver 01ec/0af4)** — the register method reads the published AX/BX/ES; 0af4 (asm 0xaf4) copies
+  the 0x20-byte sound descriptor from ES:BX into the driver struct with the correct driver-DS rebase
+  (DAT_0000_0831<<4 = load_seg+0x2a5, the 0833/347 base).
+- **351 (driver 0c94/0ca9/0aa7)** — the all-voices-off tail 0af4->0c94 driver-DS rebase; the 0ca9 loop
+  (Ghidra folded bx and ch<<8) reconstructed from asm; 0aa7's per-voice tail `jmp *0x1a5` is a NEAR
+  indirect jump through the device per-voice method vector (fist_icall(fist_snd_base+vec)).
+
+**RUNTIME ADVANCE (setarch -R, FIST_SB=1, FIST_SND_CALLTRACE):** the driver now runs the register+voice-
+reset crash-free (0af4->0c94->0ca9->0aa7 tail-jumps to slot 0x1a5 = **0x871 = device-0 null method**),
+then be0e proceeds to be58 -> DGROUP:0x530=01e7 -> 0833 -> **0966** (the note-PLAY dispatch), which is the
+NEXT driver-DS base-loss (asm 0x966: `movw [ds:0x13e2],0x13e8; cmpw [ds:al+0x13e8],0` etc. -> host-
+absolute deref).  **Device 0 (null) is currently selected because the device-select 0872 is a fmap MISS**
+(never runs), so no OPL device is picked and no 0x388 write can fire yet.
+
+**THE CORRECTED REMAINING CHAIN to the first OPL `out(0x388)` (in dependency order):**
+1. **Note-play dispatch 0966/0997/0cfb** (asm-mapped): driver-DS rebase of the note-on allocator (0997
+   scans driver_ds:(dev*8+i+0x13b) for a free voice via [0x107], writes [voice+0x111]=record[0], calls
+   0cfb(record[1], voice<<8) + 0aa7).  0cfb sets the voice freq/env from tables 0x15b4/0xfc9/0x10d4/
+   0x152e/0x14ac and tail-jumps `[ds:0x1c1]` (device method).  All device-independent; for device 0 the
+   tails no-op.  (Reaches crash-free FIST_SB once rebased.)
+2. **Device-select 0872/088f** — add 0x872 to the driver fmap + reconstruct (asm 0x872: on ds:0x3e==0 ->
+   0x8c3 = 088f, which copies device `ds:0x12`'s 7 method vectors from the per-device table into the live
+   slots).  088f is in the fmap but driver-DS base-lost (0x17b/0x17d derefs + DAT_1000_c012/c1a5).  This
+   makes the live slots point at the selected device's methods.  **Confirm the config selects device 4**
+   (the trace shows device 0 default; 014e maps a letter I/T/A/C/R->1/2/3/3/4; verify SOUND.CFG
+   "0132710000" -> code 4 = OPL/MPU music device, else document the actual code).
+3. **Device-4 OPL methods 0ea8/0e7b/0e13/0e53/0dca** (NOT in the fmap; 0dc9/0ef5 ARE) — re-decompile
+   SEED (add these + 0x872/0xa14 to `FIST_DRIVER_SEED_OFFS` in Makefile `decompile-drivers`, re-decompile
+   -> fist_snd.c rebaselines from abcafc9d to a new reproducible md5) + driver-DS rebase.  These call the
+   in-fmap OPL writer **`FUN_0000_0f21`** (asm 0xf21 = `out 0x388,reg; out 0x389,val`) -> the FIRST REAL
+   engine-driven OPL register write.
+4. **`fist_opl.c`** — a NEW OPL2/OPL3 emulator (trap 0x388/0x389 in fist_vga.c `out`, synthesize the FM
+   voices -> s16 PCM ring/WAV, the OPL analog of fist_sb.c) for bit-exact menu music vs
+   `ref/audio_menu_oracle.wav`.  (A vetted reference: the Nuked-OPL3 / DBOPL core; must be deterministic
+   + dual-target for the native<->wasm invariant.)
+5. **The continuous-music op=6 trigger** (516f->50e6(0x4fa)->driver +0x6, gated on DGROUP:0x4fc bit7) is a
+   SEPARATE start path from the be0e per-object register — still unlocated inside 00d0/cae6.
+
+**No-regression (VERIFIED both targets):** `make check` = all 351 patches apply; default boot mainmenu
+AE=0 native+wasm, native<->wasm 0-diff (md5 `3a6ff1c5`); about AE=0 native; 4 pristine md5s unchanged.
+349/350/351 are reached only under FIST_SB (c510/c530 are populated only by the FIST_SB-gated 014e
+section install) -> the 26 video flows are byte-identical by construction.  The FIST_SB path advancing
+to the 0966 note-play frontier is the documented WIP frontier (as iters 3-5 left their frontier), not a
+video-flow regression.
 
 ## 11. Iteration 5 — SOUNDDVR device-config dispatch reconstructed; frontier = the register-path ES drop + un-decompiled device methods (2026-07-18)
 

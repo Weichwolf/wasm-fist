@@ -32,6 +32,16 @@ int fist_sb_enabled(void)
 static int g_tr = -1;
 static int sbtrace(void){ if(g_tr<0) g_tr = getenv("FIST_SB_TRACE")?1:0; return g_tr; }
 
+/* ---- sound-source REGISTER threading (be0e -> c510 -> 01ec -> 0af4) ----
+ * The engine registers a sound descriptor by an INDIRECT far call through DGROUP:0x510 (== the driver's
+ * 01ec->0af4 register method).  The __allregs indirect-vector dispatch drops the register args, so the
+ * engine call site (FUN_0000_be0e / be67) publishes the exact AX/BX/ES it set up here, and the driver
+ * methods 01ec/0af4 read them (the documented per-patch indirect-method-vector threading + the unaff_ES
+ * segment-reg class ApplyConv cannot thread).  See docs/audio.md and patches 349/350. */
+unsigned short g_snd_reg_ax;   /* AX: be0e = word[DGROUP:0x9f2e+id]; be67 = 0xffff (flush) */
+unsigned short g_snd_reg_bx;   /* BX: descriptor OFFSET (be0e sets 0) */
+unsigned short g_snd_reg_es;   /* ES: descriptor SEGMENT = word[DGROUP:0x9f1c] */
+
 /* SB DSP base port (default 0x220; the ports 0x2x0..0x2xF window).  The engine derives the base from
  * SOUND.CFG; we accept the whole 0x220-0x22F window and additionally 0x210-0x260 so any configured base
  * is trapped.  (The exact SOUND.CFG->base decode is documented in docs/audio.md but is NOT load-bearing
