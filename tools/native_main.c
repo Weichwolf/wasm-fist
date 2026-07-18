@@ -281,6 +281,23 @@ static void fist_dump_and_exit(const char *why){
                   fprintf(stderr,"[curidx2] d5c2(colormask)=%02x d5c4(spr)=%04x sprite bytes:",g_mem[0x1c000+0x5c2],spr);
                   for(int i=0;i<12;i++)fprintf(stderr," %02x",sp[i]); fprintf(stderr,"\n"); }
             }
+            if (getenv("FIST_MEMPROBE")) {
+                #define GW(o) (*(uint16_t*)(g_mem+0x1c000+(o)))
+                fprintf(stderr, "[memprobe] sig[0]=%04x  freehead[0x16e2]=%04x freecnt[0x16dc]=%u"
+                        "  pool16d4[+a]=%04x[+c]=%04x[+10]=%04x[+18]=%04x"
+                        "  pool16f6[+a]=%04x[+c]=%04x[+10]=%04x[+18]=%04x"
+                        "  pool1718[+a]=%04x[+c]=%04x[+10]=%04x[+18]=%04x\n",
+                        GW(0), GW(0x16e2), GW(0x16dc),
+                        GW(0x16d4+0xa),GW(0x16d4+0xc),GW(0x16d4+0x10),GW(0x16d4+0x18),
+                        GW(0x16f6+0xa),GW(0x16f6+0xc),GW(0x16f6+0x10),GW(0x16f6+0x18),
+                        GW(0x1718+0xa),GW(0x1718+0xc),GW(0x1718+0x10),GW(0x1718+0x18));
+                fprintf(stderr, "[memprobe] svc[0x0a]=%04x:%04x svc[0x0e]=%04x:%04x "
+                        "dev[0x4fc]=%02x  0xd4=%04x:%04x 0xf4=%04x:%04x  near[0x3e8]=%04x[0x306]=%04x\n",
+                        GW(0x0a),GW(0x0c),GW(0x0e),GW(0x10),
+                        g_mem[0x1c000+0x4fc], GW(0xd4),GW(0xd6),GW(0xf4),GW(0xf6),
+                        GW(0x3e8),GW(0x306));
+                #undef GW
+            }
             if (getenv("FIST_DESCRDUMP")) {
                 uint16_t w0 = *(uint16_t*)(g_mem + 0x1c000 + 0x9f1c);
                 fprintf(stderr, "[descrdump] DGROUP:0x9f1c word0(.MS3 seg)=%04x word[0x9f1e]=%04x\n",
@@ -635,20 +652,42 @@ static const uint8_t g_dgroup_init[0x70] = {
  * the table faithfully instead, from the game's own relocation data (nothing invented). */
 #define RELOC_TAB_LIN 0x33520u
 /* Apply ONE relocation section of the engine's DGROUP reloc table (at seg 0x3352:si). is_far selects
- * FUN_0000_f842 semantics (a leading seg word, then (off,val) pairs -> DGROUP[off]=val:seg) vs
- * FUN_0000_f7ef near semantics (no seg word, (off,val) pairs -> DGROUP[off]=val, addend 0 in base-0).
+ * FUN_0000_f842 (0xf842) semantics (leading seg word, then (off,val) pairs -> DGROUP[off]=val,
+ * DGROUP[off+2]=seg) vs FUN_0000_f7ef (0xf7ef) NEAR semantics: BOTH section kinds begin with a leading
+ * WORD which is skipped.  For near it is a BASE PARAGRAPH -- the applier computes addend=(base-load_seg)*16
+ * and stores DGROUP[off]=val+addend (all near base_para=0 and load_seg=0 in our base-0 model => addend 0).
+ * (The old code did NOT skip the near leading word, so a near apply read the leading 0x0000 as the first
+ * `off` and terminated at 0 entries -- silently inert; asm-verified fix vs f7ef 0xf7fa..0xf815.)
  * Returns the number of (off,val) entries applied. */
 int fist_apply_reloc_section(uint16_t si, int is_far) {
     #define RW(a) (*(uint16_t*)(g_mem + (a)))
     uint32_t p = RELOC_TAB_LIN + si;
-    uint16_t seg = 0;
-    if (is_far) { seg = RW(p); p += 2; }
+    uint16_t seg = 0, addend = 0;
+    uint16_t lead = RW(p); p += 2;              /* leading word: far=section seg, near=base para */
+    if (is_far) seg = lead; else addend = (uint16_t)(lead << 4);
     int n = 0;
     for (;;) {
         uint16_t off = RW(p);
         if (off == 0) break;
-        RW(DGROUP_LIN + off) = RW(p + 2);
+        RW(DGROUP_LIN + off) = (uint16_t)(RW(p + 2) + addend);
         if (is_far) RW(DGROUP_LIN + off + 2) = seg;
+        p += 4; ++n;
+    }
+    #undef RW
+    return n;
+}
+/* fist_clear_reloc_section(si): the NEAR-CLEAR applier FUN_0000_f81d (0xf81d, DGROUP:0x0e) -- teardown
+ * counterpart of fist_apply_reloc_section(si,0).  Asm 0xf828..0xf83a: `mov ds,bx; add si,2` (skip the
+ * leading base word), then for each (off,val) pair write DGROUP[off]=0 (skipping the val word).  Same
+ * offsets the near install populated, cleared to 0.  Returns the number of entries cleared. */
+int fist_clear_reloc_section(uint16_t si) {
+    #define RW(a) (*(uint16_t*)(g_mem + (a)))
+    uint32_t p = RELOC_TAB_LIN + si + 2;        /* skip the leading base word */
+    int n = 0;
+    for (;;) {
+        uint16_t off = RW(p);
+        if (off == 0) break;
+        RW(DGROUP_LIN + off) = 0;
         p += 4; ++n;
     }
     #undef RW

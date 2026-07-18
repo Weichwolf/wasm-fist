@@ -1,0 +1,143 @@
+patch 346 -- thread the 5 near reloc-applier install/clear sites via the loader shim (pairs with 345).
+
+The 5 near reloc-applier sites `xor bx,bx; mov si,<off>; lcall [ds:0x0a]` (0x1384 si=0x2c4, 0x1c78
+si=0x378, 0x216d si=0x39c, 0xfa7c si=0x8c, 0x14b24 si=0x258) install DGROUP near vectors from the engine's
+own reloc table (seg 0x3352:si) via FUN_0000_f7ef (DGROUP:0x0a).  Ghidra rendered f7ef inert (merged with
+f81a, dropped the f7c3 retry + DS:SI walk) AND dropped the SI arg at every indirect service call, so f7ef
+cannot be driven with the right section.  Until now the base-lost 11e0 zeroed DGROUP:0x0a so these lcalls
+no-op-trapped; patch 345 keeps 0x0a live (= f7ef), which would fire the base-lost f7ef on garbage SI ->
+SIGSEGV (the 1384 crash).  Thread each site faithfully to the loader-role shim
+fist_apply_reloc_section(si,0) (near: skip the leading base word, addend=base<<4=0 in base-0), and each
+matched clear site `mov si,<off>; lcall [ds:0x0e]` (f81d) to fist_clear_reloc_section(si).  4b16 (patch 022)
+already had the correct fist_apply_reloc_section(0x258,0) alongside a now-live stray lcall [0x0a] -- the
+stray is dropped.  The near shim path itself was fixed (it never skipped the near leading word -> was a
+silent 0-entry no-op; asm-verified fix vs f7ef 0xf7fa..0xf815, f81d clear 0xf828..0xf83a) in
+tools/native_main.c.  Asm-verified vs re_out/fist_dat_image.bin.
+--- a/fist.c
++++ b/fist.c
+@@ -7242,7 +7242,15 @@
+ void __allregs FUN_0000_1384(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00a)))();
++  extern int fist_apply_reloc_section(unsigned short,int);
++  extern int fist_clear_reloc_section(unsigned short);
++  /* PATCH 346: near reloc-applier site (asm 0x1384 `xor bx,bx; mov si,0x2c4; lcall [ds:0x0a]`).
++     DGROUP:0x0a = the near applier FUN_0000_f7ef, whose C Ghidra rendered inert (merged with f81a,
++     dropped the f7c3 retry + DS:SI section walk) AND to which SI=0x2c4 was never threaded.  With the
++     patch-345 11e0 fix DGROUP:0x0a is no longer accidentally zeroed, so this lcall would fire the
++     base-lost f7ef on garbage SI -> SIGSEGV.  Apply the near section faithfully via the loader shim
++     (event-queue near vectors DGROUP:0x3e8..0x3fa; base-0 => addend 0). */
++  fist_apply_reloc_section(0x2c4,0);
+   FUN_0000_139e(0);
+   return;
+ }
+@@ -7253,7 +7261,11 @@
+ void __allregs FUN_0000_1394(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00e)))();
++  extern int fist_apply_reloc_section(unsigned short,int);
++  extern int fist_clear_reloc_section(unsigned short);
++  /* PATCH 346: near reloc-CLEAR site (asm 0x1394 `mov si,0x2c4; lcall [ds:0x0e]` = FUN_0000_f81d
++     teardown counterpart of 1384). */
++  fist_clear_reloc_section(0x2c4);
+   return;
+ }
+ 
+@@ -8383,9 +8395,11 @@
+   undefined2 uVar3;
+   undefined2 uVar4;
+   
++  extern int fist_apply_reloc_section(unsigned short,int);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c02e)))();
+   uVar3 = 0x378;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00a)))();
++  /* PATCH 346: near reloc-applier site (asm 0x1c78 si=0x378, display-list near vectors 0x1622..0x162c). */
++  fist_apply_reloc_section(0x378,0);
+   DAT_1000_fe02 = 0x1faf;
+   uVar4 = 0x3ae0;
+   uVar2 = 0;
+@@ -8400,7 +8414,9 @@
+ void __allregs FUN_0000_1ca5(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00e)))();
++  extern int fist_clear_reloc_section(unsigned short);
++  /* PATCH 346: near reloc-CLEAR site (asm 0x1caa si=0x378). */
++  fist_clear_reloc_section(0x378);
+   return;
+ }
+ 
+@@ -9330,7 +9346,12 @@
+     DAT_0000_3e01 = 0x10e0;
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c032)))(0);
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00a)))(unaff_CS);
++  {
++  extern int fist_apply_reloc_section(unsigned short,int);
++  /* PATCH 346: near reloc-applier site (asm 0x216d si=0x39c, near vectors 0x1630/0x1632). */
++  fist_apply_reloc_section(0x39c,0);
++  }
++  (void)unaff_CS;
+   FUN_1000_182a(1,0x1c00,extraout_DX,(undefined2 *)0x156c,param_1,param_2);
+   *(uint16_t *)(g_mem+0x1d56a) = 0x156c;  /* PATCH 325: asm `mov WORD [0x156a],0x156c` -- store the 16-bit near-offset handle, not a host pointer (which clobbered word[0x156a] AND word[0x156c]) */
+   DAT_1000_d600 = 0;
+@@ -9352,7 +9373,9 @@
+ void __allregs FUN_0000_21b3(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00e)))();
++  extern int fist_clear_reloc_section(unsigned short);
++  /* PATCH 346: near reloc-CLEAR site (asm 0x21b8 si=0x39c). */
++  fist_clear_reloc_section(0x39c);
+   return;
+ }
+ 
+@@ -39212,7 +39235,11 @@
+     DAT_1000_c29c = 0;
+     DAT_1000_c29e = 0xb000;
+     FUN_0000_fa93();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00a)))();
++    {
++    extern int fist_apply_reloc_section(unsigned short,int);
++    /* PATCH 346: near reloc-applier site (asm 0xfa7c si=0x8c, driver-method near vectors 0x26e..). */
++    fist_apply_reloc_section(0x8c,0);
++    }
+   }
+   return;
+ }
+@@ -39224,7 +39251,9 @@
+ 
+ {
+   if (DAT_1000_d6b6 == -0x3040) {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00e)))();
++    extern int fist_clear_reloc_section(unsigned short);
++    /* PATCH 346: near reloc-CLEAR site (asm 0xfa8e si=0x8c). */
++    fist_clear_reloc_section(0x8c);
+   }
+   return;
+ }
+@@ -49512,7 +49541,9 @@
+      garbage (a base-loss + multi-arg-thread cascade = BLOCKER #1 leg (b), the next work item). */
+   extern int fist_apply_reloc_section(unsigned short,int);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c02e)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00a)))();
++  /* PATCH 346: the near-applier lcall [ds:0x0a] (si=0x258) was left in place by patch 022 because
++     11e0 zeroed DGROUP:0x0a to a no-op trap.  With patch 345 that vector is live (f7ef base-lost),
++     so DROP the stray dispatch -- the faithful install is the shim call below. */
+   fist_apply_reloc_section(0x258,0);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
+   fist_apply_reloc_section(0x274,1);
+@@ -49527,8 +49558,10 @@
+ void __allregs FUN_1000_4b32(void)
+ 
+ {
++  extern int fist_clear_reloc_section(unsigned short);
+   (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c016)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c00e)))();
++  /* PATCH 346: near reloc-CLEAR site (asm 0x14b40 si=0x258), 4b16 teardown counterpart. */
++  fist_clear_reloc_section(0x258);
+   return;
+ }
+ 

@@ -1,13 +1,56 @@
-# AUDIO subsystem — recon + shim foundation (iterations 1–3)
+# AUDIO subsystem — recon + shim foundation (iterations 1–4)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
-This is a multi-iteration subsystem. Honest scope: the platform layer (`fist_sb.c`) + the verify harness +
-the reference are landed and validated (iter 1); the SOUND DRIVER is now WIRED and its device-registration
-init runs (iter 2, §8) — but the engine still does NOT drive the play methods on the menu, so there is NO
-port sound-port I/O yet. No bit-exact audio yet. Iteration 3 (§9) FULLY MAPPED the engine-side blocker to a
-concrete, asm-verified multi-step chain and proved iter-2's device-registration NEVER actually ran (guard
-fails). **No PCM this iteration; no code landed (the foundational fix regresses the 26 video flows — see
-§9); the deliverable is the precise, actionable blocker roadmap.**
+This is a multi-iteration subsystem. Iter 4 (§10) LANDED the foundational MEMMGR+reloc fix that iter 3
+had mapped but could not land: the engine signature is preserved, the object pools are built, and the
+device-registration guard now PASSES — crash-free and NO-REGRESSION to the 26 video flows on both targets.
+No PCM yet: the newly-live registration dispatches into the base-lost SOUNDDVR driver play methods, the
+next (gated) frontier.
+
+## 10. Iteration 4 — MEMMGR pool-init + near reloc appliers LANDED (crash-free, no-regression) (2026-07-18)
+
+**Landed (patches 345/346 + shim, UNGATED core boot infra; the 26 video flows stay byte-identical):**
+- **Patch 345 — `FUN_1000_11e0` (MEMMGR object-pool init, asm 0x111e0) reconstructed.** It builds two
+  2-node sentinel lists per pool struct; each node is unlinked from the free-node list (head DGROUP:0x16e2,
+  count 0x16dc) by `FUN_1000_1099` (0x11099) which RETURNS the node seg IN DS.  Ghidra dropped that DS
+  reassignment → every field store landed at DGROUP:0..0xe (DAT_1000_c000..c00e), which (a) never built the
+  pools and (b) node-B's `[0]=0xffff` CLOBBERED the 0xcbc3 signature at DGROUP:0 AND (c) overwrote the near
+  reloc-applier service vectors DGROUP:0x0a/0x0e (f7ef/f81d).  Reconstructed with an inline node-alloc
+  (mirrors 1099 exactly; leaves the shared base-lost 1099 untouched — it is resolved per-caller) writing
+  every field to the REAL node seg.  **Runtime-proven:** `sig[0]=cbc3` preserved (was 0xffff), pools
+  0x16f6/0x1718 built (`[+a]/[+c]` valid node segs, `[+0x10]`=2), free-count consumed, service vectors
+  `0x0a=015f:0f69`/`0x0e=018d:0f69` intact.
+- **Patch 346 — thread the 5 near reloc-applier install sites + 5 clear sites.**  Keeping DGROUP:0x0a live
+  (patch 345) would fire the base-lost `FUN_0000_f7ef` on garbage SI → the documented `FUN_0000_1384`
+  SIGSEGV.  Each install site `xor bx,bx; mov si,<off>; lcall [ds:0x0a]` (0x1384 si=0x2c4, 0x1c78 si=0x378,
+  0x216d si=0x39c, 0xfa7c si=0x8c, 0x14b24 si=0x258) → `fist_apply_reloc_section(si,0)`; each matched clear
+  `lcall [ds:0x0e]` (f81d) → `fist_clear_reloc_section(si)`.  The 4b16 (patch 022) stray live `lcall [0x0a]`
+  is dropped (its correct 0x258 install already present).  **Runtime-proven:** near vectors install
+  (`DGROUP:0x3e8=139e`, `0x306=026a`).
+- **Shim (`tools/native_main.c`):** fixed the NEAR path of `fist_apply_reloc_section` — it never skipped
+  the near section's leading base word, so `fist_apply_reloc_section(si,0)` read the leading 0x0000 as the
+  first `off` and terminated at 0 entries (silently inert — this is why patch 022's `(0x258,0)` had been a
+  no-op the whole time).  Now skips it (addend=base<<4=0 in base-0).  Added `fist_clear_reloc_section` (the
+  f81d near-clear) + a `FIST_MEMPROBE` diagnostic.  Asm-verified vs f7ef 0xf7fa..0xf815 / f81d
+  0xf828..0xf83a.
+
+**No-regression (VERIFIED both targets):** native 26/26 flows AE=0 crash-free (campaign-missions base==fix
+0-diff); wasm 14 flows AE=0, native↔wasm 0-diff (mainmenu/about/settings/selplayer/battles/campaigns/intro/
+review/settings-sky/battles-select/campaigns-select/battles-cancel/battles-cancel-briefing/selplayer-ok);
+default boot 5/5 rc=0, mainmenu md5 `3a6ff1c5`; 4 pristine md5s unchanged
+(`61453e42`/`0051cb56`/`75c6d726`/`abcafc9d`); `make check` = all patches apply; tree clean.
+
+**Device-registration now RUNS (gated FIST_SB) — new frontier, NO PCM yet.**  With the signature preserved,
+patch 344's device-register guard (`sig==0xcbc3`) now PASSES (was failing → 344 was inert), so it installs
+the sound method-vector section A (DGROUP:0x508=0x14e:snd_seg, …).  On the DEFAULT boot (FIST_SB off) 344
+does not run → DGROUP:0x508=0 → `bdcc`'s dispatch traps → no-op → clean.  Under **FIST_SB=1** the engine
+menu build `FUN_0000_cae6 → FUN_0000_bdcc` dispatches DGROUP:0x508 → **`m_snd_FUN_0000_014e → 0833`, which
+SIGSEGVs on a SOUNDDVR driver base-loss** (asm 0x833: `mov ds,cs:0x831` = the driver's own data seg, then
+`call [driver_ds:bx+0x11b]` near-dispatch; Ghidra rendered `ds` as the ENGINE DGROUP → `[0x121]` host
+deref).  This is the SOUNDDVR driver base-loss cascade (MGAVIDEO-031-072 class), the next (gated) work — it
+is UPSTREAM of / independent from the doc's blocker 4 (si=0xec install + 1917/107a), which were not driven
+this iteration because the boot faults at 014e first (untestable end-to-end until the driver play path is
+reconstructed).  `fist_sb.c` + harness remain ready to stream once the driver programs the SB.
 
 ## 9. Iteration 3 — engine-side blocker chain MAPPED (no PCM; no landable patch) (2026-07-18)
 

@@ -1,0 +1,110 @@
+patch 345 -- FUN_1000_11e0: reconstruct the MEMMGR object-pool init (signature-preserving, pools built).
+
+The MEMMGR object-pool init (asm 0x111e0) builds two 2-node sentinel lists in a pool struct, each node
+unlinked from the free-node list (DGROUP:0x16e2 head / 0x16dc count) by FUN_1000_1099 (asm 0x11099) which
+RETURNS the node segment IN DS -- the field stores then run with DS=that node.  Ghidra dropped the DS
+reassignment, so every field store landed at DGROUP:0..0xe (DAT_1000_c000..c00e), which (a) never built
+the pools and (b) node-B's [0]=0xffff CLOBBERED the engine signature 0xcbc3 at DGROUP:0 (so the SOUNDDVR
+init `cmpw [ds:0],0xcbc3`, drv asm 0x94, failed -> device registration skipped) and (c) overwrote the near
+reloc-applier service vectors at DGROUP:0x0a/0x0e (f7ef/f81d), accidentally suppressing the 5 near-applier
+sites.  Reconstruct 11e0 faithfully with an inline node-alloc (mirrors 1099 exactly, leaving the shared
+base-lost 1099 untouched -- it is called from ~17 sites and is resolved per-caller), writing every field to
+the REAL node segment; the signature + service vectors at DGROUP:0..0xe are preserved.  Un-suppressing the
+near appliers is completed by patch 346 (which threads the 5 sites via the loader shim); the two land
+together.  Asm-verified vs re_out/fist_dat_image.bin 0x111e0..0x11295 (node-alloc 0x11099).
+--- a/fist.c
++++ b/fist.c
+@@ -42333,54 +42333,45 @@
+ void __allregs FUN_1000_11e0(undefined2 *param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  int iVar2;
+-  undefined2 *puVar3;
+-  
+-  puVar3 = param_1;
+-  for (iVar2 = 0x10; iVar2 != 0; iVar2 = iVar2 + -1) {
+-    puVar1 = puVar3;
+-    puVar3 = puVar3 + 1;
+-    *puVar1 = 0;
+-  }
+-  param_1[0xc] = 0x1026;
+-  FUN_1000_1099();
+-  param_1[5] = 0x1c00;
+-  DAT_1000_c000 = 0;
+-  DAT_1000_c002 = 0xc0;
+-  DAT_1000_c004 = 0;
+-  DAT_1000_c00a = 0;
+-  DAT_1000_c006 = 0;
+-  DAT_1000_c008 = 0x1c00;
+-  DAT_1000_c00e = 0;
+-  FUN_1000_1099();
+-  DAT_1000_c000 = 0xffff;
+-  DAT_1000_c002 = 0xc0;
+-  DAT_1000_c004 = 0;
+-  DAT_1000_c00a = 0;
+-  DAT_1000_c006 = 0;
+-  DAT_1000_c008 = 0x1c00;
+-  DAT_1000_c00c = 0;
+-  DAT_1000_c00e = 0x1c00;
+-  param_1[8] = 2;
+-  FUN_1000_1099();
+-  param_1[6] = 0x1c00;
+-  DAT_1000_c000 = 0;
+-  DAT_1000_c002 = 0xc0;
+-  DAT_1000_c004 = 0;
+-  DAT_1000_c00a = 0;
+-  DAT_1000_c006 = 0;
+-  DAT_1000_c008 = 0x1c00;
+-  DAT_1000_c00e = 0;
+-  FUN_1000_1099();
+-  DAT_1000_c00e = 0x1c00;
+-  DAT_1000_c000 = 0xffff;
+-  DAT_1000_c002 = 0xc0;
+-  DAT_1000_c004 = 0;
+-  DAT_1000_c00a = 0;
+-  DAT_1000_c006 = 0;
+-  DAT_1000_c008 = 0x1c00;
+-  DAT_1000_c00c = 0;
++  /* PATCH 345: FUN_1000_11e0 = the MEMMGR object-pool init (asm 0x111e0).  It builds, in the pool
++     struct at param_1 (= DGROUP:bp, a host ptr into g_mem), TWO 2-node sentinel lists (heads at
++     [+0xa]/[+0xc], count [+0x10]=2, tag [+0x18]=0x1026).  Each node is unlinked from the free-node
++     list (head DGROUP:0x16e2, count DGROUP:0x16dc) by FUN_1000_1099 (asm 0x11099), which RETURNS the
++     node segment in DS; the field stores then run with DS=that node.  Ghidra DROPPED the DS-reassign,
++     so every field store landed at DGROUP:0..0xe (DAT_1000_c000..c00e): (a) never built the pools
++     (1099's own DGROUP base-loss consumed nothing) and (b) node-B's [0]=0xffff CLOBBERED the engine
++     signature 0xcbc3 at DGROUP:0 -> the SOUNDDVR init `cmpw [ds:0],0xcbc3` (drv asm 0x94) failed,
++     registration skipped; and the field stores to DGROUP:0xa/0xe overwrote the near reloc-applier
++     service vectors (f7ef/f81d), accidentally suppressing the 5 near-applier sites.  Reconstructed
++     faithfully: inline node-alloc (mirrors 1099 exactly) writing every field to the REAL node segment,
++     leaving the shared base-lost 1099 untouched (it is called from ~17 sites, resolved per-caller).
++     The signature and service vectors at DGROUP:0..0xe are now preserved.  Asm-verified 0x111e0..0x11295. */
++  extern unsigned char g_mem[];
++  #define GW11E0(lin)  (*(uint16_t*)(g_mem + (uint32_t)(lin)))
++  /* inline node-alloc = FUN_1000_1099 (0x11099): unlink OLD free head, advance to head->[0xc]. */
++  #define ALLOC11E0(dst) do {       uint16_t _h  = GW11E0(0x1d6e2u);                    /* DGROUP:0x16e2 free head seg */       uint16_t _nx = GW11E0(((uint32_t)_h  << 4) + 0xc);  /* head->[0xc] = next */       GW11E0(((uint32_t)_nx << 4) + 0xe) = 0;             /* next->[0xe] = 0 */       GW11E0(0x1d6e2u) = _nx;                             /* head = next */       GW11E0(0x1d6dcu) = (uint16_t)(GW11E0(0x1d6dcu) - 1);/* DGROUP:0x16dc count-- */       (dst) = _h;     } while (0)
++  uint16_t n1, n2, n3, n4;
++  uint32_t p;
++  int i;
++  for (i = 0; i < 0x10; i++) param_1[i] = 0;   /* zero pool struct [0..0x20) */
++  param_1[0xc] = 0x1026;                        /* [bp+0x18] */
++  /* list 1 head at [bp+0xa] */
++  ALLOC11E0(n1); param_1[5] = n1;
++  p = (uint32_t)n1 << 4;
++  GW11E0(p+0)=0; GW11E0(p+2)=0xc0; GW11E0(p+4)=0; GW11E0(p+0xa)=0; GW11E0(p+6)=0; GW11E0(p+8)=n1; GW11E0(p+0xe)=0;
++  ALLOC11E0(n2); GW11E0(((uint32_t)n1<<4)+0xc) = n2;   /* n1->[0xc]=n2 */
++  p = (uint32_t)n2 << 4;
++  GW11E0(p+0)=0xffff; GW11E0(p+2)=0xc0; GW11E0(p+4)=0; GW11E0(p+0xa)=0; GW11E0(p+6)=0; GW11E0(p+8)=n2; GW11E0(p+0xc)=0; GW11E0(p+0xe)=n1;
++  param_1[8] = 2;                               /* [bp+0x10] */
++  /* list 2 head at [bp+0xc] */
++  ALLOC11E0(n3); param_1[6] = n3;
++  p = (uint32_t)n3 << 4;
++  GW11E0(p+0)=0; GW11E0(p+2)=0xc0; GW11E0(p+4)=0; GW11E0(p+0xa)=0; GW11E0(p+6)=0; GW11E0(p+8)=n3; GW11E0(p+0xe)=0;
++  ALLOC11E0(n4); GW11E0(((uint32_t)n3<<4)+0xc) = n4;   /* n3->[0xc]=n4 */
++  p = (uint32_t)n4 << 4;
++  GW11E0(p+0xe)=n3; GW11E0(p+0)=0xffff; GW11E0(p+2)=0xc0; GW11E0(p+4)=0; GW11E0(p+0xa)=0; GW11E0(p+6)=0; GW11E0(p+8)=n4; GW11E0(p+0xc)=0;
++  #undef ALLOC11E0
++  #undef GW11E0
+   return;
+ }
+ 
