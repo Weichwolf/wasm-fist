@@ -56,6 +56,7 @@ int fist_vga_pit0_div(void);
 
 /* ================= register write latch ================= */
 static int g_latch;          /* value last written to 0x388 (the AdLib register index) */
+static unsigned g_a0_writes, g_b0_writes, g_keyon_writes;  /* diag: fnum-lo / block+fnum-hi / key-on */
 static unsigned g_writes;    /* total 0x389 register writes seen */
 
 /* ================= PCM ring + WAV sink (mono s16) ================= */
@@ -133,8 +134,11 @@ void fist_opl_out(int port, int val)
     if (port == 0x389) {                                   /* data -> DBOPL WriteReg */
         fist_dbopl_write((unsigned)g_latch, (unsigned char)val);
         g_writes++;
-        if (opltrace() && g_writes <= 64)
-            fprintf(stderr,"[opl] reg[0x%02x] = 0x%02x\n", g_latch & 0xff, val);
+        unsigned r = g_latch & 0xff;
+        if (r >= 0xa0 && r <= 0xa8) g_a0_writes++;          /* fnum-low */
+        if (r >= 0xb0 && r <= 0xb8) { g_b0_writes++; if (val & 0x20) g_keyon_writes++; }
+        if (opltrace() && g_writes <= 200)
+            fprintf(stderr,"[opl] reg[0x%02x] = 0x%02x\n", r, val);
     }
 }
 
@@ -174,6 +178,8 @@ void fist_opl_flush(void)
     fclose(g_wav); g_wav = NULL;
     fprintf(stderr,"[opl] WAV finalized: %u samples @ %d Hz (%.2fs); %u OPL reg writes; opl3=%d\n",
             g_ring_n, g_rate, g_rate? (double)g_ring_n/g_rate : 0.0, g_writes, fist_dbopl_is_opl3());
+    fprintf(stderr,"[opl] fnum writes: A0-A8=%u  B0-B8=%u  key-on=%u\n",
+            g_a0_writes, g_b0_writes, g_keyon_writes);
 }
 
 unsigned fist_opl_writes(void){ return g_writes; }

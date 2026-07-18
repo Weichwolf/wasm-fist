@@ -1,0 +1,133 @@
+SOUNDDVR device-3 per-tick VOICE/ENVELOPE ADVANCE (FUN_0000_0a28, asm 0xa28-0xa9d) reconstructed --
+the OPL A0/B0 FNUM feed the menu melody was missing (docs/audio.md §17).
+
+The 42 device-3 note posts KEY-ON via 10e3 but their PITCH is never programmed: the frequency method
+FUN_0000_10a6 (writes OPL A0 fnum-lo / B0 block+fnum-hi from the table cs:0x9dd) was NEVER CALLED, so
+every note keyed on at fnum 0 -> near-silent (peak 330 vs oracle 6714).  10a6's only dispatcher is the
+per-tick voice-envelope advance loop at driver 0xa3a (inside FUN_0000_0a28): it walks the 10 voices,
+accumulates each voice's current note = voice[0xc2] (base, set on key-on by 0aa7) + voice[0xb8] (bend)
++ the note-stream delta at voice[voice*2+0x90], and when the note CHANGES from voice[0xcc] it dispatches
+slot4 [ds:0x1b3] = 10a6 to reprogram the fnum.  In the real driver 0a28 is called from the timer ISR at
+cs:0x1d2 via `call [cs:0x5c2]` (the device-3 config at 0x95b sets [cs:0x5c2]=0x0a28); the port drives it
+per PIT tick from the shim (fist_sb.c) -- we own INT-8.
+
+Ghidra base-lost the whole body: the entry `mov cs:0x831,ds` sets ds = the driver data seg, but every
+ds: access decompiled to a bare offset, AND the two indirect method dispatches were mis-based to the
+ENGINE DGROUP (g_mem+0x1c1b3 / 0x1c189) instead of the driver-DS live method slots (0x1b3 = freq slot4,
+0x189 = tail slot1).  Reconstructed asm-verified vs re_out/fist_snd_image.bin (driver-DS = DAT_0000_0831
+<<4, the patch-353/354 class), 1:1 control flow:
+
+  a28: mov cs:0x831,ds            ; ds = driver data seg
+  a2d: cmpw [0xe],0 ; jne 0xc39   ; per-tick housekeeping (0c39) when [ds:0xe]!=0
+  a37: mov bx,9                   ; 10 voices, 9..0
+  a3a: mov ah,[bx+0xc2]           ; base note
+  a3e: cmpb [bx+0x111],0 ; dec ; ==2 -> ah=0; ch=bl(voice); call 0aa7 (duration-expiry release)
+  a59: add ah,[bx+0xb8]           ; + pitch bend
+  a5d: shl bx,1 ; walk [bx*2+0x90] note stream (0x80=end, 0x81=loop to [+0xa4], else ah+=byte, advance)
+  a83: shr bx,1
+  a87: cmp [bx+0xcc],ah ; jne -> [bx+0xcc]=ah; ch=bl; call *[ds:0x1b3] = 10a6 FREQUENCY (A0/B0 fnum)
+  a97: dec bx ; jns 0xa3a
+  a9a: jmp *[ds:0x189]            ; tail slot1 = 10a5 (ret)
+
+Reached only under FIST_SB (device 3 selected + the shim drives 0a28 per tick); the default boot never
+dispatches here -> zero effect on the 26 video flows.
+
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -1593,59 +1593,50 @@
+ void __allregs FUN_0000_0a28(uint param_1,uint param_2,undefined2 param_3,uint param_4)
+ 
+ {
+-  undefined2 uVar1;
+-  char extraout_AH;
+-  char cVar2;
+-  char cVar3;
+-  byte bVar4;
+-  undefined2 uVar5;
+-  uint uVar6;
+-  int iVar7;
+-  
+-  uVar1 = DAT_0000_0831;
+-  if (*(int *)&DAT_1000_c00e != 0) {
++  /* PATCH 358: driver-DS rebase + fix the two mis-based method dispatches (see header).  ds = the
++     driver data seg (asm entry `mov cs:0x831,ds`).  This is the per-tick fnum feed for the menu
++     melody: on a note change it dispatches slot4 [ds:0x1b3] = FUN_0000_10a6 (OPL A0/B0 fnum). */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
++  int voice;
++  uint8_t ah;
++  uint8_t al;
++  uint16_t sp;
++
++  if (*(int16_t *)(D + 0xe) != 0) {
+     param_1 = FUN_0000_0c39(param_1,param_2,param_3,0xa37);
+   }
+-  uVar6 = 9;
+-  do {
+-    bVar4 = (byte)param_2;
+-    cVar3 = *(char *)(uVar6 + 0xc2);
+-    if ((*(char *)(uVar6 + 0x111) != '\0') &&
+-       (*(char *)(uVar6 + 0x111) = *(char *)(uVar6 + 0x111) + -1, *(char *)(uVar6 + 0x111) == '\x02'
+-       )) {
+-      uVar5 = CONCAT11((char)uVar6,bVar4);
+-      FUN_0000_0aa7(param_1 & 0xff,uVar5);
+-      bVar4 = (byte)uVar5;
+-      uVar6 = param_4;
+-      cVar3 = extraout_AH;
++  for (voice = 9; voice >= 0; voice--) {
++    ah = *(uint8_t *)(D + voice + 0xc2);                       /* base note */
++    if (*(uint8_t *)(D + voice + 0x111) != 0) {                /* duration counter running? */
++      *(uint8_t *)(D + voice + 0x111) -= 1;
++      if (*(uint8_t *)(D + voice + 0x111) == 2) {              /* expiry -> release (ah=0) */
++        /* ah=0; ch=voice; call 0aa7; the loop reads back the returned AH (asm extraout_AH). */
++        uint32_t r = FUN_0000_0aa7((uint16_t)(param_1 & 0xff),
++                                   (uint16_t)(((uint16_t)voice << 8) | (uint8_t)param_2));
++        ah = (uint8_t)(r >> 8);
++      }
+     }
+-    param_1 = (uint)(byte)(cVar3 + *(char *)(uVar6 + 0xb8)) << 8;
+-    iVar7 = uVar6 * 2;
+-    while( true ) {
+-      cVar3 = *(char *)*(undefined2 *)(iVar7 + 0x90);
+-      cVar2 = (char)(param_1 >> 8);
+-      param_1 = CONCAT11(cVar2,cVar3);
+-      if (cVar3 == -0x80) break;
+-      if (cVar3 != -0x7f) {
+-        param_1 = CONCAT11(cVar2 + cVar3,cVar3);
+-        *(int *)(iVar7 + 0x90) = *(int *)(iVar7 + 0x90) + 1;
++    ah = (uint8_t)(ah + *(uint8_t *)(D + voice + 0xb8));       /* + pitch bend */
++    for (;;) {                                                 /* walk the note stream */
++      sp = *(uint16_t *)(D + voice * 2 + 0x90);
++      al = *(uint8_t *)(D + sp);
++      if (al == 0x80) break;                                   /* end marker: hold */
++      if (al != 0x81) {                                        /* delta: apply + advance */
++        ah = (uint8_t)(ah + al);
++        *(uint16_t *)(D + voice * 2 + 0x90) += 1;
+         break;
+       }
+-      *(undefined2 *)(iVar7 + 0x90) = *(undefined2 *)(iVar7 + 0xa4);
++      *(uint16_t *)(D + voice * 2 + 0x90) = *(uint16_t *)(D + voice * 2 + 0xa4);   /* loop */
+     }
+-    uVar6 = uVar6 & 0x7fff;
+-    param_2 = (uint)bVar4;
+-    cVar3 = (char)(param_1 >> 8);
+-    if (*(char *)(uVar6 + 0xcc) != cVar3) {
+-      *(char *)(uVar6 + 0xcc) = cVar3;
+-      param_1 = (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c1b3u)))();
++    if (*(uint8_t *)(D + voice + 0xcc) != ah) {                /* note changed -> reprogram fnum */
++      *(uint8_t *)(D + voice + 0xcc) = ah;
++      /* call *[ds:0x1b3] = device-3 slot4 = FUN_0000_10a6: AH = note, CH = voice. */
++      (*(code *)fist_icall(fist_snd_base + *(uint16_t *)(D + 0x1b3)))((uint)ah << 8,(uint)voice << 8);
+     }
+-    uVar6 = uVar6 - 1;
+-    if ((int)uVar6 < 0) {
+-      (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c189u)))();
+-      return;
+-    }
+-  } while( true );
++  }
++  /* tail: jmp *[ds:0x189] = device-3 slot1 = 10a5 (ret) */
++  (*(code *)fist_icall(fist_snd_base + *(uint16_t *)(D + 0x189)))();
++  return;
+ }
+ 
+ 

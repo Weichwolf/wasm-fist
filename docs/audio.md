@@ -1,6 +1,75 @@
-# AUDIO subsystem — recon + shim foundation (iterations 1–11)
+# AUDIO subsystem — recon + shim foundation (iterations 1–12)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
+
+## 18. Iteration 12 — the FNUM PATH IS FIXED + DRIVEN (patch 358): the per-tick voice-envelope advance FUN_0000_0a28 now dispatches the frequency method 10a6 → real OPL A0/B0 fnum writes fire (A0-A8: 0 → 29). HONEST: STILL NO MELODY — the note-ON FEED never runs (the engine's op=6 play trigger 516f→50e6 is NEVER reached; 0966/0997 note-post = ~0). §17's "42 note posts" is DISPROVEN at runtime (2026-07-18)
+
+**HEADLINE: patch 358 reconstructs + drives the missing FNUM feed — `FUN_0000_0a28` (the device-3
+per-tick voice/envelope advance, the 0xa3a loop) was base-lost AND its two indirect method dispatches
+were mis-based to the ENGINE DGROUP (`g_mem+0x1c1b3`/`0x1c189`) instead of the driver-DS live method
+slots.  Fixed → the advance now dispatches slot4 `[ds:0x1b3]` = `FUN_0000_10a6` (writes OPL A0 fnum-lo /
+B0 block+fnum-hi from `cs:0x9dd`), and the shim drives 0a28 per PIT tick (fist_sb.c, alongside the
+0x3dd ISR).  RUNTIME-PROVEN: real A0/B0 fnum writes now fire — `A0-A8=29  B0-B8=87  key-on=1` (was
+A0=0).  BUT the port WAV peak is STILL 330 (oracle 6714), because only ONE note ever keys on: the
+engine's note-ON feed never runs.**
+
+**WHAT LANDED (patch 358 + shim; the 4 hard-pristine md5s UNCHANGED
+`61453e42`/`0051cb56`/`75c6d726`/`e6d610c5`):**
+- **Patch 358 — `FUN_0000_0a28` reconstructed** (asm-verified vs `re_out/fist_snd_image.bin`, driver-DS =
+  `DAT_0000_0831<<4`, the patch-353/354 class).  Entry `mov cs:0x831,ds` sets ds = the driver data seg;
+  Ghidra base-lost every ds: access to a bare offset.  The loop walks the 10 device-3 voices (9..0),
+  accumulates each voice's note = `voice[0xc2]` (base, set on key-on by 0aa7) + `voice[0xb8]` (bend) +
+  the note-stream delta at `voice[voice*2+0x90]`, and when it CHANGES from `voice[0xcc]` dispatches slot4
+  `[ds:0x1b3]` = 10a6 (fnum).  The two mis-based dispatches fixed to read the driver-DS slots
+  (`fist_icall(fist_snd_base + *(uint16_t*)(D+0x1b3))` freq; `+0x189` tail = slot1 = 10a5 ret).  In the
+  real driver 0a28 is dispatched from the timer ISR at `cs:0x1d2` via `call [cs:0x5c2]` (the device-3
+  config at 0x95b sets `[cs:0x5c2]=0x0a28`); the port drives it per PIT tick from the shim (we own INT-8).
+  **INERT on the default boot** (device 3 selected + advance driven only under FIST_SB).
+- **Shim (`re_out/fist_sb.c` `fist_snd_isr_tick`, FIST_SB/OPL-gated):** drive `fist_snd_base+0xa28` each
+  tick after the 0x3dd ISR.  `re_out/fist_opl.c` gained fnum-write diagnostics (A0-A8 / B0-B8 / key-on
+  counts in the WAV-finalize summary).
+
+**RUNTIME-PROVEN (native, setarch -R, FIST_SB=1, 22 s @ FIST_TICK_HZ=25000):**
+`[opl] fnum writes: A0-A8=29  B0-B8=87  key-on=1`.  The fnum path FIRES (10a6 reached, was 0 hits).
+But `key-on=1` and the WAV peak stays 330 (near-silent); wavcompare vs `ref/audio_menu_oracle.wav` =
+MISMATCH (peak 328 vs 6714, xcorr 0).
+
+**THE EXACT REMAINING BLOCKER — the note-ON FEED never runs (measured, not guessed; bounded gdb counts
+over the full 22 s FIST_SB menu run):**
+- `FUN_1000_50e6` (the op=6 continuous-music PLAY handler, `516f→50e6(0x4fa,…)`, gated on
+  `DGROUP:0x4fc` bit7) = **0 hits**.  `516f` unconditionally calls 50e6, so the play trigger is NEVER
+  reached for the menu.  The gate itself PASSES (`DGROUP:0x4fc=0xe0`, bit7=1 — the device is present) —
+  it is the CALLER (one of the 3 `516f` sites) that the menu path never reaches.  So **the engine issues
+  no menu-music play command in our port's menu.**
+- `FUN_0000_0966` (driver note-dispatch) = **1**, `FUN_0000_0997` (note-ON allocator) = **0**.  The "42
+  device-3 note posts" of §17 are **DISPROVEN at runtime** — they do not happen (§17 overstated; the peak
+  was 330 then and 330 now, i.e. the note posts never actually keyed on).  `be0e` (sound-object register)
+  = 2 (boot registration only, not a note feed).
+- The single key-on (=1) + the 29 A0 writes come from ONE voice: a lone note-on sets `voice[0xc2]` +
+  `voice[0xcc]=0xff`, then the advance detects the change and reprograms the fnum (and the note-stream
+  modulates it) — one sustained note with vibrato, NOT a melody.
+- **System 1 (the arm-gated ISR sequencer, cs:0x60/note-table DGROUP:0x4fe) is ALSO dead:**
+  `note-table[0x4fe]=0x0000`, `voice-active-hits=0` — the device-registration REFORMAT that populates it
+  (the `FUN_1000_1917` tail `ds=blk; call 0x10cce` the shim documented-SKIPS) still never runs.
+
+**Both note SOURCES are dead → the menu music genuinely never STARTS.**  The fnum path (this iteration)
+was a real, necessary, asm-verified fix (10a6 was genuinely never called), but it is downstream of the
+missing START.  Forcing `516f`/`50e6` or hand-feeding notes would be fabricated audio (forbidden) — the
+feed must come from the engine's own trigger.
+
+**NEXT ITERATION (make music START):** locate + reach the menu-music PLAY trigger — the caller path to
+`FUN_1000_516f`/`50e6` (op=6) inside the menu build (`00d0`/`cae6`/`e714`), or the driver-sequencer
+START that populates the note-table `DGROUP:0x4fe` (the `1917`/`0x10cce` reformat).  It is gated on
+`DGROUP:0x4fc` bit7 (already set), so the caller — not the gate — is the target.  Once a real note stream
+posts (`0966→0997→0aa7→10e3` key-on), THIS iteration's fnum path (0a28→10a6) supplies the pitches → the
+OPL synthesizes the real melody.
+
+**No-regression (VERIFIED both targets):** `make check` = all 358 patches apply; native mainmenu md5
+`3a6ff1c5`, **wasm mainmenu md5 `3a6ff1c5` (native↔wasm 0-diff)**; default boot rc=0.  4 hard-pristine
+md5s unchanged; patch 358 + the shim advance-drive are FIST_SB/OPL-gated (default OFF → the 26 video
+flows byte-identical by construction) + the opl.c counters are diagnostic-only.  **HONEST: no menu melody
+on either target yet — the fnum path is fixed + driven, but the note-ON feed (the engine's play trigger)
+is the next, upstream blocker.  WAV peak 330 vs oracle 6714 = MISMATCH.**
 
 ## 17. Iteration 11 — the ARM-GATE PRODUCER (FUN_1000_1042) is reconstructed + driven; the arm RUNTIME-REACHES 2 and the ISR runs every tick (iter-9's "extender-resident arm" DEFINITIVELY refuted at runtime). HONEST: still no music — the sequencer is armed+driven but NOT FED (2026-07-18)
 
