@@ -2,6 +2,70 @@
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
 
+## 16. Iteration 10 (READ-ONLY RECON, decisive tractability gate) — VERDICT: menu-music sequencer is **RECOVERABLE**, NOT extender-paged. Iter-9's "arm is extender-resident" is REFUTED (2026-07-18)
+
+**HEADLINE: the whole menu-music path — arm, note-table reformat, sequencer, note-dispatch, and the song
+data — lives in images we HAVE (FIST.DAT + SOUNDDVR.DVR). NOTHING is in the extender kernel image
+`fist_image.bin` (proven ZERO sound code), and there is NO music data file. The blocker is unfinished
+engine-side reconstruction (base-loss recovery + reaching the sound-service tick), the SAME class as the
+26 video flows and iters 1–9 — BOUNDED, multi-iteration, tractable. It is NOT the genuinely-absent-from-
+all-images class of the mission-terrain paging.** No engine/shim/patch changes; the 4 md5s unchanged
+(`61453e42`/`0051cb56`/`75c6d726`/`e6d610c5`).
+
+**(a) The arm-gate `DGROUP:0x23e` writer — FOUND in FIST.DAT (iter-9's "extender-resident" was an
+INCOMPLETE-SCAN artifact).** Iter-9 scanned only the `c7 06 3e 02` form (mov WORD imm) → saw only
+`0xe025`=disable → wrongly concluded the enable is extender-resident. A full scan (inc-byte `fe 06`,
+mov-byte-imm `c6 06`, register forms) across all four images finds the real manipulators, **all in
+FIST.DAT**:
+  - **`0x11042` = `FUN_1000_1042` = `push ss;pop ds; incb [ss:0x23e]`** — the sequencer PRODUCER (bumps the
+    gate). Ghidra base-lost it to `DAT_2000_bcce = DAT_2000_bcce + 1` (the bogus SS=0x2ba9 context, the
+    §15/patch-356 class). **It IS live**: in the engine fmap (`{0x11042u,&FUN_1000_1042}`, fist.c:69736),
+    dispatched indirectly via a sound-service vector (not dead-stripped).
+  - **`0x11066` = `movb $0xff,[0x23e]`** (hold-overflow clamp), `0x1105e` reads it as a word.
+  - **`0xe025` = `movw [0x23e],0`** (disable, intro/title — iter-9's only find).
+  The mechanism is a producer/consumer SEMAPHORE, not a boolean: the SOUNDDVR ISR (`snd 0x3dd`)
+  `cmpw ss:0x23e,2` runs the 7-voice scan only when ==2, and `decw ss:0x23e` (snd 0x40d) drops it to 1
+  each pass; `FUN_1000_1042` must be called per sound-tick to bump it back to 2. **So the arm is
+  ENGINE-resident and merely UNREACHED** (the port never calls the sequencer-tick `FUN_1000_1042`), exactly
+  the same character as "the shim's 1917 records the work-obj seg but SKIPS the reformat" — recoverable.
+
+**(b) The extender kernel `fist_image.bin` contains ZERO sound code — the decisive DISPROOF of
+"extender-resident like the renderer".** `re_out/fist_kernel_decomp.c` + a byte scan of the image: no
+`out 0x388/0x389` (the 0x389a decomp hits are address args, not the OPL port), no OPL/AdLib/music/sequence
+strings, no arm/note-table writer (no `[0x23e]`/`[0x1c23e]`/`[0x4fe]`/`[0x1c4fe]` store in any addressing
+form). Unlike the KDV renderer — which WAS found in this kernel image and integrated as the `fist_ext`
+module — the menu-music sequencer is **not there.**
+
+**(c) Note-table `DGROUP:0x4fe` + voice slots — engine/driver-resident, recoverable.** The pointer is read
+all over the recovered SOUNDDVR ISR (snd 0x454/0x4d1/0x500/0x52f/0x55e) and the note-dispatch `0x1d62`
+(note-on) / `0x1e13` (note-off) queue voice commands into the driver's per-voice command buffers
+(driver_ds:0x12bf+) → the device method (OPL for device 3). It is written register-indirect by the engine
+device-registration REFORMAT (MEMMGR path — 1917 tail `ds=blk; call 0x10cce`) that the shim documented-
+SKIPS. All in FIST.DAT + SOUNDDVR.DVR.
+
+**(d) The menu SONG is BUILT-IN (no music file) — engine-resident.** `armoredfist/FISTDATA/` has NO
+music/sequence file (`.MUS/.XMI/.CMF/.MID/.IMF/.SNG` = 0; only `SOUND.CFG`, `SOUNDDVR.DVR`,
+`SOUNDSET.EXE`); the sound `.BIN` banks (WVSOUNDS/EVSOUNDS/DSOUNDS) are in-mission SFX. Confirms iter-9's
+"no music file opens." The menu registers sound OBJECTS on boot via engine `FUN_0000_be0e`
+(`ax=word[DGROUP:0x9f2e+bx]`, `es=word[DGROUP:0x9f1c]`, register method `lcall *0x510` → driver 01ec/0af4)
+from ENGINE DGROUP tables; the note feed (0966/0997) posts from those engine objects. Song source =
+engine data, not a file, not the extender.
+
+**VERDICT — RECOVERABLE.** Every piece is in an image we have. Integration is straight engine/driver patch
+reconstruction (CHEAPER than the KDV `fist_ext` route — no new module, no re-decompile of a separate image):
+  1. Reach/reconstruct the sequencer PRODUCER `FUN_1000_1042` (SS=DGROUP rebase of `incb [0x23e]`) + wire
+     the sound-service tick that dispatches it so `[0x23e]` reaches 2.
+  2. Reconstruct the device-registration REFORMAT (populate note-table `DGROUP:0x4fe` + init voice slots
+     `cs:0x60+`=0xff) — the `FUN_1000_1917` tail (`ds=blk; call 0x10cce`) the shim skipped.
+  3. Drive the engine note-post feed (be0e/0966/0997) from the built-in sound objects (DGROUP:0x9f2e/0x9f1c)
+     so real key-ons + fnums post.
+  4. THEN the already-driven ISR (`snd 0x3dd`, patch 356) advances real notes → OPL key-ons →
+     `fist_opl.c` PCM → wavcompare vs `ref/audio_menu_oracle.wav`.
+
+**RECOMMENDATION: CONTINUE audio.** It is tractable and bounded — the same base-loss-recovery method
+already proven 9 iterations deep. It is NOT deep-blocked. (Contrast: the mission-terrain renderer IS the
+genuinely-paged-out class; the menu-music sequencer is not.)
+
 ## 15. Iteration 9 — the driver TIMER-ISR sequencer body (0x3dd) is recovered + rebased + driven per-tick; HONEST: still no music — the sequencer is never FED (arm-gate/note-table/voice-slots never written) (2026-07-18)
 
 **HEADLINE: FUN_0000_03dd (the SOUNDDVR driver timer-ISR body Ghidra had left as the empty 0x3d6
