@@ -132,11 +132,6 @@ if FLAT32:
     # string symbols (s_...  /  PTR_s_...): the 8-hex address is the final _-separated field.
     src = re.sub(r'\b(PTR_s_[A-Za-z0-9_]+?|s_[A-Za-z0-9_]+?)_([0-9a-fA-F]{4})([0-9a-fA-F]{4})\b',
                  r'\1_\2_\3', src)
-    # 32-bit-decompile type artifacts (none appear in the 16-bit engine/driver output):
-    #  - Ghidra jump-table case pseudo-functions are named `switchD_ADDR::caseD_N` but MARKERED as
-    #    just `caseD_N` -> drop the `switchD_ADDR::` prefix so def name == marker name (== fmap key).
-    src = re.sub(r'switchD_[0-9a-fA-F]+::', '', src)
-    src = src.replace('::', '_')                              # any residual C++ scope -> '_'
     #  - a jump-table switch on a POINTER var with pointer case labels (`switch(pbVar9){case
     #    (byte*)0x1:...}`) is illegal C.  Cast the switch quantity to int and strip the case casts.
     src = re.sub(r'\bswitch\(', 'switch((int)', src)
@@ -171,6 +166,41 @@ if FLAT32:
         return "%s%sRam000f00%s = %s; *(undefined4 *)(g_mem+0x%x) = (undefined4)(%s);" % (
             ind, k, yy, rhs, sh, r)
     src = re.sub(r'(?m)^([ \t]*)([su])Ram000f00(02|04|06|08) = ([^;\n]+);', _int32_shadow, src)
+
+# Ghidra jump-table case pseudo-functions are named `switchD_ADDR::caseD_N` (FLAT32) or, in the 16-bit
+# segmented decompile, `switchD_SEG:OFF::caseD_N` (e.g. SOUNDDVR's switchD_0000:1e71::caseD_0) -- but
+# MARKERED as just `caseD_N` -> drop the `switchD_ADDR::` / `switchD_SEG:OFF::` prefix so the def name ==
+# marker name (== fmap key).  The trailing `::` disambiguates it from the seg:off colon.  Applies to
+# FLAT32 (ext) and the 16-bit driver overlays (mga/snd); a no-op on engine + on any driver lacking a
+# jump table -> byte-identical output where absent.
+if FLAT32 or MODULE:
+    src = re.sub(r'switchD_[0-9a-fA-F]+(?::[0-9a-fA-F]+)*::', '', src)
+    src = src.replace('::', '_')                              # any residual C++ scope -> '_'
+
+# De-duplicate function names: Ghidra names every far-jump-to-entry thunk (`jmp far 0:0`) `app_entry`,
+# so a driver overlay carries several app_entry definitions (the real entry 0x0 + the 0x1cd/0x3d6 return
+# thunks) -> a C redefinition.  Keep the FIRST marker's name; rename each later duplicate (marker + its
+# def header + any in-block self-reference) to <name>_<seg>_<off>.  These duplicates are referenced only
+# by numeric offset via the overlay fmap (never by name in a body), so a per-block rename is complete.
+# Engine mode has no duplicate marker names -> no-op (fist.c byte-identical).
+_MK = re.compile(r'/\* ===== (\S+) @ ([0-9a-fA-F]+):([0-9a-fA-F]+) ===== \*/')
+_marks = [(m.start(), m.group(1), m.group(2), m.group(3)) for m in _MK.finditer(src)]
+if _marks:
+    _seen = {}
+    _spans = []                                          # (block_start, block_end, oldname, newname)
+    for _i, (_st, _nm, _sg, _of) in enumerate(_marks):
+        _seen[_nm] = _seen.get(_nm, 0) + 1
+        if _seen[_nm] > 1:
+            _end = _marks[_i + 1][0] if _i + 1 < len(_marks) else len(src)
+            _spans.append((_st, _end, _nm, "%s_%s_%s" % (_nm, _sg, _of)))
+    if _spans:
+        _out, _pos = [], 0
+        for (_st, _en, _old, _new) in _spans:
+            _out.append(src[_pos:_st])
+            _out.append(re.sub(r'\b%s\b' % re.escape(_old), _new, src[_st:_en]))
+            _pos = _en
+        _out.append(src[_pos:])
+        src = ''.join(_out)
 
 # Capture defined function names from the PRISTINE markers before any rewrite mangles them
 # (RULE 7's bare-FUN-value rewrite wraps `FUN @` in the marker line since it isn't followed by '(').
@@ -284,11 +314,13 @@ for m in re.finditer(r'&(LAB_([0-9a-fA-F]+)_([0-9a-fA-F]+)(?:_([0-9]+))?)\b', sr
         continue                                   # a real C label; leave the goto/label alone
     lin = (int(m.group(2), 16) << 4) + int(m.group(3), 16) + (int(m.group(4)) if m.group(4) else 0)
     lab[name] = lin; symL[name] = lin
-# FLAT32: the 32-bit decompile also uses a bare LAB_ (no '&') as an SMC byte value/lvalue -- e.g.
-# `CONCAT11(LAB_x,LAB_x)` (read) or `LAB_x = uVar4` (self-modifying store into the code at that
-# address).  Any LAB_ NOT emitted as a real C label (not in label_decls) is such a code-address byte
-# location -> a g_mem byte accessor (same class as _FUN_/_LAB SMC data).
-if FLAT32:
+# The 32-bit-flat decompile AND the 16-bit driver overlays use a bare LAB_ (no '&') as an SMC byte
+# value/lvalue -- e.g. `CONCAT11(LAB_x,LAB_x)` (read) or `LAB_x = 0x411` (self-modifying store of a
+# jump/operand target into the code at that address; SOUNDDVR's FUN_0000_1ef2 patches LAB_0000_12d9).
+# Any LAB_ NOT emitted as a real C label (not in label_decls) is such a code-address location -> a
+# g_mem accessor (same class as _FUN_/_LAB SMC data).  Engine mode (MODULE=None, FLAT32=0) has no such
+# bare-LAB use -> unchanged (byte-identical fist.c).
+if FLAT32 or MODULE:
     for m in re.finditer(r'\b(LAB_([0-9a-fA-F]+)_([0-9a-fA-F]+)(?:_([0-9]+))?)\b', src):
         name = m.group(1)
         if name in label_decls or name in lab:
@@ -603,6 +635,14 @@ called_fns  = set(re.findall(r'\b(FUN_[0-9a-fA-F]+_[0-9a-fA-F]+|thunk_[A-Za-z0-9
 undef_fns   = sorted(n for n in called_fns if n not in DEFINED_FNS)
 defs_undef  = ["undefined4 %s(){ return 0; }  /* OPEN: referenced but not promoted to a function body */" % n
                for n in undef_fns]
+# Ghidra FID library-signature FALSE POSITIVES: a misdisassembled data/SMC region (e.g. SOUNDDVR's
+# runtime-patched dispatch stub at 0x12ab/0x12f5, flagged halt_baddata) sometimes emits a phantom call
+# to a named library routine (TaskRegister) with no body.  These occur only in unreachable
+# misdisassembled-data gap functions (never fmap-dispatched); stub to a no-op so the unit links.
+GHIDRA_PHANTOMS = ('TaskRegister',)
+phantom_fns = sorted(p for p in GHIDRA_PHANTOMS if re.search(r'\b%s\s*\(' % p, src) and p not in DEFINED_FNS)
+defs_undef += ["undefined4 %s(){ return 0; }  /* OPEN: Ghidra FID phantom in misdisassembled data */" % p
+               for p in phantom_fns]
 
 # ---- DRIVER MODE: namespace every function-like identifier so the driver unit's symbols do not
 # collide with the engine unit's identically-named ones (both have app_entry / FUN_0000_* / func_0x*
@@ -612,7 +652,7 @@ defs_undef  = ["undefined4 %s(){ return 0; }  /* OPEN: referenced but not promot
 # _fmap_n, _base) are NOT namespaced (fist_modules.c wires them). Engine mode emits none of this.
 defs_ns = []
 if MODULE:
-    ns_names = set(DEFINED_FNS) | set(undef_fns) | set(funcaddr) | set(regs) | set(stks) | set(uparm)
+    ns_names = set(DEFINED_FNS) | set(undef_fns) | set(phantom_fns) | set(funcaddr) | set(regs) | set(stks) | set(uparm)
     defs_ns = ['/* ---- driver-unit symbol namespacing (avoid engine-unit link collisions) ---- */']
     defs_ns += ["#define %s m_%s_%s" % (n, MODULE, n) for n in sorted(ns_names)]
 

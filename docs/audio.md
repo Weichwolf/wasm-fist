@@ -1,9 +1,49 @@
-# AUDIO subsystem — recon + shim foundation (iteration 1)
+# AUDIO subsystem — recon + shim foundation (iterations 1–2)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
-This is the FIRST iteration of a multi-iteration subsystem. Honest scope: the platform layer (`fist_sb.c`)
-+ the verify harness + the reference are landed and validated; the engine does NOT yet drive them because
-the sound DRIVER is not wired (see §5). No bit-exact audio yet. The exact path to it is §6.
+This is a multi-iteration subsystem. Honest scope: the platform layer (`fist_sb.c`) + the verify harness +
+the reference are landed and validated (iter 1); the SOUND DRIVER is now WIRED and its device-registration
+init runs (iter 2, §8) — but the engine still does NOT drive the play methods on the menu, so there is NO
+port sound-port I/O yet. No bit-exact audio yet. The remaining blocker is now ENGINE-SIDE (§8).
+
+## 8. Iteration 2 — SOUNDDVR wired; blocker moved ENGINE-side (2026-07-18)
+
+**Landed (all gated FIST_SB; the 26 video flows stay byte-identical, native↔wasm md5 `3a6ff1c5`):**
+- **SOUNDDVR re-decompiled via SeedDriverVecs** (the authorized baseline change): seeded +0x2 init@0x78,
+  +0x6 method@0xc1, and the 14 method-vector code offsets from the driver's 4 reloc sections (0xfd/0x14e/
+  0x19a/0x1e7/0x1ec/0x1fd/0x245/0x24b/0x252/0x2e9/0x333/0x414/0x419/0x56b). `make decompile-drivers`:
+  43→**89 fns**, REPRODUCIBLE (byte-identical re-run). New pristine md5s: `fist_snd_decomp.c`
+  `ba2b4bfe`, `fist_snd.c` `abcafc9d` (was `1e0cfd38`). **MGAVIDEO/engine/ext UNCHANGED**
+  (`75c6d726`/`61453e42`/`0051cb56`). The fmap now wires (`fmap=wired(89 fns)`); +0x2 → the init.
+- **Four assemble-tool gaps** the seeded driver exposed, fixed in `tools/assemble_fist.py` (engine/mga/ext
+  byte-identical): (a) `switchD_SEG:OFF::caseD_N` seg:offset jump-table names; (b) bare-`LAB_` SMC
+  lvalues (`LAB_0000_12d9 = 0x411`) enabled for 16-bit driver modules (was FLAT32-only); (c) Ghidra names
+  every `jmp far 0:0` thunk `app_entry` → duplicate-marker dedup (`app_entry_0000_01cd`); (d) a Ghidra
+  FID phantom `TaskRegister()` in a misdisassembled-SMC gap function → no-op stub.
+- **Init device-registration reconstructed (patch 344, asm-verified 0x78):** SS-context `0x2ba9`→`0x1c00`,
+  signature rebased to DGROUP:0, and the inert f842 method-vector section-A install done via
+  `fist_apply_reloc_at(driver_seg, 0xa, 1)` (installs DGROUP:0x508/0x51c/0x524/0x538/0x53c). Crash-free.
+
+**Decisive characterization:** the menu music **IS SB-DMA digital** — a control DOSBox capture with
+`sbtype=none` records `peak=0` (silent); the driver programs the SB DSP (`out(0x22c,0xd1)` = base+0xC
+speaker-on) and 8237 DMA in its play methods. So `fist_sb.c` is the correct model.
+
+**THE BLOCKER (moved engine-side, proven):** the engine calls **only +0x2** on the sound driver on the
+menu — it never dispatches ANY driver play method. PROVEN not to be a missing driver method-vector: a
+throwaway diagnostic installing method-vector sections A+B+C all together still yields only the +0x2 call
+and zero SB port I/O. So the menu-music-START is an **engine-side trigger our port does not reach** — the
+engine's boot (`515e` loads the sound driver at CRT-init line ~4029) reaches `FUN_0000_00d0` (main/menu)
+without issuing the digital-music play, and the sound-ACTIVATE `FUN_1000_50e6`/`516f` sits AFTER the
+`return 00d0` (teardown). The music-start inside 00d0 is gated on engine-side sound state
+(`DAT_1000_5951/5953`, the descriptor-present bit) that the port does not satisfy. `DGROUP:0xd4`
+(=`FUN_1000_1917` device work-object alloc) and `0xf4` (IRQ-callback register) are UNRECOVERED engine
+targets (patch 049 class) → they trap harmlessly. **Next iteration:** locate the engine-side menu-music
+trigger inside `00d0` and its sound-enable gate (which `DAT_1000_595x` flag it checks); recover
+`FUN_1000_1917`/the `0xf4` service so the device fully registers present; then the engine dispatches +0x6
+(section-B install + DMA buffer alloc) → the play methods program the SB → `fist_sb.c` streams PCM.
+
+---
+## (iteration 1, below)
 
 ---
 

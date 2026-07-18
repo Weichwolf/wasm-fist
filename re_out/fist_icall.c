@@ -154,6 +154,8 @@ code *fist_icall(uint32_t linear)
             uint32_t off = linear - o->base;             /* module-relative offset (base-0 fmap key) */
             if (o->fmap) {
                 void *fn = lookup_ovl_fun(o, off);
+                if (getenv("FIST_SND_CALLTRACE") && o->name[0]=='S' && o->name[1]=='O')
+                    fprintf(stderr, "[sndcall] SOUNDDVR+0x%x %s\n", off, fn?"(fmap)":"(miss)");
                 if (fn) return (code *)fn;
                 /* FAR-ENTRY THUNK.  Many driver method vectors point at a 4-byte far wrapper
                  *   E8 rel16 CB   =  call near <inner> ; lret

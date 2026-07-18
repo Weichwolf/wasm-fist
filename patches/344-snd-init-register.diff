@@ -1,0 +1,59 @@
+SOUNDDVR.DVR init (asm 0x78): run the driver's device-registration on the engine's `call far load_seg:0x2`.
+
+The engine calls the sound driver's init once on the menu path (overlay dispatch -> +0x2 -> jmp 0x78);
+the decompiled init no-ops because its guarded body never runs.  Asm 0x78:
+    test cs:0x5a,0xffff ; jne <already>          ; DAT_0000_005a==0 -> first call
+    mov  cs:0x5a,ds                              ; DAT_0000_005a = ds = DGROUP = 0x1c00
+    call 0x77f                                   ; PIT-based timing calibration (ports 42/43/61)
+    mov  ax,ss ; cmp cs:0x5a,ax ; jne bail        ; cs:0x5a == ss ? (SS=DS=0x1c00, small model)
+    cmp  ds:0x0,0xcbc3 ; jne bail                 ; engine DGROUP signature
+    mov  bx,cs ; mov si,0xa ; lcall [ds:0x12]      ; install method-vector section A (f842 FAR applier)
+    push cs;pop es; mov bx,0x3d6; lcall [ds:0xf4]  ; register driver IRQ callback (drv:0x3d6)
+    mov  ax,0x413; sub ax,0; mov bx,0x4fa; mov cx,ds; lcall [ds:0xd4]  ; device work-object alloc (1917)
+
+Ghidra artifacts fixed: (1) `DAT_0000_005a == 0x2ba9` -- the SS-context is the well-known wrong 0x2ba9;
+SS==DS==DGROUP==0x1c00 (cs:0x5a was just set to ds=0x1c00) so the compare is against 0x1c00.  (2)
+`*(int *)0x0` read absolute g_mem[0] not DGROUP:0 -- the engine signature 0xcbc3 lives at DGROUP:0x0
+(linear 0x1c000).  (3) `lcall [ds:0x12]` (=FUN_1000_f842, the FAR reloc applier) is inert in C (Ghidra
+dropped its string-op DS/ES bases) -> apply section A faithfully via the loader shim fist_apply_reloc_at
+(bx=cs=driver load seg = fist_snd_base>>4, si=0xa; the section's leading seg word at module offset 0xa
+is an MZ reloc = the driver load seg at LOAD), exactly as the MGAVIDEO init does (patches 035/037).
+Installs DGROUP:0x508=0x14e / 0x51c=0x252 / 0x524=0xfd / 0x538=0x245 / 0x53c=0x24b (far off:load_seg).
+
+The 0xf4 IRQ-callback register and the 0xd4 device work-object alloc keep their faithful fist_icall_far
+dispatch.  Both engine targets are UNRECOVERED (DGROUP:0xd4 = FUN_1000_1917, documented unrecovered in
+patch 049; 0xf4 similarly), so they trap harmlessly (return 0) until recovered -- the SAME state the
+MGAVIDEO init left its 0xd4 workspace alloc in.  This is honest: the engine does not dispatch ANY sound
+play method on the menu regardless of which method-vector sections are installed (proven: with sections
+A+B+C all installed the engine still calls only +0x2), so the downstream registration effect is not yet
+observable -- the menu-music trigger is an engine-side gate not reached in our port (see docs/audio.md
+section 6).
+
+Gated behind FIST_SB (fist_sb_enabled()): default-OFF leaves the guard false -> the 26 video flows stay
+byte-identical (mainmenu/settings/about AE=0, native<->wasm md5 3a6ff1c5).  Asm-verified vs
+re_out/fist_snd_image.bin offset 0x78.
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -391,11 +391,20 @@
+     DAT_0000_005a = 0x1c00;
+     uVar1 = 0x1c00;
+     FUN_0000_077f();
+-    if ((DAT_0000_005a == 0x2ba9) && (*(int *)0x0 == -0x343d)) {
+-      (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c012u)))(0);
++    /* PATCH 344: run the device-registration (gated FIST_SB).  SS-context 0x2ba9 -> 0x1c00 (SS=DS=
++       DGROUP); signature read rebased to DGROUP:0 (0x1c000); the inert f842 method-vector install
++       (si=0xa) done faithfully via fist_apply_reloc_at (driver load seg = fist_snd_base>>4). */
++    {
++    extern int fist_sb_enabled(void);
++    extern int fist_apply_reloc_at(unsigned short,unsigned short,int);
++    extern uint32_t fist_snd_base;
++    if (fist_sb_enabled() && DAT_0000_005a == 0x1c00 &&
++        *(short *)(g_mem+0x1c000u) == (short)0xcbc3) {
++      fist_apply_reloc_at((unsigned short)(fist_snd_base >> 4), 0xa, 1);
+       (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c0f4u)))(0);
+       (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c0d4u)))(0);
+     }
++    }
+     return;
+   }
+   FUN_0000_00fd(param_1,param_2,param_3,param_4);

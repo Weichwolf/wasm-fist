@@ -8,69 +8,168 @@ void __allregs app_entry(void)
 }
 
 
-/* ===== FUN_0000_0004 @ 0000:0004 ===== */
+/* ===== thunk_FUN_0000_0078 @ 0000:0002 ===== */
 
-void __allregs FUN_0000_0004(void)
+void __allregs
+thunk_FUN_0000_0078(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+
+{
+  undefined2 uVar1;
+  
+  if (DAT_0000_005a == 0) {
+    DAT_0000_005a = 0x1c00;
+    uVar1 = 0x1c00;
+    FUN_0000_077f();
+    if ((DAT_0000_005a == 0x2ba9) && (*(int *)0x0 == -0x343d)) {
+      (*(code *)*(undefined2 *)&DAT_1000_c012)(0);
+      (*(code *)*(undefined2 *)&DAT_1000_c0f4)(0);
+      (*(code *)*(undefined2 *)&DAT_1000_c0d4)(0);
+    }
+    return;
+  }
+  FUN_0000_00fd(param_1,param_2,param_3,param_4);
+  return;
+}
+
+
+/* ===== FUN_0000_0005 @ 0000:0005 ===== */
+
+void __allregs FUN_0000_0005(void)
 
 {
   return;
 }
 
 
-/* ===== FUN_0000_0155 @ 0000:0155 ===== */
+/* ===== thunk_FUN_0000_00c1 @ 0000:0006 ===== */
 
-/* WARNING: Removing unreachable block (ram,0x00000159) */
-/* WARNING: Variable defined which should be unmapped: param_8 */
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __allregs
-FUN_0000_0155(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
-             undefined2 *param_5,undefined2 param_6,undefined2 param_7,char param_8)
+void __allregs thunk_FUN_0000_00c1(void)
 
 {
-  char cVar1;
-  undefined1 uVar2;
-  undefined2 uVar3;
-  undefined2 extraout_DX;
-  undefined2 uVar4;
-  undefined2 **ppuVar5;
-  undefined2 unaff_ES;
-  undefined2 unaff_CS;
-  undefined2 *puStack_2;
+  (*_DAT_1000_c50c)();
+  (*_DAT_1000_c520)();
+  (*_DAT_1000_c0f8)();
+  (*_DAT_1000_c016)();
+  DAT_1000_c4fc = DAT_1000_c4fc & 0xbf | 0x22;
+  return;
+}
+
+
+/* ===== FUN_0000_0009 @ 0000:0009 ===== */
+
+void __allregs FUN_0000_0009(void)
+
+{
+  return;
+}
+
+
+/* ===== FUN_0000_0078 @ 0000:0078 ===== */
+
+void __allregs
+FUN_0000_0078(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+
+{
+  undefined2 uVar1;
   
-  ppuVar5 = &puStack_2;
-  ppuRam000f000c = &puStack_2;
-  cVar1 = '\x1a';
-  puStack_2 = param_5;
-  do {
-    param_5 = param_5 + -1;
-    ppuVar5 = ppuVar5 + -1;
-    *ppuVar5 = (undefined2 *)*param_5;
-    cVar1 = cVar1 + -1;
-  } while ('\0' < cVar1);
-  uRam000f0014 = 1;
-  uRam000f000e = 0x1c00;
-  uRam000f0000 = param_1;
-  uRam000f0002 = param_4;
-  uRam000f0004 = param_2;
-  uRam000f0006 = param_3;
-  uRam000f0008 = param_6;
-  uRam000f000a = param_7;
-  uRam000f0010 = unaff_ES;
-  (*(code *)0xf0100)();
-  uVar3 = uRam000f0004;
-  uVar4 = uRam000f0002;
-  (*_DAT_1000_c43e)();
-  uVar2 = 1;
-  if ((param_8 != 'I') && (uVar2 = 2, param_8 != 'T')) {
-    uVar2 = 3;
-    if ((param_8 != 'A') && ((uVar2 = 3, param_8 != 'C' && (uVar2 = 4, param_8 != 'R')))) {
-      uVar2 = 0;
+  if (DAT_0000_005a == 0) {
+    DAT_0000_005a = 0x1c00;
+    uVar1 = 0x1c00;
+    FUN_0000_077f();
+    if ((DAT_0000_005a == 0x2ba9) && (*(int *)0x0 == -0x343d)) {
+      (*(code *)*(undefined2 *)&DAT_1000_c012)(0);
+      (*(code *)*(undefined2 *)&DAT_1000_c0f4)(0);
+      (*(code *)*(undefined2 *)&DAT_1000_c0d4)(0);
     }
+    return;
   }
-  FUN_0000_0833(CONCAT11(0x30,uVar2),uVar3,extraout_DX,uVar4);
-  (*(code *)*(undefined2 *)0x12)();
-  (*(code *)*(undefined2 *)0x26)();
+  FUN_0000_00fd(param_1,param_2,param_3,param_4);
+  return;
+}
+
+
+/* ===== FUN_0000_00c1 @ 0000:00c1 ===== */
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_00c1(void)
+
+{
+  (*_DAT_1000_c50c)();
+  (*_DAT_1000_c520)();
+  (*_DAT_1000_c0f8)();
+  (*_DAT_1000_c016)();
+  DAT_1000_c4fc = DAT_1000_c4fc & 0xbf | 0x22;
+  return;
+}
+
+
+/* ===== FUN_0000_00e6 @ 0000:00e6 ===== */
+
+void __allregs FUN_0000_00e6(void)
+
+{
+  return;
+}
+
+
+/* ===== FUN_0000_00fd @ 0000:00fd ===== */
+
+uint __allregs FUN_0000_00fd(char param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+
+{
+  undefined1 uVar2;
+  int iVar1;
+  byte bVar3;
+  
+  bVar3 = 1;
+  if (param_1 != 'N') {
+    uVar2 = 1;
+    if ((((param_1 == 'I') || (uVar2 = 2, param_1 == 'T')) || (uVar2 = 3, param_1 == 'A')) ||
+       (uVar2 = 4, param_1 == 'R')) {
+      iVar1 = FUN_0000_0833(CONCAT11(0x80,uVar2),param_2,param_3,param_4);
+      return iVar1 << 1 | (uint)(iVar1 < 0);
+    }
+    uVar2 = 1;
+    if (((param_1 == 'I') || (uVar2 = 2, param_1 == 'A')) ||
+       ((uVar2 = 3, param_1 == 'D' || (uVar2 = 4, param_1 == 'C')))) {
+      iVar1 = FUN_0000_1e5e(uVar2,param_3);
+      return iVar1 << 1 | (uint)(iVar1 < 0);
+    }
+    bVar3 = 0;
+  }
+  return -(uint)bVar3;
+}
+
+
+/* ===== FUN_0000_014e @ 0000:014e ===== */
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_014e(char param_1,undefined2 param_2)
+
+{
+  undefined1 uVar1;
+  undefined2 extraout_DX;
+  undefined2 uVar2;
+  undefined2 unaff_CS;
+  
+  if (param_1 != 'N') {
+    uVar2 = 0x1cd;
+    (*_DAT_1000_c43e)();
+    uVar1 = 1;
+    if ((param_1 != 'I') && (uVar1 = 2, param_1 != 'T')) {
+      uVar1 = 3;
+      if ((param_1 != 'A') && ((uVar1 = 3, param_1 != 'C' && (uVar1 = 4, param_1 != 'R')))) {
+        uVar1 = 0;
+      }
+    }
+    FUN_0000_0833(CONCAT11(0x30,uVar1),param_2,extraout_DX,uVar2);
+    (*(code *)*(undefined2 *)0x12)();
+    (*(code *)*(undefined2 *)0x26)();
+  }
   return;
 }
 
@@ -96,57 +195,413 @@ void __allregs FUN_0000_019a(undefined2 param_1)
 }
 
 
-/* ===== FUN_0000_01bc @ 0000:01bc ===== */
+/* ===== app_entry @ 0000:01cd ===== */
 
-/* WARNING: Removing unreachable block (ram,0x000001c0) */
-
-void __allregs
-FUN_0000_01bc(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
-             undefined2 *param_5,undefined2 param_6,undefined2 param_7)
+void __allregs app_entry(void)
 
 {
-  char cVar1;
-  undefined2 **ppuVar2;
-  undefined2 unaff_ES;
-  undefined2 *puStack_2;
-  
-  ppuVar2 = &puStack_2;
-  ppuRam000f000c = &puStack_2;
-  cVar1 = '\x1a';
-  puStack_2 = param_5;
-  do {
-    param_5 = param_5 + -1;
-    ppuVar2 = ppuVar2 + -1;
-    *ppuVar2 = (undefined2 *)*param_5;
-    cVar1 = cVar1 + -1;
-  } while ('\0' < cVar1);
-  uRam000f0014 = 1;
-  uRam000f000e = 0x1c00;
-  uRam000f0000 = param_1;
-  uRam000f0002 = param_4;
-  uRam000f0004 = param_2;
-  uRam000f0006 = param_3;
-  uRam000f0008 = param_6;
-  uRam000f000a = param_7;
-  uRam000f0010 = unaff_ES;
-  (*(code *)0xf0100)();
-  (*(code *)*(undefined2 *)0x442)();
   return;
 }
 
 
-/* ===== FUN_0000_0313 @ 0000:0313 ===== */
+/* ===== FUN_0000_01e7 @ 0000:01e7 ===== */
+
+void __allregs
+FUN_0000_01e7(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+
+{
+  FUN_0000_0833(param_1,param_2,param_3,param_4);
+  return;
+}
+
+
+/* ===== FUN_0000_01ec @ 0000:01ec ===== */
+
+void __allregs FUN_0000_01ec(int param_1,undefined2 param_2)
+
+{
+  if (param_1 != -1) {
+    FUN_0000_0af4(param_1,param_2);
+    return;
+  }
+  FUN_0000_0c94(0xffff);
+  return;
+}
+
+
+/* ===== FUN_0000_01fd @ 0000:01fd ===== */
+
+/* WARNING: Removing unreachable block (ram,0x0000023f) */
+
+int __allregs FUN_0000_01fd(int param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+
+{
+  undefined2 uVar1;
+  uint uVar2;
+  byte in_AF;
+  char cVar3;
+  byte in_TF;
+  byte in_IF;
+  byte in_NT;
+  
+  uVar1 = DAT_0000_0831;
+  cVar3 = *(int *)&DAT_1000_c006 == param_1;
+  if ((bool)cVar3) {
+    *(undefined2 *)&DAT_1000_c006 = param_2;
+  }
+  if (*(int *)0x0 == param_1) {
+    *(undefined2 *)0x0 = param_2;
+    cVar3 = cVar3 + '\x01';
+  }
+  if ((cVar3 == '\0') && (uVar2 = *(uint *)&DAT_1000_c006 | *(uint *)0x0, uVar2 != 0)) {
+    uRam000f0002 = *(undefined2 *)&DAT_1000_c006;
+    uRam000f0004 = *(undefined2 *)0x0;
+    uRam000f0014 = 5;
+    uRam000f000e = 0x1c00;
+    uRam000f0010 = uVar1;
+    iRam000f0000 = param_1;
+    uRam000f0006 = param_2;
+    uRam000f0008 = uVar2;
+    uRam000f000a = param_4;
+    uRam000f000c = param_3;
+    (*(code *)0xf0100)((uint)(in_NT & 1) * 0x4000 | (uint)(in_IF & 1) * 0x200 |
+                       (uint)(in_TF & 1) * 0x100 | 0x40 | (uint)(in_AF & 1) * 0x10 | 4);
+    return iRam000f0000;
+  }
+  return param_1;
+}
+
+
+/* ===== FUN_0000_0245 @ 0000:0245 ===== */
+
+void __allregs FUN_0000_0245(void)
+
+{
+  DAT_0000_005c = DAT_0000_005c + '\x01';
+  return;
+}
+
+
+/* ===== FUN_0000_024b @ 0000:024b ===== */
+
+void __allregs FUN_0000_024b(void)
+
+{
+  DAT_0000_005c = DAT_0000_005c + -1;
+  return;
+}
+
+
+/* ===== FUN_0000_0252 @ 0000:0252 ===== */
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __allregs FUN_0000_0313(char param_1,int param_2,int param_3)
+void __allregs
+FUN_0000_0252(char param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
+             undefined2 param_5)
 
 {
-  *(char *)(param_2 + param_3) = *(char *)(param_2 + param_3) + param_1;
-  *(char *)(param_2 + param_3) = *(char *)(param_2 + param_3) + param_1;
-  *(char *)(param_2 + param_3) = *(char *)(param_2 + param_3) + param_1;
-  *(char *)(param_2 + param_3) = *(char *)(param_2 + param_3) + param_1;
-  (*_DAT_1000_c390)();
+  undefined1 uVar1;
+  byte extraout_AH;
+  int iVar2;
+  undefined2 uVar3;
+  
+  if (0x31 < _DAT_1000_c242) {
+    DAT_0000_128d = 0x4dd;
+    DAT_0000_128f = 0x50c;
+    DAT_0000_1291 = 0x53b;
+    iVar2 = 6;
+    DAT_0000_02e8 = param_1;
+    do {
+      *(undefined1 *)(iVar2 + 0x60) = 0xff;
+      iVar2 = iVar2 + -1;
+    } while (-1 < iVar2);
+    iVar2 = 7;
+    do {
+      *(undefined1 *)(iVar2 + 0x67) = 0;
+      iVar2 = iVar2 + -1;
+    } while (-1 < iVar2);
+    uVar3 = 0x1c00;
+    FUN_0000_0685(param_2,param_3,param_4,param_5);
+    uVar1 = 0;
+    if ((((DAT_0000_02e8 != 'N') && (uVar1 = 1, DAT_0000_02e8 != 'I')) &&
+        (uVar1 = 2, DAT_0000_02e8 != 'A')) &&
+       ((uVar1 = 3, DAT_0000_02e8 != 'D' && (uVar1 = 4, DAT_0000_02e8 != 'C')))) {
+      uVar1 = 3;
+    }
+    FUN_0000_1e73(uVar1);
+    FUN_0000_1d45((uint)extraout_AH << 8);
+    (*(code *)*(undefined2 *)&DAT_1000_c012)(0);
+    (*(code *)*(undefined2 *)&DAT_1000_c026)(0);
+    if (DAT_0000_02e8 == 'N') {
+      _DAT_2000_bfb8 = 0;
+      _DAT_2000_bfba = 0;
+    }
+    return;
+  }
+  return;
+}
+
+
+/* ===== FUN_0000_02e9 @ 0000:02e9 ===== */
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_02e9(undefined2 param_1,undefined2 param_2)
+
+{
+  undefined2 uVar1;
+  undefined2 unaff_CS;
+  
+  (*_DAT_1000_c016)();
+  uVar1 = 0x4e;
+  (*_DAT_1000_c02a)();
+  FUN_0000_1e73(0);
+  FUN_0000_0643(unaff_CS,param_1,uVar1,param_2);
+  return;
+}
+
+
+/* ===== FUN_0000_0333 @ 0000:0333 ===== */
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_0333(void)
+
+{
+  uint *puVar1;
+  undefined2 *puVar2;
+  uint uVar3;
+  undefined2 uVar4;
+  int iVar5;
+  undefined2 unaff_CS;
+  undefined1 uVar6;
+  bool bVar7;
+  
+  uVar3 = _DAT_2000_bf8e;
+  *(uint *)0x318 = _DAT_2000_bf8e;
+  uVar6 = 0xffbf < uVar3;
+  *(int *)0x31a = uVar3 + 0x40;
+  *(undefined2 *)0x314 = 0;
+  uVar4 = (*(code *)*(undefined2 *)0x38c)();
+  if (!(bool)uVar6) {
+    *(undefined2 *)0x314 = uVar4;
+    while( true ) {
+      *(undefined2 *)0x316 = 0;
+      iVar5 = (*(code *)*(undefined2 *)0x394)();
+      if (((bool)uVar6) || (iVar5 != 2)) break;
+      if (*(int *)0x316 == 0) {
+        (*(code *)*(undefined2 *)0x390)();
+        return;
+      }
+      puVar2 = (undefined2 *)*(uint *)0x318;
+      if ((undefined2 *)*(uint *)0x31a <= puVar2) {
+LAB_0000_03ca:
+        (*(code *)*(undefined2 *)0x390)();
+        return;
+      }
+      (*(code *)*(undefined2 *)0xd0)();
+      uVar4 = *puVar2;
+      *(int *)0x316 = *(int *)0x316 << 4;
+      bVar7 = false;
+      iVar5 = (*(code *)*(undefined2 *)0x394)();
+      if ((bVar7) || (iVar5 != *(int *)0x316)) goto LAB_0000_03ca;
+      *(byte *)(*(int *)0x318 + 2) = *(byte *)(*(int *)0x318 + 2) | 0x24;
+      puVar1 = (uint *)0x318;
+      uVar6 = 0xfffb < *puVar1;
+      *puVar1 = *puVar1 + 4;
+    }
+  }
+  (*(code *)*(undefined2 *)0x390)();
+  return;
+}
+
+
+/* ===== app_entry @ 0000:03d6 ===== */
+
+void __allregs app_entry(void)
+
+{
+  return;
+}
+
+
+/* ===== FUN_0000_0414 @ 0000:0414 ===== */
+
+void __allregs FUN_0000_0414(void)
+
+{
+  return;
+}
+
+
+/* ===== FUN_0000_0415 @ 0000:0415 ===== */
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_0415(char param_1)
+
+{
+  char *pcVar1;
+  byte *pbVar2;
+  char cVar3;
+  int iVar4;
+  
+  LOCK();
+  pcVar1 = (char *)((byte)(cRam0001c05f << 1 | cRam0001c05f < '\0') + 0x60);
+  cVar3 = *pcVar1;
+  *pcVar1 = param_1;
+  UNLOCK();
+  iVar4 = (int)cVar3;
+  if (*(char *)(iVar4 + 0x68) != '\0') {
+    pcVar1 = (char *)(iVar4 + 0x68);
+    *pcVar1 = *pcVar1 + -1;
+    if (*pcVar1 == '\0') {
+      pbVar2 = (byte *)(CONCAT11(cVar3 >> 7,*(undefined1 *)(iVar4 + 0x70)) * 4 + _DAT_2000_bf8e + 2)
+      ;
+      *pbVar2 = *pbVar2 & 0xbf;
+    }
+  }
+  return;
+}
+
+
+/* ===== FUN_0000_0419 @ 0000:0419 ===== */
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_0419(uint param_1,undefined2 param_2,undefined1 param_3)
+
+{
+  byte *pbVar1;
+  char *pcVar2;
+  char cVar3;
+  char cVar4;
+  int iVar5;
+  int iVar6;
+  undefined2 *puVar7;
+  undefined1 uVar8;
+  undefined2 unaff_CS;
+  
+  *(uint *)0x5e = param_1;
+  cVar4 = (char)param_1;
+  if (cVar4 != -1) {
+    iVar5 = 7;
+LAB_0000_0428:
+    iVar6 = iVar5;
+    iVar5 = iVar6 + -1;
+    if (-1 < iVar5) goto code_r0x0000042b;
+    iVar5 = 7;
+    do {
+      iVar6 = iVar5;
+      iVar5 = iVar6 + -1;
+    } while (*(char *)(iVar6 + 0x67) != '\0');
+    *(char *)(iVar6 + 0x6f) = cVar4;
+    *(undefined1 *)(iVar6 + 0x67) = 1;
+    goto LAB_0000_044b;
+  }
+  cVar4 = *(char *)0x5f;
+  uVar8 = (undefined1)((uint)unaff_CS >> 8);
+  if (cVar4 < '\0') {
+    FUN_0000_1e13(0x411,0,param_3,CONCAT11(uVar8,cVar4) & 0xff7f);
+    cVar4 = (char)param_1;
+  }
+  else {
+    FUN_0000_1d62(0x412,0,param_3,CONCAT11(uVar8,cVar4));
+    cVar4 = (char)param_1;
+  }
+LAB_0000_04ac:
+  LOCK();
+  pcVar2 = (char *)((byte)(*(char *)0x5f << 1 | *(char *)0x5f < '\0') + 0x60);
+  cVar3 = *pcVar2;
+  *pcVar2 = cVar4;
+  UNLOCK();
+  iVar5 = (int)cVar3;
+  if (*(char *)(iVar5 + 0x68) != '\0') {
+    pcVar2 = (char *)(iVar5 + 0x68);
+    *pcVar2 = *pcVar2 + -1;
+    if (*pcVar2 == '\0') {
+      pbVar1 = (byte *)(CONCAT11(cVar3 >> 7,*(undefined1 *)(iVar5 + 0x70)) * 4 + _DAT_2000_bf8e + 2)
+      ;
+      *pbVar1 = *pbVar1 & 0xbf;
+    }
+  }
+  return;
+code_r0x0000042b:
+  if (cVar4 == *(char *)(iVar6 + 0x6f)) goto code_r0x00000431;
+  goto LAB_0000_0428;
+code_r0x00000431:
+  *(char *)(iVar6 + 0x67) = *(char *)(iVar6 + 0x67) + '\x01';
+LAB_0000_044b:
+  cVar4 = (char)iVar5;
+  puVar7 = (undefined2 *)((param_1 & 0xff) * 4 + _DAT_2000_bf8e);
+  *(byte *)(puVar7 + 1) = *(byte *)(puVar7 + 1) | 0x60;
+  pbVar1 = (byte *)(puVar7 + 1);
+  *pbVar1 = *pbVar1 | 0x20;
+  if ((char)*pbVar1 < '\0') {
+    if ((*(byte *)(puVar7 + 1) & 0x10) != 0) {
+      FUN_0000_0579();
+    }
+  }
+  else {
+    FUN_0000_0415(cVar4);
+  }
+  cVar3 = *(char *)0x5f;
+  uVar8 = (undefined1)((uint)puVar7 >> 8);
+  if (cVar3 < '\0') {
+    FUN_0000_1e13(*puVar7,param_2,param_3,CONCAT11(uVar8,cVar3) & 0xff7f);
+  }
+  else {
+    FUN_0000_1d62(*puVar7,param_2,param_3,CONCAT11(uVar8,cVar3));
+  }
+  goto LAB_0000_04ac;
+}
+
+
+/* ===== FUN_0000_04dd @ 0000:04dd ===== */
+
+void __allregs FUN_0000_04dd(void)
+
+{
+  char *pcVar1;
+  byte *pbVar2;
+  byte bVar3;
+  
+  bVar3 = DAT_0000_0060;
+  LOCK();
+  DAT_0000_0060 = 0xff;
+  UNLOCK();
+  if (bVar3 != 0xff) {
+    pcVar1 = (char *)(bVar3 + 0x68);
+    *pcVar1 = *pcVar1 + -1;
+    if (*pcVar1 == '\0') {
+      pbVar2 = (byte *)((uint)*(byte *)(bVar3 + 0x70) * 4 + *(int *)0x4fe + 2);
+      *pbVar2 = *pbVar2 & 0xbf;
+    }
+  }
+  return;
+}
+
+
+/* ===== FUN_0000_056b @ 0000:056b ===== */
+
+void __allregs FUN_0000_056b(void)
+
+{
+  DAT_0000_056a = DAT_0000_056a ^ 1;
+  FUN_0000_1ed2(DAT_0000_056a);
+  return;
+}
+
+
+/* ===== FUN_0000_0579 @ 0000:0579 ===== */
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_0579(void)
+
+{
+  (*_DAT_2000_bb7c)();
   return;
 }
 
@@ -278,6 +733,65 @@ FUN_0000_0643(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined
 }
 
 
+/* ===== FUN_0000_0685 @ 0000:0685 ===== */
+
+undefined2 __allregs
+FUN_0000_0685(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+
+{
+  undefined1 uVar1;
+  undefined1 uVar2;
+  uint uVar3;
+  undefined1 extraout_AH;
+  
+  FUN_0000_077f();
+  if ((DAT_0000_0598 | DAT_0000_059a) == 0) {
+    DAT_0000_005c = DAT_0000_005c + '\x01';
+    DAT_0000_0598 = uRam00000020;
+    DAT_0000_059a = uRam00000022;
+    FUN_0000_0703();
+    out(0x43,0x34);
+    out(0x40,0);
+    out(0x40,0);
+    FUN_0000_0703();
+    out(0x43,6);
+    uVar1 = in(0x40);
+    uVar2 = in(0x40);
+    DAT_0000_05a2 = -CONCAT11(uVar2,uVar1);
+    DAT_0000_05b6 = DAT_0000_05a2 / 0xa5 - 2;
+    uRam00000020 = 0x5c5;
+    uRam00000022 = 0;
+    DAT_0000_05b8 = DAT_0000_05b6;
+    FUN_0000_0725(param_1,DAT_0000_05a2 % 0xa5,0xa5,param_2,param_3,param_4);
+    uVar1 = FUN_0000_0714(0xa5);
+    DAT_0000_005c = DAT_0000_005c + -1;
+    return CONCAT11(extraout_AH,uVar1);
+  }
+  uVar1 = in(0x61);
+  uVar3 = CONCAT11((char)((DAT_0000_0598 | DAT_0000_059a) >> 8),uVar1) & 0xfffc;
+  out(0x61,(char)uVar3);
+  out(0x43,0xb6);
+  return CONCAT11((char)(uVar3 >> 8),0xb6);
+}
+
+
+/* ===== FUN_0000_0703 @ 0000:0703 ===== */
+
+void __allregs FUN_0000_0703(void)
+
+{
+  byte bVar1;
+  
+  do {
+    bVar1 = in(0x3da);
+  } while ((bVar1 & 8) != 0);
+  do {
+    bVar1 = in(0x3da);
+  } while ((bVar1 & 8) == 0);
+  return;
+}
+
+
 /* ===== FUN_0000_0714 @ 0000:0714 ===== */
 
 undefined1 __allregs FUN_0000_0714(undefined2 param_1)
@@ -289,6 +803,48 @@ undefined1 __allregs FUN_0000_0714(undefined2 param_1)
   out(0x40,(char)param_1);
   uVar1 = (undefined1)((uint)param_1 >> 8);
   out(0x40,uVar1);
+  return uVar1;
+}
+
+
+/* ===== FUN_0000_0725 @ 0000:0725 ===== */
+
+/* WARNING: Removing unreachable block (ram,0x00000733) */
+/* WARNING: Removing unreachable block (ram,0x0000074b) */
+
+uint __allregs
+FUN_0000_0725(undefined2 param_1,undefined2 param_2,uint param_3,undefined2 param_4,
+             undefined2 param_5,undefined2 param_6)
+
+{
+  uint uVar1;
+  uint unaff_ES;
+  undefined2 uStack0002;
+  
+  uVar1 = DAT_0000_059c | DAT_0000_059e;
+  if ((DAT_0000_059c | DAT_0000_059e) == 0) {
+    uRam000f0014 = 0x21;
+    uRam000f0000 = 0x350f;
+    uRam000f000e = 0x1c00;
+    uRam000f0002 = param_3;
+    uRam000f0004 = param_1;
+    uRam000f0006 = param_2;
+    uRam000f0008 = param_5;
+    uRam000f000a = param_6;
+    uRam000f000c = param_4;
+    (*(code *)0xf0100)();
+    DAT_0000_059c = uRam000f0002;
+    uStack0002 = 0x1c00;
+    uRam000f0014 = 0x21;
+    uRam000f0000 = 0x250f;
+    uRam000f0006 = 0x772;
+    uRam000f000e = 0;
+    DAT_0000_059e = unaff_ES;
+    uRam000f000c = param_4;
+    uRam000f0010 = unaff_ES;
+    (*(code *)0xf0100)();
+    uVar1 = uRam000f0000;
+  }
   return uVar1;
 }
 
@@ -322,48 +878,6 @@ FUN_0000_074f(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined
 }
 
 
-/* ===== FUN_0000_0759 @ 0000:0759 ===== */
-
-/* WARNING: Removing unreachable block (ram,0x00000764) */
-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
-
-void __allregs
-FUN_0000_0759(undefined2 param_1,undefined2 param_2,int param_3,undefined2 *param_4,
-             undefined2 param_5,undefined2 param_6)
-
-{
-  char cVar1;
-  undefined2 **ppuVar2;
-  undefined2 unaff_ES;
-  byte in_CF;
-  undefined2 *puStack_2;
-  
-  ppuVar2 = &puStack_2;
-  ppuRam000f000c = &puStack_2;
-  cVar1 = '\x13';
-  puStack_2 = param_4;
-  do {
-    param_4 = param_4 + -1;
-    ppuVar2 = ppuVar2 + -1;
-    *ppuVar2 = (undefined2 *)*param_4;
-    cVar1 = cVar1 + -1;
-  } while ('\0' < cVar1);
-  iRam000f0002 = param_3 + _DAT_2000_988e + (uint)in_CF;
-  uRam000f0014 = 0x21;
-  uRam000f0000 = 0x250f;
-  uRam000f000e = 0x1c00;
-  uRam000f0004 = param_1;
-  uRam000f0006 = param_2;
-  uRam000f0008 = param_5;
-  uRam000f000a = param_6;
-  uRam000f0010 = unaff_ES;
-  (*(code *)0xf0100)();
-  DAT_0000_0598 = 0;
-  DAT_0000_059a = 0;
-  return;
-}
-
-
 /* ===== FUN_0000_0772 @ 0000:0772 ===== */
 
 undefined2 __allregs FUN_0000_0772(undefined2 param_1)
@@ -375,25 +889,97 @@ undefined2 __allregs FUN_0000_0772(undefined2 param_1)
 }
 
 
-/* ===== FUN_0000_0826 @ 0000:0826 ===== */
+/* ===== FUN_0000_077f @ 0000:077f ===== */
 
-undefined2 __allregs FUN_0000_0826(undefined1 param_1,undefined2 param_2,undefined2 *param_3)
+int __allregs FUN_0000_077f(void)
 
 {
-  char cVar1;
-  undefined2 *puVar2;
-  undefined2 uStack_2;
+  uint uVar1;
   
-  puVar2 = &uStack_2;
-  cVar1 = '\x03';
+  FUN_0000_07b7();
+  FUN_0000_07f4();
+  DAT_0000_077e = '\x19';
+  while( true ) {
+    while (uVar1 = FUN_0000_07f4(), uVar1 < 0x399) {
+      DAT_0000_05a6 = DAT_0000_05a6 + 1;
+      DAT_0000_077e = DAT_0000_077e + -1;
+      if (DAT_0000_077e == '\0') {
+        return DAT_0000_05a6;
+      }
+    }
+    if (uVar1 < 0x3fc) break;
+    DAT_0000_05a6 = DAT_0000_05a6 + -1;
+    DAT_0000_077e = DAT_0000_077e + -1;
+    if (DAT_0000_077e == '\0') {
+      return DAT_0000_05a6;
+    }
+  }
+  return DAT_0000_05a6;
+}
+
+
+/* ===== FUN_0000_07b7 @ 0000:07b7 ===== */
+
+void __allregs FUN_0000_07b7(void)
+
+{
+  byte bVar1;
+  char cVar2;
+  int iVar3;
+  int iVar4;
+  
+  out(0x43,0xb6);
+  out(0x42,0);
+  out(0x42,2);
+  bVar1 = in(0x61);
+  out(0x61,bVar1 & 0xfc | 1);
+  iVar4 = 0;
   do {
-    param_3 = param_3 + -1;
-    puVar2 = puVar2 + -1;
-    *puVar2 = *param_3;
-    cVar1 = cVar1 + -1;
-  } while ('\0' < cVar1);
-  out(0x61,param_1);
-  return param_2;
+    out(0x43,0x86);
+    in(0x42);
+    cVar2 = in(0x42);
+    iVar3 = iVar4 + 1;
+    if (iVar3 == 0) break;
+    iVar4 = iVar3;
+  } while (cVar2 != '\0');
+  bVar1 = in(0x61);
+  out(0x61,bVar1 & 0xfc);
+  DAT_0000_05a6 = iVar4 * 2 + -2;
+  return;
+}
+
+
+/* ===== FUN_0000_07f4 @ 0000:07f4 ===== */
+
+int __allregs FUN_0000_07f4(void)
+
+{
+  byte bVar1;
+  undefined1 uVar2;
+  undefined1 uVar3;
+  int iVar4;
+  int iVar5;
+  
+  out(0x43,0xb6);
+  out(0x42,0);
+  out(0x42,0);
+  bVar1 = in(0x61);
+  out(0x61,bVar1 & 0xfc | 1);
+  iVar5 = 0x10;
+  iVar4 = DAT_0000_05a6;
+  do {
+    do {
+      iVar4 = iVar4 + -1;
+    } while (iVar4 != 0);
+    iVar5 = iVar5 + -1;
+    iVar4 = DAT_0000_05a6;
+  } while (iVar5 != 0);
+  out(0x43,0x86);
+  uVar2 = in(0x42);
+  uVar3 = in(0x42);
+  bVar1 = in(0x61);
+  out(0x61,bVar1 & 0xfc);
+  return -CONCAT11(uVar3,uVar2);
 }
 
 
@@ -556,16 +1142,6 @@ void __allregs FUN_0000_0aa7(undefined2 param_1,uint param_2)
 }
 
 
-/* ===== FUN_0000_0af0 @ 0000:0af0 ===== */
-
-void __allregs FUN_0000_0af0(undefined2 param_1,undefined2 param_2)
-
-{
-  FUN_0000_0af4(param_1,param_2);
-  return;
-}
-
-
 /* ===== FUN_0000_0af4 @ 0000:0af4 ===== */
 
 void __allregs FUN_0000_0af4(uint param_1,int param_2)
@@ -611,6 +1187,67 @@ void __allregs FUN_0000_0af4(uint param_1,int param_2)
   *(undefined2 *)&DAT_1000_c014 = 1;
   *(undefined2 *)&DAT_1000_c00e = 0xffff;
   return;
+}
+
+
+/* ===== FUN_0000_0b5d @ 0000:0b5d ===== */
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+int __allregs FUN_0000_0b5d(byte *param_1)
+
+{
+  byte bVar1;
+  byte bVar2;
+  int iVar3;
+  undefined1 uVar4;
+  char cVar5;
+  uint uVar6;
+  uint uVar7;
+  
+  bVar1 = *_DAT_1000_c00c;
+  bVar2 = _DAT_1000_c00c[1];
+  iVar3 = CONCAT11(bVar2,bVar1);
+  if (iVar3 == 0x2fff) {
+    return (uint)bVar2 << 8;
+  }
+  uVar7 = bVar1 & 0xff0f;
+  uVar6 = CONCAT11(bVar1,bVar1) & 0xff0;
+  cVar5 = (char)uVar6;
+  if (cVar5 == -0x70) {
+    *(byte *)(uVar7 + 0x16) = bVar2;
+    param_1 = _DAT_1000_c00c + 1;
+  }
+  else {
+    if (cVar5 == -0x80) {
+      uVar4 = 0;
+      *(undefined1 *)(uVar7 + 0x16) = 0;
+      _DAT_1000_c00c = _DAT_1000_c00c + 1;
+      goto LAB_0000_0bd3;
+    }
+    if (cVar5 == -0x40) {
+      iVar3 = FUN_0000_0cf3(bVar2,uVar6);
+    }
+    else {
+      param_1 = _DAT_1000_c00c;
+      if (cVar5 != -0x30) {
+        if (cVar5 == -0x20) {
+          *(byte *)(uVar7 + 0xb8) = bVar2;
+        }
+        else if (cVar5 == -0x50) {
+          param_1 = _DAT_1000_c00c + 1;
+        }
+      }
+    }
+  }
+  uVar4 = (undefined1)((uint)iVar3 >> 8);
+  _DAT_1000_c00c = param_1 + 2;
+LAB_0000_0bd3:
+  if ((char)*_DAT_1000_c00c < '\0') {
+    _DAT_1000_c00c = _DAT_1000_c00c + 1;
+  }
+  _DAT_1000_c00c = _DAT_1000_c00c + 1;
+  return CONCAT11(uVar4,1);
 }
 
 
@@ -1114,6 +1751,2453 @@ undefined2 __allregs FUN_0000_0ef5(void)
 }
 
 
+/* ===== FUN_0000_1295 @ 0000:1295 ===== */
+
+/* WARNING: Control flow encountered bad instruction data */
+
+void __allregs FUN_0000_1295(void)
+
+{
+                    /* WARNING: Bad instruction - Truncating control flow here */
+  halt_baddata();
+}
+
+
+/* ===== FUN_0000_12ab @ 0000:12ab ===== */
+
+/* WARNING: Control flow encountered bad instruction data */
+/* WARNING: Instruction at (ram,0x00001b8d) overlaps instruction at (ram,0x00001b8c)
+    */
+/* WARNING: Stack frame is not setup normally: Input value of stackpointer is not used */
+/* WARNING: Removing unreachable block (ram,0x00001b8d) */
+/* WARNING: Removing unreachable block (ram,0x00001cb1) */
+
+uint __allregs
+FUN_0000_12ab(uint param_1,undefined2 param_2,undefined2 param_3,int *param_4,char *param_5,
+             int *param_6,undefined1 *param_7)
+
+{
+  byte *pbVar1;
+  char *pcVar2;
+  byte bVar3;
+  undefined1 uVar4;
+  code *pcVar5;
+  byte bVar6;
+  undefined2 uVar7;
+  undefined2 *puVar8;
+  undefined2 uVar9;
+  undefined2 uVar10;
+  undefined2 uVar11;
+  char cVar12;
+  byte bVar13;
+  byte bVar14;
+  uint uVar15;
+  int iVar16;
+  byte bVar17;
+  byte bVar18;
+  byte bVar20;
+  undefined2 uVar19;
+  byte bVar21;
+  char *pcVar22;
+  int iVar23;
+  undefined4 *puVar24;
+  undefined2 *puVar25;
+  undefined2 *puVar26;
+  undefined2 *in_ESP;
+  undefined2 *puVar27;
+  undefined4 *puVar28;
+  int iVar29;
+  byte *pbVar30;
+  int *piVar31;
+  undefined1 *puVar32;
+  undefined1 *puVar33;
+  undefined2 *puVar34;
+  undefined2 unaff_ES;
+  undefined2 unaff_CS;
+  undefined2 uVar35;
+  undefined2 uVar36;
+  undefined2 uVar37;
+  undefined2 in_GS;
+  byte in_CF;
+  bool bVar38;
+  bool bVar39;
+  bool bVar40;
+  byte bVar41;
+  char cVar42;
+  byte in_AF;
+  char cVar43;
+  char cVar44;
+  
+  bVar38 = param_1 < 0x1ff8 || param_1 + 0xe008 < (uint)in_CF;
+  uVar15 = (param_1 + 0xe008) - (uint)in_CF;
+  bVar41 = (byte)uVar15;
+  if ((int)uVar15 < 0) {
+    *(char *)((int)param_4 + (int)param_6) = *(char *)((int)param_4 + (int)param_6) + bVar41;
+    pbVar1 = (byte *)((int)param_4 + (int)param_6);
+    bVar38 = CARRY1(*pbVar1,bVar41);
+    *pbVar1 = *pbVar1 + bVar41;
+  }
+  else if (uVar15 != 0) {
+    return uVar15;
+  }
+  *param_6 = *param_6 + uVar15 + (uint)bVar38;
+  *(char *)((int)param_4 + (int)param_6) = *(char *)((int)param_4 + (int)param_6) + bVar41;
+  *(char *)((int)param_4 + (int)param_6) = *(char *)((int)param_4 + (int)param_6) + bVar41;
+  pbVar1 = (byte *)((int)param_4 + (int)param_6);
+  bVar3 = *pbVar1;
+  *pbVar1 = *pbVar1 + bVar41;
+  *param_6 = *param_6 + uVar15 + (uint)CARRY1(bVar3,bVar41);
+  *(char *)((int)param_4 + (int)param_6) = *(char *)((int)param_4 + (int)param_6) + bVar41;
+  pbVar1 = (byte *)((int)param_4 + (int)param_6);
+  bVar3 = *pbVar1;
+  *pbVar1 = *pbVar1 + bVar41;
+  *param_6 = *param_6 + uVar15 + (uint)CARRY1(bVar3,bVar41);
+  *(char *)((int)param_4 + (int)param_6) = *(char *)((int)param_4 + (int)param_6) + bVar41;
+  pbVar1 = (byte *)((int)param_4 + (int)param_6);
+  bVar3 = *pbVar1;
+  *pbVar1 = *pbVar1 + bVar41;
+  iVar16 = uVar15 - CARRY1(bVar3,bVar41);
+  bVar41 = (byte)iVar16;
+  *(char *)((int)param_4 + (int)param_6) = *(char *)((int)param_4 + (int)param_6) + bVar41;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[0x80] = ((char *)((int)param_4 + (int)param_6))[0x80];
+  TaskRegister(*param_4);
+  cVar42 = (char)((uint)param_4 >> 8);
+  *(char *)param_4 = (char)*param_4 + cVar42;
+  *(char *)param_4 = (char)*param_4 + cVar42;
+  *(int *)((int)param_4 + (int)param_6) = *(int *)((int)param_4 + (int)param_6) + 1;
+  *(int *)((int)param_4 + (int)param_7) = *(int *)((int)param_4 + (int)param_7) + 1;
+  *(int *)(param_5 + (int)param_7) = *(int *)(param_5 + (int)param_7) + 1;
+  *param_4 = *param_4 + 1;
+  *(char *)((int)param_4 + (int)param_6) = *(char *)((int)param_4 + (int)param_6) + bVar41;
+  *(undefined2 *)in_ESP = unaff_CS;
+  cRam0001fe00 = cRam0001fe00 + (char)param_4;
+  *param_5 = *param_5 + cVar42;
+  *(char *)((int)param_4 + (int)param_6) = *(char *)((int)param_4 + (int)param_6) + '\x01';
+  *(char *)((int)param_4 + (int)param_7) = *(char *)((int)param_4 + (int)param_7) + '\x01';
+  param_5[(int)param_7] = param_5[(int)param_7] + '\x01';
+  *(char *)param_4 = (char)*param_4 + '\x01';
+  param_7[0x53] = param_7[0x53] & (byte)param_2;
+  puVar27 = (undefined2 *)
+            CONCAT22((int)((ulong)in_ESP >> 0x10),
+                     (undefined2 *)
+                     ((uint)(undefined2 *)in_ESP ^ *(uint *)((int)param_4 + (int)param_6)));
+  pcVar22 = (char *)((int)param_4 + 1);
+  piVar31 = param_6 + 1;
+  out(*param_6,param_3);
+  if (SCARRY2((int)param_4,1)) {
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)piVar31) = *(int *)(pcVar22 + (int)piVar31) + iVar16;
+    *(int *)(param_5 + (int)piVar31) = *(int *)(param_5 + (int)piVar31) + iVar16;
+    iVar16 = iVar16 + *piVar31 + 0x706;
+    goto code_r0x00001bca;
+  }
+  puVar27 = puVar27 + -1;
+  *puVar27 = 0x2074;
+  *(uint *)(pcVar22 + (int)param_7) = *(uint *)(pcVar22 + (int)param_7) ^ (uint)param_7;
+  (param_5 + (int)param_7)[0x79] = (param_5 + (int)param_7)[0x79] & (byte)param_2;
+  uVar4 = in(param_3);
+  *param_7 = uVar4;
+  param_5[0x72] = param_5[0x72] & bVar41;
+  uVar36 = in(param_3);
+  *(undefined2 *)(param_7 + 1) = uVar36;
+  puVar25 = (undefined2 *)puVar27;
+  param_7 = (undefined1 *)*puVar25;
+  param_5 = (char *)puVar25[2];
+  pcVar22 = (char *)puVar25[4];
+  param_3 = puVar25[5];
+  param_2 = puVar25[6];
+  iVar16 = puVar25[7];
+  piVar31 = (int *)((undefined1 *)puVar25[1] + 1);
+  out(*(undefined1 *)puVar25[1],param_3);
+  bVar41 = (byte)((uint)iVar16 >> 8);
+  pcVar22[(int)piVar31] = pcVar22[(int)piVar31] & bVar41;
+  pcVar2 = pcVar22 + (int)piVar31 + 0x60;
+  cVar42 = *pcVar2;
+  cVar12 = (char)iVar16;
+  *pcVar2 = *pcVar2 + cVar12;
+  if (SCARRY1(cVar42,cVar12)) {
+LAB_0000_1bb8:
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+  }
+  else if (-1 < *pcVar2) {
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+    goto LAB_0000_1bb8;
+  }
+  *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar16;
+  pcVar22[(int)param_7] = pcVar22[(int)param_7] + cVar12;
+  iVar16 = CONCAT11(bVar41,cVar12 + param_5[(int)param_7] + '\x05');
+  puVar25[7] = unaff_ES;
+  unaff_ES = puVar25[7];
+  puVar27 = (undefined2 *)CONCAT22((int)((ulong)puVar27 >> 0x10),puVar25 + 8);
+code_r0x00001bca:
+  pcVar22[(int)param_7] = pcVar22[(int)param_7] | (byte)param_2;
+  bVar41 = param_5[(int)param_7];
+  cVar43 = (char)((uint)param_2 >> 8);
+  bVar13 = (byte)iVar16 | 0xd;
+  puVar26 = (undefined2 *)puVar27;
+  puVar26[-1] = unaff_CS;
+  bVar18 = (byte)param_3;
+  bVar38 = CARRY1(bVar18,param_5[(int)param_7]);
+  bVar3 = param_5[(int)param_7];
+  bVar20 = (byte)((uint)param_3 >> 8);
+  bVar6 = bVar13 + 0x15;
+  bVar39 = 0xea < bVar13 || CARRY1(bVar6,bVar38);
+  bVar17 = (byte)((uint)iVar16 >> 8);
+  puVar26[-2] = 0x2ba9;
+  uVar35 = puVar26[-2];
+  pbVar1 = (byte *)(pcVar22 + (int)param_7);
+  bVar21 = (byte)pcVar22;
+  bVar40 = *pbVar1 < bVar21 || (byte)(*pbVar1 - bVar21) < bVar39;
+  *pbVar1 = (*pbVar1 - bVar21) - bVar39;
+  bVar13 = param_5[(int)param_7];
+  bVar14 = bVar21 - param_5[(int)param_7];
+  iVar16 = CONCAT11((char)((uint)pcVar22 >> 8),bVar14 - bVar40);
+  puVar26[-2] = 0x1c00;
+  uVar37 = puVar26[-2];
+  param_7[iVar16] = param_7[iVar16] & bVar17;
+  uVar15 = CONCAT11(bVar17 & param_5[(int)param_7],
+                    (bVar6 + bVar38 + -0x1d) - (bVar21 < bVar13 || bVar14 < bVar40)) & 0xff25;
+  bVar13 = (byte)uVar15;
+  bVar6 = 9 < (bVar13 & 0xf) | in_AF;
+  param_7[iVar16] = param_7[iVar16] - cVar43;
+  cVar42 = param_5[(int)param_7];
+  bVar14 = (bVar13 + bVar6 * '\x06') - 0x2d;
+  bVar6 = 9 < (bVar14 & 0xf) | bVar6;
+  param_7[iVar16] = param_7[iVar16] ^ bVar20;
+  bVar13 = param_5[(int)param_7];
+  bVar14 = bVar14 + bVar6 * -6 ^ 0x35;
+  bVar6 = 9 < (bVar14 & 0xf) | bVar6;
+  bVar14 = bVar14 + bVar6 * '\x06' & 0xf;
+  cVar12 = 9 < bVar14 | bVar6;
+  puVar33 = param_7 + 1;
+  puVar26[-2] = CONCAT11(((char)(uVar15 >> 8) + bVar6) - cVar12,bVar14 + cVar12 * -6) & 0xff0f;
+  puVar26[-3] = CONCAT11(cVar43 - cVar42,(byte)param_2 | bVar41);
+  puVar26[-4] = CONCAT11(bVar20 ^ bVar13,bVar18 + bVar3);
+  puVar26[-5] = iVar16;
+  puVar26[-6] = puVar26 + -5;
+  puVar26[-7] = param_5;
+  puVar26[-8] = piVar31;
+  puVar26[-9] = param_7;
+  uVar36 = puVar26[-8];
+  uVar19 = puVar26[-7];
+  uVar7 = puVar26[-6];
+  puVar8 = (undefined2 *)puVar26[-5];
+  uVar9 = *puVar8;
+  uVar10 = puVar8[1];
+  uVar11 = puVar8[2];
+  puVar8[2] = puVar26[-9];
+  puVar8[1] = uVar36;
+  *puVar8 = uVar19;
+  puVar8[-1] = uVar7;
+  puVar8[-2] = puVar8 + 3;
+  puVar8[-3] = uVar9;
+  puVar8[-4] = uVar10;
+  puVar8[-5] = uVar11;
+  puVar34 = (undefined2 *)puVar8[-5];
+  puVar32 = (undefined1 *)puVar8[-4];
+  pbVar30 = (byte *)puVar8[-3];
+  iVar23 = puVar8[-1];
+  uVar19 = *puVar8;
+  iVar16 = puVar8[1];
+  uVar15 = puVar8[2];
+  puVar28 = (undefined4 *)((undefined2 *)CONCAT22((int)((ulong)puVar27 >> 0x10),puVar8 + 3) + -2);
+  *puVar28 = 0x6c6b6a69;
+  uVar36 = in(uVar19);
+  *puVar34 = uVar36;
+  out(*puVar32,uVar19);
+  out(*(undefined2 *)(puVar32 + 1),uVar19);
+  if (SBORROW2((int)puVar33,1)) {
+    if (iVar16 == 0) {
+      return uVar15;
+    }
+    uVar15 = in(0xe6);
+  }
+  else if (!(bool)cVar12) {
+    if (param_7 == (undefined1 *)0x0) {
+                    /* WARNING: Bad instruction - Truncating control flow here */
+      halt_baddata();
+    }
+    if ((int)param_7 < 0) {
+      do {
+                    /* WARNING: Do nothing block with infinite loop */
+      } while( true );
+    }
+    if (((POPCOUNT((uint)param_7 & 0xff) & 1U) != 0) && (0 < (int)puVar33)) {
+      if ((int)puVar33 < 1) {
+                    /* WARNING: Bad instruction - Truncating control flow here */
+        halt_baddata();
+      }
+      pcVar2 = (char *)((int)puVar34 + iVar23 + -0x7c7c);
+      *pcVar2 = *pcVar2 + -0x7c;
+      bVar41 = 0;
+      uVar15 = *(uint *)(pbVar30 + -0x7779) & uVar15;
+      cVar44 = (int)uVar15 < 0;
+      cVar43 = uVar15 == 0;
+      cVar42 = (POPCOUNT(uVar15 & 0xff) & 1U) == 0;
+      *(int *)(pbVar30 + (int)puVar32 + -0x7372) = iVar16;
+      *(undefined2 *)(iVar23 + -2) = unaff_CS;
+      *(undefined2 *)(iVar23 + -4) = 0x1c61;
+      func_0x000a866b();
+      uVar4 = *(undefined1 *)&DAT_2000_62a1;
+      uVar36 = CONCAT11(cVar44 << 7 | cVar43 << 6 | cVar12 << 4 | cVar42 << 2 | 2U | bVar41,uVar4);
+      *(undefined2 *)&DAT_2000_65a4 = uVar36;
+      puVar32[6] = uVar4;
+      *(undefined2 *)(puVar32 + 7) = uVar36;
+                    /* WARNING: Bad instruction - Truncating control flow here */
+      halt_baddata();
+    }
+                    /* WARNING: Bad instruction - Truncating control flow here */
+    halt_baddata();
+  }
+  out(0xe8,uVar15);
+  puVar24 = (undefined4 *)puVar28;
+  *(int *)((int)puVar24 + -2) = uVar15 + 0xb0bd;
+  *(undefined2 *)((int)puVar24 + -2) = uVar19;
+  *(undefined2 **)(puVar24 + -1) = (undefined2 *)((int)puVar24 + -2);
+  pbVar30[1] = pbVar30[1] & (byte)((uint)uVar19 >> 8);
+  *pbVar30 = *pbVar30 ^ (byte)(uVar15 + 0xb0bc >> 8);
+  pbVar30[1] = pbVar30[1] & (byte)(uVar15 + 0xb0bc);
+  uVar36 = *(undefined2 *)puVar24;
+  bVar41 = *(byte *)&DAT_1000_c012;
+  if ((bVar41 != 0) && (bVar41 < 6)) {
+    *(byte *)&DAT_1000_c03e = bVar41;
+    iVar16 = (uint)bVar41 * 2;
+    *(undefined2 *)0x17b = *(undefined2 *)(iVar16 + 0x17d);
+    *(undefined2 *)0x189 = *(undefined2 *)(iVar16 + 0x18b);
+    *(undefined2 *)0x197 = *(undefined2 *)(iVar16 + 0x199);
+    *(undefined2 *)&DAT_1000_c1a5 = *(undefined2 *)(iVar16 + 0x1a7);
+    *(undefined2 *)0x1b3 = *(undefined2 *)(iVar16 + 0x1b5);
+    *(undefined2 *)&DAT_1000_c1c1 = *(undefined2 *)(iVar16 + 0x1c3);
+    *(undefined2 *)0x1cf = *(undefined2 *)(iVar16 + 0x1d1);
+    *(undefined2 *)&DAT_1000_c010 = 0;
+    pcVar5 = (code *)*(undefined2 *)0x17b;
+    *(undefined2 *)puVar24 = 0x91d;
+    iVar16 = (*pcVar5)();
+    if (iVar16 != 0) {
+      *(undefined2 *)((int)puVar24 + -2) = 0x924;
+      FUN_0000_0c94(iVar16);
+      iVar23 = 0;
+      iVar29 = 0;
+      iVar16 = 10;
+      do {
+        *(undefined2 *)(iVar23 + 0x68) = 0xed3;
+        *(undefined1 *)(iVar29 + 0xcc) = 0;
+        *(undefined1 *)(iVar29 + 0x86) = 0;
+        *(undefined1 *)(iVar29 + 0x111) = 0;
+        *(undefined1 *)(iVar29 + 0x107) = 0;
+        *(undefined2 *)(iVar23 + 0x90) = 0x15b0;
+        *(undefined2 *)(iVar23 + 0xa4) = 0x15b0;
+        iVar23 = iVar23 + 2;
+        iVar29 = iVar29 + 1;
+        iVar16 = iVar16 + -1;
+      } while (iVar16 != 0);
+      DAT_0000_05c2 = 0xa28;
+      return 0xffff;
+    }
+  }
+  DAT_0000_05c2 = 0x5c4;
+  return 0;
+}
+
+
+/* ===== FUN_0000_12f5 @ 0000:12f5 ===== */
+
+/* WARNING: Control flow encountered bad instruction data */
+/* WARNING: Instruction at (ram,0x00001b8d) overlaps instruction at (ram,0x00001b8c)
+    */
+/* WARNING: Stack frame is not setup normally: Input value of stackpointer is not used */
+/* WARNING: Removing unreachable block (ram,0x00001b8d) */
+/* WARNING: Removing unreachable block (ram,0x00001cb1) */
+
+uint __allregs
+FUN_0000_12f5(int param_1,undefined2 param_2,undefined2 param_3,int *param_4,char *param_5,
+             undefined2 *param_6,undefined1 *param_7)
+
+{
+  char *pcVar1;
+  byte *pbVar2;
+  undefined1 uVar3;
+  byte bVar4;
+  code *pcVar5;
+  byte bVar6;
+  undefined2 uVar7;
+  undefined2 *puVar8;
+  undefined2 uVar9;
+  undefined2 uVar10;
+  undefined2 uVar11;
+  char cVar12;
+  byte bVar13;
+  byte bVar14;
+  int iVar15;
+  byte bVar17;
+  uint uVar16;
+  byte bVar18;
+  byte bVar20;
+  undefined2 uVar19;
+  byte bVar21;
+  char *pcVar22;
+  int iVar23;
+  undefined4 *puVar24;
+  undefined2 *puVar25;
+  undefined2 *puVar26;
+  undefined4 in_ESP;
+  undefined2 *puVar27;
+  undefined4 *puVar28;
+  int iVar29;
+  byte *pbVar30;
+  int *piVar31;
+  undefined1 *puVar32;
+  undefined1 *puVar33;
+  undefined2 *puVar34;
+  undefined2 unaff_ES;
+  undefined2 unaff_CS;
+  undefined2 uVar35;
+  undefined2 uVar36;
+  undefined2 uVar37;
+  undefined2 in_GS;
+  bool bVar38;
+  bool bVar39;
+  bool bVar40;
+  byte bVar41;
+  char cVar42;
+  byte in_AF;
+  char cVar43;
+  char cVar44;
+  
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[-0x7f80] =
+       ((char *)((int)param_4 + (int)param_6))[-0x7f80] + -0x80;
+  ((char *)((int)param_4 + (int)param_6))[0x80] = ((char *)((int)param_4 + (int)param_6))[0x80];
+  TaskRegister(*param_4);
+  cVar42 = (char)((uint)param_4 >> 8);
+  *(char *)param_4 = (char)*param_4 + cVar42;
+  *(char *)param_4 = (char)*param_4 + cVar42;
+  *(int *)((int)param_4 + (int)param_6) = *(int *)((int)param_4 + (int)param_6) + 1;
+  *(int *)((int)param_4 + (int)param_7) = *(int *)((int)param_4 + (int)param_7) + 1;
+  *(int *)(param_5 + (int)param_7) = *(int *)(param_5 + (int)param_7) + 1;
+  *param_4 = *param_4 + 1;
+  *(char *)((int)param_4 + (int)param_6) = *(char *)((int)param_4 + (int)param_6) + (byte)param_1;
+  *(undefined2 *)((int)in_ESP + -2) = unaff_CS;
+  cRam0001fe00 = cRam0001fe00 + (char)param_4;
+  *param_5 = *param_5 + cVar42;
+  *(char *)((int)param_4 + (int)param_6) = *(char *)((int)param_4 + (int)param_6) + '\x01';
+  *(char *)((int)param_4 + (int)param_7) = *(char *)((int)param_4 + (int)param_7) + '\x01';
+  param_5[(int)param_7] = param_5[(int)param_7] + '\x01';
+  *(char *)param_4 = (char)*param_4 + '\x01';
+  param_7[0x53] = param_7[0x53] & (byte)param_2;
+  puVar27 = (undefined2 *)
+            CONCAT22((int)((ulong)in_ESP >> 0x10),
+                     (undefined2 *)((int)in_ESP - 2U ^ *(uint *)((int)param_4 + (int)param_6)));
+  pcVar22 = (char *)((int)param_4 + 1);
+  piVar31 = param_6 + 1;
+  out(*param_6,param_3);
+  if (SCARRY2((int)param_4,1)) {
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + param_1;
+    *(int *)(pcVar22 + (int)piVar31) = *(int *)(pcVar22 + (int)piVar31) + param_1;
+    *(int *)(param_5 + (int)piVar31) = *(int *)(param_5 + (int)piVar31) + param_1;
+    iVar15 = param_1 + *piVar31 + 0x706;
+    goto code_r0x00001bca;
+  }
+  puVar27 = puVar27 + -1;
+  *puVar27 = 0x2074;
+  *(uint *)(pcVar22 + (int)param_7) = *(uint *)(pcVar22 + (int)param_7) ^ (uint)param_7;
+  (param_5 + (int)param_7)[0x79] = (param_5 + (int)param_7)[0x79] & (byte)param_2;
+  uVar3 = in(param_3);
+  *param_7 = uVar3;
+  param_5[0x72] = param_5[0x72] & (byte)param_1;
+  uVar36 = in(param_3);
+  *(undefined2 *)(param_7 + 1) = uVar36;
+  puVar25 = (undefined2 *)puVar27;
+  param_7 = (undefined1 *)*puVar25;
+  param_5 = (char *)puVar25[2];
+  pcVar22 = (char *)puVar25[4];
+  param_3 = puVar25[5];
+  param_2 = puVar25[6];
+  iVar15 = puVar25[7];
+  piVar31 = (int *)((undefined1 *)puVar25[1] + 1);
+  out(*(undefined1 *)puVar25[1],param_3);
+  bVar41 = (byte)((uint)iVar15 >> 8);
+  pcVar22[(int)piVar31] = pcVar22[(int)piVar31] & bVar41;
+  pcVar1 = pcVar22 + (int)piVar31 + 0x60;
+  cVar42 = *pcVar1;
+  cVar12 = (char)iVar15;
+  *pcVar1 = *pcVar1 + cVar12;
+  if (SCARRY1(cVar42,cVar12)) {
+LAB_0000_1bb8:
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+  }
+  else if (-1 < *pcVar1) {
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+    goto LAB_0000_1bb8;
+  }
+  *(int *)(pcVar22 + (int)param_7) = *(int *)(pcVar22 + (int)param_7) + iVar15;
+  pcVar22[(int)param_7] = pcVar22[(int)param_7] + cVar12;
+  iVar15 = CONCAT11(bVar41,cVar12 + param_5[(int)param_7] + '\x05');
+  puVar25[7] = unaff_ES;
+  unaff_ES = puVar25[7];
+  puVar27 = (undefined2 *)CONCAT22((int)((ulong)puVar27 >> 0x10),puVar25 + 8);
+code_r0x00001bca:
+  pcVar22[(int)param_7] = pcVar22[(int)param_7] | (byte)param_2;
+  bVar41 = param_5[(int)param_7];
+  cVar43 = (char)((uint)param_2 >> 8);
+  bVar13 = (byte)iVar15 | 0xd;
+  puVar26 = (undefined2 *)puVar27;
+  puVar26[-1] = unaff_CS;
+  bVar18 = (byte)param_3;
+  bVar38 = CARRY1(bVar18,param_5[(int)param_7]);
+  bVar4 = param_5[(int)param_7];
+  bVar20 = (byte)((uint)param_3 >> 8);
+  bVar6 = bVar13 + 0x15;
+  bVar39 = 0xea < bVar13 || CARRY1(bVar6,bVar38);
+  bVar17 = (byte)((uint)iVar15 >> 8);
+  puVar26[-2] = 0x2ba9;
+  uVar35 = puVar26[-2];
+  pbVar2 = (byte *)(pcVar22 + (int)param_7);
+  bVar21 = (byte)pcVar22;
+  bVar40 = *pbVar2 < bVar21 || (byte)(*pbVar2 - bVar21) < bVar39;
+  *pbVar2 = (*pbVar2 - bVar21) - bVar39;
+  bVar13 = param_5[(int)param_7];
+  bVar14 = bVar21 - param_5[(int)param_7];
+  iVar15 = CONCAT11((char)((uint)pcVar22 >> 8),bVar14 - bVar40);
+  puVar26[-2] = 0x1c00;
+  uVar37 = puVar26[-2];
+  param_7[iVar15] = param_7[iVar15] & bVar17;
+  uVar16 = CONCAT11(bVar17 & param_5[(int)param_7],
+                    (bVar6 + bVar38 + -0x1d) - (bVar21 < bVar13 || bVar14 < bVar40)) & 0xff25;
+  bVar13 = (byte)uVar16;
+  bVar6 = 9 < (bVar13 & 0xf) | in_AF;
+  param_7[iVar15] = param_7[iVar15] - cVar43;
+  cVar42 = param_5[(int)param_7];
+  bVar14 = (bVar13 + bVar6 * '\x06') - 0x2d;
+  bVar6 = 9 < (bVar14 & 0xf) | bVar6;
+  param_7[iVar15] = param_7[iVar15] ^ bVar20;
+  bVar13 = param_5[(int)param_7];
+  bVar14 = bVar14 + bVar6 * -6 ^ 0x35;
+  bVar6 = 9 < (bVar14 & 0xf) | bVar6;
+  bVar14 = bVar14 + bVar6 * '\x06' & 0xf;
+  cVar12 = 9 < bVar14 | bVar6;
+  puVar33 = param_7 + 1;
+  puVar26[-2] = CONCAT11(((char)(uVar16 >> 8) + bVar6) - cVar12,bVar14 + cVar12 * -6) & 0xff0f;
+  puVar26[-3] = CONCAT11(cVar43 - cVar42,(byte)param_2 | bVar41);
+  puVar26[-4] = CONCAT11(bVar20 ^ bVar13,bVar18 + bVar4);
+  puVar26[-5] = iVar15;
+  puVar26[-6] = puVar26 + -5;
+  puVar26[-7] = param_5;
+  puVar26[-8] = piVar31;
+  puVar26[-9] = param_7;
+  uVar36 = puVar26[-8];
+  uVar19 = puVar26[-7];
+  uVar7 = puVar26[-6];
+  puVar8 = (undefined2 *)puVar26[-5];
+  uVar9 = *puVar8;
+  uVar10 = puVar8[1];
+  uVar11 = puVar8[2];
+  puVar8[2] = puVar26[-9];
+  puVar8[1] = uVar36;
+  *puVar8 = uVar19;
+  puVar8[-1] = uVar7;
+  puVar8[-2] = puVar8 + 3;
+  puVar8[-3] = uVar9;
+  puVar8[-4] = uVar10;
+  puVar8[-5] = uVar11;
+  puVar34 = (undefined2 *)puVar8[-5];
+  puVar32 = (undefined1 *)puVar8[-4];
+  pbVar30 = (byte *)puVar8[-3];
+  iVar23 = puVar8[-1];
+  uVar19 = *puVar8;
+  iVar15 = puVar8[1];
+  uVar16 = puVar8[2];
+  puVar28 = (undefined4 *)((undefined2 *)CONCAT22((int)((ulong)puVar27 >> 0x10),puVar8 + 3) + -2);
+  *puVar28 = 0x6c6b6a69;
+  uVar36 = in(uVar19);
+  *puVar34 = uVar36;
+  out(*puVar32,uVar19);
+  out(*(undefined2 *)(puVar32 + 1),uVar19);
+  if (SBORROW2((int)puVar33,1)) {
+    if (iVar15 == 0) {
+      return uVar16;
+    }
+    uVar16 = in(0xe6);
+  }
+  else if (!(bool)cVar12) {
+    if (param_7 == (undefined1 *)0x0) {
+                    /* WARNING: Bad instruction - Truncating control flow here */
+      halt_baddata();
+    }
+    if ((int)param_7 < 0) {
+      do {
+                    /* WARNING: Do nothing block with infinite loop */
+      } while( true );
+    }
+    if (((POPCOUNT((uint)param_7 & 0xff) & 1U) != 0) && (0 < (int)puVar33)) {
+      if ((int)puVar33 < 1) {
+                    /* WARNING: Bad instruction - Truncating control flow here */
+        halt_baddata();
+      }
+      pcVar1 = (char *)((int)puVar34 + iVar23 + -0x7c7c);
+      *pcVar1 = *pcVar1 + -0x7c;
+      bVar41 = 0;
+      uVar16 = *(uint *)(pbVar30 + -0x7779) & uVar16;
+      cVar44 = (int)uVar16 < 0;
+      cVar43 = uVar16 == 0;
+      cVar42 = (POPCOUNT(uVar16 & 0xff) & 1U) == 0;
+      *(int *)(pbVar30 + (int)puVar32 + -0x7372) = iVar15;
+      *(undefined2 *)(iVar23 + -2) = unaff_CS;
+      *(undefined2 *)(iVar23 + -4) = 0x1c61;
+      func_0x000a866b();
+      uVar3 = *(undefined1 *)&DAT_2000_62a1;
+      uVar36 = CONCAT11(cVar44 << 7 | cVar43 << 6 | cVar12 << 4 | cVar42 << 2 | 2U | bVar41,uVar3);
+      *(undefined2 *)&DAT_2000_65a4 = uVar36;
+      puVar32[6] = uVar3;
+      *(undefined2 *)(puVar32 + 7) = uVar36;
+                    /* WARNING: Bad instruction - Truncating control flow here */
+      halt_baddata();
+    }
+                    /* WARNING: Bad instruction - Truncating control flow here */
+    halt_baddata();
+  }
+  out(0xe8,uVar16);
+  puVar24 = (undefined4 *)puVar28;
+  *(int *)((int)puVar24 + -2) = uVar16 + 0xb0bd;
+  *(undefined2 *)((int)puVar24 + -2) = uVar19;
+  *(undefined2 **)(puVar24 + -1) = (undefined2 *)((int)puVar24 + -2);
+  pbVar30[1] = pbVar30[1] & (byte)((uint)uVar19 >> 8);
+  *pbVar30 = *pbVar30 ^ (byte)(uVar16 + 0xb0bc >> 8);
+  pbVar30[1] = pbVar30[1] & (byte)(uVar16 + 0xb0bc);
+  uVar36 = *(undefined2 *)puVar24;
+  bVar41 = *(byte *)&DAT_1000_c012;
+  if ((bVar41 != 0) && (bVar41 < 6)) {
+    *(byte *)&DAT_1000_c03e = bVar41;
+    iVar15 = (uint)bVar41 * 2;
+    *(undefined2 *)0x17b = *(undefined2 *)(iVar15 + 0x17d);
+    *(undefined2 *)0x189 = *(undefined2 *)(iVar15 + 0x18b);
+    *(undefined2 *)0x197 = *(undefined2 *)(iVar15 + 0x199);
+    *(undefined2 *)&DAT_1000_c1a5 = *(undefined2 *)(iVar15 + 0x1a7);
+    *(undefined2 *)0x1b3 = *(undefined2 *)(iVar15 + 0x1b5);
+    *(undefined2 *)&DAT_1000_c1c1 = *(undefined2 *)(iVar15 + 0x1c3);
+    *(undefined2 *)0x1cf = *(undefined2 *)(iVar15 + 0x1d1);
+    *(undefined2 *)&DAT_1000_c010 = 0;
+    pcVar5 = (code *)*(undefined2 *)0x17b;
+    *(undefined2 *)puVar24 = 0x91d;
+    iVar15 = (*pcVar5)();
+    if (iVar15 != 0) {
+      *(undefined2 *)((int)puVar24 + -2) = 0x924;
+      FUN_0000_0c94(iVar15);
+      iVar23 = 0;
+      iVar29 = 0;
+      iVar15 = 10;
+      do {
+        *(undefined2 *)(iVar23 + 0x68) = 0xed3;
+        *(undefined1 *)(iVar29 + 0xcc) = 0;
+        *(undefined1 *)(iVar29 + 0x86) = 0;
+        *(undefined1 *)(iVar29 + 0x111) = 0;
+        *(undefined1 *)(iVar29 + 0x107) = 0;
+        *(undefined2 *)(iVar23 + 0x90) = 0x15b0;
+        *(undefined2 *)(iVar23 + 0xa4) = 0x15b0;
+        iVar23 = iVar23 + 2;
+        iVar29 = iVar29 + 1;
+        iVar15 = iVar15 + -1;
+      } while (iVar15 != 0);
+      DAT_0000_05c2 = 0xa28;
+      return 0xffff;
+    }
+  }
+  DAT_0000_05c2 = 0x5c4;
+  return 0;
+}
+
+
 /* ===== FUN_0000_1b3c @ 0000:1b3c ===== */
 
 /* WARNING: Control flow encountered bad instruction data */
@@ -1449,6 +4533,343 @@ FUN_0000_1c8f(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined
 }
 
 
+/* ===== caseD_0 @ 0000:1d44 ===== */
+
+void __allregs switchD_0000:1e71::caseD_0(void)
+
+{
+  return;
+}
+
+
+/* ===== FUN_0000_1d45 @ 0000:1d45 ===== */
+
+uint __allregs FUN_0000_1d45(uint param_1)
+
+{
+  uint uVar1;
+  
+  if (((byte)param_1 < 0x12) && (uVar1 = (param_1 & 0xff) * 2, uVar1 < 0x46)) {
+    DAT_0000_12f3 = *(undefined2 *)(uVar1 + 0x1af5);
+  }
+  return param_1;
+}
+
+
+/* ===== FUN_0000_1d62 @ 0000:1d62 ===== */
+
+undefined2 __allregs FUN_0000_1d62(undefined2 param_1,int param_2,undefined1 param_3,uint param_4)
+
+{
+  char cVar1;
+  uint uVar2;
+  undefined1 uVar3;
+  undefined2 unaff_CS;
+  
+  uVar2 = param_4 & 0xff;
+  ((undefined2 *)&DAT_0000_12c1)[uVar2 * 8] = param_1;
+  ((undefined2 *)&DAT_0000_12c3)[uVar2 * 8] = *(undefined2 *)0x0;
+  if (param_2 == 0) {
+    param_2 = *(int *)&DAT_1000_c002;
+  }
+  ((undefined2 *)&DAT_0000_12bf)[uVar2 * 8] = param_2;
+  ((undefined2 *)&DAT_0000_12c5)[uVar2 * 8] = 4;
+  ((undefined2 *)&DAT_0000_12c7)[uVar2 * 8] = 0;
+  cVar1 = (char)(uVar2 * 0x10);
+  uVar3 = (undefined1)(uVar2 * 0x10 >> 8);
+  if (cVar1 == '\0') {
+    *(undefined *)&DAT_0000_2931 = param_3;
+    *(undefined *)&DAT_0000_277c = param_3;
+    *(undefined *)&DAT_0000_24e5 = param_3;
+    *(undefined *)&DAT_0000_2060 = param_3;
+    cVar1 = ((char *)s_MS3_Copyright_1991_Kyle_Freeman_0000_1b19 + 0x22)[CONCAT11(uVar3,param_3)];
+    *(char *)&DAT_0000_2933 = cVar1;
+    *(char *)&DAT_0000_277e = cVar1;
+    *(char *)&DAT_0000_24e7 = cVar1;
+    *(char *)&DAT_0000_2062 = cVar1;
+  }
+  else if (cVar1 == '\x10') {
+    *(undefined *)&DAT_0000_2952 = param_3;
+    *(undefined *)&DAT_0000_279d = param_3;
+    *(undefined *)&DAT_0000_2506 = param_3;
+    *(undefined *)&DAT_0000_2081 = param_3;
+    cVar1 = ((char *)s_MS3_Copyright_1991_Kyle_Freeman_0000_1b19 + 0x22)[CONCAT11(uVar3,param_3)];
+    *(char *)&DAT_0000_2955 = cVar1;
+    *(char *)&DAT_0000_27a0 = cVar1;
+    *(char *)&DAT_0000_2509 = cVar1;
+    *(char *)&DAT_0000_2084 = cVar1;
+  }
+  else {
+    *(undefined *)&DAT_0000_2977 = param_3;
+    *(undefined *)&DAT_0000_27c2 = param_3;
+    *(undefined *)&DAT_0000_252b = param_3;
+    *(undefined *)&DAT_0000_20a6 = param_3;
+    cVar1 = ((char *)s_MS3_Copyright_1991_Kyle_Freeman_0000_1b19 + 0x22)[CONCAT11(uVar3,param_3)];
+    *(char *)&DAT_0000_297a = cVar1;
+    *(char *)&DAT_0000_27c5 = cVar1;
+    *(char *)&DAT_0000_252e = cVar1;
+    *(char *)&DAT_0000_20a9 = cVar1;
+  }
+  return param_1;
+}
+
+
+/* ===== FUN_0000_1e13 @ 0000:1e13 ===== */
+
+int __allregs FUN_0000_1e13(int param_1,int param_2,undefined1 param_3,uint param_4)
+
+{
+  int iVar1;
+  uint uVar2;
+  int iVar3;
+  undefined2 unaff_CS;
+  
+  uVar2 = param_4 & 0xff;
+  iVar3 = uVar2 * 0x10;
+  if (param_2 == 0) {
+    param_2 = *(int *)&DAT_1000_c002;
+  }
+  LOCK();
+  iVar1 = ((undefined2 *)&DAT_0000_12c9)[uVar2 * 8];
+  ((undefined2 *)&DAT_0000_12c9)[uVar2 * 8] = param_1;
+  UNLOCK();
+  ((undefined2 *)&DAT_0000_12cb)[uVar2 * 8] = param_2;
+  ((undefined1 *)&DAT_0000_12ce)[iVar3] = param_3;
+  ((undefined *)&DAT_0000_12cd)[iVar3] =
+       ((char *)s_MS3_Copyright_1991_Kyle_Freeman_0000_1b19 + 0x22)
+       [CONCAT11((char)((uint)iVar3 >> 8),param_3)];
+  if ((((undefined2 *)&DAT_0000_12c1)[uVar2 * 8] != iVar1) &&
+     (((undefined2 *)&DAT_0000_12c1)[uVar2 * 8] != 0x411)) {
+    return param_1;
+  }
+  iVar3 = FUN_0000_1d62(param_1,param_2,param_3,param_4);
+  return iVar3;
+}
+
+
+/* ===== FUN_0000_1e5e @ 0000:1e5e ===== */
+
+undefined2 __allregs FUN_0000_1e5e(byte param_1,undefined2 param_2)
+
+{
+  byte bVar1;
+  char cVar2;
+  undefined2 uVar3;
+  int iVar4;
+  uint uVar5;
+  bool bVar6;
+  
+  if (4 < param_1) {
+    return 0;
+  }
+  uVar5 = (uint)param_1;
+  bVar6 = uVar5 == 0;
+  switch(uVar5) {
+  case 0:
+    return *(undefined2 *)(uVar5 * 2 + 0x129f);
+  case 1:
+    return 0xffff;
+  case 2:
+    FUN_0000_2196();
+    if (bVar6) {
+      return 0xffff;
+    }
+    return 0;
+  case 4:
+    out(0x226,1);
+    iVar4 = 10;
+    do {
+      in(0x226);
+      iVar4 = iVar4 + -1;
+    } while (iVar4 != 0);
+    out(0x226,0);
+    iVar4 = 1000;
+    do {
+      bVar1 = in(0x22e);
+      iVar4 = iVar4 + -1;
+    } while (iVar4 != 0 && (bVar1 & 0x80) == 0);
+    cVar2 = in(0x22a);
+    if (cVar2 == -0x56) {
+      return 0xffff;
+    }
+    return 0;
+  }
+  FUN_0000_25f2(0);
+  if (!bVar6) {
+    uVar3 = FUN_0000_2614(param_2);
+    if (!bVar6) {
+      return uVar3;
+    }
+    uVar3 = FUN_0000_2614(param_2);
+    if (!bVar6) {
+      return uVar3;
+    }
+    FUN_0000_25f2(1);
+    if (!bVar6) {
+      uVar3 = FUN_0000_2614(param_2);
+      if (!bVar6) {
+        return uVar3;
+      }
+      uVar3 = FUN_0000_2614(param_2);
+      if (!bVar6) {
+        return uVar3;
+      }
+      FUN_0000_25f2(2);
+      if (!bVar6) {
+        uVar3 = FUN_0000_2614(param_2);
+        if (!bVar6) {
+          return uVar3;
+        }
+        uVar3 = FUN_0000_2614(param_2);
+        if (!bVar6) {
+          return uVar3;
+        }
+      }
+    }
+  }
+  FUN_0000_25f2(0);
+  return 0;
+}
+
+
+/* ===== FUN_0000_1e73 @ 0000:1e73 ===== */
+
+void __allregs FUN_0000_1e73(byte param_1)
+
+{
+  int iVar1;
+  
+  DAT_0000_05c0 = 0x1d44;
+  DAT_0000_12ef = 0x1d44;
+  if (DAT_0000_1d42 != '\0') {
+    (*DAT_0000_12a9)();
+  }
+  if (4 < param_1) {
+    return;
+  }
+  iVar1 = (uint)param_1 * 2;
+  DAT_0000_1293 = (code *)*(undefined2 *)(iVar1 + 0x1295);
+  DAT_0000_12a9 = (code *)*(undefined2 *)(iVar1 + 0x12ab);
+  DAT_0000_12ef = *(undefined2 *)(iVar1 + 0x12b5);
+  DAT_0000_1d42 = param_1;
+  FUN_0000_1ef6(DAT_0000_12ef);
+  DAT_0000_1d43 = 0;
+  (*DAT_0000_1293)();
+  DAT_0000_05c0 = DAT_0000_12ef;
+  return;
+}
+
+
+/* ===== FUN_0000_1ed2 @ 0000:1ed2 ===== */
+
+void __allregs FUN_0000_1ed2(char param_1)
+
+{
+  undefined1 in_AH;
+  
+  DAT_0000_1d43 = param_1;
+  if (param_1 == '\0') {
+    DAT_0000_05c0 = 0x1d44;
+    return;
+  }
+  if (param_1 != '\x02') {
+    FUN_0000_1ef2(CONCAT11(in_AH,param_1));
+  }
+  DAT_0000_05c0 = DAT_0000_12ef;
+  return;
+}
+
+
+/* ===== FUN_0000_1ef2 @ 0000:1ef2 ===== */
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+undefined2 __allregs FUN_0000_1ef2(undefined2 param_1)
+
+{
+  if (DAT_0000_12c1 != DAT_0000_12c9) {
+    DAT_0000_12c1 = DAT_0000_12c9;
+    DAT_0000_12c3 = *(undefined2 *)0x0;
+    DAT_0000_12bf = _DAT_1000_d2cb;
+    DAT_0000_12c5 = 4;
+    DAT_0000_12c7 = 0;
+  }
+  if (DAT_0000_12d1 != LAB_0000_12d9) {
+    DAT_0000_12d1 = LAB_0000_12d9;
+    LAB_0000_12d3 = *(undefined2 *)0x0;
+    DAT_0000_12cf = _DAT_1000_d2db;
+    DAT_0000_12d5 = 4;
+    DAT_0000_12d7 = 0;
+  }
+  if (DAT_0000_12e1 != DAT_0000_12e9) {
+    DAT_0000_12e1 = DAT_0000_12e9;
+    DAT_0000_12e3 = *(undefined2 *)0x0;
+    DAT_0000_12df = _DAT_1000_d2eb;
+    DAT_0000_12e5 = 4;
+    DAT_0000_12e7 = 0;
+  }
+  return param_1;
+}
+
+
+/* ===== FUN_0000_1ef6 @ 0000:1ef6 ===== */
+
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+undefined2 __allregs FUN_0000_1ef6(undefined2 param_1)
+
+{
+  DAT_0000_12c9 = 0x411;
+  LAB_0000_12d9 = 0x411;
+  DAT_0000_12e9 = 0x411;
+  DAT_0000_12cb = 0;
+  DAT_0000_12db = 0;
+  DAT_0000_12eb = 0;
+  DAT_0000_12ce = 0;
+  DAT_0000_12de = 0;
+  DAT_0000_12ee = 0;
+  if (DAT_0000_12c1 != 0x411) {
+    DAT_0000_12c1 = 0x411;
+    DAT_0000_12c3 = DAT_0000_4110;
+    DAT_0000_12bf = _DAT_1000_d2cb;
+    DAT_0000_12c5 = 4;
+    DAT_0000_12c7 = 0;
+  }
+  if (DAT_0000_12d1 != 0x411) {
+    DAT_0000_12d1 = 0x411;
+    LAB_0000_12d3 = DAT_0000_4110;
+    DAT_0000_12cf = _DAT_1000_d2db;
+    DAT_0000_12d5 = 4;
+    DAT_0000_12d7 = 0;
+  }
+  if (DAT_0000_12e1 != 0x411) {
+    DAT_0000_12e1 = 0x411;
+    DAT_0000_12e3 = DAT_0000_4110;
+    DAT_0000_12df = _DAT_1000_d2eb;
+    DAT_0000_12e5 = 4;
+    DAT_0000_12e7 = 0;
+  }
+  return param_1;
+}
+
+
+/* ===== FUN_0000_1fd5 @ 0000:1fd5 ===== */
+
+undefined1 __allregs FUN_0000_1fd5(void)
+
+{
+  byte bVar1;
+  
+  bVar1 = in(0x61);
+  out(0x61,bVar1 & 0xfc | 1);
+  out(0x43,0xb2);
+  out(0x42,1);
+  out(0x42,0);
+  out(0x43,0x92);
+  return 0x92;
+}
+
+
 /* ===== FUN_0000_216b @ 0000:216b ===== */
 
 undefined2 __allregs FUN_0000_216b(undefined2 param_1)
@@ -1473,21 +4894,6 @@ undefined2 __allregs FUN_0000_216b(undefined2 param_1)
     iVar3 = iVar3 + -1;
   } while (iVar3 != 0);
   return uVar2;
-}
-
-
-/* ===== FUN_0000_2187 @ 0000:2187 ===== */
-
-undefined2 __allregs FUN_0000_2187(void)
-
-{
-  undefined1 in_ZF;
-  
-  FUN_0000_2196();
-  if (!(bool)in_ZF) {
-    return 0;
-  }
-  return 0xffff;
 }
 
 
@@ -1519,6 +4925,52 @@ void __allregs FUN_0000_2196(void)
   FUN_0000_216b(0x460);
   FUN_0000_216b(0x480);
   return;
+}
+
+
+/* ===== FUN_0000_21db @ 0000:21db ===== */
+
+uint __allregs FUN_0000_21db(void)
+
+{
+  byte bVar1;
+  undefined1 uVar2;
+  undefined1 uVar3;
+  undefined1 uVar4;
+  undefined1 uVar5;
+  undefined2 uVar6;
+  uint uVar7;
+  
+  bVar1 = in(0x61);
+  out(0x61,bVar1 & 0xfc | 1);
+  out(0x43,0xb6);
+  out(0x42,0);
+  out(0x42,0);
+  FUN_0000_216b(0x2021);
+  FUN_0000_216b(0x60f0);
+  FUN_0000_216b(0x80f0);
+  FUN_0000_216b(0xc001);
+  FUN_0000_216b(0xe000);
+  FUN_0000_216b(0x433f);
+  FUN_0000_216b(0xb000);
+  FUN_0000_216b(0xa000);
+  FUN_0000_216b(0xa08f);
+  FUN_0000_216b(0xb02e);
+  out(0x43,0x80);
+  uVar2 = in(0x42);
+  uVar3 = in(0x42);
+  do {
+    out(0x43,0x80);
+    uVar4 = in(0x42);
+    uVar5 = in(0x42);
+  } while ((uint)(CONCAT11(uVar3,uVar2) - CONCAT11(uVar5,uVar4)) < 0x952);
+  FUN_0000_216b(0xb020);
+  FUN_0000_216b(0xa000);
+  uVar6 = FUN_0000_216b(0x4020);
+  uVar2 = in(0x61);
+  uVar7 = CONCAT11((char)((uint)uVar6 >> 8),uVar2) & 0xfffc;
+  out(0x61,(char)uVar7);
+  return uVar7;
 }
 
 
@@ -1577,25 +5029,257 @@ void __allregs FUN_0000_2278(void)
 }
 
 
-/* ===== FUN_0000_25eb @ 0000:25eb ===== */
+/* ===== FUN_0000_25f2 @ 0000:25f2 ===== */
 
-/* WARNING: Instruction at (ram,0x000025f1) overlaps instruction at (ram,0x000025f0)
-    */
-/* WARNING: Removing unreachable block (ram,0x000025f0) */
-/* WARNING: Removing unreachable block (ram,0x000025f2) */
-
-void __allregs FUN_0000_25eb(int param_1)
+void __allregs FUN_0000_25f2(int param_1)
 
 {
-  bool in_SF;
-  
-  if (!in_SF) {
-    param_1 = param_1 << 1;
-  }
-  iRam000025ec = *(int *)(param_1 + 8);
-  iRam000025ee = iRam000025ec + 1;
-  iRam000025f0 = iRam000025ec + 2;
+  DAT_0000_25ec = *(int *)(param_1 * 2 + 8);
+  DAT_0000_25ee = DAT_0000_25ec + 1;
+  DAT_0000_25f0 = DAT_0000_25ec + 2;
   return;
+}
+
+
+/* ===== FUN_0000_2614 @ 0000:2614 ===== */
+
+undefined2 __allregs FUN_0000_2614(undefined2 param_1)
+
+{
+  byte bVar1;
+  int iVar2;
+  undefined2 uVar3;
+  int iVar4;
+  undefined2 uVar5;
+  
+  out(param_1,4);
+  iVar4 = 0xc;
+  iVar2 = DAT_0000_05a6;
+  do {
+    do {
+      iVar2 = iVar2 + -1;
+    } while (iVar2 != 0);
+    iVar4 = iVar4 + -1;
+    iVar2 = DAT_0000_05a6;
+  } while (iVar4 != 0);
+  uVar3 = 0;
+  out(DAT_0000_25ec,0x7f);
+  uVar5 = CONCAT11((char)((uint)DAT_0000_25ec >> 8),(char)DAT_0000_25ec + '\x01');
+  iVar2 = 0x12;
+  do {
+    bVar1 = in(uVar5);
+    uVar3 = CONCAT11((char)((uint)uVar3 >> 8),bVar1);
+    if ((bVar1 & 0x40) != 0) {
+      iVar2 = 3;
+      do {
+        iVar4 = 0;
+        while( true ) {
+          bVar1 = in(uVar5);
+          uVar3 = CONCAT11((char)((uint)uVar3 >> 8),bVar1);
+          if ((bVar1 & 0x40) == 0) break;
+          iVar4 = iVar4 + -1;
+          if (iVar4 == 0) goto LAB_0000_2665;
+        }
+        iVar4 = 6;
+        while( true ) {
+          uVar3 = FUN_0000_268f(uVar3);
+          bVar1 = in(uVar5);
+          uVar3 = CONCAT11((char)((uint)uVar3 >> 8),bVar1);
+          if ((bVar1 & 0x40) != 0) break;
+          iVar4 = iVar4 + -1;
+          if (iVar4 == 0) goto LAB_0000_2665;
+        }
+        iVar2 = iVar2 + -1;
+      } while (iVar2 != 0);
+      uVar3 = 0xffff;
+      goto LAB_0000_2667;
+    }
+    uVar3 = FUN_0000_268f(uVar3);
+    iVar2 = iVar2 + -1;
+  } while (iVar2 != 0);
+LAB_0000_2665:
+  uVar3 = 0;
+LAB_0000_2667:
+  out(DAT_0000_25f0,0xc);
+  return uVar3;
+}
+
+
+/* ===== FUN_0000_2674 @ 0000:2674 ===== */
+
+undefined2 __allregs FUN_0000_2674(void)
+
+{
+  int iVar1;
+  int iVar2;
+  
+  out(DAT_0000_25ec,0x7f);
+  iVar2 = 4;
+  iVar1 = DAT_0000_05a6;
+  do {
+    do {
+      iVar1 = iVar1 + -1;
+    } while (iVar1 != 0);
+    iVar2 = iVar2 + -1;
+    iVar1 = DAT_0000_05a6;
+  } while (iVar2 != 0);
+  out(CONCAT11((char)((uint)DAT_0000_25ec >> 8),(char)DAT_0000_25ec + '\x02'),0xc);
+  return 0xc;
+}
+
+
+/* ===== FUN_0000_268f @ 0000:268f ===== */
+
+undefined2 __allregs FUN_0000_268f(undefined2 param_1)
+
+{
+  undefined2 uVar1;
+  
+  out(DAT_0000_25ec,(char)param_1);
+  uVar1 = CONCAT11((char)((uint)DAT_0000_25ec >> 8),(char)DAT_0000_25ec + '\x02');
+  out(uVar1,0xc);
+  in(uVar1);
+  out(uVar1,4);
+  return param_1;
+}
+
+
+/* ===== caseD_3 @ 0000:26aa ===== */
+
+undefined2 __allregs switchD_0000:1e71::caseD_3(undefined2 param_1)
+
+{
+  undefined2 uVar1;
+  undefined1 in_ZF;
+  
+  FUN_0000_25f2(0);
+  if (!(bool)in_ZF) {
+    uVar1 = FUN_0000_2614(param_1);
+    if (!(bool)in_ZF) {
+      return uVar1;
+    }
+    uVar1 = FUN_0000_2614(param_1);
+    if (!(bool)in_ZF) {
+      return uVar1;
+    }
+    FUN_0000_25f2(1);
+    if (!(bool)in_ZF) {
+      uVar1 = FUN_0000_2614(param_1);
+      if (!(bool)in_ZF) {
+        return uVar1;
+      }
+      uVar1 = FUN_0000_2614(param_1);
+      if (!(bool)in_ZF) {
+        return uVar1;
+      }
+      FUN_0000_25f2(2);
+      if (!(bool)in_ZF) {
+        uVar1 = FUN_0000_2614(param_1);
+        if (!(bool)in_ZF) {
+          return uVar1;
+        }
+        uVar1 = FUN_0000_2614(param_1);
+        if (!(bool)in_ZF) {
+          return uVar1;
+        }
+      }
+    }
+  }
+  FUN_0000_25f2(0);
+  return 0;
+}
+
+
+/* ===== FUN_0000_26eb @ 0000:26eb ===== */
+
+undefined4 __allregs FUN_0000_26eb(undefined2 param_1)
+
+{
+  int iVar1;
+  undefined2 uVar2;
+  undefined2 extraout_var;
+  int iVar4;
+  undefined4 uVar3;
+  
+  switchD_0000:1e71::caseD_3(param_1);
+  out(DAT_0000_25ec,0x7f);
+  uVar2 = CONCAT11((char)((uint)DAT_0000_25ec >> 8),(char)DAT_0000_25ec + '\x02');
+  out(uVar2,0xc);
+  iVar4 = 8;
+  iVar1 = DAT_0000_05a6;
+  do {
+    do {
+      iVar1 = iVar1 + -1;
+    } while (iVar1 != 0);
+    iVar4 = iVar4 + -1;
+    iVar1 = DAT_0000_05a6;
+  } while (iVar4 != 0);
+  out(uVar2,4);
+  iVar4 = 6;
+  do {
+    do {
+      iVar1 = iVar1 + -1;
+    } while (iVar1 != 0);
+    iVar4 = iVar4 + -1;
+    iVar1 = DAT_0000_05a6;
+  } while (iVar4 != 0);
+  iVar1 = 0x10;
+  uVar3 = 0;
+  do {
+    uVar2 = FUN_0000_268f((int)CONCAT31((int3)((ulong)uVar3 >> 8),0x80));
+    uVar3 = CONCAT22(extraout_var,uVar2);
+    iVar1 = iVar1 + -1;
+  } while (iVar1 != 0);
+  return uVar3;
+}
+
+
+/* ===== caseD_4 @ 0000:2893 ===== */
+
+undefined2 __allregs switchD_0000:1e71::caseD_4(void)
+
+{
+  byte bVar1;
+  char cVar2;
+  int iVar3;
+  
+  out(0x226,1);
+  iVar3 = 10;
+  do {
+    in(0x226);
+    iVar3 = iVar3 + -1;
+  } while (iVar3 != 0);
+  out(0x226,0);
+  iVar3 = 1000;
+  do {
+    bVar1 = in(0x22e);
+    iVar3 = iVar3 + -1;
+  } while (iVar3 != 0 && (bVar1 & 0x80) == 0);
+  cVar2 = in(0x22a);
+  if (cVar2 != -0x56) {
+    return 0;
+  }
+  return 0xffff;
+}
+
+
+/* ===== FUN_0000_28bc @ 0000:28bc ===== */
+
+undefined2 __allregs FUN_0000_28bc(void)
+
+{
+  byte bVar1;
+  undefined2 uVar2;
+  undefined1 uVar3;
+  
+  uVar2 = switchD_0000:1e71::caseD_4();
+  do {
+    uVar3 = (undefined1)((uint)uVar2 >> 8);
+    bVar1 = in(0x22c);
+    uVar2 = CONCAT11(uVar3,bVar1);
+  } while ((bVar1 & 0x80) != 0);
+  out(0x22c,0xd1);
+  return CONCAT11(uVar3,0xd1);
 }
 
 
