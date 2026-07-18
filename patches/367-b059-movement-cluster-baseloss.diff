@@ -1,0 +1,58 @@
+PATCH 367 -- the b059 BEARING/MOVEMENT cluster (objtype-0x02 crash-walk, master 0c7d4bc).  Two
+near-offset/undefined2 base-losses on the a0ab->b059->a930->a19a->0927->0b71 proximity/range path,
+asm-verified vs re_out/fist_dat_image.bin (DS=DGROUP=0x1c00):
+
+(1) FUN_0000_b059 (asm 0xb059) -- a0ab (asm 0xa112) passes param_3=SI, param_4=DI as DGROUP NEAR
+    OFFSETS (both objects); b059's body + FUN_0000_b112(SI,DI) + FUN_1000_a930(...,SI,DI) deref them
+    as host pointers -> the b112->0731 SIGSEGV (fault 0xca2e).  b112 has MIXED callers (35393/64636
+    pass host ptrs) so the fix is at b059: rebase param_3/param_4 to g_mem+0x1c000+off once (patch-244
+    idiom); the whole body + callee calls become correct verbatim.
+
+(2) FUN_0000_a19a (asm 0xa19a = pure `call 0x927; lret` forwarder) -- its param_4/param_5 were typed
+    undefined2 (uint16_t), so a930's call a19a(iVar2,p1,p2,&DAT_2000_5690,&DAT_2000_5684) TRUNCATED the
+    two point-struct HOST pointers to 16 bits before 0927 (patch 328, takes int param_4/param_5 host
+    ptrs) forwarded them to 0b71 -> host-ptr deref of a 16-bit stub (fault 0xa850; a930->a19a->0927->
+    0b71).  Widened undefined2->int (fwd decl + def; the 328/330 class); param_1..3 stay (dead cx/dx/bx).
+
+--- a/fist.c
++++ b/fist.c
+@@ -1019,7 +1019,7 @@
+ undefined4 __allregs FUN_0000_a18e(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4, int param_5);   /* PATCH 338: host point-struct pointers (were truncated to 16 bits) */
+ int __allregs FUN_0000_a192(undefined2 param_1,undefined2 param_2);
+ int __allregs FUN_0000_a196(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+-int __allregs FUN_0000_a19a(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
++int __allregs FUN_0000_a19a(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4, int param_5);   /* PATCH 367: param_4/5 widened */
+ void __allregs FUN_0000_a19e(int *param_1);
+ void __allregs FUN_0000_a1a7(int param_1);
+ void __allregs FUN_0000_a1cd(undefined2 param_1,undefined2 param_2);
+@@ -26776,8 +26776,11 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_a19a) @ 0000:a19a ===== */
+ 
+ int __allregs
+-FUN_0000_a19a(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
+-             undefined2 param_5)
++FUN_0000_a19a(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4,
++             int param_5)   /* PATCH 367: param_4/param_5 widened undefined2->int -- the point-struct
++             pointers (&DAT_2000_5690/5684, host addrs) were truncated to 16 bits before 0927->0b71
++             deref'd them as host ptrs (fault 0xa850; a930->a19a->0927->0b71).  a19a is a pure
++             call-0x927 forwarder; 0927 already takes int param_4/param_5 (host ptrs). */
+ 
+ {
+   int iVar1;
+@@ -29174,6 +29177,16 @@
+   int iVar3;
+   bool bVar4;
+   
++  /* PATCH 367: b059 (proximity/bearing) object base-loss.  a0ab (asm 0xa112) calls b059 with param_3=SI,
++   * param_4=DI as DGROUP NEAR OFFSETS (both objects); the body + b112(SI,DI)/a930(...,SI,DI) deref them
++   * as host pointers -> b112->0731 SIGSEGV (fault 0xca2e; chain 902c->a631->a0ab->b059->b112->0731).
++   * b112 has MIXED callers (some pass host ptrs) so the fix is HERE: rebase param_3/param_4 to
++   * g_mem+0x1c000+off once (patch-244 idiom); the body becomes correct verbatim. */
++  {
++    unsigned char *_dg = (unsigned char *)g_mem + 0x1c000;
++    param_3 = (int)(intptr_t)(_dg + (uint16_t)param_3);
++    param_4 = (int)(intptr_t)(_dg + (uint16_t)param_4);
++  }
+   iVar1 = FUN_0000_b112(param_3,param_4);
+   uVar2 = iVar1 - *(int *)(param_4 + 0x10);
+   if ((uVar2 < 0x4000) || (0xbfff < uVar2)) {
