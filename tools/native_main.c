@@ -1063,6 +1063,20 @@ int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
     if (op == 0x18) g_fist_after_map = 1;
+    /* FIST_DGDUMP=<prefix> (diagnostic, default OFF): dump the low DGROUP window (0x1c000..0x1e200, 8.5KB)
+     * to <prefix>.<tag>.bin at well-defined mission points so native vs wasm DGROUP can be byte-diffed to
+     * classify the mission op-0x50 divergence (host-pointer leak vs tick-timing).  Tags: map1 = right after
+     * the (single) op-0x18 map load; roster1 = first op-0x54 roster op; op50 = first op-0x50 post. */
+    { static const char *pfx = (const char*)1; if (pfx == (const char*)1) pfx = getenv("FIST_DGDUMP");
+      if (pfx) {
+        static int did_map=0, did_roster=0, did_op50=0; const char *tag=0;
+        if (op==0x18 && !did_map){ did_map=1; tag="map1"; }
+        else if (op==0x54 && !did_roster){ did_roster=1; tag="roster1"; }
+        else if (op==0x50 && !did_op50){ did_op50=1; tag="op50"; }
+        if (tag){ char path[512]; snprintf(path,sizeof path,"%s.%s.bin",pfx,tag);
+          FILE *f=fopen(path,"wb"); if(f){ fwrite(g_mem+0x1c000,1,0x2200,f); fclose(f);
+            fprintf(stderr,"[dgdump] wrote %s (op=0x%x)\n",path,op); } }
+      } }
     /* FIST_VEHWATCH (diagnostic, default OFF): poll the player-vehicle node veh+8 (Y) at every op-gate
      * entry; report the FIRST transition to a wild value (>0x01000000; correct AZER1 Y=0x116F1D). */
     if (getenv("FIST_VEHWATCH")) {
