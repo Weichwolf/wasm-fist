@@ -1,5 +1,21 @@
 # EDITOR — Phase-0 recon + the FIRST ROUND-TRIP DELIVERABLE (BATTLE .FSG save)
 
+## STATUS (2026-07-18) — `.FSG` round-trip GENERALIZED to more battles (patch 380)
+
+The load→save fixed-point round-trip (360/361, originally AZER1-only) is now bit-verified for a
+representative set spanning every theatre plus the largest battle file. Patch **380** adds an env-gated
+harness override `FIST_FSG_BATTLE=<NAME>` (default OFF → behaviour-neutral) that, right before
+`FUN_0000_d501`, overwrites the DGROUP filename buffer (`0x79a9` = `&DAT_2000_39a9`) that both the LOAD
+(`d501`) and the re-save (`d5f9`, SI=0x79a9) use — so the single `RT_MOUSE` navigation
+(BATTLES→OK→ACCEPT) loads any of the 47 `.FSG`, not just the list's default selection AZER1. No
+serializer/parser change was needed: `d6e4`/`d501` generalize as-is. Seven new verify.sh flows
+(`editor-fsg-cyprus1`/`india1`/`saudi1`/`syria1`/`ukraine1`/`train1`/`ukraine8`) — one per theatre +
+the largest file **UKRAINE8** (19022 B, most chunks/units) — each verified as an idempotent FIXED POINT
+(`load(orig)→save=f1`; `load(f1)→save=f2`; `f1==f2`), native AND wasm, native `f1` == wasm `f1` (0-diff).
+`bash tools/verify.sh both` = **35/35** (28 prior + 7). `re_out/*.c` pristine
+(`61453e42`/`0051cb56`/`75c6d726`/`e6d610c5`); no regression; `armoredfist/` git-clean after (WRITE
+flows use fresh `cp -a` scratch datadirs).
+
 ## STATUS (2026-07-18) — ADD-TANK edit-op IMPLEMENTED + verified (patch 362); load→save round-trip (360/361)
 
 The SECOND editor DoD deliverable — drive one EDIT op (ADD TANK) → save → verify the delta — is

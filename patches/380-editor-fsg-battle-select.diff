@@ -1,0 +1,35 @@
+PATCH 380: generalize the editor .FSG round-trip / add-tank harness to ANY battle.
+
+The round-trip (patch 361) and add-tank (patch 362) harness hooks fire in FUN_0000_4754 right
+after FUN_0000_d501 has LOADED the battle whose name the SELECT BATTLE list dialog left in the
+DGROUP filename buffer (0x79a9 = &DAT_2000_39a9).  With the RT_MOUSE navigation (BATTLES -> OK ->
+ACCEPT, no scroll/select), that is always the default list selection AZER1 -- so the round-trip only
+ever exercised AZER1.FSG.
+
+This env-gated hook (FIST_FSG_BATTLE=<NAME>, DEFAULT OFF -> behaviour-neutral for every verify flow
+that does not set it) runs BEFORE d501 and overwrites that same filename buffer with "<NAME>.FSG\0",
+so the load -- and the d5f9 re-save (SI=0x79a9), which writes back to the same buffer -- exercise the
+NAMED battle instead.  One RT_MOUSE navigation now covers every theatre's .FSG (CYPRUS1/INDIA1/
+SAUDI1/SYRIA1/UKRAINE1/TRAIN1) + the largest file (UKRAINE8, 19022 B / most units), proving the
+serializer FUN_0000_d6e4 + parser d501 generalize past AZER1.  The buffer format is exactly what the
+list dialog builds (8.3-name + ".FSG" + NUL, read by 7162/d501); builtin_strncpy + the char loop use
+only ghidra_compat.h facilities already in use in this TU (cf. 7162).  d501/d5f9 are unchanged and
+asm-verified (patches 156/360); this hook only redirects which battle file they touch.
+
+--- a/fist.c
++++ b/fist.c
+@@ -13978,3 +13978,14 @@
+   FUN_0000_4779();
++  if (getenv("FIST_FSG_BATTLE")) {
++    /* PATCH 380: override the loaded battle filename so the .FSG harness can exercise ANY battle,
++       not just the list's default selection (AZER1).  Write "<NAME>.FSG\0" into the DGROUP filename
++       buffer 0x79a9 (= &DAT_2000_39a9) that both d501 (LOAD, below) and the d5f9 re-save (SI=0x79a9)
++       use.  Env-gated (default OFF) -> behaviour-neutral for flows that do not set it. */
++    char *pb = getenv("FIST_FSG_BATTLE");
++    char *pd = (char *)&DAT_2000_39a9;
++    while (*pb != '\0') { *pd = *pb; pd = pd + 1; pb = pb + 1; }
++    builtin_strncpy(pd,".FSG",4);
++    pd[4] = '\0';
++  }
+   FUN_0000_d501(param_1,param_2,param_3,(undefined1 *)0x79a9,param_4);  /* PATCH 156: DOS DX offset (mirrors 476a), not the &DAT host ptr */
+   if (getenv("FIST_FSG_ROUNDTRIP")) {

@@ -200,6 +200,20 @@ FLOWS=(
   # WRITE flow (own fresh cp -a scratch datadirs; repo armoredfist/ untouched).  d5f9/d6e4/d84e/
   # d740/b40b/d638 asm-verified vs re_out/fist_dat_image.bin.
   "editor-fsg-roundtrip|25000|roundtrip||roundtrip"
+  # EDITOR .FSG round-trip generalized to MORE battles (patch 380: FIST_FSG_BATTLE overrides the loaded
+  # battle filename so the single RT_MOUSE navigation loads any of the 47 .FSG).  A representative set:
+  # one battle per THEATRE (CYPRUS/INDIA/SAUDI/SYRIA/UKRAINE/TRAIN -- different terrain/unit/path data
+  # than AZER1) + the LARGEST .FSG (UKRAINE8, 19022 B / most chunks+units -- stresses the serializer).
+  # Each proves the serializer d6e4 + parser d501 generalize past AZER1: load->save is an idempotent
+  # FIXED POINT (load(orig)->save=f1; load(f1)->save=f2; f1==f2), native AND wasm, native f1==wasm f1.
+  # The battle name is the 4th field.  WRITE flows (own fresh cp -a scratch datadir; repo untouched).
+  "editor-fsg-cyprus1|25000|roundtrip|CYPRUS1|roundtrip"
+  "editor-fsg-india1|25000|roundtrip|INDIA1|roundtrip"
+  "editor-fsg-saudi1|25000|roundtrip|SAUDI1|roundtrip"
+  "editor-fsg-syria1|25000|roundtrip|SYRIA1|roundtrip"
+  "editor-fsg-ukraine1|25000|roundtrip|UKRAINE1|roundtrip"
+  "editor-fsg-train1|25000|roundtrip|TRAIN1|roundtrip"
+  "editor-fsg-ukraine8|25000|roundtrip|UKRAINE8|roundtrip"
   # EDITOR ADD-TANK edit-op (patch 362): enter EDITING mode, add ONE tank via the engine's real
   # roster allocator + unit registry, save.  Asserts the edited .FSG has base+1 (81) DCBS units, the
   # added tank RELOADS, and load->save on the edited file is an idempotent FIXED POINT -- native AND
@@ -260,21 +274,24 @@ fresh_datadir() { # $1=tag ; echo path
 # (load canonicalizes each unit, so the editor-authored file is not itself a fixed point, but a
 # re-saved file IS): load(orig)->save = file1; load(file1)->save = file2; assert file1==file2.
 RT_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0; 7200:40:186:0"
-run_fsg() { # $1=target $2=datadir ; echo rc  (drive one load->save->exit against $2/FISTDATA/AZER1.FSG)
-  local t="$1" dd="$2"
+run_fsg() { # $1=target $2=datadir $3=battle(optional,default AZER1) ; echo rc (one load->save->exit)
+  local t="$1" dd="$2" b="${3:-AZER1}"
+  # FIST_FSG_BATTLE (patch 380) overrides the loaded battle filename so ANY .FSG can be exercised with
+  # the single RT_MOUSE navigation (BATTLES->OK->ACCEPT); it selects AZER1 by default, so passing
+  # b=AZER1 is behaviour-identical to the un-generalized flow.  Env mirrored to wasm by wasm_pre.js.
   if [ "$t" = native ]; then
-    timeout 60  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 60  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
   else
-    timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+    timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
 }
-run_roundtrip() { # $1=target ; echo path-to-file1 on success (file1==file2 asserted), empty on failure
-  local t="$1" a b f1 f2
-  a="$(fresh_datadir "rt.$t.A")"; [ "$(run_fsg "$t" "$a")" = 0 ] || { echo ""; return 1; }
-  f1="$TMP/file1.$t.FSG"; [ -s "$a/FISTDATA/AZER1.FSG" ] && cp "$a/FISTDATA/AZER1.FSG" "$f1" || { echo ""; return 1; }
-  b="$(fresh_datadir "rt.$t.B")"; cp "$f1" "$b/FISTDATA/AZER1.FSG"
-  [ "$(run_fsg "$t" "$b")" = 0 ] || { echo ""; return 1; }
-  f2="$TMP/file2.$t.FSG"; cp "$b/FISTDATA/AZER1.FSG" "$f2" 2>/dev/null || { echo ""; return 1; }
+run_roundtrip() { # $1=target $2=battle(default AZER1) ; echo path-to-file1 on success, empty on failure
+  local t="$1" b="${2:-AZER1}" a bd f1 f2
+  a="$(fresh_datadir "rt.$b.$t.A")"; [ "$(run_fsg "$t" "$a" "$b")" = 0 ] || { echo ""; return 1; }
+  f1="$TMP/file1.$b.$t.FSG"; [ -s "$a/FISTDATA/$b.FSG" ] && cp "$a/FISTDATA/$b.FSG" "$f1" || { echo ""; return 1; }
+  bd="$(fresh_datadir "rt.$b.$t.B")"; cp "$f1" "$bd/FISTDATA/$b.FSG"
+  [ "$(run_fsg "$t" "$bd" "$b")" = 0 ] || { echo ""; return 1; }
+  f2="$TMP/file2.$b.$t.FSG"; cp "$bd/FISTDATA/$b.FSG" "$f2" 2>/dev/null || { echo ""; return 1; }
   cmp -s "$f1" "$f2" || { echo ""; return 2; }   # not a fixed point
   echo "$f1"
 }
@@ -326,10 +343,16 @@ echo "== verify ($WHICH) =="
 for row in "${FLOWS[@]}"; do
   IFS='|' read -r name hz ms inp ref <<<"$row"
   ok=1; detail=""
-  if [ "$name" = editor-fsg-roundtrip ]; then
-    detail=" [roundtrip fixed-point]"; f1n=""; f1w=""
-    if [ "$WHICH" != wasm ];   then f1n="$(run_roundtrip native)"; [ -n "$f1n" ] || { ok=0; detail+=" native-fail"; }; fi
-    if [ "$WHICH" != native ]; then f1w="$(run_roundtrip wasm)";   [ -n "$f1w" ] || { ok=0; detail+=" wasm-fail"; }; fi
+  if [ "$name" = editor-fsg-roundtrip ] || [ "${name#editor-fsg-}" != "$name" ]; then
+    # Editor .FSG load->save fixed-point round-trip for a named battle.  The battle name is in the
+    # row's `inp` field (empty -> AZER1, the default list selection).  Patch 380's FIST_FSG_BATTLE
+    # override lets the single RT_MOUSE navigation load any of the 47 battles.  Verified as a FIXED
+    # POINT (load canonicalizes, so a re-saved file reloads+re-saves byte-identically) on native AND
+    # wasm, native file1 == wasm file1 (0-diff).
+    bt="${inp:-AZER1}"
+    detail=" [$bt roundtrip fixed-point]"; f1n=""; f1w=""
+    if [ "$WHICH" != wasm ];   then f1n="$(run_roundtrip native "$bt")"; [ -n "$f1n" ] || { ok=0; detail+=" native-fail"; }; fi
+    if [ "$WHICH" != native ]; then f1w="$(run_roundtrip wasm "$bt")";   [ -n "$f1w" ] || { ok=0; detail+=" wasm-fail"; }; fi
     if [ "$WHICH" = both ] && [ -n "$f1n" ] && [ -n "$f1w" ]; then
       cmp -s "$f1n" "$f1w" || { ok=0; detail+=" nat!=wasm"; }
     fi
