@@ -66,6 +66,16 @@ FLOWS=(
   # tools/refcapture_click2.sh 160 126 181 52 40 8 8 (2 independent DOSBox captures AE=0 -> deterministic,
   # non-circular).  AE=0 native AND wasm; native md5 == wasm md5, deterministic (5x single md5).
   "settings-detail-med|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:52:0; 3600:181:52:1; 4200:181:52:0; 4800:181:52:0|$ROOT/ref/settings_detail_med_native320.png"
+  # SETTINGS RADIO toggle (patch 319), DETAIL group's THIRD radio (LOW): open SETTINGS (160,126), click
+  # the LOW DETAIL radio (181,44 -- the DETAIL radios stack LOW/MED/HIGH at y 44/52/60, default HIGH lit).
+  # Same 6bcc handler as MED but bx=0x12 -> 6eb8(value 0): sets DETAIL word 0x8b47=0, status "DETAIL SET
+  # TO LOW" via 7018 reading the per-value status id from DGROUP:0x8b3d (the LOW slot; MED used 0x8b3f),
+  # marks the 3 DETAIL widgets dirty (BYTE) -> 209e/6cf4 re-paints the lit indicator HIGH -> LOW.
+  # Exercises the LOW value/status slot the MED flow does not (value 0 vs 2, 0x8b3d vs 0x8b3f).  No new
+  # engine patch (319 covers all three DETAIL radios).  Static frame -> plain FIST_RUNMS dump.  READ-only.
+  # ref via tools/refcapture_click2.sh 160 126 181 44 40 8 8 (2 independent DOSBox captures AE=0 ->
+  # deterministic, non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
+  "settings-detail-low|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:44:0; 3600:181:44:1; 4200:181:44:0; 4800:181:44:0|$ROOT/ref/settings_detail_low_native320.png"
   # SETTINGS RADIO toggle (patch 319), SOUND-FX group (3 radios): open SETTINGS, click the MEDIUM SOUND-FX
   # radio (246,150).  Default SOUND FX = HIGH (lit); the click -> 6af0 -> 6b27 -> 6bde(bx=0x1e..) ->
   # 6ee2: SOUND-FX state word 0x8b4b, marks the 3 SOUND-FX widgets dirty (4bc1/4bc4/4bc7, BYTE) -> the
