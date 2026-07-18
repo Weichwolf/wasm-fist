@@ -306,6 +306,23 @@ code *fist_icall_near(uint16_t seg, uint16_t off)
             }
         }
     }
+    /* FIST_20EA (diagnostic, default OFF): the FUN_0000_20ea display-list child-walk (patch 142) sets
+     * DGROUP:0x3e08 = bx (child cursor) right before each dispatch of word[DGROUP:(word[DGROUP:bx]+0x444e)].
+     * A near call satisfying off == that formula IS a 20ea dispatch -> log (bx,node,off) so the native-vs-
+     * wasm dispatch sequence can be diffed: the first divergence pins the corrupt display node.  Read-only. */
+    { static int t20 = -1; if (t20 < 0) t20 = getenv("FIST_20EA") ? 1 : 0;
+      if (t20 && seg == 0) {
+        uint8_t *dg = g_mem + 0x1c000;
+        uint16_t bx = *(uint16_t *)(dg + 0x3e08);
+        uint16_t node = *(uint16_t *)(dg + bx);
+        uint16_t expect = *(uint16_t *)(dg + (uint16_t)(node + 0x444e));
+        if (off == expect) {
+            static long n; if (n < 200)
+                fprintf(stderr, "[20ea] #%ld bx=0x%04x node=0x%04x off=0x%04x %s\n",
+                    n, bx, node, off, (off >= 0x1c000 || off < 0x40) ? "WILD" : "");
+            n++;
+        }
+      } }
     return fist_icall(((uint32_t)seg << 4) + off);
 }
 
