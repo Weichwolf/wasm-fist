@@ -24,6 +24,7 @@ extern uint32_t fist_snd_base;
 #define FUN_0000_0252 m_snd_FUN_0000_0252
 #define FUN_0000_02e9 m_snd_FUN_0000_02e9
 #define FUN_0000_0333 m_snd_FUN_0000_0333
+#define FUN_0000_03dd m_snd_FUN_0000_03dd
 #define FUN_0000_0414 m_snd_FUN_0000_0414
 #define FUN_0000_0415 m_snd_FUN_0000_0415
 #define FUN_0000_0419 m_snd_FUN_0000_0419
@@ -106,7 +107,6 @@ extern uint32_t fist_snd_base;
 #define TaskRegister m_snd_TaskRegister
 #define app_entry m_snd_app_entry
 #define app_entry_0000_01cd m_snd_app_entry_0000_01cd
-#define app_entry_0000_03d6 m_snd_app_entry_0000_03d6
 #define caseD_0 m_snd_caseD_0
 #define caseD_3 m_snd_caseD_3
 #define caseD_4 m_snd_caseD_4
@@ -148,7 +148,7 @@ void __allregs FUN_0000_024b(void);
 void __allregs FUN_0000_0252(char param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
 void __allregs FUN_0000_02e9(undefined2 param_1,undefined2 param_2);
 void __allregs FUN_0000_0333(void);
-void __allregs app_entry_0000_03d6(void);
+void __allregs FUN_0000_03dd(undefined2 param_1,undefined1 param_2);
 void __allregs FUN_0000_0414(void);
 void __allregs FUN_0000_0415(char param_1);
 void __allregs FUN_0000_0419(uint param_1,undefined2 param_2,undefined1 param_3);
@@ -377,6 +377,7 @@ void __allregs FUN_0000_386d(undefined2 param_1,int param_2,undefined2 param_3,u
 #define _DAT_1000_d2eb (*(undefined4 *)(g_mem+0x1d2eb))
 #define _DAT_1000_d3e2 (*(undefined4 *)(g_mem+0x1d3e2))
 #define _DAT_2000_bb7c (*(undefined4 *)(g_mem+0x2bb7c))
+#define _DAT_2000_bcce (*(undefined4 *)(g_mem+0x2bcce))
 #define _DAT_2000_bf8e (*(undefined4 *)(g_mem+0x2bf8e))
 #define _DAT_2000_bfb8 (*(undefined4 *)(g_mem+0x2bfb8))
 #define _DAT_2000_bfba (*(undefined4 *)(g_mem+0x2bfba))
@@ -824,11 +825,37 @@ LAB_0000_03ca:
 }
 
 
-/* ===== app_entry_0000_03d6 @ 0000:03d6 ===== */
+/* ===== ((uint)(uintptr_t)&FUN_0000_03dd) @ 0000:03dd ===== */
 
-void __allregs app_entry_0000_03d6(void)
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_03dd(undefined2 param_1,undefined1 param_2)
 
 {
+  char *pcVar1;
+  int iVar2;
+  int iVar3;
+  int unaff_CS;
+  int iVar4;
+  
+  if (_DAT_2000_bcce == 2) {
+    iVar2 = 0;
+    iVar4 = 7;
+    while (iVar3 = iVar4 + -1, -1 < iVar3) {
+      pcVar1 = (char *)(iVar4 + 0x5f);
+      iVar4 = iVar3;
+      if (*pcVar1 != -1) {
+        FUN_0000_0419(CONCAT11((byte)iVar3 >> 1 | (byte)iVar3 << 7,0xff),param_1,param_2);
+        iVar2 = -1;
+        iVar4 = unaff_CS;
+      }
+    }
+    if (iVar2 != 0) {
+      _DAT_2000_bcce = _DAT_2000_bcce + -1;
+      return;
+    }
+  }
+  app_entry();
   return;
 }
 
@@ -6152,7 +6179,7 @@ const struct fist_fent fist_snd_fmap[] = {
   {0x252u,(void*)&FUN_0000_0252},
   {0x2e9u,(void*)&FUN_0000_02e9},
   {0x333u,(void*)&FUN_0000_0333},
-  {0x3d6u,(void*)&app_entry_0000_03d6},
+  {0x3ddu,(void*)&FUN_0000_03dd},
   {0x414u,(void*)&FUN_0000_0414},
   {0x415u,(void*)&FUN_0000_0415},
   {0x419u,(void*)&FUN_0000_0419},

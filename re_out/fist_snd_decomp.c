@@ -417,11 +417,37 @@ LAB_0000_03ca:
 }
 
 
-/* ===== app_entry @ 0000:03d6 ===== */
+/* ===== FUN_0000_03dd @ 0000:03dd ===== */
 
-void __allregs app_entry(void)
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void __allregs FUN_0000_03dd(undefined2 param_1,undefined1 param_2)
 
 {
+  char *pcVar1;
+  int iVar2;
+  int iVar3;
+  int unaff_CS;
+  int iVar4;
+  
+  if (_DAT_2000_bcce == 2) {
+    iVar2 = 0;
+    iVar4 = 7;
+    while (iVar3 = iVar4 + -1, -1 < iVar3) {
+      pcVar1 = (char *)(iVar4 + 0x5f);
+      iVar4 = iVar3;
+      if (*pcVar1 != -1) {
+        FUN_0000_0419(CONCAT11((byte)iVar3 >> 1 | (byte)iVar3 << 7,0xff),param_1,param_2);
+        iVar2 = -1;
+        iVar4 = unaff_CS;
+      }
+    }
+    if (iVar2 != 0) {
+      _DAT_2000_bcce = _DAT_2000_bcce + -1;
+      return;
+    }
+  }
+  app_entry();
   return;
 }
 

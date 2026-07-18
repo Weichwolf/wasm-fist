@@ -1,6 +1,78 @@
-# AUDIO subsystem — recon + shim foundation (iterations 1–8)
+# AUDIO subsystem — recon + shim foundation (iterations 1–9)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
+
+## 15. Iteration 9 — the driver TIMER-ISR sequencer body (0x3dd) is recovered + rebased + driven per-tick; HONEST: still no music — the sequencer is never FED (arm-gate/note-table/voice-slots never written) (2026-07-18)
+
+**HEADLINE: FUN_0000_03dd (the SOUNDDVR driver timer-ISR body Ghidra had left as the empty 0x3d6
+far-jmp placeholder) is recovered via a re-decompile seed + the note-timing family (0419/0415/0579) is
+faithfully two-segment-rebased + the shim now drives the ISR once per engine INT-8 tick.  BUT the menu
+music still does NOT play, and this iteration proves WHY conclusively (watchpoints): the ISR's input
+state is NEVER initialized on the reached menu path — arm-gate DGROUP:0x23e stays 0, note-table pointer
+DGROUP:0x4fe stays 0, the per-voice active slots cs:0x60..0x66 stay 0.  The note stream never reaches a
+playable state; the port WAV is still near-silent (peak 330, 147 OPL writes = instrument init + ONE
+stray key-on + no fnum).**
+
+**WHAT LANDED (patch 356 + shim; the 3 hard-pristine engine md5s UNCHANGED
+`61453e42`/`0051cb56`/`75c6d726`; fist_snd.c re-baselined `9b642483` → `e6d610c5`, reproducible):**
+- **Re-decompile seed 0x3dd** (added to the snd `FIST_DRIVER_SEED_OFFS` in `Makefile decompile-drivers`;
+  103→103 fns, 0x3dd now a real function; all 354 patches re-apply clean).
+- **Patch 356** — recover FUN_0000_03dd + faithfully segment-rebase the note-timing family
+  (0419 note-advance / 0415 release tail / 0579 device far-vector).  Asm-verified vs
+  `re_out/fist_snd_image.bin`.  The family runs with **TWO segments Ghidra scrambled** (some derefs based
+  at 0, some at engine-DGROUP 0x1c000, some at the bogus SS=0x2ba9 context `_DAT_2000_bcce`/`_DAT_2000_bf8e`):
+  - **DS = CS = the driver LOAD seg (`fist_snd_base`)** — the per-voice static state: cs:0x5e (current-note
+    word), cs:0x5f (current channel), **cs:0x60+bx (active-note-per-voice, 0xff=free)**, cs:0x67+bx (alloc),
+    cs:0x68+bx (duration), cs:0x6f+bx (tag), cs:0x70+bx (note idx).
+  - **SS = DGROUP (0x1c00)** — the **arm gate word [ss:0x23e]** (the 7-voice scan runs only while ==2) and
+    the **device object at DGROUP:0x4fa (dev seg) / 0x4fc (status) / 0x4fe (note-table OFFSET)**.  The note
+    table `VT = DGROUP:[word 0x4fe]` is indexed by note*4 (flags byte at +2).
+  - Fixes: dropped `iVar4 = unaff_CS` (Ghidra mis-modeled the `push bx;…;pop bx` around the 0419 call → it
+    restores the loop counter); the `[0x5e]` store-width (`mov [0x5e],ax` is 16-bit, not the 32-bit Ghidra
+    emitted which would clobber cs:0x60/0x61).
+- **`fist_snd_isr_tick` (re_out/fist_sb.c)** — drives `fist_snd_base+0x3dd` (the body; **0x3d6 is the
+  ljmp-to-old-handler chain slot, not the entry**) once per engine INT-8 tick from the shim's ISR pump
+  (native_main.c), gated on `g_snd_isr_seg` + `fist_opl_enabled()` (FIST_SB/OPL).  We ARE the extender/PIT
+  layer (107a chained the driver ISR into INT-8), so per-tick invocation is the faithful hardware-timer
+  equivalent.  Behaviour-neutral until the sound system is armed → the 26 video flows stay byte-identical.
+
+**RUNTIME-PROVEN (native, setarch -R, watchpoints — the decisive residual):**
+- Device present: `DGROUP:0x4fa=0x3a07`, `DGROUP:0x4fc=0xe0` (bit7=1). ✓
+- **Arm gate `DGROUP:0x23e = 0` ALWAYS** — full-image scan (both .DVRs + FIST.DAT): the ISR only READS/
+  DECREMENTS it; the **ONLY writer anywhere is engine `0xe025` = `movw [0x23e],0` (DISABLE)** on the
+  intro/title setup.  **NO writer sets it to the enable value 2** → the arm is set by the Doug-Huffman
+  EXTENDER's sound/timer init (not in FIST.DAT/either .DVR), same class as the extender-resident renderer.
+- **Note-table pointer `DGROUP:0x4fe = 0` ALWAYS** (watchpoint: never written after registration).
+- **Per-voice slots cs:0x60..0x66 = 0 ALWAYS** — `0419` is the ONLY thing that would set cs:0x60+bx to a
+  note, and its ONLY caller is the ISR itself with al=0xff (release).  **`0419(real-note)` is never called**
+  → the ISR's active-voice table is never populated.  (Init should also set cs:0x60+ = 0xff/free; it isn't,
+  so uninitialised 0 reads as "note 0 active" — another symptom of the missing sound-init.)
+- OPL output = 147 writes: instrument init (regs 0x20–0xe0 ×6 ch) + B0 mostly 0x1f (block/fnum-hi, **no
+  key-on bit**) + **exactly ONE stray key-on** (`reg[0xb0]=0x3f`, bit0x20 set) + **zero A0 (fnum-low)
+  writes** → no melody.  peak 330, near-silent.
+
+**ROOT CAUSE (conclusive):** the driver timer-ISR (0x3dd) is a per-tick note-DURATION/envelope manager,
+NOT a self-contained song player — it needs its input state (arm 0x23e, note-table 0x4fe, active slots
+cs:0x60+) populated by the sound-START, which never runs on the menu.  The engine's device-3 note posts
+(`0966/0997` → **driver_ds:0x107+**, a DIFFERENT voice struct) produce only init/one-off OPL writes, not a
+melody.  The continuous menu music requires: (a) the extender's sound-init arm (`DGROUP:0x23e=2`), and (b)
+the note-table setup (`DGROUP:0x4fe`) — the shim's `1917` records the work-object seg but SKIPS the
+work-object **reformat** that would populate it.  Both are the next iteration's blockers.
+
+**+0xfab** (device-3 instrument-load mid-entry inside `0f99`) — still a fmap MISS (1 hit); needs a seed/
+fmap-register.  NB even fixed it yields only the init blips (device-3 is the SFX path here), NOT the
+continuous sequencer music — do NOT expect music from +0xfab alone.
+
+**NEXT ITERATION:** (1) reconstruct the device-registration **reformat** (populate `DGROUP:0x4fe` note-
+table + init cs:0x60+ = 0xff) — trace the real `FUN_1000_1917` tail (`ds=blk; call 0x10cce`) the shim
+replaced; (2) locate/replicate the extender's sequencer ARM (`DGROUP:0x23e=2`) OR the engine song-stream
+feed (no music file opens → built-in/engine-fed); THEN the driven 0x3dd advances real notes → key-ons.
+
+**No-regression (VERIFIED both targets):** `make check` = all 354 patches apply; mainmenu native AE=0 +
+wasm AE=0, **native↔wasm 0-diff**; default boot rc=0.  Hard-pristine `61453e42`/`0051cb56`/`75c6d726`
+unchanged; fist_snd.c `e6d610c5`.  All additions FIST_SB/OPL-gated (default OFF).  **HONEST: no menu music
+plays on either target yet — the sequencer is recovered + driven but never fed.**  The wasm FIST_SB
+sound-dispatch parity remains UNCONFIRMED (iter-8 §14 follow-up: no OPL trace under node).
 
 ## 14. Iteration 8 — the sound device now REGISTERS PRESENT (1917/107a recovered + si=0xec) — honest: still no continuous music (2026-07-18)
 

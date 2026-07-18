@@ -1,0 +1,200 @@
+SOUNDDVR driver TIMER-ISR sequencer body (FUN_0000_03dd) recovered + the note-timing family
+(0419 note-advance / 0415 release tail / 0579 device far-vector) faithfully segment-rebased.
+
+Recovered via the 0x3dd re-decompile seed (approved driver-class: added 0x3dd to the snd
+FIST_DRIVER_SEED_OFFS -> fist_snd.c rebaselines 9b642483 -> e6d610c5, reproducible; the 3 hard-pristine
+engine md5s 61453e42/0051cb56/75c6d726 UNCHANGED).  Ghidra had decompiled the 0x3d6 far-jmp placeholder
+as the empty app_entry_0000_03d6; the real ISR body is at 0x3dd.
+
+asm-verified vs re_out/fist_snd_image.bin.  The whole family runs with TWO segments that Ghidra
+scrambled (some accesses based at 0, some at engine-DGROUP 0x1c000, some at the bogus SS=0x2ba9 context):
+  - DS = CS = the driver LOAD segment (fist_snd_base): the per-voice static state at cs:0x5e (current
+    note word), cs:0x5f (current channel), cs:0x60+bx (active-note-per-voice, 0xff=free), cs:0x67+bx
+    (alloc flag), cs:0x68+bx (duration counter), cs:0x6f+bx (note tag), cs:0x70+bx (note index).
+  - SS = DGROUP (0x1c00): the arm gate word [ss:0x23e] (the sequencer runs its 7-voice scan only while
+    ==2) and the DEVICE OBJECT at DGROUP:0x4fa (dev seg) / 0x4fc (status) / 0x4fe (note-descriptor-table
+    OFFSET).  The note table VT = DGROUP:[word 0x4fe] is indexed by note*4 (flags byte at +2: 0x60/0x20
+    key bits, 0x40 sustain, 0x10 mode, bit7 gate; 0x579 vs 0415 chosen by bit7&0x10).
+
+FUN_0000_03dd (asm 0x3dd): reentrancy/arm guard [ss:0x23e]==2, then scan cs:0x60..0x66 for active voices
+  and call the per-tick note-advance 0419(al=0xff, ah=ror(voice,1)) for each; decrement the arm counter
+  while any voice is active, else chain (app_entry = the 0x3d6 ljmp-to-old-handler; the shim owns INT-8
+  so the chain is a no-op here).  Ghidra mis-modeled the `push bx; push cs; call 0419; ...; pop bx` as
+  `iVar4 = unaff_CS` (would clobber the loop counter) -> the asm restores bx via pop, dropped.
+
+FUN_0000_0419 (asm 0x419): the note-advance/release worker (find-or-alloc voice slot, set the VT flags,
+  dispatch 0415/0579, post the SMC voice binding via 1d62/1e13).  Store-width fix: `mov [0x5e],ax` is
+  16-bit (Ghidra emitted a 32-bit store that would clobber cs:0x60/0x61).
+
+FUN_0000_0415 (asm 0x4ac): the shared release/duration-decrement tail (xchg the active slot, dec the
+  duration, clear VT bit 0x40 on expiry).
+
+FUN_0000_0579 (asm 0x579): `lcall [ss:0xec]` = the device method far-vector at DGROUP:0xec.
+
+Reached only under FIST_SB (the driver sound path is populated only by the FIST_SB-gated config/section
+installs) + driven per-tick by the shim's INT-8 pump (fist_snd_isr_tick) -> the 26 video flows stay
+byte-identical.
+
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -832,26 +832,29 @@
+ void __allregs FUN_0000_03dd(undefined2 param_1,undefined1 param_2)
+ 
+ {
+-  char *pcVar1;
++  /* PATCH 356: driver TIMER-ISR sequencer body (asm 0x3dd), recovered via the 0x3dd re-decompile seed
++     + faithful segment rebase.  Two segments (Ghidra scrambled the bases): DS=CS=driver load seg for the
++     per-voice active-slot table [cs:0x60..0x66] (fist_snd_base); SS=DGROUP (0x1c00) for the arm-gate word
++     [ss:0x23e] and the device object (DGROUP:0x4fa dev-seg/0x4fc status/0x4fe note-table offset).  NB the
++     asm restores bx across the 0x419 call (push bx; ...; pop bx), so the loop counter continues at iVar3 --
++     Ghidra mis-modeled the push-cs/pop-bx as `iVar4 = unaff_CS` which would clobber the counter (dropped). */
++  uint8_t *C = (uint8_t*)(g_mem + fist_snd_base);
+   int iVar2;
+   int iVar3;
+-  int unaff_CS;
+   int iVar4;
+-  
+-  if (_DAT_2000_bcce == 2) {
++
++  if (*(uint16_t*)(g_mem+0x1c23e) == 2) {
+     iVar2 = 0;
+     iVar4 = 7;
+     while (iVar3 = iVar4 + -1, -1 < iVar3) {
+-      pcVar1 = (char *)(iVar4 + 0x5f);
+       iVar4 = iVar3;
+-      if (*pcVar1 != -1) {
++      if ((char)C[iVar3 + 0x60] != -1) {
+         FUN_0000_0419(CONCAT11((byte)iVar3 >> 1 | (byte)iVar3 << 7,0xff),param_1,param_2);
+         iVar2 = -1;
+-        iVar4 = unaff_CS;
+       }
+     }
+     if (iVar2 != 0) {
+-      _DAT_2000_bcce = _DAT_2000_bcce + -1;
++      *(uint16_t*)(g_mem+0x1c23e) = *(uint16_t*)(g_mem+0x1c23e) + -1;
+       return;
+     }
+   }
+@@ -876,22 +879,27 @@
+ void __allregs FUN_0000_0415(char param_1)
+ 
+ {
++  /* PATCH 356: shared voice release/decrement tail (asm 0x4ac..0x4dc).  DS=CS=driver load seg for the
++     per-voice slots [cs:0x5f/0x60+bx/0x68+bx/0x70+bx]; the note-descriptor table VT = DGROUP:[0x4fe]<<0
++     (SS=DGROUP), indexed by note*4 (flags byte at +2). */
++  uint8_t *C = (uint8_t*)(g_mem + fist_snd_base);
++  uint8_t *VT = (uint8_t*)(g_mem + 0x1c000u + *(uint16_t*)(g_mem+0x1c4fe));
+   char *pcVar1;
+   byte *pbVar2;
+   char cVar3;
+   int iVar4;
+-  
++
+   LOCK();
+-  pcVar1 = (char *)((byte)(cRam0001c05f << 1 | cRam0001c05f < '\0') + 0x60);
++  pcVar1 = (char *)(C + (byte)(C[0x5f] << 1 | (char)C[0x5f] < '\0') + 0x60);
+   cVar3 = *pcVar1;
+   *pcVar1 = param_1;
+   UNLOCK();
+   iVar4 = (int)cVar3;
+-  if (*(char *)(iVar4 + 0x68) != '\0') {
+-    pcVar1 = (char *)(iVar4 + 0x68);
++  if (*(char *)(C + iVar4 + 0x68) != '\0') {
++    pcVar1 = (char *)(C + iVar4 + 0x68);
+     *pcVar1 = *pcVar1 + -1;
+     if (*pcVar1 == '\0') {
+-      pbVar2 = (byte *)(CONCAT11(cVar3 >> 7,*(undefined1 *)(iVar4 + 0x70)) * 4 + _DAT_2000_bf8e + 2)
++      pbVar2 = (byte *)(CONCAT11(cVar3 >> 7,*(undefined1 *)(C + iVar4 + 0x70)) * 4 + (uintptr_t)VT + 2)
+       ;
+       *pbVar2 = *pbVar2 & 0xbf;
+     }
+@@ -916,8 +924,13 @@
+   undefined2 *puVar7;
+   undefined1 uVar8;
+   undefined2 unaff_CS;
+-  
+-  *(uint *)0x5e = param_1;
++  /* PATCH 356: driver-DS(=CS) rebase (per-voice slots [cs:0x5e/0x5f/0x67+/0x68+/0x6f+/0x70+]) + the
++     SS=DGROUP note-descriptor table VT=DGROUP:[0x4fe] (indexed note*4, flags at +2).  Width fix: the
++     [0x5e] store is `mov [0x5e],ax` = 16-bit, not the 32-bit Ghidra emitted (would clobber [0x60..0x61]). */
++  uint8_t *C = (uint8_t*)(g_mem + fist_snd_base);
++  uint8_t *VT = (uint8_t*)(g_mem + 0x1c000u + *(uint16_t*)(g_mem+0x1c4fe));
++
++  *(uint16_t *)(C + 0x5e) = (uint16_t)param_1;
+   cVar4 = (char)param_1;
+   if (cVar4 != -1) {
+     iVar5 = 7;
+@@ -929,12 +942,12 @@
+     do {
+       iVar6 = iVar5;
+       iVar5 = iVar6 + -1;
+-    } while (*(char *)(iVar6 + 0x67) != '\0');
+-    *(char *)(iVar6 + 0x6f) = cVar4;
+-    *(undefined1 *)(iVar6 + 0x67) = 1;
++    } while (*(char *)(C + iVar6 + 0x67) != '\0');
++    *(char *)(C + iVar6 + 0x6f) = cVar4;
++    *(undefined1 *)(C + iVar6 + 0x67) = 1;
+     goto LAB_0000_044b;
+   }
+-  cVar4 = *(char *)0x5f;
++  cVar4 = *(char *)(C + 0x5f);
+   uVar8 = (undefined1)((uint)unaff_CS >> 8);
+   if (cVar4 < '\0') {
+     FUN_0000_1e13(0x411,0,param_3,CONCAT11(uVar8,cVar4) & 0xff7f);
+@@ -946,29 +959,29 @@
+   }
+ LAB_0000_04ac:
+   LOCK();
+-  pcVar2 = (char *)((byte)(*(char *)0x5f << 1 | *(char *)0x5f < '\0') + 0x60);
++  pcVar2 = (char *)(C + (byte)(*(char *)(C + 0x5f) << 1 | (char)C[0x5f] < '\0') + 0x60);
+   cVar3 = *pcVar2;
+   *pcVar2 = cVar4;
+   UNLOCK();
+   iVar5 = (int)cVar3;
+-  if (*(char *)(iVar5 + 0x68) != '\0') {
+-    pcVar2 = (char *)(iVar5 + 0x68);
++  if (*(char *)(C + iVar5 + 0x68) != '\0') {
++    pcVar2 = (char *)(C + iVar5 + 0x68);
+     *pcVar2 = *pcVar2 + -1;
+     if (*pcVar2 == '\0') {
+-      pbVar1 = (byte *)(CONCAT11(cVar3 >> 7,*(undefined1 *)(iVar5 + 0x70)) * 4 + _DAT_2000_bf8e + 2)
++      pbVar1 = (byte *)(CONCAT11(cVar3 >> 7,*(undefined1 *)(C + iVar5 + 0x70)) * 4 + (uintptr_t)VT + 2)
+       ;
+       *pbVar1 = *pbVar1 & 0xbf;
+     }
+   }
+   return;
+ code_r0x0000042b:
+-  if (cVar4 == *(char *)(iVar6 + 0x6f)) goto code_r0x00000431;
++  if (cVar4 == *(char *)(C + iVar6 + 0x6f)) goto code_r0x00000431;
+   goto LAB_0000_0428;
+ code_r0x00000431:
+-  *(char *)(iVar6 + 0x67) = *(char *)(iVar6 + 0x67) + '\x01';
++  *(char *)(C + iVar6 + 0x67) = *(char *)(C + iVar6 + 0x67) + '\x01';
+ LAB_0000_044b:
+   cVar4 = (char)iVar5;
+-  puVar7 = (undefined2 *)((param_1 & 0xff) * 4 + _DAT_2000_bf8e);
++  puVar7 = (undefined2 *)((uintptr_t)VT + (param_1 & 0xff) * 4);
+   *(byte *)(puVar7 + 1) = *(byte *)(puVar7 + 1) | 0x60;
+   pbVar1 = (byte *)(puVar7 + 1);
+   *pbVar1 = *pbVar1 | 0x20;
+@@ -980,7 +993,7 @@
+   else {
+     FUN_0000_0415(cVar4);
+   }
+-  cVar3 = *(char *)0x5f;
++  cVar3 = *(char *)(C + 0x5f);
+   uVar8 = (undefined1)((uint)puVar7 >> 8);
+   if (cVar3 < '\0') {
+     FUN_0000_1e13(*puVar7,param_2,param_3,CONCAT11(uVar8,cVar3) & 0xff7f);
+@@ -1035,7 +1048,9 @@
+ void __allregs FUN_0000_0579(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_2000_bb7c)))();
++  /* PATCH 356: SS=DGROUP rebase -- `lcall [ss:0xec]` is the device method far-vector at DGROUP:0xec
++     (Ghidra rendered it at the bogus SS=0x2ba9 base 0x2bb7c). */
++  (*(code *)fist_icall_far(*(uint32_t*)(g_mem+0x1c0ec)))();
+   return;
+ }
+ 

@@ -429,6 +429,7 @@ void fist_timer_pump(void){
         ((int(*)(int,int,int,int,int,int,int,int,int,int))fn)(0,0,0,0,0,0,0,0,0,0);
         g_in_isr = 0;
         g_isr_runs++;
+        { extern void fist_snd_isr_tick(void); fist_snd_isr_tick(); } /* drive the SOUNDDVR timer-ISR music sequencer (FIST_SB) */
         { extern void fist_opl_tick(void); fist_opl_tick(); }   /* advance OPL FM by one PIT period */
         { extern void fist_queue_check(const char*); fist_queue_check("post-isr"); }
     }

@@ -113,6 +113,20 @@ void fist_snd_107a(void)
     if (sbtrace()) fprintf(stderr,"[snd] 107a: sound timer-ISR registered @ %04x:%04x\n", g_snd_isr_seg, g_snd_isr_off);
 }
 
+/* Drive the driver TIMER-ISR sequencer (SOUNDDVR body @ cs:0x3dd = fist_snd_base+0x3dd) once per engine
+ * INT-8 (PIT) tick.  We ARE the extender/PIT layer (107a chained the driver ISR into INT 8), so the
+ * faithful equivalent of the hardware timer firing is to invoke the driver ISR body each tick.  The ISR
+ * self-gates on the arm word DGROUP:0x23e==2 and the note-descriptor table DGROUP:0x4fe (both engine/
+ * device-object state) so this is behaviour-neutral until the sound system is armed.  Entry = 0x3dd (the
+ * body); 0x3d6 is the ljmp-to-old-handler chain slot, not the entry. */
+void fist_snd_isr_tick(void)
+{
+    extern int fist_opl_enabled(void);
+    if (!g_snd_isr_seg || !fist_opl_enabled()) return;
+    code *fn = fist_icall(fist_snd_base + 0x3ddu);
+    if (fn) ((int(*)(int,int,int,int,int,int,int,int,int,int))fn)(0,0,0,0,0,0,0,0,0,0);
+}
+
 /* SB DSP base port (default 0x220; the ports 0x2x0..0x2xF window).  The engine derives the base from
  * SOUND.CFG; we accept the whole 0x220-0x22F window and additionally 0x210-0x260 so any configured base
  * is trapped.  (The exact SOUND.CFG->base decode is documented in docs/audio.md but is NOT load-bearing
