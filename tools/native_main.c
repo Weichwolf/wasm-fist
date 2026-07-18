@@ -1280,6 +1280,14 @@ int fist_extender_gate(void) {
             uint8_t  h  = hm[(((ty & mask) << detail) + (tx & mask)) & 0x3fffff];
             *(int32_t*)(tcb+0x34) = (h << 8) + 1792;   /* FIST_EYE_HT = 7<<8 (oracle spawn alt 12800) */
         }
+        /* CAMERA FOCAL (TCB+0x3e): 85d0's divisor `DAT_90c0 = 0xffffffff / word[TCB+0x3e]` (+ _DAT_90c8 =
+         * the raw value).  The absent 32-bit-PM flight model writes it each frame; the port's static images
+         * leave it 0 -> integer divide-by-zero SIGFPE in the extender windshield render (residual #2, the
+         * degenerate camera).  A GUARD (d=1) only fixes the reciprocal -> _DAT_90c8 stays 0 -> AE=126; the
+         * oracle-anchored spawn value is 256 (== the FIST_MISSFB_RENDER seed above, docs/mission_cockpit.md
+         * camera) which fixes BOTH.  Unconditional on the op-0x24 in-mission render path -- never reached by
+         * the 35 front-end verify flows (they never post op-0x24), so behaviour-neutral for them. */
+        if (*(uint16_t*)(tcb+0x3e) == 0) *(uint16_t*)(tcb+0x3e) = 256;
         /* CAMERA PITCH/ROLL bridge (the render camera's ATTITUDE, TCB+0x3a/+0x3c).
          * 8120 reads +0x3a (pitch) -> 90e8 and +0x3c (roll) -> 90e4, i.e. the horizon tilt/
          * height of the perspective projection.  The absent 32-bit-PM flight model writes them
