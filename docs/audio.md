@@ -1,6 +1,71 @@
-# AUDIO subsystem — recon + shim foundation (iterations 1–9)
+# AUDIO subsystem — recon + shim foundation (iterations 1–11)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
+
+## 17. Iteration 11 — the ARM-GATE PRODUCER (FUN_1000_1042) is reconstructed + driven; the arm RUNTIME-REACHES 2 and the ISR runs every tick (iter-9's "extender-resident arm" DEFINITIVELY refuted at runtime). HONEST: still no music — the sequencer is armed+driven but NOT FED (2026-07-18)
+
+**HEADLINE: patch 357 recovers the sound-sequencer ARM-GATE PRODUCER `FUN_1000_1042` (asm 0x11042,
+`push ss;pop ds; incb [ss:0x23e]`) — Ghidra had base-lost it to `DAT_2000_bcce++` (the bogus SS=0x2ba9
+context).  The shim drives it per sound-tick, so the arm word DGROUP:0x23e now RUNTIME-REACHES 2 and the
+SOUNDDVR timer-ISR (0x3dd, patch 356) runs its 7-voice scan every tick (538550 runs vs 0 before).  This
+RUNTIME-PROVES §16's recon and closes iter-9's "the arm is extender-resident" fear: the arm IS
+engine-resident and reachable via 1042.  BUT the menu music still does NOT play — the sequencer is now
+ARMED + DRIVEN but never FED with notes (proven below).  Port WAV peak 330 (oracle 6714); wavcompare
+MISMATCH, xcorr 0.  NO fabricated audio.**
+
+**WHAT LANDED (patch 357 + shim; the 4 hard-pristine md5s UNCHANGED
+`61453e42`/`0051cb56`/`75c6d726`/`e6d610c5`):**
+- **Patch 357 — `FUN_1000_1042` reconstructed** (asm-verified vs `re_out/fist_dat_image.bin`): rebase the
+  `incb` target from `DAT_2000_bcce` (linear 0x2bcce) to the real arm word low byte DGROUP:0x23e = linear
+  0x1c23e; CF=1 on byte overflow.  Producer/consumer semaphore: the ISR `cmpw ss:0x23e,2` gates its scan,
+  `decw` (0x40d) drops 2→1 only when a voice is active; 1042 bumps 1→2.  The fn IS in the engine fmap and
+  dispatched indirectly by a sound-service vector, but the port never reaches that dispatch → the shim
+  drives it (we own the PIT).  **INERT on the default boot** (never called → mainmenu byte-identical).
+- **Shim (`re_out/fist_sb.c` `fist_snd_isr_tick`, FIST_SB/OPL-gated):** (a) one-time faithful voice-slot
+  init `cs:0x60..0x66 = 0xff` (exactly the driver device-config 0x252 does at 0x272; that config path is
+  unreached, so the ISR's scan would otherwise read uninit 0 as "note 0 active") — SAFE: with slots free
+  the scan is a no-op; (b) drive `FUN_1000_1042` (via `fist_icall(0x11042)`) to pin the arm at 2 each tick.
+  `FIST_SND_DIAG` diagnostic added (sequencer-fed snapshot).
+
+**RUNTIME-PROVEN (native, setarch -R, FIST_SB=1, `FIST_SND_DIAG`):**
+`[snd-diag] arm-bumps=2 isr-runs=538550 max-arm=2 voice-active-hits=0 note-table[0x4fe]=0x0000`.
+The arm reaches 2 (was 0 forever); the ISR runs every tick; but **NO voice is ever activated and the
+note-table DGROUP:0x4fe stays 0** → the sequencer is not fed.
+
+**THE EXACT REMAINING BLOCKER (asm-mapped this iteration — the menu music is a device-3 OPL note stream
+that key-ons WITHOUT fnums):**
+- The engine posts **42 device-3 note events over time** (`0966→0997`/`+0x10e3`, calltrace: spread from
+  the first tick to ~63% of the run — a MELODY, not init).  They dispatch the key-on method `0x10e3`
+  (writes B0|0x20 key-on + the level 0x40 reg) but produce **ZERO A0 (fnum-lo) writes and no fnum** →
+  every note keys on at fnum 0 → near-silent (peak 330).
+- **Root: the FREQUENCY method `0x10a6` (device-3 slot4, writes A0 from the fnum table `cs:0x9dd[note*2]`
+  + B0 fnum-hi/block) is NEVER CALLED on the note path** (calltrace: 0 hits).  10a6 is dispatched by the
+  per-tick VOICE-ENVELOPE ADVANCE loop at driver `0xa3a` (`call *ds:0x1b3`), which walks each voice's
+  note-stream pointer `[voice+0x90]` (set by `0cfb` from table `cs:0x15b4[note*2]`), computes the current
+  note, and reprograms the fnum when it changes.  That advance loop is not reached for the posted voices:
+  the note-on registers a device-3 voice (`driver_ds:0x107/0x111`) but the per-voice envelope-stream
+  advance (`0xa3a` → 10a6) never runs for it → no fnum.
+- **Two interleaved voice systems (now disambiguated):** (1) the ISR `0x3dd`/cs:0x60 sequencer (arm-gated,
+  note-table DGROUP:0x4fe, note-on `0419(real-note)`) — armed+driven this iteration but its cs:0x60 voices
+  need the SONG DRIVER that calls `0419(real-note)` (the ONLY caller of 0419 is the ISR itself with
+  al=0xff/release → no note-on source reached); (2) the device-3 direct voices
+  (`driver_ds:0x107/0x90/0xcc`, per-tick advance `0xa3a`, fnum `10a6`) fed by the engine's 42 note-posts.
+  The 42 posts are system (2); their silence is the uncalled `10a6`/`0xa3a` fnum advance.
+
+**NEXT ITERATION (make music play — the fnum path is the tractable lead):** drive the device-3 per-tick
+voice-envelope advance `0xa3a` (→ `10a6` fnum → A0/B0) for the posted voices — determine its real per-tick
+caller (is it reached via the ISR `0419→0579` device far-vector once a cs:0x60 voice exists, or a separate
+device service?) and rebase/thread it so the 42 posted notes program real fnums; then the melody keys on
+with pitch → OPL → PCM.  In parallel, locate the cs:0x60 SONG driver (the `0419(real-note)` caller /
+note-table 0x4fe population) for the ISR-sequencer path.  Both are device-3 driver base-losses of the
+same class as patches 353/354.
+
+**No-regression (VERIFIED both targets):** `make check` = all 356 patches apply; native mainmenu/about/
+settings/battles/selplayer AE=0, wasm mainmenu AE=0, **native↔wasm 0-diff (md5 `3a6ff1c5`)**; default boot
+rc=0.  4 hard-pristine md5s unchanged; all additions FIST_SB/OPL-gated (default OFF → the 26 video flows
+byte-identical by construction; patch 357 is inert unless the shim drives 1042).  **HONEST: no menu music
+on either target yet — the arm is recovered + the ISR is driven, but the note-fnum feed is the next
+blocker.  WAV peak 330 vs oracle 6714 = MISMATCH.**
 
 ## 16. Iteration 10 (READ-ONLY RECON, decisive tractability gate) — VERDICT: menu-music sequencer is **RECOVERABLE**, NOT extender-paged. Iter-9's "arm is extender-resident" is REFUTED (2026-07-18)
 

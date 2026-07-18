@@ -119,12 +119,59 @@ void fist_snd_107a(void)
  * self-gates on the arm word DGROUP:0x23e==2 and the note-descriptor table DGROUP:0x4fe (both engine/
  * device-object state) so this is behaviour-neutral until the sound system is armed.  Entry = 0x3dd (the
  * body); 0x3d6 is the ljmp-to-old-handler chain slot, not the entry. */
+unsigned g_snd_arm_bumps;                 /* diagnostic: how many arm-producer bumps we issued */
 void fist_snd_isr_tick(void)
 {
     extern int fist_opl_enabled(void);
     if (!g_snd_isr_seg || !fist_opl_enabled()) return;
+
+    /* One-time faithful voice-slot init (the driver device-config 0x252 does exactly this at 0x272:
+     * `mov al,0xff; mov bx,6; cs:0x60(bx)=al` -> cs:0x60..0x66 = 0xff = "voice free").  That config
+     * path is unreached in the port, so the ISR's 7-voice scan would otherwise read uninitialised 0 as
+     * "note 0 active" and dispatch spurious releases.  With the slots free the scan is a safe no-op
+     * until a real note-on populates a slot. */
+    static int voices_init = 0;
+    if (!voices_init) {
+        unsigned long dsb = fist_snd_base;              /* driver load base (linear); cs = base>>4 */
+        for (int i = 0; i <= 6; i++) g_mem[dsb + 0x60 + i] = 0xff;
+        voices_init = 1;
+    }
+
+    /* Drive the ARM-GATE PRODUCER (FUN_1000_1042, patch 357) so the arm word DGROUP:0x23e reaches 2 --
+     * the consumer (the ISR) requires exactly 2 to run its scan and drops it to 1 only when a voice is
+     * active.  We keep it pinned at 2 each tick (the sound-service dispatcher's cadence, which the port
+     * never reaches; we own the PIT).  Bump only while < 2 so it cannot overshoot past 2 and stall. */
+    {
+        code *arm = fist_icall(0x11042u);
+        int guard = 4;
+        while (arm && g_mem[0x1c23e] < 2 && guard-- > 0) {
+            ((void(*)(void))arm)();
+            g_snd_arm_bumps++;
+        }
+    }
+
     code *fn = fist_icall(fist_snd_base + 0x3ddu);
     if (fn) ((int(*)(int,int,int,int,int,int,int,int,int,int))fn)(0,0,0,0,0,0,0,0,0,0);
+
+    /* diagnostic snapshot of the sequencer state (FIST_SND_DIAG): max arm reached, any voice active,
+     * note-table offset populated?  Answers "is the sequencer FED?" without gdb. */
+    {
+        extern unsigned g_snd_seq_maxarm, g_snd_seq_active, g_snd_seq_isrruns;
+        g_snd_seq_isrruns++;
+        unsigned char arm = g_mem[0x1c23e];
+        if (arm > g_snd_seq_maxarm) g_snd_seq_maxarm = arm;
+        unsigned long dsb = fist_snd_base;
+        for (int i = 0; i <= 6; i++) if (g_mem[dsb + 0x60 + i] != 0xff) g_snd_seq_active++;
+    }
+}
+unsigned g_snd_seq_maxarm, g_snd_seq_active, g_snd_seq_isrruns;
+void fist_snd_diag(void)
+{
+    if (!getenv("FIST_SND_DIAG")) return;
+    fprintf(stderr, "[snd-diag] arm-bumps=%u isr-runs=%u max-arm=%u voice-active-hits=%u "
+            "note-table[0x4fe]=0x%04x\n",
+            g_snd_arm_bumps, g_snd_seq_isrruns, g_snd_seq_maxarm, g_snd_seq_active,
+            *(unsigned short*)(g_mem + 0x1c4fe));
 }
 
 /* SB DSP base port (default 0x220; the ports 0x2x0..0x2xF window).  The engine derives the base from

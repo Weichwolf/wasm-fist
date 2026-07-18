@@ -259,6 +259,7 @@ static void fist_dump_and_exit(const char *why){
             why, fist_vga_mode(), *(uint16_t*)(g_mem+0x1c452));
             { extern void fist_sb_flush(void); fist_sb_flush(); }   /* finalize any SB PCM/WAV capture */
             { extern void fist_opl_flush(void); fist_opl_flush(); } /* finalize any OPL FM PCM/WAV capture */
+            { extern void fist_snd_diag(void); fist_snd_diag(); }   /* sequencer-fed diagnostic */
             const char *fb = getenv("FIST_FBDUMP");
             if (fb) fist_dump_framebuffer(fb);
             { const char *rw = getenv("FIST_FBRAW");

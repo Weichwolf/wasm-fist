@@ -1,0 +1,47 @@
+SOUND-SEQUENCER ARM-GATE PRODUCER (FUN_1000_1042, asm 0x11042) reconstructed.
+
+The menu-music sequencer is gated by a producer/consumer SEMAPHORE at the arm word DGROUP:0x23e:
+the SOUNDDVR timer-ISR (driver 0x3dd, patch 356) runs its 7-voice scan only while `cmpw ss:0x23e,2`
+holds, and `decw ss:0x23e` (0x40d) drops it 2->1 each pass.  FUN_1000_1042 is the PRODUCER that bumps
+it back toward 2 (`incb [ss:0x23e]`, SS=DGROUP=0x1c00).
+
+Ghidra base-lost the byte target to `DAT_2000_bcce` (the bogus SS=0x2ba9 segment context, the
+patch-356 class): 0x2bcce instead of the real DGROUP:0x23e = linear 0x1c23e.  The function IS live in
+the engine fmap ({0x11042u,&FUN_1000_1042}) and is dispatched indirectly by a sound-service vector, but
+the port never reaches that dispatch, so the shim drives it per sound-tick (fist_sb.c fist_snd_isr_tick)
+-- the faithful hardware-timer equivalent (we own the PIT/INT-8 layer).
+
+asm-verified vs re_out/fist_dat_image.bin:
+  11042: push ds
+  11043: push ss ; pop ds          ; ds = ss = DGROUP
+  11045: incb [0x23e]              ; ++byte[DGROUP:0x23e]
+  11049: je 0x11056                ; overflow (was 0xff -> 0): stc; pop ds; ret
+  ... (the 0x1104b nop/jmp/mov bx,bx/jb dead tail never loops -- incb sets no CF)
+  11054: pop ds ; ret             ; CF=0 success
+Net: `if (++byte[0x23e] == 0) CF=1 else CF=0`.  The caller (the sound-service dispatcher) discards CF;
+we publish it to g_fist_cf for faithfulness.
+
+--- a/fist.c
++++ b/fist.c
+@@ -39307,14 +39307,13 @@
+ void __allregs FUN_1000_1042(void)
+ 
+ {
+-  bool in_CF;
+-  
+-  do {
+-    DAT_2000_bcce = DAT_2000_bcce + '\x01';
+-    if (DAT_2000_bcce == '\0') {
+-      return;
+-    }
+-  } while (in_CF);
++  /* PATCH 357: the sound-sequencer ARM-GATE PRODUCER (asm 0x11042: push ss;pop ds; incb [ss:0x23e]).
++     SS=DS=DGROUP(0x1c00); Ghidra base-lost the byte target to DAT_2000_bcce (bogus SS=0x2ba9 context).
++     Real target = the arm word's low byte at DGROUP:0x23e = linear 0x1c23e.  CF=1 on byte overflow. */
++  extern unsigned char g_mem[]; extern unsigned char g_fist_cf;
++  unsigned char v = (unsigned char)(g_mem[0x1c23e] + 1);
++  g_mem[0x1c23e] = v;
++  g_fist_cf = (unsigned char)(v == 0);
+   return;
+ }
+ 
