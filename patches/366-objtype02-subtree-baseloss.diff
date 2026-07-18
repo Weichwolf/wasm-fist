@@ -7,7 +7,7 @@ re_out/fist_dat_image.bin.  MISSION-PATH ONLY -> no menu/settings/intro/editor r
 via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix reveals the next member).
 
 --- a/fist.c	2026-07-18 19:42:50.739294331 +0200
-+++ b/fist.c	2026-07-18 21:56:47.818209507 +0200
++++ b/fist.c	2026-07-18 22:09:06.159295131 +0200
 @@ -22993,9 +22993,11 @@
  void __allregs FUN_0000_90c0(int param_1)
  
@@ -84,7 +84,7 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
    FUN_0000_ad3b(param_1);
    return;
  }
-@@ -27245,15 +27258,21 @@
+@@ -27245,15 +27258,23 @@
  void __allregs FUN_0000_ae32(undefined4 param_1,int param_2)
  
  {
@@ -97,12 +97,14 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
 -    if (bVar1 <= *(byte *)(*DAT_2000_5796 + -0x66b6)) {
 -      FUN_0000_a6e3(*(undefined2 *)(param_2 + 0x9d),CONCAT22(uVar2,*DAT_2000_5796),param_2);
 -      *(uint *)(param_2 + 0x40) = *(uint *)(param_2 + 0x40) | 0x80;
-+  /* PATCH 366: param_2=di=near offset; asm 0xae32 fire-check.  Rebase [di+0x94]/[di+0x97](WORD)/
-+   * [di+0x9d]/[di+0x40](WORD orw); the ammo-threshold chain si=word[0x9796]; bx=word[si];
-+   * byte[bx+0x994a] is all DGROUP near-offset (Ghidra derefed the near-offsets as host ptrs). */
++  /* PATCH 366 (fixed): ab03 dispatches ae32 SINGLE-ARG `(...)((int)di)` -> the object is param_1 (di=near
++   * offset); param_2 is leftover stack garbage (== ae32's own code offset 0xae32 -- the false-green tell).
++   * Rebase [di+0x94]/[di+0x97](WORD)/[di+0x9d]/[di+0x40](WORD orw) on param_1; ammo chain si=word[0x9796];
++   * bx=word[si]; byte[bx+0x994a].  a6e3 gets the object di=param_1. */
 +  unsigned char *dg = g_mem + 0x1c000;
-+  unsigned short off = (unsigned short)param_2;
-+  undefined2 uVar2 = (undefined2)((unsigned long)param_1 >> 0x10);
++  (void)param_2;
++  unsigned short off = (unsigned short)param_1;
++  undefined2 uVar2 = 0;
 +  if (dg[(unsigned short)(off + 0x94)] != 0 &&
 +      *(unsigned short *)(dg + (unsigned short)(off + 0x97)) == 0) {
 +    unsigned char bVar1 = FUN_0000_0291();
@@ -110,12 +112,12 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
 +    unsigned short bx = *(unsigned short *)(dg + si);
 +    if (bVar1 <= dg[(unsigned short)(bx + 0x994a)]) {
 +      FUN_0000_a6e3(*(unsigned short *)(dg + (unsigned short)(off + 0x9d)),
-+                    (undefined4)CONCAT22(uVar2, bx), param_2);
++                    (undefined4)CONCAT22(uVar2, bx), (int)off);
 +      *(unsigned short *)(dg + (unsigned short)(off + 0x40)) |= 0x80;
      }
    }
    return;
-@@ -27265,10 +27284,13 @@
+@@ -27265,10 +27286,13 @@
  void __allregs FUN_0000_ae5c(int *param_1)
  
  {
@@ -133,7 +135,7 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
    return;
  }
  
-@@ -27278,7 +27300,12 @@
+@@ -27278,7 +27302,12 @@
  void __allregs FUN_0000_ae66(int param_1)
  
  {
@@ -147,7 +149,7 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
    return;
  }
  
-@@ -27319,24 +27346,23 @@
+@@ -27319,24 +27348,23 @@
  void __allregs FUN_0000_ae7b(int param_1)
  
  {
@@ -189,7 +191,7 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
    return;
  }
  
-@@ -27481,31 +27507,12 @@
+@@ -27481,31 +27509,12 @@
  void __allregs FUN_0000_af97(int *param_1)
  
  {
@@ -227,7 +229,7 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
    return;
  }
  
-@@ -27515,26 +27522,30 @@
+@@ -27515,26 +27524,30 @@
  void __allregs FUN_0000_afa2(int *param_1)
  
  {
@@ -277,7 +279,7 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
      }
    }
    return;
-@@ -27558,21 +27569,17 @@
+@@ -27558,21 +27571,17 @@
  void __allregs FUN_0000_b017(int param_1)
  
  {
@@ -308,7 +310,7 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
      }
    }
    return;
-@@ -27628,27 +27635,21 @@
+@@ -27628,27 +27637,21 @@
  void __allregs FUN_0000_b0be(int param_1)
  
  {
@@ -350,7 +352,7 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
      FUN_1000_9dd2(param_1);
    }
    return;
-@@ -57305,30 +57306,35 @@
+@@ -57305,30 +57308,35 @@
  void __allregs FUN_1000_87cc(int param_1)
  
  {
@@ -408,7 +410,7 @@ via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix re
    return;
  }
  
-@@ -57726,25 +57732,28 @@
+@@ -57726,25 +57734,28 @@
  undefined4 __allregs FUN_1000_8b7c(byte param_1,int param_2)
  
  {
