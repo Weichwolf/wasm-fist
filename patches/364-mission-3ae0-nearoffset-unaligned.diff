@@ -1,0 +1,39 @@
+PATCH 364: the wasm mission op-0x50 render blocker -- FUN_0000_5c7c's DAT_2000_3ae0 near-offset extraction
+is g_mem-alignment-dependent (asm-verified vs re_out/fist_dat_image.bin @ 0x5d43 `mov di,[0x7ae0]`).
+
+DAT_2000_3ae0 (DGROUP:0x7ae0) is the player-vehicle node.  The original stores a 16-bit NEAR OFFSET there
+(`mov di,[0x7ae0]`); patch 300 models it as a HOST POINTER (so its ~10 direct-deref readers work without
+rebasing) and extracts the near offset for the cockpit-DL-base seed via `(uint16_t)(uintptr_t)DAT_2000_3ae0`.
+That truncation equals the true DGROUP offset ONLY when g_mem is 64KB-aligned -- true on native (-no-pie),
+FALSE on wasm.  So on wasm the extracted offset is low16(host_ptr) = 0x86f9 (vs the correct 0xc05c on
+native) -> FUN_0000_466c seeds cx=0x86f9 -> FUN_0000_7740 passes base cx+0xbf=0x87b8 to FUN_0000_1cdb(0x2c7f)
+-> DAT_1000_fafe (the display-walk base) = 0x87b8 (corrupt) -> the FUN_0000_20d6/20ea recursive child-walk
+reads childhi=word[DGROUP:corrupt] = a huge value -> the cursor bx runs into the 0x9000 region -> wild
+method dispatch -> the view-mode word DAT_2000_2d2c stays 0x3a3 -> FUN_0000_c584 spins the extender op-0x50
+projection loop ~1247x -> recursive FUN_0000_2486 stack overflow.  (Native renders because low16 == offset;
+wasm cannot because g_mem isn't 64KB-aligned.)
+
+FIX (target-independent, faithful to patch 300's host-pointer model): extract the near offset by SUBTRACTING
+the DGROUP base -- (uint16_t)((uint8_t*)DAT_2000_3ae0 - (g_mem+0x1c000)) -- instead of truncating the host
+pointer.  This yields the true DGROUP offset on BOTH targets regardless of g_mem alignment.  Applies to the
+two near-offset extraction sites patch 300 introduced (the 5d43 vehicle check + the 44be cockpit-build call);
+the direct-deref readers keep using DAT_2000_3ae0 as a host pointer unchanged.  MISSION-PATH ONLY (5c7c is
+only reached in the in-mission cockpit build) -> behaviour-neutral for the 28 menu/settings/intro/editor flows.
+--- a/fist.c	2026-07-18 21:20:36.760588561 +0200
++++ b/fist.c	2026-07-18 21:21:01.284620308 +0200
+@@ -16520,13 +16520,13 @@
+   else {
+     /* PATCH 300: DAT_2000_3ae0 holds the player-vehicle NEAR OFFSET (DS=DGROUP=0x1c00),
+        asm 0x5d43 `mov di,[0x7ae0]; cmp [di],3; test [di+0x16],1/8` -> rebase g_mem+0x1c000+off. */
+-    puVeh = (uint *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)DAT_2000_3ae0);
++    puVeh = (uint *)(g_mem + 0x1c000 + (uint16_t)((uint8_t *)DAT_2000_3ae0 - (g_mem + 0x1c000)));  /* PATCH 364 */
+     if ((3 < *puVeh) || ((puVeh[0xb] & 1) != 0)) goto LAB_0000_5d7c;
+     if ((puVeh[0xb] & 8) == 0) {
+       DAT_2000_2dab = 0;
+       DAT_2000_3ae9 = 0;
+       DAT_2000_3b1e = 0;
+-      FUN_0000_44be((int)(uintptr_t)DAT_2000_3ae0);
++      FUN_0000_44be((int)(uint16_t)((uint8_t *)DAT_2000_3ae0 - (g_mem + 0x1c000)));  /* PATCH 364 */
+       return;
+     }
+     uVar1 = 0xd0c;
