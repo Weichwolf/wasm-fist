@@ -1,0 +1,61 @@
+SOUNDDVR.DVR device-config method (asm 0x14e): rebase the two method-vector SECTION installs to the
+faithful reloc appliers (the crash after patch 347 dispatches the device-select).
+
+FUN_0000_014e is the driver's device-config method reached on the menu via bdcc -> DGROUP:0x508 (section
+A, FIST_SB-gated).  Asm-verified vs re_out/fist_snd_image.bin offset 0x14e:
+
+    14e: cmp al,'N'; je 0x199 (retf)              ; no-device -> nothing
+    152: push ds; push ax
+    154: mov ax,cs; mov es,ax; mov bx,0x1cd
+    15b: lcall [ds:0x43e]                         ; register driver callback cs:0x1cd (engine DGROUP:0x43e)
+    15f: pop ax
+    160..17c: map device letter -> code (I=1,T=2,A=3,C=3,R=4, else 0)
+    17e: mov al,ah; mov ah,0x30
+    182: push cs; call 0x833                      ; 0833(0x30|code) = device-select dispatch
+    186: pop ds
+    187: mov bx,cs; mov si,0x22; lcall [ds:0x12]   ; install method-vector section snd_seg:0x22 (f842 FAR)
+    190: mov bx,cs; mov si,0x4e; lcall [ds:0x26]   ; install method-vector section snd_seg:0x4e (f8d2)
+    199: retf
+
+Ghidra dropped the FAR service dispatch: the `lcall [ds:0x12]`/`[ds:0x26]` (engine DGROUP service
+appliers 0xf842 / 0xf8d2, both in seg 0xf69) were rendered as NEAR host-absolute derefs of module
+offsets 0x12/0x26 -> `*(undefined2 *)0x12` = SIGSEGV fault-addr 0x12 (setarch -R + FIST_SB repro).  The
+real calls install the driver's own method-vector reloc sections (leading seg word = the relocated driver
+load seg + (off,val) pairs) into the engine DGROUP, with bx=cs=driver load seg.  Service 0x12 (f842) is
+the plain FAR applier; service 0x26 (f8d2) is a SAVE+install applier that additionally copies the old
+DGROUP words back into the section for later restore (via the 019a stop path [ds:0x16]/[ds:0x2a], NOT
+reached on the play path).  Both have the identical INSTALL effect DGROUP[off]=val / DGROUP[off+2]=seg,
+modelled faithfully via fist_apply_reloc_at(driver_seg, si, is_far=1) -- the same loader-shim applier the
+MGAVIDEO driver init uses (patch 035/052) and the sound init 0078 uses for section A (patch 344).  The
+f8d2 save-back is documented-omitted (its only consumer, the stop-sound restore, is downstream).
+
+Gated behind fist_sb_enabled(): the whole method is FIST_SB-reachable-only (DGROUP:0x508 stays 0 on the
+default boot), and the section installs mutate shared DGROUP state, so the guard is belt-and-suspenders
+-> the 26 video flows stay byte-identical.  Asm-verified vs re_out/fist_snd_image.bin offset 0x14e.
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -538,8 +538,22 @@
+       }
+     }
+     FUN_0000_0833(CONCAT11(0x30,uVar1),param_2,extraout_DX,uVar2);
+-    (*(code *)fist_icall(fist_snd_base+0x0u+(uint16_t)(*(undefined2 *)0x12)))();
+-    (*(code *)fist_icall(fist_snd_base+0x0u+(uint16_t)(*(undefined2 *)0x26)))();
++    /* asm 0x187/0x190: mov bx,cs; mov si,0x22; lcall [ds:0x12]  (f842 FAR applier)
++     *                  mov bx,cs; mov si,0x4e; lcall [ds:0x26]  (f8d2 save+install applier)
++     * both install the driver's method-vector sections snd_seg:0x22 / snd_seg:0x4e into the engine
++     * DGROUP (bx=cs=driver load seg).  Ghidra rendered them as near host-absolute derefs of 0x12/0x26
++     * (SIGSEGV fault-addr 0x12).  The install effect is identical to fist_apply_reloc_at(is_far=1);
++     * f8d2 additionally saves the old DGROUP words back into the section for later restore (via the
++     * 019a stop path [ds:0x16]/[ds:0x2a], not reached on the play path -- documented in docs/audio.md). */
++    {
++      extern int fist_sb_enabled(void);
++      extern int fist_apply_reloc_at(unsigned short,unsigned short,int);
++      if (fist_sb_enabled()) {
++        uint16_t snd_seg = (uint16_t)(fist_snd_base >> 4);
++        fist_apply_reloc_at(snd_seg, 0x22, 1);
++        fist_apply_reloc_at(snd_seg, 0x4e, 1);
++      }
++    }
+   }
+   return;
+ }

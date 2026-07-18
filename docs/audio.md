@@ -1,11 +1,80 @@
-# AUDIO subsystem — recon + shim foundation (iterations 1–4)
+# AUDIO subsystem — recon + shim foundation (iterations 1–5)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
-This is a multi-iteration subsystem. Iter 4 (§10) LANDED the foundational MEMMGR+reloc fix that iter 3
-had mapped but could not land: the engine signature is preserved, the object pools are built, and the
-device-registration guard now PASSES — crash-free and NO-REGRESSION to the 26 video flows on both targets.
-No PCM yet: the newly-live registration dispatches into the base-lost SOUNDDVR driver play methods, the
-next (gated) frontier.
+This is a multi-iteration subsystem. Iter 5 (§11) advanced the SOUNDDVR driver dispatch two methods
+deeper under FIST_SB (the device-config method 014e + its dispatcher 0833 are asm-exactly reconstructed;
+the menu SIGSEGV moves from 0833 to the sound-source REGISTER method 0af4) — crash-free and NO-REGRESSION
+to the 26 video flows on both targets. Still no PCM: the register path 0af4 needs an engine-side DROPPED
+SEGMENT (ES = the sound-descriptor source seg) and the device-select + SB device methods are not in the
+driver fmap. The exact remaining chain to the SB `out()` is mapped below.
+
+## 11. Iteration 5 — SOUNDDVR device-config dispatch reconstructed; frontier = the register-path ES drop + un-decompiled device methods (2026-07-18)
+
+**Landed (patches 347/348, FIST_SB-gated → the 26 video flows stay byte-identical; 4 pristine md5s
+unchanged 61453e42/0051cb56/75c6d726/abcafc9d; mainmenu AE=0 native+wasm, native↔wasm md5 `3a6ff1c5`):**
+
+- **Patch 347 — `FUN_0000_0833` (the driver's device-METHOD DISPATCHER, asm 0x833) rebased to the driver's
+  OWN data segment.**  This is the exact SIGSEGV iter-4 named (`cae6→bdcc→DGROUP:0x508→014e→0833`,
+  fault-addr 0x121).  Asm 0x833: `push …; mov ds,cs:[0x831]` (DS = the DRIVER data seg — the word at code
+  offset **0x831 is an MZ reloc site** = load_seg+**0x2a5**, so `DAT_0000_0831<<4` is the driver-data
+  linear base into g_mem); `mov ds:[0x12],ax` (WORD store of the command word); `bl=(ah>>3)&0xfe`;
+  `cx=ds:[bx+0x11b]` (the STATIC method-vector table at driver_ds:0x11b — idx 6 = 0x0872 device-select for
+  the 0x30 command from 014e; idx 0x10 = 0x0a14 for the 0x80 command from 00fd); `call cx` (NEAR, driver CS
+  → `fist_snd_base+cx`).  Ghidra rendered the vector read as a HOST-absolute deref of (idx+0x11b)=0x121 and
+  the store as a 32-bit write to the ENGINE DGROUP 0x1c012.  Fixed both (driver-DS base + WORD width).
+
+- **Patch 348 — `FUN_0000_014e` (the device-CONFIG method, asm 0x14e) section installs rebased.**  The two
+  post-dispatch calls `mov bx,cs; mov si,0x22; lcall [ds:0x12]` and `mov si,0x4e; lcall [ds:0x26]` install
+  the driver's own method-vector reloc sections snd_seg:0x22 / snd_seg:0x4e into the engine DGROUP (engine
+  service appliers 0xf842 / 0xf8d2, both seg 0xf69).  Ghidra rendered them as near host-absolute derefs of
+  0x12/0x26 → SIGSEGV fault-addr 0x12.  Modelled faithfully via `fist_apply_reloc_at(driver_seg, si, 1)`
+  (identical INSTALL effect; the f8d2 save-back is documented-omitted — its only consumer is the 019a
+  stop-sound restore, downstream of the play).  **Section 0x22 installs DGROUP:0x50c=019a / 0x510=01ec /
+  0x518=01fd / 0x530=01e7** (leading seg word = the relocated driver load seg); section 0x4e installs
+  DGROUP:0x426.
+
+**Runtime-proven advance (setarch -R + `-ftrivial-auto-var-init=pattern` deterministic repro, FIST_SB=1,
+FIST_SND_CALLTRACE):** the driver dispatch now runs `+0x2`(init) → `+0x245`/`+0x24b` → `+0x14e`(config) →
+`+0x872`(device-select, **fmap MISS → clean no-op**) → `+0x1ec`(sound-source register) before the NEXT
+base-loss.  Previously it SIGSEGV'd at the first (0833).
+
+**FRONTIER — the immediate next blocker `FUN_0000_0af4` (the sound-source REGISTER, asm 0xaf4) is an
+ENGINE→DRIVER DROPPED-SEGMENT base-loss, not a plain driver base-loss.**  Call path: engine
+`FUN_0000_be0e` (asm 0xbe0e) does `xor bx,bx; mov es,ds:[0x9f1c]; call [DGROUP:0x510]` → 01ec → 0af4.  So
+0af4 copies a 0x20-byte sound descriptor from **ES:BX with BX=0 and ES = [engine DGROUP:0x9f1c]** into the
+driver struct (asm 0xb10: `mov si,bx; add si,0x10; mov al,es:[si]; mov [driver_ds:bx+0x20],al` ×0x10, then
++0x2a/+0x34).  TWO drops: (a) the driver-DS base (rebase-able, like 0833/088f) AND (b) **ES — a segment reg
+the `__allregs` model does not thread**; the C `FUN_0000_be0e` dropped both the `xor bx,bx` (→ 0af4 gets a
+garbage BX, hence the pattern-init fault-addr 0x8004) and the `es=[0x9f1c]` source segment.  The faithful
+fix is an ENGINE patch on `be0e` to thread BX=0 + the source segment [DGROUP:0x9f1c] as an explicit arg
+into 01ec/0af4 (the documented `unaff_CS/ES` segment-reg patch class), then a driver-DS rebase of 0af4 —
+deferred as a coherent next-iteration workpackage (it opens engine-side sound-descriptor threading).
+
+**THE FULL REMAINING CHAIN TO THE SB `out()` (asm-mapped this iteration, in order):**
+1. **`be0e`+`0af4`** (above): engine ES/BX thread + 0af4 driver-DS rebase.
+2. **The device-SELECT `FUN_0000_0872` / `088f` (asm 0x872, method vector 0x121) is NOT in the driver
+   fmap** (nor are 0x0a14, 0x0ca9, and the per-device method sets).  0872 reads `ds:0x3e` (current device),
+   on first call (ds:0x3e==0) falls into 0x8c3 (=088f) which selects device `ds:0x12`'s 7 method vectors
+   from the STATIC per-device tables at driver_ds:0x17d..0x1d1 into slots ds:0x17b..0x1cf.  088f (0x8c3) IS
+   partly in the fmap but base-lost (its `*(undefined2*)0x17b` derefs + `DAT_1000_c012`/`c03e`/`c1a5` are
+   driver-DS, rendered host-absolute / engine-DGROUP).  Reconstruct 0872+088f inline (add 0x872 to the
+   fmap array).  **Device index 4 = Sound Blaster** (its method set 0ea8/0dc9/0e7b/0dca/0e13/0e53/0ef5 lives
+   in the DSP region 0xd00-0xf90).
+3. **The SB device-4 methods `0ea8/0e7b/0e13/0e53/0dca` are NOT in the fmap** (0dc9/0ef5 ARE).  They build
+   the DSP command sequences via the in-fmap DSP writer **`FUN_0000_0d49`** (asm 0xd49 = `out dx,al` to the
+   configured SB DSP data port — `fist_sb.c` traps this) + `0d66`/`0d90`.  Reconstruct inline → the first
+   REAL `out(SBbase,…)` fires here → `fist_sb.c` produces PCM.
+4. **The device-register shim helpers `FUN_1000_1917` (DGROUP:0xd4, device work-obj alloc) + `FUN_1000_107a`
+   (DGROUP:0xf4, IRQ register) — UNRECOVERED, approved to reconstruct as loader-shim helpers.**  The init
+   0078 calls both (asm 0xaa/0xb9); they set the device-present state.  The play GATE (doc §9) is bit7 of
+   `DGROUP:0x4fc` checked by `FUN_1000_50e6`; the device register must set it.
+5. **The engine op=6 PLAY trigger inside `FUN_0000_00d0→cae6`** (doc §9: `516f→50e6(0x4fa)→driver +0x6`) —
+   still unlocated; needed to START continuous SB-DMA streaming (bdcc/014e only device-CONFIG, not play).
+
+**No-regression (VERIFIED):** `make check` = all 348 patches apply; default boot mainmenu AE=0 native+wasm,
+native↔wasm 0-diff (md5 `3a6ff1c5`); 4 pristine md5s unchanged.  347/348 are reached only under FIST_SB
+(the DGROUP:0x508 config vector is FIST_SB-installed) → the 26 video flows are byte-identical by
+construction.  `fist_sb.c` + the harness remain ready to stream the moment step 3 fires the DSP `out()`.
 
 ## 10. Iteration 4 — MEMMGR pool-init + near reloc appliers LANDED (crash-free, no-regression) (2026-07-18)
 

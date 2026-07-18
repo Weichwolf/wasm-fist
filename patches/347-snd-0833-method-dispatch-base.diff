@@ -1,0 +1,53 @@
+SOUNDDVR.DVR device-method dispatcher (asm 0x833): rebase the method-vector read to the driver's OWN
+data segment (the MGAVIDEO 031-072 driver base-loss class).
+
+FUN_0000_0833 is the driver's device-method dispatcher: given a command word in AX (AH selects the
+method slot), it near-calls the method vector out of the driver's private method-vector table.
+Asm-verified vs re_out/fist_snd_image.bin offset 0x833:
+
+    833: push di,si,bp,ds,es,bx,dx,cx
+    83b: mov  ds, cs:[0x831]          ; DS = the DRIVER data seg (reloc site 0x831 = load_seg+0x2a5)
+    840: mov  ds:[0x12], ax           ; store the command word (WORD) at driver_ds:0x12
+    843: mov  bl, ah                  ; bl = AH
+    845: shr  bl,1 (x3)               ; bl = AH>>3
+    84b: and  bx, 0xfe                ; bx = (AH>>3)&0xfe  (bh cleared)
+    84f: mov  cx, [bx+0x11b]          ; cx = driver_ds:[bx+0x11b] = method near-offset
+    853: call cx                      ; NEAR call in the driver CS  -> fist_snd_base + cx
+    855: pop ...                      ; 85d: retf
+
+Ghidra artifacts (both a base-loss and a store-width bug):
+ (1) The method-vector read `*(undefined2 *)((idx)+0x11b)` was rendered as a HOST-ABSOLUTE deref of
+     linear (idx+0x11b) = 0x121 -> SIGSEGV fault-addr 0x121 (setarch -R + FIST_SB deterministic repro).
+     The real read is from the DRIVER data segment.  DAT_0000_0831 holds the RELOCATED driver data seg
+     (load_seg + 0x2a5), so its <<4 is the driver-data linear base into g_mem.  The static
+     method-vector table lives at driver_ds:0x11b in the image (idx 6 = 0x0872 device-select for the
+     0x30 command from 014e; idx 0x10 = 0x0a14 for the 0x80 command from 00fd).
+ (2) `mov ds:[0x12],ax` is a 16-bit WORD store; Ghidra typed it `*(uint *)&DAT_1000_c012` (a 32-bit
+     store into the ENGINE DGROUP at 0x1c012) -> wrong base AND 4-byte width clobbering c014.  It is a
+     WORD store to driver_ds:0x12 (read back by the device-select body 088f as `ds:0x12`).
+
+Reached only under FIST_SB (the section-A install that wires DGROUP:0x508->014e is FIST_SB-gated, patch
+344), so the default boot never dispatches here -> zero effect on the 26 video flows.
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -1358,12 +1358,14 @@
+ undefined4 __allregs FUN_0000_0833(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  uVar1 = DAT_0000_0831;
+-  *(uint *)&DAT_1000_c012 = param_1;
+-  (*(code *)fist_icall(fist_snd_base+0x0u+(uint16_t)(*(undefined2 *)((param_1 >> 0xb & 0x1e) + 0x11b))))(param_2,param_3,param_4);
+-  return;
++  /* driver-data linear base: DAT_0000_0831 = relocated driver data seg (load_seg+0x2a5) */
++  uint32_t dbase = ((uint32_t)(uint16_t)DAT_0000_0831) << 4;
++  uint16_t idx   = (uint16_t)(((uint8_t)(param_1 >> 8) >> 3)) & 0xfe;   /* (AH>>3)&0xfe */
++  uint16_t vec;
++
++  *(uint16_t *)(g_mem + dbase + 0x12) = (uint16_t)param_1;              /* mov ds:[0x12],ax (WORD) */
++  vec = *(uint16_t *)(g_mem + dbase + (uint32_t)idx + 0x11b);           /* mov cx,ds:[bx+0x11b] */
++  return (*(code *)fist_icall(fist_snd_base + vec))(param_2,param_3,param_4);
+ }
+ 
+ 
