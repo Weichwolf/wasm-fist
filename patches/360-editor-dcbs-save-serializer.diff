@@ -1,0 +1,315 @@
+PATCH 360: the editor .FSG battle-SAVE serializer -- FUN_0000_d6e4 (DCBS unit-chunk writer) + its
+count pass FUN_0000_d84e + its per-unit pre-walk dispatch FUN_0000_d740 + the unit list-unlink
+FUN_0000_b40b + the .FSW/.FSE filename builder FUN_0000_d638 (asm 0xd6e4 / 0xd84e / 0xd740 / 0xb40b
+/ 0xd638) -- the variable-length + side-file parts of FUN_0000_d5f9.  The fixed-size chunk writers
+(SHDR d683, PATH d788, STMP d797, PINF d76a, BINF d779, TERM d7a6) are load-into-place /
+save-from-place and already faithful; DCBS alone is written by walking the live unit list via the
+c157/c164 iterator (patch 168), and the .FSW/.FSE names are built by rewriting the extension char.
+
+Ghidra base-lost all five: it folded c164's returned near-offset (si) + end-of-list CF into spurious
+host-ptr walks of the unused param args (`*param_1`, `param_1[-0xce8]`) -> the 0x79a9 filename
+near-offset host-deref SIGSEGV; in d6e4 it also mangled the `push ax; push si` / `pop dx; pop cx`
+around the unit-data write into `param_4`/uStack0002 -> a 0-length + wild write; b40b (dispatched by
+d740 for class-0x1b units) deref'd the node near-offset di as a host pointer (byte[di+0x16] -> the
+0xa038 SIGSEGV) with a host-int mis-scaled stride-2 list scan; and d638 assigned the uint16
+near-offset a96e to a `char*` and walked it as a host pointer.  All reconstructed faithfully via the
+established c164/g_fist_cf idiom (cf. d755 patch 169) and the DGROUP-near-offset memory model; the
+per-unit bcc4 index/value lookup (FUN_1000_b354) is inlined in d6e4 because the shared b354 decompile
+returns only the index (drops DX) and, with a host 4-byte int, mis-scales its stride/deref.  d740's
+reached slots are the no-op c30e (classes 0/1) and b40b (class 0x1b, touches only the transient
+5ccf/5cd7 lists, not the serialized unit bytes); d651 (called by d638) only creates a .FSW/.FSE when
+one is missing (AH=4300 get-attr gate), so existing side files are preserved.
+
+Reached only by the editor .FSG SAVE path (d5f9 / the 361 round-trip harness), unreached by the 26
+verify flows -> behaviour-neutral for them.  asm-verified vs re_out/fist_dat_image.bin.
+
+--- a/fist.c
++++ b/fist.c
+@@ -29467,24 +29467,31 @@
+ void __allregs FUN_0000_b40b(int param_1)
+ 
+ {
+-  int iVar1;
+-  int *piVar2;
+-  
+-  if ((*(byte *)(param_1 + 0x16) & 8) == 0) {
+-    DAT_2000_5ccb = DAT_2000_5ccb + -1;
+-    piVar2 = (int *)&DAT_2000_5ccf;
++  /* PATCH 360 (asm 0xb40b): unlink the unit near-offset di (=param_1) from its transient class list.
++     byte[DGROUP:(di+0x16)]&8 selects the list (5ccf if clear / 5cd7 if set) and decrements its count
++     (5ccb / 5ccd); then scan up to 3 word entries for di and remove it by shifting the next entry
++     down.  Ghidra base-lost `byte[di+0x16]` (host deref -> the 0xa038 SIGSEGV) and, with host 4-byte
++     int, mis-scaled the stride-2 list scan.  Rebased through g_mem+0x1c000; the 5ccb/5ccd/5ccf/5cd7
++     DGROUP globals keep their correct base.  Reached via the .FSG SAVE pre-walk (d740). */
++  unsigned char *dg = g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t base;
++  int cx;
++  if ((*(uint8_t *)(dg + (uint16_t)(di + 0x16)) & 8) == 0) {
++    DAT_2000_5ccb = (undefined2)(DAT_2000_5ccb - 1);
++    base = 0x9ccf;
+   }
+   else {
+-    DAT_2000_5ccd = DAT_2000_5ccd + -1;
+-    piVar2 = (int *)&DAT_2000_5cd7;
++    DAT_2000_5ccd = (undefined2)(DAT_2000_5ccd - 1);
++    base = 0x9cd7;
+   }
+-  iVar1 = 3;
++  cx = 3;
+   do {
+-    if (param_1 == *piVar2) break;
+-    piVar2 = piVar2 + 1;
+-    iVar1 = iVar1 + -1;
+-  } while (iVar1 != 0);
+-  *piVar2 = piVar2[1];
++    if (*(uint16_t *)(dg + base) == di) break;                     /* b424 cmp (%bx),%di */
++    base = (uint16_t)(base + 2);                                   /* b428 add $2,%bx */
++    cx = cx + -1;
++  } while (cx != 0);
++  *(uint16_t *)(dg + base) = *(uint16_t *)(dg + (uint16_t)(base + 2)); /* b42d shift */
+   return;
+ }
+ 
+@@ -34183,18 +34190,19 @@
+ void __allregs FUN_0000_d638(void)
+ 
+ {
+-  char *pcVar1;
+-  char *pcVar2;
+-  
+-  pcVar1 = DAT_2000_a96e;
+-  do {
+-    pcVar2 = pcVar1;
+-    pcVar1 = pcVar2 + 1;
+-  } while (*pcVar2 != '\0');
+-  pcVar2 = pcVar2 + -1;
+-  *pcVar2 = 'W';
++  /* PATCH 360 (asm 0xd638): after the .FSG is written, build the .FSW / .FSE side-briefing filenames
++     by overwriting the extension's last char (`...FSG` -> `...FSW` -> `...FSE`) in the filename buffer
++     at DGROUP:a96e and calling d651 for each.  Ghidra assigned the near-offset a96e (a uint16) to a
++     `char*` and walked it as a host pointer -> the 0x79a9 host-deref SIGSEGV.  Rebased through
++     g_mem+0x1c000.  (d651 only creates the side file if it does not already exist -- AH=4300 get-attr
++     gate -- so existing .FSW/.FSE are preserved.) */
++  unsigned char *dg = g_mem + 0x1c000;
++  char *p = (char *)(dg + (uint16_t)DAT_2000_a96e);
++  while (*p != '\0') p++;             /* d63c..d63f find NUL */
++  p = p + -1;                          /* d641 last char before NUL (the 'G') */
++  *p = 'W';
+   FUN_0000_d651(0,0,0,0,0,0,0);
+-  *pcVar2 = 'E';
++  *p = 'E';
+   FUN_0000_d651(0,0,0,0,0,0,0);
+   return;
+ }
+@@ -34299,72 +34307,83 @@
+ undefined4 __allregs FUN_0000_d6e4(undefined2 param_1,int *param_2,int *param_3,undefined2 param_4)
+ 
+ {
+-  undefined1 uVar1;
+-  undefined2 uVar2;
+-  int *piVar3;
+-  int *piVar4;
++  /* PATCH 360 (asm 0xd6e4): the DCBS unit-chunk serializer (the variable-length body of d5f9's SAVE;
++     the SHDR/PATH/STMP/PINF/BINF/TERM writers are fixed-size and already faithful).  Structure:
++       d84e counts units -> a9bc (total len) / a9be (count);
++       write the 8-byte DCBS header ("DCBS"+len(a9bc)+count(a9be)) from DGROUP:0xe9b8;
++       d740 pre-walk dispatch;
++       for each unit (c157/c164 iterator, si=unit near-offset, CF via g_fist_cf):
++         bcc4 (=FUN_1000_b354): find si in the stride-4 table @DGROUP:0xdfbc -> a9c4 = index,
++             a9c6 = table entry[+2] (INLINED: the shared b354 decompile drops DX and, with host
++             4-byte int, mis-scales its stride/deref -- so the lookup is reconstructed here);
++         record size = 0xfb if byte[DGROUP:(word[DGROUP:si]-0x19ec)]&1 else 0x37 -> a9c2;
++         write the 6-byte record header from DGROUP:0xe9c2 (a9c2 size, a9c4 index, a9c6 val);
++         write <size> bytes of unit data from DGROUP:si (asm pops DX=si, CX=size);
++       d755 post-walk dispatch.
++     Ghidra base-lost the c164 iterator (si/CF folded into the unused param_2 host walk) AND mangled
++     the `push ax; push si` / `pop dx; pop cx` around the record write into `param_4`/uStack0002 -> a
++     0-length + wild write and the 0x79a9 host-deref SIGSEGV.  Reconstructed faithfully (asm
++     0xd6e4..0xd73f).  param_2/param_3/param_4 are unused Ghidra artifacts. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = g_mem + 0x1c000;
+   undefined2 unaff_ES;
+-  undefined2 unaff_CS;
+-  undefined2 uStack0002;
+-  
+-  uVar1 = FUN_0000_d84e(param_2);
+-  uRam000f0000 = CONCAT11(0x40,uVar1);
++  undefined2 si;
++  uint16_t di, bx;
++  unsigned rec, e;
++  (void)param_2; (void)param_3; (void)param_4;
++
++  FUN_0000_d84e(0);                                    /* d6e4 count -> a9bc(total)/a9be(count) */
++  uRam000f0000 = CONCAT11(0x40,0);                     /* d6f1 AH=40 write */
+   uRam000f0014 = 0x21;
+-  uRam000f0002 = DAT_2000_a970;
+-  uRam000f0004 = 8;
+-  puRam000f0006 = (undefined2 *)0xe9b8;
++  uRam000f0002 = DAT_2000_a970;                        /* BX = file handle */
++  uRam000f0004 = 8;                                    /* CX = 8 */
++  puRam000f0006 = (undefined2 *)0xe9b8;                /* DX = DGROUP:0xe9b8 ("DCBS"+len+count) */
+   uRam000f000e = 0x1c00;
+-  piRam000f0008 = param_2;
+-  piRam000f000a = param_3;
+   uRam000f000c = param_1;
+   uRam000f0010 = unaff_ES;
+   fist_int_dispatch();
+-  uStack0002 = 0xd6f8;
+-  uVar2 = puRam000f0006;
+-  piVar3 = piRam000f0008;
+-  uVar1 = uRam000f0012;
+-  FUN_0000_d740(piRam000f0008);
+-  uStack0002 = 0xd6fb;
+-  FUN_0000_c157();
++
++  FUN_0000_d740(0);                                    /* d6f5 pre-walk dispatch (table -0x19d0) */
++
++  FUN_0000_c157();                                     /* d6f8 */
+   while( true ) {
+-    uStack0002 = 0xd6fe;
+-    FUN_0000_c164();
+-    if ((bool)uVar1) break;
+-    piVar4 = piVar3;
+-    uStack0002 = unaff_CS;
+-    DAT_2000_a9c4 = FUN_1000_b354(piVar3);
+-    DAT_2000_a9c2 = 0xfb;
+-    if ((*(byte *)(*piVar3 + -0x19ec) & 1) == 0) {
+-      DAT_2000_a9c2 = 0x37;
++    si = FUN_0000_c164();                              /* d6fb */
++    if ((bool)g_fist_cf) break;                        /* d6fe jb d73c */
++    di = (uint16_t)si;                                 /* d700 mov di,si */
++    {                                                  /* d702 lcall f69:bcc4 (inlined, see header) */
++      uint16_t idx = 0xffff, val = 0;
++      for (e = 0; e < 0xb6; e++) {
++        if (*(uint16_t *)(dg + (uint16_t)(0xdfbc + e*4)) == di) {
++          idx = (uint16_t)e; val = *(uint16_t *)(dg + (uint16_t)(0xdfbc + e*4 + 2)); break;
++        }
++      }
++      DAT_2000_a9c4 = idx;                             /* d707 mov [a9c4],ax */
++      DAT_2000_a9c6 = val;                             /* d70a mov [a9c6],dx */
+     }
+-    uRam000f0000 = CONCAT11(0x40,(char)DAT_2000_a9c2);
++    bx = *(uint16_t *)(dg + di);                       /* d711 mov (%si),%bx */
++    rec = ((*(uint8_t *)(dg + (uint16_t)(bx - 0x19ec)) & 1) == 0) ? 0x37 : 0xfb;
++    DAT_2000_a9c2 = (undefined2)rec;                   /* d71d mov [a9c2],ax */
++    uRam000f0000 = CONCAT11(0x40,(char)rec);           /* d722..d72e write 6-byte record header */
+     uRam000f0014 = 0x21;
+     uRam000f0002 = DAT_2000_a970;
+     uRam000f0004 = 6;
+-    puRam000f0006 = (undefined2 *)&DAT_2000_a9c2;
++    puRam000f0006 = (undefined2 *)0xe9c2;              /* DX = DGROUP:0xe9c2 (a9c2/a9c4/a9c6) */
+     uRam000f000e = 0x1c00;
+-    DAT_2000_a9c6 = uVar2;
+-    piRam000f0008 = piVar3;
+-    piRam000f000a = piVar4;
+     uRam000f000c = param_1;
++    uRam000f0010 = unaff_ES;
+     fist_int_dispatch();
+-    uRam000f0000 = CONCAT11(0x40,(char)uRam000f0000);
++    uRam000f0000 = CONCAT11(0x40,(char)uRam000f0000);  /* d730..d738 write <rec> bytes of unit data */
+     uRam000f0014 = 0x21;
+     uRam000f0002 = DAT_2000_a970;
+-    uRam000f0004 = param_4;
+-    puRam000f0006 = (undefined2 *)uStack0002;
++    uRam000f0004 = (undefined2)rec;                    /* CX = record size (asm pop cx) */
++    puRam000f0006 = (undefined2 *)di;                  /* DX = unit near-offset (asm pop dx) */
+     uRam000f000e = 0x1c00;
+     uRam000f000c = param_1;
+     uRam000f0010 = unaff_ES;
+     fist_int_dispatch();
+-    uVar2 = puRam000f0006;
+-    piVar3 = piRam000f0008;
+-    unaff_CS = 0xf69;
+-    uVar1 = uRam000f0012;
+   }
+-  uStack0002 = 0xd73f;
+-  FUN_0000_d755(piVar3);
+-  return;
++  FUN_0000_d755(0);                                    /* d73c post-walk dispatch (table -0x1998) */
++  return 0;
+ }
+ 
+ 
+@@ -34373,15 +34392,28 @@
+ void __allregs FUN_0000_d740(int *param_1)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
++  /* PATCH 360 (asm 0xd740): the pre-serialize per-unit dispatch loop (d6e4 calls it just before the
++     DCBS record writes).  Mirror of d755 (patch 169) but the near-vector table is at DGROUP:(idx*2
++     -0x19d0).  c157 inits the walk; each c164 yields the next nonzero unit near-offset (CF via
++     g_fist_cf).  For each: di=si; s2=word[DGROUP:di]; s2<<=1; near-call word[DGROUP:(s2-0x19d0)]
++     with DI (the unit near-offset) live as arg0.  Ghidra folded c164's CF/si into a base-lost +
++     mis-scaled `param_1[-0xce8]` host walk; reconstructed faithfully.  d740's reached slots are the
++     no-op c30e (classes 0/1) and b40b (class 0x1b list-unlink).  param_1 is unused. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = g_mem + 0x1c000;
++  undefined2 si;
++  (void)param_1;
+   FUN_0000_c157();
+   while( true ) {
+-    FUN_0000_c164();
+-    if ((bool)in_CF) break;
+-    in_CF = *param_1 < 0;
+-    param_1 = (int *)(*param_1 * 2);
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(param_1[-0xce8])))();
++    si = FUN_0000_c164();
++    if ((bool)g_fist_cf) break;
++    {
++      uint16_t di = (uint16_t)si;                                      /* d748 mov di,si */
++      uint16_t s2 = *(uint16_t *)(dg + di);                            /* d74a mov si,[di] */
++      s2 = (uint16_t)(s2 << 1);                                        /* d74c shl si,1 */
++      (*(code *)fist_icall_near(0x0u,
++          (uint16_t)(*(uint16_t *)(dg + (uint16_t)(s2 - 0x19d0)))))((int)di); /* d74e call [si-0x19d0] */
++    }
+   }
+   return;
+ }
+@@ -34678,24 +34710,32 @@
+ undefined4 __allregs FUN_0000_d84e(int *param_1)
+ 
+ {
+-  int iVar1;
+-  undefined1 in_CF = 0;
+-  
++  /* PATCH 360 (asm 0xd84e): the DCBS unit count/size pass.  c157 inits the walk cursor; each c164
++     yields the next nonzero unit-table entry (found near-offset in AX=si, CF via g_fist_cf when the
++     table is exhausted -- patch 168).  For each unit: bx = word[DGROUP:si] (the unit's class
++     descriptor near-offset); record size = 0xfb if byte[DGROUP:(bx-0x19ec)]&1 else 0x37; accumulate
++     a9bc (running total, seeded 2) += size+6 and a9be (count) += 1.  Ghidra folded c164's CF/si into
++     a spurious `*param_1` host-ptr deref (base-loss SIGSEGV, fault = the d5f9 filename near-offset
++     0x79a9).  Rebased through g_mem+0x1c000; param_1 is an unused Ghidra artifact (the asm takes SI
++     from the iterator, not an argument). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = g_mem + 0x1c000;
++  undefined2 si;
++  uint16_t bx;
++  unsigned rec;
++  (void)param_1;
+   DAT_2000_a9bc = 2;
+   DAT_2000_a9be = 0;
+   FUN_0000_c157();
+   while( true ) {
+-    FUN_0000_c164();
+-    if ((bool)in_CF) break;
+-    DAT_2000_a9be = DAT_2000_a9be + 1;
+-    iVar1 = 0xfb;
+-    if ((*(byte *)(*param_1 + -0x19ec) & 1) == 0) {
+-      iVar1 = 0x37;
+-    }
+-    in_CF = CARRY2(DAT_2000_a9bc,iVar1 + 6U);
+-    DAT_2000_a9bc = DAT_2000_a9bc + iVar1 + 6U;
++    si = FUN_0000_c164();
++    if ((bool)g_fist_cf) break;
++    DAT_2000_a9be = (undefined2)(DAT_2000_a9be + 1);
++    bx = *(uint16_t *)(dg + (uint16_t)si);                             /* d869 mov (%si),%bx */
++    rec = ((*(uint8_t *)(dg + (uint16_t)(bx - 0x19ec)) & 1) == 0) ? 0x37 : 0xfb;
++    DAT_2000_a9bc = (undefined2)(DAT_2000_a9bc + rec + 6);
+   }
+-  return;
++  return 0;
+ }
+ 
+ 

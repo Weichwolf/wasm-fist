@@ -1,0 +1,46 @@
+PATCH 361: editor .FSG load->save ROUND-TRIP harness (env-gated FIST_FSG_ROUNDTRIP, DEFAULT OFF).
+
+A DIAGNOSTIC/harness hook (like patch 172), NOT a covered flow-change: with FIST_FSG_ROUNDTRIP set,
+the BATTLES->OK->ACCEPT cascade -- after FUN_0000_4754 has run FUN_0000_d501 to LOAD the selected
+.FSG into the battle-state DGROUP + live unit list, and BEFORE FUN_1000_6015 and the e4bb game loop
+-- drives the engine's OWN serializer FUN_0000_d5f9 (patch 360) to re-save the battle to the loaded
+filename (DGROUP:0x79a9), then exit(0).  Firing at this point (0 sim ticks elapsed) makes the re-save
+the DETERMINISTIC pristine post-load state: reproducible, byte-stable, and identical native<->wasm.
+
+WHY A FIXED-POINT AND NOT AN ORIGINAL-FILE COMPARE: the LOAD handler d81e (asm 0xd847 `pop 0x2(%di)`)
+deliberately restores each unit's data+2 field to the value FUN_1000_bb12 recomputes from the record
+(idx/val), DISCARDING the file's stored data+2.  This is faithful engine behaviour, so an editor-
+authored .FSG is NOT itself a fixed point of load->save (its data+2 differs).  But load->save is
+IDEMPOTENT: a re-saved file reloads + re-saves byte-identically.  The editor-fsg-roundtrip verify
+flow proves it: (A) load(orig AZER1.FSG)->save = file1; (B) load(file1)->save = file2; file1==file2,
+native AND wasm, native file1==wasm file1.
+
+Gated behind getenv (NULL by default; getenv/exit via ghidra_compat.h <stdlib.h>, ENV mirrored to
+wasm by tools/wasm_pre.js) -> the 26 verify flows never set it -> BEHAVIOUR-NEUTRAL, verify.sh
+unchanged.  4754 is only reached on the ACCEPT cascade; the hook precedes the sim so no gameplay
+state is perturbed.  asm-verified callee (d5f9, patch 360) vs re_out/fist_dat_image.bin.
+
+--- a/fist.c
++++ b/fist.c
+@@ -13977,6 +13977,21 @@
+   
+   FUN_0000_4779();
+   FUN_0000_d501(param_1,param_2,param_3,(undefined1 *)0x79a9,param_4);  /* PATCH 156: DOS DX offset (mirrors 476a), not the &DAT host ptr */
++  if (getenv("FIST_FSG_ROUNDTRIP")) {
++    /* PATCH 361: editor .FSG load->save ROUND-TRIP harness (env-gated FIST_FSG_ROUNDTRIP, DEFAULT
++       OFF -> behaviour-neutral for the 26 verify flows).  Right after d501 has LOADED the selected
++       battle (.FSG chunks -> the battle-state DGROUP + the live unit list) and BEFORE FUN_1000_6015
++       / the e4bb game loop, drive the engine's OWN serializer FUN_0000_d5f9 to re-save it to the
++       loaded filename (DGROUP:0x79a9), then exit.  Firing here (0 sim ticks elapsed) makes the
++       re-save the DETERMINISTIC pristine post-load state -- reproducible + byte-stable, and identical
++       native<->wasm.  The DoD round-trip is a FIXED-POINT: the LOAD (d81e) canonicalizes each unit's
++       data+2 field via bb12, so the ORIGINAL editor-authored file is not itself a fixed point, but a
++       re-saved file IS -- load(file1)->save == file1 (verified by the editor-fsg-roundtrip flow's
++       two-stage load->save->load->save byte-compare).  d5f9's only real input is SI = the filename
++       near-offset (param_4=0x79a9, as 571d passes its own save buffer). */
++    FUN_0000_d5f9(0,0,0,0x79a9,0,0);
++    exit(0);
++  }
+   if (!(bool)in_CF) {
+     FUN_1000_6015();
+     DAT_2000_39a8 = 1;

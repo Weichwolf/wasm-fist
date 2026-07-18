@@ -1,3 +1,55 @@
+# EDITOR — Phase-0 recon + the FIRST ROUND-TRIP DELIVERABLE (BATTLE .FSG save)
+
+## STATUS (2026-07-18) — `.FSG` load→save round-trip is IMPLEMENTED + bit-verified (patches 360/361)
+
+The first LEVEL/MISSION-EDITOR DoD deliverable — the BATTLE `.FSG` save round-trip — is **landed,
+deterministic, crash-free, and byte-verified on native AND wasm** (verify.sh flow
+`editor-fsg-roundtrip`, the 27th flow; `bash tools/verify.sh both` = 27/27). It is DATA-level: no
+terrain / voxel / render dependency (§4 windshield is untouched).
+
+**What runs:** `BATTLES → OK → ACCEPT` loads `AZER1.FSG` via `FUN_0000_d501` (crash-free), then the
+patch-361 harness hook (env `FIST_FSG_ROUNDTRIP`, default OFF) drives the reconstructed serializer
+`FUN_0000_d5f9` right after the load and exits. All 7 chunks (SHDR/DCBS/PATH/STMP/PINF/BINF/TERM) are
+written, byte-identical size (10762 B), crash-free.
+
+**THE REFERENCE (resolved with asm evidence — NOT a fixed point of the original file):**
+The re-saved `.FSG` differs from the shipped `AZER1.FSG` by **144 bytes**, and this is FAITHFUL, not a
+save defect. The LOAD path canonicalizes each unit on the way in:
+- `FUN_0000_d81e` (asm `0xd847 pop 0x2(%di)`) reads a unit record but **restores the `data+2` word to
+  the value `FUN_1000_bb12` recomputes from `idx/val`, discarding the file's stored `data+2`**;
+- `FUN_0000_43c1` (patch 200) + `FUN_0000_c296` (patch 214) set per-unit state flags, the cell-index
+  registration, and derived fields;
+- SHDR fields `2daf`/`3b84` are runtime mode/sim state.
+So an editor-authored `.FSG` is **not itself a fixed point** of load→save. But load→save is
+**IDEMPOTENT**: a re-saved file reloads and re-saves byte-identically. The round-trip is therefore
+verified as a FIXED POINT — `load(orig)→save = file1`; `load(file1)→save = file2`; **`file1 == file2`,
+native AND wasm, native `file1` == wasm `file1` (0-diff)**. The `.FSW`/`.FSE` side files round-trip
+trivially: `d651` only creates them if missing (AH=4300 get-attr gate), so existing ones are preserved.
+
+**Patches:**
+- **360** — the DCBS unit-chunk serializer `FUN_0000_d6e4` + count pass `d84e` + pre-walk dispatch
+  `d740` + unit list-unlink `b40b` + `.FSW/.FSE` filename builder `d638`. All were Ghidra base-lost
+  (c164 iterator si/CF folded into host-ptr walks of unused params → the `0x79a9` filename-offset
+  SIGSEGV; `d6e4`'s `push ax;push si`/`pop dx;pop cx` mangled into `param_4`/uStack; `b40b`'s
+  `byte[di+0x16]` host deref → `0xa038` SIGSEGV). Reconstructed via the c164/`g_fist_cf` idiom (cf.
+  d755 patch 169); the per-unit `bcc4`(`b354`) index/val lookup is inlined (shared `b354` drops DX +
+  mis-scales its stride under host 4-byte int). The fixed-size writers (SHDR/PATH/STMP/PINF/BINF/TERM)
+  were already faithful (load-into-place / save-from-place; static magic+len in the DGROUP image).
+- **361** — the env-gated round-trip harness hook in `4754` (fires `d5f9` right after `d501`, pre-sim,
+  for a deterministic pristine-post-load re-save; behaviour-neutral, the 26 prior flows never set it).
+
+**Open (faithfulness confirmation, not banked):** a DOSBox-oracle compare of the port's `file1` vs the
+ORIGINAL editor's own load→save is deferred — the original saves from the editor game-loop context
+(post-`6015`/sim, editing mode), a different save-point than the deterministic pre-`6015` fire used
+here, so it is not a like-for-like compare without driving the original editor's SAVE UI. The
+serializer AND parser are independently asm-verified vs `re_out/fist_dat_image.bin`, and the fixed
+point holds, so `file1` is the faithful load→save output for the pristine post-load state.
+
+**Next editor deliverables:** enter EDITING mode (`53c5→540a`, `2dac` unlock) + drive one edit op
+(ADD TANK → save → verify the delta); then the editor map-view render (extender-side `93c0`).
+
+---
+
 # EDITOR — Phase-0 recon (in-engine LEVEL/MISSION EDITOR)
 
 Read-only recon, 2026-07-18. All offsets vs `re_out/fist_dat_image.bin`

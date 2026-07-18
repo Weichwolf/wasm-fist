@@ -188,6 +188,18 @@ FLOWS=(
   # tools/refcapture_ok3.sh 160 100 205 128 78 186 40 8 8 (DOSBox also returns to menu on CANCEL, cursor@78,186;
   # 2 independent captures AE=0, non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
   "battles-cancel-briefing|25000|tick=2600|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:78:186:0; 6000:78:186:1; 6600:78:186:0; 7200:78:186:0|$ROOT/ref/battles_cancel_briefing_native320.png"
+  # EDITOR .FSG battle-SAVE round-trip (patches 360/361) -- the first LEVEL/MISSION-EDITOR DoD
+  # deliverable, DATA-level (no terrain/render dependency).  Special-cased below (file compare, not
+  # framebuffer): BATTLES->OK->ACCEPT loads AZER1.FSG via FUN_0000_d501; the patch-361 harness hook
+  # (FIST_FSG_ROUNDTRIP) re-saves it via the reconstructed serializer FUN_0000_d5f9/d6e4 (patch 360)
+  # right after the load (pre-sim, deterministic) and exits.  The round-trip is a FIXED POINT: the
+  # LOAD (d81e/43c1/c296/bb12) canonicalizes each unit (state flags, cell-index, derived fields;
+  # asm-verified patches 200/214), so the editor-authored AZER1.FSG is NOT itself a fixed point (144
+  # faithful-canonicalization diffs), but a RE-saved file IS.  Verified: load(orig)->save=file1;
+  # load(file1)->save=file2; file1==file2, native AND wasm, native file1==wasm file1 (0-diff).  A
+  # WRITE flow (own fresh cp -a scratch datadirs; repo armoredfist/ untouched).  d5f9/d6e4/d84e/
+  # d740/b40b/d638 asm-verified vs re_out/fist_dat_image.bin.
+  "editor-fsg-roundtrip|25000|roundtrip||roundtrip"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
@@ -236,10 +248,46 @@ fresh_datadir() { # $1=tag ; echo path
   local dd="$TMP/data.$1"; rm -rf "$dd"; cp -a "$ROOT/armoredfist" "$dd"; echo "$dd"
 }
 
+# ---- EDITOR .FSG load->save ROUND-TRIP (file-level fixed-point, not framebuffer) ----
+# BATTLES(160,100) -> OK(205,128) -> ACCEPT(40,186) runs the cascade; the patch-361 hook (env
+# FIST_FSG_ROUNDTRIP) re-saves the loaded .FSG via the reconstructed serializer FUN_0000_d5f9 (patch
+# 360) right after d501 (pre-sim, deterministic) and exits.  The DoD round-trip is a FIXED POINT
+# (load canonicalizes each unit, so the editor-authored file is not itself a fixed point, but a
+# re-saved file IS): load(orig)->save = file1; load(file1)->save = file2; assert file1==file2.
+RT_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0; 7200:40:186:0"
+run_fsg() { # $1=target $2=datadir ; echo rc  (drive one load->save->exit against $2/FISTDATA/AZER1.FSG)
+  local t="$1" dd="$2"
+  if [ "$t" = native ]; then
+    timeout 60  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
+  else
+    timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+  fi
+}
+run_roundtrip() { # $1=target ; echo path-to-file1 on success (file1==file2 asserted), empty on failure
+  local t="$1" a b f1 f2
+  a="$(fresh_datadir "rt.$t.A")"; [ "$(run_fsg "$t" "$a")" = 0 ] || { echo ""; return 1; }
+  f1="$TMP/file1.$t.FSG"; [ -s "$a/FISTDATA/AZER1.FSG" ] && cp "$a/FISTDATA/AZER1.FSG" "$f1" || { echo ""; return 1; }
+  b="$(fresh_datadir "rt.$t.B")"; cp "$f1" "$b/FISTDATA/AZER1.FSG"
+  [ "$(run_fsg "$t" "$b")" = 0 ] || { echo ""; return 1; }
+  f2="$TMP/file2.$t.FSG"; cp "$b/FISTDATA/AZER1.FSG" "$f2" 2>/dev/null || { echo ""; return 1; }
+  cmp -s "$f1" "$f2" || { echo ""; return 2; }   # not a fixed point
+  echo "$f1"
+}
+
 echo "== verify ($WHICH) =="
 for row in "${FLOWS[@]}"; do
   IFS='|' read -r name hz ms inp ref <<<"$row"
   ok=1; detail=""
+  if [ "$name" = editor-fsg-roundtrip ]; then
+    detail=" [roundtrip fixed-point]"; f1n=""; f1w=""
+    if [ "$WHICH" != wasm ];   then f1n="$(run_roundtrip native)"; [ -n "$f1n" ] || { ok=0; detail+=" native-fail"; }; fi
+    if [ "$WHICH" != native ]; then f1w="$(run_roundtrip wasm)";   [ -n "$f1w" ] || { ok=0; detail+=" wasm-fail"; }; fi
+    if [ "$WHICH" = both ] && [ -n "$f1n" ] && [ -n "$f1w" ]; then
+      cmp -s "$f1n" "$f1w" || { ok=0; detail+=" nat!=wasm"; }
+    fi
+    if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
+    continue
+  fi
   # WRITE-ISOLATION: write flows run against a fresh cp -a scratch datadir (repo stays clean, run is
   # deterministic from pristine initial state).  Read-only flows use the repo armoredfist/ directly.
   ddN=""; ddW=""
