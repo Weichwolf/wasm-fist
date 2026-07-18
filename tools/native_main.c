@@ -258,6 +258,7 @@ static void fist_dump_and_exit(const char *why){
     fprintf(stderr, "[fist] %s: dumping frame + exiting (video-mode=0x%02x, [0x452]=%u)\n",
             why, fist_vga_mode(), *(uint16_t*)(g_mem+0x1c452));
             { extern void fist_sb_flush(void); fist_sb_flush(); }   /* finalize any SB PCM/WAV capture */
+            { extern void fist_opl_flush(void); fist_opl_flush(); } /* finalize any OPL FM PCM/WAV capture */
             const char *fb = getenv("FIST_FBDUMP");
             if (fb) fist_dump_framebuffer(fb);
             { const char *rw = getenv("FIST_FBRAW");
@@ -369,6 +370,7 @@ void fist_timer_pump(void){
 #endif
     { extern void fbtrap_arm_hook(void); fbtrap_arm_hook(); }
     { extern void fist_sb_pump(void); fist_sb_pump(); }   /* SB auto-init stream: raise completion IRQ (FIST_SB) */
+    { extern void fist_opl_pump(void); fist_opl_pump(); }  /* OPL FM: advance the synth in emulated time (FIST_OPL/FIST_SB) */
     /* Dev watchdog: FIST_RUNMS=<ms> dumps the framebuffer (FIST_FBDUMP) and exits after a wall-clock
      * deadline -- lets a first-light frame be captured while the engine is in its (non-returning) main
      * loop.  Runs in main context (safe for the PPM writer). */
@@ -427,6 +429,7 @@ void fist_timer_pump(void){
         ((int(*)(int,int,int,int,int,int,int,int,int,int))fn)(0,0,0,0,0,0,0,0,0,0);
         g_in_isr = 0;
         g_isr_runs++;
+        { extern void fist_opl_tick(void); fist_opl_tick(); }   /* advance OPL FM by one PIT period */
         { extern void fist_queue_check(const char*); fist_queue_check("post-isr"); }
     }
     fist_input_pump();

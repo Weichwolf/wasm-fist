@@ -29,7 +29,13 @@ gcc $F $INCL -c "$SRCDIR/fist_dos.c"      -o /tmp/fist_dos.o
 gcc $F $INCL -c "$SRCDIR/fist_vga.c"      -o /tmp/fist_vga.o
 gcc $F $INCL -c "$SRCDIR/fist_icall.c"    -o /tmp/fist_icall.o
 gcc $F $INCL -c "$SRCDIR/fist_sb.c"       -o /tmp/fist_sb.o
+gcc $F $INCL -c "$SRCDIR/fist_opl.c"      -o /tmp/fist_opl.o
 gcc $F $INCL -c "$SRCDIR/fist_modules.c"  -o /tmp/fist_modules.o
+# OPL FM: the DOSBox 0.74-3 DBOPL core (C++) + extern "C" bridge.  -nostdinc++ -fno-rtti -fno-exceptions
+# -> no 32-bit libstdc++ dependency (none is installed) -> links straight into the C program with gcc.
+CXXF="-m32 -no-pie -g -O2 -std=gnu++11 -w -nostdinc++ -fno-rtti -fno-exceptions -fno-strict-aliasing"
+g++ $CXXF -I"$SRCDIR" -I"$SRCDIR/opl" -c "$SRCDIR/fist_opl_dbopl.cpp" -o /tmp/fist_opl_dbopl.o
+g++ $CXXF -I"$SRCDIR/opl" -c "$SRCDIR/opl/dbopl.cpp" -o /tmp/fist_dbopl.o
 # Driver overlay units (re_out/fist_mga.c / fist_snd.c): compiled + linked when present, so their
 # weak fmap/base symbols in fist_modules.c resolve and the overlay dispatch wires them. Absent -> the
 # weak refs stay 0 and loaded overlays trap honestly (engine-only build still links).
@@ -40,6 +46,6 @@ for m in mga snd ext; do
   fi
 done
 gcc $F $INCL /tmp/fist_engine.o /tmp/fist_main.o /tmp/fist_dos.o /tmp/fist_vga.o /tmp/fist_icall.o \
-    /tmp/fist_modules.o /tmp/fist_sb.o $DRVOBJ -o "$OUT" -lm
+    /tmp/fist_modules.o /tmp/fist_sb.o /tmp/fist_opl.o /tmp/fist_opl_dbopl.o /tmp/fist_dbopl.o $DRVOBJ -o "$OUT" -lm
 set +x
 echo "[build_native] built $OUT (32-bit)"

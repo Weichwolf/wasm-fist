@@ -42,6 +42,15 @@ unsigned short g_snd_reg_ax;   /* AX: be0e = word[DGROUP:0x9f2e+id]; be67 = 0xff
 unsigned short g_snd_reg_bx;   /* BX: descriptor OFFSET (be0e sets 0) */
 unsigned short g_snd_reg_es;   /* ES: descriptor SEGMENT = word[DGROUP:0x9f1c] */
 
+/* ---- SOUND.CFG music-device LETTER threading (bdcc -> c508 -> 014e) ----
+ * The engine dispatches the sound-device CONFIG method by an INDIRECT far call through DGROUP:0x508
+ * (== the driver 014e device-config method) with the music-device letter in AL (asm 0xbdd6: mov al,
+ * [DGROUP:0x248]; lcall *0x508).  The __allregs indirect-vector dispatch drops AL, so the engine call
+ * site (FUN_0000_bdcc) publishes byte[DGROUP:0x248] here and 014e reads it.  For SOUND.CFG "0132710000"
+ * the engine parse leaves 'C' (0x43) at DGROUP:0x248 -> 014e code 3 = the OPL/AdLib device (0x388).
+ * See patch 352 and docs/audio.md §13. */
+unsigned short g_snd_cfg_letter;
+
 /* SB DSP base port (default 0x220; the ports 0x2x0..0x2xF window).  The engine derives the base from
  * SOUND.CFG; we accept the whole 0x220-0x22F window and additionally 0x210-0x260 so any configured base
  * is trapped.  (The exact SOUND.CFG->base decode is documented in docs/audio.md but is NOT load-bearing

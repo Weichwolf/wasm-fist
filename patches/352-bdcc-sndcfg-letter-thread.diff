@@ -1,0 +1,33 @@
+Engine FUN_0000_bdcc: thread the SOUND.CFG music-device LETTER (AL) into the device-config dispatch
+(DGROUP:0x508 -> driver 014e).
+
+bdcc dispatches the sound-device CONFIG method by an INDIRECT far call through DGROUP:0x508 (the driver's
+014e).  Asm-verified vs re_out/fist_dat_image.bin 0xbdcc:
+
+    bdcc: movw [DGROUP:0x9f20], 0xc06d
+    bdd2: mov  [DGROUP:0x9f22], cs
+    bdd6: mov  al, [DGROUP:0x248]        ; AL = the music-device LETTER (engine SOUND.CFG parse result)
+    bdd9: lcall *0x508                   ; -> 014e (device config); 014e maps I->1 T->2 A/C->3 R->4
+    bddd: movw [DGROUP:0x9fd9], 0xffff
+
+The __allregs indirect method-vector dispatch drops AL (there is no register-arg threading for an indirect
+vector call), so 014e ran with letter 0 -> device 0 (null) -> no music device.  For SOUND.CFG "0132710000"
+the engine parse leaves byte[DGROUP:0x248] = 0x43 = 'C' (runtime-verified) -> 014e code 3 = the OPL/AdLib
+FM device (port 0x388).  Publish byte[DGROUP:0x248] to the shim global g_snd_cfg_letter (re_out/fist_sb.c)
+for 014e to read (patch 348 rev) -- the documented per-patch indirect-method-vector arg threading, the
+same class as be0e/349.
+
+Harmless on the DEFAULT boot: DGROUP:0x508 is populated with the driver config method only under FIST_SB
+(the section-A install is FIST_SB-gated, patch 344); on the default boot c508 stays 0 -> the indirect call
+no-ops and the global is unread.  So the 26 video flows stay byte-identical.
+--- a/fist.c
++++ b/fist.c
+@@ -29231,6 +29231,8 @@
+   
+   DAT_2000_5f20 = 0xc06d;
+   DAT_2000_5f22 = unaff_CS;
++  /* PATCH 352: thread the dropped AL = byte[DGROUP:0x248] (asm bdd6) for the c508->014e dispatch. */
++  { extern unsigned short g_snd_cfg_letter; g_snd_cfg_letter = g_mem[0x1c248]; }
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c508)))();
+   DAT_2000_5fd9 = 0xffff;
+   return;

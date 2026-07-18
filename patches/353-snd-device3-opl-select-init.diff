@@ -1,0 +1,190 @@
+SOUNDDVR device-SELECT + OPL/AdLib device-3 INIT: reach the first real out(0x388) on the menu.
+
+With patch 352 threading the SOUND.CFG letter 'C' into 014e -> device code 3, this patch reconstructs the
+faithful driver-DS-rebased device-select + device-3 (OPL) init chain so the engine actually programs the
+OPL chip (port 0x388/0x389 via the writer FUN_0000_0f21).  All are the MGAVIDEO-031-072 driver base-loss
+class: every ds: access is to the driver's OWN data segment (DAT_0000_0831<<4 = load_seg+0x2a5), which
+Ghidra rendered as engine-DGROUP DAT_1000_cNN / host-absolute derefs.  Asm-verified vs
+re_out/fist_snd_image.bin:
+
+  * 014e  - read the threaded music-device letter (bdcc/patch 352 published byte[DGROUP:0x248]='C').
+  * 0872  - device-select: copy device 3's 7 method vectors from the per-device table driver_ds:0x17d..
+            into the live slots driver_ds:0x17b.., then call slot0 = 104f (the OPL init).
+  * 104f  - OPL init: 0f21(0x120/0x800/0xbdc0) global regs + 1082 + per-channel 0f99 key-off.
+  * 1082  - program the 9 OPL channel level/key registers.
+  * 0f99  - load a channel's OPL operator regs from the 16-byte instrument record driver_ds:(i*0x10+0x1dd).
+
+The OPL writer FUN_0000_0f21 (asm 0xf21 = out 0x388,AH; delay; out 0x389,AL) is already faithful in the
+re-decompile (no driver-DS state) -- it needs no rebase.
+
+Reached only under FIST_SB (the DGROUP:0x508 config vector is FIST_SB-installed, patch 344/348); on the
+default boot the config method is never dispatched -> zero effect on the 26 video flows.  fist_snd.c was
+re-decompiled with the device-3 method seeds (0x872,0xa14,0xf21,0xf48,0xf54,0xf99,0x104f,0x1082,0x10a5,
+0x10a6,0x10e3) -> new reproducible pristine md5 (docs/audio.md §13).
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -572,7 +572,10 @@
+   undefined2 extraout_DX;
+   undefined2 uVar2;
+   undefined2 unaff_CS;
+-  
++
++  /* PATCH 353: the music-device LETTER (AL) is dropped by the __allregs c508 indirect dispatch; read it
++     from the shim global bdcc/patch 352 published (byte[DGROUP:0x248]). 'C' -> code 3 = OPL/AdLib. */
++  { extern unsigned short g_snd_cfg_letter; if (g_snd_cfg_letter) param_1 = (char)g_snd_cfg_letter; }
+   if (param_1 != 'N') {
+     uVar2 = 0x1cd;
+     (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c43e)))();
+@@ -1455,46 +1458,49 @@
+ undefined2 __allregs FUN_0000_0872(undefined2 param_1)
+ 
+ {
+-  int iVar1;
+-  byte extraout_DH;
+-  int iVar2;
+-  int iVar3;
+-  
+-  if (DAT_1000_c03e != 0) {
++  /* PATCH 353: SOUNDDVR device-SELECT driver-DS rebase (asm 0x872 entry / 0x8c3 select-body).  Every
++     ds: access is to the driver's own data segment (DAT_0000_0831<<4 = load_seg+0x2a5); Ghidra rendered
++     them as engine-DGROUP DAT_1000_cNN + host-absolute derefs.  The 7 device method-vectors are copied
++     from the per-device table driver_ds:0x17d.. into the live slots driver_ds:0x17b.., then slot0 (init)
++     is called -> device 3 (letter 'C') = FUN_0000_104f = the OPL/AdLib init -> the first out(0x388).
++     The already-selected re-init path (ds:0x3e != 0) is not taken on the first (menu) select. */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
++  int iVar1, iVar2, iVar3;
++  uint8_t dev;
++
++  if (*(uint8_t*)(D + 0x3e) != 0) {
+     iVar1 = 0x10;
+-    do {
+-      uRam0001c111 = 0;
+-      iVar1 = iVar1 + -1;
+-    } while (iVar1 != 0);
+-    FUN_0000_0ca9(CONCAT11((char)((uint)param_1 >> 8),DAT_1000_c03e),0x889);
+-    (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c197)))();
+-    (*(undefined1 *)(g_mem+fist_snd_base+0x862)) = (byte)DAT_0000_0862 & extraout_DH;
+-  }
+-  if ((DAT_1000_c012 != 0) && (DAT_1000_c012 < 6)) {
+-    DAT_1000_c03e = DAT_1000_c012;
+-    iVar1 = (uint)DAT_1000_c012 * 2;
+-    _DAT_1000_c17b = (code *)*(undefined2 *)(iVar1 + 0x17d);
+-    _DAT_1000_c189 = *(undefined2 *)(iVar1 + 0x18b);
+-    _DAT_1000_c197 = (code *)*(undefined2 *)(iVar1 + 0x199);
+-    _DAT_1000_c1a5 = *(undefined2 *)(iVar1 + 0x1a7);
+-    _DAT_1000_c1b3 = *(undefined2 *)(iVar1 + 0x1b5);
+-    _DAT_1000_c1c1 = *(undefined2 *)(iVar1 + 0x1c3);
+-    _DAT_1000_c1cf = *(undefined2 *)(iVar1 + 0x1d1);
+-    _DAT_1000_c010 = 0;
+-    iVar1 = (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c17b)))();
++    do { *(uint8_t*)(D + 0x111) = 0; iVar1 = iVar1 + -1; } while (iVar1 != 0);
++    FUN_0000_0ca9(CONCAT11((char)((uint)param_1 >> 8), *(uint8_t*)(D + 0x3e)), 0x889);
++    (*(code *)fist_icall(fist_snd_base + *(uint16_t*)(D + 0x197)))();
++    /* asm 0x88d-0x8c2 = mis-disassembled inline signature string; no observable effect on the select */
++  }
++  dev = *(uint8_t*)(D + 0x12);
++  if ((dev != 0) && (dev < 6)) {
++    *(uint8_t*)(D + 0x3e) = dev;
++    iVar1 = (uint)dev * 2;
++    *(uint16_t*)(D + 0x17b) = *(uint16_t*)(D + iVar1 + 0x17d);
++    *(uint16_t*)(D + 0x189) = *(uint16_t*)(D + iVar1 + 0x18b);
++    *(uint16_t*)(D + 0x197) = *(uint16_t*)(D + iVar1 + 0x199);
++    *(uint16_t*)(D + 0x1a5) = *(uint16_t*)(D + iVar1 + 0x1a7);
++    *(uint16_t*)(D + 0x1b3) = *(uint16_t*)(D + iVar1 + 0x1b5);
++    *(uint16_t*)(D + 0x1c1) = *(uint16_t*)(D + iVar1 + 0x1c3);
++    *(uint16_t*)(D + 0x1cf) = *(uint16_t*)(D + iVar1 + 0x1d1);
++    *(uint16_t*)(D + 0x10) = 0;
++    iVar1 = (*(code *)fist_icall(fist_snd_base + *(uint16_t*)(D + 0x17b)))();
+     if (iVar1 != 0) {
+       FUN_0000_0c94(iVar1);
+       iVar2 = 0;
+       iVar3 = 0;
+       iVar1 = 10;
+       do {
+-        *(undefined2 *)(iVar2 + 0x68) = 0xed3;
+-        *(undefined1 *)(iVar3 + 0xcc) = 0;
+-        *(undefined1 *)(iVar3 + 0x86) = 0;
+-        *(undefined1 *)(iVar3 + 0x111) = 0;
+-        *(undefined1 *)(iVar3 + 0x107) = 0;
+-        *(undefined2 *)(iVar2 + 0x90) = 0x15b0;
+-        *(undefined2 *)(iVar2 + 0xa4) = 0x15b0;
++        *(uint16_t*)(D + iVar2 + 0x68) = 0xed3;
++        *(uint8_t*)(D + iVar3 + 0xcc) = 0;
++        *(uint8_t*)(D + iVar3 + 0x86) = 0;
++        *(uint8_t*)(D + iVar3 + 0x111) = 0;
++        *(uint8_t*)(D + iVar3 + 0x107) = 0;
++        *(uint16_t*)(D + iVar2 + 0x90) = 0x15b0;
++        *(uint16_t*)(D + iVar2 + 0xa4) = 0x15b0;
+         iVar2 = iVar2 + 2;
+         iVar3 = iVar3 + 1;
+         iVar1 = iVar1 + -1;
+@@ -2397,16 +2403,19 @@
+   undefined1 uVar5;
+   undefined1 *puVar6;
+   
+-  uVar1 = DAT_0000_0831;
+-  bVar2 = *(byte *)((param_2 >> 8) + 0xc01);
++  /* PATCH 353: driver-DS rebase (asm 0xf99).  Load the OPL operator registers for a channel from the
++     16-byte instrument record at driver_ds:(instr*0x10+0x1dd) (ES=DS=driver seg cs:0x831). */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
++  (void)uVar1;
++  bVar2 = *(uint8_t *)(D + (param_2 >> 8) + 0xc01);
+   if (8 < bVar2) {
+     return;
+   }
+-  puVar6 = (undefined1 *)((uint)param_1 * 0x10 + 0x1dd);
++  puVar6 = (undefined1 *)(D + (uint)param_1 * 0x10 + 0x1dd);
+   uVar4 = (uint)bVar2;
+-  uVar5 = *(undefined1 *)(uVar4 + 0xbf8);
+-  uVar3 = *(undefined1 *)(uVar4 + 0xbef);
+-  FUN_0000_0f21(CONCAT11(bVar2,*(undefined1 *)(uVar4 + 0xbe6)) & 0xffdf | 0xb000);
++  uVar5 = *(uint8_t *)(D + uVar4 + 0xbf8);
++  uVar3 = *(uint8_t *)(D + uVar4 + 0xbef);
++  FUN_0000_0f21(CONCAT11(bVar2,*(uint8_t *)(D + uVar4 + 0xbe6)) & 0xffdf | 0xb000);
+   FUN_0000_0f21(CONCAT11(uVar5,*puVar6) | 0x2000);
+   FUN_0000_0f21(CONCAT11(uVar5,puVar6[2]) | 0x6000);
+   FUN_0000_0f21(CONCAT11(uVar5,puVar6[3]) | 0x8000);
+@@ -2417,7 +2426,7 @@
+   FUN_0000_0f21(CONCAT11(uVar3,puVar6[8]) | 0x8000);
+   FUN_0000_0f21(CONCAT11(uVar3,puVar6[9]) | 0xe000);
+   FUN_0000_0f21(CONCAT11(bVar2,puVar6[10]) | 0xc000);
+-  *(undefined1 *)(uVar4 + 0xbdd) = puVar6[1];
++  *(uint8_t *)(D + uVar4 + 0xbdd) = puVar6[1];
+   return;
+ }
+ 
+@@ -2430,6 +2439,10 @@
+   int iVar1;
+   int iVar2;
+   
++  /* PATCH 353: driver-DS rebase (asm 0x104f).  Device-3 (OPL) init: program the OPL global registers
++     via the writer 0f21 (out 0x388/0x389), clear the per-channel op-image bytes driver_ds:0xbe6.., set
++     each channel's key-off via 0f99. */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
+   FUN_0000_0f21(0x120);
+   FUN_0000_0f21(0x800);
+   FUN_0000_0f21(0xbdc0);
+@@ -2437,7 +2450,7 @@
+   iVar1 = 9;
+   iVar2 = 0;
+   do {
+-    *(undefined1 *)(iVar2 + 0xbe6) = 0x1f;
++    *(uint8_t*)(D + iVar2 + 0xbe6) = 0x1f;
+     FUN_0000_0f99(0,CONCAT11((char)iVar2,(char)iVar1));
+     iVar2 = iVar2 + 1;
+     iVar1 = iVar1 + -1;
+@@ -2454,10 +2467,12 @@
+   int iVar1;
+   byte bVar2;
+   
++  /* PATCH 353: driver-DS rebase (asm 0x1082).  Program each of the 9 OPL channel level/key regs. */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
+   iVar1 = 9;
+   bVar2 = 0;
+   do {
+-    FUN_0000_0f21(CONCAT11(*(byte *)(bVar2 + 0xbf8) | 0x40,0x3f));
++    FUN_0000_0f21(CONCAT11(*(uint8_t *)(D + bVar2 + 0xbf8) | 0x40,0x3f));
+     FUN_0000_0f21((uint)(bVar2 | 0xb0) << 8);
+     bVar2 = bVar2 + 1;
+     iVar1 = iVar1 + -1;
+

@@ -1,6 +1,79 @@
-# AUDIO subsystem — recon + shim foundation (iterations 1–6)
+# AUDIO subsystem — recon + shim foundation (iterations 1–7)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
+
+## 13. Iteration 7 — FIRST REAL OPL out(0x388) ON THE MENU + fist_opl.c (DOSBox-matched DBOPL) stood up (2026-07-18)
+
+**HEADLINE: the engine now programs the OPL chip on the menu — real `out(0x388)` writes fire (device-3
+AdLib init), crash-free, both targets buildable; and `fist_opl.c` + the DOSBox 0.74-3 DBOPL core
+synthesize the register stream to PCM/WAV.**  The continuous MUSIC (a note stream) does NOT yet play —
+the op=6 sequencer-start is a separate, still-unreached trigger (below), so the OPL output is the
+(silent) init state.  Honest: NOT bit-exact music yet, because no notes play.
+
+**THE CORRECTED DEVICE (asm+runtime proven — supersedes §12's "device 4 = OPL"):** the SOUND.CFG music
+device is **device 3 = AdLib/OPL** (letter 'C'), NOT device 4 (which is MPU-401 MIDI, writer 0d49 -> port
+0x330).  Device 3's 7 methods (104f/10a5/1082/10e3/10a6/0f99/0f48) all call the OPL writer **FUN_0000_0f21
+= `out 0x388,AH; out 0x389,AL`**.  Runtime-verified: `byte[DGROUP:0x248]='C'` (the engine SOUND.CFG parse
+result) -> 014e code 3.
+
+**WHY IT WAS SILENT (root cause, fixed): the device LETTER was dropped.**  bdcc does `mov al,[DGROUP:0x248];
+lcall *0x508` (-> 014e); the `__allregs` indirect-vector dispatch drops AL, so 014e ran with letter 0 ->
+device 0 (null) -> no OPL.  Patch 352 threads the letter; 014e selects device 3.
+
+**LANDED (patches 352/353/354; fist_snd.c RE-DECOMPILED with the device-3 seeds -> new reproducible md5
+`9b642483` [decomp `fb27726e`], fist.c/ext/mga md5s UNCHANGED `61453e42`/`0051cb56`/`75c6d726`):**
+- **352 (engine bdcc)** — thread the dropped SOUND.CFG letter AL=byte[DGROUP:0x248] to shim global
+  `g_snd_cfg_letter` (fist_sb.c).  No-op on default boot (c508==0).
+- **353 (driver 014e/0872/104f/1082/0f99)** — 014e reads the letter (device 3); the device-SELECT 0872
+  (driver-DS rebase) copies device 3's 7 method vectors from the per-device table driver_ds:0x17d.. into
+  the live slots + calls slot0 = 104f (OPL init); 104f/1082/0f99 driver-DS rebased -> **the first real
+  out(0x388)** (init: reg 0x01=0x20 waveform-enable, 0x08, 0xBD=0xC0, per-channel 0x40/0xB0 regs).
+- **354 (driver 10e3/10a6/0aa7/0966/0997/0cfb)** — the device-3 per-voice OPL methods (10e3 key-on/off,
+  10a6 frequency) + 0aa7 velocity-scale completion + the note-play chain (0966 dispatch, 0997 note-on asm
+  reconstruction, 0cfb freq/env), all driver-DS rebased.  The device-select voice-reset (0c94->0ca9->0aa7
+  -> tail `jmp *[ds:0x1a5]` = device-3 slot3 = 10e3) is now crash-free.
+
+**RE-DECOMPILE (approved):** added the device-3 OPL seeds to Makefile `decompile-drivers` snd
+`FIST_DRIVER_SEED_OFFS` (0x872,0xa14,0xf21,0xf48,0xf54,0xf99,0x104f,0x1082,0x10a5,0x10a6,0x10e3) -> 89->103
+fns, REPRODUCIBLE.  All 3 hard-pristine engine md5s UNCHANGED.
+
+**fist_opl.c + the DBOPL core (new platform shim):**
+- **OPL core = DOSBox 0.74-3 DBOPL** (`re_out/opl/dbopl.{cpp,h}`, verbatim; only the DOSBox mixer glue
+  `DBOPL::Handler` removed -- the DSP core Chip/Channel/Operator/InitTables/GenerateBlock is byte-for-byte
+  the oracle's, since DOSBox 0.74-3 default `oplemu` = DBOPL).  `re_out/fist_opl_dbopl.cpp` = extern "C"
+  bridge (Setup/WriteReg/GenerateBlock2).  `re_out/fist_opl.c` = the port shim: trap 0x388/0x389 (routed
+  from fist_vga.c `in`/`out`), feed WriteReg, generate mono s16 PCM -> ring + WAV (FIST_AUDIO_WAV), one PIT
+  period per engine INT-8 tick (fist_opl_tick).  Gate = FIST_OPL (or FIST_SB); default OFF -> 0x388/0x389
+  never trapped -> zero video-flow effect.
+- **Builds BOTH targets:** native (g++ -m32 -nostdinc++ -fno-rtti -fno-exceptions -> NO 32-bit libstdc++
+  dep, links into the C program with gcc) and wasm (em++).  patch.sh copies `*.cpp` + `opl/` into build/;
+  build_native.sh + build.sh compile the C++ units.  Unit-verified: a synthetic AdLib note -> DBOPL peak
+  5091, 99.9% non-silent.
+- **Rate/mode:** oracle WAV = stereo 44100 16-bit; the game (device 3) never enables OPL3 (opl3Active=0)
+  -> mono GenerateBlock2 at 44100 (mono -> stereo-dup at compare time).
+
+**THE REMAINING GAP (the continuous menu MUSIC does not play — op=6 sequencer-start not reached):**
+- The engine PLAY dispatch is `FUN_1000_516f -> FUN_1000_50e6(0x4fa,..)` which dispatches op=6 to the sound
+  device ONLY if **bit7 of DGROUP:0x4fc ("device present")** is set.  **Runtime probe: `FUN_1000_50e6` is
+  NEVER reached on the menu** (traced, 0 hits under FIST_SB) -> the menu never issues the music-START.
+- The device-present bit7 is set by the device REGISTRATION (`FUN_1000_1917` DGROUP:0xd4 work-obj alloc +
+  `FUN_1000_107a` DGROUP:0xf4 IRQ-register), both UNRECOVERED (§9 blocker 4).  So even locating a 516f
+  caller on the menu would gate false.
+- **=> the port programs+opens the OPL device (init writes fire) but never starts a note sequence.**  The
+  port WAV is silent (peak 0) -- faithful to "device open, no music playing".  Making the menu music
+  actually play (and thus a meaningful bit-exact wavcompare vs `ref/audio_menu_oracle.wav`) requires:
+  (1) recover 1917/107a so the device registers present (bit7 set); (2) locate the menu music-file load +
+  the 516f/op=6 sequencer-start inside 00d0/cae6; (3) then calibrate the OPL sample cadence / phase-pin.
+  This is the next iteration's workpackage (a multi-blocker chain, as §9 mapped).
+
+**No-regression (VERIFIED both targets):** `make check` = all 354 patches apply; default boot mainmenu
+AE=0 native+wasm, native<->wasm 0-diff (md5 `3a6ff1c5`); default boot rc=0; the OPL shim is FIST_OPL/
+FIST_SB-gated (default OFF) + the driver device-3 path is FIST_SB-reachable-only -> the 26 video flows are
+byte-identical by construction.
+
+---
+## (iterations 1–6, below)
+
 This is a multi-iteration subsystem. **Iter 6 (§12) is a DECISIVE BACKEND CORRECTION: the menu background
 music is OPL2/OPL3 FM SYNTHESIS (port 0x388/0x389), NOT SB-DMA digital** — A/B oracle-proven (oplmode=none
 -> silent; oplmode=auto -> music, only variable changed).  `fist_sb.c` (SB-DMA -> PCM decoder) is the

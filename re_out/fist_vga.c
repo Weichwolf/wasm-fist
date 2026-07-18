@@ -32,6 +32,12 @@ int  fist_sb_owns(int port);
 int  fist_sb_in(int port);
 void fist_sb_out(int port, int val);
 
+/* OPL FM shim (fist_opl.c): port 0x388/0x389 trapping.  Default OFF (FIST_OPL/FIST_SB unset) ->
+ * fist_opl_owns returns 0 -> zero effect on the video flows. */
+int  fist_opl_owns(int port);
+int  fist_opl_in(int port);
+void fist_opl_out(int port, int val);
+
 void fist_vga_set_mode(int mode)
 {
     g_vmode = mode & 0xff;
@@ -45,6 +51,9 @@ int  fist_vga_mode(void){ return g_vmode; }
 /* ================= port I/O ================= */
 static int g_3da_toggle;
 static unsigned short g_pit[3] = {0xffff,0xffff,0xffff};
+/* PIT channel-0 reload divisor (INT-8 rate = 1193182/div): the OPL shim uses it to advance the FM synth
+ * by the real per-tick sample count.  0 divisor == 65536. */
+int fist_vga_pit0_div(void){ return g_pit[0] ? g_pit[0] : 0x10000; }
 static int g_pit_sub[3];
 
 /* Service the MGAVIDEO palette-upload semaphore DGROUP:0x786 bit0 == the driver's vertical-retrace ISR
@@ -83,6 +92,7 @@ int in(int port)
 {
     fist_timer_pump();   /* cooperative PIT-ISR tick: the engine polls ports in its wait/render loops */
     port &= 0xffff;
+    if (fist_opl_owns(port)) return fist_opl_in(port);  /* OPL FM 0x388 status (FIST_OPL/FIST_SB) */
     if (fist_sb_owns(port)) return fist_sb_in(port);   /* SB DSP + 8237 DMA window (FIST_SB, default off) */
     switch (port) {
     case 0x3c7: return 0;
@@ -113,6 +123,7 @@ void out(int port, int val)
 {
     fist_timer_pump();   /* cooperative PIT-ISR tick (see in()) */
     port &= 0xffff; val &= 0xff;
+    if (fist_opl_owns(port)) { fist_opl_out(port, val); return; }  /* OPL FM 0x388/0x389 (FIST_OPL/FIST_SB) */
     if (fist_sb_owns(port)) { fist_sb_out(port, val); return; }   /* SB DSP + 8237 DMA (FIST_SB, default off) */
     switch (port) {
     case 0x3c8: g_dac_widx = val; g_dac_wsub = 0; return;     /* set DAC write index */

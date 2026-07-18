@@ -27,7 +27,7 @@ INCL="-I$SRCDIR"
 
 # Engine unit + harness (native_main is reused as the wasm main via #ifdef __EMSCRIPTEN__).
 UNITS_C="$SRCDIR/fist.c $ROOT/tools/native_main.c $SRCDIR/fist_dos.c $SRCDIR/fist_vga.c \
-         $SRCDIR/fist_icall.c $SRCDIR/fist_modules.c $SRCDIR/fist_sb.c"
+         $SRCDIR/fist_icall.c $SRCDIR/fist_modules.c $SRCDIR/fist_sb.c $SRCDIR/fist_opl.c"
 # Driver overlay units, when present (weak fmap/base symbols in fist_modules.c resolve against them).
 for m in mga snd ext; do
   [ -f "$SRCDIR/fist_$m.c" ] && UNITS_C="$UNITS_C $SRCDIR/fist_$m.c"
@@ -39,6 +39,18 @@ for c in $UNITS_C; do
   "$EMCC" -c $F $INCL "$c" -o "$o" 2>/tmp/fist_wcc.txt || true
   if grep -q 'error:' /tmp/fist_wcc.txt; then
     echo "ERROR compiling $(basename "$c"):"; grep 'error:' /tmp/fist_wcc.txt | head -8; err=1
+  fi
+  OBJS="$OBJS $o"
+done
+# OPL FM: the DOSBox 0.74-3 DBOPL core (C++) + extern "C" bridge, compiled with em++ (same core as native).
+EMXX="$(dirname "$EMCC")/em++"
+CXXF="-O2 -std=gnu++11 -w -fno-rtti -fno-exceptions -fno-strict-aliasing"
+for pair in "$SRCDIR/fist_opl_dbopl.cpp:-I$SRCDIR -I$SRCDIR/opl" "$SRCDIR/opl/dbopl.cpp:-I$SRCDIR/opl"; do
+  src="${pair%%:*}"; inc="${pair#*:}"
+  o="/tmp/wasm_$(basename "$src" .cpp).o"
+  "$EMXX" -c $CXXF $inc "$src" -o "$o" 2>/tmp/fist_wcc.txt || true
+  if grep -q 'error:' /tmp/fist_wcc.txt; then
+    echo "ERROR compiling $(basename "$src"):"; grep 'error:' /tmp/fist_wcc.txt | head -8; err=1
   fi
   OBJS="$OBJS $o"
 done

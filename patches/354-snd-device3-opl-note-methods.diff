@@ -1,0 +1,219 @@
+SOUNDDVR device-3 (OPL) NOTE methods + note-play chain: driver-DS rebase so the voice-reset + note-on
+paths complete faithfully (the OPL key-on/off + frequency writes reach out(0x388)).
+
+After patch 353 selects device 3 and runs the OPL init, the device-select's voice-reset tail
+(0c94 -> 0ca9 -> 0aa7 -> `jmp *[ds:0x1a5]` = device-3 slot3 = 10e3) and the note-play dispatch reach the
+device-3 per-voice OPL methods, which were the next driver-DS base-loss (SIGSEGV in 10e3 at host 0xc01).
+All asm-verified vs re_out/fist_snd_image.bin:
+
+  * 10e3 - device-3 per-voice KEY-ON/OFF (regs 0x40/0xB0); param_3 = voice (BX at the 0aa7 tail-jmp).
+  * 10a6 - device-3 channel FREQUENCY (regs 0xA0/0xB0).
+  * 0aa7 - restore the velocity scale the tail method reads in CL (asm 0xab6-0xac1: cl=high((cl*2)*
+           voice[0xfd])); patch 351 had omitted it (its tail then went to device-0 null).  Pass the live
+           AX/CX/BX to the tail device method faithfully (BX = voice).
+  * 0966 - note dispatch: [ds:0x13e2] note-table base + the two note-table passes.
+  * 0997 - note-ON: free-voice scan + note-record read + 0cfb (freq/env) + 0aa7 (key-on).  Ghidra aliased
+           the voice index / record pointer; reconstructed from asm.
+  * 0cfb - load the voice freq/env from the per-instrument tables driver_ds:0x15b4/0xfc9/0x10d4/0x152e/
+           0x14ac; tail `jmp *[ds:0x1c1]` = device-3 slot5 = 0f99 (NEAR).
+
+Reached only under FIST_SB (device 3 is selected only when the FIST_SB-gated config path threads letter
+'C'); the default boot never dispatches here -> zero effect on the 26 video flows.
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -1521,11 +1521,14 @@
+ undefined2 __allregs FUN_0000_0966(byte param_1,undefined2 param_2)
+ 
+ {
+-  _DAT_1000_d3e2 = 0x13e8;
+-  if (*(int *)(param_1 + 0x13e8) != 0) {
++  /* PATCH 354: driver-DS rebase (asm 0x966).  [ds:0x13e2] = the note-record table base (0x13e8 then
++     0x13e4); test the note record then dispatch note-on 0997 for each of the two note tables. */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
++  *(uint16_t*)(D + 0x13e2) = 0x13e8;
++  if (*(int16_t *)(D + (uint16_t)((uint8_t)param_1 + 0x13e8)) != 0) {
+     FUN_0000_0997(param_1,param_2,0x983);
+   }
+-  _DAT_1000_d3e2 = 0x13e4;
++  *(uint16_t*)(D + 0x13e2) = 0x13e4;
+   FUN_0000_0997(param_1,param_2,0x993);
+   return 0xffff;
+ }
+@@ -1538,30 +1541,32 @@
+ void __allregs FUN_0000_0997(byte param_1,int param_2,undefined2 param_3)
+ 
+ {
+-  char cVar1;
+-  byte bVar2;
+-  int iVar3;
+-  undefined1 *puVar4;
+-  
+-  iVar3 = (uint)DAT_1000_c03e << 3;
+-  cVar1 = '\b';
+-  do {
+-    bVar2 = *(byte *)(iVar3 + 0x13b);
+-    param_2 = CONCAT11(bVar2,(char)param_2);
+-    if (*(char *)(bVar2 + 0x107) == '\0') break;
+-    iVar3 = iVar3 + 1;
+-    cVar1 = cVar1 + -1;
+-  } while (cVar1 != '\0');
+-  puVar4 = (undefined1 *)((uint)param_1 * 8 + _DAT_1000_d3e2);
+-  *(undefined1 *)(bVar2 + 0x111) = *puVar4;
+-  FUN_0000_0cfb(puVar4[1],param_2);
+-  bVar2 = (char)((uint)_DAT_1000_c012 >> 8) << 4;
+-  if (bVar2 == 0) {
+-    bVar2 = 0xff;
+-  }
+-  iVar3 = (uint)*(byte *)(param_2 + 3) * (uint)bVar2;
+-  FUN_0000_0aa7(CONCAT11(*(undefined1 *)(param_2 + 2),(char)iVar3),
+-                CONCAT11((char)((uint)param_3 >> 8),(char)((uint)iVar3 >> 8)));
++  /* PATCH 354: SOUNDDVR note-ON, faithful asm reconstruction (asm 0x997).  Ghidra aliased the found
++     voice index (ch) with param_2 and the note-record pointer with `param_2+N`; rebuilt from asm.
++     param_1 = note id (al).  All ds: = the driver data segment (DAT_0000_0831<<4). */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
++  uint16_t bp;
++  uint8_t *rec;
++  uint8_t voice = 0;
++  uint8_t ah;
++  uint16_t prod;
++  int i;
++
++  (void)param_2; (void)param_3;
++  bp = (uint16_t)(*(uint8_t*)(D + 0x3e)) << 3;              /* dev*8 */
++  for (i = 0; i < 8; i++) {                                 /* find a free voice slot */
++    voice = *(uint8_t*)(D + bp + 0x13b);                   /* voice-map[bp] */
++    if (*(uint8_t*)(D + voice + 0x107) == 0) break;        /* free? */
++    bp++;
++  }
++  rec = D + (uint16_t)((uint16_t)param_1 * 8 + *(uint16_t*)(D + 0x13e2));   /* note record */
++  *(uint8_t*)(D + voice + 0x111) = rec[0];
++  FUN_0000_0cfb(rec[1], (uint)voice << 8);                 /* freq/env; ch = voice */
++  ah = (uint8_t)((((*(uint16_t*)(D + 0x12)) >> 8) & 0xf) << 4);
++  if (ah == 0) ah = 0xff;
++  prod = (uint16_t)rec[3] * (uint16_t)ah;                  /* velocity scale */
++  FUN_0000_0aa7((uint16_t)(((uint16_t)rec[2] << 8) | (prod & 0xff)),
++                (uint)(((uint)voice << 8) | (uint)(uint8_t)(prod >> 8)));
+   return;
+ }
+ 
+@@ -1670,18 +1675,25 @@
+   char cVar2;
+   uint16_t vec;
+ 
+-  uVar1 = param_2 >> 8;
++  uVar1 = param_2 >> 8;                                       /* ch = voice index */
+   if ((*(uint16_t*)(D + 0x10) == 0) && (cVar2 = (char)((uint)param_1 >> 8), cVar2 != '\0')) {
++    /* PATCH 354: restore the velocity scale the tail device method reads in CL (asm 0xab6-0xac1):
++       cl_out = high( (cl_in*2) * voice[0xfd] ).  Patch 351 omitted it (the tail then went to device-0
++       null); with device 3 selected the tail is 10e3, which reads the scaled velocity in CX-low. */
++    uint16_t prod = (uint16_t)(uint8_t)((uint8_t)param_2 << 1) * (uint16_t)(uint8_t)D[uVar1 + 0xfd];
++    param_2 = (param_2 & 0xff00) | (uint)(uint8_t)(prod >> 8);
+     *(uint16_t *)(D + uVar1 * 2 + 0x90) = *(uint16_t *)(D + uVar1 * 2 + 0xa4);
+     D[uVar1 + 0x107] = 1;
+     D[uVar1 + 0xc2] = cVar2 + *(char *)(D + uVar1 + 0xd6);
+     D[uVar1 + 0xcc] = 0xff;
+     vec = *(uint16_t *)(D + 0x1a5);
+-    return (*(code *)fist_icall(fist_snd_base + vec))();
++    /* tail `jmp *[ds:0x1a5]` transfers the live register file; the device method reads AX/CX/BX
++       (BX = voice = uVar1).  Pass them faithfully. */
++    return (*(code *)fist_icall(fist_snd_base + vec))(param_1, param_2, uVar1);
+   }
+   D[uVar1 + 0x107] = 0;
+   vec = *(uint16_t *)(D + 0x1a5);
+-  return (*(code *)fist_icall(fist_snd_base + vec))();
++  return (*(code *)fist_icall(fist_snd_base + vec))(param_1, param_2, uVar1);
+ }
+ 
+ 
+@@ -2095,21 +2107,24 @@
+   uint uVar4;
+   int iVar5;
+   
+-  uVar2 = param_2 >> 8;
++  /* PATCH 354: driver-DS rebase (asm 0xcfb).  Load the voice freq/env from the per-instrument tables
++     driver_ds:0x15b4/0xfc9/0x10d4/0x152e/0x14ac; tail `jmp *[ds:0x1c1]` = device slot5 (device-3 0f99). */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
++  uint16_t vec;
++  uVar2 = param_2 >> 8;                                     /* voice */
+   iVar3 = uVar2 * 2;
+-  uVar4 = (uint)param_1;
+-  *(byte *)(uVar2 + 0x34) = param_1;
++  uVar4 = (uint)param_1;                                    /* instrument */
++  *(uint8_t *)(D + uVar2 + 0x34) = param_1;
+   iVar5 = uVar4 * 2;
+-  uVar1 = *(undefined2 *)(iVar5 + 0x15b4);
+-  *(undefined2 *)(iVar3 + 0xa4) = uVar1;
+-  *(undefined2 *)(iVar3 + 0x90) = uVar1;
+-  *(undefined2 *)(iVar3 + 0x40) = *(undefined2 *)(iVar5 + 0xfc9);
+-  *(undefined2 *)(iVar3 + 0x54) = *(undefined2 *)(iVar5 + 0x10d4);
+-  *(undefined1 *)(uVar2 + 0xfd) = *(undefined1 *)(uVar4 + 0x152e);
+-  *(undefined1 *)(uVar2 + 0xd6) = *(undefined1 *)(uVar4 + 0x14ac);
+-                    /* WARNING: Could not recover jumptable at 0x00000d45. Too many branches */
+-                    /* WARNING: Treating indirect jump as call */
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c1c1)))();
++  uVar1 = *(uint16_t *)(D + iVar5 + 0x15b4);
++  *(uint16_t *)(D + iVar3 + 0xa4) = uVar1;
++  *(uint16_t *)(D + iVar3 + 0x90) = uVar1;
++  *(uint16_t *)(D + iVar3 + 0x40) = *(uint16_t *)(D + iVar5 + 0xfc9);
++  *(uint16_t *)(D + iVar3 + 0x54) = *(uint16_t *)(D + iVar5 + 0x10d4);
++  *(uint8_t *)(D + uVar2 + 0xfd) = *(uint8_t *)(D + uVar4 + 0x152e);
++  *(uint8_t *)(D + uVar2 + 0xd6) = *(uint8_t *)(D + uVar4 + 0x14ac);
++  vec = *(uint16_t *)(D + 0x1c1);
++  (*(code *)fist_icall(fist_snd_base + vec))(param_1, param_2, uVar2);
+   return;
+ }
+ 
+@@ -2499,13 +2514,15 @@
+   byte bVar2;
+   uint uVar3;
+   
+-  bVar2 = *(byte *)((param_2 >> 8) + 0xc01);
++  /* PATCH 354: driver-DS rebase (asm 0x10a6).  Device-3 set channel frequency (0xA0/0xB0 regs). */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
++  bVar2 = *(uint8_t *)(D + (param_2 >> 8) + 0xc01);
+   if (bVar2 < 9) {
+     uVar3 = (uint)bVar2;
+-    uVar1 = *(undefined2 *)((param_1 >> 8) * 2 + 0x9dd);
+-    *(byte *)(uVar3 + 0xbe6) = (byte)((uint)uVar1 >> 8) | *(byte *)(uVar3 + 0xbe6) & 0xe0;
++    uVar1 = *(uint16_t *)(D + (param_1 >> 8) * 2 + 0x9dd);
++    *(uint8_t *)(D + uVar3 + 0xbe6) = (byte)((uint)uVar1 >> 8) | *(uint8_t *)(D + uVar3 + 0xbe6) & 0xe0;
+     FUN_0000_0f21(CONCAT11(bVar2,(char)uVar1) | 0xa000);
+-    FUN_0000_0f21(CONCAT11(bVar2,*(undefined1 *)(uVar3 + 0xbe6)) | 0xb000);
++    FUN_0000_0f21(CONCAT11(bVar2,*(uint8_t *)(D + uVar3 + 0xbe6)) | 0xb000);
+   }
+   return;
+ }
+@@ -2520,12 +2537,15 @@
+   byte bVar2;
+   uint uVar3;
+   
+-  bVar2 = *(byte *)(param_3 + 0xc01);
++  /* PATCH 354: driver-DS rebase (asm 0x10e3).  Device-3 per-voice key-on/off: param_3=voice index (bx
++     at the 0aa7 tail-jmp), the OPL channel = driver_ds:(voice+0xc01), op image driver_ds:0xbe6/0xbf8/0xbdd. */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
++  bVar2 = *(uint8_t *)(D + param_3 + 0xc01);
+   if (bVar2 < 9) {
+     uVar3 = (uint)bVar2;
+     if ((char)((uint)param_1 >> 8) == '\0') {
+-      bVar1 = *(byte *)(uVar3 + 0xbe6);
+-      *(byte *)(uVar3 + 0xbe6) = bVar1 & 0xdf;
++      bVar1 = *(uint8_t *)(D + uVar3 + 0xbe6);
++      *(uint8_t *)(D + uVar3 + 0xbe6) = bVar1 & 0xdf;
+       FUN_0000_0f21(CONCAT11(bVar2,bVar1) & 0xffdf | 0xb000);
+     }
+     else {
+@@ -2533,10 +2553,10 @@
+       if (0x3e < bVar1) {
+         bVar1 = 0x3f;
+       }
+-      FUN_0000_0f21((CONCAT11(*(undefined1 *)(uVar3 + 0xbf8),*(byte *)(uVar3 + 0xbdd) | bVar1) |
++      FUN_0000_0f21((CONCAT11(*(uint8_t *)(D + uVar3 + 0xbf8),*(uint8_t *)(D + uVar3 + 0xbdd) | bVar1) |
+                     0x4000) ^ 0x3f);
+-      bVar1 = *(byte *)(uVar3 + 0xbe6);
+-      *(byte *)(uVar3 + 0xbe6) = bVar1 | 0x20;
++      bVar1 = *(uint8_t *)(D + uVar3 + 0xbe6);
++      *(uint8_t *)(D + uVar3 + 0xbe6) = bVar1 | 0x20;
+       FUN_0000_0f21(CONCAT11(bVar2,bVar1) | 0xb020);
+     }
+   }
+

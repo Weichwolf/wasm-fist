@@ -64,7 +64,7 @@ install); the default boot never enters here -> the 26 video flows stay byte-ide
  
  
 @@ -1763,11 +1765,11 @@
- void __allregs FUN_0000_0c94(undefined2 param_1)
+ undefined4 __allregs FUN_0000_0c94(undefined2 param_1)
  
  {
 -  undefined2 uVar1;
@@ -81,7 +81,7 @@ install); the default boot never enters here -> the 26 video flows stay byte-ide
    return;
  }
 @@ -1778,26 +1780,20 @@
- void __allregs FUN_0000_0ca9(uint param_1,undefined2 param_2)
+ undefined4 __allregs FUN_0000_0ca9(uint param_1,undefined2 param_2)
  
  {
 -  undefined2 uVar1;
