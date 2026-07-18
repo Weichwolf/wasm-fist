@@ -1,0 +1,56 @@
+PATCH 365 -- FUN_0000_902c (objtype-0x02 per-frame UPDATE method) object base-loss.  902c is the exact
+structural twin of FUN_0000_7c1d (patch 244): a c0e5-dispatched (patch 243) per-object update whose object
+arrives in param_1 (DI) but which Ghidra read from param_4 (a dropped register -> uninitialised) -> every
+*(param_4+off) deref hit a wild host address.  On the DEFAULT native AZER1 ACCEPT COOP flow (setarch -R,
+FIST_COOP_TICK=1) this is the c0e5->c0ca->902c crash the wm-mission-divergence session pinned; with the
+wasm op-0x50 spin gone (patch 364) both targets converge on this path.  Same base-loss class as patches
+244/335-340.  Fix (asm-verified vs re_out/fist_dat_image.bin @ 0x902c; DS=DGROUP=0x1c00; CS=0):
+  - param_4 re-pointed at the object host pointer g_mem+0x1c000+(uint16)param_1 (the DI c0e5 threads);
+    the whole body + the sub-method calls (912d/90cd/9176/875f/a358/a0a4/91b8/a57a/a9ea) are
+    object-relative and become correct verbatim.
+  - the two CS-relative indirect-call tables rebased to g_mem + threaded with DI: asm 0x9060
+    `call *cs:0x90a0(bx)` (bx=byte[di+0x3d]&0x1e) and asm 0x906a `call *cs:0x91a7(bx)` (bx=byte[di+0x3e]).
+    Ghidra emitted the first as a raw offset (-0x6f60=0x90a0) and mis-based the second onto DGROUP
+    (&DAT_2000_51a6); both are CS=0 code-segment tables -> g_mem+0x90a0 / g_mem+0x91a7.
+Mirrors patch 244 verbatim (bases substituted).  NOTE: 91b8 (reached from 902c) carries its own 7e29-class
+weapon-table base-loss (`byte[di+0x91]*2 + -0x6dfa`), pinned as a separate member.
+
+--- a/fist.c
++++ b/fist.c
+@@ -24127,6 +24127,20 @@
+   ulong uVar2;
+   undefined4 uVar3;
+   
++  /* PATCH 365: objtype-0x02 per-frame UPDATE method (asm 0x902c; DS=DGROUP=0x1c00) -- the exact
++   * skeleton of FUN_0000_7c1d (patch 244).  di arrives in param_1 from c0e5 (patch 243); Ghidra read
++   * the object from param_4 (a dropped register -> garbage) so every *(param_4+off) was a wild deref
++   * (the ACCEPT COOP mission crash c0e5->c0ca->902c).  Re-point param_4 at the object host pointer
++   * g_mem+0x1c000+di; the body + sub-method calls are all object-relative so they become correct
++   * verbatim.  The two CS-relative dispatch tables (CS=0) are rebased to g_mem + threaded with DI
++   * (asm 0x9060 `call *cs:0x90a0(bx)` bx=byte[di+0x3d]&0x1e; asm 0x906a `call *cs:0x91a7(bx)`
++   * bx=byte[di+0x3e]).  Ghidra emitted raw offsets (-0x6f60=0x90a0) and mis-based the 2nd table to
++   * DGROUP:&DAT_2000_51a6; both are CS=0 code tables. */
++  {
++    unsigned char *_dg = (unsigned char *)g_mem + 0x1c000;
++    uint16_t _di = (uint16_t)(uintptr_t)param_1;
++    param_4 = (int)(intptr_t)(_dg + _di);
++  }
+   *(undefined1 *)(param_4 + 0xd) = *(undefined1 *)(param_4 + 0x1d);
+   *(undefined1 *)(param_4 + 0xa7) = (char)((uint)*(undefined2 *)(param_4 + 0x38) >> 8);
+   if (*(char *)(param_4 + 0x3c) != '\0') {
+@@ -24141,9 +24155,13 @@
+   FUN_0000_a358(param_4);
+   *(char *)(param_4 + 0x3d) = *(char *)(param_4 + 0x3d) + '\x02';
+   uVar2 = CONCAT22(uVar4,(uint)*(byte *)(param_4 + 0x3d)) & 0xffff001e;
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)((int)uVar2 + -0x6f60))))();
++  /* PATCH 365: CS-relative table1 word[g_mem+0x90a0+(byte[di+0x3d]&0x1e)], DI live */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)((unsigned char *)g_mem + 0x90a0 + ((uint)uVar2 & 0x1e))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+   uVar3 = CONCAT22((int)(uVar2 >> 0x10),(uint)*(byte *)(param_4 + 0x3e));
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)((int)(undefined2 *)&DAT_2000_51a6 + *(byte *)(param_4 + 0x3e) + 1))))();
++  /* PATCH 365: CS-relative table2 word[g_mem+0x91a7+byte[di+0x3e]], DI live */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)((unsigned char *)g_mem + 0x91a7 + *(byte *)(param_4 + 0x3e))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+   FUN_1000_a0a4(uVar1,uVar3,param_4);
+   if (*(char *)(param_4 + 0x92) == '\0') {
+     if ((*(byte *)(param_4 + 0x17) & 0x80) == 0) goto LAB_0000_908a;

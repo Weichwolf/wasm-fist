@@ -1,0 +1,456 @@
+PATCH 366: objtype-0x02 per-frame UPDATE subtree base-loss sweep (behind patch 365's 902c fix).
+Each member is a c0e5-dispatched per-object method reached via 902c's body / table1 (byte[di+0x3d]&0x1e)
+/ table2 (byte[di+0x3e]) dispatch; all receive the object as a NEAR OFFSET di and were Ghidra-base-lost
+(param derefed as a host pointer, or a CS=0 code-table read emitted without the g_mem base).  Rebase each
+to g_mem+0x1c000+off (objects, DS=DGROUP) resp. g_mem+off (CS=0 code tables).  asm-verified vs
+re_out/fist_dat_image.bin.  MISSION-PATH ONLY -> no menu/settings/intro/editor regression.  Reconstructed
+via the deterministic setarch -R + FIST_COOP_TICK ACCEPT crash-walk (each fix reveals the next member).
+
+--- a/fist.c	2026-07-18 19:42:50.739294331 +0200
++++ b/fist.c	2026-07-18 21:56:47.818209507 +0200
+@@ -22993,9 +22993,11 @@
+ void __allregs FUN_0000_90c0(int param_1)
+ 
+ {
+-  if ((*(byte *)(param_1 + 0x16) & 8) != 0) {
+-    *(undefined2 *)(param_1 + 0xac) = 0x5a;
+-  }
++  /* PATCH 366: di=near offset; asm 0x90c0 test byte[di+0x16],8; movw [di+0xac],0x5a -> rebase. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)param_1;
++  if ((dg[(unsigned short)(off + 0x16)] & 8) != 0)
++    *(unsigned short *)(dg + (unsigned short)(off + 0xac)) = 0x5a;
+   return;
+ }
+ 
+@@ -23068,10 +23070,14 @@
+ void __allregs FUN_0000_9160(int param_1)
+ 
+ {
++  /* PATCH 366 (objtype-0x02 subtree): di=near offset (902c table1 dispatch); asm 0x9160 derefs
++   * [di+0x3d]/[di+0xf1]/[di+0xf0] DGROUP-relative -> rebase g_mem+0x1c000+off. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)param_1;
+   FUN_1000_9ffc(param_1);
+-  if ((*(byte *)(param_1 + 0x3d) & 0xe0) == 0) {
+-    *(undefined1 *)(param_1 + 0xf1) = 3;
+-    *(undefined1 *)(param_1 + 0xf0) = 3;
++  if ((dg[(unsigned short)(off + 0x3d)] & 0xe0) == 0) {
++    dg[(unsigned short)(off + 0xf1)] = 3;
++    dg[(unsigned short)(off + 0xf0)] = 3;
+   }
+   return;
+ }
+@@ -23093,16 +23099,18 @@
+ void __allregs FUN_0000_917d(int param_1)
+ 
+ {
+-  char *pcVar1;
+-  uint uVar2;
+-  
+-  if (*(char *)(param_1 + 0xa8) != '\0') {
+-    pcVar1 = (char *)(param_1 + 0xa8);
+-    *pcVar1 = *pcVar1 + -1;
+-    if ((*pcVar1 == '\0') && (*(int *)((uint)*(byte *)(param_1 + 0x91) + param_1 + 0xac) != 0)) {
+-      uVar2 = (uint)(*(byte *)(param_1 + 0x91) >> 1);
+-      FUN_0000_bf3c(*(undefined1 *)(uVar2 + 0x919b),uVar2,param_1);
+-      *(undefined1 *)(param_1 + 0xcf) = 3;
++  /* PATCH 366: di=near offset; asm 0x917d weapon-cooldown fire method.  Rebase [di+0xa8]/[di+0x91]/
++   * [di+bx+0xac](WORD)/[di+0xcf]; the fire-anim byte comes from the CS=0 table byte[g_mem+0x919b+idx]
++   * (idx=byte[di+0x91]>>1).  bf3c gets that byte + idx + di. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)param_1;
++  if (dg[(unsigned short)(off + 0xa8)] != 0) {
++    dg[(unsigned short)(off + 0xa8)]--;
++    if (dg[(unsigned short)(off + 0xa8)] == 0 &&
++        *(unsigned short *)(dg + (unsigned short)(off + 0xac + dg[(unsigned short)(off + 0x91)])) != 0) {
++      unsigned uVar2 = (unsigned)(dg[(unsigned short)(off + 0x91)] >> 1);
++      FUN_0000_bf3c(g_mem[0x919b + uVar2], uVar2, param_1);
++      dg[(unsigned short)(off + 0xcf)] = 3;
+     }
+   }
+   return;
+@@ -27084,7 +27092,12 @@
+ void __allregs FUN_0000_ad2f(int param_1)
+ 
+ {
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(byte *)(param_1 + 0x43) + 0x97f0))))();
++  /* PATCH 366: di=near offset; asm 0xad2f: bx=byte[di+0x43]; call NEAR word[CS:bx+0x97f0] (CS=0 table);
++   * then ad3b(di).  Rebase [di+0x43], the CS=0 table to g_mem+0x97f0, thread di. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)param_1;
++  unsigned bx = dg[(unsigned short)(off + 0x43)];
++  (*(code *)fist_icall_near(0x0u, *(unsigned short *)((unsigned char *)g_mem + 0x97f0 + bx)))(param_1);
+   FUN_0000_ad3b(param_1);
+   return;
+ }
+@@ -27245,15 +27258,21 @@
+ void __allregs FUN_0000_ae32(undefined4 param_1,int param_2)
+ 
+ {
+-  byte bVar1;
+-  undefined2 uVar2;
+-  
+-  uVar2 = (undefined2)((ulong)param_1 >> 0x10);
+-  if ((*(char *)(param_2 + 0x94) != '\0') && (*(int *)(param_2 + 0x97) == 0)) {
+-    bVar1 = FUN_0000_0291();
+-    if (bVar1 <= *(byte *)(*DAT_2000_5796 + -0x66b6)) {
+-      FUN_0000_a6e3(*(undefined2 *)(param_2 + 0x9d),CONCAT22(uVar2,*DAT_2000_5796),param_2);
+-      *(uint *)(param_2 + 0x40) = *(uint *)(param_2 + 0x40) | 0x80;
++  /* PATCH 366: param_2=di=near offset; asm 0xae32 fire-check.  Rebase [di+0x94]/[di+0x97](WORD)/
++   * [di+0x9d]/[di+0x40](WORD orw); the ammo-threshold chain si=word[0x9796]; bx=word[si];
++   * byte[bx+0x994a] is all DGROUP near-offset (Ghidra derefed the near-offsets as host ptrs). */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)param_2;
++  undefined2 uVar2 = (undefined2)((unsigned long)param_1 >> 0x10);
++  if (dg[(unsigned short)(off + 0x94)] != 0 &&
++      *(unsigned short *)(dg + (unsigned short)(off + 0x97)) == 0) {
++    unsigned char bVar1 = FUN_0000_0291();
++    unsigned short si = *(unsigned short *)(dg + 0x9796);
++    unsigned short bx = *(unsigned short *)(dg + si);
++    if (bVar1 <= dg[(unsigned short)(bx + 0x994a)]) {
++      FUN_0000_a6e3(*(unsigned short *)(dg + (unsigned short)(off + 0x9d)),
++                    (undefined4)CONCAT22(uVar2, bx), param_2);
++      *(unsigned short *)(dg + (unsigned short)(off + 0x40)) |= 0x80;
+     }
+   }
+   return;
+@@ -27265,10 +27284,13 @@
+ void __allregs FUN_0000_ae5c(int *param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  
+-  puVar1 = (undefined2 *)(*param_1 * 4 + -0x66e4);
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))();
++  /* PATCH 366: di=near offset; asm 0xae5c: bx=word[di]; bx<<=2; lcall FAR dword[DGROUP:bx+0x991c]
++   * (per-object-type vector table).  Ghidra derefed di as a host ptr + rendered the FAR call as near
++   * (1 word).  Rebase word[di], the DGROUP vector table, use fist_icall_far, thread di. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)(uintptr_t)param_1;
++  unsigned short idx = (unsigned short)(*(unsigned short *)(dg + off) << 2);
++  (*(code *)fist_icall_far(*(unsigned int *)(dg + (unsigned short)(idx + 0x991c))))(off);
+   return;
+ }
+ 
+@@ -27278,7 +27300,12 @@
+ void __allregs FUN_0000_ae66(int param_1)
+ 
+ {
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)((*(byte *)(param_1 + 0x45) & 6) + 0xae73))))();
++  /* PATCH 366: di=near offset; asm 0xae66: bx=byte[di+0x45]&6; call *cs:[bx-0x518d] (CS-rel table @0xae73,
++   * CS=0).  Rebase the [di+0x45] deref + the CS=0 code table to g_mem+0xae73; dispatch with di live. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)param_1;
++  unsigned bx = (dg[(unsigned short)(off + 0x45)] & 6);
++  (*(code *)fist_icall_near(0x0u, *(unsigned short *)((unsigned char *)g_mem + 0xae73 + bx)))(param_1);
+   return;
+ }
+ 
+@@ -27319,24 +27346,23 @@
+ void __allregs FUN_0000_ae7b(int param_1)
+ 
+ {
+-  char *pcVar1;
+-  
+-  if ((*(uint *)(param_1 + 0x40) & 8) == 0) {
+-    *(undefined1 *)(param_1 + 0x51) = 0;
+-    return;
+-  }
+-  *(char *)(param_1 + 0x51) = *(char *)(param_1 + 0x51) + '\x01';
+-  if (*(byte *)(param_1 + 0x51) < 3) {
+-    *(undefined1 *)(param_1 + 0x45) = 2;
+-    *(undefined1 *)(param_1 + 0x46) = 3;
+-    return;
+-  }
+-  pcVar1 = (char *)(param_1 + 0x46);
+-  *pcVar1 = *pcVar1 + -1;
+-  if (*pcVar1 != '\0') {
+-    return;
+-  }
+-  *(undefined1 *)(param_1 + 0x45) = 0;
++  /* PATCH 366: di=near offset; asm 0xae7b object-anim-state method.  Rebase all [di+off] derefs + fix
++   * the WORD read at +0x40 (asm testw, Ghidra uint). */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)param_1;
++  if ((*(unsigned short *)(dg + (unsigned short)(off + 0x40)) & 8) == 0) {
++    dg[(unsigned short)(off + 0x51)] = 0;
++    return;
++  }
++  dg[(unsigned short)(off + 0x51)]++;
++  if (dg[(unsigned short)(off + 0x51)] < 3) {
++    dg[(unsigned short)(off + 0x45)] = 2;
++    dg[(unsigned short)(off + 0x46)] = 3;
++    return;
++  }
++  dg[(unsigned short)(off + 0x46)]--;
++  if (dg[(unsigned short)(off + 0x46)] != 0) return;
++  dg[(unsigned short)(off + 0x45)] = 0;
+   return;
+ }
+ 
+@@ -27481,31 +27507,12 @@
+ void __allregs FUN_0000_af97(int *param_1)
+ 
+ {
+-  uint uVar1;
+-  
+-  if ((*param_1 != 1) && (*param_1 != 3)) {
+-    return;
+-  }
+-  if ((((*DAT_2000_5796 != 3) && (*(int *)((int)param_1 + 0x97) != 0)) &&
+-      (((*(byte *)(param_1 + 0xb) & 8) != 0 || ((DAT_2000_578c & 3) == 0)))) &&
+-     ((*(uint *)((int)param_1 + 0x99) < 0xc9 ||
+-      (((param_1[0x20] & 0x80U) != 0 || (DAT_2000_578c < *(byte *)(*DAT_2000_5796 + -0x66ae))))))) {
+-    if ((*(byte *)(*(int *)((int)param_1 + 0x97) + 0x16) & 0x10) != 0) {
+-      if (*param_1 == 1) {
+-        FUN_0000_8711(param_1);
+-        return;
+-      }
+-      if (*param_1 == 3) {
+-        FUN_0000_96c0(param_1);
+-        return;
+-      }
+-    }
+-    uVar1 = *(int *)((int)param_1 + 0x8b) - *(int *)((int)param_1 + 0x89);
+-    if ((uVar1 < 0xb6) || (0xff49 < uVar1)) {
+-      FUN_0000_a286(param_1);
+-      param_1[0x20] = param_1[0x20] & 0xff7f;
+-    }
+-  }
++  /* PATCH 366: di=near offset; asm 0xaf97: cmpw [di],1/3; je afa2; ret -- af97 is a pre-check that FALLS
++   * THROUGH into FUN_0000_afa2 (0xafa2, adjacent).  Rebase word[di]; run afa2's (now-fixed) body. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)(uintptr_t)param_1;
++  if (*(unsigned short *)(dg + off) != 1 && *(unsigned short *)(dg + off) != 3) return;
++  FUN_0000_afa2(param_1);
+   return;
+ }
+ 
+@@ -27515,26 +27522,30 @@
+ void __allregs FUN_0000_afa2(int *param_1)
+ 
+ {
+-  uint uVar1;
+-  
+-  if ((((*DAT_2000_5796 != 3) && (*(int *)((int)param_1 + 0x97) != 0)) &&
+-      (((*(byte *)(param_1 + 0xb) & 8) != 0 || ((DAT_2000_578c & 3) == 0)))) &&
+-     (((*(uint *)((int)param_1 + 0x99) < 0xc9 || ((param_1[0x20] & 0x80U) != 0)) ||
+-      (DAT_2000_578c < *(byte *)(*DAT_2000_5796 + -0x66ae))))) {
+-    if ((*(byte *)(*(int *)((int)param_1 + 0x97) + 0x16) & 0x10) != 0) {
+-      if (*param_1 == 1) {
+-        FUN_0000_8711(param_1);
+-        return;
+-      }
+-      if (*param_1 == 3) {
+-        FUN_0000_96c0(param_1);
+-        return;
+-      }
+-    }
+-    uVar1 = *(int *)((int)param_1 + 0x8b) - *(int *)((int)param_1 + 0x89);
+-    if ((uVar1 < 0xb6) || (0xff49 < uVar1)) {
++  /* PATCH 366: di=near offset; asm 0xafa2 per-object AI fire-gate.  Rebase all [di+off] object fields
++   * (WORD at +0x99/+0x40/+0x8b/+0x89), si=word[di+0x97] (near offset -> [si+0x16]), and the near-offset
++   * chain d5796=word[0x9796]; w5796=word[d5796]; d578c=byte[0x978c]; thresh=byte[w5796+0x9952].
++   * Sub-calls 8711/96c0/a286 get di. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)(uintptr_t)param_1;
++  unsigned short d5796 = *(unsigned short *)(dg + 0x9796);
++  unsigned short w5796 = *(unsigned short *)(dg + d5796);
++  unsigned char  d578c = dg[0x978c];
++  unsigned short si = *(unsigned short *)(dg + (unsigned short)(off + 0x97));
++  if (w5796 != 3 && si != 0 &&
++      ((dg[(unsigned short)(off + 0x16)] & 8) != 0 || (d578c & 3) == 0) &&
++      (*(unsigned short *)(dg + (unsigned short)(off + 0x99)) < 0xc9 ||
++       (*(unsigned short *)(dg + (unsigned short)(off + 0x40)) & 0x80) != 0 ||
++       d578c < dg[(unsigned short)(w5796 + 0x9952)])) {
++    if ((dg[(unsigned short)(si + 0x16)] & 0x10) != 0) {
++      if (*(unsigned short *)(dg + off) == 1) { FUN_0000_8711(param_1); return; }
++      if (*(unsigned short *)(dg + off) == 3) { FUN_0000_96c0(param_1); return; }
++    }
++    unsigned short uVar1 = (unsigned short)(*(unsigned short *)(dg + (unsigned short)(off + 0x8b))
++                                          - *(unsigned short *)(dg + (unsigned short)(off + 0x89)));
++    if (uVar1 < 0xb6 || 0xff49 < uVar1) {
+       FUN_0000_a286(param_1);
+-      param_1[0x20] = param_1[0x20] & 0xff7f;
++      *(unsigned short *)(dg + (unsigned short)(off + 0x40)) &= 0xff7f;
+     }
+   }
+   return;
+@@ -27558,21 +27569,17 @@
+ void __allregs FUN_0000_b017(int param_1)
+ 
+ {
+-  uint uVar1;
+-  
+-  if (((*(uint *)(param_1 + 0x40) & 4) == 0) && (*(int *)(param_1 + 0x97) == 0)) {
+-    uVar1 = FUN_0000_0291();
+-    if ((uVar1 & 0x3f) == 0) {
+-      *(undefined2 *)(param_1 + 0x8b) = 0x8000;
+-      return;
+-    }
+-    if ((uVar1 & 0x3c0) == 0) {
+-      *(undefined2 *)(param_1 + 0x8b) = 0;
+-      return;
+-    }
++  /* PATCH 366: di=near offset; asm 0xb017 RNG heading-set.  Rebase [di+0x40]/[di+0x97]/[di+0x8b] (all WORD). */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)param_1;
++  if ((*(unsigned short *)(dg + (unsigned short)(off + 0x40)) & 4) == 0 &&
++      *(unsigned short *)(dg + (unsigned short)(off + 0x97)) == 0) {
++    unsigned uVar1 = FUN_0000_0291();
++    if ((uVar1 & 0x3f) == 0) { *(unsigned short *)(dg + (unsigned short)(off + 0x8b)) = 0x8000; return; }
++    if ((uVar1 & 0x3c0) == 0) { *(unsigned short *)(dg + (unsigned short)(off + 0x8b)) = 0; return; }
+     if ((uVar1 & 0x1c00) == 0) {
+       uVar1 = FUN_0000_0291();
+-      *(int *)(param_1 + 0x8b) = (uVar1 & 0x3fff) + 0xe000;
++      *(unsigned short *)(dg + (unsigned short)(off + 0x8b)) = (unsigned short)((uVar1 & 0x3fff) + 0xe000);
+     }
+   }
+   return;
+@@ -27628,27 +27635,21 @@
+ void __allregs FUN_0000_b0be(int param_1)
+ 
+ {
+-  uint uVar1;
+-  
+-  if (((((*(byte *)(param_1 + 0x16) & 8) != 0) && (*(int *)(param_1 + 0x97) != 0)) &&
+-      (0x13 < *(uint *)(param_1 + 0x99))) && (0x707 < (uint)(DAT_2000_2cde - DAT_2000_5794))) {
+-    uVar1 = FUN_0000_0291();
+-    if (*(char *)(param_1 + 0x43) == '\x04') {
+-      if ((byte)(uVar1 >> 8) < 0x41) {
+-        uVar1 = FUN_0000_a28c(param_1);
+-      }
+-      if (0x4c < (byte)uVar1) {
+-        return;
+-      }
+-    }
+-    else if (0xc < (byte)uVar1) {
+-      return;
+-    }
++  /* PATCH 366: di=near offset; asm 0xb0be AI turn-decision.  Rebase [di+0x16]/[di+0x97](WORD)/
++   * [di+0x99](WORD)/[di+0x43]; DAT_2000_2cde/5794 accessors + far targets a28c/aea6/9dd2 already correct. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)param_1;
++  if ((dg[(unsigned short)(off + 0x16)] & 8) != 0 &&
++      *(unsigned short *)(dg + (unsigned short)(off + 0x97)) != 0 &&
++      0x13 < *(unsigned short *)(dg + (unsigned short)(off + 0x99)) &&
++      0x707 < (unsigned)(unsigned short)(DAT_2000_2cde - DAT_2000_5794)) {
++    unsigned uVar1 = FUN_0000_0291();
++    if (dg[(unsigned short)(off + 0x43)] == 4) {
++      if ((unsigned char)(uVar1 >> 8) < 0x41) uVar1 = FUN_0000_a28c(param_1);
++      if (0x4c < (unsigned char)uVar1) return;
++    } else if (0xc < (unsigned char)uVar1) return;
+     DAT_2000_5794 = DAT_2000_2cde;
+-    if ((uVar1 & 0x20) != 0) {
+-      FUN_1000_aea6(param_1);
+-      return;
+-    }
++    if ((uVar1 & 0x20) != 0) { FUN_1000_aea6(param_1); return; }
+     FUN_1000_9dd2(param_1);
+   }
+   return;
+@@ -57305,30 +57306,35 @@
+ void __allregs FUN_1000_87cc(int param_1)
+ 
+ {
+-  byte *pbVar1;
+-  int *piVar2;
+-  int iVar3;
+-  byte *pbVar4;
+-  
+-  iVar3 = 0;
+-  piVar2 = (int *)*(int *)(param_1 + 0x97);
+-  if (piVar2 != (int *)0x0) {
+-    if (*piVar2 == 0x1a) {
+-      pbVar4 = (byte *)*(undefined2 *)((uint)*(byte *)((int)piVar2 + 0x19) * 2 + 0x26e8);
+-      goto LAB_1000_87f5;
++  /* PATCH 366: di=near offset; asm 0x187cc animation-frame selector.  GS=STRSEG=word[DGROUP:0x70]<<4 for
++   * the anim tables (0x26e8/0x26a0 GS-rel, byte lists), DGROUP for the object.  si=word[di+0x97]; if
++   * word[si]==0x1a use byte[si+0x19]<<1 -> word[GS:+0x26e8] else word[si]<<1 -> word[GS:+0x26a0]; walk up
++   * to 3 anim bytes[GS:si] picking the first whose word[di+b+0xac]!=0; 8b7c(that byte, di). */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char *gs = g_mem + ((unsigned)*(unsigned short *)(dg + 0x70) << 4);
++  unsigned short off = (unsigned short)param_1;
++  unsigned short bx = 0;
++  unsigned short si = *(unsigned short *)(dg + (unsigned short)(off + 0x97));
++  unsigned short srcoff;
++  if (si != 0) {
++    if (*(unsigned short *)(dg + si) == 0x1a) {
++      bx = (unsigned short)(dg[(unsigned short)(si + 0x19)] << 1);
++      srcoff = *(unsigned short *)(gs + (unsigned short)(bx + 0x26e8));
++      goto found_87cc;
+     }
+-    iVar3 = *piVar2 << 1;
++    bx = (unsigned short)(*(unsigned short *)(dg + si) << 1);
++  }
++  srcoff = *(unsigned short *)(gs + (unsigned short)(bx + 0x26a0));
++found_87cc:;
++  {
++    int cx = 3; unsigned char pb = 0;
++    do {
++      pb = gs[srcoff];
++      if (*(unsigned short *)(dg + (unsigned short)(off + 0xac + pb)) != 0) break;
++      srcoff++; cx--;
++    } while (cx != 0);
++    FUN_1000_8b7c(pb, param_1);
+   }
+-  pbVar4 = (byte *)*(undefined2 *)(iVar3 + 0x26a0);
+-LAB_1000_87f5:
+-  iVar3 = 3;
+-  do {
+-    pbVar1 = pbVar4;
+-    if (*(int *)((uint)*pbVar1 + param_1 + 0xac) != 0) break;
+-    pbVar4 = pbVar4 + 1;
+-    iVar3 = iVar3 + -1;
+-  } while (iVar3 != 0);
+-  FUN_1000_8b7c(*pbVar1,param_1);
+   return;
+ }
+ 
+@@ -57726,25 +57732,28 @@
+ undefined4 __allregs FUN_1000_8b7c(byte param_1,int param_2)
+ 
+ {
+-  uint uVar1;
+-  
+-  if (*(byte *)(param_2 + 0x91) != param_1) {
+-    *(byte *)(param_2 + 0x91) = param_1;
+-    if ((param_1 != 6) && (param_1 != *(byte *)(param_2 + 0xa5))) {
+-      *(byte *)(param_2 + 0xa5) = param_1;
+-      uVar1 = (uint)(param_1 >> 1);
+-      *(undefined1 *)(param_2 + 0xa8) = *(undefined1 *)(uVar1 + 0x9186);
+-      FUN_0000_bf3c(*(undefined1 *)(uVar1 + 0x9196),uVar1,param_2);
+-    }
+-    *(undefined1 *)(param_2 + 0xd2) = 3;
+-    *(undefined1 *)(param_2 + 0xd4) = 3;
+-    *(undefined1 *)(param_2 + 0xd6) = 3;
+-    *(undefined1 *)(param_2 + 0xd8) = 3;
+-    *(undefined1 *)(param_2 + 0xda) = 3;
+-    *(undefined1 *)(param_2 + 0xcf) = 3;
++  /* PATCH 366: param_2=di=near offset, param_1=anim byte; asm 0x18b7c set-anim.  Rebase [di+0x91]/
++   * [di+0xa5]/[di+0xa8]/[di+0xd2..0xcf]; two CS=0 tables byte[g_mem+0x9186+idx]/byte[g_mem+0x9196+idx]
++   * (idx=param_1>>1). */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short off = (unsigned short)param_2;
++  if (dg[(unsigned short)(off + 0x91)] != param_1) {
++    dg[(unsigned short)(off + 0x91)] = param_1;
++    if (param_1 != 6 && param_1 != dg[(unsigned short)(off + 0xa5)]) {
++      dg[(unsigned short)(off + 0xa5)] = param_1;
++      unsigned uVar1 = (unsigned)(param_1 >> 1);
++      dg[(unsigned short)(off + 0xa8)] = g_mem[0x9186 + uVar1];
++      FUN_0000_bf3c(g_mem[0x9196 + uVar1], uVar1, param_2);
++    }
++    dg[(unsigned short)(off + 0xd2)] = 3;
++    dg[(unsigned short)(off + 0xd4)] = 3;
++    dg[(unsigned short)(off + 0xd6)] = 3;
++    dg[(unsigned short)(off + 0xd8)] = 3;
++    dg[(unsigned short)(off + 0xda)] = 3;
++    dg[(unsigned short)(off + 0xcf)] = 3;
+     FUN_1000_70c1();
+   }
+-  return;
++  return 0;
+ }
+ 
+ 
