@@ -1,0 +1,40 @@
+SOUNDDVR device-registration: install the si=0xec far section so DGROUP:0xd4/0xf4 resolve to the
+device-register service fns FUN_1000_1917 / FUN_1000_107a (recovered as loader-shim helpers, iter 8).
+
+The driver init FUN_0000_0078 (asm 0x78) registers the sound device by two far calls:
+    push cs;pop es; mov bx,0x3d6; lcall [ds:0xf4]   ; 107a = IRQ/timer-ISR register (chains cs:0x3d6)
+    mov ax,0x413; mov bx,0x4fa; mov cx,ds; lcall [ds:0xd4]   ; 1917 = owner-tag MEMMGR search/format
+Patch 344 already fixed the SS-context guard + runs these calls, but DGROUP:0xd4/0xf4 are 0 (their
+defining FAR reloc section si=0xec is never applied on the menu path -- documented blocker 3, docs/
+audio.md §9), so `fist_icall_far(0)` trapped -> the registration no-op'd.
+
+The si=0xec section (leading seg 0xf69) DEFINES DGROUP:0xd4 = 0xf69:0x2287 = linear 0x11917 (=1917)
+and DGROUP:0xf4 = 0xf69:0x19ea = linear 0x1107a (=107a).  Both are the SAME kind as the boot service
+vectors 0x0a..0x36 (engine-own seg 0xf69 far ptrs) -- installed from the game's own reloc data (base-0
+=> identity) via the loader-role fist_apply_reloc_section, exactly as the 0x1d8 scheduler section is at
+boot.  1917/107a are UNRECOVERED by Ghidra, so fist_icall resolves linear 0x11917/0x1107a to the shim
+helpers fist_snd_1917 / fist_snd_107a (fist_sb.c) -- 1917 = the owner-tag pool search over the patch-345
+pools (0x16d4/0x16f6/0x1718 for the block owned by (0x4fa,DGROUP)); 107a = record the driver timer-ISR
+entry (SOUNDDVR cs:0x3d6) for the cooperative per-tick drive (the shim owns the PIT/INT-8 layer).
+
+Installed right before the 0xf4/0xd4 calls (inside the FIST_SB-gated patch-344 block), so DGROUP:0xd4/
+0xf4 hold the far ptrs by the time the calls read them.  Reached only under FIST_SB -> zero effect on
+the 26 video flows.  Asm-verified vs re_out/fist_dat_image.bin (si=0xec section @ reloc-table 0x33520;
+targets 0x11917 / 0x1107a).
+--- a/fist_snd.c
++++ b/fist_snd.c
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -434,10 +434,12 @@
+     {
+     extern int fist_sb_enabled(void);
+     extern int fist_apply_reloc_at(unsigned short,unsigned short,int);
++    extern int fist_apply_reloc_section(unsigned short,int);
+     extern uint32_t fist_snd_base;
+     if (fist_sb_enabled() && DAT_0000_005a == 0x1c00 &&
+         *(short *)(g_mem+0x1c000u) == (short)0xcbc3) {
+       fist_apply_reloc_at((unsigned short)(fist_snd_base >> 4), 0xa, 1);
++      fist_apply_reloc_section(0xec, 1);   /* install DGROUP:0xd4=1917 / 0xf4=107a (si=0xec far) */
+       (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c0f4u)))(0);
+       (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c0d4u)))(0);
+     }

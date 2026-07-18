@@ -1,6 +1,74 @@
-# AUDIO subsystem — recon + shim foundation (iterations 1–7)
+# AUDIO subsystem — recon + shim foundation (iterations 1–8)
 
 Status date: 2026-07-18. Author task: stand up the first port audio output + the audio-verify method.
+
+## 14. Iteration 8 — the sound device now REGISTERS PRESENT (1917/107a recovered + si=0xec) — honest: still no continuous music (2026-07-18)
+
+**HEADLINE: the two UNRECOVERED device-registration service fns FUN_1000_1917 (DGROUP:0xd4) and
+FUN_1000_107a (DGROUP:0xf4) are recovered as loader-shim helpers + the si=0xec far section is installed,
+so the SOUNDDVR device now REGISTERS PRESENT on the menu: DGROUP:0x4fc bit7=1, the device descriptor is
+populated, the timer-ISR is registered.  BUT the continuous menu MUSIC still does NOT play — the note
+stream needs the driver timer-ISR sequencer (registered, not yet driven per-tick) + the song source.
+NOT bit-exact; port WAV near-silent (peak ~331, 147 OPL reg writes = instrument init + voice key-offs).**
+
+**WHAT LANDED (patch 355 + hand-written shim; the 3 hard-pristine engine md5s UNCHANGED
+`61453e42`/`0051cb56`/`75c6d726`, fist_snd.c UNCHANGED `9b642483` — NO re-decompile this iteration):**
+- **`fist_snd_1917` / `fist_snd_107a` (re_out/fist_sb.c)** — the two engine service fns Ghidra never
+  recovered, reconstructed asm-verified vs `re_out/fist_dat_image.bin` as loader-shim helpers:
+  - **1917 (asm 0x11917)** = the owner-tagged MEMMGR SEARCH (NOT an allocator, as §9 assumed): `call
+    0x11345` searches pools 0x16d4/0x16f6/0x1718 (built by patch 345) via 0x1135f for the block owned by
+    `(bx=0x4fa, cx=DGROUP=0x1c00)` — head `word[DGROUP:pool+0xa]`, next `word[blk:0xc]`, match
+    `word[blk:6]==bx && word[blk:8]==cx`.  If found → `ds=blk; call 0x10cce` (reformat); else CF=1
+    (fail).  **The (0x4fa,DGROUP) block EXISTS in the pools → 1917 finds seg 0x39ea** (the caller
+    discards the return, so no fake alloc / no shared-CF touch — faithful).
+  - **107a (asm 0x1107a)** = the IRQ/timer-ISR register: `call 0x14ce7` splices the driver ISR
+    `SOUNDDVR cs:0x3d6` into the INT-8 handler chain (a standard far-jmp chain-insert at es:bx=
+    snd_seg:0x3d6, si=engine chain node cs:0x19bb).  The shim OWNS the PIT/INT-8 layer → "register" =
+    record the driver ISR entry (`g_snd_isr_seg:g_snd_isr_off` = 3a07:03d6) for the future per-tick
+    drive.  Both wired into `fist_icall` (linear 0x11917/0x1107a → the helpers).
+- **Patch 355 (FUN_0000_0078, FIST_SB-gated)** — install the FAR reloc section `si=0xec` right before
+  the driver init's `lcall [ds:0xf4]`/`[ds:0xd4]` (which patch 344 already runs but which trapped because
+  DGROUP:0xd4/0xf4 were 0 — the documented blocker 3).  si=0xec DEFINES **DGROUP:0xd4 = 0xf69:0x2287 =
+  linear 0x11917** and **DGROUP:0xf4 = 0xf69:0x19ea = linear 0x1107a** (verified at runtime:
+  `DGROUP:0xd4=0x0f692287`, `DGROUP:0xf4=0x0f6919ea`) → the init's calls now land in the shim helpers.
+
+**RUNTIME-VERIFIED (native, deterministic, setarch -R, break at the 1917 call):**
+- `desc[DGROUP:0x4fa] = 0x3a07` (device descriptor → SOUNDDVR seg — populated).
+- `status[DGROUP:0x4fc] = 0xe0`, **bit7 = 1 → the device registers PRESENT** (the 50e6 op=6 play gate).
+- `[snd] 1917: device work object found @ seg 0x39ea (pools)`; `[snd] 107a: timer-ISR registered @
+  3a07:03d6` (both fire; before, they trapped → registration incomplete).
+- The engine's op=6 play dispatch `FUN_1000_50e6` IS reached and dispatches the note-play chain
+  (SOUNDDVR +0966/+10e3/+1ec run repeatedly).  **NB: 50e6 was already reachable BEFORE this patch** (so
+  do NOT attribute its reach to the registration — the honest delta is that 1917/107a now COMPLETE
+  instead of trapping, and the device is present).
+
+**WHY NO MUSIC YET (the exact residual, asm-mapped):** the menu music is a CONTINUOUS note stream driven
+by the DRIVER TIMER-ISR `SOUNDDVR cs:0x3d6` (body at 0x3dd: reentrancy guard `cmpw ss:0x23e,2`, then a
+7-voice scan calling the note-advance `FUN_0000_0419` → `0579`/`0415`, all driver-DS base-lost;
+`_DAT_2000_bf8e` = the voice-descriptor table).  Ghidra decompiled the 0x3d6 far-jmp placeholder as the
+EMPTY `app_entry_0000_03d6` — the real 0x3dd body is unrecovered.  So even though 107a now registers the
+ISR, it is **not driven per PIT tick**, and the current OPL output is only the instrument-init + the
+voice key-offs (0xB0..0xB8 = 0x1f/key-off, the operator patch regs 0x20-0xe0 for 6 channels — NO
+`0xB0 |= 0x20` key-ON, NO time-varying fnum) → 147 writes total, peak ~331.  Also on the note-play chain
+the instrument-load mid-entry **SOUNDDVR +0xfab** (asm 0xfab: `shl bx,4; add 0x1dd; mov es,cs:0x831` =
+driver-DS instrument-record load) is a fmap MISS (patch-353/354 driver-DS class).
+
+**NEXT ITERATION (make music play):** (1) reconstruct the driver timer-ISR body 0x3dd + rebase
+0419/0579/0415 to the driver DS (`DAT_0000_0831<<4`) + the voice table `_DAT_2000_bf8e`; (2) drive it
+cooperatively per PIT tick from the recorded 107a registration (the shim owns INT-8, like the SB IRQ
+pump); (3) confirm/locate the menu SONG source the ISR streams (no music file opens on the boot — the
+sequence is engine-fed or built-in; trace be0e/0966 note-posts vs. a real song); (4) fix the +0xfab
+instrument-load; (5) THEN calibrate the OPL cadence + phase-pin vs `ref/audio_menu_oracle.wav` and
+wavcompare.
+
+**No-regression (VERIFIED both targets):** `make check` = all 355 patches apply; mainmenu native AE=0 +
+wasm AE=0, **native↔wasm 0-diff (md5 `3a6ff1c5`)**; default boot rc=0.  All shim additions are FIST_SB/
+FIST_OPL-gated (default OFF → the 26 video flows byte-identical by construction) + the fist_icall
+0x11917/0x1107a injection only fires when si=0xec installs DGROUP:0xd4/0xf4 (FIST_SB path).  **The wasm
+FIST_SB SOUND path was not observed to dispatch** (the menu builds + the watchdog dumps, but no OPL trace
+under node) — the sound-path dual-target parity is UNCONFIRMED (a documented follow-up, likely the
+call_indirect signature normalization of the sound driver's method vectors); the VIDEO flows stay
+byte-identical.  **HONEST: no menu music plays on either target yet.**
 
 ## 13. Iteration 7 — FIRST REAL OPL out(0x388) ON THE MENU + fist_opl.c (DOSBox-matched DBOPL) stood up (2026-07-18)
 

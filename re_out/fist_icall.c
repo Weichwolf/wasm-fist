@@ -147,6 +147,12 @@ code *fist_icall(uint32_t linear)
     /* Doug-Huffman extender service gate (e339's `lcall [DGROUP:0xea16]`) -> the shim handler. */
     if (linear == FIST_EXTGATE_LIN)
         return (code *)fist_extender_gate;
+    /* SOUND device-registration service fns UNRECOVERED by Ghidra -> loader-shim helpers (iter 8).
+     * The driver init FUN_0000_0078 calls DGROUP:0xd4 (=0xf69:0x2287=0x11917=FUN_1000_1917 owner-tag
+     * MEMMGR search) and DGROUP:0xf4 (=0xf69:0x19ea=0x1107a=FUN_1000_107a IRQ/timer-ISR register).
+     * See fist_sb.c + docs/audio.md §14. */
+    if (linear == 0x11917) { extern void fist_snd_1917(void); return (code *)fist_snd_1917; }
+    if (linear == 0x1107a) { extern void fist_snd_107a(void); return (code *)fist_snd_107a; }
     /* MULTI-MODULE: a target inside a loaded overlay's range -> that module's FUN via its fmap. */
     for (int i = 0; i < fist_ovl_n; ++i) {
         struct fist_ovl *o = &fist_ovl_tab[i];
