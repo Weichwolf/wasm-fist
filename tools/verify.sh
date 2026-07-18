@@ -200,6 +200,11 @@ FLOWS=(
   # WRITE flow (own fresh cp -a scratch datadirs; repo armoredfist/ untouched).  d5f9/d6e4/d84e/
   # d740/b40b/d638 asm-verified vs re_out/fist_dat_image.bin.
   "editor-fsg-roundtrip|25000|roundtrip||roundtrip"
+  # EDITOR ADD-TANK edit-op (patch 362): enter EDITING mode, add ONE tank via the engine's real
+  # roster allocator + unit registry, save.  Asserts the edited .FSG has base+1 (81) DCBS units, the
+  # added tank RELOADS, and load->save on the edited file is an idempotent FIXED POINT -- native AND
+  # wasm, native==wasm 0-diff.  A WRITE flow (own fresh cp -a scratch datadirs; repo untouched).
+  "editor-add-tank|25000|addtank||addtank"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
@@ -274,6 +279,49 @@ run_roundtrip() { # $1=target ; echo path-to-file1 on success (file1==file2 asse
   echo "$f1"
 }
 
+# ---- EDITOR ADD-TANK edit-op (file-level: well-formed unit delta + idempotent fixed point) ----
+# Same cascade + save-point as the round-trip, but the patch-362 hook (env FIST_EDIT_ADDTANK) enters
+# EDITING mode and ADDS ONE tank through the engine's REAL roster allocator (b21d) + unit registry
+# (0x9fbc) -- cloning an existing loaded friendly (tank) record -- posts "TANK ADDED" (66cd 0xd27),
+# then saves via d5f9 and exits.  The edited .FSG has ONE MORE DCBS unit than the round-trip save
+# (80 -> 81), it RELOADS (the added tank is valid), and load->save on the edited file is IDEMPOTENT
+# (a FIXED POINT, exactly like the round-trip: the raw edit output canonicalizes, then re-saves
+# byte-identically).  Verified native AND wasm, native==wasm 0-diff.  DoD option (b) (see docs/editor.md).
+dcbs_units() { # $1=file ; echo unit-count (first word of the DCBS chunk body) or empty
+  python3 - "$1" <<'PY' 2>/dev/null
+import sys,struct
+d=open(sys.argv[1],'rb').read(); i=0
+while i+6<=len(d):
+    t=d[i:i+4]; ln=struct.unpack('<H',d[i+4:i+6])[0]
+    if t==b'DCBS': print(struct.unpack('<H',d[i+6:i+8])[0]); break
+    i+=6+ln
+PY
+}
+run_edit() { # $1=target $2=datadir ; echo rc  (one enter-edit->add-tank->save->exit against $2/..AZER1.FSG)
+  local t="$1" dd="$2"
+  if [ "$t" = native ]; then
+    timeout 60  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
+  else
+    timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+  fi
+}
+run_addtank() { # $1=target $2=expected-unit-count ; echo path-to-edited-file on success, empty on failure
+  local t="$1" want="$2" a b c fe fe2 fe3 n
+  a="$(fresh_datadir "at.$t.A")"; [ "$(run_edit "$t" "$a")" = 0 ] || { echo ""; return 1; }
+  fe="$TMP/edit.$t.FSG"; [ -s "$a/FISTDATA/AZER1.FSG" ] && cp "$a/FISTDATA/AZER1.FSG" "$fe" || { echo ""; return 1; }
+  n="$(dcbs_units "$fe")"; [ "$n" = "$want" ] || { echo ""; return 3; }          # exactly base+1 units
+  # idempotent fixed point on the edited file: load(fe)->save = fe2; load(fe2)->save = fe3; fe2==fe3
+  b="$(fresh_datadir "at.$t.B")"; cp "$fe" "$b/FISTDATA/AZER1.FSG"
+  [ "$(run_fsg "$t" "$b")" = 0 ] || { echo ""; return 1; }
+  fe2="$TMP/editfp1.$t.FSG"; cp "$b/FISTDATA/AZER1.FSG" "$fe2" 2>/dev/null || { echo ""; return 1; }
+  [ "$(dcbs_units "$fe2")" = "$want" ] || { echo ""; return 3; }                  # reload keeps the tank
+  c="$(fresh_datadir "at.$t.C")"; cp "$fe2" "$c/FISTDATA/AZER1.FSG"
+  [ "$(run_fsg "$t" "$c")" = 0 ] || { echo ""; return 1; }
+  fe3="$TMP/editfp2.$t.FSG"; cp "$c/FISTDATA/AZER1.FSG" "$fe3" 2>/dev/null || { echo ""; return 1; }
+  cmp -s "$fe2" "$fe3" || { echo ""; return 2; }   # edited file is not an idempotent fixed point
+  echo "$fe"
+}
+
 echo "== verify ($WHICH) =="
 for row in "${FLOWS[@]}"; do
   IFS='|' read -r name hz ms inp ref <<<"$row"
@@ -284,6 +332,20 @@ for row in "${FLOWS[@]}"; do
     if [ "$WHICH" != native ]; then f1w="$(run_roundtrip wasm)";   [ -n "$f1w" ] || { ok=0; detail+=" wasm-fail"; }; fi
     if [ "$WHICH" = both ] && [ -n "$f1n" ] && [ -n "$f1w" ]; then
       cmp -s "$f1n" "$f1w" || { ok=0; detail+=" nat!=wasm"; }
+    fi
+    if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
+    continue
+  fi
+  if [ "$name" = editor-add-tank ]; then
+    # AZER1.FSG has a fixed 80-unit DCBS (guarded by the editor-fsg-roundtrip flow above); ADD-TANK
+    # must yield exactly 81.  run_addtank asserts: edit->save has EXP units, the added tank RELOADS,
+    # and load->save on the edited file is an idempotent FIXED POINT.  native==wasm on the raw edit.
+    EXP=81
+    detail=" [add-tank 80->$EXP + idempotent fixed-point]"; fen=""; few=""
+    if [ "$WHICH" != wasm ];   then fen="$(run_addtank native $EXP)"; [ -n "$fen" ] || { ok=0; detail+=" native-fail"; }; fi
+    if [ "$WHICH" != native ]; then few="$(run_addtank wasm $EXP)";   [ -n "$few" ] || { ok=0; detail+=" wasm-fail"; }; fi
+    if [ "$WHICH" = both ] && [ -n "$fen" ] && [ -n "$few" ]; then
+      cmp -s "$fen" "$few" || { ok=0; detail+=" nat!=wasm"; }
     fi
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue

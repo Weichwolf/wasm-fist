@@ -35,10 +35,10 @@ done
 
 OBJS=""; err=0
 for c in $UNITS_C; do
-  o="/tmp/wasm_$(basename "$c" .c).o"
-  "$EMCC" -c $F $INCL "$c" -o "$o" 2>/tmp/fist_wcc.txt || true
-  if grep -q 'error:' /tmp/fist_wcc.txt; then
-    echo "ERROR compiling $(basename "$c"):"; grep 'error:' /tmp/fist_wcc.txt | head -8; err=1
+  o="${OBJDIR:-/tmp}/wasm_$(basename "$c" .c).o"
+  "$EMCC" -c $F $INCL "$c" -o "$o" 2>${OBJDIR:-/tmp}/fist_wcc.txt || true
+  if grep -q 'error:' ${OBJDIR:-/tmp}/fist_wcc.txt; then
+    echo "ERROR compiling $(basename "$c"):"; grep 'error:' ${OBJDIR:-/tmp}/fist_wcc.txt | head -8; err=1
   fi
   OBJS="$OBJS $o"
 done
@@ -47,10 +47,10 @@ EMXX="$(dirname "$EMCC")/em++"
 CXXF="-O2 -std=gnu++11 -w -fno-rtti -fno-exceptions -fno-strict-aliasing"
 for pair in "$SRCDIR/fist_opl_dbopl.cpp:-I$SRCDIR -I$SRCDIR/opl" "$SRCDIR/opl/dbopl.cpp:-I$SRCDIR/opl"; do
   src="${pair%%:*}"; inc="${pair#*:}"
-  o="/tmp/wasm_$(basename "$src" .cpp).o"
-  "$EMXX" -c $CXXF $inc "$src" -o "$o" 2>/tmp/fist_wcc.txt || true
-  if grep -q 'error:' /tmp/fist_wcc.txt; then
-    echo "ERROR compiling $(basename "$src"):"; grep 'error:' /tmp/fist_wcc.txt | head -8; err=1
+  o="${OBJDIR:-/tmp}/wasm_$(basename "$src" .cpp).o"
+  "$EMXX" -c $CXXF $inc "$src" -o "$o" 2>${OBJDIR:-/tmp}/fist_wcc.txt || true
+  if grep -q 'error:' ${OBJDIR:-/tmp}/fist_wcc.txt; then
+    echo "ERROR compiling $(basename "$src"):"; grep 'error:' ${OBJDIR:-/tmp}/fist_wcc.txt | head -8; err=1
   fi
   OBJS="$OBJS $o"
 done
@@ -78,6 +78,6 @@ done
   -sEMULATE_FUNCTION_POINTER_CASTS=1 \
   -sBINARYEN_EXTRA_PASSES=pass-arg=max-func-params@64 \
   -sEXPORTED_RUNTIME_METHODS='["ENV","callMain"]' \
-  --pre-js "$ROOT/tools/wasm_pre.js" --emit-symbol-map 2>/tmp/fist_wlink.txt \
-  || { echo "LINK FAILED:"; tail -25 /tmp/fist_wlink.txt; exit 1; }
+  --pre-js "$ROOT/tools/wasm_pre.js" --emit-symbol-map 2>${OBJDIR:-/tmp}/fist_wlink.txt \
+  || { echo "LINK FAILED:"; tail -25 ${OBJDIR:-/tmp}/fist_wlink.txt; exit 1; }
 echo "[build.sh] built $OUTJS (wasm)"

@@ -1,5 +1,65 @@
 # EDITOR — Phase-0 recon + the FIRST ROUND-TRIP DELIVERABLE (BATTLE .FSG save)
 
+## STATUS (2026-07-18) — ADD-TANK edit-op IMPLEMENTED + verified (patch 362); load→save round-trip (360/361)
+
+The SECOND editor DoD deliverable — drive one EDIT op (ADD TANK) → save → verify the delta — is
+**landed, deterministic, crash-free, and file-verified on native AND wasm** (verify.sh flow
+`editor-add-tank`, the 28th flow; `bash tools/verify.sh both` = 28/28). Like the round-trip it is
+DATA-level (no terrain/voxel/render dependency).
+
+**What runs:** `BATTLES → OK → ACCEPT` loads `AZER1.FSG` via `FUN_0000_d501`, then the patch-362
+harness hook (env `FIST_EDIT_ADDTANK`, default OFF) (1) enters EDITING mode (`DAT_2000_2dab |= 2`,
+the bit2 flag `FUN_0000_540a` toggles), (2) adds ONE tank through the engine's REAL unit machinery,
+(3) posts the editor status `"TANK ADDED"` (`FUN_1000_66cd(0xd27)`, msgid = STRSEG:0xd27 = editor
+string image 0x2e467; msgid = image_off − 0x2d740), and (4) drives `FUN_0000_d5f9` to save, then
+exits. The DCBS unit count goes **80 → 81**; the chunk grows by exactly one 0x37-byte friendly record
++ its 6-byte header (61 B).
+
+**The add is through PROVEN load-path machinery, not a fabricated record:**
+- `FUN_1000_b21d` (patch 200) — the REAL roster allocator: reserves a fresh unit slot in the friendly
+  pool (DGROUP:0xa022 stride 0x37) or enemy pool (0xc05c stride 0xfb), keyed on the team bit
+  `byte[obj−0x19ec]&1`, bumps the roster count/high-water/occupancy bitmap, returns the slot's DGROUP
+  near-offset (its DI return, exposed by patch 200);
+- the new unit's serializable body is CLONED from an existing loaded friendly (tank) record — a
+  genuine, well-formed unit; only the 0x37-byte serializable prefix (exactly what `d6e4` writes and
+  `d81e` reads back) matters, and `b21d` has already set slot[0]=obj / slot[2]=roster-idx, so only the
+  body `[+4 .. +0x37)` is cloned;
+- the new slot is registered into the first free entry of the 182-entry unit registry `DGROUP:0x9fbc`
+  (the exact table `c157`/`c164` → `d84e`/`d6e4` walk on save), so it is counted + serialized;
+- spatial-index registration (`FUN_0000_43c1` → DGROUP:0x6d3c) is NOT run here — not needed to
+  SERIALIZE (`d6e4` walks 0x9fbc), and the RELOAD (`d501→d7e1→d81e→43c1`) does it faithfully.
+
+**HONEST SCOPE (why not the interactive map-click):** the fully-interactive add-tank is the
+map-canvas activate handler `FUN_0000_4c7a` (dispatched `4aaa`→tool-table @ DGROUP:0x7c54, tool-slot 8),
+which pops the `FUN_0000_64ea` vehicle-type picker and projects the click to a world cell via
+`FUN_0000_3f3c` off the map camera-state pointer `DAT_1000_d552`. That path is gated on the
+**post-6015 live editor MAP-VIEW** (extender-side `93c0`, §4 — an unreconstructed frontier): the
+object descriptor `4c7a` threads as its unit record (register DI, `param_6`) has **no
+statically-resolvable origin before 6015**, and `3f3c`'s cell is non-deterministic without the
+map-view camera block initialized (traced + confirmed, this iteration). So the harness supplies the
+type+body+cell directly, through the same roster/registry/serializer machinery — sub-deliverable 3
+(the interactive map-view drive) remains the open frontier.
+
+**THE REFERENCE (DoD option b, honest — a DOSBox original-editor byte-compare is NOT like-for-like,
+same limitation as patch 361):** verified as WELL-FORMED + a deterministic FIXED POINT:
+- edit→save has exactly **base+1 (81)** DCBS units;
+- the edited file **RELOADS** via `d501` (reload keeps 81 units — the added tank is valid);
+- the raw edit output is (like an editor-authored file) not itself a fixed point — the loader `d81e`
+  canonicalizes each unit's roster-index field slot[2] via `b21d` — **but load→save on the edited file
+  is IDEMPOTENT**: `load(edit)→save = file_E2`; `load(file_E2)→save = file_E3`; **`file_E2 == file_E3`**;
+- native AND wasm, native (raw edit output) **== wasm 0-diff**, deterministic across reruns.
+
+**Patch 362** — the env-gated `FIST_EDIT_ADDTANK` hook in `4754` (fires after `d501`, before
+`FUN_1000_6015`/`e4bb`). `b21d`/`66cd`/`d5f9` asm-verified vs `re_out/fist_dat_image.bin`. The 27
+prior flows never set the env → behaviour-neutral. `re_out/*.c` pristine.
+
+**Next editor deliverables:** the interactive map-view drive (§4 extender-side `93c0`) → drive `4c7a`
+with real map-clicks + the `64ea` type-popup + `3f3c` camera projection; then the other edit tools
+(waypoint / minefield / air-base / artillery); then a DOSBox original-editor oracle for a true
+byte-for-byte DoD gate.
+
+---
+
 ## STATUS (2026-07-18) — `.FSG` load→save round-trip is IMPLEMENTED + bit-verified (patches 360/361)
 
 The first LEVEL/MISSION-EDITOR DoD deliverable — the BATTLE `.FSG` save round-trip — is **landed,
