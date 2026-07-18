@@ -26,6 +26,12 @@ static int g_dac_ridx, g_dac_rsub;
 static int g_trace = -1;
 static int traceon(void){ if(g_trace<0){ extern char*getenv(const char*); g_trace=getenv("FIST_TRACE_TRAPS")?1:0;} return g_trace; }
 
+/* Sound Blaster shim (fist_sb.c): SB port window trapping.  Default OFF (FIST_SB unset) -> fist_sb_owns
+ * returns 0 for every port -> the switch below runs exactly as before -> zero effect on the video flows. */
+int  fist_sb_owns(int port);
+int  fist_sb_in(int port);
+void fist_sb_out(int port, int val);
+
 void fist_vga_set_mode(int mode)
 {
     g_vmode = mode & 0xff;
@@ -77,6 +83,7 @@ int in(int port)
 {
     fist_timer_pump();   /* cooperative PIT-ISR tick: the engine polls ports in its wait/render loops */
     port &= 0xffff;
+    if (fist_sb_owns(port)) return fist_sb_in(port);   /* SB DSP + 8237 DMA window (FIST_SB, default off) */
     switch (port) {
     case 0x3c7: return 0;
     case 0x3c8: return g_dac_widx & 0xff;
@@ -106,6 +113,7 @@ void out(int port, int val)
 {
     fist_timer_pump();   /* cooperative PIT-ISR tick (see in()) */
     port &= 0xffff; val &= 0xff;
+    if (fist_sb_owns(port)) { fist_sb_out(port, val); return; }   /* SB DSP + 8237 DMA (FIST_SB, default off) */
     switch (port) {
     case 0x3c8: g_dac_widx = val; g_dac_wsub = 0; return;     /* set DAC write index */
     case 0x3c7: g_dac_ridx = val; g_dac_rsub = 0; return;     /* set DAC read index */

@@ -257,6 +257,7 @@ void fist_set_int8_handler(uint32_t linear){
 static void fist_dump_and_exit(const char *why){
     fprintf(stderr, "[fist] %s: dumping frame + exiting (video-mode=0x%02x, [0x452]=%u)\n",
             why, fist_vga_mode(), *(uint16_t*)(g_mem+0x1c452));
+            { extern void fist_sb_flush(void); fist_sb_flush(); }   /* finalize any SB PCM/WAV capture */
             const char *fb = getenv("FIST_FBDUMP");
             if (fb) fist_dump_framebuffer(fb);
             { const char *rw = getenv("FIST_FBRAW");
@@ -350,6 +351,7 @@ void fist_timer_pump(void){
       if (coop) tick_advance(); }
 #endif
     { extern void fbtrap_arm_hook(void); fbtrap_arm_hook(); }
+    { extern void fist_sb_pump(void); fist_sb_pump(); }   /* SB auto-init stream: raise completion IRQ (FIST_SB) */
     /* Dev watchdog: FIST_RUNMS=<ms> dumps the framebuffer (FIST_FBDUMP) and exits after a wall-clock
      * deadline -- lets a first-light frame be captured while the engine is in its (non-returning) main
      * loop.  Runs in main context (safe for the PPM writer). */

@@ -28,6 +28,7 @@ gcc $F $INCL -c "$ROOT/tools/native_main.c" -o /tmp/fist_main.o
 gcc $F $INCL -c "$SRCDIR/fist_dos.c"      -o /tmp/fist_dos.o
 gcc $F $INCL -c "$SRCDIR/fist_vga.c"      -o /tmp/fist_vga.o
 gcc $F $INCL -c "$SRCDIR/fist_icall.c"    -o /tmp/fist_icall.o
+gcc $F $INCL -c "$SRCDIR/fist_sb.c"       -o /tmp/fist_sb.o
 gcc $F $INCL -c "$SRCDIR/fist_modules.c"  -o /tmp/fist_modules.o
 # Driver overlay units (re_out/fist_mga.c / fist_snd.c): compiled + linked when present, so their
 # weak fmap/base symbols in fist_modules.c resolve and the overlay dispatch wires them. Absent -> the
@@ -39,6 +40,6 @@ for m in mga snd ext; do
   fi
 done
 gcc $F $INCL /tmp/fist_engine.o /tmp/fist_main.o /tmp/fist_dos.o /tmp/fist_vga.o /tmp/fist_icall.o \
-    /tmp/fist_modules.o $DRVOBJ -o "$OUT" -lm
+    /tmp/fist_modules.o /tmp/fist_sb.o $DRVOBJ -o "$OUT" -lm
 set +x
 echo "[build_native] built $OUT (32-bit)"
