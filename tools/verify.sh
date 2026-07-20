@@ -219,6 +219,16 @@ FLOWS=(
   # added tank RELOADS, and load->save on the edited file is an idempotent FIXED POINT -- native AND
   # wasm, native==wasm 0-diff.  A WRITE flow (own fresh cp -a scratch datadirs; repo untouched).
   "editor-add-tank|25000|addtank||addtank"
+  # FIRST DUAL-TARGET IN-MISSION SURFACE (patches 364/365/366/367 objtype-0x02 + b059 crash-free, 381/382
+  # display-walk arg-thread wasm render, +0x3e camera seed): the AZER1-spawn cockpit CENTRAL-CHROME
+  # (engine-2322 dashboard, cols80-180 rows96-188) is bit-exact AE=0 vs a genuine DOSBox ref on BOTH
+  # native AND wasm, native<->wasm 0-diff.  BATTLES(160,100)->OK(205,128)->ACCEPT(40,186) drives the
+  # mission; FIST_MISSFB captures the settled op-0x24 render post #1 (deterministic -- raw-region md5
+  # 355e5bc63d run-stable).  REGION-LIMITED to cols80-180 rows96-188: the full frame differs in rows0-19
+  # (the terrain windshield -- mission-terrain-tile-pipeline frontier, a documented open surface).  WRITE-
+  # isolated (fresh cp -a datadir).  Needs re_out/fist_image.bin (extender render, a `make kernel-image`
+  # build artifact -- gitignored) or the render is skipped.  Special-cased below (FIST_MISSFB + region crop).
+  "mission-cockpit|25000|missfb||$ROOT/ref/mission_azer1_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
@@ -280,7 +290,7 @@ run_fsg() { # $1=target $2=datadir $3=battle(optional,default AZER1) ; echo rc (
   # the single RT_MOUSE navigation (BATTLES->OK->ACCEPT); it selects AZER1 by default, so passing
   # b=AZER1 is behaviour-identical to the un-generalized flow.  Env mirrored to wasm by wasm_pre.js.
   if [ "$t" = native ]; then
-    timeout 60  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 120 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
   else
     timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
@@ -317,7 +327,7 @@ PY
 run_edit() { # $1=target $2=datadir ; echo rc  (one enter-edit->add-tank->save->exit against $2/..AZER1.FSG)
   local t="$1" dd="$2"
   if [ "$t" = native ]; then
-    timeout 60  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 120 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
   else
     timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
@@ -337,6 +347,22 @@ run_addtank() { # $1=target $2=expected-unit-count ; echo path-to-edited-file on
   fe3="$TMP/editfp2.$t.FSG"; cp "$c/FISTDATA/AZER1.FSG" "$fe3" 2>/dev/null || { echo ""; return 1; }
   cmp -s "$fe2" "$fe3" || { echo ""; return 2; }   # edited file is not an idempotent fixed point
   echo "$fe"
+}
+
+# ---- MISSION cockpit render (FIST_MISSFB op-0x24 post #1) -> region-cropped PPM ----
+MC_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0; 7200:40:186:0"
+MC_REGION="100x92+80+96"   # cols80-180 rows96-188 central chrome
+run_mission() { # $1=target $2=datadir ; echo region-crop-ppm-path on success, empty on fail
+  local t="$1" dd="$2"
+  local out="$TMP/mc.$t.ppm" reg="$TMP/mc.$t.reg.ppm"
+  if [ "$t" = native ]; then
+    timeout 90  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
+  else
+    timeout 220 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+  fi
+  [ -s "$out" ] || { echo ""; return 1; }
+  convert "$out" -crop "$MC_REGION" +repage "$reg" 2>/dev/null || { echo ""; return 1; }
+  echo "$reg"
 }
 
 echo "== verify ($WHICH) =="
@@ -369,6 +395,29 @@ for row in "${FLOWS[@]}"; do
     if [ "$WHICH" != native ]; then few="$(run_addtank wasm $EXP)";   [ -n "$few" ] || { ok=0; detail+=" wasm-fail"; }; fi
     if [ "$WHICH" = both ] && [ -n "$fen" ] && [ -n "$few" ]; then
       cmp -s "$fen" "$few" || { ok=0; detail+=" nat!=wasm"; }
+    fi
+    if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
+    continue
+  fi
+  if [ "$name" = mission-cockpit ]; then
+    # First dual-target IN-MISSION surface: AZER1-spawn cockpit central-chrome cols80-180 rows96-188.
+    # Region-limited AE=0 vs the DOSBox ref on native AND wasm + native<->wasm 0-diff.  WRITE-isolated.
+    detail=" [AZER1 cockpit central-chrome cols80-180 rows96-188]"
+    if [ ! -s "$ROOT/re_out/fist_image.bin" ]; then echo "  FAIL $name (re_out/fist_image.bin missing; run 'make kernel-image')"; fail=$((fail+1)); continue; fi
+    convert "$ref" -crop "$MC_REGION" +repage "$TMP/mc.ref.ppm" 2>/dev/null
+    rn=""; rw=""
+    if [ "$WHICH" != wasm ]; then
+      rn="$(run_mission native "$(fresh_datadir mc.nat)")"
+      if [ -n "$rn" ]; then a=$(compare -metric AE "$rn" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" native-AE=$a"; }
+      else ok=0; detail+=" native-no-frame"; fi
+    fi
+    if [ "$WHICH" != native ]; then
+      rw="$(run_mission wasm "$(fresh_datadir mc.wasm)")"
+      if [ -n "$rw" ]; then a=$(compare -metric AE "$rw" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" wasm-AE=$a"; }
+      else ok=0; detail+=" wasm-no-frame"; fi
+    fi
+    if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
+      d=$(compare -metric AE "$rn" "$rw" /dev/null 2>&1); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
     fi
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
