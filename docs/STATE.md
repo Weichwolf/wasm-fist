@@ -1,11 +1,67 @@
-# STATE — accurate current-state frontier map (2026-07-18)
+# STATE — accurate current-state frontier map (2026-07-18; UPDATE 2026-07-20 at top)
 
-Read-only recon snapshot. Supersedes the stale CLAUDE.md `Status` section (which stops at **patch 153**;
-the repo is at **patch 343 / 341 files**, **219 commits**, **26 verify.sh flows**). Where CLAUDE.md
+Read-only recon snapshot. Supersedes the stale CLAUDE.md `Status` section. Where CLAUDE.md
 contradicts the repo, the repo wins — flagged inline.
 
 Engine pristine (unchanged): `re_out/fist.c` **61453e42**, `fist_ext.c` **0051cb56**, `fist_mga.c`
-**75c6d726**, `fist_snd.c` **1e0cfd38**. Tree clean at snapshot time.
+**75c6d726**, `fist_snd.c` **e6d610c5** (evolved via the audio patches from 1e0cfd38).
+
+---
+
+## UPDATE 2026-07-20 — master `bbd2c81`, patch 382, **36 verify.sh flows**
+
+Since the 07-18 snapshot below (patch 343 / 26 flows), three big fronts advanced:
+
+**MISSION RENDER — the AZER1 cockpit is the FIRST DUAL-TARGET in-mission surface (bit-verified both targets).**
+The mission went from "crashes before render" to native crash-free + cockpit central-chrome bit-exact on
+BOTH native+wasm. Arc (patches 364–382):
+- **364** wasm op-0x50 spin — turned out to be a WORKAROUND, not a fix (misdiagnosed DAT_2000_3ae0 as a
+  host pointer; it's a RAW near offset 0xc05c on both targets). Superseded by 382.
+- **365/366** objtype-0x02 per-object update sweep (+ the ae32 param_2 FALSE-GREEN caught and fixed).
+- **367** b059 BEARING/MOVEMENT cluster → ACCEPT-COOP mission renders crash-free 15/15 native, sustained
+  226714 op-0x24 posts.
+- **`+0x3e` camera seed** (native_main.c shim, commit 444f6e4) — the op-0x24 camera bridge missed TCB+0x3e
+  (85d0's divisor) → SIGFPE; oracle-anchored 0x3e=256 unblocks the extender render.
+- **381** native RETICLE fix — the reticle mis-aimed (position shift from 364's wrong offset), NOT a colour
+  bug; restricted 364's subtract to `__EMSCRIPTEN__` → native cockpit AE=0.
+- **382** the wasm render divergence ROOT (class-C ABI): display-walk container methods 20d6/2043 read an
+  UNPASSED `base` arg — native's nonzero stack leftover worked by luck, wasm zero-fills → base=0 → unbounded
+  walk → op-0x50 spin. Fix publishes base via g_fist_paintbp (209e/patch-057 precedent) + drops 381's
+  `__EMSCRIPTEN__` gate (both use 0xc05c — band-aid GONE, doctrinally clean) + a missing 85d0 extern.
+  → **flow 36 `mission-cockpit`**: BATTLES→OK→ACCEPT → op-0x24 render → crop central-chrome (100x92+80+96,
+  cols80-180 rows96-188) → native AE=0 + wasm AE=0 + native↔wasm 0-diff vs `ref/mission_azer1_cockpit_native320.png`.
+  REGION-LIMITED (full-frame still 116px in rows0-19 = the terrain windshield, §4 frontier). Needs `re_out/fist_image.bin`.
+
+**AUDIO — menu music PLAYS (was "no sound at all"). Bit-exact = CHECKPOINT.** Patches 344–359 + `fist_opl.c`
+(DOSBox DBOPL core) + `fist_sb.c`: the menu music is OPL2/OPL3 FM (port 0x388/0x389, NOT SB-DMA — proven via
+DOSBox oplmode A/B), SOUNDDVR device-3 AdLib, sequencer 0a28→0c39→0b5d reading MIDI in MAINMENU.MS3. Plays at
+the correct tempo/density. **Bit-exact is CHECKPOINTED** (the sequencer LAYER/CHAIN redistribution 0c39/0af4/
+0c94/0ca9 — multi-fn, not a single allocator); clean phase-pinned OPL oracle ref banked. Not yet a verify flow.
+
+**EDITOR — .FSG load→save round-trip DONE + bit-verified; ADD-TANK edit-op DONE.** Patches 360–362 + 380:
+- `editor-fsg-roundtrip` flow: idempotent fixed point (load→save=f1, load(f1)→save=f2, f1==f2), native+wasm 0-diff.
+- `editor-add-tank` flow: ADD-TANK edit-op (80→81 DCBS units, +61 bytes).
+- `editor-fsg-*` (cyprus1/india1/saudi1/syria1/ukraine1/train1/ukraine8): 7 battle round-trips; ALL 47 .FSG
+  battles independently validated as idempotent fixed points, zero serializer defects. Entry: BATTLES→ACCEPT→e4bb
+  (mode 2dab bit2). **Interactive editor (93c0 map-view + the 6 INT-33h tools) still untouched.**
+
+**36 flows = the 26 below + `editor-fsg-roundtrip` + `editor-add-tank` + 7 `editor-fsg-<battle>` + `mission-cockpit`.**
+`run_fsg`/`run_addtank` native timeout is 120s (was 60 — load-margin for the 10× gate under concurrent-agent load).
+
+**OPEN frontiers toward the 10× DoD gate (ranked):** (1) **terrain windshield** rows0-19 (§4, the deep 6980
+coord-layout paging confound — the one input-state lever left; the cockpit is region-limited around it). (2)
+**AUDIO bit-exact** (sequencer layer/chain + a WebAudio verify flow — half the DoD). (3) **the pre-existing
+`cancel` 26de-sprite-resolver flake** (~1/30 rc=139 SEGV — a MUST-FIX before the 10× gate: a flaky flow randomly
+resets the streak). (4) **other missions/maps** (only AZER1 driven; the full campaign C##/D##.KLC set — gated on §4
+for full-frame, but cockpit-chrome flows are cheap now). (5) **gameplay-in-motion, save/load, controls-config,
+interactive editor** — untouched. (6) **the 10×-consecutive-clean harness** itself (a passrun/consecutive wrapper).
+
+Detail of each in memory notes: [[mission-cockpit-camera-3e]], [[wasm-mission-op50-blocker]], [[audio-subsystem]],
+[[mission-terrain-tile-pipeline]], [[editor-entry-and-roundtrip]], [[verify-shared-binary-race]] (10×-gate timeout margin).
+
+The 07-18 snapshot below is kept for its still-accurate §4 terrain deep-dive + the front-end flow detail.
+
+---
 
 A surface counts as **bit-verified** only if it has a passing `tools/verify.sh` flow (AE=0 native AND wasm,
 native↔wasm 0-diff). Everything else is honestly downgraded.
