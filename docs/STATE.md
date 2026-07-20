@@ -8,6 +8,41 @@ Engine pristine (unchanged): `re_out/fist.c` **61453e42**, `fist_ext.c` **0051cb
 
 ---
 
+## UPDATE 2026-07-20 (later) — master `c47d366`, patches 383–385 + watchdog shim fix → **verify.sh both = 36/36**
+
+Since the bbd2c81 snapshot below, four fixes landed; the suite is now a COMPLETE clean 36/36 (first full clean
+iteration on the fixed codebase — the base the 10× gate runs on). Engine md5s still pristine (fixes are patches +
+one shim edit).
+
+- **Watchdog shim fix (commit `7cc9ef8`, `tools/native_main.c`)** — THE real "flaky gate" blocker, not the 26de
+  flake. The `FIST_RUNMS` display-flow dump-and-exit watchdog stored an ABSOLUTE epoch-ms deadline (~1.78e12) in a
+  32-bit `long` (-m32 / wasm32) → overflowed NEGATIVE for cyclic ~25-day windows → the `>0` guard silently disabled
+  it → EVERY FBDUMP display flow hung to `timeout` (rc=124) on BOTH targets while editor/intro/mission (other exit
+  seams) passed. A whole broken window looked like "24/36 flaky". Fixed 64-bit. Took the suite 12/36 → 35/36. See
+  [[runms-watchdog-32bit-epoch-overflow]].
+- **Patch 383 (`0ecfe0c`)** — eliminated the intermittent boot-time f842 far-reloc-applier SIGSEGV (~1-2.6%/boot).
+- **Patch 384 (`bf5cdea`)** — fixed the WASM menu-audio blocker: `f7ad`'s dropped template-copy args let the alloc
+  land at DGROUP:0 on wasm, clobbering the SOUNDDVR gate signature → no OPL. Threads the asm-correct args. BUT its
+  correct 0x3e0 alloc SHIFTS the MEMMGR heap (the real game's behaviour) → exposed a latent mission-render bug →
+- **Patch 385 (`c47d366`)** — reconstructed the 3 MISSED 209e cockpit-HUD icon-paint thunks `75a3/7b3d/7cea` (bare
+  arg-less c6b4=26a1 blits; Ghidra dropped ax=sprite-id + bx=elem+4; same class as siblings 305/315/316 fixed for
+  7b71/75c2/7b57). The heap shift perturbs the ABI-leftover registers they read → garbage sprites over the left
+  cockpit panel. Reconstructing all three (asm-verified, 26a1 5-arg) → mission-cockpit AE=0 on BOTH targets,
+  native↔wasm 0-diff, crop md5 `355e5bc63da5` = original banked frame, with patch 384 KEPT (audio stays fixed). No
+  revert, no band-aid. See [[patch384-mission-cockpit-conflict]].
+
+**Frontier-list correction:** the old #3 "26de-sprite-resolver flake as the must-fix gate blocker" was a
+MISDIAGNOSIS — the gate flakiness was the watchdog epoch-overflow (now fixed). The 26de flake is a real but
+SEPARATE, lower-frequency debt: a SYMPTOM of 5 un-reconstructed sibling reticle-blit dispatchers
+(2660/2758/290c/2a39/29f4) + 3 non-M1 reticle setters (74e3/8463/9497), all BUILD-DEPENDENT and only reachable on
+non-M1/idx≠0 missions (NOT the covered AZER1 flow). Full asm spec in [[reticle-sprite-dispatcher-debt]].
+
+**Remaining toward the DoD (unchanged, ranked):** 10×-consecutive-clean gate on the now-clean 36/36 (runnable);
+audio bit-exact + a WebAudio `audio-menu` flow; terrain windshield (§4); other missions/maps + the reticle debt;
+save/load; controls-config; interactive editor (6 INT-33h tools).
+
+---
+
 ## UPDATE 2026-07-20 — master `bbd2c81`, patch 382, **36 verify.sh flows**
 
 Since the 07-18 snapshot below (patch 343 / 26 flows), three big fronts advanced:
