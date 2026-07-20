@@ -35,8 +35,15 @@ BOTH native+wasm. Arc (patches 364–382):
 **AUDIO — menu music PLAYS (was "no sound at all"). Bit-exact = CHECKPOINT.** Patches 344–359 + `fist_opl.c`
 (DOSBox DBOPL core) + `fist_sb.c`: the menu music is OPL2/OPL3 FM (port 0x388/0x389, NOT SB-DMA — proven via
 DOSBox oplmode A/B), SOUNDDVR device-3 AdLib, sequencer 0a28→0c39→0b5d reading MIDI in MAINMENU.MS3. Plays at
-the correct tempo/density. **Bit-exact is CHECKPOINTED** (the sequencer LAYER/CHAIN redistribution 0c39/0af4/
-0c94/0ca9 — multi-fn, not a single allocator); clean phase-pinned OPL oracle ref banked. Not yet a verify flow.
+the correct tempo/density. **iter-19 (master 8533775) DEBUNKED the "LAYER/CHAIN redistribution" blocker — it was a
+PHANTOM from an INTRO-CONTAMINATED oracle reference.** The port's VOICING is ALREADY FAITHFUL: at real song-load
+([ds:0x6]!=0) the driver DS tables [0x20]/[0x2a]/[0xc01] are BYTE-IDENTICAL to the oracle RAM dump; 0c39 is already
+correct (patch 359 superseded the earlier "concrete bug"); iter-18's "garbage [0x20]" was a pre-song-load transient
+snapshot; all 588 oracle key-ons route voice=channel = the port. **No 0c39/[0x20]/[0xc01]/0997 patch — one would be
+WRONG.** The old ref straddled intro→menu (30 ch3 note-ons/half vs the song's 6 = intro leak); CORRECTED faithfully
+to the pure-menu window (`tools/oracle/make_menu_ref.sh`; NOT fitted — port raw-xcorr DROPPED 0.034→0.021). **REAL
+residuals (the actual audio path) = tempo/phase-pin (re-verify vs the CLEAN ref) + fnum/envelope-glide (0a28) + wasm
+sound-dispatch (call_indirect) → an `audio-menu` verify flow.** Not yet a verify flow. Full detail docs/audio.md iter-19.
 
 **EDITOR — .FSG load→save round-trip DONE + bit-verified; ADD-TANK edit-op DONE.** Patches 360–362 + 380:
 - `editor-fsg-roundtrip` flow: idempotent fixed point (load→save=f1, load(f1)→save=f2, f1==f2), native+wasm 0-diff.
