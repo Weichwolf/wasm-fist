@@ -1,0 +1,77 @@
+patch 385 -- reconstruct the three MISSED 209e cockpit-HUD icon-paint thunks FUN_1000_75a3/7b3d/7cea
+(bare arg-less c6b4=26a1 blits; Ghidra dropped ax=sprite-id + bx=element+4).  Fixes mission-cockpit AE=288
+that patch 384's 0x3e0 heap SHIFT exposed (the shift perturbs the ABI-leftover registers these thunks read
+for the garbage sprite/rect -> high-index terrain garbage over the left cockpit panel).  SAME class as
+siblings 7b71/75c2/7b57 (patches 305/315/316); reached but never threaded.  KEEPS patch 384 (wasm menu
+audio stays fixed) -- no revert, no guard.  Asm-verified vs re_out/fist_dat_image.bin; 26a1 5-arg
+__allregs (sprite,0,0,elem+4,0) per patch 305.
+
+--- a/fist.c
++++ b/fist.c
+@@ -55590,7 +55590,20 @@
+ void __allregs FUN_1000_75a3(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 385: FUN_1000_75a3 (asm 0x175a3) -- a 209e paint-walk cockpit-HUD icon paint method
++     dispatched ARG-LESS (SAME class as the 305/315/316 siblings 7b71/75c2/7b57).  Ghidra dropped ax
++     (sprite id) + bx (=element+4 position) -> 26a1->260c blit garbage from ABI leftovers; benign pre-384,
++     malignant once patch 384's 0x3e0 heap shift changes the leftovers.  asm (DS=DGROUP=0x1c00):
++       push bx; mov di,[0x6d34]; mov bl,[di+0x5f]; shr bl,4; and bx,0xf; inc bx; and bx,0x1e;
++       mov ax,[bx+0x8f58]; pop bx; lea bx,[bx+4]; lcall [0x6b4]=26a1(ax=sprite,bx=elem+4). */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t di = (uint16_t)(uintptr_t)DAT_2000_2d34;
++    uint16_t idx = (uint16_t)((((*(uint8_t *)(dg + (uint16_t)(di + 0x5f)) >> 4) & 0xf) + 1) & 0x1e);
++    uint16_t sprite = *(uint16_t *)(dg + (uint16_t)(idx + 0x8f58));
++    uint16_t pos = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);
++    ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6b4)))(sprite, 0, 0, pos, 0);
++  }
+   return;
+ }
+ 
+@@ -56131,7 +56144,17 @@
+ void __allregs FUN_1000_7b3d(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 385: FUN_1000_7b3d (asm 0x17b3d) -- same class as 75a3.  asm:
++       push bx; mov di,[0x6d34]; mov bl,[di+0x63]; and bx,0xf; shl bx,1;
++       mov ax,[bx+0x8f3e]; pop bx; lea bx,[bx+4]; lcall [0x6b4]=26a1(ax=sprite,bx=elem+4). */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t di = (uint16_t)(uintptr_t)DAT_2000_2d34;
++    uint16_t idx = (uint16_t)((*(uint8_t *)(dg + (uint16_t)(di + 0x63)) & 0xf) << 1);
++    uint16_t sprite = *(uint16_t *)(dg + (uint16_t)(idx + 0x8f3e));
++    uint16_t pos = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);
++    ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6b4)))(sprite, 0, 0, pos, 0);
++  }
+   return;
+ }
+ 
+@@ -56289,7 +56312,24 @@
+ void __allregs FUN_1000_7cea(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 385: FUN_1000_7cea (asm 0x17cea) -- same class; sprite id from a display-list record.
++     asm (bx=element node @entry, bp=g_fist_paintbp walk base):
++       push bx; mov di,[0x6d34]; add bp,[bx+2]; mov dl,[bp+1];
++       ax = dl==1?0x170 : dl==2?0x180 : 0x190;  if(dl==byte[di+0x86]) ax+=8 else ax+=byte[di+0x3f];
++       pop bx; lea bx,[bx+4]; lcall [0x6b4]=26a1(ax,bx=elem+4). */
++  {
++    uint8_t *dg = g_mem + 0x1c000;
++    uint16_t di = (uint16_t)(uintptr_t)DAT_2000_2d34;
++    uint16_t elem = *(uint16_t *)(dg + 0x3e08);
++    extern unsigned short g_fist_paintbp;
++    uint16_t bp = (uint16_t)(g_fist_paintbp + *(uint16_t *)(dg + (uint16_t)(elem + 2)));
++    uint8_t dl = *(uint8_t *)(dg + (uint16_t)(bp + 1));
++    uint16_t ax = (dl == 1) ? 0x170 : (dl == 2) ? 0x180 : 0x190;
++    if (dl == *(uint8_t *)(dg + (uint16_t)(di + 0x86))) ax = (uint16_t)(ax + 8);
++    else ax = (uint16_t)(ax + *(uint8_t *)(dg + (uint16_t)(di + 0x3f)));
++    uint16_t pos = (uint16_t)(elem + 4);
++    ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax, 0, 0, pos, 0);
++  }
+   return;
+ }
+ 
