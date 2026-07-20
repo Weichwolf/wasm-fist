@@ -399,13 +399,17 @@ void fist_timer_pump(void){
     /* Dev watchdog: FIST_RUNMS=<ms> dumps the framebuffer (FIST_FBDUMP) and exits after a wall-clock
      * deadline -- lets a first-light frame be captured while the engine is in its (non-returning) main
      * loop.  Runs in main context (safe for the PPM writer). */
-    static long g_deadline_ms = -2;
+    /* NB 64-bit: the deadline is an ABSOLUTE epoch-millisecond value (~1.78e12).  On the -m32 native
+     * build `long` is 32-bit, so tv.tv_sec*1000 overflows it -> the truncated deadline is negative for
+     * ~25-day epoch windows (bit 31 of epoch-ms flips every 2^31 ms), silently disabling this watchdog
+     * (the `> 0` guard below fails) and hanging every FBDUMP display flow until `timeout`.  Use long long. */
+    static long long g_deadline_ms = -2;
     if (g_deadline_ms == -2) {
         const char *r = getenv("FIST_RUNMS");
-        g_deadline_ms = r ? atol(r) : -1;
+        g_deadline_ms = r ? atoll(r) : -1;
         if (g_deadline_ms > 0) {
             struct timeval tv; gettimeofday(&tv, 0);
-            g_deadline_ms += tv.tv_sec*1000L + tv.tv_usec/1000L;
+            g_deadline_ms += (long long)tv.tv_sec*1000LL + tv.tv_usec/1000LL;
         }
     }
     /* Phase-pinned dump (DETERMINISM for tick-phase-dependent screens): FIST_DUMPTICK=N dumps the frame
@@ -425,7 +429,7 @@ void fist_timer_pump(void){
     }
     if (g_deadline_ms > 0) {
         struct timeval tv; gettimeofday(&tv, 0);
-        long now = tv.tv_sec*1000L + tv.tv_usec/1000L;
+        long long now = (long long)tv.tv_sec*1000LL + tv.tv_usec/1000LL;
         if (now >= g_deadline_ms) fist_dump_and_exit("FIST_RUNMS watchdog");
     }
     /* Async vertical-retrace IRQ (palette upload): fires on the timer heartbeat regardless of whether
