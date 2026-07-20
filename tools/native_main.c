@@ -1004,6 +1004,7 @@ extern void m_ext_FUN_0000_6f17(int, int, int, int, int, int); /* KDV close/free
 extern void m_ext_FUN_0000_89b0(unsigned, unsigned, unsigned); /* op-0x18 MAP-LOAD setup (terrain/pal/sky) */
 extern void m_ext_FUN_0000_84c0(unsigned);                     /* extender task-setup allocator (bc90 matrix etc.) */
 extern void m_ext_FUN_0000_8deb(void);                         /* voxel viewport setup (90a8/90f0/90f8/9114) */
+extern void m_ext_FUN_0000_85d0(void);                         /* voxel camera setup (TCB 0x2c/0x30/0x34 -> proj) */
 extern void m_ext_FUN_0000_82b8(int, int);                     /* OPAQUE-LOD voxel terrain render (8120->9200->82d0) */
 extern void m_ext_FUN_0000_8120(void);                         /* voxel camera->projection (steps 90b8/90bc/90d4/90d8) */
 extern void m_ext_FUN_0000_9200(int, int);                     /* voxel per-column texel walk (the terrain writer) */

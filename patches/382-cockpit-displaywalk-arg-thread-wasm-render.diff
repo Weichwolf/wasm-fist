@@ -1,0 +1,124 @@
+PATCH 382: fix the WASM in-mission COCKPIT display-build divergence (the op-0x50 spin) -> the AZER1 cockpit
+frame RENDERS on wasm, native<->wasm 0-diff over the banked central-chrome region (cols80-180 rows96-188,
+AE=0 vs ref/mission_azer1_cockpit_native320.png on BOTH targets).
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ 0x20d6/0x20ea/0x2043/0x2057; runtime-diffed native
+vs wasm): The display-list container methods FUN_0000_20d6 (backward, method vector [di+0x444e]) and
+FUN_0000_2043 (forward twin, [di+0x402a]) are ONLY ever DISPATCHED by the node-list walkers FUN_0000_20ea /
+FUN_0000_2057 (never direct-called -- confirmed: no direct caller in the whole unit; only fmap entries).
+Their asm register interface is bx (= the child NEAR OFFSET = elem, which the walker publishes to ds:0x3e08)
+and bp (= the walk BASE, kept LIVE in a register across `call [di+vec]`).  The decompiled walkers dispatched
+the method with a single K&R-untyped arg (param_3 = base), so the method's `base` fell to an ABI leftover:
+on native (-m32 cdecl) that leftover is nonzero stack garbage which HAPPENED to be usable (the cockpit's
+20d6 walked a bounded child list -> rendered), but wasm's fpcast-emu adapter ZERO-FILLS the unpassed value,
+so 20d6 read base=0 -> childhi = word[DGROUP:0x322] = garbage (0x563d) -> an unbounded child walk into the
+0x9000 extender region -> wild method dispatch -> DAT_2000_2d2c stayed 0x3a3 -> FUN_0000_c584's op-0x50
+projection loop spun ~1247x into the recursive FUN_0000_2486 stack overflow ("heap corrupted, address zero").
+
+This is NOT a call_indirect-signature defect and NOT an extender-boundary read (the prior "corrupt element
+0x87b8" was a RED HERRING -- native produces the identical elem=0x87b8 and renders fine; the ONLY diverging
+field was 20d6's `base`: native 0x20d6 leftover vs wasm 0x0000).  It is a C-level ABI difference in how an
+unpassed __allregs register-param resolves on the two targets.
+
+FIX (faithful, matches the asm register interface + the 209e paint-walk precedent, patch 057): the walker
+PUBLISHES the base to the shim global g_fist_paintbp (as 209e already does) and keeps ds:0x3e08 = the child
+offset; 20d6/2043 then SOURCE elem from ds:0x3e08 and base from g_fist_paintbp instead of the ABI-leftover
+params.  The leaf-method dispatch stays single-arg (unchanged), so the front-end dialog EXIT repaint (cc33)
+that also runs 20ea/2057 is untouched -- only the 20d6/2043 container methods (dispatch-only) change.  With
+base correct on BOTH targets, wasm walks the same bounded child list as native and reaches the op-0x24
+windshield render.
+
+Also drops patch 381's __EMSCRIPTEN__ gate in fist_3ae0_off (both targets now use the RAW near offset 0xc05c;
+patch 364's g_mem-subtract was the wasm op-0x50 crash WORKAROUND this patch's real fix supersedes).
+
+(The wasm render additionally needed a missing `extern void m_ext_FUN_0000_85d0(void);` prototype in the
+hand-written shim tools/native_main.c -- without it the op-0x24 render's direct call used an implicit int()
+signature that trapped as a wasm call_indirect signature_mismatch; that is a shim edit, not part of this patch.)
+
+Sources stay pristine (re_out/fist.c 61453e42); engine correction via this patch only.  Verified: native +
+wasm cockpit region AE=0 (0-diff); verify.sh 35 flows crash-free (front-end dialog cancel unaffected).
+
+--- a/fist.c	2026-07-20 10:23:20.701099330 +0200
++++ b/fist.c	2026-07-20 11:12:55.709293284 +0200
+@@ -8990,8 +8990,12 @@
+    * childlo=word[base+di+1]; if 0 return; childhi=word[base+di+3]; walk childlo+0x3af0..childhi+0x3af0
+    * FORWARD dispatching each node's [+0x402a] method.  Ghidra base-lost (DGROUP offsets as host pointers
+    * -> SIGSEGV).  Reached by the cc33 dialog EXIT repaint after a button click; reuse the correct 2057. */
+-  uint16_t elem = (uint16_t)param_1;
+-  uint16_t base = (uint16_t)param_2;
++  /* PATCH 382: like 20d6 -- 2043 is only ever dispatched via 2057, so read elem from ds:0x3e08 and base
++   * from g_fist_paintbp (both published by the 2057 walker) instead of the ABI-leftover params. */
++  extern unsigned short g_fist_paintbp;
++  uint16_t elem = *(uint16_t *)(g_mem + 0x1c000 + 0x3e08);
++  uint16_t base = g_fist_paintbp;
++  (void)param_1; (void)param_2;
+   uint16_t di   = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(elem + 2));
+   uint16_t childlo = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(base + di + 1));
+   uint16_t childhi;
+@@ -9013,9 +9017,13 @@
+      dereferenced as host pointers (SIGSEGV) and the 0xc-byte stride was int*-mis-scaled.  param_2=bx
+      walks the DGROUP node list forward, param_1=dx is the inclusive upper limit, param_3 the context. */
+   {
++    /* PATCH 382: publish the walk base to g_fist_paintbp (forward twin of the 20ea fix); dispatch stays
++     * single-arg so the dialog leaf methods are unaffected -- 2043 reads base from the global. */
++    extern unsigned short g_fist_paintbp;
+     uint8_t *dg = g_mem + 0x1c000;
+     uint16_t bx = (uint16_t)(uintptr_t)param_2;
+     uint16_t dx = (uint16_t)(uintptr_t)param_1;
++    g_fist_paintbp = (uint16_t)param_3;
+     do {
+       *(uint16_t *)(dg + 0x3e08) = bx;                                    /* asm mov ds:0x3e08,bx */
+       uint16_t di  = *(uint16_t *)(dg + bx);                              /* di = *bx */
+@@ -9139,8 +9147,16 @@
+    * childlo=word[base+di+1]; walk childlo+0x3af0..childhi+0x3af0 dispatching each node's [+0x444e]
+    * method.  Ghidra base-lost the whole thing (DGROUP offsets deref'd as host pointers -> SIGSEGV).
+    * Reached first by the cc33 dialog EXIT repaint after a button click; reuse the correct 20ea. */
+-  uint16_t elem = (uint16_t)param_1;
+-  uint16_t base = (uint16_t)param_2;
++  /* PATCH 382: 20d6/2043 are ONLY ever dispatched via the 20ea/2057 node walkers (never direct-called),
++   * so their asm register interface is bx(=child NEAR OFFSET = elem, published by the walker to ds:0x3e08)
++   * and bp(=base, published to g_fist_paintbp).  The old model read elem=param_1/base=param_2 from the
++   * dispatch, but the single-arg icall left base an ABI leftover -- nonzero stack garbage on native
++   * (worked) vs zero-filled on wasm (base=0 -> childhi garbage -> wild child walk -> op-0x50 spin).  Source
++   * both from the walker-published values so BOTH targets get the asm-correct elem/base. */
++  extern unsigned short g_fist_paintbp;
++  uint16_t elem = *(uint16_t *)(g_mem + 0x1c000 + 0x3e08);
++  uint16_t base = g_fist_paintbp;
++  (void)param_1; (void)param_2;
+   uint16_t di   = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(elem + 2));
+   uint16_t childhi = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(base + di + 3));
+   uint16_t childlo;
+@@ -9160,8 +9176,16 @@
+    *   mov ds:0x3e08,bx ; di=[bx] ; call near [DGROUP:di+0x444e](bp=param_3) ; bx-=0xc ; while(bx>=dx)
+    * Ghidra used bx/dx as bare host `int *` (deref of raw offset -> SIGSEGV) -- rebase to DGROUP near
+    * offsets (same class as patches 056/057's 201a/209e draw walkers, dispatch base here = 0x444e). */
++  /* PATCH 382: publish the walk BASE (bp) to g_fist_paintbp -- the asm keeps bp LIVE in a register across
++   * the `call [di+0x444e]`, and the container methods 20d6/2043 read it (and elem from ds:0x3e08).  The
++   * single-arg icall could not supply base (it fell to an ABI leftover: nonzero on native, zero on wasm ->
++   * op-0x50 spin).  Publishing it (like the 209e paint walk, patch 057) fixes it on BOTH targets WITHOUT
++   * changing the leaf-method dispatch ABI.  Dispatch stays single-arg -> the front-end dialog repaint
++   * (cc33) is unaffected. */
++  extern unsigned short g_fist_paintbp;
+   uint16_t lo = (uint16_t)(uintptr_t)param_1;
+   uint16_t bx = (uint16_t)(uintptr_t)param_2;
++  g_fist_paintbp = (uint16_t)param_3;
+   do {
+     uint16_t node = *(uint16_t *)(g_mem + 0x1c000 + bx);                                   /* di = *bx */
+     uint16_t hoff = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(node + 0x444e));            /* [di+0x444e] */
+@@ -16534,11 +16558,11 @@
+  * Restrict the subtract to wasm (preserving 364's op-0x50 non-spin behaviour there) and give native the
+  * correct raw near offset.  Mission-path only (5d43 only reached in the in-mission cockpit build). */
+ static inline uint16_t fist_3ae0_off(void){
+-#ifdef __EMSCRIPTEN__
+-    return (uint16_t)((uint8_t *)DAT_2000_3ae0 - (g_mem + 0x1c000));   /* PATCH 364 wasm op-0x50 workaround */
+-#else
+-    return (uint16_t)(uintptr_t)DAT_2000_3ae0;                         /* raw 16-bit near offset (true value) */
+-#endif
++    /* PATCH 382: both targets use the RAW 16-bit near offset (0xc05c).  Patch 364 subtracted
++     * g_mem+0x1c000 assuming a host-pointer representation; the slot is a RAW offset (high16==0),
++     * so the subtract was a wasm-only op-0x50 crash WORKAROUND that masked the real display-walk
++     * divergence (now fixed at the 20ea/2057 dispatch below).  Drop the __EMSCRIPTEN__ gate. */
++    return (uint16_t)(uintptr_t)DAT_2000_3ae0;
+ }
+ undefined4 __allregs FUN_0000_5d43(undefined2 param_1)
+ 
