@@ -1,0 +1,91 @@
+patch 383 -- drop the 3 base-lost FAR reloc-applier stray dispatches (lcall [ds:0x12] = f842) reached at
+BOOT -> eliminate the intermittent SIGSEGV that flakes EVERY verify flow (the 10x-gate blocker).
+
+THE FLAKE (pre-existing, ~1-2.6%/boot native rc=139; the "cancel-flow 26de" attribution was WRONG): the
+SEGV is at BOOT in FUN_0000_f842+0x56 (the FAR reloc applier, DGROUP:0x12), reached via app_entry -> the
+driver-load init sequence 06bc/f7ad/4f6e/4b16.  NOT the cancel teardown, NOT m_mga 26de.  Because these run
+once at boot before any screen, the flake hits EVERY flow -> THE flaky-flow blocker for the 10x-consecutive
+gate.  Caught + core-confirmed on the ASLR-on layout (fault-addr a small near-offset ~0xff84/0xfff2 = the
+classic near-offset-used-as-host-pointer base-loss; backtraces: f842<-4b16<-app_entry and f842<-4f6e<-app_entry).
+
+ROOT (asm-cited, re_out/fist_dat_image.bin): each site is the real-mode idiom `[xor bx,bx;] mov si,<off>;
+lcall [ds:0x12]` -- install a far method-vector section from the game's own reloc table (seg 0x3352:si) via
+the far applier f842.  Ghidra rendered f842 INERT/base-lost (dropped its `mov es,ax; mov ds,bx` string-op
+segment bases -> the C f842 executes `*(uint16_t*)dgroup_off = ..` with the near offset as a raw HOST
+pointer) AND the indirect __allregs service call `(*DAT_1000_c012)()` drops SI/param_1/param_3.  So f842
+runs on uninitialised cdecl-stack garbage: when garbage param_1!=0 and the (garbage) section pointer yields a
+nonzero dgroup_off, it wild-writes to a small near-offset address -> SIGSEGV.  Doubly garbage-dependent ->
+intermittent.  The three boot sites (0x14b16 si=0x274, 0x14f6e si=0x2b0, 0x106e8 si=0xec):
+  * 4b16 (0x14b16): DGROUP:0x12 live by here -> f842 fired -> ~2.6% crash.  The faithful install of section
+    0x274 is ALREADY done by the shim fist_apply_reloc_section(0x274,1) on the very next line (patch 022).
+  * 4f6e (0x14f6e): DGROUP:0x12 live by here (after 06bc/f7ad) -> f842 fired -> THE residual crash after the
+    4b16 fix (core: f842<-4f6e<-app_entry).  Section 0x2b0 is installed nowhere else; this dispatch never
+    performed the install faithfully (garbage param_1: crash, or param_1==0 -> the far-CLEAR f7c3).
+  * 06bc (0x106e8, C line 40991): DGROUP:0x12 is 0 at 06bc-entry -> the fmap no-op-trapped (latent, not
+    yet observed to crash).  Section 0xec is DELIBERATELY not installed here (patch 022: its base-lost
+    device-method vectors 182a/184b are resolved directly per-patch); the twin C mid-entry FUN_1000_06e3
+    (patch 031's fist_apply_reloc_section(0xec,1)) has NO callers -> dead.
+
+FIX (faithful, patch-346 precedent -- no guard, no band-aid): drop all three base-lost far-applier
+dispatches.  This mirrors patch 346, which dropped the NEAR-applier stray dispatches (0x0a/0x0e) that patch
+345 had made dangerous by keeping the applier vectors live; the FAR sibling (0x12) was simply out of 346's
+scope.  For 4b16 the faithful section-0x274 install remains (shim, unchanged) -> net behaviour identical.
+For 4f6e/06bc the section is installed nowhere else and the dispatch never installed it faithfully anyway,
+so dropping preserves the current (passing) behaviour and removes the flake -- the same deliberate
+"don't install a section whose base-lost vectors would run on garbage" strategy patch 022 already applied to
+section 0xec.  re_out/*.c stays pristine; correction via patch only.  Asm-verified vs re_out/fist_dat_image.bin
+(f842 0xf842..0xf85e; 4b16 0x14b16; 4f6e 0x14f6e..0x14f77; 06bc 0x106e8).
+
+VERIFY: boot repro (multiple flows, ASLR-on) 0 SEGV over 900+ boots (was ~1-2.6%); no regression on the 36
+verify.sh flows native + wasm.
+--- a/fist.c
++++ b/fist.c
+@@ -40988,7 +40988,14 @@
+     FUN_1000_1af3(param_1,uVar3,uVar2,uVar4,puVar5,unaff_CS,param_3);
+     FUN_1000_1dfa(param_1,uVar3,uVar2,uVar4,puVar5);
+     uVar3 = 0;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
++    /* PATCH 383: dropped the base-lost FAR-applier dispatch `mov si,0xec; lcall [ds:0x12]` (asm
++       0x106e8).  DGROUP:0x12 = the inert/base-lost far applier f842; this indirect __allregs call
++       drops SI/param_1, so f842 runs on uninitialised stack garbage (wild `*(uint16*)dgroup_off`
++       host-ptr write -> SIGSEGV).  Section 0xec (device-method vectors DGROUP:0x78..0xd0) is
++       DELIBERATELY not installed here (patch 022: its base-lost method vectors 182a/184b are resolved
++       directly per-patch, not via this section), so the faithful behaviour is a no-op -- exactly what
++       this dispatch already was in practice (DGROUP:0x12 is 0 at 06bc-entry -> the fmap no-op-trapped),
++       minus the boot-time flake if 0x12 were live.  Twin of the 4b16/4f6e drops below. */
+     FUN_1000_1384();
+     FUN_1000_1384();
+     FUN_1000_096c(uVar3);
+@@ -49726,7 +49733,14 @@
+      11e0 zeroed DGROUP:0x0a to a no-op trap.  With patch 345 that vector is live (f7ef base-lost),
+      so DROP the stray dispatch -- the faithful install is the shim call below. */
+   fist_apply_reloc_section(0x258,0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
++  /* PATCH 383: dropped the base-lost FAR-applier dispatch `mov si,0x274; lcall [ds:0x12]` (f842), the
++     far sibling of the near dispatch patch 346 already dropped (0x0a/si=0x258).  DGROUP:0x12 is live
++     here (= f842), and the indirect __allregs call drops SI/param_1 -> f842 runs on uninitialised
++     stack garbage and wild-writes `*(uint16*)dgroup_off` as a HOST pointer (~0xff84/0xfff2) ->
++     intermittent BOOT SIGSEGV (~2.6%/run via app_entry->4b16; hits every flow).  The faithful install
++     of section 0x274 (far) is the shim call below, UNCHANGED -- so net behaviour is identical, the
++     dead-and-dangerous call is removed.  Asm-verified vs re_out/fist_dat_image.bin (f842 0xf842, 4b16
++     0x14b16). */
+   fist_apply_reloc_section(0x274,1);
+   return;
+ }
+@@ -50984,7 +50998,15 @@
+ void __allregs FUN_1000_4f6e(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c012)))();
++  /* PATCH 383: dropped the base-lost FAR-applier dispatch `xor bx,bx; mov si,0x2b0; lcall [ds:0x12]`
++     (asm 0x14f6e).  This was THE residual boot flake after the 4b16 drop: DGROUP:0x12 is live by the
++     time 4f6e runs (after 06bc/f7ad), so the indirect __allregs call reached the inert/base-lost f842
++     with uninitialised stack garbage (param_3 a wild ptr) -> wild `*(uint16*)dgroup_off` host-ptr
++     write -> SIGSEGV (core-confirmed: f842 <- 4f6e <- app_entry).  Section 0x2b0 is installed nowhere
++     else and the dispatch never performed the install faithfully anyway (garbage param_1: either
++     crash, or param_1==0 -> the far-CLEAR f7c3, never the install), so dropping it preserves the
++     current (passing) behaviour and removes the flake -- same doctrine as the 4b16/06bc twins and
++     patch 346's near-applier drops.  Asm-verified vs re_out/fist_dat_image.bin 0x14f6e..0x14f77. */
+   return;
+ }
+ 
