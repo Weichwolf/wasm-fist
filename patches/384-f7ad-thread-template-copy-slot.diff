@@ -1,0 +1,49 @@
+patch 384 -- FUN_0000_f7ad: thread the DROPPED template-copy register args (slot=BX=0x74) so the
+double-buffer alloc lands at DGROUP:0x74 -- fixes the WASM-only DGROUP:0 clobber that killed menu audio.
+
+THE BUG (wasm menu music never plays; native works): under FIST_SB, wasm produced ZERO OPL writes
+(seq-advances=0, isr-runs=0) because the SOUNDDVR device-registration gate in thunk_FUN_0000_0078
+(`*(short*)(g_mem+0x1c000) == 0xcbc3`, the engine DGROUP:0 signature) FAILED -- DGROUP:0 held 0x3a06
+(the SOUNDDVR load seg) instead of 0xcbc3.  Root-caused (docs/audio.md): FUN_0000_f7ad's `call [ds:0x36]`
+(the DGROUP:0x36 template-copy service = FUN_0000_f98b) reconstruction DROPPED the four register args set
+up right before the call, so f98b read a GARBAGE slot (BX) -- 0xcee8 on native (harmless: a scratch DGROUP
+offset), 0x0000 on wasm.  f98b stores the allocated segment to DGROUP:[slot]; slot=0 on wasm => it wrote
+the alloc seg over DGROUP:0, clobbering the 0xcbc3 signature => the SB gate bailed => no timer-ISR => no
+music.  (Native's g_mem is 64 KiB-aligned so the `(uint16_t)(uintptr_t)hostptr` low-16 landed at 0xcee8;
+wasm's g_mem is not, so it landed at 0 -- the classic host-ptr-truncated-to-near-offset wasm class,
+cf. the wasm-mission-op50 memory note.)
+
+THE ASM (re_out/fist_dat_image.bin @ 0xf7ad, decisive):
+    f7ad: mov ax,0x3e0            ; count  = 0x3e0 bytes
+    f7b0: mov bx,0x74             ; slot   = DGROUP:0x74 (the double-buffer seg field)
+    f7b3: xor si,si              ; srcoff = 0
+    f7b5: mov dx,[ds:0x74]        ; srcseg = current double-buffer seg
+    f7b9: call [ds:0x36]          ; = FUN_0000_f98b(count,srcseg,slot,srcoff): alloc + copy, DGROUP:0x74=new
+    f7bd: or  [ds:0x76],0x24
+    f7c2: retf
+f98b's __allregs params (asm-verified, patch 034): param_1=count(AX), param_2=srcseg(DX), param_3=slot(BX),
+param_4=srcoff(SI).  The pristine C dropped all four (`(*fist_icall_far(c036))()`).  Thread them faithfully
+via the same signature-cast used by the working MGAVIDEO-0x0009 template copies (fist_icall_far(c036)
+resolves to f98b) so the slot is the real 0x74 on BOTH targets -> the alloc seg is stored to DGROUP:0x74
+(the double-buffer field) as the asm specifies, never to DGROUP:0.
+
+--- a/fist.c
++++ b/fist.c
+@@ -36166,7 +36166,16 @@
+ void __allregs FUN_0000_f7ad(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c036)))();
++  /* PATCH 384: thread the four register args Ghidra dropped before `call [ds:0x36]` (asm 0xf7ad-0xf7b9):
++     ax=0x3e0 (count), bx=0x74 (slot=DGROUP:0x74 double-buffer field), si=0 (srcoff), dx=[DGROUP:0x74]
++     (srcseg).  Without the slot, f98b stored the alloc seg to a garbage DGROUP offset -> harmless 0xcee8
++     on native but 0x0000 on wasm (host-ptr-truncation class), clobbering the DGROUP:0 signature and
++     killing the SB device-registration gate.  f98b (= DGROUP:0x36) takes (count,srcseg,slot,srcoff). */
++  {
++    undefined2 srcseg = *(uint16_t *)(g_mem + 0x1c000 + 0x74);
++    ((void (*)(int, undefined2, undefined2, undefined2))
++        fist_icall_far((uint32_t)(DAT_1000_c036)))(0x3e0, srcseg, 0x74, 0);
++  }
+   DAT_1000_c076 = DAT_1000_c076 | 0x24;
+   return;
+ }
