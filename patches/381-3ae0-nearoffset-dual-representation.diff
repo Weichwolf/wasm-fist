@@ -1,0 +1,73 @@
+PATCH 381: fix the native RETICLE regression from patch 364 -- restrict its base-subtract to wasm so native
+keeps the correct raw near-offset extraction of DAT_2000_3ae0.
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ 0x5d43 `mov di,[0x7ae0]`; runtime-verified both targets):
+DAT_2000_3ae0 (the DGROUP:0x7ae0 player-vehicle near-offset slot) holds the RAW 16-bit near offset on BOTH
+native and wasm (measured 0x0000c05c, high16==0).  The true DGROUP offset is therefore the low 16 bits =
+0xc05c (`(uint16_t)(uintptr_t)DAT_2000_3ae0`), which the cockpit display-walk base (FUN_0000_466c/7740/1cdb
+-> DAT_1000_fafe) and the reticle vehicle selector FUN_1000_a84c consume.  Patch 364 (the wasm op-0x50 fix)
+changed the extraction to SUBTRACT g_mem+0x1c000 -- assuming a host-pointer representation.  But the slot is a
+RAW offset, so the subtract yields a g_mem-address-dependent value: on native 0xc05c-(g_mem+0x1c000)=0xae9c,
+on wasm =0x39ac.  On native 0xae9c makes a84c read the WRONG vehicle node -> its reticle aim fields
+(V[0x10]=d558 angle, V[0x86]=d54a) are wrong -> the cockpit gunsight at cols112-139 rows117-160 renders
+SHIFTED (the 298a transparency-sprite reticle lands the red idx-14 aim line off-target; the dashboard idx-18
+grey shows at the ref reticle pixels) -> region cols80-180 rows96-188 AE=126 vs
+ref/mission_azer1_cockpit_native320.png.  On wasm 0x39ac is ALSO wrong but happens to keep FUN_0000_c584's
+op-0x50 projection loop from spinning into the recursive FUN_0000_2486 stack overflow (the real cause is the
+downstream native<->wasm object-subsystem divergence -- wasm-mission's frontier).  So patch 364 is a wasm-only
+crash workaround that was unintentionally applied to native and broke the reticle.
+
+FIX: restrict the base-subtract to __EMSCRIPTEN__ (preserving patch 364's wasm op-0x50 non-spin behaviour --
+verified: wasm still posts 0 op-0x50, no stack-overflow abort) and give NATIVE the correct raw near offset
+(`(uint16_t)(uintptr_t)DAT_2000_3ae0` = the true value) -> the native AZER1 cockpit central-chrome region
+cols80-180 rows96-188 is AE=0 vs the DOSBox ref, deterministic.  Applies to the two extraction sites patch 364
+introduced (the 5d43 vehicle check + the 44be cockpit-build seed) via the shared helper fist_3ae0_off().
+MISSION-PATH ONLY (5d43 only reached in the in-mission cockpit build) -> behaviour-neutral for the front-end
+flows (default boot rc=0, mainmenu AE=0).  Sources stay pristine (re_out/fist.c 61453e42).
+
+--- a/fist.c
++++ b/fist.c
+@@ -16519,6 +16519,27 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_5d43) @ 0000:5d43 ===== */
+ 
++/* PATCH 381: patch 364's base-subtract was a WASM-ONLY workaround, unintentionally applied to native.
++ * DAT_2000_3ae0 (DGROUP:0x7ae0 = player-vehicle NEAR OFFSET; engine asm 0x5d43 `mov di,[0x7ae0]`) holds
++ * the RAW 16-bit near offset on BOTH targets (runtime-verified 0x0000c05c, high16==0).  On native the true
++ * offset is therefore `(uint16_t)(uintptr_t)DAT_2000_3ae0` = 0xc05c -- the value the display-walk base
++ * (466c/7740/1cdb -> fafe) and the reticle vehicle selector FUN_1000_a84c need.  Patch 364 SUBTRACTED
++ * g_mem+0x1c000 to get the offset; because the slot is a RAW offset (not the host pointer patch 364 assumed),
++ * that yields a g_mem-dependent garbage value (native 0xae9c) -> a84c reads the wrong vehicle node -> the
++ * cockpit reticle aim fields (V[0x10]=d558 angle, V[0x86]=d54a) are wrong -> the gunsight at cols112-139
++ * rows117-160 renders SHIFTED (region AE=126 vs ref/mission_azer1_cockpit_native320.png).  On wasm the SAME
++ * subtract yields 0x39ac, a DIFFERENT garbage value that happens to keep the downstream FUN_0000_c584
++ * op-0x50 projection loop from spinning (the real downstream native<->wasm object-subsystem divergence,
++ * wasm-mission's frontier) -- i.e. patch 364 is a wasm-only crash workaround, not a correct extraction.
++ * Restrict the subtract to wasm (preserving 364's op-0x50 non-spin behaviour there) and give native the
++ * correct raw near offset.  Mission-path only (5d43 only reached in the in-mission cockpit build). */
++static inline uint16_t fist_3ae0_off(void){
++#ifdef __EMSCRIPTEN__
++    return (uint16_t)((uint8_t *)DAT_2000_3ae0 - (g_mem + 0x1c000));   /* PATCH 364 wasm op-0x50 workaround */
++#else
++    return (uint16_t)(uintptr_t)DAT_2000_3ae0;                         /* raw 16-bit near offset (true value) */
++#endif
++}
+ undefined4 __allregs FUN_0000_5d43(undefined2 param_1)
+ 
+ {
+@@ -16531,13 +16552,13 @@
+   else {
+     /* PATCH 300: DAT_2000_3ae0 holds the player-vehicle NEAR OFFSET (DS=DGROUP=0x1c00),
+        asm 0x5d43 `mov di,[0x7ae0]; cmp [di],3; test [di+0x16],1/8` -> rebase g_mem+0x1c000+off. */
+-    puVeh = (uint *)(g_mem + 0x1c000 + (uint16_t)((uint8_t *)DAT_2000_3ae0 - (g_mem + 0x1c000)));  /* PATCH 364 */
++    puVeh = (uint *)(g_mem + 0x1c000 + fist_3ae0_off());  /* PATCH 381 */
+     if ((3 < *puVeh) || ((puVeh[0xb] & 1) != 0)) goto LAB_0000_5d7c;
+     if ((puVeh[0xb] & 8) == 0) {
+       DAT_2000_2dab = 0;
+       DAT_2000_3ae9 = 0;
+       DAT_2000_3b1e = 0;
+-      FUN_0000_44be((int)(uint16_t)((uint8_t *)DAT_2000_3ae0 - (g_mem + 0x1c000)));  /* PATCH 364 */
++      FUN_0000_44be((int)fist_3ae0_off());  /* PATCH 381 */
+       return;
+     }
+     uVar1 = 0xd0c;
