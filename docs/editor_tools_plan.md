@@ -107,3 +107,21 @@ different marker -- determine by comparing a known tree obj vs a unit obj, or tr
 STMP loader in d501 created], (2) b21d(0x15) new slot, (3) clone the tree body, (4) register in 0x9fbc,
 (5) DAT_2000_530a++. Then the save serializes it -> STMP 32->33 records (+8B). NEXT SESSION: find the tree
 type discriminator (1 analysis step), then patch 387 is a direct add-tank clone. Everything else is specified.
+
+## plant-tree ATTEMPT 1 FAILED + REVERTED (2026-08-10) -- corrected model
+Patch 387 (clone a type-0x15 0x9fbc entry via b21d(0x15) + register + 530a++) was WRONG and REVERTED.
+Empirical test (FIST_EDIT_ADDTREE harness, STMP-chunk-length + idempotent + native==wasm): the planted
+entry grew the **DCBS chunk by +61 bytes (one UNIT record), NOT STMP** -- so registering a type-0x15 obj
+in 0x9fbc makes the DCBS serializer emit it as a bogus unit; trees do NOT round-trip to STMP via 0x9fbc.
+STMP len stayed 264; idempotent=NO (the bogus DCBS unit is non-canonical). native==wasm=YES (harness is
+deterministic). So the model "trees = type-0x15 in 0x9fbc, serialized to STMP by type" is FALSE.
+CORRECTED next step: the STMP serializer reads a DEDICATED tree structure (enumerated by DAT_2000_530a=27),
+SEPARATE from the 0x9fbc registry. Runtime dump (FIST_DUMP_REG, committed in native_main.c) DID show 27
+type-0x15 objects in 0x9fbc -- but those feed the RENDER/sim, not the STMP save. To do plant-tree correctly:
+TRACE the save path's STMP writer (find where it enumerates the 530a trees and what array/list it reads --
+it is NOT 0x9fbc) then add a tree to THAT structure. The STMP writer is in the .FSG save serializer (the
+code that builds the file buffer before d5f9 writes it); find it by the STMP tag emission ('STMP' = the
+4 bytes 53 54 4d 50) or by who reads DAT_2000_530a in a serialize context (fist.c 530a readers: 24629/
+24668/24676/24726/24765/24775/24785 are the tree add/remove ops, not the serializer -- the serializer is
+elsewhere, likely reached from the SAVE path, not 4754). NB place-target (4f5d->bd90) also writes STMP ->
+same corrected model applies. FIST_DUMP_REG diagnostic retained (native_main.c, env-gated) for next session.

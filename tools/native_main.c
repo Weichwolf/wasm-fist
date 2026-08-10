@@ -386,6 +386,27 @@ void fist_timer_pump(void){
       if (coop < 0) coop = getenv("FIST_COOP_TICK") ? 1 : 0;
       if (nomc < 0) nomc = getenv("FIST_NOMISSIONCOOP") ? 1 : 0;
       int in_mission = (g_mem[0x1c000 + 0x1549] == 0x1c);
+      /* DIAGNOSTIC (FIST_DUMP_REG): one-shot dump of the 0x9fbc object registry once in-mission, to
+       * resolve the tree object model for the plant-tree editor harness (tree type discriminator +
+       * body/coord layout). Reads only; env-gated; no effect on any flow. */
+      { static int dumped_reg = 0;
+        if (in_mission && !dumped_reg && getenv("FIST_DUMP_REG")) {
+          dumped_reg = 1;
+          unsigned char *dg = g_mem + 0x1c000;
+          fprintf(stderr, "[dumpreg] in-mission; DAT_2000_530a(tree count)=%u\n",
+                  *(unsigned short*)(g_mem+0x2530a));
+          unsigned short *fbc = (unsigned short*)(dg + 0xdfbc);   /* DAT_2000_9fbc {slot,val} x0xb6 */
+          for (int i=0;i<0xb6;i++){
+            unsigned short s=fbc[i*2], v=fbc[i*2+1];
+            if(!s) continue;
+            unsigned short t=*(unsigned short*)(dg+s);
+            unsigned char disc=dg[(unsigned short)(s-0x19ec)];
+            fprintf(stderr,"[dumpreg] [%3d] slot=%04x val=%04x t=%04x disc=%02x body:",i,s,v,t,disc);
+            for(int b=0;b<0x2a;b+=2) fprintf(stderr," %04x",*(unsigned short*)(dg+(unsigned short)(s+b)));
+            fprintf(stderr,"\n");
+          }
+        }
+      }
       if (coop) { tick_advance(); }
       else if (in_mission && !nomc) {           /* wasm-parity cadence: one tick per pump, no SIGALRM */
           if (!g_mission_coop) { g_mission_coop = 1; g_tick_pending = 0; }  /* transition: stop async ticks, flush menu-phase leftover */
