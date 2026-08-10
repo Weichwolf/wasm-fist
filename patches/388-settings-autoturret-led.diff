@@ -1,0 +1,33 @@
+PATCH 388: SETTINGS AUTO TURRET CONTROL toggle -- LED re-renders on toggle (store-width, patch-318/319/387 class).
+
+Same class as 387: the AUTO TURRET CONTROL checkbox toggle FUN_0000_6be7 (asm 0x6be7 `xorb [0x8b4d]`,
+0x6bec `movb [0x8bbe],3`, posts msgid 0x174b ENABLED / 0x172e DISABLED via 7018) flips its state + status
+line correctly but the LED indicator did not re-render -- its two flags were left WORD-typed while the
+318/319/387 sweeps retyped the neighbours:
+  - state flag 0x8b4d (DAT_2000_4b4d): asm xor/cmp BYTE; WORD typing pulls in adjacent 0x8b4e.
+  - dirty flag 0x8bbe (uRam00024bbe): asm `movb $3` BYTE; WORD `=3` clobbers the renderer-index byte
+    0x8bbf -> the dirty-walk (209e) dispatched the wrong renderer -> the AUTO TURRET indicator (6d27,
+    the inverted-checkbox renderer that reads byte[0x8b4d]) never re-ran.
+Retype both to undefined1, matching the asm.  SETTINGS-click-only -> behaviour-neutral for all other flows.
+Verified: AUTO TURRET toggle AE=0 vs DOSBox oracle native AND wasm, native<->wasm 0-diff.  re_out pristine.
+
+--- a/fist.c
++++ b/fist.c
+@@ -3287,7 +3287,7 @@
+ #define DAT_2000_4b47 (*(undefined2 *)(g_mem+0x24b47))
+ #define DAT_2000_4b49 (*(undefined2 *)(g_mem+0x24b49))
+ #define DAT_2000_4b4b (*(undefined2 *)(g_mem+0x24b4b))
+-#define DAT_2000_4b4d (*(undefined2 *)(g_mem+0x24b4d))
++#define DAT_2000_4b4d (*(undefined1 *)(g_mem+0x24b4d))   /* PATCH 388: AUTO TURRET checkbox state BYTE (asm xor/cmp byte @6be7); patch-318/387 class */
+ #define DAT_2000_4b4e (*(undefined2 *)(g_mem+0x24b4e))
+ #define DAT_2000_4b4f (*(undefined1 *)(g_mem+0x24b4f))   /* PATCH 387: SMOKE checkbox state is a BYTE (asm xor/cmp byte @6c1d); WORD typing pulled in adjacent byte 0x8b50 (patch-318 SKY-0x8b46 class) */
+ #define DAT_2000_4b50 (*(undefined2 *)(g_mem+0x24b50))
+@@ -3973,7 +3973,7 @@
+ #define uRam0001c466 (*(undefined2 *)(g_mem+0x1c466))
+ #define uRam00022bc8 (*(undefined2 *)(g_mem+0x22bc8))
+ #define uRam00024bb8 (*(undefined1 *)(g_mem+0x24bb8))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+-#define uRam00024bbe (*(undefined2 *)(g_mem+0x24bbe))
++#define uRam00024bbe (*(undefined1 *)(g_mem+0x24bbe))   /* PATCH 388: AUTO TURRET widget dirty-flag BYTE (asm mov byte,3 @6bec); WORD =3 clobbered renderer-index 0x8bbf -> LED never re-rendered */
+ #define uRam000f0000 (*(undefined2 *)(g_mem+0xf0000))
+ #define uRam000f0001 (*(undefined2 *)(g_mem+0xf0001))
+ #define uRam000f0002 (*(undefined2 *)(g_mem+0xf0002))

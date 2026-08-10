@@ -85,3 +85,21 @@ CONTROL, PROMPTS (CONTROL checkboxes, LEDs x~35), MUSIC-ON (re-enable), SOUND FX
 non-default joystick radios (STD/FLIGHTSTICK/TM-FCS/CH/TM-WCS/EXTERNAL, LEDs x~35). Each = capture oracle
 (refcapture_click2 160 126 <tx> <ty> 40 8 8 out.png) -> add flow -> AE=0 both -> matrix grows by 1. This
 is the fastest matrix-growth path while the deep mission/editor roots await focused sessions.
+
+## AUTO TURRET CONTROL LED fixed (patch 388) -- flow BLOCKED on checkbox cursor-calibration
+Same store-width class: AUTO TURRET toggle FUN_0000_6be7 (asm `xorb [0x8b4d]`, `movb [0x8bbe],3`) had
+state 0x8b4d (DAT_2000_4b4d) + dirty 0x8bbe (uRam00024bbe) left WORD-typed (the 318/319/387 sweep skipped
+them). Retyped both to undefined1 (patch 388) -> the AUTO TURRET LED now re-renders on toggle (region diff
+58->9, the box is now correctly empty, visually confirmed; native==wasm; verify.sh both = 38/38, zero
+regression -> 388 is behaviour-neutral). Patch 388 KEPT (fixes a real observable bug per the doctrine).
+BUT the settings-autoturret-off FLOW cannot be added at AE=0: an irreducible ~9px CURSOR-render residual
+remains at the AUTO TURRET row (y~143) -- deterministic (oracle o1==o2, port stable 32px; best port pos
+35,142->9px; button-center 90,143->34px; no click position gives 0). Other checkbox/radio flows align at
+AE=0 (music-off y136, sound-fx-med y150, joystick 35,34) but y~143 at x35/90 does NOT -> a genuine
+position-dependent cursor-sprite divergence between the port's integer-positioned INT-33h cursor and
+DOSBox's mouse-scaled cursor. This BLOCKS the whole settings-checkbox vein's clean AE=0 flows.
+NEXT (focused): solve the checkbox cursor-calibration generally -- either (a) park the cursor after the
+toggle at a position proven to align (capture variant with a 3rd cursor-move; both oracle+port), or (b)
+find why the port cursor at y~143/x35 renders !=DOSBox (cursor hotspot/clip at the left CONTROL panel).
+Once solved: add settings-autoturret-off (oracle in ref/pending/) + PROMPTS + MUSIC-ON + SOUND-FX OFF/HIGH
++ 6 joystick types -- the vein opens. Patch 388's LED fix is the engine half; the flow is the harness half.
