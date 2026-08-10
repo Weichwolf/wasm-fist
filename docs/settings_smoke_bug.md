@@ -148,3 +148,21 @@ higher RUNMS or a status-line-region crop that excludes the cursor at 35,143), t
 compare (like mission-cockpit). Deferred -- do NOT re-rabbit-hole the cursor this run. Bigger DoD scope
 (44 missions, 6 editor tools, save/load, controls) is the deep multi-session work; the settings axis is
 now substantially covered.
+
+## Cursor-park WORKS (correction) + AUTO TURRET flow definitively deferred (2026-08-10)
+CORRECTION to the earlier "park failed" note: the port cursor DOES park cleanly (single FIST_MOUSE
+move step at a pump <=4800; e.g. "...4200:35:143:0; 4600:250:175:0" -> 34 white cursor px at 250,175,
+confirmed). The earlier failure was pump numbers 5000-6200 not reached within RUNMS=22000. So cursor-park
+is a usable harness capability for future region-crop flows.
+BUT with BOTH cursors parked at (250,175), the AUTO TURRET LED region (y138-153) STILL differs port-vs-
+oracle by 43px (native==wasm 0-diff). Unresolved: either (a) refcapture_ok3's 3rd action is a CLICK (not a
+move) at (250,175) which may hit the PROMPTS button (~x40-260 y167) -> the ORACLE toggled PROMPTS while
+the port only MOVED there (no toggle) -> a mismatch (but that would be at y167, not the y138-153 LED
+region...), or (b) a real residual in the AUTO TURRET LED render that patch 388 didn't fully fix. Given
+multiple contradictory measurements across iterations (58->32->43), this is a genuine rabbit hole.
+DECISION: STOP the AUTO TURRET verification churn. Patch 388 is KEPT (asm-faithful byte-retype at 6be7/
+6bec, class-identical to the accepted 387/319/318, zero regression 43/43). Its clean flow is DEFERRED to
+a focused session that: uses a MOVE-only park (not a click) at a verified-flat spot for BOTH oracle and
+port, then region-crops the LED. Do NOT re-investigate AUTO TURRET this run. Net harness finding: cursor-
+park works; the region-crop flow needs a move-only oracle park (refcapture_ok3's click park is the likely
+culprit -- it needs a move-park variant).
