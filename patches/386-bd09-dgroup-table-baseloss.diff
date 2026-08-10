@@ -1,0 +1,51 @@
+PATCH 386: fix the wasm mission-render OOB crash on non-AZER1 maps -- FUN_0000_bd09 (object timer/state
+update) reads three DS-relative DGROUP word tables with the DS base LOST (Ghidra emitted raw absolute
+derefs of a negative displacement).  On native the wrapped address lands in mapped garbage (bd09 is not
+reached at the AZER1 op-0x24 post-#1 frame, so AZER1 stays AE=0); on wasm the bounds-checked linear memory
+traps -> `RuntimeError: memory access out of bounds`, crashing EVERY non-AZER1 mission (repro: CYPRUS1,
+map D06/C06 -> native renders, wasm OOB after op 0x1c).  This is the documented native<->wasm object-
+subsystem divergence (wasm-mission frontier; cf. patch 381).
+
+ROOT CAUSE (asm-verified vs re_out/fist_dat_image.bin @ 0xbd09):
+  bd0f: movzbw 0x19(%di),%bx        ; bx = byte[obj+0x19]
+  bd13: shl    $1,%bx               ; *2
+  bd15: mov    -0x6119(%bx),%bx     ; bx = word[DS:(uint16)(bx + 0x9ee7)]     (DS = DGROUP = 0x1c00)
+  bd19: add    %ax,%bx              ; + param_1 (ax) -> arg to b274
+  bd51: mov    -0x6109(%bx),%ax     ; ax = word[DS:(uint16)(bx + 0x9ef7)]  -> obj+0x14
+  bd58: and    $0x6,%bx
+  bd5b: mov    -0x60f9(%bx),%ax     ; ax = word[DS:(uint16)((bx&6) + 0x9f07)] -> arg to ba33
+All three are `[bx + disp]` with the default segment DS = DGROUP.  The displacements -0x6119/-0x6109/-0x60f9
+are the 16-bit-wrapped DGROUP offsets 0x9ee7/0x9ef7/0x9f07 (three word tables spaced 0x10, indexed by
+byte[obj+0x19]*2).  Ghidra dropped the DS base -> `*(int *)(index + -0x6119)` absolute deref, AND widened the
+16-bit `mov bx,` read to a 4-byte `*(int *)` (site 1).
+
+FIX: rebase each table deref to `g_mem + 0x1c000 + (uint16_t)(<index> - 0x61xx)` (the DGROUP base + the
+faithful 16-bit-wrapped effective address), and read 16-bit at site 1 (`*(uint16_t *)`).  MISSION-PATH ONLY
+(bd09 is an in-mission object-update method) and NOT reached on the AZER1 banked frame -> the mission-cockpit
+AZER1 flow stays AE=0 (verified).  Sources stay pristine (re_out/fist.c 61453e42); this patch applies onto
+build/.  NB the crash chain c0e5->b51f->b583->bbb7->c31e->bd09 may carry sibling base-loss twins that surface
+next once bd09 no longer faults (the documented "each fix migrates to the next twin") -- addressed iteratively.
+
+--- a/fist.c
++++ b/fist.c
+@@ -29158,7 +29158,7 @@
+   
+   if ((*(byte *)(param_3 + 0x19) & 4) == 0) {
+     uVar7 = (undefined2)((ulong)param_2 >> 0x10);
+-    uVar4 = FUN_0000_b274(*(int *)((uint)*(byte *)(param_3 + 0x19) * 2 + -0x6119) + param_1);
++    uVar4 = FUN_0000_b274(*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint)*(byte *)(param_3 + 0x19) * 2 - 0x6119)) + param_1);
+     bVar3 = (byte)uVar4;
+     if (DAT_2000_5bd9 == 4) {
+       bVar3 = (byte)(uVar4 >> 2) & 0x3f;
+@@ -29175,9 +29175,9 @@
+     *(byte *)(param_3 + 0x19) = *(byte *)(param_3 + 0x19) | 4;
+     *(undefined2 *)(param_3 + 0x1c) = 0x480;
+     iVar5 = (uint)*(byte *)(param_3 + 0x19) * 2;
+-    *(undefined2 *)(param_3 + 0x14) = *(undefined2 *)(iVar5 + -0x6109);
++    *(undefined2 *)(param_3 + 0x14) = *(undefined2 *)(g_mem + 0x1c000 + (uint16_t)(iVar5 - 0x6109));
+     uVar6 = CONCAT22(uVar7,iVar5) & 0xffff0006;
+-    FUN_0000_ba33(*(undefined2 *)((int)uVar6 + -0x60f9),param_3);
++    FUN_0000_ba33(*(undefined2 *)(g_mem + 0x1c000 + (uint16_t)((int)uVar6 - 0x60f9)),param_3);
+     FUN_0000_be8b(9,uVar6);
+   }
+   return;
