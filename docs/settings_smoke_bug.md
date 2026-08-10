@@ -50,3 +50,24 @@ asm-verified the full chain:
   209e walk maps the marker byte[0x8bXX] to the element paint method; SMOKE's element may be registered/
   dirtied differently than SKY's. Deeper than a quick front-end fix -- comparable to the mission-render
   dispatch work. Oracle stays in ref/pending/.
+
+## Final precise root (2026-08-10): settings element re-paint dispatch, not the markers
+The redraw markers byte[0x8bb5] (SMOKE) / byte[0x8bca] (SKY) written =3 by the toggles are READ NOWHERE
+in the image (objdump scan) -> they are config-CHANGED markers (for the ACCEPT-time save), NOT paint
+dirty flags. So the LED re-paint is driven by the element dispatch, not the markers. Confirmed the exact
+symptom: after SMOKE toggle byte[0x8b4f]==0 (status "DISABLED" proves the `if(word[0x8b4f]!=0)` was false),
+so 6d45 -- IF re-run -- would read 0 and draw the empty box 0xe8; but the LED stays checked (0xf0) -> 6d45
+is NOT re-dispatched. SKY's 6d36 IS re-dispatched on SKY toggle (settings-sky AE=0). => the gap is the
+settings-screen element re-paint dispatch for the SMOKE checkbox element specifically ({activate 6c1d,
+paint 6d45} vs SKY {6c02, 6d36}). This is the settings display-list element layer (patches 132 paint /
+318-320 toggle-activate). NEXT: compare how the SMOKE vs SKY DISPLAY checkbox elements are registered +
+marked dirty on activate in that build (element method-vector wiring near the SETTINGS template build);
+the SMOKE element likely isn't re-painted post-activate while SKY is. Deep (element-dispatch), not a quick
+front-end fix. Oracle stays ref/pending/settings_smoke_off_native320.png.
+
+## Session conclusion on tractability
+Every frontier investigated this session (missions AZER2/UKRAINE1 native mga, INDIA1/SAUDI1 wasm op-0x1c
+spin, plant-tree save-serializer, SMOKE settings checkbox) resolves to a genuine deep root requiring
+focused multi-step RE -- there is no remaining "quick win". All are precisely mapped + banked (roots,
+diagnostics, oracles, disproven hypotheses) so the eventual landings are fast. The port is a multi-session
+undertaking; the hourly cron restarts at these banked, routed fix points.
