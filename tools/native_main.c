@@ -100,9 +100,15 @@ static void segv_bt(int sig, siginfo_t *si, void *uc) {
      * exact crash-time state (the crash is in the first paint, before the in-mission tick pump). */
     { unsigned char *dg = g_mem + 0x1c000;
       unsigned short ty = *(unsigned short*)(g_mem+0x22d32);
-      fprintf(stderr, "[segv] mission: 2d32(type*2)=0x%04x 2d34(veh)=0x%04x d550(reticle)=0x%04x d548=0x%02x builder[6d7c+ty]=0x%04x\n",
+      fprintf(stderr, "[segv] mission: 2d32(type*2)=0x%04x 2d34(veh)=0x%04x d550(reticle)=0x%04x d548=0x%02x builder[6d7c+ty]=0x%04x 3ae0(player)=0x%04x\n",
               ty, *(unsigned short*)(g_mem+0x22d34), *(unsigned short*)(g_mem+0x1d550),
-              *(unsigned char*)(g_mem+0x1d548), *(unsigned short*)(dg+0x6d7c+(unsigned short)ty)); }
+              *(unsigned char*)(g_mem+0x1d548), *(unsigned short*)(dg+0x6d7c+(unsigned short)ty),
+              *(unsigned short*)(g_mem+0x23ae0));
+      fprintf(stderr, "[segv] roster 2d3c[0..15]:");
+      for (int r=0;r<0x10;r++){ unsigned short slot=*(unsigned short*)(g_mem+0x22d3c+r*2);
+        unsigned short typ = slot ? *(unsigned short*)(dg+slot) : 0xffff;
+        fprintf(stderr," %04x(t=%04x)", slot, typ); }
+      fprintf(stderr,"\n"); }
     /* EBP-chain walk: gcc -O0 gives every C fn a real frame, so the chain is exact (FIST_SEGV_EBP). */
     if (getenv("FIST_SEGV_EBP")) {
         unsigned long fp = ebp;
