@@ -134,3 +134,17 @@ REMAINING candidates: EXTERNAL DRIVER joystick (35,105 -- batch timed out, retes
 at its y) need the region-crop+cursor-park harness fix for a clean flow. So: aligned-column radios = free
 matrix growth; misaligned-column checkboxes = need the harness fix. This is the fastest matrix-growth vein
 while the deep mission/editor roots await focused sessions.
+
+## Aligned-column vein EXHAUSTED (2026-08-10) -- settings axis at its clean-flow limit
+EXTERNAL DRIVER joystick radio (35,105): AE=217 (native==wasm, distinct=404) -> y105 MISALIGNED like
+AUTO TURRET y143. So the remaining 3 settings toggles all sit on misaligned-y cursor positions:
+AUTO TURRET (y143), PROMPTS (~y167), EXTERNAL DRIVER (y105) -> each needs the region-crop+cursor-park
+harness fix (NOT a clean full-frame AE=0). The aligned-column clean-flow vein is DONE for this run:
+landed this session = sky/detail-low/detail-med/sound-fx-off/sound-fx-med/music-off/smoke/joystick-std/
+joy-flightstick/joy-tmfcs/joy-ch/joy-tmwcs (12 settings flows). The last 3 (AUTO TURRET verifies patch
+388) await the harness fix: (a) fix the port cursor-park (FIST_MOUSE move-after-toggle must complete
+before the FBDUMP -- the earlier attempt's park pumps 5000-6200 didn't take within RUNMS=22000; use
+higher RUNMS or a status-line-region crop that excludes the cursor at 35,143), then (b) region-crop
+compare (like mission-cockpit). Deferred -- do NOT re-rabbit-hole the cursor this run. Bigger DoD scope
+(44 missions, 6 editor tools, save/load, controls) is the deep multi-session work; the settings axis is
+now substantially covered.
