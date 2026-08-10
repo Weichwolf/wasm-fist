@@ -119,3 +119,18 @@ numbers so the cursor reaches the park spot) + use a REGION-cropped compare (lik
 includes the LED and excludes the parked cursor. Deferred as a focused harness task. Patch 388's engine
 fix stands. NB: over-invested this iteration -- the SMOKE flow (387) is the banked matrix growth; AUTO
 TURRET's is harness-blocked.
+
+## PRODUCTIVE METHOD ESTABLISHED (2026-08-10): aligned-column settings flows -> matrix 38->43
+The clean, no-rabbit-hole path for settings coverage: pick a toggle/radio whose x-COLUMN aligns with
+DOSBox's cursor scaling (x181 DISPLAY, x246 SOUND, x35 CONTROL/joystick at y<=88), capture oracle
+(refcapture_click2 160 126 <x> <y> 40 8 8), render port (FIST_MOUSE open+toggle, FIST_RUNMS=22000 dump),
+compare full-frame AE=0 -- most just work with NO engine change (the radio/checkbox render is already
+correct; the only bugs were the SMOKE/AUTO-TURRET checkbox store-width flags 387/388). Batch-test native-AE
+first (fast), then one full verify.sh both. LANDED this iteration: settings-sound-fx-off + settings-joy-
+{flightstick,tmfcs,ch,tmwcs} = matrix 39->43, all AE=0 both targets, no patch.
+REMAINING candidates: EXTERNAL DRIVER joystick (35,105 -- batch timed out, retest), NO JOYSTICK re-select
+(35,23), SOUND FX HIGH (default, needs toggle-away-then-back), MUSIC ON (default). The CHECKBOXES SMOKE
+(done 387) + AUTO TURRET (388 engine fix done, flow harness-blocked) + PROMPTS (likely same harness block
+at its y) need the region-crop+cursor-park harness fix for a clean flow. So: aligned-column radios = free
+matrix growth; misaligned-column checkboxes = need the harness fix. This is the fastest matrix-growth vein
+while the deep mission/editor roots await focused sessions.
