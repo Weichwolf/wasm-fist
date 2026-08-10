@@ -104,6 +104,10 @@ static void segv_bt(int sig, siginfo_t *si, void *uc) {
               ty, *(unsigned short*)(g_mem+0x22d34), *(unsigned short*)(g_mem+0x1d550),
               *(unsigned char*)(g_mem+0x1d548), *(unsigned short*)(dg+0x6d7c+(unsigned short)ty),
               *(unsigned short*)(g_mem+0x23ae0));
+      { unsigned short pv=*(unsigned short*)(g_mem+0x23ae0);
+        if(pv) fprintf(stderr,"[segv] player[0x16]=0x%04x (&8=%d take-cmd-gate) type=0x%04x\n",
+                 *(unsigned short*)(dg+(unsigned short)(pv+0x16)), (*(unsigned short*)(dg+(unsigned short)(pv+0x16))>>3)&1,
+                 *(unsigned short*)(dg+pv)); }
       fprintf(stderr, "[segv] roster 2d3c[0..15]:");
       for (int r=0;r<0x10;r++){ unsigned short slot=*(unsigned short*)(g_mem+0x22d3c+r*2);
         unsigned short typ = slot ? *(unsigned short*)(dg+slot) : 0xffff;
