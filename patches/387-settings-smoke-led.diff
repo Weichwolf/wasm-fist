@@ -1,0 +1,41 @@
+PATCH 387: SETTINGS SMOKE-EFFECTS toggle -- LED re-renders OFF (store-width, patch-318/319 class).
+
+Clicking SMOKE EFFECTS toggled the state + status line ("SMOKE EFFECTS DISABLED") correctly but the LED
+indicator stayed lit: the port drew the checked box every frame regardless of the flipped flag.
+
+ROOT (asm-verified vs re_out/fist_dat_image.bin; the exact class patches 318/319 fixed for SKY + the
+radios): the SMOKE checkbox's two flags were left WORD-typed while the 318/319 sweep retyped the
+neighbours -- 0x8bb5 sits between the 319-fixed 0x8bb2 and 0x8bbb and was SKIPPED.
+  - SMOKE widget DIRTY flag 0x8bb5 (DAT_2000_4bb5): asm 0x6c22 `movb $3,[0x8bb5]` is a BYTE store, but
+    typed WORD -> `= 3` wrote 0x0003, clobbering the adjacent renderer-index byte 0x8bb6 -> the dirty-walk
+    (209e) re-paint dispatched the WRONG renderer for the SMOKE element -> its state renderer 6d45 never
+    re-ran -> the LED kept the stale (checked) render.  (Identical to patch 318's SKY 0x8ba9->0x8baa.)
+  - SMOKE checkbox STATE flag 0x8b4f (DAT_2000_4b4f): asm 0x6c1d `xorb`/0x6c2a `cmpb` are BYTE ops, typed
+    WORD -> the word read/write pulls in adjacent byte 0x8b50.  (Identical to patch 318's SKY 0x8b46.)
+Retype both to undefined1 (BYTE), matching the asm and patches 318/319.  DAT_2000_4b4f is used only by
+the SMOKE toggle 6c1d (the paint 6d45 + init 6ef5 read byte[0x8b4f] directly); DAT_2000_4bb5 is only ever
+written `= 3`.  SETTINGS-click-only -> behaviour-neutral for all non-SMOKE flows.
+
+Verified: SMOKE-EFFECTS toggle now AE=0 vs the genuine DOSBox reference on native AND wasm, native<->wasm
+0-diff, deterministic.  Sources stay pristine (re_out/fist.c 61453e42); applies onto build/ after 386.
+
+--- a/fist.c
++++ b/fist.c
+@@ -3289,7 +3289,7 @@
+ #define DAT_2000_4b4b (*(undefined2 *)(g_mem+0x24b4b))
+ #define DAT_2000_4b4d (*(undefined2 *)(g_mem+0x24b4d))
+ #define DAT_2000_4b4e (*(undefined2 *)(g_mem+0x24b4e))
+-#define DAT_2000_4b4f (*(undefined2 *)(g_mem+0x24b4f))
++#define DAT_2000_4b4f (*(undefined1 *)(g_mem+0x24b4f))   /* PATCH 387: SMOKE checkbox state is a BYTE (asm xor/cmp byte @6c1d); WORD typing pulled in adjacent byte 0x8b50 (patch-318 SKY-0x8b46 class) */
+ #define DAT_2000_4b50 (*(undefined2 *)(g_mem+0x24b50))
+ #define DAT_2000_4b51 (*(undefined2 *)(g_mem+0x24b51))
+ #define DAT_2000_4b53 (*(undefined2 *)(g_mem+0x24b53))
+@@ -3310,7 +3310,7 @@
+ #define DAT_2000_4bac (*(undefined1 *)(g_mem+0x24bac))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+ #define DAT_2000_4baf (*(undefined1 *)(g_mem+0x24baf))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+ #define DAT_2000_4bb2 (*(undefined1 *)(g_mem+0x24bb2))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+-#define DAT_2000_4bb5 (*(undefined2 *)(g_mem+0x24bb5))
++#define DAT_2000_4bb5 (*(undefined1 *)(g_mem+0x24bb5))   /* PATCH 387: SMOKE widget dirty-flag is a BYTE (asm mov byte,3 @6c22); WORD `=3` clobbered renderer-index byte 0x8bb6 -> dirty-walk dispatched wrong renderer -> SMOKE LED never re-rendered OFF (patch-318 SKY-0x8ba9 class) */
+ #define DAT_2000_4bbb (*(undefined1 *)(g_mem+0x24bbb))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+ #define DAT_2000_4bc1 (*(undefined1 *)(g_mem+0x24bc1))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+ #define DAT_2000_4bc4 (*(undefined1 *)(g_mem+0x24bc4))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */

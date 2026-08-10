@@ -89,6 +89,9 @@ FLOWS=(
   # both targets.  (Together detail-med/sound-fx-med/music-off exercise every patch-319 change: the 6b27
   # arg thread, the 6eb8 status base-loss, and all 8 radio dirty-flag BYTE retypings.)
   "settings-music-off|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:136:0; 3600:181:136:1; 4200:181:136:0; 4800:181:136:0|$ROOT/ref/settings_music_off_native320.png"
+  # settings-smoke-off: DISPLAY SMOKE EFFECTS checkbox toggle OFF (patch 387 fixed the LED re-render --
+  # store-width dirty-flag 0x8bb5, patch-318/319 class).  Click SETTINGS(160,126) -> SMOKE LED(181,83).
+  "settings-smoke-off|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:83:0; 3600:181:83:1; 4200:181:83:0; 4800:181:83:0|$ROOT/ref/settings_smoke_off_native320.png"
   # SETTINGS joystick-TYPE radio toggle (patch 320), CONTROL column (5 radios): open SETTINGS (160,126),
   # click the STD JOYSTICK radio (35,34).  Default = NO JOYSTICK (lit).  The click -> 6af0 -> 6b27 ->
   # 6b55 (base-loss fixed by 320): reads the type index (1) via byte[DGROUP:0x8b5f+1], calls 6c38 ->
