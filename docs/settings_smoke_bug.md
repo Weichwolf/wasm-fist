@@ -103,3 +103,19 @@ toggle at a position proven to align (capture variant with a 3rd cursor-move; bo
 find why the port cursor at y~143/x35 renders !=DOSBox (cursor hotspot/clip at the left CONTROL panel).
 Once solved: add settings-autoturret-off (oracle in ref/pending/) + PROMPTS + MUSIC-ON + SOUND-FX OFF/HIGH
 + 6 joystick types -- the vein opens. Patch 388's LED fix is the engine half; the flow is the harness half.
+
+## Correction (2026-08-10): patch 388 LED fix is sound; residual is CURSOR/HARNESS, not the LED
+Ground-truth region view (cursor parked): the AUTO TURRET LED renders IDENTICALLY in port and DOSBox
+oracle (both the red-cross indicator). Patch 388 is correct (asm-faithful byte retype of 0x8b4d/0x8bbe,
+class-identical to 387/319/318; it reduced the toggle-frame diff 58->32, so it DID change/fix the LED
+render; no regression, 38/38). The remaining AE (~32-43) is the CURSOR: (a) DOSBox's mouse-scaled cursor
+position != the port's direct FIST_MOUSE set (position-dependent 1px divergence -- the working flows align
+by luck of position, AUTO TURRET's y~143 doesn't), and (b) an attempted cursor-PARK (move to 155,105 after
+toggle) did NOT take effect in the port frame (FIST_MOUSE park steps 5000-6200 not reached within
+FIST_RUNMS=22000, cursor stayed at the LED) -> the parked port had cursor-at-LED vs oracle-parked-away.
+The AUTO TURRET flow is BLOCKED on a HARNESS issue (cursor park timing + DOSBox cursor-scaling), NOT an
+engine bug. To land it + the checkbox vein: fix the port cursor-park (extend RUNMS / lower park pump
+numbers so the cursor reaches the park spot) + use a REGION-cropped compare (like mission-cockpit) that
+includes the LED and excludes the parked cursor. Deferred as a focused harness task. Patch 388's engine
+fix stands. NB: over-invested this iteration -- the SMOKE flow (387) is the banked matrix growth; AUTO
+TURRET's is harness-blocked.
