@@ -168,3 +168,22 @@ save-time STMP-REBUILD pass that reads the tree list -> 0x9332? Determine by: (a
 530a tree list. plant-tree flow = drive 4f32->9c1c + reuse patch-360/361 save harness + byte-diff the
 STMP chunk (offset known: it is the 264B written by d797). place-target (4f5d->bd90) = exact twin.
 FULLY SPECIFIED now except the 0x9332-update site, which is a single runtime dump (gate-serialized).
+
+## EDITOR-TOOL HANDLER -> OBJECT-TYPE -> CHUNK MAP (2026-08-10, gate-hold static RE, all 6 handlers reversed)
+All six activate-handlers reversed from re_out/fist_decomp.c. Each gates on (param_1 & 10) = activate mask,
+reads cursor coord via FUN_0000_3f3c, inserts, posts event (4b86/4b8e), status msg via FUN_1000_66cd.
+| handler | insert | obj type | tool (inferred)        | chunk / notes |
+| 4f32    | 9c1c   | 0x15     | plant-tree             | STMP (d797, fixed 264B @0x9332); msg 0xd32 ok/0xd63 fail |
+| 4f5d    | bd90   | (tree twin)| place-target         | exact twin of 4f32; msg 0xd4a/0xd7b |
+| 4e09    | grid+c2fb| 0x17   | add-waypoint (path)    | free grid placement (uVar3 % 3c02, /col<9); type-0x17=path node; PATH chunk (d788) |
+| 4eca    | b1df(0x19)/b4fb | 0x19 | lay-minefield/artillery | 2 branches on obj[+2]&0x3000: move (b4dd+b4fb, msg 0xd95/0xda5) or NEW type-0x19 (b1df); coord->obj[+4]/[+8] |
+| 4dcc    | 3d2a[type]| unit-attached | per-unit tool     | gates on DAT_2000_3ae0(selected unit)!=0 + obj[+0x16]&8; indexes &DAT_2000_3d2a[obj[+0x1b]], count<0x20 |
+| 4c7a    | 502f+462e+077e | unit | place-unit (pos+facing) | DCBS; DAT_2000_3a20/22 drag coords, 077e=facing angle, 60a0 blit, 502f take-command |
+COMMON coord source: DAT_2000_3b94 (worldX dword) / DAT_2000_3b98 (worldY dword), set by 3f3c from cursor.
+IMPLICATION for verify flows: each tool's round-trip byte-diffs a DIFFERENT chunk -- tree=STMP, waypoint=
+PATH, mine/artillery=type-0x19 chunk (locate its writer among d76a PINF/d779 BINF), unit=DCBS (already
+round-tripped by editor-add-tank/editor-fsg-roundtrip). CHEAPEST remaining after plant-tree: add-waypoint
+(4e09->PATH d788, PATH is a fixed save-from-place writer like STMP). Each needs a FIST_EDIT hook posting
+the activate event to the handler + a set cursor coord, then reuse the patch-360/361 save + chunk-diff
+harness. All gate-serialized (need runtime). This completes the editor-tool STATIC map (was the 0/6 gap's
+biggest unknown).
