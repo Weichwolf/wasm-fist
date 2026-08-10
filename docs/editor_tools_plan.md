@@ -95,3 +95,15 @@ exactly the run_addtank shape. In-mem tree object > 8B (b1df zeroes obj[2..0x33]
 obj[0x12] table / obj[0x14]=0x200 / flags obj[0x16]|=0x40 obj[0x17]|=4) but only {X,Y} serialize to STMP,
 so the clone need only carry a valid body -> clone an existing tree's object (like add-tank cloned a unit).
 This is the recommended FIRST editor-tool flow (lower risk than the AZER2 mga mission fix).
+
+## Correction: d5f9 is NOT the serializer (2026-08-10)
+FUN_0000_d5f9 (fist.c:32200) = the INT-21h file CREATE/WRITE wrapper (uRam000f0000=CONCAT11(0x3c,..);
+uRam000f0014=0x21; fist_int_dispatch()) -- it writes the already-built file buffer to disk. The SAVE path
+serializes the 0x9fbc registry: UNITS -> DCBS chunk, TREES -> STMP chunk, discriminated by object TYPE.
+b1df registers BOTH units and trees into DAT_2000_9fbc (the shared object registry). So plant-tree via clone
+= EXACTLY add-tank's shape: (1) find an existing TREE entry in 0x9fbc [needs the tree TYPE discriminator --
+the ONE remaining unknown; add-tank found friendly units by `dg[(uint16)(obj-0x19ec)]&1==0`, trees have a
+different marker -- determine by comparing a known tree obj vs a unit obj, or trace which 9fbc entries the
+STMP loader in d501 created], (2) b21d(0x15) new slot, (3) clone the tree body, (4) register in 0x9fbc,
+(5) DAT_2000_530a++. Then the save serializes it -> STMP 32->33 records (+8B). NEXT SESSION: find the tree
+type discriminator (1 analysis step), then patch 387 is a direct add-tank clone. Everything else is specified.
