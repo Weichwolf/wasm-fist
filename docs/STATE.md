@@ -8,6 +8,31 @@ Engine pristine (unchanged): `re_out/fist.c` **61453e42**, `fist_ext.c` **0051cb
 
 ---
 
+## UPDATE 2026-08-11 — matrix grown 36→**43 flows** + 3 engine fixes; **10× CONSECUTIVE-CLEAN GATE PASSED** (commit `d769482`)
+
+Since the 36/36 snapshot below, the bit-verify matrix grew to **43 flows** and 3 asm-verified engine fixes landed;
+`tools/consecutive.sh 10` then ran the full 43-flow suite **10 times in a row with ZERO failures** (`== GATE PASSED
+:: 10 consecutive clean full-suite runs (commit d769482) ==`). This banks the DoD's **criterion #2 (10× consecutive
+clean) for the CURRENT 43-flow matrix** — NOT the final DoD (which requires 10× on the COMPLETE exhaustive matrix:
+44 more missions, 6 editor tools, save/load, controls all still deferred). Every flow is native↔wasm byte-identical
++ AE=0 vs a genuine DOSBox ref, stable across all 10 iterations.
+
+- **Patch 386 (`24e5e0d`)** — bd09-class DGROUP-table base-loss (3 derefs in FUN_0000_bd09 → `g_mem+0x1c000+
+  (uint16)(idx-0x61xx)`). Fixed the CYPRUS1 **wasm** OOB → broke open the first non-AZER1 in-mission wasm render.
+- **Patch 387 (`49ee2b2`)** — SMOKE-LED store-width: retyped `DAT_2000_4b4f` (0x8b4f state) + `DAT_2000_4bb5`
+  (0x8bb5 dirty) → `undefined1`; the WORD dirty-write had clobbered the renderer-index byte → LED never re-rendered.
+- **Patch 388 (`fd01bb4`)** — AUTO TURRET LED store-width (0x8b4d/0x8bbe → `undefined1`), asm-faithful; its verify
+  FLOW is harness-blocked (cursor/region-crop), deferred — the patch is in the tree and 10×-proven for no-regression.
+- **7 new flows**: `mission-cockpit-cyprus1` (first non-AZER1 in-mission bit-verify, region-crop cols80-180 rows96-188)
+  + 6 settings toggles (`settings-sound-fx-off`, `settings-joy-{flightstick,tmfcs,ch,tmwcs}`, `settings-smoke-off`).
+- Engine `re_out/fist.c` **pristine 61453e42** (all fixes are patches; shim edits only). Docs-only commits since
+  d769482 (17139ef/61cd423/ea07d7c/9645615) don't touch the build → the 10× result covers current HEAD.
+- **Static prep banked for the next two frontiers** (docs/coverage_plan.md, docs/editor_tools_plan.md): AZER2
+  mission mga-2004 blitter (args + 4 rebase artifacts), and the full 6-tool editor map incl. plant-tree fully
+  specified (STMP=d797 264B @0x9332, round-trip deterministic).
+
+---
+
 ## UPDATE 2026-07-20 (later) — master `c47d366`, patches 383–385 + watchdog shim fix → **verify.sh both = 36/36**
 
 Since the bbd2c81 snapshot below, four fixes landed; the suite is now a COMPLETE clean 36/36 (first full clean
