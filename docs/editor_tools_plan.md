@@ -125,3 +125,19 @@ code that builds the file buffer before d5f9 writes it); find it by the STMP tag
 24668/24676/24726/24765/24775/24785 are the tree add/remove ops, not the serializer -- the serializer is
 elsewhere, likely reached from the SAVE path, not 4754). NB place-target (4f5d->bd90) also writes STMP ->
 same corrected model applies. FIST_DUMP_REG diagnostic retained (native_main.c, env-gated) for next session.
+
+## plant-tree ATTEMPT-1 OPEN QUESTION RESOLVED (2026-08-10, gate-hold static RE)
+The "dedicated tree structure, NOT 0x9fbc" next-step is now pinned by reversing the REAL tree-add
+FUN_0000_9c1c (fist.c ~20700). It does: `if (DAT_2000_530a < 0x32) { b1df(0x15,obj); obj[0x19]=530c
+(species 0..3); obj[4..7]=cursorX(3b94); obj[8..0xb]=cursorY(3b98); FUN_0000_9bef(coord,obj); 530a++; }`.
+So the tree record is type 0x15 (species@+0x19, worldX@+4 dword, worldY@+8 dword) and the KEY link is
+**FUN_0000_9bef** -- the tree-LIST linker that ATTEMPT 1 never called. ATTEMPT 1 used the wrong allocator
+(b21d not b1df) AND skipped 9bef, so its record went only into 0x9fbc (=> DCBS unit) and never into the
+dedicated tree list the STMP serializer enumerates via 530a. CONCLUSION: do NOT hand-clone -- the faithful
+plant-tree is to DRIVE the real activate handler 4f32 (mask param_1&10, cursor coord in 3b94/3b98) which
+calls 9c1c, then save + STMP byte-diff. place-target (4f5d->bd90) is the exact twin. Base-loss to patch in
+9c1c: the coord source is `*unaff_CS`/`unaff_CS[1]` (CS-based) -- should be the param_1-derived pointer
+(&DAT_2000_3b94 with the high-word seg); + the dropped success CF (uVar2 always 0) that picks the "added"
+vs "failed" status msg (4f32: 0xd32 ok / 0xd63 fail). NEXT (needs runtime, gate-serialized): a FIST_EDIT_
+hook that posts the activate event to 4f32 with a set cursor coord, then reuse the patch-360/361 save +
+STMP-length/idempotent/native==wasm harness. Reverse 9bef next to confirm the dedicated list head.
