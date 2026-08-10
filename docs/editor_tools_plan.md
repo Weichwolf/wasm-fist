@@ -82,3 +82,16 @@ base-loss must be fixed first, like 386); or (b) if AZER1 STMP is non-empty (530
 clone an existing tree object + re-register (pure 362 pattern, avoids 9c1c). Next session: check 530a at load
 first; if >0, option (b) is the low-risk path. NB 9bef -0x6cde/-0x6cd6 is another bd09-class DGROUP table
 base-loss that any tree-render/plant path will hit -> a patch-386-style rebase.
+
+## plant-tree: clone path DE-RISKED (2026-08-10) -> ready to implement
+AZER1.FSG STMP chunk (@0x27fa) = 4B tag + 4B header (02 01 10 00) + **32 records x 8 bytes** = {X32,Y32}
+world coords (rec0: X=0x000a3d76 Y=0x0010c309). So DAT_2000_530a = 32 at load (< max 0x32=50, room for 18
+more). CLONE PATH VIABLE + LOW-RISK (mirrors patch 362 add-tank; avoids 9c1c/9bef base-loss + the d552
+coord blocker): FIST_EDIT_ADDTREE hook in 4754 after d501 -> 2dab|=2 (EDIT) -> allocate a new tree object
+(b21d(0x15) or clone an existing tree's in-mem object body), set coords from an existing tree, register in
+the tree list, DAT_2000_530a++ -> d5f9 serializes -> STMP grows +8 bytes (32->33 records). VERIFY: a python
+stmp_count() (chunk-size delta / 8) asserts +1 + reload keeps 33 + idempotent fixed point + native==wasm,
+exactly the run_addtank shape. In-mem tree object > 8B (b1df zeroes obj[2..0x33]; 9bef sets obj[0x10] rng /
+obj[0x12] table / obj[0x14]=0x200 / flags obj[0x16]|=0x40 obj[0x17]|=4) but only {X,Y} serialize to STMP,
+so the clone need only carry a valid body -> clone an existing tree's object (like add-tank cloned a unit).
+This is the recommended FIRST editor-tool flow (lower risk than the AZER2 mga mission fix).
