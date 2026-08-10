@@ -69,3 +69,16 @@ unreconstructed extender frontier, docs/editor.md §2/§4) → NOT cheap; the .F
   a python stmp_count() (analog dcbs_units) asserts +1 + reload + idempotent fixed point; native==wasm.
 - RISK: LOW (env-gated, mission-path only, file-verified; does NOT touch the fragile shared mga blitter).
   Prefer this over the AZER2 mga-2004 mission fix (high regression risk to 3 bit-verified flows).
+
+## Correction (2026-08-10, after reading 9c1c/b1df/9bef/3f3c internals)
+The "Low / direct clone of 362" estimate for plant-tree is OPTIMISTIC. Unlike add-tank (clone a unit body
+into a b21d slot + register in 9fbc), 9c1c does more: b1df(0x15,obj) allocates a graphics slot via b21d(0x15)
+AND registers `obj` into 9fbc AND zeroes obj[2..], then 9bef initializes animation/RNG fields (obj[0x10]=0291
+rng, obj[0x14]=0x200, flags obj[0x16]|=0x40 obj[0x17]|=4, obj[0x12]=table[byte[obj+0x19]*2 - 0x6cde]) --
+another DGROUP table base-loss at 9bef (-0x6cde/-0x6cd6, DS-relative, same class as patch 386 bd09). And the
+coords come from 3f3c reading DAT_1000_d552 (post-6015 map camera, blocked). Faithful harness options:
+(a) supply synthetic valid coords into DAT_2000_3b94[0..3] + a fresh obj slot + call 9c1c (but 9bef's table
+base-loss must be fixed first, like 386); or (b) if AZER1 STMP is non-empty (530a>0 at load -- UNVERIFIED),
+clone an existing tree object + re-register (pure 362 pattern, avoids 9c1c). Next session: check 530a at load
+first; if >0, option (b) is the low-risk path. NB 9bef -0x6cde/-0x6cd6 is another bd09-class DGROUP table
+base-loss that any tree-render/plant path will hit -> a patch-386-style rebase.
