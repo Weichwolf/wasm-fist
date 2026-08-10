@@ -56,3 +56,16 @@ asm-verify against re_out/fist_dat_image.bin before banking, as b21d/d5f9 were f
 ## Deferred
 A screen-frame status-text cross-check ("TANK ADDED" render) needs the map-view render 93c0 (the
 unreconstructed extender frontier, docs/editor.md §2/§4) → NOT cheap; the .FSG byte-diff is the gate.
+
+## Feasibility confirmed (2026-08-10)
+- AZER1.FSG chunk tags present: SHDR/DCBS/PATH/STMP/PINF/BINF/TERM (one each). STMP chunk EXISTS ->
+  plant-tree (4f32->9c1c) and place-target (4f5d->bd90) write STMP; a byte-diff harness is viable.
+- plant-tree internals: FUN_0000_4f32 (fist.c:13952): `if(param_1&10){ 3f3c(&DAT_2000_3b94); 9c1c(&3b94,param_3);
+  66cd(0xd32 ok / 0xd63 fail) }`. FUN_0000_9c1c (fist.c:24660): `if(DAT_2000_530a<0x32){ b1df(0x15,param_2);
+  param_2[0x19]=DAT_2000_530c; param_2[4..8]=CS; 9bef(...); 530a++ }`. DAT_2000_530a = tree count (max 50),
+  DAT_2000_3b94 = tree scratch descriptor (DGROUP:0x3b94). 3f3c fills world coords from the map-click camera
+  DAT_1000_d552 (post-6015, blocked) -> harness supplies a FIXED synthetic cell into 3b94 and calls 9c1c
+  directly (exactly as patch 362 bypasses 4c7a via b21d). Verify: FIST_EDIT_ADDTREE hook in 4754 after d501;
+  a python stmp_count() (analog dcbs_units) asserts +1 + reload + idempotent fixed point; native==wasm.
+- RISK: LOW (env-gated, mission-path only, file-verified; does NOT touch the fragile shared mga blitter).
+  Prefer this over the AZER2 mga-2004 mission fix (high regression risk to 3 bit-verified flows).
