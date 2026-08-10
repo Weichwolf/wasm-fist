@@ -141,3 +141,13 @@ calls 9c1c, then save + STMP byte-diff. place-target (4f5d->bd90) is the exact t
 vs "failed" status msg (4f32: 0xd32 ok / 0xd63 fail). NEXT (needs runtime, gate-serialized): a FIST_EDIT_
 hook that posts the activate event to 4f32 with a set cursor coord, then reuse the patch-360/361 save +
 STMP-length/idempotent/native==wasm harness. Reverse 9bef next to confirm the dedicated list head.
+
+## plant-tree RNG dependency (2026-08-10, gate-hold) -- harness implication
+FUN_0000_9bef (called by 9c1c) seeds tree fields with RNG FUN_0000_0291(): +0x10=rng (sway phase),
++0x14=0x200, +0x12=(rng & htab[species*2-0x6cde])+hbase[species*2-0x6cd6] (randomized height), sets
+flags +0x17|=4 / +0x16|=0x40, then FUN_1000_adcd(species*2) inserts into a spatial index. IMPLICATION:
+a planted tree is NOT deterministic from cursor coord+species alone (height/phase are RNG). Before the
+plant-tree STMP-diff flow: EITHER pin the RNG seed (find 0291's state var, seed it via a FIST_ hook) OR
+confirm the STMP serializer writes only coord(+4/+8)+species(+0x19) and drops the render fields (+0x10/
++0x12/+0x14) -- reverse the STMP writer to decide. Only then is the round-trip byte-diffable. This is the
+last unknown before plant-tree is fully specified; everything else (drive 4f32->9c1c) is pinned.
