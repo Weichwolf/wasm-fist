@@ -82,6 +82,10 @@ FLOWS=(
   # lit indicator MOVES HIGH->MEDIUM (6d16 renderer).  No status change (SOUND has no 7018 status line).
   # ref via tools/refcapture_click2.sh 160 126 246 150 40 8 8 (2x AE=0, non-circular).  AE=0 both targets.
   "settings-sound-fx-med|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:246:150:0; 3600:246:150:1; 4200:246:150:0; 4800:246:150:0|$ROOT/ref/settings_sound_fx_med_native320.png"
+  # settings-sound-fx-off: SOUND FX radio OFF (x246, the aligned column).  Default is HIGH; clicking OFF
+  # (246,137) selects it (LED moves HIGH->OFF, 6ee2/6d16 renderer).  No engine change needed (the radio
+  # dirty/render already correct at this column); pure coverage of the OFF radio state.  AE=0 both targets.
+  "settings-sound-fx-off|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:246:137:0; 3600:246:137:1; 4200:246:137:0; 4800:246:137:0|$ROOT/ref/settings_sound_fx_off_native320.png"
   # SETTINGS RADIO toggle (patch 319), MUSIC group (2 radios): open SETTINGS, click the OFF MUSIC radio
   # (181,136).  Default MUSIC = ON (lit); the click -> 6b27 -> 6bd5 -> 6ed4: MUSIC state word 0x8b49,
   # marks the 2 MUSIC widgets dirty (uRam00024bb8/4bbb, BYTE) -> the lit indicator MOVES ON->OFF (6d05
