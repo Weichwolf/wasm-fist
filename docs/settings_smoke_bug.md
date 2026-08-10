@@ -29,3 +29,24 @@ CONTROL / PROMPTS (other checkboxes). The radio toggles are unaffected.
 MUSIC ON (re-enable), SOUND FX OFF/HIGH, the 6 non-default joystick types (STD/FLIGHTSTICK/TM-FCS/CH/
 TM-WCS/EXTERNAL DRIVER), CALIBRATE, AUTO TURRET CONTROL, PROMPTS. Each: refcapture_click2 + AE=0 both
 targets. LED column x=181 (DISPLAY), joystick LEDs x~35 (CONTROL), SOUND LEDs x~246/differently.
+
+## Deeper analysis (2026-08-10, cron iter): NOT the toggle -- it's the LED re-paint dispatch
+asm-verified the full chain:
+- Paint FUN_0000_6d45 (asm 0x6d45): `cmpb $0,[0x8b4f]; je +2; mov al,0xe; call 6d54` -> draws checked
+  sprite 0xf0 if byte[0x8b4f]!=0 else empty 0xe8. Reads byte[0x8b4f]. CONFIRMED.
+- Toggle FUN_0000_6c1d (asm 0x6c1d, PRISTINE re_out:17406): `xorb $1,[0x8b4f]; movb $3,[0x8bb5];
+  si=0x179e; cmpb $0,[0x8b4f]; je +; si=0x1788; call 7018(post status)`. Flips byte[0x8b4f], sets
+  redraw marker byte[0x8bb5]=3, posts ENABLED(0x1788)/DISABLED(0x179e) by NEW state.
+- SKY toggle 6c02 is the IDENTICAL structure (flag 0x8b4e, marker 0x8bca) and WORKS (settings-sky AE=0).
+- Port behaviour: status shows "SMOKE EFFECTS DISABLED" -> 6c1d ran, `if(word[0x8b4f]!=0)` was FALSE ->
+  byte[0x8b4f]==0 AND byte[0x8b50]==0 (the WORD read didn't misfire). So the flag IS flipped to 0.
+- YET the LED stays red (checked). So 6d45 was NOT re-dispatched after the toggle (it still shows the
+  init/checked render). SKY's 6d36 IS re-dispatched on SKY toggle. => the bug is the ELEMENT RE-PAINT
+  DISPATCH for the SMOKE LED element specifically, NOT the toggle var width (byte==word here: high bytes
+  0x8b50/0x8bb6 are unreferenced, so patch-134-style byte retyping would NOT fix it -- verified by reason).
+- The store-width theory (first hypothesis) is DISPROVEN. This is a paint-walk (209e) dispatch issue:
+  the SMOKE LED element's dirty flag (byte[0x8bb5]=3) does not cause 6d45 to re-run, while SKY's
+  (byte[0x8bca]=3) causes 6d36 to re-run. NEXT: instrument whether 6d45 is called post-toggle + how the
+  209e walk maps the marker byte[0x8bXX] to the element paint method; SMOKE's element may be registered/
+  dirtied differently than SKY's. Deeper than a quick front-end fix -- comparable to the mission-render
+  dispatch work. Oracle stays in ref/pending/.
