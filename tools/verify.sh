@@ -229,6 +229,10 @@ FLOWS=(
   # isolated (fresh cp -a datadir).  Needs re_out/fist_image.bin (extender render, a `make kernel-image`
   # build artifact -- gitignored) or the render is skipped.  Special-cased below (FIST_MISSFB + region crop).
   "mission-cockpit|25000|missfb||$ROOT/ref/mission_azer1_cockpit_native320.png"
+  # mission-cockpit-cyprus1: second bit-verified in-mission surface -- CYPRUS1 (map D06/C06, M1 idx0)
+  # reached via FIST_FSG_BATTLE (patch 380), central-chrome AE=0 both targets vs the DOSBox spawn ref
+  # (patch 386 fixed the wasm OOB in FUN_0000_bd09 that blocked all non-AZER1 maps).  Battle in `inp`.
+  "mission-cockpit-cyprus1|25000|missfb|CYPRUS1|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
@@ -352,13 +356,16 @@ run_addtank() { # $1=target $2=expected-unit-count ; echo path-to-edited-file on
 # ---- MISSION cockpit render (FIST_MISSFB op-0x24 post #1) -> region-cropped PPM ----
 MC_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0; 7200:40:186:0"
 MC_REGION="100x92+80+96"   # cols80-180 rows96-188 central chrome
-run_mission() { # $1=target $2=datadir ; echo region-crop-ppm-path on success, empty on fail
-  local t="$1" dd="$2"
+run_mission() { # $1=target $2=datadir [$3=battle] ; echo region-crop-ppm-path on success, empty on fail
+  local t="$1" dd="$2" bt="${3:-}"
   local out="$TMP/mc.$t.ppm" reg="$TMP/mc.$t.reg.ppm"
+  # $3 selects a non-default battle via patch 380's FIST_FSG_BATTLE (drives the same MC_MOUSE
+  # BATTLES->OK->ACCEPT navigation into any of the 47 .FSG).  Empty -> default AZER1 (behaviour-neutral).
+  local bexp=(); [ -n "$bt" ] && bexp=(FIST_FSG_BATTLE="$bt")
   if [ "$t" = native ]; then
-    timeout 90  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
+    timeout 90  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
   else
-    timeout 220 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 220 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
   fi
   [ -s "$out" ] || { echo ""; return 1; }
   convert "$out" -crop "$MC_REGION" +repage "$reg" 2>/dev/null || { echo ""; return 1; }
@@ -399,20 +406,24 @@ for row in "${FLOWS[@]}"; do
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
   fi
-  if [ "$name" = mission-cockpit ]; then
-    # First dual-target IN-MISSION surface: AZER1-spawn cockpit central-chrome cols80-180 rows96-188.
+  if [ "$name" = mission-cockpit ] || [ "${name#mission-cockpit-}" != "$name" ]; then
+    # Dual-target IN-MISSION surface: <battle>-spawn cockpit central-chrome cols80-180 rows96-188.
     # Region-limited AE=0 vs the DOSBox ref on native AND wasm + native<->wasm 0-diff.  WRITE-isolated.
-    detail=" [AZER1 cockpit central-chrome cols80-180 rows96-188]"
+    # The battle is in the row's `inp` field (empty -> AZER1 default; e.g. CYPRUS1 via patch 380's
+    # FIST_FSG_BATTLE).  The central chrome is map-invariant modulo dynamic instruments; the ref is a
+    # genuine DOSBox spawn-frame capture whose MC_REGION crop is the compared surface.
+    mbt="$inp"
+    detail=" [${mbt:-AZER1} cockpit central-chrome cols80-180 rows96-188]"
     if [ ! -s "$ROOT/re_out/fist_image.bin" ]; then echo "  FAIL $name (re_out/fist_image.bin missing; run 'make kernel-image')"; fail=$((fail+1)); continue; fi
     convert "$ref" -crop "$MC_REGION" +repage "$TMP/mc.ref.ppm" 2>/dev/null
     rn=""; rw=""
     if [ "$WHICH" != wasm ]; then
-      rn="$(run_mission native "$(fresh_datadir mc.nat)")"
+      rn="$(run_mission native "$(fresh_datadir "$name.nat")" "$mbt")"
       if [ -n "$rn" ]; then a=$(compare -metric AE "$rn" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" native-AE=$a"; }
       else ok=0; detail+=" native-no-frame"; fi
     fi
     if [ "$WHICH" != native ]; then
-      rw="$(run_mission wasm "$(fresh_datadir mc.wasm)")"
+      rw="$(run_mission wasm "$(fresh_datadir "$name.wasm")" "$mbt")"
       if [ -n "$rw" ]; then a=$(compare -metric AE "$rw" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" wasm-AE=$a"; }
       else ok=0; detail+=" wasm-no-frame"; fi
     fi
