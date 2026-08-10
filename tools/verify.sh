@@ -108,6 +108,12 @@ FLOWS=(
   # non-circular; port md5 139294fd != any circular self-compare).  AE=0 native AND wasm; native md5 ==
   # wasm md5, deterministic (3x single md5).
   "settings-joystick|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:34:0; 3600:35:34:1; 4200:35:34:0; 4800:35:34:0|$ROOT/ref/settings_joystick_native320.png"
+  # SETTINGS joystick radios (x35 aligned column): each selects a joystick type (LED moves), AE=0 both
+  # targets, no engine change (the joystick radio render is already correct -- settings-joystick=STD).
+  "settings-joy-flightstick|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:46:0; 3600:35:46:1; 4200:35:46:0; 4800:35:46:0|$ROOT/ref/settings_joy_flightstick_native320.png"
+  "settings-joy-tmfcs|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:58:0; 3600:35:58:1; 4200:35:58:0; 4800:35:58:0|$ROOT/ref/settings_joy_tmfcs_native320.png"
+  "settings-joy-ch|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:69:0; 3600:35:69:1; 4200:35:69:0; 4800:35:69:0|$ROOT/ref/settings_joy_ch_native320.png"
+  "settings-joy-tmwcs|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:88:0; 3600:35:88:1; 4200:35:88:0; 4800:35:88:0|$ROOT/ref/settings_joy_tmwcs_native320.png"
   "review|25000|22000|200:160:113:0; 800:160:113:1; 1400:160:113:0; 2000:160:113:0|$ROOT/ref/review_native320.png"
   "selplayer|25000|22000|200:160:74:0; 800:160:74:1; 1400:160:74:0; 2000:160:74:0|$ROOT/ref/selplayer_native320.png"
   "battles|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 2000:160:100:0|$ROOT/ref/battles_native320.png"
