@@ -94,6 +94,15 @@ static void segv_bt(int sig, siginfo_t *si, void *uc) {
     unsigned long esp = (unsigned long)u->uc_mcontext.gregs[7  /*REG_ESP*/];
     fprintf(stderr, "\n[segv] signal %d fault-addr %p EIP=0x%08lx EBP=0x%08lx ESP=0x%08lx\n",
             sig, si->si_addr, eip, ebp, esp);
+    /* Mission reticle/vehicle state at the crash (DIAGNOSTIC): identifies which vehicle-type reticle
+     * setter routed (the mga-blit/reticle debt) -- 2d32=type*2, 2d34=player vehicle, d550=reticle
+     * sprite id, d548=reticle phase.  Reads only; fires within the SEGV handler so it captures the
+     * exact crash-time state (the crash is in the first paint, before the in-mission tick pump). */
+    { unsigned char *dg = g_mem + 0x1c000;
+      unsigned short ty = *(unsigned short*)(g_mem+0x22d32);
+      fprintf(stderr, "[segv] mission: 2d32(type*2)=0x%04x 2d34(veh)=0x%04x d550(reticle)=0x%04x d548=0x%02x builder[6d7c+ty]=0x%04x\n",
+              ty, *(unsigned short*)(g_mem+0x22d34), *(unsigned short*)(g_mem+0x1d550),
+              *(unsigned char*)(g_mem+0x1d548), *(unsigned short*)(dg+0x6d7c+(unsigned short)ty)); }
     /* EBP-chain walk: gcc -O0 gives every C fn a real frame, so the chain is exact (FIST_SEGV_EBP). */
     if (getenv("FIST_SEGV_EBP")) {
         unsigned long fp = ebp;
