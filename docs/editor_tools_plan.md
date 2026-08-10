@@ -151,3 +151,20 @@ plant-tree STMP-diff flow: EITHER pin the RNG seed (find 0291's state var, seed 
 confirm the STMP serializer writes only coord(+4/+8)+species(+0x19) and drops the render fields (+0x10/
 +0x12/+0x14) -- reverse the STMP writer to decide. Only then is the round-trip byte-diffable. This is the
 last unknown before plant-tree is fully specified; everything else (drive 4f32->9c1c) is pinned.
+
+## STMP serializer RESOLVED (2026-08-10, gate-hold static RE) -- plant-tree round-trip IS deterministic
+STMP writer = FUN_0000_d797 (asm: mov cx,0x108; mov dx,0x9332; mov bx,[DGROUP:0x1690]=fh; ah=0x40;
+int 21h) -- a FIXED 264-byte (0x108) block at DGROUP:0x9332, written wholesale. It is load-into-place
+(d501) / save-from-place, NOT a per-tree enumeration (264B can't hold 50 full tree records). So STMP is
+a COMPACT placement block (grid/stamp/index); the object records (type-0x15 in 0x9fbc, with the RNG
+height/phase 9bef seeds at obj+0x10/+0x12) are DERIVED from STMP on load -- transient render/sim state,
+regenerated each load exactly like the patch-361 data+2 recompute (d81e). => a plant-tree load->save
+round-trip is DETERMINISTIC: STMP stores placement only, the RNG fields never serialize. No RNG-pin needed.
+No named DAT_2000_9332 accessors exist in the decomp => 0x9332 is populated via pointer/bulk-copy.
+ONE open (needs runtime or deeper asm): does 9c1c (tree add) write 0x9332 in place, or is there a
+save-time STMP-REBUILD pass that reads the tree list -> 0x9332? Determine by: (a) FIST_EDIT hook drives
+4f32->9c1c with a cursor coord, (b) dump the 264B at DGROUP:0x9332 before vs after + after save, (c) if
+9c1c alone doesn't change 0x9332, trace the d5f9 save path for a pre-d797 STMP builder that walks the
+530a tree list. plant-tree flow = drive 4f32->9c1c + reuse patch-360/361 save harness + byte-diff the
+STMP chunk (offset known: it is the 264B written by d797). place-target (4f5d->bd90) = exact twin.
+FULLY SPECIFIED now except the 0x9332-update site, which is a single runtime dump (gate-serialized).
