@@ -1,0 +1,33 @@
+PATCH 389: fix the AZER2 (and other non-7a98/767c-path) mission crash -- FUN_0000_47e0's c68c=mga:0x2004
+(cockpit-instrument bbox analyzer) dispatch passed its child/container args as RAW DGROUP near-offsets
+(0x7ac0/0x7a42).  Patch 177 threaded them so while c68c was the uninstalled offset-0 no-op (harmless), but
+patch 331 later installed DGROUP:0x68c=mga:0x2004 and patch 332 reconstructed 2004 to deref param_2/param_3
+as HOST POINTERS.  On the AZER2 mission path 47e0's 3aa2-guarded c68c call fires (AZER1/CYPRUS1 instead reach
+2004 via 7a98/767c -- patch 333 -- and set DAT_2000_3aa2 first, skipping this call), so 2004 wild-derefs the
+raw offset 0x7a42 -> SIGSEGV (m_mga_FUN_0000_2004+0xc1, fault-addr 0x7a42; EBP chain e714->459a->206f->209e->
+4846->4854->47e0->2004).  Rebase child/container to host ptrs EXACTLY like patch 333's 7a98/767c c68c calls
+(al=0xff id, bx=0x7ac0 child->param_2, si=0x7a42 container->param_3, asm 0x47f9-0x4801).  Runtime-verified via
+the FIST_SEGV_MGA diagnostic (commit b3ff8bc): word[DG:0x7a42]=0x55e9 (src seg), word[DG:0x1590]=0x4cf1
+(scanline seg).  CALLER-side arg-thread (patch class 296/311/333), NOT a 2004 rebase (2004 is already correct).
+
+--- a/fist.c
++++ b/fist.c
+@@ -14135,9 +14135,15 @@
+      descriptor at DGROUP:0x7a42 (its word0 = the off-screen fill-buffer segment that 2595 then fills). */
+   ((void (*)(undefined2,undefined2,int))fist_icall_far((uint32_t)(DAT_1000_c560)))(8, 0x1c00, 0x7a42);
+   if (DAT_2000_3aa2 == '\0') {
+-    /* asm 0x47f9: `mov bx,0x7ac0 ; mov al,0xff ; mov si,0x7a42 ; lcall [0x68c]` -> c68c = MGAVIDEO
+-       offset-0 no-op (`ret`); args (al=0xff, bx=0x7ac0, si=0x7a42) threaded faithfully but inert. */
+-    ((void (*)(undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c68c)))(0xff, 0x7ac0, 0x7a42);
++    /* PATCH 389: c68c=mga:0x2004 (cockpit-instrument bbox analyzer) is now LIVE -- patch 331 installs
++       DGROUP:0x68c=mga:0x2004 and patch 332 reconstructs 2004 to expect HOST-PTR param_2/param_3.  Patch 177
++       threaded these args as RAW DGROUP near-offsets (0x7ac0/0x7a42), harmless while c68c was the offset-0
++       no-op but now a WILD host-ptr deref on the AZER2 mission path (EBP chain e714->459a->206f->209e->4846->
++       4854->47e0->2004, SIGSEGV fault-addr 0x7a42).  Rebase child/container to host ptrs, EXACTLY like patch
++       333's 7a98/767c c68c calls.  asm 0x47f9-0x4801: al=0xff id, bx=0x7ac0 child(param_2), si=0x7a42
++       container(param_3).  AZER1/CYPRUS1 reach 2004 via 7a98/767c (patch 333) + set DAT_2000_3aa2 first, so
++       this 3aa2-guarded 47e0 call is AZER2-path-specific -> targeted, no menu/settings-flow effect. */
++    ((void (*)(uint,undefined2*,undefined2*))fist_icall_far((uint32_t)(DAT_1000_c68c)))(0xff, (undefined2*)(g_mem+0x1c000+0x7ac0), (undefined2*)(g_mem+0x1c000+0x7a42));
+     FUN_0000_60d9();
+     DAT_2000_3aa2 = -1;
+   }
