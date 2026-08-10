@@ -71,3 +71,17 @@ spin, plant-tree save-serializer, SMOKE settings checkbox) resolves to a genuine
 focused multi-step RE -- there is no remaining "quick win". All are precisely mapped + banked (roots,
 diagnostics, oracles, disproven hypotheses) so the eventual landings are fast. The port is a multi-session
 undertaking; the hourly cron restarts at these banked, routed fix points.
+
+## RESOLVED (patch 387, commit 49ee2b2) + PRODUCTIVE VEIN
+SMOKE was the SKIPPED entry in the patch-319 store-width sweep: dirty flag 0x8bb5 (between the 319-fixed
+0x8bb2 and 0x8bbb) + state flag 0x8b4f were left WORD-typed. Retyping both to undefined1 (asm-faithful
+byte ops @6c1d/6c22) -> the `=3` no longer clobbers the renderer-index byte 0x8bb6 -> the dirty-walk
+dispatches the correct SMOKE renderer -> LED re-renders OFF. AE=0 both targets, 38/38, no regression.
+
+VEIN: the SETTINGS checkboxes are the tractable coverage path (front-end, low-risk, refcapture_click2
+oracle + FIST_RUNMS dump verify). Remaining uncovered toggles likely the SAME store-width class (check each
+flag's #define type vs the asm at its toggle handler; retype WORD->BYTE where asm is byte): AUTO TURRET
+CONTROL, PROMPTS (CONTROL checkboxes, LEDs x~35), MUSIC-ON (re-enable), SOUND FX OFF/HIGH (x~246), the 6
+non-default joystick radios (STD/FLIGHTSTICK/TM-FCS/CH/TM-WCS/EXTERNAL, LEDs x~35). Each = capture oracle
+(refcapture_click2 160 126 <tx> <ty> 40 8 8 out.png) -> add flow -> AE=0 both -> matrix grows by 1. This
+is the fastest matrix-growth path while the deep mission/editor roots await focused sessions.
