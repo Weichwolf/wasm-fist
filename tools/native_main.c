@@ -25,6 +25,7 @@
 
 /* Diagnostic SIGSEGV backtrace (gated by FIST_SEGV_BT) -- gdb can't keep up with the fast tick. */
 extern long fist_dump_framebuffer(const char *path);   /* fist_vga.c (fwd for segv_bt) */
+extern uint32_t fist_mga_base;                          /* re_out/fist_mga.c (mga overlay load offset) */
 extern int  fist_vga_mode(void);
 
 /* -----------------------------------------------------------------------------------------------
@@ -113,6 +114,32 @@ static void segv_bt(int sig, siginfo_t *si, void *uc) {
         unsigned short typ = slot ? *(unsigned short*)(dg+slot) : 0xffff;
         fprintf(stderr," %04x(t=%04x)", slot, typ); }
       fprintf(stderr,"\n"); }
+    /* mga overlay seg capture (DIAGNOSTIC, FIST_SEGV_MGA): the m_mga_FUN_0000_2004 blitter faults on
+     * `mov es,[0x1590]` (ES base-loss).  The scanline-seg WORD lives at the mga DRIVER's DS:0x1590 --
+     * unknown statically (driver DS set at its own init, != fist_mga_base, != engine DGROUP).  Dump the
+     * candidates + windows so the real allocated seg (0x3xxx/0x9xxx heap range) can be identified, plus
+     * the compiled-C frame args (param_2/param_3 = span-out / src-sprite struct ptrs off ESP).  Reads only. */
+    if (getenv("FIST_SEGV_MGA")) {
+      fprintf(stderr, "[segv/mga] fist_mga_base=0x%08x  fault-addr=%p\n", fist_mga_base, si->si_addr);
+      unsigned base = fist_mga_base;
+      fprintf(stderr, "[segv/mga] cand engine DGROUP:0x1590 word=0x%04x  mga+0x1590 word=0x%04x\n",
+              *(unsigned short*)(g_mem+0x1c000+0x1590), *(unsigned short*)(g_mem+base+0x1590));
+      fprintf(stderr, "[segv/mga] window mga+0x1588..0x15a0:");
+      for (unsigned o=0x1588;o<=0x15a0;o+=2) fprintf(stderr," %04x", *(unsigned short*)(g_mem+base+o));
+      fprintf(stderr, "\n[segv/mga] window DG+0x1588..0x15a0:");
+      for (unsigned o=0x1588;o<=0x15a0;o+=2) fprintf(stderr," %04x", *(unsigned short*)(g_mem+0x1c000+o));
+      /* C-frame args: at gcc -O0, params are at [ebp+8],[ebp+12],[ebp+16]; deref each as a WORD ptr */
+      unsigned long *fp=(unsigned long*)ebp;
+      if (ebp>0x1000) {
+        for (int a=2;a<=4;a++){ unsigned long p=fp[a];
+          fprintf(stderr,"[segv/mga] arg%d=0x%08lx", a-1, p);
+          if (p>0x08048000 && p<0x08800000) fprintf(stderr," -> *word=0x%04x", *(unsigned short*)p);
+          /* p is a near-offset (raw low value); dump word[DG:p] and word[mga:p] = the struct's seg word */
+          if (p < 0x10000) fprintf(stderr," | DG:%04lx word=0x%04x  mga:%04lx word=0x%04x",
+              p, *(unsigned short*)(g_mem+0x1c000+p), p, *(unsigned short*)(g_mem+base+p));
+          fprintf(stderr,"\n"); }
+      }
+    }
     /* EBP-chain walk: gcc -O0 gives every C fn a real frame, so the chain is exact (FIST_SEGV_EBP). */
     if (getenv("FIST_SEGV_EBP")) {
         unsigned long fp = ebp;
