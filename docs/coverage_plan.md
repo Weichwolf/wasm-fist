@@ -276,3 +276,25 @@ chain-B record buffer should be relocated.  NEXT (fresh session): (1) trace 378e
 it does; (2) compare to a DOSBox AZER2 oracle for the 0x1e view.  A cull base-loss (too many records) is the
 leading hypothesis.  This is the deepest mission-render frontier; fully mapped, needs runtime cull analysis +
 a DOSBox oracle.  re_out/fist.c pristine 61453e42; patches 390+391 committed + 43/43-verified.
+
+## MISSION SURVEY (2026-08-11, post-391) -- 3 more crash-free missions found (native)
+run_mission survey (native, FIST_FSG_BATTLE, MC_REGION crop vs the genuine azer1/cyprus1 DOSBox refs):
+| battle  | map     | native result   | central-chrome crop match |
+|---------|---------|-----------------|---------------------------|
+| AZER1   | D32/C32 | OK (flow)       | == azer1ref (AE=0)        |
+| CYPRUS1 | D06/C06 | OK (flow)       | == cyprus1ref (AE=0)      |
+| SAUDI1  | D30/C30 | OK-rendered     | **== azer1ref (AE=0)**    |
+| SYRIA1  | D30/C30 | OK-rendered     | **== azer1ref (AE=0)**    |
+| INDIA1  | D06/C06 | OK-rendered     | **== cyprus1ref (AE=0)**  |
+| UKRAINE1| D31/C31 | CRASH (segv)    | -- (twin-class, D31 like AZER2) |
+| TRAIN1  | D32/C32 | HANG            | -- (twin-#3 class)        |
+| AZER3   | D31/C31 | CRASH (segv)    | -- (D31 like AZER2)       |
+The M1 central chrome has TWO variants (AE=90 apart, likely the spawn-speed MPH needle): azer1-type
+(AZER1/SAUDI1/SYRIA1) and cyprus1-type (CYPRUS1/INDIA1).  SAUDI1/SYRIA1/INDIA1's port crop is BIT-IDENTICAL
+(AE=0) to an existing GENUINE DOSBox ref -> they are near-ready new flows.  D31 maps (AZER2/AZER3/UKRAINE1)
+crash or hang = the twin-class frontier (chain B / object cull).  TRAIN1 (D32) hangs = twin-#3 class too.
+NEXT to add SAUDI1/SYRIA1/INDIA1 as verify flows: (1) native<->wasm identity (SAUDI1 running bg id=bda8wedup),
+(2) a GENUINE per-mission DOSBox ref (refcapture_mission_row.sh, or accept the azer1/cyprus1 ref IF a DOSBox
+SAUDI1 capture confirms the M1 chrome is truly mission-invariant), (3) add 3 rows to verify.sh + re-gate.
+Rigor note: using azer1ref for SAUDI1 assumes the real SAUDI1 DOSBox chrome == AZER1's; confirm with a genuine
+SAUDI1 DOSBox capture before banking (code-is-truth).  This survey de-risks 3 of the 40+ missions cheaply.
