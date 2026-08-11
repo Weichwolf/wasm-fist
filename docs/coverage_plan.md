@@ -104,3 +104,25 @@ PATCH 390 = reconstruct c7ca (obj=g_fist_render_si, dg-rebase, CF-thread) + c3ed
 VALIDATE: AZER1+CYPRUS1+mission-cockpit AE=0 unchanged (they are type-0/M1, do NOT reach c7ca -> zero risk);
 AZER2 advances past c7ca. Then build mission-cockpit-azer2 oracle (row 130,100 or FIST_FSG_BATTLE=AZER2,
 MC_REGION crop, SETTLE=2), add flow, re-run 10x gate on the grown matrix.
+
+## AZER2 twin #2: FUN_0000_3823 (2026-08-11, post-patch-390, asm-decoded) -> patch 391 spec
+After patch 390 (committed 10ad4c7) fixes c7ca, AZER2's NEXT crash = FUN_0000_3823+0x74 (EIP 0x0805c1ff,
+fault-addr 0xffff). EBP chain: 00d0->cae6->e714->459a->22dd->**378e+0xe8**->3823. 3823 is a per-object
+SPRITE render (obj in BX at entry; C param_3=obj). asm 0x3823-0x38a9:
+- 3d4c(0x6bc8)->iVar1; dx=-iVar1; si=word[obj+0x32]=sprite id.
+- **es=word[DGROUP:0x4f0] (sprite-dir seg); les es:(si) (sprite far ptr); dx=word[es:si-4] (sprite w/h hdr).**
+  The DECOMPILE (build/fist.c:12197 `*(undefined4*)*(undefined2*)(param_3+0x32)-4`) DROPPED the ES=[0x4f0]
+  base + the les indirection -> derefs the sprite id (0xffff sentinel on AZER2) as a RAW host ptr => fault
+  0xffff. Same sprite-dir idiom as 260c (`mov es,[0x4f0]; les si,es:[si]`).
+- di=word[DGROUP:0x156a] (viewport struct); builds coord struct at DGROUP:0x6c16 (2c16/2c18/2c1a/2c1c) from
+  viewport w/h (di+0xa/di+0xc >>1) + screen offsets; lcall [DGROUP:0x6c8]=c6c8 (sprite blit method).
+- THEN a direct FB plot: es=word[di] (fb seg); si=width/2-iVar1 clamp<width; row=word[si*2+[0x794]]; 
+  di2=height/2+cx clamp<height; al=byte[0x6c1b]; if(al) byte[es:di2+row]=al. (build/fist.c:12209-12212;
+  base-loss: es=word[di] dropped; DAT_1000_c794 rowtable.)
+RECONSTRUCTION (patch 391): rebase the sprite-dir resolution (es=word[0x4f0], les, [sprite-4]) + the FB plot
+(es=word[di]) + the viewport di=word[0x156a] near-offset reads. **RUNTIME REACH-CHECK FIRST** (binaries were
+busy w/ verify): 3823 is a general sprite-render likely ALSO on the AZER1/CYPRUS1 path -> confirm whether
+they reach it (a diagnostic or dump obj[0x32]) BEFORE reconstructing; if they reach it AE=0 via the current
+base-lost path the reconstruction could change output = regression. If NOT reached on AZER1/CYPRUS1 (likely,
+since they're crash-free on the base-lost code), it is AZER2-type-1-object-specific -> safe. Twin-migration
+continues (391 -> next). c6c8 (DGROUP:0x6c8) method install state also needs confirming (c6c1/c6d4/... family).
