@@ -1,3 +1,26 @@
+# STATE — current frontier (2026-08-11, commit 86d02cc)
+
+## MAJOR MILESTONE (2026-08-11): wasm-mission blocker CLEARED + 5 missions dual-target + 46-flow 10x gate
+- **wasm-mission tick-hold fix (commit 49f8cfb, shim-only, engine pristine)** resolves the native<->wasm
+  hard-invariant divergence: the in-mission INT-8 tick c452 was wall-clock/pump-based, so native (fast) and
+  wasm (~15x slower) accumulated different c452 by the spawn frame -> wasm crossed the 459a per-tick sim-gate
+  before op-0x24 -> the flight-model sim (op-0x1c) fired -> hang.  Fix: hold the cooperative tick during
+  mission-LOAD-pre-cockpit so wasm's spawn-frame tick matches native's frozen count.
+- **5 MISSIONS dual-target bit-verified** (was 2): AZER1, CYPRUS1, + SAUDI1/SYRIA1/INDIA1 (commit 86d02cc).
+  Central-chrome (MC_REGION) AE=0 both targets vs GENUINE DOSBox refs.  New tool: tools/refcap_saudi.sh
+  (scroll-capable, SELF-VALIDATING DOSBox mission-ref capture).  Genuine SAUDI1 ref proves M1 central chrome
+  is map-group-invariant (D30==D32).
+- **46-FLOW 10x GATE PASSED** (commit 86d02cc) -> criterion #2 re-banked on the grown matrix.
+- **THE key remaining mission blocker = twin-#3** (AZER2/D31/"2+" NATIVE chain-B render_di overrun @0x6c96):
+  chain B's 378e writes ~8 display-list records at render_di=0x6bbe, overrunning the phase table (chain A
+  relocates via 2471, chain B doesn't).  ALL "2+" missions crash/hang on this (SAUDI2/SYRIA2 hang, INDIA2
+  crashes -- richer rosters).  Fixing it unblocks AZER2 + dozens of missions.  NEEDS a DOSBox/QEMU chain-B
+  mission-state oracle (real object-cull count / render_di) -- no clean cull base-loss in the C path.
+- Editor round-trip (plant-tree 9c1c+STMP-source), save/load, controls, full-frame terrain bit-verify, and the
+  10x on the COMPLETE matrix all remain.  DoD NOT reached.  Full detail: docs/coverage_plan.md.
+
+---
+
 # STATE — accurate current-state frontier map (2026-07-18; UPDATE 2026-07-20 at top)
 
 Read-only recon snapshot. Supersedes the stale CLAUDE.md `Status` section. Where CLAUDE.md
