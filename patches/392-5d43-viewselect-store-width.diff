@@ -1,0 +1,39 @@
+PATCH 392: twin #3 ROOT -- in-mission VIEW SELECT store-width bug (5d43) that mapped the whole
+HANG bucket (AZER2/AZER3 + ~18 *2-7 missions) to the map view + chain-B overrun hang.
+
+Located by a mission-init function-trace diff (AZER1 cockpit vs AZER2 hang): both build the same view
+template (5cce->4823->1cdb, word[DGROUP:0x3b3c] = 0x0060 map default), then 5cce's 2ce7-gated FUN_0000_5d43
+switches the view node to the COCKPIT element (0x011a) via FUN_0000_44be -- but ONLY if the player-vehicle
+gate passes.  The gate `3 < *puVeh` (Ghidra uint*, 4-byte) read word[+0]|word[+2]<<16; the asm `cmp WORD
+[di],3` reads only word[+0].  AZER2's vehicle word[+2]=0x0008 -> 0x00080000 > 3 -> wrong `goto 5d7c` ->
+44be skipped -> map view -> chain-B hang.  Fix = the faithful WORD compare + BYTE [di+0x16] flag tests.
+
+VALIDATED (native): AZER2 hang->COCKPIT crash-free (rc=0); all 7 landed mission flows (AZER1/CYPRUS1/
+SAUDI1/SYRIA1/INDIA1/SAUDI7/AZER7) central-chrome AE=0 unchanged (no regression).  re_out/fist.c pristine.
+
+--- a/fist.c
++++ b/fist.c
+@@ -16602,8 +16602,21 @@
+     /* PATCH 300: DAT_2000_3ae0 holds the player-vehicle NEAR OFFSET (DS=DGROUP=0x1c00),
+        asm 0x5d43 `mov di,[0x7ae0]; cmp [di],3; test [di+0x16],1/8` -> rebase g_mem+0x1c000+off. */
+     puVeh = (uint *)(g_mem + 0x1c000 + fist_3ae0_off());  /* PATCH 381 */
+-    if ((3 < *puVeh) || ((puVeh[0xb] & 1) != 0)) goto LAB_0000_5d7c;
+-    if ((puVeh[0xb] & 8) == 0) {
++    /* PATCH 392 (twin #3, the ~18-mission HANG-bucket ROOT): store-width + pointer-scaling fix on the
++       in-mission VIEW SELECT.  asm 0x5d43: `mov di,[0x7ae0]; cmp WORD [di],3; jbe .a; ...; .a: test BYTE
++       [di+0x16],1; jne .skip; test BYTE [di+0x16],8; jne .msg; <cockpit setup 44be>`.  puVeh is Ghidra
++       (uint*) so `3 < *puVeh` read 4 BYTES (word[+0]|word[+2]<<16) instead of the asm's WORD [di]:
++       AZER2's word[+2]=0x0008 poisoned the read (0x00080000 > 3) -> wrong `goto 5d7c` -> the cockpit
++       setup FUN_0000_44be is SKIPPED -> the view node word[DGROUP:0x3b3c] stays the map element 0x0060
++       (paint 4937 -> 67e3 -> d549=0x1e chain B) instead of the cockpit 0x011a (paint 77dc->795c ->
++       a84c -> d549=0x1c chain A) -> map-view render -> the chain-B phase-table overrun HANG.  Also the
++       flag tests `puVeh[0xb]` (uint => +0x2c) must be BYTE [di+0x16] (0xb*2 for a word ptr, but the asm
++       is a byte test).  Reached for EVERY mission (5cce's 2ce7-gated 5d43); the store-width was harmless
++       only where word[+2]==0 (AZER1 + the 5 landed cockpit flows) -> no regression there, cockpit for
++       the rest.  Runtime-proven: word[+2]=0x0008 for AZER2 (0 for AZER1); *(uint16_t) word compare +
++       byte[+0x16] flags -> AZER2 hang->cockpit crash-free, all 7 landed mission flows AE=0 unchanged. */
++    if ((3 < *(uint16_t *)puVeh) || ((((uint8_t *)puVeh)[0x16] & 1) != 0)) goto LAB_0000_5d7c;
++    if ((((uint8_t *)puVeh)[0x16] & 8) == 0) {
+       DAT_2000_2dab = 0;
+       DAT_2000_3ae9 = 0;
+       DAT_2000_3b1e = 0;

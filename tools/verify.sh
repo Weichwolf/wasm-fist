@@ -266,6 +266,13 @@ FLOWS=(
   "mission-cockpit-india4|25000|missfb|INDIA4|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
   "mission-cockpit-cyprus7|25000|missfb|CYPRUS7|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
   "mission-cockpit-azer7|25000|missfb|AZER7|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  # mission-cockpit-azer2: TWIN #3 FIXED (patch 392).  AZER2 (D31) previously HUNG rendering the MAP view
+  # (chain-B phase-table overrun) because 5d43's player-vehicle gate `3 < *puVeh` read 4 bytes (Ghidra uint*)
+  # instead of the asm's WORD compare -- AZER2's vehicle word[+2]=0x0008 poisoned it -> the cockpit setup
+  # (44be) was skipped -> map view.  The store-width fix routes AZER2 to the cockpit.  Central-chrome AE=0
+  # both targets vs a GENUINE DOSBox AZER2 spawn ref; native<->wasm 0-diff.  Unblocks the ~18-mission HANG
+  # bucket root (other HANG missions now reach the cockpit path; they hit their own downstream twins next).
+  "mission-cockpit-azer2|25000|missfb|AZER2|$ROOT/ref/mission_azer2_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
