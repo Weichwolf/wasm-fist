@@ -254,3 +254,25 @@ cell into DAT_2000_3b94[0..7] (2 coord dwords) + supplies a fresh obj slot + cal
 interactive 6015/cursor path, exactly as patch 362 bypasses 4c7a via b21d), then the STMP chunk byte-diff
 round-trip (reuse the patch-360/361/362 save+diff harness). STMP chunk EXISTS in AZER1.FSG (editor plan intro)
 -> the byte-diff is viable. Verify AZER1 STMP count 530a at load (whether trees pre-exist) with the same hook.
+
+## PLANT-TREE 4f32 decoded + 9c1c arg-mapping CONFIRMED (2026-08-11, static, asm-verified)
+Real 4f32 (image 0x4f32-0x4f5c) confirms the staged 9c1c patch is CORRECT:
+  test ax,0xa ; je .ret                 ; activate-flag gate (decompile's `param_1 & 10` == 0xa)
+  mov ax,[bx+4]; mov bx,[bx+6]          ; 4f32's OWN input: read coord from the cursor/cell struct (bx)
+  mov si,0x7b94 ; call 3f3c             ; 3f3c(si=&3b94) computes/fills the 2 coord dwords into 3b94
+  mov bx,0x7b94 ; call 9c1c             ; 9c1c(bx=coord=&3b94, di=obj)   <-- CONFIRMS my patch: param_1=BX=0x7b94
+  jb .fail ; mov si,0xd32 ; call 66cd ; ret     ; CF=0 -> "TREE PLANTED" (0xd32)
+  .fail: mov si,0xd63 ; call 66cd ; ret         ; CF=1 -> fail msg (0xd63)
+=> 9c1c's param_1(BX)=coord-source 0x7b94, param_2(DI)=obj -- MATCHES mk_9c1c.py exactly. Staged patch VERIFIED.
+SECONDARY 4f32 artifacts (for the INTERACTIVE tool, NOT the round-trip harness):
+  (i)  CF-drop: decompile `uVar2=0; if(!uVar2){66cd(0xd32)}` ALWAYS picks OK; real = `if(g_fist_cf)66cd(0xd63)
+       else 66cd(0xd32)` (thread 9c1c's returned CF into the message select).
+  (ii) input base-loss: the `[bx+4]/[bx+6]` cursor-cell reads + 3f3c's coord compute are base-lost (bx cell).
+SCOPE SPLIT for the DoD editor round-trip (create->save->reload->sim byte-identical):
+  - HARNESS PATH (minimal, verifies the STMP data mutation): 9c1c (staged) + a FIST_EDIT_ADDTREE shim hook that
+    seeds a FIXED synthetic coord into DAT_2000_3b94[0..7] + supplies a fresh obj slot + calls 9c1c directly
+    (bypassing 4f32/3f3c/cursor, exactly as patch 362 bypasses 4c7a via b21d) + the STMP byte-diff round-trip
+    (reuse patch-360/361/362 save+diff harness).  This is the addable editor-plant-tree FLOW.
+  - FULL INTERACTIVE (later fidelity): + 4f32 CF-message + input base-loss + 3f3c coord-compute reconstruction.
+All post-gate (needs the binaries).  mk_9c1c.py staged; 9c1c arg-mapping asm-CONFIRMED (no runtime needed to
+author it correctly).
