@@ -367,3 +367,17 @@ no DOSBox needed -- it's native<->wasm parity): make the in-mission cooperative 
 relative to render on both targets (align fist_timer_pump's per-pump tick increment; native in-mission uses the
 same cooperative path per native_main.c:434 in_mission gate).  THEN either the sim runs deterministically on
 both (and op 0x1c must be handled) or neither reaches it before op 0x24.  Supersedes the 2dab-store-width note.
+
+### wasm-mission tick-cadence root (2026-08-11) -- pre-cockpit c452 divergence; fix risks AZER1/CYPRUS1
+native_main.c:420-460: MENUS converge (timing-independent); MISSION coop-cadence (native driven 1 tick/pump
+like wasm) activates ONLY at d549==0x1c (cockpit).  During mission LOAD (before cockpit) native uses SIGALRM
+(up-to-4 ticks/pump -> [0x452]=1 at map-load) while wasm uses 1/pump ([0x452]=274) -> c452 diverges HUGELY
+pre-cockpit.  AZER1/CYPRUS1 reach op 0x24 (MISSFB dump) before the `9 < c452-2ce0` sim-gate fires -> render
+dual-target.  SAUDI1 (63 roster op54 vs 39) crosses the sim-gate on wasm FIRST (c0ca @total125) -> op 0x1c ->
+hang.  FIX (shim-level, no DOSBox): align c452 native<->wasm from mission-LOAD (extend the coop cadence to
+g_fist_after_map, not just d549==0x1c) so both advance the tick identically.  **REGRESSION RISK: this changes
+the exact cadence under which AZER1/CYPRUS1 are bit-verified (their MISSFB frame may depend on c452)** -> after
+any cadence change, re-verify AZER1/CYPRUS1 mission-cockpit AE=0 + the full 43-flow gate BOTH targets, and if
+their frames shift, re-capture the genuine DOSBox refs at the aligned cadence.  This is the accurate root of
+the wasm-mission hang (supersedes both the op-0x1c-poster and 2dab-store-width notes -- those were downstream).
+Careful shim-timing work; fresh session.  All findings verified vs asm + native runtime ("code is the truth").
