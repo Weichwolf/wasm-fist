@@ -412,3 +412,24 @@ deterministic per-frame counter identical on both targets (decouple the sim cade
 (b) throttle ONLY the wasm in-mission tick to a per-rendered-frame rate (op-0x24 count) so it matches native's
 real-time cadence without touching load.  Both need full 43-flow re-gate (broad tick surface).  Empirical
 iteration: hypothesis tested + ruled out + reverted clean ("Zurück ist erlaubt").
+
+### wasm-mission: 459a loop structure decoded (2026-08-11) -- render(206f) vs sim ordering is the divergence
+FUN_0000_459a (build/fist.c:13731-13774) is the fixed-timestep mission loop:
+  2ce0=c452; 2ce2=0;
+  do { fist_timer_pump();                         // 1 tick/outer-iter (patch 295)
+       206f(...);                                  // RENDER (display-list walk; op-0x24 present path)
+       2ce2 += (c452-2ce0); 2ce0=c452;            // accumulate elapsed ticks
+       for(; 2ce2!=0; 2ce2--){ drain events (while c40a poll !empty -> 1e4b);
+                               if (9 < c452-2ce0) break;   // SIM-GATE
+                               [2ce4](); c0ca(); 461b(); } // SIM STEP (flight model -> c0ca -> op-0x1c)
+     } while(...)
+KEY: 206f (render) runs BEFORE the sim each outer iteration.  NATIVE SAUDI1: the MISSFB harness exits at
+op-0x24 (reached via 206f's render path) on the first outer iter BEFORE the sim loop -> c0ca NEVER called
+(matches the FIST_DIAGC0CA diag: 0 calls native).  WASM SAUDI1: op-0x24 is NOT reached before the sim fires
+(c0ca -> op-0x1c @total125) -> hang.  So the divergence is 206f's render-completion (op-0x24 present) TIMING
+vs the sim, through the cooperative event/tick pump ORDERING -- NOT the raw tick baseline.  NEXT (measure, not
+guess): instrument 459a per-outer-iteration (log c452, 2ce2, did-206f-post-op-0x24, did-c0ca-run) on native
+(fast) + wasm (1 run) to see exactly why wasm's 206f doesn't post op-0x24 before the sim.  Likely: op-0x24 is
+posted by an EVENT dispatched in the drain (1e4b->df0e), and wasm's event-queue/drain timing differs so the
+present event isn't dispatched before the sim-gate.  The fix targets the cooperative event-drain vs sim
+ordering (deterministic + native<->wasm-identical), preserving the load-phase cadence (ruled-out experiment).
