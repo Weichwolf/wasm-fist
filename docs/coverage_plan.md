@@ -126,3 +126,25 @@ they reach it (a diagnostic or dump obj[0x32]) BEFORE reconstructing; if they re
 base-lost path the reconstruction could change output = regression. If NOT reached on AZER1/CYPRUS1 (likely,
 since they're crash-free on the base-lost code), it is AZER2-type-1-object-specific -> safe. Twin-migration
 continues (391 -> next). c6c8 (DGROUP:0x6c8) method install state also needs confirming (c6c1/c6d4/... family).
+
+### patch 391 reconstruction sketch (symbols resolved 2026-08-11; WRITE+BUILD+TEST next slice, binaries were gate-held)
+3823 is a per-object sprite render; obj in BX at entry (C param_3=obj near offset; param_2=cx). Resolved:
+- DAT_1000_d56a ALREADY rebased (patch 325): (int*)(g_mem+0x1c000+word[0x156a]); [5]=width word[di+0xa],
+  [6]=height word[di+0xc], *d56a=word[di]=FB seg (a VALUE; use (uint16_t)*DAT_1000_d56a << 4 for the FB base).
+- DAT_1000_c794 = word[DGROUP:0x794] rowtable base (a near offset); correct read = *(int16_t*)(g_mem+0x1c000+
+  (uint16_t)(X*2 + DAT_1000_c794)) (cf. the working pattern at build/fist.c:12442).
+- sprite dir: es=word[DGROUP:0x4f0] (=*(uint16_t*)(g_mem+0x1c4f0)); sid=word[dg+obj+0x32]; les es:(sid) ->
+  spr_off=word[(es<<4)+sid], spr_seg=word[(es<<4)+sid+2]; sprite hdr word = word[(spr_seg<<4)+spr_off-4].
+Base-loss fixes in build/fist.c FUN_0000_3823 (12187-12216):
+1. :12197 uVar4=sprite-hdr -> the es=[0x4f0] les chain above (Ghidra dropped ES + the les indirection ->
+   deref'd sid(0xffff on AZER2) as a raw host ptr = fault 0xffff).
+2. all obj derefs (param_3+0x32, param_3+5) -> dg+obj (near offset).
+3. :12203 `2c1c = 2c18 + (uVar4 & 0xff)` is a Ghidra WIDTH error -- asm `add dx,ax` adds the FULL 16-bit
+   sprite-hdr word: 2c1c = 2c18 + (uint16_t)uVar4. (2c1a = 2c16 + (uVar4>>8 & 0xff) is correct per asm.)
+4. :12210 FB plot -> fb=g_mem+((uint16_t)*DAT_1000_d56a << 4); rowent=*(int16_t*)(g_mem+0x1c000+
+   (uint16_t)(uVar4*2+DAT_1000_c794)); fb[(uint16_t)(uVar2+rowent)] = byte[dg+obj+5].
+5. c6c8 (lcall [DGROUP:0x6c8]) already threaded elsewhere (c6c1/c6d4 family); pass bx=0x6c16 coord struct,
+   al=sid -- confirm the DGROUP:0x6c8 install state on the AZER2 path (dump if the blit no-ops).
+VALIDATE: full 43-flow verify BOTH must stay 43/43 (AZER1/CYPRUS1 either don't reach 3823 or now render it
+correctly to the same AE=0 ref); AZER2 advances past 3823 to the next twin. Then continue twin-migration
+until AZER2 reaches the MISSFB spawn frame -> build the mission-cockpit-azer2 oracle + add the flow + re-gate.
