@@ -497,3 +497,18 @@ chain-B cull count / buffer layout (a DOSBox AZER2/SAUDI2 mission oracle) to kno
 overruns (=> a cull base-loss in our port renders too many) or relocates render_di.  THAT is the highest-
 leverage next target (a DOSBox mission-state trace of chain B).  The tick-hold fix already cleared the wasm
 side; the native twin-#3 crash is the remaining mission blocker.
+
+### twin #3 REFRAMED by DOSBox oracle (2026-08-11) -- AZER2 real = COCKPIT (chain A); port wrongly enters chain B
+Captured a GENUINE AZER2 DOSBox frame (index 1, row y100, no scroll; ref/mission_azer2_cockpit_native320.png).
+Result: AZER2's central chrome AE=72 vs azer1ref (CLOSE = a cockpit, minor AZER2-specific chrome diff); full
+frame AE=27472 vs azer1 (its own D31 terrain).  So the REAL AZER2 renders the COCKPIT view (d549=0x1c, chain A)
+like AZER1/SAUDI1 -- NOT the 0x1e external view (chain B).  => the port's twin-#3 hang is NOT a chain-B cull
+issue; it is a WRONG-VIEW-SELECTION bug: the port wrongly enters chain B (d548==0 -> 4937 paints the 0x1e-view
+element -> 67e3 sets d549=0x1e), overruns the phase table, hangs -- while the real game stays in the cockpit
+(chain A).  The 4937/0x1e-view element is in the port's AZER2 display list (+ all "2+" missions) but NOT
+AZER1/SAUDI1's (AZER1 never calls 4937).  FIX DIRECTION: find why the port composes/selects the 0x1e-view for
+"2+" missions at the spawn frame (a base-loss in the display-list build or the d548/view-select) so AZER2
+renders chain A.  This is NO LONGER oracle-blocked -- the oracle CONFIRMED the target (cockpit).  NEXT: trace
+what adds the 4937 element / sets d548==0 for AZER2 vs AZER1 (the display-list composition or the a84c-vs-67e3
+view path).  Once AZER2 renders chain-A cockpit, verify vs the genuine azer2 ref (AE=0) + unblock the "2+"
+missions.  This reframes twin-#3 from "cull oracle needed" to "view-select base-loss" -- a bounded engine fix.
