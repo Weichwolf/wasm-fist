@@ -553,3 +553,14 @@ AZER2 skips it.  NEXT: find which a84c caller AZER1 uses at mission entry + why 
 the guard, likely tied to the "2+" roster / a mission-state flag).  Once AZER2 inits d549=0x1c early, the
 map-toggle sees d548!=0 -> stays cockpit -> chain A -> renders.  Verify vs ref/mission_azer2_cockpit_native320.png.
 The single highest-leverage mission unlock; bounded engine fix (no oracle).  re_out pristine 61453e42.
+
+### twin #3 root narrowed: 6 view-toggle nodes, first-painted wins; AZER2's MAP toggle paints first (2026-08-11)
+The view is set by 6 VIEW-TOGGLE paint nodes (on-screen camera buttons), each `if(d548==0){ d548=1; d552=<cam>;
+<viewinit>() }`:  5 COCKPIT: 6f1f(0x8d60/a84c), 59739(0x8e91), 60852(0x8f8c), 61766(0x9118), 62363(0x91fe) ->
+d549=0x1c chain A;  1 MAP: 4937 -> 67e3 d549=0x1e chain B.  FIRST-PAINTED (d548==0) wins the view.  AZER1's
+first-painted toggle is a COCKPIT node (renders); AZER2's is the MAP node 4937 (d549==00 confirmed = no toggle
+before it) -> chain B -> hang.  So twin-#3 = the 209e display-list WALK ORDER / DIRTY-STATE of the 6 toggle
+nodes: AZER2's map toggle is walked/dirtied before its cockpit toggles.  NEXT: diag all 6 nodes' paint order +
+dirty flags for AZER1 vs AZER2 (which node first, why) -> the base-loss (a node link/dirty mis-order for the
+"2+" roster, or the map toggle wrongly dirtied at spawn).  Fix so a cockpit toggle paints first (or the view is
+pre-set d549=0x1c before any toggle).  Bounded engine fix; verify vs ref/mission_azer2_cockpit_native320.png.
