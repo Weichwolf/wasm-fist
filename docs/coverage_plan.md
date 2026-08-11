@@ -298,3 +298,15 @@ NEXT to add SAUDI1/SYRIA1/INDIA1 as verify flows: (1) native<->wasm identity (SA
 SAUDI1 capture confirms the M1 chrome is truly mission-invariant), (3) add 3 rows to verify.sh + re-gate.
 Rigor note: using azer1ref for SAUDI1 assumes the real SAUDI1 DOSBox chrome == AZER1's; confirm with a genuine
 SAUDI1 DOSBox capture before banking (code-is-truth).  This survey de-risks 3 of the 40+ missions cheaply.
+
+### SURVEY CORRECTION (2026-08-11) -- SAUDI1 wasm TIMES OUT (native<->wasm parity NOT confirmed)
+SAUDI1 wasm (node, timeout 260s, correct OUTJS=/tmp/fisttest/fistrun.js): **rc=124, NO frame** -- native
+renders SAUDI1 in ~15s, wasm does NOT in 260s (vs cyprus1/azer1 wasm which pass at 220s).  So SAUDI1 (and
+likely SYRIA1/INDIA1) hit a WASM-SIDE hang or pathological slowness -> the native<->wasm HARD INVARIANT is
+NOT met -> they are NOT addable as dual-target flows yet.  This is the [[wasm-mission-op50-blocker]] territory
+(a known OPEN wasm mission-render divergence) OR a heavier-map wasm slowdown.  So the survey's "3 near-ready"
+is DOWNGRADED: native-crash-free + native-chrome-bit-exact, but wasm-BLOCKED.  NEXT before adding any of them:
+diagnose the SAUDI1 wasm timeout (op-histogram on the wasm build; is it stuck like the op-0x1c blocker, or
+just slow -> try a longer timeout / higher FIST_TICK_HZ).  The native-side result (chrome == genuine azer1/
+cyprus1 ref AE=0) still stands + de-risks the NATIVE render, but dual-target parity is the gate.  Honest: 0
+new flows addable from this survey until the wasm mission timeout is resolved (shared with twin-class work).
