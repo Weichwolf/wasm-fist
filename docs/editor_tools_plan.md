@@ -229,3 +229,28 @@ a tree to THAT array (via 9c1c if it populates it, or directly); (3) STMP byte-d
 three DoD axes (missions/editor/save-load) now have a precisely-scoped OPEN requiring a fresh multi-step effort
 (mission DOSBox oracle | editor STMP-save-source trace | save-load recon).  This session: 2 committed crash
 fixes (390/391) + exhaustive frontier mapping.  re_out pristine 61453e42.
+
+## PLANT-TREE 9c1c DECODED + prereqs CLEARED (2026-08-11, static; authorable, testable post-gate)
+The "9bef base-loss must be fixed first (like 386)" prereq is STALE: **FUN_0000_9bef is ALREADY reconstructed
+(patch 227)** (per-type object init, di rebased). And **FUN_1000_b1df is reconstructed (patch 258) and ALREADY
+threads g_fist_cf** (CF=1 on roster-full via b21d; zeroes obj+4.. before 9c1c writes coords -- asm order OK).
+So the ONLY engine gap for plant-tree is FUN_0000_9c1c itself, decoded exactly (image 0x9c1c-0x9c4e):
+  cmp word[530a],0x32 ; jae .fail(stc)          ; 530a = stamp count, cap 50
+  push bx; mov ax,0x15; lcall b1df; pop bx; jb .fail(stc)   ; alloc gfx slot; CF=fail
+  mov al,[530c]; mov [di+0x19],al               ; variant byte (0..3 rotator)
+  mov eax,[bx];   mov [di+4],eax                ; COORD dword0  (bx = coord source = caller's &3b94)
+  mov eax,[bx+4]; mov [di+8],eax                ; COORD dword1
+  call 9bef                                     ; per-type init (di)  [patch 227]
+  inc word[530a]; clc; ret                      ; success CF=0
+  .fail: stc; ret                               ; CF=1
+TWO Ghidra artifacts to fix: (1) `unaff_CS` = the dropped BX = the coord-source DGROUP near-offset (caller
+4f32 passes &DAT_2000_3b94 = DGROUP:0x7b94); (2) the `if(!bVar2)` inner block is DEAD (bVar2 stays true) --
+the real control flow is `jb .fail` on b1df's CF, else run the body. 9c1c returns CF (g_fist_cf). Reconstruction
+(sig kept `(undefined4 param_1=coord/BX, int param_2=obj/DI)`): bx=(uint16)param_1, di=(uint16)param_2; guard
+530a>=0x32 -> cf=1; b1df(0x15,di); if(g_fist_cf) cf=1 return; [di+0x19]=byte[930c]; [di+4]=dword[dg+bx];
+[di+8]=dword[dg+bx+4]; 9bef(di); 530a++; cf=0. Candidate generator staged in scratch (mk_9c1c.py).
+REMAINING for the FLOW (needs runtime, post-gate): a FIST_EDIT_ADDTREE shim hook that seeds a FIXED synthetic
+cell into DAT_2000_3b94[0..7] (2 coord dwords) + supplies a fresh obj slot + calls 9c1c (bypassing the
+interactive 6015/cursor path, exactly as patch 362 bypasses 4c7a via b21d), then the STMP chunk byte-diff
+round-trip (reuse the patch-360/361/362 save+diff harness). STMP chunk EXISTS in AZER1.FSG (editor plan intro)
+-> the byte-diff is viable. Verify AZER1 STMP count 530a at load (whether trees pre-exist) with the same hook.
