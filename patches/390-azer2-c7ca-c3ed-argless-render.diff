@@ -1,0 +1,156 @@
+PATCH 390: fix the AZER2 mission crash at FUN_0000_c7ca+0x5c (SIGSEGV fault-addr 0x2001a) -- the next
+"twin" after patch 389's 2004 fix -- and reconstruct its base-lost callee FUN_0000_c3ed.
+
+Runtime-captured (setarch -R, FIST_SEGV_BT/EBP/MGA, commit a0bccac): fault EIP 0x08082eb5 = c7ca+0x5c,
+param_2(obj)=0x00020004 (a STALE arg, NOT a base-loss of a real ptr); EBP chain app_entry->00d0->cae6->
+e714->459a->22dd->378e->c33c->c4df->c7ca.  So c7ca is a per-object cockpit render method dispatched
+ARG-LESS by c4df (asm c551 `call *%gs:0x3632(%bx)`, obj in SI) -> ALL its __allregs params are stale
+garbage.  This is the c681/patch-310 arg-less-render class, NOT the c68c/389 caller-base-loss class.
+
+c7ca asm 0xc7ca-0x816 (DS=DGROUP=0x1c00): obj=SI (c4df publishes it in g_fist_render_si); gate testw
+0x1,[0x6d2c]; skip iff !(2dab&2)&&(obj[0x16]&8)&&obj[0x36]==0; else c3ed(obj), bx=((obj[0x26]+0x400)>>8)&
+0xf8, +0x10d8/+0x11d8 & ah=0x24/0x0e by obj[0x16]&8, ah=0 if obj[0x1c], c8c2(ax,bx,BP,obj,0).  Ghidra
+deref'd the obj (param_2) as a host ptr -> wild read.  Rebased every obj deref to dg+si and threaded the
+x86 CF via g_fist_cf (skip=1 -> c4df next object; render returns CF=0 [c8c2's clc] -> c4df yields).  Twin
+of c584 (patch 321).  c8c2's obj arg is the NEAR offset (ca2f does dg+(uint16)param_4); [di+0x1a]=BP is
+untraced (not set in 378e/c33c/c4df, sibling c681->c962 passes 0, field outside the central-chrome crop)
+-> passed 0, to be pinned once a mission-cockpit-azer2 oracle exists.
+
+c3ed (asm 0xc3ed-0x47c) was ALSO base-lost (first reached via c7ca): it appends 6 {word,word,tag} records
+from obj[0x6e..0x85] (tags 'E'0x45..'@'0x40) into STRSEG:[a6e2] (GS=word[DGROUP:0x70]=STRSEG; a6e2 = a
+WORD near offset into STRSEG, inited 0x31ca by c3dc, advanced +30).  Ghidra deref'd param_1(obj) and the
+a6e2 cursor as host pointers.  Its AX return is discarded by c8c2 (which sets al=0x10) -> side-effect only.
+Also retype DAT_2000_a6e2 undefined2 (WORD, not int**): the 4-byte type overlapped a6e4 AND was the vehicle
+for the host-ptr deref; a6e4 is already undefined2.  Blast radius = c3dc(init)/c3ed(rewritten)/c47d(compare)
+only; on type-0/M1 maps (AZER1/CYPRUS1) the a6e2 buffer stays empty (a6e4==a6e2) so c47d is a no-op ->
+behaviour-neutral for the 3 bit-verified mission flows (which never reach c7ca/c3ed: they are type-0/M1).
+
+VALIDATED: AZER1 + CYPRUS1 + mission-cockpit central-chrome AE=0 unchanged (no regression); AZER2 advances
+past c7ca.  Engine re_out/fist.c stays pristine.  All asm-verified vs re_out/fist_dat_image.bin.
+
+--- a/fist.c
++++ b/fist.c
+@@ -3606,7 +3606,7 @@
+ #define DAT_2000_a6dc (*(undefined2 *)(g_mem+0x2a6dc))
+ #define DAT_2000_a6de (*(undefined2 *)(g_mem+0x2a6de))
+ #define DAT_2000_a6e0 (*(undefined2 *)(g_mem+0x2a6e0))
+-#define DAT_2000_a6e2 (*(int **)(g_mem+0x2a6e2))
++#define DAT_2000_a6e2 (*(undefined2 *)(g_mem+0x2a6e2)) /* PATCH 390: WORD near offset (STRSEG cursor) -- int** was 4 bytes (overlapped a6e4) + made c3ed deref it as a host ptr */
+ #define DAT_2000_a6e4 (*(undefined2 *)(g_mem+0x2a6e4))
+ #define DAT_2000_a6e6 (*(int **)(g_mem+0x2a6e6))
+ #define DAT_2000_a6e8 (*(undefined2 *)(g_mem+0x2a6e8))
+@@ -31945,29 +31945,28 @@
+ undefined4 __allregs FUN_0000_c3ed(int param_1)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  uVar1 = DAT_1000_c070;
+-  *DAT_2000_a6e2 = *(undefined2 *)(param_1 + 0x6e);
+-  DAT_2000_a6e2[1] = *(undefined2 *)(param_1 + 0x70);
+-  *(undefined1 *)(DAT_2000_a6e2 + 2) = 0x45;
+-  *(undefined2 *)((int)DAT_2000_a6e2 + 5) = *(undefined2 *)(param_1 + 0x72);
+-  *(undefined2 *)((int)DAT_2000_a6e2 + 7) = *(undefined2 *)(param_1 + 0x74);
+-  *(undefined1 *)((int)DAT_2000_a6e2 + 9) = 0x44;
+-  DAT_2000_a6e2[5] = *(undefined2 *)(param_1 + 0x76);
+-  DAT_2000_a6e2[6] = *(undefined2 *)(param_1 + 0x78);
+-  *(undefined1 *)(DAT_2000_a6e2 + 7) = 0x43;
+-  *(undefined2 *)((int)DAT_2000_a6e2 + 0xf) = *(undefined2 *)(param_1 + 0x7a);
+-  *(undefined2 *)((int)DAT_2000_a6e2 + 0x11) = *(undefined2 *)(param_1 + 0x7c);
+-  *(undefined1 *)((int)DAT_2000_a6e2 + 0x13) = 0x42;
+-  DAT_2000_a6e2[10] = *(undefined2 *)(param_1 + 0x7e);
+-  DAT_2000_a6e2[0xb] = *(undefined2 *)(param_1 + 0x80);
+-  *(undefined1 *)(DAT_2000_a6e2 + 0xc) = 0x41;
+-  *(undefined2 *)((int)DAT_2000_a6e2 + 0x19) = *(undefined2 *)(param_1 + 0x82);
+-  *(undefined2 *)((int)DAT_2000_a6e2 + 0x1b) = *(undefined2 *)(param_1 + 0x84);
+-  *(undefined1 *)((int)DAT_2000_a6e2 + 0x1d) = 0x40;
+-  DAT_2000_a6e2 = DAT_2000_a6e2 + 0xf;
+-  return;
++  /* PATCH 390: base-loss reconstruction (asm 0xc3ed-0xc47c, DS=DGROUP, GS=STRSEG).  c3ed appends 6
++     {word,word,tag} records built from obj[0x6e..0x85] (tags 'E'0x45..'@'0x40) into STRSEG:[a6e2].
++     SI=obj is a DGROUP near offset; GS=STRSEG=word[DGROUP:0x70]; a6e2 is a WORD near offset into
++     STRSEG (c3dc inits it 0x31ca; retyped this patch).  Ghidra deref'd param_1 (obj) and *a6e2 as
++     host pointers -- never reached until the c7ca per-object cockpit render (AZER2 type-1 objects).
++     Its AX return is discarded by c8c2 (which sets al=0x10) -> pure side-effect (label vertices). */
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t  si = (uint16_t)param_1;                               /* obj near offset */
++  uint8_t  *s  = dg + si;
++  uint16_t  strseg = *(uint16_t *)(dg + 0x70);
++  uint8_t  *o  = g_mem + ((uint32_t)strseg << 4) + (uint16_t)DAT_2000_a6e2;
++  static const unsigned char c3ed_off[6] = {0x6e,0x72,0x76,0x7a,0x7e,0x82};
++  static const unsigned char c3ed_tag[6] = {0x45,0x44,0x43,0x42,0x41,0x40};
++  int i;
++  for (i = 0; i < 6; i++) {                                       /* 6x `mov gs:[bx],ax; ...; add bx,5` */
++    *(uint16_t *)(o + 0) = *(uint16_t *)(s + c3ed_off[i]);
++    *(uint16_t *)(o + 2) = *(uint16_t *)(s + c3ed_off[i] + 2);
++    *(uint8_t  *)(o + 4) = c3ed_tag[i];
++    o += 5;
++  }
++  DAT_2000_a6e2 = (uint16_t)((uint16_t)DAT_2000_a6e2 + 30);       /* c477: mov word[e6e2],bx (6*5) */
++  return 0;
+ }
+ 
+ 
+@@ -32258,29 +32257,42 @@
+ void __allregs FUN_0000_c7ca(undefined2 param_1,int param_2,undefined2 param_3)
+ 
+ {
++  /* PATCH 390: c7ca (asm 0xc7ca-0xc816) is a per-object cockpit render method dispatched ARG-LESS by
++     c4df (asm c551 `call *gs:0x3632(bx)`), so ALL __allregs params are stale garbage.  obj = SI, which
++     c4df publishes in g_fist_render_si (same arg-less-render class as c681/patch-310).  Ghidra deref'd
++     param_2(obj) as a host ptr -> SIGSEGV (fault-addr 0x2001a) on the AZER2 mission path: type-1 objects
++     route classid*2 -> STRSEG:0x3632 -> c7ca; AZER1/CYPRUS1 are type-0/M1 and never reach it.  Rebase all
++     obj derefs to dg+si; thread x86 CF via g_fist_cf (skip -> stc=1 = c4df next object; render path
++     returns CF=0 [c8c2 clc] = c4df yields).  Twin of c584 (patch 321).  c8c2's obj arg is the NEAR offset
++     (ca2f does dg+(uint16)); c8c2's [di+0x1a]=BP is untraced (not set in 378e/c33c/c4df; sibling
++     c681->c962 passes 0; the field is outside the verified central-chrome crop) -> passed 0, to be pinned
++     once a mission-cockpit-azer2 oracle exists. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_render_si;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t si = g_fist_render_si;                         /* obj near offset (published by c4df) */
+   undefined1 uVar1;
+   uint uVar2;
+   int iVar3;
+-  
+-  if (((DAT_2000_2d2c & 1) != 0) &&
+-     ((((DAT_2000_2dab & 2) != 0 || ((*(byte *)(param_2 + 0x16) & 8) == 0)) ||
+-      (*(char *)(param_2 + 0x36) != '\0')))) {
+-    uVar1 = FUN_0000_c3ed(param_2);
+-    uVar2 = *(int *)(param_2 + 0x26) + 0x400U >> 8 & 0xf8;
+-    if ((*(byte *)(param_2 + 0x16) & 8) == 0) {
+-      iVar3 = uVar2 + 0x10d8;
+-      uVar2 = CONCAT11(0x24,uVar1);
+-    }
+-    else {
+-      iVar3 = uVar2 + 0x11d8;
+-      uVar2 = CONCAT11(0xe,uVar1);
+-    }
+-    if (*(char *)(param_2 + 0x1c) != '\0') {
+-      uVar2 = uVar2 & 0xff;
+-    }
+-    FUN_0000_c8c2(uVar2,iVar3,param_1,param_2,param_3);
+-    return;
+-  }
++  (void)param_1; (void)param_2; (void)param_3;
++  if ((DAT_2000_2d2c & 1) == 0) { g_fist_cf = 1; return; }               /* c7ca testw; else stc;ret */
++  if (((DAT_2000_2dab & 2) == 0) && ((*(byte *)(dg + si + 0x16) & 8) != 0) &&
++      (*(char *)(dg + si + 0x36) == '\0')) { g_fist_cf = 1; return; }    /* c7d4-c7e5 skip -> stc;ret */
++  uVar1 = (undefined1)FUN_0000_c3ed(si);                                  /* c7e7 (obj near offset) */
++  uVar2 = *(int *)(dg + si + 0x26) + 0x400U >> 8 & 0xf8;
++  if ((*(byte *)(dg + si + 0x16) & 8) == 0) {
++    iVar3 = uVar2 + 0x10d8;
++    uVar2 = CONCAT11(0x24,uVar1);
++  }
++  else {
++    iVar3 = uVar2 + 0x11d8;
++    uVar2 = CONCAT11(0xe,uVar1);
++  }
++  if (*(char *)(dg + si + 0x1c) != '\0') {
++    uVar2 = uVar2 & 0xff;
++  }
++  FUN_0000_c8c2(uVar2,iVar3,0,si,0);                                      /* c8c2(ax,bx,BP=0,obj=si,0) */
++  g_fist_cf = 0;                                                          /* c8c2 clc -> c4df jae ret */
+   return;
+ }
+ 

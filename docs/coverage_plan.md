@@ -78,3 +78,29 @@ CALLER-side g_mem rebase of obj (like 389), NOT a c7ca-internal edit (c7ca's obj
 is a host ptr). Do NOT author blind: c7ca is a shared per-object render helper reached by every mission =>
 wrong rebase regresses the 43-flow gate. Sequence: gate 10/10 -> repro AZER2 w/ EBP -> identify caller ->
 confirm AZER1/CYPRUS1 obj convention -> author patch 390 -> re-gate -> add mission-cockpit-azer2.
+
+## AZER2 c7ca ROOT-CAUSED + FULLY DECODED (2026-08-11, post-gate, runtime + asm) -> patch 390 spec
+Gate a0bccac PASSED 10/10 (binaries freed). Ran the AZER2 segv capture (setarch -R, FIST_SEGV_BT/EBP/MGA):
+- fault EIP 0x08082eb5 = c7ca+0x5c, fault-addr 0x2001a; **param_2(obj)=0x00020004** (confirmed: raw arg,
+  not a base-loss of a real ptr). EBP chain: app_entry->00d0->cae6->e714->459a->22dd->378e->**c33c**->
+  **c4df**->**c7ca**. So c7ca is dispatched ARG-LESS by c4df (asm c551 `call *%gs:0x3632(%bx)`), => ALL
+  c7ca __allregs params are STALE garbage. NOT the c68c/389 base-loss class -- it is the c681/patch-310
+  arg-less-render class. obj = SI = **g_fist_render_si** (c4df publishes it; c4df sets SI=obj, BX=CX=
+  classid*2, DX=type_code, DI=render_di, BP=inherited).
+- c7ca asm 0xc7ca-0x816 decoded: gate `if(!(2d2c&1)){cf=1;ret}`; skip `if(!(2dab&2)&&(obj[0x16]&8)&&
+  obj[0x36]==0){cf=1;ret}`; render: c3ed(obj); bx=((obj[0x26]+0x400)>>8)&0xf8; if(!(obj[0x16]&8)){bx+=
+  0x10d8; ah=0x24}else{bx+=0x11d8; ah=0x0e}; if(obj[0x1c])ah=0; c8c2(ax,bx,BP,obj,0); cf=0 (c8c2 clc ->
+  c4df jae ret). ALL obj derefs -> dg+si. CF thread: skip=1(next obj), render=0(stop walk) via g_fist_cf.
+- c3ed (asm 0xc3ed-0x47c) ALSO base-lost (never reached before): writes 6 {word,word,tag} records from
+  obj[0x6e..0x85] (tags 'E'0x45..'@'0x40) into STRSEG:[a6e2] (GS=word[DGROUP:0x70]=STRSEG; a6e2=near
+  offset, c3dc inits it 0x31ca; advance +30). SI=obj. Ghidra deref'd param_1 + *a6e2 as host ptrs.
+  Its AX return is DISCARDED by c8c2 (c8c2 sets al=0x10) -> called for side-effect only.
+- c8c2/ca2f (patch 310) already correct: obj arg = NEAR offset (ca2f does dg+(uint16)param_4); [di+0x1a]=
+  BP, [di+0x1c]=BX(sprite base); `mov cx,bx` @ca38 is DEAD (CX unused). So only BP is inherited/untraced.
+- BP ([di+0x1a]): not set in 378e/c33c/c4df; sibling c681->c962 passes 0 for this field; twin c584 (patch
+  321, renders on AZER1 mission-cockpit AE=0) also uses inherited BP -> field is plausibly OUTSIDE the
+  MC_REGION central-chrome crop. patch 390 passes 0 (documented; pin once the azer2 oracle exists).
+PATCH 390 = reconstruct c7ca (obj=g_fist_render_si, dg-rebase, CF-thread) + c3ed (SI/STRSEG/a6e2 base-loss).
+VALIDATE: AZER1+CYPRUS1+mission-cockpit AE=0 unchanged (they are type-0/M1, do NOT reach c7ca -> zero risk);
+AZER2 advances past c7ca. Then build mission-cockpit-azer2 oracle (row 130,100 or FIST_FSG_BATTLE=AZER2,
+MC_REGION crop, SETTLE=2), add flow, re-run 10x gate on the grown matrix.
