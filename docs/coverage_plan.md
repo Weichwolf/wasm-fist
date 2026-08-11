@@ -162,3 +162,18 @@ to see which op-count grows unbounded + whether total climbs (spin) vs stalls (d
 object walk / the c4df a6e6/a6e8 cursor / the c7ca-or-3823-or-sibling method that fails to advance. NB the
 op-0x60 poster is engine-side (459a/e4bb mission loop); the constant inbox=8 suggests the SAME display-list
 cmd re-posted (frame never finalizes). Patch 391 is committable forward progress (crash->hang = deeper).
+
+### twin #3 PINPOINTED (2026-08-11, ophist diff AZER1 vs AZER2) -- op-0x08 vs op-0x0c present divergence
+FIST_OPHIST diff (both build terrain tile 3918 nz=65536 dist=175 fine; both op0x60=16):
+  AZER1 (rc=0, frame): op0x18=1, op0x54(roster)=39, ... op 0x08 @total538 -> **op 0x24 present @total539** -> dump.
+  AZER2 (rc=124 hang): op0x18=1, op0x54(roster)=**75**, ... **op 0x0c @total574 -> FREEZE** (total stops climbing;
+   DEADLOCK not spin); op 0x24 NEVER posted, op 0x08 NEVER posted.
+So at the frame-finalize point AZER1 posts op 0x08 (-> the op-0x24 windshield present) but AZER2 posts op 0x0c
+and then WAITS on a completion the shim never satisfies. op 0x0c is a DIFFERENT display-list/finalize cmd,
+conditional on mission state; AZER2's larger type-1 roster (75 vs 39 op-0x54) routes the mission loop
+(459a/e4bb) into the op-0x0c branch. NEXT (twin #3 root-cause): find the engine site that posts op 0x08 vs
+op 0x0c to the TCB inbox (task+0x3f2, posters 0xd94e..0xe37b) + the branch condition -- likely a base-lost
+value/flag that for AZER2 selects op-0x0c (an error/alt-finalize path) instead of the op-0x08 present. Then
+either fix the base-loss (so AZER2 takes the op-0x08 present) or, if op-0x0c is a legit cmd, handle it in the
+shim's fist_extender_gate so the engine's post-0x0c wait completes -> op 0x24. Repro: FIST_OPHIST=1 ...
+FIST_FSG_BATTLE=AZER2. FIST_OP0C_BT=1 (native_main.c:1228) backtraces the op-0x0c poster.
