@@ -801,3 +801,17 @@ AZER2 -- instrument each of the 7 chunk handlers (or the post-d501 mode state: w
 to find where AZER2 diverges.  Then the fix is the base-lost FSG-field read.  ROOT B already banked (both view
 elements exist; only the dirty-select differs).  This is the ~20-mission unblock, fully characterized down to
 d501's chunk parse.
+
+### twin #3: SHDR word0/a975 RULED OUT as the view selector (2026-08-11, .FSG data diff, race-free)
+Diffed AZER1.FSG vs AZER2.FSG SHDR chunks directly: SHDR word0 (-> DAT_2000_a982, read correctly by d7b5;
+a975=(a982==0)) = 0(AZER1)/1(AZER2).  a975 gates the PATH(d87f)/PINF(d8a9)/STMP(d8e9) handlers: a975==1 ->
+READ the chunk, a975==0 -> SEEK PAST.  CANDIDATE tested by correlating word0 across missions vs cockpit/hang:
+  cockpit-OK: AZER1=0 CYPRUS1=0 INDIA1=0 SAUDI7=0 INDIA4=0  BUT ALSO SAUDI1=1 SYRIA1=1 AZER7=1 CYPRUS7=1 SYRIA3=1
+  HANG:       AZER2=1 AZER3=1 SYRIA2=1 SYRIA4=1 CYPRUS2=1 UKRAINE1=1  BUT ALSO TRAIN1=0 SAUDI2=0
+=> NO clean correlation: SAUDI1/AZER7 (word0=1) render the COCKPIT fine (passing flows); TRAIN1/SAUDI2
+(word0=0) hang.  So word0/a975 gates chunk-LOADING but is ORTHOGONAL to the cockpit-vs-map view.  RULED OUT.
+The real view selector remains unknown; next step is a RUNTIME diagnostic (instrument what dirties the initial
+view element for a HANG mission vs a cockpit one -- e.g. the mission-init "show initial view" / the player-unit
+-> view binding), which needs the binaries free (races the gate).  ROOT B stands (both view elements exist;
+dirty-select differs).  Data-diff method (read .FSG SHDR fields directly) is the race-free tool for the next
+candidate -- but SHDR offset/size fields are file-specific noise, so diff SAME-map missions of OPPOSITE outcome.
