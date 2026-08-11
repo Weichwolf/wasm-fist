@@ -528,3 +528,16 @@ element-CREATE that sets paint=4937.  Once the cockpit element paints first (d54
 verify vs ref/mission_azer2_cockpit_native320.png (genuine, central AE~72 vs azer1).  This unblocks AZER2 +
 all "2+"/D31 missions (the dominant mission blocker).  NEXT: grep for what sets an element's paint method to
 0x4937 / 0x6f1f + the display-list insert order for the view elements.
+
+### twin #3 refined: the 0x1e view = the MAP VIEW (2026-08-11)
+6f1f sets d552=0x8d60 (COCKPIT camera); 67e3 sets d552=map-view camera + d54a from 3b19.  So d549=0x1e =
+the MAP/commander view (toggled from the cockpit by a key normally).  => AZER2's port wrongly enters the MAP
+VIEW at the spawn frame (d548==0 -> 4937 map-node paints before the 6f1f cockpit-node) instead of the cockpit;
+the map-view render (chain B, 378e) overruns the phase table -> hang.  The real game starts in the COCKPIT
+(genuine AZER2 = cockpit).  FIX: the cockpit node (6f1f) must win the first-paint race (or the map node must
+not be dirtied/painted at spawn).  NEXT: runtime-trace the 209e display-list walk ORDER for AZER2 vs AZER1
+(which view-node is painted first + its dirty state) -- a FIST_ diag on the 209e walk / 4937 vs 6f1f entry,
+or dump the display-list node link order + dirty flags at the first 459a frame.  The base-loss is likely in
+the node dirty-state / link order that makes AZER2 paint the map node first (the "2+" richer roster perturbs
+it).  Bounded engine fix; verify vs ref/mission_azer2_cockpit_native320.png.  This is the single highest-
+leverage unlock (AZER2 + all "2+"/D31 missions).  re_out pristine 61453e42.
