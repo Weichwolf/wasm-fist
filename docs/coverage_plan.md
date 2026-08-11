@@ -633,3 +633,18 @@ the writer EIP when it stores 0x0060; or -- since it is set EARLY at mission-ini
 Once word[0x3b3c]=cockpit(0x011a) for AZER2 -> chain A -> renders (verify vs ref/mission_azer2_cockpit_native320.png).
 TWIN-#3 LOCALIZED TO ONE WORD (11 diagnostic layers) -- the highest-leverage mission unlock, one watchpoint from
 the fix.  re_out pristine 61453e42.
+
+### twin #3 -- dynamic watchpoints CONFIRMED impractical; STATIC trace is the path (2026-08-11)
+Ran a gdb HW watchpoint on word[DGROUP:0x3b3c] (=g_mem+0x1fb3c) for AZER2, 400s background: gdb reached ONLY
+the INTRO (TITLE.KDV) in 400s -- nowhere near the mission (only the boot-time 0-write @main+40 fired).  So
+gdb-to-mission is ~orders of magnitude too slow (not a timeout to extend).  A shim mprotect-watch is also
+impractical: 0x1fb3c is on a HOT DGROUP page written constantly -> single-stepping every write slows the
+engine ~1000x -> never reaches the mission.  => the writer of word[0x3b3c]=0x0060(map) MUST be found by a
+STATIC display-list-build trace.  The view node (bx=0x3b3c, stride-0xc 209e node) has content nd=word[0x3b3c]
+= the view ELEMENT offset (0x0060 map / 0x011a cockpit); the writer LINKS the view element to the node
+(node->content = element, pointer-based, no direct C ref to 0x3b3c).  NEXT (static, focused): trace the
+mission-cockpit display-list BUILD (the 1cdb/1e27 template copy + the element create/link at mission entry;
+the view container's child = the current view element) -- find where the view node (0x3b3c) content is set to
+0x0060 vs 0x011a, and the base-loss that picks the map for AZER2 (+ "2+" missions).  Examine the element structs
+at DGROUP:0x0060 (map) + 0x011a (cockpit) + their link.  This is the twin-#3 fix path -- a static engine trace,
+no dynamic tooling (both watchpoint routes ruled out).  re_out pristine 61453e42.
