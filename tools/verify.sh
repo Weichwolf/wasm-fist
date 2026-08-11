@@ -273,6 +273,17 @@ FLOWS=(
   # both targets vs a GENUINE DOSBox AZER2 spawn ref; native<->wasm 0-diff.  Unblocks the ~18-mission HANG
   # bucket root (other HANG missions now reach the cockpit path; they hit their own downstream twins next).
   "mission-cockpit-azer2|25000|missfb|AZER2|$ROOT/ref/mission_azer2_cockpit_native320.png"
+  # ex-HANG-bucket missions UNBLOCKED by the twin-#3 fix (patch 392): now render the cockpit crash-free,
+  # native<->wasm 0-diff, central-chrome AE=0 vs an existing ref (no new capture).  Swept post-392.
+  "mission-cockpit-saudi2|25000|missfb|SAUDI2|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-saudi3|25000|missfb|SAUDI3|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-syria6|25000|missfb|SYRIA6|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  "mission-cockpit-cyprus2|25000|missfb|CYPRUS2|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  "mission-cockpit-cyprus6|25000|missfb|CYPRUS6|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-train2|25000|missfb|TRAIN2|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  "mission-cockpit-train4|25000|missfb|TRAIN4|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-azer4|25000|missfb|AZER4|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-azer5|25000|missfb|AZER5|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
