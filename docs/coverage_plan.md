@@ -512,3 +512,19 @@ renders chain A.  This is NO LONGER oracle-blocked -- the oracle CONFIRMED the t
 what adds the 4937 element / sets d548==0 for AZER2 vs AZER1 (the display-list composition or the a84c-vs-67e3
 view path).  Once AZER2 renders chain-A cockpit, verify vs the genuine azer2 ref (AE=0) + unblock the "2+"
 missions.  This reframes twin-#3 from "cull oracle needed" to "view-select base-loss" -- a bounded engine fix.
+
+### twin #3 MECHANISM pinned (2026-08-11) -- 6f1f(cockpit) vs 4937(0x1e) first-paint race via d548
+Two view-element PAINT handlers, both gated on d548==0 (first-paint-wins), set the view + d548=1:
+  - FUN_1000_6f1f (cockpit): d548=1; d552=0x8d60; a84c(2d34) -> d549=0x1c -> CHAIN A (renders).
+  - FUN_0000_4937 (0x1e view): d548=1; 67e3() -> d549=0x1e -> CHAIN B (378e render_di=0x6bbe overrun -> hang).
+Whichever element the 209e display-list walk PAINTS FIRST wins the view.  AZER1/SAUDI1: 6f1f (cockpit) painted
+first -> chain A (the genuine AZER2 confirms cockpit is correct).  AZER2 (+ "2+" missions): 4937 (0x1e) painted
+first -> chain B -> hang.  So twin-#3 = the DISPLAY-LIST ELEMENT ORDER/COMPOSITION: AZER2's 0x1e-view element
+is walked/painted before its cockpit element (both exist; the real game renders the cockpit, so the 0x1e
+element should NOT win at spawn).  FIX (bounded, engine, no oracle): trace the display-list build -- find what
+adds the 4937/0x1e-view element + its order vs the 6f1f cockpit element for "2+" missions; a base-loss likely
+mis-orders them (or adds a spurious 0x1e element).  Candidates: the 209e walk order (element z/link), or the
+element-CREATE that sets paint=4937.  Once the cockpit element paints first (d549=0x1c), AZER2 renders chain A;
+verify vs ref/mission_azer2_cockpit_native320.png (genuine, central AE~72 vs azer1).  This unblocks AZER2 +
+all "2+"/D31 missions (the dominant mission blocker).  NEXT: grep for what sets an element's paint method to
+0x4937 / 0x6f1f + the display-list insert order for the view elements.
