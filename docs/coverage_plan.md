@@ -773,3 +773,17 @@ dump word[DGROUP:0x435a] (cockpit-viewport paint slot, =0x77dc if the element ex
 dirtied first (fix = the dirty-bootstrap / view-select); if empty -> the cockpit element is NOT CREATED (fix =
 d501/build's viewport-create, a base-lost mission-field read for D31/AZER2).  Then trace that create site.
 Oracle already banked (AZER2=cockpit, prior-session genuine DOSBox capture) -> no new oracle needed.
+
+### twin #3 ROOT B CONFIRMED (2026-08-11, corrected (a)/(b) diag)
+The (a)/(b) view-slot resolver (dump paint[0x423c+nd] when a view element is dispatched): BOTH AZER1 and
+AZER2 have cockpit[0x4356]=0x77dc AND map[0x429c]=0x4937 present.  => the cockpit viewport element EXISTS in
+AZER2's mission display list (NOT absent).  ROOT B: the divergence is the DIRTY-SELECT at mission init --
+AZER1 dirties/dispatches the COCKPIT view element first (77dc wins the d548==0 race -> d549=0x1c chain A);
+AZER2 dirties the MAP element first (4937 -> d549=0x1e chain B -> hang).  Both view nodes land at the SAME
+walk slot bx=0x3b3c (content word[DGROUP:0x3b3c] = 0x011a cockpit AZER1 / 0x0060 map AZER2).  (NB earlier
+"0x435a" was an arithmetic slip: 0x423c+0x11a = 0x4356.)
+=> FIX SITE: the mission-init "show initial view" that marks the cockpit vs map view element DIRTY.  Both
+elements exist; only the dirty-select differs.  This is a dirty-bootstrap fix (more tractable than a create
+base-loss).  NEXT: find the mission-init dirty-mark of the view element (candidate: 6015 / the e4bb loop init
+/ a "current view index"); determine the base-lost mission field making AZER2 pick the map view.  Oracle
+banked (AZER2=cockpit).  Throwaway diag mk_209e_diag.py (view-slot resolver) staged.
