@@ -619,3 +619,17 @@ word[DGROUP:bx] (nd) + word[DGROUP:(nd+0x423c)] (the slot) for AZER1 vs AZER2.  
 slot / node.  This is the PRECISE fix site (view-node paint-slot selection); the rest is a focused
 display-list-node trace.  TWIN-#3 ROOT FULLY LOCALIZED (10 diagnostic layers) -> the highest-leverage mission
 unlock, ready for a focused continuation.  verify vs ref/mission_azer2_cockpit_native320.png.  re_out pristine.
+
+### twin #3 LOCALIZED TO ONE WORD (2026-08-11): word[DGROUP:0x3b3c] = view-node content (map for AZER2)
+FIST_DIAGNODE (removed): the 209e view node is at bx=0x3b3c for BOTH AZER1 and AZER2 (same node), but its
+CONTENT word[DGROUP:0x3b3c] (=nd) DIFFERS: AZER1 nd=0x011a (COCKPIT element, paint 795c), AZER2 nd=0x0060 (MAP
+element, paint 4937 @ word[0x0060+0x423c]).  => twin-#3 root = word[DGROUP:0x3b3c] is set to the MAP element
+(0x0060) for AZER2, should be a COCKPIT element (0x011a).  No direct C write to 0x3b3c (=g_mem+0x1fb3c) -> the
+writer is a POINTER-BASED display-list link (a node->content = element_off write Ghidra rendered via a base
+ptr).  FIX SITE FOUND: find what writes word[DGROUP:0x3b3c]=0x0060 for AZER2.  METHOD: a memory WATCHPOINT on
+g_mem+0x1fb3c (gdb-to-mission TIMES OUT -> use a shim mprotect-watch on that page, like FIST_FBTRAP, logging
+the writer EIP when it stores 0x0060; or -- since it is set EARLY at mission-init -- a coarse bisect).  0x0060
+= the map view element, 0x011a = a cockpit view element; both are display-list elements with paint at +0x423c.
+Once word[0x3b3c]=cockpit(0x011a) for AZER2 -> chain A -> renders (verify vs ref/mission_azer2_cockpit_native320.png).
+TWIN-#3 LOCALIZED TO ONE WORD (11 diagnostic layers) -- the highest-leverage mission unlock, one watchpoint from
+the fix.  re_out pristine 61453e42.
