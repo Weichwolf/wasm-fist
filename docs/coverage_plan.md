@@ -578,3 +578,16 @@ grep the mission setup (e4bb/d501/459a-entry) for what activates/dirties a view 
 create or a view-index write); trace why AZER2 -> map, AZER1 -> 795c cockpit.  Fix so the cockpit element is
 active at spawn -> AZER2 renders chain A -> verify vs ref/mission_azer2_cockpit_native320.png.  Bounded engine
 fix, no oracle.  THE highest-leverage unlock (AZER2 + all "2+"/D31 missions).  re_out pristine 61453e42.
+
+### twin #3 diagnostics (2026-08-11): the fix is NOT a 4937 gate -- it's the display-list active-view composition
+Tested two env-gated diagnostics in 4937 (both removed): (a) FIST_NOMAP (skip 67e3 map-init) -> AZER2 STILL
+hangs (d549 stays 0 -> the 2322 re-seed uses word[0x4a88+0]=0x4aae -> a different loop); (b) FIST_FORCECOCKPIT
+(set d548=1,d552=0x8d60,a84c in 4937 like 6f1f) -> AZER2 STILL hangs (a84c alone is INCOMPLETE -- 6f1f also
+runs the `if(4d0e==2){6e75; d55a=4e1c ...}` camera-position setup; a partial force doesn't render).  CONCLUSION:
+twin-#3 is NOT fixable by gating 4937 -- the real fix is making AZER2's display list ACTIVATE the COCKPIT view
+element (the full 795c/6f1f path with its camera setup) at spawn instead of the map element (4937).  So the root
+is firmly the DISPLAY-LIST active-view-element COMPOSITION/selection: AZER2's active view element is the map;
+it must be a cockpit.  NEXT: trace the mission-cockpit display-list BUILD -- how the view elements are inserted
++ which is made active/dirty at spawn (the template copy / the 209e element link + dirty for the view container);
+find the base-loss that makes AZER2 (+ "2+" missions) activate the map element.  A deeper display-list-composition
+investigation (bounded, engine, no oracle).  re_out pristine 61453e42.  THE highest-leverage mission unlock.
