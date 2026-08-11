@@ -246,6 +246,15 @@ FLOWS=(
   # reached via FIST_FSG_BATTLE (patch 380), central-chrome AE=0 both targets vs the DOSBox spawn ref
   # (patch 386 fixed the wasm OOB in FUN_0000_bd09 that blocked all non-AZER1 maps).  Battle in `inp`.
   "mission-cockpit-cyprus1|25000|missfb|CYPRUS1|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  # mission-cockpit-{saudi1,syria1,india1}: unblocked by the wasm-mission tick-hold fix (49f8cfb) -- they
+  # rendered on native but HUNG on wasm before it.  Central-chrome (MC_REGION) AE=0 both targets vs a GENUINE
+  # DOSBox spawn ref.  ref/mission_saudi1_cockpit_native320.png is a genuine scroll-captured DOSBox SAUDI1
+  # frame (its full frame differs from AZER1/CYPRUS1 = real distinct mission/terrain; its MC_REGION == azer1ref
+  # AE=0 -- proving the M1 central chrome is map-group-invariant).  SAUDI1/SYRIA1 share map D30 (identical
+  # central chrome -> both use the genuine SAUDI1 ref); INDIA1 shares map D06 with CYPRUS1 (-> cyprus1ref).
+  "mission-cockpit-saudi1|25000|missfb|SAUDI1|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-syria1|25000|missfb|SYRIA1|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-india1|25000|missfb|INDIA1|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
