@@ -541,3 +541,15 @@ or dump the display-list node link order + dirty flags at the first 459a frame. 
 the node dirty-state / link order that makes AZER2 paint the map node first (the "2+" richer roster perturbs
 it).  Bounded engine fix; verify vs ref/mission_azer2_cockpit_native320.png.  This is the single highest-
 leverage unlock (AZER2 + all "2+"/D31 missions).  re_out pristine 61453e42.
+
+### twin #3 traced to: AZER2 never inits the cockpit view (a84c) -> map-toggle wins (2026-08-11)
+FIST_DIAGVIEW trace (diag on 4937/6f1f entry, removed): AZER1 renders the cockpit WITHOUT painting either
+view-node (no 4937, no 6f1f) -- a84c/cockpit-init comes from a NON-paint path; AZER2 paints 4937(map-toggle)
+with **d549==00** (cockpit view NEVER initialized) + d548==00 -> 67e3 -> map view (d549=0x1e) -> chain B -> hang.
+So the ROOT: AZER2 does NOT call a84c (cockpit-view init, sets d549=0x1c) at mission entry, so d549 stays 0 and
+the map-toggle node (4937) initializes the MAP view instead of the cockpit.  a84c callers: FUN_1000_6f1f@58605
+(a paint path, not used by AZER1 either) + 59739/60852/61766/62363.  AZER1 inits the cockpit via one of those;
+AZER2 skips it.  NEXT: find which a84c caller AZER1 uses at mission entry + why AZER2 skips it (a base-loss in
+the guard, likely tied to the "2+" roster / a mission-state flag).  Once AZER2 inits d549=0x1c early, the
+map-toggle sees d548!=0 -> stays cockpit -> chain A -> renders.  Verify vs ref/mission_azer2_cockpit_native320.png.
+The single highest-leverage mission unlock; bounded engine fix (no oracle).  re_out pristine 61453e42.
