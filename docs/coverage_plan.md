@@ -229,3 +229,20 @@ advances to op-0x24 present. re_out/fist.c pristine 61453e42 (no engine change t
   Also verify whether AZER1 EVER runs chain B (a later 22dd call/viewport) without hanging -- if so, AZER1's
   chain B has a relocated render_di and the AZER2 base-loss is in that relocation path specifically.
   Diagnosis-only this session; re_out/fist.c pristine 61453e42, repo clean.
+
+### twin #3 FULL trigger chain (2026-08-11) -- d548==0 -> 67e3 -> d549=0x1e -> chain B render_di overrun
+The d549=0x1e view is entered by FUN_1000_67e3 (sets d548=1,d549=0x1e), called from ONE site: FUN_0000_4937
+(a 209e paint handler, patch 180) `if (d548==0) { if(3a35==1) 5087(); 67e3(); return; }`.  So AZER2 has
+DAT_1000_d548==0 when 4937 runs -> switches to view 0x1e -> chain B.  a84c (d549=0x1c cockpit, 5 callers) is
+the normal path AZER1 takes (d548 != 0 at 4937).  d549=0x1e is a LEGIT view mode (67e3), so the bug is NOT
+the view select -- it is chain B's render_di: chain A relocates render_di via 2471 (it4) to a safe sort-node
+buffer (0x538e); chain B has no 2471, so 378e (it5) writes ca2f records at render_di=0x6bbe (378e asm 0x379e
+`mov $0x6bbe,di; call [0x1630]`=c33c), stride 0x32, ~8 recs -> 0x6d4e, OVERRUNNING the phase table @0x6c96.
+OPEN (the fix): in the REAL 16-bit game chain B's 378e ALSO sets di=0x6bbe, yet the phase table is at 0x6c82
+(static) -- so either (a) render_di's RECORD writes go to a SEPARATE buffer set up by an earlier chain-B
+handler (23ea/41d0/3fba) that our port's reconstruction DROPPED (render_di stayed 0 until 378e per the diag
+-> a dropped buffer-alloc base-loss), or (b) 378e's di=0x6bbe is the phase-walk cursor and the record dest is
+a different di the port mis-threads.  NEXT: read 378e asm (0x378e..) + trace where its ca2f records' di base
+comes from vs chain A's 2471; the dropped relocation/alloc is the base-loss to restore.  Then chain B completes
+-> op-0x24 present -> AZER2 renders.  Diagnosis-only; re_out pristine 61453e42.  Also worth checking: why is
+d548==0 for AZER2 vs !=0 for AZER1 at 4937 (may be an orthogonal state diff, but 0x1e is legit either way).
