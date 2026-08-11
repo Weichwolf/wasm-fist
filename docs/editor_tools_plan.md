@@ -214,3 +214,18 @@ NOTE: do NOT commit the 9c1c reconstruction ALONE -- it is reached by NO current
 be validated WITH the FIST_EDIT_ADDTREE flow (Tests sind Spezifikation).  Implement 9c1c + obj-alloc + hook +
 STMP-diff together, test end-to-end, THEN commit as a verified feature + add the flow + re-gate.  This is the
 cheapest UNBLOCKED DoD deliverable (editor axis; no DOSBox mission oracle needed -- STMP is a file byte-diff).
+
+## plant-tree OBJ-ALLOC + STMP-SOURCE resolved-as-open (2026-08-11)
+4f32 asm: activate handler (param_1 & 0xa), calls 3f3c (click->coord @DGROUP:0x7b94=DAT_2000_3b94) then 9c1c;
+does NOT set di -> di (the tree obj) is INHERITED from the 209e/4aaa map-click dispatch context.  b1df asm
+(0x1b1df) confirmed: it REGISTERS the passed-in di into the 0x9fbc registry (stores di, refcount++, zeroes
+body [di+4..]) -- it does NOT allocate di.  So a FIST_EDIT_ADDTREE harness must PROVIDE a valid tree obj slot
+(di) + coord + call 9c1c.  BUT the deeper OPEN (from ATTEMPT-1, still unresolved): registering a type-0x15
+obj in 0x9fbc serializes to **DCBS (+61B), NOT STMP** -- so the .FSG STMP writer reads trees from a SEPARATE
+structure (enumerated by 530a), not 0x9fbc.  => the true open piece is TRACING the .FSG save serializer's STMP
+writer (find where it reads the 530a trees; the d797 264B block @0x9332 is written wholesale from that source).
+NEXT SESSION: (1) trace the save path (d5f9/the pre-d797 STMP builder) to find the tree source array; (2) add
+a tree to THAT array (via 9c1c if it populates it, or directly); (3) STMP byte-diff harness.  CONCLUSION: all
+three DoD axes (missions/editor/save-load) now have a precisely-scoped OPEN requiring a fresh multi-step effort
+(mission DOSBox oracle | editor STMP-save-source trace | save-load recon).  This session: 2 committed crash
+fixes (390/391) + exhaustive frontier mapping.  re_out pristine 61453e42.
