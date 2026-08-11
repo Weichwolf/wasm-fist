@@ -410,7 +410,15 @@ static void fist_dump_and_exit(const char *why){
 
 void fist_timer_pump(void){
 #ifdef __EMSCRIPTEN__
-    { extern void fist_wasm_tick(void); fist_wasm_tick(); }   /* cooperative time base (no SIGALRM) */
+    { extern void fist_wasm_tick(void); extern int g_fist_after_map;
+      /* EXPERIMENT: hold the cooperative tick during mission-LOAD-pre-cockpit so c452 stays frozen at the
+         spawn frame, matching native (native's SIGALRM barely fires in a fast run -> c452~1 at spawn, and
+         459a reaches the spawn op-0x24 WITHOUT advancing c452).  Otherwise wasm's 1-tick-per-pump over-
+         accumulates c452 during the slow load + 206f render spins -> 459a's per-tick sim (c0ca->op-0x1c)
+         fires before the spawn op-0x24 -> HANG (SAUDI1/SYRIA1/INDIA1).  Tick normally in menus/intro
+         (!g_fist_after_map) and once the cockpit view is active (d549==0x1c). */
+      if (!g_fist_after_map || g_mem[0x1c000 + 0x1549] == 0x1c) fist_wasm_tick();
+    }
 #else
     /* Debug seam: FIST_COOP_TICK=1 drives the INT-8 time base COOPERATIVELY on native too (one tick
      * per pump, exactly like wasm) so the engine can be traced under gdb without gdb having to process
