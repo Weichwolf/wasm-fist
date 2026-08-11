@@ -1,0 +1,54 @@
+PATCH 393: CRASH-twin (TRAIN3) -- FUN_0000_aea8 base-loss.  param_1 = DI = an object DGROUP NEAR OFFSET
+(asm 0xaea8 `dec byte[di+0x46]`, DS=DGROUP=0x1c00), but Ghidra deref'd it as a host pointer -> fault-addr
+0xc0a2 (=0xc05c+0x46) on TRAIN3.  Rebase all [di+N] to g_mem+0x1c000+(uint16)param_1; the [di+0x47] store is
+a WORD (asm `mov [di+0x47],ax`), not the C's 4-byte int (which clobbered the adjacent +0x49/+0x4a).  af1c is
+called with the raw near-offset (its own contract, unchanged).  Reached on the in-mission reticle path
+(d550!=0); the crash was the first deref.  VALIDATED: AZER1+CYPRUS1 mission-cockpit rc=0 (no regression);
+TRAIN3 advances past aea8 (migrates to the next twin FUN_0000_8f3a, per the 389/390/391 pattern).
+re_out/fist.c pristine 61453e42.
+
+--- a/fist.c
++++ b/fist.c
+@@ -29054,20 +29054,23 @@
+ void __allregs FUN_0000_aea8(int param_1)
+ 
+ {
+-  char *pcVar1;
++  /* PATCH (TRAIN3 twin): base-loss -- param_1 = DI = object DGROUP NEAR OFFSET (asm 0xaea8 `dec byte[di+
++     0x46]`, DS=DGROUP=0x1c00); Ghidra deref'd it as a host pointer (fault 0xc0a2 = 0xc05c+0x46, TRAIN3).
++     Rebase all [di+N] to g_mem+0x1c000+(uint16)param_1; the [di+0x47] store is a WORD (asm `mov [di+0x47],
++     ax`) not an int (the 4-byte write clobbered +0x49/+0x4a). af1c gets the raw near-offset (its contract). */
++  uint8_t *o = g_mem + 0x1c000 + (uint16_t)param_1;
+   int iVar2;
+   int iVar3;
+   int iVar4;
+   int iVar5;
+   bool bVar6;
+-  
+-  pcVar1 = (char *)(param_1 + 0x46);
+-  *pcVar1 = *pcVar1 + -1;
+-  if (*pcVar1 != '\0') {
++
++  o[0x46] = o[0x46] - 1;
++  if (o[0x46] != 0) {
+     return;
+   }
+   DAT_2000_57a8 = 0;
+-  iVar2 = *(int *)(param_1 + 0x26);
++  iVar2 = *(short *)(o + 0x26);
+   iVar4 = 0xf;
+   do {
+     iVar5 = 0x20;
+@@ -29082,9 +29085,9 @@
+     iVar4 = iVar4 + -1;
+   } while (iVar4 != 0);
+   DAT_2000_57a6 = DAT_2000_57a8 + 0x10;
+-  *(int *)(param_1 + 0x47) = iVar2 + *(int *)((int)(undefined2 *)&DAT_2000_57ba + DAT_2000_57a8);
+-  *(undefined1 *)(param_1 + 0x45) = 4;
+-  *(undefined1 *)(param_1 + 0x46) = 4;
++  *(short *)(o + 0x47) = (short)(iVar2 + *(int *)((int)(undefined2 *)&DAT_2000_57ba + DAT_2000_57a8));
++  o[0x45] = 4;
++  o[0x46] = 4;
+   return;
+ }
+ 

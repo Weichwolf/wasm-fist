@@ -857,3 +857,32 @@ separate datadirs -> safe alongside the running 61-flow gate on a 4-core box).  
 NEEDS-REF (9, cockpit renders, own instrument residual): SAUDI5/6 SYRIA5/7 INDIA6/7 TRAIN1 AZER6 CYPRUS5 ->
 genuine DOSBox capture each (post-gate; DOSBox CPU-contends the gate).  POST-GATE ORDER: aea8 (1 mission,
 easy) -> 2b1e (5 missions, one fix) -> NEEDS-REF captures (9) -> re-gate.  All characterized in parallel.
+
+### CRASH twins: aea8 FIXED (patch 393) + next-twin map (2026-08-11)
+Patch 393 fixed TRAIN3's aea8 base-loss (param_1 near-offset -> host ptr) -- AZER1/CYPRUS1 no regression;
+TRAIN3 MIGRATED to the next twin **FUN_0000_8f3a+0x24 (fault 0x8fca)** = the SAME easy base-loss class
+(param_2 near-offset; `*(char*)(param_2+0x90/0xca)` -> rebase g_mem+0x1c000+(uint16)param_2).  TRAIN3 is a
+CHAIN of quick base-losses (reticle path, d550!=0) -- fix 8f3a then re-repro.
+The 5-mission 2b1e crash ROOT: `[0x6d8]` (=m_mga 2b1e blitter) is dispatched by the 5 cockpit CAMERA paints
+(6f1f/795c/8390/8cbf/93f3, engine build/fist.c:58647/59782/60890/61804/62400) with a 260c-resolved sprite
+record.  For SYRIA2/4/CYPRUS4/AZER3/UKRAINE1 (M1/idx0, like the working AZER1/AZER2) 260c (m_mga, build/
+fist_mga.c:6060, patch 114) resolves a WILD record -> 2b1e blits from garbage (fault 0x9575000).  DATA-
+specific (the HUD sprite these missions try to blit).  DIAGNOSTIC (post-verify rebuild): dump 260c's inputs
+(sprite id + position descriptor) + m_260c_recseg for SYRIA2 vs AZER1 at the 2b1e call -> find why the record
+is wild, rebase/guard-free-fix.  [[reticle-sprite-dispatcher-debt]] but idx0 -> a NEW sub-case.
+POST-393 PRIORITY (all need the freed binaries): (a) NEEDS-REF captures (9 missions, SUREST +9 -- port already
+renders, just genuine DOSBox refs); (b) 2b1e diagnostic (5 missions, uncertain depth); (c) TRAIN3 8f3a-chain
+(1 mission, several easy base-losses).  Then re-gate on the grown matrix.
+
+### 2b1e 5-mission crash: ROOT mechanism found (2026-08-11, diagnostic)
+Instrumented m_mga 2b1e for AZER1 vs SYRIA2: **AZER1 NEVER calls 2b1e; SYRIA2 does**, with
+`fb_di = word[DGROUP:0x724] = 0` -> `fb_seg = word[DGROUP:0] = 0xcbc3` (garbage) -> the blit dest
+`g_mem+(fb_seg<<4)+...` is wild -> crash (fault 0x9575000).  word[DGROUP:0x724] = _DAT_1000_c724 = the
+fb-descriptor pointer, INSTALLED at fist_mga.c:1087 (`*(uint16*)(g_mem+0x1c724)=off`).  It is 0 when SYRIA2
+dispatches 2b1e.  2b1e ([0x6d8]) is dispatched by 6f1f's SECOND-paint block guarded by `4d0e!=2 && 2d34[0xd]&1
+&& 4<word[0x2561a]<0x8f` (build/fist.c:58640).  AZER1 SKIPS this block (4d0e==2 full-cockpit, or another cond);
+SYRIA2 enters it (4d0e!=2?) -> dispatches 2b1e before the fb descriptor is installed -> crash.  NEXT (deeper):
+instrument 6f1f's block conditions (4d0e, 2d34[0xd], word[0x2561a]) + the c724 install timing for SYRIA2 vs
+AZER1 -> either (a) 4d0e should be 2 for SYRIA2 (cockpit-init incomplete -> the 44be/72d2 mode path differs),
+or (b) the fb descriptor (c724) must be installed before this HUD blit.  Connects to the 4d0e mode flag (5d43->
+44be cockpit path).  A multi-step dig -- deferred below the surer NEEDS-REF captures.  Throwaway diag mk_2b1e.py.
