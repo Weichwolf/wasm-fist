@@ -787,3 +787,17 @@ elements exist; only the dirty-select differs.  This is a dirty-bootstrap fix (m
 base-loss).  NEXT: find the mission-init dirty-mark of the view element (candidate: 6015 / the e4bb loop init
 / a "current view index"); determine the base-lost mission field making AZER2 pick the map view.  Oracle
 banked (AZER2=cockpit).  Throwaway diag mk_209e_diag.py (view-slot resolver) staged.
+
+### twin #3 fix-site narrowed to the d501 FSG-chunk view-mode field (2026-08-11, source, race-free boundary)
+Build path: e43f->4754(build)->459a(loop). 4754 = 4779 + d501(.FSG LOAD) + [harness] + `if(!CF){6015();39a8=1}`.
+The view mode is NOT set in 4754 (6015=object-table setup @DGROUP:0x6d3c, not view).  d501 (FUN_0000_d501,
+build 34128-34270) = the .FSG OPEN (INT21 AH=3D on param_4 filename) + a 7-entry CHUNK dispatch table at
+DGROUP:0xe9e6 (patch 198; FSG chunks SHDR/DCBS/PATH/STMP/PINF/BINF/TERM).  => the cockpit-vs-map MODE is set
+by one of d501's FSG chunk handlers from mission data.  5 missions (AZER1/CYPRUS1/SAUDI1/SYRIA1/INDIA1) parse
+it as COCKPIT (correct, AE=0 flows); AZER2 + the HANG bucket parse it as MAP -> the bug is a per-mission
+FSG-field read (base-loss) or a genuine field difference our port mishandles.
+NEXT (needs binaries free -> when the gate is idle): a rebuild-diag comparing the parsed mode value AZER1 vs
+AZER2 -- instrument each of the 7 chunk handlers (or the post-d501 mode state: which view element gets dirtied)
+to find where AZER2 diverges.  Then the fix is the base-lost FSG-field read.  ROOT B already banked (both view
+elements exist; only the dirty-select differs).  This is the ~20-mission unblock, fully characterized down to
+d501's chunk parse.
