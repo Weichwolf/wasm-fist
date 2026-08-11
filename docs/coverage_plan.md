@@ -213,3 +213,19 @@ logic (why B for AZER2 vs A for AZER1 -- a state/flag, likely base-lost); (b) ch
 setup (is a 2471-equivalent relocation dropped in chain B, or does 378e-in-chain-B use a different di base than
 the phase-walk 0x6bbe?). Likely a base-loss in the chain-B render_di init OR in 2322's selection. Then AZER2
 advances to op-0x24 present. re_out/fist.c pristine 61453e42 (no engine change this step -- diagnosis only).
+
+### twin #3 chain-select resolved (2026-08-11) -- d549 0x1c (chain A) vs 0x1e (chain B)
+2322 (it1) re-seeds `0a86 = word[DGROUP:0x4a88 + d549]` (d549 = viewport kind byte[0x1549]). Static table:
+  d549=0x1c -> 0x6c82 (chain A: 23ef,41c7,**2471**depth-sort,286e,3b59,23ce) ; d549=0x1e -> 0x6c8e (chain B:
+  23ea,41d0,3fba,**378e**,41ee,23ce). AZER1 renders the cockpit as d549=0x1c (chain A -> 2471 relocates
+  render_di to 0x538e, safe); AZER2 as d549=0x1e (chain B -> 378e writes at render_di=0x6bbe, overruns the
+  phase table @0x6c96). So the DIVERGENCE is d549 (0x1c vs 0x1e). NEXT (twin #3 fix, fresh session, SHARED
+  mission-render path -> full validate + re-gate after):
+  (Q1) WHY is d549=0x1e for AZER2 vs 0x1c for AZER1 -- a legit viewport-mode difference (different .FSG view
+       config) or a base-loss in the d549 setup? Find who writes word[DGROUP:0x1549] pre-2322 + why it differs.
+  (Q2) If chain B (d549=0x1e) is legit: it MUST relocate render_di off 0x6bbe before 378e/ca2f (chain A does
+       this via 2471); the dropped relocation is the base-loss. If d549=0x1e is WRONG: fix the d549 setter so
+       AZER2 uses chain A like AZER1.
+  Also verify whether AZER1 EVER runs chain B (a later 22dd call/viewport) without hanging -- if so, AZER1's
+  chain B has a relocated render_di and the AZER2 base-loss is in that relocation path specifically.
+  Diagnosis-only this session; re_out/fist.c pristine 61453e42, repo clean.
