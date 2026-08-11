@@ -815,3 +815,27 @@ view element for a HANG mission vs a cockpit one -- e.g. the mission-init "show 
 -> view binding), which needs the binaries free (races the gate).  ROOT B stands (both view elements exist;
 dirty-select differs).  Data-diff method (read .FSG SHDR fields directly) is the race-free tool for the next
 candidate -- but SHDR offset/size fields are file-specific noise, so diff SAME-map missions of OPPOSITE outcome.
+
+### twin #3 FIXED (2026-08-11, commit 6cb54a9, patch 392) -- the store-width ROOT
+The elusive selector behind ROOT B: FUN_0000_5d43 (the 2ce7-gated in-mission view-select) gates the cockpit
+setup on the player vehicle: `if (3 < *puVeh || flag&1) goto skip; if(!(flag&8)) 44be(cockpit)`.  `*puVeh`
+was read as a uint (4 bytes, Ghidra puVeh=uint*) but the asm `cmp WORD [di],3` reads word[+0] only.  AZER2's
+vehicle word[+2]=0x0008 -> the 4-byte read 0x00080000 > 3 -> wrong `goto 5d7c` -> 44be SKIPPED -> the view
+node word[DGROUP:0x3b3c] stayed the map element 0x0060 (paint 4937->67e3->d549=0x1e -> chain-B phase-table
+overrun HANG) instead of cockpit 0x011a (77dc->795c->a84c->d549=0x1c chain A).  Fix (patch 392): WORD compare
++ BYTE [di+0x16] flag tests (matching asm).  AZER2 hang->cockpit crash-free, native<->wasm crop 0-diff, AE=0
+vs ref/mission_azer2_cockpit_native320.png; all 7 prior mission flows AE=0 (no regression); verify both=52/52.
+
+METHOD (banked for reuse): a MISSION-INIT FUNCTION-TRACE DIFF cracked it after word0/3a40/mode-init were ruled
+out.  Inject env-gated entry/state logs (direct edits to build/fist.c, then `bash tools/build_native.sh` to
+compile without re-running `make patch` which would wipe them), run AZER1(cockpit) vs AZER2(hang), diff.
+Progression: view-mode handlers (both 5cce, 3a40=0 -- ruled out) -> 209e node visits (bx=3b3c nd=0x011a
+cockpit AZER1 / 0x0060 map AZER2, both dirty) -> word[3b3c] timeline (both 0x0060 after 1cdb; diverges in
+5cce AFTER 4823 = the 2ce7-gated 5d43->44be) -> 5d43 branch (both pass flags, but AZER2 takes goto 5d7c) ->
+4-byte-vs-word dump (word[+2]=0x0008 AZER2 / 0 AZER1) = the store-width bug.  Generators in scratch:
+mk_vtrace.py / mk_nodes.py / mk_vn.py / mk_2ce7.py / mk_5d43.py / mk_44be.py / mk392.py.
+
+HANG BUCKET now reaches the cockpit path -> re-sweep (subagent running): ADDABLE (cockpit rc=0 both + AE=0)
+land as flows; rc=139 = per-mission downstream twins (389/390/391 class, ASLR-off twin-migration); NEEDS-REF
+= cockpit but own instrument residual (genuine DOSBox ref). This one fix is the highest-leverage in-mission
+coverage unblock of the project so far.
