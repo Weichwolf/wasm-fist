@@ -351,3 +351,19 @@ DOSBox SAUDI1 trace at c0ca: (A) if real 2dab byte!=0 -> wasm's 2dab byte==0 is 
 posted + our extender gate's op-0x1c handling is what hangs (fix dde2/e339 op-0x1c path).  NEXT: DOSBox SAUDI1
 to capture byte[0x6dab] @ c0ca + whether the real game posts op 0x1c.  Same oracle dependency as twin #3.
 Both mission frontiers now bottleneck on a DOSBox mission oracle -> that oracle setup is the true next task.
+
+### wasm-mission divergence CORRECTED (2026-08-11) -- it's the COOPERATIVE-TICK model, NOT 2dab store-width
+Native c0ca diag (FIST_DIAGC0CA): c0ca is NEVER reached on native (SAUDI1 or AZER1) -> the 2dab read at c0ca
+was DOWNSTREAM, not the cause (native never gets there).  c0ca's callers (build/fist.c:13769/13832) are the
+PER-TICK SIM step, gated by `9 < (DAT_1000_c452 - DAT_2000_2ce0)` (>=10 elapsed INT-8 ticks) then
+`[2ce4]() ; c0ca(); 461b()` (flight model).  NATIVE SAUDI1: reaches op 0x24 (MISSFB dump) @total559 and the
+tick gate NEVER fires (c452-2ce0 stays <10) -> renders + exits.  WASM SAUDI1: c452 advances FASTER relative to
+render -> the gate fires EARLY (c0ca @total~125, before op 0x24) -> c0ca posts op 0x1c (dde2) -> the per-tick
+sim/tick path HANGS.  So the ROOT is a native<->wasm COOPERATIVE-TICK-MODEL divergence (the INT-8 tick c452
+advances at a different rate vs render on wasm), a SHIM-level parity bug (tools/native_main.c fist_timer_pump /
+the in-mission cooperative tick, #ifdef __EMSCRIPTEN__), NOT an engine base-loss.  AZER1/CYPRUS1 wasm render
+because they reach op 0x24 faster (39 roster op54 vs SAUDI1's 63) -> before the tick gate.  NEXT (shim-level,
+no DOSBox needed -- it's native<->wasm parity): make the in-mission cooperative tick advance c452 IDENTICALLY
+relative to render on both targets (align fist_timer_pump's per-pump tick increment; native in-mission uses the
+same cooperative path per native_main.c:434 in_mission gate).  THEN either the sim runs deterministically on
+both (and op 0x1c must be handled) or neither reaches it before op 0x24.  Supersedes the 2dab-store-width note.
