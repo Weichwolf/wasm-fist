@@ -398,3 +398,17 @@ count (op-0x24 frames) instead of per-pump/wall-clock; or cap ticks-per-frame so
 render.  This supersedes/completes the tick-cadence note as the accurate, full characterization of the
 wasm-mission hang.  Fresh session; no DOSBox oracle needed for the parity part (native<->wasm), but a DOSBox
 SAUDI1 cadence reference helps confirm the ~18.2Hz sim rate.
+
+### wasm-mission tick fix — EXPERIMENT RULED OUT (2026-08-11): coop-from-map-load regresses CYPRUS1
+Tested the leading hypothesis (align c452 by making native cooperative — 1 tick/pump — from mission-LOAD
+g_fist_after_map, not just cockpit d549==0x1c).  RESULT: AZER1 still AE=0, but **CYPRUS1 CRASHED (rc=139)**
+and SAUDI1 still hung (rc=124).  Cleanly reverted (git checkout native_main.c); AZER1+CYPRUS1 AE=0 restored.
+CONCLUSION: native's SIGALRM tick cadence DURING mission-load is LOAD-BEARING (some load-phase code depends on
+the real-time-ish tick rate; forcing 1/pump there breaks CYPRUS1's load).  So the fix must PRESERVE the
+load-phase tick behavior while aligning ONLY the in-mission sim-cadence (c452-2ce0 gate) native<->wasm -- a
+more surgical change than extending coop earlier.  Solution space narrowed: NOT a coop-activation-timing
+change.  Candidate directions for next session: (a) make the sim-gate delta (c452-2ce0) computed from a
+deterministic per-frame counter identical on both targets (decouple the sim cadence from the raw tick count);
+(b) throttle ONLY the wasm in-mission tick to a per-rendered-frame rate (op-0x24 count) so it matches native's
+real-time cadence without touching load.  Both need full 43-flow re-gate (broad tick surface).  Empirical
+iteration: hypothesis tested + ruled out + reverted clean ("Zurück ist erlaubt").
