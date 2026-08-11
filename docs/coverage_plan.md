@@ -335,3 +335,19 @@ wasm iters ~6min): (1) find the engine site that posts op 0x1c (the poster famil
 TCB inbox task+0x3f2) + its branch condition; (2) instrument that branch's deciding value on BOTH targets
 (a shim print, since node has no backtrace) to see which value diverges; (3) that value's base-loss/UB is the
 fix.  Distinct from twin-#3 (AZER2 native chain-B).  This blocks SAUDI1/SYRIA1/INDIA1 dual-target flows.
+
+### wasm-mission divergence ROOT-CAUSED to c0ca/2dab store-width (2026-08-11) -- but fix needs a DOSBox trace
+The op-0x1c poster is FUN_0000_dde2, called ONLY by FUN_0000_c0ca: asm `cmpb $0,[0x6dab]; jne ret` -> posts
+op 0x1c (dde2) IFF byte[0x6dab]==0.  Ghidra typed DAT_2000_2dab undefined2 (WORD) but ALL ~40 asm accesses to
+0x6dab are BYTE (cmpb/testb/xorb/movb); 2daa(0x6daa) + 2dac(0x6dac) are ALSO byte flags (2dac = editor BATTLE-
+LOCKED).  So the WORD read of 2dab pulls in 2dac's byte.  NATIVE: 2dac!=0 -> (2dab|2dac<<8)!=0 -> c0ca SKIPS
+op 0x1c -> op 0x24 -> renders (AE=0 vs DOSBox).  WASM: 2dac==0 -> WORD==0 -> c0ca POSTS op 0x1c -> HANG.
+**CRITICAL: do NOT blindly retype 2dab->undefined1** -- the asm condition is `byte[0x6dab]==0`; if that byte is
+0 on BOTH targets (only 2dac differed), retyping makes BOTH post op 0x1c -> BOTH hang (native REGRESSION).
+Native currently renders AE=0-vs-DOSBox WHILE skipping op 0x1c (via the 2dac accident) -> either DOSBox also
+skips (its 2dab byte!=0) OR op 0x1c doesn't affect the crop.  TWO possible real fixes, DISAMBIGUATED ONLY by a
+DOSBox SAUDI1 trace at c0ca: (A) if real 2dab byte!=0 -> wasm's 2dab byte==0 is a separate base-loss (find the
+2dab setter that differs; retype 2dab->byte THEN fix the value); (B) if real 2dab byte==0 -> op 0x1c SHOULD be
+posted + our extender gate's op-0x1c handling is what hangs (fix dde2/e339 op-0x1c path).  NEXT: DOSBox SAUDI1
+to capture byte[0x6dab] @ c0ca + whether the real game posts op 0x1c.  Same oracle dependency as twin #3.
+Both mission frontiers now bottleneck on a DOSBox mission oracle -> that oracle setup is the true next task.
