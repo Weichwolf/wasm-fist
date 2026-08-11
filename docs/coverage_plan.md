@@ -564,3 +564,17 @@ nodes: AZER2's map toggle is walked/dirtied before its cockpit toggles.  NEXT: d
 dirty flags for AZER1 vs AZER2 (which node first, why) -> the base-loss (a node link/dirty mis-order for the
 "2+" roster, or the map toggle wrongly dirtied at spawn).  Fix so a cockpit toggle paints first (or the view is
 pre-set d549=0x1c before any toggle).  Bounded engine fix; verify vs ref/mission_azer2_cockpit_native320.png.
+
+### twin #3 ROOT PINNED (2026-08-11): AZER2's active/starting VIEW ELEMENT = map (should be cockpit)
+FIST_DIAGVIEW (all 6 view-toggle nodes instrumented, removed): AZER1's FIRST-painted view element = COCKPIT
+795c (cam 0x8e91) -> d549=0x1c chain A -> renders.  AZER2's FIRST-painted = MAP 4937 -> d549=0x1e chain B ->
+hang.  Both d549==0 before (no pre-set), so the FIRST-painted VIEW ELEMENT wins.  => the ROOT is the
+ACTIVE/STARTING view-element SELECTION: the 209e walk paints AZER2's MAP element first (it is the active/dirty
+one at spawn), but the real AZER2 starts in the COCKPIT (genuine ref).  So AZER2's active-view element is
+wrongly the map (4937) instead of a cockpit (795c-class).  FIX: find what SETS the active/starting view element
+(dirties one of the 6 at mission entry) -- a view-index or the display-list element the mission-setup activates.
+For AZER2 (+ "2+" missions) it selects the map; a base-loss (mission-state/roster-tied) mis-selects it.  NEXT:
+grep the mission setup (e4bb/d501/459a-entry) for what activates/dirties a view element (795c/4937 element
+create or a view-index write); trace why AZER2 -> map, AZER1 -> 795c cockpit.  Fix so the cockpit element is
+active at spawn -> AZER2 renders chain A -> verify vs ref/mission_azer2_cockpit_native320.png.  Bounded engine
+fix, no oracle.  THE highest-leverage unlock (AZER2 + all "2+"/D31 missions).  re_out pristine 61453e42.
