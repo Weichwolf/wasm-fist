@@ -469,3 +469,17 @@ NEXT (add the 3 dual-target mission flows -> "every mission" axis 2->5):
   the grown 46-flow matrix (10x).
 This is the cheapest remaining "every mission" gain (the fix did the hard part).  twin-#3 (AZER2 NATIVE
 chain-B) remains separate + open (DOSBox oracle).
+
+### mission-flow EXPANSION plan (2026-08-11, post-46-flow-gate) -- same-map ref reuse = many missions cheaply
+The MC_REGION central chrome is MAP-GROUP-invariant (proven: genuine SAUDI1 D30 == azer1ref D32 AE=0).  So
+same-map missions share a genuine DOSBox ref -> NO new capture needed, just a crash-free dual-target render +
+AE=0 check.  Map groups (from the .FSG list): D32/D30 -> azer1-type (azer1ref / saudi1ref); D06 -> cyprus1-type
+(cyprus1ref).  Maps: AZER=D31(2-7)/D32(1); CYPRUS/INDIA=D06; SAUDI/SYRIA=D30; TRAIN=D32; UKRAINE=D31.
+CHEAP additions (M1, reuse refs; POST-GATE, need per-battle crash-free dual-target check via run_mission):
+  - D30 (saudi1ref): SAUDI2-7, SYRIA2-7   - D06 (cyprus1ref): CYPRUS2-7, INDIA2-7   - D32 (azer1ref): TRAIN1-4
+CAVEAT: D31 missions CRASH/hang (AZER2/AZER3/UKRAINE1 = twin-#3 native chain-B, TRAIN1 hung earlier -- retest
+w/ the tick-hold fix, some hangs may now be fixed).  METHOD per battle: run_mission native+wasm (FIST_FSG_BATTLE),
+if both render + crop AE=0 vs the same-map ref -> add the flow.  Batch these post-gate, re-gate the grown matrix.
+The scroll-ref-capture (/tmp/refcap_saudi.sh) is only needed for a NEW map group (none left among M1: D30/D06/D32
+covered; D31 blocked on twin-#3).  This could take "every mission" from 5 to ~20+ M1 missions cheaply once the
+D31/twin-#3 native crash is fixed (the remaining mission blocker).  DO NOT run these during a gate (CPU/RUNMS).
