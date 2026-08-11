@@ -648,3 +648,39 @@ the view container's child = the current view element) -- find where the view no
 0x0060 vs 0x011a, and the base-loss that picks the map for AZER2 (+ "2+" missions).  Examine the element structs
 at DGROUP:0x0060 (map) + 0x011a (cockpit) + their link.  This is the twin-#3 fix path -- a static engine trace,
 no dynamic tooling (both watchpoint routes ruled out).  re_out pristine 61453e42.
+
+### twin #3 -- REFINED mechanism (static source trace, 2026-08-11) + a decoded latent bug
+The per-frame view = the FIRST DIRTY-dispatched view-toggle element in the 209e walk.  6f1f (cockpit,
+class 0x11a) sets DAT_1000_d548=1 UNCONDITIONALLY on first paint (d548==0) -> it always "wins" if walked
+first.  4937 (map) GUARDS itself: `if (DAT_2000_3c08==2 || DAT_2000_3a40!=0) return;` -> it refuses to win
+when cockpit-mode.  So map wins for AZER2 iff (3c08!=2 && 3a40==0) AND the map node is dispatched before the
+cockpit viewport (or the cockpit viewport is not dirty).
+
+RED HERRING (ruled out this trace): the explicit view-SWITCH machine 3c08/5a34/449c is INERT in our port and
+NOT how AZER1 gets its cockpit:
+  - DAT_2000_3c08 (mode selector, DGROUP:0x7c08) has NO writer in the engine -> stuck at 0 -> the map guard
+    `3c08==2` is ALWAYS false for every mission; the guard reduces to `3a40!=0`.
+  - FUN_0000_5a34 (the view-mode jumptable dispatcher) is BASE-LOST + its index is unwritten.  Real asm:
+      5a34: mov di,[ds:0x7c08]          ; di = DAT_2000_3c08 (==0, unwritten)
+      5a38: jmp [di+0x7c0a]             ; DGROUP-relative vector[di]
+    Ghidra emitted `fist_icall_near(0, *(undefined2*)(DAT_2000_3c08 + 0x7c0a))` = deref (di+0x7c0a) as a
+    HOST pointer (base-loss) AND di is the unwritten 3c08 value.  The 0x7c0a vector table holds the enter
+    handlers 4473/4479(map,5cce,3a40=0) / 449c(cockpit,5cf0,3a40=2) / 44be...  5a34, 449c, 5cf0 are all
+    fmap-ONLY (no direct C caller) -> reached only via this (broken) jumptable or a view-switch KEY.
+  => 5a34 is a REAL bug but LATENT: no current flow presses the in-mission view-switch key, so it never
+     executes.  Fix when a view-switch flow exists: rebase to `word[DGROUP:(uint16_t)(di+0x7c0a)]` via
+     fist_icall_near, AND find the writer of DAT_2000_3c08 (the mode selector; likely an aliased/pointer
+     write, same no-writer smoking gun -- disassemble the view-key handler).  DOCUMENTED LATENT DEBT, NOT
+     PATCHED (untested path -> gate-regression risk).
+
+TRUE mission-start lever (where twin #3 lives): AZER1's cockpit wins because the cockpit VIEWPORT (class
+0x11a element, DIRTY method 6f1f, dirtied by the op-0x24 poster 795c) is dirty and dispatched before the
+map node.  For AZER2 (D31) the cockpit viewport is either (a) not created in the mission display-list build,
+or (b) created but never marked dirty (its op-0x24 poster path 795c/a329/dab0/db02/db11 doesn't run), so the
+always-dirty map node wins.  This is a DISPLAY-LIST-BUILD / dirty-bootstrap difference between D31 and D32
+missions -- NOT the 3c08/3a40 switch machine.  RESOLUTION PATH (needs runtime, currently blocked): a SHIM
+DIAGNOSTIC (env-gated printf in the 209e dispatch site, which is shim-adjacent) dumping, for AZER1 vs AZER2,
+the ORDER of view-element classes dispatched + each node's dirty flag -> pinpoints (a) vs (b).  This needs a
+build+run to the mission; do it when the /tmp binaries are free (never during a gate).  Both dynamic
+watchpoint routes remain ruled out (gdb reaches only the intro in 400s; shim mprotect on the hot DGROUP page
+= ~1000x slowdown).  re_out pristine 61453e42.
