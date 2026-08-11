@@ -433,3 +433,22 @@ guess): instrument 459a per-outer-iteration (log c452, 2ce2, did-206f-post-op-0x
 posted by an EVENT dispatched in the drain (1e4b->df0e), and wasm's event-queue/drain timing differs so the
 present event isn't dispatched before the sim-gate.  The fix targets the cooperative event-drain vs sim
 ordering (deterministic + native<->wasm-identical), preserving the load-phase cadence (ruled-out experiment).
+
+### wasm-mission divergence — COMPLETE root cause + fix spec (2026-08-11, measured both targets)
+459a per-iter trace (FIST_DIAG459A, removed): NATIVE SAUDI1 enters 459a with c452=1, stays 1 (2ce2=0) -> NO
+sim -> op-0x24 spawn -> MISSFB exits.  WASM SAUDI1 enters with c452=274 (load-phase 1-tick-per-pump
+accumulation) AND 206f advances it +40 -> 314 (206f's cooperative render spin-waits pump the tick per
+iteration) -> 2ce2=40 -> the per-tick SIM (c0ca->op-0x1c) runs 40x before the spawn op-0x24 -> HANG.
+COMPLETE ROOT CAUSE: the in-mission tick is WALL-CLOCK/PUMP-based -> native (fast, few ticks to spawn) and
+wasm (~15x slower, hundreds of ticks) accumulate DIFFERENT c452 by the spawn frame; wasm's excess crosses the
+sim-gate before op-0x24.  The tick is NOT deterministic (depends on wall-clock speed + cooperative-pump-
+iteration count, which differ native<->wasm).  FIX (the real one): a DETERMINISTIC FRAME-TIED tick -- advance
+c452 by a FIXED amount per op-0x24 PRESENT (rendered frame), NOT per fist_timer_pump/SIGALRM.  Then both
+targets advance c452 identically per frame -> the sim fires at the same logical points -> parity, AND it
+matches the game's ~per-frame tick cadence (DD2 frame-clock precedent, CLAUDE.md).  Scope to in-mission
+(fist_timer_pump stops advancing c452 during the render spins; the op-0x24 gate advances it once per present).
+CAUTION: the mission tick timing is DELICATE (the coop-from-map-load experiment regressed CYPRUS1) -> after
+implementing, full 43-flow gate BOTH targets + re-verify AZER1/CYPRUS1 mission-cockpit AE=0 (and re-capture
+refs if the frame-tied cadence shifts their spawn frame).  This SUPERSEDES all prior wasm-mission notes as the
+complete, measured characterization.  It is the accurate, bounded fix -- careful broad-surface shim work,
+fresh session, no DOSBox oracle needed (native<->wasm parity).
