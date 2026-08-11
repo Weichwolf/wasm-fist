@@ -591,3 +591,17 @@ it must be a cockpit.  NEXT: trace the mission-cockpit display-list BUILD -- how
 + which is made active/dirty at spawn (the template copy / the 209e element link + dirty for the view container);
 find the base-loss that makes AZER2 (+ "2+" missions) activate the map element.  A deeper display-list-composition
 investigation (bounded, engine, no oracle).  re_out pristine 61453e42.  THE highest-leverage mission unlock.
+
+### twin #3 -- view handlers are RUNTIME method-vectors, not a static table (2026-08-11)
+Image scan: the 6 view-handler offsets do NOT cluster as a static dispatch table (6f1f/8cbf/93f3 = 0
+occurrences; 795c/8390/4937 scattered singletons).  => the view-node paint methods are RUNTIME-INSTALLED
+DGROUP method vectors (reloc sections, like the 0x0a..0x36 / STRSEG method vectors), and the display-list
+view NODE references a method SLOT whose current handler = the active view.  22bb resets d548=0 per frame ->
+the 209e walk re-paints the view node -> its slot's handler sets the view (d549).  AZER2's view-node slot
+holds the MAP handler (4937); AZER1's holds a COCKPIT handler (795c).  So twin-#3's fix is in HOW the view
+node's paint slot is selected/installed at mission spawn (the current-view -> method-slot mapping).  This is a
+DGROUP method-vector / display-list-node trace (same class as the earlier method-vector reloc work).  NEXT
+(focused fresh): find the view node + its paint-method slot; trace what sets it to the map vs cockpit handler
+for AZER2 vs AZER1 (a current-view index or a reloc/install base-loss); verify vs ref/mission_azer2_cockpit_native320.png.
+This is the practical depth limit reached this session -- twin-#3 root is pinned to the view-node method-slot
+selection; the fix is a bounded but deep display-list-node investigation for a focused continuation.
