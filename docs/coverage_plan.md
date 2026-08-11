@@ -483,3 +483,17 @@ if both render + crop AE=0 vs the same-map ref -> add the flow.  Batch these pos
 The scroll-ref-capture (/tmp/refcap_saudi.sh) is only needed for a NEW map group (none left among M1: D30/D06/D32
 covered; D31 blocked on twin-#3).  This could take "every mission" from 5 to ~20+ M1 missions cheaply once the
 D31/twin-#3 native crash is fixed (the remaining mission blocker).  DO NOT run these during a gate (CPU/RUNMS).
+
+### EXPANSION plan CORRECTED (2026-08-11, post-46-gate native survey) -- "2+" missions crash (twin-class)
+Native survey of same-map "2" missions: SAUDI2 HANG, SYRIA2 HANG, INDIA2 CRASH (rc=139).  So the same-map ref
+reuse does NOT give free missions -- the mission NUMBER (richer unit roster / type-1 objects) triggers the
+twin-class native crashes (like AZER2), independent of the map.  The 5 bit-verified missions (AZER1/CYPRUS1/
+SAUDI1/SYRIA1/INDIA1) are all "1"s = simplest rosters.  ALL "2+" missions + all D31 (AZER2/3, UKRAINE) are
+blocked on the SAME frontier: **twin-#3 native chain-B render_di overrun @0x6c96** (docs "twin #3 ROOT-CAUSED":
+chain B's 378e writes ~8 display-list records at render_di=0x6bbe, overrunning the phase table; chain A
+relocates via 2471, chain B doesn't).  So twin-#3 is THE key mission-expansion blocker -- fixing it unblocks
+AZER2 + SAUDI2-7 + SYRIA2-7 + INDIA2-7 + more (dozens of missions).  The faithful fix needs the real game's
+chain-B cull count / buffer layout (a DOSBox AZER2/SAUDI2 mission oracle) to know whether the real game
+overruns (=> a cull base-loss in our port renders too many) or relocates render_di.  THAT is the highest-
+leverage next target (a DOSBox mission-state trace of chain B).  The tick-hold fix already cleared the wasm
+side; the native twin-#3 crash is the remaining mission blocker.
