@@ -322,3 +322,16 @@ native render).  NEXT (fresh session): FIST_OPHIST on the SAUDI1 WASM build to f
 op sequence), then trace that op's wasm-vs-native path (call_indirect signature / a base value that differs
 under EMULATE_FUNCTION_POINTER_CASTS).  Two independent mission frontiers now mapped: (i) twin-#3 native hang
 (AZER2/D31 chain-B render_di), (ii) wasm-mission divergence (SAUDI1/D30 + op50-blocker).  Both fresh-session.
+
+### wasm-mission divergence SHARPENED (2026-08-11) -- native NEVER posts op 0x1c; wasm does -> control-flow split
+FIST_OPHIST diff SAUDI1 (native /tmp/fist_native vs wasm node /tmp/fisttest/fistrun.js):
+  NATIVE: ...op54(roster)=63, op60=12, -> op 0x24 present @total559 -> renders (NO op 0x1c ever).
+  WASM:   ...op54 @t50, op60 @t113, -> **op 0x1c @t125 -> FREEZE** (op 0x24 never reached).
+=> the SAME engine build (build/fist.c) takes a DIFFERENT branch on wasm: wasm posts op 0x1c (an alt display-
+list cmd) at total~125 while native never posts it and continues to op 0x24.  So it is a native<->wasm CONTROL-
+FLOW divergence rooted in a value that differs between builds (uninitialized/UB, or a pointer/offset handled
+differently under -sEMULATE_FUNCTION_POINTER_CASTS), NOT a pure call_indirect trap.  NEXT (fresh session, slow
+wasm iters ~6min): (1) find the engine site that posts op 0x1c (the poster family d94e..e37b; op 0x1c=28 to the
+TCB inbox task+0x3f2) + its branch condition; (2) instrument that branch's deciding value on BOTH targets
+(a shim print, since node has no backtrace) to see which value diverges; (3) that value's base-loss/UB is the
+fix.  Distinct from twin-#3 (AZER2 native chain-B).  This blocks SAUDI1/SYRIA1/INDIA1 dual-target flows.
