@@ -255,6 +255,17 @@ FLOWS=(
   "mission-cockpit-saudi1|25000|missfb|SAUDI1|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "mission-cockpit-syria1|25000|missfb|SYRIA1|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "mission-cockpit-india1|25000|missfb|INDIA1|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  # mission-cockpit-{saudi7,syria3,india4,cyprus7,azer7}: same-map ref-reuse expansion (NO new capture).
+  # Swept all *2-7 battles for a crash-free cockpit spawn with central-chrome (MC_REGION) AE=0 on BOTH
+  # targets vs an EXISTING genuine DOSBox ref; these 5 pass (rc=0, AE=0 native+wasm).  The M1/idx0 central
+  # chrome is map-group-invariant modulo a spawn-frame dynamic-instrument residual, so each pins the ref its
+  # crop matches AE=0: SAUDI7->saudi1ref (==azer1 crop); SYRIA3/INDIA4/CYPRUS7/AZER7->cyprus1ref.  NB AZER7
+  # renders the cockpit AE=0 -> twin-#3 (map-view instead of cockpit) is mission-specific, NOT blanket-D31.
+  "mission-cockpit-saudi7|25000|missfb|SAUDI7|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-syria3|25000|missfb|SYRIA3|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  "mission-cockpit-india4|25000|missfb|INDIA4|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  "mission-cockpit-cyprus7|25000|missfb|CYPRUS7|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  "mission-cockpit-azer7|25000|missfb|AZER7|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
