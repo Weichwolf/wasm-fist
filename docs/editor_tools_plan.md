@@ -187,3 +187,30 @@ round-tripped by editor-add-tank/editor-fsg-roundtrip). CHEAPEST remaining after
 the activate event to the handler + a set cursor coord, then reuse the patch-360/361 save + chunk-diff
 harness. All gate-serialized (need runtime). This completes the editor-tool STATIC map (was the 0/6 gap's
 biggest unknown).
+
+## plant-tree IMPLEMENTATION SCOPED (2026-08-11) -- 9bef/b1df DONE; 9c1c asm-decoded; obj-alloc is the open piece
+Re-examined post-391.  GOOD NEWS: FUN_0000_9bef (patch 227) + FUN_1000_b1df (patch 258) are ALREADY
+reconstructed + correct.  So plant-tree needs only:
+1. **FUN_0000_9c1c reconstruction** (asm 0x9c1c-0x9c1b, decoded): inputs di=obj(param_2 near offset),
+   bx=coord(param_1 low16 = &DAT_2000_3b94).  Ghidra bugs: (a) folded b1df's CF to a DEAD `if(!bVar2)` so
+   the tree-add body NEVER runs; (b) coord base-lost as `*unaff_CS`/`unaff_CS[1]` (really dword[bx]/dword[bx+4]);
+   (c) 530a(WORD@0x930a)/530c(byte@0x930c) DGROUP vars.  Reconstruction:
+     if (DAT_2000_530a < 0x32) { b1df(0x15, obj);            // register; sets g_fist_cf on full
+        if(!g_fist_cf){ dg[obj+0x19]=dg[0x930c];              // species 530c
+           *(u32*)(dg+obj+4)=*(u32*)(dg+coord);              // cursor X (dword[bx])
+           *(u32*)(dg+obj+8)=*(u32*)(dg+coord+4);            // cursor Y (dword[bx+4])
+           9bef(obj,obj); DAT_2000_530a++; g_fist_cf=0; return; } }
+     g_fist_cf=1; return;                                     // stc: full/fail
+2. **OPEN: the obj allocation** -- 9c1c's di=obj is passed IN (b1df REGISTERS an existing obj, does not
+   allocate).  4f32 (activate handler) must allocate/provide the obj before 9c1c.  Trace 4f32 (asm 0x4f32)
+   to see where the tree obj comes from (a scratch template? b21d slot?) -- this is the ONE unknown before a
+   FIST_EDIT_ADDTREE hook can drive it.  The hook (mirror patch-362's FIST_EDIT_ADDTANK @ build/fist.c:14049)
+   sets a synthetic coord in DAT_2000_3b94/3b98, drives 4f32 (or the obj-alloc + 9c1c directly), then d5f9
+   serialize + exit.
+3. **STMP round-trip harness**: 9c1c does NOT write the STMP block (0x9332/d797) -- the save REBUILDS STMP
+   from the 530a tree list.  So after add: d5f9 save -> the .FSG STMP chunk grows; a python stmp_count()
+   (chunk-size delta) + reload + idempotent + native==wasm (reuse the patch-360/361 editor harness).
+NOTE: do NOT commit the 9c1c reconstruction ALONE -- it is reached by NO current verify flow, so it can only
+be validated WITH the FIST_EDIT_ADDTREE flow (Tests sind Spezifikation).  Implement 9c1c + obj-alloc + hook +
+STMP-diff together, test end-to-end, THEN commit as a verified feature + add the flow + re-gate.  This is the
+cheapest UNBLOCKED DoD deliverable (editor axis; no DOSBox mission oracle needed -- STMP is a file byte-diff).
