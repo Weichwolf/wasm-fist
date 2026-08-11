@@ -684,3 +684,32 @@ the ORDER of view-element classes dispatched + each node's dirty flag -> pinpoin
 build+run to the mission; do it when the /tmp binaries are free (never during a gate).  Both dynamic
 watchpoint routes remain ruled out (gdb reaches only the intro in 400s; shim mprotect on the hot DGROUP page
 = ~1000x slowdown).  re_out pristine 61453e42.
+
+### mission-sweep INVENTORY (2026-08-11, patch-391 build) -- the *2-7 battle triage
+Swept 32 candidate battles (SAUDI/SYRIA/INDIA/CYPRUS 2-7, TRAIN1-4, AZER4-7) for a crash-free cockpit spawn
+with central-chrome (MC_REGION 100x92+80+96) AE=0 on both targets vs the existing refs.  All 32 .FSG exist
+(no NO-SUCH-BATTLE).  Ref crops: azer1==saudi1 (AE=0 identical); cyprus1 differs from both by AE=90 (a
+spawn-frame dynamic-instrument residual -- NOT the map view, which would be AE in the thousands).
+
+ADDABLE (rc=0 + AE=0 both targets) -> LANDED as flows (commit 1334827):
+  SAUDI7(saudi1ref)  SYRIA3(cyprus1ref)  INDIA4(cyprus1ref)  CYPRUS7(cyprus1ref)  AZER7(cyprus1ref)
+
+BLOCKED buckets (future criterion-#1 work; each a distinct class):
+  - MAP-OR-DIFF rc=0 AE~72-85: SAUDI5 INDIA7 CYPRUS5.  RE-CLASSIFIED: AE~80 (not thousands) => these render
+    the COCKPIT with a different dynamic-instrument residual, NOT the map view.  Likely addable with a
+    mission-specific genuine DOSBox ref capture (or the residual is a deterministic per-mission instrument
+    state -> capture + pin).  CHEAPEST next expansion after the gate.
+  - CRASH rc=139: SAUDI4 INDIA2 INDIA3 INDIA5 CYPRUS3.  More base-loss twins (391-class); ASLR-off repro +
+    twin-migration per [[aslr-off-deterministic-crash-repro]].
+  - HANG rc=124: SAUDI2 SAUDI3 SAUDI6 SYRIA2 SYRIA4 SYRIA5 SYRIA6 SYRIA7 INDIA6 CYPRUS2 CYPRUS4 CYPRUS6
+    TRAIN1-4 AZER4 AZER5 AZER6.  The LARGEST bucket -- a timeout, not a crash/map.  Distinct from twin-#3
+    (map-select) and from crashes.  Root-cause class UNKNOWN (needs a shim diagnostic: where does the mission
+    loop spin?  candidate = the same op-0x1c / cooperative-tick / view-select bootstrap as twin-#3, OR a
+    resource-load wait).  AZER2/3 (skipped in the sweep, known twin-#3 map-select) may belong here or in
+    map-select -- re-triage with fresh instrumentation.
+
+NB the HANG bucket + twin-#3 map-select likely share a root (the mission-start view/sim bootstrap): a mission
+that neither renders the cockpit nor the map and just spins = the cockpit viewport never becomes dirty AND the
+map path also stalls.  A single shim diagnostic at the 209e dispatch + the 459a loop gate should separate
+"spins with no dirty view" (bootstrap) from "spins in resource load".  Do AFTER the 51-flow gate frees the
+binaries (never build/run during a gate).
