@@ -605,3 +605,17 @@ DGROUP method-vector / display-list-node trace (same class as the earlier method
 for AZER2 vs AZER1 (a current-view index or a reloc/install base-loss); verify vs ref/mission_azer2_cockpit_native320.png.
 This is the practical depth limit reached this session -- twin-#3 root is pinned to the view-node method-slot
 selection; the fix is a bounded but deep display-list-node investigation for a focused continuation.
+
+### twin #3 -- EXACT dispatch site pinned: 209e node paint = word[DGROUP:(nd+0x423c)] (2026-08-11)
+FUN_0000_209e (the 0x423c dirty-walk, build/fist.c:9088): per node it dispatches
+`nd = word[DGROUP:bx]; off = word[DGROUP:(nd+0x423c)]; call fist_icall_near(0,off)`.  So the VIEW node's paint
+handler = word[DGROUP:(view_nd + 0x423c)].  AZER2's view node -> that slot = the MAP handler 4937; AZER1's ->
+a COCKPIT handler 795c.  So twin-#3's exact fix site = what sets the view node's paint slot (nd+0x423c) / which
+NODE is the active view node, for AZER2 vs AZER1.  Two sub-cases to distinguish (one diag): (i) SAME node,
+different slot value -> a runtime write / reloc-install base-loss sets word[DGROUP:(nd+0x423c)] to the map
+handler for AZER2; (ii) DIFFERENT node (nd) -> the display-list build gives AZER2 a map view node instead of a
+cockpit one.  DIAG: at the 4937/795c paint, log word[DGROUP:0x3e08] (=bx, the node the 209e walk published) +
+word[DGROUP:bx] (nd) + word[DGROUP:(nd+0x423c)] (the slot) for AZER1 vs AZER2.  Then trace the setter of that
+slot / node.  This is the PRECISE fix site (view-node paint-slot selection); the rest is a focused
+display-list-node trace.  TWIN-#3 ROOT FULLY LOCALIZED (10 diagnostic layers) -> the highest-leverage mission
+unlock, ready for a focused continuation.  verify vs ref/mission_azer2_cockpit_native320.png.  re_out pristine.
