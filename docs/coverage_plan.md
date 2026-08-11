@@ -839,3 +839,21 @@ HANG BUCKET now reaches the cockpit path -> re-sweep (subagent running): ADDABLE
 land as flows; rc=139 = per-mission downstream twins (389/390/391 class, ASLR-off twin-migration); NEEDS-REF
 = cockpit but own instrument residual (genuine DOSBox ref). This one fix is the highest-leverage in-mission
 coverage unblock of the project so far.
+
+### CRASH-bucket twins CHARACTERIZED (2026-08-11, parallel-to-gate, no rebuild -> no race)
+Repro'd the 6 post-twin-#3 CRASH missions with the EXISTING /tmp/fist_native (setarch -R + FIST_SEGV_BT,
+separate datadirs -> safe alongside the running 61-flow gate on a 4-core box).  Two crash sites:
+- **5 missions share EIP m_mga_FUN_0000_2b1e+0x190, fault 0x9575000** (SYRIA2/SYRIA4/CYPRUS4/AZER3/UKRAINE1).
+  2b1e = patch-312's cockpit-HUD transparency blitter (2ae9/[0x6d8]); works for AZER1/AZER2 but these 5 feed
+  it a WILD source: `param_2 = g_mem + (m_260c_recseg<<4) + off` with m_260c_recseg garbage (fault
+  0x9575000-g_mem ~= 0x13AFE40 => recseg ~0x13AFE4, wild).  All 5 are M1/type-0/idx0 (d550=0, 3ae0=player)
+  like AZER1/AZER2 -> NOT the non-M1 reticle-index debt; a DATA-specific 260c record for these missions.
+  ONE fix likely clears all 5.  Next (post-gate, needs rebuild): add a shim/diagnostic dump of m_260c_recseg
+  + the 260c record at the 2b1e call for SYRIA2, find why 260c resolves a wild record, rebase.  [[reticle-sprite-dispatcher-debt]] territory but idx0.
+- **TRAIN3: EIP FUN_0000_aea8+0x1e, fault 0xc0a2** (reticle d550=0x338, distinct).  aea8 base-loss: param_1
+  is a DGROUP NEAR OFFSET (0xc05c) but `*(char*)(param_1+0x46)` derefs it as a host ptr (0xc05c+0x46=0xc0a2).
+  Straightforward rebase param_1 -> g_mem+0x1c000+(uint16)param_1 (asm-verify aea8 first; it also reads
+  +0x26 and passes param_1 to af1c -> rebase consistently).  Fix needs rebuild (post-gate).
+NEEDS-REF (9, cockpit renders, own instrument residual): SAUDI5/6 SYRIA5/7 INDIA6/7 TRAIN1 AZER6 CYPRUS5 ->
+genuine DOSBox capture each (post-gate; DOSBox CPU-contends the gate).  POST-GATE ORDER: aea8 (1 mission,
+easy) -> 2b1e (5 missions, one fix) -> NEEDS-REF captures (9) -> re-gate.  All characterized in parallel.
