@@ -730,3 +730,28 @@ if both dispatch MAP/4937 and never COCKPIT/6f1f, the synthesis holds and one di
 clears the whole HANG bucket.  (Caveat to verify, not assume: some HANGs could be a resource-load wait, not
 the chain-B spin -- the diag's [209e] trace vs a silent hang distinguishes them.)  AZER7 (D31) renders the
 cockpit AE=0 -> the map-select is NOT keyed on the D-map number; it's per-mission display-list content.
+
+### twin #3 CONFIRMED by the 209e-order diagnostic (2026-08-11, throwaway diag, re_out pristine)
+Ran the FIST_209E 209e-dispatch log on AZER1(default)/AZER2/SYRIA2.  RESULTS (decisive):
+- **HANG bucket == twin #3 PROVEN:** AZER2 and SYRIA2 (a HANG-bucket mission) are BYTE-IDENTICAL at the view
+  node: `bx=3b3c nd=0060 off=4937 d548=00 d549=00 MAP/4937`.  One root, ~20 missions.
+- **Exact mechanism (byte-level):** the view-node slot (walk pos bx=0x3b3c) holds content `nd`:
+    AZER1: nd=**0x011a** (COCKPIT viewport), paint off=**0x77dc** -> d548 transitions 00->81, d549=**0x1c**
+           (cockpit chain A); AZER1 also dispatches the cockpit cluster off=0x79xx-0x7bxx (7a26/79bf/7b15/
+           7903/77dc/7afc/7ae3/7aa5...).  Renders + exits at op-0x24.
+    AZER2: nd=**0x0060** (MAP viewport), paint off=**0x4937** -> 67e3 -> d549=**0x1e** (chain B) -> hang;
+           dispatches the map/chain-B cluster off=0x50xx-0x5cxx + 4846/4937 (none of AZER1's cockpit cluster).
+  Also bx=3b0c: AZER1 nd=0118 off=77f7 (cockpit) vs AZER2 nd=005e off=4846 (map).  So the display-list NODE
+  STRUCTURE is the same (same bx slots) but the CONTENT element each node links differs: AZER1 -> cockpit
+  elements (0x0118/0x011a), AZER2 -> map elements (0x005e/0x0060).
+- The cockpit paint is **0x77dc** (FUN_0000_77dc), NOT 6f1f (6f1f/8390/8cbf/93f3/795c are camera sub-methods).
+  The map paint is 0x4937 (FUN_0000_4937).  Element table: paint = word[DGROUP:(nd+0x423c)].
+- Genuine DOSBox AZER2 capture (prior session) = COCKPIT, so word[view-node]=0x0060(map) is a BUG; it should
+  be 0x011a(cockpit) like AZER1.
+=> THE FIX TARGET (next): find where the view-container's content element is set to the MAP viewport (0x0060,
+   paint 4937) for AZER2 instead of the COCKPIT viewport (0x011a, paint 77dc).  Both viewport elements exist
+   in the element table (nd+0x423c); the divergence is the view-SELECT / display-list-build linking the map
+   viewport as the active child for AZER2.  Watchpoints on the node word fail (gdb too slow); next diag =
+   instrument the map-viewport element CREATE/attach (paint=4937 install) + the cockpit-viewport (77dc) to see
+   which is created/activated per mission and what gates it.  This one fix unblocks AZER2/3 + the ~18-mission
+   HANG bucket.  SHARED render path -> after the fix: full 51-flow verify + AZER1/CYPRUS1 AE=0 + re-gate.
