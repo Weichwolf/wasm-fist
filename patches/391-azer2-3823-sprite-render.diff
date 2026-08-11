@@ -1,0 +1,87 @@
+PATCH 391: AZER2 twin #2 -- reconstruct FUN_0000_3823 (per-object sprite render) base-losses; fix the
+mission crash at 3823+0x74 (SIGSEGV fault-addr 0xffff), the next twin after patch 390's c7ca fix.
+
+Runtime (setarch -R, FIST_SEGV_BT/EBP, clean patch-390 binary): EIP 0x0805c1ff = FUN_0000_3823+0x74,
+fault-addr 0xffff; EBP chain 00d0->cae6->e714->459a->22dd->378e->3823.  3823 is a per-object SPRITE render
+dispatched from 378e's object walk (obj in BX at entry -> C param_3=obj DGROUP near offset; param_2=cx).
+
+asm 0x3823-0x38a9 base-losses reconstructed (all vs re_out/fist_dat_image.bin):
+ (1) sprite-directory resolution: es=word[DGROUP:0x4f0]; les es:(word[obj+0x32]); hdr=word[sprite-4].
+     Ghidra dropped ES + the les indirection -> `*(undefined4*)*(undefined2*)(param_3+0x32)` deref'd the
+     sprite id (0xffff sentinel on AZER2's type-1 objects) as a raw host ptr = the 0xffff fault.
+ (2) FB-plot segment: es=word[dg+word[0x156a]] = word[vp+0]; Ghidra wrote the plot to a raw offset.
+ (3) rowtable read: word[dg + X*2 + word[DGROUP:0x794]] (cf. the working pattern at build/fist.c:12442).
+ (4) DAT_1000_d56a is (int*) = 4-byte stride under gcc -m32, but the asm reads word[di+0xa]/[+0xc]/[0];
+     cast to uint16_t* so [5]/[6]/[0] mean +0xa/+0xc/+0 (Ghidra's int=2 hid this; gcc int=4 = +20/+24 = wrong).
+ (5) Ghidra's `2c1c = 2c18 + (uVar4 & 0xff)` is a WIDTH error -- asm `add dx,ax` adds the full 16-bit hdr word.
+All obj derefs (param_3+0x32, param_3+5) rebased to dg+obj; c6c8 blit (DGROUP:0x6c8) + c403f(obj) tail
+unchanged.  Reached only on the in-mission object-render walk; the menu/settings/editor flows never enter it.
+
+VALIDATED: AZER1 + CYPRUS1 mission-cockpit central-chrome AE=0 (43-flow verify both = 43/43, no regression);
+AZER2 advances past 3823.  re_out/fist.c pristine 61453e42; make check clean.
+
+--- a/fist.c
++++ b/fist.c
+@@ -12187,27 +12187,46 @@
+ void __allregs FUN_0000_3823(undefined2 param_1,int param_2,int param_3)
+ 
+ {
++  /* PATCH 391: per-object sprite render (asm 0x3823-0x38a9; obj in BX at entry -> C param_3 = obj DGROUP
++     near offset; param_2 = cx = screen-Y base).  Reached via 378e's object walk once patch 390 unblocked
++     c7ca.  Base-losses reconstructed: (1) the sprite-directory resolution es=word[DGROUP:0x4f0]; les
++     es:(sid); hdr=word[sprite-4] -- Ghidra dropped ES + the les indirection -> deref'd the sprite id
++     (0xffff sentinel on AZER2) as a raw host ptr = SIGSEGV fault-addr 0xffff (3823+0x74); (2) the FB-plot
++     segment es=word[dg+word[0x156a]] = word[vp+0]; (3) the rowtable read word[dg + X*2 + word[0x794]].
++     ALSO DAT_1000_d56a is (int*) (4-byte stride under gcc -m32) but the asm reads word[di+0xa]/[+0xc]/[0]
++     -- cast to uint16_t* so [5]/[6]/[0] mean +0xa/+0xc/+0 (Ghidra's int=2 made [5]/[6] right; gcc int=4
++     made them +20/+24).  ALSO Ghidra's `2c1c = 2c18 + (uVar4 & 0xff)` is a width error -- asm `add dx,ax`
++     adds the FULL 16-bit sprite-hdr word.  c6c8 blit + c403f tail unchanged (obj threaded as param_3). */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t obj = (uint16_t)param_3;
++  uint16_t *vp = (uint16_t *)DAT_1000_d56a;               /* viewport struct base (patch 325 rebased) */
+   int iVar1;
+   uint uVar2;
+-  byte bVar3;
+   uint uVar4;
+-  
+   iVar1 = FUN_0000_3d4c(0x6bc8);
+-  DAT_2000_2c16 = ((uint)DAT_1000_d56a[5] >> 1) + -iVar1;
+-  uVar4 = *(uint *)((int)*(undefined4 *)*(undefined2 *)(param_3 + 0x32) + -4);
+-  bVar3 = (byte)(uVar4 >> 8);
+-  DAT_2000_2c1a =
+-       CONCAT11((char)((uint)DAT_2000_2c16 >> 8) + CARRY1((byte)DAT_2000_2c16,bVar3),
+-                (byte)DAT_2000_2c16 + bVar3);
+-  DAT_2000_2c18 = ((uint)DAT_1000_d56a[6] >> 1) + param_2;
+-  DAT_2000_2c1c = DAT_2000_2c18 + (uVar4 & 0xff);
++  DAT_2000_2c16 = (vp[5] >> 1) + -iVar1;                  /* vp[5]=word[di+0xa]=width */
++  {
++    uint16_t es  = *(uint16_t *)(dg + 0x4f0);             /* sprite-dir seg (word[DGROUP:0x4f0]) */
++    uint16_t sid = *(uint16_t *)(dg + (uint16_t)(obj + 0x32));
++    uint8_t *dir = g_mem + ((uint32_t)es << 4);
++    uint16_t spr_off = *(uint16_t *)(dir + sid);          /* les es:(sid) -> off */
++    uint16_t spr_seg = *(uint16_t *)(dir + (uint16_t)(sid + 2));  /*                 -> seg */
++    uVar4 = *(uint16_t *)(g_mem + ((uint32_t)spr_seg << 4) + (uint16_t)(spr_off - 4)); /* sprite w/h hdr */
++  }
++  DAT_2000_2c1a = (uint16_t)(DAT_2000_2c16 + ((uVar4 >> 8) & 0xff));
++  DAT_2000_2c18 = (vp[6] >> 1) + param_2;                 /* vp[6]=word[di+0xc]=height */
++  DAT_2000_2c1c = (uint16_t)(DAT_2000_2c18 + (uVar4 & 0xffff));  /* asm add dx,ax = full hdr word */
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-  uVar4 = ((uint)DAT_1000_d56a[5] >> 1) + -iVar1;
+-  if (uVar4 < (uint)DAT_1000_d56a[5]) {
+-    uVar2 = ((uint)DAT_1000_d56a[6] >> 1) + param_2;
+-    if (uVar2 < (uint)DAT_1000_d56a[6]) {
+-      if (*(char *)(param_3 + 5) != '\0') {
+-        *(char *)(uVar2 + *(int *)(uVar4 * 2 + DAT_1000_c794)) = *(char *)(param_3 + 5);
++  vp = (uint16_t *)DAT_1000_d56a;                         /* asm re-reads di=word[0x156a] at 0x3873 */
++  uVar4 = (vp[5] >> 1) + -iVar1;                          /* X */
++  if (uVar4 < (uint)vp[5]) {
++    uVar2 = (vp[6] >> 1) + param_2;                       /* Y */
++    if (uVar2 < (uint)vp[6]) {
++      uint8_t colr = *(uint8_t *)(dg + (uint16_t)(obj + 5));
++      if (colr != 0) {
++        int16_t rowent = *(int16_t *)(dg + (uint16_t)(uVar4 * 2 + DAT_1000_c794)); /* rowtable[X] */
++        uint8_t *fb = g_mem + (((uint32_t)vp[0]) << 4);   /* FB seg = word[di] */
++        fb[(uint16_t)(uVar2 + rowent)] = colr;            /* es:di plot */
+       }
+       FUN_0000_403f(param_3);
+     }

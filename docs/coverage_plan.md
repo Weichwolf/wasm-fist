@@ -148,3 +148,17 @@ Base-loss fixes in build/fist.c FUN_0000_3823 (12187-12216):
 VALIDATE: full 43-flow verify BOTH must stay 43/43 (AZER1/CYPRUS1 either don't reach 3823 or now render it
 correctly to the same AE=0 ref); AZER2 advances past 3823 to the next twin. Then continue twin-migration
 until AZER2 reaches the MISSFB spawn frame -> build the mission-cockpit-azer2 oracle + add the flow + re-gate.
+
+## AZER2 twin #3: op-0x60 spin / no op-0x24 present (2026-08-11, post-patch-391 HANG, not crash)
+Patch 391 (3823 sprite render) fixes the 0xffff crash; AZER1/CYPRUS1 AE=0 (no regression). AZER2 now
+advances PAST 3823 but HANGS (rc=124, no frame): the mission loop repeatedly posts `[ext] service op 0x60`
+(display-list DATA, constant inbox=00000008 args 0f30/0000/0526) and NEVER posts op 0x24 (the windshield-
+render present that AZER1/CYPRUS1 reach + that triggers the FIST_MISSFB dump at the Nth op-0x24). So AZER2's
+459a/378e per-frame render never completes a frame -> spins before first present. Twin #3 = a HANG (a base-
+lost loop counter / an object-render method that doesn't advance the frame for AZER2's type-1 object set, OR
+a present-gate condition never met). DIAGNOSE next slice (needs a running binary; binaries were verify-held):
+run AZER2 with the ophist diagnostic (native_main.c:1296 logs op40/op24/op0c/op18/op54/op60 counts + total)
+to see which op-count grows unbounded + whether total climbs (spin) vs stalls (deadlock); then trace 378e's
+object walk / the c4df a6e6/a6e8 cursor / the c7ca-or-3823-or-sibling method that fails to advance. NB the
+op-0x60 poster is engine-side (459a/e4bb mission loop); the constant inbox=8 suggests the SAME display-list
+cmd re-posted (frame never finalizes). Patch 391 is committable forward progress (crash->hang = deeper).
