@@ -381,3 +381,20 @@ any cadence change, re-verify AZER1/CYPRUS1 mission-cockpit AE=0 + the full 43-f
 their frames shift, re-capture the genuine DOSBox refs at the aligned cadence.  This is the accurate root of
 the wasm-mission hang (supersedes both the op-0x1c-poster and 2dab-store-width notes -- those were downstream).
 Careful shim-timing work; fresh session.  All findings verified vs asm + native runtime ("code is the truth").
+
+### wasm-mission tick root REFINED (2026-08-11) -- sim-gate baseline + the real fix is the loop pump model
+DAT_2000_2ce0 = DAT_1000_c452 is REFRESHED (build/fist.c:13731/13747/13810), so `9 < c452-2ce0` fires the
+per-tick SIM (c0ca/461b flight model) every ~10 elapsed ticks.  Native accumulates ticks at ~real-time
+(SIGALRM) so op-0x24 renders BETWEEN sims (MISSFB dumps first); wasm's 1-tick-per-pump OVER-accumulates within
+one frame's drain loop (13755-13767) -> the sim fires BEFORE op-0x24 -> c0ca -> op 0x1c, and the post-sim
+mission loop then spins WITHOUT cooperatively pumping the tick (the known "459a tick-pump" class,
+native_main.c:1225) -> HANG.  So the TRUE fix is the mission-loop tick/pump/sim COOPERATIVE MODEL, 3 parts:
+(1) a DETERMINISTIC tick rate identical native<->wasm AND matching the game's ~18.2Hz-vs-render cadence (so
+the sim fires at the same logical points on both, like DOSBox); (2) the post-sim loop must pump the tick so
+it progresses (not spin); (3) op 0x1c (dde2) must be handled by the extender gate so the sim step completes.
+This is careful multi-part shim+loop work with REGRESSION RISK to the bit-verified AZER1/CYPRUS1 cadence
+(re-verify + possibly re-capture refs after).  Options to explore: tie c452 to a deterministic render-milestone
+count (op-0x24 frames) instead of per-pump/wall-clock; or cap ticks-per-frame so the sim can't outrun the
+render.  This supersedes/completes the tick-cadence note as the accurate, full characterization of the
+wasm-mission hang.  Fresh session; no DOSBox oracle needed for the parity part (native<->wasm), but a DOSBox
+SAUDI1 cadence reference helps confirm the ~18.2Hz sim rate.
