@@ -261,3 +261,18 @@ AZER2 -- if AZER1 d548!=0 and AZER2 d548==0, ROOT-A (find the d548 setter that d
 base-loss).  If both d548==0 (both would enter chain B, but AZER1 renders because fewer visible objects),
 ROOT-B (chain-B record buffer).  Either fix is a SHARED mission-render change -> AZER1/CYPRUS1 AE=0 + 43/43 +
 re-gate.  Diagnosis fully mapped this session; re_out/fist.c pristine 61453e42; patches 390+391 committed.
+
+### twin #3 A/B RESULT (2026-08-11) -- AZER1 never calls 4937; AZER2 does (d548==0)
+Decisive temp-diag at FUN_0000_4937 entry (removed): AZER1 renders (rc=0) and NEVER calls 4937 -> stays in
+a84c/d549=0x1c/chain A, dumps at op-0x24, exits.  AZER2 calls 4937 ONCE with d548=00,3c08=0,3a40=0,3a35=0
+-> 67e3 -> d549=0x1e -> chain B -> hang.  So the divergence is UPSTREAM of d548: AZER2's 209e display-list
+walk reaches an element whose PAINT handler is 4937 (the 0x1e-view initializer); AZER1's walk does not (it
+reaches op-0x24 first and the MISSFB dump exits).  AZER2=map D31, AZER1=map D32 -> different display lists,
+so chain B (d549=0x1e) is plausibly a LEGIT path for AZER2.  => most likely ROOT-B: chain B's 378e records
+(render_di=0x6bbe LITERAL) overrun the phase table because our port renders TOO MANY objects (a visibility/
+cull base-loss -> 8 records to 0x6d4e; real game likely culls to <4 so records stay below 0x6c82), OR the
+chain-B record buffer should be relocated.  NEXT (fresh session): (1) trace 378e's object-visibility cull
+(`call [0x4b52+byte[0x6bc2]]` per node) -- how many records SHOULD chain B write for AZER2's view vs how many
+it does; (2) compare to a DOSBox AZER2 oracle for the 0x1e view.  A cull base-loss (too many records) is the
+leading hypothesis.  This is the deepest mission-render frontier; fully mapped, needs runtime cull analysis +
+a DOSBox oracle.  re_out/fist.c pristine 61453e42; patches 390+391 committed + 43/43-verified.
