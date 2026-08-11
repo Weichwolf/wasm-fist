@@ -177,3 +177,18 @@ value/flag that for AZER2 selects op-0x0c (an error/alt-finalize path) instead o
 either fix the base-loss (so AZER2 takes the op-0x08 present) or, if op-0x0c is a legit cmd, handle it in the
 shim's fist_extender_gate so the engine's post-0x0c wait completes -> op 0x24. Repro: FIST_OPHIST=1 ...
 FIST_FSG_BATTLE=AZER2. FIST_OP0C_BT=1 (native_main.c:1228) backtraces the op-0x0c poster.
+
+### twin #3 poster chain symbolicated (2026-08-11, FIST_OP0C_BT on AZER2)
+op-0x0c backtrace (state: TCB seg aa2e=0x9000, d548=01, d549=0x1e cockpit; frame[0x452]=1, tcb+2c X=36958):
+  fist_extender_gate <- e339 <- **db99** (PATCH 193 "op-0xc display-list geom-record poster") <- **41d0**
+  (PATCH 193 "22dd handler, calls db99") <- **22dd** (phase dispatcher, +0xb8) <- 459a <- 22dd <- e714 <- cae6.
+So op-0x0c = db99's geom-record post, dispatched by 41d0 as a 22dd phase handler.  The post RETURNS; then the
+engine freezes with NO further ops (ophist total frozen at 574) = a HARD DEADLOCK in 22dd's phase walk AFTER
+the op-0x0c post (not a spin -- 0 new ops).  AZER1 at the same point posts op 0x08 (-> op 0x24 present); AZER2
+posts op 0x0c then a subsequent 22dd phase handler spins.  NEXT (twin #3 root-cause, needs runtime): trace
+22dd's phase table (analog c33c's 10-entry table) to find which handler AFTER 41d0 loops for AZER2's type-1
+roster -- add a per-phase log in 22dd's dispatch (like the FIST_C33C seam) to see the last phase entered before
+freeze; or check whether 459a's present-pump spins because op-0x24 is gated on a flag AZER2 doesn't set (the
+line-1225 tick-pump class -- but total is frozen, so it's an engine loop posting nothing, likely a base-lost
+counter in the post-0x0c phase).  db99/41d0 themselves are fine (op-0x0c is a legit geom cmd; AZER1 posts it too
+in other frames).  This is a deep mission-loop frontier -- fresh session, phase-by-phase.
