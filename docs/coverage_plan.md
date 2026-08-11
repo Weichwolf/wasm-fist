@@ -452,3 +452,20 @@ implementing, full 43-flow gate BOTH targets + re-verify AZER1/CYPRUS1 mission-c
 refs if the frame-tied cadence shifts their spawn frame).  This SUPERSEDES all prior wasm-mission notes as the
 complete, measured characterization.  It is the accurate, bounded fix -- careful broad-surface shim work,
 fresh session, no DOSBox oracle needed (native<->wasm parity).
+
+### wasm-mission tick-hold FIX LANDED (2026-08-11, commit 49f8cfb) -- 3 missions unblocked dual-target
+The wasm-mission divergence is FIXED (tools/native_main.c fist_timer_pump; wasm-only; engine pristine
+61453e42; verify.sh both = 43/43 no regression).  SAUDI1/SYRIA1/INDIA1 now RENDER on BOTH targets (were
+wasm-hung): each central-chrome crop AE=0 native==wasm, and == the genuine DOSBox refs (SAUDI1/SYRIA1 ==
+azer1ref, INDIA1 == cyprus1ref -- confirming the two M1-chrome variants).
+NEXT (add the 3 dual-target mission flows -> "every mission" axis 2->5):
+- RIGOR: the DoD wants each mission compared to ITS OWN genuine DOSBox ref.  SAUDI1/SYRIA1 are deep in the
+  scrollable SELECT BATTLE list (rows ~21/~28; AZER1-7,CYPRUS1-7,INDIA1-7,SAUDI1-7,SYRIA1-7,TRAIN,UKRAINE),
+  so refcapture_mission_row.sh (single row-click, 8 visible rows) can't reach them without SCROLL support.
+  Options: (a) extend refcapture to scroll the list then click; (b) capture ONE genuine SAUDI1 ref to PROVE
+  SAUDI1-real == azer1ref (M1-chrome mission-invariance) then add SAUDI1/SYRIA1 vs azer1ref + INDIA1 vs
+  cyprus1ref (INDIA1 is row ~14, also needs scroll).  Either needs the scroll-click DOSBox capture.
+- Then add 3 rows to verify.sh (run_mission variant with FIST_FSG_BATTLE, MC_REGION crop, SETTLE=2) + re-gate
+  the grown 46-flow matrix (10x).
+This is the cheapest remaining "every mission" gain (the fix did the hard part).  twin-#3 (AZER2 NATIVE
+chain-B) remains separate + open (DOSBox oracle).
