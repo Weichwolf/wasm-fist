@@ -713,3 +713,20 @@ that neither renders the cockpit nor the map and just spins = the cockpit viewpo
 map path also stalls.  A single shim diagnostic at the 209e dispatch + the 459a loop gate should separate
 "spins with no dirty view" (bootstrap) from "spins in resource load".  Do AFTER the 51-flow gate frees the
 binaries (never build/run during a gate).
+
+### KEY SYNTHESIS (2026-08-11): the HANG bucket == twin #3 (one root, ~20 missions)
+Cross-referencing the *2-7 sweep buckets against the twin-#3 mechanism (first-dirty view-toggle wins; map
+toggle 4937 -> d549=0x1e -> 22dd chain B -> 378e phase-table overrun -> null-dispatch SPIN):
+  - ADDABLE (5)      = cockpit / chain A / AE=0.                      [landed]
+  - MAP-OR-DIFF (3)  = cockpit / chain A / AE~80 (instrument residual, NOT map -- AE~80 not thousands).
+                       cheapest: a mission-specific genuine DOSBox ref.
+  - CRASH rc=139 (5) = a base-loss twin BEFORE the view select (391-class); ASLR-off twin-migration.
+  - HANG rc=124 (~18)= map-view select -> chain B -> SPIN == TWIN #3's exact failure mode.
+So the HANG bucket (SAUDI2/3/6, SYRIA2/4/5/6/7, INDIA6, CYPRUS2/4/6, TRAIN1-4, AZER4/5/6) + AZER2/3 are all
+ONE root: "these missions wrongly select the map view (chain B) instead of the cockpit (chain A)".  ~20
+missions unblocked by a SINGLE fix => twin #3 is the HIGHEST-LEVERAGE criterion-#1 item, not a one-mission
+edge case.  CONFIRM (post-gate, via the 209e-order diag): run it on AZER2 AND a HANG mission (e.g. SYRIA2) --
+if both dispatch MAP/4937 and never COCKPIT/6f1f, the synthesis holds and one display-list-create/dirty fix
+clears the whole HANG bucket.  (Caveat to verify, not assume: some HANGs could be a resource-load wait, not
+the chain-B spin -- the diag's [209e] trace vs a silent hang distinguishes them.)  AZER7 (D31) renders the
+cockpit AE=0 -> the map-select is NOT keyed on the D-map number; it's per-mission display-list content.
