@@ -192,3 +192,24 @@ freeze; or check whether 459a's present-pump spins because op-0x24 is gated on a
 line-1225 tick-pump class -- but total is frozen, so it's an engine loop posting nothing, likely a base-lost
 counter in the post-0x0c phase).  db99/41d0 themselves are fine (op-0x0c is a legit geom cmd; AZER1 posts it too
 in other frames).  This is a deep mission-loop frontier -- fresh session, phase-by-phase.
+
+### twin #3 ROOT-CAUSED (2026-08-11) -- phase-table / display-list-buffer OVERLAP on chain B
+Traced with a throwaway 22dd-do-while diag (logs phase 0a86 / word[0x6c96] / g_fist_render_di per iter; removed).
+The 22dd per-frame phase walk is `c450=3; do{ call word[DGROUP:0a86](vp); }while(c450!=0)`; handler 2322 (it1)
+picks a phase CHAIN by setting 0a86:
+  AZER1 -> chain A @0x6c82: 23ef,41c7,**2471**(depth-sort),286e,3b59,23ce(term). 2471 relocates render_di to a
+    safe sort-node buffer (rdi=0x538e, BELOW the phase table) -> records don't touch 0x6c82.. -> walk completes.
+  AZER2 -> chain B @0x6c8e: 23ea,41d0(op-0x0c),3fba,**378e**(direct object walk),41ee,23ce(term). Chain B has
+    NO 2471, so 378e writes display-list records via ca2f at the UNRELOCATED render_di=0x6bbe (378e's `mov
+    $0x6bbe,di`), stride 0x32, ~8 records -> rdi grows 0x6bbe->0x6d4e, OVERRUNNING the phase table 0x6c82..0x6c98
+    and zeroing chain-B's own 0x6c96 entry (static 0x41ee -> 0) BEFORE it6 reads it -> word[0x6c96]=0 ->
+    fist_icall_near(0,0) no-op that never advances 0a86 / decrements c450 -> INFINITE SPIN (the twin-#3 hang).
+Confirmed: static image DGROUP:0x6c96=0x41ee (valid handler 41ee), 0x6c98=0x23ce(term); at it1-it5 word[0x6c96]=
+0x41ee, at it6 (after 378e) =0x0000; AZER1 rdi=0x538e (safe) vs AZER2 rdi=0x6d4e (overlap).
+FIX (twin #3, next): chain B's object-render (378e path) must write records to a SAFE buffer like chain A's
+2471 does -- i.e. render_di must be relocated off 0x6bbe before 378e/ca2f write, OR 2322 wrongly selects chain B
+for AZER2 (a base-lost mode select) and AZER2 should use chain A. INVESTIGATE: (a) FUN_0000_2322 chain-select
+logic (why B for AZER2 vs A for AZER1 -- a state/flag, likely base-lost); (b) chain B's intended render_di
+setup (is a 2471-equivalent relocation dropped in chain B, or does 378e-in-chain-B use a different di base than
+the phase-walk 0x6bbe?). Likely a base-loss in the chain-B render_di init OR in 2322's selection. Then AZER2
+advances to op-0x24 present. re_out/fist.c pristine 61453e42 (no engine change this step -- diagnosis only).
