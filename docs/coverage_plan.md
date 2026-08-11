@@ -310,3 +310,15 @@ diagnose the SAUDI1 wasm timeout (op-histogram on the wasm build; is it stuck li
 just slow -> try a longer timeout / higher FIST_TICK_HZ).  The native-side result (chrome == genuine azer1/
 cyprus1 ref AE=0) still stands + de-risks the NATIVE render, but dual-target parity is the gate.  Honest: 0
 new flows addable from this survey until the wasm mission timeout is resolved (shared with twin-class work).
+
+### SAUDI1 wasm = REAL HANG (2026-08-11) -- confirms the wasm-mission divergence blocks the new missions
+SAUDI1 wasm at timeout 520s: STILL rc=124, no frame -> a REAL wasm HANG (not slowness; native renders in
+~15s).  So SAUDI1 (native-renders) HANGS on wasm = a native<->wasm HARD-INVARIANT divergence, the
+[[wasm-mission-op50-blocker]].  AZER1/CYPRUS1 wasm render (patches 381/386 fixed their maps), but SAUDI1
+(map D30) does not -> the wasm mission divergence is MAP/MISSION-specific and affects at least SAUDI1/SYRIA1/
+INDIA1.  => these 3 are NATIVE-ready but WASM-BLOCKED; 0 addable until the wasm divergence is fixed.  This is
+a distinct high-priority frontier (blocks multiple missions AND breaks the dual-target invariant on a working
+native render).  NEXT (fresh session): FIST_OPHIST on the SAUDI1 WASM build to find the stall op (vs native's
+op sequence), then trace that op's wasm-vs-native path (call_indirect signature / a base value that differs
+under EMULATE_FUNCTION_POINTER_CASTS).  Two independent mission frontiers now mapped: (i) twin-#3 native hang
+(AZER2/D31 chain-B render_di), (ii) wasm-mission divergence (SAUDI1/D30 + op50-blocker).  Both fresh-session.
