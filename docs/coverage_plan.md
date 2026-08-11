@@ -755,3 +755,21 @@ Ran the FIST_209E 209e-dispatch log on AZER1(default)/AZER2/SYRIA2.  RESULTS (de
    instrument the map-viewport element CREATE/attach (paint=4937 install) + the cockpit-viewport (77dc) to see
    which is created/activated per mission and what gates it.  This one fix unblocks AZER2/3 + the ~18-mission
    HANG bucket.  SHARED render path -> after the fix: full 51-flow verify + AZER1/CYPRUS1 AE=0 + re-gate.
+
+### twin #3 selector trace (2026-08-11, source, partial -- next step needs a rebuild-diagnostic)
+Traced toward the build-time view selector.  Findings:
+- The cockpit viewport paint is FUN_0000_77dc = a THUNK to FUN_1000_795c (the class-0x11a op-0x24 DIRTY
+  poster); the map viewport paint is FUN_0000_4937 (-> 67e3, d549=0x1e).  Both are template element paints
+  at word[DGROUP:(nd+0x423c)] (cockpit nd=0x011a->slot 0x435a=0x77dc; map nd=0x0060->slot 0x429c=0x4937).
+- DAT_2000_2dab (EDIT-mode, bit2) is NOT the selector: it's a save/restore slot (14511 saves 2dab->3ae9,
+  14544 restores 2dab=3ae9, 14124 resets 2dab=0 at mission init).  Default is 0 (play) -> 2dab doesn't
+  explain AZER2's map view.
+- The mission build FUN_0000_4754 = 4779 + d501(.FSG LOAD) + [harness hooks] + loop; the viewport element
+  is created during d501/the build from mission/.FSG data.  The selector = which viewport element (cockpit
+  0x011a vs map 0x0060) d501 creates/dirties for the mission.  AZER1->cockpit, AZER2/D31->map.
+NEXT (needs the binaries free -- do when the gate is not running): a rebuild-diagnostic to resolve (a) vs (b):
+dump word[DGROUP:0x435a] (cockpit-viewport paint slot, =0x77dc if the element exists) + word[DGROUP:0x429c]
+(map paint slot) at mission-render for AZER2.  If 0x435a==0x77dc -> the cockpit element EXISTS but isn't
+dirtied first (fix = the dirty-bootstrap / view-select); if empty -> the cockpit element is NOT CREATED (fix =
+d501/build's viewport-create, a base-lost mission-field read for D31/AZER2).  Then trace that create site.
+Oracle already banked (AZER2=cockpit, prior-session genuine DOSBox capture) -> no new oracle needed.
