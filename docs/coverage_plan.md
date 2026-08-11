@@ -246,3 +246,18 @@ a different di the port mis-threads.  NEXT: read 378e asm (0x378e..) + trace whe
 comes from vs chain A's 2471; the dropped relocation/alloc is the base-loss to restore.  Then chain B completes
 -> op-0x24 present -> AZER2 renders.  Diagnosis-only; re_out pristine 61453e42.  Also worth checking: why is
 d548==0 for AZER2 vs !=0 for AZER1 at 4937 (may be an orthogonal state diff, but 0x1e is legit either way).
+
+### twin #3 diagnosis CLOSED (2026-08-11) -- 378e asm + the decisive next test
+378e asm (0x378e-0x3822) confirmed: it walks objects via c33c(si=[0x4b9e], di=0x6bbe), dispatches each
+via `call [0x4b52+byte[0x6bc2]]`, and on exhaustion (c33c CF=1) does `addw $2,[0x4a86]` (advance 0a86 to
+0x6c96) + ret.  di=0x6bbe is LITERAL (asm 0x379e), so chain-B records go to 0x6bbe -> only SAFE if FEW
+objects are visible (records don't reach 0x6c96).  => the two candidate roots are ENTANGLED:
+  ROOT-A: AZER2 wrongly enters chain B -- d548==0 at 4937 -> 67e3 -> d549=0x1e.  If d548==0 is a base-loss
+    (AZER1 has d548!=0 -> a84c/d549=0x1c/chain A), fixing d548 makes AZER2 render via chain A like AZER1.
+  ROOT-B: chain B is legit for AZER2 but its record buffer (0x6bbe) collides with the phase table for a
+    full roster -- the real game must place chain-B records elsewhere (a dropped alloc/relocation).
+DECISIVE NEXT TEST (fresh session): temp-diag d548 (+ 3c08/3a40/3a35) at FUN_0000_4937 entry for AZER1 vs
+AZER2 -- if AZER1 d548!=0 and AZER2 d548==0, ROOT-A (find the d548 setter that differs; likely a mission-init
+base-loss).  If both d548==0 (both would enter chain B, but AZER1 renders because fewer visible objects),
+ROOT-B (chain-B record buffer).  Either fix is a SHARED mission-render change -> AZER1/CYPRUS1 AE=0 + 43/43 +
+re-gate.  Diagnosis fully mapped this session; re_out/fist.c pristine 61453e42; patches 390+391 committed.
