@@ -944,3 +944,20 @@ op-0x24 (present).  Same SHAPE as AZER2's pre-392 op-0c freeze but on chain A, s
 twin #3.  NEXT: FIST_OPHIST + the 22dd per-phase log (the [[mission-coverage-plan]] AZER2 twin-#3 method) to
 find which chain-A phase handler spins for SYRIA2's roster (op0x54 count likely differs, as it did for AZER2).
 Not view-select; do NOT re-chase 5d43. Prior "twin-#3-class view residual" note above is SUPERSEDED.
+
+### SYRIA2 hang PINPOINTED to op-0x58 (2026-08-18, FIST_OPHIST diff vs AZER1).
+FIST_OPHIST op-sequence + histogram (setarch -R, warm dd, FIST_FSG_BATTLE):
+- AZER1 (renders): FIRST-op sequence ends `op 0x08 (t=538) -> op 0x24 (t=539)` PRESENT -> frame.
+  Final histogram: op54=39 op60=16 **op24=1** total=539.  tile3918 nz=65536 (terrain OK).
+- SYRIA2 (hangs rc=124): FIRST-op sequence ends `... op 0x2c(t=545) 0x5c(t=546) 0x1c(t=554) **op 0x58
+  (t=1003)**` then SPINS FOREVER (total -> 1.74M, no new op, **op24=0** = never presents).
+  Final histogram: op54=**55** op60=**6** op24=**0** total>>.  tile3918 nz=65536 (terrain OK).
+**op-0x58 is the divergent op**: SYRIA2 posts it (AZER1 never does) and then the display-list op-loop spins
+without ever reaching op-0x24 (present).  Roster also differs: op54=55 (vs 39 units) op60=6 (vs 16).  So the
+hang is NOT view-select (SYRIA2 correctly reaches cockpit-44be) and NOT terrain (tile nz=65536) -- it is a
+cockpit-render/display-list op-loop spin triggered by SYRIA2's larger/different roster reaching an op-0x58
+handler that AZER1's roster never triggers.  NEXT (bounded): find op-0x58's handler (ext-service dispatch or
+the 22dd phase chain) + why it re-posts without advancing to present; compare the roster entry that emits
+op-0x58 on SYRIA2 vs the AZER1 roster.  Same investigative shape as AZER2 twin #3 (op-0c freeze) but a
+DIFFERENT op (0x58) and a different (chain-A/cockpit) layer.  Method: FIST_OPHIST + an op-0x58-post backtrace
+hook (mirror FIST_OP0C_BT in native_main.c:1236).
