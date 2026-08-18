@@ -1107,3 +1107,16 @@ CONSTANT rest position; 4 missions match by coincidence, 8 differ).  NEXT: reloc
 cleanly -- watch the dial fb pixel with a 1-line pause hook (or an mga-blitter backtrace gated on the dial
 region), confirm via direct instrument, then find + rebase the mission-varying field it reads (should be the
 turret azimuth = 0 at spawn).  +8 missions when fixed; the 8 genuine refs are already committed.
+
+### Dial-draw hunt (2026-08-18, cont'd): the dial region is SAVE/RESTORE-bracketed (0fbc/0fe4).
+FIST_FBTRAP=39793 (dial center, shim-only, clean /tmp/fist_native) caught a dial-column write (row114 col111)
+from **m_mga_FUN_0000_0fe4 <- 0fbc** = the display-element SAVE/RESTORE blit (patch-131 class, DGROUP:0x602).
+So the dial is a display-list ELEMENT with a saved backdrop; the needle draws BETWEEN 0fbc(save) and
+0fe4(restore).  The fbtrap one-shot-per-arm catches the FIRST write to the page each frame (the save/restore),
+not the needle.  TWO false-leads now ruled out (bc0c object-update, 0fe4 save/restore).  REFINED NEXT
+APPROACH: the dial is an ELEMENT -> find its paint method (the 209e/206f walk dispatches it; it draws the
+needle via a rotated line from an angle field).  Best method: (1) trap writes AFTER 0fe4 (arm the fbtrap on a
+needle-only pixel that the backdrop doesn't cover, e.g. a pixel only the DOSBox needle occupies for AZER6 like
+(122,124)), or (2) enumerate the cockpit display-list elements (209e walk, each element's class word0 + paint
+method) and find the azimuth-dial element, then read its paint's angle-field source.  The field is mission-
+varying in the port but should be constant (turret azimuth=0 at spawn).  +8 missions when fixed; 8 refs banked.
