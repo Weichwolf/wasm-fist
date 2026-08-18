@@ -961,3 +961,17 @@ the 22dd phase chain) + why it re-posts without advancing to present; compare th
 op-0x58 on SYRIA2 vs the AZER1 roster.  Same investigative shape as AZER2 twin #3 (op-0c freeze) but a
 DIFFERENT op (0x58) and a different (chain-A/cockpit) layer.  Method: FIST_OPHIST + an op-0x58-post backtrace
 hook (mirror FIST_OP0C_BT in native_main.c:1236).
+
+### SYRIA2 op-0x58 poster chain + hang nature (2026-08-18, FIST_OP58_BT backtrace).
+op-0x58 FIRST-post state: **node[3b3c]=0x011a (cockpit), d548=01 d549=1c (chain A), frame[0x452]=27
+(tick ADVANCING -- NOT the AZER2 op0c tick-freeze).**  Poster backtrace: 459a+0x23f -> c0ca (sim step /
+flight model, per the FIST_OP0C_BT note) -> c0e5 -> **902c -> ab03 -> b011** (per-object AI/update chain,
+0xa000-0xb000 = the ac9e/objtype family) -> aa08(ext) -> e1f0/e21c/e339 (ext gate) -> op post.  op-0x58 is
+posted ONCE (n=1); the 1.74M-op spin is the display-list build RE-POSTING 0x08/0x2c/0x5c every frame without
+the phase chain ever completing to op-0x24 (present).  So: SYRIA2 correctly reaches the cockpit, the sim
+runs (tick advances) and processes its larger roster (op54=55 vs 39) posting an op-0x58 that AZER1's roster
+never emits, but the per-frame display-list/phase chain never signals "done" -> no present -> hang.  This is
+a phase-COMPLETION spin (twin-#3 SHAPE, chain-A/cockpit layer), triggered by the object at 902c/ab03/b011
+that emits op-0x58.  NEXT: instrument 902c/ab03/b011 (the op-0x58 emitter) -- which roster object/type, and
+what condition it sets that blocks the frame's present-gate; compare to AZER1 (never posts 0x58).  Diagnostic
+FIST_OP58_BT recipe is in the git history (mirror of FIST_OP0C_BT, native_main.c:1236); re-add when resuming.
