@@ -1104,3 +1104,19 @@ gate 459a→c0ca→c0e5 not firing per frame (tick-cadence, [[wasm-mission-op50-
 spawn-frame surfaces are bit-verifiable; the 8 dial missions fail because their spawn turret is actively
 slewing while the port freezes it. Fixing the per-tick sim advance is THE gameplay-motion frontier — it would
 unblock in-motion verification broadly (and the dial). See [[dial-needle-oracle-verdict]].
+
+### Uncovered-mission crash triage (2026-08-18): one 2b1e root blocks several; UKRAINE3 is dial-class.
+Tested 8 uncovered battles for a cheap spawn-frame flow (crash-free + MC_REGION AE=0 vs the two M1 refs):
+- UKRAINE1, UKRAINE2, AZER3, CYPRUS4 → **rc=139 SEGV at the IDENTICAL EIP 0x081321eb = m_mga_FUN_0000_2b1e**
+  (build/fist_mga.c:7132, the sprite-blit inner loop; fault-addr 0x9577000 = wild fb write ptr pbVar9). ONE
+  root, not many. Same class as the reticle-sprite-dispatcher debt [[reticle-sprite-dispatcher-debt]]: 2b1e is
+  a FAITHFUL blitter that walks off g_mem when handed a {0,0}/wild sprite record UPSTREAM. This is the
+  documented, deferred 2b1e/multi-viewport-sequencing frontier (SYRIA2 hang section above; patches 395/396
+  addressed parts). AZER3's roster carries abnormal object types (c834 t=0x0f00, c92f t=0x000f) but UKRAINE1's
+  is normal (all t0/t1) yet crashes identically -> the trigger is a bad sprite descriptor, not the type.
+- CYPRUS3 → rc=124 HANG (the SYRIA2 multi-viewport-sequencing class).
+- UKRAINE3 → renders (rc=0) but MC_REGION AE=87/85 vs azer1/cyprus1 -> DIAL-class (slewing spawn turret,
+  [[dial-needle-oracle-verdict]]) — not statically bit-verifiable.
+CONCLUSION: no cheap uncovered-mission win exists — the remaining battles are all in the 2b1e-crash /
+multi-viewport-hang / dial-sim buckets, each a deep known frontier. Fixing the 2b1e sprite-dispatcher (needs a
+spec flow to reconstruct the wild-record source safely) unblocks the crash bucket broadly.
