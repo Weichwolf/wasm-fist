@@ -118,6 +118,11 @@ static void segv_bt(int sig, siginfo_t *si, void *uc) {
        * [DGROUP:0x4f0]<<4 + id.  A {0,0}/wild entry -> 2b1e blits garbage -> SEGV.  Dump the directory
        * segment word + the first 40 far-ptr records so a wild/zero entry (vs AZER1) is visible. */
       { unsigned short dseg = *(unsigned short*)(dg+0x4f0);
+        /* dump the roster-slot-4/5 object bodies (oracle=valid vehicles; port=garbage type 0x0f00) to
+         * distinguish under-registration (stale) vs build-desync -- compare vs scratch/oracle/azer3_spawn */
+        for (int r=4;r<=5;r++){ unsigned short so=*(unsigned short*)(dg+0x6d3c+r*2);
+          if(!so) continue; fprintf(stderr,"[segv] roster%d obj@0x%04x words +0..+1e:",r,so);
+          for(int i=0;i<16;i++) fprintf(stderr," %d",*(short*)(dg+(unsigned short)(so+i*2))); fprintf(stderr,"\n"); }
         fprintf(stderr,"[segv] sprite-dir [0x4f0]=seg 0x%04x  records(off:seg):", dseg);
         unsigned base = (unsigned)dseg<<4;
         for (int i=0;i<40;i++){ unsigned short off=*(unsigned short*)(g_mem+base+i*4);
