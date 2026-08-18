@@ -1,0 +1,21 @@
+PATCH 394: TRAIN3 CRASH-twin #2 -- FUN_0000_8f3a base-loss (param_2 = DI = object DGROUP near offset,
+asm `mov [di+0x90],al; mov [di+0xca],3`; Ghidra host-ptr deref -> fault 0x8fca=0x8f00+0xca).  Rebase to
+g_mem+0x1c000+(uint16)param_2.  TRAIN3 migrates to the next twin FUN_1000_7681 (a deeper multi-level base-
+loss).  Reached only on the crash path; no regression on the idx0 mission flows.  re_out pristine 61453e42.
+
+--- a/fist.c
++++ b/fist.c
+@@ -24134,8 +24134,11 @@
+ void __allregs FUN_0000_8f3a(undefined1 param_1,int param_2)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x90) = param_1;
+-  *(undefined1 *)(param_2 + 0xca) = 3;
++  /* PATCH 394 (TRAIN3 twin #2): base-loss -- param_2 = DI = object DGROUP near offset (asm 0x8f3a
++     `mov [di+0x90],al; mov [di+0xca],3`); Ghidra deref'd it as a host ptr (fault 0x8fca=0x8f00+0xca). */
++  uint8_t *o = g_mem + 0x1c000 + (uint16_t)param_2;
++  o[0x90] = param_1;
++  o[0xca] = 3;
+   FUN_1000_70eb();
+   return;
+ }
