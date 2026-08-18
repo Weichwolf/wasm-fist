@@ -933,3 +933,14 @@ per-phase log (the AZER2 twin-#3 method) on SYRIA2 vs AZER1 -> find why word[0x3
 for SYRIA2 despite 5d43's WORD compare.  Repro: `setarch -R env FIST_SEGV_BT=1 FIST_DATADIR=<warm>
 FIST_TICK_HZ=25000 FIST_FSG_BATTLE=SYRIA2 FIST_MOUSE=<MC> FIST_MISSFB=/tmp/x.ppm timeout 70 /tmp/fist_native`
 -> rc=124, last op 0x2c inbox=0x3b3c.  Shared view path -> full regression validate + re-gate after any fix.
+
+### SYRIA2 hang CORRECTED (2026-08-18): NOT the view-select -- it reaches the COCKPIT, hang is downstream.
+Instrumented 5d43's gate (word[di]=vehicle type, byte[di+0x16]=flags): **SYRIA2 = word[di]=0x0000,
+flags=0x66 -> cockpit-44be**, BYTE-for-BYTE the same decision as AZER1 (veh_off differs 0xc252 vs 0xc05c,
+word[di+2]=0x0002 vs 0, but neither poisons the WORD compare).  So the twin-#3 view-select (5d43/392) is
+CORRECT for SYRIA2 -- it takes chain A (cockpit).  The hang is DOWNSTREAM in the cockpit op-loop: the engine
+re-posts display-list ops 0x08 / 0x2c(inbox=0x3b3c view-node) / 0x5c every frame but never advances to
+op-0x24 (present).  Same SHAPE as AZER2's pre-392 op-0c freeze but on chain A, so it's a DIFFERENT root than
+twin #3.  NEXT: FIST_OPHIST + the 22dd per-phase log (the [[mission-coverage-plan]] AZER2 twin-#3 method) to
+find which chain-A phase handler spins for SYRIA2's roster (op0x54 count likely differs, as it did for AZER2).
+Not view-select; do NOT re-chase 5d43. Prior "twin-#3-class view residual" note above is SUPERSEDED.
