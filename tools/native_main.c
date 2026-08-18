@@ -89,8 +89,10 @@ void objtrap_arm(unsigned off) {
     g_objtrap_page = (void*)(a & ~(uintptr_t)(ps-1));
     mprotect(g_objtrap_page, ps, PROT_READ);
 }
+static void wwtrap_reprotect(void);
 void objtrap_trap(int sig, siginfo_t *si, void *uc) {   /* SIGTRAP: after the single-stepped write */
     ucontext_t *u = (ucontext_t *)uc;
+    wwtrap_reprotect();                                                             /* re-arm wwtrap range */
     if (g_objtrap_page) mprotect(g_objtrap_page, sysconf(_SC_PAGESIZE), PROT_READ);  /* re-arm */
     if (g_objtrap_pend_eip) {
         unsigned short v = *(unsigned short *)g_objtrap_target;
@@ -100,9 +102,43 @@ void objtrap_trap(int sig, siginfo_t *si, void *uc) {   /* SIGTRAP: after the si
     }
     u->uc_mcontext.gregs[16 /*REG_EFL*/] &= ~0x100UL;   /* clear TF */
 }
+/* ---- FIST_WWTRAP: write-protect a RANGE of g_mem (the static sprite-data region) at the op-0x2c gate to
+   catch the crash-bucket wild-writer whose target is garbage-dependent. Any in-mission write to the range
+   faults -> log EIP + fault addr + ret-cands, unprotect the whole range, single-step (TF) past the write,
+   re-protect in the SIGTRAP handler. FIST_WWTRAP="<hexoff>:<hexlen>" (g_mem-relative). */
+static void    *g_wwtrap_base = 0;   /* page-aligned range start */
+static size_t   g_wwtrap_len  = 0;   /* page-rounded length */
+static int      g_wwtrap_hits = 0;
+static void wwtrap_reprotect(void){ if (g_wwtrap_base) mprotect(g_wwtrap_base, g_wwtrap_len, PROT_READ); }
+void wwtrap_arm(unsigned off, unsigned len) {
+    if (g_wwtrap_base) return;
+    long ps = sysconf(_SC_PAGESIZE);
+    uintptr_t a = (uintptr_t)(g_mem + off);
+    uintptr_t b = a & ~(uintptr_t)(ps-1);
+    uintptr_t e = (a + len + ps - 1) & ~(uintptr_t)(ps-1);
+    g_wwtrap_base = (void*)b; g_wwtrap_len = (size_t)(e - b);
+    mprotect(g_wwtrap_base, g_wwtrap_len, PROT_READ);
+    fprintf(stderr, "[wwtrap] armed RO [g_mem+0x%lx .. +0x%lx)\n",
+            (unsigned long)(b-(uintptr_t)g_mem), (unsigned long)(e-(uintptr_t)g_mem));
+}
+
 static void segv_bt(int sig, siginfo_t *si, void *uc) {
     ucontext_t *u = (ucontext_t *)uc;
     unsigned long eip = (unsigned long)u->uc_mcontext.gregs[14 /*REG_EIP*/];
+    /* wwtrap: fault on the guarded sprite-data range -> log the writer, single-step past it, re-protect */
+    if (g_wwtrap_base && si->si_addr >= g_wwtrap_base &&
+        (char*)si->si_addr < (char*)g_wwtrap_base + g_wwtrap_len) {
+        unsigned long esp2 = (unsigned long)u->uc_mcontext.gregs[7];
+        unsigned long *sp2 = (unsigned long *)esp2;
+        fprintf(stderr, "[wwtrap] WRITE to g_mem+0x%lx  EIP=0x%08lx  ret-cands:",
+                (unsigned long)((char*)si->si_addr - (char*)g_mem), eip);
+        int sh=0; for (int i=0;i<80 && sh<10;i++){unsigned long v=sp2[i]; if(v>0x08048000&&v<0x08800000){fprintf(stderr," 0x%08lx",v);sh++;}}
+        fprintf(stderr, "\n");
+        mprotect(g_wwtrap_base, g_wwtrap_len, PROT_READ|PROT_WRITE);
+        u->uc_mcontext.gregs[16 /*REG_EFL*/] |= 0x100UL;   /* TF -> SIGTRAP re-protects */
+        if (++g_wwtrap_hits > 4000) { g_wwtrap_base = 0; }  /* runaway guard: stop trapping */
+        return;
+    }
     /* objtrap: fault on the watched page -> unprotect, single-step (TF) past the write, re-protect in SIGTRAP */
     if (g_objtrap_page && si->si_addr >= g_objtrap_page &&
         (char*)si->si_addr < (char*)g_objtrap_page + sysconf(_SC_PAGESIZE)) {
@@ -1214,10 +1250,13 @@ static void fist_ext_689a(uint8_t *xb) {
 
 int g_fist_after_map = 0;   /* set once op 0x18 (map load) has fired -> roster probe gate */
 void fist_dbg_op2c(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoint at the op-0x2c gate */
+void fist_dbg_op18(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoint at the first op-0x18 map-load (arm d548 watchpoint here) */
+void fist_dbg_fbwild(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoint when a blit dest lands outside the framebuffer (wild write) */
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
-    if (op == 0x18) g_fist_after_map = 1;
+    if (op == 0x18) { g_fist_after_map = 1;
+        if (getenv("FIST_DBG_OP18")) { static int o=0; if(!o){o=1; extern void fist_dbg_op18(void); fist_dbg_op18();} } }
     /* FIST_DBG_OP2C: clean gdb breakpoint at the first op-0x2c gate (crash-bucket secondary-viewport paint) */
     if (op == 0x2c && g_fist_after_map && getenv("FIST_DBG_OP2C")) {
         static int once=0; if(!once){ once=1; extern void fist_dbg_op2c(void); fist_dbg_op2c(); }
@@ -1225,6 +1264,12 @@ int fist_extender_gate(void) {
     if (op == 0x2c && g_fist_after_map && getenv("FIST_OBJTRAP")) {
         static int once=0; if(!once){ once=1; extern void objtrap_arm(unsigned);
             objtrap_arm((unsigned)strtoul(getenv("FIST_OBJTRAP"),0,0)); }
+    }
+    if (op == 0x2c && g_fist_after_map && getenv("FIST_WWTRAP")) {
+        static int once=0; if(!once){ once=1; extern void wwtrap_arm(unsigned,unsigned);
+            const char *e=getenv("FIST_WWTRAP"); char *c=0;
+            unsigned o=(unsigned)strtoul(e,&c,0), l=(c&&*c==':')?(unsigned)strtoul(c+1,0,0):0x3000;
+            wwtrap_arm(o,l); }
     }
     /* FIST_ROSTERTRACE (diag): log roster slot-4/5 object + its type at each op-gate -> pinpoint WHEN the
      * crash-bucket garbage type (0x0f00) appears (build-time vs a later corrupting step). Survives the
@@ -3058,7 +3103,7 @@ int main(int argc, char **argv) {
         struct sigaction sa; memset(&sa, 0, sizeof sa);
         sa.sa_sigaction = segv_bt; sa.sa_flags = SA_SIGINFO;
         sigaction(SIGSEGV, &sa, NULL);
-        if (getenv("FIST_OBJTRAP")) { extern void objtrap_trap(int,siginfo_t*,void*);
+        if (getenv("FIST_OBJTRAP") || getenv("FIST_WWTRAP")) { extern void objtrap_trap(int,siginfo_t*,void*);
             struct sigaction st; memset(&st,0,sizeof st); st.sa_sigaction=objtrap_trap; st.sa_flags=SA_SIGINFO;
             sigaction(SIGTRAP,&st,NULL); }
     }

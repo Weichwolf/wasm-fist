@@ -1,0 +1,127 @@
+PATCH 399: FUN_1000_90bf + FUN_1000_964e whole-function base-loss -- fourth vehicle-type sprite-animation
+element method + its state-setter, completing the 8039/7681/87cc family (patches 397/398 here + 366 for 87cc/8b7c).  Same
+crash-bucket subtree; the old host-ptr `*(int*)(param_1+0x97)` deref SEGVs on reach.  asm-verified deltas:
+  90bf (0x90bf..0x90fd): tables 0x29b4/0x296c; scan test word[DS:(bval+di+0xad)]; call 964e(bval,di).
+  964e (0x964e..0x96ba): sibling of 7fbc/7963; byte[DS:di+0x91/0xa5/0xa8/0xbb], writes
+       [di+0xd8/0xda/0xdc/0xde/0xd7]=3; [di+0xa8]=byte[DS:(param_1>>1)+0x9282]; uVar1=byte[DS:
+       (param_1>>1)+0x9242]; the gate is (param_1>>1)==2 && word[DS:di+0xb1]==0 (cmpw) -- NB +0xb1, not
+       +0xad, and ==2 not ==0; bee2(0x19,0x5a,di) / bf3c(uVar1,uVar2,di) (bf3c=patch 263) + near 70c1.
+GS=word[DGROUP:0x70]=0x2d74 (str-seg), DS=DGROUP=0x1c00.  Rebased di/si to g_mem+0x1c000+near-off, GS
+reads to g_mem+(gs<<4)+off, asm-exact widths.  Reached only via the mission-paint dispatch -> no passing
+verify flow reaches either (the old host-ptr deref would have SEGV'd them) -> regression-safe.  Completes
+the four per-vehicle sprite-animation element methods of the crash-bucket subtree.
+
+--- a/fist.c
++++ b/fist.c
+@@ -58128,30 +58128,39 @@
+ void __allregs FUN_1000_90bf(int param_1)
+ 
+ {
+-  byte *pbVar1;
+-  int *piVar2;
+-  int iVar3;
+-  byte *pbVar4;
+-  
+-  iVar3 = 0;
+-  piVar2 = (int *)*(int *)(param_1 + 0x97);
+-  if (piVar2 != (int *)0x0) {
+-    if (*piVar2 == 0x1a) {
+-      pbVar4 = (byte *)*(undefined2 *)((uint)*(byte *)((int)piVar2 + 0x19) * 2 + 0x29b4);
++  uint iVar3;
++  uint16_t si;
++  uint16_t idx;
++  uint16_t tbloff;
++  byte bval;
++  /* PATCH 399: FUN_1000_90bf whole-function base-loss -- fourth vehicle-type sprite-animation element
++     method (sibling of 8039/7681/87cc).  asm 0x90bf..0x90fd: GS=word[DGROUP:0x70]=str-seg,
++     DI=param_1=object near-off; frame-list off = word[GS:(byte[DS:si+0x19]<<1)+0x29b4] if word[DS:si]
++     ==0x1a else word[GS:(word[DS:si]<<1)+0x296c]; scan<=3: bval=byte[GS:off]; stop when
++     word[DS:(bval+di+0xad)]!=0; call 964e(bval,di).  Rebased di/si + GS reads, asm-exact widths.
++     Mission-paint dispatch only -> regression-safe. */
++  uint8_t *o  = g_mem + 0x1c000;
++  uint8_t *gs = g_mem + ((uint32_t)*(uint16_t *)(o + 0x70) << 4);
++  uint16_t di = (uint16_t)param_1;
++  idx = 0;
++  si = *(uint16_t *)(o + (uint16_t)(di + 0x97));
++  if (si != 0) {
++    if (*(uint16_t *)(o + si) == 0x1a) {
++      tbloff = *(uint16_t *)(gs + (uint16_t)((uint16_t)(*(byte *)(o + (uint16_t)(si + 0x19)) << 1) + 0x29b4));
+       goto LAB_1000_90e8;
+     }
+-    iVar3 = *piVar2 << 1;
++    idx = (uint16_t)(*(uint16_t *)(o + si) << 1);
+   }
+-  pbVar4 = (byte *)*(undefined2 *)(iVar3 + 0x296c);
++  tbloff = *(uint16_t *)(gs + (uint16_t)(idx + 0x296c));
+ LAB_1000_90e8:
+   iVar3 = 3;
+   do {
+-    pbVar1 = pbVar4;
+-    if (*(int *)((uint)*pbVar1 + param_1 + 0xad) != 0) break;
+-    pbVar4 = pbVar4 + 1;
++    bval = *(byte *)(gs + tbloff);
++    if (*(uint16_t *)(o + (uint16_t)((uint)bval + di + 0xad)) != 0) break;
++    tbloff = tbloff + 1;
+     iVar3 = iVar3 + -1;
+   } while (iVar3 != 0);
+-  FUN_1000_964e(*pbVar1,param_1);
++  FUN_1000_964e(bval,param_1);
+   return;
+ }
+ 
+@@ -58609,18 +58618,25 @@
+   undefined1 uVar1;
+   uint uVar2;
+   uint unaff_CS;
+-  
+-  if (*(byte *)(param_2 + 0x91) == param_1) {
++  /* PATCH 399: FUN_1000_964e whole-function base-loss -- 90bf's animation-state setter (sibling of
++     7fbc/7963).  asm 0x964e..0x96ba: DI=param_2=object near-off; byte[DS:di+0x91/0xa5/0xa8/0xbb],
++     writes [di+0xd8/0xda/0xdc/0xde/0xd7]=3; [di+0xa8]=byte[DS:(param_1>>1)+0x9282]; uVar1=byte[DS:
++     (param_1>>1)+0x9242]; the gate is (param_1>>1)==2 && word[DS:di+0xb1]==0 (cmpw) -- NB +0xb1, not
++     +0xad; bee2(0x19,0x5a,di) / bf3c(uVar1,uVar2,di) (bf3c=patch 263) + near 70c1.  Ghidra deref'd di
++     as HOST ptr; +0xb1 is a WORD.  Mission-paint only -> regression-safe. */
++  uint8_t *o = g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_2;
++  if (*(byte *)(o + (uint16_t)(di + 0x91)) == param_1) {
+     return;
+   }
+-  *(byte *)(param_2 + 0x91) = param_1;
+-  if ((param_1 == 6) || (param_1 == *(byte *)(param_2 + 0xa5))) goto LAB_1000_969d;
+-  *(byte *)(param_2 + 0xa5) = param_1;
++  *(byte *)(o + (uint16_t)(di + 0x91)) = param_1;
++  if ((param_1 == 6) || (param_1 == *(byte *)(o + (uint16_t)(di + 0xa5)))) goto LAB_1000_969d;
++  *(byte *)(o + (uint16_t)(di + 0xa5)) = param_1;
+   uVar2 = (uint)(param_1 >> 1);
+-  *(undefined1 *)(param_2 + 0xa8) = *(undefined1 *)(uVar2 + 0x9282);
+-  if ((param_1 >> 1 == 2) && (*(int *)(param_2 + 0xb1) == 0)) {
++  *(undefined1 *)(o + (uint16_t)(di + 0xa8)) = *(undefined1 *)(o + (uint16_t)(uVar2 + 0x9282));
++  if ((param_1 >> 1 == 2) && (*(uint16_t *)(o + (uint16_t)(di + 0xb1)) == 0)) {
+     uVar1 = 0xd;
+-    if (*(char *)(param_2 + 0xbb) != '\0') {
++    if (*(char *)(o + (uint16_t)(di + 0xbb)) != '\0') {
+       FUN_0000_bee2(0x19,0x5a,param_2);
+       uVar2 = unaff_CS;
+       goto LAB_1000_9694;
+@@ -58628,15 +58644,15 @@
+   }
+   else {
+ LAB_1000_9694:
+-    uVar1 = *(undefined1 *)(uVar2 + 0x9242);
++    uVar1 = *(undefined1 *)(o + (uint16_t)(uVar2 + 0x9242));
+   }
+   FUN_0000_bf3c(uVar1,uVar2,param_2);
+ LAB_1000_969d:
+-  *(undefined1 *)(param_2 + 0xd8) = 3;
+-  *(undefined1 *)(param_2 + 0xda) = 3;
+-  *(undefined1 *)(param_2 + 0xdc) = 3;
+-  *(undefined1 *)(param_2 + 0xde) = 3;
+-  *(undefined1 *)(param_2 + 0xd7) = 3;
++  *(undefined1 *)(o + (uint16_t)(di + 0xd8)) = 3;
++  *(undefined1 *)(o + (uint16_t)(di + 0xda)) = 3;
++  *(undefined1 *)(o + (uint16_t)(di + 0xdc)) = 3;
++  *(undefined1 *)(o + (uint16_t)(di + 0xde)) = 3;
++  *(undefined1 *)(o + (uint16_t)(di + 0xd7)) = 3;
+   FUN_1000_70c1();
+   return;
+ }

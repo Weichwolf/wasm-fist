@@ -1,0 +1,122 @@
+PATCH 398: FUN_1000_7681 + FUN_0000_7963 whole-function base-loss -- the second vehicle-type
+sprite-animation element method + its state-setter, siblings of 8039/7fbc (patch 397).  Same crash-bucket
+subtree: after patch 397 the AZER3 mission paint advanced past 8039 and crashed deterministically in 7681
+(the old host-ptr `*(int*)(param_1+0x97)` deref).  Structurally identical to patch 397; only the GS frame
+tables (0x2304/0x22bc vs 0x24fc/0x24b4) and the setter target (7963 vs 7fbc) differ.
+
+asm (re_out/fist_dat_image.bin), GS=word[DGROUP:0x70]=0x2d74 (str-seg), DS=DGROUP=0x1c00:
+  7681 (0x7681..0x76bf): DI=param_1=object near-off; SI=word[DS:di+0x97]; frame-list off = word[GS:
+       (byte[DS:si+0x19]<<1)+0x2304] if word[DS:si]==0x1a else word[GS:(word[DS:si]<<1)+0x22bc]; scan<=3:
+       bval=byte[GS:off]; stop when word[DS:(bval+di+0xad)]!=0; call 7963(bval,di).
+  7963 (0x7963..0x79be): DI=param_2=object; byte[DS:di+0x91/0xa5/0xa8/0xdb..0xe2]; [di+0xa8]=
+       byte[DS:(param_1>>1)+0x8f54]; uVar1=byte[DS:(param_1>>1)+0x8f0e]; word[DS:(uVar2*2)+di+0xad] (cmpw);
+       bf3c(uVar1,uVar2*2,di) (bf3c=patch 263) + far 70c1.
+Rebased di/si to g_mem+0x1c000+near-off, GS reads to g_mem+(gs<<4)+off, asm-exact widths (+0xad = WORD).
+Reached only via the mission-paint element-method dispatch -> no passing verify flow reaches either
+(the old host-ptr deref would have SEGV'd them) -> regression-safe.
+
+--- a/fist.c
++++ b/fist.c
+@@ -19653,25 +19653,31 @@
+ {
+   undefined1 uVar1;
+   uint uVar2;
+-  
+-  if (*(byte *)(param_2 + 0x91) != param_1) {
+-    *(byte *)(param_2 + 0x91) = param_1;
+-    if ((param_1 != 4) && (param_1 != *(byte *)(param_2 + 0xa5))) {
+-      *(byte *)(param_2 + 0xa5) = param_1;
++  /* PATCH 398: FUN_0000_7963 whole-function base-loss -- 7681's animation-state setter (sibling of 7fbc,
++     patch 397).  asm 0x7963..0x79be: DI=param_2=object near-off; byte[DS:di+0x91/0xa5/0xa8/0xdb..0xe2],
++     word[DS:(uVar2*2)+di+0xad] (cmpw); [di+0xa8]=byte[DS:(param_1>>1)+0x8f54]; uVar1=byte[DS:
++     (param_1>>1)+0x8f0e]; calls bf3c(uVar1,uVar2*2,di) (bf3c already patch 263) + far 70c1.  Ghidra
++     deref'd di as a HOST pointer; the +0xad read is a WORD.  Mission-paint path only -> regression-safe. */
++  uint8_t *o = g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_2;
++  if (*(byte *)(o + (uint16_t)(di + 0x91)) != param_1) {
++    *(byte *)(o + (uint16_t)(di + 0x91)) = param_1;
++    if ((param_1 != 4) && (param_1 != *(byte *)(o + (uint16_t)(di + 0xa5)))) {
++      *(byte *)(o + (uint16_t)(di + 0xa5)) = param_1;
+       uVar2 = (uint)(param_1 >> 1);
+-      *(undefined1 *)(param_2 + 0xa8) = *(undefined1 *)(uVar2 + 0x8f54);
+-      uVar1 = *(undefined1 *)(uVar2 + 0x8f0e);
+-      if (*(int *)(uVar2 * 2 + param_2 + 0xad) == 0) {
+-        *(undefined1 *)(param_2 + 0xa8) = 0xff;
++      *(undefined1 *)(o + (uint16_t)(di + 0xa8)) = *(undefined1 *)(o + (uint16_t)(uVar2 + 0x8f54));
++      uVar1 = *(undefined1 *)(o + (uint16_t)(uVar2 + 0x8f0e));
++      if (*(uint16_t *)(o + (uint16_t)(uVar2 * 2 + di + 0xad)) == 0) {
++        *(undefined1 *)(o + (uint16_t)(di + 0xa8)) = 0xff;
+         uVar1 = 0xd;
+       }
+       FUN_0000_bf3c(uVar1,uVar2 * 2,param_2);
+     }
+-    *(undefined1 *)(param_2 + 0xdb) = 3;
+-    *(undefined1 *)(param_2 + 0xdc) = 3;
+-    *(undefined1 *)(param_2 + 0xde) = 3;
+-    *(undefined1 *)(param_2 + 0xe0) = 3;
+-    *(undefined1 *)(param_2 + 0xe2) = 3;
++    *(undefined1 *)(o + (uint16_t)(di + 0xdb)) = 3;
++    *(undefined1 *)(o + (uint16_t)(di + 0xdc)) = 3;
++    *(undefined1 *)(o + (uint16_t)(di + 0xde)) = 3;
++    *(undefined1 *)(o + (uint16_t)(di + 0xe0)) = 3;
++    *(undefined1 *)(o + (uint16_t)(di + 0xe2)) = 3;
+     FUN_1000_70c1();
+   }
+   return;
+@@ -55687,30 +55693,40 @@
+ void __allregs FUN_1000_7681(int param_1)
+ 
+ {
+-  byte *pbVar1;
+-  int *piVar2;
+-  int iVar3;
+-  byte *pbVar4;
+-  
+-  iVar3 = 0;
+-  piVar2 = (int *)*(int *)(param_1 + 0x97);
+-  if (piVar2 != (int *)0x0) {
+-    if (*piVar2 == 0x1a) {
+-      pbVar4 = (byte *)*(undefined2 *)((uint)*(byte *)((int)piVar2 + 0x19) * 2 + 0x2304);
++  uint iVar3;
++  uint16_t si;
++  uint16_t idx;
++  uint16_t tbloff;
++  byte bval;
++  /* PATCH 398: FUN_1000_7681 whole-function base-loss -- sibling of 8039 (patch 397), a second
++     vehicle-type sprite-animation element method.  asm 0x7681..0x76bf: identical shape to 8039 with
++     GS=word[DGROUP:0x70]=str-seg, DI=param_1=object near-off; frame-list off = word[GS:
++     (byte[DS:si+0x19]<<1)+0x2304] (word[DS:si]==0x1a) else word[GS:(word[DS:si]<<1)+0x22bc]; scan <=3:
++     bval=byte[GS:off]; stop when word[DS:(bval+di+0xad)]!=0; call 7963(bval,di).  Rebased di/si to
++     g_mem+0x1c000+near-off and the GS table reads to g_mem+(gs<<4)+off, asm-exact widths.  Mission-paint
++     dispatch only -> regression-safe. */
++  uint8_t *o  = g_mem + 0x1c000;
++  uint8_t *gs = g_mem + ((uint32_t)*(uint16_t *)(o + 0x70) << 4);
++  uint16_t di = (uint16_t)param_1;
++  idx = 0;
++  si = *(uint16_t *)(o + (uint16_t)(di + 0x97));
++  if (si != 0) {
++    if (*(uint16_t *)(o + si) == 0x1a) {
++      tbloff = *(uint16_t *)(gs + (uint16_t)((uint16_t)(*(byte *)(o + (uint16_t)(si + 0x19)) << 1) + 0x2304));
+       goto LAB_1000_76aa;
+     }
+-    iVar3 = *piVar2 << 1;
++    idx = (uint16_t)(*(uint16_t *)(o + si) << 1);
+   }
+-  pbVar4 = (byte *)*(undefined2 *)(iVar3 + 0x22bc);
++  tbloff = *(uint16_t *)(gs + (uint16_t)(idx + 0x22bc));
+ LAB_1000_76aa:
+   iVar3 = 3;
+   do {
+-    pbVar1 = pbVar4;
+-    if (*(int *)((uint)*pbVar1 + param_1 + 0xad) != 0) break;
+-    pbVar4 = pbVar4 + 1;
++    bval = *(byte *)(gs + tbloff);
++    if (*(uint16_t *)(o + (uint16_t)((uint)bval + di + 0xad)) != 0) break;
++    tbloff = tbloff + 1;
+     iVar3 = iVar3 + -1;
+   } while (iVar3 != 0);
+-  FUN_0000_7963(*pbVar1,param_1);
++  FUN_0000_7963(bval,param_1);
+   return;
+ }
+ 
