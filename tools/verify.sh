@@ -295,6 +295,9 @@ FLOWS=(
   # Deterministic (native 2x AE=0), native<->wasm 0-diff.  Reached via FIST_FSG_BATTLE (patch 380).
   "mission-cockpit-ukraine4|25000|missfb|UKRAINE4|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
   "mission-cockpit-ukraine7|25000|missfb|UKRAINE7|$ROOT/ref/mission_azer1_cockpit_native320.png"
+  # UKRAINE8 (D31/C31-group, M1 idx0): crash-free spawn, central chrome == azer1 M1 crop AE=0; resting
+  # turret.  Deterministic (native 2x AE=0), wasm AE=0, native<->wasm 0-diff.
+  "mission-cockpit-ukraine8|25000|missfb|UKRAINE8|$ROOT/ref/mission_azer1_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
