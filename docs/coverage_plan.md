@@ -1045,3 +1045,18 @@ creates viewport elements (the 0x2d1d template build in the mission-init, 4823/1
 element CREATE), dump the element list SYRIA2 vs AZER1, and locate the base-loss that emits the 0x20/0x22
 phantoms.  Fixing it makes SYRIA2 (and SYRIA4/CYPRUS4/AZER3/UKRAINE1) present the single-viewport cockpit
 like AZER1 -> +5 missions.  This is the terminal, sharpest characterization of the 2b1e-chain SYRIA2 hang.
+
+### SYRIA2 phantom-viewport methods IDENTIFIED (2026-08-18): a80b (d549=0x22) + a84c (d549=0x1c).
+The view/camera-setup methods that set d549 (load d558=angle, d55a/d55e/d562=camera X/Y/Z from an object):
+- **FUN_1000_a84c** (build:64595, patch 302): d549=0x1c, camera from the PLAYER vehicle (param_1) -- the
+  cockpit main view.  AZER1's ONLY viewport; reached from 795c.
+- **FUN_1000_a80b** (build:64550): d549=0x22, d548=2, camera from a DIFFERENT object (param_2 near-offset).
+  An EXTRA (non-player) camera view.  SYRIA2 dispatches this (+ the d549=0x20 variant); AZER1 never does.
+So SYRIA2's cockpit display list carries extra camera-view elements dispatching a80b (0x22) and a 0x20 setter,
+which cycle 0x1c->0x20->0x1c->0x22 without the frame ever presenting.  Since SYRIA2 is M1 == AZER1 (same
+player cockpit), these extra object-cameras are the SUSPECT phantoms.  d549=0x20 has NO literal setter in
+build/fist.c (only 0x1c@a84c, 0x1e@57930-map, 0x22@a80b) -> the 0x20 comes from a computed store or an
+un-decompiled method -> FIND IT (grep the mga/ext units + non-literal d549 writes).  NEXT SESSION (sharpest):
+(1) find a80b's and the 0x20-setter's CALLERS (which display-list element/class dispatches them); (2) dump the
+209e element list SYRIA2 vs AZER1 to confirm the extra elements; (3) trace their CREATE to the base-loss (or
+confirm legit + fix the multi-view termination).  Terminal map of the 2b1e-chain SYRIA2 hang; +5 missions when fixed.
