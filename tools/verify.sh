@@ -289,6 +289,12 @@ FLOWS=(
   # SAUDI5/6/SYRIA5/7/TRAIN1) are held back: their refs are genuine but expose a port-side central
   # heading/azimuth-dial divergence (grey dial + red needle ~(108-118,116-131)) -> a real bug to fix.
   "mission-cockpit-india6|25000|missfb|INDIA6|$ROOT/ref/mission_india6_cockpit_native320.png"
+  # UKRAINE4 (map D-group, M1 idx0) + UKRAINE7 (D32/C32, M1 idx0): crash-free spawn, central-chrome
+  # (MC_REGION) bit-identical to the existing M1 refs -- resting spawn turret (no dial divergence).
+  # Same-map ref reuse: UKRAINE4 matches the cyprus1 M1 crop AE=0; UKRAINE7 matches the azer1 M1 crop AE=0.
+  # Deterministic (native 2x AE=0), native<->wasm 0-diff.  Reached via FIST_FSG_BATTLE (patch 380).
+  "mission-cockpit-ukraine4|25000|missfb|UKRAINE4|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  "mission-cockpit-ukraine7|25000|missfb|UKRAINE7|$ROOT/ref/mission_azer1_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
