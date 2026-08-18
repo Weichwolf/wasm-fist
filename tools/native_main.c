@@ -1178,10 +1178,15 @@ static void fist_ext_689a(uint8_t *xb) {
 }
 
 int g_fist_after_map = 0;   /* set once op 0x18 (map load) has fired -> roster probe gate */
+void fist_dbg_op2c(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoint at the op-0x2c gate */
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
     if (op == 0x18) g_fist_after_map = 1;
+    /* FIST_DBG_OP2C: clean gdb breakpoint at the first op-0x2c gate (crash-bucket secondary-viewport paint) */
+    if (op == 0x2c && g_fist_after_map && getenv("FIST_DBG_OP2C")) {
+        static int once=0; if(!once){ once=1; extern void fist_dbg_op2c(void); fist_dbg_op2c(); }
+    }
     /* FIST_ROSTERTRACE (diag): log roster slot-4/5 object + its type at each op-gate -> pinpoint WHEN the
      * crash-bucket garbage type (0x0f00) appears (build-time vs a later corrupting step). Survives the
      * pre-op-0x2c-paint crash window. */
