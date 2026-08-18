@@ -1031,3 +1031,17 @@ elements (209e walk: each element's word0 class + d549 kind) SYRIA2 vs AZER1 to 
 elements; + trace each viewport's paint method + its d548 present-gate.  This is the deepest cockpit-render
 layer, now fully mapped from "hang rc=124" down to "3-viewport non-terminating render".  Shared SYRIA2/4
 CYPRUS4 AZER3 UKRAINE1.
+
+### SYRIA2 3-viewport root -- REFINED to branch (b) SPURIOUS (2026-08-18).
+DECISIVE: SYRIA2's player vehicle is **M1/type-0 (2d34=0xc252, type=0x0000) -- IDENTICAL to AZER1**.  Same
+vehicle => same cockpit template (0x2d1d) => it should build AZER1's SINGLE viewport (d549=0x1c).  The extra
+d549=0x20 and 0x22 viewport elements are therefore **SPURIOUS**, not legitimate multi-viewport instruments.
+So the render loop is fine; the DISPLAY-LIST CONSTRUCTION wrongly adds two phantom viewport elements for
+SYRIA2, and each intercepts before the 0x1c chain's present (23ce sets d548=0x81 but the next 2322 picks the
+0x20 viewport instead of presenting).  The phantoms correlate with SYRIA2's larger roster (op54=55 vs AZER1's
+39), so the cockpit-template/viewport element-CREATE has a base-loss where a roster count or index over-runs
+into extra viewport records.  NEXT (next session, sharp target): find the cockpit display-list build that
+creates viewport elements (the 0x2d1d template build in the mission-init, 4823/1cdb/1e27 family + the per-
+element CREATE), dump the element list SYRIA2 vs AZER1, and locate the base-loss that emits the 0x20/0x22
+phantoms.  Fixing it makes SYRIA2 (and SYRIA4/CYPRUS4/AZER3/UKRAINE1) present the single-viewport cockpit
+like AZER1 -> +5 missions.  This is the terminal, sharpest characterization of the 2b1e-chain SYRIA2 hang.
