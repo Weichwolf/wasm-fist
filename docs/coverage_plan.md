@@ -1060,3 +1060,18 @@ un-decompiled method -> FIND IT (grep the mga/ext units + non-literal d549 write
 (1) find a80b's and the 0x20-setter's CALLERS (which display-list element/class dispatches them); (2) dump the
 209e element list SYRIA2 vs AZER1 to confirm the extra elements; (3) trace their CREATE to the base-loss (or
 confirm legit + fix the multi-view termination).  Terminal map of the 2b1e-chain SYRIA2 hang; +5 missions when fixed.
+
+### SYRIA2 -- CORRECTION: a80b viewports are LEGIT (secondary PLAYER views), bug is d548 multi-viewport sequencing.
+FUN_1000_7a38 (build:59845, patch 305) = a "sibling viewport DIRTY method (same class as 795c/79f5)" that
+calls **a80b(0xf, di_veh)** where di_veh = DAT_2000_2d34 = the PLAYER vehicle.  So d549=0x22 is a SECONDARY
+PLAYER viewport (not a foreign-object phantom -- my earlier "spurious" note is SUPERSEDED).  7a38's setup is
+gated `if((DAT_2000_2d16 & 1)==0)` and 795c increments 2d16 -> the main (0x1c) and secondary (0x22/0x20)
+viewports ALTERNATE by 2d16 parity (a designed multi-pass cockpit render).  The real bug: d548 is a SINGLE
+GLOBAL render-phase, and each viewport presents only in its own d548 state (795c: d548==0x81; 7a38: d548==0x82
+via the `(d548&0x7f)==2` branch + c694).  SYRIA2 has >1 active viewport so the global d548 can't satisfy all
+present-gates in sequence -> no viewport ever completes to op-0x24 -> spin.  AZER1's mission-cockpit flow may
+just exit at the FIRST present before its secondary pass.  RESOLUTION needs a 209e element-order + per-element
+d548-state dump (AZER1 vs SYRIA2): confirm which viewports are active, and whether the port's global-d548
+model mis-sequences the multi-viewport present (vs the original driving each viewport's d548 to its present
+state in turn).  This is a real render-architecture question, not a one-line base-loss -> deferred to a focused
+session.  The 2b1e/ac9e CRASH fixes (395/396) stand; the SYRIA2 HANG is this multi-viewport sequencing.
