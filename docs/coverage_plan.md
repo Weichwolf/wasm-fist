@@ -1011,3 +1011,23 @@ why does SYRIA2's d549 (word[DGROUP:0x1549]) alternate?  Trace d549's writer acr
 bit 1 (0x03).  This is the SAME 378e/phase-table machinery as AZER2 twin #3 (patch 392 fixed the 5d43
 view-SELECT, but this is the per-frame phase d549/d548 CYCLING, a deeper layer).  Deep multi-session-class
 dig, now precisely mapped.  Method: d548/d549 write-trace (throwaway 22dd + 795c + 23ce logging) AZER1 vs SYRIA2.
+
+### SYRIA2 hang ROOT (2026-08-18, FIST_DIAG2322 -- FULLY mapped): 3 cockpit VIEWPORTS cycling, no terminate.
+2322 selector trace (d549 = viewport kind, at each chain-select), node[3b3c]=0x011a (cockpit) throughout:
+- **AZER1:** d549=0x1c d548=0x01 -> chain @6c82 -> ONE pass -> present -> done.  Single viewport.
+- **SYRIA2:** cycles FOREVER: `0x1c(d548=01,@6c82) -> 0x20(d548=03,@6c9a) -> 0x1c -> 0x22(d548=02,@6ca2)
+  -> 0x1c -> 0x20 -> 0x1c -> 0x22 ...`  THREE viewport kinds (0x1c main + 0x20 + 0x22), each its own phase
+  chain, never converging to a present.
+So SYRIA2's cockpit display list carries TWO EXTRA viewport elements (d549=0x20 and 0x22) that AZER1 lacks
+-- additional instrument viewports (e.g. an independent commander/target sight) -- and the multi-viewport
+render loop never terminates: each viewport stays dirty (795c-class present needs d548==0x81; the 0x20/0x22
+viewports sit at d548=0x03/0x02 -> `-1<(char)d548` early-return, never present, never clear) so 209e keeps
+re-dispatching them.  **ROOT QUESTION for next session (two branches):** (a) are the 0x20/0x22 viewports
+LEGIT SYRIA2 cockpit elements -> then the multi-viewport TERMINATION/present logic is what's broken (each
+viewport's paint method must reach its own d548==0x81 present, or the frame must present after all are
+walked); or (b) are they SPURIOUS (a display-list-construction base-loss creating phantom viewport elements
+for SYRIA2's larger roster) -> find the element-CREATE that adds them.  METHOD: dump the cockpit display-list
+elements (209e walk: each element's word0 class + d549 kind) SYRIA2 vs AZER1 to see if 0x20/0x22 are real
+elements; + trace each viewport's paint method + its d548 present-gate.  This is the deepest cockpit-render
+layer, now fully mapped from "hang rc=124" down to "3-viewport non-terminating render".  Shared SYRIA2/4
+CYPRUS4 AZER3 UKRAINE1.
