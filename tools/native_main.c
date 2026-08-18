@@ -1182,6 +1182,18 @@ int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
     if (op == 0x18) g_fist_after_map = 1;
+    /* FIST_ROSTERTRACE (diag): log roster slot-4/5 object + its type at each op-gate -> pinpoint WHEN the
+     * crash-bucket garbage type (0x0f00) appears (build-time vs a later corrupting step). Survives the
+     * pre-op-0x2c-paint crash window. */
+    if (getenv("FIST_ROSTERTRACE")) {
+        static uint16_t p4=0xffff,p5=0xffff,t4=0xffff,t5=0xffff;
+        uint16_t s4=*(uint16_t*)(dg+0x6d3c+8), s5=*(uint16_t*)(dg+0x6d3c+10);
+        uint16_t ty4=s4?*(uint16_t*)(dg+s4):0, ty5=s5?*(uint16_t*)(dg+s5):0;
+        if (s4!=p4||s5!=p5||ty4!=t4||ty5!=t5){
+            fprintf(stderr,"[rtrace] op=0x%02x slot4=0x%04x(t=0x%04x) slot5=0x%04x(t=0x%04x)\n",op,s4,ty4,s5,ty5);
+            p4=s4;p5=s5;t4=ty4;t5=ty5;
+        }
+    }
     /* FIST_DGDUMP=<prefix> (diagnostic, default OFF): dump the low DGROUP window (0x1c000..0x1e200, 8.5KB)
      * to <prefix>.<tag>.bin at well-defined mission points so native vs wasm DGROUP can be byte-diffed to
      * classify the mission op-0x50 divergence (host-pointer leak vs tick-timing).  Tags: map1 = right after
