@@ -1204,3 +1204,17 @@ for 8 missions.  NEXT: dump the FULL roster for azer6 (each unit's +0x55 + the p
 which word[0x6d34] should point to; or watch veh+0x55 for a SECOND write (post the file read) in DOSBox-
 matching missions.  This is now non-contradictory and concrete.  RULED OUT: parser placement, turret-AI,
 timing, the 75e3 read.  +8 missions.  No speculative patch -- the input-provenance is still one step from the fix.
+
+### Dial: no roster unit has veh+0x55=56 -> the port MISSES a computed init of player velocity (needs oracle).
+azer6 roster dump (FIST_ROSTER55): player=slot0(0xc05c, type0 M1, +0x55=21); other units +0x55 = 60/43/45/52/
+40/32 -- **NONE is 56** (DOSBox's player value).  So it's NOT a wrong-player-selection (no unit carries 56).
+So the ORIGINAL computes/overwrites player+0x55 (=velocity) to ~56 after the .FSG read, and the PORT MISSES
+that overwrite (keeps the file byte 21).  The +0x55 writers reachable in the port (a02d `>>=1` decay, a0a4/
+a0ab collision velocity-flip, 27259 `=0` init) are all collision/decay -- NONE sets the initial ~56.  So the
+missing write is either (i) in an unreached init path, or (ii) base-lost to a wrong address.  RESOLUTION now
+requires the DOSBox/QEMU ORACLE (CLAUDE.md's tighter loop): QEMU `-s -S` gdb-stub, breakpoint on FIST.DAT's
+player-vehicle init, watch [player+0x55] during AZER6 load -> capture the instruction that sets it to ~56,
+map it to the decompiled fn, find why the port's version doesn't run/writes wrong.  This is the FIRST time
+this session a fix genuinely needs the original's runtime trace (all prior steps were port-side).  RULED OUT
+(all verified, no band-aids): .FSG parser placement, turret-AI, capture-timing, the 75e3 needle read, wrong-
+roster-player.  +8 missions.  The 8 genuine refs are committed and ready.
