@@ -254,6 +254,11 @@ band (§4) blocks AE=0, and the cockpit carries a 6209 residual on top.
 
 ## 4. Mission-windshield-terrain deep frontier — memory note CHECK
 
+> NOTE (2026-08-18 cleanup): the per-`docs/oracle_*.md` citations below were the detailed point-in-time
+> recon; those intermediate files were removed and their conclusions consolidated into this section and
+> `docs/oracle_mission_spawn.md` (the terrain verdict) + the `mission-terrain-tile-pipeline` /
+> `colormap-groundtruth` / `voxel-render-is-engine-side` memories. The findings quoted below stand.
+
 The team lead's memory note (6980 HM/coord layout under render-time non-contiguous paging;
 offline-unvalidatable ~40%; colormap/HM/camera content levers byte-exhausted; correct scene gated
 `FIST_TILEFILL`) is **ACCURATE**. Cross-checked against the three current docs:
