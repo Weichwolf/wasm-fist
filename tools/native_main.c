@@ -1233,9 +1233,12 @@ int fist_extender_gate(void) {
         static uint16_t p4=0xffff,p5=0xffff,t4=0xffff,t5=0xffff;
         uint16_t s4=*(uint16_t*)(dg+0x6d3c+8), s5=*(uint16_t*)(dg+0x6d3c+10);
         uint16_t ty4=s4?*(uint16_t*)(dg+s4):0, ty5=s5?*(uint16_t*)(dg+s5):0;
-        if (s4!=p4||s5!=p5||ty4!=t4||ty5!=t5){
-            fprintf(stderr,"[rtrace] op=0x%02x slot4=0x%04x(t=0x%04x) slot5=0x%04x(t=0x%04x)\n",op,s4,ty4,s5,ty5);
-            p4=s4;p5=s5;t4=ty4;t5=ty5;
+        static uint16_t pdir=0xffff, prec=0xffff;
+        uint16_t dir=*(uint16_t*)(dg+0x4f0);
+        uint16_t rec0 = *(uint16_t*)(g_mem + ((uint32_t)dir<<4) + 2);  /* first record's seg (valid~0x4b16) */
+        if (s4!=p4||s5!=p5||ty4!=t4||ty5!=t5||dir!=pdir||rec0!=prec){
+            fprintf(stderr,"[rtrace] op=0x%02x slot4=0x%04x(t=0x%04x) slot5=0x%04x(t=0x%04x) [0x4f0]dir=0x%04x rec0seg=0x%04x\n",op,s4,ty4,s5,ty5,dir,rec0);
+            p4=s4;p5=s5;t4=ty4;t5=ty5;pdir=dir;prec=rec0;
         }
     }
     /* FIST_DGDUMP=<prefix> (diagnostic, default OFF): dump the low DGROUP window (0x1c000..0x1e200, 8.5KB)
