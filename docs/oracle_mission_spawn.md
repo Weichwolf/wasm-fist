@@ -203,7 +203,7 @@
 > the globals the 6 iterations injected cannot reproduce the PNG frame. The residual is therefore NOT the
 > depth-step and NOT reachable by injecting these captures; it is either (a) a wrong-tick globals capture
 > (the RAM dump not frame-matched to the PNG) or (b) the tile ADDRESS/WINDOW geometry (`[3918]` offset /
-> the `0xf200` window / bc06 rows 0..13 from `docs/oracle_bc90_capture.md`) so the same tile is sampled at
+> the `0xf200` window / bc06 rows 0..13 from the bc90 capture recon (removed in cleanup)) so the same tile is sampled at
 > different addresses. **The next productive step is a frame-matched re-capture (globals + DAC + VRAM at the
 > IDENTICAL SIGUSR2 tick) so the three ground-truths are self-consistent, THEN re-diff — not another
 > depth-step experiment.** Banked seams unchanged; new one-liner repro of this verdict:

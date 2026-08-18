@@ -1100,7 +1100,7 @@ Root cause: `SOUNDDVR.DVR+0x2` = `jmp 0x78`, and the init body at **0x78 was nev
 function (RecoverAll's static discovery can't see the runtime far-call target). MGAVIDEO had the identical
 problem, fixed by `tools/ghidra/SeedDriverVecs.java` (seed the entry thunks + method vectors → re-decompile
 → the init + methods become functions in the fmap). SOUNDDVR was explicitly deferred ("sound is secondary",
-`docs/stage1.md`). That deferral is the blocker.
+the patch headers). That deferral is the blocker.
 
 ---
 
