@@ -1785,6 +1785,13 @@ int fist_extender_gate(void) {
                             *(int16_t*)(dg+(uint16_t)(slot+0x55)), USI55(slot), *(uint8_t*)(dg+(uint16_t)(slot+0x19))); }
                     fprintf(stderr,"\n");
                     #undef USI55
+                    if (getenv("FIST_DIAL55_OBJ")) { /* dump the player object (0..0x80) as words for oracle diff */
+                        uint16_t off=*(uint16_t*)(dg+0x6d34);
+                        fprintf(stderr,"[dial55obj] focus=0x%04x\n",off);
+                        for (int b=0;b<0x80;b+=0x10){ fprintf(stderr,"  +%02x:",b);
+                            for(int i=0;i<8;i++) fprintf(stderr," %6d", *(int16_t*)(dg+(uint16_t)(off+b+i*2)));
+                            fprintf(stderr,"\n"); }
+                    }
                 }
             }
             if (getenv("FIST_MISSFB_PALCMP")) {
