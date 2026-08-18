@@ -1093,3 +1093,17 @@ NEXT: find the dial-needle draw (a rotated red line at ~(113,124); likely a cock
 fixed-point rotate on an angle field) -- gdb framebuffer-watchpoint on a dial fb pixel (g_mem+0xA0000+124*320+
 110) via the SIGSTOP-pause+attach method, get the draw backtrace, find the field it reads, rebase/correct it.
 Fixing it greens 8 missions at once (+ likely improves any in-motion azimuth display).
+
+### Dial-draw hunt status (2026-08-18): bc0c RULED OUT (gdb false-lead); draw fn still to locate.
+A gdb framebuffer-watchpoint (SIGSTOP-pause+attach on a dial fb pixel) reported the writer as FUN_0000_bc0c,
+BUT a direct instrument (log bc0c when param_2 points into the framebuffer) shows bc0c NEVER writes the fb for
+AZER1 OR AZER6 -> bc0c is a per-object update method (dispatched from the c0e5 182-object iterator via
+[bx-0x1bac](di)), NOT the dial.  The gdb result was UNRELIABLE because /tmp/fist_diag carried the pausedial
+instrument which line-shifted the source -> imprecise frame symbolication / a coincidentally-aliased write.
+LESSON: for the dial watchpoint, use a MINIMAL pause hook that doesn't shift addresses, or watch in the
+committed binary; verify the caught writer with a direct param-range instrument before trusting it.
+The dial bug itself stands precisely characterized (port draws a mission-varying needle where DOSBox draws a
+CONSTANT rest position; 4 missions match by coincidence, 8 differ).  NEXT: relocate the dial-needle draw
+cleanly -- watch the dial fb pixel with a 1-line pause hook (or an mga-blitter backtrace gated on the dial
+region), confirm via direct instrument, then find + rebase the mission-varying field it reads (should be the
+turret azimuth = 0 at spawn).  +8 missions when fixed; the 8 genuine refs are already committed.
