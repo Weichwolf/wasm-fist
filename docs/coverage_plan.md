@@ -1154,3 +1154,20 @@ already set at the first word[0x6d34]!=0 frame (pauseveh confirmed), so pause-th
 either (a) instrument the mission/roster load to log the player-vehicle turret-target/facing init + compare
 AZER1 vs AZER6, or (b) pause at an EARLIER load marker (pre-roster) then watch veh+0x55.  Find the base-lost
 initial-facing/target read.  Faithful 75e3 read + a02d/a0ab slew stay untouched.  +8 missions when fixed.
+
+### Dial bug: veh+0x55 is AUTHENTIC .FSG data, read CORRECTLY -- parser RULED OUT (2026-08-18).
+CRITICAL correction chain: veh+0x55 is NOT turret azimuth (a0ab is the proximity/collision search, patch 271;
+its +0x55 write is a velocity-flip) -- it is the vehicle VELOCITY, and the dial is the SPEEDOMETER (matches
+the subagent's "MPH speedometer needle").  gdb watchpoint (pause-at-ACCEPT 4be2==1 in native_main.c, then
+watch veh+0x55) caught the write from `memcpy <- fread <- dos_int(INT21h) <- FUN_0000_d81e <- d7e1 <- d501`
+= the .FSG parser reads a 249-byte vehicle record straight into the object.  DECISIVE: dumped the loaded
+249-byte record and found it VERBATIM in the raw .FSG at offset **0x97 for BOTH AZER6 and AZER1** (same
+offset), with veh+0x55 = the authentic file byte (AZER6=0x15=21, AZER1=0x38=56).  So **the .FSG read is
+CORRECT and veh+0x55 is authentic, shared with DOSBox** -> the parser is NOT the bug, and port+DOSBox START
+with the SAME speedometer value.  Therefore the needle divergence is EITHER (a) the post-load PHYSICS/SIM
+evolves veh+0x55 differently in the port for 8 missions (a velocity-update base-loss), OR (b) the differing
+dial pixels are a DIFFERENT instrument than 75e3's veh+0x55 needle (re-verify which fb pixels actually differ
+vs which 75e3 draws).  RULED OUT this session: .FSG parser placement, turret-AI, capture-timing (SETTLE sweep).
+NEXT: (1) dump veh+0x55 at the EXACT captured op-0x24 frame port vs a DOSBox veh+0x55 probe (or compare the
+port's needle sprite vs the DOSBox ref's needle directly); (2) if they differ at the captured frame despite
+equal load value, trace the velocity-update sim (c0ca flight model) for the 8-mission base-loss.  +8 missions.
