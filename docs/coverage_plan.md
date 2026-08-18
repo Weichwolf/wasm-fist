@@ -1120,3 +1120,22 @@ needle-only pixel that the backdrop doesn't cover, e.g. a pixel only the DOSBox 
 (122,124)), or (2) enumerate the cockpit display-list elements (209e walk, each element's class word0 + paint
 method) and find the azimuth-dial element, then read its paint's angle-field source.  The field is mission-
 varying in the port but should be constant (turret azimuth=0 at spawn).  +8 missions when fixed; 8 refs banked.
+
+### Dial bug LOCATED: the needle field is vehicle+0x55 (turret azimuth) (2026-08-18).
+gdb watchpoint (clean /tmp/fist_ndl, pause hook in native_main.c -> ACCURATE fist.c symbolication) on a
+needle pixel -> the needle is a SPRITE blitted by FUN_1000_75e3 -> [c6c8]=294d/298a (patch 311).  75e3's
+needle-sprite index: `si = word[vehicle+0x55]; usi = (abs(si)>>2)&0xfffe clamp 0x18; sprite = word[DGROUP:
+usi+0x8f24]`.  The read + sprite table are CORRECT (patch 311).  Dumped word[vehicle+0x55] at 75e3:
+- CORRECT (AE=0): AZER1=56(usi14) CYPRUS1=0(usi0) SAUDI1=56(usi14) INDIA6=52(usi12)
+- WRONG:          AZER6=21(usi4) SAUDI5=19(usi4) SYRIA7=46(usi10) TRAIN1=40(usi10)
+So **vehicle+0x55 = the turret azimuth** and it is MISSION-SPECIFIC (not constant -- the subagent's "DOSBox
+constant" was a mis-characterization; the needle genuinely varies per mission, the port just computes the
+WRONG azimuth for 8).  +0x55 is init 0 (FUN@27259) then driven by the turret-rotation/AI logic (a14c/a15a
+= build 63799 `sar word[di+0x55],1` / 63812 `neg`, 64167/64175 `+0x55 +/-1`, and the target-slew).  The port's
+turret azimuth TRAJECTORY diverges from DOSBox for 8 missions (NOT a capture-timing artifact -- SETTLE sweep
+ruled out) -> a base-loss in the turret rotation/target-lock sim (candidate: 63728 `*(int*)((int)piVar7+0x55)`
+= piVar7 host-ptr deref, a residual base-loss near the rebased 63799/63812; also connects to the b112 AI-lock
+frontier -- the turret slews toward the locked target, so a wrong target-lock -> wrong azimuth).  NEXT: dump
+word[veh+0x55] TRAJECTORY over the first ~15 frames AZER1(correct) vs AZER6(wrong) -> does it slew to a wrong
+target or compute wrong?  Then fix the turret-rotation/target base-loss.  +8 missions; 8 refs already banked.
+The 75e3 read is FAITHFUL -- do NOT touch it; the bug is upstream in the +0x55 turret-azimuth sim.
