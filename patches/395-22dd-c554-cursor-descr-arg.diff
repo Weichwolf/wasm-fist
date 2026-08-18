@@ -1,0 +1,30 @@
+PATCH 395: 22dd cursor-bracket [DGROUP:0x554] dispatch -- restore the DROPPED param_1.
+Asm 0x22dd: `mov bx,[0x156a]; lcall [0x554]` ... cursor-draw loop ... `lcall [0x554]`.  BX = the descriptor
+near-offset DAT_1000_d56a (=uVar1), passed to BOTH far calls; DGROUP:0x554 = 0x3e78:0x024f = MGAVIDEO
+FUN_0000_024f (fb-descriptor SELECT: word[DGROUP:0x724]=param_1, ensure desc[0]=0xa000/desc[2]=0x140).
+The __allregs indirect dispatch dropped BX -> 024f read uninitialised stack -> word[0x724]=garbage -> next
+frame's HUD blit 2b1e read fb_seg=word[DGROUP:garbage] -> SIGSEGV 2b1e+0x190 for every mission whose d548>0
+cursor-bracket fires (SYRIA2/4, CYPRUS4, AZER3, UKRAINE1; AZER1 skips it, d548<=0).  024f's 2nd arg flows
+only to 02c1's param_2 (patch 187: UNUSED) -> pass 0.  Faithful arg-restore (cdecl; __allregs no-op).
+gdb HW-watchpoint verified the frame-0 word[0x724] clobber.
+
+--- a/fist.c
++++ b/fist.c
+@@ -9634,7 +9634,7 @@
+      AFTER 23ce armed bit7.  Read the low BYTE, signed. */
+   if (0 < (int)*(int8_t *)(g_mem + 0x1d548)) {
+     uVar1 = DAT_1000_d56a;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(uVar1, 0);   /* PATCH 395: bx=d56a descriptor */
+     DAT_1000_c450 = 3;
+     do {
+       /* PATCH 185: asm 0x22f3 `mov bx,[0x4a86]; call word ptr [bx]` -- bx = the cursor WORD near-offset
+@@ -9642,7 +9642,7 @@
+          0a86 int** so `*DAT_2000_0a86` wild-derefed the near-offset as a host pointer. */
+       (*(code *)fist_icall_near(0x0u,*(uint16_t *)(g_mem+0x1c000+(uint16_t)DAT_2000_0a86)))(uVar1);
+     } while (DAT_1000_c450 != 0);
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(0);
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(uVar1, 0);   /* PATCH 395: bx=d56a descriptor */
+     return;
+   }
+   DAT_2000_0a86 = DAT_2000_0a88;  /* PATCH 185: WORD copy (asm 0x2307 `mov ax,[0x4a88]; mov [0x4a86],ax`), not a ptr cast */
