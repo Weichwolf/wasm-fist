@@ -886,3 +886,37 @@ instrument 6f1f's block conditions (4d0e, 2d34[0xd], word[0x2561a]) + the c724 i
 AZER1 -> either (a) 4d0e should be 2 for SYRIA2 (cockpit-init incomplete -> the 44be/72d2 mode path differs),
 or (b) the fb descriptor (c724) must be installed before this HUD blit.  Connects to the 4d0e mode flag (5d43->
 44be cockpit path).  A multi-step dig -- deferred below the surer NEEDS-REF captures.  Throwaway diag mk_2b1e.py.
+
+## 2b1e 5-mission crash — ROOT-CAUSED to the 22dd cursor-bracket 024f re-dispatch (2026-08-18)
+
+The commit-9600d15 premise "wild m_260c_recseg source" is DEBUNKED: for SYRIA2 the sprite record
+recseg=0x4b16 has a VALID header (rows=11 cols=31). The crash is purely a WILD FRAMEBUFFER DESTINATION.
+
+**Mechanism (gdb hardware-watchpoint on DGROUP:0x724, SYRIA2, ASLR-off):**
+- 00e8 (VGA mode-set, boot) sets `word[DGROUP:0x724]=0x726` (the fb descriptor; desc[0x726][0]=0xa000).
+- In-mission frame 0 of 459a, `FUN_0000_22dd` takes its `if (0 < (int8_t)d548)` branch and runs the
+  CURSOR-BRACKET: asm `mov bx,[0x156a]; lcall [0x554]` ... cursor-draw loop ... `lcall [0x554]`.
+- `[DGROUP:0x554]` (DAT_1000_c554) = far ptr **0x3e78:0x024f = the MGAVIDEO driver's FUN_0000_024f**
+  (fb-descriptor install: `while(*p==0){*p=0xa000;p[2]=0x140;} word[0x724]=param_1; 02c1(...)`).
+- Our __allregs dispatch `(*(code*)fist_icall_far(c554))()` DROPS the arg -> 024f reads an
+  uninitialised stack slot for param_1 (gdb: 0x9ba9; in the plain crash run: 0) -> `word[0x724]=garbage`.
+- Frame 1's paint (459a->206f/209e->77dc->795c->2ae9->2b1e) reads `word[0x724]=0` -> fb_di=0 ->
+  fb_seg=word[DGROUP:0]=0xcbc3 -> 2b1e blits to seg 0xcbc3 -> SIGSEGV at 2b1e+0x190.
+- **AZER1 never crashes because its d548<=0 at this frame -> it SKIPS the whole cursor-bracket.**
+  c554 (->024f) and d56a (=0x156c) are BIT-IDENTICAL AZER1 vs SYRIA2; the sole difference is the branch.
+
+**Why the obvious "thread the asm's BX=d56a" is INSUFFICIENT (do NOT ship it):** the faithful arg is
+`BX = word[DGROUP:0x156a] = DAT_1000_d56a = 0x156c`. But `word[DGROUP:0x156c]=0x4b15` (a sprite seg,
+NOT 0xa000), so 024f(0x156c): the while-loop is SKIPPED (*p!=0) -> `word[0x724]=0x156c` -> 2b1e
+fb_seg=0x4b15 -> STILL a wild write. So either (a) DGROUP:0x554 should not resolve to 024f here, or
+(b) the cursor object at DGROUP:0x156c is upstream-wrong (its [0] should be 0xa000, i.e. d56a should be
+a fresh fb descriptor), or (c) our patched 024f body diverges from the real driver's.
+
+**NEXT (needs the ORACLE, not improvisation):** DOSBox/QEMU-trace the real game at 22dd's `lcall [0x554]`
+for a mission whose cursor is active in-cockpit: capture (1) the real target of [0x554], (2) BX at the
+call, (3) `word[0x724]` before/after. That settles whether 024f is the right target and what descriptor
+it must install. The whole family SYRIA2/4, CYPRUS4, AZER3, UKRAINE1 shares this one bracket -> one fix.
+Repro: `setarch -R env FIST_SEGV_BT=1 FIST_DATADIR=<warm> FIST_TICK_HZ=25000 FIST_FSG_BATTLE=SYRIA2
+FIST_MOUSE=<MC> /tmp/fist_native` -> EIP 2b1e+0x190. Watchpoint recipe: SIGSTOP-at-frame-0 pause hook
+(raise(SIGSTOP) when word[0x724]==0x726 && fr==0) + gdb `-p` attach + `handle SIGALRM nostop noprint pass`
+(the 25kHz timer makes a from-start gdb run never reach the mission).
