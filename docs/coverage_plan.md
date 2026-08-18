@@ -992,3 +992,22 @@ fires for SYRIA2's cockpit frame.**  NEXT: trace d548 transitions AZER1 vs SYRIA
 entry + at 0x23ce) + the 2322 phase-chain that gates 0x23ce -- find why SYRIA2's chain-A never reaches the
 phase-complete that sets d548 bit 7 (roster op54=55 vs 39 likely stalls a per-object phase count).  This is
 the twin-#3 phase mechanism at the cockpit/chain-A layer.  Shared by SYRIA2/4 CYPRUS4 AZER3 UKRAINE1.
+
+### SYRIA2 hang FRONTIER mapped: two-chain phase alternation (2026-08-18, 22dd handler trace).
+FIST_DIAG22DD (log each 22dd do-while handler: 0a86, word[0a86], c450, d548) AZER1 vs SYRIA2:
+- **AZER1 (converges):** ONE phase-chain pass @0x6c82 -> `2322 23ef 41c7 2471 286e 3b59 23ce` (23ce sets
+  d548|=0x80 + c450=0 -> loop exits) -> 459a presents -> MISSFB dumped -> done.  7 iterations total.
+- **SYRIA2 (hangs):** ALTERNATES two chains forever, never presenting the final frame:
+  - d548=0x01 -> chain @0x6c82 (same as AZER1, ends 23ce)
+  - d548=0x03 -> chain @**0x6c9a** = `23ea 41df **378e** 23ce`  (378e = the twin-#3 phase-table-overrun
+    record writer!)
+  Each chain reaches 23ce (d548|=0x80 -> 0x81), but by the next 22dd entry d548 is back to 0x03/0x01 (bit 7
+  cleared, bit 1 sometimes set) and 795c never sees d548==0x81 at paint time -> never presents -> 209e
+  dirty-walk loops (the 08/2c/5c op spin).
+**Chain selector** FUN_0000_2322 tail: `0a86 = word[DGROUP:0x4a88 + d549]` -- d549 (view kind) picks the
+chain.  SYRIA2's d549 evidently ALTERNATES (0x1c -> other -> 0x1c) frame-to-frame, pulling in the 378e chain
+@6c9a on alternate frames; AZER1's d549 is stable -> single chain -> present.  ROOT QUESTION (next session):
+why does SYRIA2's d549 (word[DGROUP:0x1549]) alternate?  Trace d549's writer across frames + what sets d548
+bit 1 (0x03).  This is the SAME 378e/phase-table machinery as AZER2 twin #3 (patch 392 fixed the 5d43
+view-SELECT, but this is the per-frame phase d549/d548 CYCLING, a deeper layer).  Deep multi-session-class
+dig, now precisely mapped.  Method: d548/d549 write-trace (throwaway 22dd + 795c + 23ce logging) AZER1 vs SYRIA2.
