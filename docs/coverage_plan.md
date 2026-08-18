@@ -1186,3 +1186,21 @@ pixel) and get the drawer; (3) confirm 75e3's needle sprite pixels MATCH port-vs
 the SEPARATE instrument that differs.  RULED OUT this session (all verified, no band-aids): .FSG parser
 placement, turret-AI, capture-timing, AND the veh+0x55 needle itself (frozen+shared).  The differing instrument
 + its wrong field remain to be found.  +8 missions.  Method + eliminations banked; no speculative patch made.
+
+### Dial bug RESOLVED to a concrete target (2026-08-18): port's player veh+0x55 is wrong for 8 missions.
+DOSBox dial cross-comparison (24x24 crop @102,112) DISAMBIGUATES the contradiction:
+  DOSBox azer6 == azer1 == saudi5 (AE=0); azer6 != cyprus1 (AE=84); india6 != cyprus1 (84).
+So DOSBox draws the SAME needle for azer6/azer1/saudi5 = **usi14 = veh+0x55 in [56,59]**.  The port's
+veh+0x55 (from dial55 dump): azer1=56(usi14)✓ cyprus1=0(usi0)✓ india6=52(usi12)✓ | azer6=21(usi4)✗
+saudi5=19(usi4)✗.  So the port MATCHES DOSBox exactly where its veh+0x55 == DOSBox's (azer1/cyprus1/india6)
+and DIFFERS where it doesn't: **DOSBox's azer6/saudi5 veh+0x55 ≈ 56, but the port reads 21/19** (their raw
+.FSG bytes at record-offset 0x97+0x55).  75e3 (the needle draw) is FAITHFUL -- the wrong INPUT is veh+0x55.
+The port loaded the vehicle record contiguously+correctly from file 0x97 (verified), so veh+0x55=21 is a real
+azer6.FSG byte -- yet DOSBox's player veh+0x55 is ~56.  TWO concrete possibilities: (a) the port selects the
+WRONG roster entry as the PLAYER vehicle (word[0x6d34]) for 8 missions -- a different unit whose +0x55 happens
+to be 56 is the real player (position matches because they spawn co-located, but +0x55 differs); or (b) a
+post-load init overwrites veh+0x55 to a per-vehicle-type/default value (~56 for the M1) that the port skips
+for 8 missions.  NEXT: dump the FULL roster for azer6 (each unit's +0x55 + the player-flag) and compare to
+which word[0x6d34] should point to; or watch veh+0x55 for a SECOND write (post the file read) in DOSBox-
+matching missions.  This is now non-contradictory and concrete.  RULED OUT: parser placement, turret-AI,
+timing, the 75e3 read.  +8 missions.  No speculative patch -- the input-provenance is still one step from the fix.
