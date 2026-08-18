@@ -74,9 +74,44 @@ void fbtrap_arm_hook(void) {
     g_fbtrap_page = (void*)(a & ~(uintptr_t)(ps-1));
     mprotect(g_fbtrap_page, ps, PROT_READ);
 }
+/* ---- FIST_OBJTRAP: single-step mprotect watchpoint on a DGROUP object word (catch the crash-bucket
+   wild-writer at full native speed; gdb-on-mission can't reach op-0x2c in-budget). Arm at the op-0x2c gate
+   on g_mem+0x1c000+<off>; every write to that page faults -> log the writer EIP for writes to the exact
+   target word, single-step past it, re-protect. */
+static void    *g_objtrap_page = 0;
+static uintptr_t g_objtrap_target = 0;
+static unsigned long g_objtrap_pend_eip = 0;
+void objtrap_arm(unsigned off) {
+    if (g_objtrap_page) return;
+    long ps = sysconf(_SC_PAGESIZE);
+    uintptr_t a = (uintptr_t)(g_mem + 0x1c000 + off);
+    g_objtrap_target = a;
+    g_objtrap_page = (void*)(a & ~(uintptr_t)(ps-1));
+    mprotect(g_objtrap_page, ps, PROT_READ);
+}
+void objtrap_trap(int sig, siginfo_t *si, void *uc) {   /* SIGTRAP: after the single-stepped write */
+    ucontext_t *u = (ucontext_t *)uc;
+    if (g_objtrap_page) mprotect(g_objtrap_page, sysconf(_SC_PAGESIZE), PROT_READ);  /* re-arm */
+    if (g_objtrap_pend_eip) {
+        unsigned short v = *(unsigned short *)g_objtrap_target;
+        fprintf(stderr, "[objtrap] c834+0 <- 0x%04x  by EIP=0x%08lx%s\n", v, g_objtrap_pend_eip,
+                (v!=0 && v!=1) ? "  <<< GARBAGE" : "");
+        g_objtrap_pend_eip = 0;
+    }
+    u->uc_mcontext.gregs[16 /*REG_EFL*/] &= ~0x100UL;   /* clear TF */
+}
 static void segv_bt(int sig, siginfo_t *si, void *uc) {
     ucontext_t *u = (ucontext_t *)uc;
     unsigned long eip = (unsigned long)u->uc_mcontext.gregs[14 /*REG_EIP*/];
+    /* objtrap: fault on the watched page -> unprotect, single-step (TF) past the write, re-protect in SIGTRAP */
+    if (g_objtrap_page && si->si_addr >= g_objtrap_page &&
+        (char*)si->si_addr < (char*)g_objtrap_page + sysconf(_SC_PAGESIZE)) {
+        if ((uintptr_t)si->si_addr == g_objtrap_target) g_objtrap_pend_eip = eip;  /* write to c834+0 */
+        else g_objtrap_pend_eip = 0;
+        mprotect(g_objtrap_page, sysconf(_SC_PAGESIZE), PROT_READ|PROT_WRITE);
+        u->uc_mcontext.gregs[16 /*REG_EFL*/] |= 0x100UL;   /* set TF -> SIGTRAP after the write */
+        return;
+    }
     /* fb-trap: if the fault is in our guarded page, log the writer EIP + stack, unprotect, retry */
     if (g_fbtrap_page && si->si_addr >= g_fbtrap_page &&
         (char*)si->si_addr < (char*)g_fbtrap_page + sysconf(_SC_PAGESIZE)) {
@@ -1186,6 +1221,10 @@ int fist_extender_gate(void) {
     /* FIST_DBG_OP2C: clean gdb breakpoint at the first op-0x2c gate (crash-bucket secondary-viewport paint) */
     if (op == 0x2c && g_fist_after_map && getenv("FIST_DBG_OP2C")) {
         static int once=0; if(!once){ once=1; extern void fist_dbg_op2c(void); fist_dbg_op2c(); }
+    }
+    if (op == 0x2c && g_fist_after_map && getenv("FIST_OBJTRAP")) {
+        static int once=0; if(!once){ once=1; extern void objtrap_arm(unsigned);
+            objtrap_arm((unsigned)strtoul(getenv("FIST_OBJTRAP"),0,0)); }
     }
     /* FIST_ROSTERTRACE (diag): log roster slot-4/5 object + its type at each op-gate -> pinpoint WHEN the
      * crash-bucket garbage type (0x0f00) appears (build-time vs a later corrupting step). Survives the
@@ -3012,10 +3051,13 @@ static void fist_6980_prove(void) {
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
 #ifndef __EMSCRIPTEN__
-    if (getenv("FIST_SEGV_BT") || getenv("FIST_FBTRAP")) {
+    if (getenv("FIST_SEGV_BT") || getenv("FIST_FBTRAP") || getenv("FIST_OBJTRAP")) {
         struct sigaction sa; memset(&sa, 0, sizeof sa);
         sa.sa_sigaction = segv_bt; sa.sa_flags = SA_SIGINFO;
         sigaction(SIGSEGV, &sa, NULL);
+        if (getenv("FIST_OBJTRAP")) { extern void objtrap_trap(int,siginfo_t*,void*);
+            struct sigaction st; memset(&st,0,sizeof st); st.sa_sigaction=objtrap_trap; st.sa_flags=SA_SIGINFO;
+            sigaction(SIGTRAP,&st,NULL); }
     }
 #endif
     load_image();
