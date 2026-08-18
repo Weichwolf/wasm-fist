@@ -1815,6 +1815,15 @@ int fist_extender_gate(void) {
             _exit(0);
         }
     }
+    /* FIST_MISSFB2C -- capture 0xA0000 after the Nth op-0x2c post.  The FSG-battle / crash-bucket missions
+     * (AZER3 etc.) render the windshield through the op-0x2c SECONDARY-viewport path, which the ENGINE
+     * itself paints into 0xA0000 (no extender op-0x24 emulation) -- so just snapshot the live framebuffer
+     * + current DAC and _exit.  Read-only, default OFF; never reached by the front-end verify flows. */
+    if (op == 0x2c && getenv("FIST_MISSFB2C") && getenv("FIST_MISSFB") && g_ext_ready && g_fist_after_map) {
+        static int n2c = 0;
+        long want2c = getenv("FIST_MISSFB_N") ? atol(getenv("FIST_MISSFB_N")) : 120;
+        if (++n2c == want2c) { fist_dump_framebuffer(getenv("FIST_MISSFB")); _exit(0); }
+    }
     if (op == 0x24 && getenv("FIST_MISSFB") && g_ext_ready) {
         static int nseen = 0;
         long want = getenv("FIST_MISSFB_N") ? atol(getenv("FIST_MISSFB_N")) : 1;
