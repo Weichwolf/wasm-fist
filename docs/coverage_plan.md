@@ -1075,3 +1075,21 @@ d548-state dump (AZER1 vs SYRIA2): confirm which viewports are active, and wheth
 model mis-sequences the multi-viewport present (vs the original driving each viewport's d548 to its present
 state in turn).  This is a real render-architecture question, not a one-line base-loss -> deferred to a focused
 session.  The 2b1e/ac9e CRASH fixes (395/396) stand; the SYRIA2 HANG is this multi-viewport sequencing.
+
+### Central azimuth-DIAL port bug (2026-08-18): port draws a mission-varying needle; DOSBox draws CONSTANT.
+Subagent captured genuine DOSBox refs for 9 NEEDS-REF missions (tools/refcapture_mission_scroll.sh).
+INDIA6 self-validates AE=0 -> ADDED (62nd flow).  The other 8 (AZER6 CYPRUS5 INDIA7 SAUDI5 SAUDI6 SYRIA5
+SYRIA7 TRAIN1) expose a REAL port bug isolated to ONE tiny instrument: a grey dial + red needle at
+full-frame ~(108-118, 116-131), dial hub ~(113,124).  DECISIVE measurement:
+- **DOSBox: the dial is IDENTICAL across ALL missions** (azer6/saudi5/syria7 DOSBox-dial == azer1 DOSBox-dial
+  AE=0) -- at the spawn frame the needle is at a CONSTANT rest/zero position (turret centered).
+- **Port: the dial VARIES per mission** (AZER6/SAUDI5/SYRIA7 port-dial vs azer1 port-dial AE=70/70/61) --
+  the port rotates the needle by a MISSION-DEPENDENT value that should be 0/constant at spawn.
+AZER1/CYPRUS1/SAUDI1/INDIA6 happen to have that field == the rest value -> port matches (AE=0); the other 8
+have non-zero -> wrong needle.  So the bug is a localized base-loss in the azimuth-dial NEEDLE draw: it reads
+a wrong/mission-varying field (should be the turret azimuth = 0 at spawn) and rotates the needle by it.  The
+8 DOSBox refs are COMMITTED (genuine, correct, ready) but their verify flows are HELD until the dial is fixed.
+NEXT: find the dial-needle draw (a rotated red line at ~(113,124); likely a cockpit-HUD paint using a
+fixed-point rotate on an angle field) -- gdb framebuffer-watchpoint on a dial fb pixel (g_mem+0xA0000+124*320+
+110) via the SIGSTOP-pause+attach method, get the draw backtrace, find the field it reads, rebase/correct it.
+Fixing it greens 8 missions at once (+ likely improves any in-motion azimuth display).
