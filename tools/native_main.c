@@ -113,7 +113,17 @@ static void segv_bt(int sig, siginfo_t *si, void *uc) {
       for (int r=0;r<0x10;r++){ unsigned short slot=*(unsigned short*)(g_mem+0x22d3c+r*2);
         unsigned short typ = slot ? *(unsigned short*)(dg+slot) : 0xffff;
         fprintf(stderr," %04x(t=%04x)", slot, typ); }
-      fprintf(stderr,"\n"); }
+      fprintf(stderr,"\n");
+      /* Sprite DIRECTORY dump (2b1e crash root): 260c resolves recseg:recoff = far-ptr at
+       * [DGROUP:0x4f0]<<4 + id.  A {0,0}/wild entry -> 2b1e blits garbage -> SEGV.  Dump the directory
+       * segment word + the first 40 far-ptr records so a wild/zero entry (vs AZER1) is visible. */
+      { unsigned short dseg = *(unsigned short*)(dg+0x4f0);
+        fprintf(stderr,"[segv] sprite-dir [0x4f0]=seg 0x%04x  records(off:seg):", dseg);
+        unsigned base = (unsigned)dseg<<4;
+        for (int i=0;i<40;i++){ unsigned short off=*(unsigned short*)(g_mem+base+i*4);
+          unsigned short seg=*(unsigned short*)(g_mem+base+i*4+2);
+          if (off||seg) fprintf(stderr," [%d]%04x:%04x", i, off, seg); }
+        fprintf(stderr,"\n"); } }
     /* mga overlay seg capture (DIAGNOSTIC, FIST_SEGV_MGA): the m_mga_FUN_0000_2004 blitter faults on
      * `mov es,[0x1590]` (ES base-loss).  The scanline-seg WORD lives at the mga DRIVER's DS:0x1590 --
      * unknown statically (driver DS set at its own init, != fist_mga_base, != engine DGROUP).  Dump the
@@ -1785,7 +1795,16 @@ int fist_extender_gate(void) {
                             *(int16_t*)(dg+(uint16_t)(slot+0x55)), USI55(slot), *(uint8_t*)(dg+(uint16_t)(slot+0x19))); }
                     fprintf(stderr,"\n");
                     #undef USI55
-                    if (getenv("FIST_DIAL55_UPD")) { /* is the player in the c0e5 update table (0xdfbc)? + type-method slots */
+                    if (getenv("FIST_SPRITEDIR")) { /* sprite directory [0x4f0] at the render frame (working-mission baseline) */
+                    unsigned short dseg=*(unsigned short*)(dg+0x4f0);
+                    fprintf(stderr,"[spritedir] [0x4f0]=seg 0x%04x records(off:seg):",dseg);
+                    unsigned base=(unsigned)dseg<<4;
+                    for(int i=0;i<40;i++){ unsigned short off=*(unsigned short*)(g_mem+base+i*4);
+                        unsigned short seg=*(unsigned short*)(g_mem+base+i*4+2);
+                        if(off||seg) fprintf(stderr," [%d]%04x:%04x",i,off,seg); }
+                    fprintf(stderr,"\n");
+                }
+                if (getenv("FIST_DIAL55_UPD")) { /* is the player in the c0e5 update table (0xdfbc)? + type-method slots */
                         uint16_t pl = *(uint16_t*)(dg+0x6d34);
                         uint16_t ptype = *(uint16_t*)(dg+pl);
                         fprintf(stderr,"[dial55upd] player=0x%04x type=%u  type-method word[DGROUP:(t*2-0x1bac)]: ",pl,ptype);
