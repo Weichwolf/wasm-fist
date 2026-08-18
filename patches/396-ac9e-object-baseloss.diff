@@ -1,0 +1,64 @@
+PATCH 396: FUN_0000_ac9e whole-function base-loss -- SYRIA2 twin after patch 395 (2b1e chain).
+asm 0xac9e..0xad01 (re_out/fist_dat_image.bin): SS=DS=DGROUP=0x1c00; DI=param_1 = object near-offset;
+SI/BX derived near-offsets; every N(reg) = word/dword[DGROUP:off].  Ghidra deref'd the near-offsets as
+HOST pointers (piVar1=*roster-entry, piVar4, *param_1@+0x40) and int*-scaled the WORD/DWORD reads
+(piVar1[0x17] vs asm +0x2e; *(long*)(piVar1+2)/(+4) vs asm +4/+8).  di+0x40 = WORD (testw/orw), not uint.
+Rebased all to g_mem+0x1c000+near-offset with asm-exact widths + the si-chain [0x9796]->[+4]->[*2-0x67d0]
++byte[di+0x1c]*4 and bx=word[(byte[di+0x1b]<<3)+0x6d3c].  03a9 is a fixed-point rotate (05e2/05dd) whose
+param_3 is unused, so bx (near-offset) passes through safely.  Only reached via 22dd's cursor-bracket
+(patch 395) on the SYRIA2/4 CYPRUS4 AZER3 UKRAINE1 path; no passing flow reaches it (the old host-ptr
+deref would have crashed them) -> regression-safe.
+
+--- a/fist.c
++++ b/fist.c
+@@ -28548,23 +28548,35 @@
+ void __allregs FUN_0000_ac9e(int param_1)
+ 
+ {
+-  int *piVar1;
+-  int iVar2;
+-  int iVar3;
+-  int *piVar4;
+-  
+-  if ((*(uint *)(param_1 + 0x40) & 1) == 0) {
++  /* PATCH 396: whole-function base-loss (SS=DS=DGROUP=0x1c00).  asm 0xac9e..0xad01: DI=param_1 = object
++     DGROUP near-offset; SI/BX are derived near-offsets; every `N(reg)` = word/dword[DGROUP:off].  Ghidra
++     deref'd the near-offsets as HOST pointers (piVar1 = *roster-entry, piVar4, *param_1 at +0x40) and
++     int*-scaled the WORD reads (piVar1[0x17] = +0x5c but asm 0x2e(%bx) = +0x2e; *(long*)(piVar1+2)/(+4)
++     = +8/+16 but asm 0x4/0x8(%bx) = +4/+8 dwords).  di+0x40 is a WORD (testw/orw), not a uint (a DWORD
++     or would clobber di+0x42).  Reached only via the 22dd cursor-bracket after patch 395 (SYRIA2 twin);
++     no passing flow reaches it (the old host-ptr deref would have crashed them) -> regression-safe. */
++  uint8_t *o = g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  if ((*(uint16_t *)(o + (uint16_t)(di + 0x40)) & 1) == 0) {
+     return;
+   }
+-  piVar4 = (int *)(*(int *)(*(int *)(DAT_2000_5796 + 4) * 2 + -0x67d0) +
+-                  (uint)*(byte *)(param_1 + 0x1c) * 4);
+-  piVar1 = (int *)((undefined2 *)&DAT_2000_2d3c)[(uint)*(byte *)(param_1 + 0x1b) * 4];
+-  if ((piVar1 != (int *)0x0) && (*piVar1 != 0x17)) {
+-    iVar3 = piVar4[1];
+-    iVar2 = FUN_0000_03a9(*piVar4 + piVar1[0x17],iVar3,piVar1);
+-    *(long *)(param_1 + 0x49) = (long)iVar2 * 0x20 + *(long *)(piVar1 + 2);
+-    *(long *)(param_1 + 0x4d) = (long)iVar3 * 0x20 + *(long *)(piVar1 + 4);
+-    *(uint *)(param_1 + 0x40) = *(uint *)(param_1 + 0x40) | 2;
++  /* si-chain (asm aca6..acba): si0=word[0x9796]; si1=word[si0+4]; si2=word[si1*2-0x67d0];
++     si = si2 + byte[di+0x1c]*4  (piVar4 base). */
++  {
++    uint16_t si0 = *(uint16_t *)(g_mem + 0x25796);                       /* word[DGROUP:0x9796] (int** macro reads 4B) */
++    uint16_t si1 = *(uint16_t *)(o + (uint16_t)(si0 + 4));
++    uint16_t si2 = *(uint16_t *)(o + (uint16_t)(si1 * 2 - 0x67d0));
++    uint16_t si  = (uint16_t)(si2 + (uint16_t)*(uint8_t *)(o + (uint16_t)(di + 0x1c)) * 4);
++    /* bx = word[ (byte[di+0x1b]<<3) + 0x6d3c ]  (asm acbc..acc3) -> roster-entry object near-offset. */
++    uint16_t bx = *(uint16_t *)(o + (uint16_t)(((uint16_t)*(uint8_t *)(o + (uint16_t)(di + 0x1b)) << 3) + 0x6d3c));
++    if ((bx != 0) && (*(uint16_t *)(o + bx) != 0x17)) {
++      int16_t ax = (int16_t)(uint16_t)(*(uint16_t *)(o + si) + *(uint16_t *)(o + (uint16_t)(bx + 0x2e)));
++      int16_t dx = *(int16_t *)(o + (uint16_t)(si + 2));
++      int iVar2 = FUN_0000_03a9((int)ax, (int)dx, bx);
++      *(int32_t *)(o + (uint16_t)(di + 0x49)) = (int32_t)iVar2 * 0x20 + *(int32_t *)(o + (uint16_t)(bx + 4));
++      *(int32_t *)(o + (uint16_t)(di + 0x4d)) = (int32_t)dx   * 0x20 + *(int32_t *)(o + (uint16_t)(bx + 8));
++      *(uint16_t *)(o + (uint16_t)(di + 0x40)) |= 2;
++    }
+   }
+   return;
+ }
