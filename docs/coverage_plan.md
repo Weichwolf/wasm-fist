@@ -975,3 +975,20 @@ a phase-COMPLETION spin (twin-#3 SHAPE, chain-A/cockpit layer), triggered by the
 that emits op-0x58.  NEXT: instrument 902c/ab03/b011 (the op-0x58 emitter) -- which roster object/type, and
 what condition it sets that blocks the frame's present-gate; compare to AZER1 (never posts 0x58).  Diagnostic
 FIST_OP58_BT recipe is in the git history (mirror of FIST_OP0C_BT, native_main.c:1236); re-add when resuming.
+
+### SYRIA2 op-0x58 hang ROOT NARROWED to the 795c/d548 present-gate (2026-08-18).
+Op-cycle detector (FIST_OPSEQ ring-buffer): the spin is `08 2c 5c ... 1c` repeating; op-0x2c poster chain =
+459a->206f->**209e (dirty-walk)->77dc->795c->df0e**->ext (the COCKPIT paint chain, chain A -- SAME as AZER1).
+So the 209e dirty-walk re-dispatches the cockpit element (77dc/795c) forever because it never clears dirty.
+**FUN_1000_795c state machine (re_out:55979):** top line always re-marks the element dirty
+(`*(byte*)(param_4 + word[param_3+2]) = 3`); it only PRESENTS+clears (df0e + `d548=0`) in the
+`(d548 & 0x7f)==1 && d548<0` branch, i.e. d548 == **0x81** (bit 7 set).  d548 progression must be
+0 -> 1 (795c first call: a84c reticle, d548=1) -> **0x81** (bit 7 set by the phase-complete handler
+FUN_0000_23ce `orb $0x80,[0x1548]`, patch-308 note) -> present -> 0.  **For SYRIA2 d548 STAYS 1**
+(`if(-1 < (char)d548) return` -> positive 1 returns early, no progress), so the element never presents and
+209e loops.  795c is byte-identical for AZER1 (which converges) -> the divergence is UPSTREAM in the d548
+phase progression: **the bit-7 setter FUN_0000_23ce (reached via the 22dd/2322 per-frame phase chain) never
+fires for SYRIA2's cockpit frame.**  NEXT: trace d548 transitions AZER1 vs SYRIA2 (env-gated log at 795c
+entry + at 0x23ce) + the 2322 phase-chain that gates 0x23ce -- find why SYRIA2's chain-A never reaches the
+phase-complete that sets d548 bit 7 (roster op54=55 vs 39 likely stalls a per-object phase count).  This is
+the twin-#3 phase mechanism at the cockpit/chain-A layer.  Shared by SYRIA2/4 CYPRUS4 AZER3 UKRAINE1.
