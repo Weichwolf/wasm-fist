@@ -1785,6 +1785,18 @@ int fist_extender_gate(void) {
                             *(int16_t*)(dg+(uint16_t)(slot+0x55)), USI55(slot), *(uint8_t*)(dg+(uint16_t)(slot+0x19))); }
                     fprintf(stderr,"\n");
                     #undef USI55
+                    if (getenv("FIST_DIAL55_UPD")) { /* is the player in the c0e5 update table (0xdfbc)? + type-method slots */
+                        uint16_t pl = *(uint16_t*)(dg+0x6d34);
+                        uint16_t ptype = *(uint16_t*)(dg+pl);
+                        fprintf(stderr,"[dial55upd] player=0x%04x type=%u  type-method word[DGROUP:(t*2-0x1bac)]: ",pl,ptype);
+                        for(int t=0;t<4;t++){ uint16_t o=(uint16_t)(t*2-0x1bac); fprintf(stderr,"t%d=%04x ",t,*(uint16_t*)(dg+o)); }
+                        fprintf(stderr,"\n[dial55upd] 0xdfbc update-table (stride4, 182): player-idx=");
+                        int idx=-1; int nz=0;
+                        for(int i=0;i<182;i++){ uint16_t s=*(uint16_t*)(dg+0xdfbc+i*4); if(s)nz++; if(s==pl)idx=i; }
+                        fprintf(stderr,"%d  nonzero-entries=%d  first8=",idx,nz);
+                        for(int i=0;i<8;i++) fprintf(stderr,"%04x ",*(uint16_t*)(dg+0xdfbc+i*4));
+                        fprintf(stderr,"\n");
+                    }
                     if (getenv("FIST_DIAL55_OBJ")) { /* dump the player object (0..0x80) as words for oracle diff */
                         uint16_t off=*(uint16_t*)(dg+0x6d34);
                         fprintf(stderr,"[dial55obj] focus=0x%04x\n",off);

@@ -218,6 +218,20 @@ code *fist_icall_far(uint32_t farptr)
 /* NEAR call [mem]: only the offset is stored; the segment is the caller's CS (passed by the site). */
 code *fist_icall_near(uint16_t seg, uint16_t off)
 {
+    /* FIST_UPDCNT (diagnostic, default OFF): count near-dispatches to the per-vehicle-type UPDATE methods
+     * (7c1d=M1 87df=M3 902c=AH-64 97d5=T80) that c0e5's per-frame object-update walk fires. If the count
+     * stays 0 in-mission, the sim (c0e5) is not advancing -> the turret slew / unit movement is frozen. */
+    { static int updcnt=-1; if (updcnt<0) updcnt = getenv("FIST_UPDCNT")?1:0;
+      if (updcnt && seg == 0) {
+        static long c7c1d=0,c87df=0,c902c=0,c97d5=0,ctot=0; extern int g_fist_after_map;
+        if (g_fist_after_map) {
+            if (off==0x7c1d) c7c1d++; else if (off==0x87df) c87df++;
+            else if (off==0x902c) c902c++; else if (off==0x97d5) c97d5++;
+            ctot++;
+            if (c7c1d==1 || (ctot % 20000)==0)
+                fprintf(stderr,"[updcnt] tot=%ld 7c1d(M1)=%ld 87df(M3)=%ld 902c(AH64)=%ld 97d5(T80)=%ld\n",ctot,c7c1d,c87df,c902c,c97d5);
+        }
+    } }
     /* FIST_ROSTER (diagnostic, default OFF): the display-element dirty/paint walkers (208a/209e via
      * 206f; 2006/201a via 1ff5) store the current roster entry near-offset E in DAT_1000_fe08
      * (g_mem+0x1fe08) right before dispatching a per-element method.  The element's class base is

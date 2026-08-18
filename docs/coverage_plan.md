@@ -1090,3 +1090,17 @@ must NOT be trusted as spawn refs. **DO NOT patch +0x55 to 56** (would corrupt t
 the turret-slew gameplay-sim ([[mission-b112-ailock-frontier]] a02d/a0ab) + frame-lock, or mask the ~24x20
 dial and verify the static cockpit chrome. Reusable oracle infra: scratch/oracle/capture_battle_spawn.sh +
 analyze_player.py, scratch/dial/diff_oracle.py; port diagnostics FIST_DIAL55 / _OBJ / FIST_V55WATCH.
+
+### Mission SIM does not advance per-tick in the covered flow (2026-08-18) — the gameplay-motion root.
+Chasing the frozen turret (dial) uncovered a bigger, precisely-localized gap. FIST_UPDCNT (re_out/fist_icall.c,
+env-gated: counts c0e5's per-vehicle-type UPDATE dispatch 7c1d/87df/902c/97d5) over a 35s AZER6 run at 25 kHz:
+**7c1d(M1)=1, others=0** (AZER1=0); even under FIST_COOP_TICK the M1 update fires ~1×. The setup is IDENTICAL
+to the oracle (player at 0xdfbc update-table idx0; type-0 method word[DGROUP:0xe454]=0x7c1d; a401 turret-slew
+wired, patches 243-245) — the walk is CORRECT, it just isn't being TICKED. The "6138 render posts" (b112
+memory) are op-0x24 RE-POSTS, not sim ticks; the type-2 AI update 902c never fires here (=0), which is why the
+covered flow is crash-free (b112 needs 902c). Net: the mission renders as a STATIC spawn frame — turret never
+slews, units never move, AI never runs — while the original simulates continuously. Root = the per-tick sim
+gate 459a→c0ca→c0e5 not firing per frame (tick-cadence, [[wasm-mission-op50-blocker]]). Consequence: only
+spawn-frame surfaces are bit-verifiable; the 8 dial missions fail because their spawn turret is actively
+slewing while the port freezes it. Fixing the per-tick sim advance is THE gameplay-motion frontier — it would
+unblock in-motion verification broadly (and the dial). See [[dial-needle-oracle-verdict]].
