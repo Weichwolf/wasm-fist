@@ -1171,3 +1171,18 @@ vs which 75e3 draws).  RULED OUT this session: .FSG parser placement, turret-AI,
 NEXT: (1) dump veh+0x55 at the EXACT captured op-0x24 frame port vs a DOSBox veh+0x55 probe (or compare the
 port's needle sprite vs the DOSBox ref's needle directly); (2) if they differ at the captured frame despite
 equal load value, trace the velocity-update sim (c0ca flight model) for the 8-mission base-loss.  +8 missions.
+
+### Dial bug: veh+0x55 is FROZEN + authentic -> the 75e3 needle is likely NOT the differing instrument.
+Per-frame in-mission dump (FIST_V55TRAJ): veh+0x55 STAYS constant across all frames (AZER6=21, INDIA6=52) --
+it does NOT evolve (no velocity decay/physics change).  Combined with "authentic .FSG value, offset 0x97,
+shared with DOSBox", this is a CONTRADICTION: veh+0x55 is identical (from the file) AND frozen in both port
+and DOSBox, yet the subagent measured the dial as DIFFERING (AE=70).  If 75e3 (which reads veh+0x55) were the
+differing instrument, port and DOSBox would draw the SAME needle (same frozen shared value) -> AE=0.  So
+**75e3's veh+0x55 needle is almost certainly NOT the pixels that differ** -- the gdb watchpoint on (112,127)
+caught 75e3->294d->298a, but that pixel is likely ALSO written by the ACTUAL differing instrument (a second
+draw over the same region).  RESOLUTION (next session): pixel-level separation -- (1) capture the port's AZER6
+MC crop + the DOSBox ref crop, list the EXACT differing pixels; (2) trap EACH of those pixels (FIST_FBTRAP per
+pixel) and get the drawer; (3) confirm 75e3's needle sprite pixels MATCH port-vs-DOSBox (they should) and find
+the SEPARATE instrument that differs.  RULED OUT this session (all verified, no band-aids): .FSG parser
+placement, turret-AI, capture-timing, AND the veh+0x55 needle itself (frozen+shared).  The differing instrument
++ its wrong field remain to be found.  +8 missions.  Method + eliminations banked; no speculative patch made.
