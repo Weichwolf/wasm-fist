@@ -1,382 +1,97 @@
-# Armored Fist (FIST.RUN) → WASM
+# Armored Fist (1994) → native + WebAssembly
 
-## Goal
-A faithful 1:1 rebuild of NovaLogic's **Armored Fist** (1994, `FIST.RUN`) with **bit-identical audio and
-video output**: given the same input and RNG state, the rebuild produces the same 320×200 palette
-framebuffer every frame and the same audio stream as the original under DOS, native and in the browser
-(WASM). The route there is a reproducible chain that always starts with `make` (`make image → decompile →
-assemble → patch → native / wasm`), so the whole pipeline binary → decompile → patches → build is implicitly
-documented by the Make targets. Every correction to the decompile is a commented, traceable patch.
-**No guards, no approximations, no band-aids** — any observable deviation from the original is by definition
-a bug. **Code is the truth** — verify every claim against `armoredfist/FIST.RUN` or a DOSBox run.
+## Das Ziel
 
-**Completeness bar = the DD2 standard: a 100%-exhaustively-tested port, nothing stubbed or skipped.** The
-target is not "boots and looks right" — it is *every* reachable surface exercised end-to-end and bit-verified
-on **both** targets (native + browser), the way `~/Git/wasm-dd2/` was driven through many test/fix iterations
-across every menu, every level, and every setting. In scope, all of it:
-- **Every menu / screen / dialog** — intro, main menu, mission select, briefing, options, sound/graphics
-  detail (`*.DTL`: LOW/MEDIUM/HIGH), controls config, save/load — each renders, navigates, and acts correctly.
-- **Every mission / level** — the full campaign/map set (`C##.KLC`/`D##.KLC` colormap+heightmap pairs,
-  `*.MS3` missions, `*.FPL` paths, `*.CAM` cameras) plays through, not just one demo map.
-- **Every setting / option** — detail levels, sound devices (SB/GUS), input modes (keyboard/joystick),
-  serial link — each toggles and takes effect.
-- **The in-engine LEVEL / MISSION EDITOR** — Armored Fist ships a built-in editor (part of `FIST.RUN`; there
-  is no separate editor `.EXE` in this copy — the `.KLC`/`.MS3`/`.FPL` files are its data). It is **in scope
-  as a first-class deliverable**: the editor UI must open, render, and edit on both targets, and the
-  **round-trip must be bit-verified** — create/edit a map, save it, reload it, and sim it, byte-identical to
-  the original editor's output. Locating the editor's entry point (command-line switch / hidden key / menu
-  item) is a Phase-0 recon task.
+A faithful, **1:1** rebuild of NovaLogic's *Armored Fist* (DOS protected-mode, `FIST.RUN`/`FIST.DAT`)
+that is **bit-identical to the original** under DOSBox/QEMU: given the same input and RNG state, every
+frame produces the same 320×200 palette framebuffer and the same audio stream — on **native and in the
+browser (WASM)**, and the two builds are **byte-identical to each other** (hard invariant, checked after
+every change).
 
-This project reuses the *methodology* of the sibling project `~/Git/wasm-dd2/` (Destruction Derby 2 → WASM)
-but **shares no code** — DD2 is a clean Win32 PE (DirectDraw/DirectSound/COM); Armored Fist is a 32-bit DOS
-protected-mode program. The doctrine transfers; the platform layer and Ghidra front-end are new. Read DD2's
-`CLAUDE.md` for the patch-series discipline and the Ghidra-artifact taxonomy — both apply here verbatim.
+**Done** = the DD2 completeness standard, nothing skipped: every menu / screen / dialog, every campaign
+mission and map, every setting (detail, sound devices, input modes, serial link), and the built-in
+level/mission **editor** with a bit-verified round-trip (create → save → reload → simulate, byte-identical).
+The gate: a subagent confirms the WASM build error-free and fully functional **ten consecutive times** on
+the complete exhaustive test matrix — one failure resets the count to zero.
 
-**Doctrine — "geht nicht gibt es nicht" / there is no can't.** The full chain (binary → decompile →
-patch-series → native + wasm → bit-identical + exhaustively tested) is **already proven end-to-end by
-wasm-dd2**. This is not research with an open feasibility question — it is execution of a known-good method
-on an *easier* target: a DOS game has **no COM/Win32/DirectDraw/DirectSound layer**, graphics are one linear
-320×200×8bpp framebuffer, and the whole thing runs deterministically under DOSBox/QEMU. So anything that
-looks "harder than DD2" (bound-format reversing, port/IRQ-level shim, real-/protected-mode mix) is **bounded,
-tractable work to be decomposed and finished — never a reason to stub, approximate, or declare a surface
-out of reach.** "Can't be done" is not an acceptable conclusion; the only question is the next step.
+## Die Erfolgsgeschichte: wasm-dd2
 
-## What the target actually is (recon findings — do NOT re-derive)
-**Two binaries — the engine is FIST.DAT, not FIST.RUN (verified; full detail in `docs/recon.md`):**
-- **`armoredfist/FIST.RUN`** = the **loader/runtime kernel**, NOT the engine: a stub MZ (DPMI probe) + the
-  **Doug-Huffman DOS extender** (`DOS extender Copyright 1991-1994 by Doug Huffman`) wrapping a ~4 KB
-  self-decrypting 32-bit protected-mode kernel (CRT + `FILEMGR` + `MEMMGR`). It enters flat 32-bit mode and
-  loads/execs the game from FIST.DAT. Launched by `LOADGAME.EXE` (NovaLogic loader v1.14, John Butrovich,
-  LZEXE-packed) via `LOADGAME -K400,0,1000 -X5000 FIST.RUN`. Its role → hand-written shim (`fist_dos.c`),
-  not engine source. Decompile kept as `re_out/fist_kernel_decomp.c`. Family strings: `COMANCHE`,
-  `WOLFPACK.EXE`, `ULTRA` (GUS), `BLAST` (Sound Blaster), `SERIAL`.
-- **`armoredfist/FIST.DAT`** (216 KB) = **THE ENGINE** and the decompilation target. A single MZ,
-  **16-bit segmented** code (Ghidra `x86:LE:16 Real Mode`, flat seg<<4, base 0, entry linear 0x4), 1143
-  relocs. **Almost entirely hand-written assembly** by **Kyle Freeman** (2242/2245 functions frameless) —
-  NovaLogic **Voxel Space** terrain engine (Comanche: Maximum Overkill lineage): voxel-column raycaster
-  over heightmap+colormap, hand-optimised fixed-point asm. The algorithm is publicly documented — use it as
-  a semantic oracle for the hotspots. Because it is hand-asm, register dataflow is the inter-function
-  interface (resolved at decompile time via the `__allregs` threading — see Status).
-- **Graphics** = VGA Mode 13h / Mode-X, **320×200×8bpp palette**, DAC via ports 0x3C8/0x3C9. This is a
-  single linear framebuffer → far simpler to mirror to a canvas than DD2's 640×480 DirectDraw surfaces.
-- **Audio** = Sound Blaster / Gravis UltraSound via DMA + IRQ (drivers `SOUNDDVR.DVR`, config `SOUND.CFG`,
-  `SOUNDSET.EXE`). **Input, three devices (all verified in FIST.DAT):** (a) **keyboard** (INT 9 / port
-  0x60); (b) **joystick** — full flight-sim rig: `JOYMGR`, `JOYSTICK.CFG`, calibration for throttle / hat
-  switch / pedals-rudder — for vehicle/combat control; (c) **mouse via INT 33h** — the game *requires* a
-  mouse (`"ARMORED FIST REQUIRES A MOUSE"`); 6 INT-33h sites clustered at FIST.DAT 0x14d37–0x14dc8 drive
-  the **map view / mission editor** (tools `ADD WAYPOINT`, `CUT UNIT OR PATH POINT`, `TANK ADDED`). Plus a
-  `SERIAL` link. **Timing** = PIT (INT 8). All port/IRQ/INT-level, emulated in the shim — not a clean API.
-- **Data** (`armoredfist/FISTDATA/`, 403 files): `*.M00/M08/M16/M32` = LOD 3D models, `*.MAL` = model
-  palettes/aux, `*.SKY` skies, `*.CAM` camera paths, `*.FSG/FSE/FSW` sounds, `*.MRL`, `*.KLC` (colormap/
-  heightmap map pairs `C##`/`D##`), `*.BIN`, `*.RES`, `*.MS3` missions, `*.FPL` paths, `*.DTL` detail.
-  The engine (FIST.DAT) reads these at runtime via `FILEMGR` → a DOS file-I/O shim (INT 21h open/read/seek),
-  analog to DD2's `dd2_filio.c`. Original data files live under `armoredfist/` and must be present at run
-  time. (`FIST.DAT` itself is the engine binary, not a data container — see above.)
+`~/Git/wasm-dd2/` (Destruction Derby 2 → WASM) is the **proof the whole chain works end-to-end** — the same
+method took a DOS-era commercial game all the way to a complete, bit-verified native+WASM port through many
+patient test/fix iterations. Armored Fist shares **no code** with it (DD2 is Win32/DirectDraw; AF is 32-bit
+DOS protected-mode), but it inherits the **method and the discipline** verbatim. AF is in several ways the
+*easier* target: no COM/Win32/DirectDraw layer, one linear 320×200×8bpp framebuffer, and it runs
+deterministically under DOSBox/QEMU. **Es ist schon einmal gelungen — es gelingt wieder.**
 
-## Pipeline — everything starts with `make` (the target chain IS the documentation; `make help`)
-`make image → decompile → assemble → patch → native/wasm → verify/verify-wasm`. Front/back ends are
-DOS-specific. State: image + decompile DONE and reproducible; assemble onward is the road ahead.
-- **`make image`** [DONE] — `tools/extract_dat_image.py` statically loads the FIST.DAT MZ (drop 5120 B
-  header, apply 1143 relocs, base 0) → `re_out/fist_dat_image.bin` (211212 B, 16-bit, entry 0x4).
-  `make kernel-image` = the FIST.RUN kernel image (`tools/extract_image.py`, shim reference).
-  **`make image-drivers`** [DONE] — same extractor (parameterized `[SRC [OUT [--relocs]]]`) on the two
-  runtime driver OVERLAYS → `re_out/fist_mga_image.bin` (MGAVIDEO.DVR, 31388 B/9 relocs) +
-  `fist_snd_image.bin` (SOUNDDVR.DVR, 16700 B/21 relocs) + `.relocs` sidecars. The engine loads these at
-  runtime via INT 21h AH=4B AL=03; the .DVR reloc factor is applied at LOAD time by the shim, not baked.
-- **`make decompile`** [DONE] — Ghidra headless (`x86:LE:16 Real Mode` @ base 0, `tools/decompile.sh`) →
-  pristine `re_out/fist_decomp.c` (2245 fns). preScripts `PrepAnalysis` (aggressive analyzers +
-  `DS=0x1c00`/`SS` segment context) + `MarkEntry`; postScripts `RecoverAll` (jump-table/prologue/call
-  discovery to a fixpoint — 71 tables) + `ApplyConv` (custom **`__allregs`** prototype model threading GP
-  registers as explicit C params/returns — killed 96% of register pseudo-vars) + `ExportDecomp`. Ghidra +
-  JDK are reused from wasm-dd2 via `third_party/` symlinks (gitignored).
-  **`make decompile-drivers`** [DONE] — the SAME pipeline per driver overlay (`FIST_PROJ_NAME`,
-  `FIST_ENTRY=0x0`, `FIST_ENGINE_SEEDERS=0` gates the engine-only SeedServiceVecs/SeedRuntimeVecs,
-  `GHIDRA_FIST_OUT` redirects export) → `re_out/fist_mga_decomp.c` (233 fns) + `fist_snd_decomp.c` (44).
-- **`make assemble`** [next] — mechanical `fist_decomp.c` → `re_out/fist.c` (game-code selection, fwd
-  decls, flat `g_mem[]` model, `ghidra_compat.h` for `swi()`/`in`/`out`/16-bit types). `tools/assemble_fist.py`.
-- **`make patch`** — ordered `patches/NNN-slug.diff` onto `re_out/` → `build/` with `-F0 --fuzz=0` (drift
-  fails loudly). **Never hand-edit the decompiled engine source.** Known residual patch classes from the
-  decompile: segment regs (`unaff_CS/ES`), flags/CF (no Ghidra flag-convention), `extraout_` multi-return
-  (e.g. INT 33h CX/DX), FPU `ST0-7`, 16-bit wraparound where bit-identity needs `uint16_t`.
-- **`make native`** — gcc `-m32`. **`make wasm`** — emcc (emsdk). **`make web`** — browser. **`make verify`
-  / `verify-wasm`** — crash-free matrix on both targets.
+## Das Vorgehen (der reproduzierbare Chain)
 
-Only hand-written code = the platform/runtime shim (`fist_` prefix): `fist_vga.c` (Mode 13h/Mode-X + DAC →
-framebuffer, i.e. writes to linear 0xA0000), `fist_dos.c` (extender/kernel role: INT 21h/DPMI/DOS memory +
-`FILEMGR`/`MEMMGR`; incl. **INT 21h AH=4B AL=03 load-overlay** = a faithful 16-bit MZ overlay loader),
-`fist_icall.c` (indirect-call dispatcher + **multi-module overlay registry/dispatch**), `fist_modules.c`
-(driver-overlay→fmap wiring, weak so engine-only builds link), `fist_sb.c` (SB/GUS DMA+IRQ → WebAudio),
-`fist_input.c` (INT 33h mouse + INT 9 keyboard + joystick), `fist_filio.c`, `fist_runtime.c`,
-`tools/native_main.c`. Editing those is fine; everything else is decompile + patches.
+Everything starts with `make` — the target chain *is* the documentation (`make help`):
 
-**MULTI-MODULE STRUCTURE (driver overlays).** The engine (`fist.c`) is one translation unit; each runtime
-driver overlay (MGAVIDEO.DVR video, SOUNDDVR.DVR sound) is a SEPARATE unit (`fist_mga.c`/`fist_snd.c`)
-assembled by the same `tools/assemble_fist.py` in `FIST_MODULE` mode — base-relative accessors that add a
-per-module `fist_<mod>_base` (set at load), a base-0-module-offset-keyed `fist_<mod>_fmap`, and
-`#define`-namespaced (`m_<mod>_…`) symbols so they don't collide with the engine unit. `fist_dos.c` AH=4B
-loads the real .DVR at the engine-chosen `load_seg<<4`, applies its MZ relocs, and registers it;
-`fist_icall` maps a runtime call target inside an overlay range to `linear-load_base = module offset →
-module fmap → &FUN`. Validated end-to-end via `FIST_OVL_SELFTEST=1`. See `the `patches/` series + docs/STATE.md`.
+```
+make image → decompile → assemble → patch → native / wasm → verify / verify-wasm
+```
 
-**DGROUP INDIRECT-CALL VECTOR TABLE (the runtime method-vtable install).** The engine's DGROUP holds a
-large table of far/near indirect-call vectors (service dispatch 0x0a..0x36 → seg 0xf69; device/stream
-METHOD vectors 0x78..0x33e incl. the driver-filename builder at DGROUP:0x31a → FUN_1000_4c9a). These are
-wired at runtime from an **in-image relocation table at seg 0x3352:0 (linear 0x33520)** — sections of
-`(dgroup_off, code_off)` pairs applied by **FUN_0000_f7ef** (near) / **FUN_0000_f842** (far off:seg; ==
-the DGROUP:0x12 service). f738 installs the boot sections at CRT init; each subsystem installs its own
-section on init via `mov si,<off>; call far [DGROUP:0x0a|0x12]`. Ghidra dropped the string-op segment
-bases in the C f7ef/f842 (DS=table-seg, ES=DGROUP) AND the SI arg of the indirect service calls, so the
-sections don't land → the method slots stay 0 → their `call [ds:0xNN]` trap to linear 0. Loader-role shim
-`fist_apply_reloc_section(si, is_far)` applies a section faithfully from the game's own data (base-0 ⇒
-identity), called from patches at the exact engine install sites (timing is load-bearing). Decoder
-validated slot-for-slot vs `tools/oracle/samples/dgroup_0x0_0x100.bin`. See `the `patches/` series + docs/STATE.md`.
-**Indirect-call args are threaded PER-PATCH, not by Ghidra pointer-typing.** Typing a `(*DAT_...)()`
-vector slot as a pointer-to-`__allregs`-FunctionDefinition does NOT work: Ghidra assigns FunctionDefinition
-param storage from the model's fixed pentry order (AX,BX,CX,…), but `ApplyConv` commits each real target's
-params in per-function varnode order (non-canonical register→slot map), so a generic pointer type emits
-args in the wrong positional order → flat-C cdecl corruption. DIRECT calls thread args correctly (the
-decompiler matches the known callee sig); INDIRECT method-vector sites are threaded faithfully per-patch as
-they reach the executed path. **Stage-1 gate CLEARED (patches 025–030, 023-rev): the MEMMGR best-fit
-allocator FUN_1000_0a31 + its interlocking callees (161d refill, 0bd1/0bef/0c21/0c7f search helpers, 0d70
-unlink, 1110/1114 coalesce, 17e5, 184b) are faithfully reconstructed from asm and verified (valid segments
-≥ heap base, base-sorted free list, no cycles, pool spans the full DOS block).** Execution now runs past
-MEMMGR + the 14da/197b object-pool init into the 0x5200 driver-init subsystem. **TASK 2 COMPLETE (patches
-031/032/033 + the 030 is_far fix): BOTH .DVRs now LOAD on the real boot path** — the driver-object method
-vector section si=0xec is installed at FUN_1000_06e3 (DGROUP:0xd0 = 0xf69:0x21bb = 184b), 50c8's dropped
-file-size return is restored, and FUN_1000_5051's DGROUP:0xd0->184b allocator call is threaded so it writes
-the real load_seg into the driver struct (SOUNDDVR seg 0x3a06 / MGAVIDEO seg 0x3e3a, both fmap-wired). The
-"0x5200 cascade" (5228/524e/…) was ROOT-CAUSED as the video-DRIVER dispatch surface (DGROUP:0x736/0x71a/
-0x558/0x680 are set by the driver's OWN init, not the engine), so it null-derefed only because the driver
-never loaded. The engine now dispatches INTO the video driver (new **SeedDriverVecs.java** seeds the driver
-overlay entry vector 0x2/init 0x9/methods incl. the VGA mode-set FUN_0000_00e8 = INT 10h AX=13h; video
-driver 233->236 fns). **FIRST LIGHT (mode-set half) ACHIEVED — INT 10h AX=13h FIRES.** The driver-init
-template-copy cascade (FUN_0000_f98b + the 5 template copies + workspace allocs + the driver-local
-method-vector reloc apply) is fully threaded and executing, the VGA mode-set FUN_0000_00e8 runs to its
-`INT 10h AX=0x13` (`[vid] 10h set mode 0x13`), and execution then runs through the engine's 0x5200
-driver-processing (FUN_1000_5228/524e/52d1/530b/531b) + the post-driver free-list (3436/3446) into INT 33h
-mouse init and joystick calibration. New shim helpers in `tools/native_main.c`:
-`fist_apply_reloc_at(seg,si,is_far)` (the driver-LOCAL reloc apply — `mov bx,[DGROUP:0x70e]; lcall
-[DGROUP:0x12]` — installs the driver method vectors incl. the mode-set DGROUP:0x540=0xe8:load_seg) and a
-`FIST_RUNMS` FB-dump watchdog.
-**LATEST (57 patches, 046-059 new): ALL 94 MGAVIDEO method-vector offsets recovered + the full
-mode-set→palette→driver-dispatch→cursor-init path reconstructed.** Runtime-dumped the DGROUP for every
-driver far vector (`FIST_DUMP_VECS=1` in `fist_icall.c`), seeded all 94 into `FIST_DRIVER_SEED_OFFS`,
-re-decompiled MGAVIDEO (216 fns) → the 3 documented driver-method traps (+0x3e0/0x26e/0x1963) are GONE.
-Then reconstructed, asm-verified: the palette upload (046-049: incl. resolving the **uninstalled** device
-alloc DGROUP:0xcc=182a directly to allocate the palette buffer word[0x782]), the post-mode-set driver
-object dispatch (050-053: 5228/026e/1963 + the 3446 f842-no-op elision), and the INT-33h mouse-cursor
-init walkers (054-059: 1cdb/1d59/201a/209e/2108/2d6d — DS=word[0x3e02] sprite-list segment, DGROUP
-near-offset marks, the 0xc-byte stride, node-list dispatch vectors). 2249 engine fns pristine, no
-regression (both .DVR load + mode-set + mouse init intact).
-**LATEST (63 patches, 060-065 new): CURSOR CASCADE CLEARED — FUN_0000_1c6a RETURNS; the driver rect-fill
-pixel-writer FUN_0000_1091 reconstructed; execution runs through filename-init + MEMMGR-search into the
-MAIN function FUN_0000_00d0.** Reconstructed & asm-verified: **1091** the literal VGA pixel writer (patch
-060/061 — Ghidra dropped its whole fill body "does not return"; rebuilt `di=rowtab[y0]+x0; ES=0xA000; per
-row rep stosw/stosb`, threaded an explicit colour param; erase 2108 threads colour 0); the cursor-DRAW
-handlers **2112/211d/2123/212a** (062 — dispatched by REGISTER, recover bx=word[DGROUP:0x3e08]/bp=word[
-0x3afe] + rebase node reads to DGROUP; 212a also restores the dropped INPUT ax to the DGROUP:0x584 driver
-method); the **filename-init** 21bd (064 — thread ax=0x148 + rebase param_2) + driver string-table copy
-0197 (063 — DS=word[0x70a]/ES=DGROUP bases); the **MEMMGR object-search** 135f/1345/18d1 (065 — 135f's
-folded segment-walk was an infinite loop; restored the chain walk + CF/found propagation). 2249 engine fns
-pristine, driver 216, no regression. **NONZERO PIXELS not yet reached** (gdb-verified FB at 0xA0000 =
-0/64000): the cursor erase fills colour 0 and the first real render is deeper in 00d0. **ENV-CONFIG
-HANDSHAKE RESOLVED (patches 066/067 + env/memory seeds): d99b's blob is an EXTENDER callback vector, not a
-LOADGAME env var.** The `IBM=`/`ATCODE=` premise is DEBUNKED — those are LZEXE-0.91 decompressor artifacts
-in LOADGAME.EXE (unpacked + verified); LOADGAME sets NO env var. The nibble blob d99b decodes is
-synthesized by the **Doug-Huffman EXTENDER (FIST.RUN)**, which rewrites `PSP:0x2c`. Captured live from the
-original under QEMU (`pmemsave` low RAM + `[\x30-\x3f]{12,}` grep, three copies): **`06=90762117900000?300526`**
-→ decode+swap → far ptr [ea16]=**0x0762:0x1179 (linear 0x8799)**, args ea1a=0x0f30 ea1c=0 ea1e=0x0526.
-Disassembling that target in the oracle's memory = the extender's **real-mode→32-bit-PM callback gate**
-(push segs; `rep movsl` args; stack-switch; far-jmp to PM) — so `e339`'s far-call is an EXTENDER SERVICE
-call (in our port the shim/extender role → `fist_icall_far(0x8799)` honest trap→0). Seeded the real blob at
-`PSP:0x2c` + the cb45 memory-gate fields (conv/XMS/disk, 32MB ref machine → cb45 passes, 0xf9fa/0x314 traps
-GONE); reconstructed d99b faithfully (builds the intro/title task: D02.PCX/C02.PCX/502.PAL/5.SKY) + fixed
-e339 base-loss. Execution now runs past cb45 + d99b into **FUN_0000_db3f**.
-**LATEST (70 patches, 068-072 new): EXTENDER CREATE-TASK GATE IMPLEMENTED → the intro task is a REAL
-segment; the banner prints; execution reaches the INTRO-ANIMATION PLAYER.** The 0x8799 gate now routes
-(via `fist_icall`) to **`fist_extender_gate()`** (`tools/native_main.c`, extender role): op = DGROUP:0xea10
-(aa10) selects the service; op 0 = create-task = allocate a zeroed, paragraph-aligned, real-mode task-
-control block of word[ea1a]=0x0f30 BYTES from the extender pool (free gap seg 0x9000..0x9800, above the
-MEMMGR heap-top, below the PSP) and return its segment in AX (e339 → aa2e). The PM service body lives in
-the extender's paged image (0x10000000+, unreachable by the oracle which faults earlier), so it is modelled
-faithfully from the asm-verified contract (0xe339: gate return AX = task seg; the `ljmp [DGROUP:0x58]`
-scheduler tail is guarded by task[0]!=0 which stays 0). Then: **068** rebases the whole task-struct base-
-loss family ONCE at the `DAT_2000_aa2c` macro (byte-ptr `g_mem+(word[aa2e]<<4)+word[aa2c]` — fixes ~88
-db3f/dab0/db11/dde2/… sites' base-loss + int*×4 scaling; zero regression, no pre-db3f user); **069**
-FUN_0000_153c resource-directory registrar (object struct at param_2:param_4 seg:offset; descriptor-chain
-parse into word[DGROUP:0x4f0]:out_off); **070** MGAVIDEO driver 0x4a3 palette-clear + vblank DAC-upload
-service (ES=word[DGROUP:0x782] base + service the 0x786 retrace semaphore); **071** FUN_0000_e584 intro-
-animation-player header (resource descriptor at STRSEG:bx, STRSEG=word[DGROUP:0x70]); **072** cooperative
-INT-8 pump in e584's frame-timer waits + FUN_1000_38cc (same class as 017).
-**LATEST (74 patches, 073-076 new; engine re-decompiled 2249→2251): VSYNC HANG RESOLVED — the frame/event
-SCHEDULER is installed + reconstructed, FUN_1000_38cc no longer spins, and the INTRO ANIMATION NOW PLAYS
-end-to-end (frames advance 0→573, real-time throttled).** The prior "driver vsync-poll c40a" premise was
-WRONG: **c40a is the ENGINE's frame/event SCHEDULER poll, not a driver method** — `DGROUP:0x40a = 0xf69:0x3f17
-= FUN_1000_35a7` (a seg-0xf69 service fn).  Reloc **section si=0x1d8** (leading seg 0xf69) installs the
-scheduler method vectors 0x3fe..0x41e (incl. 0x40a poll + 0x416=38cc); same KIND as the 0x0a..0x36 service
-vectors → installed at BOOT (loader role: `fist_install_dgroup → fist_apply_reloc_section(0x1d8,1)`).  The
-engine's own 0x1d8 sites don't install it: **FUN_1000_3446 (sched INIT) calls f842/bx==0 which BAILS;
-FUN_1000_3485 (sched SHUTDOWN) calls f860 which CLEARS.** Seeded the nine vector targets into
-`SeedServiceVecs.java` + re-decompiled (RecoverAll pulled in 0x35a7/0x349b/0x38f5/0x3920). **073** reconstructs
-FUN_1000_35a7 (event-queue pump; DGROUP near-offset base-loss; returns x86 CF via the shim global `g_fist_cf`
-— CF=1 when the queue is empty [0x18e4]==0xffff) + FUN_1000_3920 (cooperative-yield trampoline).  **074/076**
-thread that CF into FUN_1000_38cc/38bc (Ghidra folded both CF spins to hardcoded-false → infinite). **075**
-reconstructs the FUN_0000_e584 intro SCRIPT interpreter (6-byte records at ES:[b6ec], ES=STRSEG=word[DGROUP:
-0x70]; STRSEG base-loss + uint*×3 cursor scaling + 38bc-CF gate).
-**LATEST (75 patches, 077 new): EXTENDER TASK MODEL FULLY REVERSED + a HARD ARCHITECTURAL FINDING — the
-per-frame RENDERER is Doug-Huffman-extender 32-bit-PM code that is NOT in FIST.DAT.** Reversed the whole
-model slot-for-slot (asm 0xd99b/0xe2c2/0xe339 + reloc-table decode): the TCB command inbox is **task+0x3f2**
-(EBX, written by ~40 posters 0xd94e..0xe37b), params +0x490/+0x492/+0x494, asset names +0x7a/+0x8a/+0x9a/
-+0xaa, current name +0xba; ops = 0x00 create / 0x04-0x70 display-list setup / **0x64 post frame DATA** /
-**0x78 PRESENT frame N** (FUN_0000_d97e; its return gates e584's loop). **task[0] is an ERROR/ABORT flag,
-not "started"**: e339's `ljmp [DGROUP:0x58]` (only if task[0]!=0 && op!=0) → **0xf69:0x314 = the extender
-ABORT/RESTART handler** (`ljmp 0:0xe0`), so the shim's no-op-return-0 (task[0] stays 0) is the faithful
-non-error path.  **THE FINDING (proven by full-image scan, every encoding): task+0x3f2 is WRITTEN at 34
-sites and READ by NOTHING in FIST.DAT or either .DVR.** The consumer that reads the inbox, decodes the
-display list, streams TITLE.KDV (1.8 MB FMV), and blits to 0xA0000 is the extender's PM service — **absent
-from FIST.DAT but PRESENT in the FIST.RUN extender kernel image `re_out/fist_image.bin` (Route 1, the
-faithful path; NO DOSBox trace needed).**  **LOCATED + DECOMPILED this iteration** (`make decompile-kernel`,
-new target; 33 → 183 fns): the **KDV player** cluster (decode `0x6f3e` dispatches chunk MAGIC `'xVDK'`header/
-`'pVDK'`palette/`'iVDK'`frame; present `0x7120` = `rep movsd` 320×200 → framebuffer var `[0x917]`=0xA0000;
-palette `0x746b` → DAC 0x3c8/0x3c9; RLE `0x7135`; open/read/close = INT 21h) and the **op-service dispatch**
-(handlers `0x11cb` KDV-open reads TITLE.KDV from **TCB+0xBA** via `[0xc93]`=current-TCB, `0x11dd` decode;
-op/method-vector table image 0xcef..0xd2b).  Integration = a THIRD, **32-bit-flat** assemble-module unit
-(`fist_ext.c`): its own image rebased to `fist_ext_base`; register-indirect flat pointers → `g_mem[reg]`
-(so framebuffer 0xA0000 + TCB 0x90000 resolve absolute; `[0x807]`=0 identity); wire `fist_extender_gate` op→
-`m_ext_FUN_000011cb/11dd`.  DESIGNED + decompiled; module plumbing (a new 32-bit assemble mode) is the
-next build step (full detail in `the `patches/` series + docs/STATE.md`).
-**LATEST (this iteration): ROUTE 1 PLUMBING BUILT — the KDV player is a compiled+linked+wired 3rd MODULE;
-execution runs from the engine's intro loop INTO the real decompiled player.** New **32-bit-flat MODULE mode**
-in `assemble_fist.py` (`FIST_MODULE=ext FIST_FLAT32=1`, gated → engine byte-identical): normalizes the single
-flat-address symbols to `0000:OFF`, defaults scalars to 4 B, handles `sRam`/`PTR_*`/`code`-return/`switchD::`/
-switch-on-pointer/`BADSPACEBASE`/bare-LAB-SMC → `re_out/fist_ext.c` (183 fns) compiles+links. **Memory model =
-host-pointers-in-slots** (the extender is a flat bump allocator: seed `[0x90b]/[0x90f]` heap, `[0x917]`
-framebuffer, `[0xc93]` TCB with HOST pointers → the REAL allocator/RLE/present/DAC run with native derefs, no
-per-deref rewrite). Wired: `build_native.sh` `ext` unit, `fist_modules.c` `"EXT"` row, `native_main
-ext_module_init` (load `fist_image.bin`@`FIST_EXT_BASE=0x100000`, `fist_ovl_register`, seeds; g_mem grown to
-0x180000), gate op 0x64/0x78 → `m_ext_FUN_0000_11cb`(OPEN)/`11dd`(DECODE+PRESENT). **NO REGRESSION** (engine
-`fist.c` md5 identical; 75 patches clean; default boot rc=0, all milestones incl. EXT/`.DVR` register, mode-set,
-mouse, create-task). KDV drive gated behind **`FIST_KDV=1`** (default OFF, crash-free). **NEW FRONTIER = the
-extender's own FILEMGR** (`FUN_00005cc2`/`5d50`): the KDV OPEN needs (1) FILEMGR path tables initialized
-(`PTR_DAT_00006234` root / `PTR_s_RESOURCE_RES_0000622c` / DTA `DAT_00000927` — raw image bytes → wild ptr
-walk), and (2) a **32-bit-flat INT-21** (the shared reg-file is 16-bit `DS:DX`; the extender's flat path
-buffers at module offsets + `(short)`-truncated heap buffers mis-address → needs a 32-bit reg-file kernel
-re-decompile + an extender INT-21 at `g_mem+EDX` + AH=4E/4F). The whole player is compiled & one working
-file-open from pixels. Full detail in `the `patches/` series + docs/STATE.md`.  Also **FIXED the intro-era `'\t>'` garbage open (patch 077):
-it was FIST.SET (FUN_0000_6e0e/6e8d) with a host-pointer-truncated DX** (Ghidra typed the DX reg-file slot
-as a pointer → R_DX=low16(host ptr)); write the real DOS offset 0x8a9c/0x8aa8 → `'..\FIST.SET' -> ok`.
-Class: host-pointer-into-DOS-register INT-reg-file artifact (~10 more sites carry it — see the `patches/` series + docs/STATE.md).
-Fully mapped in `the `patches/` series + docs/STATE.md`. **Load-bearing driver-init facts:** the 5 template srcseg immediates AND
-the reloc-section leading seg words are MZ reloc sites -> already the driver load-seg at LOAD, so f98b's copy
-source = `(fist_mga_base>>4)+rel` (threaded at the call site) and the copied section applies verbatim. NB
-asm gotcha proven load-bearing: objdump AT&T `cmp %mem,%ax` for opcode `0x3b` is `ax - mem` — best-fit/base
-comparisons are the reverse of the naive reading. And: the FAR reloc applier FUN_0000_f842 (DGROUP:0x12)
-uses BX directly as the section segment (`mov ds,bx`); the oracle note about BX-from-DGROUP:0x74 was about a
-DIFFERENT applier (f860 via f7c3). Each entry installs DGROUP[off]=value, DGROUP[off+2]=section-leading-seg.
+- **image / decompile** [done, reproducible] — Ghidra headless (`x86:LE:16 Real Mode`, base 0) →
+  pristine `re_out/fist_decomp.c` (2245 fns), register dataflow threaded via the custom `__allregs`
+  model. **The decompile stays pristine — never hand-edit it.**
+- **assemble** — mechanical `fist_decomp.c` → `re_out/fist.c` (flat `uint8_t g_mem[]` model, forward
+  decls, `ghidra_compat.h`).
+- **patch** — ordered `patches/NNN-slug.diff` applied `-F0 --fuzz=0` onto `re_out/` → `build/`. **Every
+  engine correction is one commented, asm-verified patch** with its rationale in the header. Drift fails
+  loudly.
+- **native** (gcc `-m32`) / **wasm** (emcc). **verify / verify-wasm** — `tools/verify.sh` runs the
+  bit-verify flow matrix on both targets.
 
-## DOS "voodoo" — direct hardware access, and how the shim absorbs it
-1994 DOS games bypass every OS/API and touch hardware directly. Armored Fist runs in the Huffman
-extender's **flat 32-bit space**, so this maps cleanly onto our model (flat memory image + C, exactly like
-DD2's image at 0x400000): "direct memory access" decompiles to absolute pointer derefs into one big flat
-`g_mem` array — they just work. The shim only has to trap the *special* addresses/ports:
-- **Video:** direct writes to **linear `0xA0000`** (VGA Mode 13h/Mode-X). This is the DOS analog of DD2's
-  DirectDraw→`g_pixels`, and **simpler** — no COM, no surface lock/flip, just a linear byte range →
-  `fist_vga.c` mirrors it to the framebuffer/canvas. Mode-X page flips + rects via CRTC/Sequencer ports.
-- **Port I/O (trap `in`/`out`, not API calls):** VGA DAC `0x3C8/0x3C9` (palette), CRTC `0x3D4/5`,
-  Sequencer `0x3C4/5`, Attr `0x3C0`; PIT `0x40–0x43` (+ INT 8 timer tick); keyboard `0x60/0x64` (+ INT 9);
-  joystick `0x201`; Sound Blaster DSP `0x2x0` + 8237 DMA + IRQ; GUS ports. Ghidra renders these as
-  `in`/`out` intrinsics → the shim implements them.
-- **Software interrupts to trap (`int` intrinsics):** INT 21h (DOS/file via FILEMGR), INT 33h (**mouse
-  driver** — required; → browser pointer events + canvas cursor for the editor/map), INT 10h (BIOS video
-  mode set), INT 8/INT 9 (timer/keyboard). `fist_input.c` owns INT 33h + keyboard + joystick.
-- **Also expect:** self-modifying code, direct DMA into physical/linear memory, BIOS data area reads
-  (`0x400–0x4FF`), IRQ/vector hooking via the extender's INT services. These are *known, enumerable* hooks,
-  not blockers — each is one shim entry, resolved the same disciplined way as any DD2 root.
-The point: the "voodoo" is real but it is **port-level and memory-level**, i.e. a finite trap list — a
-flatter, smaller surface than DD2's COM/Win32 API shim, not a harder one. Enumerate every trapped
-port/region as it is discovered (`fist_vga.c` / `fist_dos.c` / `fist_sb.c`); no silent stubs.
+**Hand-written = only the platform shim** (`fist_*.c`, `tools/native_main.c`): VGA (linear `0xA0000` +
+DAC → framebuffer), DOS/FILEMGR (INT 21h), mouse/keyboard/joystick (INT 33h / INT 9 / port 0x201), SB/GUS
++ OPL audio, timer (PIT/INT 8), the extender/overlay loader, indirect-call dispatch. Editing the shim is
+fine; everything else is decompile + patches.
 
-## Reference oracle — DOSBox + QEMU (not Wine)
-Bit-verify against the original in DOS. Two complementary oracles are installed — use both:
-- **DOSBox** (`/usr/bin/dosbox`) — deterministic, cycle-based, hackable. Fast interactive reference and
-  quick framebuffer/palette dumps; patch/instrument it to dump memory + FB at exact cycle counts and trace
-  port I/O (VGA DAC, PIT, SB DMA, keyboard 0x60).
-- **QEMU** (`qemu-system-i386` for full-system DOS, `qemu-i386` user-mode; both installed) — runs a real
-  386 in true protected mode, so the **Doug-Huffman extender / DPMI / mode-switch paths execute more
-  faithfully than under DOSBox or Wine**. Use its **gdb stub (`-s -S`)** for instruction-level breakpoints
-  and its **deterministic `-icount` + record/replay** for cycle-exact, reproducible memory captures.
-This dual setup is expected to give a **tighter, cheaper bit-verify loop than DD2's Wine+gdb+/proc/mem**,
-and avoids the wallclock-jitter / audio-timing problems that plagued DD2's sound references. QEMU is the
-instruction-level microscope; DOSBox is the fast everyday oracle.
+**What the target is:** `FIST.RUN` = loader + Doug-Huffman DOS-extender (→ shim). **`FIST.DAT` (216 KB) =
+THE ENGINE** and the decompile target: 16-bit segmented, base 0, almost entirely hand-written asm (Kyle
+Freeman) — NovaLogic **Voxel Space** terrain (Comanche lineage). Flat model: `g_mem`, **DGROUP at linear
+0x1c000** (SS=DS=DGROUP=0x1c00), VGA fb at `0xA0000`. Data under `armoredfist/FISTDATA/` (`.KLC` maps,
+`.MS3` missions, `.FSG` battles, `.M##` models, `.FSG/FSE/FSW` sounds/briefings, …).
 
-## Ghidra-artifact taxonomy (inherited from DD2 — same decompiler, same x86, expect the same classes)
-On any wrong output, check these FIRST: **pointer scaling** (int-typed byte/word tables indexed with byte
-offsets); **scattered locals** (stack blocks split into separate C locals gcc reorders — vertex/matrix/info
-blocks read as structs by callees); **dropped register-args** at call sites (`recover_regargs.py`);
-**signed `sar` semantics** in span blitters and const hi-half loads; **paired 16-bit loads** / store-width
-mismatches (`66`-prefix, `xor eax,eax; mov al`); **mid-function entries**; **wasm `call_indirect` signature
-normalization**. New-vs-DD2 classes to expect from the DOS target: real-mode↔protected-mode transitions,
-self-modifying code, and **code overlays** (possibly inside `FIST.DAT`) needing per-region processor mode.
+## "Code ist die Wahrheit" — der Oracle
 
-## Decompile completeness — resolve jump tables exhaustively (fewer tables ⇒ fewer patches)
-Every indirect-dispatch table (near/far `jmp`/`call` through `[base+idx]`, switch idioms, NovaLogic
-command/state/opcode dispatch tables) that is **fully resolved at decompile time** — bounds recovered, all
-targets promoted to functions, the dispatch rendered as a real switch — is a manual **patch we do NOT have
-to write later**. So the `make decompile` stage optimizes for table completeness, not just entry-reachable
-coverage: a reproducible `tools/ghidra/` postScript recovers tables to a **fixpoint** (recover → new
-functions may contain new tables → repeat). Maintain a table inventory (address, kind, element size, entry
-count, index-bound source). Unresolved indirect calls are the single biggest downstream patch source in
-16-bit game code — front-load them here.
+Verify **every** claim against the original: `armoredfist/FIST.DAT` (static / `objdump -m i8086`) or a live
+run. Two oracles are installed: **DOSBox** (fast, hackable — instrument it to dump FB/RAM/ports; reaches
+missions) and **QEMU** (`-s -S` gdb-stub, `-icount` record/replay — true protected mode). A rebuilt
+instrumented `dosbox-fist` + capture scripts under `tools/oracle/` dump full guest RAM at a chosen tick;
+the engine's DGROUP relocates to **guest phys 0x2d190**, so `oracle[0x2d190+X] ≡ port g_mem[0x1c000+X]` —
+any engine field is directly comparable to the original. No approximations, no band-aids, no stubs: **any
+observable deviation from the original is by definition a bug.**
 
-## Conventions
-- Faithful reconstruction — no approximations/band-aids. Commit progress; **verify BOTH targets after every
-  change** (native ↔ wasm bit-identical is a hard invariant).
-- Every engine correction is a `patches/NNN-slug.diff` with rationale in the header; the pristine decompile
-  (`re_out/fist_decomp.c`, `fist.c`) is committed so `make patch` is reproducible without Ghidra.
-- Original game files under `armoredfist/` must be present at run time. `third_party/` (Ghidra, JDK, project
-  DB) and the extracted memory image are gitignored.
-- **DOSBox gotcha:** never `pkill -f dosbox` from inside a DOSBox-launched shell; use `pkill -x`.
+## Die Grundhaltung: "geht nicht gibt es nicht"
 
-## Toolchain (installed — do not re-hunt)
-- **WASM:** emsdk at `~/Git/emsdk/` — `emcc` 5.0.7 (`~/Git/emsdk/upstream/emscripten/emcc`) drives
-  `make wasm`/`web`; node 22.16.0 (`~/Git/emsdk/node/22.16.0_64bit/bin/node`) runs the node target. Discover
-  it in the Makefile the DD2 way: `NODE := $(firstword $(wildcard $(HOME)/Git/emsdk/node/*/bin/node) node)`.
-- **Native:** gcc `-m32`. **Decompile:** Ghidra + JDK under `third_party/` (gitignored).
-- **Oracles:** DOSBox + QEMU (`qemu-system-i386` / `qemu-i386`) — see Reference oracle above.
+The whole chain is already proven by wasm-dd2, so **nothing here is unreachable** — only bounded,
+decomposable work. When something looks hard, it is *not* a reason to stub or declare a surface out of
+reach; it is the next thing to decompose into a small, verifiable step. **One verified step at a time.**
 
-## Definition of Done (acceptance bar — not aspirational)
-The port is done only when ALL hold, on **both** native and browser:
-1. **Bit-identical** framebuffer (every frame) and audio stream vs the DOSBox reference, for the intro,
-   every menu/screen, and gameplay on **every** map, at same input + RNG state.
-2. **native ↔ wasm bit-identical** for every frame of every covered flow (hard invariant, checked after
-   every change).
-3. **Exhaustive coverage exercised** by a repeatable test harness (analog to DD2's `tools/browser/*.js`
-   + native repro modes): every menu path, every mission, every setting toggle, and the **editor
-   round-trip** (create → save → reload → sim, byte-identical) all pass in a consecutive-clean run.
-4. **No guards / stubs / approximations** in the engine path — every deviation resolved as an asm-verified
-   `patches/NNN-*.diff`. Any surface that only "mostly works" is an open bug, not done.
+- **Land small, verify immediately.** A single asm-verified patch that makes one flow bit-identical on
+  both targets is a real win. Commit it, `verify.sh both`, move on.
+- **Iterate and correct without ego.** A failing test means a bug in the *code*, not the test. A wrong
+  hypothesis, disproven against the code, is progress — it eliminates a dead end. Correcting yourself is
+  the method working, not a setback.
+- **Widerstand ist Information.** If something resists, it means there's something not yet understood —
+  stop, look at the asm / the oracle, then take the next small step. Never improvise a guard around it.
+- **Momentum beats perfection.** Pick the most tractable next flow, make it green on native + wasm, bank
+  it. Breadth grows one bit-verified surface at a time until the 10× gate falls.
 
-**Final gate (the definition of "done"):** the port is done when a **subagent has confirmed the WASM build
-error-free and fully functional 10 times in a row** — ten consecutive clean passes of the full exhaustive
-harness (every menu, every mission, every setting, the editor round-trip), with zero errors, crashes, or
-functional gaps in any pass. One failure anywhere resets the count to zero. This mirrors DD2's
-consecutive-clean loop (`tools/browser/passrun.sh` + `consecutive.sh`). Until that 10× streak is banked,
-the port is not done.
+## Konventionen
 
-## Status — see `docs/STATE.md` (the living current-state frontier map)
+- `re_out/fist.c` pristine; corrections are `patches/NNN-*.diff`; `make check` must apply all patches.
+- Verify **both targets after every change** (native ↔ wasm byte-identical is a hard invariant).
+- Original files under `armoredfist/` present at run time. `third_party/` + extracted images gitignored.
+- Git: no "Co-Authored-By: Claude" / "Generated with Claude Code" attribution in commits or PRs.
 
-CLAUDE.md is the durable spec/doctrine above; it does NOT track per-patch status. For where the port
-actually is — the bit-verified `tools/verify.sh` flow matrix, the open frontiers, and what is genuinely
-untouched — read **`docs/STATE.md`**. Per-patch rationale lives in the `patches/NNN-*.diff` headers
-(the pristine decompile + ordered patches are the reproducible source of truth). Key durable findings and
-active-frontier detail are captured in the auto-memory (`MEMORY.md` index) and the focused `docs/*.md`
-(`recon.md` architecture, `coverage_plan.md` mission/coverage plan, `audio.md`, `editor.md` +
-`editor_tools_plan.md`, `oracle_mission_spawn.md` terrain-frontier verdict, `tools/oracle/README*.md`).
+## Wo wir stehen
 
-Snapshot (2026-08-18): the entire front-end is bit-verified on both targets (intro, all menus, every
-SETTINGS toggle, list-dialog interactions, OK-save, campaign/battle drill-down, briefing) + ~25 mission
-cockpit-chrome flows + editor `.FSG` round-trip; a 43-flow suite has passed the 10× consecutive-clean gate
-(DoD criterion #2 for the CURRENT matrix, not the final DoD). Genuinely open toward the full DoD: audio
-bit-exactness (a WebAudio verify flow), the mission windshield terrain (deep 6980 paging frontier), the
-turret-slew gameplay-sim (dial needle), the interactive level/mission editor (6 element-activate tools),
-save/load, controls-config, other missions full-frame, and the 10× gate on the COMPLETE exhaustive matrix.
+The **entire front-end is bit-verified on both targets** — intro, all 7 main-menu items, every SETTINGS
+toggle, all list-dialog interactions (select/scroll/page/cancel), OK-save, campaign/battle drill-down,
+briefing — plus ~25 mission cockpit-chrome frames and the `.FSG` editor round-trip: **62 `tools/verify.sh`
+flows, AE=0 native + wasm, native↔wasm 0-diff.** The reproducible chain is solid; `re_out/fist.c` pristine;
+the shim covers VGA/DOS/mouse/audio/extender. From here it's breadth: more missions/maps, the mission
+windshield terrain, audio bit-exactness, the interactive editor tools, save/load, controls — each a
+bounded, decomposable step, one green flow at a time, all the way to the 10× gate. **Los geht's.** 🚀
