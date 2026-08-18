@@ -920,3 +920,16 @@ Repro: `setarch -R env FIST_SEGV_BT=1 FIST_DATADIR=<warm> FIST_TICK_HZ=25000 FIS
 FIST_MOUSE=<MC> /tmp/fist_native` -> EIP 2b1e+0x190. Watchpoint recipe: SIGSTOP-at-frame-0 pause hook
 (raise(SIGSTOP) when word[0x724]==0x726 && fr==0) + gdb `-p` attach + `handle SIGALRM nostop noprint pass`
 (the 25kHz timer makes a from-start gdb run never reach the mission).
+
+### SYRIA2 chain state after patches 395+396 (2026-08-18): CRASH -> HANG (twin-#3 class)
+2b1e(395) -> ac9e(396) -> now **HANG rc=124** (not a crash).  SYRIA2 reaches the display-list op-loop but
+spins on ops 0x08/0x2c/0x5c without ever posting **op-0x24 (present)** -> no MISSFB frame.  Last op before
+the freeze: `op 0x2c inbox=00003b3c` -- **0x3b3c = the view-node DGROUP offset** (word[DGROUP:0x3b3c] =
+cockpit 0x011a vs map 0x0060; the exact twin-#3 selector, patch 392).  So SYRIA2's hang is a twin-#3-CLASS
+view/phase-select residual: patch 392 fixed the 5d43 store-width for ALL missions, but SYRIA2's specific
+data evidently still lands on the wrong view chain (like AZER2 pre-392).  AZER1/CYPRUS1 stay AE=0 (they
+never reach ac9e/this path).  NEXT (needs runtime, binary must be free): FIST_OPHIST=1 op-trace + the 22dd
+per-phase log (the AZER2 twin-#3 method) on SYRIA2 vs AZER1 -> find why word[0x3b3c] stays the map element
+for SYRIA2 despite 5d43's WORD compare.  Repro: `setarch -R env FIST_SEGV_BT=1 FIST_DATADIR=<warm>
+FIST_TICK_HZ=25000 FIST_FSG_BATTLE=SYRIA2 FIST_MOUSE=<MC> FIST_MISSFB=/tmp/x.ppm timeout 70 /tmp/fist_native`
+-> rc=124, last op 0x2c inbox=0x3b3c.  Shared view path -> full regression validate + re-gate after any fix.
