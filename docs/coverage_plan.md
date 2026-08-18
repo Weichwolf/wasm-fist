@@ -1294,3 +1294,31 @@ per-vehicle/mission spawn INIT computation (candidate: a turret-target-lock / in
 a3d8 which zeroes +0x55, and the [[mission-b112-ailock-frontier]]).  NEXT (needs the oracle, in flight): read
 the original's AZER6 player+0x55 (confirm ~56) and, via a dosbox watchpoint on player+0x55, capture the write
 instruction -> map to the decompiled fn -> find why the port skips/misruns it.  Then a faithful patch. +8 flows.
+
+### Dial: ORACLE VERDICT (2026-08-18) — PREMISE REFUTED. Port +0x55 is FAITHFUL; the bug is the TURRET-SLEW SIM (+ frame-skewed refs). NO spawn-value patch.
+Rebuilt the instrumented DOSBox (scratch/oracle/capture_battle_spawn.sh scrolls the battle list to a chosen
+row) and captured GENUINE original mission-spawn guest RAM for AZER6 (x3), SAUDI5, AZER1(sanity).  DGROUP
+pins B=0x2d190 playerOff=0xc05c type0 in EVERY capture (mapping validated).  RESULTS:
+- **AZER1** player+0x55 = **56** stable  (== port, == the known-good baseline)
+- **SAUDI5** player+0x55 = **56** ; port = 19
+- **AZER6** player+0x55 = **13 / 21 / 14** across three runs (low band ~13-21, +0x10 sim-counter differs per
+  run) ; **port = 21 -> INSIDE the oracle's band.**
+DECISIVE: the "56-63 override" hypothesis is **REFUTED** — AZER6's original +0x55 is ~13-21, NOT 56, and the
+port's 21 matches.  The committed AZER6 ref (usi14 / +0x55~56) is a SETTLED/LATER frame that neither the port
+(21) nor the early oracle (13-21) shows.  **+0x55 is the DYNAMIC turret azimuth: the original SLEWS it over
+frames (oscillating 13->21->14->... toward a settled position); the port FREEZES it** at the initial value
+(FIST_V55WATCH: no transition; MISSFB_N=1,4 both 21).  So the needle divergence is NOT a wrong spawn value —
+it is (a) the port not running the per-frame turret-azimuth SLEW sim, and (b) refs captured at a non-matching
+(settled) frame.  **DO NOT patch +0x55 to 56** — that would fake a settled value the sim never computes and
+corrupt the faithful load (it IS correct at spawn).  This is the [[mission-b112-ailock-frontier]] turret-slew
+territory (a02d/a0ab per-frame azimuth update), a GAMEPLAY-MOTION deliverable, not a spawn-frame value fix.
+SAUDI5 also shows a roster COUNT divergence (port 4 objects vs oracle 8) + player +0x55 19 vs 56 — same
+"port doesn't advance the mission sim" family (units spawn / turret slews over frames the port doesn't run);
+needs frame-locked investigation, NOT a spawn patch.
+CONSEQUENCE for the 8 held-back missions (AZER6/CYPRUS5/INDIA7/SAUDI5/6/SYRIA5/7/TRAIN1): they have an
+actively-slewing (non-frame-deterministic 13-21 band at spawn) turret needle.  They are NOT statically
+bit-verifiable with the current frame-skewed refs.  Options: (a) reconstruct the turret-slew sim + frame-lock
+(the real fix; gameplay-motion), or (b) mask the ~24x20 dial region and bit-verify the static cockpit chrome
+(which already matches AE=0 elsewhere).  The 8 committed refs are FRAME-SKEWED and must NOT be trusted as
+spawn references.  Oracle infra + dumps kept under scratch/oracle/ (azer6_spawn*.ram.bin, saudi5_spawn.ram.bin);
+capture_battle_spawn.sh + analyze_player.py reusable.  Diagnostics: FIST_DIAL55 / FIST_DIAL55_OBJ / FIST_V55WATCH.
