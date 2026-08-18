@@ -90,8 +90,19 @@ reach; it is the next thing to decompose into a small, verifiable step. **One ve
 
 The **entire front-end is bit-verified on both targets** — intro, all 7 main-menu items, every SETTINGS
 toggle, all list-dialog interactions (select/scroll/page/cancel), OK-save, campaign/battle drill-down,
-briefing — plus ~25 mission cockpit-chrome frames and the `.FSG` editor round-trip: **62 `tools/verify.sh`
+briefing — plus ~26 mission cockpit-chrome frames and the `.FSG` editor round-trip: **66 `tools/verify.sh`
 flows, AE=0 native + wasm, native↔wasm 0-diff.** The reproducible chain is solid; `re_out/fist.c` pristine;
-the shim covers VGA/DOS/mouse/audio/extender. From here it's breadth: more missions/maps, the mission
-windshield terrain, audio bit-exactness, the interactive editor tools, save/load, controls — each a
-bounded, decomposable step, one green flow at a time, all the way to the 10× gate. **Los geht's.** 🚀
+the shim covers VGA/DOS/mouse/audio/extender.
+
+**The mission-paint "crash bucket" is cracked** (patches 397-399): the in-mission windshield/HUD dispatch
+reached four still-un-ported per-vehicle sprite-animation element methods (8039/7681/87cc/90bf + their
+state-setters) whose raw Ghidra host-ptr derefs SEGV'd on reach — NOT the wild-writer / spurious-viewport
+/ fb_seg red herrings that earlier sessions chased (all disproven with **non-perturbing** gdb-hw-watchpoint
++ `FIST_COOP_TICK` data; mprotect single-step was corrupting the garbage-dependent crash). AZER3 now
+renders its full M1 cockpit, central-chrome **AE=0 vs the DOSBox oracle** on both targets — the first
+op-0x2c FSG-battle surface (`FIST_MISSFB2C` capture).
+
+From here it's breadth: the remaining FSG battles / campaign maps, the mission windshield **voxel terrain**
+(the still-dark band above the cockpit), audio bit-exactness, the interactive editor tools, save/load,
+controls — each a bounded, decomposable step, one green flow at a time, all the way to the 10× gate.
+**Los geht's.** 🚀

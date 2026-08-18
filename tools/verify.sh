@@ -298,6 +298,13 @@ FLOWS=(
   # UKRAINE8 (D31/C31-group, M1 idx0): crash-free spawn, central chrome == azer1 M1 crop AE=0; resting
   # turret.  Deterministic (native 2x AE=0), wasm AE=0, native<->wasm 0-diff.
   "mission-cockpit-ukraine8|25000|missfb|UKRAINE8|$ROOT/ref/mission_azer1_cockpit_native320.png"
+  # AZER3: the FIRST un-blocked op-0x2c crash-bucket battle (patches 397-399 ported the 4 per-vehicle
+  # sprite-animation element methods that SEGV'd the mission paint).  AZER3 renders the windshield only
+  # via the op-0x2c secondary-viewport path (never posts op-0x24), so it uses the `mission-cockpit-2c-`
+  # capture mode (FIST_MISSFB2C, first op-0x2c post = spawn).  Central-chrome (MC_REGION) AE=0 on native
+  # AND wasm, native<->wasm 0-diff; the ref crop is bit-identical to the DOSBox oracle spawn frame
+  # (scratch/oracle/azer3_spawn.frame.png).  Windshield terrain band = the separate voxel-render frontier.
+  "mission-cockpit-2c-azer3|25000|missfb|AZER3|$ROOT/ref/mission_azer3_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
@@ -421,16 +428,20 @@ run_addtank() { # $1=target $2=expected-unit-count ; echo path-to-edited-file on
 # ---- MISSION cockpit render (FIST_MISSFB op-0x24 post #1) -> region-cropped PPM ----
 MC_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0; 7200:40:186:0"
 MC_REGION="100x92+80+96"   # cols80-180 rows96-188 central chrome
-run_mission() { # $1=target $2=datadir [$3=battle] ; echo region-crop-ppm-path on success, empty on fail
-  local t="$1" dd="$2" bt="${3:-}"
+run_mission() { # $1=target $2=datadir [$3=battle] [$4=mode: ""=op-0x24 spawn, "2c"=op-0x2c spawn] ; echo crop-ppm or ""
+  local t="$1" dd="$2" bt="${3:-}" mode="${4:-}"
   local out="$TMP/mc.$t.ppm" reg="$TMP/mc.$t.reg.ppm"
   # $3 selects a non-default battle via patch 380's FIST_FSG_BATTLE (drives the same MC_MOUSE
   # BATTLES->OK->ACCEPT navigation into any of the 47 .FSG).  Empty -> default AZER1 (behaviour-neutral).
   local bexp=(); [ -n "$bt" ] && bexp=(FIST_FSG_BATTLE="$bt")
+  # mode "2c": the FSG-battle SECONDARY-viewport render path (op-0x2c, engine-painted) for missions that
+  # never post op-0x24 (e.g. AZER3, un-blocked by patches 397-399).  FIST_MISSFB2C captures 0xA0000 at the
+  # first op-0x2c post (=spawn, cross-target deterministic like op-0x24 post #1).
+  local m2c=(); [ "$mode" = 2c ] && m2c=(FIST_MISSFB2C=1 FIST_MISSFB_N=1)
   if [ "$t" = native ]; then
-    timeout 90  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
+    timeout 90  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 "${bexp[@]}" "${m2c[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
   else
-    timeout 220 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 220 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 "${bexp[@]}" "${m2c[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
   fi
   [ -s "$out" ] || { echo ""; return 1; }
   convert "$out" -crop "$MC_REGION" +repage "$reg" 2>/dev/null || { echo ""; return 1; }
@@ -478,17 +489,20 @@ for row in "${FLOWS[@]}"; do
     # FIST_FSG_BATTLE).  The central chrome is map-invariant modulo dynamic instruments; the ref is a
     # genuine DOSBox spawn-frame capture whose MC_REGION crop is the compared surface.
     mbt="$inp"
-    detail=" [${mbt:-AZER1} cockpit central-chrome cols80-180 rows96-188]"
+    # op-0x2c capture mode for FSG battles that render only via the secondary viewport (name prefix
+    # `mission-cockpit-2c-`, e.g. AZER3 un-blocked by patches 397-399).  Default "" = op-0x24 spawn.
+    mmode=""; [ "${name#mission-cockpit-2c-}" != "$name" ] && mmode="2c"
+    detail=" [${mbt:-AZER1} cockpit central-chrome cols80-180 rows96-188${mmode:+ op-0x2c}]"
     if [ ! -s "$ROOT/re_out/fist_image.bin" ]; then echo "  FAIL $name (re_out/fist_image.bin missing; run 'make kernel-image')"; fail=$((fail+1)); continue; fi
     convert "$ref" -crop "$MC_REGION" +repage "$TMP/mc.ref.ppm" 2>/dev/null
     rn=""; rw=""
     if [ "$WHICH" != wasm ]; then
-      rn="$(run_mission native "$(fresh_datadir "$name.nat")" "$mbt")"
+      rn="$(run_mission native "$(fresh_datadir "$name.nat")" "$mbt" "$mmode")"
       if [ -n "$rn" ]; then a=$(compare -metric AE "$rn" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" native-AE=$a"; }
       else ok=0; detail+=" native-no-frame"; fi
     fi
     if [ "$WHICH" != native ]; then
-      rw="$(run_mission wasm "$(fresh_datadir "$name.wasm")" "$mbt")"
+      rw="$(run_mission wasm "$(fresh_datadir "$name.wasm")" "$mbt" "$mmode")"
       if [ -n "$rw" ]; then a=$(compare -metric AE "$rw" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" wasm-AE=$a"; }
       else ok=0; detail+=" wasm-no-frame"; fi
     fi
