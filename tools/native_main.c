@@ -1198,6 +1198,20 @@ int fist_extender_gate(void) {
             }
         }
     }
+    /* FIST_V55WATCH (diagnostic, default OFF): poll player(6d34)+0x55 (the cockpit azimuth-needle field,
+     * patch 311) at every op-gate; log each value transition with the op.  Reveals whether +0x55 is set
+     * once (parser only) or overwritten by a post-load init (and at which op). */
+    if (getenv("FIST_V55WATCH")) {
+        static int v55prev = 0x7fffffff; static uint16_t ndprev = 0xffff;
+        uint16_t nd = *(uint16_t *)(dg + 0x6d34);
+        if (nd) {
+            int v = *(int16_t *)(dg + (uint16_t)(nd + 0x55));
+            if (v != v55prev || nd != ndprev) {
+                fprintf(stderr, "[v55watch] focus=0x%04x +55=%d (was %d) at op=0x%x\n", nd, v, v55prev==0x7fffffff?-999:v55prev, op);
+                v55prev = v; ndprev = nd;
+            }
+        }
+    }
     /* ------------------------------------------------------------------------------------------------
      * MISSION-PALETTE ARCHITECTURE (residual #1, RESOLVED this iteration -- see docs/stage1.md).
      * The ORIGINAL uses ONE physical VGA DAC carrying BOTH the cockpit/HUD colours AND the terrain
@@ -1751,6 +1765,26 @@ int fist_extender_gate(void) {
                     fprintf(stderr,"[vehprobe] TCB +2c/30/34=%d/%d/%d  +d2/d6/da=%d/%d/%d\n",
                         *(int32_t*)(tcb+0x2c),*(int32_t*)(tcb+0x30),*(int32_t*)(tcb+0x34),
                         *(int32_t*)(tcb+0xd2),*(int32_t*)(tcb+0xd6),*(int32_t*)(tcb+0xda));
+                }
+                if (getenv("FIST_DIAL55")) {
+                    /* DIAL-NEEDLE DIAGNOSTIC (shim-only): the cockpit azimuth needle (patch 311, FUN_1000_75e3)
+                     * reads si=word[player+0x55], usi=clamp((abs(si)>>2)&0xfffe,0x18), sprite=word[dg:usi+0x8f24].
+                     * NOTE &0xfffe: si in [56..63] all map to usi=14.  Dump the player + full roster with +0x55 AND
+                     * the usi mapping (previous session compared raw +0x55, missing that 60->usi14==56->usi14). */
+                    uint16_t di   = *(uint16_t*)(dg+0x6d34);   /* camera-focus vehicle (needle reads this) */
+                    uint16_t pl   = *(uint16_t*)(dg+0x7ae0);   /* DAT_2000_3ae0 player */
+                    #define USI55(off) ({ int _s=*(int16_t*)(dg+(uint16_t)((off)+0x55)); if(_s<0)_s=-_s; \
+                                          uint16_t _u=((uint16_t)_s>>2)&0xfffe; if(_u>0x18)_u=0x18; _u; })
+                    fprintf(stderr,"[dial55] focus6d34=0x%04x +55=%d usi=%u | player7ae0=0x%04x +55=%d usi=%u | type[focus]=%u\n",
+                        di, *(int16_t*)(dg+(uint16_t)(di+0x55)), USI55(di),
+                        pl, *(int16_t*)(dg+(uint16_t)(pl+0x55)), USI55(pl), *(uint16_t*)(dg+di));
+                    fprintf(stderr,"[dial55] roster slots(off:type:+55:usi:+19flag):");
+                    for (int r=0;r<0x10;r++){ uint16_t slot=*(uint16_t*)(dg+0x6d3c+r*2);
+                        if(!slot){ fprintf(stderr," [%d]--",r); continue; }
+                        fprintf(stderr," [%d]%04x:t%u:v%d:u%u:f%02x", r, slot, *(uint16_t*)(dg+slot),
+                            *(int16_t*)(dg+(uint16_t)(slot+0x55)), USI55(slot), *(uint8_t*)(dg+(uint16_t)(slot+0x19))); }
+                    fprintf(stderr,"\n");
+                    #undef USI55
                 }
             }
             if (getenv("FIST_MISSFB_PALCMP")) {

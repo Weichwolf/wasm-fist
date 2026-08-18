@@ -1218,3 +1218,38 @@ map it to the decompiled fn, find why the port's version doesn't run/writes wron
 this session a fix genuinely needs the original's runtime trace (all prior steps were port-side).  RULED OUT
 (all verified, no band-aids): .FSG parser placement, turret-AI, capture-timing, the 75e3 needle read, wrong-
 roster-player.  +8 missions.  The 8 genuine refs are committed and ready.
+
+### Dial: DECISIVE per-pixel + file-offset audit OVERTURNS two prior premises (2026-08-18, cont'd).
+Two measurements the prior 8 doc-iterations never ran cleanly, both done now:
+
+**(1) Per-pixel diff of the port AZER6 MC crop vs the committed DOSBox ref** (rows96-199 cols80-179):
+91 differing pixels, ALL one clustered needle, bbox x[108..126] y[117..128], pivot ~(120,128).  Port needle
+points LEFT/west (red run (108-118,128)); ref needle points UP-RIGHT/north (red run (125,118)->(120,127)).
+=> ONE instrument (75e3's veh+0x55 needle) at the WRONG ANGLE.  The "FROZEN+shared -> separate overlapping
+instrument (H2)" hypothesis is REFUTED (its premise "+0x55 shared with DOSBox" was inferred, never measured).
+Ref-to-ref confirms: DOSBox dials for azer1/azer6/saudi5/saudi1 are byte-IDENTICAL (AE=0), all usi14.
+
+**(2) The "+0x55 = authentic .FSG byte at record 0x97+0x55, parser RULED OUT" premise is FALSE.**
+file[0x97+0x55] = 255/0/43 for azer1/azer6/saudi5, but the LOADED object+0x55 = 56/21/19.  The loaded values
+actually track file[0x9f] (=record+0x08) for 5/6 sampled missions; INDIA6 matches neither (file[0x9f]=0,
+loaded=52) -> the player record is NOT at a fixed file position.  A full-file scan for ANY offset whose bytes
+reproduce the DOSBox usi pattern (azer1/azer6/saudi5/saudi1/cyprus5/india7/saudi6/syria7=usi14, india6=usi12,
+cyprus1=usi0) finds NONE.  => DOSBox's player+0x55 is a COMPUTED value, not a raw file field.  The parser is
+back in play only insofar as +0x55 gets a file-derived value the original later OVERWRITES.
+
+**Confirmed facts (patch 311 needle read is asm-faithful; do NOT touch it):**
+- Player = word[0x6d34] == word[0x7ae0].  Slot0 (0xc05c) for most; but SAUDI6/SYRIA5/TRAIN1 use a NON-slot0
+  focus (0xc34d/0xc739/0xc157) -> there IS per-mission player-select logic, not always slot0.
+- Needle usi = clamp((abs(word[player+0x55])>>2)&0xfffe, 0x18).  The &0xfffe means +0x55 in [56..63] all map
+  to usi14 (the prior "no roster unit == 56" dismissal used raw value, not the usi map -- AZER6 slot1 v60 ->
+  usi14; but SAUDI5 has NO unit in [56..63] yet DOSBox draws usi14 -> DECISIVELY NOT wrong-player-selection).
+- Port+0x55 is set ONCE during .FSG load (already correct-per-file value by op-0x8) and NEVER changes after
+  (FIST_V55WATCH: no post-load transition).  Init a3d8 sets +0x55=0 (+0x61=100); parser sets the file value;
+  a02d(>>1)/a0ab(collision) only run in-sim.  NONE computes the ~56 the original shows.
+- 466c/4700 per-type dispatch [0x6d7c+type*2] is the cockpit-template BUILDER (patch 317), not a +0x55 setter.
+
+**RESOLUTION genuinely needs the ORACLE (all port-side levers exhausted, no band-aid taken):** QEMU `-s -S`
+gdb-stub (or instrumented DOSBox), break the AZER6 mission-spawn, watch [player+0x55] during load -> capture
+the instruction that writes ~56 (usi14), map it to the decompiled fn, find why the port's version doesn't run
+or writes the file value.  Diagnostics banked (shim-only, env-gated, behaviour-neutral): FIST_DIAL55 (player+
+roster +0x55/usi dump at the missfb frame), FIST_V55WATCH (per-op-gate +0x55 transition log).  8 refs committed.
