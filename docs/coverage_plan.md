@@ -1139,3 +1139,18 @@ frontier -- the turret slews toward the locked target, so a wrong target-lock ->
 word[veh+0x55] TRAJECTORY over the first ~15 frames AZER1(correct) vs AZER6(wrong) -> does it slew to a wrong
 target or compute wrong?  Then fix the turret-rotation/target base-loss.  +8 missions; 8 refs already banked.
 The 75e3 read is FAITHFUL -- do NOT touch it; the bug is upstream in the +0x55 turret-azimuth sim.
+
+### Dial bug: veh+0x55 is the turret-azimuth SLEW ERROR; init from turret target (connects to b112 AI-lock).
+The +0x55 writers: FUN_1000_a02d (build:63607 `word[di+0x55] >>= 1` = per-frame decay) + FUN_1000_a0ab
+(63799/63812 sar/neg = turret rotation) are the per-frame SLEW logic, NOT the init.  So vehicle+0x55 = the
+turret-azimuth ERROR (current facing vs the gun-aim TARGET), decaying toward 0 as the turret slews.  At the
+spawn frame it holds the mission's initial slew error (AZER1=56 CYPRUS1=0 INDIA6=52 correct; AZER6=21 SAUDI5=19
+SYRIA7=46 TRAIN1=40 WRONG).  The INITIAL error comes from the turret's target/facing set during mission/roster
+load -> the port computes a different initial target or facing for 8 missions.  This is the turret-AI target-
+lock (the [[mission-b112-ailock-frontier]] territory -- the turret slews toward the locked target; a wrong
+target-lock or a base-lost initial-facing read from the .FSG unit record -> wrong azimuth error -> wrong
+needle).  gdb from-start watchpoint on veh+0x55 is TOO SLOW to reach the load (intro at 25kHz); the value is
+already set at the first word[0x6d34]!=0 frame (pauseveh confirmed), so pause-then-watch misses it.  NEXT:
+either (a) instrument the mission/roster load to log the player-vehicle turret-target/facing init + compare
+AZER1 vs AZER6, or (b) pause at an EARLIER load marker (pre-roster) then watch veh+0x55.  Find the base-lost
+initial-facing/target read.  Faithful 75e3 read + a02d/a0ab slew stay untouched.  +8 missions when fixed.
