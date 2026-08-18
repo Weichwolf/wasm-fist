@@ -1253,3 +1253,26 @@ gdb-stub (or instrumented DOSBox), break the AZER6 mission-spawn, watch [player+
 the instruction that writes ~56 (usi14), map it to the decompiled fn, find why the port's version doesn't run
 or writes the file value.  Diagnostics banked (shim-only, env-gated, behaviour-neutral): FIST_DIAL55 (player+
 roster +0x55/usi dump at the missfb frame), FIST_V55WATCH (per-op-gate +0x55 transition log).  8 refs committed.
+
+### Dial: ORACLE-READ METHOD VALIDATED + parser structure mapped (2026-08-18, cont'd).
+Located the instrumented-DOSBox oracle infra (tools/oracle/, capture_mission_spawn.sh; dosbox-fist rebuilt
+from dosbox_vga_terrain_trace.patch).  KEY VALIDATION on the existing AZER1 spawn RAM dump
+(scratch/oracle/mspawn.ram.bin): the engine's DGROUP is relocated by the extender to guest phys **0x2d190**
+(NOT 0x1c000).  Signature scan (word[B+0x6d34]==word[B+0x7ae0], type<=12 at that offset) finds EXACTLY ONE
+base: B=0x2d190, playerOff=**0xc05c** (byte-identical to the port -> MEMMGR layout faithful), type0,
+**+0x55=56** -- matching the port's AZER1.  So oracle[0x2d190+X] == port g_mem[0x1c000+X], and reading any
+DGROUP field from an oracle .ram.bin is trivial.  (NB the DAT_2000_XXXX naming = linear 0x20000+XXXX =>
+DGROUP offset XXXX+0x4000; e.g. DAT_2000_2d34 = DGROUP:0x6d34 = player ptr.)
+
+.FSG PARSER (d501) = a RIFF-like chunk-directory reader; the 7-entry chunk table @DGROUP:0xe9e6 (read from
+the oracle dump) = SHDR/d7b5, **DCBS/d7e1 (the unit records -- the player is a DCBS unit)**, TERM/d7da,
+PATH/d87f, STMP/d8e9, **PINF/d8a9 (Player INFo)**, BINF/d8d3.  FINDING: the port RECOVERS ONLY SHDR/DCBS/PATH
+as functions; **PINF(d8a9)/BINF(d8d3)/TERM(d7da)/STMP(d8e9) are NOT in the fmap** -> d501's
+`fist_icall_near(0,0xd8a9)` traps to the no-op tramp -> **the port SKIPS the PINF/BINF/TERM/STMP chunks.**
+PINF payload is small config words (len 0xb0, values 0-5), NOT a raw azimuth, so PINF is not the direct +0x55
+source -- but the skipped-chunk class is a live candidate for other divergences.  Player+0x55 = a DERIVED
+field (object is ~256B; the DCBS record maps a subset + computes the rest); no fixed FILE offset and no fixed
+IN-RECORD offset reproduces the DOSBox usi across missions (record position varies per mission) -> the value
+is COMPUTED at object-construct from the DCBS record.  Diff tool primed: scratch/dial/diff_oracle.py (auto-
+locates DGROUP + dumps the oracle player object) -- run on the AZER6 oracle capture to get the target +0x55
+and the full field-diff vs the port AZER6 object (banked: port AZER6 +0x55=21, object dumped via FIST_DIAL55_OBJ).
