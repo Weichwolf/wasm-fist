@@ -1276,3 +1276,21 @@ IN-RECORD offset reproduces the DOSBox usi across missions (record position vari
 is COMPUTED at object-construct from the DCBS record.  Diff tool primed: scratch/dial/diff_oracle.py (auto-
 locates DGROUP + dumps the oracle player object) -- run on the AZER6 oracle capture to get the target +0x55
 and the full field-diff vs the port AZER6 object (banked: port AZER6 +0x55=21, object dumped via FIST_DIAL55_OBJ).
+
+### Dial: DISASSEMBLY proves +0x55 = direct record copy -> divergence is a COMPUTED post-parse override (2026-08-18).
+Traced the .FSG unit parse to the metal (objdump on re_out/fist_dat_image.bin):
+- d7e1(DCBS) reads a count word, then per unit: 6-byte header (a9c2=recsize) + 2-byte id (a9c0), calls d81e.
+- d81e: b1a2 locates the object (DI), then INT21 AH=3F reads (recsize-2) bytes into [object+2] -> so
+  **object[j] = record[j] for j>=2, i.e. object+0x55 = record[0x55], a DIRECT COPY** (no derivation).
+  Confirmed faithful: the port AZER1 object == the oracle AZER1 object byte-for-byte (modulo frame-drift),
+  both +0x55=56.
+- The port-SKIPPED chunk handlers (disassembled): PINF/d8a9 reads its payload into DGROUP:0x85b6; BINF/d8d3
+  into 0x79cd (+ sets flag 0x7a13); STMP into 0x9338; TERM sets a flag.  **NONE writes a vehicle +0x55**, and
+  the PINF payload is small config words (no azimuth).  So the skipped chunks are NOT the +0x55 source.
+CONCLUSION (airtight, port-side complete): object+0x55 is loaded correctly as record[0x55] (=21 for AZER6);
+the ORIGINAL must OVERRIDE the player's +0x55 post-parse with a COMPUTED value (~56 for AZER6, usi14) that
+the port never applies.  The override is NOT a stored file field and NOT in the parse chunks -> it is a
+per-vehicle/mission spawn INIT computation (candidate: a turret-target-lock / initial-facing derivation; cf.
+a3d8 which zeroes +0x55, and the [[mission-b112-ailock-frontier]]).  NEXT (needs the oracle, in flight): read
+the original's AZER6 player+0x55 (confirm ~56) and, via a dosbox watchpoint on player+0x55, capture the write
+instruction -> map to the decompiled fn -> find why the port skips/misruns it.  Then a faithful patch. +8 flows.
