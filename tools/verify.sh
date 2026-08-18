@@ -284,6 +284,11 @@ FLOWS=(
   "mission-cockpit-train4|25000|missfb|TRAIN4|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "mission-cockpit-azer4|25000|missfb|AZER4|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "mission-cockpit-azer5|25000|missfb|AZER5|$ROOT/ref/mission_cyprus1_cockpit_native320.png"
+  # INDIA6: genuine DOSBox ref (own capture, tools/refcapture_mission_scroll.sh idx19); central chrome
+  # AE=0 both targets + native<->wasm 0-diff.  The other 8 NEEDS-REF captures (AZER6/CYPRUS5/INDIA7/
+  # SAUDI5/6/SYRIA5/7/TRAIN1) are held back: their refs are genuine but expose a port-side central
+  # heading/azimuth-dial divergence (grey dial + red needle ~(108-118,116-131)) -> a real bug to fix.
+  "mission-cockpit-india6|25000|missfb|INDIA6|$ROOT/ref/mission_india6_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
