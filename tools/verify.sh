@@ -312,6 +312,12 @@ FLOWS=(
   "editor-sim-cyprus6|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "editor-sim-azer4|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "editor-sim-syria1|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  # REMOVE-TANK "simulate" leg: a battle with one friendly REMOVED still loads + spawns bit-identically
+  # (removing a friendly is central-chrome-neutral -> AE=0 vs the shared ref, native+wasm, native==wasm).
+  "editor-remsim-saudi2|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "editor-remsim-cyprus6|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "editor-remsim-azer4|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "editor-remsim-syria1|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
   # FIRST DUAL-TARGET IN-MISSION SURFACE (patches 364/365/366/367 objtype-0x02 + b059 crash-free, 381/382
   # display-walk arg-thread wasm render, +0x3e camera seed): the AZER1-spawn cockpit CENTRAL-CHROME
   # (engine-2322 dashboard, cols80-180 rows96-188) is bit-exact AE=0 vs a genuine DOSBox ref on BOTH
@@ -591,15 +597,15 @@ run_mission() { # $1=target $2=datadir [$3=battle] [$4=mode: ""=op-0x24 spawn, "
   convert "$out" -crop "$MC_REGION" +repage "$reg" 2>/dev/null || { echo ""; return 1; }
   echo "$reg"
 }
-run_editsim() { # $1=target $2=battle ; echo cropped-ppm or ""  (edit -> SIMULATE the edited .FSG)
-  # The editor DoD "simulate" leg: ADD-TANK edits $b.FSG in a datadir, then that SAME edited battle is
-  # loaded into a mission and its op-0x2c spawn cockpit is captured.  Proves the editor's output is not
-  # just file-consistent but SIMULATABLE -- the +1 unit does not perturb the (unit-count-invariant)
-  # central chrome, so it stays AE=0 vs the shared ref, on native AND wasm.
-  local t="$1" b="$2" dd
+run_editsim() { # $1=target $2=battle $3=edit-env(default FIST_EDIT_ADDTANK) ; echo cropped-ppm or ""
+  # The editor DoD "simulate" leg: the edit op ($3: add-tank or remove-tank) edits $b.FSG in a datadir,
+  # then that SAME edited battle is loaded into a mission and its op-0x2c spawn cockpit is captured.
+  # Proves the editor's output is not just file-consistent but SIMULATABLE; the friendly add/remove does
+  # not perturb the central chrome, so it stays AE=0 vs the shared ref, on native AND wasm.
+  local t="$1" b="$2" ev="${3:-FIST_EDIT_ADDTANK}" dd
   dd="$(fresh_datadir "es.$b.$t")"
-  [ "$(run_edit "$t" "$dd" "$b")" = 0 ] || { echo ""; return 1; }   # add-tank into dd (saves $b.FSG)
-  run_mission "$t" "$dd" "$b" "2c"                                   # op-0x2c spawn on the EDITED dd
+  [ "$(run_edit "$t" "$dd" "$b" "$ev")" = 0 ] || { echo ""; return 1; }   # edit into dd (saves $b.FSG)
+  run_mission "$t" "$dd" "$b" "2c"                                        # op-0x2c spawn on the EDITED dd
 }
 
 echo "== verify ($WHICH) =="
@@ -664,21 +670,24 @@ for row in "${FLOWS[@]}"; do
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
   fi
-  if [ "${name#editor-sim-}" != "$name" ]; then
-    # EDITOR "simulate" leg: ADD-TANK edit $b.FSG, then load+spawn that edited battle and compare its
-    # op-0x2c cockpit central-chrome AE=0 vs the shared DOSBox ref, native AND wasm, native==wasm 0-diff.
-    esb="$(echo "${name#editor-sim-}" | tr a-z A-Z)"
+  if [ "${name#editor-sim-}" != "$name" ] || [ "${name#editor-remsim-}" != "$name" ]; then
+    # EDITOR "simulate" leg: edit $b.FSG (add-tank, or remove-tank for editor-remsim-*), then load+spawn
+    # that edited battle and compare its op-0x2c cockpit central-chrome AE=0 vs the shared DOSBox ref,
+    # native AND wasm, native==wasm 0-diff.  Add/remove of a friendly is central-chrome-neutral.
+    esev="FIST_EDIT_ADDTANK"; esb="${name#editor-sim-}"
+    if [ "${name#editor-remsim-}" != "$name" ]; then esev="FIST_EDIT_REMTANK"; esb="${name#editor-remsim-}"; fi
+    esb="$(echo "$esb" | tr a-z A-Z)"
     detail=" [$esb edit->simulate op-0x2c central-chrome]"
     if [ ! -s "$ROOT/re_out/fist_image.bin" ]; then echo "  FAIL $name (re_out/fist_image.bin missing)"; fail=$((fail+1)); continue; fi
     convert "$ref" -crop "$MC_REGION" +repage "$TMP/mc.ref.ppm" 2>/dev/null
     rn=""; rw=""
     if [ "$WHICH" != wasm ]; then
-      rn="$(run_editsim native "$esb")"
+      rn="$(run_editsim native "$esb" "$esev")"
       if [ -n "$rn" ]; then a=$(compare -metric AE "$rn" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" native-AE=$a"; }
       else ok=0; detail+=" native-no-frame"; fi
     fi
     if [ "$WHICH" != native ]; then
-      rw="$(run_editsim wasm "$esb")"
+      rw="$(run_editsim wasm "$esb" "$esev")"
       if [ -n "$rw" ]; then a=$(compare -metric AE "$rw" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" wasm-AE=$a"; }
       else ok=0; detail+=" wasm-no-frame"; fi
     fi
