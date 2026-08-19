@@ -1,0 +1,50 @@
+PATCH 401: FUN_1000_84c3 -- thread the dropped register args through the fist_icall_far indirect
+dispatch so the mga methods [DGROUP:0x68c]=FUN_0000_2004 (cockpit-instrument bbox analyzer, vector kept
+by patch 331) and [DGROUP:0x6a8]=FUN_0000_2595 (repnz-scasb buffer scan/replace) receive al/ax/bx/si
+instead of stack garbage.  This is INDIA3's op-0x2c spawn SEGV (2004 then 2595, param_2 a wild host ptr
+0x7f5f0000).  Ghidra rendered the `mov reg,imm; call ds:[vec]` sequences as arg-less
+`fist_icall_far(vec)()`.  __allregs is a no-op (normal cdecl) and args passed to `fist_icall_far(vec)(...)`
+map to the target params in order (cf. the 1019 memmgr callback).  asm 0x84dc..0x851f:
+  c68c x3: al=0xff/0xfe/0xfd, bx=0x8f8c/0x8fa8/0x8fc4 (child), si=0x8f7e (container)
+           -> 2004(param_1=al, param_2=bx PTR, param_3=si PTR); childoff = param_2 - (g_mem+0x1c000)
+  c6a8 x3: ax=0xfd/0xfe/0x50ff, si=0x8f7e (container) -> 2595(param_1=ax, param_2=si PTR); es_seg=*param_2
+ds=DGROUP, so both near-offsets are rebased to g_mem+0x1c000+off.  asm-verified; reached only on the
+mission op-0x2c paint -> regression-safe.
+
+--- a/fist.c
++++ b/fist.c
+@@ -57030,14 +57030,28 @@
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
+   if (DAT_2000_4f8a == '\0') {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))();
++    /* PATCH 401: FUN_1000_84c3 dropped the register-arg setup Ghidra could not thread through the
++       fist_icall_far indirect dispatch -- the [DGROUP:0x68c] method (= mga FUN_0000_2004, the cockpit-
++       instrument bbox analyzer, vector fixed by patch 331) and [DGROUP:0x6a8] (= mga FUN_0000_2595, the
++       repnz-scasb buffer scan/replace) read al/ax/bx/si but got uninitialised garbage -> SIGSEGV on the
++       INDIA3 op-0x2c spawn (param_2 was a wild host ptr 0x7f5f0000).  asm 0x84dc..0x851f, per call:
++         c68c: bx=child(0x8f8c/0x8fa8/0x8fc4), al=flag(0xff/0xfe/0xfd), si=container(0x8f7e)
++               -> 2004(param_1=al, param_2=bx PTR, param_3=si PTR)   [childoff = param_2-(g_mem+0x1c000)]
++         c6a8: ax=flag(0xfd/0xfe/0x50ff), si=container(0x8f7e)
++               -> 2595(param_1=ax, param_2=si PTR)                   [es_seg = *param_2]
++       __allregs is a no-op (normal cdecl); args map to target params in order.  The two DGROUP near-
++       offsets are rebased to g_mem+0x1c000+off.  asm-verified; reached only on the op-0x2c paint. */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))
++        (0xff,(undefined2 *)(g_mem + 0x1c000 + 0x8f8c),(undefined2 *)(g_mem + 0x1c000 + 0x8f7e));
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))
++        (0xfe,(undefined2 *)(g_mem + 0x1c000 + 0x8fa8),(undefined2 *)(g_mem + 0x1c000 + 0x8f7e));
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c68c)))
++        (0xfd,(undefined2 *)(g_mem + 0x1c000 + 0x8fc4),(undefined2 *)(g_mem + 0x1c000 + 0x8f7e));
+     DAT_2000_4f8a = -1;
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))();
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))(0xfd,(undefined2 *)(g_mem + 0x1c000 + 0x8f7e));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))(0xfe,(undefined2 *)(g_mem + 0x1c000 + 0x8f7e));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6a8)))(0x50ff,(undefined2 *)(g_mem + 0x1c000 + 0x8f7e));
+   DAT_2000_4f80 = DAT_2000_4f80 | 0x25;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
+   return;
