@@ -216,7 +216,14 @@ DAC-terrain-upload inference (its band [80..255] is 2.7% to the oracle render pa
 100%) — suggestive, not conclusive. The DEFECT is the tile-build CHAIN {[0x5598] file-load, bc9c, bdc4};
 everything else ([0x5260]/[0x4f60]/range/diff-tables/block-A) is verified correct. Splitting
 [5598]-vs-algorithm DEFINITIVELY needs the ORIGINAL's [0x5598] at bc9c-time (instrumented DOSBox) — the one
-datum not derivable port-only.
+datum not derivable port-only.  **QEMU oracle is now READY for that capture** (no instrumented DOSBox
+needed): `tools/oracle/build_disk.sh himem` builds /tmp/wasm-fist-oracle/{boot_himem,game}.img; run_oracle.sh
+boots the ORIGINAL under qemu-system-i386 with the HMP monitor (pmemsave); capture_dgroup.py located the
+engine at guest 0x15190 / DGROUP 0x31190.  CONFIRMED at the menu [5598]@0x10005598 is ALL ZEROS — it is
+loaded only at the mission op-0x18 map-load, so the capture must (a) drive the menu into a mission (QEMU
+under Xvfb + the xclick.py XTEST nav, as capture_battle_burst.sh does for stock DOSBox), (b) pmemsave at/after
+map-load, (c) find the extender's guest base (not 0x10000000 here) and read [ext_base+0x5598], (d) byte-compare
+to the port's [0x5598].
 
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
