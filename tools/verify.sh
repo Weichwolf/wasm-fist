@@ -286,6 +286,19 @@ FLOWS=(
   "editor-add-tank-syria2|25000|addtank||addtank"
   "editor-add-tank-ukraine5|25000|addtank||addtank"
   "editor-add-tank-train3|25000|addtank||addtank"
+  # REMOVE-TANK edit-op (patch 405, inverse of add-tank via the REAL b2ef destroy): same theater spread,
+  # each asserts base->base-1 + reload-stable idempotent fixed point, native AND wasm, native==wasm 0-diff.
+  "editor-rem-tank|25000|remtank||remtank"
+  "editor-rem-tank-azer2|25000|remtank||remtank"
+  "editor-rem-tank-azer5|25000|remtank||remtank"
+  "editor-rem-tank-cyprus3|25000|remtank||remtank"
+  "editor-rem-tank-cyprus6|25000|remtank||remtank"
+  "editor-rem-tank-india2|25000|remtank||remtank"
+  "editor-rem-tank-india5|25000|remtank||remtank"
+  "editor-rem-tank-saudi2|25000|remtank||remtank"
+  "editor-rem-tank-syria2|25000|remtank||remtank"
+  "editor-rem-tank-ukraine5|25000|remtank||remtank"
+  "editor-rem-tank-train3|25000|remtank||remtank"
   # FIRST DUAL-TARGET IN-MISSION SURFACE (patches 364/365/366/367 objtype-0x02 + b059 crash-free, 381/382
   # display-walk arg-thread wasm render, +0x3e camera seed): the AZER1-spawn cockpit CENTRAL-CHROME
   # (engine-2322 dashboard, cols80-180 rows96-188) is bit-exact AE=0 vs a genuine DOSBox ref on BOTH
@@ -488,15 +501,15 @@ while i+6<=len(d):
     i+=6+ln
 PY
 }
-run_edit() { # $1=target $2=datadir $3=battle(default AZER1) ; echo rc  (enter-edit->add-tank->save->exit against $2/..$3.FSG)
-  # FIST_FSG_BATTLE (patch 380) selects the loaded+saved battle; the patch-362 add-tank hook is
-  # battle-agnostic (clones the first loaded FRIENDLY unit), so ANY .FSG with a friendly unit gains
-  # exactly one tank.  Default AZER1 -> behaviour-identical to the un-generalized flow.
-  local t="$1" dd="$2" b="${3:-AZER1}"
+run_edit() { # $1=target $2=datadir $3=battle(default AZER1) $4=edit-env(default FIST_EDIT_ADDTANK) ; echo rc
+  # FIST_FSG_BATTLE (patch 380) selects the loaded+saved battle; the patch-362 add-tank / patch-405
+  # remove-tank hooks are battle-agnostic (they act on the first loaded FRIENDLY unit), so ANY .FSG with
+  # a friendly unit gains/loses exactly one tank.  Default AZER1 + add-tank -> the original flow.
+  local t="$1" dd="$2" b="${3:-AZER1}" ev="${4:-FIST_EDIT_ADDTANK}"
   if [ "$t" = native ]; then
-    timeout 120 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 120 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 "$ev"=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
   else
-    timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+    timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 "$ev"=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
 }
 run_addtank() { # $1=target $2=battle(default AZER1) ; echo path-to-edited-file on success, empty on failure
@@ -518,6 +531,27 @@ run_addtank() { # $1=target $2=battle(default AZER1) ; echo path-to-edited-file 
   c="$(fresh_datadir "at.$b.$t.C")"; cp "$fe2" "$c/FISTDATA/$b.FSG"
   [ "$(run_fsg "$t" "$c" "$b")" = 0 ] || { echo ""; return 1; }
   fe3="$TMP/editfp2.$b.$t.FSG"; cp "$c/FISTDATA/$b.FSG" "$fe3" 2>/dev/null || { echo ""; return 1; }
+  cmp -s "$fe2" "$fe3" || { echo ""; return 2; }   # edited file is not an idempotent fixed point
+  echo "$fe"
+}
+run_remtank() { # $1=target $2=battle(default AZER1) ; echo path-to-edited-file on success, empty on failure
+  # Inverse of run_addtank (patch 405 FIST_EDIT_REMTANK, driving the REAL object-destroy b2ef): remove one
+  # friendly unit; the baseline is read from the freshly-copied original $b.FSG and REMOVE-TANK must yield
+  # exactly baseline-1, keep base-1 across a reload, and be an idempotent fixed point.
+  local t="$1" b="${2:-AZER1}" a bd c fe fe2 fe3 base want
+  a="$(fresh_datadir "rt.$b.$t.A")"
+  base="$(dcbs_units "$a/FISTDATA/$b.FSG")"; [ -n "$base" ] || { echo ""; return 3; }
+  want=$((base-1))
+  [ "$(run_edit "$t" "$a" "$b" FIST_EDIT_REMTANK)" = 0 ] || { echo ""; return 1; }
+  fe="$TMP/rem.$b.$t.FSG"; [ -s "$a/FISTDATA/$b.FSG" ] && cp "$a/FISTDATA/$b.FSG" "$fe" || { echo ""; return 1; }
+  [ "$(dcbs_units "$fe")" = "$want" ] || { echo ""; return 3; }                   # exactly base-1 units
+  bd="$(fresh_datadir "rt.$b.$t.B")"; cp "$fe" "$bd/FISTDATA/$b.FSG"
+  [ "$(run_fsg "$t" "$bd" "$b")" = 0 ] || { echo ""; return 1; }
+  fe2="$TMP/remfp1.$b.$t.FSG"; cp "$bd/FISTDATA/$b.FSG" "$fe2" 2>/dev/null || { echo ""; return 1; }
+  [ "$(dcbs_units "$fe2")" = "$want" ] || { echo ""; return 3; }                  # reload keeps the removal
+  c="$(fresh_datadir "rt.$b.$t.C")"; cp "$fe2" "$c/FISTDATA/$b.FSG"
+  [ "$(run_fsg "$t" "$c" "$b")" = 0 ] || { echo ""; return 1; }
+  fe3="$TMP/remfp2.$b.$t.FSG"; cp "$c/FISTDATA/$b.FSG" "$fe3" 2>/dev/null || { echo ""; return 1; }
   cmp -s "$fe2" "$fe3" || { echo ""; return 2; }   # edited file is not an idempotent fixed point
   echo "$fe"
 }
@@ -574,6 +608,20 @@ for row in "${FLOWS[@]}"; do
     detail=" [$bt add-tank base->base+1 + idempotent fixed-point]"; fen=""; few=""
     if [ "$WHICH" != wasm ];   then fen="$(run_addtank native "$bt")"; [ -n "$fen" ] || { ok=0; detail+=" native-fail"; }; fi
     if [ "$WHICH" != native ]; then few="$(run_addtank wasm "$bt")";   [ -n "$few" ] || { ok=0; detail+=" wasm-fail"; }; fi
+    if [ "$WHICH" = both ] && [ -n "$fen" ] && [ -n "$few" ]; then
+      cmp -s "$fen" "$few" || { ok=0; detail+=" nat!=wasm"; }
+    fi
+    if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
+    continue
+  fi
+  if [ "$name" = editor-rem-tank ] || [ "${name#editor-rem-tank-}" != "$name" ]; then
+    # REMOVE-TANK edit-op (patch 405, inverse of add-tank; drives the REAL b2ef object-destroy).  Battle
+    # from the `editor-rem-tank-<BATTLE>` suffix (bare -> AZER1).  Asserts edit->save = base-1, the
+    # removal RELOADS, and the edited file is an idempotent FIXED POINT.  native==wasm 0-diff.
+    bt="AZER1"; [ "${name#editor-rem-tank-}" != "$name" ] && bt="$(echo "${name#editor-rem-tank-}" | tr a-z A-Z)"
+    detail=" [$bt rem-tank base->base-1 + idempotent fixed-point]"; fen=""; few=""
+    if [ "$WHICH" != wasm ];   then fen="$(run_remtank native "$bt")"; [ -n "$fen" ] || { ok=0; detail+=" native-fail"; }; fi
+    if [ "$WHICH" != native ]; then few="$(run_remtank wasm "$bt")";   [ -n "$few" ] || { ok=0; detail+=" wasm-fail"; }; fi
     if [ "$WHICH" = both ] && [ -n "$fen" ] && [ -n "$few" ]; then
       cmp -s "$fen" "$few" || { ok=0; detail+=" nat!=wasm"; }
     fi
