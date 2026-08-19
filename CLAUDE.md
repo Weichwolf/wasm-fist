@@ -155,23 +155,22 @@ the terrain (rows ~5-85) differs ~280 px every row. So the port's NovaLogic Voxe
 bit-exact. This blocks the mission-render DoD for EVERY battle and is deep RE (existing tooling:
 tools/oracle/{capture_9200_framematched.sh, sim_voxel6980*.py, trace_terrain.sh, dosbox_vga_terrain_trace.patch}).
 
-**Voxel ROOT CAUSE pinpointed** (colour-gate, re-confirmed via `sim_voxel6980_framematched.py`): 6980 samples
-terrain colour at `[0x85bc]+coord+0x100000`; its 7585 render-time stores (38 distinct, 123..228) are ALL in
-the original's LIGHT reduce colormap and NONE in the dark C32 the port has there (max 104) — the terrain is
-**MIS-COLOURED, not mis-shaped**. It is a TWO-part defect (experiment-refined — a first guess that the
-FIST_TILEWIN=0x4200 blend-matrix window alone fixes it was DISPROVEN: with FIST_TILEWIN=0x4200 the dumped
-[0x85bc]+0x100000 colormap is still the dark 105-distinct/max-104 C32, so the 0x4200 window is the bc9c
-blend-MATRIX [bc90]/[3918] concern, NOT the colormap source):
-  (1) **the reduce collapses to dark** — the 254-distinct LIGHT reduce should land at [0x85b8] but the
-      bc90->3918 tile-alias collapses it to the 89-distinct C32 (FIST_NOTILEALIAS is the diagnostic that
-      makes the LIGHT reduce appear at [0x85b8], at the cost of corrupting the tile build); and
-  (2) **contiguity** — 6980 reads colour at heightmap `[0x85bc]+0x100000`, but the port's Route-1 89b0
-      map-load allocs [0x85bc] (heightmap) and [0x85b8] (colormap) SEPARATELY, so [0x85bc]+0x100000 is NOT
-      the colormap (the FIST_TILEFILL harness rebuilds a contiguous HM[0..1MB]+colormap[+1MB] to test this).
-**FIX** (deep, careful — the 89b0 map-load also feeds the VERIFIED dashboard, so guard the 159 green flows):
-produce the LIGHT 254-distinct reduce (untangle the tile-alias) AND place it contiguously at
-[0x85bc]+0x100000 for 6980. Verify each step vs the burst oracle (windshield rows 0-95) + re-run the 159
-matrix for no dashboard regression.
+**Voxel state — HONEST, experiment-grounded (supersedes an earlier colour-gate over-claim):** the DEFAULT
+windshield render is `m_ext_FUN_0000_9200` (per-column texel walk) sampling the terrain colour TILE at
+`[0x3918]` (bc9c's blend matrix). The `sim_voxel6980_framematched.py` colour-gate (6980 reading
+`[0x85bc]+0x100000`) is an EXPERIMENTAL render path (FIST_TILEFILL), NOT the default — a FIST_VOXEL_CONTIG
+fix that rebuilt a contiguous HM+reduce for 6980 changed the default frame by 0 px (removed). What IS solid:
+  - The port DOES build the correct LIGHT reduce (dist=78, max=228) at `[0x85b8]` in the default path
+    (confirmed by the FIST_HMDUMP `[0x85b8]` bank, identical under default / FIST_TILEWIN / FIST_NOTILEALIAS).
+  - Oracle-CONFIRMED the default terrain is **MIS-COLOURED**, not mis-shaped: on the AZER1 M1 spawn
+    (dashboard AE=0 via the burst tool) the terrain band (rows 5-85) shares only **31 colours** with the
+    original (port 131 vs oracle 108 distinct) — a **13% colour-multiset overlap**.
+  - The colour source 9200 walks is the tile `[0x3918]` (dist=176, max=255) — and FIST_TILEWIN=0x4200 does
+    NOT change it (nor `[0x85bc]+0x100000`). So the default-path defect is DEEPER than the 6980 colour-gate:
+    it is in the bc9c `[0x3918]` tile BUILD and/or 9200's INDEXING into it — still OPEN.
+**NEXT:** compare the port's `[0x3918]` tile + 9200's per-column indices to the oracle (framematched 9200
+tooling: capture_9200_framematched.sh / sim_voxel6980.py) to split "wrong tile" vs "wrong index"; then fix
+in the 89b0/bc9c build, guarding the 159 dashboard flows and verifying vs the burst oracle windshield.
 
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op

@@ -2315,7 +2315,11 @@ int fist_extender_gate(void) {
                 if (hb) { FILE *f=fopen(getenv("FIST_HMDUMP"),"wb"); if(f){ fwrite((void*)(uintptr_t)hb,1,0x100000,f); fclose(f);
                     fprintf(stderr,"[hmdump] port [0x85bc] heightmap first 1MB -> %s\n", getenv("FIST_HMDUMP")); }
                     uint32_t cb=*(uint32_t*)(xb+0x85bc)+0x100000;
-                    FILE *g2=fopen("/tmp/port_CM.bin","wb"); if(g2){ fwrite((void*)(uintptr_t)cb,1,0x100000,g2); fclose(g2); } }
+                    FILE *g2=fopen("/tmp/port_CM.bin","wb"); if(g2){ fwrite((void*)(uintptr_t)cb,1,0x100000,g2); fclose(g2); }
+                    /* FIST_HMDUMP also banks [0x85b8] (the reduce output 6980 SHOULD read) -> /tmp/port_CM858.bin */
+                    uint32_t c8=*(uint32_t*)(xb+0x85b8);
+                    if(c8){ FILE*g3=fopen("/tmp/port_CM858.bin","wb"); if(g3){ fwrite((void*)(uintptr_t)c8,1,0x100000,g3); fclose(g3);
+                        fprintf(stderr,"[hmdump] port [0x85b8] reduce 1MB -> /tmp/port_CM858.bin\n"); } } }
                 if (getenv("FIST_HMEXIT")) { fflush(stderr); _exit(0); }
             }
             /* FIST_MTXDUMP: dump the 64 KB blend matrix that bc9c filled + bdc4 read (aliased at 0x3918). */
