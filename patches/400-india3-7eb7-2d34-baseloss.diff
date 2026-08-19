@@ -1,0 +1,39 @@
+PATCH 400: FUN_0000_7eb7 base-loss -- the INDIA3 op-0x2c spawn SEGV.  Distinct from the 8039 sprite-anim
+family (patches 397-399): here the defect is an un-ported READER of DAT_2000_2d34, the player-vehicle
+DGROUP NEAR OFFSET (=0xc05c, established as a near-offset by patches 300/310, NOT a host pointer).  Ghidra
+deref'd `di+off` as a host pointer -> SIGSEGV (fault 0xc158) at `movb [di+0x3f],0`.
+
+asm 0x7eb7..0x7f18 (re_out/fist_dat_image.bin), DS=DGROUP=0x1c00:
+  mov di,ds:[0x6d34]        ; di = DAT_2000_2d34 = player-vehicle near-offset
+  movb [di+0x3f],0 ; movb [di+0xa0],0 ; orb [di+0x1a],0x20   ; all DS-relative
+Rebased the three di-relative writes onto g_mem+0x1c000+near-off.  The `es:[di+0xcd]` (aa2c) write above
+stays raw -- it is the ea2e:ea2c TCB host far-ptr, a different representation (works, and used raw by
+patch 310 too).  A vehicle-reset helper reached only on the mission op-0x2c path; no passing verify flow
+reaches it (the host-ptr deref would have SEGV'd them) -> regression-safe.
+
+--- a/fist.c
++++ b/fist.c
+@@ -20395,11 +20395,18 @@
+   DAT_2000_2d16 = 0;
+   DAT_2000_2d18 = 0;
+   *(undefined1 *)(DAT_2000_aa2c + 0xcd) = 2;
+-  iVar4 = DAT_2000_2d34;
+-  *(undefined1 *)(DAT_2000_2d34 + 0x3f) = 0;
+-  *(undefined1 *)(iVar4 + 0xa0) = 0;
+-  pbVar1 = (byte *)(iVar4 + 0x1a);
+-  *pbVar1 = *pbVar1 | 0x20;
++  /* PATCH 400: FUN_0000_7eb7 base-loss -- DAT_2000_2d34 is the player-vehicle DGROUP NEAR OFFSET (0xc05c;
++     established as such by patches 300/310), but Ghidra deref'd `di+off` as a HOST pointer -> SIGSEGV on
++     the INDIA3 (op-0x2c) spawn.  asm 0x7eb7..0x7f18: `mov di,ds:[0x6d34]; movb [di+0x3f],0; movb
++     [di+0xa0],0; orb [di+0x1a],0x20` -- all DS=DGROUP-relative.  Rebase onto g_mem+0x1c000 (the aa2c line
++     above stays raw: it is the ea2e:ea2c TCB host far-ptr, not a DGROUP offset).  A vehicle-reset helper
++     reached only on the mission path -> no passing verify flow reaches it (the host-ptr deref would have
++     SEGV'd them), regression-safe. */
++  iVar4 = (int)(uint16_t)(uintptr_t)DAT_2000_2d34;
++  pbVar1 = (byte *)(g_mem + 0x1c000 + (uint16_t)iVar4);
++  pbVar1[0x3f] = 0;
++  pbVar1[0xa0] = 0;
++  pbVar1[0x1a] = pbVar1[0x1a] | 0x20;
+   return;
+ }
+ 
