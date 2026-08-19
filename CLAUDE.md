@@ -168,9 +168,18 @@ fix that rebuilt a contiguous HM+reduce for 6980 changed the default frame by 0 
   - The colour source 9200 walks is the tile `[0x3918]` (dist=176, max=255) — and FIST_TILEWIN=0x4200 does
     NOT change it (nor `[0x85bc]+0x100000`). So the default-path defect is DEEPER than the 6980 colour-gate:
     it is in the bc9c `[0x3918]` tile BUILD and/or 9200's INDEXING into it — still OPEN.
-**NEXT:** compare the port's `[0x3918]` tile + 9200's per-column indices to the oracle (framematched 9200
-tooling: capture_9200_framematched.sh / sim_voxel6980.py) to split "wrong tile" vs "wrong index"; then fix
-in the 89b0/bc9c build, guarding the 159 dashboard flows and verifying vs the burst oracle windshield.
+**DECISIVE narrowing (wrong-tile vs wrong-index — settled):** the port's `[0x3918]` tile matches the
+original's captured tile (sample `voxel6980_framematched_pass08`, the "settled tile" dist=66/mean=199.3) at
+only **0.5%** (port dist=176/mean=110.7). So it is a **WRONG TILE, not wrong indexing** — the bug is bc9c's
+tile BUILD, downstream of a CORRECT input: the block-A blend matrix (DSOUNDS.BIN @0xe00, 64KB) is 100%
+byte-identical to the oracle groundtruth `tools/oracle/samples/oracle_bdc4_matrix_blockA_0x141000.bin`. So
+bc9c/bdc4 turn a correct block A into a wrong tile in the DEFAULT map-load. NB the FIST_TILEFILL harness
+preloads block A into [bc90] itself (fist_preload_blockA) — a strong hint the DEFAULT 89b0 path does NOT
+place block A where bc9c/bdc4 read it, so they build the tile from wrong bytes.
+**NEXT:** read bc9c/bdc4 in re_out/fist_ext.c — find where they READ block A (vs the [bc90] they WRITE the
+M[ch][cl] distance matrix to) in the default path; ensure the DEFAULT map-load supplies the correct block A
+there (as the original engine's DSOUNDS load does), rebuild the tile, and verify `[0x3918]` -> ~dist66/mean199
++ the burst-oracle windshield, guarding the 159 dashboard flows.
 
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
