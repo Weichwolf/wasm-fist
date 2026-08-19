@@ -90,12 +90,21 @@ reach; it is the next thing to decompose into a small, verifiable step. **One ve
 
 The **entire front-end is bit-verified on both targets** — intro, all 7 main-menu items, every SETTINGS
 toggle, all list-dialog interactions (select/scroll/page/cancel), OK-save, campaign/battle drill-down,
-briefing — plus 26 mission cockpit-chrome frames, **21 op-0x2c FSG-battle cockpits**, the **`.FSG`
-editor round-trip for all 47 battles**, and TWO real editor edit-ops each over a 7-theater spread:
-**ADD-TANK** (patch 362, real b21d roster-insert, base→base+1) and **REMOVE-TANK** (patch 405, real
-b2ef object-destroy, base→base-1), both bit-verified as idempotent fixed points: **146 `tools/verify.sh`
-flows, AE=0 native + wasm, native↔wasm 0-diff.** The reproducible chain is solid; `re_out/fist.c`
-pristine; the shim covers VGA/DOS/mouse/audio/extender.
+briefing — plus 26 op-0x24 mission cockpit-chrome frames, **21 op-0x2c FSG-battle cockpits**, the **`.FSG`
+editor round-trip for all 47 battles**, and THREE real editor edit-ops each over a theater spread:
+**ADD-TANK** (patch 362, real b21d friendly roster-insert, base→base+1), **ADD-ENEMY** (patch 406, b21d's
+enemy-pool branch 0xc05c, base→base+1) and **REMOVE-TANK** (patch 405, real b2ef object-destroy,
+base→base-1), all bit-verified as idempotent fixed points, PLUS the editor **"simulate" leg** for add and
+remove (the edited .FSG loads + spawns its op-0x2c cockpit AE=0 -> create→save→reload→simulate closed):
+**159 `tools/verify.sh` flows, AE=0 native + wasm, native↔wasm 0-diff.** The reproducible chain is solid;
+`re_out/fist.c` pristine; the shim covers VGA/DOS/mouse/audio/extender.
+
+**Mission-render coverage for the M1 chrome is COMPLETE** (a full 47-battle op-0x2c spawn scan + a
+14-ref cross-match): every M1-cockpit battle is bit-verified via op-0x24 and/or op-0x2c against a genuine
+DOSBox ref; INDIA3 is the SOLE crasher (near-heap OOM); and exactly **10 battles render a DIFFERENT,
+non-M1 central chrome** (azer6/cyprus4/saudi5 share one; cyprus5/saudi6/syria5/syria7/train1/ukraine3/
+ukraine6 span several more — AE 64..86 vs the M1 refs, deterministic). Those 10 are faithful-but-unverified
+pending their OWN vehicle DOSBox refs (multiple distinct chromes -> multiple oracle captures needed).
 
 **The mission-paint "crash bucket" is cracked** (patches 397-399): the in-mission windshield/HUD dispatch
 reached four un-ported per-vehicle sprite-animation element methods (8039/7681/87cc/90bf + their
