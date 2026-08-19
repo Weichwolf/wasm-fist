@@ -173,13 +173,17 @@ original's captured tile (sample `voxel6980_framematched_pass08`, the "settled t
 only **0.5%** (port dist=176/mean=110.7). So it is a **WRONG TILE, not wrong indexing** — the bug is bc9c's
 tile BUILD, downstream of a CORRECT input: the block-A blend matrix (DSOUNDS.BIN @0xe00, 64KB) is 100%
 byte-identical to the oracle groundtruth `tools/oracle/samples/oracle_bdc4_matrix_blockA_0x141000.bin`. So
-bc9c/bdc4 turn a correct block A into a wrong tile in the DEFAULT map-load. NB the FIST_TILEFILL harness
-preloads block A into [bc90] itself (fist_preload_blockA) — a strong hint the DEFAULT 89b0 path does NOT
-place block A where bc9c/bdc4 read it, so they build the tile from wrong bytes.
-**NEXT:** read bc9c/bdc4 in re_out/fist_ext.c — find where they READ block A (vs the [bc90] they WRITE the
-M[ch][cl] distance matrix to) in the default path; ensure the DEFAULT map-load supplies the correct block A
-there (as the original engine's DSOUNDS load does), rebuild the tile, and verify `[0x3918]` -> ~dist66/mean199
-+ the burst-oracle windshield, guarding the 159 dashboard flows.
+bc9c/bdc4 turn a correct block A into a wrong tile in the DEFAULT map-load. **Input is CONFIRMED correct:**
+the shim's DEFAULT op-0x18 path (native_main.c ~2204-2212, UNCONDITIONAL — not FIST_TILEFILL-gated) preloads
+block A into [bc90] via fist_preload_blockA, and a FIST_BLKADUMP shows that [bc90] is 100% byte-identical to
+DSOUNDS.BIN block A. So the earlier "default path doesn't supply block A" hint is WRONG — block A IS supplied.
+**The defect is therefore squarely inside the bc9c/bdc4 tile-BUILD** (algorithm or its write-vs-read window):
+per the FIST_BBDUMP note, bc9c writes the flat M[ch][cl] matrix at the 64KB-aligned block base while 9200
+reads the tile at the +0x4200 window ([0x3918]), and patch-289's bc90->tile alias was meant to reconcile
+that but the result is still a 0.5%-match tile. **NEXT:** read FUN_0000_bc9c + FUN_0000_bdc4 in
+re_out/fist_ext.c against the asm; fix the tile-build (the +0x4200 window / the alias / the M[ch][cl] index
+math) so `[0x3918]` -> the original dist=66/mean=199 tile; verify vs the burst-oracle windshield, guarding
+the 159 dashboard flows. This is the deepest, actively-worked layer (patch-289 + the tools/oracle voxel docs).
 
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
