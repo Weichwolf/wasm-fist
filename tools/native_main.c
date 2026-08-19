@@ -2322,6 +2322,12 @@ int fist_extender_gate(void) {
                         fprintf(stderr,"[hmdump] port [0x85b8] reduce 1MB -> /tmp/port_CM858.bin\n"); } } }
                 if (getenv("FIST_HMEXIT")) { fflush(stderr); _exit(0); }
             }
+            /* FIST_PALDUMP: dump the palette [0x5598] (256*3 RGB) that bc9c blends into the tile LUT. */
+            if (getenv("FIST_PALDUMP")) {
+                FILE*f=fopen(getenv("FIST_PALDUMP"),"wb"); if(f){ fwrite(xb+0x5598,1,768,f); fclose(f);
+                    int nz=0,mx=0; for(int i=0;i<768;i++){ if(xb[0x5598+i])nz++; if(xb[0x5598+i]>mx)mx=xb[0x5598+i]; }
+                    fprintf(stderr,"[paldump] [0x5598] palette 768B -> %s (nz=%d max=%d)\n", getenv("FIST_PALDUMP"), nz, mx); }
+            }
             /* FIST_MTXDUMP: dump the 64 KB blend matrix that bc9c filled + bdc4 read (aliased at 0x3918). */
             if (getenv("FIST_MTXDUMP")) {
                 uint32_t mb = save_3918;

@@ -180,10 +180,19 @@ DSOUNDS.BIN block A. So the earlier "default path doesn't supply block A" hint i
 **The defect is therefore squarely inside the bc9c/bdc4 tile-BUILD** (algorithm or its write-vs-read window):
 per the FIST_BBDUMP note, bc9c writes the flat M[ch][cl] matrix at the 64KB-aligned block base while 9200
 reads the tile at the +0x4200 window ([0x3918]), and patch-289's bc90->tile alias was meant to reconcile
-that but the result is still a 0.5%-match tile. **NEXT:** read FUN_0000_bc9c + FUN_0000_bdc4 in
-re_out/fist_ext.c against the asm; fix the tile-build (the +0x4200 window / the alias / the M[ch][cl] index
-math) so `[0x3918]` -> the original dist=66/mean=199 tile; verify vs the burst-oracle windshield, guarding
-the 159 dashboard flows. This is the deepest, actively-worked layer (patch-289 + the tools/oracle voxel docs).
+that but the built [0x3918] is still 0.5%-match (port dist=176/mean=110.7).
+
+**Innermost layer read (FUN_0000_bc9c + FUN_0000_ac70, re_out/fist_ext.c):** bc9c builds the symmetric
+M[ch][cl] LUT — averages the two palette RGBs (from the 6-bit palette **[0x5598]**, FIST_PALDUMP: max-ch 50 /
+mean-lum 21.7) and calls ac70 to snap the blend to the NEAREST palette index. ac70 matches against a SECOND
+palette **[0x4f60]** using squared-diff tables **[0xa060]/[0xa460]/[0xa860]** over search range
+**[0xac64]..[0xac60]** (terrain min-index 80). So the wrong tile = one of these ac70 inputs differs from the
+original: the match palette [0x4f60], the blend palette [0x5598], the diff tables, or the [ac64..ac60] range.
+**NEXT (data-level):** dump + compare each of {[0x4f60],[0x5598],[a060/a460/a860],[ac60/ac64]} vs an oracle
+capture at bc9c-time, find the wrong input, fix its producer in the default 89b0 map-load; verify [0x3918] ->
+dist66/mean199 + the burst-oracle windshield, guarding the 159 dashboard flows. Deepest, actively-worked
+layer (patch-289 + oracle voxel docs). Diagnostics added this session: FIST_PALDUMP ([0x5598]); FIST_HMDUMP
+also banks [0x85b8] (the LIGHT reduce).
 
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
