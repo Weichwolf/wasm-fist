@@ -158,14 +158,20 @@ tools/oracle/{capture_9200_framematched.sh, sim_voxel6980*.py, trace_terrain.sh,
 **Voxel ROOT CAUSE pinpointed** (colour-gate, re-confirmed via `sim_voxel6980_framematched.py`): 6980 samples
 terrain colour at `[0x85bc]+coord+0x100000`; its 7585 render-time stores (38 distinct, 123..228) are ALL in
 the original's LIGHT reduce colormap and NONE in the dark C32 the port has there (max 104) — the terrain is
-**MIS-COLOURED, not mis-shaped**. The reduce collapses to the dark 89-distinct C32 (should be the 254-distinct
-LIGHT reduce) via a COLORMAP-BUFFER ALIGNMENT bug: the original windows the colormap at the NON-64KB-aligned
-offset 0x4200 (row 66) inside [bc90]/[3918], but the port's Route-1 89b0 map-load allocs those 64KB-aligned
-(low16=0), losing the window so bc9c's matrix build collapses. **FIX DIRECTION** (deep, careful — the 89b0
-map-load also feeds the VERIFIED dashboard, so guard the 159 green flows): carry the 0x4200 window in the
-colormap/tile buffers (non-64KB-aligned; cf. FIST_TILEWIN=0x4200 / FIST_TILEFILL diagnostics) so the reduce
-yields the LIGHT 254-distinct colormap AND lands contiguously at [0x85bc]+0x100000 for 6980. Verify each step
-vs the burst oracle (windshield rows 0-95) + re-run the 159 matrix for no dashboard regression.
+**MIS-COLOURED, not mis-shaped**. It is a TWO-part defect (experiment-refined — a first guess that the
+FIST_TILEWIN=0x4200 blend-matrix window alone fixes it was DISPROVEN: with FIST_TILEWIN=0x4200 the dumped
+[0x85bc]+0x100000 colormap is still the dark 105-distinct/max-104 C32, so the 0x4200 window is the bc9c
+blend-MATRIX [bc90]/[3918] concern, NOT the colormap source):
+  (1) **the reduce collapses to dark** — the 254-distinct LIGHT reduce should land at [0x85b8] but the
+      bc90->3918 tile-alias collapses it to the 89-distinct C32 (FIST_NOTILEALIAS is the diagnostic that
+      makes the LIGHT reduce appear at [0x85b8], at the cost of corrupting the tile build); and
+  (2) **contiguity** — 6980 reads colour at heightmap `[0x85bc]+0x100000`, but the port's Route-1 89b0
+      map-load allocs [0x85bc] (heightmap) and [0x85b8] (colormap) SEPARATELY, so [0x85bc]+0x100000 is NOT
+      the colormap (the FIST_TILEFILL harness rebuilds a contiguous HM[0..1MB]+colormap[+1MB] to test this).
+**FIX** (deep, careful — the 89b0 map-load also feeds the VERIFIED dashboard, so guard the 159 green flows):
+produce the LIGHT 254-distinct reduce (untangle the tile-alias) AND place it contiguously at
+[0x85bc]+0x100000 for 6980. Verify each step vs the burst oracle (windshield rows 0-95) + re-run the 159
+matrix for no dashboard regression.
 
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
