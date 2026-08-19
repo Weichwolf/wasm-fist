@@ -155,6 +155,18 @@ the terrain (rows ~5-85) differs ~280 px every row. So the port's NovaLogic Voxe
 bit-exact. This blocks the mission-render DoD for EVERY battle and is deep RE (existing tooling:
 tools/oracle/{capture_9200_framematched.sh, sim_voxel6980*.py, trace_terrain.sh, dosbox_vga_terrain_trace.patch}).
 
+**Voxel ROOT CAUSE pinpointed** (colour-gate, re-confirmed via `sim_voxel6980_framematched.py`): 6980 samples
+terrain colour at `[0x85bc]+coord+0x100000`; its 7585 render-time stores (38 distinct, 123..228) are ALL in
+the original's LIGHT reduce colormap and NONE in the dark C32 the port has there (max 104) — the terrain is
+**MIS-COLOURED, not mis-shaped**. The reduce collapses to the dark 89-distinct C32 (should be the 254-distinct
+LIGHT reduce) via a COLORMAP-BUFFER ALIGNMENT bug: the original windows the colormap at the NON-64KB-aligned
+offset 0x4200 (row 66) inside [bc90]/[3918], but the port's Route-1 89b0 map-load allocs those 64KB-aligned
+(low16=0), losing the window so bc9c's matrix build collapses. **FIX DIRECTION** (deep, careful — the 89b0
+map-load also feeds the VERIFIED dashboard, so guard the 159 green flows): carry the 0x4200 window in the
+colormap/tile buffers (non-64KB-aligned; cf. FIST_TILEWIN=0x4200 / FIST_TILEFILL diagnostics) so the reduce
+yields the LIGHT 254-distinct colormap AND lands contiguously at [0x85bc]+0x100000 for 6980. Verify each step
+vs the burst oracle (windshield rows 0-95) + re-run the 159 matrix for no dashboard regression.
+
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
 (64ea is a modal, map-view-gated); save/load; controls — all the way to the 10× gate. **Los geht's.** 🚀
