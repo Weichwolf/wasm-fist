@@ -273,6 +273,19 @@ FLOWS=(
   # added tank RELOADS, and load->save on the edited file is an idempotent FIXED POINT -- native AND
   # wasm, native==wasm 0-diff.  A WRITE flow (own fresh cp -a scratch datadirs; repo untouched).
   "editor-add-tank|25000|addtank||addtank"
+  # ADD-TANK generalized across theaters (patch 362 hook is battle-agnostic -- clones the first loaded
+  # friendly unit): each asserts the loaded battle's ORIGINAL DCBS baseline -> base+1, the added tank
+  # RELOADS, and the edited file is an idempotent fixed point.  native AND wasm, native==wasm 0-diff.
+  "editor-add-tank-azer2|25000|addtank||addtank"
+  "editor-add-tank-azer5|25000|addtank||addtank"
+  "editor-add-tank-cyprus3|25000|addtank||addtank"
+  "editor-add-tank-cyprus6|25000|addtank||addtank"
+  "editor-add-tank-india2|25000|addtank||addtank"
+  "editor-add-tank-india5|25000|addtank||addtank"
+  "editor-add-tank-saudi2|25000|addtank||addtank"
+  "editor-add-tank-syria2|25000|addtank||addtank"
+  "editor-add-tank-ukraine5|25000|addtank||addtank"
+  "editor-add-tank-train3|25000|addtank||addtank"
   # FIRST DUAL-TARGET IN-MISSION SURFACE (patches 364/365/366/367 objtype-0x02 + b059 crash-free, 381/382
   # display-walk arg-thread wasm render, +0x3e camera seed): the AZER1-spawn cockpit CENTRAL-CHROME
   # (engine-2322 dashboard, cols80-180 rows96-188) is bit-exact AE=0 vs a genuine DOSBox ref on BOTH
@@ -462,27 +475,36 @@ while i+6<=len(d):
     i+=6+ln
 PY
 }
-run_edit() { # $1=target $2=datadir ; echo rc  (one enter-edit->add-tank->save->exit against $2/..AZER1.FSG)
-  local t="$1" dd="$2"
+run_edit() { # $1=target $2=datadir $3=battle(default AZER1) ; echo rc  (enter-edit->add-tank->save->exit against $2/..$3.FSG)
+  # FIST_FSG_BATTLE (patch 380) selects the loaded+saved battle; the patch-362 add-tank hook is
+  # battle-agnostic (clones the first loaded FRIENDLY unit), so ANY .FSG with a friendly unit gains
+  # exactly one tank.  Default AZER1 -> behaviour-identical to the un-generalized flow.
+  local t="$1" dd="$2" b="${3:-AZER1}"
   if [ "$t" = native ]; then
-    timeout 120 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 120 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
   else
-    timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+    timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_EDIT_ADDTANK=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
 }
-run_addtank() { # $1=target $2=expected-unit-count ; echo path-to-edited-file on success, empty on failure
-  local t="$1" want="$2" a b c fe fe2 fe3 n
-  a="$(fresh_datadir "at.$t.A")"; [ "$(run_edit "$t" "$a")" = 0 ] || { echo ""; return 1; }
-  fe="$TMP/edit.$t.FSG"; [ -s "$a/FISTDATA/AZER1.FSG" ] && cp "$a/FISTDATA/AZER1.FSG" "$fe" || { echo ""; return 1; }
-  n="$(dcbs_units "$fe")"; [ "$n" = "$want" ] || { echo ""; return 3; }          # exactly base+1 units
+run_addtank() { # $1=target $2=battle(default AZER1) ; echo path-to-edited-file on success, empty on failure
+  # Battle-agnostic: the baseline unit-count is read from the freshly-copied original $b.FSG, and
+  # ADD-TANK must yield exactly baseline+1.  Then the edited file is a reload-stable idempotent fixed
+  # point (load->save == load->save->load->save), and it keeps the added tank across the reload.
+  local t="$1" b="${2:-AZER1}" a bd c fe fe2 fe3 base want
+  a="$(fresh_datadir "at.$b.$t.A")"
+  base="$(dcbs_units "$a/FISTDATA/$b.FSG")"; [ -n "$base" ] || { echo ""; return 3; }
+  want=$((base+1))
+  [ "$(run_edit "$t" "$a" "$b")" = 0 ] || { echo ""; return 1; }
+  fe="$TMP/edit.$b.$t.FSG"; [ -s "$a/FISTDATA/$b.FSG" ] && cp "$a/FISTDATA/$b.FSG" "$fe" || { echo ""; return 1; }
+  [ "$(dcbs_units "$fe")" = "$want" ] || { echo ""; return 3; }                   # exactly base+1 units
   # idempotent fixed point on the edited file: load(fe)->save = fe2; load(fe2)->save = fe3; fe2==fe3
-  b="$(fresh_datadir "at.$t.B")"; cp "$fe" "$b/FISTDATA/AZER1.FSG"
-  [ "$(run_fsg "$t" "$b")" = 0 ] || { echo ""; return 1; }
-  fe2="$TMP/editfp1.$t.FSG"; cp "$b/FISTDATA/AZER1.FSG" "$fe2" 2>/dev/null || { echo ""; return 1; }
+  bd="$(fresh_datadir "at.$b.$t.B")"; cp "$fe" "$bd/FISTDATA/$b.FSG"
+  [ "$(run_fsg "$t" "$bd" "$b")" = 0 ] || { echo ""; return 1; }
+  fe2="$TMP/editfp1.$b.$t.FSG"; cp "$bd/FISTDATA/$b.FSG" "$fe2" 2>/dev/null || { echo ""; return 1; }
   [ "$(dcbs_units "$fe2")" = "$want" ] || { echo ""; return 3; }                  # reload keeps the tank
-  c="$(fresh_datadir "at.$t.C")"; cp "$fe2" "$c/FISTDATA/AZER1.FSG"
-  [ "$(run_fsg "$t" "$c")" = 0 ] || { echo ""; return 1; }
-  fe3="$TMP/editfp2.$t.FSG"; cp "$c/FISTDATA/AZER1.FSG" "$fe3" 2>/dev/null || { echo ""; return 1; }
+  c="$(fresh_datadir "at.$b.$t.C")"; cp "$fe2" "$c/FISTDATA/$b.FSG"
+  [ "$(run_fsg "$t" "$c" "$b")" = 0 ] || { echo ""; return 1; }
+  fe3="$TMP/editfp2.$b.$t.FSG"; cp "$c/FISTDATA/$b.FSG" "$fe3" 2>/dev/null || { echo ""; return 1; }
   cmp -s "$fe2" "$fe3" || { echo ""; return 2; }   # edited file is not an idempotent fixed point
   echo "$fe"
 }
@@ -530,14 +552,15 @@ for row in "${FLOWS[@]}"; do
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
   fi
-  if [ "$name" = editor-add-tank ]; then
-    # AZER1.FSG has a fixed 80-unit DCBS (guarded by the editor-fsg-roundtrip flow above); ADD-TANK
-    # must yield exactly 81.  run_addtank asserts: edit->save has EXP units, the added tank RELOADS,
-    # and load->save on the edited file is an idempotent FIXED POINT.  native==wasm on the raw edit.
-    EXP=81
-    detail=" [add-tank 80->$EXP + idempotent fixed-point]"; fen=""; few=""
-    if [ "$WHICH" != wasm ];   then fen="$(run_addtank native $EXP)"; [ -n "$fen" ] || { ok=0; detail+=" native-fail"; }; fi
-    if [ "$WHICH" != native ]; then few="$(run_addtank wasm $EXP)";   [ -n "$few" ] || { ok=0; detail+=" wasm-fail"; }; fi
+  if [ "$name" = editor-add-tank ] || [ "${name#editor-add-tank-}" != "$name" ]; then
+    # ADD-TANK edit-op generalized over battles (patch 362 hook is battle-agnostic): the battle is the
+    # `editor-add-tank-<BATTLE>` suffix (bare name -> AZER1).  run_addtank reads the ORIGINAL $b.FSG
+    # baseline, asserts edit->save = base+1 units, the added tank RELOADS, and load->save on the edited
+    # file is an idempotent FIXED POINT.  native==wasm 0-diff on the raw edit.
+    bt="AZER1"; [ "${name#editor-add-tank-}" != "$name" ] && bt="$(echo "${name#editor-add-tank-}" | tr a-z A-Z)"
+    detail=" [$bt add-tank base->base+1 + idempotent fixed-point]"; fen=""; few=""
+    if [ "$WHICH" != wasm ];   then fen="$(run_addtank native "$bt")"; [ -n "$fen" ] || { ok=0; detail+=" native-fail"; }; fi
+    if [ "$WHICH" != native ]; then few="$(run_addtank wasm "$bt")";   [ -n "$few" ] || { ok=0; detail+=" wasm-fail"; }; fi
     if [ "$WHICH" = both ] && [ -n "$fen" ] && [ -n "$few" ]; then
       cmp -s "$fen" "$few" || { ok=0; detail+=" nat!=wasm"; }
     fi
