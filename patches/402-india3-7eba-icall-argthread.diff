@@ -1,0 +1,28 @@
+PATCH 402: FUN_1000_7eba -- thread the dropped register args to the fist_icall_far([DGROUP:0x564])
+dispatch (= mga FUN_0000_0340, the menu-background/palette render).  INDIA3's next op-0x2c SEGV after
+patch 401: 0340 read `*param_2` from a wild host ptr (0x7f5f0000).  asm 0x7ec5..0x7ece:
+`mov bx,0x8f7e; mov ds:0xeaa1,bx; mov cx,ds; call ds:[0x564]`.  mga 0x340 reads its descriptor at
+es:[bx] with es=cx=ds(DGROUP), bx=0x8f7e => word[DGROUP:0x8f7e]; the port models that resolved pointer as
+`*param_2`, so param_2 = g_mem+0x1c000+0x8f7e.  param_1 is unused by 0340 (its asm never reads it) -> 0.
+Same __allregs-drops-icall-args class as patch 401; asm-verified; reached only on the op-0x2c paint ->
+regression-safe.
+
+--- a/fist.c
++++ b/fist.c
+@@ -56463,7 +56463,15 @@
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a4)))();
+   s_WVSOUNDS_BIN_2000_aa94[0xd] = '~';
+   s_WVSOUNDS_BIN_2000_aa94[0xe] = -0x71;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c564)))();
++  /* PATCH 402: FUN_1000_7eba dropped the register args to the fist_icall_far([DGROUP:0x564]) dispatch
++     (= mga FUN_0000_0340, the menu-background/palette render) -- INDIA3's next op-0x2c SEGV after patch
++     401 (0340 read *param_2 from a wild host ptr 0x7f5f0000).  asm 0x7ec5..0x7ece: `mov bx,0x8f7e;
++     mov ds:0xeaa1,bx; mov cx,ds; call ds:[0x564]`.  0340 reads its descriptor at es:[bx] with es=cx=ds
++     (DGROUP) and bx=0x8f7e, i.e. word[DGROUP:0x8f7e]; its port takes that as `*param_2`, so param_2 =
++     g_mem+0x1c000+0x8f7e.  param_1 is unused by 0340 (asm never reads it) -> pass 0.  The two byte
++     writes above already replay the `mov ds:0xeaa1,bx`.  asm-verified; op-0x2c paint only -> regression-safe. */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c564)))
++      (0,(undefined2 *)(g_mem + 0x1c000 + 0x8f7e));
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a8)))();
+   return;
+ }
