@@ -1,0 +1,86 @@
+PATCH 403: FUN_1000_8390 -- port the sibling viewport DIRTY method (mirror of 795c/patch 302) so INDIA3's
+op-0x2c paint survives its 209e arg-less dispatch.  795c (AZER3) and 8390 (INDIA3) are the same class of
+op-0x24 windshield-poster method; 209e's dirty-walk (patch 142) dispatches them ARG-LESS, publishing the
+element node bx -> DGROUP:0x3e08 and the walk base bp -> g_fist_paintbp, which the method must read (the C
+params are garbage).  8390 was un-ported, so it read `*(param_4 + *(param_3+2))` from wild garbage ->
+SIGSEGV.  Read bx/bp/si from the published globals; rebase every DAT_2000_2d34 (player-vehicle DGROUP
+near-offset) deref onto g_mem+0x1c000; thread df0e's node arg (bx_elem) and the patch-312 [0x6d8]=2ae9
+args (asm 0x18411..0x1841d: bx=0x8fe4 position descriptor, ax=(byte[[2d34]+0x1a]&0x10)?0x10:8).  8390's
+constants vs 795c: d552=0x8f8c, range<=0x4c, DAT_2000_4fe4/4fe8, final tail-call FUN_1000_8302.
+asm-verified 0x18390..0x1842c; reached only on the mission op-0x2c paint -> regression-safe.
+
+--- a/fist.c
++++ b/fist.c
+@@ -56921,46 +56921,64 @@
+ void __allregs FUN_1000_8390(undefined2 param_1,undefined2 param_2,undefined4 param_3,int param_4)
+ 
+ {
+   undefined4 uVar1;
+   undefined2 extraout_DX;
+   int iVar2;
+   undefined2 unaff_CS;
+   undefined2 uVar3;
+-
+-  *(undefined1 *)(param_4 + *(int *)((int)param_3 + 2)) = 3;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx_elem, bp_base, si_off;
++  extern unsigned short g_fist_paintbp;
++
++  /* PATCH 403: FUN_1000_8390 (asm 0x18390) -- a sibling viewport DIRTY method of 795c (patch 302),
++     d552=0x8f8c.  Dispatched ARG-LESS by the 209e dirty-walk, which publishes the element node bx ->
++     DGROUP:0x3e08 and the walk base bp -> g_fist_paintbp (patch 142); read them here -- the C params are
++     garbage (INDIA3's op-0x2c paint reaches THIS method, a distinct element-method path from AZER3's
++     795c/77dc, so a lone arg-less dispatch fed 8390 a wild param_3 -> `*(param_3+2)` SIGSEGV).  asm
++     `mov si,[bx+2]; mov [bp+si],3` marks the element dirty; every DAT_2000_2d34 (player-vehicle NEAR
++     offset) deref is rebased onto g_mem+0x1c000.  The [0x6d8]=2ae9 method args (asm 0x18411..0x1841d,
++     patch-312 class): bx=0x8fe4 (position descriptor, freshly written at 4fe4/4fe8), ax =
++     (byte[DGROUP:[2d34]+0x1a] & 0x10) ? 0x10 : 8 (sprite-directory offset). */
++  bx_elem = *(uint16_t *)(dg + 0x3e08);
++  bp_base = g_fist_paintbp;
++  si_off  = *(uint16_t *)(dg + (uint16_t)(bx_elem + 2));       /* mov si,[bx+2] */
++  *(uint8_t *)(dg + (uint16_t)(bp_base + si_off)) = 3;         /* mov [bp+si],3 */
+   iVar2 = DAT_2000_2d34;
+   if (DAT_1000_d548 == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x17) = *(byte *)(DAT_2000_2d34 + 0x17) & 0xfd;
++    *(byte *)(dg + 0x17 + (uint16_t)(uintptr_t)DAT_2000_2d34) &= 0xfd;
+     DAT_1000_d548 = 1;
+     DAT_1000_d552 = 0x8f8c;
+     FUN_1000_a84c(iVar2);
+     DAT_2000_2d16 = DAT_2000_2d16 + 1;
+     return;
+   }
+   if (-1 < (char)DAT_1000_d548) {
+     return;
+   }
+   if ((DAT_1000_d548 & 0x7f) == 1) {
+-    if ((*(byte *)(DAT_2000_2d34 + 0x1a) & 0x20) != 0) {
+-      *(byte *)(DAT_2000_2d34 + 0x1a) = *(byte *)(DAT_2000_2d34 + 0x1a) & 0xdf;
++    if ((*(byte *)(dg + 0x1a + (uint16_t)(uintptr_t)DAT_2000_2d34) & 0x20) != 0) {
++      *(byte *)(dg + 0x1a + (uint16_t)(uintptr_t)DAT_2000_2d34) &= 0xdf;
+       unaff_CS = 0;
+       FUN_0000_a329(iVar2);
+     }
+     uVar3 = unaff_CS;
+     uVar1 = FUN_1000_a20d(iVar2);
+-    FUN_0000_df0e(uVar1,param_3,iVar2);
++    FUN_0000_df0e(uVar1,(undefined4)(uint32_t)bx_elem,iVar2);
+     DAT_2000_2d14 = DAT_2000_2d14 + 1;
+     DAT_1000_d548 = 0;
+-    if ((((*(byte *)(DAT_2000_2d34 + 0x1a) & 1) != 0) && (9 < (*(undefined2 *)(g_mem+0x2561a)) + 5U)) &&
++    if ((((*(byte *)(dg + 0x1a + (uint16_t)(uintptr_t)DAT_2000_2d34) & 1) != 0) &&
++         (9 < (*(undefined2 *)(g_mem+0x2561a)) + 5U)) &&
+        ((*(undefined2 *)(g_mem+0x2561a)) + 5U < 0x4d)) {
+       DAT_2000_4fe4 = (*(undefined2 *)(g_mem+0x2561a));
+       DAT_2000_4fe8 = (*(undefined2 *)(g_mem+0x2561a)) + 0xb;
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6d8)))(0,unaff_CS,uVar3);
++      ((void (*)(undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c6d8)))
++        (((*(byte *)(g_mem + 0x1c000 + (uint16_t)(0x1a + (uint16_t)(uintptr_t)DAT_2000_2d34)) & 0x10) != 0)
++           ? 0x10 : 8, 0x8fe4, uVar3);
+       param_2 = extraout_DX;
+     }
+     FUN_1000_8302(param_1,param_2);
+   }
+   return;
+ }
+ 
+ 
