@@ -1,0 +1,37 @@
+FUN_1000_852f base-loss on the INDIA3 op-0x2c paint.
+
+Asm 0x1852f: `lea bx,[bx+4]; mov ax,[bx]; inc ax; mov bx,[bx+2]; add bx,3; call 52d1` --
+param_1 (bx) is a DGROUP NEAR OFFSET, and [bx+4]/[bx+6] are DS-relative reads (SS=DS=DGROUP).
+Likewise `mov di,ds:0x6d34; test [di+0x40],1` reads word[DS:[2d34]+0x40].  Ghidra typed param_1
+and DAT_2000_2d34 as host pointers and deref'd them raw -> SIGSEGV (param_1=0x7ff4).  Rebase the
+three DS-relative reads onto g_mem+0x1c000 (16-bit wrap); widths match the asm (WORD).  52d1 gets
+coords (word+1 / word+3), unchanged.
+--- a/fist.c
++++ b/fist.c
+@@ -57046,22 +57046,24 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_852f) @ 1000:852f ===== */
+ 
+ void __allregs FUN_1000_852f(int param_1)
+ 
+ {
+   undefined2 uVar1;
+   undefined1 extraout_AH;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t o = (uint16_t)param_1;
+   
+-  FUN_1000_52d1(*(int *)(param_1 + 4) + 1,*(int *)(param_1 + 6) + 3);
++  FUN_1000_52d1(*(uint16_t *)(dg + (uint16_t)(o + 4)) + 1,*(uint16_t *)(dg + (uint16_t)(o + 6)) + 3);
+   uVar1 = FUN_1000_524e(2);
+   FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0xf));
+   uVar1 = 0x2d64;
+-  if ((*(uint *)(DAT_2000_2d34 + 0x40) & 1) != 0) {
++  if ((*(uint16_t *)(dg + (uint16_t)((uint16_t)(uintptr_t)DAT_2000_2d34 + 0x40)) & 1) != 0) {
+     FUN_1000_530b(CONCAT11(extraout_AH,0xe));
+     uVar1 = 0x2d71;
+   }
+   thunk_FUN_1000_55ae(uVar1);
+   return;
+ }
+ 
+ 
