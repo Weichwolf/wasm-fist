@@ -206,6 +206,12 @@ windshield, guarding the 159 dashboard flows. Diagnostics: FIST_HMDUMP banks [0x
 5598/4f60/5260 + diff tables. Useful existing samples: oracle_9200_framematched_pass08.{pal,idx}.bin,
 oracle_bc9c_matrix_blockB, port_bc9c_matrix.bin.
 
+**Caveat (experiment):** the tile 9200 samples is MULTI-STEP (bc9c -> bdc4 upsample); a standalone re-run
+of bc9c alone after 89b0 gave distinct=95 vs the map-load tile's distinct=176, so it does NOT reproduce the
+build.  [0x5598] is a CONFIRMED-WRONG input (its terrain band [80..255] is 2.7% to the oracle render palette
+= what the DAC terrain, uploaded from [5598], must be, which [5260] matches 100%), but confirming it is the
+SOLE cause vs bc9c/bdc4 needs a faithful FULL tile-build re-run (bc9c + bdc4) with the corrected [5598].
+
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
 (64ea is a modal, map-view-gated); save/load; controls — all the way to the 10× gate. **Los geht's.** 🚀
