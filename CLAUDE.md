@@ -115,14 +115,21 @@ rendering under the real-timer *verify* condition, never COOP_TICK).
 
 **Oracle without the instrumented dosbox**: `tools/oracle/capture_battle_stock.sh` drives the ORIGINAL
 FIST.RUN under stock DOSBox + Xvfb + ctypes-XTEST (`xclick.py`, no root/xdotool/headers) and grabs the
-320×200 spawn — AZER1 M1-spawn central-chrome AE=0 vs the port, and AZER6 settles to AE=2 vs the port's M1
-(so AZER6's player is **M1**, faithful). **Caveat, hard-learned:** the oracle menu nav is NON-deterministic
-— the battle-list row-select and, worse, the original's **auto-cycle** (after a variable idle it swings the
-view to OTHER units, e.g. a steering-wheel/M3 vehicle) make a single row-selected grab unreliable. A grab
-that catches the cycle looks like a "wrong vehicle" but is not. Validate a specific battle only from a
-selection-zoom-verified capture that settles to AE≈0 vs the port in the M1-spawn window (~ACCEPT+24..31s),
-and cross-check the on-screen goal count. (A premature "port renders the wrong vehicle" claim here was a
-cycle-frame artifact and was retracted; the 12 op-0x2c flows stand.)
+320×200 spawn (AZER1 M1-spawn central-chrome AE=0 vs the port). **The non-deterministic auto-cycle is
+SOLVED by BURST capture** (proven for AZER6): grab a burst of ~40 frames across ACCEPT+20..40s (row at
+OY+123 for AZER6, OX/OY=192/184), crop each central chrome, and SELECT the frame whose dashboard matches
+the port — the cycle (the original swings the view to friendly units incl. a friendly M1 every few
+seconds) is no longer a blocker, you just capture through it and pick the right frame. This makes reliable
+per-battle oracle refs achievable.
+
+**AZER6 resolved (corrects the earlier "AZER6 is M1" claim, which was a friendly-M1 CYCLE frame):** AZER6's
+player is a **distinct NON-M1 vehicle**. The port's AZER6 op-0x2c central chrome matches the original's
+non-M1 view across every cycle pass at **AE=2 (MIN over all 40 burst frames — persistent, not timing)** —
+i.e. the dashboard is faithful except a **real 2-pixel bug at abs(114,135)+(114,136): port renders BLACK
+(0,0,0) where the original renders GRAY (85,85,85)/(77,73,73)**. The full-frame delta (~29 290 px) is the
+**windshield voxel terrain** (the open frontier), not the dashboard. So per-vehicle mission-render fidelity
+= (a) tiny dashboard micro-bugs like this AZER6 2px + (b) the windshield voxel — both deep-RE, now
+oracle-verifiable via the burst method.
 
 **INDIA3 is the SOLE crashing battle** — a full 35-battle op-0x2c spawn scan proved every *other* FSG
 battle renders its cockpit crash-free (34/35). INDIA3's mga-icall SEGV chain is fully ported through
