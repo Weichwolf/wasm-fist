@@ -299,6 +299,12 @@ FLOWS=(
   "editor-rem-tank-syria2|25000|remtank||remtank"
   "editor-rem-tank-ukraine5|25000|remtank||remtank"
   "editor-rem-tank-train3|25000|remtank||remtank"
+  # EDITOR "simulate" leg (create->save->reload->SIMULATE): add-tank edit a battle, then LOAD+SPAWN the
+  # edited .FSG and confirm its op-0x2c cockpit renders bit-identically (AE=0 vs saudi1 ref, native+wasm).
+  "editor-sim-saudi2|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "editor-sim-cyprus6|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "editor-sim-azer4|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "editor-sim-syria1|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
   # FIRST DUAL-TARGET IN-MISSION SURFACE (patches 364/365/366/367 objtype-0x02 + b059 crash-free, 381/382
   # display-walk arg-thread wasm render, +0x3e camera seed): the AZER1-spawn cockpit CENTRAL-CHROME
   # (engine-2322 dashboard, cols80-180 rows96-188) is bit-exact AE=0 vs a genuine DOSBox ref on BOTH
@@ -578,6 +584,16 @@ run_mission() { # $1=target $2=datadir [$3=battle] [$4=mode: ""=op-0x24 spawn, "
   convert "$out" -crop "$MC_REGION" +repage "$reg" 2>/dev/null || { echo ""; return 1; }
   echo "$reg"
 }
+run_editsim() { # $1=target $2=battle ; echo cropped-ppm or ""  (edit -> SIMULATE the edited .FSG)
+  # The editor DoD "simulate" leg: ADD-TANK edits $b.FSG in a datadir, then that SAME edited battle is
+  # loaded into a mission and its op-0x2c spawn cockpit is captured.  Proves the editor's output is not
+  # just file-consistent but SIMULATABLE -- the +1 unit does not perturb the (unit-count-invariant)
+  # central chrome, so it stays AE=0 vs the shared ref, on native AND wasm.
+  local t="$1" b="$2" dd
+  dd="$(fresh_datadir "es.$b.$t")"
+  [ "$(run_edit "$t" "$dd" "$b")" = 0 ] || { echo ""; return 1; }   # add-tank into dd (saves $b.FSG)
+  run_mission "$t" "$dd" "$b" "2c"                                   # op-0x2c spawn on the EDITED dd
+}
 
 echo "== verify ($WHICH) =="
 for row in "${FLOWS[@]}"; do
@@ -624,6 +640,30 @@ for row in "${FLOWS[@]}"; do
     if [ "$WHICH" != native ]; then few="$(run_remtank wasm "$bt")";   [ -n "$few" ] || { ok=0; detail+=" wasm-fail"; }; fi
     if [ "$WHICH" = both ] && [ -n "$fen" ] && [ -n "$few" ]; then
       cmp -s "$fen" "$few" || { ok=0; detail+=" nat!=wasm"; }
+    fi
+    if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
+    continue
+  fi
+  if [ "${name#editor-sim-}" != "$name" ]; then
+    # EDITOR "simulate" leg: ADD-TANK edit $b.FSG, then load+spawn that edited battle and compare its
+    # op-0x2c cockpit central-chrome AE=0 vs the shared DOSBox ref, native AND wasm, native==wasm 0-diff.
+    esb="$(echo "${name#editor-sim-}" | tr a-z A-Z)"
+    detail=" [$esb edit->simulate op-0x2c central-chrome]"
+    if [ ! -s "$ROOT/re_out/fist_image.bin" ]; then echo "  FAIL $name (re_out/fist_image.bin missing)"; fail=$((fail+1)); continue; fi
+    convert "$ref" -crop "$MC_REGION" +repage "$TMP/mc.ref.ppm" 2>/dev/null
+    rn=""; rw=""
+    if [ "$WHICH" != wasm ]; then
+      rn="$(run_editsim native "$esb")"
+      if [ -n "$rn" ]; then a=$(compare -metric AE "$rn" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" native-AE=$a"; }
+      else ok=0; detail+=" native-no-frame"; fi
+    fi
+    if [ "$WHICH" != native ]; then
+      rw="$(run_editsim wasm "$esb")"
+      if [ -n "$rw" ]; then a=$(compare -metric AE "$rw" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" wasm-AE=$a"; }
+      else ok=0; detail+=" wasm-no-frame"; fi
+    fi
+    if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
+      d=$(compare -metric AE "$rn" "$rw" /dev/null 2>&1); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
     fi
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
