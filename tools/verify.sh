@@ -380,6 +380,19 @@ FLOWS=(
   "mission-cockpit-2c-ukraine1|25000|missfb|UKRAINE1|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "mission-cockpit-2c-ukraine2|25000|missfb|UKRAINE2|$ROOT/ref/mission_azer3_cockpit_native320.png"
   "mission-cockpit-2c-ukraine5|25000|missfb|UKRAINE5|$ROOT/ref/mission_azer3_cockpit_native320.png"
+  # op-0x2c cockpit coverage extended to every remaining CRASH-FREE FSG battle whose M1 central chrome
+  # is bit-identical to the shared DOSBox spawn ref (saudi1) -- AE=0 native, AE=0 wasm, native==wasm.
+  # Found by a full 35-battle op-0x2c spawn scan: INDIA3 is the ONLY crashing battle (near-heap OOM,
+  # patch-404 frontier); every other battle renders, and these 9 match the saudi1 central chrome exactly.
+  "mission-cockpit-2c-azer4|25000|missfb|AZER4|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-2c-cyprus6|25000|missfb|CYPRUS6|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-2c-saudi2|25000|missfb|SAUDI2|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-2c-saudi3|25000|missfb|SAUDI3|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-2c-saudi7|25000|missfb|SAUDI7|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-2c-syria1|25000|missfb|SYRIA1|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-2c-train4|25000|missfb|TRAIN4|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-2c-ukraine7|25000|missfb|UKRAINE7|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  "mission-cockpit-2c-ukraine8|25000|missfb|UKRAINE8|$ROOT/ref/mission_saudi1_cockpit_native320.png"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
