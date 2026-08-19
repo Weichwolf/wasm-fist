@@ -299,6 +299,13 @@ FLOWS=(
   "editor-rem-tank-syria2|25000|remtank||remtank"
   "editor-rem-tank-ukraine5|25000|remtank||remtank"
   "editor-rem-tank-train3|25000|remtank||remtank"
+  # ADD-ENEMY edit-op (patch 406): exercises b21d's ENEMY roster pool (0xc05c), untested by the friendly
+  # add-tank.  base->base+1 + idempotent fixed point, native AND wasm, native==wasm 0-diff.
+  "editor-add-enemy|25000|addenemy||addenemy"
+  "editor-add-enemy-azer2|25000|addenemy||addenemy"
+  "editor-add-enemy-cyprus3|25000|addenemy||addenemy"
+  "editor-add-enemy-india2|25000|addenemy||addenemy"
+  "editor-add-enemy-saudi2|25000|addenemy||addenemy"
   # EDITOR "simulate" leg (create->save->reload->SIMULATE): add-tank edit a battle, then LOAD+SPAWN the
   # edited .FSG and confirm its op-0x2c cockpit renders bit-identically (AE=0 vs saudi1 ref, native+wasm).
   "editor-sim-saudi2|25000|editsim||$ROOT/ref/mission_saudi1_cockpit_native320.png"
@@ -518,15 +525,15 @@ run_edit() { # $1=target $2=datadir $3=battle(default AZER1) $4=edit-env(default
     timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 "$ev"=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
 }
-run_addtank() { # $1=target $2=battle(default AZER1) ; echo path-to-edited-file on success, empty on failure
-  # Battle-agnostic: the baseline unit-count is read from the freshly-copied original $b.FSG, and
-  # ADD-TANK must yield exactly baseline+1.  Then the edited file is a reload-stable idempotent fixed
-  # point (load->save == load->save->load->save), and it keeps the added tank across the reload.
-  local t="$1" b="${2:-AZER1}" a bd c fe fe2 fe3 base want
+run_addtank() { # $1=target $2=battle(default AZER1) $3=edit-env(default FIST_EDIT_ADDTANK) ; echo edited-file or ""
+  # Battle-agnostic: the baseline unit-count is read from the freshly-copied original $b.FSG, and the
+  # add op (add-tank friendly, or add-enemy via $3=FIST_EDIT_ADDENEMY) must yield exactly baseline+1.
+  # Then the edited file is a reload-stable idempotent fixed point, keeping the added unit.
+  local t="$1" b="${2:-AZER1}" ev="${3:-FIST_EDIT_ADDTANK}" a bd c fe fe2 fe3 base want
   a="$(fresh_datadir "at.$b.$t.A")"
   base="$(dcbs_units "$a/FISTDATA/$b.FSG")"; [ -n "$base" ] || { echo ""; return 3; }
   want=$((base+1))
-  [ "$(run_edit "$t" "$a" "$b")" = 0 ] || { echo ""; return 1; }
+  [ "$(run_edit "$t" "$a" "$b" "$ev")" = 0 ] || { echo ""; return 1; }
   fe="$TMP/edit.$b.$t.FSG"; [ -s "$a/FISTDATA/$b.FSG" ] && cp "$a/FISTDATA/$b.FSG" "$fe" || { echo ""; return 1; }
   [ "$(dcbs_units "$fe")" = "$want" ] || { echo ""; return 3; }                   # exactly base+1 units
   # idempotent fixed point on the edited file: load(fe)->save = fe2; load(fe2)->save = fe3; fe2==fe3
@@ -638,6 +645,19 @@ for row in "${FLOWS[@]}"; do
     detail=" [$bt rem-tank base->base-1 + idempotent fixed-point]"; fen=""; few=""
     if [ "$WHICH" != wasm ];   then fen="$(run_remtank native "$bt")"; [ -n "$fen" ] || { ok=0; detail+=" native-fail"; }; fi
     if [ "$WHICH" != native ]; then few="$(run_remtank wasm "$bt")";   [ -n "$few" ] || { ok=0; detail+=" wasm-fail"; }; fi
+    if [ "$WHICH" = both ] && [ -n "$fen" ] && [ -n "$few" ]; then
+      cmp -s "$fen" "$few" || { ok=0; detail+=" nat!=wasm"; }
+    fi
+    if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
+    continue
+  fi
+  if [ "$name" = editor-add-enemy ] || [ "${name#editor-add-enemy-}" != "$name" ]; then
+    # ADD-ENEMY edit-op (patch 406): exercises b21d's ENEMY roster branch (0xc05c) via FIST_EDIT_ADDENEMY.
+    # Same base->base+1 + idempotent-fixed-point contract as add-tank, cloning the first ENEMY unit.
+    bt="AZER1"; [ "${name#editor-add-enemy-}" != "$name" ] && bt="$(echo "${name#editor-add-enemy-}" | tr a-z A-Z)"
+    detail=" [$bt add-enemy base->base+1 + idempotent fixed-point]"; fen=""; few=""
+    if [ "$WHICH" != wasm ];   then fen="$(run_addtank native "$bt" FIST_EDIT_ADDENEMY)"; [ -n "$fen" ] || { ok=0; detail+=" native-fail"; }; fi
+    if [ "$WHICH" != native ]; then few="$(run_addtank wasm "$bt" FIST_EDIT_ADDENEMY)";   [ -n "$few" ] || { ok=0; detail+=" wasm-fail"; }; fi
     if [ "$WHICH" = both ] && [ -n "$fen" ] && [ -n "$few" ]; then
       cmp -s "$fen" "$few" || { ok=0; detail+=" nat!=wasm"; }
     fi

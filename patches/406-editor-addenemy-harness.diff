@@ -1,0 +1,65 @@
+PATCH 406: editor ADD-ENEMY edit-op harness (env-gated FIST_EDIT_ADDENEMY, DEFAULT OFF).
+
+Identical to patch 362's add-tank EXCEPT it clones the first loaded ENEMY unit (team bit
+byte[obj-0x19ec]&1 == 1) instead of the first friendly.  This routes the REAL roster allocator
+FUN_1000_b21d (patch 200) through its ENEMY branch -- pool DGROUP:0xc05c stride 0xfb, presence flags
+a38d[], count a296 -- the path patch 362's friendly add (0xa022 stride 0x37 / a2f7 / a294) never
+exercises.  The added enemy is a well-formed clone of a loaded enemy record registered into the 0x9fbc
+unit registry, so it serializes + reloads (base -> base+1) and the edited file is an idempotent fixed
+point, exactly like add-tank.  Genuine coverage of b21d's previously-untested enemy roster path.
+
+Env-gated + DEFAULT OFF -> behaviour-neutral for every non-add-enemy flow.
+
+--- a/fist.c
++++ b/fist.c
+@@ -14101,16 +14101,50 @@
+       if (s != 0) {
+         unsigned short obj = *(unsigned short *)(dg + s);
+         if ((dg[(unsigned short)(obj - 0x19ec)] & 1) == 0) { FUN_1000_b2ef(k); break; }
+       }
+     }
+     FUN_0000_d5f9(0,0,0,0x79a9,0,0);                        /* save via the reconstructed serializer */
+     exit(0);
+   }
++  if (getenv("FIST_EDIT_ADDENEMY")) {
++    /* PATCH 406: editor ADD-ENEMY edit-op harness (env-gated FIST_EDIT_ADDENEMY, DEFAULT OFF ->
++       behaviour-neutral for verify).  Identical to patch 362's add-tank EXCEPT it clones the first
++       loaded ENEMY unit (team bit byte[obj-0x19ec]&1 == 1) -- so b21d routes to the ENEMY roster pool
++       (DGROUP:0xc05c stride 0xfb, presence flags a38d[], count a296), the branch patch 362's friendly
++       add (0xa022 stride 0x37 / a2f7 / a294) never exercises.  Genuine coverage of b21d's enemy path;
++       the added enemy is a well-formed clone (base -> base+1), verified by reload + fixed point. */
++    unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++    unsigned short *fbc = (unsigned short *)(dg + 0xdfbc);   /* 0x9fbc unit registry {slot,val} x0xb6 */
++    int k, f, i;
++    unsigned short src = 0, val = 0, obj, nrec;
++    extern unsigned char g_fist_cf;
++    DAT_2000_2dab = DAT_2000_2dab | 2;                       /* enter EDITING mode (2dab bit2 = EDIT) */
++    for (k = 0; k < 0xb6; k = k + 1) {                       /* first ENEMY loaded unit (team bit 1) */
++      unsigned short s = fbc[k * 2];
++      if (s != 0) {
++        obj = *(unsigned short *)(dg + s);
++        if ((dg[(unsigned short)(obj - 0x19ec)] & 1) != 0) { src = s; val = fbc[k * 2 + 1]; break; }
++      }
++    }
++    if (src != 0) {
++      obj = *(unsigned short *)(dg + src);
++      nrec = (unsigned short)FUN_1000_b21d(obj);            /* REAL roster allocator -> new ENEMY slot */
++      if (!g_fist_cf && nrec != 0) {
++        for (i = 4; i < 0x37; i = i + 1)                    /* clone the serializable body [+4..+0x37) */
++          dg[(unsigned short)(nrec + i)] = dg[(unsigned short)(src + i)];
++        for (f = 0; f < 0xb6; f = f + 1)                    /* first free 0x9fbc registry slot */
++          if (fbc[f * 2] == 0 && fbc[f * 2 + 1] == 0) break;
++        fbc[f * 2] = nrec; fbc[f * 2 + 1] = val;            /* register the new unit -> counted + saved */
++      }
++    }
++    FUN_0000_d5f9(0,0,0,0x79a9,0,0);                        /* save via the reconstructed serializer */
++    exit(0);
++  }
+   if (!(bool)in_CF) {
+     FUN_1000_6015();
+     DAT_2000_39a8 = 1;
+   }
+   return;
+ }
+ 
+ 
