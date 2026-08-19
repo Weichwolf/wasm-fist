@@ -90,8 +90,8 @@ reach; it is the next thing to decompose into a small, verifiable step. **One ve
 
 The **entire front-end is bit-verified on both targets** — intro, all 7 main-menu items, every SETTINGS
 toggle, all list-dialog interactions (select/scroll/page/cancel), OK-save, campaign/battle drill-down,
-briefing — plus 26 mission cockpit-chrome frames, the AZER3 op-0x2c cockpit (oracle-anchored), and the
-**`.FSG` editor round-trip for all 47 battles**: **105 `tools/verify.sh` flows, AE=0 native + wasm,
+briefing — plus 26 mission cockpit-chrome frames, **12 op-0x2c FSG-battle cockpits**, and the
+**`.FSG` editor round-trip for all 47 battles**: **116 `tools/verify.sh` flows, AE=0 native + wasm,
 native↔wasm 0-diff.** The reproducible chain is solid; `re_out/fist.c` pristine; the shim covers
 VGA/DOS/mouse/audio/extender.
 
@@ -104,16 +104,14 @@ rendering under the real-timer *verify* condition, never COOP_TICK).
 
 **Oracle without the instrumented dosbox**: `tools/oracle/capture_battle_stock.sh` drives the ORIGINAL
 FIST.RUN under stock DOSBox + Xvfb + ctypes-XTEST (`xclick.py`, no root/xdotool/headers) and grabs the
-320×200 spawn — AZER1 M1-spawn central-chrome AE=0 vs the port. M1-spawn window ≈ ACCEPT+24..30s, then the
-original auto-cycles the view to other units.
-
-**KNOWN PORT BUG (next-priority)**: the port selects the WRONG player vehicle for op-0x2c battles whose
-player is not M1. Oracle-confirmed: AZER6's player is a steering-wheel/M3 vehicle, but the port renders an
-M1 cockpit (both via FIST_FSG_BATTLE and real menu nav). Its roster HAS M1+M3 units; the port picks an M1
-as the player instead of the designated M3. This is why the ~10 "distinct-chrome" battles don't match M1
-refs — and why 11 op-0x2c flows that reused M1 refs were reverted (integrity: an M1-ref match does NOT
-prove faithfulness when the port may render the wrong vehicle). Fix the player-vehicle selection → the
-op-0x2c cockpit harvest re-opens with per-battle oracle refs.
+320×200 spawn — AZER1 M1-spawn central-chrome AE=0 vs the port, and AZER6 settles to AE=2 vs the port's M1
+(so AZER6's player is **M1**, faithful). **Caveat, hard-learned:** the oracle menu nav is NON-deterministic
+— the battle-list row-select and, worse, the original's **auto-cycle** (after a variable idle it swings the
+view to OTHER units, e.g. a steering-wheel/M3 vehicle) make a single row-selected grab unreliable. A grab
+that catches the cycle looks like a "wrong vehicle" but is not. Validate a specific battle only from a
+selection-zoom-verified capture that settles to AE≈0 vs the port in the M1-spawn window (~ACCEPT+24..31s),
+and cross-check the on-screen goal count. (A premature "port renders the wrong vehicle" claim here was a
+cycle-frame artifact and was retracted; the 12 op-0x2c flows stand.)
 
 **Other open frontiers**: INDIA3 SEGVs deeper in the mga sprite-sheet builder (`m_mga_FUN_0000_2004` via
 the `84c3` icall — a cross-driver register-threading issue; patch 400 fixed its first stage `7eb7`); the
