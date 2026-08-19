@@ -27,7 +27,16 @@
 # Usage: capture_battle_stock.sh [OUT_PNG] [ROW_Y]
 #   OUT_PNG  default /tmp/oracle_battle_spawn.png
 #   ROW_Y    optional root-Y of the battle row to click after opening BATTLES
-#            (omit -> default selection = AZER1).  Rows start ~318 at ~8px pitch.
+#            (omit -> default selection = AZER1).
+#
+# CALIBRATION (measured):
+#   * game surface is at root (OX,OY) = the sole non-background 320x200 region (AZER1 menu: +192+184).
+#   * battle-list rows: row1(AZER1) at ~OY+93, ~6px pitch (OY+123 = AZER6, OY+135 = CYPRUS1 row8);
+#     only 8 rows are visible -- rows past CYPRUS1 need the scrollbar.
+#   * TIMING: after ACCEPT the settled M1 spawn frame (central-chrome AE=0 vs the port) is a ~6s window
+#     at ACCEPT+24..30s -> grab at +26s.  DO NOT wait longer: with no player input the ORIGINAL
+#     auto-cycles the mission view (~ACCEPT+32s) to OTHER units (e.g. a wheeled/steering-wheel vehicle),
+#     which is NOT the player spawn -- a late grab captures the cycle, not the cockpit.
 # =============================================================================
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
