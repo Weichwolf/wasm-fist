@@ -90,10 +90,12 @@ reach; it is the next thing to decompose into a small, verifiable step. **One ve
 
 The **entire front-end is bit-verified on both targets** — intro, all 7 main-menu items, every SETTINGS
 toggle, all list-dialog interactions (select/scroll/page/cancel), OK-save, campaign/battle drill-down,
-briefing — plus 26 mission cockpit-chrome frames, **12 op-0x2c FSG-battle cockpits**, and the
-**`.FSG` editor round-trip for all 47 battles**: **116 `tools/verify.sh` flows, AE=0 native + wasm,
-native↔wasm 0-diff.** The reproducible chain is solid; `re_out/fist.c` pristine; the shim covers
-VGA/DOS/mouse/audio/extender.
+briefing — plus 26 mission cockpit-chrome frames, **21 op-0x2c FSG-battle cockpits**, the **`.FSG`
+editor round-trip for all 47 battles**, and TWO real editor edit-ops each over a 7-theater spread:
+**ADD-TANK** (patch 362, real b21d roster-insert, base→base+1) and **REMOVE-TANK** (patch 405, real
+b2ef object-destroy, base→base-1), both bit-verified as idempotent fixed points: **146 `tools/verify.sh`
+flows, AE=0 native + wasm, native↔wasm 0-diff.** The reproducible chain is solid; `re_out/fist.c`
+pristine; the shim covers VGA/DOS/mouse/audio/extender.
 
 **The mission-paint "crash bucket" is cracked** (patches 397-399): the in-mission windshield/HUD dispatch
 reached four un-ported per-vehicle sprite-animation element methods (8039/7681/87cc/90bf + their
@@ -113,7 +115,23 @@ selection-zoom-verified capture that settles to AE≈0 vs the port in the M1-spa
 and cross-check the on-screen goal count. (A premature "port renders the wrong vehicle" claim here was a
 cycle-frame artifact and was retracted; the 12 op-0x2c flows stand.)
 
-**Other open frontiers**: INDIA3 SEGVs deeper in the mga sprite-sheet builder (`m_mga_FUN_0000_2004` via
-the `84c3` icall — a cross-driver register-threading issue; patch 400 fixed its first stage `7eb7`); the
-windshield **voxel terrain** (AZER1/AZER6 render it in the oracle); audio bit-exactness; more editor
-edit-ops; save/load; controls — one green flow at a time, all the way to the 10× gate. **Los geht's.** 🚀
+**INDIA3 is the SOLE crashing battle** — a full 35-battle op-0x2c spawn scan proved every *other* FSG
+battle renders its cockpit crash-free (34/35). INDIA3's mga-icall SEGV chain is fully ported through
+patches 400-404 (7eb7 base-loss, 84c3/7eba icall arg-threading, 8390 viewport, 852f base-loss); the crash
+now advances into the engine MEMMGR as a **genuine, deterministic near-heap OOM**: the cockpit-instrument
+bbox-analyzer (2004) allocs buf1(0xc00)=192 paras OK then buf2(0x140)=20 fails on a fragmented ~437-para
+free pool (l0c_max=223). Root-caused port-only as far as it goes — pool size (~480KB), patch 401 (84c3),
+patch 332 (2004 alloc sizes 0xc00/0x140), and the allocator (0a31/1040/0c7d faithful `stc;ret`) are ALL
+asm-verified faithful; at op-0x18 INDIA3≡AZER3 byte-identical (free=1681), so the divergence is an
+INDIA3-specific over-consumption in the synchronous post-map cockpit-setup cascade (INDIA3 reaches 2004
+via 84c3, children 0x8f8c/0x8fa8/0x8fc4, guarded once by ds:0x8f8a; AZER3 via a different caller and nets
++free). **The last question is oracle-only**: does the ORIGINAL have more near-heap headroom at 84c3-entry
+(guest phys 0x2d190+0x16d8)? — shim under-provision vs engine over-alloc. (Diagnostics: shim env
+FIST_DBG_MM dumps the d6d4 pool free/desc/l0c-max at op-0x18/0x2c; a `[2004]` build/fist_mga.c entry log
+gives the per-call trajectory.)
+
+**Other open frontiers**: the 23 crash-free-but-different-chrome battles need their own DOSBox refs
+(different vehicle / dynamic instruments); the windshield **voxel terrain** (AZER1/AZER6 render it in the
+oracle); audio bit-exactness; more editor edit-ops (modify-unit; the interactive 4c7a map-click add is
+blocked on the post-6015 map-view frontier) + the editor "simulate" round-trip leg; save/load; controls —
+one green flow at a time, all the way to the 10× gate. **Los geht's.** 🚀
