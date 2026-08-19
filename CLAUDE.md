@@ -192,16 +192,19 @@ palette index. Everything else in the build is VERIFIED CORRECT, leaving [0x5598
   - the squared-diff tables **[0xa060]/[0xa460]/[0xa860]** are valid d^2 LUTs, perceptually weighted
     (a060[k]=(31k)^2, a460=(43k)^2, a860=(26k)^2);
   - block A (DSOUNDS.BIN @0xe00) is 100% byte-identical to the oracle groundtruth.
-bc9c faithfully blends **[0x5598]** (532.pal, a palette DISTINCT from the oracle-exact [0x5260] — a dump
-shows they are NOT even permutations of each other, so [0x5260]'s correctness does NOT vouch for [0x5598];
-an earlier "[0x5260]=sort([0x5598])" reasoning was WRONG). The built tile is 0.5%-match (port dist=176/mean=
-110.7 vs original dist=66/mean=199.3), so with every other input verified the defect is **the port's
-[0x5598] (532.pal) content itself, OR bc9c's blend/write** — and [0x5598] cannot be checked port-only
-(C32.KLC is a compiled "KLC1" blob, no plain 6-bit palette; [0x5260] is a different palette).
-**NEXT (needs the instrumented oracle):** capture the ORIGINAL's [0x5598] at bc9c-time, compare byte-for-byte
-to the port's [0x5598] -> splits palette-vs-algorithm; fix the wrong one (the 532.pal load, or bc9c) in the
-default 89b0 map-load; verify [0x3918] -> dist66/mean199 + the burst-oracle windshield, guarding the 159
-dashboard flows. Diagnostics: FIST_HMDUMP banks [0x85b8]; FIST_PALDUMP dumps 5598/4f60/5260 + diff tables.
+bc9c faithfully blends **[0x5598]** (532.pal). **The defect is CONFIRMED port-only to be the port's
+[0x5598]** using an existing oracle sample (`oracle_9200_framematched_pass08.pal.bin`, the render palette):
+the terrain band [80..255] of the port's **[0x5260] is 100.0% BYTE-EXACT** to the oracle palette (so the
+render palette AND ac70's match target [0x4f60]=[0x5260]>>1 are correct), while the port's **[0x5598] is
+2.7%** to it. With every other input verified and the match target exact, the port's tile carries darker/
+lower indices (mean 110 vs the original's 199) ONLY because bc9c blends a wrong **[0x5598]** — the port's
+532.pal load is the bug. (An earlier "[0x5260]=sort([0x5598])" reasoning was WRONG; they aren't permutations.)
+**NEXT:** find the CORRECT [0x5598] — either the original's [0x5598] via instrumented DOSBox at bc9c-time,
+or by fixing the port's 532.pal producer (the extender op-0x18 load into ext+0x5598, ultimately C32.KLC) so
+that bc9c's blend of it yields the original dist=66/mean=199 tile; verify [0x3918] + the burst-oracle
+windshield, guarding the 159 dashboard flows. Diagnostics: FIST_HMDUMP banks [0x85b8]; FIST_PALDUMP dumps
+5598/4f60/5260 + diff tables. Useful existing samples: oracle_9200_framematched_pass08.{pal,idx}.bin,
+oracle_bc9c_matrix_blockB, port_bc9c_matrix.bin.
 
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
