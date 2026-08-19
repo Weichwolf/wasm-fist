@@ -346,21 +346,16 @@ FLOWS=(
   # AND wasm, native<->wasm 0-diff; the ref crop is bit-identical to the DOSBox oracle spawn frame
   # (scratch/oracle/azer3_spawn.frame.png).  Windshield terrain band = the separate voxel-render frontier.
   "mission-cockpit-2c-azer3|25000|missfb|AZER3|$ROOT/ref/mission_azer3_cockpit_native320.png"
-  # More op-0x2c FSG battles un-blocked by the crash-bucket family port (patches 397-399).  Swept all
-  # previously-uncovered .FSG for a crash-free op-0x2c spawn whose central-chrome (MC_REGION) is AE=0 on
-  # BOTH targets + native<->wasm 0-diff against an existing M1 cockpit ref (the M1 chrome center is
-  # map-invariant modulo the dynamic instruments outside the crop).  Deterministic (native 2x AE=0).
-  "mission-cockpit-2c-cyprus3|25000|missfb|CYPRUS3|$ROOT/ref/mission_saudi1_cockpit_native320.png"
-  "mission-cockpit-2c-india2|25000|missfb|INDIA2|$ROOT/ref/mission_azer3_cockpit_native320.png"
-  "mission-cockpit-2c-india5|25000|missfb|INDIA5|$ROOT/ref/mission_saudi1_cockpit_native320.png"
-  "mission-cockpit-2c-india7|25000|missfb|INDIA7|$ROOT/ref/mission_azer2_cockpit_native320.png"
-  "mission-cockpit-2c-saudi4|25000|missfb|SAUDI4|$ROOT/ref/mission_azer3_cockpit_native320.png"
-  "mission-cockpit-2c-syria2|25000|missfb|SYRIA2|$ROOT/ref/mission_saudi1_cockpit_native320.png"
-  "mission-cockpit-2c-syria4|25000|missfb|SYRIA4|$ROOT/ref/mission_saudi1_cockpit_native320.png"
-  "mission-cockpit-2c-train3|25000|missfb|TRAIN3|$ROOT/ref/mission_azer3_cockpit_native320.png"
-  "mission-cockpit-2c-ukraine1|25000|missfb|UKRAINE1|$ROOT/ref/mission_saudi1_cockpit_native320.png"
-  "mission-cockpit-2c-ukraine2|25000|missfb|UKRAINE2|$ROOT/ref/mission_azer3_cockpit_native320.png"
-  "mission-cockpit-2c-ukraine5|25000|missfb|UKRAINE5|$ROOT/ref/mission_azer3_cockpit_native320.png"
+  # NOTE (integrity self-correction): 11 more op-0x2c battles (cyprus3, india2/5/7, saudi4, syria2/4,
+  # train3, ukraine1/2/5) were briefly added by REUSING M1 cockpit refs, on the assumption their spawn
+  # is a stationary M1.  That assumption is UNSAFE and the flows were reverted: the stock-DOSBox oracle
+  # (tools/oracle/capture_battle_stock.sh) proved AZER6's ORIGINAL player vehicle is a *steering-wheel*
+  # vehicle, not M1, yet the PORT renders M1 for it under BOTH FIST_FSG_BATTLE and real menu navigation
+  # -- a genuine per-battle vehicle-selection bug (docs pending).  So an M1-ref match on an op-0x2c
+  # battle does NOT prove faithfulness; each op-0x2c battle needs its OWN oracle spawn ref (M1-window
+  # ~ACCEPT+26s, before the original auto-cycles the view).  Only AZER3 stays: its ref IS oracle-anchored
+  # (scratch/oracle/azer3_spawn.frame.png, AE=0).  Re-add each battle once its own oracle ref is captured
+  # and the port renders the correct vehicle.
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
