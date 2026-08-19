@@ -146,8 +146,15 @@ via 84c3, children 0x8f8c/0x8fa8/0x8fc4, guarded once by ds:0x8f8a; AZER3 via a 
 FIST_DBG_MM dumps the d6d4 pool free/desc/l0c-max at op-0x18/0x2c; a `[2004]` build/fist_mga.c entry log
 gives the per-call trajectory.)
 
-**Other open frontiers**: the 23 crash-free-but-different-chrome battles need their own DOSBox refs
-(different vehicle / dynamic instruments); the windshield **voxel terrain** (AZER1/AZER6 render it in the
-oracle); audio bit-exactness; more editor edit-ops (modify-unit; the interactive 4c7a map-click add is
-blocked on the post-6015 map-view frontier) + the editor "simulate" round-trip leg; save/load; controls —
-one green flow at a time, all the way to the 10× gate. **Los geht's.** 🚀
+**THE central remaining frontier — the windshield VOXEL TERRAIN.** All op-0x24/op-0x2c flows verify only
+the DASHBOARD (central chrome cols80-180 rows96-188); the actual game view above it is UNVERIFIED and
+mostly WRONG. Scoped on AZER1 (dashboard AE=0, i.e. a clean M1 spawn via the burst tool): the windshield
+(rows 0-95) is **75.5% different from the original (23 197 / 30 720 px)** — only the top ~5 sky rows match,
+the terrain (rows ~5-85) differs ~280 px every row. So the port's NovaLogic Voxel-Space terrain
+(m_ext_FUN_0000_82b8 render / 8120 camera→projection / 9200 per-column texel walk, in fist_ext.c) is NOT
+bit-exact. This blocks the mission-render DoD for EVERY battle and is deep RE (existing tooling:
+tools/oracle/{capture_9200_framematched.sh, sim_voxel6980*.py, trace_terrain.sh, dosbox_vga_terrain_trace.patch}).
+
+**Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
+battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
+(64ea is a modal, map-view-gated); save/load; controls — all the way to the 10× gate. **Los geht's.** 🚀
