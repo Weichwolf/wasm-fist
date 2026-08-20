@@ -689,3 +689,26 @@ upstream (LOD/alloc/gap/camera/sky/matrix, all oracle- or asm-verified faithful)
 settled; the windshield reduces to this proj-table + paging reconstruction. The
 session has driven it from a diffuse 75.5%-wrong mystery to this single, precisely
 localized, oracle-grounded open crux.
+
+CRUX re-confirmed at asm+oracle level (the deepest open point). Traced 6980's full
+colour write: 6aeb-6aee compute the proj lookup proj[base + ((L0+HM[coord])&0xff)]
+(proj base is SMC-patched at 0x6add per detail+L0); the proj result is a HEIGHT/run
+length (compared to the per-column running max at [0x4e60+edx], drawn when it's a new
+peak); the COLOUR written is al = [0x85bc]+0x100000+coord (6b1a) via `rep stos %al`
+(6b2b) filling `run` pixels. So 6980 writes CM[coord] directly as the terrain colour.
+FRESH ORACLE CONFIRMATION of the paradox: CM = [0x85bc]+0x100000 is STABLY DARK (range
+14-85) in BOTH the pass00 spawn dump AND the pass10 stable dump (identical top values
+60/37/62) -- NOT frame-evolving. Yet the oracle framematched terrain is LIGHT (150-230).
+So 6980 writes dark values (14-85) but the terrain renders light -- the documented
+"85b8 reduce-colormap collapse", now confirmed with guest-RAM at the asm level. The
+reconciliation (unresolved, deepest crux) is one of: (a) the dark tile INDICES (14-85)
+are mapped to light DISPLAY colours by a palette/DAC stage between the tile and the fb
+(but oracle_9200_framematched stores INDICES 150-230, not colours -- so the tile->fb
+step would have to REMAP indices); (b) 6980's colour source is subtly NOT [0x85bc]+
+0x100000 at render time (esi repoint, or a different indexing the sim+this trace both
+read as +0x100000); (c) the framematched idx sample and the guest-RAM dump are
+different provenance/map. This is THE remaining windshield unknown; everything else is
+oracle/asm-verified faithful. A future session should settle (a)/(b)/(c) -- likely by
+capturing the oracle's TILE [0x3918] terrain rows (not sky) at the framematched frame
+and checking whether they are 14-85 (dark, matching CM -> the fb sample is remapped) or
+150-230 (light -> 6980's colour source differs from [0x85bc]+0x100000).
