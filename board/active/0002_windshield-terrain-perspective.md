@@ -897,3 +897,24 @@ then wire op-0x08->6980 + add the windshield matrix flow + land patches/407-6980
 dynamic.diff (+ the projection fix + the op-dispatch) as the COMPLETE, test-verified
 windshield fix. The root is found + fix validated (10.6%->78.7%); the complete landing is
 the remaining bounded work.
+
+Projection is NOT the main gap (80.4% with oracle projection injected, +1.7% over
+78.7%). Dumped the port's 8120/85d0 projection outputs at the 6980 call vs the oracle
+guest-RAM values: port has 90b8=0,90bc=0,90fc=0,9100=0 (the 8fa0-computed ray-step
+projection is UNSET in the port's TILEFILL path) vs oracle nonzero; 90d4/90d8 slightly
+off; 90dc/90e0/90c0/90f0/90f8/90ac MATCH. Injecting the oracle's exact 90b8/90bc/90d4/
+90d8/90fc/9100 before 6980 lifted terrain only 78.7% -> 80.4%. So the projection globals
+are a minor contributor; the remaining ~20% is finer geometry -- the proj-table height
+projection (proj[detail*0x100+((L0+HM)&0xff)]) and/or sub-pixel camera precision, and
+may be near the frame-match ceiling (the port renders its spawn frame; oracle_9200_
+framematched is pass08 -- if the frames differ by even sub-pixel camera the terrain
+differs). SESSION PAYOFF (measured): the 6980 SMC root fix drove the windshield terrain
+from 10.6% (baseline, no 6980) to 78.7% (6980 SMC-correct on real 2048^2 buffers) /
+80.4% (+ oracle projection) -- a 7.5x improvement, root-caused + oracle-proven. The
+remaining ~20% is diminishing-returns fine geometry. The LANDABLE core is the 6980 SMC
+patch (coord shift [0x8490], colormap disp [0x8498]); it lands with the op-dispatch
+wiring + a windshield matrix flow once the fine geometry is either closed or accepted as
+the frame-match ceiling. NEXT: characterize the 20% residual (scattered=frame-match
+noise vs structured=a specific proj-table bug) by mapping WHERE the port/oracle terrain
+indices differ; if structured, fix the proj-table build; if scattered near the ceiling,
+proceed to author the complete windshield patch (6980 SMC + op-dispatch + matrix flow).
