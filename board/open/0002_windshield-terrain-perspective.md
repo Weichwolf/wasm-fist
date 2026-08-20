@@ -265,3 +265,21 @@ the pinned asm (objdump 0x689a) so its perspective resample leaves the terrain b
 the original leaves -- target = the saved /tmp oracle tile (element-wise), 87/13
 split. The camera + sky-setup fixes stay (both oracle-correct); 689a fidelity is
 the last windshield piece.
+
+BREAKTHROUGH -- 6980 (the terrain overlay) is the missing piece. 689a fills the
+tile with sky; 6980 (NovaLogic voxel raycaster, called from ext 0x3946) then
+overlays terrain on the near rows -- but the port only runs 6980 under FIST_TILEFILL
+(it needs paged-out seeds), so by default the sky is never overwritten by terrain.
+Running FIST_TILEFILL (689a+6980) flips the port from sky-top-to-bottom to a PROPER
+first-person voxel view: sky+clouds top, a horizon (~row 48), tan terrain bottom --
+structurally correct, and the windshield min-diff drops 75% -> 56% vs the oracle
+frames (saved: tools/oracle/samples/port_azer1_windshield_6980.png). So the render
+pipeline is 689a(sky) -> 6980(terrain overlay), both needed; the port runs 689a by
+default (via [0x3958]) but gates 6980.
+FIX PATH: run 6980 in the default render. Its seeds are the ray-depth ramps
+[0x3a24]/[0x3e24] (all-1 in fist_image.bin, paged-boot-filled constants -- the port
+never builds them; banked in tools/oracle/samples/voxel6980_ramps.bin) plus a
+contiguous HM+colormap buffer at [0x85bc]+0x100000. The 56% residual = the ramp/
+buffer fidelity: find how the original boot-fills 3a24/3e24 (395e recomputes 4224/
+4624 from them) and build them faithfully, then 6980 runs bit-exact by default. This
+is the last windshield piece; camera + sky-setup + 689a are done.
