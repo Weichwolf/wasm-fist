@@ -1075,3 +1075,19 @@ the op-0x4c present-spin tick handling -- why c452 doesn't advance, and how the 
 timer advances it -- so the engine posts the render ops; this is the real FIX0 gate
 upstream of everything. (Diagnosis continues to deepen but converges: tick -> op-post ->
 op-dispatch -> 6980-SMC -> bit-exact terrain -> matrix flow -> DoD.)
+
+*** FIX1 LANDED: patch 407 (6980 SMC dynamic) ***  commit 6616fe6.
+Reconsidered the "don't land in isolation" hesitation and landed it: patch 407 is a
+COMPLETE, asm-verified decompile correction of a specific bug (Ghidra froze 6980's static
+image constants; the map-load SMC self-modifies them to [0x8490]/[0x8498]) -- per "code is
+the truth" the static form is objectively wrong, and this is exactly the pristine-decompile
+-> asm-verified-patch workflow, independent of whether the whole windshield surface is done.
+Verified: make check clean; verify.sh native 159/0; verify.sh wasm 159/0; native==wasm
+0-diff (6980 runs only on the mission windshield path, not the 159 menu/editor/cockpit
+flows -> no regression, incl. the mission-cockpit-2c spawn flows). re_out pristine. The
+patch was regenerated against the prior 342/343 6980-SMC-model patch context. This breaks
+the session's "zero landed fixes" -- the 58-iteration diagnosis is now a landed, verified
+correction. REMAINING for the complete windshield (still open): FIX2 wire the op-dispatch
+(so the engine's posted render ops run + the tick advances so they're posted at all),
+FIX3 windshield matrix flow; plus follow-up sibling-SMC patches (6d/7f/8f/90 for ops 0x10
+etc. -- same correction class). NEXT: FIX2 op-dispatch, or the sibling SMC patches.
