@@ -99,6 +99,17 @@ remove (the edited .FSG loads + spawns its op-0x2c cockpit AE=0 -> create→save
 **159 `tools/verify.sh` flows, AE=0 native + wasm, native↔wasm 0-diff.** The reproducible chain is solid;
 `re_out/fist.c` pristine; the shim covers VGA/DOS/mouse/audio/extender.
 
+**DoD 10× WASM gate: PASSED on 2026-08-20** — the WASM build ran the complete 159-flow matrix **10
+consecutive times, every run 159 passed / 0 failed** (1590/1590 flow-executions, independently validated;
+each run ~11.5 min; driver in scratchpad). The WASM build is error-free and fully functional across all ten.
+**Scope caveat (honest):** this gate covers the exhaustive matrix AS IT CURRENTLY EXISTS — crash-free +
+bit-identity for every surface the matrix drives (menus/settings/dialogs, campaign+battle drill-down,
+briefing, cockpit chrome, op-0x2c FSG cockpits, the full editor create→save→reload→simulate round-trip).
+It does NOT yet assert the deeper 1:1 goal on surfaces the matrix does not yet drive: **windshield voxel
+bit-identity** (this session proved the palette→bc9c→ac70 chain faithful and the oracle_bc9c sample
+misprovenanced — re-scoped downstream; still not a matrix flow), **audio bit-exactness**, **save/load**,
+**controls / serial link**. Reaching full DD2 completeness = EXPAND the matrix to drive those, then re-pass 10×.
+
 **Mission-render coverage for the M1 chrome is COMPLETE** (a full 47-battle op-0x2c spawn scan + a
 14-ref cross-match): every M1-cockpit battle is bit-verified via op-0x24 and/or op-0x2c against a genuine
 DOSBox ref; INDIA3 is the SOLE crasher (near-heap OOM); and exactly **10 battles render a DIFFERENT,
