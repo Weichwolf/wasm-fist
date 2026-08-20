@@ -72,3 +72,14 @@ polish is posting at RENDER-COMPLETE (frame-end op), not mid-display-list.  NOTE
 carries a TEMP FIST_MOUSE auto-drive for this test -- must be reverted before commit (interactive
 default).  The 3 shim fixes are correct-in-principle + g_web_mode-gated; run verify.sh both (mission
 flows byte-identity) before committing.
+
+CHROME-COMPLETENESS ROOT (browser, next iter): the cockpit dashboard is M1CON.MRL (the M1 tank
+CONsole display-list resource; menu uses MAINMENU.MRL, mission uses M1CON).  Native op-0x24 frame is
+full+persistent (post#1=51237, post#50=54826 nonzero -> chrome drawn once at mission-screen-enter,
+persists while the windshield redraws on top).  The browser reaches only ~24-27k = windshield + a few
+M1CON elements (bottom-left panel) -> the M1CON console paint chain does NOT fully iterate in-mission
+under wasm (same class as the in-mission pump/state-manager starvation).  NEXT: runtime-compare the
+browser 0xA0000 chrome region vs native to see which M1CON elements are missing, trace the console
+paint (display-list element methods, si=0x174 vectors), find why it stops partway in wasm.  Do this
+with a browser run AFTER verify (no CPU contention).  verify.sh both in flight = 40/0 so far (the
+g_web_mode-gated web fixes are provably invisible to the g_web_mode=0 verify path).
