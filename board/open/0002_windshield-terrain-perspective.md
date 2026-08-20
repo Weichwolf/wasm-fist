@@ -156,3 +156,22 @@ reference (better than the later burst f04). (b) read the original's [0x395c] /
 [0x622c] / [0x8490] out of oracle_azer1_tcb.pass00.ram.bin (paging on, ext ds base
 0x10000000, cr3 0xe000) to settle the .MEG-tier question and the correct sky value.
 Saved: tools/oracle/samples/oracle_azer1_tcb_camera.txt.
+
+DECISIVE oracle state (page-walked out of oracle_azer1_tcb.pass00.ram.bin, cr3
+0xe000, ext ds linear 0x10000000): the ORIGINAL at the AZER1 render has
+  [0x395c] = 1   (sky ON;   port = 0)      <- the confirmed sky bug, target value 1
+  [0x8490] = 11  (detail;   port = 11)     matches
+  [0x622c] = 0x89a3 ("PAL.RES")            resource archive set
+Both voxel bugs are now oracle-confirmed with TARGET values: sky [0x395c]=1, and
+camera pitch(+0x3a)=384 / roll(+0x3c)=256.
+
+Mechanism puzzle for the sky: [0x395c] is written ONLY by the four .MEG find-first
+branches (13155-13170), and 4.MEG/8.MEG set 395c=1 but ALSO 8490=9/10 -- yet the
+original has 395c=1 with 8490=11, so either the original found 4/8.MEG (395c=1) and
+8490 was recomputed to 11 afterwards, or another path sets 395c. The original finds
+a .MEG with no .MEG file on disk (same data), so its find-first for "4.MEG"/"8.MEG"
+resolves via a FILEMGR fallback the port skips -- capture the original's file-open
+trace + [0x622c] AT the .MEG-probe time (another dosbox-fist run) to see what it
+resolves, then make the port resolve the same. Apply the camera pitch/roll (an
+oracle-anchored spawn seed like the existing alt/focal) and the sky, then verify
+the port's op-0x24 windshield against a dashboard-AE=0 stock-burst frame.
