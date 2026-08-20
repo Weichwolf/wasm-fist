@@ -1175,3 +1175,21 @@ correction) is LANDED + native/wasm-verified (the durable win, fixes the primary
 implementation is a deep cascading reconstruction -- the bounded-but-large multi-session work
 ahead. The windshield is no longer a mystery; it is a mapped, partly-landed, well-understood
 reconstruction with the core fix banked and the remaining pipeline precisely scoped.
+
+FIX2 dispatch mechanism vs blocker (clarified). The op-table trampolines (0x10e0/0x82c0/
+0x77e2...) are NOT ported as m_ext fns; FUN_0000_0f30 (PM gate) is not ported either. But
+the RENDER FNS (8df0/3931/6980/8120/9200) ARE ported, and fist_icall(linear) maps an ext
+address -> its C fn. So the DISPATCH MECHANISM is not the blocker -- the render fns can be
+called directly (m_ext_FUN_...). The real FIX2 blocker is the CASCADING SETUP: the camera
+(TCB +0x2c..0x3e incl. focal +0x3e, whose 0-value at op-0x08 time FPEs 85d0) + viewport +
+projection tables are populated by setup steps that the port doesn't run at the right time.
+The camera comes from the extender's per-tick flight model / a camera op; at op-0x08 (the
+first render op of the frame) the focal reads 0 in the port, but 256 by op-0x24 -- so the
+camera-setup happens mid-frame, and the port's op-0x08 fires before it. So FIX2's core work
+is reconstructing the extender's per-frame SETUP ORDER (camera-setup + viewport-configure +
+projection-build) so the render ops have their inputs -- a deep pipeline reconstruction, not
+a dispatch-wiring one-liner. HONEST DECISION: FIX2 is a dedicated multi-session reconstruction
+of the extender per-frame render pipeline; it does not yield to incremental single-op probes
+(each reveals the next cascading prerequisite). The session's durable win is FIX1 (patch 407,
+the 6980-SMC core correction, landed + native/wasm-verified). FIX2 is fully scoped for a
+focused future session: reconstruct the per-frame setup order, then dispatch the render ops.
