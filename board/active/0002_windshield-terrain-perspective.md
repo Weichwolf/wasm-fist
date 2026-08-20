@@ -767,3 +767,22 @@ geometry (the ray-step SMC 6ad2/6ad8 from D4224 * 90fc/9100) -- compare the port
 90b8/90bc/90d4/90d8 projection outputs to the oracle's (from the guest-RAM dump) at the
 AZER1 camera. All buffer CONTENT (HM==oracle, colormap==oracle) + the alias + window
 direction are settled; the last ~27% is sub-texel projection geometry.
+
+Phase settled + the plateau explained. Tested the 4 every-other phases: phase 0
+[2y][2x]=73.2% (best), ph1=71.9%, ph2=68.0%, ph3=67.9%. So phase 0 is correct; the
+phase is NOT the remaining gap. CONCLUSION: no downsample variant reaches bit-exact
+because TILEFILL_DS is an APPROXIMATION of the extender's PM paging, not the real
+mechanism. The original does NOT downsample -- 6980 walks the 2048^2 buffers through a
+page table that presents a specific 1024^2 view; an every-other point-subsample
+approximates that view (73.2%) but cannot be bit-exact (the paged gather may interleave
+pages / order texels differently than a uniform 2:1 decimation). So the ~73% plateau is
+the ceiling of the downsample band-aid; the FAITHFUL FIX is the extender PM-paging
+reconstruction: read the extender's page table (which maps ext-flat [0x85bc]+coord, for
+coord 0..0x100000, to physical), and replicate that exact mapping in the shim's ext
+memory model so 6980 reads the 2048^2 buffers via the true paged 1024^2 view -- then the
+terrain is bit-exact (all buffer CONTENT already == oracle). This is a real shim
+memory-model effort, now fully specified. Everything is verified faithful (HM/colormap/
+camera/matrix/sky/6980-addressing/alias/window-direction/phase); the last step is the
+paging, which the flat g_mem model must reproduce. NEXT: page-walk the extender's own
+page table (not cr3=0xe000) from the 16MB dump for the [0x85bc] coord range to derive
+the exact ext-flat->phys texel gather, and build that gather in the shim.
