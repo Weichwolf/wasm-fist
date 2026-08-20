@@ -70,3 +70,22 @@ by) and 8deb (viewport + the per-column horizon/sky-skip table [0x9114]). The pr
 showed the per-column horizon (910c) mostly 0 -> terrain from the top edge, vs the
 original's large sky band; patch 341 already touched 8120 (signed imul), so verify
 8120/8deb next against the asm.
+
+8120 (projection) and the whole render math are also faithful: 8120 DOES read
+pitch [c93+0x3c] (movzx = unsigned, matching the asm — so -256 reads as 65280 the
+same both sides) and roll [c93+0x3a], and patch 341 already rebuilds all four
+projection-coefficient tables at the correct module base (g_mem+ext_base+0x9450/
+9454/9650/9654 + idx*4; Ghidra base-lost two as a host function pointer + a bare
+address, over-scaled the other two). So 85d0 + 8120 + 9200 + heightmap are all
+asm-faithful — the render MATH is correct.
+
+That isolates the defect to the CAMERA STATE fed into the render: the TCB fields
+at the spawn frame (X/Y +0x2c/+0x30, alt +0x34, heading +0x38, pitch +0x3c). alt
+is a SHIM reconstruction (terrain-follow (h<<8)+eye, the flight model is paged
+out); X/Y/heading/pitch are engine-set at mission spawn. The decisive datum is the
+ORIGINAL's spawn TCB camera, which needs an instrumented-DOSBox / QEMU guest-RAM
+capture at the AZER1 spawn — the same oracle-RAM capability INDIA3 (0006) waits on.
+Building that capability unblocks both. A quick shim experiment (sweep the
+reconstructed alt / eye-height and re-render) can test whether alt-too-low alone
+raises the horizon into view, but matching the original's terrain CONTENT still
+needs its full X/Y/heading.
