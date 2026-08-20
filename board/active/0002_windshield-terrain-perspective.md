@@ -1153,3 +1153,25 @@ gap-blocked): drive the render via the WORKING FIST_MISSFB+6980 scaffold at op-0
 -- but that is a shim scaffold, not the faithful op-dispatch (doctrine prefers the real
 dispatch). SESSION STATUS: FIX1 (patch 407 SMC) landed+verified; FIX2 (op-dispatch pipeline)
 is spec'd + is the bounded multi-op implementation, partly gated by Ghidra-gap setup fns.
+
+FIX2 depth honestly scoped -- a deep cascading render-pipeline reconstruction. The
+PM-gate FUN_0000_0f30 IS the faithful dispatch (movzwl op; mov [0xcb3+op]; mov TCB[0x3f2]
+inbox; call *trampoline) -- so FIX2 = wire the shim op-service to invoke each posted op's
+op-table trampoline via the icall mechanism. BUT it has CASCADING setup prerequisites:
+  - the TCB viewport rect (+0x16..0x1c) -- 0 in the port (populated by an un-run configure);
+  - the camera focal TCB[+0x3e] -- 0 at op-0x08 time (85d0 divides by it -> FPE), set to
+    256 only by op-0x24 time by a camera-setup step BETWEEN op-0x08 and op-0x24 that the
+    port misses (the setup ops 0x68/0x6c/0x70/0x74/0x7c I traced do NOT write +0x3e --
+    0x6032 is a DOS FindFirst, 0x706b sets other globals);
+  - the projection tables (90fc/9100) + the proj-table [0x3909] (built by the projection
+    setup that also doesn't run);
+  - some setup fns (op 0x68 -> 0x76fd) sit at the Ghidra decompile GAP end.
+So the faithful windshield render is the full extender per-frame pipeline: camera-setup +
+viewport-configure + projection-build + the op-dispatch, each faithfully run in the engine's
+order. This is a SUBSTANTIAL multi-layer reconstruction (multiple undecompiled/unrun setup
+steps), genuinely multi-session. SESSION HONEST SUMMARY: FIX1 (patch 407, the 6980-SMC core
+correction) is LANDED + native/wasm-verified (the durable win, fixes the primary bug
+10.6->78.7%). FIX2 (the render-pipeline wiring) is fully diagnosed + decomposed but its
+implementation is a deep cascading reconstruction -- the bounded-but-large multi-session work
+ahead. The windshield is no longer a mystery; it is a mapped, partly-landed, well-understood
+reconstruction with the core fix banked and the remaining pipeline precisely scoped.
