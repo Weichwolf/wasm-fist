@@ -1,6 +1,7 @@
 Type: bug
 Area: engine
 Tags: instrument
+Depends: 0007
 
 INDIA3 spawns its op-0x2c cockpit crash-free like every other FSG battle (34/35
 already do). Currently INDIA3 is the sole crasher: the cockpit-instrument
