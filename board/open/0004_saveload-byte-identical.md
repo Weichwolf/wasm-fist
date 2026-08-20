@@ -26,3 +26,17 @@ a deterministic mission-completion/score path -- relates to the mission-sim
 surfaces). The 230-byte layout is the next concrete artifact to map (which bytes
 hold campaign position / promotions / stats) by diffing D.FPL before/after a
 completed mission under the DOSBox oracle.
+
+Layout map (port-only, diffed across all 7 profiles): .FPL = 230 B, 50 varying /
+180 fixed.
+  - 0x00..0x1f  header/format (bytes 0,1,4,6,8,0xc vary; NO ascii name in body ->
+    pilot name lives only in the filename, consistent with ec0d building
+    "<name>.FPL" from s_b7da; the body is pure binary state).
+  - 0x24..0x53  FIVE 7-8-byte records -- the CAMPAIGN-PROGRESS entries; in the
+    empty default D.FPL these are all 0xFF ("nothing completed"). This is where
+    mission-completion writes. <-- the mutation target for the round-trip.
+  - 0x54..0xdb  fixed 0xFF (unused/reserve in an empty profile).
+  - 0xdc / 0xde / 0xe4-0xe5  tail flags/stats (D.FPL: 0xe4=0x40).
+Concrete next datum: diff one profile before/after a completed mission under the
+DOSBox oracle -> the delta lands in 0x24..0x53, confirming the field semantics
+and giving the exact bytes the progression-mutation round-trip must reproduce.
