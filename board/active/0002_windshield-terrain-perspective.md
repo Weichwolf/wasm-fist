@@ -127,3 +127,23 @@ showed unrelated code.) Every downstream voxel function (bd62, bdc4 tile upsampl
 9200 sampler, 82b8/8120/9200 render) is now DIRECTLY asm-verifiable. NEXT: asm-verify
 bdc4 (tile [0x3918] upsample from the faithful matrix) and 9200's indexing -- the
 remaining downstream suspects, now with the asm in hand.
+
+bdc4 horizontal loop asm-verified FAITHFUL + a strategic reframe. Original bdc4
+(fist_image.bin @0xbdc4, 32-bit) horizontal 2x-upsample:
+  bdf3 mov (%esi),%al ; bdf5 mov %al,(%edi)        ; dst[0]=cur source pixel
+  bdf7 mov (%eax),%ah ; bdf9 mov %ah,0x1(%edi)     ; dst[1]=M[prev][cur], eax=matrix_base|(prev<<8)|cur
+i.e. it inserts the bc9c blend M[prev][cur] between adjacent source pixels. The
+port's `*puVar15=uVar1; puVar16[-1]=*(CONCAT31(iVar6>>8,uVar1))` resolves to exactly
+dst[0]=cur, dst[1]=M[prev][cur] -- MATCHES. bdc4's horizontal pass is faithful,
+interpolating via the (already-faithful) bc9c matrix. (The vertical pass be05+ is
+long; not exhaustively hand-diffed, but the primitive is the same M[a][b] blend.)
+STRATEGIC REFRAME: the voxel render is a MIX of (1) ported decompile functions
+[bc9c, bd0e, bdc4 -- all asm-verified faithful so far] and (2) SHIM RECONSTRUCTIONS
+of the extender's op-0x18 setup, hand-written in native_main.c (block-A preload,
+camera seed +0x3a/+0x3c, sky-setup 3958/395c, the 84c0 task-setup allocator gate).
+If the pure ported functions keep verifying faithful while the windshield stays
+75.5% wrong, the defect likely lives in the SHIM RECONSTRUCTIONS or an unchecked
+function -- NOT the blend/upsample math. NEXT: (a) finish 9200 (sampler indexing)
+asm-diff; (b) audit the native_main.c op-0x18 voxel reconstructions against what the
+original extender setup actually does (now asm-readable via fist_image.bin) -- the
+camera/sky/preload seeds are the hand-written surface most likely to diverge.
