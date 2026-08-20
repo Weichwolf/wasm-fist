@@ -83,3 +83,14 @@ browser 0xA0000 chrome region vs native to see which M1CON elements are missing,
 paint (display-list element methods, si=0x174 vectors), find why it stops partway in wasm.  Do this
 with a browser run AFTER verify (no CPU contention).  verify.sh both in flight = 40/0 so far (the
 g_web_mode-gated web fixes are provably invisible to the g_web_mode=0 verify path).
+
+DISPROVEN (this iter): the M1CON console-partial is NOT the tick-hold.  Tested reverting the
+`|| g_web_mode` tick override (keep the frozen-c452 hold for web too, like the node-wasm FIST_MISSFB
+capture that reaches the FULL 51k console): the browser console stayed PARTIAL (~27k) AND, worse, went
+BLACK (fbNonzero~73) once d549==0x1c released the hold and the sim free-ran at ~1500fps.  So the
+committed free-tick (9ab60c6) is the better state (stable partial 27k).  Conclusion: console-
+completeness + live-sim-stability are the DEEP wasm in-mission execution frontier (the sim/HUD paint
+diverges from native under wasm's cooperative cadence), NOT a tick-hold tweak.  node-wasm FIST_MISSFB
+(g_web_mode=0) reaches the full 51k console at op-0x24 post#1, but that path captures-and-exits; the
+LIVE g_web_mode loop reaches only ~27k -> the divergence is in the live in-mission loop, not the
+op-0x24 render itself.  Reverted the experiment; 9ab60c6 stands.
