@@ -203,15 +203,19 @@ re_out/fist_dos.c: open_ci + dos_int_ext AH=3F/42):
     sort preserves the multiset, so EITHER 9f10 is mis-ported OR the shim/engine ORDERING interferes
     (native_main.c calls m_ext_FUN_0000_89b0 explicitly in the op-0x18 hook while the engine's own op-0x18
     handler ALSO runs the 6032→9f70→KLC palette path — double-processing / wrong [5598] at bc9c-time).
-  - **ac70 decompile is SUSPECT (unverified):** its search cost indexes `a060[(byte)(pal.r - 0xf)]` with a
-    literal `- 0xf` and never reads the match target acb6/acc0/acca (set at fist_ext.c:15089-91 but unused
-    in the loop) — a Ghidra register-tracking gap. My Python ac70 model did NOT reproduce the port's bc9c
-    diagonal, so the port's ac70 fidelity is itself unproven. Needs the original 0xac70 asm (objdump).
+  - **ac70 is CORRECT (verified via objdump, already patched):** the decompile's literal `- 0xf` is
+    SELF-MODIFYING CODE — 0xacb6/0xacc0/0xacca are the immediate operand BYTES of the three `sub al,0xf`
+    instructions in the ac70 loop (0xacb5/acbf/acc9), and ac70's prologue OVERWRITES them with the target
+    R/G/B >>1 (`mov ds:0xacb6,al`). Ghidra baked the initial literal 0xf; **patch 238 already restores the
+    real target subtrahend** (`cVar3 - (char)bRam0000acb6` …). Confirmed against the extender image asm
+    (objdump 0xac70). So ac70 is faithful; it is NOT the voxel bug.
 Still VERIFIED-correct: [0x5260] terrain band [80..255] 100% oracle-exact (vs oracle_9200_framematched
 pass08.pal), [4f60]==[5260]>>1 100%, search range 80..255, diff tables (31k)²/(43k)²/(26k)², block A 100%.
-**NEXT (re-scoped):** (a) resolve the 89b0 shim/engine ordering — dump [0x5598] at the EXACT bc9c entry and
-confirm it equals the luma-sorted member; if not, the double-89b0 or 9f10 port is the bug; (b) objdump the
-original 0xac70 to close the `- 0xf`/target gap; (c) only then, if [5598]@bc9c IS the correct sorted member
+**NEXT (re-scoped; ac70 CLEARED):** (a) dump [0x5598] at the EXACT bc9c ENTRY (add a one-shot bank inside
+FUN_0000_bc9c) and compare to the Python luma-sort of the raw member — if unequal, the bug is patch 206
+(9f10 sort) OR the shim's explicit m_ext_FUN_0000_89b0 call (native_main.c op-0x18 hook) double-running /
+mis-ordering vs the engine's own op-0x18 6032→9f70 path (test: gate the shim call off, re-check [5598]);
+(b) only if [5598]@bc9c IS the correct sorted member
 and ac70 is faithful, the divergence is bc9c/bdc4 or a capture-state mismatch of the oracle_bc9c sample
 (rule out: confirm it was captured on the same theatre/map as AZER1). Diagnostics: FIST_OPENLOG (open/seek/
 read trace), FIST_PALDUMP (5598/4f60/5260 + diff tables), FIST_BC90DUMP (live bc9c matrix). Samples:
