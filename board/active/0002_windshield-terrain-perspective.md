@@ -1021,3 +1021,34 @@ the extender render op-dispatch (op-table @0xcb3 -> real m_ext render fns, with 
 ops populating the projection tables + proj-table) replacing the log-and-return stub, no
 159-flow regression; (3) add a windshield matrix flow; verify bit-identical native+wasm.
 This is the bounded implementation ahead; the diagnosis + primary-fix validation is done.
+
+=== CONSOLIDATED IMPLEMENTATION ROADMAP (distilled from the 56-iteration diagnosis) ===
+STATE: windshield fully root-caused + primary fix validated (10.6%->80.4%, 7.5x). Every
+component oracle/asm-verified faithful; the ONLY root of all residuals is the stubbed
+extender render op-dispatch (native_main.c:2880 log-and-return). Diagnosis DONE.
+
+FIX 1 (asm-verified, patch-ready) -- 6980 SMC dynamic:
+  re_out/fist_ext.c FUN_0000_6980: the two coord lines `(x>>0x16)<<10 | y>>0x16` -> use
+  the SMC shift `>>(0x20-DAT_0000_8490)<<DAT_0000_8490`; the two colour reads
+  `iVar14 + 0x100000 + uVar` -> `iVar14 + DAT_0000_8498 + uVar`. (SMC block 0x8a7f-0x8b29
+  proves [0x8490]/[0x8498] are the render-time values.) Apply the SAME to the sibling
+  voxel fns (6d/7f/80/81/8f/90/84/94) per the enumerated SMC slot list above. -> patch 407.
+
+FIX 2 -- wire the extender render op-dispatch (the near-terrain + projection residual):
+  the engine's 459a mission loop posts render ops each frame; the op-table @fist_image.bin
+  0xcb3 maps op->trampoline->render fn (0x08->8df0+3931->6980 tile-build; 0x0c->78f0->
+  85d0+93c0; 0x10->7940->8fa0 projection; 0x24->82b8->8120+9200 sample; 0x44->7660 sky).
+  Replace native_main.c:2880 log-and-return with a real dispatch that runs each posted op
+  through its m_ext render fn IN THE ENGINE'S ORDER, so the setup ops populate the
+  projection (90fc/9100/90b8/90bc) + build the proj-table [0x3909] before 6980, and 6980
+  before 9200. Env-gate first (FIST_WIRE_DISPATCH); the 159 flows never post render ops
+  (menu/editor), so no regression. Resolve inputs/crashes iteratively (viewport rect,
+  TCB [0xc93], the 944b/9650 projection tables).
+
+FIX 3 -- add a windshield matrix flow (verify.sh): op-0x24 AZER1 spawn, crop terrain rows
+  5-85, assert bit-identical vs a genuine DOSBox ref (capture via capture_battle_burst.sh)
+  on native AND wasm. This makes the windshield a bit-verifiable flow.
+
+LAND: make patch (407 + dispatch shim) -> verify.sh both (159 + windshield flow, AE=0,
+native==wasm) -> then the DoD 10x re-gate on the EXPANDED matrix. Root+FIX1 proven; FIX2
+is the bounded implementation; FIX3 is mechanical.
