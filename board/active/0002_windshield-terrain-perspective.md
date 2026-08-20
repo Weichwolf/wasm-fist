@@ -82,3 +82,27 @@ at bc9c-EXIT, not at render time. Add a one-shot dump at FUN_0000_bc9c's return
 bc90&0xffff0000 -- verify THAT dump is symmetric (the correctness gate), then its
 diagonal is the clean palette-encoding to compare against a provenance-matched
 oracle. Symmetry is now the port-only correctness invariant for any bc9c capture.
+
+DECISIVE port-only CLEARANCE of bc9c (stage-correct capture, oracle-independent).
+Added FIST_BC9CEXIT (dump at bc9c-EXIT before bd0e/bd62; snippet in
+tools/oracle/diag/bc9c_exit_dump.txt since build/ is ephemeral). The AZER1
+bc9c-exit matrix is:
+  - 100% SYMMETRIC (15400/15400 in 80..255) -- passes the correctness gate, so it
+    IS the clean bc9c blend matrix (render-time [bc90] was the bdc4 tile: 98% asym).
+  - diagonal EXACTLY LINEAR M[ch][ch]=ch for all 175 terrain indices (80->80 ...
+    255->255), 0 zeros. This is the mathematical signature of a correct sorted-
+    palette blend: [5598]==[5260] => self-blend matches self => M[ch][ch]=ch.
+  - combined with ac70 verified (0/40960) and [5260] oracle-proven byte-exact
+    (528/528), the off-diagonal M[ch][cl]=ac70(blend(ch,cl)) is faithful by
+    construction. => bc9c is FAITHFUL, fed correct inputs, produces the correct
+    matrix. CLEARED as a suspect, port-only, no oracle needed.
+This also resolves the whole misprovenance saga: oracle_bc9c_matrix_blockB's
+non-linear diagonal (80,83,97,...,249) is a WINDOWED capture (base+0x4200), exactly
+like the render-time / port_bc9c_matrix.bin dumps -- NOT the raw symmetric matrix.
+The saga was capture-window confusion end to end; the underlying port bc9c was
+faithful all along.
+VOXEL DEFECT NARROWS DOWNSTREAM of bc9c: the tile [0x3918]=base+0x4200 is built by
+bd0e -> bd62 -> bdc4 (upsample) FROM this faithful matrix. NEXT SUSPECT: bd0e/bd62
+(what they do to the matrix) + bdc4's tile upsample + 9200's indexing into the tile
++ the heightmap [0x85bc]. Clean sample saved: tools/oracle/samples/
+port_bc9c_exit_symmetric.bin (the faithful reference for anything downstream).
