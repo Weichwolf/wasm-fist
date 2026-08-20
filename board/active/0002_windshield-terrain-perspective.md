@@ -106,3 +106,24 @@ bd0e -> bd62 -> bdc4 (upsample) FROM this faithful matrix. NEXT SUSPECT: bd0e/bd
 (what they do to the matrix) + bdc4's tile upsample + 9200's indexing into the tile
 + the heightmap [0x85bc]. Clean sample saved: tools/oracle/samples/
 port_bc9c_exit_symmetric.bin (the faithful reference for anything downstream).
+
+bd0e RETRACTION + infra win (asm-verified, doctrine: code is the truth). A strong
+port-only hypothesis -- bd0e's shade table is 100% CONSTANT down the shade axis
+(176/176 terrain colors identical across all 32 shade levels; T[shade][color] =
+[5598][color].R, 6-bit: 80->1,160->32,255->63) -- looked like a lost ac70-return
+(the port stores (char)uVar7 instead of the match). DISPROVEN by the original asm:
+  bd29: mov (%eax),%bx        ; bl = [5598+color*3] = source R
+  bd4e: call 0xac70           ; ac70 -> match in AL
+  bd54: mov %bl,(%ecx)        ; stores BL (source R), NOT AL -- ac70's return IS discarded
+The ORIGINAL itself stores the source R and discards ac70's match. The port's
+`*puVar4 = (char)uVar7` (= bl) matches bd54 EXACTLY -> bd0e is FAITHFUL, the shade-
+constant table is correct, NOT a bug. bd0e CLEARED as a suspect.
+INFRA WIN (unblocks the rest): the extender image fist_ext.c decompiles from is
+re_out/fist_image.bin (FIST.RUN, x86:LE:32-bit FLAT base 0, 0xbf90 bytes). Any ext
+function FUN_0000_XXXX is at raw offset 0xXXXX, disassembled with `objdump -b binary
+-m i386 --start-address=0xXXXX ... re_out/fist_image.bin`. (fist_dat_image.bin is the
+16-bit ENGINE -- a DIFFERENT image; that mismatch is why earlier objdumps at 0xbd0e
+showed unrelated code.) Every downstream voxel function (bd62, bdc4 tile upsample,
+9200 sampler, 82b8/8120/9200 render) is now DIRECTLY asm-verifiable. NEXT: asm-verify
+bdc4 (tile [0x3918] upsample from the faithful matrix) and 9200's indexing -- the
+remaining downstream suspects, now with the asm in hand.

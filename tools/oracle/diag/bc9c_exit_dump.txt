@@ -28,3 +28,10 @@ Drive (AZER1 op-0x24 spawn):
 
 Result (AZER1): call #1 bc90=08314200; matrix 100% symmetric (15400/15400 in 80..255),
 diagonal LINEAR M[ch][ch]=ch, 0 zeros -> the FAITHFUL sorted-palette blend matrix.
+
+--- EXT IMAGE for asm-verification (KEY infra) ---
+fist_ext.c (bc9c/bd0e/ac70/bdc4/9200/82b8...) decompiles from FIST.RUN as
+x86:LE:32-bit FLAT base 0 -> re_out/fist_image.bin (49040 = 0xbf90 bytes).
+objdump the ORIGINAL asm of any ext function FUN_0000_XXXX at offset 0xXXXX:
+  objdump -D -b binary -m i386 --start-address=0xXXXX --stop-address=0xYYYY re_out/fist_image.bin | tail -n +7
+(NOT -m i8086, and NOT fist_dat_image.bin -- those are the 16-bit ENGINE, different image.)
