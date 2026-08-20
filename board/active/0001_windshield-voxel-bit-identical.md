@@ -28,3 +28,20 @@ multi-session architectural effort (the engine main loop + screen/state manager 
 gate), NOT a trap, un-seeded function, or base-loss. The tractable loop-win classes (trap-trace ->
 patch 408; SMC-freeze -> patch 407) are EXHAUSTED for this session. Landed + verify-both-verified
 this session: patch 407 (windshield 6980 SMC) + patch 408 (audio 0xfab instrument-apply).
+
+*** BROWSER PLAYABILITY MILESTONE (web/ harness) -- the wasm build runs + is navigable in a browser ***
+Built a browser harness (web/index.html + worker.js + tools/build_web.sh + tools/serve_web.py; shim
+accessors fist_web_* in native_main.c/fist_vga.c, __EMSCRIPTEN__/g_web_mode-gated so native+node builds
+are unaffected). The engine runs BLOCKING in a Web Worker (no ASYNCIFY -- it inflates a giant decompiled
+function past the browser's wasm local-count limit); each ~frame the pump posts the 320x200 framebuffer
++ palette to the main thread (canvas render), and polls a SharedArrayBuffer for live mouse/keyboard
+(one queued event per frame -> press/release land on different frames = real clicks; mouse X is the
+mode-13h virtual 0..639 space). VERIFIED end-to-end via headless chromium (CDP): the full FRONT-END is
+navigable in the browser -- main menu renders live, click SETTINGS -> settings screen (CONTROL/DISPLAY/
+SOUND), click BATTLES -> SELECT BATTLE dialog (AZER1..CYPRUS1), select+OK -> mission briefing
+("BLOODFEUD!"), ACCEPT -> the mission LOADS (frames resume after the load, shows the "PL:1" load
+screen). So the browser build reaches in-mission; the LIVE in-mission windshield terrain (voxel via the
+flight-model 459a + 3a24 producer) is the same deep frontier already mapped -- everything UP TO it works
+interactively in the browser. This is a real, visible deliverable toward "play it in the browser".
+Bonus finding: the settings screen shows MUSIC=OFF selected -> that config default (not a bug) is why
+menu music was silent; clicking MUSIC ON would exercise the (patch-408-fixed) OPL playback.
