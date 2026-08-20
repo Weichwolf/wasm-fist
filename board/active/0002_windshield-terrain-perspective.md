@@ -624,3 +624,27 @@ repoints [0x85bc] to a reduced buffer, size 1<<((11-1)*2)... = 1024^2); if 10, t
 port's TCB detail byte is wrong upstream (the detail-setting -> TCB[+0x59] path). The
 resolution fix direction stays confirmed (1024^2 -> 73.2%); this pins WHICH faithful
 form. Diagnostics added: FIST_LODCHK, FIST_FORCELOD, FIST_GAPCHK, FIST_TILEFILL_DS/AVG.
+
+*** FORK RESOLVED via ORACLE GUEST-RAM -- the root is the extender's PM PAGING ***
+Read the oracle's values from the saved dosbox-fist 16MB guest-RAM dump
+(/tmp/oracle_azer1_tcb.pass00.ram.bin, page-walk cr3=0xe000, ext ds base 0x10000000):
+    oracle ext[0x8490] = 11   (SAME as port -- LOD is FAITHFUL, not the bug)
+    oracle ext[0x8494] = 2048 (SAME as port)
+    oracle [0x85bc](HM)=0x74e60  [0x85b8](CM)=0x474e60  gap=0x400000 (4MB, SAME as port)
+So the LOD (11 -> 2048^2), the buffer allocation, AND the 4 MB HM/colormap gap are ALL
+identical port<->oracle. The port is faithful HERE. The divergence is the EXTENDER'S
+32-bit PM PAGING: 6980 reads the colormap at ext-flat [0x85bc]+0x100000 (=0x174e60),
+and the extender's page table REMAPS ext-flat offsets (sim_voxel6980.py: "tile ext-flat
+0x44200 -> phys 0xb78200, NOT identity; runtime buffers remapped"), so ext-flat 0x174e60
+ALIASES the colormap's physical page via paging -- even though [0x85b8]=0x474e60 is a
+different ext-flat address. The PORT's FLAT g_mem model has NO such paging: [0x85bc]+
+0x100000 is a literal +1 MB into the 2048^2 HM, not the colormap. THAT is the windshield
+root -- the missing extender PM page-mapping for the voxel buffers, NOT the LOD/reduce.
+FIST_TILEFILL_DS (73.2%) approximates the paged view by building a contiguous 1024^2
+HM+colormap. THE FAITHFUL FIX: replicate the extender's page-table mapping for the voxel
+buffers so ext-flat [0x85bc]+0x100000 (and 6980's coord strides) alias the same physical
+buffers the original's paging presents. NEXT: read the extender's page table from the
+guest-RAM dump (the mapping ext-flat 0x1xxxxx -> phys for the HM/colormap window), and
+reconstruct that mapping in the shim's ext memory model (or lay the flat buffers out to
+match the paged view). sim_voxel6980.py already models pieces of this. This is the
+definitive, oracle-grounded root -- everything else (LOD/alloc/gap) is faithful.
