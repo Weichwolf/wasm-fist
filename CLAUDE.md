@@ -157,14 +157,23 @@ via 84c3, children 0x8f8c/0x8fa8/0x8fc4, guarded once by ds:0x8f8a; AZER3 via a 
 FIST_DBG_MM dumps the d6d4 pool free/desc/l0c-max at op-0x18/0x2c; a `[2004]` build/fist_mga.c entry log
 gives the per-call trajectory.)
 
-**THE central remaining frontier — the windshield VOXEL TERRAIN.** All op-0x24/op-0x2c flows verify only
-the DASHBOARD (central chrome cols80-180 rows96-188); the actual game view above it is UNVERIFIED and
-mostly WRONG. Scoped on AZER1 (dashboard AE=0, i.e. a clean M1 spawn via the burst tool): the windshield
-(rows 0-95) is **75.5% different from the original (23 197 / 30 720 px)** — only the top ~5 sky rows match,
-the terrain (rows ~5-85) differs ~280 px every row. So the port's NovaLogic Voxel-Space terrain
-(m_ext_FUN_0000_82b8 render / 8120 camera→projection / 9200 per-column texel walk, in fist_ext.c) is NOT
-bit-exact. This blocks the mission-render DoD for EVERY battle and is deep RE (existing tooling:
-tools/oracle/{capture_9200_framematched.sh, sim_voxel6980*.py, trace_terrain.sh, dosbox_vga_terrain_trace.patch}).
+**THE central remaining frontier — the windshield VOXEL TERRAIN (defect now PROVENANCE-CONFIRMED + newly
+localized).** All op-0x24/op-0x2c flows verify only the DASHBOARD (central chrome cols80-180 rows96-188);
+the game view above it is WRONG. **RE-CONFIRMED this session against a fresh provenance-verified reference:**
+`tools/oracle/capture_battle_burst.sh 93` grabbed the ORIGINAL AZER1 spawn; the frame whose dashboard matches
+the port at **0/9200 px (AE=0)** — a genuine clean-M1 alignment, saved as
+`tools/oracle/samples/oracle_azer1_windshield_dashAE0.png` — has a windshield (rows 0-95) that is **75.5%
+different (23196/30720 px, meanAE 51.6)**. Per-row breakdown (decisive):
+  - **sky rows 0-4: 0/1600 px diff — BIT-EXACT** (the 689a sky/perspective resample is correct);
+  - **terrain rows 6-84: ~288/320 px diff EVERY row (~90%), meanAE 43-82** — fundamentally wrong, not a tint;
+  - **colour multiset rows10-85: port 129 distinct vs oracle 84, only 24 shared** — the port scatters MORE
+    colours (noisier), the original is smoother/fewer — a wrong-INDEX signature, not a wrong-colourmap one.
+Since the palette→9f10→bc9c→ac70→bdc4 COLORMAP chain is now proven faithful (above), and the sky is exact,
+the defect is **DOWNSTREAM in the terrain-specific stages: the heightmap [0x85bc] / reduce [0x85b8] build,
+the camera/projection (85d0/8120), or the 9200 per-column texel walk** — 9200 is sampling the (correct)
+colormap at WRONG indices. This is the next concrete target, now with a reusable AE=0-aligned windshield
+reference to measure against. (existing tooling: tools/oracle/{capture_battle_burst.sh, capture_9200_
+framematched.sh, sim_voxel6980*.py, trace_terrain.sh, dosbox_vga_terrain_trace.patch}).
 
 **Voxel state — HONEST, experiment-grounded (supersedes an earlier colour-gate over-claim):** the DEFAULT
 windshield render is `m_ext_FUN_0000_9200` (per-column texel walk) sampling the terrain colour TILE at
