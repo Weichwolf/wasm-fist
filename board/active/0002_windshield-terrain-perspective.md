@@ -952,3 +952,25 @@ faithfully, compare to the oracle 250x256, and the near rows (21-85) should clos
 72-86% toward 100%. Combined with the 6980 SMC fix (10.6->80.4%), a faithful proj-table
 should reach near-bit-exact terrain (modulo the ~47% subpixel frame-match ceiling). Then
 author the COMPLETE windshield patch (6980 SMC + proj-table + op-dispatch + matrix flow).
+
+Proj-table is UNBUILT (the near-terrain residual root) -- and it unifies with the
+projection globals. Dumped the port's proj-table at [0x3909]=0x82f4200 vs the oracle
+250x256 curve: only 10.2% match; the port's is LARGELY ZEROS (first8=[0,0,0,...] for
+every detail row) while the oracle has a real perspective curve (detail 0: 128,255,255..;
+detail 40: 128,131,135,138..; detail 240: 128,128,128..). So the port does NOT build the
+proj-table (like the ray tables 3a24/3e24, it's left zero) -- but unlike the ray tables,
+the proj-table DOES matter (6980 reads it at 6aee for the height projection). This is the
+near-terrain (rows 21-85) structural residual. UNIFYING INSIGHT: the proj-table AND the
+projection globals (90fc/9100/90b8/90bc = 0 in the port) are BOTH unbuilt -- common root:
+the port does not run the extender's PROJECTION-SETUP pipeline (8fa0/8120 + the proj-table
+build), because the render OP-DISPATCH is stubbed (op 0x10->8fa0 etc. log-and-return).
+So the windshield's complete fix decomposes into: (1) the 6980 SMC fix [FOUND + validated,
+10.6->80.4%]; (2) wire the extender op-dispatch to run the projection-setup ops (8fa0/8120
++ the proj-table build) so 90fc/9100 + the proj-table are populated [the near-terrain +
+projection residual]; (3) op 0x08->6980 tile-build wiring; (4) a windshield matrix flow.
+All root-caused + oracle-grounded. The core is the SMC fix + wiring the extender render
+op-dispatch (which this session mapped fully: op-table @0xcb3, 0x08->6980, 0x0c->93c0,
+0x10->8fa0, 0x24->9200, 0x44->sky). NEXT: wire the op-dispatch faithfully (run each posted
+render op through the op-table trampoline instead of log-and-return), which builds the
+proj-table + projection + tile, then measure the full default-path terrain toward
+bit-exact, then land the complete windshield patch (SMC + op-dispatch + matrix flow).
