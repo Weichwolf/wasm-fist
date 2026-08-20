@@ -1193,3 +1193,21 @@ of the extender per-frame render pipeline; it does not yield to incremental sing
 (each reveals the next cascading prerequisite). The session's durable win is FIX1 (patch 407,
 the 6980-SMC core correction, landed + native/wasm-verified). FIX2 is fully scoped for a
 focused future session: reconstruct the per-frame setup order, then dispatch the render ops.
+
+FIX2 confirmed a cascading crash-chain (not incremental-probe-solvable). Guarding
+op-0x08->6980 on focal!=0 STILL FPEs -- the focal IS seeded (shim line 1503 sets it 256
+if 0), so after the first op-0x24 the next op-0x08 has focal=256 -> the guard passes ->
+FPE elsewhere (another 0 divisor in 85d0/8df0/6980). So resolving one prerequisite just
+reveals the next 0-divisor. The faithful path is to run the FULL per-frame setup pipeline
+(the extender's camera-setup + viewport-configure + projection-build + the per-tick flight
+model) so EVERY input is populated -- not to guard/force individual ops. This is a deep,
+dedicated reconstruction of the extender's per-frame render pipeline (the camera itself is
+currently a SHIM SEED, lines 1399/1503/1527/1542, not the faithful flight model -- so FIX2
+also needs the faithful camera from the flight model). CONCLUSION (honest): the complete
+faithful windshield render (FIX2) is a MAJOR multi-session reconstruction -- the extender's
+whole per-frame pipeline (flight-model camera + viewport + projection + op-dispatch), which
+the port currently substitutes with env-gated shim scaffolds. It does not converge under
+incremental single-op probes. The session's durable, verified win is FIX1 (patch 407, the
+6980-SMC core correction). The windshield is fully diagnosed, its core bug fixed+landed, and
+FIX2 precisely scoped as the dedicated pipeline-reconstruction effort. This is the natural
+endpoint of the diagnostic+core-fix phase; FIX2 is a focused future-session build.
