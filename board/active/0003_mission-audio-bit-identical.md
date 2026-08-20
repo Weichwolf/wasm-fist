@@ -286,3 +286,24 @@ residual gap remains, it is now a small measured delta on a fully-wired chain, n
 LESSON: the board's audio notes were badly stale (patches 350-359 wired the sequencer since); trust
 build/ over old comments. This REOPENS audio as a likely-tractable surface, contra my earlier
 "deep like the voxel" framing.
+
+*** MEASURED CURRENT STATE (empirical, this session): menu music never REGISTERS/plays ***
+Ran the current build to the main menu (FIST_TICK_HZ=25000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG,
+~80s): the KDV intro completes (395 frames -> "proceeding to main menu"), OPL is active (19860
+register writes), BUT the log shows NO MAINMENU.MS3 registration/song, and the instrument-patch
+regs are each written EXACTLY ONCE (reg 0x20=0x01, 0x23=0x11, 0x40=0x4f, 0x60=0xf1, 0x80=0x53,
+0xc0=0x06 -- the init instrument 0); only reg 0x43 (per-note level/KSL) varies. So those 19860
+writes are the INTRO audio playing one instrument -- the MENU MUSIC (MAINMENU.MS3) does NOT play.
+=> The real current gap is NOT the program-change (which IS fully wired: 0cf3->0cfb->[0x1c1]->0f99)
+-- it is that the menu-music SONG-REGISTER chain never fires, so the wired program-change is never
+EXERCISED. fist_sb.c:35-39 already documents the mechanism: "sound-source REGISTER threading
+(be0e -> c510 -> 01ec -> 0af4) ... the __allregs indirect-vector dispatch DROPS the register args,
+so the methods 01ec/0af4 [don't correctly] read them". So MAINMENU.MS3 (registered via 0af4, PATCH
+350) never gets registered/started because the be0e->c510->01ec->0af4 register-arg threading is
+incomplete through the indirect-method-vector dispatch. THE REAL AUDIO ROOT (measured): fix the
+register-arg threading so 0af4 receives the MAINMENU.MS3 descriptor and the song plays; then the
+already-wired program-change (0cfb->0f99) will exercise and reg 0x20 will take the song instruments.
+This is a shim/indirect-dispatch threading fix (fist_sb.c + the register method vectors), port-only
+verifiable (reg 0x20 gains 0x31.. once the song plays; WAV corr vs ref then measurable). Bounded and
+specific -- and it is the SAME indirect-method-vector-threading class as the register-args note in
+fist_sb.c. NEXT: complete the be0e->0af4 register-arg thread so MAINMENU.MS3 registers/plays.
