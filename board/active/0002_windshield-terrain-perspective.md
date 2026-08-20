@@ -261,3 +261,25 @@ call graph into 6980 @0x6980 and its caller 82b8/8120 region), and identify what
 original's 9200 actually samples. If the original rebuilds the tile via 6980 each
 frame and the port skips it, port that call (with 6980's real inputs, not the
 FIST_TILEFILL reconstruction) -- that is the concrete fix.
+
+RENDER ARCHITECTURE mapped (asm call-graph, fist_image.bin). The original render is
+TWO separate functions, not one:
+  - TILE-BUILD: FUN_0000_3931 (called by 0x10e5): 85d0(camera) -> if [0x395d]==0:
+    call [0x3958](sky fn ptr, =0x6877) THEN call 0x6980 (voxel raycaster, builds the
+    terrain tile); else ([0x395d]!=0): call 0x686f + 0x6c00 (alt path). 6980 has
+    EXACTLY ONE caller: 0x3946, inside this function.
+  - TILE-SAMPLE: FUN_0000_82b8 (op-0x24 dispatch, called indirectly via the far-reloc
+    vector): 8120(0x82c0, projection) -> 9200(0x82c5, texel walk into fb). 9200 has
+    EXACTLY ONE caller: 0x82c5, inside 82b8.
+So the original BUILDS the terrain tile via 6980 (in 3931) and SAMPLES it via 9200
+(in 82b8) as two separate steps. The port's default op-0x24 render runs only the
+82b8 sample chain (8deb->85d0->8120->9200); 6980 runs only behind FIST_TILEFILL. If
+the port never runs FUN_0000_3931's 6980-build per frame, 9200 samples a STALE /
+wrong tile -> the +55-darker terrain. Static [0x395d]=1 routes 3931 AWAY from 6980
+(to 686f/6c00); the runtime [0x395d] value decides whether 6980 or the alt path runs.
+NEXT (precise diagnostics): (1) does the port invoke FUN_0000_3931 (via 0x10e5) in
+the mission loop? (2) what is [0x395d] at render time (0 -> 6980 terrain path, !=0 ->
+686f/6c00)? (3) what are 686f/6c00 -- the alt render the [0x395d]!=0 path runs?
+Instrument the port for 3931-entry + [0x395d], and asm-read 0x10e5 to see when 3931
+fires. This pins whether the fix is "call 3931/6980 per frame" or "set [0x395d]
+correctly so the existing dispatch reaches 6980".
