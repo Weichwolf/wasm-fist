@@ -1229,3 +1229,20 @@ phase is COMPLETE: FIX1 (patch 407, the 6980-SMC core correction) is LANDED + na
 verified; the windshield is fully root-caused, every component verified, and FIX2 precisely
 scoped for a focused, dedicated future-session build. Per "geht nicht gibt es nicht" it is
 bounded+decomposable -- but it is a subsystem-scale build, not a probe.
+
+DEFINITIVE FIX2 scope: the camera is the FIST.RUN kernel FLIGHT MODEL. The cam globals
+(9614/9618/961c) are written NEITHER in fist.c (the 16-bit engine) NOR in the extender
+overlay image -- so the flight-model camera lives in the FIST.RUN extender KERNEL (the
+32-bit-PM flight model CLAUDE.md flags as "NOT in FIST.DAT" and "reached only via the
+real->PM gate at runtime", decompiled to fist_kernel_decomp.c). The port SEEDS the camera
+in the shim precisely because this kernel flight model isn't reconstructed/run. So FIX2 =
+reconstruct the FIST.RUN kernel flight model (the camera source: flight physics -> cam
+globals -> TCB +0x2c..0x3e) + the extender render pipeline (viewport/projection/dispatch).
+This is a MAJOR multi-subsystem reconstruction (the flight-model kernel is one of the
+largest remaining surfaces), a dedicated multi-session build -- confirmed non-convergent
+under incremental probes. *** WINDSHIELD DIAGNOSIS DEFINITIVELY COMPLETE *** FIX1 (patch
+407, the 6980-SMC core correction) LANDED + native/wasm-verified. Every voxel render
+component root-caused + verified. FIX2 fully+definitively scoped: FIST.RUN kernel flight
+model (camera) + extender render pipeline. The windshield is no longer a mystery -- it is a
+mapped, core-fixed, fully-scoped reconstruction. FIX2 is the dedicated subsystem build for a
+focused future effort (per "geht nicht gibt es nicht", bounded+decomposable, but large).
