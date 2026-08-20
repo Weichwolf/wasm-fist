@@ -182,41 +182,48 @@ per the FIST_BBDUMP note, bc9c writes the flat M[ch][cl] matrix at the 64KB-alig
 reads the tile at the +0x4200 window ([0x3918]), and patch-289's bc90->tile alias was meant to reconcile
 that but the built [0x3918] is still 0.5%-match (port dist=176/mean=110.7).
 
-**Innermost layer — the wrong TILE is isolated to the [0x5598] (532.pal) blend palette.** bc9c builds the
-symmetric M[ch][cl] LUT: it averages two palette RGBs read from **[0x5598]** (asm 0xbc9c CONFIRMED:
-`mov bx,[eax*3+0x5598]` — the port decompile is faithful) and calls ac70 to snap the blend to the nearest
-palette index. Everything else in the build is VERIFIED CORRECT, leaving [0x5598] as the SOLE unverified input:
-  - ac70's match palette **[0x4f60] = [0x5260]>>1** (FUN_0000_a033), and [0x5260] is PROVEN oracle-exact
-    (dump: [4f60]==[5260]>>1 at 100.0%);
-  - the search range **[ac64..ac60] = 80..255** (correct, terrain min-index 80);
-  - the squared-diff tables **[0xa060]/[0xa460]/[0xa860]** are valid d^2 LUTs, perceptually weighted
-    (a060[k]=(31k)^2, a460=(43k)^2, a860=(26k)^2);
-  - block A (DSOUNDS.BIN @0xe00) is 100% byte-identical to the oracle groundtruth.
-bc9c faithfully blends **[0x5598]** (532.pal). **The defect is CONFIRMED port-only to be the port's
-[0x5598]** using an existing oracle sample (`oracle_9200_framematched_pass08.pal.bin`, the render palette):
-the terrain band [80..255] of the port's **[0x5260] is 100.0% BYTE-EXACT** to the oracle palette (so the
-render palette AND ac70's match target [0x4f60]=[0x5260]>>1 are correct), while the port's **[0x5598] is
-2.7%** to it. With every other input verified and the match target exact, the port's tile carries darker/
-lower indices (mean 110 vs the original's 199) ONLY because bc9c blends a wrong **[0x5598]** — the port's
-532.pal load is the bug. (An earlier "[0x5260]=sort([0x5598])" reasoning was WRONG; they aren't permutations.)
-**NEXT:** find the CORRECT [0x5598] — either the original's [0x5598] via instrumented DOSBox at bc9c-time,
-or by fixing the port's 532.pal producer (the extender op-0x18 load into ext+0x5598, ultimately C32.KLC) so
-that bc9c's blend of it yields the original dist=66/mean=199 tile; verify [0x3918] + the burst-oracle
-windshield, guarding the 159 dashboard flows. Diagnostics: FIST_HMDUMP banks [0x85b8]; FIST_PALDUMP dumps
-5598/4f60/5260 + diff tables. Useful existing samples: oracle_9200_framematched_pass08.{pal,idx}.bin,
-oracle_bc9c_matrix_blockB, port_bc9c_matrix.bin.
+**Innermost layer — RETRACTED & re-scoped (this session): the [0x5598] FILE-LOAD is CORRECT; the defect is
+the downstream transform chain {9f10 sort, bc9c, ac70}.** The prior "the port's 532.pal load is the bug"
+claim is DISPROVEN. Traced end-to-end with an env-gated shim open/seek/read log (FIST_OPENLOG in
+re_out/fist_dos.c: open_ci + dos_int_ext AH=3F/42):
+  - **[0x5598] source is NOT C32.KLC** — it is **532.PAL, member #28 of the PAL.RES RESOURCE1 archive**
+    (16B "RESOURCE1" header + 32×16B directory [12B name XOR-obfuscated with key 0xaceddead + 4B file
+    offset] + 32×768B palettes; 532.PAL @ file offset 22048). The engine's archive resolver
+    FUN_0000_6250 (opens PAL.RES, parses the dir, XOR-matches the uppercased name, `lseek`s to the member)
+    is faithfully ported: **readlog PROVES the port seeks to 22048 and reads exactly 768 B into ext+0x5598.**
+    The `532.PAL -> FAILED` then `PAL.RES -> ok` open sequence is the correct standalone-then-archive
+    fallback ([0x622c] = "PAL.RES" set at fist_ext.c:13180, driving FUN_0000_5cc2's secondary search).
+  - **Therefore raw [0x5598] is byte-identical port↔oracle** (both load the same member from the same
+    file) — it CANNOT be the port-vs-oracle divergence. This refutes the pre-compaction "diagonal proof".
+  - The raw member is then **transformed in place by FUN_0000_9f10** (called from FUN_0000_9f70 right after
+    the load, BEFORE bc9c): a **selection-sort of [5598][80..255] ascending by luma (r+2g+b)**. 9f70 then
+    copies [5598]→[5260], builds [4f60]=[5260]>>1 (a033), sets ac64=[28a5]=80/ac60=0xff, and calls bc9c.
+  - **Open anomaly (the real lead):** the port's [0x5598]@bc9c-time is NOT even a permutation of the raw
+    member[80..255] (only 28/176 RGB triples present; member max byte 63 vs [5598] max 50). A pure luma
+    sort preserves the multiset, so EITHER 9f10 is mis-ported OR the shim/engine ORDERING interferes
+    (native_main.c calls m_ext_FUN_0000_89b0 explicitly in the op-0x18 hook while the engine's own op-0x18
+    handler ALSO runs the 6032→9f70→KLC palette path — double-processing / wrong [5598] at bc9c-time).
+  - **ac70 decompile is SUSPECT (unverified):** its search cost indexes `a060[(byte)(pal.r - 0xf)]` with a
+    literal `- 0xf` and never reads the match target acb6/acc0/acca (set at fist_ext.c:15089-91 but unused
+    in the loop) — a Ghidra register-tracking gap. My Python ac70 model did NOT reproduce the port's bc9c
+    diagonal, so the port's ac70 fidelity is itself unproven. Needs the original 0xac70 asm (objdump).
+Still VERIFIED-correct: [0x5260] terrain band [80..255] 100% oracle-exact (vs oracle_9200_framematched
+pass08.pal), [4f60]==[5260]>>1 100%, search range 80..255, diff tables (31k)²/(43k)²/(26k)², block A 100%.
+**NEXT (re-scoped):** (a) resolve the 89b0 shim/engine ordering — dump [0x5598] at the EXACT bc9c entry and
+confirm it equals the luma-sorted member; if not, the double-89b0 or 9f10 port is the bug; (b) objdump the
+original 0xac70 to close the `- 0xf`/target gap; (c) only then, if [5598]@bc9c IS the correct sorted member
+and ac70 is faithful, the divergence is bc9c/bdc4 or a capture-state mismatch of the oracle_bc9c sample
+(rule out: confirm it was captured on the same theatre/map as AZER1). Diagnostics: FIST_OPENLOG (open/seek/
+read trace), FIST_PALDUMP (5598/4f60/5260 + diff tables), FIST_BC90DUMP (live bc9c matrix). Samples:
+oracle_9200_framematched_pass08.{pal,idx}.bin, oracle_bc9c_matrix_blockB, port_bc9c_matrix.bin.
 
 **Caveat (experiment):** the tile 9200 samples is MULTI-STEP (bc9c -> bdc4 upsample); a standalone re-run
 of bc9c alone after 89b0 gave distinct=95 vs the map-load tile's distinct=176, so it does NOT reproduce the
-build.  **Honest confidence — [0x5598] is a STRONG SUSPECT, not proven** (correcting an over-claim): it is
-LOADED FROM A FILE by FUN_0000_6032 (89b0 tail, FILEMGR 5cc2 + INT 21h), so if the port's file load is
-faithful then [0x5598] IS the game's real 532.pal (correct) and the bug is in bc9c/bdc4 instead. The
-"[0x5598] wrong" case rests on comparing it to the RENDER palette [0x5260] (a different ROLE) + the
-DAC-terrain-upload inference (its band [80..255] is 2.7% to the oracle render palette, which [5260] matches
-100%) — suggestive, not conclusive. The DEFECT is the tile-build CHAIN {[0x5598] file-load, bc9c, bdc4};
-everything else ([0x5260]/[0x4f60]/range/diff-tables/block-A) is verified correct. Splitting
-[5598]-vs-algorithm DEFINITIVELY needs the ORIGINAL's [0x5598] at bc9c-time (instrumented DOSBox) — the one
-datum not derivable port-only.  **QEMU oracle is now READY for that capture** (no instrumented DOSBox
+build.  **RESOLVED this session:** the file-load leg IS faithful (readlog: seek 22048, read 768 → ext+0x5598
+= the exact 532.PAL member), so raw [0x5598] is identical port↔oracle and the "[0x5598] file-load wrong"
+case is CLOSED. The live open question is [0x5598]@**bc9c-time** (post-9f10-sort, post-any-89b0-double-run),
+which the port-only dumps show is not even a permutation of the member — so an ORIGINAL [0x5598]@bc9c-time
+capture is still the decisive datum, plus the original 0xac70 asm.  **QEMU oracle is now READY for that capture** (no instrumented DOSBox
 needed): `tools/oracle/build_disk.sh himem` builds /tmp/wasm-fist-oracle/{boot_himem,game}.img; run_oracle.sh
 boots the ORIGINAL under qemu-system-i386 with the HMP monitor (pmemsave); capture_dgroup.py located the
 engine at guest 0x15190 / DGROUP 0x31190.  CONFIRMED at the menu [5598]@0x10005598 is ALL ZEROS — it is

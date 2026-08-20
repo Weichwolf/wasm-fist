@@ -84,7 +84,9 @@ static FILE *open_ci(const char *name, const char *mode)
     for (int di=0; di<nd; ++di){
         char path[600];
         snprintf(path,sizeof path,"%s/%s", dirs[di], clean);
-        FILE *f=fopen(path,mode); if(f) return f;
+        FILE *f=fopen(path,mode); if(f) {
+            if (getenv("FIST_OPENLOG")) fprintf(stderr,"[openlog] '%s' -> %s (%s)\n", name, path, mode);
+            return f; }
         /* case-variant probe of the last component */
         char buf[600]; strncpy(buf,path,sizeof buf-1); buf[sizeof buf-1]=0;
         char *comp=buf,*q; for(q=buf;*q;++q) if(*q=='/') comp=q+1;
@@ -97,6 +99,7 @@ static FILE *open_ci(const char *name, const char *mode)
         if((f=fopen(buf,mode))) return f;
     }
     (void)d1;
+    if (getenv("FIST_OPENLOG")) fprintf(stderr,"[openlog] '%s' -> FAILED (%s)\n", name, mode);
     return NULL;
 }
 
@@ -584,7 +587,13 @@ static void dos_int_ext(void)
     case 0x3f: { /* read, BX=handle ECX=count EDX=buf -> AX=bytes */
         int h = R_BX; uint32_t n = R_ECX32; uint8_t *buf = ext_addr(R_EDX32);
         if (h < 5 || h >= MAXH || !g_htab[h]) { R_AX = 6; set_cf(1); return; }
+        long pos = ftell(g_htab[h]);
         size_t r = fread(buf, 1, n, g_htab[h]);
+        if (getenv("FIST_OPENLOG")) {
+            uint32_t rel = (uint32_t)(buf - (g_mem + 0x100000));
+            fprintf(stderr,"[readlog] h=%d filepos=%ld n=%u -> %zu  destEXT+0x%x%s\n",
+                h, pos, n, r, rel, (rel>=0x5598 && rel<0x5598+0x800)?"  <== [5598]!":"");
+        }
         TRACE("[ext] 3F read h=%d n=%u -> %zu\n", h, n, r);
         R_AX = (uint16_t)r; set_cf(0); return; }
     case 0x3e: { /* close, BX=handle */
@@ -595,6 +604,7 @@ static void dos_int_ext(void)
         long off = (long)R_EDX32;                    /* full 32-bit flat offset */
         int whence = (R_AL == 1) ? SEEK_CUR : (R_AL == 2) ? SEEK_END : SEEK_SET;
         fseek(g_htab[h], off, whence); long pos = ftell(g_htab[h]);
+        if (getenv("FIST_OPENLOG")) fprintf(stderr,"[seeklog] h=%d whence=%d off=%ld -> pos=%ld\n", h, whence, off, pos);
         R_AX = (uint16_t)(pos & 0xffff); R_DX = (uint16_t)((pos >> 16) & 0xffff); set_cf(0); return; }
     default:
         /* uncovered extender INT-21 -> fall back to the 16-bit engine handler (harmless; it only
