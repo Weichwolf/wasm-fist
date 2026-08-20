@@ -1322,3 +1322,42 @@ lead -- it plausibly closes 6980's own 21.3% gap and is verifiable on the existi
 scaffold. NEXT: confirm the read-side freeze at 0x6ada (find the frozen load disp in the
 decompile), then wire the read to g_mem[0x6add] (the modeled store) -- an asm-proven
 correction verifiable on the AZER1 scaffold (should move 78.7% upward).
+
+*** LAYER-2 HYPOTHESIS DISPROVEN + FULL CAUSAL CHAIN TRACED TO ROOT ***
+Tested the asm-proven Layer-2 fix (undefined2->undefined4 on the 4 step slots
+0x6ad2/ad8/b52/b58 + wire the frozen ray-step increments to the modeled store: near
+uVar6+=uRam6ad2, uVar11-=uRam6ad8; far uVar9-=uRam6b52, uVar10+=uRam6b58 -- signs read
+from clean asm: 6ad0 'add ebx', 6ad6 'sub ebp', 6b50 'sub ebx', 6b56 'add ebp'; store is
+32-bit 'mov DWORD PTR ds:0x6ad2,edx' so the undefined2 #define IS a Ghidra mistyping).
+Result: terrain 78.7% -> 10.6% (REGRESSION to pre-407 baseline). The signs are asm-certain,
+so the regression means the store INPUTS are wrong: the step = iVar5*DAT_9100>>0x20 where
+iVar5 = [col*4+0x4224] (the ray-divisor) and DAT_9100/90fc are the projection scales --
+all UNBUILT in the port. The frozen 0x7fffffff only "works" because it happens to fit the
+scaffold's approximation. => LAYER-2 IS PROJECTION-GATED, not independently verifiable.
+
+The projection builder EXISTS: FUN_0000_395e (fist_ext.c:4336, called from 6980:10816 when
+DAT_90c0 != DAT_90c4). It builds, per column:
+  [i*4+0x4624] = [i*4+0x3e24]                          (far ray-table, copy)
+  [i*4+0x4224] = ([i*4+0x3a24] * DAT_90c0) >> 0x18     (near ray-divisor -> Layer-2's iVar5)
+  proj-table[LAB_0000_3909][col][0..0x100] = perspective_curve(0xffffffff/[0x4224] << 5)
+So 395e produces EVERYTHING 6980+Layer-2 need -- IF its inputs 3a24/3e24 (base ray-curves)
+and DAT_90c0 (camera, set by 85d0) are correct. 90c0 is correct (=0x00ffffff at op-0x08).
+
+THE ROOT: base ray-curves 0x3a24/0x3e24 are PLACEHOLDER all-1s in the static image
+(every dword = 0x00000001) and have NO writer anywhere in the extender (grep of decompile
+AND objdump of fist_image.bin: zero stores to 0x3a24/0x3e24). => they are populated
+EXTERNALLY by the FIST.DAT main engine (fist_dat_image.bin) -- the detail-LOD base curve,
+DMA'd/written into the extender's data segment before the voxel ops run. The scaffold seeds
+them from voxel6980_ramps.bin; the FAITHFUL path is the FIST.DAT builder writing them.
+
+FULL CHAIN (framebuffer <- root):
+  FIST.DAT builds 3a24/3e24 (detail-LOD base curves) -> writes into extender   [ROOT, in fist.c, unbuilt]
+    -> 395e: 3a24*90c0 -> 0x4224 + proj-table[0x3909]                          [EXISTS in extender]
+      -> 6980: raycast w/ Layer-2 step (iVar5=[0x4224]) -> tile                [patch 407 + Layer-2]
+        -> 9200: sample tile -> framebuffer                                    [works]
+Everything downstream of the root either exists (395e, 9200) or is patched (407) or is a
+known asm-proven edit gated on 395e's output (Layer-2). THE FIX2 CORE = find + wire the
+FIST.DAT 3a24/3e24 base-ray-curve builder. That is a bounded search in the FIST.DAT engine
+decompile (fist.c / fist_dat_image.bin) for the detail-LOD curve that gets written into the
+extender segment. NEXT: locate the 3a24/3e24 producer in FIST.DAT (search fist.c for the
+detail-curve build + the far write into the ext segment; or the extender op that receives it).
