@@ -97,3 +97,16 @@ FUN_0000_1e5e @5456 is the sound-DEVICE dispatch (SB detect), not it. NEXT: loca
 the note sequencer (indirect caller of 10a6) and its program-change case, and wire
 its 0f99 dispatch. Audio and voxel both bottom out in the engine's indirect-dispatch
 core -- the highest-leverage direction is completing that dispatch, not per-surface.
+
+Dispatch mechanism found: the sound driver routes via SERVICE VECTORS -- fist_icall_far
+through function pointers at DGROUP [0x012]/[0x0f4]/[0x0d4] (fist_snd.c:433-435) and
+_DAT c50c/c520/c0f8/c016 (:460-463). Both 10a6 (note-on) and 0f99 (instrument load)
+are in the icall fmap, so both are reachable; note-on fires but the program-change
+never routes to 0f99. So one of these service vectors (or the sequencer's per-event
+selection among them) is not installed/routed to the instrument-reload path in the
+port. NEXT: dump the port's vector table [DGROUP:0x012/0x0f4/0x0d4] + c50c/c520 at
+playback and compare to the oracle's (dosbox-fist guest-RAM, the same page-walk used
+for the voxel TCB) -- find the vector that should equal 0f99's entry and does not,
+then fix its install. This is the engine's indirect service-vector layer, the SAME
+class as the voxel 6980 dispatch -- completing/verifying that vector layer is the
+cross-cutting high-leverage fix.
