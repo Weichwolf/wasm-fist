@@ -1512,10 +1512,12 @@ int fist_extender_gate(void) {
          * frame (oracle alt=12800, matching the seed above) holds +0x3a=384 / +0x3c=256; the port's
          * LIVE camera is stale +0x3a=0 / +0x3c=-256.  Oracle-anchored spawn seed, exactly like the
          * alt terrain-follow above; gated with FIST_TILEFILL so the default frame is unchanged. */
-        if (getenv("FIST_TILEFILL")) {
-            *(uint16_t*)(tcb+0x3a) = 384;   /* pitch */
-            *(uint16_t*)(tcb+0x3c) = 256;   /* roll  */
-        }
+        /* Oracle-anchored spawn seed for the render camera's ATTITUDE, same class as the alt/focal seeds
+         * above (the 32-bit flight model that writes TCB+0x3a/+0x3c per frame is paged out).  dosbox-fist
+         * guest-RAM at the AZER1 render (oracle_azer1_tcb_camera.txt): pitch(+0x3a)=384 roll(+0x3c)=256..384;
+         * the port's stale values were +0x3a=0 / +0x3c=-256.  Applied on the default op-0x24 render path. */
+        *(uint16_t*)(tcb+0x3a) = 384;   /* pitch */
+        *(uint16_t*)(tcb+0x3c) = 256;   /* roll  */
         /* FIST_FULLCAM (diagnostic sweep): override the FULL render-camera position to an
          * oracle frame-match value (X/Y/alt/head/foc/det).  Format "X:Y:alt:head:foc:det". */
         if (getenv("FIST_FULLCAM")) {
