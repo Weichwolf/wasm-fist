@@ -856,3 +856,23 @@ the confirmed root with a measured 78.7% validating the direction. NEXT: enumera
 ~30 SMC target addresses (the 0x8a80-0x8b14 `mov %al/%eax,0xXXXX` writes) + map each to
 its decompiled static constant in 6980/siblings, replace with the dynamic [0x8490]/
 [0x8498] value, and drive the terrain to bit-exact.
+
+SMC slot enumeration (the patch spec). Map-load block 0x8a7f-0x8b10 writes al=[0x8490]
+(=11) into ~30 SMC slots; block 0x8b15-0x8b29 writes eax=[0x8498] (=0x400000) into 4:
+  [0x8490] (shift/stride) slots: 0x6ae6,0x6aea,0x6b66,0x6b6a (6980); 0x6d66,0x6d6a,
+    0x6de6,0x6dea (6d sibling); 0x7fc7,0x7fcb,0x7fdc,0x7fe0,0x7ff8,0x7ffc,0x800d,0x8011,
+    0x8105,0x8109 (7f/80/81); 0x8f48,0x8f4c,0x8f6a,0x8f6e (8fa0); 0x9068,0x906c,0x907f,
+    0x9083 (90); 0x8485,0x8489 (84); 0x9429,0x9434 (94).
+  [0x8498] (colormap displacement) slots: 0x6b1d,0x6b9d (6980); 0x6d9d,0x6e1d (6d).
+Each SMC target is an immediate BYTE inside an instruction (the shld amount, a shift
+count, or the 4-byte colormap displacement). The ported decompile emits these as STATIC
+constants (0x0a for shifts, 0x100000 for the displacement). The FIX (landable patch):
+for each render fn, replace the static constant with the DYNAMIC SMC source -- [0x8490]
+for shift amounts, [0x8498] for colormap displacements. For the op-0x24 6980 path the
+minimal set is: coord shld (0x6ae6/0x6aea/0x6b66/0x6b6a -> shift by [0x8490]) + colormap
+disp (0x6b1d/0x6b9d -> [0x8498]). VALIDATED so far (2 of these applied): 78.7%. NEXT:
+apply the remaining 6980 shift slots (0x6b66/0x6b6a -- likely a second coord/step shift
+in 6980's inner loop) + verify the ray-step SMC (6ad2/6ad8 from D4224*90fc/9100, patched
+separately at 6a a3-sites), re-measure toward bit-exact; then author patches/NNN-6980-
+smc-dynamic.diff making 6980 use [0x8490]/[0x8498] dynamically. This is the first
+LANDABLE windshield fix -- root-caused, oracle-proven, and measured (78.7% and climbing).
