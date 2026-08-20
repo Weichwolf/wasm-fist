@@ -648,3 +648,23 @@ guest-RAM dump (the mapping ext-flat 0x1xxxxx -> phys for the HM/colormap window
 reconstruct that mapping in the shim's ext memory model (or lay the flat buffers out to
 match the paged view). sim_voxel6980.py already models pieces of this. This is the
 definitive, oracle-grounded root -- everything else (LOD/alloc/gap) is faithful.
+
+Refinement (paging creates DISTINCT buffers, not aliasing): page-walking the oracle
+dump, ext-flat [0x85bc]+0x100000 (0x174e60) -> phys 0x1f6e60 holds a GRADIENT (3f 3e
+3e 3d 3d 3c = 63,62,62,61,61,60), while [0x85b8] (0x474e60) -> phys 0x376e60 holds the
+COLORMAP colours (8c 84 84 80 = 140,132,132,128). They map to DIFFERENT physical pages
+(1.5 MB apart). So 6980's [0x85bc]+0x100000 read is NOT the colormap-colour buffer --
+it is a SEPARATE gradient/light-reduce buffer that the extender's PM paging places at
+that ext-flat offset. The port's flat g_mem has NO such buffer there (it reads HM row
+512). So the windshield root is the extender's PM PAGE LAYOUT: several distinct voxel
+buffers (HM, a gradient/light buffer at +0x100000, the colour colormap, the tile) are
+placed at specific ext-flat offsets by non-identity paging, and 6980 reads them by
+those offsets; the flat port collapses them. FIST_TILEFILL_DS's 73.2% put COLOURS at
++0x100000 (wrong -- the oracle has a gradient there) yet still improved, so the 1024^2
+resolution helped but the buffer SEMANTICS at +0x100000 are still off. NEXT: map the
+extender's full page layout from the dump -- for each 6980 read offset ([0x85bc]+coord,
+[0x85bc]+0x100000+coord, the tile [0x3918]=0x44200, [0x85b8]) resolve ext-flat->phys and
+identify the buffer + its content; then reconstruct those buffers at the right flat
+offsets in the shim so 6980 reads faithfully. sim_voxel6980.py already models the phys
+remap (0x44200->0xb78200); extend it to all 6980 inputs. The gradient buffer at
+[0x85bc]+0x100000 (63..60 ramp) is the key newly-found input to identify + reproduce.
