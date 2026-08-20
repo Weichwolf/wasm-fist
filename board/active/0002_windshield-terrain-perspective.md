@@ -31,3 +31,33 @@ NEXT: dump the port's live [5598] at bc9c-entry (FIST_BC9CENTRY) and check entri
 190..255. Zero => decode truncation (fix the C32.KLC/532.pal decode); nonzero =>
 bc9c loop-bound bug (fix the build range). Either way the cutoff at ch=190 is the
 concrete, port-only handle -- no disputed oracle capture required.
+
+RETRACTION (same session, doctrine: correct without ego) -- the "190-cutoff =
+port defect" finding above is ITSELF a capture-window artifact, proven decisively:
+  - port_bc9c_matrix.bin's nonzero data occupies EXACTLY file bytes 0..0xbdff =
+    48640 = 65536 - 0x4200 (= 0xbe00). The zero region is EXACTLY the last 0x4200
+    bytes. Sustained-zero starts at file-row 190 = 256 - (0x4200>>8) = 256 - 66.
+  - So the port matrix was dumped from the +0x4200 WINDOW (base+0x4200, per the
+    BC90DUMP note): the read ran 65536 bytes from real_base+0x4200, so the last
+    0x4200 bytes fell PAST the 64KB matrix buffer and read as zero. The "black
+    rows 190..255" are the window overrun, NOT an unbuilt matrix region. bc9c's
+    loop is a byte-counter upper-triangle fill (ch from bc90.low, cl from ch, both
+    wrapping at 0) that DOES cover the full range; nothing truncates at 190.
+META-CONCLUSION (the real blocker, explains the whole thread's oscillation): every
+port-vs-oracle bc9c-MATRIX conclusion in this investigation is CONFOUNDED by
+mismatched capture windows -- the port dump is +0x4200-windowed (sheared: file
+offset = real offset - 0x4200, so file-row R = real-row R+66, and the last 0x4200
+bytes are past-buffer zeros), while the oracle sample's window/offset is
+undocumented. The recurring pattern -- "misprovenanced plateau", "0% heightmap",
+"190-cutoff" -- is the SAME failure each time: comparing two dumps taken at
+different, unverified offsets/stages. No offset-based matrix diff is trustworthy.
+CORRECTED NEXT (methodology fix, not a code hunt):
+  (1) Re-dump the PORT bc9c matrix at the RAW 64KB base (NOT the +0x4200 window)
+      so file offset == real matrix offset == ch*256+cl -- a clean 256x256.
+  (2) Pin the oracle sample's capture offset, or recapture it at the same raw base
+      + same map/tick; only then is a diagonal diff valid.
+  (3) BETTER -- sidestep the mis-windowed intermediates entirely and anchor on the
+      PROVENANCE-CLEAN framebuffer: oracle_azer1_windshield_dashAE0.png (real
+      DOSBox, known dashboard-AE0 state) vs port_azer1_windshield_6980.png (75.5%
+      diff). Work backward from that clean ground truth, not from these dumps.
+The camera + sky-setup fixes remain landed + matrix-verified independent of all this.
