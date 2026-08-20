@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Find the base-ray-curve (0x3a24/0x3e24) PRODUCER via dosbox-fist's CR3-aware flat-writer
-# watch: arm the RAM recorder from boot, watch ext-flat 0x10003a24..+span, reach a battle
-# mission so the curve is built, dump on 9200 render. Output: $FISTLOG.flatwriters.txt.
+# Pin the base-ray-curve (0x3a24/0x3e24) PRODUCER via dosbox-fist's CR3-aware flat-writer
+# watch. Correct mechanism: FIST_WATCHFLAT sets the watched flat range at startup; SIGUSR1
+# arms the recorder POST-BOOT (no decompression penalty) + resets the flat histogram; the
+# game writes 3a24 during mission-load; SIGUSR2 -> fist_dump() writes $FISTLOG.flatwriters.txt.
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 FISTLOG="${1:-/tmp/oracle_3a24}"
@@ -30,20 +31,25 @@ c:
 LOADGAME -K400,0,1000 -X5000 FIST.RUN
 CFG
 export SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11
-export FISTLOG="$FISTLOG" FIST_R9200CAP=1 FIST_R9200MAX=4
-export FIST_MEMARM_BOOT=1 FIST_WATCHFLAT=0x10003a24 FIST_WATCHFLATSPAN=0x800
+export FISTLOG="$FISTLOG" FIST_WATCHFLAT=0x10003a24 FIST_WATCHFLATSPAN=0x800
 XC="$ROOT/tools/oracle/xclick.py"
 rm -f "$FISTLOG".* 2>/dev/null || true
-timeout 560 xvfb-run -a --server-args="-screen 0 1024x768x24" bash -c '
+timeout 260 xvfb-run -a --server-args="-screen 0 1024x768x24" bash -c '
   "'$DBX'" -conf "'$SC'/db.conf" -exit > /tmp/3a24_dbx.log 2>&1 &
-  sleep 130
+  DP=$!
+  sleep 44
+  DPID=$(pgrep -n -f "dosbox-fist -conf" || echo $DP)
+  echo "dosbox pid=$DPID"
   import -window root "'$SC'/m.png" 2>/dev/null
   G=$(convert "'$SC'/m.png" -fuzz 1% -format "%@" info:)
   OX=$(echo $G|sed -E "s/.*\+([0-9]+)\+([0-9]+)/\1/"); OY=$(echo $G|sed -E "s/.*\+([0-9]+)\+([0-9]+)/\2/")
-  python3 "'$XC'" $((OX+160)) $((OY+100)); sleep 30
-  python3 "'$XC'" $((OX+118)) $((OY+93));  sleep 12
-  python3 "'$XC'" $((OX+205)) $((OY+128)); sleep 42
-  python3 "'$XC'" $((OX+40))  $((OY+186)); sleep 90
-' 2>&1 | grep -iE 'OX=|fist-oracle|error' || true
-echo "=== flatwriters (the 3a24 producer) ==="
-cat "$FISTLOG".flatwriters.txt 2>/dev/null || echo "NO flatwriters.txt -- (3a24 not written via ext-flat, or dump did not fire)"
+  echo "OX=$OX OY=$OY"
+  kill -USR1 $DPID; echo "SIGUSR1 sent (flat-watch armed)"    # arm BEFORE battle-select/mission-load
+  python3 "'$XC'" $((OX+160)) $((OY+100)); sleep 10           # BATTLES
+  python3 "'$XC'" $((OX+118)) $((OY+93));  sleep 3            # select battle row
+  python3 "'$XC'" $((OX+205)) $((OY+128)); sleep 14           # OK
+  python3 "'$XC'" $((OX+40))  $((OY+186)); sleep 30           # ACCEPT -> mission renders (3a24 built)
+  kill -USR2 $DPID; echo "SIGUSR2 sent (dump)"; sleep 4       # dump -> flatwriters.txt
+' 2>&1 | grep -iE 'pid=|OX=|USR|fist-oracle|dumped|error' || true
+echo "=== FLATWRITERS (the 3a24 producer) ==="
+cat "$FISTLOG".flatwriters.txt 2>/dev/null | head -40 || echo "NO flatwriters.txt"
