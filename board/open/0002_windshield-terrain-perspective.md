@@ -223,3 +223,19 @@ displayed-frame reference is needed to judge/tune. Next: extend dosbox-fist to d
 frame, not the 9200-entry off-screen buffer), then diff the port's op-0x24 spawn
 against it; if it still differs, the residual is inside the sky-resample 689a
 overlay extent or the terrain/sky horizon split.
+
+THIRD bug isolated (the two fixes are correct but exposed it): with the camera +
+[0x395c]=1 fixes applied, the port flipped from terrain-top-to-bottom to
+SKY-top-to-bottom -- the whole windshield is (noisy) sky, no horizon, no terrain.
+Visual: port = all sky; original = sky top / horizon / tan terrain bottom. Root
+cause: the sky-resample 689a (shim reconstruction, native_main ~1222 "fills the
+WHOLE 256x256 colormap tile @[0x3918]") overwrites the terrain colormap tile that
+9200 samples (build/fist_ext.c 9200 samples DAT_0000_3918 + (Yhi<<8|Xhi)) -- so
+once the sky source is built (395c=1), 9200 reads sky everywhere. The horizon /
+sky-vs-terrain composite is not respected. This was MASKED before by 395c=0 (no
+sky built, so the tile kept its bc9c/bdc4 terrain colours). Keep both landed fixes
+(oracle-correct: original has 395c=1 + pitch/roll 384/256) and fix 689a: it must
+fill a SEPARATE sky buffer / only the sky rows, not clobber the terrain tile 9200
+reads. Decisive datum: dump the ORIGINAL's [0x3918] tile contents (terrain vs sky)
+at the render via dosbox-fist (page-walk the RAM dump) to see what 9200 should
+sample; and whether 689a/6980 writes a different buffer in the original.
