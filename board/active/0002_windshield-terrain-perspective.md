@@ -360,3 +360,21 @@ attempt [1] as a DIAGNOSTIC first -- at op 0x08, call m_ext 8df0+3931 with [0xc9
 + [0x395d]=0 + a forced 320x200 viewport, check crash-free + whether [0x3918] changes
 and the terrain index-match improves; that isolates whether the tile-build path (given
 viewport+TCB) produces the right tile, before committing the full dispatch wiring.
+
+CAUSAL CONFIRMATION (forward progress, not a retraction): running the tile-BUILD
+(6980) before the 9200 sample -- via FIST_TILEFILL -- lifts the terrain index match
+from 10.6% -> 33.6% (3x) vs oracle_9200_framematched_pass08.idx.bin. This CONFIRMS
+the decomposition causally:
+  [1] wire the tile-build (6980):  10.6% -> 33.6%  (+23%, CONFIRMED it matters)
+  [3] deliver the C32.KLC colormap: the remaining ~66% gap
+FIST_TILEFILL still uses RECONSTRUCTED 6980 inputs (seeded ramps 3a24/3e24 from
+voxel6980_ramps.bin + a contiguous HM+colormap buffer at HM_base+0x100000), so the
+residual is the fidelity of those inputs -- chiefly the colormap source [0x85b8]+
+0x100000, which the port's Route-1 map-load delivers as {0,4} instead of C32.KLC
+terrain texels. So the confirmed next target is the COLORMAP DELIVERY: the extender
+maps the terrain colormap at HM_base+0x100000, but the port allocs [0x85bc]/[0x85b8]
+separately AND the C32.KLC colour data isn't decoded into it. NEXT: trace the
+extender map-load's C32.KLC -> colormap decode (89b0/643c) in fist_image.bin asm,
+find where the terrain texels should land at [0x85b8](+0x100000), and why the port
+gets {0,4}; deliver it faithfully, then re-measure (target: 33.6% -> bit-exact like
+the sky). The tile-build wiring itself is now causally proven worth landing.
