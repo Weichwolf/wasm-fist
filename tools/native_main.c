@@ -1586,10 +1586,22 @@ int fist_extender_gate(void) {
             const char*hf2=getenv("FIST_TILEFILL_HM");    /* DIAGNOSTIC: override heightmap (frame-match) */
             if (hmb && cmb) {
                 if(!hmcm) hmcm=(uint8_t*)malloc(0x200000);
+                if(getenv("FIST_TILEFILL_DS")){
+                    /* 6980 walks a 1024^2 map (asm: two shld $0xa = 20-bit index); the port's
+                     * HM/colormap are 2048^2 (4MB).  Build a genuine 1024^2 DOWNSAMPLE (every
+                     * other row/col of the 2048^2 source) so 6980's [base]+ecx / [base]+0x100000+ecx
+                     * land on a 1024^2 HM + contiguous 1024^2 colormap. */
+                    uint8_t *H=(uint8_t*)(uintptr_t)hmb, *C=(uint8_t*)(uintptr_t)cmb;
+                    for(int y=0;y<1024;y++) for(int x=0;x<1024;x++){
+                        hmcm[y*1024+x]           = H[(y*2)*2048+(x*2)];
+                        hmcm[0x100000+y*1024+x]  = C[(y*2)*2048+(x*2)]; }
+                    hm_src=hmb;
+                } else {
                 if(hmb!=hm_src){ memcpy(hmcm,(void*)(uintptr_t)hmb,0x100000); hm_src=hmb; }
                 if(hf2){ FILE*f=fopen(hf2,"rb"); if(f){fread(hmcm,1,0x100000,f);fclose(f); hm_src=0;} }
                 if(rf2){ FILE*f=fopen(rf2,"rb"); if(f){fread(hmcm+0x100000,1,0x100000,f);fclose(f);} }
                 else memcpy(hmcm+0x100000,(void*)(uintptr_t)cmb,0x100000);
+                }
                 /* FIST_TILEFILL_CMDUMP=path : bank the port's LIVE colour source ([0x85b8], 1MB) read-only */
                 if(getenv("FIST_TILEFILL_CMDUMP")){ static int cd=0; if(!cd){cd=1;
                     FILE*f=fopen(getenv("FIST_TILEFILL_CMDUMP"),"wb"); if(f){fwrite(hmcm+0x100000,1,0x100000,f);fclose(f);}
