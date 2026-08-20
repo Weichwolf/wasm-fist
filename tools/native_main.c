@@ -2238,15 +2238,22 @@ int fist_extender_gate(void) {
              * (colormap-groundtruth part 2).  Measures the reduce source's distinct-count.  Corrupts the tile
              * build (bc9c writes to blockA), so tile metrics are invalid under this flag -- reduce-only test. */
             if (tile3918 && !getenv("FIST_NOTILEALIAS")) *(uint32_t *)(xb + 0xbc90) = tile3918;   /* bc90 REUSED = tile aligned base */
-            /* FIST_FORCE395C (default OFF, DIAGNOSTIC): 89b0's tail builds ds:0x3911 (the 689a source)
-             * only when [0x395c]!=0.  [0x395c] is set by the 5c98 .MEG-file findfirst probe (4/8/16/40.MEG),
-             * which finds nothing in our data dir -> 395c stays 0 -> the source build is skipped.  Forcing
-             * a nonzero detail here lets us test whether the port's OWN 89b0 3911-build reproduces the
-             * oracle source (docs/oracle_tilesource_builder.md). */
-            if (getenv("FIST_FORCE395C"))
+            /* SKY-SETUP reconstruction (FUN_0000_7660).  89b0's tail builds the 5.SKY source [0x3911] only
+             * when [0x395c]!=0, and [0x3958] selects the sky-resample fn.  Both are set by the extender op
+             * op-table[0x22] -> 0x10da -> 0x7660, which lives in a Ghidra decompile GAP (0x7490..0x76fd not
+             * decompiled) so the port never ran it -> [0x395c] stayed 0 -> no windshield sky.  The original
+             * posts this op before op-0x18 map-load (dosbox-fist guest-RAM: original [0x395c]=1 while all
+             * four N.MEG find-firsts fail -- so the .MEG probe was NOT the setter).  Reconstructed verbatim
+             * from the pinned asm (objdump 0x7660): from the current TCB's +0xcc detail byte, pick the
+             * sky-render fn ptr [0x3958] and the sky flag [0x395c].  (oracle AZER1: TCB[+0xcc]=1.) */
+            {
+                uint8_t *t7660 = (uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0xc93));   /* [0xc93] = current TCB */
+                uint8_t cc = t7660[0xcc];
+                if (cc == 0) { *(uint32_t*)(xb+0x3958)=0x6877; g_mem[FIST_EXT_BASE+0x395c]=1; }
+                else         { *(uint32_t*)(xb+0x3958)=0x689a; g_mem[FIST_EXT_BASE+0x395c]=cc; }
+            }
+            if (getenv("FIST_FORCE395C"))       /* diagnostic override of the reconstruction above */
                 g_mem[FIST_EXT_BASE+0x395c] = (uint8_t)strtoul(getenv("FIST_FORCE395C"),0,0);
-            else if (getenv("FIST_TILEFILL"))   /* tile-fill needs 89b0 to build ds:0x3911 (5.SKY) for 689a */
-                g_mem[FIST_EXT_BASE+0x395c] = 1;
             g_fist_ext_int = 1;                    /* extender-mode flat FILEMGR INT 21h */
             m_ext_FUN_0000_89b0(inbox, inbox, inbox);
             g_fist_ext_int = 0;
