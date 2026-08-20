@@ -24,3 +24,20 @@ the SB DMA path for digital), capture the matching port stream, and compare stre
 aligned; if OPL, diff the register-write log vs a DOSBox OPL reg trace (the port and
 DOSBox share DBOPL, so equal register writes at equal times => bit-exact FM). Audio,
 like the voxel, is a deep per-surface RE effort, but the harness + reference exist.
+
+AUDIO ROOT LOCALIZED (OPL register-write compare, dosbox-fist opl_trace patch on
+the ORIGINAL via FISTOPLLOG vs the port's FIST_OPL_REGLOG): the menu music IS OPL
+(the original writes 2870 OPL DATA writes incl. 980 key-on b0-b8 values; the port
+plays too -- 301 key-on, A0-A8 both 13 distinct). The NOTES match, but the OPL
+INSTRUMENT DEFINITIONS do NOT: over the 89 common instrument registers (0x20-0x35
+AM/VIB/EG/KSR/mult, 0x40-55 KSL/level, 0x60-75 attack/decay, 0x80-95 sustain/
+release, 0xC0-C8, 0xE0-F5 waveform) only 15/89 MATCH. The port writes truncated
+low values -- e.g. reg 0x20: original 0x31, port 0x01; reg 0x23: original 0x61,
+port 0x11 -- consistently DROPPING the high bits (AM/VIB/EG-type/KSR), so the FM
+timbre is wrong and the waveform is uncorrelated (0.126) even though the note
+sequence is right. Since the port and DOSBox share DBOPL, fixing the instrument
+bytes should make the FM output bit-exact. NEXT: find where the sound driver writes
+the instrument registers (fist_snd.c sequencer / the SOUNDDVR.DVR or song
+instrument table load) and why the high nibble is lost -- likely an instrument-byte
+decode/mask bug or a wrong stride reading the patch table. This is a specific,
+bounded fix, not open-ended.
