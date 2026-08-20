@@ -41,3 +41,14 @@ the instrument registers (fist_snd.c sequencer / the SOUNDDVR.DVR or song
 instrument table load) and why the high nibble is lost -- likely an instrument-byte
 decode/mask bug or a wrong stride reading the patch table. This is a specific,
 bounded fix, not open-ended.
+
+Refinement: the shim OPL (fist_opl.c fist_opl_out -> fist_dbopl_write) is FAITHFUL
+-- it passes the 0x389 data byte UNMASKED to DBOPL. So the wrong instrument value
+(0x01 vs 0x31) already reaches the engine's `out(0x389, param_1)` call
+(re_out/fist_snd.c ~2340/5678) -- i.e. the ENGINE sound sequencer computes/reads
+the wrong instrument byte, not the shim. NEXT: trace the sequencer's instrument-
+table read in fist_snd.c against the asm (where param_1 to the 0x389 writer comes
+from) -- the high nibble (AM/VIB/EG/KSR bits) is dropped, so look for a wrong
+mask/shift or a byte-stride error reading the OPL patch table (from SOUNDDVR.DVR or
+the in-DAT patch bank). A base-loss or an `& 0x0f` on the instrument byte would
+produce exactly the observed 0x31->0x01. Fixable as an asm-verified patch.
