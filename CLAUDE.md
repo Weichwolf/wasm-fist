@@ -182,10 +182,10 @@ per the FIST_BBDUMP note, bc9c writes the flat M[ch][cl] matrix at the 64KB-alig
 reads the tile at the +0x4200 window ([0x3918]), and patch-289's bc90->tile alias was meant to reconcile
 that but the built [0x3918] is still 0.5%-match (port dist=176/mean=110.7).
 
-**Innermost layer — RETRACTED & re-scoped (this session): the [0x5598] FILE-LOAD is CORRECT; the defect is
-the downstream transform chain {9f10 sort, bc9c, ac70}.** The prior "the port's 532.pal load is the bug"
-claim is DISPROVEN. Traced end-to-end with an env-gated shim open/seek/read log (FIST_OPENLOG in
-re_out/fist_dos.c: open_ci + dos_int_ext AH=3F/42):
+**Innermost layer — the ENTIRE palette→bc9c→ac70 chain is now VERIFIED FAITHFUL (this session); the
+"voxel = bc9c/[5598] bug" premise rested on a MISPROVENANCED oracle sample.** Two prior claims are DISPROVEN
+in sequence: first "the port's 532.pal load is the bug", then "the port's bc9c reads an unsorted [5598]".
+Traced end-to-end with env-gated shim + bc9c-entry logs:
   - **[0x5598] source is NOT C32.KLC** — it is **532.PAL, member #28 of the PAL.RES RESOURCE1 archive**
     (16B "RESOURCE1" header + 32×16B directory [12B name XOR-obfuscated with key 0xaceddead + 4B file
     offset] + 32×768B palettes; 532.PAL @ file offset 22048). The engine's archive resolver
@@ -198,37 +198,37 @@ re_out/fist_dos.c: open_ci + dos_int_ext AH=3F/42):
   - The raw member is then **transformed in place by FUN_0000_9f10** (called from FUN_0000_9f70 right after
     the load, BEFORE bc9c): a **selection-sort of [5598][80..255] ascending by luma (r+2g+b)**. 9f70 then
     copies [5598]→[5260], builds [4f60]=[5260]>>1 (a033), sets ac64=[28a5]=80/ac60=0xff, and calls bc9c.
-  - **DIAGNOSIS NAILED (tools/oracle/sim_bc9c_diag.py):** a Python model of bc9c+ac70 (target=avg>>1,
-    tables (31k)²/(43k)²/(26k)², range 80..255) fed the **SORTED palette** reproduces the ORACLE bc9c
-    diagonal (80..86) nearly byte-exact; fed the raw member or the port's [5598]@dump it does NOT. The
-    port's live bc9c diagonal is 102..129 — so **the port's bc9c reads a WRONG (non-sorted) [0x5598]**,
-    whereas the correct 9f10-sorted palette is preserved in **[0x5260]** (which IS luma-monotonic, 0
-    inversions; [5598]@dump has 79). So bc9c's REQUIRED input == [5260]'s content; the port fails to hand
-    it that. 9f70's order is 9f10-sort([5598]) → copy [5598]→[5260] → a033([4f60]) → bc9c(reads [5598]),
-    and a033 does NOT touch [5598], so within ONE clean 9f70 bc9c would read the sorted [5598]. That [5598]
-    is unsorted at bc9c-time ⇒ a SECOND [5598] (re)load races the sort — the shim/engine 89b0 ordering
-    (native_main.c calls m_ext_FUN_0000_89b0 explicitly in the op-0x18 hook while the engine's own op-0x18
-    dispatch ALSO reaches 89b0's 6032→9f70 path).
-  - **ac70 is CORRECT (verified via objdump, already patched):** the decompile's literal `- 0xf` is
-    SELF-MODIFYING CODE — 0xacb6/0xacc0/0xacca are the immediate operand BYTES of the three `sub al,0xf`
-    instructions in the ac70 loop (0xacb5/acbf/acc9), and ac70's prologue OVERWRITES them with the target
-    R/G/B >>1 (`mov ds:0xacb6,al`). Ghidra baked the initial literal 0xf; **patch 238 already restores the
-    real target subtrahend** (`cVar3 - (char)bRam0000acb6` …). Confirmed against the extender image asm
-    (objdump 0xac70). So ac70 is faithful; it is NOT the voxel bug.
-Still VERIFIED-correct: [0x5260] terrain band [80..255] 100% oracle-exact (vs oracle_9200_framematched
-pass08.pal), [4f60]==[5260]>>1 100%, search range 80..255, diff tables (31k)²/(43k)²/(26k)², block A 100%.
-**NEXT (bug cornered to [5598]-freshness-at-bc9c):** (a) confirm the double-89b0 by counting the
-532.PAL(@22048)→ext+0x5598 reads per map-load (FIST_OPENLOG readlog; needs a quiet run, no concurrent
-verify); (b) TEST FIX: gate OFF native_main.c's explicit m_ext_FUN_0000_89b0 op-0x18 call and re-dump —
-if the single engine-driven 89b0 leaves [5598]==[5260] (sorted) at bc9c and port_bc9c's diagonal drops to
-80..86, that is the fix; guard all 159 flows + the map-load-covered set afterwards. Check WHY the shim call
-was added (native_main ~2153 comment) before removing — it may be there because the engine dispatch does
-NOT reach 89b0 (then the fix is different: ensure [5598] is re-sorted, or bc9c reads [5260]). (c) only if
-[5598]@bc9c already IS the sorted palette
-and ac70 is faithful, the divergence is bc9c/bdc4 or a capture-state mismatch of the oracle_bc9c sample
-(rule out: confirm it was captured on the same theatre/map as AZER1). Diagnostics: FIST_OPENLOG (open/seek/
-read trace), FIST_PALDUMP (5598/4f60/5260 + diff tables), FIST_BC90DUMP (live bc9c matrix). Samples:
-oracle_9200_framematched_pass08.{pal,idx}.bin, oracle_bc9c_matrix_blockB, port_bc9c_matrix.bin.
+  - **DIAGNOSIS (bc9c-ENTRY dump, decisive — supersedes the mid-session "port reads unsorted [5598]"):**
+    a one-shot bank at FUN_0000_bc9c's EXACT entry (build/fist_ext.c, env FIST_BC9CENTRY) proves the
+    port's bc9c INPUTS are ALL correct: [5598]@entry is luma-SORTED (0 inversions) AND byte-equals
+    [5260]@entry (256/256); [4f60]@entry == [5260]>>1 (256/256); tables a060/a460/a860=(31k)²/(43k)²/(26k)²;
+    ac64=80/ac60=255. (The earlier FIST_PALDUMP [5598] with 79 inversions is a LATER, post-bc9c overwrite —
+    it does NOT feed bc9c and is a red herring.)
+  - **ac70 is PROVABLY PERFECT:** dumping every ac70 call's (ac68,ac69,ac6a→ret) over a full map-load and
+    replaying each target through the Python model = **0 divergences / 40960 calls**. ac70's SMC `sub al,T`
+    (patch 238, verified vs objdump 0xac70) is faithful. NOT the bug.
+  - **So bc9c, fed its own correct inputs, produces the FAITHFUL matrix** (linear diagonal M[ch][ch]=ch,
+    because [5598]==[5260] ⇒ exact match at i=ch). The asm order is 9f70→9f10(sort)→a033→bc9c (objdump
+    0x9f70: call 0x9f10 / 0xa033 / 0xbc9c), so the ORIGINAL likewise reads a sorted [5598]==[5260] and
+    MUST produce the same linear diagonal.
+  - **⇒ oracle_bc9c_matrix_blockB is MISPROVENANCED:** its diagonal PLATEAUS at 80..83, which is impossible
+    for the sorted-palette pipeline both builds run (that yields a linear diagonal). The whole
+    "port bc9c ≠ oracle" premise that drove the voxel-bug hunt is a bad-sample artifact, not a port defect.
+  - **The [0xbc90]/[0x3918] 0x4200 window is INTENTIONAL (per shim docs native_main ~2220):** the original's
+    tile3918 = matrix_base + 0x4200 (not 64KB-aligned); bc9c writes M at `bc90 & 0xffff0000` and 9200/bdc4
+    reads the windowed view at +0x4200 — the port replicates this (bc90=3918=0x8314200, base 0x8310000).
+    So FIST_BC90DUMP@bc90 reads the +0x4200-windowed view (74% == sim shifted +0x4200; the other 26% =
+    0x4200/0x10000 read past the 64KB buffer, NOT a wrap) — a DUMP-window artifact, not a build error.
+Still VERIFIED-correct: file-load, 9f10 sort, [5598]@bc9c sorted==[5260], [4f60]==[5260]>>1, ac70 (0/40960),
+diff tables, block A, search range 80..255.
+**NEXT (voxel re-scoped — the palette/bc9c/ac70 chain is faithful):** (a) DISCARD or re-provenance
+oracle_bc9c_matrix_blockB — recapture bc9c's output (and [5598]@bc9c) from the ORIGINAL at a KNOWN tick
+(QEMU/instrumented DOSBox) before trusting any bc9c-diff; (b) if the windshield still visibly mismatches a
+PROVENANCE-VERIFIED 9200 capture, the defect is DOWNSTREAM of bc9c — bd0e/bd62/**bdc4 tile upsample**, the
+9200 sampler's INDEXING into tile3918, or the heightmap [0x85bc]/reduce [0x85b8] — not the blend LUT.
+Diagnostics added this session: FIST_OPENLOG (open/seek/read), FIST_BC9CENTRY (bank [5598]/[5260]/[4f60]/
+tables + bc90/3918 at bc9c entry — build/ only, regenerated by make patch), FIST_AC70DUMP (per-call
+target→ret), tools/oracle/sim_bc9c_diag.py.
 
 **Caveat (experiment):** the tile 9200 samples is MULTI-STEP (bc9c -> bdc4 upsample); a standalone re-run
 of bc9c alone after 89b0 gave distinct=95 vs the map-load tile's distinct=176, so it does NOT reproduce the
