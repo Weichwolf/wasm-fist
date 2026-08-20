@@ -516,3 +516,20 @@ upsample should exceed 73.2% toward bit-exact. NEXT: build a true 256->1024 HM+c
 land the faithful fix -- the map-load produces the correct-LOD 1024^2 voxel buffer
 (likely the detail->[0x8490] reduction is off by one doubling, or a separate 1024^2
 voxel buffer must be built alongside the 2048^2 one). Point-sampling confirmed faithful.
+
+LOD is SMC-patched (fix mechanism found). The map-load block 0x8a80-0x8b14 writes the
+LOD value al (=[0x8490]) into ~30 self-modifying-code slots across the 6980 raycaster
+(0x6ae6/0x6b66/0x7fc7/0x7fdc/0x8105/0x8f48/0x9068/0x9429/0x9434/... -- the shl amounts
+and strides 6980 uses to index the HM/colormap). asm 0x8a4c sets [0x8490]=0xc(12) ->
+[0x8494]=1<<12=4096 on THIS branch (which also sets [0x395c]=3); the port runtime shows
+[0x8494]=2048 (=1<<11), so a DETAIL branch before 0x8a40 selects the LOD. So the LOD
+(map resolution) is not a single variable but is baked into 6980 via SMC at map-load;
+a faithful fix must set [0x8490] correctly at map-load so all ~30 SMC slots + the
+[0x8494] upsample target agree on the resolution 6980 walks. The measured 1024^2
+downsample (73.2%) approximates what a correct LOD would produce natively. FAITHFUL FIX
+(bounded, multi-step): trace the detail->[0x8490] branch (which detail level yields
+which LOD; oracle det=1), set the port's map-load [0x8490] to the value that makes 6980
+walk the map at the oracle's resolution, verify the ~30 SMC slots re-patch consistently,
+and confirm the HM/colormap buffers size + contiguity ([0x85b8]==[0x85bc]+ (1<<LOD)^2)
+match. Then the terrain should reach bit-exact without any TILEFILL band-aid. This is
+the concrete landing path; the fix direction is measured-confirmed (10.6->33.6->73.2%).
