@@ -1283,3 +1283,42 @@ projection ops 0x10/0x0c that build them). SO FIX2 SIMPLIFIES: run the projectio
 reconstruction needed (the camera is already faithful). NEXT: seed/build the ray tables +
 projection before the op-0x08 6980 (like TILEFILL, but faithful), confirm no FPE, then the
 real op-0x08->6980 + op-0x24->9200 dispatch should render terrain (~78.7% via patch 407).
+
+*** MAJOR STRUCTURE FINDING: the voxel raycasters have TWO SMC layers, not one ***
+An exhaustive scan of ALL self-modifying writes (objdump | grep 'a[23] .. 6[9-e] 00 00')
+targeting the voxel code region 0x69xx-0x6exx reveals the SMC is richer than patch 407
+modeled. Two distinct layers:
+
+  LAYER 1 -- MAP-LOAD SMC (block 0x8a7f-0x8b29, runs ONCE at map load):
+    writes LOD-shift (al, from [0x8490]) to 8 shl-amount slots and HM-size (eax=0x400000,
+    from [0x8498]) to 4 disp slots:
+      6980 cluster: shl 0x6ae6/0x6b66 ; disp 0x6b1d/0x6b9d   -> PATCH 407 FIXES THESE
+      6c00 cluster: shl 0x6d66/0x6de6 ; disp 0x6d9d/0x6e1d   -> UNFIXED (mirror of 407)
+    Ghidra froze the pre-SMC image constants (shld 0xa, disp 0x100000). This is the
+    confirmed 407 bug. 407 = 6980 done, 6c00 open (candidate patch 408, asm-proven).
+
+  LAYER 2 -- RUNTIME PER-COLUMN SMC (writers INSIDE the render, run every column/frame):
+    0x6a04/0x6a09 (in 6980): eax = CONCAT31([0x3909]>>8, -(byte)([0x90dc]>>0x19))
+                              -> mov ds:0x6add,eax ; mov ds:0x6b5d,eax
+    0x6c84/0x6c89 (in 6c00): -> 0x6d5d, 0x6ddd
+    0x6f6d:                  -> 0x6e84
+    0x8de0/0x8de5:  al = [0x3915] -> 0x6955, 0x6960 (shld-amount variant, the 0x6952 fn)
+    These self-write a PER-COLUMN proj-table POINTER (base [0x3909], low byte = scaled
+    column index) into the code's disp32 field, then a load instruction dereferences it.
+    Ghidra MODELED THE STORE ONLY: _uRam00006add = CONCAT31(LAB_0000_3909>>8, -(byte)...)
+    at fist_ext.c:10831/10833/10980/10982 -- but _uRam00006add appears ONLY as an LHS
+    (store), NEVER as an RHS (read). So the DEREFERENCING LOAD (at 0x6ada) reads the FROZEN
+    image disp, disconnected from the modeled store. SAME frozen-SMC class, RUNTIME layer.
+    => UNADDRESSED in BOTH 6980 (patch 407) AND 6c00. Strong candidate for 6980's remaining
+       render gap (78.7% -> the missing 21.3% is per-column perspective, exactly what the
+       proj-pointer selects). Affects the perspective/column correctness, not the colormap.
+
+DECISION: do NOT blind-land patch 408 (6c00 map-load mirror) this round. Unlike 407
+(oracle-PROVEN 10.6%->78.7% on AZER1), 6c00 is not exercised by any current test, so an
+asm-analogy-only patch cannot be verified ("land small, VERIFY immediately"). 408 stays a
+PREPARED, asm-proven candidate to land WITH oracle proof (a map/LOD that drives the 6c00
+path, or the windshield matrix flow). Layer-2 (runtime proj-pointer) is the higher-value
+lead -- it plausibly closes 6980's own 21.3% gap and is verifiable on the existing AZER1
+scaffold. NEXT: confirm the read-side freeze at 0x6ada (find the frozen load disp in the
+decompile), then wire the read to g_mem[0x6add] (the modeled store) -- an asm-proven
+correction verifiable on the AZER1 scaffold (should move 78.7% upward).
