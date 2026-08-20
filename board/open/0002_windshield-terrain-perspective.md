@@ -205,3 +205,21 @@ onward -- it also touches TCB[+0xcc]/[+0xd1] and sets the render-fn pointer
 handler to it. Reconstruction is faithful (matches the pinned asm, like the 689a
 reconstruction), not a band-aid. Then the sky builds and, with camera pitch/roll
 =384/256 applied, verify the windshield vs the AE=0 burst reference.
+
+## Comments
+
+TWO fixes landed + matrix-verified (native 159/0 each) + native<->wasm byte-
+identical (0 diff): (1) commit 1bce4c3 reconstructs the missing 0x7660 sky-setup
+so [0x395c]=1 and 89b0 builds the 5.SKY source -> the windshield gains sky;
+(2) commit 8340772 seeds the render camera pitch/roll to the oracle values 384/256.
+The port went from terrain-top-to-bottom (28 sky-ish px, 75.5% vs original) to a
+sky+horizon+terrain view (22791 sky-ish). Neither fix perturbs any dashboard crop
+(all stay AE=0) and no OOM.
+
+Remaining for bit-exactness: the sky currently over-produces vs the SETTLED burst
+f04 (22791 vs 9304) but f04 is a later frame, not the spawn -- so a SAME-MOMENT
+displayed-frame reference is needed to judge/tune. Next: extend dosbox-fist to dump
+0xA0000 at VGA vsync right after the mission's first render (the displayed spawn
+frame, not the 9200-entry off-screen buffer), then diff the port's op-0x24 spawn
+against it; if it still differs, the residual is inside the sky-resample 689a
+overlay extent or the terrain/sky horizon split.
