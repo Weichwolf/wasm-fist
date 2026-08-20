@@ -1052,3 +1052,26 @@ FIX 3 -- add a windshield matrix flow (verify.sh): op-0x24 AZER1 spawn, crop ter
 LAND: make patch (407 + dispatch shim) -> verify.sh both (159 + windshield flow, AE=0,
 native==wasm) -> then the DoD 10x re-gate on the EXPANDED matrix. Root+FIX1 proven; FIX2
 is the bounded implementation; FIX3 is mechanical.
+
+DEEPER ROOT (op-sequence trace): the engine does NOT post the render ops at all. The
+per-frame op sequence after map-load is: 0x20,0x04,0x44(sky),0x68,0x6c,0x70,0x74,0x7c
+(setup), then op 0x4c REPEATED (present pump) + op 0x54 (roster) -- NO op 0x0c/0x08/0x24
+(the render ops) are ever posted. This confirms the documented "459a mission loop posts
+op 0x0c every outer iteration ONLY when the tick advances, but the op-0x4c present spin
+never pumps the cooperative INT-8 tick, so c452 never advances, so the per-tick sim+
+render step never runs." So the render pipeline is FROZEN at the TICK-PUMP level --
+UPSTREAM of the op-dispatch stub. The 80.4% terrain was measured via the FIST_MISSFB
+scaffold (which force-runs the render chain), NOT the engine's real posted-op flow.
+So the complete windshield fix chain is deeper than FIX2 alone:
+  FIX0 (prerequisite): make the mission-loop tick (c452) advance faithfully during the
+    op-0x4c present spin so the 459a loop posts the per-frame render ops (0x0c/0x08/0x24).
+    The shim's op-0x4c present handler must pump the cooperative INT-8 tick the way the
+    original's timer does (NOT FIST_COOP_TICK, which corrupts the render per earlier
+    findings -- the faithful timer/tick advance under the real-timer verify condition).
+  FIX1: 6980 SMC dynamic [validated]. FIX2: op-dispatch wiring. FIX3: matrix flow.
+So the windshield's TRUE first gate is the mission-loop tick/timer advance (why the
+engine never posts render ops), then the op-dispatch, then 6980 SMC. NEXT: investigate
+the op-0x4c present-spin tick handling -- why c452 doesn't advance, and how the original's
+timer advances it -- so the engine posts the render ops; this is the real FIX0 gate
+upstream of everything. (Diagnosis continues to deepen but converges: tick -> op-post ->
+op-dispatch -> 6980-SMC -> bit-exact terrain -> matrix flow -> DoD.)
