@@ -233,7 +233,14 @@ resolved before the menu can be driven into a mission. Practical notes learned: 
 is REQUIRED (absolute mouse; without `-usb` QEMU exits on the device); `-snapshot` avoids the image
 write-lock; kill lingering qemu by PID (`pkill -x` can miss one still holding monitor port 5512); the
 inline pmemsave is timing-flaky — capture_dgroup.py's full-RAM dump is the reliable path. So the [5598]
-capture is currently blocked on getting FIST.RUN to RENDER under QEMU, then the XTEST menu-nav to a mission.
+capture is currently blocked on getting FIST.RUN to RENDER under QEMU, then the XTEST menu-nav to a mission. Update: injecting keystrokes (ret/spc/esc via HMP sendkey) does NOT advance it -- the engine
+IS resident+running (load base stable at 0x20190) but the render loop is frozen at the solid-255 clear, so
+it is a QEMU VGA-retrace / PIT-timing incompatibility (FIST.RUN's frame loop likely spins on the VGA status
+port 0x3DA or PIT ticks that don't advance as its DOSBox path expects), not a missing input. So the RAM-dump
+oracle needs EITHER a QEMU VGA/timing fix OR the instrumented DOSBox (dosbox-fist; not built here, and no
+dosbox source tree is present to patch) -- both are dedicated infrastructure tasks. The STOCK DOSBox path
+(capture_battle_stock.sh / capture_battle_burst.sh) DOES reach the menu + capture the FRAMEBUFFER, but not
+guest RAM, so it cannot read [0x5598]. This is the concrete gate on the definitive [5598] split.
 
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
