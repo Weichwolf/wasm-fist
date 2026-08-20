@@ -236,3 +236,28 @@ the ray tables are built faithfully; re-run the index comparison (target: terrai
 match >> 10.6%, ideally bit-exact like the sky). This is the first REAL, actionable
 voxel defect of the session -- everything upstream (camera/sky/matrix/tile/DAC) is
 verified faithful.
+
+RAY-TABLE RETRACTION + refined root (causal test). Injecting the oracle ray tables
+(scratch/oracle/oracle_3a24.bin/oracle_3e24.bin -- confirmed a REAL curve, distinct
+=251, quadratic, vs the port/static-image all-1s) into the port's live render via
+FIST_ISO_RAY3A24/RAY3E24 changed the terrain match by 0.0% (still 10.6%). So the ray
+tables are IRRELEVANT to the default render: their only consumer 395e is called from
+6980 (asm 0x6992), and 6980 is NOT in the default chain (8deb->85d0->8120->9200) --
+it runs only behind FIST_TILEFILL. The "port never builds the ray curve" observation
+is TRUE but not the live-render bug. (The static image ships all-1s at 0x3a24/0x3e24;
+the real curve is built at runtime by a writer NOT in the ext image -- engine-side --
+but that only matters on the 6980 path.)
+REFINED ROOT: the port's default op-0x24 render walks the STALE map-load tile
+[0x3918] (the bc9c/bdc4 blend matrix) with 8120+9200, and NEVER runs 6980 (the
+NovaLogic voxel raycaster) to build a fresh terrain tile per-frame. The shim's
+FIST_TILEFILL seam exists precisely to inject a 6980 call "so 9200 walks a
+freshly-built terrain tile instead of the STALE map-load tile" (native_main.c:1560).
+So the likely live-render defect is the MISSING per-frame 6980 tile-build: 9200
+samples a blend-matrix tile instead of a raycast terrain tile -> +55-darker,
+broad-spread terrain, 10.6% match. (Camera correct + sky bit-exact still hold.)
+NEXT: asm-verify whether the ORIGINAL op-0x24 render path calls 6980 per-frame
+before 9200 (disassemble the 8deb/85d0/render dispatch in fist_image.bin; check the
+call graph into 6980 @0x6980 and its caller 82b8/8120 region), and identify what the
+original's 9200 actually samples. If the original rebuilds the tile via 6980 each
+frame and the port skips it, port that call (with 6980's real inputs, not the
+FIST_TILEFILL reconstruction) -- that is the concrete fix.
