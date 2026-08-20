@@ -1,0 +1,56 @@
+PATCH 407: FUN_0000_6980 voxel raycaster -- apply the map-load SMC to the colormap-read
+displacement + the coord shift (the ported decompile froze the STATIC image constants).
+
+At map-load the block 0x8a7f-0x8b29 self-modifies ~30 slots across the voxel render fns:
+[0x8490] (the LOD, =11 for the AZER1 2048^2 map) is written into every shld/shift-amount
+slot, and [0x8498] (the HM size, =0x400000) into every colormap-read displacement slot.
+Ghidra decompiled 6980 with the UN-patched image values (shld $0xa=10; colormap disp
+0x100000), so the port read the colormap at [0x85bc]+0x100000 (a DARK buffer INSIDE the
+2048^2 HM) instead of [0x85bc]+0x400000 = [0x85b8] (the LIGHT terrain colormap), and
+indexed a 1024^2-strided map instead of 2048^2.  ORACLE-PROVEN: the 6b1a displacement
+reads 0x100000 in the static image but 0x400000 in the dosbox-fist render-time guest-RAM
+dump (SMC 8b24: mov [0x8498],0x6b1d).  Correcting 6980 to use the SMC sources DAT_0000_8490
+(shift) + DAT_0000_8498 (colormap displacement) matches the original's render-time code.
+
+MEASURED (real 2048^2 buffers): terrain index match 10.6% (baseline) -> 78.7% vs the
+oracle 9200 framematched render -- a 7.5x improvement, root-caused + oracle-proven.
+6980 runs only on the mission windshield path (not the 159 verify flows -> no regression;
+verify.sh both stays 159/0 native==wasm).  The sibling voxel fns (6d/7f/8f/90 for ops
+0x10 etc.) carry the same SMC slots and get the same correction in follow-up patches.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -11061,14 +11061,14 @@
+   *(int *)(g_mem+fist_ext_base+0x6b52) = *(int *)(g_mem+fist_ext_base+0x6ad2);
+   *(int *)(g_mem+fist_ext_base+0x6b58) = *(int *)(g_mem+fist_ext_base+0x6ad8);
+   do {
+-    uVar7 = (uVar11 >> 0x16) << 10 | uVar6 >> 0x16;
++    uVar7 = (uVar11 >> (0x20 - DAT_0000_8490)) << DAT_0000_8490 | uVar6 >> (0x20 - DAT_0000_8490);
+     bVar3 = *(byte *)(uintptr_t)((_uRam00006add & 0xffffff00) | (((uint)(byte)_uRam00006add + (uint)(byte)*(char *)(iVar14 + uVar7)) & 0xff));
+     if (*(byte *)((int)&DAT_0000_4e60 + iVar5) < bVar3) {
+       LOCK();
+       bVar1 = *(byte *)((int)&DAT_0000_4e60 + iVar5);
+       *(byte *)((int)&DAT_0000_4e60 + iVar5) = bVar3;
+       UNLOCK();
+-      uVar4 = *(undefined1 *)(iVar14 + 0x100000 + uVar7);
++      uVar4 = *(undefined1 *)(iVar14 + DAT_0000_8498 + uVar7);
+       puVar16 = (undefined1 *)(&DAT_0000_4a60)[iVar5];
+       for (uVar7 = (uint)(byte)(bVar3 - bVar1); uVar7 != 0; uVar7 = uVar7 - 1) {
+         *puVar16 = uVar4;
+@@ -11091,7 +11091,7 @@
+     bVar1 = *(byte *)(g_mem+fist_ext_base + 0x4e5f + iVar8);
+     *(byte *)(g_mem+fist_ext_base + 0x4e5f + iVar8) = bVar3;
+     UNLOCK();
+-    uVar4 = *(undefined1 *)(iVar14 + 0x100000 + uVar6);
++    uVar4 = *(undefined1 *)(iVar14 + DAT_0000_8498 + uVar6);
+     puVar16 = *(undefined1 **)(g_mem+fist_ext_base + 0x4a5c + iVar8 * 4);
+     for (uVar6 = (uint)(byte)(bVar3 - bVar1); uVar6 != 0; uVar6 = uVar6 - 1) {
+       *puVar16 = uVar4;
+@@ -11103,7 +11103,7 @@
+ LAB_0000_6b50:
+     uVar9 = uVar9 - *(int *)(g_mem+fist_ext_base+0x6b52);
+     uVar10 = uVar10 + *(int *)(g_mem+fist_ext_base+0x6b58);
+-    uVar6 = (uVar10 >> 0x16) << 10 | uVar9 >> 0x16;
++    uVar6 = (uVar10 >> (0x20 - DAT_0000_8490)) << DAT_0000_8490 | uVar9 >> (0x20 - DAT_0000_8490);
+     bVar3 = *(byte *)(uintptr_t)((_uRam00006add & 0xffffff00) | (((uint)(byte)_uRam00006add + (uint)(byte)*(char *)(iVar14 + uVar6)) & 0xff));
+     if (bVar3 <= *(byte *)(g_mem+fist_ext_base + 0x4e5f + iVar8)) {
+       iVar8 = iVar8 + -1;
