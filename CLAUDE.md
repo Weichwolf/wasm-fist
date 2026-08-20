@@ -232,6 +232,15 @@ Traced end-to-end with env-gated shim + bc9c-entry logs:
     0x4200/0x10000 read past the 64KB buffer, NOT a wrap) — a DUMP-window artifact, not a build error.
 Still VERIFIED-correct: file-load, 9f10 sort, [5598]@bc9c sorted==[5260], [4f60]==[5260]>>1, ac70 (0/40960),
 diff tables, block A, search range 80..255.
+  - **bdc4 (the matrix CONSUMER) is also FAITHFUL (objdump 0xbdc4):** it 2×-upsamples [0x85b8] (colormap
+    reduce) reading the blend matrix at `(bc90 & 0xffff0000) + prev*256 + cur` — i.e. the SAME 64KB-aligned
+    base bc9c WROTE to (the 0x4200 low bytes of bc90 are overwritten by the prev/cur pixel bytes, so the
+    window is irrelevant to bdc4). The decompile's `CONCAT31((iVar6>>8), cur)` reproduces exactly that host
+    address. So bc9c→bdc4 is self-consistent; the FIST_BC90DUMP "+0x4200 shift" was a DUMP artifact (it read
+    the windowed bc90 ptr, not bdc4's aligned base). ⇒ the whole 9f10→bc9c→ac70→bdc4 chain is proven faithful;
+    the only remaining port-only-unverified voxel stages are **9200 (per-column sampler)** and the
+    **heightmap [0x85bc] / reduce [0x85b8] build** — but the decisive blocker stays a PROVENANCE-verified
+    oracle (the misprovenanced oracle_bc9c means we cannot even confirm the voxel IS wrong).
 **NEXT (voxel re-scoped — the palette/bc9c/ac70 chain is faithful):** (a) DISCARD or re-provenance
 oracle_bc9c_matrix_blockB — recapture bc9c's output (and [5598]@bc9c) from the ORIGINAL at a KNOWN tick
 (QEMU/instrumented DOSBox) before trusting any bc9c-diff; (b) if the windshield still visibly mismatches a
