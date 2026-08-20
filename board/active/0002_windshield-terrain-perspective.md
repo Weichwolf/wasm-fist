@@ -937,3 +937,18 @@ the subpixel frame-match ceiling and the fix is complete-enough to land. SESSION
 structural piece is the proj-table build (near-terrain distance rows); the subpixel half
 is likely the frame-match ceiling. The windshield is decomposed to its final structural
 component + a measurement ceiling.
+
+Proj-table read (the last structural piece). The oracle proj-table (from the sim blob
+voxel6980_inputs_lt2pass00.bin.gz) is 64000 bytes = 250 distance-rows x 256 height-
+indices: proj[d][i] = the projected screen span for distance-row d, height-index
+i=(L0+HM)&0xff. Far rows (d~0) are ~all 255; near rows (d~12) are a rising gradient
+(128,153,179,204,230,255,...). It lives at ext [0x3909] (base; 6980's read base is
+SMC-patched at 0x6add from [0x3909]+[0x90dc]-derived L0). This distance-indexed curve is
+the near-terrain structural residual: the port's proj-table build must match the oracle's.
+NEXT: find the port's proj-table BUILD function (writes the 250x256 curve at [0x3909]) --
+it is a perspective/projection table built from the camera (90fc/9100 the port had as 0,
++ 90c0), so it may be tied to the same 8fa0/8120 projection that was unset; build it
+faithfully, compare to the oracle 250x256, and the near rows (21-85) should close from
+72-86% toward 100%. Combined with the 6980 SMC fix (10.6->80.4%), a faithful proj-table
+should reach near-bit-exact terrain (modulo the ~47% subpixel frame-match ceiling). Then
+author the COMPLETE windshield patch (6980 SMC + proj-table + op-dispatch + matrix flow).
