@@ -82,3 +82,18 @@ program-change), see how a program-change reaches 0f99 in the asm (likely an
 indirect call / jump-table the port's fist_icall doesn't resolve), and wire it;
 then instruments reload per voice and the FM output matches. Deep in the sequencer/
 dispatch layer, like the voxel's 6980 -- both are the engine's paged/indirect core.
+
+CONFIRMED (not a duration artifact): re-ran the port for 55s (matching the oracle,
+12487 OPL writes / 4899 key-on) -- reg 0x20 still only ever = 0x01, and across the
+op1 regs 0x20-0x25 the port emits exactly ONE instrument each {01,01,01,11,11,11}
+while the ORIGINAL emits several {01,31 / 01,21,31 / 01,31,b1 / 11,61 / ...}. So the
+port genuinely plays the whole song with the init instrument and NEVER triggers a
+program-change; 0f99 (instrument load) is only reached from the OPL init (104f), not
+from the note sequencer. Both the note-on handler (10a6) and 0f99 are dispatched
+INDIRECTLY -- note-on resolves (notes play, 4899 key-on) but the program-change path
+to 0f99 does not fire. The sequencer's event loop (the fn that reads the song stream
+and indirectly calls 10a6) is the large indirect-dispatched core still to be found;
+FUN_0000_1e5e @5456 is the sound-DEVICE dispatch (SB detect), not it. NEXT: locate
+the note sequencer (indirect caller of 10a6) and its program-change case, and wire
+its 0f99 dispatch. Audio and voxel both bottom out in the engine's indirect-dispatch
+core -- the highest-leverage direction is completing that dispatch, not per-surface.
