@@ -251,3 +251,17 @@ fist_ext_689a) leave the terrain rows the original leaves -- i.e. composite sky
 only above the terrain horizon, matching the original's 87/13 split -- rather than
 fill the full 256x256. Compare the port's post-689a tile to the original's 0x44200
 tile row-by-row to find the exact fill extent 689a should use.
+
+Chain fully resolved (isolation test: FIST_FORCE395C=0 keeps terrain-everywhere,
+=1 gives sky-everywhere): the 0x7660 reconstruction correctly sets [0x3958]=0x689a
+(sky-render fn ptr; oracle TCB[+0xcc]=1) and [0x395c]=1, and the render dispatches
+indirectly through [0x3958] -> 689a (no direct `call 0x689a` in the asm; it runs
+via the fn-ptr; 6980 is called from 0x3946). The remaining bug is purely the SHIM
+689a reconstruction (native_main fist_ext_689a): it OVER-FILLS the colormap tile
+[0x3918] with sky (~100%) whereas the ORIGINAL's post-689a tile is 87% sky / 13%
+terrain (dosbox-fist page-walk of 0x44200). So 9200 reads sky in every ray instead
+of sky-upper + terrain-lower. FIX (bounded, deep): reconstruct 689a faithfully from
+the pinned asm (objdump 0x689a) so its perspective resample leaves the terrain band
+the original leaves -- target = the saved /tmp oracle tile (element-wise), 87/13
+split. The camera + sky-setup fixes stay (both oracle-correct); 689a fidelity is
+the last windshield piece.
