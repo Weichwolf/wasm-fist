@@ -172,3 +172,33 @@ pose (TCB +2c/30/34 pos, +38/3a/3c ang from a guest-RAM capture) and force the p
 to that exact pose before the windshield diff. Only a pose-matched terrain diff can
 tell a render bug from a pose difference. (bc9c/bd0e/bdc4 remain asm-verified faithful;
 this says the current windshield METRIC is confounded, not that those are wrong.)
+
+MAJOR REFRAME -- the windshield defect is the CAMERA, not the tile-build (confirms
+the pose-confound + the shim-reconstruction hypothesis, now concrete). The shim
+DOCUMENTS it (native_main.c:1350): "the LIVE mission CAMERA is degenerate (TCB Y off
+~40x, alt ~9x -- residual #2)". Read the port's live spawn pose (FIST_MISSFB_PROBE)
+vs the KNOWN oracle pose (hardcoded in the FIST_R3D2_V18 harness / docs/
+oracle_terrain_writer.md: X=609696 Y=1112229 alt=29184 head=19745 pitch=0 roll=128
+foc=256 detail=0):
+    field        port(live)   oracle    divergence
+    alt (+34)    12800        29184     2.3x too SMALL
+    pitch(+3a)   384          0         hand-seeded WRONG
+    roll (+3c)   256          128       hand-seeded WRONG (2x)
+    heading(+38) 26729        19745     differs
+    X/Y(+2c/30)  583982/1142557 609696/1112229  ~3% (close)
+So the pure render funcs (bc9c/bd0e/bdc4/6980/9200 -- asm-verified/likely faithful)
+are fed a WRONG CAMERA: the shim HAND-SEEDS the angles (pitch=384/roll=256) as a
+band-aid, but the oracle has pitch=0/roll=128, and alt is 2.3x off. A wrong camera
+makes 9200 walk the wrong part of the terrain at the wrong altitude/attitude ->
+the whole windshield diverges regardless of render fidelity. This is THE windshield
+defect and it lives in the SHIM camera reconstruction, exactly as the reframe predicted.
+DOCTRINE FIX (no band-aids): make the camera-setup faithful -- the original computes
+the pose via its flight model + 85d0 camera; the port hand-seeds it because that
+path isn't running/ported. NEXT: (a) trace where the port sets TCB +2c/30/34/38/3a/3c
+(the seed site ~1516 + any engine writes) and why alt is 2.3x + angles are hand-set;
+(b) find the original's camera-setup (flight model / 85d0 inputs) via fist_image.bin
+asm and port it so the pose is COMPUTED = oracle, removing the hand-seed. Then re-run
+the (existing) FIST_R3D2_V18 pose-matched harness -- note it currently doesn't
+trigger under the MC_MOUSE drive (op-0x54 gate); its trigger needs repair to validate
+render fidelity at the oracle pose against oracle_9200_framematched_pass08.idx.bin /
+oracle_mission_spawn_framematched_idx.bin (pose-matched oracle FB samples that EXIST).
