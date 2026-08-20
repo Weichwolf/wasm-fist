@@ -1091,3 +1091,23 @@ correction. REMAINING for the complete windshield (still open): FIX2 wire the op
 (so the engine's posted render ops run + the tick advances so they're posted at all),
 FIX3 windshield matrix flow; plus follow-up sibling-SMC patches (6d/7f/8f/90 for ops 0x10
 etc. -- same correction class). NEXT: FIX2 op-dispatch, or the sibling SMC patches.
+
+FIX0/tick RETRACTED (render ops DO post) + FIX2 prerequisite found. Traced the engine's
+posted ops without FIST_MISSFB (which _exits at op-0x24): the engine posts op 0x08 (tile-
+build) AND op 0x24 (sample) REPEATEDLY (3x each, alternating 0x08->0x24 per frame). So the
+render loop IS running, the tick DOES advance (in-mission one-tick-per-pump), and the render
+ops ARE posted -- my earlier "engine posts no render ops / tick frozen" was an artifact of
+the FIST_MISSFB _exit + the first-80-ops window. FIX0/tick is NOT needed.
+So the ONLY windshield gate is FIX2: the posted op 0x08/0x24 are LOG-AND-RETURNED instead of
+dispatched to 6980/9200. Wiring op 0x08 -> m_ext 8df0()+3931() (tile-build via 6980, now
+SMC-correct by patch 407) CRASHES with FPE (divide-by-0): 8df0 sets the viewport dims from the
+TCB rect (+0x16..0x1c), which is 0 in the port (the documented "viewport-dim frontier":
+FUN_0000_ddff writes TCB+0x1e/+0x22 from a rect that is never populated) -> a 0 viewport ->
+divide-by-0 in 3931/85d0. So FIX2 has a PREREQUISITE: populate the TCB viewport rect faithfully
+before the render ops run. So the windshield render chain is: [viewport-setup: TCB rect] ->
+op 0x08 (6980 tile, SMC-correct via 407) -> op 0x24 (9200 sample). The viewport-setup is the
+missing first link. NEXT: trace/populate the TCB viewport rect (FUN_0000_ddff's source rect
+@word[0x156a], never populated -- find who should write it: the op-service setup op that sets
+the mission viewport), then wire op 0x08/0x24 dispatch and measure the real render-path terrain
+(expect ~78.7% like the scaffold, now via the engine's posted ops). FIX1 (patch 407) landed;
+FIX2 = viewport-setup + op-dispatch wiring.
