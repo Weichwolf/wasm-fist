@@ -94,3 +94,14 @@ diverges from native under wasm's cooperative cadence), NOT a tick-hold tweak.  
 (g_web_mode=0) reaches the full 51k console at op-0x24 post#1, but that path captures-and-exits; the
 LIVE g_web_mode loop reaches only ~27k -> the divergence is in the live in-mission loop, not the
 op-0x24 render itself.  Reverted the experiment; 9ab60c6 stands.
+
+*** BROWSER -O2: ~5.6x faster in-mission, BYTE-IDENTICAL (commit ef0f518) ***
+The engine C (decompile + shim) was built -O0 -g.  Tested -O2: the mission-cockpit op-0x24 frame
+(voxel render + 459a sim -- the hardest path) is BYTE-IDENTICAL native(-O0) == node-wasm(-O2), and a
+full-matrix verify (NATIVE=-O0 vs OUTJS=-O2) runs clean (front-end + settings so far).  So the
+machine-generated decompile is well-behaved under -O2 (no UB exploited; -fno-strict-aliasing).
+Switched build_web.sh -> -O2: measured in-mission fps 0.4 -> 2.26 (headless-chromium), menu snappier.
+Kept build.sh/native at -O0 -g (gdb tracing).  FOLLOW-UP OPTION: if the -O2 full-matrix verify passes
+159/0, -O2 could be adopted for build.sh + native too (faster verify/DoD-gate + native), trading -g.
+The in-mission render is still ~2.3fps (compute-bound even at -O2) + partial M1CON console + static
+3a24 terrain -- those remain the deep frontiers, but the mission is now WATCHABLE in the browser.
