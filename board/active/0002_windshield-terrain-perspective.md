@@ -1361,3 +1361,15 @@ FIST.DAT 3a24/3e24 base-ray-curve builder. That is a bounded search in the FIST.
 decompile (fist.c / fist_dat_image.bin) for the detail-LOD curve that gets written into the
 extender segment. NEXT: locate the 3a24/3e24 producer in FIST.DAT (search fist.c for the
 detail-curve build + the far write into the ext segment; or the extender op that receives it).
+
+*** 3a24/3e24 PRODUCER: NOT in fist.c -- narrowed to extender op-handler / FUN_3a18|3a20 ***
+fist.c (FIST.DAT main engine decompile) has ZERO references to 0x3a24/0x3e24/0x100000/ext
+base -- so the base ray-curves are NOT written by a direct far-store from the main engine.
+The data flow is therefore either (a) FIST.DAT posts an op whose args carry the base curve
+and an EXTENDER op-handler writes 3a24/3e24 via a pointer, or (b) an extender function
+builds them via an indirect pointer (which a direct-disp grep cannot see). Lead: 395e reads
+_FUN_0000_3a20 (the value at 0x3a20, immediately before the 0x3a24 table = a count/length),
+and there are two tiny functions FUN_0000_3a18(int*) / FUN_0000_3a20(int*) named by their
+address right at the table -- prime builder candidates. NEXT: read FUN_0000_3a18/3a20 bodies
+and trace their callers; and enumerate the voxel SETUP op-handlers (0x68/0x6c/0x70/0x74/0x7c
+in the op-table @0xcb3) for the one that receives/writes the base ray-curve into 3a24/3e24.
