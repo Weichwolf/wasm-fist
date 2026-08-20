@@ -918,3 +918,22 @@ the frame-match ceiling. NEXT: characterize the 20% residual (scattered=frame-ma
 noise vs structured=a specific proj-table bug) by mapping WHERE the port/oracle terrain
 indices differ; if structured, fix the proj-table build; if scattered near the ceiling,
 proceed to author the complete windshield patch (6980 SMC + op-dispatch + matrix flow).
+
+20% residual characterized (mixed: subpixel ceiling + a proj-table structural error).
+Per-row terrain match (6980 SMC fix + oracle projection, 80.4% overall): rows 5-13
+(far/horizon) = 100%, rows 21-85 (near) = 72-86%. Mismatch magnitude: 47% are |diff|<=8
+(subpixel/adjacent-texel = frame-match ceiling), 53% larger (median 9, mean 18.4). The
+DISTANCE GRADIENT (far perfect, near degraded) points to a distance-dependent structural
+error -- the proj-table height projection proj[detail*0x100 + ((L0+HM)&0xff)] (L0 is the
+distance/light level from 90dc, which MATCHES oracle). So the proj-table CONTENT is the
+likely near-terrain divergence: the port's proj table (the "detail base curve" the ~30
+SMC slots also feed) may be built differently than the oracle's. So the last structural
+piece is the PROJ-TABLE BUILD. NEXT: read the oracle's proj table from the guest-RAM dump
+(the table 6980 indexes at 6aee, base SMC-patched at 0x6add from [0x3909]/[0x90dc]) and
+compare to the port's build; find the proj-table build function in the extender and
+verify/fix it. If the proj-table matches and the near-rows still differ, the residual is
+the subpixel frame-match ceiling and the fix is complete-enough to land. SESSION SUMMARY:
+6980 SMC root fix = 10.6%->80.4% (7.5x, root-caused+oracle-proven); the remaining
+structural piece is the proj-table build (near-terrain distance rows); the subpixel half
+is likely the frame-match ceiling. The windshield is decomposed to its final structural
+component + a measurement ceiling.
