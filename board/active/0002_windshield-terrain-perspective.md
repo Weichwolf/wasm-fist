@@ -477,3 +477,24 @@ colormap contiguous, re-measure the index match (a proper 1024^2 view should jum
 past 33.6%); if it does, that confirms the resolution root and the faithful fix is to
 have the map-load produce the 1024^2 voxel buffer 6980 expects (or stop the HM upsample
 at 1024 for this buffer). This is the concrete, measured windshield fix path.
+
+MEASURED CONFIRMATION -- 1024^2 downsample lifts terrain 33.6% -> 73.2%. Implemented
+FIST_TILEFILL_DS: instead of copying the first 1 MB of the 2048^2 HM/colormap, build a
+GENUINE 1024^2 downsample (every-other row/col: hmcm[y*1024+x]=src[(2y)*2048+(2x)],
+colormap likewise at +0x100000). Result on the AZER1 spawn vs oracle_9200_framematched_
+pass08.idx.bin:
+    baseline (stale tile, no 6980) : 10.6%
+    TILEFILL plain (6980, first 1MB of 2048^2) : 33.6%
+    TILEFILL_DS (6980, genuine 1024^2 downsample) : 73.2%   <-- 2.2x jump
+This CAUSALLY CONFIRMS the resolution root: 6980 walks a 1024^2 map, and giving it a
+proper 1024^2 HM+colormap (contiguous, colormap at +0x100000) makes the terrain match
+jump to 73.2%. The full chain is now measured end to end: run 6980 (10.6->33.6) + feed
+it the right 1024^2 resolution (33.6->73.2). The remaining ~27% gap is likely the
+DOWNSAMPLE METHOD (every-other vs the original's actual reduction -- averaging / a
+specific 2:1 filter) and/or colormap light-reduce details. NEXT: (a) determine the
+original's HM reduction (is the map even upsampled to 2048^2, or does the port
+over-upsample -- read the runtime [0x8494] path + whether the original's voxel buffer
+is 1024^2 natively); (b) try averaging vs point-sampling for the downsample; (c) then
+land the faithful fix -- have the map-load produce the 1024^2 voxel buffer 6980 expects
+(no TILEFILL band-aid). This is the strongest windshield progress of the session: a
+CONFIRMED fix direction with a measured 73.2% (from a 10.6% baseline).
