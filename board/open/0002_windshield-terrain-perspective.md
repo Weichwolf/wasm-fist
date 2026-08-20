@@ -194,3 +194,14 @@ the already-faithful sky pipeline builds the sky (proven: a dummy 4.MEG that for
 395c=1 flips the port from 28 to 22887 sky-ish px). Next: find where 0x7660 is
 entered (call site / fn-ptr table) to wire the reconstruction, and apply the
 camera pitch/roll=384/256 seed; verify the windshield vs a dashboard-AE=0 burst.
+
+Dispatch pinned: 0x7660 is reached as a SEPARATE op -- op-table (fist_image.bin
+@0xcb3) entry 0x22 -> 0x10da (`call 0x7660; ret`), distinct from the map-load
+entry 0x0c -> 0x10ca (`call 0x89b0`). So the sky-setup runs when the engine posts
+that op; the port never runs it because 0x7660 lives in the decompile gap. FIX
+options: (a) reconstruct FUN_0000_7660 in the shim (read its full asm from 0x7660
+onward -- it also touches TCB[+0xcc]/[+0xd1] and sets the render-fn pointer
+[0x3958]) and invoke it at map-load right after 89b0, or (b) wire the op-0x22
+handler to it. Reconstruction is faithful (matches the pinned asm, like the 689a
+reconstruction), not a band-aid. Then the sky builds and, with camera pitch/roll
+=384/256 applied, verify the windshield vs the AE=0 burst reference.
