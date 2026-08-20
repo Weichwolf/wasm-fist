@@ -55,3 +55,18 @@ fist_image.bin), so the decisive datum is the ORIGINAL's TCB camera at the AZER1
 spawn — an instrumented-DOSBox / QEMU guest-RAM capture. Blocked on that oracle
 capture (dosbox-fist not built here); until then, verify 85d0->8120->9200 against
 the asm to rule the projection in or out port-only.
+
+Port-only verification narrows it further (this round): 85d0 (camera setup) is
+asm-exact (objdump 0x85d0: X<<0xd, Y<<0xd neg, alt clamp 0x7f00 <<0x11, heading
+<<0x10 neg, 0xffffffff/focal; reads 0x2c/0x30/0x34/0x38/0x3e, NOT pitch 0x3c — so
+the earlier pitch=-256 lead is a dead end). The heightmap [0x85bc] is smooth and
+coherent (adjacent-cell mean-abs-diff 0.82, min15/max96/mean53, cloud-like relief)
+— correctly decoded, not the noise source. 9200 (the per-column sampler) is
+faithful: patch 286 restores its self-modifying colormap base (asm `mov al,[eax+
+disp]` with disp patched to DAT_0000_3918) and its index math (shld/shld =
+(Yhi<<8)|Xhi) matches. So the colormap it samples and the sampler are both right.
+Remaining suspect: 8120 (projection -> the param_1/param_2 ray deltas 9200 steps
+by) and 8deb (viewport + the per-column horizon/sky-skip table [0x9114]). The probe
+showed the per-column horizon (910c) mostly 0 -> terrain from the top edge, vs the
+original's large sky band; patch 341 already touched 8120 (signed imul), so verify
+8120/8deb next against the asm.
