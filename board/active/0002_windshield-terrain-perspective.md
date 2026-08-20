@@ -439,3 +439,24 @@ faithful) samples the real colormap with NO TILEFILL band-aid. NEXT: verify the 
 runtime gap ([0x85b8]-[0x85bc]) at op-0x18, confirm it != 0x100000, then adjust the
 map-load buffer alloc (shim MEMMGR / 36bf order+size) to make them contiguous; re-run
 the index compare (expect a large jump past 33.6% toward bit-exact).
+
+GAP CONFIRMED -- a 4x RESOLUTION mismatch. FIST_GAPCHK dumps the port's runtime
+pointers: [0x85bc](HM)=0x08324200, [0x85b8](CM)=0x08724200 -> gap = 0x400000 (4 MB),
+but 6980 hardcodes the colormap read at [0x85bc]+0x100000 (1 MB, asm `mov
+0x100000(%esi,%ecx,1),%al`). So the port's HM is 4 MB (2048x2048) and its colormap
+sits 4 MB later, while 6980 reads the colormap 1 MB after the HM base -> it reads
+HM row ~512 as colormap. Since 6980's colormap offset is a fixed 0x100000 and coord
+walks the map, the map 6980 expects is 1024x1024 (1 MB HM + 1 MB colormap, contiguous
+in 2 MB). THE PORT OVER-UPSAMPLES the HM to 2048x2048 (4 MB). This is why even
+FIST_TILEFILL (which builds a 2 MB HM[0..1MB]+CM[1MB..2MB] buffer) only reaches 33.6%:
+it copies the FIRST QUARTER of the 2048^2 HM as if it were the full 1024^2 map, so the
+heights (and thus the sampled colours) are wrong scale/region.
+ROOT (resolution): the map-load upsamples HM until [0x5578]>=[0x8494]=2048; but 6980's
+voxel walk + its fixed 0x100000 colormap stride expect a 1024x1024 (1 MB) map. Either
+the original stops the HM upsample at 1024 for the 6980 path, or 6980 walks a 1024 view
+of a 2048 map with a matching (0x400000?) stride that the port mis-set to the image's
+literal 0x100000. NEXT: read the original 36bf HM alloc SIZE (0x8ba5, from [0x937]) +
+what dim 6980's coord actually spans (its map-size register), to decide whether the fix
+is (a) HM upsample target 1024 not 2048 for the voxel buffer, or (b) a colormap placed
+0x100000 after a 1 MB HM view. The gap mismatch (0x400000 vs 0x100000) is the concrete
+lever; reconciling it is the windshield fix.

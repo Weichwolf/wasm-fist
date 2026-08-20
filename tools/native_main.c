@@ -1579,6 +1579,9 @@ int fist_extender_gate(void) {
             }
             static uint8_t *hmcm=0; static uint32_t hm_src=0;
             uint32_t hmb=*(uint32_t*)(xb+0x85bc), cmb=*(uint32_t*)(xb+0x85b8);
+            if(getenv("FIST_GAPCHK")){ static int gc=0; if(!gc){gc=1;
+                fprintf(stderr,"[gapchk] [0x85bc](HM)=%08x [0x85b8](CM)=%08x  cmb-hmb=%d (0x%x)  expect 0x100000=%d\n",
+                    hmb,cmb,(int)(cmb-hmb),(int)(cmb-hmb),0x100000);}}
             const char*rf2=getenv("FIST_TILEFILL_RED");   /* override colour source (e.g. light reduce) */
             const char*hf2=getenv("FIST_TILEFILL_HM");    /* DIAGNOSTIC: override heightmap (frame-match) */
             if (hmb && cmb) {
