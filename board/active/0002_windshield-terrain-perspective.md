@@ -830,3 +830,29 @@ reduce fn writing through &[0x85bc]). NEXT: disassemble the path from 3931/85d0 
 it from the 2048^2 map + [0x85b8]; port that build so 6980's input is bit-exact ->
 terrain bit-exact. All buffer CONTENT is faithful; the open step is the exact reduce/
 build of 6980's repointed 1024^2 input buffer.
+
+*** BREAKTHROUGH -- ROOT FOUND + fix validated past the plateau (78.7% > 73.2%) ***
+THE ROOT: the port's ported 6980 uses the STATIC (un-SMC-patched) image constants
+everywhere; the ORIGINAL self-modifies ~30 slots at map-load (block 0x8a80-0x8b14
+writes [0x8490] into the shift/stride slots, [0x8498] into the colormap-displacement
+slots). Proven by the oracle dump: 6980's colour-read displacement (6b1a) is 0x100000
+in the static image but 0x400000 in the render-time dump (SMC 8b24: mov [0x8498],
+0x6b1d). So the port reads [0x85bc]+0x100000 (dark, inside HM) where the original reads
+[0x85bc]+0x400000 = [0x85b8] (the LIGHT colormap). Similarly the coord shld amount
+(6ae6) is 0x0a static but SMC-patched to [0x8490]=0xb (2048^2 index, not 1024^2).
+VALIDATED FIX (ephemeral build/ test): changed the port 6980's colour displacement
+0x100000 -> DAT_0000_8498 AND coord `>>0x16<<10` -> `>>0x15<<0xb` (N=11), ran 6980 on
+the REAL 2048^2 [0x85bc] (FIST_TILEFILL_REAL, no downsample/repoint): terrain jumped to
+78.7% -- PAST the 73.2% downsample plateau. So the faithful fix is NOT a downsample
+band-aid; it is applying the SMC patches to the ported 6980 so it uses the DYNAMIC
+[0x8490]/[0x8498] values on the real 2048^2 buffers. The remaining ~21% is the OTHER
+~28 un-applied SMC slots (ray-step 6ad2/6ad8 from D4224*90fc/9100, proj-table base
+0x6add/0x6b5d, running-max [0x4e60], the sibling reads 6b9a). THE LANDABLE FIX: a
+patches/NNN-*.diff that makes 6980 (+ siblings 6d/6e/8fa0) use the SMC-patched dynamic
+values ([0x8490] for every shld/shift amount, [0x8498] for every colormap displacement,
+etc.) instead of the decompiled static image constants -- systematically, all ~30 slots.
+The board's earlier "LOD is SMC-patched into ~30 slots" note is exactly this; now it's
+the confirmed root with a measured 78.7% validating the direction. NEXT: enumerate all
+~30 SMC target addresses (the 0x8a80-0x8b14 `mov %al/%eax,0xXXXX` writes) + map each to
+its decompiled static constant in 6980/siblings, replace with the dynamic [0x8490]/
+[0x8498] value, and drive the terrain to bit-exact.
