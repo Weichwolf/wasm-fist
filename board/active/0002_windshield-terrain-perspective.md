@@ -876,3 +876,24 @@ in 6980's inner loop) + verify the ray-step SMC (6ad2/6ad8 from D4224*90fc/9100,
 separately at 6a a3-sites), re-measure toward bit-exact; then author patches/NNN-6980-
 smc-dynamic.diff making 6980 use [0x8490]/[0x8498] dynamically. This is the first
 LANDABLE windshield fix -- root-caused, oracle-proven, and measured (78.7% and climbing).
+
+Dynamic fix validated + patch-ready (78.7%); NOT landed in isolation (doctrine). The
+faithful dynamic form -- coord shift `>>0x16<<10` -> `>>(0x20-DAT_0000_8490)<<DAT_0000_
+8490` and colormap disp `0x100000` -> `DAT_0000_8498` in 6980 (both reads) -- gives the
+SAME 78.7% as the hardcoded test, so it works for any LOD via the real SMC source values.
+This is a correct, asm-verified decompile correction (the port's 6980 used STATIC image
+constants; the original SMC-patches them; per "code is the truth" the static form is a
+bug). BUT per "vollstaendig oder gar nicht" + "Tests sind Spezifikation" it is NOT landed
+alone: it is INERT for all current flows (6980 is not called in the default op-dispatch,
+which is still stubbed; the windshield is not a matrix flow), and 78.7% != bit-identical.
+It lands as PART OF the complete windshield fix (6980 bit-exact + op-dispatch wiring to
+call 6980 + a windshield matrix flow that goes bit-identical on native+wasm). The
+remaining ~21% to bit-exact (with all 6980-path SMC applied + real 2048^2 buffers + ray
+tables no-effect) is the PROJECTION geometry: 8120's camera->ray outputs (90b8/90bc/90d4/
+90d8) + the proj-table height projection + the per-column run geometry. NEXT: compare the
+port's 90b8/90bc/90d4/90d8 (8120 projection outputs) to the oracle's (from the guest-RAM
+dump) at the AZER1 camera; find + fix the projection divergence to drive 6980 bit-exact;
+then wire op-0x08->6980 + add the windshield matrix flow + land patches/407-6980-smc-
+dynamic.diff (+ the projection fix + the op-dispatch) as the COMPLETE, test-verified
+windshield fix. The root is found + fix validated (10.6%->78.7%); the complete landing is
+the remaining bounded work.
