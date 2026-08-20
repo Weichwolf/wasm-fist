@@ -241,3 +241,24 @@ needs the menu-nav injection like the verify flows) + FIST_OPL_REGLOG, then: con
 stuck 0x01, and instrument 0f99 to see if the original's path would call it. HONEST STATUS: no
 landable audio patch found this session; the gap is real but deep (song-level patch-change in
 the sequencer, same indirect/parse core as the voxel). Both surfaces need focused sessions.
+
+*** PRECISE ROOT (asm-grounded): per-voice instrument assignment at SONG-PLAY is missing ***
+Read build/ FUN_0000_0a28 (PATCH 358, the menu-music advance) in full: it ONLY reprograms note
+FREQUENCY -- for each of 10 voices it walks the note stream ([0x90], delta bytes; 0x80=hold,
+0x81=loop, else=note delta) and on a note change dispatches [ds:0x1b3]=device-3 slot4=FUN_0000_10a6
+(OPL A0/B0 fnum), tail [ds:0x189]=slot1=10a5(ret). It parses NO program/instrument-change events.
+So the menu song is per-voice monotimbral: each voice's INSTRUMENT is assigned ONCE at song-play,
+not mid-stream. 0f99 (the OPL instrument-patch load: writes regs 0x20-0xF5 from the 16-byte record
+at driver_ds:instr*0x10+0x1dd, and caches byte[1] in [0xbdd+voice]; note-on 10a6 re-emits reg 0x20
+from that [0xbdd] cache) is a DEVICE METHOD -- 0x0f99 appears exactly once in the image, at 0x2c19,
+inside the per-mode device-method table (~14-byte records; group with 0x0f99 = device-3/OPL). It is
+dispatched via the vector mechanism, and in the port it fires ONLY from the OPL init 104f with
+instrument 0 -> every voice plays instrument 0 -> reg 0x20 stuck 0x01, WAV corr 0.126. The ORIGINAL
+assigns each voice its song instrument via 0f99 at song-play -> reg 0x20 takes 0x31. THE MISSING
+PIECE: the song-play / voice-setup path that calls the OPL instrument-set (0f99) per voice from the
+song's per-voice instrument bytes. 0872 seeds all voices to the default stream 0x15b0 + instrument 0;
+the real menu song's per-voice instrument assignment is a separate song-play call the port does not
+fully run (an unresolved indirect dispatch / a song-play fn not wired). NEXT (focused): find the
+song-PLAY entry (sets the real per-voice [0x90] streams AND instruments; distinct from 0872's default
+seed), locate its per-voice 0f99 call, wire it; verify reg 0x20 0x01->0x31 + WAV corr rise. This is
+the precise, asm-grounded audio root -- the strongest and most specific the surface has reached.
