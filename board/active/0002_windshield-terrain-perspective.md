@@ -89,3 +89,17 @@ Building that capability unblocks both. A quick shim experiment (sweep the
 reconstructed alt / eye-height and re-render) can test whether alt-too-low alone
 raises the horizon into view, but matching the original's terrain CONTENT still
 needs its full X/Y/heading.
+
+Camera-sweep experiments against the AE=0 framebuffer reference (no guest RAM
+needed, so this line of attack is NOT blocked on 0007): overriding the render
+camera changes the windshield (a wildly different camera differs 71% from the
+default render, so the shim's op-0x24 voxel chain IS drawing it and IS
+camera-responsive), yet NEITHER the default NOR any camera override produces the
+original's SKY band — every variant fills terrain top-to-bottom and stays 75.5%
+different, with the sky rows 5-45 ~78% wrong. So the sky/horizon is missing
+independent of camera position/orientation. That points at the horizon/sky-skip
+geometry rather than the camera: the per-column sky-skip 910c (read from the baked
+table [0x9114] = (&PTR_748c)[detail], detail 1 -> image 0x7568) came out mostly 0
+in the probe, and 90f0 (the per-column fill height) / 8deb (viewport setup) decide
+how far terrain fills. Verify 8deb + the 0x7568 sky-skip table + 90f0 against the
+asm next — a port-only step.
