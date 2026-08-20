@@ -43,3 +43,15 @@ initial camera. Next: dump the LIVE TCB camera (ea2e:ea2c +0x2c X /+0x30 Y /+0x3
 alt /+0x38 heading /+0x3e focal) at the op-0x2c spawn and sanity-check it; the
 shim already has FIST_MISSFB_PROBE for this. If alt/focal are wrong, that is the
 terrain-everywhere cause.
+
+Port camera at the AZER1 op-0x24/0x2c spawn render (FIST_MISSFB_PROBE): TCB +0x2c/
++0x30/+0x34 (X/Y/alt) = 583982/1142557/12800, +0x38/+0x3a/+0x3c/+0x3e (heading/roll/
+pitch/focal) = 26729/0/-256/256, detail +0xcd/+0xcf = 1/0. alt=12800 matches the
+shim's oracle-anchored terrain-follow (h=43, (43<<8)+1792). Prime suspect is
+pitch=-256 (looking DOWN): a wrong pitch pushes the horizon above the top edge, so
+terrain fills the whole view — exactly the observed symptom. The camera is a SHIM
+reconstruction (the 32-bit flight model that writes TCB +0x34/+0x3c is paged out of
+fist_image.bin), so the decisive datum is the ORIGINAL's TCB camera at the AZER1
+spawn — an instrumented-DOSBox / QEMU guest-RAM capture. Blocked on that oracle
+capture (dosbox-fist not built here); until then, verify 85d0->8120->9200 against
+the asm to rule the projection in or out port-only.
