@@ -1211,3 +1211,21 @@ incremental single-op probes. The session's durable, verified win is FIX1 (patch
 6980-SMC core correction). The windshield is fully diagnosed, its core bug fixed+landed, and
 FIX2 precisely scoped as the dedicated pipeline-reconstruction effort. This is the natural
 endpoint of the diagnostic+core-fix phase; FIX2 is a focused future-session build.
+
+Camera is ENGINE-side (deepens FIX2 to touch the mission sim). No writes to 9614/9618/
+961c or TCB+0x2c appear in the EXTENDER image (fist_image.bin); the vehprobe read them
+from dg+0x9614 (engine DGROUP). So the camera (TCB +0x2c..0x3e) is populated ENGINE-side
+by the per-tick mission sim (FIST.DAT), which the extender render READS via the TCB. So
+FIX2 touches not just the extender render pipeline but the ENGINE per-tick sim's TCB-camera
+population -- and the port hand-seeds the camera (shim, line 1503) precisely because that
+engine sim path doesn't fully populate it at render time. So the faithful windshield render
+depends on the engine's per-tick mission sim faithfully setting the TCB camera -- one of the
+largest remaining subsystems. FINAL HONEST SCOPING: FIX2 (the faithful windshield render) =
+the engine per-tick sim TCB-camera population + the extender per-frame render pipeline
+(viewport/projection/dispatch). This is a MAJOR multi-session reconstruction touching two
+subsystems; it does not converge under incremental single-op probes (each reveals a deeper
+layer: dispatch -> setup order -> camera focal -> engine sim). The diagnostic + core-fix
+phase is COMPLETE: FIX1 (patch 407, the 6980-SMC core correction) is LANDED + native/wasm-
+verified; the windshield is fully root-caused, every component verified, and FIX2 precisely
+scoped for a focused, dedicated future-session build. Per "geht nicht gibt es nicht" it is
+bounded+decomposable -- but it is a subsystem-scale build, not a probe.
