@@ -251,6 +251,16 @@ tile defect bc9c/bdc4, NOT [0x5598].  So the two remaining suspects are: (a) the
 decode (asm-verify the extender decode) and (b) bc9c/bdc4 itself -- and the [5598]-vs-algorithm split can
 also be done port-only by asm-verifying the C32.KLC decode, not only by the oracle [5598] capture.
 
+**DECISIVE (port-only proof) — the voxel defect IS the port's [0x5598] (C32.KLC decode).** Trick: the
+bc9c matrix DIAGONAL M[ch][ch] = ac70_match(blend([5598][ch],[5598][ch])) = ac70_match([5598][ch]) encodes
+[0x5598] DIRECTLY, and since ac70's match palette [0x4f60]=[5260]>>1 is 100%-exact, a differing diagonal can
+ONLY come from a differing [5598]. Port vs oracle bc9c-matrix diagonals (terrain [80..255]) match **0.0%**
+(port ~102-118, oracle ~80-83); port_bc9c_matrix.bin is AZER1 (dist=176/mean=110.7 == the FIST_MTXDUMP tile),
+same map as the oracle pair. So the port's C32.KLC->[0x5598] 532.pal decode produces a DIFFERENT palette than
+the original's decode of the same C32.KLC -> [0x5598] is the confirmed bug, and bc9c/bdc4 need not be touched
+if [5598] is fixed. NEXT: find + fix the extender's C32.KLC->[5598] decoder (asm-verify it against the KLC1
+format); then the tile [0x3918] should rebuild to the oracle dist=66/mean=199 and the windshield go bit-exact.
+
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
 (64ea is a modal, map-view-gated); save/load; controls — all the way to the 10× gate. **Los geht's.** 🚀
