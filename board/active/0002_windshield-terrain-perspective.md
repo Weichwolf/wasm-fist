@@ -1373,3 +1373,21 @@ and there are two tiny functions FUN_0000_3a18(int*) / FUN_0000_3a20(int*) named
 address right at the table -- prime builder candidates. NEXT: read FUN_0000_3a18/3a20 bodies
 and trace their callers; and enumerate the voxel SETUP op-handlers (0x68/0x6c/0x70/0x74/0x7c
 in the op-table @0xcb3) for the one that receives/writes the base ray-curve into 3a24/3e24.
+
+*** 3a24 PRODUCER: static analysis EXHAUSTED -> oracle flat-writer watch launched ***
+Confirmed the base-ray-curve producer is NOT statically findable: FUN_3a18/3a20 are
+misdecompiled DATA (the table header, Ghidra-as-code garbage); NO writer to 0x3a24/0x3e24
+in ANY of the 4 decompile sources (fist.c's 3a24 is a different DGROUP-0x2000 var; the
+kernel's 2 refs are the duplicated 395e READS) nor in the 16-bit fist_dat_image objdump;
+not a shipped file (the curve is computed, no small FISTDATA table exists); FUN_3931 is the
+per-frame render dispatch (85d0->PTR_3958->6980/6c00), not the one-time curve builder. The
+curve is a ONE-TIME viewport-setup build by code that is either non-decompiled or writes via
+an opaque pointer -> locatable only by the oracle. Used the project's core method: dosbox-fist
+already has a CR3-aware flat-writer watch (FIST_WATCHFLAT/SPAN + FIST_MEMARM_BOOT, via the
+FIST_MEMREC macro in mem.h) that records cs:eip + code + backtrace of whoever writes a flat
+linear address. Created tools/oracle/capture_3a24_writer.sh (watch ext-flat 0x10003a24..+0x800,
+arm from boot, reach a battle mission, dump at 9200) -> $FISTLOG.flatwriters.txt names the
+producer. NEXT: read flatwriters.txt; the cs:eip pins the producer image+offset -> decompile
+that function -> wire it faithfully so 3a24/3e24 are built -> 395e produces the real projection
+-> 6980 (patch 407) + Layer-2 render the full windshield. If flatwriters is empty (producer
+writes via a non-ext-flat mapping to the same phys), escalate to FIST_WATCHPHYS on r6980_base+0x3a24.
