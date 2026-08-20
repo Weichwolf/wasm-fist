@@ -283,3 +283,27 @@ the mission loop? (2) what is [0x395d] at render time (0 -> 6980 terrain path, !
 Instrument the port for 3931-entry + [0x395d], and asm-read 0x10e5 to see when 3931
 fires. This pins whether the fix is "call 3931/6980 per frame" or "set [0x395d]
 correctly so the existing dispatch reaches 6980".
+
+FULL RENDER ARCHITECTURE (definitive, native_main.c:2611-2632 RECON + asm call-graph).
+The per-frame 3D voxel render is EXTENDER-SIDE and MULTI-OP: the engine (FIST.DAT)
+only POSTS display objects + camera/present ops; the extender does the projection via
+an op-dispatch table (fist_image.bin:0xcb3 + op -> trampoline -> render fn):
+    op 0x08 -> 8df0/FUN_3931 -> 6980          tile-BUILD (voxel raycaster)
+    op 0x0c -> 78f0 -> 85d0 + 93c0            colormap perspective texture-map ([0x85b8])
+    op 0x10 -> 7940 -> 8fa0                   rotated variant
+    op 0x24 -> 82b8 -> 8120 + 9200            tile-SAMPLE (dominant fb writer, [0x3918])
+    op 0x44 -> 7660                           SKY  (port: BIT-EXACT)
+Port status per op: SKY (0x44) + SAMPLE (0x24) work (sky bit-exact; terrain painted
+but +55 darker). The terrain divergence is in the TILE-BUILD half (op 0x08->6980
+and/or op 0x0c->93c0), NOT the sample. A prior-session RECON already found the op-0x0c
+path's colormap [0x85b8] holds only {0,4} across its 4 MB -- i.e. the C32.KLC colormap
+DATA is not delivered by the extender map-load (89b0/643c), even though the LOD build
+completes structurally. So the deepest gate is the COLORMAP DATA PATH feeding the
+tile-build, upstream of 6980/93c0.
+This UNIFIES the session's findings: camera correct, sky bit-exact, bc9c/bd0e/bdc4
+(the blend LUT) faithful, 9200 sample faithful -- but the terrain COLORMAP that the
+build ops consume (C32.KLC -> [0x85b8]/[0x3918] terrain texels) is not faithfully
+delivered by the map-load. NEXT: trace the C32.KLC colormap decode in the extender
+map-load (89b0 -> 643c ...) via fist_image.bin asm; verify what [0x85b8]/[0x3918]
+should hold vs the port's {0,4}/blend-matrix; that data-delivery is the concrete
+windshield fix, and it is asm-verifiable end to end.
