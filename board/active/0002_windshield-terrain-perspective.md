@@ -1129,3 +1129,27 @@ posted time with the real setup chain. NEXT: map the setup ops (0x68/0x6c/0x70/0
 their m_ext fns) + what each populates (camera, viewport, tables), wire the full dispatch in
 order, resolve crashes as each prerequisite is met, then measure the real-render-path terrain.
 This is the bounded (but multi-step) FIX2 implementation. FIX1 (patch 407) is landed + verified.
+
+FIX2 op-table dispatch spec (mapped). The posted render/setup ops route via op-table
+@fist_image.bin:0xcb3 -> trampoline -> fn:
+    op 0x68 -> 0x76fd (Ghidra GAP 0x7490-0x76fd, undecompiled)
+    op 0x6c -> 0x77e2 -> 0x1280
+    op 0x70 -> 0x11cb (direct handler)
+    op 0x74 -> 0x6f17 -> 0x706b
+    op 0x7c -> 0x77a4 -> 0x6032
+    op 0x08 -> 0x10e0 -> 8df0+3931 -> 6980 (tile-build, SMC-correct via patch 407)
+    op 0x24 -> 0x82c0 -> 8120 -> 9200 (sample)
+The faithful FIX2 = run the extender's PM-gate op-dispatch (FUN_0000_0f30 -> op-table[0xcb3
++op] -> trampoline) for each posted op, in the engine's posted order, replacing the shim's
+log-and-return. The setup ops (0x68/0x6c/0x70/0x74/0x7c) populate the camera (TCB +0x2c..
+0x3e incl. the focal +0x3e that 85d0 divides by) + viewport (+0x16..0x1c) + projection
+tables that the render ops (0x08 6980, 0x24 9200) consume; running them in order resolves
+the FPE crashes (each render op's prerequisites met by the prior setup ops). CAVEAT: some
+setup fns are in the Ghidra decompile GAP (0x76fd/0x77e2/0x77a4 near 0x7490-0x76fd) --
+those may need decompile-gap-filling or a shim reconstruction. This is the substantial
+multi-op FIX2 reconstruction. ALTERNATIVE (pragmatic, if the faithful dispatch proves too
+gap-blocked): drive the render via the WORKING FIST_MISSFB+6980 scaffold at op-0x24 time
+(the TCB is fully populated there), which already renders terrain at 78.7% with patch 407
+-- but that is a shim scaffold, not the faithful op-dispatch (doctrine prefers the real
+dispatch). SESSION STATUS: FIX1 (patch 407 SMC) landed+verified; FIX2 (op-dispatch pipeline)
+is spec'd + is the bounded multi-op implementation, partly gated by Ghidra-gap setup fns.
