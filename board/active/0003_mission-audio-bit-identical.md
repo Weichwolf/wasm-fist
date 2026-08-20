@@ -262,3 +262,27 @@ fully run (an unresolved indirect dispatch / a song-play fn not wired). NEXT (fo
 song-PLAY entry (sets the real per-voice [0x90] streams AND instruments; distinct from 0872's default
 seed), locate its per-voice 0f99 call, wire it; verify reg 0x20 0x01->0x31 + WAV corr rise. This is
 the precise, asm-grounded audio root -- the strongest and most specific the surface has reached.
+
+*** DECISIVE POSITIVE CORRECTION: the program-change chain IS FULLY WIRED (board baseline STALE) ***
+Read the CURRENT build/ (not the stale notes): the menu music (MAINMENU.MS3, "KGF'91") is driven by
+a real MIDI sequencer, and the program/instrument-change path is COMPLETE:
+  FUN_0000_0cf3 (MIDI event parse, PATCH 359): per tick fetch (0b5d); on a channel program change
+    (D[voice+0x2a] != D[voice+0x34]) it calls FUN_0000_0cfb(prog, ...) THEN 0aa7 (key on).
+  FUN_0000_0cfb (instrument program, PATCH 354): sets D[voice+0x34]=prog, loads the per-instrument
+    freq/env tables, and TAIL-dispatches vec=[ds:0x1c1] = device-3 slot5 = FUN_0000_0f99(prog) --
+    which writes the full OPL patch regs 0x20-0xF5 and caches byte[1] in [0xbdd+voice].
+So 0f99 IS called during playback with the SONG's instrument (via 0cf3->0cfb->[0x1c1]->0f99), NOT
+only from init 104f. The earlier board baseline -- "0f99 only from init / reg 0x20 stuck 0x01 / WAV
+corr 0.126" -- PREDATES PATCH 354/359 and is STALE. My two hypotheses this session (base-loss,
+install/dispatch mismatch) were also wrong; ALL of it dissolved on reading the built truth. The
+audio program-change is wired; the real open question is now EMPIRICAL and probably much smaller:
+what is the CURRENT reg-0x20 behaviour + WAV correlation? Could not measure this session -- a cold
+port run sticks at TITLE.KDV (the title video; menu music plays only after it), so measuring needs
+driving past the title via input injection (like the verify menu flows), then FIST_OPL_REGLOG +
+FIST_AUDIO_WAV. NEXT (tractable, not deep): drive the port past TITLE.KDV to the main menu, capture
+the OPL reglog + WAV, cross-correlate vs ref/audio_menu_oracle.wav. If it's now high -> 0003 is far
+closer to done than the board says and just needs a matrix audio flow (FIX3 = add the flow); if a
+residual gap remains, it is now a small measured delta on a fully-wired chain, not a deep RE bug.
+LESSON: the board's audio notes were badly stale (patches 350-359 wired the sequencer since); trust
+build/ over old comments. This REOPENS audio as a likely-tractable surface, contra my earlier
+"deep like the voxel" framing.
