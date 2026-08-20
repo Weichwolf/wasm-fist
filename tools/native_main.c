@@ -1593,6 +1593,11 @@ int fist_extender_gate(void) {
                      * land on a 1024^2 HM + contiguous 1024^2 colormap. */
                     uint8_t *H=(uint8_t*)(uintptr_t)hmb, *C=(uint8_t*)(uintptr_t)cmb;
                     int avg=getenv("FIST_TILEFILL_AVG")!=0;
+                    int sub=getenv("FIST_TILEFILL_SUB")!=0;   /* top-left 1024x1024 sub-block */
+                    if(sub){ for(int y=0;y<1024;y++) for(int x=0;x<1024;x++){
+                        hmcm[y*1024+x]          = H[y*2048+x];
+                        hmcm[0x100000+y*1024+x] = C[y*2048+x]; } hm_src=hmb; }
+                    else
                     for(int y=0;y<1024;y++) for(int x=0;x<1024;x++){
                         int i=(y*2)*2048+(x*2);
                         if(avg){
