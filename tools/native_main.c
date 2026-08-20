@@ -1866,6 +1866,21 @@ int fist_extender_gate(void) {
                 fprintf(stderr,"[missfb] tile3918 nz=%ld/65536 distinct=%d  ray3a24[0..3]=%d/%d/%d/%d ray3e24[0]=%d 90c0=%08x 90c4=%08x\n",
                     nz,nd,*(int32_t*)(xb+0x3a24),*(int32_t*)(xb+0x3a28),*(int32_t*)(xb+0x3a2c),*(int32_t*)(xb+0x3a30),
                     *(int32_t*)(xb+0x3e24),*(uint32_t*)(xb+0x90c0),*(uint32_t*)(xb+0x90c4));
+                /* FIST_RAWMTX=<path>: dump the RAW bc9c blend matrix at its true base
+                 * (bc90 & 0xffff0000), NOT the +0x4200 tile window at [0x3918].  bc9c writes
+                 * M[ch][cl] at base|(ch<<8)|cl, so file offset ch*256+cl == matrix entry --
+                 * a clean 256x256 whose diagonal M[ch][ch] encodes the palette directly.
+                 * (The old port_bc9c_matrix.bin was read from [0x3918]=base+0x4200, i.e. the
+                 * bdc4-upsampled tile overrunning the 64K buffer by 0x4200 -> spurious zero tail.) */
+                { const char *rm=getenv("FIST_RAWMTX");
+                  if(rm){ uint32_t bc90=*(uint32_t*)(xb+0xbc90);
+                    uint8_t*base=(bc90&&bc90<0x100000)?(xb+(bc90&0xffff0000)):(uint8_t*)(uintptr_t)(bc90&0xffff0000);
+                    FILE*f=fopen(rm,"wb");
+                    if(f){ fwrite(base,1,65536,f); fclose(f);
+                      int dd[11]={80,90,100,110,120,140,160,180,200,220,255};
+                      fprintf(stderr,"[rawmtx] bc90=%08x base=%p wrote 65536 -> %s  diag:",bc90,(void*)base,rm);
+                      for(int i=0;i<11;i++) fprintf(stderr," M[%d]=%d",dd[i],base[dd[i]*256+dd[i]]);
+                      fprintf(stderr,"\n"); } } }
                 /* FIST_MISSFB_VP: LIVE voxel viewport geometry (set by 8deb from TCB rect) vs the
                  * oracle-forced 90f8=81/90f0=288/90ac=-208.  Also the TCB viewport rect 0x16/18/1a/1c
                  * and the horizon-table 9114 pointer + first bytes. */

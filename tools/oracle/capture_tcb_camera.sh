@@ -32,7 +32,7 @@ c:
 LOADGAME -K400,0,1000 -X5000 FIST.RUN
 CFG
 export SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11
-export FISTLOG="$FISTLOG" FIST_R9200CAP=1 FIST_R9200MAX=3
+export FISTLOG="$FISTLOG" FIST_R9200CAP=1 FIST_R9200MAX=14
 XC="$ROOT/tools/oracle/xclick.py"
 rm -f "$FISTLOG".* 2>/dev/null || true
 timeout 200 xvfb-run -a --server-args="-screen 0 1024x768x24" bash -c '

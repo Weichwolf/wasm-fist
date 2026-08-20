@@ -61,3 +61,24 @@ CORRECTED NEXT (methodology fix, not a code hunt):
       DOSBox, known dashboard-AE0 state) vs port_azer1_windshield_6980.png (75.5%
       diff). Work backward from that clean ground truth, not from these dumps.
 The camera + sky-setup fixes remain landed + matrix-verified independent of all this.
+
+Progress (raw-base dump built + a NEW stage discipline found). Added FIST_RAWMTX
+to native_main.c (fires in the FIST_MISSFB_PROBE block): dumps 65536 B from the
+true matrix base (bc90 & 0xffff0000), file offset ch*256+cl == matrix entry.
+Reproducible via the run_mission MC_MOUSE drive + FIST_MISSFB_PROBE=1.
+  - CONFIRMS the retraction: at bc90=0x82e0000 (64KB-aligned) the raw diagonal is
+    M[200]=102, M[255]=103 (NONZERO at high ch) -- the earlier "rows 190..255 zero"
+    was purely the +0x4200 tile-window overrun, not an unbuilt region.
+  - BUT a port-only internal-consistency check EXPOSES a stage error: the dumped
+    matrix is 98% ASYMMETRIC (269/15400 symmetric in 80..255). bc9c's blend is
+    provably symmetric in (ch,cl) -- ac68=cl.R+ch.R, ac69=cl.G+ch.G, ac6a=cl.B+ch.B
+    -- and it dual-writes M[ch][cl]=M[cl][ch], so a TRUE bc9c matrix MUST be
+    symmetric. 98% asymmetry => render-time [bc90] does NOT point at the clean bc9c
+    matrix: by op-0x24 render time [bc90] has become the bdc4-UPSAMPLED tile (or a
+    reused buffer), not the symmetric blend LUT at bc9c-exit.
+CORRECTED NEXT (stage discipline, extends the methodology fix): capture the matrix
+at bc9c-EXIT, not at render time. Add a one-shot dump at FUN_0000_bc9c's return
+(mirror FIST_BC9CENTRY, which already hooks bc9c entry) writing 65536 B from
+bc90&0xffff0000 -- verify THAT dump is symmetric (the correctness gate), then its
+diagonal is the clean palette-encoding to compare against a provenance-matched
+oracle. Symmetry is now the port-only correctness invariant for any bc9c capture.
