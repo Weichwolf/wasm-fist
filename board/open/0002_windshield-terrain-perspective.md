@@ -298,3 +298,18 @@ oracle tile (0x44200) + the oracle heightmap/colormap now readable from the RAM
 dump, reconstruct the tile-build faithfully -- start by checking whether the
 MAP-LOAD tile (pre-689a/6980, bc9c/bdc4) already matches the original, then 689a,
 then 6980 + its [0x85bc]+0x100000 contiguous buffer (currently an approximation).
+
+DEEPEST root found -- the tile-build INPUT is wrong: the port's heightmap [0x85bc]
+matches the ORIGINAL's 0% (port mean=53 range15-96 distinct=82; oracle ptr 0x74e60
+mean=9.4 range0-255 distinct=256, read from the RAM dump). So even before 689a/6980,
+the terrain source 9200/6980 walk differs fundamentally -> the whole windshield
+terrain is wrong regardless of the (now-correct) camera + sky-setup. CAVEAT: the
+oracle distribution (mean 9.4, mostly 0) is unusual for a heightmap, so this may be
+a layout/stage/size mismatch (I read 1 MB linearly from 0x74e60, which may run past
+the heightmap into other buffers, or the original stores it at a different
+resolution/encoding than the port's decoded 1024x1024). NEXT: pin the original's
+heightmap size/encoding (from the D32.KLC KLC1 header + the map-load asm) and read
+exactly that region, then confirm whether the port's C32/D32.KLC->heightmap decode
+is faithful; if the heightmap genuinely differs, the D32.KLC decode is the root and
+fixing it should cascade the tile + windshield to bit-exact. Camera + sky-setup
+fixes remain correct and matrix-verified independent of this.
