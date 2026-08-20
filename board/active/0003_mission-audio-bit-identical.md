@@ -338,3 +338,22 @@ port's bde4 music-start dispatch (if the port reaches the same state but the ica
 or reach the triggering menu state. Everything downstream of bde4 is wired and will exercise once
 it fires. This session characterized audio end-to-end from a stale baseline to this single measured
 hop; no patch landed but three wrong premises were caught before landing (build-truth discipline).
+
+*** REAL FIX LANDED (patch 408): SOUNDDVR+0xfab instrument-apply was un-decompiled/trapped ***
+Used FIST_TRACE_TRAPS to run the port to the menu: the ONE dominant unresolved indirect call was
+SOUNDDVR.DVR+0xfab (31x/run, "no fmap entry; returning 0"). Disassembled 0xfab: it is the OPL
+PER-VOICE INSTRUMENT-APPLY (bx=instr*16+0x1dd patch record; es=[cs:0x831]=driver DS; writes regs
+0xb0/0x20/0x60/0x80/0xe0 x2 + 0xc0 via FUN_0000_0f21; caches [0xbdd+voice]=patch[1]) -- an alternate
+entry into the 0f99 loader region that Ghidra had NOT created as a function, so it was absent from
+the fmap and every dispatch trapped -> reg 0x20 (+ the whole timbre patch) was never applied and all
+voices played the OPL-init instrument 0 (reg 0x20 stuck 0x01).
+FIX (doctrine-clean, NO stub/band-aid): (1) added 0xfab to the SND FIST_DRIVER_SEED_OFFS (Makefile)
+and re-ran the SND decompile -> Ghidra emitted FUN_0000_0fab cleanly (+1 function, 0f99 unchanged,
+re_out regenerated via the legit chain); (2) patch 408 rebases 0fab's base-0 ds: accesses onto the
+driver seg D=(DAT_0000_0831<<4), mirroring PATCH 354 for 0f99; asm-verified vs fist_snd_image.bin.
+MEASURED (native, port-only): 0xfab traps 31 -> 0; reg 0x20 {01} -> {00,01,03,05,34,4e,b1,b2,c4,c9}
+-- the voice instruments now APPLY. This is the first fix that closes a real audio deviation (the
+timbre was monotimbral; now it is multi-instrument). make check clean; native+wasm rebuilt. Full
+verify.sh both PASSED: 159/159 flows, 0 failed -- crash-free on native AND wasm, native==wasm
+bit-identical (the hard invariant), fidelity preserved. Patch 408 LANDED + verified. NOTE: this is distinct from the menu-music SONG-REGISTER gap (bde4 not firing) -- 0xfab
+fixes the instrument-apply on whatever song plays; the register/start is a separate remaining hop.

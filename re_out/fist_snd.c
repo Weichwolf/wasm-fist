@@ -73,6 +73,7 @@ extern uint32_t fist_snd_base;
 #define FUN_0000_0f48 m_snd_FUN_0000_0f48
 #define FUN_0000_0f54 m_snd_FUN_0000_0f54
 #define FUN_0000_0f99 m_snd_FUN_0000_0f99
+#define FUN_0000_0fab m_snd_FUN_0000_0fab
 #define FUN_0000_104f m_snd_FUN_0000_104f
 #define FUN_0000_1082 m_snd_FUN_0000_1082
 #define FUN_0000_10a5 m_snd_FUN_0000_10a5
@@ -197,6 +198,7 @@ void __allregs FUN_0000_0f21(undefined2 param_1);
 undefined2 __allregs FUN_0000_0f48(void);
 void __allregs FUN_0000_0f54(void);
 void __allregs FUN_0000_0f99(byte param_1,uint param_2);
+void __allregs FUN_0000_0fab(undefined2 param_1,int param_2);
 undefined2 __allregs FUN_0000_104f(void);
 void __allregs FUN_0000_1082(void);
 void __allregs FUN_0000_10a5(void);
@@ -2414,6 +2416,40 @@ void __allregs FUN_0000_0f99(byte param_1,uint param_2)
     return;
   }
   puVar6 = (undefined1 *)((uint)param_1 * 0x10 + 0x1dd);
+  uVar4 = (uint)bVar2;
+  uVar5 = *(undefined1 *)(uVar4 + 0xbf8);
+  uVar3 = *(undefined1 *)(uVar4 + 0xbef);
+  FUN_0000_0f21(CONCAT11(bVar2,*(undefined1 *)(uVar4 + 0xbe6)) & 0xffdf | 0xb000);
+  FUN_0000_0f21(CONCAT11(uVar5,*puVar6) | 0x2000);
+  FUN_0000_0f21(CONCAT11(uVar5,puVar6[2]) | 0x6000);
+  FUN_0000_0f21(CONCAT11(uVar5,puVar6[3]) | 0x8000);
+  FUN_0000_0f21(CONCAT11(uVar5,puVar6[4]) | 0xe000);
+  FUN_0000_0f21(CONCAT11(uVar3,puVar6[5]) | 0x2000);
+  FUN_0000_0f21((CONCAT11(uVar3,puVar6[6]) | 0x4000) ^ 0x3f);
+  FUN_0000_0f21(CONCAT11(uVar3,puVar6[7]) | 0x6000);
+  FUN_0000_0f21(CONCAT11(uVar3,puVar6[8]) | 0x8000);
+  FUN_0000_0f21(CONCAT11(uVar3,puVar6[9]) | 0xe000);
+  FUN_0000_0f21(CONCAT11(bVar2,puVar6[10]) | 0xc000);
+  *(undefined1 *)(uVar4 + 0xbdd) = puVar6[1];
+  return;
+}
+
+
+/* ===== ((uint)(uintptr_t)&FUN_0000_0fab) @ 0000:0fab ===== */
+
+void __allregs FUN_0000_0fab(undefined2 param_1,int param_2)
+
+{
+  undefined2 uVar1;
+  byte bVar2;
+  undefined1 uVar3;
+  uint uVar4;
+  undefined1 uVar5;
+  undefined1 *puVar6;
+  
+  uVar1 = DAT_0000_0831;
+  bVar2 = (byte)((uint)param_1 >> 8);
+  puVar6 = (undefined1 *)(param_2 * 0x10 + 0x1dd);
   uVar4 = (uint)bVar2;
   uVar5 = *(undefined1 *)(uVar4 + 0xbf8);
   uVar3 = *(undefined1 *)(uVar4 + 0xbef);
@@ -6228,6 +6264,7 @@ const struct fist_fent fist_snd_fmap[] = {
   {0xf48u,(void*)&FUN_0000_0f48},
   {0xf54u,(void*)&FUN_0000_0f54},
   {0xf99u,(void*)&FUN_0000_0f99},
+  {0xfabu,(void*)&FUN_0000_0fab},
   {0x104fu,(void*)&FUN_0000_104f},
   {0x1082u,(void*)&FUN_0000_1082},
   {0x10a5u,(void*)&FUN_0000_10a5},

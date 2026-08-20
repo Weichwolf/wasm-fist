@@ -1,0 +1,56 @@
+PATCH 408: seed + driver-DS rebase of FUN_0000_0fab (asm 0xfab) -- the OPL per-voice INSTRUMENT-
+APPLY alternate entry into the 0f99 patch-loader region. Ghidra had not created 0xfab as a
+function, so the engine's runtime-dispatched call to SOUNDDVR+0xfab trapped (31x per menu run,
+returning 0) and reg 0x20 + the whole timbre patch (0x20-0xe0/0xc0) was never applied per voice --
+every note played the OPL-init instrument 0 (reg 0x20 stuck at 0x01). Added 0xfab to the SND
+FIST_DRIVER_SEED_OFFS (Makefile) so it decompiles as FUN_0000_0fab -> enters the fmap and resolves
+the traps; then rebase its base-0 (Ghidra) ds: accesses onto the driver data seg D=(DAT_0000_0831
+<<4), mirroring PATCH 354 for the sibling loader 0f99. asm-verified vs fist_snd_image.bin 0xfab
+(shl bx,1 x4; add 0x1dd; mov es,[cs:0x831]; per-op FUN_0000_0f21 writes of regs 0xb0/0x20/0x60/
+0x80/0xe0 x2 + 0xc0; cache [0xbdd+voice]=patch[1]). Port-verifiable: the 31 icall traps vanish and
+reg 0x20 takes the voice instruments instead of only 0x01.
+
+--- a/fist_snd.c	2026-08-20 17:15:21.156041045 +0200
++++ b/fist_snd.c	2026-08-20 17:18:05.653423747 +0200
+@@ -2440,20 +2440,25 @@
+ void __allregs FUN_0000_0fab(undefined2 param_1,int param_2)
+ 
+ {
+-  undefined2 uVar1;
++  /* PATCH 408: driver-DS rebase of FUN_0000_0fab (asm 0xfab) -- the OPL per-voice INSTRUMENT-APPLY
++     alternate entry into the 0f99 patch-loader.  Newly seeded into the SND decompile
++     (FIST_DRIVER_SEED_OFFS += 0xfab) since Ghidra had not created it, so the engine's runtime
++     dispatch to SOUNDDVR+0xfab trapped (31x/menu, returned 0) and reg 0x20 + the full timbre patch
++     (0x20-0xe0/0xc0) was never applied per voice -> notes stuck on OPL-init instrument 0.  Every ds:
++     access is the driver data seg (DAT_0000_0831<<4); rebase on D exactly as PATCH 354 does 0f99. */
++  uint8_t *D = (uint8_t*)(g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4));
+   byte bVar2;
+   undefined1 uVar3;
+   uint uVar4;
+   undefined1 uVar5;
+   undefined1 *puVar6;
+-  
+-  uVar1 = DAT_0000_0831;
++
+   bVar2 = (byte)((uint)param_1 >> 8);
+-  puVar6 = (undefined1 *)(param_2 * 0x10 + 0x1dd);
++  puVar6 = (undefined1 *)(D + param_2 * 0x10 + 0x1dd);
+   uVar4 = (uint)bVar2;
+-  uVar5 = *(undefined1 *)(uVar4 + 0xbf8);
+-  uVar3 = *(undefined1 *)(uVar4 + 0xbef);
+-  FUN_0000_0f21(CONCAT11(bVar2,*(undefined1 *)(uVar4 + 0xbe6)) & 0xffdf | 0xb000);
++  uVar5 = *(undefined1 *)(D + uVar4 + 0xbf8);
++  uVar3 = *(undefined1 *)(D + uVar4 + 0xbef);
++  FUN_0000_0f21(CONCAT11(bVar2,*(undefined1 *)(D + uVar4 + 0xbe6)) & 0xffdf | 0xb000);
+   FUN_0000_0f21(CONCAT11(uVar5,*puVar6) | 0x2000);
+   FUN_0000_0f21(CONCAT11(uVar5,puVar6[2]) | 0x6000);
+   FUN_0000_0f21(CONCAT11(uVar5,puVar6[3]) | 0x8000);
+@@ -2464,7 +2469,7 @@
+   FUN_0000_0f21(CONCAT11(uVar3,puVar6[8]) | 0x8000);
+   FUN_0000_0f21(CONCAT11(uVar3,puVar6[9]) | 0xe000);
+   FUN_0000_0f21(CONCAT11(bVar2,puVar6[10]) | 0xc000);
+-  *(undefined1 *)(uVar4 + 0xbdd) = puVar6[1];
++  *(undefined1 *)(D + uVar4 + 0xbdd) = puVar6[1];
+   return;
+ }
+ 
