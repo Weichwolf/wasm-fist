@@ -325,3 +325,16 @@ it does not fire in the port (unresolved icall / a menu-state the headless run d
 it; then the whole downstream (register -> MIDI -> program-change -> 0f99) exercises and reg 0x20
 takes the song instruments. Audio is thus ONE unresolved menu-dispatch away from playing, not a deep
 per-note bug. This session traced it from a stale "reg 0x20 stuck" note to this precise measured hop.
+
+Data point (measured): drove the port to the menu WITH mouse input (the menu-nav script) +
+OPL reglog -- reg 0x20 STILL written exactly once (0x01), reg 0x60 once (0xf1), 13579 total OPL
+writes (the intro/single-instrument audio). So the menu music does NOT play even with menu
+interaction -> not merely a headless-idle artifact; the bde4 music-start hop genuinely does not
+fire in the port's front-end. Definitively distinguishing "unresolved icall bug" from "the run
+never enters the exact music-triggering menu state" needs the DOSBox oracle (confirm the ORIGINAL
+fires bde4 / plays MAINMENU.MS3 at this front-end point) -- the one place audio still needs the
+oracle. NEXT (focused): oracle-confirm the original's menu-music start point, then either wire the
+port's bde4 music-start dispatch (if the port reaches the same state but the icall is unresolved)
+or reach the triggering menu state. Everything downstream of bde4 is wired and will exercise once
+it fires. This session characterized audio end-to-end from a stale baseline to this single measured
+hop; no patch landed but three wrong premises were caught before landing (build-truth discipline).
