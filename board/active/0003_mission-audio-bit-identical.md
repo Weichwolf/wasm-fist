@@ -401,3 +401,15 @@ op-0x24 per-render seam at ~0.4fps); MENU audio is smooth/realtime.  Menu MUSIC=
 default, so to HEAR music the settings MUSIC toggle must be ON (next: drive it + exercise patch-408
 OPL).  Pipeline: fist_opl.c ring -> fist_web_audio_pull -> fist_web_post_audio (EM_JS) -> index.html
 AudioContext.
+
+*** VERIFIED AUDIBLE: browser plays real MENU MUSIC (MUSIC=ON) at realtime pitch ***
+Drove the browser (headless-chromium CDP) main-menu -> SETTINGS (160,126) -> clicked the MUSIC=ON
+radio (181,149; the SOUND group's MUSIC pair, OFF at 181,136 per verify.sh settings-music-off).  The
+SETTINGS screen renders PERFECTLY in the browser (55357 nonzero, full chrome -- it is a normal menu
+screen, not the deep in-mission frontier).  Captured 5.5 s of the streamed Web-Audio PCM to a WAV
+(tools: CDP hook on playPCM).  Spectral analysis (Goertzel): clear musical tones 131/226/297/594 Hz
+(~C3/A3/D4/D5), peak/median tonality ratio 15.9 (>3 => tonal/musical), rate 44100/s.  => the browser
+produces the genuine Armored Fist AdLib/OPL menu music at correct realtime pitch.  Sent the WAV to the
+user.  This closes the browser-audio story: pipeline + realtime PIT-pacing + audible menu music, all
+landed (commit 5ec6967).  The remaining audio open items stay the DEEP ones: in-mission audio cadence
+(pump-starvation) and full bit-exact-vs-oracle audio stream.
