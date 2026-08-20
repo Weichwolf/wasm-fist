@@ -133,3 +133,14 @@ search ([0x622c] resource archive) that the port skips (the shim clears [0x622c]
 at init, and 13180 sets it to "PAL.RES" only AFTER these probes). Settling this
 needs the original's [0x395c]/[0x8490]/[0x622c] at map-load = a guest-RAM capture
 (0007). This is the point where the voxel re-converges on 0007.
+
+RESOLVED via 0007 (the guest-RAM oracle now exists). capture_tcb_camera.sh 93
+captured the ORIGINAL's render-time TCB camera at the AZER1 spawn:
+  original: X=583982 Y=1142557 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256..384 foc=256 det=1
+  port:     X=583982 Y=1142557 alt=12800 head=26729 pitch(+3a)=0   roll(+3c)=-256    foc=256 det=1
+X/Y/heading/foc/det MATCH -- the sole camera divergence is PITCH (+0x3a: 384 vs 0)
+and ROLL (+0x3c: 256 vs -256). Those are exactly the fields native_main gates
+behind FIST_TILEFILL (the paged-out flight model writes them; oracle-anchored
+spawn seed). Fix: apply pitch=384/roll=256 on the DEFAULT op-0x24 render path (a
+reconstruction like the existing alt/focal seeds), together with the sky gate
+[0x395c]. Verify the windshield against oracle_azer1_windshield_dashAE0.png.
