@@ -283,3 +283,18 @@ contiguous HM+colormap buffer at [0x85bc]+0x100000. The 56% residual = the ramp/
 buffer fidelity: find how the original boot-fills 3a24/3e24 (395e recomputes 4224/
 4624 from them) and build them faithfully, then 6980 runs bit-exact by default. This
 is the last windshield piece; camera + sky-setup + 689a are done.
+
+HONEST CORRECTION of the "56% breakthrough" (element-wise tile diff, decisive):
+the port's post-6980 tile matches the ORIGINAL's [0x3918] tile (0x44200) only 0.8%
+(516/65536), and no +/-0x4200 window shift helps -- so the tile 9200 samples is
+~99% WRONG despite the correct ray-ramps (banked == oracle 256/256). The "56%
+displayed-diff / structurally correct" was superficial: both frames have sky-top /
+terrain-bottom in the same regions, so ~44% of RGB pixels coincide, but the
+underlying colormap tile is not faithful. So camera + sky-setup are fixed
+(oracle-verified) but the TILE-BUILD chain (bc9c/bdc4 map-load colormap + 689a sky
+resample + 6980 terrain raycast) produces a tile 99% different from the original's.
+The residual is the tile-build fidelity, not the camera/ramps. Next: with the
+oracle tile (0x44200) + the oracle heightmap/colormap now readable from the RAM
+dump, reconstruct the tile-build faithfully -- start by checking whether the
+MAP-LOAD tile (pre-689a/6980, bc9c/bdc4) already matches the original, then 689a,
+then 6980 + its [0x85bc]+0x100000 contiguous buffer (currently an approximation).
