@@ -668,3 +668,24 @@ identify the buffer + its content; then reconstruct those buffers at the right f
 offsets in the shim so 6980 reads faithfully. sim_voxel6980.py already models the phys
 remap (0x44200->0xb78200); extend it to all 6980 inputs. The gradient buffer at
 [0x85bc]+0x100000 (63..60 ramp) is the key newly-found input to identify + reproduce.
+
+CONNECTS to the documented UNRESOLVED CRUX (sim_voxel6980.py). My oracle buffer-map
+confirms that sim's model: [0x85bc] holds HM at +0 and a buffer at +0x100000 (the sim
+calls it CM); the LIGHT colormap (84-228) is at [0x85b8]=0x474e60. But 6980 does NOT
+read the color directly -- sim line 52: color = proj[detail*0x100 + ((L0 + HM[coord])
+& 0xff)] -- it combines the height + light level L0 and indexes a PROJ TABLE. sim
+lines 19-22 already document the wall: "the colormap 6980 indexes at [0x85bc]+0x100000
+is DARK (max 104) in every oracle dump and cannot produce the LIGHT terrain -- the
+'85b8 reduce-colormap collapse'. The colormap is the crux, unresolved." My page-walk
+matches: [0x85bc]+0x100000 (0x174e60) = heights 14-85 (dark), while the light colours
+(84-228, max 228) live at [0x85b8] (0x474e60). So 6980's terrain COLOUR comes from a
+proj-table lookup keyed by (light L0 + a value from the dark +0x100000 buffer), NOT a
+direct colormap read -- and reconstructing that proj-table pipeline faithfully is the
+deep, documented open crux. THE OPEN STEP (unchanged in nature, now oracle-confirmed
+end to end): reconstruct 6980's proj-table colour pipeline -- how (L0, height, the
++0x100000 buffer) index the proj table to yield the LIGHT terrain colour -- with the
+extender's PM page layout supplying each buffer at its ext-flat offset. Everything
+upstream (LOD/alloc/gap/camera/sky/matrix, all oracle- or asm-verified faithful) is
+settled; the windshield reduces to this proj-table + paging reconstruction. The
+session has driven it from a diffuse 75.5%-wrong mystery to this single, precisely
+localized, oracle-grounded open crux.
