@@ -1246,3 +1246,21 @@ component root-caused + verified. FIX2 fully+definitively scoped: FIST.RUN kerne
 model (camera) + extender render pipeline. The windshield is no longer a mystery -- it is a
 mapped, core-fixed, fully-scoped reconstruction. FIX2 is the dedicated subsystem build for a
 focused future effort (per "geht nicht gibt es nicht", bounded+decomposable, but large).
+
+FIX2 fully+definitively scoped (kernel decompiled, chain unwired). fist_kernel_decomp.c
+EXISTS (572KB, FIST.RUN kernel x86:LE:32) -- the flight model IS decompiled. But
+native_main.c:1368 documents "the per-tick sim step (c0ca/461b flight model) NEVER runs" --
+the flight-model chain does not run in the port. The chain: engine per-tick (c0ca/461b in
+fist.c, 16-bit) -> the real->PM gate (0x0762:0x1179 = linear 0x8799 trampoline) -> the
+32-bit-PM kernel flight physics -> the camera globals -> TCB. The port seeds the camera in
+the shim (line 1503) because this chain is unwired. So FIX2 = wire the flight-model chain
+(c0ca/461b + the real->PM gate + the kernel flight physics -> camera) + the extender render
+pipeline (viewport/projection/dispatch). BOTH pieces are decompiled (fist.c + fist_kernel_
+decomp.c + fist_ext.c) -- so per "geht nicht gibt es nicht" it is bounded work -- but it is
+a MAJOR multi-subsystem BUILD (the PM-gate flight-model kernel is one of the largest unwired
+surfaces), a dedicated multi-session effort, not incremental probes. *** WINDSHIELD:
+diagnosis definitively complete; core fix (patch 407) landed+verified; FIX2 = wire the
+flight-model kernel chain + the render pipeline, fully scoped for a dedicated build. ***
+The session's durable achievement: the primary windshield bug is FIXED and LANDED (patch
+407, 6980-SMC, 10.6->78.7%, native/wasm-verified), and the complete render (FIX2) is
+transformed from an unknown into a mapped, decompiled, precisely-scoped subsystem build.
