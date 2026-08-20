@@ -592,3 +592,18 @@ not over-report. This is a shim FILEMGR/RAM-probe fidelity fix (the g_ext_find_c
 read 6250/5c98's RAM check, make it return the oracle's 8 MB tier so [0x8490]=10, then
 verify [0x8490]=10 + gap=0x100000 + the DEFAULT render terrain match jumps (no TILEFILL)
 + 159 flows green. First true windshield fix, landable as an asm-verified patch.
+
+CORRECTION (5c98 = DOS FindFirst, not a RAM probe): 5c98 does INT 21h AH=0x4E
+(FindFirst, cx=0x33 attr) for the filenames "8.MEG"/"16.MEG"/"40.MEG" -> file-existence
+checks. Neither the port NOR the DOSBox oracle has any .MEG files, yet the oracle has
+[0x395c]=1 (LOD 10). So the original's LOD does NOT come from the .MEG FindFirst branch
+(which finds nothing -> would give LOD 9 / [0x395c]=0). And the port's [0x8490]=11 also
+does NOT come from it. So the LOD/[0x395c] source is ELSEWHERE (not the 89f5-8a4c .MEG
+branch) -- OPEN. The established, solid facts remain: 6980 walks 1024^2 (asm); the port
+builds a 2048^2 HM (gap 0x400000) -> 6980 mis-reads; a 1024^2 point-downsample gives
+73.2% (fix direction confirmed). The remaining question is WHY the port's voxel buffer
+is 2048^2 (LOD 11) when 6980 needs 1024^2 (LOD 10) -- and where [0x8490]/[0x8494] get
+their runtime values (NOT the .MEG branch). NEXT: instrument the port's op-0x18 to dump
+[0x8490]/[0x8494]/[0x395c]/[0x395d] and find the actual writer of [0x8490]=11 (the
+upsample-target source), then reconcile it to the oracle's 1024^2. The fix is still the
+resolution (2048->1024), just its source is not the .MEG FindFirst as first read.
