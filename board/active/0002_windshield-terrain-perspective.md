@@ -712,3 +712,23 @@ oracle/asm-verified faithful. A future session should settle (a)/(b)/(c) -- like
 capturing the oracle's TILE [0x3918] terrain rows (not sky) at the framematched frame
 and checking whether they are 14-85 (dark, matching CM -> the fb sample is remapped) or
 150-230 (light -> 6980's colour source differs from [0x85bc]+0x100000).
+
+CRUX RESOLVED (concrete fix hypothesis) -- 6980 writes LIGHT, so [0x85bc]+0x100000
+must ALIAS the light colormap. Decisive check: the oracle TILE [0x3918] (0x44200) is
+LIGHT -- range 116-252, 48949/65536 in 150-230, ZERO in the dark 14-85 range. So 6980
+writes LIGHT values (150-230) to the tile, NOT the dark CM[coord] (14-85) my cr3=0xe000
+page-walk reads at [0x85bc]+0x100000. Re-walking with the extender's page table (sim
+says phys 0x131000) gives UNMAPPED in this dump -- i.e. the dump's captured cr3=0xe000
+(engine page table) resolves ext-flat [0x85bc]+0x100000 to a DARK buffer, but 6980 runs
+under the EXTENDER's render-time paging, which maps that SAME ext-flat offset to the
+LIGHT colormap [0x85b8] (range 84-228). So the paradox is a PAGE-TABLE-CONTEXT artifact:
+6980's colour read [0x85bc]+0x100000 ALIASES the light colormap [0x85b8] via the
+extender's PM paging; my dump analysis used the wrong (engine) page table and saw a
+dark buffer. CONCRETE FAITHFUL FIX: in the port's flat model, arrange [0x85bc]+0x100000
+to hold the LIGHT colormap [0x85b8] content (indexed by coord) -- i.e. alias/copy the
+[0x85b8] colormap to [0x85bc]+0x100000 for the 6980 read. TILEFILL_DS's 73.2% already
+put A colormap there (downsampled); the faithful version uses the full [0x85b8] light
+colormap at the right coord indexing. NEXT: modify the shim so [0x85bc]+0x100000 =
+[0x85b8]'s light colormap (the extender-paging alias), re-measure the DEFAULT-path
+terrain match (expect > 73.2% toward bit-exact); this is the concrete windshield fix,
+grounded in the oracle tile being light + the ext PM-paging alias.
