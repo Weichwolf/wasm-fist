@@ -12,7 +12,7 @@ EMXX="$(dirname "$EMCC")/em++"
 if [ -f "$ROOT/build/fist.c" ]; then SRCDIR="$ROOT/build"; else SRCDIR="$ROOT/re_out"; fi
 echo "[build_web] sources from $SRCDIR"
 
-F="-O0 -g -std=gnu11 -w -fno-strict-aliasing -Wno-int-conversion -Wno-implicit-function-declaration \
+F="-O2 -std=gnu11 -w -fno-strict-aliasing -Wno-int-conversion -Wno-implicit-function-declaration \
    -Wno-builtin-declaration-mismatch -Wno-return-type -Wno-incompatible-pointer-types"
 INCL="-I$SRCDIR"
 OBJDIR="${OBJDIR:-/tmp/fistweb_obj}"; mkdir -p "$OBJDIR"
