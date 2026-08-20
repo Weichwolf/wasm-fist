@@ -20,6 +20,15 @@ static unsigned char g_pal[256][3];   /* DAC palette, 6-bit components (0..63) *
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 EMSCRIPTEN_KEEPALIVE unsigned char *fist_web_palette(void){ return &g_pal[0][0]; } /* 256*3 6-bit RGB */
+/* Force the present MGAVIDEO palette buffer (word[DGROUP:0x782]) into g_pal, exactly like FIST_PALNOW
+ * before a native dump.  In-mission the DAC-upload retrace-poll may not have run at the instant the web
+ * frame is posted, leaving g_pal stale/black though the render + palette buffer are valid.  board:0001 */
+EMSCRIPTEN_KEEPALIVE void fist_web_force_palette(void){
+    unsigned pseg = *(unsigned short *)(g_mem + 0x1c782);
+    if (!pseg) return;
+    const unsigned char *pb = g_mem + ((unsigned)pseg << 4);
+    for (int i = 0; i < 256; i++){ g_pal[i][0]=pb[i*3+0]&0x3f; g_pal[i][1]=pb[i*3+1]&0x3f; g_pal[i][2]=pb[i*3+2]&0x3f; }
+}
 #endif
 static int g_vmode = -1;              /* last video mode set via INT 10h / this shim */
 

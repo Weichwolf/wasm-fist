@@ -387,6 +387,8 @@ EM_JS(void, fist_web_post_frame_js, (unsigned char *fb, unsigned char *pal), {
   postMessage({ t:'frame', fb:f.buffer, pal:p.buffer }, [f.buffer, p.buffer]);
 });
 void fist_web_post_frame(void){   /* posts unconditionally; the caller sets the ~60Hz cadence */
+  extern void fist_web_force_palette(void);
+  fist_web_force_palette();        /* in-mission the retrace-poll DAC upload may lag the render; force it */
   fist_web_post_frame_js(g_mem + 0xA0000, fist_web_palette());
 }
 /* Live mouse: mirror the FIST_MOUSE transition->flags delivery (movement 0x01; L press/rel 0x02/0x04;
@@ -558,11 +560,14 @@ void fist_timer_pump(void){
          accumulates c452 during the slow load + 206f render spins -> 459a's per-tick sim (c0ca->op-0x1c)
          fires before the spawn op-0x24 -> HANG (SAUDI1/SYRIA1/INDIA1).  Tick normally in menus/intro
          (!g_fist_after_map) and once the cockpit view is active (d549==0x1c). */
-      if (!g_fist_after_map || g_mem[0x1c000 + 0x1549] == 0x1c) fist_wasm_tick();
+      /* LIVE web play (g_web_mode) must ADVANCE the mission sim so the tank spawns and the cockpit
+         renders -- the frozen-c452 hold below is only for the deterministic FIST_MISSFB node-wasm
+         capture (g_web_mode==0), which matches native's fast-run frozen frame.  board:0001 */
+      if (!g_fist_after_map || g_mem[0x1c000 + 0x1549] == 0x1c || g_web_mode) fist_wasm_tick();
       if (g_web_mode) { void fist_web_pump_input(void), fist_web_post_frame(void);
                         /* ~60Hz cadence (pump is ~1MHz): deliver ONE input event + post ONE frame per
                          * tick, so a press and its release land on DIFFERENT engine frames -> real click. */
-                        static int wc=0; if ((++wc % 16384)==0){ fist_web_pump_input(); fist_web_post_frame(); } }
+                        static int wc=0; if ((++wc % 4096)==0){ fist_web_pump_input(); fist_web_post_frame(); } }
     }
 #else
     /* Debug seam: FIST_COOP_TICK=1 drives the INT-8 time base COOPERATIVELY on native too (one tick
@@ -2978,6 +2983,18 @@ int fist_extender_gate(void) {
     fprintf(stderr, "[ext] service op 0x%02x (display-list cmd) inbox=%08x args %04x/%04x/%04x\n", op,
             *(uint32_t *)(g_mem + ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c) + 0x3f2),
             *(uint16_t *)(dg + 0xea1a), *(uint16_t *)(dg + 0xea1c), *(uint16_t *)(dg + 0xea1e));
+#ifdef __EMSCRIPTEN__
+    /* LIVE web play: the mission loop does NOT re-enter fist_timer_pump (see FIST_R3D_DUMP note above),
+       so ticks/palette-fade/frame-post starve in-mission.  op 0x24 is the per-frame cockpit render -- drive
+       the retrace service (palette upload + fade ramp) and post one frame per render from this seam.
+       board:0001 */
+    if (g_web_mode && op == 0x24) {
+        extern void fist_vga_service_retrace(void), fist_web_pump_input(void), fist_web_post_frame(void);
+        fist_vga_service_retrace();
+        fist_web_pump_input();
+        fist_web_post_frame();
+    }
+#endif
     return 0;
 }
 
