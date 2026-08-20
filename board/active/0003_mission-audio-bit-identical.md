@@ -159,3 +159,30 @@ cross-correlation vs ref/audio_menu_oracle.wav rises from 0.126. NEXT (focused s
 0a28 event-byte parse (which special byte = program-change) against fist_snd_image.bin asm, find where
 it should call 0f99 with the song instrument, wire it (resolve the base-loss / computed-return), verify
 reg 0x20->0x31. Bounded, asm-verifiable, port-only-verifiable -- the strongest tractable landable lead.
+
+*** STRONG ROOT CANDIDATE: base-loss in the mode-select vector installer FUN_0000_0872 ***
+Traced the sequencer service-vector dispatch to its INSTALLER. FUN_0000_0872 (fist_snd.c:1456,
+= asm 0x872-0x965, covers the vector-install at 0x8da) selects the sound MODE (DAT_1000_c012,
+1..5) and installs the 7 service vectors from per-mode tables (asm: `mov ax, DS:[0x17d+bx]; mov
+[0x17b], ax` ... for 0x17b/0x189/0x197/0x1a5/0x1b3/0x1c1/0x1cf, bx = mode*2). The decompile:
+  _DAT_1000_c1b3 = *(undefined2 *)(iVar1 + 0x1b5);   // fist_snd.c:1481, the program-change vector
+reads the SOURCE table via `iVar1 + 0x1b5` with NO base -> in the flat port that is g_mem +
+(mode*2 + 0x1b5) = linear ~0x1b5 (near-null garbage), a BASE-LOSS (the asm is DS-relative:
+`DS:[0x1b5+bx]`). So the 7 vectors -- crucially [0x1b3], the program-change/control-change vector
+dispatched at fist_snd.c:1641 when a voice's [0xcc] control byte changes -- are installed from
+GARBAGE. Hence the program-change path never reaches 0f99 (instrument load); every note plays with
+init instrument 0 (reg 0x20 stuck 0x01, WAV corr 0.126). The vector STORAGE (_DAT_1000_c1b3 ->
+linear 0x1c1b3) is consistent between install (1481) and dispatch (1641); only the SOURCE
+table reads (0x17d/0x18b/0x199/0x1a7/0x1b5/0x1c3/0x1d1) lost their base.
+
+THE FIX: base-loss correction on the 7 mode-table reads in FUN_0000_0872 (lines 1477-1483) --
+add the driver's DS base so they read the real per-mode handler tables. 407-CLASS asm-verified
+patch, PORT-VERIFIABLE with no oracle-capture (FIST_OPL_REGLOG: reg 0x20 must go 0x01->0x31;
+WAV corr vs ref/audio_menu_oracle.wav must rise from 0.126). REMAINING UNKNOWN (needs a port
+run, NOT static): the exact base -- the mode tables are DS-relative DATA (the image at file-offset
+0x1b5 is CODE, so the tables are not at fist_snd_base+0x1b5 as raw file bytes; the driver's DS at
+install time must be dumped). NEXT: build the port, run with the sound driver active, dump g_mem at
+fist_snd_base+0x1b5 vs 0x1c000+0x1b5 (and DS at FUN_0000_0872 entry) to fix the base, then patch
+the 7 reads, verify reg 0x20->0x31. This is the strongest tractable landable lead in the project
+-- a specific base-loss, a specific function, a clean port-only verification. Same base-loss class
+as patch 001 (DGROUP re-base). Unlike the windshield it needs NO oracle-capture rebuild.
