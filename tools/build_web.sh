@@ -49,7 +49,7 @@ echo "[build_web] staged $(du -sh "$STAGE"|cut -f1) of game data"
   -sEMULATE_FUNCTION_POINTER_CASTS=1 -sBINARYEN_EXTRA_PASSES=pass-arg=max-func-params@64 \
   -sFORCE_FILESYSTEM=1 -sMODULARIZE=1 -sEXPORT_NAME=FistModule \
   -sEXPORTED_RUNTIME_METHODS='["callMain","ccall","cwrap","HEAPU8","FS","ENV"]' \
-  -sEXPORTED_FUNCTIONS='["_main","_fist_web_start","_fist_web_fb","_fist_web_palette","_fist_web_in_mission","_malloc"]' \
+  -sEXPORTED_FUNCTIONS='["_main","_fist_web_start","_fist_web_fb","_fist_web_palette","_fist_web_in_mission","_fist_web_mouse","_fist_web_key","_malloc"]' \
   --preload-file "$STAGE"@/ \
   2>"$OBJDIR/link.txt" || { echo "LINK FAILED:"; tail -30 "$OBJDIR/link.txt"; exit 1; }
 echo "[build_web] built $OUT (+ .wasm + .data) -- open web/index.html via a local http server"

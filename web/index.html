@@ -6,60 +6,58 @@
 <style>
   html,body{margin:0;background:#111;color:#ccc;font:13px monospace;height:100%}
   #wrap{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px}
-  canvas{image-rendering:pixelated;background:#000;width:640px;height:400px;border:1px solid #333}
+  canvas{image-rendering:pixelated;background:#000;width:640px;height:400px;border:1px solid #333;cursor:crosshair}
   #status{white-space:pre;min-height:1.5em;color:#8c8}
+  #dbg{max-width:640px;max-height:110px;overflow:auto;color:#777;font-size:11px}
 </style>
 </head>
 <body>
 <div id="wrap">
   <h3>Armored Fist — WebAssembly</h3>
-  <canvas id="screen" width="320" height="200"></canvas>
-  <div id="status">starting worker…</div>
-  <pre id="dbg" style="max-width:640px;max-height:160px;overflow:auto;color:#888;font-size:11px"></pre>
+  <canvas id="screen" width="320" height="200" tabindex="0"></canvas>
+  <div id="status">starting…</div>
+  <pre id="dbg"></pre>
 </div>
 <script>
-const cv = document.getElementById('screen');
-const ctx = cv.getContext('2d', { alpha:false });
-const img = ctx.createImageData(320, 200);
-const status = document.getElementById('status');
-const log = m => { status.textContent = m; };
-
-let latest = null;   // {fb:Uint8Array, pal:Uint8Array}
-let frames = 0;
-
-function paint(){
-  if (latest){
-    const fb = latest.fb, pal = latest.pal, out = img.data;
-    for (let i = 0, o = 0; i < 64000; i++, o += 4){
-      const c = fb[i] * 3;
-      out[o]   = (pal[c]   << 2) | (pal[c]   >> 4);
-      out[o+1] = (pal[c+1] << 2) | (pal[c+1] >> 4);
-      out[o+2] = (pal[c+2] << 2) | (pal[c+2] >> 4);
-      out[o+3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-  }
-  requestAnimationFrame(paint);
-}
+const cv=document.getElementById('screen'), ctx=cv.getContext('2d',{alpha:false}), img=ctx.createImageData(320,200);
+const statusEl=document.getElementById('status'), dbgEl=document.getElementById('dbg'), logs=[];
+const log=m=>statusEl.textContent=m, addLog=m=>{logs.push(m);dbgEl.textContent=logs.slice(-25).join('\n');dbgEl.scrollTop=1e9;};
+let latest=null, frames=0;
+function paint(){ if(latest){ const fb=latest.fb,pal=latest.pal,out=img.data;
+  for(let i=0,o=0;i<64000;i++,o+=4){const c=fb[i]*3;
+    out[o]=(pal[c]<<2)|(pal[c]>>4);out[o+1]=(pal[c+1]<<2)|(pal[c+1]>>4);out[o+2]=(pal[c+2]<<2)|(pal[c+2]>>4);out[o+3]=255;}
+  ctx.putImageData(img,0,0);} requestAnimationFrame(paint);}
 requestAnimationFrame(paint);
 
-const logs = []; const dbg=document.getElementById('dbg');
-function addLog(m){logs.push(m);dbg.textContent=logs.slice(-40).join('\n');dbg.scrollTop=dbg.scrollHeight;}
-const worker = new Worker('worker.js');
-worker.onmessage = (e) => {
-  const d = e.data;
-  if (d.t === 'ready')  log('engine running…');
-  else if (d.t === 'exited') log('engine main returned (frames: ' + frames + ')');
-  else if (d.t === 'log'){ addLog(d.m); if (frames===0) log(d.m.slice(0,80)); }
-  else if (d.t === 'err'){ addLog('ERR '+d.m); log('ERR: ' + d.m.slice(0,120)); }
-  else if (d.t === 'frame'){
-    latest = { fb: new Uint8Array(d.fb), pal: new Uint8Array(d.pal) };
-    frames++;
-    if ((frames & 15) === 0) log('running — frames: ' + frames);
-  }
-};
-worker.onerror = (e) => log('worker error: ' + e.message + ' @' + e.filename + ':' + e.lineno);
-window._dbg = () => logs.join('\n');
+// input SharedArrayBuffer: [0]x [1]y [2]btn [3]mouseSeq [4]keyWrite [5]keyRead [6..37]ring
+let IN=null;
+if(typeof SharedArrayBuffer!=='undefined'){ IN=new Int32Array(new SharedArrayBuffer(64*4)); }
+else log('SharedArrayBuffer unavailable — serve via tools/serve_web.py (COOP/COEP)');
+let buttons=0;
+function mouseFromEvent(ev){ const r=cv.getBoundingClientRect();
+  const x=Math.max(0,Math.min(319,Math.round((ev.clientX-r.left)/r.width*320)));
+  const y=Math.max(0,Math.min(199,Math.round((ev.clientY-r.top)/r.height*200)));
+  if(IN){ Atomics.store(IN,0,x); Atomics.store(IN,1,y); Atomics.store(IN,2,buttons); Atomics.add(IN,3,1); } }
+cv.addEventListener('mousemove',mouseFromEvent);
+cv.addEventListener('mousedown',e=>{buttons|=(e.button===2?2:1);mouseFromEvent(e);cv.focus();e.preventDefault();});
+cv.addEventListener('mouseup',  e=>{buttons&=~(e.button===2?2:1);mouseFromEvent(e);e.preventDefault();});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+const SC={Enter:0x1c,Escape:0x01,Backspace:0x0e,ArrowUp:0x48,ArrowDown:0x50,ArrowLeft:0x4b,ArrowRight:0x4d,' ':0x39};
+cv.addEventListener('keydown',e=>{ if(!IN)return; let sc=SC[e.key]||0,asc=0;
+  if(e.key.length===1)asc=e.key.charCodeAt(0); else if(e.key==='Enter')asc=13; else if(e.key==='Escape')asc=27; else if(e.key==='Backspace')asc=8;
+  const ax=(sc<<8)|(asc&0xff); if(ax){const w=IN[4]&31; IN[6+w]=(ax<<1)|1; Atomics.store(IN,4,(IN[4]+1)|0);}
+  if(e.key!=='F5'&&e.key!=='F12')e.preventDefault(); });
+
+const worker=new Worker('worker.js');
+worker.postMessage({t:'sab', sab: IN?IN.buffer:new ArrayBuffer(0)});   // send SAB BEFORE the module boots
+worker.onmessage=e=>{ const d=e.data;
+  if(d.t==='ready'){ log('running — click the menu'); cv.focus(); }
+  else if(d.t==='exited') log('engine returned (frames '+frames+')');
+  else if(d.t==='log') addLog(d.m);
+  else if(d.t==='err'){ addLog('ERR '+d.m); log('ERR: '+d.m.slice(0,120)); }
+  else if(d.t==='frame'){ latest={fb:new Uint8Array(d.fb),pal:new Uint8Array(d.pal)}; frames++;
+    if((frames&63)===0) log('running — click the menu  ('+frames+' frames)'); } };
+worker.onerror=e=>log('worker error: '+e.message);
 </script>
 </body>
 </html>
