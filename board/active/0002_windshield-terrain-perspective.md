@@ -974,3 +974,29 @@ op-dispatch (which this session mapped fully: op-table @0xcb3, 0x08->6980, 0x0c-
 render op through the op-table trampoline instead of log-and-return), which builds the
 proj-table + projection + tile, then measure the full default-path terrain toward
 bit-exact, then land the complete windshield patch (SMC + op-dispatch + matrix flow).
+
+Proj-table builder located -> confirms the op-dispatch is the single root. 8fa0 sets
+90fc/9100 (projection: 8fb2 mov [0x90fc], 8fbe mov [0x9100] from the 944b/9650 tables *
+90c0) but does NOT build the proj-table. The proj-table [0x3909] is allocated by the fn
+at ~0x852b (`lea 0x3909,%edx` -> alloc) and its 250x256 perspective CURVE is built from
+the projection (90fc/9100/90c0). Since the port never runs 8fa0/8120 (op-dispatch stub),
+90fc/9100 stay 0 -> the proj-table builds as ZEROS -> near-terrain wrong. So EVERY
+windshield residual (projection globals, proj-table, and the tile-build) has the SINGLE
+common root: the extender RENDER OP-DISPATCH is a log-and-return stub, so the whole
+projection-setup + build chain (8fa0 projection -> proj-table build -> 6980 tile) never
+runs; the port only renders via env-gated shim scaffolds. THE COMPLETE WINDSHIELD FIX
+(fully decomposed, root-caused, oracle-grounded this session):
+  1. 6980 SMC dynamic fix (coord [0x8490] + colormap [0x8498]) -- FOUND + validated
+     (10.6->80.4% on real buffers). patch-ready.
+  2. Wire the extender op-dispatch (op-table @0xcb3 trampolines) so the engine's posted
+     render ops actually run: 0x08->6980 (tile), 0x0c->93c0, 0x10->8fa0 (projection ->
+     90fc/9100 + proj-table build), 0x44->sky -- replacing native_main.c:2880's
+     log-and-return. This builds the projection + proj-table + tile faithfully.
+  3. A windshield matrix flow in verify.sh (op-0x24 spawn terrain, region rows 5-85) so
+     the fix is bit-verifiable native+wasm.
+Landing all three = the first complete, test-verified windshield fix. The session did
+the full diagnosis/decomposition + validated the primary fix; the op-dispatch wiring +
+matrix flow is the bounded implementation ahead. NEXT: implement the op-dispatch wiring
+as an env-gated test first (verify no 159-flow regression -- render ops only fire
+in-mission), measure the default-path terrain with 6980-SMC + real projection toward
+bit-exact, then land the complete patch set.
