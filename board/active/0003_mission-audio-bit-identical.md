@@ -140,3 +140,22 @@ base is verifiable port-only (reg 0x20 should take 0x31, WAV correlation should 
 oracle-capture rebuild. NEXT (focused session): asm-verify the fist_snd.c sequencer
 base-losses (1d62 `*0x0` + siblings), restore their bases as an asm-verified patch, confirm
 reg 0x20 takes the song instruments + WAV correlation rises -- a landable win in the 407 class.
+
+Concrete localization (correct image + sequencer functions found): fist_snd.c decompiles from
+fist_snd_image.bin (16700B, SOUNDDVR.DVR) -- NOT fist_dat_image.bin (my earlier objdump was the
+wrong image). The shim drives the sequencer via fist_icall(fist_snd_base+0x3dd) (timer ISR) and
++0xa28 (music advance, fist_sb.c:190). The song-event processor is FUN_0000_0a28 (fist_snd.c:1593):
+iterates 9 voices, reads each voice's song stream via the pointer table [0x90] (loop-back via [0xa4],
+MIDI-like special bytes 0x80/0x81), and triggers per-voice events via FUN_0000_0aa7. 0aa7 (:1656)
+dispatches via `jmp near [0x1a5]` (asm 0xae2 `ff 26 a5 01`, decompiled as the unrecovered-jumptable
+`fist_icall_far(_DAT_1000_c1a5)`) -- but this is a COROUTINE COMPUTED-RETURN (the sequencer returns
+to the caller loop via the vector [DGROUP:0x1a5]), NOT the event-type dispatch. So the program-change
+-> 0f99 link is in the event PARSING (0a28 + its callees 0b5d/0cf3/0c94), where an event byte selects
+note-on vs program-change; asm-verifiable against fist_snd_image.bin. The sequencer is a coroutine
+state-machine with computed returns + Ghidra base-losses (1d62 `*0x0`), same deep class as the voxel
+6980 dispatch. VERIFICATION PATH (clean, port-only, no oracle-capture): FIST_OPL_REGLOG -- reg 0x20
+must go from stuck-0x01 to taking the song's 0x31 once program-change reaches 0f99; then WAV
+cross-correlation vs ref/audio_menu_oracle.wav rises from 0.126. NEXT (focused session): trace the
+0a28 event-byte parse (which special byte = program-change) against fist_snd_image.bin asm, find where
+it should call 0f99 with the song instrument, wire it (resolve the base-loss / computed-return), verify
+reg 0x20->0x31. Bounded, asm-verifiable, port-only-verifiable -- the strongest tractable landable lead.
