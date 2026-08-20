@@ -333,3 +333,30 @@ camera correct, sky bit-exact) mean the pieces are ready to be driven by the rea
 dispatch. NEXT: confirm FUN_0000_0f30 (op-table dispatcher) is available/portable in
 the shim, read the op-table @0xcb3 entries + their trampolines, and wire op-service to
 dispatch via it (patch or shim) instead of the log-and-return fallthrough.
+
+OP-TABLE fully resolved (byte-offset table @fist_image.bin:0xcb3, entry = dword at
+0xcb3+op; each trampoline is `call fn(; call fn2); ret`):
+    op 0x08 -> 0x10e0 -> call 0x8df0 ; call 0x3931     tile-build (viewport + camera+6980)
+    op 0x0c -> 0x10eb -> call 0x78f0                   colormap perspective
+    op 0x10 -> 0x10f7 -> call 0x7940                   rotated variant
+    op 0x18 -> 0x10ca -> 0x89b0                        MAP-LOAD (confirmed)
+    op 0x24 -> 0x82c0 -> call 0x8120 (then 9200)       sample (mid-82b8)
+    op 0x44 -> 0x10da -> call 0x7660                   sky
+    op 0x60 -> 0x10f1 -> call 0x8650                   (camera-Z terrain-follow)
+CORRECTED op-0x08 structure: the trampoline calls TWO fns -- 8df0 then 3931. 8df0 is
+VIEWPORT/PROJECTION setup (sets 90ec fb-ptr, 90f0/90f4/90f8 viewport dims from the
+TCB rect +0x16/+0x18/+0x1a/+0x1c, 9114 horizon table from TCB+0xcd detail) -- NOT the
+tile-build. 3931 IS the tile-build: 85d0(camera); if [0x395d]==0 { [0x3958](sky);
+6980() } else { 686f(); 6c00() }. So op 0x08 = 8df0(viewport) + 3931(camera+sky+6980).
+To wire op 0x08 faithfully the tile-build 6980 needs: (a) [0xc93]=mission TCB, (b) the
+TCB VIEWPORT RECT +0x16..+0x1c populated (prior RECON: "never populated, all 0" -- the
+viewport-dim frontier; 8df0 would set dims=0 otherwise), (c) [0x395d]==0 to reach 6980.
+So the windshield implementation decomposes into: [1] wire the op-table dispatch
+(f30/0xcb3 -> trampolines) replacing log-and-return; [2] populate the TCB viewport rect
+(engine-side FUN_0000_ddff writes TCB+0x1e/+0x22 from word[0x156a] rect [+6/+8/+a/+c],
+per native_main.c:2862 -- itself needs that rect populated); [3] deliver the C32.KLC
+colormap so 6980's input is terrain texels not {0,4}. Each is asm-verifiable. NEXT:
+attempt [1] as a DIAGNOSTIC first -- at op 0x08, call m_ext 8df0+3931 with [0xc93]=TCB
++ [0x395d]=0 + a forced 320x200 viewport, check crash-free + whether [0x3918] changes
+and the terrain index-match improves; that isolates whether the tile-build path (given
+viewport+TCB) produces the right tile, before committing the full dispatch wiring.
