@@ -202,3 +202,37 @@ the (existing) FIST_R3D2_V18 pose-matched harness -- note it currently doesn't
 trigger under the MC_MOUSE drive (op-0x54 gate); its trigger needs repair to validate
 render fidelity at the oracle pose against oracle_9200_framematched_pass08.idx.bin /
 oracle_mission_spawn_framematched_idx.bin (pose-matched oracle FB samples that EXIST).
+
+BREAKTHROUGH -- the REAL residual isolated (pose-matched, non-confounded), after
+clearing SIX capture/reconstruction confounds this session. First, a CAMERA
+RETRACTION (last iteration trusted the wrong oracle): the port's LIVE spawn pose
+MATCHES the GENUINE dosbox-fist guest-RAM capture oracle_azer1_tcb_camera.txt
+(r92cam-now at 9200-render: X=583982 Y=1142557 alt=12800 head=26729 pitch=384
+roll=256 foc=256) -- EXACTLY (X/Y/alt/head/pitch/roll all match). The camera is
+CORRECT, not degenerate; the "residual #2 / Y off 40x" comment is STALE, and the
+docs/oracle_terrain_writer.md camera (X=609696/alt=29184/pitch=0/roll=128, hardcoded
+in FIST_R3D2_V18) is a DIFFERENT/misprovenanced capture -- the 6th capture-provenance
+confound of the session.
+With the camera confirmed correct, a DAC-independent INDEX comparison of the port's
+live windshield FB vs the pose-matched oracle 9200 render (oracle_9200_framematched_
+pass08.idx.bin) gives the true residual:
+  - SKY (rows 0-4): BIT-EXACT (top indices identical 0:452/32:350/3:218/33:184).
+  - TERRAIN (rows 5-85): both render terrain (port 23172, oracle 22692 px >=80),
+    but only 10.6% index match. Port mean idx=129, oracle mean=184 -> terrain is
+    +55 DARKER, with a BROAD spread (-80..+150), NOT a constant offset -> per-pixel
+    the port samples DIFFERENT tile locations, not a uniform lighting shift.
+ROOT (self-documented + verified): the port NEVER BUILDS the ray tables [0x3a24]/
+[0x3e24] (shim comment native_main.c:1400 "port never builds them"; live values are
+ray3a24[0..3]=1/1/1/1, ray3e24[0]=1 -- all 1s, UNBUILT). 9200's per-column texel
+walk uses 3a24 (x DAT_90c0) + 3e24 as the "detail base curve" increment (consumed at
+build/fist_ext.c:4367-4368); with degenerate all-1 tables the walk samples the wrong
+terrain -> the +55-darker broad-spread residual. The tile [0x3918] itself IS built
+(nz=65536, distinct=175). So THE windshield bug is the UNBUILT RAY TABLES, not the
+camera / tile / palette / matrix.
+NEXT (concrete fix path): find the original's 3a24/3e24 "detail base curve" builder
+(only CONSUMERS appear in build/fist_ext.c:4367 -> the builder is unported or in a
+Ghidra gap) via fist_image.bin asm -- search for stores to 0x3a24/0x3e24; port it so
+the ray tables are built faithfully; re-run the index comparison (target: terrain
+match >> 10.6%, ideally bit-exact like the sky). This is the first REAL, actionable
+voxel defect of the session -- everything upstream (camera/sky/matrix/tile/DAC) is
+verified faithful.
