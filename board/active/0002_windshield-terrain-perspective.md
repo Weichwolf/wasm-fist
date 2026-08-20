@@ -1425,3 +1425,32 @@ are built, and the rest of the chain (395e + 6980/patch407 + Layer-2 + 9200) pro
 full windshield -- verify on the AZER1 scaffold (expect >78.7% -> ~100%), then add the
 windshield matrix flow (FIX3). This is bounded, decomposed work -- just not autonomous-loop
 background-probe work. PAUSING the loop here for a focused windshield-tooling session.
+
+*** QEMU ORACLE IS VIABLE UNDER THE HARNESS -- boot-crash diagnosed + defeated ***
+Reopened the QEMU gdb-stub path (board-endorsed approach (b)) and got the ORACLE RUNNING:
+- The earlier "harness kills qemu / TCP-server forbidden" reads were a SELF-KILL ARTIFACT:
+  `pkill -f qemu-system-i386` matches the issuing shell's OWN cmdline (contains that string)
+  -> the command kills itself -> exit 1/144, no output. Use `pkill -x qemu-system-i386` (exact
+  proc-name; note the kernel truncates the 16-char comm to "qemu-system-i38", so `pgrep -x` needs
+  `-f`). With that fixed, qemu runs fine via Bash run_in_background:true + dangerouslyDisableSandbox,
+  TCP monitor on :5512, screendump/pmemsave/info-registers all work (tools/oracle/qmon.py, client
+  connect -- allowed).
+- VISUAL GROUND TRUTH captured this round (native /tmp/az1_cockpit.png, FIST_MISSFB AZER1 spawn):
+  the cockpit CHROME renders PERFECT + bit-exact (MPH dial, FIRE, radar, READY/HEAT/APDS/MG/HEP,
+  zoom 1X/3X/10X, TTS/TARGET) but the WINDSHIELD is TV STATIC (the 3a24/3e24 placeholder all-1s).
+  => the 3a24 producer is NOT a fidelity refinement, it is THE ENTIRE TERRAIN/GAME VIEW and the
+  hard blocker to "play it in the browser". Reframed accordingly.
+- BOOT-CRASH DIAGNOSED: the ORIGINAL under stock qemu-system-i386 (no icount) launches
+  (Tracking Number AF-FD:1U10) then dies "Interrupt divide by zero" -- the classic RUNTIME-ERROR-200
+  timing-calibration overflow (delay loop counts too many iters per PIT tick on an "infinitely fast"
+  TCG CPU -> 16-bit divisor overflow). DEFEATED by `-icount shift=7,sleep=off` (deterministic
+  per-insn virtual time defeats the overflow; sleep=off keeps host speed). With icount the game NO
+  LONGER crashes -- it grinds through early real-mode init (hot at a big-real-mode memset at BIOS
+  F000:7087, called repeatedly = progressing, not hung), just SLOW under TCG. Reaches neither menu
+  nor graphics-mode yet within ~2min wall; needs more wall-clock and/or a lower shift.
+NEXT (next iteration): let it reach the 320x200 menu (screendump != 720x400), inject mouse via HMP
+(`mouse_move`/`mouse_button`) or sendkey to navigate menu->BATTLE->ACCEPT into a mission, then
+`pmemsave 0 0x2000000 ram.bin` at the spawn and locate the 3a24/3e24 base-ray-curve bytes. If those
+are viewport/LOD-constant (mission-independent), the EXACT bytes can be captured + verified faithful
+on the AZER1 scaffold (>78.7%->~100%); to also pin the PRODUCER cs:eip, relaunch with `-s -S` and a
+gdb hardware watchpoint on linear 0x10003a24 (dump.gdb), then decompile that function.
