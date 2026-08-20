@@ -341,3 +341,17 @@ the ~2.5-3x value-scale gap). Resolving it needs the D32.KLC KLC1 decode traced
 against the map-load asm (89b0's 36bf/643c/bc06/bed2/345c upsample cascade) +
 whether 6980 reads [0x85bc] as a sparse cache. This is deep, multi-iteration RE;
 the two landed fixes (camera + sky-setup) stand independently.
+
+Heightmap decode CLEARED (D32.KLC inspected): D32.KLC is "KLC1" 256x256 with a
+SMOOTH RAMP (00 01 01 01 02 02 02 03 03 03 04...). 89b0 reads it (643c) then
+upsamples 256->2048 in place (the `while(5578<8494){2f95; iVar3<<=2; 345c; bc06}`
+cascade). The port's [0x85bc] is exactly that faithful dense upsample (mean ~53
+matches the ramp). So the port's D32.KLC->heightmap decode is FAITHFUL. The ORACLE's
+[0x85bc] read at the 9200 render is sparse/high because it is a RENDER-TIME
+transformed buffer, not the raw upsampled heightmap -- 6980 temporarily repoints
+[0x85bc] (see native_main:1599 `*(xb+0x85bc)=hmcm`), so the two pointers hold
+different stages. The earlier "0% heightmap match" was a stage/buffer confound, not
+a decode bug. So the voxel root is NOT the heightmap decode -- it is the RENDER-TIME
+tile-build: 6980 (voxel raycaster, ext 0x3946 caller) + 689a + their [0x85bc]+
+0x100000 contiguous-buffer + ramp seeds. That is the deep, paged-out-reconstruction
+piece; camera + sky-setup remain fixed and matrix-verified.
