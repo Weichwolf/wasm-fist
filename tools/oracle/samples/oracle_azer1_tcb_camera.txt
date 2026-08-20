@@ -1,0 +1,9 @@
+[seg] csb=10000000 dsb=10000000 ssb=00000000  [0xc93] via cs=f0010000 via ds=f0010000  cr3=0000e000 paging=1  TCB flat la=00010000 -> phys=00010000 (identity if paging-off = la)
+[hex ds:0xc80] 00 00 00 79 11 dd 02 30 0f 00 00 26 05 54 02 00 00 00 10 00 00 01 f0 33 00 cc 3e 03 f0 4c b1 03 f0 90 d1 02 f0 00 00 ff ff 00 00 00 f2 cf 00 c0 
+[r92cam-now #0] tcbptr=f0010000 la=00010000 lb=f0010000  A[ext-rel]: X=583982 Y=1142557 alt=3328 head=26729 pitch(+3a)=384 roll(+3c)=384 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+[seg] csb=10000000 dsb=10000000 ssb=00000000  [0xc93] via cs=f0010000 via ds=f0010000  cr3=0000e000 paging=1  TCB flat la=00010000 -> phys=00010000 (identity if paging-off = la)
+[hex ds:0xc80] 00 00 00 79 11 dd 02 30 0f 00 00 26 05 54 02 00 00 00 10 00 00 01 f0 33 00 cc 3e 03 f0 4c b1 03 f0 90 d1 02 f0 00 00 ff ff 00 00 00 f2 cf 00 c0 
+[r92cam-now #1] tcbptr=f0010000 la=00010000 lb=f0010000  A[ext-rel]: X=584027 Y=1142488 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=384 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0
+[seg] csb=10000000 dsb=10000000 ssb=00000000  [0xc93] via cs=f0010000 via ds=f0010000  cr3=0000e000 paging=1  TCB flat la=00010000 -> phys=00010000 (identity if paging-off = la)
+[hex ds:0xc80] 00 00 00 79 11 dd 02 30 0f 00 00 26 05 54 02 00 00 00 10 00 00 01 f0 33 00 cc 3e 03 f0 4c b1 03 f0 90 d1 02 f0 00 00 ff ff 00 00 00 f2 cf 00 c0 
+[r92cam-now #2] tcbptr=f0010000 la=00010000 lb=f0010000  A[ext-rel]: X=584042 Y=1142465 alt=12800 head=26729 pitch(+3a)=384 roll(+3c)=256 foc=256 det=1 | B[abs]: X=0 Y=0 alt=0 head=0 pitch=0 roll=0 foc=0 det=0

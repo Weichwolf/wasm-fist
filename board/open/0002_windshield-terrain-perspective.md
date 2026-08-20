@@ -144,3 +144,15 @@ behind FIST_TILEFILL (the paged-out flight model writes them; oracle-anchored
 spawn seed). Fix: apply pitch=384/roll=256 on the DEFAULT op-0x24 render path (a
 reconstruction like the existing alt/focal seeds), together with the sky gate
 [0x395c]. Verify the windshield against oracle_azer1_windshield_dashAE0.png.
+
+Applying the correct pitch=384/roll=256 plus forcing the sky ([0x395c]) still
+leaves ~75% and OVER-produces sky (22791 px vs the original's 9304) -- so pitch/roll
+alone is not the whole fix and the FIST_FORCE395C sky-build (689a filling the tile)
+is not yet the faithful one. Two follow-ups: (a) the guest-RAM oracle also dumped
+the original's VRAM at the 9200 render, but FIST.RUN uses VGA MODE-X (planar,
+vertical-stripe when read linearly), so the reference frame needs 4-plane
+de-interleaving before it can be diffed pixel-exact -- do that to get a same-moment
+reference (better than the later burst f04). (b) read the original's [0x395c] /
+[0x622c] / [0x8490] out of oracle_azer1_tcb.pass00.ram.bin (paging on, ext ds base
+0x10000000, cr3 0xe000) to settle the .MEG-tier question and the correct sky value.
+Saved: tools/oracle/samples/oracle_azer1_tcb_camera.txt.
