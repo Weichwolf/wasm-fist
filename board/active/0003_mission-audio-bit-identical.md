@@ -357,3 +357,17 @@ timbre was monotimbral; now it is multi-instrument). make check clean; native+wa
 verify.sh both PASSED: 159/159 flows, 0 failed -- crash-free on native AND wasm, native==wasm
 bit-identical (the hard invariant), fidelity preserved. Patch 408 LANDED + verified. NOTE: this is distinct from the menu-music SONG-REGISTER gap (bde4 not firing) -- 0xfab
 fixes the instrument-apply on whatever song plays; the register/start is a separate remaining hop.
+
+Post-408 sweep (this loop iteration): applied FIST_TRACE_TRAPS systematically -- (1) menu path:
+0xfab traps 31->0, remaining 4 traps (0x00000 null, 0x01b31, 0x1360f, 0x13f7f) are all "no FUN_
+there" garbage/mid-function computed targets (verified: 0x13f7f is inside FUN_0000_3f3c, 0x1360f
+mid-stream), safely trapped -> benign, no real fix. (2) mission/windshield path: ZERO traps (2.4M
+log lines are the op-service display-list fallthrough; the extender is fully seeded). => the
+un-seeded-function class is EXHAUSTED -- 0xfab (patch 408) was the only real one. WAV-vs-oracle
+fidelity measurement is blocked: FIST_AUDIO_WAV writes raw mono PCM (no header) AND the port plays
+a different song than ref/audio_menu_oracle.wav (menu music) because the menu-music SONG-REGISTER
+(bde4) still doesn't fire -- so patch 408's value stays verified via reg 0x20 (instruments apply)
++ verify.sh both 159/0, not yet via WAV. NEXT audio target: the menu-music-register gate (bde4 not
+dispatched by the menu front-end) -- deeper (menu-flow, not a trap): the menu renders (159 flows
+pass) but the screen-object's music-start method is not invoked. That is the gate to both the menu
+music playing AND the oracle-comparable WAV.
