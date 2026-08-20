@@ -1391,3 +1391,37 @@ producer. NEXT: read flatwriters.txt; the cs:eip pins the producer image+offset 
 that function -> wire it faithfully so 3a24/3e24 are built -> 395e produces the real projection
 -> 6980 (patch 407) + Layer-2 render the full windshield. If flatwriters is empty (producer
 writes via a non-ext-flat mapping to the same phys), escalate to FIST_WATCHPHYS on r6980_base+0x3a24.
+
+*** ORACLE-HARNESS REPURPOSING FAILED -- producer ID needs a DEDICATED session ***
+Spent multiple rounds trying to pin the 3a24/3e24 producer by repurposing dosbox-fist's
+existing capture harness via env+signals. It did not yield the producer, for compounding
+reasons now fully understood: (1) the flatwriters dump lives in fist_dump(), triggered ONLY
+by SIGUSR2 -- NOT by the FIST_R9200CAP path (which calls r9200_dump, a different dumper);
+(2) fist_prefix (the output path) is set reliably ONLY by the FIST_MEMARM_BOOT constructor,
+so without it dumps go to an empty prefix in the (cleaned) CWD; (3) FIST_MEMARM_BOOT arms
+fist_memrec on EVERY write from boot, which penalizes the write-heavy Doug-Huffman FIST.DAT
+decompression enough that timed UI clicks miss the menu; (4) the signal path and lazy init
+in fist_vgawrite add ordering constraints; (5) running these xvfb+dosbox captures as
+autonomous background jobs led to overlapping stale processes rewriting shared logs, losing
+control of which script/config actually ran. Net: this is the wrong MODE for the task.
+
+STATUS (durable): patch 407 landed + native/wasm-verified (159/0), ~78.7% AZER1 windshield.
+The windshield is FULLY DECOMPOSED and banked here: the complete chain framebuffer<-root is
+  3a24/3e24 base ray-curves [ROOT, placeholder all-1s, no extender writer, one-time build]
+   -> 395e: 3a24*90c0 -> 0x4224 (ray-divisor) + proj-table[0x3909]        [EXISTS]
+    -> 6980: raycast, Layer-1 SMC (patch 407) + Layer-2 ray-step (asm-proven, projection-gated)
+      -> 9200: tile -> framebuffer                                        [works]
+The SINGLE remaining unknown is the 3a24/3e24 producer's identity (not in any of the 4
+decompile sources, not a shipped file -> a one-time viewport/detail-LOD build in code that
+is non-decompiled or opaque-pointer-based). It requires an oracle WATCHPOINT on the ext-flat
+address 0x10003a24, done in a FOCUSED, INTERACTIVE session -- one of:
+  (a) a small dosbox-fist REBUILD adding a purpose-built, unconditional 3a24-writer logger
+      (env-gated, independent of MEMARM/R9200/SIGUSR, dumps cs:eip on the first write to the
+      watched flat page) -- then a fast single run, OR
+  (b) the QEMU gdb-stub oracle: a hardware watchpoint on the phys page backing 0x10003a24,
+      breaks EXACTLY on the write, no polling/click-timing fragility.
+Once the producer cs:eip is known: decompile that function, wire it faithfully so 3a24/3e24
+are built, and the rest of the chain (395e + 6980/patch407 + Layer-2 + 9200) produces the
+full windshield -- verify on the AZER1 scaffold (expect >78.7% -> ~100%), then add the
+windshield matrix flow (FIX3). This is bounded, decomposed work -- just not autonomous-loop
+background-probe work. PAUSING the loop here for a focused windshield-tooling session.
