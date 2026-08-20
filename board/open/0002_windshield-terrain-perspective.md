@@ -239,3 +239,15 @@ fill a SEPARATE sky buffer / only the sky rows, not clobber the terrain tile 920
 reads. Decisive datum: dump the ORIGINAL's [0x3918] tile contents (terrain vs sky)
 at the render via dosbox-fist (page-walk the RAM dump) to see what 9200 should
 sample; and whether 689a/6980 writes a different buffer in the original.
+
+Tile-composition pinned (dosbox-fist page-walk of the ORIGINAL [0x3918] tile ptr
+0x44200 + the port's FIST_MTXDUMP): the map-load tile is 74% terrain (idx>=80,
+bc9c/bdc4) but 689a OVERWRITES it with sky at render time. Post-689a the ORIGINAL
+tile is 87% sky (idx<80) / 13% terrain -- 9200 then samples sky in the upper rays
+and the retained terrain in the lower rays (the tan bottom third). The port's 689a
+reconstruction fills ~the WHOLE tile with sky (the 13% terrain band is clobbered
+too) -> 9200 reads sky everywhere. So the fix is bounded: make 689a (native_main
+fist_ext_689a) leave the terrain rows the original leaves -- i.e. composite sky
+only above the terrain horizon, matching the original's 87/13 split -- rather than
+fill the full 256x256. Compare the port's post-689a tile to the original's 0x44200
+tile row-by-row to find the exact fill extent 689a should use.
