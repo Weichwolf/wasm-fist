@@ -422,3 +422,20 @@ region, the row stride, and the HM/colormap contiguity; make the port's map-load
 that exact layout so 6980 (faithful) samples the right texels WITHOUT the TILEFILL
 band-aid. This is the concrete, asm-verifiable windshield fix, now localized to one
 build step (map-load colormap layout) downstream of everything else verified faithful.
+
+PRECISE ROOT of the colormap layout: the map-load buffer-setup (fn @0x8b80) allocates
+TWO SEPARATE buffers via 0x36bf: first the HEIGHTMAP -> [0x85bc] (dim from TCB+0x7a,
+then upsampled 256->2048 via 2f95/345c/bc06/bed2), then the COLORMAP -> [0x85b8] (dim
+from TCB+0x8a). They are separate 36bf calls -- BUT 6980 reads the colormap at
+[0x85bc]+0x100000, NOT at [0x85b8]. This only works if the allocator (36bf / the
+MEMMGR pool) places the two buffers CONTIGUOUSLY so that [0x85b8] == [0x85bc]+0x100000
+(HM occupies exactly 0x100000). The port allocs them separately/non-contiguously (per
+the FIST_TILEFILL comment), so [0x85bc]+0x100000 != [0x85b8] and 6980 reads the wrong
+region -> the colormap "right colours at wrong positions" (5.6% byte-match, +55 dark).
+THE FIX (precise, in the map-load/allocator): make the port's map-load allocate the HM
+and colormap so [0x85b8] == [0x85bc]+0x100000 (contiguous, HM sized exactly 0x100000),
+matching the original's pool layout that 6980 depends on. Then 6980 (asm-verified
+faithful) samples the real colormap with NO TILEFILL band-aid. NEXT: verify the port's
+runtime gap ([0x85b8]-[0x85bc]) at op-0x18, confirm it != 0x100000, then adjust the
+map-load buffer alloc (shim MEMMGR / 36bf order+size) to make them contiguous; re-run
+the index compare (expect a large jump past 33.6% toward bit-exact).
