@@ -103,3 +103,21 @@ table [0x9114] = (&PTR_748c)[detail], detail 1 -> image 0x7568) came out mostly 
 in the probe, and 90f0 (the per-column fill height) / 8deb (viewport setup) decide
 how far terrain fills. Verify 8deb + the 0x7568 sky-skip table + 90f0 against the
 asm next — a port-only step.
+
+ROOT-CAUSE LEAD (port-only, not blocked on 0007): the missing sky is gated by
+[0x395c]. FIST_FORCE395C=1 flips the port from ~no sky (28 sky-ish px) to sky
+(22887 px; oracle has 9304) -- proving [0x395c] is the port's sky gate. [0x395c]
+(and the map detail [0x8490]) are set in 89b0 (fist_ext.c ~13150-13172) ONLY when
+one of the memory-tier probes 5c98("4.MEG"/"8.MEG"/"16.MEG"/"40.MEG") reports found
+(built code threads the FILEMGR carry: uVar10 = g_ext_find_cf, branch on CF clear).
+There are NO .MEG files in the data (only 8.SKY), so all four probes fail and the
+port leaves [0x395c]=0 -> no sky, terrain top-to-bottom.
+
+The contradiction to resolve next: the burst-captured ORIGINAL runs on the SAME
+data (no .MEG files) yet renders sky, so the original sets [0x395c]/[0x8490] via a
+path the port does not replicate -- a 5c98 fallback, a free-memory check behind the
+".MEG" name, or a shim gap in g_ext_find_cf for these probes. Determine what the
+original resolves for the .MEG tier (does 5c98 for "N.MEG" test a file or free
+memory?), then make the port pick the same tier. Forcing 395c alone still leaves
+75.2% (too much sky, and [0x8490] detail likely also wrong), so the fix is the
+correct tier (395c AND 8490 together), not just a nonzero 395c.
