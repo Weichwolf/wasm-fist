@@ -1000,3 +1000,24 @@ matrix flow is the bounded implementation ahead. NEXT: implement the op-dispatch
 as an env-gated test first (verify no 159-flow regression -- render ops only fire
 in-mission), measure the default-path terrain with 6980-SMC + real projection toward
 bit-exact, then land the complete patch set.
+
+Individual projection-function calls do NOT shortcut the pipeline (still 78.7%).
+Calling m_ext 8fa0+8120 before the TILEFILL 6980 changed nothing -- they need their own
+inputs (the 944b/9650 projection tables, 90e0, the camera-setup chain) that only the full
+op-dispatch pipeline populates. So the windshield's near-terrain fix genuinely requires
+WIRING THE EXTENDER OP-DISPATCH PIPELINE (not calling one function) so the engine's posted
+render ops run in order with their real inputs, building projection -> proj-table -> tile.
+DIAGNOSTIC PHASE COMPLETE (this 55-iteration session). The windshield is fully root-caused,
+oracle-grounded, and decomposed:
+  - PRIMARY ROOT + validated fix: 6980 uses static un-SMC-patched constants; the dynamic
+    [0x8490]/[0x8498] fix on real 2048^2 buffers = 10.6% -> 78.7-80.4% (7.5x). patch-ready.
+  - REMAINING (near-terrain): the projection-setup pipeline (8fa0/8120 projection + the
+    proj-table build @[0x3909]) never runs because the render op-dispatch is a log-and-
+    return stub -- one common root for the projection globals + proj-table + tile-build.
+  - Every voxel component individually verified faithful (HM/colormap/camera/matrix/sky/
+    6980-addressing/window/phase); 8+ false leads honestly retracted.
+The COMPLETE fix (implementation phase, multi-step): (1) land the 6980 SMC patch; (2) wire
+the extender render op-dispatch (op-table @0xcb3 -> real m_ext render fns, with the setup
+ops populating the projection tables + proj-table) replacing the log-and-return stub, no
+159-flow regression; (3) add a windshield matrix flow; verify bit-identical native+wasm.
+This is the bounded implementation ahead; the diagnosis + primary-fix validation is done.
