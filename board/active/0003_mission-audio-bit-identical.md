@@ -217,3 +217,27 @@ base. The real runtime questions, to settle EMPIRICALLY by instrumenting build/ 
 The `mov ds,[cs:0x831]` at asm 0x83b/0xa28/0xaf4/0xc94 confirms [0x831]=driver data seg, loaded
 per-function. NEXT: instrument build/ FUN_0000_0872 (log called?/dev/DAT_0000_0831/[D+0x1b3])
 + a run with OPL menu music -> pin which of (1)/(2)/(3) is the actual break. Port-only, clean.
+
+*** SESSION CORRECTION: the vector layer WORKS (PATCH 351/353); no landable lead found today ***
+Two of my hypotheses this session were WRONG, both caught by checking build/ (the built truth)
+before landing -- the discipline working, no band-aid shipped:
+  (1) "base-loss in FUN_0000_0872's mode-table reads" -- WRONG: build/ already bases them on the
+      driver DS (D = g_mem+(DAT_0000_0831<<4)); the assembler handles the DS-relativity.
+  (2) "install(0872 driver-DS) vs dispatch(0a28 engine-DGROUP) mismatch" -- WRONG: build/ 0a28
+      (PATCH 351) also reads D+0x1b3 (driver-DS); install and dispatch agree.
+Ground truth in build/: the 7 device method-vectors ARE correctly installed + dispatched. PATCH
+353 (device select, 0872) + PATCH 351 (0aa7/0a28 driver-DS rebase) already handle the vector
+layer. [0x1b3] = device-3(OPL) slot4 = FUN_0000_10a6 (NOTE-ON) -- it fires, notes play. So the
+older board notes claiming "vectors not installed / program-change never routes" are STALE.
+The REAL and narrower gap: 0f99 (full instrument patch load, regs 0x20-0xF5) is called ONLY from
+the OPL init 104f (instrument 0) -- build/fist_snd.c:2489 is its lone caller -- and NEVER during
+playback. The original reloads the song's instrument (reg 0x20 -> 0x31); the port does not. The
+device method vectors are note-level (note-on/off), not the patch reload -- so the missing piece
+is the SONG-LEVEL program/patch-change: either a song-stream control event in 0a28's parse that
+should (re)call 0f99 with the voice's program, or a device method slot (one of [0x17b/0x197/
+0x1c1/0x1cf], not yet mapped) that the OPL device uses for patch-change. Measurement is still
+owed and needs the port DRIVEN TO MENU MUSIC (a 12s cold run only reaches TITLE.KDV; menu music
+needs the menu-nav injection like the verify flows) + FIST_OPL_REGLOG, then: confirm reg 0x20
+stuck 0x01, and instrument 0f99 to see if the original's path would call it. HONEST STATUS: no
+landable audio patch found this session; the gap is real but deep (song-level patch-change in
+the sequencer, same indirect/parse core as the voxel). Both surfaces need focused sessions.
