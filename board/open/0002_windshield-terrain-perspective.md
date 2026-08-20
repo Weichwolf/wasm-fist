@@ -313,3 +313,16 @@ exactly that region, then confirm whether the port's C32/D32.KLC->heightmap deco
 is faithful; if the heightmap genuinely differs, the D32.KLC decode is the root and
 fixing it should cascade the tile + windshield to bit-exact. Camera + sky-setup
 fixes remain correct and matrix-verified independent of this.
+
+Heightmap comparison INCONCLUSIVE (dimensions agree: both 2048x2048/4MB, [0x8494]
+=2048 mask 2047). The port's [0x85bc] is 99.9% dense (fully upsampled); the
+ORIGINAL's at pass00 is only 3% nonzero, concentrated in ~90 scattered rows of 2048
+with visibly REPEATING value runs -- i.e. the original's heightmap is MID-BUILD at
+pass00 (the map-load upsample loop 89b0:13231-13244 / bc06 / bed2 not yet finished
+at the FIRST 9200 render), not a clean same-state snapshot. So the earlier "0%
+heightmap match" is not a proven decode bug -- it compared a fully-built port map
+to a mid-build original. NEXT: recapture the guest RAM at a STABLE render (drive a
+few frames past spawn / capture a later r9200 pass, or read [0x85bc] once the
+upsample completes) and re-diff; only then is the heightmap decode conclusively
+faithful-or-not. Alternatively pivot to an unblocked breadth frontier (audio 0003)
+while the voxel needs this careful re-capture. Camera + sky-setup fixes stand.
