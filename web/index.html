@@ -48,6 +48,19 @@ cv.addEventListener('keydown',e=>{ if(!IN)return; let sc=SC[e.key]||0,asc=0;
   const ax=(sc<<8)|(asc&0xff); if(ax){const w=IN[4]%32; IN[400+w]=(ax<<1)|1; Atomics.store(IN,4,(IN[4]+1)|0);}
   if(e.key!=='F5'&&e.key!=='F12')e.preventDefault(); });
 
+// Web Audio: the worker streams mono s16 PCM chunks ({t:'audio'}); schedule them gaplessly.
+let actx=null, playCursor=0, audioSamples=0;
+function ensureAudio(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); playCursor=actx.currentTime; }catch(e){ addLog('audio init failed: '+e); } } return actx; }
+let audioPeak=0;
+function playPCM(i16, rate){ const ac=ensureAudio(); if(!ac) return; const n=i16.length; if(!n) return;
+  audioSamples+=n; for(let i=0;i<n;i++){ const a=i16[i]<0?-i16[i]:i16[i]; if(a>audioPeak)audioPeak=a; }
+  const buf=ac.createBuffer(1,n,rate||44100), ch=buf.getChannelData(0);
+  for(let i=0;i<n;i++) ch[i]=i16[i]/32768;
+  const src=ac.createBufferSource(); src.buffer=buf; src.connect(ac.destination);
+  const now=ac.currentTime; if(playCursor<now) playCursor=now;   // underrun -> resync
+  src.start(playCursor); playCursor+=n/(rate||44100); }
+cv.addEventListener('mousedown',()=>{ if(actx&&actx.state==='suspended') actx.resume(); });   // autoplay-policy resume
+
 const worker=new Worker('worker.js');
 worker.postMessage({t:'sab', sab: IN?IN.buffer:new ArrayBuffer(0)});   // send SAB BEFORE the module boots
 worker.onmessage=e=>{ const d=e.data;
@@ -56,7 +69,8 @@ worker.onmessage=e=>{ const d=e.data;
   else if(d.t==='log') addLog(d.m);
   else if(d.t==='err'){ addLog('ERR '+d.m); log('ERR: '+d.m.slice(0,120)); }
   else if(d.t==='frame'){ latest={fb:new Uint8Array(d.fb),pal:new Uint8Array(d.pal)}; frames++;
-    if((frames&63)===0) log('running — click the menu  ('+frames+' frames)'); } };
+    if((frames&63)===0) log('running — click the menu  ('+frames+' frames)'); }
+  else if(d.t==='audio'){ playPCM(new Int16Array(d.pcm), d.rate); } };
 worker.onerror=e=>log('worker error: '+e.message);
 </script>
 </body>

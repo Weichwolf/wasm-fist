@@ -152,6 +152,25 @@ static void emit_block(unsigned n)
     }
 }
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <string.h>
+/* Web audio drain: copy up to `max` newly-generated mono s16 samples into dst, advance the read
+ * cursor, and compact when fully drained so the buffer stays bounded across a long session.  The
+ * main thread pulls this each audio quantum and feeds a Web Audio AudioContext.  board:0003 */
+static unsigned g_ring_rd;
+EMSCRIPTEN_KEEPALIVE int fist_web_audio_rate(void){ return g_rate; }
+EMSCRIPTEN_KEEPALIVE int fist_web_audio_pull(short *dst, int max)
+{
+    if (!g_ring || max <= 0) return 0;
+    unsigned avail = g_ring_n - g_ring_rd;
+    unsigned n = (avail < (unsigned)max) ? avail : (unsigned)max;
+    if (n) { memcpy(dst, g_ring + g_ring_rd, n * sizeof(short)); g_ring_rd += n; }
+    if (g_ring_rd >= g_ring_n) { g_ring_rd = 0; g_ring_n = 0; }   /* fully drained -> compact */
+    return (int)n;
+}
+#endif
+
 static void ensure_rate(void)
 {
     if (g_rate_set) return;

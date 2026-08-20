@@ -391,6 +391,20 @@ void fist_web_post_frame(void){   /* posts unconditionally; the caller sets the 
   fist_web_force_palette();        /* in-mission the retrace-poll DAC upload may lag the render; force it */
   fist_web_post_frame_js(g_mem + 0xA0000, fist_web_palette());
 }
+/* Web audio: the engine runs blocking in the worker, so the worker PUSHES generated OPL PCM (mono s16)
+ * to the main thread each pump (like the video frame post), which feeds a Web Audio AudioContext.
+ * fist_web_audio_pull drains the OPL ring (fist_opl.c) since the last post.  board:0003 */
+extern int fist_web_audio_pull(short *dst, int max);
+extern int fist_web_audio_rate(void);
+static short g_web_aud[8192];
+EM_JS(void, fist_web_post_audio_js, (short *buf, int n, int rate), {
+  var a = HEAP16.slice(buf >> 1, (buf >> 1) + n);   /* copy off the heap */
+  postMessage({ t:'audio', pcm: a.buffer, rate: rate }, [a.buffer]);
+});
+void fist_web_post_audio(void){
+  int n = fist_web_audio_pull(g_web_aud, 8192);
+  if (n > 0) fist_web_post_audio_js(g_web_aud, n, fist_web_audio_rate());
+}
 /* Live mouse: mirror the FIST_MOUSE transition->flags delivery (movement 0x01; L press/rel 0x02/0x04;
  * R press/rel 0x08/0x10) so a browser mouse event drives the engine's INT-33h handler faithfully. */
 static void deliver_mouse_event(unsigned flags, unsigned vx, unsigned vy, unsigned btn);
@@ -563,11 +577,30 @@ void fist_timer_pump(void){
       /* LIVE web play (g_web_mode) must ADVANCE the mission sim so the tank spawns and the cockpit
          renders -- the frozen-c452 hold below is only for the deterministic FIST_MISSFB node-wasm
          capture (g_web_mode==0), which matches native's fast-run frozen frame.  board:0001 */
-      if (!g_fist_after_map || g_mem[0x1c000 + 0x1549] == 0x1c || g_web_mode) fist_wasm_tick();
-      if (g_web_mode) { void fist_web_pump_input(void), fist_web_post_frame(void);
+      if (g_web_mode) {
+          /* REALTIME PACING: the pump spins at CPU speed (~MHz), so ticking once per pump ran the OPL +
+             mission sim ~18x too fast (audio 825k/s vs 44100).  Pace the tick to WALLCLOCK at the
+             PIT-programmed INT-8 rate (1193182/pit_div) -- exactly the rate the OPL samples/tick
+             (rate*pit_div/PIT_HZ) assumes -> OPL generates 44100/s and the sim runs at real speed.
+             board:0003 */
+          extern int fist_vga_pit0_div(void);
+          static double last_now = -1, acc = 0;
+          double now = emscripten_get_now();
+          if (last_now < 0) last_now = now;
+          int div = fist_vga_pit0_div(); if (div < 1) div = 0x10000;
+          double tick_hz = 1193182.0 / (double)div;
+          acc += (now - last_now) * (tick_hz / 1000.0);
+          last_now = now;
+          int budget = 0;
+          while (acc >= 1.0 && budget < 8192) { fist_wasm_tick(); acc -= 1.0; budget++; }
+          if (acc > tick_hz) acc = tick_hz;   /* fell far behind (tab hidden etc.) -> don't spiral */
+      } else if (!g_fist_after_map || g_mem[0x1c000 + 0x1549] == 0x1c) fist_wasm_tick();
+      if (g_web_mode) { void fist_web_pump_input(void), fist_web_post_frame(void), fist_web_post_audio(void);
                         /* ~60Hz cadence (pump is ~1MHz): deliver ONE input event + post ONE frame per
-                         * tick, so a press and its release land on DIFFERENT engine frames -> real click. */
-                        static int wc=0; if ((++wc % 4096)==0){ fist_web_pump_input(); fist_web_post_frame(); } }
+                         * tick, so a press and its release land on DIFFERENT engine frames -> real click.
+                         * Audio posts on a coarser count so each chunk is ~tens of ms of PCM. */
+                        static int wc=0; if ((++wc % 4096)==0){ fist_web_pump_input(); fist_web_post_frame(); }
+                        if ((wc & 0xffff)==0) fist_web_post_audio(); }
     }
 #else
     /* Debug seam: FIST_COOP_TICK=1 drives the INT-8 time base COOPERATIVELY on native too (one tick
@@ -2989,10 +3022,11 @@ int fist_extender_gate(void) {
        the retrace service (palette upload + fade ramp) and post one frame per render from this seam.
        board:0001 */
     if (g_web_mode && op == 0x24) {
-        extern void fist_vga_service_retrace(void), fist_web_pump_input(void), fist_web_post_frame(void);
+        extern void fist_vga_service_retrace(void), fist_web_pump_input(void), fist_web_post_frame(void), fist_web_post_audio(void);
         fist_vga_service_retrace();
         fist_web_pump_input();
         fist_web_post_frame();
+        fist_web_post_audio();
     }
 #endif
     return 0;
