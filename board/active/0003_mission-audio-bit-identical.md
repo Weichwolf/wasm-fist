@@ -384,3 +384,20 @@ dispatched. So audio-music, windshield flight-model, and menu logic ALL share th
 game loop / screen-method dispatch. patch 408 (0xfab instrument-apply) remains the landed win --
 it makes whatever plays multi-instrument -- but a REAL song needs the game-loop music dispatch,
 which is the deep core (not a trap, not a base-loss; an unreached code path in the screen system).
+
+*** BROWSER AUDIO LANDED + THE WASM REALTIME-CLOCK FIX (commit 5ec6967) ***
+The browser now streams the engine's OPL audio to Web Audio, AND the wasm engine now runs at REAL
+speed.  Root found via the audio: with the cooperative tick advanced once per pump (CPU-speed spin),
+the OPL + mission sim ran ~18x too fast (measured browser audio 825k samples/s vs 44100).  Fix
+(g_web_mode-gated, native/node-wasm byte-identical, op-0x24 mission-cockpit frame verified): pace
+fist_wasm_tick to WALLCLOCK (emscripten_get_now) at the PIT-programmed INT-8 rate 1193182/pit_div --
+exactly the rate the OPL samples/tick (rate*pit_div/PIT_HZ) assumes.  Result: browser audio_rate
+43377/s (~44100, was 825k), peak ~5000 (audible), AudioContext running.  This is the wasm-cooperative-
+clock fix for PLAYBACK -- corrects audio pitch and paces the mission sim to real time.
+FINDINGS: (1) realtime pacing did NOT change the M1CON console-partial (~27k, still the deep HUD-paint
+frontier) but the mission render stays STABLE (not black) -- pacing is orthogonal to console-
+completeness.  (2) In-mission audio is SPARSE (the same in-mission pump-starvation: audio posts on the
+op-0x24 per-render seam at ~0.4fps); MENU audio is smooth/realtime.  Menu MUSIC=OFF is the config
+default, so to HEAR music the settings MUSIC toggle must be ON (next: drive it + exercise patch-408
+OPL).  Pipeline: fist_opl.c ring -> fist_web_audio_pull -> fist_web_post_audio (EM_JS) -> index.html
+AudioContext.
