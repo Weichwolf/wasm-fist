@@ -16,3 +16,6 @@ third_party/*_ghidra_proj/
 scratch/refcap/
 scratch/oracle/
 third_party/
+web/fist.js
+web/fist.data
+web/fist.js.symbols
