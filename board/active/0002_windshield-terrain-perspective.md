@@ -1264,3 +1264,22 @@ flight-model kernel chain + the render pipeline, fully scoped for a dedicated bu
 The session's durable achievement: the primary windshield bug is FIXED and LANDED (patch
 407, 6980-SMC, 10.6->78.7%, native/wasm-verified), and the complete render (FIX2) is
 transformed from an unknown into a mapped, decompiled, precisely-scoped subsystem build.
+
+*** CAMERA-BLOCKER RETRACTED -- the FPE is INSIDE 6980, camera+viewport are FINE ***
+Staged the op-0x08 dispatch with prints (FIST_WIRE08D): the TCB camera at op-0x08 IS
+populated (+2c/30/34=583982/1142557/3328; +3e focal=256; +38 head=26729), 85d0 runs OK
+(90c0=0x00ffffff, no divide-by-0), 8df0 runs OK (viewport 90f0/90f8=288/81, non-zero).
+Then 6980 is called and FPEs. So the earlier "camera focal=0 / viewport=0 / distributed
+camera subsystem" conclusions were WRONG -- the camera + viewport ARE populated at op-0x08.
+The FPE is INSIDE 6980, caused by the UNBUILT PROJECTION/RAY TABLES (90fc/9100=0; the ray
+tables 3a24/3e24 unbuilt) that 6980's inner loop divides by -- exactly what TILEFILL SEEDS
+(so TILEFILL's 6980 doesn't crash and reaches 78.7%). So FIX2's op-0x08 blocker is NOT a
+distributed camera/flight-model subsystem -- it is the PROJECTION-SETUP + RAY/PROJ-TABLE
+BUILD (8fa0 projection -> 90fc/9100, + the 395e ray-table build -> 3a24/3e24 -> 4224/4624,
++ the proj-table [0x3909]) which must run BEFORE 6980. This is FAR more tractable: the same
+projection-setup piece already identified, wire-able as a bounded shim step (or run the
+projection ops 0x10/0x0c that build them). SO FIX2 SIMPLIFIES: run the projection-setup
+(8fa0 + the ray/proj-table builders) before op-0x08's 6980 -- no camera/flight-model
+reconstruction needed (the camera is already faithful). NEXT: seed/build the ray tables +
+projection before the op-0x08 6980 (like TILEFILL, but faithful), confirm no FPE, then the
+real op-0x08->6980 + op-0x24->9200 dispatch should render terrain (~78.7% via patch 407).
