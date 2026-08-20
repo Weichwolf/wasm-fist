@@ -67,3 +67,18 @@ engine's indirect dispatch (fist_snd.c RULE 7 "OPEN: unresolved indirect dispatc
 the song sequencer's per-note instrument-select call (an indirect call to 0f99 or a
 direct OPL-instrument write path) and wire/port it; then the FM timbre matches and,
 sharing DBOPL, the audio goes bit-exact. Bounded but in the sequencer/icall layer.
+
+Localized precisely: the note-play handler FUN_0000_10a6 writes A0 (freq, |0xa000)
+and B0 key-on (|0xb020 at fist_snd.c:2536), reading the voice's instrument from the
+CACHED byte [0xbdd] (set by 0f99 at :2431 = puVar6[1]). 0f99 (the full instrument
+load) is only invoked from the OPL init (104f) with instrument 0, so [0xbdd] stays
+the init instrument. The ORIGINAL reloads the song's instrument (its reg 0x20 takes
+0x31), so its sequencer calls 0f99 on a program-change event; the port never does
+during playback. So the missing piece is the sequencer's PROGRAM-CHANGE handler
+that calls 0f99 with the song's instrument number -- not reached in the port,
+consistent with the unresolved indirect dispatch (RULE 7). NEXT: find the song
+event loop (the fn that reads the song stream and dispatches note-on / note-off /
+program-change), see how a program-change reaches 0f99 in the asm (likely an
+indirect call / jump-table the port's fist_icall doesn't resolve), and wire it;
+then instruments reload per voice and the FM output matches. Deep in the sequencer/
+dispatch layer, like the voxel's 6980 -- both are the engine's paged/indirect core.
