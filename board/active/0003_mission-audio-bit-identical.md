@@ -200,3 +200,20 @@ sound-active port run; a valid table = small in-driver handler offsets per mode 
 confirmed, this is a landable base-loss patch (patch 408/409 slot) that should flip reg 0x20
 0x01->0x31 and raise the WAV correlation -- a second verified win after 407, on a CLEAN
 port-only verification path (no oracle-capture). This is where a focused audio session resumes.
+
+*** BASE-LOSS HYPOTHESIS RETRACTED -- the assembler already bases these reads (via D) ***
+Checked build/fist_snd.c (the code that ACTUALLY runs) before writing any patch: FUN_0000_0872
+there reads `*(uint16_t*)(D + iVar1 + 0x1b5)` where `D = g_mem + (DAT_0000_0831 << 4)` -- i.e.
+assemble_fist.py ALREADY recognized these as DS-relative and based them on the driver's runtime
+DS (DAT_0000_0831). So there is NO base-loss in build/ and NO patch to write here; the re_out
+`iVar1 + 0x1b5` I read is the pristine pre-assembler form, correctly re-based by the assembler.
+(Same discipline that caught the Layer-2 windshield regression: verify against the built truth
+before landing.) The vector install IS correctly based. So the audio defect is NOT the vector
+base. The real runtime questions, to settle EMPIRICALLY by instrumenting build/ FUN_0000_0872:
+  (1) is FUN_0000_0872 even called (is a sound MODE dev=[D+0x12], 1..5, ever selected)?
+  (2) is DAT_0000_0831 (the driver data seg, = load_seg+0x2a5) set correctly so D is valid?
+  (3) does [D+0x1b3] end up a VALID program-change handler offset, and does the [0x1b3]
+      dispatch at 0aa7/0a28 fire on a program-change event and reach 0f99?
+The `mov ds,[cs:0x831]` at asm 0x83b/0xa28/0xaf4/0xc94 confirms [0x831]=driver data seg, loaded
+per-function. NEXT: instrument build/ FUN_0000_0872 (log called?/dev/DAT_0000_0831/[D+0x1b3])
++ a run with OPL menu music -> pin which of (1)/(2)/(3) is the actual break. Port-only, clean.
