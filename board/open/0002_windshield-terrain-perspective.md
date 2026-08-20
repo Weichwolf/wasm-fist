@@ -326,3 +326,18 @@ few frames past spawn / capture a later r9200 pass, or read [0x85bc] once the
 upsample completes) and re-diff; only then is the heightmap decode conclusively
 faithful-or-not. Alternatively pivot to an unblocked breadth frontier (audio 0003)
 while the voxel needs this careful re-capture. Camera + sky-setup fixes stand.
+
+STABLE recapture SETTLES the mid-build question (dosbox-fist patched with
+FIST_RAMPASS to dump RAM at a later r9200 pass; captured pass10 after 14 rendered
+frames): the ORIGINAL's [0x85bc] is STILL only 3% nonzero (141941/4M, mean 2.7) --
+so it is GENUINELY sparse, not unfinished. The port's is 99.9% dense (mean 53).
+The two heightmaps differ fundamentally and persistently: the original is sparse
+with HIGH values (194-249 in its loaded rows), the port is dense with MID values
+(15-96). So this is a real, stable difference, not a capture artifact. Its NATURE
+is the open question: either the original uses a SPARSE streaming/tile-cache
+heightmap (only near-camera tiles loaded, the rest 0) while the port loads a full
+dense map, or the port's D32.KLC->[0x85bc] decode produces different values (note
+the ~2.5-3x value-scale gap). Resolving it needs the D32.KLC KLC1 decode traced
+against the map-load asm (89b0's 36bf/643c/bc06/bed2/345c upsample cascade) +
+whether 6980 reads [0x85bc] as a sparse cache. This is deep, multi-iteration RE;
+the two landed fixes (camera + sky-setup) stand independently.
