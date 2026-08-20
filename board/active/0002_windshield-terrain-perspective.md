@@ -754,3 +754,16 @@ gather?), test each downsample variant (sub-block vs every-other) against 73.2%,
 match 6980's real coord->buffer mapping. The windshield reduces to this single
 buffer-window geometry; HM/colormap/camera/alias/rays are all oracle/asm-verified
 faithful.
+
+Window narrowed: every-other IS the 1024^2 view (not sub-block). Tested downsample
+windows against oracle_9200_framematched: every-other [2y][2x] = 73.2%, top-left
+sub-block [y][x] = 34.6% (much worse). So the extender's 1024^2 voxel view of the
+2048^2 map is an EVERY-OTHER subsample (2:1 decimation), NOT a quadrant. every-other
+(73.2%) is confirmed the right window direction; the remaining 27% is FINER geometry:
+either the subsample PHASE ([2y][2x] vs [2y+1][2x+1] vs mixed), or 6980's coord->texel
+sub-pixel/projection rounding (8120 -> 90b8/90bc ray steps, the shld coord). NEXT: test
+the 4 subsample phases; if none beats 73.2%, the residual is 6980's projection/coord
+geometry (the ray-step SMC 6ad2/6ad8 from D4224 * 90fc/9100) -- compare the port's
+90b8/90bc/90d4/90d8 projection outputs to the oracle's (from the guest-RAM dump) at the
+AZER1 camera. All buffer CONTENT (HM==oracle, colormap==oracle) + the alias + window
+direction are settled; the last ~27% is sub-texel projection geometry.
