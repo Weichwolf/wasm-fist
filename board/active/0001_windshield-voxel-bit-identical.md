@@ -13,3 +13,18 @@ start music, run menu logic, drive the flight-model camera/sim) are not dispatch
 next frontier and it is NOT a trap or an un-seeded function -- it is an unreached code path in the
 engine's state/screen manager. Landed this session: patch 407 (windshield 6980 SMC) + patch 408
 (audio 0xfab instrument-apply), both verify.sh-both verified (159/0, native==wasm).
+
+Game-loop probe (this loop): instrumented FUN_0000_459a (the per-tick sim / main game loop, asm
+0x459a) -- it NEVER runs in the menu (0 [looptrace] hits). But 459a is the MISSION sim (called from
+FUN_0000_87a, the game-entry that also does the be67 sound-register + FUN_0000_5d12), so its
+absence in the menu is EXPECTED. The menu-music gap is therefore in the MENU SCREEN HANDLER path
+(distinct from 459a) which also does not dispatch the music-start. Net, confirmed from multiple
+angles: the port runs the EXTENDER render pipeline (159 frame-pinned flows pass) + limited engine
+setup, but NOT the engine's full screen/state manager loop that would dispatch per-screen methods
+(menu music 9f1d/bde4, menu logic) NOR the mission game loop 459a (flight-model sim). Both the
+windshield (flight-model camera via 459a/PM-gate) and the audio (menu-music via the screen handler)
+share this root: the engine's game/screen-manager loop is not driven in the port. This is a focused
+multi-session architectural effort (the engine main loop + screen/state manager + the real->PM
+gate), NOT a trap, un-seeded function, or base-loss. The tractable loop-win classes (trap-trace ->
+patch 408; SMC-freeze -> patch 407) are EXHAUSTED for this session. Landed + verify-both-verified
+this session: patch 407 (windshield 6980 SMC) + patch 408 (audio 0xfab instrument-apply).
