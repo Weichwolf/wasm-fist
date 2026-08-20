@@ -498,3 +498,21 @@ is 1024^2 natively); (b) try averaging vs point-sampling for the downsample; (c)
 land the faithful fix -- have the map-load produce the 1024^2 voxel buffer 6980 expects
 (no TILEFILL band-aid). This is the strongest windshield progress of the session: a
 CONFIRMED fix direction with a measured 73.2% (from a 10.6% baseline).
+
+Downsample method + LOD root. Averaging is WORSE than point-sampling (53.3% vs 73.2%)
+-> the terrain is POINT-sampled (nearest), as expected for discrete voxel texels; the
+remaining ~27% gap is NOT the reduction filter. The likely root: the DS test
+down-samples the port's ALREADY-2048^2-upsampled HM (256->2048 then ->1024), but the
+faithful path is probably 256->1024 DIRECTLY (2 interpolation doublings via bc06/bed2
+instead of 3 -> different intermediate values). The port OVER-UPSAMPLES by one LOD:
+asm 0x8a4c sets [0x8490]=0xc(=12), [0x8494]=1<<[0x8490] reduced by the DETAIL setting
+to 2048 (=1<<11) at runtime; for 6980's 1024^2 buffer it should be 1<<10=1024. The
+oracle capture has det=1 (oracle_azer1_tcb_camera.txt). So the faithful fix is to make
+the map-load's HM upsample target 1024 (one less doubling) for the voxel buffer 6980
+walks, matching 6980's fixed 10-bit index. MEASURED chain so far: 10.6% (no 6980) ->
+33.6% (6980, 2048^2) -> 73.2% (6980, point-downsampled 1024^2); a TRUE 256->1024
+upsample should exceed 73.2% toward bit-exact. NEXT: build a true 256->1024 HM+colormap
+(target [0x8494]=1024) instead of downsampling the 2048^2, measure; if it beats 73.2%,
+land the faithful fix -- the map-load produces the correct-LOD 1024^2 voxel buffer
+(likely the detail->[0x8490] reduction is off by one doubling, or a separate 1024^2
+voxel buffer must be built alongside the 2048^2 one). Point-sampling confirmed faithful.
