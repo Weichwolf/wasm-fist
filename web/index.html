@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Armored Fist (WASM)</title>
+<style>
+  html,body{margin:0;background:#111;color:#ccc;font:13px monospace;height:100%}
+  #wrap{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px}
+  canvas{image-rendering:pixelated;background:#000;width:640px;height:400px;border:1px solid #333}
+  #status{white-space:pre;min-height:1.5em;color:#8c8}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h3>Armored Fist — WebAssembly</h3>
+  <canvas id="screen" width="320" height="200"></canvas>
+  <div id="status">starting worker…</div>
+  <pre id="dbg" style="max-width:640px;max-height:160px;overflow:auto;color:#888;font-size:11px"></pre>
+</div>
+<script>
+const cv = document.getElementById('screen');
+const ctx = cv.getContext('2d', { alpha:false });
+const img = ctx.createImageData(320, 200);
+const status = document.getElementById('status');
+const log = m => { status.textContent = m; };
+
+let latest = null;   // {fb:Uint8Array, pal:Uint8Array}
+let frames = 0;
+
+function paint(){
+  if (latest){
+    const fb = latest.fb, pal = latest.pal, out = img.data;
+    for (let i = 0, o = 0; i < 64000; i++, o += 4){
+      const c = fb[i] * 3;
+      out[o]   = (pal[c]   << 2) | (pal[c]   >> 4);
+      out[o+1] = (pal[c+1] << 2) | (pal[c+1] >> 4);
+      out[o+2] = (pal[c+2] << 2) | (pal[c+2] >> 4);
+      out[o+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  requestAnimationFrame(paint);
+}
+requestAnimationFrame(paint);
+
+const logs = []; const dbg=document.getElementById('dbg');
+function addLog(m){logs.push(m);dbg.textContent=logs.slice(-40).join('\n');dbg.scrollTop=dbg.scrollHeight;}
+const worker = new Worker('worker.js');
+worker.onmessage = (e) => {
+  const d = e.data;
+  if (d.t === 'ready')  log('engine running…');
+  else if (d.t === 'exited') log('engine main returned (frames: ' + frames + ')');
+  else if (d.t === 'log'){ addLog(d.m); if (frames===0) log(d.m.slice(0,80)); }
+  else if (d.t === 'err'){ addLog('ERR '+d.m); log('ERR: ' + d.m.slice(0,120)); }
+  else if (d.t === 'frame'){
+    latest = { fb: new Uint8Array(d.fb), pal: new Uint8Array(d.pal) };
+    frames++;
+    if ((frames & 15) === 0) log('running — frames: ' + frames);
+  }
+};
+worker.onerror = (e) => log('worker error: ' + e.message + ' @' + e.filename + ':' + e.lineno);
+window._dbg = () => logs.join('\n');
+</script>
+</body>
+</html>

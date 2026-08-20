@@ -371,6 +371,31 @@ static void start_timer(void){
     fprintf(stderr, "[fist] wasm cooperative time base (one INT-8 tick per pump; no SIGALRM)\n");
 }
 void fist_wasm_tick(void){ tick_advance(); }
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+/* Browser harness: the engine runs BLOCKING in a Web Worker (no ASYNCIFY -- the browser rejects the
+ * giant decompiled functions once asyncify inflates their local count).  Each ~frame the pump posts a
+ * COPY of the 320x200x8bpp VGA framebuffer + the 256*3 6-bit palette to the main thread, which renders
+ * it to a canvas (web/index.html).  Input is delivered via the shared input state the port already
+ * emulates (INT 33h/INT 9), driven from the worker message handler between engine yields. */
+EMSCRIPTEN_KEEPALIVE unsigned char *fist_web_fb(void){ return g_mem + 0xA0000; }
+EMSCRIPTEN_KEEPALIVE unsigned char *fist_web_palette(void);   /* fist_vga.c */
+EMSCRIPTEN_KEEPALIVE int fist_web_in_mission(void){ return g_mem[0x1c000 + 0x1549] == 0x1c; }
+EM_JS(void, fist_web_post_frame_js, (unsigned char *fb, unsigned char *pal), {
+  var f = HEAPU8.slice(fb, fb + 64000);
+  var p = HEAPU8.slice(pal, pal + 768);
+  postMessage({ t:'frame', fb:f.buffer, pal:p.buffer }, [f.buffer, p.buffer]);
+});
+void fist_web_post_frame(void){
+  static int c = 0; if ((++c % 64) != 0) return;   /* throttle: 1 posted frame per 64 pumps */
+  fist_web_post_frame_js(g_mem + 0xA0000, fist_web_palette());
+}
+static volatile int g_web_mode = 0;
+/* Browser start: set web-mode (enables the per-pump frame post) then run the engine main loop
+ * (non-returning; blocks the worker, which is fine -- the UI thread stays live). */
+EMSCRIPTEN_KEEPALIVE void fist_web_start(void){ g_web_mode = 1; extern int main(int,char**);
+    static char a0[]="fist"; char *av[1]={a0}; main(1,av); }
+#endif
 #endif
 
 /* ---- the engine's installed INT-8 (PIT) ISR entry, captured at DOS set-vector 0x08 ---- */
@@ -504,6 +529,7 @@ void fist_timer_pump(void){
          fires before the spawn op-0x24 -> HANG (SAUDI1/SYRIA1/INDIA1).  Tick normally in menus/intro
          (!g_fist_after_map) and once the cockpit view is active (d549==0x1c). */
       if (!g_fist_after_map || g_mem[0x1c000 + 0x1549] == 0x1c) fist_wasm_tick();
+      if (g_web_mode) { void fist_web_post_frame(void); fist_web_post_frame(); }  /* worker: post fb+palette to the main thread */
     }
 #else
     /* Debug seam: FIST_COOP_TICK=1 drives the INT-8 time base COOPERATIVELY on native too (one tick

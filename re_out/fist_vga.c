@@ -17,6 +17,10 @@
 #define FB_SZ (FB_W*FB_H)
 
 static unsigned char g_pal[256][3];   /* DAC palette, 6-bit components (0..63) */
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+EMSCRIPTEN_KEEPALIVE unsigned char *fist_web_palette(void){ return &g_pal[0][0]; } /* 256*3 6-bit RGB */
+#endif
 static int g_vmode = -1;              /* last video mode set via INT 10h / this shim */
 
 /* DAC state machine (ports 0x3C8 write-index, 0x3C7 read-index, 0x3C9 data) */
