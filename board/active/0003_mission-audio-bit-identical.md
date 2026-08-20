@@ -52,3 +52,18 @@ from) -- the high nibble (AM/VIB/EG/KSR bits) is dropped, so look for a wrong
 mask/shift or a byte-stride error reading the OPL patch table (from SOUNDDVR.DVR or
 the in-DAT patch bank). A base-loss or an `& 0x0f` on the instrument byte would
 produce exactly the observed 0x31->0x01. Fixable as an asm-verified patch.
+
+Root refined (correcting the "instrument bytes decoded wrong" framing -- the
+last-val-per-reg compare was timing-confounded): the OPL instrument PATCH TABLE at
+DGROUP:0x1dd (param_1*16+0x1dd, read by FUN_0000_0f99) is STATIC in the DAT's
+DGROUP, so it is identical port<->oracle -- not a decode bug. The real gap:
+FUN_0000_0f99 (instrument load) is ONLY called from FUN_0000_104f, the OPL INIT
+(9 channels <- instrument 0). It is NOT called during song playback. So the port
+plays every note with the init instrument 0 (reg 0x20 stays 0x01), while the
+ORIGINAL reloads the song's instruments per voice (reg 0x20 also takes 0x31). The
+per-voice instrument reload path is missing/unported -- likely reached via the
+engine's indirect dispatch (fist_snd.c RULE 7 "OPEN: unresolved indirect dispatch"
+/ fist_icall), which the port does not fully resolve for the sequencer. NEXT: find
+the song sequencer's per-note instrument-select call (an indirect call to 0f99 or a
+direct OPL-instrument write path) and wire/port it; then the FM timbre matches and,
+sharing DBOPL, the audio goes bit-exact. Bounded but in the sequencer/icall layer.
