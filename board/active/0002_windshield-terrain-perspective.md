@@ -808,3 +808,25 @@ raw +0x100000 byte? Re-trace 6aee's eax/proj vs 6b1a very carefully. Everything 
 (HM/colormap-content/camera/matrix/sky/6980-geometry/window/phase) is oracle/asm-
 verified faithful; this single colour-source paradox is the true open crux. The 73.2%
 downsample is the best approximation short of resolving it.
+
+RESOLUTION (corrected -- repoint, not paging): [0x4a60] write-pointers = 0x44200,
+0x44300, 0x44400... (column stride 0x100) -> 6980 writes into the LIGHT tile [0x3918]=
+0x44200 (256 cols x 256 rows, column-major). So 6980 DOES write the light tile, and
+its colour source is [0x85bc]+0x100000. Reconciliation: [0x85bc]+0x100000 must be LIGHT
+at 6980-RENDER time, but the dump (captured at 9200-entry, AFTER 6980) shows it dark ->
+the original REPOINTS [0x85bc] to a BUILT contiguous light buffer (HM + the [0x85b8]
+light colormap) for the 6980 call, then RESTORES [0x85bc]=0x74e60 before 9200. The
+page-dir scan found nothing because it's NOT paging -- it's a repoint + a built buffer.
+This is EXACTLY what FIST_TILEFILL does (build contiguous HM+[0x85b8]-colormap, repoint
+[0x85bc], run 6980) -> 73.2%. So the alias intuition was right in spirit; the mechanism
+is a repoint to a built buffer, and the dump can't show it (post-restore). The 73.2%
+gap is that TILEFILL's every-other DOWNSAMPLE isn't the original's exact 1024^2 buffer
+build. THE FAITHFUL FIX: find the extender's 6980-input BUILD code -- the function
+(between the map-load and the 6980 call, inside 3931/85d0->6980 setup or a reduce) that
+constructs the 1024^2 HM+colormap contiguous buffer and repoints [0x85bc] -- and port
+it exactly (no [0x85bc] write appears via `mov`, so it's built via lea+36bf/345c/a
+reduce fn writing through &[0x85bc]). NEXT: disassemble the path from 3931/85d0 into
+6980 for a [0x85bc]-repointing build (lea 0x85bc + reduce), and the reduce that fills
+it from the 2048^2 map + [0x85b8]; port that build so 6980's input is bit-exact ->
+terrain bit-exact. All buffer CONTENT is faithful; the open step is the exact reduce/
+build of 6980's repointed 1024^2 input buffer.
