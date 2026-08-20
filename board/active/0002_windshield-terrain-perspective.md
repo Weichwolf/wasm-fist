@@ -562,3 +562,22 @@ FIST_TILEFILL_DS at 73.2%) remains the open faithful step; it is bound up with t
 .MEG/detail/[0x395c]/[0x8490] map-load logic the shim partially reconstructs. NEXT:
 trace how the 1024^2 voxel buffer 6980 reads is produced from the 2048^2 map (the
 reduce / repoint), consistent with the .MEG detail selection, and port it faithfully.
+
+*** LANDABLE FIX IDENTIFIED *** -- the port's voxel LOD is off by one (11 vs 10),
+inconsistent with the sky flag. The map-load's .MEG resource branch sets the LOD
+[0x8490] AND the sky flag [0x395c] TOGETHER: only 8.MEG -> [0x8490]=10 (1024^2),
+[0x395c]=1; +16.MEG -> 11 (2048^2), 2; +40.MEG -> 12 (4096^2), 3. The oracle (and the
+port shim) have [0x395c]=1, which REQUIRES [0x8490]=10 (1024^2). But the port's 89b0
+.MEG RAM-size probes (FILEMGR chain 6250/5d50/5cc2/5c98) signal found/not-found via the
+x86 CF, which the __allregs model dropped; patch 210 reconstructs it via g_ext_find_cf
+but INCOMPLETELY -- the port over-detects one level, so [0x8490]=11 (2048^2) while
+[0x395c]=1. This 2048^2 (vs the faithful 1024^2) is EXACTLY the resolution mismatch
+that makes [0x85b8]=[0x85bc]+0x400000 (4 MB) instead of +0x100000 (1 MB), so 6980 reads
+the wrong region. THE FIX: correct the .MEG-probe CF (g_ext_find_cf) so 16.MEG/40.MEG
+return not-found and [0x8490] stops at 10 (matching [0x395c]=1) -> the HM builds as
+1024^2 (1 MB), contiguous with the colormap, and 6980 (asm-verified faithful) samples
+correctly WITHOUT the TILEFILL band-aid. This is a real, asm-grounded, landable patch
+in the FILEMGR .MEG-probe CF logic -- the first true windshield fix, consistent with
+the measured 1024^2 result (73.2%+). NEXT: locate where g_ext_find_cf is set for the
+.MEG probes, correct it so the LOD lands at 10, verify [0x8490]=10 + gap=0x100000 +
+terrain match jumps (default render, no TILEFILL), and that the 159 flows don't regress.
