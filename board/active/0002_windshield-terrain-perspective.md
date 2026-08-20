@@ -378,3 +378,13 @@ extender map-load's C32.KLC -> colormap decode (89b0/643c) in fist_image.bin asm
 find where the terrain texels should land at [0x85b8](+0x100000), and why the port
 gets {0,4}; deliver it faithfully, then re-measure (target: 33.6% -> bit-exact like
 the sky). The tile-build wiring itself is now causally proven worth landing.
+
+Colormap content refined: under FIST_TILEFILL the port's colormap [0x85b8]+0x100000
+is POPULATED (78 distinct bytes, values clustered 128-152) -- NOT {0,4} (that was the
+op-0x0c/93c0 default path without TILEFILL's reconstruction). But the values (128-152)
+are systematically DARKER than the oracle terrain (indices 150-230), matching the
++55-darker fb finding. So the colormap is delivered but with WRONG (too-dark) values.
+The residual is the COLORMAP BUILD content (C32.KLC decode / light-reduce), not
+delivery-absence. NEXT: diff the port colormap vs the oracle colormap sample
+(oracle_85b8_colormap_first64k.bin) to characterize the darkness (constant offset?
+scale? decode?) and trace the C32.KLC -> [0x85b8] light-reduce build in asm.
