@@ -242,6 +242,15 @@ dosbox source tree is present to patch) -- both are dedicated infrastructure tas
 (capture_battle_stock.sh / capture_battle_burst.sh) DOES reach the menu + capture the FRAMEBUFFER, but not
 guest RAM, so it cannot read [0x5598]. This is the concrete gate on the definitive [5598] split.
 
+**Refinement (shifts the balance toward bc9c/bdc4):** the op-0x18 map-load names its assets
+'D32.KLC'/'C32.KLC'/'532.pal'/'5.SKY', but there is NO 532.pal FILE (find finds none) and C32.KLC has no
+plain 6-bit palette (it is a compiled "KLC1" blob, first fields 512x512). So **[0x5598]/532.pal is DECODED
+from C32.KLC by the extender's map-load** -- the SAME ported extender code the port runs. If that decode is
+faithful, the port's [0x5598] EQUALS the original's (both decode the same C32.KLC), which would make the
+tile defect bc9c/bdc4, NOT [0x5598].  So the two remaining suspects are: (a) the port's C32.KLC->[5598]
+decode (asm-verify the extender decode) and (b) bc9c/bdc4 itself -- and the [5598]-vs-algorithm split can
+also be done port-only by asm-verifying the C32.KLC decode, not only by the oracle [5598] capture.
+
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
 (64ea is a modal, map-view-gated); save/load; controls — all the way to the 10× gate. **Los geht's.** 🚀
