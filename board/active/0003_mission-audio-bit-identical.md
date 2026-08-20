@@ -186,3 +186,17 @@ fist_snd_base+0x1b5 vs 0x1c000+0x1b5 (and DS at FUN_0000_0872 entry) to fix the 
 the 7 reads, verify reg 0x20->0x31. This is the strongest tractable landable lead in the project
 -- a specific base-loss, a specific function, a clean port-only verification. Same base-loss class
 as patch 001 (DGROUP re-base). Unlike the windshield it needs NO oracle-capture rebuild.
+
+Base refined (from the assembler convention, not yet runtime-confirmed): the vector STORAGE
+symbol DAT_1000_c1b3 assembles to g_mem+0x1c1b3 (= DGROUP 0x1c000 + 0x1b3), so the driver's
+DS base in the port is 0x1c000. Ghidra did NOT recognize the mode-table read `iVar1 + 0x1b5`
+as DS-relative (no DAT_ symbol emitted -> the assembler left base 0). So the base-loss fix is:
+  *(undefined2 *)(iVar1 + 0x17d)  ->  *(undefined2 *)(g_mem + 0x1c000 + iVar1 + 0x17d)
+for all 7 reads (0x17d/0x18b/0x199/0x1a7/0x1b5/0x1c3/0x1d1) at fist_snd.c:1477-1483 -- matching
+the _DAT_1000_* (0x1c000) mapping of their write targets. ONE runtime confirmation still gates
+landing (code-is-truth, avoid a band-aid): verify the per-mode handler tables are actually
+present/valid at 0x1c000+0x17d.. at FUN_0000_0872 install time (dump g_mem there during a
+sound-active port run; a valid table = small in-driver handler offsets per mode 1..5). If
+confirmed, this is a landable base-loss patch (patch 408/409 slot) that should flip reg 0x20
+0x01->0x31 and raise the WAV correlation -- a second verified win after 407, on a CLEAN
+port-only verification path (no oracle-capture). This is where a focused audio session resumes.
