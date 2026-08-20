@@ -147,3 +147,28 @@ function -- NOT the blend/upsample math. NEXT: (a) finish 9200 (sampler indexing
 asm-diff; (b) audit the native_main.c op-0x18 voxel reconstructions against what the
 original extender setup actually does (now asm-readable via fist_image.bin) -- the
 camera/sky/preload seeds are the hand-written surface most likely to diverge.
+
+DAC cleared + the real blocker named (pose-confound). Two findings via direct
+port capture (FIST_MISSFB_MERGEPAL, AZER1 spawn) vs oracle_azer1_windshield_dashAE0:
+  1. The terrain DAC is NOT the bug. [5598] (raw) and [5260] (sorted, via
+     FIST_MISSFB_PAL5260) give IDENTICAL terrain output (21.9% multiset overlap,
+     32/85 shared colours, both). Reason: [5598]@bc9c is already luma-SORTED
+     (0 inversions), so [5260]==[5598] -- the 9f10 sort is a no-op on this palette,
+     and the DAC choice cannot be the divergence. (Supersedes the "5260 is the
+     faithful DAC / 5598 regresses" tension -- moot, they're equal here.)
+  2. FUNDAMENTAL CONFOUND for windshield verification: the terrain band overlap
+     (21.9%; port has MORE colours, 129 vs oracle 85) is NOT trustworthy as a
+     render-fidelity metric because the windshield terrain depends on the exact
+     CAMERA POSE (position/heading/pitch), and dashboard-AE0 matching does NOT
+     imply pose matching (the dashboard is camera-independent chrome). The port
+     and oracle may simply be at different camera poses -> the terrain differs for
+     that reason alone, not necessarily a render bug.
+This reframes 0002's verification requirement: a windshield comparison is only
+valid at a POSE-MATCHED capture (identical camera position+heading+pitch on both
+sides). The burst tool matches the dashboard, not the pose. CORRECTED NEXT: capture
+BOTH at the deterministic SPAWN pose -- the first render frame before any AI/physics
+drift, where the camera sits at the fixed spawn point -- OR read the oracle's camera
+pose (TCB +2c/30/34 pos, +38/3a/3c ang from a guest-RAM capture) and force the port
+to that exact pose before the windshield diff. Only a pose-matched terrain diff can
+tell a render bug from a pose difference. (bc9c/bd0e/bdc4 remain asm-verified faithful;
+this says the current windshield METRIC is confounded, not that those are wrong.)
