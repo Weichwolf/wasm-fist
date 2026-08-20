@@ -581,3 +581,14 @@ in the FILEMGR .MEG-probe CF logic -- the first true windshield fix, consistent 
 the measured 1024^2 result (73.2%+). NEXT: locate where g_ext_find_cf is set for the
 .MEG probes, correct it so the LOD lands at 10, verify [0x8490]=10 + gap=0x100000 +
 terrain match jumps (default render, no TILEFILL), and that the 159 flows don't regress.
+
+REFINED (the .MEG probes are RAM-SIZE tiers, not file checks): "8.MEG/16.MEG/40.MEG"
+are RAM thresholds (8/16/40 MB available -> LOD 10/11/12). The port's large flat g_mem
+makes the probe pass the 8 MB AND 16 MB tiers -> LOD 11 (2048^2); the DOSBox oracle
+passed only 8 MB -> LOD 10 (1024^2, [0x395c]=1). So the faithful fix is to make the
+port's RAM-size probe report the SAME tier as the DOSBox reference (8 MB -> LOD 10),
+not over-report. This is a shim FILEMGR/RAM-probe fidelity fix (the g_ext_find_cf /
+6250 chain), grounded in matching the reference environment the DoD targets. NEXT:
+read 6250/5c98's RAM check, make it return the oracle's 8 MB tier so [0x8490]=10, then
+verify [0x8490]=10 + gap=0x100000 + the DEFAULT render terrain match jumps (no TILEFILL)
++ 159 flows green. First true windshield fix, landable as an asm-verified patch.
