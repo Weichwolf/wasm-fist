@@ -307,3 +307,21 @@ This is a shim/indirect-dispatch threading fix (fist_sb.c + the register method 
 verifiable (reg 0x20 gains 0x31.. once the song plays; WAV corr vs ref then measurable). Bounded and
 specific -- and it is the SAME indirect-method-vector-threading class as the register-args note in
 fist_sb.c. NEXT: complete the be0e->0af4 register-arg thread so MAINMENU.MS3 registers/plays.
+
+Refinement (measured, further trace): the menu-music-START chain is bde4 -> be00 -> be0e(id)
+(fist.c:29242/29267/29288) -- be0e registers the source; be00/bde4 are the play trigger. bde4 has
+NO direct caller in fist.c (only the icall fmap entry 0xbde4) -> the menu code invokes it via an
+INDIRECT dispatch. Two measured runs to the main menu (FIST_TICK_HZ=25000, DESCRDUMP): the port
+reaches "proceeding to main menu" but (a) no MAINMENU.MS3 registration, and (b) the FIST_DESCRDUMP
+seam never fires -> the menu-music setup (descriptor at DGROUP:0x9f1c + the bde4 register trigger)
+does NOT run in the port's menu. So the gap is UPSTREAM of the (wired) program-change: the menu's
+indirect call to bde4 (music start) does not fire/resolve. This is the SAME indirect-dispatch class
+as everything else -- the menu-front-end's sound-start dispatch is unresolved/not-reached in the
+port. Chain, measured end-to-end: [menu code -> INDIRECT bde4 (DOES NOT FIRE)] -> be00 -> be0e
+register -> 0af4 (MAINMENU.MS3 into driver) -> 0cf3 MIDI parse -> 0cfb -> [0x1c1]=0f99(prog). Only
+the FIRST hop (the menu's indirect bde4 dispatch) is broken; everything after it is wired. NEXT
+(bounded): find the menu-front-end site that should indirect-call bde4 to start MAINMENU.MS3 and why
+it does not fire in the port (unresolved icall / a menu-state the headless run does not enter), wire
+it; then the whole downstream (register -> MIDI -> program-change -> 0f99) exercises and reg 0x20
+takes the song instruments. Audio is thus ONE unresolved menu-dispatch away from playing, not a deep
+per-note bug. This session traced it from a stale "reg 0x20 stuck" note to this precise measured hop.
