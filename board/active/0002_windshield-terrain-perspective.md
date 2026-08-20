@@ -404,3 +404,21 @@ re-confirmed before over-trusting the 5.6%.) NEXT: trace 6980's colormap address
 fist_image.bin asm, and compare the port's contiguous-buffer layout/stride to the
 extender's real HM_base+0x100000 layout -- the +55 darkness is a sampling-coordinate
 or stride mismatch, downstream of a faithful colour palette.
+
+6980 ASM-VERIFIED FAITHFUL -> bug is the map-load colormap LAYOUT. The colormap
+read in 6980 matches the original exactly: asm `mov 0x100000(%esi,%ecx,1),%al`
+(esi=[0x85bc], ecx=coord) == port `*(uint8*)(iVar14 + 0x100000 + uVar7)` (iVar14=
+[0x85bc]). So 6980's addressing (colormap at base+0x100000+coord, heightmap at
+base+coord) is faithful. The divergence is PURELY the INPUT buffer: what the map-load
+places at [0x85bc]+0x100000. FIST_TILEFILL's contiguous-buffer reconstruction gets
+only 33.6% (colours right, 5.6% byte-match) -> the colormap is written to the
++0x100000 region with the WRONG LAYOUT/STRIDE. The port's Route-1 map-load allocs
+[0x85bc]/[0x85b8] SEPARATELY and its C32.KLC->colormap decode places texels at wrong
+offsets relative to what 6980's coord math expects. FIX LOCUS (precise): the extender
+map-load's colormap build -- decode C32.KLC into a contiguous HM[0..0x100000] +
+colormap[0x100000..0x200000] at [0x85bc], matching the stride 6980 walks. NEXT: trace
+89b0/643c (map-load) in fist_image.bin asm -- how it decodes C32.KLC into the colormap
+region, the row stride, and the HM/colormap contiguity; make the port's map-load build
+that exact layout so 6980 (faithful) samples the right texels WITHOUT the TILEFILL
+band-aid. This is the concrete, asm-verifiable windshield fix, now localized to one
+build step (map-load colormap layout) downstream of everything else verified faithful.
