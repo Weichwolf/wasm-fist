@@ -732,3 +732,25 @@ colormap at the right coord indexing. NEXT: modify the shim so [0x85bc]+0x100000
 [0x85b8]'s light colormap (the extender-paging alias), re-measure the DEFAULT-path
 terrain match (expect > 73.2% toward bit-exact); this is the concrete windshield fix,
 grounded in the oracle tile being light + the ext PM-paging alias.
+
+Remaining 27% = buffer STRIDE/indexing geometry (everything else faithful). Verified
+via oracle guest-RAM + measurement:
+  - PORT [0x85b8] colormap = range 82-228, mean 141.1, top 151/132/145/128/152
+    ORACLE [0x85b8]         = range 84-228, mean 140.3, top 152/128/151/145/132
+    -> colormap CONTENT is FAITHFUL (my earlier "128-152" was just the peak).
+  - PORT HM (first 64KB) = ORACLE HM (first 64KB) BYTE-IDENTICAL (range 35-86, mean
+    58.6, same top 59/51/67/49/61/66 with identical counts).
+  - Injecting the oracle ray tables 3a24/3e24 into TILEFILL_DS = 0 change (73.2%).
+  - The alias [0x85bc]+0x100000 <- [0x85b8] is already present in TILEFILL.
+So HM, colormap, alias, and ray tables are all faithful/present, yet 73.2%. The gap
+is the buffer STRIDE: 6980's coord = (Yhi_10<<10)|Xhi_10 expects a 1024-wide (1024^2-
+stride) HM + colormap; the port's map-load builds a 2048^2 HM, and TILEFILL_DS's
+every-other point-downsample (hmcm[y*1024+x]=H[(2y)*2048+(2x)]) is NOT how 6980 indexes
+the extender's paged 1024^2 view of the 2048^2 map. The extender's PM paging presents a
+specific 1024^2 window; the every-other downsample approximates it (73.2%) but is not
+the exact window. NEXT: determine the extender's exact 1024^2 window into the 2048^2 HM
+(is it a top-left 1024x1024 sub-block, an every-other subsample, or a paged tile
+gather?), test each downsample variant (sub-block vs every-other) against 73.2%, and
+match 6980's real coord->buffer mapping. The windshield reduces to this single
+buffer-window geometry; HM/colormap/camera/alias/rays are all oracle/asm-verified
+faithful.
