@@ -1592,9 +1592,15 @@ int fist_extender_gate(void) {
                      * other row/col of the 2048^2 source) so 6980's [base]+ecx / [base]+0x100000+ecx
                      * land on a 1024^2 HM + contiguous 1024^2 colormap. */
                     uint8_t *H=(uint8_t*)(uintptr_t)hmb, *C=(uint8_t*)(uintptr_t)cmb;
+                    int avg=getenv("FIST_TILEFILL_AVG")!=0;
                     for(int y=0;y<1024;y++) for(int x=0;x<1024;x++){
-                        hmcm[y*1024+x]           = H[(y*2)*2048+(x*2)];
-                        hmcm[0x100000+y*1024+x]  = C[(y*2)*2048+(x*2)]; }
+                        int i=(y*2)*2048+(x*2);
+                        if(avg){
+                            hmcm[y*1024+x]=(H[i]+H[i+1]+H[i+2048]+H[i+2049])>>2;
+                            hmcm[0x100000+y*1024+x]=(C[i]+C[i+1]+C[i+2048]+C[i+2049])>>2;
+                        } else {
+                            hmcm[y*1024+x]           = H[i];
+                            hmcm[0x100000+y*1024+x]  = C[i]; } }
                     hm_src=hmb;
                 } else {
                 if(hmb!=hm_src){ memcpy(hmcm,(void*)(uintptr_t)hmb,0x100000); hm_src=hmb; }
