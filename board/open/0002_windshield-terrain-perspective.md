@@ -1,6 +1,7 @@
 Type: bug
 Area: render
 Tags: voxel oracle
+Depends: 0007
 
 The windshield renders the terrain in a correct first-person voxel-space
 perspective — sky above, a horizon line, terrain receding below — instead of the
@@ -121,3 +122,14 @@ original resolves for the .MEG tier (does 5c98 for "N.MEG" test a file or free
 memory?), then make the port pick the same tier. Forcing 395c alone still leaves
 75.2% (too much sky, and [0x8490] detail likely also wrong), so the fix is the
 correct tier (395c AND 8490 together), not just a nonzero 395c.
+
+The .MEG resolution is confirmed a faithful file-probe: 5c98 -> 5cc2(0x4e00) =
+find-first, built code threads the carry, and NO .MEG file exists in the data
+(only 8.SKY; note .DTL files + LHA.EXE/UNPACK.BAT suggest packed distribution).
+The hard contradiction stands: the original on the SAME data renders sky (needs
+395c!=0, and 13289's [0x3911] sky build is engine decompile, not shim). So the
+original resolves a .MEG tier without a .MEG file -- most likely a 5cc2 secondary
+search ([0x622c] resource archive) that the port skips (the shim clears [0x622c]=0
+at init, and 13180 sets it to "PAL.RES" only AFTER these probes). Settling this
+needs the original's [0x395c]/[0x8490]/[0x622c] at map-load = a guest-RAM capture
+(0007). This is the point where the voxel re-converges on 0007.
