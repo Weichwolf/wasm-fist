@@ -607,3 +607,20 @@ their runtime values (NOT the .MEG branch). NEXT: instrument the port's op-0x18 
 [0x8490]/[0x8494]/[0x395c]/[0x395d] and find the actual writer of [0x8490]=11 (the
 upsample-target source), then reconcile it to the oracle's 1024^2. The fix is still the
 resolution (2048->1024), just its source is not the .MEG FindFirst as first read.
+
+[0x8490] SOURCE found = TCB[+0x59]. FIST_LODCHK shows [0x8490]=11 is set from
+TCB[+0x59] (decompile 13207: `_DAT_8490 = TCB[+0x59]`), BEFORE the .MEG branch (which
+finds nothing and doesn't override). So the port's voxel LOD comes from the TCB detail
+byte +0x59=11 (2048^2). [0x395c]=1 (sky flag) is set separately by the shim. Forcing
+TCB[+0x59]=10 (FIST_FORCELOD=10) before 89b0 CRASHES -- the map-load, SMC slots, and
+TILEFILL buffers are all sized for 2048^2, so changing only the LOD byte desyncs them.
+So the fix is NOT a one-byte change; either (a) LOD 11 is faithful and 6980 walks a
+1024^2 REDUCE of the 2048^2 (the missing repoint/reduce -- TILEFILL_DS approximates it
+at 73.2%), or (b) the whole map-load should run at LOD 10 (TCB[+0x59]=10) with all
+buffers/SMC consistent. DECISIVE datum needed: the ORACLE's TCB[+0x59] / [0x8490] (10 or
+11) -- a guest-RAM capture (dosbox-fist) at the AZER1 map-load settles (a) vs (b). If
+oracle [0x8490]=11, the fix is the 1024^2 reduce for 6980 (find where the original
+repoints [0x85bc] to a reduced buffer, size 1<<((11-1)*2)... = 1024^2); if 10, the
+port's TCB detail byte is wrong upstream (the detail-setting -> TCB[+0x59] path). The
+resolution fix direction stays confirmed (1024^2 -> 73.2%); this pins WHICH faithful
+form. Diagnostics added: FIST_LODCHK, FIST_FORCELOD, FIST_GAPCHK, FIST_TILEFILL_DS/AVG.
