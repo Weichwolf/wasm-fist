@@ -371,3 +371,16 @@ a different song than ref/audio_menu_oracle.wav (menu music) because the menu-mu
 dispatched by the menu front-end) -- deeper (menu-flow, not a trap): the menu renders (159 flows
 pass) but the screen-object's music-start method is not invoked. That is the gate to both the menu
 music playing AND the oracle-comparable WAV.
+
+Music-start trace (this iteration): instrumented a15a/9f1d/9f0f/bde4 and ran to the menu --
+mustrace count = 0. NONE of the song-play functions fire (not intro INTRO.MS3, not menu
+MAINMENU.MS3). So the 19860 OPL writes are the DEFAULT device tune (OPL init 0872->104f), NOT
+any real .MS3 song. The gap is NOT specific to the menu-register (bde4) -- it is that the engine's
+SCREEN-SYSTEM MUSIC-START DISPATCH never fires for ANY song. This bottoms out in the same deepest
+core as the windshield: the engine's MAIN GAME/SCREEN LOOP does not fully run in the port (only
+the extender render pipeline + coop-tick drive the 159 frame-pinned flows); the screen objects'
+enter/update methods -- which start music, run menu logic, drive the sim/camera -- are not
+dispatched. So audio-music, windshield flight-model, and menu logic ALL share this root: the engine
+game loop / screen-method dispatch. patch 408 (0xfab instrument-apply) remains the landed win --
+it makes whatever plays multi-instrument -- but a REAL song needs the game-loop music dispatch,
+which is the deep core (not a trap, not a base-loss; an unreached code path in the screen system).
