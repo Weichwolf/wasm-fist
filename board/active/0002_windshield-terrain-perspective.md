@@ -460,3 +460,20 @@ what dim 6980's coord actually spans (its map-size register), to decide whether 
 is (a) HM upsample target 1024 not 2048 for the voxel buffer, or (b) a colormap placed
 0x100000 after a 1 MB HM view. The gap mismatch (0x400000 vs 0x100000) is the concrete
 lever; reconciling it is the windshield fix.
+
+DECISIVE resolution datum -- 6980 walks a 1024x1024 map (asm-proven). The colormap
+index in 6980 is built by two `shld $0xa` (10-bit) shifts (6ae3: shld $0xa,%ebp,%ecx;
+6ae7: shld $0xa,%ebx,%ecx) -> ecx = (Yhi_10 << 10) | Xhi_10 = a 20-bit index, range
+0..0x100000 = 1024x1024. So 6980 reads HM at [0x85bc]+ecx and colormap at [0x85bc]+
+0x100000+ecx, BOTH 1024x1024 (1 MB), contiguous. This is fixed by the asm.
+The port provides a 2048x2048 (4 MB) HM with the colormap 4 MB later -> 6980 reads the
+wrong resolution/region. FIST_TILEFILL only reaches 33.6% because it copies the FIRST
+1 MB of the 2048^2 HM (the top-left quarter at 2048 resolution) as the "1024^2 map",
+not a proper 1024^2 DOWNSAMPLE. THE FIX: give 6980 a 1024^2 HM + 1024^2 colormap
+contiguous buffer at [0x85bc] (HM at +0, colormap at +0x100000), built as a proper
+1024-resolution view of the map -- NOT the first quarter of the 2048^2 buffer. NEXT:
+modify the tile-fill/map-load to build a genuine 1024^2 downsampled HM + 1024^2
+colormap contiguous, re-measure the index match (a proper 1024^2 view should jump well
+past 33.6%); if it does, that confirms the resolution root and the faithful fix is to
+have the map-load produce the 1024^2 voxel buffer 6980 expects (or stop the HM upsample
+at 1024 for this buffer). This is the concrete, measured windshield fix path.
