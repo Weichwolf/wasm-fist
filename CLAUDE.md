@@ -198,11 +198,17 @@ re_out/fist_dos.c: open_ci + dos_int_ext AH=3F/42):
   - The raw member is then **transformed in place by FUN_0000_9f10** (called from FUN_0000_9f70 right after
     the load, BEFORE bc9c): a **selection-sort of [5598][80..255] ascending by luma (r+2g+b)**. 9f70 then
     copies [5598]→[5260], builds [4f60]=[5260]>>1 (a033), sets ac64=[28a5]=80/ac60=0xff, and calls bc9c.
-  - **Open anomaly (the real lead):** the port's [0x5598]@bc9c-time is NOT even a permutation of the raw
-    member[80..255] (only 28/176 RGB triples present; member max byte 63 vs [5598] max 50). A pure luma
-    sort preserves the multiset, so EITHER 9f10 is mis-ported OR the shim/engine ORDERING interferes
+  - **DIAGNOSIS NAILED (tools/oracle/sim_bc9c_diag.py):** a Python model of bc9c+ac70 (target=avg>>1,
+    tables (31k)²/(43k)²/(26k)², range 80..255) fed the **SORTED palette** reproduces the ORACLE bc9c
+    diagonal (80..86) nearly byte-exact; fed the raw member or the port's [5598]@dump it does NOT. The
+    port's live bc9c diagonal is 102..129 — so **the port's bc9c reads a WRONG (non-sorted) [0x5598]**,
+    whereas the correct 9f10-sorted palette is preserved in **[0x5260]** (which IS luma-monotonic, 0
+    inversions; [5598]@dump has 79). So bc9c's REQUIRED input == [5260]'s content; the port fails to hand
+    it that. 9f70's order is 9f10-sort([5598]) → copy [5598]→[5260] → a033([4f60]) → bc9c(reads [5598]),
+    and a033 does NOT touch [5598], so within ONE clean 9f70 bc9c would read the sorted [5598]. That [5598]
+    is unsorted at bc9c-time ⇒ a SECOND [5598] (re)load races the sort — the shim/engine 89b0 ordering
     (native_main.c calls m_ext_FUN_0000_89b0 explicitly in the op-0x18 hook while the engine's own op-0x18
-    handler ALSO runs the 6032→9f70→KLC palette path — double-processing / wrong [5598] at bc9c-time).
+    dispatch ALSO reaches 89b0's 6032→9f70 path).
   - **ac70 is CORRECT (verified via objdump, already patched):** the decompile's literal `- 0xf` is
     SELF-MODIFYING CODE — 0xacb6/0xacc0/0xacca are the immediate operand BYTES of the three `sub al,0xf`
     instructions in the ac70 loop (0xacb5/acbf/acc9), and ac70's prologue OVERWRITES them with the target
@@ -211,11 +217,14 @@ re_out/fist_dos.c: open_ci + dos_int_ext AH=3F/42):
     (objdump 0xac70). So ac70 is faithful; it is NOT the voxel bug.
 Still VERIFIED-correct: [0x5260] terrain band [80..255] 100% oracle-exact (vs oracle_9200_framematched
 pass08.pal), [4f60]==[5260]>>1 100%, search range 80..255, diff tables (31k)²/(43k)²/(26k)², block A 100%.
-**NEXT (re-scoped; ac70 CLEARED):** (a) dump [0x5598] at the EXACT bc9c ENTRY (add a one-shot bank inside
-FUN_0000_bc9c) and compare to the Python luma-sort of the raw member — if unequal, the bug is patch 206
-(9f10 sort) OR the shim's explicit m_ext_FUN_0000_89b0 call (native_main.c op-0x18 hook) double-running /
-mis-ordering vs the engine's own op-0x18 6032→9f70 path (test: gate the shim call off, re-check [5598]);
-(b) only if [5598]@bc9c IS the correct sorted member
+**NEXT (bug cornered to [5598]-freshness-at-bc9c):** (a) confirm the double-89b0 by counting the
+532.PAL(@22048)→ext+0x5598 reads per map-load (FIST_OPENLOG readlog; needs a quiet run, no concurrent
+verify); (b) TEST FIX: gate OFF native_main.c's explicit m_ext_FUN_0000_89b0 op-0x18 call and re-dump —
+if the single engine-driven 89b0 leaves [5598]==[5260] (sorted) at bc9c and port_bc9c's diagonal drops to
+80..86, that is the fix; guard all 159 flows + the map-load-covered set afterwards. Check WHY the shim call
+was added (native_main ~2153 comment) before removing — it may be there because the engine dispatch does
+NOT reach 89b0 (then the fix is different: ensure [5598] is re-sorted, or bc9c reads [5260]). (c) only if
+[5598]@bc9c already IS the sorted palette
 and ac70 is faithful, the divergence is bc9c/bdc4 or a capture-state mismatch of the oracle_bc9c sample
 (rule out: confirm it was captured on the same theatre/map as AZER1). Diagnostics: FIST_OPENLOG (open/seek/
 read trace), FIST_PALDUMP (5598/4f60/5260 + diff tables), FIST_BC90DUMP (live bc9c matrix). Samples:
