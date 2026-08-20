@@ -2293,7 +2293,17 @@ int fist_extender_gate(void) {
             if (getenv("FIST_FORCE395C"))       /* diagnostic override of the reconstruction above */
                 g_mem[FIST_EXT_BASE+0x395c] = (uint8_t)strtoul(getenv("FIST_FORCE395C"),0,0);
             g_fist_ext_int = 1;                    /* extender-mode flat FILEMGR INT 21h */
+            if(getenv("FIST_FORCELOD")){ uint8_t*xb=g_mem+FIST_EXT_BASE;
+                uint32_t tcb=*(uint32_t*)(xb+0xc93);
+                if(tcb){ *(uint8_t*)(g_mem+tcb+0x59)=(uint8_t)strtoul(getenv("FIST_FORCELOD"),0,0);
+                    fprintf(stderr,"[forcelod] TCB[+0x59]=%u\n",g_mem[tcb+0x59]); } }
+            if(getenv("FIST_LODCHK")){ uint8_t*xb=g_mem+FIST_EXT_BASE;
+                fprintf(stderr,"[lodchk PRE ] 8490=%u 8494=%u 395c=%u 395d=%u\n",
+                    *(uint32_t*)(xb+0x8490),*(uint32_t*)(xb+0x8494),xb[0x395c],xb[0x395d]);}
             m_ext_FUN_0000_89b0(inbox, inbox, inbox);
+            if(getenv("FIST_LODCHK")){ uint8_t*xb=g_mem+FIST_EXT_BASE;
+                fprintf(stderr,"[lodchk POST] 8490=%u 8494=%u 395c=%u 395d=%u\n",
+                    *(uint32_t*)(xb+0x8490),*(uint32_t*)(xb+0x8494),xb[0x395c],xb[0x395d]);}
             g_fist_ext_int = 0;
             /* FIST_DS3911DUMP (default OFF, READ-ONLY): dump the port's ds:0x3911 SOURCE buffer -- the
              * static map-load buffer the extender's per-frame perspective tile-resample FUN_0000_689a
