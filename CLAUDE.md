@@ -225,6 +225,16 @@ under Xvfb + the xclick.py XTEST nav, as capture_battle_burst.sh does for stock 
 map-load, (c) find the extender's guest base (not 0x10000000 here) and read [ext_base+0x5598], (d) byte-compare
 to the port's [0x5598].
 
+**QEMU boot status (partial, obstacle found):** run_oracle.sh boots FIST.RUN and the ENGINE LOADS
+(capture_dgroup.py sees it at guest ~0x20190 / DGROUP ~0x3c190; pmemsave works via the full 32 MB dump).
+BUT FIST.RUN does NOT reach the graphical menu under QEMU: the 0xA0000 framebuffer is SOLID 255 (blank) at
+58-130 s, no intro frames — a QEMU-vs-DOSBox behavioural difference (VGA/DAC/timing/KDV-intro) that must be
+resolved before the menu can be driven into a mission. Practical notes learned: `-usb -device usb-tablet`
+is REQUIRED (absolute mouse; without `-usb` QEMU exits on the device); `-snapshot` avoids the image
+write-lock; kill lingering qemu by PID (`pkill -x` can miss one still holding monitor port 5512); the
+inline pmemsave is timing-flaky — capture_dgroup.py's full-RAM dump is the reliable path. So the [5598]
+capture is currently blocked on getting FIST.RUN to RENDER under QEMU, then the XTEST menu-nav to a mission.
+
 **Other open frontiers**: per-vehicle dashboard micro-bugs (e.g. AZER6's confirmed 2px) on the ~10 non-M1
 battles — now oracle-verifiable via `capture_battle_burst.sh`; audio bit-exactness; modify-unit editor op
 (64ea is a modal, map-view-gated); save/load; controls — all the way to the 10× gate. **Los geht's.** 🚀
