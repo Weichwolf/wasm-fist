@@ -388,3 +388,19 @@ The residual is the COLORMAP BUILD content (C32.KLC decode / light-reduce), not
 delivery-absence. NEXT: diff the port colormap vs the oracle colormap sample
 (oracle_85b8_colormap_first64k.bin) to characterize the darkness (constant offset?
 scale? decode?) and trace the C32.KLC -> [0x85b8] light-reduce build in asm.
+
+Colormap CONTENT is right -- residual is LAYOUT/SAMPLING. Diffing the port colormap
+vs oracle_85b8_colormap_first64k.bin: only 5.6% byte-identical, BUT the distributions
+MATCH (port nz mean=140.3, oracle=139.3, offset -0.9; same top colours 151/133/145/
+152/132/159). So the colormap has the RIGHT COLOURS in DIFFERENT POSITIONS. Yet the
+rendered terrain is +55 darker (fb mean 129 vs 184). Conclusion: the colour CONTENT
+of the colormap is faithful; the residual is the LAYOUT of the colormap and/or 6980's
+SAMPLING COORDINATES into it (the port samples coordinates that land on darker
+entries). This is NOT a C32.KLC colour-decode bug -- it is the colormap's spatial
+layout (HM+colormap contiguity / stride) and/or 6980's (height,light)->offset math.
+(Caveat: oracle_85b8_colormap_first64k.bin's frame/map provenance should be
+re-confirmed before over-trusting the 5.6%.) NEXT: trace 6980's colormap addressing
+(how it maps a screen column's (height,light) to a [0x85b8]+0x100000 byte offset) in
+fist_image.bin asm, and compare the port's contiguous-buffer layout/stride to the
+extender's real HM_base+0x100000 layout -- the +55 darkness is a sampling-coordinate
+or stride mismatch, downstream of a faithful colour palette.
