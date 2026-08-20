@@ -533,3 +533,19 @@ walk the map at the oracle's resolution, verify the ~30 SMC slots re-patch consi
 and confirm the HM/colormap buffers size + contiguity ([0x85b8]==[0x85bc]+ (1<<LOD)^2)
 match. Then the terrain should reach bit-exact without any TILEFILL band-aid. This is
 the concrete landing path; the fix direction is measured-confirmed (10.6->33.6->73.2%).
+
+Detail->LOD branch traced (map-load 0x89f5-0x8a4c). The LOD [0x8490] is chosen by
+resource-existence checks (call 0x5c98 on strings @0x84a6/0x84ac/0x84b3): default 9
+(512^2); +1 -> 10 (1024^2, [0x395c]=1); +2 -> 11 (2048^2, [0x395c]=2); +3 -> 12
+(4096^2, [0x395c]=3). Each level also sets the sky flag [0x395c] to 0/1/2/3. The port
+gets [0x8490]=11 (2048^2), which is CORRECT for its detail -- the 2048^2 full map is
+right. Since 6980 ALWAYS walks 1024^2 (its colormap read is a fixed +0x100000), the
+1024^2 buffer 6980 walks is a REDUCE of the 2048^2 map, and [0x85bc] is REPOINTED to
+that reduced buffer for the 6980 call. So the fix is NOT the LOD -- it is the
+2048^2 -> 1024^2 REDUCE that builds 6980's walked buffer (which FIST_TILEFILL_DS
+approximates at 73.2% by point-subsampling). NEXT: find the original's reduce (the
+code that builds the 1024^2 HM+colormap from the 2048^2 and repoints [0x85bc] before
+6980) -- likely a 2:1 reduce near 3931/6980 or in the 689a/light-reduce path; port it
+faithfully so 6980 walks the exact reduced buffer (should exceed 73.2% toward
+bit-exact). The port's 2048^2 map + LOD are faithful; only the voxel-LOD reduce is
+the open step.
