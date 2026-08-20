@@ -1111,3 +1111,21 @@ missing first link. NEXT: trace/populate the TCB viewport rect (FUN_0000_ddff's 
 the mission viewport), then wire op 0x08/0x24 dispatch and measure the real render-path terrain
 (expect ~78.7% like the scaffold, now via the engine's posted ops). FIX1 (patch 407) landed;
 FIX2 = viewport-setup + op-dispatch wiring.
+
+FIX2 is the FULL op-dispatch pipeline (not a single op). Wiring op-0x08 -> 6980, even with
+the viewport forced, still FPEs -- the crash is in 85d0 (camera setup: 90c0 = 0xffffffff /
+TCB[+0x3e] focal). At op-0x08 time the TCB camera fields (focal +0x3e, etc.) are NOT yet set
+(they read 256 at op-0x24 time via FIST_MISSFB_PROBE, but op-0x08 fires EARLIER in the frame,
+before the camera-setup op). So dispatching one render op in isolation crashes because its
+setup PREREQUISITES (camera focal, viewport rect) are populated by OTHER posted ops that the
+port also log-and-returns. So FIX2 must wire the FULL posted-op sequence faithfully in order:
+the setup ops (0x68/0x6c/0x70/0x74/0x7c + camera/viewport configure) populate the TCB camera +
+viewport, THEN op-0x08 (6980 tile, SMC-correct via 407) builds, THEN op-0x24 (9200) samples.
+This is the substantial multi-op render-pipeline reconstruction -- each posted op dispatched to
+its m_ext fn, with the setup ops' outputs (camera focal/viewport/projection tables) feeding the
+render ops. The FIST_MISSFB scaffold works because it runs the render chain LATER (op-0x24 time)
+when the TCB is fully populated + forces the viewport; the faithful FIX2 runs each op at its
+posted time with the real setup chain. NEXT: map the setup ops (0x68/0x6c/0x70/0x74/0x7c ->
+their m_ext fns) + what each populates (camera, viewport, tables), wire the full dispatch in
+order, resolve crashes as each prerequisite is met, then measure the real-render-path terrain.
+This is the bounded (but multi-step) FIX2 implementation. FIX1 (patch 407) is landed + verified.
