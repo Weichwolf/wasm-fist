@@ -110,3 +110,15 @@ for the voxel TCB) -- find the vector that should equal 0f99's entry and does no
 then fix its install. This is the engine's indirect service-vector layer, the SAME
 class as the voxel 6980 dispatch -- completing/verifying that vector layer is the
 cross-cutting high-leverage fix.
+
+Consolidation: the audio defect lives in the sound driver's command/sequencer
+dispatch -- a 18-entry command table (FUN_0000_1d45 reads DGROUP:0x1af5 by index),
+voice slots (1d62), and service vectors, threaded through the engine's indirect
+dispatch with ~dozens of RULE-7 unresolved targets + near-offset base-losses (e.g.
+1d62's `*(undefined2*)0x0`). The program-change command index does not route to
+0f99 in the port. This is systematic decompile-fidelity work on fist_snd.c (resolve
+the indirect dispatch + base-losses of the sequencer command table), a dedicated
+multi-step effort of the SAME class as the voxel 6980 raycaster -- both are the
+engine's deep dispatch core. The port-vs-oracle verification path is proven
+(FISTOPLLOG register-stream diff shows exactly which instrument writes are missing);
+the fix is bounded but large. Not a quick win, tracked for a focused session.
