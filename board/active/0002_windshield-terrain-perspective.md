@@ -786,3 +786,25 @@ camera/matrix/sky/6980-addressing/alias/window-direction/phase); the last step i
 paging, which the flat g_mem model must reproduce. NEXT: page-walk the extender's own
 page table (not cr3=0xe000) from the 16MB dump for the [0x85bc] coord range to derive
 the exact ext-flat->phys texel gather, and build that gather in the shim.
+
+ALIAS HYPOTHESIS RETRACTED (doctrine: correct without ego). Scanned all 4096
+4KB-aligned candidate page directories in the 16MB dump for one that maps ext-flat
+[0x85bc]+0x100000 (0x10174e60) to the LIGHT colormap phys region (0x37xxxx): ZERO
+hits. So there is NO page table under which [0x85bc]+0x100000 aliases the light
+colormap. The last-iteration "extender paging aliases +0x100000 to [0x85b8]"
+hypothesis is DISPROVEN. The paradox is genuinely unresolved: 6980's colour read is
+[0x85bc]+0x100000 (asm-confirmed: 6b1a `mov 0x100000(%esi,%ecx),%al`; esi=[0x85bc]
+unchanged from 6a60; written via 6b2b `rep stos %al`), which is DARK (14-85) in the
+dump, yet the oracle tile [0x3918] is LIGHT (150-230, ZERO dark values). No paging
+reconciles it. This is exactly the prior session's documented wall ("the colormap is
+the crux, unresolved"). HONEST STATE: I could not crack how 6980 produces light terrain
+from a dark [0x85bc]+0x100000 read. Remaining unknowns to try next: (a) is the tile
+[0x3918] the buffer 6980 actually writes, or does 6980 write elsewhere and 9200/a later
+stage recolours? (verify [0x4a60] write-pointer targets vs [0x3918]); (b) does the dump
+capture a state where [0x85bc]+0x100000 is mid-transform (a later frame has it light)?
+(the pass00==pass10 test said stable, but only sampled 4KB); (c) is 6980's colour read
+subtly a proj-table lookup too (proj indexed by the +0x100000 value -> light), not the
+raw +0x100000 byte? Re-trace 6aee's eax/proj vs 6b1a very carefully. Everything ELSE
+(HM/colormap-content/camera/matrix/sky/6980-geometry/window/phase) is oracle/asm-
+verified faithful; this single colour-source paradox is the true open crux. The 73.2%
+downsample is the best approximation short of resolving it.
