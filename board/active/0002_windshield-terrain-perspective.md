@@ -549,3 +549,16 @@ code that builds the 1024^2 HM+colormap from the 2048^2 and repoints [0x85bc] be
 faithfully so 6980 walks the exact reduced buffer (should exceed 73.2% toward
 bit-exact). The port's 2048^2 map + LOD are faithful; only the voxel-LOD reduce is
 the open step.
+
+Detail files = 8.MEG / 16.MEG / 40.MEG (the map LOD tiers: 8->1024^2, 16->2048^2,
+40->4096^2). The map-load's 5c98 resource check on these picks BOTH the LOD [0x8490]
+(10/11/12) AND the sky flag [0x395c] (1/2/3) together, in the SAME branch. This ties
+the voxel LOD to the sky-setup the shim already reconstructs ([0x395c]) -- so the LOD
+[0x8490] must be reconstructed consistently with [0x395c] from the same .MEG-presence
+logic. (No `mov reg,0x85bc` repoint appears in the image, so the 1024^2 buffer 6980
+walks is either built in place by a reduce or [0x85bc] holds the reduced buffer natively
+-- to be traced.) The 2048^2->1024^2 reduce that feeds 6980 (approximated by
+FIST_TILEFILL_DS at 73.2%) remains the open faithful step; it is bound up with the
+.MEG/detail/[0x395c]/[0x8490] map-load logic the shim partially reconstructs. NEXT:
+trace how the 1024^2 voxel buffer 6980 reads is produced from the 2048^2 map (the
+reduce / repoint), consistent with the .MEG detail selection, and port it faithfully.
