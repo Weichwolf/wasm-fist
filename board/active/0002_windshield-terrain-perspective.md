@@ -307,3 +307,29 @@ delivered by the map-load. NEXT: trace the C32.KLC colormap decode in the extend
 map-load (89b0 -> 643c ...) via fist_image.bin asm; verify what [0x85b8]/[0x3918]
 should hold vs the port's {0,4}/blend-matrix; that data-delivery is the concrete
 windshield fix, and it is asm-verifiable end to end.
+
+DEFINITIVE ROOT (this unifies everything): the extender per-frame RENDER OP-DISPATCH
+is NOT WIRED in the port -- it is a LOG-AND-RETURN STUB. The port's ext op-service is
+manual `if(op==X)` handlers for 0x4c/0/0x80/0x18(map-load)/0x78, plus ENV-GATED
+diagnostic handlers for 0x0c (FIST_R3D2/R3D) and 0x24 (FIST_MISSFB). Every render op
+falls through (native_main.c:2880) to `fprintf("[ext] service op..."); return 0` when
+its diagnostic env var is absent:
+    op 0x08 (tile-build -> 3931 -> 6980)   : NOT handled at all -> stub
+    op 0x0c (colormap   -> 78f0 -> 93c0)   : only under FIST_R3D2/R3D -> else stub
+    op 0x24 (sample     -> 82b8 -> 9200)   : only under FIST_MISSFB   -> else stub
+So in a NORMAL mission (no diagnostic env), the port renders NO voxel terrain -- the
++55-darker terrain I measured was the FIST_MISSFB shim RECONSTRUCTION, not the
+engine's real op flow. The whole windshield surface is unimplemented op-dispatch,
+scaffolded by diagnostic seams; this is why the 159-flow matrix does not (and cannot
+yet) assert windshield fidelity. DOCTRINE FIX (no stubs): wire the extender's PM-gate
+op-table dispatch -- the engine posts op N, the PM gate FUN_0000_0f30 does
+`movzx ebx,bx; mov ebx,[ebx+0xcb3]; call *ebx` (op-table @ fist_image.bin:0xcb3),
+trampolining to the render fn (0x08->3931/6980, 0x0c->78f0/93c0, 0x24->82b8/9200,
+0x44->7660). Faithfully running that dispatch for every posted op -- instead of
+log-and-return -- makes the real per-frame render run, with 6980 building the tile
+and 9200 sampling it, exactly as the original. That is the concrete, doctrine-correct
+windshield implementation; the session's upstream verifications (bc9c/bdc4 faithful,
+camera correct, sky bit-exact) mean the pieces are ready to be driven by the real
+dispatch. NEXT: confirm FUN_0000_0f30 (op-table dispatcher) is available/portable in
+the shim, read the op-table @0xcb3 entries + their trampolines, and wire op-service to
+dispatch via it (patch or shim) instead of the log-and-return fallthrough.
