@@ -36,7 +36,7 @@ export FISTLOG="$FISTLOG" FIST_R9200CAP=1 FIST_R9200MAX=3
 XC="$ROOT/tools/oracle/xclick.py"
 rm -f "$FISTLOG".* 2>/dev/null || true
 timeout 200 xvfb-run -a --server-args="-screen 0 1024x768x24" bash -c '
-  "'$DBX'" -conf "'$SC'/db.conf" -exit > "'$SC'/db.log" 2>&1 &
+  "'$DBX'" -conf "'$SC'/db.conf" -exit > /tmp/tcb_dbx.log 2>&1 &
   sleep 42
   import -window root "'$SC'/m.png" 2>/dev/null
   G=$(convert "'$SC'/m.png" -fuzz 1% -format "%@" info:)

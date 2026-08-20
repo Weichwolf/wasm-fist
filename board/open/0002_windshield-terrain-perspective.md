@@ -175,3 +175,22 @@ trace + [0x622c] AT the .MEG-probe time (another dosbox-fist run) to see what it
 resolves, then make the port resolve the same. Apply the camera pitch/roll (an
 oracle-anchored spawn seed like the existing alt/focal) and the sky, then verify
 the port's op-0x24 windshield against a dashboard-AE=0 stock-burst frame.
+
+SKY ROOT-CAUSE DEFINITIVE (corrects the earlier ".MEG probe" attribution). The
+guest-RAM oracle + a DOS find-first trace (dosbox-fist, [megtrace]) proved the
+ORIGINAL also finds NO .MEG file (4/8/16/40.MEG all "not found") yet still has
+[0x395c]=1 -- so the .MEG probe (89b0 @0x89e7-0x8a56, sets 395c only on a .MEG
+FOUND) is NOT the setter. The real setter is at ext 0x7660, inside a Ghidra
+DECOMPILE GAP (0x7490..0x76fd is not decompiled):
+    7666 mov eax,0x6877 ; 766b mov [0x3958],eax   ; sky-render fn ptr = 0x6877
+    7670 mov BYTE [0x395c],1                        ; 395c = 1 by DEFAULT
+    7677 cmp BYTE [ebx+0xcc],0 ; 767e je 0x7695     ; ebx = [0xc93] (TCB)
+    7680 mov eax,0x689a ; 7685 mov [0x3958],eax     ; else fn ptr = 0x689a
+    768a mov al,[ebx+0xcc] ; 7690 mov [0x395c],al   ; and 395c = TCB[+0xcc]
+The port never runs this (it is not in the decompile), so [0x395c] stays 0 and no
+sky is built. FIX: reconstruct the 0x7660 sky-setup in the shim (set [0x3958] and
+[0x395c] per TCB[+0xcc], faithfully to this asm) at the right map-load point, then
+the already-faithful sky pipeline builds the sky (proven: a dummy 4.MEG that forces
+395c=1 flips the port from 28 to 22887 sky-ish px). Next: find where 0x7660 is
+entered (call site / fn-ptr table) to wire the reconstruction, and apply the
+camera pitch/roll=384/256 seed; verify the windshield vs a dashboard-AE=0 burst.
