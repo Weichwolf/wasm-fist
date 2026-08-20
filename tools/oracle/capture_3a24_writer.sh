@@ -34,16 +34,16 @@ export FISTLOG="$FISTLOG" FIST_R9200CAP=1 FIST_R9200MAX=4
 export FIST_MEMARM_BOOT=1 FIST_WATCHFLAT=0x10003a24 FIST_WATCHFLATSPAN=0x800
 XC="$ROOT/tools/oracle/xclick.py"
 rm -f "$FISTLOG".* 2>/dev/null || true
-timeout 220 xvfb-run -a --server-args="-screen 0 1024x768x24" bash -c '
+timeout 560 xvfb-run -a --server-args="-screen 0 1024x768x24" bash -c '
   "'$DBX'" -conf "'$SC'/db.conf" -exit > /tmp/3a24_dbx.log 2>&1 &
-  sleep 42
+  sleep 130
   import -window root "'$SC'/m.png" 2>/dev/null
   G=$(convert "'$SC'/m.png" -fuzz 1% -format "%@" info:)
   OX=$(echo $G|sed -E "s/.*\+([0-9]+)\+([0-9]+)/\1/"); OY=$(echo $G|sed -E "s/.*\+([0-9]+)\+([0-9]+)/\2/")
-  python3 "'$XC'" $((OX+160)) $((OY+100)); sleep 10
-  python3 "'$XC'" $((OX+118)) $((OY+93));  sleep 3
-  python3 "'$XC'" $((OX+205)) $((OY+128)); sleep 14
-  python3 "'$XC'" $((OX+40))  $((OY+186)); sleep 32
+  python3 "'$XC'" $((OX+160)) $((OY+100)); sleep 30
+  python3 "'$XC'" $((OX+118)) $((OY+93));  sleep 12
+  python3 "'$XC'" $((OX+205)) $((OY+128)); sleep 42
+  python3 "'$XC'" $((OX+40))  $((OY+186)); sleep 90
 ' 2>&1 | grep -iE 'OX=|fist-oracle|error' || true
 echo "=== flatwriters (the 3a24 producer) ==="
 cat "$FISTLOG".flatwriters.txt 2>/dev/null || echo "NO flatwriters.txt -- (3a24 not written via ext-flat, or dump did not fire)"
