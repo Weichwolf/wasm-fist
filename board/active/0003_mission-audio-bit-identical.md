@@ -122,3 +122,21 @@ multi-step effort of the SAME class as the voxel 6980 raycaster -- both are the
 engine's deep dispatch core. The port-vs-oracle verification path is proven
 (FISTOPLLOG register-stream diff shows exactly which instrument writes are missing);
 the fix is bounded but large. Not a quick win, tracked for a focused session.
+
+Cross-surface consolidation (this round): re-examined 0003 as an alternative to the
+windshield's tooling gate. Audio has a CLEANER verification path than the voxel (port-only
+FIST_OPL_REGLOG + WAV cross-correlation, NO fragile xvfb/click oracle-capture), which is a
+real advantage. BUT the ROOT is the SAME class as the voxel: the sequencer command dispatch
+(FUN_0000_1d45 reads the 18-entry table DGROUP:0x1af5; FUN_0000_1d62 voice-slot setup carries
+a Ghidra base-loss `*(undefined2*)0x0` at fist_snd.c:5360) threaded through the engine's
+indirect service-vector layer -- the program-change command never routes to 0f99 (instrument
+load), so every note plays with init instrument 0 (reg 0x20 stuck at 0x01 vs original 0x31).
+Both the voxel (6980/3a24 producer) and audio (program-change dispatch) bottom out in the
+engine's hand-written INDIRECT-DISPATCH + base-loss core -- this is the project's central
+hard surface, confirmed cross-surface. The bounded landable sub-fixes here are the sequencer
+BASE-LOSSES (a known asm-verified patch class, e.g. 1d62's `*0x0`) -- restoring their DGROUP
+base is verifiable port-only (reg 0x20 should take 0x31, WAV correlation should rise from
+0.126). That is the tractable audio entry point, and unlike the windshield it needs no
+oracle-capture rebuild. NEXT (focused session): asm-verify the fist_snd.c sequencer
+base-losses (1d62 `*0x0` + siblings), restore their bases as an asm-verified patch, confirm
+reg 0x20 takes the song instruments + WAV correlation rises -- a landable win in the 407 class.
