@@ -1597,9 +1597,11 @@ int fist_extender_gate(void) {
                     if(sub){ for(int y=0;y<1024;y++) for(int x=0;x<1024;x++){
                         hmcm[y*1024+x]          = H[y*2048+x];
                         hmcm[0x100000+y*1024+x] = C[y*2048+x]; } hm_src=hmb; }
-                    else
+                    else {
+                    int ph=getenv("FIST_TILEFILL_PH")?atoi(getenv("FIST_TILEFILL_PH")):0;
+                    int py=(ph>>1)&1, px=ph&1;   /* phase 0..3 = (dy,dx) in the 2x2 */
                     for(int y=0;y<1024;y++) for(int x=0;x<1024;x++){
-                        int i=(y*2)*2048+(x*2);
+                        int i=(y*2+py)*2048+(x*2+px);
                         if(avg){
                             hmcm[y*1024+x]=(H[i]+H[i+1]+H[i+2048]+H[i+2049])>>2;
                             hmcm[0x100000+y*1024+x]=(C[i]+C[i+1]+C[i+2048]+C[i+2049])>>2;
@@ -1607,6 +1609,7 @@ int fist_extender_gate(void) {
                             hmcm[y*1024+x]           = H[i];
                             hmcm[0x100000+y*1024+x]  = C[i]; } }
                     hm_src=hmb;
+                    }
                 } else {
                 if(hmb!=hm_src){ memcpy(hmcm,(void*)(uintptr_t)hmb,0x100000); hm_src=hmb; }
                 if(hf2){ FILE*f=fopen(hf2,"rb"); if(f){fread(hmcm,1,0x100000,f);fclose(f); hm_src=0;} }
