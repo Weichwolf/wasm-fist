@@ -45,3 +45,30 @@ flight-model 459a + 3a24 producer) is the same deep frontier already mapped -- e
 interactively in the browser. This is a real, visible deliverable toward "play it in the browser".
 Bonus finding: the settings screen shows MUSIC=OFF selected -> that config default (not a bug) is why
 menu music was silent; clicking MUSIC ON would exercise the (patch-408-fixed) OPL playback.
+
+*** BROWSER NOW LIVE-RENDERS THE IN-MISSION VIEW (cockpit + windshield) -- 3 web-harness fixes ***
+Pushed the browser from "mission loads to the PL:1 screen" to LIVE in-mission rendering with a working
+palette.  Root causes found + fixed (all __EMSCRIPTEN__/g_web_mode-gated -> the verified native+node-wasm
+matrix is behaviorally untouched; native build confirmed OK):
+1. TICK-HOLD STARVED THE SIM.  native_main.c:561 held fist_wasm_tick during mission-load-pre-cockpit
+   (frozen-c452, a deterministic-CAPTURE aid for FIST_MISSFB node-wasm).  For LIVE play the sim must
+   advance, so d549 never reached 0x1c -> stuck at PL:1.  Fix: `|| g_web_mode` -> the browser ticks
+   normally in-mission (op 0x1c / 459a sim now fires; the tank spawns).
+2. IN-MISSION PUMP STARVATION (the deep one).  Confirmed by the pre-existing FIST_R3D_DUMP note
+   ("the mission loop does not re-enter fist_timer_pump"): unlike the menu's constant in(0x3da)
+   busy-wait, the mission sim rarely polls ports, so ticks/palette-fade/frame-post all stall (frames
+   froze ~192, palette stayed black).  Native drives these off the async SIGALRM timer; wasm has no
+   in-mission timer.  Fix: hook the per-frame cockpit render op (op 0x24 in fist_extender_gate) to
+   drive fist_vga_service_retrace() (palette upload + fade ramp) + fist_web_pump_input() +
+   fist_web_post_frame() -- one pump/post per render, the natural in-mission heartbeat.
+3. PALETTE LAGGED THE RENDER.  In-mission the retrace-poll DAC upload may not have run when the web
+   frame is posted -> g_pal black though the render + MGAVIDEO buffer are valid.  Added
+   fist_web_force_palette() (FIST_PALNOW logic: word[DGROUP:0x782] -> g_pal) in the web post.
+RESULT (headless-chromium CDP, AZER1 auto-driven via ENV FIST_MOUSE): the mission renders LIVE in the
+browser -- palette populated (palSum 0->28221, 719/768 entries), the windshield terrain (the 78.7%
+voxel, static-3a24 as expected) + cockpit chrome panels compositing, frames advancing off the op-0x24
+seam.  Captured frame is MID-COMPOSITION (fbNonzero ~24.5k vs native's full ~51k) -- the remaining
+polish is posting at RENDER-COMPLETE (frame-end op), not mid-display-list.  NOTE: worker.js currently
+carries a TEMP FIST_MOUSE auto-drive for this test -- must be reverted before commit (interactive
+default).  The 3 shim fixes are correct-in-principle + g_web_mode-gated; run verify.sh both (mission
+flows byte-identity) before committing.
