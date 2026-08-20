@@ -386,16 +386,15 @@ EM_JS(void, fist_web_post_frame_js, (unsigned char *fb, unsigned char *pal), {
   var p = HEAPU8.slice(pal, pal + 768);
   postMessage({ t:'frame', fb:f.buffer, pal:p.buffer }, [f.buffer, p.buffer]);
 });
-void fist_web_post_frame(void){
-  static int c = 0; if ((++c % 64) != 0) return;   /* known-good frame-post rate */
+void fist_web_post_frame(void){   /* posts unconditionally; the caller sets the ~60Hz cadence */
   fist_web_post_frame_js(g_mem + 0xA0000, fist_web_palette());
 }
 /* Live mouse: mirror the FIST_MOUSE transition->flags delivery (movement 0x01; L press/rel 0x02/0x04;
  * R press/rel 0x08/0x10) so a browser mouse event drives the engine's INT-33h handler faithfully. */
 static void deliver_mouse_event(unsigned flags, unsigned vx, unsigned vy, unsigned btn);
-EMSCRIPTEN_KEEPALIVE void fist_web_mouse(int x, int y, int btn){
+EMSCRIPTEN_KEEPALIVE void fist_web_mouse(int x, int y, int btn){   /* x in 0..639 (mode-13h virtual), y in 0..199 */
   static unsigned last_btn = 0; static int last_x = -1, last_y = -1;
-  unsigned vx = (x < 0 ? 0 : x > 319 ? 319 : x), vy = (y < 0 ? 0 : y > 199 ? 199 : y);
+  unsigned vx = (x < 0 ? 0 : x > 639 ? 639 : x), vy = (y < 0 ? 0 : y > 199 ? 199 : y);
   unsigned nb = (unsigned)btn & 3;
   if ((int)vx != last_x || (int)vy != last_y){ deliver_mouse_event(0x01, vx, vy, nb); last_x = vx; last_y = vy; }
   unsigned pressed = nb & ~last_btn, released = last_btn & ~nb;
@@ -414,8 +413,11 @@ EMSCRIPTEN_KEEPALIVE void fist_web_key(int ax, int down){ if (down && fist_dos_p
  * [4]=keyHead [5]=keyTail [6..]=key ring {scancode<<1 | down}. */
 EM_JS(void, fist_web_pump_input_js, (void), {
   var F = self.__fin; if (!F) return;
-  if (F[3] !== self.__mseq){ self.__mseq = F[3]; _fist_web_mouse(F[0], F[1], F[2]); }
-  while (F[5] !== F[4]){ var k = F[6 + (F[5] % 32)]; F[5] = (F[5] + 1) | 0; _fist_web_key(k >> 1, k & 1); }
+  /* mouse: deliver ONE queued event per poll so a press and its release land on DIFFERENT engine
+   * frames (like the FIST_MOUSE script spaces its steps) -- else a fast down+up registers no click. */
+  if (F[1] !== F[0]){ var i = (F[1] % 120) * 3; _fist_web_mouse(F[8+i], F[8+i+1], F[8+i+2]); F[1] = (F[1]+1)|0; }
+  /* keyboard: drain the key ring (BIOS keys are edge events). */
+  while (F[5] !== F[4]){ var k = F[400 + (F[5] % 32)]; F[5] = (F[5]+1)|0; _fist_web_key(k >> 1, k & 1); }
 });
 void fist_web_pump_input(void){ fist_web_pump_input_js(); }
 static volatile int g_web_mode = 0;
@@ -558,8 +560,9 @@ void fist_timer_pump(void){
          (!g_fist_after_map) and once the cockpit view is active (d549==0x1c). */
       if (!g_fist_after_map || g_mem[0x1c000 + 0x1549] == 0x1c) fist_wasm_tick();
       if (g_web_mode) { void fist_web_pump_input(void), fist_web_post_frame(void);
-                        static int wc=0; if ((++wc % 8192)==0) fist_web_pump_input();  /* poll input, cheap */
-                        fist_web_post_frame(); }  /* frame post self-throttles */
+                        /* ~60Hz cadence (pump is ~1MHz): deliver ONE input event + post ONE frame per
+                         * tick, so a press and its release land on DIFFERENT engine frames -> real click. */
+                        static int wc=0; if ((++wc % 16384)==0){ fist_web_pump_input(); fist_web_post_frame(); } }
     }
 #else
     /* Debug seam: FIST_COOP_TICK=1 drives the INT-8 time base COOPERATIVELY on native too (one tick

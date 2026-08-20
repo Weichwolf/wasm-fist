@@ -31,13 +31,13 @@ requestAnimationFrame(paint);
 
 // input SharedArrayBuffer: [0]x [1]y [2]btn [3]mouseSeq [4]keyWrite [5]keyRead [6..37]ring
 let IN=null;
-if(typeof SharedArrayBuffer!=='undefined'){ IN=new Int32Array(new SharedArrayBuffer(64*4)); }
+if(typeof SharedArrayBuffer!=='undefined'){ IN=new Int32Array(new SharedArrayBuffer(512*4)); }
 else log('SharedArrayBuffer unavailable — serve via tools/serve_web.py (COOP/COEP)');
 let buttons=0;
-function mouseFromEvent(ev){ const r=cv.getBoundingClientRect();
-  const x=Math.max(0,Math.min(319,Math.round((ev.clientX-r.left)/r.width*320)));
+function mouseFromEvent(ev){ if(!IN) return; const r=cv.getBoundingClientRect();
+  const x=Math.max(0,Math.min(639,Math.round((ev.clientX-r.left)/r.width*640)));  // mode-13h virtual X (0..639)
   const y=Math.max(0,Math.min(199,Math.round((ev.clientY-r.top)/r.height*200)));
-  if(IN){ Atomics.store(IN,0,x); Atomics.store(IN,1,y); Atomics.store(IN,2,buttons); Atomics.add(IN,3,1); } }
+  const w=IN[0]%120, b=8+w*3; IN[b]=x; IN[b+1]=y; IN[b+2]=buttons; Atomics.store(IN,0,(IN[0]+1)|0); }
 cv.addEventListener('mousemove',mouseFromEvent);
 cv.addEventListener('mousedown',e=>{buttons|=(e.button===2?2:1);mouseFromEvent(e);cv.focus();e.preventDefault();});
 cv.addEventListener('mouseup',  e=>{buttons&=~(e.button===2?2:1);mouseFromEvent(e);e.preventDefault();});
@@ -45,7 +45,7 @@ cv.addEventListener('contextmenu',e=>e.preventDefault());
 const SC={Enter:0x1c,Escape:0x01,Backspace:0x0e,ArrowUp:0x48,ArrowDown:0x50,ArrowLeft:0x4b,ArrowRight:0x4d,' ':0x39};
 cv.addEventListener('keydown',e=>{ if(!IN)return; let sc=SC[e.key]||0,asc=0;
   if(e.key.length===1)asc=e.key.charCodeAt(0); else if(e.key==='Enter')asc=13; else if(e.key==='Escape')asc=27; else if(e.key==='Backspace')asc=8;
-  const ax=(sc<<8)|(asc&0xff); if(ax){const w=IN[4]&31; IN[6+w]=(ax<<1)|1; Atomics.store(IN,4,(IN[4]+1)|0);}
+  const ax=(sc<<8)|(asc&0xff); if(ax){const w=IN[4]%32; IN[400+w]=(ax<<1)|1; Atomics.store(IN,4,(IN[4]+1)|0);}
   if(e.key!=='F5'&&e.key!=='F12')e.preventDefault(); });
 
 const worker=new Worker('worker.js');
