@@ -413,3 +413,14 @@ produces the genuine Armored Fist AdLib/OPL menu music at correct realtime pitch
 user.  This closes the browser-audio story: pipeline + realtime PIT-pacing + audible menu music, all
 landed (commit 5ec6967).  The remaining audio open items stay the DEEP ones: in-mission audio cadence
 (pump-starvation) and full bit-exact-vs-oracle audio stream.
+
+IN-MISSION AUDIO IS BLOCKED ON SOUNDDVR.DVR WIRING (not a cadence fix): investigated why in-mission
+audio is sparse (194 samples/s in the browser).  fist_sb.c documents that AF plays in-mission SFX/voice
+(and SB-mode music) via Sound Blaster DIGITAL DMA, and that path is NOT WIRED ("STATUS iteration 1: the
+SOUND driver SOUNDDVR.DVR is not yet wired -- no SB port is touched yet; this shim is the READY platform
+layer, produces real engine PCM the moment SOUNDDVR is wired").  So the streamed browser audio is OPL
+(AdLib) only -- which carries the menu MUSIC (already landed) but little in-mission sound.  Draining the
+OPL ring faster in-mission would NOT add sound; the in-mission-audio unblock is the SOUNDDVR.DVR
+wiring (SeedDriverVecs re-decompile + the DSP/DMA base-loss reconstruction, docs/audio.md) -- a deep
+driver task, not a harness tweak.  Conclusion: the tractable browser-audio win (OPL menu music) is
+complete; in-mission audio joins the deep-frontier list.
