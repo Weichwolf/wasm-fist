@@ -20,7 +20,12 @@ echo "[build.sh] wasm sources from $SRCDIR  (emcc=$EMCC)"
 
 # Same compiler looseness as the native build: the decompile is faithful C with Ghidra type slack
 # (int<->ptr, implicit decls, return-type slack) that is not a correctness signal at this stage.
-F="-O0 -g -std=gnu11 -w \
+# -O2 by default: verify proved -O2 wasm is BYTE-IDENTICAL to -O0 native across all 159 flows, so the
+# node-wasm + DoD-gate build runs ~5x faster with zero output change.  (32-bit NATIVE stays -O0 -- -O2
+# HANGS the x86 build on the mission-cockpit, a decompile-UB the wasm backend does not hit.)  FIST_DEBUG=1
+# restores -O0 -g for gdb tracing.
+FOPT="-O2"; [ -n "${FIST_DEBUG:-}" ] && FOPT="-O0 -g"
+F="$FOPT -std=gnu11 -w \
   -fno-strict-aliasing -Wno-int-conversion -Wno-implicit-function-declaration \
   -Wno-builtin-declaration-mismatch -Wno-return-type -Wno-incompatible-pointer-types"
 INCL="-I$SRCDIR"

@@ -105,3 +105,11 @@ Kept build.sh/native at -O0 -g (gdb tracing).  FOLLOW-UP OPTION: if the -O2 full
 159/0, -O2 could be adopted for build.sh + native too (faster verify/DoD-gate + native), trading -g.
 The in-mission render is still ~2.3fps (compute-bound even at -O2) + partial M1CON console + static
 3a24 terrain -- those remain the deep frontiers, but the mission is now WATCHABLE in the browser.
+
+-O2 ADOPTION COMPLETE (verify 159/0): the full-matrix verify with NATIVE=-O0 vs OUTJS=-O2 passed
+159 PASS / 0 FAIL -- -O2 wasm is byte-identical to -O0 native across EVERY flow.  So build.sh (node-
+wasm + DoD-gate build) now defaults to -O2 (FIST_DEBUG=1 restores -O0 -g); build_web.sh already -O2.
+The DoD 10x wasm gate + the wasm side of verify now run ~5x faster with zero output change.  CAVEAT:
+32-bit NATIVE stays -O0 -- -O2 HANGS the x86 native build on the mission-cockpit (a decompile-UB the
+wasm/LLVM backend does not hit; -O2 wasm is fine, -O2 x86 diverges).  So native keeps -O0 -g (also the
+reference + gdb-traceable).  Net: browser watchable (5.6x) + DoD gate 5x faster, all byte-verified.
