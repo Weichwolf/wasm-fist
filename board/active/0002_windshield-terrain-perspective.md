@@ -1496,3 +1496,14 @@ NOT bit-exact.  The REAL remaining work is 78.7% -> BIT-EXACT: the residuals in 
 (heightmap downsample phase, colormap contiguity, the Layer-2 ray-step) -- the deep frontier, unchanged.
 So "play in the browser with real terrain" would today mean shipping the 78.7% FIST_TILEFILL render
 (visible terrain, NOT byte-identical) -- a doctrine trade-off (visible vs bit-exact), not a solved bit.
+
+TERRAIN BIT-EXACT BLOCKER PINNED = 6980 Layer-2 base-loss (it CRASHES on the real ramps): drove
+FIST_TILEFILL (the 78.7% scaffold) on the current build -- it SEGFAULTs.  Crash is in FUN_0000_6980
+(build/fist_ext.c:11071, the NovaLogic voxel raycaster), fault-addr ~0xf81770f9 (a wild pointer), the
+moment 6980 runs 395e on the REAL ramps (90c4=0) and does the ray-march.  So the placeholder all-1s
+ramps masked a base-loss in 6980's ray-step: fed the real (large) 3e24-derived values, 6980 computes an
+out-of-bounds address.  This IS the "Layer-2 ray-step (projection-gated)" residual the board named --
+the terrain 78.7%->bit-exact work is deep 6980 asm base-reconstruction (a heightmap/colormap-index or
+ray-accumulator that lost its segment base in the decompile), NOT a tuning knob and NOT the ramps.
+Confirmed: the tractable terrain sub-problems (ramps captured/proven, 395e/9200 chain, patch-407 SMC)
+are done; the remaining is this single deep asm base-loss in 6980 -- focused non-loop work.
