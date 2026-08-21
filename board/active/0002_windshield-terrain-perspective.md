@@ -1524,3 +1524,13 @@ TERRAIN RENDER UNBLOCKED (visible, NOT bit-exact) + scaffold crash root-caused:
   port-native fidelity.  Bit-exact needs the residuals: camera/projection (85d0/8120 + the TCB seed
   reaching 6980's march) and the real heightmap/colormap indexing.  FIST_TERRAIN is the clean
   non-crashing base for that work (replaces the bit-rotted, map-size-broken FIST_TILEFILL).
+
+12.8% RESIDUAL IS NOT THE CAMERA: the port's FIST_TERRAIN camera matches the oracle spawn closely
+(port X/Y=583982/1142557 vs oracle 584027/1142488, ~50 units off out of ~1M; alt/head/pitch/foc/detail
+EXACT).  Forcing the exact oracle camera (FIST_FULLCAM=584027:1142488:12800:26729:256:1) gives the SAME
+12.8% -> the residual is in the RENDER, not the viewpoint.  Since the scaffold's 78.7% used an
+ORACLE-INJECTED heightmap (FIST_TILEFILL_HM), the dominant residual is the HEIGHTMAP: the port's
+op-0x18 map-load produces a different heightmap ([0x85bc], 4MB) than the original's -> 6980 marches the
+wrong surface.  NEXT: extract the oracle heightmap from a *.ram.bin (at the guest [0x85bc]) and compare
+to the port's (port_op18_heightmap_85bc_1mb.bin) -> if different, the terrain bit-exact work is the
+.KLC map-load / heightmap-build fidelity (bounded map-parsing work), then the projection/colormap tail.
