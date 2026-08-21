@@ -1545,3 +1545,17 @@ CAVEAT: this section already warns some oracle colormap refs (oracle_bc9c_matrix
 MISPROVENANCED, so the 5.6% is vs a capture of uncertain provenance -- the real fix needs a
 known-tick recapture per the note above.  Net: terrain bit-exact = the bc9c/bdc4 colormap-build
 fidelity (deep, reference-provenance-gated) + projection tail; camera + render-plumbing are done.
+
+COLORMAP FIX IS TOOLING-GATED (need CR3-aware oracle capture): tried to get a trustworthy oracle
+colormap by page-table-walking mspawn.ram.bin.  The extender is at phys 0x131000 (395e sig); the
+guest colormap/heightmap pointers are [0x85b8]=lin 0x474e60 / [0x85bc]=lin 0x74e60 (CM=HM+0x400000,
+contiguous -- matches the port).  BUT: (a) CR3=0xe000 (from oracle_azer1_tcb_camera.txt, a DIFFERENT
+capture) does not map lin 0x474e60 in this dump; (b) identity (phys==lin) at 0x474e60 yields a
+monotonic ramp 45 44 43 42.. (NOT a colormap).  So the *.ram.bin dumps lack the CR3/CPU-state needed
+to walk their own page tables -> the oracle colormap cannot be reliably extracted from them.  This is
+exactly the board's "misprovenanced refs -> recapture at a known tick" wall: a trustworthy oracle
+colormap needs a capture that ALSO records CR3 (a dosbox-fist instrumentation REBUILD) or a QEMU run
+(which does NOT boot AF -- RTE-200/BIOS-hang, confirmed).  So the terrain-color bit-exact work is
+blocked on oracle-capture TOOLING, a focused non-loop effort -- NOT autonomous-loop-tractable.
+The tractable terrain progress (render unblocked natively 12.8%, camera ruled out, colormap residual
+localized to bc9c/bdc4) is banked; the bit-exact tail is this tooling-gated colormap frontier.
