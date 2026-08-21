@@ -1653,6 +1653,24 @@ int fist_extender_gate(void) {
         /* the decompiled extender render chain (viewport -> camera -> projection -> texel walk) */
         m_ext_FUN_0000_8deb();
         m_ext_FUN_0000_85d0();
+        /* FIST_TERRAIN (clean minimal path): the map-load's heightmap [0x85bc] + colormap [0x85b8] are
+         * ALREADY contiguous (mapprobe: CM = HM + DAT_8498 = HM+0x400000, both 4MB), so 6980 reads them
+         * correctly WITH NO buffer rebuild -- unlike the bit-rotted FIST_TILEFILL scaffold (sized for a
+         * 1024^2/2MB map, it overflows on this 2048^2 map -> crash).  Seed the paged-out ramps +
+         * projection constants, force 395e (90c4=0), run 689a's sky/tile + 6980's terrain overlay, then
+         * the default 8120->9200 samples the freshly-built tile.  board:0002 */
+        if (getenv("FIST_TERRAIN")) {
+            static int seeded=0;
+            if (!seeded) { seeded=1;
+                FILE*rf=fopen("tools/oracle/samples/voxel6980_ramps.bin","rb");
+                if(rf){ static uint8_t rb[4096]; if(fread(rb,1,4096,rf)==4096){ memcpy(xb+0x3a24,rb,1024); memcpy(xb+0x3e24,rb+1024,1024);} fclose(rf); }
+                *(uint32_t*)(xb+0x90b0)=0x00003d00; *(uint32_t*)(xb+0x90b4)=0x00020000;   /* paged-out proj consts */
+            }
+            *(uint32_t*)(xb+0x90c4)=0;   /* force 6980->395e proj rebuild from the real ramps + native 90c0 */
+            if (!getenv("FIST_TERRAIN_NO689A")) fist_ext_689a(xb);
+            extern void m_ext_FUN_0000_6980(void);
+            m_ext_FUN_0000_6980();
+        }
         /* FIST_TILEFILL (EXPERIMENTAL, default OFF) -- run the per-frame terrain TILE-FILL
          * FUN_0000_6980 (NovaLogic voxel raycaster) BEFORE 9200 samples the tile, so 9200 walks a
          * freshly-built terrain tile instead of the stale map-load tile.  6980 reads the camera set by
@@ -2461,6 +2479,9 @@ int fist_extender_gate(void) {
             *(uint32_t *)(xb + 0xc93) = save_c93;
             fprintf(stderr, "[ext] op 0x18 MAP-LOAD returned; detail[0x8490]=0x%x dim[0x8494]=%u (base=0x0b => 2048)\n",
                     *(uint32_t *)(xb + 0x8490), *(uint32_t *)(xb + 0x8494));
+            if (getenv("FIST_MAPPROBE")) fprintf(stderr, "[mapprobe] DAT_8498(cm-off)=0x%x [0x85bc](HM)=0x%x [0x85b8](CM)=0x%x  CM-HM=0x%x\n",
+                    *(uint32_t*)(xb+0x8498), *(uint32_t*)(xb+0x85bc), *(uint32_t*)(xb+0x85b8),
+                    *(uint32_t*)(xb+0x85b8) - *(uint32_t*)(xb+0x85bc));
             if (getenv("FIST_CMDUMP")) {
                 uint32_t cmb = *(uint32_t*)(xb+0x85b8);
                 if (cmb) { FILE *f=fopen(getenv("FIST_CMDUMP"),"wb"); if(f){ fwrite((void*)(uintptr_t)cmb,1,0x400000,f); fclose(f);

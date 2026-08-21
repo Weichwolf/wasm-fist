@@ -1507,3 +1507,20 @@ the terrain 78.7%->bit-exact work is deep 6980 asm base-reconstruction (a height
 ray-accumulator that lost its segment base in the decompile), NOT a tuning knob and NOT the ramps.
 Confirmed: the tractable terrain sub-problems (ramps captured/proven, 395e/9200 chain, patch-407 SMC)
 are done; the remaining is this single deep asm base-loss in 6980 -- focused non-loop work.
+
+TERRAIN RENDER UNBLOCKED (visible, NOT bit-exact) + scaffold crash root-caused:
+- The FIST_TILEFILL crash is a MAP-SIZE bug, not a base-loss: the scaffold rebuilds a 2MB hmcm sized
+  for a 1024^2 map, but AZER1 is 2048^2 (DAT_8494=2048, DAT_8490=0xb) with DAT_8498(colormap offset)
+  =0x400000, so 6980's HM+DAT_8498+index overflows the 2MB buffer -> segfault at 6980:11071.
+- KEY: the port's map-load ALREADY lays heightmap [0x85bc] + colormap [0x85b8] CONTIGUOUSLY (mapprobe:
+  CM = HM + 0x400000 = HM + DAT_8498, both 4MB).  So 6980 reads them correctly with NO rebuild -- the
+  scaffold's hmcm rebuild is both unnecessary AND the crash cause.
+- Added FIST_TERRAIN (clean, env-gated): seed real ramps + 90b0/90b4 + 90c4=0, run 689a + 6980 with the
+  DEFAULT contiguous HM/CM (no rebuild).  RESULT: the voxel terrain RENDERS (visible hills, no crash),
+  native==wasm byte-identical, default path + verify UNAFFECTED (env-gated).
+- HONEST fidelity: 12.8% RGB match vs the oracle AZER1 windshield (rows 8-88), consistent across all
+  three refs.  This is the port's OWN render (real heightmap+ramps); the scaffold's documented 78.7%
+  used an ORACLE-INJECTED heightmap (FIST_TILEFILL_HM, a diagnostic upper bound), so 12.8% is the true
+  port-native fidelity.  Bit-exact needs the residuals: camera/projection (85d0/8120 + the TCB seed
+  reaching 6980's march) and the real heightmap/colormap indexing.  FIST_TERRAIN is the clean
+  non-crashing base for that work (replaces the bit-rotted, map-size-broken FIST_TILEFILL).
