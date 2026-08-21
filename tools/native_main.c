@@ -1295,6 +1295,10 @@ static void ext_module_init(void) {
     *(uint32_t *)(xb + 0x90b) = (uint32_t)(uintptr_t)(g_mem + FIST_EXT_HEAP);   /* heap base */
     *(uint32_t *)(xb + 0x90f) = (uint32_t)(uintptr_t)(g_mem + FIST_EXT_HEAP_TOP);/* heap top */
     *(uint32_t *)(xb + 0x2f50) = 0;   /* MEMMGR cursor 0 => (re)init from [0x90b] on first alloc */
+    /* Base ray-curve tables (0x3a20 count + 0x3a24/0x3e24) -- the viewport-init producer is paged out of
+     * fist_image.bin (only the all-1s placeholder ships), so install the oracle ground truth here (byte-
+     * identical across 23 guest-RAM dumps -> viewport-constant).  395e consumes them.  board:0002 */
+    { extern void fist_install_base_rays(uint32_t); fist_install_base_rays(FIST_EXT_BASE); }
     *(uint32_t *)(xb + 0x2f54) = 0;   /* MEMMGR live-block count */
     /* FILEMGR path tables (normally set by the extender's own FILEMGR init, which this port does not
      * run).  The resolver FUN_00005cc2/5d50 builds a search path = [0x6234] path-root + filename and

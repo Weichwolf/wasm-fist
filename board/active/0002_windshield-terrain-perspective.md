@@ -1454,3 +1454,26 @@ NEXT (next iteration): let it reach the 320x200 menu (screendump != 720x400), in
 are viewport/LOD-constant (mission-independent), the EXACT bytes can be captured + verified faithful
 on the AZER1 scaffold (>78.7%->~100%); to also pin the PRODUCER cs:eip, relaunch with `-s -S` and a
 gdb hardware watchpoint on linear 0x10003a24 (dump.gdb), then decompile that function.
+
+*** 3a24 PRODUCER SOLVED AS DATA -- captured, proven mission-independent, baked (commit pending) ***
+The board's "single remaining unknown" (the 3a24/3e24 base-ray-curve producer) is CRACKED -- not by
+finding the producer code, but by capturing its OUTPUT from the oracle and proving it constant:
+METHOD (no live oracle run needed -- 23 guest-RAM dumps already existed in scratch/oracle/*.ram.bin):
+  - 395e (0x395e) and 3a24 (0x3a24) sit on the SAME 4KB extender page, so 3a24 = (395e code
+    signature offset) + 0xc6 in any guest RAM dump.  395e's signature is the 16 bytes
+    a1 f1 38 00 00 48 c1 e0 08 a3 24 39 00 00 d1 e8 (mov eax,[38f1]; shl eax,8; mov [3924],eax; ...).
+  - Found EXACTLY ONCE per dump; read 0x804 bytes at +0xc2 = 3a20(count) + 3a24[256] + 3e24[256].
+RESULT: count=250; 3a24[0..3]=197d,2fff,3e32,4e6b (monotonic curve1); 3e24[0..3]=eef4d,1c1f86,247118,
+2df2ab (monotonic curve2).  **BYTE-IDENTICAL across ALL 23 dumps** (aa10, azer3/6, cm85b8, saudi5,
+activate, ...) -> the table is VIEWPORT-CONSTANT / mission-independent, exactly the board's open
+question, answered YES.  So it is faithful DATA (the exact deterministic bytes the original computes),
+not an approximation -- same class as the shim's other paged-out seeds (TCB camera fields).
+BAKED: tools/fist_base_rays.c (the 2052 bytes) + fist_install_base_rays(ext_base) called from
+ext_module_init after the fist_image.bin load (which ships only the all-1s placeholder, count=200).
+Wired into all 3 build scripts; native(rays)==wasm(rays) BYTE-IDENTICAL on mission-cockpit.
+REMAINING (bounded, no longer an "unknown"): the install currently changes the render by 0 bytes --
+the FIST_MISSFB windshield path (8deb->85d0->8120->9200) does NOT run 395e (which reads 3a24 and
+builds 4224/3909), so the real curves are not yet consumed.  NEXT: ensure 395e runs on the op-0x24
+render path (it is called from 6977 on focal-change) so 4224/3909 rebuild from the real 3a24, then the
+6980/9200 chain renders the real terrain.  Earlier a WRONG install (g_mem mis-declared as ptr) faulted;
+fixed via ghidra_compat.h (g_mem is an array) + FIST_EXT_BASE=0x100000.

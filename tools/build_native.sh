@@ -25,6 +25,7 @@ INCL="-I$SRCDIR"
 set -x
 gcc $F $INCL -c "$SRCDIR/fist.c"          -o ${OBJDIR:-/tmp}/fist_engine.o
 gcc $F $INCL -c "$ROOT/tools/native_main.c" -o ${OBJDIR:-/tmp}/fist_main.o
+gcc $F $INCL -c "$ROOT/tools/fist_base_rays.c" -o ${OBJDIR:-/tmp}/fist_base_rays.o
 gcc $F $INCL -c "$SRCDIR/fist_dos.c"      -o ${OBJDIR:-/tmp}/fist_dos.o
 gcc $F $INCL -c "$SRCDIR/fist_vga.c"      -o ${OBJDIR:-/tmp}/fist_vga.o
 gcc $F $INCL -c "$SRCDIR/fist_icall.c"    -o ${OBJDIR:-/tmp}/fist_icall.o
@@ -45,7 +46,7 @@ for m in mga snd ext; do
     gcc $F $INCL -c "$SRCDIR/fist_$m.c" -o "${OBJDIR:-/tmp}/fist_$m.o" && DRVOBJ="$DRVOBJ ${OBJDIR:-/tmp}/fist_$m.o"
   fi
 done
-gcc $F $INCL ${OBJDIR:-/tmp}/fist_engine.o ${OBJDIR:-/tmp}/fist_main.o ${OBJDIR:-/tmp}/fist_dos.o ${OBJDIR:-/tmp}/fist_vga.o ${OBJDIR:-/tmp}/fist_icall.o \
+gcc $F $INCL ${OBJDIR:-/tmp}/fist_engine.o ${OBJDIR:-/tmp}/fist_main.o ${OBJDIR:-/tmp}/fist_base_rays.o ${OBJDIR:-/tmp}/fist_dos.o ${OBJDIR:-/tmp}/fist_vga.o ${OBJDIR:-/tmp}/fist_icall.o \
     ${OBJDIR:-/tmp}/fist_modules.o ${OBJDIR:-/tmp}/fist_sb.o ${OBJDIR:-/tmp}/fist_opl.o ${OBJDIR:-/tmp}/fist_opl_dbopl.o ${OBJDIR:-/tmp}/fist_dbopl.o $DRVOBJ -o "$OUT" -lm
 set +x
 echo "[build_native] built $OUT (32-bit)"
