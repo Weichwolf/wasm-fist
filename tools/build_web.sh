@@ -17,7 +17,7 @@ F="-O2 -std=gnu11 -w -fno-strict-aliasing -Wno-int-conversion -Wno-implicit-func
 INCL="-I$SRCDIR"
 OBJDIR="${OBJDIR:-/tmp/fistweb_obj}"; mkdir -p "$OBJDIR"
 
-UNITS_C="$SRCDIR/fist.c $ROOT/tools/native_main.c $ROOT/tools/fist_base_rays.c $SRCDIR/fist_dos.c $SRCDIR/fist_vga.c \
+UNITS_C="$SRCDIR/fist.c $ROOT/tools/native_main.c $SRCDIR/fist_dos.c $SRCDIR/fist_vga.c \
          $SRCDIR/fist_icall.c $SRCDIR/fist_modules.c $SRCDIR/fist_sb.c $SRCDIR/fist_opl.c"
 for m in mga snd ext; do [ -f "$SRCDIR/fist_$m.c" ] && UNITS_C="$UNITS_C $SRCDIR/fist_$m.c"; done
 

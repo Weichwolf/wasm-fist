@@ -31,7 +31,7 @@ F="$FOPT -std=gnu11 -w \
 INCL="-I$SRCDIR"
 
 # Engine unit + harness (native_main is reused as the wasm main via #ifdef __EMSCRIPTEN__).
-UNITS_C="$SRCDIR/fist.c $ROOT/tools/native_main.c $ROOT/tools/fist_base_rays.c $SRCDIR/fist_dos.c $SRCDIR/fist_vga.c \
+UNITS_C="$SRCDIR/fist.c $ROOT/tools/native_main.c $SRCDIR/fist_dos.c $SRCDIR/fist_vga.c \
          $SRCDIR/fist_icall.c $SRCDIR/fist_modules.c $SRCDIR/fist_sb.c $SRCDIR/fist_opl.c"
 # Driver overlay units, when present (weak fmap/base symbols in fist_modules.c resolve against them).
 for m in mga snd ext; do
