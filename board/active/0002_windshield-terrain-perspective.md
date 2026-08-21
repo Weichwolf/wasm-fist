@@ -1534,3 +1534,14 @@ op-0x18 map-load produces a different heightmap ([0x85bc], 4MB) than the origina
 wrong surface.  NEXT: extract the oracle heightmap from a *.ram.bin (at the guest [0x85bc]) and compare
 to the port's (port_op18_heightmap_85bc_1mb.bin) -> if different, the terrain bit-exact work is the
 .KLC map-load / heightmap-build fidelity (bounded map-parsing work), then the projection/colormap tail.
+
+TERRAIN-COLOR RESIDUAL QUANTIFIED = the colormap (bc9c/bdc4 build): dumped the port's FIST_TERRAIN
+colormap ([0x85b8], 4MB, FIST_CMDUMP) and compared its first 64k to oracle_85b8_colormap_first64k.bin
+-> only 5.6% byte-match (oracle[0:8]=79797c85858585..91 vs port=8c848480808084..91).  So beyond the
+camera (ruled out) the dominant terrain-fidelity residual is the COLORMAP DATA -- the surface
+color-index each map point maps to is wrong.  This is the board's documented bc9c/bdc4 map-load
+colormap-build chain (532.pal->[5598]->9f10 luma-sort->[5260]->bc9c blend LUT->bdc4 2x upsample).
+CAVEAT: this section already warns some oracle colormap refs (oracle_bc9c_matrix_blockB) are
+MISPROVENANCED, so the 5.6% is vs a capture of uncertain provenance -- the real fix needs a
+known-tick recapture per the note above.  Net: terrain bit-exact = the bc9c/bdc4 colormap-build
+fidelity (deep, reference-provenance-gated) + projection tail; camera + render-plumbing are done.
