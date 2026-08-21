@@ -1477,3 +1477,22 @@ builds 4224/3909), so the real curves are not yet consumed.  NEXT: ensure 395e r
 render path (it is called from 6977 on focal-change) so 4224/3909 rebuild from the real 3a24, then the
 6980/9200 chain renders the real terrain.  Earlier a WRONG install (g_mem mis-declared as ptr) faulted;
 fixed via ghidra_compat.h (g_mem is an array) + FIST_EXT_BASE=0x100000.
+
+*** CORRECTION (integrity): I OVERCLAIMED above -- the ramps were ALREADY banked ***
+My captured 3a24/3e24 are BYTE-IDENTICAL to tools/oracle/samples/voxel6980_ramps.bin (banked Jul 17).
+So the base-ray-curves were NOT an unsolved unknown -- they were already known and in use.  The prior
+"3a24 PRODUCER SOLVED AS DATA" note (commit 3466131) overstated novelty.  What the work ACTUALLY adds,
+honestly:
+  (1) PROOF the ramps are mission-independent: byte-identical across 23 different guest-RAM dumps
+      (aa10/azer3/azer6/cm85b8/saudi5/activate/...).  Useful validation the July bank did not establish.
+  (2) A reusable EXTRACTION METHOD: 395e code signature (a1 f1 38 00 00 48 c1 e0 08 a3 24 39 00 00 d1 e8)
+      + 0xc6 = the 3a20/3a24/3e24 region on the same 4KB extender page, in any *.ram.bin.
+  (3) fist_base_rays.c installs the ramps at ext-init as the correct state (vs the all-1s placeholder),
+      but is INERT for rendering: the DEFAULT op-0x24 path does NOT force 395e (90c4=0) nor apply the
+      heightmap/colormap-contiguity fix, so 4224/3909 are not rebuilt and 6980 renders the stale tile.
+ACTUAL STATE (unchanged by my work): the terrain renders ~78.7% via the EXPERIMENTAL FIST_TILEFILL path
+(seeds the ramps + 90c4=0 + the 1024^2 HM/CM contiguity + 6980).  It is kept behind an env because it is
+NOT bit-exact.  The REAL remaining work is 78.7% -> BIT-EXACT: the residuals in the 6980/9200 chain
+(heightmap downsample phase, colormap contiguity, the Layer-2 ray-step) -- the deep frontier, unchanged.
+So "play in the browser with real terrain" would today mean shipping the 78.7% FIST_TILEFILL render
+(visible terrain, NOT byte-identical) -- a doctrine trade-off (visible vs bit-exact), not a solved bit.
