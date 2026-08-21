@@ -113,3 +113,15 @@ The DoD 10x wasm gate + the wasm side of verify now run ~5x faster with zero out
 32-bit NATIVE stays -O0 -- -O2 HANGS the x86 native build on the mission-cockpit (a decompile-UB the
 wasm/LLVM backend does not hit; -O2 wasm is fine, -O2 x86 diverges).  So native keeps -O0 -g (also the
 reference + gdb-traceable).  Net: browser watchable (5.6x) + DoD gate 5x faster, all byte-verified.
+
+BROWSER TERRAIN NEEDS THE LIVE-LOOP MISSION FIDELITY (not just the render): tried gating the native
+FIST_TERRAIN render on g_web_mode so the browser windshield shows terrain.  RESULT: the browser live
+loop settles (frames freeze ~447) to a windshield that is 88% index-80 = pal(1,0,3) = uniform
+near-black -- NOT terrain, though the console renders FULL (nz 51256 vs native's 51237).  So 6980 runs
+but renders near-black because the LIVE mission state diverges from native's op-0x24-post#1 (where the
+same 6980 renders real hills, verified natively).  This is the same wasm in-mission execution
+divergence as the console-partial finding: the browser sim does not reach/hold native's spawn camera+
+world state.  Reverted the g_web_mode gate (kept FIST_TERRAIN as the native diagnostic).  So "terrain
+in the browser" is blocked on the live-loop mission fidelity (the sim state), on top of the terrain
+bit-exact residuals (board:0002) -- both deep.  (Side note: FIST_TERRAIN's 689a/6980 made the console
+render FULL in the browser -- a possible lead for the console-completeness frontier, unverified.)
