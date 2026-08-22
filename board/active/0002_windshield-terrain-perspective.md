@@ -1577,3 +1577,21 @@ diff <pfx>.r6980.map_cm.bin vs the port's colormap-build (bc9c/bdc4) to localize
 TRUSTWORTHY provenance; fix the port map-load colormap; add a terrain-fidelity flow to tools/verify.sh;
 then re-run the 10x wasm_gate against the expanded matrix.  (The capture still needs its xclick nav
 timings validated headless -- DOS boot + menu cadence under xvfb may differ from a real display.)
+
+TRUSTWORTHY ORACLE CM CAPTURED (headless) + bc9c HYPOTHESIS (A) DISPROVEN:
+  - Ran capture_6980_framematched.sh headless (xvfb + third_party/dosbox-fist + the repaired xclick):
+    DOS booted, xclick navigated to the AZER1 cockpit, 6980 ran 3 passes (LIGHT, 8616 stores each) and
+    dumped the render-time colormap through LIVE PAGING -> scratch/oracle/r69.r6980.map_cm.bin (1MB,
+    105 distinct values 0..104, a real descending gradient -- NOT a ramp/zero).  This is the trustworthy-
+    provenance oracle CM board:0002 wanted; the tooling gate is CLEARED (regenerate via the committed
+    script + `xvfb-run -a env DOSBOX=$PWD/third_party/dosbox-fist FISTLOG=... bash tools/oracle/
+    capture_6980_framematched.sh`).
+  - Read FUN_0000_bc9c (build/fist_ext.c ~16938): its double loop increments the low byte (cVar7) and
+    high byte (cVar9) each until the char wraps 255->0 -> BOTH cover the FULL 0..255, i.e. bc9c builds
+    all 256x256 cells.  So hypothesis (A) "build loop upper-bound ~190" is WRONG.  The observed port
+    "rows 190..255 all zero" must therefore come UPSTREAM of the build loop: the source palette read at
+    &DAT_0000_5598 ((idx&0xff)*3 RGB triples) is likely zero for idx>=190 in the port (an incomplete
+    palette load), or the ac70 mix / bd0e-bd62 reduce collapses them.  NEXT lead: dump the port's 0x5598
+    source palette at AZER1 map-load and check whether entries 190..255 are populated; if not, the defect
+    is the palette-load feeding bc9c, not bc9c itself.  Then diff port CM vs r69.r6980.map_cm.bin for the
+    trustworthy residual, fix, add a terrain-fidelity flow to tools/verify.sh, re-run the 10x gate.
