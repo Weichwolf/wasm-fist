@@ -425,6 +425,18 @@ FLOWS=(
   "mission-cockpit-2c-train4|25000|missfb|TRAIN4|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "mission-cockpit-2c-ukraine7|25000|missfb|UKRAINE7|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "mission-cockpit-2c-ukraine8|25000|missfb|UKRAINE8|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  # ---- remaining battles: cockpit spawn native<->wasm bit-identity (no DOSBox ref yet -> native==wasm
+  # only, the hard invariant).  Completes the 47-mission cockpit set except INDIA3 (board:0006 spawn OOM).
+  "mission-cockpit-azer6|25000|missfb|AZER6|"
+  "mission-cockpit-cyprus5|25000|missfb|CYPRUS5|"
+  "mission-cockpit-saudi5|25000|missfb|SAUDI5|"
+  "mission-cockpit-saudi6|25000|missfb|SAUDI6|"
+  "mission-cockpit-syria5|25000|missfb|SYRIA5|"
+  "mission-cockpit-syria7|25000|missfb|SYRIA7|"
+  "mission-cockpit-train1|25000|missfb|TRAIN1|"
+  "mission-cockpit-ukraine3|25000|missfb|UKRAINE3|"
+  "mission-cockpit-2c-cyprus4|25000|missfb|CYPRUS4|"
+  "mission-cockpit-2c-ukraine6|25000|missfb|UKRAINE6|"
   # ---- IN-MISSION VOXEL TERRAIN render (FIST_TERRAIN): full-framebuffer native<->wasm bit-identity ----
   # board:0002 -- extends the matrix with terrain coverage (689a+6980 voxel raycaster).  native==wasm
   # confirmed 0-diff on the full 320x200 frame; the oracle-fidelity (Stage-2 vs the live-paging capture)
@@ -778,18 +790,21 @@ for row in "${FLOWS[@]}"; do
     mmode=""; [ "${name#mission-cockpit-2c-}" != "$name" ] && mmode="2c"
     detail=" [${mbt:-AZER1} cockpit central-chrome cols80-180 rows96-188${mmode:+ op-0x2c}]"
     if [ ! -s "$ROOT/re_out/fist_image.bin" ]; then echo "  FAIL $name (re_out/fist_image.bin missing; run 'make kernel-image')"; fail=$((fail+1)); continue; fi
-    convert "$ref" -crop "$MC_REGION" +repage "$TMP/mc.ref.ppm" 2>/dev/null
+    # ref optional: with a DOSBox ref, assert MC_REGION AE=0 per target; without one, native==wasm only
+    # (the hard invariant) -- lets the full 47-mission cockpit set land before every ref is captured.
+    [ -n "$ref" ] && convert "$ref" -crop "$MC_REGION" +repage "$TMP/mc.ref.ppm" 2>/dev/null
     rn=""; rw=""
     if [ "$WHICH" != wasm ]; then
       rn="$(run_mission native "$(fresh_datadir "$name.nat")" "$mbt" "$mmode")"
-      if [ -n "$rn" ]; then a=$(compare -metric AE "$rn" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" native-AE=$a"; }
+      if [ -n "$rn" ]; then [ -n "$ref" ] && { a=$(compare -metric AE "$rn" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" native-AE=$a"; }; }
       else ok=0; detail+=" native-no-frame"; fi
     fi
     if [ "$WHICH" != native ]; then
       rw="$(run_mission wasm "$(fresh_datadir "$name.wasm")" "$mbt" "$mmode")"
-      if [ -n "$rw" ]; then a=$(compare -metric AE "$rw" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" wasm-AE=$a"; }
+      if [ -n "$rw" ]; then [ -n "$ref" ] && { a=$(compare -metric AE "$rw" "$TMP/mc.ref.ppm" /dev/null 2>&1); [ "$a" = 0 ] || { ok=0; detail+=" wasm-AE=$a"; }; }
       else ok=0; detail+=" wasm-no-frame"; fi
     fi
+    [ -z "$ref" ] && detail+=" [native==wasm only, no ref]"
     if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
       d=$(compare -metric AE "$rn" "$rw" /dev/null 2>&1); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
     fi
