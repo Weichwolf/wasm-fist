@@ -455,3 +455,17 @@ N*samples_per_tick identical samples native==wasm.  Then a tick-pinned WAV is bi
 audio matrix flow.  Investigate why native emits ~1/2.8 the ticks: likely native drains multiple wall-clock
 ISR ticks per pump while [0x452] and fist_opl_tick count differently, or the menu pit_div read differs at
 the sample point.  (Terrain already landed as a native==wasm matrix flow this round; audio is the next.)
+
+AUDIO GAP LOCALIZED TO LIVE pit_div PER opl_tick.  The ISR drain (native_main.c:711-722) couples one
+engine-ISR call ([0x452]++) with one fist_opl_tick() 1:1, so both targets run 2000 opl_ticks to reach
+[0x452]=2000.  Yet samples differ: native 552938 (276.5/tick) vs wasm 1546692 (773/tick).  fist_opl_tick
+(fist_opl.c:230) reads `div = fist_vga_pit0_div()` LIVE each tick and adds rate*div/PIT_HZ samples -- so
+the two targets see DIFFERENT live PIT divisors per tick (implied avg div native ~7481 vs wasm ~20915).
+The engine programs the PIT deterministically as a function of [0x452], so at the SAME [0x452] the div
+should match; the divergence means native (SIGALRM, budget=4 drain/pump) and wasm (coop, 1 tick/pump) are
+sampling the div at different phases relative to when the menu reprograms the PIT, OR [0x452] is not
+bumped 1:1 with the ISR (a sub-divided counter).  REAL FIX (no fixed-div band-aid, per "code is the
+truth"): make the live pit_div read deterministic native==wasm at each opl_tick -- trace whether [0x452]
+tracks the ISR 1:1 and whether the div-reprogram sequence is phase-aligned to [0x452] on both; align it so
+sum_k rate*div(k)/PIT_HZ is identical.  Then the tick-pinned WAV is native==wasm and becomes an audio
+matrix flow.  This is the precise, measured next sub-project for board:0003.
