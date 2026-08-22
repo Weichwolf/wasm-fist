@@ -1625,3 +1625,23 @@ the adjacent (higher) palette index for the ~2948 half-way cells.  CAUTION: bc9c
 (verified) flows, so the rounding change must be asm-verified against re_out/fist_*_image.bin (the exact
 `add/shr` vs `shr` at the ac68/69/6a stores) and re-run through the 10x gate to prove byte-neutrality on
 the existing matrix before it is accepted.  This is the precise, bounded next fix for terrain bit-identity.
+
+bc9c AVERAGING ASM-VERIFIED FAITHFUL -> the 0.359% is a STAGE artifact, NOT a colormap bug.
+Disassembled bc9c's channel-average stores in re_out/fist_image.bin @0xbcc8:
+    f9  stc            ; CF=1
+    12 c3  adc al,bl   ; al = al+bl+1
+    d0 d8  rcr al,1    ; al = (al+bl+1)>>1, ADC carry-out rotated into bit7
+    a2 68 ac  mov ds:0xac68,al        (same for ac69 via adc ah,bh / rcr ah; ac6a via dl)
+This is EXACTLY the port's `(byte)(bVar3+1)>>1 | (CARRY1(bVar5,bVar11) || 0xfe<bVar3)<<7` (bVar3=al+bl):
+(a+b+1)>>1 with carry-out (a+b>=255) in bit7.  So bc9c is faithful, AND ac70's nearest-index/tie-break is
+faithful (prior note).  Both colormap functions match the asm.  THEREFORE the 0.359% (+1 in ~2948 cells)
+is not a build bug: the oracle CM (r69.r6980.map_cm.bin) is read at 6980 RENDER time -- AFTER the per-
+frame lighting/reduce pass (689a light-tile / the reduce at bd0e/bd62) -- while the port dump (FIST_CM1MDUMP)
+is at MAP-LOAD time, BEFORE that pass.  The +1 skew is the lighting/reduce delta between the two pipeline
+STAGES, not a fidelity defect.
+CONCLUSION for board:0002: the terrain colormap BUILD is asm-faithful; the remaining terrain-fidelity
+question is to compare LIKE stages -- dump the port CM at 6980-render (not map-load) and diff vs the oracle
+render-time CM -- which is a measurement refinement, not a bug hunt.  NEXT: add a port render-time CM dump
+(at 6980 entry, like the oracle) and confirm 0-diff; then add that as a terrain-CM bit-identity flow to
+tools/verify.sh and re-gate.  The old "5.6% / rows-190-255-zero / build-loop-bound / palette-load" leads
+are all DISPROVEN.
