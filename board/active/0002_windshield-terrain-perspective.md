@@ -1660,3 +1660,19 @@ differs port-vs-oracle:
   capture, same live-paging read) and byte-diff vs the port's FIST_PALDUMP; if they differ, the defect is
   the palette load, not bc9c.  This is a sub-0.4% terrain residual with both build FUNCTIONS proven faithful
   -- the remaining work is input-provenance, not a build-logic bug.  Diagnostic: native FIST_CMRENDER added.
+
+SOURCE-PALETTE PROVENANCE IS PAGING-GATED (confirms the CR3 framing for build-INPUTS specifically).
+Tried to extract the oracle's ext[0x5598] source palette from the existing r69.pass00.ram.bin (16MB phys)
+by locating the extender via the 395e code signature (found @ phys 0x13495e -> ext_base_phys 0x131000).
+ext[0x5598] at phys 0x131000+0x5598 reads ALL ZERO -> the extender's DATA is PAGED: the signature finds
+the contiguous CODE region, but the 0x5598 data lives in a different physical page, so the identity map
+(phys = base + linear) that works for code FAILS for paged data.  This is exactly board:0002's original
+"the .ram.bin lacks CR3 to walk the page tables" -- it holds for build INPUTS (0x5598 palette, bc90
+matrix).  The map_cm OUTPUT diff worked only because the r6980 capture reads it via LIVE PAGING (DOSBox
+mem_readb), not from the phys ram.bin.
+SO the bounded next step to pin the 0.359%: add a LIVE-PAGING dump of ext[0x5598] (256*3) to the DOSBox
+r6980 capture (same mem_readb path that already dumps map_cm) -> rebuild third_party/dosbox-fist (source
+in third_party/dosbox-build/dosbox-0.74-3; user-authorized) -> re-capture headless -> byte-diff vs the
+port's FIST_PALDUMP.  If they match, the palette load is faithful and the residual is in bc90/KLC-decode;
+if they differ, the palette load is the +1 source.  This is a DOSBox-instrumentation task, not a
+build-logic bug -- the port's bc9c/ac70 colormap logic is proven asm-faithful.
