@@ -486,3 +486,19 @@ env-gated FIST_OPLDIV trace in fist_opl_tick (logs [0x452] + div per opl_tick). 
   corresponds to the SAME number of PIT-ISR calls (hence OPL samples) on native and wasm.  Then a
   tick-pinned WAV is native==wasm and becomes an audio matrix flow.  FIST_OPLDIV diagnostic added
   (env-gated, in the fist_opl.c shim).
+
+DEEP TRACE: divergence is the ISR-CALL COUNT, not the per-call emulation.  The engine PIT ISR
+FUN_1000_30f8 (@0x130f8) is a VARIABLE-RATE timer: it polls the retrace status `in(word[0x463]+6)` =0x3da
+in a countdown loop (d8d4), then reprograms the PIT reload `out 0x40,d8c4` (d8c4 self-adjusts), and calls
+FUN_1000_31c3 which bumps [0x452].  Checked the port emulation is DETERMINISTIC per call: fist_vga in()
+0x3da TOGGLES bit3 every read (not wall-clock), and the PIT counter read (0x40-0x42) DECREMENTS a
+synthetic g_pit[ch] per read -- so each ISR call is reproducible.  Therefore the native-vs-wasm audio
+divergence is NOT per-call rate; it is the TOTAL NUMBER of ISR calls (= drained ticks) run to reach a
+given [0x452].  FIST_COOP_TICK=1 (native drives 1 tick/pump like the node/wasm g_web_mode=0 path) did NOT
+equalize it (WAV nat 1673998 vs node 1944102) -- so even under cooperative ticking the two run different
+ISR counts per [0x452].  Also the OPL starts at different [0x452] (native=1, wasm=34), a start-offset on
+top of the ratio gap.  NEXT (focused debug): instrument the ISR-call count vs [0x452] under FIST_COOP_TICK
+on both and find why they differ tick-for-tick (candidate: extra pump/drain calls in one target's spin
+loops, or the d8c4 variable-reload feedback diverging from a different in()-read interleaving).  Once the
+ISR-call count is a deterministic function of [0x452] on both, the tick-pinned WAV is native==wasm and
+becomes an audio matrix flow.  (Terrain already native==wasm in the matrix; audio is the open frontier.)
