@@ -1559,3 +1559,21 @@ colormap needs a capture that ALSO records CR3 (a dosbox-fist instrumentation RE
 blocked on oracle-capture TOOLING, a focused non-loop effort -- NOT autonomous-loop-tractable.
 The tractable terrain progress (render unblocked natively 12.8%, camera ruled out, colormap residual
 localized to bc9c/bdc4) is banked; the bit-exact tail is this tooling-gated colormap frontier.
+
+HEADLESS ORACLE UNBLOCKED (tooling): the DD2 "expand the matrix to terrain/audio bit-identity" frontier
+was gated on running the DOSBox oracle, which this environment can now do HEADLESSLY:
+  - the instrumented DOSBox is at third_party/dosbox-fist (ELF, runs under `xvfb-run -a`; the scripts'
+    default DOSBOX=/tmp/debs/dosbox-fist is stale -> pass DOSBOX="$PWD/third_party/dosbox-fist").
+  - Xvfb + xvfb-run are present; XTest input (xclick/xkey) works on the virtual display.
+  - the input drivers no longer need the libxtst-dev header: tools/oracle/xclick.c + xkey.c now declare
+    the 3 XTestFake* prototypes inline and the 9 capture/trace scripts link `-l:libXtst.so.6` (the runtime
+    soname; no .so symlink on this host).  Verified: both build + run under xvfb (rc=0).
+  - capture_6980_framematched.sh already dumps the render-time colormap through LIVE PAGING at 6980
+    execution (<pfx>.r6980.map_cm.bin, 1MB) -- i.e. DOSBox resolves the paged linear->phys itself, so NO
+    offline CR3 page-walk is needed for the colormap (this supersedes the "needs CR3-aware recapture"
+    framing for the CM specifically: live-paging capture IS the CR3-aware read).
+NEXT (now runnable): drive capture_6980_framematched.sh headless to a settled AZER1/SAUDI1 cockpit,
+diff <pfx>.r6980.map_cm.bin vs the port's colormap-build (bc9c/bdc4) to localize the 5.6% residual with
+TRUSTWORTHY provenance; fix the port map-load colormap; add a terrain-fidelity flow to tools/verify.sh;
+then re-run the 10x wasm_gate against the expanded matrix.  (The capture still needs its xclick nav
+timings validated headless -- DOS boot + menu cadence under xvfb may differ from a real display.)

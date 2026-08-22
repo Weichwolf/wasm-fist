@@ -29,8 +29,7 @@ DOSBOX="${DOSBOX:-/tmp/debs/dosbox-fist}"
 PREFIX="${FISTLOG:-$ROOT/scratch/oracle/r92}"
 MAXPASS="${FIST_R9200MAX:-16}"
 [ -x "$DOSBOX" ] || { echo "missing instrumented dosbox at $DOSBOX"; exit 1; }
-[ -x /tmp/xclick ] || cc -O2 "$ROOT/tools/oracle/xclick.c" -I/tmp/debs/sysroot/usr/include \
-    -L/tmp/debs/sysroot/usr/lib/x86_64-linux-gnu -o /tmp/xclick -lX11 -lXtst
+[ -x /tmp/xclick ] || cc -O2 "$ROOT/tools/oracle/xclick.c" -o /tmp/xclick -lX11 -l:libXtst.so.6
 mkdir -p "$(dirname "$PREFIX")"
 rm -f "$PREFIX".pass*.cap "$PREFIX".pass*.vram.bin "$PREFIX".pass*.pal.bin
 SCRATCH="$(mktemp -d /tmp/fist_r92.XXXXXX)"; DATA="$SCRATCH/armoredfist"

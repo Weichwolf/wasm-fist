@@ -4,10 +4,11 @@
  */
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
-#include <X11/extensions/XTest.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+/* from libXtst -- declared inline to avoid the -dev-only X11/extensions/XTest.h */
+extern int XTestFakeKeyEvent(Display *, unsigned int keycode, int is_press, unsigned long delay);
 int main(int argc,char**argv){
   if(argc<2) return 2;
   Display*d=XOpenDisplay(NULL); if(!d) return 1;

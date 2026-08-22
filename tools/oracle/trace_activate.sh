@@ -25,8 +25,7 @@ WATCHPHYS="${FIST_WATCHPHYS:-0x35f50}"
 WATCHSPAN="${FIST_WATCHSPAN:-0x100}"
 
 [ -x "$DOSBOX" ] || { echo "missing instrumented dosbox at $DOSBOX"; exit 1; }
-[ -x /tmp/xclick ] || cc -O2 "$ROOT/tools/oracle/xclick.c" -I/tmp/debs/sysroot/usr/include \
-    -L/tmp/debs/sysroot/usr/lib/x86_64-linux-gnu -o /tmp/xclick -lX11 -lXtst
+[ -x /tmp/xclick ] || cc -O2 "$ROOT/tools/oracle/xclick.c" -o /tmp/xclick -lX11 -l:libXtst.so.6
 mkdir -p "$(dirname "$PREFIX")"
 rm -f "$PREFIX.watch.txt"
 SCRATCH="$(mktemp -d /tmp/fist_activate.XXXXXX)"; DATA="$SCRATCH/armoredfist"

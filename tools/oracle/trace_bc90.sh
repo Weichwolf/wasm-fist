@@ -27,8 +27,7 @@ TILEPHYS="${FIST_TILEPHYS:-0x141000}"
 AE="${FIST_ARMEARLY:-}"; REMAIN=$(( WAIT - ${AE:-0} )); [ "$REMAIN" -lt 1 ] && REMAIN=1
 
 [ -x "$DOSBOX" ] || { echo "missing instrumented dosbox at $DOSBOX (see tools/oracle/README_terrain.md)"; exit 1; }
-[ -x /tmp/xclick ] || cc -O2 "$ROOT/tools/oracle/xclick.c" -I/tmp/debs/sysroot/usr/include \
-    -L/tmp/debs/sysroot/usr/lib/x86_64-linux-gnu -o /tmp/xclick -lX11 -lXtst
+[ -x /tmp/xclick ] || cc -O2 "$ROOT/tools/oracle/xclick.c" -o /tmp/xclick -lX11 -l:libXtst.so.6
 mkdir -p "$(dirname "$PREFIX")"
 rm -f "$PREFIX".lastwriters.txt "$PREFIX".lastval.bin
 SCRATCH="$(mktemp -d /tmp/fist_bc90.XXXXXX)"; DATA="$SCRATCH/armoredfist"

@@ -26,8 +26,7 @@ DOSBOX="${DOSBOX:-/tmp/debs/dosbox-fist}"
 CYCLES="${CYCLES:-max}"
 
 [ -x "$DOSBOX" ] || { echo "missing instrumented dosbox at $DOSBOX (see tools/oracle/README_terrain.md)"; exit 1; }
-[ -x /tmp/xclick ] || cc -O2 "$ROOT/tools/oracle/xclick.c" -I/tmp/debs/sysroot/usr/include \
-    -L/tmp/debs/sysroot/usr/lib/x86_64-linux-gnu -o /tmp/xclick -lX11 -lXtst
+[ -x /tmp/xclick ] || cc -O2 "$ROOT/tools/oracle/xclick.c" -o /tmp/xclick -lX11 -l:libXtst.so.6
 mkdir -p "$(dirname "$PREFIX")"
 SCRATCH="$(mktemp -d /tmp/fist_terrain.XXXXXX)"; DATA="$SCRATCH/armoredfist"
 cp -a "$ROOT/armoredfist" "$DATA"
