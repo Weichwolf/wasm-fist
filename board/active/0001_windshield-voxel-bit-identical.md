@@ -152,3 +152,18 @@ STILL OPEN after the crash fix (two separate findings, this round):
       (no terrain -- FIST_TERRAIN off in the browser) and the cockpit is not persistently visible; the
       radar block is noise.  This is the board:0001/0002 terrain+live-loop fidelity, distinct from the
       now-fixed crash.
+
+IN-MISSION RENDER CRAWL ROOT-CAUSED (the "hängt" symptom): bracket-profiled the browser mission paint
+pipeline (env FIST_WEB_PROF, temp instrumentation, now reverted).  Decisive chain:
+  459a outer loop -> 206f -> 209e paint dirty-walk -> per-node handler off=0x77dc (=795c) == 2247ms/2s
+  (the whole wallclock).  Inside 795c (op-0x24 windshield poster): the d548&0x7f==1 render branch's tail
+  FUN_1000_78ca == 2236ms/6 calls == ~373ms EACH.  Everything else is FREE: pump tail (fbtrap/sb/opl)
+  0ms, 22dd 1ms, a20d 0ms, and CRUCIALLY df0e (the terrain render -> 9200) == 1ms/6.  So the crawl is
+  NOT the voxel terrain -- it is FUN_1000_78ca, the COCKPIT-STATUS HUD paint (asm 0x178ca).  Within 78ca
+  the prime suspect is FUN_1000_a2e9(0x28,0x114,veh) -- a near-full-width (0x114=276px) region draw; the
+  remaining calls are small HUD gauges (a520 0x4e,0x1c; a52e 0x4e,0xd4; a547; a4e9 10,0x14; a5a9) that
+  cannot account for 373ms.  (Could not split a2e9 vs the gauge-tail: the realtime-paced auto-drive mission
+  entry went flaky ~0/8 after adding the finer brackets -- the entry timing is fragile, a harness gap.)
+  NEXT: bracket 78ca's children to pin a2e9, then find the pathological loop inside it (likely a dims/16-bit
+  blit issue of the same class as the patch-409 298a W=0 bug -- a 373ms single-region draw is not normal).
+  At ~373ms x ~3.6 outer-iterations per visible frame the mission renders ~2.5 fps = reads as a hang.
