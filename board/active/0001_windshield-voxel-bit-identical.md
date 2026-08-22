@@ -181,3 +181,18 @@ not the 459a live paint that dispatches 795c/78ca).  NEXT (needs a robust in-mis
 browser reach+hold the 78ca state deterministically, then bracket 78ca's children to pin the one heavy
 draw and its pathological loop.  Confirmed floor: when 78ca runs it is ~100% of the frame (78ca=2236ms/6
 == 206f=2238ms/2s in the one run that held the state).
+
+CRAWL FIXED (patch 410) -- resolves the drill above.  The child of 78ca eating the frame is FUN_1000_a547
+(the in-mission range/status HUD element), measured at 1126ms/call; within it the cost is the FIRST call
+`(*c60a)()` = MGAVIDEO 1091 SOLID rect-fill, 373-1130ms.  Root: Ghidra DROPPED the c60a args (asm 0x1a577
+`mov al,0x50; mov bx,0x967c; call [0x60a]`) -> 1091 got a GARBAGE bx (undefined register) as the rect
+near-offset and filled a WILD near-screen-size rect every HUD paint -> the ~2.5fps crawl.  Fix = thread
+bx=0x967c (the rect &DAT_2000_567c a547 just populated) + al=0x50, and bx=0x967c into the sibling c61a
+(asm 0x1a584); asm-verified vs re_out/fist_dat_image.bin, same dropped-arg class + same c60a cast as
+patch 305.  VERIFIED: fix build instantiates+runs (node), native<->wasm(node) BYTE-IDENTICAL on mainmenu
+AND mission-cockpit AZER1/SAUDI1/AZER2 (DIFF=0); byte-neutral on the covered matrix (a547 unreached by the
+frozen-capture verify flows).  HARNESS gaps found + partly fixed this round: cdp_repro must NOT `Page.enable`
+(hangs on some chromium states); serve_web.py needed `Cross-Origin-Resource-Policy: same-origin` (COEP
+require-corp was intermittently stalling the 10MB .data MEMFS preload -> "still waiting on run dependencies");
+headless chromium still intermittently stalls the .data fetch (retry-until-MAP-loads).  The a2e9 guess two
+notes up was wrong; a547/c60a is the confirmed+fixed cause.

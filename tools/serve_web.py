@@ -9,6 +9,9 @@ class H(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
         self.send_header('Cross-Origin-Embedder-Policy', 'require-corp')
+        # COEP require-corp blocks any subresource (fist.data / fist.wasm) that lacks CORP -> without this
+        # the MEMFS .data preload intermittently stalls ("still waiting on run dependencies").
+        self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
         self.send_header('Cache-Control', 'no-store')
         super().end_headers()
     def log_message(self, *a): pass
