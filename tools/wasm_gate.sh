@@ -21,7 +21,7 @@ while [ "$consec" -lt "$NEED" ]; do
   summary="$(grep -E '== verify:' "$rl" | tail -1)"
   passed="$(grep -c '  PASS ' "$rl")"
   failed="$(grep -c '  FAIL ' "$rl")"
-  if echo "$summary" | grep -qE '0 failed' && [ "$failed" -eq 0 ] && [ "$passed" -ge 159 ]; then
+  if echo "$summary" | grep -qE '0 failed' && [ "$failed" -eq 0 ] && [ "$passed" -ge 175 ]; then
     consec=$((consec+1))
     echo "[gate] run #$run CLEAN ($passed pass / $failed fail) -> consecutive=$consec/$NEED  $(date)" >> "$GATELOG"
   else
