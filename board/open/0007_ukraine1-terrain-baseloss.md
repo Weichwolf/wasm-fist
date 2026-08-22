@@ -119,3 +119,50 @@ and have each method read its params from that context by register, not by prune
 restoring the __allregs "all-GP-in/out" ABI at the indirect-call boundary that Ghidra could not thread
 because it did not know the target signature.  A per-target trampoline is the band-aid; the context ABI
 is the fix.  Anything less reproduces one of the disproven single-site attempts.  Matrix intact 175/175.
+
+FULL CASCADE MAPPED + bd09 MARSHALING WORKED (tested, reverted -- changes a passing flow unverifiably).
+This round proved the mechanism end-to-end and destroyed two standing assumptions:
+
+MECHANISM (definitive): __allregs is a NO-OP macro -> the decompile is plain cdecl.  c31e dispatches
+`(*fn)((int)di)` -- ONE stack arg.  A vtable target that reads >1 param gets STACK GARBAGE for the rest.
+Empirically confirmed: instrumenting bd09 on UKRAINE1 printed param_3=0xffe0fdf8 (a live STACK address,
+not a near offset, not a host ptr) -- pure uninitialised-stack garbage.  Methods that read the object as
+param_1 work by luck (di lands in param_1); bd09 reads object=param_3 AND param_1=ax, so it gets garbage.
+
+ASSUMPTION 1 DESTROYED -- "the terrain path calls bd09 with a full ptr (polymorphism)":  FALSE.  bd09 has
+NO direct C caller (only the icall fmap entry {0xbd09u,&FUN_0000_bd09}); it is 100% c31e-dispatched, type
+0x1a only.  Patch 411's terrain regression came from its b274 edit (b274 HAS terrain-path callers
+26190/26786), NOT from bd09.  So bd09 itself can be fixed freely.
+
+ASSUMPTION 2 DESTROYED -- "the 5 passing terrain flows render bd09 correctly":  FALSE and important.  On
+AZER1, c31e DOES dispatch bd09 (type 0x1a objects exist), but with the 1-arg call bd09.param_3 = stack
+garbage whose byte[+0x19]&4 happened to be SET -> bd09 early-returns as a silent NO-OP.  The 5 "passing"
+terrain flows are native==wasm but SKIP bd09's per-object work -> a concrete oracle-fidelity gap (see
+board:0002).  Fixing bd09 changed AZER1 by 206 bytes (bd09 now does real work) -- unverifiable as
+oracle-correct without the DOSBox oracle, so NOT landable this loop.
+
+WORKED FIX (correct, reverted): c31e marshals the bd09 target with its true register signature
+`((void(*)(int,undefined4,int))fn)((int)(uint16)param_1 /*ax*/, 0, (int)di /*object*/)`; bd09 rebases the
+object via obj=dg+(uint16)param_3, computes the b274 arg as a host ptr dg+(uint16)(word[DG:..]+ax), and
+passes ba33 the object as a NEAR offset (uint16)param_3 (ba33 wants near per patch 258).  param_2's high
+word only feeds a gated damage event (be8b->e2c2), not sourced by c31e -> 0 (native==wasm-safe).  RESULT:
+the crash moved OFF bd09 to the NEXT site -> the marshaling is correct, the cascade continues.
+
+THE CASCADE (each site is the SAME host-vs-near object-ref polymorphism across the terrain vs mission
+path, which is why every single-site fix either crashes downstream or regresses terrain):
+  c31e  -- passes 1 arg; must marshal per-target register->param maps (bd09 done)
+    -> bd09  -- object=param_3(near), param_1=ax; DONE (worked example above)
+      -> b274  -- INTERNAL base-loss: `*(byte*)(DAT_2000_a3b2 + 0x16)` derefs a DGROUP near offset as a
+                  host ptr (asm b289: mov si,[0xe3b2]; test [si+0x16],8).  fault 0xa371 = 0xa35b+0x16.
+                  DAT_2000_a3b2 is written `= param_3` (30828) and `= param_4` (65283) -- host on the
+                  terrain path (AZER1's b274 callers work), near on the mission path.  b274 is SHARED with
+                  the terrain path -> touching it regressed patch 411.  Needs the object-ref represention
+                  unified BEFORE b274, not a b274-local rebase.
+      -> ... (further sites expected past b274)
+
+CONCLUSION: the fix is not a chain of per-site rebases (each is polymorphic and shared) but a ONE-TIME
+UNIFICATION of the object-reference representation across the whole object-method subsystem: pick the
+port-natural full g_mem pointer for every object handle, make c31e (and the terrain paint dispatcher, and
+the roster walkers) all produce that representation, and make every method+helper (bd09/b274/ba33/...)
+consume it -- so no function is polymorphic across paths.  Multi-session, asm-anchored, individually
+re-gated.  Matrix intact 175/175 (all prototypes reverted).

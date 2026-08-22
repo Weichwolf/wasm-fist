@@ -1699,3 +1699,12 @@ per-mission map-specific bug as board:0006 INDIA3's spawn OOM).  So terrain is n
 EVERY mission; the crashing maps (UKRAINE1, likely others) need per-map root-causing before their terrain
 flows can land.  NEXT: sweep all 47 battles for FIST_TERRAIN native==wasm, add the clean ones, and
 root-cause each crasher (UKRAINE1 first) as its own board item.
+
+CONCRETE FIDELITY CAUSE found via board:0007 recon: on the passing terrain flows (AZER1..SYRIA1), the
+object-action method bd09 (dispatched by c31e for type-0x1a objects) is SILENTLY SKIPPED -- c31e's 1-arg
+cdecl call leaves bd09.param_3 = stack garbage whose byte[+0x19]&4 is set, so bd09 early-returns without
+doing its per-object animation/damage-accumulator work.  native==wasm both skip it identically (so the
+matrix stays green) but the ORIGINAL runs bd09, so the port's terrain frame diverges from the oracle by
+whatever bd09 would have drawn/updated.  This is (part of) the terrain oracle-fidelity residual.  Fix is
+gated on board:0007's object-reference unification (fixing bd09 in isolation changed AZER1 by 206 bytes,
+unverifiable without a CR3-aware oracle recapture -- the same tooling gate board:0002 already names).
