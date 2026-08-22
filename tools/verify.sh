@@ -425,6 +425,13 @@ FLOWS=(
   "mission-cockpit-2c-train4|25000|missfb|TRAIN4|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "mission-cockpit-2c-ukraine7|25000|missfb|UKRAINE7|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "mission-cockpit-2c-ukraine8|25000|missfb|UKRAINE8|$ROOT/ref/mission_saudi1_cockpit_native320.png"
+  # ---- IN-MISSION VOXEL TERRAIN render (FIST_TERRAIN): full-framebuffer native<->wasm bit-identity ----
+  # board:0002 -- extends the matrix with terrain coverage (689a+6980 voxel raycaster).  native==wasm
+  # confirmed 0-diff on the full 320x200 frame; the oracle-fidelity (Stage-2 vs the live-paging capture)
+  # is tracked separately (the ~0.36% CM input-provenance residual, bc9c/ac70 asm-faithful).
+  "terrain-azer1|25000|terrain|AZER1|"
+  "terrain-saudi1|25000|terrain|SAUDI1|"
+  "terrain-cyprus1|25000|terrain|CYPRUS1|"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
@@ -597,6 +604,20 @@ run_mission() { # $1=target $2=datadir [$3=battle] [$4=mode: ""=op-0x24 spawn, "
   convert "$out" -crop "$MC_REGION" +repage "$reg" 2>/dev/null || { echo ""; return 1; }
   echo "$reg"
 }
+run_terrain() { # $1=target $2=battle ; echo full-framebuffer ppm or ""  -- FIST_TERRAIN voxel render
+  # The in-mission VOXEL TERRAIN render (689a sky/tile + 6980 raycaster, env-gated via FIST_TERRAIN so it
+  # runs on the map-load spawn state).  Asserts the FULL 320x200 framebuffer is native<->wasm bit-identical
+  # -- terrain coverage for the hard invariant (board:0002).  READ-ONLY (no edit) -> use the repo datadir.
+  local t="$1" bt="${2:-}" out="$TMP/tr.$t.ppm"
+  local bexp=(); [ -n "$bt" ] && bexp=(FIST_FSG_BATTLE="$bt")
+  if [ "$t" = native ]; then
+    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=25000 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
+  else
+    timeout 220 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=25000 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+  fi
+  [ -s "$out" ] || { echo ""; return 1; }
+  echo "$out"
+}
 run_editsim() { # $1=target $2=battle $3=edit-env(default FIST_EDIT_ADDTANK) ; echo cropped-ppm or ""
   # The editor DoD "simulate" leg: the edit op ($3: add-tank or remove-tank) edits $b.FSG in a datadir,
   # then that SAME edited battle is loaded into a mission and its op-0x2c spawn cockpit is captured.
@@ -693,6 +714,19 @@ for row in "${FLOWS[@]}"; do
     fi
     if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
       d=$(compare -metric AE "$rn" "$rw" /dev/null 2>&1); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
+    fi
+    if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
+    continue
+  fi
+  if [ "${name#terrain-}" != "$name" ]; then
+    # IN-MISSION VOXEL TERRAIN render (FIST_TERRAIN): full-framebuffer native<->wasm bit-identity for a
+    # named battle (row `inp`, empty -> AZER1).  board:0002 -- terrain coverage for the hard invariant.
+    tbt="$inp"; detail=" [${tbt:-AZER1} FIST_TERRAIN voxel render, full-fb native==wasm]"
+    rn=""; rw=""
+    if [ "$WHICH" != wasm ];   then rn="$(run_terrain native "$tbt")"; [ -n "$rn" ] || { ok=0; detail+=" native-no-frame"; }; fi
+    if [ "$WHICH" != native ]; then rw="$(run_terrain wasm "$tbt")";   [ -n "$rw" ] || { ok=0; detail+=" wasm-no-frame"; }; fi
+    if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
+      d=$(cmp -l "$rn" "$rw" 2>/dev/null | wc -l); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
     fi
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
