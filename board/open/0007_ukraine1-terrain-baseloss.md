@@ -59,3 +59,19 @@ origin at 26190/26786 (are they already-DGROUP objects whose full ptr = g_mem+0x
 un-rebase is exact).  This unifies the b274/bd09/c31e cluster to one convention + re-gate 10x.  Larger
 than a single deref rebase; the crash is real but the fix is a coordinated cluster change, not a one-liner.
 The verified 165/165 matrix is intact (patch 411 reverted).
+
+SYSTEMIC ROOT (bd09-only test): rebasing ONLY bd09's param_3 ALSO regresses AZER1 terrain (diff=206) --
+so bd09 too receives a FULL pointer on the terrain path, not just b274.  bd09 has no direct C callers; it
+is a VTABLE METHOD (registered {0xbd09,&FUN_0000_bd09}) dispatched via icall.  c31e dispatches it with a
+NEAR di (asm `call [si-0x1ab0]`, DI=object offset), but the TERRAIN object-paint dispatcher reaches the
+same method with a FULL pointer.  => This is NOT a b274/bd09-local base-loss; it is a SYSTEMIC calling-
+convention inconsistency across the object-method dispatch surface: dispatchers pass a near DI, but the
+decompiled method bodies inconsistently treat the object arg as a near offset (raw `*(param+N)` -> crash on
+the near path) OR as a full pointer (works on the terrain path).  A blanket rebase in the method breaks the
+full-ptr dispatch; passing a full ptr from c31e breaks methods that already rebase.
+CORRECT FIX (systemic, board:0007): audit the object-method dispatch convention -- make ALL dispatchers
+pass the SAME representation (full g_mem+0x1c000+off pointer is the port-natural choice) AND make every
+dispatched method treat its object arg the same way, so no method is polymorphic.  This is a convention
+sweep across c31e + the terrain paint dispatcher + the vtable methods, asm-anchored, with a 10x re-gate.
+Substantial; the UKRAINE1 crash is the first symptom.  Reverted all local edits; matrix intact 165/165.
+The one-deref-rebase and blanket-rebase approaches are both DISPROVEN.
