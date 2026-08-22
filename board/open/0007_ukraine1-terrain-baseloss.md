@@ -28,3 +28,17 @@ mission-cockpit ref frames (native==wasm holds either way -- both targets read t
 vs-oracle AE could shift).  The prototype was reverted to keep the matrix verified; this is a focused
 cascade-sweep + re-gate sub-project.  Once landed, add terrain-ukraine1 (+ sweep the other 41 maps) to the
 matrix.
+
+CORRECTION -- BLANKET b274/bd09 REBASE IS WRONG (patch 411 tried + REVERTED).  Rebasing every param_1/
+param_3/a3b2 deref onto g_mem+0x1c000 fixed the UKRAINE1 crash (rc 139->no-segv) and kept AZER1 rc=0, BUT
+REGRESSED the 5 terrain flows to native!=wasm (206-byte diff) -> 160/165.  Root: b274/bd09 receive
+POLYMORPHIC args -- the TERRAIN render path passes an ALREADY-REAL host pointer (g_mem+...), while the
+UKRAINE1 crash path passes a DGROUP NEAR offset.  `(uint16_t)(uintptr_t)param` truncates a real pointer to
+16 bits, and native vs wasm have different g_mem base addresses -> the truncation diverges -> 206-byte
+native!=wasm.  So the base-loss is NOT in b274/bd09 (they correctly receive a pointer from the terrain
+caller); it is the UKRAINE1-path CALLER (c31e or its caller) that passes a raw near-offset instead of
+rebasing it before the call.  CORRECT FIX: find the caller on the UKRAINE1 path that supplies the near
+offset to bd09/b274 and rebase it THERE (or thread the right pointer), leaving b274/bd09's deref of a real
+pointer intact -- asm-verify which arg the crashing caller passes.  Patch 411 reverted; matrix restored to
+the verified 165/165.  The blanket-rebase lesson: check for polymorphic (near-offset vs host-ptr) callers
+before rebasing a deref.
