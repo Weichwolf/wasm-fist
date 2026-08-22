@@ -1613,3 +1613,15 @@ byte-diffed it against the headless live-paging oracle (r69.r6980.map_cm.bin):
   bit-identity flow to tools/verify.sh (native CM1MDUMP vs the banked oracle) and re-run the 10x gate.
   Diagnostic tooling landed: native FIST_PALDUMP (ext[0x5598]) + FIST_CM1MDUMP ([0x85bc]+1M), read-only,
   env-gated.
+
+RESIDUAL NARROWED TO bc9c BLEND ROUNDING (ac70 tie-break RULED OUT): read FUN_0000_ac70's nearest-index
+loop -- the compare is `if (uVar7 < uVar5)` (asm acd4 `jb`, strict less-than) so on a distance TIE the
+LOWEST index wins, and this is asm-faithful; the a060/a460/a860 weighted-sq distance tables + the target
+subtrahend (self-modified bytes acb6/acc0/acca = target RGB>>1) are patch-207/236/238 verified.  So the
++1 index skew is NOT an ac70 tie-break/selection bug -- it is fed by a +1 in the TARGET COLOUR bc9c
+blends into ac68/ac69/ac6a: bc9c uses `(byte)(sum+1)>>1 | carry<<7` (round-half-UP) for each channel
+average.  If the original truncates (`sum>>1`) or rounds differently, the port's colour is +1 -> maps to
+the adjacent (higher) palette index for the ~2948 half-way cells.  CAUTION: bc9c is exercised by covered
+(verified) flows, so the rounding change must be asm-verified against re_out/fist_*_image.bin (the exact
+`add/shr` vs `shr` at the ac68/69/6a stores) and re-run through the 10x gate to prove byte-neutrality on
+the existing matrix before it is accepted.  This is the precise, bounded next fix for terrain bit-identity.
