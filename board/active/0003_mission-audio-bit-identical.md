@@ -502,3 +502,19 @@ on both and find why they differ tick-for-tick (candidate: extra pump/drain call
 loops, or the d8c4 variable-reload feedback diverging from a different in()-read interleaving).  Once the
 ISR-call count is a deterministic function of [0x452] on both, the tick-pinned WAV is native==wasm and
 becomes an audio matrix flow.  (Terrain already native==wasm in the matrix; audio is the open frontier.)
+
+TRUE ROOT: the per-read 0x3da RETRACE TOGGLE makes the variable-rate PIT ISR non-deterministic.
+Under FIST_COOP_TICK the OPL start-offset aligns (both [0x452]=34 at opltick=0), but the ISR-per-[0x452]
+ratio K still diverges: native 43500 opltick @ [0x452]=594 (K~77.7) vs wasm 58500 @ [0x452]=599 (K~103.5).
+The engine ISR 30f8 runs a retrace-countdown `do{ in(0x3da); d8d4--; }while(d8d4 && !(bit3))` and feeds
+d8d4 into the self-adjusting PIT reload d8c4 (its variable rate).  fist_vga in(0x3da) does
+`g_3da_toggle ^= 0x09` -- a GLOBAL per-read toggle, so bit3's value at ISR entry depends on the TOTAL
+count of 0x3da reads so far, which includes the render/vsync busy-poll reads that differ native vs wasm.
+-> the ISR sees a different retrace phase -> different d8d4/d8c4 -> different K -> different total ISR
+calls (OPL samples) per [0x452] -> audio not native==wasm.  The framebuffer is immune (fixed point at
+[0x452]=N).  REAL FIX (shim, board:0003): make the 0x3da retrace bit DETERMINISTIC as a function of the
+engine tick / [0x452] (e.g. bit3 = f(tick phase)) instead of a free-running per-read toggle, so the ISR's
+retrace-countdown is identical native==wasm -- while still terminating the render vsync busy-waits.  This
+touches a port every covered flow reads (0x3da), so it must be re-gated 10x on the 162-flow matrix to
+prove byte-neutrality on the existing surface before the audio flow is added.  This is the precise,
+root-caused next sub-project for audio bit-identity.
