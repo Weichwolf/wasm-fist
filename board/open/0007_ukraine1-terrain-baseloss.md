@@ -75,3 +75,16 @@ dispatched method treat its object arg the same way, so no method is polymorphic
 sweep across c31e + the terrain paint dispatcher + the vtable methods, asm-anchored, with a 10x re-gate.
 Substantial; the UKRAINE1 crash is the first symptom.  Reverted all local edits; matrix intact 165/165.
 The one-deref-rebase and blanket-rebase approaches are both DISPROVEN.
+
+c31e FULL-PTR DISPATCH: byte-neutral but INSUFFICIENT (tested + reverted).  Changing c31e to pass the
+object as a full g_mem pointer (dg+di) instead of the raw near offset kept AZER1 terrain byte-identical
+(diff=0 -- so bd09 does raw-deref its object arg, and a full ptr is the right representation) BUT did NOT
+fix UKRAINE1 (still SIGSEGV at b274 via bd09).  So bd09's param_3 was never the whole story: bd09 calls
+b274 with `word[g_mem+0x1c000+...] + param_1`, and bd09's OWN param_1 comes from an __allregs register the
+c31e icall does not set -> b274 gets a garbage arg on the UKRAINE1 object path.  DEEPER CRUX: the crux is
+the __allregs REGISTER-PASSING convention for icall-dispatched vtable methods -- which of ax/bx/dx/di hold
+param_1/2/3 when a method is reached via `call [vector]`, and whether the port's icall shim threads them.
+The near-vs-full object-arg is only one facet.  This needs an audit of fist_icall_near's register model +
+the vtable-method signatures, asm-anchored, not a per-call rebase.  All single-site fixes (deref rebase,
+blanket rebase, c31e full-ptr) are now DISPROVEN; the fix is the __allregs icall register convention.
+Matrix intact 175/175.
