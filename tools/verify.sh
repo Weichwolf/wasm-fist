@@ -432,6 +432,8 @@ FLOWS=(
   "terrain-azer1|25000|terrain|AZER1|"
   "terrain-saudi1|25000|terrain|SAUDI1|"
   "terrain-cyprus1|25000|terrain|CYPRUS1|"
+  "terrain-india1|25000|terrain|INDIA1|"
+  "terrain-syria1|25000|terrain|SYRIA1|"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================

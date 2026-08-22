@@ -1690,3 +1690,12 @@ input difference whose provenance needs a bc9c-EXECUTION-TIME live-paging captur
 BOTH targets (instrument DOSBox at the bc9c entry / the op-0x18 map-load, not the 6980 render).  That is the
 precise remaining step; it is fine-grained input archaeology, not a build-logic defect.  The terrain
 colormap is 99.64% bit-identical with faithful build logic -- a strong de-risk of board:0002.
+
+TERRAIN MATRIX COVERAGE EXPANDED 3->5 + a per-mission terrain-crash found.  Tested FIST_TERRAIN
+native==wasm across a broader battle set: AZER1/SAUDI1/CYPRUS1/INDIA1/SYRIA1 all PASS (diff=0), added
+INDIA1+SYRIA1 to the matrix (terrain flows now 5).  But UKRAINE1 SEGFAULTS in the native FIST_TERRAIN
+render path (689a/6980 on the UKRAINE1 map) -- a per-mission terrain-render crash (same class of
+per-mission map-specific bug as board:0006 INDIA3's spawn OOM).  So terrain is not yet renderable for
+EVERY mission; the crashing maps (UKRAINE1, likely others) need per-map root-causing before their terrain
+flows can land.  NEXT: sweep all 47 battles for FIST_TERRAIN native==wasm, add the clean ones, and
+root-cause each crasher (UKRAINE1 first) as its own board item.
