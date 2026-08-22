@@ -532,3 +532,17 @@ lockstep even in menus (a FIST_AUDIO_DETERM mode that forces coop + retrace-rese
 is native==wasm.  Both are shim changes touching the 0x3da/tick path that every flow uses, so the audio
 flow lands with a full 10x re-gate.  Reverted the partial prototype to keep the 162-flow matrix verified;
 FIST_OPLDIV trace retained.  Precise next sub-project: implement (a)+(b) together under one env gate.
+
+FIST_AUDIO_DETERM (retrace-reset + pure-coop TOGETHER) also INSUFFICIENT -- reverted.  Adding the
+pure-cooperative tick source (latch g_mission_coop to stop SIGALRM) ON TOP of the retrace-reset produced
+the EXACT SAME WAVs (nat 805502 / node 1074858, 574918 diff) as retrace-reset alone -- so SIGALRM is NOT
+the second source either (it was not contributing).  The ISR-count-per-[0x452] still diverges (native
+72.6 vs wasm 96.9) under identical cooperative ticking + deterministic retrace.  Hypotheses now DISPROVEN
+for the audio native==wasm gap: pump-vs-tick, pit_div, retrace-phase (partial only), SIGALRM tick-source.
+REMAINING: the engine itself calls fist_timer_pump (-> ISR) a different NUMBER of times per [0x452] on
+native vs wasm even with identical code + deterministic port emulation -- i.e. an engine-level control-flow
+divergence (a data-dependent spin-loop iteration count, or a still-nondeterministic port read the ISR/menu
+logic branches on).  NEXT (differential trace): log the (pump#, [0x452], key DGROUP timer vars d8c4/d8d2/
+d8d4/c452) per ISR on BOTH targets under coop and diff to find the FIRST tick where they diverge -- that
+pins the real source.  This is a deeper determinism problem than the framebuffer (which is immune as a
+fixed point); audio remains the open frontier.  All partial prototypes reverted; matrix stays 162/162.
