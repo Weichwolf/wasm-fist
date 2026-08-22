@@ -42,3 +42,20 @@ offset to bd09/b274 and rebase it THERE (or thread the right pointer), leaving b
 pointer intact -- asm-verify which arg the crashing caller passes.  Patch 411 reverted; matrix restored to
 the verified 165/165.  The blanket-rebase lesson: check for polymorphic (near-offset vs host-ptr) callers
 before rebasing a deref.
+
+MULTI-SITE ROOT: FUN_0000_b274 is called with INCONSISTENT arg conventions across the decompile.
+  - callers 26190 `b274(param_1 + -0x64a3)` and 26786 `b274(param_1 + -0x64c1)`: param_1 there is a
+    FULL host pointer -> b274's param_1 is a full pointer (the working TERRAIN/frame path -- unpatched
+    `*param_1` host deref is correct).
+  - caller 30991 (inside bd09) `b274(word[g_mem+0x1c000+...] + param_1)`: a DGROUP NEAR offset (the
+    UKRAINE1 crash path via c31e's object-action dispatch, which calls the method near with di=object
+    offset).
+  So b274 receives BOTH full pointers AND near offsets -> a blanket rebase (patch 411) truncated the full
+  pointers -> terrain native!=wasm.  Same split for bd09/param_3 (c31e dispatch passes the near di).
+FAITHFUL FIX (multi-site, board:0007): the ORIGINAL convention is uniformly NEAR (DS-relative) -- so
+UNIFY: make callers 26190/26786 pass NEAR offsets (un-rebase their param_1 to (uint16)(ptr - g_mem -
+0x1c000) + -0x64xx), THEN rebase b274/bd09's derefs (as patch 411 did).  Requires asm-verifying param_1's
+origin at 26190/26786 (are they already-DGROUP objects whose full ptr = g_mem+0x1c000+off? then the
+un-rebase is exact).  This unifies the b274/bd09/c31e cluster to one convention + re-gate 10x.  Larger
+than a single deref rebase; the crash is real but the fix is a coordinated cluster change, not a one-liner.
+The verified 165/165 matrix is intact (patch 411 reverted).
