@@ -469,3 +469,20 @@ truth"): make the live pit_div read deterministic native==wasm at each opl_tick 
 tracks the ISR 1:1 and whether the div-reprogram sequence is phase-aligned to [0x452] on both; align it so
 sum_k rate*div(k)/PIT_HZ is identical.  Then the tick-pinned WAV is native==wasm and becomes an audio
 matrix flow.  This is the precise, measured next sub-project for board:0003.
+
+AUDIO GAP FULLY LOCALIZED: ISR-calls-per-[0x452] ratio diverges (div=250 is identical).  Added an
+env-gated FIST_OPLDIV trace in fist_opl_tick (logs [0x452] + div per opl_tick).  Findings:
+  - div = 250 CONSTANT and IDENTICAL on both targets (samples/tick = 44100*250/1193182 = 9.24).  My
+    earlier "pit_div divergence" was WRONG.
+  - opl_tick (= one engine-ISR call = one PIT period) fires ~80x per [0x452] increment ([0x452] is a
+    SUB-DIVIDED counter the ISR bumps every ~80th call).  native reached [0x452]=766 at 59500 opl_ticks
+    (~77.7/[0x452]); wasm [0x452]=1994 at 167000 (~83.8).  FIST_COOP_TICK=1 does NOT fix it: at
+    [0x452]=1200 native=~75.5 ISR/[0x452] vs wasm=~87.7 (WAV nat 1673998 vs node 1944102, 775703 diff).
+  - So the audio stream length = f(total ISR calls), and the ISR-call-count to reach a given [0x452]
+    differs native vs wasm because the ISR->[0x452] sub-division / spin-loop ISR count is not identical
+    (the framebuffer is immune: it is a fixed point at [0x452]=N regardless of ISR count).
+  REAL FIX (board:0003, no band-aid): make the total ISR-call count a pure function of [0x452] identical
+  on both -- trace FUN_1000_30f8 / FUN_1000_3346's [0x452] sub-division and ensure each [0x452] increment
+  corresponds to the SAME number of PIT-ISR calls (hence OPL samples) on native and wasm.  Then a
+  tick-pinned WAV is native==wasm and becomes an audio matrix flow.  FIST_OPLDIV diagnostic added
+  (env-gated, in the fist_opl.c shim).

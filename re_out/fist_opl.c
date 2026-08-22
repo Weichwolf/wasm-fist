@@ -228,6 +228,10 @@ void fist_opl_tick(void)
         if (opltrace()) fprintf(stderr, "[opl] MUSIC_HZ=%.2f -> %.3f samples/seq-advance\n", hz, g_samples_per_seq);
     }
     int div = fist_vga_pit0_div();
+    if (getenv("FIST_OPLDIV")) { static long tk=0; extern uint8_t g_mem[];
+        long c452=*(uint16_t*)(g_mem+0x1c452);
+        if (tk<12 || (tk%500)==0) fprintf(stderr,"[opldiv] opltick=%ld [0x452]=%ld div=%d\n",tk,c452,div);
+        tk++; }
     g_samp_acc += (double)g_rate * (double)div / PIT_HZ;
     unsigned n = (unsigned)g_samp_acc;
     if (n > 65536) n = 65536;           /* guard a pathological divisor */
