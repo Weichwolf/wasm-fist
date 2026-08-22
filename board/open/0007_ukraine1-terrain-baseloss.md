@@ -88,3 +88,34 @@ The near-vs-full object-arg is only one facet.  This needs an audit of fist_ical
 the vtable-method signatures, asm-anchored, not a per-call rebase.  All single-site fixes (deref rebase,
 blanket rebase, c31e full-ptr) are now DISPROVEN; the fix is the __allregs icall register convention.
 Matrix intact 175/175.
+
+DEFINITIVE ROOT CAUSE (asm-anchored, re_out/fist_dat_image.bin).  Disassembled the c31e dispatch and the
+UKRAINE1 vtable target bd09:
+
+  c31e:  mov [0x9bdb],ax ; mov [0x9bd9],bx ; di=si (object) ; si=word[si] ; shl si,1 ; call [si-0x1ab0]
+         -> the ONLY thing handed to the method is DI = the object near-offset; ax/bx are stashed to
+            DGROUP (0x9bdb/0x9bd9), NOT reloaded; cx/dx inherited.  Port passes exactly (int)di.
+  bd09:  test [di+0x19],4 ...             -> bd09's param_3 = DI (the object)
+         movzx bx,[di+0x19]; shl bx,1; mov bx,[bx-0x6119]; add bx,ax; call b274
+                                          -> bd09's param_1 = AX (c31e's live ax); b274 gets word[..]+ax
+
+TWO faults at the SAME dispatch, which is why every single-site fix failed:
+  (1) di is passed as a NEAR offset (int)di, but bd09's decompile derefs param_3 as a HOST pointer
+      (*(byte*)(param_3+0x19)) -> first SIGSEGV.  (c31e full-ptr `dg+di` fixes THIS one, AZER1 diff=0.)
+  (2) bd09.param_1 = c31e's live AX; b274 takes `byte *param_1` and receives word[DGROUP-table]+param_1,
+      which is only a valid host pointer if AX is g_mem+0x1c000-based.  The c31e path does not guarantee
+      that, so fixing (1) merely moves the crash into b274 -> second SIGSEGV (observed).
+
+WHY NO SINGLE-SITE FIX EXISTS: Ghidra's __allregs model (a NO-OP macro; params are positional C args that
+ApplyConv.java assigned from registers) PRUNES unused registers and RENUMBERS per function.  Evidence:
+c31e's param_3 = SI (object), but bd09's param_3 = DI (object) -- the same "3rd param" slot maps to a
+DIFFERENT register in each function.  So there is NO stable positional register->param map to marshal
+through an indirect `call [vtable]`: each target has its own pruned map.  The terrain paint dispatcher
+happens to hand bd09 host-pointer param_1 AND param_3 already (AZER1 works unpatched); c31e does not.
+
+THE ONLY SOUND FIX (scoped, multi-session): a register-context marshaling layer for vtable dispatch --
+give every icall-dispatched method the full GP-register context (ax,bx,cx,dx,si,di and the dword pairs)
+and have each method read its params from that context by register, not by pruned position.  Equivalent to
+restoring the __allregs "all-GP-in/out" ABI at the indirect-call boundary that Ghidra could not thread
+because it did not know the target signature.  A per-target trampoline is the band-aid; the context ABI
+is the fix.  Anything less reproduces one of the disproven single-site attempts.  Matrix intact 175/175.
