@@ -518,3 +518,17 @@ retrace-countdown is identical native==wasm -- while still terminating the rende
 touches a port every covered flow reads (0x3da), so it must be re-gated 10x on the 162-flow matrix to
 prove byte-neutrality on the existing surface before the audio flow is added.  This is the precise,
 root-caused next sub-project for audio bit-identity.
+
+RETRACE-RESET ALONE INSUFFICIENT (tried + reverted, unverified goal-not-met change kept out of tree).
+Prototyped resetting the 0x3da toggle phase at each ISR entry (fist_vga_retrace_reset from the drain loop):
+it REDUCED the native-vs-wasm audio diff (775703 -> 574918 B) and changed the WAV sizes, but audio is
+STILL not bit-identical (native ~72.6 ISR/[0x452] vs wasm ~96.9).  So the retrace phase is ONE
+non-deterministic input but not the only one.  SECOND source: in the MENU (g_mission_coop==0) native's
+async SIGALRM STILL calls tick_advance IN ADDITION to the FIST_COOP_TICK coop tick -> native's total
+tick/ISR count per [0x452] differs from wasm's pure-coop count.  So audio native==wasm needs BOTH:
+(a) deterministic 0x3da retrace-countdown phase, AND (b) a pure-cooperative tick source for the audio
+capture (no async SIGALRM contribution) -- i.e. run the audio verify flow under the mission-coop-style
+lockstep even in menus (a FIST_AUDIO_DETERM mode that forces coop + retrace-reset), then a tick-pinned WAV
+is native==wasm.  Both are shim changes touching the 0x3da/tick path that every flow uses, so the audio
+flow lands with a full 10x re-gate.  Reverted the partial prototype to keep the 162-flow matrix verified;
+FIST_OPLDIV trace retained.  Precise next sub-project: implement (a)+(b) together under one env gate.
