@@ -1676,3 +1676,17 @@ in third_party/dosbox-build/dosbox-0.74-3; user-authorized) -> re-capture headle
 port's FIST_PALDUMP.  If they match, the palette load is faithful and the residual is in bc90/KLC-decode;
 if they differ, the palette load is the +1 source.  This is a DOSBox-instrumentation task, not a
 build-logic bug -- the port's bc9c/ac70 colormap logic is proven asm-faithful.
+
+SOURCE-PALETTE CAPTURE MUST BE AT bc9c-TIME, NOT 6980-TIME (0x5598 is scratch, reused by render).
+Added a live-paging ext[0x5598] dump to the DOSBox r6980 capture (third_party/dosbox-build .../vga_memory.cpp,
+gitignored) and re-captured headless -> scratch/oracle/r69.r6980.src5598.bin.  Result: the oracle's
+ext[0x5598] at 6980-RENDER time has e190=[0,0,0] e255=[0,0,0] and matches NONE of the port's map-load
+palette blocks (73-81% diff).  Conclusion: ext[0x5598] is a TRANSIENT scratch region -- bc9c reads it at
+MAP-LOAD time, but by 6980-render time it has been repurposed, so a 6980-time dump is the wrong moment for
+the source palette.  (The port's FIST_PALDUMP, also at map-load via op-0x18, shows 0x5598 populated
+190..255 -- but comparing it to the oracle's 6980-time 0x5598 is apples-to-oranges.)
+NET for the 0.359% terrain residual: build logic (bc9c/ac70) proven asm-faithful; the residual is a small
+input difference whose provenance needs a bc9c-EXECUTION-TIME live-paging capture of the source palette in
+BOTH targets (instrument DOSBox at the bc9c entry / the op-0x18 map-load, not the 6980 render).  That is the
+precise remaining step; it is fine-grained input archaeology, not a build-logic defect.  The terrain
+colormap is 99.64% bit-identical with faithful build logic -- a strong de-risk of board:0002.
