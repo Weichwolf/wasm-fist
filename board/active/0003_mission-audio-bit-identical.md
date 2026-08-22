@@ -424,3 +424,19 @@ OPL ring faster in-mission would NOT add sound; the in-mission-audio unblock is 
 wiring (SeedDriverVecs re-decompile + the DSP/DMA base-loss reconstruction, docs/audio.md) -- a deep
 driver task, not a harness tweak.  Conclusion: the tractable browser-audio win (OPL menu music) is
 complete; in-mission audio joins the deep-frontier list.
+
+AUDIO native==wasm NEEDS TICK-DRIVEN SYNTHESIS (measured this round).  Terrain just landed in the matrix
+as a native==wasm flow (board:0002); tried the same for audio and found the gap concretely: a tick-pinned
+run (FIST_TICK_HZ=1000 FIST_DUMPTICK=2000 FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV) yields DIFFERENT WAVs
+native vs wasm -- nat=1105920 B, node=3093428 B, 775703 diff bytes.  Root: OPL/SB generation is PUMP-driven
+(fist_opl_pump advances the synth by elapsed emulated time each pump), and the pump rate differs by target
+(native SIGALRM wall-clock vs wasm cooperative), so the two produce different SAMPLE COUNTS for the same
+engine-tick window.  The framebuffer is native==wasm because a dumped frame is a FIXED POINT at tick N
+(independent of pump count); audio is a STREAM over the whole pump history, so it is not.
+FIX (bounded harness change, board:0003): drive OPL/SB sample generation off the ENGINE TICK, not the
+pump/wall-clock -- emit exactly samples_per_tick = 44100/tick_hz samples per INT-8 tick (fist_wasm_tick /
+tick_advance), so N ticks -> N*samples_per_tick identical samples on both targets.  Then a tick-pinned
+menu/mission WAV is native==wasm bit-identical and can become an audio flow in tools/verify.sh (like the
+terrain flows).  This is the next matrix-expansion after terrain; it does not touch the OPL/SB synth math
+(already the DOSBox DBOPL core), only WHEN samples are pulled.  Oracle-fidelity (vs a clean-provenance
+DOSBox capture via the now-headless oracle) is the subsequent Stage-2.
