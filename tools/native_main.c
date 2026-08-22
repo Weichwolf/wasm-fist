@@ -2487,6 +2487,27 @@ int fist_extender_gate(void) {
                 if (cmb) { FILE *f=fopen(getenv("FIST_CMDUMP"),"wb"); if(f){ fwrite((void*)(uintptr_t)cmb,1,0x400000,f); fclose(f);
                     fprintf(stderr,"[cmdump] 85b8 colormap dumped -> %s\n", getenv("FIST_CMDUMP")); } }
             }
+            /* FIST_PALDUMP (READ-ONLY, board:0002): dump the bc9c SOURCE palette at ext[0x5598] (256 RGB
+             * triples) + report how many of entries 190..255 are populated -- tests whether the port's
+             * "colormap rows 190..255 all zero" originates in an incomplete source-palette load (upstream
+             * of bc9c) rather than bc9c itself (whose build loop covers full 0..255). */
+            if (getenv("FIST_PALDUMP")) {
+                uint8_t *sp = xb + 0x5598;
+                int hi=0; for(int i=190*3;i<256*3;i++) if(sp[i]) hi++;
+                int lo=0; for(int i=80*3;i<190*3;i++) if(sp[i]) lo++;
+                fprintf(stderr,"[paldump] ext[0x5598] source palette: entries 80..189 nonzero=%d/%d ; entries 190..255 nonzero=%d/%d ; e190=%d,%d,%d e255=%d,%d,%d\n",
+                    lo,110*3,hi,66*3, sp[190*3],sp[190*3+1],sp[190*3+2], sp[255*3],sp[255*3+1],sp[255*3+2]);
+                FILE *f=fopen(getenv("FIST_PALDUMP"),"wb"); if(f){ fwrite(sp,1,768,f); fclose(f); }
+            }
+            /* FIST_CM1MDUMP (board:0002): dump the 1MB region at [0x85bc]+0x100000 whose stats match the
+             * live-paging oracle CM (r69.r6980.map_cm.bin: 105 distinct / 1047525 nonzero) -- byte-diff
+             * against it to settle whether the port terrain colormap is already bit-identical. */
+            if (getenv("FIST_CM1MDUMP")) {
+                uint32_t hmb = *(uint32_t*)(xb+0x85bc);
+                if (hmb) { FILE *f=fopen(getenv("FIST_CM1MDUMP"),"wb");
+                    if(f){ fwrite((void*)(uintptr_t)(hmb+0x100000),1,0x100000,f); fclose(f);
+                    fprintf(stderr,"[cm1mdump] [0x85bc]+1M dumped -> %s\n", getenv("FIST_CM1MDUMP")); } }
+            }
             /* FIST_HMDUMP (default OFF, READ-ONLY): dump the port's OWN op-0x18-decoded HEIGHTMAP as 6980
              * addresses it -- [0x85bc] first 1MB (the coord layout hm[(v>>22)<<10|(u>>22)]).  Byte-compared
              * to the capture HM (voxel6980_framematched_pass08) to settle whether the port's own contiguous

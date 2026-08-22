@@ -1595,3 +1595,21 @@ TRUSTWORTHY ORACLE CM CAPTURED (headless) + bc9c HYPOTHESIS (A) DISPROVEN:
     source palette at AZER1 map-load and check whether entries 190..255 are populated; if not, the defect
     is the palette-load feeding bc9c, not bc9c itself.  Then diff port CM vs r69.r6980.map_cm.bin for the
     trustworthy residual, fix, add a terrain-fidelity flow to tools/verify.sh, re-run the 10x gate.
+
+RESIDUAL RE-MEASURED WITH TRUSTWORTHY PROVENANCE: 0.359%, NOT 5.6% -- and localized to +1 ROUNDING.
+Dumped the port's live AZER1 map-load colormap (native FIST_CM1MDUMP = [0x85bc]+0x100000, 1MB) and
+byte-diffed it against the headless live-paging oracle (r69.r6980.map_cm.bin):
+  - diff = 3760 / 1048576 = 0.359% ; port and oracle BOTH distinct=105, nonzero=1047525 (identical stats).
+  - So the port terrain colormap is 99.64% BIT-IDENTICAL to the trustworthy oracle.  The prior "5.6%" (and
+    the "rows 190..255 all zero") were artifacts of the provenance-uncertain sample / a mis-identified
+    region -- DISPROVEN.  Confirmed the source palette is complete: FIST_PALDUMP shows ext[0x5598] entries
+    190..255 nonzero=198/198 (e255=63,63,63), so no palette-load defect.
+  - The 3760 differing bytes are a ROUNDING difference: 2948 (78%) are |delta|=1, the rest 2..7; the port
+    is systematically +1 vs the oracle in the affected cells (first diffs: port 66/67/68 vs oracle
+    65/66/67...).  bc9c averages with `(x+1)>>1` (round-half-up) + a carry-into-bit7 (ac68/ac69/ac6a) and
+    mixes via FUN_0000_ac70 -> the +1 skew is a half-rounding / carry discrepancy in that blend vs the asm.
+  NEXT: read FUN_0000_ac70 (+ bc9c's ac68/69/6a carry terms) and asm-verify the exact rounding op against
+  re_out/fist_*_image.bin; fix the +1 skew so the port CM matches byte-for-byte; then add a terrain-CM
+  bit-identity flow to tools/verify.sh (native CM1MDUMP vs the banked oracle) and re-run the 10x gate.
+  Diagnostic tooling landed: native FIST_PALDUMP (ext[0x5598]) + FIST_CM1MDUMP ([0x85bc]+1M), read-only,
+  env-gated.
