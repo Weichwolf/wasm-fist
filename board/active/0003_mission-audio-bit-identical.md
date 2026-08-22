@@ -546,3 +546,17 @@ logic branches on).  NEXT (differential trace): log the (pump#, [0x452], key DGR
 d8d4/c452) per ISR on BOTH targets under coop and diff to find the FIRST tick where they diverge -- that
 pins the real source.  This is a deeper determinism problem than the framebuffer (which is immune as a
 fixed point); audio remains the open frontier.  All partial prototypes reverted; matrix stays 162/162.
+
+AUDIO native==wasm LANDED for the deterministic window (matrix flow audio-opl-init).  Bisected the
+divergence: the OPL FM WAV is native==wasm BIT-IDENTICAL (diff=0, reproducible) up to FIST_DUMPTICK=120
+under FIST_COOP_TICK (122400 B both), and diverges only between [0x452]=120 and 250 (DT=250 diff=87799).
+The opltick->[0x452] curves are IDENTICAL for the first ~213 ticks then diverge at a STATE TRANSITION
+that RESETS [0x452] (wasm trace shows [0x452] 124 -> 110 at a later opltick) -- i.e. an intro->menu (or
+similar) screen change whose onset is reached at a different opltick on the two targets.  So the audio
+engine itself is deterministic native==wasm within a screen; the divergence is the TRANSITION timing.
+LANDED: tools/verify.sh audio-opl-init flow -- OPL FM audio full-WAV native==wasm over the [0x452]=120
+window (div=250 fixed via FIST_TICK_HZ=1000).  Matrix now 165 flows.  OPEN (full-duration audio): make
+the state-transition onset ([0x452] reset point) deterministic native==wasm -- the transition fires at a
+different opltick because the pre-transition screen's exit condition (likely the KDV intro frame count or
+a timed auto-advance) resolves at a target-dependent tick; trace the exit predicate.  Then the audio flow
+can extend across transitions to full menu/mission music.

@@ -434,6 +434,11 @@ FLOWS=(
   "terrain-cyprus1|25000|terrain|CYPRUS1|"
   "terrain-india1|25000|terrain|INDIA1|"
   "terrain-syria1|25000|terrain|SYRIA1|"
+  # ---- OPL FM AUDIO stream native<->wasm bit-identity (board:0003) ----
+  # The OPL FM audio is native==wasm bit-identical over the deterministic OPL-init window ([0x452]=120,
+  # pure-coop); full-duration music audio (across the intro->menu [0x452]-reset transition) awaits the
+  # transition-onset determinism fix.  This lands the audio native==wasm invariant for that window.
+  "audio-opl-init|1000|audio||"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
@@ -621,6 +626,21 @@ run_terrain() { # $1=target $2=battle ; echo full-framebuffer ppm or ""  -- FIST
   [ -s "$out" ] || { echo ""; return 1; }
   echo "$out"
 }
+run_audio() { # $1=target ; echo wav or ""  -- OPL FM audio, tick-pinned, native<->wasm bit-identity
+  # board:0003: the OPL FM audio stream is native==wasm bit-identical up to the pre-transition window
+  # [0x452]=120 (proven diff=0) under pure-cooperative ticking (FIST_COOP_TICK).  Beyond a state
+  # transition that resets [0x452] (~intro->menu) it diverges (open: transition-onset determinism), so
+  # this flow pins the deterministic OPL-init window.  FIST_TICK_HZ=1000 fixed so div=250 is stable.
+  local t="$1"
+  local out="$TMP/au.$t.wav"
+  if [ "$t" = native ]; then
+    timeout 60  env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK=120 FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.ppm" "$NATIVE" >/dev/null 2>&1
+  else
+    timeout 150 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK=120 FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.ppm" "$NODE" "$OUTJS" >/dev/null 2>&1
+  fi
+  [ -s "$out" ] || { echo ""; return 1; }
+  echo "$out"
+}
 run_editsim() { # $1=target $2=battle $3=edit-env(default FIST_EDIT_ADDTANK) ; echo cropped-ppm or ""
   # The editor DoD "simulate" leg: the edit op ($3: add-tank or remove-tank) edits $b.FSG in a datadir,
   # then that SAME edited battle is loaded into a mission and its op-0x2c spawn cockpit is captured.
@@ -717,6 +737,18 @@ for row in "${FLOWS[@]}"; do
     fi
     if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
       d=$(compare -metric AE "$rn" "$rw" /dev/null 2>&1); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
+    fi
+    if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
+    continue
+  fi
+  if [ "${name#audio-}" != "$name" ]; then
+    # OPL FM audio stream native<->wasm bit-identity (tick-pinned OPL-init window).  board:0003.
+    detail=" [OPL FM audio, coop tick-pinned [0x452]=120, full-WAV native==wasm]"
+    rn=""; rw=""
+    if [ "$WHICH" != wasm ];   then rn="$(run_audio native)"; [ -n "$rn" ] || { ok=0; detail+=" native-no-wav"; }; fi
+    if [ "$WHICH" != native ]; then rw="$(run_audio wasm)";   [ -n "$rw" ] || { ok=0; detail+=" wasm-no-wav"; }; fi
+    if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
+      d=$(cmp -l "$rn" "$rw" 2>/dev/null | wc -l); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
     fi
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
