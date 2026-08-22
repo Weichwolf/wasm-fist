@@ -1645,3 +1645,18 @@ render-time CM -- which is a measurement refinement, not a bug hunt.  NEXT: add 
 (at 6980 entry, like the oracle) and confirm 0-diff; then add that as a terrain-CM bit-identity flow to
 tools/verify.sh and re-gate.  The old "5.6% / rows-190-255-zero / build-loop-bound / palette-load" leads
 are all DISPROVEN.
+
+STAGE-ARTIFACT HYPOTHESIS DISPROVEN -- the 0.359% is a REAL residual from a build INPUT.
+Dumped the port CM at RENDER time (FIST_CMRENDER: [0x85bc]+0x100000 AFTER fist_ext_689a + 6980 run) and
+diffed vs the live-paging oracle: STILL 3760/1048576 = 0.359%, IDENTICAL to the map-load diff.  So 689a
+does NOT modify [0x85bc]+0x100000 -- the CM is the same pre- and post-lighting, and the +1 skew is NOT a
+map-load-vs-render-time stage difference (my prior note was WRONG).  Since bc9c's blend and ac70's nearest-
+index are both asm-verified faithful, a 0.359% output difference must originate in a BUILD INPUT that
+differs port-vs-oracle:
+  candidates: (a) the &DAT_0000_5598 SOURCE palette BYTES (I confirmed 190..255 are populated, but NOT that
+  every byte equals the oracle's -- a +/-1 in the loaded palette propagates faithfully to a +1 CM);
+  (b) the bc90 blend matrix input; (c) the a060/a460/a860 distance tables; (d) a subtle .KLC map-decode
+  difference feeding the colours.  NEXT: dump the oracle's ext[0x5598] source palette (add it to the 6980
+  capture, same live-paging read) and byte-diff vs the port's FIST_PALDUMP; if they differ, the defect is
+  the palette load, not bc9c.  This is a sub-0.4% terrain residual with both build FUNCTIONS proven faithful
+  -- the remaining work is input-provenance, not a build-logic bug.  Diagnostic: native FIST_CMRENDER added.

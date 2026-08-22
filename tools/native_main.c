@@ -1670,6 +1670,14 @@ int fist_extender_gate(void) {
             if (!getenv("FIST_TERRAIN_NO689A")) fist_ext_689a(xb);
             extern void m_ext_FUN_0000_6980(void);
             m_ext_FUN_0000_6980();
+            /* FIST_CMRENDER (board:0002): dump the RENDER-TIME colormap ([0x85bc]+0x100000, post-689a
+             * lighting/reduce -- the same stage the live-paging oracle r69.r6980.map_cm.bin captures) for a
+             * LIKE-STAGE byte-diff vs the map-load dump's 0.359% (which was pre-lighting). */
+            if (getenv("FIST_CMRENDER")) {
+                uint32_t hmb=*(uint32_t*)(xb+0x85bc);
+                if(hmb){ FILE*f=fopen(getenv("FIST_CMRENDER"),"wb"); if(f){ fwrite((void*)(uintptr_t)(hmb+0x100000),1,0x100000,f); fclose(f);
+                    fprintf(stderr,"[cmrender] post-689a render-time CM dumped -> %s\n", getenv("FIST_CMRENDER")); } }
+            }
         }
         /* FIST_TILEFILL (EXPERIMENTAL, default OFF) -- run the per-frame terrain TILE-FILL
          * FUN_0000_6980 (NovaLogic voxel raycaster) BEFORE 9200 samples the tile, so 9200 walks a
