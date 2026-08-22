@@ -1,0 +1,168 @@
+PATCH 409: faithful 16-bit reconstruction of the MGAVIDEO transparency sprite blit FUN_0000_298a
+(asm-verified vs re_out/fist_mga_image.bin 0x298a-0x29f3), superseding patch 136's loop body.
+
+THE BUG (wasm "memory access out of bounds"; native: silent memory corruption).  On the live mission
+paint pass the wireframe unit blitter 294d->298a is handed a sprite record whose header width byte
+(word[si-4] low) is 0 (asm-observed: recseg=5add recoff=20ca srch=1b00 => W=0 H=0x1b, at on-screen
+dst di=rowtab[116]+107).  Patch 136 rebased the ES/rowtab/stride/source bases correctly but kept
+Ghidra's model of the ES:DI dest cursor as a flat 32-bit host pointer and the row/col counters as
+32-bit ints.  The asm inner `mov cx,dx ; loop` and outer `pop cx ; loop` are 16-bit: cx=W=0 makes
+`loop` run 65536 times with the 16-bit DI wrapping exactly once through the 64KB VGA segment (harmless
+in real mode).  Ghidra's 32-bit `uint` counter instead underflowed 0->0xffffffff and the flat dest
+pointer marched out of g_mem -> wasm trap (native corrupts memory past 0xA0000 and limps on).  Confirmed
+by catching the crashing call in the browser (-g2 build, stack 298a<-294d<-786b<-459a) and reading the
+header W=0 at the trap; g_d298 debug scratch at linear 0x2011020 (just past g_mem+0x1000000) held the
+blit's own spilled pixels -- the marker being overwritten IS the OOB dest march.
+
+Same 16-bit-wrap class as patch 178 (2595 MASK fill) and patch 294 (23d8 cockpit-panel RLE): the
+faithful fix is a direct transliteration with uint16_t di/si/cx, NOT an upstream W!=0 guard (per the
+patch-294 oracle doctrine: the original reaches the blit with the edge-case record and survives via
+segment wrap, so bit-identity requires we wrap too -- both di AND si, since the W=0 flat path reads
+65536 source bytes and real-mode SI wraps in the DS segment).
+
+  dst = ES:DI, ES=word[[0x724]][0], DI=rowtab[param_4]+param_2 (rowtab=[0x794])   -- di 16-bit, wraps
+  stride bp = word[[0x724]+4] (xor/sub param_1 idiom, = itself for param_1=0)
+  src = DS:SI, DS=m_260c_recseg (entry ES), SI=param_3 ; header word[si-4]: hi=H rows, lo=W cols
+  flat path (29b6..29cc): per row, W bytes lods'd, each stos'd (nonzero) or skipped (di++); di-=W; di+=bp
+  RLE path (29d2..29f0): per row, lods skip (di+=skip), lods count, count bytes stos/skip; di=rowstart+bp
+
+Reached only on the in-mission 459a paint (wireframe unit blit); unreached by the verify flow matrix
+-> native<->wasm byte-identity across the matrix is preserved.  Sources stay pristine; fist_mga.c via
+build/.  board:0001
+
+--- a/fist_mga.c	2026-08-22 13:00:43.310691842 +0200
++++ b/fist_mga.c	2026-08-22 13:00:43.311617843 +0200
+@@ -6769,78 +6769,66 @@
+ void __allregs FUN_0000_298a(uint param_1,int param_2,byte *param_3,int param_4)
+ 
+ {
+-  byte *pbVar1;
+-  byte *pbVar2;
+-  uint uVar4;
+-  uint uVar5;
+-  uint uVar6;
+-  int iVar7;
+-  byte *pbVar8;
+-  byte *pbVar9;
+-  byte *pbVar10;
+-
+-  /* PATCH 136: transparency sprite blit (asm 0x298a..0x29f3) -- the REVIEW wireframe blitter (called by
+-     294d, the [0x6c8]=0x294d method).  Same base-loss class as 26de (patch 114): Ghidra dropped the
+-     fb-dest ES base + rowtable, the row stride, and the source DS(=entry ES=m_260c_recseg) base.  Rebuild:
+-       dst    = word[[0x724]][0] : (rowtab[param_4] + param_2)      ; es=fb seg, di=rowtab[row]+col
+-       stride = word[[0x724]+4] ^ cx - cx  (cx=param_1=0 => stride) ; bp = fb row pitch
+-       src    = m_260c_recseg : param_3                             ; ds:si sprite record
+-     header word[si-4]: low byte = width(cols), high byte = height(rows).  al==0 => transparent (skip).
+-     The loop bodies are the pristine decompile (correct); only the base computations are rebuilt. */
++  /* PATCH 409: faithful 16-bit reconstruction of the MGAVIDEO transparency sprite blit FUN_0000_298a
++     (asm-verified vs re_out/fist_mga_image.bin 0x298a-0x29f3), superseding patch 136's loop body.
++     Patch 136 rebased the ES/rowtab/stride/source bases correctly but modelled the ES:DI dest cursor as a
++     flat 32-bit host pointer and the row/col counters as 32-bit ints.  The asm's inner `mov cx,dx; loop`
++     and outer `pop cx; loop` are 16-bit (cx), and di/si are the 16-bit ES:DI / DS:SI cursors that WRAP
++     inside their 64KB segments.  A wireframe unit sprite whose header width byte (word[si-4] low) is 0
++     seeds the inner counter cx=0 => `loop` runs 65536 times with di wrapping once through the VGA segment
++     (harmless in real mode).  Ghidra's 32-bit `uint` counter instead underflowed 0->0xffffffff and the
++     flat dest pointer marched out of g_mem => wasm "memory access out of bounds" (native: silent
++     corruption) on the 459a mission-paint wireframe unit blit.  Same 16-bit-wrap class as patch 178
++     (2595) and patch 294 (23d8).
++       dst = ES:DI, ES=word[[0x724]][0], DI=rowtab[param_4]+param_2 (rowtab=[0x794])   -- di 16-bit, wraps
++       stride bp = word[[0x724]+4] (xor/sub param_1 idiom, = itself for param_1=0)
++       src = DS:SI, DS=m_260c_recseg (entry ES), SI=param_3 ; header word[si-4]: hi=H rows, lo=W cols
++     Direct transliteration with uint16_t di/si/cx; the dest byte is g_mem[(ES<<4)+di], src g_mem[(DS<<4)+si]. */
++  uint16_t di, si, cx, rows, width, stride;
++  uint32_t es_base, ds_base;
++  byte al;
++  {
++    uint16_t rowtab = *(uint16_t *)(g_mem + 0x1c794);                               /* [0x794] */
++    di = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint16_t)param_4 * 2 + rowtab));/* di=rowtab[row] */
++    di = (uint16_t)(di + (uint16_t)param_2);                                         /* add di,dx (col) */
++    uint16_t fbp = *(uint16_t *)(g_mem + 0x1c724);                                   /* bp=[0x724] */
++    es_base = (uint32_t)(*(uint16_t *)(g_mem + 0x1c000 + fbp)) << 4;                 /* es=[bp+0] */
++    stride  = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(fbp + 4));                  /* bp=[bp+4] */
++    stride  = (uint16_t)((stride ^ (uint16_t)param_1) - (uint16_t)param_1);          /* xor/sub idiom */
++    ds_base = (uint32_t)m_260c_recseg << 4;                                          /* ds = entry es */
++    si = (uint16_t)(uintptr_t)param_3;
++  }
+   {
+-  uint16_t fb_di  = *(uint16_t *)(g_mem + 0x1c724);
+-  uint16_t fb_seg = *(uint16_t *)(g_mem + 0x1c000 + fb_di);
+-  uint16_t rowtab = *(uint16_t *)(g_mem + 0x1c794);
+-  uint16_t rowoff = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint16_t)param_4 * 2 + rowtab));
+-  pbVar8 = g_mem + ((uint32_t)fb_seg << 4) + (uint16_t)(rowoff + (uint16_t)param_2);
+-  iVar7 = (int)(short)((*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(fb_di + 4)) ^ param_1) - param_1);
+-  param_3 = g_mem + ((uint32_t)m_260c_recseg << 4) + (uint16_t)(uintptr_t)param_3;
++    uint16_t hdr = *(uint16_t *)(g_mem + ds_base + (uint16_t)(si - 4));  /* mov cx,[si-4] + xchg pair */
++    rows  = (uint16_t)(hdr >> 8);                                        /* H (outer counter) */
++    width = (uint16_t)(hdr & 0xff);                                      /* W (inner counter, dx) */
+   }
+-  uVar4 = *(uint16_t *)(param_3 + -4) >> 8;
+-  uVar6 = *(uint16_t *)(param_3 + -4) & 0xff;
+-  uVar5 = uVar6;
+-  if (param_3[-2] != 2) {
+-    do {
+-      do {
+-        pbVar9 = pbVar8;
+-        pbVar1 = param_3;
+-        param_3 = param_3 + 1;
+-        if (*pbVar1 != 0) {
+-          *pbVar9 = *pbVar1;
+-        }
+-        uVar5 = uVar5 - 1;
+-        pbVar8 = pbVar9 + 1;
+-      } while (uVar5 != 0);
+-      uVar4 = uVar4 - 1;
+-      uVar5 = uVar6;
+-      pbVar8 = pbVar9 + (iVar7 - uVar6) + 1;
+-    } while (uVar4 != 0);
++  if (g_mem[ds_base + (uint16_t)(si - 2)] != 2) {                        /* cmp byte[si-2],2 : flat path */
++    do {                                                                 /* 29b6 outer (H) */
++      cx = width;                                                        /* mov cx,dx */
++      do {                                                               /* 29ba inner (W) */
++        al = g_mem[ds_base + si]; si = (uint16_t)(si + 1);               /* lods al */
++        if (al != 0) g_mem[es_base + di] = al;                           /* or al; jz : stos es:[di] */
++        di = (uint16_t)(di + 1);                                         /* di advances either branch */
++      } while (--cx != 0);                                               /* loop */
++      di = (uint16_t)(di - width + stride);                              /* sub di,dx ; add di,bp */
++    } while (--rows != 0);                                               /* loop 29b6 */
+     return;
+   }
+-  do {
+-    pbVar9 = param_3 + 1;
+-    pbVar10 = pbVar8 + *param_3;
+-    param_3 = param_3 + 2;
+-    for (uVar5 = (uint)*pbVar9; uVar5 != 0; uVar5 = uVar5 - 1) {
+-      while( true ) {
+-        pbVar1 = param_3;
+-        param_3 = param_3 + 1;
+-        if (*pbVar1 == 0) break;
+-        pbVar2 = pbVar10;
+-        pbVar10 = pbVar10 + 1;
+-        *pbVar2 = *pbVar1;
+-        uVar5 = uVar5 - 1;
+-        if (uVar5 == 0) goto LAB_0000_29eb;
+-      }
+-      pbVar10 = pbVar10 + 1;
+-    }
+-LAB_0000_29eb:
+-    pbVar8 = pbVar8 + iVar7;
+-    uVar4 = uVar4 - 1;
+-    if (uVar4 == 0) {
+-      return;
++  do {                                                                   /* 29d2 RLE outer (H) */
++    uint16_t row_di = di;                                               /* mov dx,di (row start) */
++    al = g_mem[ds_base + si]; si = (uint16_t)(si + 1);                  /* lods al (skip) */
++    di = (uint16_t)(di + al);                                           /* add di,ax */
++    cx = g_mem[ds_base + si]; si = (uint16_t)(si + 1);                  /* lods al (run count) */
++    if (cx != 0) {                                                      /* jcxz 29eb */
++      do {                                                             /* 29de run */
++        al = g_mem[ds_base + si]; si = (uint16_t)(si + 1);             /* lods al */
++        if (al != 0) g_mem[es_base + di] = al;                         /* or al; jz : stos */
++        di = (uint16_t)(di + 1);                                       /* di advances either branch */
++      } while (--cx != 0);                                             /* loop 29de */
+     }
+-  } while( true );
++    di = (uint16_t)(row_di + stride);                                   /* mov di,dx ; add di,bp */
++  } while (--rows != 0);                                                /* loop 29d2 */
+ }
+ 
+ 

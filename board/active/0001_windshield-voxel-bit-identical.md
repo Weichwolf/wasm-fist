@@ -125,3 +125,30 @@ world state.  Reverted the g_web_mode gate (kept FIST_TERRAIN as the native diag
 in the browser" is blocked on the live-loop mission fidelity (the sim state), on top of the terrain
 bit-exact residuals (board:0002) -- both deep.  (Side note: FIST_TERRAIN's 689a/6980 made the console
 render FULL in the browser -- a possible lead for the console-completeness frontier, unverified.)
+
+BROWSER MISSION CRASH ROOT-CAUSED + FIXED (patch 409): the live browser mission drew the cockpit
+briefly then trapped "memory access out of bounds".  Caught the crashing call in a -g2 browser build
+(stack 298a<-294d<-786b<-459a; post-mortem g_d298 scratch): the MGAVIDEO wireframe unit blitter
+FUN_0000_298a was handed a sprite record with header width byte == 0 (srch=0x1b00 => W=0 H=0x1b, at
+on-screen dst di=rowtab[116]+107).  The asm (re_out/fist_mga_image.bin 0x298a) inner `mov cx,dx; loop`
+is 16-bit: cx=W=0 -> `loop` runs 65536x with the 16-bit ES:DI cursor wrapping once through the VGA
+segment (harmless).  Ghidra (patch 136) widened the counter to 32-bit `uint` and modelled di as a flat
+pointer -> W=0 underflowed 0->0xffffffff and the dest marched out of g_mem -> wasm trap / native silent
+corruption.  Fix = faithful 16-bit transliteration (uint16_t di/si/cx, wrapping) -- same class as patch
+178 (2595) / patch 294 (23d8); NOT an upstream W!=0 guard (patch-294 doctrine: original reaches the
+blit with the edge record and survives via wrap, so bit-identity requires we wrap too).  Verified: 6x
+18s + 2x 40s browser mission runs crash-free (was ~1/2 with -g2).  Unreached by the verify matrix.
+
+STILL OPEN after the crash fix (two separate findings, this round):
+  (1) IN-MISSION RENDER CRAWL (the "hängt" symptom): profiled the browser mission -- the sim advances
+      fine (tick_hz=4773, ticks keep wallclock, tick cost ~0ms) but op-0x24 (the cockpit render frame)
+      fires only ~2.5/s; the engine main-loop pump rate collapses from ~386k/s (menu idle-spin) to
+      ~150/s in-mission (each iteration ~6.7ms of engine render work OUTSIDE the tick).  So the mission
+      renders at ~2.5 fps -- choppy, reads as a hang.  6980 voxel raycast is NOT the cost (3931/6980
+      never run in the default browser path).  Cost is elsewhere in the 459a paint pipeline; needs a
+      finer profile (CDP CPU profiling is blocked -- the worker blocks with no ASYNCIFY, so Profiler.start
+      cannot be delivered mid-loop; use C-level bracket timing on the 459a subtree).
+  (2) WINDSHIELD/COCKPIT NOT DRAWN CORRECTLY: at ~13s the windshield shows a noisy blue/gray gradient
+      (no terrain -- FIST_TERRAIN off in the browser) and the cockpit is not persistently visible; the
+      radar block is noise.  This is the board:0001/0002 terrain+live-loop fidelity, distinct from the
+      now-fixed crash.
