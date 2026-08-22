@@ -440,3 +440,18 @@ menu/mission WAV is native==wasm bit-identical and can become an audio flow in t
 terrain flows).  This is the next matrix-expansion after terrain; it does not touch the OPL/SB synth math
 (already the DOSBox DBOPL core), only WHEN samples are pulled.  Oracle-fidelity (vs a clean-provenance
 DOSBox capture via the now-headless oracle) is the subsequent Stage-2.
+
+CORRECTION (honest): "pump-driven" above is WRONG.  fist_opl_pump() is EMPTY (fist_opl.c:246); OPL
+generation is already TICK-driven via fist_opl_tick() ("once per engine INT-8 tick from the ISR drain",
+samples/tick = rate*pit_div/PIT_HZ).  The real native-vs-wasm gap: the tick-pinned run (FIST_DUMPTICK=2000)
+produced 12.5 s of audio native (1105920 B = 552938 mono s16) but 35 s wasm (3093428 B = 1546692), a ~2.8x
+ratio, even though both stop at engine tick [0x452]=2000.  So the number of fist_opl_tick calls (and/or the
+samples_per_tick pit_div) to REACH [0x452]=2000 diverges by target -- native's SIGALRM ISR and wasm's
+cooperative drain do not advance the OPL sample clock in lockstep with [0x452].  The framebuffer is immune
+(fixed point at [0x452]=N); the audio stream is not.
+NEXT (accurate): make the OPL sample clock advance in EXACT lockstep with [0x452] on both targets -- one
+fist_opl_tick per [0x452] increment, samples_per_tick from the same pit_div -- so [0x452]=N yields
+N*samples_per_tick identical samples native==wasm.  Then a tick-pinned WAV is bit-identical and becomes an
+audio matrix flow.  Investigate why native emits ~1/2.8 the ticks: likely native drains multiple wall-clock
+ISR ticks per pump while [0x452] and fist_opl_tick count differently, or the menu pit_div read differs at
+the sample point.  (Terrain already landed as a native==wasm matrix flow this round; audio is the next.)
