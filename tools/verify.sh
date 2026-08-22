@@ -608,7 +608,8 @@ run_terrain() { # $1=target $2=battle ; echo full-framebuffer ppm or ""  -- FIST
   # The in-mission VOXEL TERRAIN render (689a sky/tile + 6980 raycaster, env-gated via FIST_TERRAIN so it
   # runs on the map-load spawn state).  Asserts the FULL 320x200 framebuffer is native<->wasm bit-identical
   # -- terrain coverage for the hard invariant (board:0002).  READ-ONLY (no edit) -> use the repo datadir.
-  local t="$1" bt="${2:-}" out="$TMP/tr.$t.ppm"
+  local t="$1" bt="${2:-}"
+  local out="$TMP/tr.$t.ppm"
   local bexp=(); [ -n "$bt" ] && bexp=(FIST_FSG_BATTLE="$bt")
   if [ "$t" = native ]; then
     timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=25000 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
