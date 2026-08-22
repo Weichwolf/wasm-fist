@@ -167,3 +167,17 @@ pipeline (env FIST_WEB_PROF, temp instrumentation, now reverted).  Decisive chai
   NEXT: bracket 78ca's children to pin a2e9, then find the pathological loop inside it (likely a dims/16-bit
   blit issue of the same class as the patch-409 298a W=0 bug -- a 373ms single-region draw is not normal).
   At ~373ms x ~3.6 outer-iterations per visible frame the mission renders ~2.5 fps = reads as a hang.
+
+CRAWL DRILL CORRECTION (a2e9 DISPROVEN + intermittency): further bracket-timing corrects the previous
+"prime suspect a2e9" guess -- FUN_1000_a2e9 is a cheap heading-value-to-text formatter (bounded div
+loops, ~0ms), NOT the cost.  The 373ms is elsewhere among 78ca's HUD children (524e/530b/a7e0/02e8/
+5531/a4b2/a520/a52e/a547/a4e9/a5a9 -- all small text/gauge draws via 52d1/5591/5531/5547, the SAME
+primitives the menus use fast, so the primitive itself is not inherently slow).  Could not pin the child:
+78ca is INTERMITTENT -- it runs only in a specific vehicle/HUD state (795c d548&0x7f==1 render branch +
+veh[0x97]!=0 gates); many browser runs render the mission at 450+ frames with 78ca NEVER called (fast, no
+crawl), while others hit the 78ca state and crawl to ~2.5fps.  So the "hängt" is state-triggered, not
+every-frame.  Native FIST_MISSFB canNOT reproduce it (frozen op-0x24 capture runs the extender pipeline,
+not the 459a live paint that dispatches 795c/78ca).  NEXT (needs a robust in-mission harness): make the
+browser reach+hold the 78ca state deterministically, then bracket 78ca's children to pin the one heavy
+draw and its pathological loop.  Confirmed floor: when 78ca runs it is ~100% of the frame (78ca=2236ms/6
+== 206f=2238ms/2s in the one run that held the state).
