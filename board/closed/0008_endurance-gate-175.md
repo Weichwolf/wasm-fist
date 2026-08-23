@@ -28,3 +28,11 @@ WHAT THIS DOES *NOT* CLAIM (honesty -- the DD2 "done" bar is NOT met):
   NOT "the port is done".  Per CLAUDE.md, re-passing this gate AS THE MATRIX GROWS to cover every
   surface is what will eventually turn "the matrix passes" into "the port is done".  This item records
   the first clean 10x; it must be re-run after each material matrix expansion.
+
+RE-GATED on the EXTENDED 176-flow matrix (2026-08-23, after patch 411 landed + the audio-intro flow):
+10 consecutive clean tools/wasm_gate.sh runs, 176 pass / 0 fail each, 0 resets (05:51 -> 07:57 CEST).
+The matrix grew 175 -> 176: audio is now native==wasm bit-identical ACROSS the intro->menu transition
+(audio-intro, [0x452]=300), not just the [0x452]=120 init window.  wasm_gate floor raised 175 -> 176.
+Still NOT the full-exhaustive matrix (terrain 5/47 board:0007, INDIA3 board:0006, audio not yet across
+mission transitions board:0003, oracle-fidelity board:0002) -- the endurance gate re-passing on each
+expansion is the mechanism, not the completion.
