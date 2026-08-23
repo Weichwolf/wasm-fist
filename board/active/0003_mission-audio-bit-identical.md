@@ -728,3 +728,18 @@ So reaching menu-music+ audio needs that shim-level fix: make the 0x3da retrace 
 retrace-countdown length) a DETERMINISTIC function of the engine tick phase, not a free-running per-read
 toggle -- a change every flow's 0x3da reads touch, so it lands with a full 10x re-gate.  Intro/title audio
 (diff=0 to [0x452]=4000) is unaffected and stays landed.  Matrix 176/176.
+
+DIVERGENCE MECHANISM NARROWED (FIST_3DACNT global 0x3da-read counter): the 0x3da reads are IDENTICAL
+native==wasm up to c452=4388 (both exactly 676118 reads), then diverge over the c452=4388..4400 window
+(native 3882 reads, wasm 3706 -> 176 apart = 88 ISRs at ~2 reads/ISR).  The reads come from
+FUN_1000_31c3 (the PIT-ISR sub-handler; its VGA attribute-controller reset does out(0x3c0)/in(0x3da)/
+out(0x3c0,0x20) each tick).  So the divergence is NOT a busy-wait exit and NOT accumulated drift (reads
+are bit-synced until 4388); it is the VARIABLE-PIT-RATE self-adjustment (30f8 reprograms d8c4 each ISR,
+fed by the retrace-countdown d8d4) producing 88 EXTRA ISR ticks on native in the 12-c452-tick approach to
+the menu-enter (e714 at c452=4399).  Reads synced until 4388 means the retrace-phase input was identical
+up to there; the adjustment diverges only as the PIT rate ramps for the menu-enter.  PRECISE NEXT TRACE
+(scoped): log d8c4 (PIT reload), d8d4 (retrace countdown), d8d2 in 30f8/31c3 per ISR across c452
+4388..4400 on both targets and diff to find the FIRST divergent reload -- that is the exact
+self-adjustment step that differs, and the target for a deterministic-PIT-rate fix.  This is intricate
+1000-segment ISR work (30f8/31c3), to be done as a focused continuation, not an autonomous-loop guess.
+Intro/title audio (diff=0 to [0x452]=4000) stays landed + 10x-gated.  Matrix 176/176.
