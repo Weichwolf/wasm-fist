@@ -61,3 +61,9 @@ board:0003 (audio) is BLOCKED on op 0x78 here.  board:0001/0002 (windshield/terr
 the separate shim path; folding them into a unified gate dispatcher is a later consolidation, not required
 first.  This is a focused, asm-anchored, multi-step shim implementation -- the documented "extender-service
 frontier" made first-class.
+
+CORRECTION (see board:0003's tick-regime finding): op 0x78 is NOT the audio blocker.  Audio full-duration
+native==wasm is blocked by the async-vs-coop TICK REGIME (audio diff=0 was achieved WITH a blank intro
+under COOP_TICK+patch411).  op 0x78 here is for the intro's VISUAL fidelity (real frames vs blank) and the
+DD2 "every screen renders" completeness -- a parallel frontier, not a prerequisite for audio.  Patch 411
+still lands with the tick-regime unification (board:0003), independently of this render.
