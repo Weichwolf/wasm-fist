@@ -688,3 +688,15 @@ data-dependent or reads a still-nondeterministic port) -- the same async-vs-coop
 family as the deeper board:0003 work.  Harder than the intro; likely needs the tick-regime unification
 (de-risked above) to resolve cleanly.  Matrix intact 176/176; audio-intro flow pinned at the safe
 [0x452]=4000.
+
+CORRECTION to the 2nd-transition attribution above: it is NOT FUN_1000_2e6b (that was a line-number
+mapping error between the instrumented and clean build/fist.c).  Re-ran FIST_C452W with OLD->NEW logging
+gated on old>1000: the 4399->0 reset is FUN_0000_e714 (site L36771) -- the SAME main-menu-enter function
+as the 1st (intro->menu) reset.  So the 2nd transition is a MENU RE-ENTER at [0x452]=4399 (~4.4s after the
+first menu-enter), fired 88 oplticks apart native (opltick 339352) vs wasm (339264).  e714's re-enter
+callers are 37015 (`if in_CF` after the cb7c .FSG probe) or 37058 (after the e4bb in-mission loop) -- one
+of those fires 88 oplticks apart under identical cooperative ticking.  So the current audio boundary is a
+periodic menu re-enter/refresh whose onset predicate is target-dependent by 88 oplticks; tracing which
+e714 re-enter caller fires and its predicate (a menu-idle timer or the cb7c CF) is the precise next step.
+Audio coverage remains native==wasm diff=0 to [0x452]=4000 (bit-verified + 10x-gated); the boundary is a
+menu re-enter, not a new screen.  Matrix intact 176/176.
