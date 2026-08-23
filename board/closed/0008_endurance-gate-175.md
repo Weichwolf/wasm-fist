@@ -36,3 +36,7 @@ The matrix grew 175 -> 176: audio is now native==wasm bit-identical ACROSS the i
 Still NOT the full-exhaustive matrix (terrain 5/47 board:0007, INDIA3 board:0006, audio not yet across
 mission transitions board:0003, oracle-fidelity board:0002) -- the endurance gate re-passing on each
 expansion is the mechanism, not the completion.
+
+RE-GATED again (2026-08-23) after extending the audio-intro window to [0x452]=4000: 10/10 consecutive
+clean, 176 pass / 0 fail each, 0 resets (08:47 -> 10:53 CEST).  The audio-intro flow now bit-verifies the
+OPL+SB stream native==wasm over ~64 s (full title intro + menu music), not just the [0x452]=300 crossing.
