@@ -713,3 +713,18 @@ reach MENU-music audio native==wasm the boot->menu-enter onset must be made dete
 (trace cae6's pre-e714 steps -- d99b/6a02/e446/e584 -- for the 88-opltick spin, likely a busy-wait whose
 iteration count is data-dependent or reads a still-nondeterministic port).  Current landed coverage:
 INTRO/title audio native==wasm diff=0, bit-verified + 10x-gated, at [0x452]=4000.  Matrix 176/176.
+
+88-OPLTICK DIVERGENCE LOCALIZED to the ISR-per-c452 SUB-DIVISION RATIO at the menu-enter approach.
+FIST_OPLSEQ opltick-vs-c452 counts at the boundary: native sits 155 oplticks at c452=4398 and 154 at
+4399; wasm sits 144 at 4398 and 77 at 4399 (truncated by the e714 reset).  opltick<->c452 is IDENTICAL to
+[0x452]=4000 (audio diff=0), then the sub-division ratio (ISR calls per c452 increment) diverges only at
+c452~4398 -- the last ~2 c452-ticks before cae6->e714 fires.  ROOT (matches the old "TRUE ROOT" note): the
+engine PIT ISR (30f8) is VARIABLE-RATE -- it runs a retrace-countdown `do{in(0x3da);d8d4--}while(d8d4 &&
+!bit3)` and feeds d8d4 into the self-adjusting PIT reload d8c4.  As the boot approaches the menu-enter the
+PIT rate shifts and the 0x3da retrace-phase (fist_vga per-read toggle) makes the ISR-per-c452 ratio differ
+native vs wasm (155 vs 144) -> 88 oplticks (OPL samples) apart by the reset.  This is the SAME 0x3da /
+variable-PIT determinism the old retrace-reset prototype targeted (reduced but did not eliminate; reverted).
+So reaching menu-music+ audio needs that shim-level fix: make the 0x3da retrace bit (and hence the
+retrace-countdown length) a DETERMINISTIC function of the engine tick phase, not a free-running per-read
+toggle -- a change every flow's 0x3da reads touch, so it lands with a full 10x re-gate.  Intro/title audio
+(diff=0 to [0x452]=4000) is unaffected and stays landed.  Matrix 176/176.
