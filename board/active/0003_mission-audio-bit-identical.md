@@ -811,3 +811,17 @@ be58, resolve the 0833 vtable target, and opltick-step into it to find the wait 
 differs -- a focused drill into the sound-driver command path (fist_snd.c).  Intro/title audio stays
 landed+gated (diff=0 to [0x452]=4000).  Matrix 176/176.  (Note: 2 earlier attributions this session --
 2e6b, d8d4 -- were disproven by data and retracted; this one is backed by the be0e-internal opltick trace.)
+
+DRILL REACHED THE SOUND-DRIVER NOTE PROCESSING (full data-driven chain).  0833's menu-enter dispatch:
+cmd=0x1ec, idx=0, vec=0x966 -> FUN_0000_0966 (m_snd, PATCH 354 note-record table) -> FUN_0000_0997
+(SOUNDDVR note-ON: find a free voice, set the note record, FUN_0000_0cfb freq/env, write OPL registers).
+The 224-vs-16-ISR divergence in be58's sound call is therefore OPL-REGISTER-WRITE volume: each out(0x388/
+0x389) calls fist_timer_pump() (one ISR) before the fist_opl_owns() check, so #ISRs == #port-ops, and
+native performs ~208 more OPL-related port ops than wasm at the menu-music START (native 224 vs wasm 16).
+So the menu-music note-on path emits a DIFFERENT number of OPL writes native vs wasm -- the divergence is
+in the sound-driver music start, not the timer/retrace/loader (all disproven).  PRECISE NEXT PROBE (better
+than more C-drilling): FIST_OPL_REGLOG=<path> on BOTH targets (the shim already logs every 0x389 write as
+"seq adv reg val"), pinned to the menu-enter window, and DIFF the two logs -- that shows exactly which OPL
+registers native writes that wasm does not (or the order/count), pointing at the divergent loop/branch in
+0966/0997/0cfb.  Chain fully mapped: cae6->e714->be0e->be58->[c530]=snd01e7->0833->0966->0997.  Intro/title
+audio stays landed+gated (diff=0 to [0x452]=4000).  Matrix 176/176.
