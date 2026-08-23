@@ -451,6 +451,10 @@ FLOWS=(
   # pure-coop); full-duration music audio (across the intro->menu [0x452]-reset transition) awaits the
   # transition-onset determinism fix.  This lands the audio native==wasm invariant for that window.
   "audio-opl-init|1000|audio||"
+  # board:0003 (patch 411): OPL FM audio ACROSS the intro->menu transition -- both targets now PLAY the
+  # title intro identically, so the stream stays native==wasm bit-identical past the [0x452]=188 transition.
+  # Pinned at [0x452]=300 (well past it); proven diff=0 (381008 B both).
+  "audio-intro|1000|audio:300||"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
@@ -638,17 +642,18 @@ run_terrain() { # $1=target $2=battle ; echo full-framebuffer ppm or ""  -- FIST
   [ -s "$out" ] || { echo ""; return 1; }
   echo "$out"
 }
-run_audio() { # $1=target ; echo wav or ""  -- OPL FM audio, tick-pinned, native<->wasm bit-identity
-  # board:0003: the OPL FM audio stream is native==wasm bit-identical up to the pre-transition window
-  # [0x452]=120 (proven diff=0) under pure-cooperative ticking (FIST_COOP_TICK).  Beyond a state
-  # transition that resets [0x452] (~intro->menu) it diverges (open: transition-onset determinism), so
-  # this flow pins the deterministic OPL-init window.  FIST_TICK_HZ=1000 fixed so div=250 is stable.
-  local t="$1"
-  local out="$TMP/au.$t.wav"
+run_audio() { # $1=target $2=dumptick(default 120) ; echo wav or ""  -- OPL FM audio, tick-pinned, native<->wasm
+  # board:0003: the OPL FM audio stream is native==wasm bit-identical under pure-cooperative ticking
+  # (FIST_COOP_TICK, FIST_TICK_HZ=1000 so div=250 is stable).  Since patch 411 (d97e returns e339's op-0x78
+  # status) BOTH targets play the title intro identically, so the stream stays bit-identical ACROSS the
+  # intro->menu transition -- audio-intro pins [0x452]=300 (past the transition); audio-opl-init pins the
+  # [0x452]=120 OPL-init window.
+  local t="$1" dt="${2:-120}"
+  local out="$TMP/au.$t.$dt.wav"
   if [ "$t" = native ]; then
-    timeout 60  env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK=120 FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.ppm" "$NATIVE" >/dev/null 2>&1
+    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK="$dt" FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NATIVE" >/dev/null 2>&1
   else
-    timeout 150 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK=120 FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.ppm" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 240 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK="$dt" FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NODE" "$OUTJS" >/dev/null 2>&1
   fi
   [ -s "$out" ] || { echo ""; return 1; }
   echo "$out"
@@ -754,11 +759,13 @@ for row in "${FLOWS[@]}"; do
     continue
   fi
   if [ "${name#audio-}" != "$name" ]; then
-    # OPL FM audio stream native<->wasm bit-identity (tick-pinned OPL-init window).  board:0003.
-    detail=" [OPL FM audio, coop tick-pinned [0x452]=120, full-WAV native==wasm]"
+    # OPL FM audio stream native<->wasm bit-identity (tick-pinned).  board:0003.  The dumptick is carried
+    # in the flow's 3rd field as "audio" (=120) or "audio:N" (=N).
+    audt=120; case "$ms" in audio:*) audt="${ms#audio:}";; esac
+    detail=" [OPL FM audio, coop tick-pinned [0x452]=$audt, full-WAV native==wasm]"
     rn=""; rw=""
-    if [ "$WHICH" != wasm ];   then rn="$(run_audio native)"; [ -n "$rn" ] || { ok=0; detail+=" native-no-wav"; }; fi
-    if [ "$WHICH" != native ]; then rw="$(run_audio wasm)";   [ -n "$rw" ] || { ok=0; detail+=" wasm-no-wav"; }; fi
+    if [ "$WHICH" != wasm ];   then rn="$(run_audio native "$audt")"; [ -n "$rn" ] || { ok=0; detail+=" native-no-wav"; }; fi
+    if [ "$WHICH" != native ]; then rw="$(run_audio wasm "$audt")";   [ -n "$rw" ] || { ok=0; detail+=" wasm-no-wav"; }; fi
     if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
       d=$(cmp -l "$rn" "$rw" 2>/dev/null | wc -l); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
     fi
