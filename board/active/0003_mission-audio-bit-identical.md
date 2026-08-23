@@ -933,3 +933,17 @@ instruction/function that writes the divergent value between c452=50 and 200.  T
 way to the root, done with a fresh, careful pass -- not the fatigued forward-probe chain.  Everything
 landed this session (patch 411, intro/title audio diff=0 to [0x452]=4000, 2x 10x-gate) is intact; matrix
 176/176; tree clean; ~11 diagnostic probes all reverted.
+
+PATCH 412 LANDED (asm-verified be50/be58 dropped-ax-arg into the [c530] sound call).  Root of the 2 (really
+7) divergent driver bytes FOUND: FUN_0000_be50/be58 call the sound driver [c530]=01e7->0833 which stores
+param_1 into D+0x12 (the sound command) then vtable-dispatches on it.  The asm sets AX=0x4000 (be50) /
+0x5000 (be58, 5fc8!=0) / 0x4000 (be58 je-be50, 5fc8==0), but Ghidra DROPPED the `mov ax,IMM` and
+mis-rendered be58's `je be50` as a 2nd arg-less call -> param_1 was an uninitialised register (D+0x12 =
+0x01ec native / 0x0000 wasm at c452=87) -> the menu sound driver ran a GARBAGE command (near-silent, hence
+native~wasm and audio diff=0 to [0x452]=4000 masked it) instead of the real 0x4000/0x5000.  Patch 412
+threads the args; D+0x12 is now identical native==wasm, matrix stays 176/176, audio-intro (4000) stays
+diff=0.  NEWLY EXPOSED (not a regression -- previously masked): with the CORRECT command the menu MUSIC
+actually plays and now shows a native<->wasm divergence in the NOTE PROCESSING (audio diff!=0 from
+~[0x452]=4500, sizes now MATCH so it is content not length).  So board:0003's remaining menu/mission-audio
+work is this note-processing divergence, no longer hidden behind the dropped-arg garbage command.  This is
+the 8th root-cause step, and the FIRST since patch 411 to land an asm-verified correction toward it.
