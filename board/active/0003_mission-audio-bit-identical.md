@@ -592,3 +592,33 @@ which one performs the 188->0 reset on wasm and confirm native never reaches it;
 guard and identify the divergent platform input.  That input, made deterministic native==wasm, extends the
 audio flow across the transition to full menu/mission music.  Matrix intact 175/175; FIST_OPLSEQ retained
 (env-gated, byte-neutral: audio-opl-init still diff=0, 122400 B both).
+
+TRANSITION ROOT = d97e DROPPED RETURN VALUE (asm-faithful fix found; landing BLOCKED on the extender
+intro-render frontier -- prototyped patch 411, verified the win, REVERTED for a matrix regression).
+Full call-chain trace of the intro->menu transition that diverges the audio:
+  e714(menu-enter, resets [0x452]=0) <- cae6(boot->menu init) -step12-> e446 -> e584(intro anim-script
+  interpreter).  e584's loop exits early on `FUN_0000_d97e(puVar6) != 0`.  d97e asm (0xd97e-0xd99a) is
+  `store param->task+0x3f2 ; aa10=0x78 ; call e339 ; ret` -- so d97e's return IS e339's AX.  e339 far-
+  calls the Doug-Huffman extender gate [ea16]=0762:1179=linear 0x8799 (extender op 0x78 = task-execute/
+  present the intro frame).  Ghidra rendered d97e as `FUN_0000_e339(); return;` -- DROPPING the value.
+  So d97e returned leftover EAX: measured 0 on native, 0x100000 on wasm (FIST_D97E probe) -> wasm's e584
+  SKIPPED the 573-frame intro every boot, native played it -> different ISR-tick accumulation -> audio
+  streams diverged at exactly opltick 11916 ([0x452] 188->0 = e714 menu-enter, pinned via FIST_C452W to
+  build/fist.c site + FIST_E714 to caller cae6/32781).
+FIX (asm-faithful): d97e `FUN_0000_e339(); return;` -> `return FUN_0000_e339();`.  e339's op-0x78 return
+  is a DETERMINISTIC 0 on BOTH (FIST_E339 probe: aa16=0x8799 gate, uVar1=0 both) -> both play the intro ->
+  transition fires at the same opltick.  VERIFIED: audio WAV over the intro (FIST_TICK_HZ=1000
+  DUMPTICK=300 COOP_TICK, OPL+SB) is native==wasm BIT-IDENTICAL (diff=0, 381008 B), up from [0x452]=120.
+
+WHY IT CANNOT LAND ALONE (matrix regression -> reverted): with d97e fixed, wasm now PLAYS the intro like
+native -- but the extender task-execute service (op 0x78 / gate 0x8799) is a STUB (traps to 0, the
+documented "extender-service frontier"), so the intro renders BLANK.  Under the non-COOP framebuffer-flow
+regime (FIST_TICK_HZ=25000, native async-SIGALRM vs wasm cooperative), wasm playing the blank intro fails
+to reach the tick-pinned dump [0x452]=2600 in time -> battles-cancel-briefing dumps a near-blank frame
+(nonzero 0.7% vs native 94.4%) -> nat!=wasm (181417 B).  1 of 175 flows regressed; the other 174 stayed
+green.  The OLD green was wasm ACCIDENTALLY skipping the intro (the d97e bug) landing on the same settled
+briefing fixed-point as native -- i.e. the flow passed for the wrong reason.
+COUPLING (board:0003 <-> extender frontier): audio full-duration native==wasm REQUIRES both (a) the d97e
+return-value fix AND (b) a faithful extender intro-render service (op 0x78) so the intro plays+renders
+identically within the flow timeouts on both targets.  They must land TOGETHER.  Patch 411 kept out of
+tree until (b) exists.  Matrix restored 175/175.  Diagnostics retained: FIST_OPLSEQ (committed).
