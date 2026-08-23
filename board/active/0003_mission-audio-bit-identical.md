@@ -825,3 +825,20 @@ than more C-drilling): FIST_OPL_REGLOG=<path> on BOTH targets (the shim already 
 registers native writes that wasm does not (or the order/count), pointing at the divergent loop/branch in
 0966/0997/0cfb.  Chain fully mapped: cae6->e714->be0e->be58->[c530]=snd01e7->0833->0966->0997.  Intro/title
 audio stays landed+gated (diff=0 to [0x452]=4000).  Matrix 176/176.
+
+REGLOG DIFF -- FINAL NATURE OF THE DIVERGENCE (corrects the "sequencer advances differently" framing).
+FIST_OPL_REGLOG on both targets to DUMPTICK=4405: the OPL DATA-write streams are BIT-IDENTICAL for 144
+lines, then diverge at line 145 where BOTH are at adv=4281 (the SAME music-sequencer position) but write
+DIFFERENT registers -- native: reg=b0(keyon) then 23/63/83/e3/20 (a full OPERATOR/instrument definition);
+wasm: reg=43(level) then b0/44/b1/4d/b5 (levels + keyons).  So it is NOT a sequencer-position or timer
+divergence (adv is identical); it is a CODE-PATH split inside the note processing (0966/0997/0cfb) at the
+menu-music START: for the same sequencer tick native emits a full instrument setup while wasm emits a
+partial one.  This matches be58's 224-vs-16 ISR gap (native does ~208 more OPL port-ops = the full
+instrument writes).  The likely cause is divergent SOUND-DRIVER STATE at the menu-enter -- 0997's
+voice-allocation loop `for(i<8){voice=voicemap[bp]; if(voice_active[voice+0x107]==0) break; bp++}` taking a
+different branch because a voice-active flag / note record differs native vs wasm.  (Cumulative end counts
+native 178 / wasm 383 writes, adv 4285 vs 4596, are the CONSEQUENCE of this split cascading, not the
+cause.)  PRECISE NEXT PROBE: at the menu-music start (adv=4281), diff the driver data segment
+(DAT_0000_0831<<4) voice-active flags [+0x107..] and note-record table [+0x13e8..] native vs wasm to find
+the first divergent driver-state byte -- that is the actual root.  Full chain + nature now mapped;
+intro/title audio stays landed+gated (diff=0 to [0x452]=4000).  Matrix 176/176.
