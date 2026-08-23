@@ -778,3 +778,19 @@ between e584 (intro) and the e714 call with the opltick at each, on both targets
 opltick-delta differs -- that is the actual divergent spin.  I over-claimed twice this session (2e6b, then
 d8d4); the honest state is the divergence is LOCALIZED (c452=4399, e714 timing) but its mechanism is NOT
 yet identified.  Intro/title audio stays landed+gated.  Matrix 176/176.
+
+DIVERGENCE LOCALIZED WITH HARD DATA (opltick-per-step traces; no hypothesis).  Chain, all identical until
+the pinpoint:
+  cae6 calls e714 at EXACTLY tick=339040, c452=4395 on BOTH targets (cae6's pre-e714 steps are bit-synced).
+  INSIDE e714, stepping the opltick: identical at "before be0e" (tick=339040 both); then FUN_0000_be0e(4)
+  runs and "before e40e" shows native tick=339336 vs wasm 339128 -> be0e took 296 ISRs on native, 88 on
+  wasm (Δ+208 native).  The following e40e block partially compensates (native +16, wasm +136), netting
+  the +88 ISR (=176 0x3da reads) gap seen at the reset.
+So the divergence is INSIDE FUN_0000_be0e(4): it loads the MAINMENU screen resource (.MS3) via the
+[DGROUP:c378]=FUN_0000_250d loader (dx=word[DGROUP:4+0x9f2c]=the .MS3 filename), then the c510 sound-source
+register (c510==0, no-op on boot) and be58.  The .MS3 screen-load path pumps a TARGET-DEPENDENT number of
+ISRs (296 vs 88) -- a file-load / screen-setup spin whose pump count differs native vs wasm, NOT the PIT
+rate or the 0x3da countdown (both disproven earlier).  PRECISE NEXT PROBE: opltick-step INTO the
+[c378]=250d loader (and be58 / e40e) to find the exact spin/wait whose iteration count differs -- likely a
+file-manager (fist_dos.c) or driver wait loop that pumps while polling a status.  This is the actual
+mechanism, reached by data not guesswork.  Intro/title audio stays landed+gated.  Matrix 176/176.
