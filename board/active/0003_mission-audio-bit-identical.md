@@ -743,3 +743,22 @@ up to there; the adjustment diverges only as the PIT rate ramps for the menu-ent
 self-adjustment step that differs, and the target for a deterministic-PIT-rate fix.  This is intricate
 1000-segment ISR work (30f8/31c3), to be done as a focused continuation, not an autonomous-loop guess.
 Intro/title audio (diff=0 to [0x452]=4000) stays landed + 10x-gated.  Matrix 176/176.
+
+ROOT FULLY UNDERSTOOD (FIST_PITTRACE d8c4/d8d4 per-ISR trace).  The PIT rate is STABLE and IDENTICAL on
+both targets: div=250, d8c4=250 (reload), d8d4=1, d8d2=1000 -- byte-for-byte the same content.  So it is
+NOT a variable-rate self-adjustment (that hypothesis is disproven).  ISR-per-c452 counts across the window:
+  c452:  4386 4388 4390 4392 4394 4396 4397 4398 4399 4400
+  nat :   155  156  155  155  155  155  156  155  154   78
+  wasm:   156  156  156  155  156  155  156  144   77   78
+i.e. a +-1 ISR-per-c452 SUB-DIVISION WOBBLE that starts ~c452=4386 (wasm occasionally +1) and then blows
+up at the menu-enter (c452=4398: 155 vs 144; 4399: 154 vs 77) as e714 fires at a different sub-tick.  The
+sub-division (how many ISRs elapse per c452 increment, ~155) is gated by the retrace-countdown d8d4, whose
+result depends on the 0x3da retrace-bit PHASE at ISR entry -- and that phase is the global 0x3da read-count
+parity (fist_vga `g_3da_toggle ^= 0x09`), which drifts by +-1 between native and wasm as the boot nears the
+menu-enter.  So the ROOT is confirmed: the free-running per-read 0x3da toggle makes the c452 sub-division
+timing (via d8d4) non-deterministic at the +-1 level; it stays invisible while the wobble cancels (audio
+diff=0 to [0x452]=4000) and surfaces at the menu-enter where it compounds.  THE FIX (unchanged target, now
+fully justified): make the 0x3da retrace bit a deterministic function of the engine tick phase rather than
+the global read count, so d8d4's countdown is identical native==wasm -> the sub-division is bit-stable ->
+audio native==wasm past the menu-enter.  Careful shim change (fist_vga), touches every flow's 0x3da reads,
+lands with a full 10x re-gate.  This is now a well-understood, bounded fix -- not a guess.  Matrix 176/176.
