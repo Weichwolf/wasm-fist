@@ -897,3 +897,21 @@ a segfault-safe dump+diff of the driver data segment (base=DAT_0000_0831<<4) voi
 find the divergent voice byte directly.  That byte IS the root (upstream of the 0997 branch).  Intro/title
 audio stays landed+gated.  Matrix 176/176.  (Disproven this session, all by data: 2e6b, d8d4, .MS3-load,
 sequencer-position, c452-bump-gate semaphores.)
+
+ROOT NARROWED TO 2 DRIVER BYTES (segfault-safe vdump of the driver data seg, base=DAT_0000_0831<<4).
+Dumped [+0x100..+0x1ff]+[+0x13e0..+0x141f] at increasing c452: IDENTICAL at c452=50, DIVERGENT (exactly 2
+bytes) from c452=200 onward -- so the divergence is born early in the intro (c452 50..200), latent, and
+surfaces only at the menu-music start.  The 2 bytes are +0x133 and +0x1c1 (native 0x00/0xAB, wasm
+0x20/0x80).  CORRECTION: the voice-active flags (+0x107..+0x110) are IDENTICAL -- so the earlier
+"voice-active flag differs" hypothesis (from the reglog register pattern) is DISPROVEN; the divergent bytes
+are elsewhere.  base+0x1c1 is WRITTEN by FUN_0000_0872 (PATCH 353, the SOUNDDVR device-SELECT):
+`*(D+0x1c1) = *(D + dev*2 + 0x1c3)` -- it is a DEVICE METHOD-VECTOR copied from the per-device table for
+the selected device dev=D[0x12].  So the divergence is a sound-device method-vector (and +0x133) differing
+native vs wasm, which routes the menu-music note processing down different methods -> different OPL writes
+-> audio diverges.  This is upstream of 0997/voice-alloc entirely (that was a symptom).  DEFINITIVE NEXT
+PROBE: at FUN_0000_0872 (fires early, c452~50..200), capture dev=D[0x12] and the source vectors
+D[dev*2+0x1c3] / D[dev*2+0x199] etc. on both targets -- if dev is identical, the per-device VECTOR TABLE
+(D[0x17d..0x1d1]) has a target-divergent entry (a driver method installed differently native vs wasm,
+likely the same __allregs/icall-vector class as elsewhere); if dev differs, the device SELECTION itself
+diverges.  6th self-correction this session (voice-active); the actual root is a device method-vector at
++0x1c1 set by 0872.  Intro/title audio stays landed+gated.  Matrix 176/176.
