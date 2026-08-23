@@ -878,3 +878,22 @@ of the sound driver entirely.  Everything downstream (voice alloc, OPL stream) i
 audio stays landed+gated (diff=0 to [0x452]=4000).  Matrix 176/176.  (5th self-correction this session:
 the "tick timing diverges" framing is imprecise -- adv is identical; the wobble is in a PIT-tick sub-counter
 separate from the sequencer, and its cause is unpinned.)
+
+C452-BUMP GATE DISPROVEN TOO (FIST_GATE trace).  The c452-bump condition in FUN_1000_30de is
+`c446==0xff && c2a8==0 && byte[0x123e8]==0xff` (patch018/019 semaphores).  Traced c446/c2a8/c06b per ISR
+across c452 4386..4400: all three are byte-for-byte IDENTICAL native==wasm (c446=0xff, c2a8=0x00,
+c06b=0x00), and 0x123e8 is a CONSTANT image byte (read-only, never written).  So the c452-bump gate is NOT
+the divergence either (5th disproven mechanism).  The 88-extra-ISR window (native 2331 vs wasm 2243 gate
+lines) is EXACTLY the be58 sound-driver's 88 extra OPL writes -- each out(0x388/0x389) pumps one ISR -- so
+the "sub-division wobble" and the "voice-alloc branch" are ONE phenomenon, not two.  EVERYTHING reduces to:
+at the menu-music start (be58->0997) the voice-active flag D[voice+0x107] differs native vs wasm, taking
+0997 down the allocate-new-voice branch (native, full instrument def) vs the reuse branch (wasm) -- while
+ALL traced upstream state is identical (OPL write stream for 144 lines, gate semaphores, sequencer adv,
+PIT rate/countdown).  So the voice-active flag divergence has NO identified upstream cause in anything
+traced; the leading remaining candidate is a driver voice-state byte that is set by a NON-OPL-emitting
+code path (invisible to the reglog) or is read in a target-divergent state.  DEFINITIVE NEXT PROBE:
+a segfault-safe dump+diff of the driver data segment (base=DAT_0000_0831<<4) voice-active region [+0x100..
++0x140] at the menu-enter -- guarding base sanity (nonzero, < g_mem size) and firing exactly once -- to
+find the divergent voice byte directly.  That byte IS the root (upstream of the 0997 branch).  Intro/title
+audio stays landed+gated.  Matrix 176/176.  (Disproven this session, all by data: 2e6b, d8d4, .MS3-load,
+sequencer-position, c452-bump-gate semaphores.)
