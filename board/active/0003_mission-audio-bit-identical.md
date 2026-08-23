@@ -560,3 +560,35 @@ the state-transition onset ([0x452] reset point) deterministic native==wasm -- t
 different opltick because the pre-transition screen's exit condition (likely the KDV intro frame count or
 a timed auto-advance) resolves at a target-dependent tick; trace the exit predicate.  Then the audio flow
 can extend across transitions to full menu/mission music.
+
+TRANSITION-ONSET DIVERGENCE PINNED TO A SINGLE wasm-EXCLUSIVE [0x452]-RESET (FIST_OPLSEQ probe, this
+round).  Added an env-gated per-opltick trace FIST_OPLSEQ in the fist_opl.c shim ("opltick c452" per line
++ a RESET marker when c452 drops).  Ran BOTH targets under the audio flow (FIST_TICK_HZ=1000 div=250
+FIST_COOP_TICK, no FIST_MOUSE) and diffed the c452-vs-opltick curves:
+  - opltick<->[0x452] is BIT-IDENTICAL native==wasm for opltick 0..11915 (both climb to [0x452]=188 at the
+    exact same oplticks).  So per-screen the audio ISR + retrace-countdown + ISR-per-[0x452] ratio K are
+    fully deterministic native==wasm -- this SUPERSEDES the earlier "K diverges per screen" reading (that
+    was measured ACROSS the transition).
+  - at opltick 11916 EXACTLY, wasm RESETS [0x452] 188->0 (a screen/timer re-init), while NATIVE continues
+    MONOTONICALLY (188->189 at opltick 11985 ... ->[0x452]=800 at opltick 59485, NO reset in a 90s window).
+  So the sole audio divergence is a wasm-EXCLUSIVE [0x452]-reset event that native never executes in-window,
+  at an identical engine state (identical [0x452] and identical opltick up to the event).
+
+RULED OUT this round:
+  - g_web_mode: node runs callMain/_main (NOT fist_web_start), so g_web_mode=0 on BOTH; and it is byte-
+    identical 0..11915 (a g_web_mode split would diverge from tick 0).  The native_main.c g_web_mode
+    branches (580/598/3074) do not fire here.
+  - engine floating-point: the engine uses NO float/double -- all 11 "double" matches in build/fist.c are
+    the WORD in comments (double-deref/-buffer/-click).  So x87(native 80-bit) vs wasm(64-bit) is NOT the
+    cause.  (The OPL shim's doubles are in the ISR path, which is proven identical 0..11915.)
+  - retrace-phase per screen: K identical per screen (above), so the 0x3da toggle is consistent within a
+    screen; only the transition predicate differs.
+
+REMAINING (the real root): with identical code, identical g_web_mode=0, no FP, and identical state to
+opltick 11915, the transition predicate at 11916 must branch on a PLATFORM READ that returns different
+values native vs wasm (input poll / DOS or KDV stream position / an uninitialised host-side var).  PRECISE
+NEXT PROBE: instrument the c452 write sites (build/fist.c 15603/17684/17687/17954/33782/34031) to log
+which one performs the 188->0 reset on wasm and confirm native never reaches it; then read that site's
+guard and identify the divergent platform input.  That input, made deterministic native==wasm, extends the
+audio flow across the transition to full menu/mission music.  Matrix intact 175/175; FIST_OPLSEQ retained
+(env-gated, byte-neutral: audio-opl-init still diff=0, 122400 B both).

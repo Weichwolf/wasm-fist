@@ -232,6 +232,11 @@ void fist_opl_tick(void)
         long c452=*(uint16_t*)(g_mem+0x1c452);
         if (tk<12 || (tk%500)==0) fprintf(stderr,"[opldiv] opltick=%ld [0x452]=%ld div=%d\n",tk,c452,div);
         tk++; }
+    if (getenv("FIST_OPLSEQ")) { static long tk=0; extern uint8_t g_mem[]; static long prev=-1;
+        long c452=*(uint16_t*)(g_mem+0x1c452);
+        fprintf(stderr,"%ld %ld\n",tk,c452);            /* compact per-opltick [0x452] for native/wasm diff */
+        if (prev>=0 && c452<prev) fprintf(stderr,"[oplseq] RESET at opltick=%ld  %ld -> %ld\n",tk,prev,c452);
+        prev=c452; tk++; }
     g_samp_acc += (double)g_rate * (double)div / PIT_HZ;
     unsigned n = (unsigned)g_samp_acc;
     if (n > 65536) n = 65536;           /* guard a pathological divisor */
