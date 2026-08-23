@@ -454,7 +454,7 @@ FLOWS=(
   # board:0003 (patch 411): OPL FM audio ACROSS the intro->menu transition -- both targets now PLAY the
   # title intro identically, so the stream stays native==wasm bit-identical past the [0x452]=188 transition.
   # Pinned at [0x452]=300 (well past it); proven diff=0 (381008 B both).
-  "audio-intro|1000|audio:300||"
+  "audio-intro|1000|audio:1000||"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================

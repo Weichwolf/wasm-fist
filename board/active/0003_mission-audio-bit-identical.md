@@ -661,3 +661,14 @@ need their dump-tick moved past the (now-played) intro + a ref recapture.  This 
 foundation change to: (1) native_main.c cooperative default, (2) patch 411, (3) recapture the handful of
 transition-crossing refs, (4) 10x re-gate -- most of the 175 flows carry over unchanged.  Matrix intact
 175/175 (measurement only).
+
+AUDIO native==wasm COVERAGE MEASURED after patch 411 (the intro-skip fix): the OPL+SB stream is now
+BIT-IDENTICAL native==wasm far past the intro -- diff=0 at [0x452] = 300 / 600 / 1000 / 2000 / 4000
+(4000 = 5,696,650 B WAV, ~64 s of audio: the full title intro + the menu music).  It DIVERGES again by
+[0x452]=8000 (diff=776594, node WAV 1442 B shorter) -> a SECOND transition-onset divergence of the same
+class as the intro was (a screen change whose onset lands at a target-dependent opltick), somewhere in
+4000..8000.  So patch 411 made the ENTIRE intro+menu phase deterministic; the next divergence is a later
+menu/sub-screen transition (to be pinned the same way: FIST_OPLSEQ + FIST_C452W the reset site).  The
+audio-intro matrix flow is extended 300 -> 1000 (safely inside the diff=0 region and the run_audio
+timeout).  Full-duration audio across MISSION transitions is the remaining open work; the tick-regime
+unification (de-risked above) plus pinning each successive transition onset is the path.
