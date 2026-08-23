@@ -622,3 +622,30 @@ COUPLING (board:0003 <-> extender frontier): audio full-duration native==wasm RE
 return-value fix AND (b) a faithful extender intro-render service (op 0x78) so the intro plays+renders
 identically within the flow timeouts on both targets.  They must land TOGETHER.  Patch 411 kept out of
 tree until (b) exists.  Matrix restored 175/175.  Diagnostics retained: FIST_OPLSEQ (committed).
+
+FUNDAMENTAL BLOCKER RE-IDENTIFIED = the async(native)-vs-coop(wasm) TICK REGIME, NOT the extender render.
+Isolated with patch 411 re-applied as a build-only experiment (reverted):
+  - patch411 + async native (default):  native reaches the briefing at [0x452]=2600 (nonzero 0.944),
+    wasm (always coop) is STILL in the intro at [0x452]=2600 (nonzero 0.007) -> nat!=wasm.  NOT a timeout:
+    wasm with a 400s timeout completes (rc=0) and STILL dumps the blank intro -> wasm genuinely needs MORE
+    [0x452] than native to reach the briefing.
+  - patch411 + COOP_TICK on BOTH:  native AND wasm are blank at [0x452]=2600 (both 0.007) and MATCH
+    (diff=0).  So native+COOP behaves like wasm+coop -> the divergence is the REGIME, not the target.
+CONCLUSION: the intro+nav sequence costs a DIFFERENT number of [0x452] ticks under async vs cooperative
+ticking (the async SIGALRM does engine work between [0x452] increments that coop does not), so the
+framebuffer "fixed point at [0x452]=N" is NOT regime-immune across a screen TRANSITION sequence -- it is
+immune only WITHIN a settled screen.  The current 175-flow matrix passes only because wasm ACCIDENTALLY
+skips the intro (the d97e bug) and lands on the same settled [0x452]=2600 briefing state as native-async.
+
+THEREFORE the audio full-duration native==wasm path is:
+  (1) patch 411 (d97e return, asm-faithful, verified);
+  (2) UNIFY the tick regime: drive native cooperatively too (no async SIGALRM) so native==wasm is
+      regime-identical -- then BOTH play the intro identically in [0x452] terms (audio already proven
+      diff=0 under COOP_TICK+411, and briefing already proven diff=0 under COOP+411);
+  (3) RE-CAPTURE the ref framebuffers under the cooperative regime (the current refs were captured from
+      native-async, which reaches different [0x452]=N states across transitions);
+  (4) re-gate 10x.
+This is a determinism-FOUNDATION change (native_main.c tick source + a ref recapture), larger than a
+single patch but now precisely bounded.  The extender op-0x78 render (board:0009) is for the intro's
+VISUAL fidelity (blank vs real frames) -- it is NOT the audio blocker; audio is regime-sensitive, not
+render-sensitive (audio diff=0 was achieved WITH a blank intro under COOP_TICK).  Matrix intact 175/175.
