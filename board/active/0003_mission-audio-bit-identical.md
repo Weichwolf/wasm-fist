@@ -794,3 +794,20 @@ rate or the 0x3da countdown (both disproven earlier).  PRECISE NEXT PROBE: oplti
 [c378]=250d loader (and be58 / e40e) to find the exact spin/wait whose iteration count differs -- likely a
 file-manager (fist_dos.c) or driver wait loop that pumps while polling a status.  This is the actual
 mechanism, reached by data not guesswork.  Intro/title audio stays landed+gated.  Matrix 176/176.
+
+DIVERGENCE TRACED INTO THE SOUND DRIVER (hard opltick data, full chain).  Corrected the ".MS3 load"
+attribution: be0e's internal calls are all bit-synced (c378 .MS3 loader took 0 ISRs identical, c510 took 72
+identical) EXCEPT the final FUN_0000_be58, which is the divergent one: native 224 ISRs vs wasm 16
+(t=339112->339336 nat, ->339128 wasm).  be58 calls [DGROUP:c530] = far 0x3a44:01e7 = m_snd_FUN_0000_01e7
+-- a SOUND DRIVER method (the menu-enter starts the menu MUSIC).  Chain: cae6 -> e714(menu-enter) ->
+be0e(4) -> be58 -> [c530]=snd 01e7 -> FUN_0000_0833.  0833 is itself a DISPATCHER: it stores the command
+in DAT_1000_c012 and calls a sound-driver vtable method `fist_icall(fist_snd_base + word[(param_1>>0xb &
+0x1e)+0x11b])(...)`.  So the 224-vs-16-ISR spin is inside the sound-driver sub-method selected by the
+command param_1 -- i.e. the menu-music START path spins a target-dependent number of ISRs.  This is the
+SOUND DRIVER's own wait/spin, a multi-dispatch subsystem (01e7->0833->vtable->...), NOT the PIT rate, the
+0x3da countdown, or the .MS3 file load (all disproven).  This is where audio-beyond-intro determinism
+actually lives: a sound-driver music-start spin.  NEXT: capture param_1 (the c012 command) at the menu
+be58, resolve the 0833 vtable target, and opltick-step into it to find the wait whose iteration count
+differs -- a focused drill into the sound-driver command path (fist_snd.c).  Intro/title audio stays
+landed+gated (diff=0 to [0x452]=4000).  Matrix 176/176.  (Note: 2 earlier attributions this session --
+2e6b, d8d4 -- were disproven by data and retracted; this one is backed by the be0e-internal opltick trace.)
