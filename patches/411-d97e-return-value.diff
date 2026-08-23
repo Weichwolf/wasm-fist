@@ -1,0 +1,30 @@
+PATCH 411: return e339's result from FUN_0000_d97e (the intro-script frame EXECUTE call), asm-verified vs
+re_out/fist_dat_image.bin 0x0d97e-0x0d99a.  Fixes the AUDIO native<->wasm divergence across the intro
+(board:0003) AND the latent bug that wasm SKIPPED the title intro on every boot.
+
+THE BUG.  d97e's asm is `... call e339 ; ret` -- AX (DX:AX) returned by FUN_0000_e339 (the extender op-0x78
+task-execute gate) IS d97e's return.  Ghidra rendered it `FUN_0000_e339(); return;` -- DROPPING the value
+-> d97e returned the leftover EAX: 0 on native, 0x100000 on wasm (FIST_D97E probe).  The intro-script loop
+e584 exits early on `d97e(puVar6) != 0`, so wasm SKIPPED the 573-frame title intro every boot while native
+played it -> different ISR-tick accumulation -> the OPL audio streams diverged at exactly opltick 11916
+([0x452] 188->0 = the e714 main-menu enter).  FIST_E339 confirms e339's op-0x78 return is a DETERMINISTIC 0
+on BOTH targets, so threading it makes d97e return 0 on both -> both play the intro identically.
+
+FIX.  `FUN_0000_e339(); return;`  ->  `return FUN_0000_e339();` (faithful to `call e339 ; ret`).
+
+VERIFIED.  Audio WAV over the intro (FIST_TICK_HZ=1000 FIST_DUMPTICK=300 FIST_COOP_TICK, OPL+SB) is now
+native<->wasm BIT-IDENTICAL (diff=0, 381008 B), up from the prior [0x452]=120 limit.  Both targets now PLAY
+the intro, so the transition-crossing framebuffer flow battles-cancel-briefing settles at the briefing a
+little later -> its tick-pin moves 2600->6000 (both targets reach the SAME settled briefing == the existing
+ref, AE=0, native==wasm diff=0; the briefing is a settled screen so the ref is regime-invariant).  Full
+175-flow matrix re-verified native==wasm on both targets; 10x endurance gate re-passed.
+--- a/fist.c
++++ b/fist.c
+@@ -35193,8 +35193,7 @@
+ {
+   *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_1;
+   DAT_2000_aa10 = 0x78;
+-  FUN_0000_e339();
+-  return;
++  return FUN_0000_e339();
+ }

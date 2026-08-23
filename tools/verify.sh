@@ -200,7 +200,7 @@ FLOWS=(
   # catch).  READ-only (briefing 7162 only reads AZER1.FSW).  ref via
   # tools/refcapture_ok3.sh 160 100 205 128 78 186 40 8 8 (DOSBox also returns to menu on CANCEL, cursor@78,186;
   # 2 independent captures AE=0, non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
-  "battles-cancel-briefing|25000|tick=2600|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:78:186:0; 6000:78:186:1; 6600:78:186:0; 7200:78:186:0|$ROOT/ref/battles_cancel_briefing_native320.png"
+  "battles-cancel-briefing|25000|tick=6000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:78:186:0; 6000:78:186:1; 6600:78:186:0; 7200:78:186:0|$ROOT/ref/battles_cancel_briefing_native320.png"
   # EDITOR .FSG battle-SAVE round-trip (patches 360/361) -- the first LEVEL/MISSION-EDITOR DoD
   # deliverable, DATA-level (no terrain/render dependency).  Special-cased below (file compare, not
   # framebuffer): BATTLES->OK->ACCEPT loads AZER1.FSG via FUN_0000_d501; the patch-361 harness hook
