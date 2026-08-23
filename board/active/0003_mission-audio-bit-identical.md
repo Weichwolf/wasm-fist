@@ -860,3 +860,21 @@ determinism (the be0e/be58 sound-start pump timing) -- consistent with the whole
 (reglog register semantics); no over-claim.  Direct driver-state confirmation (dumping D[+0x107]) is
 gated on a segfault-safe probe (3 naive dumps crashed on the patched sound-driver derefs -> careful work).
 Intro/title audio stays landed+gated.  Matrix 176/176.
+
+HONEST PRECISION on the synthesis (avoid over-claim): the reglog divergence is at IDENTICAL adv=4281 on
+both targets.  If tick timing had diverged, the music-sequencer adv would differ -- it does NOT.  So the
+CONSEQUENCE chain is understood (voice-active flag differs -> 0997 alloc branch differs -> instrument-def
+vs level-reuse OPL writes -> stream diverges), but the ORIGINATING cause is still OPEN: what makes the
+ISR-per-c452 SUB-DIVISION wobble (155 vs 144, hard data) while the PIT rate is stable (d8c4=250), the
+retrace-countdown is deterministic (d8d4=1), and the sequencer position is identical (adv=4281)?  All three
+candidate mechanisms are DISPROVEN.  The voice-active flag [+0x107] must be driven by an ISR/PIT-tick
+counter that is SEPARATE from the music-sequencer adv (envelope release on the PIT tick, not the music
+tick), and THAT counter wobbles -- but its wobble source is unidentified.  This is the genuine open root;
+I will not guess a fifth mechanism.  PRECISE NEXT PROBE (segfault-safe): trace the c452-bump ACCUMULATOR
+itself -- which DGROUP counter (c44e / c738 / the d8d2=1000 divisor logic in 31c3/30f8) increments per ISR
+and triggers the c452 bump, and log its value + the increment per ISR across c452 4386..4400 on both, to
+find the FIRST accumulator step that differs.  That is the true root of the sub-division wobble, upstream
+of the sound driver entirely.  Everything downstream (voice alloc, OPL stream) is consequence.  Intro/title
+audio stays landed+gated (diff=0 to [0x452]=4000).  Matrix 176/176.  (5th self-correction this session:
+the "tick timing diverges" framing is imprecise -- adv is identical; the wobble is in a PIT-tick sub-counter
+separate from the sequencer, and its cause is unpinned.)
