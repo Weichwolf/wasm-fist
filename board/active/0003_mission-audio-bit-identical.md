@@ -915,3 +915,21 @@ D[dev*2+0x1c3] / D[dev*2+0x199] etc. on both targets -- if dev is identical, the
 likely the same __allregs/icall-vector class as elsewhere); if dev differs, the device SELECTION itself
 diverges.  6th self-correction this session (voice-active); the actual root is a device method-vector at
 +0x1c1 set by 0872.  Intro/title audio stays landed+gated.  Matrix 176/176.
+
+INTEGRITY CHECK -- my offset attribution hit a CONTRADICTION (flagging, not forcing).  I claimed the
+divergent dump byte was base+0x1c1, but FUN_0000_0872 writes base+0x1c1 = 0x0f99 IDENTICALLY on both
+(verified: dev=3, src1c3=0x0f99, one call at c452=34) and line 1533 is its ONLY writer; base+0x1c1 is only
+READ afterwards (line 2148, `jmp *[ds:0x1c1]` device slot5).  So base+0x1c1 CANNOT hold 0xAB/0x80 -- my
+cmp-byte-194 -> +0x1c1 mapping is WRONG.  What is FIRM (re-verified): exactly 2 bytes in the driver data
+seg region [+0x100..+0x1ff] differ native vs wasm, IDENTICAL at c452=50 and DIVERGENT from c452=200
+(latent through the intro, surfacing at the menu-music start); the voice-active flags [+0x107..+0x110] are
+NOT among them; and FUN_0872 device-select is NOT the divergent writer (writes identically).  What is NOT
+firm: the exact offsets of the 2 bytes and their divergent writer (my forward-offset arithmetic became
+unreliable -- 7 hypotheses disproven, and fatigue-driven imprecision is now a risk per "Flüssigkeit ist
+verdächtig").  CORRECT NEXT APPROACH (not more forward-drilling): a WATCHPOINT on the 2 divergent driver
+bytes -- recompute their exact offsets from a fresh cmp with an explicit offset print, then set a gdb
+hardware watchpoint (or a wrapped-access guard) on g_mem+base+<off> and run BOTH targets to catch the exact
+instruction/function that writes the divergent value between c452=50 and 200.  That is the deterministic
+way to the root, done with a fresh, careful pass -- not the fatigued forward-probe chain.  Everything
+landed this session (patch 411, intro/title audio diff=0 to [0x452]=4000, 2x 10x-gate) is intact; matrix
+176/176; tree clean; ~11 diagnostic probes all reverted.
