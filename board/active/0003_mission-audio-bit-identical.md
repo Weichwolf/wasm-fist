@@ -649,3 +649,15 @@ This is a determinism-FOUNDATION change (native_main.c tick source + a ref recap
 single patch but now precisely bounded.  The extender op-0x78 render (board:0009) is for the intro's
 VISUAL fidelity (blank vs real frames) -- it is NOT the audio blocker; audio is regime-sensitive, not
 render-sensitive (audio diff=0 was achieved WITH a blank intro under COOP_TICK).  Matrix intact 175/175.
+
+TICK-REGIME UNIFICATION DE-RISKED (measurement, no tree change): ran native with FIST_COOP_TICK vs native
+default (async) on settled-screen ref'd flows -> mainmenu diff=0, settings diff=0.  So native-coop is
+OUTPUT-IDENTICAL to native-async on settled screens (the framebuffer fixed point is regime-invariant
+WITHIN a screen, as expected).  The regime only changes output on TRANSITION-crossing flows (the intro
+[0x452]-cost).  Implication: switching native to cooperative ticking will NOT perturb the settled-screen
+matrix (mainmenu/settings/about/cockpit/terrain/editor fixed points) -- only the few transition-crossing
+flows (battles-cancel-briefing, campaign-missions, and any that boot through the intro before a tick-pin)
+need their dump-tick moved past the (now-played) intro + a ref recapture.  This bounds the board:0003
+foundation change to: (1) native_main.c cooperative default, (2) patch 411, (3) recapture the handful of
+transition-crossing refs, (4) 10x re-gate -- most of the 175 flows carry over unchanged.  Matrix intact
+175/175 (measurement only).
