@@ -700,3 +700,16 @@ periodic menu re-enter/refresh whose onset predicate is target-dependent by 88 o
 e714 re-enter caller fires and its predicate (a menu-idle timer or the cb7c CF) is the precise next step.
 Audio coverage remains native==wasm diff=0 to [0x452]=4000 (bit-verified + 10x-gated); the boundary is a
 menu re-enter, not a new screen.  Matrix intact 176/176.
+
+FINAL ACCURATE PICTURE (FIST_E714C caller trace): only ONE e714 fires in the boot->8000 window --
+BOOT32781 (the cae6 boot->menu-enter) at c452=4395.  With patch 411 the intro plays FULLY, so the
+boot->menu-enter now happens at [0x452]~4395 (the earlier "[0x452]=188" reset was the PRE-patch411
+wasm-intro-SKIP artifact, now gone).  So: the audio-intro flow (diff=0 to [0x452]=4000) captures the
+INTRO / title-screen audio (the ~64s the title plays before the menu), NOT menu music; the menu music
+starts only AFTER the e714 reset at ~4395.  The divergence at 4399 is the cae6->e714 boot->menu-enter
+firing 88 oplticks apart native (opltick 339352) vs wasm (339264) under identical cooperative ticking --
+a boot-path spin-loop / timing nondeterminism (NOT a menu re-enter; correcting the note above).  So to
+reach MENU-music audio native==wasm the boot->menu-enter onset must be made deterministic to the opltick
+(trace cae6's pre-e714 steps -- d99b/6a02/e446/e584 -- for the 88-opltick spin, likely a busy-wait whose
+iteration count is data-dependent or reads a still-nondeterministic port).  Current landed coverage:
+INTRO/title audio native==wasm diff=0, bit-verified + 10x-gated, at [0x452]=4000.  Matrix 176/176.
