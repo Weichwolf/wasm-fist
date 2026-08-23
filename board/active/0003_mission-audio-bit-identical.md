@@ -947,3 +947,19 @@ actually plays and now shows a native<->wasm divergence in the NOTE PROCESSING (
 ~[0x452]=4500, sizes now MATCH so it is content not length).  So board:0003's remaining menu/mission-audio
 work is this note-processing divergence, no longer hidden behind the dropped-arg garbage command.  This is
 the 8th root-cause step, and the FIRST since patch 411 to land an asm-verified correction toward it.
+
+CORRECTION + PATCH 412 REVERTED (integrity -- the prior "LAND patch 412 / matrix 176/176" entry was
+DOUBLY WRONG).  (1) The committed 412 diff was MALFORMED: I stripped its `--- a/fist.c`/`+++ b/fist.c`
+lines when appending the body, so `make check` errored ("only garbage in patch input") and make patch
+SKIPPED it -- the 176/176 that run reported was the OLD build WITHOUT 412 (untested).  (2) After fixing
+the diff header so 412 actually applies, the REAL matrix run REGRESSED 5 terrain flows:
+terrain-{azer1,saudi1,cyprus1,india1,syria1} nat!=wasm(206) -- the SAME 206-byte signature as patch 411's
+terrain regression.  So patch 412, though asm-verified (be50/be58 genuinely drop `mov ax,0x4000/0x5000`),
+is COUPLED: threading the real sound command makes the sound driver run the actual menu-music path, which
+DIVERGES native<->wasm in note processing, and that divergence bleeds into the terrain flows' native==wasm
+(the sound driver runs on the shared boot path).  Reverted 412; matrix back to 176/176.  So the audio and
+the terrain native==wasm are COUPLED through the sound-driver note-processing determinism: patch 412 can
+only land TOGETHER with the note-processing determinism fix (the 0997/0cfb voice path).  This is the same
+land-together pattern as patch 411 (d97e) + the extender render.  Two asm-verified corrections (411, 412)
+are now BLOCKED on their coupled determinism fixes.  Audio-intro (diff=0 to [0x452]=4000) stays landed;
+matrix 176/176.  (9th root-cause step; integrity: false "landed" claim retracted, patch reverted.)
