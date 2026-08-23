@@ -762,3 +762,19 @@ fully justified): make the 0x3da retrace bit a deterministic function of the eng
 the global read count, so d8d4's countdown is identical native==wasm -> the sub-division is bit-stable ->
 audio native==wasm past the menu-enter.  Careful shim change (fist_vga), touches every flow's 0x3da reads,
 lands with a full 10x re-gate.  This is now a well-understood, bounded fix -- not a guess.  Matrix 176/176.
+
+CORRECTION (integrity -- the "ROOT fully understood" claim above was PREMATURE and is partly DISPROVEN):
+the FIST_PITTRACE data shows d8d4=1 in the whole window.  With the ISR retrace-countdown
+`do{in(0x3da);d8d4--}while(d8d4 && !bit3)`, d8d4=1 means it ALWAYS runs exactly ONE iteration (d8d4->0,
+exit) REGARDLESS of bit3 -- so the countdown is deterministic and the 0x3da retrace PHASE does NOT gate it
+here.  Therefore the "+-1 wobble is caused by the 0x3da read-count parity via d8d4" hypothesis is WRONG.
+What IS firm: (a) the PIT rate is stable+identical (div=250, d8c4=250); (b) the retrace-countdown is
+deterministic (d8d4=1); (c) 0x3da reads are bit-synced native==wasm to c452=4388; (d) the divergence is
+concentrated at c452=4398-4399 where wasm does far fewer ISRs (4399: 154 native vs 77 wasm) because the
+menu-enter e714 (called from cae6) FIRES ~77 ISRs EARLIER on wasm.  So the real question is unchanged and
+still OPEN: which cae6 pre-e714 step's ISR/pump count differs native vs wasm at c452=4399 (what makes e714
+fire earlier on wasm).  The PIT/retrace variables traced so far are NOT it.  NEXT: instrument cae6's steps
+between e584 (intro) and the e714 call with the opltick at each, on both targets, to find the step whose
+opltick-delta differs -- that is the actual divergent spin.  I over-claimed twice this session (2e6b, then
+d8d4); the honest state is the divergence is LOCALIZED (c452=4399, e714 timing) but its mechanism is NOT
+yet identified.  Intro/title audio stays landed+gated.  Matrix 176/176.
