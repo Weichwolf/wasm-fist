@@ -672,3 +672,19 @@ menu/sub-screen transition (to be pinned the same way: FIST_OPLSEQ + FIST_C452W 
 audio-intro matrix flow is extended 300 -> 1000 (safely inside the diff=0 region and the run_audio
 timeout).  Full-duration audio across MISSION transitions is the remaining open work; the tick-regime
 unification (de-risked above) plus pinning each successive transition onset is the path.
+
+2ND TRANSITION PINNED (the [0x452]~8000 audio-coverage boundary): FIST_OPLSEQ located the divergence at
+opltick 339264 -- BOTH targets reset [0x452] near c452=4399 (wasm @339264 c452=4398 -> 0; native @339352
+c452=4399 -> 0) but 88 oplticks APART.  FIST_C452W + backward signature search pinned the reset site to
+FUN_1000_2e6b (NOT e714): a 1000-segment SCREEN/MODE-INIT that fills the far-call block at 0x000f0000
+(uRam000f0002..0010), calls fist_int_dispatch(), then zeroes DAT_1000_c452 / c432 / d8ca / c44e / c450
+and sets c738=0xff.  So this is a mode-set / screen re-init reached via an INT dispatch, fired at a
+TARGET-DEPENDENT opltick (88 apart) -- a spin-loop / timing divergence in its CALLER, NOT the clean
+dropped-return class the intro (d97e) was.  This is the current audio-coverage boundary: native==wasm
+diff=0 holds to [0x452]=4000 (~64s, the full intro + menu music), and the FIRST divergence past it is this
+2e6b mode-init at c452~4399.  NEXT audio step (scoped): trace 2e6b's caller and the predicate that fires
+it 88 oplticks apart under identical cooperative ticking (candidate: a busy-wait iteration count that is
+data-dependent or reads a still-nondeterministic port) -- the same async-vs-coop / spin-loop determinism
+family as the deeper board:0003 work.  Harder than the intro; likely needs the tick-regime unification
+(de-risked above) to resolve cleanly.  Matrix intact 176/176; audio-intro flow pinned at the safe
+[0x452]=4000.
