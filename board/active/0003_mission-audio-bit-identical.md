@@ -842,3 +842,21 @@ cause.)  PRECISE NEXT PROBE: at the menu-music start (adv=4281), diff the driver
 (DAT_0000_0831<<4) voice-active flags [+0x107..] and note-record table [+0x13e8..] native vs wasm to find
 the first divergent driver-state byte -- that is the actual root.  Full chain + nature now mapped;
 intro/title audio stays landed+gated (diff=0 to [0x452]=4000).  Matrix 176/176.
+
+REGLOG REGISTER-PATTERN reveals the branch (no further probe needed -- read from the data already
+captured).  At the divergence (adv=4281), native writes 0x20/0x23/0x40/0x63/0x80/0x83/0xe0/0xe3 -- the OPL
+OPERATOR registers = a FULL INSTRUMENT DEFINITION (a NEWLY ALLOCATED voice), while wasm writes 0x43/0x44/
+0x4d (levels) + 0xb0/0xb1 (key-on) = a voice being REUSED/updated.  So 0997's voice-allocation loop
+`for(i<8){voice=voicemap[bp]; if(voice_active[voice+0x107]==0) break; bp++}` takes a DIFFERENT branch:
+native finds the voice FREE (writes a full instrument def), wasm finds it IN USE (updates levels).  Root =
+the voice-active flag at D[voice+0x107] differs native vs wasm at the menu-music start.  A voice goes
+inactive on note-off (envelope release), which is TICK-TIMING-driven -- so this is the SAME tick
+sub-division divergence localized earlier (the +-1 ISR-per-c452 wobble at the menu-enter), now shown to
+propagate through the sound driver's timing-dependent voice lifecycle: a note-off fires at a slightly
+different tick on the two targets -> a voice is free on one and busy on the other at the menu-enter ->
+different voice allocation -> different OPL stream -> audio diverges.  So the audio-beyond-intro root and
+the tick-sub-division root are THE SAME issue (coupled), and the fix is the menu-enter tick-sub-division
+determinism (the be0e/be58 sound-start pump timing) -- consistent with the whole chain.  Data-supported
+(reglog register semantics); no over-claim.  Direct driver-state confirmation (dumping D[+0x107]) is
+gated on a segfault-safe probe (3 naive dumps crashed on the patched sound-driver derefs -> careful work).
+Intro/title audio stays landed+gated.  Matrix 176/176.
