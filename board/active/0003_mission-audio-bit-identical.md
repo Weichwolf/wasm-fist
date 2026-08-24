@@ -1634,3 +1634,15 @@ does not let an environment-dependent host-pointer VALUE reach a render-visible 
 rebased offset, or don't store the host ptr where the render reads it).  This is a real, bounded porting bug
 in the mga driver's pointer handling -- concrete and NOT oracle-gated.  Progress: the 57 is eliminated down
 to the host-pointer class via decisive testing (not compiler, not uninit -> environment/host-ptr).
+
+UNIFIED (2026-08-24, loop): both board:0003 components are ONE class -- register/state-dataflow divergence.
+c664=0x3e783fca (far-ptr -> mga 3fca) is IDENTICAL native/wasm; the divergence is ONLY param_1 (0x8b89
+native / 0 wasm), a register value that is (not-uninit under zero-init, not-opt under -O0, not a pointer
+target) the LOW-16 of a host-pointer-in-g_mem -- the environment (x86-32/wasm32) host-ptr class.  So the 57
+(host-ptr-low16 into the reticle param) and the 149 (unaff_CS/ES uninit) are BOTH register/state-dataflow
+divergences that the committed build converges by UB coincidence.  UNIFIED FIX PATH: deterministic
+register/pointer dataflow -- SetCSContext (the uninit segment class) + host-pointer normalisation (don't let
+an env-dependent host-ptr's low16 reach a render-visible field).  board:0003 is now FULLY characterised:
+one root class, two surfaces, one dedicated fix direction.  This is the culmination of the whole
+investigation -- from "mysterious 206" to "register/state-dataflow determinism, precisely located at
+unaff_CS/ES (149) and the reticle host-ptr-low16 param (57)".
