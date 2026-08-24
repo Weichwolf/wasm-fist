@@ -1019,3 +1019,20 @@ be58-garbage-command consequences; (2) dump -> patch 412 makes the sound-driver 
 terrain hangs -> pure-coop unviable; (4) no sound/FB memory overlap -> the terrain coupling is timing.
 The single root is the async-vs-coop tick regime; the fix is the specified deterministic render-advancing
 tick model.  Matrix 176/176; tree clean.
+
+MECHANISM OF THE 412<->TERRAIN COUPLING PINNED (sharpest fix spec).  in()/out() call fist_timer_pump() on
+EVERY port access (fist_vga.c lines 106/137), and in COOP each pump advances one engine tick -> the game
+clock [0x452] advances per-I/O-op.  So sound-I/O VOLUME perturbs the game clock: WITHOUT 412 the sound
+driver issues few out(0x388/0x389) (garbage near-silence) -> few pumps -> the terrain flow's [0x452]
+progression is stable and native-async==wasm-coop at the capture fixed point (terrain passes); WITH 412 the
+real note processing issues MANY OPL writes -> many extra pumps -> [0x452] inflates by an amount that
+differs under async(native) vs coop(wasm) -> terrain reaches its capture [0x452] at a shifted render state
+-> 206 B.  So the precise defect class is: the ENGINE game-tick is advanced per platform-I/O-op, which
+lets I/O volume (and its async-vs-coop interaction) leak into game timing.  SHARPEST FIX: advance [0x452]
+by a deterministic amount per GAME-FRAME (engine progress), NOT per in()/out() -- so sound-I/O volume
+cannot perturb the game clock and native==wasm holds regardless of regime.  This both fixes audio (ISR
+count becomes a pure function of engine progress) AND removes the terrain coupling (sound I/O no longer
+shifts the terrain [0x452]).  It is exactly the "engine-progress-keyed tick" candidate (ii) above, now
+mechanism-justified.  Caveat/risk: the current per-I/O pump is WHAT makes the 176 flows converge today, so
+this is a matrix-wide timing change requiring careful design + full 10x re-gate.  Patches 411+412 land with
+it.  Matrix 176/176; tree clean.
