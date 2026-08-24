@@ -523,10 +523,16 @@ for i, l in enumerate(lines):
     if not m or m.group(1) in seen:
         continue
     sig, j = [], i + 1
-    # generous lookahead in driver mode: WARNING-comment blocks can precede a multi-line signature
-    # (driver decompiles have many). Engine keeps the original 14 so its output stays byte-identical.
-    _cap = 40 if MODULE else 14
-    while j < len(lines) and j < i + _cap:
+    # Budget the lookahead in REAL (non-comment, non-blank) lines, not total lines: a long
+    # `/* WARNING: Removing unreachable block */` block between the marker and the signature must not
+    # push a (possibly line-wrapped) multi-line signature past the cap. Counting only real lines keeps
+    # the committed engine decompile byte-identical (its signatures are a few real lines) while correctly
+    # capturing wrapped signatures that a total-line cap truncated (e.g. the CS/ES-threaded decompile's
+    # 2-line prototypes preceded by a WARNING block -> the old 14-total-line cap cut them at `param_4,`).
+    _cap_real = 40 if MODULE else 14
+    _abs = 600           # absolute scan bound (comment blocks can be long) — runaway guard only
+    real_seen = 0
+    while j < len(lines) and (j - i) < _abs and real_seen < _cap_real:
         s = lines[j].strip()
         if '{' in s:
             s = s[:s.find('{')].strip()
@@ -534,7 +540,7 @@ for i, l in enumerate(lines):
                 sig.append(s)
             break
         if s and not s.startswith(('/*', '*')):
-            sig.append(s)
+            sig.append(s); real_seen += 1
         j += 1
     joined = ' '.join(sig)
     if '(' not in joined:
