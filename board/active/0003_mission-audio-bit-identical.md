@@ -1459,3 +1459,17 @@ perturbed boot state, of which c686/be58(412)/a null-getenv are all triggers -- 
 "code-layout / uninit-state fragility" characterisation, NOT a specific far-call.  The reliable path remains
 the oracle (does the original's terrain frame match committed-W?) + a native-vs-wasm state-diff at the FIRST
 divergent byte under a controlled perturbation.  patch 412 stays innocent.
+
+DECOMPOSITION (2026-08-24, loop): 412's 206 = ~149 uninit-reads + ~57 codegen-residual.  Built BOTH
+targets with patch 412 + gcc/emcc -ftrivial-auto-var-init=zero (deterministic locals, a DIAGNOSTIC band-aid
+NOT a doctrinal fix), ran terrain-azer1: native vs wasm = 57 (down from 206 without zero-init).  So
+deterministic uninitialised locals remove ~149 of the 206 -> the uninit reads (the __allregs-prune segment
+class SetCSContext addresses) are the DOMINANT cause of 412's terrain divergence, confirming the fix
+direction.  A separate ~57-byte residual remains even with both targets zero-init'd -> a genuine
+native(gcc -O0)-vs-wasm(emcc -O2) codegen/UB divergence INDEPENDENT of uninit locals (matches the earlier
+"zero-init native vs wasm = 57").  So the full 412-terrain fix is TWO layers: (1) restore the pruned
+segment/register writes so there are no uninit reads (the doctrinal SetCSContext migration, ~149 bytes),
+and (2) resolve the ~57 codegen residual (a real portability diff to localise via native-vs-wasm state-diff
+at the first divergent byte with both zero-init'd, so uninit noise is removed).  patch 412 remains innocent;
+its 206 is entirely this pre-existing native/wasm fragility that recompiling be58 exposes.  Next: localise
+the 57 (which bytes, which function) with both-zero-init builds to strip the uninit component.
