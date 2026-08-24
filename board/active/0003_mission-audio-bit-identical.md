@@ -1473,3 +1473,19 @@ and (2) resolve the ~57 codegen residual (a real portability diff to localise vi
 at the first divergent byte with both zero-init'd, so uninit noise is removed).  patch 412 remains innocent;
 its 206 is entirely this pre-existing native/wasm fragility that recompiling be58 exposes.  Next: localise
 the 57 (which bytes, which function) with both-zero-init builds to strip the uninit component.
+
+DECISIVE (2026-08-24, loop): the committed terrain native==wasm=0 is itself a FRAGILE UB COINCIDENCE.
+Committed (NO 412) + zero-init BOTH targets = 57 (the SAME 19 top-left pixels as the 412+zero-init case).
+So the 57 is PRE-EXISTING, independent of 412.  The inversion is the tell: with GARBAGE uninit, native and
+wasm CONVERGE in the top-left (committed=0, matrix passes); with ZERO uninit they DIVERGE (57).  So the
+committed native==wasm=0 holds only because the garbage uninit values coincidentally converge -- ANY
+perturbation (412, zero-init, a null getenv) breaks it.  This DEFINITIVELY confirms the terrain native==wasm
+invariant is a fragile UB coincidence, not robust correctness.  DECOMPOSITION FINAL: the top-left 19-pixel
+(x0..10,y0..10) region has (a) an uninit-read sensitivity AND (b) a genuine native(gcc-O0)/wasm(emcc-O2)
+CODEGEN divergence that garbage masks and zero reveals -- 57 bytes.  The main voxel-terrain body is robustly
+native==wasm.  ROBUST FIX (two parts, both dedicated): (1) eliminate ALL uninit reads on the terrain path
+(the SetCSContext migration handles the segment class; other uninit locals may remain) so native and wasm
+compute deterministically, AND (2) localise+fix the top-left 57 codegen divergence (a real portability bug
+in whatever renders the 19-pixel corner element).  patch 412 stays innocent -- it is one of several
+perturbations that expose the pre-existing fragility.  The matrix's terrain rows pass today but NON-robustly.
+Next: identify which function renders the top-left corner (the 57's owner).
