@@ -963,3 +963,28 @@ only land TOGETHER with the note-processing determinism fix (the 0997/0cfb voice
 land-together pattern as patch 411 (d97e) + the extender render.  Two asm-verified corrections (411, 412)
 are now BLOCKED on their coupled determinism fixes.  Audio-intro (diff=0 to [0x452]=4000) stays landed;
 matrix 176/176.  (9th root-cause step; integrity: false "landed" claim retracted, patch reverted.)
+
+BREAKTHROUGH + FULL CONVERGENCE (gdb watchpoint + driver-seg dump, decisive).  Set a hardware watchpoint
+on the divergent driver byte g_mem+base+0x210 (base=0x3ce90) and ran native: it is written by
+m_snd_FUN_0000_0997 (note-ON, fist_snd.c:1610) <- 0966 <- 0833(param_1=492=0x1EC) <- 01e7 -- i.e. DIRECTLY
+by the note processing running the GARBAGE command 0x1ec (be58's dropped arg, D+0x12).  So ALL the
+divergent driver bytes are CONSEQUENCES of the be58 dropped command, not independent.  PROOF: with patch
+412 applied (real command 0x4000/0x5000), the whole driver data segment [base..base+0x2000] is diff=0
+native==wasm (7 divergent bytes -> 0).  So PATCH 412 COMPLETELY FIXES the sound-driver STATE divergence
+under cooperative ticking.
+WHY 412 STILL CAN'T LAND (fully characterized): 412 makes the sound driver do the REAL menu-music work
+(instead of garbage near-silence).  The terrain matrix flows run FIST_TICK_HZ=25000 with NATIVE async
+SIGALRM vs WASM cooperative ticking; the near-silent garbage command did negligible work so async-vs-coop
+never diverged them (they pass today), but 412's real sound work runs a target-dependent number of
+ISRs under async-vs-coop -> the 5 terrain flows regress 206 B.  And they cannot simply be switched to
+COOP: terrain under FIST_COOP_TICK at 25000 Hz TIMES OUT (the voxel render loop does not pump the timer
+enough, so [0x452] crawls in wall-clock and never reaches the FIST_MISSFB dump op).
+THE ONE FUNDAMENTAL ROOT: everything converges on the async(native)-vs-coop(wasm) TICK-REGIME determinism.
+It blocks: patch 412 (menu-music audio), patch 411's UKRAINE1 terrain (same 206-B signature), and full
+audio.  The sound-driver state itself is now PROVEN deterministic (412, driver diff=0); the residue is
+purely the tick-count regime.  So the highest-leverage single fix for board:0003 AND board:0007-terrain is
+a deterministic unified tick model that (a) native and wasm share exactly, and (b) does not time out the
+voxel render -- e.g. drive native cooperatively BUT pump the timer from the render/present path too, or
+give both a wall-clock-independent tick source keyed to engine progress.  Patches 411+412 are two
+asm-verified corrections banked and ready, gated on this one tick-determinism fix.  Matrix 176/176; both
+prototypes reverted; tree clean.
