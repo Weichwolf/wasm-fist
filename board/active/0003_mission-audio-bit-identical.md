@@ -1489,3 +1489,21 @@ compute deterministically, AND (2) localise+fix the top-left 57 codegen divergen
 in whatever renders the 19-pixel corner element).  patch 412 stays innocent -- it is one of several
 perturbations that expose the pre-existing fragility.  The matrix's terrain rows pass today but NON-robustly.
 Next: identify which function renders the top-left corner (the 57's owner).
+
+UNIFICATION (2026-08-24, loop): board:0003 has TWO independent divergence sources; the whole investigation
+unifies.  State-diff native-zero-init vs wasm-zero-init at the terrain capture: 709 bytes divergent (BROAD),
+first at DGROUP+0x452 = the frame timer (native 40 vs wasm 314 = the async-vs-coop TICK REGIME), scattered
+across 687 non-tick/non-mga bytes -> the tick regime causes broad sim-state divergence.  BUT the framebuffer
+diverges only 57 bytes (19 top-left pixels): the voxel-terrain BODY is TICK-ROBUST (renders identically
+despite the broad state divergence), and only a TOP-LEFT display element is tick-SENSITIVE.  So:
+  SOURCE 1 (~149 of 412's 206): uninit reads (garbage c686/segment class) -- fixed by zero-init /
+    SetCSContext; masked in committed by garbage-convergence coincidence.
+  SOURCE 2 (~57, pre-existing): the async-vs-coop tick regime feeding a tick-sensitive top-left element
+    (its state at capture depends on [0x452]=40-vs-314); the terrain body is robust to it.
+The committed native==wasm=0 masks BOTH via UB coincidence (garbage converges the top-left despite the tick
+regime).  This RECONCILES the earlier tick-regime flip-flops: the tick regime IS a real divergence source,
+but ONLY for the top-left element, NOT the terrain body -- which is why coop-both and async-both both showed
+206 (the uninit source dominated) and why "tick regime" kept being retracted (it doesn't move the body).
+ROBUST board:0003 FIX = BOTH: (1) deterministic tick so native==wasm reach the capture at the same [0x452]
+(the render-advancing coop-pump seam), AND (2) eliminate the uninit reads (SetCSContext).  Test underway:
+coop-both + zero-init -> if the 57 vanishes, SOURCE 2 is confirmed as the tick regime.
