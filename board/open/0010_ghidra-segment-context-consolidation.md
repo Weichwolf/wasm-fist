@@ -145,3 +145,20 @@ SetCSContext.java pipeline-integrated (it is correct and improves the decompile)
 a deliberate, per-patch REBASE effort (not a delete-139 shortcut), justified primarily by the board:0003
 determinism payoff -- which should be confirmed FIRST (e.g. via the DOSBox trace giving ground-truth, or a
 minimal targeted build) before committing to rebasing 136 patches.
+
+MIGRATION IS ALL-OR-NOTHING (tested 2026-08-24).  Attempted a partial build (new CS/ES decompile + ONLY
+the 233 exact-applying patches, no fuzz) to test the board:0003 determinism payoff cheaply.  It does NOT
+build: (a) conflicting-types errors because SIGNATURE patches (in the skipped set) and BODY patches are
+INTERDEPENDENT -- a skipped signature patch leaves the auto-generated prototype conflicting with a body a
+different applied patch changed; (b) a malformed prototype parse error at the assembled fist.c (`param_4,;`)
+that appears on the new decompile even without fuzz -- either assemble_fist.py mishandles a re-threaded
+signature or an exact-applied patch corrupts it (a migration-session task to isolate).  CONCLUSION: the
+patch set cannot be partially migrated; board:0003 determinism CANNOT be tested via a partial build.  The
+two ways to confirm the board:0003 payoff remain: (1) the FULL migration (rebase all ~397 patches onto the
+new decompile -> build both targets -> terrain native==wasm), or (2) the terrain ORACLE frame (board:0002)
+to arbitrate whether committed-W or defined-W' is faithful (the DOSBox trace can supply ground-truth per
+site, but the terrain frame itself needs the frame-matched capture).  Both are dedicated work; neither is a
+safe partial increment.  What is DONE this session and banked: SetCSContext.java (correct, pipeline-
+integrated, 312 unaff->0), the honest scope correction (~25 subsumed not 184; 136 pointer-basing still
+needed), and the confirmed DOSBox write-trace capability.  The migration + determinism confirmation is the
+scoped next dedicated session, justified by the board:0003 payoff, to be entered deliberately.
