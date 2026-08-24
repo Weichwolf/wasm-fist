@@ -1117,3 +1117,20 @@ renderpump WITHOUT 412 -> if native==wasm there, 412's real path is the sole tri
 driver/engine state under coop+412 native vs wasm to find the first divergent byte (now feasible since
 terrain runs in 1s under coop+renderpump).  The render-pump (un-starves coop terrain) is the enabling tool
 for that.  Matrix 176/176; tree clean; prototype reverted.
+
+RENDER-PUMP PROTOTYPE IS FRAGILE (follow-up, reverted).  coop+renderpump WITHOUT 412 -> native SEGVs
+(rc=139, no frame); WITH 412 -> native completes.  So the render-pump's 64 pumps/frame do NOT just advance
+[0x452] -- each pump runs the FULL cooperative ISR (timer + sound + palette), which has side effects and,
+without 412's real command, drives native into a crash.  So the render-pump cannot cleanly validate a tick
+fix, and my "un-starves coop terrain" sub-result is real but not a usable seam as-is (it perturbs state).
+The STANDING firm facts after all this: (1) patch 412 is asm-verified (be50/be58 thread the real sound
+command); (2) 412 makes the sound-driver STATE diff=0 under the audio env (coop, TICK_HZ=1000); (3) UNDER
+coop-both at TICK_HZ=25000 with 412, the terrain framebuffer STILL diverges native==wasm by 206 -> so the
+206 is NEITHER the async-vs-coop tick regime (coop-both shows it) NOR FP in the sound path (fist_snd.c has
+zero float/double; DBOPL is inactive with OPL off in terrain).  The 206 native-vs-wasm terrain divergence
+under 412 is a genuine but STILL-UNIDENTIFIED difference in the code path 412 exercises -- mechanism OPEN,
+and every convergence I proposed (tick regime, CPU-work SIGALRM, OPL-write pump, localized overlay) has been
+DISPROVEN by a subsequent test.  Honest state: I do NOT know the 206 mechanism.  It needs a state-diff of
+native vs wasm at the terrain capture under coop+412 (a segv-safe, non-perturbing way to run terrain fast
+under coop -- the render-pump is not it), then bisect the first divergent engine byte.  patch 411 (audio-
+intro) stays landed + gated; patch 412 stays banked/blocked.  Matrix 176/176; all prototypes reverted.
