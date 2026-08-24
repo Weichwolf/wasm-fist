@@ -1427,3 +1427,18 @@ reshuffles native's garbage c686, occasionally making the far call NON-trap on n
 activation -> 206).  Next: (a) identify the c684:c686 far-call TARGET (fist_icall_far(0xf69:off) -> which
 FUN), (b) diff its native vs wasm execution to find the 5879 divergence, (c) oracle-confirm the original DOES
 run this far call in terrain (so W is unfaithful and the far call must be made native==wasm + faithful).
+
+UNCONFOUNDED (2026-08-24): per-site-CORRECT c686 ALSO gives 5879.  Re-ran with the asm-correct per-site CS
+(FUN_0000_02c5/02e8 -> c686=0xf69 ; FUN_1000_55c5 -> c686=0x1000, matching SetCSContext) on both targets:
+native vs wasm = 5879 again.  So the 5879 is NOT an artifact of a wrong uniform value -- even with the
+faithful CS, activating the c684:c686 far call diverges native/wasm by 5879.  ROBUST CONCLUSION: the
+far-call TARGET (fist_icall_far(c684)) executes/resolves differently native vs wasm.  The committed terrain
+native==wasm=W holds ONLY because GARBAGE c686 makes the far call trap to a no-op on both targets -- W does
+NOT include the far call's terrain contribution and is therefore very likely UNFAITHFUL vs the original
+(which runs the call with a real CS).  board:0003's determinism root is thus a native/wasm divergence in
+the c684:c686 far-call target, MASKED in the committed build by the garbage-c686 no-op.  This also explains
+412's 206 as a partial unmasking (be58 recompile shifts native's garbage so the call non-traps on native
+for some frames).  THE FIX PATH: (1) identify the far-call target FUN (c684 offset + the 0xf69/0x1000 seg),
+(2) find why it runs native != wasm (a shim fist_icall_far resolution diff, or the target's own native/wasm
+codegen/UB), (3) make it deterministic AND faithful, (4) oracle-confirm the original renders it.  This is
+the real board:0003 work; it is a far-call-target determinism bug, now pinned to a single mechanism.
