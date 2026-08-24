@@ -1518,3 +1518,18 @@ survives tick-matching).  So the honest decomposition of 412's 206 is: ~149 = un
 ~57 = a pure codegen divergence in a 19-pixel top-left element (a real portability bug: FP, integer width,
 or aliasing in whatever renders x0..10,y0..10).  Both fixes are dedicated and INDEPENDENT.  Localising the
 57 owner (which function writes the top-left corner) is the concrete next step for that portability bug.
+
+LOCALISED -- the 57 is a MOUSE-CURSOR / CROSSHAIR draw, not a terrain codegen bug (2026-08-24, loop).  The
+19 divergent pixels form a PLUS/CROSS at (5,5): vertical line x=5 (y=0..10), horizontal line y=5 (x=0..10),
+black centre (5,5)=000000, white arms fbfbfb.  NATIVE draws this white crosshair cursor; WASM does not (it
+shows the terrain/sky underneath).  This ties to the 0x578-region divergence in the state-diff: the mga
+display-element FAR-PTR method vectors (c578/c57c/c580 = `(*_DAT_1000_c578)()` cursor/element handlers) are
+POPULATED on native and ZERO on wasm.  So native has the cursor-draw method vector installed and runs it
+(drawing the crosshair at the cursor position); wasm's vector is 0 -> no draw.  This is a control-flow
+divergence in the mga (MGAVIDEO) cursor-element registration -- native reaches the registration that sets
+c578, wasm does not -- INDEPENDENT of tick and uninit (persists under coop-both + zero-init).  So 412's 206
+= ~149 uninit segment reads + ~57 mga-cursor-crosshair that native draws and wasm doesn't.  FIDELITY
+QUESTION (board:0002): does the ORIGINAL show a cursor/crosshair in the FIST_TERRAIN voxel view?  If NO ->
+native's cursor draw is the bug (match wasm's no-draw); if YES -> wasm is missing it.  Either way this is a
+concrete mga-cursor-vector control-flow divergence, not an FP/codegen bug.  Next: find why native populates
+c578 (the cursor method vector) and wasm zeros it -- the mga cursor-registration path divergence.
