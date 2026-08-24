@@ -1065,3 +1065,19 @@ be NARROWER than a tick re-architecture -- identify what writes 0x20 to fb top-l
 frame-count value that 412 perturbs).  DIRECT NEXT PROBE: gdb watchpoint on g_mem+0xA0000 (fb row0 col0)
 during native terrain-azer1+412 to catch the writer of the 0x20 band.  10th mechanism refinement; the
 coupling is a localized overlay, not global timing.  Matrix 176/176; tree clean.
+
+RECONCILIATION (integrity -- my "localized overlay disproves the tick regime" refinement was OVER-STATED).
+Read the voxel raycaster m_ext_FUN_0000_6980 (build/fist_ext.c): it renders from the camera state
+DAT_0000_90e0 (position/angle) via the transform tables at fist_ext_base+0x9450/0x9454/0x9650.  The camera
+state advances with the game sim per [0x452] tick.  So patch 412's tiny tick-count shift (its real sound
+work adds ISRs, differently async-vs-coop) produces a TINY camera/sim-state difference at the terrain
+capture -> only 206 of 64000 FB bytes (0.3%) differ, concentrated where the render crosses a threshold
+(the top-left horizon/sky boundary).  A tiny tick difference producing a small, LOCALIZED render diff is
+fully consistent with -- not a refutation of -- the tick regime.  FIST_TERRAIN renders ONLY the voxel view
+(no HUD overlay), so the divergent top-left pixels ARE the voxel output at a marginally shifted camera,
+NOT a separate sound-status overlay.  So the terrain coupling RE-CONVERGES on the single async-vs-coop
+tick-regime root (the camera/sim-state at capture is tick-sensitive; 412 perturbs the tick via sound-ISR
+volume).  This restores the clean convergence: ONE root = the tick regime; fix = the deterministic
+engine-progress-keyed tick model.  My prior "top-left render element, not broad timing" framing is
+corrected -- it is a tiny tick-caused camera shift, localized because 0.3% of the view crosses a boundary.
+Patches 411+412 land with the tick-model fix.  Matrix 176/176; tree clean.
