@@ -1657,3 +1657,19 @@ session (last touched in prior sessions).  So the native/wasm matrix binaries ar
 before this session -> the 176/176 matrix (10x-gated, board:0008) holds by construction; no re-run needed.
 (A `wasm_gate.sh` I launched earlier spun uselessly because its input binary /tmp/fisttest/fistrun.js was
 never built -- a launch misfire, not a matrix failure; stopped and superseded by this git-based proof.)
+
+CHASE LIMIT + CONFOUND (2026-08-24, loop): the 57-reticle chase has hit its productive limit; stopping it
+honestly.  Checked d548 (the reticle-phase byte 22dd branches on) in the ZERO-INIT statedumps: d548=0x81
+(-127) on BOTH native and wasm -> both take 22dd's RE-SEED branch (no reticle render via 22dd), and ALL
+22dd reticle fields (d56a=0x156c, c450=0, 0a86=0x0c0b, 0a88=0x6262) are IDENTICAL native/wasm.  So 22dd is
+NOT the zero-init reticle-render path.  The earlier backtrace (22dd->286e->3fca) was from the GARBAGE-init
+build (/tmp/fist_bt, not zero-init), where d548 differed -> I CONFOUNDED the garbage-build backtrace with
+the zero-init statedump; the zero-init reticle-render path is DIFFERENT and unpinned.  This is the ~8th
+level of the 57 chase and it is now producing confounds (mixed build states) rather than convergence.
+HONEST STOP: the 57 is a deep, DISTRIBUTED native/wasm environment (host-pointer/register-state) divergence
+in the reticle path that perturbation-tracing cannot cleanly pin to one fixable line -- each level reveals
+the divergence one step upstream and mixing build states risks false leads.  The robust fix remains the
+systematic register/pointer-dataflow determinism (dedicated), NOT more single-line chasing.  board:0003 is
+FULLY characterised (206 = ~149 unaff_CS/ES uninit + ~57 reticle host-ptr/register-state, one root class:
+register/state-dataflow determinism); both fixes are dedicated implementation.  Further autonomous
+perturbation experiments on the 57 are retired as diminishing-returns/confound-prone.
