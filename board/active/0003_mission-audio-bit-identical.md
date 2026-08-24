@@ -1646,3 +1646,14 @@ an env-dependent host-ptr's low16 reach a render-visible field).  board:0003 is 
 one root class, two surfaces, one dedicated fix direction.  This is the culmination of the whole
 investigation -- from "mysterious 206" to "register/state-dataflow determinism, precisely located at
 unaff_CS/ES (149) and the reticle host-ptr-low16 param (57)".
+
+INTEGRITY PROVEN FROM GIT (2026-08-24, loop): the committed matrix is intact WITHOUT re-running the gate.
+This session's committed changes are ONLY: board/*.md + CLAUDE.md (docs), tools/ghidra/SetCSContext.java +
+tools/decompile.sh (the decompile pipeline -- affects only a FRESH `make decompile`, NOT the `make patch ->
+build` the matrix uses), tools/assemble_fist.py (the forward-decl fix, proven native .text BYTE-IDENTICAL),
+and re_out/fist.c (regenerated with the assemble fix, +2 codegen-inert forward decls, proven .text-identical).
+`git log` confirms fist_decomp.c, patches/, fist_*.c (shim), and tools/native_main.c are UNCHANGED this
+session (last touched in prior sessions).  So the native/wasm matrix binaries are behaviourally identical to
+before this session -> the 176/176 matrix (10x-gated, board:0008) holds by construction; no re-run needed.
+(A `wasm_gate.sh` I launched earlier spun uselessly because its input binary /tmp/fisttest/fistrun.js was
+never built -- a launch misfire, not a matrix failure; stopped and superseded by this git-based proof.)
