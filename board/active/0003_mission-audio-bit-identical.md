@@ -1081,3 +1081,20 @@ volume).  This restores the clean convergence: ONE root = the tick regime; fix =
 engine-progress-keyed tick model.  My prior "top-left render element, not broad timing" framing is
 corrected -- it is a tiny tick-caused camera shift, localized because 0.3% of the view crosses a boundary.
 Patches 411+412 land with the tick-model fix.  Matrix 176/176; tree clean.
+
+SHARPEST ROOT STATEMENT (why async<->coop diverge, at the CPU-work level).  native's tick source is the
+wall-clock SIGALRM (native_main.c setitimer) -- it fires ~N times/sec of WALL CLOCK, so MORE CPU work
+between frames -> MORE ticks drained.  wasm has no SIGALRM: its tick advances one-per-pump (cooperative),
+which is CPU-work-INDEPENDENT.  So patch 412 (real note processing = more CPU work) makes native's SIGALRM
+fire more during that work -> native's [0x452] advances faster relative to the game-frame count -> at the
+capture [0x452]=N the camera/sim has run fewer game-frames -> the voxel view shifts (206 px).  On wasm the
+same extra work adds NO ticks (coop) -> no shift.  That is exactly why 412 couples to terrain ONLY under
+the mixed async-vs-coop regime, and why the framebuffer fixed points pass today WITHOUT 412 (near-silent
+sound = negligible CPU work = SIGALRM stable).  THE FIX, now fully justified: a tick source that advances
+[0x452] a fixed amount per GAME-FRAME (engine present), CPU-work-INDEPENDENT, on BOTH targets -- so neither
+CPU work (SIGALRM) nor pump volume (coop) can perturb the tick, native==wasm holds, and terrain does not
+starve (it advances per rendered frame).  Implementation caveat: there is no clean per-frame "present" hook
+in the shim today (the frame is rendered straight to g_mem+0xA0000; the palette upload rides in(0x3da)),
+so the engine-progress tick needs a deliberately-placed present seam -- a careful engine/shim change, full
+10x re-gate.  This is the complete, code-verified characterization of the single determinism root; patches
+411+412 land with it.  Matrix 176/176; tree clean.
