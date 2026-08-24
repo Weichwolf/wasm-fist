@@ -72,3 +72,16 @@ best-effort ES), should resolve the segment-carry class the same way.
 
 Parent 0003 (audio/terrain determinism) and 0007 (terrain baseloss) are DOWNSTREAM consequences resolved
 by this root fix.  This item is gated only on a Ghidra install (headless decompile); it needs no oracle.
+
+RESULT (CS half, 2026-08-24) -- IT WORKS.  Added tools/ghidra/SetCSContext.java (postScript: baseline CS =
+page-segment per 64 KB page; override the far-call-discovered non-zero cluster's CERTAIN sub-window with
+CS=seg -- e.g. 0xf690..0xffff => CS=0xf69).  Ran it on the reused project + re-export (no re-analysis):
+  unaff_CS declarations: 134 (re_out) -> 0 (scratch/csctx)  -- ALL eliminated.
+  terrain site FUN_0000_02c5: `DAT_1000_c686 = unaff_CS` -> `DAT_1000_c686 = 0xf69` (the exact value the
+    hand-patches restore); other sites correctly resolve `= 0x1000` under CS=0x1000.
+So the CS-class (~67 patches) is subsumed by one Ghidra postScript, per Cosmo's rule "what Ghidra detects
+correctly needs no patch".  NEXT: (a) ES context (unaff_ES still present at c434 = FUN_1000_2ebe, ES:=DS at
+entry -> baseline ES=DGROUP 0x1c00 like DS; measure); (b) full integration: swap the CS(+ES)-context
+decompile into re_out, re-triage the now-redundant segment patches (-F0 apply -> drop the ones subsumed,
+keep the semantic ones), rebuild, verify native==wasm + full 10x re-gate; (c) confirm whether the defined
+c686/c3e2/c434 also collapses the board:0003 terrain determinism (native reads the constant, not garbage).
