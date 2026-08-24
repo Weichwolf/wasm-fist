@@ -1549,3 +1549,21 @@ reaching 3fca).  So 412's 206 = ~149 uninit segment reads + ~57 the c578 mga dis
 sets up (via 3fca) and wasm doesn't.  Next (dedicated): trace why native reaches FUN_0000_3fca with real
 params during terrain and wasm doesn't -- the mga display-list setup control-flow divergence.  Both board:0003
 components are now precisely localised: (1) the unaff_CS/ES segment class (SetCSContext), (2) c578/3fca.
+
+FINAL LOCALISATION (2026-08-24): the 57 is a CONTROL-FLOW divergence in the mga display-element caller.
+Traced FUN_0000_3fca (the c578 setter) entry, native vs wasm, both zero-init'd, during terrain: BOTH call
+it once, but with DIFFERENT params:
+  native: p1=0x8b89, p2=0x081d4ff4 (a g_mem host ptr, g_mem+0xae14), p3=0xffd4eac8 (a stack ptr)
+  wasm:   p1=0x0000, p2=0 (null),   p3=0 (null)
+So native takes the "real display-element" branch (real params -> c578=0x8b89 -> draws the (5,5) element),
+wasm takes the "null/default" branch (3fca(0,0,0) -> c578=0 -> no draw).  This is a control-flow divergence
+in the CALLER of 3fca: native's branch condition is true, wasm's false -- driven by some upstream state that
+differs native vs wasm and PERSISTS under coop-both + zero-init (so not tick, not uninit; a genuine
+native/wasm state/codegen divergence in the mga display-list setup).  The chase bottoms out here: the caller
+condition depends on upstream diverged state (the broad 709-byte state divergence has a real component
+beyond tick/uninit that this branch reads).  So board:0003's 57 = an mga display-element that native's setup
+path enables and wasm's does not, at the caller of FUN_0000_3fca.  This is a dedicated mga-driver control-flow
+investigation (find the branch + the upstream state it reads) -- the exhaustive perturbation chase has
+localised it to this caller but the positive fix needs the mga setup path traced with the oracle to decide
+whether the (5,5) element SHOULD render (native faithful) or not (wasm faithful).  board:0003 fully mapped:
+(1) ~149 unaff_CS/ES uninit (SetCSContext migration), (2) ~57 the 3fca-caller mga-element branch divergence.
