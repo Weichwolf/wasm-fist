@@ -85,3 +85,20 @@ in the extender shim to decode the posted frame-command (task+0x3f2) and blit vi
 path.  fist_icall_far(0x8799) currently traps to 0 (the whole gate is a no-op) -- this is the single seam
 to implement.  This is a DEDICATED multi-step 32-bit-extender recovery + shim build (touches every flow's
 boot path -> full 10x re-gate), not a tail-of-session change; the entry map here is its ready starting point.
+
+GATE BLIT MACHINERY MAPPED (deeper recon, read-only).  From 0x8799 the gate is a SCALED FRAME BLIT:
+  - [0x8490] : scale/mode state selector, set internally to 9/0xa/0xb (movl at 0x89f5/0x8a12/0x8a2f);
+              the 0x87be arm `mov ecx,0xa; sub ecx,[0x8490]; je/ja` loops the scale step call
+              0xbc06 (ecx<0xa branch, scale-up) or 0xbed2 (ecx>0xa, scale-down), ecx = |0xa-[0x8490]| times.
+  - position : [0x8648]/[0x864c] = blit x/y, centred by subtracting [0x5578]>>1 / [0x557c]>>1 (screen dims).
+  - blit     : mov esi,[0x8644] (src frame ptr) ; mov edi,[0x85b8] (dest = frame surface) ; call 0x88af ;
+              also sets [0xac60]=0xff, [0xac64]=[0x28a5] (palette/flags) ; then `xor eax,eax; ret` (status 0).
+  - TCB      : mov esi,[0xc93]; add esi,0x6a at entry (the task's per-frame draw record base).
+So op-0x78's faithful behaviour = set src [0x8644] from the posted command (task+0x3f2 frame id), dest
+[0x85b8] = the frame surface (-> 0xA0000), position [0x8648/864c], scale [0x8490], then run 0x88af (the
+core blit) with the 0xbc06/0xbed2 scale steps.  IMPLEMENT-SESSION MAP (all in re_out/fist_image.bin, i386):
+  0x8799 gate entry ; 0x88af core blit ; 0xbc06 scale-up step ; 0xbed2 scale-down step ; state [0x8490];
+  src [0x8644] ; dst [0x85b8] ; pos [0x8648/864c] ; screen [0x5578/557c] ; pal [0x28a5]->[0xac64], [0xac60].
+Trace 0x88af/0xbc06/0xbed2 to byte-exact, wire them + the state setup into the extender shim's
+fist_extender_gate (currently traps 0x8799->0), decode task+0x3f2, blit to 0xA0000; verify intro native==
+wasm + AE vs a DOSBox intro frame; then land patch 411 across the intro; full 10x re-gate.
