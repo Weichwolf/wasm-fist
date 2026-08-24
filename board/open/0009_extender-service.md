@@ -102,3 +102,17 @@ core blit) with the 0xbc06/0xbed2 scale steps.  IMPLEMENT-SESSION MAP (all in re
 Trace 0x88af/0xbc06/0xbed2 to byte-exact, wire them + the state setup into the extender shim's
 fist_extender_gate (currently traps 0x8799->0), decode task+0x3f2, blit to 0xA0000; verify intro native==
 wasm + AE vs a DOSBox intro frame; then land patch 411 across the intro; full 10x re-gate.
+
+TRACTABILITY VERDICT (0x88af disassembled): op-0x78's blit is a SCALED ALPHA-BLEND RGB SPRITE RENDERER,
+not a copy -- so board:0009 is genuinely a dedicated multi-function recovery, confirmed at the asm:
+  - source byte -> blend-factor table [0x5599] (stride 3: `mov 0x5599(eax,eax,2),bl`); 0x1f = skip/term.
+  - dest pixel  -> RGB palette [0x5260] (stride 3: `lea 0x5260(edx,edx,2)`).
+  - TWO blend paths (jb at 0x890c): (A) 0x890e `shr bl,1; add 0x80; mul` per R/G/B; (B) 0x8935 weighted
+    `shr bl,2; bh=~bl; mul dst*bh + bl` per R/G/B -> working RGB at [0xac68/69/6a], then nearest-index match.
+  - wrapped by the scale loop 0xbc06(up)/0xbed2(down), shift by [0x8490]; addressing base [0x8498],
+    mask [0x849c], src esi, dst-row [0x8838]=edi+[0x8498], screen [0x5578/557c].
+Faithful reimplementation must recover: the source sprite format (+ its 0x1f run/skip), the [0x5599]
+factor table, the [0x5260] RGB palette, BOTH blend formulas byte-exact, the RGB->8bpp match, and the scale
+steps -- each verified native==wasm bit-exact.  This is a focused but real graphics-primitive recovery for
+a dedicated session (with the symbol map above as its ready inputs), NOT a quick tail-of-session patch;
+rushing the blend/match math would silently fail bit-identity.
