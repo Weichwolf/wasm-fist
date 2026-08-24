@@ -1134,3 +1134,21 @@ DISPROVEN by a subsequent test.  Honest state: I do NOT know the 206 mechanism. 
 native vs wasm at the terrain capture under coop+412 (a segv-safe, non-perturbing way to run terrain fast
 under coop -- the render-pump is not it), then bisect the first divergent engine byte.  patch 411 (audio-
 intro) stays landed + gated; patch 412 stays banked/blocked.  Matrix 176/176; all prototypes reverted.
+
+CLEAN STATE-DIFF (real matrix regime) RE-CONFIRMS THE TICK REGIME; the render-pump retraction was
+CONTAMINATED.  Ran a state dump (g_mem[0x1c000..0xA0000]) at the terrain capture with 412, native ASYNC
+vs wasm COOP (the ACTUAL matrix regime, NO render-pump).  Result: FB diff 206 (the real regression), and
+751 divergent engine bytes over 152 scattered DGROUP runs -- a BROAD sim-state divergence.  The key byte:
+DGROUP+0x452 (the frame timer [0x452]) = native 0x0028=40 vs wasm 0x013a=314.  So native-async and
+wasm-coop reach the terrain-capture op at DIFFERENT [0x452] (40 vs 314) with 412 -> the whole sim/camera
+state differs -> 206 FB bytes.  This is exactly the async-vs-coop tick regime, and it RETRACTS my previous
+"convergence retracted" entry: that retraction was based on a coop+RENDER-PUMP test, but the render-pump
+CONTAMINATES native (its 64 pumps/frame run the full ISR with side effects -> native's DGROUP vectors go
+NULL, an earlier dump showed 2738 bytes of native-null-vs-wasm-0x0f69-vectors).  So the render-pump test
+was invalid; the CLEAN real-regime diff shows [0x452] itself diverges -> the tick regime IS the root, as
+originally converged.  WITHOUT 412 terrain passes (both reach the capture at the same [0x452]); WITH 412
+the sound work shifts the tick so the capture op fires at 40 vs 314.  FIX unchanged: a deterministic
+engine-progress tick so native==wasm reach the capture at the same [0x452] -- but the render-pump is NOT a
+usable seam (it perturbs state).  A clean fast-coop-terrain path (advance [0x452] without ISR side effects)
+is the tooling need.  Net: tick regime re-confirmed by clean data; ~14 hypothesis flips total, each
+data-driven.  patch 411 landed; 412 blocked on the tick fix.  Matrix 176/176; all prototypes reverted.
