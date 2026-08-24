@@ -1152,3 +1152,36 @@ engine-progress tick so native==wasm reach the capture at the same [0x452] -- bu
 usable seam (it perturbs state).  A clean fast-coop-terrain path (advance [0x452] without ISR side effects)
 is the tooling need.  Net: tick regime re-confirmed by clean data; ~14 hypothesis flips total, each
 data-driven.  patch 411 landed; 412 blocked on the tick fix.  Matrix 176/176; all prototypes reverted.
+
+WITHOUT-412 CONTROL OVERTURNS THE TICK-REGIME-ROOT CLAIM (decisive four-way dump analysis).  The prior
+entry asserted "WITHOUT 412 both reach the capture at the same [0x452]".  That is FALSE.  Ran the clean
+state-diff a second time on the COMMITTED build (NO 412, no render-pump), native ASYNC vs wasm COOP, same
+terrain-azer1 capture.  Result: FB diff = 0 (terrain PASSES, as it must), BUT engine-state diff = 750
+bytes INCLUDING [0x452] = native 40 vs wasm 314 -- the SAME [0x452] divergence as with 412.  So the
+async-vs-coop [0x452]/tick divergence is present WITHOUT 412 and the terrain framebuffer is IDENTICAL
+anyway.  Therefore the tick/[0x452] divergence is NOT the 206 cause; it is a harmless regime artifact the
+tick-settled voxel render is robust to.  My "tick regime re-confirmed" entry above (and commit 90e25f7)
+is RETRACTED: it inferred causation from "[0x452] differs with 412" without running the without-412
+control that shows it differs regardless.
+
+WHAT ACTUALLY CAUSES THE 206 (four-way comparison: {native,wasm} x {no412,+412}, all clean dumps).  412
+changes native state at exactly 14 DGROUP bytes and wasm state at 0 bytes.  Branch selector DAT_2000_5fc8
+= 0x0001 on BOTH targets both ways -> be58 threads the SAME command 0x5000 on native and wasm.  So: same
+sound command, yet native's command-0x5000 handler writes 14 engine-DGROUP bytes and wasm's writes none.
+This is a divergent HANDLER (not divergent input).  Without 412 the command is uninitialised garbage ->
+handler no-ops -> terrain passes; with 412 the real 0x5000 handler runs and propagates a PRE-EXISTING
+native-vs-wasm structural DGROUP divergence into render-visible bytes (notably DGROUP+0x1e1b: 0->1 on
+native only), which the voxel render then reads -> 206 FB bytes.
+
+THE REAL ROOT is the pre-existing native-vs-wasm state divergence itself (750 bytes at the terrain
+capture, present with OR without 412; 245 both-nonzero/structural, 505 one-side-zero).  Example region
+DGROUP 0x570..0x590: native = 89db48cc2930e09e 1c08f05b..., wasm = 0000000002e7656d 73636754... -- a
+STRUCTURALLY different populated struct/buffer (looks like a differently-initialised pointer/record, not a
+shifted counter).  It is harmless to all 5 terrain FBs (they pass) and to audio-intro (passes), so it went
+unseen; 412's sound command is merely the first consumer that reads it and writes render-visible state.
+FIX DIRECTION (corrected): stop chasing a tick re-architecture; instead find why DGROUP is populated
+differently native vs wasm at spawn (the 0x570-region struct + the 505 one-side-zero bytes) -- a real
+determinism bug that likely also gates full-duration menu/mission audio (board:0003) once 412 lands.  Next
+concrete step: watchpoint/bisect the 0x570 region's writer at boot on both targets and diff the first
+divergent populate.  patch 411 landed; 412 blocked on this DGROUP-populate divergence, NOT on the tick.
+Matrix 176/176; tree clean; all instrumentation reverted.
