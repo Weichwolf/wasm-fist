@@ -1185,3 +1185,51 @@ determinism bug that likely also gates full-duration menu/mission audio (board:0
 concrete step: watchpoint/bisect the 0x570 region's writer at boot on both targets and diff the first
 divergent populate.  patch 411 landed; 412 blocked on this DGROUP-populate divergence, NOT on the tick.
 Matrix 176/176; tree clean; all instrumentation reverted.
+
+ROOT FOUND & PROVEN: the "412 regresses terrain" 206 is a native-async CODE-LAYOUT-FRAGILITY artifact,
+NOT anything 412 does semantically.  RETRACT the entire prior cause-chain for the 206 (tick regime,
+[0x452], DGROUP-populate divergence, calibration [0x1e1a], sound-command handler) -- all were chasing
+shadows in a jittery native signal.  The decisive experiments (all clean, deterministic, terrain-azer1,
+matrix env FIST_TICK_HZ=25000 FIST_TERRAIN=1 MC_MOUSE, i.e. native-async exactly as run_terrain uses):
+
+  1. native no412 run1 vs run2:            FB 0     state 31   ([0x452]=40 both)
+     -> native FB is deterministic per-binary, but engine STATE jitters 31 bytes run-to-run.  So the
+        four-way {nat,wasm}x{no412,+412} byte analysis was CONFOUNDED by native state-jitter; its "14
+        bytes / newly-divergent 0x1e1b" conclusions are void (consistent with CALFIX not moving the 206).
+  2. native+412 run-to-run:                FB 0     (deterministic) ; vs native-no412: FB 206 (stable)
+  3. be50/be58 call-count native vs wasm:  IDENTICAL -- be50 x0, be58 x1, c530=0, 5fc8=1 on BOTH.
+     be58's single call is ((void(*)(uint16_t))fist_icall_far(0))(0x5000) -> linear 0 -> trap_tramp
+     (FIST_INTVEC_LIN=0xFE000 so 0 is NOT a chained vector; lookup_fun(0) misses) -> a no-op int(void)
+     that IGNORES the arg.  NOARG runtime-gate: arg-vs-noarg FB = 0 -> the 0x5000 argument is inert.
+  4. THE CONTROL: add a semantically-NULL `if(getenv("FIST_ZZZ_NEVER")){volatile int q=0;}` to be58 (NO
+     412, never taken) and recompile:
+        native-clean vs wasm-clean        = 0     (the matrix match holds for the committed binary)
+        wasm-clean   vs wasm-DUMMY        = 0     (wasm-coop is CODE-LAYOUT-INVARIANT / robust)
+        native-clean vs native-DUMMY      = 206   (native-async is CODE-LAYOUT-FRAGILE)
+        native-DUMMY vs wasm-DUMMY        = 206
+     A null recompile of a terrain-boot-path function (be58) shifts the native-async terrain FB by the
+     SAME 206.  Patch 412 modifies be58 -> recompiles it -> identical shift.  412 is SEMANTICALLY INNOCENT.
+
+MECHANISM: native-async's terrain render samples engine state at tick/interrupt-firing points whose
+alignment depends on the compiled code of the terrain-boot path; recompiling a function on that path
+(be58) re-aligns them -> ~206 pixels move.  wasm-coop advances the tick by a deterministic I/O-count
+pump, so its render is code-layout-invariant.  Therefore native==wasm terrain bit-identity is a FRAGILE
+COINCIDENCE of the frozen committed native binary: it holds today (176/176) and survives patches that miss
+the terrain-boot-hot path (411/d97e = extender, no shift), but ANY patch touching a terrain-boot-hot
+function (412/be58) breaks it -- and would break it identically whether or not the patch is semantically
+correct.  This is a native determinism DEFECT, not a 412 bug.
+
+CONSEQUENCES / FIX DIRECTION (supersedes all earlier 0003 fix notes):
+  - patch 412 is unblocked in principle: its terrain "regression" is not real divergence, it is the
+    native-async render being non-robust to recompilation.  412 must NOT be reverted for the 206.
+  - The real defect to close: native terrain must use the SAME deterministic, code-layout-invariant tick
+    model as wasm-coop (advance the render clock by engine-progress / a deterministic pump, not by
+    wall-clock/interrupt alignment).  Then native terrain FB is recompile-invariant, native==wasm holds
+    ROBUSTLY, and any correct patch (412 included) lands without a phantom terrain shift.
+  - Known constraint (unchanged): pure FIST_COOP_TICK starves the voxel render (no port I/O -> no pump ->
+    timeout).  So the deterministic native terrain tick needs a render-advancing pump seam that does NOT
+    run the full ISR side effects (the earlier render-pump prototype perturbed state and is not it).
+  - The matrix's terrain native==wasm check is only as trustworthy as the native binary is deterministic;
+    until native terrain is code-layout-invariant, a passing terrain row proves "these two frozen binaries
+    agree", not "the port renders terrain deterministically".  This is the sharpest statement of board:0002.
+Matrix 176/176; tree clean; all instrumentation reverted (make patch).
