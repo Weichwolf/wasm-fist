@@ -1712,3 +1712,20 @@ perturbation (412/zero-init) exposes it.  FIX (dedicated, sanctioned mechanism):
 thread the faithful 16-bit engine values into the reticle-descriptor caller path (22dd/286e -> 3fca AX/DI)
 + the SetCSContext segment-context for the unaff_CS/ES class -- i.e. deterministic register/pointer dataflow
 so no host-environment value reaches render-visible engine state.  board:0003 is now ASM-ROOTED end to end.
+
+FIX DIRECTION PROVEN AT THE SHIM LEVEL (2026-08-24, loop): the 149 unaff_CS/ES class is a PURE DECOMPILE
+(Ghidra-unthreaded) problem; the SHIM is already deterministic.  asm of FUN_1000_2ebe @ 0x12ebe:
+  mov ax,0x3508; int 0x21          ; DOS AH=35 get-INT-vector for INT 8 -> returns ES:BX
+  mov [0x434], es                  ; c434 = the INT-8 handler SEGMENT (the ES the INT returned)
+The shim's AH=35 handler (fist_dos.c:321) returns `R_ES = FIST_INTVEC_SEG` -- a CONSTANT (0xFE00),
+DETERMINISTIC on both native and wasm.  But the decompile models `mov [0x434],es` as `DAT_1000_c434 =
+unaff_ES` -- an UNINITIALISED C local, because Ghidra did NOT thread the INT-21 ES return.  So in the port
+c434 = garbage (native) / 0 (wasm), NOT the faithful deterministic FIST_INTVEC_SEG.  (This specific c434 is
+also DEAD -- no readers -- so harmless; but it typifies the class.)  CONCLUSION: the 149-class
+non-determinism is entirely the DECOMPILE not threading values that are DETERMINISTIC at the shim/engine
+level (INT-return ES/BX, saved CS/ES segments).  So the fix is 100% in the GHIDRA PIPELINE -- SetCSContext
+(board:0010, done, for the CS/ES segment saves) PLUS extending InstallIntFixup to thread the INT-21 AH=35
+ES:BX return (and similar unthreaded INT returns).  NOT a shim fix; NOT a per-site source hack.  This
+sharpens board:0010: the pipeline fix (SetCSContext + InstallIntFixup INT-return threading) resolves the
+149 class deterministically, and a fresh decompile + patch migration lands it.  The shim already does the
+right (deterministic) thing; only the decompile's register/INT-return threading is incomplete.
