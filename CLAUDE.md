@@ -157,6 +157,20 @@ needing guest RAM.
   Scripts default `DOSBOX=/tmp/debs/dosbox-fist`; point them at `third_party/dosbox-fist`.
 - **QEMU** `qemu-system-i386` (gdb-stub `-s -S`, icount replay) for protected-mode inspection.
 
+**Dynamic write-trace (the "SQL-trace" of the running game).** The patched DOSBox hooks EVERY guest memory
+access (`fist_memrec`/`FIST_MEMREAD_HR` on `host_writeb/w/d` + reads in `mem.h`), so a run reconstructs the
+application's behaviour from its accesses the way a SQL trace reconstructs an app from its queries. Arm it
+with `FIST_MEMARM_BOOT=1 FISTLOG=<prefix>` plus a target: `FIST_WATCHPHYS=<phys> [FIST_WATCHSPAN=N]` logs
+every write in a physical window with the LIVE `cs:eip`, `ss:sp`, value, and a 20-word stack dump
+(`<prefix>.watch.txt`) — i.e. WHO (which code segment + IP) wrote WHAT WHERE; `FIST_WATCHFLAT=<flat>
+[FIST_WATCHFLATSPAN=N]` is the CR3-aware variant that follows a flat linear address through the extender's
+paging (`cr3`), and `FIST_TILEPHYS` records the per-byte last-writer of a 64 KB window. Use it to recover
+ground-truth register/segment values (e.g. the real CS behind a `mov [mem],cs`), to find the writer of any
+diverging byte, or to map a subsystem's data flow. Caveat: the 16-bit engine runs UNDER the extender's PM
+paging (`cr3=0xe000`), so an engine DGROUP field is NOT at guest phys `0x1c000` — use `FIST_WATCHFLAT`
+(CR3-aware) with the engine-flat linear, or read `dsb`/`csb` from a `capture_9200`/`_6980` `.cam.txt` to
+locate the relocated DGROUP first.
+
 ## What decides done
 
 Completeness is the DD2 standard — every menu, screen, and dialog; every campaign mission and map; every
