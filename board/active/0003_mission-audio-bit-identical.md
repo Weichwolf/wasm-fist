@@ -1692,3 +1692,23 @@ render-visible g_mem field (c578) -- normalise to a rebased offset, or ensure th
 16-bit engine representation not the host pointer.  This is a real, bounded host-pointer-model bug in the
 mga display-element setup, the SAME class as the shim's other host-ptr-in-g_mem slots.  board:0003's 57 is
 now cleanly + consistently rooted (no confound): host-pointer-in-c578, environment-divergent.
+
+ASM-CONFIRMED ROOT (2026-08-24, loop): 3fca's stores are AX (param_1) and DI (param_3), both host-ptr-derived
+in the port.  objdump of FUN_0000_3fca @ mga 0x3fca:
+  3fca: push es; push ds; pop es ; mov ds,ss:[0x70a]   (DS = the reticle-descriptor segment, ~DGROUP)
+  3fd2: mov [0x578], ax           -> c578 = AX  (= param_1)
+  3fd5: mov [0x57a], di           -> c57a = DI  (= param_3)
+  3fd9: mov ax, ss:[di+2] ; ... stores derived values to c57c/57e/580/582/584/586/588.
+In the ORIGINAL, AX and DI are 16-bit ENGINE values (offsets); the decompile modelled param_3 as `int *`
+(a HOST pointer) and param_1's AX comes from the caller's register flow carrying a host-ptr-derived value.
+So c578=AX=0x8b89 (native, host-ptr low16) / 0 (wasm) and c57a=DI (host stack-ptr low16) both DIVERGE by
+environment -> the 57 reticle-descriptor bytes.  This ASM-CONFIRMS that BOTH board:0003 components are the
+SAME __allregs register/pointer-dataflow class: the 149 (unaff_CS/ES segment regs read uninit) and the 57
+(AX/DI carrying host-pointer-derived values instead of faithful 16-bit engine offsets, environment-divergent).
+UNIFIED ROOT (asm-level): the port's register/pointer dataflow lets HOST-environment values (host pointers,
+uninit segment regs) reach engine-state fields that the render reads; native (x86-32) and wasm (wasm32)
+represent these differently, so the committed native==wasm holds only by garbage coincidence and any
+perturbation (412/zero-init) exposes it.  FIX (dedicated, sanctioned mechanism): asm-verified patches that
+thread the faithful 16-bit engine values into the reticle-descriptor caller path (22dd/286e -> 3fca AX/DI)
++ the SetCSContext segment-context for the unaff_CS/ES class -- i.e. deterministic register/pointer dataflow
+so no host-environment value reaches render-visible engine state.  board:0003 is now ASM-ROOTED end to end.
