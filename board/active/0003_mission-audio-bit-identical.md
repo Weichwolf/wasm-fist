@@ -1286,3 +1286,31 @@ level bisect inside fist.c -- with pattern-init=0xAA the uninit local reads 0xAA
 terrain boot for the first 0xAAAA-derived value to name the propagating store, or wrap candidate display-
 list-walker locals with explicit zeroing and watch the 603 collapse -- then read the asm for the dropped
 register write and land it as an asm-verified patch.  Matrix 176/176; tree clean.
+
+CONFIRMED + REFINED: the uninit reads are SEGMENT REGISTERS unaff_CS / unaff_ES, and the committed
+native==wasm terrain match is an UNDEFINED-BEHAVIOUR COINCIDENCE.  0xAA/0xFE pattern-flow-scan named the
+exact stores: FUN_0000_134e (DAT_1000_c3e2 = unaff_CS), FUN_1000_2ebe (c434/382c/uRam000f0010 = unaff_ES),
+FUN_0000_02c5 (c686 = unaff_CS) -- Ghidra could not thread the real-mode CS/ES segment registers, so these
+locals are read uninitialised (fist.c has 63 unaff_CS + 150 unaff_ES + 58 int-unaff_CS such reads).
+Initialising ALL of them to a constant makes native CODE-LAYOUT-INVARIANT (clean vs recompiled-dummy = 0,
+was 206) -- PROVING these are the fragility root.  BUT neither 0 nor 0x1000 reproduces the committed FB W:
+  unaff=0  : native invariant, but native vs committed-wasm = 206
+  unaff=0x1000 : native invariant, but native vs committed-wasm = 206  (0x1000 = the FUN_1000_3a14 precedent)
+  committed native (garbage reads) vs committed wasm = 0   (W)
+  wasm with unaff=0 == committed wasm (emcc -O2 already lands the UB read on a W-producing value)
+So native-garbage and wasm-(-O2-UB) COINCIDENTALLY both produce W, while any DEFINED constant (0, 0x1000)
+produces W+206.  The terrain native==wasm bit-identity is therefore resting on undefined behaviour: two
+uninitialised-segment-register reads that happen to agree for the frozen committed binaries.  Recompiling
+a terrain-boot-hot function (412/be58, or a null getenv) reshuffles native's stack garbage -> its UB value
+changes -> W+~206, "breaking" terrain -- which is why every hot-path patch appears to regress it.
+
+TRUE FIX (board:0007 __allregs domain + board:0002 fidelity): restore the ASM-TRUE CS/ES value at each of
+these sites from the original disassembly (read what CS/ES actually held there; e.g. CS is the running
+code segment, ES is whatever the preceding asm loaded), landing them as asm-verified patches so BOTH
+targets read a DEFINED, faithful value.  That removes the UB, makes native code-layout-invariant, keeps
+native==wasm ROBUSTLY, unblocks 412, and -- because the current W is a garbage-derived value that may not
+match the DOSBox oracle -- likely CORRECTS the terrain FB toward oracle-faithful (board:0002) and unblocks
+board:0007's 42 missions (same lost-register-dataflow defect).  This is NOT guessable (0/0x1000 both wrong);
+it needs the per-site asm.  -ftrivial-auto-var-init is only the instrument, never the fix.
+STATUS: root fully proven & localised to named sites; the per-site asm-true CS/ES recovery is the concrete
+remaining engineering (deliberate, patch-disciplined, full re-gate).  Matrix 176/176; tree clean.
