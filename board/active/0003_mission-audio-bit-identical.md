@@ -1600,3 +1600,19 @@ native's 0b9e population deterministic == wasm's (null -> no reticle) by finding
 divergence in the reticle/display-list setup (289b/22dd/286e path via e714).  This is the concrete root; the
 verification (committed = no-reticle on both) prevented an over-claim that native always draws a spurious
 reticle.  board:0003's 57 rooted + verified.
+
+CORRECTION (2026-08-24, loop): the "0b9e branch drives the reticle" was WRONG.  Traced 286e's branch:
+DAT_2000_0b9e = NULL on BOTH native and wasm at the branch (286e fires once each, both take the `==0` true
+branch -> the reticle do/while loop does NOT run on either).  So 0b9e is NOT the divergence.  The 3fca call
+(from the backtrace 22dd->286e->3fca) comes from 286e's FIRST line `fist_icall_far((uint32_t)DAT_1000_c664)()`,
+NOT the 0b9e loop.  Both targets call 3fca via c664, but with DIFFERENT params (native real host-ptrs, wasm
+nulls) -- and 3fca takes NO explicit args (the __allregs model), so its p1/p2/p3 come from the REGISTER STATE
+at the c664 call.  So the reticle-element c578 population divergence is a REGISTER/STATE divergence upstream
+of 3fca, manifesting via the c664->3fca path -- the same broad native/wasm state divergence, NOT a single
+fixable branch.  This is the ~7th level of the chase and each level reveals the divergence one step upstream
+in the register/state flow -> the 57 is DISTRIBUTED broad-state divergence reaching the framebuffer via the
+reticle path, not pinnable to one line.  HONEST CONCLUSION: board:0003's 57 (like the 149) is a manifestation
+of the fundamental native(gcc-O0)/wasm(emcc-O2) state divergence; the committed build converges by UB
+coincidence; the robust fix is deterministic state on both (SetCSContext for the uninit class + resolving the
+compiler-level state divergence), NOT a targeted reticle patch.  The reticle path is just where the 57 bytes
+surface.  Further single-line chasing has diminishing returns.
