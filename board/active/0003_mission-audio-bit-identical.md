@@ -1673,3 +1673,22 @@ systematic register/pointer-dataflow determinism (dedicated), NOT more single-li
 FULLY characterised (206 = ~149 unaff_CS/ES uninit + ~57 reticle host-ptr/register-state, one root class:
 register/state-dataflow determinism); both fixes are dedicated implementation.  Further autonomous
 perturbation experiments on the 57 are retired as diminishing-returns/confound-prone.
+
+CORRECTION of the confound claim (2026-08-24, loop) -- re-ran CONSISTENTLY: the backtrace is NOT a confound.
+The zero-init 3fca backtrace is IDENTICAL to the garbage build: app_entry -> 00d0 -> cae6 -> e714 -> 459a ->
+22dd -> 286e -> 3fca, with p1=0x8b89, p2=0x081d4ff4 (g_mem ptr), p3=stack -- same in both builds.  So the
+reticle renders via 22dd->286e->3fca on BOTH builds; my "confound" was wrong.  The actual error was the d548
+reading: d548=0x81 in the STATEDUMP is the FINAL value at the capture, NOT the render-time value -- 22dd
+renders the reticle EARLIER in boot (when d548>0), then d548 becomes 0x81 later; the statedump doesn't
+capture render-time d548.  So the reticle IS rendered via 22dd's render branch.  The genuine divergence:
+param_1=0x8b89 at the 3fca call = the LOW-16 of the host pointer 0xe5288b89 that 3fca stores into c578 (the
+mga display-element descriptor); on wasm the equivalent host pointer is a wasm-linear address -> different
+low16 -> c578 differs -> the reticle draws differently (or not) -> 57 FB bytes.  CLEAN CONFIRMED ROOT: the 57
+is the HOST-POINTER-IN-g_mem class -- c578 holds a raw host pointer (0xe5288b89 native) whose representation
+is environment-dependent (x86-32 vs wasm32).  The committed build shows NO reticle on both (garbage
+coincidence); perturbation (zero-init/412) makes native's host-ptr-derived c578 non-null -> spurious reticle.
+FIX CLASS (concrete): the mga reticle-descriptor path must not store a raw host-pointer VALUE in a
+render-visible g_mem field (c578) -- normalise to a rebased offset, or ensure the descriptor uses the
+16-bit engine representation not the host pointer.  This is a real, bounded host-pointer-model bug in the
+mga display-element setup, the SAME class as the shim's other host-ptr-in-g_mem slots.  board:0003's 57 is
+now cleanly + consistently rooted (no confound): host-pointer-in-c578, environment-divergent.
