@@ -1098,3 +1098,22 @@ in the shim today (the frame is rendered straight to g_mem+0xA0000; the palette 
 so the engine-progress tick needs a deliberately-placed present seam -- a careful engine/shim change, full
 10x re-gate.  This is the complete, code-verified characterization of the single determinism root; patches
 411+412 land with it.  Matrix 176/176; tree clean.
+
+CONVERGENCE RETRACTED (integrity -- DISPROVEN by the render-pump COOP test).  I concluded the single root
+was the async-vs-coop tick regime.  TEST: added a render-pump burst to the voxel tile->fb (9200) so terrain
+runs under FIST_COOP_TICK (it un-starved -- terrain-azer1 completes in 1s under coop vs 500s timeout, a
+useful sub-result), applied 412, and compared BOTH targets under coop+renderpump+412:
+terrain-azer1 native==wasm = diff 206 (NOT 0), and native-coop vs the async ref = 206.  So COOP-BOTH STILL
+DIVERGES 206 -- the async-vs-coop tick regime is NOT the cause of the 206 terrain regression (12th disproven
+hypothesis, and it retracts the "single tick-regime root" + "SHARPEST CPU-work SIGALRM" convergence of the
+last several commits).  What is now FIRM: (a) patch 412 makes the sound-driver STATE diff=0 under coop
+(proven earlier); (b) yet the terrain FRAMEBUFFER diverges 206 native vs wasm EVEN under coop-both with
+412; (c) coop is deterministic (same tick both), so the 206 is a genuine NATIVE-vs-WASM COMPILED-BEHAVIOUR
+difference in the code path 412 newly exercises (0833's real-command dispatch -> 0997/0cfb note path),
+NOT tick timing and NOT the (diff=0) sound state.  Leading candidate: FP or undefined-behaviour divergence
+native(gcc x87/sse) vs wasm(emcc 64-bit) in the note-processing math (0cfb freq/env), OR an uninitialised
+read that differs by target -- surfacing in the terrain render via a shared value.  NEXT: run coop+
+renderpump WITHOUT 412 -> if native==wasm there, 412's real path is the sole trigger; then diff the
+driver/engine state under coop+412 native vs wasm to find the first divergent byte (now feasible since
+terrain runs in 1s under coop+renderpump).  The render-pump (un-starves coop terrain) is the enabling tool
+for that.  Matrix 176/176; tree clean; prototype reverted.
