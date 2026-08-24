@@ -49,6 +49,29 @@ a flat memory model:
 - game data lives under `armoredfist/FISTDATA/` (`.KLC` maps, `.MS3` missions, `.FSG` battles, `.M##`
   models, `.FSG/FSE/FSW` sounds & briefings, palette archives, …).
 
+## NovaLogic optimizations (the idioms that shape the decompile)
+
+Kyle Freeman's 1994 hand-written asm squeezes a 386 with tricks that dominate the reverse-engineering, so
+recognizing them is half the work:
+
+- **Segment registers as a fourth address dimension.** `mov [mem],cs` / `push cs` SAVE the running code
+  segment so a later `lcall [mem]:off` reconstructs a far pointer back into that code with no per-call
+  relocation math; `ES`/`DS` are loaded once and reused across `rep movs/stos` blits. These implicit
+  segment carries are invisible to a decompiler run without CS/ES context — which is exactly why **~184 of
+  397 patches (46%) are one class: restoring a segment base Ghidra dropped** (`unaff_CS`/`unaff_ES`, far-ptr
+  seg, string-op base). board:0010 tracks fixing this at the Ghidra-parameter root instead of per site.
+- **Multiple code segments (CS clusters).** The engine is not single-segment: `CS=0x1000` (main engine,
+  linear `0x10000+`), a `CS=0xf69` CRT/service cluster (window `0xf690..0x1f68f`, straddling `0x10000`, so
+  it physically overlaps the 0x1000 code), and a small `e000` region. Near `rel16` call/jmp wrap inside
+  their own segment's 64 KB window; Ghidra's flat page grid wraps them at the wrong boundary
+  (`SegWrapFixup.java` repairs this per-instruction).
+- **Voxel-Space terrain** (Comanche lineage): a column-major ray-cast over a heightmap, **fixed-point
+  integer only** (no FP in the raycaster), per-column texel walk (`689a` sky/tile resample → `6980`
+  raycaster → `9200` tile→fb writer). Determinism-relevant: no x87 rounding to diverge native↔wasm.
+- **Cooperative timing on a PIT tick.** `[0x452]` (frame timer) is bumped by the INT-8 sub-handler; the
+  engine spin-waits on tick counters, so time "passes" only when the pump runs — the seam the port drives
+  cooperatively (`fist_timer_pump`).
+
 ## The chain
 
 Everything starts with `make` — the target chain *is* the documentation (`make help`).
@@ -116,6 +139,23 @@ guest physical address, so any engine field is directly comparable byte-for-byte
 windshield, `tools/oracle/capture_battle_burst.sh` grabs the original spawn under stock DOSBox and selects
 the frame whose dashboard matches the port, giving a provenance-verified framebuffer reference without
 needing guest RAM.
+
+### Toolchain inventory (present in-repo — these are the working tools, not external deps)
+
+- **Ghidra** `third_party/ghidra_12.1.2_PUBLIC` (headless) + JDK `third_party/jdk-21.0.11+10`, project DB
+  `third_party/fist_ghidra_proj/*.rep` (reused across runs; `FIST_FRESH=1` re-imports). Driver:
+  `tools/decompile.sh` (`make image`→`fist_dat_image.bin`→decompile). Pipeline order (all in
+  `tools/ghidra/`): `PrepAnalysis` (aggressive analyzers + **DS/SS** segment context) → `MarkEntry` →
+  `SeedServiceVecs`/`SeedRuntimeVecs` → `RecoverAll` (jump-table/prologue fixpoint) → `SegWrapFixup`
+  (CS-cluster near-flow repair; discovers the `0xf69`/`0x1000` clusters) → `InstallIntFixup` (INT→reg-file)
+  → `ApplyConv` (custom `__allregs` model, register threading) → `SegmentFixup` (DS-provably-CS) →
+  `ExportDecomp`. **CS and ES context are NOT yet set** (`PrepAnalysis`) — the board:0010 gap.
+- **Patched DOSBox** `third_party/dosbox-fist` (instrumented; DGROUP relocated to a known guest phys addr so
+  engine fields diff byte-for-byte vs `g_mem`). Terrain/voxel oracle: `tools/oracle/capture_9200_framematched.sh`
+  and `capture_6980_framematched.sh` (`FIST_R9200CAP`: frame-matched {globals, VRAM, DAC, tile} per 9200
+  pass). 1:1 320×200 references land in `ref/` via `tools/refcapture_*.sh` (e.g. `refcapture_intro.sh`).
+  Scripts default `DOSBOX=/tmp/debs/dosbox-fist`; point them at `third_party/dosbox-fist`.
+- **QEMU** `qemu-system-i386` (gdb-stub `-s -S`, icount replay) for protected-mode inspection.
 
 ## What decides done
 
