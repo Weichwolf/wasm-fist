@@ -1442,3 +1442,20 @@ for some frames).  THE FIX PATH: (1) identify the far-call target FUN (c684 offs
 (2) find why it runs native != wasm (a shim fist_icall_far resolution diff, or the target's own native/wasm
 codegen/UB), (3) make it deterministic AND faithful, (4) oracle-confirm the original renders it.  This is
 the real board:0003 work; it is a far-call-target determinism bug, now pinned to a single mechanism.
+
+RETRACTION (2026-08-24): the "c684:c686 far-call TARGET diverges native/wasm" conclusion is DISPROVEN by a
+direct trace.  Instrumented every c684 far-call site (c684 value + c686) in the per-site-correct-c686 build,
+native vs wasm during terrain: IDENTICAL -- 1045 calls each, same value distribution (798x c684=3e781d23
+c686=3e78 ; 193x 3e7819ae ; 29x 10000000/1000 ; 25x 030b/0000).  So (a) native and wasm fire the SAME c684
+far calls with the SAME arguments -> the far calls are NOT the 5879 divergence source; (b) c686 at the
+terrain far calls is 0x3e78 (set DYNAMICALLY before the calls), NOT my forced 0xf69/0x1000 -- the forced
+value is OVERWRITTEN before these calls, so it only perturbs the boot WINDOW before being overwritten.
+So the 5879 from forcing c686 is a genuine native/wasm divergence but through an UNIDENTIFIED non-c684 path
+(the transient forced value cascades through some other consumer / boot-state).  This joins c3e2/c434 in
+weakening the "terrain-site value drives the render" thesis: the c684 far-call mechanism I proposed is NOT
+it.  HONEST STATE: forcing c686 != garbage triggers native!=wasm 5879, mechanism still not pinned; the c684
+far-call hypothesis is eliminated.  The determinism divergence is a native/wasm codegen/UB sensitivity to
+perturbed boot state, of which c686/be58(412)/a null-getenv are all triggers -- consistent with the ORIGINAL
+"code-layout / uninit-state fragility" characterisation, NOT a specific far-call.  The reliable path remains
+the oracle (does the original's terrain frame match committed-W?) + a native-vs-wasm state-diff at the FIRST
+divergent byte under a controlled perturbation.  patch 412 stays innocent.
