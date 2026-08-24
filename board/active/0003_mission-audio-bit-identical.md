@@ -1036,3 +1036,17 @@ shifts the terrain [0x452]).  It is exactly the "engine-progress-keyed tick" can
 mechanism-justified.  Caveat/risk: the current per-I/O pump is WHAT makes the 176 flows converge today, so
 this is a matrix-wide timing change requiring careful design + full 10x re-gate.  Patches 411+412 land with
 it.  Matrix 176/176; tree clean.
+
+MECHANISM CLAIM RETRACTED (integrity -- disproven by matrix test).  I claimed the 412<->terrain coupling
+was the OPL-register-write pump (in()/out() pumping the tick on 0x388/0x389).  TESTED: prototyped
+out(0x388/0x389) skipping fist_timer_pump(), applied 412, ran the FULL matrix -> terrain-{azer1..syria1}
+STILL nat!=wasm(206), unchanged.  audio-intro stayed diff=0 (so the no-pump is behaviour-neutral for
+audio), but it does NOT fix the terrain coupling.  So the coupling is NOT the OPL-write pump volume; the
+extra ISRs/divergence come from something else in 412's real-command processing (0833 dispatches the real
+command 0x5000 to a DIFFERENT sound-driver method than the garbage 0x1ec -> slot 0x0a vs slot 0 -> a
+different code path that perturbs terrain native-async vs wasm-coop by a mechanism NOT yet identified).
+9th disproven hypothesis.  What remains FIRM: 412 makes the sound-driver STATE diff=0 under coop (proven);
+412 regresses the 5 terrain flows 206 B under the matrix's native-async-vs-wasm-coop regime; the coupling
+is a timing/state divergence in 412's real-command code path, mechanism OPEN.  The reliable path remains a
+gdb watchpoint on the terrain-divergent framebuffer bytes' SOURCE (find what writes the 206 divergent FB
+bytes and why it differs with 412), a fresh careful pass.  Prototype reverted; matrix 176/176; tree clean.
