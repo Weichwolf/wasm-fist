@@ -1006,3 +1006,16 @@ must be re-gated 10x; the terrain-COOP-timeout is the hard constraint it must sa
 patches 411 (d97e) and 412 (be50/be58 -- proven to make the sound-driver state diff=0) both land with it,
 unblocking menu/mission audio AND removing the async-vs-coop terrain coupling.  This is the single
 highest-leverage item across board:0003 and the terrain determinism.  Matrix 176/176; tree clean.
+
+MEMORY-OVERLAP RULED OUT (last alternative closed).  The 206-byte terrain regression under patch 412 is
+NOT sound-data corrupting the framebuffer: the sound driver data segment (base 0x3ce90 .. 0x3ee90) sits
+388 KB below the VGA framebuffer (0xA0000) -- no overlap.  So the 206 divergent bytes are IN the terrain
+framebuffer as a TIMING-shifted render (the async-vs-coop tick regime), not memory corruption.  This closes
+the last non-tick-regime hypothesis: the coupling is confirmed to be the tick determinism.  (Manual terrain
+repro is unreliable -- FIST_MISSFB terrain times out under my ad-hoc mouse script; the AUTHORITATIVE datum
+is the verify.sh matrix run: terrain-{azer1,saudi1,cyprus1,india1,syria1} nat!=wasm(206) with 412, 176/176
+without it.)  Convergence now confirmed from four independent angles: (1) watchpoint -> divergent bytes are
+be58-garbage-command consequences; (2) dump -> patch 412 makes the sound-driver state diff=0; (3) COOP
+terrain hangs -> pure-coop unviable; (4) no sound/FB memory overlap -> the terrain coupling is timing.
+The single root is the async-vs-coop tick regime; the fix is the specified deterministic render-advancing
+tick model.  Matrix 176/176; tree clean.
