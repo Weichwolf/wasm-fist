@@ -1272,3 +1272,17 @@ becomes code-layout-invariant AND native==wasm robust AND 412 lands, and likely 
 42 missions.  (valgrind is NOT installed here; localise instead by per-TU/-per-function
 -ftrivial-auto-var-init=zero bisection, then read the asm for the specific dropped write.)  Matrix 176/176;
 tree clean.
+
+TU-BISECT LOCALISES THE CONSUMED UNINIT READ TO fist.c (NOT fist_ext.c).  Method: build every TU with
+-ftrivial-auto-var-init=zero (invariant baseline), then recompile ONE TU with =pattern (0xAA) and relink;
+a changed terrain FB means that TU holds a CONSUMED uninit read.  Result:
+  pattern-init fist_ext.c vs all-zero baseline = 0    -> fist_ext.c's 183 unaff_/extraout_/in_ESP pseudo-
+                                                          vars are INNOCENT (they never reach the FB)
+  pattern-init fist.c     vs all-zero baseline = 603  -> the FB-driving uninit read is in fist.c
+So correct the previous entry: the culprit is a __allregs-pruned register read in ONE fist.c terrain-boot
+function, not the raycaster TU.  fist.c has 970 such pseudo-vars; the terrain render is driven by the
+extender display-list walkers (PATCH 116/193/346 dispatch paths, op-0x08).  NEXT (deliberate): function-
+level bisect inside fist.c -- with pattern-init=0xAA the uninit local reads 0xAAAA, so scan g_mem during
+terrain boot for the first 0xAAAA-derived value to name the propagating store, or wrap candidate display-
+list-walker locals with explicit zeroing and watch the 603 collapse -- then read the asm for the dropped
+register write and land it as an asm-verified patch.  Matrix 176/176; tree clean.
