@@ -199,3 +199,26 @@ WHAT STANDS regardless: SetCSContext.java (pipeline-integrated, correct -- futur
 clean) and the assemble_fist.py wrapped-signature fix (landed, native .text byte-identical) are both
 correct improvements independent of the migration decision.  The DOSBox write-trace (board:0002 tool) is
 the arbiter to run next.
+
+CRITICAL CORRECTION -- SetCSContext does NOT fix board:0003 determinism (2026-08-24).  My earlier note
+("terrain sites now read DEFINED c686=0xf69 on both targets -> determinism test is a clean build away") was
+WRONG.  board:0003's proven characterisation: the terrain-site reads are DEAD on wasm (emcc -O2 elides them,
+VALUE-INVARIANT) and LIVE on native (-O0 reads + uses them).  So DEFINING the values (which is all
+SetCSContext does) makes native USE the defined value (-> W') while wasm still ELIDES it (-> W) -> native
+!= wasm by 206.  Confirmed by the prior data point: native-defined vs wasm-defined = 206; wasm-defined ==
+wasm-garbage == W.  Therefore SetCSContext, applied to the migration, would make terrain native != wasm
+(the current native==wasm holds ONLY because both hit W by garbage/elision coincidence, and defining breaks
+that coincidence on the native side).  board:0003 determinism is a native-O0-reads / wasm-O2-elides CODEGEN
+divergence, INDEPENDENT of whether the value is defined -- SetCSContext does not touch it.
+
+REVISED board:0010 COST/BENEFIT (honest): the migration costs ~189 hand-rebases and delivers ONLY a
+cleaner decompile (312 unaff->0) + ~25 subsumed patches -- NOT a determinism fix (it may regress terrain to
+native!=wasm 206).  That is very likely NOT worth 189 rebases for the EXISTING patch base.  DECISION:
+KEEP SetCSContext + the assemble fix for FUTURE fresh decompiles (a from-scratch decompile is then clean,
+and new patches are written against defined segments), but DO NOT migrate the existing patch base.  The
+board:0003 determinism fix is a SEPARATE problem: resolve why native -O0 keeps a terrain-site read that
+emcc -O2 proves dead, then (oracle-arbitrated W vs W') either force both to keep the faithful value or
+force both to drop a spurious read.  That is the real board:0003 work; board:0010 was a detour that
+cleaned the decompile but does not solve determinism.  Net honest outcome: SetCSContext + assemble fix
+landed as decompile-quality improvements; the "consolidation eliminates 184 patches / fixes determinism"
+thesis is RETRACTED.

@@ -1377,3 +1377,14 @@ W or W' is faithful, and it is tooling-gated.  Until then the fix cannot be land
 either direction blindly risks encoding the wrong frame into the matrix).  This closes the diagnosis: root
 = __allregs-pruned saved-segment reads with an -O2-vs-O0 liveness divergence; blocked on the terrain oracle
 to choose the faithful frame.  Matrix 176/176; tree clean.
+
+SHARPENED (via board:0010, 2026-08-24): defining the terrain-site segment values (the board:0010 CS/ES
+context) does NOT converge native==wasm -- it makes native USE the value (-O0, W') while wasm ELIDES it
+(-O2, W) -> 206.  So the determinism root is precisely a native-O0-vs-wasm-O2 CODEGEN divergence at these
+sites (native keeps a read emcc -O2 proves dead), NOT the definedness of the value.  The real fix: (1) find
+why native's terrain render has a data dependency on c686/c3e2/c434 that wasm's does not (compiled-code
+diff of the terrain-write path native vs wasm), then (2) oracle-arbitrate W vs W' (does the ORIGINAL's
+terrain frame depend on these fields?) to decide whether to make BOTH keep the value (faithful read) or
+BOTH drop it (spurious read).  The DOSBox read-trace can be extended (address-filtered read-watch on the
+engine DGROUP under CR3-aware paging) to answer whether the original reads them during render.  patch 412
+stays semantically innocent; it only exposes the fragility by recompiling be58.
