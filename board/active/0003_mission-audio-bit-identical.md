@@ -1050,3 +1050,18 @@ different code path that perturbs terrain native-async vs wasm-coop by a mechani
 is a timing/state divergence in 412's real-command code path, mechanism OPEN.  The reliable path remains a
 gdb watchpoint on the terrain-divergent framebuffer bytes' SOURCE (find what writes the 206 divergent FB
 bytes and why it differs with 412), a fresh careful pass.  Prototype reverted; matrix 176/176; tree clean.
+
+TERRAIN COUPLING LOCALIZED to a specific TOP-LEFT render element (not a broad timing shift -- narrows the
+whole picture).  Captured terrain-azer1 native(412) vs wasm(412) framebuffers with the REAL run_terrain
+MC_MOUSE (my earlier ad-hoc mouse script was wrong -> timeouts).  The 206 divergent bytes are 12 short
+runs, ALL in the top-left corner: rows 0,3,6,9,12,15,18 (every 3rd row), cols 0..32.  native = 0x20
+UNIFORM across the region; wasm = varied (0x00/0x3c/0x34/...).  So with patch 412 NATIVE fills this
+top-left every-3rd-row band with 0x20 while WASM keeps varied content -- a LOCALIZED render-element
+divergence, NOT a broadly timing-shifted terrain view (a broad tick-shift would scatter across the whole
+320x200).  This DISPROVES "the terrain coupling is the tick regime" as a broad phenomenon: it is a specific
+top-left overlay whose content 412 changes, differing native-async vs wasm-coop.  IMPLICATION: the fix may
+be NARROWER than a tick re-architecture -- identify what writes 0x20 to fb top-left rows{0,3,6,..} cols
+0..32 on native under 412 and why wasm differs there (a HUD/overlay element reading a sound-state or
+frame-count value that 412 perturbs).  DIRECT NEXT PROBE: gdb watchpoint on g_mem+0xA0000 (fb row0 col0)
+during native terrain-azer1+412 to catch the writer of the 0x20 band.  10th mechanism refinement; the
+coupling is a localized overlay, not global timing.  Matrix 176/176; tree clean.
