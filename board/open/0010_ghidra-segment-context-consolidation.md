@@ -162,3 +162,16 @@ safe partial increment.  What is DONE this session and banked: SetCSContext.java
 integrated, 312 unaff->0), the honest scope correction (~25 subsumed not 184; 136 pointer-basing still
 needed), and the confirmed DOSBox write-trace capability.  The migration + determinism confirmation is the
 scoped next dedicated session, justified by the board:0003 payoff, to be entered deliberately.
+
+ASSEMBLE-FIX UNBLOCKS THE MIGRATION STARTING POINT (2026-08-24).  With the assemble_fist.py wrapped-
+signature fix landed, the CS/ES decompile now assembles CLEANLY: 0 malformed `,;` prototypes (was the
+build-blocking parse error), the 243 `param_N,`-continued lines are legitimate wrapped signatures.  Patch
+apply on the clean assembled fist.c: 233 exact / 164 need rebase (context-shifted by the re-threading, NOT
+corruption).  So board:0010's remaining work is now precisely: rebase 164 context-shifted patches (mostly
+the 136 pointer-basing ones that are still semantically needed) onto the CS/ES decompile, build both
+targets, verify native==wasm + terrain determinism (board:0003), full 10x re-gate.  DE-RISKED THIS SESSION:
+(1) SetCSContext.java eliminates 312 unaff pseudo-vars (integrated in decompile.sh), (2) assemble_fist.py
+handles wrapped signatures (landed, native .text byte-identical), (3) migration scope measured precisely
+(233 exact / 164 rebase, 0 parse errors) with the honest split (~25 subsumable, 136 pointer-basing needing
+rebase).  The 164-patch rebase is the dedicated task; it is now mechanical-per-patch (clean base, no tooling
+blockers), justified by the board:0003 determinism payoff.
