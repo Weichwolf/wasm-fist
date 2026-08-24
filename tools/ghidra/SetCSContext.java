@@ -36,6 +36,12 @@ public class SetCSContext extends GhidraScript {
         Listing lst = p.getListing();
         Register cs = p.getRegister("CS");
         if (cs == null) { println("SETCS no CS register"); return; }
+        // ES baseline: the dominant real-mode pattern is ES:=DS at entry (DGROUP) for the DGROUP-relative
+        // rep-string / struct blits; seed ES=DGROUP like DS.  Off by default (FIST_ES_CTX=1) so the CS win
+        // can be measured/landed independently -- ES is genuinely dynamic and needs a drop-vs-regression check.
+        Register es = p.getRegister("ES");
+        long esBase = envInt("FIST_ES_BASE", 0x1c00);
+        boolean setEs = System.getenv("FIST_ES_CTX") != null;
         long minSites = envInt("FIST_CS_MINSITES", 8);
         long codeEnd  = envInt("FIST_CODE_END", 0x1c000);
         Address lo = p.getMinAddress(), hi = p.getMaxAddress();
@@ -50,6 +56,10 @@ public class SetCSContext extends GhidraScript {
                 int pageSeg = (int)(pg << 12);
                 p.getProgramContext().setValue(cs, at(a), at(b), BigInteger.valueOf(pageSeg));
                 baseSet++;
+            }
+            if (setEs && es != null) {
+                p.getProgramContext().setValue(es, at(0), at(linHi), BigInteger.valueOf(esBase));
+                println("SETCS ES baseline = 0x" + Long.toHexString(esBase) + " over whole image");
             }
             // 2) discover non-zero CS clusters from far call/jmp targets
             Map<Integer,Integer> segSites = new HashMap<>();

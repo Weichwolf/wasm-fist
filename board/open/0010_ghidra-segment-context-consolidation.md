@@ -85,3 +85,17 @@ entry -> baseline ES=DGROUP 0x1c00 like DS; measure); (b) full integration: swap
 decompile into re_out, re-triage the now-redundant segment patches (-F0 apply -> drop the ones subsumed,
 keep the semantic ones), rebuild, verify native==wasm + full 10x re-gate; (c) confirm whether the defined
 c686/c3e2/c434 also collapses the board:0003 terrain determinism (native reads the constant, not garbage).
+
+RESULT (CS+ES, 2026-08-24) -- 312 unaff -> 0, and 207/397 patches self-identify as redundant.  With
+FIST_ES_CTX=1 (ES baseline = DGROUP 0x1c00, the ES:=DS pattern) added to SetCSContext:
+  unaff_CS 134->0, unaff_ES 176->0  => ALL 312 unaff register decls eliminated.
+  terrain sites: c686=0xf69, c3e2=0xf69, c434=0x1c00 (all DEFINED, were unaff).
+Swapped the CS+ES decompile into re_out, `make assemble` OK (2269 funcs, 0 unaff in fist.c), then applied
+all 397 patches individually: 190 apply clean, **207 FAIL because their target segment is now correct**.
+So ~half the patch base is subsumed.  CAVEAT: the 207 need triage -- most are redundant (drop), but some
+may be semantic patches whose CONTEXT merely shifted (rebase), and the GLOBAL ES=0x1c00 baseline is
+aggressive (string-ops with a buffer ES would mis-resolve) -> must be validated by build+matrix, and ES may
+need to be per-function (SegmentFixup-style provable ES:=DS) rather than global.  DECISIVE next test: build
+the CS+ES decompile + the 190 applying patches and check terrain-azer1 native==wasm (board:0003) + a broad
+matrix smoke -- if green, the 207 were genuinely redundant and board:0003's UB determinism is fixed at the
+Ghidra root; if it regresses, ES is too aggressive / some patches need rebasing.
