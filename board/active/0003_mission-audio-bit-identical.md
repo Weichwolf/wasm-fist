@@ -1331,3 +1331,25 @@ FUN_0000_* is a prerequisite step to read their CS store, next session.)  The pe
 recovery (thread the pruned segment loads: ES=DS at 2ebe, and the CS stores at 134e/02c5 once mapped) is the
 concrete fix -- asm-verified patches, engine-wide blast radius (271 unaff_CS/ES reads), full re-gate.
 Matrix 176/176; tree clean.
+
+ASM + LOAD-MAPPING RESOLVED, and a KEY native/wasm ASYMMETRY around the UB.  The segment-0000 load map:
+FIST.DAT is an MZ exe; the Ghidra image (re_out/fist_dat_image.bin) is file[0x1400..EOF] (the 0x1400 MZ
+header dropped), loaded at base 0, so Ghidra-linear = image offset.  Disassembling THE IMAGE (not raw
+FIST.DAT) at the linear offsets gives clean code and the exact dropped stores:
+  FUN_0000_02c5 @0x2c5:  c7 06 84 06 0b 03  movw [0x684],0x30b ; 8c 0e 86 06  mov [0x686],cs  -> c686 = CS
+  FUN_0000_134e @0x134e: c7 06 e0 03 74 13  movw [0x3e0],0x1374; 8c 0e e2 03  mov [0x3e2],cs  -> c3e2 = CS
+  FUN_1000_2ebe @0x12ebe: mov ds,ax; mov ax,es (ES=DS entry); ... mov [0x434],es              -> c434 = ES
+So the pruned ops are plain `mov [mem],cs` / `mov [mem],es` -- Ghidra could not type the segment-register
+source and emitted unaff_CS/unaff_ES.  BUT the value is NOT a recoverable constant that reproduces the
+committed FB W: unaff_CS/ES set to 0, 0x1000, 0xf69 (the c686 normal value = main code seg), or ES=0x1c00
+(=DGROUP=entry DS) ALL give native = W+206 (call it W'), never W.  Only the committed uninitialised garbage
+gives W.  AND emcc -O2 is VALUE-INVARIANT here: wasm with unaff=0 == committed wasm == W (the wasm build's
+output does not depend on these reads), while native IS value-sensitive (garbage->W, any constant->W').
+So the committed terrain native==wasm=W rests on: native-garbage and wasm-(-O2-elided) COINCIDENTALLY both
+yielding W, and the asm-faithful segment value yields W' != W on native.  IMPLICATION (board:0002): W may
+itself be UNFAITHFUL -- both current targets may be rendering a garbage-coincidence FB, and the oracle-true
+terrain frame could be W'.  The fix is therefore NOT "hardcode the segment"; it is (a) thread the pruned
+`mov [mem],cs/es` faithfully so BOTH targets read the DEFINED value AND compile-consume it identically
+(understand why emcc -O2 elides the read that gcc -O0 consumes -- likely dead-store elimination the native
+-O0 build keeps), and (b) oracle-capture terrain to decide whether W or W' is correct.  This is genuine
+deliberate work; the asm and load-map here are the ready inputs for it.  Matrix 176/176; tree clean.
