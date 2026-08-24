@@ -1408,3 +1408,22 @@ terrain-relevant, BOTH targets must save+use the real CS (SetCSContext value + d
 not, c686's value is harmless and W is fine.  Either way: only c686 matters, and it is a far-ptr-segment
 idiom, not a raw data value.  patch 412 remains semantically innocent (recompiling be58 just reshuffles the
 native garbage in this slot).
+
+DECISIVE TEST (2026-08-24): c686 IS live + terrain-relevant; defining it EXPOSES a native/wasm far-call
+divergence.  Forced c686 = 0xf69 (the real-CS value) at all 3 write sites (02c5/55c5/…) on BOTH targets,
+built native + wasm, ran terrain-azer1: native vs wasm = **5879** (far worse than the committed 0 or the
+412-perturbed 206).  Interpretation: with a GARBAGE c686 the c684:c686 far call resolves to an unmapped
+segment -> fist_icall_far traps -> no-op -> NO terrain effect -> native==wasm=W (the committed coincidence
+that PASSES the matrix by SIDESTEPPING the far call).  With c686 DEFINED (0xf69) the far call RESOLVES and
+RUNS a real function that heavily writes the terrain framebuffer -> and native vs wasm run/resolve it
+DIFFERENTLY (5879 bytes).  So: (1) c686 is genuinely on the terrain-render path (not dead); (2) the current
+terrain native==wasm holds ONLY because garbage c686 makes the far call a no-op on both -- it is NOT
+rendering the far-call's contribution at all, so W is likely UNFAITHFUL (missing whatever the original's
+real-CS far call draws); (3) there is a SEPARATE, larger native/wasm divergence (5879) in the far-call
+target's resolution or codegen, exposed the moment the call is activated.  CONSEQUENCE: board:0003 is a deep
+native/wasm far-call determinism problem, and the matrix's passing terrain rows are passing by sidestepping
+a real far call, not by faithfully rendering it.  patch 412's 206 is the same class (recompiling be58
+reshuffles native's garbage c686, occasionally making the far call NON-trap on native only -> partial
+activation -> 206).  Next: (a) identify the c684:c686 far-call TARGET (fist_icall_far(0xf69:off) -> which
+FUN), (b) diff its native vs wasm execution to find the 5879 divergence, (c) oracle-confirm the original DOES
+run this far call in terrain (so W is unfaithful and the far call must be made native==wasm + faithful).
