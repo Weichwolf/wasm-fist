@@ -48,6 +48,8 @@ public class InstallIntFixup extends GhidraScript {
         " DX = *[ram]:2 0xf0006:4;" +
         " SI = *[ram]:2 0xf0008:4;" +
         " DI = *[ram]:2 0xf000a:4;" +
+        " DS = *[ram]:2 0xf000e:4;" +          // INT-return DS (segment returns preserve the input DS)
+        " ES = *[ram]:2 0xf0010:4;" +          // INT-return ES: AH=35 get-vector / AH=2f get-DTA return ES:BX
         " CF = *[ram]:1 0xf0012:4;" +          // carry/error flag back into the flag dataflow
         " res = 0:2;" +                        // satisfy the swi output (dropped by the goto below)
         " goto inst_next;";
