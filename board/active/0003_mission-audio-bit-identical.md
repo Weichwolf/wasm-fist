@@ -1533,3 +1533,19 @@ QUESTION (board:0002): does the ORIGINAL show a cursor/crosshair in the FIST_TER
 native's cursor draw is the bug (match wasm's no-draw); if YES -> wasm is missing it.  Either way this is a
 concrete mga-cursor-vector control-flow divergence, not an FP/codegen bug.  Next: find why native populates
 c578 (the cursor method vector) and wasm zeros it -- the mga cursor-registration path divergence.
+
+PRECISE LOCALISATION (2026-08-24, corrects the "mouse cursor" guess): the 57 is a c578 mga DISPLAY-ELEMENT,
+NOT the mouse cursor.  Read the cursor + mga state from the zero-init statedumps (native vs wasm, terrain
+capture): the MOUSE CURSOR is IDENTICAL -- d5d9(draw-gate)=0xff both, d5ca/d5cc(cursor y/x)=186/40 both,
+d5c4(sprite)=0x0028 both, d5ac(cursor far-ptr)=0x3e782f04 both, dda0/dd9e(mouse)=40/186 both.  So the mouse
+cursor is at (40,186) and converges -- it is NOT the (5,5) crosshair.  The ACTUAL divergence is c578:
+native=0xe5288b89, wasm=0x00000000.  c578 is an mga display-element DESCRIPTOR set by FUN_0000_3fca
+(c578=param_1, c57c=param_3[1]-param_3[0], c580=param_2[1]) and CALLED via `(*_DAT_1000_c578)()`.  So the
+(5,5) crosshair is drawn by the mga display-element whose descriptor c578 native POPULATES (0xe5288b89) and
+wasm leaves ZERO -> native draws the element, wasm doesn't.  ROOT: FUN_0000_3fca runs (or runs with real
+params) on native but not on wasm -- a control-flow divergence in the mga display-element setup that
+persists under coop-both + zero-init (so NOT tick, NOT uninit; a genuine native/wasm control-flow diff in
+reaching 3fca).  So 412's 206 = ~149 uninit segment reads + ~57 the c578 mga display-element that native
+sets up (via 3fca) and wasm doesn't.  Next (dedicated): trace why native reaches FUN_0000_3fca with real
+params during terrain and wasm doesn't -- the mga display-list setup control-flow divergence.  Both board:0003
+components are now precisely localised: (1) the unaff_CS/ES segment class (SetCSContext), (2) c578/3fca.
