@@ -988,3 +988,21 @@ voxel render -- e.g. drive native cooperatively BUT pump the timer from the rend
 give both a wall-clock-independent tick source keyed to engine progress.  Patches 411+412 are two
 asm-verified corrections banked and ready, gated on this one tick-determinism fix.  Matrix 176/176; both
 prototypes reverted; tree clean.
+
+TICK-REGIME FIX CONSTRAINED (COOP terrain completion test, decisive): native terrain-azer1 under
+FIST_COOP_TICK at 25000 Hz does NOT complete even in 500 s wall-clock (rc=124, no frame) -- the voxel
+render loop (689a/6980/9200) does almost no port I/O, so under pure cooperative ticking [0x452] barely
+advances and never reaches the FIST_MISSFB dump op.  (The diff=0 vs ref in that run is a false positive on
+two empty files.)  So "unify everything on COOP + raise timeouts" is NOT viable: pure-coop STARVES the
+terrain render.  Combined with the earlier finding that async ticking is non-deterministic vs coop, BOTH
+existing regimes are ruled out for a unified deterministic tick.  THE FIX MUST BE a NEW tick model that is
+simultaneously (a) deterministic and identical native==wasm, and (b) advances [0x452] during the voxel
+render (does not depend on the render generating pumps).  Two concrete candidate designs: (i) pump the
+cooperative tick from the voxel render loop itself (so [0x452] advances proportionally to render progress,
+deterministically on both targets), or (ii) drive [0x452] off a deterministic ENGINE-PROGRESS counter
+(e.g. present-count / frame-count) rather than pump-count or wall-clock.  This is a focused shim-
+architecture change (native_main.c tick source + the render pump seam), touching every flow's timing, and
+must be re-gated 10x; the terrain-COOP-timeout is the hard constraint it must satisfy.  Once it lands,
+patches 411 (d97e) and 412 (be50/be58 -- proven to make the sound-driver state diff=0) both land with it,
+unblocking menu/mission audio AND removing the async-vs-coop terrain coupling.  This is the single
+highest-leverage item across board:0003 and the terrain determinism.  Matrix 176/176; tree clean.
