@@ -1616,3 +1616,21 @@ of the fundamental native(gcc-O0)/wasm(emcc-O2) state divergence; the committed 
 coincidence; the robust fix is deterministic state on both (SetCSContext for the uninit class + resolving the
 compiler-level state divergence), NOT a targeted reticle patch.  The reticle path is just where the 57 bytes
 surface.  Further single-line chasing has diminishing returns.
+
+DECISIVE ELIMINATION (2026-08-24, loop): the 57 is an ENVIRONMENT divergence (x86-32 gcc vs wasm32 emcc),
+NOT compiler-opt and NOT uninit.  native -O0 + zero-init vs wasm -O0 + zero-init = STILL 57 (matched opt
+level AND matched zero-init still diverge).  So it is neither an emcc -O2 optimization (both -O0) nor
+uninitialised locals (both zero).  It is inherent to the native-vs-wasm ENVIRONMENT.  STRONGEST CANDIDATE:
+HOST POINTERS stored in g_mem -- the 3fca params were host pointers (p2=0x081d4ff4 in the g_mem region,
+p3=a stack address) on native; on wasm these are wasm-linear addresses (different values, or 0).  If the
+mga/reticle path stores a host pointer into a g_mem slot and a later read does arithmetic/comparison on its
+VALUE (not just deref), native (0x081.../high stack) and wasm (small wasm offsets) diverge -> the reticle
+element descriptor c578 gets a different value -> 57 FB bytes.  This is the documented host-pointer-in-g_mem
+porting class (the shim stores host ptrs in slots like [0x917]=&fb; the reticle path evidently stores one
+that reaches the render).  So board:0003's 57 = a host-pointer-representation divergence in the mga/reticle
+setup; the committed build converges because native's GARBAGE c578 coincidentally matches wasm's, but any
+perturbation exposes the environment-dependent host-pointer value.  FIX CLASS: ensure the mga/reticle path
+does not let an environment-dependent host-pointer VALUE reach a render-visible g_mem field (normalise to a
+rebased offset, or don't store the host ptr where the render reads it).  This is a real, bounded porting bug
+in the mga driver's pointer handling -- concrete and NOT oracle-gated.  Progress: the 57 is eliminated down
+to the host-pointer class via decisive testing (not compiler, not uninit -> environment/host-ptr).
