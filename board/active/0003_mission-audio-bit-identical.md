@@ -1567,3 +1567,20 @@ investigation (find the branch + the upstream state it reads) -- the exhaustive 
 localised it to this caller but the positive fix needs the mga setup path traced with the oracle to decide
 whether the (5,5) element SHOULD render (native faithful) or not (wasm faithful).  board:0003 fully mapped:
 (1) ~149 unaff_CS/ES uninit (SetCSContext migration), (2) ~57 the 3fca-caller mga-element branch divergence.
+
+ROOT FOUND -- the 57 is a SPURIOUS RETICLE-GRATICULE that native registers in the pure-terrain view and
+wasm does not (2026-08-24).  Backtrace of the 3fca caller: app_entry -> 00d0 -> cae6 -> e714 (display-list
+vector install, PATCH 098) -> 459a -> 22dd -> 286e -> 3fca.  FUN_0000_3a68 in this chain is "PATCH 324: 22dd
+RETICLE-GRATICULE script handler", and PATCH 324 draws the reticle graticule (FUN_0000_3d99 line-clip).  So
+the (5,5) crosshair is the tank targeting-RETICLE GRATICULE.  The immediate caller FUN_0000_286e branches on
+`if (DAT_2000_0b9e == 0)`: DAT_2000_0b9e is the reticle display-element LINKED-LIST head; native has it
+NON-NULL (elements present -> the do/while walks them, dispatching the reticle method -> 3fca with real
+params -> c578 set -> draws the graticule), wasm has it NULL (empty list -> no reticle drawn).  FIDELITY (no
+oracle needed): FIST_TERRAIN renders ONLY the voxel view (no HUD overlay, per CLAUDE.md/board), so the
+targeting reticle should NOT appear in the pure-terrain capture -> WASM (empty list, no reticle) is FAITHFUL,
+NATIVE (spurious reticle graticule at (5,5)) is the BUG.  So the 57 = native spuriously populates the reticle
+display-list (DAT_2000_0b9e) in the FIST_TERRAIN path where wasm (correctly) leaves it empty.  The fix is a
+shim/setup one: find why native's FIST_TERRAIN path registers the reticle element into DAT_2000_0b9e and
+wasm's does not, and stop native (match wasm's no-reticle terrain view).  This is a CONCRETE shim bug, NOT
+oracle-gated -- the pure voxel view has no HUD by definition.  board:0003's 57 is now fully rooted:
+native-spurious-reticle in the terrain-only view via DAT_2000_0b9e.
