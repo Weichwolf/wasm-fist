@@ -1584,3 +1584,19 @@ shim/setup one: find why native's FIST_TERRAIN path registers the reticle elemen
 wasm's does not, and stop native (match wasm's no-reticle terrain view).  This is a CONCRETE shim bug, NOT
 oracle-gated -- the pure voxel view has no HUD by definition.  board:0003's 57 is now fully rooted:
 native-spurious-reticle in the terrain-only view via DAT_2000_0b9e.
+
+VERIFIED (2026-08-24, avoids over-claim): the committed build correctly shows NO reticle on BOTH targets.
+Checked (5,5) + cross arms: committed-native = 3c3c3c/3c3c3c/4d4949 (terrain, NO reticle); committed-wasm =
+IDENTICAL (NO reticle) -> native==wasm=0 is a faithful no-reticle terrain view.  Only ZERO-INIT native shows
+the reticle ((5,5)=000000, arms fbfbfb).  So the refined truth: committed-native leaves DAT_2000_0b9e NULL
+(garbage coincidence -> no reticle, matches wasm); zero-init native makes 0b9e NON-NULL (draws reticle).  BUT
+wasm is spec-zero-init and STILL has 0b9e NULL (no reticle) -> a genuine native(gcc-O0)/wasm(emcc-O2) CODEGEN
+divergence in the 0b9e reticle-display-list population: with identical zero locals, native populates 0b9e and
+wasm does not.  The committed native==wasm=0 holds only because native's GARBAGE coincidentally leaves 0b9e
+null (matching wasm's deterministic null).  FAITHFUL behaviour = NO reticle in the pure voxel view (wasm
+robustly correct; committed-native correct by luck).  So the 57 is a native/wasm codegen divergence in the
+reticle-graticule display-list population (DAT_2000_0b9e), NOT a semantic reticle bug.  ROBUST FIX: make
+native's 0b9e population deterministic == wasm's (null -> no reticle) by finding the gcc-O0/emcc-O2 codegen
+divergence in the reticle/display-list setup (289b/22dd/286e path via e714).  This is the concrete root; the
+verification (committed = no-reticle on both) prevented an over-claim that native always draws a spurious
+reticle.  board:0003's 57 rooted + verified.
