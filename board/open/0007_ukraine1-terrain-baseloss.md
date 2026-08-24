@@ -166,3 +166,10 @@ port-natural full g_mem pointer for every object handle, make c31e (and the terr
 the roster walkers) all produce that representation, and make every method+helper (bd09/b274/ba33/...)
 consume it -- so no function is polymorphic across paths.  Multi-session, asm-anchored, individually
 re-gated.  Matrix intact 175/175 (all prototypes reverted).
+
+
+SHARED ROOT with board:0003 (2026-08-24): the __allregs-prune that this item names as the terrain
+object-ref root ALSO causes board:0003's terrain FB code-layout-fragility -- fist_ext.c has 183 uninit
+Ghidra register pseudo-vars (unaff_/extraout_/in_ESP) read as garbage; native (garbage, recompile-
+dependent) vs wasm (spec-zero) diverge under any hot-path recompile (proven: -ftrivial-auto-var-init=zero
+makes native terrain code-layout-invariant).  One fix -- restore the dropped register writes -- serves both.

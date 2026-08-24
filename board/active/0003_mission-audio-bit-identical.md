@@ -1257,3 +1257,18 @@ leaves 57 vs wasm and hides the real lost-write); it is only the instrument that
 NEXT: valgrind --track-origins=yes on the native terrain run to name the exact uninitialised local + its
 reading function, then find the Ghidra-dropped write in the asm and land it as a patch.  Matrix 176/176;
 tree clean.
+
+LOCALISATION + SHARED ROOT WITH board:0007.  fist_ext.c carries 183 Ghidra uninitialised-register
+pseudo-vars (unaff_ES, extraout_var, in_ESP, ...) -- the __allregs-prune artifact: register values the
+decompile could not thread, declared but never assigned, so READ AS GARBAGE.  The terrain render funcs
+themselves (689a/6980/9200) are clean of them; the uninit reads live in the terrain-BOOT functions that
+populate camera/transform state the render consumes (e.g. `uRam000f0010 = unaff_ES`, 880 stores into the
+0xf00xx scratch the render reads).  On native those reads are stack/heap garbage (code-layout-dependent ->
+206 on recompile); on wasm they are spec-zero.  This is the SAME __allregs-prune root that board:0007 names
+for the terrain object-ref cascade -- board:0003's terrain determinism and board:0007's terrain baseloss
+are two faces of one defect: the decompile's lost register dataflow.  Closing the __allregs-prune faithfully
+(restore the dropped register writes as asm-verified patches) removes the uninit reads -> native terrain
+becomes code-layout-invariant AND native==wasm robust AND 412 lands, and likely unblocks board:0007's
+42 missions.  (valgrind is NOT installed here; localise instead by per-TU/-per-function
+-ftrivial-auto-var-init=zero bisection, then read the asm for the specific dropped write.)  Matrix 176/176;
+tree clean.
