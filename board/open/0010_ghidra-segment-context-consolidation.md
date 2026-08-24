@@ -121,3 +121,27 @@ the ~139 segment patches are that set.  NOTE for board:0003: with the fix, the t
 c686=0xf69 / c434=0x1c00 on BOTH targets (no UB) -- the determinism test is now a clean build away, pending
 the patch migration.  DOSBox memrec trace (Cosmo's SQL-trace idea) can supply ground-truth CS/ES per site
 to VALIDATE the Ghidra values and, if a build is produced, decide board:0003 W-vs-W' against the oracle.
+
+HONEST CORRECTION (2026-08-24, counterexample-driven) -- the "~184 patches redundant" claim was WRONG.
+Verified per-patch against the assembled CS/ES decompile: of the 161 non-exact patches, only ~25 are even
+CANDIDATES for pure-constant subsumption; **136 do POINTER-BASING** (`g_mem+(seg<<4)+off` / far-ptr
+reconstruction) that the CS/ES context does NOT fix.  Decisive counterexample -- patch 011-4cb9-thunk-esbase
+on the new decompile:
+  new decompile: `*param_1 = 0xea; *(undefined2*)(param_1+3) = param_2;`  (param_1 still a RAW host pointer)
+  patch 011 restores: `dst = g_mem+(ES<<4)+DI`, ES from the stack (caller CS), SMC store based into g_mem.
+The CS context eliminated the `unaff_CS` PSEUDO-VAR (the symptom), but the patch's real work -- BASING the
+DI offset as g_mem+(seg<<4)+off and threading ES-from-stack -- is still absent, so the patch is STILL
+NEEDED (rebase, not delete).  Most segment patches are this shape.  So:
+  - What CS/ES context genuinely delivers: 312 unaff pseudo-vars -> 0 (a real decompile-quality win) and it
+    DOES subsume the PURE `mov [mem],cs`->constant cases (the terrain c686/c3e2/c434 sites, ~10-25 patches).
+  - What it does NOT deliver: wholesale retirement of the segment class.  ADOPTING it costs REBASING ~136
+    still-needed pointer-basing patches whose context shifted -- a large migration to gain ~25 retirements
+    plus a cleaner decompile.
+REVISED VALUE THESIS: board:0010's payoff is NOT patch-count reduction; it is (a) a cleaner pristine
+decompile for all FUTURE work (no unaff pseudo-vars), and (b) the DETERMINISM fix -- IF the now-DEFINED
+terrain sites (c686=0xf69, c434=0x1c00 on both targets, no UB) actually converge board:0003 terrain
+native==wasm.  That determinism test is the real prize and REQUIRES the migration to build.  DECISION: keep
+SetCSContext.java pipeline-integrated (it is correct and improves the decompile), but treat the migration as
+a deliberate, per-patch REBASE effort (not a delete-139 shortcut), justified primarily by the board:0003
+determinism payoff -- which should be confirmed FIRST (e.g. via the DOSBox trace giving ground-truth, or a
+minimal targeted build) before committing to rebasing 136 patches.

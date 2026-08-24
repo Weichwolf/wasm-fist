@@ -57,9 +57,10 @@ recognizing them is half the work:
 - **Segment registers as a fourth address dimension.** `mov [mem],cs` / `push cs` SAVE the running code
   segment so a later `lcall [mem]:off` reconstructs a far pointer back into that code with no per-call
   relocation math; `ES`/`DS` are loaded once and reused across `rep movs/stos` blits. These implicit
-  segment carries are invisible to a decompiler run without CS/ES context — which is exactly why **~184 of
-  397 patches (46%) are one class: restoring a segment base Ghidra dropped** (`unaff_CS`/`unaff_ES`, far-ptr
-  seg, string-op base). board:0010 tracks fixing this at the Ghidra-parameter root instead of per site.
+  segment carries are invisible to a decompiler run without CS/ES context — which is why a large
+  share of patches touch this class. Setting CS/ES context in Ghidra (board:0010) eliminates the 312 `unaff_CS`/`unaff_ES`
+  pseudo-vars and subsumes the pure `mov [mem],cs`->constant cases, but NOT the pointer-basing patches
+  (`g_mem+(seg<<4)+off`), which still restore a base Ghidra gets wrong — board:0010 carries the honest split.
 - **Multiple code segments (CS clusters).** The engine is not single-segment: `CS=0x1000` (main engine,
   linear `0x10000+`), a `CS=0xf69` CRT/service cluster (window `0xf690..0x1f68f`, straddling `0x10000`, so
   it physically overlaps the 0x1000 code), and a small `e000` region. Near `rel16` call/jmp wrap inside
