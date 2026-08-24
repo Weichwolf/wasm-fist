@@ -1388,3 +1388,23 @@ terrain frame depend on these fields?) to decide whether to make BOTH keep the v
 BOTH drop it (spurious read).  The DOSBox read-trace can be extended (address-filtered read-watch on the
 engine DGROUP under CR3-aware paging) to answer whether the original reads them during render.  patch 412
 stays semantically innocent; it only exposes the fragility by recompiling be58.
+
+STATIC NARROWING (2026-08-24) -- the determinism root is ONE far-ptr-segment save, not 3 sites.  Readers
+of the 3 candidate terrain sites in the decompile:
+  - DAT_1000_c3e2, DAT_1000_c434: NO readers (only #define + the unaff write) -> DEAD -> RED HERRINGS
+    (they cannot cause the 206; the earlier flow-scan flagged them only as write-divergent, not consumed).
+  - DAT_1000_c686: LIVE.  c684 (`undefined4` = full far-ptr seg:off) + c686 (`undefined2` = saved segment)
+    are the NovaLogic FAR-POINTER-RECONSTRUCTION pair used by fist_icall_far(DAT_1000_c684) at 37739 /
+    51978.. .  FUN_0000_02c5: `c684=0x30b; call 541b; c684=c686; c686=unaff_CS` = the `mov [0x684],0x30b ;
+    mov [0x686],cs` idiom (save this frame's CS into c686 so a later far call via c684 reconstructs a ptr
+    back into this code segment).  FUN_1000_55c5 is a save/call/restore that writes c686=unaff_CS on exit.
+So the determinism issue is precisely: native writes GARBAGE cs (recompile-dependent) into the far-ptr
+segment slot c686; wasm elides the read.  The FAITHFUL value is the real running CS (what SetCSContext
+computes: 0xf69/0x1000).  IMPLICATION: the current terrain W (native garbage == wasm elided) is likely
+UNFAITHFUL vs the original (which saves the real CS) -- the matrix passes only because it checks
+native==wasm, NOT the oracle.  So board:0002 (oracle) must confirm whether the c684:c686 far call is on
+the terrain-render path and whether the original's frame = W or the real-CS frame W''.  If the far call is
+terrain-relevant, BOTH targets must save+use the real CS (SetCSContext value + defeat wasm's elision); if
+not, c686's value is harmless and W is fine.  Either way: only c686 matters, and it is a far-ptr-segment
+idiom, not a raw data value.  patch 412 remains semantically innocent (recompiling be58 just reshuffles the
+native garbage in this slot).
