@@ -1353,3 +1353,27 @@ terrain frame could be W'.  The fix is therefore NOT "hardcode the segment"; it 
 (understand why emcc -O2 elides the read that gcc -O0 consumes -- likely dead-store elimination the native
 -O0 build keeps), and (b) oracle-capture terrain to decide whether W or W' is correct.  This is genuine
 deliberate work; the asm and load-map here are the ready inputs for it.  Matrix 176/176; tree clean.
+
+FINAL CHARACTERISATION: the unaff stores are DEAD on wasm, LIVE on native -- the FB agreement is a
+garbage-path coincidence over a data dependency native has and wasm does not.  Decisive test with a
+DISTINCTIVE value (rules out the earlier 0-only fluke): built BOTH targets with unaff_CS=0xf69/ES=0x1c00.
+  wasm-0xf69 vs committed-wasm W   = 0    -> wasm output is INDEPENDENT of these values (even initialised)
+  native-0xf69 vs wasm-0xf69        = 206  -> native output DOES depend on them (-> W')
+So DAT_c686/c3e2/c434 (the saved CS/ES) are read back and used by NATIVE's terrain render but NOT by
+WASM's -- emcc -O2 eliminates the dependency (whether as UB-propagation or dead-store/read elimination),
+gcc -O0 keeps it literally.  The committed native==wasm=W holds only because native's garbage happens to
+render the same pixels as wasm's value-independent path; any recompile perturbs native's garbage -> W+/-206.
+CONSEQUENCE FOR THE FIX (sharper): this is NOT merely "restore the pruned mov[mem],cs" -- initialising the
+value does not converge the targets because wasm ignores it.  The real divergence is that native's render
+READS these saved-segment DGROUP words and wasm's does not.  Two directions, to be decided by the oracle:
+  (A) if the engine is SUPPOSED to use the saved CS/ES (far-ptr reconstruction), wasm is WRONG (optimised
+      the read away); force wasm to keep it (e.g. volatile / -O2 exclusion on the reader) and set the
+      faithful segment -> both -> W' (the oracle-true frame), or
+  (B) if native's dependency is spurious (a decompile artifact the real engine never had), native is WRONG;
+      the faithful render ignores these words (as wasm does) -> W is correct and native must be made to
+      not read them.
+Deciding A vs B REQUIRES the DOSBox/QEMU oracle terrain frame (board:0002) -- it is the arbiter of whether
+W or W' is faithful, and it is tooling-gated.  Until then the fix cannot be landed correctly (landing
+either direction blindly risks encoding the wrong frame into the matrix).  This closes the diagnosis: root
+= __allregs-pruned saved-segment reads with an -O2-vs-O0 liveness divergence; blocked on the terrain oracle
+to choose the faithful frame.  Matrix 176/176; tree clean.
