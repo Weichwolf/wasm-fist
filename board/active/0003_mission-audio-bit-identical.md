@@ -1507,3 +1507,14 @@ but ONLY for the top-left element, NOT the terrain body -- which is why coop-bot
 ROBUST board:0003 FIX = BOTH: (1) deterministic tick so native==wasm reach the capture at the same [0x452]
 (the render-advancing coop-pump seam), AND (2) eliminate the uninit reads (SetCSContext).  Test underway:
 coop-both + zero-init -> if the 57 vanishes, SOURCE 2 is confirmed as the tick regime.
+
+CORRECTION (2026-08-24, loop): the 57 is NEITHER tick NOR uninit -- RETRACT "source 2 = tick regime".
+COOP native + zero-init vs wasm(coop) + zero-init = STILL 57.  So with native forced to COOP ticking (same
+tick model as wasm) AND both zero-init'd (no uninit reads), the 57 top-left divergence PERSISTS.  Therefore
+the 57 is a PURE native(gcc-O0)/wasm(emcc-O2) CODEGEN/UB divergence in the top-left render, independent of
+both the tick regime and uninitialised locals.  The 709-byte broad state divergence in the async state-diff
+DID include the tick regime, but that is a red herring for the 57 (the terrain body absorbs it; the 57
+survives tick-matching).  So the honest decomposition of 412's 206 is: ~149 = uninit reads (SetCSContext),
+~57 = a pure codegen divergence in a 19-pixel top-left element (a real portability bug: FP, integer width,
+or aliasing in whatever renders x0..10,y0..10).  Both fixes are dedicated and INDEPENDENT.  Localising the
+57 owner (which function writes the top-left corner) is the concrete next step for that portability bug.
