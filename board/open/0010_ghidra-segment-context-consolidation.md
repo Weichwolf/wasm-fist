@@ -175,3 +175,27 @@ handles wrapped signatures (landed, native .text byte-identical), (3) migration 
 (233 exact / 164 rebase, 0 parse errors) with the honest split (~25 subsumable, 136 pointer-basing needing
 rebase).  The 164-patch rebase is the dedicated task; it is now mechanical-per-patch (clean base, no tooling
 blockers), justified by the board:0003 determinism payoff.
+
+TRUE MIGRATION COST = ~189 HAND-REBASES (decisive, 2026-08-24).  Attempted automatic 3-way rebase
+(git merge-file --diff3, base=committed fist.c, target=CS/ES fist.c) on every failing patch: only 9
+auto-merge; 189 CONFLICT.  Root cause: ApplyConv re-threads EVERY function's register params (variable
+names + expression structure change throughout each affected function), so a patch's target CONTEXT
+diverges too far from the committed base for context-based merge -- the change is NOT localized to the
+segment sites.  So adopting the CS/ES context for the EXISTING patch base costs ~189 genuine hand-rebases,
+to gain: a cleaner decompile + ~25 subsumed patches + POSSIBLY the board:0003 determinism fix.
+
+REVISED RECOMMENDATION (honest cost/benefit): do NOT start the 189-rebase migration until the board:0003
+determinism payoff is CONFIRMED, because that payoff is the only thing justifying the cost.  The payoff
+question -- is the defined-value terrain frame W' more faithful than the committed garbage-coincidence
+frame W? -- is decided by the TERRAIN ORACLE (board:0002), which breaks the circularity WITHOUT the full
+migration: capture the original's AZER1 terrain under the instrumented DOSBox, compare to native-W and
+defined-W'.  IF W' is oracle-faithful -> the migration is justified (it corrects terrain toward the
+original AND fixes native==wasm determinism) -> do the 189 rebases.  IF W is faithful -> board:0010 is only
+a cleaner-decompile refactor whose 189-rebase cost is NOT justified for the existing patch base (keep
+SetCSContext for FUTURE fresh decompiles only).  So the true next step for this whole line is the terrain
+oracle (board:0002), not the migration.
+
+WHAT STANDS regardless: SetCSContext.java (pipeline-integrated, correct -- future fresh decompiles are
+clean) and the assemble_fist.py wrapped-signature fix (landed, native .text byte-identical) are both
+correct improvements independent of the migration decision.  The DOSBox write-trace (board:0002 tool) is
+the arbiter to run next.
