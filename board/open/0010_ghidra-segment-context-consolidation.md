@@ -99,3 +99,25 @@ need to be per-function (SegmentFixup-style provable ES:=DS) rather than global.
 the CS+ES decompile + the 190 applying patches and check terrain-azer1 native==wasm (board:0003) + a broad
 matrix smoke -- if green, the 207 were genuinely redundant and board:0003's UB determinism is fixed at the
 Ghidra root; if it regresses, ES is too aggressive / some patches need rebasing.
+
+MECHANISM PROVEN + PIPELINE-INTEGRATED; MIGRATION MEASURED (2026-08-24).  SetCSContext.java is now in the
+decompile.sh POST chain (after SegWrapFixup, before ApplyConv) with FIST_ES_CTX default-on.  Verified via
+reused-project + SetCSContext + ApplyConv re-thread (scratch/csctx_conv):
+  - ALL 312 unaff register decls eliminated (unaff_CS 134->0, unaff_ES 176->0);
+  - ApplyConv re-threads signatures WITH the cs/es context resolved (sig-changed converges 1256->8 over 5
+    passes) -> consistent prototypes+bodies, unaff=0;
+  - `make assemble` OK (2269 funcs, 0 unaff in fist.c).
+Patch migration measured against this decompile: of 397 patches 236 apply EXACTLY, 22 rebase with fuzz,
+139 are candidate-redundant (their target segment is now correct).  BUT the migration is NOT a mechanical
+auto-triage: (a) a patch failing to apply does not prove it redundant -- some are semantic patches whose
+CONTEXT merely shifted and must be rebased BY HAND; (b) crude --fuzz=3 application MANGLES prototypes
+(observed: `FUN_1000_223c(...,param_4,;` -- a hunk placed at the wrong line), so fuzz-rebase is unsafe.
+Dropping the 139 wholesale fails the build (missing still-needed prototype/DAT/semantic patches conflict
+with changed bodies).  So the migration is exactly the "dedicated session" this item scopes: per-patch
+review -- for each non-exact patch decide redundant(drop) vs semantic(rebase by hand), rebuild, verify
+native==wasm, full 10x re-gate.  What is DONE and banked: the Ghidra root fix itself (SetCSContext.java,
+pipeline-integrated) -- the hard part; per Cosmo, "what Ghidra now detects correctly needs no patch", and
+the ~139 segment patches are that set.  NOTE for board:0003: with the fix, the terrain sites read DEFINED
+c686=0xf69 / c434=0x1c00 on BOTH targets (no UB) -- the determinism test is now a clean build away, pending
+the patch migration.  DOSBox memrec trace (Cosmo's SQL-trace idea) can supply ground-truth CS/ES per site
+to VALIDATE the Ghidra values and, if a build is produced, decide board:0003 W-vs-W' against the oracle.
