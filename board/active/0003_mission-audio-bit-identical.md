@@ -1314,3 +1314,20 @@ board:0007's 42 missions (same lost-register-dataflow defect).  This is NOT gues
 it needs the per-site asm.  -ftrivial-auto-var-init is only the instrument, never the fix.
 STATUS: root fully proven & localised to named sites; the per-site asm-true CS/ES recovery is the concrete
 remaining engineering (deliberate, patch-disciplined, full re-gate).  Matrix 176/176; tree clean.
+
+ASM CONFIRMATION of the __allregs prune (the mechanism proven at the disassembly).  objdump -m i8086 on
+FIST.DAT at FUN_1000_2ebe (file offset 0x12ebe) shows exactly the dropped write:
+  12ec6: mov %ds,%ax        ; AX = entry DS
+  12ec8: mov %ax,%es        ; ES = DS     <-- Ghidra pruned THIS assignment
+  12eca: mov (%bx),%ds      ; DS is then overwritten
+  ...
+  12edc: mov %es,%ax        ; reads ES (still = the entry DS) -> the C decompile's `unaff_ES`
+So `unaff_ES` at this site = the ENTRY DS value, a register-dataflow fact the decompile lost -- NOT a
+constant (which is why unaff=0 and unaff=0x1000 both mis-produced W+206; the faithful value is the caller's
+DS at entry, restored by threading the pruned `es = ds` write).  This is board:0007's __allregs-prune
+domain, now verified at the asm.  (FUN_0000_02c5 / FUN_0000_134e disassemble as garbage at raw file offset
+0x2c5/0x134e -> the segment-0000 load mapping is NOT identity; resolving the Ghidra image base for
+FUN_0000_* is a prerequisite step to read their CS store, next session.)  The per-site register-provenance
+recovery (thread the pruned segment loads: ES=DS at 2ebe, and the CS stores at 134e/02c5 once mapped) is the
+concrete fix -- asm-verified patches, engine-wide blast radius (271 unaff_CS/ES reads), full re-gate.
+Matrix 176/176; tree clean.
