@@ -238,3 +238,17 @@ now TWO complementary mechanisms: InstallIntFixup (INT-return ES/DS, faithful, d
 segments; (3) assemble_fist.py wrapped-signature fix -- forward decls; remaining: the far-ptr/string-op
 pointer-basing patches (~136) still need rebasing (genuinely semantic, not pipeline-subsumable).  Each
 pipeline fix reduces the unaff/uninit surface a fresh decompile carries, shrinking the eventual migration.
+
+ES-THREADING EXPERIMENT = NO-OP (2026-08-24, honest): tested threading ES as a GP param in ApplyConv
+(FIST_THREAD_ES, matrix-safe scratch).  Result: 0 functions got an ES param -> no effect.  With SetCSContext
+resolving the ES CONTEXT, no function reads ES-before-write (the decompiler's condition for an input param),
+so ES-threading is redundant; DGROUP intact (3304 DAT_ refs).  So the segment-threading route does NOT
+resolve the far-ptr/string-op pointer-basing patches (~136) -- those are genuinely SEMANTIC (they restore
+`g_mem+(seg<<4)+off` pointer BASING that the decompile drops, a pointer-model issue, not a segment-VALUE
+issue that context/threading fixes).  Reverted the experiment (inert).  CONCLUSION of the pipeline-fix
+momentum: the EFFECTIVE, safe, bounded pipeline fixes are LANDED -- SetCSContext (CS/ES segment context),
+InstallIntFixup ES/DS (INT-return segments), assemble_fist.py (wrapped forward-decls).  The remaining 149
+surface (~136 far-ptr/string-op pointer-basing) is semantic and needs per-patch rebasing in the migration,
+NOT a pipeline fix.  The 57 (host-stack-ptr AX/DI in the reticle descriptor) is the SS-relative-stack model,
+also deep.  So the pipeline-root well is genuinely dry: what could be fixed at the Ghidra/tooling root IS
+fixed; the rest is the dedicated migration + the deep pointer-model work.
