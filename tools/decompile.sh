@@ -21,6 +21,7 @@ PROJ_NAME="${FIST_PROJ_NAME:-fist_engine}"
 IMG="${FIST_IMAGE:-$ROOT/re_out/fist_dat_image.bin}"
 LANG="${FIST_LANG:-x86:LE:16:Real Mode}"
 export FIST_ENTRY="${FIST_ENTRY:-0x4}"
+export FIST_ES_CTX="${FIST_ES_CTX:-1}"  # board:0010: ES=DGROUP baseline (eliminates unaff_ES); FIST_ES_CTX=0 to disable
 OUT="${1:-$ROOT/re_out}"
 
 [ -s "$IMG" ] || { echo "[decompile] missing $IMG — run 'make image' first"; exit 1; }
@@ -72,7 +73,12 @@ else
     export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Dfist.seed.offs=${FIST_DRIVER_SEED_OFFS}"
   fi
 fi
-POST=("${SEED[@]}" -postScript RecoverAll.java -postScript SegWrapFixup.java -postScript InstallIntFixup.java -postScript ApplyConv.java -postScript SegmentFixup.java -postScript ExportDecomp.java)
+# SetCSContext runs AFTER SegWrapFixup (which discovers the CS clusters) and BEFORE ApplyConv: it sets the
+# CS segment-register context per code segment (page-seg baseline + far-call cluster certain-window
+# override, e.g. 0xf690..0xffff => CS=0xf69) and, with FIST_ES_CTX=1, an ES=DGROUP baseline.  This resolves
+# `mov [mem],cs` / ES refs to real segment CONSTANTS so ApplyConv does NOT thread them as unaff_CS/unaff_ES
+# params -- eliminating the ~184-patch segment-dataflow-loss class at the decompile root (board:0010).
+POST=("${SEED[@]}" -postScript RecoverAll.java -postScript SegWrapFixup.java -postScript SetCSContext.java -postScript InstallIntFixup.java -postScript ApplyConv.java -postScript SegmentFixup.java -postScript ExportDecomp.java)
 # ExportDecomp writes <GHIDRA_FIST_OUT>/fist_decomp.c + functions.txt; point it at $OUT so a driver
 # decompile lands beside the engine's without clobbering re_out/fist_decomp.c.
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -DGHIDRA_FIST_OUT=$OUT"
