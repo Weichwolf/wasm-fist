@@ -67,3 +67,21 @@ native==wasm is blocked by the async-vs-coop TICK REGIME (audio diff=0 was achie
 under COOP_TICK+patch411).  op 0x78 here is for the intro's VISUAL fidelity (real frames vs blank) and the
 DD2 "every screen renders" completeness -- a parallel frontier, not a prerequisite for audio.  Patch 411
 still lands with the tick-regime unification (board:0003), independently of this render.
+
+GATE ENTRY LOCATED + DISASSEMBLED (recon for the implement session; read-only, matrix-safe).  The op
+posters d97e (op 0x78) and e2c2 (op 0x64) are TRIVIAL pass-throughs -- each does
+`*(task+0x3f2)=arg; aa10=OP; return/call FUN_0000_e339()`; all real work is in the GATE.  The gate lives
+in the 32-bit extender image re_out/fist_image.bin (49040 B, app-relative flat base 0, so app-off ==
+linear).  linear 0x8799 = fist_image.bin offset 0x8799; disassembled as i386 it is coherent 32-bit code:
+    87ab: mov esi,[0xc93]      ; [0xc93] = the TCB (task control block) pointer (extract_image.py note)
+    87b1: add esi,0x6a
+    87b4: call 0x643c ; 87b9: call 0x4a3c
+    87be: mov ecx,0xa ; 87c3: sub ecx,[0x8490] ; 87c9: je 0x87ef ; 87cb: ja 0x87e0
+So the gate is a 32-bit PM dispatcher: it loads the TCB, then branches on a value at [0x8490] (a state/op
+selector) via a compare ladder (je/ja at 0x87c9/0x87cb ...).  The implement session's entry points:
+disassemble fist_image.bin from 0x8799 tracing the [0x8490] compare-ladder to the op-0x78 arm, map the TCB
+struct fields it touches (base [0xc93], +0x6a), and the callees 0x643c/0x4a3c; then reimplement that arm
+in the extender shim to decode the posted frame-command (task+0x3f2) and blit via the existing KDV/sprite
+path.  fist_icall_far(0x8799) currently traps to 0 (the whole gate is a no-op) -- this is the single seam
+to implement.  This is a DEDICATED multi-step 32-bit-extender recovery + shim build (touches every flow's
+boot path -> full 10x re-gate), not a tail-of-session change; the entry map here is its ready starting point.
