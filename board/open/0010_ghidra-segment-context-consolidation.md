@@ -222,3 +222,19 @@ force both to drop a spurious read.  That is the real board:0003 work; board:001
 cleaned the decompile but does not solve determinism.  Net honest outcome: SetCSContext + assemble fix
 landed as decompile-quality improvements; the "consolidation eliminates 184 patches / fixes determinism"
 thesis is RETRACTED.
+
+INSTALLINTFIXUP INT-RETURN ES/DS THREADING LANDED (2026-08-24) -- the pipeline-fix family grows.  Found +
+fixed a real InstallIntFixup gap: it threaded INT register INPUTS + read back AX/BX/CX/DX/SI/DI/CF as
+OUTPUTS but NOT ES/DS -> INT 21h AH=35 (get-vector) / AH=2f (get-DTA) returned ES:BX with only BX threaded;
+their ES stayed the pre-INT value, so `mov [mem],es` after such INTs decompiled as unaff_ES (uninitialised)
+instead of the shim's deterministic return.  Fix: read ES (0xf0010) + DS (0xf000e) back after the fixup
+call.  Validated: FUN_1000_2ebe c434 changed `= unaff_ES` -> `uVar3 = uRam000f0010; c434 = uVar3` (reads
+the threaded INT-return ES = the shim's FIST_INTVEC_SEG, deterministic native==wasm).  Correct-by-
+construction + matrix-safe (fresh-decompile only).  This is the FAITHFUL mechanism for INT-return ES,
+refining SetCSContext's blanket ES=DGROUP baseline for INT sites -- so the ES half of the pipeline fix is
+now TWO complementary mechanisms: InstallIntFixup (INT-return ES/DS, faithful, deterministic) + SetCSContext
+(CS/ES saved-segment context).  UNIFIED PIPELINE-FIX FAMILY for the board:0003 149 + board:0007 root:
+(1) SetCSContext -- CS/ES segment context (mov [mem],cs saves); (2) InstallIntFixup ES/DS -- INT-return
+segments; (3) assemble_fist.py wrapped-signature fix -- forward decls; remaining: the far-ptr/string-op
+pointer-basing patches (~136) still need rebasing (genuinely semantic, not pipeline-subsumable).  Each
+pipeline fix reduces the unaff/uninit surface a fresh decompile carries, shrinking the eventual migration.
