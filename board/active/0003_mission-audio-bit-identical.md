@@ -1233,3 +1233,27 @@ CONSEQUENCES / FIX DIRECTION (supersedes all earlier 0003 fix notes):
     until native terrain is code-layout-invariant, a passing terrain row proves "these two frozen binaries
     agree", not "the port renders terrain deterministically".  This is the sharpest statement of board:0002.
 Matrix 176/176; tree clean; all instrumentation reverted (make patch).
+
+MECHANISM OF THE FRAGILITY PINNED: UNINITIALISED STACK LOCALS in the terrain path.  Rebuilding native
+with gcc -ftrivial-auto-var-init=zero (zero every auto var, matching wasm's spec-guaranteed zero locals):
+  zero-init clean vs zero-init DUMMY = 0    (the 206 code-layout fragility VANISHES)
+  zero-init clean vs wasm            = 57   (was 0 for the async-garbage clean binary; see below)
+So the native terrain FB depends on uninitialised stack locals; their garbage is code-layout-dependent
+(any recompile of a terrain-path function reshuffles it -> ~206 px), which is why patch 412 / a null
+getenv / ANY hot-path edit "regresses" terrain.  wasm is robust because wasm function locals are zero by
+the wasm spec.  This SUPERSEDES the "code-layout fragility" statement with its cause, and finally explains
+the whole 20-hypothesis chase: every prior "root" (tick regime, [0x452], DGROUP-populate, calibration,
+sound handler) was reading tea leaves in a signal driven by uninitialised memory.
+
+The 57-byte residual (zero-init native vs wasm) is the SECOND-ORDER fact: the committed native binary's
+GARBAGE locals coincidentally produced a wasm-matching FB (async-clean vs wasm = 0), but ZEROing those
+locals moves native 57 px off wasm -- i.e. wasm's effective value for the read local is NOT zero either.
+So neither garbage nor zero is the ENGINE-CORRECT value; the original asm writes that local before reading
+it and Ghidra dropped the write (the classic __allregs prune).  The CORRECT fix is a patch that restores
+the lost initialisation so BOTH targets read the same computed value -- that removes the fragility (no
+uninit read) AND collapses the 57 (identical value native==wasm), unblocking 412 and the terrain rows
+against recompilation.  -ftrivial-auto-var-init=zero is NOT the fix (it is a global band-aid that still
+leaves 57 vs wasm and hides the real lost-write); it is only the instrument that proved the mechanism.
+NEXT: valgrind --track-origins=yes on the native terrain run to name the exact uninitialised local + its
+reading function, then find the Ghidra-dropped write in the asm and land it as a patch.  Matrix 176/176;
+tree clean.
