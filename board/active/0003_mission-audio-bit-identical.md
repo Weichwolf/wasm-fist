@@ -1886,3 +1886,34 @@ starts voices {0,1,5,9}, oracle {0,2,3,5,6,7}) is a SEQUENCER-LOGIC fidelity dif
 is interpreted -- a dedicated event-by-event asm-vs-C trace of the song-parse / voice-allocation control
 flow (0419 voice-steal + the 12c1/12c9 track array + the 1e13/1d62 install), NOT a mechanical base/map/mask
 fix.  That trace is the honest next step; this loop converged the root and cleared every shortcut.
+
+DEEP TRACE -- DECODE CHAIN VERIFIED FAITHFUL, ROOT IS DRIVER-DS BASE TIMING (2026-08-25, same loop):
+Traced the entire MS3 playback decode chain asm-vs-C (re_out/fist_snd_image.bin objdump vs build/fist_snd.c)
+and RUNTIME (gdb on -g native).  Findings:
+  - 0b5d (MIDI event reader): patch-359 reconstruction is FAITHFUL to asm 0xb5d.  Verified every branch:
+    note-on(0x9n) stores note at [chan+0x16], returns CH=chan; note-off(0x8n) CH=chan,note=0; program(0xc0)
+    ->0cf3; pitch(0xe0)->[chan+0xb8]; the 14-bit delta decode (dx = ((first&0x7f)<<7)|second) matches
+    (asm 0xbd9-0xbef).  Status@cursor, note@+1, vel@+2 offsets all correct.
+  - 0c39 (note dispatch): FAITHFUL.  The per-note voice expansion is a CHAIN walk: start ch=MIDI channel,
+    play if [ch+0x111]==0 (voice-free gate), then ch=[ch+0x20]-1, loop until [ch+0x20]==0.  The [0x20]
+    voice-chain + [0x111] free-gate + [0x2a]/[0x34] program tables all match the asm (0xc39-0xc93).
+  - snd_song_reparse (0xb10 song-init): FAITHFUL.  Copies the voice-chain [ds:0x20..0x2f] from
+    song[0x10..0x1f] and the programs [ds:0x2a..0x39] from song[0x20..0x2f], cursor=song+0x30.  For
+    MAINMENU.MS3 the chain source song[0x10..0x1f] = 00 00 00 00 00 09 00.. (a STATIC file table, so it is
+    identical port<->oracle -- NOT a decode bug).
+So the DECODE is not the bug.  The RUNTIME bug: DAT_0000_0831 (the driver data-segment word the patches
+base on, = word at snd_base+0x831) reads INCONSISTENTLY -- 0x0000 and 0x2b at the FIRST 0f99/0c39 calls,
+but 0x3ce9 (= 0x02a5 + load_seg 0x3a44, the reloc-applied correct DS) at steady-state melody calls.  With
+DS=0x2b/0 the sequencer reads garbage song state (song_seg=0xc303, cursor=0x789, playing=0x485b at the
+first 0c39) and the [0x20] chain reads code bytes -> spurious/wrong voices.  So patches 353/358/359/408
+compute a base that is only intermittently correct: right in steady state, WRONG for the early calls.
+HYPOTHESIS (concrete, testable, likely a SHIM fix): the shim's fist_snd_seq_advance (fist_opl.c ->
+fist_icall(snd_base+0xa28)) drives 0a28->0c39 on the OPL sample clock gated only on `g_snd_isr_seg &&
+fist_opl_enabled()`, NOT on the sound driver being fully loaded/relocated + the song registered
+([ds:0xe]==0xffff with a VALID base).  So it fires PREMATURELY, before DAT_0831 stabilises at 0x3ce9,
+producing the early garbage sequencer calls -- and the opening-chord voice divergence (port {0,1,5,9} vs
+oracle {0,2,3,5,6,7}) was captured from exactly this early-garbage window.  NEXT: gate fist_snd_seq_advance
+on driver-ready (a stable driver-DS base + [ds:0xe] playing), verify the early DS=0x2b/0 calls vanish, then
+re-capture the phase-matched OPL stream -- if the steady-state voice-set then matches the oracle, this is
+the fix.  This is the first hypothesis that is both runtime-grounded AND a bounded shim change; the decode
+chain is proven faithful so the remaining variable is WHEN the shim drives it.
