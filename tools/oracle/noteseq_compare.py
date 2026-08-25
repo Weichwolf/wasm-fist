@@ -65,7 +65,36 @@ def longest_run(a, b):
         prev = cur
     return best
 
+def load_ref(path):
+    """Load a checked-in note-seq reference (channel fnum block per line; # comments)."""
+    ev = []
+    with open(path) as f:
+        for ln in f:
+            ln = ln.strip()
+            if not ln or ln.startswith('#'): continue
+            a = ln.split()
+            ev.append((int(a[0]), int(a[1]), int(a[2])))
+    return ev
+
+def gate(port_reglog, ref_path):
+    """board:0011 gate: the port's engine note stream must CONTAIN the full oracle
+    reference as a contiguous run.  Exit 0 pass / 1 fail."""
+    P = note_events(parse(port_reglog))
+    R = load_ref(ref_path)
+    L, i, j = longest_run(P, R)
+    ok = (L == len(R))                              # the entire reference appears contiguously
+    print("gate: port note-ons=%d  ref=%d  longest-contiguous-match=%d/%d  -> %s"
+          % (len(P), len(R), L, len(R), "PASS" if ok else "FAIL"))
+    if not ok and P:
+        print("  ref[%d:%d] first mismatch context: port has %d contiguous from port[%d]"
+              % (0, min(6, len(R)), L, i))
+    return 0 if ok else 1
+
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == '--gate':
+        if len(sys.argv) < 4:
+            print("usage: noteseq_compare.py --gate PORT.reglog REF_noteseq.txt"); sys.exit(2)
+        sys.exit(gate(sys.argv[2], sys.argv[3]))
     if len(sys.argv) < 3:
         print(__doc__); sys.exit(2)
     port_w   = parse(sys.argv[1])

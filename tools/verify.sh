@@ -455,6 +455,10 @@ FLOWS=(
   # title intro identically, so the stream stays native==wasm bit-identical past the [0x452]=188 transition.
   # Pinned at [0x452]=4000 (~64s: full intro + menu music); proven diff=0 (5696650 B both), the max window before a 2nd transition-onset divergence at [0x452]~8000.
   "audio-intro|1000|audio:4000||"
+  # board:0011 (re-entrancy fix, commit d7bd0aa): the port's ENGINE-generated menu OPL note stream must
+  # CONTAIN the DOSBox-oracle MAINMENU.MS3 note sequence (ref/audio_menu_noteseq.txt) note-for-note.  This
+  # is the port-vs-ORIGINAL audio-CONTENT invariant (a SILENT port passes native==wasm but FAILS this).
+  "audio-menu-content|||"
 )
 
 # ============================ WRITE-ISOLATION POLICY ============================
@@ -658,6 +662,20 @@ run_audio() { # $1=target $2=dumptick(default 120) ; echo wav or ""  -- OPL FM a
   [ -s "$out" ] || { echo ""; return 1; }
   echo "$out"
 }
+run_audio_reglog() { # $1=target ; echo reglog-path or ""  -- port engine OPL note stream over the menu
+  # board:0011: capture the port's ENGINE-GENERATED OPL register stream through the intro->menu so the
+  # menu melody (MAINMENU.MS3) is present, for a port-vs-ORACLE note-sequence content check (the earlier
+  # audio-* flows only assert native==wasm, which a SILENT port trivially satisfied).  Deep dumptick so the
+  # menu music has played; FIST_SB/FIST_OPL select the OPL device-3 sequencer (behaviour-neutral otherwise).
+  local t="$1" out="$TMP/aureg.$t.reglog"
+  if [ "$t" = native ]; then
+    timeout 120 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK=30000 FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NATIVE" >/dev/null 2>&1
+  else
+    timeout 300 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK=30000 FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+  fi
+  [ -s "$out" ] || { echo ""; return 1; }
+  echo "$out"
+}
 run_editsim() { # $1=target $2=battle $3=edit-env(default FIST_EDIT_ADDTANK) ; echo cropped-ppm or ""
   # The editor DoD "simulate" leg: the edit op ($3: add-tank or remove-tank) edits $b.FSG in a datadir,
   # then that SAME edited battle is loaded into a mission and its op-0x2c spawn cockpit is captured.
@@ -768,6 +786,23 @@ for row in "${FLOWS[@]}"; do
     if [ "$WHICH" != native ]; then rw="$(run_audio wasm "$audt")";   [ -n "$rw" ] || { ok=0; detail+=" wasm-no-wav"; }; fi
     if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
       d=$(cmp -l "$rn" "$rw" 2>/dev/null | wc -l); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
+    fi
+    if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
+    continue
+  fi
+  if [ "$name" = audio-menu-content ]; then
+    # board:0011: the port's ENGINE-GENERATED menu OPL note stream must CONTAIN the DOSBox-oracle
+    # MAINMENU.MS3 note sequence (ref/audio_menu_noteseq.txt) contiguously -- i.e. the port actually PLAYS
+    # the original's menu melody note-for-note.  This is the audio-CONTENT invariant the native==wasm
+    # audio-* flows cannot express (a silent port passes those).  Checked on native AND wasm.
+    ref="$ROOT/ref/audio_menu_noteseq.txt"; detail=" [menu OPL note stream contains oracle MAINMENU.MS3 note-seq]"
+    if [ "$WHICH" != wasm ]; then
+      rl="$(run_audio_reglog native)"
+      if [ -n "$rl" ] && python3 "$ROOT/tools/oracle/noteseq_compare.py" --gate "$rl" "$ref" >/dev/null 2>&1; then :; else ok=0; detail+=" native-content-FAIL"; fi
+    fi
+    if [ "$WHICH" != native ]; then
+      rl="$(run_audio_reglog wasm)"
+      if [ -n "$rl" ] && python3 "$ROOT/tools/oracle/noteseq_compare.py" --gate "$rl" "$ref" >/dev/null 2>&1; then :; else ok=0; detail+=" wasm-content-FAIL"; fi
     fi
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
