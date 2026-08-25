@@ -98,3 +98,18 @@ PLAYS on both targets but is NOT yet native==wasm deterministic:
        even under FIST_COOP_TICK=1 -> the per-frame/pump cadence this board must make instant-for-instant.
   So mission music CONTENT is largely faithful (1062-note shared core, same proven 0a28->0c39 driver), but
   the hard native==wasm invariant for mission audio rides (1) a pre-song gate + (2) this board's cadence.
+
+es=0 PRE-SONG ROOT FOUND (2026-08-26, gdb playing-flag watch): the native<->wasm mission-audio divergence
+begins at a delta-0 CHORD (adv=4262, fnum=768 on ch0/1/5/8) that wasm fetches whole in one advance while
+native splits ch0 to the next advance -- because the two read a DIFFERENT delta for the 4th chord note,
+i.e. they read DIVERGENT SONG MEMORY.  Root: `be0e(0)` (track 0) -> 01ec -> 0af4 registers a song with
+[ds:0x6]=0 (es=0) and [ds:0xe]=0xffff (PLAYING) during the intro, BEFORE the real menu song be0e(4)
+(es=0x4c61).  Track 0 is an UNLOADED song (segment 0), so 0b5d streams es:cursor = 0:0x9ff4+ = g_mem low
+region, which is runtime-divergent native<->wasm -> the chord's 4th delta differs -> the goto-fetch loop
+terminates one note earlier on native.  (Chain: be0e(0) <- e584 <- e446 <- cae6.)
+FAITHFUL FIX DIRECTION (needs asm verification vs 0xaf4/0x1ec/0xbe0e): the driver must not PLAY a song
+whose data segment is 0 (unloaded) -- treat es=0 as "no song / silence" (do not set [ds:0xe]=0xffff), which
+is what the original must do since segment 0 holds no MS3.  This is a ROOT fix (never play an unloaded
+song), NOT a skip-the-symptom guard.  Confirm against the DOSBox oracle that the intro (be0e(0) period)
+produces no MS3 music, then patch the be0e/0af4 chain.  Closing this removes cause (1); cause (2) (in-
+mission tick cadence) remains this board's per-frame determinism.
