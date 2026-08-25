@@ -143,3 +143,19 @@ es=0 CAUSE-(1) FULLY ROOTED + FIX SCOPED (2026-08-26):
   Then INTRO.MS3 loads, the intro plays the real music (native==wasm deterministic), and the mission
   note-seq native<->wasm 1062-note common core should extend to full -- leaving only cause (2) (in-mission
   tick cadence) on this board.  This is a load/vector ORDERING fix, asm/oracle-grounded, not a guard.
+
+DEEPEST ROOT of cause-(1) (2026-08-26): the c378 loader install is late because f842 is INERT.
+  Per fist_ensure_dlist_vecs()'s own comment (native_main.c:1201): the ORIGINAL installs the display-list
+  method vectors (incl. c378 = the .MS3/screen-resource loader) AT LOAD TIME via the far applier f842 from
+  FUN_1000_223c.  In the port f842's C body is INERT -- Ghidra DROPPED ITS STRING-OP SEGMENT BASES (the
+  board:0003 far-pointer-basing class) -- so it can't apply at load time; AND applying the reloc at the
+  223c point corrupts the not-yet-ready DGROUP (breaks FUN_1000_5c3a; patch 091).  So the port defers the
+  whole install to e714 (menu-enter), which is AFTER the intro's first be0e(0) -> INTRO.MS3 can't load.
+  So cause-(1) is a board:0003 far-ptr-basing instance (inert f842) forcing a deferred vector install whose
+  timing misses the intro music.  FIX candidates (delicate; must keep the 177-flow matrix green):
+   (i) install ONLY the c378 loader vector (or call fist_ensure_dlist_vecs) at the intro screen-enter,
+       after DGROUP is ready but before be0e(0) -- needs verifying DGROUP is ready at that point; OR
+   (ii) restore f842's dropped string-op segment bases (the real board:0003 fix) + resolve the 223c
+       DGROUP-not-ready corruption so the ORIGINAL's load-time install works verbatim.
+  This is careful ordering/basing work for a focused session -- NOT a rushed end-of-session change (a wrong
+  install point corrupts DGROUP and breaks the validated matrix).  Cause-(1) is now rooted end-to-end.
