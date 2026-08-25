@@ -2460,3 +2460,24 @@ the dosbox 0a28-counter, correlate 0a28 calls to the engine's frame counter (DGR
 poll) to CONFIRM 1 call/frame; (2) if confirmed, drive the port's 0a28 from the same per-frame hook the
 port already uses for the framebuffer (not the OPL sample clock), so audio + video share ONE exact tick.
 This makes the audio timing tractable as PART OF the frame-determinism work, not a separate mechanism.
+
+MAJOR STATIC FINDING -- the SOUND MUSIC-TICK is an INT-8 ISR far-vector call (2026-08-25, gate-safe static
+analysis): FUN_1000_31c3 (the engine's INT-8 sub-handler, called from the dynamic-PIT ISR 30f8) calls a
+SET of far vectors each interrupt -- fist_icall_far(pcRam0001c5e4 / DAT_1000_d5b0 / DAT_1000_c2b0 /
+DAT_1000_c05c) + fist_icall_near(0x1000:DAT_1000_c058) -- AND bumps the frame timer DAT_1000_c452+1 in the
+SAME handler.  So the music-sequencer tick (0a28, via the SOUNDDVR 0x1d2 invoker) is ONE OF THESE
+per-INT-8-ISR far vectors -- it is driven by the SAME dynamic-PIT timer that bumps [0x452], at an ISR
+sub-rate (the ~60 Hz measured).  This EXPLAINS "dead-in-image" (the ENGINE's 31c3 drives it, not SOUNDDVR)
+and CONFIRMS the audio tick is ISR/frame-cadence-driven, unified with [0x452].
+THE FIX DIRECTION (now concrete): the port currently DECOUPLES the audio -- fist_opl.c drives 0a28 from the
+SAMPLE clock (fist_opl_tick -> fist_snd_seq_advance when g_seq_acc >= samples/seq), a reconstruction because
+the 0a28 far-vector in 31c3 is UNINSTALLED in the port (dead-in-image).  To get sample-bit-identity, INSTALL
+that vector so the port's INT-8 ISR (30f8->31c3, already driven cooperatively by fist_timer_pump) calls 0a28
+at the SAME ISR sub-rate as the original -- and REMOVE the shim's sample-clock drive.  Then the audio fires
+at the exact [0x452]/frame instants (PIT-exact), matching the original, and it becomes deterministic WITH the
+frame timing (board:0001).  CONCRETE STEPS (next session, needs rebuild -> after the gate): (1) identify
+which of c5e4/d5b0/c2b0/c05c/c058 is the SOUNDDVR 0x1d2 (sound) vector (check which resolves into
+fist_snd_base's 0x1d2 region); (2) confirm 31c3's per-vector sub-rate accumulator (d8ca / d8b6+d8b8 etc.)
+yields the ~60 Hz sound rate; (3) drive 0a28 from that ISR path, retire the sample-clock reconstruction;
+(4) re-verify native==wasm + the phase-aligned menu WAV.  This turns the audio timing from "unknown deep
+seam" into a SPECIFIC vector-install + ISR-sub-rate reconstruction in the already-cooperative INT-8 path.
