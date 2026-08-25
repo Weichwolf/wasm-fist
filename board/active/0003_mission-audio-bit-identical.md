@@ -2424,3 +2424,26 @@ exact (measured 59.9936 Hz); aggregate menu voicing matches within 1%.  The form
 proof remains, gated ONLY on a clean menu-only phase anchor (first menu note), which every from-boot
 capture keeps contaminating.  Concrete: capture the oracle to a WAV/reglog, trim at the menu-song start
 (the song-register burst that FOLLOWS the last intro event), align the port there, diff event-by-event.
+
+SELF-CORRECTION -- the "one constant" reframe was TOO OPTIMISTIC; bit-identity needs EXACT FIRING INSTANTS
+(2026-08-25): ran an alignment-robust longest-common-substring of the port's menu OPL reg stream (10409
+writes) vs the oracle's post-intro menu stream (1655) -> LONGEST common contiguous run = only 15 writes.
+Two things this shows:
+  (1) CONFOUND: the port capture (FIST_TICK_HZ=25000) runs the OPL on a COMPRESSED, non-real-time timeline
+      (fist_opl_tick advances DBOPL by pit_div samples per engine tick, 25000/s), so write-RATES and exact
+      sequences are not directly comparable to the oracle's real-time PIT capture.  A valid proof needs a
+      REAL-TIME-normalised port capture, not the coop-tick audio flow.
+  (2) DEEPER TRUTH: even with the exact AVERAGE cadence landed, the port fires 0a28 on g_seq_acc SAMPLE-
+      ACCUMULATOR boundaries while the ORIGINAL fires on exact PIT-tick instants.  These differ by
+      sub-sample amounts, so 0a28 SAMPLES THE PITCH ENVELOPES at slightly different phases -> different
+      A0/B0 fnum values -> divergent reg streams (only 15-write common runs).  So my earlier reframe
+      ("audio is sample-locked, so ONE constant MUSIC_DIV suffices") is WRONG: the exact FIRING INSTANTS
+      (PIT-tick-exact phase), not just the average rate, determine the envelope sampling.
+CORRECTED ROOT (honest): menu-audio sample-bit-identity requires the port to fire 0a28 at the SAME instants
+as the original's PIT ISR -- i.e. the deterministic (instruction/PIT-exact) timing model, NOT merely the
+average cadence.  The landed MUSIC_DIV=120.536 fix is still a real improvement (correct average tempo ->
+better aggregate match, correct loop duration) and STANDS; and the driver init + instrument tables are
+PROVEN bit-identical (134-write byte match).  But full sample-identity is, after all, ONE WITH the
+engine-wide deterministic-timing seam (the exact PIT-tick firing that board:0001's live sim also needs) --
+the same conclusion reached earlier, now CONFIRMED by the LCS test rather than asserted.  The "one
+constant" shortcut is retired; the honest gate is the exact-firing-instant timing model.
