@@ -2308,3 +2308,24 @@ intro-contaminated reference; (2) PROVED the port's menu-audio code+data faithfu
 localised the residual sample-level gap to its TRUE root -- the approximate cooperative-tick timing vs the
 original's exact PIT cadence, a known engine-wide seam (instruction-counted tick), NOT a fist_snd.c defect.
 Menu-audio CONTENT is faithful; sample-BIT-identity is one with the deep deterministic-timing work.
+
+MEASURED THE ORACLE'S NOTE CADENCE + NARROWED THE TIMING GAP (2026-08-25, concrete data for next session):
+Measured the original's menu note rate directly from the OPL log timestamps: the melody changes pitch
+every ~228-257ms (A0-write inter-deltas on the busy channel cluster at 228/242/243/257ms; 457/471 = skips)
+= ~4 note-changes/s.  The shim's MUSIC_DIV_DEFAULT=120 (7231.4/120 = 60.3Hz sequencer) is ALREADY
+"oracle real-note-on-rate-pinned" (docs/audio.md), so the TEMPO / note rate is already tuned to this.
+So the remaining sample-level gap is NOT the coarse tempo (tuned) -- it is SUB-NOTE: the pitch-ENVELOPE
+phase within each ~228ms note (0a28's per-tick fnum sweep) and the exact 0a28 CALL cadence, which is a
+finer subdivision of the PIT rate than the note rate.  KEY LIMITATION (measured): the exact 0a28 call rate
+is NOT derivable from the OPL log -- 0a28 calls that reprogram NO voice write nothing, so they are
+invisible (only ~20 0a28-origin OPL writes/s appear, far below the true call rate).  Determining the exact
+0a28 cadence REQUIRES a dosbox-fist hook at the 0a28 ENTRY (cs offset 0xa28 in the SOUNDDVR seg) counting
+invocations per PIT tick -- a small, specific addition to the opl_trace patch (dosbox_opl_trace.patch),
+then rebuild dosbox-fist.  THAT number sets the exact MUSIC_DIV, which (given content is proven faithful +
+tempo already pinned) should close the sub-note envelope-phase residual.
+CONCRETE NEXT (bounded, specific): (1) add a 0a28-entry counter to dosbox_opl_trace.patch (log a line each
+time guest cs:ip == snd_seg:0x0a28), (2) run the menu, divide 0a28-count by PIT-tick-count -> the exact
+divider k, (3) set MUSIC_DIV = k in fist_opl.c, (4) re-capture + phase-aligned diff.  This is the precise,
+bounded tooling step that turns the proven-faithful content into sample-bit-identical output.  Everything
+upstream (song, sequencer, tables, tempo) is verified; only this one exact-subdivision constant is
+approximate.
