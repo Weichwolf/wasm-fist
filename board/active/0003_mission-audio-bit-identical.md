@@ -2037,3 +2037,28 @@ flat linear from a cam/cr3 read, per CLAUDE.md's dynamic write-trace section).  
 This loop EXHAUSTED the port side with a deterministic harness (chain proven correct) and reduced the open
 question to ONE decisive oracle-side measurement.  That measurement -- not more port-side probing -- is the
 next step; it is a bounded dosbox-instrumentation task, not open-ended.
+
+0a28 VERIFIED FAITHFUL + THE DIVERGENCE IS A SUSTAINED-DRONE / PITCH-ENVELOPE DIFFERENCE (2026-08-25):
+Traced the LAST unverified sequencer function FUN_0000_0a28 (per-tick voice/pitch manager) against asm
+0xa28 -- it is FAITHFUL: the [0xe] playing-gate -> 0c39; the voice 9..0 loop; [voice+0xc2] base note;
+the [voice+0x111] duration counter + release-at-2 via 0aa7; the +[voice+0xb8] pitch-bend; the pitch-
+envelope WALK (dx=[voice*2+0x90] stream ptr; al=DS:[ptr]; 0x80=hold, 0x81=loop->[voice*2+0xa4], else
+ah+=delta + incw ptr); the [voice+0xcc] change-detect -> reprogram via device method [0x1b3].  All match.
+So ALL FIVE sequencer functions (0b5d, 0c39, 0a28, 0af4, snd_song_reparse) are asm-faithful.
+DECISIVE new signature (pitch content, deterministic): comparing the global A0 (fnum-low = pitch) value
+distributions port vs oracle:
+  ORACLE: e4x136 (!) 70x28 10x20 2ax16 a4x15 0bx4 bax3 ..   -> DOMINATED by a sustained e4 (a bass DRONE)
+  PORT:   0bx26 bax22 10x22 a4x15 6ex13 2ax13 3fx12 dcx11 4bx10 .. e4x2  -> spread, e4 barely present
+Shared vocabulary (10,2a,a4,0b,ba,93,6e) => SAME song; but the oracle SUSTAINS/repeats e4 on ch0 (136
+A0-writes = the driver re-writing the bass fnum every tick, i.e. a pitch-envelope that oscillates around
+e4 / a held drone), while the port does NOT hold that drone.  Since 0a28's envelope-walk is faithful, the
+difference is in the DATA it reads: the per-note pitch-envelope stream at [voice*2+0x90]/[0xa4] (set by
+0aa7 from [note*2+0x15b4] etc. in 0cfb/0cf3) OR the note-record tables [0x2a]/[0x34] 0af4 builds from
+song[0x20..0x2f].  I have NOT byte-compared those static driver tables port-vs-oracle.
+CONCLUSION: port-side CODE is exhaustively verified faithful (5/5 functions + chain + device + file); the
+divergence is now localised to the pitch-envelope / note-record DATA tables the faithful code reads -- a
+sustained-bass-drone the port drops.  Two decisive next measurements (bounded): (1) byte-compare the
+driver's static envelope tables ([0x15b4], [0x1dd] instrument bank, and the [0x2a]/[0x34] note-records
+0af4 builds) port-vs-oracle via a dosbox-fist watch; (2) trace the ch0 bass voice: why the oracle re-keys
+/ re-fnums e4 136x and the port 2x -- the [0x90] stream contents for that voice.  The port-side code hunt
+is DONE (all faithful); the remaining work is a DATA-table comparison requiring the oracle-side capture.
