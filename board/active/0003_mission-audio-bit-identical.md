@@ -1844,3 +1844,27 @@ channel-map bytes at song start and compare to the original (via a dosbox-fist F
 SOUNDDVR DGROUP:0xc01 span, or read it from the driver's static init); and trace what sets param_2's high
 byte (the voice index) at the note-on call site.  This is the bounded handle for the H2 sequencer-decode
 divergence: a voice/channel-allocation table or index, not the OPL layer.
+
+RUNTIME-VERIFIED REFINEMENT via gdb on the -g native build (2026-08-25, same loop) -- pinned the root
+one level deeper and RULED OUT the channel-map/base suspects with live memory dumps:
+  - Patch 353's driver-DS base is CORRECT at note-play time: at a melody 0f99 call the word at
+    snd_base+0x831 = 0x3ce9 = load_seg(0x3a44)+0x2a5, the reloc-applied driver data segment (driver start
+    bytes at snd_base match fist_snd_image.bin).  (An earlier 0x2b reading was a PRE-RELOCATION first-hit
+    artifact -- the very first 0f99 (104f init) can be caught before the driver DS settles; the melody
+    calls use 0x3ce9.  Self-corrected.)
+  - The voice->channel map at driver_ds:0xc01 is a SENSIBLE IDENTITY map, not corrupt:
+    00 01 02 03 04 05 06 07 63 08 63 63 63 63 63 63  = voice V -> OPL channel V for V=0..7, voice 8
+    DISABLED (0x63 > 8 -> 0f99's `if(8<bVar2)return`), voice 9 -> channel 8.  9 usable voices.
+  - Mapping the observed key-on CHANNELS back through this map: the port activates VOICES {0,1,5,9} at
+    song start (key-ons on ch0/1/5/8); the oracle activates VOICES {0,2,3,5,6,7} (key-ons on ch7/0/2/3/5/6).
+    Different VOICE SETS, and different COUNTS (port 4, oracle 6-7) -- even the opening all-voices key-on
+    (val 3f, block7 reset) is 4 voices in the port vs 7 in the oracle.
+CONCLUSION (runtime-verified, convergent -- not the earlier oscillation): the audio divergence is a
+SONG-PARSE / VOICE-ACTIVATION fidelity bug in the port's MS3 sequencer -- it activates a different (smaller)
+set of tracks/voices from MAINMENU.MS3 than the original, from the song's first event.  It is NOT the OPL
+layer, NOT the instrument decode/mask, NOT the driver-DS base (0x3ce9 correct), NOT the 0xc01 channel map
+(identity, correct), NOT the dispatch/jumptables.  CONCRETE NEXT: find where the sequencer reads
+MAINMENU.MS3's TRACK TABLE (the per-voice song-pointer array) and how many voices it starts -- compare the
+port's track-count/pointer parse to the SOUNDDVR.DVR asm (the FUN_0000_0872/104f voice-init loop iterates
+9 voices; the song header selects which are active).  The bug is that the port starts 4 voices where the
+original starts 6-7 -- a bounded track-activation parse defect, reachable by asm diff of the song-load path.
