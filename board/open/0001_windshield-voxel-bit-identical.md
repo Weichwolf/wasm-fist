@@ -50,3 +50,18 @@ instants.  The audio rider is a small bounded shim change once this lands: drive
 the port's per-frame VGA-present hook (retire the fist_opl.c sample-clock reconstruction).  So this
 frontier's payoff is doubled -- it closes board:0003's audio bit-identity too.  (board:0003 landed
 MUSIC_DIV=120.536 = the measured 60 Hz-mean as the best uniform approximation until this lands.)
+
+MISSION-AUDIO REACHABILITY FINDINGS (2026-08-26): empirically scoping mission music vs this frontier.
+  - Under COOP ticking (FIST_TICK_HZ=1000 FIST_COOP_TICK=1) + the MC_MOUSE mission nav, the port DOES reach
+    the mission (opens MSPRITE1.BIN, M1CON.MRL = mission-1 console) and the op-0x2c spawn (rc=0, 6/6 runs).
+  - Mission MUSIC (MSN*.MS3) loads DURING GAMEPLAY, AFTER the spawn -- the FB-capture harness exits at spawn
+    (FIST_MISSFB_N=1) so it never reaches the music.  Running past spawn (FIST_MISSFB_N=300) times out:
+    sustained in-mission gameplay does not progress far enough headlessly -> exactly this board's gap.
+  - Under fast-forward (FIST_TICK_HZ=25000, the verify.sh mission mode) + audio, the run is too slow (audio
+    per-tick) to reach the mission in-budget.  So mission music needs the COOP in-mission sim to progress
+    -- which is this board's deterministic per-frame loop.
+  - RARE INTERMITTENT SEGFAULT (~1/8) in the coop+mission+audio path (once at op-0x1c display-list, clean
+    the other 7 runs incl. under gdb) -- a non-determinism symptom (uninit state / ordering) in the same
+    in-mission path this board addresses.  When the deterministic per-frame loop lands, re-test for the crash.
+  NET: mission audio bit-identity is gated on THIS board (the in-mission per-frame determinism), confirming
+  the "doubled payoff" above -- the deterministic frame loop unblocks the windshield AND mission audio.

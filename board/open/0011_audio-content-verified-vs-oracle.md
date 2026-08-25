@@ -54,3 +54,10 @@ DoD GATE PASSED (2026-08-26, 00:48): 10/10 consecutive clean wasm runs on the 17
 audio-menu-content gate is now part of every DoD run (177 pass / 0 fail each).  Menu audio content is a
 genuinely-enforced, DoD-validated invariant: the port plays MAINMENU.MS3 note-for-note vs the oracle, on
 native AND wasm, and a regression to silence fails the gate.
+
+MISSION AUDIO -- empirically confirmed board:0001-gated (2026-08-26): the port reaches the mission spawn
+under coop ticking (rc=0, 6/6) but MSN*.MS3 music loads post-spawn during gameplay, which the spawn-capture
+harness does not reach; running past spawn stalls (sustained in-mission sim = board:0001).  A rare
+intermittent segfault (~1/8) in the coop+mission+audio path is logged on board:0001 as an in-mission
+non-determinism symptom.  So the mission audio-content gate (analogous to audio-menu-content) waits on
+board:0001 making in-mission gameplay deterministically reachable headlessly.
