@@ -40,3 +40,12 @@ STILL OPEN (why this item stays open):
   - WAV-SAMPLE bit-identity vs the original (tempo/phase, not just note ORDER) remains the ultimate target;
     the note-seq gate is a necessary content invariant, not the full deliverable -- it depends on the
     frame-timing determinism (board:0001) to become a sample-exact WAV compare.
+
+CORRECTION (2026-08-25): the menu content gate initially had two wiring bugs that made it PASS without
+actually gating -- (1) flow-dispatch: 'audio-menu-content' matched the generic 'audio-' native==wasm WAV
+branch first (fixed: excluded it); (2) set -u: run_audio_reglog used $t in the same `local` that defines
+it, so under verify.sh's set -u the function errored and returned an empty reglog path -> the gate saw ""
+and FAILED (fixed: split the local onto two lines).  Both caught by NOT trusting a green result (the wrong
+detail string, then the in-matrix FAIL).  NOW GENUINELY ENFORCED: full matrix 177/177 with the real content
+gate showing detail "menu OPL note stream contains oracle MAINMENU.MS3 note-seq" and PASSing on native+wasm.
+A regression to silence now truly FAILS the matrix (self-checked: silent build 0/239).
