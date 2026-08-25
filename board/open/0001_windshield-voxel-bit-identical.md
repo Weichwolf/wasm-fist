@@ -113,3 +113,18 @@ is what the original must do since segment 0 holds no MS3.  This is a ROOT fix (
 song), NOT a skip-the-symptom guard.  Confirm against the DOSBox oracle that the intro (be0e(0) period)
 produces no MS3 music, then patch the be0e/0af4 chain.  Closing this removes cause (1); cause (2) (in-
 mission tick cadence) remains this board's per-frame determinism.
+
+es=0 ROOT NAILED (2026-08-26): NOT an empty track -- track 0's name IS 'INTRO.MS3' (present on disk, 1523
+B), but it NEVER OPENS (openlog: only MAINMENU.MS3).  gdb at the two be0e calls (correct addr g_mem+0x1c378):
+  be0e(0) [intro]: c378(loader vector)=0x00000000 (NOT installed) -> the (*c378)() screen-resource load is
+                   a null-vector no-op -> INTRO.MS3 never loads -> descriptor seg [0x9f1c]=0 -> es=0.
+  be0e(4) [menu ]: c378=0x0f692e7d (seg 0xf69 installed) -> loads MAINMENU.MS3 -> es=0x4c61 (plays right).
+So the intro-music load fails because the c378 loader vector is installed only AFTER be0e(0) runs; the
+sequencer then streams es=0 (0:0x9ff4+) garbage that is runtime-divergent native<->wasm -> the chord split
+at adv=4262 and the whole mission-audio native!=wasm.  This is a VECTOR-INSTALL ORDERING root (the 0xf69
+service cluster that owns c378 is set up later than the intro's first be0e), NOT a band-aid case.
+FIX (two parts, needs asm + DOSBox-oracle): (a) determine whether the ORIGINAL installs c378 before the
+intro's be0e(0) (=> the port's vector-install ordering is early-off, fix it so INTRO.MS3 loads and plays)
+OR the original also has no intro MS3 (=> the driver must treat es=0/unloaded as SILENCE, faithfully); (b)
+re-run the native<->wasm mission note-seq -> the 1062-note common core should extend to a full match once
+the es=0 garbage window is gone, leaving only cause (2) (in-mission tick cadence) for this board.
