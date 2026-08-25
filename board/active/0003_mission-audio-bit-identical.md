@@ -2107,3 +2107,32 @@ per-voice note-records [0x2a]/[0x34]/[0xc2], and confirming the oracle track == 
 capture -- locating the driver DGROUP under the extender CR3 paging -- is a dedicated, bounded
 dosbox-instrumentation sub-task, and it is the SINGLE remaining lever.  The port-side code+data audit is
 COMPLETE and clean; menu-audio bit-identity is blocked ONLY on that one oracle-side measurement.
+
+ABSOLUTE PORT-SIDE FLOOR -- SONG BYTE-IDENTICAL + 10a6/fnum-table VERIFIED (2026-08-25, session close):
+Closed the last two port-side variables:
+  (1) SONG LOAD is byte-identical: dumped the port's loaded song at the register event (es=0x4c61) and
+      cmp'd the first 3561 bytes vs armoredfist/FISTDATA/MAINMENU.MS3 -> 0 differing bytes.  The port
+      loads the ENTIRE song correctly (not just the header) -- the input is DEFINITIVELY identical.
+  (2) 10a6 (the note->fnum A0/B0 writer, the last unverified pitch-path function) is FAITHFUL + correctly
+      driver-DS rebased (patch 354): channel=[voice+0xc01], fnum=[note*2+0x9dd]; matches asm 0x10a6.  The
+      [0x9dd] note->fnum table is a sensible ascending chromatic table (0083 0087 008a 008f 0093..).
+COMPLETE port-side audit (this session, all deterministic/asm-verified faithful or byte-identical):
+  song data (byte-identical) | device select | voice chain | 6 functions (0b5d/0c39/0a28/0af4/
+  snd_song_reparse/10a6) | channel map [0xc01] | fnum table [0x9dd] | transpose [0x14ac] | envelope
+  [0x15b4] | instrument bank [0x1dd] | tempo (MUSIC_HZ swept + ruled out).
+EVERY measurable port-side element is correct/identical to the original, yet the deterministic OPL stream
+diverges (oracle e4-heavy across ch0-7 never ch8; port spread + over ch0/1 + ch8).  This is now provably
+NOT a port-side code or static-data defect.  The divergence must be one of:
+  (A) the shim's cooperative DRIVE STRUCTURE -- the interleaving of the two per-tick driver entries
+      (fist_snd_seq_advance->0a28 AND fist_snd_isr_tick->0x3dd body) differs from the original's single
+      PIT ISR that chains both; tempo is ruled out but the ORDER/RATIO of the two drives is not modelled
+      1:1, and the per-voice envelope advance (0a28) vs note dispatch (0c39, inside 0a28) vs the 0x3dd
+      body could interleave differently -> different fnum evolution.  This is a SHIM drive-model question
+      (bounded, port-side-fixable IF the real ISR chain's two-entry cadence is reconstructed from asm).
+  (B) the oracle capture conditions (track != MAINMENU.MS3, or a different config) -- needs the oracle
+      -side SOUNDDVR capture to exclude.
+NEXT (the two remaining levers, both bounded): (A) reconstruct the real SOUNDDVR PIT-ISR chain's exact
+two-entry cadence (0x3dd body + 0xa28) from asm 0x3d6/0x3dd and drive the shim identically -- this is the
+one port-side mechanism NOT yet verified 1:1 (the shim approximates it); (B) the oracle-side capture.
+Lever (A) is the more promising -- it is the ONLY port-side element still approximated rather than
+asm-faithful, and it directly controls the per-tick fnum evolution that the e4-distribution measures.
