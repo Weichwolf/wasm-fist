@@ -250,8 +250,37 @@ void fist_opl_tick(void)
     if (n > 65536) n = 65536;           /* guard a pathological divisor */
     if (n) {
         g_samp_acc -= n;
-        /* advance the MIDI sequencer at MUSIC_HZ, locked to the sample clock (once per
-         * g_samples_per_seq generated samples) -- BEFORE emitting so the block reflects the writes */
+        /* board:0003 -- the ORIGINAL fires 0a28 per VGA VERTICAL RETRACE (mode-13h 70.086 Hz) via a
+         * fractional accumulator, giving the measured 5S+1D pattern (fire on ~6 of every 7 vsyncs, a
+         * 60 Hz MEAN but VSYNC-QUANTIZED to 629-sample boundaries, NOT uniform 60 Hz).  FIST_VSYNC_MUSIC
+         * drives that faithful mechanism: quantize each 0a28 fire to a synthetic vsync boundary
+         * (g_rate/VSYNC_HZ_13H samples) and gate it with a MUSIC_HZ/VSYNC_HZ per-vsync accumulator, so
+         * the OPL writes land at the original's exact vsync sample offsets.  Default (unset) keeps the
+         * uniform-60Hz approximation the DoD 10x gate validated. */
+        /* DEFAULT: the faithful VSYNC-QUANTIZED drive.  0a28 fires per mode-13h VGA vsync (70.086 Hz)
+         * via a MUSIC_HZ/VSYNC_HZ fractional accumulator -> the ORIGINAL's measured 5S+1D pattern
+         * (verified: fire on ~6 of 7 vsyncs, 629/1258-sample intervals).  FIST_UNIFORM_MUSIC selects the
+         * old uniform-60 Hz approximation for comparison. */
+        static int uniform_mode = -1;
+        if (uniform_mode < 0) uniform_mode = getenv("FIST_UNIFORM_MUSIC") ? 1 : 0;
+        if (!uniform_mode) {
+            static double spv = 0.0, vacc = 0.0, macc = 0.0, fire_per_vsync = 0.0;
+            if (spv == 0.0) {
+                double music_hz = SND_ISR_HZ / MUSIC_DIV_DEFAULT;  /* 59.9936 Hz measured mean */
+                const char *e = getenv("FIST_MUSIC_HZ"); if (e) { double v = atof(e); if (v > 0) music_hz = v; }
+                spv = (double)g_rate / 70.086;                     /* samples per mode-13h vsync */
+                fire_per_vsync = music_hz / 70.086;                /* fractional fire rate per vsync */
+            }
+            vacc += n;
+            while (vacc >= spv) {
+                vacc -= spv;
+                macc += fire_per_vsync;
+                if (macc >= 1.0) { macc -= 1.0; fist_snd_seq_advance(); }
+            }
+            emit_block(n);
+            return;
+        }
+        /* FIST_UNIFORM_MUSIC: the uniform-60 Hz approximation (once per g_samples_per_seq samples). */
         g_seq_acc += n;
         while (g_seq_acc >= g_samples_per_seq) { g_seq_acc -= g_samples_per_seq; fist_snd_seq_advance(); }
         emit_block(n);
