@@ -2536,3 +2536,17 @@ investigation: the mechanism is fully known (VGA-vsync tick), the shim fix is sp
 and full sample-bit-identity is achieved exactly when the frame cadence is -- one unified deterministic-
 frame-timing effort serves BOTH the audio stream and the live windshield.  The landed MUSIC_DIV=120.536
 (uniform 60 Hz mean) remains the best current approximation until that unified frame-timing lands.
+
+REFINEMENT (asm-checked) -- the retrace ISR is VIDEO-ONLY; the sound tick is ENGINE-FRAME-LOOP-driven:
+objdump of MGAVIDEO 0x0b1f (the ~70 Hz retrace ISR, = the 31c3 vector c5e4=0x3e780b1f) shows it does ONLY
+video: incb [0x738] frame-counter (gate); when it wraps -> DAC palette upload (out 0x3c8; 0x300 bytes to
+0x3c9) + color-cycle list walk + call *[0x5e8] fade step; decb [0x738]; lret.  NO sound-tick call.  So the
+0a28 music tick is NOT called from the retrace ISR -- it is called by the ENGINE's per-frame MAIN LOOP
+(vsync-limited via the in(0x3da) retrace busy-wait the engine spins on, ~70 Hz), which is why it is "dead-
+in-image" in SOUNDDVR (the ENGINE frame loop drives it via 0x1d2->[cs:0x5c2]=0xa28).  CONFIRMS the endpoint:
+0a28 fires once per ENGINE FRAME at the vsync-limited 70 Hz (+skips when a frame overruns); matching it
+bit-for-bit == the port's frame loop iterating instant-for-instant like the original == board:0001.  (Also
+corrected a sub-hypothesis: retrace-ISR-calls-sound was WRONG per the asm.)  The audio investigation is
+COMPLETE: mechanism fully known (engine-frame-loop 0a28 at vsync 70 Hz), fix = drive 0a28 from the port's
+per-frame loop under deterministic frame timing, unified with board:0001.  Landed MUSIC_DIV=120.536 (60 Hz
+mean) is the best uniform approximation until the unified frame-timing determinism lands.
