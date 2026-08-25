@@ -2481,3 +2481,21 @@ fist_snd_base's 0x1d2 region); (2) confirm 31c3's per-vector sub-rate accumulato
 yields the ~60 Hz sound rate; (3) drive 0a28 from that ISR path, retire the sample-clock reconstruction;
 (4) re-verify native==wasm + the phase-aligned menu WAV.  This turns the audio timing from "unknown deep
 seam" into a SPECIFIC vector-install + ISR-sub-rate reconstruction in the already-cooperative INT-8 path.
+
+RETRACTION (same loop, correct-without-ego) -- "31c3 far vector = the sound tick" was WRONG: dumped the
+31c3 vectors at runtime -- c5e4=0x3e780b1f, d5b0=0x3e782f38 (both seg 0x3e78 = MGAVIDEO driver), c05c=
+0x0f69036a, c058=0x0f690314 (seg 0f69 = engine service cluster), c2b0=0x00000000 (frame-blit, patch 123,
+gated on c738).  NONE point to the SOUNDDVR (seg 0x3a44), and a full DGROUP scan (0xc000..0xd800) found ZERO
+far-pointers with the sound-driver segment.  So the 31c3 ISR drives VIDEO/frame + service, NOT the music
+tick, and the sound tick (0a28 via 0x1d2) is NOT wired through any DGROUP far-vector in the port.  My
+"major finding" over-claimed; retracted.
+HONEST REFINED STATE: the sound-tick (0a28/0x1d2) invocation is genuinely DEAD-IN-IMAGE and NOT installed
+as a DGROUP vector -- the shim's sample-clock reconstruction (fist_opl_tick, now at the measured 60 Hz
+cadence) is the only driver.  The ~60 Hz rate still suggests INT-8/frame coupling, but the mechanism is
+most likely an IVT CHAIN (0x1d2 chained into the engine's INT-8, like the SOUNDDVR ISR 0x3d6 is via 107a)
+rather than a DGROUP call -- which is why the DGROUP scan is empty.  UNCONFIRMED.  To pin it needs the
+dosbox 0a28-counter correlated to the engine INT-8 fire (which interrupt/rate 0x1d2 is chained to) -- a
+measurement blocked by the running gate's CPU contention (timing-sensitive).  NET: two over-claims this
+session (the "one constant" reframe; "31c3=sound") both CORRECTED by evidence -- the discipline holds.  The
+LANDED results (measured 60 Hz cadence fix; init proven bit-identical) STAND; the exact sound-tick firing
+mechanism remains the genuine open seam, measurable post-gate.
