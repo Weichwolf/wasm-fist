@@ -2212,3 +2212,25 @@ a1:222/a0:110 higher than the port over the longer window) may be a window-lengt
 minor real difference -- verify with an EQUAL-length, phase-aligned menu-vs-menu window and the clean WAV
 xcorr; that is the actual (much smaller) remaining audio-fidelity question, NOT the voice-redistribution
 phantom this session chased.
+
+EQUAL-WINDOW MENU-VS-MENU (2026-08-25, corrected final state): captured the port for 60s (14316 writes,
+comparable to the oracle's 57s menu window) and compared apples-to-apples:
+  CHANNEL voicing -- FAITHFUL: port ch0:20% ch1:42% ch2:12% ch3:1% ch5:11% ch6:7% ch7:7% ch8:1% ==
+    oracle-menu within ~1% per channel.  The voice=channel allocation is correct (confirms iter 19).
+  PITCH (A0 fnum-low) -- a REAL RESIDUAL remains: the oracle CONCENTRATES on a1:222 + a0:110 (~30% of A0
+    writes on two adjacent fnums = a SUSTAINED note / drone on the busy channel), while the port SPREADS
+    (0b:432 ba:292 10:285 3f:280 2a:270 ..) with no single dominant.  Shared vocabulary (0b/ba/10/3f/2a/dc
+    /4b/6e) present in both but at different prominence.  So: same busy channels, but the oracle HOLDS a
+    note (a1) the port renders as a moving/spread line.
+NET (honest, corrected): the session's DRAMATIC "e4 voice-redistribution" divergence was 100% intro
+contamination (RESOLVED -- port voicing faithful).  What actually remains is a SMALLER, precise question:
+the oracle sustains a drone/pedal (fnum a1) on the busy channel that the port does not hold -- a
+pitch-EVOLUTION difference (the sustained note's fnum vs a moving line), NOT a voice-allocation bug.  This
+is the SAME "held-drone-not-sustained" shape seen in the intro (e4), so it is a genuine (if minor) fidelity
+gap in how a HELD note's pitch is maintained per tick.  Given the full port-side code+data audit is proven
+faithful, the drone residual most likely lives in the DRIVE CADENCE of the per-tick fnum feed (0a28) on a
+held note -- the ONE mechanism that is rate-approximated (MUSIC_HZ), OR a phase-alignment artifact of the
+un-aligned windows.  NEXT (bounded, the real remaining audio work): phase-align a menu-vs-menu window (same
+song offset, equal length) and diff the A0/B0 stream event-by-event to confirm whether the drone residual
+is real or a loop-phase artifact; if real, it is a held-note fnum-maintenance question on 0a28's feed.
+This is the ACCURATE remaining gap -- far smaller than the phantom this session opened with.
