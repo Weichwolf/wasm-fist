@@ -40,3 +40,7 @@ expansion is the mechanism, not the completion.
 RE-GATED again (2026-08-23) after extending the audio-intro window to [0x452]=4000: 10/10 consecutive
 clean, 176 pass / 0 fail each, 0 resets (08:47 -> 10:53 CEST).  The audio-intro flow now bit-verifies the
 OPL+SB stream native==wasm over ~64 s (full title intro + menu music), not just the [0x452]=300 crossing.
+
+RE-VALIDATED (2026-08-25) at MUSIC_DIV=120.536 (board:0003 audio cadence fix): tools/wasm_gate.sh -> 10/10
+consecutive clean WASM full-matrix runs, 176 PASS / 0 FAIL each, 0 total fails.  The audio timing change is
+DoD-safe; the 10x endurance holds at the current tree.

@@ -2550,3 +2550,13 @@ corrected a sub-hypothesis: retrace-ISR-calls-sound was WRONG per the asm.)  The
 COMPLETE: mechanism fully known (engine-frame-loop 0a28 at vsync 70 Hz), fix = drive 0a28 from the port's
 per-frame loop under deterministic frame timing, unified with board:0001.  Landed MUSIC_DIV=120.536 (60 Hz
 mean) is the best uniform approximation until the unified frame-timing determinism lands.
+
+*** DoD 10x GATE RE-PASSED WITH THE MUSIC_DIV FIX (2026-08-25) ***
+The audio cadence fix (MUSIC_DIV_DEFAULT 120.0 -> 120.536, the measured exact 0a28 rate) was validated
+against the FULL DoD endurance: tools/wasm_gate.sh ran verify.sh wasm 10 CONSECUTIVE times, each on the
+complete 176-flow matrix -> 10/10 CLEAN, 176 PASS / 0 FAIL every run, ZERO total failures.  So the audio
+timing change is provably DoD-safe: native==wasm bit-identity + crash-free functionality hold across the
+entire matrix, 10x consecutive.  (board:0008's endurance gate re-passed at the new audio constant.)  This
+banks the "native/wasm byte-identical, 10x consecutive" DoD criterion at the current state.  The remaining
+audio criterion (sample-bit-identity vs the ORIGINAL) is the frame-timing model (unified with board:0001),
+now that the gate no longer holds the WASM binary -- rebuilds are unblocked for that dedicated effort.
