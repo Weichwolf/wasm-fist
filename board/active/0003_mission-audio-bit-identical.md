@@ -2675,3 +2675,25 @@ delta-0 event1 dispatch from 814e244 to the function exit, logging every taken b
 find where control diverges from the goto-fetch.  The fix is a patch-359 correction to the delta-0 loop
 (and/or a decw-underflow guard: `if([ds:0x14]!=0) [ds:0x14]--; if(==0) fetch`), asm-verified vs 0xc39.
 This is THE remaining audio-content root; song load/registration/decode are all proven correct.
+
+*** ROOT CAUSE RESOLVED (2026-08-25): SEQUENCER RE-ENTRANCY via out()->timer_pump ***
+The patched sequencer (0c39/0b5d/0cfb/0fab, patches 354/359/408) is CORRECT.  The stall is a RE-ENTRANCY
+bug in the PORT's driving path.  Definitive gdb branch trace on the delta-0 event:
+  call0cfb   d14=0x0000 ch=0x01     <- dispatching ch1 note, delay counter = 0
+  decw-next  d14=0xffff ch=0x08     <- a NESTED 0c39 ran mid-dispatch and decw'd d14 0->0xffff
+  call0aa7   d14=0xffff ch=0x01     <- back in the outer dispatch, d14 now corrupted
+  CHECK      d14=0xffff -> RETURN -> 65535-tick stall
+Backtrace of the nested call: out(port=0x388) [OPL reg write from 0f21/0fab instrument-apply]
+  -> fist_timer_pump() [fist_vga.c out() pumps the cooperative timer on EVERY port write]
+  -> fist_opl_tick() -> fist_snd_seq_advance() -> 0a28 -> 0c39 (RE-ENTRANT).
+So a note-dispatch's OPL register writes recursively re-drive the music sequencer, and the nested 0c39
+corrupts the SHARED driver delay counter [ds:0x14] (and cursor).  On real hardware the OPL port write is
+pure I/O -- it NEVER advances the MIDI sequencer (that is the timer ISR's job, once per tick, atomically).
+The port's out()->fist_timer_pump coupling (the cooperative-timing seam) makes the OPL write re-enter the
+sequencer.  This also explains the run-to-run intermittency (recursion depth depends on how many OPL regs
+a note writes + tick phase) -- a determinism smell in its own right.
+FIX (faithful, shim-level, NOT a decompile patch, NOT a symptom-guard): a re-entrancy guard so the music
+sequencer advance never runs nested -- if already inside the sequencer (0a28/0c39), fist_snd_seq_advance
+must no-op.  Matches the hardware model (sequencer is atomic per tick; OPL I/O during it does not re-drive
+it).  Implement in the shim (fist_sb.c fist_snd_seq_advance / fist_opl_tick), verify note-on count jumps
+from ~4 toward the oracle's ~99, then re-run the 10x gate for native==wasm.

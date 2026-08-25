@@ -187,8 +187,18 @@ void fist_snd_seq_advance(void)
 {
     extern int fist_opl_enabled(void);
     if (!g_snd_isr_seg || !fist_opl_enabled()) return;
+    /* board:0003: the MIDI sequencer (0a28 -> 0c39) is ATOMIC per tick.  Its note dispatch writes OPL
+       registers (0f21 -> out()), and out() pumps the cooperative PIT tick (fist_timer_pump), which loops
+       back here -- a nested advance would run 0c39 recursively and corrupt the SHARED driver delay counter
+       [ds:0x14] (decw 0->0xffff = a 65535-tick stall) and cursor, so the menu music emitted ~4 note-ons in
+       190s instead of the original's continuous melody.  On real hardware OPL I/O never re-drives the
+       sequencer; guard against re-entry to restore that invariant. */
+    static int in_seq = 0;
+    if (in_seq) return;
+    in_seq = 1;
     code *adv = fist_icall(fist_snd_base + 0xa28u);
     if (adv) { ((int(*)(int,int,int,int))adv)(0,0,0,0); g_snd_seq_advances++; }
+    in_seq = 0;
 }
 
 void fist_snd_diag(void)
