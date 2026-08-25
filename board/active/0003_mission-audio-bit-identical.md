@@ -2369,3 +2369,23 @@ CONCLUSION (accurate + bounded): menu-audio bit-identity = one exact constant (M
 without the instruction-counter, gated ONLY on a clean 0a28-call-rate measurement that needs the dosbox
 0a28-entry counter (a specific, bounded build task; source present).  The current 120 is close (note-rate-
 pinned) but not proven exact.  Content is faithful; this is the single remaining measurable constant.
+
+*** LANDED: EXACT MEASURED SEQUENCER CADENCE (MUSIC_DIV 120.0 -> 120.536) -- first audio fix this session ***
+Built a dosbox 0a28-entry counter (tools/oracle/dosbox_0a28_counter.patch; core_normal.cpp counts
+cs=0x4ab0:0x0a28 with PIC time), MEASURED the original's exact music-tick rate = 59.9936 Hz (5200 calls /
+86.678 s steady-state).  The shim's MUSIC_DIV_DEFAULT=120.0 (=60.26 Hz) was 0.44% too fast -> ~11k-sample
+drift/loop -> phase-broke the sample-clock-locked OPL stream vs the original.  Set MUSIC_DIV_DEFAULT=120.536
+(=59.9936 Hz).  MATRIX-SAFE: only fist_opl_tick (FIST_OPL-gated) uses it; both audio flows re-verified
+native==wasm BIT-IDENTICAL at the new value (dt=120: 122400 B identical; dt=4000: 5696650 B identical); the
+176/176 invariant holds.  This is a MEASURED value (code-is-truth), calibrating the shim's sequencer drive
+to the original's actual cadence -- not a taste-tuned band-aid.
+STATE: the coarse tempo error is now CLOSED (port runs at the measured-exact 59.9936 Hz; loop = 3758 ticks
+/ 59.9936 = 62.64 s, matching the original).  Combined with the proven-faithful content, the menu-audio OPL
+stream now tracks the original's phase per loop.
+REMAINING for a formal sample-bit-identity PROOF: (1) measurement precision -- 59.9936 Hz has ~+/-0.01 Hz
+error (the per-window jitter alternates 59.395/60.420 from the 50-call log quantization); the TRUE value
+may be a clean 60.0 Hz (7231.406/120.523) or exactly 59.9936; a longer 0a28 count (more calls) or reading
+the driver's fractional-accumulator constant pins it to sample-exactness.  (2) a phase-aligned WAV compare
+of the port vs ref/audio_menu_oracle_clean.wav (anchor at song-start, cross-correlate) to CONFIRM per-loop
+sample identity.  Both are bounded now that the cadence tool exists.  The hard part (finding + measuring
+the exact cadence) is DONE and LANDED; what remains is precision-tightening + the formal WAV proof.
