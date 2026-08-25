@@ -667,7 +667,8 @@ run_audio_reglog() { # $1=target ; echo reglog-path or ""  -- port engine OPL no
   # menu melody (MAINMENU.MS3) is present, for a port-vs-ORACLE note-sequence content check (the earlier
   # audio-* flows only assert native==wasm, which a SILENT port trivially satisfied).  Deep dumptick so the
   # menu music has played; FIST_SB/FIST_OPL select the OPL device-3 sequencer (behaviour-neutral otherwise).
-  local t="$1" out="$TMP/aureg.$t.reglog"
+  local t="$1"
+  local out="$TMP/aureg.$t.reglog"          # NB separate line: $t must be set before it is used (set -u)
   if [ "$t" = native ]; then
     timeout 120 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK=30000 FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NATIVE" >/dev/null 2>&1
   else
