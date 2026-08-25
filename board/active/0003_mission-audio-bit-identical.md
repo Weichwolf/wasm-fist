@@ -2697,3 +2697,17 @@ sequencer advance never runs nested -- if already inside the sequencer (0a28/0c3
 must no-op.  Matches the hardware model (sequencer is atomic per tick; OPL I/O during it does not re-drive
 it).  Implement in the shim (fist_sb.c fist_snd_seq_advance / fist_opl_tick), verify note-on count jumps
 from ~4 toward the oracle's ~99, then re-run the 10x gate for native==wasm.
+
+*** FIX LANDED + VERIFIED (2026-08-25, commit d7bd0aa): MENU MUSIC PLAYS ***
+Re-entrancy guard (static in_seq) on fist_snd_seq_advance (shim, decompile untouched).  Results:
+  - note-ons over the 190s menu run: 4 -> 4412 (the melody plays).
+  - noteseq_compare.py port vs oracle: longest CONTIGUOUS exact match GROWS with the oracle capture length
+    -- 99 notes (10s oracle) then 239 notes (35s oracle), each == the oracle's ENTIRE menu window
+    (port[37:N] == oracle[275:275+N]).  The port reproduces MAINMENU.MS3 note-for-note; the match is
+    reference-length-limited, not divergence-limited.
+  - native==wasm WAV byte-identical (5696650 B, cmp clean) -- the hard invariant holds.
+  - full-matrix regression + 10x DoD gate: pending (running).
+REMAINING (fidelity DEPTH, not the silence bug): (a) tempo/phase bit-identity vs the original over the WAV
+(the vsync-drive/MUSIC_DIV work, now meaningful since notes play); (b) a hermetic port-vs-oracle audio
+note-seq flow in verify.sh so silence can never regress unnoticed (board:0011).  The audio-content ROOT
+(silence) is RESOLVED.
