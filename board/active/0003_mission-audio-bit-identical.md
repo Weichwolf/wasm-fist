@@ -2062,3 +2062,27 @@ driver's static envelope tables ([0x15b4], [0x1dd] instrument bank, and the [0x2
 0af4 builds) port-vs-oracle via a dosbox-fist watch; (2) trace the ch0 bass voice: why the oracle re-keys
 / re-fnums e4 136x and the port 2x -- the [0x90] stream contents for that voice.  The port-side code hunt
 is DONE (all faithful); the remaining work is a DATA-table comparison requiring the oracle-side capture.
+
+TEMPO RULED OUT + PORT-SIDE CODE HUNT EXHAUSTED (2026-08-25, session close):
+Swept FIST_MUSIC_HZ 60/120/240/480/900/1800/3600/7200 (the shim's sequencer-drive rate, default 60.3 Hz =
+SND_ISR_HZ 7231.4 / MUSIC_DIV_DEFAULT 120).  The port's e4-drone fraction of A0 writes: 1.3% @60, 1.3%
+@120, 5.1% @240, 5.2% @480, then ~0% @900+ (the sequencer over-advances and the music collapses to a few
+writes, or 8614 writes with e4=0 @7200).  The port NEVER reaches the oracle's e4 dominance (~30%, 136/455)
+at ANY rate.  So the sustained-bass-drone divergence is NOT a tempo/drive-rate artifact -- it is structural.
+SESSION-CLOSE STATE for board:0003 audio (menu music, MAINMENU.MS3, OPL2 device 3):
+  PROVEN port-side (deterministic / asm): file, device selection, voice-chain build (0af4/reparse),
+    all 5 sequencer functions (0b5d, 0c39, 0a28, 0af4, snd_song_reparse), the [0xc01] identity channel
+    map -- ALL faithful.  Tempo swept + ruled out.  A deterministic FIST_SNDREGLOG capture harness was
+    built (prototype reverted; re-add to patches 349/350 to persist).
+  THE REMAINING DIVERGENCE: the ORIGINAL sustains an e4 bass drone (ch0, A0=e4 x136 = a held note with a
+    pitch-modulation envelope) that the PORT drops (e4 x2, ch0 keyed 198x but with SPREAD pitches).  Same
+    song (shared pitch vocabulary), same faithful code, same static tables in principle -> the divergence
+    can only be a runtime-state or static-DATA difference the faithful code reads differently, which
+    port-side analysis alone CANNOT resolve (every code path checks out).
+  DECISIVE NEXT (oracle-side, bounded, the ONLY remaining lever): capture the RUNNING ORIGINAL's SOUNDDVR
+    driver data via dosbox-fist FIST_WATCHFLAT -- specifically (a) the [0x20] voice chain, (b) the ch0
+    voice's note-record [0x2a]/[0x34] + pitch-envelope stream [voice*2+0x90]/[0xa4], (c) confirm the oracle
+    is playing MAINMENU.MS3 (not a different menu track).  Locate the SOUNDDVR DGROUP flat linear from a
+    cam/cr3 read (CLAUDE.md dynamic-write-trace).  This byte-compare vs the port's (deterministically
+    captured) tables will show EXACTLY where the drone is lost -- a static-data load bug, a note-record
+    build bug, or an unmodeled driver mechanism.  Port-side is DONE; this oracle-side capture is the work.
