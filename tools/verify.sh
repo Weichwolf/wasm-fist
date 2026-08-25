@@ -776,9 +776,10 @@ for row in "${FLOWS[@]}"; do
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
   fi
-  if [ "${name#audio-}" != "$name" ]; then
+  if [ "${name#audio-}" != "$name" ] && [ "$name" != audio-menu-content ]; then
     # OPL FM audio stream native<->wasm bit-identity (tick-pinned).  board:0003.  The dumptick is carried
-    # in the flow's 3rd field as "audio" (=120) or "audio:N" (=N).
+    # in the flow's 3rd field as "audio" (=120) or "audio:N" (=N).  (audio-menu-content is the port-vs-
+    # ORACLE content gate, handled in its own branch below -- excluded here so it does not fall through.)
     audt=120; case "$ms" in audio:*) audt="${ms#audio:}";; esac
     detail=" [OPL FM audio, coop tick-pinned [0x452]=$audt, full-WAV native==wasm]"
     rn=""; rw=""
