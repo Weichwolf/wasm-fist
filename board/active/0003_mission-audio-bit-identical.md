@@ -2086,3 +2086,24 @@ SESSION-CLOSE STATE for board:0003 audio (menu music, MAINMENU.MS3, OPL2 device 
     cam/cr3 read (CLAUDE.md dynamic-write-trace).  This byte-compare vs the port's (deterministically
     captured) tables will show EXACTLY where the drone is lost -- a static-data load bug, a note-record
     build bug, or an unmodeled driver mechanism.  Port-side is DONE; this oracle-side capture is the work.
+
+[0x15b4] ENVELOPE TABLE RULED OUT + PORT-SIDE FLOOR REACHED (2026-08-25, session close):
+Chased the e4-drone to the pitch-envelope table [ds:0x15b4] (per-note envelope pointers, read by 0cf3 to
+set [voice*2+0xa4]).  Port runtime [0x15b4] = all 0x15b2 (a pointer to the default envelope at 0x15b2 =
+byte 0x00 then 0x80 = "add 0, hold" = NO modulation).  RULED OUT as a bug: 0x15b4 is a STATIC default
+table the driver init copies from image offset 0x4004 (an array of 0x15b2 words, misdisassembled as
+`mov dl,0x15`); it is identical port+oracle, and no code writes it per-song.  So neither side gets pitch
+modulation from this path -- the oracle's e4-concentration is a note-FREQUENCY difference (the original
+returns to the e4 pitch-class far more often; A0=e4 spread across voices 0-7 via 0a28's per-voice fnum
+reprogram, stack 0a96->10d7), not a pitch-envelope the port drops.
+SESSION FLOOR (honest): every concrete port-side hypothesis this session dissolved under verification --
+instrument mask, program-change dispatch, jumptables, driver-DS base (both fns), device selection, voice
+chain, all 5 sequencer functions, tempo (MUSIC_HZ sweep), the [0x15b4]/[0x14ac] static tables.  ALL are
+faithful/identical to the original.  Yet the deterministic OPL stream diverges (oracle e4-heavy + spreads
+ch0-7 never ch8; port spread + over-loads ch0/1 + uses ch8).  The cause is NOT locatable by port-side
+analysis -- it requires seeing what the RUNNING ORIGINAL's SOUNDDVR does differently, which needs the
+oracle-side driver-state capture (dosbox-fist FIST_WATCHFLAT on the SOUNDDVR DGROUP: the [0x20] chain, the
+per-voice note-records [0x2a]/[0x34]/[0xc2], and confirming the oracle track == MAINMENU.MS3).  That
+capture -- locating the driver DGROUP under the extender CR3 paging -- is a dedicated, bounded
+dosbox-instrumentation sub-task, and it is the SINGLE remaining lever.  The port-side code+data audit is
+COMPLETE and clean; menu-audio bit-identity is blocked ONLY on that one oracle-side measurement.
