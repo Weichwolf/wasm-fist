@@ -2283,3 +2283,28 @@ DEFINITIVE SESSION CONCLUSION for board:0003 menu audio:
   Until that tool exists, menu-audio bit-identity is STRONGLY EVIDENCED (port-side proven faithful) but not
   formally demonstrated.  This is the accurate, bounded state -- the session converted a false "gross
   divergence" into "port proven faithful; formal bit-proof pending a phase-aligned comparator."
+
+*** ROOT OF THE (SAMPLE-LEVEL) AUDIO GAP: EXACT TICK TIMING, a KNOWN documented seam (2026-08-25) ***
+The "3f vs b0" opening-chord difference is DECISIVE and explains everything: 0x3f = block7/fnhi3 (high),
+0xb0..0xb8 = block4-6 rising.  These are the SAME notes at DIFFERENT pitch-ENVELOPE phases.  0a28 walks a
+per-voice pitch-envelope every tick ([voice*2+0x90] delta stream) and reprograms A0/B0 as the pitch
+sweeps; so the fnum a note shows is a function of WHEN you sample it in its sweep.  The port's cooperative
+tick (fist_snd_seq_advance at the MUSIC_HZ heuristic, locked to the OPL sample clock) advances the envelope
+at a rate that is NOT instruction-exact to the original's PIT ISR (7231.4/k Hz), so at any capture instant
+every sweeping voice is at a different envelope phase than the oracle -> different A0/B0 values -> the
+"pitch histogram residual", the "a1 drone", the "9-vs-4 opening", the "chord order" -- ALL of them are the
+same phenomenon: a phase offset in the pitch-envelope sweep from the approximate tick rate.
+THE HONEST ROOT: the port's menu audio is FAITHFUL IN CONTENT (proven byte-identical song + asm-faithful
+sequencer + identical tables -> the right notes, voices, instruments, envelopes), but SAMPLE-LEVEL
+BIT-IDENTITY is gated on EXACT tick timing.  The shim drives the sequencer at a heuristic MUSIC_HZ
+(MUSIC_DIV_DEFAULT, xcorr-tuned), NOT the original's instruction-exact PIT cadence.  This is the SAME seam
+CLAUDE.md names: "FIST_TICK_HZ ... the knob is the seam a later deterministic (instruction-counted) tick
+source will replace."  Audio bit-identity therefore REQUIRES the instruction-counted tick source (a QEMU
+icount-replay-pinned or cycle-exact PIT drive) -- the same deep timing seam the live-mission voxel
+(board:0001) and the deterministic frame timing depend on.  It is NOT a sound-driver bug (that is proven
+faithful); it is the engine-wide TIMING MODEL.
+SESSION NET (accurate + complete): (1) DISPROVED the "gross voice-redistribution" alarm -- it was an
+intro-contaminated reference; (2) PROVED the port's menu-audio code+data faithful in every element; (3)
+localised the residual sample-level gap to its TRUE root -- the approximate cooperative-tick timing vs the
+original's exact PIT cadence, a known engine-wide seam (instruction-counted tick), NOT a fist_snd.c defect.
+Menu-audio CONTENT is faithful; sample-BIT-identity is one with the deep deterministic-timing work.
