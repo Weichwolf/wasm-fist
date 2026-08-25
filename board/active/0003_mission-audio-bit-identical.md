@@ -2612,3 +2612,44 @@ faithful (residual = timing/phase only, the board:0001 unification); 30-85% part
 <30% real note bug or wrong section.  QUEUED post-gate: capture port menu reglog (existing native binary)
 + oracle menu reglog (tools/oracle/trace_opl.sh, dosbox) -> run harness -> FIRST unconfounded answer to
 "does the port play MAINMENU.MS3's notes faithfully".  This is the clean test the write-density lead needed.
+
+*** ROOT ISOLATED (2026-08-25, post-gate): THE PORT DOES NOT PLAY THE MENU MELODY ***
+The phase-free harness plus an idle-menu oracle capture ended every confound and exposed the real bug.
+MEASURED (both idle-menu, no interaction, note-on rising edges = pure content):
+  ORACLE idle-menu: 374 note-ons total, 99 in the menu window (t>=32s), steady ~46-48 per 5s bucket
+                    -> a rich continuous melody, ~10 note-ons/sec.
+  PORT full run to [0x452]=30000 (190s audio, full KDV intro + menu): 180 OPL writes, **4 key-ons TOTAL**
+                    -> ~0.02 note-ons/sec == essentially SILENT.
+So the whole "LCS=15 / 4x write density / phase" saga was chasing a stream that ISN'T PLAYING.  The DoD
+gate's native==wasm passes because BOTH targets are IDENTICALLY SILENT -- byte-identity to each other does
+NOT imply match to the original.  The port's sequencer REGISTERS the song (the instrument-load block IS in
+the reglog: 0f99 operator regs written -> 0af4/song-register ran) but emits ~no note events.
+HYPOTHESIS (to verify next): the port drives 0a28 (per-tick voice/pitch FEED for already-sounding voices)
+but never calls 0b5d (the MS3 EVENT READER that fetches the next note-on/off/delay and dispatches via
+0c39).  Instruments load, voices would be fed, but NO NEW NOTES trigger -> 4 stray key-ons only.  I.e. the
+port's fist_snd_seq_advance advances the wrong half of the sequencer.  This is now a concrete, falsifiable
+code bug, not a timing/phase mystery.  Harness: tools/oracle/noteseq_compare.py; captures reproducible via
+trace_opl.sh (oracle) + FIST_OPL_REGLOG (port).  NEXT: trace the port's seq-advance call chain (does it
+reach 0b5d?), fix so the event reader runs, re-measure note-on count vs 99.
+
+*** EXACT ROOT (2026-08-25, gdb ground truth): SONG EVENT-POINTER LOSES ITS SEGMENT ***
+The menu is silent because the sequencer's event-stream pointer is GARBAGE, not because of any timing.
+CHAIN (all verified live on /tmp/fist_native, no rebuild):
+  1. MAINMENU.MS3 IS opened+loaded (FIST_OPENLOG confirms).
+  2. 0af4 (snd_song_reparse / song-register) IS called: param_2=0x9ff4 (the song OFFSET).  The song SEGMENT
+     arrives in ES -- but the decompile has `unaff_ES` (uninitialised) at fist_snd.c:1698,1704, so the
+     segment is DROPPED.
+  3. 0af4 stores the event pointer via `*(undefined2*)&DAT_1000_c00c = puVar5` (fist_snd.c:1723) -- a
+     16-bit store -- while 0b5d reads it back as a FULL native pointer `_DAT_1000_c00c =
+     *(int**)(g_mem+0x1c00c)` (fist_snd.c:354,1746).  gdb: stored@0x1c00c = 0x018d0f69 == UNMAPPABLE
+     ("Cannot access memory at 0x18d0f69").  So 0b5d dereferences garbage every tick -> ~no notes.
+  MEASURED CONSEQUENCE: 4 note-ons in 190s (vs oracle 99+ in the menu window).
+This is a board:0003 FAR-POINTER-BASING defect, now pinned to ONE variable (c00c, the MS3 event cursor)
+and TWO sites (0af4 store @1723 + the unaff_ES drop @1698/1704; 0b5d read @1746).  The port's flat model
+never reconstructs g_mem + (song_seg<<4) + off for the event cursor.
+FIX DIRECTION (next): find the ENGINE call site that plays MAINMENU.MS3 (loads the file, sets ES:DX =
+song_seg:0x9ff4, calls the driver play entry -> 01ec -> 0af4) to recover the true song segment; then a
+patch bases c00c as a real g_mem pointer to the loaded MS3 events so 0b5d walks the actual note stream.
+Verify by re-running the note-on count -> must approach the oracle's ~10/sec.  This is THE audio root; the
+vsync-drive + MUSIC_DIV work (correct mechanism, gate-passing) sits on top of it and only matters once
+notes actually play.
