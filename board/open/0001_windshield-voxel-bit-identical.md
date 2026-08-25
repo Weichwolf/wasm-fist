@@ -80,3 +80,21 @@ CORRECTION (2026-08-26) -- MISSION GAMEPLAY + MUSIC ARE REACHABLE HEADLESSLY (ea
   NET: mission audio is NOT board:0001-blocked for PLAYBACK; the open piece is native==wasm determinism of
   the mission path + an oracle mission-music reference.  WAV-sample tempo/phase identity vs the original
   still rides this board's per-frame cadence.
+
+MISSION AUDIO native==wasm STATUS (2026-08-26, measured): the coop mission run (menu->loading->MSN2.MS3)
+PLAYS on both targets but is NOT yet native==wasm deterministic:
+  - native 2241 note-ons / 11762 writes (WAV 11.997M samples) vs wasm 2764 / 14035 (WAV 14.01M samples).
+  - LONGEST CONTIGUOUS COMMON note-run = 1062 (the core music matches native<->wasm), BUT the common
+    PREFIX from t=0 is 0: they diverge at note-on #0 -- native=(ch1,768,7) vs wasm=(ch0,768,7) -- the
+    SAME pitch on a different channel.  That is the es=0 PRE-SONG artifact (0b5d reads a garbage "song"
+    from segment 0 before the real song registers; board:0003 noted it) reading channel state that differs
+    native<->wasm.  And the TAIL differs: wasm runs ~17% more fist_opl_tick calls to reach [0x452]=15000
+    (in-mission pump/tick cadence divergence), so it plays further into the music.
+  TWO DISTINCT DETERMINISM CAUSES to close for mission audio native==wasm:
+   (1) the es=0 pre-song garbage (a sound-driver init-state bug; likely also latent in the menu but masked
+       there because audio-intro pins a window where both targets read the same value) -- fix: never let
+       the sequencer play before a real song is registered ([ds:0x6]!=0 / [ds:0xe] gate).
+   (2) the in-mission tick cadence: native and wasm reach [0x452]=15000 with different fist_opl_tick counts
+       even under FIST_COOP_TICK=1 -> the per-frame/pump cadence this board must make instant-for-instant.
+  So mission music CONTENT is largely faithful (1062-note shared core, same proven 0a28->0c39 driver), but
+  the hard native==wasm invariant for mission audio rides (1) a pre-song gate + (2) this board's cadence.
