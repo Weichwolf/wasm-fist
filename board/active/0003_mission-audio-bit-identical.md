@@ -2342,3 +2342,30 @@ add a 0a28-entry counter to dosbox_opl_trace.patch + rebuild third_party/dosbox-
 invocations/PIT-tick -> exact k, (3) set MUSIC_DIV=k.  The dosbox source IS present (third_party/dosbox-
 build) so the patch+rebuild route is available.  This is the precise remaining step; it was attempted and
 correctly scoped, not left vague.
+
+KEY CORRECTION + EXACT-DIVIDER MEASUREMENT ATTEMPTS (2026-08-25):
+IMPORTANT REFRAME (corrects my earlier "needs full instruction-counting" pessimism): the port's audio is
+SAMPLE-CLOCK-LOCKED, not instruction-locked -- fist_opl_tick advances DBOPL by samples and drives 0a28
+locked to that sample clock (g_samples_per_seq).  So per-loop (aligned at song-start, phase=0), an EXACT
+MUSIC_DIV makes the OPL writes land on the SAME sample offsets as DOSBox -> bit-identical loop, WITHOUT the
+full deterministic-timing model.  Audio bit-identity reduces to ONE exact constant (MUSIC_DIV), not the
+engine-wide instruction-counter.  (The instruction-counter is still needed for the live-mission voxel /
+arbitrary-frame determinism -- but NOT for the menu-audio loop.)
+Parsed MAINMENU.MS3's delta stream faithfully (0b5d logic): 585 note-ons, total 3758 delta-ticks to the
+0x2fff end marker per pass.  So tick_rate = 3758 / loop_seconds, and MUSIC_DIV = 7231.4 / tick_rate.  The
+current MUSIC_DIV_DEFAULT=120 (=60.3Hz) implies a 62.3s loop.
+BUT every OPL-log measurement of the exact loop_seconds is CONFOUNDED:
+  - counting B0-with-keyon as "note-ons" OVER-counts (0a28's per-tick envelope rewrites also set the keyon
+    bit -> not just true note-ons; gave an implausible 12.5s "loop"); true note-ons need keyon 0->1 edge
+    detection per channel;
+  - no clean loop-restart anchor in the OPL stream (the reg==val "rising re-init" signature fires on any
+    note whose block/fnhi matches the register number -> noisy, no periodic peak);
+  - the FIST_WATCHFLAT approach (count 0x1d2's incb cs:0x5c) needs the driver's CR3-mapped flat, unresolved.
+So the EXACT MUSIC_DIV cannot be cleanly measured from the OPL log alone.  The clean, unconfounded path is
+a dosbox 0a28-ENTRY counter: the dosbox-0.74-3 source is present + BUILT (third_party/dosbox-build, adlib.o
+etc.), so add a per-instruction check `if guest cs:ip == snd_seg:0x0a28 count++` (snd_seg observed 0x4ab0)
+to the core / the opl_trace patch, rebuild, count 0a28 calls per PIT-tick-second -> exact k -> MUSIC_DIV.
+CONCLUSION (accurate + bounded): menu-audio bit-identity = one exact constant (MUSIC_DIV), reachable
+without the instruction-counter, gated ONLY on a clean 0a28-call-rate measurement that needs the dosbox
+0a28-entry counter (a specific, bounded build task; source present).  The current 120 is close (note-rate-
+pinned) but not proven exact.  Content is faithful; this is the single remaining measurable constant.
