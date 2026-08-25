@@ -2011,3 +2011,29 @@ cam/cr3 read) -- if it equals 00 00 00 00 00 09.., candidate (b) is dead and the
 management (verify it vs asm 0xa28, the last unverified sequencer function).  This loop PROVED the chain
 correct with a deterministic harness and isolated the remaining bug to ONE function (0a28) or the oracle
 chain -- a clean, bounded fork, no longer a confounded search.
+
+PORT-SIDE FULLY VERIFIED -- PARADOX NOW REQUIRES ORACLE-SIDE CHAIN CAPTURE (2026-08-25, same loop):
+Closed the last port-side variable: device selection is FAITHFUL, not a port assumption.  Patch 352 header
++ asm 0xbdcc: the ENGINE'S OWN SOUND.CFG parse leaves byte[DGROUP:0x248]=0x43='C' (runtime-verified) for
+"0132710000", and 014e maps A/C->3 = OPL/AdLib.  The port reads the engine's parse result, so the ORIGINAL
+under the same SOUND.CFG also selects device 3.  Same device, both sides.
+COMPLETE port-side verification ledger (all confirmed this loop, deterministic/asm):
+  file        = MAINMENU.MS3 (FIST_OPENLOG; sndreg#2 song[0..7]="MS3-KGF'")
+  device      = 3 OPL/AdLib (engine SOUND.CFG parse -> [0x248]='C', faithful)
+  voice-chain = 00 00 00 00 00 09 00.. (0af4 at sndreg#2, EXACT file match, deterministic)
+  MIDI decode = 0b5d/0c39 asm-faithful (verified branch-by-branch)
+  channel map = identity [0xc01]=00 01 02.. (runtime)
+  per-voice   = 0a28 does PITCH envelope ([voice*2+0x90] stream), not channel assignment
+The port therefore FAITHFULLY renders the file: its key-ons (ch0,1,5,8..) are the file's MIDI channels
+(1,5,9) through the correct chain.  Yet the oracle plays ch7,0,2,3,5,6.  Every port-side element checks
+out, so the paradox can ONLY be resolved ORACLE-SIDE: capture the RUNNING ORIGINAL's driver [0x20] voice
+chain + per-voice OPL-channel assignment via dosbox-fist FIST_WATCHFLAT on the SOUNDDVR DGROUP (locate its
+flat linear from a cam/cr3 read, per CLAUDE.md's dynamic write-trace section).  Two outcomes:
+  - oracle [0x20] == 00 00 00 00 00 09.. (same as port): then port+oracle build the SAME chain but the
+    ORIGINAL's runtime differs elsewhere -> a driver mechanism not yet modeled (the paradox deepens, but
+    localised to a specific runtime-state divergence the watch will show).
+  - oracle [0x20] != port's: then the ORIGINAL builds a DIFFERENT chain from the same file -> the port's
+    0af4 chain-build (or the song bytes it reads) diverges after all, and the watch shows exactly where.
+This loop EXHAUSTED the port side with a deterministic harness (chain proven correct) and reduced the open
+question to ONE decisive oracle-side measurement.  That measurement -- not more port-side probing -- is the
+next step; it is a bounded dosbox-instrumentation task, not open-ended.
