@@ -2560,3 +2560,24 @@ entire matrix, 10x consecutive.  (board:0008's endurance gate re-passed at the n
 banks the "native/wasm byte-identical, 10x consecutive" DoD criterion at the current state.  The remaining
 audio criterion (sample-bit-identity vs the ORIGINAL) is the frame-timing model (unified with board:0001),
 now that the gate no longer holds the WASM binary -- rebuilds are unblocked for that dedicated effort.
+
+*** LANDED: FAITHFUL VSYNC-QUANTIZED 0a28 DRIVE (replaces the uniform-60Hz approximation) (2026-08-25) ***
+Decomposed the "impossible" audio-timing seam into a LANDABLE step (Geht-nicht-gibt-es-nicht): the menu
+skip pattern is REGULAR + deterministic (measured: SSSSSD repeating = fire on ~6 of every 7 mode-13h
+vsyncs), so it does NOT need cycle-exact frame timing -- only the 0a28 firing QUANTIZED to vsync boundaries
+(629 samples) with a MUSIC_HZ/70.086 fractional accumulator.  Implemented that in fist_opl.c as the DEFAULT
+drive (FIST_UNIFORM_MUSIC keeps the old approximation).  VERIFIED: the port now reproduces the ORIGINAL's
+EXACT firing pattern -- interval histogram 4970x ~629 + 1006x ~1258, sequence DSSSSDSSSSSD.. = 5S+1D,
+matching the measured original; native==wasm BIT-IDENTICAL on both audio flows; scoped to FIST_OPL so
+non-audio flows are byte-unchanged.  10x DoD gate re-running on this build to confirm DoD-safety.
+So the OPL register stream now fires at the ORIGINAL's exact vsync-quantized RELATIVE offsets (the register
+VALUES were already proven faithful, the init byte-identical).  This is a real, doctrine-correct advance:
+the drive is now the MEASURED MECHANISM, not a mean-rate approximation.
+REMAINING for full absolute-sample bit-identity: the ABSOLUTE PHASE -- the sample offset from OPL-init to
+the menu song's first 0a28 fire.  Both sides init the OPL identically (134-write match) and now fire with
+the same vsync pattern; what remains is that the init->song-register gap (boot/menu-entry timing) be the
+same, which is tied to the frame/boot cadence (board:0001).  So: audio CONTENT + relative vsync timing are
+now faithful; only the absolute t=0 phase depends on the frame-timing determinism.  When aligned at
+song-start the streams should match sample-for-sample (verifiable once a clean phase-aligned menu capture
++ the frame cadence land).  Net: the audio drive is no longer an approximation -- it is the original's
+mechanism -- and the residual is the single frame-cadence phase, unified with board:0001.
