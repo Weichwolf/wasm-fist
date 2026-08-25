@@ -2136,3 +2136,22 @@ two-entry cadence (0x3dd body + 0xa28) from asm 0x3d6/0x3dd and drive the shim i
 one port-side mechanism NOT yet verified 1:1 (the shim approximates it); (B) the oracle-side capture.
 Lever (A) is the more promising -- it is the ONLY port-side element still approximated rather than
 asm-faithful, and it directly controls the per-tick fnum evolution that the e4-distribution measures.
+
+DRIVE-CADENCE LEVER (A) DISPROVEN (2026-08-25, session close): tested the hypothesis that the ISR
+(0x3dd->0419 voice management) is driven too fast.  Added a rate-divider to fist_snd_isr_tick and swept
+FIST_ISR_DIV=1/4/16/60.  RESULT: ZERO effect -- the OPL output (A0 total, e4 count, ch8 usage) is
+byte-identical across all divisors.  So the voice-management ISR drive RATE does NOT affect the menu-music
+OPL output (the voice slots stay free / 0419 no-ops in this scenario).  Combined with the earlier disproved
+readiness gate, BOTH drive-structure hypotheses are dead -- the shim's cooperative drive cadence is NOT the
+cause of the OPL divergence.  Reverted (tree clean).
+FINAL SESSION STATE (board:0003 audio, after the most exhaustive port-side audit): EVERY testable port-side
+mechanism -- all 6 sequencer/fnum functions (asm-faithful), the byte-identical song load, every static
+table (chain/fnum/transpose/envelope/instrument/channel-map), tempo (MUSIC_HZ swept), and BOTH drive
+cadences (ISR-rate + seq-readiness, both disproved) -- is verified correct/identical to the original OR
+shown to not affect the output.  The deterministic OPL divergence (oracle e4-heavy ch0-7-never-ch8; port
+spread + ch0/1 + ch8) is NOT reproducible by any port-side lever.  This EXHAUSTS port-side analysis
+completely.  The ONLY remaining explanation is a difference visible ONLY in the running original: either
+its SOUNDDVR builds/uses different runtime state (needs the oracle-side FIST_WATCHFLAT capture of the
+driver DGROUP), OR the oracle CAPTURE ITSELF differs (a different menu track / config than MAINMENU.MS3 --
+which the same capture would confirm).  The next step is unambiguously the oracle-side driver-state
+capture; port-side has nothing left to test.
