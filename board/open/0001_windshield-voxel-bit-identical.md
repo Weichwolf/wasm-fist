@@ -128,3 +128,18 @@ intro's be0e(0) (=> the port's vector-install ordering is early-off, fix it so I
 OR the original also has no intro MS3 (=> the driver must treat es=0/unloaded as SILENCE, faithfully); (b)
 re-run the native<->wasm mission note-seq -> the 1062-note common core should extend to a full match once
 the es=0 garbage window is gone, leaving only cause (2) (in-mission tick cadence) for this board.
+
+es=0 CAUSE-(1) FULLY ROOTED + FIX SCOPED (2026-08-26):
+  ORACLE CONFIRMS the original PLAYS intro music: 225 OPL note-ons in the intro window (t<26s, first at
+  t=1045ms) in the DOSBox capture.  So the port MUST load+play INTRO.MS3 during the intro; the es=0 garbage
+  is a genuine bug (faithful fix = load INTRO.MS3, NOT gate es=0 to silence).
+  ORDERING ROOT: the intro's be0e(0) fires BEFORE the c378 loader vector exists.  c378 is installed by the
+  shim fist_ensure_dlist_vecs() -> fist_apply_reloc_section(si=0x174) (native_main.c:964/1217), called from
+  the engine's e714 path -- but the intro-music be0e(0) comes from the earlier e584<-e446<-cae6 path.  So
+  the display-list module's method vectors (incl. c378 = the screen-resource/.MS3 loader) are relocated too
+  LATE: be0e(0)'s (*c378)() load is a null-vector no-op -> INTRO.MS3 never opens -> es=0.
+  FIX (next, bounded engine work; guard the 177-flow matrix): make the display-list vector install / reloc
+  of the c378 loader happen BEFORE the intro's first be0e(0) (the original clearly has it available then).
+  Then INTRO.MS3 loads, the intro plays the real music (native==wasm deterministic), and the mission
+  note-seq native<->wasm 1062-note common core should extend to full -- leaving only cause (2) (in-mission
+  tick cadence) on this board.  This is a load/vector ORDERING fix, asm/oracle-grounded, not a guard.
