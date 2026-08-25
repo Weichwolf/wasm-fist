@@ -159,3 +159,16 @@ DEEPEST ROOT of cause-(1) (2026-08-26): the c378 loader install is late because 
        DGROUP-not-ready corruption so the ORIGINAL's load-time install works verbatim.
   This is careful ordering/basing work for a focused session -- NOT a rushed end-of-session change (a wrong
   install point corrupts DGROUP and breaks the validated matrix).  Cause-(1) is now rooted end-to-end.
+
+FIX ATTEMPT 1 -- RULED OUT (2026-08-26, matrix-guarded): calling fist_ensure_dlist_vecs() at the be0e
+first-use (before the c378 dispatch) DOES make INTRO.MS3 load (openlog: INTRO.MS3 x2; intro note-ons now
+start at adv=51 = real music, not the adv=4262 es=0 garbage) -- BUT it BREAKS rendering: full matrix ->
+FAIL about / settings / settings-sky at ref-AE~63000 (nearly the whole screen wrong).  Confirms the
+fist_ensure_dlist_vecs comment: applying the reloc section (DGROUP:0x344..0x394) before DGROUP is ready
+corrupts it; the intro be0e(0) is still too early (DGROUP:0x344 region not yet the installable placeholder).
+Reverted (patch 100 restored; tree green).  So the WHOLE-section early install is out.  REMAINING FIX PATHS
+(narrower): (a) install ONLY the c378 slot (DGROUP:0x378) if that single far-ptr's target region is ready
+at intro time, leaving the rest for e714; (b) make the DGROUP:0x344 block ready earlier so the section can
+install pre-intro without corruption; (c) the deep f842 fix (restore its dropped string-op seg bases so the
+original's LOAD-time applier works verbatim).  Each needs the 177-flow matrix as the guard, as this attempt
+demonstrated.  Negative result banked: don't re-try the blanket early install.
