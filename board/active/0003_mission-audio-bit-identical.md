@@ -1917,3 +1917,24 @@ on driver-ready (a stable driver-DS base + [ds:0xe] playing), verify the early D
 re-capture the phase-matched OPL stream -- if the steady-state voice-set then matches the oracle, this is
 the fix.  This is the first hypothesis that is both runtime-grounded AND a bounded shim change; the decode
 chain is proven faithful so the remaining variable is WHEN the shim drives it.
+
+READINESS-GATE FIX HYPOTHESIS TESTED + DISPROVEN (2026-08-25, same loop, reverted): implemented the
+"drive 0a28 only when the driver sequencer vector is installed" gate in fist_snd_seq_advance --
+`if (word[(word[snd_base+0x831]<<4)+0x5c2] != 0xa28) return;` (the real ISR is chained only after
+device-select sets driver_ds:[0x5c2]=0xa28).  RESULT: the gate is FAR too aggressive -- OPL writes dropped
+5222 -> 158, the music barely plays.  So [ds:0x5c2]==0xa28 is FALSE for most seq-advance calls even during
+valid playback.  gdb at a 0f99 note call: DAT_0831=0x2b (base 0x2b0), and at the fixed 0x3ce9 base
+[0x5c2]=0x7c10 (not 0xa28), [0xe]=0x0000 (not yet playing) -- i.e. neither candidate base holds the
+sequencer-installed sentinel at note time.  So my "premature-call before driver-DS-ready" model is WRONG:
+the base ambiguity is not a simple early-vs-steady split, and gating on the installed-vector sentinel is
+not the fix (reverted immediately; tree clean).  DEEPER FINDING surfaced by the shim source: there are TWO
+per-tick drive paths, not one -- fist_snd_seq_advance -> 0a28 (0xa28, the fnum feed that calls 0c39) AND
+fist_snd_isr_tick -> the driver ISR body @cs:0x3dd (self-gates on arm word DGROUP:0x23e==2 + note table
+DGROUP:0x4fe).  The interaction of these two drives + the driver-DS word instability (DAT_0831 reads
+0/0x2b/0x3ce9 at different call sites) is the real complexity, and it is NOT a one-line readiness gate.
+HONEST STATE after this loop: the decode chain (0b5d/0c39/song-init) is PROVEN faithful to the asm; the
+divergence is in the driver-DS + dual-ISR DRIVE model, which is genuinely intricate (two tick paths, an
+unstable DS base word) and needs a dedicated trace of how the real SOUNDDVR chains + bases its two ISR
+entries (0x3dd body + 0xa28 fnum feed) -- a multi-session effort, not a bounded shim gate.  The gate
+experiment is retired as disproven; the value this loop is the faithful-decode proof + the disproof of
+five+ wrong roots, narrowing the frontier to the drive/base model.
