@@ -2234,3 +2234,28 @@ un-aligned windows.  NEXT (bounded, the real remaining audio work): phase-align 
 song offset, equal length) and diff the A0/B0 stream event-by-event to confirm whether the drone residual
 is real or a loop-phase artifact; if real, it is a held-note fnum-maintenance question on 0a28's feed.
 This is the ACCURATE remaining gap -- far smaller than the phantom this session opened with.
+
+PHASE-ALIGNMENT CAVEAT ON THE RESIDUAL (2026-08-25, honest final): tried an event-by-event note-on
+sequence diff (port menu-start vs oracle post-intro).  The sequences DIFFER at the start -- oracle opens
+with a 9-channel instrument-setup burst (0:b0 1:b1 2:b2 .. 8:b8, repeated) then its melody; the port opens
+with a 4-channel setup (0:3f 1:3f 5:3f 8:3f) then its melody -- and the subsequent note sequences do not
+line up.  BUT this comparison is PHASE-CONFOUNDED: (a) the oracle window boundary (t>t0+26s) is only the
+APPROXIMATE menu-music start (make_menu_ref.sh's "+26s" is a hand-tuned trim, not the exact first melody
+event), and (b) the port's cooperative-tick timeline vs the oracle's real-time PIT makes wall-clock / event
+-index alignment imprecise across a looping song.  So the sequence-level mismatch is NOT proof of a real
+per-event divergence -- it is mostly window misalignment.
+ACCURATE FINAL STATE for board:0003 menu audio:
+  * RESOLVED (definitive): the session's dramatic "e4 voice-redistribution" was INTRO CONTAMINATION; the
+    port's menu-music CHANNEL VOICING is FAITHFUL (aggregate distribution matches the oracle MENU window
+    within ~1% per channel, equal-length 60s vs 57s).  This confirms docs/audio.md iter 19.
+  * OPEN (small, precise): (1) a menu-start INSTRUMENT-SETUP difference (oracle inits 9 channels, port 4)
+    -- a real but minor setup divergence; (2) a possible sustained-note (a1 drone) fnum-maintenance
+    residual, currently PHASE-CONFOUNDED and unproven.  Both need a PRECISELY phase-aligned menu window
+    (find the exact first melody event in each stream, align, equal length) before either can be called a
+    real bug vs a loop-phase artifact.
+  * METHOD FIX (permanent, to stop re-chasing phantoms): build the phase-aligned menu comparator as a tool
+    (align at the instrument-setup burst, not wall-clock) and compare against ref/audio_menu_oracle_clean.
+    wav (the already-de-contaminated reference) -- NOT a from-boot capture.
+This session's NET: turned a false "gross voice-redistribution" alarm into the correct finding (voicing
+faithful) via a total port-side audit, and reduced the real open question to a small, precisely-scoped
+(and possibly phantom) setup/drone residual gated on proper phase alignment.
