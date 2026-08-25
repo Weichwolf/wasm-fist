@@ -1868,3 +1868,21 @@ MAINMENU.MS3's TRACK TABLE (the per-voice song-pointer array) and how many voice
 port's track-count/pointer parse to the SOUNDDVR.DVR asm (the FUN_0000_0872/104f voice-init loop iterates
 9 voices; the song header selects which are active).  The bug is that the port starts 4 voices where the
 original starts 6-7 -- a bounded track-activation parse defect, reachable by asm diff of the song-load path.
+
+BASE-LOSS FULLY RULED OUT (2026-08-25, same loop, asm-verified) -- checked the two voice-path functions'
+segment bases against re_out/fist_snd_image.bin objdump, so the next session does NOT re-chase base-loss:
+  - 0f99 (instrument/channel load): runtime DS = 0x3ce9 = load_seg+0x2a5 (patch 353 base correct); the
+    caller sets DS via `mov ds, cs:[0x831]` (reloc'd data seg, DS != CS).
+  - 0419 (voice allocator, the per-voice slot machine [0x5e/0x5f/0x67/0x68/0x6f/0x70]): the asm at 0x419
+    EXPLICITLY sets DS=CS (`419: push ds; 41a: mov bx,cs; 41c: mov ds,bx`), then all [0x5e..] are CS-based
+    -- so patch 356's `C = g_mem + fist_snd_base` (CS base) is CORRECT, and its SS-override note table
+    VT=DGROUP:[0x4fe] matches the `%ss:0x4fe` in the asm.  (Tested + REJECTED a "356 uses wrong base"
+    hypothesis: 0f99 and 0419 legitimately use DIFFERENT DS conventions -- DS=CS+0x2a5 vs DS=CS -- both
+    asm-faithful.)
+So EVERY mechanical class is now eliminated with hard evidence: OPL layer, instrument decode/mask,
+dispatch/jumptables, driver-DS base (both functions), 0xc01 channel map (identity, correct), device-letter
+threading ('C'/OPL to driver 0x248 = 0x43, correct).  The port-vs-oracle voice-activation divergence (port
+starts voices {0,1,5,9}, oracle {0,2,3,5,6,7}) is a SEQUENCER-LOGIC fidelity difference in how MAINMENU.MS3
+is interpreted -- a dedicated event-by-event asm-vs-C trace of the song-parse / voice-allocation control
+flow (0419 voice-steal + the 12c1/12c9 track array + the 1e13/1d62 install), NOT a mechanical base/map/mask
+fix.  That trace is the honest next step; this loop converged the root and cleared every shortcut.
