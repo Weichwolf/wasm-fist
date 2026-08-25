@@ -1983,3 +1983,31 @@ mode (reg 0xbd bit5) is engaged differently (both write 0xbd) -- if the oracle r
 are percussion and melodic voices cap at ch0-5, changing the allocation.  This is the deterministic,
 solid characterization of the audio gap; the fix still needs the tick-pinned driver-flow trace to see
 WHERE the allocation (the [0x20] chain walk in 0c39 + the 0a28 free-voice search) diverges.
+
+DETERMINISTIC CAPTURE HARNESS BUILT + VOICE-CHAIN CONFIRMED CORRECT (2026-08-25, same loop):
+Built the tick/event-pinned capture the previous entry called for -- a FIST_SNDREGLOG seam at the two
+song-register points (be0e publish in fist.c patch-349 site; 0af4 + snd_song_reparse in fist_snd.c) that
+logs the ACTUAL event, not a wall-clock snapshot (env-gated, zero effect off; prototyped in build/, since
+reverted -- re-add to patches 349/350 to make permanent).  DETERMINISTIC results (reproducible):
+  [sndreg#1] es=0000 (NULL)  -> 0af4 builds chain[0x20..] = fa4a429a0e00.. (GARBAGE from g_mem[0])
+  [sndreg#2] es=4c61         -> song[0..7]=4d53332d4b474627 = "MS3-KGF'" (the REAL MAINMENU.MS3!),
+                                song[0x10..0x1f]=00 00 00 00 00 09 00.. = EXACT file match,
+                                0af4 builds chain[0x20..] = 00 00 00 00 00 09 00.. (CORRECT)
+  [reparse LOOP] es=4c61     -> rebuilds chain = 00 00 00 00 00 09 00.. (CORRECT, song loops fine)
+So the voice-chain IS built CORRECTLY (all three events at the SAME base dbase=0x3ce90; sndreg#2 overwrites
+sndreg#1's garbage; the loop keeps it correct).  The earlier "exit dump = garbage chain" was a wall-clock
+timing-confound (dumped mid-transition), NOT a real corruption -- retired.  There is a SPURIOUS null
+register first (sndreg#1, es=0 from DGROUP:0x9f1c==0), but sndreg#2 corrects it; brief window.
+THE PARADOX (now sharp): with chain CORRECT + 0b5d/0c39 asm-faithful, the port FAITHFULLY renders
+MAINMENU.MS3 -- its key-on channels 0,1,5,8,8,1,0,1,1,1,0,2,2.. are the file's MIDI channels (opening
+91/95/99 = ch1/5/9) mapped through the correct chain.  Yet the ORACLE plays ch7,0,2,3,5,6 -- DIFFERENT
+channels, same file+driver+device.  Same code + same file + same chain SHOULD give the same output.
+RESOLUTION PATH (two candidates, decisively separable): (a) the bug is in the ONE unverified per-tick
+path -- FUN_0000_0a28's per-voice note-stream walk ([voice*2+0x90] pointer + the [0x2a]/[0x34] note-record
+tables built by 0af4's SECOND copy loop from song[0x20..0x2f]) -- which manages sustained voices separately
+from 0c39's note-on; OR (b) the ORACLE builds a different [0x20] chain.  DECISIVE NEXT: dump the ORACLE's
+driver [0x20] chain via dosbox-fist FIST_WATCHFLAT on the SOUNDDVR DGROUP (find its flat linear from a
+cam/cr3 read) -- if it equals 00 00 00 00 00 09.., candidate (b) is dead and the bug is 0a28's per-voice
+management (verify it vs asm 0xa28, the last unverified sequencer function).  This loop PROVED the chain
+correct with a deterministic harness and isolated the remaining bug to ONE function (0a28) or the oracle
+chain -- a clean, bounded fork, no longer a confounded search.
