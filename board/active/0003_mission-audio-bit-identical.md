@@ -1729,3 +1729,118 @@ ES:BX return (and similar unthreaded INT returns).  NOT a shim fix; NOT a per-si
 sharpens board:0010: the pipeline fix (SetCSContext + InstallIntFixup INT-return threading) resolves the
 149 class deterministically, and a fresh decompile + patch migration lands it.  The shim already does the
 right (deterministic) thing; only the decompile's register/INT-return threading is incomplete.
+
+AUDIO ROOT REFUTED FROM LIVE CAPTURE (2026-08-25, loop) -- the top-of-file "instrument high-nibble
+dropped / program-change never routes to 0f99" root is STALE.  Re-measured the CURRENT build's OPL
+register stream (FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG, mainmenu; reglog carries adv=g_snd_seq_advances
+so a write's sequencer phase is visible) against a fresh oracle trace (third_party/dosbox-fist,
+FISTOPLLOG, 32s menu-wait + 10s play, 4564 writes).  Two config-INDEPENDENT facts overturn the old root:
+  (1) The port DOES reload instruments DURING playback, not only at init.  reg 0x20 (operator AM/VIB/
+      EG/KSR/mult) is written at adv=1570,1598,1769,1797,3620,5329,5357,5528,7379 -- all adv>0 (sequencer
+      advancing), only the very first at adv=0 (the 104f OPL-init instrument 0).  So 0f99/0fab ARE
+      reached from the note sequencer with nonzero instruments; the "0f99 only called from init,
+      program-change never dispatched" claim is FALSE for the current tree.
+  (2) The port writes a WIDE instrument-byte range INCLUDING the high bits: reg 0x20 takes
+      {00,01,03,05,34,4e,b1,b2,c4,c9}, reg 0x23 takes {00,11,15,22,77,aa,ff}.  b1/c4/c9 have bit7(AM)+
+      bit6(VIB) SET -- the port is NOT "dropping the high nibble / stuck at 0x01".  That characterisation
+      is FALSE.
+So neither the "& 0x0f mask / decode" bug nor the "missing per-voice program-change dispatch" root holds.
+WHAT ACTUALLY DIVERGES (empirical): the port and oracle play a DIFFERENT NOTE STREAM at the menu, not the
+same song with wrong timbre.  reg 0x20: oracle steady-state is essentially ONE melody instrument (0x31,
+repeated) + a 0x01 init; the port loads a 9+-voice BANK ({b1,b2,c4,c9,4e,34,03,00,05,01}).  Channel-0
+A0/B0 fnum streams: the SETUP prefix matches (both B0 = 00,1f,1f,1f,1f,1f,3f) then the melodies diverge
+(port B0 ->1f,1f,1f,36,16..; oracle B0 ->22,02,22,2a,0a..; oracle A0 is a constant 0xe4 drone, port A0
+varies).  So the divergence is upstream of the OPL layer -- in WHICH song/notes the sequencer plays, not
+in instrument-byte decoding.
+CAVEAT (why this is not yet a landed fix): the comparison is NOT config/timing-matched.  The port's OPL
+output is heavily tick-rate sensitive (127 writes in a 4s run, 450 in a 6s run, 5222 in a 25s run -- the
+melody warms up late on the cooperative tick), and the oracle runs sb16/oplmode=auto vs the port's device
+selection (c012, unverified here).  So the NOTE-STREAM divergence needs a device- and phase-matched
+recapture before it is conclusive; only refutations (1)+(2) are config-independent and solid.
+NEXT (redirected, honest): the tractable audio question is no longer "why is the timbre wrong" but "does
+the port's sequencer read the SAME menu song + program numbers as the oracle" -- i.e. song-stream
+fidelity in the threaded MS3 interpreter (the note handlers 0cd1/0cf3/0cfb tail-jump via [c1c1]; the
+command decode sits behind Ghidra's unrecovered jumptables at 0xae2/0xaec/0xd45 in fist_snd.c).  Confirm
+first that both load the SAME menu .MS3 and select the SAME device (c012), phase-match the capture, THEN
+diff the requested program-change numbers.  The instrument PATCH TABLE at 0x1dd is the same static
+SOUNDDVR.DVR bytes on both, so it is NOT the suspect.  Matrix invariant unaffected (audio is not
+framebuffer-gated); this loop corrected the board root, it did not change any build input.
+
+AUDIO ROOT SHARPENED + UNIFIED (2026-08-25, same loop) -- ruled OUT the remaining local suspects, so the
+divergence is the cooperative-tick TIMING model, not a sequencer decode bug:
+  - SAME song: FIST_OPENLOG shows the port opens MAINMENU.MS3 (+ MAINMENU.MRL) for the menu -- the correct
+    menu track; the oracle plays the same menu -> same file.
+  - SAME device config: both read armoredfist/SOUND.CFG = ASCII "0132710000" (mounted for DOSBox too) and
+    the static SOUNDDVR.DVR instrument table at 0x1dd -> identical device selection + patch bank on both.
+  - The Ghidra "Could not recover jumptable at 0xae2/0xaec/0xd45" warnings are NOT the bug: objdump of
+    re_out/fist_snd_image.bin shows all three are `ff 26 xx 01` = `jmp [c1a5]` / `jmp [c1c1]` -- THREADED-
+    CODE tail-jumps through the device handler vectors (loaded by FUN_0000_0872), faithfully modeled as
+    `(*fist_icall_far(cXXX))()`.  The threaded dispatch is intact.
+So: same file, same table, same device, intact dispatch -- yet the note stream diverges (oracle channel-0
+A0 is a CONSTANT 0xe4 drone + a sparse 0x31 melody; the port front-loads a 9-voice bank {b1,b2,c4,c9,4e,
+34,..} with a varying A0).  The tell is STRUCTURAL + timing: the port's OPL write count is wildly tick-rate
+dependent (127 writes/4s, 450/6s, 5222/25s -- the melody "warms up" late on the cooperative tick), i.e. the
+port is not PACING song events at the original's tempo; it dumps many events per pumped tick where the
+oracle spreads them over real PIT time.  This is the SAME cooperative-tick timing-fidelity gap that
+board:0001 names for the live mission sim (the sequencer, like 459a, evolves only when fist_timer_pump
+runs, and the pump cadence != the original PIT cadence).  CONCLUSION: menu-music bit-identity is not an
+isolated fist_snd.c decode fix -- it is gated on a faithful (instruction-counted / PIT-accurate) tick
+source, the same deep seam FIST_TICK_HZ is a placeholder for.  Audio + live-voxel unify under ONE root:
+cooperative-tick timing fidelity.  This retires the "sequencer decode / jumptable / instrument-mask"
+leads as dead ends and points the audio work at the timing model (shared with board:0001), not fist_snd.c.
+
+SELF-CORRECTION (2026-08-25, same loop, before commit) -- the "CONCLUSION: gated on the tick model"
+above OVERSTATES.  The note-VALUE differences argue against pure timing: after the shared setup prefix
+(B0 = 00,1f,1f,1f,1f,1f,3f) the port continues B0 = 1f,1f,1f,1f,36,16,.. while the oracle continues
+22,02,22,2a,0a,.. -- these are different PITCHES/blocks (0x36=keyon+blk5+fnhi2 vs 0x22=keyon+blk0+fnhi2),
+not the SAME values at a stretched cadence.  Pure tempo divergence would replay the same values in order.
+BUT the two captures are PHASE-UNMATCHED (port sampled from menu-entry; oracle sampled 32s into steady
+menu music) -- comparing port-event-k to oracle-event-k is meaningless across different song positions.
+So BOTH hypotheses stay live and are NOT yet distinguishable:
+  (H1) cooperative-tick tempo/pacing (front-loading events) -- supported by the tick-rate write-count
+       sensitivity (127/4s .. 5222/25s);
+  (H2) a sequencer decode/interpretation divergence -- supported by the different note values post-prefix.
+The ONLY way to decide is a PHASE-MATCHED capture: drive the port to the same song position as the oracle
+(or capture the oracle from menu-entry with a short MENU_WAIT) and diff the event streams aligned at the
+song start.  Honest state: refutations (1)+(2) from the prior entry are solid (no instrument-mask bug, no
+missing program-change dispatch, jumptables are threaded tail-jumps, song+table+device all match); the
+timing-vs-decode question is OPEN and capture-confounded.  Do the menu-entry oracle recapture next.
+
+PHASE-MATCHED DETERMINATION (2026-08-25, same loop) -- recaptured the oracle OPL from menu-ENTRY
+(MENU_WAIT=20 vs 32): the oracle channel-0 B0 stream is IDENTICAL for both waits
+(00,1f,1f,1f,1f,1f,3f,22,02,22,2a,0a,2a,..) -> the oracle log always starts at song position 0, so port
+(from its first write) and oracle are now PHASE-ALIGNED at the song start.  Aligned channel-0 B0:
+  oracle: 00 1f 1f 1f 1f 1f 3f 22 02 22 2a 0a 2a 2a 0a ...
+  port:   00 1f 1f 1f 1f 1f 1f 3f 1f 1f 1f 1f 36 16 00 ...
+They MATCH through the first six values (00 + five 1f) then DIVERGE: the port emits an EXTRA 1f (six vs
+five keyoff/setup writes) before its first key-on 3f, and thereafter plays different PITCHES (port
+36,16,.. = keyon+blk5/fnhi2 etc; oracle 22,02,2a,.. = keyon+blk0/fnhi2 etc) -- different note VALUES at
+the SAME song position, not the same values time-stretched.  This DECIDES H1 vs H2: pure cooperative-tick
+tempo (H1) would replay identical values at a different cadence; the values themselves differ from event
+~6, so the root is H2 -- a SEQUENCER INTERPRETATION divergence: the port's MS3 event walk reads
+MAINMENU.MS3 into a different note/keyoff stream than the original, from near the song start.  (The
+tick-rate write-COUNT sensitivity is a real but SEPARATE tempo effect, not the note-content cause.)
+CAVEAT (honest, not yet airtight): the port stream still includes the OPL-init (104f/1082) B0 writes; the
+one-extra-1f could be a init-vs-song alignment offset of a single event.  To close it, strip the init
+prefix (the 104f channel-init writes are deterministic) and re-align at the first SONG event, then diff.
+But the post-key-on pitch divergence (36/16 vs 22/02/2a) is past any single-event shift, so H2 stands.
+NET for the loop: the audio root is now a phase-matched, config-matched, table-matched SEQUENCER-DECODE
+divergence in the port's MS3 interpreter (fist_snd.c) -- reachable by event-by-event port-vs-oracle diff
+from the song start, NOT the tick model and NOT the previously-blamed instrument-mask/dispatch/jumptable.
+That is the concrete, bounded next handle.  (Refutations this loop: instrument-mask bug; missing
+program-change dispatch; unrecovered-jumptable decode; device/song/table mismatch; pure-timing tempo.)
+
+CONCRETE NEW LEAD -- CHANNEL/VOICE ALLOCATION DIVERGES (2026-08-25, same loop): all-channel key-on
+(B0-B8, bit5 set) from song start, phase-aligned:
+  oracle: ch7:3f ch0:3f ch2:3f ch3:3f ch5:3f ch6:3f ch6:3f  ch7:20 ch7:26 ch6:2e ch5:32 ch3:26 ch2:2a ch0:22 ..
+  port:   ch0:3f ch1:3f ch5:3f ch8:3f                        ch8:26 ch1:26 ch0:36 ch1:26 ch1:26 ch1:26 ch0:36 ..
+The port plays the melody on DIFFERENT OPL channels (ch0/1/5/8) than the original (ch7/0/2/3/5/6), with a
+different note count in the opening chord (7 key-ons vs 4).  So the divergence is (or includes) VOICE->
+CHANNEL ALLOCATION: the sequencer's per-voice channel assignment lands notes on the wrong OPL channels.
+That allocation flows through the channel map read at DGROUP:0xc01 (`bVar2 = *(byte*)((param_2>>8)+0xc01)`
+in 0f99/10a6/10e3) -- the voice-index -> OPL-channel table.  If the port's 0xc01 map (or the voice->param
+that indexes it) differs from the original, every note retargets.  CONCRETE NEXT: dump the port's 0xc01
+channel-map bytes at song start and compare to the original (via a dosbox-fist FIST_WATCHFLAT on the
+SOUNDDVR DGROUP:0xc01 span, or read it from the driver's static init); and trace what sets param_2's high
+byte (the voice index) at the note-on call site.  This is the bounded handle for the H2 sequencer-decode
+divergence: a voice/channel-allocation table or index, not the OPL layer.
