@@ -65,3 +65,18 @@ MISSION-AUDIO REACHABILITY FINDINGS (2026-08-26): empirically scoping mission mu
     in-mission path this board addresses.  When the deterministic per-frame loop lands, re-test for the crash.
   NET: mission audio bit-identity is gated on THIS board (the in-mission per-frame determinism), confirming
   the "doubled payoff" above -- the deterministic frame loop unblocks the windshield AND mission audio.
+
+CORRECTION (2026-08-26) -- MISSION GAMEPLAY + MUSIC ARE REACHABLE HEADLESSLY (earlier "stalls" was harness):
+  - The in-mission windshield render ADVANCES frame-to-frame: op-0x2c posts #1/#5/#20 have distinct md5s
+    (motion), rc=0.  Gameplay progresses under FIST_TICK_HZ=25000; the N=300 "timeout" was just slowness.
+  - MISSION MUSIC LOADS + PLAYS: a coop run (FIST_TICK_HZ=1000 FIST_COOP_TICK=1 FIST_DUMPTICK=15000 + the
+    MC_MOUSE mission nav, NO FIST_MISSFB2C) navigates menu->LOADING.MS3->MISSION and opens MSN2.MS3, then
+    emits 2241 note-ons / 4471 key-ons (11762 OPL writes) continuously across the whole sequence, ending
+    in-mission.  So the re-entrancy fix (d7bd0aa) plays mission music too, as predicted (same 0a28->0c39
+    driver proven note-for-note on the menu).
+  - The earlier "sustained sim doesn't progress" was a HARNESS artifact: FIST_MISSFB2C (op-0x2c video
+    capture) + audio + nav stalls at OPL-init (169 writes); dropping the FB machinery (audio-only reglog)
+    runs clean.  A separate rare ~1/8 segfault remains in the coop+mission path (uninit/ordering) -- retest.
+  NET: mission audio is NOT board:0001-blocked for PLAYBACK; the open piece is native==wasm determinism of
+  the mission path + an oracle mission-music reference.  WAV-sample tempo/phase identity vs the original
+  still rides this board's per-frame cadence.
