@@ -2403,3 +2403,24 @@ OPL reg stream (FIST_OPL_REGLOG) with the new cadence, convert to the trace_opl 
 t=ms from adv/rate), oplreplay it, and cross-correlate the menu window vs audio_menu_oracle_clean.wav; OR
 diff the port vs oracle OPL reg streams event-by-event anchored at the loop restart.  Both are bounded now
 that the exact cadence is landed.
+
+OPL REG-STREAM COMPARISON: DRIVER INIT PROVEN BIT-IDENTICAL; divergence was intro contamination AGAIN
+(2026-08-25): with the landed cadence fix, captured the port's menu OPL reg stream + an oracle stream and
+compared ordered (reg:val) writes anchored at bd:c0.  RESULT: the first 134 writes are BYTE-IDENTICAL
+(bd:c0 43:3f b0:00 .. + the first instrument loads 23:11 63:d2 83:74 e3:00 20:01 40:4f 60:f1 80:53 e0:00
+c0:06 for channels 0-2) -> the DRIVER OPL INIT + instrument-table content is provably bit-identical port
+vs oracle.  The divergence at write 135 (port bulk-keyoff/reload vs oracle continues) was -- yet again --
+INTRO CONTAMINATION: the oracle's ONLY bd:c0 is at t=1017ms (the BOOT/intro init); the MENU music does NOT
+re-init the OPL (no bd:c0 after t=26000), it continues the boot OPL state.  So I anchored the port's MENU
+init against the oracle's INTRO init; they share the driver init (134 writes) then diverge into different
+SONGS.  Not a port bug.
+HARD-LEARNED METHOD RULE (5th time -- codifying to STOP repeating): the from-boot oracle OPL capture's
+early writes (incl. its only bd:c0) are the INTRO.  NEVER anchor a menu comparison on bd:c0 or any pre-26s
+event.  The menu song has NO OPL re-init -- it must be anchored on its FIRST MENU-SONG NOTE (post-intro,
+post song-register), and the oracle must be trimmed to menu-only (make_menu_ref.sh's +26s trim / the
+already-built ref/audio_menu_oracle_clean.wav).
+POSITIVE NET: driver init + instrument tables PROVEN bit-identical (134-write byte match); cadence LANDED
+exact (measured 59.9936 Hz); aggregate menu voicing matches within 1%.  The formal menu-SONG per-event
+proof remains, gated ONLY on a clean menu-only phase anchor (first menu note), which every from-boot
+capture keeps contaminating.  Concrete: capture the oracle to a WAV/reglog, trim at the menu-song start
+(the song-register burst that FOLLOWS the last intro event), align the port there, diff event-by-event.
