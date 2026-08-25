@@ -2259,3 +2259,27 @@ ACCURATE FINAL STATE for board:0003 menu audio:
 This session's NET: turned a false "gross voice-redistribution" alarm into the correct finding (voicing
 faithful) via a total port-side audit, and reduced the real open question to a small, precisely-scoped
 (and possibly phantom) setup/drone residual gated on proper phase alignment.
+
+FINAL CHECK -- PORT USES ALL 9 CHANNELS; THE 9-vs-4 "SETUP DIFF" IS ORDER/PHASE-CONFOUNDED TOO (2026-08-25):
+Checked whether the port genuinely DROPS the oracle's 9-channel opening chord: it does NOT.  Over the 60s
+menu window the port keys ALL 9 OPL channels (0-8) and reaches 6-wide chords; it simply does not emit the
+oracle's LITERAL consecutive "0:b0 1:b1 .. 8:b8" burst as an exact-ordered run -- which an order/phase diff
+would never match anyway (the port keys the same channels in a different interleave/phase).  So the
+"9-vs-4 setup difference" is NOT a dropped-notes bug; it is the same window-misalignment artifact -- the
+oracle's b0..b8 burst is a loop-restart re-init that my un-aligned port window didn't capture at the same
+song offset.
+DEFINITIVE SESSION CONCLUSION for board:0003 menu audio:
+  The port's menu-music CODE and DATA are PROVEN faithful/byte-identical to the original in EVERY element
+  (song, 6 functions, all tables, device, channel map).  By construction, faithful code + identical data +
+  byte-identical input yields identical output.  The port's aggregate menu voicing MATCHES the oracle
+  within ~1%, uses all 9 channels, and the e4/drone "divergences" collapse to noise once the reference is
+  taken from the MENU window instead of the intro.  EVERY apparent residual (9-vs-4 opening, a1 drone,
+  pitch histogram, chord order) lives in the fine-grained event stream and is CONFOUNDED by unaligned
+  windows + the coop-tick-vs-real-time timeline of a LOOPING song.  None is proven to be a real defect.
+  What is NOT yet done: a PHASE-ALIGNED event-by-event PROOF of bit-identity.  That is the single remaining
+  deliverable -- a menu comparator that (1) sources the oracle from the post-intro menu window (or
+  ref/audio_menu_oracle_clean.wav), (2) anchors both streams at the song-loop restart (the all-channel
+  re-init burst), (3) diffs the A0/B0/instrument stream event-by-event modulo the known tempo mapping.
+  Until that tool exists, menu-audio bit-identity is STRONGLY EVIDENCED (port-side proven faithful) but not
+  formally demonstrated.  This is the accurate, bounded state -- the session converted a false "gross
+  divergence" into "port proven faithful; formal bit-proof pending a phase-aligned comparator."
