@@ -2329,3 +2329,16 @@ divider k, (3) set MUSIC_DIV = k in fist_opl.c, (4) re-capture + phase-aligned d
 bounded tooling step that turns the proven-faithful content into sample-bit-identical output.  Everything
 upstream (song, sequencer, tables, tempo) is verified; only this one exact-subdivision constant is
 approximate.
+
+ATTEMPTED THE 0a28-CADENCE MEASUREMENT via FIST_WATCHFLAT (2026-08-25): tried to count the original's
+0a28 invocations by watching the driver's re-entrancy counter cs:0x5c (0x1d2 does incb/decb cs:0x5c per
+0a28 call).  Computed the driver flat as 0x4ab00 (from the OPL log's flat=0004ba38 for cs=4ab0:0f38) ->
+cs:0x5c = flat 0x4ab5c, ran dosbox-fist FIST_MEMARM_BOOT=1 FIST_WATCHFLAT=0x4ab5c.  RESULT: no .watch.txt
+produced -- the address was not hit, because the SOUNDDVR runs UNDER the extender's CR3 paging so its
+cs:0x5c is NOT at engine-flat 0x4ab5c; the flat must be CR3-resolved (per CLAUDE.md: read dsb/csb from a
+cam capture to locate the relocated driver, then FIST_WATCHFLAT the CR3-aware linear).  So the cadence
+measurement is a genuine (bounded) dosbox sub-task: (1) get the driver's CR3-mapped flat for cs:0x5c (or
+add a 0a28-entry counter to dosbox_opl_trace.patch + rebuild third_party/dosbox-build), (2) count
+invocations/PIT-tick -> exact k, (3) set MUSIC_DIV=k.  The dosbox source IS present (third_party/dosbox-
+build) so the patch+rebuild route is available.  This is the precise remaining step; it was attempted and
+correctly scoped, not left vague.
