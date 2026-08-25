@@ -2581,3 +2581,19 @@ now faithful; only the absolute t=0 phase depends on the frame-timing determinis
 song-start the streams should match sample-for-sample (verifiable once a clean phase-aligned menu capture
 + the frame cadence land).  Net: the audio drive is no longer an approximation -- it is the original's
 mechanism -- and the residual is the single frame-cadence phase, unified with board:0001.
+
+HONEST LCS TEST (disproves the over-hope) -- vsync drive matches FIRING but not CONTENT (2026-08-25):
+Compared the port's menu OPL reg stream (VSYNC drive, native) vs the oracle's menu stream via longest-
+common-substring (alignment-robust).  RESULT: LCS = 15 writes -- UNCHANGED from the uniform drive.  So the
+vsync-quantized firing (verified to match the original's 5S+1D pattern) does NOT make the register STREAM
+match beyond 15 writes.  Also: the port emits ~4x MORE OPL writes than the oracle (228/s vs 57/s) -> a
+DEEPER WRITE-DENSITY divergence: the port's 0a28 emits far more envelope/fnum (A0/B0) updates per unit
+time than the original.  0a28 rewrites A0/B0 only when [voice+0xcc]!=ah (pitch changed), so the port's
+per-voice pitch envelope is CHANGING far more often than the original's -- the same envelope-density issue
+seen earlier.  CORRECTED EXPECTATION: sample-bit-identity needs BOTH (a) the firing timing (NOW faithful,
+vsync-quantized) AND (b) the per-tick write CONTENT (still divergent: 4x over-writing).  The vsync drive
+fixes (a) and is doctrine-correct (the measured mechanism, kept as default), but (b) -- the envelope/fnum
+write density -- is the deeper unresolved root, NOT the firing rate.  NEXT (the real gap): trace WHY the
+port's 0a28 rewrites fnums ~4x more often -- the per-voice envelope stream [voice*2+0x90] deltas vs the
+original's (does the port's envelope have fewer 0x80-hold markers?), or a state/base difference making the
+pitch drift every tick.  This is the concrete, evidence-pinned next lead: the OPL write DENSITY, not timing.
