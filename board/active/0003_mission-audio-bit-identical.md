@@ -2155,3 +2155,31 @@ its SOUNDDVR builds/uses different runtime state (needs the oracle-side FIST_WAT
 driver DGROUP), OR the oracle CAPTURE ITSELF differs (a different menu track / config than MAINMENU.MS3 --
 which the same capture would confirm).  The next step is unambiguously the oracle-side driver-state
 capture; port-side has nothing left to test.
+
+CULMINATION -- PORT-SIDE PROVEN IDENTICAL -> THE ORACLE REFERENCE IS NOW SUSPECT (2026-08-25, session end):
+Closed the transpose-table question: DS:0x14ac (transpose) and DS:0x152e both LOAD CORRECTLY -- the driver
+DS block loads from DVR file offset 0x2a50 (= load_seg + 0x2a5<<4; verified: DS:0x9dd = file:0x342d, the
+fnum table), so DS:0x14ac = file:0x3efc (=all 0x00, matches port runtime) and DS:0x152e = file:0x3f7e
+(=all 0x80, matches port runtime).  The transpose is GENUINELY zero in SOUNDDVR.DVR -- no transpose either
+side, correctly loaded.
+So the port-side audit is now TOTAL and every element is IDENTICAL to the original:
+  song (byte-identical) | 6 functions asm-faithful | fnum table [0x9dd] (from DVR file:0x342d, has e4 at
+  note 60/84) | transpose [0x14ac]=0 (DVR file:0x3efc) | [0x152e]=0x80 (file:0x3f7e) | envelope [0x15b4]
+  | instrument [0x1dd] | channel map [0xc01] | device | tempo | both drive cadences.
+LOGICAL CONCLUSION: identical code + identical data + byte-identical input MUST produce identical output.
+The port's OPL stream is deterministic and the port renders MAINMENU.MS3 with verified-faithful code on
+verified-identical data.  Therefore the deterministic port-vs-oracle divergence CANNOT originate port-side
+-- it implies the ORACLE CAPTURE is not an equivalent render.  The oracle boots via
+`LOADGAME -K400,0,1000 -X5000 FIST.RUN` -- a KEYSTROKE-INJECTION launcher (LOADGAME.EXE), sampled 20-32 s
+into the boot; that state was NEVER validated to be a clean, passive MAIN-MENU MAINMENU.MS3 render (the -K
+keys may navigate elsewhere, or the sample lands mid-transition / on a queued track).  This REFRAMES the
+whole thread: the port's menu audio may ALREADY be faithful, and the "divergence" may be an INVALID oracle
+baseline.
+DECISIVE NEXT (cheap, and it inverts the burden of proof): VALIDATE the oracle reference -- capture the
+oracle's 320x200 FRAMEBUFFER at the exact OPL-capture instant and confirm it is the main menu
+(cmp vs ref/main_menu_native320.png), AND trace the oracle's file OPENs to confirm it loaded MAINMENU.MS3
+(not another .MS3).  If the oracle is NOT on a clean main menu, the port audio is vindicated and this whole
+"menu-audio divergence" was a bad-reference artifact.  If it IS a clean menu, then the ONLY remaining
+port-side variable is the driver-ISR DRIVE STRUCTURE (interleaving/order, not rate -- rate is ruled out),
+and the shim's cooperative dual-entry drive must be reconstructed 1:1 from the asm ISR chain.  Either way,
+the port-side CODE+DATA is exhaustively PROVEN identical; the burden is now on the oracle baseline.
