@@ -2447,3 +2447,16 @@ PROVEN bit-identical (134-write byte match).  But full sample-identity is, after
 engine-wide deterministic-timing seam (the exact PIT-tick firing that board:0001's live sim also needs) --
 the same conclusion reached earlier, now CONFIRMED by the LCS test rather than asserted.  The "one
 constant" shortcut is retired; the honest gate is the exact-firing-instant timing model.
+
+UNIFYING INSIGHT -- 0a28 RATE ~= 60 Hz = the engine FRAME rate (2026-08-25): the measured 0a28 call rate
+59.9936 Hz is within measurement noise of 60.0 Hz -- a classic game-FRAME / display rate, NOT a clean
+subdivision of the SOUNDDVR PIT ISR (7231.4/120=60.26, /121=59.76; neither matches 59.99).  This strongly
+implies 0a28 (the music-sequencer tick) is called ONCE PER ENGINE FRAME by the ENGINE main loop -- which
+EXPLAINS why its invoker (0x1d2 via [cs:0x5c2]) is "dead-in-image" in SOUNDDVR (the ENGINE drives it, not
+the driver), and it UNIFIES the audio timing with the FRAME timing.  So menu-audio sample-bit-identity is
+one with the engine's exact FRAME cadence -- the SAME [0x452] frame-timer / coop-tick determinism that
+board:0001's live windshield needs.  Concrete follow-up (when the gate is not contending for CPU): (1) with
+the dosbox 0a28-counter, correlate 0a28 calls to the engine's frame counter (DGROUP:0x452 or the vsync
+poll) to CONFIRM 1 call/frame; (2) if confirmed, drive the port's 0a28 from the same per-frame hook the
+port already uses for the framebuffer (not the OPL sample clock), so audio + video share ONE exact tick.
+This makes the audio timing tractable as PART OF the frame-determinism work, not a separate mechanism.
