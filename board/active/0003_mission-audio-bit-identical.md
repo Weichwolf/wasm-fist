@@ -1970,3 +1970,16 @@ breakpoint) to see the [0x20] chain the port actually builds vs the MS3 file's 0
 (3) THEN compare port-vs-oracle voice chains at the same pinned event.  This loop PROVED the decode
 faithful + the OPL stream deterministic + disproved the readiness gate; the remaining work is a
 deterministic-capture driver-flow trace, explicitly NOT more wall-clock gdb snapshots (which confound).
+
+REFINED (full-stream, deterministic): the divergence is a VOICE-ALLOCATION DISTRIBUTION difference, not a
+missing-voices bug.  Over the full 15 s stream both use most OPL channels, but differently:
+  PORT   ch0:198 ch1:408 ch2:114 ch3:12  ch4:4  ch5:104 ch6:66 ch7:70 ch8:6
+  ORACLE ch0:62  ch1:20  ch2:68  ch3:56  ch4:24 ch5:92  ch6:96 ch7:37 ch8:0
+The port OVER-concentrates on ch0/ch1 (198/408 vs 62/20), UNDER-uses ch3/ch4 (12/4 vs 56/24), and USES
+ch8 (6 key-ons) where the oracle NEVER does (ch8:0).  The "never ch8" + the ch0/1 over-load is the concrete
+signature to chase: it is consistent with a different voice-STEALING / round-robin allocation (the port
+reuses ch0/1 instead of spreading to ch3/4, and lets a voice fall onto ch8).  Check whether OPL2 RHYTHM
+mode (reg 0xbd bit5) is engaged differently (both write 0xbd) -- if the oracle runs rhythm mode, ch6/7/8
+are percussion and melodic voices cap at ch0-5, changing the allocation.  This is the deterministic,
+solid characterization of the audio gap; the fix still needs the tick-pinned driver-flow trace to see
+WHERE the allocation (the [0x20] chain walk in 0c39 + the 0a28 free-voice search) diverges.
