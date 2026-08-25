@@ -2521,3 +2521,18 @@ retire the fist_opl_tick sample-clock reconstruction.  Then audio + video share 
 tick and the OPL stream fires at the original's exact instants.  This is the concrete, unified endpoint:
 menu-audio bit-identity == VGA-vsync-locked tick == the board:0001 frame-cadence determinism.  The exact
 firing mechanism is now KNOWN (measured), not a mystery seam.
+
+UNIFICATION -- AUDIO BIT-IDENTITY == board:0001 FRAME-TIMING DETERMINISM (2026-08-25, definitive endpoint):
+Since the music tick fires per VGA-PRESENT (measured: 70.086 Hz mode-13h + a ~17% frame-skip pattern),
+menu-audio sample-bit-identity requires the port to (a) drive 0a28 from the per-frame VGA-present hook (the
+specced fix), AND (b) have its FRAMES fire at the SAME instants + same skip pattern as the original.  (b)
+IS board:0001's frontier -- the port's deterministic frame cadence matching the original's.  So the per-
+vsync drive alone is necessary-not-sufficient: the exact SKIP pattern (which frames the tick skips) is a
+function of the engine's per-frame loop timing, which only matches bit-for-bit once the frame cadence is
+deterministic-vs-original.  THEREFORE audio bit-identity and board:0001 (windshield/frame determinism) are
+literally the SAME underlying requirement: the port's per-frame present must be instant-for-instant the
+original's.  The audio just RIDES that vsync.  This is the honest, complete endpoint of the audio timing
+investigation: the mechanism is fully known (VGA-vsync tick), the shim fix is specced (per-present drive),
+and full sample-bit-identity is achieved exactly when the frame cadence is -- one unified deterministic-
+frame-timing effort serves BOTH the audio stream and the live windshield.  The landed MUSIC_DIV=120.536
+(uniform 60 Hz mean) remains the best current approximation until that unified frame-timing lands.
