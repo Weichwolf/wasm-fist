@@ -2183,3 +2183,32 @@ oracle's 320x200 FRAMEBUFFER at the exact OPL-capture instant and confirm it is 
 port-side variable is the driver-ISR DRIVE STRUCTURE (interleaving/order, not rate -- rate is ruled out),
 and the shim's cooperative dual-entry drive must be reconstructed 1:1 from the asm ISR chain.  Either way,
 the port-side CODE+DATA is exhaustively PROVEN identical; the burden is now on the oracle baseline.
+
+*** RESOLVED -- THE "MENU-AUDIO DIVERGENCE" WAS AN INTRO-CONTAMINATED REFERENCE (2026-08-25) ***
+The entire session's premise was WRONG, and the exhaustive port-side audit (correctly) found nothing
+because there was nothing port-side to find.  Root cause of the false alarm:
+  - My oracle capture /tmp/oracle_entry (trace_opl.sh MENU_WAIT=20 PLAY=6) spans t=960..26214ms = ENTIRELY
+    THE INTRO (the intro runs ~0..26s; the menu music starts AFTER).  So I compared the port's MENU music
+    against the oracle's INTRO music the whole session -- the "e4-heavy across ch0-7" was the INTRO's
+    distribution, not the menu's.
+  - This is EXACTLY the contamination tools/oracle/make_menu_ref.sh already documents (docs/audio.md iter
+    19): "the prior reference started at BOOT and MIXED the intro audio (a ch3/5/6-heavy 'spread'
+    distribution) with the menu music -- which made iters 16/17/18 chase a non-existent voice
+    'redistribution'.  The port's menu-music voicing is actually FAITHFUL (voice=channel)."  I re-derived
+    the same false lead and, through the full port-side audit, re-confirmed the port is faithful.
+DECISIVE menu-vs-menu comparison (oracle MENU window t>t0+30s, post-intro, vs the port):
+  channel distribution (normalised): oracle ch0:20% ch1:41% ch2:11% ch3:1.1% ch5:11% ch6:7% ch7:7.7%
+    ch8:0.4%  vs  PORT ch0:20% ch1:42% ch2:12% ch3:1.2% ch5:11% ch6:6.7% ch7:7.1% ch8:0.6% -- MATCH.
+  e4 fraction: oracle-MENU 2.6% vs PORT 3.8% (the intro was 30%) -- the "e4 drone" divergence VANISHES.
+  pitch vocabulary: 0b/ba/10/3f/dc/2a shared with similar counts.
+CONCLUSION: the port's MENU-MUSIC voicing + pitch distribution MATCH the oracle's MENU music.  The port's
+menu audio is FAITHFUL, as iteration 19 already established and this session's port-side audit independently
+proved (every function asm-faithful, every table byte-identical to the DVR, song byte-identical).  The
+whole "divergence" was a bad reference window.  LESSON (recorded so it is not repeated a 4th time): NEVER
+compare against a from-boot OPL capture -- the intro contaminates it; use the post-intro menu window
+(make_menu_ref.sh trims at +26s) or ref/audio_menu_oracle_clean.wav.
+REMAINING for true BIT-identity (not the false divergence): a residual in the pitch histogram (oracle-menu
+a1:222/a0:110 higher than the port over the longer window) may be a window-length/loop-count effect or a
+minor real difference -- verify with an EQUAL-length, phase-aligned menu-vs-menu window and the clean WAV
+xcorr; that is the actual (much smaller) remaining audio-fidelity question, NOT the voice-redistribution
+phantom this session chased.
