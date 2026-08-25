@@ -2711,3 +2711,12 @@ REMAINING (fidelity DEPTH, not the silence bug): (a) tempo/phase bit-identity vs
 (the vsync-drive/MUSIC_DIV work, now meaningful since notes play); (b) a hermetic port-vs-oracle audio
 note-seq flow in verify.sh so silence can never regress unnoticed (board:0011).  The audio-content ROOT
 (silence) is RESOLVED.
+
+*** DoD GATE PASSED on the fixed build (2026-08-25, 20:07): 10/10 consecutive clean ***
+tools/wasm_gate.sh: 10 consecutive full-matrix wasm runs, each 176 pass / 0 fail, on the build with the
+sequencer re-entrancy guard (commit d7bd0aa).  Combined with the `both`-mode full-matrix run (176/176,
+native==wasm), the menu-music fix is DoD-validated: the port PLAYS MAINMENU.MS3 (note-for-note faithful to
+the oracle, 239-note contiguous exact match) AND native==wasm byte-identity holds across ten consecutive
+clean matrix passes.  The audio-content silence root is CLOSED end to end.
+Still open (fidelity DEPTH, tracked): tempo/phase WAV bit-identity vs the original (vsync-drive/MUSIC_DIV,
+now meaningful) + a port-vs-oracle content flow in verify.sh so silence cannot regress unnoticed (board:0011).
