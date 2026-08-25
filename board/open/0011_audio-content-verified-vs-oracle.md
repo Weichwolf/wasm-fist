@@ -49,3 +49,8 @@ and FAILED (fixed: split the local onto two lines).  Both caught by NOT trusting
 detail string, then the in-matrix FAIL).  NOW GENUINELY ENFORCED: full matrix 177/177 with the real content
 gate showing detail "menu OPL note stream contains oracle MAINMENU.MS3 note-seq" and PASSing on native+wasm.
 A regression to silence now truly FAILS the matrix (self-checked: silent build 0/239).
+
+DoD GATE PASSED (2026-08-26, 00:48): 10/10 consecutive clean wasm runs on the 177-flow matrix -- the real
+audio-menu-content gate is now part of every DoD run (177 pass / 0 fail each).  Menu audio content is a
+genuinely-enforced, DoD-validated invariant: the port plays MAINMENU.MS3 note-for-note vs the oracle, on
+native AND wasm, and a regression to silence fails the gate.
