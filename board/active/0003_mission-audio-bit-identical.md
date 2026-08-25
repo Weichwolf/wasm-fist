@@ -1938,3 +1938,35 @@ unstable DS base word) and needs a dedicated trace of how the real SOUNDDVR chai
 entries (0x3dd body + 0xa28 fnum feed) -- a multi-session effort, not a bounded shim gate.  The gate
 experiment is retired as disproven; the value this loop is the faithful-decode proof + the disproof of
 five+ wrong roots, narrowing the frontier to the drive/base model.
+
+METHODOLOGICAL WALL + WHAT IS SOLID (2026-08-25, same loop, after the gate disproof):
+Pushed the driver-DS/drive investigation further and hit a capture-methodology wall; recording what is
+SOLID vs CONFOUNDED so the next session starts clean.
+SOLID (deterministic, reproducible):
+  - The port's OPL WRITE STREAM is deterministic: two 15 s native runs produce byte-identical reg/val
+    sequences (2725==2725 lines).  So "port plays the menu melody on OPL voices {1,5,8}" (MIDI channels
+    1/5/9 -> the MS3 [0x20] voice-chain 00 00 00 00 00 09 00.. -> voices {1},{5,8},{9}->ch{1,5,8}) is a
+    firm fact, not a timing artifact.
+  - Oracle (OPL2 only: ports 388/389, no OPL3/38a-38b) plays the opening chord on OPL {0,2,3,5,6,7} (6-7
+    voices) -- more voices than the port, same driver code (oracle stack offsets 0a28/0a96/0c39/0c7a ==
+    the port's driver functions), same file, same device.
+CONFOUNDED (must NOT be trusted; caused earlier wrong sub-conclusions):
+  - Wall-clock (FIST_RUNMS) gdb MEMORY snapshots of the driver data segment are timing-confounded: the
+    same fixed g_mem address (0x3ce90) reads [0xe]=0xffff on one run and 0x0000 on another, [0x3e]=0x03
+    vs 0xff, [0x6]songseg valid vs 0 -- because the watchdog fires at a wall-clock instant and the engine
+    has done different amounts of work by then (the SIM is deterministic per-TICK, not per-wall-second).
+    So NO driver-state conclusion from a RUNMS snapshot is valid; only tick-pinned / event-pinned captures
+    are.  (This is the same capture-window confound board:0002 documents, here for audio.)
+INCOMPLETE MODEL (the real blocker): breaking at the song-register 0af4 (m_snd_FUN_0000_0af4) did NOT fire
+in a 9 s run, yet deterministic music plays -- so the song data reaches the sequencer via a path my model
+(engine be0e -> g_snd_reg_es -> 01ec/0af4 register) does NOT capture, OR 0af4 fires during early boot in a
+way the breakpoint missed.  g_snd_reg_es reads 0 at exit.  Until the ACTUAL song-data-flow (who sets
+[ds:0x6] song-seg + builds the [0x20] chain, and when) is traced with a DETERMINISTIC event pin, the
+voice-count divergence cannot be attributed.
+HONEST NEXT (methodology-first, not another guess): (1) a TICK-PINNED capture harness for the driver data
+seg (dump [ds:0x6/0xc/0xe/0x20..] at a fixed [0x452] tick, native==wasm, like the FIST_MISSFB frame pins),
+(2) trace the REAL song-register event (instrument 0af4/be0e with a logging seam, not a hanging gdb
+breakpoint) to see the [0x20] chain the port actually builds vs the MS3 file's 00 00 00 00 00 09 00..,
+(3) THEN compare port-vs-oracle voice chains at the same pinned event.  This loop PROVED the decode
+faithful + the OPL stream deterministic + disproved the readiness gate; the remaining work is a
+deterministic-capture driver-flow trace, explicitly NOT more wall-clock gdb snapshots (which confound).
