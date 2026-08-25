@@ -2499,3 +2499,25 @@ measurement blocked by the running gate's CPU contention (timing-sensitive).  NE
 session (the "one constant" reframe; "31c3=sound") both CORRECTED by evidence -- the discipline holds.  The
 LANDED results (measured 60 Hz cadence fix; init proven bit-identical) STAND; the exact sound-tick firing
 mechanism remains the genuine open seam, measurable post-gate.
+
+*** DEFINITIVE: THE MUSIC TICK IS VGA-VSYNC-LOCKED (70.086 Hz mode-13h), not fixed 60 Hz (2026-08-25) ***
+Measured the EXACT 0a28 firing INTERVALS (instrumented dosbox logging PIC_FullIndex per call, 4091 calls;
+guest-PIC-time is deterministic so this is valid even under the gate's CPU load).  Interval histogram:
+  14.268 ms  x2955  (= 70.086 Hz = the MODE-13h VGA vertical-refresh period, EXACT)
+  28.536 ms  x598   (= 2 frames -- a skipped tick)
+  mean (steady) = 16.668 ms = 59.9955 Hz.
+So 0a28 fires ONCE PER VGA VERTICAL RETRACE (70 Hz), with ~17% of ticks skipping one frame -> a 60 Hz MEAN.
+This DEFINITIVELY identifies the "dead-in-image" mechanism: the music tick is chained to the VGA VSYNC /
+the engine's per-frame present, NOT a PIT subdivision and NOT a uniform 60 Hz.  It EXPLAINS the earlier
+50-call-window jitter (59.4/60.4 alternation = the 70-Hz-with-skips pattern averaged) and it UNIFIES the
+audio tick with the VGA FRAME cadence (board:0001) -- they are the SAME vsync.
+IMPLICATION for the landed fix: MUSIC_DIV_DEFAULT=120.536 (uniform 60 Hz) is the best UNIFORM-rate
+approximation (correct MEAN tempo, better aggregate match) and STANDS as such -- but it is NOT the exact
+pattern.  Sample-bit-identity requires driving 0a28 at the EXACT vsync instants (70.086 Hz) WITH the
+original's exact frame-skip pattern -- i.e. from the port's per-frame VGA-present hook, deterministically,
+NOT the OPL sample clock.  THE FIX (post-gate, needs rebuild): drive fist_snd_seq_advance from the port's
+VGA vsync / framebuffer-present path (once per 70 Hz frame, honoring the same skip logic the engine uses),
+retire the fist_opl_tick sample-clock reconstruction.  Then audio + video share ONE deterministic vsync
+tick and the OPL stream fires at the original's exact instants.  This is the concrete, unified endpoint:
+menu-audio bit-identity == VGA-vsync-locked tick == the board:0001 frame-cadence determinism.  The exact
+firing mechanism is now KNOWN (measured), not a mystery seam.
