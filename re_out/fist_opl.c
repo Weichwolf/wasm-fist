@@ -92,7 +92,15 @@ int fist_vga_pit0_div(void);
  * WAV-envelope xcorr sweep against ref/audio_menu_oracle.wav -- but that reference is a 12.7 s STEREO
  * clip with menu-click SFX and no clean loop (§23), so its xcorr peak was spurious and ~4.3x too fast.
  * Env FIST_MUSIC_DIV / FIST_MUSIC_HZ re-select. */
-#define MUSIC_DIV_DEFAULT 120.0              /* 7231.4/120 = 60.3 Hz -- oracle real-note-on-rate-pinned */
+#define MUSIC_DIV_DEFAULT 120.536            /* 7231.4/120.536 = 59.9936 Hz -- MEASURED: the ORIGINAL's exact
+                                              * 0a28 (music-tick) call rate, counted via an instrumented
+                                              * dosbox (core_normal.cpp counts cs=0x4ab0:0x0a28 entries;
+                                              * 5200 calls over 86.678 s steady-state = 59.9936 Hz).  The
+                                              * prior 120.0 (60.26 Hz) was 0.44% too fast -> ~11k-sample
+                                              * drift/loop.  board:0003 -- the exact sequencer cadence that
+                                              * makes the sample-clock-locked OPL stream phase-match the
+                                              * original per loop.  (SND_ISR_HZ 7231.4 is the SOUNDDVR PIT
+                                              * ISR; 0a28 fires every ~120.54 ISRs via a fractional accum.) */
 static double g_seq_acc = 0.0;
 static double g_samples_per_seq = 0.0;
 extern void fist_snd_seq_advance(void);

@@ -1,0 +1,23 @@
+# Instrument DOSBox's normal CPU core to COUNT SOUNDDVR 0a28 (music-sequencer tick) invocations,
+# to measure the ORIGINAL's exact sequencer cadence (-> the exact MUSIC_DIV for fist_opl.c).
+# Env: FIST_0A28LOG=<path> (enable) + FIST_0A28SEG=<hex cs, default 0x4ab0>.  Logs "count pic_ms"
+# every 50 hits.  Apply to third_party/dosbox-build/dosbox-0.74-3/src/cpu/core_normal.cpp + `make`.
+# MEASURED (board:0003): 5200 calls / 86.678 s steady = 59.9936 Hz -> MUSIC_DIV_DEFAULT = 120.536.
+--- a/src/cpu/core_normal.cpp
++++ b/src/cpu/core_normal.cpp
+@@ CPU_Core_Normal_Run @@
++#include <cstdlib>
++static unsigned long fist_0a28_count = 0;
++static FILE *fist_0a28_f = 0;
++static int fist_0a28_seg = -1;
+ Bits CPU_Core_Normal_Run(void) {
+ 	while (CPU_Cycles-->0) {
+ 		LOADIP;
+ 		...
+ 		core.base_val_ds=ds;
++		if (fist_0a28_seg < 0) { const char*s=getenv("FIST_0A28SEG"); fist_0a28_seg = s? (int)strtol(s,0,16) : 0x4ab0;
++			const char*p=getenv("FIST_0A28LOG"); if(p) fist_0a28_f=fopen(p,"w"); }
++		if (fist_0a28_f && SegValue(cs)==(Bitu)fist_0a28_seg && (reg_eip&0xffff)==0x0a28) {
++			fist_0a28_count++;
++			if ((fist_0a28_count % 50)==0) { fprintf(fist_0a28_f,"%lu %.3f\n", fist_0a28_count, PIC_FullIndex()); fflush(fist_0a28_f); }
++		}
