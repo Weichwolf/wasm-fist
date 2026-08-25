@@ -2389,3 +2389,17 @@ the driver's fractional-accumulator constant pins it to sample-exactness.  (2) a
 of the port vs ref/audio_menu_oracle_clean.wav (anchor at song-start, cross-correlate) to CONFIRM per-loop
 sample identity.  Both are bounded now that the cadence tool exists.  The hard part (finding + measuring
 the exact cadence) is DONE and LANDED; what remains is precision-tightening + the formal WAV proof.
+
+WAV-VALIDATION ATTEMPT (inconclusive, honest): tried a quick cross-correlation of the port's FIST_AUDIO_WAV
+(dt=4000, native) vs ref/audio_menu_oracle_clean.wav -> xcorr ~0.000.  NOT a refutation: the port WAV
+(64.6s) includes the KDV INTRO (the oracle-clean is menu-only, trimmed at +26s), the port audio flow runs
+under FIST_TICK_HZ=1000 COOP (so its wall-timing != real-time), and the coarse alignment search misses
+phase.  A valid proof needs: (a) a MENU-ONLY port OPL capture (skip/trim the intro), (b) format-matched
+synthesis (feed the port's OPL reg stream through oplreplay like the oracle, OR compare reg streams
+directly), (c) phase-anchor at the song-loop start.  So the formal sample-bit-identity PROOF is still open,
+but the LANDED cadence fix (MUSIC_DIV=120.536, measured) stands on its own: it is the original's measured
+exact music-tick rate, matrix-safe, correct by construction.  NEXT for the proof: capture the port's menu
+OPL reg stream (FIST_OPL_REGLOG) with the new cadence, convert to the trace_opl format (add a synthetic
+t=ms from adv/rate), oplreplay it, and cross-correlate the menu window vs audio_menu_oracle_clean.wav; OR
+diff the port vs oracle OPL reg streams event-by-event anchored at the loop restart.  Both are bounded now
+that the exact cadence is landed.
