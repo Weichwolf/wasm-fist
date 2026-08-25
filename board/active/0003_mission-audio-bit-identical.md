@@ -2653,3 +2653,25 @@ patch bases c00c as a real g_mem pointer to the loaded MS3 events so 0b5d walks 
 Verify by re-running the note-on count -> must approach the oracle's ~10/sec.  This is THE audio root; the
 vsync-drive + MUSIC_DIV work (correct mechanism, gate-passing) sits on top of it and only matters once
 notes actually play.
+
+*** SEQUENCER STALL PINNED (2026-08-25, gdb): patch-359 0c39 dispatches ~1 event then hangs ***
+Song registration is NOT the bug -- gdb watchpoint proved [ds:0x6]=song seg is written EXACTLY ONCE
+(=0x4c61, by 0af4) over the whole menu run: stable, no flip-flop, real MAINMENU.MS3 data at S[0x30]
+(91 24 40 00 95 49 = the actual note stream).  The bug is the SEQUENCER (patch 359, FUN_0000_0c39):
+  - The first menu event is a delta-0 chord (91 24 40|00  95 49 31|00 ...).  0b5d decodes it correctly
+    (ch=1 note=0x24 delta=0) and stores [ds:0x14]=g_snd_ev_dx=0 (asm 814e237).
+  - The delta-0 re-loop `if([ds:0x14]==0) goto fetch` (asm 814e337 test / 814e345 jmp) executes ZERO
+    times over the entire run (instrumented count: CHECK=1 GOTO_FETCH=0 RETURN=1).  So the chord's 2nd/3rd
+    simultaneous notes are never fetched.
+  - The function returns with [ds:0x14]=0; the NEXT 0c39 tick does `decw [ds:0x14]` -> 0x0000-1 = 0xffff
+    (UNDERFLOW, asm 814e108) -> `if(!=0) return` -> the sequencer now counts 0xffff down for 65535 ticks
+    == a multi-second hang.  gdb-caught: on the delta-0 event nothing writes [ds:0x14] between the store
+    (=0) and the next-call decw (0->0xffff).  This underflow-hang is why only ~4 note-ons fire in 190 s.
+UNRESOLVED MICRO-CAUSE: why 814e337 is reached with [ds:0x14]!=0 (RETURN) rather than ==0 (goto fetch)
+for the delta-0 event -- the compiled dispatch/chain-advance flow (814e244..814e336, `ch=D[ch+0x20]`)
+doesn't cleanly match the C source under -O0 line info, and the behaviour is timing-sensitive across gdb
+runs (some events show delta 0x59 and count down normally).  NEXT (sharp): assembly single-step ONE
+delta-0 event1 dispatch from 814e244 to the function exit, logging every taken branch + [ds:0x14], to
+find where control diverges from the goto-fetch.  The fix is a patch-359 correction to the delta-0 loop
+(and/or a decw-underflow guard: `if([ds:0x14]!=0) [ds:0x14]--; if(==0) fetch`), asm-verified vs 0xc39.
+This is THE remaining audio-content root; song load/registration/decode are all proven correct.
