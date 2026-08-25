@@ -22,3 +22,21 @@ stream to the ORIGINAL's (DOSBox oracle), so a regression to silence (or wrong n
 Rationale lives in board:0003: the note-sequence harness already exists and is self-validated; wiring it
 into verify.sh as a first-class flow is what turns "native==wasm" into "bit-identical to the original"
 for audio. Until then, every audio "pass" is provenance-blind to the oracle.
+
+--- PROGRESS (2026-08-25) ---
+LANDED: the MENU audio-content gate is wired into the matrix (commit follows).
+  - ref/audio_menu_noteseq.txt -- 239-note DOSBox-oracle MAINMENU.MS3 reference.
+  - tools/oracle/noteseq_compare.py --gate -- contiguous-containment check (fixed build 239/239 PASS,
+    silent build 0/239 FAIL).
+  - tools/verify.sh `audio-menu-content` flow -- gates the port's native AND wasm menu OPL note stream
+    against the reference.  Verified PASS both targets (native 4412 / wasm 4397 note-ons contain all 239).
+  A regression to silence now FAILS the matrix -- the gap the silence bug hid behind is closed FOR THE MENU.
+STILL OPEN (why this item stays open):
+  - MISSION audio content (MSN*.MS3) is NOT yet gated: sustained in-mission gameplay -- where mission music
+    loads/plays -- is not reachable headlessly today (the FB-capture harness exits at spawn, before MSN*.MS3
+    loads).  Gating mission audio depends on the in-mission cooperative sim (board:0001).  The re-entrancy
+    fix (d7bd0aa) is structurally general (all music shares the 0a28->0c39 sequencer), so mission music will
+    play faithfully once reachable -- but that must be VERIFIED, not assumed, when the sim path lands.
+  - WAV-SAMPLE bit-identity vs the original (tempo/phase, not just note ORDER) remains the ultimate target;
+    the note-seq gate is a necessary content invariant, not the full deliverable -- it depends on the
+    frame-timing determinism (board:0001) to become a sample-exact WAV compare.
