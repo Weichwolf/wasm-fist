@@ -2597,3 +2597,18 @@ write density -- is the deeper unresolved root, NOT the firing rate.  NEXT (the 
 port's 0a28 rewrites fnums ~4x more often -- the per-voice envelope stream [voice*2+0x90] deltas vs the
 original's (does the port's envelope have fewer 0x80-hold markers?), or a state/base difference making the
 pitch drift every tick.  This is the concrete, evidence-pinned next lead: the OPL write DENSITY, not timing.
+
+DECISIVE PHASE-FREE HARNESS BUILT + SELF-VALIDATED (2026-08-25):
+Every port-vs-oracle STREAM comparison to date is confounded (intro contamination, coop-timeline drift,
+loop-phase, section mismatch) -- LCS=15 and "4x write density" cannot separate "genuine note bug" from
+"comparison artifact".  Built tools/oracle/noteseq_compare.py to dissolve ALL of it at once: it extracts
+note-on RISING EDGES (channel, fnum, block) from both reglogs -- pure musical content, ZERO timing -- and
+reports the longest CONTIGUOUS matching note-run.  Rationale: a faithful port emits the same note sequence
+as the oracle regardless of phase/loop-position/tick-density; a long contiguous run therefore survives
+every timing confound, and its ABSENCE is genuine content divergence.  Auto-detects both log formats
+(port FIST_OPL_REGLOG "adv=N reg= val="; oracle FISTOPLLOG "DATA reg=").  Self-validated on synthetic
+logs: identical content -> 100% run "FAITHFUL"; divergent content -> 0% "DIVERGE".  Verdict bands: >85%
+faithful (residual = timing/phase only, the board:0001 unification); 30-85% partial (find the break);
+<30% real note bug or wrong section.  QUEUED post-gate: capture port menu reglog (existing native binary)
++ oracle menu reglog (tools/oracle/trace_opl.sh, dosbox) -> run harness -> FIRST unconfounded answer to
+"does the port play MAINMENU.MS3's notes faithfully".  This is the clean test the write-density lead needed.
