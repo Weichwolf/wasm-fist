@@ -192,3 +192,21 @@ FIX ATTEMPT 2 + KEY ENTANGLEMENT FINDING (2026-08-26, matrix-guarded):
   rides on this board's per-frame determinism -- confirming the "doubled payoff" (windshield + all audio).
   Reverted attempt 2 (patch 100 + the helper); tree green (make check clean).  Negative results banked;
   the primary path is now unambiguous: land cause (2) cadence determinism, then cause (1).
+
+AUDIO DETERMINISM DECOMPOSED INTO 3 LAYERS (2026-08-26); cause-2 LANDED:
+  cause-2 (re-entrant cadence) -- FIXED + COMMITTED (g_in_isr atomic-tick guard, native_main.c): keeping
+    g_in_isr=1 across the snd/opl ticks stops out()->fist_timer_pump from re-entering and generating extra
+    fist_opl_tick samples.  Measured: [0x452]=8000 menu-music WAV native/wasm sample gap 5026->711; with
+    INTRO.MS3 loaded the intro WAV LENGTHS became native==wasm identical (5696650 both).  Matrix 177/177.
+    (The SIGALRM-under-coop async tick was NOT the residual -- disabling it had zero effect; reverted.)
+  cause-1 (es=0 intro garbage) -- fix shape = single-slot fist_apply_reloc_slot(0x174,0x378) at be0e
+    first-use (loads INTRO.MS3, render-safe).  Blocked by cause-3.
+  cause-3 (NOTE-CONTENT divergence) -- NEW, the deep one: with cadence fixed, native and wasm still emit
+    DIFFERENT NOTES for the same playback.  First divergence is the es=0 chord (adv=4262: native splits it
+    ch1/5/8 @4262 + ch0 @4263; wasm plays ch0/1/5/8 all @4262) -- the delta-0 goto-fetch loop terminates one
+    note earlier on native.  The es=0 song reads g_mem[0:0xa024+] = ENGINE IMAGE (loaded identically), so the
+    divergence is in SEQUENCER STATE (cursor [ds:0xc] / voice chain), not the song bytes.  With INTRO.MS3
+    loaded the intro WAV content still differed 4M bytes -> real-song playback is also content-nondeterministic.
+    ROOT (to find): what sequencer/driver state differs native<->wasm at the first chord despite identical
+    song memory + fixed cadence -- needs cross-target (native AND wasm/node) gdb of [ds:0xc]/voice-chain at
+    adv=4262.  This is THE remaining audio determinism blocker (gates cause-1 landing + all mission audio).
