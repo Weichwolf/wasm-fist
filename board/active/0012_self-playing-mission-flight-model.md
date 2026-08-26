@@ -816,3 +816,19 @@ target, param_2 as source, CS for +0x12) + ba49/ba33/b51f (correct the child-obj
 re-registering the parent).  Then a294 stays < 0x78, b1d6 registers projectiles, they carry the firer's
 position + muzzle offset, fly, hit, b2ef fires, goals fall.  This is the last root between "tanks drive"
 (patch 416) and "mission resolves".  Cross-ref board:0010 (this fire path is a concrete board:0010 consumer).
+
+## a294 guard is NOT the sole blocker -- whole spawn cluster is broken (2026-08-26)
+
+Diagnostic: temporarily relaxed b1d6's guard 0x78->0x300 (reverted).  Result: ZERO change -- goals=13,
+live=114, a294=150, and the player position sequence byte-identical to the guarded run.  So allowing b1d6
+to register does NOT produce functional projectiles: the 9caa spawn scramble (writes the projectile fields
+to the SOURCE object and reads position from unaff_CS) means the "new" object is never validly created.
+=> the fire path requires the FULL spawn-cluster reconstruction (9caa target/source/position + b1d6 DI
+return + ba49/ba33/b51f unaff_CS child pointer + a294 dedup), all the board:0010 CS-context/register class,
+done PER-SITE (Ghidra is NOT installed in this env, so the systematic SetCSContext re-decompile is
+unavailable).  This is the substantial remaining work between patch 416 (tanks drive) and a resolved
+mission.  It is bounded (a specific ~5-8 function cluster) but each site needs asm-mapped register recovery.
+
+HONEST SESSION STATE: movement FIXED+verified (416); win-metric+mechanism corrected (goals/AUTO CONTROL,
+oracle-confirmed dynamic); fire path fully traced to the board:0010 spawn-cluster base-loss; goal UNMET
+(no mission resolution yet).  Next: per-site reconstruct the 9caa/ba49/b1d6-return spawn register flow.
