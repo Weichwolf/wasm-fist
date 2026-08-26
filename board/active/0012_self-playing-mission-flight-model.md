@@ -939,3 +939,33 @@ objects, decrementing a294); (3) verify a294 stays <0x78, b1d6 spawns weapons, p
 goals -> 0; (4) then determinism + native==wasm across the run.  This is the substantial "build the part the
 port does not yet run" clause -- now precisely scoped to op-0x4c, reached by tracing combat backwards from
 b2ef=0.  Movement (416) stands; goal UNMET; the blocker is singular and named.
+
+## REFRAME: type-0x10 objects are WEAPON SYSTEMS; leak = documented bb64/DAT_5a25 deviation (2026-08-26)
+
+Instrumented b51f's carry inputs: positions are SANE (~0x100000), offsets are the real 8-direction burst
+pattern (0xfffffe00=-512, 0x00001800=+6144, ...); carry fires exactly when offY is negative (a legitimate
+in-bounds geometric condition, asm `add eax,off; jc`).  So the b51f registration TRIGGER is correct -- the
+59 type-0x10 objects are WEAPON/TURRET systems: b51f -> bb64 (find armed target in range -> DAT_5a25, patch
+255) -> c31e (act on target) -> ba49 (spawn/register).  The registration IS the weapon burst.  Phase-bit
+gate [0x1b] limits each to ~4 fires (the negative-offY phases), once -> a294 climbs to the 0x96 cap once,
+then static (matches a294=150).
+
+THE CONTRADICTION (unresolved): patch 258 (asm-verified) has ba49 register param_1 = the EMITTER itself
+into a new slot and overwrite its position -- which duplicates/corrupts the emitter, yet the oracle can't
+leak.  Patches 253/255/258 EXPLICITLY document deviations here: patch 258 note "c31e's object should be
+SI=DAT_2000_5a25 (the bb64-found target) but the chain dispatches on param_1; revisit with the bb64 DAT_5a25
+population."  So the spawn chain currently uses the emitter (param_1) as a stand-in because bb64/DAT_5a25
+(the proper target/effect object) is incompletely populated.  The correct object to register/act-on is the
+bb64-found target in DAT_5a25, not the emitter -- completing that (patch 255/258) likely stops the
+emitter self-duplication AND makes the weapon act on a real target.
+
+TWO CANDIDATE ROOTS remain, needing the oracle to disambiguate (a294 tick-by-tick) or Ghidra (board:0010):
+  (A) complete bb64/DAT_5a25 so ba49 registers the real target/effect (not the emitter) -> no self-dup;
+  (B) the op-0x4c render reclaims the display objects each frame (FIST_SIMRUN stubs it).
+Both are within reach but each needs ground-truth I cannot get in THIS env (oracle anchor paging-blocked;
+Ghidra absent).  I will NOT improvise a fix on the unresolved emitter-registration contradiction.
+
+HONEST FINAL: movement fixed+verified (416); win-metric+self-play-mechanism corrected+oracle-confirmed;
+fire failure traced by measurement to the weapon-system spawn chain (type-0x10 -> bb64/DAT_5a25 -> ba49)
+whose target-object population is a DOCUMENTED incomplete deviation (patch 255/258).  Goal UNMET.  The two
+concrete unblockers are unchanged: a per-run registry-signature oracle anchor, or Ghidra for board:0010.
