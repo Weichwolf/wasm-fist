@@ -2790,3 +2790,26 @@ plain DAT_2000_0452 symbol) and why its trigger condition fires on native-not-wa
 i.e. which in-mission DGROUP state first diverges.  Menu/intro audio: CLOSED (patch 412).  Mission audio:
 BLOCKED on in-mission sim determinism, now precisely localized to the opltick-374992 / 3rd-[0x452]-reset
 event.
+
+*** LOCALIZED to the board:0003 HOST-POINTER CLASS (2026-08-26, DGROUP opltick-bisect) ***
+Dumped DGROUP (0x1c000, 64 KB) at pinned oplticks on both targets (temp FIST_DUMP_OPLTICK probe in the
+fist_opl.c shim, since removed) and diffed to find where the mission sim FIRST diverges:
+  - oplticks 340000..371720: only a STABLE ~17-byte diff -- HOST-POINTER values that never change and do
+    NOT affect audio.  Offsets: ds:0x0000-0x0002, 0x03e2-0x03e3, 0x15c2-0x15c3, 0x16b0-0x16b1,
+    0x3ae2-0x3ae3 (player, cf. the SEGV diag "3ae0(player)"), 0x941d-0x941f, 0x9f22-0x9f23, 0xe856.
+    These are native-ELF vs wasm-linear pointer low/high words stored in DGROUP -- the board:0003
+    149/57 determinism class exactly.
+  - CASCADE ONSET at opltick 371740: the diff jumps 17 -> 111 -> 2077 -> 2879 bytes.  The FIRST sim-state
+    bytes to diverge are ds:0x0600-0x0603 and a run at ds:0x074d.. -- i.e. at opltick 371740 some in-
+    mission code READS one of the stable host-pointer bytes above and branches/computes on it, writing
+    the environment-divergent result into 0x0600 / 0x074d, which then cascades across the whole DGROUP
+    (event queue + object subsystem) and, ~3250 oplticks later (374992), produces the extra native
+    [0x452] frame-timer reset -> the mission-audio WAV divergence.
+CONCLUSION: mission-audio native==wasm is NOT a new bug -- it is the SAME host-pointer determinism class
+this board and board:0001 already track (the "restore g_mem+(seg<<4)+off basing" / faithful-16-bit-offset
+migration), now proven to reach render/audio-visible mission state and pinned to a single trigger:
+opltick 371740, reading one of ~17 named host-pointer DGROUP words, first-writing ds:0x0600 / ds:0x074d.
+NEXT (sharp): native gdb watchpoint on g_mem+0x1c74d (or 0x1c600) armed at opltick 371740 -> the writer's
+cs:eip and the host-pointer source it read; that names the exact store to make faithful (16-bit engine
+offset, not host ptr), the same patch class as 349/384.  Fixing it closes mission-audio AND removes one
+concrete member of the 149/57 host-pointer class -> progress on board:0001 too.  Menu/intro audio: CLOSED.
