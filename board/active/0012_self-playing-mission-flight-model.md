@@ -776,3 +776,14 @@ SESSION SUMMARY (2026-08-26): went from wrong-metric/wrong-model to a landed fix
     blocks every weapon spawn -> b2ef=0 -> goals stuck at 13.
   GOAL STILL UNMET (mission does not yet resolve); the remaining chain is one bounded fix (dedupe the
   registry so a294 falls below 0x78), then verify goals->0 and native==wasm.
+
+## Duplication source split (2026-08-26)
+
+b1df caller trace (return-address): FUN_0000_ba33 (33x) <- ba49 <- b51f (the 59 side-A 0x10 effect objects
+spawning children) and FUN_0000_a93e (7x).  BUT only ~40 b1df calls in 6000 ticks while 35 duplicates
+ALREADY EXIST at spawn (t=314) -> the MAIN duplication is LOAD-time via b1a2 <- d81e (the .FSG loader),
+with colliding param_3 slot indices; b1df adds a few more during the sim.  So the dedup fix is primarily
+in the LOAD path: instrument b1a2 (param_3 slot, param_4 object) during d7e1's load loop to find the
+colliding/repeating param_3, and asm-verify the slot-index computation in d81e/d7e1 (likely a base-loss or
+16-vs-32-bit width bug in the inbox reads uRam000f0008/000a that feed b1a2's param_3).  Fix so each loaded
+object gets a UNIQUE slot and a294 == distinct side-A count (<0x78) -> b1d6 fire guard passes.
