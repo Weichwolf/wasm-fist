@@ -2745,3 +2745,24 @@ FIST_DUMPTICK=9000, FIST_AUDIO_WAV) exposes a distinct IN-MISSION divergence:
   ideally the tick) to the deterministic PIT count [0x452], NOT to port-write count -- decoupling the
   determinism smell the board already flagged.  This is the in-mission analogue of the menu-audio work and
   the gating item for mission-audio native==wasm.  Menu/intro axis: CLOSED.
+
+*** REFINED (2026-08-26, FIST_OPLSEQ tick-correspondence diff -- corrects the "gradual drift" framing above) ***
+The in-mission divergence is NOT gradual port-write drift.  Diffing the per-opltick [0x452] correspondence
+(FIST_OPLSEQ=1, AZER1 coop-pinned to [0x452]=9000) shows PERFECT LOCKSTEP native==wasm for [0x452] 1..4397
+(byte-identical audio for the whole menu+load+early-mission, ~78 s), then a SINGLE DISCRETE JUMP at exactly
+[0x452]=4398: native does 24692 MORE fist_opl_tick calls in that one tick-transition than wasm, after which
+the two resume lockstep with a CONSTANT +24692-opltick offset to [0x452]=9000.  Milestones (first opltick
+reaching each [0x452]): =1000 both 75033; =4000 gap 0; =4397 gap 0; =4398 gap 24692; =5000 gap 24692;
+=9000 native 1074680 / wasm 1049988 (gap 24692).
+INTERPRETATION: at the single in-mission frame [0x452]=4398 the engine enters a SPIN-WAIT that native
+services 24692 times while [0x452] is frozen, wasm far fewer -- i.e. a poll on some I/O/timer condition that
+resolves at a different rate native vs wasm.  Each spin iteration does an I/O port access whose out()->
+fist_timer_pump coupling fires fist_opl_tick, so native's longer spin injects 24692 extra OPL samples,
+shifting the whole post-4398 audio stream out of phase (the mid-stream content divergence).  Independently,
+native generates FEWER samples-per-opltick than wasm (native 1074681 oplticks but the SHORTER 16951330-B WAV
+vs wasm 1049989 oplticks / 19403836 B) -> the PIT0 divisor (fist_vga_pit0_div, the div in fist_opl_tick's
+g_rate*div/PIT_HZ) also differs in-mission: two coupled facets of the same in-mission timing-model skew.
+NEXT (bounded, sharp): instrument the [0x452]=4398 spin -- capture cs:eip / the polled port during native's
+24692-iteration stall (FIST_WATCH* or a spin-counter in out()) to name the exact poll (vsync retrace? SB DMA
+position? a tick-counter compare?), then make that poll deterministic native==wasm (the faithful fix, at the
+shim I/O boundary -- the same class as the menu-audio re-entrancy guard).  Menu/intro audio: CLOSED.
