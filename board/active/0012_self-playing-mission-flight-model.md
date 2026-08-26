@@ -317,3 +317,31 @@ So the two remaining problems are now sharp:
 TURN NET: proved the combat + win/lose logic is DECOMPILED and partially FIRES (b2ef, a296 drops); the
 blockers are now precisely (A) the non-deterministic present-hack must become the faithful per-frame
 signal, and (B) the fire->hit->damage chain must be made to sustain (oracle-diff).  Both bounded + tooled.
+
+## SOBERING CORRECTION: combat is HOST-POINTER-dependent, deterministically ZERO (2026-08-26)
+
+Ran the b2ef instrumentation under setarch -R (ASLR OFF) for reproducibility: 3 runs = 0, 0, 0 destroys.
+With ASLR ON: 3, 0, 0.  So the earlier "b2ef fires, a296 16->14" was a HOST-POINTER FLUKE -- garbage
+native ELF addresses (varying per-run under ASLR) happened to steer a few spurious destroys.
+DETERMINISTICALLY the port does ZERO combat: the fire->hit->damage->b2ef chain never completes; no
+attrition, no resolution.  (Disarming the async SIGALRM under FIST_COOP_TICK=1 did NOT change this -> the
+non-determinism is NOT the SIGALRM double-tick, it is the board:0003 host-pointer class in the mission sim.)
+
+So the real, deeper blocker is now correct: the in-mission simulation is PERVASIVELY host-pointer-dependent
+(board:0003) -- native pointers stored in g_mem drive control flow in the AI/targeting/hit/damage path, so
+(a) it is non-deterministic run-to-run (ASLR) and (b) with real/deterministic memory the combat logic
+takes the wrong branches and never registers a hit.  This is the SAME host-pointer determinism class that
+board:0003 tracks for audio, but pervasive across the flight/combat model.  native==wasm is impossible
+until those pointer dependencies are made faithful (16-bit engine offsets, not host addresses).
+
+CONCRETE NEXT (correctly scoped): the mission-sim host-pointer migration -- oracle-diff the port's per-tick
+object writes vs the DOSBox oracle (FIST_WATCHPHYS=0x3b14c) UNDER setarch -R for a reproducible baseline,
+find the first divergent write, trace it to the host-pointer store/deref that caused it (the 349/384/b2ef-
+patch class), make it faithful, repeat until the fire->hit->damage->b2ef chain completes and a side
+depletes to 0 IDENTICALLY on native (any ASLR) and wasm.  Plus the op-0x24 render (board:0001).  This is
+the deep pointer-model migration the project always knew the missions needed -- now proven to gate combat.
+
+TURN NET (honest): sim runs; handshake faithful; oracle addressing solved; combat+win/lose DECOMPILED and
+located; BUT combat is deterministically zero -- gated on the pervasive mission-sim host-pointer migration
+(board:0003 class) + render.  The earlier "combat fires" was an ASLR artifact.  The blocker is deep but
+correctly identified and tooled (oracle-diff under ASLR-off).
