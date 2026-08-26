@@ -1,0 +1,27 @@
+board:0012 flight-model pointer-model migration: FUN_0000_9aa1 per-object lifecycle counter base-loss (asm-verified WORD @ g_mem+0x1c000+off+0x19)
+--- a/fist.c
++++ b/fist.c
+@@ -25925,13 +25925,16 @@
+ 
+ {
+   int iVar1;
+-  
+-  *(int *)(param_2 + 0x19) = *(int *)(param_2 + 0x19) + 1;
+-  if ((((*(int *)(param_2 + 0x19) != 0x32) && (*(int *)(param_2 + 0x19) != 400)) &&
+-      (*(int *)(param_2 + 0x19) != 0x2ee)) &&
+-     (((*(int *)(param_2 + 0x19) != 0x44c && (*(int *)(param_2 + 0x19) != 0x5aa)) &&
+-      (*(int *)(param_2 + 0x19) != 0x708)))) {
+-    if (*(int *)(param_2 + 0x19) != 0x866) {
++  /* PATCH 414 (board:0012 flight-model pointer-model migration): asm 0x9aa1 -- per-object lifecycle
++     method dispatched by c0e5 (patch 243) with DI = the object DGROUP near-offset (DS=DGROUP=0x1c00).
++     asm `inc WORD PTR [di+0x19]` then `cmp WORD PTR [di+0x19],imm` (0x32/0x190/0x2ee/0x44c/0x5aa/0x708/
++     0x866): a WORD age counter; at 0x866 -> destroy (b2ef).  Ghidra base-lost it (param_2 as host int*,
++     4-byte).  Rebase to g_mem+0x1c000 + (uint16_t)(off+0x19), WORD width (asm-verified). */
++  unsigned short *ctr = (unsigned short *)(g_mem + 0x1c000 + (unsigned short)(param_2 + 0x19));
++  *ctr = *ctr + 1;
++  if (((*ctr != 0x32) && (*ctr != 400) && (*ctr != 0x2ee)) &&
++     ((*ctr != 0x44c && *ctr != 0x5aa) && *ctr != 0x708)) {
++    if (*ctr != 0x866) {
+       return;
+     }
+     iVar1 = FUN_1000_b354(param_2);
