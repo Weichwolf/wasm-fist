@@ -1061,3 +1061,20 @@ per-frame registry: does the emitter transiently become type 4, or is a pool obj
 The DESPAWN mechanism itself (bab4, type 4) is now identified in-engine -- the gap is purely getting the
 effect to BE type 4.  Movement (416) + targeting/damage (417) landed; combat works; goal UNMET; the last
 blocker is now diagnosed to a single field (the effect's dispatch type) + its allocation source.
+
+## Confirmed: effect needs a FRESH type-4 object (naive type-set crashes) (2026-08-26)
+
+Diagnostic (FIST_EFFTYPE4, reverted): forced the ba33-registered effect object to type 4 (-> bab4 despawn).
+Result: SEGFAULT (exit 139).  The registered object IS the live emitter being processed; changing its type
+mid-flight makes bab4 deref its (weapon-shaped, not effect-shaped) fields -> crash.  This PROVES the fix is
+NOT "repurpose the emitter" but "register a FRESH type-4 effect object" from the object pool that patch 258
+approximated (it registered the emitter as a stand-in because the fresh-effect source was unresolved).
+
+FINAL DIAGNOSIS (as sharp as possible without oracle/Ghidra): combat works (416+417); the mission does not
+resolve because weapon hit-effects are registered as the type-0x10 emitter (update b51f, never despawns)
+instead of a fresh type-4 effect (update bab4, despawns after its animation).  a294 leaks -> b1d6 guard
+blocks sustained fire.  The despawn mechanism (bab4) and the correct effect type (4) are identified
+IN-ENGINE; the single missing piece is the fresh-type-4-effect ALLOCATION SOURCE (an object pool) that the
+b51f->ba49->ba33->b1df asm passes as di=emitter.  Resolving it needs the oracle (observe the correct
+per-frame registry: where the fresh effect object comes from) or Ghidra (board:0010 systematic CS-context).
+Both unavailable here.  This is the precise, minimal remaining work for a RESOLVED mission.
