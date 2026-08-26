@@ -896,3 +896,26 @@ that never trips; asm-verify + patch (416/258 idiom).  Once one class of display
 falls below 0x78 and the 9caa->b1d6 weapon spawn (already correct, patch 270) proceeds -> combat.
 Movement (416) stands; goal UNMET; the fire chain is now traced end-to-end to a single narrow defect class
 (display-object expiry/despawn), everything upstream (spawn) and the win metric confirmed correct.
+
+## MEASURED: a294 leak is POST-COCKPIT type-4 display-object registration (2026-08-26)
+
+Instrumented b21d (side-count) per call.  DECISIVE: of 143 b21d calls, 99 are AFTER cockpit entry
+(incock=1).  a294 climbs to ~44 at load-end (units+trees), then to the 0x96 cap POST-cockpit via ~99
+registrations of TYPE 4 (side=0): these are the b1df(4, di) display-object registrations from the
+b51f/b583 emitters (each phase re-registers -> +a294).  They NEVER despawn (b2ef=0) -> a294 saturates ->
+b1d6 weapon-spawn guard blocks fire.  So the leak is unambiguously the per-frame/per-phase type-4 display
+objects not being reclaimed.
+
+NEXT LEAD (concrete): FUN_0000_462e = `b1df(param_1,param_2); if(!CF) c296(param_2)` -- register THEN call
+FUN_0000_c296.  c296 (+ the type-4 update method vtable[4] @ DGROUP:(8-0x1bac)) is the likely
+reclaim/despawn-schedule path for these transient display objects.  Trace c296 and the type-4 update:
+find where a type-4 object's lifetime/rendered-flag should trip its b354->b2ef reclaim, and why it never
+does in the port (base-lost expiry read, or the reclaim tied to the op-0x4c render that FIST_SIMRUN stubs).
+Strong secondary hypothesis: the reclaim is part of the op-0x4c display-list PRESENT (the goal's named
+render frontier) which FIST_SIMRUN only ready-bit-stubs -> the render never consumes+reclaims the
+transient display objects -> they leak.  If so, the fix is implementing op-0x4c faithfully (not the stub).
+
+STATUS: movement fixed+verified (416); fire blocker measured to the type-4 display-object reclaim; goal
+UNMET.  The chain is: [emitters register type-4 display objs each phase] -> [never reclaimed: b2ef=0] ->
+[a294 -> 0x96 cap] -> [b1d6 guard blocks weapon spawn] -> [no projectiles/hits/destroys] -> [goals stuck].
+Fixing the type-4 reclaim (or the op-0x4c render that should do it) is the single remaining blocker.
