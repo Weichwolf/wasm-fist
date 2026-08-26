@@ -370,3 +370,15 @@ correctness; plus the op-0x24 windshield render (board:0001).  Both are large bu
 oracle-falsifiable, and use the proven decompile->patch method.  The goal (deterministic resolved win/lose
 native==wasm) is unmet and is a substantial multi-session reconstruction from here -- but every wall that
 made it look impossible is down, and the work is a defined migration + render, not a mystery.
+
+## Migration STARTED: patch 414 (FUN_0000_9aa1 lifecycle base-loss) landed (2026-08-26)
+
+First concrete step of the flight-model pointer-model migration.  FUN_0000_9aa1 (a c0e5-dispatched
+per-object lifecycle method, asm 0x9aa1) had its WORD age counter [di+0x19] base-lost by Ghidra
+(param_2 as host int*, 4-byte).  Fixed: rebase to g_mem+0x1c000 + (uint16_t)(off+0x19), WORD width
+(asm-verified: `inc WORD PTR [di+0x19]` + word cmps 0x32..0x866; c0e5/patch-243 confirms DS=DGROUP=0x1c00,
+DI=object near-offset).  Matrix-neutral: the AZER1 mission-cockpit spawn frame is byte-identical with and
+without 414 (the sim is near-frozen by default without FIST_SIMRUN, so the method barely runs on the
+covered flows).  One of DOZENS of object-update methods still to migrate the same way; the systematic
+driver is the oracle registry-write diff (FIST_WATCHPHYS=0x3b14c under setarch -R) to prioritize the
+methods on the fire->hit->damage->b2ef path and asm-verify each rebasing.
