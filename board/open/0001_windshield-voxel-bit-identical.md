@@ -307,3 +307,21 @@ or (c) a wasm codegen/FP path.  DECISIVE NEXT: native+wasm gdb of ONE 0f99 call 
 dump puVar6[0..10], uVar3, uVar5, bVar2 on BOTH targets and diff, to see which input actually differs.
 cause-1 reverted (does not reach native==wasm alone).  cause-2 + cause-3 remain LANDED + 10x-gate-validated;
 cause-4 is the genuine last menu/intro audio blocker and its input has not yet been pinned.
+
+CAUSE-4 FULLY PINNED (2026-08-26, gdb): the divergent OPL level (reg 0x44 native 0x8f / wasm 0x80) is
+written by 10e3 (note key-on velocity path) <- 0aa7, NOT 0f99.  10e3's level = (D[uVar3+0xbdd] | ((vel>>2)
++0x20)) ^ 0x3f; back-solving -> D[channel+0xbdd] = native 0x80 / wasm 0x8f AT THE WRITE.  D[+0xbdd] is set
+by 0f99 as `puVar6[1]` = instrument-record byte 1, puVar6 = D + PROGRAM*0x10 + 0x1dd.  The memdump at
+[0x452]=5000 shows D[+0xbdd] + the records IDENTICAL -> the divergence is TRANSIENT: at the key-on (adv
+~4262) D[+0xbdd] held a wild value that later converged.  MECHANISM: the es=0 pre-song (cause-1) feeds 0f99
+GARBAGE program numbers -> puVar6 indexes PAST the identical records into host-pointer-divergent memory
+(extender 0x100000+) -> the transient per-channel base level D[+0xbdd] diverges -> the key-on level diverges
+native<->wasm.  So cause-4 == cause-1 (the es=0 garbage) via the TRANSIENT base-level, resolving the earlier
+apparent contradiction (the persistent records are identical; the transient wild read is the divergence).
+OPEN: the earlier INTRO.MS3-load test still diverged -> either the es=0 song still plays a window before
+INTRO.MS3 registers (a key-on in that window latches the wild base level), or the c378 single-slot load
+lands INTRO.MS3 a few ticks later than the first es=0 key-on.  NEXT (decisive): with INTRO.MS3 loaded, gdb
+whether 0f99 EVER sees a garbage (>N) program; if yes, tighten cause-1 so INTRO.MS3 registers BEFORE the
+first key-on (or gate 0f99 to skip out-of-range programs faithfully per asm 0x99 `if (8<bVar2) return`,
+which already guards voice but not program).  cause-2 + cause-3 LANDED + 10x-gate-validated; cause-4 is the
+es=0-garbage transient, now understood end-to-end.
