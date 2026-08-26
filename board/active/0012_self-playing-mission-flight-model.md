@@ -120,3 +120,20 @@ REMAINING to reach a resolved win/lose native==wasm:
   4. op-0x1c (dde2) is still stubbed -- determine what the extender op-0x1c must do and whether the sim
      needs it (physics?) vs c0e5 alone.
   5. Run to a resolved win/lose; then wasm byte-identical.
+
+## Visual confirmation + the render frontier (2026-08-26)
+
+Captured the port windshield with FIST_SIMRUN (scratchpad/simfb.png): the COCKPIT renders (dashboard,
+MPH/compass gauges, AUTO CONTROL, FIRE, READY) and the RADAR shows LIVE unit blips -- the sim state is
+visibly driving the HUD.  So the flight model runs and feeds the instruments.  The WINDSHIELD (top) is
+garbage blue static: the op-0x24 / 9200 voxel-terrain render is still broken (board:0001) -- a RENDER
+frontier, independent of the now-working sim.  The "GOALS REMAINING" HUD text is also not painting (HUD
+text render + the goals-count base-loss).
+
+So the two remaining fronts are now cleanly separated:
+  A. SIM (this board): runs; make the present-complete faithful+default; fix goals-count base-loss; verify
+     object writes tick-for-tick vs the oracle transaction log; reach a resolved win/lose; wasm identical.
+  B. RENDER (board:0001): the windshield voxel terrain (op-0x24 -> 85d0 camera -> 8120 proj -> 9200 texel
+     walk) + viewport geometry, so the simulated frames actually draw.
+The DoD needs BOTH (every simulated frame produced), but they are now independently attackable, and the
+hard blocker (a totally frozen sim) is CLEARED.
