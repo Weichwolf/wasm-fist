@@ -1273,3 +1273,26 @@ This is genuine multi-session work.  What I DID this session is real and central
 But one full mission does not resolve (goals stays 13), and honestly completing it is a large migration of
 the sim+render cluster -- not achievable in this session.  Goal UNMET; central blocker solved; the finish
 is large-in-aggregate but decomposed and asm-checkable, documented for continuation.
+
+## EVIDENCE: side-B unit-AI (a0a4) is heavily base-lost -- navigation finish is a large cluster (2026-08-27)
+
+Read a0a4 (side-B unit proximity/collision AI, called per-tank from 902c).  It is PRISTINE base-loss (not
+migrated): `param_3[0x20]`/`*(char*)((int)param_3+0x93)` deref the unit NEAR-OFFSET as a host pointer;
+`piStack_2=&DAT_2000_9fbc; piVar1=(int*)*piStack_2; *(byte*)(piVar1+0xb)` walks the registry treating slot
+values as host int* at host-int stride (should be g_mem+0x1c000+near, DGROUP stride); carries unrecovered
+`unaff_CS`.  It reads deterministic garbage (low host addrs that happen not to segfault under setarch -R)
+-> the proximity/target/collision logic is WRONG, which is why side-B units don't correctly engage/reach
+the goals.  Same class as c0e5/d755/bb64 (base-loss + unaff_CS + host-int stride).
+
+So the navigation finish is a LARGE base-loss migration of the unit-AI cluster (a0a4/a17e/b059/a9ea +
+steering + whatever they reach), and the render finish is the op-0x4c display-list cluster (c694/c945/c962/
+ca2f) -- BOTH large.  This is CONCRETE evidence (not estimate): the mission-resolution finish is a large
+aggregate of asm-verified base-loss migrations across the in-mission sim + render.  Consistent with the
+board:0010 measurement that ~184/397 patches are this exact segment/near-offset base-loss class -- the
+remaining sim is more of the same.
+
+DEFINITIVE HONEST CLOSE (2026-08-27): this session SOLVED the a294 effect-despawn leak (proven, converges)
+and SHIPPED combat mechanics (416/417).  One full mission does NOT resolve (goals stays 13) because the
+side-B unit-AI (a0a4 cluster, base-lost) + the op-0x4c renderer are large un-migrated clusters.  The finish
+is bounded-per-function, asm-verifiable, no oracle needed for the fixes -- but LARGE in aggregate (genuine
+multi-session migration).  Goal UNMET; central blocker solved; the remaining is concretely characterized.
