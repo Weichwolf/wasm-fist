@@ -369,3 +369,20 @@ play-gate would silence the garbage (native==wasm) but leaves a silent intro gap
 plays intro music from t=1045ms) -> not bit-identical, and it is a guard CLAUDE.md forbids -- so NOT taken.
 STATE: cause-4 root fully understood (es=0 velocity); cause-1 fix is intro-time init-ordering (deep, shared
 with the windshield/extender readiness this board tracks).  cause-2 + cause-3 remain LANDED + 10x-validated.
+
+CAUSE-1/4 -- TWO EARLIER CONCLUSIONS CORRECTED (2026-08-26, deeper gdb):
+  (A) "250d can't allocate at intro" was WRONG: with the single-slot c378, 250d SUCCEEDS -- g_mm_cf=0,
+      descriptor[DGROUP:0x9f1c]=0x4b16 (a valid loaded segment); INTRO.MS3 loads fine.
+  (B) be0e(0)'s 0af4 DOES register INTRO.MS3: watchpoint on [ds:0x6] shows 0af4 writing 0x4b16 then 0x4cc1
+      (valid segs), never 0.
+  BUT the 0aa7 key-ons still read [ds:0x6]=0 (confirmed via both DAT_0831-derived and hardcoded address,
+      db=0x3ce9).  RECONCILIATION: the es=0 garbage key-ons fire BEFORE be0e(0)'s 0af4 registers INTRO.MS3
+      -- i.e. the sequencer is already PLAYING (firing key-ons) on the INITIAL [ds:0x6]=0 state, during boot,
+      before the intro screen-enter.  So the single-slot INTRO.MS3 load at be0e(0) is TOO LATE; the divergent
+      garbage already played in the pre-registration window.  cause-4's true fix = prevent the sequencer from
+      playing before the FIRST song registers (find what sets [ds:0xe]=playing while [ds:0x6]==0 during boot,
+      and stop it -- the faithful root, since an unregistered song must not be dispatched).  OPEN: a full
+      [ds:0xe]+[ds:0x6] timeline from process start is needed to find who enables playback pre-registration
+      (my session-start trace attributed [ds:0xe]=0xffff to be0e(0)'s 0af4, but the key-ons precede it -- so
+      there is an earlier enable).  cause-2 + cause-3 remain LANDED + 10x-validated; cause-4 root refined to
+      "playback enabled before first song registration" (boot-time), not the intro-load timing.
