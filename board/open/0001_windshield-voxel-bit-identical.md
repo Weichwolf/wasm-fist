@@ -295,3 +295,15 @@ wasm chain is: cause-2 (LANDED) + cause-3/patch385 (LANDED) + cause-1 (INTRO.MS3
 three, the garbage program indices are gone and cause-4 should resolve.  NEXT: re-apply cause-1 on the
 cause-2+3 base and re-measure the level convergence (the earlier INTRO.MS3 test was on the pre-patch-385
 base).
+
+CAUSE-4 HYPOTHESIS DISPROVEN (2026-08-26) -- SELF-CORRECTION: re-applied cause-1 (INTRO.MS3 load, valid
+programs) ON TOP of cause-2 + cause-3/patch385 and re-measured -- audio-intro [0x452]=4000 STILL differs
+(2.17M bytes).  So cause-4 (instrument LEVEL divergence) is NOT the es=0 garbage-program-index issue: it
+persists with VALID INTRO.MS3 programs.  0f99 reads level = puVar6[6] from D+program*0x10+0x1dd (the driver-
+DS record region, which the memdump showed IDENTICAL) yet the level still diverges -> the real cause-4 is
+either (a) the INTRO.MS3 instrument records are loaded to a location that IS native!=wasm (not the region I
+sampled), or (b) 0f99's reg-base uVar3/uVar5 = D[uVar4+0xbef/0xbf8] differ (uVar4 = D[(param_2>>8)+0xc01]),
+or (c) a wasm codegen/FP path.  DECISIVE NEXT: native+wasm gdb of ONE 0f99 call (same param_1/param_2) --
+dump puVar6[0..10], uVar3, uVar5, bVar2 on BOTH targets and diff, to see which input actually differs.
+cause-1 reverted (does not reach native==wasm alone).  cause-2 + cause-3 remain LANDED + 10x-gate-validated;
+cause-4 is the genuine last menu/intro audio blocker and its input has not yet been pinned.
