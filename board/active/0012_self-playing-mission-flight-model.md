@@ -404,3 +404,24 @@ STATUS: goal unmet (deterministic combat=0, no win/lose, render+wasm pending), B
 now a bounded work-list (6 methods + their combat-path callees), 2 bricks landed, determinism improving,
 each step matrix-neutral + asm-verified.  The "large multi-session" estimate is really "finish a bounded,
 enumerated method set" -- much smaller than feared.
+
+## Combat break PINPOINTED: units never fire (upstream AI residual base-loss) (2026-08-26)
+
+Instrumented the object-REGISTER (FUN_1000_b1a2, fire/spawn) + DESTROY (b2ef) over AZER1 (setarch -R):
+  - registers: 4, ALL at t=274 (obj 0x0000/0x0001/0x001b) = the initial mission unit spawns; then ZERO
+    more.  destroys: 0.
+So post-spawn the port creates NO projectiles -> units NEVER FIRE -> no hits -> no attrition -> no win/lose.
+The break is UPSTREAM of projectiles (bc46 is fine now): in the unit AI/fire-decision path inside the
+type-0..3 update methods FUN_0000_7c1d/87df/902c/97d5.  These are only PARTIALLY migrated (they carry
+base-rebase markers AND 7-8 raw param-offset derefs); the residual raw derefs are the AI/targeting reads
+that decide to fire -> reading garbage -> the AI never fires b1a2.  NEXT TARGET: audit each unit method's
+raw derefs (asm-verify obj vs non-obj params), rebase the object-field ones (g_mem+0x1c000+off, correct
+widths), until b1a2 is called by the AI post-spawn (units fire) -> projectiles (bc46) -> hit -> b2ef ->
+a294/a296 deplete.  Then the same for the friendly/enemy AI symmetry.  Combat break is now a specific,
+located residual-base-loss audit of 4 functions, not open-ended.
+
+PROGRESS THIS SESSION: sim runs; handshake faithful; oracle addressing solved; combat+win/lose DECOMPILED
+and located; work-list BOUNDED (6 AZER1 update methods); patches 414+415 landed (matrix-neutral, determinism
+improved); combat break PINPOINTED to the unit-method AI-fire residual base-loss (units never fire).  Goal
+unmet (0 combat, no win/lose, render+wasm pending) but the remaining combat work is a located audit of 4
+unit methods' object derefs -> the mechanical migration loop continues.
