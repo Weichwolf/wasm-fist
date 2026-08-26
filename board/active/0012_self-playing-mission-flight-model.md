@@ -597,3 +597,33 @@ find why it never fires -- almost certainly a base-lost target/LOS/range read (t
 class) that always yields "no target".  Confirm the fire cadence + a294 trajectory against a correctly
 re-anchored oracle.  Corrects the prior "settled: extender reconstruction" -- combat is decompiled
 FIST.DAT; the break is a base-loss in the update-method subtree.
+
+## MAP: unit type -> c0e5 update method -> side (AZER1, port, correct addressing) (2026-08-26)
+
+Extended FIST_DUMP_REG (shim, gated) to print each object's c0e5 dispatch: method = *(u16*)(dg +
+(u16)(type*2 - 0x1bac)), and the b21d side flag = dg[(u16)(type-0x19ec)]&1 (indexed by TYPE).  AZER1 roster:
+
+  side | type | count | update method (FUN_0000_) | role
+  -----+------+-------+---------------------------+---------------------------
+   A(0)| 0x10 |  59   | b51f                      | enemy units (aggressor side)
+   A(0)| 0x15 |  27   | 9c4f                      | trees (== DAT_530a tree count)
+   A(0)| 0x1a |   6   | bc46                      | props/effects (patch 415 migrated)
+   A(0)| 0x1b |   6   | b355                      | props/effects
+   B(1)| 0x00 |   2   | 7c1d                      | PLAYER (slot c05c, index 0)
+   B(1)| 0x01 |   2   | 87df                      | player-side unit
+   B(1)| 0x02 |   9   | 902c                      | player-side tanks
+   B(1)| 0x03 |   3   | 97d5                      | player-side unit
+
+VALIDATION: side-B (t=0,1,2,3) sums to 2+2+9+3 = 16 == a296 -> the type-indexed side flag is CORRECT.
+Side-A live = 59+27+6+6 = 98, but a294=150 (capped 0x96) -> ~52 phantom side-A registrations (over-count
+confirmed; b1a2/b21d load path double-counts or the .FSG exceeds the cap -- a load base-loss candidate).
+
+FIRE GATE (FUN_0000_b51f, the 59 enemy 0x10 units): increments [param_2+0x19] each call; every 32 ticks,
+per an 8-phase bitmask DAT_2000_5646[phase], if the phase-bit in [param_2+0x1b] is clear it accumulates a
+position+offset (DAT_5c8b/5c8f) and, on CARRY, sets the bit and calls FUN_0000_c31e(0,10,param_1,DAT_5a25)
++ FUN_0000_ba49(0x9c15,...) -- the candidate fire/spawn.  param_2 is used as a RAW object pointer
+(param_2+0x19/+0x1b/+0x1c) -> the base-loss surface: if param_2 is the raw near-offset (not g_mem+0x1c000+
+off) the gate reads/writes garbage and never carries -> never fires.  NEXT SESSION: verify param_2's base
+at the c0e5->b51f/902c dispatch (the object pointer register), migrate the fire-gate derefs (414/415/363
+class) so the carry/bitmask math is faithful, and confirm firing + b2ef destroys against a correctly
+re-anchored oracle.  This is the singular remaining frontier: per-update-method fire-gate base-loss.

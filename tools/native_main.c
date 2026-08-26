@@ -642,8 +642,9 @@ void fist_timer_pump(void){
             unsigned short s=fbc[i*2], v=fbc[i*2+1];
             if(!s) continue;
             unsigned short t=*(unsigned short*)(dg+s);
-            unsigned char disc=dg[(unsigned short)(s-0x19ec)];
-            fprintf(stderr,"[dumpreg] [%3d] slot=%04x val=%04x t=%04x disc=%02x body:",i,s,v,t,disc);
+            unsigned char side=dg[(unsigned short)(t-0x19ec)]&1;   /* b21d side flag is indexed by TYPE */
+            unsigned short moff=*(unsigned short*)(dg+(unsigned short)(t*2-0x1bac));  /* c0e5 update-method offset */
+            fprintf(stderr,"[dumpreg] [%3d] slot=%04x val=%04x t=%04x side=%d upd=%04x body:",i,s,v,t,side,moff);
             for(int b=0;b<0x2a;b+=2) fprintf(stderr," %04x",*(unsigned short*)(dg+(unsigned short)(s+b)));
             fprintf(stderr,"\n");
           }
