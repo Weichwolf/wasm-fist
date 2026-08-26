@@ -241,3 +241,21 @@ entries are RUNTIME-OVERWRITTEN with a native-vs-wasm-divergent value -- a drive
 (board:0003 class), NOT the g_mem-base truncation (alignment had no audio effect).  NEXT: watchpoint the
 writer of driver_ds:0x12 (and 0x1c1) to find the divergent input (likely a host-pointer low-16 or a
 call-arg the __allregs vector site drops, cf. patch 384) and thread the faithful 16-bit value.
+
+AUDIO DETERMINISM -- 2 OF 4 LAYERS LANDED (2026-08-26):
+  cause-2 (re-entrant cadence) -- LANDED (g_in_isr atomic tick); 10x DoD gate 10/10.
+  cause-3 (dropped AX command word) -- LANDED (patch 385: thread be58->c530 AX; asm 0xbe4f-0xbe66).
+    Result: note COUNT + driver-DS state converged native==wasm; matrix 177/177.
+  cause-1 (es=0 intro garbage) -- fix ready (single-slot INTRO.MS3 load); with cause-2+3 fixed the note
+    count AND the WAV LENGTH are now native==wasm IDENTICAL (17760300 both) when INTRO.MS3 loads -- but
+    blocked by cause-4.
+  cause-4 (instrument-APPLY level divergence) -- NEW residual + the last blocker: with all above, the OPL
+    LEVEL registers (0x40-0x55) still differ -- native writes the real instrument levels, wasm writes the
+    base (0x80/0x00).  0fab's level write is (record_byte ^ 0x3f); native record_byte=0x22 / wasm 0x3f, so
+    wasm reads a level of 0.  The g_mem diff is down to 128 bytes: driver 0x39d66 = native 0x91fd / wasm 0
+    (a level/timbre source populated on native, 0 on wasm) + the extender region 0x100000+ (88 host-ptr
+    bytes).  So cause-4 is 0fab/0f99 reading an instrument-level source that is host-populated on native and
+    empty on wasm -- another board:0003 host-value site.  This breaks audio-intro if INTRO.MS3 loads (the
+    level divergence is inside the [0x452]=4000 window), so cause-1's INTRO.MS3 load is reverted until
+    cause-4 lands.  NEXT: watchpoint driver_ds region 0x39d66 (and 0fab's puVar6/level source) to find the
+    host-populated-only value.  Two of four audio-determinism layers are now LANDED + matrix-clean.
