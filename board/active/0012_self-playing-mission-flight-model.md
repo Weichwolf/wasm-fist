@@ -1038,3 +1038,26 @@ asm-verified matrix-safe patches (416 movement, 417 targeting+damage x2 fields).
 it does not yet RESOLVE (one side to 0) because the effect despawn (a294 leak) halts sustained combat.
 That single remaining blocker is precisely scoped to the op-0x4c render / ba49-effect-alloc frontier -- the
 goal's own named "per-frame render path" clause.  Goal UNMET (no resolved win/lose) but combat proven.
+
+## SHARPEST: despawn = bab4 (type 4); effects mis-registered as the type-0x10 emitter (2026-08-26)
+
+Dumped the c0e5 type->update vtable (FIST_VTDUMP, gated, in native_main.c):
+  type 04 -> bab4  (the DESPAWN animation update: dec [di+0x20] timer, advance [di+0x19] frame, and when
+                    [di+0x19]==[di+0x1e] -> b354->b2ef DESPAWN.  ba5d sets up exactly these fields.)
+  type 10 -> b51f  (the WEAPON: bb64 find-target -> c31e damage -> ba49 spawn effect.)
+So the weapon-spawned EFFECT should be a TYPE-4 object (despawns via bab4 after its animation), and
+b1df(4, di)'s "4" is precisely that intended effect type.  BUT the fire chain (b51f b57b `pop di` ->
+ba49 -> ba33 -> b1df) registers DI = the type-0x10 EMITTER itself, whose update stays b51f (fires forever,
+never despawns) -> a294 leaks.  ba5d inits the bab4 animation fields on it, but its dispatch TYPE ([di+0])
+is never set to 4 (checked b51f/ba49/ba33/ba5d/b1df/b21d asm -- none writes [di+0]).  So the effect is
+born as the emitter (type 0x10) and runs the weapon update instead of the despawn update.
+
+This is the exact mechanism of the a294 leak, and it IS patch 258's documented deviation ("ba49 registers
+the object ... revisit with the bb64 DAT_5a25 population").  The correct behaviour registers a FRESH
+TYPE-4 effect object (from an object pool / DAT_5a25) with [obj+0]=4, which despawns via bab4.  The port's
+asm-faithful chain registers the emitter as a stand-in.  Resolving it needs the fresh-type-4-effect source
+(the object pool the decompile/patch 258 approximated), which needs the oracle (to observe the correct
+per-frame registry: does the emitter transiently become type 4, or is a pool object allocated?) or Ghidra.
+The DESPAWN mechanism itself (bab4, type 4) is now identified in-engine -- the gap is purely getting the
+effect to BE type 4.  Movement (416) + targeting/damage (417) landed; combat works; goal UNMET; the last
+blocker is now diagnosed to a single field (the effect's dispatch type) + its allocation source.

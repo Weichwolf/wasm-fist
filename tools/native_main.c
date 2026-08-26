@@ -638,6 +638,7 @@ void fist_timer_pump(void){
           fprintf(stderr, "[dumpreg] in-mission; DAT_2000_530a(tree count)=%u\n",
                   *(unsigned short*)(g_mem+0x2530a));
           unsigned short *fbc = (unsigned short*)(dg + 0xdfbc);   /* DAT_2000_9fbc {slot,val} x0xb6 */
+          if(getenv("FIST_VTDUMP")){ for(int ty=0;ty<0x30;ty++){ unsigned short m=*(unsigned short*)(dg+(unsigned short)(ty*2-0x1bac)); if(m) fprintf(stderr,"[vt] type %02x -> upd %04x%s\n",ty,m,(m==0xbab4)?"  BAB4-DESPAWN":(m==0xb51f)?"  B51F-WEAPON":""); } }
           for (int i=0;i<0xb6;i++){
             unsigned short s=fbc[i*2], v=fbc[i*2+1];
             if(!s) continue;
