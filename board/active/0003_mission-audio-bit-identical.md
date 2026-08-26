@@ -2813,3 +2813,23 @@ NEXT (sharp): native gdb watchpoint on g_mem+0x1c74d (or 0x1c600) armed at oplti
 cs:eip and the host-pointer source it read; that names the exact store to make faithful (16-bit engine
 offset, not host ptr), the same patch class as 349/384.  Fixing it closes mission-audio AND removes one
 concrete member of the 149/57 host-pointer class -> progress on board:0001 too.  Menu/intro audio: CLOSED.
+
+*** CASCADE-ORIGIN WRITER NAMED (2026-08-26, gdb watchpoint on ds:0x074d armed at opltick 371720) ***
+The write that first injects the divergence is m_mga_FUN_0000_0197 (build/fist_mga.c:1015), a string-copy
+into DGROUP:0x740 (covers the first-diverging ds:0x074d..):
+    tseg = word[DGROUP:0x70a]; tbase = g_mem+(tseg<<4);
+    soff = word[tbase+bx];     src = tbase+soff;   dst = DGROUP:0x740;
+    do { c=*src++; *dst++=c; } while (c);          // strcpy(src -> DGROUP:0x740)
+Native copies 0xDA,0xDA,... (poison/uninitialised fill) while wasm copies real data (56 52 00..) -> the
+SOURCE pointer chain (tseg=word[0x70a] / bx / soff=word[tbase+bx]) resolves to a DIFFERENT g_mem location
+on native vs wasm.  Upstream, this path is reached from FUN_0000_19d1(param_1=60, param_2=0x0A4D02A9,
+param_3=1536) at fist.c:7919 (183f->19d1->...->0197): param_2 = 0x0A4D02A9 is a 32-BIT value far outside
+the 16-bit engine range -- a HOST POINTER.  The other onset offset ds:0x0600 also takes host-pointer
+dwords (native 0x00a04d1f vs wasm 0x0fbc3e78).  So the cascade origin is a host-pointer value flowing
+through FUN_0000_19d1 into the FUN_0000_0197 string/table lookup, making its source offset (bx/soff) and
+thus the copied bytes environment-divergent -- the board:0003/0001 host-pointer class, exact site named.
+NEXT (the fix): trace how FUN_0000_19d1's host-pointer param_2 becomes FUN_0000_0197's `bx` (the word
+index into tbase), and restore the faithful 16-bit engine offset there (patch class 349/384) so `src`
+resolves identically on both targets.  That single store closes mission-audio native==wasm for AZER1 AND
+removes a concrete member of the 149/57 host-pointer determinism class (board:0001).  Menu/intro: CLOSED;
+mission audio: root writer NAMED (fist_mga.c:1015 / FUN_0000_19d1 param_2 host-ptr), fix is next.
