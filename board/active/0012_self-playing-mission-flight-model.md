@@ -627,3 +627,35 @@ off) the gate reads/writes garbage and never carries -> never fires.  NEXT SESSI
 at the c0e5->b51f/902c dispatch (the object pointer register), migrate the fire-gate derefs (414/415/363
 class) so the carry/bitmask math is faithful, and confirm firing + b2ef destroys against a correctly
 re-anchored oracle.  This is the singular remaining frontier: per-update-method fire-gate base-loss.
+
+## ORACLE-ANCHOR BLOCKER + refined hypothesis (2026-08-26)
+
+Tried to compare the port's a294/a296 to the oracle's.  BLOCKED by the engine-under-paging anchoring:
+  - The 16-bit engine runs under the extender's PM paging (cr3=0000e000, paging=1; confirmed in a live
+    .cam.txt [seg] line).  At the 9200 render point DS is the extender's 4GB FLAT selector (dsb=10000000),
+    NOT the engine DGROUP.  So an engine DGROUP field's guest-PHYS is a paged translation, NOT derivable
+    by segment arithmetic, and the relocation differs per run.
+  - Every fixed anchor missed: FIST_WATCHPHYS=0x3b424 hit a TEXT buffer (ASCII 'H'/'I'/'J' written by
+    bc88, a string parser); 0x3aab4 (derived from a prior run's cs=2082) saw only 2 init-zeroing writes
+    across the whole 90s mission -> not a294.  The prior session's registry anchor 0x31190/0x3b14c does
+    NOT hold this run.
+  - FIST_WATCHFLAT is CR3-aware (the correct tool) but its histogram is emitted only in the final
+    fist_dump(), which needs SIGUSR2 -- broken in this env.  SIGUSR2 .ram.bin also does not fire here.
+  UNBLOCK PATHS (bounded, next session): (a) build a per-run registry-signature locator -- scan a broad
+  FIST_WATCHPHYS window during load for the deterministic roster slot values (c05c,c157,a022,...) to fix
+  the engine DAT_2000 phys THIS run, then a294 = base+0xa294; or (b) make FIST_WATCHFLAT emit live (patch
+  the DOSBox to append its flat-watch hits to .watch.txt per-write like WATCHPHYS does), then watch the
+  engine-flat linear 0x2a294 directly.  Either gives the tick-by-tick a294 the goal's transaction-log
+  comparison needs.
+
+REFINED LEADING HYPOTHESIS for "units move but never fire" (port defect, unproven): the FIST_SIMRUN
+present-complete stub (native_main.c:732) only ORs bit7 into d548 -- it runs NONE of the extender's
+per-frame 32-bit flight-model work.  Unit MOVEMENT is pure FIST.DAT velocity integration (needs no
+extender) and works (fp evolves).  Unit TARGETING (acquire enemy in range/LOS in the 3D voxel world) may
+require the extender's per-frame world/geometry computation, which SIMRUN starves -> the mobile-unit AI
+(902c/97d5/87df/7c1d -> shared a9ea/a0a4 targeting) never acquires a target -> never fires -> b2ef=0.
+If confirmed, the fix is the goal's core clause: implement the extender per-frame flight/combat model
+faithfully (not a ready-bit stub).  To confirm/refute WITHOUT the oracle: trace the mobile-unit AI
+targeting to the point it bails (no-target), and check whether the missing datum is extender-computed.
+Also testing an anchor-free A-vs-B signal now: oracle windshield inter-frame diff over the 90s mission
+(static standoff => tiny diffs; active combat => large diffs).
