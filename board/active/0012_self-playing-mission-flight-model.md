@@ -694,3 +694,27 @@ DRIVE toward + ENGAGE the goals so goals: 13 -> 0.  NEXT SESSION, in order:
   3. Track goals (not a294) as the win metric; mission resolves at goals==0.
 The win-metric correction + AUTO-CONTROL mechanism + A-confirmation (oracle is dynamic) are the durable
 gains; the goal (self-playing win/lose, byte-identical native==wasm) remains UNMET.
+
+## SHARPENED ROOT: mobile-unit position is base-loss-corrupted (2026-08-26)
+
+Tracked the player tank (registry idx 0, slot c05c, t=0) position (obj+4/+8 = 32-bit X/Y; verified vs the
+spawn dumpreg: X=0x039cea2c Y=0x119172a1) across 56000 ticks under FIST_SIMRUN + setarch -R:
+  t=314   X=60615212    Y=294744737     (= spawn 0x039cea2c / 0x119172a1, plausible world coords)
+  t=8000  X=1981957015  Y=868406021
+  t=16000 X=110378239   Y=-564112123
+  t=24000 X=1962079803  Y=-2012630267
+  t=32000 X=-1191408201 Y=817818885   ... (wild, sign-flipping, GB-scale jumps)
+A driving tank moves SMOOTHLY (small per-tick deltas).  These are random 32-bit jumps -> the mobile-unit
+MOVEMENT INTEGRATION is corrupted: the AUTO-CONTROL AI integrates position += velocity/heading, and a
+base-lost velocity/heading field (read from the raw near-offset instead of g_mem+0x1c000+off) makes
+position explode to garbage.  So the tank never coherently navigates to the goals -> never engages ->
+goals stuck at 13, b2ef=0.  The wild state also defeats targeting (no valid range/LOS) -> no fire.  ONE
+root, the 414/415/363 base-loss class, in the MOBILE-UNIT update subtree (902c/7c1d + shared movement
+callees 912d/90cd/9176/875f/a358 and targeting a9ea/a0a4).
+
+NEXT SESSION (concrete, ordered): (1) read FUN_0000_902c's movement callees (912d/90cd/9176 = the
+position/velocity integrators) and asm-verify which obj-field derefs are base-lost (raw param_4+off vs
+g_mem+0x1c000+off); (2) migrate them (patches/NNN, 363/414/415 idiom) so the player position integrates
+SMOOTHLY; verify via FIST_SIMTRACE that X/Y move in small deltas; (3) then targeting/fire should follow
+(goals begin to fall); track goals->0 as the win.  The oracle windshield (ref/oracle_azer1_selfplay/)
+is the visual truth: auto-control tank drives + "GOALS REMAINING" counts down.

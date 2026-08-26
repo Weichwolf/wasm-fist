@@ -669,9 +669,13 @@ void fist_timer_pump(void){
           /* DGROUP-relative offset of DAT_2000_XXXX = XXXX + 0x4000 (DAT base seg 0x2000 = DGROUP 0x1c00 + 0x400). */
           int a=*(unsigned short*)(dg+0xe294), b=*(unsigned short*)(dg+0xe296);
           long bucket=t/strace;
+          /* player tank = registry index 0 (slot c05c, t=0); track its position (obj+4,+8 = 32-bit X,Y)
+           * to see whether AUTO CONTROL is DRIVING it (position moves) or it sits idle. */
+          unsigned short ps=fbc[0]; long px=0,py=0; int pctl=0;
+          if(ps){ px=*(int*)(dg+(unsigned short)(ps+4)); py=*(int*)(dg+(unsigned short)(ps+8)); pctl=dg[(unsigned short)(ps+0x17)]; }
           if (live!=plive||a!=pa||b!=pb||goals!=pg||bucket!=hb){
-            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d%s\n",t,live,goals,a,b,
-              (live!=plive||a!=pa||b!=pb||goals!=pg)?"  <<CHANGE":"");
+            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d  player{slot=%04x X=%ld Y=%ld f17=%02x}%s\n",
+              t,live,goals,a,b,ps,px,py,pctl,(live!=plive||a!=pa||b!=pb||goals!=pg)?"  <<CHANGE":"");
             plive=live;pa=a;pb=b;pg=goals;hb=bucket;
           }
         }
