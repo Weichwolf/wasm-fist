@@ -280,3 +280,18 @@ one target but reads 0 on the other.  Fixing it needs the cross-target (native+w
 exact reg-0x40..0x55 level write's data source -- deferred until the 10x gate (validating cause-2 + patch
 385) frees the build.  Two of four audio-determinism layers landed + gate-validating; cause-4 is a
 board:0003 host-pointer site feeding the level path (not a single fixable byte, so no quick thread).
+
+CAUSE-4 MECHANISM (2026-08-26, gdb+static): the divergent OPL level is written by 0f99 (instrument loader),
+`level = puVar6[6] ^ 0x3f` where puVar6 = D + param_1*0x10 + 0x1dd (param_1 = program number).  For a VALID
+program (small param_1) puVar6 lands in the driver-DS instrument-record region, which is native==wasm
+IDENTICAL -> level matches.  The divergence therefore comes from a LARGE/garbage param_1 that indexes
+puVar6 PAST the records into the host-pointer-divergent region (extender 0x100000+/engine 0x10000+).  That
+garbage program number is the es=0 pre-song (cause-1): its unregistered "song" yields garbage program-change
+events -> wild instrument records -> native!=wasm levels.  So cause-4 UNIFIES WITH cause-1: fixing the es=0
+garbage (load INTRO.MS3, real programs 0..N) keeps puVar6 in the identical record region and the levels
+converge.  (The residual seen with INTRO.MS3 loaded needs a re-check with all of cause-2+3 + the load in
+place; the earlier test predated confirming cause-3's ds:0x1c1 fix fully propagates.)  So the audio native==
+wasm chain is: cause-2 (LANDED) + cause-3/patch385 (LANDED) + cause-1 (INTRO.MS3 load, ready) -- with all
+three, the garbage program indices are gone and cause-4 should resolve.  NEXT: re-apply cause-1 on the
+cause-2+3 base and re-measure the level convergence (the earlier INTRO.MS3 test was on the pre-patch-385
+base).
