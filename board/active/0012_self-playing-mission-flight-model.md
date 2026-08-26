@@ -1205,3 +1205,29 @@ NET (accurate, non-inflated): 416+417 shipped = working combat.  418+cascade SOL
 converges) but is blocked from shipping by the render-method migration (board:0001) + is not sufficient for
 resolution (needs the player navigation/engagement).  Goal UNMET.  The main combat blocker (effect despawn)
 is genuinely solved; the finish is the render sprite-method cascade + the auto-control navigation.
+
+## REFINED: even the 417 a296-drop was an emitter-teleport artifact; resolution needs navigation (2026-08-27)
+
+Traced why 418 (correct) shows a296=16 while 417 showed a296 16->10.  With 417 alone, ba49 wrote the burst
+position DAT_5c7f/5c83 to [emitter+4]/[+8] -- the EMITTER's OWN position -- teleporting the (otherwise
+stationary, b51f does not integrate position) type-0x10 weapon emitters around, sometimes INTO range of
+side-B units, where c31e then damaged them.  So the 417 a296-drop was partly an ARTIFACT of that position
+corruption, not clean combat.  With 418 (ba49 writes velocity to the fresh EFFECT object, not the emitter),
+the emitters stay put and only engage what comes into their range.
+
+So the accurate combat model: side-A has stationary weapon emitters (b51f/bc0c) + goals; the player's side-B
+platoon is AUTO-CONTROL mobile.  Resolution (one side eliminated) requires the AUTO-CONTROL to DRIVE the
+player/platoon into the enemy and destroy the goals (or be destroyed).  In the port the auto-control drives
+the player OUT (X -> -21M) rather than toward objectives.  THE RESOLUTION BLOCKER IS THE AUTO-CONTROL
+NAVIGATION (heading/target selection), a distinct subsystem -- likely a base-loss in the player-unit AI
+(7c1d + shared a9ea/a0a4 targeting/steering) or it needs the oracle to verify the correct heading.
+
+FULLY ACCURATE SESSION STATE (2026-08-27):
+  - 416 (movement) + 417 (targeting/damage) shipped -- but 417's visible a296-drop was partly an emitter
+    position-corruption artifact, so "combat working" is real only in the sense that c31e damage + b2ef
+    destroy fire; clean sustained combat is not yet achieved.
+  - a294 effect-despawn leak SOLVED + proven (418 + bab4/bae1/bb02/bc0c cascade; a294 balances, no crash) --
+    genuine, but blocked from shipping by the render-method migration (board:0001 c694/c945/c962).
+  - Resolution requires, beyond the above: the AUTO-CONTROL NAVIGATION to engage (the player-unit AI).
+  Goal UNMET.  Three scoped pieces remain: (1) render sprite-method base-loss cascade [drop the skip guard];
+  (2) the auto-control navigation to drive-to-engage; (3) then verify goals/a296 -> 0 + native==wasm.
