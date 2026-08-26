@@ -511,3 +511,25 @@ live unit with a target in range, writes a9c0/a9c4/a9c6 and dispatches d7e1 -- d
 per-tick pump, verified against the oracle's a9c0/registry writes (setarch -R) until d7e1 fires per
 engagement, projectiles hit, and a294/a296 deplete to a side=0.  Then the FIST.DAT damage-subtree
 base-loss (414/415 started), op-0x24 render (board:0001), and host-ptr elimination for native==wasm.
+
+## SETTLED: AI-fire is the extender, not a FIST.DAT base-loss (2026-08-26)
+
+Resolved d7e1's caller (nm on the instrumented binary): FUN_0000_d501 (+689) -- the MISSION-LOAD function
+(loads AZER1.FSG, places units), which runs ONCE.  So d7e1 (the spawn/fire mechanism) IS FIST.DAT and works
+for load, but has NO per-tick caller in the decompile.  Combat fire dispatches d7e1 via the a9f0 weapon
+vector, which has ZERO references in fist.c.  Therefore the per-tick AI fire-DECISION (target-acquire ->
+select weapon -> dispatch a9f0 -> d7e1) is UNAMBIGUOUSLY in the extender overlay, NOT a FIST.DAT base-loss.
+This ends the earlier flip-flop: the FIST.DAT side (d7e1 spawn, object updates, damage, b2ef, win/lose) is
+present + works; the missing piece is exactly the extender's per-tick AI/fire/targeting loop.
+
+RECONSTRUCTION PLAN (concrete, the substantive goal clause): implement the extender per-tick AI in the
+shim (driven from the cooperative pump, gated on in-mission d549==0x1c):
+  for each live unit in the registry (DAT_2000_9fbc): if it has a target in range/LOS, set up the round
+  (a9c0=projectile obj / a9c4 / a9c6) and dispatch d7e1 (the existing FIST.DAT spawn) -- i.e. drive the
+  a9f0 fire path the extender would.  Reverse the exact decision from the oracle: FIST_WATCHPHYS on the
+  AI-state fields the oracle reads before writing a9c0 (capture cs=0xf000's reads/writes around each fire),
+  reproduce the target-select + fire cadence, verify the port's a9c0/registry/b2ef writes match the oracle
+  tick-for-tick under setarch -R, until a294/a296 deplete to a side=0.  Then FIST.DAT damage base-loss
+  (414/415+), op-0x24 render (board:0001), host-ptr elimination for native==wasm.
+STATUS: goal unmet; the ONE substantive blocker is now unambiguous (reconstruct the extender AI/fire loop)
+and the FIST.DAT half is confirmed working -- the flip-flop is closed, the target is singular.
