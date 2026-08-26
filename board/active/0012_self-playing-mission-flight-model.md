@@ -1178,3 +1178,30 @@ to drop the render-skip guard [the type-4 effects must render faithfully, no stu
 correct combat doesn't deplete a side -- likely the player AUTO-CONTROL navigation (drives out of range) or
 the weapon cadence.  418+cascade is a REAL, shippable-once-render-migrated fix; goal still unmet but the
 effect-despawn/a294-leak is genuinely SOLVED.
+
+## ACCURATE PICTURE: a294 leak SOLVED; 2 subsystems remain (render + navigation) (2026-08-27)
+
+The effect-despawn / a294-leak fix is REAL and CONVERGES (proven: a294 balances, no crash).  Its patch set:
+  418 (thread b21d DI-return: b1df returns the allocated buffer, ba33/ba49 init it) +
+  419 (bab4 despawn base-loss migration) + bae1/bb02 (bab4 sub-method migrations) +
+  bc0c (type-0x17 weapon-platform update: base-loss + int/uint->WORD width, fires 9caa).
+Reference impl saved: scratchpad/combo2_a294balances.c (currently uses a render-skip GUARD, which the goal
+forbids -- must be replaced by migrating the render methods).
+
+TWO REMAINING SUBSYSTEMS between "a294 solved" and "mission resolves":
+  (A) RENDER migration (board:0001 windshield): the type-4 effects flow through the per-frame sprite render
+      c33c->c4df->c694->c945->c962...  c4df is migrated (sets g_fist_render_si); the render METHODS are not
+      (c694 reads word[si+0x1c] with si the object near-offset, Ghidra gave it a garbage host-ptr param_3).
+      Migrate c694/c945/c962 (read the object from g_fist_render_si; g_mem+0x1c000 base; asm widths) to drop
+      the render-skip guard.  Bounded base-loss cascade (the 416/419 idiom).
+  (B) COMBAT RESOLUTION: with CORRECT mechanics (418, no self-duplication) a296 stays 16 in a 64000-tick
+      window and the player AUTO-CONTROL drives OUT of range (X -> -21M by t=4747).  The 417 a296-drop
+      (16->10) was partly a duplication ARTIFACT (the emitter re-ran b51f, amplifying c31e).  So correct
+      combat is slower/balanced and needs the player to ENGAGE -- the auto-control NAVIGATION (drive toward
+      objectives) is the next thing to verify against the oracle, or the mission simply needs the player's
+      own weapons (bc0c/9caa, now unblocked since a294 balances) to deplete the enemy goals over more time.
+
+NET (accurate, non-inflated): 416+417 shipped = working combat.  418+cascade SOLVES the a294 leak (proven,
+converges) but is blocked from shipping by the render-method migration (board:0001) + is not sufficient for
+resolution (needs the player navigation/engagement).  Goal UNMET.  The main combat blocker (effect despawn)
+is genuinely solved; the finish is the render sprite-method cascade + the auto-control navigation.
