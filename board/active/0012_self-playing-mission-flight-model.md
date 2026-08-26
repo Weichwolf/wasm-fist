@@ -62,3 +62,29 @@ verified against the oracle transaction log.  Multi-phase, not a bounded change.
 4. Finish the mission-load render frontier (op-0x4c / DGROUP:0x7aa4 viewport geometry,
    board:0001) so the simulated frames render.
 5. Done when AZER1 plays itself to a resolved win/lose, deterministic, native==wasm.
+
+## Sim-state LOCALIZED (2026-08-26, decompile + port memdump)
+
+The mission simulation state is the OBJECT REGISTRY DAT_2000_9fbc (engine DGROUP is
+0x20000-based: DAT_2000_XXXX = g_mem+0x20000+XXXX, per build/fist.c macros; NOT the
+shim's 0x1c000).  Registry = 182 slots stride 4 {obj-nearptr:word, val:word} at
+g_mem+0x29fbc; each object lives at g_mem+0x20000+nearptr with a flags byte at +0x17
+(bit3=0x08 => "goal" unit).  The HUD goals count DAT_2000_578e (g_mem+0x2578e) is
+RECOMPUTED each frame by FUN@fist.c:60248: `578e=0; for 182 slots: if(slot.ptr &&
+obj[+0x17]&8) 578e++;` then FUN_1000_65c2 formats it into the "GOALS: " HUD string
+(DAT_2000_46db).  So goals 13->11 in the oracle = the flight model DESTROYING
+goal-flagged objects (clearing their slot/flag), and the engine re-counting.
+
+PORT BASELINE (from a coop-tick AZER1 run, two memdumps t[0x452]=8000 vs 40000):
+  - mission-LOAD WORKS: registry has 114 occupied slots, 33 goal-flagged objects.
+  - simulation does NOT run: object-data [0x2a000..0x2d000] only 77/12288 bytes move
+    over 32000 ticks; a sampled object is byte-identical; DAT_2000_578e stays 0 (the
+    count fn is base-broken/not-run in the port).  Units are spawned but FROZEN.
+
+So the reconstruction target is sharp: the flight-model SIM LOOP that walks the
+registry and updates each object (position/physics -> AI/targeting -> weapons/damage
+-> destruction), driving DAT_2000_9fbc + object data write-for-write to the oracle
+trace, until goal objects are cleared and DAT_2000_578e reaches 0 (win) or the player
+platoon is eliminated (lose).  VERIFY handle: watch DAT_2000_9fbc + object region
+(engine-flat, CR3-aware FIST_WATCHFLAT) in the oracle and match the port's writes.
+Refines next-step 1: the sim state is the registry, not a scalar; capture its trace.
