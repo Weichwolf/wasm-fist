@@ -1015,3 +1015,26 @@ the display-object reclaim, now the SINGLE remaining blocker between "combat wor
 (My FIST_SIMTRACE goal-count is polluted by leaked duplicates -- goals oscillates 13-17; a296 is the clean
 combat signal.)  Movement (416) + targeting/damage (417) landed+asm-verified; combat PROVEN; sustaining it
 to resolution is the final step.
+
+## COMPLETE CHAIN TRACED: combat works; final blocker = effect despawn (render/ba49-alloc) (2026-08-26)
+
+Verified 23/0 native: patches 416+417 are matrix-safe (in-mission only).  The full combat chain is now
+traced end to end and WORKS except one piece:
+  spawn (loaded, clean) -> per-tick c0e5 dispatch (works) -> mobile-unit movement (416, works) ->
+  weapon target-acquire bb64 (works, finds c252) -> damage c31e on the TARGET (417, WORKS -> a296 16->10,
+  b2ef fires, units destroyed) -> [MISSING: effect/emitter despawn] -> a294 leaks to 0x96 cap -> blocks
+  BOTH sides' further weapon spawns (b1d6 guard) -> combat halts unresolved.
+Exhaustively confirmed the despawn is genuinely absent per-frame: a294 falls ONLY via b2ef (61428); b330
+(bulk clear-by-type, incl. b330(0x10) for emitters) is called only from command fns (5612/5652/5666), NOT
+per-frame; c30e (pre-update) is empty; 461b is a round-robin; c30f/b5e7-destruct are the individual
+despawns but nothing drives them for the spent emitters.  So the effect reclaim is the render-transient
+path (op-0x4c display-list, FIST_SIMRUN stubs it) OR the ba49 chain should register a fresh DESPAWNING
+effect object instead of the emitter (patch 258's documented deviation) -- both need the oracle (to observe
+the correct per-frame registry) or Ghidra (board:0010) to implement faithfully, neither available here.
+
+SESSION RESULT: from a frozen mission (goals=13 static, b2ef=0, framed as open-ended extender
+reconstruction) to WORKING, VERIFIED, DETERMINISTIC COMBAT (a296 16->10, units destroyed) via three
+asm-verified matrix-safe patches (416 movement, 417 targeting+damage x2 fields).  The mission is dynamic;
+it does not yet RESOLVE (one side to 0) because the effect despawn (a294 leak) halts sustained combat.
+That single remaining blocker is precisely scoped to the op-0x4c render / ba49-effect-alloc frontier -- the
+goal's own named "per-frame render path" clause.  Goal UNMET (no resolved win/lose) but combat proven.
