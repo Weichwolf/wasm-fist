@@ -718,3 +718,32 @@ g_mem+0x1c000+off); (2) migrate them (patches/NNN, 363/414/415 idiom) so the pla
 SMOOTHLY; verify via FIST_SIMTRACE that X/Y move in small deltas; (3) then targeting/fire should follow
 (goals begin to fall); track goals->0 as the win.  The oracle windshield (ref/oracle_azer1_selfplay/)
 is the visual truth: auto-control tank drives + "GOALS REMAINING" counts down.
+
+## BREAKTHROUGH: movement width-bug FIXED (patch 416) + fire blocker CONFIRMED (a294 guard) (2026-08-26)
+
+ROOT of "units move but don't fire", found by asm-verification and two instrumented runs:
+
+1. MOVEMENT (FIXED, patch 416): the 4 mobile-unit integrators (7cd5/88e4/912d/98c3) do
+   `pos[+4/+8] += (long)*(int*)(obj+0x59/0x5b)`.  ASM is `movsx eax,WORD PTR [di+0x59]` -- a 16-bit velX,
+   16-bit velY at adjacent 0x59/0x5b.  ghidra_compat doctrine: int=32-bit.  So `*(int*)` read 32 bits =
+   velX|(velY<<16) = GARBAGE velocity -> tanks teleported to +-billions.  Fix: `*(int*)`->`*(short*)`
+   (16-bit; the `(long)` keeps the sign-extend).  VERIFIED: post-fix the player Y integrates SMOOTHLY and
+   monotonically (1.1M -> -443M over 60000 ticks, steady deltas) instead of random jumps.  Tanks now DRIVE.
+
+2. FIRE BLOCKER (confirmed, not yet fixed): instrumented b1d6/b1df (the runtime object/projectile
+   spawners).  b1d6 is called HUNDREDS of times during the sim (units ARE trying to fire), but EVERY call
+   after load bails on b1d6's `DAT_2000_a294 < 0x78` capacity guard because a294=150 (>=120).  So no
+   projectile can spawn -> no hits -> b2ef=0 -> goals stuck at 13.
+   WHY a294=150: a296=16 == live side-B (consistent), but a294=150 vs 98 live side-A -> side-A over-counts
+   by 52.  Since b2ef (despawn/destroy) fires 0x, every spawned object (early b1df effects) accumulates and
+   NEVER despawns -> a294 leaks monotonically to the 0x96 cap -> the guard then blocks ALL weapon spawns.
+   THE REAL BLOCKER IS THEREFORE "objects never despawn": b2ef is never dispatched, so a294 can only climb.
+
+NEXT (ordered, tractable): find why timed objects never despawn (never dispatch b2ef).  Prime suspect:
+the SAME width-bug class in the effect/projectile UPDATE methods (b5e7/b60f/b808/b93f/b945/b998 -- they
+carry the most `(long)*(int*)` sites AND lifetime/timer counters like `*(int*)(param_5+0x2d)`).  If a
+16-bit lifetime is read as 32-bit it never hits its expiry compare -> the object lives forever -> a294
+leaks.  Asm-verify each `(long)*(int*)`/`*(int*)` timer deref in that cluster (movsx WORD => *(short*)),
+migrate, and confirm: b2ef starts firing -> a294 falls below 0x78 -> b1d6 spawns projectiles -> goals
+begin to fall.  36 `(long)*(int*)` sites remain (b945:6, b998/b93f/b808/b60f/b5e7:3 each, a0a4/a0ab:2 ...);
+this is a bounded asm-verified width-sweep, the 416 idiom generalized.  Win metric = goals -> 0.
