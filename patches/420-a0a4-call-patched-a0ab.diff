@@ -1,0 +1,86 @@
+board:0012 patch 420: a0a4 is the guard for the a0ab proximity search (asm cmp di,[0x6d34]; je a0ab); Ghidra inlined a0ab base-lost into it.  Restore guard + call the already-patched a0ab (patch 271).
+--- a/fist.c
++++ b/fist.c
+@@ -63838,74 +63838,12 @@
+ 
+ {
+-  int *piVar1;
+-  uint uVar2;
+-  undefined2 in_register_0000000a;
+-  undefined4 uVar3;
+-  uint uVar4;
+-  undefined2 uVar5;
+-  int *piVar6;
+-  int *piVar7;
+-  int *unaff_CS;
+-  int iStack_4;
+-  int *piStack_2;
+-  
+-  uVar3 = CONCAT22(in_register_0000000a,param_1);
+-  if (param_3 != DAT_2000_2d34) {
+-    return;
+-  }
+-  param_3[0x20] = param_3[0x20] & 0xfff7;
+-  if (*(char *)((int)param_3 + 0x93) == '\0') {
+-    uVar5 = (undefined2)((ulong)param_2 >> 0x10);
+-    piStack_2 = (int *)&DAT_2000_9fbc;
+-    iStack_4 = 0xb6;
+-    while( true ) {
+-      do {
+-        do {
+-          piVar6 = param_3;
+-          piVar7 = unaff_CS;
+-          if (iStack_4 == 0) {
+-            *(byte *)(piVar6 + 0x31) = *(byte *)(piVar6 + 0x31) & 0xfd;
+-            return;
+-          }
+-          piVar1 = (int *)*piStack_2;
+-          piStack_2 = piStack_2 + 2;
+-          iStack_4 = iStack_4 + -1;
+-          unaff_CS = piVar7;
+-          param_3 = piVar6;
+-        } while ((((piVar1 == (int *)0x0) || ((*(byte *)(piVar1 + 0xb) & 0x40) == 0)) ||
+-                 ((*(byte *)(piVar1 + 0xb) & 0x10) != 0)) || (piVar6 == piVar1));
+-        uVar2 = FUN_0000_a17e(piVar1 + 2,piVar6 + 2);
+-        unaff_CS = (int *)0x0;
+-        param_3 = piVar7;
+-      } while ((int)uVar3 != 0);
+-      uVar4 = piVar7[10] + piVar6[10] + 0x100U >> 1;
+-      if (uVar2 < uVar4) break;
+-      if (uVar2 - uVar4 < 0x1e01) {
+-        iStack_4 = 0;
+-        FUN_0000_b059(uVar3,uVar4,piVar6,piVar7);
+-        unaff_CS = (int *)0x0;
+-        param_3 = piVar7;
+-      }
+-    }
+-    if ((*(byte *)(piVar7 + 0x31) & 2) == 0) {
+-      *(byte *)(piVar7 + 0x31) = *(byte *)(piVar7 + 0x31) | 2;
+-      if (*piVar6 == 0x15) {
+-        *(int *)((int)piVar7 + 0x55) = *(int *)((int)piVar7 + 0x55) >> 1;
+-        *(int *)((int)piVar7 + 0x57) = *(int *)((int)piVar7 + 0x57) >> 1;
+-        FUN_0000_c047(0x30,CONCAT22(uVar5,iStack_4),piVar7);
+-        FUN_0000_c31e(0,0,0,piVar7);
+-        return;
+-      }
+-      FUN_0000_c047(0x2d,CONCAT22(uVar5,iStack_4),piVar7);
+-      *(long *)(piVar7 + 2) = *(long *)(piVar7 + 2) + (long)*(int *)((int)piVar7 + 0x59) * -0x20;
+-      *(long *)(piVar7 + 4) = *(long *)(piVar7 + 4) + (long)*(int *)((int)piVar7 + 0x5b) * -0x20;
+-      *(int *)((int)piVar7 + 0x55) = -*(int *)((int)piVar7 + 0x55);
+-      *(undefined2 *)((int)piVar7 + 0x57) = 0;
+-    }
+-    *(undefined1 *)((int)piVar7 + 0x93) = 4;
+-    return;
+-  }
+-  *(char *)((int)param_3 + 0x93) = *(char *)((int)param_3 + 0x93) + -1;
+-  return;
++  /* PATCH 420 (board:0012): a0a4 (asm 0x1a0a4) is the GUARD `cmp di,[ds:0x6d34]; je 0x1a0ab; retf` that
++   * falls through into the proximity/collision search a0ab (patch 271, already migrated).  Ghidra
++   * inlined the a0ab body into a0a4 base-lost (near-offset di deref'd as host ptr, host-int-stride 9fbc
++   * walk, unaff_CS), so calling a0a4 ran garbage instead of the correct search.  Restore the guard and
++   * CALL the patched a0ab (self near-offset di == param_3 -> a0ab's param_1).  DAT_2000_2d34 = the
++   * current/active object the guard gates on. */
++  if ((unsigned short)(uintptr_t)param_3 != (unsigned short)(uintptr_t)DAT_2000_2d34) return;
++  FUN_1000_a0ab((unsigned short)(uintptr_t)param_3, param_2, param_3);
+ }
+ 
