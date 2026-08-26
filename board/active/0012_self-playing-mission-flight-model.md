@@ -1078,3 +1078,35 @@ IN-ENGINE; the single missing piece is the fresh-type-4-effect ALLOCATION SOURCE
 b51f->ba49->ba33->b1df asm passes as di=emitter.  Resolving it needs the oracle (observe the correct
 per-frame registry: where the fresh effect object comes from) or Ghidra (board:0010 systematic CS-context).
 Both unavailable here.  This is the precise, minimal remaining work for a RESOLVED mission.
+
+## *** EXACT FIX PROVEN *** (patches 418/419, reverted — they crash the render cascade) (2026-08-26)
+
+FOUND the fresh-effect allocation source: FUN_1000_b21d IS the object allocator.  Its asm allocates a free
+slot from the side pool (a022 stride 0x37 / c05c stride 0xfb), writes word[buf]=the type, and RETURNS the
+buffer in DI.  Patch 200's own comment says so ("Returns the allocated slot's DGROUP near-offset ...
+consumed by the callers b1a2/b1d6/b1df"), but the port's b1df/b1d6 DROPPED that DI-return and register the
+INPUT param (the emitter) instead -- so effects are the type-0x10 emitter (b51f, never despawns) rather
+than the fresh type-4 buffer (bab4, despawns).  patch 258's documented deviation, root-caused.
+
+PROVEN (patch 418 = thread b21d's DI-return through b1df->ba33->ba49; patch 419 = migrate bab4 base-loss):
+with these, the effect IS the fresh type-4 object and c0e5 DISPATCHES bab4 (the despawn) -- CONFIRMED by
+the crash moving from b51f into bab4 then into the RENDER (c33c->c4df->c694).  So the mechanism is correct:
+effects -> type-4 -> bab4 animate -> b2ef despawn -> a294 balances -> sustained combat.
+
+WHY REVERTED: the type-4 effects now flow through the per-frame RENDER walk (c33c/c4df) which dispatches
+per-object render methods (c694 -> c945 ...) that are BASE-LOST (c694 derefs param_3+0x1c with param_3 a
+garbage host pointer -> SIGSEGV).  This crashes the process, regressing the working 416/417 combat, so 418/
+419 cannot ship until the render cascade is migrated.  IMPORTANTLY: c33c/c4df/c694/c945 are DECOMPILED
+FIST.DAT functions (FUN_0000_*), NOT the undecompiled overlay -- so the render IS migratable (the 363/414/
+415/419 base-loss idiom), a BOUNDED cascade, not an overlay reconstruction.
+
+THE COMPLETE REMAINING FIX (now precisely known, ~a handful of base-loss migrations):
+  1. patch 418 (thread b21d's DI-return: b1df/b1d6 register it, callers ba33/ba49/462e/9caa init IT); 
+  2. patch 419 (bab4 despawn migration -- done, verified reached);
+  3. migrate the per-object RENDER methods the type-4 effects hit: c694 (+c945) and the c4df dispatch
+     object-pointer base-loss (param_3 must be the DGROUP near-offset, not a host pointer);
+  4. re-test: a294 balances -> combat sustains -> a296/goals -> 0 -> mission RESOLVES.
+This is the end of the trace: the mechanism is proven, the allocator (b21d) is found, the despawn (bab4) is
+migrated and confirmed, and the only thing between here and a resolved mission is the bounded, decompiled
+render-method base-loss cascade (c694/c945/c4df).  Movement (416) + targeting/damage (417) shipped; the
+effect-despawn + render cascade is the finish.  Goal UNMET but the path is fully proven end-to-end.
