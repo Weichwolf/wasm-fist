@@ -2833,3 +2833,26 @@ index into tbase), and restore the faithful 16-bit engine offset there (patch cl
 resolves identically on both targets.  That single store closes mission-audio native==wasm for AZER1 AND
 removes a concrete member of the 149/57 host-pointer determinism class (board:0001).  Menu/intro: CLOSED;
 mission audio: root writer NAMED (fist_mga.c:1015 / FUN_0000_19d1 param_2 host-ptr), fix is next.
+
+*** MECHANISM FULLY TRACED (2026-08-26): runaway strcpy from a host-pointer-divergent table index ***
+Full dataflow of the cascade origin (all native-gdb + decompile-verified):
+  FUN_0000_4308 (fist.c:13353): gs=g_mem+(word[DGROUP:0x70]<<4)=STRSEG (0x2d74); forward-walks the
+    STRSEG:0x802 command table (stride 8: [+0]=cx,[+2]=bx,[+4]=ax,[+6]=vec); for vec==0x183f calls
+    FUN_0000_183f(ax,cx,0,bx,0).
+  -> 183f/1692 store DAT_1000_e676 = param_4 = bx  (fist.c:7826/7915; DAT_1000_e676 = word[0x1e676]).
+  -> FUN_0000_19d1 (fist.c:8134) calls FUN_0000_0197((undefined2*)DAT_1000_e676).
+  -> FUN_0000_0197 (fist_mga.c:997): bx=(uint16_t)param_1; if(bx!=0xffff){ tseg=word[0x70a];
+       tbase=g_mem+(tseg<<4); soff=word[tbase+bx]; src=tbase+soff; strcpy(src -> DGROUP:0x740); }
+  The divergent value is bx = the STRSEG:0x802 table[+2] entry = 0xeea9 on NATIVE.  0197 comment says the
+  faithful caller value is a small index (~0x148); 0xeea9 is a HOST-POINTER-derived index.  With bx=0xeea9,
+  native's src=tbase+word[tbase+0xeea9] lands in a 0xDA-filled region with NO NUL terminator, so the strcpy
+  RUNS AWAY, overwriting DGROUP:0x740.. with 0xDA until a chance NUL -> the 2879-byte DGROUP cascade
+  (g_mem is zero-init BSS, so the 0xDA was WRITTEN by the mis-indexed walk, not uninitialised).  On wasm bx
+  indexes a valid NUL-terminated string (56 52 00) -> a clean short copy.  So the WHOLE mission-audio
+  divergence reduces to: the STRSEG:0x802 table entry [+2] holds a host-pointer-divergent index (0xeea9
+  native) instead of the faithful 16-bit engine offset.
+NEXT (post-gate, needs runtime trace w/o CPU contention): watchpoint the STRSEG:0x802 table[+2] slot during
+  mission load to name the writer that stores 0xeea9 (a host ptr) instead of the faithful index, and make
+  that store faithful (patch class 349/384).  That single store closes AZER1 mission-audio native==wasm and
+  removes a member of the 149/57 host-pointer class (board:0001).  Menu/intro: CLOSED.  10x DoD gate on the
+  committed cause-4 state: RUNNING (tools/wasm_gate.sh, /tmp/wasm_gate.log).
