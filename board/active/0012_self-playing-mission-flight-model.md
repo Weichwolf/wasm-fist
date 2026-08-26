@@ -242,3 +242,29 @@ works); (4) combat PRECISELY located (flat 0x28000+, cs=0x2082) and confirmed a 
 The goal (faithful win/lose native==wasm) now reduces to: decompile+wire the flat-0x28000 flight-model
 combat, finish the op-0x24 windshield render (board:0001), verify vs the oracle, reach the outcome, wasm
 byte-identical.  Substantial, but every piece is now located, tooled, and falsifiable.
+
+## The combat cluster is cs=0x2082, MISSED by the decompile (2026-08-26, decisive)
+
+Oracle registry-writer trace (FIST_WATCHPHYS=0x3b14c during AZER1 play): the object/unit registry
+DAT_2000_9fbc is written overwhelmingly by cs=0x2082 (eip 0xbb0f 1536x, 0xbb6e/0xbb26/0xbc77 ...; base
+SegPhys=flatip-eip=0x20820, so the code runs at guest-phys 0x2c000..0x2c500).  The writer's stack operates
+on DAT_2000_3ae0 (player) + unit slots -> this IS the flight/combat model that moves and destroys units.
+CRITICAL: the decompile has ONLY CS clusters 0x0000 (7663 fns), 0x1000 (4708), e000 (4) -- cs=0x2082 has
+ZERO functions.  So the combat cluster is NOT decompiled (not merely unwired): the Ghidra pipeline
+(PrepAnalysis/SegWrapFixup discover 0x1000/0xf69/e000) never threaded the 0x2082 code segment.  That is
+exactly the goal's "flight/combat model... in the overlay... not in FIST.DAT".
+
+CONCRETE NEXT (the reconstruction, proven pipeline):
+  1. Determine cs=0x2082's source: is guest-phys 0x20820.. inside FIST.DAT's loaded image (a cluster Ghidra
+     skipped) or the FIST.RUN extender overlay?  Capture the code bytes at guest-phys 0x2c32f (the 0xbb0f
+     writer) and grep them in FIST.DAT / FIST.RUN / fist_dat_image.bin to identify the binary + offset.
+  2. Thread the cs=0x2082 cluster into the Ghidra pipeline (extend SegWrapFixup/PrepAnalysis to discover +
+     analyze it, or add it as an image target) -> decompile -> assemble into a new TU.
+  3. Wire it as the per-frame flight-model step (it is what op-0x1c/the c0ca chain should reach) and verify
+     the port's registry writes tick-for-tick vs the oracle (0x3b14c) until goal units deplete.
+  4. Finish op-0x24 windshield render (board:0001); reach the resolved win/lose; wasm byte-identical.
+
+TURN NET: sim runs; handshake faithful (no derail, d549 cycles like the oracle); oracle addressing solved;
+combat cluster IDENTIFIED as cs=0x2082 and PROVEN absent from the decompile -> the precise, falsifiable
+next decompile target.  The goal is a bounded reconstruction of one missed code cluster + render + verify,
+not an open-ended "write a simulator".
