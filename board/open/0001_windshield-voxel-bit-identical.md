@@ -172,3 +172,23 @@ at intro time, leaving the rest for e714; (b) make the DGROUP:0x344 block ready 
 install pre-intro without corruption; (c) the deep f842 fix (restore its dropped string-op seg bases so the
 original's LOAD-time applier works verbatim).  Each needs the 177-flow matrix as the guard, as this attempt
 demonstrated.  Negative result banked: don't re-try the blanket early install.
+
+FIX ATTEMPT 2 + KEY ENTANGLEMENT FINDING (2026-08-26, matrix-guarded):
+  Added a SURGICAL single-slot installer fist_apply_reloc_slot(0x174, 0x378) called from be0e first-use
+  (installs ONLY the c378 loader vector, not the whole section).  RESULT: it FIXED the render corruption
+  (about/settings/settings-sky PASS again) AND loaded INTRO.MS3 (intro music from adv=51) -- so the
+  single-slot approach is the right shape for cause (1).  BUT the full matrix -> 170/177 with 7 NEW fails:
+    - audio-intro nat!=wasm(2354949), audio-opl-init nat!=wasm(44293)  [audio-menu-content still PASSES]
+    - terrain-azer1/saudi1/cyprus1/india1/syria1 nat!=wasm(188)
+  CRUCIAL: audio-intro was native==wasm ONLY BECAUSE THE INTRO WAS SILENT -- the es=0 garbage started at
+  ~[0x452]=4972 (adv 4262), AFTER audio-intro's [0x452]=4000 window, so its window was clean.  Loading real
+  INTRO.MS3 makes music play from ~[0x452]=60 -> INSIDE the audio-intro window -> and that playback is
+  native!=wasm.  So CAUSE (1) AND CAUSE (2) ARE ENTANGLED: fixing the intro-music LOAD (cause 1) exposes the
+  audio TICK-CADENCE non-determinism (cause 2) within the intro, breaking native==wasm.  Cause (1) CANNOT
+  land alone.
+  REORDERING: cause (2) -- the deterministic per-frame audio cadence (this board) -- is the PRIMARY blocker
+  and must be fixed FIRST; then the single-slot INTRO.MS3 load (cause 1, attempt-2 shape) can land on top
+  and the intro/mission audio becomes native==wasm end-to-end.  The whole intro+mission audio native==wasm
+  rides on this board's per-frame determinism -- confirming the "doubled payoff" (windshield + all audio).
+  Reverted attempt 2 (patch 100 + the helper); tree green (make check clean).  Negative results banked;
+  the primary path is now unambiguous: land cause (2) cadence determinism, then cause (1).
