@@ -2856,3 +2856,26 @@ NEXT (post-gate, needs runtime trace w/o CPU contention): watchpoint the STRSEG:
   that store faithful (patch class 349/384).  That single store closes AZER1 mission-audio native==wasm and
   removes a member of the 149/57 host-pointer class (board:0001).  Menu/intro: CLOSED.  10x DoD gate on the
   committed cause-4 state: RUNNING (tools/wasm_gate.sh, /tmp/wasm_gate.log).
+
+*** ROOT CONFIRMED + FIX ATTEMPT DISPROVEN (2026-08-26, decisive) ***
+CONFIRMED (env-gated diag in FUN_0000_0197): native's 0197 model-name-builder gets bx=0xeea9 (a wild
+index, "BADIDX") at [0x452]=275; WASM NEVER gets a bad index.  So the divergent input is 0197's param_1 =
+DAT_1000_e676 = the BX register at the FUN_0000_4308 dispatch.  asm-verified (objdump 0x4308): the loop
+does `mov cx,ax`([+0]) / `mov bx,ax`([+2]) / AX=[+4] / `call [vec]`, so AX=[+4],BX=[+2],CX=[+0] at the call;
+FUN_0000_1692 does `mov [0x2676],bx` -> DAT_1000_e676=BX.  The decompiled else-branch (fist.c:13367)
+`(*(code*)fist_icall_near(0,vec))(ax,bx,cx)` threads only 3 positional args, so for a vec whose target is
+FUN_0000_1684->1692 (reads a 4th, BX) param_4 is UNINITIALISED -> garbage 0xeea9 (native) / a benign small
+value (wasm, coincidence) -> native's 0197 runs a runaway strcpy -> the DGROUP cascade -> mission-audio
+divergence.  ROOT is thus an __allregs arg-threading gap at the 4308 else-branch, host-pointer/uninit class.
+FIX ATTEMPT (patch 413, reverted): threading the else-branch faithfully as (ax,cx,0,bx,0) -- matching the
+0x183f branch and the p1=AX/p2=CX/p3=DX/p4=BX/p5=SI __allregs order -- did NOT converge and REGRESSED native
+into a HANG: native then reached an UNIMPLEMENTED shim path ("FUN_1000_0c21 block-relocating probe --
+unimplemented deep follow-on; treating as not-found") and looped emitting op-0x4c display-list commands,
+never reaching DUMPTICK.  Two lessons: (a) the else-branch is GENERIC (many vecs) so a blanket re-thread
+perturbs other targets; (b) the *correct* mission path needs FUN_1000_0c21 (a memmgr block-relocating
+follow-on) that the shim does not implement -- the garbage index was steering native AROUND that path.
+So mission-audio native==wasm is a MULTI-PART fix, not one patch: (1) a per-vec-correct 4308 else-branch
+threading (not a blanket one), AND (2) implementing the FUN_1000_0c21 memmgr block-relocating follow-on the
+faithful path requires; the table[+2] index itself may also be host-pointer-divergent (needs re-check once
+1 & 2 land).  This is squarely the board's "deep pointer-model + migration" work, now pinned to concrete
+sites (fist.c:13367 else-branch + FUN_1000_0c21 shim gap).  Committed cause-4 (menu/intro) unaffected.
