@@ -919,3 +919,23 @@ STATUS: movement fixed+verified (416); fire blocker measured to the type-4 displ
 UNMET.  The chain is: [emitters register type-4 display objs each phase] -> [never reclaimed: b2ef=0] ->
 [a294 -> 0x96 cap] -> [b1d6 guard blocks weapon spawn] -> [no projectiles/hits/destroys] -> [goals stuck].
 Fixing the type-4 reclaim (or the op-0x4c render that should do it) is the single remaining blocker.
+
+## CONVERGENCE: the type-4 reclaim is the op-0x4c render (the goal's named frontier) (2026-08-26)
+
+Ruled out every non-render reclaim candidate: c30e (empty), 461b (round-robin dispatcher), c30f (b354->b2ef
+despawn -- no direct callers, vtable-only), 462e/c296 (register+INIT a new object, not reclaim).  No engine
+per-frame path reclaims the type-4 display objects.  Therefore the reclaim is in the PER-FRAME RENDER that
+FIST_SIMRUN only ready-bit-stubs: the op-0x4c display-list present.  The emitters register type-4 display
+objects each phase FOR the render to draw + consume; with the render stubbed, they are drawn never and
+reclaimed never -> a294 leaks to the 0x96 cap -> weapon spawn blocked.  This is EXACTLY the goal's stated
+frontier: "finishing the per-frame render path (the op-0x4c display-list / DGROUP:0x7aa4 viewport-geometry)".
+
+So the single remaining blocker for self-playing combat is the op-0x4c display-list render implementation
+(NOT a small base-loss patch).  patch 413 (blanket op-0x4c faithful threading) was reverted earlier because
+the real path hits unimplemented FUN_1000_0c21 memmgr -> native hang; that memmgr + the op-0x4c display-list
+consumer are the work.  ORDERED PLAN: (1) implement/stub-out FUN_1000_0c21 memmgr so op-0x4c can run without
+hanging; (2) implement the op-0x4c display-list present faithfully (draws + reclaims the type-4 display
+objects, decrementing a294); (3) verify a294 stays <0x78, b1d6 spawns weapons, projectiles hit, b2ef fires,
+goals -> 0; (4) then determinism + native==wasm across the run.  This is the substantial "build the part the
+port does not yet run" clause -- now precisely scoped to op-0x4c, reached by tracing combat backwards from
+b2ef=0.  Movement (416) stands; goal UNMET; the blocker is singular and named.
