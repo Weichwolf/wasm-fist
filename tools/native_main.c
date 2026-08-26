@@ -1363,6 +1363,15 @@ void fist_dbg_fbwild(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoi
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
+    /* board:0012 EXPERIMENT: complete the frame-present handshake INSIDE the op-0x4c gate (not only in
+     * the PIT pump at line ~711), because the in-mission 459a present-poll spins on op-0x4c WITHOUT
+     * re-entering fist_timer_pump -> d548 never flips 1->0x81 -> the loop never advances back to the
+     * per-tick sim c0ca -> the mission freezes after ~3 spawn frames.  The real flight model OR-s bit7
+     * into d548 to signal "frame ready"; emulate that here so the present completes every op-0x4c and
+     * the frame loop keeps running the sim. */
+    if (getenv("FIST_SIMRUN") && op == 0x4c &&
+        g_mem[0x1c000 + 0x1549] == 0x1c && g_mem[0x1c000 + 0x1548] == 1)
+        g_mem[0x1c000 + 0x1548] = 0x81;
     if (op == 0x18) { g_fist_after_map = 1;
         if (getenv("FIST_DBG_OP18")) { static int o=0; if(!o){o=1; extern void fist_dbg_op18(void); fist_dbg_op18();} } }
     /* FIST_DBG_OP2C: clean gdb breakpoint at the first op-0x2c gate (crash-bucket secondary-viewport paint) */

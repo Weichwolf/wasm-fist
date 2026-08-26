@@ -88,3 +88,35 @@ trace, until goal objects are cleared and DAT_2000_578e reaches 0 (win) or the p
 platoon is eliminated (lose).  VERIFY handle: watch DAT_2000_9fbc + object region
 (engine-flat, CR3-aware FIST_WATCHFLAT) in the oracle and match the port's writes.
 Refines next-step 1: the sim state is the registry, not a scalar; capture its trace.
+
+## BREAKTHROUGH: the flight model RUNS (2026-08-26) -- the sim was one handshake away
+
+The flight-model sim is NOT missing code -- it is FUN_0000_c0ca (per-tick), which walks the object
+registry DAT_2000_9fbc and calls each object's update method (FUN_0000_c0e5: fist_icall_near vector at
+obj*2-0x1bac), then dde2->op-0x1c.  c0ca IS reached in the port (guard DAT_2000_2dab=0, not gated), BUT
+only ~3 times at spawn ([0x452]=314) then it STOPPED while the timer kept advancing.
+
+ROOT: the in-mission 459a frame loop presents via the op-0x4c gate, whose completion is the d548 (0x1548)
+handshake -- the engine sets d548=1 ("waiting"), the flight model OR-s bit7 (d548=0x81="frame ready"),
+then FUN@fist.c:13440 presents + FUN_1000_65c2 (HUD) and resets d548=0.  The port faked bit7 ONLY in the
+PIT pump (native_main.c:711), but the present-poll spins on op-0x4c WITHOUT re-entering fist_timer_pump,
+so after a few frames d548 never flips -> infinite op-0x4c spin -> the loop never returns to c0ca -> the
+sim freezes.
+
+FIX (proven, env-gated FIST_SIMRUN experiment in fist_extender_gate): complete the present INSIDE the
+op-0x4c gate (d548: 1->0x81 when d549==0x1c), emulating the flight model's frame-ready signal at the point
+the loop actually polls.  RESULT: c0ca now runs CONTINUOUSLY (~1/tick, #8000 at tick 8275), the mission
+runs CLEAN to tick 30000 (rc=0), and the object data EVOLVES: 3176/12288 bytes change t2000->t8000 (vs 77
+frozen).  The flight model is executing -- units update every tick.  THE SIM IS ALIVE.
+
+REMAINING to reach a resolved win/lose native==wasm:
+  1. Make the present-complete FAITHFUL + default (not FIST_SIMRUN-gated): the real signal is the flight
+     model OR-ing bit7 into d548 via the TCB+8 pointer d99b installed -- wire that, or drive it from the
+     op-0x1c handler, so it is the correct mechanism not an always-ready fake.
+  2. Fix the goals-count base-loss (fist.c:60248 `*(byte*)(*piVar4+0x17)` derefs the raw DGROUP offset as
+     a host ptr -> DAT_2000_578e stuck at 0) so goals decrement is visible + the win test works.
+  3. Verify the sim is FAITHFUL: capture the oracle's registry/object transaction log (live FIST_WATCHPHYS)
+     and match the port's object writes tick-for-tick; fix divergences (host-ptr class) until identical.
+  4. op-0x1c (dde2) is still stubbed -- determine what the extender op-0x1c must do and whether the sim
+     needs it (physics?) vs c0e5 alone.
+  5. Run to a resolved win/lose; then wasm byte-identical.
