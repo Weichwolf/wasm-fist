@@ -787,3 +787,32 @@ in the LOAD path: instrument b1a2 (param_3 slot, param_4 object) during d7e1's l
 colliding/repeating param_3, and asm-verify the slot-index computation in d81e/d7e1 (likely a base-loss or
 16-vs-32-bit width bug in the inbox reads uRam000f0008/000a that feed b1a2's param_3).  Fix so each loaded
 object gets a UNIQUE slot and a294 == distinct side-A count (<0x78) -> b1d6 fire guard passes.
+
+## DEFINITIVE fire-path root: weapon-spawn is base-loss-scrambled (board:0010 class) (2026-08-26)
+
+b1d6's sole caller = FUN_1000_9caa (the type-0x11 projectile/weapon spawn).  Asm-verified (img 0x19caa):
+  push di            ; DI = SOURCE firer object (caller passes it in DI)
+  mov ax,0x11 ; push cs ; call 0x1b1d6   ; allocate a NEW projectile obj -> returned in DI
+  mov si,di          ; SI = the NEW object
+  pop di             ; DI = source restored
+  mov [si+0x12], (rand&0x3f)+CS          ; new-obj id/seed uses CS (== the decompile's "unaff_CS")
+  mov [si+4],[di+4] ; [si+8],[di+8]       ; copy SOURCE(di) position X/Y -> NEW(si)
+  mov [si+0xc], [di+0xc]+0x300            ; + muzzle Z offset
+  retf
+DECOMPILE (FUN_1000_9caa) LOST b1d6's DI return: it uses iVar4=param_2 (the SOURCE) as the write target and
+reads position from iVar5=unaff_CS (garbage/CS constant).  So the port writes the projectile fields onto the
+SOURCE firer and sources position from garbage -> even if the a294 guard permitted, no valid projectile is
+created.  Two coupled base-losses, BOTH the CS-context / register-tracking class (board:0010):
+  (A) a294 leak: b51f(59 side-A 0x10 objects) -> ba49 -> ba33 -> b1df re-registers via `unaff_CS` (b51f:
+      `FUN_0000_ba49(0x9c15,param_1,unaff_CS)`), duplicating objects (ad74 x10) -> a294 -> 0x96 cap ->
+      b1d6's `a294<0x78` guard rejects EVERY weapon spawn.  (Load b1a2 is CLEAN: 50 objs, slots 0-49,
+      no collision -- the dup is purely the sim-time unaff_CS spawn path.)
+  (B) spawn scramble: 9caa mis-maps b1d6's new-object return (DI) -> writes projectile to the source and
+      reads position from unaff_CS.
+FIX PATH (the goal's core "build the part the port does not run"): recover the CS-context / register flow in
+the spawn cluster -- either board:0010 SetCSContext in the Ghidra pipeline (systematic: eliminates unaff_CS,
+re-threads b1d6's DI return) then re-decompile, OR per-site base-loss patches on 9caa (use b1d6-return as
+target, param_2 as source, CS for +0x12) + ba49/ba33/b51f (correct the child-object pointer so it stops
+re-registering the parent).  Then a294 stays < 0x78, b1d6 registers projectiles, they carry the firer's
+position + muzzle offset, fly, hit, b2ef fires, goals fall.  This is the last root between "tanks drive"
+(patch 416) and "mission resolves".  Cross-ref board:0010 (this fire path is a concrete board:0010 consumer).
