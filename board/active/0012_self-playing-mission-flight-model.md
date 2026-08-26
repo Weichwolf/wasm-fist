@@ -856,3 +856,28 @@ such that DI is reloaded.  UNRESOLVED -- do not patch until the model is underst
 OR a working oracle anchor to observe the correct per-frame registry writes; both unavailable in this env).
 This is the honest edge of understanding; improvising a base-loss patch here risks silent corruption of the
 pristine-derived engine, which the project forbids.  The 416 movement fix stands (asm-verified, 18/0 verify).
+
+## REFINED (corrected re_out->build): spawn cluster IS patched; blocker = display-object per-frame clear (2026-08-26)
+
+IMPORTANT CORRECTION: my earlier "9caa/spawn-cluster base-loss" analysis read re_out (pristine/scrambled).
+The BUILD is already patched: 9caa=patch 270, b51f=253, b583=257, the b1df->ba33->ba49->ba5d chain=258,
+b5e7=335.  patch 258 asm-VERIFIED that b1df(4, di=the object) registers the object into the 182-slot 0xdfbc
+table -- so the b51f/b583 emitters re-register their object each phase (up to 8x) as DISPLAY objects; this
+is the correct asm.  These MUST be cleared/despawned each frame or the 182-slot registry overflows.
+
+CONFIRMED the guard is a real safety limit, not the bug: relaxing BOTH a294 gates (b1d6 <0x78 and b21d
+cap ==0x96) SEGFAULTS (exit 139) -- the registry overflows.  So combat cannot be unblocked by bypassing the
+guard; the leak itself must be stopped.  a294 reaches 150 by the FIRST cockpit frame (t=314) -- i.e. during
+the pre-cockpit load/spawn frames, via the emitter re-registration -- and never falls (b2ef=0: NOTHING
+despawns).  In the oracle a294 must stay <0x78 (it fires 9caa->b1d6), so the oracle DOES clear these each
+frame; the port does not.
+
+THE MISSING MECHANISM (concrete next lead): the per-frame TRANSIENT-OBJECT CLEAR.  The frame loop
+(re_out ~13008/13071) runs `fist_icall_far(DAT_2000_2ce4)` immediately BEFORE FUN_0000_c0ca(update) and
+FUN_0000_461b after.  One of these (2ce4 pre-clear, or a compaction that removes display-type slots and
+decrements a294) is very likely the per-frame reset the port stubs/mis-dispatches, letting emitters
+accumulate to the 0x96 cap.  NEXT: trace what DAT_2000_2ce4 / FUN_0000_461b resolve to at the mission frame
+(instrument fist_icall_far for that vector; objdump the frame-loop caller), find the display-object clear,
+verify it runs in the port; if stubbed/base-lost, restore it -> a294 stays low -> b1d6 spawns weapons ->
+projectiles (b5e7) -> hits -> b2ef -> goals fall.  Secondary: patch 258's documented bb64/DAT_5a25
+target-population deviation.  Movement (416) stands; goal UNMET.
