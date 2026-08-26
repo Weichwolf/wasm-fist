@@ -747,3 +747,32 @@ leaks.  Asm-verify each `(long)*(int*)`/`*(int*)` timer deref in that cluster (m
 migrate, and confirm: b2ef starts firing -> a294 falls below 0x78 -> b1d6 spawns projectiles -> goals
 begin to fall.  36 `(long)*(int*)` sites remain (b945:6, b998/b93f/b808/b60f/b5e7:3 each, a0a4/a0ab:2 ...);
 this is a bounded asm-verified width-sweep, the 416 idiom generalized.  Win metric = goals -> 0.
+
+## a294-LEAK ROOT: registry DUPLICATION (confirmed at spawn) (2026-08-26)
+
+FIST_DUMP_REG at first-in-mission: 115 live registry entries but only 80 DISTINCT slot values -> 35
+duplicates.  The SAME object is registered in many 9fbc slots: ad74 x10, a392 x8, a35b x6, a324 x6,
+ab85 x5, a3c9 x5, ...  Side-A distinct = 64, yet a294=150.  So each duplicate registration bumps a294
+(via b21d) -> a294 over-counts to the 0x96 cap -> b1d6's `a294<0x78` weapon-spawn guard blocks ALL firing.
+The fire blocker is therefore DUPLICATE OBJECT REGISTRATION in the object-management path (b1a2/b1d6/b1df
+placement into 9fbc[param_3*2] with colliding param_3, or an update method that re-registers its object
+every frame), NOT a despawn/lifetime issue.
+
+NEXT (ordered): (1) determine WHERE the duplicates are created -- instrument b1a2/b1d6/b1df to log
+(param_3 slot, param_4 object) and find the colliding/repeating registration; likely a base-loss/width bug
+in the slot-index (param_3) computation in d81e/d7e1 (load) or an update method re-adding its object.
+(2) Fix it (363/414/415/416 idiom) so each object occupies ONE slot and a294 == distinct side-A count
+(<0x78).  (3) Then b1d6's guard passes -> weapon spawns -> projectiles -> hits -> b2ef -> goals fall.
+Track goals->0 as the win metric.  This is the last identified blocker between "tanks drive" (patch 416,
+done) and "mission resolves".
+
+SESSION SUMMARY (2026-08-26): went from wrong-metric/wrong-model to a landed fix + fully-traced blocker.
+  - Corrected the win metric: GOALS REMAINING->0 (port loads goals=13 == oracle), NOT a294/a296.
+  - Corrected the mechanism: self-play = AUTO CONTROL autopilot; oracle is dynamic with empty input
+    (frame MAE<=12330) => the port's static behaviour is a BUG, goal achievable.
+  - LANDED patch 416: mobile-unit velocity read width int->short (asm movsx WORD) -> tanks now DRIVE
+    (position integrates smoothly vs prior random +-billions).  asm-verified 4 sites.
+  - TRACED the fire blocker end to end: duplicate registration -> a294 leaks to 0x96 cap -> b1d6 guard
+    blocks every weapon spawn -> b2ef=0 -> goals stuck at 13.
+  GOAL STILL UNMET (mission does not yet resolve); the remaining chain is one bounded fix (dedupe the
+  registry so a294 falls below 0x78), then verify goals->0 and native==wasm.
