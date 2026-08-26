@@ -2879,3 +2879,22 @@ threading (not a blanket one), AND (2) implementing the FUN_1000_0c21 memmgr blo
 faithful path requires; the table[+2] index itself may also be host-pointer-divergent (needs re-check once
 1 & 2 land).  This is squarely the board's "deep pointer-model + migration" work, now pinned to concrete
 sites (fist.c:13367 else-branch + FUN_1000_0c21 shim gap).  Committed cause-4 (menu/intro) unaffected.
+
+*** WHY IT IS NOT A BOUNDED PATCH: gated on the in-progress mission-LOAD reconstruction (2026-08-26) ***
+Reverting patch 413 and reading patch 188's OWN residual-risk note settles the scope.  The committed state
+has BOTH targets on a "wrong-but-completing" mission path: 0197's model-name index is garbage on both
+(native 0xeea9 wild, wasm a benign small coincidence), so neither loads real models, both reach DUMPTICK,
+and their audio streams DIVERGE (16.95M vs 19.40M).  Correcting the index (patch 413) steers native onto
+the REAL model-load path, which immediately hits the DOCUMENTED next frontier: patch 188 states verbatim
+"the op-0x4c display-list frame loop does NOT yet terminate (the mission viewport geometry at DGROUP:0x7aa4
+is still uninitialised)", plus FUN_1000_0c21's own "unimplemented deep follow-on" -> native HANGS.  So
+mission-audio native==wasm is not a standalone audio bug: it is DOWNSTREAM of the incomplete mission-load
+cascade reconstruction (real model loading -> the memmgr deep relocating allocator [patch 188, partial] ->
+the op-0x4c display-list loop -> DGROUP:0x7aa4 viewport geometry -> FUN_1000_0c21 follow-on).  Landing it
+requires COMPLETING that multi-function frontier faithfully so BOTH targets take the same correct path,
+THEN the 4308 else-branch per-vec threading (fist.c:13367, the 1684/1692 vec -> (ax,cx,0,bx,0)) makes the
+model index deterministic on that path.  That is the board's "deep pointer-model + migration" frontier,
+actively in progress via patches 188+.  Concrete ordered next steps: (1) implement DGROUP:0x7aa4 mission
+viewport-geometry init so the op-0x4c loop terminates; (2) implement FUN_1000_0c21's deep follow-on; (3)
+per-vec 4308 else-branch threading; (4) re-verify mission-audio WAV native==wasm.  Menu/intro audio stays
+CLOSED (patch 412).  Nothing to revert; tree clean.
