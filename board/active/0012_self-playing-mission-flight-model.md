@@ -1231,3 +1231,25 @@ FULLY ACCURATE SESSION STATE (2026-08-27):
   - Resolution requires, beyond the above: the AUTO-CONTROL NAVIGATION to engage (the player-unit AI).
   Goal UNMET.  Three scoped pieces remain: (1) render sprite-method base-loss cascade [drop the skip guard];
   (2) the auto-control navigation to drive-to-engage; (3) then verify goals/a296 -> 0 + native==wasm.
+
+## CORRECTION: navigation finish is asm-migratable, NOT oracle-blocked (2026-08-27)
+
+I over-stated that the auto-control navigation "needs the oracle."  The FIX is an asm-verified base-loss
+migration like everything else (the FIST.DAT asm IS the correct behaviour); the oracle is only for the
+FINAL byte-identity verification, not for deriving the fix.  Entry points found: the unit velocity
+[obj+0x59]/[0x5b] (integrated by 416) is written by accel (re_out ~25840: if [0x59]<0xfe [0x59]++) and
+damping (~25906: decay [0x5b] toward 0) dynamics; the steering/heading that drives velocity direction is
+in the side-B unit AI (7c1d/902c -> a9ea/a0a4 + sub-updates).  Migrate that cluster (drive-to-engage
+heading toward the side-A goals) with the 416/419 idiom; then the side-B platoon engages -> destroys goals
+-> goals->0.
+
+So the ENTIRE finish is a bounded, decompiled, asm-verifiable base-loss migration -- no oracle dependency
+for the fix, no undecompiled overlay:
+  (1) render sprite methods c694/c945/c962 (drop the render-skip);
+  (2) side-B auto-control steering/navigation (a9ea/a0a4/steering) to drive-to-engage;
+  (3) any further per-frame methods the sustained sim reaches (same idiom, crash-driven discovery);
+  (4) verify goals->0 + native==wasm.
+It is a substantial migration (many FUN_0000 functions in the b5xx-c9xx sim+render cluster) but each step is
+small and asm-checkable.  NOT open-ended; NOT tool-blocked for the FIX (only the final byte-identity check
+wants the oracle, whose engine anchor is CR3-paged here).  Goal UNMET; the a294 leak (main blocker) SOLVED;
+the finish is this bounded migration cluster.
