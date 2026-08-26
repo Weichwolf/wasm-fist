@@ -202,3 +202,43 @@ TURN NET: cleared the frozen-sim blocker (c0ca/c0e5 run).  Proved the flight mod
 code + missing extender per-frame functions, not a from-scratch simulator.  Mapped the exact remaining
 pipeline to a resolved, oracle-matching win/lose.  The reconstruction of that per-frame pipeline (and then
 wasm parity) is the substantial, well-defined work that remains.
+
+## Oracle-derived faithful handshake; combat = cs=0x2082 (2026-08-26)
+
+Captured the oracle's d548/d549 live trace (FIST_WATCHPHYS at the CORRECT guest-phys: engine base 0x11190,
+so DGROUP:0x1548 = 0x2e6d8, and DAT_2000_9fbc registry = 0x3b14c -- addressing SOLVED).  Findings:
+  - d548 frame-ready = the flight model ORs bit7 into the WAITING state, which is 1/2/3 -> 0x81/0x82/0x83
+    (not only 1->0x81).  The port hack handled only 1 -> incomplete handshake -> d549 DERAILED to invalid 0.
+  - FIX: OR bit7 into any waiting state (1/2/3).  RESULT: d549 now STAYS VALID and cycles 0x1c<->0x20 like
+    the oracle (tick5000 d549=0x20 d548=0x83; tick20000 d549=0x1c d548=0x81) -- the derail is GONE.
+  - the frame-ready is written by cs=0x2082 (the EXTENDER flight model) at eip 0x82e4/0x831e/0x8382/0x8402/
+    0xb17e/0xb247; the "waiting" 1/2/3 is written by cs=0x1119 eip=0x23d1 (562x, the engine present setup).
+  - oracle d549 spends most time in 0x1c (cockpit) cycling to 0x20/0x22 -- so the port's view-cycling is
+    faithful; only the stuck-0x00 was the bug (now fixed).
+
+STILL: units do NOT deplete (133 stable) -- COMBAT/DAMAGE is absent.  It runs in cs=0x2082 (the extender
+flight model), which the port STUBS.  So the next concrete target is cs=0x2082's per-frame combat: the
+functions at eip 0x82e4../0xb17e.. (and what they call) resolve weapons/damage/death and write the object
+registry.  These are in fist_image.bin (the extender), NOT in fist_ext.c -- decompile + wire them (the
+proven pipeline), verify the port's registry writes tick-for-tick vs the oracle (FIST_WATCHPHYS=0x3b14c),
+until goal units deplete to a resolved win/lose.  Handshake: FAITHFUL.  Combat: the mapped remaining work.
+
+## Combat code located: flat 0x28000+ (cs=0x2082) -- a NEW decompile target (2026-08-26)
+
+The cs=0x2082 flight-model writers (frame-ready + combat) live at flat linear 0x28000..0x2c000
+(flatip 0x28b04, 0x28b3e, 0x2b9dc, 0x2ba6c, ...).  This is ABOVE the engine (0x10000..0x1c000) and BEYOND
+re_out/fist_image.bin (size 0xbf90) -- so the flight-model combat/physics code is a SEPARATE region NOT in
+either decompile (fist_dat_image.bin = FIST.DAT engine; fist_image.bin = FIST.RUN kernel).  It is the
+extender's PM flight model proper, loaded at runtime (the overlay the goal calls "the part... at 0x100000").
+CONCRETE NEXT: extract the flat 0x28000..0x2c000 (and its callees) from the running extender / FIST.RUN,
+add it as a decompile target (make image variant), decompile -> assemble -> wire it as the op-per-frame
+flight-model step, and verify the object-registry writes (FIST_WATCHPHYS=0x3b14c) tick-for-tick vs the
+oracle until goal units deplete to a resolved win/lose.
+
+TURN NET (major, oracle-verified): (1) frozen-sim blocker CLEARED (c0ca/c0e5 run); (2) faithful d548
+handshake (OR bit7 into waiting 1/2/3) -> d549 no longer derails, cycles 0x1c<->0x20 like the oracle;
+(3) oracle-verification addressing SOLVED (DGROUP:0x1548=guest-phys 0x2e6d8, registry=0x3b14c, live trace
+works); (4) combat PRECISELY located (flat 0x28000+, cs=0x2082) and confirmed a new decompile target.
+The goal (faithful win/lose native==wasm) now reduces to: decompile+wire the flat-0x28000 flight-model
+combat, finish the op-0x24 windshield render (board:0001), verify vs the oracle, reach the outcome, wasm
+byte-identical.  Substantial, but every piece is now located, tooled, and falsifiable.
