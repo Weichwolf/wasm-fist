@@ -991,3 +991,27 @@ the ba49 spawn contradiction (asm registers the emitter di, not a flying project
 damage is c31e-direct or projectile-based.  Two sub-defects remain in the SAME weapon cluster; 417 fixed
 the targeting/gate, the damage-application + the ba49/effect-despawn are next.  Movement (416) + targeting
 (417) landed and asm-verified; goal UNMET but combat provably advanced (targeting now correct, a294 halved).
+
+## *** COMBAT WORKS *** patch 417 fixed -- units are destroyed (2026-08-26)
+
+The c31e param_3 fix was the linchpin.  c31e (patch 256) does `di = (uint16_t)param_3` -- it wants the
+object NEAR OFFSET, not a host pointer.  My first 417 passed g_mem+0x1c000+DAT_5a25 -> its low16 = garbage
+-> c31e dispatched the wrong type.  Corrected to pass DAT_5a25 (the raw near offset).  RESULT (measured,
+setarch -R, deterministic):
+
+  a296 (side-B unit count) DROPS: 16 -> 15 -> 14 -> 13 -> 12 -> 11 -> 10 over t=474..1008.  b2ef FIRES.
+  UNITS ARE DESTROYED.  The mission is DYNAMIC where it was frozen for the entire prior effort.
+
+The side-A weapon emitters (type-0x10, b51f) find side-B targets (bb64 -> c252), damage them (c31e on the
+target), and destroy them.  This is real AI-vs-AI combat: the enemy destroying the player's side.
+
+REMAINING (the last blocker to a RESOLVED win/lose): combat STALLS at t~1008 when a294 (side-A) re-caps at
+150.  The side-A emitters/effects (ba49 registrations) never despawn (a294 only climbs, never falls), so
+after each emitter fires its one 8-phase burst (phase-bit [di+0x1b] gates re-fire) the registry fills and
+b21d/b1d6 block further spawns -> combat halts with a296=10 (6 of 16 destroyed), not 0.  To RESOLVE the
+mission, the spent emitters/effects must despawn (free a294 / reset the phase-bits) so combat is SUSTAINED
+until a296 -> 0 (one side eliminated).  This is the effect/emitter despawn lifecycle -- the same class as
+the display-object reclaim, now the SINGLE remaining blocker between "combat works" and "mission resolves".
+(My FIST_SIMTRACE goal-count is polluted by leaked duplicates -- goals oscillates 13-17; a296 is the clean
+combat signal.)  Movement (416) + targeting/damage (417) landed+asm-verified; combat PROVEN; sustaining it
+to resolution is the final step.
