@@ -559,3 +559,41 @@ runs per-tick in the port (oracle registry writes at guest-phys 0x3b14c under se
 then walk the update-method subtree for base-loss (the 414/415 migration class) until a unit fires + hits.
 This is tractable FIST.DAT migration, not extender reconstruction.  The flip-flop is corrected by reading
 the actual code: combat is decompiled; the work is base-loss migration + faithful per-tick dispatch.
+
+## EMPIRICAL: the sim RUNS but units never FIRE (port defect, no oracle needed) (2026-08-26)
+
+Instrumented the port directly (FIST_SIMTRACE in native_main.c: per-tick live-count + a294/a296 +
+body-fingerprint; throwaway patch on b2ef: destroy-call counter).  AZER1 -> cockpit, setarch -R
+(ASLR off, deterministic), FIST_SIMRUN=1, 40000-64000 ticks.  Facts:
+
+  1. THE PER-TICK SIM ADVANCES.  c0e5's object-body fingerprint changes EVERY tick bucket -> the update
+     methods run and mutate object state (movement/AI evolves).  NOT frozen.  (Corrects the earlier
+     "0/0/0 destroys = frozen sim" reading -- the sim is live.)
+  2. NO COMBAT EVER RESOLVES.  b2ef (object destroy) fires ZERO times in 40000 ticks.  Registry live-count
+     is CONSTANT at 114 for 64000 ticks.  a294/a296 static.
+  3. UNITS NEVER FIRE.  A constant live-count means no projectile ever spawns (a shot would perturb the
+     registry: +1 on spawn, -1 on despawn).  So the fire DECISION inside the per-type update methods
+     (912d/90cd/9176/875f/a358/a0a4) never triggers.  This is the combat break -- and it is a PORT DEFECT
+     (dispatch works, movement works; only the fire gate is dead), NOT extender-reconstruction and NOT
+     the self-play design.
+  4. SIDE-COUNT DESYNC.  With CORRECT addressing (DAT_2000_XXXX = g_mem+0x1c000+(XXXX+0x4000); my first
+     trace was off by 0x4000): port a294=150 (== the 0x96 cap in b21d), a296=16.  Sum 166 > 114 live
+     registry slots -> the side-counters OVER-count vs the registry (b21d increments exceed surviving
+     9fbc placements).  Since b2ef never fires and no sim-time register happens, a294=150 is purely the
+     LOAD result: d7e1->d81e->b1a2->b21d over-registered side-A to the cap.  Concrete anomaly (b1a2
+     param_3 slot handling, or the type->side discriminator read *(byte*)(type-0x19ec)) -- a base-loss
+     candidate in the load or the update path.
+
+METHOD NOTES (for the oracle comparison the goal requires):
+  - DAT_2000_XXXX g_mem offset = 0x20000+XXXX; DGROUP-relative (from dg=g_mem+0x1c000) = XXXX+0x4000.
+  - The instrumented DOSBox RELOCATES DGROUP to a per-run guest-phys base; the stale 0x31190/registry
+    0x3b14c anchor is WRONG for fresh runs (a FIST_WATCHPHYS=0x3b424 "a294" probe hit a TEXT buffer:
+    ASCII 'H'/'I'/'J' written by bc88, a string parser).  Oracle side-count comparison MUST first
+    re-anchor DGROUP this-run (read dsb from a capture_9200/_6980 .cam.txt, or CR3-aware WATCHFLAT on the
+    engine-flat linear 0x2a294), NOT reuse a prior run's phys.
+
+NEXT (singular, tractable, PORT-side): trace inside ONE per-type unit update method to the fire gate and
+find why it never fires -- almost certainly a base-lost target/LOS/range read (the 414/415/363 migration
+class) that always yields "no target".  Confirm the fire cadence + a294 trajectory against a correctly
+re-anchored oracle.  Corrects the prior "settled: extender reconstruction" -- combat is decompiled
+FIST.DAT; the break is a base-loss in the update-method subtree.
