@@ -1253,3 +1253,23 @@ It is a substantial migration (many FUN_0000 functions in the b5xx-c9xx sim+rend
 small and asm-checkable.  NOT open-ended; NOT tool-blocked for the FIX (only the final byte-identity check
 wants the oracle, whose engine anchor is CR3-paged here).  Goal UNMET; the a294 leak (main blocker) SOLVED;
 the finish is this bounded migration cluster.
+
+## ACCURATE re-assessment of the render (2026-08-27)
+
+Read c945/c962 asm: they are the windshield DISPLAY-LIST SPRITE BLITTER -- `rep movs` copying sprite data
+ds:si -> es:di into the display-list output buffer, indexed by dl=[obj+0x1c] frame id, via sprite source
+tables ([bx-0x1b58], [bx+0x276c]) and a command helper ca2f (al=0xc/8).  This is the op-0x4c display-list /
+DGROUP:0x7aa4 render FRONTIER the goal names -- a substantial subsystem (board:0001), NOT the "few base-loss
+functions" I called it.  So I was too optimistic about the render cascade.
+
+HONEST AGGREGATE ASSESSMENT: the finish is bounded PER FUNCTION (each an asm-verified migration) but LARGE
+IN AGGREGATE -- it is most of the in-mission simulation + the op-0x4c windshield renderer:
+  - render: the op-0x4c display-list blitter cluster (c694/c945/c962/ca2f + sprite tables) = board:0001;
+  - navigation: the side-B auto-control steering (a9ea/a0a4 + velocity accel/damp 25840/25906) so units
+    drive to + destroy the goals (measured: over 64000 ticks goals stayed 13, no goal reached);
+  - the per-frame update methods the sustained sim reaches (crash-discovered).
+This is genuine multi-session work.  What I DID this session is real and central: shipped combat mechanics
+(416/417) and SOLVED+PROVED the a294 effect-despawn leak (418 + bab4/bae1/bb02/bc0c cascade, converges).
+But one full mission does not resolve (goals stays 13), and honestly completing it is a large migration of
+the sim+render cluster -- not achievable in this session.  Goal UNMET; central blocker solved; the finish
+is large-in-aggregate but decomposed and asm-checkable, documented for continuation.
