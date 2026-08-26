@@ -382,3 +382,25 @@ without 414 (the sim is near-frozen by default without FIST_SIMRUN, so the metho
 covered flows).  One of DOZENS of object-update methods still to migrate the same way; the systematic
 driver is the oracle registry-write diff (FIST_WATCHPHYS=0x3b14c under setarch -R) to prioritize the
 methods on the fire->hit->damage->b2ef path and asm-verify each rebasing.
+
+## Migration BOUNDED + 2 bricks landed (2026-08-26)
+
+Enumerated AZER1's combat-path via c0e5 dispatch (FIST_METHODS instrument): only SIX per-type update
+methods run -- type0..3 = FUN_0000_7c1d/87df/902c/97d5, type0x1a=bc46, type0x1b=b355.  NOT "dozens".
+Of the six, 5 already had base-rebase markers; bc46 was fully base-lost.  Landed:
+  - patch 414: FUN_0000_9aa1 lifecycle WORD counter (a different type, still correct).
+  - patch 415: FUN_0000_bc46 (type 0x1a) -- full rebase + asm-verified widths.  Effect: destroys are now
+    DETERMINISTIC (0/0 under setarch -R vs earlier ASLR flukes) -- a non-determinism source removed.
+Combat is still 0 deterministically, so the remaining base-loss is on the fire->hit->damage chain the unit
+methods reach: the callees (FUN_1000_9efc fire, ace0/b1df round-spawn, 9caa, b354, 9cfd, b2ef-adjacent)
+and/or residual derefs inside the 5 "migrated" methods (they showed 7-8 raw param derefs -- some may be
+legit params, some residual base-loss).  DEFINED LOOP to finish combat: (1) instrument each of the 6
+methods + their callees to find raw host-ptr derefs of the object offset; (2) asm-verify + rebase each
+(g_mem+0x1c000+off, correct widths) as a matrix-neutral patch; (3) re-run under setarch -R until b2ef
+fires and a294/a296 deplete to a side=0; (4) then eliminate the host-ptr class entirely so native==wasm.
+Bounded, mechanical, oracle-falsifiable.  Plus op-0x24 render (board:0001).
+
+STATUS: goal unmet (deterministic combat=0, no win/lose, render+wasm pending), BUT the combat migration is
+now a bounded work-list (6 methods + their combat-path callees), 2 bricks landed, determinism improving,
+each step matrix-neutral + asm-verified.  The "large multi-session" estimate is really "finish a bounded,
+enumerated method set" -- much smaller than feared.
