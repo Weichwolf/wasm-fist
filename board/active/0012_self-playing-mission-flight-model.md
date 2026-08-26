@@ -1132,3 +1132,24 @@ Root-caused + proved the effect-despawn fix (b21d is the object allocator; port 
 must be the fresh type-4 object that despawns via bab4).  Reduced the remaining from "open-ended extender
 reconstruction" to a concrete, decompiled, base-loss migration cascade of the effect+render cluster.
 Goal UNMET (mission does not resolve); combat proven; the finish is a deep-but-bounded per-frame migration.
+
+## HONEST CORRECTION: patch 418 has an unresolved pool-allocation flaw (2026-08-26)
+
+On grinding the cascade further I found the bc0c crash is on an UNDER-allocated a022 slot (param_2=0xBA58 =
+slot 122 while only ~115 were allocated) -- i.e. patch 418's b1df registered a 9fbc entry pointing at an
+UNALLOCATED/garbage pool slot.  So "thread b21d's DI-return" is NOT a clean fix: the idx/a294 accounting
+between b21d (roster slot walk, stride 0x37/0xfb) and 9fbc (the object registry) does not line up the way
+418 assumed, and the effect objects it creates are malformed -> the cascade CRASHES rather than converges.
+My earlier "*** EXACT FIX PROVEN ***" claim was OVERCONFIDENT: 418 confirmed the effect can be routed to
+type-4/bab4, but it does not correctly ALLOCATE the effect object.  The real fresh-effect allocation (which
+object buffer the a022/c05c pool hands out, and how ba5d/9fbc index it) is still not correctly understood
+from the decompile alone -- it needs the oracle to observe the correct per-frame pool/registry state, or
+Ghidra.  Retract the "proven" framing; the honest state is: the DIRECTION (effects must be a despawning
+type-4 object) is right, but the ALLOCATION mechanics are not yet correctly reconstructed.
+
+TRUE SESSION STATE: 416 (movement) + 417 (targeting/damage) shipped + verified = real working combat
+(a296 16->10, units destroyed) -- this stands.  The effect-despawn / a294-leak fix that would SUSTAIN combat
+to resolution is NOT solved: the object-allocation model (b21d pool <-> 9fbc registry <-> ba5d init) is not
+correctly understood, and 418's attempt creates malformed objects.  Goal UNMET.  Honest remaining work:
+correctly reconstruct the effect-object allocation (needs oracle/Ghidra), then migrate the effect+render
+update-method cluster it flows through.  I over-claimed "proven fix" mid-session; corrected here.
