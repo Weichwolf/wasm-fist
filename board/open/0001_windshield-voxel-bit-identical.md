@@ -259,3 +259,13 @@ AUDIO DETERMINISM -- 2 OF 4 LAYERS LANDED (2026-08-26):
     level divergence is inside the [0x452]=4000 window), so cause-1's INTRO.MS3 load is reverted until
     cause-4 lands.  NEXT: watchpoint driver_ds region 0x39d66 (and 0fab's puVar6/level source) to find the
     host-populated-only value.  Two of four audio-determinism layers are now LANDED + matrix-clean.
+
+CORRECTION (2026-08-26): 0x39d66 is written by the MGAVIDEO driver (m_mga_04f1 -> 1774 -> 184b -> 0a31,
+value 0x91fd from a video param), NOT the sound path -- it is video memory near the driver, dormant for
+the passing video flows.  So cause-4's instrument-LEVEL source is elsewhere (the extender 0x100000+ or the
+engine 0x10000 g_mem diffs).  cause-4 (wasm OPL levels read as 0, native real) remains the last audio
+blocker; the level write is 0fab's `(record_byte ^ 0x3f)` so the divergent input is the instrument record
+byte the FM-apply reads -- next: watchpoint the exact OPL reg-0x54 write's source under the INTRO.MS3-loaded
+build to find the host-populated-only level table.  cause-2 + cause-3 (patch 385) are LANDED + committed +
+matrix-clean; the audio note-count and WAV-length are now native==wasm identical -- only instrument levels
+diverge.  Two of four audio-determinism layers landed this session.
