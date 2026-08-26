@@ -1,0 +1,71 @@
+board:0012 mobile-unit velocity read width: asm is movsx WORD PTR [di+0x59]/[di+0x5b] (16-bit velX/velY, sign-extended to the 32-bit pos at [di+4]/[di+8]).  Ghidra mis-typed the 16-bit source as (long)*(int*) -- int=32-bit per ghidra_compat doctrine -- so the read grabs velX PLUS the adjacent velY (0x5b) as one 32-bit value, integrating GARBAGE velocity -> the auto-control tank teleports to nonsense coords instead of driving to goals.  Fix: *(int*) -> *(short*) (16-bit), (long) preserves the sign-extend.  4 sibling integrators (7cd5/88e4/912d/98c3 = the 4 mobile-unit types).  Verified: objdump all 4 identical.
+--- a/fist.c
++++ b/fist.c
+@@ -21452,14 +21452,14 @@
+   FUN_1000_a395(param_2);
+   if (!(bool)g_fist_cf) {             /* 7ce6 jb skip; CF=0 (a395 moved) -> obj[0xca]=3 + 76e8 */
+     *(undefined1 *)(param_2 + 0xca) = 3;
+     FUN_0000_76e8();
+   }
+   FUN_1000_a1d6(param_1,param_2);
+-  *(long *)(param_2 + 4) = *(long *)(param_2 + 4) + (long)*(int *)(param_2 + 0x59);
+-  *(long *)(param_2 + 8) = *(long *)(param_2 + 8) + (long)*(int *)(param_2 + 0x5b);
++  *(long *)(param_2 + 4) = *(long *)(param_2 + 4) + (long)*(short *)(param_2 + 0x59);
++  *(long *)(param_2 + 8) = *(long *)(param_2 + 8) + (long)*(short *)(param_2 + 0x5b);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_7d00) @ 0000:7d00 ===== */
+ 
+@@ -23206,14 +23206,14 @@
+   FUN_1000_a395(param_2);
+   if (!(bool)in_CF) {
+     *(undefined1 *)(param_2 + 0xec) = 3;
+     FUN_0000_76e8();
+   }
+   FUN_1000_a1d6(param_1,param_2);
+-  *(long *)(param_2 + 4) = *(long *)(param_2 + 4) + (long)*(int *)(param_2 + 0x59);
+-  *(long *)(param_2 + 8) = *(long *)(param_2 + 8) + (long)*(int *)(param_2 + 0x5b);
++  *(long *)(param_2 + 4) = *(long *)(param_2 + 4) + (long)*(short *)(param_2 + 0x59);
++  *(long *)(param_2 + 8) = *(long *)(param_2 + 8) + (long)*(short *)(param_2 + 0x5b);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_8917) @ 0000:8917 ===== */
+ 
+@@ -24493,14 +24493,14 @@
+   FUN_1000_a395(param_2);
+   if (!(bool)in_CF) {
+     *(undefined1 *)(param_2 + 200) = 3;
+     FUN_0000_76e8();
+   }
+   FUN_1000_a1d6(param_1,param_2);
+-  *(long *)(param_2 + 4) = *(long *)(param_2 + 4) + (long)*(int *)(param_2 + 0x59);
+-  *(long *)(param_2 + 8) = *(long *)(param_2 + 8) + (long)*(int *)(param_2 + 0x5b);
++  *(long *)(param_2 + 4) = *(long *)(param_2 + 4) + (long)*(short *)(param_2 + 0x59);
++  *(long *)(param_2 + 8) = *(long *)(param_2 + 8) + (long)*(short *)(param_2 + 0x5b);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_9160) @ 0000:9160 ===== */
+ 
+@@ -25666,14 +25666,14 @@
+   if (!(bool)in_CF) {
+     *(undefined1 *)(param_2 + 0xce) = 3;
+     *(undefined1 *)(param_2 + 0xd1) = 3;
+     FUN_0000_76e8();
+   }
+   FUN_1000_a1d6(param_1,param_2);
+-  *(long *)(param_2 + 4) = *(long *)(param_2 + 4) + (long)*(int *)(param_2 + 0x59);
+-  *(long *)(param_2 + 8) = *(long *)(param_2 + 8) + (long)*(int *)(param_2 + 0x5b);
++  *(long *)(param_2 + 4) = *(long *)(param_2 + 4) + (long)*(short *)(param_2 + 0x59);
++  *(long *)(param_2 + 8) = *(long *)(param_2 + 8) + (long)*(short *)(param_2 + 0x5b);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_98fb) @ 0000:98fb ===== */
+ 
