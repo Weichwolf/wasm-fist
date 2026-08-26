@@ -229,3 +229,15 @@ CAUSE-3 DIAGNOSIS (2026-08-26), via FIST_MEMDUMP g_mem diff native vs wasm at [0
   the 0872 method-vector copy source, find the native-vs-wasm-divergent input, make it faithful (16-bit).
   cause-2 (re-entrant cadence) is LANDED; cause-3 (this device-select host-value divergence) is the last
   audio determinism blocker + gates cause-1 (INTRO.MS3 load) and all mission audio.
+
+CAUSE-3 TRACED DEEPER (2026-08-26): the divergent audio driver-DS words are, in the method-vector table
+ds:0x17b..0x1d1, EXACTLY ONE of 44 entries: ds:0x1c1 = native 0fab vs wasm 0f80 (all others identical).
+But the more fundamental divergence is ds:0x12 = native 0x01ec vs wasm 0x0000 (0x1ec = the 01ec play-fn
+offset) and ds:0x14 = 4 vs 5 (delay).  The device-SELECT copy (patch 353: dev=byte[D+0x12]; if dev in
+1..5 copy row dev*2) is SKIPPED on both (native dev=0xec !<6, wasm dev=0) -> so ds:0x1c1 is written
+divergently ELSEWHERE in the driver init, and ds:0x12 itself is a driver-init value that comes out
+0x01ec native / 0 wasm.  The method table is loaded from SOUNDDVR.DVR (identical file) so these single
+entries are RUNTIME-OVERWRITTEN with a native-vs-wasm-divergent value -- a driver-init host-value leak
+(board:0003 class), NOT the g_mem-base truncation (alignment had no audio effect).  NEXT: watchpoint the
+writer of driver_ds:0x12 (and 0x1c1) to find the divergent input (likely a host-pointer low-16 or a
+call-arg the __allregs vector site drops, cf. patch 384) and thread the faithful 16-bit value.
