@@ -1315,3 +1315,22 @@ REMAINING to resolution (the large but PROVEN-tractable cluster, per-function cl
 STATUS: 416+417+420 shipped (combat mechanics + a0a4 proximity); 418+cascade proven; goal UNMET (goals=13,
 no resolution).  The finish is a large but per-function-clean base-loss migration of the unit-AI steering +
 effect + render clusters -- genuine multi-session work, grinding-tractable (420 proves the method).
+
+## NUANCE: navigation base-loss is subtle (heading/target), efficient fix needs oracle (2026-08-27)
+
+Checked 902c's callees: 912d/90cd/9176/a358/a57a/875f receive the object as a CORRECT HOST POINTER (they
+work -- combat runs, no crash there); only a0a4 got a near-offset (fixed by 420).  So the side-B units DRIVE
+COHERENTLY (the player integrates a smooth directional path, not random garbage) -- the movement stack works.
+The resolution blocker is therefore NOT a crash or garbage-motion base-loss; it is a SUBTLE heading/target-
+selection error: the units drive the WRONG DIRECTION (away from the side-A goals) rather than engaging.
+Which function computes the (wrong) heading is not identifiable by "does it crash / read garbage" -- it needs
+the ORACLE to observe the correct per-tick heading/target and find the divergence (or a blind grind of the
+whole AI cluster migrating every base-loss regardless).  So the finish splits:
+  - EFFECT + RENDER clusters: mechanical base-loss migration, no oracle needed (418+cascade proven; render
+    c694/c945/c962 to migrate) -- grinding-tractable here.
+  - NAVIGATION/steering-to-goal: the actual mission-resolution blocker, a SUBTLE dataflow divergence best
+    found with the oracle (blocked by CR3-paging here) -- else large blind grind.
+FINAL HONEST STATE (2026-08-27): shipped 416/417/420 (movement, damage, a0a4 proximity); proved 418+cascade
+(a294 leak).  Mission does NOT resolve (goals=13) because the units steer the wrong way; the steering
+divergence needs the oracle to locate efficiently.  Goal UNMET; effect/render finish is mechanical, the
+resolution-critical navigation is oracle-gated for efficient diagnosis.  Real progress banked; honest limit.
