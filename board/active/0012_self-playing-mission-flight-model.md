@@ -268,3 +268,29 @@ TURN NET: sim runs; handshake faithful (no derail, d549 cycles like the oracle);
 combat cluster IDENTIFIED as cs=0x2082 and PROVEN absent from the decompile -> the precise, falsifiable
 next decompile target.  The goal is a bounded reconstruction of one missed code cluster + render + verify,
 not an open-ended "write a simulator".
+
+## DECISIVE CORRECTION: the combat IS decompiled -- it just isn't triggering (2026-08-26)
+
+Retract "cs=0x2082 is a missing cluster".  cs=0x2082 is an ALIAS SELECTOR for the SAME engine code as
+cs=0x1000 (both base the flight/combat model; the oracle's cs=0x2082 eip 0xbb0f/0xbc77 == the decompiled
+cs=0x1000 functions at ~0xb2ef/0xbc..).  The combat + win/lose logic is FULLY DECOMPILED in fist.c:
+  - FUN_1000_b2ef = UNIT DESTROY: clears the registry slot ((undefined2*)&DAT_2000_9fbc)[i*2]=0, marks the
+    object destroyed (+0xb|=1), decrements the per-slot count 9fbe and the SIDE counts DAT_2000_a294 /
+    DAT_2000_a296 (friendly/enemy) -> this IS the "one side eliminated" resolution.
+  - FUN_1000_b2ef has ~10 callers (fist.c 13867, 24472/24548/24619/24727, 25215/25236/25306, 28067,
+    28296 ...) = the weapon-hit / collision / damage death sites, all decompiled + linked.
+So the goal's "in-mission simulation... unit AI, movement, weapons, damage, win/lose" is NOT missing code:
+it is present and runs (c0e5 walks the registry every tick).  Units do not deplete because the DAMAGE FLOW
+never triggers a destroy -- no weapon hit registers.  Likely causes (to debug against the oracle):
+  1. op-0x1c projection (0x1109/0x7fa0) stubbed -> units have no screen/aim solution -> AI can't acquire /
+     fire.  2. the present cadence perturbs AI timing.  3. a stubbed extender service or a base-loss in the
+  targeting/hit path silently no-ops the fire->hit->damage->b2ef chain.
+CONCRETE NEXT: instrument FUN_1000_b2ef + the fire/hit path in the port (does anything reach them?), diff
+the port's per-tick registry/object writes vs the oracle (FIST_WATCHPHYS=0x3b14c / object region) to find
+the first tick the port stops matching, and fix that divergence (the missing projection or a base-loss),
+until b2ef fires and DAT_2000_a294/a296 deplete to a resolved win/lose.  This is combat-FLOW debugging on
+DECOMPILED code + oracle diff -- bounded, not a new decompile.
+
+TURN NET: frozen-sim cleared; faithful handshake (no derail); oracle addressing solved; combat proven
+DECOMPILED with the win/lose resolver (b2ef + a294/a296) present -> the remaining work is triggering the
+already-decompiled damage flow (oracle-diff debugging) + render + wasm, not building a simulator.
