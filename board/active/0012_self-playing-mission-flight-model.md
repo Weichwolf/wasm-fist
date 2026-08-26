@@ -137,3 +137,21 @@ So the two remaining fronts are now cleanly separated:
      walk) + viewport geometry, so the simulated frames actually draw.
 The DoD needs BOTH (every simulated frame produced), but they are now independently attackable, and the
 hard blocker (a totally frozen sim) is CLEARED.
+
+## HONEST REFINEMENT: unblocked != faithful (2026-08-26)
+
+Long-run check (FIST_SIMRUN, AZER1): the sim runs but does NOT yet reproduce the oracle's battle.
+  - tick 5000: d549(view)=0x20, tick 30000: d549=0x00 (left cockpit 0x1c) -- view-state transitions fire.
+  - occupied units ~114->139 (stride8) / 114 (stride4): STABLE -- units are NOT being destroyed, whereas
+    the oracle depletes goals 13->11 (units dying).  So combat attrition is not happening faithfully.
+  - the present-complete is gated on d549==0x1c, so once the view transitions the hack stops driving it.
+CONCLUSION: the op-0x4c present-complete UNBLOCKS c0ca (the sim executes, objects churn, HUD/radar live),
+but the always-ready fake is NOT the faithful frame-ready timing, so the sim advances at the wrong cadence
+/ takes wrong transitions and does not converge to the oracle's outcome.  "Sim runs" is achieved; "sim
+runs FAITHFULLY (oracle-matching)" is the next substantial step and is what the goal requires.
+NEXT (sharpened): (1) capture the oracle's per-tick object-registry + d548/d549 transaction log (live
+FIST_WATCHPHYS at the in-mission guest-phys) and the port's, diff tick-for-tick; (2) replace the fake
+present-complete with the FAITHFUL frame-ready signal (the flight model OR-s bit7 into d548 via the TCB+8
+pointer d99b installs -- reconstruct that trigger + its timing) so the cadence matches; (3) fix the
+goals-count base-loss so attrition is visible + the win test works; (4) drive to the oracle's resolved
+outcome; (5) wasm byte-identical.  The frozen-sim blocker is cleared; faithful reproduction is the work.
