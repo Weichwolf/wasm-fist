@@ -469,3 +469,29 @@ patch); re-run setarch -R until d7e1/b1a2 fire post-spawn.  The fire path is now
 Goal remains UNMET (0 deterministic combat, no win/lose, render+wasm pending).  Net this turn: fire path
 traced end-to-end + break localized to the AI target/fire sub-method subtree; the migration loop continues
 there.
+
+## Combat is SPLIT: damage/destroy in FIST.DAT, AI/fire in the extender overlay (2026-08-26)
+
+Oracle trace of the fire-setup field DAT_2000_a9c0 (guest-phys 0x3bb50, the object b1a2 registers on fire):
+written ONLY by cs=0xf000:0x14a5 (81x) + cs=0x02dd (1x) over AZER1 play -- NOT by cs=0x1000 (FIST.DAT
+engine) nor the cs=0x2082 alias.  a9c0 is also NEVER written in re_out/fist.c or fist_ext.c.  So the code
+that DECIDES to fire and sets up the round (writes a9c0) runs in cs=0xf000 (extender/high-memory), OUTSIDE
+the FIST.DAT decompile.  This resolves the earlier ambiguity: the combat model is SPLIT --
+  - IN FIST.DAT (decompiled, base-loss migration): the object-update methods (c0e5-dispatched 7c1d/87df/
+    902c/97d5/bc46/b355), damage lifecycle, and the win/lose resolver (b2ef + a294/a296).  <- migratable.
+  - IN THE EXTENDER OVERLAY (cs=0xf000, NOT in FIST.DAT decompile): the AI target-acquire + fire-decision
+    that writes a9c0 and dispatches the fire (d7e1 weapon vector).  <- this is the goal's "part the port
+    does not yet run... in the overlay at 0x100000, not in FIST.DAT"; the port STUBS it, so the AI never
+    fires (b1a2 only at spawn).
+So finishing combat requires BOTH: (a) the FIST.DAT object-method base-loss migration (started: 414/415),
+AND (b) reconstructing the extender-overlay AI/fire code (cs=0xf000 cluster) -- extract + decompile that
+region (the make-kernel-image/fist_ext pipeline, extended to the cs=0xf000 fire cluster) or reconstruct it
+faithfully in the shim, verified vs the oracle a9c0/registry writes.  (b) is the substantive "build the
+part the port does not yet run" clause and is genuinely large.
+
+HONEST SCALE: the goal (deterministic AZER1 win/lose native==wasm) needs (b) the overlay AI/fire
+reconstruction + (a) the FIST.DAT combat-subtree migration + the op-0x24 render (board:0001) + host-pointer
+elimination for native==wasm.  That is a large multi-session reconstruction.  This session cleared every
+conceptual wall (frozen sim, unfaithful handshake, unsolved addressing, unlocated/undecompiled combat) and
+made concrete verified progress + 2 landed patches, and now precisely SPLITS the combat into the decompiled
+(migratable) half and the overlay (must-reconstruct) half -- the honest structure of the remaining work.
