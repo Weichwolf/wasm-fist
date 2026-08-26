@@ -269,3 +269,14 @@ byte the FM-apply reads -- next: watchpoint the exact OPL reg-0x54 write's sourc
 build to find the host-populated-only level table.  cause-2 + cause-3 (patch 385) are LANDED + committed +
 matrix-clean; the audio note-count and WAV-length are now native==wasm identical -- only instrument levels
 diverge.  Two of four audio-determinism layers landed this session.
+
+CAUSE-4 REFINED (2026-08-26): the divergent OPL level is NOT a static g_mem byte -- searching the
+INTRO.MS3-loaded memdumps for the expected source byte (native 0x22 / wasm 0x3f, from level = byte^0x3f)
+found ZERO hits.  So the level is COMPUTED from host-pointer-divergent state, not a raw record byte.  The
+remaining g_mem diffs are all host-address-shaped: engine 0x10000+ high-words native `09 08`/`0a 08`
+(=0x0809../0x080a.. ELF pointer high words) vs wasm values, and the extender 0x100000+ (88 host-ptr bytes).
+So cause-4 is a stored HOST POINTER (board:0003 class) whose value feeds the OPL instrument-level path on
+one target but reads 0 on the other.  Fixing it needs the cross-target (native+wasm/node) gdb trace of the
+exact reg-0x40..0x55 level write's data source -- deferred until the 10x gate (validating cause-2 + patch
+385) frees the build.  Two of four audio-determinism layers landed + gate-validating; cause-4 is a
+board:0003 host-pointer site feeding the level path (not a single fixable byte, so no quick thread).
