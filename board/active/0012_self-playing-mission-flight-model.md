@@ -659,3 +659,38 @@ faithfully (not a ready-bit stub).  To confirm/refute WITHOUT the oracle: trace 
 targeting to the point it bails (no-target), and check whether the missing datum is extender-computed.
 Also testing an anchor-free A-vs-B signal now: oracle windshield inter-frame diff over the 90s mission
 (static standoff => tiny diffs; active combat => large diffs).
+
+## REFRAME (the session's key finding): win = GOALS REMAINING, self-play = AUTO CONTROL (2026-08-26)
+
+Anchor-free A-vs-B experiment (oracle windshield inter-frame MAE across the 90s AZER1 mission, no memory
+anchoring): MAE = 2460..12330 (peak ~19% pixel change/frame), all frames confirmed windshield (17-20KB).
+=> the ORACLE IS HIGHLY DYNAMIC with the SAME passive input.  Rules out "the real game needs player action"
+(hypothesis B).  The port's total static no-combat is a BUG (path A); the goal IS achievable.
+
+The oracle frames (saved: ref/oracle_azer1_selfplay/f_01.png gunner view, f_07.png driver view) show the
+GROUND TRUTH that corrects the goal's own framing:
+  - HUD reads "GOALS REMAINING: 13" -> the WIN/LOSE condition is GOALS -> 0 (destroy the 13 goal objects),
+    NOT a294/a296 unit-elimination.  I was measuring the WRONG metric all along.
+  - "AUTO CONTROL" panel + view cycling "PL:1 UN:1" -> the player's platoon is on AUTOPILOT (AI-driven).
+    THIS is why the mission self-plays with EMPTY input: the tank drives + engages under auto-control.
+  - radar shows red enemy blips (targets tracked); the tank drives through terrain (big MAE = camera moving
+    because the auto-controlled tank is MOVING).
+  - strings confirmed in FIST.DAT: "GOALS:"@img0x246cc, "AUTO"@0x248f0, "AUTO TURRET CONTROL ENABLED/
+    DISABLED"@0x2ee6e/0x2ee8b -> goals + auto-control are DECOMPILED ENGINE features (reachable).
+
+PORT MATCHES AT SPAWN: FIST_SIMTRACE now counts goal-flagged objects (obj+0x17 & 0x08): the port loads
+goals=13 -- EXACTLY the oracle's "GOALS REMAINING: 13".  Roster is faithful.  But goals stays 13 forever
+(no combat destroys them) because the auto-controlled tank never drives/engages.
+
+REVISED FIX PATH (supersedes the a294/side-count framing): the self-play needs the AUTO-CONTROL tank to
+DRIVE toward + ENGAGE the goals so goals: 13 -> 0.  NEXT SESSION, in order:
+  1. Determine if the port's player tank is actually IN auto-control mode on mission entry (find the
+     auto-control state flag; the real game defaults to it for the platoon).  If not set, that alone may be
+     why it sits idle.
+  2. If in auto-control but idle: the auto-control NAVIGATION (path to goals) + FIRING likely needs the
+     extender's per-frame world model (voxel terrain height/LOS for driving + targeting) that the
+     FIST_SIMRUN present-stub starves -> implement the extender per-frame flight/combat step faithfully
+     (the goal's core clause), driving goals->0.
+  3. Track goals (not a294) as the win metric; mission resolves at goals==0.
+The win-metric correction + AUTO-CONTROL mechanism + A-confirmation (oracle is dynamic) are the durable
+gains; the goal (self-playing win/lose, byte-identical native==wasm) remains UNMET.

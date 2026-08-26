@@ -658,20 +658,21 @@ void fist_timer_pump(void){
       /* DIAGNOSTIC (FIST_SIMTRACE=N): every N engine ticks ([0x452]) print live-object count, the two
        * side unit-counts (a294/a296), and a fingerprint of all live object bodies -- to see whether the
        * per-tick sim (c0e5) ADVANCES (fp changes = movement/state; a294/a296 drop = destroys). Reads only. */
-      { static long strace=-2, hb=-1; static int plive=-1,pa=-1,pb=-1;
+      { static long strace=-2, hb=-1; static int plive=-1,pa=-1,pb=-1,pg=-1;
         if (strace==-2){ const char*e=getenv("FIST_SIMTRACE"); strace=e?atol(e):-1; }
         if (strace>0 && in_mission) {
           unsigned char *dg=g_mem+0x1c000;
           unsigned t=*(unsigned short*)(dg+0x452);
           unsigned short *fbc=(unsigned short*)(dg+0xdfbc);
-          int live=0; for(int i=0;i<0xb6;i++) if(fbc[i*2]) live++;
+          int live=0,goals=0; for(int i=0;i<0xb6;i++){ unsigned short s=fbc[i*2]; if(!s)continue; live++;
+            if(dg[(unsigned short)(s+0x17)]&0x08) goals++; }   /* obj+0x17 bit3 = goal (win = goals->0) */
           /* DGROUP-relative offset of DAT_2000_XXXX = XXXX + 0x4000 (DAT base seg 0x2000 = DGROUP 0x1c00 + 0x400). */
           int a=*(unsigned short*)(dg+0xe294), b=*(unsigned short*)(dg+0xe296);
           long bucket=t/strace;
-          if (live!=plive||a!=pa||b!=pb||bucket!=hb){
-            fprintf(stderr,"[simtrace] t=%u live=%d a294=%d a296=%d%s\n",t,live,a,b,
-              (live!=plive||a!=pa||b!=pb)?"  <<CHANGE":"");
-            plive=live;pa=a;pb=b;hb=bucket;
+          if (live!=plive||a!=pa||b!=pb||goals!=pg||bucket!=hb){
+            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d%s\n",t,live,goals,a,b,
+              (live!=plive||a!=pa||b!=pb||goals!=pg)?"  <<CHANGE":"");
+            plive=live;pa=a;pb=b;pg=goals;hb=bucket;
           }
         }
       }
