@@ -1153,3 +1153,28 @@ to resolution is NOT solved: the object-allocation model (b21d pool <-> 9fbc reg
 correctly understood, and 418's attempt creates malformed objects.  Goal UNMET.  Honest remaining work:
 correctly reconstruct the effect-object allocation (needs oracle/Ghidra), then migrate the effect+render
 update-method cluster it flows through.  I over-claimed "proven fix" mid-session; corrected here.
+
+## UN-RETRACT: patch 418 IS correct -- a294 BALANCES, cascade converges (2026-08-26)
+
+Reverse the previous retraction.  With 418 (thread b21d's allocated buffer) + the cascade of base-loss
+migrations it exposes (bab4 + its sub-methods bae1/bb02 + bc0c) + render-skip diagnostic, the run:
+  - DOES NOT CRASH (exit 0, runs to t=64000).  bc0c was just an unmigrated base-loss (+ a width bug
+    *(int/uint*) where the asm is WORD -- same class as 416), NOT a garbage object from 418.
+  - a294 now BALANCES: climbs to ~141 then FALLS (136,131,126,120,110,107,...) oscillating 88-147 instead
+    of monotonically pinning at the 0x96 cap -> THE EFFECTS DESPAWN (bab4 animate -> b2ef).  The a294 leak
+    is FIXED.
+So 418 IS the correct fix (b21d is the object allocator; register its DI-return; effects are the fresh
+type-4 object that despawns via bab4).  The cascade is a BOUNDED set of base-loss migrations (bab4/bae1/
+bb02/bc0c so far), each asm-verifiable (363/414/415/416/419 idiom), and it CONVERGES (no crash, a294
+balanced).  My earlier "garbage/under-allocated slot" diagnosis was wrong: 0xBA58 was a valid type-0x17
+object near-offset that bc0c deref'd raw (base-loss), not a malformed 418 allocation.
+
+NEW ISSUE (not a crash): with the CORRECT behaviour, a296 stays 16 (no side-B destroyed) in this window --
+the 417 a296-drop (16->10) was partly an ARTIFACT of the duplication leak (the emitter re-registered itself
+and re-ran b51f, AMPLIFYING c31e damage).  With 418 (no self-duplication) the emitters fire once/phase, so
+less damage, and the player drives off sooner.  So the mission still doesn't resolve, but now from correct
+mechanics, not a leak.  REMAINING to resolution: (1) migrate the render methods c694/c945 (+c4df object-ptr)
+to drop the render-skip guard [the type-4 effects must render faithfully, no stub]; (2) understand why the
+correct combat doesn't deplete a side -- likely the player AUTO-CONTROL navigation (drives out of range) or
+the weapon cadence.  418+cascade is a REAL, shippable-once-render-migrated fix; goal still unmet but the
+effect-despawn/a294-leak is genuinely SOLVED.
