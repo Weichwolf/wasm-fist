@@ -1,0 +1,29 @@
+board:0012 b51f weapon fire: gate on bb64's CF (target found) not the discarded position carry, and dispatch c31e on the bb64-found TARGET (DAT_5a25) not the emitter -- so targets actually take damage.  asm-verified 0xb561-b578 (jae b582 = bb64 CF; mov di,[0x9a25] = target).  Fixes patch 253/258's documented DAT_5a25 deviation.
+--- a/fist.c
++++ b/fist.c
+@@ -29937,13 +29937,20 @@
+       DAT_2000_5c7e = *(undefined1 *)(param_2 + 0x1c);
+       DAT_2000_5c7d = ((undefined1 *)&DAT_2000_5646)[uVar1];
+       FUN_0000_bb64(CONCAT31((int3)((ulong)DAT_2000_5c83 >> 8),DAT_2000_5c7e));
+-      if (bVar2) {
++      /* PATCH 417 (board:0012): b51f is a WEAPON: bb64 finds an armed target in range -> DAT_2000_5a25
++       * and returns CF (g_fist_cf).  ASM b564 `jae b582` gates the fire on THAT CF (target found), NOT
++       * the discarded position-add carry bVar2 (b552's `add` carry is never tested).  And ASM b573
++       * `mov di,[0x9a25]` makes c31e dispatch on SI = the bb64-found TARGET (DAT_5a25) -- Ghidra passed
++       * the emitter (param_1), so the damage/action hit the emitter itself, never the target, and no
++       * unit was ever destroyed.  Recover both: gate on g_fist_cf; c31e on the target object
++       * (g_mem+0x1c000+DAT_5a25).  ba49 still registers the emitter per asm (b57b pop di). */
++      { extern unsigned char g_fist_cf;
++      if (g_fist_cf) {
+         *(byte *)(param_2 + 0x1b) = *(byte *)(param_2 + 0x1b) | DAT_2000_5c7d;
+-        FUN_0000_c31e(0,10,param_1,DAT_2000_5a25);
+-        /* PATCH 258: thread di=object near offset (asm b57f: ba49 with the restored original
+-         * object in DI) instead of the dropped unaff_CS. */
++        FUN_0000_c31e(0,10,
++          (int *)((unsigned char *)g_mem + 0x1c000 + (uint16_t)DAT_2000_5a25),DAT_2000_5a25);
+         FUN_0000_ba49(0x9c15,param_1,(uint16_t)(uintptr_t)param_1);
+-      }
++      } }
+     }
+   }
+   return;
