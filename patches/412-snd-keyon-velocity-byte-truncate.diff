@@ -1,0 +1,24 @@
+board:0001 cause-4: device key-on tail-call passes 8-bit velocity (CL), fixing wasm i32 non-truncation of 10e3's byte param_2 -> OPL level reg 0x54 native==wasm
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -1726,11 +1726,18 @@
+     vec = *(uint16_t *)(D + 0x1a5);
+     /* tail `jmp *[ds:0x1a5]` transfers the live register file; the device method reads AX/CX/BX
+        (BX = voice = uVar1).  Pass them faithfully. */
+-    return (*(code *)fist_icall(fist_snd_base + vec))(param_1, param_2, uVar1);
++    /* PATCH 412 (board:0001 cause-4): the device key-on method (device 3 = FUN_0000_10e3, which
++       declares `byte param_2`) reads the velocity from CL only (7-bit MIDI, always <=0x7f).  The tail
++       `jmp *[ds:0x1a5]` transfers CX = (CH<<8)|CL; CH is a stale high byte from 0aa7's caller (the
++       channel), NOT velocity.  Native's byte-param ABI truncates CX->CL at entry; wasm's call_indirect
++       through the untyped `code *` pointer does NOT (i32 passes whole), so 10e3 read 0x0N0a and computed
++       (param_2>>2)+0x20 -> clamp 0x3f -> OPL level reg 0x54 = 0x00 (wasm) vs 0x1d (native).  Pass the
++       faithful 8-bit velocity (CL) so both targets truncate identically; native output is unchanged. */
++    return (*(code *)fist_icall(fist_snd_base + vec))(param_1, (uint8_t)param_2, uVar1);
+   }
+   D[uVar1 + 0x107] = 0;
+   vec = *(uint16_t *)(D + 0x1a5);
+-  return (*(code *)fist_icall(fist_snd_base + vec))(param_1, param_2, uVar1);
++  return (*(code *)fist_icall(fist_snd_base + vec))(param_1, (uint8_t)param_2, uVar1);
+ }
+ 
+ 

@@ -386,3 +386,39 @@ CAUSE-1/4 -- TWO EARLIER CONCLUSIONS CORRECTED (2026-08-26, deeper gdb):
       (my session-start trace attributed [ds:0xe]=0xffff to be0e(0)'s 0af4, but the key-ons precede it -- so
       there is an earlier enable).  cause-2 + cause-3 remain LANDED + 10x-validated; cause-4 root refined to
       "playback enabled before first song registration" (boot-time), not the intro-load timing.
+
+CAUSE-4 ROOT FOUND + FIXED AT WAV LEVEL (2026-08-26, patch 386):
+  The residual OPL level divergence (reg 0x54: native 0x1d / wasm 0x00) is NOT a data byte and NOT the
+  pre-registration es=0 concern above -- it is a wasm call_indirect NARROWING bug at the device key-on
+  tail-call.  Chain (single-slot patch 100 applied, so velocity CL is identical native==wasm):
+    - 0aa7 key-on tail-jumps `jmp *[ds:0x1a5]` to the selected device method (device 3 = FUN_0000_10e3),
+      passing CX = (CH<<8)|CL via the untyped `(*(code *)fist_icall(...))(param_1, param_2, uVar1)` pointer.
+    - 10e3 declares `byte param_2` -> reads CL (7-bit MIDI velocity).  CH is a stale high byte (= channel)
+      from 0aa7's caller, NEVER velocity.
+    - NATIVE x86 ABI truncates CX->CL at the byte-param entry (CH always read as 0).  WASM call_indirect
+      passes the whole i32 (CH not narrowed), so 10e3 read param_2=0x0N0a, computed (param_2>>2)+0x20 ->
+      >0x3e clamp -> 0x3f -> level (bdd|0x3f)^0x3f = 0x00 instead of native 0x1d.
+    - PROOF: 1005/1005 10e3 rows have IDENTICAL CL; native CH distinct-set={0}, wasm CH distinct-set={0..9}
+      (= param_3 channel).  The divergence is ENTIRELY the untruncated high byte.
+  FIX (patch 386, faithful register width, NOT a guard): the device key-on method reads an 8-bit velocity
+  (CL); pass `(uint8_t)param_2` at both 0aa7 tail-calls so both targets truncate identically.  Native output
+  UNCHANGED (already truncated); wasm converges.
+  RESULT: FIST_AUDIO_WAV native vs wasm now BYTE-IDENTICAL -- dt=120 (122400 B) AND dt=5000 (13450302 B, 13.45
+  MB of OPL FM audio).  cause-4 (native==wasm audio content) CLOSED at the WAV level.
+  PENDING: full verify.sh matrix (single-slot patch 100 + 385 + 386) to confirm no regression on
+  audio-intro/terrain (patch 100 broke those pre-385; re-testing now).  If the matrix passes -> land 386
+  (+ decide patch 100's fate); if not -> isolate whether 386 alone (committed base) suffices.
+
+CORRECTION -- SINGLE-SLOT THEORY WAS A MISDIAGNOSIS; PATCH 412 ALONE IS THE FIX (2026-08-26):
+  The prior "playback enabled before first-song registration" / single-slot-INTRO.MS3-load theory (above)
+  was WRONG.  Tested empirically: patch 412 (velocity byte-truncate) applied ALONE on the committed base
+  (full 6-arg patch 100, NO single-slot experiment, NO fist_apply_reloc_slot helper) makes FIST_AUDIO_WAV
+  BYTE-IDENTICAL native==wasm at EVERY dumptick: dt=120 (122400 B), dt=4000 (5696650 B = the audio-intro
+  flow that previously "diverged 2.17M bytes"), dt=5000 (13450302 B).  So the ENTIRE cause-4 divergence was
+  the single wasm call_indirect i32->byte non-truncation at the 0aa7 device key-on tail-call -- NOT an es=0
+  pre-registration playback problem.  The es=0 / velocity-CL-divergence observations that motivated the
+  single-slot were a downstream manifestation of the SAME untruncated-CH bug (CH = channel bled into the
+  level clamp), not a separate load-timing fault.  The single-slot experiment merely perturbed the velocity
+  path enough to mask it.  MINIMAL FAITHFUL FIX = patch 412 only; single-slot + helper DROPPED (git stash).
+  cause-4 CLOSED.  (cause-1 intro voxel-readiness, if any residual, is a SEPARATE windshield-init matter and
+  is NOT gated on audio -- audio is now fully native==wasm.)
