@@ -294,3 +294,26 @@ DECOMPILED code + oracle diff -- bounded, not a new decompile.
 TURN NET: frozen-sim cleared; faithful handshake (no derail); oracle addressing solved; combat proven
 DECOMPILED with the win/lose resolver (b2ef + a294/a296) present -> the remaining work is triggering the
 already-decompiled damage flow (oracle-diff debugging) + render + wasm, not building a simulator.
+
+## Combat fires but non-deterministically + doesn't sustain (2026-08-26, honest)
+
+Instrumented FUN_1000_b2ef (unit destroy) in the port's AZER1 run (FIST_SIMRUN):
+  - b2ef DOES fire -- a few early destroys (t=314/406/662, slots 57/58/61) and the side count a296 drops
+    16->15->14.  So the decompiled combat/removal path is reachable and the side counters move.
+  - BUT it does NOT sustain: only ~2-3 destroys near spawn (likely mission-setup unit removal), then combat
+    stalls; no side depletes to 0, no resolved win/lose.
+  - AND it is NON-DETERMINISTIC: three identical FIST_COOP_TICK=1 runs gave 0, 0, and 2 destroys.  The
+    op-0x4c present-hack (fires on every gate call) makes the frame/sim cadence timing-dependent even under
+    coop tick -> different combat each run.  That directly violates the goal's determinism requirement.
+So the two remaining problems are now sharp:
+  (A) DETERMINISM: replace the op-0x4c always-ready hack with the FAITHFUL frame-ready (the flight model
+      ORs bit7 into d548 at ONE deterministic point per frame -- the cs=0x1000/0x2082 code at eip 0x82e4..
+      does it in the oracle; drive d548 from THAT point, not from the gate poll), so the tick-by-tick sim
+      is reproducible.  Without this, native==wasm byte-identity is impossible.
+  (B) SUSTAINED COMBAT: with a deterministic cadence, oracle-diff the per-tick object/registry writes
+      (FIST_WATCHPHYS=0x3b14c) to find where the port's fire->hit->damage->b2ef chain stops matching the
+      oracle (likely the stubbed op-0x1c projection = no aim solution, or a base-loss in the targeting),
+      and fix until units deplete to a side=0 resolution matching the oracle.
+TURN NET: proved the combat + win/lose logic is DECOMPILED and partially FIRES (b2ef, a296 drops); the
+blockers are now precisely (A) the non-deterministic present-hack must become the faithful per-frame
+signal, and (B) the fire->hit->damage chain must be made to sustain (oracle-diff).  Both bounded + tooled.
