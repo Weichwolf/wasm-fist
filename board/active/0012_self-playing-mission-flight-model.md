@@ -155,3 +155,26 @@ present-complete with the FAITHFUL frame-ready signal (the flight model OR-s bit
 pointer d99b installs -- reconstruct that trigger + its timing) so the cadence matches; (3) fix the
 goals-count base-loss so attrition is visible + the win test works; (4) drive to the oracle's resolved
 outcome; (5) wasm byte-identical.  The frozen-sim blocker is cleared; faithful reproduction is the work.
+
+## op-0x1c mapped; faithful-combat requirements (2026-08-26)
+
+The extender PM op-table (fist_image.bin:0xcb3, byte-indexed dword -> trampoline 0x10xx -> call handler):
+  op-0x18 -> [0xccb]=tramp 0x10ca -> call 0x89b0  (MAP-LOAD; wired in port as m_ext_FUN_0000_89b0)
+  op-0x1c -> [0xccf]=tramp 0x1109 -> inline: edi=[0xc99]; ecx=0x20; walk 32 tasks; per task call 0x7fa0
+             (transform) storing screen coords [edi+0x22/0x24/0x32/0x34] -> op-0x1c is PROJECTION
+             (world->screen for the radar/HUD/render), NOT the damage/combat resolver.
+  FUN_0000_1109 / 0x7fa0 are NOT in re_out/fist_ext.c -- the extender decompile only covers the KDV +
+  map-load cluster, so the sim/projection functions are in fist_image.bin but NOT yet in the build.
+
+So faithful in-mission play needs, concretely:
+  1. The REAL frame-ready cadence, not the always-ready op-0x4c fake: the current hack unblocks c0ca but
+     drives d549 into wrong states (0x1c->0x20->0x00) and the wrong tick rate, so combat never resolves.
+     Reconstruct how the flight model OR-s bit7 into d548 (the d99b TCB+8 pointer) at the right time.
+  2. Decompile + wire the missing extender sim functions: op-0x1c projection (0x1109 + 0x7fa0) and whatever
+     resolves weapons/damage/death (units do NOT deplete today -> the damage path is absent/stubbed).  These
+     are in fist_image.bin; extend the extender decompile (make kernel-image / assemble_fist) to cover them.
+  3. The engine-side object-update methods (c0e5's per-type vectors at type*2-0x1bac) DO run (objects churn)
+     but movement/AI without the extender projection+damage loop don't produce attrition.
+  4. Verify tick-for-tick vs the oracle registry/d548 trace; reach the resolved win/lose; wasm identical.
+STATUS: frozen-sim blocker CLEARED (c0ca runs).  Faithful combat = real frame-ready cadence + decompiling
+the missing extender sim/projection/damage functions + oracle-verified attrition.  Substantial but mapped.
