@@ -178,3 +178,27 @@ So faithful in-mission play needs, concretely:
   4. Verify tick-for-tick vs the oracle registry/d548 trace; reach the resolved win/lose; wasm identical.
 STATUS: frozen-sim blocker CLEARED (c0ca runs).  Faithful combat = real frame-ready cadence + decompiling
 the missing extender sim/projection/damage functions + oracle-verified attrition.  Substantial but mapped.
+
+## d549 derail confirms: the per-frame extender pipeline must actually run (2026-08-26)
+
+d549 (DAT_1000_d549 @ g_mem+0x1d549) is the view/game state: 0x14/0x16 (menu-ish), 0x1c (cockpit),
+0x1e/0x20/0x22 (external/map/etc views).  Under the FIST_SIMRUN present-hack the port's d549 goes
+0x1c -> 0x20 -> 0x00, and 0x00 is INVALID (fist.c:9339 `DAT_2000_0a86 = word[&0a88 + d549]` indexes a
+table by d549 -> d549=0 reads out of range).  So the mission STATE DERAILS by ~tick 30000, not a clean
+phase change.  Root: the present-hack completes the frame WITHOUT the flight model's real per-frame work
+(op-0x1c projection 0x1109/0x7fa0 stubbed; op-0x24 windshield render partial/garbage), so the frame data
+the engine's game logic reads (camera, projected object positions, render results) is stale/wrong and the
+state machine walks into an invalid d549 -> no faithful combat, no attrition, no resolved win/lose.
+
+So "make the present faithful" is not a one-liner: it requires the extender's per-frame pipeline to
+actually PRODUCE correct frame data each tick -- op-0x1c projection + op-0x24 render (board:0001) both
+running faithfully -- so the frame the engine presents is real, the d548 bit7 is set at the right point
+(after that work), the game state stays valid, and c0e5's object updates + the projected combat drive real
+attrition matching the oracle.  This is the "finishing the mission-load and per-frame render path" clause
+of the goal, and it is genuinely multi-step reconstruction (decompile op-0x1c/0x7fa0 + finish the 9200
+windshield render + faithful frame-ready), not a bounded patch.
+
+TURN NET: cleared the frozen-sim blocker (c0ca/c0e5 run).  Proved the flight model is decompiled engine
+code + missing extender per-frame functions, not a from-scratch simulator.  Mapped the exact remaining
+pipeline to a resolved, oracle-matching win/lose.  The reconstruction of that per-frame pipeline (and then
+wasm parity) is the substantial, well-defined work that remains.
