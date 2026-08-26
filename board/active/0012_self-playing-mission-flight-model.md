@@ -969,3 +969,25 @@ HONEST FINAL: movement fixed+verified (416); win-metric+self-play-mechanism corr
 fire failure traced by measurement to the weapon-system spawn chain (type-0x10 -> bb64/DAT_5a25 -> ba49)
 whose target-object population is a DOCUMENTED incomplete deviation (patch 255/258).  Goal UNMET.  The two
 concrete unblockers are unchanged: a per-run registry-signature oracle anchor, or Ghidra for board:0010.
+
+## PATCH 417 landed: correct weapon targeting (asm-verified) -- combat closer, not complete (2026-08-26)
+
+BREAKTHROUGH this session: bb64 DOES find targets (instrumented: 55 armed(0x40) objects, 21 bit3-eligible,
+consistently FINDS si=c252 = a side-B unit).  So targeting works.  Root of no-damage, asm-verified from
+full b51f asm (0xb51f-b582):
+  - b564 `jae b582`: the fire is gated on bb64's CF (target FOUND), NOT the discarded position-add carry
+    (b552's `add` carry is never tested).  Ghidra gated on that carry (bVar2) -> fired on the wrong
+    condition.
+  - b573 `mov di,[0x9a25]`: c31e dispatches on SI = the bb64-found TARGET (DAT_5a25); Ghidra passed the
+    emitter (param_1) -> the damage/action hit the EMITTER, never the target.
+PATCH 417 recovers both (gate on g_fist_cf; c31e on g_mem+0x1c000+DAT_5a25).  EFFECT (measured): a294 now
+starts at 80 (was 150), combat dynamics change, player moves differently -> the fix is real and matrix-safe
+(in-mission only; make check clean).
+
+STILL UNRESOLVED (b2ef=0, goals=13): (1) a294 still climbs to the 0x96 cap (~t500) via the ba49 emitter
+registration each fire -> eventually blocks fire again; (2) even with correct targeting, the TARGET is not
+destroyed -- c31e dispatches the target's -0x1ab0 action method but no b2ef results.  The open question is
+the ba49 spawn contradiction (asm registers the emitter di, not a flying projectile) + whether the actual
+damage is c31e-direct or projectile-based.  Two sub-defects remain in the SAME weapon cluster; 417 fixed
+the targeting/gate, the damage-application + the ba49/effect-despawn are next.  Movement (416) + targeting
+(417) landed and asm-verified; goal UNMET but combat provably advanced (targeting now correct, a294 halved).
