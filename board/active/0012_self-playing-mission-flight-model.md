@@ -832,3 +832,27 @@ mission.  It is bounded (a specific ~5-8 function cluster) but each site needs a
 HONEST SESSION STATE: movement FIXED+verified (416); win-metric+mechanism corrected (goals/AUTO CONTROL,
 oracle-confirmed dynamic); fire path fully traced to the board:0010 spawn-cluster base-loss; goal UNMET
 (no mission resolution yet).  Next: per-site reconstruct the 9caa/ba49/b1d6-return spawn register flow.
+
+## RESISTANCE POINT: spawn/registration model not fully understood (2026-08-26)
+
+Asm-traced the b51f child-spawn precisely (do NOT improvise a fix past this until resolved):
+  b51f (0xb51f): per-object gate; on carry sets [di+0x1b] phase-bit, computes a child position into
+    DAT_2000_9c7f/9c83 (= [di+4]/[di+8] + a per-phase offset table [bx-0x6375]/[bx-0x6371]), then
+    `mov di,[0x9a25]; push cs; call c31e` (a sound/effect), `pop di` (di=b51f obj), `mov ax,0x9c15;
+    call ba49`.  So at the ba49 call, DI = the b51f object.
+  ba49 (0xba49): `call ba33; mov eax,[9c7f]; mov [si+4],eax; mov eax,[9c83]; mov [si+8],eax` -- writes the
+    computed child position into si[4]/si[8].
+  ba33 (0xba33): `push di; mov ax,4; call 0xf69:0xbb4f (=FUN_1000_b1df); mov si,di; pop di; jb skip;
+    call ba5d`.
+  b1df (0x1b1df): IDENTICAL to b1d6 minus the a294 guard -- walks 9fbc for a free slot, `mov [si],di`
+    (registers the EXISTING DI pointer), zeroes the body.  b1df does NOT allocate and does NOT change DI.
+OPEN CONTRADICTION: DI at the b1df call = the b51f parent object, so b1df registers the PARENT into a new
+slot (and ba49 then sets si=di=parent position to the child coords) -- i.e. it appears to re-register +
+reposition the PARENT every phase.  That would duplicate/corrupt the parent (matches the port's ad74 x10),
+but the ORACLE does not leak, so either (a) DI is remapped by a segment/base I'm not modelling, (b) these
+b51f objects are consumed short-lived effects whose slots are freed by a path I haven't found, or (c) the
+`mov si,di` after b1df captures a DIFFERENT DI because b1df's far-return (0xf69 cluster) unwinds the stack
+such that DI is reloaded.  UNRESOLVED -- do not patch until the model is understood (needs Ghidra board:0010
+OR a working oracle anchor to observe the correct per-frame registry writes; both unavailable in this env).
+This is the honest edge of understanding; improvising a base-loss patch here risks silent corruption of the
+pristine-derived engine, which the project forbids.  The 416 movement fix stands (asm-verified, 18/0 verify).
