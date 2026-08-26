@@ -210,3 +210,22 @@ AUDIO DETERMINISM DECOMPOSED INTO 3 LAYERS (2026-08-26); cause-2 LANDED:
     ROOT (to find): what sequencer/driver state differs native<->wasm at the first chord despite identical
     song memory + fixed cadence -- needs cross-target (native AND wasm/node) gdb of [ds:0xc]/voice-chain at
     adv=4262.  This is THE remaining audio determinism blocker (gates cause-1 landing + all mission audio).
+
+CAUSE-3 DIAGNOSIS (2026-08-26), via FIST_MEMDUMP g_mem diff native vs wasm at [0x452]=5000:
+  Only 143 bytes of the whole 16MB g_mem differ (both targets internally deterministic).  The differing
+  bytes are host-address-shaped (native ..2d 08 = 0x082d.. ELF, wasm ..11 01 = 0x0111.. wasm linear mem),
+  heaviest in the extender region 0x100000+ (88B), plus the sound-driver DS 0x3ce90+ and DGROUP.  The 177
+  VIDEO flows pass because the render path never reads these; the AUDIO path reads a few driver-DS words:
+    ds:0x1c1 = native 0xfab vs wasm 0xf80  (the 0cfb device-slot dispatch vector -> different FM loader)
+    ds:0x14  = native 4    vs wasm 5       (the sequencer delay counter -> chord splits differently)
+    ds:0x12  = native 0x1ec vs wasm 0      (the play-function vector)
+  These are set by the SOUNDDVR device-SELECT (patch 353, 0872: copy device-3's 7 method vectors from the
+  per-device table driver_ds:0x17d.. into the live slots).  TESTED the 64KiB-g_mem-alignment fix (patch
+  384's "host-ptr-truncated-to-near-offset" class): it aligned native g_mem + cut g_mem diffs 143->108, but
+  the AUDIO reglog was UNCHANGED (native/wasm md5 identical to before) -> cause-3 is NOT that truncation
+  class; it is a SPECIFIC device-select divergence where the copied method-vector / slot values come out
+  different native<->wasm (a value derived from a host pointer or a divergent copy in the 0872 select /
+  patch 353).  Reverted the alignment (no effect on target).  NEXT: trace the writer of driver_ds:0x1c1 /
+  the 0872 method-vector copy source, find the native-vs-wasm-divergent input, make it faithful (16-bit).
+  cause-2 (re-entrant cadence) is LANDED; cause-3 (this device-select host-value divergence) is the last
+  audio determinism blocker + gates cause-1 (INTRO.MS3 load) and all mission audio.
