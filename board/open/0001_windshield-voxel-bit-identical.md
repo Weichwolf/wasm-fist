@@ -340,3 +340,18 @@ STATE: cause-2 + cause-3 LANDED + 10x-gate-validated (menu/editor matrix); cause
 driver byte (D[ch+0xbdd]) but its divergence source needs live cross-target instrumentation, not memdump.
 Two of four menu/intro audio-determinism layers fixed; the goal (mission audio, WAV-vs-original, DD2
 missions) remains a large multi-session effort beyond this.
+
+CAUSE-4 ROOT CONFIRMED (2026-08-26, live cross-target diag): the divergent OPL level is the NOTE VELOCITY,
+not D[+0xbdd].  A temporary FIST_DIAG_BDD dump in 0f99/10e3 (built + run on BOTH targets, diffed) showed
+D[ch+0xbdd]=0x80 identical but the velocity `vel`: native = real (0x30/0x2c/0x2e..) vs wasm = 0x3f CONSTANT
+(capped).  0aa7 (patch 354) computes vel = high((cl<<1) * D[voice+0xfd]); D[+0xfd]=0x80 (identical) so
+vel = cl (the raw velocity byte).  cl = g_snd_ev_vel = S[bx] read by 0b5d, S = g_mem+(es<<4).  For the es=0
+PRE-SONG (cause-1), es=0 so S[bx] = g_mem[cursor]; as the garbage cursor advances it lands on the host-
+pointer-DIVERGENT bytes (the 128-byte g_mem diff) -> divergent velocity -> wasm caps to 0x3f -> level 0.
+So cause-4 == cause-1: the es=0 garbage read as velocity.  UNIFIED: the entire menu/intro audio native!=wasm
+residual (after cause-2 + cause-3) is the es=0 pre-song reading host-ptr-divergent g_mem.  FIX = cause-1
+(load INTRO.MS3 so es!=0 before the first key-on); the earlier INTRO.MS3 test still diverged because the
+single-slot c378 install lands INTRO.MS3 a few ticks LATE -- a key-on in that gap latches the es=0 garbage
+velocity.  DECISIVE FIX: register INTRO.MS3 / gate the sequencer so NO key-on fires while [ds:0x6]==0 (no
+valid song seg) -- faithful (an unregistered song must not play).  Temp diag removed; tree clean.  cause-2 +
+cause-3 LANDED + 10x-gate-validated; cause-4 root now fully understood = the es=0 pre-song velocity.
