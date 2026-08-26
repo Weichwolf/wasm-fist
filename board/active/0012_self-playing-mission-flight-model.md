@@ -345,3 +345,28 @@ TURN NET (honest): sim runs; handshake faithful; oracle addressing solved; comba
 located; BUT combat is deterministically zero -- gated on the pervasive mission-sim host-pointer migration
 (board:0003 class) + render.  The earlier "combat fires" was an ASLR artifact.  The blocker is deep but
 correctly identified and tooled (oracle-diff under ASLR-off).
+
+## Root of zero-combat CONFIRMED: object-update methods deref objects via raw host pointers (2026-08-26)
+
+The per-object update methods that c0e5 dispatches (e.g. FUN_0000_9aa1, a b2ef-caller lifecycle/damage
+method) deref the object as `*(int *)(param_2 + 0x19)` -- param_2 is the object NEAR-OFFSET used as a raw
+host int* (base-loss), and the method branches on those reads to drive the damage/lifecycle -> b2ef path.
+With real memory the reads are garbage-or-wrong -> wrong branches -> the fire/hit/damage/destroy logic
+never fires (deterministic zero combat); under ASLR the garbage varies -> the flukey destroys.  So the
+flight/combat model IS decompiled and dispatched, but its per-object methods are PERVASIVELY base-lost
+(the board:0003 pointer-model class): each reads object fields through an unrebased 16-bit offset as a host
+pointer.  Making combat work = rebasing those derefs (obj at g_mem+0x20000+off; field widths per asm) across
+the object-update method table -- exactly the 349/384/b2ef(patch-363) migration class, but for the whole
+flight/combat model.  That is the goal's "map faithfully into the platform shim" clause, now pinned to a
+concrete, large, systematic task (dozens of per-type update methods), verified against the oracle registry
+trace (0x3b14c) under setarch -R.
+
+SESSION-LONG NET (honest, corrected): the mission's flight/combat model is DECOMPILED + DISPATCHED (c0ca/
+c0e5 run, b2ef + win/lose resolver present), the frozen-sim blocker is CLEARED, the frame-ready handshake
+is FAITHFUL (no derail, oracle-matching d549 cycling), and the oracle-verification tooling/addressing is
+SOLVED.  The one deep remaining blocker is the pointer-model migration of the per-object update methods
+(base-loss -> faithful 16-bit-offset basing), which gates BOTH determinism (native==wasm) AND combat
+correctness; plus the op-0x24 windshield render (board:0001).  Both are large but precisely scoped,
+oracle-falsifiable, and use the proven decompile->patch method.  The goal (deterministic resolved win/lose
+native==wasm) is unmet and is a substantial multi-session reconstruction from here -- but every wall that
+made it look impossible is down, and the work is a defined migration + render, not a mystery.
