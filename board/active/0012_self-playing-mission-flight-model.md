@@ -448,3 +448,24 @@ improving, and the exact break located (units never fire -> a base-lost obj-dere
 fire-path callees).  Goal UNMET (0 deterministic combat, no win/lose, render board:0001 + wasm pending);
 remaining = walk the combat subtree's residual base-loss to first-fire and beyond, + render + host-ptr
 elimination for native==wasm.  Large but finite, falsifiable per step, and converging.
+
+## Fire path fully traced: b1a2 <- d81e <- d7e1 <- indirect AI weapon dispatch (2026-08-26)
+
+Traced the fire/spawn chain up from the register:
+  FUN_1000_b1a2 (register object)  <-  FUN_0000_d81e (spawn one; sets f0000.. inbox)  <-
+  FUN_0000_d7e1 (spawn-N loop, DAT_2000_a9be count)  <-  [NO direct caller in fist.c] -> dispatched
+  INDIRECTLY (a weapon/method vector) by the unit-AI update methods.
+So "unit fires" == the AI dispatches the weapon method that runs d7e1->d81e->b1a2 to spawn a round.
+Post-spawn the port never dispatches it -> the AI's target-acquire/fire-decision never triggers.  The 902c
+audit showed the unit methods rebase the object (param_4) and dispatch sub-methods via fist_icall_near with
+CORRECT (rebased) vector reads -> so the break is DEEPER: inside a dispatched sub-method (912d/90cd/9176 or
+an fist_icall_near target) on the target-acquire/aim path, an object field is read through a raw (unrebased)
+offset -> the AI computes "no target / can't fire" and never reaches d7e1.
+NEXT (mechanical): instrument 902c's fist_icall_near dispatch + the AI sub-methods to find the first
+sub-method whose object-field read is base-lost on the fire path; asm-verify+rebase it (matrix-neutral
+patch); re-run setarch -R until d7e1/b1a2 fire post-spawn.  The fire path is now a named chain end-to-end
+(b1a2/d81e/d7e1 + the AI dispatch); the residual base-loss is a bounded search within that chain's sub-methods.
+
+Goal remains UNMET (0 deterministic combat, no win/lose, render+wasm pending).  Net this turn: fire path
+traced end-to-end + break localized to the AI target/fire sub-method subtree; the migration loop continues
+there.
