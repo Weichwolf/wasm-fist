@@ -355,3 +355,17 @@ single-slot c378 install lands INTRO.MS3 a few ticks LATE -- a key-on in that ga
 velocity.  DECISIVE FIX: register INTRO.MS3 / gate the sequencer so NO key-on fires while [ds:0x6]==0 (no
 valid song seg) -- faithful (an unregistered song must not play).  Temp diag removed; tree clean.  cause-2 +
 cause-3 LANDED + 10x-gate-validated; cause-4 root now fully understood = the es=0 pre-song velocity.
+
+CAUSE-1/CAUSE-4 FIX BOUNDARY (2026-08-26): loading INTRO.MS3 does NOT stop the es=0 garbage.  gdb at every
+0aa7 key-on shows [ds:0x6]=0 (es=0) even with the single-slot c378 install AND 0x378+0x388 -- INTRO.MS3 is
+OPENED (openlog x2) but the c378 loader (250d) never stores the loaded segment into the descriptor
+[DGROUP:0x9f1c], so be0e reads g_snd_reg_es=0 and 0af4 registers the es=0 song, which the sequencer plays
+(garbage velocity from g_mem host-ptr bytes).  Root: the intro-time screen-resource LOAD/ALLOCATE path is
+not ready during be0e(0) -- 250d opens the file but the alloc/extender isn't up to give it a segment (the
+SAME intro-time DGROUP/allocator-not-ready class as the f842 vector-install timing: patch 091 / the
+fist_ensure_dlist_vecs comment).  So cause-1 (make INTRO.MS3 register at the intro) requires the extender/
+allocator to be ready earlier -- a deep port-INIT-ORDERING fix, not a vector-slot install.  A [ds:0x6]==0
+play-gate would silence the garbage (native==wasm) but leaves a silent intro gap vs the original (the oracle
+plays intro music from t=1045ms) -> not bit-identical, and it is a guard CLAUDE.md forbids -- so NOT taken.
+STATE: cause-4 root fully understood (es=0 velocity); cause-1 fix is intro-time init-ordering (deep, shared
+with the windshield/extender readiness this board tracks).  cause-2 + cause-3 remain LANDED + 10x-validated.
