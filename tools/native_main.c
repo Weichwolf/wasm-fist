@@ -708,8 +708,11 @@ void fist_timer_pump(void){
      * aa10=0x24 -> e339 -> the extender 9200 windshield voxel render.  Emulate the always-ready extender
      * here.  GATED on d549==0x1c (the cockpit view, only ever set on the in-mission 459a path) so it is
      * strictly behaviour-neutral for the 19 menu/pre-mission verify flows. */
-    if (g_mem[0x1c000 + 0x1549] == 0x1c && g_mem[0x1c000 + 0x1548] == 1)
-        g_mem[0x1c000 + 0x1548] = 0x81;
+    { static int sr=-1; if(sr<0) sr=getenv("FIST_SIMRUN")?1:0;
+      uint8_t h = g_mem[0x1c000 + 0x1548];
+      if (g_mem[0x1c000 + 0x1549] == 0x1c && (h & 0x7f) != 0 &&
+          ((sr && (h & 0x80) == 0) || h == 1))
+          g_mem[0x1c000 + 0x1548] = (uint8_t)(sr ? (h | 0x80) : 0x81); }
     if (!g_int8_set || g_in_isr) return;
     { extern void fist_queue_check(const char*); fist_queue_check("pre-isr"); }
     int budget = 4;
@@ -1369,9 +1372,10 @@ int fist_extender_gate(void) {
      * per-tick sim c0ca -> the mission freezes after ~3 spawn frames.  The real flight model OR-s bit7
      * into d548 to signal "frame ready"; emulate that here so the present completes every op-0x4c and
      * the frame loop keeps running the sim. */
-    if (getenv("FIST_SIMRUN") && op == 0x4c &&
-        g_mem[0x1c000 + 0x1549] == 0x1c && g_mem[0x1c000 + 0x1548] == 1)
-        g_mem[0x1c000 + 0x1548] = 0x81;
+    if (getenv("FIST_SIMRUN") && op == 0x4c && g_mem[0x1c000 + 0x1549] == 0x1c) {
+        uint8_t h = g_mem[0x1c000 + 0x1548];
+        if ((h & 0x80) == 0 && (h & 0x7f) != 0) g_mem[0x1c000 + 0x1548] = h | 0x80;  /* OR bit7 into waiting 1/2/3 (oracle) */
+    }
     if (op == 0x18) { g_fist_after_map = 1;
         if (getenv("FIST_DBG_OP18")) { static int o=0; if(!o){o=1; extern void fist_dbg_op18(void); fist_dbg_op18();} } }
     /* FIST_DBG_OP2C: clean gdb breakpoint at the first op-0x2c gate (crash-bucket secondary-viewport paint) */
