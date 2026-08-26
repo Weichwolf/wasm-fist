@@ -468,6 +468,11 @@ static void fist_dump_and_exit(const char *why){
             { extern void fist_sb_flush(void); fist_sb_flush(); }   /* finalize any SB PCM/WAV capture */
             { extern void fist_opl_flush(void); fist_opl_flush(); } /* finalize any OPL FM PCM/WAV capture */
             { extern void fist_snd_diag(void); fist_snd_diag(); }   /* sequencer-fed diagnostic */
+            /* board:0001 cause-3: dump g_mem so native vs wasm can be diffed to locate where the sound
+               sequencer state first diverges (both targets internally deterministic; the divergence is
+               native-vs-wasm systematic).  FIST_MEMDUMP=<path>. */
+            { const char *md = getenv("FIST_MEMDUMP");
+              if (md) { FILE *f = fopen(md, "wb"); if (f) { fwrite(g_mem, 1, FIST_MEM_SIZE, f); fclose(f); } } }
             const char *fb = getenv("FIST_FBDUMP");
             if (fb) fist_dump_framebuffer(fb);
             { const char *rw = getenv("FIST_FBRAW");
