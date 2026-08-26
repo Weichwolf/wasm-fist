@@ -495,3 +495,19 @@ elimination for native==wasm.  That is a large multi-session reconstruction.  Th
 conceptual wall (frozen sim, unfaithful handshake, unsolved addressing, unlocated/undecompiled combat) and
 made concrete verified progress + 2 landed patches, and now precisely SPLITS the combat into the decompiled
 (migratable) half and the overlay (must-reconstruct) half -- the honest structure of the remaining work.
+
+## DEFINITIVE combat-break: d7e1 (fire/spawn) runs ONCE at load, never for combat (2026-08-26)
+
+Instrumented FUN_0000_d7e1 (the spawn/fire routine: sets the extender inbox to &a9c0, loops d81e->b1a2)
+with __builtin_return_address: over AZER1 (setarch -R) it is called EXACTLY ONCE, at t=274 (initial unit
+placement, caller 0x808724f), and NEVER AGAIN.  So the AI-fire trigger that should re-dispatch d7e1 per
+engagement never runs post-spawn -> b1a2 never fires -> 0 projectiles -> 0 hits -> a294/a296 never deplete
+-> no win/lose.  This is the single, deterministic, verified root of zero combat: the per-tick AI fire
+decision (target-acquire -> select weapon -> dispatch the a9f0 weapon vector -> d7e1) is not driving.
+That decision path is dispatched indirectly (a9f0 has NO reference in fist.c; a9c0 is written by cs=0xf000
+extender code) -> the in-mission AI/fire loop lives in the extender overlay, stubbed by the port.
+NEXT (the reconstruction): implement/reconstruct the extender's per-tick AI fire-decision that, for each
+live unit with a target in range, writes a9c0/a9c4/a9c6 and dispatches d7e1 -- driven from the port's
+per-tick pump, verified against the oracle's a9c0/registry writes (setarch -R) until d7e1 fires per
+engagement, projectiles hit, and a294/a296 deplete to a side=0.  Then the FIST.DAT damage-subtree
+base-loss (414/415 started), op-0x24 render (board:0001), and host-ptr elimination for native==wasm.
