@@ -425,3 +425,26 @@ and located; work-list BOUNDED (6 AZER1 update methods); patches 414+415 landed 
 improved); combat break PINPOINTED to the unit-method AI-fire residual base-loss (units never fire).  Goal
 unmet (0 combat, no win/lose, render+wasm pending) but the remaining combat work is a located audit of 4
 unit methods' object derefs -> the mechanical migration loop continues.
+
+## Refinement: combat migration is the transitive SUBTREE, not just 6 methods (2026-08-26)
+
+Auditing FUN_0000_902c (type-2 unit update): it IS migrated -- rebases the object to a pointer
+(param_4 = g_mem+0x1c000+di) and derefs correctly.  So the 6 top-level update methods are (mostly) done;
+the residual base-loss that stops the AI from firing is DEEPER -- in the combat-path callees each unit
+method dispatches: FUN_0000_912d/90cd/9176 (per-object sub-steps), FUN_1000_875f/a0a4, FUN_0000_a358, and
+the fist_icall_near SUB-METHOD dispatches (weapon/targeting/fire vectors).  One of those, on the AI
+fire-decision path, reads an object field through a raw (unrebased) offset -> the AI never calls b1a2.
+
+So the combat work is the TRANSITIVE combat subtree (unit methods -> their callees -> ...), a finite but
+larger-than-6 set.  Method (unchanged, proven): trace the fire path from a unit method down (instrument
+each callee's entry / find raw obj derefs), asm-verify+rebase the base-lost one, re-run under setarch -R
+until b1a2 fires post-spawn.  Because each fix is a matrix-neutral patch and determinism is verifiable per
+step, the subtree can be walked systematically to the first-firing point, then to hit/damage/deplete.
+
+HONEST SESSION SUMMARY: transformed the goal from "write a combat simulator" to a located, mechanical
+migration -- sim runs, handshake faithful, oracle addressing solved, combat+win/lose DECOMPILED, work
+bounded to the AZER1 combat subtree, 2 base-loss bricks landed (414/415, matrix-neutral), determinism
+improving, and the exact break located (units never fire -> a base-lost obj-deref in the unit methods'
+fire-path callees).  Goal UNMET (0 deterministic combat, no win/lose, render board:0001 + wasm pending);
+remaining = walk the combat subtree's residual base-loss to first-fire and beyond, + render + host-ptr
+elimination for native==wasm.  Large but finite, falsifiable per step, and converging.
