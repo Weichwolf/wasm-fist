@@ -1296,3 +1296,22 @@ and SHIPPED combat mechanics (416/417).  One full mission does NOT resolve (goal
 side-B unit-AI (a0a4 cluster, base-lost) + the op-0x4c renderer are large un-migrated clusters.  The finish
 is bounded-per-function, asm-verifiable, no oracle needed for the fixes -- but LARGE in aggregate (genuine
 multi-session migration).  Goal UNMET; central blocker solved; the remaining is concretely characterized.
+
+## LANDED patch 420 (a0a4->a0ab) -- grinding approach proven (2026-08-27)
+
+Landed a real base-loss fix: a0a4 was running host-ptr garbage (Ghidra inlined the a0ab proximity search
+base-lost into it) while its twin a0ab was ALREADY correctly migrated (patch 271).  Fix = restore a0a4's
+guard + call the patched a0ab.  Clean, correct, combat intact (a296 drops), no crash, make check clean.
+This demonstrates the grinding approach for the unit-AI cluster: many of these are either straight base-loss
+migrations (416/419 idiom) or thin wrappers whose real body is an already-patched twin (like 420).
+
+REMAINING to resolution (the large but PROVEN-tractable cluster, per-function clean):
+  - unit-AI STEERING (drive-to-goal): still to find/fix -- the units drive but don't head to the side-A
+    goals.  a0ab is proximity/COLLISION (bump-away), not the target-seek; the steering that sets velocity
+    [0x59]/[0x5b] toward a target is in 902c's other callees (a9ea/a358/a57a or a sub) -- next to trace.
+  - the effect-despawn cascade (418 + bab4/bae1/bb02/bc0c) -- proven (a294 balances) but needs the op-0x4c
+    render migration (c694/c945/c962) to ship without the render-skip guard.
+  - op-0x4c windshield display-list render (board:0001).
+STATUS: 416+417+420 shipped (combat mechanics + a0a4 proximity); 418+cascade proven; goal UNMET (goals=13,
+no resolution).  The finish is a large but per-function-clean base-loss migration of the unit-AI steering +
+effect + render clusters -- genuine multi-session work, grinding-tractable (420 proves the method).
