@@ -1110,3 +1110,25 @@ This is the end of the trace: the mechanism is proven, the allocator (b21d) is f
 migrated and confirmed, and the only thing between here and a resolved mission is the bounded, decompiled
 render-method base-loss cascade (c694/c945/c4df).  Movement (416) + targeting/damage (417) shipped; the
 effect-despawn + render cascade is the finish.  Goal UNMET but the path is fully proven end-to-end.
+
+## Cascade is BRANCHING (deep) -- proven fix, but completion is the full per-frame migration (2026-08-26)
+
+Pushed the effect-despawn fix further (418 + 419-with-bab4-dispatch-fix + bae1/bb02 sub-method migrations +
+render-skip diagnostic).  Each fix moved the crash to the NEXT unmigrated function: b51f -> bab4 -> bae1/
+bb02 -> render c694 -> update bc0c(type 0x17) ...  Routing effects through the fresh type-4 pool exercises
+many per-frame update AND render methods that were never reached before (the effects never existed), and
+each is a base-loss (host-ptr deref of a near-offset).  a294 was still climbing (79->115) when it crashed
+(effects animate for [o+0x1e] frames before bab4 despawns them, so the pool fills before they clear).
+
+So the effect-despawn fix is PROVEN correct (b21d allocator + type-4 + bab4 reached) but its completion is
+NOT a 2-3 function patch -- it is the bounded-but-DEEP per-frame simulation+render base-loss migration
+(bab4/bae1/bb02 + c694/c945/c4df render methods + bc0c and other update methods the effects flow through).
+This is exactly the goal's "finishing the ... per-frame render path ... with no stubs" clause, now reached
+and scoped concretely (a specific set of ~10+ FUN_0000 base-loss migrations in the b5xx-bcxx/c6xx-c9xx
+render+effect cluster), each asm-verifiable with the 363/414/415/419 idiom.
+
+SESSION NET: shipped 416 (movement) + 417 (targeting/damage) = WORKING VERIFIED COMBAT (a296 16->10).
+Root-caused + proved the effect-despawn fix (b21d is the object allocator; port drops its DI-return; effects
+must be the fresh type-4 object that despawns via bab4).  Reduced the remaining from "open-ended extender
+reconstruction" to a concrete, decompiled, base-loss migration cascade of the effect+render cluster.
+Goal UNMET (mission does not resolve); combat proven; the finish is a deep-but-bounded per-frame migration.
