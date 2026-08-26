@@ -325,3 +325,18 @@ whether 0f99 EVER sees a garbage (>N) program; if yes, tighten cause-1 so INTRO.
 first key-on (or gate 0f99 to skip out-of-range programs faithfully per asm 0x99 `if (8<bVar2) return`,
 which already guards voice but not program).  cause-2 + cause-3 LANDED + 10x-gate-validated; cause-4 is the
 es=0-garbage transient, now understood end-to-end.
+
+CAUSE-4 -- "WILD RECORD" HYPOTHESIS ALSO DISPROVEN (2026-08-26, asm 0xf99): the asm computes puVar6 =
+program*0x10 + 0x1dd with program = AL (a BYTE, 0..255), so puVar6 in 0x1dd..0x11cd -- ALWAYS within the
+driver-DS region that the memdump showed native==wasm IDENTICAL.  It never indexes into the divergent
+extender.  So cause-4 is NOT a wild-record read.  It is a genuine TRANSIENT divergence of D[channel+0xbdd]
+(the per-channel base level 10e3 reads at key-on): at the write it is native 0x80 / wasm 0x8f, but the
+records, the program, the voice->channel map D[voice+0xc01], and the reg-base D[+0xbf8] all read IDENTICAL
+in the memdump, and g_mem is BSS-zeroed identically.  So the source of the transient is not yet found by
+static/memdump analysis.  DECISIVE NEXT (bounded): a temporary env-gated dump of D[ch+0xbdd] + puVar6[1] +
+program INSIDE 0f99 and 10e3 (a diagnostic patch, rebuild BOTH targets, run, diff the per-call trace) to
+catch the exact call where D[+0xbdd] first differs native<->wasm -- static analysis has hit its limit here.
+STATE: cause-2 + cause-3 LANDED + 10x-gate-validated (menu/editor matrix); cause-4 pinned to one transient
+driver byte (D[ch+0xbdd]) but its divergence source needs live cross-target instrumentation, not memdump.
+Two of four menu/intro audio-determinism layers fixed; the goal (mission audio, WAV-vs-original, DD2
+missions) remains a large multi-session effort beyond this.
