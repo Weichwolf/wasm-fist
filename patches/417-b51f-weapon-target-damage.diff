@@ -20,7 +20,7 @@ board:0012 b51f weapon fire: gate on bb64's CF (target found) not the discarded 
 -        /* PATCH 258: thread di=object near offset (asm b57f: ba49 with the restored original
 -         * object in DI) instead of the dropped unaff_CS. */
 +        FUN_0000_c31e(0,10,
-+          (int *)((unsigned char *)g_mem + 0x1c000 + (uint16_t)DAT_2000_5a25),DAT_2000_5a25);
++          (int *)(uintptr_t)(uint16_t)DAT_2000_5a25,DAT_2000_5a25);  /* c31e wants the NEAR OFFSET in param_3 (it does (uint16)param_3), not a host ptr */
          FUN_0000_ba49(0x9c15,param_1,(uint16_t)(uintptr_t)param_1);
 -      }
 +      } }
