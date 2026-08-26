@@ -2766,3 +2766,27 @@ NEXT (bounded, sharp): instrument the [0x452]=4398 spin -- capture cs:eip / the 
 24692-iteration stall (FIST_WATCH* or a spin-counter in out()) to name the exact poll (vsync retrace? SB DMA
 position? a tick-counter compare?), then make that poll deterministic native==wasm (the faithful fix, at the
 shim I/O boundary -- the same class as the menu-audio re-entrancy guard).  Menu/intro audio: CLOSED.
+
+*** ROOT CORRECTED AGAIN -- IT IS A MISSION-SIM DIVERGENCE, NOT AUDIO (2026-08-26, decisive) ***
+The "[0x452]=4398 spin-stall" framing above is RETRACTED -- it was an artifact of [0x452] being NON-
+MONOTONIC (the engine RESETS the frame timer to 0 at phase boundaries, so "first opltick reaching
+[0x452]=N" is ill-defined).  The FIST_OPLSEQ RESET markers are decisive:
+  native RESETs: opltick 339128 (4397->0), 355844 (215->71), 374992 (317->0)   <- THREE
+  wasm   RESETs: opltick 339128 (4397->0), 355844 (215->71)                     <- TWO
+Both targets share the first two resets EXACTLY (byte-identical audio through them); native then does a
+THIRD [0x452]-reset (317->0) at opltick 374992 that wasm NEVER does -- and opltick 374992 is exactly the
+6869902-B (~78 s) WAV divergence point.  The per-[0x452]-value opltick counts are otherwise IDENTICAL
+(4394..4400: 156,155,155,86,78,77,78 on BOTH).  So nothing in the audio path diverges: the engine reaches
+a DIFFERENT MISSION-SIM STATE on native (an extra frame-timer-reset phase transition) that wasm does not,
+and the audio stream faithfully tracks it.  DISPROVEN this round (self-corrected): (a) port-write/pump
+drift; (b) async SIGALRM injection -- gating g_mission_coop under FIST_COOP_TICK changed the WAV by ZERO
+bytes; (c) ISR-drain tick-accounting.  All three were audio-centric; the truth is upstream.
+CONSEQUENCE: mission-audio native==wasm is GATED ON mission-SIM determinism (board:0001 territory), not on
+the audio subsystem.  The mission-cockpit missfb flows pass native==wasm only on a SINGLE spawn-frame
+central-chrome crop (tick 25000) -- they do NOT cover the continued sim, so a post-spawn sim divergence
+(the extra [0x452] reset at opltick 374992) slips past them.  NEXT (correctly scoped): find the engine
+event that zeroes/resets [0x452] (the frame timer; accessed indirectly via the INT-8 sub-handler, not a
+plain DAT_2000_0452 symbol) and why its trigger condition fires on native-not-wasm at that sim point --
+i.e. which in-mission DGROUP state first diverges.  Menu/intro audio: CLOSED (patch 412).  Mission audio:
+BLOCKED on in-mission sim determinism, now precisely localized to the opltick-374992 / 3rd-[0x452]-reset
+event.
