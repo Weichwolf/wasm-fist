@@ -714,10 +714,16 @@ void fist_timer_pump(void){
         if (!fn) break;
         g_in_isr = 1;
         ((int(*)(int,int,int,int,int,int,int,int,int,int))fn)(0,0,0,0,0,0,0,0,0,0);
-        g_in_isr = 0;
         g_isr_runs++;
         { extern void fist_snd_isr_tick(void); fist_snd_isr_tick(); } /* drive the SOUNDDVR timer-ISR music sequencer (FIST_SB) */
         { extern void fist_opl_tick(void); fist_opl_tick(); }   /* advance OPL FM by one PIT period */
+        /* board:0001 cause-2 (audio cadence determinism): keep g_in_isr=1 ACROSS the snd/opl ticks, not
+           just the ISR body.  fist_opl_tick's note dispatch writes OPL regs via out(), and out() pumps the
+           cooperative PIT tick (fist_timer_pump) -- with g_in_isr=0 that nested pump ran tick_advance +
+           drained + called fist_opl_tick AGAIN, generating EXTRA samples whose count differs native<->wasm
+           (the intro/menu music WAV then diverges).  Reset AFTER the ticks so the whole ISR+audio step is
+           atomic and the nested pump is a no-op. */
+        g_in_isr = 0;
         { extern void fist_queue_check(const char*); fist_queue_check("post-isr"); }
     }
     fist_input_pump();
