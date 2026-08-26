@@ -1,0 +1,52 @@
+board:0012 flight-model migration: FUN_0000_bc46 type-0x1a update base-loss -> faithful rebase+widths (asm 0xbc46)
+--- a/fist.c
++++ b/fist.c
+@@ -30893,9 +30893,15 @@
+   ulong uVar2;
+   bool bVar3;
+   
+-  if ((*(char *)(param_3 + 0x19) != '\x04') && (*(char *)(param_3 + 0x19) != '\x06')) {
+-    *(byte *)(param_3 + 0x16) = *(byte *)(param_3 + 0x16) | 8;
+-    if ((*(char *)(param_3 + 0x19) == '\x03') && ((DAT_2000_2cde & 7) == 0)) {
++  /* PATCH 415 (board:0012 flight-model migration): asm 0xbc46 -- type-0x1a per-object update (round/effect)
++     dispatched by c0e5 with DI=param_3=object DGROUP near-offset (DS=DGROUP=0x1c00).  Ghidra base-lost all
++     [di+X] derefs (param_3 as host ptr) and mis-typed [di+0x1c] as 32-bit (asm `mov ax,WORD [di+0x1c]`).
++     Rebase to g_mem+0x1c000+off; widths asm-verified: +0x16/+0x17/+0x19/+0x1e/+0x2a BYTE, +0x1b/+0x1c WORD.
++     Callees 9efc/b1df/ace0/9caa take the near-offset param_3 (they rebase internally, patch-244 idiom). */
++  unsigned char *o = g_mem + 0x1c000 + (unsigned short)param_3;
++  if ((*(char *)(o + 0x19) != '\x04') && (*(char *)(o + 0x19) != '\x06')) {
++    o[0x16] = o[0x16] | 8;
++    if ((*(char *)(o + 0x19) == '\x03') && ((DAT_2000_2cde & 7) == 0)) {
+       uVar2 = FUN_0000_0291();
+       if ((uVar2 & 7) == 0) {
+         iVar1 = FUN_1000_9efc(100,param_2,param_3);
+@@ -30906,20 +30912,20 @@
+           if (!bVar3) {
+             FUN_1000_ace0(param_2,param_3,iVar1,0xf69,param_4);
+           }
+-          *(undefined1 *)(iVar1 + 0x2a) = 0;
+-          *(undefined2 *)(iVar1 + 0x1b) = 0x18e;
+-          *(byte *)(iVar1 + 0x17) = *(byte *)(iVar1 + 0x17) | 1;
++          o[0x2a] = 0;
++          *(unsigned short *)(o + 0x1b) = 0x18e;
++          o[0x17] = o[0x17] | 1;
+         }
+       }
+     }
+     return;
+   }
+-  *(char *)(param_3 + 0x1e) = *(char *)(param_3 + 0x1e) + '\x01';
+-  if (((*(byte *)(param_3 + 0x1e) & 0x3f) == 0) && (0x80 < *(uint *)(param_3 + 0x1c))) {
+-    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(uint *)(param_3 + 0x1c)),param_3);
+-    *(int *)(param_3 + 0x1c) = *(int *)(param_3 + 0x1c) + -1;
+-    if (0x300 < *(uint *)(param_3 + 0x1c)) {
+-      *(int *)(param_3 + 0x1c) = *(int *)(param_3 + 0x1c) + -4;
++  *(char *)(o + 0x1e) = *(char *)(o + 0x1e) + '\x01';
++  if (((o[0x1e] & 0x3f) == 0) && (0x80 < *(unsigned short *)(o + 0x1c))) {
++    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(unsigned short *)(o + 0x1c)),param_3);
++    *(unsigned short *)(o + 0x1c) = *(unsigned short *)(o + 0x1c) + -1;
++    if (0x300 < *(unsigned short *)(o + 0x1c)) {
++      *(unsigned short *)(o + 0x1c) = *(unsigned short *)(o + 0x1c) + -4;
+     }
+   }
+   return;
