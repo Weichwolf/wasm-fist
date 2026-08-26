@@ -533,3 +533,29 @@ shim (driven from the cooperative pump, gated on in-mission d549==0x1c):
   (414/415+), op-0x24 render (board:0001), host-ptr elimination for native==wasm.
 STATUS: goal unmet; the ONE substantive blocker is now unambiguous (reconstruct the extender AI/fire loop)
 and the FIST.DAT half is confirmed working -- the flip-flop is closed, the target is singular.
+
+## CORRECTION: a9c0/a9f0 is NOT the fire path -- it is the .FSG file loader (2026-08-26)
+
+Read the d6e4/d7e1/d81e cluster in full.  DISPROVEN: a9c0/a9c4/a9c6 are NOT a "fire order".  They are the
+.FSG record buffer for DOS file serialization:
+  - FUN_0000_d7e1 = the BATTLE-FILE LOADER: AX=0x3Fxx (INT 21h AH=3F = DOS READ), handle=DAT_2000_a970,
+    reads a 2-byte unit COUNT into DAT_2000_a9be, then loops { read 6 bytes -> a9c2 (record hdr),
+    read 2 bytes -> a9c0, FUN_0000_d81e -> FUN_1000_b1a2(a9c0,a9c6,a9c4,...) instantiate the unit,
+    a9be-- } until a9be==0.  This is why d7e1 runs ONCE at load (d501 caller) and spawns all units.
+  - FUN_0000_d6e4 = the mirror SAVE (AX=0x40xx = INT 21h AH=40 = DOS WRITE, same record layout).
+  - The oracle's "cs=0xf000 writes a9c0" is just the extender's INT-21h READ service filling the buffer
+    from the file -- DOS I/O, NOT an AI fire decision.
+So the SETTLED-as-extender conclusion above was built on a MISIDENTIFIED buffer.  The per-tick combat AI is
+NOT an a9c0/a9f0 extender fire loop.  fist_int_dispatch here = the engine's INT-21h bridge (DOS file I/O),
+not a flight-model op.
+
+REFOCUS (the real per-tick path, all decompiled FIST.DAT): FUN_0000_c0ca -> FUN_0000_c0e5 walks the object
+registry (DAT_2000_9fbc) and dispatches per-type unit UPDATE methods (912d/90cd/9176/875f/a358/a0a4) via
+fist_icall_near.  The fire DECISION lives INSIDE those update methods; a firing unit spawns a projectile
+object (b1a2/b354) which later hits -> b2ef -> a294/a296 deplete.  The 0/0/0-destroys-under-setarch-R result
+therefore means the update methods either (a) don't run per-tick, (b) run but the AI state that gates firing
+is base-lost/wrong, or (c) fire but projectile motion/collision is base-lost.  NEXT: verify c0e5 actually
+runs per-tick in the port (oracle registry writes at guest-phys 0x3b14c under setarch -R, tick-for-tick),
+then walk the update-method subtree for base-loss (the 414/415 migration class) until a unit fires + hits.
+This is tractable FIST.DAT migration, not extender reconstruction.  The flip-flop is corrected by reading
+the actual code: combat is decompiled; the work is base-loss migration + faithful per-tick dispatch.
