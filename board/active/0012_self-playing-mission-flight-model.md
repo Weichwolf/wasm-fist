@@ -881,3 +881,18 @@ accumulate to the 0x96 cap.  NEXT: trace what DAT_2000_2ce4 / FUN_0000_461b reso
 verify it runs in the port; if stubbed/base-lost, restore it -> a294 stays low -> b1d6 spawns weapons ->
 projectiles (b5e7) -> hits -> b2ef -> goals fall.  Secondary: patch 258's documented bb64/DAT_5a25
 target-population deviation.  Movement (416) stands; goal UNMET.
+
+## Despawn is INDIVIDUAL, not a frame clear -- localizes the leak (2026-08-26)
+
+Ruled out a per-frame transient clear: DAT_2000_2ce4 (pre-c0ca vector) = 0xc30e in-mission, and
+FUN_0000_c30e is EMPTY (return;).  Despawn is per-object: FUN_0000_c30f (b354->b2ef) and the b5e7 destruct
+branch (patch 335) each despawn ONE object when it expires.  So the a294 leak is simply that the emitter-
+spawned display objects never reach their despawn condition (b2ef fires 0x).  The remaining question is
+narrow and concrete: for a b51f/b583-emitted display object, WHICH update path should call b2ef (c30f or
+b5e7 destruct), and why is its expiry condition never met in the port (lifetime/timer/collision read
+base-lost or width-bugged, OR the despawn dispatch vector unresolved)?  NEXT: instrument b2ef's would-be
+callers (c30f, b5e7 destruct branch) + the expiry compares in the display-object update; find the read
+that never trips; asm-verify + patch (416/258 idiom).  Once one class of display object despawns, a294
+falls below 0x78 and the 9caa->b1d6 weapon spawn (already correct, patch 270) proceeds -> combat.
+Movement (416) stands; goal UNMET; the fire chain is now traced end-to-end to a single narrow defect class
+(display-object expiry/despawn), everything upstream (spawn) and the win metric confirmed correct.
