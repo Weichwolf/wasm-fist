@@ -2720,3 +2720,28 @@ the oracle, 239-note contiguous exact match) AND native==wasm byte-identity hold
 clean matrix passes.  The audio-content silence root is CLOSED end to end.
 Still open (fidelity DEPTH, tracked): tempo/phase WAV bit-identity vs the original (vsync-drive/MUSIC_DIV,
 now meaningful) + a port-vs-oracle content flow in verify.sh so silence cannot regress unnoticed (board:0011).
+
+*** IN-MISSION AUDIO DIVERGES native==wasm (2026-08-26, NEW -- menu/intro now CLOSED) ***
+With cause-4 fixed (patch 412, commit 938a6b1), the menu/intro OPL audio is byte-identical native==wasm
+(WAV to 13.45 MB) and the full native+wasm matrices are 177/0.  Extending the audio probe INTO a mission
+(AZER1 spawn via the MC_MOUSE BATTLES->OK->ACCEPT sequence, coop-pinned FIST_COOP_TICK=1 FIST_TICK_HZ=1000
+FIST_DUMPTICK=9000, FIST_AUDIO_WAV) exposes a distinct IN-MISSION divergence:
+  - native WAV = 16951330 B, wasm WAV = 19403836 B (wasm ~14.5% longer).
+  - The audio DATA is byte-IDENTICAL for the first 6869902 B (~78 s of the menu-nav + mission-LOAD + early
+    in-mission), then diverges mid-stream -- NOT a pure prefix.  The identical prefix confirms the cause-4
+    menu/load audio determinism; the divergence is POST-SPAWN (in-mission).
+  - CRITICAL: FIST_OPL=1/SB=0 and FIST_OPL=0/SB=1 both yield the EXACT SAME sizes (16951330 / 19403836) as
+    the mixed run -- so the divergence is SYNTH-INDEPENDENT.  It is a total audio-SAMPLE-COUNT (pump-count)
+    divergence, not an OPL-vs-SB content bug: native and wasm generate a different number of audio-clock
+    steps to reach the same [0x452]=9000.  samples ∝ pumps, so pumps_native/pumps_wasm ≈ 0.874.
+  ROOT HYPOTHESIS (matches the board's own "out() pumps timer on EVERY port write is a determinism smell"):
+  the cooperative-timer seam advances the tick on each I/O port write (fist_vga.c out()->fist_timer_pump).
+  In-mission the native and wasm I/O port-write counts differ (e.g. the retrace-poll DAC/palette upload
+  path -- fist_web_force_palette forces it on wasm, native lags), so the SAME [0x452] tick is reached with
+  a DIFFERENT pump count, and audio samples (generated per pump) diverge in count and phase from ~78 s on.
+  NEXT (bounded): (1) instrument fist_timer_pump call-count native vs wasm to the divergence tick to confirm
+  pumps diverge; (2) pin the exact [0x452] where the per-tick pump count first differs and the in-mission
+  code path responsible (likely the DAC/retrace I/O); (3) FAITHFUL fix = bind audio-sample generation (and
+  ideally the tick) to the deterministic PIT count [0x452], NOT to port-write count -- decoupling the
+  determinism smell the board already flagged.  This is the in-mission analogue of the menu-audio work and
+  the gating item for mission-audio native==wasm.  Menu/intro axis: CLOSED.
