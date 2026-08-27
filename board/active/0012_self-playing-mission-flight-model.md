@@ -1607,3 +1607,47 @@ REMAINING to a resolved win/lose (the last mile):
 
 The mission is no longer frozen -- it self-plays and fights.  Resolution is the sustained-combat last mile
 (aim + a294), now fully tooled (in-repo oracle + block-trace) and located.
+
+## *** MEASURED: combat plateaus at a296=10 -- the blocker is NAVIGATION, not the cascade (2026-08-27) ***
+
+Landed patch 426 (turret-slew 7d1d 16-bit width, same class as 423) and then INSTRUMENTED the full stall
+end-to-end with ungated counters (the earlier "frozen" readings were an artifact of printing INSIDE the
+simtrace `<<CHANGE` gate -- the underlying values keep evolving; corrected here).  The measured picture:
+
+| metric (AZER1 self-play, correct load a296=16) | value | meaning |
+|---|---|---|
+| a296 (enemy side) | 16 -> 10 by t~450, then FLAT | 6 real kills, then plateau |
+| aa08/e21c scans | grow (AI=371, player=42) -- NOT frozen | AI units DO scan every tick |
+| op-0x58 LOS outcomes | out-of-range 73%, occluded 20%, visible 7% | most candidate pairs too far |
+| min_dist (nearest cross-side pair) | oscillates 142388<->197333, NO downward trend | units do NOT close range |
+| turret slew 7d1d | works (moves -364/tick), aim converges when target held | fixed by 426 |
+| [0x452] tick | advances correctly (~15 Hz, ISR/PIT-divided) | sim is NOT frozen |
+
+DECISIVE: the combat CASCADE is correct (scan -> lock -> aim -> fire -> b2ef kills 6 enemies).  It
+plateaus because the 10 SURVIVING enemies are spread ~140k-300k across the map and the AI units do NOT
+navigate to close engagement range (min_dist never trends down).  This is exactly the long-standing
+drive-to-goal STEERING blocker (units drive coherently but do not steer toward distant hostiles/objectives
+-- the a9ea/a358/a57a target-selection cluster in the 902c movement callees).  The a294=150 cap and the
+turret aim are DOWNSTREAM/secondary; the primary gap to a resolved win/lose is unit navigation.
+
+## HARNESS DETERMINISM BLOCKER (blocks VERIFYING resolution)
+
+The self-play harness cannot currently produce a reliable LONG run: the FIST_MOUSE script fires clicks on
+PUMP count ("t = pump-after-ready"), but the menu->mission LOAD between clicks is TICK-paced.  Under
+instrumentation the pump/tick ratio changes, so:
+  - light/fast build (no FIST_SIMTRACE): reaches high t (~4000) but the BATTLES->OK->ACCEPT clicks land on
+    the wrong tick-state -> AZER1 mis-loads (a296=0, an EMPTY mission -- NOT a resolution; the earlier
+    "a296->0" sighting was this mis-load, not a win);
+  - correct-load build (FIST_SIMTRACE=1, per-pump object loop sets the right ratio): loads a296=16 but runs
+    ~1 tick/sec -> only reaches t~600 in 560s wall-clock.
+So "does AZER1 resolve past a296=10?" is presently UNMEASURABLE at high t with a correct load.  FIX: make
+the FIST_MOUSE clicks TICK-gated (or menu-state-gated) so the load is deterministic at any speed -- then a
+fast run can be trusted.  This is the concrete next step to VERIFY resolution once navigation is fixed.
+
+## Honest status
+
+Combat is REAL and correct (16->10 kills, cascade end-to-end, crash-free, mission-cockpit AE=0; patches
+421/422/423/425/426 shipped, all asm-verified base-loss fixes).  The mission does NOT yet resolve: the
+primary remaining blocker is AI unit NAVIGATION (drive-to-goal steering toward distant enemies), measured
+via a stable min_dist floor.  Secondary: a294 effect-leak, turret-aim sustain, and the harness tick-gate
+needed to VERIFY resolution.  Goal unmet; the remaining work is precisely located and evidence-backed.
