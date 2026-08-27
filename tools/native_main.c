@@ -1421,6 +1421,10 @@ int fist_extender_gate(void) {
      * on the ground -- proven: forcing terrain-follow Z makes candidates VISIBLE).  Wiring the per-unit
      * terrain-follow Z (like the camera-alt at the op-0x24 block) will activate this LOS -> target lock. */
     if (op == 0x58 && g_ext_ready && g_fist_after_map) {
+        /* board:0012 e339 clobber fix: a SERVICE op consumes its selector so e339's task-scheduler tail
+         * (far-jmp [DGROUP:0x58] when aa10!=0 && TCB!=0) does NOT overwrite the LOS result with a trap-0.
+         * Without this the op-0x58 return never reaches aa08 (targets never lock). */
+        *(uint16_t*)(dg + 0xea10) = 0;
         uint8_t *xb = g_mem + FIST_EXT_BASE;
         uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
         uint8_t *tcb = g_mem + tcb_lin;
