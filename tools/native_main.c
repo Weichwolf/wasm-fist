@@ -665,8 +665,11 @@ void fist_timer_pump(void){
           unsigned char *dg=g_mem+0x1c000;
           unsigned t=*(unsigned short*)(dg+0x452);
           unsigned short *fbc=(unsigned short*)(dg+0xdfbc);
-          int live=0,goals=0; for(int i=0;i<0xb6;i++){ unsigned short s=fbc[i*2]; if(!s)continue; live++;
-            if(dg[(unsigned short)(s+0x17)]&0x08) goals++; }   /* obj+0x17 bit3 = goal (win = goals->0) */
+          int live=0,goals=0,firereq=0,cool=0,tgt=0,tcnt=0,cand=0; for(int i=0;i<0xb6;i++){ unsigned short s=fbc[i*2]; if(!s)continue; live++;
+            if(dg[(unsigned short)(s+0x17)]&0x08) goals++;
+            if(dg[(unsigned short)(s+0x17)]&0x80) firereq++;   /* [0x17]&0x80 = fire-request set */
+            if(dg[(unsigned short)(s+0x92)]) cool++;            /* [0x92] = fire timer/countdown */
+            if(*(unsigned short*)(dg+(unsigned short)(s+0x97))) tgt++; if(dg[(unsigned short)(s+0x94)]) tcnt++; if(*(unsigned short*)(dg+(unsigned short)(s+0x9d))) cand++; }  /* [0x97] = acquired target */
           /* DGROUP-relative offset of DAT_2000_XXXX = XXXX + 0x4000 (DAT base seg 0x2000 = DGROUP 0x1c00 + 0x400). */
           int a=*(unsigned short*)(dg+0xe294), b=*(unsigned short*)(dg+0xe296);
           long bucket=t/strace;
@@ -679,8 +682,8 @@ void fist_timer_pump(void){
             vx=*(short*)(dg+(unsigned short)(ps+0x59)); vy=*(short*)(dg+(unsigned short)(ps+0x5b));
             f26=*(short*)(dg+(unsigned short)(ps+0x26)); f30=*(short*)(dg+(unsigned short)(ps+0x30)); }
           if (live!=plive||a!=pa||b!=pb||goals!=pg||bucket!=hb){
-            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d  player{slot=%04x X=%ld Y=%ld f17=%02x h55=%d s57=%d vx59=%d vy5b=%d f26=%d f30=%d}%s\n",
-              t,live,goals,a,b,ps,px,py,pctl,vh,vs,vx,vy,f26,f30,(live!=plive||a!=pa||b!=pb||goals!=pg)?"  <<CHANGE":"");
+            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d firereq=%d cool=%d tgt=%d tcnt=%d cand=%d  player{slot=%04x X=%ld Y=%ld f17=%02x h55=%d s57=%d vx59=%d vy5b=%d f26=%d f30=%d}%s\n",
+              t,live,goals,a,b,firereq,cool,tgt,tcnt,cand,ps,px,py,pctl,vh,vs,vx,vy,f26,f30,(live!=plive||a!=pa||b!=pb||goals!=pg)?"  <<CHANGE":"");
             plive=live;pa=a;pb=b;pg=goals;hb=bucket;
           }
         }

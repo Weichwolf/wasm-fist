@@ -1492,3 +1492,38 @@ starts) + the b1df object-model root fix & effect spawn/despawn/render cascade (
 native==wasm==ref AE=0).  MAPPED the entire combat model with asm-verified C for layers 2/3.  Goal UNMET:
 the mission does not resolve because the LAYER-1 AI fire-decision is un-mapped -- genuine multi-phase work,
 now precisely localized to the update-method targeting/fire-gate.
+
+## *** DECISIVE ROOT: the combat blocker is the op-0x58 LOS extender service (2026-08-27) ***
+
+Traced the no-fire chain to its EXACT singular root by empirical field-scan (FIST_SIMTRACE now reports
+firereq/cool/tgt/tcnt/cand across all units):
+  - NO unit ever sets the fire-request ([0x17]&0x80 / [0x92]) -> firereq=0, cool=0 for all units all ticks.
+  - Because NO unit ever acquires a target ([0x97]) -> tgt=0.
+  - Because the enemy-SCAN FUN_1000_aa08 finds NO candidates ([0x94] count=0, [0x9d] cand=0) -> tcnt/cand=0.
+  - Because aa08's per-candidate LINE-OF-SIGHT query e1f0 -> e21c -> op-0x58 (extender PM service) is
+    UNIMPLEMENTED: e339's extender callback [aa16] traps to 0, so op-0x58 returns 0 = "NOT VISIBLE" for
+    EVERY candidate (documented in patch 334's own comment).  So the scan's LOS gate always fails ->
+    the whole targeting->fire->combat chain is dead.
+
+THIS IS THE GOAL'S "part the port does not yet run... in the overlay at 0x100000, not in FIST.DAT":
+op-0x58 is a terrain LINE-OF-SIGHT test (object 3D pos [tcb 0xd2/0xd6/0xda] vs candidate [0xde/0xe2/0xe6],
+per-type heights added; posted via e21c; result = visible?).  It is ABSENT from re_out/fist_ext.c and
+fist_image.bin -- it lives in the runtime extender overlay.  The FIST.DAT-side targeting/fire chain is
+FULLY PRESENT and (mostly) migrated: aa08 scan (334), ae32 acquire (366), afa2 fire-gate (366), a286 set
+[0x92], 7c1d gate.  They just never trigger because LOS is stubbed to "not visible".
+
+SO THE MISSION-RESOLUTION PATH IS NOW SINGULAR + LOCATED:
+  1. Implement op-0x58 LOS FAITHFULLY (terrain ray-cast between the two units over the voxel heightmap;
+     inputs already marshalled by e21c into the TCB).  This is the undecompiled overlay piece -- extract/
+     decompile the extender's op-0x58 handler (make kernel-image variant / overlay dump) or reconstruct +
+     oracle-verify.  Result: candidates pass LOS -> aa08 finds targets -> ae32 acquires -> afa2 fires.
+  2. Land the FIRE cascade (asm-verified C already in board/0012_fire_cascade_reference.md: 7e29.. +
+     7745/778a/77cf/7814 + b725/b73b/b767 + ace0 + 9b5c/9b6f) so a286's [0x92] -> 7e29 -> spawns a
+     projectile -> hits -> b2ef -> a296/a294 deplete.
+  3. Then op-0x4c windshield render (board:0001) + full-run wasm byte-identity.
+
+SESSION NET (2026-08-27, major): SHIPPED steering (421/422/423) + the b1df object-model/effect cascade
+(424, sim runs clean).  Converted the combat blocker from "huge undefined cascade" to a SINGULAR located
+root: the op-0x58 LOS extender service.  The entire FIST.DAT targeting/fire chain is present; the missing
+piece is exactly the overlay LOS the goal names.  Goal UNMET; the resolution path is now singular, located,
+and falsifiable (implement LOS -> land the asm-mapped fire cascade -> a side to 0).
