@@ -1431,6 +1431,15 @@ int fist_extender_gate(void) {
         uint8_t *hm  = (uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0x85bc));
         int32_t ox=*(int32_t*)(tcb+0xd2), oy=*(int32_t*)(tcb+0xd6), oz=*(int32_t*)(tcb+0xda);
         int32_t cx=*(int32_t*)(tcb+0xde), cy=*(int32_t*)(tcb+0xe2), cz=*(int32_t*)(tcb+0xe6);
+        /* board:0012 unit-Z terrain-follow (camera-Z class stand-in for the absent overlay unit-altitude:
+         * the flight-model per-unit ground-clamp is paged out, exactly like the camera-Z at op-0x24).
+         * Use the LOS's OWN fixed-10 terrain index so endpoints sit on the sampled terrain + eye. */
+        if (hm) {
+            uint32_t oi = ((((uint32_t)(-(int32_t)((uint32_t)oy<<13))>>22)&0x3ff)<<10) | (((uint32_t)ox<<13)>>22 &0x3ff);
+            uint32_t ci = ((((uint32_t)(-(int32_t)((uint32_t)cy<<13))>>22)&0x3ff)<<10) | (((uint32_t)cx<<13)>>22 &0x3ff);
+            oz = ((int32_t)hm[oi&0x3fffff]<<8) + 1792;
+            cz = ((int32_t)hm[ci&0x3fffff]<<8) + 1792;
+        }
         int32_t dx=cx-ox, dy=cy-oy, dz=cz-oz;
         if (!hm || dx>=0x40000 || dy>=0x40000 || dx<=-0x40000 || dy<=-0x40000) return 0; /* out of range */
         dx<<=13; dy<<=13; dy=-dy; dz<<=16;                                    /* scale; Y flip */

@@ -1,0 +1,158 @@
+board:0012 target-acquire chain base-loss migration: a6e3 (acquire) + e20a (op-0x58 target-LOS, mirrors e21c, returns result) + a4b2 (player target-lock HUD msg, STRSEG).  Reached once op-0x58 propagates (aa10 fix) + units terrain-follow.  See inline PATCH 425.
+--- a/fist.c
++++ b/fist.c
+@@ -27857,33 +27857,34 @@
+ void __allregs FUN_0000_a6e3(int param_1,undefined4 param_2,int param_3)
+ 
+ {
+-  undefined1 uVar1;
++  /* PATCH 425: target ACQUIRE (asm 0xa6e3; DGROUP).  param_1=candidate, param_3=self near-offsets.
++     Set [self+0x97]=candidate, validate via e20a (op-0x58 LOS); clear on invalid.  Player-only branch
++     (self==2d34) plays a STRSEG target-lock tone via a4a2/bf3c.  Ghidra host-ptr-deref'd everything. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned int cand = (unsigned short)param_1;
++  unsigned int self = (unsigned short)param_3;
+   int iVar2;
+-  int *piVar3;
+-  
+-  if (((param_1 != 0) && ((*(byte *)(param_1 + 0x17) & 0x40) == 0)) &&
+-     ((*(byte *)(param_1 + 0x16) & 1) == 0)) {
+-    *(int *)(param_3 + 0x97) = param_1;
+-    iVar2 = FUN_0000_e20a(param_2,param_3);
+-    if (iVar2 == 0) {
+-      *(undefined2 *)(param_3 + 0x97) = 0;
+-      return;
+-    }
+-    if (param_3 == DAT_2000_2d34) {
+-      piVar3 = (int *)*(int *)(param_3 + 0x97);
+-      iVar2 = *(int *)(*piVar3 * 2 + 0x2daf);
+-      if ((*(byte *)(piVar3 + 0xb) & 8) == 0) {
+-        iVar2 = *(int *)(*piVar3 * 2 + 0x2de7);
+-      }
+-      if (iVar2 == -1) {
+-        iVar2 = *(int *)((uint)*(byte *)((int)piVar3 + 0x19) * 2 + 0x2e1f);
+-      }
+-      FUN_1000_a4a2(iVar2,param_3);
+-      uVar1 = *(undefined1 *)(*piVar3 + -0x68fe);
+-      if ((*(byte *)(piVar3 + 0xb) & 8) == 0) {
+-        uVar1 = 0x14;
+-      }
+-      FUN_0000_bf3c(uVar1,*piVar3,param_3);
++  if (cand != 0 && (dg[(unsigned short)(cand + 0x17)] & 0x40) == 0 &&
++      (dg[(unsigned short)(cand + 0x16)] & 1) == 0) {
++    *(unsigned short *)(dg + (unsigned short)(self + 0x97)) = (unsigned short)cand;
++    iVar2 = FUN_0000_e20a(param_2, param_3);
++    if (iVar2 == 0) { *(unsigned short *)(dg + (unsigned short)(self + 0x97)) = 0; return; }
++    if (self == (unsigned short)DAT_2000_2d34) {
++      unsigned int tgt = *(unsigned short *)(dg + (unsigned short)(self + 0x97));
++      unsigned int gs  = *(unsigned short *)(dg + 0x70);
++      unsigned char *gsb = g_mem + ((unsigned long)gs << 4);
++      unsigned int bx = (unsigned)(*(unsigned short *)(dg + tgt)) << 1;
++      int tone = *(int16_t *)(gsb + (unsigned short)(bx + 0x2daf));
++      if ((dg[(unsigned short)(tgt + 0x16)] & 8) == 0)
++        tone = *(int16_t *)(gsb + (unsigned short)(bx + 0x2de7));
++      if (tone == -1) {
++        bx = (unsigned)dg[(unsigned short)(tgt + 0x19)] << 1;
++        tone = *(int16_t *)(gsb + (unsigned short)(bx + 0x2e1f));
++      }
++      FUN_1000_a4a2(tone, param_3);
++      { unsigned char al = dg[(unsigned short)(*(unsigned short *)(dg + tgt) - 0x68fe)];
++        if ((dg[(unsigned short)(tgt + 0x16)] & 8) == 0) al = 0x14;
++        FUN_0000_bf3c(al, *(unsigned short *)(dg + tgt), param_3); }
+     }
+   }
+   return;
+@@ -36059,32 +36060,31 @@
+ undefined4 __allregs FUN_0000_e20a(undefined4 param_1,int *param_2)
+ 
+ {
+-  int *piVar1;
+-  uint uVar2;
+-  int iVar3;
+-  undefined2 uVar4;
+-  
+-  uVar4 = DAT_2000_aa2e;
+-  iVar3 = DAT_2000_aa2c;
+-  piVar1 = (int *)*(int *)((int)param_2 + 0x97);
+-  if (piVar1 != (int *)0x0) {
+-    *(undefined4 *)(DAT_2000_aa2c + 0xde) = *(undefined4 *)(piVar1 + 2);
+-    *(undefined4 *)(iVar3 + 0xe2) = *(undefined4 *)(piVar1 + 4);
+-    if (*piVar1 == 0x1a) {
+-      uVar2 = *(uint *)((*(byte *)((int)piVar1 + 0x19) & 3) * 2 + -0x6151);
+-    }
+-    else {
+-      uVar2 = *(uint *)(*piVar1 * 2 + -0x1a78);
+-    }
+-    *(long *)(iVar3 + 0xe6) = (ulong)uVar2 + *(long *)(piVar1 + 6);
+-    *(undefined4 *)(iVar3 + 0xd2) = *(undefined4 *)(param_2 + 2);
+-    *(undefined4 *)(iVar3 + 0xd6) = *(undefined4 *)(param_2 + 4);
+-    *(long *)(iVar3 + 0xda) = (ulong)*(uint *)(*param_2 * 2 + -0x1a40) + *(long *)(param_2 + 6);
+-    *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = (int *)CONCAT22((int)((ulong)param_1 >> 0x10),piVar1);
+-    DAT_2000_aa10 = 0x58;
+-    FUN_0000_e339();
++  /* PATCH 425: target-LOS setup (asm 0xe20a; mirrors e21c but the candidate is the SELF's target
++     [self+0x97]).  Ghidra base-lost every deref + DROPPED the op-0x58 return -> a6e3 got garbage. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char *tcb = (unsigned char *)(uintptr_t)(uint32_t)DAT_2000_aa2c;
++  unsigned int self = (unsigned short)(uintptr_t)param_2;
++  unsigned int tgt  = *(unsigned short *)(dg + (unsigned short)(self + 0x97));
++  unsigned int w, tbl;
++  (void)param_1;
++  if (tgt != 0) {
++    unsigned char *t = dg + tgt;
++    *(uint32_t *)(tcb + 0xde) = *(uint32_t *)(t + 4);
++    *(uint32_t *)(tcb + 0xe2) = *(uint32_t *)(t + 8);
++    w = *(uint16_t *)t;
++    if (w == 0x1a) tbl = *(uint16_t *)(dg + (uint16_t)(((t[0x19] & 3) * 2) - 0x6151));
++    else           tbl = *(uint16_t *)(dg + (uint16_t)((w * 2) - 0x1a78));
++    *(uint32_t *)(tcb + 0xe6) = tbl + *(uint32_t *)(t + 0xc);
++    *(uint32_t *)(tcb + 0xd2) = *(uint32_t *)(dg + (uint16_t)(self + 4));
++    *(uint32_t *)(tcb + 0xd6) = *(uint32_t *)(dg + (uint16_t)(self + 8));
++    w = *(uint16_t *)(dg + self);
++    *(uint32_t *)(tcb + 0xda) = *(uint16_t *)(dg + (uint16_t)((w * 2) - 0x1a40)) + *(uint32_t *)(dg + (uint16_t)(self + 0xc));
++    *(uint32_t *)(tcb + 0x3f2) = tgt;
++    *(uint16_t *)(dg + 0xea10) = 0x58;
++    return (int)(uint16_t)FUN_0000_e339();
+   }
+-  return;
++  return 0;
+ }
+ 
+ 
+@@ -64319,23 +64319,19 @@
+ void __allregs FUN_1000_a4b2(void)
+ 
+ {
+-  uint uVar1;
+-  int iVar2;
+-  char *pcVar3;
+-  undefined2 unaff_CS;
+-  
+-  if (DAT_2000_569e != 0) {
+-    uVar1 = 0;
+-    iVar2 = 0x50;
+-    pcVar3 = DAT_2000_56a0;
+-    do {
+-      if (*pcVar3 == '\0') break;
+-      uVar1 = uVar1 + 4;
+-      pcVar3 = pcVar3 + 1;
+-      iVar2 = iVar2 + -1;
+-    } while (iVar2 != 0);
+-    FUN_1000_52d1(0xc,0xa0 - (uVar1 >> 1));
+-    thunk_FUN_1000_5591(unaff_CS);
++  /* PATCH 425: player target-lock HUD message render (asm 0x1a4b2).  The string lives in STRSEG
++     (es=word[DGROUP:0x70]) at near-offset DAT_2000_56a0; measure (<=0x50 chars, 4px each), centre at
++     row 0xc, render via 5591.  Ghidra deref'd the STRSEG near-offset as a host char* -> SIGSEGV once the
++     player locks a target (a4a2 sets 569e/56a0).  Reached now that target-acquire works. */
++  unsigned char *dg = g_mem + 0x1c000;
++  if (*(uint16_t *)(dg + 0x969e) != 0) {                 /* DAT_2000_569e */
++    unsigned int es = *(uint16_t *)(dg + 0x70);          /* STRSEG */
++    unsigned char *esb = g_mem + ((unsigned long)es << 4);
++    unsigned int si0 = *(uint16_t *)(dg + 0x96a0);       /* DAT_2000_56a0 string near-offset */
++    unsigned int si = si0, len = 0; int cx = 0x50;
++    while (cx != 0) { if (esb[(uint16_t)si] == 0) break; len += 4; si++; cx--; }
++    FUN_1000_52d1(0xc, 0xa0 - (int)(len >> 1));
++    thunk_FUN_1000_5591((char *)(uintptr_t)si0);
+   }
+   return;
+ }
