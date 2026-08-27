@@ -1,0 +1,55 @@
+board:0012 FIRE DISPATCH 7e29 base-loss -- di=firer near-offset (DGROUP), the far spawn-dispatch table `call DWORD cs:[bx+0x7e77]` (0f69:80b5/80fa/8184/813f = FUN_1000_7745/778a/7814/77cf), CF thread (g_fist_cf), and the [bx+0x8f06] muzzle-fx table were all Ghidra-mangled.  Reached the instant a unit fires (afa2->7c1d->7e29) -- previously SEGV'd.
+--- a/fist.c	2026-08-27 15:28:32.813820992 +0200
++++ b/fist.c	2026-08-27 15:28:32.825637325 +0200
+@@ -20293,27 +20293,31 @@
+ void __allregs FUN_0000_7e29(int param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  uint uVar2;
+-  bool bVar3;
+-  
++  /* PATCH 428: FIRE DISPATCH (asm 0x7e29; DS=DGROUP, di=firer near-offset).  Ghidra base-lost every
++     [di+off], read the FAR dispatch table `call DWORD cs:[bx+0x7e77]` as a NEAR call through a host ptr,
++     dropped its CF (g_fist_cf), and mis-scaled the [bx+0x8f06] table.  The table (4 DWORD far ptrs at
++     image 0x7e77) selects the weapon SPAWN method by bx=[di+0x91]<<1: 0->0f69:80b5=FUN_1000_7745,
++     2->0f69:80fa=778a, 4->0f69:8184=7814, 6->0f69:813f=77cf.  The far callee reads the firer from DI:
++     7745/778a/77cf take it as param_4 (5-arg __allregs), 7814 as param_3 (4-arg) -- thread accordingly.
++     On CF=1 (spawn failed / cap) -> bf77; else if a live target [di+0x97] -> bf94; else muzzle-fx bf3c. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
+   FUN_1000_70d6();
+-  *(undefined1 *)(param_1 + 0xdb) = 3;
+-  if ((*(char *)(param_1 + 0x91) == '\x04') || (*(char *)(param_1 + 0xa8) == '\0')) {
+-    bVar3 = false;
+-    puVar1 = (undefined2 *)((uint)*(byte *)(param_1 + 0x91) * 2 + 0x7e77);
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))(0xf69);
+-    if (!bVar3) {
+-      if ((*(int *)(param_1 + 0x97) != 0) && ((*(byte *)(*(int *)(param_1 + 0x97) + 0x16) & 8) == 0)
+-         ) {
+-        FUN_0000_bf94(param_1);
+-        return;
+-      }
+-      uVar2 = (uint)(*(byte *)(param_1 + 0x91) >> 1);
+-      FUN_0000_bf3c(*(undefined1 *)(uVar2 + 0x8f06),uVar2,param_1);
+-      return;
+-    }
+-    FUN_0000_bf77(param_1);
++  dg[(unsigned short)(di + 0xdb)] = 3;
++  if (dg[(unsigned short)(di + 0x91)] == 4 || dg[(unsigned short)(di + 0xa8)] == 0) {
++    unsigned bx = (unsigned)dg[(unsigned short)(di + 0x91)] << 1;
++    uint32_t fp = *(uint32_t *)(g_mem + (unsigned short)(0x7e77 + bx));
++    g_fist_cf = 0;
++    if (dg[(unsigned short)(di + 0x91)] == 4)
++      ((void (*)(undefined2,undefined4,int,undefined2))fist_icall_far(fp))(0,0,(int)di,0);
++    else
++      ((void (*)(undefined2,undefined4,undefined4,int,undefined2))fist_icall_far(fp))(0,0,0,(int)di,0);
++    if (g_fist_cf) { FUN_0000_bf77((int)di); return; }
++    { unsigned short si = *(unsigned short *)(dg + (unsigned short)(di + 0x97));
++      if (si != 0 && (dg[(unsigned short)(si + 0x16)] & 8) == 0) { FUN_0000_bf94((int)di); return; } }
++    { unsigned bx2 = (unsigned)(dg[(unsigned short)(di + 0x91)] >> 1);
++      FUN_0000_bf3c(dg[(unsigned short)(bx2 + 0x8f06)], bx2, (int)di); }
+   }
+   return;
+ }
