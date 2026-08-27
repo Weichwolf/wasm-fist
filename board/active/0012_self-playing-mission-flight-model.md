@@ -2495,3 +2495,27 @@ Session end: goal not met, but the prerequisite TOOL is built (mid-mission oracl
 step is the PM segment-base resolution to parse it.  All port work pushed; dosbox change recorded above
 (gitignored).  The single frontier remains the acquisition/convergence divergence, now with a working
 oracle-dump path to measure it directly next session.
+
+## Oracle-dump parse: open RE problem (layout differs from the port model)
+
+With the tool working, tried to locate the oracle's DGROUP in the mid-mission dump.  Findings:
+  - At the auto-dump (engine code running): cs=0008:base 0x2dd0, ds=0033:base 0x10000000, ss=0010:base
+    0x26e0, cr3=0xe000.  So engine CODE/STACK are at LOW linear (0x2dd0/0x26e0) but DATA (DS) is the flat
+    0x10000000 descriptor with WRAP addressing.
+  - Page-walk cr3=0xe000 at CPU-linear 0x1c000 (port's DGROUP): the frame timer [0x452] reads 0 (should
+    tick mid-mission) and the "registry" at 0x29fbc is CODE bytes, not {slot,val} pairs -> DGROUP is NOT
+    at CPU-linear 0x1c000 in this dump.
+  - Phys scan of the full 16MB for a coherent registry (P+0xdfbc slots -> P+slot bodies with valid types +
+    sane positions + a ticking [0x452]) found NOTHING at >=60 units.
+So the original's IN-MISSION memory layout (DGROUP/registry/unit-body addressing under the extender's PM +
+DS base 0x10000000 wrap) does NOT match the port's real-mode seg<<4 model -- locating it needs the GDT/LDT
+descriptor for the engine's DGROUP selector (and the wrap math), or a different capture (dump the engine's
+DS:offset->CPU-linear mapping live).  This is a bounded but genuine RE sub-problem, now the gating step for
+the oracle unit-field comparison.  The TOOL (mem-hook mid-mission dump) is done and works; the PARSE is the
+open piece.
+
+FINAL session state: goal not met (AZER1 doesn't resolve).  Delivered: patch 437 (held cascade crash-clean+
+leak-free); four wrong hypotheses disproven (a294/a296, op-0x58, reload, faction bit); blocker localized to
+a coupled movement(divergence)+acquisition(low-supply) system with object model/LOS/fire-decision proven
+correct beneath it; and the mem-hook oracle-dump TOOL built (the prerequisite for the direct oracle
+comparison), with the remaining piece being the original's in-mission DGROUP addressing.  All pushed.
