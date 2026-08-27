@@ -2675,3 +2675,24 @@ coords from the TCB, compute hit/miss (+ damage), return the result e1a6 expects
 re_out/fist_image.bin at the op-0x54 arm of the gate (board:0009 method), implement in the shim, and the
 projectiles will hit -> units die -> mission resolves.  This is the genuine last mile, and the hard part
 (getting projectiles to spawn+fly) is DONE.  Goal not yet met but the path is now a single named service.
+
+## op-0x54 DECODED + implemented; next piece = projectile altitude ([proj+0xd]) physics
+
+Fully decoded op-0x54 (collision) from fist_image.bin: the op-dispatcher is at 0xf30 (handler = dword[0xcb3
++op]; op-0x54 -> 0x11a6, op-0x58 -> 0x1103).  Handler 0x11a6: edi=[0xca1]+di (di = proj+4 from e1a6's `lea
+di,[di+4]`; [0xca1]=([TCB+0x26]<<4)+[0x807] = the extender's DGROUP mirror), reads X=[proj+4], Y=[proj+8],
+calls 0x8480 = terrain lookup: idx=((-Y<<13)>>22 &0x3ff)<<10 | ((X<<13)>>22 &0x3ff); return heightmap
+[0x85bc][idx] (raw byte).  e1a6 (asm 0xe1a6): [proj+0x18]=al; return [proj+0xd]-[proj+0x18] -> b5e7 explodes
+(b691) when the shell Z-byte [proj+0xd] < terrain.  IMPLEMENTED in the shim (native_main op-0x54 handler,
+modeled on op-0x58, projectile from the c0e5 cursor) -- crash-clean.
+
+BUT the collision never fires: **e1a6 calls = 0** because b5e7 gates it on WORD[proj+0xd] < 0x80 and the
+projectiles' [proj+0xd] stays >= 0x80 -- they do NOT descend into the collision regime.  So the projectile
+Z/altitude physics is the next piece: [proj+0xc] (Z dword) += [proj+0x21] (Z velocity) should make
+WORD[proj+0xd] (=Z>>8) fall below 0x80 as the shell arcs down, triggering e1a6 -> op-0x54 -> hit.  Check
+the projectile init (ace0/held 433, b73b, 778a) for [proj+0xc]/[proj+0x21]/[proj+0xd] -- likely the Z or
+Z-velocity isn't set to a falling arc (or [proj+0xd] init >= 0x80 and never decremented).  Fix that and the
+whole chain closes: spawn (438) -> fly -> DESCEND -> op-0x54 terrain hit -> b691 explosion -> splash damage
+-> deaths -> resolution.  The op-0x54 shim handler is decoded+ready (re-add from this spec); the last
+mechanical piece is the shell's downward arc.  MASSIVE session progress: combat blocker fixed (438),
+projectiles spawn+fly, collision service decoded+implemented; remaining = projectile altitude physics.

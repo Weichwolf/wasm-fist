@@ -339,6 +339,8 @@ extern int g_menu_ready;
 #define BIOS_TICK_LIN 0x46C
 unsigned short g_fist_a18e_bx=0;
 long g_a286=0,g_7e29=0,g_7745=0;
+long g_e1a6=0;
+long g_op54_n=0,g_op54_hit=0,g_op54_raw=0,g_op54_curtype=-1; unsigned g_op54_pz=0,g_op54_th=0;
 unsigned g_e29dis[16]={0}; long g_e29disc[16]={0}; int g_e29n=0;
 long g_e29_3dh[16]={0}; unsigned g_e29_type=0,g_e29_91=0,g_e29_3d=0,g_e29_di=0;
 long g_slot0_a8z=0,g_slot0_a8nz=0;
@@ -489,6 +491,7 @@ static void fist_dump_and_exit(const char *why){
       extern long g_slot0_a8z,g_slot0_a8nz; fprintf(stderr,"[7d69slot] cursor-hits-7d69-slot: a8==0=%ld  a8!=0(should-decrement)=%ld\n",g_slot0_a8z,g_slot0_a8nz);
       extern unsigned g_e29_type,g_e29_91,g_e29_3d,g_e29_di; fprintf(stderr,"[7e29firer] type=%04x weapon[0x91]=%02x [0x3d]=%02x di=%04x\n",g_e29_type,g_e29_91,g_e29_3d,g_e29_di);
       extern unsigned g_e29dis[16]; extern long g_e29disc[16]; extern int g_e29n; { unsigned char*dg=g_mem+0x1c000; unsigned short*fbc=(unsigned short*)(dg+0xdfbc); fprintf(stderr,"[7e29di] %d distinct di:",g_e29n); for(int i=0;i<g_e29n;i++){ int inreg=0; for(int j=0;j<0xb6;j++) if(fbc[j*2]==g_e29dis[i]){inreg=1;break;} fprintf(stderr," %04x(n=%ld,reg=%d,t=%04x)",g_e29dis[i],g_e29disc[i],inreg,*(unsigned short*)(dg+g_e29dis[i])); } fprintf(stderr,"\n"); }
+      extern long g_op54_n,g_op54_hit; extern unsigned g_op54_pz,g_op54_th; extern long g_op54_raw,g_op54_curtype; extern long g_e1a6; fprintf(stderr,"[e1a6] calls=%ld\n",g_e1a6); fprintf(stderr,"[op54raw] total op-0x54 to gate=%ld  cur-c0e5-obj-type-at-0x54=0x%lx\n",g_op54_raw,g_op54_curtype); fprintf(stderr,"[op54] collision-queries=%ld  would-HIT([proj+0xd]<terrain)=%ld  last(pz=%u th=%u)\n",g_op54_n,g_op54_hit,g_op54_pz,g_op54_th);
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }
@@ -1481,6 +1484,33 @@ int fist_extender_gate(void) {
     }
     if (op == 0x18) { g_fist_after_map = 1;
         if (getenv("FIST_DBG_OP18")) { static int o=0; if(!o){o=1; extern void fist_dbg_op18(void); fist_dbg_op18();} } }
+    /* board:0012 op-0x54 PROJECTILE-vs-TERRAIN collision service -- faithful port of the 32-bit handler
+     * 0x11a6/0x8480: return the RAW heightmap byte at the projectile's (X=[proj+4], Y=[proj+8]) using the
+     * same idx = ((-Y<<13)>>22 &0x3ff)<<10 | ((X<<13)>>22 &0x3ff) and heightmap [ext+0x85bc] as op-0x58.
+     * e1a6 (asm 0xe1a6: lea di,[di+4]; post; [proj+0x18]=al; return [proj+0xd]-[proj+0x18]) HITS when the
+     * shell's Z [proj+0xd] drops below the terrain byte -> explosion (b5e7 b691) -> splash damage.  The
+     * querying projectile is the current c0e5 object (g_fist_c0e5_si cursor); only projectile-types
+     * (8..0xc, upd b5e7) query collision, so gate on that (skips the map-load roster op-0x54). */
+    if (op == 0x54) { extern long g_op54_raw; g_op54_raw++; }
+    if (op == 0x54 && g_ext_ready && g_fist_after_map) {
+        extern unsigned short g_fist_c0e5_si;
+        { extern long g_op54_curtype; extern unsigned short g_fist_c0e5_si; unsigned short pp=*(uint16_t*)(dg+g_fist_c0e5_si); if(pp) g_op54_curtype=*(uint16_t*)(dg+pp); }
+        uint16_t proj = *(uint16_t*)(dg + g_fist_c0e5_si);
+        uint16_t ty = proj ? *(uint16_t*)(dg + proj) : 0xffff;
+        if (proj && ty >= 8 && ty <= 0xc) {
+            *(uint16_t*)(dg + 0xea10) = 0;
+            uint8_t *xb54 = g_mem + FIST_EXT_BASE;
+            uint8_t *hm54 = (uint8_t*)(uintptr_t)(*(uint32_t*)(xb54+0x85bc));
+            int32_t X = *(int32_t*)(dg + (uint16_t)(proj + 4));
+            int32_t Y = *(int32_t*)(dg + (uint16_t)(proj + 8));
+            uint32_t idx = ((((uint32_t)(-(int32_t)((uint32_t)Y<<13))>>22)&0x3ff)<<10) | (((uint32_t)X<<13)>>22 &0x3ff);
+            if (hm54) { uint8_t th=hm54[idx & 0x3fffff]; uint8_t pz=g_mem[0x1c000+(uint16_t)(proj+0xd)];
+                extern long g_op54_n,g_op54_hit; extern unsigned g_op54_pz,g_op54_th; g_op54_n++;
+                if ((char)pz < (char)th) g_op54_hit++; g_op54_pz=pz; g_op54_th=th;
+                return (int)th; }
+            return 0;
+        }
+    }
     /* board:0012 op-0x58 LINE-OF-SIGHT service -- faithful port of the 32-bit-PM handler decoded from
      * fist_image.bin @0x802e (board/0012_fire_cascade_reference.md): a DDA terrain ray-cast between the
      * object (TCB+0xd2/0xd6/0xda) and candidate (TCB+0xde/0xe2/0xe6) over the mission heightmap
