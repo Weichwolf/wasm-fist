@@ -2809,3 +2809,33 @@ cx=-13192 (a18e/a192) + check whether [proj+0xd] is meant to be the terrain-rela
 mechanism (fire->spawn->fly->despawn) is PROVEN working (438 + b2ef churn); the one missing link is the
 shell entering the collision regime so e1a6->op-0x54 fires.  Goal not met; blocker re-localized to the
 projectile collision-band (small/bounded), render frontier set aside as a red herring.
+
+## PRECISE BLOCKER (measured): projectiles have ZERO horizontal velocity -> plunge straight down at the firer
+
+Instrumented b5e7 (the projectile update, patch 335) at the EXACT collision gate.  Chain of measurements
+(stable, non-crashing runs; AZER1 self-play, 60s):
+  [b5e7]        alive=6227  dead=134434   (most b5e7 calls are on already-dead shells; despawn doesn't unlink)
+  [gate-fresh]  n=78  band-hits(<0x80)=0  closest-approach-to-Z0 = -13056  (shell NEVER in the [0,0x7fff] band at the gate)
+  [fresh-proj]  Z0 ~ 0xd00 (just above ground);  Zvel=-16384;  X=0x8eac7 Y=0x117dc5  firer[0x27]=0xc05c
+  [ballistics]  vel = (X=0, Y=0, Z=-16384)   speed[0x1b]=0x4aa   firer=0xc05c type=0x0  pitch[0x38]=4
+
+CONCLUSION -- the shell has NO horizontal velocity (velX=velY=0) and only a steep downward velZ=-16384.
+So it does not fly to the target; it drops straight down and hits terrain at the FIRER's own position.
+The collision gate b5e7 `[proj+0xd]<0x80` is checked POST-move; with Z0~0xd00 and one -16384 step the shell
+jumps from just-above-ground straight to -13056 (below ground), skipping the [0,0x7fff] collision band, so
+e1a6 (op-0x54 terrain collision) NEVER fires -> no explosion -> no splash damage -> a296 frozen at 16.
+
+This is a PRECISE, bounded velocity bug -- NOT the render (fully abandoned as a red herring) and NOT a
+Z-scale issue.  Two hard clues to chase next:
+  1. ace0 (the projectile-init, fist.c ~65200) sets velZ = cx = [firer+0x38] = 4 for a type-0 firer, and
+     velX = a192(ax,speed), velY = g_fist_rot_dx.  But the MEASURED velZ is -16384, not 4 -> either the
+     shell is NOT spawned through this ace0 path, or velZ is OVERWRITTEN post-spawn (b5e7 addb/guidance).
+  2. a192 -> FUN_0000_0459 (patch 309, "asm-verified 3-in/3-out rotation trig) returns velX and sets
+     g_fist_rot_dx (velY) from azimuth ax, magnitude M=speed, heading H=g_fist_rot_h.  velX=velY=0 with
+     M=0x4aa!=0 means either 0459 is broken for this input, or g_fist_rot_h (the heading) is STALE because
+     the actual spawn path calls a192 without setting it (ace0 sets it at line 65216, a sibling may not).
+NEXT: find the ACTUAL spawn path for this shell (trace [si+0x1d/0x1f/0x21] writers via FIST_WATCHFLAT on
+the proj near-offset, or the oracle's projectile velocity at spawn) -> determines whether it's 0459, a
+stale g_fist_rot_h, or a wrong-aim (straight-down) from the AI targeting.  The combat mechanism is proven
+(438 spawns shells that fly+despawn); the ONE missing link is the shell's horizontal velocity so it reaches
+a target and its terrain-collision fires.  Goal not met; blocker localized to a single velocity vector.
