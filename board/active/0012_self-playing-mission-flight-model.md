@@ -2743,3 +2743,24 @@ still does not resolve (a296=16), gated on the flight-model unit-Z + explosion-d
 named and bounded.  This is the largest advance of the effort; the remaining frontier is concrete, not
 diffuse.  patch 438 held with the cascade; op-0x54 handler + the ground-clamp/render-guard experiments are
 specced here for the next pass.
+
+## op-0x4c/mga render is the hard gate for the on-ground-units path (board:0001)
+
+Ran the full-chain test (op-0x54 handler + FIST_GROUNDCLAMP + FIST_RENDERGUARD + counters).  Guarding the
+mga blitter 2b1e (NULL sprite) just exposed the NEXT mga crash 26de (fist_mga.c:6319, param_1=param_2=0 --
+a NULL-param base-loss, param_3 a VALID g_mem terrain ptr).  So the op-0x4c/mga sprite render (board:0001)
+has SEVERAL base-losses that only fire once units are visible on the ground; they are varied (NULL sprite,
+NULL params), not a single wild-pointer guard.  Skipping the render at 77dc (its signature spans lines; the
+naive guard missed) is the cleaner route but the render is entangled with the frame-present handshake.  So
+proving "combat resolves" by clamping units + skipping the render is itself blocked by the op-0x4c frontier.
+
+NET, precisely: the fire->spawn->fly->collision(op-0x54) chain is built (patch 438 + op-0x54 decoded/impl).
+The three remaining pieces are now RANKED by how they couple:
+  1. op-0x4c/mga render (board:0001) -- the sprite blitters base-loss on on-ground units; this GATES any
+     ground-clamp path, so it must be done (or the render cleanly bypassed) before combat can be observed.
+  2. flight-model unit-Z ground-clamp -- faithful per-unit terrain-follow (surviving the sim's Z writes).
+  3. b691 explosion -> b2ef splash damage (unverified; reachable only after 1+2).
+The op-0x54 shim handler (op==0x54 gate; c0e5-cursor projectile; heightmap[idx]) is specced + ready to
+re-add once it is verified not to disturb the map-load roster op-0x54.  Session end: combat mechanically
+built through collision; the resolved mission is gated on the op-0x4c render (board:0001) + the flight-model
+Z-clamp, both substantial named frontiers.  patch 438 + cascade (430-438) held; goal not met.
