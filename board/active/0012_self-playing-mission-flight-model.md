@@ -2539,3 +2539,28 @@ question (does b1df get called during combat? if not, which gate blocks?), measu
 with a single allocation counter -- the cleanest next probe, and NOT the acquisition/movement rabbit holes.
 The perturbation-prone 7e29 measurements are superseded; the reliable signal is the stable pool count =
 zero spawns.  Goal not met; the mechanical frontier is now "why does a286 not produce a b1df spawn".
+
+## MECHANICAL ROOT (clean, non-perturbing): 7e29 spawn gate never opens -- firing units' [0xa8] never 0
+
+Single-counter (non-perturbing) probe of the spawn path, held+437 AZER1 90s:
+  [spawn] b1df-total=473  b1df-in-combat(tick>1000)=4      -> during combat, ~ZERO objects allocated
+  [7e29]  entered=1440    gate-open(spawn-dispatch)=0      -> 7e29 IS reached 1440x but its gate
+                                                              ([0x91]==4 || [0xa8]==0) NEVER passes
+So the fire path REACHES the spawn dispatcher (7e29, 1440x from 7c1d) but the gate never opens because the
+FIRING units always have [0xa8]!=0 (reloading) AND [0x91]!=4.  b1df-late=4 confirms: the fire-decision
+fires (a286=20) but produces no projectile allocation -> no hit -> no death -> stable pool -> no resolution.
+
+CORRECTION: the earlier "reload DISPROVED (all [0xa8]=0)" (from the one-shot dumpreg) measured IDLE units;
+the FIRING units (those entering 7e29) have [0xa8]!=0 at every entry.  So the RELOAD is re-elevated as the
+real mechanical blocker -- for the units actively trying to fire, [0xa8] never reaches 0.  (The perturbation-
+derived "[0xa8]=70 constant at 7e29" from mid-session was, in retrospect, pointing at the RIGHT thing; the
+clean gate-open=0 confirms it non-perturbingly.)
+
+So the bounded mechanical question is now sharp: WHY does the firing unit's reload [0xa8] never decrement to
+0?  7d69 (patch 263, `if [0xa8]!=0 [0xa8]--`) is dispatched by 7c1d's table1 `word[0x7c91+(byte[di+0x3d]&
+0x1e)]` (patch 244) only when [0x3d]&0x1e==0 (1/16 ticks).  If the firing unit's [0x3d] cursor is stuck (not
+advancing +2/tick) or the table1 index never selects 7d69 for it, its [0xa8] freezes at the spawn-init
+value (~0x46) forever.  Next probe (non-perturbing single counters, NOT hot-path histograms): count 7d69
+entries for firing units + whether [0x3d] advances -- i.e. does the reload cursor turn for the units in
+7e29.  This is the single mechanical thread; object model / LOS / fire-decision / acquisition all proven to
+reach here.  Goal not met; the mechanical root is the firing unit's frozen reload cursor.
