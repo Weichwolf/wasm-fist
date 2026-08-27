@@ -1817,3 +1817,23 @@ This is runtime-probe-BLOCKED (hot-path instrumentation hangs the run).  The ONL
 the oracle: trace a firing ORIGINAL unit's [0x89]/[0x8b]/[0x92]/[0xa8] to see the aim converge+hold and the
 gate pass, then fix a265/a18e (angle precision) faithfully.  That single fix should cascade to resolution:
 gate passes -> land the (asm-ready) 7745/b725/ace0 spawn cascade -> projectiles -> a296 -> 0.
+
+## CORRECTION: aim CONVERGES; the root is the [0xa8] reload-vs-request TIMING (2026-08-27)
+
+The prior "aim-convergence is the root" was WRONG.  7e29 is reached 1056x, and 7e29 is reached ONLY when
+[0x92] is set, which afa2 sets ONLY when the aim error [0x8b]-[0x89] is within +-0xb6 -- so the aim DOES
+converge (1056 fire requests fired).  The aim is fine.  The SOLE blocker is [0xa8] (reload) never being 0
+at any of those 1056 request-ticks, while it DOES reach 0 by exit.
+
+The reload decrement lives in FUN_0000_7d69 (a "7c1d type-A template" sub-method dispatched by the object's
+animation frame, like ab03's [bx-0x6704] table), and [0xa8] is SET by 7963 (weapon-select) to the weapon's
+reload time (or 0xff when that weapon is out of ammo -- player has ammo, so not this).  So the anti-
+correlation is a DISPATCH/animation-state coupling: [0xa8] decrements only in the animation frames that
+dispatch 7d69, and those frames do not overlap the aim-converged fire-request window -- so [0xa8] never
+reaches 0 while [0x92] stands.  (A deadlock-shaped hazard: fire needs [0xa8]==0; [0xa8] winds down in a
+frame set entered around firing; firing never happens -> [0xa8] never gets there during a request.)
+
+This is the precise, single remaining link, and it is RUNTIME-PROBE-BLOCKED (hot-path instrumentation hangs
+the timing-sensitive run).  The oracle is the only way to see how the ORIGINAL sequences the animation-frame
+dispatch of the reload decrement against the fire request so the gate passes.  Everything upstream (reach,
+crash-free run, aim, targeting, afa2) is SOLVED; this reload-dispatch timing is the last mile to a296->0.
