@@ -2207,3 +2207,30 @@ mission never resolves.  The enemy->friendly DAMAGE path (projectile collision -
 the port's projectile-collision/damage path from the b2ef callers backward to the fire-spawn, OR instrument
 the port to see how far a projectile gets (spawn -> fly -> collide -> damage -> b2ef), and close the
 base-loss that stops it.  Land held cascade 430-437 together once damage works + wasm-parity verified.
+
+## op-0x58 LOS WORKS (47% visible) -- blocker is the FIST.DAT acquire-HOLD, not the extender
+
+Instrumented the op-0x58 LOS handler (native_main.c:1467, already implemented as a terrain raycast with a
+Z terrain-follow stand-in) with a call census.  Held+437, AZER1 60s:
+  [op58] LOS calls=45873  out-of-range=17777 (39%)  occluded=6534 (14%)  VISIBLE=21562 (47%)
+So op-0x58 returns VISIBLE for ~half of all queries -- units SEE each other constantly.  op-0x58 is NOT the
+blocker (this CORRECTS the earlier "op-0x58 unimplemented / extender frontier" read: it IS implemented and
+mostly returns visible).  Yet a286-request=0, 7e29=0, tgt stays 1-2.  So visible-LOS results do NOT become
+held targets + fire.  The gap is downstream, in FIST.DAT:
+
+Acquire path = FUN_0000_ae32 (patch 366, dispatched by ab03 per unit): promotes candidate word[off+0x9d]
+-> target word[off+0x97] via a6e3, GATED on byte[off+0x94]!=0 (has candidate count) && word[off+0x97]==0
+(no current target) && RNG(0291) <= byte[bx+0x994a] (per-type probability threshold, bx=word[word[0x9796]]).
+Most units show cand94(=[0x94])==0 in the dumpreg and tgt=1 steady-state, while op-0x58 says 47% visible --
+so targets are acquired only BRIEFLY then cleared (churn: acquire->clear->acquire), never held long enough
+for the turret aim-servo (a3e2/a3ec, +-0xb6/step, now fixed by 437) to converge within afa2's +-0xb6 gate
+and fire.  This is the ENGAGEMENT-HOLD problem (target persistence + aim convergence inside the hold
+window), squarely FIST.DAT AI logic -- patchable, NOT an extender/overlay service.
+
+Corrected next target (precise): trace WHY [0x97] does not persist -- what sets/clears [0x94]/[0x9d] (the
+candidate scan aa08/FUN_1000_aa08) and what clears [0x97] each frame; and whether the RNG threshold
+byte[bx+0x994a] is base-lost/0 (would make acquisition near-never).  Instrument ae32 (acquire-fire count)
++ a6e3 (set vs clear) + the [0x97] clearers.  op-0x58 census instrumentation banked in native_main.c.
+This session net: leak+5 crashes fixed (patch 437, held cascade clean); a294/a296 AND op-0x58 both
+DISPROVEN as the blocker; combat blocker precisely localized to the FIST.DAT acquire-hold / aim-converge
+chain (ae32/a6e3/aa08/afa2), with the object model + LOS proven working underneath it.

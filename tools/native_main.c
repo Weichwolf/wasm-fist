@@ -341,6 +341,7 @@ unsigned short g_fist_a18e_bx=0;
 long g_a286=0,g_7e29=0,g_7745=0;
 long g_min_a296 = 0x7fffffff;
 long g_min_los = 0x7fffffffL;   /* non-perturbing: min cross-side |dx|+|dy| over op-0x58 queries once combat starts */
+long g_op58_n=0, g_op58_oor=0, g_op58_occ=0, g_op58_vis=0;   /* board:0012: op-0x58 LOS call/return census */
 int  g_a296_loaded = 0;           /* set once a296>=15 seen (AZER1 spawned its roster) */
 static volatile sig_atomic_t g_tick_pending;     /* raised by the timer source, drained by the pump */
 #define TICK_PENDING_CAP 8
@@ -478,6 +479,7 @@ static void fist_dump_and_exit(const char *why){
               (g_a296_loaded ? "(mission loaded, not resolved)" : "(mission never loaded a296>=15)"));
       extern long g_a286,g_7e29,g_7745; fprintf(stderr,"[chain] a286-request=%ld  7e29-dispatch=%ld  7745-spawn=%ld\n",g_a286,g_7e29,g_7745);
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
+      extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }
             { extern void fist_sb_flush(void); fist_sb_flush(); }   /* finalize any SB PCM/WAV capture */
             { extern void fist_opl_flush(void); fist_opl_flush(); } /* finalize any OPL FM PCM/WAV capture */
@@ -1485,8 +1487,9 @@ int fist_extender_gate(void) {
             cz = ((int32_t)hm[ci&0x3fffff]<<8) + 1792;
         }
         { extern long g_min_los,g_min_a296; long ad=(cx>ox?cx-ox:ox-cx)+(cy>oy?cy-oy:oy-cy); if(g_min_a296<16 && ad<g_min_los) g_min_los=ad; }
+        { extern long g_op58_n; g_op58_n++; }
         int32_t dx=cx-ox, dy=cy-oy, dz=cz-oz;
-        if (!hm || dx>=0x40000 || dy>=0x40000 || dx<=-0x40000 || dy<=-0x40000) return 0; /* out of range */
+        if (!hm || dx>=0x40000 || dy>=0x40000 || dx<=-0x40000 || dy<=-0x40000) { extern long g_op58_oor; g_op58_oor++; return 0; } /* out of range */
         dx<<=13; dy<<=13; dy=-dy; dz<<=16;                                    /* scale; Y flip */
         int32_t ecx=1;
         for(;;){ ecx<<=1; dx>>=1; dy>>=1; dz>>=1;                             /* normalise the step */
@@ -1498,8 +1501,9 @@ int fist_extender_gate(void) {
             rx+=sdx; ry+=sdy; rz+=sdz;
             uint32_t idx = ((((uint32_t)ry>>22)&0x3ff)<<10) | (((uint32_t)rx>>22)&0x3ff); /* shld,10 index */
             uint32_t h = (uint32_t)hm[idx & 0x3fffff] << 24;
-            if (h >= (uint32_t)rz) return 0;                                  /* terrain occludes */
+            if (h >= (uint32_t)rz) { extern long g_op58_occ; g_op58_occ++; return 0; } /* terrain occludes */
         }
+        { extern long g_op58_vis; g_op58_vis++; }
         return -1;                                                           /* 0xffffffff = clear LOS */
     }
     /* FIST_DBG_OP2C: clean gdb breakpoint at the first op-0x2c gate (crash-bucket secondary-viewport paint) */
