@@ -1796,3 +1796,24 @@ This is the SINGLE remaining combat blocker for a296->0, and it is runtime-probe
 instrumentation perturbs the timing and hangs the run).  The way in is the ORACLE (dosbox-fist write/block
 trace) to observe how the ORIGINAL couples aim-converge + reload-ready + weapon-select so the gate passes --
 then a faithful patch to the fire-decision + landing the (asm-ready) spawn cascade resolves the mission.
+
+## afa2 is FAITHFUL -> the root is AIM-CONVERGENCE (static, 2026-08-27)
+
+Disassembled afa2 (the fire-decision, asm 0xafa2-0xb008): it sets the fire request (call a286 -> [0x92]=0x30)
+purely on (target [0x97]!=0) + (range: [0x99]<=0xc8 or [0x40]&0x80 or the [bx-0x66ae] gate) + AIM ERROR
+`[di+0x8b]-[di+0x89]` within +-0xb6 (asm affe: `cmp ax,0xb6; jb -> a286`).  It does NOT read [0xa8]
+(reload) -- so the port's afa2 is FAITHFUL; the original also sets the request independent of reload, and
+the reload gate lives ONLY in 7e29.
+
+Therefore the 7e29 gate ([0xa8]==0 during an active request) passes ONLY if the aim error stays < +-0xb6
+CONTINUOUSLY for ~[0xa8]-init ticks (so the reload decrement in the 7c1d type-A reload handler reaches 0
+while [0x92] still stands).  7745 reached=0 => the aim never holds within +-0xb6 that long.  The turret
+aim = [0x89] (slewed toward [0x8b]=[0x9b]-[0x26] by 7d1d/patch 426); [0x8b] comes from a265/a18e (the
+angle solver, flagged "imprecise" in patch 274, [0x9b] seen stuck at 0x2000 at session start).  So the
+SINGLE root of the a296=10 plateau is the turret AIM-CONVERGENCE (a265/a18e precision and/or the 7d1d slew
+not reaching+holding [0x8b]) -- the same aim issue this session opened with, now proven to be the last link.
+
+This is runtime-probe-BLOCKED (hot-path instrumentation hangs the run).  The ONLY remaining data path is
+the oracle: trace a firing ORIGINAL unit's [0x89]/[0x8b]/[0x92]/[0xa8] to see the aim converge+hold and the
+gate pass, then fix a265/a18e (angle precision) faithfully.  That single fix should cascade to resolution:
+gate passes -> land the (asm-ready) 7745/b725/ace0 spawn cascade -> projectiles -> a296 -> 0.
