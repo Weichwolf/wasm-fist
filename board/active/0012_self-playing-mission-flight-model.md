@@ -2371,3 +2371,28 @@ Honest session-end state: object model (437) + LOS (47%) + fire-decision (afa2 2
 DISPROVEN as blocker (all units [0xa8]=0); the two live threads are (a) player faction bit [0x16]&8=0
 (own-side targeting -- confirm vs oracle) and (b) low acquisition supply for the AI shooters.  Both
 non-perturbing-measurable; the perturbation-derived reload/7e29 numbers are superseded.
+
+## Oracle ground-truth RAM comparison: BLOCKED by a tooling gap (next-session prerequisite)
+
+Attempted to settle the two threads (player faction bit; low acquisition) by dumping the ORIGINAL's DGROUP
+mid-combat and diffing unit [0x16]/[0x97]/[0xa8] against the port.  BLOCKED:
+  - SIGUSR2 full-dump (fist_dump -> ram.bin) is triggered ONLY from fist_vgawrite (0xA0000 writes); the
+    in-mission render bypasses 0xA0000 (extender PM framebuffer), so the handler never fires mid-mission --
+    the dump silently produces nothing.  (Same reason earlier flatwriters/SIGUSR2 dumps failed in-mission.)
+  - FIST_R9200CAP DOES dump full guest RAM at a terrain-render pass (pass00.ram.bin, 16MB), but at that
+    moment the engine DGROUP (CPU-linear 0x1c000) is paged (cr3) to an UNKNOWN guest-phys; a base-scan of
+    the dump finds no coherent ~109-unit registry (best candidates are garbage: 105x type-0, dup slots) --
+    the DGROUP is not at phys 0x1c000 in the render-time dump and a loose type<=0x30 heuristic can't pin it.
+To get clean oracle unit fields the next session needs: walk the pass RAM dump's page tables (cr3 at
+capture -> the .cam.txt records dsb/csb/cr3) to translate CPU-linear 0x1c000 to its guest-phys in THAT
+dump, then parse the registry there; OR add a mem-hook-triggered full-dump to dosbox-fist (fire fist_dump
+from fist_memrec on a chosen tick, not only fist_vgawrite).  This is a bounded tooling task, then the
+[0x16]/[0x97] diff is immediate.
+
+Session end -- honest: goal NOT met (AZER1 does not resolve).  Net gains, all pushed: patch 437 (held
+cascade crash-clean+leak-free); a294/a296 + op-0x58 + reload + engagement-AI-generic all DISPROVEN as the
+blocker; the blocker localized to FIST.DAT combat-AI ACQUISITION/ENGAGEMENT, confirmed diverging from the
+oracle by the resolution gap itself (oracle wipes the player in ~2.5min; port = zero deaths).  Two concrete
+non-perturbing-measurable defects to verify+fix next (player faction bit [0x16] bit-3 unset; low target
+acquisition), plus the oracle-dump tooling prerequisite above.  Discipline lesson banked: only the one-shot
+dumpreg is non-perturbing; hot-path counters stall the timing-sensitive sim into false states.
