@@ -2654,3 +2654,24 @@ because they DON'T despawn/hit -> still no damage (a296=16).  A long direct run 
 collision/despawn path -- its c0e5 update method + hit-detection -> b2ef, and the saturation crash.  This
 is the genuine last stretch: fire chain PROVEN working end-to-end (spawn+fly); only collision/damage/
 despawn remains.  patch 438 held with the cascade (430-438); combat is no longer stalled at the dispatch.
+
+## THE LAST PIECE: op-0x54 (projectile COLLISION service) is unimplemented in the shim
+
+With patch 438, the fire chain now runs end-to-end THROUGH projectile flight.  The projectile update b5e7
+(patch 335, correct) moves the projectile and calls e1a6 for collision; e1a6 (asm 0xe1a6) posts **op-0x54**
+via e339 with the TCB inbox = the target, writes the result to [proj+0x18], and returns [proj+0xd] -
+[proj+0x18] (b5e7 explodes/hits the target when this is < 0, i.e. op-0x54 result > [proj+0xd]).  The shim
+implements op-0x58 (LOS raycast) but NOT op-0x54 as a collision service -- native_main only tags op-0x54
+as the "roster op" diagnostic.  So op-0x54 traps to 0 -> [proj+0x18]=0 -> e1a6 returns [proj+0xd] (>=0) ->
+NO hit ever -> projectiles fly + time out (b5e7 lifetime 0x1e0) WITHOUT damaging anything -> a296=16, no
+deaths.  (They also accumulate because... [to confirm] the type-9/12 despawn vs spawn balance; a294->150.)
+
+So the combat chain, now fully mapped and MOSTLY WORKING:
+  fire-decision (afa2) -> dispatch (7c1d->7e29, FIXED 438) -> spawn (778a/b73b/9b5c/9b6f, FIXED 438) ->
+  flight (b5e7/ace0, works) -> COLLISION (e1a6 -> op-0x54, UNIMPLEMENTED) -> damage/explosion (b691->b2ef).
+The SINGLE remaining piece is the op-0x54 collision service in the shim -- a bounded 32-bit-extender-service
+implementation exactly like the op-0x58 LOS handler (native_main.c:1467): read the projectile + target
+coords from the TCB, compute hit/miss (+ damage), return the result e1a6 expects.  Map it from
+re_out/fist_image.bin at the op-0x54 arm of the gate (board:0009 method), implement in the shim, and the
+projectiles will hit -> units die -> mission resolves.  This is the genuine last mile, and the hard part
+(getting projectiles to spawn+fly) is DONE.  Goal not yet met but the path is now a single named service.
