@@ -1,0 +1,25 @@
+board:0012 launcher b725 base-loss (asm 0xb725): si=proj/di=firer near-offsets; ace0(0, target=[di+0x97], proj, firer).  Ghidra host-ptr-deref'd [si+*]/[di+0x97].
+--- a/fist.c	2026-08-27 17:34:00.077819587 +0200
++++ b/fist.c	2026-08-27 17:34:00.090450022 +0200
+@@ -30231,9 +30231,18 @@
+ void __allregs FUN_0000_b725(undefined2 param_1,int param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x2a) = 5;
+-  *(undefined2 *)(param_2 + 0x1b) = 0x355;
+-  FUN_1000_ace0(param_1,*(undefined2 *)(param_3 + 0x97),param_2,param_3,param_4);
++  /* PATCH 432: launcher (asm 0xb725; DS=DGROUP).  si=param_2=projectile near-off, di=param_3=firer.
++     [si+0x2a]=5; [si+0x1b]=0x355; ace0(ax=0, bx=target=[di+0x97], si=proj, di=firer).  Ghidra host-ptr
++     deref'd [si+*] and [di+0x97]; rebase to DGROUP. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_2;
++  unsigned int di = (unsigned short)param_3;
++  (void)param_1; (void)param_4;
++  dg[(unsigned short)(si + 0x2a)] = 5;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) = 0x355;
++  FUN_1000_ace0(0,
++    (int *)(uintptr_t)(unsigned int)*(unsigned short *)(dg + (unsigned short)(di + 0x97)),
++    (int)si, (int *)(uintptr_t)di, 0);
+   return;
+ }
+ 

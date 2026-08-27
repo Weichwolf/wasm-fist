@@ -1,0 +1,159 @@
+board:0012 projectile INIT ace0 base-loss (asm 0x1ace0-0x1adcc + guidance sub 0x1addb): near-offset proj/firer/target derefs (Ghidra host-ptr+int-scaling), DWORD pos/vel truncation, dropped a18e bx (patch 431) + a192 dx (patch 309).  Rebuilt 1:1 so the spawned projectile gets its launch position/velocity + homing.  Completes the turret fire cascade 7e29->7745->b725->ace0.
+--- a/fist.c	2026-08-27 17:36:16.207708579 +0200
++++ b/fist.c	2026-08-27 17:36:16.209332483 +0200
+@@ -65114,71 +65114,94 @@
+ void __allregs FUN_1000_ace0(undefined2 param_1,int *param_2,int param_3,int *param_4,int param_5)
+ 
+ {
+-  uint uVar1;
+-  int iVar2;
+-  ulong uVar3;
+-  int iVar4;
+-  undefined2 uVar5;
+-  int iVar6;
+-  ulong uVar7;
+-  int unaff_CS;
+-  int iVar8;
+-  int iVar9;
+-  
+-  *(undefined2 *)(param_3 + 0x2f) = param_2;
+-  iVar8 = unaff_CS;
+-  if (param_2 != (int *)0x0) {
+-    if (*param_2 == 0x1a) {
+-      uVar1 = *(uint *)((*(byte *)(param_3 + 0x19) & 3) * 2 + -0x6151);
+-    }
+-    else {
+-      uVar1 = *(uint *)(*param_2 * 2 + -0x1a78);
++  /* PATCH 433: projectile INIT (asm 0x1ace0-0x1adcc) + guidance sub (0x1addb-0x1ae3b); DS=DGROUP.
++     ax=param_1=aim, bx=param_2=target near-off, si=param_3=proj near-off, di=param_4=firer near-off.
++     Ghidra base-lost every [si/di/bx+*] (host-ptr + int-scaling), truncated the DWORD position/velocity,
++     and dropped a18e's bx (threaded via g_fist_a18e_bx, patch 431) and a192's dx (g_fist_rot_dx, patch
++     309).  a18e/0578 deref their +4/+5 args as HOST pointers; DAT_2000_5690/94/98 == DGROUP:0x9690 scratch. */
++  extern unsigned short g_fist_rot_h, g_fist_rot_dx, g_fist_a18e_bx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short aim = (unsigned short)param_1;
++  unsigned short bx  = (unsigned short)(uintptr_t)param_2;   /* target near-off */
++  unsigned short si  = (unsigned short)param_3;              /* proj near-off */
++  unsigned short di  = (unsigned short)(uintptr_t)param_4;   /* firer near-off */
++  unsigned int eax, ebx;
++  unsigned short ax, cx;
++  (void)param_5;
++
++  *(unsigned short *)(dg + (unsigned short)(si + 0x2f)) = bx;
++  if (bx != 0) {
++    unsigned short ty = *(unsigned short *)(dg + bx);
++    if (ty == 0x1a) {
++      unsigned short b = (unsigned short)((dg[(unsigned short)(si + 0x19)] & 3) << 1);
++      ebx = *(unsigned short *)(dg + (unsigned short)(b - 0x6151));
++    } else {
++      unsigned short b = (unsigned short)(ty << 1);
++      ebx = *(unsigned short *)(dg + (unsigned short)(b - 0x1a78));
+     }
+-    uVar7 = (ulong)uVar1;
+-    iVar8 = 0;
+-    uVar1 = FUN_0000_b26a();
+-    uVar3 = (ulong)(uVar1 & 0x7ff);
+-    if ((param_4[0x20] & 0x10U) == 0) {
+-      if ((*(byte *)(param_4 + 0xb) & 8) != 0) {
+-        uVar3 = uVar3 << 2;
++    eax = (unsigned int)((unsigned short)FUN_0000_b26a() & 0x7ff);
++    if ((*(unsigned short *)(dg + (unsigned short)(di + 0x40)) & 0x10) != 0) eax >>= 1;
++    else if ((dg[(unsigned short)(di + 0x16)] & 8) != 0) eax <<= 2;
++    *(unsigned int *)(dg + (unsigned short)(si + 0x31)) = ebx - eax;
++  }
++  *(unsigned short *)(dg + (unsigned short)(si + 0x27)) = di;
++  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(di + 4));
++  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(di + 8));
++  {
++    unsigned short fty = *(unsigned short *)(dg + di);
++    dg[(unsigned short)(si + 0x29)] = dg[(unsigned short)(fty - 0x1a08)];
++    unsigned short b2 = (unsigned short)(fty << 1);
++    *(unsigned int *)(dg + (unsigned short)(si + 0xc)) =
++        (unsigned int)*(unsigned short *)(dg + (unsigned short)(b2 - 0x1a40))
++        + *(unsigned int *)(dg + (unsigned short)(di + 0xc));
++  }
++  ax = (unsigned short)(aim + *(unsigned short *)(dg + (unsigned short)(di + 0x10)));
++  cx = *(unsigned short *)(dg + (unsigned short)(di + 0x38));
++  if (*(unsigned short *)(dg + di) == 0x1a) {
++    unsigned short tgt = *(unsigned short *)(dg + (unsigned short)(si + 0x2f));
++    DAT_2000_5690 = *(unsigned int *)(dg + (unsigned short)(tgt + 4));
++    DAT_2000_5694 = *(unsigned int *)(dg + (unsigned short)(tgt + 8));
++    DAT_2000_5698 = *(unsigned int *)(dg + (unsigned short)(tgt + 0xc)) + *(unsigned int *)(dg + (unsigned short)(si + 0x31));
++    ax = (unsigned short)FUN_0000_a18e(cx, param_1, (int)(unsigned short)(*(unsigned short *)(dg+di)*2),
++             (int)(intptr_t)(dg + (unsigned short)(si + 4)), (int)(intptr_t)&DAT_2000_5690);
++    cx = (unsigned short)(g_fist_a18e_bx + 0xb6);
++  }
++  *(unsigned short *)(dg + (unsigned short)(si + 0x10)) = ax;
++  g_fist_rot_h = cx;
++  {
++    unsigned short velX = (unsigned short)FUN_0000_a192(ax, *(unsigned short *)(dg + (unsigned short)(si + 0x1b)));
++    *(unsigned short *)(dg + (unsigned short)(si + 0x1d)) = velX;
++    *(unsigned short *)(dg + (unsigned short)(si + 0x1f)) = g_fist_rot_dx;
++    *(unsigned short *)(dg + (unsigned short)(si + 0x21)) = cx;
++  }
++  *(unsigned short *)(dg + (unsigned short)(si + 0x23)) = 2;
++  dg[(unsigned short)(si + 0x16)] = (unsigned char)(dg[(unsigned short)(si + 0x16)] | (dg[(unsigned short)(di + 0x16)] & 8));
++  /* guidance sub 0x1addb (di=proj here): home on the target within a 0x16c cone, else clear it */
++  {
++    unsigned short tgt = *(unsigned short *)(dg + (unsigned short)(si + 0x2f));
++    if (tgt != 0) {
++      if ((dg[(unsigned short)(tgt + 0x16)] & 1) != 0) {
++        *(unsigned short *)(dg + (unsigned short)(si + 0x2f)) = 0;
++      } else {
++        DAT_2000_5690 = *(unsigned int *)(dg + (unsigned short)(tgt + 4));
++        DAT_2000_5694 = *(unsigned int *)(dg + (unsigned short)(tgt + 8));
++        DAT_2000_5698 = *(unsigned int *)(dg + (unsigned short)(tgt + 0xc)) + *(unsigned int *)(dg + (unsigned short)(si + 0x31));
++        unsigned short gax = (unsigned short)FUN_0000_a18e(cx, param_1, 0,
++                 (int)(intptr_t)(dg + (unsigned short)(si + 4)), (int)(intptr_t)&DAT_2000_5690);
++        unsigned short s = (unsigned short)(gax - *(unsigned short *)(dg + (unsigned short)(si + 0x10)) + 0xb6);
++        if (s < 0x16c) {
++          unsigned short gcx = g_fist_a18e_bx;
++          g_fist_rot_h = gcx;
++          unsigned short vX = (unsigned short)FUN_0000_a192(gax, *(unsigned short *)(dg + (unsigned short)(si + 0x1b)));
++          *(unsigned short *)(dg + (unsigned short)(si + 0x1d)) = vX;
++          *(unsigned short *)(dg + (unsigned short)(si + 0x1f)) = g_fist_rot_dx;
++          *(unsigned short *)(dg + (unsigned short)(si + 0x21)) = gcx;
++        } else {
++          *(unsigned short *)(dg + (unsigned short)(si + 0x2f)) = 0;
++        }
+       }
+     }
+-    else {
+-      uVar3 = (ulong)((uVar1 & 0x7ff) >> 1);
+-    }
+-    *(long *)(param_3 + 0x31) = uVar7 - uVar3;
+-    param_5 = unaff_CS;
+-  }
+-  *(undefined2 *)(param_3 + 0x27) = param_4;
+-  *(undefined4 *)(param_3 + 4) = *(undefined4 *)(param_4 + 2);
+-  *(undefined4 *)(param_3 + 8) = *(undefined4 *)(param_4 + 4);
+-  iVar6 = *param_4;
+-  *(undefined1 *)(param_3 + 0x29) = *(undefined1 *)(iVar6 + -0x1a08);
+-  iVar6 = iVar6 * 2;
+-  *(long *)(param_3 + 0xc) = (ulong)*(uint *)(iVar6 + -0x1a40) + *(long *)(param_4 + 6);
+-  iVar2 = param_5 + param_4[8];
+-  iVar4 = param_4[0x1c];
+-  iVar9 = iVar8;
+-  if (*param_4 == 0x1a) {
+-    iVar9 = *(int *)(param_3 + 0x2f);
+-    DAT_2000_5690 = *(undefined4 *)(iVar9 + 4);
+-    DAT_2000_5694 = *(undefined4 *)(iVar9 + 8);
+-    DAT_2000_5698 = *(long *)(iVar9 + 0xc) + *(long *)(param_3 + 0x31);
+-    iVar9 = 0;
+-    iVar2 = FUN_0000_a18e(iVar4,param_1,iVar6,param_3 + 4,(undefined4 *)&DAT_2000_5690);
+-    iVar4 = iVar6 + 0xb6;
+-    param_3 = iVar8;
+   }
+-  *(int *)(param_3 + 0x10) = iVar2;
+-  uVar5 = *(undefined2 *)(param_3 + 0x1b);
+-  iVar8 = FUN_0000_a192(iVar4,uVar5);
+-  *(int *)(iVar9 + 0x1d) = iVar8;
+-  *(undefined2 *)(iVar9 + 0x1f) = uVar5;
+-  *(int *)(iVar9 + 0x21) = iVar4;
+-  *(undefined2 *)(iVar9 + 0x23) = 2;
+-  *(byte *)(iVar9 + 0x16) = *(byte *)(iVar9 + 0x16) | *(byte *)(param_3 + 0x16) & 8;
+-  FUN_1000_addb(iVar4,uVar5,iVar6,iVar9);
+-  return;
+ }
+ 
+ 

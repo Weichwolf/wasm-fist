@@ -1,0 +1,40 @@
+board:0012 type-4 effect DESPAWN bab4 base-loss (reached after patch 434's proper effects): DGROUP-rebase [di+off], the [DGROUP:(([di+0x1a]&6)-0x638b)] animation dispatch with DI live, WORD read of [di+0x1a]. Countdown [0x20] -> despawn (b354/b2ef) or advance frame.
+--- a/fist.c	2026-08-27 17:55:54.996759323 +0200
++++ b/fist.c	2026-08-27 17:55:55.020251788 +0200
+@@ -30705,20 +30705,26 @@
+ void __allregs FUN_0000_bab4(int param_1)
+ 
+ {
+-  char *pcVar1;
++  /* PATCH 435: type-4 effect DESPAWN update (asm 0xbab4; DS=DGROUP=0x1c00, di=object near-offset).  Now
++     REACHED after patch 434 makes b1df create proper type-4 effects.  Ghidra base-lost every [di+off] to a
++     host pointer, the [DGROUP:(([di+0x1a]&6)-0x638b)] animation dispatch to a host offset (dropping the
++     live DI arg), and read [di+0x1a] as a DWORD.  Counts down [0x20]; at 0 reloads it from [0x1f] and
++     either DESPAWNS (b354->b2ef, when the frame [0x19] reaches the last [0x1e]) or advances the frame. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
+   int iVar2;
+-  
+-  pcVar1 = (char *)(param_1 + 0x20);
+-  *pcVar1 = *pcVar1 + -1;
+-  if (*pcVar1 == '\0') {
+-    *(undefined1 *)(param_1 + 0x20) = *(undefined1 *)(param_1 + 0x1f);
+-    if (*(char *)(param_1 + 0x19) == *(char *)(param_1 + 0x1e)) {
+-      iVar2 = FUN_1000_b354(param_1);
++  dg[(unsigned short)(di + 0x20)] = (unsigned char)(dg[(unsigned short)(di + 0x20)] - 1);
++  if (dg[(unsigned short)(di + 0x20)] == 0) {
++    dg[(unsigned short)(di + 0x20)] = dg[(unsigned short)(di + 0x1f)];
++    if (dg[(unsigned short)(di + 0x19)] == dg[(unsigned short)(di + 0x1e)]) {
++      iVar2 = FUN_1000_b354((int)di);
+       FUN_1000_b2ef(iVar2);
+       return;
+     }
+-    *(char *)(param_1 + 0x19) = *(char *)(param_1 + 0x19) + '\x01';
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)((*(uint *)(param_1 + 0x1a) & 6) + 0x9c75))))();
++    dg[(unsigned short)(di + 0x19)] = (unsigned char)(dg[(unsigned short)(di + 0x19)] + 1);
++    { unsigned int bx = (unsigned int)(*(unsigned short *)(dg + (unsigned short)(di + 0x1a)) & 6);
++      (*(code *)fist_icall_near(0x0u,
++          *(unsigned short *)(dg + (unsigned short)(bx + 0x9c75))))((int)di); }
+   }
+   return;
+ }

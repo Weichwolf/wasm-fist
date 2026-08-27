@@ -2012,3 +2012,36 @@ proper effect that schedules a task.
    the spawned projectile flies + hits (callees a18e/a192/b26a already correct).
 5. Then a combat-heavy battle (AZER5) plays to one side eliminated -> the goal, on a single mission.
 The turret FIRES; this chain (leak -> scheduler -> projectile physics) is the last mile, each step bounded.
+
+## *** REAL ROOT of the leak found: b1df orphan bug — but fixing it exposes a masked fire-path base-loss (2026-08-27) ***
+
+Deep dig after the AZER5-fires breakthrough.  The registry (with the fork's 430-433 applied) showed the
+b51f emitters registered MULTIPLE times (a211/a16c/a248 duplicated) and NO type-4 effects -> the a294 leak
++ wrong projectiles trace to **b1df itself** (patch-258 "orphan bug"), not ba33/ba5d:
+  - b1df (asm 0x1b1df) must register + return b21d's NEWLY-ALLOCATED slot (DI); b21d sets [new+0]=class key
+    and b1df zeroes only [new+4..], so the type IS set (type-4 for b1df(4)).  Patch 258 wrongly did
+    di=param_2 (registering/zeroing the CALLER, orphaning b21d's slot) and returned `count`, so 7745 got
+    `count` as its projectile and every ba49 orphaned a registered object = the leak.
+
+HELD patches (patches/held/, asm-verified, make check clean, NOT applied -- they expose the coupling below):
+  - 434 b1df ROOT fix (register+return b21d's new slot) -> a294 leak GONE (150->120, bounded), effects
+    become proper type-4 objects.
+  - 435 bab4 (type-4 effect DESPAWN) + 436 bae1 (effect anim frame) base-loss -> the effect lifecycle now
+    runs CLEAN end to end (b1df->bab4->bae1->b2ef despawn), no crash, on AZER5.
+  - 430 ba33/ba5d (use b1df's new object), 431 0578 a18e-bx thread, 432 b725, 433 ace0 (projectile physics).
+    NOTE: held-433 needs the `g_fist_a18e_bx` global re-added to tools/native_main.c (the fork added it).
+
+**THE COUPLING (why held, not landed):** with the correct b1df/effect model (430+434..436), AZER5's turret
+FIRE-DECISION breaks -- 7745 reached drops 720 -> 0 (units stop reaching the fire dispatch).  So the
+friendly fire path (afa2 aim / 7c1d->7e29 gate) DEPENDS on the BUGGY b1df/effect behaviour: the orphan
+bug's side effects (duplicate emitter registration, the caller-zeroing) were masking ANOTHER base-loss in
+the fire-decision path.  Neither state resolves: stable (429) fires 720x but with garbage projectiles
+(b1df returns count) -> no hits; fixed (434) has correct projectiles but no firing.
+
+## Next (concrete): find the masked fire-path base-loss
+
+With 434 applied, trace WHY afa2/7c1d stop setting [0x92]/reaching 7e29 -- the buggy b1df was compensating.
+Candidates: b1df's caller-zeroing was (wrongly) resetting a fire field the units re-read; or the duplicate
+0xdfbc registration changed the c0e5 update order the fire logic relies on; or 7745's b1df(8) side effect
+on the firer.  Once that masked base-loss is fixed, 434-436 + 430-433 land clean -> AZER5: fire -> hit ->
+side eliminated.  The turret fires and the leak is solved; this single coupling is the last barrier.

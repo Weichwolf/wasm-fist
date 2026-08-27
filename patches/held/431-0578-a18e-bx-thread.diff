@@ -1,0 +1,17 @@
+board:0012 thread 0578/a18e's bx output (asm 0578 'call 77e; mov bx,ax'): 077e's return is the elevation-to-target that ace0/1addb read as cx=bx; Ghidra dropped it.  Capture into g_fist_a18e_bx.
+--- a/fist.c	2026-08-27 17:33:42.245961791 +0200
++++ b/fist.c	2026-08-27 17:33:42.259582429 +0200
+@@ -5073,9 +5073,11 @@
+   
+   uVar1 = FUN_0000_0731(param_4,param_5);
+   iVar2 = FUN_0000_0927(param_1,param_2,param_3,param_4,param_5);
+-  FUN_0000_077e(*(uint *)(param_5 + 8) - *(uint *)(param_4 + 8),param_2,
++  { extern unsigned short g_fist_a18e_bx;   /* PATCH 431: asm 0578 `call 77e; mov bx,ax` -- 077e's
++       return is a18e's bx output (elevation-to-target), dropped by Ghidra; thread it for ace0/1addb. */
++    g_fist_a18e_bx = (unsigned short)FUN_0000_077e(*(uint *)(param_5 + 8) - *(uint *)(param_4 + 8),param_2,
+                 (*(int *)(param_5 + 10) - *(int *)(param_4 + 10)) -
+-                (uint)(*(uint *)(param_5 + 8) < *(uint *)(param_4 + 8)),iVar2);
++                (uint)(*(uint *)(param_5 + 8) < *(uint *)(param_4 + 8)),iVar2); }
+   return uVar1;
+ }
+ 

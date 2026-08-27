@@ -1,0 +1,43 @@
+board:0012 fix a294 POOL LEAK (patch-258 ba33 orphan bug): ba33 dropped b1df(4)'s NEW object + installed the template into the CALLER, orphaning a registered object each emitter fire -> a294 fills to 0x96 cap -> projectile allocation fails.  ba5d self-copied the position instead of asm [si+N]<-[di+N] (caller).  ba5d(template,NEW,caller); position from caller.
+--- a/fist.c	2026-08-27 17:22:35.455232127 +0200
++++ b/fist.c	2026-08-27 17:22:35.471456173 +0200
+@@ -30616,10 +30616,15 @@
+    * g_fist_cf on roster-full) and, on success, installs the template into the object via ba5d.
+    * Ghidra dropped b1df's CF (local in_CF never set) and mis-attributed ba5d's template/object args
+    * (unaff_CS garbage host deref). */
++  /* PATCH 430: fix patch-258 ORPHAN LEAK.  asm 0xba33: b1df(4) allocates a NEW object (SI=DI=new); ba5d
++     installs the template into the NEW object with the CALLER's position.  Patch 258 DROPPED b1df's return
++     and passed the CALLER (param_2) to ba5d -> the new object was orphaned (registered in 0x9fbc, never used,
++     never despawned) = the a294 POOL LEAK that fills to the 0x96 cap and blocks all projectile allocation.
++     Capture b1df's return; ba5d(template, NEW-object, caller). */
+   extern unsigned char g_fist_cf;
+-  FUN_1000_b1df(4,(int *)(uintptr_t)(uint16_t)param_2);
++  unsigned int ba33_new = (unsigned short)FUN_1000_b1df(4,(int *)(uintptr_t)(uint16_t)param_2);
+   if (!(bool)g_fist_cf) {
+-    FUN_0000_ba5d((undefined2 *)(uintptr_t)(uint16_t)param_1,(int)(uint16_t)param_2,0);
++    FUN_0000_ba5d((undefined2 *)(uintptr_t)(uint16_t)param_1,(int)ba33_new,(int)(uint16_t)param_2);
+   }
+   return 0;
+ }
+@@ -30661,7 +30666,7 @@
+   unsigned int si = (unsigned short)param_2;              /* object near offset (si==di) */
+   unsigned int ax;
+   unsigned char u;
+-  (void)param_3;
++  unsigned int di5d = (unsigned short)param_3;   /* PATCH 430: caller (di), was dropped as (void)param_3 */
+   dg[(unsigned short)(si + 0x19)] = 0;
+   *(unsigned short *)(dg + (unsigned short)(si + 0x10)) = *(unsigned short *)(dg + (unsigned short)bx);
+   dg[(unsigned short)(si + 0x1e)] = dg[(unsigned short)(bx + 2)];
+@@ -30677,9 +30682,9 @@
+   *(unsigned short *)(dg + (unsigned short)(si + 0x12)) = (unsigned short)ax;
+   *(unsigned short *)(dg + (unsigned short)(si + 0x14)) = 0x800;
+   *(unsigned short *)(dg + (unsigned short)(si + 0x1c)) = 0;
+-  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(si + 4));
+-  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(si + 8));
+-  *(unsigned int *)(dg + (unsigned short)(si + 0xc)) = *(unsigned int *)(dg + (unsigned short)(si + 0xc));
++  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(di5d + 4));   /* PATCH 430: asm ba9b [si+4]<-[di+4] (caller) */
++  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(di5d + 8));
++  *(unsigned int *)(dg + (unsigned short)(si + 0xc)) = *(unsigned int *)(dg + (unsigned short)(di5d + 0xc));
+   return;
+ }
+ 

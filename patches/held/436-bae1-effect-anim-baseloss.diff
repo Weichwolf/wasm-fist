@@ -1,0 +1,31 @@
+board:0012 type-4 effect animation-frame method bae1 base-loss (bab4 dispatch target): DGROUP-rebase [di+0x19]/[di+0x1c].
+--- a/fist.c	2026-08-27 17:57:02.219884807 +0200
++++ b/fist.c	2026-08-27 17:57:02.228440131 +0200
+@@ -30744,19 +30744,21 @@
+ void __allregs FUN_0000_bae1(int param_1)
+ 
+ {
+-  char cVar1;
+-  
+-  cVar1 = *(char *)(param_1 + 0x19);
++  /* PATCH 436: type-4 effect animation-frame method bae1 (asm 0xbae1; DGROUP, di=near-offset), one of the
++     bab4 [0x1a]&6 dispatch targets.  DGROUP-rebase [di+0x19]/[di+0x1c] (were host-ptr). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  char cVar1 = (char)dg[(unsigned short)(di + 0x19)];
+   if (cVar1 == '\x13') {
+-    *(undefined2 *)(param_1 + 0x1c) = 0x100;
++    *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x100;
+   }
+   else {
+     if (cVar1 == '\x10') {
+-      *(undefined2 *)(param_1 + 0x1c) = 0x200;
++      *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x200;
+       return;
+     }
+     if (cVar1 == '\r') {
+-      *(undefined2 *)(param_1 + 0x1c) = 0x300;
++      *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x300;
+       return;
+     }
+   }

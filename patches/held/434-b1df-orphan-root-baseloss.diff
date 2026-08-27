@@ -1,0 +1,35 @@
+board:0012 b1df ROOT base-loss (patch-258 orphan bug): b1df must register + return b21d's NEWLY-ALLOCATED slot (DI), not the incoming param_2. Fixes the a294 pool leak AND makes 7745/ba33 get the real new projectile/effect object.
+--- a/fist.c	2026-08-27 17:53:27.059839195 +0200
++++ b/fist.c	2026-08-27 17:53:27.073721634 +0200
+@@ -65670,12 +65670,19 @@
+    * object body (0x33 or 0xf7 bytes per byte[word[di]-0x19ec]&1).  Ghidra base-lost the whole thing:
+    * the near-offset object was deref'd as a host int* (*param_2 -> SIGSEGV), the table was walked at
+    * host-int stride 8, and b21d's CF was dropped (local in_CF never set). */
++  /* PATCH 434: b1df ROOT base-loss (the "orphan bug" board:0012 flagged).  asm 0x1b1df: b21d ALLOCATES a
++     new slot and returns it in DI; b1df registers THAT DI into 0xdfbc, zeroes DI[4..], and the callers
++     (7745 proj=DI, ba33 new=DI, ...) consume DI -- b1df does NOT read the incoming DI (param_2).  Patch
++     258 wrongly did di=param_2 (registering/zeroing the CALLER, orphaning b21d's slot -> a294 pool leak +
++     duplicate registry entries) and returned `count` (so 7745 got count, not the projectile).  Use b21d's
++     returned slot; return it. */
+   extern unsigned char g_fist_cf;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+-  unsigned int di = (unsigned short)(uintptr_t)param_2;
++  unsigned int di;
+   unsigned int si, cx, bx;
+   int count;
+-  FUN_1000_b21d(param_1);
++  (void)param_2;
++  di = (unsigned short)FUN_1000_b21d(param_1);
+   if (g_fist_cf) { g_fist_cf = 1; return 0; }
+   si = 0xdfbc; count = 0;
+   while (*(unsigned short *)(dg + (unsigned short)si) != 0 ||
+@@ -65695,7 +65702,8 @@
+     cx = cx - 1;
+   } while (cx != 0);
+   g_fist_cf = 0;
+-  return count;
++  (void)count;
++  return (int)di;   /* PATCH 434: return the NEW SLOT (callers use DI), not the 0xdfbc count */
+ }
+ 
+ 
