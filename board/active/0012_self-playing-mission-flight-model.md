@@ -2785,3 +2785,27 @@ The combat MECHANISM is built end-to-end through collision (patch 438 fire-dispa
 decoded/implemented); what remains is the render+flight-model coupling (A+B) then damage (C).  This is the
 honest, ordered frontier.  Goal not met; the mission stalls because on-ground rendering + unit-Z clamp are
 a coupled pair the port does not yet run -- exactly the "part the port does not yet run" the goal names.
+
+## KEY CORRECTION: render/ground-clamp NOT the blocker -- projectile falls too fast through the collision band
+
+Measured WITHOUT any ground-clamp (units floating, render untouched):
+  [projZ]  141142 samples; [proj+0xd] min=0xd max=0xffcd; Zvel[0x21]=-13192; Zdword[0xc]=0xff9ee680
+  [chain2] e1a6=0  op54=0  HITS=0  b2ef-kills=136560
+So the projectiles fly and DESPAWN on lifetime (b2ef 136560x = the b5e7 0x1e0 timeout, NOT unit kills --
+a296 stays 16), but the COLLISION check e1a6 NEVER fires.  The projectiles DO descend on their own (Zvel
+-13192, no ground-clamp needed) -- so the whole "ground-clamp + op-0x4c render" path was a WRONG turn.  The
+real gate: b5e7 checks [proj+0xd]<0x80 (Z in the 0..0x8000 band) POST-move, but each tick subtracts 13192
+from Z, so the shell jumps THROUGH the ~2.5-tick-wide collision band before the post-move check sees it ->
+[proj+0xd] goes from >=0x80 (Z>0x8000) straight to >=0x80 (Z<0), never <0x80 at the check -> e1a6=0.
+
+So the finish is NOT the render at all -- it is the projectile Z-step / collision-band interaction:
+  - EITHER the Z velocity [proj+0x21] is wrong (too large: the ace0 ballistics a18e/a192 -> cx=-13192),
+  - OR the Z scale is off (shell should live in the band longer; [proj+0xc] init or the <<13 world scale),
+  - OR [proj+0xd] is not Z>>8 but a separate altitude-above-terrain field that op-0x54 should update each
+    tick (e1a6 writes [proj+0x18]; maybe [proj+0xd] is fed from the terrain query, not the raw Z).
+This is a small, bounded FIST.DAT/ballistics question -- NOT the op-0x4c render (which was a red herring
+exposed by the unnecessary ground-clamp).  Next: instrument b5e7's POST-move [proj+0xd] + trace ace0's
+cx=-13192 (a18e/a192) + check whether [proj+0xd] is meant to be the terrain-relative altitude.  The combat
+mechanism (fire->spawn->fly->despawn) is PROVEN working (438 + b2ef churn); the one missing link is the
+shell entering the collision regime so e1a6->op-0x54 fires.  Goal not met; blocker re-localized to the
+projectile collision-band (small/bounded), render frontier set aside as a red herring.
