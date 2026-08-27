@@ -2888,3 +2888,27 @@ NEXT (two bounded threads, both now precisely scoped):
      chain (now REACHABLE: e1a6 already fires 30x) actually drops enemy a296.
 The mission blocker is no longer vague: it is 077e's angular accuracy + the damage cascade, both asm-scoped.
 Goal not met, but the root cause is found and a fix that makes shells fly flat + collide is proven.
+
+## Residual isolated: 077e's arctan TABLE is fine; the bug is its negative-Y octant/sign combination
+
+Dumped DGROUP:0x2448 at runtime -> the arctan table IS populated (0,326,652,978,...,10055 -- a clean ramp),
+so the coarse-angle output is NOT a missing table.  Traced 077e's sign-fold with the (sign-extended) args my
+fix passes: for dZ=-2304 it correctly folds to Y=|dZ|=2304, X=range=22782, iVar10=2 (the "Y<0" quadrant
+marker).  So the FOLDING is right.  The error is downstream, in the final octant assembly (fist.c ~5474-5486,
+asm ~0x7c3-0x820): with iVar10=2 the return shifts octant bits into bit15 across two >>1 steps and yields
+-0x2000 (-45deg) instead of the small -0x418 the table interpolation should give for atan(2304/22782)=5.77deg.
+The +dZ twin (2304,22782) returns 0 (shallow rounds down) -- so the two disagree in MAGNITUDE, which is the
+tell that 077e's negative-Y path (iVar10 quadrant encoding) is the residual decompile bug, exposed only now
+that 0578 feeds 077e the correct register roles.
+
+So the mission-resolution critical path is now a SINGLE intricate decompile correction plus a verification:
+  1. Fix 077e's octant/sign assembly (0x7c3..0x820) so atan2(-Y,X) for shallow Y returns a small negative
+     matching atan2(+Y,X)'s magnitude -- diff the asm's `xchg`/`shl bp,1`/final `>>1|bit15` sequence against
+     fist.c:5474-5486; the DAT_2000_dad0 branch (5474 vs 5488) selects table-interp vs raw-octant.  Calibrate
+     every octant vs atan2 with the FIST_CALIB harness.
+  2. Then the b691 explosion -> b2ef splash-damage chain (already REACHABLE: e1a6 fires 30x with the partial
+     fix) must actually drop enemy a296.
+This session's net: the "self-playing mission stalls" mystery is fully resolved to root cause -- a ballistic
+elevation that computed -90deg (patch 431's scrambled 077e args) then -45deg (residual 077e octant bug).
+The partial fix already turns dead straight-down shells into flat-flying shells that collide with terrain.
+Goal not met; the remaining work is one 077e octant-math fix + the damage-cascade check, both asm-scoped.
