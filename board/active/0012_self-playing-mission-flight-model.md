@@ -2319,3 +2319,30 @@ the object model + LOS + fire-decision all proven, the two remaining defects to 
 mission are: (1) the AI reload/fire-request timing (7e29 [0xa8]==0 gate), (2) this own-side target
 admission.  Both are the last mile; the session reduced "mission doesn't resolve" to these two located,
 asm-verifiable defects.
+
+## CORRECTION (non-perturbing): reload was a PERTURBATION artifact; real break = fire-request doesn't propagate
+
+The previous "[0xa8] STUCK at 70 -> reload never completes" finding (commit cbb0bbd) is WRONG -- it was a
+PERTURBATION artifact of hot-path 7e29-gate instrumentation.  The clean, non-perturbing one-shot dumpreg
+(held+437, t=8000) shows **ALL 108 units with rld_a8=00** -- every unit is reloaded; the spawn gate
+[0xa8]==0 is OPEN.  Reload is NOT the blocker.  (Lesson re-confirmed: only the one-shot dumpreg is
+trustworthy; multi-op hot-path counters stall the timing-sensitive sim into false states.)
+
+Corrected, non-perturbing picture:
+  - Acquisition globals FINE: acq-thresh[bx+0x994a]=0x78 (~47% RNG pass), [0x9935] rankceil=0xff (all pass),
+    [0x993a] rgate=0x3e8.  Acquisition is threshold-OK but LOW-SUPPLY: aa08's broad all-pairs scan gets
+    ~1.4% mutual-LOS (expected -- units spread out), ~338 candidate-passes/60s; snapshot shows only 1 of
+    109 units holding a target (the player -> a FRIENDLY c34d).  Shooters (types 1/2/3) tgt97=0000.
+  - Minimal non-perturbing counters (single increments): **87df-reaches-899c=0, 899c-entered=0** -- the
+    type-1 shooter update NEVER sees [0x92]!=0 || [0x17]&0x80, so its spawn dispatch (899c) is never
+    reached.  So afa2/a286's fire-request [0x92]=0x30 does NOT propagate to the shooter's own update where
+    the spawn would fire.  (And 899c itself is base-lost -- host-ptr table [0x91]*2-0x7612, [0x97]
+    int-deref, dead bVar3 -- so it would SEGV if ever entered; the crash-clean run confirms it is not.)
+
+So the corrected single blocker: **the fire-request set by afa2 (types 1/3, 20x) never reaches the firing
+unit's spawn dispatch** -- [0x92] is set but gone by the time the unit's own update (87df/97d5) checks it,
+so no spawn, no projectile, no damage, no resolution.  Next (non-perturbing only): (1) count a286 fires by
+unit TYPE (1 vs 3) to know which shooter path to follow; (2) trace whether afa2 runs BEFORE or AFTER the
+[0x92] check within that unit's update, and what clears [0x92] between set and check; (3) then the base-lost
+spawn dispatch (899c type-1 + the type-3 analog) needs the 7e29-class patch.  Reload/own-side-only findings
+superseded by this propagation break.  Object model (437), LOS (47%), fire-decision (afa2 20x) all proven.
