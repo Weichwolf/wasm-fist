@@ -337,6 +337,8 @@ extern int g_menu_ready;
  * one pending ISR invocation (capped). For Stage-1 unblocking any correct-enough rate works; the knob
  * is the seam a later deterministic (instruction-counted) tick source will replace. */
 #define BIOS_TICK_LIN 0x46C
+unsigned short g_fist_a18e_bx=0;
+long g_a286=0,g_7e29=0,g_7745=0;
 long g_min_a296 = 0x7fffffff;
 long g_min_los = 0x7fffffffL;   /* non-perturbing: min cross-side |dx|+|dy| over op-0x58 queries once combat starts */
 int  g_a296_loaded = 0;           /* set once a296>=15 seen (AZER1 spawned its roster) */
@@ -474,6 +476,7 @@ static void fist_dump_and_exit(const char *why){
               g_a296_loaded, g_min_a296,
               (g_a296_loaded && *(uint16_t*)(g_mem+0x1c000+0xe296)==0) ? "*** RESOLVED: enemy side eliminated ***" :
               (g_a296_loaded ? "(mission loaded, not resolved)" : "(mission never loaded a296>=15)"));
+      extern long g_a286,g_7e29,g_7745; fprintf(stderr,"[chain] a286-request=%ld  7e29-dispatch=%ld  7745-spawn=%ld\n",g_a286,g_7e29,g_7745);
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
  }
             { extern void fist_sb_flush(void); fist_sb_flush(); }   /* finalize any SB PCM/WAV capture */

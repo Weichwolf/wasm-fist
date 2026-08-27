@@ -2045,3 +2045,30 @@ Candidates: b1df's caller-zeroing was (wrongly) resetting a fire field the units
 0xdfbc registration changed the c0e5 update order the fire logic relies on; or 7745's b1df(8) side effect
 on the firer.  Once that masked base-loss is fixed, 434-436 + 430-433 land clean -> AZER5: fire -> hit ->
 side eliminated.  The turret fires and the leak is solved; this single coupling is the last barrier.
+
+## CRUCIAL correction: the buggy b1df MASKED the reload gate; "AZER5 fires 720x" was the bug (2026-08-27)
+
+Fire-chain counters with the CORRECT b1df (held patch 434) on AZER5: a286 fire-request=17 (was ~1056),
+7e29 reached=816, 7745 spawn=0.  The gate [0x91]==4 || [0xa8]==0 never passes.  ROOT of the illusion: the
+BUGGY b1df, in 7745's `proj=b1df(8, firer)`, registered+ZEROED the FIRER (di) -- zeroing [firer+4..0xfb],
+which includes [0xa8] (the reload) -> [0xa8]=0 -> the gate passed EVERY fire.  So the stable state's "720
+turret fires" were an ARTIFACT of the orphan bug zeroing the reload, and the projectiles were garbage
+(b1df returned count).  With the correct b1df the ~21s reload (established earlier: [0xa8] init x 1/16-tick
+7d69 dispatch) is REAL, and it only clears if the units HOLD an aim-converged engagement that long.
+
+So the corrected picture: the fire CASCADE is now fully built and correct (held 431-436: b1df root, bab4/
+bae1 despawn, b725/ace0 physics, leak gone a294 150->120) -- but a RESOLVED mission still needs the same
+MOVEMENT / ENGAGEMENT-HOLD the earlier analysis pinned: units must sustain an aimed target across the 21s
+reload for the gate to pass and a real projectile to spawn+fly+hit.  The buggy b1df faked this by zeroing
+the reload; it did NOT make the units actually hold engagement.  (a286 dropping 1056->17 with the correct
+model also shows the buggy effects were inflating the apparent engagement.)
+
+## Where it stands, honestly
+
+Two independent, both-required pieces for a resolved combat mission, both now precisely identified:
+  1. The fire cascade -- BUILT + correct, held in patches/held/ (431-436), leak solved, no crash.
+  2. Movement engagement-hold -- units holding an aimed target across the ~21s reload -- STILL open (the
+     deep drive-to-goal subsystem; the buggy b1df's reload-zeroing masked it, it is not solved).
+Stable pushed state (429) is the buggy-but-firing baseline (AE=0).  The held patches are the correct fire
+cascade, to land together WITH the engagement-hold fix.  Goal unmet; the last real barrier is the movement
+AI holding engagement -- unchanged by this session's cascade work, but now with the fire path proven correct.
