@@ -1464,3 +1464,31 @@ spawn+despawn cascade"): land the FIRE dispatch 7e29/899c/91b8/99a2 (far-call `f
 projectiles -> hits -> b2ef -> a296->0 (win) or a294->0 (lose).  Then op-0x4c windshield render (board:0001)
 for the DoD's "every frame produced", and full-run wasm byte-identity.  The object model + effect lifecycle
 are DONE; firing is the singular remaining resolution blocker, fully asm-specified.
+
+## COMBAT MODEL is MULTI-LAYER; current break is the upstream AI fire-DECISION (2026-08-27)
+
+Mapped the full fire path (subagent, asm-verified; complete C in board/0012_fire_cascade_reference.md).
+Decisive finding: the fire DISPATCH (7e29/899c/91b8/99a2) is NEVER reached in AZER1 -- proven because the
+base-lost dispatch derefs raw host ~0x7e77 and would SIGSEGV if called, yet the patch-424 build runs clean.
+So the break is UPSTREAM: the AI fire-DECISION in the per-type update methods (targeting -> set the fire
+gate [di+0x92]!=0 / [di+0x17]&0x80) never triggers.  The dispatch+spawn+launch+trajectory cascade (layer 2/3,
+full asm-verified C now in the reference file: 7e29.., 7745/778a/77cf/7814, b725/b73b/b767/b6c9, ace0, 9b5c/
+9b6f + the b21d/b1df/b1d6 allocator contract) is downstream and only matters once the decision fires.
+
+SCOPE (honest, matches the goal's "largest remaining piece, multi-phase"): the combat model is 3 layers x
+per-unit-type (4 update methods x 4 weapons = 16 spawn methods).  AZER1 needs only the firing type(s), but
+the LAYER-1 fire-decision (targeting: acquire target, in-range/LOS, cooldown -> set [0x92]/[0x17]&0x80) is
+un-mapped and is the true resolution blocker.  a296 16->10 early is the emitter/collision path (b51f/c31e),
+not unit fire.
+
+NEXT (sole resolution blocker, now precisely located): trace the AI fire-DECISION inside 902c/97d5/7c1d/87df
+(and their targeting sub-methods a0a4/a358/a57a/a9ea + the fist_icall_near weapon vectors) to where it
+should set [di+0x92]/[di+0x17]&0x80; find the base-loss that keeps it from triggering; fix it -> the dispatch
+fires -> land the layer-2/3 cascade (reference file) -> projectiles -> hits -> b2ef -> a side to 0.  Then
+op-0x4c windshield render (board:0001) + full-run wasm parity.
+
+SESSION NET (2026-08-27): SHIPPED steering (421/422/423, cracked the long-claimed oracle blocker; combat
+starts) + the b1df object-model root fix & effect spawn/despawn/render cascade (424; sim runs clean, 25/0,
+native==wasm==ref AE=0).  MAPPED the entire combat model with asm-verified C for layers 2/3.  Goal UNMET:
+the mission does not resolve because the LAYER-1 AI fire-decision is un-mapped -- genuine multi-phase work,
+now precisely localized to the update-method targeting/fire-gate.
