@@ -2281,3 +2281,25 @@ that cursor never lands on the 7d69 slot.  Precise next step: trace byte[di+0x3d
 (asm-verified) and the whole proven chain fires -> projectiles spawn -> combat resolves.  This session:
 fire chain reduced from "doesn't resolve" to a single measured defect (reload cursor); leak+crashes fixed
 (437, held cascade clean); a294/a296, op-0x58, and the engagement-AI hypothesis all disproven en route.
+
+## Caveat + additional reliable finding (target-selection picks own side)
+
+Caveat on the [0xa8]=70 read: it came from single-increment counters (non-perturbing) and was consistent
+(min=max=70 at every 7e29 dispatch), but a plain-build dumpreg at t=8000 shows both TYPE-0 units (c05c
+player, cf11) with rld_a8=00 (reloaded) -- so the 7e29-dispatching unit with [0xa8]=70 is either a 3rd
+type-0 unit or a transient early-reload state; the reload-cursor conclusion needs a non-perturbing
+per-unit [0xa8]-over-time confirmation before it is treated as THE root (the committed cbb0bbd finding is
+the strongest lead, not yet certain).
+
+RELIABLE (plain dumpreg, no hot-path instrumentation): the PLAYER c05c is reloaded ([0xa8]=0) + aim
+converged (aim89==tbrg8b==0x2000) + has a target tgt97=c34d -- but **c34d is a FRIENDLY (side 1)**.  So
+the player's acquired target is its OWN side -> the fire gate correctly refuses (no fratricide) -> the
+player never fires despite being ready.  Target SELECTION is picking own-side units, a second concrete
+defect independent of the reload timing.  The acquire a6e3 (patch 425) validates via op-0x58 but does NOT
+re-check the side flag; the candidate scan aa08's side filter (byte[cand+0x16]&8 vs byte[0x96ab], line
+1aa90) is the side gate -- if [0x96ab] (own-side selector) is base-lost/wrong, friendlies pass as
+candidates.  So there are (at least) TWO concrete defects gating combat: (1) reload/fire-request timing on
+the AI shooters (types 1/3 fire a286 but the spawn gate [0xa8]==0 stays shut), (2) target selection
+admitting own-side units (player locks a friendly).  Both are FIST.DAT, asm-verifiable, and downstream of
+the proven object model + LOS.  Next session: confirm the side gate [0x96ab]/aa08-1aa90 (friendly admitted?)
+and the per-unit reload [0xa8] timeline non-perturbingly; each is a bounded base-loss fix.
