@@ -2130,3 +2130,29 @@ units are gone.  So the barrier is ENEMY target RE-ACQUISITION across the missio
 LOS not sustaining), coupled with whether friendlies traverse the enemy envelope.  This is a deep
 multi-factor engagement subsystem; the oracle now gives an exact reference (resolves in 2.5min) and a
 working per-field live-trace recipe to diff any specific function's behaviour port-vs-oracle.
+
+## Held cascade is now CRASH-CLEAN + LEAK-FREE (patch 437); blocker isolated to afa2 fire-gate
+
+Testing the held cascade (430-436, correct b1df) on AZER1 self-play exposed FIVE dormant base-losses:
+once the correct b1df flows REAL weapon/effect objects through c0e5's per-type update dispatch + the turret
+aim-servo, long-unreachable functions SEGV on host-ptr deref of their object near-offset.  Fixed as
+**patch 437** (held): a3e2/a3ec (aim servo +-0xb6, also int*->WORD width), aae8 (servo method dispatch,
+c0e5 convention arg=di), bc0c (periodic update), bb02 (effect-frame set).  All asm-verified, regression-
+safe (unreachable before the cascade).  Result with held 430-437:
+  - NO crash (ran full ~2.5min self-play to the watchdog).
+  - a294 STABLE at ~120 (was pinned at the 0x96=150 cap in stable) -> **the pool leak/saturation is GONE**;
+    despawn (bab4/bb02) now recycles effects.  So pool-saturation WAS a real stall factor, now fixed.
+  - BUT still no resolution: firereq=0 ALWAYS, a296=16 stable, ZERO kills, a286-request=0.  The correct
+    b1df also removed the stable build's accidental early skirmish (5 kills) -> confirming that "combat"
+    was a buggy artifact of the orphan bug, not real engagement.
+
+So pool-saturation was one bug (fixed); the RESOLUTION blocker is the aim/fire gate afa2 (0xafa2, patch
+366).  afa2 fires a286 when the outer gate passes (has target si=[0x97], globals/flags) AND aim error
+WORD[0x8b]-[0x89] < 0xb6.  Evidence it is NOT reached: the [0x17]|=0x80 fire-request setters (still base-
+lost host-ptr form at 20923/21239/...) never crash -> that path is dead.  And the stable-build dumpreg
+shows the player with aim89==tbrg8b==0x2000 (CONVERGED) + a target, yet a286=0 -> afa2's OUTER gate blocks,
+or afa2 is not called per-AI-unit, or the target is mis-selected (player tgt97=c34d = a FRIENDLY).  Next:
+trace who calls afa2 for AI units + which outer-gate term fails, and diff [0x8b]/[0x89]/[0x97] vs the
+oracle (WATCHPHYS recipe).  Held cascade ready to LAND pending wasm-parity + verify-matrix (kept in
+patches/held/ until then).  Concrete session progress: pool leak solved + crash-clean held path (437);
+goal still unmet on the afa2 engagement gate.

@@ -1,0 +1,107 @@
+board:0012 held-patch-exposed base-loss cluster in the per-tick UPDATE/aim-servo path (5 funcs).  Once the
+correct b1df (held 434) flows REAL weapon/effect objects through c0e5's per-type update dispatch and the
+turret aim-servo, five long-dormant base-lost functions are reached for the first time and SEGV on the
+host-ptr deref of their object near-offset.  All asm-verified (DS=DGROUP=0x1c00), di = object near-offset:
+  a3e2/a3ec (0xa3e2/0xa3ec): aim servo -- call aae8 then WORD[di+0x30]-=/+=0xb6 (Ghidra int*-widened).
+  aae8      (0xaae8): servo method dispatch -- test WORD[di+0x40]&1; clear + near-call per-type method
+             word[DGROUP:(type*2 - 0x66a6)] with the object live (c0e5 convention).
+  bc0c      (0xbc0c): object periodic update -- [di+0x16]|=0x40,[di+0x17]|=0x44,WORD[di+0x1f]++, every
+             0x40 ticks if WORD[di+0x21]>0x80 far-call 9caa.
+  bb02      (0xbb02): effect-frame set -- byte[di+0x19] selects WORD[di+0x1c] (0x06->0x200,0x08->0x100).
+Regression-safe: all five were unreachable (would have crashed) before the held cascade wired real objects.
+--- a/fist.c
++++ b/fist.c
+@@ -27355,8 +27355,9 @@
+ void __allregs FUN_0000_a3e2(undefined2 param_1,int param_2)
+ 
+ {
+-  FUN_0000_aae8(param_1,param_2);
+-  *(int *)(param_2 + 0x30) = *(int *)(param_2 + 0x30) + -0xb6;
++  { unsigned char *dg = g_mem + 0x1c000;
++    FUN_0000_aae8(param_1,param_2);
++    *(unsigned short *)(dg + (unsigned short)((unsigned short)param_2 + 0x30)) -= 0xb6; }  /* asm sub WORD [di+0x30],0xb6 */
+   return;
+ }
+ 
+@@ -27366,8 +27367,9 @@
+ void __allregs FUN_0000_a3ec(undefined2 param_1,int param_2)
+ 
+ {
+-  FUN_0000_aae8(param_1,param_2);
+-  *(int *)(param_2 + 0x30) = *(int *)(param_2 + 0x30) + 0xb6;
++  { unsigned char *dg = g_mem + 0x1c000;
++    FUN_0000_aae8(param_1,param_2);
++    *(unsigned short *)(dg + (unsigned short)((unsigned short)param_2 + 0x30)) += 0xb6; }  /* asm add WORD [di+0x30],0xb6 */
+   return;
+ }
+ 
+@@ -28276,9 +28278,17 @@
+ int * __allregs FUN_0000_aae8(int *param_1,int *param_2)
+ 
+ {
+-  if ((param_2[0x20] & 1U) != 0) {
+-    param_2[0x20] = param_2[0x20] & 0xfffe;
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_2 * 2 + -0x66a6))))(param_1);
++  /* aim-servo method dispatch (asm 0xaae8; DS=DGROUP).  di=param_2 = object near-offset; if
++     word[di+0x40]&1 set, clear it and near-call the per-type method word[DGROUP:(type*2 - 0x66a6)]
++     with the object live (c0e5 convention).  Ghidra host-ptr-deref'd param_2 -> SEGV once real weapon
++     objects flowed through the servo (held b1df).  Returns param_2 (asm stc) / param_1 (clc). */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_2;
++  if ((*(unsigned short *)(dg + (unsigned short)(di + 0x40)) & 1) != 0) {
++    *(unsigned short *)(dg + (unsigned short)(di + 0x40)) &= 0xfffe;
++    unsigned short bx = (unsigned short)((unsigned int)(unsigned short)(*(unsigned short *)(dg + di)) << 1);
++    unsigned short moff = *(unsigned short *)(dg + (unsigned short)(bx - 0x66a6));
++    (*(code *)fist_icall_near(0x0u, moff))((int)di);
+     return param_2;
+   }
+   return param_1;
+@@ -30771,14 +30781,17 @@
+ void __allregs FUN_0000_bb02(int param_1)
+ 
+ {
+-  if (*(char *)(param_1 + 0x19) == '\x06') {
+-    *(undefined2 *)(param_1 + 0x1c) = 0x200;
+-    return;
+-  }
+-  if (*(char *)(param_1 + 0x19) != '\b') {
+-    return;
++  /* effect-frame set (asm 0xbb02; DS=DGROUP).  di=param_1 = object near-offset; byte[di+0x19] selects
++     word[di+0x1c] (0x06->0x200, 0x08->0x100).  Ghidra host-ptr-deref'd -> SEGV via held bab4 despawn. */
++  { unsigned char *dg = g_mem + 0x1c000;
++    unsigned short di = (unsigned short)param_1;
++    if (dg[(unsigned short)(di + 0x19)] == 6) {
++      *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x200;
++      return;
++    }
++    if (dg[(unsigned short)(di + 0x19)] != 8) return;
++    *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x100;
+   }
+-  *(undefined2 *)(param_1 + 0x1c) = 0x100;
+   return;
+ }
+ 
+@@ -30908,11 +30921,18 @@
+ void __allregs FUN_0000_bc0c(undefined4 param_1,int param_2)
+ 
+ {
+-  *(byte *)(param_2 + 0x16) = *(byte *)(param_2 + 0x16) | 0x40;
+-  *(byte *)(param_2 + 0x17) = *(byte *)(param_2 + 0x17) | 0x44;
+-  *(int *)(param_2 + 0x1f) = *(int *)(param_2 + 0x1f) + 1;
+-  if (((*(uint *)(param_2 + 0x1f) & 0x3f) == 0) && (0x80 < *(uint *)(param_2 + 0x21))) {
+-    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(uint *)(param_2 + 0x21)),param_2);
++  /* object periodic update (asm 0xbc0c; DS=DGROUP).  di=param_2 = object near-offset; set flags
++     [di+0x16]|=0x40, [di+0x17]|=0x44; WORD[di+0x1f]++ ; every 0x40 ticks if WORD[di+0x21]>0x80 far-call
++     9caa.  Ghidra host-ptr-deref'd param_2 + int-widened the WORD fields -> SEGV as a c0e5 update method. */
++  { unsigned char *dg = g_mem + 0x1c000;
++    unsigned short di = (unsigned short)param_2;
++    dg[(unsigned short)(di + 0x16)] |= 0x40;
++    dg[(unsigned short)(di + 0x17)] |= 0x44;
++    *(unsigned short *)(dg + (unsigned short)(di + 0x1f)) += 1;
++    if (((*(unsigned short *)(dg + (unsigned short)(di + 0x1f)) & 0x3f) == 0) &&
++        (*(unsigned short *)(dg + (unsigned short)(di + 0x21)) > 0x80)) {
++      FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(unsigned short *)(dg + (unsigned short)(di + 0x21))),param_2);
++    }
+   }
+   return;
+ }
