@@ -1867,3 +1867,31 @@ remaining unknown is the RUNTIME coincidence of [0xa8]==0 with an active aim-con
 be observed in the port (perturbation) and is not determinable statically.  The oracle (dosbox-fist,
 FIST_WATCHFLAT on a firing unit's [0xa8]/[0x92]/[0x89]/[0x8b]) is the sole remaining data path to see how
 the original achieves the coincidence -> then a faithful fix + landing the asm-ready spawn cascade resolves.
+
+## *** ORACLE DECISIVE: the original FIRES the turret (778a+ace0) -> the plateau is a REAL BUG (2026-08-27) ***
+
+Block-trace of the ORIGINAL AZER1 run (third_party/dosbox-fist, cs=0x2082 = FIST.DAT relocated,
+FIST.DAT_off = eip + 0xf690).  Mapping verified: aa08 (enemy scan) present=True at 2082:b378.  Then the
+turret fire cascade in the ORIGINAL:
+  - 778a (turret SPAWN, weapon 2 = 7e29 table[[0x91]=2]) : PRESENT
+  - ace0 (projectile INIT)                               : PRESENT
+  - b1df (allocator), a265 (aim)                         : PRESENT
+  - 7745/7814 (weapons 0/4, not carried)                : absent (correctly)
+
+So the ORIGINAL's units DO fire their main gun (via 778a, matching the units' [0x91]=2), spawn projectiles
+(ace0), and -- since AZER1 resolves in the original -- kill the enemy side.  This REFUTES the prior "the
+a296=10 plateau is faithful / no base-loss" conclusion: the port NEVER reaches 778a (7745 reached=0, and
+the same holds for 778a -- 7e29's gate never passes for weapon 2), so the port has a REAL BUG that stops
+the turret from firing where the original fires.  The oracle earned its keep: it converted "maybe faithful"
+into "definitely a bug, and here is the exact code (778a/ace0) the port must reach."
+
+## What this pins for the fix
+
+7e29's gate for weapon 2 is [0xa8]==0.  The original reaches it during a fire request (778a runs); the port
+never does.  The reload rate (1/16-tick, ~224 ticks) is faithful, so the divergence is that the port's units
+do NOT hold an aim-converged target across the ~224-tick reload the way the original's do -- i.e. the port's
+target-persistence / engagement-maintenance (LOS + drive-to-goal navigation) is the divergent subsystem, OR
+there is an extra [0xa8] reset in the port.  NEXT (now sharply targeted): oracle-watch a firing original
+unit's [0xa8]/[0x92]/[0x97] to see whether [0xa8] winds monotonically to 0 under a held target (=> port
+navigation/LOS bug) or is driven differently; then fix the divergent subsystem + land 778a/ace0 (asm-ready).
+The plateau is a BUG with a known-good reference, not a wall.
