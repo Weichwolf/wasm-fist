@@ -1992,3 +1992,23 @@ reverted patch 424).  So 430 is HELD: the next step is to find the AZER1 hang th
 triggers, land 430 cleanly, then land b725/ace0.  The path to a RESOLVED combat mission is now concrete:
 fix the leak (430 + the exposed downstream) -> projectiles allocate -> land b725/ace0 -> projectiles hit ->
 side eliminated.  The turret fires; this is the last cascade.
+
+## Patch 430's AZER1 hang PINNED: exposes a task-scheduler base-loss (c06a/c058) (2026-08-27)
+
+gdb on the hung AZER1-with-430 process: infinite spin in 459a's event-drain (line 13761) calling the
+scheduler poll FUN_1000_35a7 ([c40a]).  35a7's task branch `if (DAT_1000_c06a != 0) icall [c058]` fires --
+the now-PROPER effect objects (430) schedule a task (c06a set) -- but DAT_1000_c058 = 0 (uninitialised),
+so 35a7 icalls 0x1000:0 every poll and never returns "queue empty" -> 459a spins forever.  So patch 430 is
+ASM-CORRECT (drops AZER5 a294 150->58) but UNMASKS a base-loss in the task-scheduler setup (c058 never
+seeded, or the effect's task-enqueue writes it base-lost).  The orphan bug (258) hid this by never making a
+proper effect that schedules a task.
+
+## The resolution chain, now fully enumerated (each a concrete asm-verifiable fix)
+
+1. Patch 429 (7745 spawn) -- LANDED + PUSHED; the turret fires in combat battles (AZER5 7745 reached 720x).
+2. Patch 430 (ba33/ba5d orphan-leak fix) -- asm-correct, drops a294 150->58, HELD (exposes #3).
+3. Task-scheduler c058 seed / effect task-enqueue base-loss -- the AZER1 hang 430 unmasks (35a7 c06a/c058).
+4. b725 launcher + ace0 projectile-init (asm 0xb725 / 0x1ace0-0x1adcc + 0x1addb) -- projectile physics so
+   the spawned projectile flies + hits (callees a18e/a192/b26a already correct).
+5. Then a combat-heavy battle (AZER5) plays to one side eliminated -> the goal, on a single mission.
+The turret FIRES; this chain (leak -> scheduler -> projectile physics) is the last mile, each step bounded.
