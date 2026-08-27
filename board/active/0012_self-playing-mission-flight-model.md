@@ -1735,3 +1735,27 @@ uninitialised.  NOTE: this probe counted only FUN_0000_7e29 (the TYPE-0/player d
 fire through the SIBLING dispatchers 899c/91b8/99a2 (gate [0x91]==6) which are NOT yet probed -- the AI-vs-AI
 kill path likely runs through those + their emitters, so the next step is to probe/land the sibling fire
 cascades and settle the [0x91]/[0xa8] weapon-init, not only the player's 7e29.
+
+## Combat STRUCTURE mapped (unit fire-state dump at exit, 2026-08-27)
+
+The two sides use DIFFERENT update-method families (from the 0x9fbc registry at exit, t=17830):
+  - side=1 (a294, "friendly", incl. player c05c): types 0/1/2/3 -> upd 7c1d/87df/902c/97d5 -> fire
+    dispatchers 7e29/899c/91b8/99a2.  Only 7e29 (type-0) is ever reached (1056x); 899c/91b8/99a2 reach=0.
+  - side=0 (a296=10, "enemy"): types 0x1a/0x1b -> upd b355/bc46 (NOT the 7e29 cascade at all) + huge ammo.
+So a296 (enemy) is driven by b355/bc46, and the 6 kills are NOT the 7e29 turret cascade (which never
+spawns).  The friendly turret fire and the enemy update methods are SEPARATE subsystems.
+
+Per-unit fire fields (friendly units): player c05c has weap[0x91]=2, reload[0xa8]=0, tgt[0x97]=c34d --
+but c34d is a side=1 unit (type 2), i.e. the player is TARGETING A SAME-SIDE (friendly) unit.  Suspected
+targeting-side bug: the enemy scan (aa08/e20a op-0x58) is selecting same-side candidates, so the friendlies
+never lock the side=0 enemies -> the 10 enemies are never engaged by friendly fire.  (reload[0xa8]=0 at
+exit means the fire GATE would pass; the earlier gate_pass=0 is the anti-correlation of the fire request
+[0x92] with the reload-ready window -- secondary to the targeting-side question.)
+
+## Sharper remaining hypothesis (to verify next)
+
+The plateau is likely TARGETING-SIDE, not merely fire or navigation: if friendly units lock same-side
+units, they never shoot the enemies.  NEXT: verify the aa08/e20a candidate side-filter (does the scan
+restrict to OPPOSITE side?) and how the enemy b355/bc46 update methods engage.  This is the concrete lead
+for the a296=10 plateau, now testable at full speed (no crash).  Everything else this session (deterministic
+reach, crash-free run to t=17830, patches 426/427/428) stands.
