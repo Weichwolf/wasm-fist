@@ -2630,3 +2630,27 @@ values + whether each is in the 0xdfbc registry -> confirm if the fire-attempts 
 engagement-hold/no-fire-request reading).  This is a sharper, more mechanical lead than "hold aim 11s" --
 the real units are RELOADED (contradicting the reload-blocker reading for THEM); their missing piece is the
 FIRE-REQUEST, while a non-unit object spins the spawn dispatch.  Goal not met; this is the live thread.
+
+## *** BREAKTHROUGH: THE combat blocker found + fixed (patch 438) -- projectiles now spawn + fly ***
+
+The single defect that stopped ALL combat: **7c1d passes 7e29 the HOST pointer, not the DI near-offset.**
+7c1d (patch 244) re-points param_4 to the host pointer g_mem+0x1c000+di for its object-relative BODY, but
+the call `FUN_0000_7e29(param_4)` still passes that host pointer, and 7e29 (patch 428) does di=(u16)param_1
+-> (u16)(host ptr) = a CONSTANT garbage near-offset 0x325c (NOT in the registry).  Proven non-perturbingly:
+7e29 has exactly 1 distinct di=0x325c (reg=0) over 1392 entries; the spawn gate reads garbage [0xa8] so
+gate-open=0 and b1df-in-combat=4.  This is why every measured link (LOS/acquire/fire-decision/reload) was
+correct yet nothing spawned -- the fire DISPATCH was pointed at garbage.  It also explains the earlier
+"[0xa8]=70 stuck" perturbation red herring and the whole "engagement-hold" mis-read: units WERE firing, the
+dispatch was just corrupt.
+
+FIX (patch 438): pass the near-offset (param_4 - (g_mem+0x1c000)).  This exposed the never-reached SPAWN
+CASCADE, all fixed asm-verified: 778a (weapon-9 spawn), b73b (launcher, sibling of b725), 9b5c (muzzle-fx
+spawn), 9b6f (muzzle-fx position init) -- each was host-ptr-deref'd / int*-scaled by Ghidra.  RESULT:
+CRASH-CLEAN, and **projectiles now SPAWN + FLY** -- a294 grows 120->150 (was frozen at 120 forever).
+
+REMAINING (the new frontier, much closer to done): the projectiles accumulate to the pool cap (a294=150)
+because they DON'T despawn/hit -> still no damage (a296=16).  A long direct run SEGVs at/after saturation
+(a later projectile-lifecycle base-loss, not yet caught under gdb).  Next: the projectile (type 9)
+collision/despawn path -- its c0e5 update method + hit-detection -> b2ef, and the saturation crash.  This
+is the genuine last stretch: fire chain PROVEN working end-to-end (spawn+fly); only collision/damage/
+despawn remains.  patch 438 held with the cascade (430-438); combat is no longer stalled at the dispatch.

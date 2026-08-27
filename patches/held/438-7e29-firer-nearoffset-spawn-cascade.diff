@@ -1,0 +1,175 @@
+board:0012 THE COMBAT BLOCKER: 7c1d passes 7e29 the HOST pointer, not the DI near-offset -- the fire
+dispatch operated on garbage every tick so the spawn gate never opened.  asm 0x7c1d calls 7e29 with DI =
+the firer's DGROUP near-offset; patch 244 re-points 7c1d's param_4 to the HOST pointer (g_mem+0x1c000+di)
+for the object-relative body, but the 7e29 CALL still passes param_4, and 7e29 (patch 428) does di=(u16)
+param_1 -> (u16)(host ptr) = a constant garbage near-offset (0x325c) NOT in the registry.  So all 1440
+fire-attempts/run hit garbage [0xa8]!=0 -> gate never opens -> b1df-in-combat=4 -> no projectile -> no
+combat.  FIX: pass 7e29 the near-offset (param_4 - (g_mem+0x1c000)).  This exposed the never-before-reached
+SPAWN CASCADE (all host-ptr/int*-scaled base-loss, asm-verified, DS=DGROUP):
+  778a (0x1778a): weapon-9 spawn -- ammo WORD[di+0xaf]--, a265, si=b1df(9,di), b73b(new,firer), reload
+        [di+0xa8]=0x14, [di+0x3c]=0x10, clear [di+0x92].  (Ghidra used unaff_CS for the firer writes.)
+  b73b (0xb73b): launcher (sibling of b725/patch 432) -- [si+0x2a]=0,[si+0x1b]=0x4aa WORD, ace0(0,
+        target=[di+0x97], proj=si, firer=di).
+  9b5c (0x9b5c): muzzle-fx spawn -- si=b1d6(0x12,di) (return was dropped), 9b6f(new,firer).
+  9b6f (0x9b6f): muzzle-fx position init -- copy firer X/Y/Z, offset by 03a9(aim); every WORD/DWORD field
+        was int*-scaled by Ghidra.
+RESULT: crash-clean, projectiles SPAWN + FLY (a294 120->150).  Remaining (next): projectiles accumulate to
+the pool cap (don't despawn/hit) -> no damage yet; that is the projectile collision/despawn path.
+--- a/fist.c
++++ b/fist.c
+@@ -21363,7 +21363,7 @@
+   else {
+     *(char *)(param_4 + 0x92) = *(char *)(param_4 + 0x92) + -1;
+   }
+-  FUN_0000_7e29(param_4);
++  FUN_0000_7e29((int)((intptr_t)param_4 - (intptr_t)((unsigned char *)g_mem + 0x1c000)));  /* 7e29 wants DI=near-offset, not the host ptr */
+ LAB_0000_7c7b:
+   FUN_0000_a57a(param_4);
+   FUN_0000_a9ea(param_1,uVar3,param_4);
+@@ -21657,6 +21657,9 @@
+   extern unsigned char g_fist_cf;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned int di = (unsigned short)param_1;
++  { extern unsigned g_e29dis[16]; extern long g_e29disc[16]; extern int g_e29n;
++    int _f=0; for(int _i=0;_i<g_e29n;_i++){ if(g_e29dis[_i]==(unsigned)di){ g_e29disc[_i]++; _f=1; break; } }
++    if(!_f && g_e29n<16){ g_e29dis[g_e29n]=(unsigned)di; g_e29disc[g_e29n]=1; g_e29n++; } }
+   FUN_1000_70d6();
+   dg[(unsigned short)(di + 0xdb)] = 3;
+   if (dg[(unsigned short)(di + 0x91)] == 4 || dg[(unsigned short)(di + 0xa8)] == 0) {
+@@ -26045,12 +26048,14 @@
+ void __allregs FUN_0000_9b5c(undefined2 param_1)
+ 
+ {
+-  undefined2 unaff_CS;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_b1d6(0x12,param_1);
+-  if (!(bool)in_CF) {
+-    FUN_0000_9b6f(param_1,unaff_CS);
++  /* muzzle-fx spawn (asm 0x9b5c; DS=DGROUP).  di=param_1=firer; b1d6(0x12,di) allocates the fx (returns
++     new obj in di->si; CF=cap -> skip); 9b6f(si=new, di=firer).  Ghidra dropped the b1d6 return + used
++     unaff_CS. */
++  extern unsigned char g_fist_cf;
++  unsigned short di = (unsigned short)param_1;
++  unsigned short si = (unsigned short)FUN_1000_b1d6(0x12,(int *)(uintptr_t)di);
++  if (!g_fist_cf) {
++    FUN_0000_9b6f((int)si,(int *)(uintptr_t)di);
+   }
+   return;
+ }
+@@ -26061,24 +26066,28 @@
+ void __allregs FUN_0000_9b6f(int param_1,int *param_2)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int iVar3;
+-  
+-  *(undefined1 *)(param_1 + 0x19) = 0;
+-  *(undefined2 *)(param_1 + 0x1a) = 0;
+-  *(undefined2 *)(param_1 + 0x14) = 0x200;
+-  *(undefined4 *)(param_1 + 4) = *(undefined4 *)(param_2 + 2);
+-  *(undefined4 *)(param_1 + 8) = *(undefined4 *)(param_2 + 4);
+-  iVar3 = *param_2 * 2;
+-  *(long *)(param_1 + 0xc) = (ulong)*(uint *)(iVar3 + -0x6cfe) + *(long *)(param_2 + 6);
+-  iVar1 = param_2[8];
+-  *(int *)(param_1 + 0x10) = iVar1;
+-  iVar2 = *(int *)(iVar3 + -0x6d06);
+-  iVar1 = FUN_0000_03a9(iVar1,iVar2,iVar3);
+-  *(long *)(param_1 + 4) = *(long *)(param_1 + 4) + (long)iVar1;
+-  *(long *)(param_1 + 8) = *(long *)(param_1 + 8) + (long)iVar2;
+-  *(int *)(param_1 + 0x10) = *(int *)(param_1 + 0x10) + -0x8000;
++  /* muzzle-fx position init (asm 0x9b6f; DS=DGROUP).  si=param_1=new fx, di=param_2=firer.  Copy firer
++     X/Y ([di+4]/[di+8] dwords) -> [si+4]/[si+8]; Z=[si+0xc]=word[DGROUP:(type*2-0x6cfe)]+[di+0xc];
++     [si+0x10]=word[di+0x10]; then offset X += 03a9([di+0x10], table2=word[type*2-0x6d06], type*2),
++     Y += table2, [si+0x10]-=0x8000.  Ghidra host-ptr-deref'd + int*-scaled every WORD/DWORD field. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = (unsigned short)param_1;
++  unsigned short di = (unsigned short)(uintptr_t)param_2;
++  dg[(unsigned short)(si + 0x19)] = 0;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1a)) = 0;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x14)) = 0x200;
++  *(uint32_t *)(dg + (unsigned short)(si + 4)) = *(uint32_t *)(dg + (unsigned short)(di + 4));
++  *(uint32_t *)(dg + (unsigned short)(si + 8)) = *(uint32_t *)(dg + (unsigned short)(di + 8));
++  { unsigned short bx = (unsigned short)((unsigned)(unsigned short)(*(unsigned short *)(dg + di)) << 1);
++    *(uint32_t *)(dg + (unsigned short)(si + 0xc)) =
++        (uint32_t)*(unsigned short *)(dg + (unsigned short)(bx - 0x6cfe)) + *(uint32_t *)(dg + (unsigned short)(di + 0xc));
++    int ax_in = *(int16_t *)(dg + (unsigned short)(di + 0x10));
++    *(int16_t *)(dg + (unsigned short)(si + 0x10)) = (int16_t)ax_in;
++    int dx = *(int16_t *)(dg + (unsigned short)(bx - 0x6d06));
++    int iVar1 = FUN_0000_03a9(ax_in,(uint)dx,(undefined2)bx);
++    *(int32_t *)(dg + (unsigned short)(si + 4)) += iVar1;
++    *(int32_t *)(dg + (unsigned short)(si + 8)) += dx;
++    *(int16_t *)(dg + (unsigned short)(si + 0x10)) += -0x8000; }
+   return;
+ }
+ 
+@@ -30262,9 +30271,18 @@
+ void __allregs FUN_0000_b73b(undefined2 param_1,int param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x2a) = 0;
+-  *(undefined2 *)(param_2 + 0x1b) = 0x4aa;
+-  FUN_1000_ace0(param_1,*(undefined2 *)(param_3 + 0x97),param_2,param_3,param_4);
++  /* launcher (asm 0xb73b; DS=DGROUP), sibling of b725 (patch 432): si=param_2=projectile near-off,
++     di=param_3=firer.  [si+0x2a]=0; [si+0x1b]=0x4aa; ace0(ax=0, bx=target=[di+0x97], si=proj, di=firer).
++     Ghidra host-ptr-deref'd si/di + int-widened the WORD [si+0x1b]. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_2;
++  unsigned int di = (unsigned short)param_3;
++  (void)param_1; (void)param_4;
++  dg[(unsigned short)(si + 0x2a)] = 0;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) = 0x4aa;
++  FUN_1000_ace0(0,
++    (int *)(uintptr_t)(unsigned int)*(unsigned short *)(dg + (unsigned short)(di + 0x97)),
++    (int)si, (int *)(uintptr_t)di, 0);
+   return;
+ }
+ 
+@@ -59680,26 +59698,26 @@
+              undefined2 param_5)
+ 
+ {
+-  undefined2 uVar1;
+-  int unaff_CS;
+-  undefined1 uVar2;
+-  
+-  uVar2 = 0;
+-  if (*(int *)(param_4 + 0xaf) != 0) {
+-    *(int *)(param_4 + 0xaf) = *(int *)(param_4 + 0xaf) + -1;
+-    *(undefined1 *)(param_4 + 0xe6) = 3;
+-    FUN_1000_a265(param_1,param_2,param_4);
+-    uVar1 = (undefined2)param_2;
+-    FUN_1000_b1df(9,param_4);
+-    if (!(bool)uVar2) {
+-      FUN_0000_b73b(uVar1,param_4,unaff_CS,param_5);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 0x14;
+-      FUN_0000_9b5c(unaff_CS);
+-      FUN_0000_c047(0xc,param_3,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0x3c) = 0x10;
+-      *(undefined1 *)(unaff_CS + 0x92) = 0;
+-      return;
+-    }
++  /* spawn method (asm 0x1778a; DS=DGROUP).  di=param_4 = FIRER near-offset; ammo WORD[di+0xaf]>0: dec ammo,
++     a265(di), si=b1df(9,di) (new projectile; CF=pool-cap -> fail/stc), b73b(firer,new), firer reload
++     [di+0xa8]=0x14, [di+0x3c]=0x10, clear [di+0x92].  Ghidra host-ptr-deref'd di, int-widened the WORD
++     ammo, and used unaff_CS (garbage) for the firer post-writes.  Reached once 7c1d passes 7e29 the real
++     DI near-offset (the 7c1d->7e29 host-ptr bug). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)param_4;
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0xaf)) != 0) {
++    *(unsigned short *)(dg + (unsigned short)(di + 0xaf)) -= 1;
++    dg[(unsigned short)(di + 0xe6)] = 3;
++    FUN_1000_a265(param_1,param_2,(int)di);
++    { unsigned short si = (unsigned short)FUN_1000_b1df(9,(int *)(uintptr_t)di);
++      if (g_fist_cf) { g_fist_cf = 1; return; }
++      FUN_0000_b73b((undefined2)param_2,(int)si,(int)di,param_5);
++      dg[(unsigned short)(di + 0xa8)] = 0x14;
++      FUN_0000_9b5c((int)di);
++      FUN_0000_c047(0xc,param_3,(int)di);
++      dg[(unsigned short)(di + 0x3c)] = 0x10;
++      dg[(unsigned short)(di + 0x92)] = 0; }
+   }
+   return;
+ }

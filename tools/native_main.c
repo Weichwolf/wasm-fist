@@ -339,6 +339,7 @@ extern int g_menu_ready;
 #define BIOS_TICK_LIN 0x46C
 unsigned short g_fist_a18e_bx=0;
 long g_a286=0,g_7e29=0,g_7745=0;
+unsigned g_e29dis[16]={0}; long g_e29disc[16]={0}; int g_e29n=0;
 long g_e29_3dh[16]={0}; unsigned g_e29_type=0,g_e29_91=0,g_e29_3d=0,g_e29_di=0;
 long g_slot0_a8z=0,g_slot0_a8nz=0;
 long g_reinit_a8=0,g_7d69dec=0;
@@ -487,6 +488,7 @@ static void fist_dump_and_exit(const char *why){
       extern long g_reinit_a8,g_7d69dec; fprintf(stderr,"[reload] 7963-reinit-a8-in-combat=%ld  7d69-decrement-in-combat=%ld\n",g_reinit_a8,g_7d69dec);
       extern long g_slot0_a8z,g_slot0_a8nz; fprintf(stderr,"[7d69slot] cursor-hits-7d69-slot: a8==0=%ld  a8!=0(should-decrement)=%ld\n",g_slot0_a8z,g_slot0_a8nz);
       extern unsigned g_e29_type,g_e29_91,g_e29_3d,g_e29_di; fprintf(stderr,"[7e29firer] type=%04x weapon[0x91]=%02x [0x3d]=%02x di=%04x\n",g_e29_type,g_e29_91,g_e29_3d,g_e29_di);
+      extern unsigned g_e29dis[16]; extern long g_e29disc[16]; extern int g_e29n; { unsigned char*dg=g_mem+0x1c000; unsigned short*fbc=(unsigned short*)(dg+0xdfbc); fprintf(stderr,"[7e29di] %d distinct di:",g_e29n); for(int i=0;i<g_e29n;i++){ int inreg=0; for(int j=0;j<0xb6;j++) if(fbc[j*2]==g_e29dis[i]){inreg=1;break;} fprintf(stderr," %04x(n=%ld,reg=%d,t=%04x)",g_e29dis[i],g_e29disc[i],inreg,*(unsigned short*)(dg+g_e29dis[i])); } fprintf(stderr,"\n"); }
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }
