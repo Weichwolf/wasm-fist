@@ -93,3 +93,48 @@ transcript (agent a9345b6, 3rd reply).  Key: ace0 params AX=aim(0),BX=target,SI=
 velocity `[si+0x10]` heading, `[si+0x1d]` velX (a192), `[si+0x1f]` speed, `[si+0x31]` DWORD, tail `addb(dg+proj)`.
 `b6c9` (0xb6c9, 7814's launcher) still needs disassembly+rebase (same shape as b725).
 Already-correct callees: a265(274), addb(337), a18e(338), a192, c047(268), b26a, adcd(222).
+
+---
+
+# op-0x58 LOS handler — DECODED from fist_image.bin @ 0x802e (2026-08-27)
+
+The combat-resolution ROOT (see board 0012): the enemy-scan aa08's per-candidate visibility query
+`e1f0->e21c->op-0x58` returns 0 ("not visible") because op-0x58 is unimplemented -> no unit ever acquires a
+target -> no fire.  The handler IS in `re_out/fist_image.bin` (op-table 0xcb3: op-0x58 -> tramp 0x1103
+`call 0x802e`), 32-bit PM, NOT decompiled.  Full decode (objdump -m i386, 0x8035-0x811e):
+
+Inputs: `edi` = the extender TCB (= `DAT_2000_aa2c`), already filled by `FUN_0000_e21c`:
+  obj  3D pos  = TCB[0xd2]=X, TCB[0xd6]=Y, TCB[0xda]=Z (Z already has per-type height added)
+  cand 3D pos  = TCB[0xde]=X, TCB[0xe2]=Y, TCB[0xe6]=Z
+`ds:0x85bc` = terrain heightmap base ptr; `ds:0x8020/0x8024/0x8028` = scratch step dx/dy/dz.
+Returns EAX: 0xffffffff = VISIBLE (clear LOS), 0 = not visible / out of range.
+
+Algorithm (asm-exact):
+```
+dx = cand.X - obj.X;  dy = cand.Y - obj.Y;  dz = cand.Z - obj.Z;      /* 32-bit signed */
+if (dy>=0x40000 || dx>=0x40000 || dy<=-0x40000 || dx<=-0x40000) return 0;  /* out of range */
+dx <<= 13;  dy <<= 13;  dy = -dy;  dz <<= 16;                          /* scale; Y flip */
+/* normalise step so |dx|,|dy| < 0x3000000, counting doublings in ecx: */
+ecx = 0;
+do { ecx = ecx*2 + ... /* inc;shl1 */; dx>>=1(sar); dy>>=1; dz>>=1; }
+   while (dx>=0x3000000 || dy>=0x3000000 || dx<=-0x3000000 || dy<=-0x3000000);
+steps = ecx - 1;
+sdx=dx; sdy=dy; sdz=dz;                                                /* [0x8020..0x8028] */
+rx = obj.X<<13;  ry = -(obj.Y<<13);  rz = obj.Z<<16;                   /* march start */
+for (i=0;i<steps;i++){
+  rx += sdx;  ry += sdy;  rz += sdz;
+  idx = (rx>>22) ... actually: eax=0; shld eax,ry,10; shld eax,rx,10;  /* eax = ((ry>>22)&0x3ff)<<10 | ... */
+  h = terrainbase[eax] << 24;                                          /* movzx byte; shl 24 */
+  if (h >= rz) return 0;                                               /* OCCLUDED */
+}
+return 0xffffffff;                                                     /* VISIBLE */
+```
+The index `eax` after `xor eax,eax; shld eax,edx,0xa; shld eax,ebx,0xa` = top-10-bits-of-ry then
+top-10-bits-of-rx composed into a 20-bit heightmap offset (a 1024x1024 or packed terrain grid) — verify the
+exact packing against the port's 9200/6980 heightmap base + stride when wiring.
+
+WIRING (shim, faithful — NOT a stub): implement op-0x58 in the extender-service dispatch (where e339/aa10
+route ops) as the C above, reading the TCB coords `DAT_2000_aa2c + 0xd2/…/0xe6`, using the port's mission
+terrain heightmap for `[0x85bc]` (the same data 9200/6980 read).  Then aa08's LOS gate passes for in-range,
+unoccluded candidates -> targets acquired -> the fire cascade above spawns projectiles -> combat resolves.
+Falsifiable vs the DOSBox oracle (same op-0x58 result per candidate).
