@@ -337,6 +337,8 @@ extern int g_menu_ready;
  * one pending ISR invocation (capped). For Stage-1 unblocking any correct-enough rate works; the knob
  * is the seam a later deterministic (instruction-counted) tick source will replace. */
 #define BIOS_TICK_LIN 0x46C
+long g_min_a296 = 0x7fffffff;     /* cheapest (no-I/O) mission-outcome tracker: min enemy count once loaded */
+int  g_a296_loaded = 0;           /* set once a296>=15 seen (AZER1 spawned its roster) */
 static volatile sig_atomic_t g_tick_pending;     /* raised by the timer source, drained by the pump */
 #define TICK_PENDING_CAP 8
 /* One tick of the host time base: bump the BIOS 18.2 Hz counter (0040:006C) and queue one INT-8 ISR
@@ -465,6 +467,12 @@ void fist_set_int8_handler(uint32_t linear){
 static void fist_dump_and_exit(const char *why){
     fprintf(stderr, "[fist] %s: dumping frame + exiting (video-mode=0x%02x, [0x452]=%u)\n",
             why, fist_vga_mode(), *(uint16_t*)(g_mem+0x1c452));
+    { extern long g_min_a296; extern int g_a296_loaded;
+      fprintf(stderr, "[outcome] a294=%d a296=%d  loaded=%d min_a296=%ld  %s\n",
+              *(uint16_t*)(g_mem+0x1c000+0xe294), *(uint16_t*)(g_mem+0x1c000+0xe296),
+              g_a296_loaded, g_min_a296,
+              (g_a296_loaded && *(uint16_t*)(g_mem+0x1c000+0xe296)==0) ? "*** RESOLVED: enemy side eliminated ***" :
+              (g_a296_loaded ? "(mission loaded, not resolved)" : "(mission never loaded a296>=15)")); }
             { extern void fist_sb_flush(void); fist_sb_flush(); }   /* finalize any SB PCM/WAV capture */
             { extern void fist_opl_flush(void); fist_opl_flush(); } /* finalize any OPL FM PCM/WAV capture */
             { extern void fist_snd_diag(void); fist_snd_diag(); }   /* sequencer-fed diagnostic */
@@ -628,6 +636,12 @@ void fist_timer_pump(void){
       if (coop < 0) coop = getenv("FIST_COOP_TICK") ? 1 : 0;
       if (nomc < 0) nomc = getenv("FIST_NOMISSIONCOOP") ? 1 : 0;
       int in_mission = (g_mem[0x1c000 + 0x1549] == 0x1c);
+      /* Cheap (NO I/O -> non-perturbing) mission-outcome tracker: any fprintf in the hot pump changes the
+       * pump/tick ratio and breaks the timing-sensitive menu/mission-load, so record a296 silently and
+       * report once at exit (fist_dump_and_exit).  board:0012 */
+      { int b = *(uint16_t *)(g_mem + 0x1c000 + 0xe296);
+        if (b >= 15) g_a296_loaded = 1;
+        if (g_a296_loaded && b < g_min_a296) g_min_a296 = b; }
       /* DIAGNOSTIC (FIST_DUMP_REG): one-shot dump of the 0x9fbc object registry once in-mission, to
        * resolve the tree object model for the plant-tree editor harness (tree type discriminator +
        * body/coord layout). Reads only; env-gated; no effect on any flow. */
@@ -941,6 +955,23 @@ void fist_input_pump(void){
         if (released & 2) deliver_mouse_event(0x10, vx, vy, nb);   /* right released */
         g_last_btn = nb;
         g_mstep_i++;
+    }
+    /* FIST_AUTOBATTLE (board:0012): DETERMINISTIC AZER1 reach with no click-timing dependence.  The menu
+     * SCREEN transitions are pump/render-paced, so an instrumented run's clicks land on the wrong screen.
+     * Instead of timing clicks, FORCE the two transient menu modals to their OK/ACCEPT outcome the instant
+     * they are active -- detected by their spin flags: the cc33/cb7c battle-list spins on
+     * DAT_2000_a85d==0xff (set <2 = OK), the 7088 briefing (id DAT_2000_4be5==0) spins on
+     * DAT_2000_4be2==0 (set =1 = ACCEPT).  BATTLES is the FIST_MOUSE click above (main menu = robust
+     * fixed point).  FIST_FSG_BATTLE=AZER1 pins the battle in FUN_0000_4754.  No fprintf here -> keeps the
+     * hot pump non-perturbing so the shipped timing is preserved. */
+    { static int ab = -1; if (ab < 0) ab = getenv("FIST_AUTOBATTLE") ? 1 : 0;
+      if (ab && g_mstep_i >= g_mstep_n && g_mem[0x1c000 + 0x1549] != 0x1c) {
+        uint16_t *a85d = (uint16_t *)(g_mem + 0x2a85d);
+        uint16_t *be2  = (uint16_t *)(g_mem + 0x24be2);
+        uint16_t *be5  = (uint16_t *)(g_mem + 0x24be5);
+        if (*a85d == 0xff) *a85d = 0;                          /* battle-list active -> force OK */
+        else if (*be5 == 0 && (*be2 & 0xff) == 0) *be2 = 1;    /* briefing active   -> force ACCEPT */
+      }
     }
 }
 
@@ -3166,9 +3197,11 @@ int fist_extender_gate(void) {
         }
         return 0;
     }
-    fprintf(stderr, "[ext] service op 0x%02x (display-list cmd) inbox=%08x args %04x/%04x/%04x\n", op,
+    { static int extlog = -1; if (extlog < 0) extlog = getenv("FIST_EXTLOG") ? 1 : 0;
+      if (extlog)
+        fprintf(stderr, "[ext] service op 0x%02x (display-list cmd) inbox=%08x args %04x/%04x/%04x\n", op,
             *(uint32_t *)(g_mem + ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c) + 0x3f2),
-            *(uint16_t *)(dg + 0xea1a), *(uint16_t *)(dg + 0xea1c), *(uint16_t *)(dg + 0xea1e));
+            *(uint16_t *)(dg + 0xea1a), *(uint16_t *)(dg + 0xea1c), *(uint16_t *)(dg + 0xea1e)); }
 #ifdef __EMSCRIPTEN__
     /* LIVE web play: the mission loop does NOT re-enter fist_timer_pump (see FIST_R3D_DUMP note above),
        so ticks/palette-fade/frame-post starve in-mission.  op 0x24 is the per-frame cockpit render -- drive

@@ -1,0 +1,15 @@
+board:0012 fire-trigger a286 base-loss ([di+0x92]=0x30) -- di is a DGROUP near-offset, not a host pointer.  Latent SEGV: a286 is only reached when a unit's afa2 aim-gate converges + fires, which never happened in the slow instrumented runs (aim_ok=0), so the wild host-address write surfaced only at full self-play speed (player 0xc05c fires -> crash).  asm 0xa286 `mov BYTE PTR [di+0x92],0x30` (DS=DGROUP); rebase to g_mem+0x1c000+(u16)(di+0x92).
+--- a/fist.c	2026-08-27 15:21:29.785820637 +0200
++++ b/fist.c	2026-08-27 15:21:29.799267075 +0200
+@@ -25612,7 +25612,10 @@
+ void __allregs FUN_0000_a286(int param_1)
+ 
+ {
+-  *(undefined1 *)(param_1 + 0x92) = 0x30;
++  /* PATCH 427: fire-trigger (asm 0xa286 `mov BYTE [di+0x92],0x30`; DS=DGROUP).  di = firing object's
++     DGROUP near-offset, NOT a host pointer -- Ghidra base-lost it -> wild write to host (di+0x92) that
++     SEGV'd the instant afa2's aim-gate first converged and fired.  Rebase to DGROUP. */
++  *(unsigned char *)(g_mem + 0x1c000 + (unsigned short)(param_1 + 0x92)) = 0x30;
+   return;
+ }
+ 
