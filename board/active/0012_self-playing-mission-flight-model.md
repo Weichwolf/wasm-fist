@@ -1651,3 +1651,37 @@ Combat is REAL and correct (16->10 kills, cascade end-to-end, crash-free, missio
 primary remaining blocker is AI unit NAVIGATION (drive-to-goal steering toward distant enemies), measured
 via a stable min_dist floor.  Secondary: a294 effect-leak, turret-aim sustain, and the harness tick-gate
 needed to VERIFY resolution.  Goal unmet; the remaining work is precisely located and evidence-backed.
+
+## HARNESS DETERMINISM — root pinned: menu-load is PUMP/RENDER-paced, not tick-paced (2026-08-27)
+
+Attempted a TICK-GATED mouse (gate each click on the phase-local [0x452] delta instead of a pump count)
+to get a deterministic fast run.  It got HALF way: steps 0-5 (BATTLES + OK) fire correctly spread across
+[0x452] 10->216, but the ACCEPT clicks (6-9) FAIL -- in a fast run the OK->briefing transition does NOT
+happen (no [0x452] reset), so ACCEPT fires on the wrong screen and AZER1 never loads (a296 stays 0).
+
+ROOT (measured): the menu SCREEN transitions (main-menu -> battle-list -> briefing) are driven by the
+PUMP-paced 206f RENDER, not by [0x452] ticks.  So at the same [0x452] tick a fast run and a slow run are on
+DIFFERENT screens.  Neither pump-gating (breaks when instrumentation changes the pump/tick ratio) nor
+tick-gating (breaks because screens are render-paced) aligns a click with screen-readiness.  Evidence:
+[0x452] at menu-ready is non-repeatable across instrumentation levels (0 vs 4382), and the OK->briefing
+[0x452] reset (216->133 in a correct load) simply does not occur in a fast run.
+
+THE FIX (concrete, next step) -- one of:
+  (a) Gate each click on the 22dd interpreter SCREEN-STATE (DAT_2000_0a86 cursor + the phase byte at
+     [0x1548]/[0x1549]; the 22dd menu phases at fist.c:12393) -- fire the click when the expected screen is
+     actually active.  Fully robust to pump/tick ratio.  Needs the per-screen 22dd phase values.
+  (b) DIRECT mission-load invocation (bypass menus), like FIST_CAM_SELFTEST directly calls FUN_0000_ef5e:
+     set the selected-mission state to AZER1 and call the briefing/mission-start entry directly -> the
+     self-play then runs deterministically at full CPU speed with NO menu navigation.  Needs the
+     mission-start entry + selected-mission state layout.
+This harness determinism is IN-SCOPE for the goal ("finishing the mission-load path", "deterministic, no
+wall-clock, as fast as the CPU allows") and is the PREREQUISITE for verifying resolution + native==wasm:
+without a fast reliable load, navigation fixes cannot be falsified and a full self-play run cannot complete.
+
+## Session net (2026-08-27, second half)
+
+SHIPPED: patch 426 (turret-slew 16-bit width).  DIAGNOSED (evidence-backed, ungated): combat cascade is
+correct (a296 16->10, 6 kills); it plateaus because units do not close range to the 10 survivors
+(navigation / drive-to-goal); the sim ticks at ~15 Hz correctly.  PINNED: the harness-determinism root
+(menu-load render-paced) that blocks a fast reliable AZER1 load, with two concrete fix paths.  Goal unmet;
+the two remaining blockers (unit navigation + deterministic mission-reach) are now precisely located.
