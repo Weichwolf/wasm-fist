@@ -1384,3 +1384,56 @@ independent, asm-mapped blockers remain:
 So the finish = (1) resolve the friendly-roster saturation (despawn/dedup on the d81e/b1a2 path) + (2) land
 the fire-dispatch far-call + spawn-method repair -> real sustained projectile combat -> a side to 0; then
 op-0x4c render (board:0001) + wasm byte-identity.  Steering (the long-claimed oracle blocker) is DONE.
+
+## ROOT CAUSE of BOTH remaining blockers FOUND: b1df orphans b21d slots (2026-08-27, asm-verified)
+
+Subagent + asm proof settled the object-allocation model, and it is the SAME root for the a294 leak AND
+the no-firing:
+  - FUN_1000_b21d (0x1b21d) is the POOL ALLOCATOR: AX=type/class key IN; it walks the friendly (0xa022
+    stride 0x37) / enemy (0xc05c stride 0xfb) pool for a free slot, stores AX as the slot's word[0], and
+    returns DI = the NEW object near-offset (CF on full).  The roster tables ARE the object storage.
+  - FUN_1000_b1a2 (patch 200) uses b21d's returned DI correctly.  FUN_1000_b1df (patch 258) does NOT: it
+    runs b21d (a294++, allocating a slot) but then registers the CALLER's param_2 and DROPS b21d's DI.
+    So EVERY b1df call ORPHANS a b21d slot -> a294 climbs to the 0x96=150 cap purely from orphaned slots
+    (491 effect b1df calls at load via ba49/a93e) = THE a294 LEAK; and no fresh projectile/effect object
+    is ever really produced = units never fire.  asm: b1df `call b21d; ... mov [si],di` uses b21d's DI.
+
+## The fix is a COUPLED spawn+despawn cascade (attempted, reverted -- needs both halves) (2026-08-27)
+
+Landed b1df->return-b21d-DI + threaded ba33/ba49 to use the fresh object (all asm-verified).  RESULT: the
+early crash cleared, but the sim then HANGS -- b1df now correctly registers a FRESH object per call into
+the 182-slot display table 0xdfbc, but nothing DESPAWNS them, so they accumulate and overflow the table
+walk (`while(word[si]) si+=4` runs off the end).  So the spawn fix is correct but INSUFFICIENT alone: the
+object model only stays bounded if spawn (fresh alloc) and DESPAWN (free the pool slot + display slot via
+b2ef) are BOTH faithful.  Reverted to keep the tree green (steering 421/422/423 stay committed).
+
+EXACT asm-verified C to land next session (from the subagent, all proven against fist_dat_image.bin):
+  A. b1df (0x1b1df): `di=(u16)b21d(param_1); if(cf)return 0; walk 0xdfbc; [si]=di; [si+2]++; zero di+4..;
+     return di;`  (CORRECTS patch 258; the return is DI=new obj, consumed by 7745/ba33; b294 base-lost, ok)
+  B. ba33 (0xba33): `si=(u16)b1df(4,0); if(!cf) ba5d(template,si); return si;`  ba49 (0xba49):
+     `si=(u16)ba33(param_1,param_3); [si+4]=DAT_5c7f; [si+8]=DAT_5c83;`
+  C. FIRE dispatch 7e29/899c/91b8/99a2 (0x7e29 ...): the `movzx bx,[di+0x91]; shl bx,1;
+     call DWORD PTR cs:[bx+0x7e77]` is a FAR call (seg 0x0f69) into the spawn method table @ CS0 0x7e77
+     (4 far ptrs -> 7745/778a/77cf/7814); rebase to
+     `fist_icall_far(*(u32*)(g_mem+(u16)(0x7e77+(byte[di+0x91]<<1))))` with FIRER(di) threaded as the DI
+     arg + capture the returned CF (jb) into the bf77-vs-bf94/bf3c selection.  Tables: 899c=0x89ee,
+     91b8=0x9206, 99a2=0x99f4; per-type sound fallback byte-tables 0x8f06/0x90f2/0x91a0/0x9246.
+  D. 7745/778a/77cf/7814 (0x17745 ...): cooldown WORD [di+0xad/0xaf/0xb3]; a265(0,0,firer); proj=(u16)
+     b1df(8|9|10,0); if(cf) return no-fire; b725/b73b/b767(0,proj,firer,0); [firer+0xa8]=0x14; 9b5c(firer);
+     c047(0xc,0,firer); [firer+0x3c]=0x10; [firer+0x92]=0; g_fist_cf=0.  (widths: cmp/dec WORD [di+0xad];
+     mov BYTE for the rest; clc/stc = fire/no-fire.)
+  E. b725 (0xb725, base-lost): param_2=SI=proj, param_3=DI=firer; [proj+0x2a]=5; [proj+0x1b]=0x355;
+     ace0(param_1, target=word[firer+0x97], proj, firer, ...).  DOWNSTREAM ace0 (0x1ace0 = 0f69:b650) is
+     the launch/trajectory integrator (writes proj velocity) -- must be checked next or the projectile
+     spawns but does not move.  9b5c/9b6f (muzzle flash via b1d6(0x12)) cosmetic but base-lost -> fix too.
+  F. DESPAWN half (REQUIRED to stay bounded): the per-tick effect update must reach b2ef to free the pool
+     slot (a294--) + clear the display+registry slot when the effect's life expires.  bab4 (0xbab4) is the
+     type-4 despawn (b354->b2ef) but was measured NOT dispatched -> find the actual per-tick method for the
+     b1df-spawned objects (they ARE in the 9fbc/0xdfbc registry that c0e5 walks; identify their update
+     vector) and migrate it so life[0x20] counts down to b2ef.  Land spawn (A-E) and despawn (F) TOGETHER
+     (verify a294 stays bounded + b2ef fires) -- landing spawn alone overflows (proven this session).
+
+STATUS: steering DONE+committed (combat starts, a296 16->10).  The fire+effect subsystem is now fully
+diagnosed with exact asm-verified C, but it is a COUPLED spawn+despawn cascade (~15 functions) that must
+land as a unit -- genuine multi-session work, NOT a bounded single patch.  Goal unmet; every remaining
+piece is located, asm-specified, and falsifiable.
