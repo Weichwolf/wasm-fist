@@ -2519,3 +2519,23 @@ leak-free); four wrong hypotheses disproven (a294/a296, op-0x58, reload, faction
 a coupled movement(divergence)+acquisition(low-supply) system with object model/LOS/fire-decision proven
 correct beneath it; and the mem-hook oracle-dump TOOL built (the prerequisite for the direct oracle
 comparison), with the remaining piece being the original's in-mission DGROUP addressing.  All pushed.
+
+## FACTION BIT definitively RULED OUT (direct experiment) + no projectiles ever spawn
+
+FIST_FIXFACTION experiment (shim, non-perturbing): forced byte[obj+0x16] bit3 = the unit's SIDE for ALL
+units each tick, so aa08's filter (cand[0x16]&8 == scanner's [0x96ab]) cleanly separates factions.  Result:
+a296 = 16 unchanged, ZERO deaths -- identical to baseline.  So the faction bit / aa08 side filter is NOT
+the blocker (a clean direct disproof, confirming the earlier shaky-oracle-data disproof).  Five hypotheses
+now ruled out by experiment: a294/a296-signal, op-0x58, reload-stuck, faction-bit, engagement-AI-generic.
+
+KEY OBSERVATION (reframes the remaining work): a294=120 and a296=16 are PERFECTLY STABLE across every run
+(2000..120000 ticks) -- NO object churn at all.  Since projectiles/effects are pool objects, stable pool
+counts mean **NO projectile is EVER spawned** in the held+437 build.  The fire-decision fires (afa2 a286=20)
+but NOTHING is allocated -> no projectile -> no hit -> no damage -> no death -> no resolution.  So the
+single mechanical blocker is: **the fire-request (a286 -> [0x92]) does not result in a projectile-object
+spawn** (b1df allocation).  The spawn dispatch for the actual firing units (type-0 via 7c1d->7e29; type-2
+via 902c's path) either never opens its gate or never calls the allocator.  This is a BOUNDED, mechanical
+question (does b1df get called during combat? if not, which gate blocks?), measurable non-perturbingly
+with a single allocation counter -- the cleanest next probe, and NOT the acquisition/movement rabbit holes.
+The perturbation-prone 7e29 measurements are superseded; the reliable signal is the stable pool count =
+zero spawns.  Goal not met; the mechanical frontier is now "why does a286 not produce a b1df spawn".

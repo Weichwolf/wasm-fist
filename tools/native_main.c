@@ -650,6 +650,18 @@ void fist_timer_pump(void){
       { int b = *(uint16_t *)(g_mem + 0x1c000 + 0xe296);
         if (b >= 15) g_a296_loaded = 1;
         if (g_a296_loaded && b < g_min_a296) g_min_a296 = b; }
+      /* DIAGNOSTIC (FIST_FIXFACTION): test the aa08 side-filter hypothesis -- force byte[obj+0x16] bit3
+       * = the unit's SIDE (byte[type-0x19ec]&1), so [0x16]&8 cleanly separates factions.  If units then
+       * engage the OTHER side (combat -> deaths, a296 drops), the faction bit was a real blocker.  Few
+       * writes/tick -> non-perturbing.  NOT a shipped patch -- an experiment. board:0012 */
+      if (in_mission && getenv("FIST_FIXFACTION")) {
+        unsigned char *dg = g_mem + 0x1c000; unsigned short *fbc = (unsigned short*)(dg+0xdfbc);
+        for (int i=0;i<0xb6;i++){ unsigned short s=fbc[i*2]; if(!s) continue;
+          unsigned short t=*(unsigned short*)(dg+s);
+          unsigned char side=dg[(unsigned short)(t-0x19ec)]&1;
+          unsigned char *f16=&dg[(unsigned short)(s+0x16)];
+          *f16 = (unsigned char)((*f16 & ~8) | (side<<3)); }
+      }
       /* DIAGNOSTIC (FIST_DUMP_REG): one-shot dump of the 0x9fbc object registry once in-mission, to
        * resolve the tree object model for the plant-tree editor harness (tree type discriminator +
        * body/coord layout). Reads only; env-gated; no effect on any flow. */
