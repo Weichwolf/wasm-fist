@@ -2396,3 +2396,26 @@ oracle by the resolution gap itself (oracle wipes the player in ~2.5min; port = 
 non-perturbing-measurable defects to verify+fix next (player faction bit [0x16] bit-3 unset; low target
 acquisition), plus the oracle-dump tooling prerequisite above.  Discipline lesson banked: only the one-shot
 dumpreg is non-perturbing; hot-path counters stall the timing-sensitive sim into false states.
+
+## Oracle partial parse (page-walked): re-weights the two threads
+
+Page-walked the R9200CAP dump's cr3=0xe000: CPU-linear 0x1c000 -> guest-phys 0x1c000 (IDENTITY, confirmed).
+Registry at 0xdfbc parses only 11 coherent units (the c0xx unit pages are paged/not-present at render time,
+so most slots' fields read garbage -> the parse is PARTIAL, not a full 109-unit comparison).  But the 11
+coherent units carry two informative signals:
+  1. WITH-TARGET = 9/11 (82%) in the oracle vs 1/109 (~1%) in the port.  Suggestive (not conclusive given
+     the partial parse) that the ORIGINAL acquires+holds targets abundantly where the port barely does ->
+     reinforces thread B (acquisition/engagement) as the real divergence, consistent with the resolution
+     gap (oracle wipes the player; port zero deaths).
+  2. faction (side,bit3) is MIXED in the oracle too: (1,0)=5,(1,1)=2,(0,0)=3,(0,1)=1 -- both bit3 values
+     appear on each side, exactly like the port.  So [0x16]&8 is NOT a clean faction discriminator in the
+     ORIGINAL either -> the port's "mixed faction bit / player bit3=0" is very likely NORMAL, not a bug.
+     This WEAKENS thread A (player faction bit): [0x16]&8 is probably not the side filter it looked like,
+     and the player targeting c34d may be a legitimate transient, not the blocker.
+Re-weighted conclusion: the single real blocker is thread B -- target ACQUISITION/engagement supply
+(oracle: most units engaged; port: near-none).  The port's aa08->ae32->afa2 chain is present and correct
+per-step but produces far too few sustained targets.  The next session's cleanest decisive move is a FULL
+oracle unit-field comparison (needs the unit pages present -- either a non-render-time full dump via a
+mem-hook-triggered fist_dump, or page-walk EVERY slot's fields as done here but at a tick where the unit
+pages are resident) to measure the original's per-unit target/acquire rate directly and find why the port's
+scan yields ~1% vs the oracle's ~80%.  Thread A (faction bit) deprioritised.
