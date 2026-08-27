@@ -2586,3 +2586,27 @@ This is the tightest the blocker has been: object model + LOS + acquisition + fi
 + spawn-dispatch reach (7e29 1440x) ALL proven; the single mechanical defect is the FIRING unit's reload
 counter [0xa8] being frozen (no 7d69 decrement in combat), so the spawn gate [0xa8]==0 never opens.  Goal
 not met; this is the mechanical root, one bounded probe from the exact base-loss.
+
+## CLOSING SYNTHESIS: the root is the ENGAGEMENT-HOLD (full mechanical chain, proven)
+
+table1[0] = word[image:0x7c91] = 0x7d69, and 0x7d69 IS the reload fn (`cmp BYTE[di+0xa8],0`) -- so the
+dispatch is CORRECT (not base-lost).  The complete, non-perturbing chain now closes:
+  1. afa2 fires a286 (aim converges) -> sets [0x92]=0x30 (48-tick fire-request window), re-set each tick
+     the aim stays converged.
+  2. 7c1d dispatches 7d69 (reload) 1/16 ticks -> [0xa8] DOES reach 0 for idle units (dumpreg confirms).
+  3. 7e29's spawn gate needs [0x92]!=0 (or [0x17]&0x80) AND [0xa8]==0 in the SAME window.
+  4. But the reload [0xa8] init (table 0x8f54[weapon>>1], ~20-70) decrements 1/16-tick -> ~320-1120 ticks
+     to reach 0, while the fire-request [0x92] lasts only 48 ticks (decrements 3 per window).  So the
+     fire-request EXPIRES ~7-23x before the reload completes.
+  5. For the gate to open, the aim must STAY converged for the whole reload (~320+ ticks) so [0x92] is
+     continuously re-set until [0xa8] hits 0.  The port's units do NOT hold aim/target that long (they
+     drift apart -- median cross-side distance grows -- and the target churns), so [0x92] and [0xa8]==0
+     never coincide -> 7e29 gate-open=0 -> no spawn -> no combat.  The oracle HOLDS engagement across the
+     reload (it resolves), so this is the divergence.
+So after the full session, the root is the ENGAGEMENT-HOLD -- units sustaining an aimed target across the
+~21s (320-tick) reload -- exactly board:0012's original thesis, now proven with a complete measured chain
+(object model / LOS / acquisition / fire-decision / reload-dispatch ALL correct; the single failure is aim/
+target persistence across the reload window).  This is a deep AI/movement property (hold formation + track
++ aim under the reload timer), NOT a single base-loss -- genuine multi-session work, but now the mechanism
+is fully understood end-to-end and the exact gate ([0x92] & [0xa8]==0 coincidence) is measurable to verify
+any fix.  Goal not met; the mechanism is closed.
