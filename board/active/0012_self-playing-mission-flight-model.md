@@ -2939,3 +2939,32 @@ the cand/tgt scoring that SIMTRACE reports) -- find why, with correct a18e angle
 a threshold/cone/scoring comparison that only passed under the old wrong (coarse/-90deg) angles.  Then the
 fire cascade (438, proven) -> flat shells -> collision -> b691/b2ef damage should follow.
 Goal not met; but the aim/heading atan2 is now correct+verified and the blocker is a single named subsystem.
+
+## Target-selection blocker traced: the combat-AI STATE MACHINE, not one check
+
+With faithful 077e + 0578 fix (correct ~-5.77deg aim), instrumented the acquire chain over 90s AZER1:
+  [AE32]    calls=2  gate1-ok(tmr&&notgt)=0            (ae32 = the target-ACQUIRE method)
+  [ACQUIRE] a6e3-calls=0  reached-e20a=0               (a6e3/e20a LOS never even reached)
+  SIMTRACE  cand=1 tcnt=1 tgt=0 firereq=0  ace0-inits=0
+So the promotion candidate([0x9d]) -> target([0x97]) -> fire never runs because its ENTRY method ae32 is
+barely dispatched (2x/90s).  ae32 is not a standalone call: ab03 (PATCH 246, the per-object animation-frame
+method) dispatches it through the weapon-frame sub-tables word[DS:(frame&0xf)*2 - 0x6704 / -0x6724], indexed
+by the object's type-slot [di+0x1b], frame-counter [di+0x42], and flag [di+0x40]&1.  So target-acquire fires
+only when a unit is in the specific weapon animation-frame/state that selects ae32 in those tables.
+
+INTERPRETATION: the correct aim/heading atan2 (077e) puts units into DIFFERENT AI/weapon states than the old
+broken angles did -- with the old -90deg/coarse angles the units reached the fire/acquire states (ace0 ran,
+shells spawned+plunged); with correct angles they do NOT reach them (ace0=0, ae32~0).  The old "firing" was
+the broken aim accidentally driving the state machine into fire; correct aim exposes that the DOWNSTREAM
+combat-AI chain -- turret-alignment gate on afa2 (fire-decision), the ae32/a6e3 acquire, e20a LOS -- does not
+yet complete on its own.  This is a MULTI-FUNCTION AI-state frontier, not a single threshold.
+
+So the honest decomposition of "mission resolves" is now COMPLETE and layered:
+  1. [DONE, verified] aim/heading atan2 (077e) -- correct to <0.1deg, all octants; fixes steering direction.
+  2. [BLOCKER] combat-AI state machine: units must reach the weapon-frame state that dispatches ae32 (via
+     ab03 frame-tables), acquire ([0x9d]->a6e3->[0x97], LOS via e20a), align turret, and let afa2 fire.
+     Trace: why, with correct angles, units don't enter that state (o[0x1b]/[0x42]/[0x40] evolution, and the
+     afa2 fire-decision's aim-alignment gate) -- likely the turret-rotation servo (a3e2/a3ec, patch 437) not
+     converging the gun to the now-correct bearing.
+  3. [THEN] the proven fire cascade (438) -> flat shells (correct elevation) -> collision -> b691/b2ef damage.
+The core math is solved and verified; the remaining is the combat-AI state chain, precisely named per layer.
