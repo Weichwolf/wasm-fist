@@ -1575,3 +1575,35 @@ symptom, and it is why board:0013 (the dynamic block-trace) is the right tool: i
 values (unit-Z, the rank/range thresholds, the LOS index resolution) that pin each layer, instead of the
 guess-and-isolate loop.  With the instrumented dosbox-fist absent from this environment, each layer's
 faithful data is not observable here -- the tool boundary, not a method boundary.
+
+## *** BREAKTHROUGH: REAL AI-vs-AI COMBAT (2026-08-27, via the block-trace + oracle) ***
+
+Built the FIST_BLKTRACE hook into dosbox-fist (board:0013), ran AZER1 self-play under it -> the flight
+model is cs=0x2082 = FIST.DAT relocated (decompiled, not overlay).  Then the DECISIVE fixes that made the
+mission genuinely fight:
+  1. e339 SERVICE-OP RETURN CLOBBER (committed): e339's task-scheduler tail (far-jmp [DGROUP:0x58] when
+     aa10!=0 && TCB!=0) overwrote the op-0x58 LOS callback return with a trap-0 -> e1f0/aa08 always saw
+     "not visible" -> NO target ever locked.  Fix: a service op consumes its selector (clear aa10) so
+     e339 returns the callback result.  This one bug masked ALL of target acquisition.
+  2. unit-Z terrain-follow (op-0x58, camera-Z class stand-in for the paged-out overlay ground-clamp).
+  3. PATCH 425: target-acquire chain base-loss migration -- a6e3 (acquire), e20a (target op-0x58 LOS,
+     mirrors e21c, returns the result), a4b2 (player target-lock HUD msg, STRSEG).
+
+RESULT (AZER1 self-play, crash-free, mission-cockpit AE=0): the real AI targeting runs END TO END --
+scan (tcnt 1->6) -> target lock (tgt 1->3) -> fire request (firereq 0->5) -> **a296 (enemy side) drops
+16->10 via genuine target-locked fire** (b2ef enemy-destroys=6, verified; NOT the emitter artifact).
+The mission now plays itself and fights.
+
+REMAINING to a resolved win/lose (the last mile):
+  - COMBAT STALLS at a296=10: after the initial burst firereq drops to 0 (targets still present, tgt=1)
+    and a294 caps at 150 (b2ef friendly-destroys=0 -- friendly effects never despawn).  Two coupled
+    sub-blockers: (a) sustained turret AIM/fire (why firereq falls to 0 with a target locked -- the a265
+    aim / afa2 in-range+aim gates), and (b) the a294 effect-leak (81 load effects fill the friendly roster
+    so friendly projectiles/effects can't spawn).  The b1df object-model cascade is NOT the a294 fix (it
+    REGRESSES the working fire path -> reverted); the leak is the load-effect despawn (a93e/ba49 spawns,
+    bab4-class despawn not firing).  Diagnose with the now-working oracle write-trace (FIST_WATCHFLAT) on
+    a294 + the aim fields, and the block-trace for the oracle's sustained-fire path.
+  - Then native==wasm byte-identity across the run + op-0x4c windshield render (board:0001).
+
+The mission is no longer frozen -- it self-plays and fights.  Resolution is the sustained-combat last mile
+(aim + a294), now fully tooled (in-repo oracle + block-trace) and located.
