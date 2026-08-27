@@ -2839,3 +2839,52 @@ the proj near-offset, or the oracle's projectile velocity at spawn) -> determine
 stale g_fist_rot_h, or a wrong-aim (straight-down) from the AI targeting.  The combat mechanism is proven
 (438 spawns shells that fly+despawn); the ONE missing link is the shell's horizontal velocity so it reaches
 a target and its terrain-collision fires.  Goal not met; blocker localized to a single velocity vector.
+
+## ROOT CAUSE FOUND + PARTIAL FIX: 0578 passes WRONG args to 077e -> shells aim straight down (-90 deg)
+
+The straight-down plunge (velZ=-16384, velX=velY=0) is NOT a render/Z-scale issue.  It is a wrong-argument
+bug in the ballistic-aim: ace0's guidance (fist.c ~65235) calls a18e -> 0578 -> 077e to compute the
+elevation-to-target g_fist_a18e_bx, then a192 turns (azimuth, elevation) into the velocity.  When the
+elevation is -90 deg the horizontal velocity is speed*cos(-90)=0 -> the shell drops straight down at the
+firer's own feet and never reaches a target (e1a6 terrain-collision never fires -> a296 frozen at 16).
+
+ASM PROOF (0578, file off 0x578; objdump -m i8086):
+  585 mov ax,[di+8]; 588 sub ax,[si+8]      -> ax = dZ_lo (16-bit)   (di=param_5 tgt, si=param_4 shell)
+  58b mov dx,[di+0xa]; 58e sbb dx,[si+0xa]  -> dx = dZ_hi (16-bit, with borrow)
+  581 mov bx,ax (range_lo); 583 mov cx,dx (range_hi)   [range = 0x927 return, pushed]
+  591 call 0x77e   -> 077e(ax=dZ_lo, dx=dZ_hi, bx=range_lo, cx=range_hi)
+077e's param<->register map (from its sign-fold order, fist.c ~5400): param_1=ax, param_2=cx, param_3=dx,
+param_4=bx.  So the CORRECT call is 077e(dZ_lo, range_hi, dZ_hi, range_lo).
+BUT patch 431 wrote:  077e(dZ_32bit, param_2_STALE(0578's own param_2, e.g. 0x7c1d), garbage_32bit_read_at+0xa, iVar2)
+-> param_2 (must be range_hi) got a stale 0x7c1d, param_3 (must be dZ_hi) got a 32-bit read straddling the
+next struct field -> X and Y corrupted -> elevation = -0x4000 (-90 deg) every shot.
+
+PARTIAL FIX (verified to change behaviour, held not shipped -- see residual below):
+  in 0578, replace the 077e call with:
+    { int dZ = (int)(*(uint*)(param_5+8) - *(uint*)(param_4+8));
+      if (iVar2 == 0) { g_fist_a18e_bx = dZ < 0 ? 0xc000 : 0x4000; }        /* atan2(dZ,0)=+/-90; 077e diverges at range=0 */
+      else { unsigned tz=*(uint*)(param_5+8), sz=*(uint*)(param_4+8); unsigned bor=(tz<sz);
+        short dzhi=(short)(*(unsigned short*)(param_5+0xa) - *(unsigned short*)(param_4+0xa) - bor);
+        g_fist_a18e_bx = (unsigned short)FUN_0000_077e(tz-sz, (uint)iVar2>>16, (uint)(int)dzhi, (uint)iVar2 & 0xffff); } }
+  RESULT (measured, 90s AZER1 self-play):
+    - shell velocity  (0,0,-16384) plunge  ->  (844,844,0) FLAT FLIGHT   [first-shell vel]
+    - e1a6 terrain-collisions  0  ->  30    (shells now descend into the collision regime and hit)
+    - elevation for the combat shot  -16384 (-90)  ->  -8192 (-45)
+    - a296 STILL 16 (no kills) -- see residual.
+
+077e CALIBRATION (FIST_CALIB harness; output is BAM, 0x2000=45deg, 0x4000=90deg):
+  077e(0,1000)=0    077e(1000,1000)=0x2000(45)   077e(1000,0)=0x4000(90)   [these 3 are CORRECT]
+  077e(2304,22782)=0     077e(-2304,22782)=-0x2000(-45)     077e(1000,10000)=0
+  -> ASYMMETRIC: +dZ shallow rounds to 0, -dZ shallow jumps to -45.  atan2(2304,22782)=+5.77deg=~+0x418 for
+     BOTH signs.  So 077e's OWN decompile mishandles the negative-dZ sign-fold (16-vs-32-bit widening: the
+     folding negates the full 32-bit param_1/param_4 and cascades a 2nd fold via (int)param_2<0), and there
+     is a DAT_2000_dad0-dependent branch at fist.c:5477 the calibration ran with dad0=0.  So the residual
+     is a SEPARATE bounded bug in 077e itself, exposed now that 0578 feeds it the right register roles.
+
+NEXT (two bounded threads, both now precisely scoped):
+  1. Fix 077e's decompile so its sign-fold matches the asm 16-bit registers for negative dZ / shallow angles
+     (calibrate every octant vs atan2; mind DAT_2000_dad0).  Target: 077e(-2304,22782) ~= -0x418, not -0x2000.
+  2. Once the elevation is correct and shells reach targets, verify the b691 explosion -> b2ef splash-damage
+     chain (now REACHABLE: e1a6 already fires 30x) actually drops enemy a296.
+The mission blocker is no longer vague: it is 077e's angular accuracy + the damage cascade, both asm-scoped.
+Goal not met, but the root cause is found and a fix that makes shells fly flat + collide is proven.
