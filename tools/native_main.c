@@ -339,6 +339,7 @@ extern int g_menu_ready;
 #define BIOS_TICK_LIN 0x46C
 unsigned short g_fist_a18e_bx=0;
 long g_a286=0,g_7e29=0,g_7745=0;
+long g_reinit_a8=0,g_7d69dec=0;
 long g_b1df_n=0,g_b1df_late=0,g_7e29ent=0,g_7e29gate=0;
 long g_min_a296 = 0x7fffffff;
 long g_min_los = 0x7fffffffL;   /* non-perturbing: min cross-side |dx|+|dy| over op-0x58 queries once combat starts */
@@ -481,6 +482,7 @@ static void fist_dump_and_exit(const char *why){
       extern long g_a286,g_7e29,g_7745; fprintf(stderr,"[chain] a286-request=%ld  7e29-dispatch=%ld  7745-spawn=%ld\n",g_a286,g_7e29,g_7745);
       extern long g_b1df_n,g_b1df_late; fprintf(stderr,"[spawn] b1df-total=%ld  b1df-in-combat(tick>1000)=%ld\n",g_b1df_n,g_b1df_late);
       { extern long g_7e29ent,g_7e29gate; fprintf(stderr,"[7e29] entered=%ld  gate-open(spawn-dispatch)=%ld\n",g_7e29ent,g_7e29gate); }
+      extern long g_reinit_a8,g_7d69dec; fprintf(stderr,"[reload] 7963-reinit-a8-in-combat=%ld  7d69-decrement-in-combat=%ld\n",g_reinit_a8,g_7d69dec);
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }

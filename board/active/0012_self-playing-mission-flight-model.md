@@ -2564,3 +2564,25 @@ value (~0x46) forever.  Next probe (non-perturbing single counters, NOT hot-path
 entries for firing units + whether [0x3d] advances -- i.e. does the reload cursor turn for the units in
 7e29.  This is the single mechanical thread; object model / LOS / fire-decision / acquisition all proven to
 reach here.  Goal not met; the mechanical root is the firing unit's frozen reload cursor.
+
+## Reload FROZEN in combat: 7d69-decrement=0 AND 7963-reinit=0 (clean, non-perturbing)
+
+Single-counter probe (combat = tick>1000): 7963 [0xa8]=table re-init = 0, AND 7d69 [0xa8]-- decrement = 0.
+So during combat the reload counter [0xa8] neither advances nor resets -- it is FROZEN.  Units that reached
+[0xa8]=0 before combat (the IDLE ones, seen in the dumpreg) stay 0; the FIRING units (entering 7e29 with
+[0xa8]!=0) stay nonzero forever -> 7e29 gate-open=0 -> no spawn (b1df-in-combat=4) -> no combat.
+
+The mechanism narrows to: 7d69 (the reload decrement, dispatched by 7c1d's table1 word[0x7c91+([0x3d]&0x1e)]
+when the cursor hits slot 0) is NOT decrementing the firing units' [0xa8] in combat, even though 7c1d runs
+for them (7e29 entered 1440x) and [0x3d]+=2 every 7c1d call (line 21349) so the cursor should hit slot 0
+every 16 calls.  Possible causes, each bounded: (a) table1[0] (word[0x7c91]) does not actually point to
+FUN_0000_7d69 (the counter was in that function; a different/base-lost table entry would explain the 0),
+(b) the firing units carry [0x17]&0x80 STUCK so they spin in 7e29 but their per-tick 7c1d path skips the
+table1 reload slot, (c) their [0xa8] init value is a "never" sentinel.  Next probe (non-perturbing single
+counters): at 7c1d's table1 dispatch site (line 21352) record the dispatched offset when [0x3d]&0x1e==0 --
+confirm whether table1[0] == 0x7d69 and whether it fires for [0xa8]!=0 units.  That pins (a) vs (b).
+
+This is the tightest the blocker has been: object model + LOS + acquisition + fire-decision (afa2 a286=20)
++ spawn-dispatch reach (7e29 1440x) ALL proven; the single mechanical defect is the FIRING unit's reload
+counter [0xa8] being frozen (no 7d69 decrement in combat), so the spawn gate [0xa8]==0 never opens.  Goal
+not met; this is the mechanical root, one bounded probe from the exact base-loss.
