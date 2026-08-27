@@ -667,6 +667,12 @@ void fist_timer_pump(void){
             unsigned short moff=*(unsigned short*)(dg+(unsigned short)(t*2-0x1bac));  /* c0e5 update-method offset */
             fprintf(stderr,"[dumpreg] [%3d] slot=%04x val=%04x t=%04x side=%d upd=%04x body:",i,s,v,t,side,moff);
             for(int b=0;b<0x2a;b+=2) fprintf(stderr," %04x",*(unsigned short*)(dg+(unsigned short)(s+b)));
+            /* combat/AI state snapshot: [0x17]ctl [0x26]hdg [0x30]desHdg [0x49]goal(32b) [0x89]aim [0x8b]tgtBrg
+               [0x92]fireTmr [0x94]candTmr [0x97]target [0xa8]reload -- to see engagement/aim/reload posture. */
+            fprintf(stderr," | c17=%02x hdg26=%04x des30=%04x goal49=%08x aim89=%04x tbrg8b=%04x ftmr92=%02x cand94=%02x tgt97=%04x rld_a8=%02x",
+              dg[(unsigned short)(s+0x17)],*(unsigned short*)(dg+(unsigned short)(s+0x26)),*(unsigned short*)(dg+(unsigned short)(s+0x30)),
+              *(unsigned int*)(dg+(unsigned short)(s+0x49)),*(unsigned short*)(dg+(unsigned short)(s+0x89)),*(unsigned short*)(dg+(unsigned short)(s+0x8b)),
+              dg[(unsigned short)(s+0x92)],dg[(unsigned short)(s+0x94)],*(unsigned short*)(dg+(unsigned short)(s+0x97)),dg[(unsigned short)(s+0xa8)]);
             fprintf(stderr,"\n");
           }
         }

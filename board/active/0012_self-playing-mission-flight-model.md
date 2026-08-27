@@ -2072,3 +2072,28 @@ Two independent, both-required pieces for a resolved combat mission, both now pr
 Stable pushed state (429) is the buggy-but-firing baseline (AE=0).  The held patches are the correct fire
 cascade, to land together WITH the engagement-hold fix.  Goal unmet; the last real barrier is the movement
 AI holding engagement -- unchanged by this session's cascade work, but now with the fire path proven correct.
+
+## ORACLE CONFIRMS: AZER1 self-plays to elimination (MISSION LOST, UNITS REMAINING 00)
+
+Decisive oracle run (`tools/oracle` third_party/dosbox-fist, AZER1, empty input = AUTO CONTROL self-play,
+~2.5 min in-mission).  End screen = **"MISSION LOST / OBJECTIVES REMAINING: 13 / ... GROUND UNITS LOST: 04
+/ UNITS REMAINING: 00 / ENEMY GROUND KILLS: 01"**.  So the ORIGINAL resolves AZER1 by ONE SIDE ELIMINATED
+(the player's 4 ground units wiped out by the enemy AI; friendlies scored 1 kill) -- the exact goal
+condition, reproducible in AZER1, in ~2.5 min.  The "AZER1 is quiet" nuance is real but it STILL resolves:
+the enemy AI keeps engaging until the player side is gone.
+
+Port AZER1 self-play (stable, no held patches), FIST_SIMTRACE time-series:
+  - t=366..406: an EARLY skirmish -- firereq up to 5, a296 15->10 (5 destroys), goals oscillate.  This is
+    the ENEMY fire path (types 0x1a/0x1b, upd bc46/b355) landing hits; friendlies never fire (a286=0).
+  - t>=406..30000: TOTAL STALL -- a296=10 forever, firereq=0, tgt=1, cand up to 5, cross-unit min range
+    down to 10833 (<< 0x40000).  Units are CLOSE and find candidates but NOBODY fires.  Mission never
+    resolves.
+
+So the gap is now exact and oracle-anchored: **the port's AI stops engaging after the opening skirmish;
+the original keeps engaging to elimination.**  Registry snapshot (FIST_DUMP_REG) at spawn: every unit has
+tgt97=0000, cand94=00, ftmr92=00, rld_a8=00 -- targeting cold at t~0 (expected).  Steady-state the acquire
+a6e3 (patch 425) does set [0x97] but e20a (op-0x58 LOS) clears most (73%-out-of-range finding), leaving
+tgt=1; and even that one unit never fires.  Both the FRIENDLY fire gate (afa2->a286, AE=0) and the ENEMY
+re-engagement (bc46/b355 stop after the burst) fail to sustain.  Next: split firereq/tgt BY SIDE over time
+to see which side stalls first, and trace an enemy's [0x97]/[0x92]/[0xa8] across the port stall vs the
+oracle resolve.  Goal reproducible + oracle-confirmed; port stall is the barrier.
