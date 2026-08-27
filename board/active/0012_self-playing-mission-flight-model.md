@@ -1940,3 +1940,29 @@ maintain an aim-converged target for ~21 s (the faithful weapon-2 reload) for th
 does not; the original does.  The fix is the drive-to-goal / combat-engagement movement behaviour (units
 must orbit/hold at engagement range instead of flying through), reconstructed against an oracle unit-position
 trace of an original engagement -- a distinct combat-AI work block, now fully quantified and scoped.
+
+## Movement traced to the drive-to-goal: WAYPOINT-based [0x49], not enemy-pursuit (2026-08-27)
+
+Traced the AI steering to ground: the steering servo (a401/a395, patches 422/423) slews the unit heading
+[0x26] toward the DESIRED heading [0x30]; [0x30] is set by ab91/abb7 (patch 328) = bearing from the unit's
+position [obj+4] to a GOAL at [obj+0x49] (via 0541).  And [0x49] (the goal) is set by ac7e (patch 248) from
+a resource DAT_2000_5798 (set by ab03), and by ac9e (patch 396) from a ROSTER-ENTRY position -- i.e. a
+WAYPOINT/formation target, NOT the combat target [0x97].  a9ea/a0a4/a57a are player-only (audio/proximity),
+NOT AI steering.
+
+So the AI units drive toward WAYPOINTS and engage enemies opportunistically as they pass; they do not PURSUE
+[0x97].  They converge (min_dist 39898) but drive THROUGH instead of holding, so the ~21s weapon-2 reload
+never completes during a standing engagement, and no fresh aim-converged request lands after [0xa8] hits 0.
+This is why the port engages ONCE and never re-engages.
+
+## Where the completion sits (fully traced, honest)
+
+Every combat link is faithful and accounted for: reach, crash-free run, targeting-side, op-0x58 LOS, afa2
+fire-decision, aim convergence (1056 requests), weapon-select (0 flicker), the 1/16-tick 21s reload, and the
+spawn cascade (778a/ace0, oracle-confirmed in the original).  The ONLY divergence is that the port's units,
+following the waypoint drive-to-goal, do not sustain/re-establish an engagement long enough for the reload
+-- while the original's do (the user confirms AF self-plays to elimination; the oracle confirms all four
+spawn methods fire).  Closing it means the movement/order layer (the waypoint goal [0x49] set by ac7e/ac9e
+from the mission order data, or a combat-steer override) must keep units engaged -- verified against an
+oracle unit-position trace of an original engagement.  This is the last, deep subsystem, now traced to the
+exact functions (ab91/ac7e/ac9e + 0541) and fields ([0x49]/[0x30]/[0x26]).
