@@ -1685,3 +1685,41 @@ correct (a296 16->10, 6 kills); it plateaus because units do not close range to 
 (navigation / drive-to-goal); the sim ticks at ~15 Hz correctly.  PINNED: the harness-determinism root
 (menu-load render-paced) that blocks a fast reliable AZER1 load, with two concrete fix paths.  Goal unmet;
 the two remaining blockers (unit navigation + deterministic mission-reach) are now precisely located.
+
+## *** MAJOR: full-speed AI-vs-AI self-play runs CLEAN to t=17830 (crash fixed) (2026-08-27) ***
+
+The self-play no longer crashes and no longer needs the slow instrumentation to reach AZER1.  Two base-loss
+SEGVs on the FIRE path -- latent until the aim actually converged and a unit fired -- were the wall:
+  - PATCH 427 a286 (fire-trigger [di+0x92]=0x30): di is a DGROUP near-offset, was a host pointer.
+  - PATCH 428 7e29 (fire DISPATCH): the far spawn-table `call DWORD cs:[bx+0x7e77]`
+    (0f69:80b5/80fa/8184/813f = FUN_1000_7745/778a/7814/77cf) + CF + muzzle-fx table were base-lost.
+With these, an uninstrumented FIST_SIMRUN run plays AZER1 end to end, deterministically, to [0x452]=17830
+and exits clean (was: SEGV the instant the player's aim converged).  This RETIRES the "reach is timing-
+fragile" blocker for the shipped binary -- the fragility was only my INSTRUMENTATION perturbing the
+pump/tick ratio; the shipped (non-perturbing) binary reaches + runs the mission fine (verified with a
+no-I/O outcome tracker, g_min_a296, reported once at exit).
+
+Also added (shim, env-gated, behaviour-neutral): FIST_AUTOBATTLE (force the cb7c/7088 menu modals to
+OK/ACCEPT via their spin-flags a85d/4be2 -> deterministic reach with no click timing), the non-perturbing
+outcome tracker, and a FIST_EXTLOG gate on the [ext] service-op flood.
+
+## Measured outcome over the clean 17830-tick run
+
+a296 plateaus at 10 (min_a296=10) -- 6 killed, 10 survive.  Non-perturbing probes:
+  - nearest surviving cross-side pair = |dx|+|dy| 142388, BELOW the op-0x58 range gate (0x40000) -> at
+    least one survivor is within LOS/scan range (not purely a navigation-out-of-range stall).
+  - 7e29 fires 1056x but the main-gun SPAWN gate `[di+0x91]==4 || [di+0xa8]==0` passes 0 times: the units'
+    main-gun reload [0xa8] is never 0 at the moment 7e29 is reached, and [0x91] is not 4.  So the TURRET
+    main gun never spawns a projectile -- the 6 kills are the emitter path (b51f/c31e), and the turret
+    fire cascade (7745/etc spawn methods, still base-lost) is never exercised.
+
+## Remaining to a resolved win/lose (now precisely two coupled items)
+
+1. FIRE-DECISION / reload coordination: 7e29's spawn gate never coincides with [0xa8]==0.  Either the
+   fire-request ([0x92] via afa2/a286) is not aligned with the reload reaching 0, or [0x91]/[0xa8] carry a
+   residual base-loss (the last 7e29 sample had [0x91]=145, not a 0..6 weapon index -- suspicious).  Fixing
+   this makes tanks fire their main gun (and then the spawn methods 7745/778a/7814/77cf must be landed from
+   the board fire-cascade reference -- asm-verified C ready).
+2. NAVIGATION: whether the 10 survivors are driven into weapon range (emitter or main-gun) -- min_los
+   142388 is within LOS range but likely beyond weapon range, so drive-to-goal still matters.
+The crash + reach are SOLVED; resolution is these two, both located with non-perturbing evidence.

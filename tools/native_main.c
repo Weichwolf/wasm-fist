@@ -337,7 +337,10 @@ extern int g_menu_ready;
  * one pending ISR invocation (capped). For Stage-1 unblocking any correct-enough rate works; the knob
  * is the seam a later deterministic (instruction-counted) tick source will replace. */
 #define BIOS_TICK_LIN 0x46C
-long g_min_a296 = 0x7fffffff;     /* cheapest (no-I/O) mission-outcome tracker: min enemy count once loaded */
+long g_min_a296 = 0x7fffffff;
+long g_min_los = 0x7fffffffL;
+long g_spawn_seen[16] = {0};
+long g_7e29_n=0,g_7e29_gate=0,g_7e29_w91=0,g_7e29_a8=0;   /* cheapest in-range probe: min |dx|+|dy| over LOS queries once loaded */     /* cheapest (no-I/O) mission-outcome tracker: min enemy count once loaded */
 int  g_a296_loaded = 0;           /* set once a296>=15 seen (AZER1 spawned its roster) */
 static volatile sig_atomic_t g_tick_pending;     /* raised by the timer source, drained by the pump */
 #define TICK_PENDING_CAP 8
@@ -472,7 +475,10 @@ static void fist_dump_and_exit(const char *why){
               *(uint16_t*)(g_mem+0x1c000+0xe294), *(uint16_t*)(g_mem+0x1c000+0xe296),
               g_a296_loaded, g_min_a296,
               (g_a296_loaded && *(uint16_t*)(g_mem+0x1c000+0xe296)==0) ? "*** RESOLVED: enemy side eliminated ***" :
-              (g_a296_loaded ? "(mission loaded, not resolved)" : "(mission never loaded a296>=15)")); }
+              (g_a296_loaded ? "(mission loaded, not resolved)" : "(mission never loaded a296>=15)"));
+      extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
+      extern long g_spawn_seen[16]; fprintf(stderr,"[spawn] 7e29 dispatch by [0x91]: 0(7745)=%ld 2(778a)=%ld 4(7814)=%ld 6(77cf)=%ld\n",g_spawn_seen[0],g_spawn_seen[2],g_spawn_seen[4],g_spawn_seen[6]);
+      extern long g_7e29_n,g_7e29_gate,g_7e29_w91,g_7e29_a8; fprintf(stderr,"[7e29] entries=%ld gate_pass=%ld  last[0x91]=%ld [0xa8]=%ld\n",g_7e29_n,g_7e29_gate,g_7e29_w91,g_7e29_a8); }
             { extern void fist_sb_flush(void); fist_sb_flush(); }   /* finalize any SB PCM/WAV capture */
             { extern void fist_opl_flush(void); fist_opl_flush(); } /* finalize any OPL FM PCM/WAV capture */
             { extern void fist_snd_diag(void); fist_snd_diag(); }   /* sequencer-fed diagnostic */
@@ -1471,6 +1477,7 @@ int fist_extender_gate(void) {
             oz = ((int32_t)hm[oi&0x3fffff]<<8) + 1792;
             cz = ((int32_t)hm[ci&0x3fffff]<<8) + 1792;
         }
+        { extern long g_min_los,g_min_a296; long ad=(cx>ox?cx-ox:ox-cx)+(cy>oy?cy-oy:oy-cy); if(g_min_a296<16 && ad<g_min_los) g_min_los=ad; }
         int32_t dx=cx-ox, dy=cy-oy, dz=cz-oz;
         if (!hm || dx>=0x40000 || dy>=0x40000 || dx<=-0x40000 || dy<=-0x40000) return 0; /* out of range */
         dx<<=13; dy<<=13; dy=-dy; dz<<=16;                                    /* scale; Y flip */
