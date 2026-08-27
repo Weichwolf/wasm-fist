@@ -2466,3 +2466,32 @@ stays 0 -> aa08 scan under-supplies), or (b) gets one but ae32 never promotes (R
 then immediately clears (churn) -- each points to a different bounded fix.  Movement (units diverge) is a
 secondary factor -- it reduces opportunities but in-range pairs exist and still don't engage, so the
 acquisition-hold rate is the primary blocker.  Goal not met; this is the precise, non-perturbing frontier.
+
+## TOOL BUILT: mem-hook mid-mission full-dump in dosbox-fist (FIST_MEMDUMP_N)
+
+Built the identified prerequisite -- a mid-mission guest-RAM dump with unit pages RESIDENT.  The SIGUSR2
+dump path never fires in-mission (gated on 0xA0000 writes the render bypasses) AND the SIGUSR2 signal never
+sets fist_req in-mission (DOSBox/SDL overrides the constructor-installed handler -- confirmed: fist_memrec
+runs 2200M+ times with req=0).  Fix (in third_party/dosbox-build/dosbox-0.74-3/src/hardware/vga_memory.cpp,
+top of fist_memrec, gitignored so recorded here): a write-count auto-dump --
+    static ull _n=0,_thr=0; static int _done=0;
+    if(_thr==0){const char*e=getenv("FIST_MEMDUMP_N"); _thr=e?atoll(e)*1000000ULL:~0ULL;}
+    if(!_done && ++_n>=_thr){_done=1; fist_dump(); return;}   // + fwd-decl static void fist_dump(void);
+WORKS: FIST_MEMARM_BOOT=1 FIST_MEMDUMP_N=1500 -> /tmp/<prefix>.ram.bin (16MB) at ~mid-combat.  Rebuild:
+`cd third_party/dosbox-build/dosbox-0.74-3 && make -j4 && cp src/dosbox ../../dosbox-fist`.
+
+REMAINING BLOCKER for the oracle comparison: parsing the dump's DGROUP.  The original runs under the
+extender's PM with DS base 0x10000000 and WRAP addressing (cam.txt: dsb=0x10000000, ptr 0xf0010000 wraps to
+CPU-linear 0x10000) -- so the oracle's DGROUP/unit-body linear addresses do NOT follow the port's real-mode
+seg<<4 model (DGROUP@0x1c000).  Page-walking cr3=0xe000 at candidate bases: at 0x1c000 the registry
+(0x29fbc) yields 11 slots with valid types + 9/11 target-fields set, BUT the unit BODIES' positions read
+garbage -> the type/target reads may be garbage too (can't trust the 82%).  Base-scans hit false positives
+(loose heuristics match zero/garbage regions).  To finish: read the dump's GDT/LDT (or the r92 cam.txt
+csb/dsb/ssb) to get each engine segment's true base, then address unit bodies as (segbase + near_offset)
+NOT (0x1c000 + near_offset).  Then the direct port-vs-oracle unit-field diff (positions/waypoints/targets)
+is immediate and settles the movement-convergence vs acquisition question.
+
+Session end: goal not met, but the prerequisite TOOL is built (mid-mission oracle dump works); the last
+step is the PM segment-base resolution to parse it.  All port work pushed; dosbox change recorded above
+(gitignored).  The single frontier remains the acquisition/convergence divergence, now with a working
+oracle-dump path to measure it directly next session.
