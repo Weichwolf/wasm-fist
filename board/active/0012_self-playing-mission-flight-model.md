@@ -2419,3 +2419,25 @@ oracle unit-field comparison (needs the unit pages present -- either a non-rende
 mem-hook-triggered fist_dump, or page-walk EVERY slot's fields as done here but at a tick where the unit
 pages are resident) to measure the original's per-unit target/acquire rate directly and find why the port's
 scan yields ~1% vs the oracle's ~80%.  Thread A (faction bit) deprioritised.
+
+## Convergence trend (non-perturbing, 3 snapshots) = TWO coupled root factors
+
+Cross-side pairwise Manhattan distance from the held+437 one-shot dumpreg at t=2000/8000/20000:
+    median: 1,080,008 -> 1,187,982 -> 1,352,389   (MONOTONIC INCREASE -> units DRIVE APART)
+    min:    17,082    -> 17,075    -> 17,082       (closest pair stays ~17k, IN op-0x58 range <0x40000)
+    friendlies with a waypoint (goal49!=0): 8/16 constant
+Enemy centroid Y~0x5d301; friendlies Y~0xc5000..0x117000 -> friendlies sit ~1M NORTH of the enemies and,
+where they have waypoints, those waypoints lead them FURTHER north (median grows) -- the friendly force
+does NOT advance into the enemy zone.  So factor (1): drive-to-goal / waypoint assignment -- half the
+friendlies have no goal (goal49=0) and the half that do diverge from the enemies.  BUT factor (2): the
+closest cross-side pair stays ~17k apart (well inside op-0x58 range) for the whole run and STILL never
+engages -- so even a persistent in-range pair produces no acquisition->fire->kill.  Factor (2) is the fire/
+acquisition/spawn chain traced this session (correct per-step, but the fire-moment dynamics are
+perturbation-sensitive and the oracle ground-truth is paged out).  A resolved mission needs BOTH: units
+converging (or the mission's advancing force actually advancing) AND in-range pairs completing the kill
+chain.  Neither is achieved.  Honest: the blocker is a coupled movement+engagement system, not a single
+base-loss; the non-perturbing evidence now pins both halves (waypoints lead away; in-range pairs still
+don't kill).  Fresh-session tooling (mem-hook oracle full-dump for resident unit pages; a non-perturbing
+fire-moment ring-buffer) is the prerequisite to close either half cleanly -- rushing with hot-path counters
+produced the reload false-positive this session.  Goal not met; the two factors are the precise, measured
+frontier, with object model + LOS + fire-decision proven correct beneath them.
