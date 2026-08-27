@@ -1775,3 +1775,24 @@ window never coincide, so the friendly turret never spawns a projectile (the 6 e
 enemy-side b355/bc46 path / emitters, not friendly 7e29 fire).  NEXT: trace how the original couples the
 fire request to [0xa8]==0 (afa2 should gate the request on reload-ready, or 7c1d should hold [0x92] until
 [0xa8]==0), and the enemy b355/bc46 engage/damage path.  This is the concrete a296=10 plateau lead.
+
+## DEFINITIVE blocker (non-perturbing, 2026-08-27): the friendly turret spawn gate NEVER passes
+
+Landed a minimal-perturbation counter in the (asm-verified) 7745 spawn method: over a clean run to t=17830
+it is reached **0 times**.  So the 7e29 turret spawn gate `[di+0x91]==4 || [di+0xa8]==0` NEVER passes for
+any friendly unit -> the turret main gun NEVER spawns a projectile.  The 6 enemy kills are the friendly
+EMITTER path (b51f/c31e, short range); the 10 far enemies survive because the RANGED turret never engages.
+The fire cascade (7745/b725/ace0, all base-lost) is DEAD CODE until the gate passes -- landing it is
+premature (verified: landing 7745 changed nothing, reached=0), so patch 429 was reverted.
+
+Why the gate never passes (both alternatives fail every tick 7e29 is reached):
+  - [0x91]!=4: units select weapon 2 (player) / others via 7681's auto-select, never weapon 4 (the special
+    no-reload main gun whose gate passes directly).
+  - [0xa8]!=0: the reload timer is never 0 at the moment the fire request [0x92] (afa2 aim) is set -- the
+    aim-converged window and the reload-ready window are anti-correlated (player has [0xa8]=0 at exit, but
+    with no active request).  Likely the turret aim (a265/a18e, "imprecise" per patch 274) never converges
+    long enough for [0xa8] to reach 0 while a request stands.
+This is the SINGLE remaining combat blocker for a296->0, and it is runtime-probe-BLOCKED (any hot-path
+instrumentation perturbs the timing and hangs the run).  The way in is the ORACLE (dosbox-fist write/block
+trace) to observe how the ORIGINAL couples aim-converge + reload-ready + weapon-select so the gate passes --
+then a faithful patch to the fire-decision + landing the (asm-ready) spawn cascade resolves the mission.
