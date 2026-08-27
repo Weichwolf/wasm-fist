@@ -1412,6 +1412,38 @@ int fist_extender_gate(void) {
     }
     if (op == 0x18) { g_fist_after_map = 1;
         if (getenv("FIST_DBG_OP18")) { static int o=0; if(!o){o=1; extern void fist_dbg_op18(void); fist_dbg_op18();} } }
+    /* board:0012 op-0x58 LINE-OF-SIGHT service -- faithful port of the 32-bit-PM handler decoded from
+     * fist_image.bin @0x802e (board/0012_fire_cascade_reference.md): a DDA terrain ray-cast between the
+     * object (TCB+0xd2/0xd6/0xda) and candidate (TCB+0xde/0xe2/0xe6) over the mission heightmap
+     * [ext+0x85bc] (== the op-0x24 voxel render's).  Returns 0xffffffff (clear LOS) / 0 (occluded or out
+     * of range); e21c takes (uint16), aa08 gates != 0.  NOTE: currently returns 0 for all pairs because
+     * the units' Z [obj+0xc] is NOT terrain-following (the absent 32-bit-PM flight model does not sit units
+     * on the ground -- proven: forcing terrain-follow Z makes candidates VISIBLE).  Wiring the per-unit
+     * terrain-follow Z (like the camera-alt at the op-0x24 block) will activate this LOS -> target lock. */
+    if (op == 0x58 && g_ext_ready && g_fist_after_map) {
+        uint8_t *xb = g_mem + FIST_EXT_BASE;
+        uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        uint8_t *tcb = g_mem + tcb_lin;
+        uint8_t *hm  = (uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0x85bc));
+        int32_t ox=*(int32_t*)(tcb+0xd2), oy=*(int32_t*)(tcb+0xd6), oz=*(int32_t*)(tcb+0xda);
+        int32_t cx=*(int32_t*)(tcb+0xde), cy=*(int32_t*)(tcb+0xe2), cz=*(int32_t*)(tcb+0xe6);
+        int32_t dx=cx-ox, dy=cy-oy, dz=cz-oz;
+        if (!hm || dx>=0x40000 || dy>=0x40000 || dx<=-0x40000 || dy<=-0x40000) return 0; /* out of range */
+        dx<<=13; dy<<=13; dy=-dy; dz<<=16;                                    /* scale; Y flip */
+        int32_t ecx=1;
+        for(;;){ ecx<<=1; dx>>=1; dy>>=1; dz>>=1;                             /* normalise the step */
+            if (dx>=0x3000000 || dy>=0x3000000 || dx<=-0x3000000 || dy<=-0x3000000) continue; break; }
+        ecx--;
+        int32_t sdx=dx, sdy=dy, sdz=dz;
+        int32_t rx=ox<<13, ry=-(oy<<13), rz=oz<<16;                           /* march from object */
+        for (int32_t i=0; i<ecx; i++) {
+            rx+=sdx; ry+=sdy; rz+=sdz;
+            uint32_t idx = ((((uint32_t)ry>>22)&0x3ff)<<10) | (((uint32_t)rx>>22)&0x3ff); /* shld,10 index */
+            uint32_t h = (uint32_t)hm[idx & 0x3fffff] << 24;
+            if (h >= (uint32_t)rz) return 0;                                  /* terrain occludes */
+        }
+        return -1;                                                           /* 0xffffffff = clear LOS */
+    }
     /* FIST_DBG_OP2C: clean gdb breakpoint at the first op-0x2c gate (crash-bucket secondary-viewport paint) */
     if (op == 0x2c && g_fist_after_map && getenv("FIST_DBG_OP2C")) {
         static int once=0; if(!once){ once=1; extern void fist_dbg_op2c(void); fist_dbg_op2c(); }

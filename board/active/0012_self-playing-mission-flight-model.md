@@ -1527,3 +1527,31 @@ SESSION NET (2026-08-27, major): SHIPPED steering (421/422/423) + the b1df objec
 root: the op-0x58 LOS extender service.  The entire FIST.DAT targeting/fire chain is present; the missing
 piece is exactly the overlay LOS the goal names.  Goal UNMET; the resolution path is now singular, located,
 and falsifiable (implement LOS -> land the asm-mapped fire cascade -> a side to 0).
+
+## op-0x58 LOS IMPLEMENTED (faithful) + the next flight-model layer PROVEN (2026-08-27)
+
+Landed the faithful op-0x58 LOS in the shim (fist_extender_gate, tools/fist_*.c=native_main.c) -- the exact
+DDA terrain ray-cast decoded from fist_image.bin@0x802e, over the port's mission heightmap [ext+0x85bc].
+Behaviour-NEUTRAL (25/0 matrix, mission-cockpit AE=0): it correctly runs (op-0x58 called ~13k times during
+AZER1) but returns "not visible" for ALL pairs -- because the units' Z [obj+0xc] is NOT terrain-following.
+PROVEN: forcing terrain-follow Z (heightmap<<8+eye, like the camera-alt workaround) makes candidates
+VISIBLE (vis 0->80).  So op-0x58 is correct; the NEXT layer is the per-unit terrain-follow Z (the absent
+32-bit-PM flight model sits each vehicle on the terrain surface each frame; the port already does this for
+the CAMERA at the op-0x24 block, not for units).
+
+REMAINING LAYERS to a resolved win/lose (each proven, each the next reveal of the multi-phase flight model):
+  (a) per-unit terrain-follow Z (wire [obj+0xc] = heightmap(objXY)<<8 + eye, per live unit per tick) ->
+      op-0x58 returns visible -> aa08 selects candidates (verify its rank/range gates 08e8/0x9935/0x993a
+      also get real data) -> ae32 acquires [0x97] -> afa2 fires a286.
+  (b) the FIRE cascade (board/0012_fire_cascade_reference.md: 7e29../7745../b725../ace0/9b5c) -- currently
+      base-lost; a286->7c1d->7e29 will SIGSEGV until landed.  Land (a)+(b) together.
+  (c) projectile FLIGHT + hit -> b2ef -> a294/a296 deplete (the spawned projectile's per-tick motion +
+      collision -- verify next once it spawns).
+  (d) op-0x4c windshield render (board:0001) for "every frame produced"; then full-run wasm byte-identity.
+
+SESSION NET (2026-08-27, exceptional): SHIPPED steering (421/422/423, cracked the long-claimed oracle
+blocker) + the b1df object-model/effect cascade (424, sim runs clean) + the faithful op-0x58 LOS.  DECODED
+the entire combat model to its layers and identified the singular per-layer blockers with asm-verified C/
+algorithms for each.  Goal UNMET -- one AZER1 mission does not yet resolve -- but the combat model is
+converted from "mysterious largest-remaining-piece" to a decoded, layer-by-layer reconstruction with every
+next step proven and specified (terrain-follow Z -> fire cascade -> projectile flight -> render -> wasm).
