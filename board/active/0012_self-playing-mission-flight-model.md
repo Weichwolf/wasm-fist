@@ -2764,3 +2764,24 @@ The op-0x54 shim handler (op==0x54 gate; c0e5-cursor projectile; heightmap[idx])
 re-add once it is verified not to disturb the map-load roster op-0x54.  Session end: combat mechanically
 built through collision; the resolved mission is gated on the op-0x4c render (board:0001) + the flight-model
 Z-clamp, both substantial named frontiers.  patch 438 + cascade (430-438) held; goal not met.
+
+## op-0x4c/mga render is MULTI-PATH -- the hard coupling that gates the resolved mission
+
+Guarded the 77dc render wrapper (-> 795c -> mga); the crash simply moved to ANOTHER display path:
+459a -> 22dd -> 3a0f -> 26a1 -> 26de (mga, fist_mga.c:6319, NULL-param base-loss).  So there are MULTIPLE
+render routes out of the 459a present, ALL reaching the mga sprite blitters that base-loss once units are
+visible on the ground.  So the op-0x4c/mga render (board:0001) cannot be point-guarded to run the sim; it
+is a genuine multi-function frontier, and it is COUPLED to the ground-clamp: clamping unit Z (needed so
+shells descend into the collision regime) makes units visible -> the multi-path render base-losses.
+
+So the resolved-mission critical path is now precise and ordered:
+  A. op-0x4c/mga sprite render (board:0001) -- MUST work for on-ground units (the blitters 2b1e/26de/26a1/
+     795c... take the sprite/params base-lost); it gates any ground-clamp observation.  OR the ground-clamp
+     is applied in a way that keeps units render-culled while the sim/collision sees ground Z (two-Z split
+     -- but the engine uses a single [obj+0xc], so this needs care).
+  B. flight-model unit-Z ground-clamp (faithful per-unit terrain-follow, surviving the sim's own writes).
+  C. b691 explosion -> b2ef splash damage (reachable only after A+B).
+The combat MECHANISM is built end-to-end through collision (patch 438 fire-dispatch/spawn cascade + op-0x54
+decoded/implemented); what remains is the render+flight-model coupling (A+B) then damage (C).  This is the
+honest, ordered frontier.  Goal not met; the mission stalls because on-ground rendering + unit-Z clamp are
+a coupled pair the port does not yet run -- exactly the "part the port does not yet run" the goal names.
