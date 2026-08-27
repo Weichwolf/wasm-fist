@@ -706,6 +706,19 @@ void fist_timer_pump(void){
           }
         }
       }
+      /* DIAGNOSTIC (FIST_GROUNDCLAMP): test whether the missing unit-Z ground-clamp is the last blocker.
+       * The 32-bit flight model sits every unit on the terrain each tick; it is paged out, so [obj+0xc]
+       * (Z) stays high -> projectiles spawn high -> shell [proj+0xd]>=0x80 -> e1a6 collision never fires.
+       * Clamp each unit's Z to the sampled terrain (op-0x58/op-0x54 heightmap) and see if shells then
+       * descend + hit -> deaths.  Env-gated experiment. board:0012 */
+      if (in_mission && getenv("FIST_GROUNDCLAMP")) {
+        uint8_t *dgc = g_mem + 0x1c000; uint16_t *fbc=(uint16_t*)(dgc+0xdfbc);
+        uint8_t *xb = g_mem + FIST_EXT_BASE; uint8_t *hmc=(uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0x85bc));
+        if (hmc) for(int i=0;i<0xb6;i++){ uint16_t s=fbc[i*2]; if(!s) continue;
+          int32_t X=*(int32_t*)(dgc+(uint16_t)(s+4)), Y=*(int32_t*)(dgc+(uint16_t)(s+8));
+          uint32_t idx=((((uint32_t)(-(int32_t)((uint32_t)Y<<13))>>22)&0x3ff)<<10)|(((uint32_t)X<<13)>>22 &0x3ff);
+          *(int32_t*)(dgc+(uint16_t)(s+0xc)) = ((int32_t)hmc[idx&0x3fffff]<<8) + 1792; }
+      }
       if (coop) { tick_advance(); }
       else if (in_mission && !nomc) {           /* wasm-parity cadence: one tick per pump, no SIGALRM */
           if (!g_mission_coop) { g_mission_coop = 1; g_tick_pending = 0; }  /* transition: stop async ticks, flush menu-phase leftover */

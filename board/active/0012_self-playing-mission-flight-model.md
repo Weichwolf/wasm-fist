@@ -2696,3 +2696,30 @@ whole chain closes: spawn (438) -> fly -> DESCEND -> op-0x54 terrain hit -> b691
 -> deaths -> resolution.  The op-0x54 shim handler is decoded+ready (re-add from this spec); the last
 mechanical piece is the shell's downward arc.  MASSIVE session progress: combat blocker fixed (438),
 projectiles spawn+fly, collision service decoded+implemented; remaining = projectile altitude physics.
+
+## The last combat piece = unit-Z ground-clamp (flight model); it couples to the op-0x4c render
+
+Confirmed: the projectiles spawn high because the units' Z [obj+0xc] is NOT terrain-following (the absent
+32-bit-PM flight-model ground-clamp -- the SAME gap the op-0x58 handler documents).  So shell [proj+0xd]
+(=Z>>8) stays >= 0x80 and b5e7 never calls e1a6 -> op-0x54 never fires -> no hit.  Experiment
+FIST_GROUNDCLAMP (set each unit [obj+0xc] = hm[idx]<<8+1792, the op-0x58 terrain Z) CONFIRMED the Z is the
+gate -- but it SEGVs in the MGA blitter (m_mga_FUN_0000_2b1e / fist_mga.c:7121, via the display path
+77dc->795c->2b1e), because the unit Z also feeds the op-0x4c display-list render (board:0001), which
+base-losses on it.  So the unit-Z ground-clamp is the last COMBAT piece AND it is coupled to the render
+frontier: doing it faithfully needs the flight-model per-unit ground-clamp (sit units on the terrain each
+tick) AND the op-0x4c/mga render to handle the resulting Z (the board:0001 sprite-blitter base-loss).
+
+## SESSION SUMMARY -- the combat chain, end to end
+
+  fire-decision afa2 (works) -> dispatch 7c1d->7e29 (FIXED patch 438: was passing the HOST ptr not the DI
+  near-offset -> garbage 0x325c) -> spawn 778a/b73b/9b5c/9b6f (FIXED 438, base-loss cascade) -> flight
+  b5e7/ace0 (works, projectiles SPAWN+FLY, a294 120->150) -> collision e1a6->op-0x54 (DECODED from
+  fist_image.bin 0x11a6/0x8480 + IMPLEMENTED in the shim: terrain-height lookup) -> [BLOCKED: units' Z not
+  ground-clamped -> shells stay high -> e1a6 not reached] -> explosion b691 -> splash damage -> b2ef ->
+  deaths -> resolution.
+From "completely stalled at the dispatch, zero spawns, a296 frozen" to "fire chain works end-to-end,
+projectiles spawn+fly, collision service decoded+implemented, ONE flight-model piece (unit-Z ground-clamp,
+coupled to the op-0x4c render) remaining."  patch 438 held with the cascade; op-0x54 shim handler
+decoded+ready (spec above).  The largest single advance of the whole effort; combat is mechanically solved
+bar the unit-Z ground-clamp + its render coupling.  Goal not yet met, but the finish is now two named,
+bounded pieces (ground-clamp + op-0x4c render), not a diffuse AI problem.
