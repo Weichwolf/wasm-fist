@@ -1,0 +1,31 @@
+board:0012 turret-slew 7d1d 16-bit width base-loss (the sustained-fire aim blocker) -- Ghidra 32-bit *(int*) + 15-bit abs made the turret aim never reach the +-0xb6 fire tolerance.  Same class as 423 (a395).
+--- a/fist.c
++++ b/fist.c
+@@ -21502,15 +21502,20 @@
+   int iVar2;
+   uint uVar3;
+   
+-  if (*(int *)(param_1 + 0x97) != 0) {
+-    *(int *)(param_1 + 0x8b) = *(int *)(param_1 + 0x9b) - *(int *)(param_1 + 0x26);
++  /* PATCH 426: TURRET SLEW (asm 0x7d1d) -- all WORD: [0x8b]=[0x9b]-[0x26]; err=[0x8b]-[0x89];
++     cwd/xor/sub 16-bit abs; clamp step to 0x16c; add WORD[di+0x89].  Ghidra typed the turret heading
++     fields *(int*) (32-bit) + (int)>>0xf abs -> the aim NEVER converged (aim error stayed out of the
++     +-0xb6 fire tolerance) -> units lock+range a target but never fire.  Same class as patch 423 (a395). */
++  if (*(short *)(param_1 + 0x97) != 0) {
++    *(short *)(param_1 + 0x8b) = *(short *)(param_1 + 0x9b) - *(short *)(param_1 + 0x26);
+   }
+-  uVar1 = *(int *)(param_1 + 0x8b) - *(int *)(param_1 + 0x89);
+-  uVar3 = (int)uVar1 >> 0xf;
+-  uVar1 = (uVar1 ^ uVar3) - uVar3;
+-  iVar2 = ((uVar1 - 0x16c & -(uint)(uVar1 < 0x16c)) + 0x16c ^ uVar3) - uVar3;
++  iVar2 = (short)(*(short *)(param_1 + 0x8b) - *(short *)(param_1 + 0x89));
++  uVar1 = (iVar2 < 0) ? -iVar2 : iVar2;
++  if (0x16c <= (int)uVar1) uVar1 = 0x16c;
++  iVar2 = (short)((iVar2 < 0) ? -(int)uVar1 : (int)uVar1);
++  (void)uVar3;
+   if (iVar2 != 0) {
+-    *(int *)(param_1 + 0x89) = *(int *)(param_1 + 0x89) + iVar2;
++    *(short *)(param_1 + 0x89) = *(short *)(param_1 + 0x89) + iVar2;
+     *(undefined1 *)(param_1 + 0xca) = 3;
+     FUN_0000_76e8();
+   }
