@@ -123,6 +123,11 @@ extender/overlay loader, and indirect-call dispatch. The decompile stays pristin
 
 ## Code is the truth: the oracle
 
+The instrumented oracle is IN-REPO and runnable: `third_party/dosbox-fist` (16 MB ELF binary, not an empty
+dir) with source at `third_party/dosbox-build/`. Never claim it is absent. For in-mission fields use the
+CR3-aware `FIST_WATCHFLAT=<engine-flat>` (armed via `FIST_MEMARM_BOOT=1 FISTLOG=<prefix>`), not a fixed
+guest-phys — that is the whole "CR3-blocked" misread.
+
 ```mermaid
 flowchart LR
   orig["armoredfist/FIST.RUN + FIST.DAT"] --> dosbox["DOSBox oracle<br/>fast, instrumentable, reaches missions"]
