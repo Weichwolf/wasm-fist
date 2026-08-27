@@ -1909,3 +1909,17 @@ port (7963/7fbc are both weapon-change-guarded), and the reload table/rate is fa
 the movement AI holding units at engagement range across the reload.  This is the last subsystem; it is deep
 (drive-to-goal steering) and the oracle (unit-position trace of an original engagement) is the reference for
 how the original parks its units to fire.
+
+## Oracle: ALL FOUR unit types fire in the original (2026-08-27)
+
+Byte-signature grep of the oracle block-trace: the original executes ALL four type spawn methods --
+778a (t0/wpn2), 8121 (t1), 88d1 (t2), 9b7e (t3) -- plus afa2, a286, aa08, ae32.  So every friendly type
+fires its weapon in the original; the port fires NONE (7e29 gate never passes; 899c/91b8/99a2 reach=0).
+This confirms the a296=10 plateau is a SYSTEMIC fire-timing bug, not a one-type quirk -- the port's units
+never sustain the engagement/reload coincidence that lets the gate pass, across all four update families.
+(The FUN_0000 dispatchers 7e29/899c/91b8/99a2 themselves did not byte-match in the trace -- a trace-scope
+artifact of the low-segment cs; the SPAWN methods they call all ran, which is the load-bearing evidence.)
+
+The completion (making the port's units sustain engagement so [0xa8]==0 coincides with the aim-converged
+request, then landing 778a/8121/88d1/9b7e + ace0) is a distinct, substantial combat-AI work block, fully
+diagnosed here and gated on the oracle field-watch of a firing unit's [0xa8]/[0x92]/[0x91]/[0x97].
