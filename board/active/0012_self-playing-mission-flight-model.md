@@ -1923,3 +1923,20 @@ artifact of the low-segment cs; the SPAWN methods they call all ran, which is th
 The completion (making the port's units sustain engagement so [0xa8]==0 coincides with the aim-converged
 request, then landing 778a/8121/88d1/9b7e + ace0) is a distinct, substantial combat-AI work block, fully
 diagnosed here and gated on the oracle field-watch of a firing unit's [0xa8]/[0x92]/[0x91]/[0x97].
+
+## QUANTIFIED: weapon-2 reload = 320 ticks (~21s) -> the engagement-hold requirement, confirmed (2026-08-27)
+
+Read the reload tables from the port at exit (non-perturbing):
+  0x8f54 (7963 reload, index [0x91]>>1): 20 20 0 20 ...   (indices 4+ are adjacent non-reload data)
+  0x90f6 (7fbc reload):                   2  2 2  0 76 79 65 68  (76 79 65 68 = "LOAD" string data)
+So weapon 2 (the units' [0x91]=2, index 1) has reload = 20; x the confirmed 1/16-tick decrement (7d69) =
+320 ticks ~ 21 s at 15 Hz.  Weapon 4 (index 2) = 0 (the instant [0x91]==4 gate branch).  The oracle trace
+shows the original fires 778a = WEAPON 2 (not 7814/weapon-4), so the original's tanks HOLD their engagement
+across the ~21 s reload and fire; the port's units break engagement in seconds, so [0xa8] (which winds down
+regardless) reaches 0 only when the aim/target window has already passed -> the gate never coincides.
+
+This DEFINITIVELY confirms the blocker is movement-AI ENGAGEMENT-HOLD, and quantifies it: units must
+maintain an aim-converged target for ~21 s (the faithful weapon-2 reload) for the turret to fire.  The port
+does not; the original does.  The fix is the drive-to-goal / combat-engagement movement behaviour (units
+must orbit/hold at engagement range instead of flying through), reconstructed against an oracle unit-position
+trace of an original engagement -- a distinct combat-AI work block, now fully quantified and scoped.
