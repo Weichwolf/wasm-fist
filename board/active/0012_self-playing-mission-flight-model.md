@@ -2234,3 +2234,22 @@ byte[bx+0x994a] is base-lost/0 (would make acquisition near-never).  Instrument 
 This session net: leak+5 crashes fixed (patch 437, held cascade clean); a294/a296 AND op-0x58 both
 DISPROVEN as the blocker; combat blocker precisely localized to the FIST.DAT acquire-hold / aim-converge
 chain (ae32/a6e3/aa08/afa2), with the object model + LOS proven working underneath it.
+
+## aa08 scan gate-map (precise next-session entry point)
+
+FUN_1000_aa08 (asm 0x1aa08, the candidate scan; sets [obj+0x94]=count, [obj+0x9d]=best) walks all 182
+registry slots and, per candidate, requires ALL of:
+  - byte[cand+0x16]&4 set; byte[cand+0x16]&8 != byte[0x96ab]; cand != self[0x9936]
+  - LOS visible: e1f0 -> op-0x58 (PROVEN 47% visible, not the filter)
+  - rank byte[word[cand]+word[0x9944]] <= byte[0x9935]  (per-type rank ceiling)
+  - octant: 08e8 range hi-byte (c45a>>8)==0
+  - range: rax <= word[0x993a] (the RANGE GATE, rgate) && rax < word[0x993e] (running best)
+Only then inc byte[0x9934]; tail sets [obj+0x94]=count, [obj+0x9d]=[0x993c].  simtrace: tcnt([0x94]!=0)=2-6,
+tgt([0x97]!=0)=1-2 of ~15 friendlies -> acquisition WORKS but for few units; the survivors of the LOS pass
+are filtered by the RANGE GATE [0x993a] + octant (08e8 range).  So the precise open question is the range
+path: (a) what value is rgate/[0x993a] (aa08's caller / top of aa08) -- base-lost or too small?  (b) is
+08e8 (range->c458/c45a, called via a17e) computing the right magnitude/octant, or is it base-lost so most
+in-LOS candidates fail the octant (c45a>>8!=0) / range compare?  Instrument aa08 (candidates-seen vs
+passed-LOS vs passed-range) + dump [0x993a] to split "range gate too tight" from "08e8 range wrong".  Then
+the acquire-hold + aim-converge tail (ae32/a6e3/afa2) with a persistent target.  This is the last mile of
+the FIST.DAT engagement chain; object model, fire cascade, and LOS all proven working beneath it.
