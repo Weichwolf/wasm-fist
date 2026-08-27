@@ -1759,3 +1759,19 @@ units, they never shoot the enemies.  NEXT: verify the aa08/e20a candidate side-
 restrict to OPPOSITE side?) and how the enemy b355/bc46 update methods engage.  This is the concrete lead
 for the a296=10 plateau, now testable at full speed (no crash).  Everything else this session (deterministic
 reach, crash-free run to t=17830, patches 426/427/428) stands.
+
+## CORRECTION + sharpened lead (2026-08-27)
+
+The "player targets a same-side unit" note used the WRONG side field (type-indexed dg[t-0x19ec]&1).  The
+REAL combat side is [obj+0x16]&8, and aa08's scan filter (`if ((cand[0x16]&8) == obj[0x16]&8) continue;`,
+asm 1aa90) correctly skips SAME-side candidates -> the player's lock c34d is a valid OPPOSITE-side target.
+Targeting-side is NOT the bug.  (Also: aa08's header comment claiming op-0x58 "returns 0 for all candidates"
+is STALE -- the shim now implements op-0x58, targets DO lock, the player has a live target at exit.)
+
+The real remaining lead is FIRE-REQUEST / RELOAD timing: 7e29 is reached 1056x (fire request [0x92] set)
+but the spawn gate [0x91]==4||[0xa8]==0 passes 0x -- when [0x92] is set the reload [0xa8]>0, and when
+[0xa8] reaches 0 (player has [0xa8]=0 at exit) [0x92] is not set.  The fire request and the reload-ready
+window never coincide, so the friendly turret never spawns a projectile (the 6 enemy kills come from the
+enemy-side b355/bc46 path / emitters, not friendly 7e29 fire).  NEXT: trace how the original couples the
+fire request to [0xa8]==0 (afa2 should gate the request on reload-ready, or 7c1d should hold [0x92] until
+[0xa8]==0), and the enemy b355/bc46 engage/damage path.  This is the concrete a296=10 plateau lead.
