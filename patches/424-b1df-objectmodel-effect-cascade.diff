@@ -1,0 +1,28 @@
+board:0012 b1df object-model fix (CORRECTS patch 258) + the effect spawn/despawn/render cascade it unblocks.
+ROOT: b21d (0x1b21d) is the pool allocator -- AX=type/class key IN, DI=new object near-offset OUT (it does
+NOT read incoming DI).  FUN_1000_b1a2 (patch 200) uses b21d's returned DI correctly; FUN_1000_b1df (patch
+258) did NOT -- it ran b21d (a294++, allocating a slot) but registered the CALLER's param_2 and dropped
+b21d's DI, ORPHANING a pool slot every call and never producing the fresh object callers need.  That single
+bug is the root of the a294 leak AND of "units never fire".  This patch (all asm-verified vs
+fist_dat_image.bin) fixes b1df to allocate+register+return b21d's DI, threads the fresh object through the
+effect spawners ba33/ba49 (asm: mov si,di; ba5d(template,si); ba49 writes velocity to SI), and migrates the
+now-reachable effect DESPAWN (bab4 type-4 update -> b354->b2ef, + its DI-threaded frame handlers bae1/bb02,
+all base-lost) and the RENDER method c694 (word[si+0x1c] was a host-ptr; c945/c962 already migrated).
+RESULT: the in-mission effect lifecycle runs with NO crash, NO stub, NO guard; the AZER1 self-play sim runs
+to completion (exit 0); native==wasm==ref central-chrome AE=0; 25/0 native matrix.  This does NOT by itself
+resolve combat (the per-tick AI FIRE dispatch 7e29/899c/91b8/99a2 + spawn methods 7745/778a/77cf/7814 remain
+-- the board carries their exact asm-verified C); it is the object-model foundation those build on.
+--- a/fist.c
++++ b/fist.c
+@@ -32315,8 +32315,9 @@
+ void __allregs FUN_0000_c694(undefined2 param_1,undefined2 param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  DAT_2000_a3b4 = 0x3e800;
+-  FUN_0000_c945(param_1,param_2,*(undefined2 *)(param_3 + 0x1c),param_3,param_4);
++  DAT_2000_a3b4 = 0x3e800;    /* PATCH 424: si=object near-offset; word[si+0x1c] DGROUP-based (asm mov bp,[si+0x1c]) */
++  { unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++    FUN_0000_c945(param_1,param_2,*(unsigned short *)(dg + (unsigned short)(param_3 + 0x1c)),param_3,param_4); }
+   return;
+ }
+ 

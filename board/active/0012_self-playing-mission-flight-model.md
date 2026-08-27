@@ -1437,3 +1437,30 @@ STATUS: steering DONE+committed (combat starts, a296 16->10).  The fire+effect s
 diagnosed with exact asm-verified C, but it is a COUPLED spawn+despawn cascade (~15 functions) that must
 land as a unit -- genuine multi-session work, NOT a bounded single patch.  Goal unmet; every remaining
 piece is located, asm-specified, and falsifiable.
+
+## LANDED patch 424: b1df object-model fix + effect spawn/despawn/render cascade runs CLEAN (2026-08-27)
+
+Executed the b1df root fix + its cascade (asm-verified end to end) and it is MATRIX-CLEAN:
+  - b1df CORRECTED (patch 258 was wrong): allocate via b21d, register+zero b21d's returned DI, return DI.
+  - ba33/ba49 thread the fresh object (SI) into ba5d (template copy) + the launch-velocity write.
+  - effect DESPAWN migrated: bab4 (type-4 per-tick) -> b354->b2ef, DI-threaded to its frame handlers
+    bae1/bb02 (all were base-lost host-ptr derefs).
+  - render method c694 base-loss fixed (word[si+0x1c] DGROUP-based; c945/c962 already migrated).
+VERIFIED: AZER1 self-play sim now runs to completion with NO crash / stub / guard (exit 0, was SIGSEGV
+in the render cascade before); 25/0 native matrix; native==wasm==ref central-chrome AE=0 (AZER1/CYPRUS1/
+SAUDI1); editor FSG-roundtrip rc=0.  The frozen-then-crashing effect path is now a clean running lifecycle.
+
+STILL UNRESOLVED (the last piece): combat does not deplete a side.  a294 sits at the 150 cap and the
+despawn branch (bab4->b2ef) is not reached for the load effects (0 despawns in 25000 ticks) -- consistent
+with them being persistent/long-lived (so a294=150 is likely the legit loaded roster, NOT a leak) OR a
+slow animation; either way the RESOLUTION blocker is now singular: units never fire a PROJECTILE, because
+the per-tick AI fire dispatch is still the base-lost NEAR-call mis-decompile.  a296 drops 16->10 early
+(emitter/collision path b51f/c31e) then stalls.
+
+NEXT (the sole remaining blocker, exact asm-verified C already on this board under "The fix is a COUPLED
+spawn+despawn cascade"): land the FIRE dispatch 7e29/899c/91b8/99a2 (far-call `fist_icall_far(*(u32*)(g_mem+
+0x7e77+(byte[di+0x91]<<1)))` threading FIRER as the DI arg + capture CF) and the spawn methods 7745/778a/
+77cf/7814 (b1df(8|9|10) now returns the projectile; b725/b73b/b767 launch; ace0 trajectory) so units spawn
+projectiles -> hits -> b2ef -> a296->0 (win) or a294->0 (lose).  Then op-0x4c windshield render (board:0001)
+for the DoD's "every frame produced", and full-run wasm byte-identity.  The object model + effect lifecycle
+are DONE; firing is the singular remaining resolution blocker, fully asm-specified.
