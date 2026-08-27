@@ -2253,3 +2253,31 @@ in-LOS candidates fail the octant (c45a>>8!=0) / range compare?  Instrument aa08
 passed-LOS vs passed-range) + dump [0x993a] to split "range gate too tight" from "08e8 range wrong".  Then
 the acquire-hold + aim-converge tail (ae32/a6e3/afa2) with a persistent target.  This is the last mile of
 the FIST.DAT engagement chain; object model, fire cascade, and LOS all proven working beneath it.
+
+## FIRE CHAIN FULLY TRACED (measured): root = firing unit's reload [0xa8] STUCK at 70
+
+Instrumented the whole fire chain in the held+437 build (AZER1, 60s self-play).  Every stage MEASURED:
+  [afa2]  reached=2874  has-target=170  gate-passed=20  aim-converged(FIRE a286)=20
+  [chain] a286-request=20  7e29-dispatch=912  (the committed g_a286/g_7e29/g_7745 counters were DEAD --
+          their build/ increments are wiped by `make patch`; the "a286=0" reads all session were a dead
+          counter, NOT a real zero.  Re-added live -> a286 fires 20x, 7e29 dispatched 912x.)
+  [7e29gate] a8==0(reloaded)=0  [0x91]==4=0  GATE-OPEN=0   -> 7e29's spawn gate ([0x91]==4 || [0xa8]==0)
+          NEVER opens across 912 dispatches.
+  [reload]  7d69 calls=2684  min[0xa8]-seen=0             -> the reload decrement DOES reach 0 (other units)
+  [reload2] [0xa8] at 7e29 dispatch: min=70 max=70        -> but the FIRING unit's [0xa8] is CONSTANT 70
+          (0x46), never decrementing.  7d69 (patch 263, `if [0xa8]!=0 [0xa8]--`) is dispatched via 7c1d's
+          table1 `word[0x7c91+(byte[di+0x3d]&0x1e)]` (patch 244) -- it decrements OTHER units to 0 but the
+          firing unit's [0x3d] state never selects 7d69, so its reload is frozen at the spawn-init value 70.
+
+So the ENTIRE fire chain is correct and reached -- object model (437), aim-servo (437), afa2 fire-decision
+(20 real fires), 7e29 dispatch (912) -- and the SINGLE remaining defect is: **the firing unit's weapon
+reload [0xa8] never counts down** (stuck at 70), so 7e29's `[0xa8]==0` spawn gate never opens -> no
+projectile -> no damage -> no death -> no resolution.  This is NOT the engagement AI, NOT movement, NOT
+LOS, NOT the extender -- it is the per-frame reload state machine: 7d69 (decrement) is gated behind the
+7c1d table1 dispatch on byte[di+0x3d] (the animation/state cursor, "+=2/tick"), and for the firing unit
+that cursor never lands on the 7d69 slot.  Precise next step: trace byte[di+0x3d]'s advance in 7c1d
+(the table1 index (di+0x3d)&0x1e -> word[0x7c91+idx]) for the firing unit -- why it never dispatches 7d69
+(index 0) -- OR whether 7963/another path re-sets [0xa8]=70 each frame.  Fix that one reload-cursor defect
+(asm-verified) and the whole proven chain fires -> projectiles spawn -> combat resolves.  This session:
+fire chain reduced from "doesn't resolve" to a single measured defect (reload cursor); leak+crashes fixed
+(437, held cascade clean); a294/a296, op-0x58, and the engagement-AI hypothesis all disproven en route.
