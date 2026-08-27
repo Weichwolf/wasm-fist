@@ -2097,3 +2097,36 @@ tgt=1; and even that one unit never fires.  Both the FRIENDLY fire gate (afa2->a
 re-engagement (bc46/b355 stop after the burst) fail to sustain.  Next: split firereq/tgt BY SIDE over time
 to see which side stalls first, and trace an enemy's [0x97]/[0x92]/[0xa8] across the port stall vs the
 oracle resolve.  Goal reproducible + oracle-confirmed; port stall is the barrier.
+
+## Oracle movement trace: base CONFIRMED + friendly units move live
+
+FIST_WATCHPHYS on the friendly-unit position band (flat 0x28000..0x28800) during the resolving AZER1 run:
+4122 live writes landed at 0x280xx -> **DGROUP is at engine-flat 0x1c000 in the oracle too, IDENTITY-mapped
+under cr3=0xe000** (WATCHPHYS fixed-phys worked).  My earlier pool-counter watch produced no file NOT
+because of a bad base but because FIST_WATCHFLAT's histogram dumps only at SIGUSR2, and that dump is
+deferred to the next VGA write -- which never came on the static MISSION-LOST stats screen.  Recipe that
+WORKS for a live value time-series of any engine field: FIST_MEMARM_BOOT=1 FISTLOG=<pfx>
+FIST_WATCHPHYS=<flat=phys> FIST_WATCHSPAN=<n>  (identity-mapped DGROUP; logs each byte write with value +
+live cs:eip to <pfx>.watch.txt, no signal needed).
+
+Two writers hit the friendly positions in the oracle:
+  - flatip=0x0000721f (engine cs=02dd): bulk-zero (spawn/clear), 2048 writes.
+  - flatip=0x000f14a5 (cs=f000, extender service memcpy called from engine 02dd:3246): the POSITION
+    updater, 2074 writes, values stepping (0x0f66.. -> 0x1119..).  => oracle friendly units are being
+    continuously repositioned = they MOVE throughout combat.
+Oracle allocation differs slightly from the port (friendly slots ~c080/c118/c1a8/c210/c31a/c513 vs port
+c05c/c157/c252/..), so per-slot cross-checks must be by ROLE not fixed offset.
+
+## Consolidated gap (oracle-anchored)
+
+  | fact | oracle (original) | port (stable) |
+  |------|-------------------|---------------|
+  | AZER1 self-play outcome | MISSION LOST, UNITS REMAINING 00 (~2.5min) | STALL at a296=10, never resolves |
+  | friendly movement | continuous (0xf14a5 repositions) | mobile units advance, several static-by-design |
+  | enemy engagement | sustained until player wiped | fires early (5 kills) then tgt97=0, no re-acquire |
+The port's enemies (stationary types 0x1a/0x1b) STOP acquiring after the opening skirmish (stall: tgt97=0,
+ftmr92=0, rld_a8=0 across all enemies); the original's keep acquiring+firing until the player's 4 ground
+units are gone.  So the barrier is ENEMY target RE-ACQUISITION across the mission (candidate->a6e3->e20a
+LOS not sustaining), coupled with whether friendlies traverse the enemy envelope.  This is a deep
+multi-factor engagement subsystem; the oracle now gives an exact reference (resolves in 2.5min) and a
+working per-field live-trace recipe to diff any specific function's behaviour port-vs-oracle.

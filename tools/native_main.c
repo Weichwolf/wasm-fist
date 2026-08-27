@@ -652,7 +652,8 @@ void fist_timer_pump(void){
        * resolve the tree object model for the plant-tree editor harness (tree type discriminator +
        * body/coord layout). Reads only; env-gated; no effect on any flow. */
       { static int dumped_reg = 0;
-        if (in_mission && !dumped_reg && getenv("FIST_DUMP_REG")) {
+        if (in_mission && !dumped_reg && getenv("FIST_DUMP_REG")
+            && *(unsigned short*)(g_mem+0x1c452) >= (unsigned)(getenv("FIST_DUMP_REG_T")?atoi(getenv("FIST_DUMP_REG_T")):0)) {
           dumped_reg = 1;
           unsigned char *dg = g_mem + 0x1c000;
           fprintf(stderr, "[dumpreg] in-mission; DAT_2000_530a(tree count)=%u\n",
