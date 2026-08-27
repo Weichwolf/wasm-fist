@@ -2441,3 +2441,28 @@ don't kill).  Fresh-session tooling (mem-hook oracle full-dump for resident unit
 fire-moment ring-buffer) is the prerequisite to close either half cleanly -- rushing with hot-path counters
 produced the reload false-positive this session.  Goal not met; the two factors are the precise, measured
 frontier, with object model + LOS + fire-decision proven correct beneath them.
+
+## Combat-object roles clarified: type-0x15 is NON-COMBAT; real in-range combat pairs still don't acquire
+
+Excluding non-combatants sharpens the picture:
+  - type 0x15 (9c4f, 27 objs): f16=0x40 -> [0x16]&4 = 0 => NOT a valid target (aa08 line 1aa8a skips
+    candidates without [0x16]&4); 9c4f is a stub update.  These are markers/props, and they were the
+    "closest enemy at 17k" -- a red herring.  Real combat enemies (0x17/0x1a/0x1b) carry [0x16]&4 (f16=
+    0x46/0x4e).
+  - Real combat pairs: 44 combat enemies vs 16 friendlies; closest targetable pair = 42496 (STILL in
+    op-0x58 range <0x40000); 52/704 combat pairs (7%) in range.  Yet the closest pair (enemy a16c t=0x1a
+    <-> friendly c739 t=3) has tgt97=0 on BOTH -- no mutual acquisition despite being in range.
+  - op-0x58 in-range visibility is actually HIGH (of in-range calls, 77% visible: 21562 vis / 6534 occ),
+    so LOS is NOT rejecting most in-range combat pairs.  So the block is NOT LOS and NOT range -- it is the
+    aa08->ae32 promotion RATE: only 1-2 of 16 friendlies ever hold a target (simtrace), vs the oracle's
+    partial-parse ~80%.
+
+So the single measured divergence is the target ACQUISITION/HOLD RATE (port ~1-2/16 vs oracle ~majority),
+for pairs that ARE in range and mostly LOS-visible.  The promotion path ae32 (gate [0x94]!=0 && [0x97]==0
+&& RNG<=0x78) + the candidate-scan aa08 that feeds [0x94]/[0x9d] is where the port under-produces held
+targets.  The next non-perturbing step: a per-unit ring-buffer recording [0x94]/[0x9d]/[0x97] transitions
+over ticks for ONE in-range friendly (e.g. c739) to see whether it (a) never gets a candidate ([0x94]
+stays 0 -> aa08 scan under-supplies), or (b) gets one but ae32 never promotes (RNG/gate), or (c) promotes
+then immediately clears (churn) -- each points to a different bounded fix.  Movement (units diverge) is a
+secondary factor -- it reduces opportunities but in-range pairs exist and still don't engage, so the
+acquisition-hold rate is the primary blocker.  Goal not met; this is the precise, non-perturbing frontier.
