@@ -1895,3 +1895,17 @@ there is an extra [0xa8] reset in the port.  NEXT (now sharply targeted): oracle
 unit's [0xa8]/[0x92]/[0x97] to see whether [0xa8] winds monotonically to 0 under a held target (=> port
 navigation/LOS bug) or is driven differently; then fix the divergent subsystem + land 778a/ace0 (asm-ready).
 The plateau is a BUG with a known-good reference, not a wall.
+
+## The navigation blocker, precisely characterized (2026-08-27)
+
+Not "units never reach range" -- afa2 raised 1056 fire requests, so units DO enter weapon range 1056 times
+(afa2's [0x99]<=0xc8 / [0x9952] range gate passed).  The failure is ENGAGEMENT-HOLD: each in-range window
+is far shorter than the ~224-tick (15 s) reload, so [0xa8] never winds to 0 while a request stands.  min_dist
+reaching 39898 (< 0x40000) then drifting confirms units CLOSE but do not PARK at engagement range -- they
+fly through / circle past, exactly the drive-to-goal steering pattern (a9ea/a358/a57a in the 902c movement
+callees) the git history flagged.  Confirmed a REAL divergence, not faithful: the oracle's original units
+hold the engagement long enough that 778a fires; the port's do not.  No extra [0xa8] reset exists in the
+port (7963/7fbc are both weapon-change-guarded), and the reload table/rate is faithful -- so the sole fix is
+the movement AI holding units at engagement range across the reload.  This is the last subsystem; it is deep
+(drive-to-goal steering) and the oracle (unit-position trace of an original engagement) is the reference for
+how the original parks its units to fire.
