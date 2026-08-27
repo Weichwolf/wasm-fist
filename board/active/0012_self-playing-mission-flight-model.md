@@ -2156,3 +2156,27 @@ trace who calls afa2 for AI units + which outer-gate term fails, and diff [0x8b]
 oracle (WATCHPHYS recipe).  Held cascade ready to LAND pending wasm-parity + verify-matrix (kept in
 patches/held/ until then).  Concrete session progress: pool leak solved + crash-clean held path (437);
 goal still unmet on the afa2 engagement gate.
+
+## REFRAME: a294/a296 is NOT the oracle's kill signal; resolution lives in the overlay
+
+Oracle kill-trace (WATCHPHYS on the port's pool-counter addresses flat 0x2a294/0x2a296 across the full
+resolving AZER1 run): only **16 writes total, and both writers are generic service routines** -- a one-time
+memset (721f, val=00) then a one-time 8-byte memcpy (f14a5).  NO inc/dec.  So in the ORIGINAL, flat
+0x2a294/6 is an incidental data block, NOT the live side/unit counter.  The port's DAT_2000_a294/a296
+(which DO behave as inc/dec pool counters in the port) therefore do NOT correspond to the original's
+unit-remaining mechanism -- the whole "a296 stall at 10/16" metric this board has tracked is the WRONG
+signal for resolution.
+
+What resolution actually is: the end screen reads **"OBJECTIVES REMAINING: 13" + "UNITS REMAINING: 00"**,
+and the port's simtrace goals=13 MATCHES the oracle's 13 -- so objectives track fine.  Resolution fires on
+UNITS REMAINING -> 0 (per-side unit roster), and per the standing goal spec the mission WIN/LOSE logic
+"lives in the overlay at 0x100000, not in FIST.DAT".  So the resolution path is: friendly units take
+damage -> per-unit HP->0 -> removed from the overlay's unit roster -> overlay declares MISSION LOST.  The
+port's held+437 build is object-model CLEAN (109 objects at t=20533, no duplicates, no leak, a294 stable)
+but produces ZERO friendly deaths -> the enemy->friendly DAMAGE path (one of b2ef's 23 callers, via a
+specific projectile-collision/damage handler) is not firing, and/or the overlay unit-roster + win/lose
+check is not wired.  Corrected next target: (1) locate the overlay's unit-remaining roster + win/lose
+check (FUN_1000_* at 0x100000), (2) find the projectile-collision -> damage -> roster-remove path and its
+base-loss, verified via the WATCHPHYS recipe against the oracle's actual roster address (to be located, NOT
+0x2a294).  This session: leak+crash SOLVED (patch 437, held cascade clean); the a294/a296 stall metric
+DISPROVEN as the resolution signal; resolution re-localized to the overlay unit-roster + damage path.
