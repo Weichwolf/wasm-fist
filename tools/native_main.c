@@ -673,10 +673,14 @@ void fist_timer_pump(void){
           /* player tank = registry index 0 (slot c05c, t=0); track its position (obj+4,+8 = 32-bit X,Y)
            * to see whether AUTO CONTROL is DRIVING it (position moves) or it sits idle. */
           unsigned short ps=fbc[0]; long px=0,py=0; int pctl=0;
-          if(ps){ px=*(int*)(dg+(unsigned short)(ps+4)); py=*(int*)(dg+(unsigned short)(ps+8)); pctl=dg[(unsigned short)(ps+0x17)]; }
+          short vh=0,vs=0,vx=0,vy=0,f26=0,f30=0;
+          if(ps){ px=*(int*)(dg+(unsigned short)(ps+4)); py=*(int*)(dg+(unsigned short)(ps+8)); pctl=dg[(unsigned short)(ps+0x17)];
+            vh=*(short*)(dg+(unsigned short)(ps+0x55)); vs=*(short*)(dg+(unsigned short)(ps+0x57));
+            vx=*(short*)(dg+(unsigned short)(ps+0x59)); vy=*(short*)(dg+(unsigned short)(ps+0x5b));
+            f26=*(short*)(dg+(unsigned short)(ps+0x26)); f30=*(short*)(dg+(unsigned short)(ps+0x30)); }
           if (live!=plive||a!=pa||b!=pb||goals!=pg||bucket!=hb){
-            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d  player{slot=%04x X=%ld Y=%ld f17=%02x}%s\n",
-              t,live,goals,a,b,ps,px,py,pctl,(live!=plive||a!=pa||b!=pb||goals!=pg)?"  <<CHANGE":"");
+            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d  player{slot=%04x X=%ld Y=%ld f17=%02x h55=%d s57=%d vx59=%d vy5b=%d f26=%d f30=%d}%s\n",
+              t,live,goals,a,b,ps,px,py,pctl,vh,vs,vx,vy,f26,f30,(live!=plive||a!=pa||b!=pb||goals!=pg)?"  <<CHANGE":"");
             plive=live;pa=a;pb=b;pg=goals;hb=bucket;
           }
         }

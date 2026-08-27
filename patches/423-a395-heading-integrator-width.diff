@@ -1,0 +1,76 @@
+board:0012 unit heading INTEGRATOR width base-loss (FUN_1000_a395).  a395 turns a mobile unit's current
+heading [0x26] toward its target heading [0x30], one clamped step (<=0xb6) per tick.  asm @ 0x1a395 is
+WORD throughout (mov ax,WORD[di+0x30]; sub ax,WORD[di+0x26]; cwd/xor/sub abs; add WORD[di+0x26],ax; second
+mode adds a clamped [0x89] slew to [0x26]/[0x30] and subtracts from [0x89]/[0x8b]).  Ghidra typed
+[0x26]/[0x30]/[0x89]/[0x8b]/[0x5d] as 32-bit *(int*)/*(uint*): the 32-bit error read [0x30]-[0x26] pulled
+in adjacent fields and the abs used (int)x>>0xf (a 15-bit shift on a 32-bit int) -> the heading error was
+garbage and never converged (observed: [0x26] oscillated +-30000 instead of settling at the target), so a
+mobile unit could not steer to a commanded heading.  Fix: rebase every field to 16-bit *(short*), matching
+the WORD asm; the abs/clamp/sign-restore kept faithful.  (Sibling to 421 a1d6/a174 + 422 a401 servo -- the
+same mobile-unit steering cluster.)
+--- a/fist.c
++++ b/fist.c
+@@ -64185,41 +64185,47 @@
+   int iVar2;
+   uint uVar3;
+   
++  /* PATCH 423: a395 is the heading integrator -- turns current heading [0x26] toward target [0x30].
++   * asm (fist_dat_image.bin @ 0x1a395) is WORD throughout: mov ax,WORD[di+0x30]; sub ax,WORD[di+0x26];
++   * cwd/xor/sub = 16-bit abs; clamp step to 0xb6; add WORD[di+0x26],ax.  Ghidra typed [0x26]/[0x30]/
++   * [0x89]/[0x8b]/[0x5d] as *(int*)/*(uint*) (32-bit) -> the 32-bit heading-error read pulled in
++   * neighbours and the abs shift (>>0xf on a 32-bit int) was wrong -> heading never converged (oscillated
++   * +-30000) and the tank could not turn to a target heading.  Rebase all to 16-bit *(short*). */
+   if ((((*(byte *)(param_1 + 0x19) & 6) != 0) || ((*(byte *)(param_1 + 0x19) & 0x10) != 0)) ||
+-     (*(int *)(param_1 + 0x5d) == 0)) {
++     (*(short *)(param_1 + 0x5d) == 0)) {
+     g_fist_cf = 1;                 /* 1a399/1a39f/1a3a5 -> 1a3ff stc */
+     return;
+   }
+   if ((*(byte *)(param_1 + 0x1a) & 0x80) == 0) {
+-    uVar1 = *(int *)(param_1 + 0x30) - *(int *)(param_1 + 0x26);
+-    uVar3 = (int)uVar1 >> 0xf;
+-    uVar1 = (uVar1 ^ uVar3) - uVar3;
+-    iVar2 = ((uVar1 - 0xb6 & -(uint)(uVar1 < 0xb6)) + 0xb6 ^ uVar3) - uVar3;
++    iVar2 = (short)(*(short *)(param_1 + 0x30) - *(short *)(param_1 + 0x26));  /* 16-bit wrapped error */
++    uVar1 = (iVar2 < 0) ? -iVar2 : iVar2;                                     /* cwd;xor;sub = abs */
++    if (0xb6 <= (int)uVar1) uVar1 = 0xb6;                                     /* clamp step magnitude */
++    iVar2 = (short)((iVar2 < 0) ? -(int)uVar1 : (int)uVar1);                  /* restore sign */
+     if (iVar2 != 0) {
+-      *(int *)(param_1 + 0x26) = *(int *)(param_1 + 0x26) + iVar2;
++      *(short *)(param_1 + 0x26) = *(short *)(param_1 + 0x26) + iVar2;
+       g_fist_cf = 0;               /* 1a3c9 add; 1a3cc jmp 1a3fd clc */
+       return;
+     }
+     g_fist_cf = 1;                 /* 1a3c7 je 1a3ff stc */
+     return;
+   }
+-  uVar1 = *(uint *)(param_1 + 0x89);
+-  if ((uVar1 & 0x8000) == 0) {
+-    if (0x38e < (int)uVar1) {
+-      uVar1 = 0x38e;
++  iVar2 = *(short *)(param_1 + 0x89);
++  if ((iVar2 & 0x8000U) == 0) {
++    if (0x38e < iVar2) {
++      iVar2 = 0x38e;
+       goto LAB_1000_a3ef;
+     }
+   }
+-  else if ((int)uVar1 < -0x38e) {
+-    uVar1 = 0xfc72;
++  else if (iVar2 < -0x38e) {
++    iVar2 = -0x38e;
+     goto LAB_1000_a3ef;
+   }
+   *(byte *)(param_1 + 0x1a) = *(byte *)(param_1 + 0x1a) & 0x7f;
+ LAB_1000_a3ef:
+-  *(int *)(param_1 + 0x26) = *(int *)(param_1 + 0x26) + uVar1;
+-  *(int *)(param_1 + 0x30) = *(int *)(param_1 + 0x30) + uVar1;
+-  *(int *)(param_1 + 0x89) = *(int *)(param_1 + 0x89) - uVar1;
+-  *(int *)(param_1 + 0x8b) = *(int *)(param_1 + 0x8b) - uVar1;
++  *(short *)(param_1 + 0x26) = *(short *)(param_1 + 0x26) + iVar2;
++  *(short *)(param_1 + 0x30) = *(short *)(param_1 + 0x30) + iVar2;
++  *(short *)(param_1 + 0x89) = *(short *)(param_1 + 0x89) - iVar2;
++  *(short *)(param_1 + 0x8b) = *(short *)(param_1 + 0x8b) - iVar2;
+   g_fist_cf = 0;                   /* 1a3fd clc */
+   return;
+ }

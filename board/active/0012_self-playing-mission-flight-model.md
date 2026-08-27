@@ -1334,3 +1334,53 @@ FINAL HONEST STATE (2026-08-27): shipped 416/417/420 (movement, damage, a0a4 pro
 (a294 leak).  Mission does NOT resolve (goals=13) because the units steer the wrong way; the steering
 divergence needs the oracle to locate efficiently.  Goal UNMET; effect/render finish is mechanical, the
 resolution-critical navigation is oracle-gated for efficient diagnosis.  Real progress banked; honest limit.
+
+## STEERING RUNAWAY SOLVED -- it was a WIDTH base-loss, NOT oracle-gated heading (2026-08-27)
+
+Prior sessions declared the resolution blocker a "subtle heading/target divergence needing the oracle".
+DISPROVEN by reading the code + a direct player-field trace (FIST_SIMTRACE prints player
+[0x55]/[0x57]/[0x59]/[0x5b]/[0x26]/[0x30]).  The player Y ran to -529M because the mobile-unit STEERING
+cluster treats 16-bit fields as 32-bit -- a pure asm-verifiable width base-loss, no oracle needed:
+  - 421 (a1d6 velY[0x5b]=heading>>1 / velX[0x59]=a196, + a174 input->heading[0x30]/throttle[0x57]):
+    all WORD in asm (mov WORD[di+0x59],ax; mov WORD[di+0x5b],dx), Ghidra *(int*).
+  - 422 (a401 heading SERVO): reads heading [0x55] as *(uint*) (32-bit UNSIGNED) so a negative 16-bit
+    heading looks large-positive -> the servo decrements FOREVER (the runaway).  asm cmp ax,WORD[di+0x55]
+    is SIGNED.  Rebased [0x55]/[0x57]/[0x40] to 16-bit -> heading settles at the target.
+  - 423 (a395 heading INTEGRATOR): turns current heading [0x26] toward target [0x30], all WORD asm,
+    Ghidra *(int*); the 32-bit error read + (int)>>0xf abs never converged (osc +-30000).  Rebased.
+RESULT (setarch -R, FIST_SIMRUN): heading now CONVERGES (f26 26729->0), position is BOUNDED, and COMBAT
+STARTS -- a296 (enemy side count) drops 16->10 in the first ~90 ticks (was frozen at 16 for 64000 ticks).
+The earlier "a296 drops are teleport artifacts" was because the corrupt steering teleported emitters; with
+clean steering the drops are real engagement.  Verified: make check clean; 26/26 native menu matrix PASS;
+mission-cockpit central chrome AE=0 vs ref (no render regression).
+
+## Remaining blockers to a RESOLVED win/lose, now PRECISELY mapped (2026-08-27)
+
+Combat starts but STALLS at a296=10 the instant a294 (friendly roster) hits its 0x96=150 cap (b21d).  Two
+independent, asm-mapped blockers remain:
+
+1. FRIENDLY-ROSTER SATURATION.  b21d registers friendly objects into a 150-slot table (0xa022 stride 0x37);
+   at ~t=381 it is FULL, so NO new friendly object (incl. any friendly projectile) can spawn -> combat
+   halts.  Probe (FIST_B21DPROBE, __builtin_return_address): the fills are d81e->b1a2 (the DCBS .FSG record
+   loader) registering objects 0x10/0x15/0x1a/0x1b repeatedly.  OPEN: is 150 the legitimate loaded roster
+   (AZER1 really has that many friendlies) or a duplicate-registration leak (same obj re-registered w/o a
+   b2ef deregister)?  Raising the cap to 0x7000 CRASHES at t=363 (the slot table physically holds 150) --
+   so the fix must be despawn/dedup, not a bigger cap.  bab4 (type-4 effect despawn, base-lost) was
+   migrated experimentally but changed NOTHING (not the leak path) -> reverted; the leak is via d81e/b1a2,
+   not the type-4 effect update.
+
+2. UNITS NEVER FIRE A PROJECTILE (subagent-mapped, asm-verified).  The per-type update -> fire-gate ->
+   fire-trigger (FUN_0000_7e29/899c/91b8/99a2) dispatches the per-weapon spawn method via
+   `call DWORD PTR cs:[bx+0x7e77]` -- a FAR call into seg 0x0f69 (table @0x7e77 = 4 far ptrs -> FUN_1000_
+   7745/778a/77cf/7814, each b1df(8|9|10,di) = the projectile spawn), returning fire/no-fire in CF.  Ghidra
+   rendered it as a base-lost NEAR call `fist_icall_near(0,*host_ptr)(0xf69)`: derefs raw host 0x7e77
+   (needs g_mem+0x7e77), reads the 4-byte far ptr as 2-byte, drops seg 0x0f69 and the returned CF -> the
+   spawn methods are NEVER invoked -> no projectile ever spawns.  FIX (mapped, not yet landed): far-dispatch
+   `fist_icall_far(*(uint32_t*)(g_mem+0x7e77+(byte[di+0x91]*2)))` with di live + thread CF into the
+   bf77/bf94 selection; then repair 7745/778a/77cf/7814 (unaff_CS firer base, WORD [di+0xad] cooldown, keep
+   b1df's returned projectile + CF).  The a296 16->10 drop today is the emitter/collision path (b51f/c31e,
+   417), NOT projectiles.
+
+So the finish = (1) resolve the friendly-roster saturation (despawn/dedup on the d81e/b1a2 path) + (2) land
+the fire-dispatch far-call + spawn-method repair -> real sustained projectile combat -> a side to 0; then
+op-0x4c render (board:0001) + wasm byte-identity.  Steering (the long-claimed oracle blocker) is DONE.

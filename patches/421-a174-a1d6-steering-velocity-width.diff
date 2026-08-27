@@ -1,0 +1,65 @@
+board:0012 unit-STEERING velocity width base-loss (the AZER1 self-play runaway root).  The player/unit
+auto-control drives its position to +-500M (Y monotonic, accelerating) instead of steering to the side-A
+goals.  Root: the two steering functions treat 16-bit velocity/heading fields as 32-bit.
+
+FUN_1000_a174 (control-input -> heading[0x30]/throttle[0x57]) and FUN_1000_a1d6 (heading -> velX[0x59]/
+velY[0x5b], called each tick right before the patch-416 integration) access fields 0x26/0x30/0x55/0x57/
+0x59/0x5b.  asm (fist_dat_image.bin @ 0x1a174 / 0x1a1d6) is WORD throughout:
+  a174: add ax,WORD[di+0x26]; mov WORD[di+0x30],ax; mov WORD[di+0x57],ax; test WORD[di+0x55],0x8000
+  a1d6: mov dx,WORD[di+0x55]; sar dx,1; mov ax,WORD[di+0x26]; mov WORD[di+0x26/0x30],ax;
+        mov WORD[di+0x59],ax; mov WORD[di+0x5b],dx
+Ghidra typed them *(int*)/*(uint*) (32-bit).  Two failure modes: (1) the 32-bit READ of [0x55]/[0x26]
+pulls in the adjacent throttle [0x57] (accelerated to 0xfe by a410/a41b) so the climbing throttle bleeds
+straight into velY -> unbounded velocity; (2) the 32-bit WRITEs clobber neighbours (velX write spills into
+velY, [0x57] write spills into velX, [0x26]/[0x30] spill into +2).  Fix: rebase all six accesses to 16-bit
+*(short*)/*(uint16_t*), matching the WORD asm; sign-extension preserved (movsx/sar are signed).
+--- a/fist.c
++++ b/fist.c
+@@ -59812,7 +59812,7 @@
+   
+   uVar1 = (uint)*(char *)(param_1 + 0xa1);
+   if ((0x17 < uVar1) && (uVar1 < 0xffe9)) {
+-    *(int *)(param_1 + 0x30) = uVar1 + *(int *)(param_1 + 0x26);
++    *(short *)(param_1 + 0x30) = (short)uVar1 + *(short *)(param_1 + 0x26);
+   }
+   uVar1 = (uint)*(char *)(param_1 + 0xa2);
+   if ((uVar1 < 0x18) || (0xffe7 < uVar1)) {
+@@ -59827,8 +59827,8 @@
+   else if (uVar1 < 0xff11) {
+     uVar1 = 0xff10;
+   }
+-  *(uint *)(param_1 + 0x57) = uVar1;
+-  if ((*(uint *)(param_1 + 0x55) & 0x8000) == 0) {
++  *(short *)(param_1 + 0x57) = (short)uVar1;
++  if ((*(uint16_t *)(param_1 + 0x55) & 0x8000) == 0) {
+     if (1 < *(byte *)(param_1 + 0x90)) {
+       FUN_0000_a19e(param_1);
+     }
+@@ -59848,8 +59848,8 @@
+   byte bVar2;
+   int iVar3;
+   
+-  iVar3 = *(int *)(param_2 + 0x55) >> 1;
+-  iVar1 = *(int *)(param_2 + 0x26);
++  iVar3 = *(short *)(param_2 + 0x55) >> 1;
++  iVar1 = *(short *)(param_2 + 0x26);
+   bVar2 = *(byte *)(param_2 + 0x19) & 6;
+   if ((bVar2 != 0) && (bVar2 != 6)) {
+     param_1 = iVar3 * 8;
+@@ -59857,12 +59857,12 @@
+       param_1 = iVar3 * -8;
+     }
+     iVar1 = iVar1 + param_1;
+-    *(int *)(param_2 + 0x26) = iVar1;
+-    *(int *)(param_2 + 0x30) = iVar1;
++    *(short *)(param_2 + 0x26) = iVar1;
++    *(short *)(param_2 + 0x30) = iVar1;
+   }
+   iVar1 = FUN_0000_a196(iVar1,iVar3,param_1);
+-  *(int *)(param_2 + 0x59) = iVar1;
+-  *(int *)(param_2 + 0x5b) = iVar3;
++  *(short *)(param_2 + 0x59) = iVar1;
++  *(short *)(param_2 + 0x5b) = iVar3;
+   return;
+ }
+ 
