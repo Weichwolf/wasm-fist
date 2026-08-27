@@ -2303,3 +2303,19 @@ the AI shooters (types 1/3 fire a286 but the spawn gate [0xa8]==0 stays shut), (
 admitting own-side units (player locks a friendly).  Both are FIST.DAT, asm-verifiable, and downstream of
 the proven object model + LOS.  Next session: confirm the side gate [0x96ab]/aa08-1aa90 (friendly admitted?)
 and the per-unit reload [0xa8] timeline non-perturbingly; each is a bounded base-loss fix.
+
+## Side-gate data (non-perturbing, one-shot dumpreg) -- defect #2 evidence
+
+At mission spawn: [0x96ab] own-side-selector = 0x00, and byte[obj+0x16]&8 (the bit aa08's side filter
+`(cand[0x16]&8)==[0x96ab]` at 1aa90 compares) does NOT cleanly separate the two sides:
+    side=0 (enemy):    bit8=0 x83,  bit8=1 x9
+    side=1 (friendly): bit8=0 x4,   bit8=1 x12
+If [0x16]&8 were the faction bit it would be all-0 for one side and all-8 for the other; the mix (9 enemies
++4 friendlies on the "wrong" bit) means the scan admits own-side units as candidates -> the player locks a
+FRIENDLY (c34d).  Caveat: this assumes [0x16]&8 IS the side discriminator; the 1aa90 asm + how [0x96ab] is
+loaded per-scan must be read to confirm whether (a) [0x16] bit-8 is base-lost at object init, or (b) the
+filter compares the wrong field / [0x96ab] is stale.  Either way it is a bounded FIST.DAT base-loss.  With
+the object model + LOS + fire-decision all proven, the two remaining defects to close for a resolving
+mission are: (1) the AI reload/fire-request timing (7e29 [0xa8]==0 gate), (2) this own-side target
+admission.  Both are the last mile; the session reduced "mission doesn't resolve" to these two located,
+asm-verifiable defects.
