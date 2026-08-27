@@ -338,7 +338,7 @@ extern int g_menu_ready;
  * is the seam a later deterministic (instruction-counted) tick source will replace. */
 #define BIOS_TICK_LIN 0x46C
 unsigned short g_fist_a18e_bx=0;
-long g_a286=0,g_7e29=0,g_7745=0;
+long g_a286=0,g_7e29=0,g_7745=0,g_e1a6=0;
 long g_e1a6=0;
 long g_op54_n=0,g_op54_hit=0,g_op54_raw=0,g_op54_curtype=-1; unsigned g_op54_pz=0,g_op54_th=0;
 unsigned g_e29dis[16]={0}; long g_e29disc[16]={0}; int g_e29n=0;
@@ -492,6 +492,7 @@ static void fist_dump_and_exit(const char *why){
       extern unsigned g_e29_type,g_e29_91,g_e29_3d,g_e29_di; fprintf(stderr,"[7e29firer] type=%04x weapon[0x91]=%02x [0x3d]=%02x di=%04x\n",g_e29_type,g_e29_91,g_e29_3d,g_e29_di);
       extern unsigned g_e29dis[16]; extern long g_e29disc[16]; extern int g_e29n; { unsigned char*dg=g_mem+0x1c000; unsigned short*fbc=(unsigned short*)(dg+0xdfbc); fprintf(stderr,"[7e29di] %d distinct di:",g_e29n); for(int i=0;i<g_e29n;i++){ int inreg=0; for(int j=0;j<0xb6;j++) if(fbc[j*2]==g_e29dis[i]){inreg=1;break;} fprintf(stderr," %04x(n=%ld,reg=%d,t=%04x)",g_e29dis[i],g_e29disc[i],inreg,*(unsigned short*)(dg+g_e29dis[i])); } fprintf(stderr,"\n"); }
       extern long g_op54_n,g_op54_hit; extern unsigned g_op54_pz,g_op54_th; extern long g_op54_raw,g_op54_curtype; extern long g_e1a6; fprintf(stderr,"[e1a6] calls=%ld\n",g_e1a6); fprintf(stderr,"[op54raw] total op-0x54 to gate=%ld  cur-c0e5-obj-type-at-0x54=0x%lx\n",g_op54_raw,g_op54_curtype); fprintf(stderr,"[op54] collision-queries=%ld  would-HIT([proj+0xd]<terrain)=%ld  last(pz=%u th=%u)\n",g_op54_n,g_op54_hit,g_op54_pz,g_op54_th);
+      extern long g_e1a6; fprintf(stderr,"[e1a6] collision-checks=%ld\n",g_e1a6);
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }
@@ -718,6 +719,15 @@ void fist_timer_pump(void){
           int32_t X=*(int32_t*)(dgc+(uint16_t)(s+4)), Y=*(int32_t*)(dgc+(uint16_t)(s+8));
           uint32_t idx=((((uint32_t)(-(int32_t)((uint32_t)Y<<13))>>22)&0x3ff)<<10)|(((uint32_t)X<<13)>>22 &0x3ff);
           *(int32_t*)(dgc+(uint16_t)(s+0xc)) = ((int32_t)hmc[idx&0x3fffff]<<8) + 1792; }
+      }
+      if (in_mission && getenv("FIST_GROUNDCLAMP")) {
+        uint8_t *dgc = g_mem + 0x1c000; uint16_t *fbc=(uint16_t*)(dgc+0xdfbc);
+        uint8_t *xb = g_mem + FIST_EXT_BASE; uint8_t *hmc=(uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0x85bc));
+        if (hmc) for(int i=0;i<0xb6;i++){ uint16_t sv=fbc[i*2]; if(!sv) continue;
+          uint16_t ty=*(uint16_t*)(dgc+sv); if(ty>0x1b) continue;  /* units only, skip proj/fx */
+          int32_t X=*(int32_t*)(dgc+(uint16_t)(sv+4)), Y=*(int32_t*)(dgc+(uint16_t)(sv+8));
+          uint32_t idx=((((uint32_t)(-(int32_t)((uint32_t)Y<<13))>>22)&0x3ff)<<10)|(((uint32_t)X<<13)>>22 &0x3ff);
+          *(int32_t*)(dgc+(uint16_t)(sv+0xc)) = ((int32_t)hmc[idx&0x3fffff]<<8) + 1792; }
       }
       if (coop) { tick_advance(); }
       else if (in_mission && !nomc) {           /* wasm-parity cadence: one tick per pump, no SIGALRM */

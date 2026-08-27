@@ -2723,3 +2723,23 @@ coupled to the op-0x4c render) remaining."  patch 438 held with the cascade; op-
 decoded+ready (spec above).  The largest single advance of the whole effort; combat is mechanically solved
 bar the unit-Z ground-clamp + its render coupling.  Goal not yet met, but the finish is now two named,
 bounded pieces (ground-clamp + op-0x4c render), not a diffuse AI problem.
+
+## Ground-clamp experiment: not sufficient alone -- combat still needs flight-model Z + explosion + render
+
+FIST_GROUNDCLAMP (set unit [obj+0xc]=terrain Z each tick) + FIST_RENDERGUARD (skip the NULL-sprite blit in
+mga 2b1e) ran crash-clean under gdb but a296=16 -- NO deaths.  So the naive per-tick unit-Z clamp is not by
+itself enough: either the sim overwrites [obj+0xc] after the clamp (needs confirming), the shell arc still
+doesn't drop [proj+0xd] below 0x80 within its 0x1e0-tick life, OR the explosion/splash-damage path (b691 ->
+b2ef) has its own base-loss beyond the collision.  e1a6 count under the (build-flaky) probe was
+inconclusive.  So the finish is more than one line: (a) the flight-model per-unit ground-clamp done
+faithfully (and surviving the sim's own Z writes), (b) the shell descending into the collision regime, (c)
+the b691 explosion -> splash damage -> b2ef actually killing units, (d) the op-0x4c/mga render drawing
+on-ground units (board:0001) so no guard is needed.  Each is bounded and now reachable because the fire
+chain SPAWNS+FLIES (patch 438) and op-0x54 is decoded/implemented.
+
+Net for the session: the combat blocker (7c1d->7e29 host-ptr) is FIXED (438), the spawn cascade is FIXED,
+op-0x54 collision is DECODED+implemented -- projectiles spawn+fly for the first time ever.  The mission
+still does not resolve (a296=16), gated on the flight-model unit-Z + explosion-damage + op-0x4c render, all
+named and bounded.  This is the largest advance of the effort; the remaining frontier is concrete, not
+diffuse.  patch 438 held with the cascade; op-0x54 handler + the ground-clamp/render-guard experiments are
+specced here for the next pass.
