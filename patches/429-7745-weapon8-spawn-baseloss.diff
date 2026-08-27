@@ -1,0 +1,56 @@
+board:0012 weapon-8 projectile SPAWN 7745 base-loss -- REACHED when a unit actually fires (combat-heavy battles e.g. AZER5, where the 7e29 gate passes).  Ghidra dropped b1df's returned projectile DI and used the unaff_CS pseudo-var for the b725 launcher + all [+0xa8/0x3c/0x92] writes (wild), lost the WORD ammo [0xad] + the clc/stc CF.  Rebased di->DGROUP, proj=b1df(8), b725(SI=proj,DI=firer), CF=g_fist_cf.  First of the turret spawn cascade (b725/ace0 follow).
+--- a/fist.c	2026-08-27 16:49:37.311839361 +0200
++++ b/fist.c	2026-08-27 16:49:37.321115288 +0200
+@@ -55724,27 +55724,31 @@
+              undefined2 param_5)
+ 
+ {
+-  undefined2 uVar1;
+-  int unaff_CS;
+-  undefined1 uVar2;
+-  
+-  uVar2 = 0;
+-  if (*(int *)(param_4 + 0xad) != 0) {
+-    *(int *)(param_4 + 0xad) = *(int *)(param_4 + 0xad) + -1;
+-    *(undefined1 *)(param_4 + 0xe4) = 3;
+-    FUN_1000_a265(param_1,param_2,param_4);
+-    uVar1 = (undefined2)param_2;
+-    FUN_1000_b1df(8,param_4);
+-    if (!(bool)uVar2) {
+-      FUN_0000_b725(uVar1,param_4,unaff_CS,param_5);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 0x14;
+-      FUN_0000_9b5c(unaff_CS);
+-      FUN_0000_c047(0xc,param_3,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0x3c) = 0x10;
+-      *(undefined1 *)(unaff_CS + 0x92) = 0;
+-      return;
+-    }
+-  }
++  /* PATCH 429: weapon-8 projectile SPAWN (asm 0x17745; DS=DGROUP, di=firer near-offset).  Ghidra base-lost
++     [di+0xad] (WORD ammo, read as *(int*)), DROPPED b1df's returned projectile DI (asm `mov si,di; pop di`
++     -> SI=proj, DI=firer), and used the uninitialised `unaff_CS` pseudo-var as proj+firer for b725 and every
++     [+0xa8/0x3c/0x92] write -> SEGV the instant a unit actually fires (reached in combat-heavy battles, e.g.
++     AZER5, where the 7e29 gate passes).  Also lost the clc/stc CF contract (asm 17786/17788).  Rebuilt 1:1:
++     dec WORD ammo, a265 aim, b1df(8)->proj, b725(SI=proj,DI=firer), reload[0xa8]=0x14, 9b5c, c047(0xc),
++     [0x3c]=0x10, clear fire-trigger [0x92], CF=0; no-ammo/pool-full -> g_fist_cf=1. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_4;
++  unsigned int proj;
++  (void)param_1; (void)param_2; (void)param_3; (void)param_5;
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0xad)) == 0) { g_fist_cf = 1; return; }
++  *(unsigned short *)(dg + (unsigned short)(di + 0xad)) -= 1;
++  dg[(unsigned short)(di + 0xe4)] = 3;
++  FUN_1000_a265(0, 0, (int *)(uintptr_t)di);
++  proj = (unsigned short)FUN_1000_b1df(8, (int *)(uintptr_t)di);
++  if (g_fist_cf) { g_fist_cf = 1; return; }
++  FUN_0000_b725(0, (int)proj, (int)di, 0);
++  dg[(unsigned short)(di + 0xa8)] = 0x14;
++  FUN_0000_9b5c((int)di);
++  FUN_0000_c047(0xc, 0, (int)di);
++  dg[(unsigned short)(di + 0x3c)] = 0x10;
++  dg[(unsigned short)(di + 0x92)] = 0;
++  g_fist_cf = 0;
+   return;
+ }
+ 
