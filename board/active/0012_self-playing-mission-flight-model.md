@@ -1723,3 +1723,15 @@ a296 plateaus at 10 (min_a296=10) -- 6 killed, 10 survive.  Non-perturbing probe
 2. NAVIGATION: whether the 10 survivors are driven into weapon range (emitter or main-gun) -- min_los
    142388 is within LOS range but likely beyond weapon range, so drive-to-goal still matters.
 The crash + reach are SOLVED; resolution is these two, both located with non-perturbing evidence.
+
+## Fire-gate detail (2026-08-27, post-milestone)
+
+7c1d fires 7e29 while [0x92]!=0 (the a286 fire-request 0x30, decremented ~48 ticks) or [0x17]&0x80.  7e29
+spawns iff [0x91]==4 || [0xa8]==0.  Over 1056 type-0 dispatches: 0 passed -- [0xa8] (reload) never 0 at
+fire time and [0x91]=145 (garbage, not a 0..6 weapon index).  FUN_1000_72f0 (weapon-select, asm 0x172f0)
+sets [player+0x91] via a base-lost host-ptr read/write (`iVar3=DAT_2000_2d34`(near-offset) used as a host
+pointer `*(char*)(iVar3+0x91)`), but with EMPTY player input in self-play it is not driven, so [0x91] stays
+uninitialised.  NOTE: this probe counted only FUN_0000_7e29 (the TYPE-0/player dispatcher); the enemy units
+fire through the SIBLING dispatchers 899c/91b8/99a2 (gate [0x91]==6) which are NOT yet probed -- the AI-vs-AI
+kill path likely runs through those + their emitters, so the next step is to probe/land the sibling fire
+cascades and settle the [0x91]/[0xa8] weapon-init, not only the player's 7e29.
