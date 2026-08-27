@@ -1966,3 +1966,29 @@ spawn methods fire).  Closing it means the movement/order layer (the waypoint go
 from the mission order data, or a combat-steer override) must keep units engaged -- verified against an
 oracle unit-position trace of an original engagement.  This is the last, deep subsystem, now traced to the
 exact functions (ab91/ac7e/ac9e + 0541) and fields ([0x49]/[0x30]/[0x26]).
+
+## *** BREAKTHROUGH via Cosmo's hint: the turret FIRES in combat-heavy battles (2026-08-27) ***
+
+Cosmo: "es gibt ja mehr missionen. bei der ersten passiert halt nicht viel" (AZER1 is the quiet first
+mission).  Decisive: FIST_FSG_BATTLE=AZER5 (patch 380 overrides the loaded battle -> its own map D31/C31)
+makes the units FIRE -- 7745 (weapon-8 turret spawn) reached 720x (AZER1: 0).  So the fire cascade WORKS in
+a combat-heavy battle; AZER1 just never sustains engagement.  This confirms the whole fire chain is right.
+Landing 7745 (patch 429, re-landed) fixed AZER5's spawn-method crash.
+
+But AZER5 still doesn't resolve, for TWO now-precise reasons:
+  1. THE a294 POOL LEAK (patch-258 orphan bug): projectile SPAWNED = 0 over 720 fires -- b1df ALWAYS returns
+     full because a294 is at its 0x96=150 cap.  ROOT: ba33 (asm 0xba33) allocates a NEW object via b1df(4)
+     (SI=new) and ba5d installs the template into the NEW object with the CALLER's position -- but patch 258
+     DROPPED b1df's return and passed the CALLER (param_2), orphaning a registered object each emitter fire
+     (b51f->ba49->ba33); ba5d also SELF-COPIED [si+N]<-[si+N] instead of the asm [si+N]<-[di+N] (caller).
+     Registry proof: type-0x10 (b51f) objects grow 20 -> 92 as a294 fills.
+  2. PROJECTILE PHYSICS (b725 launcher + ace0 projectile-init) still base-lost -> even when a projectile
+     spawns it flies wrong / doesn't hit.  ace0 (asm 0x1ace0-0x1adcc + sub 0x1addb) is a large 1:1 landing
+     (DWORD pos/vel, DGROUP ballistic tables, b26a/a18e/a192 -- callees already correct).
+
+Patch 430 (the asm-correct ba33/ba5d leak fix) DROPS a294 150->58 on AZER5 (leak gone!) but REGRESSES AZER1
+(hang after map-load) -- the now-proper effect objects expose a downstream base-loss (same fragility that
+reverted patch 424).  So 430 is HELD: the next step is to find the AZER1 hang the proper effect model
+triggers, land 430 cleanly, then land b725/ace0.  The path to a RESOLVED combat mission is now concrete:
+fix the leak (430 + the exposed downstream) -> projectiles allocate -> land b725/ace0 -> projectiles hit ->
+side eliminated.  The turret fires; this is the last cascade.
