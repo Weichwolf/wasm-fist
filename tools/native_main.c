@@ -339,6 +339,8 @@ extern int g_menu_ready;
 #define BIOS_TICK_LIN 0x46C
 unsigned short g_fist_a18e_bx=0;
 long g_a286=0,g_7e29=0,g_7745=0;
+long g_e29_3dh[16]={0}; unsigned g_e29_type=0,g_e29_91=0,g_e29_3d=0,g_e29_di=0;
+long g_slot0_a8z=0,g_slot0_a8nz=0;
 long g_reinit_a8=0,g_7d69dec=0;
 long g_b1df_n=0,g_b1df_late=0,g_7e29ent=0,g_7e29gate=0;
 long g_min_a296 = 0x7fffffff;
@@ -483,6 +485,8 @@ static void fist_dump_and_exit(const char *why){
       extern long g_b1df_n,g_b1df_late; fprintf(stderr,"[spawn] b1df-total=%ld  b1df-in-combat(tick>1000)=%ld\n",g_b1df_n,g_b1df_late);
       { extern long g_7e29ent,g_7e29gate; fprintf(stderr,"[7e29] entered=%ld  gate-open(spawn-dispatch)=%ld\n",g_7e29ent,g_7e29gate); }
       extern long g_reinit_a8,g_7d69dec; fprintf(stderr,"[reload] 7963-reinit-a8-in-combat=%ld  7d69-decrement-in-combat=%ld\n",g_reinit_a8,g_7d69dec);
+      extern long g_slot0_a8z,g_slot0_a8nz; fprintf(stderr,"[7d69slot] cursor-hits-7d69-slot: a8==0=%ld  a8!=0(should-decrement)=%ld\n",g_slot0_a8z,g_slot0_a8nz);
+      extern unsigned g_e29_type,g_e29_91,g_e29_3d,g_e29_di; fprintf(stderr,"[7e29firer] type=%04x weapon[0x91]=%02x [0x3d]=%02x di=%04x\n",g_e29_type,g_e29_91,g_e29_3d,g_e29_di);
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }

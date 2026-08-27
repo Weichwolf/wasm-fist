@@ -2610,3 +2610,23 @@ target persistence across the reload window).  This is a deep AI/movement proper
 + aim under the reload timer), NOT a single base-loss -- genuine multi-session work, but now the mechanism
 is fully understood end-to-end and the exact gate ([0x92] & [0xa8]==0 coincidence) is measurable to verify
 any fix.  Goal not met; the mechanism is closed.
+
+## NEW LEAD: 7e29 fire-attempts come from a NON-registry [0xa8]!=0 object (di=0x325c), not the real units
+
+Resolving the reload contradiction non-perturbingly:
+  - 7c1d's 7d69 cursor slot ([0x3d]&0x1e==0): [0xa8]==0 x3644, [0xa8]!=0 x0  -> the REAL registry units
+    are all RELOADED ([0xa8]=0) in combat and hit the reload slot, but carry no fire-request.
+  - 7e29 (gate-open=0, all entries [0xa8]!=0): the captured firer is di=0x325c, type=0, weapon[0x91]=0,
+    [0x3d]=0x32.  di=0x325c is NOT a registry unit slot (real units are 0xa0xx..0xd7xx); [0x3d]=0x32 gives
+    &0x1e=0x12 (never 0) so this object NEVER hits the 7d69 reload slot -> its [0xa8] is frozen nonzero.
+So the fire path (7c1d->7e29) is being driven by an [0xa8]!=0 object that is NOT one of the reloaded
+registry units.  Two readings, both bounded and for the next session: (a) di=0x325c is a spawned/effect
+object (one of b1df-in-combat=4) that shouldn't drive the weapon-fire path, or a corrupted/orphan
+registration that c0e5 dispatches as a type-0 unit; (b) the REAL units are reloaded+targeted but afa2 never
+sets their [0x92] fire-request (so they never enter 7e29 at all), and the 1440 7e29 entries are all this
+one stuck object spinning on [0x17]&0x80.  Next probe (non-perturbing): in 7e29, histogram DISTINCT di
+values + whether each is in the 0xdfbc registry -> confirm if the fire-attempts are ALL the garbage object
+(-> object-dispatch/orphan bug, a specific FIXABLE defect) or spread across real units (-> the
+engagement-hold/no-fire-request reading).  This is a sharper, more mechanical lead than "hold aim 11s" --
+the real units are RELOADED (contradicting the reload-blocker reading for THEM); their missing piece is the
+FIRE-REQUEST, while a non-unit object spins the spawn dispatch.  Goal not met; this is the live thread.
