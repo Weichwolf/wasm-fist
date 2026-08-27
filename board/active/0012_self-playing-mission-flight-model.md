@@ -2180,3 +2180,30 @@ check (FUN_1000_* at 0x100000), (2) find the projectile-collision -> damage -> r
 base-loss, verified via the WATCHPHYS recipe against the oracle's actual roster address (to be located, NOT
 0x2a294).  This session: leak+crash SOLVED (patch 437, held cascade clean); the a294/a296 stall metric
 DISPROVEN as the resolution signal; resolution re-localized to the overlay unit-roster + damage path.
+
+## Correction + accurate state (end of oracle arc)
+
+Correction to the previous reframe: watching fixed scalar addresses in the oracle (0x2a294 side-counter,
+0x25fbe) is the WRONG instrument, not proof the port's model diverges.  b2ef (patch 363) decrements
+DAT_2000_9fbe[param_1*2] (the per-SLOT registry value-array, indexed by registry index) and the a2f7/a38d
+per-SUB presence arrays -- NOT scalar counters at those base addresses.  So a death writes a slot-indexed
+element (a moving address), which a fixed-address WATCHPHYS on the base byte cannot catch; my traces caught
+only the block memset(721f)/memcpy(f14a5) that INITIALISE the registry at mission load (val 0x74 = 116 =
+the initial object count).  The KDV overlay at 0x100000 is the intro-video player (fist_ext.c), NOT combat
+logic -- so the mission win/lose IS in FIST.DAT (the oracle = FIST.RUN+FIST.DAT resolves it), reachable.
+
+SOLID, BANKED this session:
+  1. Oracle CONFIRMS AZER1 self-plays to "MISSION LOST / UNITS REMAINING 00" in ~2.5min (screen captured) --
+     the goal condition is reproducible.  Working oracle live-trace recipe (WATCHPHYS, no signal).
+  2. Patch 437 (held): 5 base-losses (a3e2/a3ec/aae8/bc0c/bb02) exposed when the correct b1df flows real
+     objects through c0e5/aim-servo -- FIXED.  Held cascade (430-437) now CRASH-CLEAN + LEAK-FREE +
+     duplicate-free (109 objects, a294 stable at 120, was pinned at the 0x96=150 cap).  make check clean.
+  3. Object model is correct; the correct b1df removed the stable build's accidental buggy skirmish -> the
+     "5 early kills" were an orphan-bug artifact, not real combat.
+
+OPEN (the real barrier, unchanged in kind): friendly units take NO damage in the port (no deaths) so the
+mission never resolves.  The enemy->friendly DAMAGE path (projectile collision -> HP -> b2ef via one of its
+23 callers) does not fire.  Correct next approach (NOT more fixed-address oracle watching): statically trace
+the port's projectile-collision/damage path from the b2ef callers backward to the fire-spawn, OR instrument
+the port to see how far a projectile gets (spawn -> fly -> collide -> damage -> b2ef), and close the
+base-loss that stops it.  Land held cascade 430-437 together once damage works + wasm-parity verified.
