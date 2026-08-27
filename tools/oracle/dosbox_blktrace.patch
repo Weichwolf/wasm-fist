@@ -1,0 +1,34 @@
+board:0013 dynamic basic-block trace -- dump every EXECUTED instruction once (dedup by linear via a
+bitmap) as "cs:eip linear <16 opcode bytes>", to reconstruct the executed program (overlay flight model,
+indirect edges, SMC, the code static Ghidra cannot reach).  Env: FIST_BLKTRACE=<path>, optional
+FIST_BLKTRACE_LO/_HI (hex linear scope) and FIST_BLKTRACE_CS (hex, one code segment).  Insert in the
+normal core's per-instruction loop (after the 0a28 hook), before the C_DEBUG block.  Apply to
+third_party/dosbox-build/dosbox-0.74-3/src/cpu/core_normal.cpp then `make`.
+--- a/src/cpu/core_normal.cpp
++++ b/src/cpu/core_normal.cpp
+@@ after the fist_0a28 hook in CPU_Core_Normal_Run() @@
+ 		if (fist_0a28_f && SegValue(cs)==(Bitu)fist_0a28_seg && (reg_eip&0xffff)==0x0a28) {
+ 			fist_0a28_count++;
+ 			fprintf(fist_0a28_f,"%.4f\n", PIC_FullIndex());
+ 		}
++		static int fist_blk_init = 0; static FILE* fist_blk_f = 0;
++		static unsigned char* fist_blk_seen = 0;
++		static Bit32u fist_blk_lo = 0, fist_blk_hi = 0xffffffffu; static int fist_blk_cs = -1;
++		if (!fist_blk_init) { fist_blk_init = 1;
++			const char* p = getenv("FIST_BLKTRACE");
++			if (p) { fist_blk_f = fopen(p, "w");
++				fist_blk_seen = (unsigned char*)calloc(0x2000000/8, 1);
++				const char* lo = getenv("FIST_BLKTRACE_LO"); if (lo) fist_blk_lo = (Bit32u)strtoul(lo,0,16);
++				const char* hi = getenv("FIST_BLKTRACE_HI"); if (hi) fist_blk_hi = (Bit32u)strtoul(hi,0,16);
++				const char* cs = getenv("FIST_BLKTRACE_CS"); if (cs) fist_blk_cs = (int)strtol(cs,0,16);
++			}
++		}
++		if (fist_blk_f && fist_blk_seen && (fist_blk_cs < 0 || SegValue(cs)==(Bitu)fist_blk_cs)) {
++			Bit32u lin = (Bit32u)core.cseip;
++			if (lin >= fist_blk_lo && lin < fist_blk_hi && lin < 0x2000000
++			    && !(fist_blk_seen[lin>>3] & (1u<<(lin&7)))) {
++				fist_blk_seen[lin>>3] |= (1u<<(lin&7));
++				char b[33]; for (int i=0;i<16;i++) sprintf(b+i*2,"%02x",(unsigned)mem_readb(lin+i));
++				fprintf(fist_blk_f,"%04x:%08x %08x %s\n",(unsigned)SegValue(cs),(unsigned)reg_eip,(unsigned)lin,b);
++			}
++		}

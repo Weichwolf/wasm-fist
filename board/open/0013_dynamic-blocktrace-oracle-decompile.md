@@ -60,3 +60,21 @@ scope to the flight-model clusters), run AZER1 self-play once, and reassemble th
 Then port the flight-model blocks (unit-Z/dynamics, fire dispatch->spawn, projectile flight, damage) as
 asm-verified patches, verified against the block bytes + write sequence.  This is the concrete tool for
 finishing board:0012 (and it retires the "oracle is CR3-blocked" excuse that recurs across the board).
+
+## BUILT + RUNS + first finding (2026-08-27)
+
+Built the FIST_BLKTRACE hook into third_party/dosbox-build (normal-core per-instruction dedup bitmap;
+patch saved as tools/oracle/dosbox_blktrace.patch since third_party is gitignored) and ran AZER1 self-play
+under it (xvfb + xclick BATTLES->OK->ACCEPT, core=normal).  It WORKS: ~21.5k unique executed instructions,
+deduped.  CS distribution in-mission: cs=0x1119 (8424, extender present/service, 32-bit), **cs=0x2082
+(6071) = the flight model**, cs=0x4ec3/0x0249/0x02dd/0x4ab0 (sound/extender), etc.
+
+DECISIVE, resolves the board's cs=0x2082 flip-flop: cs=0x2082's bytes ARE FIST.DAT at a CONSTANT offset --
+`FIST.DAT_off = cs2082_eip + 0xf690` (10/12 sampled instrs match; the 2 misses are extender trampolines /
+far-glue).  0xf690 = 0xf69<<4, so **cs=0x2082 is the 0xf69/cs=0x1000 engine code relocated to linear
+0x20820** -- i.e. the flight model is DECOMPILED FIST.DAT run under a different selector, NOT missing
+overlay code.  So the port HAS the code; the combat gap is a dispatch/base-loss in the already-decompiled
+flight functions, findable by oracle-vs-port execution diff + the targeted write-trace (FIST_WATCHFLAT on
+the unit-Z / aa08-threshold fields) -- both now unblocked by this in-repo binary.  NEXT: write-trace the
+unit-Z [obj+0xc] writer to pin the terrain-follow physics, map its eip -> FUN_1000, and fix why the port's
+copy does not set it.
