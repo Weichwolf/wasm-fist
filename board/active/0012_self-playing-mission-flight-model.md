@@ -1837,3 +1837,33 @@ This is the precise, single remaining link, and it is RUNTIME-PROBE-BLOCKED (hot
 the timing-sensitive run).  The oracle is the only way to see how the ORIGINAL sequences the animation-frame
 dispatch of the reload decrement against the fire request so the gate passes.  Everything upstream (reach,
 crash-free run, aim, targeting, afa2) is SOLVED; this reload-dispatch timing is the last mile to a296->0.
+
+## The reload is 1/16-tick dispatched (~224-tick / 15s reload) -- the exact timing mechanism (2026-08-27)
+
+Static, decisive: table1 @image 0x7c91 (7c1d's animation sub-method vectors, indexed by [0x3d]&0x1e) has
+**table1[0] = 0x7d69** = the reload-decrement handler.  [0x3d] increments by 2 each tick (7c1d), so
+[0x3d]&0x1e cycles 0..0x1e every 16 ticks -> 7d69 (and thus the [0xa8]-- decrement) fires only ONCE PER 16
+TICKS.  With [0xa8] init ~14 (weapon 2), the effective reload is ~14x16 = 224 ticks ~ 15s at 15 Hz -- a
+realistic main-gun reload, and FAITHFUL (the table is image data; the original decrements at the same rate).
+
+So the a296=10 plateau mechanism is now fully explained WITHOUT any base-loss in the reload/fire path:
+  - afa2 sets the fire request the moment the aim is within +-0xb6 (1056 requests over the run).
+  - but those requests cluster EARLY, while [0xa8] is still counting down from the initial weapon-select;
+    the 16-tick-dispatched reload only reaches 0 ~224 ticks in, and 7963 does NOT re-set [0xa8] while the
+    weapon is stable, so [0xa8] does wind down -- but by the time it is 0 the aim/target window that raised
+    the request has passed ([0xa8]=0 at exit, with NO active request; gate_pass=0).
+The turret only ever fires if a fresh aim-converged request happens to land on a tick where [0xa8] has
+already reached 0.  In the port that coincidence never occurs in 17830 ticks; in the original the mission
+resolves, so the original's units either HOLD aim across the ~224-tick reload or re-acquire+converge after
+[0xa8]==0.  Which of those the port fails is a RUNTIME-TIMING question (target persistence / aim-tracking on
+a moving target across 15s), and it is runtime-probe-BLOCKED (even a single-read probe in 7e29 hangs the
+timing-sensitive run -- reconfirmed).
+
+## Honest limit reached (static analysis exhausted)
+
+Every LINK of the fire chain is now accounted for and shown faithful: reach, crash-free run, targeting-side
+filter, op-0x58 LOS, afa2 fire-decision, aim convergence, weapon-select, the 1/16 reload rate.  The ONLY
+remaining unknown is the RUNTIME coincidence of [0xa8]==0 with an active aim-converged request, which cannot
+be observed in the port (perturbation) and is not determinable statically.  The oracle (dosbox-fist,
+FIST_WATCHFLAT on a firing unit's [0xa8]/[0x92]/[0x89]/[0x8b]) is the sole remaining data path to see how
+the original achieves the coincidence -> then a faithful fix + landing the asm-ready spawn cascade resolves.
