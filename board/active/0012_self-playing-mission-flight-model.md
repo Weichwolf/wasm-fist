@@ -1555,3 +1555,23 @@ the entire combat model to its layers and identified the singular per-layer bloc
 algorithms for each.  Goal UNMET -- one AZER1 mission does not yet resolve -- but the combat model is
 converted from "mysterious largest-remaining-piece" to a decoded, layer-by-layer reconstruction with every
 next step proven and specified (terrain-follow Z -> fire cascade -> projectile flight -> render -> wasm).
+
+## DECISIVE: LOS is NOT the sole blocker -- aa08 rank/range also rejects all (2026-08-27)
+
+Forced op-0x58 to return always-visible (diagnostic): tcnt/tgt/firereq STAYED 0.  So even with LOS
+"visible", the enemy-scan FUN_1000_aa08 selects NO candidate -- its rank gate (rank<=[0x9935]) and/or
+octant-range gate (08e8 -> rax<=[0x993a] && rax<[0x993e]) reject every candidate.  Confirmed additionally:
+the per-unit terrain-follow Z hook (obj[+0xc]=heightmap<<8+eye, camera-Z class) DOES set the Z
+(pz 1280 -> ~10000, terrain-following) but op-0x58 still returns 0 -- the LOS march uses a FIXED 10-bit
+shld index while the terrain grid is detail=11 (2048^2), so [0x85bc]+fixed-10 samples the wrong cells;
+the op-0x58 index/heightmap-resolution needs reconciling (coarse LOS grid vs the 2048 render grid).
+
+So the targeting chain is a STACK of layers, each independently broken/absent, proven by isolation:
+  unit-Z terrain-follow (absent flight-model physics) -> op-0x58 index/res (fixed-10 vs detail-11) ->
+  aa08 rank[0x9935]/range[0x993a] gates -> ae32 acquire -> afa2 fire -> the fire cascade -> projectile.
+Forcing any one layer does NOT cascade to a target lock -- each must be made faithful.  This is exactly
+the goal's "multi-phase, largest remaining piece", now empirically decomposed with each layer's exact
+symptom, and it is why board:0013 (the dynamic block-trace) is the right tool: it yields the real per-frame
+values (unit-Z, the rank/range thresholds, the LOS index resolution) that pin each layer, instead of the
+guess-and-isolate loop.  With the instrumented dosbox-fist absent from this environment, each layer's
+faithful data is not observable here -- the tool boundary, not a method boundary.
