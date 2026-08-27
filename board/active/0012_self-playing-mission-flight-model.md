@@ -2912,3 +2912,30 @@ This session's net: the "self-playing mission stalls" mystery is fully resolved 
 elevation that computed -90deg (patch 431's scrambled 077e args) then -45deg (residual 077e octant bug).
 The partial fix already turns dead straight-down shells into flat-flying shells that collide with terrain.
 Goal not met; the remaining work is one 077e octant-math fix + the damage-cascade check, both asm-scoped.
+
+## 077e FAITHFULLY RECONSTRUCTED + VERIFIED -- aim/heading atan2 now correct; blocker moves to TARGET-SELECTION
+
+Reconstructed FUN_0000_077e as a faithful 16-bit emulation of the asm (0x77e-0x82a) -- the prior Ghidra
+decompile did 32-bit arithmetic where the asm uses 16-bit registers, so its sign-folds and octant assembly
+were wrong for negative Y and it diverged on degenerate inputs.  VERIFIED against atan2 across every octant
+AND world-scale magnitudes (BAM, 0x4000=90deg):
+  (1000,1000)=45  (1000,0)=90  (-2304,22782)=-5.8(exp -5.77)  (327680,196608)=59.0  (1048576,524288)=63.4
+  (35255,128634)=15.3 [the real combat dX/dY]  -- ALL match to <0.1deg, symmetric for +/-Y.
+The full code is in patches/held/439-077e-faithful-atan2.note; the required 0578 caller-arg fix (077e wants
+ax=dZ_lo,cx=range_hi,dx=dZ_hi,bx=range_lo; patch 431 passed a stale param_2 + a garbage +0xa read) is in
+patches/held/440-0578-077e-args.note.  Both are needed together (faithful 077e + old garbage args -> crash).
+
+INTEGRATION RESULT (faithful 077e + 0578 fix, full AZER1):
+  - elevation for the combat shot: -90deg (patch 431 bug) -> -45deg (partial) -> CORRECT ~-5.77deg
+  - units MOVE with sensible velocity (player vx=4 vy=28, live=108, goals=13) -- the STEERING/heading is now
+    coherent (this is the "units steer WRONG DIRECTION" half from board 1d2f7ac, now FIXED by correct atan2)
+  - BUT: firereq=0, tgt=0 -- TARGET-SELECTION now picks NO target, so no shots, a296 stays 16.
+So fixing the aim/heading atan2 (077e) resolves the heading half of the old "heading/target-selection
+divergence" and exposes the OTHER half: target-selection selects nothing once the angles are correct.  This
+is the precise remaining blocker -- NOT the aim (now correct+verified), NOT the render, NOT the damage.
+
+NEXT (precisely scoped): the target-selection walk (the 902c callees a9ea/a358/a57a from board b0ccfc3, and
+the cand/tgt scoring that SIMTRACE reports) -- find why, with correct a18e angles, it yields tgt=0.  Likely
+a threshold/cone/scoring comparison that only passed under the old wrong (coarse/-90deg) angles.  Then the
+fire cascade (438, proven) -> flat shells -> collision -> b691/b2ef damage should follow.
+Goal not met; but the aim/heading atan2 is now correct+verified and the blocker is a single named subsystem.

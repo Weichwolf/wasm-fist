@@ -1,0 +1,6 @@
+NOTE: 0578 (a18e ballistic-aim) must call the faithful 077e with the correct register roles:
+  { unsigned tz=*(uint*)(param_5+8), sz=*(uint*)(param_4+8); unsigned bor=(tz<sz);
+    short dzhi=(short)(*(unsigned short*)(param_5+0xa) - *(unsigned short*)(param_4+0xa) - bor);
+    g_fist_a18e_bx = (unsigned short)FUN_0000_077e(tz-sz, (uint)iVar2>>16, (uint)(int)dzhi, (uint)iVar2); }
+(077e wants ax=dZ_lo, cx=range_hi, dx=dZ_hi, bx=range_lo; patch 431 passed a stale param_2 + garbage.)
+With faithful 077e + this, the combat elevation is the correct ~-5.77deg (was -90 then -45).

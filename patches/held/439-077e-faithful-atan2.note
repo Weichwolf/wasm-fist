@@ -1,0 +1,90 @@
+NOTE (not yet a .diff): faithful 16-bit reconstruction of FUN_0000_077e (asm 0x77e-0x82a).
+VERIFIED correct vs atan2 across all octants (BAM, 0x4000=90deg):
+  (0,1000)=0  (1000,1000)=45  (1000,0)=90  (-2304,22782)=-5.8(exp -5.77)  (2304,22782)=+5.8  (5000,10000)=26.6
+Replaces the 32-bit Ghidra decompile (which was asymmetric/divergent for negative Y).
+Return: (int)(short)r RUNS the mission but the fire-path (ace0) is never reached (units stop firing);
+        (int)(unsigned short)r HANGS map-load -- so integration needs the exact caller-expected return
+        format + why the fire-decision is coupled to the OLD buggy aim.  Body:
+
+int __allregs FUN_0000_077e(uint param_1,uint param_2,uint param_3,uint param_4)
+{
+  /* PATCH 439: faithful 16-bit reconstruction of the fixed-point atan2 (asm 0x77e-0x82a).  The prior
+     Ghidra decompile did 32-bit arithmetic where the asm uses 16-bit registers (ax/dx/bx/cx), so its
+     sign-folds and octant assembly were wrong for negative Y and it could diverge.  __allregs entry:
+     ax=param_1=Y_lo, cx=param_2=X_hi, dx=param_3=Y_hi, bx=param_4=X_lo  (Y=dZ, X=range, 32-bit hi:lo).
+     Returns the BAM angle (0x4000=90deg).  asm-verified vs re_out/fist_dat_image.bin 0x77e..0x82a. */
+  unsigned short ax=(unsigned short)param_1, cx=(unsigned short)param_2,
+                 dx=(unsigned short)param_3, bx=(unsigned short)param_4;
+  unsigned short bp=0, t; int cf;
+  if (dx & 0x8000) {                                   /* 780 or dx,dx; js */
+    bp = 2;                                            /* 784 */
+    cf=(ax!=0); ax=(unsigned short)-ax;                /* 787 neg ax; jae */
+    if(!cf) dx=(unsigned short)-dx; else dx=(unsigned short)~dx;   /* 772 / 78b */
+    cf=(bx!=0); bx=(unsigned short)-bx;                /* 78d neg bx; jae */
+    if(!cf) cx=(unsigned short)-cx; else cx=(unsigned short)~cx;   /* 776 / 791 */
+  }
+  if (cx & 0x8000) {                                   /* 793 or cx,cx; js */
+    bp++;                                              /* 797 */
+    cf=(bx!=0); bx=(unsigned short)-bx;                /* 798 neg bx; jae */
+    if(!cf) cx=(unsigned short)-cx; else cx=(unsigned short)~cx;   /* 77a / 79c */
+    t=bx; bx=ax; ax=t;  t=dx; dx=cx; cx=t;             /* 79e xchg bx,ax; xchg dx,cx */
+  }
+  bp = (unsigned short)(bp << 1);                      /* 7a1 shl bp,1 */
+  for (;;) {                                           /* loop @7b7 */
+    unsigned int Y=((unsigned int)dx<<16)|ax, X=((unsigned int)cx<<16)|bx;
+    unsigned int Yr = Y - X; int borrow = (Y < X);     /* 7b7 sub; 7b9 sbb */
+    ax=(unsigned short)Yr; dx=(unsigned short)(Yr>>16);
+    if (borrow) {                                      /* 7bb jae not-taken -> 7bd restore, exit */
+      unsigned int Yb = Yr + X; ax=(unsigned short)Yb; dx=(unsigned short)(Yb>>16);
+      break;                                           /* 7c1 jmp 7d3 */
+    }
+    bp++;                                              /* 7ac */
+    unsigned int X2 = X << 1;                          /* 7ad shl bx,1; rcl cx,1 */
+    unsigned int nlo = (unsigned int)(unsigned short)X2 + (unsigned short)Yr;  /* 7b1 add bx,ax */
+    bx = (unsigned short)nlo; cf = (nlo>>16)&1;
+    cx = (unsigned short)((unsigned short)(X2>>16) + (unsigned short)(Yr>>16) + cf); /* 7b5/7a5 adc cx,dx */
+    if (bx==0 && cx==0) return 0;                      /* je 7a5; jne 7b7 not-taken -> ret 0 */
+  }
+  while ((cx >> 8) == 0) {                             /* 7d3 or ch,ch; je 7c3 (byte-normalize) */
+    dx=(unsigned short)((dx<<8)|(ax>>8)); ax=(unsigned short)(ax<<8);   /* 7c3 (dx:ax)<<=8 */
+    cx=(unsigned short)((cx<<8)|(bx>>8)); bx=(unsigned short)(bx<<8);   /* (cx:bx)<<=8 */
+  }
+  if (!(cx & 0x8000)) {                                /* 7d7 js 7e3 (else bit-normalize) */
+    do {                                               /* 7d9 shl ax; rcl dx; shl bx; adc cx,cx */
+      unsigned int Yv=(((unsigned int)dx<<16)|ax)<<1; ax=(unsigned short)Yv; dx=(unsigned short)(Yv>>16);
+      int cfb = bx>>15; bx=(unsigned short)(bx<<1);
+      cx=(unsigned short)(cx+cx+cfb);
+    } while (!(cx & 0x8000));                          /* jns 7d9 */
+  }
+  { int cfd = (dx < cx);                               /* 7e3 cmp dx,cx (CF=dx<cx) */
+    cfd = !cfd;                                        /* 7e5 cmc */
+    unsigned short m = cfd ? 0xffff : 0;               /* 7e6 sbb bx,bx = -CF */
+    dx=(unsigned short)(dx+m); ax=(unsigned short)(ax|m);   /* 7e8 add dx,bx; 7ea or ax,bx */
+    unsigned int num=((unsigned int)dx<<16)|ax;        /* 7ec div cx */
+    ax=(unsigned short)(cx?num/cx:0xffff); dx=(unsigned short)(cx?num%cx:0);
+  }
+  { unsigned char *dg=(unsigned char*)g_mem+0x1c000; unsigned short acc;
+    if (DAT_2000_dad0 == 0) {                          /* 7ee test [0x2040]; je -> 7f6 interp */
+      unsigned short idx=(unsigned short)(((ax>>8)&0xff)<<1);   /* 7f6 bl=ah */
+      unsigned short tbl0=*(unsigned short*)(dg+0x2448+idx);    /* 801 */
+      unsigned short tbl1=*(unsigned short*)(dg+0x244a+idx);    /* 7fc */
+      unsigned short delta=(unsigned short)(tbl1-tbl0);         /* 806 sub cx,bx */
+      unsigned char frac=(unsigned char)ax;                     /* al = quot low (after xchg cl,al) */
+      unsigned short prod=(unsigned short)((unsigned short)((unsigned char)delta)*(unsigned short)frac + 0x80); /* 80a mul; 80c add 0x80 */
+      acc=(unsigned short)(prod>>8);                            /* 80f al=ah */
+      unsigned char ch=(unsigned char)((delta>>8)-1);           /* 813 dec ch */
+      if (ch==0) acc=(unsigned short)(acc + frac);              /* 815 jne; 817 add ax,cx (cx=0:frac) */
+      acc=(unsigned short)(acc + tbl0);                         /* 819 add ax,bx */
+    } else {                                           /* 82b path: raw table, no interp */
+      unsigned short idx=(unsigned short)(((ax>>8)&0xff)<<1);
+      acc=*(unsigned short*)(dg+0x2448+idx);
+    }
+    { unsigned short r=acc; int carry=0;               /* 81b shr bp,1; rcr ax,1 (x3); 827 adc ax,0 */
+      for (int i=0;i<3;i++){ int b=bp&1; bp>>=1; carry=r&1; r=(unsigned short)((r>>1)|(b<<15)); }
+      r=(unsigned short)(r+carry);
+      return (int)(short)r;
+    }
+  }
+}
+
+
