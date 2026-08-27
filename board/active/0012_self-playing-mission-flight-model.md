@@ -2346,3 +2346,28 @@ unit TYPE (1 vs 3) to know which shooter path to follow; (2) trace whether afa2 
 [0x92] check within that unit's update, and what clears [0x92] between set and check; (3) then the base-lost
 spawn dispatch (899c type-1 + the type-3 analog) needs the 7e29-class patch.  Reload/own-side-only findings
 superseded by this propagation break.  Object model (437), LOS (47%), fire-decision (afa2 20x) all proven.
+
+## Refined non-perturbing state: a286 fires are type-0/2; player faction bit [0x16]&8 unset
+
+Minimal single-counter split (non-perturbing): the 20 a286 fires are ALL on type "other" (0 or 2), ZERO on
+type-1/3.  So afa2 is icalled DIRECTLY (via its 0xafa2 vector-table entry) bypassing af97's type-1/3 gate,
+firing for the player (type 0) and type-2 units.  (So 87df/type-1 was the wrong spawn path to chase; its
+0 reaches were correct -- type-1 simply doesn't fire here.)  The player (type 0) fires but:
+FACTION-BIT ANOMALY (clean dumpreg f16 values):
+    enemies (side=0): f16=0x46 / 0x66  -> bit3(0x08)=0
+    friendlies(side=1): f16=0x6e       -> bit3=1
+    PLAYER c05c:      f16=0x66         -> bit3=0  (WRONG: same as enemies)
+aa08's target filter skips candidates whose [0x16]&8 == [0x96ab](=the scanner's own [0x16]&8).  The player,
+with bit3=0, skips bit3=0 units (the enemies!) and locks bit3=1 units (friendlies) -> tgt97=c34d (own side).
+So the player's faction bit [0x16] bit-3 is not set (0x66 not 0x6e), inverting its target selection.  This
+is either a base-loss in the player unit's [0x16] init (wholesale writers: 9512 `[0x16]=param_1`, 57186
+`[0x16]^=8` toggle, 51827) or a genuine self-play difference (player normally human-controlled, faction bit
+set elsewhere) -- REQUIRES the oracle to confirm whether the original's player has bit3 set (memory dump at
+the player unit's [0x16]).  Separately, the shooter units (types 1/2/3) have tgt97=0 (low acquisition
+supply, ~1.4% mutual-LOS, expected for spread-out units) -- so even with a correct player faction bit,
+sustained combat needs the acquisition supply too.
+
+Honest session-end state: object model (437) + LOS (47%) + fire-decision (afa2 20x) proven; reload
+DISPROVEN as blocker (all units [0xa8]=0); the two live threads are (a) player faction bit [0x16]&8=0
+(own-side targeting -- confirm vs oracle) and (b) low acquisition supply for the AI shooters.  Both
+non-perturbing-measurable; the perturbation-derived reload/7e29 numbers are superseded.
