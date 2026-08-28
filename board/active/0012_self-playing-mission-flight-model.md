@@ -2996,3 +2996,34 @@ TWO remaining blockers, both now precisely located:
 Net this session: the ballistic-aim atan2 (077e) is reconstructed, verified, and its correct format proven
 to unblock detection+acquisition of targets AI-wide.  Goal unmet (a296=16, no fire yet), but the two
 remaining pieces are a named AI-state transition and the (long-known) op-0x4c render.
+
+## FULL FIRE PIPELINE NOW WORKS end-to-end (with correct 077e) -- only final hit-registration + gates remain
+
+Correcting my earlier g_afa2=0 reading (that was a crashed/early run): with the corrected 077e (zero-extend +
+guards) + 0578 fix, over a clean 38s AZER1 self-play (render bypassed to survive the mga crash), the ENTIRE
+combat pipeline runs:
+  [dispatch] AB03 SUB-6724 (combat) slots 0..f all dispatched ~1330x each (SUB-6704 noncombat = 0 -> units
+             are ALWAYS in combat mode [0x40]&1=1, set at spawn line 21284).  So ae32(slot8)/afa2(slot0xa)/
+             af97(slot5) ALL dispatch.
+  [fire]     afa2 = 1680 dispatched, would-fire (turret aligned, |[0x8b]-[0x89]|<0xb6) = 97
+  [spawn]    ace0-projectile-inits = 4    (afa2->a286 sets [0x92]=0x30 -> 7c1d -> 7e29 -> spawn)
+  [collide]  e1a6-collisions = 1916       (the 4 shells sit in the [proj+0xd]<0x80 regime ~480 ticks each)
+  [destroy]  b2ef-UNIT-destroys = 117, a294 drops 150 -> 125
+So aim(077e) -> heading -> candidate(a9b9) -> acquire(ae32/a6e3/e20a) -> target[0x97] -> turret-slew(7d1d/
+a3e2) -> fire-gate(afa2) -> a286 -> 7e29 -> ace0 projectile -> e1a6 op-0x54 collision ALL FUNCTION.  This is
+the flight/combat model the goal names, now running.
+
+THREE remaining gates to a resolved a296 (all now precisely bounded):
+  1. HIT-REGISTRATION: go691 = 0 -- e1a6 fires 1916x but NEVER returns (char)<0, i.e. the shells stay just
+     ABOVE the terrain byte the whole flight -> never explode (b691=0) -> no splash -> a296 frozen.  With the
+     correct -5.77deg elevation the shell SHOULD descend ~2300 over range 22782 and hit near the target; it
+     doesn't.  Trace the 4 shells' [proj+0xd] vs the op-0x54 terrain byte along flight (Z scale / lifetime /
+     the [proj+0x18] terrain sample) -- the last link before kills.
+  2. AMMO/RELOAD GATE: would-fire=97 but ace0=4 -- most fires don't spawn (7e29 gate [0x91]==4||[0xa8]==0);
+     only 4 shells actually launch.  Verify the ammo/reload counters advance so units keep firing.
+  3. CRASH at ~t=43515: persists even with the mga blitters bypassed (FIST_NORENDER) -> it is in the SIM
+     (projectile/explosion/object path), NOT only the op-0x4c render.  Find + fix (likely a base-loss in the
+     b691/b2ef or a despawn path that the now-active combat reaches).
+b2ef-UNIT-destroys=117 with a296 unchanged means those destroys are NON-enemy objects (projectiles/effects);
+the enemy a296 count only drops on a real b691 splash kill, which needs gate 1.  The pipeline is essentially
+complete; the mission is close.  Goal still unmet (a296=16) but every stage from aim to collision now runs.
