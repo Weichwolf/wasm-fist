@@ -3936,3 +3936,26 @@ what native writes there and when.
 
 This supersedes the "1a45 loader" target (confirmed benign) -- the real divergence is a first-combat-frame
 display-list/record-table build. Native done + committed (266..452); blocker localized to one operation.
+
+## Turn N+18: sim divergence ROOT = the b39c DAMAGE COMPUTATION (RNG is deterministic; a modifier input diverges)
+
+Separated render from sim at combat step 5 (both a296=16). Of ~1969 DGROUP diffs, only ~15 are SIM state;
+the rest are RENDER buffers (DGROUP:0x1200 written by the MGA display driver m_mga_FUN_0000_02c1; the
+0xe6e2..0xe6f3 c33c/c164 render-walk cursor) -- target-specific render intermediates, benign for the sim.
+The SIM diffs:
+  - DGROUP:0xc28c = unit 0xc252's DAMAGE ACCUMULATOR [obj+0x3a]: native 0x1f (31) vs wasm 0x11 (17).
+  - a few other unit fields (0xc076, 0xc26b/c, 0xcc6e) + DGROUP:0xe3b5 (native 0, wasm 0xdc).
+So b39c (PATCH 266 damage-application) computes DIFFERENT damage native vs wasm. The RNG (FUN_0000_0291,
+the g_mem LFSR) is deterministic (identical), so the divergence is a DAMAGE-MODIFIER input to b39c:
+candidates are the armour LUT index DAT_2000_5bd7, the damage record word[DG:bx0+siB]/bxA, or the
+type-modifier DAT_2000_5606 (= DAT_a3ae / DAT_a3b0 by [target+0x16]&8).  NB DAT_a3ae/a3b0/a3b2 were
+IDENTICAL at step 5 (not in the diff) -- so the divergent input is likely DAT_5bd7 (armour index) or the
+per-hit damage-record pointer/high-word, or the b39c ax0/bx0 = DAT_5bdb/5bd9 (which I sourced from those
+globals in PATCH 266). Fewer damage per hit -> wasm accumulates slower -> kills 12 not 16 -> stalls.
+
+THIS is the byte-identity blocker for the sim: ONE divergent value feeding b39c's damage math. NEXT: dump
+native vs wasm at step 5 for DAT_2000_5bd7 (g_mem+0x25bd7), DAT_2000_5bd9/5bdb (0x25bd9/db), and the
+damage record b39c reads, to find which single input diverges (a host-pointer/CS-carry high-word feeding
+the damage scale). The render-buffer diffs are a SEPARATE (framebuffer-relevant) issue. This supersedes
+all prior broad-surface estimates: the combat byte-identity is ONE damage-input base-loss.
+Native done + committed (266..452).
