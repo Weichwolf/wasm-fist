@@ -1,0 +1,95 @@
+PATCH 449: mission WIN-DECLARATION -- a5dc 2da2 signedness + count/str-seg base-loss, + ba30 debrief
+number-format base-loss.  ROOT: undefined2 is uint16_t, so a5dc's guard `if (DAT_2000_2da2 != -1)` is
+`65535 != -1` = ALWAYS TRUE -> a5dc early-returns every frame and NEVER runs the side-count/win-check
+(asm is `cmp word[2da2],0xffff; jne`).  Fixing a5dc's own guard (2da2/2da6 != 0xffff) makes the win-check
+live; its count-path was ALSO base-lost (registry object read as host ptr at int*-stride 8; asm si=word
+[DGROUP:bx], test byte[DGROUP:si+0x17], STRIDE 4) and its HUD write `es:[0x2d8e]=ax` dropped ES=word
+[DGROUP:0x70] (str-seg) -> wild host write.  Rebased both.  ba30 (post-a814 debrief number formatter)
+wrote its result into param_2 as a host pointer (callers pass DGROUP near offsets 0x432f..0x4399) ->
+SIGSEGV; rebased param_2 to DGROUP.  RESULT: once the AI-vs-AI combat eliminates the enemy side (a296==0),
+a5dc counts the side to 0 (max5790=16) and arms the mission-end (2da2=0x3c countdown -> DAT_2000_a814=0xff)
+-> 459a returns via mission-end -> **the engine SELF-DECLARES the win (a814 fired)**.  NB the OTHER nine
+`2da2 == -1` sites carry the same signedness bug but are left for now: fixing them opens a base-loss
+cascade in the 2da2-gated flight-model code that stalls combat (board:0012, held/449 caveat) -- a5dc's
+guard is fixed in isolation so the win-declaration works while the current (win-eliminating) combat
+trajectory is preserved.  Post-resolution debrief screen (ba63 + siblings) still has its own base-loss
+cascade (str-seg writes) -- separate follow-up.  ASM-verified vs re_out 0x1a5dc-0x1a664, 0x1ba30.
+--- a/fist.c
++++ b/fist.c
+@@ -64454,36 +64454,36 @@
+   int *piVar4;
+   
+   uVar1 = DAT_2000_578e;
+-  if (DAT_2000_2da2 != -1) {
++  if (DAT_2000_2da2 != 0xffff) {
+     DAT_2000_2da2 = DAT_2000_2da2 + -1;
+     if (DAT_2000_2da2 == 0) {
+       DAT_2000_a814 = 0xff;
+     }
+     return;
+   }
+-  if ((((DAT_2000_2da6 != -1) && (DAT_2000_2da6 == '\0')) && (DAT_2000_2da7 == '\0')) &&
++  if ((((DAT_2000_2da6 != 0xffff) && (DAT_2000_2da6 == '\0')) && (DAT_2000_2da7 == '\0')) &&
+      (DAT_2000_2da8 == '\0')) {
+     DAT_2000_2da0 = 2;
+     DAT_2000_2da2 = 2;
+     return;
+   }
+   DAT_2000_5792 = DAT_2000_578e;
+-  piVar4 = (int *)&DAT_2000_9fbc;
+-  iVar3 = 0xb6;
+   DAT_2000_578e = 0;
+-  do {
+-    if ((*piVar4 != 0) && ((*(byte *)(*piVar4 + 0x17) & 8) != 0)) {
+-      DAT_2000_578e = DAT_2000_578e + 1;
+-    }
+-    piVar4 = piVar4 + 2;
+-    iVar3 = iVar3 + -1;
+-  } while (iVar3 != 0);
++  { unsigned char *dg = g_mem + 0x1c000; unsigned short bx = 0xdfbc; int cx = 0xb6;
++    do {
++      unsigned short si = *(unsigned short *)(dg + bx);
++      if ((si != 0) && ((dg[(unsigned short)(si + 0x17)] & 8) != 0)) DAT_2000_578e = DAT_2000_578e + 1;
++      bx = (unsigned short)(bx + 4);
++      cx = cx + -1;
++    } while (cx != 0);
++  }
+   if (DAT_2000_5790 < DAT_2000_578e) {
+     DAT_2000_5790 = DAT_2000_578e;
+   }
+   if (uVar1 != 0xffff) {
+     FUN_0000_02e8(DAT_2000_578e,(undefined1 *)&DAT_1000_df8c);
+-    *(undefined2 *)0x2d8e = DAT_1000_df8f;
++    { unsigned char *dg = g_mem + 0x1c000; unsigned short strseg = *(unsigned short *)(dg + 0x70);
++      *(uint16_t *)(g_mem + ((uint32_t)strseg << 4) + 0x2d8e) = (uint16_t)DAT_1000_df8f; }
+     if (DAT_2000_578e < DAT_2000_5792) {
+       FUN_1000_66cd(0x2d7e);
+     }
+@@ -66716,6 +66716,10 @@
+   int iVar5;
+   undefined2 unaff_ES;
+   
++  /* board:0012: param_2 is a DGROUP string-buffer NEAR offset (callers pass 0x432f/0x4352/0x4376/0x4399);
++     Ghidra deref'd it as a host pointer -> SIGSEGV in the post-resolution (a814) debrief.  Rebase to DGROUP.
++     (The DAT_2000_b743 powers-of-ten table is already a host-addressable macro, left as-is.) */
++  unsigned char *dst = (unsigned char *)g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_2;
+   iVar5 = 0;
+   iVar1 = 6;
+   cVar3 = ' ';
+@@ -66730,13 +66734,13 @@
+       cVar3 = cVar2;
+       cVar4 = '0';
+     }
+-    *param_2 = cVar3;
+-    param_2 = param_2 + 1;
++    *dst = cVar3;
++    dst = dst + 1;
+     iVar5 = iVar5 + 4;
+     iVar1 = iVar1 + -1;
+     cVar3 = cVar4;
+   } while (iVar1 != 0);
+-  *param_2 = (char)param_1 + '0';
++  *dst = (char)param_1 + '0';
+   return;
+ }
+ 

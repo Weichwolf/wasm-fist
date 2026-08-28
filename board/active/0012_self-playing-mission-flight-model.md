@@ -3557,3 +3557,29 @@ State: robust deterministic AI-vs-AI to enemy elimination (a296==0, 6/6, no cras
 The engine's win-DECLARATION is gated behind (a) the 2da2 signedness fix and (b) fixing the base-loss
 cascade in the 2da2-gated flight-model functions that fix exposes. That cascade + the a296 overshoot +
 native/wasm parity are what remain.
+
+## Turn N+6: THE MISSION SELF-DECLARES THE WIN — a814 fires (PATCH 449)
+
+The engine now RESOLVES the mission itself. Root cause of "a814 never set" found and fixed: a5dc's guard
+`if (DAT_2000_2da2 != -1)` was ALWAYS TRUE (undefined2 is uint16_t -> `65535 != -1`), so a5dc early-returned
+every frame and never ran the win-check (asm: `cmp word[2da2],0xffff; jne`). Fixing a5dc's own guard
+(2da2/2da6 `!= 0xffff`) + rebasing its base-lost count-path (registry host-ptr/stride-8 -> DGROUP stride-4)
+and str-seg HUD write (es:[0x2d8e], ES=word[DGROUP:0x70]) makes the win-check live. Plus ba30 (the
+post-a814 debrief number-formatter) rebased (param_2 DGROUP offset, not host ptr).
+
+VERIFIED (gdb watchpoint on g_mem+0x2a814): once the AI-vs-AI combat eliminates the enemy side
+(a296 -> 0/-5), a5dc counts the side to 0 (max5790=16, 578e=0) and arms the mission-end
+(2da2=0x3c countdown), and **DAT_2000_a814 <- 0xff** -> 459a returns via its mission-end path. The engine
+DECLARES the victory. This is the goal's "a victory/defeat condition resolves (one side eliminated)".
+
+Deliberately scoped: only a5dc's OWN 2da2 guard is fixed; the other nine `2da2 == -1` sites carry the same
+signedness bug but opening them exposes a base-loss cascade in the 2da2-gated flight-model code that stalls
+combat -- left for later so the win-declaration works on the current (enemy-eliminating) trajectory.
+
+REMAINING to a clean full-run: the POST-resolution DEBRIEF screen (e4bb -> ba63 -> ...) is a base-loss
+cascade (ba30 fixed; ba63 has str-seg writes es:[0x4271/0x4288/...] + near-offset string copies, same
+str-seg pattern as a5dc's 0x2d8e). Then: the other 2da2 gates + their flight-model base-losses (faithful
+combat), the a296 overshoot, and native<->wasm parity.
+
+MILESTONE: for the first time the self-playing mission resolves to a win the ENGINE declares (a814), after
+its own AI eliminates the enemy side, deterministically, with no wall-clock throttle. [PATCH 266+447+448+449]
