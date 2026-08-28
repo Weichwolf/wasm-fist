@@ -4311,3 +4311,28 @@ NEW projectile's field, not the emitter's.  Rebase faithfully so the weapon keep
 bb64 skips friendly tanks -> tanks survive -> they engage the real enemy -> a296 resolves.  Meter:
 FIST_DMGLOG (b39c/bb64/b1df probes) + the oracle census (census_azer1.sh, cr3=0xe000, DGROUP 0x2d190).
 This is THE resolution blocker, root-caused to one field-corruption in the weapon fire path.  Goal unmet.
+
+## Turn N+20 cont.13: CORRECTION -- ba5d is NOT the corruptor; al=0 firing is the mechanism, root still open
+
+Read ba5d (patch 258): it copies a spawn-template into the NEW object (si==di == the spawned projectile)
+and sets word[si+0x1c]=0 on THAT new object -- correct (a fresh projectile starts with [0x1c]=0).  So ba5d
+does not corrupt the emitter; the ba5d suspicion (cont.12) is WITHDRAWN.
+Refined, verified understanding:
+- type-0x10 objects fire via b51f every 32 frames; bb64's side-gate reads al = byte[firing-obj+0x1c].
+  A newly-spawned projectile has [0x1c]=0 -> al=0 -> bb64 selects ANY target with [0x16]&8 (the tanks) ->
+  friendly-fire.  The port's tanks are killed by al=0 firers in range.
+- The ORIGINAL keeps 25 type-0x10 and its tanks at hp3a=0.  So in the original, either (a) these al=0
+  firers do NOT fire, or (b) they fire but the tanks are OUT OF RANGE (0ea9), or (c) the original never
+  spawns the +66 extra al=0 projectiles that the port does.
+STILL OPEN (the precise root): WHY the port has al=0 type-0x10 objects firing in range of the tanks when
+the original does not.  Two concrete sub-hypotheses to test next, both oracle-checkable:
+  (H1) the tanks DON'T MOVE in the port (steering: des30 never driven) so they sit in weapon range and are
+       hit, while the original's tanks drive out of range -- check c34d position over ticks vs the original
+       (original c34d pos=(549136,1017675) mid-mission; compare the port's trajectory).
+  (H2) the port over-spawns al=0 projectiles (the +66) via a fire-gate base-loss in b51f (`byte[wpn+0x1b] &
+       DAT_5646[uVar1]`) or ba49, so weapons that should be idle fire -- check whether the original's 25
+       type-0x10 ever call b51f's fire branch.
+NEXT: instrument b51f fire-branch entry (does it fire in the original? -- needs oracle b51f trace) OR
+compare the port c34d position trajectory to the original.  This turn: oracle census infra built
+(census_azer1.sh, engine-context RAM dump @cr3=0xe000) + the tank-death chain root-caused to the al=0
+friendly-fire mechanism + patch 457 (b294).  The al=0 SOURCE is the one remaining link.  Goal unmet.
