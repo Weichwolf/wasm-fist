@@ -4051,3 +4051,30 @@ Honest scope to the goal, ordered:
      op58 LOS select).  Without this the mission never resolves, on either target.
   3. render byte-identity (op-0x4c display list) -- the full-framebuffer 206-byte diff.
 Only when (2) yields a resolving mission can native<->wasm byte-identity of the FULL run be measured.
+
+## Turn N+20 cont.3: RESOLUTION BLOCKER precisely localized -- AI decision layer (goal->heading->target), NOT crashes/steering-funcs
+
+Per-object AI-state dump (FIST_DUMP_REG=1 FIST_DUMP_REG_T=800, setarch -R) at tick 800 -- ground truth:
+  [ 0] slot=c05c side=1 upd=7c1d  hdg26=0000 des30=0000 goal49=000bfb9a tgt97=0000 cand94=00
+  [ 1] slot=c157 side=1 upd=87df  hdg26=2000 des30=2000 goal49=0008e01f tgt97=0000
+  [2..21] side=0 upd=b355/b51f/bc46  hdg26=0000 des30=0000 goal49=0800xxxx tgt97=0000 cand94=00
+FACTS:
+- Units HAVE goals: goal49 (obj+0x49, 32-bit) is nonzero on essentially every unit (0x08000500, 0x08000280,
+  player 0x000bfb9a).  So goal ASSIGNMENT works.
+- des30 (obj+0x30, desired heading) = 0 for all; hdg26 (current heading) = 0 for all but one.  The AI step
+  that computes desired-heading (bearing to goal49) and TURNS hdg26 toward it never runs -> units don't
+  steer toward their goal.
+- tgt97=0 / cand94=0 everywhere: no target acquired, no candidate -- because units never close to LOS+range
+  (min cross-side |dx|+|dy| stays 0x7fffffff).  Targeting (a6e3, patch 425) is correct; it just never fires
+  because the steering never brings units into range.
+CONCLUSION: the resolution blocker is the AI DECISION LAYER goal49 -> des30 (bearing) -> hdg26 (turn) ->
+close range -> acquire tgt97 -> fire.  The FIST.DAT functions previously tagged "AI steering" (a9ea/a57a/
+a0a4) are ALL player-only (guard `== DAT_2000_2d34`); a358 is a cooldown.  The AI drive-to-goal for
+NON-player units is the overlay/extender flight/combat model the goal statement names ("unit AI ... that
+lives in the overlay at 0x100000, not in FIST.DAT") -- the part the port does not yet run.  The crash-walk
+(454/455/456) was necessary plumbing; the RESOLUTION needs the des30-bearing + turn integrator for AI units.
+
+NEXT (evidence-driven, oracle-guided per CLAUDE.md FIST_WATCHFLAT): find the function that writes obj+0x30
+(des30) from obj+0x49 (goal) for a NON-player unit -- either it is missing (overlay) or base-lost.  Compare
+the port's des30/hdg26 per tick to the DOSBox oracle (FIST_WATCHFLAT on a unit's +0x30) to see where the
+port stops computing the bearing.  Meter unchanged: native (no setarch) resolves AZER1 => a296->0.
