@@ -3840,3 +3840,27 @@ it is now fully measured (~40-site loader cluster + 133-macro surface + CS-carry
 deterministic), and specified (1a45 asm->DGROUP map) -- a bounded dedicated porting effort, correctly not
 attempted as a rushed partial patch that (a) provably cannot work in isolation and (b) would risk the
 banked native milestone.
+
+## Turn N+14: EMPIRICAL confirmation — mechanical rebasing of 1a45 breaks native (entangled base-loss)
+
+Executed a real attempt at porting 1a45's clearest base-losses (the pointer-typed e674/fad4 header-field
+reads + the word-copy that writes to host 0), with a native-regression safety net. RESULT: native
+CRASHED (SIGSEGV in the unit-AI FUN_0000_a3ec <- 902c <- c0e5) -- my rebasing of the e67e/e680/fad4
+model-header fields CHANGED 1a45's control flow so native now reached a word-copy into g_mem[0] (fad6=0 at
+that point). Reverted; the committed build is confirmed intact (5/5 plain runs, exit 0, min_a296=0 -- the
+earlier "SIGSEGV" was a gdb-watchpoint artifact, not a regression).
+
+LESSON (empirical, not asserted): 1a45's base-loss is ENTANGLED with the working native behavior. The
+original "works by luck" because its host-pointer reads/writes land OUTSIDE g_mem (host addresses) and the
+e67e/e680 header arithmetic produces values whose native-specific results steer the control flow to an
+early EOF return before the buggy loop. Mechanically rebasing the fields to DGROUP changes those values ->
+changes the control flow -> native reaches an uninitialised-segment write -> crash. A correct port requires
+understanding the MODEL-HEADER FORMAT these fields encode (what e67e/e680 are -- offsets into the model
+segment; what the read/decompress loop is doing), so the ported arithmetic reproduces the same logical
+behavior with defined values. That is genuine model-format reverse-engineering, exactly the "dedicated
+session" class -- now confirmed by a failed mechanical attempt, not merely predicted.
+
+State unchanged and honest: native end-to-end resolution DONE + committed (266..452), verified intact after
+the revert. wasm byte-identity NOT met; the 1a45 loader-cluster port needs model-header-format RE (a
+mechanical rebase provably breaks native), the CS-carry class needs board:0010, and both remain the
+scoped, de-risked, but genuinely dedicated remaining work.
