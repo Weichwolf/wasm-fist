@@ -4505,3 +4505,27 @@ NEXT: fix the 19ae/19ea text-render loop + the reticle render base-loss, then un
 with byte-identity.  This turn: FOUND + asm-verified the friendly-fire ROOT (0ea9 carry flag) via oracle
 census + hardware watchpoint; held pending the render frontier.  Deliverables: census infra, patch 457
 (landed), patch 458 (held, root fix).  Goal UNMET but the resolution blocker is SOLVED at the sim level.
+
+## Turn N+20 cont.21: 458 landing is gated on the RENDER FRONTIER (confirmed) -- the sim fix is real, the render must work
+
+Validated the fix boundary precisely.  With patch 458 applied:
+- WITHOUT a render guard: the HUD text renderer 19ae->19ea (fist_mga glyph blitter) infinite-loops at t=1
+  when a520 (the target-info HUD, drawn only once a target is ACQUIRED -- which 458 enables) is reached.
+- WITH a diagnostic guard bounding 19ea/5591: the hang MOVES to a port-I/O SPIN-WAIT (FUN_1000_30f8 ->
+  in(); the frame-ready wait) -- because guarding/skipping the render breaks the frame-COMPLETION protocol
+  the engine cooperatively spins on.  So the render CANNOT be bypassed to reach the sim; it must complete.
+CONCLUSION: 458 is the correct, asm-verified SIM fix (0ea9 carry flag) -- it turns real combat on (player
+moves, weapons target correctly) -- but the AZER1 mission cannot run to resolution until the RENDER PATH
+that draws the now-active combat HUD works: a520 -> 52d1/5591 -> c684 -> 19ae -> 19ea (the target-lock HUD
+text) has render base-losses (the glyph blitter's height/loop and the text-state feed), and the reticle
+render diverges native<->wasm.  This is precisely the "op-0x4c display-list / DGROUP:0x7aa4 viewport-geometry
+frontier ... finishing the ... per-frame render path" the GOAL names as remaining -- now reached because
+the sim runs.  It is NOT reachable while combat is broken (the old friendly-fire killed everything before
+the target-HUD drew), which is why prior sessions never hit it.
+STATE: sim root cause SOLVED (458, asm-verified, held); the remaining blocker is the per-frame render of the
+active-combat HUD (19ea glyph blit + text-state + reticle), a bounded render-path port.  NEXT: port 19ea's
+blit loop faithfully (bound = the real glyph height from the font, not garbage) + fix the a520/52d1 text-
+state feed + the reticle render base-loss; then un-hold 458 -> combat resolves byte-identically.  This turn:
+found+asm-verified the friendly-fire ROOT (0ea9), proved it (player moves/combat runs), located the render
+frontier that gates it.  Deliverables: oracle census infra, patch 457 (landed), patch 458 (held, root fix).
+Goal UNMET; sim solved, render frontier is the last surface.
