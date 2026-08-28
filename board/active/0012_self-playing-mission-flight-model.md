@@ -3459,3 +3459,31 @@ So the correct order of remaining work:
 The damage-routing fix itself is CORRECT and committed (units take real damage and die) -- it exposed the
 next layer: the death/wreck/teardown path was never exercised on real units before (only the 0x600 churn
 object), so its base-losses were latent. Goal not met (run crashes once real deaths cascade).
+
+## Turn N+3: the breakthrough opened a bounded base-loss CLUSTER in the live-combat hit handlers
+
+The b39c damage-routing fix works, but longer runs crash in a CASCADE -- clean backtraces (not smashed)
+all rooted in the mission loop: 459a -> c0ca -> c0e5 -> b51f -> c31e -> <hit handler>. b51f fires,
+bb64 finds an armed object, c31e dispatches that object's -0x1ab0 action method with di (target near
+offset) in param_1 (same positional-dispatch as b39c). A FAMILY of near-identical hit-accumulator handlers
+(one per object type) is pristine + base-lost -- they were NEVER exercised before because nothing ever hit
+a real object. Crash walks forward as combat hits new object types:
+  bd09 (target 0xa090) -> [FIXED] -> b274 (0xb274, DAT_a3b2 host-deref) -> [FIXED] -> b396 (target 0xa1da)
+  -> ... still going.
+
+Each handler's fix is mechanical + asm-verified (saved in patches/held/447-c31e-hitcluster.note):
+  - object di = (uint16)param_1 (c31e delivers it there, not param_3);
+  - the asm's AX = (uint16)DAT_2000_5bdb, and DAT_2000_5bd9 = the stored BX;
+  - the current-target flag read DAT_2000_a3b2 rebased to dg[(uint16)(DAT_2000_a3b2+0x16)] (== PATCH 266's
+    inline b39c calc);
+  - b274 takes a HOST ptr to the DGROUP damage record; ba33 takes the object NEAR offset in param_2.
+
+FIXED this turn (asm-verified vs re_out): FUN_0000_bd09, FUN_0000_b274. REMAINING: FUN_0000_b396 and its
+siblings in the -0x1ab0 action vtable. This is a bounded family (one accumulator per targetable object
+type), each a quick asm-verified base-loss rebase; the cascade terminates once the family is complete.
+
+STATE: the damage-routing breakthrough (patch 266) is committed and correct. bd09/b274 fixes are held (not
+yet applied as patches -- they'll be formalized with the rest of the family once the run survives real
+deaths end-to-end). Tree kept clean. Then: a296 over-decrement (past 0 to -40) so the count lands exactly
+on 0 = detectable resolution. Goal not met (run still crashes mid-cascade), but the path is now purely
+mechanical base-loss cleanup along a fully-understood call chain.

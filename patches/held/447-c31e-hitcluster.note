@@ -1,0 +1,65 @@
+NOTE 447: the c31e action-handler HIT-CLUSTER (board:0012).  After the b39c damage-routing fix (patch 266)
+made real units take damage, b51f->c31e dispatches each hit object's -0x1ab0 action method with di
+(target near offset) in param_1.  A FAMILY of near-identical hit-accumulator handlers (bd09, b396, ...) are
+pristine + base-lost.  Each needs: object di=(uint16)param_1; ax=(uint16)DAT_2000_5bdb; DAT_2000_a3b2
+rebased dg[(uint16)(DAT_2000_a3b2+0x16)]; b274 takes host ptr to DGROUP record (g_mem+0x1c000+recoff);
+ba33 takes object NEAR offset in param_2.  FIXED: bd09, b274 (asm-verified).  REMAINING: b396 (thr 0x4f)
+and siblings -> finish family so the run survives real deaths, then fix the a296 overshoot past 0.
+
+--- FUN_0000_bd09 (FIXED) ---
+void __allregs FUN_0000_bd09(int param_1,undefined4 param_2,int param_3)
+
+{
+  /* board:0012 base-loss + dispatch-param fix (asm 0xbd09-0xbd68; DS=DGROUP=0x1c00): c31e-dispatched
+     hit/damage-accumulate action handler.  di=TARGET object near offset -- delivered by c31e's
+     `(*vec)((int)di)` in param_1 (NOT param_3), ax=DAT_5bdb.  Ghidra read the object via param_3 as a
+     HOST pointer (`*(byte*)(param_3+0x19)` -> SIGSEGV once combat is live, target 0xa090).  Rebased to the
+     DGROUP model; b274 takes a HOST ptr to the DGROUP damage record; ba33 takes the object NEAR offset. */
+  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+  unsigned int di = (unsigned short)(uintptr_t)param_1;
+  unsigned int ax0 = (unsigned short)DAT_2000_5bdb;
+  (void)param_3;
+  if ((dg[(unsigned short)(di + 0x19)] & 4) == 0) {
+    unsigned short bx = *(unsigned short *)(dg + (unsigned short)((unsigned)dg[(unsigned short)(di + 0x19)] * 2 - 0x6119));
+    bx = (unsigned short)(bx + ax0);
+    unsigned int uVar4 = FUN_0000_b274((byte *)(dg + bx));
+    unsigned char al = (unsigned char)uVar4;
+    if (DAT_2000_5bd9 == 4) al = (unsigned char)((uVar4 >> 2) & 0x3f);
+    unsigned char old = dg[(unsigned short)(di + 0x1a)];
+    dg[(unsigned short)(di + 0x1a)] = (unsigned char)(old + al);
+    if ((((unsigned)old + al) <= 0xff) && (dg[(unsigned short)(di + 0x1a)] < dg[(unsigned short)(di + 0x1b)])) {
+      return;
+    }
+    dg[(unsigned short)(di + 0x16)] |= 1;
+    dg[(unsigned short)(di + 0x16)] &= 0xf9;
+    dg[(unsigned short)(di + 0x17)] &= 0xf7;
+    dg[(unsigned short)(di + 0x19)] |= 4;
+    *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x480;
+    unsigned short bx2 = (unsigned short)((unsigned)dg[(unsigned short)(di + 0x19)] * 2);
+    *(unsigned short *)(dg + (unsigned short)(di + 0x14)) = *(unsigned short *)(dg + (unsigned short)(bx2 - 0x6109));
+    bx2 = (unsigned short)(bx2 & 6);
+    FUN_0000_ba33(*(unsigned short *)(dg + (unsigned short)(bx2 - 0x60f9)), (int)(unsigned short)di);
+    FUN_0000_be8b(9, param_2);
+  }
+  return;
+}
+
+--- FUN_0000_b274 (FIXED) ---
+uint __allregs FUN_0000_b274(byte *param_1)
+
+{
+  /* board:0012: DAT_2000_a3b2 is the current-target object NEAR offset (DS:a3b2); asm reads its flags
+     byte[di+0x16].  Ghidra deref'd it as a host pointer -> SIGSEGV once bd09/damage reaches b274.  Rebase
+     to the DGROUP model (identical to PATCH 266's inline b39c damage calc). param_1 is a host ptr to the
+     DGROUP damage record (caller passes g_mem+0x1c000+recoff). */
+  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+  uint uVar1;
+  int iVar2;
+
+  uVar1 = FUN_0000_0291();
+  iVar2 = DAT_2000_a3ae;
+  if ((dg[(unsigned short)((unsigned short)DAT_2000_a3b2 + 0x16)] & 8) != 0) {
+    iVar2 = DAT_2000_a3b0;
+  }
+  return (((uVar1 & 0xff) * (uint)param_1[1] >> 8) + *param_1 + 1) * iVar2 >> 8;
+}
