@@ -4716,3 +4716,28 @@ work the port explicitly marked as such (patch127: "deferred to the sub-screen f
 solved+asm-verified (458).  This turn landed render-frontier link #1 (459/CRTC) and confirmed link #2 is the
 deferred 2ebe/3346 spin-wait + coop-tick interaction.  Patches 454-457,459 landed; 458 held.  Goal UNMET;
 the remaining render/sub-screen frontier is dedicated work the port itself flagged as deferred.
+
+## Turn N+20 cont.30: blocker #2 fully root-caused -- a cooperative-timing vs async-preemption deadlock (the patch127-deferred piece)
+
+Complete mechanism of the pre-cockpit deadlock:
+1. First mission frame: 459a -> 22dd -> 3a68 -> c33c(phase walk) -> c4df(patch 292: the ROSTER RENDER
+   dispatch).  c4df dispatches each object's per-VIEWPORT render method by byte[0x1549]=d549 (cockpit 0x1e
+   -> STRSEG:0x3632; else -> 0x358a).  At d549=00 (viewport not yet set) it uses the else table.
+2. With 458 a target is LOCKED, so the player object's render method draws the RETICLE -> FUN_1000_2ebe,
+   which (patch127) does screen/vector setup then FUN_1000_3346 = "busy-wait until [0x452] changes".
+3. The ISR bumps [0x452] ONLY when DAT_2000_ba90==0x424a (verified: the c452++ is in the ba90==0x424a
+   branch; ba90=0000 -> the ISR instead runs the c05c FRAME-SCHEDULER and returns without bumping [0x452]).
+4. ba90 is flipped to 0x424a by the cockpit-setup that c05c drives -- but c05c runs INSIDE the INT-8 ISR,
+   which in the ORIGINAL preempts the foreground ASYNCHRONOUSLY (PIT IRQ), so it advances independently of
+   the blocked reticle render.  The port drives c05c COOPERATIVELY (only from the pump, which is called by
+   the blocked 3346 spin) -> c05c cannot advance the setup past the point the blocked foreground occupies
+   -> ba90 never becomes 0x424a -> [0x452] never bumps -> 3346 spins forever.  A genuine circular
+   cooperative-timing deadlock, exactly the async-preemption the cooperative model does not yet replicate.
+This is precisely the patch127-deferred "cooperative pump for the spin-wait it enables ... deferred to the
+sub-screen frontier."  A port-side spin-breaker that force-advances [0x452] FAILED (verified) because the
+ISR gate (ba90) blocks the bump -- the fix must drive c05c/the cockpit-setup to completion (ba90=0x424a)
+COOPERATIVELY through the spin-wait, faithfully, without re-triggering the load over-run the freeze prevents.
+So blocker #2 is the deferred cooperative-timing/async-preemption reconstruction -- the deepest kind of
+render-frontier work, not a base-loss patch.  PROGRESS THIS TURN: 459 landed (render base-loss #1); blocker
+#2 root-caused to the ba90/[0x452]/c05c cooperative-timing deadlock (patch127-deferred).  454-457,459
+landed; 458 held.  Goal UNMET; the render/timing half is the port's own flagged deferred work.
