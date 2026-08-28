@@ -3910,3 +3910,29 @@ kills 16 on native, wasm stalls at 12 -> a damage/AI base-loss that reads a host
 COMBAT far-trace or sim-step-granular DGROUP diff, since the tick is too coarse -- the whole combat is 5
 ticks). This is NOT the 1a45/load cluster. Native done + committed (266..452); the byte-identity blocker is
 now a single localized combat divergence, not a load-surface port.
+
+## Turn N+17: divergence LOCALIZED to the first combat sim-step + a specific DGROUP structure
+
+Built a sim-step-granular dump (FIST_DUMPSTEP=N -> dump at the Nth in-mission sim-step) for native AND
+wasm and bisected. Findings:
+- Native combat by sim-step: a296 16(step1)->13(50)->9(100)->4(200)->0(300, RESOLVED). Wasm: 16->13->
+  11(150)->10(200) then STALLS. So wasm kills ~6 then stalls where native kills 16.
+- The DGROUP divergence is present from the FIRST combat sim-step: step1 = 1542 diffs, step5 = 1969, both
+  a296=16 (just spawned). So the divergence is in the very first per-frame update of the combat, NOT
+  accumulated drift.
+- WHERE: the step-1 diffs concentrate in DGROUP:0x1100..0x1400 (~760 B) and 0x4c00..0x5200 (~430 B). At
+  DGROUP:0x1200 native is all-ZERO while wasm holds a TABLE of near-offsets 0x1e60,0x1ea8,0x1ef0,... (stride
+  0x48 -> pointers to 0x48-byte records based at DGROUP:0x1e60). So wasm BUILDS a display-list/record table
+  that native (at this step) leaves empty -- a CONTROL-FLOW divergence in the first combat frame, not just
+  divergent host-pointer values.
+
+So the byte-identity blocker is now a SINGLE, precisely-located combat divergence: the first-combat-frame
+operation that populates the DGROUP:0x1200 record table (0x48-stride, base 0x1e60) runs on wasm but not
+native (or in a different order). NEXT: identify the builder of the 0x1200/0x1e60 table (0x48-stride record
+list -- likely the op-0x4c display-list / object-render list the goal names) and the branch that diverges;
+determine whether it feeds the sim (kills) or is render-only (framebuffer still must match). Tools: the
+FIST_DUMPSTEP dumps (this turn) as the falsifiable meter; a gdb watch on g_mem+0x1d200 on native to see
+what native writes there and when.
+
+This supersedes the "1a45 loader" target (confirmed benign) -- the real divergence is a first-combat-frame
+display-list/record-table build. Native done + committed (266..452); blocker localized to one operation.
