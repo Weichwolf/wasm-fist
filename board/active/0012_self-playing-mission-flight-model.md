@@ -3164,3 +3164,24 @@ patch 442's 77cf -- object = g_mem+0x1c000+near_offset, every [obj+N] at its asm
 object's update reaches bb1b -> 0ea9 -> c14f -> enemy HP -> b354/b2ef -> a296--.  This is a bounded base-loss
 patch class (the exact same one already applied ~370 times), NOT new subsystem work.  Then verify a296 drops.
 Goal unmet (a296=16); but the splash is FOUND, IMPLEMENTED, and its blocker is a known base-loss in b51f/b808.
+
+## RENDER (board:0001) root cause: mga blitters lack the real-mode 16-bit fb-SEGMENT WRAP
+
+Disassembled 2b1e (re_out/fist_mga_image.bin @0x2b1e, patch 312 cockpit blitter): it has NO clip -- the
+original relies on real-mode `es:di` addressing where the dst offset di is 16-bit and WRAPS at 0xffff inside
+the fb segment (es=0xA000).  The port's decompile masks the START offset to (uint16_t) but advances the blit
+with HOST pointers (pbVar10 = pbVar11 + (pitch-cols) per row) WITHOUT re-wrapping to 16 bits.  So when a
+sprite's header rows/cols or its DGROUP pos descriptor is off-screen/garbage (which happens once the layout
+shifts -- an uninitialised pos field, itself a latent base-loss), the multi-row blit walks pbVar10 PAST the
+64KB fb region in g_mem -> out-of-bounds write SIGSEGV (fist_mga.c:7121).  Real mode never faulted (di wrapped).
+FAITHFUL FIX (board:0001): reconstruct the mga blitters (2b1e/26de/2ae9/...) so the dst is g_mem+(fb_seg<<4)+
+(uint16_t)off with the offset re-wrapped to 16 bits on EVERY row/pixel advance (== es:di real-mode wrap), not
+a bare host-pointer walk.  This is faithful (matches real-mode segment addressing), bounded per-blitter, and:
+  (a) satisfies the goal's explicit "finish the op-0x4c display-list / render path" requirement, AND
+  (b) stops the layout-fragile SIGSEGV so bb1b/c14f (the splash) can finally be instrumented port-side.
+
+STATUS after this session: the combat model is BUILT end-to-end (aim->acquire->fire->spawn->fly->HIT->
+explosion), the SPLASH is FOUND (bb1b/c14f implemented; base-lost caller b60f rebased = patch 443), and the
+two remaining, now-precisely-scoped frontiers are: (1) the mga blitter 16-bit-wrap (board:0001, above), and
+(2) verifying/finishing the enemy-HP splash once the render no longer defeats diagnosis (c14f per-type handler
++ [0x16]&0x40 flag + bb1b range).  Goal unmet (a296=16); every blocker is now a named, bounded reconstruction.
