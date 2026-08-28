@@ -3792,3 +3792,28 @@ This is the executable plan. Native end-to-end resolution remains DONE + committ
 byte-identity is a bounded, now-fully-specified porting effort (loaders + CS-carry + verified deterministic
 guest-seg allocation), correctly scoped as dedicated work rather than a rushed in-session patch that would
 risk the banked native milestone.
+
+## Turn N+12 (cont.): shim guest-segment allocator IS deterministic -> byte-identity work de-risked
+
+Checked the prerequisite from the previous note: fist_dos.c:118 `static uint16_t g_next_seg = 0x3400;`
+is a DETERMINISTIC bump allocator (real-mode segments handed out in the free hole 0x34000..0x90000, below
+VGA). So native and wasm allocate IDENTICAL guest segments for the same alloc sequence -> the guest
+segments 1a45 uses (fad4/fad6) hold the SAME value on both targets. The shim-determinism prerequisite is
+ALREADY SATISFIED; no mem-manager change is needed.
+
+This de-risks the porting: rebasing 1a45's dropped ES/DS bases to fad6/fad4 (per the spec above) uses the
+same deterministic segment on both targets, so a faithful port is byte-identical by construction (not
+contingent on an allocator fix). NB the native run resolves WITHOUT crashing despite 1a45's `*(uint*)0`
+write because on native address 0 is unmapped AND native's read-path returns early (EOF) before that loop;
+on wasm linear-memory address 0 IS valid, so if the divergent control flow reaches it the write corrupts
+low memory -- another reason the port must land the segment bases exactly.
+
+CORRECTED work order for wasm byte-identity (all bounded, none needing a shim rewrite):
+  1. board:0010 -- CS/ES context in Ghidra -> retire the CS-carry class wholesale (deterministic constants).
+  2. Port the ES/DS-segment base-loss loaders (1a45 first, per the asm->DGROUP spec above; the guest
+     segments are already deterministic), verifying with FIST_FARTRACE (first-divergence-seq moves later)
+     and a native-resolution regression check after each.
+  3. Re-run native<->wasm g_mem/framebuffer cmp at a shared FIST_DUMPTICK; iterate until 0 diffs across the
+     whole run.
+Native end-to-end resolution DONE + committed (266..452). wasm byte-identity: fully specified, de-risked,
+bounded per-function porting -- the DD2 method's endgame, correctly scoped as dedicated work.
