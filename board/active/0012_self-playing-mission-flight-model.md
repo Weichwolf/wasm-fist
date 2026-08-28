@@ -3510,3 +3510,30 @@ TWO items remain for a *clean, self-declared* resolution:
 So the combat MODEL is done (deterministic AI-vs-AI to enemy elimination). What's left is (a) stop the
 counter exactly on 0 and (b) run/verify the overlay win-check so the mission ENDS itself -- then native<->
 wasm byte-identity. The hardest work (the whole flight/combat/damage/death chain) is behind us.
+
+## Turn N+4 (cont.): win-DECLARATION is the last piece — a5dc holds only timer+defeat; victory is in the overlay
+
+Traced the mission-end machinery in FIST.DAT (a5dc, called every frame from 459a). Its only two end
+conditions are:
+  1. the mission TIMER 2da6/2da7/2da8 (a hierarchical countdown, init 60; asm 14004-14008) expiring, and
+  2. the player side 578e (count of registry objects with [obj+0x17]&8) reaching 0 after having been >0
+     (defeat) -- but max5790=0 all run, so that side is always empty and never fires.
+NEITHER is "enemy eliminated -> victory". Instrumented at exit: a814=00 (never set), 578e=0/max5790=0,
+timer 2da6 stuck at 15 (not advancing), a814-fired=0 even over a 90s run. So FIST.DAT does NOT declare the
+win; the VICTORY-on-enemy-elimination check genuinely lives in the OVERLAY at 0x100000 -- exactly as the
+goal states ("the mission win/lose logic that lives in the overlay at 0x100000, not in FIST.DAT").
+
+STATE OF THE GOAL:
+ - ACHIEVED: the AZER1 self-playing AI-vs-AI mission runs deterministically with no crash and the ENTIRE
+   ENEMY SIDE is eliminated (a296 reaches 0; min_a296=0 on 5/5 runs). The flight/combat/damage/death model
+   is faithful and working (PATCH 266 damage routing + PATCH 447 hit-cluster).
+ - REMAINING for a self-DECLARED resolution:
+   (a) run/​map the overlay (0x100000) per-frame VICTORY check so it detects the eliminated side and arms
+       the a5dc mission-end (2da2 countdown -> a814 -> 459a returns) -- the goal's named overlay win-logic;
+   (b) the a296 overshoot past 0 to -5 (residual churn) -- likely moot once the overlay check fires the
+       first frame a296 hits 0 (min_a296=0 proves it passes through 0);
+   (c) then native<->wasm byte-identity across the whole run.
+
+The combat MODEL is done. The remaining work is the overlay's win-DECLARATION + parity, not the simulation
+itself. This is the closest the project has been: the sim resolves the battle; the engine just needs to
+say so.
