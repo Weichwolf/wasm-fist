@@ -3864,3 +3864,26 @@ State unchanged and honest: native end-to-end resolution DONE + committed (266..
 the revert. wasm byte-identity NOT met; the 1a45 loader-cluster port needs model-header-format RE (a
 mechanical rebase provably breaks native), the CS-carry class needs board:0010, and both remain the
 scoped, de-risked, but genuinely dedicated remaining work.
+
+## Turn N+15: sim-divergence REFINED — only 3 DEAD CS/ES words in DGROUP; the real issue is load-timeline desync
+
+Direct native-vs-wasm DGROUP compare (FIST_DUMPTICK + FIST_MEMDUMP, shared early tick, both a296=0):
+- The DGROUP (0x1c000..0x2c000, the sim region) differs by only **6 bytes = 3 words**: DGROUP:0x3e2
+  (DAT_1000_c3e2 = unaff_CS, FUN_0000_1322), 0x16b0 (=unaff_ES, the INT-wrapper f6c3), 0x3ae2. native
+  stores unaff_CS/unaff_ES garbage; wasm stores 0. ALL THREE ARE DEAD STORES (grep: zero readers) -- so
+  they do NOT drive the sim; the 138 other tick-2000 diffs were the extender OVERLAY dispatch tables
+  (host pointers the sim never reads as data). => the SIM-relevant divergence is tiny and mostly dead.
+- BUT the [0x452] frame-tick is NOT synchronized across targets: native reaches roster-spawn only after
+  tick ~4000 and resolves by ~4500; wasm reaches a296=16 at a completely different [0x452]. So FIST_DUMPTICK
+  does NOT dump the same MISSION state on both -- the LOAD TIMELINE diverges (the load takes different tick
+  counts native vs wasm). That desync is the 1a45-class load base-losses (model decompress/read) advancing
+  the cooperative tick a different number of times because their divergent control flow does different work.
+
+So the corrected picture: the combat divergence is not seeded by a big DGROUP difference at load -- it is
+the LOAD/model path (1a45 cluster) diverging in control flow -> different tick timeline -> different combat
+evolution. Fixing byte-identity = (a) the ~3 dead CS/ES stores -> constants (cheap, for strict g_mem
+identity), (b) port the 1a45-class load base-losses so the load does identical work in identical ticks
+(the intricate model-format RE, empirically shown to break native if done mechanically), (c) any remaining
+combat-time CS-carry stores. The falsifiable meter stays FIST_FARTRACE (first-divergence-seq) + a
+MISSION-STATE-synced dump (dump-on-a296==16), since [0x452] is not a cross-target clock until the load is
+deterministic. Native done + committed (266..452); wasm byte-identity precisely re-scoped.
