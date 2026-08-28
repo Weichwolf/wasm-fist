@@ -4254,3 +4254,32 @@ from the start (load bug) or 80 growing to 142 (a spurious per-frame spawn)?  (2
 so the port reproduces the 80-object set.  Oracle harness tools/oracle/census_azer1.sh + the cr3=0xe000
 walk (DGROUP 0x2d190, table 0x3b14c) are the falsifiable meter.  This is the real unblock.  Goal unmet, but
 the blocker is now a specific, measurable mission-load defect with a known-correct target.
+
+## Turn N+20 cont.11: TANK-DEATH CHAIN TRACED end-to-end + PATCH 457 (b294 base-loss)
+
+The oracle census reframed the bug (cont.10): the port LOADS the mission correctly (80 objects incl. 9
+type-2 tanks, byte-identical AI-state at spawn) but LOSES the tanks during the sim.  Traced WHY, in-port:
+- The 9 tanks are destroyed one-by-one (ticks 30/46/82/95/105/119/274/303/319) by FUN_0000_a93e, each
+  reaching hp3a>=0x64 (100) -- i.e. killed by ACCUMULATED DAMAGE, not a spurious flag.
+- Full call chain (native backtrace at the a93e that kills c34d): 459a -> c0ca -> c0e5 -> b51f -> c31e ->
+  c336 -> b39c -> a93e.  So the c0e5 per-frame update of the type-0x10 objects (b51f) runs the action
+  dispatch c31e/c336 and applies DAMAGE (b39c) to the tanks, killing them.  The ~66 spurious type-0x10 are
+  the death-effects/wrecks the kills spawn (cascade).
+- The ORIGINAL has the SAME 25 type-0x10 objects at spawn yet its tanks SURVIVE.  So the port's b51f/b39c
+  applies damage the original does not: a damage-TARGETING or damage-AMOUNT divergence in the type-0x10
+  weapon update (b51f, patch 253) or its dispatch (c31e/c336/b39c).  firereq=0 throughout, so this is NOT
+  fired-weapon damage -- the 25 pre-placed type-0x10 objects hit the tanks each frame in the port only.
+
+PATCH 457: FUN_1000_b294 (display-object register wrapper) base-loss -- passed *puVar5 (a wild host deref
+of the slot value) as b1df's TYPE key instead of word[DGROUP:di], + phantom unaff_CS.  Rebased faithfully
+(pass the real type; the asm tail's rep-movs is a si==di self-copy no-op).  ASM-verified 0x1b294.  NOTE:
+this did NOT change the AZER1 census (b294 is off this hot path) -- it is a correct latent base-loss fix
+(host-deref -> wasm divergence), NOT the tank-killer.  Verified: mission-cockpit crop byte-identical
+native<->wasm; make check OK.
+
+NEXT (concrete, oracle-checkable): instrument b39c to log (attacker/weapon, target di, damage) when it hits
+a type-2 tank; find which of the 25 type-0x10 objects damages the tanks + why (wrong target near-offset /
+wrong side test / base-lost weapon record).  Compare vs original (b39c should NOT hit the tanks).  Fix that
+-> tanks survive -> they drive+fight -> a296 resolves.  Oracle meter (census_azer1.sh + cr3=0xe000 walk,
+DGROUP 0x2d190, table 0x3b14c) confirms the 80-object target.  Goal unmet; blocker is now a SPECIFIC
+per-frame damage-application divergence, root-caused to the b51f->b39c chain.

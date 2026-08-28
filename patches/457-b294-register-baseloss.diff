@@ -1,0 +1,65 @@
+PATCH 457: FUN_1000_b294 base-loss -- the display-object REGISTER wrapper corrupted the mission object set.
+asm 0x1b294 (DS=DGROUP=0x1c00): di = word[DGROUP:0xdfbc+param_1*4] (the slot's object near-offset); register
+it via b1df(word[DGROUP:di], di); on b1df success track the max side-total a29c=(a294+a296); the tail's
+`rep movs es:[di],ds:[si]` has si==di (b1df leaves si=di + already zeroed the body) = a self-copy no-op.
+Ghidra base-lost it: `puVar5 = slot value` used as a HOST POINTER, so b1df's TYPE key was *puVar5 (a wild
+host deref -> garbage) instead of word[DGROUP:di], and the phantom `unaff_CS`/`bVar6` split the single
+near-offset + dropped b1df's CF.  On the port this passed a GARBAGE type to b1df->b21d: the AZER1 mission's
+9 mobile type-2 tanks were killed (type->0x13 via b2d3) and ~66 spurious type-0x10 objects spawned within
+~100 ticks -- so combat never engaged and a296 never resolved.  Oracle census (engine-context RAM dump,
+cr3=0xe000): the ORIGINAL keeps 80 objects incl. 9 STEERING type-2 tanks; the port at spawn matches (80
+objects, 9 tanks, byte-identical tank AI-state hdg26==des30) then diverges via this base-loss.  Rebased to
+the DGROUP model + pass the real type; b1df's CF via g_fist_cf.  ASM-verified vs 0x1b294-0x1b2d2.
+--- a/fist.c
++++ b/fist.c
+@@ -61362,31 +61362,26 @@
+ int __allregs FUN_1000_b294(int param_1)
+ 
+ {
+-  int *piVar1;
+-  undefined2 *puVar2;
++  /* PATCH 457: display-object REGISTER wrapper (asm 0x1b294; DS=DGROUP=0x1c00).  di = the slot's object
++   * NEAR OFFSET = word[DGROUP:0xdfbc+param_1*4]; register it via b1df(word[DGROUP:di], di).  Ghidra
++   * base-lost it: puVar5 = the slot value used as a HOST POINTER, so b1df's TYPE key was *puVar5 (a wild
++   * host deref = garbage) instead of word[DGROUP:di]; and the phantom `unaff_CS` split the single
++   * near-offset (asm: di==si) into a bogus second pointer.  On the port this passed a GARBAGE type to
++   * b1df->b21d, corrupting the roster/object set (the AZER1 mission's 9 mobile type-2 tanks were killed
++   * and ~66 spurious type-0x10 objects spawned within ~100 ticks; oracle census: original keeps 80 objects
++   * incl. 9 steering tanks).  Rebase to the DGROUP model + pass the real type.  The asm tail's
++   * `rep movs es:[di],ds:[si]` has si==di (b1df leaves si=di and has already zeroed the body) -> a
++   * self-copy no-op, omitted.  Tracks the max side-total a29c (a294+a296) as the asm does. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = *(unsigned short *)(dg + (unsigned short)(0xdfbc + (unsigned int)param_1 * 4));
++  unsigned short type = *(unsigned short *)(dg + di);
+   int iVar3;
+-  int iVar4;
+-  undefined2 *puVar5;
+-  int *unaff_CS;
+-  bool bVar6;
+-  
+-  bVar6 = param_1 << 1 < 0;
+-  puVar5 = (undefined2 *)((undefined2 *)&DAT_2000_9fbc)[param_1 * 2];
+-  iVar3 = FUN_1000_b1df(*puVar5,puVar5);
+-  if (!bVar6) {
+-    if (DAT_2000_a29c < (uint)(DAT_2000_a294 + DAT_2000_a296)) {
+-      DAT_2000_a29c = DAT_2000_a294 + DAT_2000_a296;
+-    }
+-    iVar4 = 0x37;
+-    if ((*(byte *)(*unaff_CS + -0x19ec) & 1) != 0) {
+-      iVar4 = 0xfb;
+-    }
+-    for (; iVar4 != 0; iVar4 = iVar4 + -1) {
+-      puVar2 = puVar5;
+-      puVar5 = (undefined2 *)((int)puVar5 + 1);
+-      piVar1 = unaff_CS;
+-      unaff_CS = (int *)((int)unaff_CS + 1);
+-      *(char *)puVar2 = (char)*piVar1;
++  iVar3 = FUN_1000_b1df(type,(int *)(uintptr_t)di);
++  if (!(bool)g_fist_cf) {
++    if ((unsigned short)DAT_2000_a29c <
++        (unsigned int)((unsigned short)DAT_2000_a294 + (unsigned short)DAT_2000_a296)) {
++      DAT_2000_a29c = (unsigned short)((unsigned short)DAT_2000_a294 + (unsigned short)DAT_2000_a296);
+     }
+     return iVar3;
+   }
