@@ -3438,3 +3438,24 @@ TWO REMAINING BLOCKERS to a clean resolved a296==0:
 
 NEXT: fix the mga blitter wrap so the run survives the wrecks, then trace/​fix the a296 over-decrement so
 the counter stops at exactly 0 = mission resolved.
+
+## Turn N+2 (cont.): post-fix crash is memory corruption once units die — NOT a clean resolution
+
+After the damage-routing fix lands real kills, longer runs SEGV (fault-addr nil, EIP inside f738 with a
+SHALLOW app_entry->f738 backtrace, and ALL mission state zeroed: veh=0 player=0 roster 2d3c all-zero,
+sprite-dir seg=0). A probe on 459a's `if(a814) return` mission-end exit did NOT fire before the crash, so
+this is NOT a clean 459a mission-end -> the null-call-in-f738 backtrace is a SMASHED stack: a wild write
+(from the now-active destroy path a93e/c047 or the render on the new type-0x13 wreck sprites) corrupts
+memory -- zeroing DGROUP mission state and the return stack -- which then surfaces as a null far-call.
+
+So the correct order of remaining work:
+1. Find the WILD WRITE that appears once units die. Candidates: (a) the b39c destroy calls now reach
+   a93e/c047 with the real target -- verify a93e/c047 and their callees (b2d3 done) are base-loss-clean
+   on the real object path (they were only ever exercised on the churn object 0x600 before); (b) the mga
+   blitter on the type-0x13 wreck sprite (needs the 16-bit src+dst wrap). Use FIST_WWTRAP / a guarded
+   page on the DGROUP mission block to catch the writer's cs:eip.
+2. Then the a296 over-decrement (past 0 to -40) so the count lands on exactly 0 = detectable resolution.
+
+The damage-routing fix itself is CORRECT and committed (units take real damage and die) -- it exposed the
+next layer: the death/wreck/teardown path was never exercised on real units before (only the 0x600 churn
+object), so its base-losses were latent. Goal not met (run crashes once real deaths cascade).
