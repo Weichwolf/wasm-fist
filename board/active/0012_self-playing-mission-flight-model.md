@@ -3050,3 +3050,27 @@ effect; the alternative damage route is the ba33-spawned explosion object's own 
 Either way the enemy-HP-reduction is the last unimplemented link.
 Every earlier stage now runs (op-0x54 landed this session).  Goal still unmet (a296=16), but the pipeline
 is one extender-service (damage) away from kills.
+
+## Damage model DECODED: the splash is the explosion OBJECT (ba33 template 0x9c4d), not op-0x64/be8b
+
+Continued tracing the go691 (shell-hit) branch to find the enemy-HP sink.  Findings:
+  - op-0x64 (@extender 0x786a, via be8b(0xf)->e2c2) is NOT the damage: 0x22ab (its callee) is EFFECT-SLOT
+    management (3 slots @DGROUP:0x15d7, effect record + timer + type bytes @0x2689/0x26b3/0x26df) = the
+    visual/audio explosion, not HP.  So be8b/op-0x64 posts the explosion EFFECT.
+  - bbb7 -> c31e is the object ACTION-DISPATCH (patch 256, word[type*2-0x1ab0]) = the shell's death action
+    (spawn its explosion), not splash damage.
+  - ba33(0x9c4d, shell) SPAWNS a NEW object via b1df(4,..) + installs template DGROUP:0x9c4d (ba5d).  THIS
+    new explosion object's own per-frame UPDATE is where the splash-damage-to-nearby-units lives.
+  - KILL sink CONFIRMED (b2ef, patch 363): a296-- happens when b2ef destroys an object whose type-flag
+    byte[0xe614+type]&1 is SET (enemy side).  Measured b2ef-UNIT-destroys=117 were a294-type (byte&1==0:
+    projectiles/effects) -> a294 dropped, a296 did NOT.  So enemy objects are never destroyed = their HP
+    never reaches the destroy condition = the splash never applies.
+
+So the FINAL unimplemented link is the explosion-object (template 0x9c4d) UPDATE method's splash: it must
+find enemy units within a radius of the blast and reduce their HP toward the b354/b2ef destroy that does
+a296--.  Next: read the object type installed by template 0x9c4d and its update-method (via the 7c1d/aae8
+type dispatch); check whether it is base-lost / unimplemented (op-0x58-class) or whether the enemy units'
+Z being non-terrain-following makes a 3D splash-distance miss them.  Plus GATE 2 still limits shots to 4
+(would-fire=97 vs ace0=4, the 7e29 [0x91]==4||[0xa8]==0 ammo/reload gate).
+Every stage aim->acquire->fire->spawn->fly->HIT->explosion-EFFECT now runs; the enemy-HP splash from the
+spawned explosion object is the last link.  Goal unmet (a296=16); pipeline complete but for the splash sink.
