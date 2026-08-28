@@ -4336,3 +4336,25 @@ NEXT: instrument b51f fire-branch entry (does it fire in the original? -- needs 
 compare the port c34d position trajectory to the original.  This turn: oracle census infra built
 (census_azer1.sh, engine-context RAM dump @cr3=0xe000) + the tank-death chain root-caused to the al=0
 friendly-fire mechanism + patch 457 (b294).  The al=0 SOURCE is the one remaining link.  Goal unmet.
+
+## Turn N+20 cont.14: H1 ELIMINATED -- tanks are frozen in BOTH; the divergence is purely weapon fire/targeting
+
+Decisive test: the port's tank c34d position is (549136,1017675) at tick 1 AND tick 20 -- FROZEN.  The
+ORIGINAL's c34d (ram_500.bin, mid-mission) is at the SAME (549136,1017675) -- also frozen.  So BOTH sides'
+tanks are stationary at identical positions; the steering/movement hypothesis (H1) is WRONG -- movement is
+not the difference.  (This also means "units don't steer" is NOT the resolution blocker for AZER1: the
+tanks are meant to hold position; the mission resolves by the weapons/combat, not by driving.)
+Therefore the entire divergence is in the WEAPON FIRE + TARGETING (H2): the port has type-0x10 objects
+firing with al=0 (side-selector [0x1c]=0) IN RANGE of the stationary tanks -> bb64 selects them ([0x16]&8)
+-> b39c damages them to death; the ORIGINAL, with the SAME 25 stationary type-0x10 and the SAME stationary
+tanks, keeps every tank at hp3a=0.  So the original's type-0x10 either do NOT fire, or fire with a nonzero
+side that skips the tanks.  The port fires al=0 -> friendly-fire.  (+66 type-0x10 are the death-effect
+cascade once the first tank dies.)
+NARROWED ROOT (one of): (a) a b51f FIRE-GATE base-loss makes the port auto-fire weapons the original leaves
+idle (b51f fires every 32 frames iff `byte[wpn+0x1b] & DAT_5646[(cnt>>5)] == 0`; if [0x1b]/the DAT_5646
+mask index is base-lost, it fires wrongly); (b) the firing type-0x10 have [0x1c]=0 (fresh projectiles, or a
+corrupted original weapon) so bb64's al=0 branch hits friendlies.  NEXT: oracle-trace whether the original's
+25 type-0x10 ever enter b51f's fire branch (bb64 call) -- if they never fire, it is (a), a b51f fire-gate
+base-loss; fix the gate so idle weapons stay idle -> no friendly-fire -> tanks survive -> a296 resolves.
+This turn root-caused the AZER1 non-resolution to the b51f weapon-fire path (H1/movement eliminated), built
+the oracle census infra, and landed patch 457.  Goal unmet; the blocker is one weapon-fire-gate step away.
