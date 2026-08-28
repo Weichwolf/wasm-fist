@@ -3759,3 +3759,36 @@ the overlay/TCB host-ptr tables) so every read is a DEFINED, address-space-indep
 DD2 method continued -- bounded per-function, but a real surface, not a single fix. The divergence is now
 traced to concrete first sites (1a45; bdcc/5f22 fixed) and its NATURE is understood (host-address
 dependence, not logic error), which is the prerequisite for closing it.
+
+## Turn N+12: 1a45 PORTING SPEC (asm-mapped) + the deeper prerequisite (shim guest-segment determinism)
+
+Fully disassembled FUN_0000_1a45 (asm 0x1a45-0x1bd1, a model/sprite loader+decompressor). The
+byte-identity divergence there is the ES/DS-segment base-loss class. Exact asm->DGROUP mapping (the
+porting spec):
+  - segments live in DGROUP: fad2=W[0x3ad2], fad4=W[0x3ad4], fad6=W[0x3ad6] (fad6 = the loaded-model GUEST
+    SEGMENT returned by the c0e4 decompress-open; fad4 -> a segment via W[fad4]).
+  - `*(int *)(DAT_1000_e674 + 0x27f4)`  ->  W[(uint16)(DAT_1000_e674 + 0x27f4)]  (asm 1ab6/1aee: mov di,
+    [0x2674]; mov di,[di+0x27f4]) ; and `*(puVar8+e67e)=fad4` -> W[(uint16)(that+e67e)]=fad4.
+  - word-copy loop (asm 1afe rep movsw es:[di],ds:[si], es=fad6, di=0, si=0x267c, cx=8): decompile has
+    dst=puVar20=(uint*)0 (host 0!) -> must be g_mem+(fad6<<4)+0; src &DAT_1000_e67c is already correct.
+  - `(**(code **)&DAT_1000_c394)()` (asm 1b26 lcall ss:[0x394] with DS=fad6) -> fist_icall_far(c394) with
+    the fad6 buffer, NOT a raw host deref of the far-ptr bytes.
+  - `*(int*)&DAT_1000_c006`, `*(int*)*(int*)&DAT_1000_c006` (asm 1b35 es:0x6, es:[es:0x6]) -> W[fad6:6],
+    W[fad6:W[fad6:6]] ; result -> W[(uint16)(e674+0x276c)].
+  - xlat decompress (asm 1b50-1b75) + final rep movsb (asm 1bbf): es=fad6 / W[fad4], ds=W[[0x3ad2]],
+    xlat table at ds:0x300 ; decompile renders all bases as host 0 / DGROUP:0xe (`&DAT_1000_c00e`) which
+    are actually es:0/es:0xe of the fad6 model segment.
+
+DEEPER PREREQUISITE (found while mapping): 1a45 reads/writes the GUEST SEGMENTS fad4/fad6, allocated at
+runtime by the shim's memory manager via the c0e4/decompress path. A faithful 1a45 port is byte-identical
+ONLY IF the shim allocates those guest segments DETERMINISTICALLY (identical values native<->wasm). If the
+allocator's segment values are host-derived, 1a45 diverges regardless of the port. So the byte-identity
+work order is: (1) verify/enforce deterministic guest-segment allocation in the shim mem-manager; (2)
+board:0010 CS-carry wholesale; (3) port the ES/DS base-loss loaders (1a45 first, per this spec), using the
+far-call divergence trace (FIST_FARTRACE) as the falsifiable progress meter -- each fix pushes the first
+divergence sequence later until native==wasm across the run.
+
+This is the executable plan. Native end-to-end resolution remains DONE + committed (266..452); wasm
+byte-identity is a bounded, now-fully-specified porting effort (loaders + CS-carry + verified deterministic
+guest-seg allocation), correctly scoped as dedicated work rather than a rushed in-session patch that would
+risk the banked native milestone.
