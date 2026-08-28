@@ -3959,3 +3959,27 @@ damage record b39c reads, to find which single input diverges (a host-pointer/CS
 the damage scale). The render-buffer diffs are a SEPARATE (framebuffer-relevant) issue. This supersedes
 all prior broad-surface estimates: the combat byte-identity is ONE damage-input base-loss.
 Native done + committed (266..452).
+
+## Turn N+19: BYTE-IDENTITY BREAKTHROUGH -- combat SIM is byte-identical (PATCH 453); render is the remainder
+
+Sim-step-granular g_mem bisection found the combat divergence ROOT: FUN_0000_b26a (asm `jmp 0x291`, a tail
+call to the LFSR RNG 0291) DROPPED its return value in the decompile (`FUN_0000_0291(); return;`). native
+-O0 kept 0291's result in AX by luck; wasm -O2 returned a CONSTANT -> b39c's random damage roll was
+constant on wasm -> units took too little damage -> wasm killed 12/16 and stalled. FIX (PATCH 453):
+`return FUN_0000_0291();`. VERIFIED:
+- b39c per-hit damage byte-identical native<->wasm (08,0a,07,0b,0c,... for identical inputs).
+- a296 kills in LOCKSTEP on both: 13(step50)->9(100)->4(200)->0(300, RESOLVED). wasm now kills all 16.
+- At combat step 200: DGROUP unit region (0xc000-d000) = 0 diffs, counter region (0xe000-e800) = 0 diffs.
+  THE SIMULATION STATE IS BYTE-IDENTICAL. The whole earlier "combat diverges" saga was this ONE dropped
+  RNG return -- the sim-step bisection isolated it to the single divergent byte (the damage accumulator).
+
+REMAINING for FULL byte-identity = the RENDER only:
+- framebuffer (0xA0000): 78 diffs; render backbuffers (0x110000+): tens of thousands. The units are
+  byte-identical, so the render DRAWS identical sim state slightly differently -> render-path base-losses
+  (the mga blitters / display-list build with host-pointer/segment drops -- the un-wrapped 26de/2660/298a/
+  2758 blitters + the op-0x4c display-list / DGROUP:0x7aa4 frontier the goal names). This is the LAST
+  surface: render determinism. The sim (the mission outcome, tick-by-tick combat state) is DONE.
+
+So: native end-to-end resolution DONE (266..452); combat SIM byte-identity native<->wasm DONE (453); only
+the RENDER path's byte-identity remains (framebuffer + display buffers), a bounded mga-blitter/display-list
+base-loss cleanup -- no longer a mystery, the sim half of "byte-identical" is achieved.
