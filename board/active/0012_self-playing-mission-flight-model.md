@@ -4602,3 +4602,28 @@ This is not "one patch away" -- it is the second half of the build, the render h
 alongside the sim half.  Deliverables: oracle census infra (census_azer1.sh), patches 454-457 landed, 458
 (root fix, mechanically clean) held, 24 evidence entries documenting the full sim root-cause chain.
 Goal UNMET; sim half SOLVED, render half is the remaining goal-named surface.
+
+## Turn N+20 cont.25: CONFIRMED -- landing 458 requires the op-0x4c RENDER/PRESENT frontier (the frame-completion handshake), not just HUD text
+
+Deeper validation.  Even with the two hanging HUD text elements (6c2d/a520) cleanly skipped, the mission
+STILL stalls at t=1: the per-frame loop 459a (build/fist.c:13751) spins forever calling the VGA vsync-wait
+30f8 (in(0x3DA)) -- it never advances to drain the sim-steps, so [0x452] stays 1.  This is the op-0x4c
+PRESENT / frame-completion handshake: the port runs the mission cooperatively with FIST_SIMRUN, which
+STUBS the op-0x4c present; that stub satisfies the frame-complete condition for the BROKEN-combat state,
+but with 458 (combat active, targets/interactions selected from tick 1) the game reaches a different
+present/display-list state the stub does not complete -> the frame loop spins.
+So landing 458 does NOT merely need the HUD glyph render fixed -- it needs the actual op-0x4c display-list /
+per-frame PRESENT path BUILT (no stub), so a live combat frame completes and the loop advances.  That is
+verbatim the GOAL's remaining half: "finishing the mission-load and per-frame render path (the op-0x4c
+display-list / DGROUP:0x7aa4 viewport-geometry frontier) so every simulated frame ... [is] produced with no
+stubs, guards, or approximations."  The FIST_SIMRUN present-stub is exactly such a stub; it must be replaced
+by the faithful op-0x4c present for the self-play to advance frame-by-frame under live combat.
+
+DEFINITIVE STATE OF THE ARC: (1) mission-load DONE + byte-identical.  (2) combat SIM root-caused + asm-
+verified FIX (458), mechanically clean (only bb64/bb1b consume its flag).  (3) the op-0x4c render/present
+frontier -- the per-frame display-list present that FIST_SIMRUN currently stubs -- is the remaining half,
+and it must be built faithfully for the combat frame to complete + be byte-identical.  This is the GOAL's
+own second clause, genuine dedicated work of the same magnitude as the combat arc.  458 lands the moment the
+op-0x4c present is faithful (frame completes under live combat) AND the resulting frame is byte-identical
+native<->wasm.  Deliverables of the arc: oracle census infra, patches 454-457 landed, 458 (root fix) held,
+25 evidence entries.  Goal UNMET; sim half SOLVED, op-0x4c render/present half remains.
