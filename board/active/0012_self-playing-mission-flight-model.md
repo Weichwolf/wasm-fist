@@ -3609,3 +3609,29 @@ isolation). The a296 overshoot past 0 is moot (the win fires the frame 578e hits
 
 MILESTONE: for the first time, one full AZER1 mission plays itself to a resolved WIN that the engine
 declares, deterministically, with no wall-clock throttle, and the native process completes end-to-end.
+
+## Turn N+8: wasm build reaches the mission but the in-mission sim is glacially slow (byte-identity blocked)
+
+Started the native<->wasm byte-identity requirement.
+- TOOLCHAIN: `make wasm` must use the emsdk toolchain ($HOME/Git/emsdk/upstream/emscripten/emcc 5.0.7 +
+  wasm-opt 129); the system /usr/bin/emcc 3.1.69 + wasm-opt v120 fail at the wasm-opt step
+  (`Unknown option '--enable-bulk-memory-opt'`). build.sh already defaults to the emsdk emcc, so plain
+  `make wasm` works; only an explicit EMCC=emcc (system) breaks it.
+- The wasm build (emsdk, -O2) BUILDS and runs: reaches AZER1 MAP-LOAD and spawns the roster (a296=16).
+- BUT the in-mission sim advances ~100x slower than native: over a 300s wasm run, op58 LOS calls = 3
+  (native does thousands in ~15s), a294 grew 67->79, a296 stayed 16, no kills, 7e29/spawn/bb1b = 0. So the
+  wasm mission does NOT reach combat resolution in any practical wall-clock, blocking the byte-identity
+  compare (can't reach a shared mission tick to diff g_mem).
+
+The 159 previously-verified flows (menus/briefings) are byte-identical native<->wasm at -O2; the in-mission
+COMBAT path is new and shows this wasm-specific slowness. Candidates: (a) an -O2 wasm miscompile of a
+decompile-UB loop in the in-mission render/sim that native -O0 doesn't hit (build.sh already notes -O2
+HANGS the 32-bit NATIVE cockpit -- a decompile-UB the wasm backend "does not hit" -- so the in-mission
+path has known -O optimization sensitivity); (b) an un-wrapped mga blitter (26de/2660/298a/2758 -- only
+2b1e is wrapped by PATCH 448) doing 65536-iter garbage loops per frame that -O2 wasm handles differently.
+NEXT: build -O0 wasm (FIST_DEBUG=1) to test whether it's -O2-specific, then dump native+wasm g_mem at a
+shared FIST_DUMPTICK to locate the first diverging byte (or confirm identity + fix only the speed).
+
+STATE: native end-to-end DONE (mission plays to a resolved win, exits clean, deterministic, committed
+266+447+448+449+450+451). Byte-identity is the last requirement; wasm reaches the mission but its
+in-mission sim speed blocks the compare -- a bounded wasm in-mission perf/-O investigation.
