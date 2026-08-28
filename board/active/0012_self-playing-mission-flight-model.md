@@ -3710,3 +3710,27 @@ STATE: native end-to-end resolution DONE + committed (266..452). Byte-identity r
 one site fixed; the systematic fix (board:0010 CS context + overlay host-ptr normalization) is the bounded
 remaining work. The sim's near-offset state is already deterministic across targets -- only the CS/host
 high-words diverge, and they steer the combat's far-calls.
+
+## Turn N+10: byte-identity divergence TRACED to concrete sites; RNG ruled out; it is the CS-carry cascade
+
+Deepened the byte-identity diagnosis with a far-call divergence trace (FIST_FARTRACE: log every
+fist_icall_far seg:off + return-addr in-mission, native vs wasm, diff):
+- RNG RULED OUT: FUN_0000_0291 (the LFSR, PATCH 156) reads/writes state at g_mem+0x1df82.. (near offsets),
+  fully deterministic -> identical native<->wasm. Not the divergence.
+- FIRST far-call divergence = seq 309, inside FUN_0000_1a45 (streaming file-loader, PATCH 161): wasm
+  dispatches an EXTRA 0xf69:3167 where native dispatches 0xf69:3152 (segment 0xf69 same, target OFFSET
+  diverges -> a DIFFERENT function selected). The three cycling far-calls (3e78:0197, 0f69:30de,
+  0f69:3152) all issue from 1a45 via DGROUP far-pointers DAT_1000_c38c/c390/c550. The divergence is a
+  control-flow/selection difference driven by a value contaminated by the CS-carry/host-pointer class.
+- This confirms: the native<->wasm in-mission divergence is the CS-carry cascade -- fixing one site
+  (PATCH 452 already did bdcc/5f22) reveals the next. There are ~11 direct + ~58 array `= unaff_CS`
+  stores plus the overlay/TCB host-ptr tables; each far-pointer they feed can steer a divergent dispatch.
+
+CONCLUSION (honest): the SYSTEMATIC and faithful fix is board:0010 -- set CS/ES context in the Ghidra
+PrepAnalysis step and re-derive, eliminating all 312 unaff_CS/unaff_ES pseudo-vars at once so every
+CS-carry store is a deterministic constant. That is a dedicated re-decompile + re-apply-all-patches +
+re-gate session (per board:0010's own scope), NOT a safe mid-session improvised change. Piecemeal per-site
+patching is possible but each site needs its true CS (0x1000 vs 0xf69, reference-determined) and the
+cascade is long. Native end-to-end resolution is DONE + committed (266..452); wasm byte-identity is
+blocked on the CS-carry class, now traced to concrete sites (1a45 dispatch, bdcc/5f22 fixed), with
+board:0010 as the correct next-session path.
