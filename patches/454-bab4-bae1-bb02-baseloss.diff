@@ -1,0 +1,99 @@
+PATCH 454: base-loss cluster in the c0e5-dispatched objtype-0x04 per-frame UPDATE method bab4 and its two
+state sub-methods bae1/bb02.  di (object near offset) is threaded into each by the update walk (patch 243)
+and the bab4 near-dispatch table @DGROUP:0x9c75 {bae1,bae0,bb02,bae0}, but Ghidra deref'd di as a HOST
+pointer (*(param_1+off)) and, in bab4, dropped the DI arg + mis-based the near table onto a host offset.
+Under ASLR these read/segfault at random host addresses (the crash the b26a-corrected trajectory now
+reaches; masked by setarch -R where the garbage happens to be mapped) and, on wasm, read a DIFFERENT
+address space -> divergence.  Rebased all three to the DGROUP model (g_mem+0x1c000+(u16)(di+off)); di
+threaded into bab4's sub-dispatch.  ASM-verified vs re_out/fist_dat_image.bin @ 0xbab4/0xbae1/0xbb02.
+bae0 (empty ret) needs no change.
+--- a/fist.c
++++ b/fist.c
+@@ -28854,20 +28854,25 @@
+ void __allregs FUN_0000_bab4(int param_1)
+ 
+ {
+-  char *pcVar1;
+-  int iVar2;
+-  
+-  pcVar1 = (char *)(param_1 + 0x20);
+-  *pcVar1 = *pcVar1 + -1;
+-  if (*pcVar1 == '\0') {
+-    *(undefined1 *)(param_1 + 0x20) = *(undefined1 *)(param_1 + 0x1f);
+-    if (*(char *)(param_1 + 0x19) == *(char *)(param_1 + 0x1e)) {
+-      iVar2 = FUN_1000_b354(param_1);
++  /* PATCH 454: objtype-0x04 per-frame UPDATE method (asm 0xbab4; DS=DGROUP=0x1c00).  di=object near
++   * offset in param_1 (c0e5 threads it, patch 243).  Frame-countdown byte[di+0x20]; on wrap reload from
++   * [di+0x1f], step the anim frame [di+0x19] toward [di+0x1e] and dispatch the state sub-method
++   * word[DG:0x9c75+(word[di+0x1a]&6)](di) {bae1/bae0/bb02}, else at end-of-anim run b354->b2ef.  Ghidra
++   * deref'd di as a host pointer (random SIGSEGV without setarch -R), dropped the DI arg, and mis-based
++   * the near table to a host offset.  Rebased to the DGROUP model; di threaded into the sub-method. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  if ((unsigned char)(--dg[(unsigned short)(di + 0x20)]) == 0) {
++    dg[(unsigned short)(di + 0x20)] = dg[(unsigned short)(di + 0x1f)];
++    if ((char)dg[(unsigned short)(di + 0x19)] == (char)dg[(unsigned short)(di + 0x1e)]) {
++      int iVar2 = FUN_1000_b354((int)di);
+       FUN_1000_b2ef(iVar2);
+       return;
+     }
+-    *(char *)(param_1 + 0x19) = *(char *)(param_1 + 0x19) + '\x01';
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)((*(uint *)(param_1 + 0x1a) & 6) + 0x9c75))))();
++    dg[(unsigned short)(di + 0x19)] = dg[(unsigned short)(di + 0x19)] + 1;
++    (*(code *)fist_icall_near(0x0u,
++        *(uint16_t *)(dg + (unsigned short)(0x9c75 +
++            (*(uint16_t *)(dg + (unsigned short)(di + 0x1a)) & 6)))))((int)di);
+   }
+   return;
+ }
+@@ -28887,19 +28892,21 @@
+ void __allregs FUN_0000_bae1(int param_1)
+ 
+ {
+-  char cVar1;
+-  
+-  cVar1 = *(char *)(param_1 + 0x19);
++  /* PATCH 454: bab4 state sub-method (asm 0xbae1; DS=DGROUP=0x1c00).  di=object near offset in param_1;
++   * maps anim frame byte[di+0x19] to a period word[di+0x1c].  Ghidra deref'd di as host ptr; rebased. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  char cVar1 = (char)dg[(unsigned short)(di + 0x19)];
+   if (cVar1 == '\x13') {
+-    *(undefined2 *)(param_1 + 0x1c) = 0x100;
++    *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x100;
+   }
+   else {
+     if (cVar1 == '\x10') {
+-      *(undefined2 *)(param_1 + 0x1c) = 0x200;
++      *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x200;
+       return;
+     }
+     if (cVar1 == '\r') {
+-      *(undefined2 *)(param_1 + 0x1c) = 0x300;
++      *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x300;
+       return;
+     }
+   }
+@@ -28912,14 +28919,18 @@
+ void __allregs FUN_0000_bb02(int param_1)
+ 
+ {
+-  if (*(char *)(param_1 + 0x19) == '\x06') {
+-    *(undefined2 *)(param_1 + 0x1c) = 0x200;
++  /* PATCH 454: bab4 state sub-method (asm 0xbb02; DS=DGROUP=0x1c00).  di=object near offset in param_1;
++   * maps anim frame byte[di+0x19] (6/8) to a period word[di+0x1c].  Ghidra deref'd di as host ptr. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  if ((char)dg[(unsigned short)(di + 0x19)] == '\x06') {
++    *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x200;
+     return;
+   }
+-  if (*(char *)(param_1 + 0x19) != '\b') {
++  if ((char)dg[(unsigned short)(di + 0x19)] != '\b') {
+     return;
+   }
+-  *(undefined2 *)(param_1 + 0x1c) = 0x100;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x100;
+   return;
+ }
+ 

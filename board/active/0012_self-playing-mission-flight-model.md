@@ -3983,3 +3983,35 @@ REMAINING for FULL byte-identity = the RENDER only:
 So: native end-to-end resolution DONE (266..452); combat SIM byte-identity native<->wasm DONE (453); only
 the RENDER path's byte-identity remains (framebuffer + display buffers), a bounded mga-blitter/display-list
 base-loss cleanup -- no longer a mystery, the sim half of "byte-identical" is achieved.
+
+## Turn N+20: HONEST RE-ASSESSMENT -- "native done / only render remains" was WRONG; base-loss cluster blocks the WHOLE mission path
+
+Measured ground truth (not narrative), this session:
+- Native does NOT resolve AZER1 cleanly on its own.  It runs ONLY under `setarch -R` (ASLR off), where the
+  UNPATCHED mission-path base-losses read *self-consistent garbage* host addresses instead of segfaulting.
+  Without setarch -R native SIGSEGVs, and the crash SITE VARIES run-to-run (a3ec, aae8-via-a3ec, bab4->bb02,
+  ...) -- the signature of MANY live base-losses, each deref'ing an object NEAR offset (di) as a host pointer.
+- Because those base-losses touch HOST addresses, wasm (different address space) reads/writes different
+  memory -> native<->wasm byte-identity is IMPOSSIBLE while any LIVE base-loss remains on the path.  This
+  is exactly the board's earlier honest conclusion (7512799/7c13b0e): setarch -R "works by luck", not a
+  faithful port.  The prior summary's "combat SIM byte-identity DONE / only render remains" OVERSTATED it:
+  the cluster spans the whole mission update path, not just render.
+- Patch 453 (b26a RNG return) is a GENUINE correct fix but does NOT change native -O0 (b26a returns 0291's
+  AX either way by luck); its value is wasm -O2.  Keep it.
+
+The cluster (bounded, asm-verifiable, per-function):
+- c0e5 per-object UPDATE dispatch (patch 243): table @DGROUP:0xe454 by type, ~21 methods.  Patched:
+  7c1d 87df 902c 97d5 b5e7 b51f c0ba 9aa1 bc46 b355 (+others).  UNPATCHED/base-lost & AZER1-exercised:
+  bab4(+bae1/bb02) [FIXED patch 454], and still: b808 b918 9b11 9bc6 9c4f b481 bc0c 9b56 9afc (verify each).
+- servo sub-cluster via 902c->a0a4 and tables @DGROUP:0x90a0/0x91a7: a3ec(+aae8 di-forward), a376 a3a8
+  a3e2 a3f6 a432 ...  (a3ec analyzed, patch 455 pending).
+- navigation a0a4/a358/a9ea + op-0x4c render (the render byte-identity, still last).
+
+PATCH 454 (this turn): bab4 + bae1 + bb02 (objtype-0x04 update + its 2 state sub-methods) rebased to the
+DGROUP model (di threaded, writes now land in g_mem not host garbage).  ASM-verified @0xbab4/0xbae1/0xbb02.
+Advances the native trajectory past that crash (mission loads a296=16 correctly).
+
+METER going forward: (1) native WITHOUT setarch -R must stop crashing (necessary); (2) native under
+setarch -R g_mem must converge to wasm g_mem at matched sim-steps (sufficient) -- the FIST_DUMPSTEP diff.
+Goal precondition: native resolves AZER1 WITHOUT setarch -R (proves no live host-address base-loss remains).
+This is genuine multi-session grind: ~10-15 more asm-verified per-function rebases + render.  Goal UNMET.
