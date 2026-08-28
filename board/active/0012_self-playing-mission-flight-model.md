@@ -4408,3 +4408,28 @@ free-realloc / a spurious spawn the original doesn't do) -- is the next target, 
 new type-0x10 registrations (b1df/ba33) in the original vs port.  Deliverables this turn: oracle census infra
 (census_azer1.sh, engine-context cr3=0xe000 dump), the full root-cause chain, patch 457.  make check OK.
 Goal UNMET; blocker is a specific self-firing-projectile spawn divergence, deeply narrowed.
+
+## Turn N+20 cont.17: the friendly-fire is OUT-OF-RANGE hits -> bb64/0ea9 range-test or the re-register cascade
+
+New evidence tightening the root:
+- The launcher fire path RE-REGISTERS THE EMITTER: b51f asm b56c `push di`(emitter) ... b573 `di=[0x9a25]`
+  (target) -> c31e damages target ... b57b `pop di`(emitter) ... b57f `call ba49` with di=EMITTER.  So a
+  launcher that FIRES calls ba49->ba33->b1df(4,emitter)+ba5d on ITSELF, which ZEROES the emitter body ->
+  [0x1c]=0 and repositions it (ba49 sets [si+4/8]=5c7f/5c83).  Confirmed by REGLOG: slot a2b6 registered
+  tick4 ([0x1c]=1, pos 764826) then RE-registered tick20 ([0x1c]=0, pos 47872).  So each fire turns the
+  emitter into a [0x1c]=0 object -> next fire is al=0 -> friendly-fire.  This is faithful to the asm, so the
+  ORIGINAL must simply NOT fire these (its 25 type-0x10 stay [0x1c]=1/2, tanks hp3a=0) while the PORT does.
+- The friendly-fire hits are OUT OF RANGE: a [0x1c]=0 firer at pos (44800,62311) damages c34d at
+  (549136,1017675) -- ~500k apart, but bb64's range = candidate[0x14]+0x200 = 0x400+0x200 = 0x600 (=1536).
+  Tank [0x14]=0x400 and [0x16]=0x6e are BYTE-IDENTICAL port-vs-original.  So a correct range test would
+  REJECT c34d; the port accepts it.  => bb64's range test 0ea9 (or the position/5c7f fed to it) is
+  BASE-LOST in the port: it reports out-of-range candidates as in-range, so every fire hits distant
+  friendlies.  Everything upstream (tank fields, positions, launcher [0x1c] at spawn) is byte-identical, so
+  the divergence is inside the fire->target-range path (0ea9 / bb64 / the 5c7f dword feed).
+NEXT (precise): audit FUN_0000_0ea9 (the manhattan/range test bb64 uses) + the 32-bit 5c7f/5c83 feed for a
+base-loss (width/sign/host-ptr) that makes it pass out-of-range; and/or whether the emitter re-register
+(b51f->ba49 on the emitter) should even run under empty input (does the ORIGINAL fire at tick 2? -- oracle
+b51f/bb64 trace).  Fixing the range test so out-of-range candidates are rejected stops the friendly-fire ->
+tanks survive -> the real combat resolves.  Deliverables this turn: oracle census infra, the full
+friendly-fire root-cause chain (down to out-of-range range-test), patch 457.  Goal UNMET; blocker = the
+bb64/0ea9 range-test (or 5c7f feed) base-loss in the weapon fire path, one asm audit from a fix.
