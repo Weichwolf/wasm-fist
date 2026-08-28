@@ -1,0 +1,3002 @@
+NOTE (crash FIX, asm-verified, proven to eliminate the t=43515 SIGSEGV): 77cf + b767 are base-lost weapon-
+spawn siblings of 778a/b73b (patch 438).  7e29 dispatches 77cf for a second weapon; Ghidra host-ptr-deref'd
+the FIRER near-offset (param_4) and used unaff_CS (garbage) for the b1df-spawned projectile -> SIGSEGV in
+FUN_1000_77cf @ fist.c:59713 the moment a unit fires that weapon (caught via gdb; #1 was 7e29).  Fix mirrors
+patch 438's 778a.  asm 0x1778a-sibling verified: [di+0xb3] ammo (WORD), [di+0xea]=3, b1df(0xa,di), b767(
+proj,firer), [di+0xa8]=0x14, 9b5c(di), c047(0xc), [di+0x3c]=0x10, [di+0x92]=0.  With it the AZER1 self-play
+runs 250s sim WITHOUT the crash (was SIGSEGV ~t=43515).
+
+--- FUN_1000_77cf ---
+void __allregs
+FUN_1000_77cf(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4,
+             undefined2 param_5)
+
+{
+  /* PATCH 442: weapon-spawn method (asm 0x1778a sibling; DS=DGROUP).  di=param_4=FIRER near-offset; ammo
+     WORD[di+0xb3]>0: dec ammo, [di+0xea]=3, a265(di), si=b1df(0xa,di) (CF=pool-cap -> stc/fail), b767(
+     firer,proj), firer reload [di+0xa8]=0x14, 9b5c(di), c047, [di+0x3c]=0x10, clear [di+0x92].  Ghidra
+     host-ptr-deref'd di, int-widened the WORD ammo, and used unaff_CS (garbage) for the post-writes
+     (SIGSEGV in 7e29's fire path). Mirrors patch 438's 778a. */
+  extern unsigned char g_fist_cf;
+  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+  unsigned short di = (unsigned short)param_4;
+  if (*(unsigned short *)(dg + (unsigned short)(di + 0xb3)) != 0) {
+    *(unsigned short *)(dg + (unsigned short)(di + 0xb3)) -= 1;
+    dg[(unsigned short)(di + 0xea)] = 3;
+    FUN_1000_a265(param_1,param_2,(int)di);
+    { unsigned short si = (unsigned short)FUN_1000_b1df(0xa,(int *)(uintptr_t)di);
+      if (g_fist_cf) { g_fist_cf = 1; return; }
+      FUN_0000_b767((undefined2)param_2,(int)si,(int)di,param_5);
+      dg[(unsigned short)(di + 0xa8)] = 0x14;
+      FUN_0000_9b5c((int)di);
+      FUN_0000_c047(0xc,param_3,(int)di);
+      dg[(unsigned short)(di + 0x3c)] = 0x10;
+      dg[(unsigned short)(di + 0x92)] = 0; }
+  }
+  return;
+}
+
+--- FUN_0000_b767 ---
+void __allregs FUN_0000_b767(undefined2 param_1,int param_2,int param_3,undefined2 param_4);
+void __allregs FUN_0000_b77d(undefined2 param_1,int param_2,int param_3,undefined2 param_4);
+void __allregs FUN_0000_b793(undefined2 param_1,int param_2,int param_3,undefined2 param_4);
+void __allregs FUN_0000_b7a9(undefined2 param_1,int param_2,int param_3);
+void __allregs FUN_0000_b808(undefined2 param_1,undefined4 param_2,int param_3);
+void __allregs FUN_0000_b8d1(int param_1,int param_2);
+void __allregs FUN_0000_b918(int param_1);
+void __allregs FUN_0000_b93f(int param_1);
+void __allregs FUN_0000_b945(undefined2 param_1,undefined2 param_2,int param_3);
+void __allregs FUN_0000_b998(undefined2 param_1,undefined2 param_2,int param_3);
+undefined2 __allregs FUN_0000_ba33(undefined2 param_1,undefined2 param_2);
+undefined4 __allregs FUN_0000_ba49(undefined2 param_1,int param_2,undefined2 param_3);
+void __allregs FUN_0000_ba5d(undefined2 *param_1,int param_2,int param_3);
+void __allregs FUN_0000_bab4(int param_1);
+void __allregs FUN_0000_bae0(void);
+void __allregs FUN_0000_bae1(int param_1);
+void __allregs FUN_0000_bb02(int param_1);
+void __allregs FUN_0000_bb1b(int param_1,int *param_2);
+ulong __allregs FUN_0000_bb64(ulong param_1);
+void __allregs FUN_0000_bbb7(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+undefined4 __allregs FUN_0000_bbc6(undefined2 param_1,undefined2 param_2,int *param_3);
+void __allregs FUN_0000_bc0c(undefined4 param_1,int param_2);
+void __allregs FUN_0000_bc2c(undefined4 param_1);
+void __allregs FUN_0000_bc46(undefined4 param_1,undefined2 param_2,int param_3,undefined2 param_4);
+void __allregs FUN_0000_bcbf(undefined4 param_1,int param_2);
+void __allregs FUN_0000_bcd5(undefined4 param_1,int param_2);
+void __allregs FUN_0000_bd09(int param_1,undefined4 param_2,int param_3);
+void __allregs FUN_0000_bd90(undefined4 param_1,int param_2);
+void __allregs FUN_0000_bdb8(undefined2 param_1);
+void __allregs FUN_0000_bdcc(void);
+void __allregs FUN_0000_bde4(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_0000_be00(undefined2 param_1);
+void __allregs FUN_0000_be09(void);
+void __allregs FUN_0000_be0e(int param_1);
+void __allregs FUN_0000_be50(void);
+void __allregs FUN_0000_be58(void);
+void __allregs FUN_0000_be67(void);
+void __allregs FUN_0000_be75(void);
+void __allregs FUN_0000_be86(void);
+undefined4 __allregs FUN_0000_be8b(int param_1,undefined4 param_2);
+void __allregs FUN_0000_beb7(undefined2 param_1);
+void __allregs FUN_0000_bedc(void);
+void __allregs FUN_0000_bee2(undefined1 param_1,int param_2,int param_3);
+void __allregs FUN_0000_bee8(undefined1 param_1,int param_2);
+void __allregs FUN_0000_befb(char param_1,undefined2 param_2);
+void __allregs FUN_0000_bf15(char param_1,undefined2 param_2,int param_3);
+void __allregs FUN_0000_bf3c(char param_1,undefined2 param_2,int param_3);
+void __allregs FUN_0000_bf77(undefined2 param_1);
+void __allregs FUN_0000_bf94(undefined2 param_1);
+void __allregs FUN_0000_bfb1(void);
+void __allregs FUN_0000_bfce(undefined2 param_1);
+void __allregs FUN_0000_bfeb(undefined2 param_1);
+void __allregs FUN_0000_c008(undefined2 param_1);
+void __allregs FUN_0000_c00c(int param_1,undefined4 param_2,undefined4 param_3);
+void __allregs FUN_0000_c035(int param_1,undefined4 param_2);
+void __allregs FUN_0000_c047(int param_1,undefined4 param_2,int param_3);
+void __allregs FUN_0000_c073(int param_1,int param_2);
+void __allregs FUN_0000_c083(void);
+void __allregs FUN_0000_c084(void);
+void __allregs FUN_0000_c08e(void);
+void __allregs FUN_0000_c0b0(void);
+void __allregs FUN_0000_c0b6(void);
+void __allregs FUN_0000_c0ba(int param_1);
+void __allregs FUN_0000_c0ca(undefined4 param_1);
+void __allregs FUN_0000_c0e5(undefined2 param_1);
+void __allregs FUN_0000_c123(int param_1);
+void __allregs FUN_0000_c14f(int *param_1);
+void __allregs FUN_0000_c157(void);
+undefined2 __allregs FUN_0000_c164(void);   /* PATCH 168: returns the found table-entry near-offset in AX (asm si), CF via g_fist_cf */
+uint __allregs FUN_0000_c182(uint param_1,undefined2 param_2,undefined2 param_3,uint *param_4,int param_5);
+void __allregs FUN_0000_c1db(void);
+void __allregs FUN_0000_c1f0(void);
+void __allregs FUN_0000_c296(int *param_1);
+void __allregs FUN_0000_c2f2(int *param_1);
+undefined4 __allregs FUN_0000_c2fb(int *param_1);
+void __allregs FUN_0000_c30e(void);
+void __allregs FUN_0000_c30f(undefined2 param_1);
+void __allregs FUN_0000_c31e(undefined2 param_1,undefined2 param_2,int *param_3,undefined2 param_4);
+void __allregs FUN_0000_c335(void);
+void __allregs FUN_0000_c336(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_0000_c33c(uint16_t si,uint16_t di);   /* PATCH 292: object-roster walk iterator */
+void __allregs FUN_0000_c38b(undefined2 param_1,undefined2 *param_2);
+void __allregs FUN_0000_c3d6(undefined2 param_1);
+void __allregs FUN_0000_c3dc(void);
+undefined4 __allregs FUN_0000_c3ed(int param_1);
+void __allregs FUN_0000_c47d(undefined2 param_1);
+void __allregs FUN_0000_c4a2(undefined2 param_1);
+void __allregs FUN_0000_c4df(void);
+void __allregs FUN_0000_c577(void);
+void __allregs FUN_0000_c584(uint param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_0000_c5e2(void);
+void __allregs FUN_0000_c62d(void);
+void __allregs FUN_0000_c648(void);
+void __allregs FUN_0000_c66e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_0000_c681(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_0000_c694(undefined2 param_1,undefined2 param_2,int param_3,undefined2 param_4);
+void __allregs FUN_0000_c6c1(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_0000_c6d4(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_0000_c6e7(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_0000_c6fa(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_0000_c70d(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_0000_c7ca(undefined2 param_1,int param_2,undefined2 param_3);
+void __allregs FUN_0000_c8b2(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_0000_c8c2(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 *param_5);
+void __allregs FUN_0000_c8d5(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 *param_5);
+void __allregs FUN_0000_c8e8(int param_1,int param_2,undefined2 param_3,int param_4,undefined1 *param_5);
+void __allregs FUN_0000_c8ff(int param_1,int param_2,undefined2 param_3,int param_4,undefined2 *param_5);
+void __allregs FUN_0000_c945(int param_1,int param_2,undefined2 param_3,int param_4,undefined2 *param_5);
+void __allregs FUN_0000_c962(int param_1,int param_2,undefined2 param_3,int param_4,undefined2 *param_5);
+void __allregs FUN_0000_c97f(int param_1,int param_2,undefined2 param_3,int param_4,undefined2 *param_5);
+void __allregs FUN_0000_c99c(void);
+void __allregs FUN_0000_c9af(int param_1);
+void __allregs FUN_0000_ca2f(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4,int param_5);
+void __allregs FUN_0000_ca6b(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4,int param_5);
+void __allregs FUN_0000_caab(undefined2 param_1,undefined2 param_2,int param_3,int param_4);
+void __allregs FUN_0000_cae6(undefined2 param_1,undefined4 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_0000_cb45(void);
+undefined1 __allregs FUN_0000_cb74(undefined4 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined1 *param_7);
+undefined1 __allregs FUN_0000_cb7c(undefined4 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined1 *param_7);
+undefined2 __allregs FUN_0000_cbd4(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined1 *param_4, undefined2 param_5);
+undefined4 __allregs FUN_0000_cc33(undefined2 param_1);
+void __allregs FUN_0000_ccc9(void);
+void __allregs FUN_0000_ccca(undefined2 param_1,int param_2,undefined2 param_3);
+void __allregs FUN_0000_ccd8(undefined2 param_1);
+void __allregs FUN_0000_ccde(uint param_1,int param_2,int param_3);
+void __allregs FUN_0000_cd1c(int param_1);
+void __allregs FUN_0000_cd3b(uint param_1);
+void __allregs FUN_0000_cd70(int param_1);
+void __allregs FUN_0000_cd8f(uint param_1);
+void __allregs FUN_0000_cdc4(int param_1);
+void __allregs FUN_0000_ce37(ulong param_1,int param_2,int param_3);
+void __allregs FUN_0000_cef4(void);
+void __allregs FUN_0000_cf44(int param_1);
+void __allregs FUN_0000_cf6b(uint param_1,int param_2,int param_3);
+void __allregs FUN_0000_cf8e(int param_1);
+void __allregs FUN_0000_cfcc(uint param_1);
+void __allregs FUN_0000_cffc(uint param_1,int param_2);
+void __allregs FUN_0000_d039(void);
+void __allregs FUN_0000_d03f(void);
+void __allregs FUN_0000_d066(void);
+void __allregs FUN_0000_d092(byte param_1);
+void __allregs FUN_0000_d0d7(void);
+void __allregs FUN_0000_d0d8(void);
+void __allregs FUN_0000_d103(void);
+void __allregs FUN_0000_d107(uint param_1);
+void __allregs FUN_0000_d135(void);
+void __allregs FUN_0000_d146(void);
+void __allregs FUN_0000_d153(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_0000_d176(void);
+void __allregs FUN_0000_d199(void);
+void __allregs FUN_0000_d1b0(void);
+undefined4 __allregs FUN_0000_d1c8(undefined2 param_1,undefined1 *param_2);
+undefined4 __allregs FUN_0000_d20d(undefined2 param_1);
+void __allregs FUN_0000_d27d(void);
+void __allregs FUN_0000_d27e(int param_1);
+void __allregs FUN_0000_d2bd(int param_1);
+void __allregs FUN_0000_d2f5(int param_1);
+void __allregs FUN_0000_d31c(uint param_1,int param_2,int param_3);
+void __allregs FUN_0000_d33f(uint param_1,int param_2);
+void __allregs FUN_0000_d364(undefined2 param_1);
+void __allregs FUN_0000_d398(void);
+void __allregs FUN_0000_d3be(void);
+undefined4 __allregs FUN_0000_d3ce(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_0000_d3e7(undefined2 param_1);
+void __allregs FUN_0000_d442(void);
+void __allregs FUN_0000_d443(void);
+void __allregs FUN_0000_d480(int param_1);
+void __allregs FUN_0000_d4a7(uint param_1,int param_2,int param_3);
+void __allregs FUN_0000_d4ca(uint param_1,int param_2);
+void __allregs FUN_0000_d4ec(void);
+void __allregs FUN_0000_d4f2(void);
+void __allregs FUN_0000_d4f8(void);
+void __allregs FUN_0000_d4fe(void);
+void __allregs FUN_0000_d4ff(void);
+uint __allregs FUN_0000_d501(undefined2 param_1,uint param_2,undefined2 param_3,undefined2 *param_4, undefined2 param_5);
+void __allregs FUN_0000_d5f9(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined2 __allregs FUN_0000_d62e(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_0000_d638(void);
+undefined2 __allregs FUN_0000_d651(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+undefined4 __allregs FUN_0000_d683(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+undefined4 __allregs FUN_0000_d6e4(undefined2 param_1,int *param_2,int *param_3,undefined2 param_4);
+void __allregs FUN_0000_d740(int *param_1);
+void __allregs FUN_0000_d755(int *param_1);
+undefined2 __allregs FUN_0000_d76a(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+undefined2 __allregs FUN_0000_d779(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+undefined2 __allregs FUN_0000_d788(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+undefined2 __allregs FUN_0000_d797(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+undefined2 __allregs FUN_0000_d7a6(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+undefined2 __allregs FUN_0000_d7b5(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_0000_d7e1(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+undefined4 __allregs FUN_0000_d81e(undefined2 param_1,undefined2 param_2,int param_3,undefined2 param_4);
+undefined4 __allregs FUN_0000_d84e(int *param_1);
+undefined2 __allregs FUN_0000_d87f(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+/* PATCH 162: FSG chunk handlers not promoted by Ghidra (reached only via the d501 dispatch table
+   DAT_2000_a9e6 -> fist_icall_near(0,off), so they trapped safely before this patch). */
+void __allregs FUN_0000_d7da(void);
+void __allregs FUN_0000_d8a9(void);
+void __allregs FUN_0000_d8d3(void);
+void __allregs FUN_0000_d8e9(void);
+void __allregs FUN_0000_d91f(void);
+void __allregs FUN_0000_d944(undefined4 param_1);
+void __allregs FUN_0000_d961(undefined4 param_1);
+undefined4 __allregs FUN_0000_d97e(undefined4 param_1);
+void __allregs FUN_0000_d99b(undefined4 param_1);
+void __allregs FUN_0000_dab0(void);
+void __allregs FUN_0000_dad2(void);
+void __allregs FUN_0000_db02(void);
+void __allregs FUN_0000_db11(void);
+void __allregs FUN_0000_db3f(undefined4 param_1);
+void __allregs FUN_0000_dde2(undefined4 param_1);
+void __allregs FUN_0000_ddff(void);
+void __allregs FUN_0000_dd15(void);   /* PATCH 306: phase-0x1c camera->extender-TCB copy */
+void __allregs FUN_0000_41c7(void);   /* PATCH 306: phase-0x1c render-script handler (script entry 1) */
+void __allregs FUN_0000_db99(void);   /* PATCH 193: op-0xc display-list geom-record poster */
+void __allregs FUN_0000_41d0(void);   /* PATCH 193: 22dd handler (calls db99) */
+void __allregs FUN_0000_dc12(void);   /* PATCH 322: op-0x10/0x5c object-geom record poster */
+void __allregs FUN_0000_41df(void);   /* PATCH 322: 22dd handler (calls dc12) */
+void __allregs FUN_0000_40ec(void);   /* PATCH 194: crosshair-erase */
+void __allregs FUN_0000_3fba(void);   /* PATCH 194: crosshair-draw handler */
+void __allregs FUN_0000_41ee(void);   /* PATCH 194: 22dd handler (calls 49b5) */
+void __allregs FUN_0000_23ce(void);   /* PATCH 194: 22dd phase terminator */
+void __allregs FUN_0000_de70(undefined4 param_1);
+void __allregs FUN_0000_de89(undefined4 param_1);
+void __allregs FUN_0000_df00(undefined1 param_1);
+void __allregs FUN_0000_df0e(undefined4 param_1,undefined4 param_2,uint *param_3);
+void __allregs FUN_0000_e006(undefined4 param_1);
+void __allregs FUN_0000_e043(undefined4 param_1,undefined4 *param_2);
+void __allregs FUN_0000_e09a(undefined4 param_1);
+undefined4 __allregs FUN_0000_e115(undefined4 param_1);
+undefined4 __allregs FUN_0000_e132(undefined4 param_1);
+void __allregs FUN_0000_e16c(undefined4 param_1);
+undefined4 __allregs FUN_0000_e189(undefined4 param_1);
+char __allregs FUN_0000_e1a6(undefined4 param_1,int param_2);
+undefined4 __allregs FUN_0000_e1d1(undefined4 param_1);
+undefined4 __allregs FUN_0000_e1f0(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined4 param_4, undefined2 param_5,int *param_6,int *param_7);   /* PATCH 334: param_6/param_7 are candidate/object HOST pointers */
+undefined4 __allregs FUN_0000_e200(undefined4 param_1,int param_2);   /* PATCH 340 */
+undefined4 __allregs FUN_0000_e20a(undefined4 param_1,int *param_2);
+int __allregs FUN_0000_e21c(int *param_1,int param_2,int *param_3);   /* PATCH 334: returns e339's op-0x58 result */
+undefined4 __allregs FUN_0000_e2a5(undefined4 param_1);
+void __allregs FUN_0000_e2c2(undefined4 param_1);
+void __allregs FUN_0000_e2df(undefined4 param_1);
+void __allregs FUN_0000_e2fc(undefined4 param_1);
+undefined2 __allregs FUN_0000_e339(void);
+void __allregs FUN_0000_e38a(undefined2 param_1);
+void __allregs FUN_0000_e39f(void);
+void __allregs FUN_0000_e3bc(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_0000_e3f8(void);
+void __allregs FUN_0000_e405(void);
+void __allregs FUN_0000_e40e(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_0000_e42f(void);
+void __allregs FUN_0000_e43f(void);
+void __allregs FUN_0000_e446(undefined4 param_1);
+void __allregs FUN_0000_e459(void);
+void __allregs FUN_0000_e4bb(undefined2 param_1);
+void __allregs FUN_0000_e526(void);
+void __allregs FUN_0000_e527(void);
+void __allregs FUN_0000_e528(void);
+void __allregs FUN_0000_e534(uint param_1,int param_2);
+void __allregs FUN_0000_e548(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_0000_e584(undefined4 param_1);
+void __allregs FUN_0000_e6b1(uint *param_1);
+int __allregs FUN_0000_e6e9(int param_1);
+void __allregs FUN_0000_e714(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_0000_e77a(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_0000_e786(void);
+void __allregs FUN_0000_e87a(undefined2 param_1,undefined2 param_2,undefined4 param_3,undefined2 param_4);
+void __allregs FUN_0000_e934(void);
+void __allregs FUN_0000_e948(void);
+void __allregs FUN_0000_e958(void);
+void __allregs FUN_0000_e975(void);
+void __allregs FUN_0000_e9b6(void);
+void __allregs FUN_0000_e9bd(void);
+void __allregs FUN_0000_e9e6(void);
+void __allregs FUN_0000_e9ec(void);
+void __allregs FUN_0000_e9f0(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_0000_ea5a(uint param_1,int param_2,int param_3);
+void __allregs FUN_0000_ea7d(void);
+void __allregs FUN_0000_ea7e(uint param_1,int param_2);
+void __allregs FUN_0000_ea9c(int param_1);
+void __allregs FUN_0000_eaa3(void);
+void __allregs FUN_0000_eaac(undefined2 param_1);
+void __allregs FUN_0000_eb02(void);
+void __allregs FUN_0000_eb03(void);
+void __allregs FUN_0000_eb07(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_0000_eb1b(void);
+void __allregs FUN_0000_eb5c(uint param_1);
+void __allregs FUN_0000_eb7e(uint param_1);
+void __allregs FUN_0000_eba0(uint param_1,int param_2);
+void __allregs FUN_0000_ebc5(undefined2 param_1);
+void __allregs FUN_0000_ebd1(undefined1 param_1);
+void __allregs FUN_0000_ebf3(void);
+void __allregs FUN_0000_ec0d(undefined2 param_1);
+void __allregs FUN_0000_ec5e(void);
+void __allregs FUN_0000_ec7e(undefined4 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_0000_ed00(void);
+void __allregs FUN_0000_ed10(void);
+void __allregs FUN_0000_ed14(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_0000_ed28(void);
+void __allregs FUN_0000_edc2(uint param_1,int param_2);
+void __allregs FUN_0000_edfb(void);
+void __allregs FUN_0000_ee67(void);
+void __allregs FUN_0000_ee7c(uint param_1);
+void __allregs FUN_0000_eeab(void);
+void __allregs FUN_0000_eec0(uint param_1);
+void __allregs FUN_0000_eeef(uint param_1);
+void __allregs FUN_0000_ef0e(void);
+void __allregs FUN_0000_ef14(uint param_1);
+void __allregs FUN_0000_ef33(void);
+void __allregs FUN_0000_ef39(uint param_1,int param_2);
+void __allregs FUN_0000_ef5e(ulong param_1,undefined2 param_2,int param_3);
+void __allregs FUN_0000_efa1(void);
+void __allregs FUN_0000_efa8(void);
+void __allregs FUN_0000_efd8(void);
+int __allregs FUN_0000_f00c(void);
+void __allregs FUN_0000_f040(void);
+undefined4 __allregs FUN_0000_f05f(void);
+uint __allregs FUN_0000_f088(uint param_1);
+void __allregs FUN_0000_f0b0(uint param_1);
+void __allregs FUN_0000_f0cc(int param_1,char *param_2);
+void __allregs FUN_0000_f0f1(undefined2 param_1,undefined4 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_0000_f141(void);
+void __allregs FUN_0000_f146(void);
+void __allregs FUN_0000_f154(void);
+void __allregs FUN_0000_f1a1(void);
+void __allregs FUN_0000_f1da(void);
+void __allregs FUN_0000_f1ec(void);
+void __allregs FUN_0000_f202(void);
+void __allregs FUN_0000_f214(void);
+void __allregs FUN_0000_f226(void);
+void __allregs FUN_0000_f238(void);
+void __allregs FUN_0000_f24a(void);
+void __allregs FUN_0000_f25d(void);
+void __allregs FUN_0000_f26f(void);
+void __allregs FUN_0000_f282(void);
+void __allregs FUN_0000_f299(void);
+void __allregs FUN_0000_f2c0(void);
+void __allregs FUN_0000_f2e7(void);
+void __allregs FUN_0000_f30e(void);
+void __allregs FUN_0000_f335(void);
+void __allregs FUN_0000_f338(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_0000_f3a1(void);
+void __allregs FUN_0000_f3a2(void);
+void __allregs FUN_0000_f3a3(void);
+void __allregs FUN_0000_f3cf(void);
+void __allregs FUN_0000_f3d5(void);
+void __allregs FUN_0000_f3db(uint param_1,int param_2);
+void __allregs FUN_0000_f3f6(undefined2 *param_1);
+void __allregs FUN_0000_f400(void);
+void __allregs FUN_0000_f401(uint param_1);
+void __allregs FUN_0000_f420(void);
+void __allregs FUN_0000_f426(uint param_1);
+void __allregs FUN_0000_f445(void);
+void __allregs FUN_0000_f465(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_0000_f63d(char param_1,int param_2,int param_3);
+void __allregs FUN_0000_f69e(void);
+void __allregs FUN_0000_f6ba(void);
+void __allregs FUN_0000_f6c3(void);
+undefined2 __allregs FUN_0000_f6da(int param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_0000_f6e9(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined2 __allregs FUN_0000_f70b(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined2 __allregs FUN_0000_f72c(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+undefined4 __allregs FUN_0000_f738(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_0000_f77f(undefined2 param_1);
+void __allregs FUN_0000_f7ad(void);
+undefined4 __allregs FUN_0000_f7c3(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_0000_f7ef(int param_1,undefined2 param_2,int *param_3,undefined2 param_4);
+void __allregs FUN_0000_f81d(int param_1,undefined2 param_2,int param_3,undefined2 param_4);
+void __allregs FUN_0000_f842(int param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4);
+void __allregs FUN_0000_f860(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_0000_f869(undefined2 param_1,undefined2 param_2,int param_3,undefined2 param_4,int param_5, undefined2 param_6);
+void __allregs FUN_0000_f88f(int param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4);
+void __allregs FUN_0000_f8b4(int param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4);
+void __allregs FUN_0000_f8d2(int param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4);
+void __allregs FUN_0000_f8e9(undefined2 *param_1,undefined2 param_2,undefined2 *param_3);
+void __allregs FUN_0000_f909(int param_1,undefined2 param_2,int param_3,undefined2 param_4);
+void __allregs FUN_0000_f932(int param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4);
+void __allregs FUN_0000_f960(int param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4);
+undefined2 __allregs FUN_0000_f98b(int param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+undefined2 __allregs FUN_0000_f9c0(char param_1,undefined2 param_2,undefined2 param_3,byte param_4,undefined2 param_5, undefined2 param_6,undefined2 param_7,undefined2 param_8);
+void __allregs FUN_0000_fa06(char *param_1);
+void __allregs FUN_0000_fa26(void);
+void __allregs FUN_0000_fa52(void);
+void __allregs FUN_0000_fa81(void);
+void __allregs FUN_0000_fa93(void);
+void __allregs FUN_0000_fab1(void);
+undefined4 __allregs FUN_0000_fb29(uint param_1);
+void __allregs FUN_0000_fb83(undefined2 *param_1);
+void __allregs FUN_0000_fc05(void);
+void __allregs FUN_0000_fcfe(byte param_1);
+void __allregs FUN_0000_fd1c(undefined1 param_1,undefined2 param_2,undefined2 param_3,int param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+void __allregs FUN_0000_fd60(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_0000_fd64(uint param_1,byte *param_2);
+void __allregs FUN_0000_fd79(void);
+void __allregs FUN_0000_fdf7(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_0000_fe47(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_0000_fe57(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+void __allregs FUN_0000_fec8(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined2 __allregs FUN_0000_fefb(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7,undefined2 param_8, undefined2 param_9);
+void __allregs FUN_0000_ff2c(undefined2 param_1);
+int __allregs FUN_0000_ffdd(undefined1 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_1000_0010(byte param_1,undefined2 param_2);
+undefined1 __allregs FUN_1000_001f(undefined1 *param_1);
+undefined2 __allregs FUN_1000_00c8(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4, undefined2 param_5,int param_6,undefined2 param_7,undefined2 param_8);
+undefined2 __allregs FUN_1000_020d(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+undefined2 __allregs FUN_1000_022e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+undefined2 __allregs FUN_1000_027b(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_1000_0376(void);
+void __allregs FUN_1000_03ba(uint param_1);
+void __allregs FUN_1000_03f0(void);
+void __allregs FUN_1000_041b(void);
+void __allregs FUN_1000_04a5(void);
+void __allregs FUN_1000_04ab(void);
+void __allregs FUN_1000_0534(void);
+void __allregs FUN_1000_05c2(void);
+void __allregs FUN_1000_05d8(void);
+undefined2 __allregs FUN_1000_05ed(undefined2 param_1);
+void __allregs FUN_1000_0612(void);
+undefined4 __allregs FUN_1000_0625(void);
+void __allregs FUN_1000_0630(undefined1 param_1);
+byte __allregs FUN_1000_0645(undefined1 param_1);
+undefined4 __allregs FUN_1000_0662(undefined1 param_1);
+void __allregs FUN_1000_0679(undefined1 param_1);
+undefined1 __allregs FUN_1000_0682(undefined1 param_1);
+void __allregs FUN_1000_06a0(undefined1 param_1,undefined1 *param_2);
+void __allregs FUN_1000_06bc(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_06e3(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_1000_0708(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined2 __allregs FUN_1000_0722(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_1000_07a6(uint param_1,int param_2,undefined2 param_3);
+undefined4 __allregs FUN_1000_07fe(undefined1 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_1000_08a1(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+undefined2 * __allregs FUN_1000_08b3(undefined2 param_1,byte param_2,undefined2 param_3,int param_4,undefined2 *param_5, undefined1 *param_6);
+undefined2 __allregs FUN_1000_08c6(undefined2 *param_1,undefined1 *param_2,undefined2 param_3);
+void __allregs FUN_1000_08dc(undefined2 param_1,undefined2 *param_2);
+undefined4 __allregs FUN_1000_08f0(undefined2 param_1,undefined2 param_2,undefined2 *param_3);
+undefined2 __allregs FUN_1000_08fb(undefined1 param_1,undefined2 param_2,undefined2 param_3,int param_4);
+void __allregs FUN_1000_090b(undefined2 param_1,undefined1 *param_2);
+void __allregs FUN_1000_0912(undefined2 param_1,undefined1 *param_2,uint param_3);
+void __allregs FUN_1000_0919(uint param_1,undefined1 *param_2);
+void __allregs FUN_1000_0926(uint param_1,undefined1 *param_2);
+undefined2 __allregs FUN_1000_0938(undefined2 param_1,int param_2,int param_3);
+undefined4 __allregs FUN_1000_096c(undefined2 param_1);
+void __allregs FUN_1000_09ad(void);
+undefined4 __allregs FUN_1000_09bc(void);
+uint __allregs FUN_1000_0a31(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 *param_5,undefined2 param_6);
+int __allregs FUN_1000_0bd1(undefined2 *param_1);  /* PATCH 175: ctl host-ptr, not truncated */
+void __allregs FUN_1000_0bef(undefined2 param_1,undefined2 *param_2);
+void __allregs FUN_1000_0c21(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 *param_4);
+void __allregs FUN_1000_0c7d(void);
+void __allregs FUN_1000_0c7f(undefined2 param_1,int param_2);
+void __allregs FUN_1000_0cce(uint param_1,int param_2,undefined2 param_3);
+undefined4 __allregs FUN_1000_0d2e(undefined2 param_1,int param_2,undefined2 param_3);
+void __allregs FUN_1000_0d70(int param_1);
+undefined2 __allregs FUN_1000_0dc2(undefined2 param_1,int param_2);
+undefined2 __allregs FUN_1000_0e8b(int param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+undefined2 __allregs FUN_1000_0ecb(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_0f80(void);
+void __allregs FUN_1000_0f91(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_0fb8(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_1019(int param_1);
+undefined4 __allregs FUN_1000_1040(void);
+void __allregs FUN_1000_1042(void);
+void __allregs FUN_1000_106d(undefined2 param_1);
+void __allregs FUN_1000_1087(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_1000_108e(undefined2 param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_1000_1099(void);
+void __allregs FUN_1000_10b6(void);
+undefined2 __allregs FUN_1000_10d5(int param_1);
+void __allregs FUN_1000_10dc(void);
+undefined2 __allregs FUN_1000_1110(int param_1);
+undefined2 __allregs FUN_1000_1114(int param_1);
+undefined2 __allregs FUN_1000_1117(void);
+void __allregs FUN_1000_11e0(undefined2 *param_1);
+void __allregs FUN_1000_1296(undefined2 param_1);
+undefined4 __allregs FUN_1000_12b0(uint param_1,int param_2);
+void __allregs FUN_1000_12cd(undefined2 param_1);
+undefined4 __allregs FUN_1000_12e7(int param_1,int param_2);
+void __allregs FUN_1000_1303(undefined2 param_1,undefined2 param_2);
+int __allregs FUN_1000_131e(int param_1,int param_2,int param_3);
+undefined4 __allregs FUN_1000_1345(undefined2 param_1,undefined2 param_2);
+int __allregs FUN_1000_135f(int param_1,int param_2,int param_3);
+void __allregs FUN_1000_1384(void);
+void __allregs FUN_1000_1394(void);
+void __allregs FUN_1000_13a4(void);
+void __allregs FUN_1000_13b4(void);
+void __allregs FUN_1000_13c4(void);
+void __allregs FUN_1000_13d4(void);
+undefined4 __allregs FUN_1000_13e4(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+undefined2 __allregs FUN_1000_140e(undefined1 param_1,int param_2,undefined2 param_3,undefined2 param_4, undefined2 *param_5,undefined2 *param_6,undefined2 param_7,undefined2 param_8);
+undefined2 __allregs FUN_1000_1457(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_1000_1467(int param_1,uint param_2,int param_3);
+undefined2 __allregs FUN_1000_15f4(undefined2 param_1);
+void __allregs FUN_1000_161d(int param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_1727(int param_1,int param_2,int param_3);
+undefined4 __allregs FUN_1000_175d(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_1774(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+uint __allregs FUN_1000_1796(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+uint __allregs FUN_1000_17a1(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_17da(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+undefined4 __allregs FUN_1000_17e5(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_181a(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_1000_182a(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+uint __allregs FUN_1000_184b(int param_1,uint param_2,undefined2 param_3,undefined2 *param_4,undefined2 param_5, undefined2 param_6);
+void __allregs FUN_1000_18d1(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_1000_18e4(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+undefined2 __allregs FUN_1000_195d(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_1a14(void);
+void __allregs FUN_1000_1a1b(void);
+void __allregs FUN_1000_1a1c(void);
+undefined2 __allregs FUN_1000_1ae1(undefined2 param_1);
+void __allregs FUN_1000_1af3(undefined2 param_1,undefined2 param_2,uint param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+void __allregs thunk_FUN_1000_1bce(undefined2 param_1);
+void __allregs FUN_1000_1bce(uint param_1);
+uint __allregs FUN_1000_1bd8(uint param_1,undefined2 param_2);
+undefined4 __allregs FUN_1000_1c68(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_1cba(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+uint __allregs FUN_1000_1d51(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+uint __allregs FUN_1000_1d5c(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+uint __allregs FUN_1000_1d9c(int param_1);
+void __allregs FUN_1000_1df2(void);
+void __allregs FUN_1000_1dfa(undefined2 param_1,undefined2 param_2,code *param_3,undefined2 param_4, undefined2 param_5);
+void __allregs thunk_FUN_1000_1eab(undefined2 param_1);
+void __allregs FUN_1000_1eab(uint param_1);
+void __allregs FUN_1000_1eb4(undefined2 param_1,undefined2 param_2);
+void __allregs thunk_FUN_1000_1f3b(void);
+void __allregs FUN_1000_1f3b(void);
+uint __allregs FUN_1000_1f43(uint param_1);
+undefined4 __allregs FUN_1000_1fcc(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_204f(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+uint __allregs FUN_1000_2114(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+uint __allregs FUN_1000_211f(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+int __allregs FUN_1000_2149(uint param_1);
+uint __allregs FUN_1000_216e(uint param_1,int param_2);
+undefined2 __allregs FUN_1000_21a2(undefined2 param_1);
+undefined2 __allregs FUN_1000_21dc(void);
+undefined4 __allregs FUN_1000_223c(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined2 __allregs FUN_1000_22a3(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+uint __allregs FUN_1000_22ec(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7,uint param_8);
+undefined2 __allregs FUN_1000_2380(char param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+undefined2 __allregs FUN_1000_2387(char param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+undefined2 __allregs FUN_1000_239c(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+undefined4 __allregs FUN_1000_23a5(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7,undefined1 param_8);
+undefined1 __allregs FUN_1000_23ba(void);
+undefined1 __allregs FUN_1000_23bf(undefined1 param_1);
+void __allregs FUN_1000_23df(void);
+void __allregs FUN_1000_2413(byte *param_1,byte *param_2);
+undefined2 __allregs FUN_1000_2452(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_1000_249b(undefined2 param_1,int param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_1000_2508(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_1000_250d(undefined2 param_1,uint param_2,undefined2 *param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+int __allregs FUN_1000_2593(undefined2 param_1,uint param_2,uint param_3,undefined2 param_4,undefined2 param_5, undefined2 param_6);
+int __allregs FUN_1000_260d(undefined2 param_1,int param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+uint __allregs FUN_1000_2688(uint param_1,int param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_26fc(undefined2 param_1,int param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_2733(undefined2 param_1,int param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_2762(int param_1,int param_2,undefined2 param_3);
+void __allregs FUN_1000_2765(int param_1,int param_2,undefined2 param_3);
+uint __allregs FUN_1000_276e(uint param_1,int param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_27e2(int param_1);
+int  __allregs FUN_1000_27f7(int param_1,int param_2,int param_3);  /* PATCH 160: slot,cx,dx */
+int  __allregs FUN_1000_280a(int param_1,int param_2,int param_3);  /* PATCH 160: slot,cx,dx */
+void __allregs FUN_1000_281e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined2 __allregs FUN_1000_2825(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_1000_2867(int param_1);                         /* PATCH 160: FILEMGR v0 CLOSE */
+int __allregs FUN_1000_2871(int param_1,int param_2,int param_3);  /* PATCH 160: FILEMGR v0 READ  */
+int __allregs FUN_1000_287b(int param_1,int param_2,int param_3);  /* PATCH 160: FILEMGR v0 SEEK  */
+void __allregs FUN_1000_288e(void);
+void __allregs FUN_1000_2890(void);
+void __allregs FUN_1000_2891(int param_1,uint param_2);
+uint __allregs FUN_1000_28c0(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined4 __allregs FUN_1000_296b(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+undefined2 __allregs FUN_1000_2994(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_1000_29b2(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+undefined2 __allregs FUN_1000_2a50(undefined2 param_1,int param_2,uint param_3,undefined2 param_4);
+int __allregs FUN_1000_2aa2(void);
+void __allregs FUN_1000_2b14(void);
+void __allregs FUN_1000_2b70(int *param_1);
+void __allregs FUN_1000_2b90(undefined1 param_1);
+uint __allregs FUN_1000_2bc5(void);
+uint __allregs FUN_1000_2bef(undefined1 *param_1,int param_2,undefined2 param_3,int param_4);
+void __allregs FUN_1000_2c2d(void);
+undefined2 __allregs FUN_1000_2c40(undefined2 param_1,uint param_2,undefined2 *param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+undefined4 __allregs FUN_1000_2c69(undefined1 param_1);
+void __allregs FUN_1000_2c9e(void);
+void __allregs FUN_1000_2cc8(void);
+void __allregs FUN_1000_2cca(void);
+undefined2 __allregs FUN_1000_2ccb(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+uint __allregs FUN_1000_2ced(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 *param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7,undefined2 param_8);
+void __allregs FUN_1000_2d2d(char *param_1,char *param_2,char *param_3);
+undefined2 __allregs FUN_1000_2d5b(undefined2 param_1,undefined2 param_2,undefined2 param_3,char param_4, undefined2 param_5,int param_6,undefined2 param_7,undefined2 param_8);
+void __allregs FUN_1000_2d65(char *param_1,int param_2,int param_3,undefined2 *param_4,char *param_5,char *param_6);
+void __allregs FUN_1000_2d7f(uint param_1,uint param_2,int param_3,char *param_4,char *param_5);
+undefined4 __allregs FUN_1000_2d9b(undefined2 param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7,undefined2 param_8);
+void __allregs FUN_1000_2de3(void);
+undefined2 __allregs FUN_1000_2df6(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined4 __allregs FUN_1000_2e0d(undefined2 param_1,byte *param_2,undefined2 param_3);
+void __allregs FUN_1000_2e6b(undefined1 param_1,undefined2 param_2,undefined2 *param_3,int param_4);
+void __allregs FUN_1000_2e9f(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_2ebe(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_2f3d(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_1000_2f71(void);
+void __allregs FUN_1000_2fbe(void);
+void __allregs FUN_1000_2fd3(void);
+void __allregs FUN_1000_3064(void);
+undefined2 __allregs FUN_1000_30cf(void);
+void __allregs FUN_1000_30de(void);
+undefined2 __allregs FUN_1000_30f8(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7,undefined2 param_8, undefined2 param_9,undefined2 param_10);
+void __allregs FUN_1000_31c3(byte param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7,undefined2 param_8, undefined2 param_9,undefined2 param_10,undefined2 param_11);
+void __allregs FUN_1000_3218(undefined2 param_1,char param_2,undefined2 *param_3,int param_4,undefined2 param_5, undefined2 param_6,undefined2 param_7,undefined2 param_8,undefined2 param_9, undefined2 param_10,undefined2 param_11,undefined2 param_12,undefined2 param_13, undefined2 param_14);
+void __allregs FUN_1000_32ae(void);
+undefined2 __allregs FUN_1000_32c1(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+undefined1 __allregs FUN_1000_32cb(undefined2 param_1);
+undefined2 __allregs FUN_1000_32df(void);
+void __allregs FUN_1000_330c(undefined2 *param_1);
+void __allregs FUN_1000_3318(void);
+void __allregs FUN_1000_3346(void);
+void __allregs FUN_1000_3352(void);
+void __allregs FUN_1000_335b(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7,undefined2 param_8, undefined2 param_9,undefined2 param_10);
+void __allregs FUN_1000_33c0(undefined2 param_1,int param_2,undefined1 *param_3);
+void __allregs FUN_1000_3415(uint param_1,undefined1 *param_2);
+void __allregs FUN_1000_341c(byte param_1,undefined1 *param_2);
+void __allregs FUN_1000_3436(undefined2 param_1,int param_2,undefined2 param_3,int param_4);
+void __allregs FUN_1000_3446(void);
+void __allregs FUN_1000_3485(void);
+undefined2 __allregs FUN_1000_3495(undefined2 param_1);
+undefined2 * __allregs FUN_1000_349b(uint param_1,undefined2 param_2);
+undefined2 __allregs FUN_1000_34f5(uint param_1);
+void __allregs FUN_1000_3566(undefined2 *param_1);
+uint __allregs FUN_1000_35a7(void);
+char __allregs FUN_1000_3638(char param_1);
+void __allregs FUN_1000_3645(undefined2 param_1,undefined2 param_2,undefined2 *param_3,int param_4);
+void __allregs FUN_1000_3653(undefined2 *param_1);
+void __allregs FUN_1000_37aa(undefined2 param_1);
+void __allregs FUN_1000_380e(void);
+void __allregs FUN_1000_381b(void);
+void __allregs FUN_1000_3828(void);
+void __allregs FUN_1000_382e(void);
+void __allregs FUN_1000_3835(void);
+undefined2 __allregs FUN_1000_3840(undefined2 *param_1);
+void __allregs FUN_1000_38bc(uint param_1);
+void __allregs FUN_1000_38cc(void);
+undefined4 __allregs FUN_1000_38de(void);
+void __allregs FUN_1000_38f5(uint param_1);
+undefined4 __allregs FUN_1000_3907(void);
+undefined4 __allregs FUN_1000_3920(void);
+void __allregs FUN_1000_392a(undefined2 param_1,undefined2 param_2,uint param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_1000_3992(undefined2 param_1,undefined2 param_2,int param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined2 __allregs FUN_1000_39bd(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_39d7(uint param_1,uint param_2,undefined2 param_3,uint param_4);
+void __allregs FUN_1000_3a00(void);
+void __allregs FUN_1000_3a14(void);
+void __allregs FUN_1000_3a78(void);
+void __allregs FUN_1000_3a87(void);
+void __allregs FUN_1000_3af4(int param_1,int param_2,undefined2 *param_3,undefined2 param_4);
+void __allregs FUN_1000_3b83(undefined2 param_1);
+void __allregs FUN_1000_3b97(undefined2 param_1);
+void __allregs FUN_1000_3bdc(void);
+void __allregs FUN_1000_3c2e(undefined2 param_1,uint *param_2,undefined2 param_3);
+void __allregs FUN_1000_3c6a(undefined2 param_1,int param_2,undefined2 param_3);
+void __allregs FUN_1000_3cf2(void);
+void __allregs FUN_1000_3d07(void);
+void __allregs FUN_1000_3d17(void);
+void __allregs FUN_1000_3d89(void);
+void __allregs FUN_1000_3d93(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_1000_3dbd(uint param_1);
+void __allregs FUN_1000_3df8(void);
+void __allregs FUN_1000_3e87(int param_1);
+void __allregs FUN_1000_3e9e(int param_1);
+void __allregs FUN_1000_3ebf(int param_1,int param_2,int *param_3);
+void __allregs FUN_1000_3f0e(int param_1,int param_2,int *param_3);
+void __allregs FUN_1000_3f5c(char *param_1,char *param_2);
+byte __allregs FUN_1000_3f65(byte *param_1,byte *param_2);
+void __allregs FUN_1000_3fa7(void);
+void __allregs FUN_1000_3fd5(void);
+void __allregs FUN_1000_3fda(int param_1);
+void __allregs FUN_1000_4037(void);
+void __allregs FUN_1000_403c(int param_1);
+void __allregs FUN_1000_409f(void);
+void __allregs FUN_1000_40a4(int param_1);
+void __allregs FUN_1000_4172(void);
+void __allregs FUN_1000_4177(int param_1);
+void __allregs FUN_1000_424d(void);
+undefined2 __allregs FUN_1000_4270(undefined2 param_1);
+void __allregs FUN_1000_427a(int *param_1);
+void __allregs FUN_1000_429e(int param_1);
+void __allregs FUN_1000_42ab(void);
+void __allregs FUN_1000_42b0(int param_1,uint *param_2);
+void __allregs FUN_1000_4367(int param_1);
+undefined4 __allregs FUN_1000_43dd(void);
+void __allregs FUN_1000_43f0(void);
+void __allregs FUN_1000_4403(void);
+void __allregs FUN_1000_4457(undefined2 *param_1,int param_2,int param_3);
+void __allregs FUN_1000_4469(uint param_1,undefined1 *param_2);
+void __allregs FUN_1000_4470(byte param_1,undefined1 *param_2);
+void __allregs FUN_1000_449e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+undefined2 __allregs FUN_1000_44cf(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_1000_44f8(void);
+undefined2 __allregs FUN_1000_4517(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+undefined2 __allregs FUN_1000_452a(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+undefined2 __allregs FUN_1000_46b6(undefined2 param_1);
+uint __allregs FUN_1000_46c8(uint param_1);
+byte __allregs FUN_1000_46f9(byte param_1);
+void __allregs FUN_1000_4a2c(undefined2 param_1,undefined2 param_2,undefined2 param_3,char *param_4,int param_5, char *param_6,char *param_7);
+void __allregs FUN_1000_4b04(char *param_1);
+void __allregs FUN_1000_4b16(void);
+void __allregs FUN_1000_4b32(void);
+undefined4 __allregs FUN_1000_4b45(undefined2 param_1);
+uint __allregs FUN_1000_4b5e(int param_1);
+undefined2 __allregs FUN_1000_4b6a(void);
+void __allregs FUN_1000_4b7e(undefined2 param_1);
+void __allregs FUN_1000_4b86(undefined2 param_1);
+void __allregs FUN_1000_4b8e(undefined2 param_1);
+void __allregs FUN_1000_4b96(undefined2 param_1);
+void __allregs FUN_1000_4b9e(undefined2 param_1);
+void __allregs FUN_1000_4bae(int param_1);
+void __allregs FUN_1000_4bb7(void);
+void __allregs FUN_1000_4bc3(int param_1);
+void __allregs FUN_1000_4bcc(void);
+undefined2 __allregs FUN_1000_4bd8(undefined2 param_1);
+undefined2 __allregs FUN_1000_4bf7(undefined2 param_1);
+undefined2 __allregs FUN_1000_4c16(undefined2 param_1);
+undefined2 __allregs FUN_1000_4c35(undefined2 param_1);
+undefined2 __allregs FUN_1000_4c54(undefined2 param_1);
+uint __allregs FUN_1000_4c6a(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_4c92(char *param_1);
+undefined4 __allregs FUN_1000_4c9a(char *param_1);
+void __allregs FUN_1000_4cb9(undefined1 *param_1,undefined2 param_2);
+void __allregs FUN_1000_4cd0(undefined2 param_1,int param_2);
+void __allregs FUN_1000_4ce7(undefined1 *param_1,int param_2);
+void __allregs FUN_1000_4d05(int param_1,int param_2,int param_3,int param_4);
+void __allregs FUN_1000_4d45(int param_1,int param_2,int *param_3);
+void thunk_EXT_FUN_e000_9b4b(void);
+void __allregs FUN_1000_4e0e(byte *param_1,uint param_2,byte *param_3,byte *param_4,byte *param_5);
+void __allregs FUN_1000_4e25(byte *param_1,byte *param_2,undefined2 *param_3,byte *param_4,byte *param_5);
+void __allregs FUN_1000_4e5b(int param_1,byte *param_2,byte *param_3);
+void __allregs FUN_1000_4e6a(undefined2 param_1,int param_2,byte *param_3,undefined2 param_4,undefined2 *param_5, byte *param_6,byte *param_7);
+void __allregs FUN_1000_4e73(undefined2 param_1,int param_2,byte *param_3,byte *param_4,byte *param_5);
+void __allregs FUN_1000_4e81(uint param_1,byte *param_2,undefined2 *param_3,byte *param_4,byte *param_5);
+void __allregs FUN_1000_4ea6(uint param_1,uint param_2,uint param_3,undefined2 *param_4,undefined2 *param_5, undefined2 *param_6);
+void __allregs FUN_1000_4f31(uint param_1,uint param_2,uint param_3,int param_4,undefined2 *param_5, undefined2 *param_6,undefined2 *param_7);
+void __allregs FUN_1000_4f6e(void);
+undefined4 __allregs FUN_1000_4f78(void);
+void __allregs FUN_1000_4f82(undefined2 param_1,int param_2,undefined2 *param_3);
+void __allregs FUN_1000_4f9c(int param_1,undefined2 *param_2);
+undefined2 __allregs FUN_1000_5014(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_1000_5051(undefined2 param_1,undefined2 param_2,undefined2 *param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7,undefined2 param_8);
+undefined2 __allregs FUN_1000_50c8(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7,undefined2 param_8);
+void __allregs FUN_1000_50e6(undefined2 *param_1,undefined2 param_2,undefined2 param_3);
+void __allregs FUN_1000_511a(void);
+void __allregs FUN_1000_5153(void);
+void __allregs FUN_1000_515e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+void __allregs FUN_1000_516f(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_5177(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_1000_518d(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_5195(undefined2 *param_1);
+void __allregs FUN_1000_51a6(void);
+void __allregs FUN_1000_51bb(void);
+undefined2 __allregs FUN_1000_51c6(byte *param_1);
+void __allregs FUN_1000_5214(void);
+void __allregs FUN_1000_521e(void);
+void __allregs FUN_1000_5228(void);
+void __allregs FUN_1000_524d(void);
+undefined2 __allregs FUN_1000_524e(uint param_1);
+void __allregs FUN_1000_52a3(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_52ba(undefined2 param_1,undefined2 param_2);
+undefined2 __allregs FUN_1000_52c6(void);
+void __allregs FUN_1000_52d1(int param_1,int param_2);
+undefined2 __allregs FUN_1000_52ed(void);
+void __allregs FUN_1000_530b(undefined2 param_1);
+undefined2 __allregs FUN_1000_5313(void);
+void __allregs FUN_1000_531b(undefined2 param_1);
+undefined2 __allregs FUN_1000_5323(void);
+char __allregs FUN_1000_532b(char param_1);
+int __allregs FUN_1000_534e(char *param_1);
+int __allregs FUN_1000_5364(int param_1,int param_2,int param_3,undefined2 *param_4,char *param_5, undefined2 *param_6);
+int __allregs FUN_1000_541b(uint param_1);
+void __allregs FUN_1000_5471(uint param_1);
+void __allregs FUN_1000_548c(undefined1 param_1,int param_2,int param_3,undefined2 *param_4,int param_5,int param_6 );
+void __allregs FUN_1000_549f(uint param_1,undefined2 param_2);
+void __allregs FUN_1000_54ac(uint param_1);
+void __allregs FUN_1000_54b4(byte param_1);
+void __allregs FUN_1000_54c2(byte param_1);
+void __allregs FUN_1000_54e0(undefined2 param_1);
+void __allregs FUN_1000_54e8(undefined2 param_1);
+void __allregs FUN_1000_54f6(uint param_1);
+void __allregs FUN_1000_550e(undefined2 param_1,int param_2,int param_3);
+void __allregs thunk_FUN_1000_5531(char *param_1);
+void __allregs FUN_1000_5531(char *param_1);
+void __allregs thunk_FUN_1000_5547(char *param_1);
+void __allregs FUN_1000_5547(char *param_1);
+void __allregs thunk_FUN_1000_555f(char *param_1);
+void __allregs FUN_1000_555f(char *param_1);
+void __allregs thunk_FUN_1000_5579(char *param_1);
+void __allregs FUN_1000_5579(char *param_1);
+void __allregs thunk_FUN_1000_5591(char *param_1);
+void __allregs FUN_1000_5591(char *param_1);
+void __allregs thunk_FUN_1000_55ae(char *param_1);
+void __allregs FUN_1000_55ae(char *param_1);
+void __allregs FUN_1000_55c5(void);
+void __allregs FUN_1000_56f8(void);
+void __allregs FUN_1000_571b(ulong param_1,uint param_2,int param_3,char *param_4,undefined2 *param_5,byte *param_6 ,int *param_7,undefined1 param_8,byte param_9,byte param_10,undefined1 param_11, undefined1 param_12,undefined1 param_13,undefined1 param_14,byte param_15,byte param_16 ,int *param_17,undefined2 param_18,byte param_19);
+void __allregs FUN_1000_57be(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined1 *param_6,undefined1 *param_7);
+void __allregs FUN_1000_591b(ulong param_1,char *param_2,undefined1 *param_3,char *param_4,undefined2 *param_5, byte *param_6,char *param_7,byte param_8,undefined1 param_9,undefined1 param_10, byte param_11,byte param_12);
+void __allregs FUN_1000_5b29(undefined2 *param_1);
+void __allregs FUN_1000_5b84(undefined2 param_1,int param_2,undefined2 param_3,int param_4,int param_5,int param_6, int param_7,int *param_8);
+void __allregs FUN_1000_5c3a(void);
+undefined1 __allregs FUN_1000_5c5f(void);
+void __allregs FUN_1000_5c8a(void);
+void __allregs FUN_1000_5cf7(void);
+void __allregs FUN_1000_5d48(undefined2 param_1);
+void __allregs FUN_1000_5dd7(void);
+void __allregs FUN_1000_5dfc(void);
+void __allregs FUN_1000_5e98(void);
+void __allregs FUN_1000_5f14(void);
+void __allregs FUN_1000_5f15(void);
+void __allregs FUN_1000_5fca(int *param_1);
+void __allregs FUN_1000_6015(void);
+undefined2 __allregs FUN_1000_6049(undefined2 param_1);
+undefined2 __allregs FUN_1000_6068(undefined2 param_1,int param_2,int param_3,undefined2 param_4);
+undefined2 __allregs FUN_1000_6078(int param_1,int param_2,int param_3,int param_4,int param_5,undefined2 param_6);
+undefined2 __allregs FUN_1000_6084(undefined2 param_1,undefined2 param_2,undefined2 *param_3,undefined2 *param_4, undefined2 param_5);
+void __allregs FUN_1000_60a0(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,int param_6);
+void __allregs FUN_1000_60e5(int param_1);
+void __allregs FUN_1000_60f9(int param_1,int param_2);
+void __allregs FUN_1000_610e(int param_1);
+void __allregs FUN_1000_612c(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+undefined2 __allregs FUN_1000_616e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6,undefined2 param_7);
+int __allregs FUN_1000_6199(void);
+void __allregs FUN_1000_61a7(void);
+void __allregs FUN_1000_61f7(void);
+void __allregs FUN_1000_6220(void);
+undefined4 __allregs FUN_1000_6356(void);
+void __allregs FUN_1000_63b8(void);
+void __allregs FUN_1000_6448(void);
+void __allregs FUN_1000_6499(undefined2 param_1,undefined2 param_2);
+uint __allregs FUN_1000_6507(undefined2 param_1);
+void __allregs FUN_1000_658b(void);
+void __allregs FUN_1000_6598(char param_1,undefined1 param_2,int param_3);
+void __allregs FUN_1000_65c2(void);
+void __allregs FUN_1000_6686(int param_1);
+undefined4 __allregs FUN_1000_66cd(char *param_1);
+void __allregs FUN_1000_66f2(undefined2 param_1,undefined4 *param_2,int param_3);
+void __allregs FUN_1000_671b(void);
+void __allregs FUN_1000_6790(int param_1,int param_2);
+void __allregs FUN_1000_67e3(void);
+undefined2 __allregs FUN_1000_685f(byte param_1);
+void __allregs FUN_1000_6870(void);
+void __allregs FUN_1000_68c3(void);
+void __allregs FUN_1000_691b(int *param_1);
+undefined4 __allregs FUN_1000_697e(void);
+undefined4 __allregs FUN_1000_69c0(void);
+void __allregs FUN_1000_6a75(int param_1,int param_2);
+void __allregs FUN_1000_6ac5(void);
+void __allregs FUN_1000_6beb(int *param_1);
+void __allregs FUN_1000_6c04(void);
+void __allregs FUN_1000_6c2d(void);
+void __allregs FUN_1000_6c4c(void);
+void __allregs FUN_1000_6c96(void);
+void __allregs FUN_1000_6d00(void);
+undefined4 __allregs FUN_1000_6d0f(void);
+void __allregs FUN_1000_6d3d(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5);
+void __allregs FUN_1000_6d53(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5);
+void __allregs FUN_1000_6d69(uint16_t param_1,uint16_t p2,uint16_t p3,uint16_t param_4,uint16_t p5);
+void __allregs FUN_1000_6d8c(void);
+void __allregs FUN_1000_6da9(uint param_1);
+void __allregs FUN_1000_6df3(uint param_1);
+void __allregs FUN_1000_6e3d(void);
+void __allregs FUN_1000_6e75(uint param_1,undefined2 param_2);
+void __allregs FUN_1000_6f1f(undefined2 param_1,undefined2 param_2,undefined4 param_3,int param_4);
+void __allregs FUN_1000_701b(void);
+void __allregs FUN_1000_702b(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_70c1(void);
+void __allregs FUN_1000_70d6(void);
+void __allregs FUN_1000_70eb(void);
+void __allregs FUN_1000_7100(void);
+void __allregs FUN_1000_712e(uint param_1,int param_2,int param_3);
+void __allregs FUN_1000_7165(uint param_1);
+void __allregs FUN_1000_719f(uint param_1);
+void __allregs FUN_1000_71e6(uint param_1);
+void __allregs FUN_1000_722d(uint param_1);
+void __allregs FUN_1000_7260(uint param_1);
+void __allregs FUN_1000_7293(int param_1,int param_2);
+void __allregs FUN_1000_72f0(uint param_1,int param_2,int param_3);
+void __allregs FUN_1000_7329(int param_1,int param_2);
+void __allregs FUN_1000_73aa(void);
+void __allregs FUN_1000_73eb(uint param_1,int param_2);
+void __allregs FUN_1000_7420(uint param_1,int param_2);
+void __allregs FUN_1000_7455(uint param_1);
+void __allregs FUN_1000_747f(uint param_1);
+void __allregs FUN_1000_74a9(int param_1,int param_2);
+void __allregs FUN_1000_74e3(int param_1,int param_2);
+void __allregs FUN_1000_7544(void);
+void __allregs FUN_1000_7561(int param_1);
+void __allregs FUN_1000_7582(int param_1);
+void __allregs FUN_1000_75a3(void);
+void __allregs FUN_1000_75c2(void);
+void __allregs FUN_1000_75cc(void);
+void __allregs FUN_1000_75e3(void);
+void __allregs FUN_1000_7614(int param_1);
+void __allregs FUN_1000_7671(int param_1);
+void __allregs FUN_1000_7681(int param_1);
+void __allregs FUN_1000_7745(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_7779(int param_1,int param_2,int param_3);
+void __allregs FUN_1000_778a(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_77cf(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_77f9(char param_1,int param_2,int param_3,int param_4,int param_5);
+void __allregs FUN_1000_7814(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4);
+void __allregs FUN_1000_784a(undefined4 param_1,int param_2);
+void __allregs FUN_1000_787a(uint param_1);
+void __allregs FUN_1000_78a4(uint param_1);
+void __allregs FUN_1000_78ca(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_795c(undefined2 param_1,undefined2 param_2,undefined4 param_3,int param_4);
+void __allregs FUN_1000_79f5(undefined2 param_1,int param_2,int param_3);
+void __allregs FUN_1000_7a38(int param_1,int param_2);
+void __allregs FUN_1000_7a98(void);
+void __allregs FUN_1000_7b04(int param_1);
+void __allregs FUN_1000_7b3d(void);
+void __allregs FUN_1000_7b57(void);
+void __allregs FUN_1000_7b71(void);
+void __allregs FUN_1000_7bc8(uint param_1,int param_2);
+void __allregs FUN_1000_7c33(uint param_1,int param_2);
+void __allregs FUN_1000_7c6e(uint param_1,int param_2);
+void __allregs FUN_1000_7ca9(void);
+void __allregs FUN_1000_7cea(void);
+void __allregs FUN_1000_7d22(uint param_1,int param_2,int param_3);
+void __allregs FUN_1000_7d50(uint param_1);
+void __allregs FUN_1000_7d7f(uint param_1);
+void __allregs FUN_1000_7dae(int param_1);
+void __allregs FUN_1000_7df8(int param_1);
+void __allregs FUN_1000_7e3e(int param_1);
+void __allregs FUN_1000_7e80(uint param_1,int param_2,int param_3);
+void __allregs FUN_1000_7eba(void);
+void __allregs FUN_1000_7ed7(int param_1);
+void __allregs FUN_1000_7f5f(int param_1);
+undefined4 __allregs FUN_1000_7fbc(byte param_1,int param_2);
+void __allregs FUN_1000_8029(int param_1);
+void __allregs FUN_1000_8039(int param_1);
+void __allregs FUN_1000_8121(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_8176(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_81bb(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_8205(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4);
+void __allregs FUN_1000_8240(undefined4 param_1,int param_2);
+void __allregs FUN_1000_8270(int param_1,int param_2);
+void __allregs FUN_1000_82b6(uint param_1);
+void __allregs FUN_1000_82dc(uint param_1);
+void __allregs FUN_1000_8302(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_8390(undefined2 param_1,undefined2 param_2,undefined4 param_3,int param_4);
+void __allregs FUN_1000_842d(int param_1,int param_2);
+void __allregs FUN_1000_8463(int param_1,int param_2);
+void __allregs FUN_1000_84c3(void);
+void __allregs FUN_1000_852f(int param_1);
+void __allregs FUN_1000_8568(void);
+void __allregs FUN_1000_85c0(uint param_1,int param_2);
+void __allregs FUN_1000_862b(void);
+void __allregs FUN_1000_8668(void);
+void __allregs FUN_1000_8682(void);
+void __allregs FUN_1000_869c(uint param_1,int param_2);
+void __allregs FUN_1000_86d2(uint param_1,int param_2);
+void __allregs FUN_1000_8708(void);
+void __allregs FUN_1000_8725(void);
+void __allregs FUN_1000_8742(void);
+void __allregs FUN_1000_875f(int param_1);
+void __allregs FUN_1000_87bc(int param_1);
+void __allregs FUN_1000_87cc(int param_1);
+void __allregs FUN_1000_888c(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_88d1(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_8916(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_895b(undefined4 param_1,int param_2);
+void __allregs FUN_1000_8963(byte param_1,undefined4 param_2,int param_3,int param_4);
+void __allregs FUN_1000_8995(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4);
+void __allregs FUN_1000_89d0(uint param_1);
+void __allregs FUN_1000_89f6(uint param_1);
+void __allregs FUN_1000_8a1c(uint param_1);
+void __allregs FUN_1000_8a43(uint param_1,int param_2,int param_3);
+void __allregs FUN_1000_8a71(uint param_1);
+void __allregs FUN_1000_8aa0(uint param_1);
+void __allregs FUN_1000_8acf(void);
+void __allregs FUN_1000_8b10(uint param_1,int param_2);
+void __allregs FUN_1000_8b46(uint param_1,int param_2);
+undefined4 __allregs FUN_1000_8b7c(byte param_1,int param_2);
+void __allregs FUN_1000_8bcd(int param_1);
+void __allregs FUN_1000_8bfc(uint param_1,int param_2,int param_3);
+void __allregs FUN_1000_8c2d(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_8cbf(undefined2 param_1,undefined2 param_2,undefined4 param_3,int param_4);
+void __allregs FUN_1000_8d67(undefined2 param_1,int param_2,int param_3);
+void __allregs FUN_1000_8daa(int param_1,int param_2);
+void __allregs FUN_1000_8e0a(void);
+void __allregs FUN_1000_8e76(void);
+void __allregs FUN_1000_8ef3(void);
+void __allregs FUN_1000_8f4b(uint param_1,int param_2);
+void __allregs FUN_1000_8fb6(int param_1);
+void __allregs FUN_1000_8fff(int param_1,int param_2);
+void __allregs FUN_1000_9050(void);
+void __allregs FUN_1000_906d(void);
+void __allregs FUN_1000_90af(int param_1);
+void __allregs FUN_1000_90bf(int param_1);
+void __allregs FUN_1000_90fe(int param_1);
+void __allregs FUN_1000_9186(int param_1);
+void __allregs FUN_1000_928a(uint param_1,int param_2);
+void __allregs FUN_1000_92b8(uint param_1);
+void __allregs FUN_1000_92ea(uint param_1);
+void __allregs FUN_1000_931c(uint param_1);
+void __allregs FUN_1000_9342(uint param_1);
+void __allregs FUN_1000_9368(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_93f3(undefined2 param_1,undefined2 param_2,undefined4 param_3,int param_4);
+void __allregs FUN_1000_9497(int param_1,int param_2);
+void __allregs FUN_1000_94f5(void);
+void __allregs FUN_1000_954b(uint param_1,int param_2);
+void __allregs FUN_1000_958d(uint param_1,int param_2);
+void __allregs FUN_1000_95c3(uint param_1,int param_2);
+void __allregs FUN_1000_95f9(void);
+undefined4 __allregs FUN_1000_964e(byte param_1,int param_2);
+void __allregs FUN_1000_96bb(void);
+void __allregs FUN_1000_96e6(uint param_1,int param_2,int param_3);
+void __allregs FUN_1000_9717(int param_1,int param_2);
+void __allregs FUN_1000_9774(void);
+void __allregs FUN_1000_97da(void);
+void __allregs FUN_1000_9812(uint param_1,int param_2,int param_3);
+void __allregs FUN_1000_9840(uint param_1);
+void __allregs FUN_1000_986f(uint param_1);
+void __allregs FUN_1000_989e(void);
+void __allregs FUN_1000_98d2(undefined2 *param_1);
+void __allregs FUN_1000_9931(int param_1,int param_2);
+void __allregs FUN_1000_994a(void);
+void __allregs FUN_1000_99bb(uint param_1,int param_2,int param_3);
+void __allregs FUN_1000_99e2(undefined2 param_1,int param_2,int param_3,int param_4,uint param_5,int param_6, uint param_7,int param_8);
+void __allregs FUN_1000_9a2b(uint param_1,int param_2,int param_3);
+void __allregs FUN_1000_9a68(int param_1);
+void __allregs FUN_1000_9ab5(void);
+void __allregs FUN_1000_9ad4(void);
+void __allregs FUN_1000_9af3(int param_1,int param_2);
+void __allregs FUN_1000_9b39(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_9b7e(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+void __allregs FUN_1000_9bc3(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4);
+void __allregs FUN_1000_9c15(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4);
+void __allregs FUN_1000_9c50(undefined4 param_1,undefined2 param_2);
+void __allregs FUN_1000_9c75(uint param_1);
+ulong __allregs FUN_1000_9caa(ulong param_1,int param_2);
+ulong __allregs FUN_1000_9cfd(ulong param_1,int param_2);
+void __allregs FUN_1000_9d49(uint param_1,int param_2);
+void __allregs FUN_1000_9dd2(int param_1);
+void __allregs FUN_1000_9e4f(void);
+undefined2 __allregs FUN_1000_9efc(uint param_1,undefined2 param_2,undefined2 *param_3);
+void __allregs FUN_1000_9f92(uint param_1,uint param_2,int param_3);
+void __allregs FUN_1000_9ffc(int param_1);
+undefined4 __allregs FUN_1000_a02d(undefined2 param_1,int param_2);
+void __allregs FUN_1000_a064(undefined2 param_1,int param_2);
+void __allregs FUN_1000_a080(undefined2 param_1,int param_2);
+void __allregs FUN_1000_a0a4(undefined2 param_1,undefined4 param_2,int *param_3);
+void __allregs FUN_1000_a0ab(undefined2 param_1,undefined4 param_2,int *param_3);
+void __allregs FUN_1000_a174(int param_1);
+void __allregs FUN_1000_a1d6(int param_1,int param_2);
+undefined4 __allregs FUN_1000_a20d(int *param_1);
+void __allregs FUN_1000_a265(undefined2 param_1,undefined4 param_2,int *param_3);
+void __allregs FUN_1000_a2e9(undefined2 param_1,undefined2 param_2,int param_3);
+int __allregs FUN_1000_a358(int param_1,char *param_2);
+void __allregs FUN_1000_a370(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+void __allregs FUN_1000_a395(int param_1);
+void __allregs FUN_1000_a401(int param_1);
+void __allregs FUN_1000_a4a2(undefined2 param_1,int param_2);
+void __allregs FUN_1000_a4b2(void);
+void __allregs FUN_1000_a4e9(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_a520(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_a52e(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_a547(int param_1);
+void __allregs FUN_1000_a5a9(void);
+void __allregs FUN_1000_a5c4(void);
+void __allregs FUN_1000_a5dc(void);
+void __allregs FUN_1000_a6c8(int param_1);
+void __allregs FUN_1000_a722(undefined2 param_1,undefined2 param_2);
+void __allregs FUN_1000_a755(void);
+void __allregs FUN_1000_a7a7(uint param_1);
+void __allregs FUN_1000_a7c7(int param_1);
+void __allregs FUN_1000_a7e0(undefined2 param_1,undefined2 param_2);
+byte __allregs FUN_1000_a7ed(byte param_1);
+void __allregs FUN_1000_a80b(undefined1 param_1,int param_2);
+void __allregs FUN_1000_a84c(int param_1);
+void __allregs FUN_1000_a8d7(void);
+void __allregs FUN_1000_a918(uint param_1,uint param_2,uint *param_3);
+void __allregs FUN_1000_a930(undefined2 param_1,undefined2 param_2,int param_3,int param_4);
+void __allregs FUN_1000_a9b9(int param_1);
+void __allregs FUN_1000_aa08(undefined2 param_1,undefined2 param_2,undefined4 param_3,undefined2 param_4, int *param_5);
+void __allregs FUN_1000_ab7f(int param_1);
+void __allregs FUN_1000_ac0a(undefined2 param_1);
+void __allregs FUN_1000_ac31(undefined1 param_1,char *param_2);
+void __allregs FUN_1000_ace0(undefined2 param_1,int *param_2,int param_3,int *param_4,int param_5);
+void __allregs FUN_1000_adcd(undefined4 param_1);
+void __allregs FUN_1000_addb(undefined2 param_1,undefined2 param_2,undefined2 param_3,int param_4);
+void __allregs FUN_1000_ae3c(undefined2 param_1,undefined2 param_2,uint param_3,int param_4);
+void __allregs FUN_1000_aea6(int *param_1);
+void __allregs FUN_1000_b004(undefined1 param_1,undefined2 param_2);
+void __allregs FUN_1000_b02a(undefined2 param_1);
+void __allregs FUN_1000_b040(int *param_1);
+void __allregs FUN_1000_b10c(int param_1,int *param_2);
+undefined4 __allregs FUN_1000_b158(void);
+void __allregs FUN_1000_b175(void);
+void __allregs FUN_1000_b176(void);
+undefined4 __allregs FUN_1000_b1a2(undefined2 param_1,undefined2 param_2,int param_3,int *param_4);
+int __allregs FUN_1000_b1d6(int param_1,int *param_2);
+int __allregs FUN_1000_b1df(undefined2 param_1,int *param_2);
+undefined4 __allregs FUN_1000_b21d(int param_1);
+int __allregs FUN_1000_b294(int param_1);
+void __allregs FUN_1000_b2d3(int param_1);
+void __allregs FUN_1000_b2ef(int param_1);
+void __allregs FUN_1000_b330(undefined2 *param_1);
+int __allregs FUN_1000_b354(int param_1);
+void __allregs FUN_1000_b373(int param_1);
+void __allregs FUN_1000_b39c(int param_1,int param_2,int *param_3);
+void __allregs FUN_1000_b46d(void);
+undefined4 __allregs FUN_1000_b47a(undefined4 param_1,uint16_t si);
+void __allregs FUN_1000_b4a3(int param_1);
+void __allregs FUN_1000_b4cd(undefined2 *param_1,int param_2);
+void __allregs FUN_1000_b4fc(int param_1);
+void __allregs FUN_1000_b5a4(int param_1);
+void __allregs FUN_1000_b631(uint16_t param_1);        /* PATCH 138 */
+void __allregs FUN_1000_b652(int param_1);
+void __allregs FUN_1000_b6a4(void);
+void __allregs FUN_1000_b6dd(void);
+void __allregs FUN_1000_b756(undefined1 param_1,undefined2 param_2,undefined2 param_3,int param_4, undefined2 param_5,undefined1 *param_6,undefined1 *param_7);
+void __allregs FUN_1000_b7ae(char *param_1);
+void __allregs FUN_1000_b7c4(char *param_1);
+undefined4 __allregs FUN_1000_b7db(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+undefined2 __allregs FUN_1000_b890(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+void __allregs FUN_1000_b89a(void);
+void __allregs FUN_1000_b92d(void);
+void __allregs FUN_1000_b949(int param_1,int param_2);
+void __allregs FUN_1000_b996(void);
+void __allregs FUN_1000_b9b2(int param_1,int param_2);
+void __allregs FUN_1000_ba30(ulong param_1,char *param_2);
+void __allregs FUN_1000_ba63(void);
+void __allregs FUN_1000_bb34(void);
+void __allregs FUN_1000_bb4e(void);
+void __allregs FUN_1000_bb58(void);
+void __allregs FUN_1000_bc12(void);
+void __allregs FUN_1000_bc39(void);
+void __allregs FUN_1000_bc58(void);
+void __allregs FUN_1000_bc77(void);
+void __allregs FUN_1000_bc86(void);
+void __allregs FUN_1000_bc88(char param_1,int param_2);
+void __allregs FUN_1000_bce7(undefined4 param_1,int param_2);
+undefined4 __allregs FUN_1000_bd14(undefined2 param_1,undefined4 param_2,undefined2 param_3,undefined2 param_4, undefined1 *param_5,undefined2 param_6);
+undefined4 __allregs FUN_1000_bd7e(void);
+void __allregs FUN_1000_bdbe(void);
+void __allregs FUN_1000_be47(void);
+void __allregs FUN_1000_bea4(uint param_1,uint param_2);
+void __allregs FUN_1000_bf16(void);
+void __allregs FUN_1000_bf45(void);
+undefined2 __allregs FUN_1000_f91f(uint param_1,char param_2,uint param_3,int *param_4,int param_5,uint *param_6, uint *param_7);
+undefined2 __allregs FUN_1000_f9a4(uint param_1,uint param_2,int *param_3,int param_4,uint *param_5,uint *param_6);
+undefined2 __allregs FUN_1000_f9fa(uint param_1,uint param_2,int *param_3,int param_4,uint *param_5,uint *param_6);
+undefined2 __allregs FUN_1000_fa06(uint param_1,uint param_2,int *param_3,int param_4,uint *param_5,uint *param_6);
+undefined2 __allregs FUN_1000_fa66(uint param_1,uint param_2,int *param_3,int param_4,uint *param_5,uint *param_6);
+undefined2 __allregs FUN_1000_fb29(uint param_1,uint param_2,int param_3,int param_4,uint *param_5,uint *param_6);
+void __allregs FUN_1000_fb7a(char param_1,int param_2,int param_3);
+undefined2 __allregs FUN_1000_fc3d(uint param_1,uint param_2,int param_3,int param_4,uint *param_5,uint *param_6);
+undefined2 __allregs FUN_1000_fc45(uint param_1,uint param_2,int param_3,int param_4,uint *param_5,uint *param_6);
+undefined2 __allregs FUN_1000_fc4d(uint param_1,uint param_2,int param_3,int param_4,uint *param_5,uint *param_6);
+undefined2 __allregs FUN_1000_fc93(uint param_1,uint param_2,int param_3,int param_4,uint *param_5,uint *param_6);
+undefined2 __allregs FUN_1000_fc95(uint param_1,uint param_2,int param_3,int param_4,uint *param_5,uint *param_6);
+
+/* ---- RULE 2: DAT_SEG_OFF -> g_mem accessor at linear (SEG<<4)+OFF ---- */
+#define DAT_0000_00cc (*(undefined2 *)(g_mem+0xcc))
+#define DAT_0000_0366 (*(undefined2 *)(g_mem+0x366))
+#define DAT_0000_0417 (*(undefined2 *)(g_mem+0x417))
+#define DAT_0000_0463 (*(undefined2 *)(g_mem+0x463))
+#define DAT_0000_25fb (*(undefined2 *)(g_mem+0x25fb))
+#define DAT_0000_2612 (*(undefined2 *)(g_mem+0x2612))
+#define DAT_0000_3dff (*(undefined2 *)(g_mem+0x3dff))
+#define DAT_0000_3e01 (*(undefined2 *)(g_mem+0x3e01))
+#define DAT_1000_2b50 (*(undefined2 *)(g_mem+0x12b50))
+#define DAT_1000_2b52 (*(undefined2 *)(g_mem+0x12b52))
+#define DAT_1000_2b54 (*(undefined2 *)(g_mem+0x12b54))
+#define DAT_1000_2b56 (*(undefined2 *)(g_mem+0x12b56))
+#define DAT_1000_2b58 (*(undefined2 *)(g_mem+0x12b58))
+#define DAT_1000_2b5a (*(undefined2 *)(g_mem+0x12b5a))
+#define DAT_1000_2b5c (*(undefined2 *)(g_mem+0x12b5c))
+#define DAT_1000_2b5e (*(undefined2 *)(g_mem+0x12b5e))
+#define DAT_1000_2b60 (*(undefined2 *)(g_mem+0x12b60))
+#define DAT_1000_2b62 (*(undefined2 *)(g_mem+0x12b62))
+#define DAT_1000_2b64 (*(undefined2 *)(g_mem+0x12b64))
+#define DAT_1000_2b66 (*(int **)(g_mem+0x12b66))
+#define DAT_1000_2b6a (*(undefined2 *)(g_mem+0x12b6a))
+#define DAT_1000_2b7e (*(undefined2 *)(g_mem+0x12b7e))
+#define DAT_1000_2d56 (*(undefined2 *)(g_mem+0x12d56))
+#define DAT_1000_2d57 (*(undefined2 *)(g_mem+0x12d57))
+#define DAT_1000_2d58 (*(undefined2 *)(g_mem+0x12d58))
+#define DAT_1000_2d59 (*(undefined2 *)(g_mem+0x12d59))
+#define DAT_1000_2d5a (*(undefined2 *)(g_mem+0x12d5a))
+#define DAT_1000_2d79 (*(undefined2 *)(g_mem+0x12d79))
+#define DAT_1000_2d7d (*(undefined2 *)(g_mem+0x12d7d))
+#define DAT_1000_3213 (*(undefined2 *)(g_mem+0x13213))
+#define DAT_1000_331e (*(undefined2 *)(g_mem+0x1331e))
+#define DAT_1000_3320 (*(undefined2 *)(g_mem+0x13320))
+#define DAT_1000_33b8 (*(undefined2 *)(g_mem+0x133b8))
+#define DAT_1000_33ba (*(undefined2 *)(g_mem+0x133ba))
+#define DAT_1000_33bc (*(undefined2 *)(g_mem+0x133bc))
+#define DAT_1000_33be (*(undefined2 *)(g_mem+0x133be))
+#define DAT_1000_340e (*(undefined2 *)(g_mem+0x1340e))
+#define DAT_1000_3410 (*(undefined2 *)(g_mem+0x13410))
+#define DAT_1000_3606 (*(undefined2 *)(g_mem+0x13606))
+#define DAT_1000_3608 (*(undefined2 *)(g_mem+0x13608))
+#define DAT_1000_360a (*(undefined2 *)(g_mem+0x1360a))
+#define DAT_1000_360c (*(undefined2 *)(g_mem+0x1360c))
+#define DAT_1000_3630 (*(undefined2 *)(g_mem+0x13630))
+#define DAT_1000_3632 (*(undefined2 *)(g_mem+0x13632))
+#define DAT_1000_3634 (*(int **)(g_mem+0x13634))
+#define DAT_1000_382a (*(undefined2 *)(g_mem+0x1382a))
+#define DAT_1000_382c (*(undefined2 *)(g_mem+0x1382c))
+#define DAT_1000_4660 (*(undefined2 *)(g_mem+0x14660))
+#define DAT_1000_4e0a (*(undefined2 *)(g_mem+0x14e0a))
+#define DAT_1000_4f98 (*(undefined2 *)(g_mem+0x14f98))
+#define DAT_1000_4f9a (*(undefined2 *)(g_mem+0x14f9a))
+#define DAT_1000_5951 (*(undefined2 *)(g_mem+0x15951))
+#define DAT_1000_5953 (*(undefined2 *)(g_mem+0x15953))
+#define DAT_1000_5955 (*(undefined2 *)(g_mem+0x15955))
+#define DAT_1000_5957 (*(int **)(g_mem+0x15957))
+#define DAT_1000_5959 (*(undefined2 *)(g_mem+0x15959))
+#define DAT_1000_595b (*(undefined2 *)(g_mem+0x1595b))
+#define DAT_1000_5961 (*(undefined2 *)(g_mem+0x15961))
+#define DAT_1000_5963 (*(undefined2 *)(g_mem+0x15963))
+#define DAT_1000_5b80 (*(undefined2 *)(g_mem+0x15b80))
+#define DAT_1000_5b82 (*(undefined2 *)(g_mem+0x15b82))
+#define DAT_1000_606e (*(undefined2 *)(g_mem+0x1606e))
+#define DAT_1000_6070 (*(undefined2 *)(g_mem+0x16070))
+#define DAT_1000_6072 (*(undefined2 *)(g_mem+0x16072))
+#define DAT_1000_6076 (*(undefined2 *)(g_mem+0x16076))
+#define DAT_1000_6493 (*(undefined2 *)(g_mem+0x16493))
+#define DAT_1000_6495 (*(undefined2 *)(g_mem+0x16495))
+#define DAT_1000_6497 (*(undefined2 *)(g_mem+0x16497))
+#define DAT_1000_6596 (*(undefined2 *)(g_mem+0x16596))
+#define DAT_1000_c000 (*(undefined2 *)(g_mem+0x1c000))
+#define DAT_1000_c002 (*(undefined2 *)(g_mem+0x1c002))
+#define DAT_1000_c004 (*(undefined2 *)(g_mem+0x1c004))
+#define DAT_1000_c006 (*(undefined2 *)(g_mem+0x1c006))
+#define DAT_1000_c008 (*(undefined2 *)(g_mem+0x1c008))
+#define DAT_1000_c00a (*(undefined4 *)(g_mem+0x1c00a))
+#define DAT_1000_c00c (*(undefined2 *)(g_mem+0x1c00c))
+#define DAT_1000_c00e (*(undefined4 *)(g_mem+0x1c00e))
+#define DAT_1000_c010 (*(undefined2 *)(g_mem+0x1c010))
+#define DAT_1000_c012 (*(undefined4 *)(g_mem+0x1c012))
+#define DAT_1000_c014 (*(undefined2 *)(g_mem+0x1c014))
+#define DAT_1000_c016 (*(undefined2 *)(g_mem+0x1c016))
+#define DAT_1000_c017 (*(undefined2 *)(g_mem+0x1c017))
+#define DAT_1000_c018 (*(undefined2 *)(g_mem+0x1c018))
+#define DAT_1000_c020 (*(undefined2 *)(g_mem+0x1c020))
+#define DAT_1000_c022 (*(undefined2 *)(g_mem+0x1c022))
+#define DAT_1000_c026 (*(undefined4 *)(g_mem+0x1c026))
+#define DAT_1000_c02c (*(undefined2 *)(g_mem+0x1c02c))
+#define DAT_1000_c02e (*(undefined4 *)(g_mem+0x1c02e))
+#define DAT_1000_c032 (*(undefined4 *)(g_mem+0x1c032))
+#define DAT_1000_c036 (*(undefined4 *)(g_mem+0x1c036))
+#define DAT_1000_c03a (*(undefined2 *)(g_mem+0x1c03a))
+#define DAT_1000_c03c (*(undefined4 *)(g_mem+0x1c03c))
+#define DAT_1000_c058 (*(undefined2 *)(g_mem+0x1c058))
+#define DAT_1000_c05c (*(undefined4 *)(g_mem+0x1c05c))
+#define DAT_1000_c060 (*(undefined4 *)(g_mem+0x1c060))
+#define DAT_1000_c064 (*(undefined4 *)(g_mem+0x1c064))
+#define DAT_1000_c068 (*(undefined2 *)(g_mem+0x1c068))
+#define DAT_1000_c06a (*(undefined2 *)(g_mem+0x1c06a))
+#define DAT_1000_c06b (*(undefined2 *)(g_mem+0x1c06b))
+#define DAT_1000_c06c (*(undefined2 *)(g_mem+0x1c06c))
+#define DAT_1000_c06e (*(undefined2 *)(g_mem+0x1c06e))
+#define DAT_1000_c070 (*(undefined2 *)(g_mem+0x1c070))
+#define DAT_1000_c074 (*(undefined2 *)(g_mem+0x1c074))
+#define DAT_1000_c076 (*(undefined2 *)(g_mem+0x1c076))
+#define DAT_1000_c080 (*(undefined4 *)(g_mem+0x1c080))
+#define DAT_1000_c0cc (*(undefined4 *)(g_mem+0x1c0cc))
+#define DAT_1000_c0d0 (*(undefined4 *)(g_mem+0x1c0d0))
+#define DAT_1000_c0d8 (*(undefined4 *)(g_mem+0x1c0d8))
+#define DAT_1000_c0e4 (*(undefined4 *)(g_mem+0x1c0e4))
+#define DAT_1000_c0e8 (*(undefined4 *)(g_mem+0x1c0e8))
+#define DAT_1000_c0fc (*(undefined2 *)(g_mem+0x1c0fc))
+#define DAT_1000_c0fe (*(undefined2 *)(g_mem+0x1c0fe))
+#define DAT_1000_c100 (*(undefined2 *)(g_mem+0x1c100))
+#define DAT_1000_c102 (*(undefined2 *)(g_mem+0x1c102))
+#define DAT_1000_c23e (*(undefined2 *)(g_mem+0x1c23e))
+#define DAT_1000_c240 (*(undefined2 *)(g_mem+0x1c240))
+#define DAT_1000_c242 (*(undefined2 *)(g_mem+0x1c242))
+#define DAT_1000_c246 (*(undefined2 *)(g_mem+0x1c246))
+#define DAT_1000_c247 (*(undefined2 *)(g_mem+0x1c247))
+#define DAT_1000_c249 (*(undefined2 *)(g_mem+0x1c249))
+#define DAT_1000_c258 (*(undefined2 *)(g_mem+0x1c258))
+#define DAT_1000_c260 (*(undefined2 *)(g_mem+0x1c260))
+#define DAT_1000_c26c (*(undefined2 *)(g_mem+0x1c26c))
+#define DAT_1000_c26e (*(undefined4 *)(g_mem+0x1c26e))
+#define DAT_1000_c270 (*(undefined4 *)(g_mem+0x1c270))
+#define DAT_1000_c272 (*(undefined2 *)(g_mem+0x1c272))
+#define DAT_1000_c282 (*(undefined4 *)(g_mem+0x1c282))
+#define DAT_1000_c284 (*(undefined4 *)(g_mem+0x1c284))
+#define DAT_1000_c286 (*(undefined4 *)(g_mem+0x1c286))
+#define DAT_1000_c28e (*(undefined4 *)(g_mem+0x1c28e))
+#define DAT_1000_c292 (*(undefined4 *)(g_mem+0x1c292))
+#define DAT_1000_c298 (*(undefined4 *)(g_mem+0x1c298))
+#define DAT_1000_c29c (*(undefined2 *)(g_mem+0x1c29c))
+#define DAT_1000_c29e (*(undefined2 *)(g_mem+0x1c29e))
+#define DAT_1000_c2a0 (*(undefined2 *)(g_mem+0x1c2a0))
+#define DAT_1000_c2a8 (*(undefined2 *)(g_mem+0x1c2a8))
+#define DAT_1000_c2a9 (*(undefined2 *)(g_mem+0x1c2a9))
+#define DAT_1000_c2ac (*(undefined4 *)(g_mem+0x1c2ac))
+#define DAT_1000_c2b0 (*(undefined4 *)(g_mem+0x1c2b0))
+#define DAT_1000_c2b4 (*(undefined4 *)(g_mem+0x1c2b4))
+#define DAT_1000_c2b8 (*(undefined4 *)(g_mem+0x1c2b8))
+#define DAT_1000_c2dc (*(undefined4 *)(g_mem+0x1c2dc))
+#define DAT_1000_c2de (*(undefined2 *)(g_mem+0x1c2de))
+#define DAT_1000_c2e0 (*(undefined4 *)(g_mem+0x1c2e0))
+#define DAT_1000_c2e4 (*(undefined2 *)(g_mem+0x1c2e4))
+#define DAT_1000_c2e8 (*(undefined4 *)(g_mem+0x1c2e8))
+#define DAT_1000_c2f0 (*(undefined4 *)(g_mem+0x1c2f0))
+#define DAT_1000_c300 (*(undefined2 *)(g_mem+0x1c300))
+#define DAT_1000_c305 (*(undefined2 *)(g_mem+0x1c305))
+#define DAT_1000_c31a (*(undefined4 *)(g_mem+0x1c31a))
+#define DAT_1000_c31e (*(undefined4 *)(g_mem+0x1c31e))
+#define DAT_1000_c322 (*(undefined4 *)(g_mem+0x1c322))
+#define DAT_1000_c32e (*(undefined4 *)(g_mem+0x1c32e))
+#define DAT_1000_c342 (*(undefined2 *)(g_mem+0x1c342))
+#define DAT_1000_c354 (*(undefined4 *)(g_mem+0x1c354))
+#define DAT_1000_c358 (*(undefined4 *)(g_mem+0x1c358))
+#define DAT_1000_c370 (*(undefined4 *)(g_mem+0x1c370))
+#define DAT_1000_c378 (*(undefined4 *)(g_mem+0x1c378))
+#define DAT_1000_c384 (*(undefined4 *)(g_mem+0x1c384))
+#define DAT_1000_c388 (*(undefined4 *)(g_mem+0x1c388))
+#define DAT_1000_c38c (*(undefined4 *)(g_mem+0x1c38c))
+#define DAT_1000_c390 (*(undefined4 *)(g_mem+0x1c390))
+#define DAT_1000_c394 (*(undefined4 *)(g_mem+0x1c394))
+#define DAT_1000_c3e0 (*(undefined2 *)(g_mem+0x1c3e0))
+#define DAT_1000_c3e2 (*(undefined2 *)(g_mem+0x1c3e2))
+#define DAT_1000_c3e4 (*(undefined2 *)(g_mem+0x1c3e4))
+#define DAT_1000_c3fc (*(undefined2 *)(g_mem+0x1c3fc))
+#define DAT_1000_c3fe (*(undefined4 *)(g_mem+0x1c3fe))
+#define DAT_1000_c40a (*(undefined4 *)(g_mem+0x1c40a))
+#define DAT_1000_c420 (*(undefined2 *)(g_mem+0x1c420))
+#define DAT_1000_c432 (*(undefined4 *)(g_mem+0x1c432))
+#define DAT_1000_c434 (*(undefined2 *)(g_mem+0x1c434))
+#define DAT_1000_c43e (*(undefined4 *)(g_mem+0x1c43e))
+#define DAT_1000_c446 (*(undefined2 *)(g_mem+0x1c446))
+#define DAT_1000_c447 (*(undefined2 *)(g_mem+0x1c447))
+#define DAT_1000_c448 (*(undefined2 *)(g_mem+0x1c448))
+#define DAT_1000_c44a (*(undefined2 *)(g_mem+0x1c44a))
+#define DAT_1000_c44b (*(undefined2 *)(g_mem+0x1c44b))
+#define DAT_1000_c44c (*(undefined2 *)(g_mem+0x1c44c))
+#define DAT_1000_c44e (*(undefined2 *)(g_mem+0x1c44e))
+#define DAT_1000_c450 (*(undefined2 *)(g_mem+0x1c450))
+#define DAT_1000_c452 (*(undefined2 *)(g_mem+0x1c452))
+#define DAT_1000_c454 (*(undefined2 *)(g_mem+0x1c454))
+#define DAT_1000_c456 (*(int **)(g_mem+0x1c456))
+#define DAT_1000_c458 (*(undefined2 *)(g_mem+0x1c458))
+#define DAT_1000_c45a (*(undefined2 *)(g_mem+0x1c45a))
+#define DAT_1000_c45c (*(undefined2 *)(g_mem+0x1c45c))
+#define DAT_1000_c45e (*(undefined2 *)(g_mem+0x1c45e))
+#define DAT_1000_c460 (*(undefined2 *)(g_mem+0x1c460))
+#define DAT_1000_c462 (*(undefined2 *)(g_mem+0x1c462))
+#define DAT_1000_c464 (*(undefined2 *)(g_mem+0x1c464))
+#define DAT_1000_c490 (*(undefined4 *)(g_mem+0x1c490))
+#define DAT_1000_c494 (*(undefined4 *)(g_mem+0x1c494))
+#define DAT_1000_c4a0 (*(undefined4 *)(g_mem+0x1c4a0))
+#define DAT_1000_c4f0 (*(undefined2 *)(g_mem+0x1c4f0))
+#define DAT_1000_c4f4 (*(undefined2 *)(g_mem+0x1c4f4))
+#define DAT_1000_c4f6 (*(undefined2 *)(g_mem+0x1c4f6))
+#define DAT_1000_c4f8 (*(undefined2 *)(g_mem+0x1c4f8))
+#define DAT_1000_c4fa (*(undefined2 *)(g_mem+0x1c4fa))
+#define DAT_1000_c508 (*(undefined4 *)(g_mem+0x1c508))
+#define DAT_1000_c50c (*(undefined4 *)(g_mem+0x1c50c))
+#define DAT_1000_c510 (*(undefined4 *)(g_mem+0x1c510))
+#define DAT_1000_c518 (*(undefined4 *)(g_mem+0x1c518))
+#define DAT_1000_c520 (*(undefined4 *)(g_mem+0x1c520))
+#define DAT_1000_c52c (*(undefined4 *)(g_mem+0x1c52c))
+#define DAT_1000_c530 (*(undefined4 *)(g_mem+0x1c530))
+#define DAT_1000_c538 (*(undefined4 *)(g_mem+0x1c538))
+#define DAT_1000_c53c (*(undefined4 *)(g_mem+0x1c53c))
+#define DAT_1000_c540 (*(undefined4 *)(g_mem+0x1c540))
+#define DAT_1000_c544 (*(undefined4 *)(g_mem+0x1c544))
+#define DAT_1000_c550 (*(undefined4 *)(g_mem+0x1c550))
+#define DAT_1000_c554 (*(undefined4 *)(g_mem+0x1c554))
+#define DAT_1000_c558 (*(undefined4 *)(g_mem+0x1c558))
+#define DAT_1000_c55c (*(undefined4 *)(g_mem+0x1c55c))
+#define DAT_1000_c560 (*(undefined4 *)(g_mem+0x1c560))
+#define DAT_1000_c564 (*(undefined4 *)(g_mem+0x1c564))
+#define DAT_1000_c56c (*(undefined4 *)(g_mem+0x1c56c))
+#define DAT_1000_c584 (*(undefined4 *)(g_mem+0x1c584))
+#define DAT_1000_c58c (*(undefined4 *)(g_mem+0x1c58c))
+#define DAT_1000_c594 (*(undefined4 *)(g_mem+0x1c594))
+#define DAT_1000_c59c (*(undefined4 *)(g_mem+0x1c59c))
+#define DAT_1000_c5a4 (*(undefined4 *)(g_mem+0x1c5a4))
+#define DAT_1000_c5b0 (*(undefined4 *)(g_mem+0x1c5b0))
+#define DAT_1000_c5c4 (*(undefined4 *)(g_mem+0x1c5c4))
+#define DAT_1000_c5fa (*(undefined4 *)(g_mem+0x1c5fa))
+#define DAT_1000_c5fe (*(undefined4 *)(g_mem+0x1c5fe))
+#define DAT_1000_c600 (*(undefined2 *)(g_mem+0x1c600))
+#define DAT_1000_c602 (*(undefined4 *)(g_mem+0x1c602))
+#define DAT_1000_c60a (*(undefined4 *)(g_mem+0x1c60a))
+#define DAT_1000_c60e (*(undefined4 *)(g_mem+0x1c60e))
+#define DAT_1000_c61a (*(undefined4 *)(g_mem+0x1c61a))
+#define DAT_1000_c61e (*(undefined4 *)(g_mem+0x1c61e))
+#define DAT_1000_c622 (*(undefined4 *)(g_mem+0x1c622))
+#define DAT_1000_c626 (*(undefined4 *)(g_mem+0x1c626))
+#define DAT_1000_c648 (*(undefined4 *)(g_mem+0x1c648))
+#define DAT_1000_c654 (*(undefined4 *)(g_mem+0x1c654))
+#define DAT_1000_c664 (*(undefined4 *)(g_mem+0x1c664))
+#define DAT_1000_c668 (*(undefined4 *)(g_mem+0x1c668))
+#define DAT_1000_c674 (*(undefined4 *)(g_mem+0x1c674))
+#define DAT_1000_c67c (*(undefined4 *)(g_mem+0x1c67c))
+#define DAT_1000_c680 (*(undefined4 *)(g_mem+0x1c680))
+#define DAT_1000_c684 (*(undefined4 *)(g_mem+0x1c684))
+#define DAT_1000_c686 (*(undefined2 *)(g_mem+0x1c686))
+#define DAT_1000_c688 (*(undefined4 *)(g_mem+0x1c688))
+#define DAT_1000_c68c (*(undefined4 *)(g_mem+0x1c68c))
+#define DAT_1000_c690 (*(undefined4 *)(g_mem+0x1c690))
+#define DAT_1000_c694 (*(undefined4 *)(g_mem+0x1c694))
+#define DAT_1000_c6a8 (*(undefined4 *)(g_mem+0x1c6a8))
+#define DAT_1000_c6ac (*(undefined4 *)(g_mem+0x1c6ac))
+#define DAT_1000_c6b0 (*(undefined4 *)(g_mem+0x1c6b0))
+#define DAT_1000_c6b4 (*(undefined4 *)(g_mem+0x1c6b4))
+#define DAT_1000_c6bc (*(undefined4 *)(g_mem+0x1c6bc))
+#define DAT_1000_c6c8 (*(undefined4 *)(g_mem+0x1c6c8))
+#define DAT_1000_c6cc (*(undefined4 *)(g_mem+0x1c6cc))
+#define DAT_1000_c6d0 (*(undefined4 *)(g_mem+0x1c6d0))
+#define DAT_1000_c6d4 (*(undefined4 *)(g_mem+0x1c6d4))
+#define DAT_1000_c6d8 (*(undefined4 *)(g_mem+0x1c6d8))
+#define DAT_1000_c71a (*(undefined2 *)(g_mem+0x1c71a))
+#define DAT_1000_c722 (*(undefined2 *)(g_mem+0x1c722))
+#define DAT_1000_c736 (*(undefined2 *)(g_mem+0x1c736))
+#define DAT_1000_c738 (*(undefined1 *)(g_mem+0x1c738))
+#define DAT_1000_c73b (*(undefined2 *)(g_mem+0x1c73b))
+#define DAT_1000_c73d (*(undefined2 *)(g_mem+0x1c73d))
+#define DAT_1000_c73e (*(undefined2 *)(g_mem+0x1c73e))
+#define DAT_1000_c740 (*(undefined2 *)(g_mem+0x1c740))
+#define DAT_1000_c742 (*(undefined2 *)(g_mem+0x1c742))
+#define DAT_1000_c748 (*(undefined2 *)(g_mem+0x1c748))
+#define DAT_1000_c74a (*(undefined2 *)(g_mem+0x1c74a))
+#define DAT_1000_c787 (*(undefined2 *)(g_mem+0x1c787))
+#define DAT_1000_c78c (*(undefined2 *)(g_mem+0x1c78c))
+#define DAT_1000_c78e (*(undefined2 *)(g_mem+0x1c78e))
+#define DAT_1000_c790 (*(undefined2 *)(g_mem+0x1c790))
+#define DAT_1000_c794 (*(undefined2 *)(g_mem+0x1c794))
+#define DAT_1000_cf69 (*(undefined2 *)(g_mem+0x1cf69))
+#define DAT_1000_d548 (*(undefined2 *)(g_mem+0x1d548))
+#define DAT_1000_d549 (*(undefined2 *)(g_mem+0x1d549))
+#define DAT_1000_d54a (*(undefined2 *)(g_mem+0x1d54a))
+#define DAT_1000_d54b (*(undefined2 *)(g_mem+0x1d54b))
+#define DAT_1000_d54c (*(undefined2 *)(g_mem+0x1d54c))
+#define DAT_1000_d54d (*(undefined2 *)(g_mem+0x1d54d))
+#define DAT_1000_d54e (*(undefined2 *)(g_mem+0x1d54e))
+#define DAT_1000_d54f (*(undefined2 *)(g_mem+0x1d54f))
+#define DAT_1000_d550 (*(undefined2 *)(g_mem+0x1d550))
+#define DAT_1000_d552 (*(undefined2 *)(g_mem+0x1d552))
+#define DAT_1000_d554 (*(undefined2 *)(g_mem+0x1d554))
+#define DAT_1000_d558 (*(undefined2 *)(g_mem+0x1d558))
+#define DAT_1000_d55a (*(undefined2 *)(g_mem+0x1d55a))
+#define DAT_1000_d55c (*(undefined2 *)(g_mem+0x1d55c))
+#define DAT_1000_d55d (*(undefined2 *)(g_mem+0x1d55d))
+#define DAT_1000_d55e (*(undefined2 *)(g_mem+0x1d55e))
+#define DAT_1000_d562 (*(undefined2 *)(g_mem+0x1d562))
+#define DAT_1000_d566 (*(undefined2 *)(g_mem+0x1d566))
+#define DAT_1000_d56a ((int *)(g_mem+0x1c000+(*(uint16_t *)(g_mem+0x1d56a))))  /* PATCH 325: near-offset word[0x156a] rebased onto DGROUP:0x1c00 (asm [bx], bx=word[0x156a], DS=0x1c00) */
+#define DAT_1000_d56c (*(undefined2 *)(g_mem+0x1d56c))
+#define DAT_1000_d578 (*(undefined2 *)(g_mem+0x1d578))
+#define DAT_1000_d57e (*(undefined2 *)(g_mem+0x1d57e))
+#define DAT_1000_d584 (*(undefined2 *)(g_mem+0x1d584))
+#define DAT_1000_d594 (*(undefined4 *)(g_mem+0x1d594))
+#define DAT_1000_d598 (*(undefined4 *)(g_mem+0x1d598))
+#define DAT_1000_d59c (*(undefined4 *)(g_mem+0x1d59c))
+#define DAT_1000_d5a0 (*(undefined4 *)(g_mem+0x1d5a0))
+#define DAT_1000_d5a4 (*(undefined4 *)(g_mem+0x1d5a4))
+#define DAT_1000_d5a8 (*(undefined4 *)(g_mem+0x1d5a8))
+#define DAT_1000_d5ac (*(undefined4 *)(g_mem+0x1d5ac))
+#define DAT_1000_d5b0 (*(undefined4 *)(g_mem+0x1d5b0))
+#define DAT_1000_d5b6 (*(undefined2 *)(g_mem+0x1d5b6))
+#define DAT_1000_d5b8 (*(undefined2 *)(g_mem+0x1d5b8))
+#define DAT_1000_d5ba (*(undefined2 *)(g_mem+0x1d5ba))
+#define DAT_1000_d5ca (*(undefined2 *)(g_mem+0x1d5ca))
+#define DAT_1000_d5cc (*(undefined2 *)(g_mem+0x1d5cc))
+#define DAT_1000_d600 (*(undefined2 *)(g_mem+0x1d600))
+#define DAT_1000_d602 (*(undefined2 *)(g_mem+0x1d602))
+#define DAT_1000_d604 (*(undefined2 *)(g_mem+0x1d604))
+#define DAT_1000_d606 (*(undefined2 *)(g_mem+0x1d606))
+#define DAT_1000_d608 (*(undefined2 *)(g_mem+0x1d608))
+#define DAT_1000_d60a (*(undefined2 *)(g_mem+0x1d60a))
+#define DAT_1000_d630 (*(undefined4 *)(g_mem+0x1d630))
+#define DAT_1000_d636 (*(undefined2 *)(g_mem+0x1d636))
+#define DAT_1000_d638 (*(undefined2 *)(g_mem+0x1d638))
+#define DAT_1000_d65e (*(undefined4 *)(g_mem+0x1d65e))
+#define DAT_1000_d696 (*(undefined4 *)(g_mem+0x1d696))
+#define DAT_1000_d69e (*(undefined4 *)(g_mem+0x1d69e))
+#define DAT_1000_d6a6 (*(undefined4 *)(g_mem+0x1d6a6))
+#define DAT_1000_d6ac (*(undefined2 *)(g_mem+0x1d6ac))
+#define DAT_1000_d6ae (*(undefined2 *)(g_mem+0x1d6ae))
+#define DAT_1000_d6b6 (*(undefined2 *)(g_mem+0x1d6b6))
+#define DAT_1000_d6c4 (*(undefined2 *)(g_mem+0x1d6c4))
+#define DAT_1000_d6ce (*(undefined2 *)(g_mem+0x1d6ce))
+#define DAT_1000_d6d2 (*(undefined2 *)(g_mem+0x1d6d2))
+#define DAT_1000_d6d4 (*(undefined2 *)(g_mem+0x1d6d4))
+#define DAT_1000_d6d8 (*(undefined2 *)(g_mem+0x1d6d8))
+#define DAT_1000_d6dc (*(undefined2 *)(g_mem+0x1d6dc))
+#define DAT_1000_d6e2 (*(undefined2 *)(g_mem+0x1d6e2))
+#define DAT_1000_d6ee (*(undefined2 *)(g_mem+0x1d6ee))
+#define DAT_1000_d6f4 (*(undefined2 *)(g_mem+0x1d6f4))
+#define DAT_1000_d6f6 (*(undefined2 *)(g_mem+0x1d6f6))
+#define DAT_1000_d6f8 (*(undefined2 *)(g_mem+0x1d6f8))
+#define DAT_1000_d700 (*(undefined2 *)(g_mem+0x1d700))
+#define DAT_1000_d704 (*(undefined2 *)(g_mem+0x1d704))
+#define DAT_1000_d70a (*(undefined2 *)(g_mem+0x1d70a))
+#define DAT_1000_d710 (*(undefined2 *)(g_mem+0x1d710))
+#define DAT_1000_d716 (*(undefined2 *)(g_mem+0x1d716))
+#define DAT_1000_d718 (*(undefined2 *)(g_mem+0x1d718))
+#define DAT_1000_d71a (*(undefined2 *)(g_mem+0x1d71a))
+#define DAT_1000_d726 (*(undefined2 *)(g_mem+0x1d726))
+#define DAT_1000_d746 (*(undefined2 *)(g_mem+0x1d746))
+#define DAT_1000_d758 (*(undefined2 *)(g_mem+0x1d758))
+#define DAT_1000_d75a (*(undefined2 *)(g_mem+0x1d75a))
+#define DAT_1000_d764 (*(undefined4 *)(g_mem+0x1d764))
+#define DAT_1000_d766 (*(undefined2 *)(g_mem+0x1d766))
+#define DAT_1000_d7a6 (*(undefined2 *)(g_mem+0x1d7a6))
+#define DAT_1000_d7b2 (*(undefined4 *)(g_mem+0x1d7b2))
+#define DAT_1000_d7b4 (*(undefined2 *)(g_mem+0x1d7b4))
+#define DAT_1000_d7f6 (*(undefined2 *)(g_mem+0x1d7f6))
+#define DAT_1000_d878 (*(undefined2 *)(g_mem+0x1d878))
+#define DAT_1000_d8a8 (*(undefined2 *)(g_mem+0x1d8a8))
+#define DAT_1000_d8aa (*(undefined2 *)(g_mem+0x1d8aa))
+#define DAT_1000_d8b4 (*(undefined2 *)(g_mem+0x1d8b4))
+#define DAT_1000_d8b6 (*(undefined2 *)(g_mem+0x1d8b6))
+#define DAT_1000_d8b8 (*(undefined2 *)(g_mem+0x1d8b8))
+#define DAT_1000_d8be (*(undefined2 *)(g_mem+0x1d8be))
+#define DAT_1000_d8c0 (*(undefined2 *)(g_mem+0x1d8c0))
+#define DAT_1000_d8c2 (*(undefined2 *)(g_mem+0x1d8c2))
+#define DAT_1000_d8c4 (*(undefined2 *)(g_mem+0x1d8c4))
+#define DAT_1000_d8c6 (*(undefined2 *)(g_mem+0x1d8c6))
+#define DAT_1000_d8ca (*(undefined2 *)(g_mem+0x1d8ca))
+#define DAT_1000_d8d2 (*(undefined2 *)(g_mem+0x1d8d2))
+#define DAT_1000_d8d4 (*(undefined2 *)(g_mem+0x1d8d4))
+#define DAT_1000_d8de (*(undefined2 *)(g_mem+0x1d8de))
+#define DAT_1000_d8e0 (*(undefined2 *)(g_mem+0x1d8e0))
+#define DAT_1000_d8e2 (*(undefined2 *)(g_mem+0x1d8e2))
+#define DAT_1000_d8e4 (*(undefined2 *)(g_mem+0x1d8e4))
+#define DAT_1000_d8e6 (*(undefined2 *)(g_mem+0x1d8e6))
+#define DAT_1000_d8e8 (*(undefined2 *)(g_mem+0x1d8e8))
+/* Event queue = linked list of 18-byte (9-word) nodes at DGROUP:0x18ea; ALL links/handles are 16-bit
+ * DGROUP near offsets (empty sentinel 0xffff), NOT host pointers.  d8e0/d8e2 are ADJACENT words so the
+ * 4-byte int** typing overlapped them and truncated every node link (patch 126; init/drain already fixed
+ * in patches 043/073).  QOFF: offset->host base pointer;  QW: the 16-bit word at a DGROUP offset. */
+#define QOFF(o) (g_mem + 0x1c000 + (uint16_t)(o))
+#define QW(o)   (*(uint16_t *)QOFF(o))
+#define DAT_1000_d8ea (*(undefined2 *)(g_mem+0x1d8ea))
+#define DAT_1000_dd6a (*(undefined2 *)(g_mem+0x1dd6a))
+#define DAT_1000_dd94 (*(undefined2 *)(g_mem+0x1dd94))
+#define DAT_1000_dd96 (*(undefined2 *)(g_mem+0x1dd96))
+#define DAT_1000_dd98 (*(undefined2 *)(g_mem+0x1dd98))
+#define DAT_1000_dd9a (*(undefined2 *)(g_mem+0x1dd9a))
+#define DAT_1000_dd9c (*(undefined2 *)(g_mem+0x1dd9c))
+#define DAT_1000_dd9e (*(undefined2 *)(g_mem+0x1dd9e))
+#define DAT_1000_dda0 (*(undefined2 *)(g_mem+0x1dda0))
+#define DAT_1000_dda2 (*(undefined2 *)(g_mem+0x1dda2))
+#define DAT_1000_dda3 (*(undefined2 *)(g_mem+0x1dda3))
+#define DAT_1000_dda4 (*(undefined2 *)(g_mem+0x1dda4))
+#define DAT_1000_dda6 (*(undefined2 *)(g_mem+0x1dda6))
+#define DAT_1000_dda8 (*(undefined2 *)(g_mem+0x1dda8))
+#define DAT_1000_ddaa (*(undefined2 *)(g_mem+0x1ddaa))
+#define DAT_1000_ddac (*(undefined2 *)(g_mem+0x1ddac))
+#define DAT_1000_ddae (*(undefined2 *)(g_mem+0x1ddae))
+#define DAT_1000_ddb0 (*(undefined2 *)(g_mem+0x1ddb0))
+#define DAT_1000_ddb2 (*(undefined2 *)(g_mem+0x1ddb2))
+#define DAT_1000_ddb4 (*(undefined2 *)(g_mem+0x1ddb4))
+#define DAT_1000_ddb6 (*(undefined2 *)(g_mem+0x1ddb6))
+#define DAT_1000_ddba (*(undefined2 *)(g_mem+0x1ddba))
+#define DAT_1000_ddba_1 (*(undefined1 *)(g_mem+0x1ddbb))
+#define DAT_1000_ddbc (*(undefined2 *)(g_mem+0x1ddbc))
+#define DAT_1000_ddbe (*(undefined2 *)(g_mem+0x1ddbe))
+#define DAT_1000_ddc0 (*(undefined2 *)(g_mem+0x1ddc0))
+#define DAT_1000_ddc4 (*(undefined2 *)(g_mem+0x1ddc4))
+#define DAT_1000_ddcf (*(undefined2 *)(g_mem+0x1ddcf))
+#define DAT_1000_ddd2 (*(undefined2 *)(g_mem+0x1ddd2))
+#define DAT_1000_dddc (*(undefined2 *)(g_mem+0x1dddc))
+#define DAT_1000_ddea (*(undefined2 *)(g_mem+0x1ddea))
+#define DAT_1000_ddf4 (*(undefined2 *)(g_mem+0x1ddf4))
+#define DAT_1000_de02 (*(undefined2 *)(g_mem+0x1de02))
+#define DAT_1000_de06 (*(undefined2 *)(g_mem+0x1de06))
+#define DAT_1000_de08 (*(undefined2 *)(g_mem+0x1de08))
+#define DAT_1000_de1c (*(undefined2 *)(g_mem+0x1de1c))
+#define DAT_1000_de1e (*(undefined2 *)(g_mem+0x1de1e))
+#define DAT_1000_de20 (*(undefined2 *)(g_mem+0x1de20))
+#define DAT_1000_de78 (*(undefined2 *)(g_mem+0x1de78))
+#define DAT_1000_de7a (*(undefined2 *)(g_mem+0x1de7a))
+#define DAT_1000_de7d (*(undefined2 *)(g_mem+0x1de7d))
+#define DAT_1000_df00 (*(undefined2 *)(g_mem+0x1df00))
+#define DAT_1000_df7e (*(undefined2 *)(g_mem+0x1df7e))
+#define DAT_1000_df80 (*(undefined2 *)(g_mem+0x1df80))
+#define DAT_1000_df84 (*(undefined2 *)(g_mem+0x1df84))
+#define DAT_1000_df86 (*(undefined2 *)(g_mem+0x1df86))
+#define DAT_1000_df88 (*(undefined2 *)(g_mem+0x1df88))
+#define DAT_1000_df8a (*(undefined2 *)(g_mem+0x1df8a))
+#define DAT_1000_df8c (*(undefined2 *)(g_mem+0x1df8c))
+#define DAT_1000_df8d (*(undefined2 *)(g_mem+0x1df8d))
+#define DAT_1000_df8e (*(undefined2 *)(g_mem+0x1df8e))
+#define DAT_1000_df8f (*(undefined2 *)(g_mem+0x1df8f))
+#define DAT_1000_df91 (*(undefined2 *)(g_mem+0x1df91))
+#define DAT_1000_df92 (*(undefined2 *)(g_mem+0x1df92))
+#define DAT_1000_df96 (*(undefined2 *)(g_mem+0x1df96))
+#define DAT_1000_e004 (*(undefined2 *)(g_mem+0x1e004))
+#define DAT_1000_e00e (*(undefined2 *)(g_mem+0x1e00e))
+#define DAT_1000_e010 (*(undefined2 *)(g_mem+0x1e010))
+#define DAT_1000_e012 (*(undefined2 *)(g_mem+0x1e012))
+#define DAT_1000_e014 (*(undefined2 *)(g_mem+0x1e014))
+#define DAT_1000_e016 (*(undefined2 *)(g_mem+0x1e016))
+#define DAT_1000_e018 (*(undefined2 *)(g_mem+0x1e018))
+#define DAT_1000_e01a (*(undefined2 *)(g_mem+0x1e01a))
+#define DAT_1000_e01c (*(undefined2 *)(g_mem+0x1e01c))
+#define DAT_1000_e01e (*(undefined2 *)(g_mem+0x1e01e))
+#define DAT_1000_e020 (*(undefined2 *)(g_mem+0x1e020))
+#define DAT_1000_e022 (*(undefined2 *)(g_mem+0x1e022))
+#define DAT_1000_e024 (*(undefined2 *)(g_mem+0x1e024))
+#define DAT_1000_e026 (*(undefined2 *)(g_mem+0x1e026))
+#define DAT_1000_e028 (*(undefined2 *)(g_mem+0x1e028))
+#define DAT_1000_e02a (*(undefined2 *)(g_mem+0x1e02a))
+#define DAT_1000_e02c (*(undefined2 *)(g_mem+0x1e02c))
+#define DAT_1000_e02e (*(undefined2 *)(g_mem+0x1e02e))
+#define DAT_1000_e030 (*(undefined2 *)(g_mem+0x1e030))
+#define DAT_1000_e031 (*(undefined2 *)(g_mem+0x1e031))
+#define DAT_1000_e032 (*(undefined2 *)(g_mem+0x1e032))
+#define DAT_1000_e034 (*(undefined2 *)(g_mem+0x1e034))
+#define DAT_1000_e036 (*(undefined2 *)(g_mem+0x1e036))
+#define DAT_1000_e038 (*(undefined2 *)(g_mem+0x1e038))
+#define DAT_1000_e03a (*(undefined2 *)(g_mem+0x1e03a))
+#define DAT_1000_e03c (*(undefined2 *)(g_mem+0x1e03c))
+#define DAT_1000_e040 (*(undefined2 *)(g_mem+0x1e040))
+#define DAT_1000_e64a (*(undefined2 *)(g_mem+0x1e64a))
+#define DAT_1000_e672 (*(undefined2 *)(g_mem+0x1e672))
+#define DAT_1000_e674 (*(int **)(g_mem+0x1e674))
+#define DAT_1000_e676 (*(undefined2 *)(g_mem+0x1e676))
+#define DAT_1000_e678 (*(undefined2 *)(g_mem+0x1e678))
+#define DAT_1000_e67a (*(undefined2 *)(g_mem+0x1e67a))
+#define DAT_1000_e67c (*(undefined2 *)(g_mem+0x1e67c))
+#define DAT_1000_e67e (*(undefined2 *)(g_mem+0x1e67e))
+#define DAT_1000_e680 (*(undefined2 *)(g_mem+0x1e680))
+#define DAT_1000_e68c (*(undefined2 *)(g_mem+0x1e68c))
+#define DAT_1000_e68e (*(undefined2 *)(g_mem+0x1e68e))
+#define DAT_1000_e6e6 (*(undefined2 *)(g_mem+0x1e6e6))
+#define DAT_1000_e7b0 (*(undefined2 *)(g_mem+0x1e7b0))
+#define DAT_1000_e7b2 (*(undefined2 *)(g_mem+0x1e7b2))
+#define DAT_1000_e7b4 (*(undefined2 *)(g_mem+0x1e7b4))
+#define DAT_1000_e7b6 (*(undefined2 *)(g_mem+0x1e7b6))
+#define DAT_1000_e7b8 (*(undefined2 *)(g_mem+0x1e7b8))
+#define DAT_1000_e7ba (*(undefined2 *)(g_mem+0x1e7ba))
+#define DAT_1000_e7bc (*(undefined2 *)(g_mem+0x1e7bc))
+#define DAT_1000_e7be (*(undefined2 *)(g_mem+0x1e7be))
+#define DAT_1000_e7c0 (*(undefined2 *)(g_mem+0x1e7c0))
+#define DAT_1000_e7c2 (*(undefined2 *)(g_mem+0x1e7c2))
+#define DAT_1000_e7c4 (*(undefined2 *)(g_mem+0x1e7c4))
+#define DAT_1000_e7c6 (*(undefined2 *)(g_mem+0x1e7c6))
+#define DAT_1000_e7c8 (*(undefined2 *)(g_mem+0x1e7c8))
+#define DAT_1000_e7ca (*(undefined2 *)(g_mem+0x1e7ca))
+#define DAT_1000_e7cc (*(undefined2 *)(g_mem+0x1e7cc))
+#define DAT_1000_e7ce (*(undefined2 *)(g_mem+0x1e7ce))
+#define DAT_1000_e7d0 (*(undefined2 *)(g_mem+0x1e7d0))
+#define DAT_1000_e7d2 (*(undefined2 *)(g_mem+0x1e7d2))
+#define DAT_1000_e7d4 (*(undefined2 *)(g_mem+0x1e7d4))
+#define DAT_1000_e7d6 (*(undefined2 *)(g_mem+0x1e7d6))
+#define DAT_1000_e7d8 (*(undefined2 *)(g_mem+0x1e7d8))
+#define DAT_1000_e7da (*(undefined2 *)(g_mem+0x1e7da))
+#define DAT_1000_e7dc (*(undefined2 *)(g_mem+0x1e7dc))
+#define DAT_1000_e7de (*(undefined2 *)(g_mem+0x1e7de))
+#define DAT_1000_e7e2 (*(undefined2 *)(g_mem+0x1e7e2))
+#define DAT_1000_e7e4 (*(undefined2 *)(g_mem+0x1e7e4))
+#define DAT_1000_e7e6 (*(undefined2 *)(g_mem+0x1e7e6))
+#define DAT_1000_e7e8 (*(undefined2 *)(g_mem+0x1e7e8))
+#define DAT_1000_e7ec (*(undefined2 *)(g_mem+0x1e7ec))
+#define DAT_1000_e7f0 (*(undefined2 *)(g_mem+0x1e7f0))
+#define DAT_1000_eb50 (*(undefined4 *)(g_mem+0x1eb50))
+#define DAT_1000_ec2a (*(undefined2 *)(g_mem+0x1ec2a))
+#define DAT_1000_ef00 (*(undefined2 *)(g_mem+0x1ef00))
+#define DAT_1000_fad2 (*(undefined2 *)(g_mem+0x1fad2))
+#define DAT_1000_fad4 (*(int **)(g_mem+0x1fad4))
+#define DAT_1000_fad6 (*(undefined2 *)(g_mem+0x1fad6))
+#define DAT_1000_fad8 (*(undefined2 *)(g_mem+0x1fad8))
+#define DAT_1000_fada (*(undefined2 *)(g_mem+0x1fada))
+#define DAT_1000_faf0 (*(undefined2 *)(g_mem+0x1faf0))
+#define DAT_1000_faf2 (*(undefined2 *)(g_mem+0x1faf2))
+#define DAT_1000_fafa (*(undefined2 *)(g_mem+0x1fafa))
+#define DAT_1000_fafc (*(undefined2 *)(g_mem+0x1fafc))
+#define DAT_1000_fafe (*(undefined2 *)(g_mem+0x1fafe))
+#define DAT_1000_fe00 (*(undefined2 *)(g_mem+0x1fe00))
+#define DAT_1000_fe02 (*(undefined2 *)(g_mem+0x1fe02))
+#define DAT_1000_fe04 (*(undefined2 *)(g_mem+0x1fe04))
+#define DAT_1000_fe06 (*(undefined2 *)(g_mem+0x1fe06))
+#define DAT_1000_fe08 (*(int **)(g_mem+0x1fe08))
+#define DAT_1000_fe0c (*(undefined2 *)(g_mem+0x1fe0c))
+#define DAT_1000_fe0e (*(undefined2 *)(g_mem+0x1fe0e))
+#define DAT_1000_fe10 (*(undefined2 *)(g_mem+0x1fe10))
+#define DAT_1000_fe12 (*(undefined2 *)(g_mem+0x1fe12))
+#define DAT_1000_fe14 (*(int **)(g_mem+0x1fe14))
+#define DAT_1000_fe16 (*(undefined2 *)(g_mem+0x1fe16))
+#define DAT_2000_0a84 (*(undefined2 *)(g_mem+0x20a84))
+#define DAT_2000_0a86 (*(uint16_t *)(g_mem+0x20a86))  /* PATCH 185: 22dd script-interpreter cursor = a WORD DGROUP near-offset, not an int** host ptr */
+#define DAT_2000_0a88 (*(undefined2 *)(g_mem+0x20a88))
+#define DAT_2000_0aba (*(undefined2 *)(g_mem+0x20aba))
+#define DAT_2000_0ac8 (*(undefined2 *)(g_mem+0x20ac8))
+#define DAT_2000_0ad6 (*(undefined2 *)(g_mem+0x20ad6))
+#define DAT_2000_0ae8 (*(undefined2 *)(g_mem+0x20ae8))
+#define DAT_2000_0b9e (*(int **)(g_mem+0x20b9e))
+#define DAT_2000_0ba0 (*(undefined2 *)(g_mem+0x20ba0))
+#define DAT_2000_1951 (*(undefined4 *)(g_mem+0x21951))
+#define DAT_2000_1b4d (*(undefined2 *)(g_mem+0x21b4d))
+#define DAT_2000_259a (*(undefined4 *)(g_mem+0x2259a))
+#define DAT_2000_272a (*(undefined4 *)(g_mem+0x2272a))
+#define DAT_2000_2ad4 (*(undefined2 *)(g_mem+0x22ad4))
+#define DAT_2000_2ad6 (*(int **)(g_mem+0x22ad6))
+#define DAT_2000_2ad8 (*(undefined2 *)(g_mem+0x22ad8))
+#define DAT_2000_2ada (*(int **)(g_mem+0x22ada))
+#define DAT_2000_2adc (*(undefined2 *)(g_mem+0x22adc))
+#define DAT_2000_2ade (*(undefined2 *)(g_mem+0x22ade))
+#define DAT_2000_2ae4 (*(undefined2 *)(g_mem+0x22ae4))
+#define DAT_2000_2ae6 (*(undefined2 *)(g_mem+0x22ae6))
+#define DAT_2000_2ae8 (*(undefined2 *)(g_mem+0x22ae8))
+#define DAT_2000_2aec (*(undefined2 *)(g_mem+0x22aec))
+#define DAT_2000_2b5c (*(undefined2 *)(g_mem+0x22b5c))
+#define DAT_2000_2b5e (*(undefined2 *)(g_mem+0x22b5e))
+#define DAT_2000_2b64 (*(undefined2 *)(g_mem+0x22b64))
+#define DAT_2000_2b66 (*(int **)(g_mem+0x22b66))
+#define DAT_2000_2b68 (*(undefined2 *)(g_mem+0x22b68))
+#define DAT_2000_2b6a (*(undefined2 *)(g_mem+0x22b6a))
+#define DAT_2000_2b6c (*(undefined2 *)(g_mem+0x22b6c))
+#define DAT_2000_2b6e (*(undefined2 *)(g_mem+0x22b6e))
+#define DAT_2000_2b70 (*(undefined2 *)(g_mem+0x22b70))
+#define DAT_2000_2b72 (*(undefined2 *)(g_mem+0x22b72))
+#define DAT_2000_2b74 (*(int **)(g_mem+0x22b74))
+#define DAT_2000_2b76 (*(undefined2 *)(g_mem+0x22b76))
+#define DAT_2000_2b78 (*(undefined2 *)(g_mem+0x22b78))
+#define DAT_2000_2b7a (*(undefined2 *)(g_mem+0x22b7a))
+#define DAT_2000_2b7e (*(undefined2 *)(g_mem+0x22b7e))
+#define DAT_2000_2b80 (*(undefined2 *)(g_mem+0x22b80))
+#define DAT_2000_2b82 (*(undefined2 *)(g_mem+0x22b82))
+#define DAT_2000_2b84 (*(undefined2 *)(g_mem+0x22b84))
+#define DAT_2000_2bc2 (*(undefined2 *)(g_mem+0x22bc2))
+#define DAT_2000_2bca (*(undefined2 *)(g_mem+0x22bca))
+#define DAT_2000_2bcc (*(undefined2 *)(g_mem+0x22bcc))
+#define DAT_2000_2bce (*(undefined2 *)(g_mem+0x22bce))
+#define DAT_2000_2bd0 (*(undefined2 *)(g_mem+0x22bd0))
+#define DAT_2000_2bd2 (*(undefined2 *)(g_mem+0x22bd2))
+#define DAT_2000_2bf0 (*(int **)(g_mem+0x22bf0))
+#define DAT_2000_2c02 (*(undefined2 *)(g_mem+0x22c02))
+#define DAT_2000_2c04 (*(undefined2 *)(g_mem+0x22c04))
+#define DAT_2000_2c06 (*(undefined2 *)(g_mem+0x22c06))
+#define DAT_2000_2c08 (*(undefined2 *)(g_mem+0x22c08))
+#define DAT_2000_2c0e (*(undefined2 *)(g_mem+0x22c0e))
+#define DAT_2000_2c10 (*(undefined2 *)(g_mem+0x22c10))
+#define DAT_2000_2c12 (*(undefined2 *)(g_mem+0x22c12))
+#define DAT_2000_2c14 (*(undefined2 *)(g_mem+0x22c14))
+#define DAT_2000_2c16 (*(undefined2 *)(g_mem+0x22c16))
+#define DAT_2000_2c18 (*(undefined2 *)(g_mem+0x22c18))
+#define DAT_2000_2c1a (*(undefined2 *)(g_mem+0x22c1a))
+#define DAT_2000_2c1c (*(undefined2 *)(g_mem+0x22c1c))
+#define DAT_2000_2c1e (*(undefined2 *)(g_mem+0x22c1e))
+#define DAT_2000_2c26 (*(undefined2 *)(g_mem+0x22c26))
+#define DAT_2000_2c28 (*(undefined2 *)(g_mem+0x22c28))
+#define DAT_2000_2c2a (*(undefined2 *)(g_mem+0x22c2a))
+#define DAT_2000_2c38 (*(undefined2 *)(g_mem+0x22c38))
+#define DAT_2000_2c3a (*(undefined2 *)(g_mem+0x22c3a))
+#define DAT_2000_2c3e (*(undefined2 *)(g_mem+0x22c3e))
+#define DAT_2000_2c40 (*(undefined2 *)(g_mem+0x22c40))
+#define DAT_2000_2c42 (*(undefined2 *)(g_mem+0x22c42))
+#define DAT_2000_2c43 (*(undefined2 *)(g_mem+0x22c43))
+#define DAT_2000_2c44 (*(undefined2 *)(g_mem+0x22c44))
+#define DAT_2000_2c45 (*(undefined2 *)(g_mem+0x22c45))
+#define DAT_2000_2c46 (*(undefined2 *)(g_mem+0x22c46))
+#define DAT_2000_2c4e (*(undefined2 *)(g_mem+0x22c4e))
+#define DAT_2000_2c50 (*(undefined2 *)(g_mem+0x22c50))
+#define DAT_2000_2c52 (*(undefined2 *)(g_mem+0x22c52))
+#define DAT_2000_2c54 (*(undefined2 *)(g_mem+0x22c54))
+#define DAT_2000_2c56 (*(undefined2 *)(g_mem+0x22c56))
+#define DAT_2000_2c63 (*(undefined2 *)(g_mem+0x22c63))
+#define DAT_2000_2c65 (*(undefined2 *)(g_mem+0x22c65))
+#define DAT_2000_2c6d (*(undefined2 *)(g_mem+0x22c6d))
+#define DAT_2000_2c7c (*(undefined2 *)(g_mem+0x22c7c))
+#define DAT_2000_2cae (*(undefined2 *)(g_mem+0x22cae))
+#define DAT_2000_2cb0 (*(undefined2 *)(g_mem+0x22cb0))
+#define DAT_2000_2cc0 (*(undefined2 *)(g_mem+0x22cc0))
+#define DAT_2000_2cc2 (*(int **)(g_mem+0x22cc2))
+#define DAT_2000_2cca (*(undefined2 *)(g_mem+0x22cca))
+#define DAT_2000_2ccc (*(undefined2 *)(g_mem+0x22ccc))
+#define DAT_2000_2cdb (*(undefined2 *)(g_mem+0x22cdb))
+#define DAT_2000_2cde (*(undefined2 *)(g_mem+0x22cde))
+#define DAT_2000_2ce0 (*(undefined2 *)(g_mem+0x22ce0))
+#define DAT_2000_2ce2 (*(undefined2 *)(g_mem+0x22ce2))
+#define DAT_2000_2ce4 (*(undefined2 *)(g_mem+0x22ce4))
+#define DAT_2000_2ce6 (*(undefined1 *)(g_mem+0x22ce6))
+#define DAT_2000_2ce7 (*(undefined1 *)(g_mem+0x22ce7))
+#define DAT_2000_2ce8 (*(undefined2 *)(g_mem+0x22ce8))
+#define DAT_2000_2d0f (*(undefined2 *)(g_mem+0x22d0f))
+#define DAT_2000_2d10 (*(undefined2 *)(g_mem+0x22d10))
+#define DAT_2000_2d12 (*(undefined2 *)(g_mem+0x22d12))
+#define DAT_2000_2d14 (*(undefined2 *)(g_mem+0x22d14))
+#define DAT_2000_2d16 (*(undefined2 *)(g_mem+0x22d16))
+#define DAT_2000_2d18 (*(undefined2 *)(g_mem+0x22d18))
+#define DAT_2000_2d1a (*(undefined2 *)(g_mem+0x22d1a))
+#define DAT_2000_2d2c (*(undefined2 *)(g_mem+0x22d2c))
+#define DAT_2000_2d2e (*(undefined2 *)(g_mem+0x22d2e))
+#define DAT_2000_2d2f (*(undefined2 *)(g_mem+0x22d2f))
+#define DAT_2000_2d32 (*(undefined2 *)(g_mem+0x22d32))
+#define DAT_2000_2d34 (*(int **)(g_mem+0x22d34))
+#define DAT_2000_2d38 (*(undefined2 *)(g_mem+0x22d38))
+#define DAT_2000_2d3a (*(undefined2 *)(g_mem+0x22d3a))
+#define DAT_2000_2d3b (*(undefined2 *)(g_mem+0x22d3b))
+#define DAT_2000_2d3c (*(undefined2 *)(g_mem+0x22d3c))
+#define DAT_2000_2d5c (*(undefined2 *)(g_mem+0x22d5c))
+#define DAT_2000_2d84 (*(undefined2 *)(g_mem+0x22d84))
+#define DAT_2000_2d86 (*(undefined2 *)(g_mem+0x22d86))
+#define DAT_2000_2d99 (*(undefined2 *)(g_mem+0x22d99))
+#define DAT_2000_2d9b (*(undefined2 *)(g_mem+0x22d9b))
+#define DAT_2000_2d9d (*(undefined2 *)(g_mem+0x22d9d))
+#define DAT_2000_2da0 (*(undefined2 *)(g_mem+0x22da0))
+#define DAT_2000_2da2 (*(undefined2 *)(g_mem+0x22da2))
+#define DAT_2000_2da4 (*(undefined2 *)(g_mem+0x22da4))
+#define DAT_2000_2da5 (*(undefined2 *)(g_mem+0x22da5))
+#define DAT_2000_2da6 (*(undefined2 *)(g_mem+0x22da6))
+#define DAT_2000_2da7 (*(undefined2 *)(g_mem+0x22da7))
+#define DAT_2000_2da8 (*(undefined2 *)(g_mem+0x22da8))
+#define DAT_2000_2da9 (*(undefined2 *)(g_mem+0x22da9))
+#define DAT_2000_2daa (*(undefined2 *)(g_mem+0x22daa))
+#define DAT_2000_2dab (*(undefined2 *)(g_mem+0x22dab))
+#define DAT_2000_2dac (*(undefined2 *)(g_mem+0x22dac))
+#define DAT_2000_2dad (*(undefined2 *)(g_mem+0x22dad))
+#define DAT_2000_2dae (*(undefined2 *)(g_mem+0x22dae))
+#define DAT_2000_2daf (*(undefined2 *)(g_mem+0x22daf))
+#define DAT_2000_2db0 (*(undefined2 *)(g_mem+0x22db0))
+#define DAT_2000_2db2 (*(undefined2 *)(g_mem+0x22db2))
+#define DAT_2000_2db4 (*(undefined2 *)(g_mem+0x22db4))
+#define DAT_2000_2db6 (*(undefined2 *)(g_mem+0x22db6))
+#define DAT_2000_2db8 (*(undefined2 *)(g_mem+0x22db8))
+#define DAT_2000_2dba (*(undefined2 *)(g_mem+0x22dba))
+#define DAT_2000_2dbc (*(undefined2 *)(g_mem+0x22dbc))
+#define DAT_2000_2dbe (*(undefined2 *)(g_mem+0x22dbe))
+#define DAT_2000_2dc0 (*(undefined2 *)(g_mem+0x22dc0))
+#define DAT_2000_2dd0 (*(undefined2 *)(g_mem+0x22dd0))
+#define DAT_2000_2e0b (*(undefined2 *)(g_mem+0x22e0b))
+#define DAT_2000_2e15 (*(undefined2 *)(g_mem+0x22e15))
+#define DAT_2000_367d (*(undefined2 *)(g_mem+0x2367d))
+#define DAT_2000_3699 (*(undefined2 *)(g_mem+0x23699))
+#define DAT_2000_37bc (*(undefined2 *)(g_mem+0x237bc))
+#define DAT_2000_37cc (*(undefined2 *)(g_mem+0x237cc))
+#define DAT_2000_37ce (*(undefined2 *)(g_mem+0x237ce))
+#define DAT_2000_37d2 (*(undefined2 *)(g_mem+0x237d2))
+#define DAT_2000_37d4 (*(undefined2 *)(g_mem+0x237d4))
+#define DAT_2000_37d6 (*(undefined2 *)(g_mem+0x237d6))
+#define DAT_2000_37d8 (*(undefined2 *)(g_mem+0x237d8))
+#define DAT_2000_37da (*(undefined2 *)(g_mem+0x237da))
+#define DAT_2000_37ea (*(undefined2 *)(g_mem+0x237ea))
+#define DAT_2000_38aa (*(undefined2 *)(g_mem+0x238aa))
+#define DAT_2000_38ac (*(undefined2 *)(g_mem+0x238ac))
+#define DAT_2000_38ae (*(undefined2 *)(g_mem+0x238ae))
+#define DAT_2000_38b0 (*(undefined2 *)(g_mem+0x238b0))
+#define DAT_2000_38b2 (*(undefined2 *)(g_mem+0x238b2))
+#define DAT_2000_38b4 (*(undefined2 *)(g_mem+0x238b4))
+#define DAT_2000_399a (*(undefined2 *)(g_mem+0x2399a))
+#define DAT_2000_399c (*(undefined2 *)(g_mem+0x2399c))
+#define DAT_2000_399e (*(undefined2 *)(g_mem+0x2399e))
+#define DAT_2000_39a0 (*(undefined2 *)(g_mem+0x239a0))
+#define DAT_2000_39a2 (*(undefined2 *)(g_mem+0x239a2))
+#define DAT_2000_39a4 (*(undefined2 *)(g_mem+0x239a4))
+#define DAT_2000_39a8 (*(undefined2 *)(g_mem+0x239a8))
+#define DAT_2000_39a9 (*(undefined2 *)(g_mem+0x239a9))
+#define DAT_2000_39c3 (*(undefined2 *)(g_mem+0x239c3))
+#define DAT_2000_39c5 (*(undefined2 *)(g_mem+0x239c5))
+#define DAT_2000_39cd (*(undefined2 *)(g_mem+0x239cd))
+#define DAT_2000_39dd (*(undefined2 *)(g_mem+0x239dd))
+#define DAT_2000_39ed (*(undefined2 *)(g_mem+0x239ed))
+#define DAT_2000_39fd (*(undefined2 *)(g_mem+0x239fd))
+#define DAT_2000_3a0d (*(undefined2 *)(g_mem+0x23a0d))
+#define DAT_2000_3a13 (*(undefined2 *)(g_mem+0x23a13))
+#define DAT_2000_3a14 (*(undefined2 *)(g_mem+0x23a14))
+#define DAT_2000_3a1c (*(undefined2 *)(g_mem+0x23a1c))
+#define DAT_2000_3a1e (*(undefined2 *)(g_mem+0x23a1e))
+#define DAT_2000_3a20 (*(undefined2 *)(g_mem+0x23a20))
+#define DAT_2000_3a22 (*(undefined2 *)(g_mem+0x23a22))
+#define DAT_2000_3a24 (*(undefined2 *)(g_mem+0x23a24))
+#define DAT_2000_3a26 (*(undefined2 *)(g_mem+0x23a26))
+#define DAT_2000_3a28 (*(undefined2 *)(g_mem+0x23a28))
+#define DAT_2000_3a2a (*(undefined2 *)(g_mem+0x23a2a))
+#define DAT_2000_3a2c (*(undefined2 *)(g_mem+0x23a2c))
+#define DAT_2000_3a2e (*(undefined2 *)(g_mem+0x23a2e))
+#define DAT_2000_3a30 (*(undefined2 *)(g_mem+0x23a30))
+#define DAT_2000_3a32 (*(undefined2 *)(g_mem+0x23a32))
+#define DAT_2000_3a34 (*(undefined2 *)(g_mem+0x23a34))
+#define DAT_2000_3a35 (*(undefined2 *)(g_mem+0x23a35))
+#define DAT_2000_3a36 (*(undefined2 *)(g_mem+0x23a36))
+#define DAT_2000_3a38 (*(undefined2 *)(g_mem+0x23a38))
+#define DAT_2000_3a3c (*(undefined2 *)(g_mem+0x23a3c))
+#define DAT_2000_3a40 (*(undefined2 *)(g_mem+0x23a40))
+#define DAT_2000_3a44 (*(undefined2 *)(g_mem+0x23a44))
+#define DAT_2000_3a48 (*(undefined2 *)(g_mem+0x23a48))
+#define DAT_2000_3a50 (*(undefined2 *)(g_mem+0x23a50))
+#define DAT_2000_3a52 (*(undefined2 *)(g_mem+0x23a52))
+#define DAT_2000_3aa2 (*(undefined2 *)(g_mem+0x23aa2))
+#define DAT_2000_3adc (*(undefined2 *)(g_mem+0x23adc))
+#define DAT_2000_3ae0 (*(int **)(g_mem+0x23ae0))
+#define DAT_2000_3ae2 (*(undefined2 *)(g_mem+0x23ae2))
+#define DAT_2000_3ae3 (*(undefined2 *)(g_mem+0x23ae3))
+#define DAT_2000_3ae5 (*(undefined2 *)(g_mem+0x23ae5))
+#define DAT_2000_3ae7 (*(undefined2 *)(g_mem+0x23ae7))
+#define DAT_2000_3ae9 (*(undefined2 *)(g_mem+0x23ae9))
+#define DAT_2000_3aea (*(undefined2 *)(g_mem+0x23aea))
+#define DAT_2000_3aec (*(undefined2 *)(g_mem+0x23aec))
+#define DAT_2000_3aee (*(undefined2 *)(g_mem+0x23aee))
+#define DAT_2000_3b12 (*(undefined2 *)(g_mem+0x23b12))
+#define DAT_2000_3b18 (*(undefined2 *)(g_mem+0x23b18))
+#define DAT_2000_3b1a (*(undefined2 *)(g_mem+0x23b1a))
+#define DAT_2000_3b1c (*(undefined2 *)(g_mem+0x23b1c))
+#define DAT_2000_3b1e (*(undefined2 *)(g_mem+0x23b1e))
+#define DAT_2000_3b1f (*(undefined2 *)(g_mem+0x23b1f))
+#define DAT_2000_3b20 (*(undefined2 *)(g_mem+0x23b20))
+#define DAT_2000_3b84 (*(undefined2 *)(g_mem+0x23b84))
+#define DAT_2000_3b88 (*(undefined2 *)(g_mem+0x23b88))
+#define DAT_2000_3b94 (*(undefined2 *)(g_mem+0x23b94))
+#define DAT_2000_3b98 (*(undefined2 *)(g_mem+0x23b98))
+#define DAT_2000_3b9c (*(undefined2 *)(g_mem+0x23b9c))
+#define DAT_2000_3b9e (*(undefined2 *)(g_mem+0x23b9e))
+#define DAT_2000_3bb6 (*(undefined2 *)(g_mem+0x23bb6))
+#define DAT_2000_3bb8 (*(undefined2 *)(g_mem+0x23bb8))
+#define DAT_2000_3bba (*(undefined2 *)(g_mem+0x23bba))
+#define DAT_2000_3bbc (*(undefined2 *)(g_mem+0x23bbc))
+#define DAT_2000_3bbe (*(undefined2 *)(g_mem+0x23bbe))
+#define DAT_2000_3bc0 (*(undefined2 *)(g_mem+0x23bc0))
+#define DAT_2000_3bc2 (*(undefined2 *)(g_mem+0x23bc2))
+#define DAT_2000_3bc4 (*(undefined2 *)(g_mem+0x23bc4))
+#define DAT_2000_3bd2 (*(undefined2 *)(g_mem+0x23bd2))
+#define DAT_2000_3bd4 (*(undefined2 *)(g_mem+0x23bd4))
+#define DAT_2000_3bd6 (*(undefined2 *)(g_mem+0x23bd6))
+#define DAT_2000_3bd8 (*(undefined2 *)(g_mem+0x23bd8))
+#define DAT_2000_3bdc (*(undefined2 *)(g_mem+0x23bdc))
+#define DAT_2000_3be0 (*(undefined2 *)(g_mem+0x23be0))
+#define DAT_2000_3be4 (*(undefined2 *)(g_mem+0x23be4))
+#define DAT_2000_3be8 (*(undefined2 *)(g_mem+0x23be8))
+#define DAT_2000_3bec (*(undefined2 *)(g_mem+0x23bec))
+#define DAT_2000_3bf8 (*(undefined2 *)(g_mem+0x23bf8))
+#define DAT_2000_3bfa (*(undefined2 *)(g_mem+0x23bfa))
+#define DAT_2000_3bfc (*(undefined2 *)(g_mem+0x23bfc))
+#define DAT_2000_3bfe (*(undefined2 *)(g_mem+0x23bfe))
+#define DAT_2000_3c00 (*(undefined2 *)(g_mem+0x23c00))
+#define DAT_2000_3c02 (*(undefined2 *)(g_mem+0x23c02))
+#define DAT_2000_3c04 (*(undefined2 *)(g_mem+0x23c04))
+#define DAT_2000_3c06 (*(undefined2 *)(g_mem+0x23c06))
+#define DAT_2000_3c08 (*(undefined2 *)(g_mem+0x23c08))
+#define DAT_2000_3c0e (*(undefined2 *)(g_mem+0x23c0e))
+#define DAT_2000_3c10 (*(undefined2 *)(g_mem+0x23c10))
+#define DAT_2000_3c16 (*(undefined2 *)(g_mem+0x23c16))
+#define DAT_2000_3c18 (*(undefined2 *)(g_mem+0x23c18))
+#define DAT_2000_3c1c (*(undefined2 *)(g_mem+0x23c1c))
+#define DAT_2000_3c20 (*(undefined2 *)(g_mem+0x23c20))
+#define DAT_2000_3c25 (*(undefined2 *)(g_mem+0x23c25))
+#define DAT_2000_3c27 (*(undefined2 *)(g_mem+0x23c27))
+#define DAT_2000_3c2c (*(undefined2 *)(g_mem+0x23c2c))
+#define DAT_2000_3c4e (*(undefined2 *)(g_mem+0x23c4e))
+#define DAT_2000_3c50 (*(int **)(g_mem+0x23c50))
+#define DAT_2000_3c52 (*(undefined2 *)(g_mem+0x23c52))
+#define DAT_2000_3d06 (*(undefined2 *)(g_mem+0x23d06))
+#define DAT_2000_3d0e (*(undefined2 *)(g_mem+0x23d0e))
+#define DAT_2000_3d1a (*(undefined2 *)(g_mem+0x23d1a))
+#define DAT_2000_3d1c (*(undefined2 *)(g_mem+0x23d1c))
+#define DAT_2000_3d1d (*(undefined2 *)(g_mem+0x23d1d))
+#define DAT_2000_3d1e (*(undefined2 *)(g_mem+0x23d1e))
+#define DAT_2000_3d20 (*(undefined2 *)(g_mem+0x23d20))
+#define DAT_2000_3d22 (*(undefined2 *)(g_mem+0x23d22))
+#define DAT_2000_3d24 (*(undefined2 *)(g_mem+0x23d24))
+#define DAT_2000_3d26 (*(undefined2 *)(g_mem+0x23d26))
+#define DAT_2000_3d28 (*(undefined2 *)(g_mem+0x23d28))
+#define DAT_2000_3d29 (*(undefined2 *)(g_mem+0x23d29))
+#define DAT_2000_3d2a (*(undefined2 *)(g_mem+0x23d2a))
+#define DAT_2000_3d40 (*(undefined2 *)(g_mem+0x23d40))
+#define DAT_2000_4689 (*(undefined2 *)(g_mem+0x24689))
+#define DAT_2000_4690 (*(undefined2 *)(g_mem+0x24690))
+#define DAT_2000_4692 (*(undefined2 *)(g_mem+0x24692))
+#define DAT_2000_4697 (*(undefined2 *)(g_mem+0x24697))
+#define DAT_2000_46db (*(undefined2 *)(g_mem+0x246db))
+#define DAT_2000_46f4 (*(undefined2 *)(g_mem+0x246f4))
+#define DAT_2000_47bd (*(undefined2 *)(g_mem+0x247bd))
+#define DAT_2000_47c2 (*(undefined2 *)(g_mem+0x247c2))
+#define DAT_2000_47c4 (*(undefined2 *)(g_mem+0x247c4))
+#define DAT_2000_47c9 (*(undefined2 *)(g_mem+0x247c9))
+#define DAT_2000_47ca (*(undefined2 *)(g_mem+0x247ca))
+#define DAT_2000_47cb (*(undefined2 *)(g_mem+0x247cb))
+#define DAT_2000_47cc (*(undefined2 *)(g_mem+0x247cc))
+#define DAT_2000_47cd (*(undefined2 *)(g_mem+0x247cd))
+#define DAT_2000_47ce (*(undefined2 *)(g_mem+0x247ce))
+#define DAT_2000_47cf (*(undefined2 *)(g_mem+0x247cf))
+#define DAT_2000_47d0 (*(undefined2 *)(g_mem+0x247d0))
+#define DAT_2000_47d1 (*(undefined2 *)(g_mem+0x247d1))
+#define DAT_2000_47d2 (*(undefined2 *)(g_mem+0x247d2))
+#define DAT_2000_47d3 (*(undefined2 *)(g_mem+0x247d3))
+#define DAT_2000_47d4 (*(undefined2 *)(g_mem+0x247d4))
+#define DAT_2000_47d5 (*(undefined2 *)(g_mem+0x247d5))
+#define DAT_2000_47d6 (*(undefined2 *)(g_mem+0x247d6))
+#define DAT_2000_47d7 (*(undefined2 *)(g_mem+0x247d7))
+#define DAT_2000_47da (*(undefined2 *)(g_mem+0x247da))
+#define DAT_2000_47dd (*(undefined2 *)(g_mem+0x247dd))
+#define DAT_2000_47e0 (*(undefined2 *)(g_mem+0x247e0))
+#define DAT_2000_47e4 (*(undefined2 *)(g_mem+0x247e4))
+#define DAT_2000_47e7 (*(undefined2 *)(g_mem+0x247e7))
+#define DAT_2000_47ea (*(undefined2 *)(g_mem+0x247ea))
+#define DAT_2000_47ed (*(undefined2 *)(g_mem+0x247ed))
+#define DAT_2000_47f0 (*(undefined2 *)(g_mem+0x247f0))
+#define DAT_2000_47f3 (*(undefined2 *)(g_mem+0x247f3))
+#define DAT_2000_47f6 (*(undefined2 *)(g_mem+0x247f6))
+#define DAT_2000_47f9 (*(undefined2 *)(g_mem+0x247f9))
+#define DAT_2000_47fc (*(undefined2 *)(g_mem+0x247fc))
+#define DAT_2000_47ff (*(undefined2 *)(g_mem+0x247ff))
+#define DAT_2000_4802 (*(undefined2 *)(g_mem+0x24802))
+#define DAT_2000_4803 (*(undefined2 *)(g_mem+0x24803))
+#define DAT_2000_4804 (*(undefined2 *)(g_mem+0x24804))
+#define DAT_2000_4805 (*(undefined2 *)(g_mem+0x24805))
+#define DAT_2000_4806 (*(undefined2 *)(g_mem+0x24806))
+#define DAT_2000_480a (*(undefined2 *)(g_mem+0x2480a))
+#define DAT_2000_480e (*(undefined2 *)(g_mem+0x2480e))
+#define DAT_2000_4810 (*(undefined2 *)(g_mem+0x24810))
+#define DAT_2000_4812 (*(undefined2 *)(g_mem+0x24812))
+#define DAT_2000_4814 (*(int **)(g_mem+0x24814))
+#define DAT_2000_4816 (*(undefined2 *)(g_mem+0x24816))
+#define DAT_2000_4817 (*(undefined2 *)(g_mem+0x24817))
+#define DAT_2000_4819 (*(int **)(g_mem+0x24819))
+#define DAT_2000_481b (*(undefined2 *)(g_mem+0x2481b))
+#define DAT_2000_481d (*(undefined2 *)(g_mem+0x2481d))
+#define DAT_2000_4821 (*(undefined2 *)(g_mem+0x24821))
+#define DAT_2000_4825 (*(undefined2 *)(g_mem+0x24825))
+#define DAT_2000_4827 (*(undefined2 *)(g_mem+0x24827))
+#define DAT_2000_482d (*(undefined2 *)(g_mem+0x2482d))
+#define DAT_2000_482f (*(undefined2 *)(g_mem+0x2482f))
+#define DAT_2000_4835 (*(undefined2 *)(g_mem+0x24835))
+#define DAT_2000_4837 (*(undefined2 *)(g_mem+0x24837))
+#define DAT_2000_483d (*(undefined2 *)(g_mem+0x2483d))
+#define DAT_2000_483f (*(undefined2 *)(g_mem+0x2483f))
+#define DAT_2000_485d (*(undefined2 *)(g_mem+0x2485d))
+#define DAT_2000_48fa (*(undefined2 *)(g_mem+0x248fa))
+#define DAT_2000_48ff (*(undefined2 *)(g_mem+0x248ff))
+#define DAT_2000_4901 (*(undefined2 *)(g_mem+0x24901))
+#define DAT_2000_4903 (*(undefined2 *)(g_mem+0x24903))
+#define DAT_2000_4905 (*(undefined2 *)(g_mem+0x24905))
+#define DAT_2000_4907 (*(undefined2 *)(g_mem+0x24907))
+#define DAT_2000_4909 (*(undefined2 *)(g_mem+0x24909))
+#define DAT_2000_490c (*(undefined2 *)(g_mem+0x2490c))
+#define DAT_2000_490f (*(undefined2 *)(g_mem+0x2490f))
+#define DAT_2000_4912 (*(undefined2 *)(g_mem+0x24912))
+#define DAT_2000_4915 (*(undefined2 *)(g_mem+0x24915))
+#define DAT_2000_4917 (*(undefined2 *)(g_mem+0x24917))
+#define DAT_2000_4919 (*(undefined2 *)(g_mem+0x24919))
+#define DAT_2000_491b (*(undefined2 *)(g_mem+0x2491b))
+#define DAT_2000_491d (*(undefined2 *)(g_mem+0x2491d))
+#define DAT_2000_491f (*(undefined2 *)(g_mem+0x2491f))
+#define DAT_2000_4922 (*(undefined2 *)(g_mem+0x24922))
+#define DAT_2000_4925 (*(undefined2 *)(g_mem+0x24925))
+#define DAT_2000_4928 (*(undefined2 *)(g_mem+0x24928))
+#define DAT_2000_492b (*(undefined2 *)(g_mem+0x2492b))
+#define DAT_2000_492d (*(undefined2 *)(g_mem+0x2492d))
+#define DAT_2000_492f (*(undefined2 *)(g_mem+0x2492f))
+#define DAT_2000_4931 (*(undefined2 *)(g_mem+0x24931))
+#define DAT_2000_4933 (*(undefined2 *)(g_mem+0x24933))
+#define DAT_2000_4935 (*(undefined2 *)(g_mem+0x24935))
+#define DAT_2000_4938 (*(undefined2 *)(g_mem+0x24938))
+#define DAT_2000_493b (*(undefined2 *)(g_mem+0x2493b))
+#define DAT_2000_493e (*(undefined2 *)(g_mem+0x2493e))
+#define DAT_2000_4941 (*(undefined2 *)(g_mem+0x24941))
+#define DAT_2000_4943 (*(undefined2 *)(g_mem+0x24943))
+#define DAT_2000_4945 (*(undefined2 *)(g_mem+0x24945))
+#define DAT_2000_4947 (*(undefined2 *)(g_mem+0x24947))
+#define DAT_2000_4949 (*(undefined2 *)(g_mem+0x24949))
+#define DAT_2000_494b (*(undefined2 *)(g_mem+0x2494b))
+#define DAT_2000_494e (*(undefined2 *)(g_mem+0x2494e))
+#define DAT_2000_4951 (*(undefined2 *)(g_mem+0x24951))
+#define DAT_2000_4954 (*(undefined2 *)(g_mem+0x24954))
+#define DAT_2000_4957 (*(undefined2 *)(g_mem+0x24957))
+#define DAT_2000_4958 (*(undefined2 *)(g_mem+0x24958))
+#define DAT_2000_4959 (*(undefined2 *)(g_mem+0x24959))
+#define DAT_2000_495a (*(undefined2 *)(g_mem+0x2495a))
+#define DAT_2000_495b (*(undefined2 *)(g_mem+0x2495b))
+#define DAT_2000_495e (*(undefined2 *)(g_mem+0x2495e))
+#define DAT_2000_495f (*(undefined2 *)(g_mem+0x2495f))
+#define DAT_2000_4961 (*(undefined2 *)(g_mem+0x24961))
+#define DAT_2000_4963 (*(undefined2 *)(g_mem+0x24963))
+#define DAT_2000_4965 (*(undefined2 *)(g_mem+0x24965))
+#define DAT_2000_4977 (*(undefined2 *)(g_mem+0x24977))
+#define DAT_2000_4979 (*(undefined2 *)(g_mem+0x24979))
+#define DAT_2000_497b (*(undefined2 *)(g_mem+0x2497b))
+#define DAT_2000_497d (*(undefined2 *)(g_mem+0x2497d))
+#define DAT_2000_497f (*(undefined2 *)(g_mem+0x2497f))
+#define DAT_2000_4998 (*(undefined2 *)(g_mem+0x24998))
+#define DAT_2000_499e (*(undefined2 *)(g_mem+0x2499e))
+#define DAT_2000_49ae (*(undefined2 *)(g_mem+0x249ae))
+#define DAT_2000_49b0 (*(undefined2 *)(g_mem+0x249b0))
+#define DAT_2000_49b2 (*(undefined2 *)(g_mem+0x249b2))
+#define DAT_2000_49b4 (*(undefined2 *)(g_mem+0x249b4))
+#define DAT_2000_49be (*(undefined2 *)(g_mem+0x249be))
+#define DAT_2000_49bf (*(undefined2 *)(g_mem+0x249bf))
+#define DAT_2000_49c1 (*(undefined2 *)(g_mem+0x249c1))
+#define DAT_2000_49c3 (*(undefined2 *)(g_mem+0x249c3))
+#define DAT_2000_4a8e (*(undefined2 *)(g_mem+0x24a8e))
+#define DAT_2000_4a90 (*(undefined2 *)(g_mem+0x24a90))
+#define DAT_2000_4a92 (*(undefined2 *)(g_mem+0x24a92))
+#define DAT_2000_4a94 (*(undefined2 *)(g_mem+0x24a94))
+#define DAT_2000_4a95 (*(undefined2 *)(g_mem+0x24a95))
+#define DAT_2000_4a98 (*(undefined2 *)(g_mem+0x24a98))
+#define DAT_2000_4a9a (*(undefined2 *)(g_mem+0x24a9a))
+#define DAT_2000_4aa8 (*(undefined2 *)(g_mem+0x24aa8))
+#define DAT_2000_4aa9 (*(undefined2 *)(g_mem+0x24aa9))
+#define DAT_2000_4aab (*(undefined2 *)(g_mem+0x24aab))
+#define DAT_2000_4aac (*(undefined2 *)(g_mem+0x24aac))
+#define DAT_2000_4aad (*(undefined2 *)(g_mem+0x24aad))
+#define DAT_2000_4aae (*(undefined2 *)(g_mem+0x24aae))
+#define DAT_2000_4aaf (*(undefined2 *)(g_mem+0x24aaf))
+#define DAT_2000_4ab0 (*(undefined2 *)(g_mem+0x24ab0))
+#define DAT_2000_4ab1 (*(undefined2 *)(g_mem+0x24ab1))
+#define DAT_2000_4ab2 (*(undefined2 *)(g_mem+0x24ab2))
+#define DAT_2000_4b43 (*(undefined2 *)(g_mem+0x24b43))
+#define DAT_2000_4b45 (*(undefined2 *)(g_mem+0x24b45))
+#define DAT_2000_4b46 (*(undefined1 *)(g_mem+0x24b46))   /* PATCH 318: SKY checkbox state is a BYTE (asm xor/cmp byte); WORD typing pulled in the adjacent DETAIL byte 0x8b47 -> wrong toggle status + kept the indicator lit */
+#define DAT_2000_4b47 (*(undefined2 *)(g_mem+0x24b47))
+#define DAT_2000_4b49 (*(undefined2 *)(g_mem+0x24b49))
+#define DAT_2000_4b4b (*(undefined2 *)(g_mem+0x24b4b))
+#define DAT_2000_4b4d (*(undefined1 *)(g_mem+0x24b4d))   /* PATCH 388: AUTO TURRET checkbox state BYTE (asm xor/cmp byte @6be7); patch-318/387 class */
+#define DAT_2000_4b4e (*(undefined2 *)(g_mem+0x24b4e))
+#define DAT_2000_4b4f (*(undefined1 *)(g_mem+0x24b4f))   /* PATCH 387: SMOKE checkbox state is a BYTE (asm xor/cmp byte @6c1d); WORD typing pulled in adjacent byte 0x8b50 (patch-318 SKY-0x8b46 class) */
+#define DAT_2000_4b50 (*(undefined2 *)(g_mem+0x24b50))
+#define DAT_2000_4b51 (*(undefined2 *)(g_mem+0x24b51))
+#define DAT_2000_4b53 (*(undefined2 *)(g_mem+0x24b53))
+#define DAT_2000_4b55 (*(undefined2 *)(g_mem+0x24b55))
+#define DAT_2000_4b57 (*(undefined2 *)(g_mem+0x24b57))
+#define DAT_2000_4b59 (*(undefined2 *)(g_mem+0x24b59))
+#define DAT_2000_4b5b (*(undefined2 *)(g_mem+0x24b5b))
+#define DAT_2000_4b65 (*(undefined2 *)(g_mem+0x24b65))
+#define DAT_2000_4b90 (*(undefined2 *)(g_mem+0x24b90))
+#define DAT_2000_4b91 (*(undefined1 *)(g_mem+0x24b91))   /* PATCH 320: joystick-radio widget dirty-flag is a BYTE (asm mov BYTE,3); the WORD `=3` clobbered the adjacent renderer-index byte -> re-paint dispatched the wrong renderer (patch 318/319 store-width class) */
+#define DAT_2000_4b94 (*(undefined1 *)(g_mem+0x24b94))   /* PATCH 320: joystick-radio widget dirty-flag is a BYTE (asm mov BYTE,3); the WORD `=3` clobbered the adjacent renderer-index byte -> re-paint dispatched the wrong renderer (patch 318/319 store-width class) */
+#define DAT_2000_4b97 (*(undefined1 *)(g_mem+0x24b97))   /* PATCH 320: joystick-radio widget dirty-flag is a BYTE (asm mov BYTE,3); the WORD `=3` clobbered the adjacent renderer-index byte -> re-paint dispatched the wrong renderer (patch 318/319 store-width class) */
+#define DAT_2000_4b9a (*(undefined1 *)(g_mem+0x24b9a))   /* PATCH 320: joystick-radio widget dirty-flag is a BYTE (asm mov BYTE,3); the WORD `=3` clobbered the adjacent renderer-index byte -> re-paint dispatched the wrong renderer (patch 318/319 store-width class) */
+#define DAT_2000_4b9d (*(undefined1 *)(g_mem+0x24b9d))   /* PATCH 320: joystick-radio widget dirty-flag is a BYTE (asm mov BYTE,3); the WORD `=3` clobbered the adjacent renderer-index byte -> re-paint dispatched the wrong renderer (patch 318/319 store-width class) */
+#define DAT_2000_4ba0 (*(undefined2 *)(g_mem+0x24ba0))
+#define DAT_2000_4ba3 (*(undefined2 *)(g_mem+0x24ba3))
+#define DAT_2000_4ba9 (*(undefined1 *)(g_mem+0x24ba9))   /* PATCH 318: SKY widget dirty-flag is a BYTE (asm mov byte,3); the WORD `=3` clobbered the renderer-index byte 0x8baa -> re-paint dispatched the wrong renderer */
+#define DAT_2000_4bac (*(undefined1 *)(g_mem+0x24bac))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+#define DAT_2000_4baf (*(undefined1 *)(g_mem+0x24baf))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+#define DAT_2000_4bb2 (*(undefined1 *)(g_mem+0x24bb2))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+#define DAT_2000_4bb5 (*(undefined1 *)(g_mem+0x24bb5))   /* PATCH 387: SMOKE widget dirty-flag is a BYTE (asm mov byte,3 @6c22); WORD `=3` clobbered renderer-index byte 0x8bb6 -> dirty-walk dispatched wrong renderer -> SMOKE LED never re-rendered OFF (patch-318 SKY-0x8ba9 class) */
+#define DAT_2000_4bbb (*(undefined1 *)(g_mem+0x24bbb))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+#define DAT_2000_4bc1 (*(undefined1 *)(g_mem+0x24bc1))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+#define DAT_2000_4bc4 (*(undefined1 *)(g_mem+0x24bc4))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+#define DAT_2000_4bc7 (*(undefined1 *)(g_mem+0x24bc7))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+#define DAT_2000_4bca (*(undefined2 *)(g_mem+0x24bca))
+#define DAT_2000_4bd0 (*(undefined2 *)(g_mem+0x24bd0))
+#define DAT_2000_4bd4 (*(undefined2 *)(g_mem+0x24bd4))
+#define DAT_2000_4bdc (*(undefined2 *)(g_mem+0x24bdc))
+#define DAT_2000_4be2 (*(undefined2 *)(g_mem+0x24be2))
+#define DAT_2000_4be3 (*(undefined2 *)(g_mem+0x24be3))
+#define DAT_2000_4be5 (*(undefined2 *)(g_mem+0x24be5))
+#define DAT_2000_4be7 (*(undefined2 *)(g_mem+0x24be7))
+#define DAT_2000_4be9 (*(undefined2 *)(g_mem+0x24be9))
+#define DAT_2000_4beb (*(undefined2 *)(g_mem+0x24beb))
+#define DAT_2000_4bed (*(undefined2 *)(g_mem+0x24bed))
+#define DAT_2000_4cd6 (*(undefined2 *)(g_mem+0x24cd6))
+#define DAT_2000_4cf3 (*(undefined2 *)(g_mem+0x24cf3))
+#define DAT_2000_4cf4 (*(undefined2 *)(g_mem+0x24cf4))
+#define DAT_2000_4cf7 (*(undefined2 *)(g_mem+0x24cf7))
+#define DAT_2000_4cfa (*(undefined2 *)(g_mem+0x24cfa))
+#define DAT_2000_4cfd (*(undefined2 *)(g_mem+0x24cfd))
+#define DAT_2000_4d00 (*(undefined2 *)(g_mem+0x24d00))
+#define DAT_2000_4d03 (*(undefined2 *)(g_mem+0x24d03))
+#define DAT_2000_4d06 (*(undefined2 *)(g_mem+0x24d06))
+#define DAT_2000_4d0a (*(undefined2 *)(g_mem+0x24d0a))
+#define DAT_2000_4d0c (*(undefined2 *)(g_mem+0x24d0c))
+#define DAT_2000_4d0e (*(undefined2 *)(g_mem+0x24d0e))
+#define DAT_2000_4d4a (*(undefined2 *)(g_mem+0x24d4a))
+#define DAT_2000_4d50 (*(undefined2 *)(g_mem+0x24d50))
+#define DAT_2000_4d52 (*(undefined4 *)(g_mem+0x24d52))
+#define DAT_2000_4d56 (*(undefined2 *)(g_mem+0x24d56))
+#define DAT_2000_4d5a (*(undefined2 *)(g_mem+0x24d5a))
+#define DAT_2000_4d5c (*(undefined2 *)(g_mem+0x24d5c))
+#define DAT_2000_4d5e (*(undefined2 *)(g_mem+0x24d5e))
+#define DAT_2000_4d5f (*(undefined2 *)(g_mem+0x24d5f))
+#define DAT_2000_4dba (*(undefined2 *)(g_mem+0x24dba))
+#define DAT_2000_4dbe (*(undefined2 *)(g_mem+0x24dbe))
+#define DAT_2000_4e1c (*(undefined2 *)(g_mem+0x24e1c))
+#define DAT_2000_4e20 (*(undefined2 *)(g_mem+0x24e20))
+#define DAT_2000_4e24 (*(undefined2 *)(g_mem+0x24e24))
+#define DAT_2000_4e28 (*(undefined2 *)(g_mem+0x24e28))
+#define DAT_2000_4e2c (*(undefined2 *)(g_mem+0x24e2c))
+#define DAT_2000_4e30 (*(undefined2 *)(g_mem+0x24e30))
+#define DAT_2000_4e34 (*(undefined2 *)(g_mem+0x24e34))
+#define DAT_2000_4e36 (*(undefined2 *)(g_mem+0x24e36))
+#define DAT_2000_4e38 (*(undefined2 *)(g_mem+0x24e38))
+#define DAT_2000_4e46 (*(undefined2 *)(g_mem+0x24e46))
+#define DAT_2000_4e47 (*(undefined2 *)(g_mem+0x24e47))
+#define DAT_2000_4e48 (*(undefined2 *)(g_mem+0x24e48))
+#define DAT_2000_4e49 (*(undefined2 *)(g_mem+0x24e49))
+#define DAT_2000_4e4b (*(undefined2 *)(g_mem+0x24e4b))
+#define DAT_2000_4e4d (*(undefined2 *)(g_mem+0x24e4d))
+#define DAT_2000_4e4f (*(undefined2 *)(g_mem+0x24e4f))
+#define DAT_2000_4e50 (*(undefined2 *)(g_mem+0x24e50))
+#define DAT_2000_4e51 (*(undefined2 *)(g_mem+0x24e51))
+#define DAT_2000_4e52 (*(undefined2 *)(g_mem+0x24e52))
+#define DAT_2000_4e53 (*(undefined2 *)(g_mem+0x24e53))
+#define DAT_2000_4e54 (*(undefined2 *)(g_mem+0x24e54))
+#define DAT_2000_4e55 (*(undefined2 *)(g_mem+0x24e55))
+#define DAT_2000_4e56 (*(undefined2 *)(g_mem+0x24e56))
+#define DAT_2000_4e57 (*(undefined2 *)(g_mem+0x24e57))
+#define DAT_2000_4e58 (*(undefined2 *)(g_mem+0x24e58))
+#define DAT_2000_4e5a (*(undefined2 *)(g_mem+0x24e5a))
+#define DAT_2000_4e5c (*(undefined2 *)(g_mem+0x24e5c))
+#define DAT_2000_4e5e (*(undefined2 *)(g_mem+0x24e5e))
+#define DAT_2000_4e60 (*(undefined2 *)(g_mem+0x24e60))
+#define DAT_2000_4e62 (*(undefined2 *)(g_mem+0x24e62))
+#define DAT_2000_4e64 (*(undefined2 *)(g_mem+0x24e64))
+#define DAT_2000_4e66 (*(undefined2 *)(g_mem+0x24e66))
+#define DAT_2000_4e68 (*(undefined2 *)(g_mem+0x24e68))
+#define DAT_2000_4e6a (*(undefined2 *)(g_mem+0x24e6a))
+#define DAT_2000_4e6c (*(undefined2 *)(g_mem+0x24e6c))
+#define DAT_2000_4e6e (*(undefined2 *)(g_mem+0x24e6e))
+#define DAT_2000_4e70 (*(undefined2 *)(g_mem+0x24e70))
+#define DAT_2000_4e71 (*(undefined2 *)(g_mem+0x24e71))
+#define DAT_2000_4e72 (*(undefined2 *)(g_mem+0x24e72))
+#define DAT_2000_4e75 (*(undefined2 *)(g_mem+0x24e75))
+#define DAT_2000_4e86 (*(undefined2 *)(g_mem+0x24e86))
+#define DAT_2000_4e8a (*(undefined2 *)(g_mem+0x24e8a))
+#define DAT_2000_4e90 (*(undefined2 *)(g_mem+0x24e90))
+#define DAT_2000_4ee6 (*(undefined2 *)(g_mem+0x24ee6))
+#define DAT_2000_4eea (*(undefined2 *)(g_mem+0x24eea))
+#define DAT_2000_4f12 (*(undefined2 *)(g_mem+0x24f12))
+#define DAT_2000_4f14 (*(undefined2 *)(g_mem+0x24f14))
+#define DAT_2000_4f1a (*(undefined2 *)(g_mem+0x24f1a))
+#define DAT_2000_4f80 (*(undefined2 *)(g_mem+0x24f80))
+#define DAT_2000_4f84 (*(undefined2 *)(g_mem+0x24f84))
+#define DAT_2000_4f8a (*(undefined2 *)(g_mem+0x24f8a))
+#define DAT_2000_4fe4 (*(undefined2 *)(g_mem+0x24fe4))
+#define DAT_2000_4fe8 (*(undefined2 *)(g_mem+0x24fe8))
+#define DAT_2000_50ae (*(undefined2 *)(g_mem+0x250ae))
+#define DAT_2000_50b0 (*(undefined2 *)(g_mem+0x250b0))
+#define DAT_2000_50b6 (*(undefined2 *)(g_mem+0x250b6))
+#define DAT_2000_510c (*(undefined2 *)(g_mem+0x2510c))
+#define DAT_2000_5110 (*(undefined2 *)(g_mem+0x25110))
+#define DAT_2000_5116 (*(undefined2 *)(g_mem+0x25116))
+#define DAT_2000_51a6 (*(undefined2 *)(g_mem+0x251a6))
+#define DAT_2000_51a8 (*(undefined2 *)(g_mem+0x251a8))
+#define DAT_2000_51ae (*(undefined2 *)(g_mem+0x251ae))
+#define DAT_2000_51c8 (*(undefined2 *)(g_mem+0x251c8))
+#define DAT_2000_51cc (*(undefined2 *)(g_mem+0x251cc))
+#define DAT_2000_51f2 (*(undefined2 *)(g_mem+0x251f2))
+#define DAT_2000_51f6 (*(undefined2 *)(g_mem+0x251f6))
+#define DAT_2000_51fc (*(undefined2 *)(g_mem+0x251fc))
+#define DAT_2000_524a (*(undefined2 *)(g_mem+0x2524a))
+#define DAT_2000_524c (*(undefined2 *)(g_mem+0x2524c))
+#define DAT_2000_5252 (*(undefined2 *)(g_mem+0x25252))
+#define DAT_2000_5254 (*(undefined2 *)(g_mem+0x25254))
+#define DAT_2000_526a (*(undefined2 *)(g_mem+0x2526a))
+#define DAT_2000_526c (*(undefined2 *)(g_mem+0x2526c))
+#define DAT_2000_526e (*(undefined2 *)(g_mem+0x2526e))
+#define DAT_2000_5270 (*(undefined2 *)(g_mem+0x25270))
+#define DAT_2000_52e6 (*(undefined2 *)(g_mem+0x252e6))
+#define DAT_2000_52ea (*(undefined2 *)(g_mem+0x252ea))
+#define DAT_2000_52ee (*(undefined2 *)(g_mem+0x252ee))
+#define DAT_2000_52f0 (*(undefined2 *)(g_mem+0x252f0))
+#define DAT_2000_52f2 (*(undefined2 *)(g_mem+0x252f2))
+#define DAT_2000_52f6 (*(undefined2 *)(g_mem+0x252f6))
+#define DAT_2000_530a (*(undefined2 *)(g_mem+0x2530a))
+#define DAT_2000_530c (*(undefined2 *)(g_mem+0x2530c))
+#define DAT_2000_530d (*(undefined2 *)(g_mem+0x2530d))
+#define DAT_2000_5338 (*(undefined2 *)(g_mem+0x25338))
+#define DAT_2000_533a (*(undefined2 *)(g_mem+0x2533a))
+#define DAT_2000_533e (*(undefined2 *)(g_mem+0x2533e))
+#define DAT_2000_543a (*(undefined2 *)(g_mem+0x2543a))
+#define DAT_2000_543c (*(undefined2 *)(g_mem+0x2543c))
+#define DAT_2000_5440 (*(undefined2 *)(g_mem+0x25440))
+#define DAT_2000_5444 (*(undefined2 *)(g_mem+0x25444))
+#define DAT_2000_5448 (*(undefined2 *)(g_mem+0x25448))
+#define DAT_2000_544c (*(undefined2 *)(g_mem+0x2544c))
+#define DAT_2000_544e (*(undefined2 *)(g_mem+0x2544e))
+#define DAT_2000_5450 (*(undefined2 *)(g_mem+0x25450))
+#define DAT_2000_5452 (*(undefined2 *)(g_mem+0x25452))
+#define DAT_2000_5454 (*(undefined2 *)(g_mem+0x25454))
+#define DAT_2000_5456 (*(undefined2 *)(g_mem+0x25456))
+#define DAT_2000_545c (*(undefined2 *)(g_mem+0x2545c))
+#define DAT_2000_545e (*(undefined2 *)(g_mem+0x2545e))
+#define DAT_2000_5460 (*(undefined2 *)(g_mem+0x25460))
+#define DAT_2000_5462 (*(undefined2 *)(g_mem+0x25462))
+#define DAT_2000_5464 (*(undefined2 *)(g_mem+0x25464))
+#define DAT_2000_5524 (*(undefined2 *)(g_mem+0x25524))
+#define DAT_2000_5600 (*(undefined2 *)(g_mem+0x25600))
+#define DAT_2000_5602 (*(undefined2 *)(g_mem+0x25602))
+#define DAT_2000_5604 (*(undefined2 *)(g_mem+0x25604))
+#define DAT_2000_5606 (*(undefined2 *)(g_mem+0x25606))
+#define DAT_2000_5608 (*(undefined2 *)(g_mem+0x25608))
+#define DAT_2000_560a (*(int **)(g_mem+0x2560a))
+#define DAT_2000_560c (*(undefined2 *)(g_mem+0x2560c))
+#define DAT_2000_560e (*(undefined2 *)(g_mem+0x2560e))
+#define DAT_2000_5614 (*(undefined2 *)(g_mem+0x25614))
+#define DAT_2000_5618 (*(undefined2 *)(g_mem+0x25618))
+#define DAT_2000_561c (*(undefined2 *)(g_mem+0x2561c))
+#define DAT_2000_5620 (*(undefined2 *)(g_mem+0x25620))
+#define DAT_2000_5644 (*(undefined2 *)(g_mem+0x25644))
+#define DAT_2000_5646 (*(undefined2 *)(g_mem+0x25646))
+#define DAT_2000_5675 (*(undefined2 *)(g_mem+0x25675))
+#define DAT_2000_567a (*(undefined2 *)(g_mem+0x2567a))
+#define DAT_2000_567c (*(undefined2 *)(g_mem+0x2567c))
+#define DAT_2000_567e (*(undefined2 *)(g_mem+0x2567e))
+#define DAT_2000_5680 (*(undefined2 *)(g_mem+0x25680))
+#define DAT_2000_5684 (*(undefined2 *)(g_mem+0x25684))
+#define DAT_2000_5688 (*(undefined2 *)(g_mem+0x25688))
+#define DAT_2000_568c (*(undefined2 *)(g_mem+0x2568c))
+#define DAT_2000_5690 (*(undefined2 *)(g_mem+0x25690))
+#define DAT_2000_5694 (*(undefined2 *)(g_mem+0x25694))
+#define DAT_2000_5698 (*(undefined2 *)(g_mem+0x25698))
+#define DAT_2000_569c (*(undefined2 *)(g_mem+0x2569c))
+#define DAT_2000_569e (*(undefined2 *)(g_mem+0x2569e))
+#define DAT_2000_56a0 (*(undefined2 *)(g_mem+0x256a0))
+#define DAT_2000_56a8 (*(undefined2 *)(g_mem+0x256a8))
+#define DAT_2000_56aa (*(undefined2 *)(g_mem+0x256aa))
+#define DAT_2000_56ab (*(undefined2 *)(g_mem+0x256ab))
+#define DAT_2000_56ec (*(undefined2 *)(g_mem+0x256ec))
+#define DAT_2000_56ee (*(undefined2 *)(g_mem+0x256ee))
+#define DAT_2000_56f0 (*(undefined2 *)(g_mem+0x256f0))
+#define DAT_2000_56f2 (*(undefined2 *)(g_mem+0x256f2))
+#define DAT_2000_56f4 (*(undefined2 *)(g_mem+0x256f4))
+#define DAT_2000_56f6 (*(undefined2 *)(g_mem+0x256f6))
+#define DAT_2000_56f8 (*(undefined2 *)(g_mem+0x256f8))
+#define DAT_2000_56fa (*(undefined2 *)(g_mem+0x256fa))
+#define DAT_2000_56fc (*(undefined2 *)(g_mem+0x256fc))
+#define DAT_2000_56fe (*(undefined2 *)(g_mem+0x256fe))
+#define DAT_2000_5700 (*(undefined2 *)(g_mem+0x25700))
+#define DAT_2000_5746 (*(undefined2 *)(g_mem+0x25746))
+#define DAT_2000_5768 (*(undefined2 *)(g_mem+0x25768))
+#define DAT_2000_576a (*(int **)(g_mem+0x2576a))
+#define DAT_2000_578a (*(undefined2 *)(g_mem+0x2578a))
+#define DAT_2000_578c (*(undefined2 *)(g_mem+0x2578c))
+#define DAT_2000_578e (*(undefined2 *)(g_mem+0x2578e))
+#define DAT_2000_5790 (*(undefined2 *)(g_mem+0x25790))
+#define DAT_2000_5792 (*(undefined2 *)(g_mem+0x25792))
+#define DAT_2000_5794 (*(undefined2 *)(g_mem+0x25794))
+#define DAT_2000_5796 (*(int **)(g_mem+0x25796))
+#define DAT_2000_5798 (*(int **)(g_mem+0x25798))
+#define DAT_2000_579e (*(undefined2 *)(g_mem+0x2579e))
+#define DAT_2000_57a0 (*(undefined2 *)(g_mem+0x257a0))
+#define DAT_2000_57a2 (*(int **)(g_mem+0x257a2))
+#define DAT_2000_57a4 (*(undefined2 *)(g_mem+0x257a4))
+#define DAT_2000_57a6 (*(undefined2 *)(g_mem+0x257a6))
+#define DAT_2000_57a8 (*(undefined2 *)(g_mem+0x257a8))
+#define DAT_2000_57aa (*(undefined2 *)(g_mem+0x257aa))
+#define DAT_2000_57ba (*(undefined2 *)(g_mem+0x257ba))
+#define DAT_2000_5934 (*(undefined2 *)(g_mem+0x25934))
+#define DAT_2000_5935 (*(undefined2 *)(g_mem+0x25935))
+#define DAT_2000_5936 (*(undefined2 *)(g_mem+0x25936))
+#define DAT_2000_5938 (*(undefined2 *)(g_mem+0x25938))
+#define DAT_2000_593a (*(undefined2 *)(g_mem+0x2593a))
+#define DAT_2000_593c (*(undefined2 *)(g_mem+0x2593c))
+#define DAT_2000_593e (*(undefined2 *)(g_mem+0x2593e))
+#define DAT_2000_5940 (*(undefined2 *)(g_mem+0x25940))
+#define DAT_2000_5942 (*(undefined2 *)(g_mem+0x25942))
+#define DAT_2000_5944 (*(undefined2 *)(g_mem+0x25944))
+#define DAT_2000_5962 (*(undefined2 *)(g_mem+0x25962))
+#define DAT_2000_5966 (*(undefined2 *)(g_mem+0x25966))
+#define DAT_2000_5a06 (*(undefined2 *)(g_mem+0x25a06))
+#define DAT_2000_5a08 (*(undefined2 *)(g_mem+0x25a08))
+#define DAT_2000_5a0a (*(undefined2 *)(g_mem+0x25a0a))
+#define DAT_2000_5a0c (*(undefined2 *)(g_mem+0x25a0c))
+#define DAT_2000_5a0e (*(undefined2 *)(g_mem+0x25a0e))
+#define DAT_2000_5a11 (*(undefined2 *)(g_mem+0x25a11))
+#define DAT_2000_5a15 (*(undefined2 *)(g_mem+0x25a15))
+#define DAT_2000_5a19 (*(undefined2 *)(g_mem+0x25a19))
+#define DAT_2000_5a1d (*(undefined2 *)(g_mem+0x25a1d))
+#define DAT_2000_5a1f (*(undefined2 *)(g_mem+0x25a1f))
+#define DAT_2000_5a21 (*(undefined2 *)(g_mem+0x25a21))
+#define DAT_2000_5a25 (*(undefined2 *)(g_mem+0x25a25))
+#define DAT_2000_5bd7 (*(undefined2 *)(g_mem+0x25bd7))
+#define DAT_2000_5bd9 (*(undefined2 *)(g_mem+0x25bd9))
+#define DAT_2000_5bdb (*(undefined2 *)(g_mem+0x25bdb))
+#define DAT_2000_5c7d (*(undefined2 *)(g_mem+0x25c7d))
+#define DAT_2000_5c7e (*(undefined2 *)(g_mem+0x25c7e))
+#define DAT_2000_5c7f (*(undefined2 *)(g_mem+0x25c7f))
+#define DAT_2000_5c83 (*(undefined2 *)(g_mem+0x25c83))
+#define DAT_2000_5c87 (*(undefined2 *)(g_mem+0x25c87))
+#define DAT_2000_5c89 (*(undefined2 *)(g_mem+0x25c89))
+#define DAT_2000_5c8b (*(undefined2 *)(g_mem+0x25c8b))
+#define DAT_2000_5c8f (*(undefined2 *)(g_mem+0x25c8f))
+#define DAT_2000_5ccb (*(undefined2 *)(g_mem+0x25ccb))
+#define DAT_2000_5ccd (*(undefined2 *)(g_mem+0x25ccd))
+#define DAT_2000_5ccf (*(undefined2 *)(g_mem+0x25ccf))
+#define DAT_2000_5cd7 (*(undefined2 *)(g_mem+0x25cd7))
+#define DAT_2000_5ce3 (*(undefined2 *)(g_mem+0x25ce3))
+#define DAT_2000_5ce5 (*(undefined2 *)(g_mem+0x25ce5))
+#define DAT_2000_5ce7 (*(undefined2 *)(g_mem+0x25ce7))
+#define DAT_2000_5dc7 (*(undefined2 *)(g_mem+0x25dc7))
+#define DAT_2000_5f17 (*(undefined2 *)(g_mem+0x25f17))
+#define DAT_2000_5f19 (*(undefined2 *)(g_mem+0x25f19))
+#define DAT_2000_5f1b (*(undefined2 *)(g_mem+0x25f1b))
+#define DAT_2000_5f1c (*(undefined2 *)(g_mem+0x25f1c))
+#define DAT_2000_5f1e (*(undefined2 *)(g_mem+0x25f1e))
+#define DAT_2000_5f20 (*(undefined2 *)(g_mem+0x25f20))
+#define DAT_2000_5f22 (*(undefined2 *)(g_mem+0x25f22))
+#define DAT_2000_5fc8 (*(undefined2 *)(g_mem+0x25fc8))
+#define DAT_2000_5fca (*(undefined2 *)(g_mem+0x25fca))
+#define DAT_2000_5fcc (*(undefined2 *)(g_mem+0x25fcc))
+#define DAT_2000_5fce (*(undefined2 *)(g_mem+0x25fce))
+#define DAT_2000_5fd0 (*(undefined2 *)(g_mem+0x25fd0))
+#define DAT_2000_5fd4 (*(undefined2 *)(g_mem+0x25fd4))
+#define DAT_2000_5fd6 (*(undefined2 *)(g_mem+0x25fd6))
+#define DAT_2000_5fd7 (*(undefined2 *)(g_mem+0x25fd7))
+#define DAT_2000_5fd9 (*(undefined2 *)(g_mem+0x25fd9))
+#define DAT_2000_5fdd (*(undefined2 *)(g_mem+0x25fdd))
+#define DAT_2000_5fdf (*(undefined2 *)(g_mem+0x25fdf))
+#define DAT_2000_6020 (*(undefined2 *)(g_mem+0x26020))
+#define DAT_2000_6376 (*(undefined2 *)(g_mem+0x26376))
+#define DAT_2000_63a8 (*(undefined2 *)(g_mem+0x263a8))
+#define DAT_2000_646e (*(undefined2 *)(g_mem+0x2646e))
+#define DAT_2000_9153 (*(undefined2 *)(g_mem+0x29153))
+#define DAT_2000_9fbc (*(undefined2 *)(g_mem+0x29fbc))
+#define DAT_2000_9fbe (*(undefined2 *)(g_mem+0x29fbe))
+#define DAT_2000_a294 (*(undefined2 *)(g_mem+0x2a294))
+#define DAT_2000_a296 (*(undefined2 *)(g_mem+0x2a296))
+#define DAT_2000_a298 (*(undefined2 *)(g_mem+0x2a298))
+#define DAT_2000_a29a (*(undefined2 *)(g_mem+0x2a29a))
+#define DAT_2000_a29c (*(undefined2 *)(g_mem+0x2a29c))
+#define DAT_2000_a29e (*(undefined2 *)(g_mem+0x2a29e))
+#define DAT_2000_a2a0 (*(undefined2 *)(g_mem+0x2a2a0))
+#define DAT_2000_a2a2 (*(undefined2 *)(g_mem+0x2a2a2))
+#define DAT_2000_a2a4 (*(undefined2 *)(g_mem+0x2a2a4))
+#define DAT_2000_a2a6 (*(undefined2 *)(g_mem+0x2a2a6))
+#define DAT_2000_a2a8 (*(undefined2 *)(g_mem+0x2a2a8))
+#define DAT_2000_a2aa (*(undefined2 *)(g_mem+0x2a2aa))
+#define DAT_2000_a2f7 (*(undefined2 *)(g_mem+0x2a2f7))
+#define DAT_2000_a38d (*(undefined2 *)(g_mem+0x2a38d))
+#define DAT_2000_a3ae (*(undefined2 *)(g_mem+0x2a3ae))
+#define DAT_2000_a3b0 (*(undefined2 *)(g_mem+0x2a3b0))
+#define DAT_2000_a3b2 (*(undefined2 *)(g_mem+0x2a3b2))
+#define DAT_2000_a3b4 (*(undefined2 *)(g_mem+0x2a3b4))
+#define DAT_2000_a440 (*(undefined2 *)(g_mem+0x2a440))
+#define DAT_2000_a444 (*(undefined2 *)(g_mem+0x2a444))
+#define DAT_2000_a448 (*(undefined2 *)(g_mem+0x2a448))
+#define DAT_2000_a44c (*(undefined2 *)(g_mem+0x2a44c))
+#define DAT_2000_a6dc (*(undefined2 *)(g_mem+0x2a6dc))
+#define DAT_2000_a6de (*(undefined2 *)(g_mem+0x2a6de))
+#define DAT_2000_a6e0 (*(undefined2 *)(g_mem+0x2a6e0))
+#define DAT_2000_a6e2 (*(undefined2 *)(g_mem+0x2a6e2)) /* PATCH 390: WORD near offset (STRSEG cursor) -- int** was 4 bytes (overlapped a6e4) + made c3ed deref it as a host ptr */
+#define DAT_2000_a6e4 (*(undefined2 *)(g_mem+0x2a6e4))
+#define DAT_2000_a6e6 (*(int **)(g_mem+0x2a6e6))
+#define DAT_2000_a6e8 (*(undefined2 *)(g_mem+0x2a6e8))
+#define DAT_2000_a6ea (*(undefined2 *)(g_mem+0x2a6ea))
+#define DAT_2000_a6ec (*(undefined2 *)(g_mem+0x2a6ec))
+#define DAT_2000_a6ee (*(undefined2 *)(g_mem+0x2a6ee))
+#define DAT_2000_a6ef (*(undefined2 *)(g_mem+0x2a6ef))
+#define DAT_2000_a6f1 (*(undefined2 *)(g_mem+0x2a6f1))
+#define DAT_2000_a709 (*(undefined2 *)(g_mem+0x2a709))
+#define DAT_2000_a70b (*(undefined2 *)(g_mem+0x2a70b))
+#define DAT_2000_a814 (*(undefined2 *)(g_mem+0x2a814))
+#define DAT_2000_a82e (*(undefined2 *)(g_mem+0x2a82e))
+#define DAT_2000_a830 (*(undefined2 *)(g_mem+0x2a830))
+#define DAT_2000_a834 (*(undefined2 *)(g_mem+0x2a834))
+#define DAT_2000_a836 (*(undefined2 *)(g_mem+0x2a836))
+#define DAT_2000_a838 (*(undefined2 *)(g_mem+0x2a838))
+#define DAT_2000_a83a (*(undefined2 *)(g_mem+0x2a83a))
+#define DAT_2000_a83c (*(undefined2 *)(g_mem+0x2a83c))
+#define DAT_2000_a83e (*(undefined2 *)(g_mem+0x2a83e))
+#define DAT_2000_a840 (*(undefined2 *)(g_mem+0x2a840))
+#define DAT_2000_a842 (*(undefined2 *)(g_mem+0x2a842))
+#define DAT_2000_a845 (*(undefined2 *)(g_mem+0x2a845))
+#define DAT_2000_a853 (*(undefined2 *)(g_mem+0x2a853))
+#define DAT_2000_a855 (*(undefined2 *)(g_mem+0x2a855))
+#define DAT_2000_a857 (*(undefined2 *)(g_mem+0x2a857))
+#define DAT_2000_a859 (*(undefined2 *)(g_mem+0x2a859))
+#define DAT_2000_a85b (*(undefined2 *)(g_mem+0x2a85b))    /* PATCH 144: a85b is a WORD near code-offset (asm `mov WORD PTR [0xe85b]`); undefined4 overlapped a85d/a85e -> the modal-loop dispatch read word|garbage<<16 -> always trapped, so d0d7/d103 never ran */
+#define DAT_2000_a85d (*(undefined2 *)(g_mem+0x2a85d))
+#define DAT_2000_a85e (*(undefined2 *)(g_mem+0x2a85e))
+#define DAT_2000_a86c (*(undefined2 *)(g_mem+0x2a86c))
+#define DAT_2000_a86d (*(undefined2 *)(g_mem+0x2a86d))
+#define DAT_2000_a86f (*(undefined2 *)(g_mem+0x2a86f))
+#define DAT_2000_a871 (*(undefined2 *)(g_mem+0x2a871))
+#define DAT_2000_a873 (*(undefined2 *)(g_mem+0x2a873))
+#define DAT_2000_a877 (*(undefined2 *)(g_mem+0x2a877))
+#define DAT_2000_a879 (*(undefined2 *)(g_mem+0x2a879))
+#define DAT_2000_a87b (*(undefined2 *)(g_mem+0x2a87b))
+/* PATCH 142: a87d is a 32-bit DWORD scroll-range denominator (asm b6a4 `mov dword[0xe87d],0x10000`,
+ * cef4 `div DWORD PTR [0xe87d]`).  Ghidra typed it undefined2 (WORD) so `a87d = 0x10000` truncated to 0
+ * -> cef4 divide-by-zero (SIGFPE) on the first list row-select/scroll.  Occupies 0xe87d..0xe880; a881 is
+ * at 0xe881 (no overlap). */
+#define DAT_2000_a87d (*(uint32_t *)(g_mem+0x2a87d))
+#define DAT_2000_a881 (*(undefined2 *)(g_mem+0x2a881))
+#define DAT_2000_a883 (*(undefined2 *)(g_mem+0x2a883))
+#define DAT_2000_a885 (*(undefined2 *)(g_mem+0x2a885))
+#define DAT_2000_a887 (*(undefined2 *)(g_mem+0x2a887))
+#define DAT_2000_a889 (*(undefined2 *)(g_mem+0x2a889))
+#define DAT_2000_a88b (*(undefined2 *)(g_mem+0x2a88b))
+#define DAT_2000_a88d (*(undefined2 *)(g_mem+0x2a88d))
+#define DAT_2000_a8ad (*(undefined2 *)(g_mem+0x2a8ad))
+#define DAT_2000_a8ee (*(uint8_t *)(g_mem+0x2a8ee))    /* PATCH 142: BYTE element dirty-mask (asm `mov BYTE PTR`); WORD typing clobbered the adjacent child-list head/link -> no repaint on row-select/scroll */
+#define DAT_2000_a8f4 (*(uint8_t *)(g_mem+0x2a8f4))    /* PATCH 142: BYTE element dirty-mask (asm `mov BYTE PTR`); WORD typing clobbered the adjacent child-list head/link -> no repaint on row-select/scroll */
+#define DAT_2000_a8f5 (*(uint8_t *)(g_mem+0x2a8f5))    /* PATCH 142: BYTE element dirty-mask (asm `mov BYTE PTR`); WORD typing clobbered the adjacent child-list head/link -> no repaint on row-select/scroll */
+#define DAT_2000_a8f6 (*(undefined2 *)(g_mem+0x2a8f6))
+#define DAT_2000_a8f7 (*(undefined2 *)(g_mem+0x2a8f7))
+#define DAT_2000_a8f8 (*(undefined2 *)(g_mem+0x2a8f8))
+#define DAT_2000_a900 (*(undefined2 *)(g_mem+0x2a900))
+#define DAT_2000_a902 (*(undefined2 *)(g_mem+0x2a902))
+#define DAT_2000_a903 (*(undefined2 *)(g_mem+0x2a903))
+#define DAT_2000_a906 (*(undefined2 *)(g_mem+0x2a906))
+#define DAT_2000_a912 (*(undefined2 *)(g_mem+0x2a912))
+#define DAT_2000_a914 (*(undefined2 *)(g_mem+0x2a914))
+#define DAT_2000_a916 (*(undefined2 *)(g_mem+0x2a916))
+#define DAT_2000_a918 (*(undefined2 *)(g_mem+0x2a918))
+#define DAT_2000_a919 (*(undefined2 *)(g_mem+0x2a919))
+#define DAT_2000_a927 (*(undefined2 *)(g_mem+0x2a927))
+#define DAT_2000_a938 (*(undefined2 *)(g_mem+0x2a938))
+#define DAT_2000_a93e (*(undefined2 *)(g_mem+0x2a93e))
+#define DAT_2000_a946 (*(undefined2 *)(g_mem+0x2a946))
+#define DAT_2000_a948 (*(undefined2 *)(g_mem+0x2a948))
+#define DAT_2000_a94a (*(undefined2 *)(g_mem+0x2a94a))
+#define DAT_2000_a94f (*(undefined2 *)(g_mem+0x2a94f))
+#define DAT_2000_a96e (*(undefined2 *)(g_mem+0x2a96e))
+#define DAT_2000_a970 (*(undefined2 *)(g_mem+0x2a970))
+#define DAT_2000_a972 (*(undefined2 *)(g_mem+0x2a972))
+#define DAT_2000_a974 (*(undefined1 *)(g_mem+0x2a974))
+#define DAT_2000_a975 (*(undefined1 *)(g_mem+0x2a975))
+#define DAT_2000_a976 (*(undefined2 *)(g_mem+0x2a976))
+#define DAT_2000_a978 (*(undefined2 *)(g_mem+0x2a978))
+#define DAT_2000_a97a (*(undefined2 *)(g_mem+0x2a97a))
+#define DAT_2000_a982 (*(undefined2 *)(g_mem+0x2a982))
+#define DAT_2000_a984 (*(undefined2 *)(g_mem+0x2a984))
+#define DAT_2000_a987 (*(undefined2 *)(g_mem+0x2a987))
+#define DAT_2000_a988 (*(undefined2 *)(g_mem+0x2a988))
+#define DAT_2000_a98c (*(undefined2 *)(g_mem+0x2a98c))
+#define DAT_2000_a990 (*(undefined2 *)(g_mem+0x2a990))
+#define DAT_2000_a994 (*(undefined2 *)(g_mem+0x2a994))
+#define DAT_2000_a998 (*(undefined2 *)(g_mem+0x2a998))
+#define DAT_2000_a99c (*(undefined2 *)(g_mem+0x2a99c))
+#define DAT_2000_a9a0 (*(undefined2 *)(g_mem+0x2a9a0))
+#define DAT_2000_a9a4 (*(undefined2 *)(g_mem+0x2a9a4))
+#define DAT_2000_a9bc (*(undefined2 *)(g_mem+0x2a9bc))
+#define DAT_2000_a9be (*(undefined2 *)(g_mem+0x2a9be))
+#define DAT_2000_a9c0 (*(undefined2 *)(g_mem+0x2a9c0))
+#define DAT_2000_a9c2 (*(undefined2 *)(g_mem+0x2a9c2))
+#define DAT_2000_a9c4 (*(undefined2 *)(g_mem+0x2a9c4))
+#define DAT_2000_a9c6 (*(undefined2 *)(g_mem+0x2a9c6))
+#define DAT_2000_a9e6 (*(undefined2 *)(g_mem+0x2a9e6))
+#define DAT_2000_aa10 (*(undefined2 *)(g_mem+0x2aa10))
+#define DAT_2000_aa12 (*(undefined2 *)(g_mem+0x2aa12))
+#define DAT_2000_aa14 (*(undefined2 *)(g_mem+0x2aa14))
+#define DAT_2000_aa16 (*(undefined4 *)(g_mem+0x2aa16))
+#define DAT_2000_aa18 (*(undefined2 *)(g_mem+0x2aa18))
+#define DAT_2000_aa1a (*(undefined2 *)(g_mem+0x2aa1a))
+#define DAT_2000_aa1c (*(undefined2 *)(g_mem+0x2aa1c))
+#define DAT_2000_aa2c ((uint8_t *)(g_mem + ((uint32_t)(*(uint16_t*)(g_mem+0x2aa2e))<<4) + *(uint16_t*)(g_mem+0x2aa2c)))
+#define DAT_2000_aa2e (*(undefined2 *)(g_mem+0x2aa2e))
+#define DAT_2000_aa5e (*(undefined2 *)(g_mem+0x2aa5e))
+#define DAT_2000_aa66 (*(undefined2 *)(g_mem+0x2aa66))
+#define DAT_2000_aa6e (*(undefined2 *)(g_mem+0x2aa6e))
+#define DAT_2000_aa74 (*(undefined2 *)(g_mem+0x2aa74))
+#define DAT_2000_aa7c (*(undefined2 *)(g_mem+0x2aa7c))
+#define DAT_2000_aa88 (*(undefined2 *)(g_mem+0x2aa88))
+#define DAT_2000_aab7 (*(undefined2 *)(g_mem+0x2aab7))
+#define DAT_2000_aab8 (*(undefined2 *)(g_mem+0x2aab8))
+#define DAT_2000_aab9 (*(undefined2 *)(g_mem+0x2aab9))
+#define DAT_2000_aaba (*(undefined2 *)(g_mem+0x2aaba))
+#define DAT_2000_adb8 (*(undefined2 *)(g_mem+0x2adb8))
+#define DAT_2000_adb9 (*(undefined2 *)(g_mem+0x2adb9))
+#define DAT_2000_adba (*(undefined2 *)(g_mem+0x2adba))
+#define DAT_2000_b6b9 (*(undefined2 *)(g_mem+0x2b6b9))
+#define DAT_2000_b6ba (*(undefined2 *)(g_mem+0x2b6ba))
+#define DAT_2000_b6bc (*(undefined2 *)(g_mem+0x2b6bc))
+#define DAT_2000_b6be (*(undefined2 *)(g_mem+0x2b6be))
+#define DAT_2000_b6bf (*(undefined2 *)(g_mem+0x2b6bf))
+#define DAT_2000_b6c0 (*(undefined2 *)(g_mem+0x2b6c0))
+#define DAT_2000_b6c2 (*(undefined2 *)(g_mem+0x2b6c2))
+#define DAT_2000_b6c6 (*(undefined2 *)(g_mem+0x2b6c6))
+#define DAT_2000_b6ce (*(undefined2 *)(g_mem+0x2b6ce))
+#define DAT_2000_b6d6 (*(undefined2 *)(g_mem+0x2b6d6))
+#define DAT_2000_b6e0 (*(undefined2 *)(g_mem+0x2b6e0))
+#define DAT_2000_b6e2 (*(undefined2 *)(g_mem+0x2b6e2))
+#define DAT_2000_b6e4 (*(undefined2 *)(g_mem+0x2b6e4))
+#define DAT_2000_b6e6 (*(undefined2 *)(g_mem+0x2b6e6))
+#define DAT_2000_b6e8 (*(undefined2 *)(g_mem+0x2b6e8))
+#define DAT_2000_b6ea (*(undefined2 *)(g_mem+0x2b6ea))
+#define DAT_2000_b6ec (*(int **)(g_mem+0x2b6ec))
+#define DAT_2000_b6f0 (*(undefined2 *)(g_mem+0x2b6f0))
+#define DAT_2000_b6f2 (*(undefined2 *)(g_mem+0x2b6f2))
+#define DAT_2000_b6f4 (*(undefined2 *)(g_mem+0x2b6f4))
+#define DAT_2000_b6f5 (*(undefined2 *)(g_mem+0x2b6f5))
+#define DAT_2000_b6f7 (*(undefined2 *)(g_mem+0x2b6f7))
+#define DAT_2000_b6f9 (*(undefined2 *)(g_mem+0x2b6f9))
+#define DAT_2000_b743 (*(undefined2 *)(g_mem+0x2b743))
+#define DAT_2000_b75f (*(undefined2 *)(g_mem+0x2b75f))
+#define DAT_2000_b76f (*(undefined2 *)(g_mem+0x2b76f))
+#define DAT_2000_b771 (*(undefined2 *)(g_mem+0x2b771))
+#define DAT_2000_b78e (*(undefined2 *)(g_mem+0x2b78e))
+#define DAT_2000_b798 (*(undefined2 *)(g_mem+0x2b798))
+#define DAT_2000_b7d8 (*(undefined2 *)(g_mem+0x2b7d8))
+#define DAT_2000_b7eb (*(undefined2 *)(g_mem+0x2b7eb))
+#define DAT_2000_b7f1 (*(undefined2 *)(g_mem+0x2b7f1))
+#define DAT_2000_b7f3 (*(undefined2 *)(g_mem+0x2b7f3))
+#define DAT_2000_b7f9 (*(undefined2 *)(g_mem+0x2b7f9))
+#define DAT_2000_b80a (*(undefined2 *)(g_mem+0x2b80a))
+#define DAT_2000_b80b (*(undefined2 *)(g_mem+0x2b80b))
+#define DAT_2000_b80c (*(undefined2 *)(g_mem+0x2b80c))
+#define DAT_2000_b80e (*(undefined2 *)(g_mem+0x2b80e))
+#define DAT_2000_b80f (*(undefined2 *)(g_mem+0x2b80f))
+#define DAT_2000_b848 (*(uint8_t *)(g_mem+0x2b848))    /* PATCH 148: ec7e's campaign-screen dispatch flag is a BYTE (asm `movb [0xf848]`); undefined2 WORD stores clobbered the adjacent HARDWARE-icon rect at DGROUP:0xf849 (ed14/ee67 use 0xf849/0xf812) -> corrupt paint.  0=idle,1=OK,0xff=CANCEL. */
+#define DAT_2000_b851 (*(undefined2 *)(g_mem+0x2b851))
+#define DAT_2000_b882 (*(undefined2 *)(g_mem+0x2b882))
+#define DAT_2000_b885 (*(undefined2 *)(g_mem+0x2b885))
+#define DAT_2000_b886 (*(undefined2 *)(g_mem+0x2b886))
+#define DAT_2000_b887 (*(undefined2 *)(g_mem+0x2b887))
+#define DAT_2000_b88f (*(undefined2 *)(g_mem+0x2b88f))
+#define DAT_2000_b891 (*(undefined2 *)(g_mem+0x2b891))
+#define DAT_2000_b893 (*(undefined2 *)(g_mem+0x2b893))
+#define DAT_2000_b895 (*(undefined2 *)(g_mem+0x2b895))
+#define DAT_2000_b899 (*(int **)(g_mem+0x2b899))
+#define DAT_2000_b89b (*(undefined2 *)(g_mem+0x2b89b))
+#define DAT_2000_b8f0 (*(undefined2 *)(g_mem+0x2b8f0))
+#define DAT_2000_b900 (*(undefined2 *)(g_mem+0x2b900))
+#define DAT_2000_b902 (*(undefined2 *)(g_mem+0x2b902))
+#define DAT_2000_b91b (*(undefined2 *)(g_mem+0x2b91b))
+#define DAT_2000_b941 (*(undefined2 *)(g_mem+0x2b941))
+#define DAT_2000_ba50 (*(undefined2 *)(g_mem+0x2ba50))
+#define DAT_2000_ba54 (*(undefined2 *)(g_mem+0x2ba54))
+#define DAT_2000_ba56 (*(undefined2 *)(g_mem+0x2ba56))
+#define DAT_2000_ba7c (*(uint8_t *)(g_mem+0x2ba7c))    /* PATCH 149: per-element dirty BYTE (asm movb); was undefined2 WORD -> ba7c=3 clobbered the adjacent bottom-box dirty byte ba7d (patch-142 a8ee class) so bdbe never repainted */
+#define DAT_2000_ba7d (*(uint8_t *)(g_mem+0x2ba7d))    /* PATCH 149: bottom-box dirty BYTE (asm movb); see ba7c */
+#define DAT_2000_ba80 (*(undefined2 *)(g_mem+0x2ba80))
+#define DAT_2000_ba82 (*(undefined2 *)(g_mem+0x2ba82))
+#define DAT_2000_ba88 (*(undefined2 *)(g_mem+0x2ba88))
+#define DAT_2000_ba8a (*(undefined2 *)(g_mem+0x2ba8a))
+#define DAT_2000_ba8c (*(undefined2 *)(g_mem+0x2ba8c))
+#define DAT_2000_ba90 (*(undefined2 *)(g_mem+0x2ba90))
+#define DAT_2000_baca (*(undefined4 *)(g_mem+0x2baca))
+#define DAT_2000_bad8 (*(undefined2 *)(g_mem+0x2bad8))
+#define DAT_2000_badc (*(undefined4 *)(g_mem+0x2badc))
+#define DAT_2000_baf8 (*(undefined2 *)(g_mem+0x2baf8))
+#define DAT_2000_bb00 (*(undefined2 *)(g_mem+0x2bb00))
+#define DAT_2000_bb04 (*(undefined2 *)(g_mem+0x2bb04))
+#define DAT_2000_bb06 (*(undefined2 *)(g_mem+0x2bb06))
+#define DAT_2000_bb5c (*(undefined4 *)(g_mem+0x2bb5c))
+#define DAT_2000_bcce (*(undefined2 *)(g_mem+0x2bcce))
+#define DAT_2000_bcd2 (*(undefined2 *)(g_mem+0x2bcd2))
+#define DAT_2000_bcfe (*(undefined2 *)(g_mem+0x2bcfe))
+#define DAT_2000_bd02 (*(undefined2 *)(g_mem+0x2bd02))
+#define DAT_2000_bd12 (*(undefined2 *)(g_mem+0x2bd12))
+#define DAT_2000_bd14 (*(undefined2 *)(g_mem+0x2bd14))
+#define DAT_2000_bd20 (*(undefined2 *)(g_mem+0x2bd20))
+#define DAT_2000_bd24 (*(undefined2 *)(g_mem+0x2bd24))
+#define DAT_2000_bd2e (*(undefined2 *)(g_mem+0x2bd2e))
+#define DAT_2000_bdd2 (*(undefined2 *)(g_mem+0x2bdd2))
+#define DAT_2000_bedc (*(undefined2 *)(g_mem+0x2bedc))
+#define DAT_2000_bee2 (*(undefined2 *)(g_mem+0x2bee2))
+#define DAT_2000_bf80 (*(undefined2 *)(g_mem+0x2bf80))
+#define DAT_2000_bfd4 (*(undefined2 *)(g_mem+0x2bfd4))
+#define DAT_2000_bfff (*(undefined2 *)(g_mem+0x2bfff))
+#define DAT_2000_c1c6 (*(undefined2 *)(g_mem+0x2c1c6))
+#define DAT_2000_d0bc (*(undefined2 *)(g_mem+0x2d0bc))
+#define DAT_2000_d158 (*(undefined2 *)(g_mem+0x2d158))
+#define DAT_2000_d164 (*(undefined2 *)(g_mem+0x2d164))
+#define DAT_2000_d166 (*(undefined2 *)(g_mem+0x2d166))
+#define DAT_2000_d168 (*(undefined2 *)(g_mem+0x2d168))
+#define DAT_2000_d16a (*(undefined2 *)(g_mem+0x2d16a))
+#define DAT_2000_d16c (*(undefined2 *)(g_mem+0x2d16c))
+#define DAT_2000_d16e (*(undefined2 *)(g_mem+0x2d16e))
+#define DAT_2000_d172 (*(undefined2 *)(g_mem+0x2d172))
+#define DAT_2000_d182 (*(undefined2 *)(g_mem+0x2d182))
+#define DAT_2000_d186 (*(undefined2 *)(g_mem+0x2d186))
+#define DAT_2000_d1a0 (*(undefined2 *)(g_mem+0x2d1a0))
+#define DAT_2000_d1c2 (*(undefined2 *)(g_mem+0x2d1c2))
+#define DAT_2000_d1ca (*(undefined2 *)(g_mem+0x2d1ca))
+#define DAT_2000_d1d4 (*(undefined2 *)(g_mem+0x2d1d4))
+#define DAT_2000_d1f4 (*(undefined4 *)(g_mem+0x2d1f4))
+#define DAT_2000_d242 (*(undefined4 *)(g_mem+0x2d242))
+#define DAT_2000_d286 (*(undefined2 *)(g_mem+0x2d286))
+#define DAT_2000_d328 (*(undefined2 *)(g_mem+0x2d328))
+#define DAT_2000_d32a (*(undefined2 *)(g_mem+0x2d32a))
+#define DAT_2000_d32c (*(undefined2 *)(g_mem+0x2d32c))
+#define DAT_2000_d32e (*(undefined2 *)(g_mem+0x2d32e))
+#define DAT_2000_d330 (*(undefined2 *)(g_mem+0x2d330))
+#define DAT_2000_d332 (*(undefined2 *)(g_mem+0x2d332))
+#define DAT_2000_d334 (*(undefined2 *)(g_mem+0x2d334))
+#define DAT_2000_d336 (*(undefined2 *)(g_mem+0x2d336))
+#define DAT_2000_d340 (*(undefined2 *)(g_mem+0x2d340))
+#define DAT_2000_d342 (*(undefined2 *)(g_mem+0x2d342))
+#define DAT_2000_d344 (*(undefined2 *)(g_mem+0x2d344))
+#define DAT_2000_d348 (*(undefined2 *)(g_mem+0x2d348))
+#define DAT_2000_d34c (*(undefined2 *)(g_mem+0x2d34c))
+#define DAT_2000_d350 (*(undefined2 *)(g_mem+0x2d350))
+#define DAT_2000_d352 (*(undefined2 *)(g_mem+0x2d352))
+#define DAT_2000_d354 (*(undefined2 *)(g_mem+0x2d354))
+#define DAT_2000_d356 (*(undefined2 *)(g_mem+0x2d356))
+#define DAT_2000_d35e (*(undefined2 *)(g_mem+0x2d35e))
+#define DAT_2000_d36e (*(undefined2 *)(g_mem+0x2d36e))
+#define DAT_2000_d740 (*(undefined2 *)(g_mem+0x2d740))
+#define DAT_2000_dad0 (*(undefined2 *)(g_mem+0x1e040)) /* PATCH 157: SS=DS=0x1c00; the trig recursion counter is DGROUP:0x2040 (=DAT_1000_e040), not ss:0x2ba90+0x2040 */
+#define DAT_3000_26ce (*(undefined2 *)(g_mem+0x326ce))
+#define DAT_3000_26d2 (*(undefined2 *)(g_mem+0x326d2))
+#define DAT_3000_26d4 (*(undefined2 *)(g_mem+0x326d4))
+#define DAT_3000_26d5 (*(undefined2 *)(g_mem+0x326d5))
+#define DAT_3000_26d6 (*(undefined2 *)(g_mem+0x326d6))
+#define DAT_3000_26d8 (*(undefined2 *)(g_mem+0x326d8))
+#define _DAT_0000_0366 (*(undefined4 *)(g_mem+0x366))
+#define _DAT_1000_3606 (*(int **)(g_mem+0x13606))
+#define _DAT_1000_5b80 (*(undefined4 *)(g_mem+0x15b80))
+#define _DAT_1000_c006 (*(undefined4 *)(g_mem+0x1c006))
+#define _DAT_1000_c016 (*(undefined4 *)(g_mem+0x1c016))
+#define _DAT_1000_c100 (*(undefined4 *)(g_mem+0x1c100))
+#define _DAT_1000_c29c (*(int **)(g_mem+0x1c29c))
+#define _DAT_1000_d55a (*(undefined4 *)(g_mem+0x1d55a))
+#define _DAT_1000_d55c (*(undefined4 *)(g_mem+0x1d55c))
+#define _DAT_1000_d5b6 (*(undefined4 *)(g_mem+0x1d5b6))
+#define _DAT_1000_dd96 (*(undefined4 *)(g_mem+0x1dd96))
+#define _DAT_1000_ddba (*(undefined4 *)(g_mem+0x1ddba))
+#define _DAT_1000_df91 (*(undefined4 *)(g_mem+0x1df91))
+#define _DAT_1000_df92 (*(undefined4 *)(g_mem+0x1df92))
+#define _DAT_1000_e01a (*(undefined4 *)(g_mem+0x1e01a))
+#define _DAT_1000_e030 (*(undefined4 *)(g_mem+0x1e030))
+#define _DAT_2000_2cc2 (*(undefined4 *)(g_mem+0x22cc2))
+#define _DAT_2000_2cc4 (*(undefined4 *)(g_mem+0x22cc4))
+#define _DAT_2000_2d38 (*(undefined4 *)(g_mem+0x22d38))
+#define _DAT_2000_2d3a (*(undefined4 *)(g_mem+0x22d3a))
+#define _DAT_2000_578c (*(undefined4 *)(g_mem+0x2578c))
+#define _DAT_2000_5f1e (*(undefined4 *)(g_mem+0x25f1e))
+#define _DAT_2000_a902 (*(undefined4 *)(g_mem+0x2a902))
+#define _DAT_2000_aa2c (*(undefined4 *)(g_mem+0x2aa2c))
+#define _DAT_3000_a4bc (*(undefined4 *)(g_mem+0x3a4bc))
+#define _DAT_3000_a4be (*(undefined4 *)(g_mem+0x3a4be))
+#define _DAT_a000_f9fe (*(undefined4 *)(g_mem+0xaf9fe))
+/* ---- RULE 3: s_ string symbols -> pointer to string bytes in g_mem ---- */
+#define s_0_FSG_2000_39bd ((char *)(g_mem+0x239bd))
+#define s_A_CAM_2000_b889 ((char *)(g_mem+0x2b889))
+#define s_INHIBIT_OFF_ACTION__ACT_CTR__PIN_2000_597d ((char *)(g_mem+0x2597d))
+#define s_INTRO_MS3_2000_5f64 ((char *)(g_mem+0x25f64))
+#define s_LOADING_2000_50fa ((char *)(g_mem+0x250fa))
+#define s_LOADING_2000_5286 ((char *)(g_mem+0x25286))
+#define s_MDFS_BIN_2000_a84a ((char *)(g_mem+0x2a84a))
+#define s_Memory_pool_corrupted_error__2000_da10 ((char *)(g_mem+0x2da10))
+#define s_READY_2000_5102 ((char *)(g_mem+0x25102))
+#define s_READY_2000_528e ((char *)(g_mem+0x2528e))
+#define s_RECORD00_SRD_2000_2cce ((char *)(g_mem+0x22cce))
+#define s_TIME_REMAINING_00_00_2000_46de ((char *)(g_mem+0x246de))
+#define s_WVSOUNDS_BIN_2000_aa94 ((char *)(g_mem+0x2aa94))
+#define s__2000_b7da ((char *)(g_mem+0x2b7da))
+#define s__BRADLEY__2000_48c6 ((char *)(g_mem+0x248c6))
+#define s___NO_ORDERS_RECEIVED_FOR_THIS_MI_2000_4cad ((char *)(g_mem+0x24cad))
+#define s____FIST_SET_2000_4a9c ((char *)(g_mem+0x24a9c))
+/* ---- RULE 4: absolute RAM accessors -> g_mem ---- */
+#define bRam00000364 (*(undefined1 *)(g_mem+0x364))
+#define bRam00010ce1 (*(undefined1 *)(g_mem+0x10ce1))
+#define bRam00010d39 (*(undefined1 *)(g_mem+0x10d39))
+#define bRam00010fb4 (*(undefined1 *)(g_mem+0x10fb4))
+#define bRam00010fd1 (*(undefined1 *)(g_mem+0x10fd1))
+#define bRam00022d39 (*(undefined1 *)(g_mem+0x22d39))
+#define bRam000f0012 (*(undefined1 *)(g_mem+0xf0012))
+#define cRam00000365 (*(undefined1 *)(g_mem+0x365))
+#define cRam00010ce1 (*(undefined1 *)(g_mem+0x10ce1))
+#define cRam00013280 (*(undefined1 *)(g_mem+0x13280))
+#define cRam000f0000 (*(undefined1 *)(g_mem+0xf0000))
+#define iRam00010994 (*(int *)(g_mem+0x10994))
+#define iRam00010998 (*(int *)(g_mem+0x10998))
+#define iRam00010ce2 (*(int *)(g_mem+0x10ce2))
+#define iRam00011224 (*(int *)(g_mem+0x11224))
+#define iRam00015965 (*(int *)(g_mem+0x15965))
+#define iRam0002a875 (*(int *)(g_mem+0x2a875))
+#define iRam000f0000 (*(int *)(g_mem+0xf0000))
+#define iRam000f0002 (*(int *)(g_mem+0xf0002))
+#define iRam000f0004 (*(int *)(g_mem+0xf0004))
+#define iRam000f0006 (*(int *)(g_mem+0xf0006))
+#define iRam000f0008 (*(int *)(g_mem+0xf0008))
+#define iRam000f000a (*(int *)(g_mem+0xf000a))
+#define iRam000f000e (*(int *)(g_mem+0xf000e))
+#define iRam000f0010 (*(int *)(g_mem+0xf0010))
+#define pbRam000f0008 (*(undefined1 **)(g_mem+0xf0008))
+#define pcRam0001c5e4 (*(char **)(g_mem+0x1c5e4))
+#define pcRam000f0000 (*(char **)(g_mem+0xf0000))
+#define pcRam000f0002 (*(char **)(g_mem+0xf0002))
+#define pcRam000f0004 (*(char **)(g_mem+0xf0004))
+#define pcRam000f0006 (*(char **)(g_mem+0xf0006))
+#define pcRam000f0008 (*(char **)(g_mem+0xf0008))
+#define pcRam000f000a (*(char **)(g_mem+0xf000a))
+#define pcRam000f000e (*(char **)(g_mem+0xf000e))
+#define piRam000f0002 (*(int **)(g_mem+0xf0002))
+#define piRam000f0008 (*(int **)(g_mem+0xf0008))
+#define piRam000f000a (*(int **)(g_mem+0xf000a))
+#define piRam000f000e (*(int **)(g_mem+0xf000e))
+#define ppuRam000f000c (*(undefined2 ***)(g_mem+0xf000c))
+#define puRam00010bdb (*(undefined2 **)(g_mem+0x10bdb))
+#define puRam00010ce2 (*(undefined2 **)(g_mem+0x10ce2))
+#define puRam0001327c (*(undefined2 **)(g_mem+0x1327c))
+#define puRam000f0000 (*(undefined2 **)(g_mem+0xf0000))
+#define puRam000f0002 (*(undefined2 **)(g_mem+0xf0002))
+#define puRam000f0006 (*(undefined2 **)(g_mem+0xf0006))
+#define puRam000f0008 (*(undefined2 **)(g_mem+0xf0008))
+#define puRam000f000a (*(undefined2 **)(g_mem+0xf000a))
+#define puRam000f000c (*(undefined2 **)(g_mem+0xf000c))
+#define ram0x000037dd (*(undefined2 *)(g_mem+0x37dd))
+#define ram0x0001d55b (*(undefined2 *)(g_mem+0x1d55b))
+#define ram0x0001e025 (*(undefined2 *)(g_mem+0x1e025))
+#define uRam00010994 (*(undefined2 *)(g_mem+0x10994))
+#define uRam00010996 (*(undefined2 *)(g_mem+0x10996))
+#define uRam00010998 (*(undefined2 *)(g_mem+0x10998))
+#define uRam0001099a (*(undefined2 *)(g_mem+0x1099a))
+#define uRam00010bd9 (*(undefined2 *)(g_mem+0x10bd9))
+#define uRam00010ce1 (*(undefined2 *)(g_mem+0x10ce1))
+#define uRam00015965 (*(undefined2 *)(g_mem+0x15965))
+#define uRam00015967 (*(undefined2 *)(g_mem+0x15967))
+#define uRam0001596b (*(undefined2 *)(g_mem+0x1596b))
+#define uRam0001c290 (*(undefined2 *)(g_mem+0x1c290))
+#define uRam0001c466 (*(undefined2 *)(g_mem+0x1c466))
+#define uRam00022bc8 (*(undefined2 *)(g_mem+0x22bc8))
+#define uRam00024bb8 (*(undefined1 *)(g_mem+0x24bb8))   /* PATCH 319: radio/checkbox widget dirty-flag is a BYTE (asm mov byte,3); WORD `=3` clobbered the adjacent renderer-index byte */
+#define uRam00024bbe (*(undefined1 *)(g_mem+0x24bbe))   /* PATCH 388: AUTO TURRET widget dirty-flag BYTE (asm mov byte,3 @6bec); WORD =3 clobbered renderer-index 0x8bbf -> LED never re-rendered */
+#define uRam000f0000 (*(undefined2 *)(g_mem+0xf0000))
+#define uRam000f0001 (*(undefined2 *)(g_mem+0xf0001))
+#define uRam000f0002 (*(undefined2 *)(g_mem+0xf0002))
+#define uRam000f0004 (*(undefined2 *)(g_mem+0xf0004))
+#define uRam000f0006 (*(undefined2 *)(g_mem+0xf0006))
+#define uRam000f0008 (*(undefined2 *)(g_mem+0xf0008))
+#define uRam000f000a (*(undefined2 *)(g_mem+0xf000a))
+#define uRam000f000c (*(undefined2 *)(g_mem+0xf000c))
+#define uRam000f000e (*(undefined2 *)(g_mem+0xf000e))
+#define uRam000f0010 (*(undefined2 *)(g_mem+0xf0010))
+#define uRam000f0012 (*(undefined2 *)(g_mem+0xf0012))
+#define uRam000f0014 (*(undefined2 *)(g_mem+0xf0014))
+/* ---- RULE 7: _FUN/_thunk_FUN code-address data locations (SMC / far-ptr) -> g_mem ---- */
+#define _FUN_0000_0368 (*(undefined2 *)(g_mem+0x368))
+/* ---- RULE 7: address-taken jump targets (OPEN: unresolved indirect dispatch) -> g_mem ---- */
+#define LAB_0000_5cf3_4 (*(undefined1 *)(g_mem+0x5cf7))
+
+/* ===================== engine function bodies (verbatim from the decompile) ===================== */
+
+/* ===== app_entry @ 0000:0004 ===== */
+
+/* WARNING: Removing unreachable block (ram,0x00000025) */
+/* WARNING: Removing unreachable block (ram,0x00000173) */
+
+undefined2 __allregs
+app_entry(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
+         undefined2 param_5,undefined2 param_6)
+
+{
+  undefined1 uVar1;
+  undefined2 uVar2;
+  undefined2 extraout_DX;
+  undefined2 extraout_DX_00;
+  undefined2 in_register_0000000e;
+  undefined4 uVar3;
+  undefined2 uVar4;
+  undefined2 unaff_ES;
+  undefined1 in_CF = 0;
+  undefined1 uVar5;
+  undefined2 uVar6;
+  undefined2 uVar7;
+  undefined2 uVar8;
+  
+  uVar3 = CONCAT22(in_register_0000000e,param_3);
+  DAT_2000_ba90 = 0x424a;
+  DAT_1000_c068 = unaff_ES;
+  FUN_0000_f69e();
+  FUN_0000_f6da(0x3390,param_1,param_2,param_4,param_5,param_6);
+  uVar5 = 0;
+  if ((bool)in_CF) {
+    uRam000f0014 = 0x21;
+    uRam000f0000 = 0x4c01;
+    uRam000f0002 = (undefined2)uVar3;
+    uRam000f000e = 0x1c00;
+    uRam000f0004 = param_1;
+    uRam000f0006 = param_2;
+    uRam000f0008 = param_5;
+    uRam000f000a = param_6;
+    uRam000f000c = param_4;
+    uRam000f0010 = unaff_ES;
+    fist_int_dispatch();
+    uVar3 = CONCAT22((int)((ulong)uVar3 >> 0x10),uRam000f0002);
+    param_1 = uRam000f0004;
+    param_2 = uRam000f0006;
+    param_5 = uRam000f0008;
+    param_6 = uRam000f000a;
+    uVar5 = uRam000f0012;
+  }
+  uVar2 = FUN_0000_f738(param_2,param_4);
+  uVar1 = FUN_1000_4b45(uVar2);
+  FUN_0000_f6e9(uVar1,param_1,(int)uVar3,param_4,param_5,param_6);
+  FUN_0000_f70b(param_1,param_2,(int)uVar3,param_4,param_5,param_6);
+  uVar1 = FUN_1000_223c(param_1,param_2,(int)uVar3,param_4,param_5,param_6);
+  FUN_0000_fd1c(uVar1,param_1,param_2,(int)uVar3,param_4,param_5,param_6);
+  if (!(bool)uVar5) {
+    uVar4 = 0xf69;
+    FUN_1000_449e(param_1,param_2,(int)uVar3,param_4,param_5,param_6);
+    uVar2 = 0xf69;
+    FUN_0000_fa52();
+    FUN_0000_f77f(param_4);
+    FUN_1000_020d(param_1,param_2,(int)uVar3,param_4,param_5,param_6,uVar4);
+    FUN_1000_06bc(param_1,param_4,99,uVar2);
+    FUN_0000_f7ad();
+    FUN_1000_4f6e();
+    FUN_1000_4b16();
+    uVar4 = 0xf69;
+    FUN_1000_2ebe(param_1,(int)uVar3,param_4,param_5);
+    uVar2 = 0xf69;
+    FUN_1000_515e(param_1,param_4,param_6,0x7c,uVar4);
+    FUN_0000_134e(param_1,param_4,param_6,0x7f);
+    if (!(bool)uVar5) {
+      FUN_0000_14da(param_2,param_4,param_6);
+      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c540)))(0xf69,uVar2);
+      param_2 = extraout_DX;
+      FUN_0000_1384();
+      FUN_1000_5214();
+      FUN_1000_5228();
+      FUN_1000_3446();
+      FUN_1000_392a(param_1,param_2,(int)uVar3,param_4,param_5,param_6);
+      FUN_1000_3a14();
+      FUN_0000_1c6a();
+      FUN_1000_51a6();
+      FUN_0000_2144(param_4,param_6);
+      if (!(bool)uVar5) {
+        uVar2 = FUN_0000_00d0(param_1,param_2,(int)uVar3,param_4,param_5,param_6);
+        return uVar2;
+      }
+    }
+    while (FUN_1000_5c5f(), !(bool)uVar5) {
+      FUN_1000_5c3a();
+      FUN_0000_cae6(param_1,uVar3,param_4,param_5,param_6);
+    }
+    FUN_1000_b175();
+    FUN_0000_1c64();
+    FUN_0000_21b3();
+    FUN_1000_51bb();
+    FUN_0000_1ca5();
+    FUN_1000_3a78();
+    FUN_1000_3992(param_1,param_2,(int)uVar3,param_4,param_5,param_6);
+    uVar6 = 0xf69;
+    FUN_1000_3485();
+    uVar4 = 0xf69;
+    FUN_1000_524d();
+    uVar2 = 0xf69;
+    FUN_1000_521e();
+    FUN_0000_1394();
+    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c544)))(0xf69,uVar2,uVar4,uVar6);
+    param_2 = extraout_DX_00;
+    FUN_0000_1519();
+    FUN_0000_136e(param_4,param_6);
+    FUN_1000_516f(param_4,param_6);
+    FUN_1000_2f3d(param_1,param_4,param_6);
+    FUN_1000_4b32();
+    uVar2 = FUN_1000_4f78();
+    FUN_1000_0708(uVar2,param_1,param_2,(int)uVar3,param_4,param_6);
+    FUN_1000_027b(param_1,(int)uVar3,param_4,param_5,param_6);
+    FUN_0000_fa81();
+    FUN_1000_44cf(param_1,param_4,param_6);
+  }
+  uVar2 = (undefined2)uVar3;
+  FUN_0000_fd60(param_1,param_2,uVar2,param_4,param_5,param_6);
+  uVar8 = 0xf69;
+  FUN_1000_22a3(param_1,param_4,param_6);
+  uVar7 = 0xf69;
+  FUN_0000_f72c(param_1,uVar2,param_4,param_5,param_6);
+  DAT_1000_c684 = 0x330;
+  DAT_1000_c686 = 0xf69;
+  uVar4 = 0;
+  uVar6 = 0xf69;
+  thunk_FUN_1000_5591(0);
+  FUN_0000_f6ba();
+  uRam000f0014 = 0x21;
+  uRam000f0000 = 0x4c00;
+  uRam000f000e = 0x1c00;
+  uRam000f0002 = uVar2;
+  uRam000f0004 = param_1;
+  uRam000f0006 = param_2;
+  uRam000f0008 = uVar4;
+  uRam000f000a = param_6;
+  uRam000f000c = param_4;
+  uRam000f0010 = unaff_ES;
+  fist_int_dispatch();
+  return uRam000f0000;
+}

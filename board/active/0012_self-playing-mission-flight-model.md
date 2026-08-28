@@ -3096,3 +3096,24 @@ STATE: pipeline complete aim->acquire->fire->spawn->fly->HIT->explosion-effect (
 blockers to a296->0 are now: (A) the enemy-HP SPLASH (ba33 explosion-object 0x9c4d update, or terrain-hit
 splash needing ground-clamped enemy Z), and (B) a LAYOUT-SENSITIVE latent SIGSEGV on the combat path that
 also defeats printf diagnosis -- best chased with ASAN/watchpoint.  Goal unmet (a296=16).
+
+## CRASH FIXED (Gate 3): 77cf+b767 base-loss (patch 442) -> sim runs 250s clean; splash still open + MORE latent bugs
+
+Caught the t=43515 SIGSEGV under gdb (high FIST_TICK_HZ to reach it fast): #0 FUN_1000_77cf @ fist.c:59713,
+#1 FUN_0000_7e29 (the FIRE/spawn dispatch), #2 7c1d, #3 c0e5.  77cf is a base-lost weapon-spawn sibling of
+778a (patch 438): `*(int*)(param_4+0xb3)` derefs the FIRER near-offset as a HOST POINTER + uses unaff_CS
+(garbage) for the b1df-spawned projectile.  Its launcher b767 is likewise base-lost (param_2=proj/param_3=
+firer as host ptrs).  Fixed both (mirror 778a/b73b), asm-verified vs 0x1778a-sibling -> patches/held/442.
+RESULT: the AZER1 self-play now runs 250s sim to completion WITHOUT the crash (exit 0).  a294=131.
+
+Two things remain:
+  1. a296 STILL 16: the enemy-HP SPLASH (ba33 explosion object 0x9c4d) still doesn't apply -- the last link.
+  2. MORE LATENT base-losses: adding a go691-branch diagnostic STILL SIGSEGVs at map-load even with 77cf
+     fixed -> there are additional unpatched host-ptr base-losses on the now-deeper combat path, each
+     "lucky" in one layout and faulting when perturbed.  The METHOD is proven: gdb with a high tick rate
+     catches each crash -> read the faulting FUN_ -> it is a near-offset-as-host-ptr base-loss -> rebase
+     (mirror the 438-family).  Iterate until the combat path is clean, THEN the splash can be instrumented.
+So the finish is: (a) grind the remaining combat-path base-losses via gdb-catch-and-fix (mechanical, multi-
+iteration, method proven this session by patch 442), and (b) implement/repair the explosion-object 0x9c4d
+splash so enemy HP falls to the b354/b2ef destroy that does a296--.  Goal unmet (a296=16); one crash fixed,
+sim runs full, splash + residual base-losses remain.
