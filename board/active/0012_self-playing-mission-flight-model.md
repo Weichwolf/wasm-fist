@@ -3537,3 +3537,23 @@ STATE OF THE GOAL:
 The combat MODEL is done. The remaining work is the overlay's win-DECLARATION + parity, not the simulation
 itself. This is the closest the project has been: the sim resolves the battle; the engine just needs to
 say so.
+
+## Turn N+5: 2b1e render wrap SHIPPED (robust elimination); 2da2 signedness bug found (a5dc win-logic is dead)
+
+Two results:
+1. PATCH 448 (mga 2b1e 16-bit src+dst segment wrap) SHIPPED. The un-wrapped PATCH-312 blitter walked host
+   pointers past the 64 KB segment on the garbage/large wreck sprites that appear once units die -> the
+   trajectory-dependent SIGSEGV. Wrapped to uint16_t. RESULT: the enemy-elimination milestone is now ROBUST
+   -- 6/6 runs reach a296==0 with NO crash (was intermittent). make check OK.
+2. Found (gdb watchpoint) WHY the engine never declares the win: a5dc's guard `if (DAT_2000_2da2 != -1)` is
+   ALWAYS TRUE because undefined2 is uint16_t, so `0xffff != -1` = `65535 != -1`. a5dc early-returns every
+   frame and NEVER runs the side-count/win-check. The asm is `cmp word,0xffff; jne`. This signedness bug
+   hits all 10 `2da2 == -1` sites. Fix + the a5dc count-path/str-seg base-loss rebuild are saved in
+   patches/held/449. CAVEAT: applying the signedness fix also opens the OTHER 2da2==-1 gates (15514 etc.),
+   which guard flight-model code with its own latent base-losses -> the combat then STALLS at ~2 kills
+   (a base-loss cascade, same pattern as the c31e cluster). So 449 is held until that cascade is fixed.
+
+State: robust deterministic AI-vs-AI to enemy elimination (a296==0, 6/6, no crash) [PATCH 266+447+448].
+The engine's win-DECLARATION is gated behind (a) the 2da2 signedness fix and (b) fixing the base-loss
+cascade in the 2da2-gated flight-model functions that fix exposes. That cascade + the a296 overshoot +
+native/wasm parity are what remain.
