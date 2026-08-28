@@ -3403,3 +3403,38 @@ per-unit target-selection + heading (the 902c/a9ea/a358/a57a steering outputs) t
 find where the port's surviving-unit AI diverges (idles / steers away instead of driving to the nearest
 live enemy). The 6-kills-then-stall signature says the divergence is in re-target/re-approach after the
 first engagement, not in the fire/damage path.
+
+## Turn N+2: BREAKTHROUGH — the damage-routing bug found & fixed; real enemy units now die (a296 falls)
+
+Root cause of "no real kills" FOUND and FIXED (patch 266 amended). Instrumenting b39c's actual arguments:
+it was damaging `di=0x600` (a wild, off-registry object, garbage type 0x3e78) while the log showed the
+REAL target near offset (0xc252) arriving in **param_1**. Cause: b39c is reached ONLY via `c336 <- c31e`'s
+`-0x1ab0` action dispatch, emitted as `(*vec)((int)di)` -- so the target di lands POSITIONALLY in the
+handler's param_1 (c336 forwards it to b39c's param_1), NOT param_3. Ghidra's __allregs *signature* put
+DI in param_3, but `__allregs` is a no-op macro, so the positional C arg wins. The asm's AX/BX damage
+selectors were stored by c31e to [0x9bdb]/[0x9bd9] just before the call. Prior PATCH 266 read
+di=param_3 (leftover garbage) + ax/bx from the dropped param_1/param_2, so BOTH damage-accumulation AND
+the a93e/c047 destroy calls hit the wild 0x600 object; every real enemy stayed at hp=0 and a296 only
+moved via the spurious type-0x13 churn (which is why the "6 kills" reading kept flip-flopping -- they were
+never real).
+
+FIX (patch 266): `di = param_1`; `ax0 = [0x9bdb]`, `bx0 = [0x9bd9]`; `param_3 = di` so the downstream
+destroy/reaction calls (a93e/c047/a02d/a064/a080) act on the real target too.
+
+RESULT (deterministic, AZER1): the correct enemy unit (offc252) now accumulates real damage
+(hp 0 -> 208) and DIES; a296 falls 16 -> 13 in a short window, and in a longer render-surviving trajectory
+plows PAST 0 (underflows to 65496 = -40 signed) -> genuine mass kills. First time in the project real
+enemy units take damage and die. make check OK (both targets), fix is a proper asm-reasoned patch.
+
+TWO REMAINING BLOCKERS to a clean resolved a296==0:
+1. RENDER CRASH ON WRECKS: when a unit dies it becomes a type-0x13 wreck; the un-wrapped mga blitter
+   (2b1e + siblings) SEGVs on the wreck sprite (the known render fragility). Trajectory-dependent: some
+   runs SEGV at a296=13, some survive to a296=-40. Needs the 16-bit src+dst segment wrap across the mga
+   blitters (patches/held/446 for 2b1e -- note its body needs the m_260c_recseg helper; siblings
+   26de/2660/298a/2758 still to wrap).
+2. a296 OVERSHOOT: it underflows past 0 to -40 instead of stopping at 0 -- b2ef over-decrements (~56
+   dec for ~16-22 units); wreck cleanup / sub-index reuse double-counts. Resolution check is a296==0, so
+   the count must land exactly on 0. Investigate after the render survives (so the full run is observable).
+
+NEXT: fix the mga blitter wrap so the run survives the wrecks, then trace/​fix the a296 over-decrement so
+the counter stops at exactly 0 = mission resolved.

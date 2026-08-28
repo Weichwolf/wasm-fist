@@ -13,7 +13,7 @@ word[di+0x40]; param_3+0x1d=+0x74 vs asm byte[di+0x3a]) and DROPPED table-A enti
 unaff_CS = the pushed dx).  Rebuilt faithfully in the DGROUP model.  Mission-cascade only.
 --- a/fist.c
 +++ b/fist.c
-@@ -63831,59 +63831,76 @@
+@@ -63831,59 +63831,87 @@
  void __allregs FUN_1000_b39c(int param_1,int param_2,int *param_3)
  
  {
@@ -40,9 +40,20 @@ unaff_CS = the pushed dx).  Rebuilt faithfully in the DGROUP model.  Mission-cas
 +   * param_3+0x1d=+0x74 vs asm byte[di+0x3a]), and DROPPED the table-A near offset entirely (the phantom
 +   * `unaff_CS`, actually the pushed dx = word[DG:(word[di]*2+0xe3c0)]).  Rebuilt faithfully. */
 +  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
-+  unsigned int di = (unsigned short)(uintptr_t)param_3;
-+  unsigned int bx0 = (unsigned short)param_2;
-+  unsigned int ax0 = (unsigned short)param_1;
++  /* board:0012 damage-routing fix: b39c is reached ONLY via c336 <- c31e's -0x1ab0 action dispatch,
++   * which is emitted as `(*vec)((int)di)` -- so the TARGET near offset (di) arrives POSITIONALLY in the
++   * handler's param_1 (c336 forwards it to b39c's param_1), NOT param_3 (Ghidra's __allregs signature
++   * put DI in param_3, but __allregs is a no-op macro so the positional C arg wins).  The asm's AX/BX
++   * damage-record selectors were stored by c31e to [0x9bdb]/[0x9bd9] immediately before the call and are
++   * unchanged at entry, so read them from there.  Prior code read di=param_3 (leftover garbage 0x600)
++   * + ax/bx from the dropped param_1/param_2: damage + destroy hit a wild off-registry object, every
++   * real enemy stayed at hp=0, and a296 never fell for a genuine kill.  param_3 is re-pointed at the
++   * object so the downstream a93e/c047/a02d/a064/a080 destroy+reaction calls (which read it as their DI
++   * arg) also act on the real target. */
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  unsigned int bx0 = (unsigned short)DAT_2000_5bd9;
++  unsigned int ax0 = (unsigned short)DAT_2000_5bdb;
++  param_3 = (int *)(uintptr_t)di;
 +  unsigned int si, bxA, siB, bx, ax, dx;
 +  unsigned char al, ah, oldv;
 +  int r;
