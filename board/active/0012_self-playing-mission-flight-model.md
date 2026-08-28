@@ -3074,3 +3074,25 @@ Z being non-terrain-following makes a 3D splash-distance miss them.  Plus GATE 2
 (would-fire=97 vs ace0=4, the 7e29 [0x91]==4||[0xa8]==0 ammo/reload gate).
 Every stage aim->acquire->fire->spawn->fly->HIT->explosion-EFFECT now runs; the enemy-HP splash from the
 spawned explosion object is the last link.  Goal unmet (a296=16); pipeline complete but for the splash sink.
+
+## Splash sink narrowed + a LAYOUT-SENSITIVE latent crash exposed (Gate 3 is a real memory bug)
+
+- bbb7 -> c31e is NOT the shell's splash: c31e's di = param_3 = DAT_2000_5a25 (a type-3 GLOBAL object,
+  action-method 0xc336), not the shell (bbb7 passes the shell as param_4, which c31e ignores).  Confirmed
+  by a one-shot dump: c31e fires only for type=0x3.  So the go691 branch's damage is NOT in bbb7/c31e.
+- That leaves the ba33-spawned explosion OBJECT (template 0x9c4d) as the splash carrier (its own update),
+  OR a direct terrain-hit-at-target's-position whose splash needs the enemy on the ground.
+- CRITICAL: adding ANY ~5-line diagnostic to the b5e7 go691 branch makes the build SIGSEGV at MAP-LOAD,
+  while the identical build without it completes (a294=150).  The added code is getenv+go691-guarded and
+  never executes at map-load -> this is a LAYOUT-SENSITIVE latent memory bug (uninitialised/wild pointer
+  that is "lucky" in one binary layout, faults in another).  It is the same class as the t=43515 crash that
+  persists under FIST_NORENDER.  So Gate 3 is a genuine memory-corruption bug on the now-active combat path,
+  and it also makes go691-branch instrumentation fragile -- it must be found+fixed (likely a base-loss in
+  the projectile/explosion/despawn path or the op-0x4c display-list) before the splash can be diagnosed by
+  instrumentation.  Recommended: hunt it with ASAN (build without ASAN=' ' to get the real allocator +
+  redzones) or a watchpoint on the faulting address, rather than more printf probes.
+
+STATE: pipeline complete aim->acquire->fire->spawn->fly->HIT->explosion-effect (op-0x54 landed).  The two
+blockers to a296->0 are now: (A) the enemy-HP SPLASH (ba33 explosion-object 0x9c4d update, or terrain-hit
+splash needing ground-clamped enemy Z), and (B) a LAYOUT-SENSITIVE latent SIGSEGV on the combat path that
+also defeats printf diagnosis -- best chased with ASAN/watchpoint.  Goal unmet (a296=16).
