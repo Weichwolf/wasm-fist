@@ -4674,3 +4674,24 @@ PROGRESS THIS TURN: patch 459 LANDED (render-frontier base-loss #1: 2758 CRTC co
 identical, make check OK); the render frontier is being walked down with the watchpoint/backtrace method,
 now at blocker #2 (the coop-tick/reticle deadlock), precisely diagnosed.  458 held pending the chain.
 Goal UNMET; render frontier advancing concretely (459 landed, #2 diagnosed).
+
+## Turn N+20 cont.28: coop-tick spin-breaker INSUFFICIENT -- blocker #2 is deeper (render-order/op-0x4c), not just the tick freeze
+
+Tested the coop-tick hypothesis for blocker #2 directly: added a diagnostic spin-breaker to fist_timer_pump
+(after map-load + pre-cockpit, force one tick every 5000 frozen pumps to break the 3346 wait).  RESULT: the
+458-active mission STILL stalls at t=1 -- advancing the tick did NOT unblock it.  So the pre-cockpit
+reticle-render deadlock is NOT merely the coop-tick freeze; there is a deeper render-ORDER / display-list
+issue (the op-0x4c/DGROUP:0x7aa4 frontier): with 458's live target, the frame loop's display-list walk
+dispatches the reticle render (22dd->3a68, which tick-waits and pulls in the roster walk c33c) BEFORE the
+cockpit-view element (795c/a84c that set d548/d549) -- and even feeding it ticks does not let it complete
+(d548=d549=00 throughout).  The correct frame never assembles.
+So blocker #2 is a genuine op-0x4c display-list ordering/content defect, not a one-line timing fix: the
+combat-active first frame's element list is wrong (the reticle/roster paint runs before the windshield/
+cockpit-view setup).  This is the "op-0x4c display-list / DGROUP:0x7aa4 viewport-geometry frontier" the GOAL
+names, reached only now that combat is live.
+PROGRESS THIS TURN: patch 459 LANDED (render base-loss #1, CRTC corruption, byte-identical); blocker #2
+diagnosed to the coop-tick layer then REFINED (spin-breaker insufficient -> it is the display-list order).
+The render frontier is a deep chain; 459 is the first landed link.  Next: dump the 458-active first-frame
+display-list element order (the DGROUP:0x3af0 element list 209e walks) vs the without-458 order to find why
+the reticle/roster paint precedes the cockpit-view setup, and fix that ordering/registration.  458 held.
+Goal UNMET; render frontier is deeper than one fix, 459 landed, #2 refined to the display-list order.
