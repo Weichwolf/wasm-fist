@@ -3270,3 +3270,99 @@ it cannot be exercised until the op-0x4c render/present drives the deterministic
 single gating frontier now.  a296 has never genuinely dropped.  Next: reconstruct the op-0x4c display-list +
 its d548 frame-queue/present handshake (board:0001) as the real, faithful per-frame path -> sim advances on a
 correct render -> THEN the fire->hit->damage chain can be honestly assessed to a296==0.
+
+## Turn N: op-0x4c coupling DISPROVEN; render is a data-dependent throttle; a296-damage is the real gap
+
+Three findings overturn last turn's "op-0x4c present coupling gates the sim" frame:
+
+1. **op-0x4c is NEVER called in-mission** (instrumented the extender gate: `in_mission=0` on all
+   32 calls, all pre-mission/menu). The in-mission present path is `459a -> 206f` (per-frame render)
+   and `459a -> 22dd` (end-of-frame), both direct mga blitters — NOT the extender op-0x4c. The
+   FIST_SIMRUN d548-bit7 handshake fires 0 times in-mission. Last turn's coupling hypothesis was wrong.
+
+2. **The sim advances fine.** 459a's real structure (fist.c ~13712): outer loop = `pump; 206f(render);
+   2ce2 += [0x452]-2ce0; for(;2ce2!=0;2ce2--){ event-drain; SIM-STEP=icall[2ce4]; c0ca; 461b }; c52c;
+   096c; 22dd`. The SIM STEP is the `[2ce4]` icall. Timed run: 58455 frames, **3048 sim steps** in 8s.
+
+3. **The render 206f is the throttle, and it is DATA-DEPENDENT.** Direct clock timers over one 8s run:
+   `206f=6.43s 22dd=0.76s sim=0.00 c0ca=0.09 pump=0.23 c52c/096c/1e4b~0`. 206f = 80% of wall time.
+   Frame count swings wildly (6 vs 58455) with trivial build changes because SOME frames are
+   catastrophic: when a unit's sprite descriptor is garbage (cols/rows huge), the mga blitter runs a
+   ~16M-iteration loop (~1.3s/frame); otherwise ~0.1ms/frame. The fix is the pending "16-bit src+dst
+   segment wrap across ALL mga blitters" (26de/2660/298a/2758…), which caps each blit at real-mode cx.
+   NB 077e(atan2) was a **gdb misattribution** — its loops max at 590 iters (main=2, byte=0, bit=590),
+   not a spin. The earlier "077e spins" reading was wrong.
+
+**THE REAL GAP (unchanged bottom line):** across 3048 genuine sim steps, `a296` stayed 16 — no enemy
+unit died. The combat model *runs* but does not reduce enemy-unit HP to trigger b2ef's `a296--`. That
+is the flight/combat-model gap the goal names, and it is now cleanly separable from the render throttle.
+Next: with the sim now advancing thousands of steps, instrument the damage path (unit registry @DG:0xdfbc,
+per-unit HP, the b2ef destroy at PATCH 363) to see whether damage ever reaches the 16 enemy units.
+
+## Turn N (cont.): the damage path is NOT b5e7 — bb1b splash never fires; b5e7 stuck on one dead object
+
+With the sim now advancing (5900 steps/run), instrumented the full splash-damage chain b5e7 -> bb1b ->
+c14f -> b2ef(unit). Hard data (15s / ~5900 sim steps, AZER1, deterministic):
+
+- `bb1b-calls = 0`, `c14f-calls = 0`  -> the unit splash-damage walk is NEVER invoked. a296 CANNOT drop.
+- `b5e7: calls=13718 timeout=12281 terrain=1437 decr=0 splash-reached=0`.
+- **ALL 13718 b5e7 calls are on ONE object: type=9, di=0xaf63.** Its age `[obj+0x2d]` runs away to 5300
+  (should cap at 0x1e0=480): the timeout-destroy `b6be (b354->b2ef)` never removes it, because di=0xaf63
+  is NOT in the 0xdfbc registry -> b354 returns not-found -> b2ef's `if(off!=0)` guard no-ops. So one
+  malformed type-9 object is re-updated every frame forever, always taking the timeout branch, never the
+  destruct/splash branch. bb1b is unreachable from it.
+- Yet a294 churns to 121 (projectiles ARE created/destroyed elsewhere) -> **b5e7 (PATCH 335) is not the
+  live projectile updater**; the real per-frame projectile motion + unit-damage path is a DIFFERENT
+  function reached from the sim step (icall `[2ce4]`). I had been analyzing/patching the wrong function
+  for the combat-damage chain.
+
+NEXT (concrete): find the real projectile/weapon update path — trace what the sim step `[DGROUP:0x2ce4]`
+dispatches to, and which function iterates the live projectile list and calls the unit-damage handler
+(the c14f per-type vector `word[DG:type*2-0x1ae8]`). Ground-truth it against the DOSBox oracle: arm
+`FIST_WATCHFLAT` on a296 (=0x1002a294 span 4) during an original AZER1 run to capture WHO (cs:eip) writes
+a296 when an enemy dies, then map that writer back to the port. Separately: enemy AI fires only ~3 shots
+in 15s -> the weapon-fire trigger (fire dispatch, PATCH 438 / 7e29 firer) is also under-firing; worth a
+census once the damage path is found. Render throttle (206f data-dependent 16M-iter blitter frames) is a
+separate, known, deferred perf item — it limits steps/sec but does not block correctness.
+
+## Turn N (final): the a296 gap localized to ONE point — c31e damage on the type-3 target doesn't kill it
+
+Traced the ENTIRE combat path from the sim step down to the exact function where it fails. The real
+per-frame update is **c0e5 (PATCH 243)**, walking the 0xdfbc registry and dispatching each object's
+per-type method through THREE parallel DGROUP vtables:
+
+| vtable | near-base | dispatcher | role |
+|--------|-----------|-----------|------|
+| update      | `type*2-0x1bac` | c0e5 | per-frame motion/logic |
+| interaction | `type*2-0x1ae8` | c14f (from bb1b splash) | splash damage |
+| action      | `type*2-0x1ab0` | c31e | targeted action/damage |
+
+**In-mission object census (c0e5, per-type update-vec + a296 flag@[0xe614+type]):**
+- A296-side UNITS: `t0->7c1d t1->87df t2->902c t3->97d5 t13->c0ba` (type-2 902c = the unit-AI steering).
+- a294-side PROJECTILES/FX: `t10->b51f (dominant weapon, 808k/run) t15->9c4f t1a->bc46 t1b->b355`.
+
+**The weapon path WORKS up to the last step.** b51f (PATCH 417, the type-0x10 weapon) fires 429×/run;
+its **bb64 target-find returns a REAL enemy unit — type-3 at off 0xc252 — 277×**, and dispatches
+`c31e(target, dmg=10)` on it each time. So: weapon fires -> finds a real A296 unit -> calls the damage
+action 277 times.
+
+**But the unit never dies.** b2ef-destroy census over the whole run: the ONLY thing ever destroyed is
+`type-0x13 at off 0x600, 6×` — one object cycling spawn/destroy. Types 0,1,2,3 (the real tanks) are
+NEVER destroyed. So the a296 16->10 is that single type-0x13 churn, **definitively not enemy kills**
+(re-confirmed, matches prior turns).
+
+**THE GAP, to a single point:** `c31e`'s action on the type-3 target (its action method
+`word[DG:3*2-0x1ab0]`, a b583-family handler) is invoked 277× with damage=10 (stored to DAT_2000_5bd9)
+but does NOT reduce the unit's HP to the destroy threshold / never calls b2ef on it. Either the handler
+doesn't apply DAT_5bd9 as damage to the target's HP field, or the HP<=0 -> b2ef(self) trigger is
+mis-decompiled (base-loss). THIS is the one function to fix for a296 to drop on real units.
+
+Secondary: bb64 only ever returns ONE target (type-3 @0xc252) though 16 units exist — a targeting-breadth
+issue to revisit after the damage lands. Enemy AI fire cadence also low. Render 206f throttle = separate
+deferred perf item (data-dependent 16M-iter blitter frames), does not block correctness.
+
+NEXT: read the type-3 action handler (statically: it's a b583-family fn; find it via the runtime
+`word[DG:0xe4f6]` = the -0x1ab0 slot for type 3, or trace the vtable init). Verify vs asm whether it
+applies DAT_5bd9 to the target HP and triggers b2ef at HP<=0. Ground-truth with the oracle: arm
+`FIST_WATCHFLAT=0x1002a294 span 4` on an original AZER1 run to capture the cs:eip that writes a296 on a
+real kill, then map that writer + its HP-decrement site back to the port.
