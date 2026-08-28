@@ -3887,3 +3887,26 @@ identity), (b) port the 1a45-class load base-losses so the load does identical w
 combat-time CS-carry stores. The falsifiable meter stays FIST_FARTRACE (first-divergence-seq) + a
 MISSION-STATE-synced dump (dump-on-a296==16), since [0x452] is not a cross-target clock until the load is
 deterministic. Native done + committed (266..452); wasm byte-identity precisely re-scoped.
+
+## Turn N+16: MAJOR NARROWING — load+menu are byte-identical; divergence is ONLY the combat (5-tick window)
+
+Systematic native-vs-wasm DGROUP bisection (both builds DETERMINISTIC -- confirmed wasm 0 run-to-run diffs
+at FIST_DUMPTICK=2000). Result overturns several earlier over-estimates:
+- wasm is internally DETERMINISTIC (byte-identical run-to-run). The divergence is purely native<->wasm.
+- native<->wasm DGROUP is byte-identical EXCEPT the 3 dead CS/ES words, STABLE at 6 bytes across EVERY
+  tick from 2000 through 4360 (both a296=0, pre-combat). So the ENTIRE mission LOAD + MENU + model-load
+  is byte-identical. => FUN_0000_1a45 (the model loader, the first FAR-call divergence) is BENIGN: it
+  loads the SAME model DATA via a different call sequence; the DGROUP (sim state) is unaffected. My many
+  turns targeting 1a45 were MISDIRECTED.
+- The whole combat runs in a 5-[0x452]-tick window: native tick 4380 a296=0 (pre-spawn) -> tick 4385
+  a296=-5 (RESOLVED). ~972 sim-steps in ~5 ticks (~194 sim-steps/tick, very dense). The divergence is
+  EXCLUSIVELY inside this combat window -- a combat-path base-loss, NOT the load surface.
+- wasm slows hard exactly at the combat (couldn't reach tick 4400 in 400s) -- the same render throttle on
+  the combat frames (drawing units/wrecks); separate from the divergence but co-located.
+
+CORRECTED SCOPE (much smaller than prior turns claimed): wasm byte-identity = (a) the 3 dead CS/ES stores
+-> constants (strict g_mem only); (b) ONE combat-path divergence in the tick-4380..4385 window (the combat
+kills 16 on native, wasm stalls at 12 -> a damage/AI base-loss that reads a host/CS value; find via a
+COMBAT far-trace or sim-step-granular DGROUP diff, since the tick is too coarse -- the whole combat is 5
+ticks). This is NOT the 1a45/load cluster. Native done + committed (266..452); the byte-identity blocker is
+now a single localized combat divergence, not a load-surface port.
