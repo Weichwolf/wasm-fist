@@ -4283,3 +4283,31 @@ wrong side test / base-lost weapon record).  Compare vs original (b39c should NO
 -> tanks survive -> they drive+fight -> a296 resolves.  Oracle meter (census_azer1.sh + cr3=0xe000 walk,
 DGROUP 0x2d190, table 0x3b14c) confirms the 80-object target.  Goal unmet; blocker is now a SPECIFIC
 per-frame damage-application divergence, root-caused to the b51f->b39c chain.
+
+## Turn N+20 cont.12: FULL ROOT-CAUSE CHAIN -- friendly-fire from a corrupted weapon side-field (weapon+0x1c)
+
+Traced the tank-death to a SINGLE corrupted field, end-to-end, oracle-anchored:
+1. Load is CORRECT: port spawns the 80-object set incl. 9 type-2 tanks BYTE-IDENTICAL to the original
+   (tank c34d hdg26==des30==0x09fb, [0x16]=0x6e, [0x17]=0x34; weapons ad06 [0x1c]=2, a2b6 [0x1c]=1).
+2. The type-0x10 objects are WEAPONS (b51f): every 32 frames bb64 finds an armed target in range -> c31e
+   -> c336 -> b39c damages it.  bb64's SIDE GATE (asm bb85): al=DAT_5c7e (= the firing weapon's byte
+   [wpn+0x1c]); if al==2 hit ANY target; elif al!=0 xor the target's [0x16] bit3 then require it; elif
+   al==0 require target [0x16]&8 WITHOUT the xor.  Tanks have [0x16]=0x6e (bit3 set).
+3. ORIGINAL: weapons fire with al=1/2 -> the xor/any-logic SKIPS friendly tanks -> tanks keep hp3a=0
+   (verified in ram_500.bin: all 9 tanks hp3a=00).
+4. PORT: weapons fire with al=**0** (5c7e=0) -> the al==0 branch selects tanks ([0x16]&8=8) -> b39c
+   damages them ~5-10/tick from ~15 weapons -> hp3a>=100 by tick ~30 -> a93e destroys them (type->0x13,
+   b2d3) -> death-effects spawn the +66 spurious type-0x10 -> by tick 800: 0 tanks, combat impossible.
+5. WHY al=0: the firing weapon's byte[wpn+0x1c] is CORRUPTED 2->0 during the sim (ad06: [0x1c]=0x02 at
+   spawn, =0x00 by tick 100).  b51f reads it correctly (asm `mov al,[di+0x1c]`, verified).  The zeroer is
+   NOT b1df (instrumented: 1 unrelated event).  [0x1c] is a TYPE-OVERLOADED field -- a WORD timer for some
+   object types (bae1/bb02 write 0x100/0x200/0x300; a decrement path) but the BYTE side-selector for
+   type-0x10 weapons.  The prime suspect is FUN_0000_ba5d (spawn chain b51f->ba49->ba5d, patch 258) which
+   does `word[si+0x1c]=0` -- if it zeroes the FIRING weapon's [0x1c] instead of the new projectile's, that
+   is the corruption, in the exact fire path.
+
+FIX TARGET (next, precise): audit ba5d (+ba49) for which object's [0x1c] it zeroes; the asm must zero the
+NEW projectile's field, not the emitter's.  Rebase faithfully so the weapon keeps its side-selector ->
+bb64 skips friendly tanks -> tanks survive -> they engage the real enemy -> a296 resolves.  Meter:
+FIST_DMGLOG (b39c/bb64/b1df probes) + the oracle census (census_azer1.sh, cr3=0xe000, DGROUP 0x2d190).
+This is THE resolution blocker, root-caused to one field-corruption in the weapon fire path.  Goal unmet.
