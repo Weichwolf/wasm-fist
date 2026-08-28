@@ -3366,3 +3366,40 @@ NEXT: read the type-3 action handler (statically: it's a b583-family fn; find it
 applies DAT_5bd9 to the target HP and triggers b2ef at HP<=0. Ground-truth with the oracle: arm
 `FIST_WATCHFLAT=0x1002a294 span 4` on an original AZER1 run to capture the cs:eip that writes a296 on a
 real kill, then map that writer + its HP-decrement site back to the port.
+
+## Turn N+1: CORRECTION — the 6 kills are REAL; combat mechanics work end-to-end; blocker is AI engagement
+
+Traced the full damage->death->counter chain against asm and instrumented it. This OVERTURNS the prior
+turn's "a296 16->10 is type-0x13 churn, not real kills" — that was WRONG.
+
+**The death design (asm-verified):** a unit does not decrement a296 when it dies. Instead:
+- b39c (PATCH 266, the damage-application fn, reached via c336<-c31e from weapon b51f) accumulates damage
+  into `byte[di+0x3a]`; at `>=0x64` it runs the destroy path `c047(0x2d) + a93e`.
+- a93e (PATCH 281) calls **b2d3** (asm 0x1b2d3, ends retf at 0x1b2ee) which sets `word[di]=0x13`: the dead
+  unit BECOMES a type-0x13 "wreck", still registry-resident, a296 NOT yet decremented.
+- Later the type-0x13 wreck is cleaned by **b2ef** (asm 0x1b2ef, separate fn) whose `dec [0xe296]`
+  (asm 0x1b32a) is the real, monotonic a296--.
+b2d3 and b2ef are correctly separate functions (no fall-through); the decompile is faithful.
+
+**Hard evidence the 6 kills are real:** across runs of 20s / 45s / 90s, `min_a296 == final_a296 == 10`
+(monotonic, a296 never re-increases -> 6 permanent net kills, not an oscillating respawn). b39c damage:
+`calls=277 dmg_max=3 hp_accum_max=199 destroy-branch=102`. So damage applies and lethal thresholds trigger.
+
+**The real blocker — AI engagement stalls, NOT a mechanics/render/counter bug:**
+- 20s run: frames=160416 sim-steps=8294 b39c=277 a296=10.
+- 90s run: frames=725682 sim-steps=37378 b39c=277 a296=10.
+The sim advances 4.5x more steps at 90s (NOT frozen, render throttle is not the blocker here) yet b39c
+stays EXACTLY 277 and a296 EXACTLY 10. After the opening engagement kills 6 units, the surviving 10 never
+fire or get hit again across 37378 sim steps. The AI-vs-AI engagement deadlocks: survivors do not
+navigate/target to re-engage. This is the unit-AI STEERING gap (902c + callees a9ea/a358/a57a) named in the
+git history ("units drive coherently but steer wrong direction").
+
+**Bottom line reframed:** the flight/combat MECHANICS (weapon fire -> target-find -> damage -> death ->
+wreck -> cleanup -> a296--) are proven and produce 6 real kills. The mission does NOT resolve because the
+surviving units stop engaging (AI navigation/target-selection), not because damage/death/counting fail.
+
+NEXT: diagnose why survivors don't re-engage. Oracle: run original AZER1 to a resolved outcome and compare
+per-unit target-selection + heading (the 902c/a9ea/a358/a57a steering outputs) tick-by-tick vs the port to
+find where the port's surviving-unit AI diverges (idles / steers away instead of driving to the nearest
+live enemy). The 6-kills-then-stall signature says the divergence is in re-target/re-approach after the
+first engagement, not in the fire/damage path.
