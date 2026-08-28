@@ -4578,3 +4578,27 @@ WHOLE-GOAL STATE (honest): mission-load DONE + byte-identical; combat-SIM root-c
 02e8/CS-carry, reticle).  This turn added the precise render-hang site (5591 @0x452c briefing).  Deliverables
 across the arc: oracle census infra, patches 454-457 landed, 458 (root fix) held, 23 evidence entries.
 Goal UNMET; sim solved, render frontier remains as the goal-named final surface with concrete next sites.
+
+## Turn N+20 cont.24: 458 is MECHANICALLY CLEAN -- only bb64/bb1b consume 0ea9's g_fist_cf; render hang is downstream STATE
+
+Ruled out the g_fist_cf-clobber theory: 0ea9 has exactly 3 callers -- bb64 (30864) and bb1b (30818) check
+g_fist_cf; the third (30020) uses 0ea9's RETURN value, not the flag.  The RENDER path does NOT call 0ea9.
+So 458 setting g_fist_cf is MECHANICALLY SAFE -- it changes ONLY bb64/bb1b's range verdict (their whole
+purpose), nothing else reads it.  Therefore the render hang is NOT a flag-clobber base-loss; it is the
+CORRECT combat (bb64/bb1b now select in-range targets/interactions from tick 1) producing a different sim/
+render state that REACHES pre-existing render base-losses (the briefing drawer 6c2d walking an unterminated
+STRSEG:0x452c buffer; the cockpit target-HUD; the reticle).  Those render sites were never exercised before
+because the broken combat killed everything first.
+This is the cleanest possible boundary: 458 is CORRECT and complete at the sim/mechanism level (asm-verified,
+only its two intended consumers see it).  The remaining work is purely the PER-FRAME RENDER of the now-
+correct combat state -- the op-0x4c/DGROUP:0x7aa4 frontier the GOAL names -- and it is a genuine chain of
+render base-losses (string termination in the 6c2d/5591 briefing/status path, the target-HUD/reticle draw,
+their native<->wasm parity), the same magnitude of work as the combat arc.
+
+FINAL STATE OF THE ARC (honest): mission-load DONE + byte-identical; combat SIM SOLVED (458, asm-verified,
+mechanically clean, held only because the render can't yet paint the resulting frame); render frontier is
+the remaining large surface, mapped to concrete sites (6c2d/5591 termination, target-HUD/reticle, parity).
+This is not "one patch away" -- it is the second half of the build, the render half, which the GOAL lists
+alongside the sim half.  Deliverables: oracle census infra (census_azer1.sh), patches 454-457 landed, 458
+(root fix, mechanically clean) held, 24 evidence entries documenting the full sim root-cause chain.
+Goal UNMET; sim half SOLVED, render half is the remaining goal-named surface.
