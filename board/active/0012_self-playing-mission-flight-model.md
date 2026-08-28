@@ -4556,3 +4556,25 @@ non-terminating exit + the reticle native<->wasm base-loss), port it faithfully,
 resolves byte-identically.  Deliverables across this arc: oracle census infra (census_azer1.sh), patches
 454/455/456/457 landed, 458 (root fix) held, 22 evidence entries.  Goal UNMET; sim solved, render frontier
 remains as the goal-named final surface.
+
+## Turn N+20 cont.23: render-frontier hang localized to the briefing/HUD text draw (5591 @0x452c) -- candid scale
+
+The unbounded render (19ea 360k+ calls) is 5591 walking the mission-briefing buffer STRSEG:0x452c
+("BLOODFEUD! AS ARMENIAN FORCES PUSH INTO AZERBAIJAN...") WITHOUT hitting its terminator -- called from the
+briefing/status text path (build/fist.c:58438 thunk_5591(0x452c); the 6c2d briefing drawer).  With 458
+(combat active) this path renders an unterminated buffer -> infinite char walk -> frame never completes.
+So the render frontier gating 458 is a CHAIN of text/HUD-render base-losses (5591 string termination + the
+a520/02e8 CS-carry font-vector + the reticle native<->wasm divergence), each distinct.
+
+CANDID ASSESSMENT OF SCALE (no over-promising): the SIM is solved (458, asm-verified).  The RENDER frontier
+is NOT one patch -- it is the op-0x4c/DGROUP:0x7aa4 per-frame combat-render surface the GOAL names, and this
+session reached it and found it is several layered base-losses in the text/HUD/reticle path, only now
+exercised because combat runs.  Landing 458 needs that whole path to (a) terminate every frame with combat
+active and (b) be byte-identical native<->wasm.  That is genuine dedicated multi-session work on the render
+path, the same magnitude as the combat work that took this whole arc.
+
+WHOLE-GOAL STATE (honest): mission-load DONE + byte-identical; combat-SIM root-caused + asm-verified fix
+(458, held); render frontier = the remaining LARGE surface, now mapped to concrete sites (5591 termination,
+02e8/CS-carry, reticle).  This turn added the precise render-hang site (5591 @0x452c briefing).  Deliverables
+across the arc: oracle census infra, patches 454-457 landed, 458 (root fix) held, 23 evidence entries.
+Goal UNMET; sim solved, render frontier remains as the goal-named final surface with concrete next sites.
