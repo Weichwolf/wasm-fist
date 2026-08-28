@@ -4015,3 +4015,18 @@ METER going forward: (1) native WITHOUT setarch -R must stop crashing (necessary
 setarch -R g_mem must converge to wasm g_mem at matched sim-steps (sufficient) -- the FIST_DUMPSTEP diff.
 Goal precondition: native resolves AZER1 WITHOUT setarch -R (proves no live host-address base-loss remains).
 This is genuine multi-session grind: ~10-15 more asm-verified per-function rebases + render.  Goal UNMET.
+
+## Turn N+20 cont.: PATCHES 455/456 -- servo a3ec + event c00c/c035 base-losses; crash-walk cleared for AZER1
+
+Continued the mission-path base-loss crash-walk (meter: native WITHOUT setarch -R, crash site via
+FIST_SEGV_BT + addr2line on the non-PIE binary).  Sequence, each fix advancing to the next:
+  a3ec/aae8-via-a3ec (455) -> bab4->bb02 (454) -> c035 (456) -> NO CRASH.
+- PATCH 455: a3ec servo/state method -- di threaded into param_1 by the 902c dispatch (patch 365), Ghidra
+  expected it in param_2; forward di to aae8 in BOTH positions; rebase the `add word[di+0x30],0xb6`.
+- PATCH 456: c00c/c035 event-post pair -- `word[bx-0x601f]` DGROUP read deref'd as a host pointer.  Rebased
+  the READ (the only native<->wasm divergence; the e2c2 arg is pure param arithmetic = identical on both,
+  so byte-identity holds -- its asm ecx/edx faithfulness is a separate 2da2 concern, flagged).
+RESULT: native no-setarch runs 70-100s with NO crash (2/2 + 1); mission-cockpit central chrome remains
+byte-identical native<->wasm (455+456 no regression); make check OK.  Combat progression (does a296 fall
+to 0 without setarch -R?) still under test.  The crash-walk cluster for AZER1 is cleared to here; remaining
+= whatever combat-progression base-loss keeps a296 from resolving + render.  Goal UNMET but advancing.

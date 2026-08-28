@@ -1,0 +1,42 @@
+PATCH 456: base-loss host-pointer READ in the c00c/c035 event-post pair (asm 0xc00c/0xc035; DS=DGROUP=
+0x1c00).  Both do `bx=ax; mov ax,word[bx-0x601f]` -- a DGROUP read at (param_1-0x601f) that Ghidra deref'd
+as a host pointer (*(undefined2*)(param_1-0x601f)) -> the c035 SIGSEGV the b26a-corrected trajectory reaches
+without setarch -R, and a wasm divergence.  Rebased the read to the DGROUP model (g_mem+0x1c000+(u16)
+(param_1-0x601f)); c00c's guard made 16-bit (0xffff).  The e2c2 CALL argument is left exactly as Ghidra
+emitted it (CONCAT22(param>>0x10, param_1)): the asm actually builds it from ecx/edx register math this
+decompile does not model, but that expression is pure PARAMETER arithmetic -> byte-identical native<->wasm,
+so it does not block byte-identity.  Its faithfulness vs the asm ecx/edx value is a separate (2da2/
+faithfulness) concern, flagged not fixed here.  ASM-verified read @0xc00c/0xc035.
+--- a/fist.c
++++ b/fist.c
+@@ -29558,7 +29558,16 @@
+ void __allregs FUN_0000_c00c(int param_1,undefined4 param_2,undefined4 param_3)
+ 
+ {
+-  if ((param_1 != -1) && (DAT_2000_5fdd = param_1, (char)*(undefined2 *)(param_1 + -0x601f) != -1))
++  /* PATCH 456: asm 0xc00c `cmp ax,0xffff; je; mov ds:0x9fdd,ax; bx=ax; mov ax,word[bx-0x601f]; cmp al,0xff
++   * ...; call e2c2`.  param_1=ax; word[bx-0x601f] is a DGROUP read Ghidra deref'd as a HOST pointer (the
++   * c035/c00c SIGSEGV without setarch -R, divergent on wasm).  Rebase the read to the DGROUP model; 16-bit
++   * guard (0xffff).  The e2c2 ARG is left as Ghidra emitted it: the asm builds it from ecx/edx register
++   * math (not modeled here), but it is pure param arithmetic -> IDENTICAL native<->wasm, so it does not
++   * block byte-identity; its FAITHFULNESS vs the asm is a separate (2da2/faithfulness) concern. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  if (((unsigned short)param_1 != 0xffff) &&
++      (DAT_2000_5fdd = param_1,
++       (char)*(unsigned short *)(dg + (unsigned short)((unsigned short)param_1 - 0x601f)) != -1))
+   {
+     FUN_0000_e2c2(CONCAT22((int)((ulong)param_3 >> 0x10),param_1));
+   }
+@@ -29571,7 +29580,11 @@
+ void __allregs FUN_0000_c035(int param_1,undefined4 param_2)
+ 
+ {
+-  if ((char)*(undefined2 *)(param_1 + -0x601f) != -1) {
++  /* PATCH 456: asm 0xc035 `bx=ax; mov ax,word[bx-0x601f]; cmp al,0xff; jne -> call e2c2`.  param_1=ax;
++   * the word[bx-0x601f] read was deref'd as a HOST pointer (crash, wasm-divergent).  Rebase to DGROUP.
++   * e2c2 arg left as Ghidra emitted (param arithmetic, identical native<->wasm; faithfulness caveat as c00c). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  if ((char)*(unsigned short *)(dg + (unsigned short)((unsigned short)param_1 - 0x601f)) != -1) {
+     FUN_0000_e2c2(CONCAT22((int)((ulong)param_2 >> 0x10),param_1));
+   }
+   return;

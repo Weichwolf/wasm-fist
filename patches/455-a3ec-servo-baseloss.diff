@@ -1,0 +1,29 @@
+PATCH 455: servo/state method a3ec base-loss (asm 0xa3ec; DS=DGROUP=0x1c00).  di=object near offset,
+threaded positionally into param_1 by the 902c movement dispatch (patch 365, tables @DGROUP:0x90a0/0x91a7);
+Ghidra's __allregs signature expected di in param_2, so the body deref'd garbage param_2 as a host pointer
+(the a3ec/aae8-via-a3ec SIGSEGV without setarch -R) and passed garbage to aae8.  aae8 (patch 451) reads di
+from param_2 and forwards param_1 to its armed-flag sub-dispatch (DI live in the asm) -> forward di in BOTH
+positions.  Rebase the `add word[di+0x30],0xb6` to the DGROUP model.  ASM-verified @0xa3ec / 0xaae8.
+--- a/fist.c
++++ b/fist.c
+@@ -25809,8 +25809,18 @@
+ void __allregs FUN_0000_a3ec(undefined2 param_1,int param_2)
+ 
+ {
+-  FUN_0000_aae8(param_1,param_2);
+-  *(int *)(param_2 + 0x30) = *(int *)(param_2 + 0x30) + 0xb6;
++  /* PATCH 455: servo/state method (asm 0xa3ec: `push cs; call aae8; add word[di+0x30],0xb6; ret`).  di =
++   * object near offset; the 902c movement dispatch (patch 365, tables @DGROUP:0x90a0/0x91a7) threads it
++   * POSITIONALLY into param_1, but Ghidra's __allregs signature expected it in param_2 -> the body deref'd
++   * garbage param_2 as a host pointer (the a3ec/aae8 SIGSEGV) and passed garbage to aae8.  aae8 (patch
++   * 451) reads di from its param_2 and forwards param_1 to its armed-flag sub-dispatch (di live in the
++   * asm) -> pass di in BOTH.  Rebase the 16-bit add to the DGROUP model. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  (void)param_2;
++  FUN_0000_aae8((int *)(uintptr_t)di,(int *)(uintptr_t)di);
++  *(unsigned short *)(dg + (unsigned short)(di + 0x30)) =
++      (unsigned short)(*(unsigned short *)(dg + (unsigned short)(di + 0x30)) + 0xb6);
+   return;
+ }
+ 
