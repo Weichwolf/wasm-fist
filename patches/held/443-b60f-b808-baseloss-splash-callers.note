@@ -1,0 +1,29 @@
+NOTE (the splash-caller fix): b60f (0xb60f) and b808 (0xb808) are base-lost projectile-update siblings of
+b5e7 that CALL bb1b (the unit-proximity splash-damage walk).  Because they deref the object near-offset as a
+HOST POINTER (Ghidra param_5/param_3), they read garbage and never reach bb1b -> no enemy splash -> a296=16.
+Both are DISPATCHED (icall table 0xb60f/0xb808).  Fix = the patch-335 (b5e7) / patch-442 (77cf) base-loss
+class: object = g_mem+0x1c000+di (di=near-offset in param_1), every [obj+N] at its asm width.
+
+b60f is a MID-ENTRY into b5e7's body (0xb60f..0xb6c8 == b5e7's move+collision+explosion tail, no lifetime
+gate).  ASM-VERIFIED (objdump -m i8086 @0xb60f):
+  b610 test [di+0x2d],0xf; jne b61c;  b617 call f69:b74b (==addb)          -- addb every 16th frame
+  b61c X+=movsx[di+0x1d]; b625 Y+=[di+0x1f]; b62e Z+=[di+0x21]             -- move (DWORD += WORD)
+  b637 cmp [di+0xd],0x80; jae b643; b63e call e1a6; js b691               -- terrain collision
+  b643 cmp [di+0x23],0; jne b64f; b649 call bb1b; jb b653; b64e ret       -- UNIT-PROXIMITY SPLASH
+  b64f dec [di+0x23]; ret
+  b653 (proximity hit): [0x27]==[0x9a25]?ret; DAT_5bd7=(-[di+0x10]-[si+0x10])>>0xc (si=c0e5 cursor);
+       bbb7([di+0x2a],[di+0x29],di); if [di]==7 uv2=0x9c45 else { di=[di+0x27]; a4a2(0x2e27,di); bfce(di);
+       uv2=0x9c4d } -> b6b5
+  b691 (terrain explosion): if [di]==7 uv2=0x9c05 else { di=[di+0x27]; a4a2(0x2e33,di); uv2=word[DG:
+       (word[di]*2 - 0x6423)] } -> b6b5
+  b6b5 ba33(uv2, di); be8b(0xf,..); b6be call f69:bcc4 (==b354); b6c3 call f69:bc5f (==b2ef); ret
+  (NOTE the di REASSIGNMENT to [di+0x27] in the non-type-7 branches before ba33 -- mirror b5e7's tail
+   exactly, which already handles this; b5e7's patched body @fist.c:30081-30105 is the template.)
+
+b808 (0xb808): the other base-lost bb1b caller (a variant with a b8xx-specific head, then the same
+bb1b/ba33/be8b/b354/b2ef tail) -- disassemble 0xb808 and rebase likewise.
+
+VERIFY AFTER: with the render stabilized OR NORENDER, count bb1b calls + g_fist_cf hits + c14f; a296 should
+drop as enemy units take the c14f interaction damage.  CAVEAT: also confirm the enemy-damage PATH -- b5e7's
+OWN bb1b (@30086, already rebased) needs go691==0 (rare, go691=2395 terrain hits), so the reached splash is
+via these siblings' updates (or the c14f per-type handler at word[DG:type*2-0x1ae8] may itself need a rebase).
