@@ -4433,3 +4433,25 @@ b51f/bb64 trace).  Fixing the range test so out-of-range candidates are rejected
 tanks survive -> the real combat resolves.  Deliverables this turn: oracle census infra, the full
 friendly-fire root-cause chain (down to out-of-range range-test), patch 457.  Goal UNMET; blocker = the
 bb64/0ea9 range-test (or 5c7f feed) base-loss in the weapon fire path, one asm audit from a fix.
+
+## Turn N+20 cont.18: 0ea9 + muzzle offsets are CORRECT -> the emitter POSITION itself is corrupted upstream (memory-corruption cascade)
+
+Eliminated two more: (1) 0ea9 (the range test) is faithful -- it rejects diffs whose high word !=0, so a
+~500k separation IS rejected; not the bug.  (2) the muzzle-offset table DAT_5c8b is correct/small (dX,dY in
+[-12288,9728]).  So 5c7f (=emitter pos + small offset) should ~= the emitter position.
+BUT the re-registered emitter a2b6 is at pos ~43776 (fire) though it registered at 764826 at tick4.  So the
+EMITTER's own position dword[a2b6+4] was corrupted 764826 -> ~43776 between tick4 and tick20 -- upstream of
+the fire.  Combined with the [0x1c] 1->0 corruption, this is a MEMORY-CORRUPTION CASCADE: weapon object
+fields (position dword[+4/+8], side [0x1c]) get scrambled during the sim, downstream of a byte-identical
+spawn.  A corrupted-position weapon then computes a bogus 5c7f that happens to land near a friendly tank ->
+0ea9 (correctly) reports in-range -> friendly-fire.
+So the true root is a BASE-LOSS that writes wrong/overflowing data into the weapon objects mid-sim (an
+out-of-bounds or misdirected write -- e.g. a copy loop with a wrong length/target, or a near-offset written
+as a host pointer that aliases another object's slot).  This is a memory-corruption bug, not a single
+mis-computed field; it needs a WATCH on a weapon's dword[+4]/[0x1c] to catch the exact writer.
+NEXT (precise, decisive): gdb hardware watchpoint on g_mem+0x1c000+0xa2b6+4 (and +0x1c) under the mission
+run (handle SIGALRM nostop pass) -> the instruction/function that corrupts the weapon position; that writer
+is the base-loss to fix.  Alternatively FIST_WATCHPHYS-style in-shim watch.  Deliverables this turn: oracle
+census infra (census_azer1.sh), the complete friendly-fire root-cause chain narrowed to a weapon-object
+memory-corruption, and patch 457.  Eliminated: movement, ba5d, b51f-math, 0ea9-logic, muzzle-offsets.
+Goal UNMET; the blocker is a specific mid-sim weapon-object corruption, one watchpoint from the writer.
