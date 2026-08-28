@@ -1,0 +1,112 @@
+NOTE (render fix, same class as 444): 26de mga blitter -- apply the real-mode es:di 16-bit fb-SEGMENT WRAP
+to the row start (roff26, all 3 loops advance the row by net +iVar9).  Same host-pointer-no-wrap bug as
+2b1e (444).  Build clean; did NOT further drop a296 (10), so 26de was not the ongoing combat-corruption
+source, but it is a valid faithful fix.  Body:
+
+undefined2 __allregs FUN_0000_26de(uint param_1,int param_2,byte *param_3,int param_4)
+
+{
+  byte bVar1;
+  byte *pbVar2;
+  byte *pbVar3;
+  uint uVar5;
+  uint uVar6;
+  uint uVar7;
+  uint uVar8;
+  int iVar9;
+  byte *pbVar10;
+  byte *pbVar11;
+  uint8_t *fb26; uint16_t roff26;  /* PATCH 445 */
+
+  /* PATCH 114: masked sprite blit, es:0..dst <- ds:si (asm 0x26de..0x2757).  es(entry)=SOURCE sprite seg
+     (published by 260c as m_260c_recseg); si=param_3=record offset; di=param_4=row (rowtab index);
+     dx=param_2=col; cx=param_1=stride-xor.  Ghidra dropped the fb-dest ES base and the source DS(=es
+     entry) base, and mis-typed _DAT_1000_c724 as a host ptr.  Rebuild the bases:
+       dest   = word[[0x724]][0] : (rowtab[di] + col)
+       stride = word[[0x724]+4] ^ cx - cx
+       source = m_260c_recseg : param_3  */
+  {
+  uint16_t fb_di  = *(uint16_t *)(g_mem + 0x1c724);
+  uint16_t fb_seg = *(uint16_t *)(g_mem + 0x1c000 + fb_di);
+  uint16_t rowtab = *(uint16_t *)(g_mem + 0x1c794);
+  uint16_t rowoff = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint16_t)param_4 * 2 + rowtab));
+  fb26 = g_mem + ((uint32_t)fb_seg << 4);                 /* PATCH 445: fb-segment base */
+  roff26 = (uint16_t)(rowoff + (uint16_t)param_2);         /* PATCH 445: 16-bit row dst offset (es:di wrap) */
+  pbVar10 = fb26 + roff26;
+  iVar9 = (int)(short)((*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(fb_di + 4)) ^ param_1) - param_1);
+  param_3 = g_mem + ((uint32_t)m_260c_recseg << 4) + (uint16_t)(uintptr_t)param_3;
+  }
+  uVar7 = *(uint16_t *)(param_3 + -4);
+  uVar5 = uVar7 >> 8;
+  uVar8 = uVar7 & 0xff;
+  if (param_3[-2] == 2) {
+    do {
+      pbVar10 = fb26 + roff26;                            /* PATCH 445: wrapped row start */
+      pbVar11 = pbVar10 + *param_3;
+      bVar1 = param_3[1];
+      for (uVar7 = (uint)(bVar1 >> 1); param_3 = param_3 + 2, uVar7 != 0; uVar7 = uVar7 - 1) {
+        pbVar2 = pbVar11;
+        pbVar11 = pbVar11 + 2;
+        *(undefined2 *)pbVar2 = *(undefined2 *)param_3;
+      }
+      for (uVar7 = (uint)((bVar1 & 1) != 0); uVar7 != 0; uVar7 = uVar7 - 1) {
+        pbVar3 = pbVar11;
+        pbVar11 = pbVar11 + 1;
+        pbVar2 = param_3;
+        param_3 = param_3 + 1;
+        *pbVar3 = *pbVar2;
+      }
+      roff26 = (uint16_t)(roff26 + iVar9);                /* PATCH 445 */
+      uVar5 = uVar5 - 1;
+    } while (uVar5 != 0);
+    return 0;
+  }
+  if (((uint)param_3 & (uint)pbVar10 & 1) != 0) {
+    do {
+      pbVar10 = fb26 + roff26;                            /* PATCH 445 */
+      pbVar11 = pbVar10 + 1;
+      pbVar2 = param_3;
+      param_3 = param_3 + 1;
+      *pbVar10 = *pbVar2;
+      for (uVar7 = uVar8 - 1 >> 1; uVar7 != 0; uVar7 = uVar7 - 1) {
+        pbVar3 = pbVar11;
+        pbVar11 = pbVar11 + 2;
+        pbVar2 = param_3;
+        param_3 = param_3 + 2;
+        *(undefined2 *)pbVar3 = *(undefined2 *)pbVar2;
+      }
+      for (uVar7 = (uint)((uVar8 - 1 & 1) != 0); uVar7 != 0; uVar7 = uVar7 - 1) {
+        pbVar3 = pbVar11;
+        pbVar11 = pbVar11 + 1;
+        pbVar2 = param_3;
+        param_3 = param_3 + 1;
+        *pbVar3 = *pbVar2;
+      }
+      roff26 = (uint16_t)(roff26 + iVar9);                /* PATCH 445 (net +iVar9) */
+      uVar5 = uVar5 - 1;
+    } while (uVar5 != 0);
+    return 0;
+  }
+  do {
+    pbVar10 = fb26 + roff26;                              /* PATCH 445 */
+    for (uVar6 = uVar8 >> 1; uVar6 != 0; uVar6 = uVar6 - 1) {
+      pbVar3 = pbVar10;
+      pbVar10 = pbVar10 + 2;
+      pbVar2 = param_3;
+      param_3 = param_3 + 2;
+      *(undefined2 *)pbVar3 = *(undefined2 *)pbVar2;
+    }
+    for (uVar6 = (uint)((uVar7 & 1) != 0); uVar6 != 0; uVar6 = uVar6 - 1) {
+      pbVar3 = pbVar10;
+      pbVar10 = pbVar10 + 1;
+      pbVar2 = param_3;
+      param_3 = param_3 + 1;
+      *pbVar3 = *pbVar2;
+    }
+    roff26 = (uint16_t)(roff26 + iVar9);                  /* PATCH 445 (net +iVar9) */
+    uVar5 = uVar5 - 1;
+  } while (uVar5 != 0);
+  return 0;
+}
+
+

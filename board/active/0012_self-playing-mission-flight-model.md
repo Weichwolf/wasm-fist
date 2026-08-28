@@ -3185,3 +3185,23 @@ explosion), the SPLASH is FOUND (bb1b/c14f implemented; base-lost caller b60f re
 two remaining, now-precisely-scoped frontiers are: (1) the mga blitter 16-bit-wrap (board:0001, above), and
 (2) verifying/finishing the enemy-HP splash once the render no longer defeats diagnosis (c14f per-type handler
 + [0x16]&0x40 flag + bb1b range).  Goal unmet (a296=16); every blocker is now a named, bounded reconstruction.
+
+## RENDER FIX (444/445) unblocks combat ACTIVITY -- a296 16->10, but the drops are type-0x13, not clear kills
+
+The 2b1e blitter's missing 16-bit fb-segment wrap (patch 444) was writing PAST the 64KB fb region in g_mem,
+which SIGSEGV'd AND silently corrupted sim state -- freezing combat.  Fixing it (track a wrapping uint16 dst
+offset == real-mode es:di) STOPS the crash and CORRUPTION: instrumentation now runs WITHOUT crashing, and
+a296 DROPS 16->10 (was frozen at 16 all session) in a burst at combat onset (t=314-406).  This is the first
+time combat state actually changes.  26de got the same wrap (445, valid) but didn't drop a296 further.
+
+HOWEVER, kill-logging the a296-- shows all 6 drops are the SAME slot 0x600, type 0x13, same caller -- NOT 6
+distinct enemy-unit deaths.  Explosion templates are type 0x10/0x11/0x14 (read from 0x9c4d/45/05), so 0x13 is
+something else (an enemy projectile/missile spawned+destroyed at the reused slot 0x600).  type 0x13 has the
+side-B flag ([0xe614+0x13]&1=1), so each despawn decrements a296 -- likely a SPAWN/DESPAWN IMBALANCE (b1df add
+vs b2ef remove) for type-0x13, NOT genuine unit eliminations.  So a296==0 (the resolution check @DGROUP:0xe296)
+is not a reliable "enemy units eliminated" metric while type-0x13 objects perturb it.
+
+NET: the RENDER 16-bit-wrap (444) is a real, required (goal names the render) fix that unfroze combat; but the
+mission still does not genuinely resolve.  NEXT: (a) apply the wrap to ALL blitters (26de done; 2660/298a/...);
+(b) identify type 0x13 + fix its a294/a296 spawn/despawn balance so a296 counts UNITS only; (c) then confirm
+the fire->hit->damage chain drops REAL enemy units to a296==0.  Render fixes preserved in held/444+445.
