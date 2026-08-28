@@ -3682,3 +3682,31 @@ blitters so wasm reaches the in-mission resolution, then cmp framebuffers/sim-st
 (b) for strict full-g_mem identity, normalize the host-pointer stores (overlay/TCB/DGROUP 4-byte fields)
 to near offsets. Both are bounded, understood work -- the sim state itself is already deterministic across
 targets (low-word near-offsets identical).
+
+## Turn N+9: CORRECTION — wasm is FAST but DIVERGES; root cause = CS-carry/host-pointer contamination
+
+Corrected the prior "wasm is glacially slow" reading (that was a chaotic-trajectory artifact of an
+un-instrumented build). With loop counters: wasm does 1.3M frames / 67k sim-steps in 60s -- FASTER than
+native (18k frames / 972 steps in 20s). The real problem is a DIVERGENCE, not speed:
+- Native: a296 16->0 (16 kills) in ~972 sim-steps -> RESOLVES.
+- Wasm:   a296 16->4 (12 kills) then STALLS, even after 168k sim-steps -> does NOT resolve.
+
+ROOT CAUSE (traced): g_mem holds HOST-POINTER / CS-CARRY values that differ native<->wasm (native 0x08xx,
+wasm 0x01xx address spaces). The combat reads them, so it evolves differently. Concretely found FUN_0000_
+bdcc: asm `mov [DGROUP:0x9f22],cs` saves a FAR pointer 0xc06d:CS; Ghidra's unaff_CS pseudo-var is host
+garbage (native 0x0808 vs wasm 0x0000) -> the stored segment and any `lcall [5f20]` through it diverge.
+The tick-2000 g_mem diff (144 bytes) is entirely this class: `DAT_* = unaff_CS` stores (11 direct + ~58
+array/field) + the extender-overlay/TCB host-pointer tables (0x100000+, 0xf0000). The DGROUP fields even
+keep the CORRECT near-offset in the low word; only the CS/high word is host garbage.
+
+PATCH 452 fixes the bdcc/5f22 site (CS=0x1000, main-engine cluster; native still resolves 2/2). It is ONE
+of the class. The SYSTEMATIC byte-identity fix is **board:0010**: set CS/ES context in the Ghidra
+PrepAnalysis step (tools/ghidra/PrepAnalysis.java) and re-decompile -> eliminates all 312 unaff_CS/unaff_ES
+pseudo-vars at once, making every CS-carry store a deterministic constant. Plus the overlay/TCB host-ptr
+tables need near-offset normalization (or exclusion from the sim-state compare, as host-side dispatch
+scaffolding).
+
+STATE: native end-to-end resolution DONE + committed (266..452). Byte-identity root cause IDENTIFIED and
+one site fixed; the systematic fix (board:0010 CS context + overlay host-ptr normalization) is the bounded
+remaining work. The sim's near-offset state is already deterministic across targets -- only the CS/host
+high-words diverge, and they steer the combat's far-calls.

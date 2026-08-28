@@ -1,0 +1,27 @@
+PATCH 452: byte-identity CS-carry fix (bdcc, DGROUP:0x9f22).  asm bdd2 `mov [DGROUP:0x9f22],cs` saves a
+FAR pointer 0xc06d:CS into DAT_2000_5f20/5f22.  Ghidra's unaff_CS pseudo-var (CS context NOT set --
+board:0010) resolves to HOST-ADDRESS garbage that differs native<->wasm (native 0x0808, wasm 0x0000), so
+g_mem[0x25f22] and any later `lcall [5f20]` through it diverge between the two builds -- one concrete
+source of the native<->wasm in-mission COMBAT divergence (native resolves 16 kills; wasm stalls at 12).
+bdcc runs under the main-engine cluster CS=0x1000, so store the constant.  ASM-verified vs
+re_out/fist_dat_image.bin 0xbdd2.  NOTE: this is ONE of ~11 `DAT_* = unaff_CS` CS-carry stores (plus the
+overlay/TCB host-pointer tables); the SYSTEMATIC byte-identity fix is board:0010 (set CS/ES context in the
+Ghidra PrepAnalysis step -> eliminates all 312 unaff_CS/unaff_ES pseudo-vars at once).
+--- a/fist.c
++++ b/fist.c
+@@ -31086,10 +31086,12 @@
+ void __allregs FUN_0000_bdcc(void)
+ 
+ {
+-  undefined2 unaff_CS;
+-  
++  /* board:0012 byte-identity (CS-carry): asm bdd2 `mov [DGROUP:0x9f22],cs` saves a FAR pointer 0xc06d:CS.
++     Ghidra's unaff_CS pseudo-var is host-address garbage that DIFFERS native<->wasm (0x0808 vs 0x0000), so
++     the stored segment -- and any later `lcall [5f20]` through it -- diverges between targets.  bdcc runs
++     under the main-engine CS=0x1000 (board:0010). */
+   DAT_2000_5f20 = 0xc06d;
+-  DAT_2000_5f22 = unaff_CS;
++  DAT_2000_5f22 = 0x1000;
+   /* PATCH 352: thread the dropped AL = byte[DGROUP:0x248] (asm bdd6) for the c508->014e dispatch. */
+   { extern unsigned short g_snd_cfg_letter; g_snd_cfg_letter = g_mem[0x1c248]; }
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c508)))();
