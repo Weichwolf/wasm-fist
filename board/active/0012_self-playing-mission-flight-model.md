@@ -4529,3 +4529,30 @@ state feed + the reticle render base-loss; then un-hold 458 -> combat resolves b
 found+asm-verified the friendly-fire ROOT (0ea9), proved it (player moves/combat runs), located the render
 frontier that gates it.  Deliverables: oracle census infra, patch 457 (landed), patch 458 (held, root fix).
 Goal UNMET; sim solved, render frontier is the last surface.
+
+## Turn N+20 cont.22: the render-frontier hang is UNBOUNDED HUD text (not a height bug) -- honest scale assessment
+
+Diagnosed the 458 render hang precisely: 19ea's glyph height is a VALID 0x0006 and it renders LEGIBLE text
+("SELECT BATTLE", "GOALS REMAINING:", ...), so it is NOT a garbage-height loop.  Instead 19ea is called
+360,000+ times and GROWING in ~25s -- the render draws an UNBOUNDED stream of characters (the cursor di0
+marches across the framebuffer, wrapping) i.e. the per-frame HUD render loops without ever completing a
+frame (an unterminated/looping string OR a redraw loop whose exit condition 458's g_fist_cf change now
+never satisfies).  So the frame never finishes -> [0x452] stays at 1 -> the sim never drains -> no
+resolution.  This is NOT a single mis-offset base-loss: it is a control-flow loop in the per-frame combat-
+HUD render whose termination depends on state 458 changes -- the "op-0x4c display-list / DGROUP:0x7aa4
+viewport-geometry frontier ... finishing the ... per-frame render path" the GOAL explicitly names as the
+part still to build.
+
+HONEST SCALE: this is genuine multi-session work, not one patch.  The SIM half is SOLVED and asm-verified
+(458).  The RENDER half -- a per-frame combat-HUD/display-list render that terminates and is byte-identical
+native<->wasm -- is a substantial surface only now REACHABLE (prior friendly-fire hid it).  The two are
+separable: 458 lands the moment the render frontier both (a) completes a frame with combat active and (b)
+matches native<->wasm.  Until then 458 stays held (it regresses byte-identity + hangs the render).
+
+STATE OF THE WHOLE GOAL: mission-load DONE + byte-identical (80 objects, tanks, weapons all match the
+original at spawn); combat SIM root-caused + fixed (458, asm-verified, held); render frontier is the LAST
+surface and is genuinely large.  NEXT SESSION target: the per-frame combat-HUD render loop (find its
+non-terminating exit + the reticle native<->wasm base-loss), port it faithfully, un-hold 458 -> AZER1
+resolves byte-identically.  Deliverables across this arc: oracle census infra (census_azer1.sh), patches
+454/455/456/457 landed, 458 (root fix) held, 22 evidence entries.  Goal UNMET; sim solved, render frontier
+remains as the goal-named final surface.
