@@ -4387,3 +4387,24 @@ its zeroed/garbage spot and its range test hits distant friendlies.  Audit ba5d'
 THIS turn: root-caused AZER1 non-resolution to self-firing [0x1c]=0 projectiles (port creates them, original
 has zero); eliminated movement + ba5d-emitter hypotheses; census infra + patch 457.  Goal unmet; the fix is
 the projectile-spawn (ba5d position / projectile type / fire-gate), one asm-verified patch away.
+
+## Turn N+20 cont.16: b51f position math VERIFIED correct; the wrong projectile positions are from spawn/slot dynamics
+
+Verified b51f's launch-position computation matches the asm exactly (b541-b557): 5c7f = dword[launcher+4] +
+dword[DGROUP:0x9c8b + (uVar1<<3 & 0x38)], 5c83 likewise at 0x9c8f -- the port's `[uVar1*2]` dword-index ==
+uVar1*8 bytes == the asm.  So b51f is NOT the position bug.  ba5d's di==si self-copies are also correct
+(ba33 -> b1df leaves di=object=si).  Yet the port's [0x1c]=0 firers sit at near-origin positions
+(44800,62311) unrelated to their launcher (890132,...), and fire with counter [0x19]=0x20 that a
+tick-2-spawned projectile could NOT reach by tick 18 at 1/tick -- so these firing objects are NOT simple
+launcher->projectile spawns.  They are SLOT-REUSED objects (launcher ad74@890132 despawns; a [0x1c]=0 object
+appears at slot ad74@44800) whose provenance is a deeper spawn/free/realloc divergence.
+
+HONEST STATE after this (very long) turn: the AZER1 non-resolution is root-caused to SELF-FIRING [0x1c]=0
+type-0x10 objects that friendly-fire the stationary tanks -- the port creates them, the original never does
+(its 25 type-0x10 are all [0x1c]=1/2, byte-identical to the port AT SPAWN).  Eliminated with evidence:
+movement/steering (both sides' tanks frozen at identical positions), ba5d emitter-corruption, b51f offset
+math.  The remaining precise question -- WHERE the port's [0x1c]=0 firing objects come from (slot reuse /
+free-realloc / a spurious spawn the original doesn't do) -- is the next target, oracle-checkable by watching
+new type-0x10 registrations (b1df/ba33) in the original vs port.  Deliverables this turn: oracle census infra
+(census_azer1.sh, engine-context cr3=0xe000 dump), the full root-cause chain, patch 457.  make check OK.
+Goal UNMET; blocker is a specific self-firing-projectile spawn divergence, deeply narrowed.
