@@ -4455,3 +4455,28 @@ is the base-loss to fix.  Alternatively FIST_WATCHPHYS-style in-shim watch.  Del
 census infra (census_azer1.sh), the complete friendly-fire root-cause chain narrowed to a weapon-object
 memory-corruption, and patch 457.  Eliminated: movement, ba5d, b51f-math, 0ea9-logic, muzzle-offsets.
 Goal UNMET; the blocker is a specific mid-sim weapon-object corruption, one watchpoint from the writer.
+
+## Turn N+20 cont.19: WATCHPOINT catches the corruptor -- ba49 (b51f fire path) rewrites the EMITTER's own position
+
+Hardware watchpoint on g_mem+0x1c000+0xa2b6+4 (weapon position) under the live mission caught the corrupting
+write DIRECTLY:
+  #0 FUN_0000_ba49 (build/fist.c:30661)   Old value=0  New value=47872
+  #1 FUN_0000_b51f (29983)  #2 c0e5  #3 c0ca  #4 459a  #5 e714
+So the exact writer is ba49, in the b51f WEAPON-FIRE path: `[emitter+4] = 5c7f` (the muzzle position).  The
+b51f fire path re-registers the EMITTER onto itself (asm b57b pop di -> ba49 on di=emitter): b1df zeroes the
+emitter body (position AND [0x1c]->0), ba49 rewrites the emitter position to the muzzle 5c7f.  Each fire thus
+MOVES the emitter to its muzzle and clears its side to 0 -> the emitter becomes a drifting [0x1c]=0 object
+that friendly-fires.  This is the mechanical corruptor, now caught red-handed.
+THE REMAINING QUESTION (the true fix boundary): is this re-register-the-emitter behavior FAITHFUL to the asm
+(then the port must be FIRING when the original does not -- a fire-gate / bb64-target divergence upstream),
+or is it a BASE-LOSS where ba49/b51f should spawn a SEPARATE projectile object (a fresh near-offset) rather
+than re-register the emitter?  The asm b57f calls ba49 with di=emitter (faithful per patch 417) -- so the
+port most likely FIRES weapons the original leaves idle.  Under empty player input the ORIGINAL's friendly
+type-0x10 do not fire (its 25 stay [0x1c]=1/2, tanks hp3a=0); the port fires them (b51f fire-gate reached).
+NEXT (decisive): oracle-trace whether the ORIGINAL enters b51f's fire branch at all under empty input --
+watch the original's a2b6 position (FIST_WATCHFLAT on the engine-flat of a2b6+4) for a ba49-style rewrite.
+If the original NEVER fires these, the bug is the port's b51f FIRE-GATE (byte[wpn+0x1b] & DAT_5646[cnt>>5],
+or the counter [0x19] init) firing weapons that should stay idle -- fix the gate -> no fire -> no
+friendly-fire -> tanks survive -> a296 resolves.  This turn: oracle census infra + the friendly-fire chain
+caught to the exact writer (ba49) via hardware watchpoint + patch 457.  Goal UNMET; the corruptor is
+identified, the fix boundary is the b51f fire-gate vs the original.
