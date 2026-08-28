@@ -1,0 +1,23 @@
+NOTE (proven to fire go691): op-0x54 PROJECTILE-TERRAIN collision service (extender 0x11a6) + the e1a6
+publish that the C decompile drops (asm lea di,[di+4]).  Without it e1a6's [proj+0x18] stays 0 so the shell
+never registers below terrain (go691=0).  With it: go691 = 2395 (shells hit + explode).  asm-verified:
+  0x11a6: edi=di+[ds:0xca1]; ebx=[edi]=[proj+4]=X; edx=[edi+4]=[proj+8]=Y; shl 13; neg edx; call 0x8480
+          -> al = heightmap[idx];  ret.  (0x8480 idx = ((-Y<<13)>>22&0x3ff)<<10 | ((X<<13)>>22&0x3ff))
+
+--- build/fist.c e1a6 (publish the projectile near-offset for the shim) ---
+  after `DAT_2000_aa10 = 0x54;` and before `uVar1 = FUN_0000_e339();` insert:
+    { extern unsigned short g_fist_op54_proj; g_fist_op54_proj =
+        (unsigned short)((intptr_t)param_2 - (intptr_t)((unsigned char*)g_mem + 0x1c000)); }
+
+--- tools/native_main.c fist_extender_gate (before the op-0x58 block) ---
+  unsigned short g_fist_op54_proj = 0;   /* file-scope global */
+  if (op == 0x54 && g_ext_ready && g_fist_after_map && g_fist_op54_proj) {
+      *(uint16_t*)(dg + 0xea10) = 0;                       /* consume selector (e339 clobber, see op-0x58) */
+      uint8_t *xb54 = g_mem + FIST_EXT_BASE;
+      uint8_t *hm54 = (uint8_t*)(uintptr_t)(*(uint32_t*)(xb54 + 0x85bc));
+      uint16_t p = g_fist_op54_proj;
+      int32_t X = *(int32_t*)(dg + (uint16_t)(p + 4));
+      int32_t Y = *(int32_t*)(dg + (uint16_t)(p + 8));
+      uint32_t idx = ((((uint32_t)(-(int32_t)((uint32_t)Y<<13))>>22)&0x3ff)<<10) | (((uint32_t)X<<13)>>22 & 0x3ff);
+      return hm54 ? (int)hm54[idx & 0x3fffff] : 0;
+  }

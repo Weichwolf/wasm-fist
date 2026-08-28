@@ -3027,3 +3027,26 @@ THREE remaining gates to a resolved a296 (all now precisely bounded):
 b2ef-UNIT-destroys=117 with a296 unchanged means those destroys are NON-enemy objects (projectiles/effects);
 the enemy a296 count only drops on a real b691 splash kill, which needs gate 1.  The pipeline is essentially
 complete; the mission is close.  Goal still unmet (a296=16) but every stage from aim to collision now runs.
+
+## op-0x54 COLLISION implemented -> shells HIT + explode (go691 0 -> 2395); final piece is the DAMAGE service
+
+Gate 1 SOLVED: the shim handled op-0x58 (LOS) but NOT op-0x54 (projectile-terrain collision), so e1a6's
+[proj+0x18] stayed 0 and the shells never registered below terrain.  Decoded op-0x54 (extender 0x11a6:
+samples heightmap[idx] at the projectile's [proj+4]/[proj+8], via DI=proj+4 which the C decompile drops)
+and implemented it in the shim + an e1a6 publish of the projectile near-offset (both in patches/held/441).
+RESULT: go691 (shell-hit branch) 0 -> 2395, shells now hit terrain and run the explosion path (bbb7/ba33/
+be8b), a294 churns.  So the WHOLE chain aim->acquire->fire->spawn->fly->HIT now runs.
+
+But a296 STILL 16.  Traced the damage path: the go691 branch calls be8b(0xf,..) [PATCH 280 damage-event
+poster] -> e2c2 -> aa10=100 -> e339 = op-0x64, a THIRD unimplemented extender service (like op-0x54/0x58).
+op-0x64 handler @ extender 0x786a (asm-decoded): reads the damage descriptor (al), walks a record list at
+[0x85b0]/[0x85b4] by al steps, and calls 0x22ab / 0x2377 -- the actual DAMAGE APPLY to the target unit's HP.
+Unimplemented -> the damage event is posted but never applied -> enemy HP never drops -> a296 frozen.
+
+So the FINAL piece to a resolved a296 is the op-0x64 damage service (reconstruct 0x786a + 0x22ab/0x2377,
+the list-walk + HP-subtract, faithfully into the shim -- same class of work as the op-0x58 LOS handler).
+CAVEAT to verify next: confirm op-0x64/be8b is the ENEMY-splash-damage and not only the firer's weapon
+effect; the alternative damage route is the ba33-spawned explosion object's own update applying splash.
+Either way the enemy-HP-reduction is the last unimplemented link.
+Every earlier stage now runs (op-0x54 landed this session).  Goal still unmet (a296=16), but the pipeline
+is one extender-service (damage) away from kills.
