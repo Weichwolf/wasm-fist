@@ -345,7 +345,9 @@ long g_slot0_a8z=0,g_slot0_a8nz=0;
 long g_reinit_a8=0,g_7d69dec=0;
 long g_b1df_n=0,g_b1df_late=0,g_7e29ent=0,g_7e29gate=0;
 long g_min_a296 = 0x7fffffff;
-long g_min_los = 0x7fffffffL;   /* non-perturbing: min cross-side |dx|+|dy| over op-0x58 queries once combat starts */
+long g_min_los = 0x7fffffffL;
+unsigned short g_fist_op54_proj=0;
+long g_bb1b=0,g_bb1b_cand=0,g_c14f=0,g_c14f_hit=0;   /* non-perturbing: min cross-side |dx|+|dy| over op-0x58 queries once combat starts */
 long g_op58_n=0, g_op58_oor=0, g_op58_occ=0, g_op58_vis=0;   /* board:0012: op-0x58 LOS call/return census */
 int  g_a296_loaded = 0;           /* set once a296>=15 seen (AZER1 spawned its roster) */
 static volatile sig_atomic_t g_tick_pending;     /* raised by the timer source, drained by the pump */
@@ -489,6 +491,7 @@ static void fist_dump_and_exit(const char *why){
       extern long g_slot0_a8z,g_slot0_a8nz; fprintf(stderr,"[7d69slot] cursor-hits-7d69-slot: a8==0=%ld  a8!=0(should-decrement)=%ld\n",g_slot0_a8z,g_slot0_a8nz);
       extern unsigned g_e29_type,g_e29_91,g_e29_3d,g_e29_di; fprintf(stderr,"[7e29firer] type=%04x weapon[0x91]=%02x [0x3d]=%02x di=%04x\n",g_e29_type,g_e29_91,g_e29_3d,g_e29_di);
       extern unsigned g_e29dis[16]; extern long g_e29disc[16]; extern int g_e29n; { unsigned char*dg=g_mem+0x1c000; unsigned short*fbc=(unsigned short*)(dg+0xdfbc); fprintf(stderr,"[7e29di] %d distinct di:",g_e29n); for(int i=0;i<g_e29n;i++){ int inreg=0; for(int j=0;j<0xb6;j++) if(fbc[j*2]==g_e29dis[i]){inreg=1;break;} fprintf(stderr," %04x(n=%ld,reg=%d,t=%04x)",g_e29dis[i],g_e29disc[i],inreg,*(unsigned short*)(dg+g_e29dis[i])); } fprintf(stderr,"\n"); }
+      extern long g_bb1b,g_bb1b_cand,g_c14f,g_c14f_hit; fprintf(stderr,"[SPLASH] bb1b=%ld cand(0x40)=%ld c14f=%ld c14f-hit=%ld\n",g_bb1b,g_bb1b_cand,g_c14f,g_c14f_hit);
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }
@@ -1489,6 +1492,11 @@ int fist_extender_gate(void) {
      * the units' Z [obj+0xc] is NOT terrain-following (the absent 32-bit-PM flight model does not sit units
      * on the ground -- proven: forcing terrain-follow Z makes candidates VISIBLE).  Wiring the per-unit
      * terrain-follow Z (like the camera-alt at the op-0x24 block) will activate this LOS -> target lock. */
+    if (op == 0x54 && g_ext_ready && g_fist_after_map && g_fist_op54_proj) {
+        *(uint16_t*)(dg + 0xea10) = 0; uint8_t *xb54=g_mem+FIST_EXT_BASE; uint8_t *hm54=(uint8_t*)(uintptr_t)(*(uint32_t*)(xb54+0x85bc));
+        uint16_t pp=g_fist_op54_proj; int32_t X=*(int32_t*)(dg+(uint16_t)(pp+4)),Y=*(int32_t*)(dg+(uint16_t)(pp+8));
+        uint32_t idx=((((uint32_t)(-(int32_t)((uint32_t)Y<<13))>>22)&0x3ff)<<10)|(((uint32_t)X<<13)>>22&0x3ff);
+        return hm54?(int)hm54[idx&0x3fffff]:0; }
     if (op == 0x58 && g_ext_ready && g_fist_after_map) {
         /* board:0012 e339 clobber fix: a SERVICE op consumes its selector so e339's task-scheduler tail
          * (far-jmp [DGROUP:0x58] when aa10!=0 && TCB!=0) does NOT overwrite the LOS result with a trap-0.
