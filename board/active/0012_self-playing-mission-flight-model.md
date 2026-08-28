@@ -3224,3 +3224,25 @@ REUSABLE TOOLING saved this session: patches/held/apply_chain.py re-applies 439/
 fresh `make patch` build/ in one step (body-anchored, avoids the forward-decl bug), so the full combat stack
 can be rebuilt+iterated without hand re-application.  Next: finish the src+dst wrap across all blitters
 (board:0001) -> stable render -> then classify a296 (units vs type-0x13) and close the unit-damage chain.
+
+## HONEST CORRECTION: the a296 16->10 was likely a CORRUPTION ARTIFACT, not real kills
+
+Completed the 2b1e src+dst 16-bit wrap PROPERLY (patch 446: both ds:si and es:di wrap, AND the loop counters
+made 16-bit == real-mode cx, so a garbage header can't spin ~4e9 times / underflow).  RESULT: no crash, no
+hang -- but a296 = 16 (FROZEN again), and the sim ran much less (a294=95, op58 LOS=24 vs thousands).
+So the a296 16->10 seen under the dst-ONLY wrap (444) was almost certainly the un-wrapped SOURCE read going
+OOB and incidentally churning type-0x13 objects / decrementing a296 -- a CORRUPTION SIDE EFFECT, NOT genuine
+enemy-unit kills (consistent with the kill-log: all 6 were the same slot 0x600, type 0x13).  With the source
+correctly wrapped, that spurious churn stops and a296 stays 16.
+
+So the honest state is: the combat still does NOT kill enemy units; a296 stays 16.  The render corruption was
+masking the true (frozen) combat state with spurious a296 decrements.  ALSO: the correct 446 wrap changed the
+sim's behaviour (froze earlier) -- either my rewrite has a residual bug OR the un-wrapped 444 render was
+feeding the sim different (corrupt) state each frame; this needs careful, byte-checked reconstruction (the
+whole point of the deterministic/faithful mandate).  I did NOT ship 446 (uncertain); 444/445 stay in held as
+the dst-only step, now flagged as producing corruption-driven a296 motion, not real kills.
+
+TRUE remaining work (unchanged in substance, clarified): (1) reconstruct ALL mga blitters' src+dst 16-bit
+wrap CORRECTLY + byte-verify the render output vs a reference frame (so the sim gets faithful state, not
+corruption); (2) with a faithful render, diagnose why the fire->hit->damage chain does not reduce enemy-unit
+HP (a296 stays 16) -- the genuine flight/combat-model gap the goal names.  a296 has never reached 0.
