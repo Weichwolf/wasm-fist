@@ -4078,3 +4078,28 @@ NEXT (evidence-driven, oracle-guided per CLAUDE.md FIST_WATCHFLAT): find the fun
 (des30) from obj+0x49 (goal) for a NON-player unit -- either it is missing (overlay) or base-lost.  Compare
 the port's des30/hdg26 per tick to the DOSBox oracle (FIST_WATCHFLAT on a unit's +0x30) to see where the
 port stops computing the bearing.  Meter unchanged: native (no setarch) resolves AZER1 => a296->0.
+
+## Turn N+20 cont.4: steering machinery FULLY TRACED -- missing enable is obj+0x40 bit2 (compute-bearing), set by the AI-command layer
+
+Traced the goal->heading chain to named functions + the exact gating flag:
+- ab88 (patch 282) dispatches per-object animation methods via word[DG:(0x9810+byte[di+0x43])] with the
+  object as a HOST pointer (correct).  One target is:
+- ab91 (patch 328) = the BEARING method: computes bearing to obj+0x49 (goal) via 0541 and writes
+  obj+0x30 (des30) -- BUT ONLY IF (obj+0x40 & 2) [compute-bearing] and (obj+0x40 & 1) [write-des30].
+- obj+0x40 bit1 IS set at spawn (init methods 21308/24291/...).  bit2 is set by:
+    * ac7e (patch 248): goal from a RESOURCE/animation record (DAT_2000_5798) -- animation-scripted.
+    * ac9e (patch 396): goal from a ROSTER-entry target (bx=word[(byte[di+0x1b]<<3)+0x6d3c]); sets
+      obj+0x49/0x4d = roster target position, obj+0x40 |= 2.  ==> the AI "pursue/attack roster target".
+      Patch 396's OWN header: "Reached only via the 22dd cursor-bracket after patch 395; NO PASSING FLOW
+      REACHES IT."  So in self-play (no cursor/command) ac9e is never dispatched.
+DIAGNOSIS: goal49 is nonzero on AI units (dump), but obj+0x40 bit2 is NOT set for them, so ab91 skips the
+bearing write -> des30 stays 0 -> no turn -> no engagement -> a296 never resolves.  The missing piece is
+the AI-COMMAND layer that issues "pursue target N" to each non-player unit each tick (sets goal49 from the
+enemy roster + obj+0x40|=2) -- exactly the overlay (0x100000) flight/combat model the goal names as unbuilt.
+ac9e is the FIST.DAT executor of that order; the ORDER-ISSUER (per-tick AI target selection per unit) is
+what self-play lacks.
+
+NEXT (sharp, evidence-driven): (a) oracle FIST_WATCHFLAT on a NON-player unit's obj+0x40 & obj+0x30 under
+DOSBox AZER1 self-play to see WHO sets bit2 + des30 each tick and at which cs:ip (identifies the order-issuer
+-- FIST.DAT fn vs overlay); (b) port that issuer faithfully into the shim/patch.  Only then do units steer,
+close, engage, a296->0.  This is the "part the port does not yet run" made concrete to one mechanism.
