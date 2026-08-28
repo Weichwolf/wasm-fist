@@ -3583,3 +3583,29 @@ combat), the a296 overshoot, and native<->wasm parity.
 
 MILESTONE: for the first time the self-playing mission resolves to a win the ENGINE declares (a814), after
 its own AI eliminates the enemy side, deterministically, with no wall-clock throttle. [PATCH 266+447+448+449]
+
+## Turn N+7: FULL END-TO-END ON NATIVE — mission plays itself to a resolved win AND exits cleanly
+
+The AZER1 self-playing mission now runs completely on native, deterministically: AI-vs-AI combat eliminates
+the enemy side (a296->0, 578e->0), a5dc declares the win (a814=0xff), the post-resolution debrief renders,
+and the process EXITS CLEANLY -- no crash. Verified via gdb watchpoint on a814 + native exit code:
+WIN (a296=-5, 578e=0, 5790=16) + exit 0, repeatably.
+
+Completed the two cascades the win-declaration exposed:
+- PATCH 450: the post-a814 DEBRIEF screen (results/scoring, never reached before). ba30/ba63 wrote result
+  strings via host ptrs into the STR-SEG (ES=word[DGROUP:0x70]); 77c3/aa2b deref'd the player-vehicle
+  near offset as host; e528's debrief state-machine dispatch read its DGROUP table offset as host. All
+  rebased.
+- PATCH 451: aae8 -- a 902c unit-AI armed-flag branch (word[di+0x40] read as int*[0x20] host) that the
+  a5dc-active combat trajectory reaches. Rebased.
+
+Full chain now: PATCH 266 (damage routing) + 447 (hit-cluster) + 448 (render wrap) + 449 (win-declaration)
++ 450 (debrief) + 451 (unit-AI). make check OK.
+
+REMAINING for the full goal: native<->wasm byte-identity across the whole run (the last hard requirement),
+and -- for faithfulness -- the other nine 2da2==-1 signedness sites + their flight-model base-loss cascade
+(currently left closed so the win-eliminating trajectory is preserved; a5dc's own guard is fixed in
+isolation). The a296 overshoot past 0 is moot (the win fires the frame 578e hits 0).
+
+MILESTONE: for the first time, one full AZER1 mission plays itself to a resolved WIN that the engine
+declares, deterministically, with no wall-clock throttle, and the native process completes end-to-end.
