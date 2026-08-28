@@ -4358,3 +4358,32 @@ corrupted original weapon) so bb64's al=0 branch hits friendlies.  NEXT: oracle-
 base-loss; fix the gate so idle weapons stay idle -> no friendly-fire -> tanks survive -> a296 resolves.
 This turn root-caused the AZER1 non-resolution to the b51f weapon-fire path (H1/movement eliminated), built
 the oracle census infra, and landed patch 457.  Goal unmet; the blocker is one weapon-fire-gate step away.
+
+## Turn N+20 cont.15: ROOT NAILED -- the port SPAWNS firing [0x1c]=0 projectiles the original never has
+
+Decisive oracle+port comparison:
+- Port at spawn: 25 type-0x10 objects, byte[0x1c] = {8x 0x01, 17x 0x02} -- BYTE-IDENTICAL to the ORIGINAL
+  (also 8x1, 17x2).  So the launchers load identically; NO [0x1c]=0 objects at spawn on either side.
+- ORIGINAL (ram_500.bin, mid-mission): still exactly 25 type-0x10, ALL [0x1c] in {1,2}.  ZERO [0x1c]=0.
+- PORT (fire log): 318 fires come from [0x1c]=0 objects.  They appear at slots that REUSE launcher offsets
+  (e.g. launcher a2b6 fires tick4 at pos (764826,980908); a NEW [0x1c]=0 object at slot a2b6 fires tick20 at
+  pos (47872,4012) -- near ORIGIN, wrong).  These are SPAWNED PROJECTILES: fresh (cnt19=0x20=first fire),
+  [0x1c]=0 (ba5d zeroes the new object), at bogus near-origin positions.  They run b51f, reach counter 32,
+  fire with al=0 -> bb64 selects the stationary friendly tanks ([0x16]&8) -> b39c kills them (from ~tick18).
+CONCLUSION: the ORIGINAL either (a) never spawns these type-0x10 projectiles (its launchers do not enter
+b51f's spawn/fire branch under empty input), or (b) spawns them as a NON-type-0x10 flying projectile that
+does not run b51f, or (c) spawns them at the launcher position with a bounded range so they fly+despawn,
+never lingering to friendly-fire.  The PORT spawns type-0x10 projectiles at near-origin positions that
+persist and fire.  So the divergence is in the FIRE->SPAWN path b51f->ba49->ba5d: the spawned projectile's
+TYPE and/or POSITION and/or the launcher fire-gate is base-lost, creating self-firing [0x1c]=0 projectiles.
+
+FIX TARGET (precise, next): compare the port's ba49/ba5d projectile spawn to the original -- (1) does the
+original spawn a type-0x10 at all (oracle: watch the object table for new type-0x10 near a launcher fire)?
+(2) is the port's spawned projectile position (near origin) wrong (a base-lost pos copy in ba5d: it does
+`dword[si+4]<-dword[si+4]` SELF-copies -- Ghidra dropped the TEMPLATE source, so the projectile keeps
+garbage/zero position)?  ba5d's three trailing dword "copies" are si<-si self-copies (position NOT seeded
+from the template) -- STRONG suspect: the projectile position is never set from the launcher, so it sits at
+its zeroed/garbage spot and its range test hits distant friendlies.  Audit ba5d's position seeding vs asm.
+THIS turn: root-caused AZER1 non-resolution to self-firing [0x1c]=0 projectiles (port creates them, original
+has zero); eliminated movement + ba5d-emitter hypotheses; census infra + patch 457.  Goal unmet; the fix is
+the projectile-spawn (ba5d position / projectile type / fire-gate), one asm-verified patch away.
