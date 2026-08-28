@@ -1,10 +1,13 @@
 NOTE (not yet a .diff): faithful 16-bit reconstruction of FUN_0000_077e (asm 0x77e-0x82a).
-VERIFIED correct vs atan2 across all octants (BAM, 0x4000=90deg):
-  (0,1000)=0  (1000,1000)=45  (1000,0)=90  (-2304,22782)=-5.8(exp -5.77)  (2304,22782)=+5.8  (5000,10000)=26.6
-Replaces the 32-bit Ghidra decompile (which was asymmetric/divergent for negative Y).
-Return: (int)(short)r RUNS the mission but the fire-path (ace0) is never reached (units stop firing);
-        (int)(unsigned short)r HANGS map-load -- so integration needs the exact caller-expected return
-        format + why the fire-decision is coupled to the OLD buggy aim.  Body:
+VERIFIED correct vs atan2 across all octants AND world-scale magnitudes (BAM, 0x4000=90deg).
+CRITICAL: return MUST be (int)(unsigned short)r (zero-extend, 0..0xffff) to match the asm's unsigned
+16-bit ax -- sign-extending broke every AI angle-comparison (targeting stalled: tgt=0) AND stalled the
+sim frame counter (t stuck ~314).  Degenerate-input guards (X=0/Y=0) are required because the 32-bit-
+modelled loop can diverge where the asm converges (zero-extend + no guard -> map-load hang).
+IMPACT when applied (+ 0578 arg fix in 440): units DETECT candidates + ACQUIRE targets (tgt 0 -> 11 and
+climbing), sim runs 100x more frames (t 314 -> 43515+).  REMAINING: afa2 (fire) + 7d1d (turret slew) are
+never dispatched (g_afa2=0, g_slew=0) -> units hold in navigate state, don't transition to combat; and the
+op-0x4c/mga sprite blitter (26de) crashes on wild sprites (param_1=0xffff) once units are visible.  Body:
 
 int __allregs FUN_0000_077e(uint param_1,uint param_2,uint param_3,uint param_4)
 {
@@ -16,6 +19,9 @@ int __allregs FUN_0000_077e(uint param_1,uint param_2,uint param_3,uint param_4)
   unsigned short ax=(unsigned short)param_1, cx=(unsigned short)param_2,
                  dx=(unsigned short)param_3, bx=(unsigned short)param_4;
   unsigned short bp=0, t; int cf;
+  { unsigned Yv=((unsigned)dx<<16)|ax, Xv=((unsigned)cx<<16)|bx;   /* atan2 degenerate inputs (asm converges but the 32-bit-modelled loop can diverge) */
+    if (Xv==0) return Yv==0 ? 0 : ((dx&0x8000)? 0xc000 : 0x4000);
+    if (Yv==0) return (cx&0x8000)? 0x8000 : 0; }
   if (dx & 0x8000) {                                   /* 780 or dx,dx; js */
     bp = 2;                                            /* 784 */
     cf=(ax!=0); ax=(unsigned short)-ax;                /* 787 neg ax; jae */
@@ -82,9 +88,11 @@ int __allregs FUN_0000_077e(uint param_1,uint param_2,uint param_3,uint param_4)
     { unsigned short r=acc; int carry=0;               /* 81b shr bp,1; rcr ax,1 (x3); 827 adc ax,0 */
       for (int i=0;i<3;i++){ int b=bp&1; bp>>=1; carry=r&1; r=(unsigned short)((r>>1)|(b<<15)); }
       r=(unsigned short)(r+carry);
-      return (int)(short)r;
+      return (int)(unsigned short)r;
     }
   }
 }
+
+
 
 

@@ -2968,3 +2968,31 @@ So the honest decomposition of "mission resolves" is now COMPLETE and layered:
      converging the gun to the now-correct bearing.
   3. [THEN] the proven fire cascade (438) -> flat shells (correct elevation) -> collision -> b691/b2ef damage.
 The core math is solved and verified; the remaining is the combat-AI state chain, precisely named per layer.
+
+## BREAKTHROUGH: correct 077e return FORMAT unblocks the whole targeting AI (tgt 0->11, sim 100x faster)
+
+The faithful 077e was correct in VALUE but I first returned it sign-extended.  Two fixes make it work end-to-end:
+  1. return (int)(unsigned short)r  -- zero-extend to match the asm's UNSIGNED 16-bit ax.  Sign-extending
+     turned every 0x8000..0xffff angle negative, which flipped AI angle-comparisons (targeting produced
+     tgt=0) AND stalled the engine frame counter [0x452] (stuck ~314 in 120s).
+  2. degenerate-input guards for X==0 / Y==0 (atan2 = +/-90 / 0 / 180) -- the 32-bit-modelled loop diverges
+     where the 16-bit asm converges, so without the guards zero-extend HANGS at map-load.
+With BOTH (+ the 0578 caller-arg fix), measured over a live AZER1 self-play:
+  - candidates DETECTED, targets ACQUIRED: tgt climbs 2 -> 3 -> ... -> 11 (was frozen at 0)
+  - [0x452] frame counter runs 100x more (t: 314 -> 43515+) -- the broken angles were throttling the sim too
+  - a294 back to ~150 (unit activity restored)
+So the aim/heading atan2 fix cascades correctly through candidate-detection (a9b9) -> acquire (ae32/a6e3/
+e20a LOS) -> target [0x97].  This is the largest single behavioural unblock of the effort.
+
+TWO remaining blockers, both now precisely located:
+  A. COMBAT-STATE TRANSITION: with tgt=11, the fire-decision afa2 and the turret-slew 7d1d are NEVER
+     dispatched (g_afa2=0, g_slew=0).  Units hold in the NAVIGATE state (goals=13, driving to waypoints)
+     and never switch to the combat/engage state that dispatches afa2 (fire-gate: |[0x8b]-[0x89]|<0xb6 ->
+     a286 fire) and 7d1d (turret slew, patch 426).  Find the state-machine transition (has a target ->
+     engage) that selects the afa2/7d1d animation-frame methods -- it is not firing.
+  B. op-0x4c/mga RENDER CRASH: FUN_0000_26de (fist_mga.c:6319) segfaults on a wild sprite (param_1=0xffff)
+     via 459a->22dd->3a0f->2660/26de, once the working AI makes units visible.  This is board:0001 (the
+     op-0x4c display-list frontier) resurfacing -- now on the critical path because the sim actually runs.
+Net this session: the ballistic-aim atan2 (077e) is reconstructed, verified, and its correct format proven
+to unblock detection+acquisition of targets AI-wide.  Goal unmet (a296=16, no fire yet), but the two
+remaining pieces are a named AI-state transition and the (long-known) op-0x4c render.
