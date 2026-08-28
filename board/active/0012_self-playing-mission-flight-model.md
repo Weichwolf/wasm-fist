@@ -4695,3 +4695,24 @@ The render frontier is a deep chain; 459 is the first landed link.  Next: dump t
 display-list element order (the DGROUP:0x3af0 element list 209e walks) vs the without-458 order to find why
 the reticle/roster paint precedes the cockpit-view setup, and fix that ordering/registration.  458 held.
 Goal UNMET; render frontier is deeper than one fix, 459 landed, #2 refined to the display-list order.
+
+## Turn N+20 cont.29: blocker #2 is a KNOWN DEFERRED render-frontier piece (2ebe spin-wait) -- confirmed by the port's own patch127 note
+
+Traced the pre-cockpit deadlock to FUN_1000_2ebe (build/fist.c:47059): it does screen/vector SETUP
+(2f71/2fd3/30de/32cb/32c1) then FUN_1000_3346 (the "wait until [0x452] changes" spin).  The port's OWN
+patch127 comment inside 2ebe states it verbatim: "Faithful install + a cooperative pump for the spin-wait
+it enables is deferred to the sub-screen frontier."  So this spin-wait was KNOWINGLY LEFT UNHANDLED -- it
+is a deferred piece of the exact op-0x4c/render frontier the GOAL names, and 458's live combat now pulls
+2ebe into the per-frame path (via 22dd->3a68->c33c roster walk), where its spin-wait can never complete
+because [0x452] is frozen pre-cockpit (the anti-over-run freeze) -> deadlock.
+So blocker #2 is not a new mystery: it is the port's deferred "sub-screen frontier" spin-wait handling,
+tangled with the coop-tick freeze.  Fixing it needs the faithful cooperative-pump-through-the-spin-wait
+that patch127 deferred -- but done so it does NOT re-trigger the load over-run the freeze prevents (i.e.
+distinguish the SETUP spin-wait, which needs ticks, from the load-phase pump the freeze must hold).  That is
+the genuine op-0x4c/DGROUP:0x7aa4 render-path work.
+
+STANDING HONEST ASSESSMENT (unchanged, now with the port's own confirmation): the RENDER HALF is deferred
+work the port explicitly marked as such (patch127: "deferred to the sub-screen frontier").  The SIM HALF is
+solved+asm-verified (458).  This turn landed render-frontier link #1 (459/CRTC) and confirmed link #2 is the
+deferred 2ebe/3346 spin-wait + coop-tick interaction.  Patches 454-457,459 landed; 458 held.  Goal UNMET;
+the remaining render/sub-screen frontier is dedicated work the port itself flagged as deferred.
