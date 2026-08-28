@@ -27,3 +27,13 @@ VERIFY AFTER: with the render stabilized OR NORENDER, count bb1b calls + g_fist_
 drop as enemy units take the c14f interaction damage.  CAVEAT: also confirm the enemy-damage PATH -- b5e7's
 OWN bb1b (@30086, already rebased) needs go691==0 (rare, go691=2395 terrain hits), so the reached splash is
 via these siblings' updates (or the c14f per-type handler at word[DG:type*2-0x1ae8] may itself need a rebase).
+
+--- RESULT (applied + tested) ---
+b60f rebased faithfully (mirror b5e7) + b767 anchor-bug fixed -> build clean, AZER1 runs 150s, exit 0.
+BUT a296 still 16.  So b60f is NOT (by itself) the reached enemy-splash path, OR the splash has a further
+blocker (the c14f per-type interaction handler @word[DG:type*2-0x1ae8], or units lacking [0x16]&0x40, or
+bb1b's range).  COULD NOT VERIFY: any instrumentation of bb1b/c14f/b60f SIGSEGVs the layout-fragile mga
+render (board:0001) at map-load -- the render defeats all port-side diagnosis of the splash.
+So the RENDER (board:0001, the 2b1e blitter's missing clip) is now the CRITICAL PATH: it must be
+reconstructed (faithful clip) to (a) satisfy the goal's explicit render requirement AND (b) stop perturbing-
+crashes so the splash can be diagnosed.  b60f rebase kept here as a valid base-loss fix regardless.
