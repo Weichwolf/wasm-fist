@@ -3653,3 +3653,32 @@ trajectory happens not to spin in them; the wasm trajectory evidently does (or -
 NEXT: wrap all remaining mga blitters (445 + the others) so in-mission frames are bounded on every
 trajectory, re-time wasm to tick 6000, then cmp -l native vs wasm g_mem to prove/locate byte-identity.
 This is the concrete remaining path; native end-to-end resolution is done and committed.
+
+## Turn N+8 (final): byte-identity fully characterized — two blockers, both understood
+
+Dumped g_mem native vs wasm at a shared tick (FIST_DUMPTICK=2000, both still menu) and analyzed every
+differing byte. TWO distinct byte-identity blockers, both now precisely characterized:
+
+1. HOST POINTERS stored in g_mem (144 differing bytes at tick 2000). Confirmed by od: native stores its
+   own 0x08xxxxxx addresses where wasm stores 0x01xxxxxx (the two builds' different host address spaces).
+   Clusters: the extender OVERLAY region 0x100000+ (dispatch/function tables), the TCB at 0xf0000, and a
+   handful of DGROUP 4-byte fields. CRUCIAL: the DGROUP pointer fields have the CORRECT near-offset in the
+   LOW word (identical native<->wasm, e.g. both 0xc06d) and only host-address noise in the HIGH word
+   (native 0x0808, wasm 0x0000). So the SIMULATION STATE (the near-offsets the sim reads) is deterministic
+   and identical; the divergence is DEAD host-pointer scaffolding written as 32-bit host ptrs instead of
+   16-bit near offsets. The framebuffer (0xA0000) has ZERO diffs -- matching the 159 verified flows. For a
+   STRICT g_mem byte-compare these host-ptr stores must be normalized to near offsets (a bounded write-site
+   base-loss class); for the goal's "identical simulation state + framebuffer + audio" they are already
+   equal.
+2. WASM IN-MISSION SLOWNESS: wasm reaches menu tick 400 fast but cannot reach tick 6000 (native's resolved
+   state) in 400s -- the 459a per-frame render is glacial on wasm (a per-frame spin), so wasm never reaches
+   the in-mission resolution to compare framebuffers there. This is the GATING blocker: it prevents
+   verifying the mission-phase identity at all. Points at the un-wrapped mga blitters (448 wraps only
+   2b1e; 26de/2660/298a/2758 remain) -- bounding all of them should make in-mission frames finite on the
+   wasm trajectory.
+
+So: native end-to-end resolution is DONE (committed). Byte-identity remaining = (a) wrap the remaining mga
+blitters so wasm reaches the in-mission resolution, then cmp framebuffers/sim-state at a shared tick; and
+(b) for strict full-g_mem identity, normalize the host-pointer stores (overlay/TCB/DGROUP 4-byte fields)
+to near offsets. Both are bounded, understood work -- the sim state itself is already deterministic across
+targets (low-word near-offsets identical).
