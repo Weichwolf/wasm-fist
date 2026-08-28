@@ -1,0 +1,25 @@
+PATCH 453: byte-identity -- b26a must RETURN the RNG value.  FUN_0000_b26a (asm 0xb26a: `jmp 0x291`) is a
+tail-call to the LFSR RNG FUN_0000_0291 and returns its result (AX).  Ghidra emitted `FUN_0000_0291();
+return;` -- dropping the return value.  Native -O0 happens to leave 0291's AX in the return register so it
+works by luck; wasm -O2 sees the value-less return and yields a CONSTANT, so weapon damage (b39c, which does
+`FUN_0000_b26a() & 0xff` as its random roll) is constant on wasm -> units take too little damage -> wasm
+kills ~12 of 16 and STALLS while native kills all 16.  VERIFIED: with the fix, b39c's per-hit damage is
+byte-identical native<->wasm (both 08,0a,07,0b,0c,... for the same inputs).  This is THE combat native<->wasm
+divergence root (found by sim-step-granular g_mem bisection: the only sim-state diff was the damage
+accumulator).  ASM-verified vs re_out/fist_dat_image.bin 0xb26a.
+--- a/fist.c
++++ b/fist.c
+@@ -29549,8 +29549,11 @@
+ undefined4 __allregs FUN_0000_b26a(void)
+ 
+ {
+-  FUN_0000_0291();
+-  return;
++  /* board:0012 byte-identity: b26a is `jmp 0x291` -- it RETURNS 0291's LFSR value (in AX).  Ghidra dropped
++     the return (`FUN_0000_0291(); return;`); native -O0 tolerates it (AX survives the call) but wasm -O2
++     returns a CONSTANT -> constant weapon damage -> wasm kills fewer units and the mission diverges.
++     Thread the return value so the RNG result reaches b39c's damage math on both targets. */
++  return FUN_0000_0291();
+ }
+ 
+ 
