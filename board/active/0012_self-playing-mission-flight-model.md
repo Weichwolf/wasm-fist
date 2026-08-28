@@ -3635,3 +3635,21 @@ shared FIST_DUMPTICK to locate the first diverging byte (or confirm identity + f
 STATE: native end-to-end DONE (mission plays to a resolved win, exits clean, deterministic, committed
 266+447+448+449+450+451). Byte-identity is the last requirement; wasm reaches the mission but its
 in-mission sim speed blocks the compare -- a bounded wasm in-mission perf/-O investigation.
+
+## Turn N+8 (cont.): the wasm in-mission slowness is per-FRAME, blocking the tick-anchored g_mem compare
+
+Concrete measurement of the byte-identity blocker:
+- Native reaches tick 6000 (mission already RESOLVED, a296=-5, a294=150) in <30s; g_mem dumped
+  (/tmp/nat_{6000,9000,12000}.mem, all resolved).
+- wasm reaches early menu tick 400 quickly, but does NOT reach tick 6000 in 400s wall-clock (FIST_DUMPTICK
+  never fired) -> its IN-MISSION frames (459a outer loop, which bumps [0x452]) are glacial. So the tick
+  advance itself stalls once in-mission, i.e. a per-FRAME render spin (same class as native's pre-PATCH-448
+  throttle), not a per-tick divergence I can yet diff.
+- Because wasm can't reach a shared in-mission tick in practical time, the g_mem byte-compare is blocked.
+
+This points at the un-wrapped mga blitters: PATCH 448 wraps ONLY 2b1e; 26de/2660/298a/2758 remain
+host-pointer walks (26de fix is held in patches/held/445, 298a is PATCH 409). On native -O0 the resolving
+trajectory happens not to spin in them; the wasm trajectory evidently does (or -O2 changes their cost).
+NEXT: wrap all remaining mga blitters (445 + the others) so in-mission frames are bounded on every
+trajectory, re-time wasm to tick 6000, then cmp -l native vs wasm g_mem to prove/locate byte-identity.
+This is the concrete remaining path; native end-to-end resolution is done and committed.
