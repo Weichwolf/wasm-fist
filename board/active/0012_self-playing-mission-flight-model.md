@@ -3817,3 +3817,26 @@ CORRECTED work order for wasm byte-identity (all bounded, none needing a shim re
      whole run.
 Native end-to-end resolution DONE + committed (266..452). wasm byte-identity: fully specified, de-risked,
 bounded per-function porting -- the DD2 method's endgame, correctly scoped as dedicated work.
+
+## Turn N+13: byte-identity surface MEASURED — it is an interconnected pointer-typed-macro subsystem
+
+Confirmed why 1a45 cannot be ported in isolation: its inputs are the POINTER-TYPED macros
+DAT_1000_e674 = `*(int **)` and DAT_1000_fad4 = `*(int **)` (base-loss at the MACRO level -- they store
+host pointers), which are SET and READ across many functions, not just 1a45. Measured scope:
+  - DAT_1000_e674: 18 refs   fad4: 6   fad2: 2   fad6: 3   e67a: 6   e67c: 9   e67e: 7   e680: 4
+    => the model/asset-loader cluster is ~40 interconnected sites across multiple functions that must be
+    rebased TOGETHER (change the macro type uint16 + DGROUP-rebase every use, or fix each use with casts).
+  - 133 pointer-typed (int**/undefined4) DAT_1000_ macros exist file-wide -- the broader base-loss surface
+    the wasm target exposes (native tolerates host pointers within one address space; wasm cannot).
+
+So wasm byte-identity is a cohesive multi-function subsystem port (the e674/fad4 loader cluster first,
+per the 1a45 asm spec), NOT a single-site fix -- exactly the "dedicated session" class. The falsifiable
+plan is unchanged and correct: (1) verified -- shim guest-seg alloc is deterministic; (2) rebase the
+e674/fad4 loader cluster together, native-regression-checked, FIST_FARTRACE first-divergence-seq as the
+meter; (3) board:0010 CS-carry wholesale; (4) shared-tick g_mem/framebuffer cmp -> 0 diffs.
+
+FINAL honest state: native end-to-end resolution DONE + committed (266..452). wasm byte-identity NOT met;
+it is now fully measured (~40-site loader cluster + 133-macro surface + CS-carry class), de-risked (shim
+deterministic), and specified (1a45 asm->DGROUP map) -- a bounded dedicated porting effort, correctly not
+attempted as a rushed partial patch that (a) provably cannot work in isolation and (b) would risk the
+banked native milestone.
