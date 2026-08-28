@@ -4480,3 +4480,28 @@ or the counter [0x19] init) firing weapons that should stay idle -- fix the gate
 friendly-fire -> tanks survive -> a296 resolves.  This turn: oracle census infra + the friendly-fire chain
 caught to the exact writer (ba49) via hardware watchpoint + patch 457.  Goal UNMET; the corruptor is
 identified, the fix boundary is the b51f fire-gate vs the original.
+
+## Turn N+20 cont.20: ROOT CAUSE FOUND + FIXED (0ea9 carry flag, patch 458) -- HELD: it exposes downstream render base-losses
+
+THE ROOT CAUSE of the AZER1 non-resolution, found and fixed:
+FUN_0000_0ea9 (the manhattan RANGE test) DROPPED its carry-flag verdict.  asm: `stc`(f21)=in-range,
+`clc`(f23)=out-of-range; callers (bb64/bb1b) branch on it via `jae`, threaded as g_fist_cf.  Ghidra set
+g_fist_cf NOWHERE, so bb64 read a STALE flag -> accepted OUT-OF-RANGE candidates -> the type-0x10 weapons
+acquired+damaged the friendly tanks ~500k units away (far past the ~1536 range) -> tanks died -> a296 never
+resolved.  PATCH 458 sets g_fist_cf = 1/0 on the stc/clc returns (asm-verified 0xf21/0xf23).
+PROOF it is the root: with 458 the port's behaviour CHANGES CORRECTLY -- the player now MOVES (vx59=15,
+f26=26729; was frozen vx=0,f26=0), the weapons no longer instantly friendly-fire, and combat actually runs.
+BUT 458 EXPOSES two downstream base-losses the broken 0ea9 had masked (it can't land until they're fixed):
+  (1) SELF-PLAY HANG: with real combat running, the HUD text renderer 19ae->19ea (fist_mga.c glyph blitter)
+      infinite-loops on a now-populated/target-locked string at t=1 (the op-0x4c / HUD-text render frontier).
+  (2) mission-cockpit BYTE-IDENTITY REGRESSION: 458 makes the port ACQUIRE A TARGET (bb64 now works), so
+      the cockpit draws the target-reticle -- whose render diverges native<->wasm (byte 6267).  Correct
+      behaviour, but the reticle/target-HUD render has its own native<->wasm base-loss.
+So 458 is CORRECT + asm-verified but HELD in patches/held/ (it regresses the mission-cockpit byte-identity
+invariant).  It is NOT a dead end -- it is the key that turns the combat on; landing it needs the render
+frontier fixed first: (a) the 19ae/19ea glyph-blit loop bound (height/terminator), and (b) the target-
+reticle/HUD render native<->wasm base-loss.  Those are the op-0x4c/DGROUP:0x7aa4 render work the GOAL names.
+NEXT: fix the 19ae/19ea text-render loop + the reticle render base-loss, then un-hold 458 -> combat resolves
+with byte-identity.  This turn: FOUND + asm-verified the friendly-fire ROOT (0ea9 carry flag) via oracle
+census + hardware watchpoint; held pending the render frontier.  Deliverables: census infra, patch 457
+(landed), patch 458 (held, root fix).  Goal UNMET but the resolution blocker is SOLVED at the sim level.

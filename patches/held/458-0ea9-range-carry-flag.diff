@@ -1,0 +1,31 @@
+PATCH 458: FUN_0000_0ea9 (the manhattan RANGE/proximity test) dropped its CARRY-FLAG verdict.  asm 0xea9:
+each of the 3 axes computes |delta| and, if it exceeds the range `bp`, `ja 0xf23` -> `clc;ret` (OUT OF
+RANGE); if ALL axes fit, `stc;ret` (IN RANGE).  Every caller (bb64 patch 255, bb1b patch 284, ...) branches
+on that CF via `jae` and the port threads it through the shim global g_fist_cf.  Ghidra modeled 0ea9 as
+returning only a distance uint and set g_fist_cf NOWHERE (grep count 0), so bb64's `if (g_fist_cf)` read a
+STALE flag left by a previous op -> it accepted OUT-OF-RANGE candidates.  In AZER1 this made the type-0x10
+weapons acquire and DAMAGE the stationary friendly tanks (~500k units away, far past the ~1536 range) each
+frame -> hp3a>=100 -> a93e destroyed all 9 tanks by ~tick300 -> combat could never resolve (a296 stuck).
+Root-caused via oracle census (original tanks hp3a=0, port tanks damaged from out-of-range firers) + a
+hardware watchpoint.  FIX: set g_fist_cf = 1 on the all-axes-in-range return (asm stc) and = 0 on the
+out-of-range return (asm clc).  ASM-verified vs 0xea9-0xf24 (stc@f21 / clc@f23).
+--- a/fist.c
++++ b/fist.c
+@@ -6564,9 +6564,17 @@
+         DAT_1000_e032 = 0xff;
+         uVar1 = -uVar1;
+       }
++      /* PATCH 458: 0ea9 is the manhattan RANGE test.  The asm returns its verdict in the CARRY FLAG
++         (f21 `stc;ret` = IN RANGE / all axes <= range; f23 `clc;ret` = OUT OF RANGE / an axis too far);
++         its callers (bb64/bb1b/... via `jae`) branch on that CF, threaded here as g_fist_cf.  Ghidra
++         dropped the flag entirely -- 0ea9 set g_fist_cf NOWHERE -- so bb64 read a STALE g_fist_cf and
++         selected OUT-OF-RANGE targets: in AZER1 the type-0x10 weapons then friendly-fired the stationary
++         tanks to death (a296 never resolved).  Set g_fist_cf to match the asm stc/clc. */
++      { extern unsigned char g_fist_cf; g_fist_cf = 1; }   /* all axes in range -> stc */
+       return uVar1;
+     }
+   }
++  { extern unsigned char g_fist_cf; g_fist_cf = 0; }       /* an axis out of range -> clc */
+   return uVar2;
+ }
+ 
