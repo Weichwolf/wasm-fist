@@ -3139,3 +3139,28 @@ So the state after patch 442:
 NEXT: (a) reconstruct the mga blitter clipping (board:0001) to stabilize -- read the asm 2b1e clip test the
 Ghidra decompile dropped; (b) then instrument the splash; or (a') oracle-trace the enemy-HP writer directly.
 Goal unmet (a296=16); combat crash fixed (442), render-fragility is the diagnosis blocker.
+
+## THE SPLASH IS IMPLEMENTED (bb1b/c14f) -- its CALLERS (b51f/b808) are base-lost -> it never runs
+
+Traced the enemy-HP damage sink statically to the END and found it is NOT missing:
+  - bb1b (PATCH 284, asm 0xbb1b, twin of a0ab) is the SPLASH proximity walk: over the 182-entry object
+    table @DGROUP:0xdfbc, for each candidate si with [si+0x16]&0x40 set and si!=self, it runs the range
+    test 0ea9(range=[si+0x14]+0x100, self@di+4, cand@si+4) and, on a hit, dispatches c14f(si).  bb1b is
+    CORRECTLY rebased (dg+offset pointers), and 0ea9 (the range test) is correct (rebased dwords), and
+    c14f (PATCH 284, per-type interaction dispatch word[DG:type*2-0x1ae8]) is correct.  So the whole
+    proximity->interaction->damage chain EXISTS and is asm-verified.
+  - BUT bb1b is called from the projectile/explosion UPDATE siblings b51f (fist.c:30154) and b808 (30389)
+    -- and THOSE are BASE-LOST: `*(int*)((int)param_5 + 0x23)` / `*(uint*)(param_3 + 0x27)` use the object
+    NEAR-OFFSET as a HOST POINTER (Ghidra dropped the DGROUP base, same class as b60f, patch 335's b5e7,
+    patch 442's 77cf).  They read GARBAGE [0x23]/[0x27], so `if([0x23]==0)`/`if([0x27]<0x3c)` mis-branches
+    and bb1b is NEVER reached (and no crash, because the garbage read happens to land in-bounds).
+  - The DIRECT-hit path (b5e7 else-branch, bb1b @30086) IS rebased, but it needs go691==0 && [obj+0x23]==0;
+    with go691=2395 (shells hit terrain) that branch is rarely taken, so the splash relies on the explosion
+    object's update (b51f/b808), which is the base-lost path.
+
+So the FINISH is NO LONGER "implement the splash" -- it is: REBASE the base-lost bb1b-calling update siblings
+b51f (0xb51f) / b808 (0xb808) / b60f (0xb60f) to the DGROUP near-offset model (mirror patch 335's b5e7 and
+patch 442's 77cf -- object = g_mem+0x1c000+near_offset, every [obj+N] at its asm width), so the explosion
+object's update reaches bb1b -> 0ea9 -> c14f -> enemy HP -> b354/b2ef -> a296--.  This is a bounded base-loss
+patch class (the exact same one already applied ~370 times), NOT new subsystem work.  Then verify a296 drops.
+Goal unmet (a296=16); but the splash is FOUND, IMPLEMENTED, and its blocker is a known base-loss in b51f/b808.
