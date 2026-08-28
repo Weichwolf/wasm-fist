@@ -4202,3 +4202,23 @@ mapped; oracle reaches the mission headless.  The RESOLUTION still requires: (1)
 harness (one step); (2) census original-vs-port objects + trace who drives enemy units (obj+0x40 bit1 /
 obj+0x30 writer); (3) port that AI/spawn/instantiation faithfully.  Multi-session, but every piece is now
 either done or reduced to a concrete next action.  Goal unmet.
+
+## Turn N+20 cont.9: ORACLE RAM DUMP WORKING headless -- census 1 engine-context step away
+
+Built + de-risked a headless AZER1 RAM-census harness (tools/oracle/census_azer1.sh):
+- Reaches the AZER1 cockpit under xvfb-run (verified: /tmp/ocensus.cockpit.png -- dashboard + radar + red
+  enemy blips + "GOALS REMAINING: 13").
+- Deterministic snapshot via FIST_MEMDUMP_N=<N>M (auto-dumps after N million guest RAM writes -- NO signal
+  timing; the SIGUSR2 path was unreliable under nested xvfb-run).  Write rate ~3M/s; N=400 lands ~40s into
+  the mission and produced a full 16 MB guest-physical .ram.bin.
+REMAINING oracle hurdle (the ONE step to the census): the N=400 dump fired in EXTENDER context
+(cs=1119:00011190, ds=2d19:0002d190, cr3=0x588a) -- real-mode-style seg bases (seg<<4) but paging ON.  The
+object table at DGROUP:0xdfbc is NOT at phys 0x3b14c (all zero there) because that ds is the extender's, and
+the engine DGROUP is under a DIFFERENT cr3 (CLAUDE.md: engine cr3=0xe000).  cr3=0x588a's PD does not resolve
+(PDEs aren't valid frames), so the dump must be taken in ENGINE context (cs=engine-code-seg).
+NEXT (concrete): gate the dump on engine context -- either (a) a cs-filter in the FIST_MEMDUMP path (dump
+only when SegPhys(cs) is the engine's relocated code seg), or (b) read the engine dsb/csb from a
+capture_9200/_6980 .cam.txt (engine-context capture) and walk THAT cr3, or (c) FIST_WATCHFLAT=<engine-flat
+of 0x3b14c> (CR3-aware, follows paging) to write-trace the object registry.  Then census word[obj+0] over
+the 182-slot table and diff vs the port's 142-object / 2-vehicle census -> the missing mobile force (or its
+spawn/AI) is named.  Harness saved; the census is one engine-context capture away.  Goal unmet.
