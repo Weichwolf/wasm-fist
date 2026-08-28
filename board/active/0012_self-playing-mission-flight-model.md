@@ -4222,3 +4222,35 @@ capture_9200/_6980 .cam.txt (engine-context capture) and walk THAT cr3, or (c) F
 of 0x3b14c> (CR3-aware, follows paging) to write-trace the object registry.  Then census word[obj+0] over
 the 182-slot table and diff vs the port's 142-object / 2-vehicle census -> the missing mobile force (or its
 spawn/AI) is named.  Harness saved; the census is one engine-context capture away.  Goal unmet.
+
+## Turn N+20 cont.10: ORACLE CENSUS DELIVERED -- the bug is CONCRETE: port mission-load builds the WRONG object set (no type-2 tanks)
+
+The engine-context RAM dump WORKED: FIST_MEMDUMP_N=500 landed at cr3=0x0000e000 (engine paging); the object
+table @DGROUP:0xdfbc resolves at phys 0x3b14c (DGROUP base 0x2d190, identity-mapped under cr3=0xe000) and
+holds the real object near-offsets (c05c/c157/a022/a059/c34d... -- matching the port's deterministic alloc).
+
+ORIGINAL AZER1 object census (80 live objects, engine context) vs PORT (142, tick 800):
+  type   original  port
+  0x02      9        0     <- MOBILE TANKS -- the steering enemy force.  PORT HAS NONE.
+  0x03      3        0     <- missing
+  0x10     25       91     <- port over-spawns +66 (b51f)
+  0x15     27       27     ok
+  0x1a      6       12     +6
+  0x1b      6        8     +2
+  0x00      2        2 ; 0x01  2  2
+The 9 original type-2 tanks (c34d/c448/c63e/c834/c92f/ca2a/cb25/cc20/cd1b) ARE STEERING: hdg26==des30
+(nonzero, e.g. c34d hdg=des=0x09fb), goal49 set on several, f40=0x11/0x03.  The PORT has ZERO type-2 objects
+and none of those offsets exist -- so the port never creates the mobile enemy force, which is exactly why
+firereq/tgt/cand stay 0 and a296 never resolves.
+
+ROOT (now concrete + oracle-anchored): the port's DCBS mission-load INSTANTIATION is wrong -- it fails to
+create the type-2 tanks (and type-3), and over-creates type-0x10 (+66).  The target state is exact and
+known (the 80-object histogram above).  The DCBS record->object pipeline (d501 -> 43c1/patch200 ->
+c296/patch214 -> per-type init word[DG:(word[di]*2-0x1b20)]) mis-assigns types / mis-parses records:
+80 records must yield 80 objects with 9 type-2, not 142 with 0 type-2.
+NEXT (tractable, in-repo, oracle-checkable): (1) census the PORT at the earliest mission tick -- is it 142
+from the start (load bug) or 80 growing to 142 (a spurious per-frame spawn)?  (2) find where word[obj+0]
+(type) is set from the DCBS record; verify against the FSG record type field; (3) fix the parse/instantiation
+so the port reproduces the 80-object set.  Oracle harness tools/oracle/census_azer1.sh + the cr3=0xe000
+walk (DGROUP 0x2d190, table 0x3b14c) are the falsifiable meter.  This is the real unblock.  Goal unmet, but
+the blocker is now a specific, measurable mission-load defect with a known-correct target.
