@@ -3117,3 +3117,25 @@ So the finish is: (a) grind the remaining combat-path base-losses via gdb-catch-
 iteration, method proven this session by patch 442), and (b) implement/repair the explosion-object 0x9c4d
 splash so enemy HP falls to the b354/b2ef destroy that does a296--.  Goal unmet (a296=16); one crash fixed,
 sim runs full, splash + residual base-losses remain.
+
+## Diagnosis blocker identified: the op-0x4c/mga render (board:0001) is LAYOUT-FRAGILE, not a combat bug
+
+After the 77cf+b767 crash fix (442) the COMBAT path is clean (sim runs 250s, exit 0).  The crashes that any
+instrumentation triggers are the RENDER: caught under gdb -> #0 m_mga_FUN_0000_2b1e (fist_mga.c:7121) <-
+2ae9 <- 795c <- 77dc <- 209e <- 206f <- 459a, during the MENU (pre-mission).  fist_mga.c:7121 is the sprite
+blit inner loop `*pbVar10 = *pbVar1` writing to pbVar9 = g_mem+(fb_seg<<4)+(rowoff+col) -- an OUT-OF-BOUNDS
+framebuffer write (the blitter lacks the original's clip; rowoff+col runs past the fb).  param_2 is a VALID
+sprite, so it is a clipping/bounds bug, not a wild sprite.  It is layout-fragile: the clean binary layout
+happens to keep pbVar9 in bounds (or not draw that sprite); any code added shifts g_mem/uninit state and
+the same blit faults.  This is board:0001 (op-0x4c display list) surfacing as the practical DIAGNOSIS
+BLOCKER: printf/exit-global probes perturb the layout -> the fragile render faults before combat.
+
+So the state after patch 442:
+  - COMBAT path clean; aim->acquire->fire->spawn->fly->HIT->explosion-effect all run; sim reaches 250s.
+  - a296=16: the enemy-HP SPLASH (explosion object 0x9c4d) still does not apply -- the last combat link.
+  - To DIAGNOSE the splash by instrumentation, the mga blitters (2b1e/26de) need faithful CLIPPING
+    (board:0001) so they stop being layout-fragile; OR diagnose the splash via the DOSBox oracle
+    (FIST_WATCHFLAT on an enemy HP field -> capture the writer) which does not perturb the port's layout.
+NEXT: (a) reconstruct the mga blitter clipping (board:0001) to stabilize -- read the asm 2b1e clip test the
+Ghidra decompile dropped; (b) then instrument the splash; or (a') oracle-trace the enemy-HP writer directly.
+Goal unmet (a296=16); combat crash fixed (442), render-fragility is the diagnosis blocker.
