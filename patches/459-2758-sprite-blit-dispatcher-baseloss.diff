@@ -1,0 +1,56 @@
+PATCH 459: MGAVIDEO sprite-blit dispatcher FUN_0000_2758 base-loss (asm 0x2758) -- the sibling of 279d
+(patch 303), left un-ported.  Ghidra dropped 260c's CF/ZF (in_CF/in_ZF = 0 locals) so 2758 ALWAYS took the
+ZF=0 path and passed the 260c RETURN value (iVar1) as the blit ROW to 27de instead of m_260c_cx, giving a
+wild di whose ES:di dest fell OUTSIDE the framebuffer.  On the AZER1 reticle blit (reached only once patch
+458 acquires a target: 22dd -> 3a0f -> 2758 -> 27de) this WROTE OVER the BIOS CRTC-port word g_mem[0x463]
+(0x03D4 -> corrupt), so the engine's subsequent VGA input-status/vsync poll read the WRONG port, its retrace
+bit never toggled, and the per-frame loop 459a spun forever -> [0x452] frozen at 1, the flight/combat sim
+never drained -> the mission could never resolve.  Caught by a hardware watchpoint on g_mem+0x463 under a
+458-active run (writer = 27de <- 2758 <- 3a0f <- 22dd <- 459a).  Reconstructed faithfully from the asm,
+threading the 260c shim statics (m_260c_cf/zf/cx/recoff) exactly as patch 303 did for 279d.  ASM-verified vs
+re_out/fist_mga_image.bin 0x2758-0x279c.  Mission-render-path only (the cockpit reticle blit chain).
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -6088,17 +6088,31 @@
+ void __allregs FUN_0000_2758(undefined2 param_1,undefined2 param_2,undefined2 param_3)
+ 
+ {
+-  int iVar1;
+-  undefined1 in_CF = 0;
+-  undefined1 in_ZF = 0;
+-  
+-  iVar1 = FUN_0000_260c(param_1,param_2,_DAT_1000_c724);
+-  if (!(bool)in_CF) {
+-    if ((bool)in_ZF) {
+-                    /* WARNING: Subroutine does not return */
+-      FUN_0000_2d6d((undefined1 *)&DAT_1000_d588);
+-    }
+-    FUN_0000_27de(0xffff,_DAT_1000_d58e,param_3,iVar1 + -1);
++  /* PATCH 459: MGAVIDEO sprite-blit dispatcher (asm 0x2758), sibling of 279d (patch 303).  Ghidra dropped
++     260c's CF/ZF (in_CF/in_ZF = 0 locals) so this ALWAYS took the ZF=0 path and passed the 260c RETURN
++     (iVar1) as the blit ROW instead of m_260c_cx -> a wild di in 27de whose ES:di dest landed OUTSIDE the
++     framebuffer.  On the AZER1 reticle blit (reached once patch 458 acquires a target: 22dd->3a0f->2758->
++     27de) it corrupted the BIOS CRTC-port word g_mem[0x463] (0x03D4 -> garbage), so the engine's later VGA
++     vsync poll read the WRONG port, its retrace bit never toggled, and the per-frame loop 459a hung ->
++     [0x452] frozen at 1, the sim never drained.  Thread the 260c shim CF/ZF/cx/recoff exactly like 279d.
++     asm: `di=word[0x724]; call 260c; jb 279b (CF=1 -> nothing); jne 278e (ZF=0 -> simple)`.
++       ZF=1 full-clip: 2d6d(bx=0x1588); word[0x794]=0x7c8; word[0x796]=0x140;
++                       27de(cx=0xffff, dx=word[0x158e], si=recoff, di=word[0x158c]-1); 2e12().
++       ZF=0 simple   : 27de(cx=0xffff, dx=word[0x158e], si=recoff, di=ax-1) with ax=m_260c_cx. */
++  extern int m_260c_cf, m_260c_zf, m_260c_cx;
++  extern uint16_t m_260c_recoff;
++  FUN_0000_260c(param_1,param_2,_DAT_1000_c724);
++  if (m_260c_cf != 0) return;                                       /* jb 279b -> retf */
++  if (m_260c_zf != 0) {                                             /* jne 278e: ZF=0 simple; here ZF=1 */
++    FUN_0000_2d6d((undefined1 *)(uintptr_t)0x1588);                 /* bx=0x1588 */
++    *(uint16_t *)(g_mem + 0x1c794) = 0x7c8;
++    *(uint16_t *)(g_mem + 0x1c796) = 0x140;
++    FUN_0000_27de(0xffff,(int)_DAT_1000_d58e,(byte *)(uintptr_t)m_260c_recoff,
++                  (int)(uint16_t)(*(uint16_t *)(g_mem + 0x1d58c) - 1));  /* di=word[0x158c]-1 */
++    FUN_0000_2e12();
++  } else {
++    FUN_0000_27de(0xffff,(int)_DAT_1000_d58e,(byte *)(uintptr_t)m_260c_recoff,
++                  (int)(uint16_t)(m_260c_cx - 1));                  /* di=ax-1=m_260c_cx-1 */
+   }
+   return;
+ }

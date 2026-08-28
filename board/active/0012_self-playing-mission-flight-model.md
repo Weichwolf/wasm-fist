@@ -4627,3 +4627,26 @@ own second clause, genuine dedicated work of the same magnitude as the combat ar
 op-0x4c present is faithful (frame completes under live combat) AND the resulting frame is byte-identical
 native<->wasm.  Deliverables of the arc: oracle census infra, patches 454-457 landed, 458 (root fix) held,
 25 evidence entries.  Goal UNMET; sim half SOLVED, op-0x4c render/present half remains.
+
+## Turn N+20 cont.26: PATCH 459 landed -- first render-frontier base-loss fixed (2758 sprite blitter no longer corrupts the CRTC port)
+
+Watchpoint-driven progress on the op-0x4c render frontier.  A hardware watchpoint on g_mem+0x463 (the BIOS
+CRTC-port word) under a 458-active run caught the corruptor: FUN_0000_2758 (MGAVIDEO sprite-blit dispatcher,
+asm 0x2758) -- the un-ported SIBLING of 279d (patch 303).  Ghidra dropped 260c's CF/ZF, so 2758 always took
+the ZF=0 path and passed the 260c RETURN value as the blit ROW (instead of m_260c_cx), giving a wild di in
+27de whose ES:di dest fell outside the framebuffer and overwrote g_mem[0x463] (0x03D4 -> garbage).  The
+reticle blit chain (22dd->3a0f->2758->27de) is reached only once patch 458 acquires a target -> the CRTC
+corruption -> the VGA vsync poll read the WRONG port -> the per-frame loop 459a hung.
+PATCH 459 threads 260c's CF/ZF/cx/recoff exactly like 279d (asm-verified vs re_out/fist_mga_image.bin
+0x2758-0x279c).  RESULT: with 458+459, g_mem[0x463] STAYS 0x03D4 (verified live) -- the CRTC corruption is
+GONE and the vsync poll works.  459 lands cleanly (mission-render-path only): mission-cockpit crop
+byte-identical native<->wasm, make check OK.  This is the FIRST concrete piece of the render frontier fixed.
+
+The hang now MOVES one layer deeper (as expected for the render frontier): the per-frame render walks the
+mission-object roster (FUN_0000_3a68 reticle-graticule -> c33c roster-walk-iterator -> c4df -> 0007 -> 2ebe
+-> 3346), which spins/loops under the 458 combat state (d549=00, [0x452]=0 -- the first mission frame's
+render never completes).  So the render frontier is a CHAIN, and it is now being walked down one landed
+base-loss at a time (459 first).  NEXT: the c33c/3346 roster-render spin (is 3346 another port spin like
+2758's CRTC, or does c33c cycle?) -- same watchpoint/backtrace method.  Progress: 459 landed (render-frontier
+base-loss #1); 458 still held pending the rest of the reticle/roster render chain.  Goal UNMET, but the
+render frontier is now yielding to the oracle-watchpoint method, one landed fix at a time.
