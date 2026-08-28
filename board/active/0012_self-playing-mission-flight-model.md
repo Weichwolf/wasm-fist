@@ -3205,3 +3205,22 @@ NET: the RENDER 16-bit-wrap (444) is a real, required (goal names the render) fi
 mission still does not genuinely resolve.  NEXT: (a) apply the wrap to ALL blitters (26de done; 2660/298a/...);
 (b) identify type 0x13 + fix its a294/a296 spawn/despawn balance so a296 counts UNITS only; (c) then confirm
 the fire->hit->damage chain drops REAL enemy units to a296==0.  Render fixes preserved in held/444+445.
+
+## RENDER (board:0001) refined: the wrap is needed on BOTH src AND dst of EVERY blitter
+
+Applied the full stack (077e/op54/442/443/444/445) via a reusable applier (patches/held/apply_chain.py +
+443-b60f-body.txt) and instrumented the combat.  With 2b1e+26de dst-wrapped, SOME instrumentation runs (the
+earlier a296 16->10 run), but a different probe SIGSEGVs -- gdb: #0 m_mga_2b1e (fist_mga.c:7129) but this
+time the SOURCE read faults (param_2 sprite-data ptr out of bounds), not the dst.  So real-mode wraps ds:si
+(SOURCE) too: a garbage sprite header (rows/cols) over-reads past the source segment.  The faithful fix is
+16-bit segment wrap on BOTH the src offset (ds:si in m_260c_recseg) AND the dst (es:di in fb) for EVERY
+blitter (2b1e/26de/2660/298a/2758/...), not just the dst of two.  This is the honest scope of board:0001:
+a multi-blitter, src+dst 16-bit-wrap reconstruction.  It is bounded and mechanical (the wrap pattern is
+proven in 444), but spans ~all mga blit functions.  Until it is complete the render stays layout-fragile and
+defeats combat instrumentation -- which is why the unit-damage chain (does the fire->hit->damage drop REAL
+enemy units, vs the type-0x13 a296 churn) still cannot be cleanly measured port-side.
+
+REUSABLE TOOLING saved this session: patches/held/apply_chain.py re-applies 439/441/442/443/444/445 onto a
+fresh `make patch` build/ in one step (body-anchored, avoids the forward-decl bug), so the full combat stack
+can be rebuilt+iterated without hand re-application.  Next: finish the src+dst wrap across all blitters
+(board:0001) -> stable render -> then classify a296 (units vs type-0x13) and close the unit-damage chain.

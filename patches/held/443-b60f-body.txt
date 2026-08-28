@@ -1,0 +1,41 @@
+void __allregs
+FUN_0000_b60f(undefined2 param_1,undefined2 param_2,undefined4 param_3,int param_4,int *param_5)
+{
+  /* PATCH 443: mid-entry twin of b5e7. di=object near-offset in param_1. */
+  extern unsigned char g_fist_cf; extern unsigned short g_fist_c0e5_si;
+  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+  uint16_t di = (uint16_t)(uintptr_t)param_1;
+  unsigned char *obj = dg + di;
+  int p3hi = (int)((ulong)param_3 >> 0x10);
+  uint16_t uv2; (void)param_4; (void)param_5;
+  if ((*(uint16_t *)(obj + 0x2d) & 0xf) == 0)
+    FUN_1000_addb(param_1,param_2,(int)param_3,(int)(intptr_t)obj);
+  *(int32_t *)(obj + 4) += *(int16_t *)(obj + 0x1d);
+  *(int32_t *)(obj + 8) += *(int16_t *)(obj + 0x1f);
+  *(int32_t *)(obj + 0xc) += *(int16_t *)(obj + 0x21);
+  int go691 = 0;
+  if (*(uint16_t *)(obj + 0xd) < 0x80) { if ((char)FUN_0000_e1a6(param_3,(int)(intptr_t)obj) < 0) go691 = 1; }
+  if (go691) {
+    if (*(uint16_t *)obj == 7) { uv2 = 0x9c05; }
+    else { FUN_1000_a4a2(0x2e33,*(uint16_t *)(obj + 0x27));
+      uint16_t w0 = *(uint16_t *)obj; param_3 = CONCAT22(p3hi,(uint16_t)(w0 * 2));
+      uv2 = *(uint16_t *)(dg + (uint16_t)(w0 * 2 - 0x6423)); }
+    FUN_0000_ba33(uv2,(int)(intptr_t)obj); FUN_0000_be8b(0xf,param_3);
+  } else {
+    if (*(uint16_t *)(obj + 0x23) != 0) { *(uint16_t *)(obj + 0x23) -= 1; return; }
+    FUN_0000_bb1b((int)(unsigned short)di,0xb64c);
+    if (!(unsigned char)g_fist_cf) return;
+    if (*(uint16_t *)(obj + 0x27) == DAT_2000_5a25) return;
+    { uint16_t si = g_fist_c0e5_si;
+      DAT_2000_5bd7 = (uint16_t)((uint16_t)(- *(int16_t *)(obj + 0x10) - *(int16_t *)(dg + (uint16_t)(si + 0x10))) >> 0xc); }
+    param_3 = CONCAT22(p3hi,(uint16_t)obj[0x29]);
+    FUN_0000_bbb7((uint)obj[0x2a],(uint)obj[0x29],(int)(intptr_t)obj);
+    if (*(uint16_t *)obj == 7) { uv2 = 0x9c45; }
+    else { uv2 = *(uint16_t *)(obj + 0x27); FUN_1000_a4a2(0x2e27,uv2); FUN_0000_bfce(uv2); uv2 = 0x9c4d; }
+    FUN_0000_ba33(uv2,(int)(intptr_t)obj); FUN_0000_be8b(0xf,param_3);
+  }
+  { int iv1 = FUN_1000_b354((int)(intptr_t)obj); FUN_1000_b2ef(iv1); }
+  return;
+}
+
+
