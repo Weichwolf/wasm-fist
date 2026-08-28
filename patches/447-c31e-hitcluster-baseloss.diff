@@ -1,0 +1,178 @@
+PATCH 447: c31e action-handler HIT-CLUSTER base-loss fixes (bd09/b274/b396).  After PATCH 266 routed
+weapon damage to the real target, b51f->c31e dispatches each hit object's -0x1ab0 action method with di
+(target near offset) POSITIONALLY in param_1.  These hit-accumulator handlers were still base-lost after
+PATCH 386 (object read from param_3 as a host ptr, DAT_2000_a3b2 host-ptr) -- never exercised until real
+objects took hits.  Rebased fully: di=param_1; the asm's AX=DAT_5bdb, BX=DAT_5bd9; DAT_a3b2 ->
+dg[(uint16)(a3b2+0x16)]; b274 gets a host ptr to the DGROUP record; ba33 gets the object near offset.
+ASM-verified vs re_out/fist_dat_image.bin 0xbd09-0xbd68, 0xb274-0xb2a1, 0xb396-0xb406.  RESULT: AZER1
+AI-vs-AI sim runs to a296==0 (enemy side eliminated), min_a296=0, no crash, deterministic.
+--- a/fist.c
++++ b/fist.c
+@@ -29556,20 +29556,19 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_b274) @ 0000:b274 ===== */
+ 
+ uint __allregs FUN_0000_b274(byte *param_1)
+-
+ {
++  /* board:0012 NOTE 447: DAT_a3b2 = current-target near offset; rebase to DGROUP (== PATCH 266 inline). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   uint uVar1;
+   int iVar2;
+-  
+   uVar1 = FUN_0000_0291();
+   iVar2 = DAT_2000_a3ae;
+-  if ((*(byte *)(DAT_2000_a3b2 + 0x16) & 8) != 0) {
++  if ((dg[(unsigned short)((unsigned short)DAT_2000_a3b2 + 0x16)] & 8) != 0) {
+     iVar2 = DAT_2000_a3b0;
+   }
+   return (((uVar1 & 0xff) * (uint)param_1[1] >> 8) + *param_1 + 1) * iVar2 >> 8;
+ }
+ 
+-
+ /* ===== ((uint)(uintptr_t)&FUN_0000_b2a2) @ 0000:b2a2 ===== */
+ 
+ void __allregs FUN_0000_b2a2(void)
+@@ -29699,45 +29698,40 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_b396) @ 0000:b396 ===== */
+ 
+ void __allregs FUN_0000_b396(int param_1,int param_2,int param_3)
+-
+ {
+-  byte *pbVar1;
+-  byte bVar2;
+-  byte bVar3;
+-  uint uVar4;
+-  int iVar5;
+-  undefined2 in_register_0000000e;
+-  byte *pbVar6;
+-  
+-  if (*(char *)(param_3 + 0x19) == '\0') {
+-    pbVar6 = (byte *)CONCAT22(in_register_0000000e,(byte *)(*(int *)(param_2 + -0x1bde) + param_1));
+-    uVar4 = FUN_0000_0291();
+-    iVar5 = DAT_2000_a3ae;
+-    if ((*(byte *)(DAT_2000_a3b2 + 0x16) & 8) != 0) {
+-      iVar5 = DAT_2000_a3b0;
+-    }
+-    pbVar1 = (byte *)(param_3 + 0x1a);
+-    bVar2 = *pbVar1;
+-    bVar3 = (byte)((((uVar4 & 0xff) * (uint)((byte *)pbVar6)[1] >> 8) + *(byte *)pbVar6 + 1) * iVar5
+-                  >> 8);
+-    *pbVar1 = *pbVar1 + bVar3;
+-    if ((CARRY1(bVar2,bVar3)) || (0x4f < *(byte *)(param_3 + 0x1a))) {
+-      *(undefined1 *)(param_3 + 0x19) = 1;
+-      *(undefined2 *)(param_3 + 0x1d) = 0x300;
+-      *(undefined2 *)(param_3 + 0x12) = 0x140;
+-      *(undefined2 *)(param_3 + 0x1f) = 0;
+-      *(byte *)(param_3 + 0x16) = *(byte *)(param_3 + 0x16) & 0xf9;
+-      *(byte *)(param_3 + 0x17) = *(byte *)(param_3 + 0x17) & 0xe7;
+-      *(byte *)(param_3 + 0x16) = *(byte *)(param_3 + 0x16) | 1;
+-      FUN_0000_ba33(0x9c5d,param_3);
+-      FUN_0000_be8b(9,pbVar6);
+-      return;
+-    }
++  /* board:0012 NOTE 447 hit-cluster (asm 0xb396-0xb406): object di=param_1 (c31e dispatch),
++     ax=DAT_5bdb, bx=DAT_5bd9; record base word[DG:(bx-0x1bde)]; DAT_a3b2 rebased; threshold 0x50. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  unsigned int ax0 = (unsigned short)DAT_2000_5bdb;
++  unsigned int bx0 = (unsigned short)DAT_2000_5bd9;
++  (void)param_2; (void)param_3;
++  if (dg[(unsigned short)(di + 0x19)] == 0) {
++    unsigned short bx = *(unsigned short *)(dg + (unsigned short)(bx0 - 0x1bde));
++    bx = (unsigned short)(bx + ax0);
++    unsigned int rnd = FUN_0000_0291() & 0xff;
++    unsigned int axv = (rnd * (unsigned)dg[(unsigned short)(bx + 1)]) >> 8;
++    axv = axv + (unsigned)dg[(unsigned short)bx] + 1;
++    int dxv = DAT_2000_a3ae;
++    if ((dg[(unsigned short)((unsigned short)DAT_2000_a3b2 + 0x16)] & 8) != 0) dxv = DAT_2000_a3b0;
++    axv = (axv * (unsigned)(unsigned short)dxv) >> 8;
++    unsigned char al = (unsigned char)axv;
++    unsigned char old = dg[(unsigned short)(di + 0x1a)];
++    dg[(unsigned short)(di + 0x1a)] = (unsigned char)(old + al);
++    if ((((unsigned)old + al) <= 0xff) && (dg[(unsigned short)(di + 0x1a)] < 0x50)) return;
++    dg[(unsigned short)(di + 0x19)] = 1;
++    *(unsigned short *)(dg + (unsigned short)(di + 0x1d)) = 0x300;
++    *(unsigned short *)(dg + (unsigned short)(di + 0x12)) = 0x140;
++    *(unsigned short *)(dg + (unsigned short)(di + 0x1f)) = 0;
++    dg[(unsigned short)(di + 0x16)] &= 0xf9;
++    dg[(unsigned short)(di + 0x17)] &= 0xe7;
++    dg[(unsigned short)(di + 0x16)] |= 1;
++    FUN_0000_ba33(0x9c5d, (int)(unsigned short)di);
++    FUN_0000_be8b(9, param_2);
+   }
+   return;
+ }
+ 
+-
+ /* ===== ((uint)(uintptr_t)&FUN_0000_b407) @ 0000:b407 ===== */
+ 
+ void __allregs FUN_0000_b407(undefined2 param_1)
+@@ -31007,44 +31001,37 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_bd09) @ 0000:bd09 ===== */
+ 
+ void __allregs FUN_0000_bd09(int param_1,undefined4 param_2,int param_3)
+-
+ {
+-  byte *pbVar1;
+-  byte bVar2;
+-  byte bVar3;
+-  uint uVar4;
+-  int iVar5;
+-  undefined2 uVar7;
+-  ulong uVar6;
+-  
+-  if ((*(byte *)(param_3 + 0x19) & 4) == 0) {
+-    uVar7 = (undefined2)((ulong)param_2 >> 0x10);
+-    uVar4 = FUN_0000_b274(*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)((uint)*(byte *)(param_3 + 0x19) * 2 - 0x6119)) + param_1);
+-    bVar3 = (byte)uVar4;
+-    if (DAT_2000_5bd9 == 4) {
+-      bVar3 = (byte)(uVar4 >> 2) & 0x3f;
+-    }
+-    pbVar1 = (byte *)(param_3 + 0x1a);
+-    bVar2 = *pbVar1;
+-    *pbVar1 = *pbVar1 + bVar3;
+-    if ((!CARRY1(bVar2,bVar3)) && (*(byte *)(param_3 + 0x1a) < *(byte *)(param_3 + 0x1b))) {
++  /* board:0012 NOTE 447 hit-cluster: object di=param_1 (c31e dispatch), ax=DAT_5bdb; DGROUP rebase. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  unsigned int ax0 = (unsigned short)DAT_2000_5bdb;
++  (void)param_3;
++  if ((dg[(unsigned short)(di + 0x19)] & 4) == 0) {
++    unsigned short bx = *(unsigned short *)(dg + (unsigned short)((unsigned)dg[(unsigned short)(di + 0x19)] * 2 - 0x6119));
++    bx = (unsigned short)(bx + ax0);
++    unsigned int uVar4 = FUN_0000_b274((byte *)(dg + bx));
++    unsigned char al = (unsigned char)uVar4;
++    if (DAT_2000_5bd9 == 4) al = (unsigned char)((uVar4 >> 2) & 0x3f);
++    unsigned char old = dg[(unsigned short)(di + 0x1a)];
++    dg[(unsigned short)(di + 0x1a)] = (unsigned char)(old + al);
++    if ((((unsigned)old + al) <= 0xff) && (dg[(unsigned short)(di + 0x1a)] < dg[(unsigned short)(di + 0x1b)])) {
+       return;
+     }
+-    *(byte *)(param_3 + 0x16) = *(byte *)(param_3 + 0x16) | 1;
+-    *(byte *)(param_3 + 0x16) = *(byte *)(param_3 + 0x16) & 0xf9;
+-    *(byte *)(param_3 + 0x17) = *(byte *)(param_3 + 0x17) & 0xf7;
+-    *(byte *)(param_3 + 0x19) = *(byte *)(param_3 + 0x19) | 4;
+-    *(undefined2 *)(param_3 + 0x1c) = 0x480;
+-    iVar5 = (uint)*(byte *)(param_3 + 0x19) * 2;
+-    *(undefined2 *)(param_3 + 0x14) = *(undefined2 *)(g_mem + 0x1c000 + (uint16_t)(iVar5 - 0x6109));
+-    uVar6 = CONCAT22(uVar7,iVar5) & 0xffff0006;
+-    FUN_0000_ba33(*(undefined2 *)(g_mem + 0x1c000 + (uint16_t)((int)uVar6 - 0x60f9)),param_3);
+-    FUN_0000_be8b(9,uVar6);
++    dg[(unsigned short)(di + 0x16)] |= 1;
++    dg[(unsigned short)(di + 0x16)] &= 0xf9;
++    dg[(unsigned short)(di + 0x17)] &= 0xf7;
++    dg[(unsigned short)(di + 0x19)] |= 4;
++    *(unsigned short *)(dg + (unsigned short)(di + 0x1c)) = 0x480;
++    unsigned short bx2 = (unsigned short)((unsigned)dg[(unsigned short)(di + 0x19)] * 2);
++    *(unsigned short *)(dg + (unsigned short)(di + 0x14)) = *(unsigned short *)(dg + (unsigned short)(bx2 - 0x6109));
++    bx2 = (unsigned short)(bx2 & 6);
++    FUN_0000_ba33(*(unsigned short *)(dg + (unsigned short)(bx2 - 0x60f9)), (int)(unsigned short)di);
++    FUN_0000_be8b(9, param_2);
+   }
+   return;
+ }
+ 
+-
+ /* ===== ((uint)(uintptr_t)&FUN_0000_bd90) @ 0000:bd90 ===== */
+ 
+ void __allregs FUN_0000_bd90(undefined4 param_1,int param_2)

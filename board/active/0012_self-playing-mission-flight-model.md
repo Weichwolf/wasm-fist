@@ -3487,3 +3487,26 @@ yet applied as patches -- they'll be formalized with the rest of the family once
 deaths end-to-end). Tree kept clean. Then: a296 over-decrement (past 0 to -40) so the count lands exactly
 on 0 = detectable resolution. Goal not met (run still crashes mid-cascade), but the path is now purely
 mechanical base-loss cleanup along a fully-understood call chain.
+
+## Turn N+4: MILESTONE — the AI-vs-AI combat simulates the ENEMY SIDE TO ELIMINATION (min_a296=0)
+
+Completed the c31e hit-handler cluster (PATCH 447: bd09/b274/b396 -- the base-loss rebuilds saved last
+turn, asm-verified vs 0xbd09/0xb274/0xb396). The cascade terminates: with PATCH 266 (damage routing) +
+PATCH 447 (hit cluster), the AZER1 self-playing mission runs with NO crash and reaches **a296==0**:
+`min_a296=0` on 5/5 deterministic runs (exit 0). For the first time the engine's own AI drives both sides,
+the weapons deal real damage, units die, and the ENTIRE ENEMY SIDE is eliminated -- the victory condition
+at the simulation level.
+
+TWO items remain for a *clean, self-declared* resolution:
+1. a296 OVERSHOOT: after hitting 0 it drifts to -5 (65531 unsigned) -- a few spurious extra b2ef
+   decrements (the residual type-0x13 churn object) push it past 0. Cosmetic to the elimination fact but
+   prevents the count from RESTING on exactly 0.
+2. WIN-DETECTION / mission-end: the run currently ends on the FIST_RUNMS wall-clock watchdog, not on the
+   engine's own mission-end. The win/lose logic that watches the side counts and arms the post-resolution
+   countdown (DAT_2000_2da2 -> a5dc decrements -> DAT_2000_a814=0xff -> 459a returns) lives in the OVERLAY
+   at 0x100000 (as the goal states), not in FIST.DAT (grep: 2da2 is only ever init'd to -1 here). Need to
+   confirm the overlay's per-frame win-check runs under the port and fires when a296 reaches 0.
+
+So the combat MODEL is done (deterministic AI-vs-AI to enemy elimination). What's left is (a) stop the
+counter exactly on 0 and (b) run/verify the overlay win-check so the mission ENDS itself -- then native<->
+wasm byte-identity. The hardest work (the whole flight/combat/damage/death chain) is behind us.
