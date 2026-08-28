@@ -4650,3 +4650,27 @@ base-loss at a time (459 first).  NEXT: the c33c/3346 roster-render spin (is 334
 2758's CRTC, or does c33c cycle?) -- same watchpoint/backtrace method.  Progress: 459 landed (render-frontier
 base-loss #1); 458 still held pending the rest of the reticle/roster render chain.  Goal UNMET, but the
 render frontier is now yielding to the oracle-watchpoint method, one landed fix at a time.
+
+## Turn N+20 cont.27: render-frontier blocker #2 -- pre-cockpit reticle render deadlocks on the coop-tick freeze
+
+After 459 (CRTC fixed), the 458-active run hangs one layer deeper, precisely located: the per-frame loop
+459a -> 22dd -> 3a68 (reticle-graticule render) -> c33c (roster walk) -> c4df -> 0007 -> 2ebe -> 3346.
+3346 is the engine idiom "busy-wait until the PIT tick DGROUP:0x452 changes" (it pumps the cooperative timer
+each spin).  State at the hang: g_in_isr=0, tickpend=0, [0x452]=0, d549=00 (NOT the cockpit view 0x1c).
+So the tick NEVER advances -> 3346 spins forever.
+ROOT: the port's cooperative-tick FREEZE.  fist_timer_pump gates tick advance on `!g_fist_after_map ||
+d549==0x1c` (native_main.c:632) -- deliberately FROZEN during mission-LOAD-pre-cockpit for native<->wasm
+frame parity (board:0001).  But with 458 the combat is live, and the frame loop reaches the reticle render's
+tick-wait (3346) BEFORE FUN_1000_a84c sets d549=0x1c (the cockpit view) -> the wait can never complete ->
+a84c is never reached -> d549 never becomes 0x1c -> permanent deadlock.  Without 458 the game reaches
+d549=0x1c without hitting this reticle tick-wait, so the freeze is harmless there.
+This is a genuine coop-tick vs mission-entry-render interaction (not a pure base-loss): the faithful engine
+runs the PIT continuously, so 3346 returns; the port's parity-freeze conflicts with the live-combat render
+order.  FIX OPTIONS (next): (a) advance the coop tick whenever the engine spin-waits on [0x452] pre-cockpit
+too (relax the freeze to the whole post-map mission-startup window), verifying it does not break the
+mission-cockpit byte-identity; or (b) determine whether 3a68/the reticle should render at all at d549=00
+(a display-list/state base-loss dispatching the cockpit reticle pre-cockpit).  Both are tractable.
+PROGRESS THIS TURN: patch 459 LANDED (render-frontier base-loss #1: 2758 CRTC corruption fixed, byte-
+identical, make check OK); the render frontier is being walked down with the watchpoint/backtrace method,
+now at blocker #2 (the coop-tick/reticle deadlock), precisely diagnosed.  458 held pending the chain.
+Goal UNMET; render frontier advancing concretely (459 landed, #2 diagnosed).
