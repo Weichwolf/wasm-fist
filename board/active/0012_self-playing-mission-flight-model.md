@@ -4129,3 +4129,22 @@ this tick but absent in the port (a spawn or a mission-load object-instantiation
 way the port at tick 800 has only the player's 2 vehicles + static scenery -- no opponent to drive/kill.
 NEXT: oracle census -- dump the ORIGINAL DOSBox AZER1 object table (types + counts) at the same tick and
 diff vs the port's 142-object census; the missing objects (or the spawn that creates them) are the target.
+
+## Turn N+20 cont.6: TRACTABLE LEAD -- the path-resource table DAT_2000_3d2a (DGROUP:0x7d2a) is not populated from the FSG PATH chunk
+
+AZER1.FSG (10762 B) chunk walk: SHDR / DCBS(80 units, stride~100) / PATH(2144 B = waypoints) / STMP / PINF
+/ BINF / TERM.  So the mission ships 80 units AND a PATH (navigation-waypoint) chunk.
+The steering chain needs DAT_2000_3d2a[byte[di+0x1b]] (DGROUP:0x7d2a, a per-roster-slot table of path-record
+near-offsets) -> ab03 loads it into DAT_2000_5798 -> ac7e copies the path record into goal49 + enables the
+bearing gate.  MEASURED (tick 800): 3d2a[] is 0x0000 for most roster indices (0x1e/0xff/0xc7/0xb7), nonzero
+only for a couple (0x00->7d40, 0x19->bb9a).  So MOST units' path slot is EMPTY -> no goal record -> ac7e's
+`if [si]!=0` fails -> no goal update -> no steering.
+grep of DGROUP:0x7d2a shows READERS (16843/28346/29529/35676/57999) but NO producer that fills the table
+from the PATH chunk.  HYPOTHESIS (tractable, in-repo, no oracle needed): the FSG mission-load (d501 parser)
+does not parse the PATH chunk into the DAT_2000_3d2a path-record table (or byte[di+0x1b] roster indices are
+mis-assigned), so units have no waypoints -> goal49 holds spawn defaults -> des30 stays 0 -> no drive-to-goal
+-> no engagement -> a296 never resolves.  This is squarely "finishing the mission-load" the goal names.
+NEXT: (1) find the FSG PATH-chunk handler in d501/mission-load; confirm whether DGROUP:0x7d2a is populated
+and byte[di+0x1b] assigned per unit; (2) if the PATH parse is missing/base-lost, port it (asm-verified) so
+each unit gets its waypoint path; then re-dump 3d2a[]/des30 -- units should steer.  This supersedes the
+"overlay AI unbuilt" framing for the FIRST failing link: a mission-load path-table population gap.
