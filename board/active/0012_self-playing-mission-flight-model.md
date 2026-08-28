@@ -4148,3 +4148,34 @@ NEXT: (1) find the FSG PATH-chunk handler in d501/mission-load; confirm whether 
 and byte[di+0x1b] assigned per unit; (2) if the PATH parse is missing/base-lost, port it (asm-verified) so
 each unit gets its waypoint path; then re-dump 3d2a[]/des30 -- units should steer.  This supersedes the
 "overlay AI unbuilt" framing for the FIRST failing link: a mission-load path-table population gap.
+
+## Turn N+20 cont.7: static analysis exhausted -- the ONE decisive experiment left is the oracle object/AI census
+
+Consolidated honest state after deep static tracing this turn:
+- The bearing/steer subsystem ab03->ab88->ab91 (patches 246/282/328) writes des30 from goal49 ONLY for
+  TYPE-0/1 objects (dispatched by 7c1d/87df).  Type-0x10/0x15/0x1a/0x1b objects have their own update
+  methods (b51f/9c4f/bc46/b355) and do NOT run ab91 -- they are not meant to steer.
+- Port live-object census @tick800: 142 objects.  By word[obj+0]: 91x0x10, 27x0x15, 12x0x1a, 8x0x1b,
+  2x type0 (the player's 2 vehicles), 2x type1, rest are non-object/free slots (word[0]=near-offset).
+  So the ONLY mobile type-0 vehicles are the player's two.  No enemy type-0/2 vehicle is steering.
+- AZER1.FSG DCBS has 80 unit records (stride 100); the record->object-type mapping is NOT a clean
+  offset-0 field (offset+0 histogram: 41x0, 3x1, ... -- inconclusive without the DCBS installer's field
+  map, patches 200/214/215/216).  So "FSG has 41 vehicles, port makes 2" is UNPROVEN -- could be a
+  record-parse mismatch OR the record type-0 count is not vehicles.
+THE UNANSWERABLE-BY-STATIC question: does the ORIGINAL AZER1 (DOSBox), with the port's exact empty-input
+self-play, have MOBILE enemy vehicles driving + engaging at tick 800 that the port lacks -- and if so, are
+they (A) instantiated wrong by the DCBS parser, (B) spawned by a system (b1df/7e29) the port doesn't fire,
+or (C) driven by overlay AI the port doesn't run?  Static tracing cannot distinguish these; it needs the
+oracle.
+
+DECISIVE NEXT EXPERIMENT (set up, not yet run -- needs xvfb-run + the instrumented DOSBox):
+  1. Reach AZER1 under third_party/dosbox-fist (capture_mission_spawn.sh drives BATTLES->OK->ACCEPT via
+     xclick under Xvfb; DISPLAY via xvfb-run).
+  2. At a mid-mission tick, dump guest RAM (SIGUSR2) + locate the relocated engine DGROUP (dsb from a
+     capture .cam.txt), then census word[obj+0] over the 182-slot table @DGROUP:0xdfbc -- the ORIGINAL's
+     object-type histogram + how many type-0/2 vehicles + their des30/goal49/obj+0x40.
+  3. Diff vs the port's 142-object census.  The missing objects (or the writer of a non-player unit's
+     obj+0x40 bit1 / obj+0x30 via FIST_WATCHFLAT) name EXACTLY what to build/port.
+This is the only path that turns "the in-mission AI does not run" into a specific, asm-verifiable fix.
+Static analysis this turn: crash-walk cleared (454/455/456) + steering machinery fully mapped; the RESOLUTION
+requires this oracle step, which is multi-session RE, not a single patch.  Goal unmet.
