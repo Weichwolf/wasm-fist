@@ -4179,3 +4179,26 @@ DECISIVE NEXT EXPERIMENT (set up, not yet run -- needs xvfb-run + the instrument
 This is the only path that turns "the in-mission AI does not run" into a specific, asm-verifiable fix.
 Static analysis this turn: crash-walk cleared (454/455/456) + steering machinery fully mapped; the RESOLUTION
 requires this oracle step, which is multi-session RE, not a single patch.  Goal unmet.
+
+## Turn N+20 cont.8: ORACLE BRING-UP (headless) -- reaches AZER1 cockpit; RAM-census dump needs a harness fix
+
+Oracle infrastructure works headless (this is new, de-risks the whole oracle path):
+- third_party/dosbox-fist runs under `xvfb-run` (DOSBox 0.74-3, all libs resolved).
+- tools/oracle/capture_mission_spawn.sh (xclick BATTLES->OK->ACCEPT) REACHES the AZER1 in-mission COCKPIT
+  headless -- captured /tmp/azer1_spawn.png: the dashboard renders, "GOALS REMAINING: 13", and the radar
+  shows RED enemy blips.  So the ORIGINAL AZER1 has an enemy force present in-mission (confirms enemies
+  exist; the port's job is to reproduce their AI-driven motion).
+- The mapping to census the object table is known: object registry @ guest phys 0x3b14c (= DGROUP:0xdfbc =
+  DAT_2000_9fbc); DGROUP phys base 0x2d190 (load base 0x11190); a slot's type = word[0x2d190 + slot_off].
+BLOCKER on the census: the SIGUSR2 RAM-dump (fist_req=2, fires from the RAM-write hook, vga_memory.cpp:495)
+did NOT write <prefix>.ram.bin even though the script logged "SIGUSR2 RAM dump" and the write-hook was armed
+(FIST_MEMARM_BOOT=1 FISTLOG FIST_TILEPHYS).  Likely the kill -USR2 target PID under the nested xvfb-run bash
+-c is not the dosbox process, or the dump defers to a write that never comes before kill.  ONE harness fix
+(correct DPID / send USR2 to the real dosbox pid, or switch to FIST_WATCHPHYS=0x3b14c write-trace which needs
+no snapshot timing) unblocks the census + the per-unit obj+0x40/+0x30 writer trace.
+
+STATE OF PLAY (honest): crash-walk cleared (454/455/456, verified byte-identical); steering machinery fully
+mapped; oracle reaches the mission headless.  The RESOLUTION still requires: (1) fix the oracle dump/watch
+harness (one step); (2) census original-vs-port objects + trace who drives enemy units (obj+0x40 bit1 /
+obj+0x30 writer); (3) port that AI/spawn/instantiation faithfully.  Multi-session, but every piece is now
+either done or reduced to a concrete next action.  Goal unmet.
