@@ -4103,3 +4103,29 @@ NEXT (sharp, evidence-driven): (a) oracle FIST_WATCHFLAT on a NON-player unit's 
 DOSBox AZER1 self-play to see WHO sets bit2 + des30 each tick and at which cs:ip (identifies the order-issuer
 -- FIST.DAT fn vs overlay); (b) port that issuer faithfully into the shim/patch.  Only then do units steer,
 close, engage, a296->0.  This is the "part the port does not yet run" made concrete to one mechanism.
+
+## Turn N+20 cont.5: CORRECTION + refined finding -- gate is bit1 (0x02); bearing subsystem is type-gated; no mobile enemy force
+
+Correction to cont.4: ab91's compute-bearing gate is obj+0x40 BIT1 (0x02), des30-write gate is BIT0 (0x01)
+-- NOT "bit2".  Direct field dump (FIST_DUMP_REG probe, tick 800, values below) refutes the simple
+"bit not set" story and sharpens the real gap:
+  [ 0] c05c 7c1d(type0)  f40=0003 (bit0+bit1 SET) goal49=000bfb9a des30=0000   <- player HAS both gates, des30 still 0
+  [ 2] a022 b355(0x1b)   f40=11cf (bit0+bit1 SET) 3d2a[1e]=0000 des30=0000
+  [15] a248 b355(0x1b)   f40=00ee (bit1 set,bit0 CLEAR) 3d2a[19]=bb9a
+FACTS (measured):
+- The player (type0, both gates set) STILL has des30=0.  So either ab03->ab88->ab91 does not run for it,
+  or ab91 computes bearing 0 (goal49 ~= self position -> no turn).  The gate flags are NOT the whole story.
+- The bearing/steer subsystem (ab03->ab88->ab91, patches 246/282/328) is dispatched ONLY by the type-0/1
+  update methods 7c1d/87df.  Live-object census at tick 800: side-1 = 4 (2x7c1d + 2x87df = the PLAYER's
+  vehicles); "side-0" = 138 objects, ALL of update-type 9c4f(anim, 27) / b355(8) / b51f(projectile, 91) /
+  bc46(12) -- ZERO of type 7c1d/902c.  9c4f is a tiny anim-frame setter, not a vehicle AI.  (NB: the "side"
+  field is dg[type-0x19ec]&1, a per-TYPE flag, not a team id -- do not read it as team.)
+- b1df-spawn=0, 7e29-dispatch=0 across the run: NO mobile combat vehicles have spawned.  a296=16 counts
+  pending enemy strength, but no type-0/2 vehicle objects for it exist on the map.
+REFRAMED BLOCKER: there is no mobile AI-vs-AI force to resolve.  Two candidate roots, to disambiguate with
+the oracle: (A) the SPAWN/reinforcement system (b1df/7e29) that instantiates mobile vehicles never fires in
+self-play; (B) the enemy vehicles use a vehicle update-type (7c1d/902c) that is present in the ORIGINAL at
+this tick but absent in the port (a spawn or a mission-load object-instantiation the port skips).  Either
+way the port at tick 800 has only the player's 2 vehicles + static scenery -- no opponent to drive/kill.
+NEXT: oracle census -- dump the ORIGINAL DOSBox AZER1 object table (types + counts) at the same tick and
+diff vs the port's 142-object census; the missing objects (or the spawn that creates them) are the target.

@@ -702,6 +702,13 @@ void fist_timer_pump(void){
               dg[(unsigned short)(s+0x17)],*(unsigned short*)(dg+(unsigned short)(s+0x26)),*(unsigned short*)(dg+(unsigned short)(s+0x30)),
               *(unsigned int*)(dg+(unsigned short)(s+0x49)),*(unsigned short*)(dg+(unsigned short)(s+0x89)),*(unsigned short*)(dg+(unsigned short)(s+0x8b)),
               dg[(unsigned short)(s+0x92)],dg[(unsigned short)(s+0x94)],*(unsigned short*)(dg+(unsigned short)(s+0x97)),dg[(unsigned short)(s+0xa8)]);
+            /* board:0012 steering-chain probe: obj+0x1b(rosterIdx) 0x40(flags,&2=bearing-enable) 0x42(animfrm)
+               0x43(animstate); the goal-resource chain DAT_5798=word[DAT_3d2a+[0x1b]*2] that ac7e reads to set bit2. */
+            { unsigned char rix=dg[(unsigned short)(s+0x1b)];
+              fprintf(stderr," || i1b=%02x f40=%04x(b2=%d) a42=%02x s43=%02x 3d2a[%02x]=%04x 5798=%04x",
+                rix,*(unsigned short*)(dg+(unsigned short)(s+0x40)),(*(unsigned short*)(dg+(unsigned short)(s+0x40))>>1)&1,
+                dg[(unsigned short)(s+0x42)],dg[(unsigned short)(s+0x43)],
+                rix,*(unsigned short*)(g_mem+0x23d2a+rix*2),*(unsigned short*)(g_mem+0x25798)); }
             fprintf(stderr,"\n");
           }
         }
