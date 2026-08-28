@@ -4030,3 +4030,24 @@ RESULT: native no-setarch runs 70-100s with NO crash (2/2 + 1); mission-cockpit 
 byte-identical native<->wasm (455+456 no regression); make check OK.  Combat progression (does a296 fall
 to 0 without setarch -R?) still under test.  The crash-walk cluster for AZER1 is cleared to here; remaining
 = whatever combat-progression base-loss keeps a296 from resolving + render.  Goal UNMET but advancing.
+
+## Turn N+20 cont.2: crash cleared, but COMBAT DOES NOT ENGAGE -- next cluster is targeting/steering, not crashes
+
+After 454/455/456 native no-setarch stops crashing, but an uninstrumented AZER1 run does NOT resolve: the
+SIMTRACE shows firereq=0, tgt=0, tcnt=0, cand=0 THROUGHOUT -- units MOVE (player X/Y advance) but NEVER
+acquire a target or post a fire request, so a296 does not deplete to 0 by combat.  (live/a296 drift down
+slowly = attrition/expiry, not kills.)  This is the board's long-standing "units steer but don't fight /
+wrong direction" blocker (commit 1d2f7ac), now confirmed to sit BELOW the crash layer: the crash-walk
+bricks (454/455/456) were necessary but the resolution blocker is the AI TARGET-SELECTION + drive-to-goal
+cluster -- the 902c callees a0a4/a358/a9ea/a57a and the LOS/target-acquire path (op58 fires 16k-50k times,
+all out-of-range/occluded -> VISIBLE but never selected).  NOTE: patch 451's "native resolves 5/5 end-to-end"
+could NOT be reproduced this session (native crashes without setarch -R at 10e2fe8; no confirmed resolution
+even under setarch -R) -- treat "native resolution" as UNCONFIRMED with the checked-in recipe, not done.
+
+Honest scope to the goal, ordered:
+  1. [in progress] mission-path base-loss crash-walk -- clears the SIGSEGVs (454/455/456 landed; more may
+     surface as combat engages).
+  2. [BLOCKER] AI target-selection/steering so units engage -> a296 depletes to 0 (a0a4/a358/a9ea/a57a +
+     op58 LOS select).  Without this the mission never resolves, on either target.
+  3. render byte-identity (op-0x4c display list) -- the full-framebuffer 206-byte diff.
+Only when (2) yields a resolving mission can native<->wasm byte-identity of the FULL run be measured.
