@@ -1,0 +1,61 @@
+void __allregs FUN_0000_2b1e(int *param_1,byte *param_2)
+{
+  /* PATCH 446: cockpit-HUD sprite blit, real-mode wrap on BOTH ds:si(src) and es:di(dst), 16-bit counters. */
+  byte bVar8; uint16_t uVar5, uVar6, uVar7; int iVar4;
+  uint8_t *fb; uint16_t off; uint8_t *src; uint16_t soff;
+  {
+    uint8_t *dg = g_mem + 0x1c000;
+    int16_t *pos = (int16_t *)(dg + (uint16_t)(uintptr_t)param_1);
+    uint16_t fb_di = *(uint16_t *)(dg + 0x724);
+    uint16_t fb_seg = *(uint16_t *)(dg + fb_di);
+    uint16_t pitch = *(uint16_t *)(dg + (uint16_t)(fb_di + 4));
+    uint16_t rowtab = *(uint16_t *)(g_mem + 0x1c794);
+    uint16_t rowidx, rowoff, col;
+    src = g_mem + ((uint32_t)m_260c_recseg << 4);
+    soff = (uint16_t)(uintptr_t)param_2;
+    bVar8 = (byte)(*(uint16_t *)(src + (uint16_t)(soff - 4)) >> 8);
+    uVar7 = *(uint16_t *)(src + (uint16_t)(soff - 4)) & 0xff;
+    uVar6 = (uint16_t)bVar8;
+    rowidx = (uint16_t)((uint16_t)((uint16_t)(pos[0] + pos[2]) >> 1) - (uint16_t)(bVar8 >> 1));
+    rowoff = *(uint16_t *)(dg + (uint16_t)(rowidx * 2 + rowtab));
+    col = (uint16_t)((uint16_t)((uint16_t)(pos[1] + pos[3]) >> 1) - (uint16_t)(uVar7 >> 1));
+    fb = g_mem + ((uint32_t)fb_seg << 4);
+    off = (uint16_t)(rowoff + col);
+    iVar4 = (int)pitch;
+  }
+  if (src[(uint16_t)(soff - 2)] != 2) {
+    uVar5 = uVar7;
+    do {
+      do {
+        byte v = src[soff]; soff = (uint16_t)(soff + 1);
+        if (v != 0) fb[off] = v;
+        off = (uint16_t)(off + 1);
+        uVar5 = (uint16_t)(uVar5 - 1);
+      } while (uVar5 != 0);
+      uVar6 = (uint16_t)(uVar6 - 1); uVar5 = uVar7;
+      off = (uint16_t)(off + (iVar4 - uVar7));
+    } while (uVar6 != 0);
+    return;
+  }
+  do {
+    uint16_t poff = (uint16_t)(off + src[soff]);
+    byte cnt = src[(uint16_t)(soff + 1)];
+    soff = (uint16_t)(soff + 2);
+    for (uVar7 = (uint16_t)cnt; uVar7 != 0; uVar7 = (uint16_t)(uVar7 - 1)) {
+      while (1) {
+        byte v = src[soff]; soff = (uint16_t)(soff + 1);
+        if (v == 0) break;
+        fb[poff] = v; poff = (uint16_t)(poff + 1);
+        uVar7 = (uint16_t)(uVar7 - 1);
+        if (uVar7 == 0) goto LAB_2ba1;
+      }
+      poff = (uint16_t)(poff + 1);
+    }
+LAB_2ba1:
+    off = (uint16_t)(off + iVar4);
+    uVar6 = (uint16_t)(uVar6 - 1);
+    if (uVar6 == 0) return;
+  } while (1);
+}
+
+

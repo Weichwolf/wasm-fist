@@ -3246,3 +3246,27 @@ TRUE remaining work (unchanged in substance, clarified): (1) reconstruct ALL mga
 wrap CORRECTLY + byte-verify the render output vs a reference frame (so the sim gets faithful state, not
 corruption); (2) with a faithful render, diagnose why the fire->hit->damage chain does not reduce enemy-unit
 HP (a296 stays 16) -- the genuine flight/combat-model gap the goal names.  a296 has never reached 0.
+
+## DEEPEST FINDING: the sim advance is COUPLED to the op-0x4c present path -- corruption was FAKING it
+
+Re-verified with the CORRECT 2b1e src+dst wrap (446, saved patches/held/446-2b1e-src-dst-wrap.txt), long run
+(RUNMS=250000), with AND without FIST_SIMRUN: the sim BARELY advances -- op58 LOS calls=27 over 250s (vs
+THOUSANDS under the corrupt 444 render), a294=97, a296=16.  So:
+  - The corrupt render (444, un-wrapped src reading OOB) was INCIDENTALLY driving the per-frame sim advance
+    -- almost certainly its OOB writes flipping the frame-ready flag d548 (DGROUP:0x1548), which the 459a
+    present-poll spins on before letting the per-tick sim c0ca run.  That same corruption produced the fake
+    a296 16->10 churn.
+  - The CORRECT render (446) does NOT queue a frame (set d548=1/2/3) or flip bit7, so 459a spins forever and
+    the sim never ticks -> combat frozen -> a296=16.  FIST_SIMRUN (the shim's bit7-OR stand-in) does not help
+    because it only fires when d548 is already 1/2/3, and the render never sets it.
+So the REAL frontier is EXACTLY what the goal names: "finishing the ... per-frame render path (the op-0x4c
+display-list / DGROUP:0x7aa4 viewport-geometry frontier)".  The op-0x4c present must faithfully QUEUE each
+frame (set d548) and complete it (bit7) so 459a releases the sim tick -- WITHOUT relying on render corruption.
+Until that handshake is built faithfully, the sim cannot advance under a correct (non-corrupting) render, and
+every "combat runs / a296 moves" observation this session was corruption-driven, not real.
+
+This REFRAMES the whole effort correctly: the combat MODEL is built (aim/fire/spawn/collision patches), but
+it cannot be exercised until the op-0x4c render/present drives the deterministic tick faithfully.  That is the
+single gating frontier now.  a296 has never genuinely dropped.  Next: reconstruct the op-0x4c display-list +
+its d548 frame-queue/present handshake (board:0001) as the real, faithful per-frame path -> sim advances on a
+correct render -> THEN the fire->hit->damage chain can be honestly assessed to a296==0.
