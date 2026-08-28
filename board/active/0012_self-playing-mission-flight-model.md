@@ -3734,3 +3734,28 @@ patching is possible but each site needs its true CS (0x1000 vs 0xf69, reference
 cascade is long. Native end-to-end resolution is DONE + committed (266..452); wasm byte-identity is
 blocked on the CS-carry class, now traced to concrete sites (1a45 dispatch, bdcc/5f22 fixed), with
 board:0010 as the correct next-session path.
+
+## Turn N+11: byte-identity blocker is BROADER than CS-carry — it's the base-loss surface (e.g. 1a45 model loader)
+
+Read FUN_0000_1a45 (the first divergent far-call site). It is NOT a clean function with one CS-carry bug --
+it is a heavily BASE-LOST model/chunk loader (PATCH 161 fixed only its streaming-OPEN far-calls): the body
+still deref's host pointers and even NULL:
+  - `puVar20 = (uint *)0x0; ... *puVar7 = *puVar3` (8x)  -> writes host addresses 0,4,..28
+  - `for (iVar12 = *(int *)0x0 - (int)pbVar9; ...)`      -> reads *(int*)0
+  - `puVar8 = (undefined2 *)*(int *)(DAT_1000_e674 + 0x27f4)`, `*((int)puVar8 + DAT_1000_e67e) = ...`
+  - `pbVar9 = (byte *)*(undefined2 *)*(undefined2 *)&DAT_1000_c00e`, `*(byte *)(ulong)(*pbVar1 + 0x300)`
+These produce HOST-ADDRESS-dependent results that are internally consistent on native (so the mission
+resolves) but DIFFER on wasm (different address space) -> the combat trajectory diverges.
+
+So the byte-identity blocker is the WHOLE base-loss surface still latent on the mission path -- every
+function that "works" on native (doesn't crash, produces a self-consistent result from host pointers) but
+is not faithfully DGROUP-rebased will diverge native<->wasm. CS-carry (board:0010) is one large subclass;
+1a45-style host-pointer/null-deref loaders are another. Native passing is NECESSARY but NOT SUFFICIENT for
+byte-identity: a function can be native-correct-by-luck and still non-portable.
+
+This is the honest scope: native end-to-end resolution is DONE (266..452); wasm byte-identity requires
+faithfully porting the remaining base-lost mission-path functions (1a45 model loader + the CS-carry class +
+the overlay/TCB host-ptr tables) so every read is a DEFINED, address-space-independent value. That is the
+DD2 method continued -- bounded per-function, but a real surface, not a single fix. The divergence is now
+traced to concrete first sites (1a45; bdcc/5f22 fixed) and its NATURE is understood (host-address
+dependence, not logic error), which is the prerequisite for closing it.
