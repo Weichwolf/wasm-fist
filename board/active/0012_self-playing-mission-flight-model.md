@@ -4741,3 +4741,781 @@ So blocker #2 is the deferred cooperative-timing/async-preemption reconstruction
 render-frontier work, not a base-loss patch.  PROGRESS THIS TURN: 459 landed (render base-loss #1); blocker
 #2 root-caused to the ba90/[0x452]/c05c cooperative-timing deadlock (patch127-deferred).  454-457,459
 landed; 458 held.  Goal UNMET; the render/timing half is the port's own flagged deferred work.
+
+## *** BREAKTHROUGH *** cont.31: tick-latch breaks deadlock #2 -- combat runs to a296==0 (ALL enemies dead)
+
+The blocker-#2 cooperative-timing deadlock is BROKEN.  Fix (tools/native_main.c, shim -- hand-written, allowed):
+  - native (line ~719): gate the coop-tick on the LATCH `(in_mission || g_mission_coop)`, not the live
+    `in_mission` (d549==0x1c).  d549 transiently leaves 0x1c during the in-mission render (the 458 reticle
+    path uses the else-table at d549=00); the old live gate froze the pump exactly there.  Latch g_mission_coop
+    on first cockpit entry and keep pumping through the d549!=0x1c windows.
+  - wasm (line ~632): mirror with a `static int _seen_cockpit` latch.
+With 458 applied + this latch + the correct BATTLES->OK->ACCEPT FIST_MOUSE, AZER1 now:
+  - LOADS (after_map=1, mission_coop=1), the cockpit sim RUNS for 515+ ticks, player drives (X/Y advance).
+  - COMBAT RESOLVES THE ENEMY SIDE: a296 (side-B unit count, dec'd by b2ef 0x1b32a) runs
+    16 -> 15 -> ... -> 1 -> 0.  ALL 16 side-B units destroyed.  This BLOWS PAST the long-documented
+    "stalls at 10 (survivors stop engaging)" -- 458's carry-flag targeting fix (0ea9) makes the AI engage to
+    completion.  The self-play AI-vs-AI combat the goal names now runs end to end mechanically.
+
+TWO REMAINING DEFECTS (both concrete, code-truth):
+  1. a296 UNDERFLOWS past 0: 0 -> 65535(-1) -> ... -> 65531(-5).  b2ef keeps decrementing after the side is
+     empty.  No `a296==0 -> victory` check exists in the engine decompile (grep DAT_2000_a296: only b1df
+     register-guard +1 and b2ef despawn -1; a814=0xff is a TIMER end via 2da2, not the kill-count check).
+     The win/lose resolution the goal names ("lives in the overlay at 0x100000") is NOT wired to a296==0 in
+     the port -> the sim does not halt at elimination -> underflow.  This is the "build the missing overlay
+     win/lose logic" clause, now reached.
+  2. FREEZE at t=515: the sim stalls because d549 is corrupted 0x1c -> 00 and NEVER restored.  Engine writes
+     d549 ONLY as 0x1c/0x1e/0x22 (58068/64726/64764) -- there is NO `d549=0` in the code.  So d549=00 is a
+     WILD WRITE (memory corruption at g_mem+0x1d549), the SAME class as patch 459 (which 458 exposes).  Once
+     d549=00, c4df takes the else-render (not the cockpit a84c path) so a84c never re-runs -> d549 stuck 0 ->
+     the shim frame-ready handshake (native_main.c:816, gated on d549==0x1c) stops -> per-frame sim advance
+     halts -> a296 frozen.  The e4bb master loop keeps pumping ([0x452] spins) but the sim is dead.
+     DIAGNOSTIC IN FLIGHT: hardware watchpoint on g_mem+0x1d549 (value not in {0x1c,0x1e,0x22}) to catch the
+     corruptor's backtrace -> asm-verify -> patch (459 idiom).
+
+STATUS: deadlock #2 BROKEN (tick-latch); AZER1 combat proven to run to full enemy elimination (a296:16->0);
+remaining = (a) the d549-corruption freeze (patch, in-flight) and (b) wiring the a296==0 victory resolution
+(overlay logic).  458 still held pending the render base-losses it exposes.  Goal UNMET but the self-play
+combat MECHANISM is proven end-to-end for the first time.  Native only so far; wasm + byte-identity pending.
+
+## *** RESOLVED WIN CONFIRMED *** cont.32: AZER1 plays to a legitimate victory (one side eliminated)
+
+The "freeze at t=515" is NOT a hang -- it is the MISSION-END exit.  The in-mission frame loop 459a/45f7
+returns the instant `DAT_2000_a814 != 0` (`if(a814){be86();be67();return;}` at 13754/13820).  a814=0xff is
+set by the engine's OWN mission-end scheduler FUN_1000_a5dc (called every frame @13729), and DECISIVE
+disambiguation of WHICH end-condition fired (read at the resolved state):
+  - 2da0 = 0  -> the GOALS-ELIMINATED branch fired (`if (5790!=0 && 578e==0){...2da0=0;2da2=0x3c;}`), NOT
+    time-expiry (2da0=2) and NOT low-fuel (2da0=1).
+  - 5790(peak goal-count)=16, 578e(now)=0  -> all 16 enemy GOAL-units destroyed.  578e = count of
+    live objects with flag[0x17]&8 (the "goal" bit); it went 16 -> 0 = the enemy side ELIMINATED.
+  - TIME 2da6/2da7/2da8 = 0f/00/34 (init 3c/00/00, counts DOWN) -> ~44% elapsed; the clock did NOT run out.
+  - a814=0xff -> mission-over; the 2da2=0x3c countdown armed by the goals branch completed (2da2=0 now).
+So with 458 + tick-latch + STOPALARM, the self-playing AZER1 mission RESOLVES TO A VICTORY by eliminating
+the entire enemy goal-side (578e:16->0) -- the engine's own win logic, faithfully reached, not a shim stub.
+This is exactly the goal's "victory/defeat condition resolves (one side eliminated)."  The long-documented
+"stalls at 10 survivors" blocker is GONE: 458's carry-flag targeting fix makes the AI engage to full kill.
+
+The a296=-5 underflow is a SEPARATE cosmetic issue: a296 is the display-object registry count (the leak/
+over-despawn class), NOT the win metric.  The win is driven by 578e(goals), which reaches 0 cleanly.  The
+underflow does not affect resolution correctness and (if identical native<->wasm) does not break byte-identity.
+
+REMAINING TO CLOSE THE GOAL:
+  1. DETERMINISM: confirm the combat is bit-identical run-to-run (cooperative in-mission; menu is a fixed
+     point) -- two native runs must resolve at the same [0x452] with the same 578e trajectory.
+  2. native<->wasm byte-identity across the whole run (load -> combat -> a814=0xff).
+  3. Land the enablers as proper patches: un-hold 458, + the native_main.c tick-latch + STOPALARM (verify
+     they don't regress the 19 menu/pre-mission verify flows or the mission-cockpit crop).
+  4. (faithfulness, secondary) the a296 underflow + the post-a814 return-to-menu spin (e4bb doesn't detect
+     mission-over cleanly) -- confirm vs oracle; not required for "resolved win/lose" but for a clean full run.
+STATUS: *** native AZER1 self-play resolves to a WIN (enemy side eliminated, a814=0xff) *** -- the goal's
+core simulation now runs end-to-end for the first time.  Verification (determinism, wasm parity) + patch
+landing remain.  458 still formally held pending the verify-matrix re-pass with the tick-latch fix.
+
+## cont.33: native's WIN uses wall-clock (SIGALRM); pure-cooperative path deadlocks at the c452 fine-tick
+
+CRITICAL nuance for the goal ("deterministic cooperative tick, NO wall-clock dependence", native==wasm):
+native reaches the a814=0xff win ONLY because its pre-mission SIGALRM (FIST_TICK_HZ=25000) fires the INT-8
+ISR ASYNCHRONOUSLY, which races past the engine's timing spin-waits.  The PURE-COOPERATIVE path (native
+FIST_COOP_TICK=1, and wasm -- which has no SIGALRM) does NOT resolve:
+  - wasm: hangs PRE-cockpit (its coop-tick is deliberately FROZEN when after_map&&!seen_cockpit, native_main.c
+    :632 -- the board's "coop-tick freeze") -> no simtrace at all.
+  - native FIST_COOP_TICK=1: reaches the cockpit (t=314, d549=0x1c) then the tick [0x452] FREEZES at 314.
+
+Root of the coop freeze, pinned by watchpoint (ground truth at the hang):
+  - The c452 bump lives in the INT-8 ISR FUN_1000_31c3 (build/fist.c:47410-47432).  It fires ONLY when
+    ALL of: c06b==0 (word-typed DGROUP:0x6b), ba90==0x424a, c446==0xff, c2a8==0, CARRY2(d8b6,d8b8),
+    [0x123e8]==0xff.  At the coop hang: ba90=0x424a OK, c446=0xff OK, c2a8=0 OK, d549=0x1c OK -- but
+    c06b = 0x10/0x16 (NOT 0) -> the whole bump block is skipped -> c452 frozen at 314.
+  - c06b (DGROUP:0x6b) is written by m_mga_FUN_0000_02c1 (fist_mga.c:1236), the MGA font MRU PITCH-CACHE
+    list walk, reached via the roster/HUD render 22dd->2322/024f.  Its node-field write `[cur+2]` lands on
+    DGROUP:0x6b when the walked node `cur`=0x69, i.e. a cache NODE overlaps the frame-scheduler idle flag
+    c06b.  Under SIGALRM the async ISR catches the brief c06b==0 windows between HUD repaints; under pure
+    cooperative timing c06b is non-zero whenever the ISR checks -> permanent freeze.
+  - So this is the cont.30 async-preemption-vs-cooperative frontier, one layer DEEPER than ba90: ba90 is
+    fine now; the new gate is c06b, clobbered by the MGA MRU-cache walk landing a node at DGROUP:0x69.
+
+OPEN QUESTION (next lead): is a NODE legitimately at DGROUP:0x69 (then c06b's 0x6b genuinely overlaps a
+pitch field, and the ISR's `c06b` semantics differ), OR is the MRU list corrupted upstream by a combat-
+exposed base-loss that inserts a bad node offset (0x69)?  Trace the 0x798 MRU list contents at the hang;
+if 0x69 is a bogus node, find the upstream writer (459/02c1-class base-loss) that put it there.  Fixing it
+(so c06b stays the scheduler flag, reaching 0) would unfreeze c452 on BOTH targets deterministically --
+the true wall-clock-free path.  This is the substantial remaining render/timing-frontier work.
+
+STATUS: native resolves AZER1 to a WIN but VIA WALL-CLOCK (SIGALRM) -- not yet goal-compliant.  Pure-
+cooperative (the goal's requirement, and wasm's only mode) deadlocks at the c452 fine-tick because the MGA
+MRU-cache walk clobbers the scheduler idle flag c06b.  Goal UNMET; blocker localized to one concrete site
+(02c1/DGROUP:0x69/c06b).  458 applies in-series; the menu/settings verify flows still pass with it (15+/15).
+
+## cont.34: cooperative-freeze root PINNED -- 02c1 corrupts word[0x798] because the MRU list is uninitialized
+
+Hardware watchpoint on word[DGROUP:0x798] (the MGA pitch-cache MRU free-list HEAD) caught the corruptor:
+  m_mga_FUN_0000_02c1 @ fist_mga.c:1247 (`word[0x798] = cur`, the move-to-front tail), writing 0000/garbage,
+  reached via the mission HUD render 22dd -> 024f -> 02c1(pitch=80).  It writes garbage because `cur` is
+  garbage: the free-list is NOT VALID when the mission HUD first walks it with a non-320 pitch (80).  Valid
+  nodes are DGROUP:0x798,0x79e,..,0x7c2 (8 nodes, stride 6, built by FUN_0000_0284 = patch 326, called from
+  the MGAVIDEO init FUN_0000_00e8).  In the mission run word[0x798]=0xd9d9 already at 452=1 -> the list head
+  is garbage before the first walk -> the walk follows bad links (into DGROUP:0x69, whose [+2]=0x6b overlaps
+  the frame-scheduler idle flag c06b) -> c06b clobbered -> under cooperative timing the c452 fine-tick never
+  fires (needs c06b==0) -> tick frozen -> sim frozen.  Under SIGALRM the async ISR races the clobber and wins
+  anyway (hence native resolves), but the HUD render is ALSO unfaithful (corrupt rowtable) in that case.
+
+CONCRETE NEXT LEAD (well-defined, single site): WHY is the MRU free-list invalid before combat's first
+non-320-pitch 02c1?  Either (a) FUN_0000_00e8/0284 (the init) does not run on the mission graphics-init path
+before the HUD, or (b) it runs but DGROUP:0x798.. is zeroed/overwritten during mission-load (op 0x18) or the
+cockpit setup, or (c) a residual base-loss in 0284/02c1 leaves/produces the garbage.  Diagnose: watch
+word[0x798] from graphics-init -> does it ever become the valid 0x79e (0284 ran)?  If yes, find the writer
+that corrupts it to 0xd9d9 (mission-load buffer?); if no, find why 00e8/0284 is skipped on this path and
+ensure the free-list is built before the HUD walk.  Fixing it makes 02c1 walk a valid list -> no c06b
+clobber -> c452 advances cooperatively on BOTH targets -> the wall-clock-free, native==wasm resolution the
+goal requires, AND a faithful HUD render.
+
+STATUS: the pure-cooperative freeze is root-caused to ONE concrete site (uninitialized MGA MRU free-list ->
+02c1 clobbers c06b).  This is the singular remaining blocker for the goal's wall-clock-free native==wasm
+mission.  458 landed in-series (menu/settings verify flows byte-identical); native resolves the mission to a
+WIN under SIGALRM but that path is not yet goal-compliant (wall-clock) and the cooperative path deadlocks
+here.  Goal UNMET; blocker singular and precisely located.
+
+## cont.35: corruptor REFINED -- the MGA MRU free-list (0x798-0x7c8) is mass-overwritten at mission entry
+
+Polling word[0x798] launch->entry PROVES: it is VALID (0x79e) throughout the MENU (452 climbing), then the
+ENTIRE node region DGROUP:0x798-0x7c2 becomes foreign garbage AT mission entry (452 resets to 1):
+  [798]=d9d9 [79e]=d9d9 [7a4]=d9d9 [7aa]=dad9 [7b0]=dada [7b6]=dbdb [7bc]=dada [7c2]=d9da
+i.e. a table of ~0xd9d9..0xdbdb values written at stride 6 over 0x798-0x7c8 -- NOT values 02c1 could produce
+(its offsets are 0x798-0x7c2).  So a MISSION-ENTRY routine writes a foreign table to the WRONG DGROUP offset
+(a base-loss), landing on 0x798 and clobbering the MGA pitch-cache free-list.  02c1 is the VICTIM: it walks
+the clobbered list (cur=0xd9d9), follows bad links into DGROUP:0x69, and its [cur+2] write lands on 0x6b =
+c06b (the frame-scheduler idle flag) -> c06b non-zero -> the c452 fine-tick never fires under cooperative
+timing -> tick frozen.  (Watchpoints on word[0x798] keep catching 02c1's own re-writes; the FOREIGN write
+that first sets 0xd9d9 slips into the ~0.5s gap while gdb attaches -- a race to break next.)
+
+CONCRETE NEXT STEP (unblocks the whole goal): catch the FOREIGN writer of 0xd9d9 to DGROUP:0x798 at mission
+entry.  Break the attach race by running under gdb from a MENU breakpoint (e.g. break at the mission-entry
+op / FUN_0000_e714 first cockpit pass) with word[0x798] still 0x79e, THEN arm a hardware watchpoint on
+word[0x798] and single-step into entry -- the first writer that sets it 0xd9d9 is the base-loss.  It writes
+a stride-6 table of 0xd9xx-0xdbxx values; identify that table's INTENDED DGROUP target (Ghidra base-loss:
+di/near-offset deref'd as host ptr, or a wrong segment base) and rebase it (459/454-457 idiom).  Fixing it
+keeps the MRU free-list intact -> 02c1 walks a valid list -> c06b stays the scheduler flag -> c452 advances
+cooperatively -> the wall-clock-free native==wasm mission the goal requires (AND a faithful HUD render).
+
+VERIFY-GATE STATUS (458 landed in-series): menu+settings(16)+review+selplayer+battles verify flows are
+byte-identical native<->wasm with 458 applied (two runs).  The mission-cockpit-crop / campaign / roundtrip
+flows were not reached in the captured logs -- re-run to confirm before finalizing 458's landing.
+
+## cont.36: corruptor candidate FUN_0000_23d8 (MGA); session summary + landed work
+
+A word[0x79e] watchpoint run stopped in m_mga_FUN_0000_23d8 (fist_mga.c:5526) but did NOT confirm-fire
+(the command block did not run -> SIGTERM merely landed there); treat 23d8 as UNCONFIRMED.  The corruptor
+remains elusive due to SIGALRM TIMING VARIANCE: run-to-run, word[0x798]/[0x79e] is sometimes still valid at
+the first mission 02c1, sometimes already 0xd9d9 -- i.e. the corruption is timing-dependent (async ISR).
+The stride-6 0xd9xx-0xdbxx values resemble CODE offsets (cf. the 0xdb8b SMC-terminator / 0xf69 cluster).
+NEXT
+SESSION: break at FUN_0000_23d8 entry on the first mission pass (word[0x79e] still 0x7a4), single-step /
+watch word[0x79e], and read the intended vs actual DGROUP target of its stride-6 table write; rebase the
+base-loss (459 idiom).  That single fix should keep the free-list intact -> 02c1 walks valid -> c06b stays
+the scheduler idle flag -> c452 advances cooperatively -> the wall-clock-free, native==wasm mission.
+
+SESSION LANDED / PROVEN:
+  - patch 458 (0ea9 carry-flag, asm-verified combat-targeting fix) UN-HELD -> moved into the series
+    (patches/458-*.diff), applies -F0 --fuzz=0 in-series; menu+settings(16)+review+selplayer+battles verify
+    flows byte-identical native<->wasm with it applied.
+  - tools/native_main.c: tick-latch (native gate `(in_mission||g_mission_coop)`, wasm `_seen_cockpit`) +
+    FIST_STOPALARM helper (kills the async itimer once cooperative; diagnostic-gated).
+  - PROVEN: native AZER1 self-play RESOLVES TO A VICTORY (goals 578e:16->0, a814=0xff, 2da0=0 goals-branch),
+    DETERMINISTICALLY (two runs byte-identical: 228 simtrace lines, resolve at t=515, player X=583871
+    Y=1156949).  First time the goal's core simulation runs end-to-end.
+NOT YET MET: the win uses wall-clock (SIGALRM races the c06b clobber); pure-cooperative (wasm's only mode)
+deadlocks at the c452 fine-tick due to the MGA free-list corruption.  Goal UNMET; blocker singular + located.
+
+## cont.37: corruptor is a DISPLAY-LIST element method in the 22dd cursor-walk (the op-0x4c frontier)
+
+Traced the corruption path statically: FUN_0000_22dd (roster/HUD render) dispatches per-element render
+methods through a CURSOR-WALK `call word[DGROUP:0a86]` (fist.c:9652, patch 185 double-indirection).  The
+victim 02c1(font) is ONE dispatched element; the 0xd9d9-table corruptor is ANOTHER display-list element
+method (dispatched earlier in the same walk) whose base-loss write lands on the mga free-list at 0x798.
+So the corruptor sits squarely in the op-0x4c DISPLAY-LIST render -- the exact "op-0x4c display-list /
+DGROUP:0x7aa4 viewport-geometry frontier" the GOAL names as the part to build.  NEXT: instrument the 22dd
+cursor-walk (log each dispatched word[0a86] target + watch word[0x798]) to identify which element method
+writes the stride-6 0xd9xx table to 0x798; rebase its base-loss (459 idiom).  This is the singular fix that
+unblocks the wall-clock-free native==wasm mission.
+
+## cont.38: CORRECTION -- 458+tick-latch BREAK byte-identity (70 flows); REVERTED to baseline
+
+A full verify run (both targets) with 458+tick-latch applied completed: **107 passed, 70 FAILED**.  The
+failures are the HARD-INVARIANT class, not timeouts:
+  - EVERY mission-cockpit flow: `native-AE=454 nat!=wasm(454)` (the cockpit crop DIVERGES native vs wasm).
+  - EVERY terrain flow: `nat!=wasm(6104)` (voxel render diverges).
+  - editor-sim / editor-remsim (op-0x2c) diverge too.
+CAUSE: the tick-latch changes the tick CADENCE so native (SIGALRM races the word[0x798]/c06b corruption)
+and wasm (cooperative freeze) render DIFFERENT cockpit/terrain frames.  My earlier "16-18 flows byte-
+identical" covered ONLY menu/settings flows that never reach the cockpit -- premature.  The board's original
+reason for HOLDING 458 ("exposes render base-losses that break byte-identity") is CONFIRMED CORRECT.
+
+ACTION TAKEN: reverted -- 458 back to patches/held/, tools/native_main.c restored to baseline (no tick-
+latch, no STOPALARM).  Rebuilt; VERIFIED the baseline mission-cockpit crop is byte-identical again
+(native==wasm, 0 diffs, md5 355e5bc6...).  The invariant holds on the committed baseline.
+
+WHAT STANDS (as DIAGNOSIS, not landed code): the experimental 458+tick-latch run PROVED native AZER1 can
+resolve to a victory (578e:16->0, a814=0xff) deterministically -- so the combat/sim model IS complete enough
+to resolve; and it pinned the singular blocker to the word[0x798] display-list corruption (cont.32-37).
+CORRECT SEQUENCE for landing: FIRST fix the word[0x798] corruptor (the 22dd cursor-walk display-list
+element base-loss) so the cockpit is native==wasm AND the cooperative tick doesn't freeze -- THEN 458 + a
+cooperative-safe tick fix can land without breaking byte-identity.  Landing them before that fix is invalid.
+STATUS: baseline restored + byte-identical; 458 held (correctly); goal UNMET; blocker = word[0x798]
+display-list base-loss (well-located); combat-resolution capability proven (diagnosis).
+
+## cont.39: TWO cooperative blockers in sequence (#1 d549 bootstrap under SIMRUN, then #2 word[0x798])
+
+Ran pure-cooperative (FIST_COOP_TICK + skip itimer -> no SIGALRM, deterministic, gdb-clean).  Result: it
+does NOT even reach the word[0x798] corruption -- it reaches the mission MASTER LOOP FUN_0000_e4bb, the tick
+ADVANCES (452=4849, g_tick_pending=8, ba90=0x424a, c06b=0), but d549 stays 00 (never enters cockpit view).
+So under pure cooperative + FIST_SIMRUN the COCKPIT-VIEW BOOTSTRAP never completes:
+  - d549=0x1c is set ONLY by FUN_1000_a84c (64764), reached via 77dc->795c (cockpit render), which runs when
+    the frame-ready handshake (d548 bit7) fires.  The engine's own phase machine bootstraps it (patch 308:
+    23ce `orb 0x80,[0x1548]`); the shim's SIMRUN handshake (native_main.c:816) is gated on d549==0x1c and so
+    cannot bootstrap it.  Under SIGALRM the engine phase machine reaches 23ce (async) and d549->0x1c; under
+    pure cooperative + SIMRUN it does not -> d549 stuck 0 -> cockpit never entered -> sim never runs.
+  - The baseline mission-cockpit VERIFY flow works cooperatively on wasm (byte-identical crop) because it
+    runs WITHOUT FIST_SIMRUN: its handshake path (`h==1`) + the engine 23ce bootstrap d549 for a single
+    early frame.  FIST_SIMRUN's continuous self-play handshake is the part that doesn't bootstrap coop.
+So the goal's pure-cooperative self-play needs, IN ORDER: (#1) a faithful cooperative bootstrap of the
+cockpit view (engine 23ce phase-complete must fire under cooperative ticking so d549->0x1c without SIGALRM),
+THEN (#2) the word[0x798] display-list base-loss fix so the c452 fine-tick doesn't freeze and native==wasm.
+Both are the "build the missing render/timing path" clause; #1 is the FIRST gate for pure cooperative.
+
+Reverted the FIST_COOP_TICK-skip-itimer diagnostic seam; native_main.c back to pristine baseline (byte-
+identical invariant intact).  Only the board carries this session's findings (cont.31-39).
+
+## *** BREAKTHROUGH + MAJOR CORRECTION *** cont.40: the cooperative blockers were a FIST_AUTOBATTLE artifact
+
+The entire cont.30-39 saga (pre-cockpit "deadlock", word[0x798] corruption, c06b clobber, c452 freeze, the
+"two sequential cooperative blockers") was an artifact of the FIST_AUTOBATTLE test harness -- NOT a real
+engine/render defect.  FIST_AUTOBATTLE force-writes the battle-list/briefing modal flags (a85d/be2); with
+MC_MOUSE already clicking BATTLES->OK->ACCEPT, that double-drive CORRUPTED the menu->mission transition,
+which is what smashed the MGA free-list at DGROUP:0x798 and cascaded into the "cooperative freeze".
+
+Proven by REMOVING AUTOBATTLE (MC_MOUSE navigates alone, exactly like the mission-cockpit verify flow):
+  - PURE-COOPERATIVE native (no SIGALRM), FIST_SIMRUN + MC_MOUSE, NO AUTOBATTLE:
+    word[0x798] = 0x07c2 (VALID, not corrupted); d549 bootstraps to 0x1c; the sim RUNS; a296 16->0 (enemy
+    side eliminated); a814=0xff (mission resolved).  DETERMINISTIC: two runs byte-identical (229 simtrace
+    lines each, diff=0).  NO wall-clock, NO SIGALRM.
+
+LANDED (tools/native_main.c, SIMRUN-gated so the 30+ non-SIMRUN verify flows are UNAFFECTED -- confirmed:
+mission-cockpit crop native==wasm 0-diff):
+  - FIST_SIMRUN now drives a PURE-cooperative tick on BOTH targets, one-tick-per-pump, mirroring wasm's
+    EXACT freeze gate `!after_map || d549==0x1c` (freeze [0x452] through the pre-cockpit load so both
+    targets accumulate identical ticks; native reaches the cockpit at t=274, the wasm-cadence value).
+  - start_timer() skipped under FIST_SIMRUN (+ FIST_NO_ITIMER diag) -> no async SIGALRM.
+
+*** NATIVE HALF OF THE GOAL ACHIEVED ***: one full AZER1 mission plays itself to a resolved WIN, driven by a
+deterministic cooperative tick, NO wall-clock dependence, native.
+
+REMAINING (the byte-identical-wasm half): wasm FIST_SIMRUN reaches d549=0x1c only BRIEFLY (flickers 0x1c<->00)
+and does not HOLD the cockpit view -> the sim does not run to completion (0 simtrace in 130s; rc=124 hang,
+no crash).  Native holds d549=0x1c and runs 229 ticks; wasm does not.  This is a genuine, wasm-specific
+render/viewport divergence at the cockpit-view maintenance (795c/a84c dispatch) -- the op-0x4c / DGROUP
+viewport frontier the goal names, now reached CLEANLY (no AUTOBATTLE pollution).  Open: is it a true hang or
+node slowness (~100x)?  A multi-minute wasm run is in flight to settle it; if a real hang, find why the
+render dispatches d549 away from 0x1c on wasm but not native (same engine code -> a shim #ifdef or platform
+divergence in the render/handshake path).
+
+## cont.41: wasm hang is a RENDER-state divergence (sim state IDENTICAL) -- localized by full DGROUP diff
+
+Dumped the full 64KB DGROUP on BOTH targets at the FIRST d549==0x1c (cockpit entry) and diffed.  DECISIVE:
+  - native and wasm reach cockpit entry at the IDENTICAL logical point: pump=2907920, [0x452]=274, d548=81,
+    d549=1c, word798=07c2, realaa10(DAT_2000_aa10, DGROUP:0xea10)=0x0008 -- all identical.
+  - The OBJECT REGISTRY (DAT_2000_9fbc @ DGROUP:0xdfbc) is NOT in the diff -> the SIM STATE is byte-identical
+    native<->wasm at cockpit entry.  So the sim/combat model is aligned; determinism holds for the sim.
+  - 1457 DGROUP bytes DO differ, ALL in MGA/RENDER SCRATCH: the largest is 0x112a-0x1447 (748B) = an MGA
+    pitch-cache ROWTABLE (native=all-zeros, wasm=the computed sequence n*0x120: 0120 0240 0360 0480 ...);
+    plus a far-pointer table 0x4c0c-0x538c (stride 0x34) and a byte array 0xa02f-0xa9da (stride 0x37).
+So wasm's RENDER (not its sim) diverges: it builds MGA rowtable/cache state (e.g. a pitch-0x120 rowtable)
+that native does not.  The wasm render then busy-loops -- d549 reaches 0x1c but does NOT HOLD (flickers
+0x1c<->00), so the frame loop never returns to advance the per-tick sim -> 0 simtrace, rc=124 HANG (CPU-busy
+4.5 min).  Native holds d549=0x1c and runs 229 ticks to a296=0 + a814=0xff.  The crop verify flow MASKS this
+(the central-chrome crop is engineered byte-identical; the divergence is in the rest of the framebuffer +
+MGA scratch).
+
+So the byte-identical-wasm half reduces to ONE well-scoped defect: the pre-cockpit MGA/viewport RENDER
+produces different pitch-cache/rowtable state native vs wasm (the op-0x4c display-list / DGROUP viewport-
+geometry frontier the GOAL names).  NEXT: find why wasm's render caches a pitch (0x120) / builds a rowtable
+that native doesn't -- a platform divergence in the MGA blit/pitch path (fist_mga.c / fist_vga.c shim, or a
+render value that reads differently under emcc).  Make the render state identical -> wasm holds d549=0x1c ->
+wasm runs the (already-identical) sim to the same a296=0/a814=0xff -> byte-identical native==wasm mission.
+
+## LANDED THIS SESSION (uncommitted): FIST_SIMRUN = pure-cooperative tick, both targets
+
+tools/native_main.c (SIMRUN-gated; the 30+ non-SIMRUN verify flows are byte-identical native<->wasm --
+mission-cockpit crop 0-diff confirmed):
+  - FIST_SIMRUN drives one-tick-per-pump on BOTH targets, mirroring wasm's exact freeze gate
+    (`!after_map || d549==0x1c`) so [0x452] is frozen through the pre-cockpit load and both accumulate
+    identical ticks (cockpit at t=274 on both).
+  - start_timer() skipped under FIST_SIMRUN -> no async SIGALRM (also FIST_NO_ITIMER diag).
+RESULT: *** native AZER1 self-play resolves to a WIN (578e:16->0, a294... a296 16->0, a814=0xff), driven by
+a DETERMINISTIC COOPERATIVE TICK, NO wall-clock, native -- two runs byte-identical (229 traces, diff=0). ***
+The goal's native half is met; the wasm half is one localized render-state defect away.
+
+## cont.42: wasm render divergence = MGA pitch-request SEQUENCE differs (MRU cache order), pitch=0 anomaly
+
+Read all 8 MGA pitch-cache nodes from both DGROUP dumps at cockpit entry.  BOTH cache pitch 0x120, but at
+DIFFERENT MRU slots with a DIFFERENT linked-list order:
+  native: node 0x7c2 = pitch 0x120 (rowtable 0x12b8); list tail 0x7bc(next=0); 0x7c2.next=0x79e
+  wasm:   node 0x7bc = pitch 0x120 (rowtable 0x1128); list tail 0x7b6(next=0); 0x7c2 = pitch 0x0000 (!)
+The MRU linked-list order encodes the ORDER of 02c1 pitch requests, so native and wasm issue their
+pre-cockpit MGA font/window draws in a DIFFERENT SEQUENCE -- even though [0x452], the object registry, and
+all key state are byte-identical.  wasm ends with an ANOMALOUS pitch=0x0000 node (0x7c2); a pitch-0 rowtable
+is degenerate and is the likely proximate cause of the render busy-loop (d549 won't hold -> hang).
+
+So the byte-identical-wasm half = ONE render-sequence divergence: WHY do native and wasm dispatch the
+pre-cockpit MGA draws (02c1 pitch requests via 024f/22dd cursor-walk) in a different order?  The sim is
+already identical, so it is a platform (emcc) divergence in a shim MGA/VGA function or a render value that
+reads differently under wasm -- NOT an engine/sim defect.  NEXT: instrument the 02c1 pitch-request SEQUENCE
+(a patch or icall-dispatch hook logging each pitch + caller), run native+wasm, diff to the FIRST divergent
+MGA call; that call's shim path is the divergence.  Fix -> identical MRU cache -> wasm holds d549=0x1c ->
+wasm runs the (identical) sim to a296=0/a814=0xff -> byte-identical native==wasm mission.
+
+SESSION BOTTOM LINE: *** native AZER1 self-play resolves to a deterministic, wall-clock-free WIN *** (the
+goal's native half, LANDED, verify-safe).  The entire prior cont.30-39 "cooperative deadlock" was a
+FIST_AUTOBATTLE harness artifact (corrected).  The wasm half is reduced from a diffuse "render frontier" to
+a single, named render-sequence divergence with the sim already proven byte-identical.  Goal not yet fully
+met (wasm mission not reproduced) but the remaining gap is singular and precisely located.
+
+## *** ROOT CAUSE of the wasm divergence FOUND *** cont.43: g_mem-base-dependent descriptor truncation
+
+Instrumented FUN_0000_02c1's pitch requests (build/ throwaway diag) and diffed native vs wasm.  DECISIVE:
+both make 37790 02c1 calls, but wasm passes GARBAGE pitches (0x585=1413, 0x36, 0x65, 0x6f, 0x7b, 0x85, 0x95
+...) where native passes clean widths (0x50, 0x48, 0x32, 0x120).  Traced the biggest divergence (native
+pitch 0x50 vs wasm 0x140) to its caller FUN_0000_024f, whose pitch = the WIDTH field of a render descriptor.
+024f (patch 036): `off = (uint16_t)(uintptr_t)param_1; p = g_mem+0x1c000+off; ... 02c1(p[2])`.
+
+The descriptor comes from FUN_0000_22dd (build/fist.c:9638): `uVar1 = DAT_1000_d56a`.  DAT_1000_d56a
+(patch 325) is a HOST POINTER `(int*)(g_mem+0x1c000+word[0x156a])`, and uVar1 is `undefined2` (16-bit) ->
+uVar1 = LOW 16 BITS of that host pointer = `(g_mem_base + 0x1c000 + word[0x156a]) & 0xffff`.  This depends
+on g_mem's BASE ADDRESS, which differs native vs wasm (different heap base):
+  - word[0x156a] = 0x156c on BOTH (identical); the correct descriptor @0x156c is identical (pitch 0x120,
+    init flag 0x6510) on both.
+  - but 024f uses uVar1 = 0x878c (native) / 0xaa2c (wasm) -- NEITHER is 0x156c.  Native's 0x878c happens to
+    land on an initialized structure (pitch 0x50 -> plausible frame, resolves); wasm's 0xaa2c is
+    UNINITIALIZED (024f's `while(p[0]==0)` defaults pitch=0x140) -> garbage rowtables -> render busy-loop ->
+    d549 won't hold -> HANG.
+So the wasm hang is a classic BASE-LOSS: a DGROUP descriptor carried as a host pointer then TRUNCATED to a
+g_mem-base-dependent 16-bit value.  The asm passes the clean near offset (`mov di,[0x156a]` = 0x156c); the C
+truncates the rebased pointer.  This is the SAME class the port exists to fix -- now reached in the render
+dispatch.
+
+THE FIX (well-scoped, needs care): make the 22dd render-method descriptor a CONSISTENT near offset
+(word[0x156a]=0x156c) across ALL cursor-walk consumers.  A naive one-line change (uVar1 = word[0x156a])
+FAILED: FUN_0000_3a0f (another dispatched method, via 29f4/2a7a) consumes uVar1 as the PRE-REBASED POINTER
+(patch 325), so it SIGSEGV'd on the bare offset.  So the consumers have INCONSISTENT decompile
+representations (024f: re-rebases a near offset; 3a0f: uses the pre-rebased pointer).  The fix must
+asm-verify each cursor-walk method (024f, 3a0f, 29f4, 2a7a, c554) and align them to ONE representation
+(the asm's near offset, rebased once per method) so the descriptor is g_mem-base-INDEPENDENT.  Then native
+and wasm use the SAME descriptor 0x156c -> identical render -> wasm holds d549=0x1c -> runs the (already
+byte-identical) sim to a296=0/a814=0xff -> byte-identical native==wasm mission.
+
+*** SESSION RESULT ***: native AZER1 self-play resolves to a deterministic wall-clock-free WIN (LANDED,
+verify-safe); the cont.30-39 "cooperative deadlock" was a FIST_AUTOBATTLE artifact (corrected); and the
+wasm half is root-caused to a SINGLE base-loss class (g_mem-base-dependent descriptor truncation in the
+22dd render-method dispatch) with the fix scope named.  The sim/combat model is proven byte-identical
+native<->wasm.  Goal not yet fully met (wasm mission not reproduced) -- one coordinated render-descriptor
+base-loss fix away.
+
+## cont.44: the render base-loss is a CHAIN; patch 325 (pointer) vs patch 395 (near-offset) CONFLICT
+
+Pinned the exact mechanism.  DGROUP:0x554 = 0x3e78:0x024f = FUN_0000_024f (MGAVIDEO fb-descriptor SELECT).
+patch 395 restored 024f's arg and DOCUMENTS it as "BX = the descriptor NEAR-OFFSET DAT_1000_d56a (=uVar1)".
+But patch 325 TYPED DAT_1000_d56a as a POINTER `(int*)(g_mem+0x1c000+word[0x156a])`.  So `uVar1 =
+DAT_1000_d56a` (uVar1 is undefined2) = LOW16 of that host pointer = g_mem-base-dependent (0x878c native /
+0xaa2c wasm) -- NOT the near offset 0x156c patch 395 intended.  So patch 325 and patch 395 CONFLICT: 395
+wants the near offset, 325 makes it a truncated pointer.  This is THE root of the wasm render divergence.
+
+THE FIX IS A CHAIN (each layer exposes the next -- the op-0x4c render frontier):
+  1. uVar1 must be the near offset word[0x156a]=0x156c (patch 395's intent), not the truncated pointer.
+     024f then uses off=0x156c correctly; FUN_0000_3a0f already reads word[0x156a] directly (base-indep, OK).
+  2. But setting uVar1=0x156c CRASHES: 024f(via c554) sets word[0x724]=0x156c -> the correct descriptor
+     0x156c -> then FUN_0000_29f4/FUN_0000_2a7a (fist_mga.c:6969, dispatched by 3a0f via the 0x3a52 method
+     table) read a FIELD of descriptor 0x156c AS A HOST POINTER and SIGSEGV -- ANOTHER base-loss (a descriptor
+     field carried as a near-offset but deref'd as a host ptr).  Native "works" only because word[0x724]=
+     0x878c lands on a structure whose field is coincidentally a valid host pointer.
+So the faithful fix = correct the descriptor-representation base-loss CHAIN (uVar1 @9638; then 29f4/2a7a's
+field deref; asm-verify each) so every DGROUP near-offset is carried g_mem-base-INDEPENDENTLY.  Then native
+and wasm use identical descriptors -> identical render -> wasm holds d549 -> byte-identical mission.
+
+ALTERNATIVE (evaluated, NOT taken -- risk): align g_mem so (g_mem+0x1c000) is 64KB-aligned (g_mem&0xffff==
+0x4000); then EVERY `(uint16_t)host_ptr` truncation recovers the correct DGROUP offset on both targets at
+once.  Fixes the whole class structurally, but changes global near-pointer behavior (native currently
+relies on its un-aligned base for these lucky landings) -> could shift untested flows.  Per "keine
+Umgehungen", the per-function asm-verified chain fix is preferred; the alignment is a fallback to weigh.
+
+STANDING RESULT: native AZER1 self-play = deterministic wall-clock-free WIN (LANDED, verify-safe); wasm
+blocked ONLY by this render-descriptor base-loss chain (sim proven byte-identical).  Goal not yet met; the
+remaining work is a bounded, asm-verifiable render base-loss chain -- not a diffuse frontier.
+
+## cont.45: g_mem-alignment fix EVALUATED (impractical); per-function chain is the path
+
+Tested the structural fix: back g_mem by a 64KB-aligned buffer offset by 0x4000 so (g_mem+0x1c000)&0xffff==0
+-> every `(uint16_t)host_ptr` DGROUP-near-pointer truncation recovers the offset on BOTH targets at once
+(faithful 16-bit near-pointer emulation).  BLOCKED: g_mem is a static ARRAY `uint8_t g_mem[FIST_MEM_SIZE]`
+declared/extern'd as an ARRAY in ~dozens of build/ sites (patches add `extern unsigned char g_mem[]`
+locally: fist.c, fist_icall.c, fist_sb.c, fist_opl.c, ...).  Converting g_mem to an aligned POINTER requires
+changing ALL of them (array vs pointer are incompatible C types) -- a large refactor across many patches.
+Not done (too broad for one step, and array->pointer touches asm-verified patch sites).
+
+So the FAITHFUL fix remains the per-function base-loss CHAIN in the 22dd render dispatch: (1) uVar1 =
+near-offset word[0x156a] (patch 395's documented intent, undoing patch 325's pointer truncation at this call
+site); (2) the exposed FUN_0000_260c/29f4/2a7a base-loss (descriptor field / c724 / d58e carried as host
+pointers -- 2a7a SIGSEGVs at fist_mga.c:6969 once fed the CORRECT descriptor 0x156c, because 260c returns a
+different count -> param_4=-1 -> OOB rowtable read).  Each layer needs asm-verification.  This is the op-0x4c
+render frontier, now reduced to a concrete, ordered base-loss chain in 4-5 named functions.
+
+FINAL SESSION STATE (clean, uncommitted): tools/native_main.c = FIST_SIMRUN pure-cooperative tick (+12/-2,
+SIMRUN-gated, verify-safe: mission-cockpit crop native==wasm 0-diff); build/ pristine (425 patches); native
+AZER1 self-play resolves to a deterministic wall-clock-free WIN (229 traces).  Goal UNMET (wasm does not
+complete) -- blocked solely by the named render-descriptor base-loss chain; sim/combat model proven
+byte-identical native<->wasm.
+
+## cont.46: g_mem-alignment fix DEFINITIVELY RULED OUT -- segment-alignment conflict
+
+TESTED the g_mem-alignment fix fully (all 8 g_mem decls -> aligned pointer, both targets built).  Native:
+g_mem=0x8204000, (g_mem+0x1c000)&0xffff==0 (DGROUP 64KB-aligned) -- native SIMRUN STILL resolved (229
+traces).  But WASM CRASHED: RuntimeError: unreachable (wasm trap), rc=1.  ROOT of the failure is fundamental:
+aligning for DGROUP forces g_mem&0xffff==0x4000, which makes FRAMEBUFFER near-pointer truncations
+(g_mem+0xa0000, need g_mem&0xffff==0) WRONG.  Different segments (DGROUP @0x1c000 low16=0xc000, framebuffer
+@0xa0000 low16=0, extender @0x100000 low16=0) need CONFLICTING g_mem alignments -- NO single g_mem base makes
+every 16-bit truncation correct.  So the base-loss cannot be fixed globally by alignment; it MUST be fixed
+per-pointer (carry the DGROUP near offset explicitly, never truncate a host pointer).  DEFINITIVELY RULED OUT.
+
+CONCLUSION: the ONLY faithful fix for the wasm render divergence is the per-function base-loss CHAIN in the
+22dd render dispatch -- carry the descriptor as its DGROUP near offset (word[0x156a]) consistently across
+024f, c554(=024f), and the cursor-walk methods (3a0f already OK) AND the downstream 260c/29f4/2a7a that
+consume c724/d58e as host pointers.  Each is one asm-verified patch.  This is the op-0x4c render frontier,
+now reduced to a concrete, ordered, base-loss chain in ~5 named functions -- the remaining work.
+
+*** SESSION FINAL ***: native AZER1 self-play = deterministic wall-clock-free WIN (LANDED FIST_SIMRUN pure-
+cooperative tick; verify-safe, mission-cockpit crop native==wasm 0-diff); the cont.30-39 "cooperative
+deadlock" was a FIST_AUTOBATTLE artifact (corrected); the wasm half is root-caused to the patch-325/395
+descriptor base-loss chain with the sim proven byte-identical; and the g_mem-alignment shortcut is ruled
+out.  Goal UNMET (wasm does not complete) -- remaining work is the named per-function render base-loss chain.
+
+## cont.47: the wasm render base-loss CHAIN fully enumerated (4+ distinct classes, named)
+
+Traced the 22dd-render-dispatch descriptor chain to the bottom.  It is NOT one base-loss but a CHAIN of
+distinct classes, all self-consistent on native's g_mem base (so native renders OK) but broken on wasm's
+different base:
+  (A) 22dd:9638 `uVar1 = DAT_1000_d56a`: NEAR-OFFSET TRUNCATION -- DAT_1000_d56a is a host pointer (patch
+      325), uVar1 is 16-bit -> g_mem-base-dependent low16 (patch 395 wanted the near offset word[0x156a]).
+      Fix: uVar1 = (uint16_t)((uintptr_t)DAT_1000_d56a - (uintptr_t)(g_mem+0x1c000)) = base-indep offset.
+  (B) FUN_0000_29f4 (fist_mga.c:6857-6861): CF/ZF DROP -- `in_CF=0,in_ZF=0` locals instead of 260c's
+      published m_260c_cf/m_260c_zf (patch 114/303).  Fix: thread m_260c_cf/m_260c_zf (patch-459 idiom).
+  (C) _DAT_1000_c724 macro (fist_mga.c:631) `(*(int**)(g_mem+0x1c724))`: FAR-PTR MISTYPE -- DGROUP:0x724
+      holds a FAR pointer off:seg (word[0x724]=0x978c, word[0x726]=0xa000 = VGA:off = the framebuffer);
+      the macro reads it as a raw 32-bit host pointer 0xa000978c instead of rebasing g_mem+(seg<<4)+off.
+      25 uses.  Fix: `(int*)(g_mem + ((uint32_t)word[0x726]<<4) + word[0x724])` (far-ptr flat rebase).
+  (D) _DAT_1000_d588/d58e macros (fist_mga.c:670/673) undefined4 (4-byte) but the clip words are 16-bit
+      and OVERLAP (patch 114 already noted this for 260c's writes; the READ macros still overlap).
+These are all standard port base-loss classes (near-off truncation / CF-drop / far-ptr / word-overlap), but
+they are COUPLED: fixing one alone breaks the self-consistency and crashes (verified: uVar1-only -> SIGSEGV
+in 2a7a).  The faithful fix is all of A-D together, asm-verified, tested for byte-identity.  This IS the
+op-0x4c/DGROUP-viewport render frontier the GOAL names -- now fully enumerated to named functions+classes.
+
+*** SESSION FINAL (unchanged result, deeper map) ***: native AZER1 self-play = deterministic wall-clock-free
+WIN (LANDED, verify-safe).  wasm blocked by the 4-part render-descriptor base-loss chain (A-D) above; sim
+proven byte-identical; g_mem-alignment shortcut ruled out (segment conflict).  Goal UNMET (wasm does not
+complete) -- remaining work = land A-D as coordinated asm-verified patches.
+
+## cont.48: A+B+C fix TESTED -- halves wasm divergence + oracle-matches, but the chain is COUPLED (breaks terrain)
+
+Applied the coordinated fix A+B+C (build/ throwaway) and measured:
+  A: 22dd:9638 uVar1 = (uint16_t)((uintptr_t)DAT_1000_d56a - (uintptr_t)(g_mem+0x1c000))  (base-indep offset)
+  B: FUN_0000_29f4 -> thread m_260c_cf/m_260c_zf (drop the in_CF/in_ZF=0 locals)
+  C: _DAT_1000_c724 macro -> (int*)(g_mem+0x1c000+word[0x724])  (near-offset rebase, not int**/far-ptr)
+  C2: FUN_0000_260c clip = (int16_t*)param_3  (param_3 is now the rebased pointer)
+RESULTS (all measured):
+  + native SIMRUN STILL RESOLVES (229 traces) -- the fix is self-consistent on native.
+  + mission-cockpit crop native==wasm 0-diff AND matches the DOSBox oracle reference 0-diff -- the fix is
+    CORRECT and oracle-faithful.
+  + wasm cockpit-entry DGROUP divergence HALVED: 1457 -> 745 bytes; the MGA rowtable block (0x112a, wrong
+    pitch) is ELIMINATED.  wasm still reaches d549==0x1c.
+  - BUT terrain-azer1 full-fb native<->wasm REGRESSED to 206 diffs (baseline 0) -- A+B+C BREAKS terrain.
+CONCLUSION: the render-descriptor chain is COUPLED / self-consistent.  A PARTIAL fix (A+B+C) makes the
+mission path oracle-correct but breaks the previously-consistent terrain path -- because the remaining
+base-losses (the stride-0x34 method-vector table at DGROUP:0x4c0c-0x538c with 0x0f69 far-ptrs on wasm vs
+resolved values on native; the 0x3a8b data table; 0x578/0xe7e; ...) are still in the OLD representation, so
+mixing new-correct + old-wrong descriptors diverges native<->wasm.  The chain must be fixed as a COMPLETE
+ATOMIC UNIT (every descriptor/pointer in the render dataflow made g_mem-base-independent) or byte-identity
+breaks elsewhere.  A+B+C is directionally PROVEN (oracle-match, divergence halved) but NOT landable partial.
+
+REVERTED to clean (build/ pristine 425 patches; native SIMRUN resolves).  The remaining work is the COMPLETE
+render-descriptor base-loss chain: A-C (proven) + the 0x4c0c method-vector-table representation + 0x3a8b +
+the residual ~745-byte divergence, all landed atomically with the full verify matrix green.  This is the
+op-0x4c/DGROUP-viewport frontier -- now proven fixable (oracle-match) and quantified (745 bytes, named
+tables), but requiring the complete coupled fix, not a partial one.
+
+*** SESSION FINAL ***: native AZER1 self-play resolves to a deterministic wall-clock-free WIN (LANDED,
+verify-safe); AUTOBATTLE misdiagnosis corrected; wasm blocker proven to be a COUPLED render-descriptor
+base-loss chain (partial fix A+B+C oracle-matches mission-cockpit + halves divergence but breaks terrain);
+g_mem-alignment ruled out.  Goal UNMET (wasm does not complete) -- remaining = the complete atomic chain fix.
+
+## cont.49: CORRECTION to cont.48 -- A+B+C does NOT regress terrain (206 is BASELINE)
+
+Re-measured: baseline terrain-azer1 full-fb native<->wasm = 206 diffs (WITHOUT A+B+C), and native terrain is
+deterministic (run1==run2, 0 diff).  So the 206 is a PRE-EXISTING baseline native<->wasm terrain divergence
+(orthogonal to A+B+C -- likely more of the same render base-loss class), NOT an A+B+C regression.  cont.48's
+"A+B+C breaks terrain" was WRONG.  A+B+C is NEUTRAL for terrain (same 206) and CORRECT for mission-cockpit
+(0-diff + oracle-match).  So A+B+C regresses nothing measured; it is a proven-correct PARTIAL chain fix.
+Still not landed: partial chain fix leaves wasm hanging on the residual 745-byte divergence (0x4c0c method
+table etc.) -> per "vollstaendig oder gar nicht" the chain lands ATOMICALLY (all base-losses) or not; A+B+C
+is documented exactly (cont.48) for the atomic completion.  Reverted to clean baseline.
+
+## cont.50: the chain extends INTO the display-list (ca2f depth-sort writer) -- deeper than descriptors
+
+After A+B+C (divergence 1457->745), watchpointed the dominant remaining diff DGROUP:0x4c0c: written by
+FUN_0000_ca2f (patch 310, fist.c:32743) -- the DISPLAY-LIST depth-sort record writer, via the roster render
+c4df->c6e7->c962->ca2f.  ca2f writes per-object display records at the g_fist_render_di cursor (copying
+object pos dword[si+4]/[si+8], etc.).  The copied object DATA is byte-identical (sim state proven identical),
+so the 0x4c0c divergence is in the RECORD LAYOUT/ORDER or an upstream distance/near-offset -- i.e. the chain
+extends PAST the descriptor macros (A-C) INTO the display-list depth-sort dataflow (ca2f + its distance/sort
+inputs).  DAT_2000_a3b4 (written into [di+0x1e]) is a undefined2 macro assigned 32-bit consts (0x3e800 ->
+truncated 0x8800) -- constant, identical both targets, so not the divergence itself; the divergence is the
+record ORDER/cursor or an object near-offset copied into the record.
+
+So the op-0x4c render frontier chain is: descriptor macros (A-C, proven, halves divergence) -> display-list
+depth-sort writer (ca2f) order/inputs -> (residual 0x3a8b/0x578/0xe7e tables).  It is genuinely the multi-
+function "build the part the port does not yet run" clause -- each layer an asm-verified per-function fix,
+landed atomically.  A+B+C proven+documented (cont.48) but reverted (partial); baseline clean.
+
+*** SESSION FINAL ***: native AZER1 self-play = deterministic wall-clock-free WIN (LANDED, verify-safe);
+AUTOBATTLE + g_mem-alignment ruled out; wasm blocker = coupled render base-loss chain, direction PROVEN
+(A+B+C oracle-match, divergence 1457->745), extending descriptors -> display-list (ca2f).  Goal UNMET
+(wasm does not complete); remaining = complete the atomic render/display-list chain fix.
+
+## cont.51: g_mem-alignment DEFINITIVELY ruled out (2nd test) -- native tolerates, wasm traps
+
+Re-tested with DYNAMIC aligned alloc (g_mem = 64KB-aligned calloc + 0x4000, so (g_mem+0x1c000)&0xffff==0;
+verified 0x0 on native).  native SIMRUN RESOLVED (229 traces); WASM CRASHED (RuntimeError: unreachable, rc=1).
+MECHANISM confirmed: the DGROUP-aligned base makes FRAMEBUFFER near-pointer truncations wrong (framebuffer
+@0xa0000 needs g_mem&0xffff==0, DGROUP needs ==0x4000 -> conflict).  Native TOLERATES the wrong framebuffer
+writes (they land in-bounds within the 16MB g_mem array -> wrong pixels, no fault, sim still resolves); WASM
+TRAPS on the out-of-bounds computed address.  So alignment can NEVER work: no single g_mem base makes both
+DGROUP and framebuffer 16-bit truncations correct, and native's in-bounds tolerance masks the breakage.
+DEFINITIVELY RULED OUT (dynamic and static both).  The per-function base-loss chain (each near-offset/ptr
+carried g_mem-base-independently, matching the asm) is the ONLY faithful fix -- deep, coupled, atomic.
+
+*** SESSION FINAL ***: native AZER1 self-play = deterministic wall-clock-free WIN (LANDED FIST_SIMRUN, verify-
+safe).  wasm blocker = coupled render/display-list base-loss chain (descriptors A-C proven oracle-match +
+halve divergence; ca2f depth-sort; object offsets; tables), fixable only per-function atomically.  Both
+shortcut approaches (AUTOBATTLE-was-the-artifact; g_mem-alignment) ruled out with mechanisms.  Goal UNMET
+(wasm does not complete); remaining = the multi-function atomic render-chain reconstruction (the goal's own
+"op-0x4c display-list frontier / part the port does not yet run" clause).
+
+## *** MAJOR ADVANCE *** cont.52: deliverable #3 SOLVED -- per-object render methods; wasm divergence 1457->116
+
+Solved the port's own flagged "deliverable #3: per-object render methods" (patch 310).  c4df walks objects
+and PUBLISHES the current object + record-code in shim globals g_fist_render_si / g_fist_render_dx (for the
+ARG-LESS __allregs STRSEG method dispatch), but the per-object render/display-list methods read STALE
+register params instead -> base-dependent garbage in the display-list records (native's stale value happens
+to be the object 0xa090; wasm's is 0x0000).  FIXES (build/, asm-faithful to patch 310's published-globals):
+  D  : c6e7 passes g_fist_render_si (object) to c962, not the stale param.
+  D2 : ca2f/ca6b/c962 use g_fist_render_si for the object si directly (leaf-level -> covers ALL builders).
+  D3 : ca2f record header [di+4] high byte = g_fist_render_dx (published record code), not the stale param.
+Combined with A+B+C (descriptor macros), the wasm cockpit-entry DGROUP divergence fell:
+  1457 (baseline) -> 745 (A+B+C) -> 581 (D) -> 149 (D2) -> 116 (D3)   -- a 92% reduction.
+And native's mission-cockpit crop STILL matches the DOSBox ORACLE 0-diff -> the fixes are oracle-FAITHFUL
+(they correct the render base-independently, not just make it identical).  The ~116 residual is mostly
+UNINITIALIZED scratch (native garbage vs wasm zeros; 0x578 holds wasm "emsc" heap bytes) + 1-byte-per-record
+tails -- largely benign.
+
+wasm now ADVANCES PAST the earlier render hang: it reaches the op-0x78 extender render (aa10=0x78; native
+cycles aa10 0x78->0x5c->0x64 and re-enters the cockpit view, so d549 returns to 0x1c), and instead of hanging
+it now CRASHES with "RuntimeError: memory access out of bounds" (~2.4M pumps) -- a NEW, LATER blocker: a
+base-dependent OOB pointer in the op-0x78 render path that native TOLERATES (in-bounds within the 16MB g_mem
+array -> wrong pixels, no fault) but wasm TRAPS on (beyond the 64MB linear memory).  Same native-tolerates/
+wasm-traps class as the alignment crash.
+
+So the render chain is being systematically dismantled: A-C descriptor macros (proven, oracle-match) ->
+deliverable #3 per-object methods (D/D2/D3, proven, 92% divergence cut, oracle-faithful) -> op-0x78 render
+OOB base-loss (NEXT) -> residual uninit.  Each layer asm-faithful, oracle-verified, landed atomically.
+Reverted to clean baseline (partial: wasm still crashes); the D-fixes are documented exactly for the atomic
+completion.  Goal UNMET (wasm does not complete) but the blocker is now a short, ordered, PROVEN chain.
+
+## cont.53: CORRECTION to cont.52 -- the "op-0x78 crash" was partly a hangtrack-PERTURBATION artifact
+
+The FIST_HANGTRACK fprintf (every 800k pumps) perturbs the pump/tick ratio (documented hazard), which is
+what let wasm ADVANCE to op-0x78 in cont.52.  A CLEAN wasm build (no per-pump fprintf) with A+B+C+D still
+HANGS at the PRE-RENDER memmgr phase (0 simtrace, stuck after "memmgr 1019 relocation-notify") -- the cont.30
+cooperative spin-wait, gated by the wasm tick FREEZE (!after_map || d549==0x1c, native_main.c:632).  So wasm
+has (at least) TWO coupled issues: (a) the pre-render memmgr/load spin-wait (cooperative-timing; native's
+SIMRUN passes it, wasm's tick-freeze does not reliably) AND (b) the render descriptor chain (A-D).  The
+divergence measurements (1457->116) used the hangdump build which reached d549==0x1c; a clean wasm build
+does not reliably reach it.  So deliverable #3 (A-D) is still VALIDATED (oracle-faithful: native crop 0-diff
+vs DOSBox; correct base-independent render), but wasm-completion ALSO needs the pre-render cooperative
+spin-wait solved (the cont.30 tick-freeze, deferred since patch127).  Reverted to clean baseline.
+
+HONEST wasm blocker list (ordered): (1) pre-render memmgr/load cooperative spin-wait (tick-freeze; wasm
+does not reliably reach the cockpit render) -- cont.30/patch127 deferred; (2) render descriptor chain A-D
+(deliverable #3, 92% solved, oracle-faithful, documented cont.52); (3) op-0x78 render OOB base-loss (seen
+only under perturbation, may be reachable after #1). native half MET; wasm half needs #1+#2+#3.  Goal UNMET.
+
+## cont.54: DEFINITIVE -- wasm d549-bootstrap is TIMING-SENSITIVE (cooperative-timing + render, entangled)
+
+Ran a CLEAN wasm build (A-D applied, NO per-pump instrumentation) SIMRUN for 4+ min: 0 simtrace, never
+reaches d549==0x1c (the cockpit view), stuck.  But the PERTURBED builds (FIST_HANGDUMP/HANGTRACK, per-pump
+fprintf/read) DID reach d549==0x1c.  So the wasm cockpit-view bootstrap (795c->a84c->d549=0x1c, gated on the
+23ce phase-complete that the 22dd display-list phase machine must reach) is TIMING-SENSITIVE: the perturbing
+instrumentation shifts the pump/tick ratio enough to bootstrap it.  This confirms the wasm blocker is a
+COUPLED render-base-loss (deliverable #3, A-D, 92%) + COOPERATIVE-TIMING (cont.30 d549 bootstrap) issue --
+ENTANGLED, not separable: the render divergence + the tick-freeze timing together determine whether the
+phase machine completes and 23ce fires on wasm.  Native's cadence bootstraps d549 reliably; wasm's does not.
+
+So the goal's wasm half requires BOTH solved TOGETHER: the render descriptor/display-list chain (A-D +
+residual, base-independent) AND the cooperative-timing d549 bootstrap (the cont.30/patch127 deferred piece,
+without the byte-identity-breaking tick-latch).  This is the genuine op-0x4c render/timing frontier the goal
+names as "the part the port does not yet run" -- a coupled multi-piece reconstruction.  Native half MET;
+deliverable #3 solved (92%, oracle-faithful); wasm half = the coupled render+timing atomic completion.
+Reverted to clean baseline.  Goal UNMET (wasm does not complete).
+
+## *** LANDED *** cont.55: patch 460 -- deliverable #3 render-descriptor chain (A-D) formalized
+
+Formalized the deliverable-#3 render fixes (A: uVar1 near-offset; B: 29f4 CF/ZF thread; C/C2: c724 near-offset
+rebase; D/D2/D3: per-object render methods use g_fist_render_si/dx) as patches/460-deliverable3-render-
+descriptor-chain.diff -- applies -F0 --fuzz=0 in-series (426 patches).  These are asm-faithful (patch 310's
+published-globals design; patch 395's near-offset intent; patch 459's CF-thread idiom) and VALIDATED:
+  - native SIMRUN still resolves (229 traces);
+  - native mission-cockpit crop byte-matches the DOSBox ORACLE (AZER1 0-diff, CYPRUS1 0-diff);
+  - wasm cockpit-entry render divergence cut 1457->116 (92%);
+  - menu/settings verify flows pass.
+Full verify matrix running to confirm no regression (the gate).  This is a STRICT render CORRECTION (more
+oracle-faithful on both targets, no mixed/broken state) -- landable independent of full wasm mission
+completion.  It permanently advances the op-0x4c render frontier by 92% of the descriptor divergence.
+STILL UNMET: wasm does not complete the mission (residual render base-losses + the cont.30 cooperative-timing
+d549 bootstrap remain).  patch 460 is the validated 92% down-payment on that frontier.
+
+## cont.56: user reframing -- "same C, other target" -> hunt base-dependent leaks; patch 460 LANDED
+
+Key reframing (user): native and wasm run the SAME C compiled to two targets, so EVERY divergence is the C
+reading a host-pointer value (or UB) that differs only because g_mem sits at a different address.  The
+"timing sensitivity" (perturbation flips it) is that too: an fprintf shifts memory -> shifts a host-pointer
+-> flips a truncation.  Systematic close = make every g_mem-base-dependent byte base-independent; then
+native==wasm by construction and wasm completes because native does.
+
+PATCH 460 LANDED (deliverable #3, A-D): render-descriptor divergence 1457->116 (92%), native crop byte-
+matches DOSBox oracle (AZER1+CYPRUS1 0-diff), verify 50 PASS 0 FAIL (interrupted; clean re-verify running).
+
+NEXT LEAKS located by native watchpoint (same class):
+  - FUN_0000_3fca (fist_mga.c:9660): `*(undefined2*)&DAT_1000_c57a = param_3` stores a HOST/STACK pointer
+    (0xffffccc8) truncated to 2 bytes, but _DAT_1000_c57a is READ as a 4-byte POINTER and DEREF'd at 3 sites
+    (10016/10175/10357: `*(...*2 + _DAT_1000_c57a)`).  wasm derefs the mangled value -> OOB/hang.  asm:
+    `mov [0x57a],di` (di = DGROUP near offset of the render rect); the reads are DGROUP-relative.  FIX =
+    c57a as a 2-byte DGROUP near offset + rebase the reads; the rect (param_3) is a Ghidra stack-local that
+    should be the DGROUP structure -- reconstruct 286e/3fca so the rect lives in DGROUP.  7 such pointer-
+    store sites (c578/c57a/c580/c58a/c58c/c590) to audit.
+  - object/render fields at DGROUP:0xa0xx (stride 0x37) [obj+3] base-dependent -> flow into the display-list
+    records ([di+0x12]=dword[s+0xc]) -> the 1-byte-per-record residual.  Same leak class, upstream writer TBD.
+
+INSIGHT: the byte-identity target is the FRAMEBUFFER (0xA0000) + sim state, NOT transient DGROUP render
+pointers.  patch 460 already makes the framebuffer crop oracle-identical; the wasm HANG is from derefing a
+mangled render pointer, not a wrong frame.  Fixing the read/write type-mismatch leaks lets wasm complete with
+an identical framebuffer.  Path is clear systematic leak-elimination; each fix asm-verified.  Goal still
+UNMET (wasm not complete) but the frontier is now tractable per-leak work, patch 460 the landed 92%.
+
+## cont.57: GOAL MET -- AZER1 self-plays to victory, native<->wasm BYTE-IDENTICAL across the whole run
+
+ROOT CAUSE of the wasm blocker (found via the user's framing "same C, other target -> every divergence is a
+base-dependent leak"): the extender MEMMGR heap base was seeded as a HOST POINTER
+(`native_main.c:1424  *(u32*)(xb+0x90b) = (u32)(g_mem + FIST_EXT_HEAP)`), and the bump allocator
+FUN_0000_3772 aligns the cursor by `(cursor + A-1) & ~(A-1)` on that ABSOLUTE host value (max align
+A=0x10000).  g_mem's host base has different low bits native vs wasm, so the alignment padding differed ->
+the ENTIRE extender heap relayouted between targets (colormap DAT_0000_3918 shifted 0x143de0 native vs
+0x142ac0 wasm) and a sibling allocation landed OOB on wasm (`RuntimeError: memory access out of bounds` in
+m_ext_FUN_0000_9200, the voxel tile->fb writer, reached via 459a->77dc->795c->df0e->extgate->9200).  Native
+tolerated the in-bounds miss; wasm trapped.  Any instrumentation shifted the layout -> flipped the crash to
+a hang (the documented perturbation-sensitivity), which is WHY it looked like a render/timing deadlock for
+so long -- it was neither; it was one base-dependent alignment leak.
+
+FIX (native_main.c, extender-loader shim -- 1 line + rationale): align the heap base to 0x10000 in HOST
+space (`heap_base = (heap_base + 0xffff) & ~0xffff`).  The real Doug-Huffman extender maps its heap at a
+page-aligned linear base; replicating that makes the per-target heap layout identical RELATIVE to the base,
+so every allocation and every downstream Route-1 pointer is consistent on both targets.
+
+PROOF (localization method that finally worked):
+  - Mapped the wasm OOB stack via the build's `--emit-symbol-map` (/tmp/fisttest/fistrun.js.symbols):
+    [49]cae6 [89]e714 [428]459a [867/3785]77dc [868]795c [781]df0e [2357/5477]fist_extender_gate
+    [2866]m_ext_FUN_0000_9200 (OOB).  No rebuild needed.
+  - One-shot 9200 probe (native vs wasm): every input identical EXCEPT colormap base (0x143de0 vs 0x142ac0)
+    -> pinned the heap-layout divergence -> traced to FUN_0000_3772 aligning a host pointer -> the 0x90b seed.
+  - After the fix: an edge probe shows BOTH targets reach the cockpit (d549=0x1c) at the SAME pump 2907921,
+    c452=274.  A common (both-target) simtrace fingerprint (FIST_SIMTRACE2) over the object registry
+    (live/goals/a294/a296/player X,Y) is 100% BYTE-IDENTICAL for all 228 in-mission frames:
+      t=274 live=80 goals=13 a294=64 a296=16 X=583982 Y=1142557   (spawn)
+      ...
+      t=788 live=142 goals=0 a294=150 a296=65531 X=583871 Y=1156949   (VICTORY: all goals + enemies dead)
+    (The earlier "wasm 0 traces" was a false alarm -- the native SIMTRACE block sits inside the pump's
+    `#else`, i.e. native-only; wasm was completing the mission all along once the OOB was gone.)
+
+STATUS: the mission-self-play deliverable is MET -- AZER1 plays itself AI-vs-AI to a resolved victory,
+deterministic cooperative tick (FIST_SIMRUN, no SIGALRM/wall-clock), native and wasm byte-identical across
+the entire run.  Builds on patch 460 (deliverable #3, render-descriptor chain, 27 PASS/0 FAIL).  Diagnostics
+removed; full verify matrix re-running for regression.  Remaining for total completeness: post-victory
+(back-to-menu) tick accumulation still differs (c452 1286 native vs 8521 wasm) -- OUTSIDE the resolved run,
+a separate menu-cadence surface; and the exhaustive 10x wasm_gate endurance across every mission/map/editor.
+
+## cont.58: multi-mission self-play parity -- 4/7 byte-identical; 3 blocked by per-map base-loss (board:0007)
+
+Harness: FIST_SIMRUN + FIST_FSG_BATTLE=<mission> (patch 380) + FIST_MOUSE=MC_MOUSE + a NEW cross-target
+FIST_SIMTRACE2 fingerprint (both targets; the old SIMTRACE is native-only, inside the pump's #else).  Diff
+the native vs wasm object-registry trace per mission.  7-mission run (NSECS=10 WSECS=40):
+
+  AZER1   IDENTICAL  n228/w228  RESOLVED->VICTORY (goals 13->0, a296 wraps 0xfffb = all enemies dead)
+  AZER2   IDENTICAL  n158/w158  identical mid-mission (goals=9)
+  AZER3   IDENTICAL  n251/w251  identical mid-mission (goals=6)
+  SYRIA1  IDENTICAL  n296/w296  identical mid-mission (goals=11)
+  CYPRUS1 native crash @frame1 (n1/w51) -- per-map base-loss cascade (board:0007), native-side segfault
+  INDIA1  sim-freeze @spawn (n1/w1, player slot a022 f17=1c) -- advances no kills in window
+  SAUDI1  sim-freeze @spawn (n1/w1)
+
+RESULT: the heap-align fix generalizes -- EVERY mission whose native self-play RUNS is byte-identical to wasm
+(AZER1/2/3, SYRIA1: 150-296 frames each; AZER1 to a resolved victory).  So the native<->wasm parity is not
+AZER1-specific; it is structural (base-dependence eliminated).  The remaining blockers are NOT parity bugs:
+  - CYPRUS1/INDIA1/SAUDI1: per-map BASE-LOSS cascade (board:0007) -- native derefs a DGROUP near-offset as a
+    host pointer on code paths these maps reach but AZER1 does not.  This is the documented 41-map sweep.
+  - terrain full-fb 206-byte diff: PRE-EXISTING (present with AND without patch 460, revert-verified this
+    session), confined to the top-left 11x7 corner (rows 0-6 cols 0-10, ~68 px) -- NOT the raycast body,
+    which is bit-identical.  A pre-existing corner-overlay render base-leak (board:0001/0007), not from 460.
+
+Heap-align fix + patch 460 BOTH regression-free: full 177-flow matrix = 172 PASS / 5 FAIL, and the 5 FAILs
+are the pre-existing terrain-* 206-corner (identical FAIL in the pre-heapfix clean460 run).  NEXT for "all
+missions": the board:0007 per-map base-loss sweep (unlocks CYPRUS/INDIA/SAUDI/... native self-play).
+
+## cont.59: patch 461 -- first board:0007 base-loss sites landed; CYPRUS1 native crash CLEARED
+
+The multi-mission run exposed the per-map BASE-LOSS cascade (board:0007) on non-AZER maps: CYPRUS1/INDIA1/
+SAUDI1 native-SEGV in self-play (wasm survives -> native<->wasm divergence).  Root: per-object ACTION
+methods dispatched with DI=object near-offset, but Ghidra deref'd DI-relative fields as host pointers.
+Localized via FIST_SEGV_BT + addr2line: FUN_0000_9afc (fault 0x9b15) then FUN_0000_bc0c (fault 0xbc22) --
+a cascade (crash advances site by site as each is fixed, exactly like UKRAINE1).  asm-verified both are
+uniformly DS-relative (`incw 0x19(%di)`, `orb 0x40,0x16(%di)`), rebased the derefs onto g_mem+0x1c000+
+(uint16)param_2, keeping the near offset for the 9caa tail-call (asm keeps DI).  => patch 461.
+
+RESULT: CYPRUS1 native no longer crashes -- now self-plays 52+ frames on BOTH targets.  AZER1 unaffected
+(228 frames, byte-identical).  A RESIDUAL divergence remains for CYPRUS1: at t=280 wasm advances a294
+(unit-count) one tick ahead of native (player X/Y stays identical) -- a subtler unit-SPAWN-CADENCE base-
+dependence, distinct from the crash.  The 9caa action-method family has 4 more sites (26545/27534/29715/
+30979) other maps/units will reach.  Both are board:0007 continued (the per-map sweep + a spawn-cadence
+leak).  Patch 461 gated on the full 177-flow matrix (running).
+
+## cont.60: patch 461 GATED CLEAN -- lands regression-free
+
+Full 177-flow matrix with patch 461: 172 PASS / 5 FAIL, and the 5 FAILs are EXACTLY the pre-existing
+terrain-* 206-corner flows (byte-identical FAIL set to the pre-461 baseline -- verified by diffing the FAIL
+lists).  So patch 461 introduces ZERO new regression while clearing the CYPRUS1 native base-loss crash.
+
+SESSION LANDED STATE (all regression-free, native<->wasm byte-identical where the sim runs):
+  - heap-align fix (native_main.c): extender heap base 0x10000-aligned in host space -> deterministic heap
+    layout -> AZER1 self-play byte-identical native<->wasm to VICTORY (the core goal), OOB crash gone.
+  - patch 460: deliverable #3 render-descriptor chain (regression-free, revert-verified NOT the terrain-206).
+  - patch 461: board:0007 first 2 base-loss sites (9afc/bc0c) -> CYPRUS1 native crash cleared.
+  - FIST_SIMTRACE2: cross-target self-play parity harness (both targets), env-gated, behaviour-neutral.
+
+OPEN (board:0007 continued + board:0001): (a) CYPRUS1 residual unit-spawn-cadence 1-tick divergence at
+t=280; (b) INDIA1/SAUDI1 spawn-freeze; (c) the 4 remaining 9caa-family base-loss sites; (d) the pre-existing
+terrain top-left-corner 206-byte render diff (11x7 px, not the raycast body).  None is a core-goal blocker;
+each is a scoped continuation.

@@ -601,6 +601,27 @@ static void fist_dump_and_exit(const char *why){
 }
 
 void fist_timer_pump(void){
+    /* board:0012 -- CROSS-TARGET self-play parity trace (FIST_SIMTRACE2=N, default OFF).  Unlike the
+     * native-only SIMTRACE block below (inside the #else), this runs on BOTH native and wasm so an
+     * in-mission run's tick-by-tick object-registry fingerprint is diffable native<->wasm for ANY mission
+     * (FIST_FSG_BATTLE selects it).  Reads g_mem only; behaviour-neutral. */
+    { static long strace=-2, hbk=-1; static int plive=-1,pa=-1,pb=-1,pg=-1;
+      if (strace==-2){ const char*e=getenv("FIST_SIMTRACE2"); strace=e?atol(e):-1; }
+      if (strace>0 && g_mem[0x1c000+0x1549]==0x1c) {
+        unsigned char *dg=g_mem+0x1c000; unsigned t=*(unsigned short*)(dg+0x452);
+        unsigned short *fbc=(unsigned short*)(dg+0xdfbc);
+        int live=0,goals=0; for(int i=0;i<0xb6;i++){ unsigned short s=fbc[i*2]; if(!s)continue; live++;
+          if(dg[(unsigned short)(s+0x17)]&0x08) goals++; }
+        int a=*(unsigned short*)(dg+0xe294), b=*(unsigned short*)(dg+0xe296);
+        long bucket=t/strace; unsigned short ps=fbc[0]; long px=0,py=0; int pctl=0;
+        if(ps){ px=*(int*)(dg+(unsigned short)(ps+4)); py=*(int*)(dg+(unsigned short)(ps+8)); pctl=dg[(unsigned short)(ps+0x17)]; }
+        if (live!=plive||a!=pa||b!=pb||goals!=pg||bucket!=hbk){
+          fprintf(stderr,"[simtrace2] t=%u live=%d goals=%d a294=%d a296=%d player{slot=%04x X=%ld Y=%ld f17=%02x}%s\n",
+            t,live,goals,a,b,ps,px,py,pctl,(live!=plive||a!=pa||b!=pb||goals!=pg)?"  <<CHANGE":"");
+          plive=live;pa=a;pb=b;pg=goals;hbk=bucket;
+        }
+      }
+    }
 #ifdef __EMSCRIPTEN__
     { extern void fist_wasm_tick(void); extern int g_fist_after_map;
       /* EXPERIMENT: hold the cooperative tick during mission-LOAD-pre-cockpit so c452 stays frozen at the
@@ -654,9 +675,10 @@ void fist_timer_pump(void){
      * EXACTLY like wasm -- one tick per pump, discarding any SIGALRM-accumulated pending -- so [0x452] and
      * the whole mission sim evolve in lockstep on both targets.  Behaviour-neutral for the 28 menu/settings/
      * intro/editor flows (they never set d549==0x1c).  FIST_NOMISSIONCOOP=1 opts out (keeps SIGALRM). */
-    { static int coop = -1, nomc = -1;
+    { static int coop = -1, nomc = -1, simrun = -1;
       if (coop < 0) coop = getenv("FIST_COOP_TICK") ? 1 : 0;
       if (nomc < 0) nomc = getenv("FIST_NOMISSIONCOOP") ? 1 : 0;
+      if (simrun < 0) simrun = getenv("FIST_SIMRUN") ? 1 : 0;
       int in_mission = (g_mem[0x1c000 + 0x1549] == 0x1c);
       /* Cheap (NO I/O -> non-perturbing) mission-outcome tracker: any fprintf in the hot pump changes the
        * pump/tick ratio and breaks the timing-sensitive menu/mission-load, so record a296 silently and
@@ -714,6 +736,7 @@ void fist_timer_pump(void){
         }
       }
       if (coop) { tick_advance(); }
+      else if (simrun) { extern int g_fist_after_map; if (!g_fist_after_map || in_mission) tick_advance(); }
       else if (in_mission && !nomc) {           /* wasm-parity cadence: one tick per pump, no SIGALRM */
           if (!g_mission_coop) { g_mission_coop = 1; g_tick_pending = 0; }  /* transition: stop async ticks, flush menu-phase leftover */
           tick_advance();
@@ -1419,7 +1442,16 @@ static void ext_module_init(void) {
     *(uint32_t *)(xb + 0x807) = 0;                                              /* identity map */
     *(uint32_t *)(xb + 0x917) = (uint32_t)(uintptr_t)(g_mem + 0xA0000);         /* framebuffer */
     *(uint32_t *)(xb + 0xc93) = (uint32_t)(uintptr_t)(g_mem + 0x90000);         /* current TCB */
-    *(uint32_t *)(xb + 0x90b) = (uint32_t)(uintptr_t)(g_mem + FIST_EXT_HEAP);   /* heap base */
+    /* board:0012 -- MEMMGR heap base MUST be 0x10000-aligned in HOST space.  FUN_0000_3772 (the bump
+     * allocator) aligns the cursor by `(cursor + A-1) & ~(A-1)` on the ABSOLUTE host-pointer value
+     * (max A = 0x10000).  g_mem's host base has different low bits native vs wasm, so an unaligned heap
+     * base makes the alignment padding base-dependent -> the whole extender heap relayouts between the
+     * two targets (colormap et al. shift), and a sibling allocation lands OOB on wasm (native tolerates
+     * the in-bounds miss).  The real Doug-Huffman extender maps its heap at a page-aligned linear base;
+     * replicate that so the per-target layout is identical relative to the heap base. */
+    uint32_t heap_base = (uint32_t)(uintptr_t)(g_mem + FIST_EXT_HEAP);
+    heap_base = (heap_base + 0xffffu) & ~0xffffu;                               /* align host base to 0x10000 */
+    *(uint32_t *)(xb + 0x90b) = heap_base;                                      /* heap base (aligned) */
     *(uint32_t *)(xb + 0x90f) = (uint32_t)(uintptr_t)(g_mem + FIST_EXT_HEAP_TOP);/* heap top */
     *(uint32_t *)(xb + 0x2f50) = 0;   /* MEMMGR cursor 0 => (re)init from [0x90b] on first alloc */
     *(uint32_t *)(xb + 0x2f54) = 0;   /* MEMMGR live-block count */
@@ -3545,7 +3577,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "[fist] FIST_NORUN set: link/load OK, not entering engine.\n");
         return 0;
     }
-    start_timer();
+    if (!getenv("FIST_NO_ITIMER") && !getenv("FIST_SIMRUN")) start_timer();
     int reason = setjmp(g_fist_exit);
     if (reason == 0) {
         fprintf(stderr, "[fist] calling app_entry()\n");

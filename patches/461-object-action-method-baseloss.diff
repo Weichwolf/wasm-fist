@@ -1,0 +1,48 @@
+board:0007 -- per-object ACTION-METHOD base-loss cascade (native SEGV in CYPRUS1/INDIA1/SAUDI1 self-play).
+
+The engine dispatches per-object periodic "action" methods indirectly with DI = the object's DGROUP NEAR
+offset.  Ghidra typed the method's DI-relative derefs as HOST-pointer derefs of `param_2` -> a base-loss:
+on native the near offset (e.g. 0x9afc) is dereferenced as an absolute host address and SEGVs (fault-addr
+0x9b15 = param_2+0x19).  AZER1 never reaches these methods; CYPRUS1/INDIA1/SAUDI1 do, so their native
+self-play crashes while wasm's does not -- exactly the base-dependent divergence class this port hunts.
+
+Fixed for the two methods CYPRUS1's early self-play reaches (crash advanced 9afc -> bc0c -> clear):
+  FUN_0000_9afc (asm 0x9afc `incw 0x19(%di)` ... lcall f69:a61a=9caa)
+  FUN_0000_bc0c (asm 0xbc0c `orb 0x40,0x16(%di)` `orb 0x44,0x17(%di)` `incw 0x1f(%di)` ... 9caa)
+Both are uniformly DS-relative on DI -> rebase the derefs onto g_mem+0x1c000+(uint16)param_2.  9caa still
+receives the raw NEAR offset (the asm keeps DI across the lcall).  asm-verified vs re_out/fist_dat_image.bin.
+AZER1 self-play stays byte-identical (228 frames); CYPRUS1 native no longer crashes (runs 52+ frames).
+(A residual CYPRUS1 unit-spawn-cadence divergence + siblings 26545/27534/29715/30979 are board:0007 continued.)
+
+--- a/fist.c
++++ b/fist.c
+@@ -25985,8 +25985,9 @@
+ void __allregs FUN_0000_9afc(undefined4 param_1,int param_2)
+ 
+ {
+-  *(int *)(param_2 + 0x19) = *(int *)(param_2 + 0x19) + 1;
+-  if ((*(uint *)(param_2 + 0x19) & 0x3f) == 0) {
++  int *pv = (int *)(g_mem + 0x1c000 + (uint16_t)param_2 + 0x19);   /* board:0007 base-loss: param_2 is DI (near) */
++  *pv = *pv + 1;
++  if ((*(uint *)pv & 0x3f) == 0) {
+     FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),0x180),param_2);
+   }
+   return;
+@@ -30914,11 +30915,12 @@
+ void __allregs FUN_0000_bc0c(undefined4 param_1,int param_2)
+ 
+ {
+-  *(byte *)(param_2 + 0x16) = *(byte *)(param_2 + 0x16) | 0x40;
+-  *(byte *)(param_2 + 0x17) = *(byte *)(param_2 + 0x17) | 0x44;
+-  *(int *)(param_2 + 0x1f) = *(int *)(param_2 + 0x1f) + 1;
+-  if (((*(uint *)(param_2 + 0x1f) & 0x3f) == 0) && (0x80 < *(uint *)(param_2 + 0x21))) {
+-    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(uint *)(param_2 + 0x21)),param_2);
++  unsigned char *o = g_mem + 0x1c000 + (uint16_t)param_2;   /* board:0007 base-loss: param_2 is DI (near) */
++  *(byte *)(o + 0x16) = *(byte *)(o + 0x16) | 0x40;
++  *(byte *)(o + 0x17) = *(byte *)(o + 0x17) | 0x44;
++  *(int *)(o + 0x1f) = *(int *)(o + 0x1f) + 1;
++  if (((*(uint *)(o + 0x1f) & 0x3f) == 0) && (0x80 < *(uint *)(o + 0x21))) {
++    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(uint *)(o + 0x21)),param_2);
+   }
+   return;
+ }

@@ -1,0 +1,114 @@
+PATCH 460: deliverable #3 -- per-object render methods + render descriptor macros (the op-0x4c display-list
+frontier).  Combines: (A) 22dd's cursor-bracket descriptor uVar1 = DAT_1000_d56a is carried as a 16-bit
+truncation of the rebased host pointer (patch 325 typed d56a a pointer; patch 395 documents it as the
+near-offset) -> g_mem-base-DEPENDENT (native lands on a valid struct, wasm on uninitialised) -> take the
+DGROUP near offset (ptr - (g_mem+0x1c000)), base-independent.  (B) FUN_0000_29f4 threads 260c's published
+m_260c_cf/m_260c_zf (Ghidra dropped them as in_CF/in_ZF=0 locals; patch-459 idiom).  (C) _DAT_1000_c724
+macro: DGROUP:0x724 holds a near offset (024f writes it), not a stored host pointer -> rebase
+g_mem+0x1c000+word[0x724].  (C2) 260c uses that rebased pointer directly.  (D/D2/D3) the per-object render/
+display-list methods (c4df walk publishes the object in g_fist_render_si and record code in g_fist_render_dx
+per patch 310, for the ARG-LESS __allregs dispatch) were reading STALE register params -> use the published
+globals: c6e7 passes g_fist_render_si; ca2f/ca6b/c962 read g_fist_render_si for the object si; ca2f's record
+header high byte = g_fist_render_dx.  RESULT: wasm cockpit-entry render divergence 1457->116 bytes (92%),
+native mission-cockpit crop byte-matches the DOSBox oracle (AZER1, CYPRUS1 0-diff), menu/settings verify
+flows pass.  asm-faithful to patch 310's published-globals design.
+--- a/fist.c
++++ b/fist.c
+@@ -3,6 +3,7 @@
+  * Corrections go in patches/NNN-*.diff (applied by `make patch`); regenerate with `make assemble`.
+  */
+ #include "ghidra_compat.h"
++extern unsigned short g_fist_render_si, g_fist_render_dx;  /* board:0012 file-scope */
+ 
+ /* ---- RULE 7: unresolved indirect/mid-function call targets, stubbed (OPEN) ---- */
+ int func_0x00000556(){ return 0; }  /* OPEN: unresolved indirect/mid-function call target */
+@@ -9635,8 +9636,8 @@
+      byte => 0x1c80 > 0) and wrongly took the render branch instead of the re-seed branch on the frame
+      AFTER 23ce armed bit7.  Read the low BYTE, signed. */
+   if (0 < (int)*(int8_t *)(g_mem + 0x1d548)) {
+-    uVar1 = DAT_1000_d56a;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(uVar1, 0);   /* PATCH 395: bx=d56a descriptor */
++    uVar1 = (undefined2)(uint16_t)((uintptr_t)DAT_1000_d56a - (uintptr_t)(g_mem + 0x1c000));  /* FIX A */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(uVar1, 0);   /* PATCH 395 */
+     DAT_1000_c450 = 3;
+     do {
+       /* PATCH 185: asm 0x22f3 `mov bx,[0x4a86]; call word ptr [bx]` -- bx = the cursor WORD near-offset
+@@ -32411,8 +32412,9 @@
+ FUN_0000_c6e7(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
++  extern unsigned short g_fist_render_si;
+   DAT_2000_a3b4 = 0x3e800;
+-  FUN_0000_c962(param_2,10,0,param_3,param_4);
++  FUN_0000_c962(param_2,10,0,g_fist_render_si,param_4);   /* FIX D */
+   return;
+ }
+ 
+@@ -32552,7 +32554,7 @@
+   uint8_t  *dg = g_mem + 0x1c000;
+   FUN_0000_ca2f(CONCAT11((char)param_1,2),param_2,param_3,param_4,(int)(intptr_t)param_5);
+   uint16_t di  = g_fist_render_di;
+-  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  extern unsigned short g_fist_render_si; uint16_t src = (uint16_t)(g_fist_render_si + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
+   unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));
+   for (unsigned i = 0; i < cnt; i++)
+     *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
+@@ -32611,7 +32613,7 @@
+   for (unsigned i = 0; i < cnt; i++)
+     *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
+   di = (uint16_t)(di + cnt);
+-  *(uint16_t *)(dg + di) = *(uint16_t *)(dg + (uint16_t)(param_4 + 0x12));
++  *(uint16_t *)(dg + di) = *(uint16_t *)(dg + (uint16_t)(g_fist_render_si + 0x12));
+   g_fist_render_di = (uint16_t)(di + 2);
+   return;
+ }
+@@ -32736,11 +32738,12 @@
+   extern unsigned short g_fist_render_di;
+   uint8_t  *dg = g_mem + 0x1c000;
+   uint16_t  di = g_fist_render_di;
+-  uint16_t  si = (uint16_t)param_4;
++  extern unsigned short g_fist_render_si;
++  uint16_t  si = g_fist_render_si;   /* D2 */
+   uint8_t  *d  = dg + di;
+   uint8_t  *s  = dg + si;
+   *(uint16_t *)(d + 2)    = si;                                   /* [di+2]=si (source offset) */
+-  *(uint16_t *)(d + 4)    = (uint16_t)param_1;                    /* [di+4]=header (dl<<8|kind) */
++  { extern unsigned short g_fist_render_dx; *(uint16_t *)(d + 4) = (uint16_t)(((g_fist_render_dx&0xff)<<8)|((uint16_t)param_1&0xff)); }  /* D3 */
+   *(uint16_t *)(d + 6)    = (uint16_t)(*(uint16_t *)(s + 0x14) >> 8);
+   *(uint16_t *)(d + 8)    = *(uint16_t *)(s + 0x10);
+   *(uint32_t *)(d + 0xa)  = *(uint32_t *)(s + 4);
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -628,7 +628,7 @@
+ #define _DAT_1000_c716 (*(undefined4 *)(g_mem+0x1c716))
+ #define _DAT_1000_c71a (*(undefined4 *)(g_mem+0x1c71a))
+ #define _DAT_1000_c722 (*(undefined4 *)(g_mem+0x1c722))
+-#define _DAT_1000_c724 (*(int **)(g_mem+0x1c724))
++#define _DAT_1000_c724 ((int*)(g_mem+0x1c000+(*(uint16_t*)(g_mem+0x1c724))))  /* FIX C */
+ #define _DAT_1000_c726 (*(undefined4 *)(g_mem+0x1c726))
+ #define _DAT_1000_c72c (*(undefined4 *)(g_mem+0x1c72c))
+ #define _DAT_1000_c72e (*(undefined4 *)(g_mem+0x1c72e))
+@@ -6078,7 +6078,7 @@
+   uint16_t recoff = *(uint16_t *)(g_mem + dirlin);            /* les si,es:[si] : off */
+   uint16_t recseg = *(uint16_t *)(g_mem + dirlin + 2);        /*                 seg */
+   int16_t *pos    = (int16_t *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_2);
+-  int16_t *clip   = (int16_t *)(g_mem + 0x1c000 + (uint16_t)param_3);
++  int16_t *clip   = (int16_t *)param_3;   /* C2 */
+   m_260c_recseg = recseg; m_260c_recoff = recoff;
+   m_260c_cf = 1; m_260c_zf = 0;
+   uVar1 = *(uint16_t *)(g_mem + ((uint32_t)recseg << 4) + (uint16_t)(recoff - 4)) & (uint16_t)_DAT_1000_d586;
+@@ -6854,12 +6854,10 @@
+ 
+ {
+   int iVar1;
+-  undefined1 in_CF = 0;
+-  undefined1 in_ZF = 0;
+   
+   iVar1 = FUN_0000_260c(param_1,param_2,_DAT_1000_c724);
+-  if (!(bool)in_CF) {
+-    if ((bool)in_ZF) {
++  if (!(bool)m_260c_cf) {   /* FIX B */
++    if ((bool)m_260c_zf) {
+                     /* WARNING: Subroutine does not return */
+       FUN_0000_2d6d((undefined1 *)&DAT_1000_d588);
+     }
