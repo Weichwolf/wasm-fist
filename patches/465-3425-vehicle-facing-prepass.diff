@@ -1,0 +1,88 @@
+PATCH 465: FUN_0000_3425 -- the node-kind 0x1e VEHICLE facing pre-pass (windshield-object frontier, slice 2).
+
+word[0x4b2c+0x1e] (the per-kind rasterizer table 286e dispatches) points at 0x3425, which Ghidra never made
+a function (mid-block entry): classes 0-3 (every tank/vehicle, via c5fc -> c91c kind 0x1e) route here, so
+the port's icall fell through to the overlay miss path (SEGV in m_mga_3fca once patches 462-464 let a
+vehicle node reach 286e).  asm 0x3425-0x3533 (SS=DS=DGROUP; 8-local bp frame): skip own vehicle; 0541
+(bearing + range camera->node), 077e over the halved Z delta (pitch), 5e2/5dd of the relative heading,
+rotate the node's [+0x16]/[+0x18] pair into view space (imul/shl-1 high words), pick the facing sprite
+frame from the per-code table word[0x268e+code] + clamp(|Lc-pitch+0x400|,0x4000)>>11 and add
+byte[di+8] to the record code; tail-jump `jmp word[0x4b2c+kind-0x18]` = the kind-6 sprite rasterizer
+2e49.  Uses the published 0541 cx/dx (patch 328) and the 0459/patch-309 sign convention for 5e2/5dd.
+--- a/fist.c
++++ b/fist.c
+@@ -1270,6 +1270,7 @@
+ void __allregs FUN_0000_c577(void);
+ void __allregs FUN_0000_c584(uint param_1,undefined2 param_2,undefined2 param_3);
+ void __allregs FUN_0000_c5e2(void);
++void __allregs FUN_0000_3425(void);  /* PATCH 465 */
+ void __allregs FUN_0000_c5e7(void); void __allregs FUN_0000_c5fc(void); void __allregs FUN_0000_c60f(void);
+ void __allregs FUN_0000_c62f(void); void __allregs FUN_0000_c64a(void); void __allregs FUN_0000_c6a4(void);
+ void __allregs FUN_0000_c91c(int param_1,int param_2,undefined2 param_3,int param_4,undefined2 *param_5);  /* PATCH 463 */
+@@ -11656,6 +11657,58 @@
+ }
+ 
+ 
++/* ===== PATCH 465: FUN_0000_3425 @ 0000:3425 (node-kind 0x1e VEHICLE facing pre-pass; not in the Ghidra function set) ===== */
++
++void __allregs FUN_0000_3425(void)
++
++{
++  /* PATCH 465: word[0x4b2c+0x1e] -- the kind-0x1e (c91c, classes 0-3 = vehicles) node renderer (asm
++   * 0x3425-0x3533; DS=SS=DGROUP=0x1c00; a `push bp; sub sp,0x10; mov bp,sp` frame of 8 locals).
++   *   bx=word[0x4b9e] (node); word[bx+2]==word[0x1554] (own vehicle) -> ret.
++   *   0541(si=0x155a camera, di=bx+0xa node pos) -> L0=bearing, L2/L4=range lo/hi.
++   *   dz = (dword[bx+0x12] - dword[0x1566]) >> 1 (sar/rcr); 077e(ax=dz.lo, cx=range hi, dx=dz.hi,
++   *   bx=range lo) -> L6 = pitch.
++   *   rel = word[bx+8] - bearing; L8 = sgn(5e2(rel) >> 1), La = sgn(5dd(rel) >> 1) (sign = the entry cwd).
++   *   Lc = hi16((v16*La + v18*L8) << 1); Le = hi16((v16*L8 - v18*La) << 1); word[bx+0x18]=Le;
++   *   word[bx+0x16]=Lc  (v16/v18 = the node's [+0x16]/[+0x18] = object [+0x34]/[+0x32], rotated into view).
++   *   di = word[0x268e + byte[bx+5]] (per-code facing table); a = clamp(|Lc - L6 + 0x400|, 0x4000) with
++   *   the original sign; di += (int8)(a>>8) >> 3; byte[bx+5] += byte[di+8]  (facing -> sprite frame).
++   *   Tail: si = byte[bx+4] - 0x18 (= 6); `jmp word[0x4b2c+si]` -> the kind-6 sprite rasterizer 2e49. */
++  extern uint16_t g_fist_0541_cx, g_fist_0541_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x4b9e);
++  uint16_t bearing, rlo, rhi, pitch, rel, v, sgn, sn, cs, Lc, Le, di;
++  int32_t dz, p;
++  int16_t a, sg;
++  if (*(uint16_t *)(dg + (uint16_t)(bx + 2)) == *(uint16_t *)(dg + 0x1554)) return;
++  bearing = (uint16_t)FUN_0000_0541(0,0,0,(int)(intptr_t)(dg + 0x155a),(int)(intptr_t)(dg + (uint16_t)(bx + 0xa)));
++  rlo = g_fist_0541_cx; rhi = g_fist_0541_dx;
++  dz = (int32_t)(*(uint32_t *)(dg + (uint16_t)(bx + 0x12)) - *(uint32_t *)(dg + 0x1566)) >> 1;
++  pitch = (uint16_t)FUN_0000_077e((uint16_t)dz, rhi, (uint16_t)((uint32_t)dz >> 16), rlo);
++  rel = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(bx + 8)) - bearing);
++  v = (uint16_t)FUN_0000_05e2(rel);  sgn = (rel & 0x8000) ? 0xffff : 0;
++  sn = (uint16_t)(((v >> 1) ^ sgn) - sgn);
++  v = (uint16_t)FUN_0000_05dd(rel);  sgn = ((uint16_t)(0x4000 - rel) & 0x8000) ? 0xffff : 0;
++  cs = (uint16_t)(((v >> 1) ^ sgn) - sgn);
++  {
++    int16_t v16 = *(int16_t *)(dg + (uint16_t)(bx + 0x16)), v18 = *(int16_t *)(dg + (uint16_t)(bx + 0x18));
++    p  = (int32_t)v16 * (int16_t)cs + (int32_t)v18 * (int16_t)sn;  Lc = (uint16_t)(((uint32_t)p << 1) >> 16);
++    p  = (int32_t)v16 * (int16_t)sn - (int32_t)v18 * (int16_t)cs;  Le = (uint16_t)(((uint32_t)p << 1) >> 16);
++  }
++  *(uint16_t *)(dg + (uint16_t)(bx + 0x18)) = Le;
++  *(uint16_t *)(dg + (uint16_t)(bx + 0x16)) = Lc;
++  di = *(uint16_t *)(dg + (uint16_t)(0x268e + dg[(uint16_t)(bx + 5)]));
++  a  = (int16_t)(Lc - pitch + 0x400); sg = (int16_t)(a >> 15);
++  a  = (int16_t)((a ^ sg) - sg);                       /* abs */
++  if ((uint16_t)a >= 0x4000) a = 0x4000;               /* sub/sbb/and/add clamp */
++  a  = (int16_t)((a ^ sg) - sg);                       /* re-sign */
++  di = (uint16_t)(di + (uint16_t)((int16_t)(int8_t)((uint16_t)a >> 8) >> 3));
++  dg[(uint16_t)(bx + 5)] += dg[(uint16_t)(di + 8)];
++  (*(code *)fist_icall_near(0x0u,*(uint16_t *)(dg + (uint16_t)(0x4b2c + (uint16_t)(dg[(uint16_t)(bx + 4)] - 0x18)))))();
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_3534) @ 0000:3534 ===== */
+ 
+ void __allregs FUN_0000_3534(void)
+@@ -73113,6 +73166,7 @@
+   {0x3282u,(void*)&FUN_0000_3282},
+   {0x32a6u,(void*)&FUN_0000_32a6},
+   {0x33fbu,(void*)&FUN_0000_33fb},
++  {0x3425u,(void*)&FUN_0000_3425},   /* PATCH 465 */
+   {0x3534u,(void*)&FUN_0000_3534},
+   {0x3536u,(void*)&FUN_0000_3536},
+   {0x3663u,(void*)&FUN_0000_3663},

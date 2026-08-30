@@ -1,0 +1,829 @@
+PATCH 473: the eight remaining base-lost per-object UPDATE methods of the c0e5 dispatch table, plus the
+bearing/pitch helper bbc6 and 054c's BX lane (board:0007 base-loss sweep / board:0012 self-play).
+
+With patch 462 the object SPAWN core is correct, so the c0e5 -0x1bac table now really dispatches the
+CHILD/PROJECTILE types; a table scan showed eight entries whose bodies still deref'd the DI near offset as
+a host pointer (SEGV in 9b11 on the first 9caa child).  Rebuilt 1:1 from asm (each cited in its comment):
+  9b11 (0x11 smoke child), 9bc6 (0x12), 9c4f (0x15 muzzle flash), 9e2b (0x05/0x06 ground vehicle),
+  b481 (0x16 demolition charge), b808 (0x0e guided missile), b918 (0x0f rocket) with its CS-table state
+  handlers b945 (boost) / b998 (homing), and 9d49 (0x18 smoke cloud, via 9b56).
+Also: bbc6 (the target bearing/pitch: rebased, publishes BX) and 054c (0578's twin: 077e now gets 08e8's
+range lanes from DAT_1000_c458/c45a instead of a dead input, and its result -- the PITCH -- is published as
+g_fist_054c_bx, which every projectile stores into [obj+0x1e]/[obj+0x1f]).  Widths are asm-exact
+([di+0xc]/[di+0x1a]/[di+0x1b]/[di+0x23] are WORD, not the 32-bit Ghidra typed), and the dropped register
+lanes (0459's dx/cx, 03a9's dx, e1a6's sign, bb1b's CF, ba33's SI) are threaded.  b945/b998 take DI as
+arg0 so b918's `call word[CS:0xb93f + state]` dispatch works through fist_icall_near.
+--- a/fist.c
++++ b/fist.c
+@@ -8,6 +8,7 @@
+ extern unsigned short g_fist_fp_dx, g_fist_fp_cx;  /* PATCH 468: the 0d13..0e22 fixed-point block's DX (exponent) / CX register lanes */
+ extern unsigned short g_fist_r48_dx, g_fist_r48_cx, g_fist_3e29_cx;  /* PATCH 469: 1322/129f 48-bit DX:CX lanes; 3e29's CX (screen x) */
+ extern uint32_t g_fist_ext_esi; extern unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi, g_fist_1345_bp;  /* PATCH 471: op-0x40 register lanes; 1345's BP (list header) */
++extern unsigned short g_fist_054c_bx;  /* PATCH 473: 054c/bbc6 BX out = the PITCH (077e over the Z delta) */
+ 
+ /* ---- RULE 7: unresolved indirect/mid-function call targets, stubbed (OPEN) ---- */
+ int func_0x00000556(){ return 0; }  /* OPEN: unresolved indirect/mid-function call target */
+@@ -1190,8 +1191,8 @@
+ void __allregs FUN_0000_b8d1(int param_1,int param_2);
+ void __allregs FUN_0000_b918(int param_1);
+ void __allregs FUN_0000_b93f(int param_1);
+-void __allregs FUN_0000_b945(undefined2 param_1,undefined2 param_2,int param_3);
+-void __allregs FUN_0000_b998(undefined2 param_1,undefined2 param_2,int param_3);
++void __allregs FUN_0000_b945(int param_1);   /* PATCH 473: DI (object near offset) is arg0 */
++void __allregs FUN_0000_b998(int param_1);   /* PATCH 473: DI (object near offset) is arg0 */
+ undefined2 __allregs FUN_0000_ba33(undefined2 param_1,undefined2 param_2);
+ undefined4 __allregs FUN_0000_ba49(undefined2 param_1,int param_2,undefined2 param_3);
+ void __allregs FUN_0000_ba5d(undefined2 *param_1,int param_2,int param_3);
+@@ -5034,10 +5035,17 @@
+   undefined2 uVar1;
+   undefined2 uVar2;
+   
++  /* PATCH 473 (0578's twin, cf. patch 462): asm 0x54c-0x577 -- 0731 (bearing -> ax), 08e8 (range, which
++   * leaves dx:ax in DGROUP:0x458/0x45a = DAT_1000_c458/c45a), then 077e over the Z delta with `mov bx,ax;
++   * mov cx,dx` = the range LOW word in bx and the HIGH word in cx (Ghidra passed the dead input param_1
++   * as cx and 08e8's void return as bx); `mov bx,ax` publishes 077e's result (the PITCH) in BX, which
++   * bbc6's callers (b808/b945/b998) store into the projectile.  Out: ax=bearing, bx=pitch. */
+   DAT_2000_dad0 = DAT_2000_dad0 + '\x01';
+   uVar1 = FUN_0000_0731(param_2,param_3);
+-  uVar2 = FUN_0000_08e8(param_2,param_3);
+-  FUN_0000_077e(*(uint *)(param_3 + 8) - *(uint *)(param_2 + 8),param_1,
++  FUN_0000_08e8((long *)(intptr_t)param_2,(long *)(intptr_t)param_3);
++  uVar2 = (undefined2)DAT_1000_c458;
++  g_fist_054c_bx = (unsigned short)FUN_0000_077e(*(uint *)(param_3 + 8) - *(uint *)(param_2 + 8),
++                (uint)(unsigned short)DAT_1000_c45a,
+                 (*(int *)(param_3 + 10) - *(int *)(param_2 + 10)) -
+                 (uint)(*(uint *)(param_3 + 8) < *(uint *)(param_2 + 8)),uVar2);
+   DAT_2000_dad0 = DAT_2000_dad0 + -1;
+@@ -25792,24 +25800,26 @@
+ void __allregs FUN_0000_9b11(int param_1)
+ 
+ {
+-  int iVar1;
+-  
++  /* PATCH 473: type-0x11 CHILD per-frame UPDATE (asm 0x9b11-0x9b4d; DS=DGROUP=0x1c00), the object 9caa
++   * spawns (patch 462).  di=param_1 = the object near offset.  While the mission gate DAT_2000_4b4f==1:
++   * drift by the global wind dword[0x92f2]/[0x92f6], rise `addw $8,[di+0xc]` (WORD), and run the 12-tick
++   * / 30-frame animation counters [di+0x1a] (WORD) and [di+0x19] (BYTE); at the end (or with the gate
++   * off) destroy via b354/b2ef.  Ghidra deref'd di as a host pointer (SIGSEGV the first frame a 9caa
++   * child existed) and typed [di+0xc]/[di+0x1a] 32-bit. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  unsigned char *o = dg + di;
+   if (DAT_2000_4b4f == '\x01') {
+-    *(long *)(param_1 + 4) = *(long *)(param_1 + 4) + DAT_2000_52f2;
+-    *(long *)(param_1 + 8) = *(long *)(param_1 + 8) + DAT_2000_52f6;
+-    *(int *)(param_1 + 0xc) = *(int *)(param_1 + 0xc) + 8;
+-    *(int *)(param_1 + 0x1a) = *(int *)(param_1 + 0x1a) + 1;
+-    if (*(uint *)(param_1 + 0x1a) < 0xc) {
+-      return;
+-    }
+-    *(undefined2 *)(param_1 + 0x1a) = 0;
+-    *(char *)(param_1 + 0x19) = *(char *)(param_1 + 0x19) + '\x01';
+-    if (*(byte *)(param_1 + 0x19) < 0x1e) {
+-      return;
+-    }
++    *(uint32_t *)(o + 4) += *(uint32_t *)(dg + 0x92f2);
++    *(uint32_t *)(o + 8) += *(uint32_t *)(dg + 0x92f6);
++    *(uint16_t *)(o + 0xc) += 8;
++    *(uint16_t *)(o + 0x1a) += 1;
++    if (*(uint16_t *)(o + 0x1a) < 0xc) return;
++    *(uint16_t *)(o + 0x1a) = 0;
++    o[0x19] += 1;
++    if (o[0x19] < 0x1e) return;
+   }
+-  iVar1 = FUN_1000_b354(param_1);
+-  FUN_1000_b2ef(iVar1);
++  FUN_1000_b2ef(FUN_1000_b354((int)di));
+   return;
+ }
+ 
+@@ -25872,17 +25882,18 @@
+ void __allregs FUN_0000_9bc6(int param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  *(int *)(param_1 + 0x1a) = *(int *)(param_1 + 0x1a) + 1;
+-  if (7 < *(uint *)(param_1 + 0x1a)) {
+-    *(undefined2 *)(param_1 + 0x1a) = 0;
+-    *(char *)(param_1 + 0x19) = *(char *)(param_1 + 0x19) + '\x01';
+-    if (6 < *(byte *)(param_1 + 0x19)) {
+-      iVar1 = FUN_1000_b354(param_1);
+-      FUN_1000_b2ef(iVar1);
+-    }
+-  }
++  /* PATCH 473: type-0x12 per-frame UPDATE (asm 0x9bc6-0x9be7): an 8-tick / 7-frame animation counter
++   * pair ([di+0x1a] WORD, [di+0x19] BYTE), then destroy via b354/b2ef.  di=param_1 (near offset);
++   * Ghidra host-deref'd it. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  unsigned char *o = dg + di;
++  *(uint16_t *)(o + 0x1a) += 1;
++  if (*(uint16_t *)(o + 0x1a) < 8) return;
++  *(uint16_t *)(o + 0x1a) = 0;
++  o[0x19] += 1;
++  if (o[0x19] < 7) return;
++  FUN_1000_b2ef(FUN_1000_b354((int)di));
+   return;
+ }
+ 
+@@ -25957,9 +25968,12 @@
+ void __allregs FUN_0000_9c4f(int param_1)
+ 
+ {
+-  if (DAT_2000_530d == '\x01') {
+-    *(undefined1 *)(param_1 + 0x19) = DAT_2000_530c;
+-  }
++  /* PATCH 473: type-0x15 per-frame UPDATE (asm 0x9c4f-0x9c5c): while the global flag byte[DGROUP:0x930d]
++   * ==1 (set by 9c5d, the muzzle-flash trigger) copy the shared frame byte[0x930c] into this object's
++   * [di+0x19].  di=param_1 (near offset); Ghidra host-deref'd it. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned char *o = dg + (uint16_t)param_1;
++  if (dg[0x930d] == 1) o[0x19] = dg[0x930c];
+   return;
+ }
+ 
+@@ -26265,78 +26279,61 @@
+ void __allregs FUN_0000_9e2b(undefined4 param_1,int param_2)
+ 
+ {
+-  uint *puVar1;
+-  byte bVar2;
+-  byte bVar3;
+-  char cVar6;
+-  uint uVar4;
+-  ulong uVar5;
+-  uint uVar7;
+-  uint uVar8;
+-  int unaff_CS;
+-  
+-  DAT_2000_543a = FUN_0000_0291();
+-  if ((DAT_2000_2cde & 3) == 0) {
+-    bVar2 = FUN_0000_e1d1(param_1);
+-    if (*(byte *)(unaff_CS + 0xd) < bVar2) {
+-      *(byte *)(unaff_CS + 0xd) = bVar2;
+-    }
+-    bVar3 = bVar2 + *(char *)(unaff_CS + 0x32);
+-    if (*(byte *)(unaff_CS + 0xd) < bVar3) {
+-      *(char *)(unaff_CS + 0xd) = *(char *)(unaff_CS + 0xd) + '\x01';
+-    }
+-    else if (*(byte *)(unaff_CS + 0xd) != bVar3) {
+-      *(char *)(unaff_CS + 0xd) = *(char *)(unaff_CS + 0xd) + -1;
+-    }
+-    *(char *)(unaff_CS + 0x18) = *(char *)(unaff_CS + 0xd) - bVar2;
+-    param_2 = unaff_CS;
+-  }
+-  *(byte *)(param_2 + 0x1a) = (byte)DAT_2000_2d14 & 7;
+-  if (*(int *)(param_2 + 0x1b) < *(int *)(param_2 + 0x1d)) {
+-    if ((DAT_2000_2cde & 0xf) == 0) {
+-      *(int *)(param_2 + 0x1b) = *(int *)(param_2 + 0x1b) + 1;
+-    }
+-  }
+-  else if (*(int *)(param_2 + 0x1b) != *(int *)(param_2 + 0x1d)) {
+-    *(int *)(param_2 + 0x1b) = *(int *)(param_2 + 0x1b) + -1;
+-  }
+-  cVar6 = (char)((uint)*(undefined2 *)(param_2 + 0x10) >> 8);
+-  if (cVar6 != *(char *)(param_2 + 0x30)) {
+-    if (cVar6 < *(char *)(param_2 + 0x30)) {
+-      *(char *)(param_2 + 0x30) = *(char *)(param_2 + 0x30) + -1;
+-    }
+-    else {
+-      *(char *)(param_2 + 0x30) = *(char *)(param_2 + 0x30) + '\x01';
+-    }
+-  }
+-  uVar4 = *(int *)(param_2 + 0x2e) - *(int *)(param_2 + 0x10);
+-  uVar7 = (int)uVar4 >> 0xf;
+-  uVar4 = (uVar4 ^ uVar7) - uVar7;
+-  uVar8 = (DAT_2000_543a & 0xf) + 0x2d;
+-  *(int *)(param_2 + 0x10) =
+-       *(int *)(param_2 + 0x10) +
+-       (((uVar4 - uVar8 & -(uint)(uVar4 < uVar8)) + uVar8 ^ uVar7) - uVar7);
+-  *(int *)(param_2 + 0x23) = *(int *)(param_2 + 0x23) + -1;
+-  if ((*(uint *)(param_2 + 0x23) & 0x1f) == 0) {
+-    uVar8 = (uint)*(byte *)(param_2 + 0x25);
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(byte *)(param_2 + 0x25) + 0x9f0f))))();
+-  }
+-  if ((10 < *(byte *)(param_2 + 0x33)) && ((DAT_2000_2cde & 3) == 0)) {
+-    uVar5 = FUN_0000_0291();
+-    if ((uVar5 & 3) == 0) {
+-      FUN_1000_9caa(CONCAT22((int)(uVar5 >> 0x10),0x180),param_2);
+-    }
+-  }
+-  uVar7 = *(uint *)(param_2 + 0x1b);
+-  uVar8 = FUN_0000_03a9((uint)*(byte *)(param_2 + 0x30) << 8,uVar7,uVar8);
+-  puVar1 = (uint *)(param_2 + 4);
+-  uVar4 = *puVar1;
+-  *puVar1 = *puVar1 + uVar8;
+-  *(int *)(param_2 + 6) = *(int *)(param_2 + 6) + ((int)uVar8 >> 0xf) + (uint)CARRY2(uVar4,uVar8);
+-  puVar1 = (uint *)(param_2 + 8);
+-  uVar4 = *puVar1;
+-  *puVar1 = *puVar1 + uVar7;
+-  *(int *)(param_2 + 10) = *(int *)(param_2 + 10) + ((int)uVar7 >> 0xf) + (uint)CARRY2(uVar4,uVar7);
++  /* PATCH 473: type-5/6 GROUND-VEHICLE per-frame UPDATE (asm 0x9e2b-0x9f0e; DS=DGROUP=0x1c00).  di=the
++   * object near offset (param_1 -- c0e5 passes it as arg0).  Every 4th frame ([0x6cde]&3): query the
++   * terrain under the hull via e1d1 (op 0x54, di+4) and slew the ground-height byte [di+0xd] one step
++   * toward it + the per-type offset [di+0x32], storing the slope in [di+0x18].  Then: [di+0x1a] = the
++   * global animation phase [0x6d14]&7; the throttle [di+0x1b] (WORD) steps toward [di+0x1d]; the turret
++   * byte [di+0x30] steps toward the hull heading's high byte; the hull heading [di+0x10] slews toward
++   * the commanded [di+0x2e] clamped by (word[0x943a]&0xf)+0x2d; the state sub-method
++   * word[CS:0x9f0f + byte[di+0x25]] fires every 32nd tick of [di+0x23]; a damaged hull ([di+0x33]>10)
++   * randomly emits smoke via 9caa(0x180); finally the position advances by 03a9(ah=[di+0x30], dx=
++   * [di+0x1b]) with 03a9's DX lane (patch 462) as the Y component.  Ghidra base-lost di (split into
++   * `unaff_CS`/param_2 host derefs), typed [di+0x1b]/[di+0x1d]/[di+0x23] 32-bit, and dropped 03a9's DX. */
++  extern unsigned short g_fist_03a9_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  unsigned char *o = dg + di;
++  uint16_t ax, bx;
++  (void)param_2;
++  *(uint16_t *)(dg + 0x943a) = (uint16_t)FUN_0000_0291();
++  if ((*(uint16_t *)(dg + 0x6cde) & 3) == 0) {
++    uint8_t bl = (uint8_t)FUN_0000_e1d1((int)(uint16_t)(di + 4));   /* 9e3e: di+4 */
++    uint8_t al;
++    if (bl > o[0xd]) o[0xd] = bl;                                    /* 9e44 cmp/jbe */
++    al = (uint8_t)(bl + o[0x32]);
++    if (o[0xd] < al) o[0xd]++;                                       /* 9e4f cmp; jb 9e5b */
++    else if (o[0xd] != al) o[0xd]--;
++    o[0x18] = (uint8_t)(o[0xd] - bl);
++  }
++  o[0x1a] = (uint8_t)(*(uint16_t *)(dg + 0x6d14) & 7);
++  ax = *(uint16_t *)(o + 0x1b);
++  if ((int16_t)ax < (int16_t)*(uint16_t *)(o + 0x1d)) {              /* 9e74 jl */
++    if ((*(uint16_t *)(dg + 0x6cde) & 0xf) == 0) *(uint16_t *)(o + 0x1b) += 1;
++  } else if (ax != *(uint16_t *)(o + 0x1d)) {
++    *(uint16_t *)(o + 0x1b) -= 1;
++  }
++  { uint8_t ah = (uint8_t)(*(uint16_t *)(o + 0x10) >> 8);            /* 9e88 */
++    if (ah != o[0x30]) { if ((int8_t)ah > (int8_t)o[0x30]) o[0x30]++; else o[0x30]--; } }
++  { int16_t d = (int16_t)(*(uint16_t *)(o + 0x2e) - *(uint16_t *)(o + 0x10));
++    int16_t sg = (int16_t)(d >> 15);
++    uint16_t mx = (uint16_t)((*(uint16_t *)(dg + 0x943a) & 0xf) + 0x2d);
++    d = (int16_t)((d ^ sg) - sg);
++    if ((uint16_t)d > mx) d = (int16_t)mx;
++    d = (int16_t)((d ^ sg) - sg);
++    *(uint16_t *)(o + 0x10) += (uint16_t)d; }
++  *(uint16_t *)(o + 0x23) -= 1;
++  if ((*(uint16_t *)(o + 0x23) & 0x1f) == 0) {                       /* 9ec1 testw 0x1f */
++    uint16_t vec = *(uint16_t *)(g_mem + 0x10000 + 0x9f0f + o[0x25]); /* 9ecd call cs:[0x9f0f+bx] */
++    (*(code *)fist_icall_near(0x0u,vec))((int)di);
++  }
++  if (o[0x33] > 10 && (*(uint16_t *)(dg + 0x6cde) & 3) == 0) {
++    if (((uint16_t)FUN_0000_0291() & 3) == 0) FUN_1000_9caa(0x180,(int)di);  /* 9eea lcall f69:a61a */
++  }
++  ax = (uint16_t)FUN_0000_03a9((int)(uint16_t)(o[0x30] << 8),*(uint16_t *)(o + 0x1b),0);
++  bx = g_fist_03a9_dx;
++  *(uint32_t *)(o + 4) += (uint32_t)(int32_t)(int16_t)ax;            /* 9efe add/adc (32-bit) */
++  *(uint32_t *)(o + 8) += (uint32_t)(int32_t)(int16_t)bx;
+   return;
+ }
+ 
+@@ -29630,23 +29627,27 @@
+ void __allregs FUN_0000_b481(undefined2 param_1,undefined4 param_2,int param_3,int param_4)
+ 
+ {
+-  undefined2 uVar1;
+-  int iVar2;
+-  
+-  if (*(int *)(param_4 + 0x1b) == 0) {
+-    FUN_0000_be8b(0x24,param_2);
+-  }
+-  *(int *)(param_4 + 0x1b) = *(int *)(param_4 + 0x1b) + 1;
+-  if (*(uint *)(param_4 + 0x19) <= *(uint *)(param_4 + 0x1b)) {
+-    DAT_2000_5684 = *(undefined4 *)(param_4 + 4);
+-    DAT_2000_5688 = *(undefined4 *)(param_4 + 8);
+-    FUN_0000_ba33(0x9c1d,param_4);
+-    *(byte *)(param_3 + 0x17) = *(byte *)(param_3 + 0x17) | 1;
+-    uVar1 = FUN_0000_be8b(0xf,param_2);
+-    FUN_1000_ae3c(uVar1,param_1,0x1e,param_4);
+-    iVar2 = FUN_1000_b354(param_4);
+-    FUN_1000_b2ef(iVar2);
+-  }
++  /* PATCH 473: type-0x16 DEMOLITION-CHARGE per-frame UPDATE (asm 0xb481-0xb4ca; DS=DGROUP=0x1c00).
++   * di=param_1 (near offset).  On the first tick (word[di+0x1b]==0) play sound 0x24; count up until
++   * [di+0x1b] >= [di+0x19] (the fuse), then publish the blast centre dword[di+4]/[di+8] into the scratch
++   * point DGROUP:0x9684/0x9688, spawn the explosion template 0x9c1d via ba33 (patch 462 returns the new
++   * object in SI) and set its byte[si+0x17] bit0, play sound 0xf, apply the area damage
++   * f69:0xb7ac = FUN_1000_ae3c with bx=0x1e (radius), and destroy via b354/b2ef.  Ghidra host-deref'd
++   * di and lost ba33's SI. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1, si;
++  unsigned char *o = dg + di;
++  (void)param_2; (void)param_3; (void)param_4;
++  if (*(uint16_t *)(o + 0x1b) == 0) FUN_0000_be8b(0x24,0);
++  *(uint16_t *)(o + 0x1b) += 1;
++  if (*(uint16_t *)(o + 0x1b) < *(uint16_t *)(o + 0x19)) return;
++  *(uint32_t *)(dg + 0x9684) = *(uint32_t *)(o + 4);
++  *(uint32_t *)(dg + 0x9688) = *(uint32_t *)(o + 8);
++  si = (uint16_t)FUN_0000_ba33(0x9c1d,(undefined2)di);
++  dg[(uint16_t)(si + 0x17)] |= 1;
++  FUN_0000_be8b(0xf,0);
++  FUN_1000_ae3c(0,0,0x1e,(int)di);
++  FUN_1000_b2ef(FUN_1000_b354((int)di));
+   return;
+ }
+ 
+@@ -30180,72 +30181,64 @@
+ void __allregs FUN_0000_b808(undefined2 param_1,undefined4 param_2,int param_3)
+ 
+ {
+-  uint uVar1;
+-  uint uVar2;
+-  int iVar3;
+-  undefined4 uVar4;
+-  undefined2 uVar5;
+-  uint uVar6;
+-  undefined2 uVar7;
+-  undefined4 uVar8;
+-  bool bVar9;
+-  
+-  *(int *)(param_3 + 0x27) = *(int *)(param_3 + 0x27) + 1;
+-  if (599 < *(uint *)(param_3 + 0x27)) {
+-LAB_0000_b8c6:
+-    iVar3 = FUN_1000_b354(param_3);
+-    FUN_1000_b2ef(iVar3);
+-    return;
+-  }
+-  iVar3 = *(int *)(param_3 + 0x1b);
+-  uVar8 = CONCAT22((int)((ulong)param_2 >> 0x10),iVar3);
+-  if (iVar3 != 0) {
+-    if ((*(byte *)(iVar3 + 0x16) & 1) == 0) {
+-      uVar4 = FUN_0000_bbc6(param_1,param_3 + 4,iVar3);
+-      uVar1 = (int)uVar4 - *(int *)(param_3 + 0x10);
+-      *(undefined2 *)(param_3 + 0x1f) = (int)uVar8;
+-      uVar6 = (int)uVar1 >> 0xf;
+-      uVar2 = (uVar1 ^ uVar6) - uVar6;
+-      uVar1 = *(uint *)(param_3 + 0x29);
+-      uVar8 = CONCAT22((int)((ulong)uVar8 >> 0x10),uVar1);
+-      *(int *)(param_3 + 0x10) =
+-           *(int *)(param_3 + 0x10) +
+-           (((uVar2 - uVar1 & -(uint)(uVar2 < uVar1)) + uVar1 ^ uVar6) - uVar6);
+-      uVar5 = *(undefined2 *)(param_3 + 0x1f);
+-      uVar7 = *(undefined2 *)(param_3 + 0x1d);
+-      iVar3 = FUN_0000_0459(uVar5,uVar7);
+-      *(int *)(param_3 + 0x21) = iVar3;
+-      *(undefined2 *)(param_3 + 0x23) = uVar7;
+-      *(undefined2 *)(param_3 + 0x25) = uVar5;
+-    }
+-    else {
+-      *(undefined2 *)(param_3 + 0x1b) = 0;
+-    }
+-  }
+-  *(long *)(param_3 + 4) = *(long *)(param_3 + 4) + (long)*(int *)(param_3 + 0x21);
+-  *(long *)(param_3 + 8) = *(long *)(param_3 + 8) + (long)*(int *)(param_3 + 0x23);
+-  *(long *)(param_3 + 0xc) = *(long *)(param_3 + 0xc) + (long)*(int *)(param_3 + 0x25);
+-  bVar9 = (int)(*(uint *)(param_3 + 0xd) - 0x80) < 0;
+-  if (*(uint *)(param_3 + 0xd) < 0x80) {
+-    FUN_0000_e1a6(uVar8,param_3);
+-    if (bVar9) {
+-      FUN_0000_ba33(0x9c35,param_3);
+-      FUN_0000_be8b(0xf,uVar8);
+-      goto LAB_0000_b8c6;
+-    }
+-  }
+-  uVar5 = (undefined2)((ulong)uVar8 >> 0x10);
+-  bVar9 = *(uint *)(param_3 + 0x27) < 0x3c;
+-  if (!bVar9) {
+-    FUN_0000_bb1b(param_3,0xb894);
+-    if ((bVar9) && (*(int *)(param_3 + 0x2f) != DAT_2000_5a25)) {
+-      uVar8 = CONCAT22(uVar5,(uint)*(byte *)(param_3 + 0x2e));
+-      FUN_0000_bbb7((uint)*(byte *)(param_3 + 0x31),(uint)*(byte *)(param_3 + 0x2e),param_3);
+-      FUN_0000_ba33(0x9c55,param_3);
+-      FUN_0000_be8b(0xf,uVar8);
+-      goto LAB_0000_b8c6;
++  /* PATCH 473: type-0x0e GUIDED-MISSILE per-frame UPDATE (asm 0xb808-0xb8d0; DS=DGROUP=0x1c00).
++   * di=param_1 (near offset).  Life counter [di+0x27] >= 0x258 -> destroy.  With a live target
++   * word[di+0x1b] (cleared when the target's byte[+0x16] bit0 says dead): bbc6(self+4, target) gives the
++   * bearing (ax) and pitch (bx -> [di+0x1f]); the heading [di+0x10] slews toward it clamped by the turn
++   * rate word[di+0x29]; 0459(ax=heading, dx=speed [di+0x1d], cx=pitch) writes the velocity triple
++   * [di+0x21]/[0x23]/[0x25].  The position then advances by the sign-extended triple.  Below 0x80 of
++   * altitude word[di+0xd] the terrain probe e1a6 (op 0x54) signs a ground hit -> explosion template
++   * 0x9c35; after 0x3c ticks bb1b's proximity walk can report a hit (CF) on an object that is not the
++   * firer word[di+0x2f] -> damage via bbb7(ax=byte[di+0x31], bx=byte[di+0x2e]) + template 0x9c55.  Both
++   * play sound 0xf and destroy.  Ghidra host-deref'd di, dropped e1a6's sign and bb1b's CF and lost
++   * 0459's dx/cx lanes. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_rot_h, g_fist_rot_dx, g_fist_rot_cx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1, bx, ax;
++  unsigned char *o = dg + di;
++  uint16_t tmpl = 0;
++  (void)param_2; (void)param_3;
++  *(uint16_t *)(o + 0x27) += 1;
++  if (*(uint16_t *)(o + 0x27) < 0x258) {
++    bx = *(uint16_t *)(o + 0x1b);
++    if (bx != 0) {
++      if (dg[(uint16_t)(bx + 0x16)] & 1) { *(uint16_t *)(o + 0x1b) = 0; }
++      else {
++        ax = (uint16_t)FUN_0000_bbc6(0,(undefined2)(uint16_t)(di + 4),(int *)(uintptr_t)bx);
++        *(uint16_t *)(o + 0x1f) = g_fist_054c_bx;
++        { int16_t d = (int16_t)(ax - *(uint16_t *)(o + 0x10));
++          int16_t sg = (int16_t)(d >> 15);
++          uint16_t mx = *(uint16_t *)(o + 0x29);
++          d = (int16_t)((d ^ sg) - sg);
++          if ((uint16_t)d > mx) d = (int16_t)mx;
++          d = (int16_t)((d ^ sg) - sg);
++          *(uint16_t *)(o + 0x10) += (uint16_t)d; }
++        g_fist_rot_h = *(uint16_t *)(o + 0x1f);
++        ax = (uint16_t)FUN_0000_0459(*(uint16_t *)(o + 0x10),*(uint16_t *)(o + 0x1d));
++        *(uint16_t *)(o + 0x21) = ax;
++        *(uint16_t *)(o + 0x23) = g_fist_rot_dx;
++        *(uint16_t *)(o + 0x25) = g_fist_rot_cx;
++      }
++    }
++    *(uint32_t *)(o + 4) += (uint32_t)(int32_t)*(int16_t *)(o + 0x21);
++    *(uint32_t *)(o + 8) += (uint32_t)(int32_t)*(int16_t *)(o + 0x23);
++    *(uint32_t *)(o + 0xc) += (uint32_t)(int32_t)*(int16_t *)(o + 0x25);
++    if (*(uint16_t *)(o + 0xd) < 0x80) {                              /* b87f cmpw */
++      if ((char)FUN_0000_e1a6((int)(uint16_t)(di + 4),(int)(intptr_t)o) < 0) tmpl = 0x9c35;  /* b886/b889 js */
++    }
++    if (tmpl == 0) {
++      if (*(uint16_t *)(o + 0x27) < 0x3c) return;                     /* b88b */
++      FUN_0000_bb1b((int)di,(int *)(uintptr_t)di);
++      if (!(bool)g_fist_cf) return;                                   /* b894 jb */
++      if (*(uint16_t *)(o + 0x2f) == *(uint16_t *)(dg + 0x9a25)) return;   /* b89b: the firer */
++      FUN_0000_bbb7((undefined2)o[0x31],(undefined2)o[0x2e],(undefined2)di);
++      tmpl = 0x9c55;
+     }
++    FUN_0000_ba33((undefined2)tmpl,(undefined2)di);
++    FUN_0000_be8b(0xf,0);
+   }
++  FUN_1000_b2ef(FUN_1000_b354((int)di));
+   return;
+ }
+ 
+@@ -30275,15 +30268,25 @@
+ void __allregs FUN_0000_b918(int param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  *(int *)(param_1 + 0x26) = *(int *)(param_1 + 0x26) + 1;
+-  if (((*(byte *)(*(int *)(param_1 + 0x1a) + 0x16) & 1) == 0) && (*(byte *)(param_1 + 0x2a) < 5)) {
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(byte *)(param_1 + 0x2a) + 0xb93f))))();
+-    return;
++  /* PATCH 473: type-0x0f ROCKET per-frame UPDATE (asm 0xb918-0xb93e; DS=DGROUP=0x1c00).  di=param_1.
++   * Counter [di+0x26]++; if the launcher word[di+0x1a] is dead (byte[+0x16] bit0) or the state byte
++   * [di+0x2a] exceeds 4 -> destroy (b354/b2ef).  Otherwise dispatch the state handler
++   * word[CS:0xb93f + state] (the states are pre-scaled by 2: 0/2 -> b945 boost, 4 -> b998 homing).
++   * Ghidra host-deref'd di and the launcher, and emitted the CS jump table as code. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1, si, bx;
++  unsigned char *o = dg + di;
++  *(uint16_t *)(o + 0x26) += 1;
++  si = *(uint16_t *)(o + 0x1a);
++  if ((dg[(uint16_t)(si + 0x16)] & 1) == 0) {
++    bx = o[0x2a];
++    if (bx <= 4) {
++      uint16_t vec = *(uint16_t *)(g_mem + 0x10000 + 0xb93f + bx);
++      (*(code *)fist_icall_near(0x0u,vec))((int)di);
++      return;
++    }
+   }
+-  iVar1 = FUN_1000_b354(param_1);
+-  FUN_1000_b2ef(iVar1);
++  FUN_1000_b2ef(FUN_1000_b354((int)di));
+   return;
+ }
+ 
+@@ -30315,144 +30318,87 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_b945) @ 0000:b945 ===== */
+ 
+-void __allregs FUN_0000_b945(undefined2 param_1,undefined2 param_2,int param_3)
++void __allregs FUN_0000_b945(int param_1)
+ 
+ {
+-  int iVar1;
+-  uint uVar2;
+-  uint uVar3;
+-  undefined4 uVar4;
+-  undefined2 uVar5;
+-  uint uVar6;
+-  undefined2 uVar7;
+-  undefined2 in_register_0000000e;
+-  long lVar8;
+-  undefined1 uVar9;
+-  bool bVar10;
+-  
+-  if (*(uint *)(param_3 + 0x26) < 0x14) {
+-    if (*(uint *)(param_3 + 0x1c) < 0x200) {
+-      *(int *)(param_3 + 0x1c) = *(int *)(param_3 + 0x1c) + 6;
+-    }
+-    uVar5 = *(undefined2 *)(param_3 + 0x1e);
+-    uVar7 = *(undefined2 *)(param_3 + 0x1c);
+-    iVar1 = FUN_0000_0459(uVar5,uVar7);
+-    *(int *)(param_3 + 0x20) = iVar1;
+-    *(undefined2 *)(param_3 + 0x22) = uVar7;
+-    *(undefined2 *)(param_3 + 0x24) = uVar5;
+-    *(long *)(param_3 + 4) = *(long *)(param_3 + 4) + (long)*(int *)(param_3 + 0x20);
+-    *(long *)(param_3 + 8) = *(long *)(param_3 + 8) + (long)*(int *)(param_3 + 0x22);
+-    *(long *)(param_3 + 0xc) = *(long *)(param_3 + 0xc) + (long)*(int *)(param_3 + 0x24);
+-    return;
+-  }
+-  *(char *)(param_3 + 0x2a) = *(char *)(param_3 + 0x2a) + '\x02';
+-  *(undefined2 *)(param_3 + 0x26) = 0;
+-  *(undefined2 *)(param_3 + 0x1e) = 0;
+-  *(int *)(param_3 + 0x28) = *(int *)(param_3 + 0x28) + 0x16;
+-  uVar4 = FUN_0000_bbc6(param_1,param_3 + 4,*(undefined2 *)(param_3 + 0x1a));
+-  *(undefined2 *)(param_3 + 0x1e) = param_2;
+-  uVar2 = (int)uVar4 - *(int *)(param_3 + 0x10);
+-  uVar6 = (int)uVar2 >> 0xf;
+-  uVar3 = (uVar2 ^ uVar6) - uVar6;
+-  uVar2 = *(uint *)(param_3 + 0x28);
+-  lVar8 = CONCAT22(in_register_0000000e,uVar2);
+-  *(int *)(param_3 + 0x10) =
+-       *(int *)(param_3 + 0x10) +
+-       (((uVar3 - uVar2 & -(uint)(uVar3 < uVar2)) + uVar2 ^ uVar6) - uVar6);
+-  uVar5 = *(undefined2 *)(param_3 + 0x1e);
+-  uVar7 = *(undefined2 *)(param_3 + 0x1c);
+-  iVar1 = FUN_0000_0459(uVar5,uVar7);
+-  *(int *)(param_3 + 0x20) = iVar1;
+-  *(undefined2 *)(param_3 + 0x22) = uVar7;
+-  *(undefined2 *)(param_3 + 0x24) = uVar5;
+-  *(long *)(param_3 + 4) = *(long *)(param_3 + 4) + (long)*(int *)(param_3 + 0x20);
+-  *(long *)(param_3 + 8) = *(long *)(param_3 + 8) + (long)*(int *)(param_3 + 0x22);
+-  *(long *)(param_3 + 0xc) = *(long *)(param_3 + 0xc) + (long)*(int *)(param_3 + 0x24);
+-  uVar9 = *(byte *)(param_3 + 0xd) < 0x80;
+-  bVar10 = (char)(*(byte *)(param_3 + 0xd) + 0x80) < '\0';
+-  if ((bool)uVar9) {
+-    FUN_0000_e1a6(lVar8,param_3);
+-    if (bVar10) {
+-      uVar5 = 0x9c1d;
+-      goto LAB_0000_ba1f;
+-    }
+-  }
+-  uVar2 = (uint)((ulong)lVar8 >> 0x10);
+-  FUN_0000_bb1b(param_3,0xba02);
+-  if ((!(bool)uVar9) || (*(int *)(param_3 + 0x2b) == DAT_2000_5a25)) {
+-    return;
+-  }
+-  lVar8 = (ulong)uVar2 << 0x10;
+-  FUN_0000_bbb7(0x19,0,param_3);
+-  uVar5 = 0x9c5d;
+-LAB_0000_ba1f:
+-  FUN_0000_ba33(uVar5,param_3);
+-  FUN_0000_be8b(0xf,lVar8);
+-  iVar1 = FUN_1000_b354(param_3);
+-  FUN_1000_b2ef(iVar1);
++  /* PATCH 473: rocket state 0/2 -- BOOST (asm 0xb945-0xb997).  While [di+0x26] < 0x14 accelerate
++   * ([di+0x1c] += 6 up to 0x200) and fly straight: 0459(ax=heading [di+0x10], dx=speed [di+0x1c],
++   * cx=pitch [di+0x1e]) -> the velocity triple [di+0x20]/[0x22]/[0x24], position += it.  At 0x14 ticks
++   * advance the state (+2), clear [di+0x26]/[di+0x1e] and FALL THROUGH into b998 (asm b98a-b998 has no
++   * jump).  Ghidra host-deref'd di and lost 0459's dx/cx. */
++  extern unsigned short g_fist_rot_h, g_fist_rot_dx, g_fist_rot_cx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1, ax;
++  unsigned char *o = dg + di;
++  if (*(uint16_t *)(o + 0x26) < 0x14) {
++    if (*(uint16_t *)(o + 0x1c) < 0x200) *(uint16_t *)(o + 0x1c) += 6;
++    g_fist_rot_h = *(uint16_t *)(o + 0x1e);
++    ax = (uint16_t)FUN_0000_0459(*(uint16_t *)(o + 0x10),*(uint16_t *)(o + 0x1c));
++    *(uint16_t *)(o + 0x20) = ax;
++    *(uint16_t *)(o + 0x22) = g_fist_rot_dx;
++    *(uint16_t *)(o + 0x24) = g_fist_rot_cx;
++    *(uint32_t *)(o + 4) += (uint32_t)(int32_t)*(int16_t *)(o + 0x20);
++    *(uint32_t *)(o + 8) += (uint32_t)(int32_t)*(int16_t *)(o + 0x22);
++    *(uint32_t *)(o + 0xc) += (uint32_t)(int32_t)*(int16_t *)(o + 0x24);
++    return;
++  }
++  o[0x2a] += 2;
++  *(uint16_t *)(o + 0x26) = 0;
++  *(uint16_t *)(o + 0x1e) = 0;
++  FUN_0000_b998(param_1);                                  /* fall-through */
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_b998) @ 0000:b998 ===== */
+ 
+-void __allregs FUN_0000_b998(undefined2 param_1,undefined2 param_2,int param_3)
++void __allregs FUN_0000_b998(int param_1)
+ 
+ {
+-  uint uVar1;
+-  uint uVar2;
+-  int iVar3;
+-  undefined4 uVar4;
+-  undefined2 uVar5;
+-  uint uVar6;
+-  undefined2 uVar7;
+-  undefined2 in_register_0000000e;
+-  long lVar8;
+-  undefined1 uVar9;
+-  bool bVar10;
+-  
+-  *(int *)(param_3 + 0x28) = *(int *)(param_3 + 0x28) + 0x16;
+-  uVar4 = FUN_0000_bbc6(param_1,param_3 + 4,*(undefined2 *)(param_3 + 0x1a));
+-  *(undefined2 *)(param_3 + 0x1e) = param_2;
+-  uVar1 = (int)uVar4 - *(int *)(param_3 + 0x10);
+-  uVar6 = (int)uVar1 >> 0xf;
+-  uVar2 = (uVar1 ^ uVar6) - uVar6;
+-  uVar1 = *(uint *)(param_3 + 0x28);
+-  lVar8 = CONCAT22(in_register_0000000e,uVar1);
+-  *(int *)(param_3 + 0x10) =
+-       *(int *)(param_3 + 0x10) +
+-       (((uVar2 - uVar1 & -(uint)(uVar2 < uVar1)) + uVar1 ^ uVar6) - uVar6);
+-  uVar5 = *(undefined2 *)(param_3 + 0x1e);
+-  uVar7 = *(undefined2 *)(param_3 + 0x1c);
+-  iVar3 = FUN_0000_0459(uVar5,uVar7);
+-  *(int *)(param_3 + 0x20) = iVar3;
+-  *(undefined2 *)(param_3 + 0x22) = uVar7;
+-  *(undefined2 *)(param_3 + 0x24) = uVar5;
+-  *(long *)(param_3 + 4) = *(long *)(param_3 + 4) + (long)*(int *)(param_3 + 0x20);
+-  *(long *)(param_3 + 8) = *(long *)(param_3 + 8) + (long)*(int *)(param_3 + 0x22);
+-  *(long *)(param_3 + 0xc) = *(long *)(param_3 + 0xc) + (long)*(int *)(param_3 + 0x24);
+-  uVar9 = *(byte *)(param_3 + 0xd) < 0x80;
+-  bVar10 = (char)(*(byte *)(param_3 + 0xd) + 0x80) < '\0';
+-  if ((bool)uVar9) {
+-    FUN_0000_e1a6(lVar8,param_3);
+-    if (bVar10) {
+-      uVar5 = 0x9c1d;
+-      goto LAB_0000_ba1f;
+-    }
+-  }
+-  uVar1 = (uint)((ulong)lVar8 >> 0x10);
+-  FUN_0000_bb1b(param_3,0xba02);
+-  if ((!(bool)uVar9) || (*(int *)(param_3 + 0x2b) == DAT_2000_5a25)) {
+-    return;
+-  }
+-  lVar8 = (ulong)uVar1 << 0x10;
+-  FUN_0000_bbb7(0x19,0,param_3);
+-  uVar5 = 0x9c5d;
+-LAB_0000_ba1f:
+-  FUN_0000_ba33(uVar5,param_3);
+-  FUN_0000_be8b(0xf,lVar8);
+-  iVar3 = FUN_1000_b354(param_3);
+-  FUN_1000_b2ef(iVar3);
++  /* PATCH 473: rocket state 4 -- HOMING (asm 0xb998-0xba32).  Widen the turn allowance
++   * ([di+0x28] += 0x16), then bbc6(self+4, launcher/target word[di+0x1a]) -> bearing (ax) and pitch
++   * (bx -> [di+0x1e]); slew the heading [di+0x10] toward the bearing clamped by [di+0x28]; 0459 writes
++   * the velocity triple [di+0x20]/[0x22]/[0x24] and the position advances by it.  Below 0x80 of the
++   * altitude BYTE [di+0xd] the terrain probe e1a6 signs a ground hit -> explosion template 0x9c1d
++   * (no damage call); otherwise bb1b's proximity walk can report a hit on an object that is not the
++   * firer word[di+0x2b] -> damage bbb7(ax=0x19, bx=0) + template 0x9c5d.  Both play sound 0xf and
++   * destroy via b354/b2ef.  Ghidra host-deref'd di and dropped e1a6's sign / bb1b's CF / 0459's lanes. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_rot_h, g_fist_rot_dx, g_fist_rot_cx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1, ax, tmpl = 0;
++  unsigned char *o = dg + di;
++  *(uint16_t *)(o + 0x28) += 0x16;
++  ax = (uint16_t)FUN_0000_bbc6(0,(undefined2)(uint16_t)(di + 4),(int *)(uintptr_t)*(uint16_t *)(o + 0x1a));
++  *(uint16_t *)(o + 0x1e) = g_fist_054c_bx;
++  { int16_t d = (int16_t)(ax - *(uint16_t *)(o + 0x10));
++    int16_t sg = (int16_t)(d >> 15);
++    uint16_t mx = *(uint16_t *)(o + 0x28);
++    d = (int16_t)((d ^ sg) - sg);
++    if ((uint16_t)d > mx) d = (int16_t)mx;
++    d = (int16_t)((d ^ sg) - sg);
++    *(uint16_t *)(o + 0x10) += (uint16_t)d; }
++  g_fist_rot_h = *(uint16_t *)(o + 0x1e);
++  ax = (uint16_t)FUN_0000_0459(*(uint16_t *)(o + 0x10),*(uint16_t *)(o + 0x1c));
++  *(uint16_t *)(o + 0x20) = ax;
++  *(uint16_t *)(o + 0x22) = g_fist_rot_dx;
++  *(uint16_t *)(o + 0x24) = g_fist_rot_cx;
++  *(uint32_t *)(o + 4) += (uint32_t)(int32_t)*(int16_t *)(o + 0x20);
++  *(uint32_t *)(o + 8) += (uint32_t)(int32_t)*(int16_t *)(o + 0x22);
++  *(uint32_t *)(o + 0xc) += (uint32_t)(int32_t)*(int16_t *)(o + 0x24);
++  if (o[0xd] < 0x80) {                                                /* b9f4 cmpb */
++    if ((char)FUN_0000_e1a6((int)(uint16_t)(di + 4),(int)(intptr_t)o) < 0) tmpl = 0x9c1d;
++  }
++  if (tmpl == 0) {
++    FUN_0000_bb1b((int)di,(int *)(uintptr_t)di);
++    if (!(bool)g_fist_cf) return;
++    if (*(uint16_t *)(o + 0x2b) == *(uint16_t *)(dg + 0x9a25)) return;
++    FUN_0000_bbb7(0x19,0,(undefined2)di);
++    tmpl = 0x9c5d;
++  }
++  FUN_0000_ba33((undefined2)tmpl,(undefined2)di);
++  FUN_0000_be8b(0xf,0);
++  FUN_1000_b2ef(FUN_1000_b354((int)di));
+   return;
+ }
+ 
+@@ -30720,21 +30666,24 @@
+ undefined4 __allregs FUN_0000_bbc6(undefined2 param_1,undefined2 param_2,int *param_3)
+ 
+ {
+-  uint uVar1;
+-  undefined2 uVar2;
+-  undefined2 extraout_var;
+-  
+-  DAT_2000_5a11 = *(undefined4 *)(param_3 + 2);
+-  DAT_2000_5a15 = *(undefined4 *)(param_3 + 4);
+-  if (*param_3 == 0x1a) {
+-    uVar1 = *(uint *)((*(byte *)((int)param_3 + 0x19) & 3) * 2 + -0x6151);
+-  }
+-  else {
+-    uVar1 = *(uint *)(*param_3 * 2 + -0x1a78);
+-  }
+-  DAT_2000_5a19 = *(long *)(param_3 + 6) + (ulong)uVar1;
+-  uVar2 = FUN_0000_054c(param_1,param_2,(undefined4 *)&DAT_2000_5a11);
+-  return CONCAT22(extraout_var,uVar2);
++  /* PATCH 473: bearing/pitch to a TARGET object (asm 0xbbc6-0xbc0b; DS=DGROUP=0x1c00).  si=param_2 = the
++   * SELF position near offset (the callers pass di+4); di=param_3 = the TARGET near offset.  Copies the
++   * target's dword[di+4]/[di+8] into the scratch point DGROUP:0x9a11/0x9a15 and its dword[di+0xc] plus
++   * the per-type height LUT (type 0x1a: word[((byte[di+0x19]&3)<<1)-0x6151], else word[type*2-0x1a78])
++   * into 0x9a19, then 054c(si=self, di=0x9a11) -> ax=bearing, bx=pitch (g_fist_054c_bx).  Ghidra
++   * host-deref'd the target (param_3) and dropped the BX output. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t si = (uint16_t)param_2, di = (uint16_t)(uintptr_t)param_3, t;
++  uint32_t z;
++  (void)param_1;
++  *(uint32_t *)(dg + 0x9a11) = *(uint32_t *)(dg + (uint16_t)(di + 4));
++  *(uint32_t *)(dg + 0x9a15) = *(uint32_t *)(dg + (uint16_t)(di + 8));
++  z = *(uint32_t *)(dg + (uint16_t)(di + 0xc));
++  t = *(uint16_t *)(dg + di);
++  if (t == 0x1a) z += *(uint16_t *)(dg + (uint16_t)(((dg[(uint16_t)(di + 0x19)] & 3) << 1) - 0x6151));
++  else           z += *(uint16_t *)(dg + (uint16_t)((t << 1) - 0x1a78));
++  *(uint32_t *)(dg + 0x9a19) = z;
++  return (undefined4)(uint16_t)FUN_0000_054c(0,(int)(intptr_t)(dg + si),(int)(intptr_t)(dg + 0x9a11));
+ }
+ 
+ 
+@@ -63572,50 +63521,43 @@
+ void __allregs FUN_1000_9d49(uint param_1,int param_2)
+ 
+ {
+-  uint *puVar1;
+-  uint uVar2;
+-  int iVar3;
+-  uint *puVar4;
+-  int unaff_CS;
+-  int iVar5;
+-  
++  /* PATCH 473: type-0x18 SMOKE/FLARE per-frame UPDATE (asm 0x19d49-0x19dd1; DS=DGROUP=0x1c00), reached
++   * from 9b56 (`lcall f69:a6b9`) with di=the object near offset (param_1).  While the mission gate
++   * DAT_2000_4b4f==1: every 8th tick ([di+0x1a]&7) sweep the 32-entry roster table DGROUP:0x6d3c and,
++   * for every live tank (word[si] <= 3) whose distance to this cloud (08e8 over si+4/di+4, high word 0)
++   * is below the cloud radius word[di+0x14], set byte[si+0x96]=0xff (the "blinded" flag the gunnery AI
++   * reads).  Then drift by half the wind dword[0x92f2]/[0x92f6], rise, grow ([di+0x12] += 2, radius
++   * [di+0x14] += 0x10) and run the 0x6e-tick / 13-frame animation counters; at the end (or with the gate
++   * off) destroy via b354/b2ef.  Ghidra base-lost di/si and the 08e8 outputs (which land in
++   * DAT_1000_c458/c45a). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1, bx, si;
++  unsigned char *o = dg + di;
++  (void)param_2;
+   if (DAT_2000_4b4f == '\x01') {
+-    if ((*(uint *)(param_2 + 0x1a) & 7) == 0) {
+-      puVar4 = (uint *)0x0;
+-      iVar3 = param_2;
+-      while (iVar5 = unaff_CS, param_2 = iVar3, puVar4 < (uint *)0x40) {
+-        puVar1 = (uint *)puVar4[0x369e];
+-        puVar4 = puVar4 + 1;
+-        iVar3 = param_2;
+-        unaff_CS = iVar5;
+-        if ((puVar1 != (uint *)0x0) && (*puVar1 < 4)) {
+-          unaff_CS = 0;
+-          uVar2 = FUN_0000_a17e(puVar1 + 2,param_2 + 4);
+-          puVar4 = puVar1;
+-          iVar3 = iVar5;
+-          if ((param_1 == 0) && (param_1 = *(uint *)(iVar5 + 0x14), uVar2 < param_1)) {
+-            *(undefined1 *)(param_2 + 0x96) = 0xff;
+-          }
+-        }
+-      }
+-    }
+-    *(long *)(param_2 + 4) = *(long *)(param_2 + 4) + (DAT_2000_52f2 >> 1);
+-    *(long *)(param_2 + 8) = *(long *)(param_2 + 8) + (DAT_2000_52f6 >> 1);
+-    *(int *)(param_2 + 0xc) = *(int *)(param_2 + 0xc) + 1;
+-    *(int *)(param_2 + 0x12) = *(int *)(param_2 + 0x12) + 2;
+-    *(int *)(param_2 + 0x14) = *(int *)(param_2 + 0x14) + 0x10;
+-    *(int *)(param_2 + 0x1a) = *(int *)(param_2 + 0x1a) + 1;
+-    if (*(uint *)(param_2 + 0x1a) < 0x6e) {
+-      return;
+-    }
+-    *(undefined2 *)(param_2 + 0x1a) = 0;
+-    *(char *)(param_2 + 0x19) = *(char *)(param_2 + 0x19) + '\x01';
+-    if (*(byte *)(param_2 + 0x19) < 0xd) {
+-      return;
+-    }
++    if ((*(uint16_t *)(o + 0x1a) & 7) == 0) {
++      for (bx = 0; bx < 0x40; bx = (uint16_t)(bx + 2)) {
++        si = *(uint16_t *)(dg + (uint16_t)(0x6d3c + bx));
++        if (si == 0) continue;
++        if (*(uint16_t *)(dg + si) > 3) continue;
++        FUN_0000_a17e((int)(intptr_t)(dg + (uint16_t)(si + 4)),(int)(intptr_t)(dg + (uint16_t)(di + 4)));
++        if ((uint16_t)DAT_1000_c45a != 0) continue;                  /* 19d7f or dx,dx; jne */
++        if ((uint16_t)DAT_1000_c458 >= *(uint16_t *)(o + 0x14)) continue;  /* 19d86 sub; jae */
++        dg[(uint16_t)(si + 0x96)] = 0xff;
++      }
++    }
++    *(uint32_t *)(o + 4) += (uint32_t)((int32_t)*(uint32_t *)(dg + 0x92f2) >> 1);
++    *(uint32_t *)(o + 8) += (uint32_t)((int32_t)*(uint32_t *)(dg + 0x92f6) >> 1);
++    *(uint16_t *)(o + 0xc) += 1;
++    *(uint16_t *)(o + 0x12) += 2;
++    *(uint16_t *)(o + 0x14) += 0x10;
++    *(uint16_t *)(o + 0x1a) += 1;
++    if (*(uint16_t *)(o + 0x1a) < 0x6e) return;
++    *(uint16_t *)(o + 0x1a) = 0;
++    o[0x19] += 1;
++    if (o[0x19] < 0xd) return;
+   }
+-  iVar3 = FUN_1000_b354(param_2);
+-  FUN_1000_b2ef(iVar3);
++  FUN_1000_b2ef(FUN_1000_b354((int)di));
+   return;
+ }
+ 

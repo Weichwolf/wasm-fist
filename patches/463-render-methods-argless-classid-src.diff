@@ -1,0 +1,487 @@
+PATCH 463: the c4df per-class RENDER methods for the mission view (STRSEG table 0x358a) -- arg-less dispatch
+reads the published SI/DX, the writers' copy source is indexed by CLASSID*2, every writer's `clc` yields,
+and the six un-decompiled table entries (c5e7/c5fc/c60f/c62f/c64a/c6a4 + the c91c builder) are added.
+
+Trigger: with patch 462 the first class-4 effect object exists as a real record; its render method c694
+(patch 424) read si/dx from the STALE __allregs params (c4df dispatches `call *gs:0x358a(bx)` arg-less), so
+c945 copied word[garbage+0x276c] bytes from a garbage source over the display-list program at DGROUP:0x6c82
+-> 22dd's cursor walked into a zero word -> icall(0) spin on the first frame (caught by a hardware
+watchpoint on 0x6c88: writer c945 <- c694 <- c4df <- c33c <- 2471 <- 22dd).
+
+ASM (0xc5c9-0xc6fa wrappers, 0xc8b2-0xc944 writers, 0xca2f/0xca6b headers): c4df leaves SI=object,
+DL=byte[classid-0x1b74] (record code), BX=CX=classid*2; each wrapper loads BP/BX/DX per its own asm and
+calls a builder; ca2f/ca6b do `mov bx,cx` so the builders' `add si,[bx-0x1b58]` indexes the per-CLASS
+model-data offset table (patches 310/460 used the bx record field), `mov bx,dx; mov cx,[bx+0x276c]` gives
+the byte count (dx = the record code -- every caller now passes g_fist_render_dx), and all builders end
+`clc` -> c4df `jb c4df` falls through and RETURNS after one record so 2471 links exactly that node
+(the C builders never cleared g_fist_cf -> c4df wrote every object's record in one call and 2471 linked
+only the first).  ca2f's header word is AX as passed (ah=dl for the c962 family, an explicit value for
+c8b2's callers -- patch 460 D3 forced dl).  New entries: c5e7 stc; c5fc (classes 0-3, the tanks) ->
+c91c (kind 0x1e, xor-0x80 copy, [si+0x10]<->[si+0x26] swap); c60f (0x17 wrecks; dx=[si+0x1b], -1 ->
+stc); c62f/c635 (7,0xf; needs byte[si+0x17]&1); c64a (0xb,0xe; heading flip +0x8000 around the record);
+c6a4 (0x11; bp by byte[0xe6f1]).  The cockpit/map/external tables 0x3632/0x35fa/0x35c2 keep their
+un-decompiled entries (c713/c715/c72e/c74d/c774/c77d/c783/c7a5/c817/c829/c82d/c845/c862/c86e/c874/c876/
+c888/c894) -- not reached by self-play (d549=0x1c), next slice of this frontier.
+--- a/fist.c
++++ b/fist.c
+@@ -1270,6 +1270,9 @@
+ void __allregs FUN_0000_c577(void);
+ void __allregs FUN_0000_c584(uint param_1,undefined2 param_2,undefined2 param_3);
+ void __allregs FUN_0000_c5e2(void);
++void __allregs FUN_0000_c5e7(void); void __allregs FUN_0000_c5fc(void); void __allregs FUN_0000_c60f(void);
++void __allregs FUN_0000_c62f(void); void __allregs FUN_0000_c64a(void); void __allregs FUN_0000_c6a4(void);
++void __allregs FUN_0000_c91c(int param_1,int param_2,undefined2 param_3,int param_4,undefined2 *param_5);  /* PATCH 463 */
+ void __allregs FUN_0000_c62d(void);
+ void __allregs FUN_0000_c648(void);
+ void __allregs FUN_0000_c66e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+@@ -32364,6 +32367,68 @@
+ }
+ 
+ 
++/* ===== PATCH 463: FUN_0000_c5e7 @ 0000:c5e7 (STRSEG render-method entry, not in the Ghidra function set) ===== */
++
++void __allregs FUN_0000_c5e7(void)
++
++{
++  /* PATCH 463: STRSEG render-method entry (asm 0xc5e7), dispatched ARG-LESS by c4df (`call *gs:0x358a(bx)`)
++   * with SI=object (g_fist_render_si), DL=record code (g_fist_render_dx), CX=BX=classid*2 live.  Not in
++   * Ghidra's function set (mid-block entry) -> the port silently "advanced" past every object of its
++   * classes.  The writer's clc/stc is threaded via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  (void)dg; (void)si;
++  g_fist_cf = 1;
++  return;
++}
++
++
++/* ===== PATCH 463: FUN_0000_c5fc @ 0000:c5fc (STRSEG render-method entry, not in the Ghidra function set) ===== */
++
++void __allregs FUN_0000_c5fc(void)
++
++{
++  /* PATCH 463: STRSEG render-method entry (asm 0xc5fc), dispatched ARG-LESS by c4df (`call *gs:0x358a(bx)`)
++   * with SI=object (g_fist_render_si), DL=record code (g_fist_render_dx), CX=BX=classid*2 live.  Not in
++   * Ghidra's function set (mid-block entry) -> the port silently "advanced" past every object of its
++   * classes.  The writer's clc/stc is threaded via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  (void)dg; (void)si;
++  DAT_2000_a3b4 = 0x3e800;
++  FUN_0000_c91c((int)g_fist_render_dx,(int)*(unsigned short *)(dg + (unsigned short)(si + 0x12)),0,(int)si,0);
++  return;
++}
++
++
++/* ===== PATCH 463: FUN_0000_c60f @ 0000:c60f (STRSEG render-method entry, not in the Ghidra function set) ===== */
++
++void __allregs FUN_0000_c60f(void)
++
++{
++  /* PATCH 463: STRSEG render-method entry (asm 0xc60f), dispatched ARG-LESS by c4df (`call *gs:0x358a(bx)`)
++   * with SI=object (g_fist_render_si), DL=record code (g_fist_render_dx), CX=BX=classid*2 live.  Not in
++   * Ghidra's function set (mid-block entry) -> the port silently "advanced" past every object of its
++   * classes.  The writer's clc/stc is threaded via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  (void)dg; (void)si;
++  unsigned short dx;
++  DAT_2000_a3b4 = 0x3e800;
++  dx = *(unsigned short *)(dg + (unsigned short)(si + 0x1b));
++  if (dx == 0xffff) { g_fist_cf = 1; return; }                    /* c621 cmp dx,-1; je c62d (stc) */
++  FUN_0000_c8e8((int)dx,0x32,0,(int)si,0);
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c62d) @ 0000:c62d ===== */
+ 
+ void __allregs FUN_0000_c62d(void)
+@@ -32373,6 +32438,27 @@
+ }
+ 
+ 
++/* ===== PATCH 463: FUN_0000_c62f @ 0000:c62f (STRSEG render-method entry, not in the Ghidra function set) ===== */
++
++void __allregs FUN_0000_c62f(void)
++
++{
++  /* PATCH 463: STRSEG render-method entry (asm 0xc62f), dispatched ARG-LESS by c4df (`call *gs:0x358a(bx)`)
++   * with SI=object (g_fist_render_si), DL=record code (g_fist_render_dx), CX=BX=classid*2 live.  Not in
++   * Ghidra's function set (mid-block entry) -> the port silently "advanced" past every object of its
++   * classes.  The writer's clc/stc is threaded via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  (void)dg; (void)si;
++  if ((dg[(unsigned short)(si + 0x17)] & 1) == 0) { g_fist_cf = 1; return; }
++  DAT_2000_a3b4 = 0x19000;
++  FUN_0000_c8e8(0x3a,(int)(unsigned short)(*(unsigned short *)(dg + si) << 1),0x8ff,(int)si,0);   /* c635 */
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c648) @ 0000:c648 ===== */
+ 
+ void __allregs FUN_0000_c648(void)
+@@ -32382,14 +32468,45 @@
+ }
+ 
+ 
++/* ===== PATCH 463: FUN_0000_c64a @ 0000:c64a (STRSEG render-method entry, not in the Ghidra function set) ===== */
++
++void __allregs FUN_0000_c64a(void)
++
++{
++  /* PATCH 463: STRSEG render-method entry (asm 0xc64a), dispatched ARG-LESS by c4df (`call *gs:0x358a(bx)`)
++   * with SI=object (g_fist_render_si), DL=record code (g_fist_render_dx), CX=BX=classid*2 live.  Not in
++   * Ghidra's function set (mid-block entry) -> the port silently "advanced" past every object of its
++   * classes.  The writer's clc/stc is threaded via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  (void)dg; (void)si;
++  DAT_2000_a3b4 = 0x19000;
++  if (dg[(unsigned short)(si + 0x17)] & 1) {                                   /* c657 jne c635 */
++    FUN_0000_c8e8(0x3a,(int)(unsigned short)(*(unsigned short *)(dg + si) << 1),0x8ff,(int)si,0);
++    return;
++  }
++  *(unsigned short *)(dg + (unsigned short)(si + 0x10)) += 0x8000;
++  FUN_0000_c8e8((int)g_fist_render_dx,0x1e,0,(int)si,0);
++  *(unsigned short *)(dg + (unsigned short)(si + 0x10)) += 0x8000;
++  g_fist_cf = 0;
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c66e) @ 0000:c66e ===== */
+ 
+ void __allregs
+ FUN_0000_c66e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
++  /* PATCH 463: asm 0xc66e `a3b4=0x3e800; bp=0; bx=0x14; call c8e8` -- arg-less c4df dispatch (classes 5,6):
++   * dx/si from the published globals (the __allregs params are stale). */
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
+   DAT_2000_a3b4 = 0x3e800;
+-  FUN_0000_c8e8(param_2,0x14,0,param_3,param_4);
++  FUN_0000_c8e8((int)g_fist_render_dx,0x14,0,(int)g_fist_render_si,0);
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;
+   return;
+ }
+ 
+@@ -32415,9 +32532,36 @@
+ void __allregs FUN_0000_c694(undefined2 param_1,undefined2 param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  DAT_2000_a3b4 = 0x3e800;    /* PATCH 424: si=object near-offset; word[si+0x1c] DGROUP-based (asm mov bp,[si+0x1c]) */
+-  { unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+-    FUN_0000_c945(param_1,param_2,*(unsigned short *)(dg + (unsigned short)(param_3 + 0x1c)),param_3,param_4); }
++  /* PATCH 463 (supersedes 424): asm 0xc694 `a3b4=0x3e800; mov bp,[si+0x1c]; call c945` -- arg-less c4df
++   * dispatch (class 4).  Patch 424 read si/dx from the STALE params: c945 then copied word[garbage+0x276c]
++   * (thousands of) bytes over the display-list program at DGROUP:0x6c82 -> 22dd walked into a zero word
++   * -> icall(0) spin the first frame a class-4 effect object existed (patch 462 made spawns real). */
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  DAT_2000_a3b4 = 0x3e800;
++  FUN_0000_c945((int)g_fist_render_dx,0,*(unsigned short *)(dg + (unsigned short)(si + 0x1c)),(int)si,0);
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;
++  return;
++}
++
++
++/* ===== PATCH 463: FUN_0000_c6a4 @ 0000:c6a4 (STRSEG render-method entry, not in the Ghidra function set) ===== */
++
++void __allregs FUN_0000_c6a4(void)
++
++{
++  /* PATCH 463: STRSEG render-method entry (asm 0xc6a4), dispatched ARG-LESS by c4df (`call *gs:0x358a(bx)`)
++   * with SI=object (g_fist_render_si), DL=record code (g_fist_render_dx), CX=BX=classid*2 live.  Not in
++   * Ghidra's function set (mid-block entry) -> the port silently "advanced" past every object of its
++   * classes.  The writer's clc/stc is threaded via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  (void)dg; (void)si;
++  DAT_2000_a3b4 = 0x1f400;
++  FUN_0000_c962((int)g_fist_render_dx,0,(dg[0xe6f1] != 0) ? 0x100 : 0x500,(int)si,0);
+   return;
+ }
+ 
+@@ -32428,8 +32572,11 @@
+ FUN_0000_c6c1(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
++  /* PATCH 463: asm 0xc6c1 `a3b4=0x1f400; bp=0x700; bx=0; call c962` (class 0x18), arg-less dispatch. */
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
+   DAT_2000_a3b4 = 0x1f400;
+-  FUN_0000_c962(param_2,0,0x700,param_3,param_4);
++  FUN_0000_c962((int)g_fist_render_dx,0,0x700,(int)g_fist_render_si,0);
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;
+   return;
+ }
+ 
+@@ -32440,8 +32587,11 @@
+ FUN_0000_c6d4(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
++  /* PATCH 463: asm 0xc6d4 `a3b4=0x19000; bp=0; bx=0; call c962` (class 0x15), arg-less dispatch. */
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
+   DAT_2000_a3b4 = 0x19000;
+-  FUN_0000_c962(param_2,0,0,param_3,param_4);
++  FUN_0000_c962((int)g_fist_render_dx,0,0,(int)g_fist_render_si,0);
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;
+   return;
+ }
+ 
+@@ -32452,9 +32602,12 @@
+ FUN_0000_c6e7(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
+-  extern unsigned short g_fist_render_si;
++  /* PATCH 463 (completes 460 FIX D): asm 0xc6e7 `a3b4=0x3e800; bp=0; bx=0xa; call c962` (class 0x1a);
++   * dx too comes from the published global. */
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
+   DAT_2000_a3b4 = 0x3e800;
+-  FUN_0000_c962(param_2,10,0,g_fist_render_si,param_4);   /* FIX D */
++  FUN_0000_c962((int)g_fist_render_dx,10,0,(int)g_fist_render_si,0);
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;
+   return;
+ }
+ 
+@@ -32465,8 +32618,11 @@
+ FUN_0000_c6fa(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
++  /* PATCH 463: asm 0xc6fa `a3b4=0x19000; bp=0x200; bx=0x32; call c8e8` (class 0x12), arg-less dispatch. */
++  extern unsigned short g_fist_render_si, g_fist_render_dx;
+   DAT_2000_a3b4 = 0x19000;
+-  FUN_0000_c8e8(param_2,0x32,0x200,param_3,param_4);
++  FUN_0000_c8e8((int)g_fist_render_dx,0x32,0x200,(int)g_fist_render_si,0);
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;
+   return;
+ }
+ 
+@@ -32478,7 +32634,13 @@
+              undefined2 param_5)
+ 
+ {
+-  FUN_0000_c8b2(CONCAT11(0xf,param_1),param_2,param_3,param_4,param_5);
++  /* PATCH 463: asm 0xc70d `mov ah,0xf; call c8b2` (cockpit-view table 0x3632, class 0x15), arg-less
++   * dispatch: bx=classid*2 (live from c4df); bp is untraced at this entry (cf. patch 390) -> 0. */
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  FUN_0000_c8b2(CONCAT11(0xf,0),(undefined2)(unsigned short)(*(unsigned short *)(dg + si) << 1),0,(undefined2)si,0);
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;(void)param_5;
+   return;
+ }
+ 
+@@ -32535,8 +32697,10 @@
+              undefined2 param_5)
+ 
+ {
++  extern unsigned char g_fist_cf;   /* PATCH 463: clc */
+   DAT_2000_a3b4 = 0xffffffff;
+   FUN_0000_ca2f(CONCAT11((char)((uint)param_1 >> 8),0x12),param_2,param_3,param_4,param_5);
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -32554,6 +32718,7 @@
+   DAT_2000_a3b4 = 0xffffffff;
+   FUN_0000_ca2f(CONCAT11((char)((uint)param_1 >> 8),0x10),param_2,param_3,param_4,(int)(intptr_t)param_5);
+   { uint16_t di = g_fist_render_di; *(uint16_t *)(dg + di) = (uint16_t)param_2; g_fist_render_di = (uint16_t)(di + 2); }
++  { extern unsigned char g_fist_cf; g_fist_cf = 0; }   /* PATCH 463: clc */
+   return;
+ }
+ 
+@@ -32573,6 +32738,7 @@
+   DAT_2000_a3b4 = 0xffffffff;
+   FUN_0000_ca2f(CONCAT11((char)((uint)param_1 >> 8),0xe),param_2,param_3,param_4,(int)(intptr_t)param_5);
+   { uint16_t di = g_fist_render_di; *(uint16_t *)(dg + di) = 0; g_fist_render_di = (uint16_t)(di + 2); }
++  { extern unsigned char g_fist_cf; g_fist_cf = 0; }   /* PATCH 463: clc */
+   return;
+ }
+ 
+@@ -32592,13 +32758,19 @@
+   /* PATCH 310: c962-class builder (asm 0xc8e8, kind 2) -- copy only, NO trailing append. */
+   extern unsigned short g_fist_render_di;
+   uint8_t  *dg = g_mem + 0x1c000;
++  /* PATCH 463: the copy source is si + word[CLASSID*2 - 0x1b58] (ca2f leaves bx=cx=classid*2, c4df's cx),
++   * not the bx record field; the count is word[dx+0x276c] (param_1 = dx, passed by every caller now);
++   * `clc` -> g_fist_cf=0 (c4df yields one record per call, 2471 links it). */
++  extern unsigned char g_fist_cf;
+   FUN_0000_ca2f(CONCAT11((char)param_1,2),param_2,param_3,param_4,(int)(intptr_t)param_5);
+   uint16_t di  = g_fist_render_di;
+-  extern unsigned short g_fist_render_si; uint16_t src = (uint16_t)(g_fist_render_si + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  uint16_t si  = (uint16_t)param_4;
++  uint16_t src = (uint16_t)(si + *(int16_t *)(dg + (uint16_t)((*(uint16_t *)(dg + si) << 1) - 0x1b58)));
+   unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));
+   for (unsigned i = 0; i < cnt; i++)
+     *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
+   g_fist_render_di = (uint16_t)(di + cnt);
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -32618,15 +32790,48 @@
+   /* PATCH 310: ca6b-class builder (asm 0xc8ff, kind 6) -- append word[si+0x26]. */
+   extern unsigned short g_fist_render_di;
+   uint8_t  *dg = g_mem + 0x1c000;
++  extern unsigned char g_fist_cf;   /* PATCH 463: src index = classid*2; clc */
+   FUN_0000_ca6b(CONCAT11((char)param_1,6),param_2,param_3,param_4,(int)(intptr_t)param_5);
+   uint16_t di  = g_fist_render_di;
+-  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)((*(uint16_t *)(dg + (uint16_t)param_4) << 1) - 0x1b58)));
+   unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));
+   for (unsigned i = 0; i < cnt; i++)
+     *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
+   di = (uint16_t)(di + cnt);
+   *(uint16_t *)(dg + di) = *(uint16_t *)(dg + (uint16_t)(param_4 + 0x26));
+   g_fist_render_di = (uint16_t)(di + 2);
++  g_fist_cf = 0;
++  return;
++}
++
++
++/* ===== PATCH 463: FUN_0000_c91c @ 0000:c91c (record builder, not in the Ghidra function set) ===== */
++
++void __allregs
++FUN_0000_c91c(int param_1,int param_2,undefined2 param_3,int param_4,undefined2 *param_5)
++
++{
++  /* PATCH 463: ca6b-class builder (asm 0xc91c-0xc944, kind 0x1e; ES=DS=DGROUP): `mov ax,[si+0x26]; xchg
++   * ax,[si+0x10]; push ax` (swap the object's heading/turret words for the record), ca6b(ah=dl,al=0x1e),
++   * then cx=word[dx+0x276c] bytes from si+word[classid*2-0x1b58] each XOR 0x80 (`lodsb; xor al,0x80;
++   * stosb`), then restore [si+0x10] and append it; clc.  Classes 0-3 (the tanks) route here via c5fc. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_render_di;
++  uint8_t  *dg = g_mem + 0x1c000;
++  uint16_t  si = (uint16_t)param_4;
++  uint16_t  saved = *(uint16_t *)(dg + (uint16_t)(si + 0x10));
++  *(uint16_t *)(dg + (uint16_t)(si + 0x10)) = *(uint16_t *)(dg + (uint16_t)(si + 0x26));
++  FUN_0000_ca6b(CONCAT11((char)param_1,0x1e),param_2,param_3,param_4,(int)(intptr_t)param_5);
++  uint16_t di  = g_fist_render_di;
++  uint16_t src = (uint16_t)(si + *(int16_t *)(dg + (uint16_t)((*(uint16_t *)(dg + si) << 1) - 0x1b58)));
++  unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));
++  for (unsigned i = 0; i < cnt; i++)
++    *(uint8_t *)(dg + (uint16_t)(di + i)) = (uint8_t)(*(uint8_t *)(dg + (uint16_t)(src + i)) ^ 0x80);
++  di = (uint16_t)(di + cnt);
++  *(uint16_t *)(dg + (uint16_t)(si + 0x10)) = saved;
++  *(uint16_t *)(dg + di) = saved;
++  g_fist_render_di = (uint16_t)(di + 2);
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -32646,15 +32851,17 @@
+   /* PATCH 310: c962-class builder (asm 0xc945, kind 0xc) -- append word[si+0x12]. */
+   extern unsigned short g_fist_render_di;
+   uint8_t  *dg = g_mem + 0x1c000;
++  extern unsigned char g_fist_cf;   /* PATCH 463: src index = classid*2; clc */
+   FUN_0000_ca2f(CONCAT11((char)param_1,0xc),param_2,param_3,param_4,(int)(intptr_t)param_5);
+   uint16_t di  = g_fist_render_di;
+-  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)((*(uint16_t *)(dg + (uint16_t)param_4) << 1) - 0x1b58)));
+   unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));
+   for (unsigned i = 0; i < cnt; i++)
+     *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
+   di = (uint16_t)(di + cnt);
+-  *(uint16_t *)(dg + di) = *(uint16_t *)(dg + (uint16_t)(g_fist_render_si + 0x12));
++  *(uint16_t *)(dg + di) = *(uint16_t *)(dg + (uint16_t)(param_4 + 0x12));
+   g_fist_render_di = (uint16_t)(di + 2);
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -32671,15 +32878,17 @@
+      offsets rebased to DGROUP; di from the shim global (in/out). */
+   extern unsigned short g_fist_render_di;
+   uint8_t  *dg = g_mem + 0x1c000;
++  extern unsigned char g_fist_cf;   /* PATCH 463: src index = classid*2; clc */
+   FUN_0000_ca2f(CONCAT11((char)param_1,8),param_2,param_3,param_4,(int)(intptr_t)param_5);
+   uint16_t di  = g_fist_render_di;                                  /* advanced by ca2f */
+-  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)((*(uint16_t *)(dg + (uint16_t)param_4) << 1) - 0x1b58)));
+   unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));  /* cx (unsigned copy count) */
+   for (unsigned i = 0; i < cnt; i++)                                /* rep movsb ds:si -> es:di */
+     *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
+   di = (uint16_t)(di + cnt);
+   *(uint16_t *)(dg + di) = *(uint16_t *)(dg + (uint16_t)(param_4 + 0x12)); /* stos word[si+0x12] */
+   g_fist_render_di = (uint16_t)(di + 2);
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -32699,15 +32908,17 @@
+   /* PATCH 310: c962 variant (asm 0xc97f) -- final appended word = 0x70 (a class tag) not word[si+0x12]. */
+   extern unsigned short g_fist_render_di;
+   uint8_t  *dg = g_mem + 0x1c000;
++  extern unsigned char g_fist_cf;   /* PATCH 463: src index = classid*2; clc */
+   FUN_0000_ca2f(CONCAT11((char)param_1,8),param_2,param_3,param_4,(int)(intptr_t)param_5);
+   uint16_t di  = g_fist_render_di;
+-  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)(param_2 - 0x1b58)));
++  uint16_t src = (uint16_t)(param_4 + *(int16_t *)(dg + (uint16_t)((*(uint16_t *)(dg + (uint16_t)param_4) << 1) - 0x1b58)));
+   unsigned cnt = *(uint16_t *)(dg + (uint16_t)(param_1 + 0x276c));
+   for (unsigned i = 0; i < cnt; i++)
+     *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
+   di = (uint16_t)(di + cnt);
+   *(uint16_t *)(dg + di) = 0x70;
+   g_fist_render_di = (uint16_t)(di + 2);
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -32778,12 +32989,12 @@
+   extern unsigned short g_fist_render_di;
+   uint8_t  *dg = g_mem + 0x1c000;
+   uint16_t  di = g_fist_render_di;
+-  extern unsigned short g_fist_render_si;
+-  uint16_t  si = g_fist_render_si;   /* D2 */
++  uint16_t  si = (uint16_t)param_4;  /* PATCH 463: every caller now passes the live SI (was the D2 global) */
+   uint8_t  *d  = dg + di;
+   uint8_t  *s  = dg + si;
+   *(uint16_t *)(d + 2)    = si;                                   /* [di+2]=si (source offset) */
+-  { extern unsigned short g_fist_render_dx; *(uint16_t *)(d + 4) = (uint16_t)(((g_fist_render_dx&0xff)<<8)|((uint16_t)param_1&0xff)); }  /* D3 */
++  *(uint16_t *)(d + 4)    = (uint16_t)param_1;                    /* PATCH 463: AX as passed (ah=dl for the
++                                                                     c962 family, an explicit value for c8b2's) */
+   *(uint16_t *)(d + 6)    = (uint16_t)(*(uint16_t *)(s + 0x14) >> 8);
+   *(uint16_t *)(d + 8)    = *(uint16_t *)(s + 0x10);
+   *(uint32_t *)(d + 0xa)  = *(uint32_t *)(s + 4);
+@@ -73894,11 +74105,17 @@
+   {0xc577u,(void*)&FUN_0000_c577},
+   {0xc584u,(void*)&FUN_0000_c584},
+   {0xc5e2u,(void*)&FUN_0000_c5e2},
++  {0xc5e7u,(void*)&FUN_0000_c5e7},   /* PATCH 463 */
++  {0xc5fcu,(void*)&FUN_0000_c5fc},   /* PATCH 463 */
++  {0xc60fu,(void*)&FUN_0000_c60f},   /* PATCH 463 */
+   {0xc62du,(void*)&FUN_0000_c62d},
++  {0xc62fu,(void*)&FUN_0000_c62f},   /* PATCH 463 */
+   {0xc648u,(void*)&FUN_0000_c648},
++  {0xc64au,(void*)&FUN_0000_c64a},   /* PATCH 463 */
+   {0xc66eu,(void*)&FUN_0000_c66e},
+   {0xc681u,(void*)&FUN_0000_c681},
+   {0xc694u,(void*)&FUN_0000_c694},
++  {0xc6a4u,(void*)&FUN_0000_c6a4},   /* PATCH 463 */
+   {0xc6c1u,(void*)&FUN_0000_c6c1},
+   {0xc6d4u,(void*)&FUN_0000_c6d4},
+   {0xc6e7u,(void*)&FUN_0000_c6e7},
+@@ -73910,6 +74127,7 @@
+   {0xc8d5u,(void*)&FUN_0000_c8d5},
+   {0xc8e8u,(void*)&FUN_0000_c8e8},
+   {0xc8ffu,(void*)&FUN_0000_c8ff},
++  {0xc91cu,(void*)&FUN_0000_c91c},   /* PATCH 463 */
+   {0xc945u,(void*)&FUN_0000_c945},
+   {0xc962u,(void*)&FUN_0000_c962},
+   {0xc97fu,(void*)&FUN_0000_c97f},

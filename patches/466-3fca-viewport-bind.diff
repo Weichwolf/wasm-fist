@@ -1,0 +1,43 @@
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -9655,18 +9655,28 @@
+   int iVar1;
+   undefined2 uVar2;
+   
+-  uVar2 = _DAT_2000_c19a;
+-  *(undefined2 *)&DAT_1000_c578 = param_1;
+-  *(undefined2 *)&DAT_1000_c57a = param_3;
+-  *(int *)&DAT_1000_c57c = param_3[1] - *param_3;
+-  *(undefined2 *)&DAT_1000_c57e = *param_2;
+-  *(undefined2 *)&DAT_1000_c580 = param_2[1];
+-  iVar1 = param_2[2];
+-  *(int *)&DAT_1000_c582 = iVar1;
+-  *(int *)&DAT_1000_c586 = iVar1 - *(int *)&DAT_1000_c57e;
+-  iVar1 = param_2[3];
+-  *(int *)&DAT_1000_c584 = iVar1;
+-  *(int *)&DAT_1000_c588 = iVar1 - *(int *)&DAT_1000_c580;
++  /* PATCH 466: MGAVIDEO viewport BIND (asm 0x3fca-0x400a; ds=word[ss:0x70a] driver data, es=ss=DGROUP).
++   * ax=draw SEGMENT -> word[0x578]; di=DGROUP near offset of the per-column offset table -> word[0x57a]
++   * (the 42b0/43e4/453d blitters index it `add bx,[0x57a]; mov ax,ss:[bx]`), word[0x57c]=word[ss:di+2]-
++   * word[ss:di]; then four `lodsw es:[si]` clip words from DGROUP:si -> 0x57e/0x580/0x582/0x584 with the
++   * extents 0x586=0x582-0x57e, 0x588=0x584-0x580; returns ax=es=DGROUP.  Ghidra stored the HOST pointers
++   * (2-byte truncated) and read the words as 4-byte ints (the c57a/c57c leak the board flagged). */
++  /* PATCH 470: `mov ds,[ss:0x70a]` -- these variables live in the driver's PRIVATE data segment
++   * word[DGROUP:0x70a] (the seg 0197/400b/4030/405e/410e switch to), NOT in DGROUP: the decompile's
++   * DAT_1000_c5xx macros (DGROUP-based) are wrong for every function that does that switch. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned char *md = g_mem + ((uint32_t)(*(uint16_t *)(dg + 0x70a)) << 4);
++  uint16_t si = (uint16_t)(uintptr_t)param_2, di = (uint16_t)(uintptr_t)param_3;
++  (void)uVar2; (void)iVar1;
++  *(uint16_t *)(md + 0x578) = (uint16_t)param_1;
++  *(uint16_t *)(md + 0x57a) = di;
++  *(uint16_t *)(md + 0x57c) = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(di + 2)) - *(uint16_t *)(dg + di));
++  *(uint16_t *)(md + 0x57e) = *(uint16_t *)(dg + si);
++  *(uint16_t *)(md + 0x580) = *(uint16_t *)(dg + (uint16_t)(si + 2));
++  *(uint16_t *)(md + 0x582) = *(uint16_t *)(dg + (uint16_t)(si + 4));
++  *(uint16_t *)(md + 0x586) = (uint16_t)(*(uint16_t *)(md + 0x582) - *(uint16_t *)(md + 0x57e));
++  *(uint16_t *)(md + 0x584) = *(uint16_t *)(dg + (uint16_t)(si + 6));
++  *(uint16_t *)(md + 0x588) = (uint16_t)(*(uint16_t *)(md + 0x584) - *(uint16_t *)(md + 0x580));
+   return 0x1c00;
+ }
+ 

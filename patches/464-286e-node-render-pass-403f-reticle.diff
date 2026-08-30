@@ -1,0 +1,119 @@
+PATCH 464: the 22dd display-list OBJECT-RENDER pass 286e + the per-node reticle hit-test 403f (board:0012
+windshield-object frontier, slice 1).
+
+With patches 462/463 the render walk now links real object nodes, so 286e runs for the first time: Ghidra
+deref'd the node-list head word[0x4b9e] as a host int* (SEGV fault-addr 0x4bd64bde = two node offsets) and
+read the record kind byte through it.  asm 0x286e-0x28b6: viewport bind (lcall [0x664]), then per node
+`al=byte[bx+4]; call word[0x4b2c+al]` (the per-KIND rasterizer table), `call 403f`, `bx=word[bx]` ->
+word[0x4b9e], stop on 0 (cursor += 2) or word[0x450]==0 (budget: return without advancing).  403f (asm
+0x403f-0x4095): es=word[word[0x156a]] (the viewport's draw segment), di=word[0x6b74] (reticle pixel; -1 =
+none): read the pixel, if not 0xff write 0xff, keep the colour in byte[0x6b76] and this node's object
+word[bx+2] in word[0x6b72] -- the "object under the reticle" that feeds the target lock; on the live VGA
+page (seg == word[0x722]) bracketed by lcall [0x159c]/[0x15a0].  Ghidra typed the pixel offset as a host
+char* and compared the segment against &DAT_2000_bfff.  The per-kind rasterizers 29ec/2bb8/2e49/309b/30bc/
+30de/3536 (+3425, not in the function set) are the next slices.
+--- a/fist.c
++++ b/fist.c
+@@ -10619,19 +10619,28 @@
+ void __allregs FUN_0000_286e(void)
+ 
+ {
++  /* PATCH 464: the 22dd display-list OBJECT-RENDER pass (asm 0x286e-0x28b6; DS=DGROUP=0x1c00).  Head:
++   * `di=word[0x156a]; ax=word[di]; si=di+6; di=word[0x794]; lcall [0x664]` (viewport bind).  Then walk
++   * the distance-sorted node list 2471 built: bx=word[0x4b9e]; per node `al=byte[bx+4]` (the record
++   * KIND ca2f stored in the header's low byte) -> `call word[0x4b2c+kind]` (the per-kind rasterizer:
++   * 29ec/2bb8/2e49/309b/30bc/30de/3534/3536/3425/3663, each reads the node back from word[0x4b9e]),
++   * then 403f (reticle hit-test), then bx=word[bx] (next link) -> word[0x4b9e]; stop on 0 (cursor+=2)
++   * or when word[0x450]==0 (frame budget spent -> ret WITHOUT advancing the cursor: resumed next call).
++   * Ghidra deref'd word[0x4b9e] as a host int* (SEGV at 0x4bd6..) and read the kind as a host byte. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx, kind;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c664)))();
+-  if (DAT_2000_0b9e == (int *)0x0) {
+-LAB_0000_28b1:
+-    DAT_2000_0a86 = DAT_2000_0a86 + 2;
+-  }
+-  else {
+-    do {
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(byte *)(DAT_2000_0b9e + 2) + 0x4b2c))))();
+-      FUN_0000_403f(DAT_2000_0b9e);
+-      DAT_2000_0b9e = (int *)*DAT_2000_0b9e;
+-      if (DAT_2000_0b9e == (int *)0x0) goto LAB_0000_28b1;
+-    } while (DAT_1000_c450 != 0);
+-  }
++  bx = *(unsigned short *)(dg + 0x4b9e);
++  if (bx == 0) { DAT_2000_0a86 = DAT_2000_0a86 + 2; return; }
++  do {
++    kind = dg[(unsigned short)(bx + 4)];
++    (*(code *)fist_icall_near(0x0u,*(unsigned short *)(dg + (unsigned short)(0x4b2c + kind))))();
++    bx = *(unsigned short *)(dg + 0x4b9e);
++    FUN_0000_403f((int)bx);
++    bx = *(unsigned short *)(*(unsigned short *)(dg + 0x4b9e) + dg);
++    *(unsigned short *)(dg + 0x4b9e) = bx;
++    if (bx == 0) { DAT_2000_0a86 = DAT_2000_0a86 + 2; return; }
++  } while (*(unsigned short *)(dg + 0x450) != 0);
+   return;
+ }
+ 
+@@ -12994,30 +13003,38 @@
+ void __allregs FUN_0000_403f(int param_1)
+ 
+ {
+-  char cVar1;
+-  int iVar2;
+-  
+-  if (DAT_2000_2b74 != (char *)&DAT_2000_bfff) {
+-    iVar2 = *DAT_1000_d56a;
+-    if (iVar2 == DAT_1000_c722) {
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_d59c)))();
+-      cVar1 = *DAT_2000_2b74;
+-      if (cVar1 != -1) {
+-        *DAT_2000_2b74 = -1;
+-        DAT_2000_2b72 = *(undefined2 *)(param_1 + 2);
+-        DAT_2000_2b76 = cVar1;
+-      }
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a0)))();
+-      return;
+-    }
+-    cVar1 = *DAT_2000_2b74;
+-    if (cVar1 != -1) {
+-      *DAT_2000_2b74 = -1;
+-      DAT_2000_2b76 = cVar1;
+-      DAT_2000_2b72 = *(undefined2 *)(param_1 + 2);
+-      return;
+-    }
++  /* PATCH 464: reticle HIT-TEST after each rendered node (asm 0x403f-0x4095; DS=DGROUP=0x1c00).  ax=word
++   * [0x6b74] = the reticle pixel offset (-1 = none); es=word[word[0x156a]] = the viewport's DRAW SEGMENT;
++   * if es != word[0x722] (not the live VGA page): `ah=es:[di]; if ah==0xff ret; es:[di]=0xff;
++   * byte[0x6b76]=ah (the colour that was there); word[0x6b72]=word[bx+2] (this node's OBJECT -> the
++   * target under the reticle)`; else the same bracketed by lcall [0x159c] / lcall [0x15a0] (VGA page
++   * begin/end).  bx=node (param_1).  Ghidra took the pixel offset for a host char* and the segment for a
++   * pointer compare (`DAT_2000_2b74 != &DAT_2000_bfff`). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short off = *(unsigned short *)(dg + 0x6b74);
++  unsigned short seg, bx = (unsigned short)param_1;
++  unsigned char *px, ah;
++  if (off == 0xffff) return;
++  seg = *(unsigned short *)DAT_1000_d56a;
++  if (seg != (unsigned short)DAT_1000_c722) {
++    px = g_mem + (((uint32_t)seg << 4) + off);
++    ah = *px;
++    if (ah == 0xff) return;
++    *px = 0xff;
++    dg[0x6b76] = ah;
++    *(unsigned short *)(dg + 0x6b72) = *(unsigned short *)(dg + (unsigned short)(bx + 2));
++    return;
++  }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d59c)))();
++  seg = *(unsigned short *)DAT_1000_d56a;
++  px = g_mem + (((uint32_t)seg << 4) + off);
++  ah = *px;
++  if (ah != 0xff) {
++    *px = 0xff;
++    dg[0x6b76] = ah;
++    *(unsigned short *)(dg + 0x6b72) = *(unsigned short *)(dg + (unsigned short)(bx + 2));
+   }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a0)))();
+   return;
+ }
+ 

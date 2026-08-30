@@ -1,0 +1,86 @@
+PATCH 477: the AH-64 turret slew 90db/90cd -- it fed the aiming solver a265 a HOST pointer where a265
+takes a DGROUP NEAR offset, so a265's result stores went through the pointer's low 16 bits and overwrote
+the frame loop's own service vector at DGROUP:0x6ce4.
+
+902c (patch 365) holds the object as a host pointer and passes it down to 90cd->90db, but a265 (patch 274)
+takes DI as a near offset -- it did `(uint16_t)param_3` on a host address, landing its word[di+0x38] /
+[di+0x99] / [di+0x9b] stores on DGROUP:0x6ce3..0x6ce6.  In the AZER1 self-play that clobbered word[0x6ce4]
+(the per-frame service vector 459a calls at asm 0x45ed, legitimately 0xc30e/0x5db8/0x773e) with 0x000e, so
+459a dispatched into FUN_0000_4700 with a garbage DI and SEGV'd -- a corruption whose crash site was three
+subsystems away from its cause (found with a value-filtered hardware watchpoint on the vector).
+Also rebuilt both functions at the asm's WORD widths ([di+0x10]/[di+0x26]/[di+0x89]/[di+0x8b]/[di+0x97]/
+[di+0x9b] are all 16-bit; Ghidra's 32-bit `int` accesses clobbered each neighbouring field).
+--- a/fist.c
++++ b/fist.c
+@@ -24239,8 +24239,13 @@
+ void __allregs FUN_0000_90cd(undefined2 param_1,undefined4 param_2,int param_3)
+ 
+ {
++  /* PATCH 477: asm 0x90cd-0x90da -- `call 90db; mov ax,[di+0x26]; add ax,[di+0x89]; mov [di+0x10],ax`.
++   * All three fields are WORDs; Ghidra read/wrote them as 32-bit `int` (so [di+0x10] clobbered
++   * [di+0x12] and the sum came from the wrong bytes).  param_3 = the object HOST pointer (902c's
++   * convention, patch 365). */
++  unsigned char *o = (unsigned char *)(intptr_t)param_3;
+   FUN_0000_90db(param_1,param_2,param_3);
+-  *(int *)(param_3 + 0x10) = *(int *)(param_3 + 0x26) + *(int *)(param_3 + 0x89);
++  *(uint16_t *)(o + 0x10) = (uint16_t)(*(uint16_t *)(o + 0x26) + *(uint16_t *)(o + 0x89));
+   return;
+ }
+ 
+@@ -24250,26 +24255,39 @@
+ void __allregs FUN_0000_90db(undefined2 param_1,undefined4 param_2,int param_3)
+ 
+ {
+-  uint uVar1;
+-  int iVar2;
+-  uint uVar3;
+-  
+-  if (*(int *)(param_3 + 0x97) != 0) {
+-    FUN_1000_a265(param_1,param_2,param_3);
+-    *(int *)(param_3 + 0x8b) = *(int *)(param_3 + 0x9b) - *(int *)(param_3 + 0x26);
++  /* PATCH 477: the AH-64 TURRET/aim slew (asm 0x90db-0x912c; DS=DGROUP=0x1c00, di=the object).
++   * With a locked target word[di+0x97] it re-runs the aiming solver a265 and takes the commanded
++   * azimuth word[di+0x8b] = word[di+0x9b] - word[di+0x26]; the actual azimuth word[di+0x89] then slews
++   * toward it by at most 0x16c per frame (the `sub bx,ax; sbb cx,cx; and cx,ax; add bx,ax` clamp), and
++   * a move sets byte[di+0xc8]=3 and calls 76e8.  Finally byte[di+0xa9]=0x80, [di+0xaa]=[di+0xab]=0.
++   * TWO defects: (1) a265 takes DI as a DGROUP NEAR OFFSET (patch 274) but this caller received the
++   * object HOST pointer from 902c (patch 365) and passed it straight through -- a265 then used the
++   * pointer's low 16 bits as the offset and wrote its results (word[di+0x38]/[di+0x99]/[di+0x9b])
++   * through a wild near offset.  In the AZER1 self-play that landed on DGROUP:0x6ce3..0x6ce6 and
++   * overwrote the frame-loop's own service vector word[0x6ce4], so 459a then called through it into
++   * FUN_0000_4700 with a garbage DI and crashed.  (2) every field here is a WORD in the asm; Ghidra
++   * used 32-bit `int`, so each store clobbered the neighbouring field. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned char *o = (unsigned char *)(intptr_t)param_3;
++  uint16_t di = (uint16_t)(o - dg);
++  int16_t d, sg;
++  if (*(uint16_t *)(o + 0x97) != 0) {                       /* 90db mov si,[di+0x97]; or si,si */
++    FUN_1000_a265(param_1,param_2,(int *)(uintptr_t)di);    /* 90e3 lcall f69:abd5 (di = NEAR offset) */
++    *(uint16_t *)(o + 0x8b) = (uint16_t)(*(uint16_t *)(o + 0x9b) - *(uint16_t *)(o + 0x26));
+   }
+-  uVar1 = *(int *)(param_3 + 0x8b) - *(int *)(param_3 + 0x89);
+-  uVar3 = (int)uVar1 >> 0xf;
+-  uVar1 = (uVar1 ^ uVar3) - uVar3;
+-  iVar2 = ((uVar1 - 0x16c & -(uint)(uVar1 < 0x16c)) + 0x16c ^ uVar3) - uVar3;
+-  if (iVar2 != 0) {
+-    *(int *)(param_3 + 0x89) = *(int *)(param_3 + 0x89) + iVar2;
+-    *(undefined1 *)(param_3 + 200) = 3;
++  d  = (int16_t)(*(uint16_t *)(o + 0x8b) - *(uint16_t *)(o + 0x89));   /* 90f3/90f7 */
++  sg = (int16_t)(d >> 15);                                             /* 90fb cwtd */
++  d  = (int16_t)((d ^ sg) - sg);
++  if ((uint16_t)d > 0x16c) d = 0x16c;                                  /* 9100-9109 clamp */
++  d  = (int16_t)((d ^ sg) - sg);
++  if (d != 0) {                                                        /* 910f je 911d */
++    *(uint16_t *)(o + 0x89) = (uint16_t)(*(uint16_t *)(o + 0x89) + (uint16_t)d);
++    o[0xc8] = 3;
+     FUN_0000_76e8();
+   }
+-  *(undefined1 *)(param_3 + 0xa9) = 0x80;
+-  *(undefined1 *)(param_3 + 0xaa) = 0;
+-  *(undefined1 *)(param_3 + 0xab) = 0;
++  o[0xa9] = 0x80;
++  o[0xaa] = 0;
++  o[0xab] = 0;
+   return;
+ }
+ 

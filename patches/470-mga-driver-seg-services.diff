@@ -1,0 +1,149 @@
+PATCH 470: MGAVIDEO driver-private-segment functions 400b/4030/405e rebuilt (windshield-object frontier,
+slice 6) -- the sprite position / palette-bank / shade-table services the kind-6 renderer calls via
+[0x668]/[0x674].
+
+These functions start with `mov ds,[ss:0x70a]`: their variables (0x58a/0x58c screen pos, 0x58e shade,
+0x5bd bank, 0x5bf/0x5cb bank tables) live in the driver's PRIVATE segment word[DGROUP:0x70a], not in
+DGROUP -- the decompile's DAT_1000_c5xx macros (DGROUP-based) and the raw `*(int *)0x58e` host derefs
+were both wrong (patch 466's 3fca is corrected to the same base).  405e fills the 256-byte shade table at
+DGROUP:0x1448 (es=ss) and decrements the entries of the bank's bright-colour list; 4030 selects the bank
+(ax>=0xc -> 10, CF=1) and resets the shade cache; 400b stores the sprite anchor.  asm-verified vs
+re_out/fist_mga_image.bin 0x400b-0x40b5.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -9683,16 +9683,14 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_400b) @ 0000:400b ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ void __allregs FUN_0000_400b(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  uVar1 = _DAT_2000_c19a;
+-  *(undefined2 *)&DAT_1000_c58a = param_1;
+-  *(undefined2 *)&DAT_1000_c58c = param_2;
++  /* PATCH 470: sprite screen position (asm 0x400b-0x4019): `mov ds,[ss:0x70a]; [0x58a]=ax; [0x58c]=cx`
++   * in the driver's private segment. */
++  unsigned char *md = g_mem + ((uint32_t)(*(uint16_t *)(g_mem + 0x1c70a)) << 4);
++  *(uint16_t *)(md + 0x58a) = (uint16_t)param_1;
++  *(uint16_t *)(md + 0x58c) = (uint16_t)param_2;
+   return;
+ }
+ 
+@@ -9708,82 +9706,49 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_4030) @ 0000:4030 ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ uint __allregs FUN_0000_4030(uint param_1)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  uVar1 = _DAT_2000_c19a;
+-  if (param_1 < 0xc) {
+-    if (param_1 != *(uint *)0x5bd) {
+-      *(uint *)0x5bd = param_1;
+-      *(undefined2 *)0x58e = 0;
+-    }
+-    return param_1;
++  /* PATCH 470: select the palette BANK (asm 0x4030-0x405d; ds=driver seg): ax>=0xc -> ax=10, CF=1;
++   * ax!=[0x5bd] -> [0x5bd]=ax, [0x58e]=0 (shade cache reset), bx=word[0x5cb+ax], es=driver seg; CF=0.
++   * Ghidra deref'd the driver-seg offsets as host addresses. */
++  extern unsigned char g_fist_cf;
++  unsigned char *md = g_mem + ((uint32_t)(*(uint16_t *)(g_mem + 0x1c70a)) << 4);
++  uint16_t ax = (uint16_t)param_1;
++  if (ax >= 0xc) { g_fist_cf = 1; return 10; }
++  if (ax != *(uint16_t *)(md + 0x5bd)) {
++    *(uint16_t *)(md + 0x5bd) = ax;
++    *(uint16_t *)(md + 0x58e) = 0;
+   }
+-  return 10;
++  g_fist_cf = 0;
++  return ax;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_405e) @ 0000:405e ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ void __allregs FUN_0000_405e(int param_1)
+ 
+ {
+-  char *pcVar1;
+-  uint *puVar2;
+-  uint uVar3;
+-  undefined2 *puVar4;
+-  undefined2 uVar5;
+-  byte bVar6;
+-  undefined1 uVar7;
+-  int iVar8;
+-  uint uVar9;
+-  uint *puVar10;
+-  undefined2 *puVar11;
+-  
+-  uVar5 = _DAT_2000_c19a;
+-  LOCK();
+-  iVar8 = *(int *)0x58e;
+-  *(int *)0x58e = param_1;
+-  UNLOCK();
+-  if (iVar8 != param_1) {
+-    uVar7 = (undefined1)((uint)(param_1 + 0xff) >> 8);
+-    puVar11 = (undefined2 *)0x1448;
+-    for (iVar8 = 0x80; iVar8 != 0; iVar8 = iVar8 + -1) {
+-      puVar4 = puVar11;
+-      puVar11 = puVar11 + 1;
+-      *puVar4 = CONCAT11(uVar7,uVar7);
+-    }
+-    bVar6 = -*(char *)0x58e;
+-    if (bVar6 != 0) {
+-      puVar10 = (uint *)*(undefined2 *)(*(int *)0x5bd + 0x5bf);
+-      uVar9 = (uint)(bVar6 >> 1);
+-      if ((bVar6 & 1) != 0) {
+-        puVar2 = puVar10;
+-        puVar10 = (uint *)((int)puVar10 + 1);
+-        pcVar1 = (char *)((byte)*puVar2 + 0x1448);
+-        *pcVar1 = *pcVar1 + -1;
+-        if (uVar9 == 0) {
+-          return;
+-        }
+-      }
+-      do {
+-        puVar2 = puVar10;
+-        puVar10 = puVar10 + 1;
+-        uVar3 = *puVar2;
+-        pcVar1 = (char *)((uVar3 & 0xff) + 0x1448);
+-        *pcVar1 = *pcVar1 + -1;
+-        pcVar1 = (char *)((uVar3 >> 8) + 0x1448);
+-        *pcVar1 = *pcVar1 + -1;
+-        uVar9 = uVar9 - 1;
+-      } while (uVar9 != 0);
+-    }
+-  }
++  /* PATCH 470: build the SHADE table (asm 0x405e-0x40b5; ds=driver seg, es=ss=DGROUP).  ax=shade;
++   * `xchg ax,[0x58e]`: unchanged -> return.  Fill the 256-byte table DGROUP:0x1448 with (ax+0xff)>>8
++   * (`add ax,0xff; mov al,ah; rep stosw x0x80`), then for count = -(byte)[0x58e] palette indices from
++   * the bank list word[0x5bf+[0x5bd]] (driver seg) decrement their table entry (`lodsb/lodsw; dec
++   * es:[bx+di]`).  Ghidra deref'd 0x58e/0x5bd/0x1448 as host addresses. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char *md = g_mem + ((uint32_t)(*(uint16_t *)(dg + 0x70a)) << 4);
++  uint16_t bx = (uint16_t)param_1, old = *(uint16_t *)(md + 0x58e), ax, si, cx, i;
++  uint8_t fill, n;
++  *(uint16_t *)(md + 0x58e) = bx;
++  if (old == bx) return;
++  ax = (uint16_t)(bx + 0xff); fill = (uint8_t)(ax >> 8);
++  for (i = 0; i < 0x100; i++) dg[0x1448 + i] = fill;
++  n = (uint8_t)(0 - (uint8_t)*(uint16_t *)(md + 0x58e));
++  if (n == 0) return;
++  si = *(uint16_t *)(md + (uint16_t)(0x5bf + *(uint16_t *)(md + 0x5bd)));
++  cx = (uint16_t)(n >> 1);
++  if (n & 1) { dg[0x1448 + md[si++]]--; if (cx == 0) return; }
++  while (cx--) { dg[0x1448 + md[si]]--; dg[0x1448 + md[(uint16_t)(si + 1)]]--; si = (uint16_t)(si + 2); }
+   return;
+ }
+ 

@@ -1,0 +1,28 @@
+PATCH 467: 4308's STRSEG:0x802 model-load walk dispatches 1684 with the 183f varnode order (p1=AX, p2=CX,
+p4=BX), not positionally.
+
+asm 1684: `movb [0x3ada],0xff; call 1692; movb [0x3ada],0; ret`; 1692: `mov [0x2674],ax; mov [0x2676],bx;
+mov [0x2678],cx` -- identical register contract to 183f (patch 195 already special-cases 183f).  The
+generic `icall(vec)(ax,bx,cx)` put BX (the model/string id that 183f -> 19d1 -> MGA 0197 uses as the
+template string-table index) into p2 and left p4 to whatever was on the stack.  It was benign by accident
+until patches 462-466 changed frame layouts: p4 became 0xf2c4, MGA 0197 (`lodsb/stosb until NUL` into
+DGROUP:0x740) copied a NUL-less run over the pitch-cache MRU nodes at DGROUP:0x798.. and the STRSEG word
+at DGROUP:0x70 (hardware-watchpoint proven), so c4df read vector 0x0007 from the wrong segment, re-entered
+FUN_0000_0007 and stalled in 2ebe's tick wait.
+--- a/fist.c
++++ b/fist.c
+@@ -13435,6 +13435,14 @@
+         /* 183f varnode order: p1=AX([+4]), p2=CX([+0]), p4=BX([+2]); p3=DX/p5=SI ambient (asm-verified
+            dead: 183f reads only AX/BX/CX, 19d1 only AX/BX, 1a45 only AX/BX/CX) -> pass 0 (patch 195). */
+         FUN_0000_183f(ax, cx, 0, bx, 0);
++      } else if (vec == 0x1684) {
++        /* PATCH 467: 1684 (the 0x3ada-flagged twin, asm 1684-1691 -> 1692 `mov [0x2674],ax; mov [0x2676],bx;
++           mov [0x2678],cx`) has the SAME varnode order as 183f.  The positional (ax,bx,cx) dispatch below
++           left p4 (BX = the model/string id 183f -> 19d1 -> MGA 0197 copies) as a STALE stack slot: any
++           frame-layout change turned it into a garbage id (0xf2c4) -> 0197 copied a NUL-less string over
++           the MGA pitch-cache nodes at DGROUP:0x798.. and the STRSEG word at 0x70 -> c4df dispatched
++           vector 0x0007 (re-entered the app entry) and hung in 2ebe's tick wait. */
++        FUN_0000_1684(ax, cx, 0, bx, 0);
+       } else {
+         (*(code *)fist_icall_near(0x0u, vec))(ax, bx, cx);
+       }

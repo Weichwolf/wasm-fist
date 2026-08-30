@@ -1,0 +1,793 @@
+PATCH 472: the remaining node-kind renderers 29ec (kind 2) / 30de (kind 0xa) / 2bb8 (kind 4) and their
+size-override wrappers 309b (kind 8) / 30bc (kind 0xc) (windshield-object frontier, slice 8).
+
+All three share 2e49's prologue (patch 471: gates, 0e22 scale, 3e8c/405e/3e29/400b/3ed4).  29ec (asm
+0x29ec-0x2b93) uses one descriptor (facing from 059a(word[bx+8])) whose segment 0x6b5c serves the whole
+list; 30de (0x30de-0x3281) takes the facing directly as (word[bx+8]&0x1f)<<1; 2bb8 (0x2bb8-0x2e44) has a
+BASE descriptor (059a(byte[bx+0x32]<<8) -> 0x6b64/0x6b66) whose single polygon list seeds the sorted list
+and a PART descriptor (059a(word[bx+8]) -> 0x6ad8/0x6ada) for the part facings at node+0x33, re-touching
+each descriptor in the walk and taking es from it.  The abort helpers 2b94/3282/2e45 (`pop ax; pop bx;
+ret`) return from the renderer.  309b/30bc swap the per-code size word[0x27b0+code] with word[node+0x32+
+cnt] around 29ec/30de (`xchg`, restored after).  Each polygon posts op-0x40 through e132 with the
+patch-471 register lanes.  Ghidra host-deref'd the node/descriptors/resource tables (SEGV in 309b once
+2e49 landed).
+--- a/fist.c
++++ b/fist.c
+@@ -10800,137 +10800,112 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_29ec) @ 0000:29ec ===== */
+ 
++static int p472_touch(unsigned char *dg, uint16_t d)
++{
++  uint8_t b = dg[(uint16_t)(d + 2)];
++  dg[(uint16_t)(d + 2)] = (uint8_t)(b | 0x20);
++  if ((b & 0x80) == 0) return 1;                     /* jns -> abort helper (2b94/3282/2e45) */
++  if (b & 0x10) FUN_1000_0d2e(d,0,d);                /* lcall f69:169e */
++  return 0;
++}
++/* the sorted-list insert of one polygon-list entry (asm 2b09-2b34 / 31f7-3222 / 2d64-2d8f): key ah */
++static void p472_insert(unsigned char *dg, uint16_t key, uint16_t si)
++{
++  uint16_t prev = 0x6adc, nxt = *(uint16_t *)(dg + 0x6adc), nw;
++  while (nxt != 0 && (uint8_t)(key >> 8) >= dg[(uint16_t)(nxt + 3)]) { prev = nxt; nxt = *(uint16_t *)(dg + nxt); }
++  nw = *(uint16_t *)(dg + 0x6ad6);
++  *(uint16_t *)(dg + nw) = nxt; *(uint16_t *)(dg + (uint16_t)(nw + 2)) = key; *(uint16_t *)(dg + (uint16_t)(nw + 4)) = si;
++  *(uint16_t *)(dg + 0x6ad6) = (uint16_t)(nw + 8);
++  *(uint16_t *)(dg + prev) = nw;
++}
++/* post one polygon to the extender op-0x40 rasterizer (asm 2b58-2b83 / 3246-3271 / 2de2-2e0b) */
++static void p472_post(unsigned char *dg, unsigned char *rb, uint16_t pl, uint16_t dx, uint16_t rec, int altbit)
++{
++  uint16_t pl2 = (uint16_t)(pl << 1), ts, cx;
++  unsigned char *rb2 = rb;
++  g_fist_ext_edi = (uint16_t)((pl & 0x8000) ? 0xffff : 0);            /* sbb di,di */
++  if (altbit && (pl & 0x4000)) {                                      /* js -> the base model's descriptor */
++    uint16_t r2 = *(uint16_t *)(dg + (uint16_t)(rec - 2));
++    pl2 &= 0x7fff; rb2 = g_mem + ((uint32_t)(*(uint16_t *)(dg + r2)) << 4);
++  }
++  ts = *(uint16_t *)(rb2 + 0xe);
++  pl2 = (uint16_t)(pl2 << 1);
++  cx = *(uint16_t *)(rb2 + (uint16_t)(pl2 + ts + 2));
++  ts = *(uint16_t *)(rb2 + (uint16_t)(pl2 + ts));
++  g_fist_ext_esi = (uint32_t)ts + *(uint32_t *)(rb2 + 2);
++  g_fist_ext_ecx = cx; g_fist_ext_edx = dx;
++  FUN_0000_e132(g_fist_ext_esi);
++}
++
+ uint __allregs FUN_0000_29ec(undefined4 param_1,undefined2 param_2)
+ 
+ {
+-  byte *pbVar1;
+-  int *piVar2;
+-  undefined2 uVar3;
+-  int iVar4;
+-  byte bVar5;
+-  int iVar6;
+-  uint uVar7;
+-  undefined1 extraout_AH;
+-  undefined2 *puVar8;
+-  uint uVar9;
+-  undefined2 uVar10;
+-  undefined2 *puVar11;
+-  undefined2 *puVar12;
+-  undefined2 uVar14;
+-  undefined2 *puVar13;
+-  int *piVar15;
+-  byte *pbVar16;
+-  undefined2 *unaff_CS;
+-  undefined1 uVar17;
+-  undefined1 uVar18;
+-  undefined2 *puVar19;
+-  
+-  uVar14 = (undefined2)((ulong)param_1 >> 0x10);
+-  uVar7 = DAT_1000_d554;
+-  if ((DAT_1000_d554 != *(uint *)(DAT_2000_0b9e + 2)) && (*(long *)(DAT_2000_0b9e + 0x2a) != -1)) {
+-    iVar6 = FUN_0000_0846((undefined2 *)&DAT_1000_d55a,DAT_2000_0b9e + 10);
+-    bVar5 = (byte)((uint)(iVar6 - DAT_2000_2c2a) >> 8);
+-    uVar7 = CONCAT11(bVar5,(((byte)(iVar6 - DAT_2000_2c2a) ^ bVar5) - bVar5) + '\x02') & 0xff07;
+-    if (((byte)uVar7 < 5) && (*(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x276c) != 0)) {
+-      uVar7 = *(uint *)(DAT_2000_0b9e + 0x1e);
+-      puVar8 = (undefined2 *)*(undefined2 *)(DAT_2000_0b9e + 0x20);
+-      uVar17 = puVar8 < (undefined2 *)0x7d;
+-      uVar18 = puVar8 == (undefined2 *)0x7d;
+-      if ((bool)uVar17) {
+-        uVar7 = FUN_0000_0d13(uVar7,puVar8);
+-        uVar10 = DAT_2000_2c28;
+-        DAT_2000_2c50 = FUN_0000_0e22(DAT_2000_2c26,uVar7);
+-        DAT_2000_2c52 = uVar10;
+-        uVar7 = FUN_0000_3e8c(DAT_2000_2c54,DAT_2000_2c56,DAT_2000_0b9e);
+-        if (!(bool)uVar18) {
+-          (*(code *)fist_icall_far((uint32_t)(DAT_1000_c674)))();
+-          uVar7 = FUN_0000_3e29(DAT_2000_0b9e);
+-          if (!(bool)uVar17) {
+-            puVar19 = (undefined2 *)0x2a78;
+-            (*(code *)fist_icall_far((uint32_t)(DAT_1000_c668)))();
+-            FUN_0000_3ed4(DAT_2000_0b9e);
+-            bVar5 = FUN_0000_059a(*(undefined2 *)(DAT_2000_0b9e + 8),(undefined2 *)&DAT_1000_d55a,
+-                                  DAT_2000_0b9e + 10);
+-            DAT_2000_2ad8 = CONCAT11(extraout_AH,bVar5);
+-            iVar6 = *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x27f4);
+-            iVar4 = *(int *)(DAT_2000_2ad8 + iVar6);
+-            pbVar1 = (byte *)(iVar4 + 2);
+-            *pbVar1 = *pbVar1 | 0x20;
+-            if ((char)*pbVar1 < '\0') {
+-              if ((*(byte *)(iVar4 + 2) & 0x10) != 0) {
+-                FUN_1000_0d2e(iVar4,param_2,iVar6);
+-                puVar19 = unaff_CS;
+-              }
+-            }
+-            else {
+-              puVar19 = (undefined2 *)0x2abc;
+-              FUN_0000_2b94(0x2abc);
+-            }
+-            uVar10 = *puVar19;
+-            DAT_2000_2adc = 0;
+-            DAT_2000_2ade = 0;
+-            DAT_2000_2ad6 = (undefined2 *)&DAT_2000_2ae4;
+-            DAT_2000_2ad4 = *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x276c) * 2;
+-            pbVar16 = (byte *)(DAT_2000_0b9e + 0x32);
+-            DAT_2000_2b5e = 0;
+-            DAT_2000_2b5c = uVar10;
+-            do {
+-              pbVar1 = pbVar16;
+-              pbVar16 = pbVar16 + 1;
+-              puVar19 = (undefined2 *)
+-                        *(undefined2 *)
+-                         ((uint)*pbVar1 * 2 +
+-                         *(int *)(DAT_2000_2b5e + *(int *)*(undefined2 *)(DAT_2000_2ad8 + 0x3a8c)));
+-              uVar3 = *puVar19;
+-              puVar11 = (undefined2 *)&DAT_2000_2adc;
+-              do {
+-                puVar12 = puVar11;
+-                if ((byte)((uint)uVar3 >> 8) < *(byte *)((int)puVar11 + 3)) break;
+-                puVar12 = (undefined2 *)*puVar11;
+-                puVar8 = puVar11;
+-                puVar11 = puVar12;
+-              } while (puVar12 != (undefined2 *)0x0);
+-              *DAT_2000_2ad6 = puVar12;
+-              DAT_2000_2ad6[1] = uVar3;
+-              DAT_2000_2ad6[2] = puVar19 + 1;
+-              puVar19 = DAT_2000_2ad6 + 4;
+-              *puVar8 = DAT_2000_2ad6;
+-              DAT_2000_2ad6 = puVar19;
+-              uVar3 = DAT_2000_2b5c;
+-              uVar7 = DAT_2000_2b5e + 2;
+-              DAT_2000_2b5e = uVar7;
+-              if (DAT_2000_2ad4 <= uVar7) {
+-                puVar13 = (undefined2 *)CONCAT22(uVar14,(undefined2 *)&DAT_2000_2adc);
+-                do {
+-                  puVar8 = (undefined2 *)puVar13;
+-                  uVar9 = (uint)*(byte *)(puVar8 + 1);
+-                  if (uVar9 != 0) {
+-                    piVar15 = (int *)puVar8[2];
+-                    do {
+-                      piVar2 = piVar15;
+-                      piVar15 = piVar15 + 2;
+-                      uVar7 = *piVar2 * 2;
+-                      if ((int)uVar7 < 0) {
+-                        uVar7 = uVar7 & 0x7fff;
+-                      }
+-                      puVar13 = (undefined2 *)
+-                                CONCAT22((int)((ulong)puVar13 >> 0x10),(undefined2 *)(uVar7 * 2));
+-                      uVar7 = FUN_0000_e132(puVar13);
+-                      uVar9 = uVar9 - 1;
+-                    } while (uVar9 != 0);
+-                  }
+-                  puVar13 = (undefined2 *)
+-                            CONCAT22((int)((ulong)puVar13 >> 0x10),(undefined2 *)*puVar8);
+-                } while ((undefined2 *)*puVar8 != (undefined2 *)0x0);
+-                return uVar7;
+-              }
+-            } while( true );
+-          }
+-        }
++  /* PATCH 472: node-kind 2 SPRITE/model renderer (asm 0x29ec-0x2b93) -- 2e49's single-descriptor form
++   * (patch 471 documents the shared gates/scale/screen/TCB prologue).  facing = 059a(word[bx+8]) ->
++   * 0x6ad8; descriptor word[word[0x27f4+code]+facing] (bit7 clear -> 2b94 aborts, bit4 -> f69:169e);
++   * es = its segment -> 0x6b5c; the parts at node+0x32 build the depth-sorted list; each polygon posts
++   * op-0x40 (bit 14 -> the base model's descriptor word[rec-2]).  Wrapped by 309b (kind 8) which swaps
++   * word[0x27b0+code] with word[node+0x32+cnt] around the call.  Ghidra host-deref'd everything. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x4b9e), ax, code, m, e, sz, y, cnt, rec, f, d1, di, k, es;
++  uint8_t b;
++  (void)param_1; (void)param_2;
++  if (*(uint16_t *)(dg + (uint16_t)(bx + 2)) == *(uint16_t *)(dg + 0x1554)) return 0;
++  if (*(uint32_t *)(dg + (uint16_t)(bx + 0x2a)) == 0xffffffffu) return 0;
++  ax = (uint16_t)FUN_0000_0846((uint *)(dg + 0x155a),(uint *)(dg + (uint16_t)(bx + 0xa)));
++  ax = (uint16_t)(ax - *(uint16_t *)(dg + 0x6c2a));
++  { uint8_t al = (uint8_t)ax, ah = (uint8_t)(ax >> 8);
++    al = (uint8_t)((al ^ ah) - ah); al = (uint8_t)((al + 2) & 7);
++    if (al > 4) return 0; }
++  code = dg[(uint16_t)(bx + 5)];
++  cnt  = *(uint16_t *)(dg + (uint16_t)(0x276c + code));
++  if (cnt == 0) return 0;
++  if (*(uint16_t *)(dg + (uint16_t)(bx + 0x20)) >= 0x7d) return 0;
++  m = (uint16_t)FUN_0000_0d13(*(uint16_t *)(dg + (uint16_t)(bx + 0x1e)),*(uint16_t *)(dg + (uint16_t)(bx + 0x20)));
++  e = g_fist_fp_dx;
++  g_fist_fp_dx = *(uint16_t *)(dg + 0x6c28); g_fist_fp_cx = e;
++  *(uint16_t *)(dg + 0x6c50) = (uint16_t)FUN_0000_0e22(*(uint16_t *)(dg + 0x6c26),m);
++  *(uint16_t *)(dg + 0x6c52) = g_fist_fp_dx;
++  sz = (uint16_t)FUN_0000_3e8c(*(uint16_t *)(dg + 0x6c54),*(uint16_t *)(dg + 0x6c56),(int)bx);
++  if (sz == 0) return 0;
++  ((void (*)(int))fist_icall_far((uint32_t)(DAT_1000_c674)))((int)sz);                  /* MGA 405e */
++  y = (uint16_t)FUN_0000_3e29((int)bx);
++  if (g_fist_cf) return 0;
++  ((void (*)(undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c668)))(y,g_fist_3e29_cx);  /* MGA 400b */
++  FUN_0000_3ed4((int)bx);
++  rec = *(uint16_t *)(dg + (uint16_t)(0x27f4 + code));
++
++  f = (uint8_t)FUN_0000_059a((int)*(uint16_t *)(dg + (uint16_t)(bx + 8)),(int)(intptr_t)(dg + 0x155a),(int)(intptr_t)(dg + (uint16_t)(bx + 0xa)));
++  *(uint16_t *)(dg + 0x6ad8) = f;
++  d1 = *(uint16_t *)(dg + (uint16_t)(f + rec));
++  if (p472_touch(dg,d1)) return 0;                                   /* 2b94: pop ax; pop bx; ret */
++  es = *(uint16_t *)(dg + d1); *(uint16_t *)(dg + 0x6b5c) = es;
++
++  *(uint16_t *)(dg + 0x6adc) = 0; *(uint16_t *)(dg + 0x6ade) = 0; *(uint16_t *)(dg + 0x6ad6) = 0x6ae4;
++  *(uint16_t *)(dg + 0x6ad4) = (uint16_t)(cnt * 2);
++  di = (uint16_t)(bx + 0x32);
++  *(uint16_t *)(dg + 0x6b5e) = 0;
++  { unsigned char *rb = g_mem + ((uint32_t)es << 4);
++    do {
++      uint16_t t = *(uint16_t *)(dg + (uint16_t)(0x3a8c + *(uint16_t *)(dg + 0x6ad8)));
++      t = *(uint16_t *)(rb + t);
++      t = *(uint16_t *)(rb + (uint16_t)(*(uint16_t *)(dg + 0x6b5e) + t));
++      t = *(uint16_t *)(rb + (uint16_t)((uint8_t)(dg[di] * 2) + t));
++      di = (uint16_t)(di + 1);
++      p472_insert(dg,*(uint16_t *)(rb + t),(uint16_t)(t + 2));
++      k = (uint16_t)(*(uint16_t *)(dg + 0x6b5e) + 2); *(uint16_t *)(dg + 0x6b5e) = k;
++    } while (k < *(uint16_t *)(dg + 0x6ad4));
++    for (k = 0x6adc; k != 0; k = *(uint16_t *)(dg + k)) {
++      uint16_t n = dg[(uint16_t)(k + 2)], si = *(uint16_t *)(dg + (uint16_t)(k + 4)), i;
++      for (i = 0; i < n; i++) {
++        uint16_t pl = *(uint16_t *)(rb + si), dx = *(uint16_t *)(rb + (uint16_t)(si + 2));
++        si = (uint16_t)(si + 4);
++        p472_post(dg,rb,pl,dx,rec,1);
+       }
+     }
+   }
+-  return uVar7;
++  return 0;
+ }
+ 
+ 
+@@ -10948,205 +10923,90 @@
+ uint __allregs FUN_0000_2bb8(undefined4 param_1,undefined2 param_2,uint *param_3)
+ 
+ {
+-  byte *pbVar1;
+-  undefined2 uVar2;
+-  uint uVar3;
+-  undefined2 *puVar4;
+-  byte bVar5;
+-  int iVar6;
+-  uint uVar7;
+-  undefined1 extraout_AH;
+-  undefined1 extraout_AH_00;
+-  undefined2 *puVar8;
+-  uint *puVar9;
+-  undefined2 uVar10;
+-  undefined2 *puVar11;
+-  undefined2 *puVar12;
+-  uint *puVar13;
+-  undefined2 uVar15;
+-  uint *puVar14;
+-  uint *puVar16;
+-  byte *pbVar17;
+-  uint *unaff_CS;
+-  uint *puVar18;
+-  undefined1 uVar19;
+-  undefined1 uVar20;
+-  undefined2 *puStack_4;
+-  
+-  uVar15 = (undefined2)((ulong)param_1 >> 0x10);
+-  uVar7 = DAT_1000_d554;
+-  if ((DAT_1000_d554 != *(uint *)(DAT_2000_0b9e + 2)) && (*(long *)(DAT_2000_0b9e + 0x2a) != -1)) {
+-    iVar6 = FUN_0000_0846((undefined2 *)&DAT_1000_d55a,DAT_2000_0b9e + 10);
+-    bVar5 = (byte)((uint)(iVar6 - DAT_2000_2c2a) >> 8);
+-    uVar7 = CONCAT11(bVar5,(((byte)(iVar6 - DAT_2000_2c2a) ^ bVar5) - bVar5) + '\x02') & 0xff07;
+-    if (((byte)uVar7 < 5) && (*(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x276c) != 0)) {
+-      uVar7 = *(uint *)(DAT_2000_0b9e + 0x1e);
+-      uVar3 = *(uint *)(DAT_2000_0b9e + 0x20);
+-      uVar19 = uVar3 < 0x7d;
+-      uVar20 = uVar3 == 0x7d;
+-      if ((bool)uVar19) {
+-        uVar7 = FUN_0000_0d13(uVar7,uVar3);
+-        uVar10 = DAT_2000_2c28;
+-        DAT_2000_2c50 = FUN_0000_0e22(DAT_2000_2c26,uVar7);
+-        DAT_2000_2c52 = uVar10;
+-        uVar7 = FUN_0000_3e8c(DAT_2000_2c54,DAT_2000_2c56,DAT_2000_0b9e);
+-        if (!(bool)uVar20) {
+-          (*(code *)fist_icall_far((uint32_t)(DAT_1000_c674)))();
+-          uVar7 = FUN_0000_3e29(DAT_2000_0b9e);
+-          if (!(bool)uVar19) {
+-            puStack_4 = (undefined2 *)0x2c44;
+-            (*(code *)fist_icall_far((uint32_t)(DAT_1000_c668)))();
+-            FUN_0000_3ed4(DAT_2000_0b9e);
+-            bVar5 = FUN_0000_059a((uint)*(byte *)(DAT_2000_0b9e + 0x32) << 8,
+-                                  (undefined2 *)&DAT_1000_d55a,DAT_2000_0b9e + 10);
+-            DAT_2000_2b64 = CONCAT11(extraout_AH,bVar5);
+-            iVar6 = *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x27f4);
+-            puVar4 = (undefined2 *)*(int *)(DAT_2000_2b64 + iVar6);
+-            pbVar1 = (byte *)(puVar4 + 1);
+-            DAT_2000_2b66 = puVar4;
+-            *pbVar1 = *pbVar1 | 0x20;
+-            if ((char)*pbVar1 < '\0') {
+-              if ((*(byte *)(puVar4 + 1) & 0x10) != 0) {
+-                unaff_CS = (uint *)&DAT_1000_cf69;
+-                puStack_4 = (undefined2 *)0x2c88;
+-                FUN_1000_0d2e(puVar4,param_2,iVar6);
+-              }
+-            }
+-            else {
+-              FUN_0000_2e45(0x2c8d);
+-            }
+-            DAT_2000_2b5c = *DAT_2000_2b66;
+-            DAT_2000_2ade = 0;
+-            DAT_2000_2ad4 = *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x276c) * 2;
+-            DAT_2000_2b5e = 0;
+-            puVar8 = (undefined2 *)&DAT_2000_2adc;
+-            DAT_2000_2ae8 =
+-                 (undefined2 *)
+-                 *(undefined2 *)
+-                  *(undefined2 *)*(undefined2 *)*(undefined2 *)(DAT_2000_2b64 + 0x3a8c) + 1;
+-            DAT_2000_2ae6 =
+-                 *(undefined2 *)
+-                  *(undefined2 *)
+-                   *(undefined2 *)*(undefined2 *)*(undefined2 *)(DAT_2000_2b64 + 0x3a8c);
+-            DAT_2000_2ae4 = 0;
+-            DAT_2000_2ad6 = (undefined2 *)&DAT_2000_2aec;
+-            DAT_2000_2adc = (undefined2 *)&DAT_2000_2ae4;
+-            bVar5 = FUN_0000_059a(*(undefined2 *)(DAT_2000_0b9e + 8),(undefined2 *)&DAT_1000_d55a,
+-                                  DAT_2000_0b9e + 10);
+-            DAT_2000_2ad8 = CONCAT11(extraout_AH_00,bVar5);
+-            iVar6 = *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x27f4);
+-            puVar4 = (undefined2 *)*(int *)(DAT_2000_2ad8 + iVar6);
+-            pbVar1 = (byte *)(puVar4 + 1);
+-            DAT_2000_2ada = puVar4;
+-            *pbVar1 = *pbVar1 | 0x20;
+-            if ((char)*pbVar1 < '\0') {
+-              if ((*(byte *)(puVar4 + 1) & 0x10) != 0) {
+-                unaff_CS = (uint *)&DAT_1000_cf69;
+-                puStack_4 = (undefined2 *)0x2d2f;
+-                FUN_1000_0d2e(puVar4,param_2,iVar6);
+-              }
+-            }
+-            else {
+-              FUN_0000_2e45(0x2d34);
+-            }
+-            uVar10 = *DAT_2000_2ada;
+-            pbVar17 = (byte *)(DAT_2000_0b9e + 0x33);
+-            DAT_2000_2b5c = uVar10;
+-            do {
+-              uVar7 = DAT_2000_2b5e + 2;
+-              DAT_2000_2b5e = uVar7;
+-              if (DAT_2000_2ad4 <= uVar7) {
+-                puVar14 = (uint *)CONCAT22(uVar15,(uint *)&DAT_2000_2adc);
+-                uVar15 = DAT_2000_2b5c;
+-                do {
+-                  puVar4 = DAT_2000_2b66;
+-                  puVar13 = (uint *)puVar14;
+-                  puVar9 = (uint *)(uint)(byte)puVar13[1];
+-                  if (puVar9 != (uint *)0x0) {
+-                    puVar16 = (uint *)puVar13[2];
+-                    puVar18 = unaff_CS;
+-                    if (puVar13 == (uint *)&DAT_2000_2ae4) {
+-                      uVar10 = (undefined2)((ulong)puVar14 >> 0x10);
+-                      pbVar1 = (byte *)(DAT_2000_2b66 + 1);
+-                      *pbVar1 = *pbVar1 | 0x20;
+-                      if ((char)*pbVar1 < '\0') {
+-                        if ((*(byte *)(puVar4 + 1) & 0x10) != 0) {
+-                          FUN_1000_0d2e(puVar4,param_2,pbVar17);
+-                          puVar18 = (uint *)&DAT_1000_cf69;
+-                          param_3 = unaff_CS;
+-                        }
+-                      }
+-                      else {
+-                        param_3 = (uint *)0x2dd6;
+-                        FUN_0000_2e45(0x2dd6);
+-                      }
+-                      uVar15 = *DAT_2000_2b66;
+-                      puVar14 = (uint *)CONCAT22(uVar10,puVar9);
+-                      puVar16 = (uint *)puVar9[2];
+-                      puStack_4 = (undefined2 *)&DAT_2000_2ae4;
+-                      puVar9 = param_3;
+-                    }
+-                    do {
+-                      uVar7 = *puVar16;
+-                      puVar16 = puVar16 + 2;
+-                      pbVar17 = (byte *)-(uint)CARRY2(uVar7,uVar7);
+-                      puVar14 = (uint *)CONCAT22((int)((ulong)puVar14 >> 0x10),(uint *)(uVar7 << 2))
+-                      ;
+-                      uVar7 = FUN_0000_e132(puVar14);
+-                      puVar9 = (uint *)((int)puVar9 + -1);
+-                      unaff_CS = puVar18;
+-                      param_3 = puVar16;
+-                    } while (puVar9 != (uint *)0x0);
+-                  }
+-                  puVar4 = DAT_2000_2ada;
+-                  uVar10 = (undefined2)((ulong)puVar14 >> 0x10);
+-                  if (puStack_4 == (undefined2 *)&DAT_2000_2ae4) {
+-                    pbVar1 = (byte *)(DAT_2000_2ada + 1);
+-                    *pbVar1 = *pbVar1 | 0x20;
+-                    if ((char)*pbVar1 < '\0') {
+-                      if ((*(byte *)(puVar4 + 1) & 0x10) != 0) {
+-                        unaff_CS = (uint *)&DAT_1000_cf69;
+-                        param_3 = (uint *)0x2e2f;
+-                        uVar7 = FUN_1000_0d2e(puVar4,param_2,pbVar17);
+-                      }
+-                    }
+-                    else {
+-                      uVar7 = FUN_0000_2e45(0x2e34);
+-                    }
+-                    uVar15 = *DAT_2000_2ada;
+-                  }
+-                  puVar14 = (uint *)CONCAT22(uVar10,(uint *)*puStack_4);
+-                } while ((uint *)*puStack_4 != (uint *)0x0);
+-                return uVar7;
+-              }
+-              pbVar1 = pbVar17;
+-              pbVar17 = pbVar17 + 1;
+-              puVar4 = (undefined2 *)
+-                       *(undefined2 *)
+-                        ((uint)*pbVar1 * 2 +
+-                        *(int *)(uVar7 + *(int *)*(undefined2 *)(DAT_2000_2ad8 + 0x3a8c)));
+-              uVar2 = *puVar4;
+-              puVar11 = (undefined2 *)&DAT_2000_2adc;
+-              do {
+-                puVar12 = puVar11;
+-                if ((byte)((uint)uVar2 >> 8) < *(byte *)((int)puVar11 + 3)) break;
+-                puVar12 = (undefined2 *)*puVar11;
+-                puVar8 = puVar11;
+-                puVar11 = puVar12;
+-              } while (puVar12 != (undefined2 *)0x0);
+-              *DAT_2000_2ad6 = puVar12;
+-              DAT_2000_2ad6[1] = uVar2;
+-              DAT_2000_2ad6[2] = puVar4 + 1;
+-              puVar4 = DAT_2000_2ad6 + 4;
+-              *puVar8 = DAT_2000_2ad6;
+-              DAT_2000_2ad6 = puVar4;
+-            } while( true );
+-          }
+-        }
+-      }
++  /* PATCH 472: node-kind 4 renderer (asm 0x2bb8-0x2e44): a BASE descriptor (facing = 059a(byte[bx+0x32]
++   * <<8) -> 0x6b64/0x6b66) whose single polygon list (three indirections from word[0x3a8c+facing]) seeds
++   * the sorted list at 0x6ae4, then the PART descriptor (059a(word[bx+8]) -> 0x6ad8/0x6ada) with the part
++   * facing bytes from node+0x33; the walk re-touches 0x6b66 for the first entry (0x6ae4) and 0x6ada for the
++   * rest and takes es from the touched descriptor; no bit-14 alternate; 2e45 is the abort helper. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x4b9e), ax, code, m, e, sz, y, cnt, rec, f, d1, d2, di, k, es, t;
++  unsigned char *rb;
++  (void)param_1; (void)param_2; (void)param_3;
++  if (*(uint16_t *)(dg + (uint16_t)(bx + 2)) == *(uint16_t *)(dg + 0x1554)) return 0;
++  if (*(uint32_t *)(dg + (uint16_t)(bx + 0x2a)) == 0xffffffffu) return 0;
++  ax = (uint16_t)FUN_0000_0846((uint *)(dg + 0x155a),(uint *)(dg + (uint16_t)(bx + 0xa)));
++  ax = (uint16_t)(ax - *(uint16_t *)(dg + 0x6c2a));
++  { uint8_t al = (uint8_t)ax, ah = (uint8_t)(ax >> 8);
++    al = (uint8_t)((al ^ ah) - ah); al = (uint8_t)((al + 2) & 7);
++    if (al > 4) return 0; }
++  code = dg[(uint16_t)(bx + 5)];
++  cnt  = *(uint16_t *)(dg + (uint16_t)(0x276c + code));
++  if (cnt == 0) return 0;
++  if (*(uint16_t *)(dg + (uint16_t)(bx + 0x20)) >= 0x7d) return 0;
++  m = (uint16_t)FUN_0000_0d13(*(uint16_t *)(dg + (uint16_t)(bx + 0x1e)),*(uint16_t *)(dg + (uint16_t)(bx + 0x20)));
++  e = g_fist_fp_dx;
++  g_fist_fp_dx = *(uint16_t *)(dg + 0x6c28); g_fist_fp_cx = e;
++  *(uint16_t *)(dg + 0x6c50) = (uint16_t)FUN_0000_0e22(*(uint16_t *)(dg + 0x6c26),m);
++  *(uint16_t *)(dg + 0x6c52) = g_fist_fp_dx;
++  sz = (uint16_t)FUN_0000_3e8c(*(uint16_t *)(dg + 0x6c54),*(uint16_t *)(dg + 0x6c56),(int)bx);
++  if (sz == 0) return 0;
++  ((void (*)(int))fist_icall_far((uint32_t)(DAT_1000_c674)))((int)sz);
++  y = (uint16_t)FUN_0000_3e29((int)bx);
++  if (g_fist_cf) return 0;
++  ((void (*)(undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c668)))(y,g_fist_3e29_cx);
++  FUN_0000_3ed4((int)bx);
++  rec = *(uint16_t *)(dg + (uint16_t)(0x27f4 + code));
++  f = (uint8_t)FUN_0000_059a((int)(uint16_t)(dg[(uint16_t)(bx + 0x32)] << 8),(int)(intptr_t)(dg + 0x155a),(int)(intptr_t)(dg + (uint16_t)(bx + 0xa)));
++  *(uint16_t *)(dg + 0x6b64) = f;
++  d1 = *(uint16_t *)(dg + (uint16_t)(f + rec)); *(uint16_t *)(dg + 0x6b66) = d1;
++  if (p472_touch(dg,d1)) return 0;                                   /* 2e45 */
++  es = *(uint16_t *)(dg + d1); *(uint16_t *)(dg + 0x6b5c) = es; rb = g_mem + ((uint32_t)es << 4);
++  *(uint16_t *)(dg + 0x6adc) = 0; *(uint16_t *)(dg + 0x6ade) = 0; *(uint16_t *)(dg + 0x6ad6) = 0x6ae4;
++  *(uint16_t *)(dg + 0x6ad4) = (uint16_t)(cnt * 2);
++  *(uint16_t *)(dg + 0x6b5e) = 0;
++  t = *(uint16_t *)(dg + (uint16_t)(0x3a8c + f));
++  t = *(uint16_t *)(rb + t); t = *(uint16_t *)(rb + t); t = *(uint16_t *)(rb + t);
++  { uint16_t key = *(uint16_t *)(rb + t), nw = *(uint16_t *)(dg + 0x6ad6);   /* 2cd7: first entry, no sort */
++    *(uint16_t *)(dg + nw) = 0; *(uint16_t *)(dg + (uint16_t)(nw + 2)) = key; *(uint16_t *)(dg + (uint16_t)(nw + 4)) = (uint16_t)(t + 2);
++    *(uint16_t *)(dg + 0x6ad6) = (uint16_t)(nw + 8); *(uint16_t *)(dg + 0x6adc) = nw; }
++  f = (uint8_t)FUN_0000_059a((int)*(uint16_t *)(dg + (uint16_t)(bx + 8)),(int)(intptr_t)(dg + 0x155a),(int)(intptr_t)(dg + (uint16_t)(bx + 0xa)));
++  *(uint16_t *)(dg + 0x6ad8) = f;
++  d2 = *(uint16_t *)(dg + (uint16_t)(f + rec)); *(uint16_t *)(dg + 0x6ada) = d2;
++  if (p472_touch(dg,d2)) return 0;
++  es = *(uint16_t *)(dg + d2); *(uint16_t *)(dg + 0x6b5c) = es; rb = g_mem + ((uint32_t)es << 4);
++  di = (uint16_t)(bx + 0x33);
++  for (;;) {                                                          /* 2d91 loop (count first) */
++    k = (uint16_t)(*(uint16_t *)(dg + 0x6b5e) + 2); *(uint16_t *)(dg + 0x6b5e) = k;
++    if (k >= *(uint16_t *)(dg + 0x6ad4)) break;
++    t = *(uint16_t *)(dg + (uint16_t)(0x3a8c + *(uint16_t *)(dg + 0x6ad8)));
++    t = *(uint16_t *)(rb + t);
++    t = *(uint16_t *)(rb + (uint16_t)(*(uint16_t *)(dg + 0x6b5e) + t));
++    t = *(uint16_t *)(rb + (uint16_t)((uint8_t)(dg[di] * 2) + t));
++    di = (uint16_t)(di + 1);
++    p472_insert(dg,*(uint16_t *)(rb + t),(uint16_t)(t + 2));
++  }
++  for (k = 0x6adc; k != 0; k = *(uint16_t *)(dg + k)) {                    /* 2da0 walk */
++    uint16_t n = dg[(uint16_t)(k + 2)], si = *(uint16_t *)(dg + (uint16_t)(k + 4)), i;
++    if (n == 0) { if (k == 0x6ae4) { if (p472_touch(dg,*(uint16_t *)(dg + 0x6b66))) return 0; es = *(uint16_t *)(dg + *(uint16_t *)(dg + 0x6b66)); }
++                  if (k == 0x6ae4) {} continue; }
++    if (k == 0x6ae4) {                                                  /* first entry: the BASE descriptor */
++      if (p472_touch(dg,*(uint16_t *)(dg + 0x6b66))) return 0;
++      es = *(uint16_t *)(dg + *(uint16_t *)(dg + 0x6b66));
++      si = *(uint16_t *)(dg + (uint16_t)(k + 4));
++    }
++    rb = g_mem + ((uint32_t)es << 4);
++    for (i = 0; i < n; i++) {
++      uint16_t pl = *(uint16_t *)(rb + si), dx = *(uint16_t *)(rb + (uint16_t)(si + 2));
++      si = (uint16_t)(si + 4);
++      p472_post(dg,rb,pl,dx,rec,0);
++    }
++    if (k == 0x6ae4) {                                                  /* 2e11: after the first entry -> PART descriptor */
++      if (p472_touch(dg,*(uint16_t *)(dg + 0x6ada))) return 0;
++      es = *(uint16_t *)(dg + *(uint16_t *)(dg + 0x6ada));
+     }
+   }
+-  return uVar7;
++  return 0;
+ }
+ 
+ 
+@@ -11295,20 +11155,16 @@
+ void __allregs FUN_0000_309b(undefined4 param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 *puVar1;
+-  undefined2 uVar2;
+-  int iVar3;
+-  uint uVar4;
+-  
+-  uVar4 = (uint)*(byte *)(DAT_2000_0b9e + 5);
+-  iVar3 = *(int *)(uVar4 + 0x276c);
+-  LOCK();
+-  puVar1 = (undefined2 *)((int)(undefined2 *)&DAT_1000_e7b0 + uVar4);
+-  uVar2 = *puVar1;
+-  *puVar1 = *(undefined2 *)(iVar3 + DAT_2000_0b9e + 0x32);
+-  UNLOCK();
+-  FUN_0000_29ec(CONCAT22((int)((ulong)param_1 >> 0x10),iVar3),param_2);
+-  *(undefined2 *)((int)(undefined2 *)&DAT_1000_e7b0 + uVar4) = uVar2;
++  /* PATCH 472: node-kind 8 = kind 2 with the size override (asm 0x309b-0x30bb): swap word[0x27b0+code]
++   * with word[node+0x32+word[0x276c+code]] around 29ec, restore after. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = *(uint16_t *)(dg + 0x4b9e), code = dg[(uint16_t)(di + 5)];
++  uint16_t off = *(uint16_t *)(dg + (uint16_t)(0x276c + code));
++  uint16_t *slot = (uint16_t *)(dg + (uint16_t)(0x27b0 + code));
++  uint16_t saved = *slot;
++  *slot = *(uint16_t *)(dg + (uint16_t)(di + 0x32 + off));
++  FUN_0000_29ec(param_1,param_2);
++  *slot = saved;
+   return;
+ }
+ 
+@@ -11318,20 +11174,15 @@
+ void __allregs FUN_0000_30bc(undefined4 param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 *puVar1;
+-  undefined2 uVar2;
+-  int iVar3;
+-  uint uVar4;
+-  
+-  uVar4 = (uint)*(byte *)(DAT_2000_0b9e + 5);
+-  iVar3 = *(int *)(uVar4 + 0x276c);
+-  LOCK();
+-  puVar1 = (undefined2 *)((int)(undefined2 *)&DAT_1000_e7b0 + uVar4);
+-  uVar2 = *puVar1;
+-  *puVar1 = *(undefined2 *)(iVar3 + DAT_2000_0b9e + 0x32);
+-  UNLOCK();
+-  FUN_0000_30de(CONCAT22((int)((ulong)param_1 >> 0x10),iVar3),param_2);
+-  *(undefined2 *)((int)(undefined2 *)&DAT_1000_e7b0 + uVar4) = uVar2;
++  /* PATCH 472: node-kind 0xc = kind 0xa with the size override (asm 0x30bc-0x30dc), cf. 309b. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = *(uint16_t *)(dg + 0x4b9e), code = dg[(uint16_t)(di + 5)];
++  uint16_t off = *(uint16_t *)(dg + (uint16_t)(0x276c + code));
++  uint16_t *slot = (uint16_t *)(dg + (uint16_t)(0x27b0 + code));
++  uint16_t saved = *slot;
++  *slot = *(uint16_t *)(dg + (uint16_t)(di + 0x32 + off));
++  FUN_0000_30de(param_1,param_2);
++  *slot = saved;
+   return;
+ }
+ 
+@@ -11341,131 +11192,68 @@
+ uint __allregs FUN_0000_30de(undefined4 param_1,undefined2 param_2)
+ 
+ {
+-  byte *pbVar1;
+-  int *piVar2;
+-  undefined2 uVar3;
+-  int iVar4;
+-  int iVar5;
+-  byte bVar7;
+-  uint uVar6;
+-  undefined2 *puVar8;
+-  uint uVar9;
+-  undefined2 uVar10;
+-  undefined2 *puVar11;
+-  undefined2 *puVar12;
+-  undefined2 uVar14;
+-  undefined2 *puVar13;
+-  int *piVar15;
+-  byte *pbVar16;
+-  undefined2 *unaff_CS;
+-  undefined1 uVar17;
+-  undefined1 uVar18;
+-  undefined2 *puVar19;
+-  
+-  uVar14 = (undefined2)((ulong)param_1 >> 0x10);
+-  uVar6 = DAT_1000_d554;
+-  if ((DAT_1000_d554 != *(uint *)(DAT_2000_0b9e + 2)) && (*(long *)(DAT_2000_0b9e + 0x2a) != -1)) {
+-    iVar5 = FUN_0000_0846((undefined2 *)&DAT_1000_d55a,DAT_2000_0b9e + 10);
+-    bVar7 = (byte)((uint)(iVar5 - DAT_2000_2c2a) >> 8);
+-    uVar6 = CONCAT11(bVar7,(((byte)(iVar5 - DAT_2000_2c2a) ^ bVar7) - bVar7) + '\x02') & 0xff07;
+-    if (((byte)uVar6 < 5) && (*(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x276c) != 0)) {
+-      uVar6 = *(uint *)(DAT_2000_0b9e + 0x1e);
+-      puVar8 = (undefined2 *)*(undefined2 *)(DAT_2000_0b9e + 0x20);
+-      uVar17 = puVar8 < (undefined2 *)0x7d;
+-      uVar18 = puVar8 == (undefined2 *)0x7d;
+-      if ((bool)uVar17) {
+-        uVar6 = FUN_0000_0d13(uVar6,puVar8);
+-        uVar10 = DAT_2000_2c28;
+-        DAT_2000_2c50 = FUN_0000_0e22(DAT_2000_2c26,uVar6);
+-        DAT_2000_2c52 = uVar10;
+-        uVar6 = FUN_0000_3e8c(DAT_2000_2c54,DAT_2000_2c56,DAT_2000_0b9e);
+-        if (!(bool)uVar18) {
+-          (*(code *)fist_icall_far((uint32_t)(DAT_1000_c674)))();
+-          uVar6 = FUN_0000_3e29(DAT_2000_0b9e);
+-          if (!(bool)uVar17) {
+-            puVar19 = (undefined2 *)0x316a;
+-            (*(code *)fist_icall_far((uint32_t)(DAT_1000_c668)))();
+-            FUN_0000_3ed4(DAT_2000_0b9e);
+-            DAT_2000_2ad8 = (*(uint *)(DAT_2000_0b9e + 8) & 0x1f) * 2;
+-            iVar5 = *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x27f4);
+-            iVar4 = *(int *)(DAT_2000_2ad8 + iVar5);
+-            pbVar1 = (byte *)(iVar4 + 2);
+-            *pbVar1 = *pbVar1 | 0x20;
+-            if ((char)*pbVar1 < '\0') {
+-              if ((*(byte *)(iVar4 + 2) & 0x10) != 0) {
+-                FUN_1000_0d2e(iVar4,param_2,iVar5);
+-                puVar19 = unaff_CS;
+-              }
+-            }
+-            else {
+-              puVar19 = (undefined2 *)0x31aa;
+-              FUN_0000_3282(0x31aa);
+-            }
+-            uVar10 = *puVar19;
+-            DAT_2000_2adc = 0;
+-            DAT_2000_2ade = 0;
+-            DAT_2000_2ad6 = (undefined2 *)&DAT_2000_2ae4;
+-            DAT_2000_2ad4 = *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x276c) * 2;
+-            pbVar16 = (byte *)(DAT_2000_0b9e + 0x32);
+-            DAT_2000_2b5e = 0;
+-            DAT_2000_2b5c = uVar10;
+-            do {
+-              pbVar1 = pbVar16;
+-              pbVar16 = pbVar16 + 1;
+-              puVar19 = (undefined2 *)
+-                        *(undefined2 *)
+-                         ((uint)*pbVar1 * 2 +
+-                         *(int *)(DAT_2000_2b5e + *(int *)*(undefined2 *)(DAT_2000_2ad8 + 0x3a8c)));
+-              uVar3 = *puVar19;
+-              puVar11 = (undefined2 *)&DAT_2000_2adc;
+-              do {
+-                puVar12 = puVar11;
+-                if ((byte)((uint)uVar3 >> 8) < *(byte *)((int)puVar11 + 3)) break;
+-                puVar12 = (undefined2 *)*puVar11;
+-                puVar8 = puVar11;
+-                puVar11 = puVar12;
+-              } while (puVar12 != (undefined2 *)0x0);
+-              *DAT_2000_2ad6 = puVar12;
+-              DAT_2000_2ad6[1] = uVar3;
+-              DAT_2000_2ad6[2] = puVar19 + 1;
+-              puVar19 = DAT_2000_2ad6 + 4;
+-              *puVar8 = DAT_2000_2ad6;
+-              DAT_2000_2ad6 = puVar19;
+-              uVar3 = DAT_2000_2b5c;
+-              uVar6 = DAT_2000_2b5e + 2;
+-              DAT_2000_2b5e = uVar6;
+-              if (DAT_2000_2ad4 <= uVar6) {
+-                puVar13 = (undefined2 *)CONCAT22(uVar14,(undefined2 *)&DAT_2000_2adc);
+-                do {
+-                  puVar8 = (undefined2 *)puVar13;
+-                  uVar9 = (uint)*(byte *)(puVar8 + 1);
+-                  if (uVar9 != 0) {
+-                    piVar15 = (int *)puVar8[2];
+-                    do {
+-                      piVar2 = piVar15;
+-                      piVar15 = piVar15 + 2;
+-                      uVar6 = *piVar2 * 2;
+-                      if ((int)uVar6 < 0) {
+-                        uVar6 = uVar6 & 0x7fff;
+-                      }
+-                      puVar13 = (undefined2 *)
+-                                CONCAT22((int)((ulong)puVar13 >> 0x10),(undefined2 *)(uVar6 * 2));
+-                      uVar6 = FUN_0000_e132(puVar13);
+-                      uVar9 = uVar9 - 1;
+-                    } while (uVar9 != 0);
+-                  }
+-                  puVar13 = (undefined2 *)
+-                            CONCAT22((int)((ulong)puVar13 >> 0x10),(undefined2 *)*puVar8);
+-                } while ((undefined2 *)*puVar8 != (undefined2 *)0x0);
+-                return uVar6;
+-              }
+-            } while( true );
+-          }
+-        }
++  /* PATCH 472: node-kind 0xa renderer (asm 0x30de-0x3281) -- 29ec with the facing taken directly as
++   * (word[bx+8] & 0x1f) << 1 (no 059a) and 3282 as the abort helper; wrapped by 30bc (kind 0xc). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x4b9e), ax, code, m, e, sz, y, cnt, rec, f, d1, di, k, es;
++  uint8_t b;
++  (void)param_1; (void)param_2;
++  if (*(uint16_t *)(dg + (uint16_t)(bx + 2)) == *(uint16_t *)(dg + 0x1554)) return 0;
++  if (*(uint32_t *)(dg + (uint16_t)(bx + 0x2a)) == 0xffffffffu) return 0;
++  ax = (uint16_t)FUN_0000_0846((uint *)(dg + 0x155a),(uint *)(dg + (uint16_t)(bx + 0xa)));
++  ax = (uint16_t)(ax - *(uint16_t *)(dg + 0x6c2a));
++  { uint8_t al = (uint8_t)ax, ah = (uint8_t)(ax >> 8);
++    al = (uint8_t)((al ^ ah) - ah); al = (uint8_t)((al + 2) & 7);
++    if (al > 4) return 0; }
++  code = dg[(uint16_t)(bx + 5)];
++  cnt  = *(uint16_t *)(dg + (uint16_t)(0x276c + code));
++  if (cnt == 0) return 0;
++  if (*(uint16_t *)(dg + (uint16_t)(bx + 0x20)) >= 0x7d) return 0;
++  m = (uint16_t)FUN_0000_0d13(*(uint16_t *)(dg + (uint16_t)(bx + 0x1e)),*(uint16_t *)(dg + (uint16_t)(bx + 0x20)));
++  e = g_fist_fp_dx;
++  g_fist_fp_dx = *(uint16_t *)(dg + 0x6c28); g_fist_fp_cx = e;
++  *(uint16_t *)(dg + 0x6c50) = (uint16_t)FUN_0000_0e22(*(uint16_t *)(dg + 0x6c26),m);
++  *(uint16_t *)(dg + 0x6c52) = g_fist_fp_dx;
++  sz = (uint16_t)FUN_0000_3e8c(*(uint16_t *)(dg + 0x6c54),*(uint16_t *)(dg + 0x6c56),(int)bx);
++  if (sz == 0) return 0;
++  ((void (*)(int))fist_icall_far((uint32_t)(DAT_1000_c674)))((int)sz);                  /* MGA 405e */
++  y = (uint16_t)FUN_0000_3e29((int)bx);
++  if (g_fist_cf) return 0;
++  ((void (*)(undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c668)))(y,g_fist_3e29_cx);  /* MGA 400b */
++  FUN_0000_3ed4((int)bx);
++  rec = *(uint16_t *)(dg + (uint16_t)(0x27f4 + code));
++
++  f = (uint16_t)((*(uint16_t *)(dg + (uint16_t)(bx + 8)) & 0x1f) << 1);
++  *(uint16_t *)(dg + 0x6ad8) = f;
++  d1 = *(uint16_t *)(dg + (uint16_t)(f + rec));
++  if (p472_touch(dg,d1)) return 0;                                   /* 3282: pop ax; pop bx; ret */
++  es = *(uint16_t *)(dg + d1); *(uint16_t *)(dg + 0x6b5c) = es;
++
++  *(uint16_t *)(dg + 0x6adc) = 0; *(uint16_t *)(dg + 0x6ade) = 0; *(uint16_t *)(dg + 0x6ad6) = 0x6ae4;
++  *(uint16_t *)(dg + 0x6ad4) = (uint16_t)(cnt * 2);
++  di = (uint16_t)(bx + 0x32);
++  *(uint16_t *)(dg + 0x6b5e) = 0;
++  { unsigned char *rb = g_mem + ((uint32_t)es << 4);
++    do {
++      uint16_t t = *(uint16_t *)(dg + (uint16_t)(0x3a8c + *(uint16_t *)(dg + 0x6ad8)));
++      t = *(uint16_t *)(rb + t);
++      t = *(uint16_t *)(rb + (uint16_t)(*(uint16_t *)(dg + 0x6b5e) + t));
++      t = *(uint16_t *)(rb + (uint16_t)((uint8_t)(dg[di] * 2) + t));
++      di = (uint16_t)(di + 1);
++      p472_insert(dg,*(uint16_t *)(rb + t),(uint16_t)(t + 2));
++      k = (uint16_t)(*(uint16_t *)(dg + 0x6b5e) + 2); *(uint16_t *)(dg + 0x6b5e) = k;
++    } while (k < *(uint16_t *)(dg + 0x6ad4));
++    for (k = 0x6adc; k != 0; k = *(uint16_t *)(dg + k)) {
++      uint16_t n = dg[(uint16_t)(k + 2)], si = *(uint16_t *)(dg + (uint16_t)(k + 4)), i;
++      for (i = 0; i < n; i++) {
++        uint16_t pl = *(uint16_t *)(rb + si), dx = *(uint16_t *)(rb + (uint16_t)(si + 2));
++        si = (uint16_t)(si + 4);
++        p472_post(dg,rb,pl,dx,rec,1);
+       }
+     }
+   }
+-  return uVar6;
++  return 0;
+ }
+ 
+ 

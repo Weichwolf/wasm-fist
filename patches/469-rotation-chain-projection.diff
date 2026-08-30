@@ -1,0 +1,366 @@
+PATCH 469: the camera-relative rotation chain 1322/129f/11ad (48-bit cx:dx:ax lanes) and the node
+projection helpers 3e29/3e8c/3ed4/3069 rebuilt from asm (windshield-object frontier, slice 5).
+
+1322 (asm 0x1322): dx:ax * cx -> 48-bit cx:dx:ax in three precision tiers; 129f (0x129f): one axis pair
+A*sin +/- B*cos with the sign bytes cl/ch xor'd against the rotation struct's [3]/[7] and the four
+add/sub/negate combinations as a 48-bit carry chain; 11ad (0x11ad): object-camera deltas (X/Y as
+magnitude+sign, Z signed) at 0x200e/0x2012/0x2016, then two 129f calls whose results >>16 go back into
+0x200e/0x2010 and 0x2012/0x2014 (byte[0x2015] = the "behind camera" sign 3e29 tests).  Ghidra summed
+16-bit halves, dropped every DX/CX lane and the carry chain (`return uVar2 + uVar1`).  3e29: 11ad + the
+0d13/0df7/0db5 chain (patch 468 lanes) with the scale [0x6c50]:[0x6c52] -> screen (cx=x, ax=y) around the
+viewport centre word[desc+0xc]/2, word[desc+0xa]/2, CF=behind; 3e8c: projected size via word[0x27b0+code]
+and the same scale (+8 exponent); 3ed4: the node -> TCB+0x476..0x48e field post the op-0x40 rasterizer
+reads (Ghidra deref'd the far pointer's offset as a host address); 3069: the abort tail's descriptor bit
+clears (its `pop ax; ret` is realised by 2e49 returning).  Shim: g_fist_r48_dx/cx, g_fist_3e29_cx.
+--- a/fist.c
++++ b/fist.c
+@@ -6,6 +6,7 @@
+ extern unsigned short g_fist_render_si, g_fist_render_dx;  /* board:0012 file-scope */
+ extern unsigned short g_fist_b1df_ax, g_fist_0578_bx, g_fist_03a9_dx;  /* PATCH 462: b1df AX (display index), 0578 BX (pitch), 03a9 DX */
+ extern unsigned short g_fist_fp_dx, g_fist_fp_cx;  /* PATCH 468: the 0d13..0e22 fixed-point block's DX (exponent) / CX register lanes */
++extern unsigned short g_fist_r48_dx, g_fist_r48_cx, g_fist_3e29_cx;  /* PATCH 469: 1322/129f 48-bit DX:CX lanes; 3e29's CX (screen x) */
+ 
+ /* ---- RULE 7: unresolved indirect/mid-function call targets, stubbed (OPEN) ---- */
+ int func_0x00000556(){ return 0; }  /* OPEN: unresolved indirect/mid-function call target */
+@@ -7033,56 +7034,36 @@
+ int __allregs FUN_0000_11ad(uint *param_1,undefined2 param_2,uint *param_3)
+ 
+ {
+-  int iVar1;
+-  undefined1 uVar2;
+-  byte bVar5;
+-  undefined2 uVar3;
+-  undefined2 uVar4;
+-  uint uVar6;
+-  uint uVar7;
+-  bool bVar8;
+-  
+-  uVar2 = 0;
+-  DAT_1000_e00e = *param_1 - *param_3;
+-  DAT_1000_e010 = (param_1[1] - param_3[1]) - (uint)(*param_1 < *param_3);
+-  if ((int)DAT_1000_e010 < 0) {
+-    uVar2 = 0xff;
+-    bVar8 = DAT_1000_e00e == 0;
+-    DAT_1000_e00e = -DAT_1000_e00e;
+-    if (bVar8) {
+-      DAT_1000_e010 = -DAT_1000_e010;
+-    }
+-    else {
+-      DAT_1000_e010 = ~DAT_1000_e010;
+-    }
+-  }
+-  bVar5 = 0;
+-  DAT_1000_e012 = param_1[2] - param_3[2];
+-  uVar6 = (param_1[3] - param_3[3]) - (uint)(param_1[2] < param_3[2]);
+-  if ((int)uVar6 < 0) {
+-    bVar5 = 0xff;
+-    bVar8 = DAT_1000_e012 == 0;
+-    DAT_1000_e012 = -DAT_1000_e012;
+-    if (bVar8) {
+-      uVar6 = -uVar6;
+-    }
+-    else {
+-      uVar6 = ~uVar6;
+-    }
++  /* PATCH 469: camera-relative delta + 2-axis rotation (asm 0x11ad-0x1231; DS=DGROUP).  bx=object pos
++   * (param_1, host ptr), si=camera pos (param_3, host ptr), bp=rotation struct (param_2 = its DGROUP
++   * near offset, e.g. 0x6c1e).  X/Y deltas are taken as magnitudes with the sign bits in cl/ch and
++   * stored at 0x200e/0x2012; the Z delta (signed) at 0x2016.  Then 129f(X,Y ; ch=~ch) -> X' and
++   * 129f(Y,X ; cl<->ch) -> Y', each stored as the 48-bit result >> 16 (mid:hi words) back into
++   * 0x200e/0x2010 and 0x2012/0x2014.  Ghidra rendered the two 48-bit results as 16-bit ints and lost
++   * the sign-flag plumbing. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint8_t *bp = dg + (uint16_t)param_2;
++  uint16_t cx = 0, keep, r1dx, r1cx;
++  uint32_t d;
++  d = *(uint32_t *)param_1 - *(uint32_t *)param_3;
++  if ((int32_t)d < 0) { cx |= 0x00ff; d = (uint32_t)(0 - d); }
++  *(uint32_t *)(dg + 0x200e) = d;
++  d = *(uint32_t *)(param_1 + 1) - *(uint32_t *)(param_3 + 1);
++  if ((int32_t)d < 0) { cx |= 0xff00; d = (uint32_t)(0 - d); }
++  *(uint32_t *)(dg + 0x2012) = d;
++  *(uint32_t *)(dg + 0x2016) = *(uint32_t *)(param_1 + 2) - *(uint32_t *)(param_3 + 2);
++  keep = cx;
++  FUN_0000_129f((int *)(dg + 0x200e),(undefined2)(uint16_t)(cx ^ 0xff00),(int *)(dg + 0x2012),(undefined2 *)bp);
++  r1dx = g_fist_r48_dx; r1cx = g_fist_r48_cx;
++  cx = (uint16_t)((keep >> 8) | (keep << 8));                       /* xchg cl,ch */
++  {
++    int lo = FUN_0000_129f((int *)(dg + 0x2012),(undefined2)cx,(int *)(dg + 0x200e),(undefined2 *)bp);
++    *(uint16_t *)(dg + 0x2012) = g_fist_r48_dx;
++    *(uint16_t *)(dg + 0x2014) = g_fist_r48_cx;
++    *(uint16_t *)(dg + 0x200e) = r1dx;
++    *(uint16_t *)(dg + 0x2010) = r1cx;
++    return lo;
+   }
+-  DAT_1000_e016 = param_1[4] - param_3[4];
+-  DAT_1000_e018 = (param_1[5] - param_3[5]) - (uint)(param_1[4] < param_3[4]);
+-  uVar3 = CONCAT11(~bVar5,uVar2);
+-  DAT_1000_e014 = uVar6;
+-  FUN_0000_129f((undefined2 *)&DAT_1000_e00e,uVar3,(undefined2 *)&DAT_1000_e012,param_2);
+-  uVar4 = CONCAT11(uVar2,bVar5);
+-  uVar7 = uVar6;
+-  iVar1 = FUN_0000_129f((undefined2 *)&DAT_1000_e012,uVar4,(undefined2 *)&DAT_1000_e00e,param_2);
+-  DAT_1000_e012 = uVar7;
+-  DAT_1000_e014 = uVar4;
+-  DAT_1000_e00e = uVar6;
+-  DAT_1000_e010 = uVar3;
+-  return iVar1;
+ }
+ 
+ 
+@@ -7121,55 +7102,34 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_129f) @ 0000:129f ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ int __allregs FUN_0000_129f(int *param_1,undefined2 param_2,int *param_3,undefined2 *param_4)
+ 
+ {
+-  uint uVar1;
+-  uint uVar2;
+-  int iVar3;
+-  int iVar4;
+-  int iVar5;
+-  
+-  _DAT_1000_e01a =
+-       CONCAT11((byte)((uint)param_2 >> 8) ^ *(byte *)((int)param_4 + 3),
+-                (byte)param_2 ^ *(byte *)((int)param_4 + 7));
+-  iVar5 = *param_3;
+-  iVar4 = param_3[1];
+-  if (*(char *)(param_4 + 1) == '\0') {
+-    uVar1 = 0;
+-  }
+-  else {
+-    uVar1 = FUN_0000_1322(iVar5,*param_4,iVar4);
+-    iVar5 = iVar4;
+-  }
+-  iVar4 = *param_1;
+-  iVar3 = param_1[1];
+-  if (*(char *)(param_4 + 3) == '\0') {
+-    uVar2 = 0;
+-  }
+-  else {
+-    uVar2 = FUN_0000_1322(iVar4,param_4[2],iVar3);
+-    iVar4 = iVar3;
+-  }
+-  if (-1 < DAT_1000_e01a) {
+-    if (-1 < _DAT_1000_e01a) {
+-      return uVar2 + uVar1;
+-    }
+-    return uVar2 - uVar1;
+-  }
+-  if (-1 < _DAT_1000_e01a) {
+-    return uVar1 - uVar2;
+-  }
+-  iVar3 = ~(uVar2 + uVar1) + 1;
+-  if (iVar3 != 0) {
+-    return iVar3;
+-  }
+-  if (iVar4 + iVar5 + (uint)CARRY2(uVar2,uVar1) != 0) {
+-    return 0;
+-  }
+-  return 0;
++  /* PATCH 469: rotate one axis pair (asm 0x129f-0x1321; DS=DGROUP).  ax=ptr A (param_1), bx=ptr B
++   * (param_3), cx=sign flags (param_2: cl for A, ch for B), bp=rotation struct (param_4: [0]=cos
++   * mantissa, [2]=cos-nonzero flag, [3]=cos sign, [4]=sin mantissa, [6]=flag, [7]=sign).  cl^=bp[7],
++   * ch^=bp[3] -> word[0x201a]; B48 = bp[2] ? 1322(B, cos) : B<<16; A48 = bp[6] ? 1322(A, sin) : A<<16;
++   * then by the two sign bytes: A+B / A-B / B-A / -(A+B) as 48-bit cx:dx:ax.  Ghidra's version added
++   * 16-bit halves and dropped the carry chain and the DX/CX lanes -> g_fist_r48_dx/cx. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint8_t *bp = (uint8_t *)param_4;
++  uint16_t cx = (uint16_t)param_2;
++  uint32_t A = *(uint32_t *)param_1, B = *(uint32_t *)param_3;
++  int64_t a48, b48, r;
++  uint16_t lo;
++  cx = (uint16_t)(((cx & 0xff) ^ bp[7]) | ((((cx >> 8) ^ bp[3]) & 0xff) << 8));
++  *(uint16_t *)(dg + 0x201a) = cx;
++  if (bp[2] == 0) b48 = (int64_t)((uint64_t)B << 16);
++  else { lo = (uint16_t)FUN_0000_1322((int)(uint16_t)B,(int)*(uint16_t *)(bp + 0),(int)(uint16_t)(B >> 16));
++         b48 = (int64_t)(((uint64_t)g_fist_r48_cx << 32) | ((uint64_t)g_fist_r48_dx << 16) | lo); }
++  if (bp[6] == 0) a48 = (int64_t)((uint64_t)A << 16);
++  else { lo = (uint16_t)FUN_0000_1322((int)(uint16_t)A,(int)*(uint16_t *)(bp + 4),(int)(uint16_t)(A >> 16));
++         a48 = (int64_t)(((uint64_t)g_fist_r48_cx << 32) | ((uint64_t)g_fist_r48_dx << 16) | lo); }
++  if ((int8_t)(cx & 0xff) >= 0) r = ((int8_t)(cx >> 8) >= 0) ? a48 + b48 : a48 - b48;
++  else                          r = ((int8_t)(cx >> 8) >= 0) ? b48 - a48 : -(a48 + b48);
++  g_fist_r48_dx = (uint16_t)((uint64_t)r >> 16);
++  g_fist_r48_cx = (uint16_t)((uint64_t)r >> 32);
++  return (int)(uint16_t)r;
+ }
+ 
+ 
+@@ -7178,13 +7138,20 @@
+ int __allregs FUN_0000_1322(int param_1,int param_2,int param_3)
+ 
+ {
+-  if (param_3 == 0) {
+-    return param_1 * param_2;
+-  }
+-  if ((char)((uint)param_3 >> 8) == '\0') {
+-    return (uint)(byte)((char)((uint)param_1 >> 8) * (char)param_2) << 8;
++  /* PATCH 469: 32x16 -> 48-bit multiply (asm 0x1322-0x134c): value dx:ax (param_3:param_1) * cx
++   * (param_2) -> cx:dx:ax.  dx==0: `mul cx` -> (dx:ax, cx=0); dh==0: mantissa (dl:ah) * cx, result
++   * placed one byte up (cl=P.b3, dx=P.b2:P.b1, ah=P.b0, al=0); else (value>>16)*cx placed two bytes up
++   * (cx=P.hi, dx=P.lo, ax=0).  Ghidra returned a 16-bit product (`param_1*param_2`) and dropped DX/CX ->
++   * published in g_fist_r48_dx / g_fist_r48_cx. */
++  uint16_t ax = (uint16_t)param_1, cx = (uint16_t)param_2, dx = (uint16_t)param_3;
++  uint32_t p;
++  if (dx == 0) { p = (uint32_t)ax * cx; g_fist_r48_dx = (uint16_t)(p >> 16); g_fist_r48_cx = 0; return (int)(uint16_t)p; }
++  if ((dx & 0xff00) == 0) {
++    p = (uint32_t)((dx << 8) | (ax >> 8)) * cx;
++    g_fist_r48_cx = (uint16_t)(p >> 24); g_fist_r48_dx = (uint16_t)(p >> 8);
++    return (int)(uint16_t)((p & 0xff) << 8);
+   }
+-  return 0;
++  p = (uint32_t)cx * dx; g_fist_r48_cx = (uint16_t)(p >> 16); g_fist_r48_dx = (uint16_t)p; return 0;
+ }
+ 
+ 
+@@ -11363,8 +11330,12 @@
+ undefined2 __allregs FUN_0000_3069(undefined2 param_1)
+ 
+ {
+-  *(byte *)(DAT_2000_2b68 + 2) = *(byte *)(DAT_2000_2b68 + 2) & 0xbf;
+-  *(byte *)(DAT_2000_2b6c + 2) = *(byte *)(DAT_2000_2b6c + 2) & 0xbf;
++  /* PATCH 469: model-render ABORT tail (asm 0x3069-0x307a): clear bit6 of byte[+2] in both resource
++   * descriptors word[0x6b68] / word[0x6b6c] (DGROUP near offsets), then `pop ax; ret` = return from the
++   * CALLER (2e49).  The pop is realised by 2e49 returning after this call; Ghidra host-deref'd both. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  dg[(uint16_t)(*(uint16_t *)(dg + 0x6b68) + 2)] &= 0xbf;
++  dg[(uint16_t)(*(uint16_t *)(dg + 0x6b6c) + 2)] &= 0xbf;
+   return param_1;
+ }
+ 
+@@ -12870,26 +12841,32 @@
+ int __allregs FUN_0000_3e29(int param_1)
+ 
+ {
+-  int iVar1;
+-  uint uVar2;
+-  int iVar3;
+-  undefined2 uVar4;
+-  
+-  DAT_2000_2c4e = param_1;
+-  iVar1 = FUN_0000_11ad(param_1 + 10,(undefined2 *)&DAT_2000_2c1e,(undefined2 *)&DAT_1000_d55a);
+-  if (-1 < (*(undefined1 *)(g_mem+0x1e015))) {
+-    uVar4 = DAT_1000_e010;
+-    uVar2 = FUN_0000_0d13(DAT_1000_e00e,DAT_1000_e010);
+-    iVar1 = FUN_0000_0df7(uVar2,DAT_2000_2c50);
+-    FUN_0000_0db5(iVar1,uVar4);
+-    uVar4 = DAT_1000_e018;
+-    iVar1 = DAT_1000_d56a;
+-    uVar2 = FUN_0000_0d13(DAT_1000_e016,DAT_1000_e018);
+-    iVar3 = FUN_0000_0df7(uVar2,DAT_2000_2c50);
+-    iVar3 = FUN_0000_0db5(iVar3,uVar4);
+-    return (*(uint *)(iVar1 + 10) >> 1) - iVar3;
+-  }
+-  return iVar1;
++  /* PATCH 469: node -> screen projection (asm 0x3e29-0x3e8b; DS=DGROUP).  bx=node near offset -> word
++   * [0x6c4e]; 11ad(node+0xa vs camera 0x155a, rot 0x6c1e); byte[0x2015]<0 (behind) -> CF=1.  Else
++   * x = 0db5(0df7(0d13(dword[0x200e]), scale [0x6c50]:[0x6c52])) + word[desc+0xc]/2 -> CX out
++   * (g_fist_3e29_cx); y = -0db5(0df7(0d13(dword[0x2016]), scale)) + word[desc+0xa]/2 -> AX; CF=0.
++   * Ghidra base-lost the node (host deref) and the exponent lanes. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)param_1, desc, ax, x;
++  *(uint16_t *)(dg + 0x6c4e) = bx;
++  FUN_0000_11ad((uint *)(dg + (uint16_t)(bx + 0xa)),0x6c1e,(uint *)(dg + 0x155a));
++  if ((int8_t)dg[0x2015] < 0) { g_fist_cf = 1; return param_1; }
++  desc = *(uint16_t *)(dg + 0x156a);
++  ax = (uint16_t)FUN_0000_0d13(*(uint16_t *)(dg + 0x200e),*(uint16_t *)(dg + 0x2010));
++  g_fist_fp_cx = *(uint16_t *)(dg + 0x6c52);
++  ax = (uint16_t)FUN_0000_0df7(ax,*(uint16_t *)(dg + 0x6c50));
++  ax = (uint16_t)FUN_0000_0db5(ax,g_fist_fp_dx);
++  x  = (uint16_t)(ax + (*(uint16_t *)(dg + (uint16_t)(desc + 0xc)) >> 1));
++  ax = (uint16_t)FUN_0000_0d13(*(uint16_t *)(dg + 0x2016),*(uint16_t *)(dg + 0x2018));
++  g_fist_fp_cx = *(uint16_t *)(dg + 0x6c52);
++  ax = (uint16_t)FUN_0000_0df7(ax,*(uint16_t *)(dg + 0x6c50));
++  ax = (uint16_t)FUN_0000_0db5(ax,g_fist_fp_dx);
++  ax = (uint16_t)(0 - ax);
++  ax = (uint16_t)(ax + (*(uint16_t *)(dg + (uint16_t)(desc + 0xa)) >> 1));
++  g_fist_3e29_cx = x;
++  g_fist_cf = 0;
++  return (int)ax;
+ }
+ 
+ 
+@@ -12898,15 +12875,18 @@
+ undefined4 __allregs FUN_0000_3e8c(undefined2 param_1,undefined2 param_2,int param_3)
+ 
+ {
+-  int iVar1;
+-  
+-  if (*(int *)((int)(undefined2 *)&DAT_1000_e7b0 + (uint)*(byte *)(param_3 + 5)) != 0x100) {
+-    param_1 = *(undefined2 *)((int)(undefined2 *)&DAT_1000_e7b0 + (uint)*(byte *)(param_3 + 5));
+-    param_2 = 0;
+-  }
+-  iVar1 = FUN_0000_0df7(param_1,DAT_2000_2c50);
+-  FUN_0000_0db5(iVar1,CONCAT11((char)((uint)param_2 >> 8),(char)param_2 + '\b'));
+-  return;
++  /* PATCH 469: projected SIZE (asm 0x3e8c-0x3eb2).  ax:dx = the node's [+0x1e]/[+0x20] distance
++   * normalised by the caller (param_1/param_2), bx=node (param_3, near offset).  If the per-code size
++   * word[0x27b0+byte[bx+5]] != 0x100 it replaces ax (dx=0); then 0df7 by the scale [0x6c50]:[0x6c52],
++   * exponent += 8, 0db5 -> ax (the caller's `je` tests ax==0).  Ghidra host-deref'd the node. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)param_3, ax = (uint16_t)param_1, dx = (uint16_t)param_2, w;
++  w = *(uint16_t *)(dg + (uint16_t)(0x27b0 + dg[(uint16_t)(bx + 5)]));
++  if (w != 0x100) { ax = w; dx = 0; }
++  g_fist_fp_dx = dx; g_fist_fp_cx = *(uint16_t *)(dg + 0x6c52);
++  ax = (uint16_t)FUN_0000_0df7(ax,*(uint16_t *)(dg + 0x6c50));
++  dx = (uint16_t)((g_fist_fp_dx & 0xff00) | (uint8_t)((g_fist_fp_dx & 0xff) + 8));
++  return (undefined4)(uint16_t)FUN_0000_0db5(ax,dx);
+ }
+ 
+ 
+@@ -12934,31 +12914,29 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_3ed4) @ 0000:3ed4 ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ void __allregs FUN_0000_3ed4(int param_1)
+ 
+ {
+-  undefined2 uVar1;
+-  int iVar2;
+-  undefined2 uVar3;
+-  
+-  uVar3 = (undefined2)((ulong)_DAT_2000_aa2c >> 0x10);
+-  iVar2 = (int)_DAT_2000_aa2c;
+-  *(undefined2 *)(iVar2 + 0x482) = *(undefined2 *)(param_1 + 0x1a);
+-  *(undefined2 *)(iVar2 + 0x480) =
+-       *(undefined2 *)((int)(undefined2 *)&DAT_1000_e7b0 + (uint)*(byte *)(param_1 + 5));
+-  *(undefined2 *)(iVar2 + 0x478) = *(undefined2 *)(param_1 + 0x26);
+-  *(undefined2 *)(iVar2 + 0x476) = *(undefined2 *)(param_1 + 0x28);
+-  *(undefined4 *)(iVar2 + 0x47a) = *(undefined4 *)(param_1 + 0x2a);
+-  *(undefined2 *)(iVar2 + 0x47e) = *(undefined2 *)(param_1 + 0x2e);
+-  *(undefined2 *)(iVar2 + 0x486) = *(undefined2 *)(param_1 + 0x30);
+-  uVar1 = *(undefined2 *)(param_1 + 0x18);
+-  *(undefined2 *)(iVar2 + 0x48a) = uVar1;
+-  *(undefined2 *)(iVar2 + 0x48e) = uVar1;
+-  *(undefined2 *)(iVar2 + 0x488) = 0;
+-  *(undefined2 *)(iVar2 + 0x48c) = 0;
+-  *(undefined2 *)(iVar2 + 0x484) = *(undefined2 *)(param_1 + 0x1c);
++  /* PATCH 469: post the node's render parameters into the extender TCB (asm 0x3ed4-0x3f3b: `les di,
++   * [0xea2c]`; bx=node near offset): TCB+0x482=word[bx+0x1a], +0x480=word[0x27b0+byte[bx+5]],
++   * +0x478=word[bx+0x26], +0x476=word[bx+0x28], dword +0x47a=dword[bx+0x2a], +0x47e=word[bx+0x2e],
++   * +0x486=word[bx+0x30], +0x48a=+0x48e=word[bx+0x18], +0x488=+0x48c=0, +0x484=word[bx+0x1c].  The
++   * op-0x40 rasterizer reads these.  Ghidra deref'd the far pointer's low word as a host address. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint8_t *t = DAT_2000_aa2c;
++  uint16_t bx = (uint16_t)param_1;
++  *(uint16_t *)(t + 0x482) = *(uint16_t *)(dg + (uint16_t)(bx + 0x1a));
++  *(uint16_t *)(t + 0x480) = *(uint16_t *)(dg + (uint16_t)(0x27b0 + dg[(uint16_t)(bx + 5)]));
++  *(uint16_t *)(t + 0x478) = *(uint16_t *)(dg + (uint16_t)(bx + 0x26));
++  *(uint16_t *)(t + 0x476) = *(uint16_t *)(dg + (uint16_t)(bx + 0x28));
++  *(uint32_t *)(t + 0x47a) = *(uint32_t *)(dg + (uint16_t)(bx + 0x2a));
++  *(uint16_t *)(t + 0x47e) = *(uint16_t *)(dg + (uint16_t)(bx + 0x2e));
++  *(uint16_t *)(t + 0x486) = *(uint16_t *)(dg + (uint16_t)(bx + 0x30));
++  *(uint16_t *)(t + 0x48a) = *(uint16_t *)(dg + (uint16_t)(bx + 0x18));
++  *(uint16_t *)(t + 0x48e) = *(uint16_t *)(dg + (uint16_t)(bx + 0x18));
++  *(uint16_t *)(t + 0x488) = 0;
++  *(uint16_t *)(t + 0x48c) = 0;
++  *(uint16_t *)(t + 0x484) = *(uint16_t *)(dg + (uint16_t)(bx + 0x1c));
+   return;
+ }
+ 

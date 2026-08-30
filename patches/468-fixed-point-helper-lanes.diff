@@ -1,0 +1,300 @@
+PATCH 468: the fixed-point normalise/multiply/divide block 0d13/0d55/0db5/0df7/0e22 rebuilt with its full
+register contracts (windshield-object frontier, slice 4 -- the projection helpers 3e29/3e8c and the kind-6
+renderer 2e49 depend on the exponent lanes).
+
+asm 0xd13-0xe62 (DS=DGROUP): the engine's "mantissa AX + exponent DL (sign in DH)" arithmetic.  0d13
+normalises dx:ax -> (ax, dx=0/8/0x10 | 0xff00 sign); 0d55 denormalises by byte steps with overflow ->
+0x6fff/0x9001 + CF; 0db5 denormalises to a signed 16-bit value (0x6fff/0 + CF on over/underflow); 0df7
+multiplies mantissas and combines exponents (`add cl,dl; xor ch,dh`, +8/+0x10 when the product spills);
+0e22 divides after pre-shifting the dividend by 8/16/24 (`cmp dx,bx; jae`) with exponent -8 per step, CF =
+(bx>>1) < remainder.  The __allregs model returns AX only, so Ghidra dropped every DX/CX exponent lane and
+hard-wired the CF locals; the port's existing callers (3e29/3d99/...) ignore the exponents.  DX in/out ->
+g_fist_fp_dx, CX in -> g_fist_fp_cx, CF -> g_fist_cf (shim globals); signatures unchanged, and the AX results
+of 0df7/0e22 do not depend on the lanes, so existing callers are unaffected.  asm-verified vs
+re_out/fist_dat_image.bin.
+--- a/fist.c
++++ b/fist.c
+@@ -5,6 +5,7 @@
+ #include "ghidra_compat.h"
+ extern unsigned short g_fist_render_si, g_fist_render_dx;  /* board:0012 file-scope */
+ extern unsigned short g_fist_b1df_ax, g_fist_0578_bx, g_fist_03a9_dx;  /* PATCH 462: b1df AX (display index), 0578 BX (pitch), 03a9 DX */
++extern unsigned short g_fist_fp_dx, g_fist_fp_cx;  /* PATCH 468: the 0d13..0e22 fixed-point block's DX (exponent) / CX register lanes */
+ 
+ /* ---- RULE 7: unresolved indirect/mid-function call targets, stubbed (OPEN) ---- */
+ int func_0x00000556(){ return 0; }  /* OPEN: unresolved indirect/mid-function call target */
+@@ -6465,30 +6466,21 @@
+ uint __allregs FUN_0000_0d13(uint param_1,uint param_2)
+ 
+ {
+-  uint uVar1;
+-  
+-  if (-1 < (int)param_2) {
+-    if (param_2 != 0) {
+-      if ((char)(param_2 >> 8) != '\0') {
+-        return param_2;
+-      }
+-      param_1 = CONCAT11((char)param_2,(char)(param_1 >> 8));
+-    }
+-    return param_1;
+-  }
+-  if (param_1 == 0) {
+-    uVar1 = -param_2;
+-  }
+-  else {
+-    uVar1 = param_2 ^ 0xffff;
+-  }
+-  if (uVar1 != 0) {
+-    if ((char)(uVar1 >> 8) == '\0') {
+-      return CONCAT11((char)uVar1,(char)(-param_1 >> 8));
+-    }
+-    return uVar1;
+-  }
+-  return -param_1;
++  /* PATCH 468: NORMALISE a 32-bit dx:ax into a 16-bit mantissa AX + exponent DX (asm 0xd13-0xd4c).
++   * dx>=0: dx==0 -> (ax, 0); dh!=0 -> (dx, 0x10); else (dl:ah, 0x08).  dx<0: the value is negated
++   * first (`neg ax; jae -> neg dx | not dx`), then the same three cases with dh=0xff: (ax,0xff00) /
++   * (dx,0xff10) / (dl:ah,0xff08) -- dh carries the sign for 0db5's re-apply.  Ghidra returned AX only
++   * (the exponent DX, consumed by 0df7/0e22/0db5, was dropped) -> published in g_fist_fp_dx. */
++  uint16_t ax = (uint16_t)param_1, dx = (uint16_t)param_2;
++  if ((int16_t)dx >= 0) {
++    if (dx == 0) { g_fist_fp_dx = 0; return ax; }
++    if (dx & 0xff00) { g_fist_fp_dx = 0x10; return dx; }
++    g_fist_fp_dx = 0x08; return (uint16_t)((dx << 8) | (ax >> 8));
++  }
++  if (ax == 0) dx = (uint16_t)(0 - dx); else { ax = (uint16_t)(0 - ax); dx = (uint16_t)~dx; }
++  if (dx == 0) { g_fist_fp_dx = 0xff00; return ax; }
++  if (dx & 0xff00) { g_fist_fp_dx = 0xff10; return dx; }
++  g_fist_fp_dx = 0xff08; return (uint16_t)((dx << 8) | (ax >> 8));
+ }
+ 
+ 
+@@ -6524,51 +6516,47 @@
+ uint __allregs FUN_0000_0d55(uint param_1,undefined2 param_2)
+ 
+ {
+-  uint uVar1;
+-  char cVar2;
+-  char cVar3;
+-  char cVar4;
+-  byte bVar5;
+-  char cVar6;
+-  
+-  bVar5 = (byte)((uint)param_2 >> 8);
+-  cVar3 = (char)param_2 + '\b';
+-  if (cVar3 == '\0') {
+-    if (bVar5 == 0) {
+-      return param_1;
+-    }
+-  }
+-  else {
+-    if (cVar3 < '\0') {
+-      if (cVar3 == -8) {
+-        return (param_1 >> 8 ^ CONCAT11(bVar5,bVar5)) - CONCAT11(bVar5,bVar5);
+-      }
+-      return 0;
+-    }
+-    cVar2 = '\0';
+-    cVar6 = '\0';
+-    do {
+-      cVar4 = cVar2;
+-      if (cVar6 != '\0') {
+-        if (-1 < (int)((uint)bVar5 << 8)) {
+-          return 0x6fff;
+-        }
+-        return 0x9001;
+-      }
+-      uVar1 = param_1 >> 8;
+-      param_1 = param_1 << 8;
+-      cVar3 = cVar3 + -8;
+-      cVar2 = (char)uVar1;
+-      cVar6 = cVar4;
+-    } while (cVar3 != '\0');
+-    if (-1 < (int)((uint)bVar5 << 8)) {
+-      return param_1;
+-    }
+-  }
+-  if (param_1 == 0) {
+-    return 0;
++  /* PATCH 468: DENORMALISE by byte steps (asm 0xd55-0xdb4): dl+=8; dl==0 -> (dh!=0 ? negate 0:ax :
++   * unchanged), CF=0; dl<0 -> only dl==-8 is representable: ax=ah (>>8) with the dh sign applied,
++   * dx=sign-extend, CF=0, else ax=dx=0, CF=1; dl>0: shift dx:ax left 8 per step (cl-=8) while dh
++   * stays 0, overflow -> ax=dx=0x6fff (or 0x9001 if the sign ch<0), CF=1; on success apply the sign
++   * (ch<0 -> negate dx:ax), CF=0.  Out: AX, DX (g_fist_fp_dx), CF (g_fist_cf). */
++  extern unsigned char g_fist_cf;
++  uint16_t ax = (uint16_t)param_1, dx = (uint16_t)param_2;
++  uint8_t dl = (uint8_t)(dx + 8), dh = (uint8_t)(dx >> 8);
++  uint16_t cx;
++  if (dl == 0) {                                     /* da3 */
++    g_fist_cf = 0;
++    if (dh == 0) { g_fist_fp_dx = (uint16_t)(dh << 8); return ax; }
++    dx = 0;
++    if (ax == 0) dx = (uint16_t)(0 - dx); else { ax = (uint16_t)(0 - ax); dx = (uint16_t)~dx; }
++    g_fist_fp_dx = dx; return ax;
++  }
++  if ((int8_t)dl < 0) {                              /* d8b */
++    if (dl != 0xf8) { g_fist_fp_dx = 0; g_fist_cf = 1; return 0; }
++    ax = (uint16_t)(ax >> 8);
++    dx = (uint16_t)(dh ? 0xffff : 0);                /* dl=dh -> dx = dh:dh */
++    ax = (uint16_t)((ax ^ dx) - dx);
++    g_fist_fp_dx = (uint16_t)(((int16_t)ax < 0) ? 0xffff : 0);   /* cwd */
++    g_fist_cf = 0; return ax;
++  }
++  cx = (uint16_t)((dh << 8) | dl);                   /* d5f mov cx,dx (dl already +8) */
++  dx = 0;
++  for (;;) {                                         /* d63 */
++    if (dx & 0xff00) {                               /* overflow */
++      g_fist_cf = 1;
++      if ((int8_t)(cx >> 8) < 0) { g_fist_fp_dx = 0x9001; return 0x9001; }
++      g_fist_fp_dx = 0x6fff; return 0x6fff;
++    }
++    dx = (uint16_t)(ax >> 8); ax = (uint16_t)(ax << 8);   /* xchg dh,dl; xchg dl,ah; xchg ah,al */
++    cx = (uint16_t)((cx & 0xff00) | (uint8_t)((cx & 0xff) - 8));
++    if ((cx & 0xff) == 0) break;
++  }
++  g_fist_cf = 0;
++  if ((int8_t)(cx >> 8) < 0) {                       /* da9 negate dx:ax */
++    if (ax == 0) dx = (uint16_t)(0 - dx); else { ax = (uint16_t)(0 - ax); dx = (uint16_t)~dx; }
+   }
+-  return -param_1;
++  g_fist_fp_dx = dx; return ax;
+ }
+ 
+ 
+@@ -6577,28 +6565,25 @@
+ int __allregs FUN_0000_0db5(uint param_1,undefined2 param_2)
+ 
+ {
+-  byte bVar1;
+-  byte bVar2;
+-  undefined1 uVar3;
+-  
+-  bVar2 = (byte)param_2;
+-  uVar3 = (undefined1)((uint)param_2 >> 8);
+-  if (bVar2 != 0) {
+-    bVar1 = (byte)(param_1 >> 8);
+-    if ((char)bVar2 < '\0') {
+-      if (-0x10 < (char)bVar2) {
+-        return ((uint)bVar1 ^ CONCAT11(uVar3,uVar3)) - CONCAT11(uVar3,uVar3);
+-      }
+-      return 0;
++  /* PATCH 468: DENORMALISE to a signed 16-bit value (asm 0xdb5-0xdf1).  dl=exponent, dh=sign.  dl==0:
++   * ax must be non-negative; dl>0 (only <0x10 and ah==0 fit): ax<<=8; dl<0 (only >-16 fits): ax>>=8;
++   * then ax = sign-applied (`mov dl,dh; xor ax,dx; sub ax,dx`), CF=0.  Overflow -> 0x6fff (signed),
++   * CF=1; underflow -> 0, CF=1.  Ghidra hard-wired the CF locals. */
++  extern unsigned char g_fist_cf;
++  uint16_t ax = (uint16_t)param_1, dx = (uint16_t)param_2;
++  uint8_t dl = (uint8_t)dx, dh = (uint8_t)(dx >> 8);
++  uint16_t sg = (uint16_t)(dh ? 0xffff : 0);
++  int ovf = 0;
++  if (dl != 0) {
++    if ((int8_t)dl < 0) {
++      if ((int8_t)dl <= (int8_t)0xf0) { g_fist_cf = 1; return 0; }        /* dd2..de3 */
++      ax = (uint16_t)(ax >> 8);
++      g_fist_cf = 0; return (int)(uint16_t)((ax ^ sg) - sg);
+     }
+-    if ((bVar1 != 0) || (0xf < bVar2)) goto LAB_0000_0de7;
+-    param_1 = param_1 << 8;
++    if ((ax & 0xff00) != 0 || dl >= 0x10) ovf = 1; else ax = (uint16_t)(ax << 8);
+   }
+-  if (-1 < (int)param_1) {
+-    return (param_1 ^ CONCAT11(uVar3,uVar3)) - CONCAT11(uVar3,uVar3);
+-  }
+-LAB_0000_0de7:
+-  return (CONCAT11(uVar3,uVar3) ^ 0x6fff) - CONCAT11(uVar3,uVar3);
++  if (!ovf && (int16_t)ax >= 0) { g_fist_cf = 0; return (int)(uint16_t)((ax ^ sg) - sg); }
++  g_fist_cf = 1; return (int)(uint16_t)((0x6fff ^ sg) - sg);                /* de7 */
+ }
+ 
+ 
+@@ -6607,17 +6592,18 @@
+ int __allregs FUN_0000_0df7(uint param_1,uint param_2)
+ 
+ {
+-  long lVar1;
+-  int iVar2;
+-  int iVar3;
+-  
+-  lVar1 = (ulong)param_1 * (ulong)param_2;
+-  iVar3 = (int)((ulong)lVar1 >> 0x10);
+-  iVar2 = (int)lVar1;
+-  if ((iVar3 != 0) && (iVar2 = iVar3, (char)((ulong)lVar1 >> 0x18) == '\0')) {
+-    return (int)((ulong)lVar1 >> 8);
+-  }
+-  return iVar2;
++  /* PATCH 468: normalised MULTIPLY (asm 0xdf7-0xe18): ax*bx with exponents cx (in g_fist_fp_cx) and dx
++   * (in g_fist_fp_dx): `add cl,dl; xor ch,dh` combines exponent + sign; `mul bx`; product high word 0 ->
++   * ax=low; else dh==0 -> ax=product>>8, exponent+8; else ax=product>>16, exponent+0x10.  DX out = the
++   * combined exponent (g_fist_fp_dx).  Ghidra kept only the mantissa. */
++  uint16_t ax = (uint16_t)param_1, bx = (uint16_t)param_2;
++  uint16_t cx = g_fist_fp_cx, dx = g_fist_fp_dx;
++  uint32_t p = (uint32_t)ax * bx;
++  uint16_t hi = (uint16_t)(p >> 16);
++  cx = (uint16_t)(((uint8_t)((cx & 0xff) + (dx & 0xff))) | (((cx >> 8) ^ (dx >> 8)) << 8));
++  if (hi == 0) { g_fist_fp_dx = cx; return (int)(uint16_t)p; }
++  if ((hi & 0xff00) == 0) { cx = (uint16_t)((cx & 0xff00) | (uint8_t)((cx & 0xff) + 8)); g_fist_fp_dx = cx; return (int)(uint16_t)(p >> 8); }
++  cx = (uint16_t)((cx & 0xff00) | (uint8_t)((cx & 0xff) + 0x10)); g_fist_fp_dx = cx; return (int)hi;
+ }
+ 
+ 
+@@ -6626,33 +6612,36 @@
+ uint __allregs FUN_0000_0e22(uint param_1,uint param_2)
+ 
+ {
+-  byte bVar2;
+-  uint uVar1;
+-  uint uVar3;
+-  
+-  if (param_2 < 2) {
+-    if (param_2 != 1) {
+-      param_1 = 0x6fff;
+-    }
+-    return param_1;
+-  }
+-  bVar2 = (byte)(param_1 >> 8);
+-  uVar3 = (uint)bVar2;
+-  if (uVar3 < param_2) {
+-    uVar1 = 0;
+-    uVar3 = param_1;
+-    if (param_2 <= param_1) goto LAB_0000_0e56;
+-    if ((bVar2 != 0) || (param_1 = param_1 << 8, param_1 < param_2)) goto LAB_0000_0e5a;
++  /* PATCH 468: normalised DIVIDE (asm 0xe22-0xe62): ax (exponent dx) / bx (exponent cx).  `sub dl,cl;
++   * xor dh,ch` -> result exponent; bx<=1: bx==1 -> ax unchanged, else ax=0x6fff, dl=0x38 (CF=0).  Else
++   * pre-shift the dividend left by 8/16/24 (exponent -8 per step) as long as it stays below the divisor
++   * (`cmp dx,bx; jae`), `div bx`, DX out = exponent (g_fist_fp_dx); CF = (bx>>1) < remainder (rounding
++   * hint, g_fist_cf).  Ghidra dropped every exponent lane. */
++  extern unsigned char g_fist_cf;
++  uint16_t ax = (uint16_t)param_1, bx = (uint16_t)param_2;
++  uint16_t dx = g_fist_fp_dx, cx = g_fist_fp_cx;
++  uint16_t ex = (uint16_t)(((uint8_t)((dx & 0xff) - (cx & 0xff))) | (((dx >> 8) ^ (cx >> 8)) << 8));
++  uint32_t v; uint16_t q, r;
++  if (bx <= 1) {
++    g_fist_cf = 0;
++    if (bx == 1) { g_fist_fp_dx = ex; return ax; }
++    g_fist_fp_dx = (uint16_t)((ex & 0xff00) | 0x38); return 0x6fff;
+   }
++  if ((ax >> 8) >= bx)       { v = ax; }
+   else {
+-    uVar1 = param_1 & 0xff;
+-LAB_0000_0e56:
+-    param_1 = uVar3 & 0xff00;
+-    uVar1 = CONCAT11((char)uVar3,(char)uVar1);
+-  }
+-  param_1 = param_1 >> 8;
+-LAB_0000_0e5a:
+-  return (uint)(CONCAT22(param_1,uVar1) / (ulong)param_2);
++    ex = (uint16_t)((ex & 0xff00) | (uint8_t)((ex & 0xff) - 8));
++    if (ax >= bx)            { v = (uint32_t)ax << 8; }
++    else {
++      ex = (uint16_t)((ex & 0xff00) | (uint8_t)((ex & 0xff) - 8));
++      if (ax & 0xff00)       { v = (uint32_t)ax << 16; }
++      else if ((ax & 0xff) >= bx) { v = (uint32_t)ax << 16; }
++      else { ex = (uint16_t)((ex & 0xff00) | (uint8_t)((ex & 0xff) - 8)); v = (uint32_t)ax << 24; }
++    }
++  }
++  q = (uint16_t)(v / bx); r = (uint16_t)(v % bx);
++  g_fist_cf = (uint8_t)(((uint16_t)(bx >> 1)) < r);
++  g_fist_fp_dx = ex;
++  return q;
+ }
+ 
+ 

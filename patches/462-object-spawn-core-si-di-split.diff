@@ -1,0 +1,951 @@
+PATCH 462: the object-SPAWN core -- b21d returns the NEW slot in DI, b1df registers/zeroes THAT slot, and
+every spawn caller splits `mov si,di; pop di` into SI=new object, DI=parent (board:0007 base-loss cascade,
+board:0012 self-play).
+
+ASM (re_out/fist_dat_image.bin): b21d (0x1b21d) allocates a roster slot with `mov di,0xa022|0xc05c; add
+di,0x37|0xfb ...; mov [di],ax; mov [di+2],bx; clc; ret` -- DI OUT is the new object.  b1df (0x1b1df)
+`call b21d; jae; ... mov [si],di; inc [si+2]; mov bx,[di]; ... mov si,di; add si,4; rep zero` registers
+and zeroes the NEW slot (ax out = display index), and its callers all do `push di; mov ax,TYPE; lcall
+b1df; mov si,di; pop di` -> SI=new, DI=parent, then initialise SI from DI.  Patches 258/270/457/298/281/
+415/415 read `di` as the caller's object and folded the SI/DI split into "si==di": the port registered the
+PARENT twice, zeroed the PARENT's body, orphaned the fresh slot, and wrote each child's init into its
+parent.  Patch 429 (7745) already expected b1df to return the projectile -> it got the display index and
+built the shell at DGROUP:<small int>.
+
+Rebuilt 1:1 (each asm-verified, cited in the per-function comments): b1d6 (guarded fall-through into b1df,
+was dead after b21d), b1df (returns DI; AX published as g_fist_b1df_ax), b294 (real SOURCE->NEW rep movsb
+clone), 9caa/9cfd (type-0x11/0x18 children placed at the parent), ba33/ba49/ba5d (template spawn: child
+gets the parent's position, ba49's velocity goes to the child), 9d7a (9db1 gets si=parent, di=new), a93e
+(b10c wreck<-X, 60f9 replaces X by the wreck; 60f9 is a WORD table at stride 2), bc46 (ace0 gets ax=b1df's
+AX, bx=target, si=new, di=firer; tail writes to SI), a46e/b355 (9caa takes the NEAR offset, not the
+re-pointed host ptr), ace0 (projectile LAUNCH init, whole body), addb tail (a192 ax=bearing, cx=0578's
+pitch, dx/cx outputs), 0578 (077e cx=0927's DX; pitch published as g_fist_0578_bx), a265 tail ([di+0x38]=
+pitch, [di+0x99]=(range hi<<8)|LUT>>8), the weapon wrappers b6c9/b6e3/b725/b73b/b751/b767/b77d/b793
+(si=new proj, di=firer; b6c9's random spread), 03a9 (2-axis rotation trig, DX output g_fist_03a9_dx) and
+its ac?? consumer.  Shim: three published-register globals (tools/native_main.c).
+--- a/fist.c
++++ b/fist.c
+@@ -4,6 +4,7 @@
+  */
+ #include "ghidra_compat.h"
+ extern unsigned short g_fist_render_si, g_fist_render_dx;  /* board:0012 file-scope */
++extern unsigned short g_fist_b1df_ax, g_fist_0578_bx, g_fist_03a9_dx;  /* PATCH 462: b1df AX (display index), 0578 BX (pitch), 03a9 DX */
+ 
+ /* ---- RULE 7: unresolved indirect/mid-function call targets, stubbed (OPEN) ---- */
+ int func_0x00000556(){ return 0; }  /* OPEN: unresolved indirect/mid-function call target */
+@@ -4664,47 +4665,31 @@
+ int __allregs FUN_0000_03a9(int param_1,uint param_2,undefined2 param_3)
+ 
+ {
+-  undefined2 uVar1;
+-  uint uVar2;
+-  uint uVar3;
+-  uint uVar4;
+-  uint uVar5;
+-  int iVar6;
+-  bool bVar7;
+-  
+-  uVar1 = CONCAT11((char)((uint)-param_1 >> 8) + '@',(char)-param_1);
+-  bVar7 = false;
+-  if (-1 < (int)param_2) {
+-    uVar3 = param_2;
+-    uVar4 = param_2;
+-    uVar2 = FUN_0000_05e2(uVar1);
+-    if (!bVar7) {
+-      uVar3 = (uint)((ulong)uVar2 * (ulong)uVar3 >> 0x10);
+-    }
+-    bVar7 = (uVar3 ^ uVar4) < uVar4;
+-    uVar4 = (uVar3 ^ uVar4) - uVar4;
+-    uVar3 = FUN_0000_05dd(uVar1);
+-    if (!bVar7) {
+-      param_2 = (uint)((ulong)uVar3 * (ulong)param_2 >> 0x10);
+-    }
+-    return (param_2 ^ uVar4) - uVar4;
+-  }
+-  bVar7 = param_2 != 0;
+-  uVar5 = -param_2;
+-  uVar3 = uVar5;
+-  uVar4 = uVar5;
+-  uVar2 = FUN_0000_05e2(uVar1);
+-  if (!bVar7) {
+-    uVar3 = (uint)((ulong)uVar2 * (ulong)uVar3 >> 0x10);
+-  }
+-  iVar6 = (uVar3 ^ uVar4) - uVar4;
+-  bVar7 = iVar6 != 0;
+-  uVar4 = -iVar6;
+-  uVar3 = FUN_0000_05dd(uVar1);
+-  if (!bVar7) {
+-    uVar5 = (uint)((ulong)uVar3 * (ulong)uVar5 >> 0x10);
+-  }
+-  return -((uVar5 ^ uVar4) - uVar4);
++  /* PATCH 462: faithful 2-in/2-out rotation trig (asm 0x3a9-0x405; the 2-axis sibling of 0459/patch 309).
++   * ax=angle A, dx=magnitude M (cx untouched, param_3 dead).  `neg ax; add ah,0x40` -> A'=0x4000-A;
++   * M<0 takes the 0x3d9 twin (|M| and each product negated).  Block 1: 5e2(A') (=cos A) * |M| with the
++   * sign from 5e2's entry cwd (A' bit15) -> DX; block 2: 5dd(A') (=sin A) * |M|, sign from 5dd's cwd on
++   * 0x4000-A' -> AX.  CF from 5e2/5dd (the 0xffff==1.0 special) skips the mul.  Ghidra hard-wired the
++   * CF locals to false, used M as the sign mask, and dropped the DX output (published: g_fist_03a9_dx). */
++  extern unsigned short g_fist_03a9_dx;
++  uint16_t A   = (uint16_t)(0x4000 - (uint16_t)param_1);
++  uint16_t M   = (uint16_t)param_2;
++  int      neg = (short)M < 0;
++  uint16_t v, sgn, p1, p2;
++  (void)param_3;
++  if (neg) M = (uint16_t)(0 - M);
++  v   = (uint16_t)FUN_0000_05e2(A);
++  sgn = (uint16_t)((A & 0x8000) ? 0xffff : 0);
++  p1  = (v == 0xffff) ? M : (uint16_t)(((uint32_t)v * (uint32_t)M) >> 16);
++  p1  = (uint16_t)((p1 ^ sgn) - sgn);
++  if (neg) p1 = (uint16_t)(0 - p1);
++  v   = (uint16_t)FUN_0000_05dd(A);
++  sgn = (uint16_t)(((uint16_t)(0x4000 - A) & 0x8000) ? 0xffff : 0);
++  p2  = (v == 0xffff) ? M : (uint16_t)(((uint32_t)v * (uint32_t)M) >> 16);
++  p2  = (uint16_t)((p2 ^ sgn) - sgn);
++  if (neg) p2 = (uint16_t)(0 - p2);
++  g_fist_03a9_dx = p1;
++  return (int)(short)p2;
+ }
+ 
+ 
+@@ -5072,9 +5057,14 @@
+   undefined2 uVar1;
+   int iVar2;
+   
++  /* PATCH 462: asm 0x578-0x599 -- 0731 (bearing -> ax), 0927 (range -> dx:ax), then 077e over the Z delta
++   * with `mov bx,ax; mov cx,dx` = 0927's LOW word in bx and HIGH word in cx (Ghidra passed the dead input
++   * param_2 as cx); `mov bx,ax` publishes 077e's result (the PITCH) in BX, consumed by ace0/addb/a265 via
++   * g_fist_0578_bx.  Out: ax=bearing, bx=pitch, cx=range lo, dx=range hi. */
++  extern uint16_t g_fist_0927_dx;
+   uVar1 = FUN_0000_0731(param_4,param_5);
+   iVar2 = FUN_0000_0927(param_1,param_2,param_3,param_4,param_5);
+-  FUN_0000_077e(*(uint *)(param_5 + 8) - *(uint *)(param_4 + 8),param_2,
++  g_fist_0578_bx = (unsigned short)FUN_0000_077e(*(uint *)(param_5 + 8) - *(uint *)(param_4 + 8),g_fist_0927_dx,
+                 (*(int *)(param_5 + 10) - *(int *)(param_4 + 10)) -
+                 (uint)(*(uint *)(param_5 + 8) < *(uint *)(param_4 + 8)),iVar2);
+   return uVar1;
+@@ -26393,16 +26383,17 @@
+    * near-offset) survives 9d7a's push/pop into 9db1's ebx (asm 9d7b/9d99). */
+   extern unsigned char g_fist_cf;
+   undefined2 obj;
+-  unsigned int entry_off;
++  unsigned int entry_off, nw;
+ 
+   FUN_1000_66cd((char *)0x2b6d);
+   obj = *param_1;
+   FUN_1000_a4a2(0x2fa0,obj);
+-  FUN_1000_b1df(param_2,(int *)(uintptr_t)(unsigned short)obj);
++  nw = (unsigned short)FUN_1000_b1df(param_2,(int *)(uintptr_t)(unsigned short)obj);
+   if (!(bool)g_fist_cf) {
++    /* PATCH 462: asm 9d90/9d96 `push di; lcall b1df; pop si` -> SI=the parent (obj), DI=the NEW object
++     * returned by b1df; 9db1 initialises DI from SI (patch 298 passed obj for both). */
+     entry_off = (unsigned short)((unsigned char *)param_1 - ((unsigned char *)g_mem + 0x1c000));
+-    FUN_0000_9db1((undefined2)entry_off,(int)(unsigned short)obj,
+-                  (int *)(uintptr_t)(unsigned short)obj);
++    FUN_0000_9db1((undefined2)entry_off,(int)(unsigned short)obj,(int *)(uintptr_t)nw);
+   }
+   return;
+ }
+@@ -27528,7 +27519,7 @@
+    * param_2 at g_mem+0x1c000+di.  Object-relative body + ext 9caa call.  Mission-cascade only. */
+   param_2 = (int)(intptr_t)((unsigned char *)g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1);
+   if (((*(byte *)(param_2 + 0x3d) & 0x60) == 0) && ((*(byte *)(param_2 + 0x1a) & 0x40) != 0)) {
+-    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),0x300),param_2);
++    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),0x300),(int)(uint16_t)(uintptr_t)param_1);  /* PATCH 462: di near-offset, not the host ptr */
+   }
+   *(byte *)(param_2 + 0x96) = *(byte *)(param_2 + 0x96) >> 1;
+   return;
+@@ -28085,18 +28076,19 @@
+   extern unsigned char g_fist_cf;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned int di = (unsigned short)param_2;   /* destroyed object X near offset */
++  unsigned int nw;
+   int iVar1;
+   FUN_1000_610e((int)di);
+   FUN_0000_ba33(0x9c5d,(int)di);
+   FUN_0000_ba33(0x9c3d,(int)di);
+   FUN_0000_be8b(9,param_1);
+-  FUN_1000_b1df(0x17,(int *)(uintptr_t)di);
++  nw = (unsigned short)FUN_1000_b1df(0x17,(int *)(uintptr_t)di);   /* PATCH 462: asm a95e `mov si,di; pop di` -> SI=NEW wreck, DI=X */
+   if ((bool)g_fist_cf) {                        /* b1df stc = roster full (asm a961 jae taken when CF=0) */
+     FUN_1000_60e5((int)di);
+   }
+   else {
+-    FUN_1000_b10c((int)di,(int *)(uintptr_t)di);
+-    FUN_1000_60f9((int)di,(int)di);
++    FUN_1000_b10c((int)nw,(int *)(uintptr_t)di);   /* wreck <- X's position/orientation */
++    FUN_1000_60f9((int)nw,(int)di);                /* 60f9: replace X by the wreck in the 0x6d3c table (ax=si) */
+   }
+   if (di == *(unsigned short *)(dg + 0x6d34)) {  /* X == the player object? */
+     FUN_1000_a5c4();
+@@ -28683,9 +28675,10 @@
+     if ((bx != 0) && (*(uint16_t *)(o + bx) != 0x17)) {
+       int16_t ax = (int16_t)(uint16_t)(*(uint16_t *)(o + si) + *(uint16_t *)(o + (uint16_t)(bx + 0x2e)));
+       int16_t dx = *(int16_t *)(o + (uint16_t)(si + 2));
++      extern unsigned short g_fist_03a9_dx;
+       int iVar2 = FUN_0000_03a9((int)ax, (int)dx, bx);
+       *(int32_t *)(o + (uint16_t)(di + 0x49)) = (int32_t)iVar2 * 0x20 + *(int32_t *)(o + (uint16_t)(bx + 4));
+-      *(int32_t *)(o + (uint16_t)(di + 0x4d)) = (int32_t)dx   * 0x20 + *(int32_t *)(o + (uint16_t)(bx + 8));
++      *(int32_t *)(o + (uint16_t)(di + 0x4d)) = (int32_t)(int16_t)g_fist_03a9_dx * 0x20 + *(int32_t *)(o + (uint16_t)(bx + 8));  /* PATCH 462: 03a9's DX output */
+       *(uint16_t *)(o + (uint16_t)(di + 0x40)) |= 2;
+     }
+   }
+@@ -29709,7 +29702,7 @@
+   param_2 = (int)(intptr_t)((unsigned char *)g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1);
+   *(int *)(param_2 + 0x1b) = *(int *)(param_2 + 0x1b) + 1;
+   if (((*(uint *)(param_2 + 0x1b) & 0x3f) == 0) && (0x80 < *(uint *)(param_2 + 0x1d))) {
+-    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(uint *)(param_2 + 0x1d)),param_2);
++    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(uint *)(param_2 + 0x1d)),(int)(uint16_t)(uintptr_t)param_1);  /* PATCH 462: di near-offset */
+     *(int *)(param_2 + 0x1d) = *(int *)(param_2 + 0x1d) + -1;
+   }
+   if (*(char *)(param_2 + 0x19) == '\x01') {
+@@ -30209,10 +30202,17 @@
+ void __allregs FUN_0000_b6c9(undefined2 param_1,int param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x2a) = 0xf;
+-  *(undefined2 *)(param_2 + 0x1b) = 0x4aa;
+-  FUN_0000_0291();
+-  FUN_1000_ace0(param_1,0,param_2,param_3,param_4);
++  /* PATCH 462: weapon spawn wrapper (asm 0xb6c9; DS=DGROUP=0x1c00).  si=the NEW projectile (param_2),
++   * di=the FIRER (param_3) -- callers (7745 etc.) pass b1df's new object in si.  byte[si+0x2a]=0xf,
++   * word[si+0x1b]=0x4aa; ace0(ax=ax, bx=0 (no target); ax=(rand&0x1ff)-0x100).  Ghidra host-deref'd both objects. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_2, di = (unsigned short)param_3;
++  unsigned int ax;
++  (void)param_1; (void)param_4;
++  dg[(unsigned short)(si + 0x2a)] = 0xf;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) = 0x4aa;
++  ax = (unsigned short)(((unsigned short)FUN_0000_0291() & 0x1ff) - 0x100);   /* b6d2-b6d8: random spread */
++  FUN_1000_ace0((undefined2)(ax),(int *)(uintptr_t)(0),(int)si,(int *)(uintptr_t)di,0);
+   return;
+ }
+ 
+@@ -30223,23 +30223,24 @@
+ FUN_0000_b6e3(uint param_1,undefined2 param_2,int param_3,int param_4,undefined2 param_5)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  undefined2 uVar3;
+-  
++  /* PATCH 462: weapon spawn wrapper w/ lateral offset (asm 0xb6e3-0xb724; DS=DGROUP=0x1c00).  ax=side
++   * flag -> DAT_2000_5a1d (param_1); si=NEW projectile (param_3), di=FIRER (param_4).  byte[si+0x2a]=0x14,
++   * word[si+0x1b]=0x300; ace0(ax=0, bx=word[di+0x97]); then ax=word[si+0x10]-0x4000 (+0x8000 if side&1),
++   * 03a9(ax, dx=0x180) -> movsx ax/dx added to dword[si+4]/[si+8].  Ghidra host-deref'd both objects. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_3, di = (unsigned short)param_4;
++  unsigned int ax;
++  int r;
++  (void)param_2; (void)param_5;
+   DAT_2000_5a1d = param_1;
+-  *(undefined1 *)(param_3 + 0x2a) = 0x14;
+-  *(undefined2 *)(param_3 + 0x1b) = 0x300;
+-  uVar3 = *(undefined2 *)(param_4 + 0x97);
+-  FUN_1000_ace0(param_2,uVar3,param_3,param_4,param_5);
+-  iVar1 = *(int *)(param_3 + 0x10) + -0x4000;
+-  if ((DAT_2000_5a1d & 1) != 0) {
+-    iVar1 = *(int *)(param_3 + 0x10) + 0x4000;
+-  }
+-  iVar2 = 0x180;
+-  iVar1 = FUN_0000_03a9(iVar1,0x180,uVar3);
+-  *(long *)(param_3 + 4) = *(long *)(param_3 + 4) + (long)iVar1;
+-  *(long *)(param_3 + 8) = *(long *)(param_3 + 8) + (long)iVar2;
++  dg[(unsigned short)(si + 0x2a)] = 0x14;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) = 0x300;
++  FUN_1000_ace0(0,(int *)(uintptr_t)*(unsigned short *)(dg + (unsigned short)(di + 0x97)),(int)si,(int *)(uintptr_t)di,0);
++  ax = (unsigned short)(*(unsigned short *)(dg + (unsigned short)(si + 0x10)) - 0x4000);
++  if ((DAT_2000_5a1d & 1) != 0) ax = (unsigned short)(ax + 0x8000);
++  r = FUN_0000_03a9((undefined2)ax,0x180,0);
++  *(unsigned int *)(dg + (unsigned short)(si + 4)) += (unsigned int)(int)(short)r;
++  *(unsigned int *)(dg + (unsigned short)(si + 8)) += (unsigned int)(int)(short)g_fist_03a9_dx;
+   return;
+ }
+ 
+@@ -30249,9 +30250,15 @@
+ void __allregs FUN_0000_b725(undefined2 param_1,int param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x2a) = 5;
+-  *(undefined2 *)(param_2 + 0x1b) = 0x355;
+-  FUN_1000_ace0(param_1,*(undefined2 *)(param_3 + 0x97),param_2,param_3,param_4);
++  /* PATCH 462: weapon spawn wrapper (asm 0xb725; DS=DGROUP=0x1c00).  si=the NEW projectile (param_2),
++   * di=the FIRER (param_3) -- callers (7745 etc.) pass b1df's new object in si.  byte[si+0x2a]=5,
++   * word[si+0x1b]=0x355; ace0(ax=0, bx=word[di+0x97] (target link)).  Ghidra host-deref'd both objects. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_2, di = (unsigned short)param_3;
++  (void)param_1; (void)param_4;
++  dg[(unsigned short)(si + 0x2a)] = 5;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) = 0x355;
++  FUN_1000_ace0((undefined2)(0),(int *)(uintptr_t)(*(unsigned short *)(dg + (unsigned short)(di + 0x97))),(int)si,(int *)(uintptr_t)di,0);
+   return;
+ }
+ 
+@@ -30261,9 +30268,15 @@
+ void __allregs FUN_0000_b73b(undefined2 param_1,int param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x2a) = 0;
+-  *(undefined2 *)(param_2 + 0x1b) = 0x4aa;
+-  FUN_1000_ace0(param_1,*(undefined2 *)(param_3 + 0x97),param_2,param_3,param_4);
++  /* PATCH 462: weapon spawn wrapper (asm 0xb73b; DS=DGROUP=0x1c00).  si=the NEW projectile (param_2),
++   * di=the FIRER (param_3) -- callers (7745 etc.) pass b1df's new object in si.  byte[si+0x2a]=0,
++   * word[si+0x1b]=0x4aa; ace0(ax=0, bx=word[di+0x97] (target link)).  Ghidra host-deref'd both objects. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_2, di = (unsigned short)param_3;
++  (void)param_1; (void)param_4;
++  dg[(unsigned short)(si + 0x2a)] = 0;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) = 0x4aa;
++  FUN_1000_ace0((undefined2)(0),(int *)(uintptr_t)(*(unsigned short *)(dg + (unsigned short)(di + 0x97))),(int)si,(int *)(uintptr_t)di,0);
+   return;
+ }
+ 
+@@ -30273,9 +30286,15 @@
+ void __allregs FUN_0000_b751(undefined2 param_1,int param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x2a) = 10;
+-  *(undefined2 *)(param_2 + 0x1b) = 0x355;
+-  FUN_1000_ace0(param_1,*(undefined2 *)(param_3 + 0x97),param_2,param_3,param_4);
++  /* PATCH 462: weapon spawn wrapper (asm 0xb751; DS=DGROUP=0x1c00).  si=the NEW projectile (param_2),
++   * di=the FIRER (param_3) -- callers (7745 etc.) pass b1df's new object in si.  byte[si+0x2a]=10,
++   * word[si+0x1b]=0x355; ace0(ax=0, bx=word[di+0x97] (target link)).  Ghidra host-deref'd both objects. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_2, di = (unsigned short)param_3;
++  (void)param_1; (void)param_4;
++  dg[(unsigned short)(si + 0x2a)] = 10;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) = 0x355;
++  FUN_1000_ace0((undefined2)(0),(int *)(uintptr_t)(*(unsigned short *)(dg + (unsigned short)(di + 0x97))),(int)si,(int *)(uintptr_t)di,0);
+   return;
+ }
+ 
+@@ -30285,9 +30304,15 @@
+ void __allregs FUN_0000_b767(undefined2 param_1,int param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x2a) = 10;
+-  *(undefined2 *)(param_2 + 0x1b) = 0x355;
+-  FUN_1000_ace0(param_1,*(undefined2 *)(param_3 + 0x97),param_2,param_3,param_4);
++  /* PATCH 462: weapon spawn wrapper (asm 0xb767; DS=DGROUP=0x1c00).  si=the NEW projectile (param_2),
++   * di=the FIRER (param_3) -- callers (7745 etc.) pass b1df's new object in si.  byte[si+0x2a]=10,
++   * word[si+0x1b]=0x355; ace0(ax=0, bx=word[di+0x97] (target link)).  Ghidra host-deref'd both objects. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_2, di = (unsigned short)param_3;
++  (void)param_1; (void)param_4;
++  dg[(unsigned short)(si + 0x2a)] = 10;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) = 0x355;
++  FUN_1000_ace0((undefined2)(0),(int *)(uintptr_t)(*(unsigned short *)(dg + (unsigned short)(di + 0x97))),(int)si,(int *)(uintptr_t)di,0);
+   return;
+ }
+ 
+@@ -30297,9 +30322,15 @@
+ void __allregs FUN_0000_b77d(undefined2 param_1,int param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x2a) = 10;
+-  *(undefined2 *)(param_2 + 0x1b) = 0x355;
+-  FUN_1000_ace0(param_1,*(undefined2 *)(param_3 + 0x97),param_2,param_3,param_4);
++  /* PATCH 462: weapon spawn wrapper (asm 0xb77d; DS=DGROUP=0x1c00).  si=the NEW projectile (param_2),
++   * di=the FIRER (param_3) -- callers (7745 etc.) pass b1df's new object in si.  byte[si+0x2a]=10,
++   * word[si+0x1b]=0x355; ace0(ax=0, bx=word[di+0x97] (target link)).  Ghidra host-deref'd both objects. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_2, di = (unsigned short)param_3;
++  (void)param_1; (void)param_4;
++  dg[(unsigned short)(si + 0x2a)] = 10;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) = 0x355;
++  FUN_1000_ace0((undefined2)(0),(int *)(uintptr_t)(*(unsigned short *)(dg + (unsigned short)(di + 0x97))),(int)si,(int *)(uintptr_t)di,0);
+   return;
+ }
+ 
+@@ -30309,9 +30340,15 @@
+ void __allregs FUN_0000_b793(undefined2 param_1,int param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x2a) = 0;
+-  *(undefined2 *)(param_2 + 0x1b) = 0x355;
+-  FUN_1000_ace0(param_1,*(undefined2 *)(param_3 + 0x97),param_2,param_3,param_4);
++  /* PATCH 462: weapon spawn wrapper (asm 0xb793; DS=DGROUP=0x1c00).  si=the NEW projectile (param_2),
++   * di=the FIRER (param_3) -- callers (7745 etc.) pass b1df's new object in si.  byte[si+0x2a]=0,
++   * word[si+0x1b]=0x355; ace0(ax=0, bx=word[di+0x97] (target link)).  Ghidra host-deref'd both objects. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_2, di = (unsigned short)param_3;
++  (void)param_1; (void)param_4;
++  dg[(unsigned short)(si + 0x2a)] = 0;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1b)) = 0x355;
++  FUN_1000_ace0((undefined2)(0),(int *)(uintptr_t)(*(unsigned short *)(dg + (unsigned short)(di + 0x97))),(int)si,(int *)(uintptr_t)di,0);
+   return;
+ }
+ 
+@@ -30631,17 +30668,16 @@
+ undefined2 __allregs FUN_0000_ba33(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  /* PATCH 258: spawn-record dispatch (asm 0xba33; DS=DGROUP=0x1c00).  di=object near offset in
+-   * param_2, ax=template near offset in param_1.  Registers the object via b1df(4,di) (which sets
+-   * g_fist_cf on roster-full) and, on success, installs the template into the object via ba5d.
+-   * Ghidra dropped b1df's CF (local in_CF never set) and mis-attributed ba5d's template/object args
+-   * (unaff_CS garbage host deref). */
++  /* PATCH 462 (supersedes 258): template SPAWN (asm 0xba33-0xba48; DS=DGROUP=0x1c00).  ax=template near
++   * offset (param_1), di=parent (param_2).  `push di; push ax; b1df(4); mov si,di; pop ax; pop di; jb`
++   * -> SI=the NEW object, DI=the parent; on CF=0 `call ba5d` (ax=template, si=new, di=parent).  Returns
++   * SI (the new object; = di when b1df failed) -- ba49 writes its launch velocity through it. */
+   extern unsigned char g_fist_cf;
+-  FUN_1000_b1df(4,(int *)(uintptr_t)(uint16_t)param_2);
++  unsigned int si = (unsigned short)FUN_1000_b1df(4,(int *)(uintptr_t)(uint16_t)param_2);
+   if (!(bool)g_fist_cf) {
+-    FUN_0000_ba5d((undefined2 *)(uintptr_t)(uint16_t)param_1,(int)(uint16_t)param_2,0);
++    FUN_0000_ba5d((undefined2 *)(uintptr_t)(uint16_t)param_1,(int)si,(int)(uint16_t)param_2);
+   }
+-  return 0;
++  return (undefined2)si;
+ }
+ 
+ 
+@@ -30650,15 +30686,13 @@
+ undefined4 __allregs FUN_0000_ba49(undefined2 param_1,int param_2,undefined2 param_3)
+ 
+ {
+-  /* PATCH 258: spawn-record + launch-velocity write (asm 0xba49; DS=DGROUP=0x1c00).  di=object near
+-   * offset in param_3 (asm leaves si=di=object after ba33); param_1=template near offset.  After ba33
+-   * registers the object, writes the launch velocity dword[si+4]/[si+8] from DAT_2000_5c7f/5c83.
+-   * Ghidra used param_2 (a host object ptr) for the [si+*] writes and truncated DAT_5c7f/83 to 16
+-   * bits; rebuilt in the DGROUP model with the full dword reads. */
++  /* PATCH 462 (supersedes 258): template spawn + launch-velocity write (asm 0xba49-0xba5c).  `call ba33`
++   * leaves SI=the NEW object; dword[si+4]/[si+8] = DAT_2000_5c7f/5c83.  Patch 258 wrote them into the
++   * PARENT (it read ba33's si as di). */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+-  unsigned int si = (unsigned short)param_3;
++  unsigned int si;
+   (void)param_2;
+-  FUN_0000_ba33(param_1,param_3);
++  si = (unsigned short)FUN_0000_ba33(param_1,param_3);
+   *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(g_mem + 0x25c7f);
+   *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(g_mem + 0x25c83);
+   return 0;
+@@ -30670,18 +30704,18 @@
+ void __allregs FUN_0000_ba5d(undefined2 *param_1,int param_2,int param_3)
+ 
+ {
+-  /* PATCH 258: template->object copy (asm 0xba5d; DS=DGROUP=0x1c00).  bx=template near offset in
+-   * param_1, si=di=object near offset in param_2.  Copies the spawn-template fields into the object
++  /* PATCH 258 + 462: template->object copy (asm 0xba5d-0xbab3; DS=DGROUP=0x1c00).  bx=template near
++   * offset (param_1), si=the NEW object (param_2), di=the PARENT (param_3, patch 462 -- b1df returns the
++   * new slot in DI, ba33 keeps the parent in DI).  Copies the spawn-template fields into the new object
+    * and seeds the fixed launch state (0x14=0x800, life 0x12 from template word[bx+4] or a random
+-   * 0x200+rand&0xff when 0xffff).  Ghidra base-lost every DS-relative access (template/object treated
+-   * as host pointers -> SIGSEGV).  Rebuilt with explicit DGROUP byte/word offsets.  The trailing three
+-   * dword copies are asm [si+N]<-[di+N] with di==si (self-copies), kept verbatim. */
++   * 0x200+rand&0xff when 0xffff); the trailing three dword copies `[si+4/8/0xc] <- [di+4/8/0xc]` place
++   * the child at the PARENT's position (patch 258 took them for self-copies). */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned int bx = (unsigned short)(uintptr_t)param_1;   /* template near offset */
+-  unsigned int si = (unsigned short)param_2;              /* object near offset (si==di) */
++  unsigned int si = (unsigned short)param_2;              /* new object near offset */
++  unsigned int di = (unsigned short)param_3;              /* parent near offset */
+   unsigned int ax;
+   unsigned char u;
+-  (void)param_3;
+   dg[(unsigned short)(si + 0x19)] = 0;
+   *(unsigned short *)(dg + (unsigned short)(si + 0x10)) = *(unsigned short *)(dg + (unsigned short)bx);
+   dg[(unsigned short)(si + 0x1e)] = dg[(unsigned short)(bx + 2)];
+@@ -30697,9 +30731,9 @@
+   *(unsigned short *)(dg + (unsigned short)(si + 0x12)) = (unsigned short)ax;
+   *(unsigned short *)(dg + (unsigned short)(si + 0x14)) = 0x800;
+   *(unsigned short *)(dg + (unsigned short)(si + 0x1c)) = 0;
+-  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(si + 4));
+-  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(si + 8));
+-  *(unsigned int *)(dg + (unsigned short)(si + 0xc)) = *(unsigned int *)(dg + (unsigned short)(si + 0xc));
++  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(di + 4));
++  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(di + 8));
++  *(unsigned int *)(dg + (unsigned short)(si + 0xc)) = *(unsigned int *)(dg + (unsigned short)(di + 0xc));
+   return;
+ }
+ 
+@@ -30943,7 +30977,6 @@
+ {
+   int iVar1;
+   ulong uVar2;
+-  bool bVar3;
+   
+   /* PATCH 415 (board:0012 flight-model migration): asm 0xbc46 -- type-0x1a per-object update (round/effect)
+      dispatched by c0e5 with DI=param_3=object DGROUP near-offset (DS=DGROUP=0x1c00).  Ghidra base-lost all
+@@ -30957,16 +30990,21 @@
+       uVar2 = FUN_0000_0291();
+       if ((uVar2 & 7) == 0) {
+         iVar1 = FUN_1000_9efc(100,param_2,param_3);
+-        bVar3 = false;
+         if (iVar1 != 0) {
+-          iVar1 = param_3;
+-          FUN_1000_b1df(7,param_3);
+-          if (!bVar3) {
+-            FUN_1000_ace0(param_2,param_3,iVar1,0xf69,param_4);
++          /* PATCH 462: asm bc77-bc95 `push ax(target); push di; mov ax,7; lcall b1df; mov si,di; pop di;
++           * pop bx; jb; lcall ace0(ax=b1df's AX, bx=target, si=NEW, di=firer)`; the tail writes
++           * [si+0x2a]/[si+0x1b]/[si+0x17] go to SI (= di when b1df failed).  Patch 415 fed ace0 garbage
++           * (0xf69 for di) and wrote the tail into the firer. */
++          extern unsigned char g_fist_cf;
++          unsigned int si = (unsigned short)FUN_1000_b1df(7,(int *)(uintptr_t)(unsigned short)param_3);
++          unsigned char *n = g_mem + 0x1c000 + (unsigned short)si;
++          if (!(bool)g_fist_cf) {
++            FUN_1000_ace0((undefined2)g_fist_b1df_ax,(int *)(uintptr_t)(unsigned short)iVar1,(int)si,
++                          (int *)(uintptr_t)(unsigned short)param_3,0);
+           }
+-          o[0x2a] = 0;
+-          *(unsigned short *)(o + 0x1b) = 0x18e;
+-          o[0x17] = o[0x17] | 1;
++          n[0x2a] = 0;
++          *(unsigned short *)(n + 0x1b) = 0x18e;
++          n[0x17] = n[0x17] | 1;
+         }
+       }
+     }
+@@ -57225,18 +57263,16 @@
+ void __allregs FUN_1000_60f9(int param_1,int param_2)
+ 
+ {
+-  int iVar1;
+-  int *piVar2;
+-  
+-  iVar1 = 0x20;
+-  piVar2 = (int *)&DAT_2000_2d3c;
+-  do {
+-    if (param_2 == *piVar2) {
+-      *piVar2 = param_1;
++  /* PATCH 462: object-reference REPLACE (asm 0x160f9-0x1610c; DS=DGROUP=0x1c00): `mov ax,si; mov cx,0x20;
++   * mov si,0x6d3c; loop: cmp [si],di; jne; mov [si],ax; add si,2` -- 32 WORD entries.  param_1=ax=si (the
++   * replacement), param_2=di (the value replaced).  Ghidra walked the table at int stride 4. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int i;
++  for (i = 0; i < 0x20; i++) {
++    if (*(unsigned short *)(dg + 0x6d3c + i * 2) == (unsigned short)param_2) {
++      *(unsigned short *)(dg + 0x6d3c + i * 2) = (unsigned short)param_1;
+     }
+-    piVar2 = piVar2 + 1;
+-    iVar1 = iVar1 + -1;
+-  } while (iVar1 != 0);
++  }
+   return;
+ }
+ 
+@@ -63461,35 +63497,30 @@
+ ulong __allregs FUN_1000_9caa(ulong param_1,int param_2)
+ 
+ {
+-  /* PATCH 270: object-type-C spawn-child UPDATE (asm 0x19caa; DS=DGROUP=0x1c00), dispatched by b355.
+-   * di=object near offset in param_2; when the mission gate DAT_2000_4b4f==1 it registers the object as
+-   * a display object via b1d6 (-> b1df; leaves si=di=object, sets g_fist_cf on roster-full) and, on
+-   * success, seeds its spin word[di+0x12]=(rand&0x3f)+(low16 param_1), word[di+0x14]=that*4, clears
+-   * byte[di+0x19]/word[di+0x1a] and bumps dword[di+0xc]+=0x300.  Ghidra base-lost di (host deref ->
+-   * SIGSEGV) and split the single object into iVar4/iVar5=unaff_CS (the [+4]/[+8] copies are asm
+-   * si<-di with si==di, i.e. no-ops -> elided).  Rebuilt in the DGROUP model. */
++  /* PATCH 462 (supersedes 270): type-0x11 CHILD spawn (asm 0x19caa-0x19cfc; DS=DGROUP=0x1c00).  ax=low16
++   * param_1 (spin seed), di=PARENT near-offset (param_2), gate DAT_2000_4b4f==1.  `push ax; push di;
++   * b1d6(0x11); mov si,di; pop di` -> SI=the NEW child, DI=the parent (patch 270 took si==di and wrote
++   * the child's init into the PARENT).  CF=0: word[si+0x12]=(rand&0x3f)+ax, word[si+0x14]=that<<2,
++   * byte[si+0x19]=0, word[si+0x1a]=0, dword[si+4]/[si+8]=parent's, dword[si+0xc]=parent's+0x300 (=eax). */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   extern unsigned char g_fist_cf;
+   unsigned int di = (unsigned short)param_2;
+   unsigned int ax0 = (unsigned short)param_1;
+-  uint uVar1;
+-  int iVar2;
+-  ulong uVar3;
+-  
++  unsigned int si, v;
+   if (DAT_2000_4b4f == '\x01') {
+-    FUN_1000_b1d6(0x11,(int *)(uintptr_t)di);
++    si = (unsigned short)FUN_1000_b1d6(0x11,(int *)(uintptr_t)di);
+     if (!(bool)g_fist_cf) {
+-      uVar1 = FUN_0000_b26a();
+-      iVar2 = (int)((uVar1 & 0x3f) + ax0);
+-      *(unsigned short *)(dg + (unsigned short)(di + 0x12)) = (unsigned short)iVar2;
+-      *(unsigned short *)(dg + (unsigned short)(di + 0x14)) = (unsigned short)(iVar2 << 2);
+-      dg[(unsigned short)(di + 0x19)] = 0;
+-      *(unsigned short *)(dg + (unsigned short)(di + 0x1a)) = 0;
+-      uVar3 = (ulong)(*(unsigned int *)(dg + (unsigned short)(di + 0xc)) + 0x300);
+-      *(unsigned int *)(dg + (unsigned short)(di + 0xc)) = (unsigned int)uVar3;
+-      return uVar3;
++      v = (unsigned short)(((unsigned short)FUN_0000_b26a() & 0x3f) + ax0);
++      *(unsigned short *)(dg + (unsigned short)(si + 0x12)) = (unsigned short)v;
++      *(unsigned short *)(dg + (unsigned short)(si + 0x14)) = (unsigned short)(v << 2);
++      dg[(unsigned short)(si + 0x19)] = 0;
++      *(unsigned short *)(dg + (unsigned short)(si + 0x1a)) = 0;
++      *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(di + 4));
++      *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(di + 8));
++      v = *(unsigned int *)(dg + (unsigned short)(di + 0xc)) + 0x300;
++      *(unsigned int *)(dg + (unsigned short)(si + 0xc)) = v;
++      return (ulong)v;
+     }
+-    param_1 = (ulong)di;
+   }
+   return param_1;
+ }
+@@ -63500,32 +63531,30 @@
+ ulong __allregs FUN_1000_9cfd(ulong param_1,int param_2)
+ 
+ {
+-  ulong uVar1;
+-  uint uVar2;
+-  undefined2 extraout_var;
+-  int iVar3;
+-  int iVar4;
+-  int unaff_CS;
+-  bool bVar5;
+-  
+-  bVar5 = DAT_2000_4b4f == '\0';
++  /* PATCH 462: type-0x18 CHILD spawn (asm 0x19cfd-0x19d48; DS=DGROUP=0x1c00) -- 9caa's sibling, reached
++   * from the 9aa1 lifecycle method (patch 414) at the age milestones.  Same shape: gate DAT_2000_4b4f==1,
++   * `push ax; push di; b1d6(0x18); mov si,di; pop di` -> SI=NEW child, DI=parent.  CF=0: word[si+0x12]=
++   * (rand&0x3f)+ax, byte[si+0x19]=0, word[si+0x1a]=0, word[si+0x14]=0x300, dword[si+4/8/0xc]=parent's
++   * (no +0x300; eax=dword[di+0xc] is the return).  Ghidra base-lost both objects (host derefs). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  extern unsigned char g_fist_cf;
++  unsigned int di = (unsigned short)param_2;
++  unsigned int ax0 = (unsigned short)param_1;
++  unsigned int si, v;
+   if (DAT_2000_4b4f == '\x01') {
+-    iVar3 = param_2;
+-    FUN_1000_b1d6(0x18,param_2);
+-    if (!bVar5) {
+-      iVar4 = unaff_CS;
+-      uVar2 = FUN_0000_b26a();
+-      *(int *)(iVar3 + 0x12) = (uVar2 & 0x3f) + unaff_CS;
+-      *(undefined1 *)(iVar3 + 0x19) = 0;
+-      *(undefined2 *)(iVar3 + 0x1a) = 0;
+-      *(undefined2 *)(iVar3 + 0x14) = 0x300;
+-      *(undefined4 *)(iVar3 + 4) = *(undefined4 *)(iVar4 + 4);
+-      *(undefined4 *)(iVar3 + 8) = *(undefined4 *)(iVar4 + 8);
+-      uVar1 = *(ulong *)(iVar4 + 0xc);
+-      *(ulong *)(iVar3 + 0xc) = uVar1;
+-      return uVar1;
++    si = (unsigned short)FUN_1000_b1d6(0x18,(int *)(uintptr_t)di);
++    if (!(bool)g_fist_cf) {
++      v = (unsigned short)(((unsigned short)FUN_0000_b26a() & 0x3f) + ax0);
++      *(unsigned short *)(dg + (unsigned short)(si + 0x12)) = (unsigned short)v;
++      dg[(unsigned short)(si + 0x19)] = 0;
++      *(unsigned short *)(dg + (unsigned short)(si + 0x1a)) = 0;
++      *(unsigned short *)(dg + (unsigned short)(si + 0x14)) = 0x300;
++      *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(di + 4));
++      *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(di + 8));
++      v = *(unsigned int *)(dg + (unsigned short)(di + 0xc));
++      *(unsigned int *)(dg + (unsigned short)(si + 0xc)) = v;
++      return (ulong)v;
+     }
+-    param_1 = CONCAT22(extraout_var,param_2);
+   }
+   return param_1;
+ }
+@@ -64138,10 +64167,14 @@
+   DAT_2000_5698 = (ulong)uVar2 + *(unsigned int *)(dg + (unsigned short)(si + 0xc));
+   uVar3 = FUN_0000_a18e(param_1,(int)param_2,iVar4,(undefined4 *)&DAT_2000_5684,
+                         (undefined4 *)&DAT_2000_5690);
++  /* PATCH 462: asm 1a2d6-1a2e3 `mov [di+0x9b],ax; mov [di+0x38],bx; shl edx,8; mov dl,ch; mov [di+0x99],dx`
++   * -- bx = a18e's pitch (g_fist_0578_bx), dx = its range HIGH word (0927's, g_fist_0927_dx), ch = the
++   * height-LUT word's high byte (1a2c0 `mov ch,ah`).  Patch 274 stored the LUT INDEX and a param mash. */
++  { extern uint16_t g_fist_0927_dx;
+   *(unsigned short *)(dg + (unsigned short)(di + 0x9b)) = uVar3;
+-  *(unsigned short *)(dg + (unsigned short)(di + 0x38)) = (unsigned short)iVar4;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x38)) = g_fist_0578_bx;
+   *(unsigned short *)(dg + (unsigned short)(di + 0x99)) =
+-      (unsigned short)((((uint)param_2 & 0xff) << 8) | (((uint)param_1 >> 8) & 0xff));
++      (unsigned short)(((unsigned int)g_fist_0927_dx << 8) | ((uVar2 >> 8) & 0xff)); }
+   return;
+ }
+ 
+@@ -65136,75 +65169,71 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_ace0) @ 1000:ace0 ===== */
+ 
+-/* WARNING: Variable defined which should be unmapped: param_5 */
+-
+ void __allregs FUN_1000_ace0(undefined2 param_1,int *param_2,int param_3,int *param_4,int param_5)
+ 
+ {
+-  uint uVar1;
+-  int iVar2;
+-  ulong uVar3;
+-  int iVar4;
+-  undefined2 uVar5;
+-  int iVar6;
+-  ulong uVar7;
+-  int unaff_CS;
+-  int iVar8;
+-  int iVar9;
+-  
+-  *(undefined2 *)(param_3 + 0x2f) = param_2;
+-  iVar8 = unaff_CS;
+-  if (param_2 != (int *)0x0) {
+-    if (*param_2 == 0x1a) {
+-      uVar1 = *(uint *)((*(byte *)(param_3 + 0x19) & 3) * 2 + -0x6151);
+-    }
+-    else {
+-      uVar1 = *(uint *)(*param_2 * 2 + -0x1a78);
+-    }
+-    uVar7 = (ulong)uVar1;
+-    iVar8 = 0;
+-    uVar1 = FUN_0000_b26a();
+-    uVar3 = (ulong)(uVar1 & 0x7ff);
+-    if ((param_4[0x20] & 0x10U) == 0) {
+-      if ((*(byte *)(param_4 + 0xb) & 8) != 0) {
+-        uVar3 = uVar3 << 2;
+-      }
+-    }
+-    else {
+-      uVar3 = (ulong)((uVar1 & 0x7ff) >> 1);
++  /* PATCH 462: projectile LAUNCH init (asm 0x1ace0-0x1adcc; DS=DGROUP=0x1c00), reached from every weapon
++   * spawn (b6c9/b6e3/b725..b793 and bc46) right after b1df.  In: ax=heading spread (param_1), bx=TARGET
++   * near-offset or 0 (param_2), si=the NEW projectile (param_3), di=the FIRER (param_4).  Body 1:1:
++   *   [si+0x2f]=bx; bx!=0: ebx=height LUT (target type 0x1a: word[((byte[si+0x19]&3)<<1)-0x6151], else
++   *     word[type*2-0x1a78]) minus (rand&0x7ff, >>1 if word[di+0x40]&0x10 else <<2 if byte[di+0x16]&8)
++   *     -> dword[si+0x31];
++   *   [si+0x27]=di; dword[si+4/8]=firer's; byte[si+0x29]=byte[type-0x1a08]; dword[si+0xc]=word[type*2-
++   *     0x1a40]+dword[di+0xc];
++   *   ax+=word[di+0x10]; cx=word[di+0x38]; firer type 0x1a: project target(+dword[si+0x31]) into 0x9690,
++   *     a18e(si+4 -> 0x9690) -> ax=bearing, cx=pitch(bx)+0xb6;
++   *   word[si+0x10]=ax; a192(ax, dx=word[si+0x1b], cx) -> word[si+0x1d]=ax, [si+0x1f]=dx, [si+0x21]=cx;
++   *   word[si+0x23]=2; byte[si+0x16]|=byte[di+0x16]&8; addb(di=si).
++   * Ghidra base-lost every object deref (host pointers), bound the dropped a18e/a192 multi-returns to
++   * dead locals (iVar8/iVar9/unaff_CS) and fed addb the wrong object. */
++  extern unsigned short g_fist_rot_h, g_fist_rot_dx, g_fist_rot_cx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int ax = (unsigned short)param_1;
++  unsigned int bx = (unsigned short)(uintptr_t)param_2;
++  unsigned int si = (unsigned short)param_3;
++  unsigned int di = (unsigned short)(uintptr_t)param_4;
++  unsigned int cx, t, r, ebx;
++  (void)param_5;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x2f)) = (unsigned short)bx;
++  if (bx != 0) {
++    t = *(unsigned short *)(dg + (unsigned short)bx);
++    if (t == 0x1a) {
++      ebx = *(unsigned short *)(dg + (unsigned short)(((dg[(unsigned short)(si + 0x19)] & 3) << 1) - 0x6151));
++    } else {
++      ebx = *(unsigned short *)(dg + (unsigned short)((t << 1) - 0x1a78));
+     }
+-    *(long *)(param_3 + 0x31) = uVar7 - uVar3;
+-    param_5 = unaff_CS;
++    r = (unsigned short)FUN_0000_b26a() & 0x7ff;
++    if (*(unsigned short *)(dg + (unsigned short)(di + 0x40)) & 0x10) r = r >> 1;
++    else if (dg[(unsigned short)(di + 0x16)] & 8) r = r << 2;
++    *(unsigned int *)(dg + (unsigned short)(si + 0x31)) = ebx - r;
+   }
+-  *(undefined2 *)(param_3 + 0x27) = param_4;
+-  *(undefined4 *)(param_3 + 4) = *(undefined4 *)(param_4 + 2);
+-  *(undefined4 *)(param_3 + 8) = *(undefined4 *)(param_4 + 4);
+-  iVar6 = *param_4;
+-  *(undefined1 *)(param_3 + 0x29) = *(undefined1 *)(iVar6 + -0x1a08);
+-  iVar6 = iVar6 * 2;
+-  *(long *)(param_3 + 0xc) = (ulong)*(uint *)(iVar6 + -0x1a40) + *(long *)(param_4 + 6);
+-  iVar2 = param_5 + param_4[8];
+-  iVar4 = param_4[0x1c];
+-  iVar9 = iVar8;
+-  if (*param_4 == 0x1a) {
+-    iVar9 = *(int *)(param_3 + 0x2f);
+-    DAT_2000_5690 = *(undefined4 *)(iVar9 + 4);
+-    DAT_2000_5694 = *(undefined4 *)(iVar9 + 8);
+-    DAT_2000_5698 = *(long *)(iVar9 + 0xc) + *(long *)(param_3 + 0x31);
+-    iVar9 = 0;
+-    iVar2 = FUN_0000_a18e(iVar4,param_1,iVar6,param_3 + 4,(undefined4 *)&DAT_2000_5690);
+-    iVar4 = iVar6 + 0xb6;
+-    param_3 = iVar8;
+-  }
+-  *(int *)(param_3 + 0x10) = iVar2;
+-  uVar5 = *(undefined2 *)(param_3 + 0x1b);
+-  iVar8 = FUN_0000_a192(iVar4,uVar5);
+-  *(int *)(iVar9 + 0x1d) = iVar8;
+-  *(undefined2 *)(iVar9 + 0x1f) = uVar5;
+-  *(int *)(iVar9 + 0x21) = iVar4;
+-  *(undefined2 *)(iVar9 + 0x23) = 2;
+-  *(byte *)(iVar9 + 0x16) = *(byte *)(iVar9 + 0x16) | *(byte *)(param_3 + 0x16) & 8;
+-  FUN_1000_addb(iVar4,uVar5,iVar6,iVar9);
++  *(unsigned short *)(dg + (unsigned short)(si + 0x27)) = (unsigned short)di;
++  *(unsigned int *)(dg + (unsigned short)(si + 4)) = *(unsigned int *)(dg + (unsigned short)(di + 4));
++  *(unsigned int *)(dg + (unsigned short)(si + 8)) = *(unsigned int *)(dg + (unsigned short)(di + 8));
++  t = *(unsigned short *)(dg + (unsigned short)di);
++  dg[(unsigned short)(si + 0x29)] = dg[(unsigned short)(t - 0x1a08)];
++  *(unsigned int *)(dg + (unsigned short)(si + 0xc)) =
++      (unsigned int)*(unsigned short *)(dg + (unsigned short)((t << 1) - 0x1a40)) +
++      *(unsigned int *)(dg + (unsigned short)(di + 0xc));
++  ax = (unsigned short)(ax + *(unsigned short *)(dg + (unsigned short)(di + 0x10)));
++  cx = *(unsigned short *)(dg + (unsigned short)(di + 0x38));
++  if (t == 0x1a) {
++    unsigned int tg = *(unsigned short *)(dg + (unsigned short)(si + 0x2f));
++    DAT_2000_5690 = *(unsigned int *)(dg + (unsigned short)(tg + 4));
++    DAT_2000_5694 = *(unsigned int *)(dg + (unsigned short)(tg + 8));
++    DAT_2000_5698 = *(unsigned int *)(dg + (unsigned short)(tg + 0xc)) + *(unsigned int *)(dg + (unsigned short)(si + 0x31));
++    ax = (unsigned short)FUN_0000_a18e(0,0,0,(int)(intptr_t)(dg + (unsigned short)(si + 4)),(int)(intptr_t)(dg + 0x9690));
++    cx = (unsigned short)(g_fist_0578_bx + 0xb6);
++  }
++  *(unsigned short *)(dg + (unsigned short)(si + 0x10)) = (unsigned short)ax;
++  g_fist_rot_h = (unsigned short)cx;
++  r = (unsigned short)FUN_0000_a192((undefined2)ax,*(unsigned short *)(dg + (unsigned short)(si + 0x1b)));
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1d)) = (unsigned short)r;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x1f)) = g_fist_rot_dx;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x21)) = g_fist_rot_cx;
++  *(unsigned short *)(dg + (unsigned short)(si + 0x23)) = 2;
++  dg[(unsigned short)(si + 0x16)] |= dg[(unsigned short)(di + 0x16)] & 8;
++  FUN_1000_addb(0,0,0,(int)(intptr_t)(dg + (unsigned short)si));
+   return;
+ }
+ 
+@@ -65260,11 +65289,15 @@
+                                 (int)(intptr_t)(obj + 4), (undefined4 *)&DAT_2000_5690); /* 1ae0d */
+           uint16_t s = (uint16_t)((uint16_t)r - *(uint16_t *)(obj + 0x10) + 0xb6);       /* 1ae13-1ae18 */
+           if (s < 0x16c) {                                         /* 1ae1c cmp 0x16c; jb 1ae28 */
++            /* PATCH 462: `mov cx,bx` = a18e's BX (0578's pitch, g_fist_0578_bx); ax is still a18e's bearing
++             * (r); dx/cx after a192 are 0459's OUTPUTS (g_fist_rot_dx/cx), not the inputs (patch 337). */
++            extern unsigned short g_fist_rot_h, g_fist_rot_dx, g_fist_rot_cx;
+             uint16_t uv2 = *(uint16_t *)(obj + 0x1b);              /* 1ae2a mov dx,[di+0x1b] */
+-            int r2 = FUN_0000_a192(param_3, uv2);                  /* 1ae2d (cx=bx=param_3, dx=uv2) */
++            g_fist_rot_h = g_fist_0578_bx;                         /* 1ae28 mov cx,bx */
++            int r2 = FUN_0000_a192((undefined2)(uint16_t)r, uv2);  /* 1ae2d a192(ax=bearing, dx, cx=pitch) */
+             *(uint16_t *)(obj + 0x1d) = (uint16_t)r2;              /* 1ae32 mov [di+0x1d],ax */
+-            *(uint16_t *)(obj + 0x1f) = uv2;                       /* 1ae35 mov [di+0x1f],dx */
+-            *(uint16_t *)(obj + 0x21) = (uint16_t)param_3;         /* 1ae38 mov [di+0x21],cx(=bx=param_3) */
++            *(uint16_t *)(obj + 0x1f) = g_fist_rot_dx;             /* 1ae35 mov [di+0x1f],dx */
++            *(uint16_t *)(obj + 0x21) = g_fist_rot_cx;             /* 1ae38 mov [di+0x21],cx */
+             return;
+           }
+         }
+@@ -65628,37 +65661,14 @@
+ int __allregs FUN_1000_b1d6(int param_1,int *param_2)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int *piVar3;
+-  bool bVar4;
+-  
+-  bVar4 = DAT_2000_a294 < 0x78;
+-  if (!bVar4) {
+-    { extern unsigned char g_fist_cf; g_fist_cf = 1; }  /* PATCH 270: asm b1d6 stc when roster full */
+-    return param_1;
+-  }
+-  iVar1 = FUN_1000_b21d(param_1);
+-  if (bVar4) {
+-    return iVar1;
+-  }
+-  iVar1 = 0;
+-  for (piVar3 = (int *)&DAT_2000_9fbc; (*piVar3 != 0 || (piVar3[1] != 0)); piVar3 = piVar3 + 2) {
+-    iVar1 = iVar1 + 1;
+-  }
+-  *piVar3 = (int)param_2;
+-  piVar3[1] = piVar3[1] + 1;
+-  iVar2 = 0x33;
+-  if ((*(byte *)(*param_2 + -0x19ec) & 1) != 0) {
+-    iVar2 = 0xf7;
+-  }
+-  piVar3 = param_2 + 2;
+-  do {
+-    *(undefined1 *)piVar3 = 0;
+-    piVar3 = (int *)((int)piVar3 + 1);
+-    iVar2 = iVar2 + -1;
+-  } while (iVar2 != 0);
+-  return iVar1;
++  /* PATCH 462: friendly-capped object SPAWN (asm 0x1b1d6; DS=DGROUP=0x1c00): `cmp word[0xe294],0x78;
++   * jb b1df; stc; lret` -- a guarded FALL-THROUGH into b1df.  Ghidra's version called b21d and returned
++   * before b1df's display-table/zero tail (dead code behind `if (bVar4)`), so a b1d6 spawn allocated a
++   * roster slot but never registered or initialised it.  ax=type (param_1), di=parent (param_2).
++   * Returns the NEW object near-offset (asm DI); g_fist_cf=1 when capped or the roster is full. */
++  extern unsigned char g_fist_cf;
++  if ((unsigned short)DAT_2000_a294 >= 0x78) { g_fist_cf = 1; return (int)(unsigned short)(uintptr_t)param_2; }
++  return FUN_1000_b1df((undefined2)param_1,param_2);
+ }
+ 
+ 
+@@ -65667,20 +65677,22 @@
+ int __allregs FUN_1000_b1df(undefined2 param_1,int *param_2)
+ 
+ {
+-  /* PATCH 258: display-object registrar (asm 0x1b1df; DS=DGROUP=0x1c00).  param_1=type key (ax),
+-   * param_2=object NEAR OFFSET (di).  Calls b21d (roster insert; sets g_fist_cf when the roster is
+-   * full) then finds a free slot in the 182-entry table @ DGROUP:0xdfbc (stride 4: word[si]==0 &&
+-   * word[si+2]==0), stores the object near-offset there, bumps the slot refcount, and zeroes the
+-   * object body (0x33 or 0xf7 bytes per byte[word[di]-0x19ec]&1).  Ghidra base-lost the whole thing:
+-   * the near-offset object was deref'd as a host int* (*param_2 -> SIGSEGV), the table was walked at
+-   * host-int stride 8, and b21d's CF was dropped (local in_CF never set). */
++  /* PATCH 462 (supersedes 258): object SPAWN (asm 0x1b1df-0x1b21c; DS=DGROUP=0x1c00).  ax=type key;
++   * di=the CALLER's object -- only carried, b21d never reads it.  b21d allocates a fresh roster slot and
++   * RETURNS IT IN DI (`mov di,0xa022|0xc05c; add di,0x37|0xfb ...; mov [di],ax; mov [di+2],bx`); b1df
++   * then stores THAT slot in the first free display-table entry (DGROUP:0xdfbc, stride 4), bumps the
++   * entry's refcount, and zeroes the NEW slot's body (0x33 friendly / 0xf7 enemy bytes from +4, keyed on
++   * the TYPE's team bit byte[word[di]-0x19ec]&1).  Out: ax=display index, di=the new object, CF=0; on
++   * roster-full CF=1 and di is untouched.  Patch 258 misread di as the caller's object: the port
++   * re-registered the PARENT, zeroed the PARENT's body and orphaned the freshly allocated slot -- every
++   * spawn (projectile, wreck, effect, child) was built on the wrong record, and the callers' `mov si,di;
++   * pop di` (SI=new, DI=parent) split was folded into "si==di".  Callers take the new object from the
++   * return value and the display index from g_fist_b1df_ax (the asm AX). */
+   extern unsigned char g_fist_cf;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+-  unsigned int di = (unsigned short)(uintptr_t)param_2;
+-  unsigned int si, cx, bx;
+-  int count;
+-  FUN_1000_b21d(param_1);
+-  if (g_fist_cf) { g_fist_cf = 1; return 0; }
++  unsigned int di, si, cx, bx, count;
++  di = (unsigned short)FUN_1000_b21d((int)(unsigned short)param_1);
++  if (g_fist_cf) { g_fist_cf = 1; return (int)(unsigned short)(uintptr_t)param_2; }
+   si = 0xdfbc; count = 0;
+   while (*(unsigned short *)(dg + (unsigned short)si) != 0 ||
+          *(unsigned short *)(dg + (unsigned short)(si + 2)) != 0) {
+@@ -65698,8 +65710,9 @@
+     si = (unsigned short)(si + 1);
+     cx = cx - 1;
+   } while (cx != 0);
++  g_fist_b1df_ax = (unsigned short)count;
+   g_fist_cf = 0;
+-  return count;
++  return (int)di;
+ }
+ 
+ 
+@@ -65749,30 +65762,30 @@
+ int __allregs FUN_1000_b294(int param_1)
+ 
+ {
+-  /* PATCH 457: display-object REGISTER wrapper (asm 0x1b294; DS=DGROUP=0x1c00).  di = the slot's object
+-   * NEAR OFFSET = word[DGROUP:0xdfbc+param_1*4]; register it via b1df(word[DGROUP:di], di).  Ghidra
+-   * base-lost it: puVar5 = the slot value used as a HOST POINTER, so b1df's TYPE key was *puVar5 (a wild
+-   * host deref = garbage) instead of word[DGROUP:di]; and the phantom `unaff_CS` split the single
+-   * near-offset (asm: di==si) into a bogus second pointer.  On the port this passed a GARBAGE type to
+-   * b1df->b21d, corrupting the roster/object set (the AZER1 mission's 9 mobile type-2 tanks were killed
+-   * and ~66 spurious type-0x10 objects spawned within ~100 ticks; oracle census: original keeps 80 objects
+-   * incl. 9 steering tanks).  Rebase to the DGROUP model + pass the real type.  The asm tail's
+-   * `rep movs es:[di],ds:[si]` has si==di (b1df leaves si=di and has already zeroed the body) -> a
+-   * self-copy no-op, omitted.  Tracks the max side-total a29c (a294+a296) as the asm does. */
++  /* PATCH 462 (supersedes 457): object CLONE (asm 0x1b294-0x1b2d2; DS=DGROUP=0x1c00).  si=word[0xdfbc+
++   * ax*4] (the SOURCE), ax=word[si] (its type); b1df(type) -> di=NEW slot, ax=display index; `pop si`.
++   * On CF=0: a29c=max(a29c,a294+a296), then `push ds; pop es; rep movsb` 0x37/0xfb bytes (team bit of
++   * word[si]) SOURCE->NEW -- si!=di, a real copy (patch 457 read it as a self-copy).  Returns ax=display
++   * index (asm `pop ax`), di=the clone; CF from b1df. */
+   extern unsigned char g_fist_cf;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+-  unsigned short di = *(unsigned short *)(dg + (unsigned short)(0xdfbc + (unsigned int)param_1 * 4));
+-  unsigned short type = *(unsigned short *)(dg + di);
+-  int iVar3;
+-  iVar3 = FUN_1000_b1df(type,(int *)(uintptr_t)di);
+-  if (!(bool)g_fist_cf) {
+-    if ((unsigned short)DAT_2000_a29c <
+-        (unsigned int)((unsigned short)DAT_2000_a294 + (unsigned short)DAT_2000_a296)) {
+-      DAT_2000_a29c = (unsigned short)((unsigned short)DAT_2000_a294 + (unsigned short)DAT_2000_a296);
+-    }
+-    return iVar3;
++  unsigned int si = *(unsigned short *)(dg + (unsigned short)(0xdfbc + (unsigned short)param_1 * 4));
++  unsigned int di, cx, bx;
++  di = (unsigned short)FUN_1000_b1df(*(unsigned short *)(dg + si),(int *)(uintptr_t)si);
++  if (g_fist_cf) { g_fist_cf = 1; return (int)g_fist_b1df_ax; }
++  if ((unsigned short)DAT_2000_a29c <
++      (unsigned short)((unsigned short)DAT_2000_a294 + (unsigned short)DAT_2000_a296)) {
++    DAT_2000_a29c = (unsigned short)((unsigned short)DAT_2000_a294 + (unsigned short)DAT_2000_a296);
+   }
+-  return iVar3;
++  bx = *(unsigned short *)(dg + si);
++  cx = (dg[(unsigned short)(bx - 0x19ec)] & 1) ? 0xfb : 0x37;
++  do {
++    dg[(unsigned short)di] = dg[(unsigned short)si];
++    di = (unsigned short)(di + 1); si = (unsigned short)(si + 1);
++    cx = cx - 1;
++  } while (cx != 0);
++  g_fist_cf = 0;
++  return (int)g_fist_b1df_ax;
+ }
+ 
+ 

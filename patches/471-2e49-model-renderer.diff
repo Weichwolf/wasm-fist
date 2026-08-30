@@ -1,0 +1,318 @@
+PATCH 471: FUN_0000_2e49 -- the node-kind 6 MODEL renderer (windshield-object frontier, slice 7), plus the
+resource touch 0d2e's method dispatch through 1345's list header.
+
+asm 0x2e49-0x3068 (DS=DGROUP): gates (own vehicle, unset dword[bx+0x2a], view cone via 0846, empty
+part count word[0x276c+code], distance high word >= 0x7d); scale [0x6c50]:[0x6c52] = 0e22(dword[0x6c26]
+/ 0d13(distance)) (patch-468 lanes); 3e8c size, MGA 405e shade, 3e29 screen -> MGA 400b, 3ed4 TCB post
+(patches 469/470); two 059a facing lookups select the resource descriptors word[word[0x27f4+code]+facing]
+(bit7 clear -> 3069 abort, bit4 -> f69:169e touch, bits 5|6 held while drawing); the node's per-part
+facing bytes at +0x32 pick polygon lists inside the loaded resource (es = descriptor segment, tables at
+DGROUP:0x3a8c and resource [word]/[part]/[facing*2]) inserted depth-sorted (key ah) into the 8-byte list
+at 0x6ae4; the walk posts every polygon to the extender op-0x40 rasterizer (e132) with esi = word + dword
+es:[2] (linear), cx/dx from the entry and di = the bit-15 flag (bit 14 -> the base model's descriptor
+word[rec-2]).  The e132 register lanes are published (g_fist_ext_esi/ecx/edx/edi) for the gate's op-0x40
+handler (next slice).  0d2e (f69:169e): `call [bp+0x18]` uses the MEMMGR list header 1345 found
+(DGROUP:0x16d4/0x16f6/0x1718, now published as g_fist_1345_bp) and its CF is 1345's found/not-found --
+Ghidra deref'd a stale param and hard-wired the CF.  Ghidra host-deref'd every pointer in 2e49 (SEGV the
+first time a vehicle node reached it with patches 462-470).
+--- a/fist.c
++++ b/fist.c
+@@ -7,6 +7,7 @@
+ extern unsigned short g_fist_b1df_ax, g_fist_0578_bx, g_fist_03a9_dx;  /* PATCH 462: b1df AX (display index), 0578 BX (pitch), 03a9 DX */
+ extern unsigned short g_fist_fp_dx, g_fist_fp_cx;  /* PATCH 468: the 0d13..0e22 fixed-point block's DX (exponent) / CX register lanes */
+ extern unsigned short g_fist_r48_dx, g_fist_r48_cx, g_fist_3e29_cx;  /* PATCH 469: 1322/129f 48-bit DX:CX lanes; 3e29's CX (screen x) */
++extern uint32_t g_fist_ext_esi; extern unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi, g_fist_1345_bp;  /* PATCH 471: op-0x40 register lanes; 1345's BP (list header) */
+ 
+ /* ---- RULE 7: unresolved indirect/mid-function call targets, stubbed (OPEN) ---- */
+ int func_0x00000556(){ return 0; }  /* OPEN: unresolved indirect/mid-function call target */
+@@ -11163,157 +11164,114 @@
+ uint __allregs FUN_0000_2e49(undefined4 param_1,undefined2 param_2)
+ 
+ {
+-  byte *pbVar1;
+-  undefined2 uVar2;
+-  ulong uVar3;
+-  byte bVar4;
+-  int iVar5;
+-  uint uVar6;
+-  undefined1 extraout_AH;
+-  undefined1 extraout_AH_00;
+-  undefined2 *puVar7;
+-  uint uVar8;
+-  undefined2 uVar9;
+-  undefined2 *puVar10;
+-  undefined2 *puVar11;
+-  undefined2 uVar13;
+-  undefined2 *puVar12;
+-  undefined2 *puVar14;
+-  int *piVar15;
+-  byte *pbVar16;
+-  undefined1 uVar17;
+-  undefined1 uVar18;
+-  
+-  uVar13 = (undefined2)((ulong)param_1 >> 0x10);
+-  uVar6 = DAT_1000_d554;
+-  if ((DAT_1000_d554 != *(uint *)(DAT_2000_0b9e + 2)) && (*(long *)(DAT_2000_0b9e + 0x2a) != -1)) {
+-    iVar5 = FUN_0000_0846((undefined2 *)&DAT_1000_d55a,DAT_2000_0b9e + 10);
+-    bVar4 = (byte)((uint)(iVar5 - DAT_2000_2c2a) >> 8);
+-    uVar6 = CONCAT11(bVar4,(((byte)(iVar5 - DAT_2000_2c2a) ^ bVar4) - bVar4) + '\x02') & 0xff07;
+-    if (((byte)uVar6 < 5) && (*(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x276c) != 0)) {
+-      uVar6 = *(uint *)(DAT_2000_0b9e + 0x1e);
+-      puVar7 = (undefined2 *)*(undefined2 *)(DAT_2000_0b9e + 0x20);
+-      uVar17 = puVar7 < (undefined2 *)0x7d;
+-      uVar18 = puVar7 == (undefined2 *)0x7d;
+-      if ((bool)uVar17) {
+-        uVar6 = FUN_0000_0d13(uVar6,puVar7);
+-        uVar9 = DAT_2000_2c28;
+-        DAT_2000_2c50 = FUN_0000_0e22(DAT_2000_2c26,uVar6);
+-        DAT_2000_2c52 = uVar9;
+-        uVar6 = FUN_0000_3e8c(DAT_2000_2c54,DAT_2000_2c56,DAT_2000_0b9e);
+-        if (!(bool)uVar18) {
+-          (*(code *)fist_icall_far((uint32_t)(DAT_1000_c674)))();
+-          uVar6 = FUN_0000_3e29(DAT_2000_0b9e);
+-          if (!(bool)uVar17) {
+-            (*(code *)fist_icall_far((uint32_t)(DAT_1000_c668)))();
+-            FUN_0000_3ed4(DAT_2000_0b9e);
+-            bVar4 = FUN_0000_059a(*(undefined2 *)(DAT_2000_0b9e + 8),(undefined2 *)&DAT_1000_d55a,
+-                                  DAT_2000_0b9e + 10);
+-            DAT_2000_2ad8 = CONCAT11(extraout_AH,bVar4);
+-            iVar5 = *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x27f4);
+-            puVar14 = (undefined2 *)*(int *)(DAT_2000_2ad8 + iVar5);
+-            pbVar1 = (byte *)(puVar14 + 1);
+-            DAT_2000_2b68 = puVar14;
+-            *pbVar1 = *pbVar1 | 0x20;
+-            if ((char)*pbVar1 < '\0') {
+-              if ((*(byte *)(puVar14 + 1) & 0x10) != 0) {
+-                FUN_1000_0d2e(puVar14,param_2,iVar5);
+-              }
+-            }
+-            else {
+-              FUN_0000_3069(0x2f1c);
+-            }
+-            *(byte *)(DAT_2000_2b68 + 1) = *(byte *)(DAT_2000_2b68 + 1) | 0x60;
+-            bVar4 = FUN_0000_059a(*(undefined2 *)
+-                                   (DAT_2000_0b9e + *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x276c)
+-                                   + 0x32),(undefined2 *)&DAT_1000_d55a,DAT_2000_0b9e + 10);
+-            DAT_2000_2b6a = CONCAT11(extraout_AH_00,bVar4);
+-            iVar5 = *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x27f4);
+-            puVar14 = (undefined2 *)*(int *)(DAT_2000_2b6a + iVar5);
+-            pbVar1 = (byte *)(puVar14 + 1);
+-            DAT_2000_2b6c = puVar14;
+-            *pbVar1 = *pbVar1 | 0x20;
+-            if ((char)*pbVar1 < '\0') {
+-              if ((*(byte *)(puVar14 + 1) & 0x10) != 0) {
+-                FUN_1000_0d2e(puVar14,param_2,iVar5);
+-              }
+-            }
+-            else {
+-              FUN_0000_3069(0x2f6f);
+-            }
+-            *(byte *)(DAT_2000_2b6c + 1) = *(byte *)(DAT_2000_2b6c + 1) | 0x60;
+-            DAT_2000_2adc = 0;
+-            DAT_2000_2ade = 0;
+-            DAT_2000_2ad6 = (undefined2 *)&DAT_2000_2ae4;
+-            DAT_2000_2ad4 = *(int *)(*(byte *)(DAT_2000_0b9e + 5) + 0x276c) * 2;
+-            pbVar16 = (byte *)(DAT_2000_0b9e + 0x32);
+-            DAT_2000_2b5e = 0;
+-            do {
+-              puVar14 = DAT_2000_2b68;
+-              iVar5 = DAT_2000_2ad8;
+-              if ((*pbVar16 & 0x80) != 0) {
+-                puVar14 = DAT_2000_2b6c;
+-                iVar5 = DAT_2000_2b6a;
+-              }
+-              uVar2 = *puVar14;
+-              pbVar1 = pbVar16;
+-              pbVar16 = pbVar16 + 1;
+-              puVar14 = (undefined2 *)
+-                        *(undefined2 *)
+-                         ((uint)(byte)(*pbVar1 * '\x02') +
+-                         *(int *)(DAT_2000_2b5e + *(int *)*(undefined2 *)(iVar5 + 0x3a8c)));
+-              uVar9 = *puVar14;
+-              puVar10 = (undefined2 *)&DAT_2000_2adc;
+-              do {
+-                puVar11 = puVar10;
+-                if ((byte)((uint)uVar9 >> 8) < *(byte *)((int)puVar10 + 3)) break;
+-                puVar11 = (undefined2 *)*puVar10;
+-                puVar7 = puVar10;
+-                puVar10 = puVar11;
+-              } while (puVar11 != (undefined2 *)0x0);
+-              *DAT_2000_2ad6 = puVar11;
+-              DAT_2000_2ad6[1] = uVar9;
+-              DAT_2000_2ad6[2] = puVar14 + 1;
+-              DAT_2000_2ad6[3] = uVar2;
+-              puVar14 = DAT_2000_2ad6 + 4;
+-              *puVar7 = DAT_2000_2ad6;
+-              DAT_2000_2ad6 = puVar14;
+-              uVar6 = DAT_2000_2b5e + 2;
+-              DAT_2000_2b5e = uVar6;
+-              if (DAT_2000_2ad4 <= uVar6) {
+-                puVar12 = (undefined2 *)CONCAT22(uVar13,(undefined2 *)&DAT_2000_2adc);
+-                do {
+-                  puVar7 = (undefined2 *)puVar12;
+-                  uVar8 = (uint)*(byte *)(puVar7 + 1);
+-                  if (uVar8 != 0) {
+-                    uVar3 = *(ulong *)(puVar7 + 2);
+-                    piVar15 = (int *)(uVar3 & 0xffff);
+-                    do {
+-                      uVar6 = *(int *)piVar15 * 2;
+-                      if ((int)uVar6 < 0) {
+-                        uVar6 = uVar6 & 0x7fff;
+-                      }
+-                      puVar12 = (undefined2 *)
+-                                CONCAT22((int)((ulong)puVar12 >> 0x10),(undefined2 *)(uVar6 * 2));
+-                      uVar6 = FUN_0000_e132(puVar12);
+-                      piVar15 = (int *)ZEXT24((int *)piVar15 + 2);
+-                      uVar8 = uVar8 - 1;
+-                    } while (uVar8 != 0);
+-                  }
+-                  puVar12 = (undefined2 *)
+-                            CONCAT22((int)((ulong)puVar12 >> 0x10),(undefined2 *)*puVar7);
+-                } while ((undefined2 *)*puVar7 != (undefined2 *)0x0);
+-                *(byte *)(DAT_2000_2b68 + 1) = *(byte *)(DAT_2000_2b68 + 1) & 0xbf;
+-                *(byte *)(DAT_2000_2b6c + 1) = *(byte *)(DAT_2000_2b6c + 1) & 0xbf;
+-                return uVar6;
+-              }
+-            } while( true );
+-          }
+-        }
+-      }
++  /* PATCH 471: node-kind 6 MODEL renderer (asm 0x2e49-0x3068; DS=DGROUP=0x1c00), dispatched by 286e
++   * (and by 3425's tail for vehicles).  bx=word[0x4b9e] (node).  Gates: own vehicle, dword[bx+0x2a]==-1,
++   * view cone (0846 bearing - word[0x6c2a], |low byte|+2 & 7 > 4), word[0x276c+code]==0, distance high
++   * word >= 0x7d.  Scale [0x6c50]:[0x6c52] = 0e22(dword[0x6c26] / 0d13(distance)); 3e8c size==0 -> out;
++   * MGA 405e(size) shade table; 3e29 -> screen (cx=x, ax=y) -> MGA 400b; 3ed4 posts the TCB fields.
++   * Two facing lookups (059a of word[bx+8] and of word[bx+0x32+cnt]) select the resource descriptors
++   * word[word[0x27f4+code] + facing] -> 0x6b68/0x6b6c; a descriptor whose bit7 is clear aborts (3069),
++   * bit4 set touches it via f69:169e (0d2e); bits 5|6 are set while drawing.  Then the per-part facing
++   * bytes at node+0x32 (cnt of them) select polygon lists (es=descriptor segment, tables at 0x3a8c and
++   * inside the resource) inserted depth-sorted (key ah) into the 8-byte list at 0x6ae4 (head 0x6adc);
++   * the list is walked and each polygon posted to the extender op-0x40 rasterizer (e132) with esi = the
++   * polygon's linear address (word + dword es:[2]), cx/dx from the list entry and di = the bit-15 flag
++   * (bit 14 selects the base model's descriptor word[rec-2]).  Finally bit6 is cleared on both descriptors.
++   * Ghidra host-deref'd the node and every DGROUP/resource pointer (SEGV) and lost the register lanes. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x4b9e), ax, code, m, e, sz, y, cnt, rec, f, d1, d2, di, k;
++  uint8_t b;
++  (void)param_1; (void)param_2;
++  if (*(uint16_t *)(dg + (uint16_t)(bx + 2)) == *(uint16_t *)(dg + 0x1554)) return 0;
++  if (*(uint32_t *)(dg + (uint16_t)(bx + 0x2a)) == 0xffffffffu) return 0;
++  ax = (uint16_t)FUN_0000_0846((uint *)(dg + 0x155a),(uint *)(dg + (uint16_t)(bx + 0xa)));
++  ax = (uint16_t)(ax - *(uint16_t *)(dg + 0x6c2a));
++  { uint8_t al = (uint8_t)ax, ah = (uint8_t)(ax >> 8);
++    al = (uint8_t)((al ^ ah) - ah); al = (uint8_t)((al + 2) & 7);
++    if (al > 4) return 0; }
++  code = dg[(uint16_t)(bx + 5)];
++  cnt  = *(uint16_t *)(dg + (uint16_t)(0x276c + code));
++  if (cnt == 0) return 0;
++  if (*(uint16_t *)(dg + (uint16_t)(bx + 0x20)) >= 0x7d) return 0;
++  m = (uint16_t)FUN_0000_0d13(*(uint16_t *)(dg + (uint16_t)(bx + 0x1e)),*(uint16_t *)(dg + (uint16_t)(bx + 0x20)));
++  e = g_fist_fp_dx;
++  g_fist_fp_dx = *(uint16_t *)(dg + 0x6c28); g_fist_fp_cx = e;
++  *(uint16_t *)(dg + 0x6c50) = (uint16_t)FUN_0000_0e22(*(uint16_t *)(dg + 0x6c26),m);
++  *(uint16_t *)(dg + 0x6c52) = g_fist_fp_dx;
++  sz = (uint16_t)FUN_0000_3e8c(*(uint16_t *)(dg + 0x6c54),*(uint16_t *)(dg + 0x6c56),(int)bx);
++  if (sz == 0) return 0;
++  ((void (*)(int))fist_icall_far((uint32_t)(DAT_1000_c674)))((int)sz);                  /* MGA 405e */
++  y = (uint16_t)FUN_0000_3e29((int)bx);
++  if (g_fist_cf) return 0;
++  ((void (*)(undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c668)))(y,g_fist_3e29_cx);  /* MGA 400b */
++  FUN_0000_3ed4((int)bx);
++  rec = *(uint16_t *)(dg + (uint16_t)(0x27f4 + code));
++  f = (uint8_t)FUN_0000_059a((int)*(uint16_t *)(dg + (uint16_t)(bx + 8)),(int)(intptr_t)(dg + 0x155a),(int)(intptr_t)(dg + (uint16_t)(bx + 0xa)));
++  *(uint16_t *)(dg + 0x6ad8) = f;
++  d1 = *(uint16_t *)(dg + (uint16_t)(f + rec));
++  *(uint16_t *)(dg + 0x6b68) = d1;
++  b = dg[(uint16_t)(d1 + 2)]; dg[(uint16_t)(d1 + 2)] = (uint8_t)(b | 0x20);
++  if ((b & 0x80) == 0) { FUN_0000_3069(0); return 0; }
++  if (b & 0x10) FUN_1000_0d2e(d1,0,d1);
++  dg[(uint16_t)(*(uint16_t *)(dg + 0x6b68) + 2)] |= 0x60;
++  f = (uint8_t)FUN_0000_059a((int)*(uint16_t *)(dg + (uint16_t)(bx + 0x32 + cnt)),(int)(intptr_t)(dg + 0x155a),(int)(intptr_t)(dg + (uint16_t)(bx + 0xa)));
++  *(uint16_t *)(dg + 0x6b6a) = f;
++  d2 = *(uint16_t *)(dg + (uint16_t)(f + rec));
++  *(uint16_t *)(dg + 0x6b6c) = d2;
++  b = dg[(uint16_t)(d2 + 2)]; dg[(uint16_t)(d2 + 2)] = (uint8_t)(b | 0x20);
++  if ((b & 0x80) == 0) { FUN_0000_3069(0); return 0; }
++  if (b & 0x10) FUN_1000_0d2e(d2,0,d2);
++  dg[(uint16_t)(*(uint16_t *)(dg + 0x6b6c) + 2)] |= 0x60;
++  *(uint16_t *)(dg + 0x6adc) = 0; *(uint16_t *)(dg + 0x6ade) = 0; *(uint16_t *)(dg + 0x6ad6) = 0x6ae4;
++  *(uint16_t *)(dg + 0x6ad4) = (uint16_t)(cnt * 2);
++  di = (uint16_t)(bx + 0x32);
++  *(uint16_t *)(dg + 0x6b5e) = 0;
++  do {
++    uint16_t fb = *(uint16_t *)(dg + 0x6ad8), ds_ = *(uint16_t *)(dg + 0x6b68), es, t, key, prev, nxt, nw;
++    unsigned char *rb;
++    if (dg[di] & 0x80) { fb = *(uint16_t *)(dg + 0x6b6a); ds_ = *(uint16_t *)(dg + 0x6b6c); }
++    es = *(uint16_t *)(dg + ds_); rb = g_mem + ((uint32_t)es << 4);
++    t = *(uint16_t *)(dg + (uint16_t)(0x3a8c + fb));
++    t = *(uint16_t *)(rb + t);
++    t = *(uint16_t *)(rb + (uint16_t)(*(uint16_t *)(dg + 0x6b5e) + t));
++    t = *(uint16_t *)(rb + (uint16_t)((uint8_t)(dg[di] * 2) + t));
++    di = (uint16_t)(di + 1);
++    key = *(uint16_t *)(rb + t); t = (uint16_t)(t + 2);                     /* lodsw */
++    prev = 0x6adc; nxt = *(uint16_t *)(dg + 0x6adc);
++    while (nxt != 0 && (uint8_t)(key >> 8) >= dg[(uint16_t)(nxt + 3)]) { prev = nxt; nxt = *(uint16_t *)(dg + nxt); }
++    nw = *(uint16_t *)(dg + 0x6ad6);
++    *(uint16_t *)(dg + nw) = nxt; *(uint16_t *)(dg + (uint16_t)(nw + 2)) = key;
++    *(uint16_t *)(dg + (uint16_t)(nw + 4)) = t; *(uint16_t *)(dg + (uint16_t)(nw + 6)) = es;
++    *(uint16_t *)(dg + 0x6ad6) = (uint16_t)(nw + 8);
++    *(uint16_t *)(dg + prev) = nw;
++    k = (uint16_t)(*(uint16_t *)(dg + 0x6b5e) + 2); *(uint16_t *)(dg + 0x6b5e) = k;
++  } while (k < *(uint16_t *)(dg + 0x6ad4));
++  for (k = 0x6adc; k != 0; k = *(uint16_t *)(dg + k)) {                    /* 300e walk */
++    uint16_t n = dg[(uint16_t)(k + 2)], es = *(uint16_t *)(dg + (uint16_t)(k + 6)), si = *(uint16_t *)(dg + (uint16_t)(k + 4)), i;
++    for (i = 0; i < n; i++) {
++      unsigned char *rb = g_mem + ((uint32_t)es << 4);
++      uint16_t pl = *(uint16_t *)(rb + si), dx = *(uint16_t *)(rb + (uint16_t)(si + 2)), pl2, ts, es2 = es, cx;
++      unsigned char *rb2 = rb;
++      si = (uint16_t)(si + 4);
++      pl2 = (uint16_t)(pl << 1);
++      g_fist_ext_edi = (uint16_t)((pl & 0x8000) ? 0xffff : 0);            /* sbb di,di */
++      if (pl & 0x4000) {                                                  /* 3029 js 307b: base model */
++        uint16_t r2 = *(uint16_t *)(dg + (uint16_t)(rec - 2));
++        pl2 &= 0x7fff; es2 = *(uint16_t *)(dg + r2); rb2 = g_mem + ((uint32_t)es2 << 4);
++      }
++      ts = *(uint16_t *)(rb2 + 0xe);
++      pl2 = (uint16_t)(pl2 << 1);
++      cx = *(uint16_t *)(rb2 + (uint16_t)(pl2 + ts + 2));
++      ts = *(uint16_t *)(rb2 + (uint16_t)(pl2 + ts));
++      g_fist_ext_esi = (uint32_t)ts + *(uint32_t *)(rb2 + 2);
++      g_fist_ext_ecx = cx; g_fist_ext_edx = dx;
++      FUN_0000_e132(g_fist_ext_esi);                                      /* op 0x40 */
+     }
+   }
+-  return uVar6;
++  dg[(uint16_t)(*(uint16_t *)(dg + 0x6b68) + 2)] &= 0xbf;
++  dg[(uint16_t)(*(uint16_t *)(dg + 0x6b6c) + 2)] &= 0xbf;
++  return 0;
+ }
+ 
+ 
+@@ -42504,8 +42462,10 @@
+   undefined1 in_CF = 0;
+ 
+   uVar1 = FUN_1000_1345(0x1c00,param_1);  /* PATCH 325: owner = SS = DGROUP = 0x1c00 (asm `mov ss,cx`); Ghidra's 0x2ba9 was the wrong SS context constant */
+-  if (!(bool)in_CF) {
+-    (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(param_2 + 0x18))))();
++  if ((uint16_t)uVar1 != 0) {   /* PATCH 471: 1345 CF=0 <=> found (node seg != 0); asm 10d3f `jb 10d6a` */
++    /* PATCH 471: asm 10d43 `call [bp+0x18]` -- bp = the MEMMGR list HEADER 1345 left (DGROUP:0x16d4/0x16f6/
++     * 0x1718, published as g_fist_1345_bp); Ghidra host-deref'd the stale param_2. */
++    (*(code *)fist_icall_near(0x1000u,*(uint16_t *)(g_mem + 0x1c000 + (uint16_t)(g_fist_1345_bp + 0x18))))();
+     if (!(bool)in_CF) {
+       FUN_1000_1019(0xe);
+       *(undefined2 *)&DAT_1000_c006 = 0;
+@@ -43231,10 +43191,13 @@
+      Ghidra lost the CF chaining (dead in_CF local) -> only the first list ran and the result was
+      discarded.  found <=> 135f return != 0; return the node segment (ax) or 0 (all-not-found, CF=1). */
+   int r;
++  g_fist_1345_bp = 0x16d4;                                                    /* PATCH 471: asm bp = list header */
+   r = FUN_1000_135f(param_1,param_2,(int)(undefined2 *)&DAT_1000_d6d4);
+   if (r == 0) {
++    g_fist_1345_bp = 0x16f6;
+     r = FUN_1000_135f(param_1,param_2,(int)(undefined2 *)&DAT_1000_d6f6);
+     if (r == 0) {
++      g_fist_1345_bp = 0x1718;
+       r = FUN_1000_135f(param_1,param_2,(int)(undefined2 *)&DAT_1000_d718);
+     }
+   }

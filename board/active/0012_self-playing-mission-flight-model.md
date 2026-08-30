@@ -5519,3 +5519,70 @@ OPEN (board:0007 continued + board:0001): (a) CYPRUS1 residual unit-spawn-cadenc
 t=280; (b) INDIA1/SAUDI1 spawn-freeze; (c) the 4 remaining 9caa-family base-loss sites; (d) the pre-existing
 terrain top-left-corner 206-byte render diff (11x7 px, not the raycast body).  None is a core-goal blocker;
 each is a scoped continuation.
+
+## cont.61: the object-SPAWN core was wrong (patch 462) -> the windshield-object render frontier opens
+
+asm decisive: b21d RETURNS the new roster slot in DI; b1df registers/zeroes THAT slot; every spawn caller
+does `push di; lcall b1df; mov si,di; pop di` -> SI=new object, DI=parent, then initialises SI from DI.
+Patches 258/270/457/298/281/415 read di as the caller's object -> the port re-registered the PARENT,
+zeroed the PARENT's body, orphaned the fresh slot, and wrote each child's init into its parent; patch 429
+(7745) expected b1df's DI and got the display index -> shells built at DGROUP:<small int>.  PATCH 462
+rebuilds b1d6/b1df/b294/9caa/9cfd/ba33/ba49/ba5d/9d7a/a93e/bc46/a46e/b355/ace0/addb/0578/a265/b6c9..b793/
+03a9 (+ shim globals g_fist_b1df_ax/g_fist_0578_bx/g_fist_03a9_dx).  The earlier "AZER1 self-plays to
+victory byte-identical" ran on these wrong spawns (a self-consistent but unfaithful sim).
+
+Consequences, each caught by hardware watchpoint and fixed as its own patch:
+  463: real class-4 effect objects hit c694 (arg-less c4df dispatch reading STALE params) -> c945 copied
+       word[garbage+0x276c] bytes over the display-list program at 0x6c82 -> 22dd icall(0) spin.  All 0x358a
+       render wrappers now read g_fist_render_si/dx; the builders index their copy source by CLASSID*2
+       (ca2f `mov bx,cx`), and END WITH clc (g_fist_cf=0) -> c4df yields one record per call so 2471 links
+       every node (before: only the first).  Six un-decompiled table entries added (c5e7/c5fc tanks/c60f
+       wrecks/c62f/c64a/c6a4 + builder c91c).  Before 463 NO object was ever drawn in the windshield.
+  464: 286e (the node-render pass) + 403f (reticle pixel hit-test -> word[0x6b72] object under reticle =
+       the target-lock feed) rebuilt from asm.
+  NEXT: the per-KIND rasterizers word[0x4b2c+kind]: 3425 (kind 0x1e vehicle facing pre-pass, tail-jumps
+       to kind 6), 2e49 (kind 6 sprite), 29ec (kind 2), 2bb8 (kind 4), 309b/30bc/30de (kind 8/c/a wrappers
+       of 29ec), 3536 (kind 0x12) -- all pristine base-lost; ~2.8 KB asm; helpers 0d13/0e22/3e8c/3e29/3ed4.
+       462-464 held uncommitted until AZER1 runs through again; then gate + oracle windshield capture.
+
+## cont.62: the render frontier is OPEN and the self-play runs 4000+ live-combat frames (patches 462-477)
+
+Patch 462 (the object-SPAWN core) turned every downstream surface live for the first time, and each newly
+reached function exposed the SAME two Ghidra defect classes -- a DGROUP near offset deref'd as a host
+pointer, and a 16-bit register modelled as a 32-bit C int.  Landed, each asm-verified, in the order the
+running mission reached them:
+
+  462  object SPAWN core (b21d returns the NEW slot in DI; b1df registers/zeroes it; every caller splits
+       `mov si,di; pop di` into SI=new, DI=parent).  Supersedes the si==di reading in 258/270/457/298/
+       281/415/429; also 0578/a265/03a9 register lanes.
+  463  the c4df per-class RENDER methods (arg-less dispatch reads the published SI/DX, copy source indexed
+       by CLASSID*2, every builder ends `clc` so c4df yields one record per call) + 6 table entries that
+       were not in Ghidra's function set (c5e7/c5fc/c60f/c62f/c64a/c6a4 + the c91c builder).
+       BEFORE 463 NO object was ever drawn in the windshield.
+  464  286e (the display-list node-render pass) + 403f (the reticle pixel hit-test that feeds the target
+       lock).   465  3425 (kind-0x1e vehicle facing pre-pass).   466/470  the MGAVIDEO viewport bind 3fca
+       and the driver-private-segment services 400b/4030/405e (they run with ds=word[DGROUP:0x70a], NOT
+       DGROUP -- the whole DAT_1000_c5xx macro family is mis-based for them).
+  468  the fixed-point block 0d13/0d55/0db5/0df7/0e22 (its DX/CX exponent lanes were dropped entirely).
+  469  the rotation chain 1322/129f/11ad (48-bit cx:dx:ax, Ghidra summed 16-bit halves) + the projection
+       helpers 3e29/3e8c/3ed4/3069.   471  2e49 (the kind-6 MODEL renderer) + 0d2e/1345.   472  the
+       remaining kind renderers 29ec/30de/2bb8 + the size-override wrappers 309b/30bc.
+  473  the eight base-lost per-object UPDATE methods (9b11/9bc6/9c4f/9e2b/b481/b808/b918+b945/b998/9d49)
+       + bbc6 and 054c's pitch lane.   474  the AH-64 weapon stations (91b8's CS FAR-pointer table +
+       88d1/888c/8916/8995/895b) and 9a50.
+  475  a930: Ghidra bound the `pop cx` counter of a bounded 24-step loop to the UNINITIALISED pseudo-var
+       `unaff_CS` -> the engine froze inside one c0e5 walk (frame counter [0x6cde] stuck) once the AI
+       reached a coincident pair.  Shim: the cooperative-tick mission window is now sticky (the PIT must
+       keep running when the engine switches viewport; the old d549==0x1c gate stopped time).
+  476  077e, the ARCTANGENT under every bearing in the engine: modelled over 32-bit locals, so its
+       `add bx,ax`/`adc cx,dx` zero-exit was unreachable and a zero-length vector span forever.
+  477  90db fed a265 a HOST pointer where a265 takes a NEAR offset -> a265's stores went through the
+       pointer's low 16 bits and overwrote the frame loop's own service vector word[0x6ce4]; 459a then
+       called into 4700 with a garbage DI.  A corruption three subsystems from its crash site, caught
+       with a value-filtered watchpoint.  (Both functions also rebuilt at the asm's WORD widths.)
+
+STATE: AZER1 self-plays ~4000 in-mission frames (t=274 -> 23938) with LIVE combat -- objects spawn, render
+through the real display-list path, fire, and die (goals 13->12, enemies 16->13, live 80->129).  Full
+177-flow verify matrix: 177 PASS / 0 FAIL (the 5 terrain-206 FAILs of the pre-462 baseline are gone too).
+NEXT: the crash chase continues at 899c (the M3 update's sub-method, same class), then the wasm parity
+re-run and the multi-mission sweep.

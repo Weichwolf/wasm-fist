@@ -1,0 +1,231 @@
+PATCH 476: FUN_0000_077e -- the engine's ARCTANGENT rebuilt at 16-bit register widths (it hung on a
+zero-length vector and returned wrong angles everywhere else).
+
+asm 0x77e-0x845 (SS=DS=DGROUP=0x1c00): octant folding into bp, a shift-and-add normalise of cx:bx against
+dx:ax, a bytewise+bitwise scale until ch's bit7 is set, the `cmp dx,cx / cmc / sbb bx,bx` divide guard,
+`div cx`, the DGROUP arctan table at 0x2448 (interpolated via `mul cl`/`add ax,0x80`/`dec ch` unless the
+ss:0x2040 no-interpolation flag is set) and finally the three octant bits rotated into the result by
+`shr bp,1; rcr ax,1` x3 + `adc ax,0`.  Ghidra rendered all of it over 32-bit C locals, so every 16-bit
+wrap became a bit-31 test and the `add bx,ax` / `adc cx,dx` zero-exit became unreachable: a vector whose
+DX is 0 only after 16-bit truncation (the caller passed 0x10000) spun the normalise loop forever.  That
+froze the AZER1 self-play inside a single c0e5 object walk at t=16988 once patches 462/475 let the AI
+reach a coincident object pair -- and until now every bearing the engine computed came out of the same
+32-bit-wrapped code.  Reconstructed 1:1; the callers (0731/0578/054c/059a/3425) are unchanged.
+--- a/fist.c
++++ b/fist.c
+@@ -5385,115 +5385,108 @@
+ int __allregs FUN_0000_077e(uint param_1,uint param_2,uint param_3,uint param_4)
+ 
+ {
+-  ulong uVar1;
+-  byte bVar2;
+-  byte bVar3;
+-  uint uVar4;
+-  uint uVar5;
+-  char cVar6;
+-  uint uVar7;
+-  uint uVar8;
+-  int iVar9;
+-  int iVar10;
+-  uint uVar11;
+-  bool bVar12;
+-  bool bVar13;
+-  
+-  iVar10 = 0;
+-  if ((int)param_3 < 0) {
+-    iVar10 = 2;
+-    bVar12 = param_1 == 0;
+-    param_1 = -param_1;
+-    if (bVar12) {
+-      param_3 = -param_3;
+-    }
+-    else {
+-      param_3 = ~param_3;
+-    }
+-    bVar12 = param_4 == 0;
+-    param_4 = -param_4;
+-    if (bVar12) {
+-      param_2 = -param_2;
+-    }
+-    else {
+-      param_2 = ~param_2;
+-    }
+-  }
+-  uVar7 = param_1;
+-  uVar5 = param_3;
+-  if ((int)param_2 < 0) {
+-    iVar10 = iVar10 + 1;
+-    uVar7 = -param_4;
+-    if (param_4 == 0) {
+-      uVar5 = -param_2;
+-      param_2 = param_3;
+-      param_4 = param_1;
+-    }
+-    else {
+-      uVar5 = ~param_2;
+-      param_2 = param_3;
+-      param_4 = param_1;
+-    }
++  /* PATCH 476: ARCTANGENT of the 32-bit pair dx:ax / cx:bx (asm 0x77e-0x845; SS=DS=DGROUP=0x1c00),
++   * the core of every bearing/pitch in the engine (0731, 0578/054c, 059a, 3425...).  ax=param_1,
++   * cx=param_2, dx=param_3, bx=param_4.
++   *   77e-7a1  fold both vectors into the first octant, accumulating the octant code in bp
++   *            (`neg`/`not` pairs preserve the two's-complement 32-bit negation; `xchg ax,bx` +
++   *            `xchg cx,dx` swap the axes when |y| > |x|), then bp <<= 1.
++   *   7b7-7bb  normalise: while dx:ax >= cx:bx, bp++, shift cx:bx left one and add dx:ax into it;
++   *            when BOTH halves of the sum are zero the routine returns 0 (asm 7a9 `xor ax,ax; ret`).
++   *   7c3-7e1  scale cx:bx up (bytewise, then bitwise) until ch's bit7 is set, keeping dx:ax aligned.
++   *   7e3-7ec  the `cmp dx,cx / cmc / sbb bx,bx` guard clamps the dividend so `div cx` cannot overflow,
++   *            then ax = (dx:ax)/cx is the octant fraction.
++   *   7ee-845  look the angle up in the DGROUP arctan table at 0x2448 (entry [ah*2], next entry at
++   *            0x244a) -- interpolated with the `mul cl`/`add ax,0x80`/`dec ch` step unless the
++   *            no-interpolation flag ss:0x2040 is set -- and finally rotate the three octant bits of bp
++   *            into the top of ax (`shr bp,1; rcr ax,1` x3 + `adc ax,0`).
++   * Ghidra rendered the whole routine over 32-bit C locals: every 16-bit register wrap became a
++   * bit-31 test and the `add bx,ax`/`adc cx,dx` zero-exit could no longer be reached.  With a
++   * zero-length vector (dx = 0x10000 in a 32-bit local == 0 in the real DX) the normalise loop then
++   * spun forever -- the AZER1 self-play froze inside one c0e5 object walk at t=16988 once the corrected
++   * spawns (patch 462) and a930 (patch 475) let the AI reach a coincident pair.  Reconstructed 1:1 at
++   * the asm's 16-bit widths. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t ax = (uint16_t)param_1, cx = (uint16_t)param_2;
++  uint16_t dx = (uint16_t)param_3, bx = (uint16_t)param_4;
++  uint16_t bp = 0;
++  unsigned c, i;
++
++  if ((int16_t)dx < 0) {                                  /* 780 or dx,dx; jns 793 */
++    bp = 2;
++    if (ax == 0) dx = (uint16_t)(0 - dx);                 /* 787 neg ax; jae 772 (neg dx) */
++    else { ax = (uint16_t)(0 - ax); dx = (uint16_t)~dx; }
++    if (bx == 0) cx = (uint16_t)(0 - cx);                 /* 78d neg bx; jae 776 (neg cx) */
++    else { bx = (uint16_t)(0 - bx); cx = (uint16_t)~cx; }
++  }
++  if ((int16_t)cx < 0) {                                  /* 793 or cx,cx; jns 7a1 */
++    bp = (uint16_t)(bp + 1);
++    if (bx == 0) cx = (uint16_t)(0 - cx);                 /* 798 neg bx; jae 77a (neg cx) */
++    else { bx = (uint16_t)(0 - bx); cx = (uint16_t)~cx; }
++    { uint16_t t = ax; ax = bx; bx = t; t = cx; cx = dx; dx = t; }   /* 79e xchg ax,bx; xchg cx,dx */
+   }
+-  uVar11 = iVar10 << 1;
+-  bVar2 = 0;
+-  while( true ) {
+-    bVar12 = uVar7 < param_4;
+-    uVar7 = uVar7 - param_4;
+-    bVar13 = uVar5 < param_2;
+-    uVar4 = uVar5 - param_2;
+-    uVar5 = uVar4 - bVar12;
+-    if (bVar13 || uVar4 < bVar12) break;
+-    uVar11 = uVar11 + 1;
+-    bVar2 = bVar2 ^ 1;
+-    uVar8 = param_4 * 2;
+-    uVar4 = param_2 << 1 | (uint)((int)param_4 < 0);
+-    param_4 = uVar8 + uVar7;
+-    if (param_4 == 0) {
+-      param_2 = uVar4 + uVar5 + (uint)CARRY2(uVar8,uVar7);
+-      if (param_2 == 0) {
+-        return 0;
+-      }
+-    }
+-    else {
+-      param_2 = uVar4 + uVar5 + (uint)CARRY2(uVar8,uVar7);
+-    }
++  bp = (uint16_t)(bp << 1);                               /* 7a1 */
++
++  for (;;) {                                              /* entered at 7b7 (asm 7a3 jmp) */
++    unsigned b1 = (ax < bx);                              /* 7b7 sub ax,bx */
++    unsigned b2 = ((uint32_t)dx < (uint32_t)cx + b1);     /* 7b9 sbb dx,cx */
++    ax = (uint16_t)(ax - bx);
++    dx = (uint16_t)(dx - cx - b1);
++    if (b2) break;                                        /* 7bb jae 7ac */
++    bp = (uint16_t)(bp + 1);                              /* 7ac */
++    c  = (unsigned)(bx >> 15);                            /* 7ad shl bx,1 */
++    bx = (uint16_t)(bx << 1);
++    cx = (uint16_t)((cx << 1) | c);                       /* 7af rcl cx,1 */
++    { uint32_t t = (uint32_t)bx + ax;                     /* 7b1 add bx,ax */
++      bx = (uint16_t)t;
++      cx = (uint16_t)(cx + dx + (uint16_t)(t >> 16));     /* 7b5 / 7a5 adc cx,dx */
++      if (bx == 0 && cx == 0) return 0; }                 /* 7b3 je 7a5; 7a7 jne 7b7; 7a9 xor ax,ax */
++  }
++  { uint32_t t = (uint32_t)ax + bx;                       /* 7bd add ax,bx */
++    ax = (uint16_t)t;
++    dx = (uint16_t)(dx + cx + (uint16_t)(t >> 16)); }     /* 7bf adc dx,cx */
++
++  while ((uint8_t)(cx >> 8) == 0) {                       /* 7d3 or ch,ch; je 7c3 */
++    dx = (uint16_t)((dx << 8) | (ax >> 8));               /* 7c3 dh=dl; dl=ah */
++    ax = (uint16_t)(ax << 8);                             /* 7c7 ah=al; xor al,al */
++    cx = (uint16_t)((cx << 8) | (bx >> 8));               /* 7cb ch=cl; cl=bh */
++    bx = (uint16_t)(bx << 8);                             /* 7cf bh=bl; xor bl,bl */
++  }
++  while ((int8_t)(uint8_t)(cx >> 8) >= 0) {               /* 7d7 js 7e3 / 7e1 jns 7d9 */
++    c  = (unsigned)(ax >> 15); ax = (uint16_t)(ax << 1);  /* 7d9 shl ax,1 */
++    dx = (uint16_t)((dx << 1) | c);                       /* 7db rcl dx,1 */
++    c  = (unsigned)(bx >> 15); bx = (uint16_t)(bx << 1);  /* 7dd shl bx,1 */
++    cx = (uint16_t)((cx << 1) | c);                       /* 7df adc cx,cx */
++  }
++  { uint16_t m = (uint16_t)((dx >= cx) ? 0xffff : 0);     /* 7e3 cmp dx,cx; cmc; sbb bx,bx */
++    dx = (uint16_t)(dx + m);                              /* 7e8 add dx,bx */
++    ax = (uint16_t)(ax | m);                              /* 7ea or ax,bx */
++    ax = (uint16_t)(((((uint32_t)dx << 16) | ax)) / cx); }/* 7ec div cx */
++
++  { uint16_t idx = (uint16_t)((uint16_t)(uint8_t)(ax >> 8) << 1);   /* 7f6/82b bl=ah; shl bx,1 */
++    uint16_t t0 = *(uint16_t *)(dg + (uint16_t)(0x2448 + idx));
++    if (DAT_2000_dad0 != '\0') {                          /* 7ee testb ss:0x2040; jne 82b */
++      ax = t0;
++    } else {
++      uint16_t t1 = *(uint16_t *)(dg + (uint16_t)(0x244a + idx));
++      uint16_t d  = (uint16_t)(t1 - t0);                  /* 806 sub cx,bx */
++      uint8_t  al = (uint8_t)d, cl = (uint8_t)ax;         /* 808 xchg al,cl */
++      uint16_t p  = (uint16_t)((uint16_t)al * (uint16_t)cl); /* 80a mul cl */
++      uint8_t  ch = (uint8_t)((uint8_t)(d >> 8) - 1);     /* 813 dec ch */
++      p = (uint16_t)(p + 0x80);                           /* 80c add ax,0x80 */
++      p = (uint16_t)(p >> 8);                             /* 80f mov al,ah; xor ah,ah */
++      if (ch == 0) p = (uint16_t)(p + (uint16_t)(((uint16_t)ch << 8) | cl));  /* 817 add ax,cx */
++      ax = (uint16_t)(p + t0);                            /* 819 add ax,bx */
++    }
++  }
++  c = 0;
++  for (i = 0; i < 3; i++) {                               /* 81b/836 shr bp,1; rcr ax,1 (x3) */
++    unsigned cb = bp & 1; bp = (uint16_t)(bp >> 1);
++    c  = ax & 1;
++    ax = (uint16_t)((ax >> 1) | (cb << 15));
+   }
+-  uVar4 = uVar7 + param_4;
+-  uVar7 = uVar5 + param_2 + (uint)CARRY2(uVar7,param_4);
+-  for (; (char)(param_2 >> 8) == '\0'; param_2 = CONCAT11((char)param_2,(char)uVar5)) {
+-    uVar7 = CONCAT11((char)uVar7,(char)(uVar4 >> 8));
+-    uVar4 = uVar4 << 8;
+-    uVar5 = param_4 >> 8;
+-    param_4 = param_4 << 8;
+-  }
+-  for (; -1 < (int)param_2; param_2 = param_2 * 2 + (uint)bVar12) {
+-    bVar12 = (int)uVar4 < 0;
+-    uVar4 = uVar4 << 1;
+-    uVar7 = uVar7 << 1 | (uint)bVar12;
+-    bVar12 = (int)param_4 < 0;
+-    param_4 = param_4 << 1;
+-  }
+-  uVar1 = CONCAT22(uVar7 + -(uint)(param_2 <= uVar7),uVar4 | -(uint)(param_2 <= uVar7)) /
+-          (ulong)param_2;
+-  bVar3 = (byte)(uVar1 >> 8);
+-  if (DAT_2000_dad0 == '\0') {
+-    iVar9 = (uint)bVar3 * 2;
+-    iVar10 = *(int16_t *)(g_mem + 0x1c000 + iVar9 + 0x2448); /* PATCH 157 */
+-    uVar5 = (uint16_t)(*(int16_t *)(g_mem + 0x1c000 + iVar9 + 0x244a) - iVar10); /* PATCH 157 */
+-    bVar3 = (byte)uVar1;
+-    uVar7 = (uVar5 & 0xff) * (uint)bVar3 + 0x80 >> 8;
+-    cVar6 = (char)(uVar5 >> 8) + -1;
+-    if (cVar6 == '\0') {
+-      uVar7 = uVar7 + CONCAT11(cVar6,bVar3);
+-    }
+-    uVar7 = uVar7 + iVar10 >> 1;
+-    return (((uVar7 | (uint)bVar2 << 0xf) >> 1 | (uint)((uVar11 >> 1 & 1) != 0) << 0xf) >> 1 |
+-           (uint)((uVar11 >> 2 & 1) != 0) << 0xf) + (uint)((uVar7 & 2) != 0);
+-  }
+-  uVar7 = (uint16_t)*(uint16_t *)(g_mem + 0x1c000 + (uint)bVar3 * 2 + 0x2448) >> 1; /* PATCH 157 */
+-  return (((uVar7 | (uint)bVar2 << 0xf) >> 1 | (uint)((uVar11 >> 1 & 1) != 0) << 0xf) >> 1 |
+-         (uint)((uVar11 >> 2 & 1) != 0) << 0xf) + (uint)((uVar7 & 2) != 0);
++  ax = (uint16_t)(ax + c);                                /* 827/842 adc ax,0 */
++  return (int)ax;
+ }
+ 
+ 

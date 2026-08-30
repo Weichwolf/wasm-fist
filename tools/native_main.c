@@ -600,6 +600,20 @@ static void fist_dump_and_exit(const char *why){
             _exit(0);
 }
 
+/* board:0012 -- MISSION-TIME window for the cooperative tick.  The pre-cockpit LOAD phase is held (the
+ * engine must reach the spawn frame with [0x452] still at the load value, native and wasm alike), but once
+ * the cockpit view has been entered ONCE the PIT must keep running for the rest of the mission: the engine
+ * switches d549 between the mission viewports (0x1c cockpit, 0x1e/0x20/0x22 the map/external/kill views)
+ * and the old `d549==0x1c` gate froze [0x452] the moment the view changed -> the frame loop spun forever
+ * in the per-frame AI (a930->a19a->0927) with time stopped.  Sticky: latch on the first cockpit frame. */
+static int fist_mission_time(void)
+{
+    extern int g_fist_after_map;
+    static int seen_cockpit = 0;
+    if (g_mem[0x1c000 + 0x1549] == 0x1c) seen_cockpit = 1;
+    return !g_fist_after_map || seen_cockpit;
+}
+
 void fist_timer_pump(void){
     /* board:0012 -- CROSS-TARGET self-play parity trace (FIST_SIMTRACE2=N, default OFF).  Unlike the
      * native-only SIMTRACE block below (inside the #else), this runs on BOTH native and wasm so an
@@ -650,7 +664,7 @@ void fist_timer_pump(void){
           int budget = 0;
           while (acc >= 1.0 && budget < 8192) { fist_wasm_tick(); acc -= 1.0; budget++; }
           if (acc > tick_hz) acc = tick_hz;   /* fell far behind (tab hidden etc.) -> don't spiral */
-      } else if (!g_fist_after_map || g_mem[0x1c000 + 0x1549] == 0x1c) fist_wasm_tick();
+      } else if (fist_mission_time()) fist_wasm_tick();
       if (g_web_mode) { void fist_web_pump_input(void), fist_web_post_frame(void), fist_web_post_audio(void);
                         /* ~60Hz cadence (pump is ~1MHz): deliver ONE input event + post ONE frame per
                          * tick, so a press and its release land on DIFFERENT engine frames -> real click.
@@ -736,7 +750,7 @@ void fist_timer_pump(void){
         }
       }
       if (coop) { tick_advance(); }
-      else if (simrun) { extern int g_fist_after_map; if (!g_fist_after_map || in_mission) tick_advance(); }
+      else if (simrun) { if (fist_mission_time()) tick_advance(); }
       else if (in_mission && !nomc) {           /* wasm-parity cadence: one tick per pump, no SIGALRM */
           if (!g_mission_coop) { g_mission_coop = 1; g_tick_pending = 0; }  /* transition: stop async ticks, flush menu-phase leftover */
           tick_advance();
@@ -1345,6 +1359,18 @@ unsigned short g_fist_rot_cx;   /* output: 0459's cx (Z delta) */
  * (in/out); si = the source object near-offset; dx = the per-type record code (c4df dl=byte[type-0x1b74]).
  * All are DGROUP near offsets (2471 asm 0x2481 `push ds; pop es` => ES=DGROUP). */
 unsigned short g_fist_render_si;   /* c4df->method: source object near-offset */
+/* PATCH 462 (board:0007/0012): dropped multi-register outputs of the object-spawn/aim chain. */
+unsigned short g_fist_b1df_ax;     /* b1df: AX = display-table index of the freshly spawned object */
+unsigned short g_fist_0578_bx;     /* 0578 (a18e): BX = pitch (077e over the Z delta) */
+unsigned short g_fist_03a9_dx;     /* 03a9: DX = M*cos(A) (AX = M*sin(A) is the return) */
+unsigned short g_fist_fp_dx;       /* PATCH 468: 0d13/0d55/0db5/0df7/0e22 DX lane (exponent in/out) */
+unsigned short g_fist_fp_cx;       /* PATCH 468: 0df7/0e22 CX lane (divisor/multiplier exponent in) */
+unsigned short g_fist_r48_dx, g_fist_r48_cx;   /* PATCH 469: 1322/129f 48-bit result lanes (cx:dx:ax) */
+unsigned short g_fist_3e29_cx;     /* PATCH 469: 3e29 CX out (projected screen x) */
+uint32_t g_fist_ext_esi;           /* PATCH 471: op-0x40 (e132) ESI lane = polygon linear address */
+unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi;   /* PATCH 471: op-0x40 CX/DX/DI lanes */
+unsigned short g_fist_1345_bp;     /* PATCH 471: 1345 BP out = the MEMMGR list header (0x16d4/0x16f6/0x1718) */
+unsigned short g_fist_054c_bx;     /* PATCH 473: 054c/bbc6 BX out = the pitch (077e over the Z delta) */
 unsigned short g_fist_render_di;   /* 2471<->writers: dest node cursor (in/out, advanced by ca2f/c962) */
 unsigned short g_fist_render_dx;   /* c4df->method->c962: per-type record code (dl=byte[type-0x1b74]) */
 

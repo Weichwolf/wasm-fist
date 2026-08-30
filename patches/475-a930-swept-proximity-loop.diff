@@ -1,0 +1,96 @@
+PATCH 475: FUN_1000_a930 -- the swept proximity test froze the engine (an uninitialised `unaff_CS` used as
+the loop counter) and truncated its 32-bit coordinates to 16 bits.
+
+asm 0x1a930-0x1a9b8 (DS=DGROUP=0x1c00): march the moving object along its velocity for 24 steps
+(`mov cx,0x18` ... `push cx` / `pop cx` / `loop`), each step advancing dword[0x9684]/[0x9688] by
+dword[0x9962]/[0x9966] (mirrored into 0xe444/0xe44c) and testing 0927's range via a19a against the
+combined radius word[0x979e] = word[si+0x14] + word[di+0x14] + word[0x97a0]; `jbe` -> STC (hit), loop
+exhausted -> CLC.  Ghidra bound the `pop cx` counter to the uninitialised pseudo-var `unaff_CS`
+(`iVar2 = unaff_CS - 1; unaff_CS = 0;`), so the counter ran 0x18, garbage-1, -1, -1 ... and the loop never
+ended: with the corrected object spawns (patch 462) the AZER1 self-play reached this path at t=16988 and
+the engine stopped inside a single c0e5 object walk (the frame counter [0x6cde] frozen at 37484, the
+cooperative tick starved).  It also wrote the routine's 32-bit position words through the 2-byte
+DAT_2000_* accessors, truncating every coordinate.  Rebuilt 1:1 at the asm widths with the CF result
+threaded via g_fist_cf (a0ab's `jb` consumes it).
+
+Shim (tools/native_main.c): the cooperative-tick MISSION WINDOW is now sticky -- the pre-cockpit load
+phase is still held (both targets), but once the cockpit view has been entered the PIT keeps running for
+the rest of the mission.  The old `d549 == 0x1c` gate froze [0x452] the moment the engine switched to
+another mission viewport (0x1e/0x20/0x22), which stopped time in exactly the frames this patch unblocks.
+--- a/fist.c
++++ b/fist.c
+@@ -64855,31 +64855,49 @@
+ void __allregs FUN_1000_a930(undefined2 param_1,undefined2 param_2,int param_3,int param_4)
+ 
+ {
+-  uint uVar1;
+-  int iVar2;
+-  int unaff_CS;
+-  
+-  DAT_2000_5684 = DAT_2000_5962 * 8 + *(long *)(param_4 + 4);
+-  DAT_2000_5688 = DAT_2000_5966 * 8 + *(long *)(param_4 + 8);
+-  DAT_2000_5690 = *(undefined4 *)(param_3 + 4);
+-  DAT_2000_5694 = *(undefined4 *)(param_3 + 8);
+-  DAT_2000_579e = *(int *)(param_3 + 0x14) + *(int *)(param_4 + 0x14) + DAT_2000_57a0;
+-  iVar2 = 0x18;
+-  DAT_2000_a440 = DAT_2000_5684;
+-  DAT_2000_a448 = DAT_2000_5688;
+-  do {
+-    DAT_2000_5684 = DAT_2000_5684 + DAT_2000_5962;
+-    DAT_2000_5688 = DAT_2000_5688 + DAT_2000_5966;
+-    DAT_2000_a444 = DAT_2000_5684;
+-    DAT_2000_a44c = DAT_2000_5688;
+-    uVar1 = FUN_0000_a19a(iVar2,param_1,param_2,(undefined4 *)&DAT_2000_5690,
+-                          (undefined4 *)&DAT_2000_5684);
+-    if (uVar1 <= DAT_2000_579e) {
+-      return;
+-    }
+-    iVar2 = unaff_CS + -1;
+-    unaff_CS = 0;
+-  } while (iVar2 != 0);
++  /* PATCH 475: the SWEPT proximity test (asm 0x1a930-0x1a9b8; DS=DGROUP=0x1c00), the inner step of the
++   * a0ab collision walk.  si=param_3 / di=param_4 are the two objects (b059 rebases both to host
++   * pointers).  It marches the moving object's position along its velocity for 24 steps and reports the
++   * first step whose 0927 range falls to/below the combined radius word[0x979e] = word[si+0x14] +
++   * word[di+0x14] + word[0x97a0]:
++   *     start   dword[0x9684] = (dword[0x9962] << 3) + dword[di+4]      (also -> 0xe440)
++   *             dword[0x9688] = (dword[0x9966] << 3) + dword[di+8]      (also -> 0xe448)
++   *             dword[0x9690] = dword[si+4]; dword[0x9694] = dword[si+8]
++   *     cx = 0x18; loop { [0x9684] += dword[0x9962]; [0x9688] += dword[0x9966];  (0xe444/0xe44c mirror)
++   *                       ax = a19a(cx, si=0x9690, di=0x9684);  if (ax <= [0x979e]) -> STC (hit);
++   *                     } while (--cx);  -> CLC (clear)
++   * TWO defects, both fatal once combat ran with the corrected spawns (patch 462): Ghidra bound the
++   * `pop cx` loop counter to the uninitialised pseudo-var `unaff_CS` (`iVar2 = unaff_CS - 1; unaff_CS =
++   * 0;` -> the counter went 0x18, garbage-1, -1, -1, ... and the loop NEVER terminated -- the engine
++   * froze inside a single c0e5 object walk with the frame counter [0x6cde] stuck), and it assigned the
++   * routine's 32-bit position words (0x9684/0x9688/0x9690/0x9694 and the 0xe440.. mirrors) through the
++   * 2-byte DAT_2000_* accessors, truncating every coordinate.  Rebuilt 1:1 at the asm's widths with the
++   * CF result threaded through g_fist_cf (a0ab's `jb` consumes it). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned char *si = (unsigned char *)(intptr_t)param_3;
++  unsigned char *di = (unsigned char *)(intptr_t)param_4;
++  uint32_t vx = *(uint32_t *)(dg + 0x9962), vy = *(uint32_t *)(dg + 0x9966);
++  uint16_t cx;
++  *(uint32_t *)(dg + 0x9684) = (vx << 3) + *(uint32_t *)(di + 4);
++  *(uint32_t *)(dg + 0xe440) = *(uint32_t *)(dg + 0x9684);
++  *(uint32_t *)(dg + 0x9688) = (vy << 3) + *(uint32_t *)(di + 8);
++  *(uint32_t *)(dg + 0xe448) = *(uint32_t *)(dg + 0x9688);
++  *(uint32_t *)(dg + 0x9690) = *(uint32_t *)(si + 4);
++  *(uint32_t *)(dg + 0x9694) = *(uint32_t *)(si + 8);
++  *(uint16_t *)(dg + 0x979e) = (uint16_t)(*(uint16_t *)(si + 0x14) + *(uint16_t *)(di + 0x14)
++                                          + *(uint16_t *)(dg + 0x97a0));
++  for (cx = 0x18; cx != 0; cx--) {                       /* 1a977 mov cx,0x18 ... 1a9af loop */
++    uint16_t ax;
++    *(uint32_t *)(dg + 0x9684) += vx;
++    *(uint32_t *)(dg + 0xe444) = *(uint32_t *)(dg + 0x9684);
++    *(uint32_t *)(dg + 0x9688) += vy;
++    *(uint32_t *)(dg + 0xe44c) = *(uint32_t *)(dg + 0x9688);
++    ax = (uint16_t)FUN_0000_a19a((undefined2)cx,param_1,param_2,
++                                 (int)(intptr_t)(dg + 0x9690),(int)(intptr_t)(dg + 0x9684));
++    if (ax <= *(uint16_t *)(dg + 0x979e)) { g_fist_cf = 1; return; }   /* 1a9ad jbe -> stc */
++  }
++  g_fist_cf = 0;                                                        /* 1a9b3 clc */
+   return;
+ }
+ 

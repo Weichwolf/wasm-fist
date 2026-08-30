@@ -1,0 +1,378 @@
+PATCH 474: the AH-64 weapon-station step 91b8, its five station handlers (88d1/888c/8916/8995/895b) and
+the dispense-placement helper 9a50 (board:0007 base-loss sweep, reached once combat runs).
+
+91b8 (asm 0x91b8-0x9205) dispatches `lcall word[CS:0x9206 + station*2]` -- a FAR-pointer table of five
+0f69: entries, one per weapon station (the station byte[di+0x91] is pre-scaled by 2).  Ghidra deref'd that
+CS table as a host pointer (`(undefined2 *)(byte*2 + -0x6dfa)`) and made the call near, so the first AH-64
+that reached a firing state SEGV'd; it also host-deref'd the locked target word[di+0x97] and the callout
+table byte[DGROUP:0x91a0+n].  Each station handler is the patch-429 idiom -- `dec rounds; a265 aim;
+b1df(type) -> SI=the NEW projectile, DI=the firer; launch wrapper; reload; c047 report` -- with b1df's
+CF/SI now correct per patch 462; the cannon (8995) is rate-gated on (word[0x6cde]&7)==0 and the flare
+dispenser (895b) reports 0x3031 when empty.  9a50 places a dispensed object at its parent using 03a9's
+published DX lane and posts e1d1 for the NEW object (Ghidra wrote that result into the parent).
+asm-verified vs re_out/fist_dat_image.bin.
+--- a/fist.c
++++ b/fist.c
+@@ -24406,28 +24406,44 @@
+ void __allregs FUN_0000_91b8(int param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  uint uVar2;
+-  bool bVar3;
+-  
++  /* PATCH 474: AH-64 WEAPON-STATION step (asm 0x91b8-0x9205; DS=DGROUP=0x1c00), called by 902c with the
++   * object HOST pointer (patch 365's convention).  70d6 services the cockpit, byte[di+0xcf]=3; when the
++   * selected station byte[di+0x91] is 6 (the cannon) or the reload byte[di+0xa8] has expired, the state
++   * handler `lcall word[CS:0x9206 + station*2]` fires -- a FAR-pointer table of five 0f69: entries
++   * (0x9241/0x91fc/0x9286/0x9305/0x92cb = FUN_1000_88d1/888c/8916/8995/895b, one per station, the
++   * station byte being pre-scaled by 2).  Its CF: 1 -> bf77 (the "no ammo" callout), 0 -> if the locked
++   * target word[di+0x97] is live (its byte[+0x16] bit3 clear) bf94, else the per-station callout
++   * bf3c(byte[DGROUP:0x91a0 + station/2], station/2, di).  Ghidra deref'd the CS table as a host pointer
++   * (SEGV once combat was live), made the far call near, and host-deref'd the target and the callout
++   * table.  bf3c/bf77/bf94 take the object NEAR offset (patch 263). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)((unsigned char *)(uintptr_t)param_1 - dg);
++  unsigned char *o = dg + di;
++  uint16_t bx, target;
++  uint32_t vec;
+   FUN_1000_70d6();
+-  *(undefined1 *)(param_1 + 0xcf) = 3;
+-  if ((*(char *)(param_1 + 0x91) == '\x06') || (*(char *)(param_1 + 0xa8) == '\0')) {
+-    bVar3 = false;
+-    puVar1 = (undefined2 *)((uint)*(byte *)(param_1 + 0x91) * 2 + -0x6dfa);
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))(0xf69);
+-    if (!bVar3) {
+-      if ((*(int *)(param_1 + 0x97) != 0) && ((*(byte *)(*(int *)(param_1 + 0x97) + 0x16) & 8) == 0)
+-         ) {
+-        FUN_0000_bf94(param_1);
+-        return;
+-      }
+-      uVar2 = (uint)(*(byte *)(param_1 + 0x91) >> 1);
+-      FUN_0000_bf3c(*(undefined1 *)(uVar2 + 0x91a0),uVar2,param_1);
+-      return;
+-    }
+-    FUN_0000_bf77(param_1);
++  o[0xcf] = 3;
++  if (o[0x91] != 6 && o[0xa8] != 0) return;                    /* 91c2/91c9 */
++  bx = (uint16_t)(o[0x91] << 1);                               /* 91d0 movzbw; shl 1 */
++  vec = *(uint32_t *)(g_mem + 0x10000 + (uint16_t)(0x9206 + bx));   /* 91d7 lcall cs:[0x9206+bx] */
++  g_fist_cf = 0;
++  switch ((uint16_t)vec) {          /* the five entries of the CS far-pointer table (all segment 0x0f69) */
++    case 0x9241: FUN_1000_88d1(0,0,0,(int)di,0); break;
++    case 0x91fc: FUN_1000_888c(0,0,0,(int)di,0); break;
++    case 0x9286: FUN_1000_8916(0,0,0,(int)di,0); break;
++    case 0x9305: FUN_1000_8995(0,0,(int)di,0);   break;
++    case 0x92cb: FUN_1000_895b(0,(int)di);       break;
++    default:     (*(code *)fist_icall_far(vec))((int)di); break;   /* honest fallback */
++  }
++  if ((bool)g_fist_cf) { FUN_0000_bf77((undefined2)di); return; }   /* 91dc jb 9201 */
++  target = *(uint16_t *)(o + 0x97);
++  if (target != 0 && (dg[(uint16_t)(target + 0x16)] & 8) == 0) {
++    FUN_0000_bf94((undefined2)di);                                  /* 91ed */
++    return;
+   }
++  bx = (uint16_t)(o[0x91] >> 1);                                    /* 91f1 movzbw; shr 1 */
++  FUN_0000_bf3c((char)dg[(uint16_t)(0x91a0 + bx)],(undefined2)bx,(int)di);
+   return;
+ }
+ 
+@@ -25703,20 +25719,26 @@
+ void __allregs FUN_0000_9a50(undefined2 param_1,int param_2,int param_3)
+ 
+ {
+-  undefined1 uVar1;
+-  int iVar2;
+-  int iVar3;
+-  
+-  *(undefined4 *)(param_2 + 4) = *(undefined4 *)(param_3 + 4);
+-  *(undefined4 *)(param_2 + 8) = *(undefined4 *)(param_3 + 8);
+-  iVar3 = 0x80;
+-  iVar2 = FUN_0000_a196(*(undefined2 *)(param_3 + 0x26),0x80,param_1);
+-  *(long *)(param_2 + 4) =
+-       *(long *)(param_2 + 4) + ((long)iVar2 + (long)*(int *)(param_3 + 0x59)) * 0x20;
+-  iVar2 = *(int *)(param_3 + 0x5b);
+-  *(long *)(param_2 + 8) = *(long *)(param_2 + 8) + ((long)iVar3 + (long)iVar2) * 0x20;
+-  uVar1 = FUN_0000_e1d1((long)iVar2);
+-  *(undefined1 *)(param_3 + 0xd) = uVar1;
++  /* PATCH 474: place a dispensed object at its parent (asm 0x9a50-0x9aa0; DS=DGROUP=0x1c00).
++   * si=param_2 = the NEW object near offset (dest), di=param_3 = the parent (src).  Copies the parent's
++   * dword[di+4]/[di+8], then offsets them by 03a9(ax=word[di+0x26], dx=0x80) -- ax into X, 03a9's DX
++   * lane (patch 462) into Y -- each plus the parent's word[di+0x59]/[di+0x5b] and scaled <<5.  Finally
++   * e1d1 (op 0x54) is posted for the NEW object's position (si+4) and its result stored at byte[si+0xd].
++   * Ghidra host-deref'd both objects, dropped 03a9's DX (reused iVar3=0x80) and wrote the e1d1 result
++   * into the PARENT ([param_3+0xd]) instead of the new object. */
++  extern unsigned short g_fist_03a9_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t si = (uint16_t)param_2, di = (uint16_t)param_3;
++  int16_t ax;
++  (void)param_1;
++  *(uint32_t *)(dg + (uint16_t)(si + 4)) = *(uint32_t *)(dg + (uint16_t)(di + 4));
++  *(uint32_t *)(dg + (uint16_t)(si + 8)) = *(uint32_t *)(dg + (uint16_t)(di + 8));
++  ax = (int16_t)FUN_0000_a196(*(uint16_t *)(dg + (uint16_t)(di + 0x26)),0x80,0);
++  *(uint32_t *)(dg + (uint16_t)(si + 4)) +=
++      (uint32_t)(((int32_t)ax + (int32_t)*(int16_t *)(dg + (uint16_t)(di + 0x59))) << 5);
++  *(uint32_t *)(dg + (uint16_t)(si + 8)) +=
++      (uint32_t)(((int32_t)(int16_t)g_fist_03a9_dx + (int32_t)*(int16_t *)(dg + (uint16_t)(di + 0x5b))) << 5);
++  dg[(uint16_t)(si + 0xd)] = (uint8_t)FUN_0000_e1d1((int)(uint16_t)(si + 4));
+   return;
+ }
+ 
+@@ -61497,96 +61519,96 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_888c) @ 1000:888c ===== */
+ 
+-void __allregs
+-FUN_1000_888c(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4,
++void __allregs FUN_1000_888c(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4,
+              undefined2 param_5)
+ 
+ {
+-  undefined2 uVar1;
+-  int unaff_CS;
+-  undefined1 uVar2;
+-  
+-  uVar2 = 0;
+-  if (*(int *)(param_4 + 0xae) != 0) {
+-    *(int *)(param_4 + 0xae) = *(int *)(param_4 + 0xae) + -1;
+-    *(undefined1 *)(param_4 + 0xde) = 3;
+-    FUN_1000_a265(param_1,param_2,param_4);
+-    uVar1 = (undefined2)param_2;
+-    FUN_1000_b1df(8,param_4);
+-    if (!(bool)uVar2) {
+-      FUN_0000_b725(uVar1,param_4,unaff_CS,param_5);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 0x14;
+-      FUN_0000_9b5c(unaff_CS);
+-      FUN_0000_c047(3,param_3,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0x92) = 0;
+-      *(undefined1 *)(unaff_CS + 0x3c) = 0x10;
+-      return;
+-    }
+-  }
++  /* PATCH 474: AH-64 weapon-station handler, state via the 91b8 CS far-pointer table (asm 0x1888c;
++   * DS=DGROUP=0x1c00, di=the firer near offset).  Station 2 (word[di+0xae] rounds): a265 aim, b1df type 8, b725 launch, reload 0x14, 9b5c, c047(3).
++   * `push di; mov ax,TYPE; lcall b1df; mov si,di; pop di` -> SI=the NEW projectile, DI=the firer
++   * (patch 462); CF=1 (stc) when the station is empty or the roster is full, CF=0 (clc) on a shot.
++   * Ghidra host-deref'd the firer and took b1df's return for the firer. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_4, si;
++  unsigned char *o = dg + di;
++  if (*(uint16_t *)(o + 0xae) == 0) { g_fist_cf = 1; return; }
++  *(uint16_t *)(o + 0xae) -= 1;
++  o[0xde] = 3;
++  FUN_1000_a265(0,0,(int *)(uintptr_t)di);
++  si = (uint16_t)FUN_1000_b1df(8,(int *)(uintptr_t)di);
++  if ((bool)g_fist_cf) { g_fist_cf = 1; return; }
++  FUN_0000_b725(0,(int)si,(int)di,0);
++  o[0xa8] = 0x14;
++  FUN_0000_9b5c((int)di);
++  FUN_0000_c047(3,0,(int)di);
++  o[0x92] = 0;
++  o[0x3c] = 0x10;
++  g_fist_cf = 0;
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_88d1) @ 1000:88d1 ===== */
+ 
+-void __allregs
+-FUN_1000_88d1(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4,
++void __allregs FUN_1000_88d1(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4,
+              undefined2 param_5)
+ 
+ {
+-  undefined2 uVar1;
+-  int unaff_CS;
+-  undefined1 uVar2;
+-  
+-  uVar2 = 0;
+-  if (*(int *)(param_4 + 0xac) != 0) {
+-    *(int *)(param_4 + 0xac) = *(int *)(param_4 + 0xac) + -1;
+-    *(undefined1 *)(param_4 + 0xdc) = 3;
+-    FUN_1000_a265(param_1,param_2,param_4);
+-    uVar1 = (undefined2)param_2;
+-    FUN_1000_b1df(0xd,param_4);
+-    if (!(bool)uVar2) {
+-      FUN_0000_b793(uVar1,param_4,unaff_CS,param_5);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 0x14;
+-      FUN_0000_9b5c(unaff_CS);
+-      FUN_0000_c047(3,param_3,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0x92) = 0;
+-      *(undefined1 *)(unaff_CS + 0x3c) = 0x10;
+-      return;
+-    }
+-  }
++  /* PATCH 474: AH-64 weapon-station handler, state via the 91b8 CS far-pointer table (asm 0x188d1;
++   * DS=DGROUP=0x1c00, di=the firer near offset).  Station 0 (word[di+0xac] rounds): a265 aim, b1df type 0xd, b793 launch, reload 0x14, 9b5c, c047(3).
++   * `push di; mov ax,TYPE; lcall b1df; mov si,di; pop di` -> SI=the NEW projectile, DI=the firer
++   * (patch 462); CF=1 (stc) when the station is empty or the roster is full, CF=0 (clc) on a shot.
++   * Ghidra host-deref'd the firer and took b1df's return for the firer. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_4, si;
++  unsigned char *o = dg + di;
++  if (*(uint16_t *)(o + 0xac) == 0) { g_fist_cf = 1; return; }
++  *(uint16_t *)(o + 0xac) -= 1;
++  o[0xdc] = 3;
++  FUN_1000_a265(0,0,(int *)(uintptr_t)di);
++  si = (uint16_t)FUN_1000_b1df(0xd,(int *)(uintptr_t)di);
++  if ((bool)g_fist_cf) { g_fist_cf = 1; return; }
++  FUN_0000_b793(0,(int)si,(int)di,0);
++  o[0xa8] = 0x14;
++  FUN_0000_9b5c((int)di);
++  FUN_0000_c047(3,0,(int)di);
++  o[0x92] = 0;
++  o[0x3c] = 0x10;
++  g_fist_cf = 0;
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_8916) @ 1000:8916 ===== */
+ 
+-void __allregs
+-FUN_1000_8916(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4,
++void __allregs FUN_1000_8916(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4,
+              undefined2 param_5)
+ 
+ {
+-  undefined2 uVar1;
+-  int unaff_CS;
+-  undefined1 uVar2;
+-  
+-  uVar2 = 0;
+-  if (*(int *)(param_4 + 0xb0) != 0) {
+-    *(int *)(param_4 + 0xb0) = *(int *)(param_4 + 0xb0) + -1;
+-    *(undefined1 *)(param_4 + 0xe0) = 3;
+-    FUN_1000_a265(param_1,param_2,param_4);
+-    uVar1 = (undefined2)param_2;
+-    FUN_1000_b1df(8,param_4);
+-    if (!(bool)uVar2) {
+-      FUN_0000_b751(uVar1,param_4,unaff_CS,param_5);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 0x28;
+-      FUN_0000_9b5c(unaff_CS);
+-      FUN_0000_c047(3,param_3,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0x92) = 0;
+-      *(undefined1 *)(unaff_CS + 0x3c) = 0x10;
+-      return;
+-    }
+-  }
++  /* PATCH 474: AH-64 weapon-station handler, state via the 91b8 CS far-pointer table (asm 0x18916;
++   * DS=DGROUP=0x1c00, di=the firer near offset).  Station 4 (word[di+0xb0] rounds): a265 aim, b1df type 8, b751 launch, reload 0x28, 9b5c, c047(3).
++   * `push di; mov ax,TYPE; lcall b1df; mov si,di; pop di` -> SI=the NEW projectile, DI=the firer
++   * (patch 462); CF=1 (stc) when the station is empty or the roster is full, CF=0 (clc) on a shot.
++   * Ghidra host-deref'd the firer and took b1df's return for the firer. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_4, si;
++  unsigned char *o = dg + di;
++  if (*(uint16_t *)(o + 0xb0) == 0) { g_fist_cf = 1; return; }
++  *(uint16_t *)(o + 0xb0) -= 1;
++  o[0xe0] = 3;
++  FUN_1000_a265(0,0,(int *)(uintptr_t)di);
++  si = (uint16_t)FUN_1000_b1df(8,(int *)(uintptr_t)di);
++  if ((bool)g_fist_cf) { g_fist_cf = 1; return; }
++  FUN_0000_b751(0,(int)si,(int)di,0);
++  o[0xa8] = 0x28;
++  FUN_0000_9b5c((int)di);
++  FUN_0000_c047(3,0,(int)di);
++  o[0x92] = 0;
++  o[0x3c] = 0x10;
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -61596,25 +61618,27 @@
+ void __allregs FUN_1000_895b(undefined4 param_1,int param_2)
+ 
+ {
+-  int iVar1;
+-  int unaff_CS;
+-  bool bVar2;
+-  
+-  bVar2 = false;
+-  iVar1 = param_2;
+-  if (*(int *)(param_2 + 0xb4) != 0) {
+-    *(int *)(param_2 + 0xb4) = *(int *)(param_2 + 0xb4) + -1;
+-    *(undefined1 *)(param_2 + 0xe4) = 3;
+-    FUN_1000_b1df(0x14,param_2);
+-    iVar1 = unaff_CS;
+-    if (!bVar2) {
+-      FUN_0000_9a50((int)param_1,param_2,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 8;
+-      FUN_0000_c047(0x27,param_1,unaff_CS);
+-      return;
+-    }
+-  }
+-  FUN_1000_a4a2(0x3031,iVar1);
++  /* PATCH 474: AH-64 station 8 -- the FLARE/CHAFF dispenser (asm 0x1895b-0x18994; di=param_2, the
++   * dispensing object's near offset).  word[di+0xb4] rounds, byte[di+0xe4]=3, b1df type 0x14 -> SI=the
++   * NEW flare, 9a50 places it, reload byte[di+0xa8]=8, c047(0x27); empty -> a4a2(0x3031) ("no flares")
++   * and CF=1.  Ghidra host-deref'd the object and took b1df's return for it. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_2, si;
++  unsigned char *o = dg + di;
++  (void)param_1;
++  if (*(uint16_t *)(o + 0xb4) == 0) {
++    FUN_1000_a4a2(0x3031,(int)di);                                        /* 1898c */
++    g_fist_cf = 1; return;
++  }
++  *(uint16_t *)(o + 0xb4) -= 1;
++  o[0xe4] = 3;
++  si = (uint16_t)FUN_1000_b1df(0x14,(int *)(uintptr_t)di);
++  if ((bool)g_fist_cf) { FUN_1000_a4a2(0x3031,(int)di); g_fist_cf = 1; return; }
++  FUN_0000_9a50(0,(int)si,(int)di);
++  o[0xa8] = 8;
++  FUN_0000_c047(0x27,0,(int)di);
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -61648,23 +61672,26 @@
+ void __allregs FUN_1000_8995(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  int unaff_CS;
+-  bool bVar1;
+-  
+-  if ((DAT_2000_2cde & 7) == 0) {
+-    bVar1 = false;
+-    if (*(int *)(param_3 + 0xb2) == 0) {
+-      return;
+-    }
+-    *(int *)(param_3 + 0xb2) = *(int *)(param_3 + 0xb2) + -1;
+-    *(undefined1 *)(param_3 + 0xe2) = 3;
+-    FUN_1000_b1df(7,param_3);
+-    if (!bVar1) {
+-      FUN_0000_b6c9(param_1,param_3,unaff_CS,param_4);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 0;
+-      FUN_0000_c047(6,param_2,unaff_CS);
+-    }
+-  }
++  /* PATCH 474: AH-64 station 6 -- the CANNON (asm 0x18995-0x189cf; di=param_3, the firer near offset).
++   * Rate-gated on (word[0x6cde] & 7) == 0 (fires at most every 8th frame, CF=0 when gated out);
++   * word[di+0xb2] rounds, byte[di+0xe2]=3, b1df type 7 -> SI=the NEW round, b6c9 launch, reload
++   * byte[di+0xa8]=0, c047(6).  No a265/9b5c and no trigger clear (unlike the missile stations).
++   * Ghidra host-deref'd the firer, dropped b1df's CF and fed b6c9 the `unaff_CS` garbage. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_3, si;
++  unsigned char *o = dg + di;
++  (void)param_1; (void)param_2; (void)param_4;
++  if ((*(uint16_t *)(dg + 0x6cde) & 7) != 0) { g_fist_cf = 0; return; }   /* 18995 testw; jne 189cc (clc) */
++  if (*(uint16_t *)(o + 0xb2) == 0) { g_fist_cf = 1; return; }            /* 1899d je 189ce (stc) */
++  *(uint16_t *)(o + 0xb2) -= 1;
++  o[0xe2] = 3;
++  si = (uint16_t)FUN_1000_b1df(7,(int *)(uintptr_t)di);
++  if ((bool)g_fist_cf) { g_fist_cf = 0; return; }                         /* 189b8 jb 189cc (clc) */
++  FUN_0000_b6c9(0,(int)si,(undefined2)di,0);
++  o[0xa8] = 0;
++  FUN_0000_c047(6,0,(int)di);
++  g_fist_cf = 0;
+   return;
+ }
+ 
