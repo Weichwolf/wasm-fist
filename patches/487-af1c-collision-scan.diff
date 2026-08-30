@@ -1,0 +1,102 @@
+PATCH 487: FUN_0000_af1c, the COLLISION-AVOIDANCE scan, was fully base-lost (host-deref'd cursor and
+candidates, `int *` scaling that advanced the display table 8 bytes per 4-byte entry and read [si+0x2c]
+where the asm reads [si+0x16]).
+
+asm 0xaf1c-0xaf96 (DS=DGROUP=0x1c00), di = the moving object's NEAR offset (aea8 passes it raw): the walk
+state lives in DGROUP -- word[0x97a2] is the 0xdfbc display-table cursor (stride 4) and word[0x97a4] the
+remaining count (182).  A candidate must be non-null, not type 0x15, carry byte[si+0x16]&0x40 and not be
+the mover; b112's bearing must put it in the forward half-plane (bearing - word[di+0x10] < 0x4000 or
+>= 0xc000) and its Manhattan distance |dX|+|dY| must be <= 0x1e00.  Then word[0x97a0]=0x400 and a930 (the
+swept proximity test, patch 475) decides: CF=1 (impending collision) returns, CF=0 keeps walking; an
+exhausted walk returns CF=0.  INDIA1's self-play SEGV'd here once patch 486 let its units reach the scan.
+b112 and a930 take HOST pointers (patches 334/475), so the near offsets are rebased at those calls.
+--- a/fist.c
++++ b/fist.c
+@@ -29113,44 +29113,49 @@
+ void __allregs FUN_0000_af1c(undefined2 param_1,int *param_2)
+ 
+ {
+-  int *piVar1;
+-  int iVar2;
+-  long lVar3;
+-  long lVar4;
+-  int *piVar5;
+-  bool bVar6;
+-  
+-  DAT_2000_57a2 = (int *)&DAT_2000_9fbc;
+-  DAT_2000_57a4 = 0xb6;
+-  do {
+-    do {
+-      do {
+-        do {
+-          if (DAT_2000_57a4 == 0) {
+-            return;
+-          }
+-          piVar1 = DAT_2000_57a2 + 2;
+-          DAT_2000_57a4 = DAT_2000_57a4 + -1;
+-          piVar5 = (int *)*DAT_2000_57a2;
+-          DAT_2000_57a2 = piVar1;
+-        } while ((((piVar5 == (int *)0x0) || (*piVar5 == 0x15)) ||
+-                 ((*(byte *)(piVar5 + 0xb) & 0x40) == 0)) || (param_2 == piVar5));
+-        iVar2 = FUN_0000_b112(piVar5,param_2);
+-      } while ((0x3fff < (uint)(iVar2 - param_2[8])) && ((uint)(iVar2 - param_2[8]) < 0xc000));
+-      lVar3 = *(long *)(param_2 + 2) - *(long *)(piVar5 + 2);
+-      if (lVar3 < 0) {
+-        lVar3 = -lVar3;
+-      }
+-      lVar4 = *(long *)(param_2 + 4) - *(long *)(piVar5 + 4);
+-      if (lVar4 < 0) {
+-        lVar4 = -lVar4;
+-      }
+-      bVar6 = (ulong)(lVar3 + lVar4) < 0x1e00;
+-    } while (0x1e00 < (ulong)(lVar3 + lVar4));
+-    DAT_2000_57a0 = 0x400;
+-    FUN_1000_a930(param_1,(int)lVar4,piVar5,param_2);
+-  } while (!bVar6);
+-  return;
++  /* PATCH 487: the COLLISION-AVOIDANCE scan (asm 0xaf1c-0xaf96; DS=DGROUP=0x1c00).  di=param_2 = the
++   * moving object's NEAR offset (aea8 passes it raw -- its documented contract).  The walk state lives in
++   * DGROUP, not in registers: word[0x97a2] = the display-table cursor (0xdfbc, stride 4) and word[0x97a4]
++   * = the remaining count (182).  A candidate qualifies when it is non-null, not type 0x15, has
++   * byte[si+0x16]&0x40 and is not the mover itself; b112 then gives the bearing to it and the candidate
++   * must lie in the forward half-plane (bearing - word[di+0x10] < 0x4000 or >= 0xc000); finally the
++   * Manhattan distance |dX| + |dY| must be <= 0x1e00.  For such a candidate word[0x97a0] is set to 0x400
++   * and a930 (the swept proximity test, patch 475) runs: CF=1 means an impending collision and the scan
++   * RETURNS, CF=0 continues the walk; an exhausted walk returns CF=0.
++   * Ghidra host-deref'd the cursor and every candidate field and used `int *` scaling throughout, so the
++   * cursor advanced 8 bytes per entry instead of 4 and `piVar5 + 0xb` read +0x2c where the asm reads
++   * +0x16 -- INDIA1's self-play SEGV'd here (af1c(param_2=0xc448)) once patch 486 let its units get this
++   * far.  b112 and a930 take HOST pointers (patches 334/475), so the near offsets are rebased at the
++   * call. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_2, si, ax;
++  int32_t adx, ady;
++  *(uint16_t *)(dg + 0x97a2) = 0xdfbc;                                  /* af1c */
++  *(uint16_t *)(dg + 0x97a4) = 0xb6;                                    /* af22 */
++  for (;;) {
++    uint16_t cur;
++    if (*(uint16_t *)(dg + 0x97a4) == 0) { g_fist_cf = 0; return; }     /* af28 -> af95 clc */
++    cur = *(uint16_t *)(dg + 0x97a2);
++    *(uint16_t *)(dg + 0x97a2) = (uint16_t)(cur + 4);                   /* af33 addw 4 */
++    *(uint16_t *)(dg + 0x97a4) = (uint16_t)(*(uint16_t *)(dg + 0x97a4) - 1);
++    si = *(uint16_t *)(dg + cur);                                       /* af3c mov si,[bx] */
++    if (si == 0) continue;                                              /* af3e */
++    if (*(uint16_t *)(dg + si) == 0x15) continue;                       /* af42 */
++    if ((dg[(uint16_t)(si + 0x16)] & 0x40) == 0) continue;              /* af47 */
++    if (si == di) continue;                                             /* af4d cmp si,di */
++    ax = (uint16_t)((uint16_t)FUN_0000_b112((int)(intptr_t)(dg + si),(int)(intptr_t)(dg + di))
++                    - *(uint16_t *)(dg + (uint16_t)(di + 0x10)));       /* af52/af55 */
++    if (ax >= 0x4000 && ax < 0xc000) continue;                          /* af58/af5b forward half-plane */
++    adx = (int32_t)(*(uint32_t *)(dg + (uint16_t)(di + 4)) - *(uint32_t *)(dg + (uint16_t)(si + 4)));
++    if (adx < 0) adx = -adx;                                            /* af6a/af6c */
++    ady = (int32_t)(*(uint32_t *)(dg + (uint16_t)(di + 8)) - *(uint32_t *)(dg + (uint16_t)(si + 8)));
++    if (ady < 0) ady = -ady;                                            /* af77/af79 */
++    if ((uint32_t)(adx + ady) > 0x1e00) continue;                       /* af7f ja */
++    *(uint16_t *)(dg + 0x97a0) = 0x400;                                 /* af87 */
++    FUN_1000_a930((undefined2)param_1,0,(int)(intptr_t)(dg + si),(int)(intptr_t)(dg + di)); /* af8d */
++    if ((bool)g_fist_cf) return;                                        /* af92 jae -> keep walking */
++  }
+ }
+ 
+ 

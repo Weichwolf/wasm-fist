@@ -1,0 +1,128 @@
+PATCH 486: FUN_0000_a17e's point-struct parameters were 16-bit (every caller's HOST pointer truncated),
+and its third caller FUN_1000_6507 -- the nearest-OBJECTIVE scan -- was fully base-lost.
+
+a17e is the `call 0x8e8; lret` forwarder of the 32-bit distance helper; SI/DI are the two point structs
+08e8 dereferences.  Ghidra typed them `undefined2`, so the host pointers 9efc (target acquisition, patch
+483) and 9d49 (patch 473) pass were cut to their low word and 08e8 dereferenced a 16-bit stub address:
+INDIA1's self-play SEGV'd on its first target candidate with `FUN_0000_08e8(0x62a0,0x44fa)` (AZER1 hid it
+-- its units rarely pass 9efc's earlier gates, only one held a target lock).  Widened to `int`, as patch
+367 already did for the sibling forwarder a19a.
+
+6507 (asm 0x16507-0x1658a) ranks the mission OBJECTIVES by distance: the goal-group table word[DGROUP:
+0x7d2a+g] for g=0,2,4,6 (plus 8..0xe when byte[0x6dab]&2), each entry a near-offset list whose first byte
+is the count and whose 8-byte entries start at +0xc, measured against the reference point DGROUP:0x7bf0;
+the winner lands in word[0x7bf8]/[0x7bfc]/[0x7bfe].  Ghidra host-deref'd the list, used the uninitialised
+`unaff_CS` as the entry index and took the distance from `extraout_AH`, so the AI's objective ranking was
+garbage -- and differed between -O0 and -O2.
+--- a/fist.c
++++ b/fist.c
+@@ -1018,7 +1018,7 @@
+ void __allregs FUN_0000_a0c8(int param_1,undefined4 param_2,int param_3);
+ void __allregs FUN_0000_a135(undefined2 param_1,undefined2 param_2,int param_3,int param_4);
+ void __allregs FUN_0000_a15a(undefined2 param_1,undefined2 param_2,int param_3,int param_4);
+-undefined4 __allregs FUN_0000_a17e(undefined2 param_1,undefined2 param_2);
++undefined4 __allregs FUN_0000_a17e(int param_1,int param_2);   /* PATCH 486: SI/DI are 32-bit point-struct HOST pointers (were undefined2 -> truncated) */
+ int __allregs FUN_0000_a182(undefined2 param_1,undefined2 param_2);
+ undefined4 __allregs FUN_0000_a186(undefined2 param_1);
+ undefined2 __allregs FUN_0000_a18a(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+@@ -26724,13 +26724,17 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_a17e) @ 0000:a17e ===== */
+ 
+-undefined4 __allregs FUN_0000_a17e(undefined2 param_1,undefined2 param_2)
++undefined4 __allregs FUN_0000_a17e(int param_1,int param_2)
+ 
+ {
+   /* PATCH 484: asm 0xa17e is `call 08e8; lret` -- a pure forwarder, so the callee's AX IS this
+    * function's return value.  Ghidra's bare `return;` in a non-void function left it to the
+-   * calling convention: correct by accident at -O0 (native), garbage at -O2 (wasm). */
+-  return FUN_0000_08e8(param_1,param_2);
++   * calling convention: correct by accident at -O0 (native), garbage at -O2 (wasm).
++   * PATCH 486: param_1/param_2 widened undefined2 -> int.  They are SI/DI, the two point structs 08e8
++   * dereferences, and every caller passes a 32-bit HOST pointer; as uint16_t they were TRUNCATED to
++   * their low word, so 08e8 dereferenced a 16-bit stub address (INDIA1 SEGV'd on its first target
++   * candidate: 08e8(0x62a0,0x44fa)).  Same widening as patch 367 applied to the sibling a19a. */
++  return FUN_0000_08e8((long *)(intptr_t)param_1,(long *)(intptr_t)param_2);
+ }
+ 
+ 
+@@ -57877,41 +57881,47 @@
+ uint __allregs FUN_1000_6507(undefined2 param_1)
+ 
+ {
+-  undefined1 extraout_AH;
+-  uint uVar1;
+-  byte *pbVar2;
+-  byte *pbVar3;
+-  byte *pbVar4;
+-  int unaff_CS;
+-  int iVar5;
+-  
+-  DAT_2000_3bf8 = 0xffff;
+-  DAT_2000_3bfc = 0xffff;
+-  DAT_2000_3bfe = -1;
+-  DAT_2000_3c00 = 0;
+-  do {
+-    pbVar4 = (byte *)*(undefined2 *)((int)(undefined2 *)&DAT_2000_3d2a + DAT_2000_3c00);
+-    if (*pbVar4 != 0) {
+-      pbVar3 = (byte *)0x0;
+-      iVar5 = unaff_CS;
++  /* PATCH 486: nearest-OBJECTIVE scan (asm 0x16507-0x1658a; DS=DGROUP=0x1c00).  Walks the goal-group
++   * table word[DGROUP:0x7d2a + g] for g = 0,2,4,6 (and 8..0xe as well when byte[0x6dab]&2 is set): each
++   * entry is the near offset of a list whose first byte is the entry COUNT and whose entries are 8 bytes
++   * from +0xc.  For every entry the 32-bit distance to the reference point DGROUP:0x7bf0 is measured with
++   * a17e (=08e8); a non-zero HIGH BYTE of the high word means out of range, otherwise the 16-bit
++   * distance>>8 competes for the minimum.  Out: word[0x7bf8]=best distance (also the return), word
++   * [0x7bfc]=its group, word[0x7bfe]=its index.
++   * Ghidra host-deref'd the group-table entry and every list byte, walked the entries with the
++   * uninitialised pseudo-vars `unaff_CS`/`iVar5` as the index, and took the distance from `extraout_AH`
++   * -- so the AI's objective ranking was garbage and differed between -O0 and -O2. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t g, lst, cx, d;
++  (void)param_1;
++  *(uint16_t *)(dg + 0x7bf8) = 0xffff;
++  *(uint16_t *)(dg + 0x7bfc) = 0xffff;
++  *(uint16_t *)(dg + 0x7bfe) = 0xffff;
++  *(uint16_t *)(dg + 0x7c00) = 0;
++  do {
++    g   = *(uint16_t *)(dg + 0x7c00);
++    lst = *(uint16_t *)(dg + (uint16_t)(0x7d2a + g));                /* 16523 */
++    if (dg[lst] != 0) {                                              /* 16527 count */
++      cx = 0;
+       do {
+-        pbVar2 = pbVar3;
+-        unaff_CS = 0;
+-        FUN_0000_a17e(pbVar4 + (int)pbVar2 * 8 + 0xc,0x7bf0);
+-        if (((char)((uint)param_1 >> 8) == '\0') &&
+-           (uVar1 = CONCAT11((char)param_1,extraout_AH), uVar1 < DAT_2000_3bf8)) {
+-          DAT_2000_3bfc = DAT_2000_3c00;
+-          DAT_2000_3bf8 = uVar1;
+-          DAT_2000_3bfe = iVar5;
++        FUN_0000_a17e((int)(intptr_t)(dg + (uint16_t)(lst + 0xc + cx * 8)),   /* 16536 si */
++                      (int)(intptr_t)(dg + 0x7bf0));                          /* 1653b di */
++        if ((uint8_t)((uint16_t)DAT_1000_c45a >> 8) == 0) {           /* 16545 or dh,dh */
++          d = (uint16_t)((((uint16_t)DAT_1000_c45a & 0xff) << 8) |
++                         (((uint16_t)DAT_1000_c458 >> 8) & 0xff));   /* 16549 mov al,ah; mov ah,dl */
++          if (d < *(uint16_t *)(dg + 0x7bf8)) {                       /* 1654d jae skip */
++            *(uint16_t *)(dg + 0x7bf8) = d;
++            *(uint16_t *)(dg + 0x7bfc) = *(uint16_t *)(dg + 0x7c00);
++            *(uint16_t *)(dg + 0x7bfe) = cx;
++          }
+         }
+-        pbVar3 = (byte *)(iVar5 + 1);
+-        pbVar4 = pbVar2;
+-        iVar5 = unaff_CS;
+-      } while ((byte)pbVar3 < *pbVar2);
++        cx = (uint16_t)(cx + 1);                                      /* 16560 inc cx */
++      } while ((uint8_t)cx < dg[lst]);                                /* 16561 cmp [bx],cl; jb */
+     }
+-    DAT_2000_3c00 = DAT_2000_3c00 + 2;
+-  } while ((DAT_2000_3c00 < 8) || (((DAT_2000_2dab & 2) != 0 && (DAT_2000_3c00 < 0x10))));
+-  return DAT_2000_3bf8;
++    *(uint16_t *)(dg + 0x7c00) = (uint16_t)(*(uint16_t *)(dg + 0x7c00) + 2);
++  } while (*(uint16_t *)(dg + 0x7c00) < 8 ||
++           (((uint16_t)DAT_2000_2dab & 2) != 0 && *(uint16_t *)(dg + 0x7c00) < 0x10));
++  return (uint)*(uint16_t *)(dg + 0x7bf8);                            /* 16587 */
+ }
+ 
+ 

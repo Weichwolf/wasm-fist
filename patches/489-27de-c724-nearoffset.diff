@@ -1,0 +1,28 @@
+PATCH 489: the MGAVIDEO sprite blitter 27de derived its clip descriptor from the LOW 16 BITS OF A HOST
+POINTER, so its destination depended on g_mem's address -- a native<->wasm divergence.
+
+Patch 460 (FIX C) correctly redefined the macro `_DAT_1000_c724` as the REBASED pointer
+`g_mem + 0x1c000 + word[DGROUP:0x724]`, but 27de (patch 303) still recovered the descriptor's near offset
+by truncating that pointer: `(uint16_t)(uintptr_t)_DAT_1000_c724`.  The result is g_mem's low word plus
+the offset, so the destination segment word[c724off], the stride word[c724off+4] and hence every byte this
+blit writes differ between the two targets.  On INDIA1 the sprite bytes landed at DGROUP:0xc011.. on native
+and nowhere on wasm -- the first divergence of that mission's self-play (caught by the per-tick block
+fingerprint, then a watchpoint on the byte).  The near offset is simply word[DGROUP:0x724]; read it
+directly.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -6476,7 +6476,13 @@
+        stride bp = word[DGROUP:c724+4] ^ cx - cx  (cx = param_1).
+      di is 16-bit (wraps inside the 64KB dest segment -> memory-safe).  Faithful asm transliteration. */
+   uint8_t *dg = g_mem + 0x1c000;
+-  uint16_t c724off = (uint16_t)(uintptr_t)_DAT_1000_c724;
++  /* PATCH 489: the clip descriptor's DGROUP NEAR OFFSET is word[DGROUP:0x724] itself -- taking the low
++   * 16 bits of the REBASED host pointer _DAT_1000_c724 (patch 460 FIX C made it `g_mem+0x1c000+off`)
++   * makes every derived value depend on g_mem's host address, which differs native vs wasm.  On INDIA1
++   * that put this blit's destination segment/stride/rowtable at different DGROUP words per target and
++   * the sprite bytes landed at DGROUP:0xc011.. on native and nowhere on wasm -- the mission's first
++   * native<->wasm divergence.  Read the near offset directly. */
++  uint16_t c724off = *(uint16_t *)(g_mem + 0x1c724);
+   uint16_t es_seg  = *(uint16_t *)(dg + c724off);
+   uint16_t stride  = (uint16_t)((*(uint16_t *)(dg + (uint16_t)(c724off + 4)) ^ (uint16_t)param_1) - (uint16_t)param_1);
+   uint16_t rowbase = *(uint16_t *)(dg + 0x794);

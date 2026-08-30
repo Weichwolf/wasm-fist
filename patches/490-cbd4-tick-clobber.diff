@@ -1,0 +1,89 @@
+PATCH 490: the saved-game / file-list pick dialog cbd4 wrote an UNINITIALISED value into the engine's PIT
+tick counter -- the twin defect patch 143 fixed in cb74.
+
+asm 0xcbd4-0xcc32 (DS=DGROUP=0x1c00): `push [0x452]` saves the click timestamp across the dialog and both
+exits `pop [0x452]` it back.  Ghidra invented `DAT_1000_c452 = unaff_CS` instead, so the tick counter was
+overwritten with whatever the compiler left in that slot -- different at -O0 (native) and -O2 (wasm).
+The rest of the function was base-lost as well: the picked entry's 13-byte name is copied out of the
+STRSEG (ES = word[DGROUP:0x70]) at word[0xe838]*0x10+0x3776 into the caller's buffer word[0xe855], and the
+result is the entry word at STRSEG:0x3f76+idx*2, with CF=1 on cancel.  Found because it left different
+scratch at DGROUP:0xe855 on the two targets, which showed up the moment the cross-target fingerprint was
+widened to the full roster region (0x9000..0xefff).
+--- a/fist.c
++++ b/fist.c
+@@ -33083,41 +33083,42 @@
+              undefined2 param_5)
+ 
+ {
+-  undefined1 *puVar1;
+-  undefined2 uVar2;
+-  undefined2 uVar3;
+-  int iVar4;
+-  undefined1 *puVar5;
+-  undefined1 *puVar6;
+-  undefined2 unaff_CS;
+-  undefined1 in_CF = 0;
+-  bool bVar7;
+-  
+-  DAT_2000_a82e = 2;
+-  DAT_2000_a85e = 0;
+-  DAT_2000_a853 = param_3;
+-  DAT_2000_a855 = param_4;
+-  uVar3 = FUN_1000_b7db(param_1,param_2,param_3,param_5);
+-  if ((!(bool)in_CF) && (bVar7 = false, DAT_2000_a834 != 0)) {
+-    uVar3 = FUN_0000_cc33(param_3);
+-    uVar2 = DAT_1000_c070;
+-    if (!bVar7) {
+-      puVar5 = (undefined1 *)(DAT_2000_a838 * 0x10 + 0x3776);
+-      iVar4 = 0xd;
+-      puVar6 = DAT_2000_a855;
+-      do {
+-        puVar1 = puVar5;
+-        puVar5 = puVar5 + 1;
+-        *puVar6 = *puVar1;
+-        puVar6 = puVar6 + 1;
+-        iVar4 = iVar4 + -1;
+-      } while (iVar4 != 0);
+-      DAT_1000_c452 = unaff_CS;
+-      return *(undefined2 *)(DAT_2000_a838 * 2 + 0x3f76);
++  /* PATCH 490: the SAVED-GAME / file-list pick dialog (asm 0xcbd4-0xcc32; DS=DGROUP=0x1c00), the twin of
++   * cb74 (patch 143).  `push [0x452]` saves the click timestamp across the dialog and `pop [0x452]`
++   * restores it on BOTH exits; Ghidra invented `DAT_1000_c452 = unaff_CS` instead, writing an
++   * UNINITIALISED value into the engine's PIT tick counter -- the value differs between -O0 (native) and
++   * -O2 (wasm), so the two targets left different scratch behind at DGROUP:0xe855 (word[0x17ab], the
++   * dialog's destination pointer) and in [0x452] itself.  The rest is 1:1: state word[0xe82e]=2,
++   * word[0xe853]=si, word[0xe855]=di, word[0xe85e]=0; b7db enumerates; on success cc33 picks an entry and
++   * the 13-byte name is copied from ES=word[DGROUP:0x70] (STRSEG) offset word[0xe838]*0x10+0x3776 into
++   * word[0xe855], and the entry's word at STRSEG:0x3f76+idx*2 is the result.  CF=1 on cancel/failure. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t saved452 = (uint16_t)DAT_1000_c452;                    /* cbd4 push [0x452] */
++  uint16_t idx, di, si, res = 0;
++  uint8_t *ss;
++  *(uint16_t *)(dg + 0xe82e) = 2;                                 /* cbd8 */
++  *(uint16_t *)(dg + 0xe853) = (uint16_t)param_3;                 /* cbde mov [0x17ad],si */
++  *(uint16_t *)(dg + 0xe855) = (uint16_t)(uintptr_t)param_4;      /* cbe2 mov [0x17ab],di */
++  *(uint16_t *)(dg + 0xe85e) = 0;                                 /* cbe6 */
++  FUN_1000_b7db(param_1,param_2,param_3,param_5);                 /* cbec lcall f69:c14b */
++  if (!(bool)g_fist_cf && *(uint16_t *)(dg + 0xe834) != 0) {      /* cbf1/cbf3 */
++    FUN_0000_cc33(param_3);                                       /* cbfa */
++    if (!(bool)g_fist_cf) {                                       /* cbfd */
++      di = *(uint16_t *)(dg + 0xe855);                            /* cbff */
++      ss = g_mem + ((uint32_t)(*(uint16_t *)(dg + 0x70)) << 4);   /* cc03 mov es,[0x70] */
++      idx = *(uint16_t *)(dg + 0xe838);                           /* cc07 */
++      si  = (uint16_t)((idx << 4) + 0x3776);                      /* cc0b/cc0e */
++      { int n; for (n = 0; n < 0xd; n++) dg[(uint16_t)(di + n)] = ss[(uint16_t)(si + n)]; }  /* cc15 */
++      res = *(uint16_t *)(ss + (uint16_t)(0x3f76 + (uint16_t)(idx << 1)));                   /* cc22 */
++      g_fist_cf = 0;                                              /* cc27 clc */
++      DAT_1000_c452 = saved452;                                   /* cc28 pop [0x452] */
++      return (undefined2)res;
+     }
+   }
+-  DAT_1000_c452 = unaff_CS;
+-  return uVar3;
++  g_fist_cf = 1;                                                  /* cc2d stc */
++  DAT_1000_c452 = saved452;                                       /* cc2e pop [0x452] */
++  return (undefined2)res;
+ }
+ 
+ 

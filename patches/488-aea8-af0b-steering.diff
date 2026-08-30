@@ -1,0 +1,118 @@
+PATCH 488: the steering / obstacle-avoidance driver aea8 and its sibling countdown af0b.
+
+aea8 (asm 0xaea8-0xaf0a, di = the object's NEAR offset) searches for a collision-free heading every 4th
+tick: from the commanded azimuth word[di+0x26] it tries up to 15 offsets word[DGROUP:0x97aa+idx],
+projecting each with 03a9(angle,0x20) into dword[0x9962]/[0x9966] and asking af1c (patch 487).  af1c's
+CF=0 means CLEAR and BREAKS the search (`jae 0xaef0`); the chosen heading is committed as word[di+0x47] =
+word[di+0x26] + word[DGROUP:0x97ba+idx].  Ghidra read both offset tables 4 bytes wide, stored 03a9's dx
+INPUT (the constant 0x20) where the asm stores its DX OUTPUT, and replaced af1c's CF with the bogus
+`(long)iVar5 << 2 < 0` -- so the search never terminated early and always committed the last candidate.
+af0b (asm 0xaf0b-0xaf1b) is the same countdown without the search; Ghidra deref'd di as a host pointer
+(INDIA1's self-play SEGV'd there) and tested the WORD flag [di+0x40] 32 bits wide.
+--- a/fist.c
++++ b/fist.c
+@@ -29049,39 +29049,43 @@
+ void __allregs FUN_0000_aea8(int param_1)
+ 
+ {
+-  /* PATCH (TRAIN3 twin): base-loss -- param_1 = DI = object DGROUP NEAR OFFSET (asm 0xaea8 `dec byte[di+
+-     0x46]`, DS=DGROUP=0x1c00); Ghidra deref'd it as a host pointer (fault 0xc0a2 = 0xc05c+0x46, TRAIN3).
+-     Rebase all [di+N] to g_mem+0x1c000+(uint16)param_1; the [di+0x47] store is a WORD (asm `mov [di+0x47],
+-     ax`) not an int (the 4-byte write clobbered +0x49/+0x4a). af1c gets the raw near-offset (its contract). */
+-  uint8_t *o = g_mem + 0x1c000 + (uint16_t)param_1;
+-  int iVar2;
+-  int iVar3;
+-  int iVar4;
+-  int iVar5;
+-  bool bVar6;
+-
+-  o[0x46] = o[0x46] - 1;
+-  if (o[0x46] != 0) {
+-    return;
++  /* PATCH 488 (completes the TRAIN3-twin rebase): the STEERING / obstacle-avoidance driver
++   * (asm 0xaea8-0xaf0a; DS=DGROUP=0x1c00), di=param_1 = the object's NEAR offset.
++   * Every 4th tick (byte[di+0x46] countdown) it searches for a collision-free heading: starting from the
++   * object's commanded azimuth word[di+0x26] it tries up to 15 candidate offsets word[DGROUP:0x97aa+idx],
++   * each time projecting a probe vector with 03a9(angle, 0x20) -- AX into dword[0x9962], 03a9's DX lane
++   * into dword[0x9966] -- and asking af1c (patch 487) whether that heading collides.  af1c's CF=0 means
++   * CLEAR, which BREAKS the search (`jae 0xaef0`); CF=1 tries the next offset.  The chosen heading is
++   * committed as word[di+0x47] = word[di+0x26] + word[DGROUP:0x97ba+idx] (the same table 0x10 bytes on,
++   * asm `add bx,0x10`), word[0x97a6] records the index and the timers byte[di+0x45]/[di+0x46] are reset
++   * to 4.  Ghidra read the two offset tables as 4-byte ints, used the CONSTANT 0x20 (03a9's dx INPUT)
++   * where the asm stores 03a9's DX OUTPUT into dword[0x9966], and replaced af1c's CF with the bogus
++   * `(long)iVar5 << 2 < 0`, so the search always ran all 15 candidates and committed the last one.
++   * af0b (asm 0xaf0b) is the same countdown without the search: on expiry it either re-arms
++   * ([di+0x40]&8 -> [di+0x45]=[di+0x46]=4) or clears byte[di+0x45]. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_03a9_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint8_t *o = dg + (uint16_t)param_1;
++  uint16_t base, idx, cnt, ax;
++  o[0x46] = (uint8_t)(o[0x46] - 1);
++  if (o[0x46] != 0) return;                                            /* aeab jne */
++  *(uint16_t *)(dg + 0x97a8) = 0;                                      /* aead */
++  base = *(uint16_t *)(o + 0x26);                                      /* aeb3 mov ax,[di+0x26] */
++  for (cnt = 0xf; cnt != 0; cnt--) {                                   /* aeb6 mov cx,0xf */
++    idx = *(uint16_t *)(dg + 0x97a8);
++    ax  = (uint16_t)(base + *(uint16_t *)(dg + (uint16_t)(0x97aa + idx)));   /* aebf add [bx-0x6856],ax */
++    ax  = (uint16_t)FUN_0000_03a9((int)ax,0x20,(undefined2)idx);             /* aec6 call 0x3a9 (dx=0x20) */
++    *(uint32_t *)(dg + 0x9962) = (uint32_t)((int32_t)(int16_t)ax << 3);      /* aec9 movswl; shl 3 */
++    *(uint32_t *)(dg + 0x9966) = (uint32_t)((int32_t)(int16_t)g_fist_03a9_dx << 3); /* aed5 movswl dx */
++    FUN_0000_af1c(0,(int *)(uintptr_t)(uint16_t)param_1);                    /* aee2 call af1c */
++    if (!(bool)g_fist_cf) break;                                             /* aee7 jae 0xaef0 */
++    *(uint16_t *)(dg + 0x97a8) = (uint16_t)(idx + 2);                        /* aee9 addw 2 */
+   }
+-  DAT_2000_57a8 = 0;
+-  iVar2 = *(short *)(o + 0x26);
+-  iVar4 = 0xf;
+-  do {
+-    iVar5 = 0x20;
+-    iVar3 = FUN_0000_03a9(iVar2 + *(int *)((int)(undefined2 *)&DAT_2000_57aa + DAT_2000_57a8),0x20,
+-                          DAT_2000_57a8);
+-    DAT_2000_5962 = (long)iVar3 << 3;
+-    DAT_2000_5966 = (long)iVar5 << 3;
+-    bVar6 = (long)iVar5 << 2 < 0;
+-    FUN_0000_af1c((int)DAT_2000_5966,param_1);
+-    if (!bVar6) break;
+-    DAT_2000_57a8 = DAT_2000_57a8 + 2;
+-    iVar4 = iVar4 + -1;
+-  } while (iVar4 != 0);
+-  DAT_2000_57a6 = DAT_2000_57a8 + 0x10;
+-  *(short *)(o + 0x47) = (short)(iVar2 + *(int *)((int)(undefined2 *)&DAT_2000_57ba + DAT_2000_57a8));
+-  o[0x45] = 4;
++  idx = (uint16_t)(*(uint16_t *)(dg + 0x97a8) + 0x10);                 /* aef0/aef4 add bx,0x10 */
++  *(uint16_t *)(dg + 0x97a6) = idx;                                    /* aef7 */
++  *(uint16_t *)(o + 0x47) = (uint16_t)(base + *(uint16_t *)(dg + (uint16_t)(0x97aa + idx)));  /* aefb/aeff */
++  o[0x45] = 4;                                                         /* af02 */
+   o[0x46] = 4;
+   return;
+ }
+@@ -29092,18 +29096,16 @@
+ void __allregs FUN_0000_af0b(int param_1)
+ 
+ {
+-  char *pcVar1;
+-  
+-  pcVar1 = (char *)(param_1 + 0x46);
+-  *pcVar1 = *pcVar1 + -1;
+-  if (*pcVar1 == '\0') {
+-    if ((*(uint *)(param_1 + 0x40) & 8) != 0) {
+-      *(undefined1 *)(param_1 + 0x45) = 4;
+-      *(undefined1 *)(param_1 + 0x46) = 4;
+-      return;
+-    }
+-    *(undefined1 *)(param_1 + 0x45) = 0;
+-  }
++  /* PATCH 488: the plain steering countdown (asm 0xaf0b-0xaf1b; DS=DGROUP=0x1c00), di=param_1 = the
++   * object's NEAR offset: `decb [di+0x46]; jne ret; testw $8,[di+0x40]; jne 0xaf02` -- on expiry either
++   * re-arm both timers to 4 (when the WORD flag [di+0x40] has bit3) or clear byte[di+0x45].  Ghidra
++   * deref'd di as a host pointer (INDIA1's self-play SEGV'd here) and tested [di+0x40] 32 bits wide. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint8_t *o = dg + (uint16_t)param_1;
++  o[0x46] = (uint8_t)(o[0x46] - 1);
++  if (o[0x46] != 0) return;
++  if ((*(uint16_t *)(o + 0x40) & 8) != 0) { o[0x45] = 4; o[0x46] = 4; return; }   /* af10/af02 */
++  o[0x45] = 0;
+   return;
+ }
+ 
