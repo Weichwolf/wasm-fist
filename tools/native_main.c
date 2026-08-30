@@ -631,14 +631,17 @@ void fist_timer_pump(void){
         if (sd>=0 && !done && g_mem[0x1c000+0x1549]==0x1c &&
             *(unsigned short*)(g_mem+0x1c452) == (unsigned short)sd) {
           const char *o = getenv("FIST_SIMDUMP_OUT"); FILE *f = fopen(o?o:"/tmp/fist_simdump.bin","wb");
-          if (f){ fwrite(g_mem+0x1c000+0x9000,1,0x6000,f); fclose(f); }
-          done = 1; fprintf(stderr,"[simdump] wrote DGROUP 0x9000..0xdfff at t=%d\n", sd); } }
+          if (f){ fwrite(g_mem+0x1c000,1,0xf000,f); fclose(f); }
+          done = 1; fprintf(stderr,"[simdump] wrote DGROUP 0x0000..0xefff at t=%d\n", sd); } }
       { static int sh=-1; static unsigned pt=0xffffffffu;
         if (sh<0) sh = getenv("FIST_SIMHASH") ? 1 : 0;
         if (sh && g_mem[0x1c000+0x1549]==0x1c) {
           unsigned t2 = *(unsigned short*)(g_mem+0x1c452);
           if (t2 != pt) { pt = t2;
             fprintf(stderr,"[simhash] t=%u", t2);
+            /* blocks over DGROUP 0x9000..0xefff: the object rosters, display table and AI scratch.  The
+             * LOW DGROUP is deliberately excluded -- it holds the far-vector table the shim installs
+             * with real host addresses, which differ between the targets by construction. */
             for (int b=0;b<48;b++){ unsigned h=2166136261u; const unsigned char *p=g_mem+0x1c000+0x9000+b*0x200;
               for (int q=0;q<0x200;q++){ h^=p[q]; h*=16777619u; }
               fprintf(stderr," %08x",h); }

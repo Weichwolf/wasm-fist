@@ -5624,3 +5624,40 @@ RESULT: AZER1 self-play, cooperative tick, empty player input --
   * no crash, no freeze; combat is live (goals 13->12, enemies 16->13, ~133 objects).
 OPEN: the mission does not yet reach a RESOLVED victory/defeat (goals stay at 12) -- the AI completes the
 first objective and then holds; that is the next board:0012 question, not a parity one.
+
+## cont.64: cross-target parity method, and what it has proven per mission (patches 486-491)
+
+METHOD (now the standard tool for this board item; all three emitters live in the shim so BOTH targets
+produce them, all env-gated and read-only):
+  FIST_SIMHASH=1     one line per engine tick: a 48-block FNV-1a fingerprint of DGROUP 0x9000..0xefff
+                     (the object rosters, the display table and the AI scratch).  Diff the native and
+                     wasm logs -> the first differing TICK and the differing BLOCK.
+  FIST_SIMDUMP=<t>   one-shot raw dump of DGROUP 0x0000..0xefff at that tick -> diff -> the exact BYTES.
+  FIST_SIMTYPES=1    per-type census of the display table appended to the FIST_SIMTRACE2 fingerprint.
+Then a value-filtered hardware watchpoint on the native side names the WRITER.  Every parity carrier in
+cont.63/64 was found this way in minutes.
+NOTE on the window: the LOW DGROUP (below 0x9000) is deliberately outside the fingerprint -- it holds the
+far-vector table the shim installs with genuine host addresses, which differ between the targets by
+construction.  A whole-DGROUP dump at AZER2 t=2161 shows only 23 bytes differing in total, none of them a
+recurring host-base delta.
+
+PER-MISSION STATE (cooperative tick, empty player input, native vs wasm over the compared window):
+  AZER1    crash-free, IDENTICAL   (up to 27k ticks measured)
+  AZER3    crash-free, IDENTICAL   (25k)
+  SYRIA1   crash-free, IDENTICAL   (24k)
+  INDIA1   crash-free, IDENTICAL   (16k)   <- was a first-frame SEGV before 486/487/488/489
+  CYPRUS1  crash-free, IDENTICAL   (4k)
+  AZER2    crash-free, identical for ~1.9k in-mission ticks, then ONE slot differs at t=2162: the last
+           friendly roster entry (index 119, the 0x78 cap) receives a type-8 object on native and a
+           type-4 on wasm.  At the preceding tick the whole DGROUP differs in 23 bytes only -- among them
+           the MGA clip words 0x1586..0x158e and a handful of per-slot flags -- so the carrier is a
+           render-side leak into DGROUP, not a sim divergence.  Open, and the next thing to chase.
+
+DEFECT CLASSES THIS ROUND (all asm-verified, each its own patch):
+  486  a 16-bit parameter truncating a HOST pointer (a17e) -- and the objective scan 6507 rebuilt.
+  487  a display-table walk with `int *` scaling (af1c: 8 bytes per 4-byte entry, [si+0x2c] for [si+0x16]).
+  488  a search loop whose terminator was a bogus expression instead of the callee's CF (aea8), and a
+       register OUTPUT replaced by its INPUT (03a9's DX).
+  489  the low 16 bits of a REBASED pointer used as a near offset (27de) -- host-address dependent.
+  490  an uninitialised value written into the PIT tick counter (cbd4).
+  491  a HOST pointer stored in a DGROUP word the asm fills with DI, then re-read as an offset (cb74/cb7c).

@@ -1,0 +1,59 @@
+PATCH 491: the file-dialog pair cb74/cb7c stored a HOST POINTER in the DGROUP word the asm fills with DI --
+the last cross-target difference in the whole DGROUP object region.
+
+asm 0xcb7c (and its twin 0xcb74): `mov %di,-0x17ab` puts the caller's destination NEAR OFFSET in
+word[DGROUP:0xe855], and the picked name is copied through a RE-READ of that word (`mov -0x17ab,%di;
+mov %al,(%di)` -- DS:di, i.e. DGROUP).  The port stored the caller's host pointer instead, so g_mem's low
+word ended up in a DGROUP word and stayed there: native 0x2be9 vs wasm 0x0fb9, from the menu phase
+onward.  It is outside the object rosters (which is why the mission fingerprint was already identical for
+71k ticks) but it is a genuine byte-identity break, found by widening the cross-target fingerprint to
+DGROUP 0x9000..0xefff and watchpointing the word.  Store the near offset and copy through it, exactly as
+the asm does.
+--- a/fist.c
++++ b/fist.c
+@@ -32997,7 +32997,12 @@
+    * `= param_1` truncated it to ".F" (0 matches).  Store the whole dword. */
+   *(uint32_t *)(g_mem + 0x2a845) = (uint32_t)param_1;
+   DAT_2000_a853 = param_6;
+-  DAT_2000_a855 = param_7;
++  DAT_2000_a855 = (undefined2)(uint16_t)((unsigned char *)param_7 - ((unsigned char *)g_mem + 0x1c000));
++  /* PATCH 491: word[DGROUP:0xe855] is the destination NEAR OFFSET (asm `mov %di,-0x17ab`), and the
++   * name copy re-reads it (`mov -0x17ab,%di; mov %al,(%di)` -> DS:di = DGROUP).  Storing the caller's
++   * HOST pointer there left g_mem's low word in a DGROUP word, so the two targets differed at
++   * DGROUP:0xe855 from the menu phase onward (native 0x2be9 vs wasm 0x0fb9 -- the only cross-target
++   * difference left in DGROUP 0x9000..0xefff).  Store the near offset and copy through it. */
+   /* PATCH 143: cb74/cb7c share the tail from cb82.  cb82 `push [0x452]` saves the click-timestamp
+    * DGROUP:0x452 across the enumerate + modal loop; cbc0/cbcb `pop [0x452]` restore it.  Ghidra invented
+    * `DAT_1000_c452 = unaff_CS` (garbage) instead -> clobbered c452 with an uninitialised value. */
+@@ -33017,7 +33022,7 @@
+     if (!g_fist_cf) {
+       uint16_t strseg = *(uint16_t *)(g_mem + 0x1c070);
+       uint8_t *src = g_mem + ((uint32_t)strseg << 4) + (uint16_t)(DAT_2000_a838 * 0x10 + 0x3776);
+-      uint8_t *dst = (uint8_t *)param_7;
++      uint8_t *dst = (uint8_t *)g_mem + 0x1c000 + (uint16_t)DAT_2000_a855;   /* PATCH 491: DS:di */
+       uVar2 = 0;
+       for (iVar4 = 0; iVar4 < 0xd; iVar4++) { uVar2 = src[iVar4]; dst[iVar4] = uVar2; }
+       DAT_1000_c452 = saved452;
+@@ -33050,7 +33055,12 @@
+   /* PATCH 137: full-dword ".FSG"/".FPL" extension store (see cb74). */
+   *(uint32_t *)(g_mem + 0x2a845) = (uint32_t)param_1;
+   DAT_2000_a853 = param_6;
+-  DAT_2000_a855 = param_7;
++  DAT_2000_a855 = (undefined2)(uint16_t)((unsigned char *)param_7 - ((unsigned char *)g_mem + 0x1c000));
++  /* PATCH 491: word[DGROUP:0xe855] is the destination NEAR OFFSET (asm `mov %di,-0x17ab`), and the
++   * name copy re-reads it (`mov -0x17ab,%di; mov %al,(%di)` -> DS:di = DGROUP).  Storing the caller's
++   * HOST pointer there left g_mem's low word in a DGROUP word, so the two targets differed at
++   * DGROUP:0xe855 from the menu phase onward (native 0x2be9 vs wasm 0x0fb9 -- the only cross-target
++   * difference left in DGROUP 0x9000..0xefff).  Store the near offset and copy through it. */
+   /* PATCH 143: cb7c shares cb74's tail (see cb74) -- CANCEL (CF from cc33) skips the base-lost name copy. */
+   { extern unsigned char g_fist_cf; uint16_t saved452 = DAT_1000_c452;
+   FUN_1000_b756((char)param_1,param_2,param_3,param_4,param_5,param_6,param_7);
+@@ -33063,7 +33073,7 @@
+     if (!g_fist_cf) {
+       uint16_t strseg = *(uint16_t *)(g_mem + 0x1c070);
+       uint8_t *src = g_mem + ((uint32_t)strseg << 4) + (uint16_t)(DAT_2000_a838 * 0x10 + 0x3776);
+-      uint8_t *dst = (uint8_t *)param_7;
++      uint8_t *dst = (uint8_t *)g_mem + 0x1c000 + (uint16_t)DAT_2000_a855;   /* PATCH 491: DS:di */
+       uVar2 = 0;
+       for (iVar4 = 0; iVar4 < 0xd; iVar4++) { uVar2 = src[iVar4]; dst[iVar4] = uVar2; }
+       DAT_1000_c452 = saved452;
