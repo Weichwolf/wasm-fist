@@ -5586,3 +5586,41 @@ through the real display-list path, fire, and die (goals 13->12, enemies 16->13,
 177-flow verify matrix: 177 PASS / 0 FAIL (the 5 terrain-206 FAILs of the pre-462 baseline are gone too).
 NEXT: the crash chase continues at 899c (the M3 update's sub-method, same class), then the wasm parity
 re-run and the multi-mission sweep.
+
+## cont.63: native<->wasm parity RESTORED and proven at 71,507 consecutive ticks (patches 478-485)
+
+With the render/spawn frontier open (cont.62) the AZER1 self-play ran thousands of live-combat frames but
+native and wasm drifted apart at t=334.  Method that found every carrier: a per-tick 32-block FNV
+fingerprint of the DGROUP object/AI region (FIST_SIMHASH) plus a one-shot raw dump (FIST_SIMDUMP) and a
+per-type object census (FIST_SIMTYPES), all in the shim so BOTH targets emit them; diff the two logs,
+take the first differing tick, dump that tick on both, and the differing BYTES name the field -- then a
+value-filtered hardware watchpoint on the native side names the writer.
+
+Carriers found, all of one of two classes:
+  (a) a bare `return;` in a NON-VOID function (Ghidra dropped the asm's AX result).  -O0/native happened
+      to leave the right value in the return register, -O2/wasm did not, so the two targets took
+      different branches.  481: e1d1/e132/e189 (the op-0x54 terrain-height service -- every object's
+      ground height byte[obj+0xd] was real on wasm and 0 on native, from the FIRST mission frame).
+      484: 08e8/a17e/a186/a18e (every range and bearing measurement in the AI).  485: e200 (a tail JUMP
+      into e21c, i.e. the op-0x58 LOS verdict that a904's burn tick turns into byte[obj+0x36]=0xff) and
+      e115.  -Wreturn-type reports 67 such functions engine-wide; the rest are not yet on a live path.
+  (b) the c0e5 per-object UPDATE dispatch passes the object as ARG0, but three patches had taken a later
+      varnode (482: 9afc/bc0c from patch 461 took param_2, bc46 from patch 415 took param_3, 9aa1 from
+      patch 414 took param_2) -- at runtime those hold the function's own code address or a host stack
+      address, so every field write went through a garbage DGROUP offset (bc0c OR-ed 0x40/0x44 into
+      DGROUP:0xbc22 every frame a wreck existed).
+Also landed: 478 (the M3 weapon stations 899c + 8121/8176/81bb/8205, twins of the AH-64 pair), 479 (9dd2,
+the AI support-request handler, whose side index was an uninitialised `unaff_CS`), 480 (9b5c/9b6f, the
+muzzle-smoke spawn -- the engine's largest uninitialised-read site), 483 (9efc, TARGET ACQUISITION: the
+whole nearest-enemy scan was base-lost and took its distance from `extraout_AH`).
+Shim: the op-0x54 terrain-height service now answers OBJECT queries (it only served projectiles before,
+so every unit's ground height was 0 -- the same gap the op-0x58 note blames for units not sitting on the
+terrain).
+
+RESULT: AZER1 self-play, cooperative tick, empty player input --
+  * the 32-block DGROUP fingerprint is IDENTICAL for all 71,507 measured ticks on both targets;
+  * the mission fingerprint (live/goals/a294/a296/player X,Y + per-type census) is IDENTICAL over all
+    13,196 recorded state changes;
+  * no crash, no freeze; combat is live (goals 13->12, enemies 16->13, ~133 objects).
+OPEN: the mission does not yet reach a RESOLVED victory/defeat (goals stay at 12) -- the AI completes the
+first objective and then holds; that is the next board:0012 question, not a parity one.

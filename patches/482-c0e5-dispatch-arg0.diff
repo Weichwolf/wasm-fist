@@ -1,0 +1,164 @@
+PATCH 482: four c0e5-dispatched per-object UPDATE methods took the object from the WRONG parameter and so
+wrote every field through a stale stack slot.
+
+The c0e5 walk (patch 243) dispatches `call [bx-0x1bac]` with the object's DGROUP near offset live in DI and
+passes it as ARG0, so the object is param_1 -- confirmed at runtime for the whole table (7c1d gets 0xc05c,
+bc46 gets 0xa090/0xa0c7/... , all valid slots) and already assumed by every other patched method.  Three
+patches picked a later varnode:
+  9afc + bc0c (patch 461) took param_2, and bc46 (patch 415) took param_3 -- at runtime those hold their
+  own code address (0xbc0c) or a host stack address (0xffffcc68).  bc0c therefore OR-ed 0x40/0x44 into
+  DGROUP:0xbc22/0xbc23 every frame a wreck existed: the first native<->wasm divergence of the AZER1
+  self-play, found by diffing a per-tick 32-block DGROUP fingerprint between the targets (t=290, block
+  0xbc00..0xbdff) and then watchpointing the word.
+  9aa1 (patch 414) took param_2 for its age counter, so objects aged a random DGROUP word instead of
+  their own [di+0x19].
+Also corrected the widths these three used: [di+0x19]/[di+0x1f]/[di+0x21] are WORDs in the asm (the 32-bit
+`int` accesses clobbered the neighbouring field), and 9aa1's milestone list / bc0c's smoke gate now read
+the WORD the asm reads.
+--- a/fist.c
++++ b/fist.c
+@@ -25772,24 +25772,26 @@
+ void __allregs FUN_0000_9aa1(undefined4 param_1,int param_2)
+ 
+ {
+-  int iVar1;
+-  /* PATCH 414 (board:0012 flight-model pointer-model migration): asm 0x9aa1 -- per-object lifecycle
+-     method dispatched by c0e5 (patch 243) with DI = the object DGROUP near-offset (DS=DGROUP=0x1c00).
+-     asm `inc WORD PTR [di+0x19]` then `cmp WORD PTR [di+0x19],imm` (0x32/0x190/0x2ee/0x44c/0x5aa/0x708/
+-     0x866): a WORD age counter; at 0x866 -> destroy (b2ef).  Ghidra base-lost it (param_2 as host int*,
+-     4-byte).  Rebase to g_mem+0x1c000 + (uint16_t)(off+0x19), WORD width (asm-verified). */
+-  unsigned short *ctr = (unsigned short *)(g_mem + 0x1c000 + (unsigned short)(param_2 + 0x19));
+-  *ctr = *ctr + 1;
+-  if (((*ctr != 0x32) && (*ctr != 400) && (*ctr != 0x2ee)) &&
+-     ((*ctr != 0x44c && *ctr != 0x5aa) && *ctr != 0x708)) {
+-    if (*ctr != 0x866) {
+-      return;
+-    }
+-    iVar1 = FUN_1000_b354(param_2);
+-    FUN_1000_b2ef(iVar1);
++  /* PATCH 482 (supersedes 414's parameter choice): per-object lifecycle method (asm 0x9aa1-0x9ae8).
++   * The c0e5 per-object UPDATE walk (patch 243) dispatches `call [bx-0x1bac]` with the object near
++   * offset live in DI and passes it as ARG0, so the object is param_1 -- verified at runtime (every
++   * other method in the table already uses param_1).  Taking a later varnode meant reading a STALE
++   * STACK SLOT: this function wrote its fields through that garbage offset, silently corrupting
++   * DGROUP (the AZER1 self-play's first native<->wasm divergence was bc0c writing 0x40/0x44 into
++   * DGROUP:0xbc22 -- its own code address used as a near offset).
++   * asm: `incw [di+0x19]` then the age milestones 0x32/0x190/0x2ee/0x44c/0x5aa/0x708 each fire
++   * 9cfd(0x1a0) (lcall f69:a66d), and 0x866 destroys via b354/b2ef. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  uint16_t *ctr = (uint16_t *)(dg + (uint16_t)(di + 0x19));
++  (void)param_2;
++  *ctr = (uint16_t)(*ctr + 1);
++  if (*ctr == 0x32 || *ctr == 0x190 || *ctr == 0x2ee ||
++      *ctr == 0x44c || *ctr == 0x5aa || *ctr == 0x708) {
++    FUN_1000_9cfd(0x1a0,(int)di);
+     return;
+   }
+-  FUN_1000_9cfd(CONCAT22((int)((ulong)param_1 >> 0x10),0x1a0),param_2);
++  if (*ctr == 0x866) FUN_1000_b2ef(FUN_1000_b354((int)di));
+   return;
+ }
+ 
+@@ -25823,11 +25825,21 @@
+ void __allregs FUN_0000_9afc(undefined4 param_1,int param_2)
+ 
+ {
+-  int *pv = (int *)(g_mem + 0x1c000 + (uint16_t)param_2 + 0x19);   /* board:0007 base-loss: param_2 is DI (near) */
+-  *pv = *pv + 1;
+-  if ((*(uint *)pv & 0x3f) == 0) {
+-    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),0x180),param_2);
+-  }
++  /* PATCH 482 (supersedes 461's parameter choice): type-0x19 periodic SMOKE emitter (asm 0x9afc-0x9b0e).
++   * The c0e5 per-object UPDATE walk (patch 243) dispatches `call [bx-0x1bac]` with the object near
++   * offset live in DI and passes it as ARG0, so the object is param_1 -- verified at runtime (every
++   * other method in the table already uses param_1).  Taking a later varnode meant reading a STALE
++   * STACK SLOT: this function wrote its fields through that garbage offset, silently corrupting
++   * DGROUP (the AZER1 self-play's first native<->wasm divergence was bc0c writing 0x40/0x44 into
++   * DGROUP:0xbc22 -- its own code address used as a near offset).
++   * asm: `incw [di+0x19]; testw $0x3f,[di+0x19]; jne ret; mov ax,0x180; lcall f69:a61a (=9caa)` --
++   * a WORD counter (patch 461 used a 32-bit int, which also clobbered [di+0x1b]). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  uint16_t *ctr = (uint16_t *)(dg + (uint16_t)(di + 0x19));
++  (void)param_2;
++  *ctr = (uint16_t)(*ctr + 1);
++  if ((*ctr & 0x3f) == 0) FUN_1000_9caa(0x180,(int)di);
+   return;
+ }
+ 
+@@ -30752,13 +30764,26 @@
+ void __allregs FUN_0000_bc0c(undefined4 param_1,int param_2)
+ 
+ {
+-  unsigned char *o = g_mem + 0x1c000 + (uint16_t)param_2;   /* board:0007 base-loss: param_2 is DI (near) */
+-  *(byte *)(o + 0x16) = *(byte *)(o + 0x16) | 0x40;
+-  *(byte *)(o + 0x17) = *(byte *)(o + 0x17) | 0x44;
+-  *(int *)(o + 0x1f) = *(int *)(o + 0x1f) + 1;
+-  if (((*(uint *)(o + 0x1f) & 0x3f) == 0) && (0x80 < *(uint *)(o + 0x21))) {
+-    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(uint *)(o + 0x21)),param_2);
+-  }
++  /* PATCH 482 (supersedes 461's parameter choice): type-0x17 WRECK per-frame method (asm 0xbc0c-0xbc2b).
++   * The c0e5 per-object UPDATE walk (patch 243) dispatches `call [bx-0x1bac]` with the object near
++   * offset live in DI and passes it as ARG0, so the object is param_1 -- verified at runtime (every
++   * other method in the table already uses param_1).  Taking a later varnode meant reading a STALE
++   * STACK SLOT: this function wrote its fields through that garbage offset, silently corrupting
++   * DGROUP (the AZER1 self-play's first native<->wasm divergence was bc0c writing 0x40/0x44 into
++   * DGROUP:0xbc22 -- its own code address used as a near offset).
++   * asm: `orb $0x40,[di+0x16]; orb $0x44,[di+0x17]; incw [di+0x1f]; testw $0x3f,[di+0x1f]; jne ret;
++   * mov ax,[di+0x21]; cmp ax,0x80; jbe ret; lcall f69:a61a (=9caa)` -- [di+0x1f] and [di+0x21] are WORDs
++   * (patch 461 used 32-bit ints, so the counter write clobbered [di+0x21] and the smoke gate read four
++   * bytes). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  unsigned char *o = dg + di;
++  (void)param_2;
++  o[0x16] |= 0x40;
++  o[0x17] |= 0x44;
++  *(uint16_t *)(o + 0x1f) = (uint16_t)(*(uint16_t *)(o + 0x1f) + 1);
++  if ((*(uint16_t *)(o + 0x1f) & 0x3f) == 0 && *(uint16_t *)(o + 0x21) > 0x80)
++    FUN_1000_9caa(*(uint16_t *)(o + 0x21),(int)di);
+   return;
+ }
+ 
+@@ -30786,24 +30811,27 @@
+      [di+X] derefs (param_3 as host ptr) and mis-typed [di+0x1c] as 32-bit (asm `mov ax,WORD [di+0x1c]`).
+      Rebase to g_mem+0x1c000+off; widths asm-verified: +0x16/+0x17/+0x19/+0x1e/+0x2a BYTE, +0x1b/+0x1c WORD.
+      Callees 9efc/b1df/ace0/9caa take the near-offset param_3 (they rebase internally, patch-244 idiom). */
+-  unsigned char *o = g_mem + 0x1c000 + (unsigned short)param_3;
++  /* PATCH 482 (supersedes 415's parameter choice): the c0e5 walk passes the object near offset as
++   * ARG0 (param_1) -- param_3 was a stale stack slot (0xffffcc68, a host stack address, verified at
++   * runtime), so every type-0x1a object updated through a garbage DGROUP offset. */
++  unsigned char *o = g_mem + 0x1c000 + (unsigned short)(uintptr_t)param_1;
+   if ((*(char *)(o + 0x19) != '\x04') && (*(char *)(o + 0x19) != '\x06')) {
+     o[0x16] = o[0x16] | 8;
+     if ((*(char *)(o + 0x19) == '\x03') && ((DAT_2000_2cde & 7) == 0)) {
+       uVar2 = FUN_0000_0291();
+       if ((uVar2 & 7) == 0) {
+-        iVar1 = FUN_1000_9efc(100,param_2,param_3);
++        iVar1 = FUN_1000_9efc(100,param_2,(int)(unsigned short)(uintptr_t)param_1);
+         if (iVar1 != 0) {
+           /* PATCH 462: asm bc77-bc95 `push ax(target); push di; mov ax,7; lcall b1df; mov si,di; pop di;
+            * pop bx; jb; lcall ace0(ax=b1df's AX, bx=target, si=NEW, di=firer)`; the tail writes
+            * [si+0x2a]/[si+0x1b]/[si+0x17] go to SI (= di when b1df failed).  Patch 415 fed ace0 garbage
+            * (0xf69 for di) and wrote the tail into the firer. */
+           extern unsigned char g_fist_cf;
+-          unsigned int si = (unsigned short)FUN_1000_b1df(7,(int *)(uintptr_t)(unsigned short)param_3);
++          unsigned int si = (unsigned short)FUN_1000_b1df(7,(int *)(uintptr_t)(unsigned short)(uintptr_t)param_1);
+           unsigned char *n = g_mem + 0x1c000 + (unsigned short)si;
+           if (!(bool)g_fist_cf) {
+             FUN_1000_ace0((undefined2)g_fist_b1df_ax,(int *)(uintptr_t)(unsigned short)iVar1,(int)si,
+-                          (int *)(uintptr_t)(unsigned short)param_3,0);
++                          (int *)(uintptr_t)(unsigned short)(uintptr_t)param_1,0);
+           }
+           n[0x2a] = 0;
+           *(unsigned short *)(n + 0x1b) = 0x18e;
+@@ -30815,7 +30843,7 @@
+   }
+   *(char *)(o + 0x1e) = *(char *)(o + 0x1e) + '\x01';
+   if (((o[0x1e] & 0x3f) == 0) && (0x80 < *(unsigned short *)(o + 0x1c))) {
+-    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(unsigned short *)(o + 0x1c)),param_3);
++    FUN_1000_9caa(*(unsigned short *)(o + 0x1c),(int)(unsigned short)(uintptr_t)param_1);
+     *(unsigned short *)(o + 0x1c) = *(unsigned short *)(o + 0x1c) + -1;
+     if (0x300 < *(unsigned short *)(o + 0x1c)) {
+       *(unsigned short *)(o + 0x1c) = *(unsigned short *)(o + 0x1c) + -4;

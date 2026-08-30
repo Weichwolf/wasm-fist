@@ -1,0 +1,73 @@
+PATCH 481: the extender service wrappers e1d1 / e132 / e189 dropped e339's RETURN -- the last
+native<->wasm divergence of the AZER1 self-play, present from the very first mission frame.
+
+asm 0xe1d1 / 0xe132 / 0xe189: `mov gs:[si+0x3f2],ebx; mov [0xea10],<selector>; call e339; ret` -- the
+service result is e339's AX and the callers consume it: adcd (patch 222) and 9db1 (patch 298) store it as
+the object's ground height byte[obj+0xd], and 9e2b slews the hull toward it.  Ghidra emitted a bare
+`return;` in a function declared to return undefined4; native -O0 happened to leave e339's AX in the
+return register while wasm -O2 did not, so every object's byte[+0xd] held a real terrain height on wasm and
+0 on native.  Found by adding a per-tick 32-block DGROUP fingerprint (FIST_SIMHASH) plus a raw region dump
+(FIST_SIMDUMP) to the cross-target trace and diffing the two targets at the first in-mission tick: exactly
+one byte per object, [obj+0x0d].
+
+Shim (tools/native_main.c): the op-0x54 TERRAIN-HEIGHT service now answers OBJECT queries too, not just
+the projectile one -- it takes the position pair the engine posts in the TCB inbox (TCB+0x3f2 = obj+4) and
+returns the heightmap byte with the same base (ext+0x85bc) and index packing as the decoded op-0x58 LOS
+handler.  Every object's ground height was 0 before, which is also why the op-0x58 note reports units that
+do not sit on the terrain.
+--- a/fist.c
++++ b/fist.c
+@@ -36072,10 +36072,15 @@
+ undefined4 __allregs FUN_0000_e132(undefined4 param_1)
+ 
+ {
++  /* PATCH 481: asm `mov gs:[si+0x3f2],ebx; mov [0xea10],SEL; call e339; ret` -- the service RESULT is
++   * e339's AX and the callers use it (adcd/9db1 store it as the object's ground height byte[di+0xd],
++   * 9e2b slews to it).  Ghidra emitted a bare `return;` in a non-void function: native -O0 happened
++   * to leave e339's AX in place, wasm -O2 did not -- so EVERY object's byte[+0xd] was a real terrain
++   * height on wasm and 0 on native, the first (and until now only) native<->wasm divergence of the
++   * AZER1 self-play, visible from the very first mission frame. */
+   *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_1;
+   DAT_2000_aa10 = 0x40;
+-  FUN_0000_e339();
+-  return;
++  return FUN_0000_e339();
+ }
+ 
+ 
+@@ -36096,10 +36101,15 @@
+ undefined4 __allregs FUN_0000_e189(undefined4 param_1)
+ 
+ {
++  /* PATCH 481: asm `mov gs:[si+0x3f2],ebx; mov [0xea10],SEL; call e339; ret` -- the service RESULT is
++   * e339's AX and the callers use it (adcd/9db1 store it as the object's ground height byte[di+0xd],
++   * 9e2b slews to it).  Ghidra emitted a bare `return;` in a non-void function: native -O0 happened
++   * to leave e339's AX in place, wasm -O2 did not -- so EVERY object's byte[+0xd] was a real terrain
++   * height on wasm and 0 on native, the first (and until now only) native<->wasm divergence of the
++   * AZER1 self-play, visible from the very first mission frame. */
+   *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_1;
+   DAT_2000_aa10 = 0x50;
+-  FUN_0000_e339();
+-  return;
++  return FUN_0000_e339();
+ }
+ 
+ 
+@@ -36123,10 +36133,15 @@
+ undefined4 __allregs FUN_0000_e1d1(undefined4 param_1)
+ 
+ {
++  /* PATCH 481: asm `mov gs:[si+0x3f2],ebx; mov [0xea10],SEL; call e339; ret` -- the service RESULT is
++   * e339's AX and the callers use it (adcd/9db1 store it as the object's ground height byte[di+0xd],
++   * 9e2b slews to it).  Ghidra emitted a bare `return;` in a non-void function: native -O0 happened
++   * to leave e339's AX in place, wasm -O2 did not -- so EVERY object's byte[+0xd] was a real terrain
++   * height on wasm and 0 on native, the first (and until now only) native<->wasm divergence of the
++   * AZER1 self-play, visible from the very first mission frame. */
+   *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_1;
+   DAT_2000_aa10 = 0x54;
+-  FUN_0000_e339();
+-  return;
++  return FUN_0000_e339();
+ }
+ 
+ 

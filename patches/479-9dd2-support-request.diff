@@ -1,0 +1,83 @@
+PATCH 479: FUN_1000_9dd2, the AI SUPPORT-REQUEST handler -- the BX side index was bound to the
+uninitialised pseudo-var `unaff_CS` and the request queue was walked as `int *` (stride 24) through a
+host-deref'd near pointer.
+
+asm 0x19dd2-0x19e4e (DS=DGROUP=0x1c00), reached from b0be with di=the requesting object: byte[di+0x16]
+bit3 selects the side (bx=0/2 -> the busy word 0x9454/0x9456, the enable word 0x9450+bx, the last-request
+stamp 0x9460+bx and the queue head 0x9458+bx); the request is rate-limited to one per 0x1e0 frames, calls
+out via bf3c(3,bx,di), then walks the 16-entry, 0xc-byte-stride queue for a free slot to record the object
+and the tick word[0x452] (a4a2(0x2f2a) + bee2(0x25,0xb4)), answering a4a2(0x2edd) + bee2(0x27,0xb4) when
+the queue is full or the side is busy/disabled.  Rebuilt 1:1; the first AI support request of the AZER1
+self-play SEGV'd here.
+--- a/fist.c
++++ b/fist.c
+@@ -63616,35 +63616,42 @@
+ void __allregs FUN_1000_9dd2(int param_1)
+ 
+ {
+-  int iVar1;
+-  int *piVar2;
+-  int unaff_CS;
+-  
+-  iVar1 = 0;
+-  if ((*(byte *)(param_1 + 0x16) & 8) != 0) {
+-    iVar1 = 2;
+-  }
+-  if (0x1df < (uint)(DAT_2000_2cde - *(int *)((int)(undefined2 *)&DAT_2000_5460 + iVar1))) {
+-    FUN_0000_bf3c(3,iVar1,param_1);
+-    if ((*(int *)((int)(undefined2 *)&DAT_2000_5450 + unaff_CS) != 0) && (iVar1 == 0)) {
+-      *(int *)((int)(undefined2 *)&DAT_2000_5460 + unaff_CS) = DAT_2000_2cde;
+-      piVar2 = (int *)*(undefined2 *)(unaff_CS + -0x6ba8);
+-      iVar1 = 0x10;
+-      do {
+-        if (*piVar2 == 0) {
+-          *piVar2 = param_1;
+-          piVar2[1] = DAT_1000_c452;
+-          FUN_1000_a4a2(0x2f2a,param_1);
+-          FUN_0000_bee2(0x25,0xb4,param_1);
+-          return;
+-        }
+-        piVar2 = piVar2 + 6;
+-        iVar1 = iVar1 + -1;
+-      } while (iVar1 != 0);
++  /* PATCH 479: the AI SUPPORT-REQUEST handler (asm 0x19dd2-0x19e4e; DS=DGROUP=0x1c00), reached from the
++   * b0be turn-decision (patch 366) with di=param_1, the requesting object's near offset.  The side is
++   * selected by byte[di+0x16] bit3: friendly -> ax=word[0x9454], bx=0; enemy -> ax=word[0x9456], bx=2.
++   * The request is rate-limited to one per 0x1e0 frames per side (word[0x9460+bx] vs the frame counter
++   * word[0x6cde]); bf3c(3, bx, di) is the radio callout.  If that side's queue is enabled
++   * (word[0x9450+bx] != 0) and its busy word ax is 0, stamp word[0x9460+bx] and walk the 16-entry,
++   * 0xc-byte-stride queue at word[0x9458+bx] for a free slot: store di and the tick word[0x452], then
++   * a4a2(0x2f2a) + bee2(0x25,0xb4).  A full queue (or a disabled/busy side) answers bee2(0x27,0xb4) +
++   * a4a2(0x2edd).  Ghidra bound the BX side index to the uninitialised pseudo-var `unaff_CS`, walked the
++   * queue as `int *` (stride 24 instead of 0xc bytes) and host-deref'd the queue pointer, so the first
++   * AI support request in the AZER1 self-play SEGV'd. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  unsigned char *o = dg + di;
++  uint16_t ax, bx, p, cx;
++  if ((o[0x16] & 8) != 0) { ax = *(uint16_t *)(dg + 0x9456); bx = 2; }   /* 19dd8 */
++  else                    { ax = *(uint16_t *)(dg + 0x9454); bx = 0; }
++  if ((uint16_t)(*(uint16_t *)(dg + 0x6cde) - *(uint16_t *)(dg + (uint16_t)(0x9460 + bx))) < 0x1e0)
++    return;                                                             /* 19dec cmp 0x1e0; jb */
++  FUN_0000_bf3c(3,(undefined2)bx,(int)di);                              /* 19df6 */
++  if (*(uint16_t *)(dg + (uint16_t)(0x9450 + bx)) != 0 && ax == 0) {    /* 19dfd / 19e04 */
++    *(uint16_t *)(dg + (uint16_t)(0x9460 + bx)) = *(uint16_t *)(dg + 0x6cde);
++    p = *(uint16_t *)(dg + (uint16_t)(0x9458 + bx));                    /* 19e10 mov bx,[0x9458+bx] */
++    for (cx = 0x10; cx != 0; cx--) {                                    /* 19e14 mov cx,0x10 */
++      if (*(uint16_t *)(dg + p) == 0) {                                 /* 19e17 cmpw [bx],0 */
++        *(uint16_t *)(dg + p) = di;                                     /* 19e23 mov [bx],di */
++        *(uint16_t *)(dg + (uint16_t)(p + 2)) = *(uint16_t *)(dg + 0x452);
++        FUN_1000_a4a2(0x2f2a,(int)di);
++        FUN_0000_bee2(0x25,0xb4,(int)di);
++        return;
++      }
++      p = (uint16_t)(p + 0xc);                                          /* 19e1c add bx,0xc */
+     }
+-    FUN_0000_bee2(0x27,0xb4,param_1);
+-    FUN_1000_a4a2(0x2edd,param_1);
+   }
++  FUN_0000_bee2(0x27,0xb4,(int)di);                                     /* 19e3d */
++  FUN_1000_a4a2(0x2edd,(int)di);
+   return;
+ }
+ 

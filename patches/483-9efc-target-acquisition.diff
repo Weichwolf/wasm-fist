@@ -1,0 +1,109 @@
+PATCH 483: FUN_1000_9efc -- TARGET ACQUISITION (pick the nearest valid enemy) was fully base-lost and took
+its distance from an UNINITIALISED pseudo-var, so native and wasm locked onto different targets.
+
+asm 0x19efc-0x19f91 (DS=DGROUP=0x1c00): the 182-entry display table at DGROUP:0xdfbc (stride 4) is walked
+for candidates that are targetable ((byte[si+0x17]&8) or (byte[si+0x16]&0x20)), on the other side
+((byte[si+0x16]&8) != byte[0x96ab]), not already dead (byte[si+0x17]&0x40) and not the searcher; a17e
+(=08e8) measures self+4 -> cand+4 into DGROUP:0x458/0x45a and the nearest one within the caller's range
+wins (scratch at 0x96ab/0x96ec/0x96f4/0x96f6/0x96fa/0x96fe).  Ghidra walked the table as `int *` at stride
+8 with host-pointer candidates, and read the 16-bit distance out of `extraout_AH`/`unaff_CS` -- pseudo-vars
+that are never assigned, so -O0 (native) and -O2 (wasm) produced different comparisons.  This was the last
+native<->wasm divergence of the AZER1 self-play after patches 481/482 (first differing tick t=16092, in
+enemy[9]'s aim fields +0x10/+0x89/+0x8b/+0x9b -- the fields a265/90db write for the locked target).
+--- a/fist.c
++++ b/fist.c
+@@ -63787,47 +63787,54 @@
+ undefined2 __allregs FUN_1000_9efc(uint param_1,undefined2 param_2,undefined2 *param_3)
+ 
+ {
+-  undefined2 *puVar1;
+-  undefined1 extraout_AH;
+-  uint uVar2;
+-  undefined2 *puVar3;
+-  undefined2 *puVar4;
+-  undefined2 *puVar5;
+-  undefined2 unaff_CS;
+-  undefined2 uVar6;
+-  
+-  DAT_2000_56ab = *(byte *)(param_3 + 0xb) & 8;
+-  DAT_2000_56fe = 0;
+-  DAT_2000_56f4 = 0;
+-  DAT_2000_56f6 = 0xffff;
+-  puVar3 = (undefined2 *)0xb6;
+-  puVar5 = (undefined2 *)&DAT_2000_9fbc;
+-  DAT_2000_56ec = param_3;
+-  DAT_2000_56fa = param_1;
+-  while (uVar6 = unaff_CS, puVar3 != (undefined2 *)0x0) {
+-    puVar1 = (undefined2 *)*puVar5;
+-    puVar5 = puVar5 + 2;
+-    puVar4 = (undefined2 *)((int)puVar3 + -1);
+-    puVar3 = puVar4;
+-    unaff_CS = uVar6;
+-    if ((puVar1 != (undefined2 *)0x0) &&
+-       (((((*(byte *)((int)puVar1 + 0x17) & 8) != 0 || ((*(byte *)(puVar1 + 0xb) & 0x20) != 0)) &&
+-         ((*(byte *)(puVar1 + 0xb) & 8) != DAT_2000_56ab)) &&
+-        (((*(byte *)((int)puVar1 + 0x17) & 0x40) == 0 && (puVar1 != DAT_2000_56ec)))))) {
+-      unaff_CS = 0;
+-      FUN_0000_a17e(puVar1 + 2,DAT_2000_56ec + 2);
+-      puVar3 = puVar1;
+-      puVar5 = puVar4;
+-      if (((char)((uint)param_2 >> 8) == '\0') &&
+-         ((uVar2 = CONCAT11((char)param_2,extraout_AH), uVar2 <= DAT_2000_56fa &&
+-          (uVar2 < DAT_2000_56f6)))) {
+-        DAT_2000_56fe = DAT_2000_56fe + 1;
+-        DAT_2000_56f4 = uVar6;
+-        DAT_2000_56f6 = uVar2;
+-      }
+-    }
++  /* PATCH 483: TARGET ACQUISITION -- pick the nearest valid enemy (asm 0x19efc-0x19f91; DS=DGROUP=0x1c00).
++   * ax=param_1 = the maximum range, di=param_3 = the searching object's near offset.  Scratch: word
++   * [0x96fa]=range, word[0x96ec]=self, byte[0x96ab]=self's side bit ([di+0x16]&8), word[0x96fe]=the
++   * candidate count, word[0x96f4]=the best candidate, word[0x96f6]=its distance (0xffff = none).
++   * The 182-entry display table at DGROUP:0xdfbc (stride 4) is walked; a candidate qualifies when
++   * (byte[si+0x17]&8) or (byte[si+0x16]&0x20), its side bit differs, byte[si+0x17]&0x40 is clear and it
++   * is not the searcher itself.  a17e (=08e8) then measures self+4 -> cand+4, leaving the 32-bit
++   * distance in DGROUP:0x458/0x45a; a non-zero HIGH BYTE of the high word means out of range, otherwise
++   * the 16-bit distance>>8 must be <= the range and < the best so far, and the candidate becomes the new
++   * best.  Returns word[0x96f4].
++   * Ghidra host-deref'd the whole walk (`puVar5 = &DAT_2000_9fbc` stepped by 2 ints = 8 bytes instead of
++   * the table's 4, candidates deref'd as host pointers), and -- the reason this mattered for parity --
++   * took the DISTANCE from the dropped AH of a17e's return via the UNINITIALISED pseudo-var
++   * `extraout_AH` (plus `unaff_CS` as the stored candidate).  -O0 and -O2 leave different garbage there,
++   * so each side locked onto different targets: after patches 481/482 this was the last remaining
++   * native<->wasm divergence of the AZER1 self-play (first seen at t=16092 in enemy[9]'s aim fields
++   * +0x10/+0x89/+0x8b/+0x9b). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_3;
++  uint16_t bx = 0xdfbc, cx, si, d;
++  (void)param_2;
++  *(uint16_t *)(dg + 0x96fa) = (uint16_t)param_1;
++  *(uint16_t *)(dg + 0x96ec) = di;
++  dg[0x96ab] = (uint8_t)(dg[(uint16_t)(di + 0x16)] & 8);
++  *(uint16_t *)(dg + 0x96fe) = 0;
++  *(uint16_t *)(dg + 0x96f4) = 0;
++  *(uint16_t *)(dg + 0x96f6) = 0xffff;
++  for (cx = 0xb6; cx != 0; cx--) {
++    si = *(uint16_t *)(dg + bx);
++    bx = (uint16_t)(bx + 4);
++    if (si == 0) continue;                                              /* 19f34 */
++    if ((dg[(uint16_t)(si + 0x17)] & 8) == 0 &&
++        (dg[(uint16_t)(si + 0x16)] & 0x20) == 0) continue;              /* 19f38/19f3e */
++    if ((uint8_t)(dg[(uint16_t)(si + 0x16)] & 8) == dg[0x96ab]) continue; /* 19f44 same side */
++    if (dg[(uint16_t)(si + 0x17)] & 0x40) continue;                     /* 19f4f */
++    if (si == *(uint16_t *)(dg + 0x96ec)) continue;                     /* 19f55 self */
++    FUN_0000_a17e((int)(intptr_t)(dg + (uint16_t)(si + 4)),
++                  (int)(intptr_t)(dg + (uint16_t)(*(uint16_t *)(dg + 0x96ec) + 4)));  /* 19f61 */
++    if ((uint8_t)((uint16_t)DAT_1000_c45a >> 8) != 0) continue;         /* 19f69 or dh,dh */
++    d = (uint16_t)((((uint16_t)DAT_1000_c45a & 0xff) << 8) |
++                   (((uint16_t)DAT_1000_c458 >> 8) & 0xff));            /* 19f6d mov al,ah; mov ah,dl */
++    if (d > *(uint16_t *)(dg + 0x96fa)) continue;                       /* 19f71 ja */
++    if (d >= *(uint16_t *)(dg + 0x96f6)) continue;                      /* 19f77 jae */
++    *(uint16_t *)(dg + 0x96f6) = d;                                     /* 19f7d */
++    *(uint16_t *)(dg + 0x96f4) = si;                                    /* 19f80 */
++    *(uint16_t *)(dg + 0x96fe) = (uint16_t)(*(uint16_t *)(dg + 0x96fe) + 1);
+   }
+-  return DAT_2000_56f4;
++  return (undefined2)*(uint16_t *)(dg + 0x96f4);                        /* 19f8e */
+ }
+ 
+ 

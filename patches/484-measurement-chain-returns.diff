@@ -1,0 +1,63 @@
+PATCH 484: the measurement chain 08e8 / a17e / a186 / a18e dropped their RETURN VALUE -- correct by
+accident at -O0 (native), garbage at -O2 (wasm).
+
+asm: 0x8e8 ends `mov [0x458],ax; mov [0x45a],dx; ret`, so AX (the 32-bit distance's LOW word, also stored
+at DGROUP:0x458) is the result; 0xa17e / 0xa186 / 0xa18e are pure `call <target>; lret` forwarders whose
+result is the callee's AX (08e8 range, 031c, 0578 bearing).  Ghidra emitted a bare `return;` in all four
+non-void functions, so the value each caller received depended on what the compiler happened to leave in
+the return register -- the same defect class as patch 481's e1d1/e132/e189 and the reason the AZER1
+self-play still drifted native<->wasm after the object-level fixes: every range/bearing measurement in
+the AI (target acquisition, aim, proximity) flowed through these four.
+--- a/fist.c
++++ b/fist.c
+@@ -5636,7 +5636,10 @@
+   lVar3 = (uVar2 >> (uVar2 < uVar1)) + (uVar1 >> (uVar2 >= uVar1));
+   DAT_1000_c458 = (int)lVar3;
+   DAT_1000_c45a = (int)((ulong)lVar3 >> 0x10);
+-  return;
++  /* PATCH 484: asm 0x8e8 ends `mov [0x458],ax; mov [0x45a],dx; ret` -- AX (the distance LOW word) is the
++   * return value and a17e/054c/9efc's callers consume it.  Ghidra emitted a bare `return;` in a non-void
++   * function: -O0 (native) happened to leave the right value in the return register, -O2 (wasm) did not. */
++  return (undefined4)(uint16_t)DAT_1000_c458;
+ }
+ 
+ 
+@@ -26724,8 +26727,10 @@
+ undefined4 __allregs FUN_0000_a17e(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  FUN_0000_08e8(param_1,param_2);
+-  return;
++  /* PATCH 484: asm 0xa17e is `call 08e8; lret` -- a pure forwarder, so the callee's AX IS this
++   * function's return value.  Ghidra's bare `return;` in a non-void function left it to the
++   * calling convention: correct by accident at -O0 (native), garbage at -O2 (wasm). */
++  return FUN_0000_08e8(param_1,param_2);
+ }
+ 
+ 
+@@ -26746,8 +26751,10 @@
+ undefined4 __allregs FUN_0000_a186(undefined2 param_1)
+ 
+ {
+-  FUN_0000_031c(param_1);
+-  return;
++  /* PATCH 484: asm 0xa186 is `call 031c; lret` -- a pure forwarder, so the callee's AX IS this
++   * function's return value.  Ghidra's bare `return;` in a non-void function left it to the
++   * calling convention: correct by accident at -O0 (native), garbage at -O2 (wasm). */
++  return FUN_0000_031c(param_1);
+ }
+ 
+ 
+@@ -26770,8 +26777,10 @@
+              int param_5)   /* PATCH 338 */
+ 
+ {
+-  FUN_0000_0578(param_1,param_2,param_3,param_4,param_5);
+-  return;
++  /* PATCH 484: asm 0xa18e is `call 0578; lret` -- a pure forwarder, so the callee's AX IS this
++   * function's return value.  Ghidra's bare `return;` in a non-void function left it to the
++   * calling convention: correct by accident at -O0 (native), garbage at -O2 (wasm). */
++  return FUN_0000_0578(param_1,param_2,param_3,param_4,param_5);
+ }
+ 
+ 

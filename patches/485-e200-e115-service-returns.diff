@@ -1,0 +1,42 @@
+PATCH 485: the extender-service wrappers e200 and e115 dropped their RETURN VALUE (the op-0x58 LOS verdict
+and the op-0x3c result) -- the next native<->wasm divergence after patches 481/484.
+
+asm 0xe200 is `mov gs,[0xea2e]; mov si,[0xea2c]; jmp 0xe21c` -- a tail JUMP, so e200 returns exactly what
+e21c returns (the op-0x58 line-of-sight verdict), and 0xe115 is the usual `mov gs:[si+0x3f2],ebx;
+mov [0xea10],0x3c; call e339; ret`.  Ghidra emitted a bare `return;` in both non-void functions, so the
+caller read whatever the compiler left in the return register: a904 (the burn / secondary-damage tick)
+tests e200's result and marks byte[obj+0x36]=0xff on a hit, which is exactly the byte that diverged
+(enemy[6]+0x36, native 0xff vs wasm 0x00 at t=16573) once patch 481 gave the LOS handler real terrain
+heights to work with.
+--- a/fist.c
++++ b/fist.c
+@@ -36100,10 +36100,13 @@
+ undefined4 __allregs FUN_0000_e115(undefined4 param_1)
+ 
+ {
++  /* PATCH 485: the asm tail is `mov gs:[si+0x3f2],ebx; mov [0xea10],0x3c; call e339; ret` -- the service RESULT is the callee's AX and this function's
++   * caller consumes it (the op-0x3c service result).  Ghidra emitted a bare `return;` in a non-void function, leaving the
++   * value to whatever the compiler happened to put in the return register: correct by accident at
++   * -O0 (native), undefined at -O2 (wasm).  Same class as patches 481/484. */
+   *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_1;
+   DAT_2000_aa10 = 0x3c;
+-  FUN_0000_e339();
+-  return;
++  return FUN_0000_e339();
+ }
+ 
+ 
+@@ -36208,8 +36211,11 @@
+ undefined4 __allregs FUN_0000_e200(undefined4 param_1,int param_2)   /* PATCH 340: object HOST ptr (was undefined2->truncated) */
+ 
+ {
+-  FUN_0000_e21c(param_1,DAT_2000_aa2c,param_2);
+-  return;
++  /* PATCH 485: the asm tail is `mov gs,[0xea2e]; mov si,[0xea2c]; jmp 0xe21c (a tail JUMP)` -- the service RESULT is the callee's AX and this function's
++   * caller consumes it (a904's burn/secondary-damage tick tests it as the op-0x58 LOS verdict and marks byte[di+0x36]=0xff).  Ghidra emitted a bare `return;` in a non-void function, leaving the
++   * value to whatever the compiler happened to put in the return register: correct by accident at
++   * -O0 (native), undefined at -O2 (wasm).  Same class as patches 481/484. */
++  return FUN_0000_e21c(param_1,DAT_2000_aa2c,param_2);
+ }
+ 
+ 

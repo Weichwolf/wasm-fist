@@ -1,0 +1,95 @@
+PATCH 480: the muzzle-smoke spawn 9b5c/9b6f -- the engine's largest uninitialised-read site, and the
+native<->wasm divergence carrier of the AZER1 self-play.
+
+asm 0x9b5c-0x9bc5 (DS=DGROUP=0x1c00): every weapon-fire path (7745 and the AH-64 / M3 stations) calls
+9b5c, which spawns a type-0x12 puff with `push di; mov ax,0x12; lcall f69:bb46 (=b1d6); mov si,di; pop di`
+-> SI=the NEW object, DI=the firer (patch 462), then 9b6f places it: the firer's position, the per-type
+muzzle height word[DGROUP:0x9302 + type*2], the firer's heading offset by 03a9(heading, word[DGROUP:
+0x92fa + type*2]) with 03a9's DX lane as the Y component, and finally word[si+0x10] += 0x8000.
+Ghidra passed the UNINITIALISED `unaff_CS` as 9b6f's object (10 uninitialised reads -- the most of any
+function in the engine), hard-wired b1d6's CF to 0, deref'd both objects as host pointers with int*
+scaling (param_2+2 = +8 bytes where the asm reads [di+4]) and read the two DGROUP tables at raw negative
+addresses.  Because -O0 (native) and -O2 (wasm) leave different garbage in that slot, each shot wrote the
+puff to a different DGROUP offset per target: the AZER1 self-play stayed identical for 42 frames and then
+drifted (one extra type-0x11 child on wasm at t=334, found by adding a per-type census to the cross-target
+FIST_SIMTRACE2 fingerprint).
+--- a/fist.c
++++ b/fist.c
+@@ -25885,13 +25885,18 @@
+ void __allregs FUN_0000_9b5c(undefined2 param_1)
+ 
+ {
+-  undefined2 unaff_CS;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_b1d6(0x12,param_1);
+-  if (!(bool)in_CF) {
+-    FUN_0000_9b6f(param_1,unaff_CS);
+-  }
++  /* PATCH 480: MUZZLE-SMOKE spawn (asm 0x9b5c-0x9b6e), called by EVERY weapon-fire path (7745, the AH-64
++   * stations 88d1/888c/8916 and the M3's 8121/8176/81bb).  `push di; mov ax,0x12; lcall f69:bb46 (=b1d6);
++   * mov si,di; pop di; jb ret; call 9b6f` -> SI=the NEW type-0x12 puff, DI=the firer (patch 462).
++   * Ghidra passed the UNINITIALISED pseudo-var `unaff_CS` as 9b6f's object and hard-wired b1d6's CF to 0
++   * -- the single largest uninitialised-read site in the engine (10 of them), and the reason the AZER1
++   * self-play diverged native<->wasm: -O0 and -O2 leave different garbage in that slot, so the puff was
++   * built at a different DGROUP offset on each target and the object population drifted apart (one extra
++   * type-0x11 child on wasm by t=334). */
++  extern unsigned char g_fist_cf;
++  uint16_t di = (uint16_t)param_1;                                  /* the firer near offset */
++  uint16_t si = (uint16_t)FUN_1000_b1d6(0x12,(int *)(uintptr_t)di); /* 9b60 -> DI = the new object */
++  if (!(bool)g_fist_cf) FUN_0000_9b6f((int)si,(int *)(uintptr_t)di);
+   return;
+ }
+ 
+@@ -25901,24 +25906,33 @@
+ void __allregs FUN_0000_9b6f(int param_1,int *param_2)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  int iVar3;
+-  
+-  *(undefined1 *)(param_1 + 0x19) = 0;
+-  *(undefined2 *)(param_1 + 0x1a) = 0;
+-  *(undefined2 *)(param_1 + 0x14) = 0x200;
+-  *(undefined4 *)(param_1 + 4) = *(undefined4 *)(param_2 + 2);
+-  *(undefined4 *)(param_1 + 8) = *(undefined4 *)(param_2 + 4);
+-  iVar3 = *param_2 * 2;
+-  *(long *)(param_1 + 0xc) = (ulong)*(uint *)(iVar3 + -0x6cfe) + *(long *)(param_2 + 6);
+-  iVar1 = param_2[8];
+-  *(int *)(param_1 + 0x10) = iVar1;
+-  iVar2 = *(int *)(iVar3 + -0x6d06);
+-  iVar1 = FUN_0000_03a9(iVar1,iVar2,iVar3);
+-  *(long *)(param_1 + 4) = *(long *)(param_1 + 4) + (long)iVar1;
+-  *(long *)(param_1 + 8) = *(long *)(param_1 + 8) + (long)iVar2;
+-  *(int *)(param_1 + 0x10) = *(int *)(param_1 + 0x10) + -0x8000;
++  /* PATCH 480: place the muzzle puff (asm 0x9b6f-0x9bc5; DS=DGROUP=0x1c00).  si=param_1 = the NEW type-
++   * 0x12 object, di=param_2 = the firer.  byte[si+0x19]=0, word[si+0x1a]=0, word[si+0x14]=0x200; the
++   * firer's dword[di+4]/[di+8] are copied over and dword[si+0xc] = word[DGROUP:0x9302 + type*2] +
++   * dword[di+0xc] (the muzzle height for the firer's type word[di]); the firer's heading word[di+0x10]
++   * is copied to word[si+0x10] and offset by 03a9(ax=heading, dx=word[DGROUP:0x92fa + type*2]) -- ax into
++   * X, 03a9's DX lane (patch 462) into Y -- after which word[si+0x10] += 0x8000 (the puff faces back down
++   * the barrel).  Ghidra deref'd both objects as host pointers with int* scaling (param_2+2 = +8 bytes
++   * where the asm reads [di+4]), read the two DGROUP tables at raw negative addresses and dropped 03a9's
++   * DX. */
++  extern unsigned short g_fist_03a9_dx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t si = (uint16_t)param_1, di = (uint16_t)(uintptr_t)param_2, bx;
++  int16_t ax, dxv;
++  dg[(uint16_t)(si + 0x19)] = 0;
++  *(uint16_t *)(dg + (uint16_t)(si + 0x1a)) = 0;
++  *(uint16_t *)(dg + (uint16_t)(si + 0x14)) = 0x200;
++  *(uint32_t *)(dg + (uint16_t)(si + 4)) = *(uint32_t *)(dg + (uint16_t)(di + 4));
++  *(uint32_t *)(dg + (uint16_t)(si + 8)) = *(uint32_t *)(dg + (uint16_t)(di + 8));
++  bx = (uint16_t)(*(uint16_t *)(dg + di) << 1);                       /* 9b8d mov bx,[di]; shl bx,1 */
++  *(uint32_t *)(dg + (uint16_t)(si + 0xc)) =
++      (uint32_t)*(uint16_t *)(dg + (uint16_t)(0x9302 + bx)) + *(uint32_t *)(dg + (uint16_t)(di + 0xc));
++  *(uint16_t *)(dg + (uint16_t)(si + 0x10)) = *(uint16_t *)(dg + (uint16_t)(di + 0x10));
++  dxv = *(int16_t *)(dg + (uint16_t)(0x92fa + bx));                   /* 9ba5 mov dx,[bx-0x6d06] */
++  ax  = (int16_t)FUN_0000_03a9(*(uint16_t *)(dg + (uint16_t)(di + 0x10)),(uint16_t)dxv,0);
++  *(uint32_t *)(dg + (uint16_t)(si + 4)) += (uint32_t)(int32_t)ax;    /* 9bb0 movswl ax */
++  *(uint32_t *)(dg + (uint16_t)(si + 8)) += (uint32_t)(int32_t)(int16_t)g_fist_03a9_dx;
++  *(uint16_t *)(dg + (uint16_t)(si + 0x10)) += 0x8000;                /* 9bc0 addw 0x8000 */
+   return;
+ }
+ 

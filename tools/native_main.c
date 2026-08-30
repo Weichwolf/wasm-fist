@@ -621,6 +621,28 @@ void fist_timer_pump(void){
      * (FIST_FSG_BATTLE selects it).  Reads g_mem only; behaviour-neutral. */
     { static long strace=-2, hbk=-1; static int plive=-1,pa=-1,pb=-1,pg=-1;
       if (strace==-2){ const char*e=getenv("FIST_SIMTRACE2"); strace=e?atol(e):-1; }
+      /* board:0012 cross-target DGROUP hash (FIST_SIMHASH=1): one line per engine tick with a 32-block
+       * FNV-1a fingerprint of the object/AI region, so the FIRST diverging tick AND the block that
+       * carries it can be found by diffing the native and wasm logs.  Read-only, env-gated. */
+      /* board:0012 one-shot raw dump of the object region at a chosen tick (FIST_SIMDUMP=<tick>,
+       * FIST_SIMDUMP_OUT=<path>) so native and wasm can be diffed byte-for-byte.  Read-only, env-gated. */
+      { static int sd=-2; static int done=0;
+        if (sd==-2){ const char*e=getenv("FIST_SIMDUMP"); sd = e?atoi(e):-1; }
+        if (sd>=0 && !done && g_mem[0x1c000+0x1549]==0x1c &&
+            *(unsigned short*)(g_mem+0x1c452) == (unsigned short)sd) {
+          const char *o = getenv("FIST_SIMDUMP_OUT"); FILE *f = fopen(o?o:"/tmp/fist_simdump.bin","wb");
+          if (f){ fwrite(g_mem+0x1c000+0x9000,1,0x5000,f); fclose(f); }
+          done = 1; fprintf(stderr,"[simdump] wrote DGROUP 0x9000..0xdfff at t=%d\n", sd); } }
+      { static int sh=-1; static unsigned pt=0xffffffffu;
+        if (sh<0) sh = getenv("FIST_SIMHASH") ? 1 : 0;
+        if (sh && g_mem[0x1c000+0x1549]==0x1c) {
+          unsigned t2 = *(unsigned short*)(g_mem+0x1c452);
+          if (t2 != pt) { pt = t2;
+            fprintf(stderr,"[simhash] t=%u", t2);
+            for (int b=0;b<32;b++){ unsigned h=2166136261u; const unsigned char *p=g_mem+0x1c000+0x9000+b*0x200;
+              for (int q=0;q<0x200;q++){ h^=p[q]; h*=16777619u; }
+              fprintf(stderr," %08x",h); }
+            fprintf(stderr,"\n"); } } }
       if (strace>0 && g_mem[0x1c000+0x1549]==0x1c) {
         unsigned char *dg=g_mem+0x1c000; unsigned t=*(unsigned short*)(dg+0x452);
         unsigned short *fbc=(unsigned short*)(dg+0xdfbc);
@@ -630,8 +652,16 @@ void fist_timer_pump(void){
         long bucket=t/strace; unsigned short ps=fbc[0]; long px=0,py=0; int pctl=0;
         if(ps){ px=*(int*)(dg+(unsigned short)(ps+4)); py=*(int*)(dg+(unsigned short)(ps+8)); pctl=dg[(unsigned short)(ps+0x17)]; }
         if (live!=plive||a!=pa||b!=pb||goals!=pg||bucket!=hbk){
-          fprintf(stderr,"[simtrace2] t=%u live=%d goals=%d a294=%d a296=%d player{slot=%04x X=%ld Y=%ld f17=%02x}%s\n",
+          fprintf(stderr,"[simtrace2] t=%u live=%d goals=%d a294=%d a296=%d player{slot=%04x X=%ld Y=%ld f17=%02x}%s",
             t,live,goals,a,b,ps,px,py,pctl,(live!=plive||a!=pa||b!=pb||goals!=pg)?"  <<CHANGE":"");
+          /* board:0012 per-TYPE census of the display table: which spawn class differs native<->wasm. */
+          { static int types=-1; if (types<0) types = getenv("FIST_SIMTYPES") ? 1 : 0;
+            if (types) { int h[64]; for(int q=0;q<64;q++) h[q]=0;
+              for (int i2=0;i2<0xb6;i2++){ unsigned short s2=fbc[i2*2]; if(!s2) continue;
+                unsigned short ty=*(unsigned short*)(dg+s2); h[ty<64?ty:63]++; }
+              fprintf(stderr,"  types=");
+              for(int q=0;q<64;q++) if(h[q]) fprintf(stderr,"%02x:%d,",q,h[q]); } }
+          fprintf(stderr,"\n");
           plive=live;pa=a;pb=b;pg=goals;hbk=bucket;
         }
       }
@@ -1557,9 +1587,18 @@ int fist_extender_gate(void) {
      * the units' Z [obj+0xc] is NOT terrain-following (the absent 32-bit-PM flight model does not sit units
      * on the ground -- proven: forcing terrain-follow Z makes candidates VISIBLE).  Wiring the per-unit
      * terrain-follow Z (like the camera-alt at the op-0x24 block) will activate this LOS -> target lock. */
-    if (op == 0x54 && g_ext_ready && g_fist_after_map && g_fist_op54_proj) {
+    /* board:0012 op-0x54 TERRAIN-HEIGHT service.  The engine posts the DGROUP near offset of a position
+     * pair (X,Y dwords) in the TCB inbox (TCB+0x3f2, written by e1d1/e1a6/adcd/9db1 as obj+4) and stores
+     * the returned byte as that object's ground height [obj+0xd]; 9e2b slews the hull to it and e1a6
+     * returns [obj+0xd]-[obj+0x18] (the slope) so the AI can tell up- from down-hill.  Same heightmap and
+     * index packing as the decoded op-0x58 LOS handler below (ext+0x85bc, the op-0x24 voxel map).  It used
+     * to answer only the projectile query (g_fist_op54_proj), leaving every OBJECT height 0. */
+    if (op == 0x54 && g_ext_ready && g_fist_after_map) {
         *(uint16_t*)(dg + 0xea10) = 0; uint8_t *xb54=g_mem+FIST_EXT_BASE; uint8_t *hm54=(uint8_t*)(uintptr_t)(*(uint32_t*)(xb54+0x85bc));
-        uint16_t pp=g_fist_op54_proj; int32_t X=*(int32_t*)(dg+(uint16_t)(pp+4)),Y=*(int32_t*)(dg+(uint16_t)(pp+8));
+        uint32_t tcb54 = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        uint16_t pp = g_fist_op54_proj ? (uint16_t)(g_fist_op54_proj + 4)
+                                       : (uint16_t)*(uint32_t*)(g_mem + tcb54 + 0x3f2);
+        int32_t X=*(int32_t*)(dg+pp),Y=*(int32_t*)(dg+(uint16_t)(pp+4));
         uint32_t idx=((((uint32_t)(-(int32_t)((uint32_t)Y<<13))>>22)&0x3ff)<<10)|(((uint32_t)X<<13)>>22&0x3ff);
         return hm54?(int)hm54[idx&0x3fffff]:0; }
     if (op == 0x58 && g_ext_ready && g_fist_after_map) {
