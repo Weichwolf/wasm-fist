@@ -6131,3 +6131,34 @@ MGA image at offsets 0x2bb0 and 0x540c -- two method tables; identify which tabl
 mission setup and what the engine puts in AL there.  Note the board already records that FUN_0000_60d9,
 the other known route to mga-0x2604, is never reached and leaves the SRC descriptor word[0x7ac0]
 unpopulated, so this is a different, live path.
+
+## cont.65k -- AZER1 and AZER4 are native<->wasm IDENTICAL in SIM **and** RENDER
+
+The render chain cont.65f isolated is closed.  The last two carriers:
+
+  522  FUN_0000_2604, the sprite CLIP-MASK setter, is a WORD xchg (`cbtw ; xchg ax,[0x1586]`) that the
+       decompile did as a 4-byte read/write, so the sign-extension high half landed in
+       DGROUP:0x1588..0x1589 -- the clip word 260c fills with its own result and 26a1/279d/294d read back
+       as the blit ROW.  Every call to the setter silently corrupted the next sprite blit's row.
+
+  523  The two [DGROUP:0x6b0] calls in FUN_0000_378e (the mission render walk) are a SAVE/RESTORE PAIR:
+           378e: mov ax,0xffff ; lcall [0x6b0] ; push ax   <- 2604 is an XCHG, it RETURNS the old mask
+           37c2: pop ax        ; lcall [0x6b0]             <- put it back
+       Ghidra dropped both the push and the pop, so the restoring call ran on an uninitialised AX.
+       [0x6b0] was identified from the MGA vector-install table at image 0x5406, which is (slot, method)
+       pairs: 0x06ac->0x25d1, 0x06b0->0x2604, 0x06b4->0x26a1, 0x06b8->0x2660.
+
+RESULT (6000-tick windows; fingerprint = DGROUP 0x9000..0xefff plus the enumerated render block
+0x1586..0x158f):
+
+    AZER1   IDENTICAL (sim + render) over 5726 in-mission ticks
+    AZER4   IDENTICAL (sim + render) over 5726 in-mission ticks
+    AZER2   diverges t=373, block 0xb800 -- back in the SIM region, a different carrier
+    SYRIA1  identical to t=3745, then the wasm run leaves the cockpit early
+
+Self-play sweep unchanged at 38/47 (521-523 are parity fixes; 519 was the one that moved the count).
+Native verify matrix 177 PASS / 0 FAIL, re-run per patch series.
+
+NEXT: AZER2 at t=373, block 0xb800, with the same three-run method.  Then SYRIA1's early cockpit exit --
+the fingerprint stops because byte[DGROUP:0x1549] leaves 0x1c on wasm, so the carrier is whatever drives
+that transition, and it is below 0x9000 and outside the enumerated render set.
