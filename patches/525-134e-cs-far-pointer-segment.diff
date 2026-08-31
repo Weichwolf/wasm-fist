@@ -1,0 +1,33 @@
+PATCH 525: `mov %cs,0x3e2` stored an uninitialised pseudo-var.
+
+asm 0x134e-0x1357 (FUN_0000_134e):
+    134e: c7 06 e0 03 74 13   movw $0x1374,0x3e0     ; the far pointer's OFFSET
+    1354: 8c 0e e2 03         mov  %cs,0x3e2         ; ...and its SEGMENT
+
+FUN_0000_134e lives in the CS=0x0000 cluster -- its linear address IS its offset, and the stored target
+0x1374 decodes as real code there (`pop %ss:0x3a ; call *%ss:0x3a`) -- so the segment written is 0.
+
+Ghidra emitted `DAT_1000_c3e2 = unaff_CS;`, an uninitialised pseudo-var: undefined behaviour, and hence a
+different value under gcc -m32 (0x994e observed at DGROUP:0x3e2) than under emcc (0).  This is one of the
+`mov [mem],cs` sites board:0010 exists to eliminate wholesale by setting CS context in the Ghidra
+pipeline; until that lands it is corrected here.
+
+It is one of the ten bytes still differing between the targets in AZER2's whole-DGROUP dump at t=372.
+--- a/fist.c
++++ b/fist.c
+@@ -7179,7 +7179,14 @@
+   if (DAT_1000_c246 == 0x56) {
+     bVar1 = 0x4d;
+   }
+-  DAT_1000_c3e2 = unaff_CS;
++  /* PATCH 525: asm 0x1354 `8c 0e e2 03  mov %cs,0x3e2` -- the CS half of the far pointer whose offset
++   * 0x134e has just written to DGROUP:0x3e0 (`movw $0x1374,0x3e0`).  FUN_0000_134e lives in the
++   * CS=0x0000 cluster (its linear address IS its offset, and the target 0x1374 decodes as code there),
++   * so the segment stored is 0.  Ghidra had the uninitialised `unaff_CS` pseudo-var here -- one of the
++   * class board:0010 exists to eliminate wholesale -- which is undefined behaviour and therefore a
++   * different value under gcc -m32 (0x994e observed) than under emcc (0). */
++  DAT_1000_c3e2 = 0;                                  /* 1354 mov [0x3e2],cs  (CS = 0x0000) */
++  (void)unaff_CS;
+   FUN_1000_5177(bVar1,param_1,param_2,param_3,0x1366,param_4);
+   if (bVar2) {
+     FUN_1000_5119();
