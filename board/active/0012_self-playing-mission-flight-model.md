@@ -5945,3 +5945,26 @@ excludes (it holds the shim's far-vector table with real host addresses), so the
 longer see it.  NEXT: extend the fingerprint with a second, explicitly enumerated set of low-DGROUP
 render words (0x1586..0x158f, 0x3ae2, 0x078e, 0x03e2, 0x16b0, 0x2672) so the walk can continue with the
 same three-run method, and chase 260c's clip decision from there.
+
+## cont.65g -- the fingerprint now sees the render side, and it answers immediately
+
+FIST_SIMHASH gained a 49th column: an FNV-1a over an EXPLICITLY ENUMERATED set of low-DGROUP render
+words -- 0x03e2..0x03e3, 0x078e..0x078f, 0x1586..0x158f, 0x16b0..0x16b1, 0x2672, 0x3ae2..0x3ae3, i.e.
+exactly the 17 bytes the cont.65f whole-DGROUP dump isolated.  Enumerating them rather than hashing the
+whole low DGROUP keeps the shim's far-vector table (real host addresses, different by construction) out
+of the fingerprint while letting the same first-differing-tick walk continue into the render side.
+
+First measurement with it:
+
+    AZER1   sim columns IDENTICAL for the whole 5726-tick window; RENDER column differs at t=274
+    SYRIA1  same -- RENDER column differs at t=274
+
+t=274 is the FIRST in-mission tick.  So the render-side divergence is not something the combat cascade
+introduced: it is there from the first frame the cockpit exists, and it has simply been invisible until
+now because the fingerprint deliberately did not look below 0x9000.  The sim halves of AZER1 and SYRIA1
+are bit-identical across the entire measured run.
+
+NEXT: walk it with the same three-run method, starting at t=274 -- dump both targets, diff, and
+watchpoint the first differing byte.  The prime suspect is already named: FUN_0000_260c's clip
+calculation (patch 114), whose outputs are 0x1586..0x158e, where native had 0xffac/0xffff and wasm zeros
+at SYRIA1 t=3471 -- one target taking the "clipped out" exit and the other not.

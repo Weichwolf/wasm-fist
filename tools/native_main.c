@@ -645,6 +645,20 @@ void fist_timer_pump(void){
             for (int b=0;b<48;b++){ unsigned h=2166136261u; const unsigned char *p=g_mem+0x1c000+0x9000+b*0x200;
               for (int q=0;q<0x200;q++){ h^=p[q]; h*=16777619u; }
               fprintf(stderr," %08x",h); }
+            /* board:0012 cont.65f: a 49th column over an EXPLICIT set of low-DGROUP RENDER words.  The
+             * bulk of the low DGROUP stays excluded (it holds the shim's far-vector table with real host
+             * addresses, which differ by construction), but the sim region is now bit-identical on the
+             * missions that used to diverge, and everything still differing lives down here -- the MGA
+             * sprite clip words 260c computes (0x1586..0x158f, patch 114) and the display-list pointers
+             * around them.  Enumerating them keeps the fingerprint free of host addresses while letting
+             * the same first-differing-tick walk continue into the render side. */
+            { static const unsigned short rw[] = {
+                0x03e2,0x03e3, 0x078e,0x078f,
+                0x1586,0x1587,0x1588,0x1589,0x158a,0x158b,0x158c,0x158d,0x158e,0x158f,
+                0x16b0,0x16b1, 0x2672, 0x3ae2,0x3ae3 };
+              unsigned h=2166136261u;
+              for (unsigned q=0;q<sizeof(rw)/sizeof(rw[0]);q++){ h^=g_mem[0x1c000+rw[q]]; h*=16777619u; }
+              fprintf(stderr," R%08x",h); }
             fprintf(stderr,"\n"); } } }
       if (strace>0 && g_mem[0x1c000+0x1549]==0x1c) {
         unsigned char *dg=g_mem+0x1c000; unsigned t=*(unsigned short*)(dg+0x452);
