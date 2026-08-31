@@ -1,0 +1,72 @@
+PATCH 497: four `call/lcall *%cs:table(%bx)` dispatches read the table 0x10000 too high.
+
+FUN_0000_899c, FUN_0000_91b8, FUN_0000_9e2b and FUN_0000_b918 all live in the CS=0x0000 cluster
+(linear address == offset: their near calls resolve as such -- e.g. 91b8's `91fd: e8 3c 2d` -> 0xbf3c),
+so a `%cs:`-relative table operand is at linear <offset>, exactly like the CS-relative dispatch tables
+patches 244/250/365 already rebase as `g_mem + 0x7c91` / `+ 0x8858` / `+ 0x90a0` with no extra base.
+These four instead read `g_mem + 0x10000 + <offset>`, i.e. the CS=0x1000 image, which holds ordinary
+code bytes there.  Verified against the image:
+
+  image 0x89ee: 91 8a 69 0f  e6 8a 69 0f  2b 8b 69 0f  75 8b 69 0f
+                -> 0f69:{8a91,8ae6,8b2b,8b75}, exactly 899c's four switch cases
+  image 0x9206: 41 92 69 0f  fc 91 69 0f  86 92 69 0f  05 93 69 0f  cb 92 69 0f
+                -> 0f69:{9241,91fc,9286,9305,92cb}, exactly 91b8's five switch cases
+  image 0x9f0f: near offsets {9f1d, 9f66, 9fe5, a069, a07c, a02a} -- 9e2b's own neighbourhood
+  image 0xb93f: near offsets {b945, b945, b998, ...}              -- b918's own neighbourhood
+  image 0x19206: 0e e8 81 c3 8b 85 af 00 ...  (code)
+
+899c and 91b8 are the WEAPON-STATION step of the two armour classes: 902c (object type 2) dispatches
+91b8 and 87df dispatches 899c, each the type's equivalent of 7c1d's 7e29.  Measured on AZER1 self-play:
+91b8 was entered 10224 times in 20000 ticks with the gate open (byte[di+0x91]=0x02, reload
+byte[di+0xa8]=0) and NOT ONE of its five station handlers ran -- the garbage vector always fell through
+to the honest `default` fallback.  So no type-2 unit had ever fired a shot, which is why the AI-vs-AI
+self-play could destroy nothing and no mission could reach a resolved victory/defeat.
+
+Only the table base changes; the index scaling (`shl $1,%bx` for the 4-byte far tables, unscaled for the
+byte-indexed word tables) is already faithful.
+--- a/fist.c
++++ b/fist.c
+@@ -23163,7 +23163,9 @@
+   o[0xcd] = 3;
+   if (o[0x91] != 6 && o[0xa8] != 0) return;                    /* 89aa/89b1 */
+   bx = (uint16_t)(o[0x91] << 1);                               /* 89b8 movzbw; shl 1 */
+-  vec = *(uint32_t *)(g_mem + 0x10000 + (uint16_t)(0x89ee + bx));   /* 89bf lcall cs:[0x89ee+bx] */
++  /* PATCH 497: CS=0, not 0x1000 -- see the patch header.  Table verified at image 0x89ee:
++   * {0f69:8a91, 0f69:8ae6, 0f69:8b2b, 0f69:8b75}, exactly the four switch cases below. */
++  vec = *(uint32_t *)(g_mem + (uint16_t)(0x89ee + bx));            /* 89bf lcall cs:[0x89ee+bx] */
+   g_fist_cf = 0;
+   switch ((uint16_t)vec) {          /* the four entries of the CS far-pointer table (all segment 0x0f69) */
+     case 0x8a91: FUN_1000_8121(0,0,0,(int)di,0); break;
+@@ -24463,7 +24465,9 @@
+   o[0xcf] = 3;
+   if (o[0x91] != 6 && o[0xa8] != 0) return;                    /* 91c2/91c9 */
+   bx = (uint16_t)(o[0x91] << 1);                               /* 91d0 movzbw; shl 1 */
+-  vec = *(uint32_t *)(g_mem + 0x10000 + (uint16_t)(0x9206 + bx));   /* 91d7 lcall cs:[0x9206+bx] */
++  /* PATCH 497: CS=0, not 0x1000 -- see the patch header.  Table verified at image 0x9206:
++   * {0f69:9241, 0f69:91fc, 0f69:9286, 0f69:9305, 0f69:92cb}, exactly the five switch cases below. */
++  vec = *(uint32_t *)(g_mem + (uint16_t)(0x9206 + bx));            /* 91d7 lcall cs:[0x9206+bx] */
+   g_fist_cf = 0;
+   switch ((uint16_t)vec) {          /* the five entries of the CS far-pointer table (all segment 0x0f69) */
+     case 0x9241: FUN_1000_88d1(0,0,0,(int)di,0); break;
+@@ -26414,7 +26418,9 @@
+     *(uint16_t *)(o + 0x10) += (uint16_t)d; }
+   *(uint16_t *)(o + 0x23) -= 1;
+   if ((*(uint16_t *)(o + 0x23) & 0x1f) == 0) {                       /* 9ec1 testw 0x1f */
+-    uint16_t vec = *(uint16_t *)(g_mem + 0x10000 + 0x9f0f + o[0x25]); /* 9ecd call cs:[0x9f0f+bx] */
++    /* PATCH 497: CS=0, not 0x1000.  Table verified at image 0x9f0f: near offsets
++     * {0x9f1d, 0x9f66, 0x9fe5, 0xa069, 0xa07c, 0xa02a}, all inside this function's own neighbourhood. */
++    uint16_t vec = *(uint16_t *)(g_mem + (uint16_t)(0x9f0f + o[0x25])); /* 9ecd call cs:[0x9f0f+bx] */
+     (*(code *)fist_icall_near(0x0u,vec))((int)di);
+   }
+   if (o[0x33] > 10 && (*(uint16_t *)(dg + 0x6cde) & 3) == 0) {
+@@ -30397,7 +30403,9 @@
+   if ((dg[(uint16_t)(si + 0x16)] & 1) == 0) {
+     bx = o[0x2a];
+     if (bx <= 4) {
+-      uint16_t vec = *(uint16_t *)(g_mem + 0x10000 + 0xb93f + bx);
++      /* PATCH 497: CS=0, not 0x1000.  Table verified at image 0xb93f: near offsets
++       * {0xb945, 0xb945, 0xb998, ...}, all inside this function's own neighbourhood. */
++      uint16_t vec = *(uint16_t *)(g_mem + (uint16_t)(0xb93f + bx));
+       (*(code *)fist_icall_near(0x0u,vec))((int)di);
+       return;
+     }

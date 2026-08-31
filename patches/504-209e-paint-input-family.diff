@@ -1,0 +1,357 @@
+PATCH 504: the whole 209e cockpit paint/input method family base-lost the player near offset.
+
+DAT_2000_2d34 (DGROUP:0x6d34) holds the PLAYER object's NEAR OFFSET -- FUN_0000_466c stores it that way
+(patch 300) -- and every member of this family dereferenced it as a host pointer.  The group splits in
+two shapes, both dispatched by the 209e display-list walk (patch 142):
+
+  INPUT handlers (80b5, 8123, 816d, 81b7, 820b): `test ax,0x80; je -> stc` / `test ax,1; jne -> clc`,
+  then act on the player object.  All five also dropped the clc/stc contract the walk consumes.
+      80b5  turret centre:  bit2 -> word[di+0x8b]=0, bit4 -> 0x8000, both then a2a8 (already near-offset,
+            patch 261).
+      8123  weapon select:  `mov si,[bx+2]; movb [bp+si],3`, and on bits 0x14
+            `mov al,[bp+si+1]; mov [di+0x86],al; lcall 0f69:8999` (== linear 0x18029, FUN_1000_8029).
+      816d  hatch:          byte[di+0xc9]=3, byte[di+0x3e]=6 (or 0 on bits 0x14/0x400).
+      81b7  816d's twin:    byte[di+0xca]=3, byte[di+0x3e]=8.
+      820b  fire:           byte[di+0xde]=byte[di+0xdf]=3, then aae8 + `orb [di+0x17],0x80`, else
+            `andb [di+0x17],0x7f`.
+
+  PAINT methods (80eb, 819c, 81e6, 8243; 8152 was patch 503): they run with BX = the display-list
+  element's near offset and BP = the walk base.  The walk publishes BX to DGROUP:0x3e08 (`mov [0x3e08],bx`)
+  and BP to g_fist_paintbp (patch 142), and the port's dispatch is arg-less, so both are read back from
+  there.  Ghidra dereferenced the element as a host pointer, emitted the `addw/subw [bx+2],K` pairs as
+  4-byte int read-modify-writes, and dropped the (ax,bx) argument pair of every `lcall [0x6b4]`.
+      80eb  weapon-select plate: glyph base 0x3d8/0x3e8/0x3f8 by byte[bp+[bx+2]+1], +8 if it matches
+            byte[di+0x86] else + byte[di+0x3f].
+      819c  8152's twin: byte[di+0x3f]+0x418, offset 0x2f.
+      81e6  two-glyph gauge: (byte[di+0x3f]+0x428, 0x90d6) then (byte[di+0x3f]+0x438, 0x90de).
+      8243  weapon-station plate: `mov bl,[bp+si+1]; mov ax,[bx-0x6f1a]` -- a WORD at DGROUP:(0x90e6+bl),
+            the index UNSCALED because the stored ids are pre-scaled -- then +8 if bl == byte[di+0x91]
+            else + byte[di+0x3f].
+
+None of this could run before patches 499-503 let the player-death path complete and the post-death
+event drain reach the display-list walk.
+--- a/fist.c
++++ b/fist.c
+@@ -21885,24 +21885,28 @@
+ void __allregs FUN_0000_80b5(uint param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
+-  if ((param_1 & 0x80) == 0) {
++  /* PATCH 504: the TURRET-CENTRE input handler (asm 0x80b5-0x80ea).  `test ax,0x80; je -> stc` /
++   * `test ax,1; jne -> clc`; bit2 sets word[di+0x8b]=0, bit4 sets 0x8000, both then call a2a8 (which
++   * already takes the near offset, patch 261).  The clc/stc contract was dropped as well.
++   * DAT_2000_2d34 (DGROUP:0x6d34) is the PLAYER object's NEAR OFFSET -- patch 300 stores it that way --
++   * and Ghidra dereferenced it as a host pointer in every member of this family. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_paintbp;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned int ax = param_1;
++  (void)g_fist_paintbp;
++  if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }              /* 80b5/80b8 -> 80e9 stc */
++  g_fist_cf = 0;
++  if ((ax & 1) != 0) return;                                    /* 80ba -> 80e7 clc */
++  if ((ax & 4) != 0) {                                          /* 80bf -> 80cb */
++    *(unsigned short *)(dg + (unsigned short)(di + 0x8b)) = 0;   /* 80cf movw */
++    FUN_0000_a2a8((int)di);                                     /* 80d5 */
+     return;
+   }
+-  if ((param_1 & 1) == 0) {
+-    if ((param_1 & 4) != 0) {
+-      *(undefined2 *)(DAT_2000_2d34 + 0x8b) = 0;
+-      FUN_0000_a2a8(iVar1);
+-      return;
+-    }
+-    if ((param_1 & 0x10) == 0) {
+-      return;
+-    }
+-    *(undefined2 *)(DAT_2000_2d34 + 0x8b) = 0x8000;
+-    FUN_0000_a2a8(iVar1);
+-  }
++  if ((ax & 0x10) == 0) return;                                 /* 80c4 -> 80c9 clc */
++  *(unsigned short *)(dg + (unsigned short)(di + 0x8b)) = 0x8000;/* 80de movw */
++  FUN_0000_a2a8((int)di);                                       /* 80e4 */
+   return;
+ }
+ 
+@@ -21912,7 +21916,26 @@
+ void __allregs FUN_0000_80eb(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 504: the WEAPON-SELECT plate paint method (asm 0x80eb-0x8122), dispatched by the 209e display-list
++   * walk with BX = the element near offset and BP = the walk base (the walk publishes BX to
++   * DGROUP:0x3e08 and BP to g_fist_paintbp, patch 142).  `add bp,[bx+2]; mov dl,[bp+1]` selects the
++   * glyph base 0x3d8/0x3e8/0x3f8, then +8 if it matches byte[di+0x86] else + byte[di+0x3f].
++   * DAT_2000_2d34 (DGROUP:0x6d34) is the PLAYER object's NEAR OFFSET -- patch 300 stores it that way --
++   * and Ghidra dereferenced it as a host pointer in every member of this family. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_paintbp;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = *(unsigned short *)(dg + 0x3e08);
++  unsigned short bp = (unsigned short)(g_fist_paintbp + *(unsigned short *)(dg + (unsigned short)(bx + 2))); /* 80f0 */
++  unsigned char dl = dg[(unsigned short)(bp + 1)];              /* 80f3 */
++  unsigned short ax = 0x3d8;                                    /* 80f6 */
++  (void)g_fist_cf;
++  if (dl != 1) { ax = 0x3e8; if (dl != 2) ax = 0x3f8; }         /* 80f9-8106 */
++  if (dl == dg[(unsigned short)(di + 0x86)]) ax = (unsigned short)(ax + 8);   /* 8109/810f */
++  else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]);           /* 8114/8118 */
++  bx = (unsigned short)(bx + 4);                                /* 811a lea bx,[bx+4] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);  /* 811d */
+   return;
+ }
+ 
+@@ -21922,23 +21945,29 @@
+ void __allregs FUN_0000_8123(uint param_1,int param_2,int param_3)
+ 
+ {
+-  int iVar1;
+-  int iVar2;
+-  
+-  iVar2 = DAT_2000_2d34;
+-  if ((param_1 & 0x80) == 0) {
+-    return;
+-  }
+-  if ((param_1 & 1) == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x3f) = *(byte *)(DAT_2000_2d34 + 0x3f) ^ 8;
+-    iVar1 = *(int *)(param_2 + 2);
+-    *(undefined1 *)(param_3 + iVar1) = 3;
+-    if ((param_1 & 0x14) == 0) {
+-      return;
+-    }
+-    *(undefined1 *)(iVar2 + 0x86) = *(undefined1 *)(param_3 + iVar1 + 1);
+-    FUN_1000_8029(iVar2);
+-  }
++  /* PATCH 504: the WEAPON-SELECT click handler (asm 0x8123-0x8151).  BX/BP as in 80eb; `mov si,[bx+2];
++   * movb [bp+si],3` marks the cell dirty, and on bits 0x14 it loads byte[bp+si+1] into byte[di+0x86]
++   * and calls 0f69:8999 (== linear 0x18029, FUN_1000_8029).  Ghidra host-deref'd the cell AND the
++   * player, read [bx+2] as a 4-byte int, and dropped the clc/stc contract.
++   * DAT_2000_2d34 (DGROUP:0x6d34) is the PLAYER object's NEAR OFFSET -- patch 300 stores it that way --
++   * and Ghidra dereferenced it as a host pointer in every member of this family. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_paintbp;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned int ax = param_1;
++  unsigned short bx, bp, si;
++  if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }              /* 8123/8126 -> 8150 stc */
++  g_fist_cf = 0;
++  if ((ax & 1) != 0) return;                                    /* 8128 -> 814e clc */
++  bx = *(unsigned short *)(dg + 0x3e08);
++  bp = g_fist_paintbp;
++  dg[(unsigned short)(di + 0x3f)] = (unsigned char)(dg[(unsigned short)(di + 0x3f)] ^ 8); /* 8131 */
++  si = *(unsigned short *)(dg + (unsigned short)(bx + 2));      /* 8135 mov si,[bx+2] */
++  dg[(unsigned short)(bp + si)] = 3;                            /* 8138 movb [bp+si],3 */
++  if ((ax & 0x14) == 0) return;                                 /* 813b -> 8140 clc */
++  dg[(unsigned short)(di + 0x86)] = dg[(unsigned short)(bp + si + 1)];  /* 8142/8145 */
++  FUN_1000_8029((int)di);                                       /* 8149 */
+   return;
+ }
+ 
+@@ -21976,21 +22005,26 @@
+ void __allregs FUN_0000_816d(uint param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
+-  if ((param_1 & 0x80) == 0) {
++  /* PATCH 504: the HATCH input handler (asm 0x816d-0x819b): toggle byte[di+0x3f] bit3, mark byte[di+0xc9]=3,
++   * and set byte[di+0x3e] to 6 unless bits 0x14/0x400 are set (then 0).  clc/stc restored.
++   * DAT_2000_2d34 (DGROUP:0x6d34) is the PLAYER object's NEAR OFFSET -- patch 300 stores it that way --
++   * and Ghidra dereferenced it as a host pointer in every member of this family. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_paintbp;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned int ax = param_1;
++  (void)g_fist_paintbp;
++  if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }              /* 816d/8170 -> 819a stc */
++  g_fist_cf = 0;
++  if ((ax & 1) != 0) return;                                    /* 8172 -> 8198 clc */
++  dg[(unsigned short)(di + 0x3f)] = (unsigned char)(dg[(unsigned short)(di + 0x3f)] ^ 8); /* 817b */
++  dg[(unsigned short)(di + 0xc9)] = 3;                          /* 817f */
++  if ((ax & 0x14) == 0 && (ax & 0x400) == 0) {                  /* 8184/8189 */
++    dg[(unsigned short)(di + 0x3e)] = 6;                        /* 818e */
+     return;
+   }
+-  if ((param_1 & 1) == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x3f) = *(byte *)(DAT_2000_2d34 + 0x3f) ^ 8;
+-    *(undefined1 *)(iVar1 + 0xc9) = 3;
+-    if (((param_1 & 0x14) == 0) && ((param_1 & 0x400) == 0)) {
+-      *(undefined1 *)(iVar1 + 0x3e) = 6;
+-      return;
+-    }
+-    *(undefined1 *)(iVar1 + 0x3e) = 0;
+-  }
++  dg[(unsigned short)(di + 0x3e)] = 0;                          /* 8194 */
+   return;
+ }
+ 
+@@ -22000,12 +22034,19 @@
+ void __allregs FUN_0000_819c(int param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = param_1 + 4;
+-  *(int *)(param_1 + 6) = *(int *)(param_1 + 6) + 0x2f;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *(int *)(iVar1 + 2) = *(int *)(iVar1 + 2) + -0x2f;
++  /* PATCH 504: 8152's twin (asm 0x819c-0x81b6): same shape, glyph base 0x418 and offset 0x2f.
++   * DAT_2000_2d34 (DGROUP:0x6d34) is the PLAYER object's NEAR OFFSET -- patch 300 stores it that way --
++   * and Ghidra dereferenced it as a host pointer in every member of this family. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_paintbp;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x418);   /* 81a0/81a4 */
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);      /* 81a7 */
++  (void)param_1; (void)g_fist_cf; (void)g_fist_paintbp;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 0x2f;   /* 81aa addw [bx+2],0x2f */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);  /* 81ae */
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 0x2f;   /* 81b2 subw */
+   return;
+ }
+ 
+@@ -22015,21 +22056,25 @@
+ void __allregs FUN_0000_81b7(uint param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
+-  if ((param_1 & 0x80) == 0) {
++  /* PATCH 504: 816d's twin (asm 0x81b7-0x81e5): byte[di+0xca]=3 and byte[di+0x3e]=8.
++   * DAT_2000_2d34 (DGROUP:0x6d34) is the PLAYER object's NEAR OFFSET -- patch 300 stores it that way --
++   * and Ghidra dereferenced it as a host pointer in every member of this family. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_paintbp;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned int ax = param_1;
++  (void)g_fist_paintbp;
++  if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }              /* 81b7/81ba -> 81e4 stc */
++  g_fist_cf = 0;
++  if ((ax & 1) != 0) return;                                    /* 81bc -> 81e2 clc */
++  dg[(unsigned short)(di + 0x3f)] = (unsigned char)(dg[(unsigned short)(di + 0x3f)] ^ 8); /* 81c5 */
++  dg[(unsigned short)(di + 0xca)] = 3;                          /* 81c9 */
++  if ((ax & 0x14) == 0 && (ax & 0x400) == 0) {                  /* 81ce/81d3 */
++    dg[(unsigned short)(di + 0x3e)] = 8;                        /* 81d8 */
+     return;
+   }
+-  if ((param_1 & 1) == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x3f) = *(byte *)(DAT_2000_2d34 + 0x3f) ^ 8;
+-    *(undefined1 *)(iVar1 + 0xca) = 3;
+-    if (((param_1 & 0x14) == 0) && ((param_1 & 0x400) == 0)) {
+-      *(undefined1 *)(iVar1 + 0x3e) = 8;
+-      return;
+-    }
+-    *(undefined1 *)(iVar1 + 0x3e) = 0;
+-  }
++  dg[(unsigned short)(di + 0x3e)] = 0;                          /* 81de */
+   return;
+ }
+ 
+@@ -22039,8 +22084,21 @@
+ void __allregs FUN_0000_81e6(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 504: the two-glyph gauge paint (asm 0x81e6-0x820a): two [0x6b4] calls with
++   * (byte[di+0x3f]+0x428, 0x90d6) and (byte[di+0x3f]+0x438, 0x90de).  Ghidra dropped both argument
++   * pairs and the player lookup entirely.
++   * DAT_2000_2d34 (DGROUP:0x6d34) is the PLAYER object's NEAR OFFSET -- patch 300 stores it that way --
++   * and Ghidra dereferenced it as a host pointer in every member of this family. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_paintbp;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  (void)g_fist_cf; (void)g_fist_paintbp;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x428),0x90d6);   /* 81ea-81f4 */
++  di = (unsigned short)DAT_2000_2d34;                                       /* 81f8 re-read */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x438),0x90de);   /* 81fc-8206 */
+   return;
+ }
+ 
+@@ -22050,23 +22108,29 @@
+ void __allregs FUN_0000_820b(uint param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
+-  if ((param_1 & 0x80) == 0) {
++  /* PATCH 504: the FIRE input handler (asm 0x820b-0x8242): toggle byte[di+0x3f] bit3, mark byte[di+0xde] and
++   * byte[di+0xdf] = 3, then either arm (aae8 with DI live + `orb [di+0x17],0x80`) or disarm
++   * (`andb [di+0x17],0x7f`).
++   * DAT_2000_2d34 (DGROUP:0x6d34) is the PLAYER object's NEAR OFFSET -- patch 300 stores it that way --
++   * and Ghidra dereferenced it as a host pointer in every member of this family. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_paintbp;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned int ax = param_1;
++  (void)g_fist_paintbp;
++  if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }              /* 820b/820e -> 8241 stc */
++  g_fist_cf = 0;
++  if ((ax & 1) != 0) return;                                    /* 8210 -> 823f clc */
++  dg[(unsigned short)(di + 0x3f)] = (unsigned char)(dg[(unsigned short)(di + 0x3f)] ^ 8); /* 8219 */
++  dg[(unsigned short)(di + 0xde)] = 3;                          /* 821d */
++  dg[(unsigned short)(di + 0xdf)] = 3;                          /* 8222 */
++  if ((ax & 0x400) == 0 && (ax & 0x14) == 0) {                  /* 8227/822c */
++    FUN_0000_aae8((int *)(uintptr_t)ax,(int *)(uintptr_t)di);   /* 8232 call aae8 (DI live) */
++    dg[(unsigned short)(di + 0x17)] = (unsigned char)(dg[(unsigned short)(di + 0x17)] | 0x80); /* 8235 */
+     return;
+   }
+-  if ((param_1 & 1) == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x3f) = *(byte *)(DAT_2000_2d34 + 0x3f) ^ 8;
+-    *(undefined1 *)(iVar1 + 0xde) = 3;
+-    *(undefined1 *)(iVar1 + 0xdf) = 3;
+-    if (((param_1 & 0x400) == 0) && ((param_1 & 0x14) == 0)) {
+-      FUN_0000_aae8(param_1,iVar1);
+-      *(byte *)(iVar1 + 0x17) = *(byte *)(iVar1 + 0x17) | 0x80;
+-      return;
+-    }
+-    *(byte *)(iVar1 + 0x17) = *(byte *)(iVar1 + 0x17) & 0x7f;
+-  }
++  dg[(unsigned short)(di + 0x17)] = (unsigned char)(dg[(unsigned short)(di + 0x17)] & 0x7f);   /* 823b */
+   return;
+ }
+ 
+@@ -22076,7 +22140,27 @@
+ void __allregs FUN_0000_8243(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 504: the WEAPON-STATION plate paint (asm 0x8243-0x826d).  `mov si,[bx+2]; mov bl,[bp+si+1]; xor bh,bh;
++   * mov ax,[bx-0x6f1a]` reads a WORD at DGROUP:(0x90e6 + bl) -- the index is NOT scaled, the ids are
++   * pre-scaled -- then +8 if bl matches byte[di+0x91], else + byte[di+0x3f]; `pop bx; lea bx,[bx+4]`
++   * restores the element pointer for the [0x6b4] call.
++   * DAT_2000_2d34 (DGROUP:0x6d34) is the PLAYER object's NEAR OFFSET -- patch 300 stores it that way --
++   * and Ghidra dereferenced it as a host pointer in every member of this family. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_paintbp;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx0 = *(unsigned short *)(dg + 0x3e08);
++  unsigned short bp = g_fist_paintbp;
++  unsigned short si = *(unsigned short *)(dg + (unsigned short)(bx0 + 2));   /* 8244 */
++  unsigned char bl = dg[(unsigned short)(bp + si + 1)];                      /* 8247 */
++  unsigned short ax = *(unsigned short *)(dg + (unsigned short)(0x90e6 + bl)); /* 824c */
++  unsigned short bx;
++  (void)g_fist_cf;
++  if (bl == dg[(unsigned short)(di + 0x91)]) ax = (unsigned short)(ax + 8);  /* 8254/825a */
++  else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]);          /* 825f/8263 */
++  bx = (unsigned short)(bx0 + 4);                                            /* 8266 */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);               /* 8269 */
+   return;
+ }
+ 

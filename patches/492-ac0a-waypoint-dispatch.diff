@@ -1,0 +1,186 @@
+PATCH 492: the WAYPOINT-REACHED dispatcher ac0a and its four handlers -- one base-loss that crashed the
+self-play of at least six missions at an identical stack.
+
+asm 0x1ac0a-0x1ac30 (DS=DGROUP=0x1c00, CS=0x0f69), reached from ad11 when an object comes within 0x30 of
+its current waypoint: si = its waypoint list word[DGROUP:0x7d2a + byte[di+0x1b]*2] (the same goal-group
+table the objective scan 6507 walks), bx = the mission waypoint MODE word[DGROUP:(word[DGROUP:0x9796]+2)]
+clamped to 0..3, then `call word[CS:0xb5a1 + bx*2]` -- CS is the 0x0f69 cluster, so the targets are linear
+0x1ac39/0x1ac5d/0x1ac81/0x1aca5.  Ghidra read word[0x9796] as a HOST pointer and dereferenced `+2` through
+it (SIGSEGV), mis-based the CS table to segment 0x1000 and dropped DI.  The four targets are mid-block
+entries Ghidra never made functions: three CONSUME the reached waypoint (decrement byte[si], shift the
+8-byte entries down from si+0x14 to si+0xc) and the fourth ROTATES the list (saving the first entry and
+writing it back into the last slot -- a patrol loop); they are added here together with their icall-map
+entries.  A 47-mission native crash sweep found AZER4, AZER6, CYPRUS5, CYPRUS6, SAUDI1 and INDIA5 all
+SEGV'ing at exactly ac0a <- ad11 <- ad08 <- ab03.
+--- a/fist.c
++++ b/fist.c
+@@ -9,6 +9,8 @@
+ extern unsigned short g_fist_r48_dx, g_fist_r48_cx, g_fist_3e29_cx;  /* PATCH 469: 1322/129f 48-bit DX:CX lanes; 3e29's CX (screen x) */
+ extern uint32_t g_fist_ext_esi; extern unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi, g_fist_1345_bp;  /* PATCH 471: op-0x40 register lanes; 1345's BP (list header) */
+ extern unsigned short g_fist_054c_bx;  /* PATCH 473: 054c/bbc6 BX out = the PITCH (077e over the Z delta) */
++void __allregs FUN_1000_ac39(int param_1); void __allregs FUN_1000_ac5d(int param_1);
++void __allregs FUN_1000_ac81(int param_1); void __allregs FUN_1000_aca5(int param_1);  /* PATCH 492 */
+ 
+ /* ---- RULE 7: unresolved indirect/mid-function call targets, stubbed (OPEN) ---- */
+ int func_0x00000556(){ return 0; }  /* OPEN: unresolved indirect/mid-function call target */
+@@ -28657,7 +28659,8 @@
+    * and the `[di+0x40] &= 0xfffd` 4-byte STORE clobbered [di+0x42] -- the animation frame counter ab03
+    * increments (`inc BYTE [di+0x42]`, patch 246).  Restored to the asm widths. */
+   if (((*(uint16_t *)(param_1 + 0x40) & 2) != 0) && (*(uint16_t *)(param_1 + 0x53) < 0x31)) {
+-    FUN_1000_ac0a(param_1);                                  /* ad1e lcall 0xf69:0xb57a */
++    /* PATCH 492: ac0a takes the object NEAR offset (it indexes DGROUP tables by byte[di+0x1b]). */
++    FUN_1000_ac0a((undefined2)(uint16_t)((unsigned char *)(uintptr_t)param_1 - ((unsigned char *)g_mem + 0x1c000)));
+     *(uint16_t *)(param_1 + 0x40) = (uint16_t)(*(uint16_t *)(param_1 + 0x40) & 0xfffd); /* ad23 */
+   }
+   return;
+@@ -65260,13 +65263,133 @@
+ void __allregs FUN_1000_ac0a(undefined2 param_1)
+ 
+ {
+-  uint uVar1;
+-  
+-  uVar1 = *(uint *)(DAT_2000_5796 + 2);
+-  if (3 < uVar1) {
+-    uVar1 = 0;
++  /* PATCH 492: the WAYPOINT-REACHED dispatcher (asm 0x1ac0a-0x1ac30; DS=DGROUP=0x1c00, CS=0x0f69),
++   * reached from ad11 once an object is within 0x30 of its current waypoint.  di=param_1 = the object's
++   * NEAR offset:
++   *     si = word[DGROUP:0x7d2a + byte[di+0x1b]*2]   -- its waypoint list (the same goal-group table the
++   *                                                    objective scan 6507 walks)
++   *     bx = word[DGROUP:(word[DGROUP:0x9796] + 2)]  -- the mission's waypoint MODE, >= 4 clamped to 0
++   *     call word[CS:0xb5a1 + bx*2]                  -- CS is the 0x0f69 cluster, so the targets are
++   *                                                    linear 0x1ac39/0x1ac5d/0x1ac81/0x1aca5
++   * Ghidra read word[0x9796] as a HOST pointer and dereferenced `+2` through it (SIGSEGV), mis-based the
++   * CS table to segment 0x1000 and dropped DI.  A 47-mission crash sweep found AZER4, AZER6, CYPRUS5,
++   * CYPRUS6, SAUDI1 and INDIA5 all faulting at exactly this stack: ac0a <- ad11 <- ad08 <- ab03. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t si = *(uint16_t *)(dg + (uint16_t)(0x7d2a + (uint16_t)(dg[(uint16_t)(di + 0x1b)] << 1)));
++  uint16_t bx = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x9796) + 2));
++  if (bx >= 4) bx = 0;
++  switch (bx) {
++    case 0: FUN_1000_ac39((int)si); break;
++    case 1: FUN_1000_ac5d((int)si); break;
++    case 2: FUN_1000_ac81((int)si); break;
++    default: FUN_1000_aca5((int)si); break;
+   }
+-  (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)(uVar1 * 2 + -0x4a5f))))(param_1);
++  return;
++}
++
++
++/* ===== PATCH 492: FUN_1000_ac39 @ 1000:ac39 (waypoint-list consume, not in the Ghidra function set) ===== */
++
++void __allregs FUN_1000_ac39(int param_1)
++
++{
++  /* PATCH 492: waypoint mode 0 -- consume the reached waypoint (asm 0x1ac39; DS=DGROUP=0x1c00).  si=param_1 = the near offset of the object's WAYPOINT
++   * LIST (ac0a resolves it as word[DGROUP:0x7d2a + byte[di+0x1b]*2]).  byte[si] is the entry count; when
++   * non-zero it is decremented and the remaining 8-byte entries shift down one slot (si+0x14 -> si+0xc),
++   * i.e. the reached waypoint is CONSUMED. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t si = (uint16_t)param_1, di, cx;
++  cx = dg[si];
++  if (cx == 0) return;
++  dg[si] = (uint8_t)(dg[si] - 1);
++  di = (uint16_t)(si + 0xc);
++  si = (uint16_t)(si + 0x14);
++  do {
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + si);
++    *(uint32_t *)(dg + (uint16_t)(di + 4)) = *(uint32_t *)(dg + (uint16_t)(si + 4));
++    si = (uint16_t)(si + 8); di = (uint16_t)(di + 8);
++  } while (--cx != 0);
++  return;
++}
++
++
++/* ===== PATCH 492: FUN_1000_ac5d @ 1000:ac5d (waypoint-list consume, not in the Ghidra function set) ===== */
++
++void __allregs FUN_1000_ac5d(int param_1)
++
++{
++  /* PATCH 492: waypoint mode 1 -- the same shift (its own table entry) (asm 0x1ac5d; DS=DGROUP=0x1c00).  si=param_1 = the near offset of the object's WAYPOINT
++   * LIST (ac0a resolves it as word[DGROUP:0x7d2a + byte[di+0x1b]*2]).  byte[si] is the entry count; when
++   * non-zero it is decremented and the remaining 8-byte entries shift down one slot (si+0x14 -> si+0xc),
++   * i.e. the reached waypoint is CONSUMED. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t si = (uint16_t)param_1, di, cx;
++  cx = dg[si];
++  if (cx == 0) return;
++  dg[si] = (uint8_t)(dg[si] - 1);
++  di = (uint16_t)(si + 0xc);
++  si = (uint16_t)(si + 0x14);
++  do {
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + si);
++    *(uint32_t *)(dg + (uint16_t)(di + 4)) = *(uint32_t *)(dg + (uint16_t)(si + 4));
++    si = (uint16_t)(si + 8); di = (uint16_t)(di + 8);
++  } while (--cx != 0);
++  return;
++}
++
++
++/* ===== PATCH 492: FUN_1000_ac81 @ 1000:ac81 (waypoint-list consume, not in the Ghidra function set) ===== */
++
++void __allregs FUN_1000_ac81(int param_1)
++
++{
++  /* PATCH 492: waypoint mode 2 -- the same shift (its own table entry) (asm 0x1ac81; DS=DGROUP=0x1c00).  si=param_1 = the near offset of the object's WAYPOINT
++   * LIST (ac0a resolves it as word[DGROUP:0x7d2a + byte[di+0x1b]*2]).  byte[si] is the entry count; when
++   * non-zero it is decremented and the remaining 8-byte entries shift down one slot (si+0x14 -> si+0xc),
++   * i.e. the reached waypoint is CONSUMED. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t si = (uint16_t)param_1, di, cx;
++  cx = dg[si];
++  if (cx == 0) return;
++  dg[si] = (uint8_t)(dg[si] - 1);
++  di = (uint16_t)(si + 0xc);
++  si = (uint16_t)(si + 0x14);
++  do {
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + si);
++    *(uint32_t *)(dg + (uint16_t)(di + 4)) = *(uint32_t *)(dg + (uint16_t)(si + 4));
++    si = (uint16_t)(si + 8); di = (uint16_t)(di + 8);
++  } while (--cx != 0);
++  return;
++}
++
++
++/* ===== PATCH 492: FUN_1000_aca5 @ 1000:aca5 (waypoint-list ROTATE, not in the Ghidra function set) ===== */
++
++void __allregs FUN_1000_aca5(int param_1)
++
++{
++  /* PATCH 492: waypoint mode 3 -- a PATROL rotate (asm 0x1aca5-0x1acdf; DS=DGROUP=0x1c00).  Unlike the
++   * three consume handlers this one KEEPS the count: the first entry (si+0xc) is saved, every later entry
++   * shifts down one slot and the saved entry is written back into the last slot, so the object cycles
++   * through its waypoints forever. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t si = (uint16_t)param_1, di, cx;
++  uint32_t s0, s1;
++  cx = dg[si];
++  if (cx == 0) return;
++  di = (uint16_t)(si + 0xc);
++  si = (uint16_t)(si + 0x14);
++  s0 = *(uint32_t *)(dg + di);
++  s1 = *(uint32_t *)(dg + (uint16_t)(di + 4));
++  do {
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + si);
++    *(uint32_t *)(dg + (uint16_t)(di + 4)) = *(uint32_t *)(dg + (uint16_t)(si + 4));
++    si = (uint16_t)(si + 8); di = (uint16_t)(di + 8);
++  } while (--cx != 0);
++  di = (uint16_t)(di - 8);
++  *(uint32_t *)(dg + (uint16_t)(di + 4)) = s1;
++  *(uint32_t *)(dg + di) = s0;
+   return;
+ }
+ 
+@@ -75014,6 +75137,10 @@
+   {0x1ab7fu,(void*)&FUN_1000_ab7f},
+   {0x1ac0au,(void*)&FUN_1000_ac0a},
+   {0x1ac31u,(void*)&FUN_1000_ac31},
++  {0x1ac39u,(void*)&FUN_1000_ac39},   /* PATCH 492 */
++  {0x1ac5du,(void*)&FUN_1000_ac5d},   /* PATCH 492 */
++  {0x1ac81u,(void*)&FUN_1000_ac81},   /* PATCH 492 */
++  {0x1aca5u,(void*)&FUN_1000_aca5},   /* PATCH 492 */
+   {0x1ace0u,(void*)&FUN_1000_ace0},
+   {0x1adcdu,(void*)&FUN_1000_adcd},
+   {0x1addbu,(void*)&FUN_1000_addb},

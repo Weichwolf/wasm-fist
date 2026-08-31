@@ -1,0 +1,50 @@
+PATCH 494: the hull velocity decomposition -- a1d6 dropped a196's DX lane.
+
+asm 0x1a1d6-0x1a20c (DS=DGROUP=0x1c00, CS=0x0f69):
+    1a201: 9a 96 a1 00 00   lcall 0:a196          ; a196 = `call 0x3a9; lret`, the 2-in/2-out rotation
+    1a206: 89 45 59         mov   [di+0x59],ax    ; trig (patch 462): AX=heading, DX=magnitude in;
+    1a209: 89 55 5b         mov   [di+0x5b],dx    ; AX=sin lane, DX=cos lane out.
+7cd5 integrates the object position from exactly this word pair (`[di+4] += (short)[di+0x59]`,
+`[di+8] += (short)[di+0x5b]`).  Ghidra's __allregs model returns AX only, so the DX lane vanished and
+the decompile stored a1d6's own INPUT dx -- iVar3 == [di+0x55]>>1, the scalar speed -- into [di+0x5b].
+
+Consequence (measured on AZER1 self-play before the fix): the Y velocity was the raw speed for EVERY
+object regardless of heading, so every unit crept north at half throttle forever.  No unit could reach
+its waypoint: ab91 stores the 0541 range in [di+0x53] and ad11 gates the waypoint-reached dispatch on
+`[di+0x53] < 0x31`, but the measured [di+0x53] never left 0x5bc..0x728, so ac0a (patch 492) was entered
+0 times in 6000 ticks, the waypoint list was never consumed, the two sides drifted apart (closest
+cross-side pair 268435 vs the 262144 LOS range gate), aa08 found no candidate (byte[di+0x94]==0 in
+494 of 495 ae32 entries), no fire request was ever issued (a286 entered 0 times) and no mission could
+reach a resolved victory/defeat.
+
+0x3a9 publishes its DX lane as g_fist_03a9_dx (patch 462); a196 is a pure forwarder and does not touch
+it, so reading it immediately after the call is exact.
+--- a/fist.c
++++ b/fist.c
+@@ -64204,9 +64204,24 @@
+     *(short *)(param_2 + 0x26) = iVar1;
+     *(short *)(param_2 + 0x30) = iVar1;
+   }
++  /* PATCH 494: the HULL VELOCITY decomposition (asm 0x1a1d6-0x1a20c; DS=DGROUP=0x1c00, CS=0x0f69).
++   * `lcall 0:a196` is a pure forwarder to 0x3a9, the 2-in/2-out rotation trig (patch 462): it takes
++   * AX=heading, DX=magnitude and returns BOTH components -- AX = the sin lane, DX = the cos lane -- and
++   * the asm stores them as a PAIR:  1a206 mov [di+0x59],ax ; 1a209 mov [di+0x5b],dx.  7cd5 then
++   * integrates the object position from exactly those two words (`[di+4] += (short)[di+0x59]`,
++   * `[di+8] += (short)[di+0x5b]`).
++   * Ghidra's __allregs model returns AX only, so the DX lane vanished and the decompile stored a1d6's
++   * OWN INPUT dx (iVar3 == [di+0x55]>>1, the scalar speed) into [di+0x5b] instead.  Consequence: the Y
++   * velocity was the raw speed for EVERY object regardless of heading -- every unit crept north at half
++   * throttle forever, no unit could ever reach its waypoint ([di+0x53], the range ab91 stores from the
++   * 0541 bearing/range, never fell under ad11's 0x31 threshold), so the waypoint list was never consumed
++   * (ac0a/patch 492 was never entered), the two sides drifted apart instead of closing, aa08 found no
++   * candidate inside the LOS range gate, and no mission could reach a resolved victory/defeat.
++   * 0x3a9 publishes its DX lane as g_fist_03a9_dx (patch 462); a196 forwards without touching it. */
++  extern unsigned short g_fist_03a9_dx;
+   iVar1 = FUN_0000_a196(iVar1,iVar3,param_1);
+-  *(short *)(param_2 + 0x59) = iVar1;
+-  *(short *)(param_2 + 0x5b) = iVar3;
++  *(short *)(param_2 + 0x59) = iVar1;                    /* 1a206 mov [di+0x59],ax */
++  *(short *)(param_2 + 0x5b) = (short)g_fist_03a9_dx;    /* 1a209 mov [di+0x5b],dx */
+   return;
+ }
+ 

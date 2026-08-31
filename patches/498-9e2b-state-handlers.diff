@@ -1,0 +1,174 @@
+PATCH 498: the 9e2b state-table handlers 9f1d / a07c and their shared helpers a135 / a15a.
+
+Patch 497 repaired the `call *%cs:0x9f0f(%bx)` table base in FUN_0000_9e2b, which made this family
+reachable for the first time; INDIA1 and TRAIN3 then SIGSEGV'd on the first frame the state machine ran,
+both at 9f1d <- 9e2b <- c0e5 <- c0ca <- 459a.
+
+9e2b dispatches with DI = the object's DGROUP NEAR OFFSET, so it arrives in param_1 (the fault backtrace
+shows param_1 = 0xbbd9, a live roster offset, while Ghidra's chosen param_3 = 0xffffcc28).  All four
+functions carry the same three defects:
+
+  * the object -- and the SECOND near offset word[di+0x1f], the tracked target -- were dereferenced as
+    host pointers;
+  * the WORD comparands/stores [di+0x21] / [di+0x23] / [di+0x2e] were read and written as 4-byte ints
+    (the [di+0x2e] store clobbers [di+0x30], the desired heading);
+  * a135/a15a dropped FUN_0000_054c's CX and DX outputs.  054c (asm 0x54c-0x577) pushes 08e8's AX/DX
+    before calling 077e and pops them back, so on return AX=bearing, BX=pitch, CX=range_lo, DX=range_hi,
+    with CX/DX being exactly DGROUP:0x458/0x45a (DAT_1000_c458/c45a).  The asm then composes
+    `mov ch,cl ; mov dl,ch` = ((range_hi & 0xff) << 8) | ((range_lo >> 8) & 0xff) == (uint16_t)(range>>8)
+    -- the same idiom patch 328 restored in ab91 -- and stores it at [di+0x21].  Ghidra's __allregs model
+    returns AX only, so it folded that store onto a135/a15a's own DEAD INPUTS param_1/param_2.
+
+a135's two remaining call sites are FUN_0000_9f1d and FUN_0000_a07c (both fixed here) and
+FUN_0000_9f0f.  The last is not a function: 0x9f0f IS the dispatch table (verified contents
+{9f1d, 9f66, 9fe5, a069, a07c, a02a}), which Ghidra typed as code -- its body decodes to `in(0x9f)` and
+a chain of writes through a fabricated `puVar1`, it has no caller and no entry in the icall map, so it
+is left untouched rather than "corrected"; a135's signature is preserved so it still compiles.
+--- a/fist.c
++++ b/fist.c
+@@ -26481,25 +26481,36 @@
+ void __allregs FUN_0000_9f1d(undefined2 param_1,undefined2 param_2,int param_3)
+ 
+ {
+-  if (*(int *)(param_3 + 0x1f) != 0) {
+-    if ((*(byte *)(*(int *)(param_3 + 0x1f) + 0x16) & 1) == 0) {
+-      FUN_0000_a135(param_1,param_2,param_3,0x9f2d);
++  /* PATCH 498: entry 0 of the 9e2b state table (asm 0x9f1d-0x9f65; DS=DGROUP=0x1c00).  9e2b dispatches
++   * `call *%cs:0x9f0f(%bx)` with DI = the object's DGROUP NEAR OFFSET, which lands in param_1 (param_2/3
++   * are dead inputs -- the fault backtrace shows param_3 = 0xffffcc28).  Ghidra took the object from
++   * param_3 and host-deref'd it, host-deref'd the SECOND near offset word[di+0x1f] (the tracked target),
++   * and read the two WORD comparands [di+0x21] as 4-byte ints.  Unreachable until patch 497 repaired the
++   * table base, then INDIA1 and TRAIN3 faulted here on the first frame the state machine ran. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t si;
++  (void)param_2; (void)param_3;
++  si = *(uint16_t *)(dg + (uint16_t)(di + 0x1f));               /* 9f1d mov si,[di+0x1f] */
++  if (si != 0) {                                                /* 9f20 or si,si; je 9f61 */
++    if ((dg[(uint16_t)(si + 0x16)] & 1) == 0) {                 /* 9f24 testb [si+0x16],1; jne 9f5c */
++      FUN_0000_a135(0,0,(int)di,0);                             /* 9f2a call a135 (DI live) */
+       goto LAB_0000_9f2d;
+     }
+-    *(undefined2 *)(param_3 + 0x1f) = 0;
++    *(uint16_t *)(dg + (uint16_t)(di + 0x1f)) = 0;              /* 9f5c movw [di+0x1f],0 */
+   }
+-  FUN_0000_a15a(param_1,param_2,param_3,(char *)s_INTRO_MS3_2000_5f64);
++  FUN_0000_a15a(0,0,(int)di,0);                                 /* 9f61 call a15a (DI live) */
+ LAB_0000_9f2d:
+-  if ((*(uint *)(param_3 + 0x21) < 0x1f5) && ((*(byte *)(param_3 + 0x16) & 8) != 0)) {
+-    FUN_0000_bfb1();
+-  }
+-  if (100 < *(uint *)(param_3 + 0x21)) {
+-    return;
+-  }
+-  *(undefined2 *)(param_3 + 0x1d) = 0;
+-  *(undefined1 *)(param_3 + 0x25) = 2;
+-  *(undefined2 *)(param_3 + 0x23) = 0;
+-  *(char *)(param_3 + 0x31) = *(char *)(param_3 + 0x31) + ((byte)DAT_2000_543a & 3);
++  if (*(uint16_t *)(dg + (uint16_t)(di + 0x21)) <= 0x1f4 &&     /* 9f2d cmpw 0x1f4; ja 9f3e */
++      (dg[(uint16_t)(di + 0x16)] & 8) != 0) {                   /* 9f34 testb [di+0x16],8; je 9f3e */
++    FUN_0000_bfb1();                                            /* 9f3b */
++  }
++  if (*(uint16_t *)(dg + (uint16_t)(di + 0x21)) > 0x64) return; /* 9f3e cmpw 0x64; jbe 9f45 */
++  *(uint16_t *)(dg + (uint16_t)(di + 0x1d)) = 0;                /* 9f45 */
++  dg[(uint16_t)(di + 0x25)] = 2;                                /* 9f4a */
++  *(uint16_t *)(dg + (uint16_t)(di + 0x23)) = 0;                /* 9f4e */
++  dg[(uint16_t)(di + 0x31)] =
++      (uint8_t)(dg[(uint16_t)(di + 0x31)] + (uint8_t)(*(uint16_t *)(dg + 0x943a) & 3)); /* 9f53-9f58 */
+   return;
+ }
+ 
+@@ -26644,11 +26655,19 @@
+ void __allregs FUN_0000_a07c(undefined2 param_1,undefined2 param_2,int param_3)
+ 
+ {
+-  if ((*(int *)(param_3 + 0x1f) != 0) && ((*(byte *)(*(int *)(param_3 + 0x1f) + 0x16) & 1) == 0)) {
+-    FUN_0000_a135(param_1,param_2,param_3,0xa08c);
++  /* PATCH 498: entry 4 of the 9e2b state table (asm 0xa07c-0xa096), 9f1d's short twin -- same
++   * near-offset object in param_1, same host-pointer base-loss on it and on word[di+0x1f], same
++   * 4-byte read of the WORD [di+0x23]. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t si;
++  (void)param_2; (void)param_3;
++  si = *(uint16_t *)(dg + (uint16_t)(di + 0x1f));               /* a07c mov si,[di+0x1f] */
++  if (si != 0 && (dg[(uint16_t)(si + 0x16)] & 1) == 0) {        /* a07f/a083 */
++    FUN_0000_a135(0,0,(int)di,0);                               /* a089 call a135 (DI live) */
+   }
+-  if (*(int *)(param_3 + 0x23) == 0) {
+-    *(undefined1 *)(param_3 + 0x25) = 2;
++  if (*(uint16_t *)(dg + (uint16_t)(di + 0x23)) == 0) {         /* a08c cmpw [di+0x23],0 */
++    dg[(uint16_t)(di + 0x25)] = 2;                              /* a092 movb [di+0x25],2 */
+   }
+   return;
+ }
+@@ -26714,14 +26733,32 @@
+ void __allregs FUN_0000_a135(undefined2 param_1,undefined2 param_2,int param_3,int param_4)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined1 uVar2;
+-  
+-  uVar2 = (undefined1)((uint)param_1 >> 8);
+-  uVar1 = FUN_0000_054c(param_2,param_3 + 4,*(int *)(param_3 + 0x1f) + 4);
+-  *(undefined2 *)(param_4 + 0x21) = CONCAT11((char)param_2,uVar2);
+-  *(undefined2 *)(param_4 + 0x2e) = uVar1;
+-  *(int *)(param_4 + 0x2e) = *(int *)(param_4 + 0x2e) + ((DAT_2000_543a & 0x7f) - 0x40);
++  /* PATCH 498: the TRACKED-TARGET bearing/range update (asm 0xa135-0xa159; DS=DGROUP=0x1c00).
++   *     a135: push di ; a136: lea si,[di+4] ; a139: mov di,[di+0x1f] ; a13c: lea di,[di+4]
++   *     a13f: call 0x54c ; a142: pop di
++   *     a143: mov ch,cl ; a145: mov dl,ch ; a147: mov [di+0x21],cx     ; the RANGE word
++   *     a14a: mov [di+0x2e],ax                                        ; the BEARING
++   *     a14d: mov ax,[0x943a] ; a150: and ax,0x7f ; a153: sub ax,0x40 ; a156: add [di+0x2e],ax
++   * param_3 is the object's DGROUP NEAR OFFSET (9f1d/a07c call it with DI live); param_1/2/4 are dead.
++   * 054c takes HOST pointers and returns ax=bearing, bx=pitch, cx=range_lo, dx=range_hi -- cx/dx being
++   * the 08e8 outputs it pushed before calling 077e, so they are exactly DGROUP:0x458/0x45a
++   * (DAT_1000_c458/c45a).  Ghidra dropped 054c's CX and DX (the __allregs model returns AX only) and
++   * folded the [di+0x21] store onto a135's own DEAD INPUTS param_1/param_2, host-deref'd the object and
++   * the near offset word[di+0x1f], and emitted the two WORD stores/adds as 4-byte ints (which clobbers
++   * [di+0x23] and [di+0x30]).  The composition `mov ch,cl; mov dl,ch` yields
++   * ((range_hi & 0xff) << 8) | ((range_lo >> 8) & 0xff) == (uint16_t)(range32 >> 8), the same idiom
++   * patch 328 restored in ab91. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_3;
++  uint16_t tgt = *(uint16_t *)(dg + (uint16_t)(di + 0x1f));
++  uint16_t ax;
++  (void)param_1; (void)param_2; (void)param_4;
++  ax = (uint16_t)FUN_0000_054c(0,(int)(intptr_t)(dg + (uint16_t)(di + 4)),
++                                 (int)(intptr_t)(dg + (uint16_t)(tgt + 4)));
++  *(uint16_t *)(dg + (uint16_t)(di + 0x21)) =
++      (uint16_t)((((uint16_t)DAT_1000_c45a & 0xff) << 8) | (((uint16_t)DAT_1000_c458 >> 8) & 0xff));
++  *(uint16_t *)(dg + (uint16_t)(di + 0x2e)) =
++      (uint16_t)(ax + (uint16_t)((*(uint16_t *)(dg + 0x943a) & 0x7f) - 0x40));
+   return;
+ }
+ 
+@@ -26731,14 +26768,20 @@
+ void __allregs FUN_0000_a15a(undefined2 param_1,undefined2 param_2,int param_3,int param_4)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined1 uVar2;
+-  
+-  uVar2 = (undefined1)((uint)param_1 >> 8);
+-  uVar1 = FUN_0000_054c(param_2,param_3 + 4,param_3 + 0x26);
+-  *(undefined2 *)(param_4 + 0x21) = CONCAT11((char)param_2,uVar2);
+-  *(undefined2 *)(param_4 + 0x2e) = uVar1;
+-  *(int *)(param_4 + 0x2e) = *(int *)(param_4 + 0x2e) + ((DAT_2000_543a & 0x1f) - 0x10);
++  /* PATCH 498: a135's no-target twin (asm 0xa15a-0xa17d).  Identical body except that the second 054c
++   * endpoint is the object's OWN stored aim point `lea di,[di+0x26]` instead of the tracked target's
++   * position, and the jitter mask is 0x1f-0x10 rather than 0x7f-0x40 (`a17b: xor bx,bx` clears the
++   * pitch lane on the way out).  Same dropped-CX/DX, same base-loss, same store widths. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_3;
++  uint16_t ax;
++  (void)param_1; (void)param_2; (void)param_4;
++  ax = (uint16_t)FUN_0000_054c(0,(int)(intptr_t)(dg + (uint16_t)(di + 4)),
++                                 (int)(intptr_t)(dg + (uint16_t)(di + 0x26)));
++  *(uint16_t *)(dg + (uint16_t)(di + 0x21)) =
++      (uint16_t)((((uint16_t)DAT_1000_c45a & 0xff) << 8) | (((uint16_t)DAT_1000_c458 >> 8) & 0xff));
++  *(uint16_t *)(dg + (uint16_t)(di + 0x2e)) =
++      (uint16_t)(ax + (uint16_t)((*(uint16_t *)(dg + 0x943a) & 0x1f) - 0x10));
+   return;
+ }
+ 

@@ -1,0 +1,59 @@
+PATCH 503: the dead-player damage-plate paint method 8152.
+
+asm 0x8152-0x816c (DS=DGROUP=0x1c00), dispatched by the 209e display-list walk (patch 142) with BX
+holding the list element's DGROUP NEAR OFFSET:
+    8152: 8b 3e 34 6d     mov    di,[0x6d34]      ; the PLAYER's near offset
+    8156: 0f b6 45 3f     movzbw ax,[di+0x3f]
+    815a: 05 08 04        add    ax,0x408         ; the glyph/string id passed to the paint service
+    815d: 8d 5f 04        lea    bx,[bx+4]
+    8160: 83 47 02 07     addw   [bx+2],7
+    8164: ff 1e b4 06     lcall  [0x6b4]
+    8168: 83 6f 02 07     subw   [bx+2],7
+    816c: c3              ret
+
+Ghidra dereferenced the element pointer as a host pointer, emitted the two `addw/subw [bx+2],7` as
+4-byte int read-modify-writes (which also clobber [bx+8..9]), dropped the player lookup entirely and
+dropped the far call's (ax,bx) argument pair.
+
+209e already publishes the live BX to DGROUP:0x3e08 (`mov [0x3e08],bx`) immediately before the
+dispatch -- the port's dispatch is arg-less -- so the element offset is read back from there.
+
+Unreachable until patch 502 let the post-death event drain reach the display-list walk; AZER1 then
+SIGSEGV'd here at 8152 <- 209e <- 206f <- 459a.
+--- a/fist.c
++++ b/fist.c
+@@ -21946,14 +21946,27 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_8152) @ 0000:8152 ===== */
+ 
+ void __allregs FUN_0000_8152(int param_1)
+-
+ {
+-  int iVar1;
+-  
+-  iVar1 = param_1 + 4;
+-  *(int *)(param_1 + 6) = *(int *)(param_1 + 6) + 7;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *(int *)(iVar1 + 2) = *(int *)(iVar1 + 2) + -7;
++  /* PATCH 503: the dead-player damage-plate paint method (asm 0x8152-0x816c; DS=DGROUP=0x1c00),
++   * dispatched by the 209e display-list walk (patch 142) with BX = the list element's NEAR OFFSET:
++   *     8152: mov di,[0x6d34]        ; the PLAYER's DGROUP NEAR OFFSET
++   *     8156: movzbw ax,[di+0x3f] ; 815a: add ax,0x408      ; the string/glyph id
++   *     815d: lea bx,[bx+4]
++   *     8160: addw [bx+2],7 ; 8164: lcall [0x6b4] ; 8168: subw [bx+2],7 ; ret
++   * Ghidra host-deref'd the element pointer AND emitted the two `addw/subw [bx+2],7` as 4-byte int
++   * read-modify-writes (clobbering [bx+8..9]), dropped the player lookup entirely and dropped the far
++   * call's (ax,bx) argument pair.  209e publishes the live BX to DGROUP:0x3e08 immediately before the
++   * dispatch (`mov [0x3e08],bx`, already in the walk), so the element offset is read back from there --
++   * the dispatch itself is arg-less in the port.  Unreachable until patch 502 let the post-death event
++   * drain get this far. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;                       /* 8152 */
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x408); /* 8156/815a */
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);    /* 815d lea bx,[bx+4] */
++  (void)param_1;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 7;                 /* 8160 addw [bx+2],7 */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);             /* 8164 lcall [0x6b4] */
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 7;                 /* 8168 subw [bx+2],7 */
+   return;
+ }
+ 

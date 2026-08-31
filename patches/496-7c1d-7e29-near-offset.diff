@@ -1,0 +1,35 @@
+PATCH 496: 7c1d handed FUN_0000_7e29 a host pointer where the asm passes the object's near offset.
+
+asm 0x7c65-0x7c7b (DS=DGROUP=0x1c00, DI = the object's DGROUP near offset):
+    7c65: cmpb $0x0,0x92(%di) ; 7c6a: je 0x7c72 ; 7c6c: decb 0x92(%di) ; 7c70: jmp 0x7c78
+    7c72: testb $0x80,0x17(%di) ; 7c76: je 0x7c7b
+    7c78: e8 ae 01  call 0x7e29          ; DI live == the object
+7e29 was rebuilt to the near-offset convention (`di = (unsigned short)param_1`), but this call site kept
+passing patch 244's HOST pointer param_4 (== g_mem+0x1c000+di).  Truncated to 16 bits that is a
+host-address-dependent garbage offset, so the entire weapon chain operated on a phantom object.
+
+Measured on AZER1 self-play before the fix: a286 (the fire request, `mov BYTE [di+0x92],0x30`) was
+entered 213 times in 20000 ticks, yet FUN_0000_7e29 spawned nothing and bb1b (projectile impact) was
+entered 0 times.  In UKRAINE3 the phantom's [+0x91]/[+0xa8] gate happened to open and the run SIGSEGV'd
+inside the spawn method (that fault is patch 495; this is why it was reached at all).
+
+Every other DI-live dispatch in 7c1d already subtracts the DGROUP base; this one did not.
+--- a/fist.c
++++ b/fist.c
+@@ -21152,7 +21152,15 @@
+   else {
+     *(char *)(param_4 + 0x92) = *(char *)(param_4 + 0x92) + -1;
+   }
+-  FUN_0000_7e29(param_4);
++  /* PATCH 496: `7c78 call 0x7e29` runs with DI = the object's DGROUP NEAR OFFSET, and 7e29's body
++   * (patch 427's convention, `di = (unsigned short)param_1`) expects exactly that -- but this call site
++   * still handed it patch 244's HOST pointer param_4, whose low 16 bits are (g_mem+0x1c000+di)&0xffff:
++   * a host-address-dependent garbage offset.  Every other DI-live dispatch in this function already
++   * subtracts the DGROUP base (the two CS-relative tables above); this one did not.  Consequence: the
++   * whole weapon chain fired against a phantom object -- in AZER1 the phantom's [+0x91]/[+0xa8] gate
++   * simply never opened (7e29 entered 213 times' worth of a286 fire-requests with 0 spawns), and in
++   * UKRAINE3 it opened on garbage and faulted.  Pass the near offset. */
++  FUN_0000_7e29(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+ LAB_0000_7c7b:
+   FUN_0000_a57a(param_4);
+   FUN_0000_a9ea(param_1,uVar3,param_4);

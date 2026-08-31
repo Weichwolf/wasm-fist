@@ -5661,3 +5661,93 @@ DEFECT CLASSES THIS ROUND (all asm-verified, each its own patch):
   489  the low 16 bits of a REBASED pointer used as a near offset (27de) -- host-address dependent.
   490  an uninitialised value written into the PIT tick counter (cbd4).
   491  a HOST pointer stored in a DGROUP word the asm fills with DI, then re-read as an offset (cb74/cb7c).
+
+## cont.65 -- the AI FIGHTS: the hull-velocity defect that had frozen the whole combat chain
+
+THE FINDING. `FUN_1000_a1d6` -- the hull VELOCITY decomposition -- stored its own INPUT where the asm
+stores a returned register:
+
+    1a201: 9a 96 a1 00 00   lcall 0:a196        ; a196 = `call 0x3a9; lret`, the 2-in/2-out rotation trig
+    1a206: 89 45 59         mov   [di+0x59],ax  ; AX = the sin lane
+    1a209: 89 55 5b         mov   [di+0x5b],dx  ; DX = the cos lane
+
+`FUN_0000_7cd5` integrates the object position from exactly that word pair (`[di+4] += (short)[di+0x59]`,
+`[di+8] += (short)[di+0x5b]`).  Ghidra's `__allregs` model returns AX only, so the DX lane vanished and the
+decompile wrote a1d6's own input dx -- `[di+0x55]>>1`, the scalar SPEED -- into `[di+0x5b]`.
+
+Consequence, measured end to end on an AZER1 self-play: the Y velocity was the raw speed for EVERY object
+regardless of heading, so every unit crept north at half throttle forever.  Nothing could reach a waypoint:
+ab91 stores the 0541 range in `[di+0x53]` and ad11 gates the waypoint-reached dispatch on `[di+0x53] < 0x31`,
+but the measured `[di+0x53]` never left 0x5bc..0x728.  So ac0a (patch 492) was entered ZERO times in 6000
+ticks, the waypoint list was never consumed, `[di+0x30]` (desired heading) equalled `[di+0x26]` and never
+changed, and the two sides drifted apart into disjoint Y bands -- closest cross-side pair 268435 against the
+262144 LOS range gate.  aa08 therefore found no candidate (byte[di+0x94]==0 in 494 of 495 ae32 entries), no
+target was ever acquired, and FUN_0000_a286 -- the fire request -- was entered ZERO times.  That is why no
+mission could reach a resolved victory/defeat: not a win-condition bug, a kinematics bug.
+
+Patch 494 restores the DX lane (0x3a9 already publishes it as g_fist_03a9_dx, patch 462).  Immediately:
+  op-0x58 LOS VISIBLE   294 / 18489  ->  6688 / 23519  (20000 ticks)   ->  29351 / 79531 (60000 ticks)
+  closest cross-side |dx|+|dy|   206176  ->  147385  ->  96620   (gate 262144)
+  a286 fire requests    0 -> 213 ;  a6e3 target acquisitions  1 -> 32 ;  c31e damage dispatches 0 -> 200
+
+METHOD NOTE, and a correction to this board's own instrumentation.  The `[chain]`, `[spawn]`, `[7e29]`,
+`[reload]`, `[SPLASH]` counters `fist_dump_and_exit` prints are DEAD: the engine-side increments lived in
+patches that have since been rewritten, so they print 0 unconditionally and are not evidence.  Only
+`[op58]` and `[range]` (incremented in the shim's own op-0x58 handler) are live.  The chain census in this
+entry was taken with gdb breakpoints + `ignore <huge>` + `info breakpoints`, which needs no engine edit --
+that is the method to use.  A second measurement trap: a sweep that scores "did not crash within N seconds"
+scores a HANG as a pass.  `prog.sh` now demands the run REACH a tick target (FIST_DUMPTICK, rc=0), which is
+what caught the 0660 hang below.
+
+THE CASCADE 494 OPENED.  Every fix below is a real decompile defect in code that had never executed:
+
+  495  the three remaining weapon-SPAWN methods 778a / 77cf / 7814 / 784a carried patch 429's 7745 defect
+       verbatim (firer near-offset host-deref'd, WORD ammo read as int, b1df's returned projectile dropped
+       and `unaff_CS` substituted for both objects, clc/stc contract lost).  First live engagement
+       (UKRAINE3) faulted in 778a.
+  496  7c1d handed FUN_0000_7e29 patch 244's HOST pointer where the asm passes the object NEAR OFFSET
+       (`7c78 call 0x7e29`, DI live).  The whole weapon chain had been firing at a phantom object.
+  497  FOUR `call/lcall *%cs:table(%bx)` dispatches read their table at `g_mem + 0x10000 + off` although
+       899c / 91b8 / 9e2b / b918 are all CS=0x0000 functions -- verified against the image, where CS=0
+       holds the pointer tables and CS=0x1000 holds code.  91b8 (the type-2 WEAPON-STATION step) had run
+       10224 times in 20000 ticks with its gate wide open and dispatched NOT ONCE.  No type-2 unit had
+       ever fired a shot.
+  498  the 9e2b state-table handlers 9f1d / a07c and their helpers a135 / a15a: object and tracked-target
+       near offsets host-deref'd, WORD comparands read as 4-byte ints, and 054c's CX/DX dropped (054c
+       returns ax=bearing, bx=pitch, cx=range_lo, dx=range_hi; `mov ch,cl; mov dl,ch` composes
+       (uint16_t)(range>>8), the same idiom patch 328 restored in ab91).
+  499  MGA `FUN_0000_0660` spun forever -- `if (!bVar6) { do { } while (true); }` from a dropped CF, the
+       twin of the defect patch 092 fixed in 04f1.  This is the AZER1 HANG between t=6500 and t=6800, hit
+       on the first projectile impact resolved against the player.  Reconstructed both branches; also
+       corrected 04f1's [0x786]/[0x738] BYTE vs WORD store widths.
+  500  500f walked the DGROUP:0x6d3c WORD cell table with a 4-byte stride and host-deref'd its entries.
+  501  the player-death camera hand-off 5087 / 5fca -- same table, same base-loss.
+  502  8568, the dead-player cockpit overlay: player near offset host-deref'd, WORD table read as int,
+       both far-call argument pairs dropped.
+  503  8152 and 504 the whole rest of the 209e paint/input family (80b5, 80eb, 8123, 816d, 819c, 81b7,
+       81e6, 820b, 8243): DAT_2000_2d34 is the player NEAR OFFSET and every one of them host-deref'd it;
+       the paint methods additionally lost BX/BP (the walk publishes BX to DGROUP:0x3e08 and BP to
+       g_fist_paintbp), emitted `addw/subw [bx+2],K` as 4-byte read-modify-writes, and dropped the
+       `lcall [0x6b4]` argument pairs; the input handlers dropped the clc/stc contract.
+
+MEASURED STATE AFTER 504 (47 missions, cooperative tick, empty input, must REACH t=20000 with rc=0):
+  18 / 47 reach 20000 ticks.  26 SEGV, 3 slow/hang.
+This is NOT a regression against the previous "46/47 ran 11 s without crashing": in that state no unit had
+ever fired, so the entire post-combat half of the engine was unreachable and untested.  The 29 failures are
+the honest size of the remaining frontier, now visible for the first time.
+
+NATIVE <-> WASM: AZER1 identical over 5726 in-mission ticks; SYRIA1 identical to ~t=3700 then diverges;
+AZER2 now diverges at t=334 (it already diverged at t=2162 before this round).  Same story: more code runs,
+so more latent divergence sites are exposed.  The carrier is still believed to be render-side leakage into
+DGROUP (block 24, DGROUP 0xc000..0xc1ff -- the object roster area).
+
+FRONTIER (the next thing to chase, in order):
+  1. the MGA sprite blitter family `2a7a` / `2a39` reached from 8682 <- 7fc7 -- the current top SEGV, a
+     multi-base pointer reconstruction (the `_DAT_1000_c794` element table, the `_DAT_1000_c724` struct
+     and the ES blit base).
+  2. re-run the 47-mission progress sweep after each blitter fix; the SEGV set should collapse in groups,
+     as it did for 500-504.
+  3. then native<->wasm: dump DGROUP 0xc000..0xc1ff at the first diverging tick on both targets and
+     value-filter a watchpoint on the first differing byte.
+  4. only then is the win/lose evaluator (a5dc, already correct: result 0 when word[0x978e] hits 0 with
+     word[0x9790] != 0; result 1 when the friendly count word[0x6d38] hits 0) able to fire.

@@ -1,0 +1,81 @@
+PATCH 502: the dead-player cockpit overlay 8568 dereferenced the player near offset as a host pointer.
+
+asm 0x18568-0x185bf (DS=DGROUP=0x1c00), reached from the event drain 206f -> 209e -> 7fb5 once the
+player object has been destroyed:
+    18568: bb ae 90        mov bx,0x90ae
+    1856b: b8 08 05        mov ax,0x508
+    1856e: ff 1e b4 06     lcall [0x6b4]
+    18572: 8b 3e 34 6d     mov di,[0x6d34]           ; the PLAYER's DGROUP NEAR OFFSET
+    18576: f6 85 90 00 80  testb [di+0x90],0x80 ; jne 0x1859e
+    1857d: mov bl,[di+0x90] ; xor bh,bh ; shl bx,1
+    18585: 8b 87 b8 90     mov ax,[bx-0x6f48]        ; == word[DGROUP:0x90b8 + idx*2]
+    18589: push ax ; add [0x90b0],ax ; mov ax,0x510 ; mov bx,0x90ae ; lcall [0x6c8]
+    18598: pop ax ; sub [0x90b0],ax ; lret
+    1859e: mov ax,[0x90b6] ; add [0x90b0],ax ; addw [0x90ae],2
+    185aa: push ax ; mov ax,0x518 ; mov bx,0x90ae ; lcall [0x6c8]
+    185b5: pop ax ; sub [0x90b0],ax ; subw [0x90ae],2 ; lret
+
+Three defects: DAT_2000_2d34 holds the player's NEAR OFFSET (patch 300 stores it that way) and was
+dereferenced as a host pointer; the -0x6f48 table was read as raw host memory with 4-byte `int`
+elements where the asm reads WORDs; and both far calls lost their (ax,bx) argument pair.
+
+Unreachable until patches 499/500/501 let the player-death sequence run to completion; then AZER1
+SIGSEGV'd here at 8568 <- 7fb5 <- 209e <- 206f <- 459a.
+--- a/fist.c
++++ b/fist.c
+@@ -61508,22 +61508,41 @@
+ void __allregs FUN_1000_8568(void)
+ 
+ {
+-  int iVar1;
+-  
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  iVar1 = DAT_2000_50b6;
+-  if ((*(byte *)(DAT_2000_2d34 + 0x90) & 0x80) == 0) {
+-    iVar1 = *(int *)((uint)*(byte *)(DAT_2000_2d34 + 0x90) * 2 + -0x6f48);
+-    DAT_2000_50b0 = DAT_2000_50b0 + iVar1;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-    DAT_2000_50b0 = DAT_2000_50b0 - iVar1;
++  /* PATCH 502: the DEAD-PLAYER cockpit overlay (asm 0x18568-0x185bf; DS=DGROUP=0x1c00), reached from
++   * the event drain 206f -> 209e -> 7fb5 once the player object is destroyed:
++   *     18568: mov bx,0x90ae ; mov ax,0x508 ; lcall [0x6b4]
++   *     18572: mov di,[0x6d34]                          ; the PLAYER's DGROUP NEAR OFFSET
++   *     18576: testb [di+0x90],0x80 ; jne 0x1859e
++   *     1857d: mov bl,[di+0x90] ; xor bh,bh ; shl bx,1
++   *     18585: mov ax,[bx-0x6f48]                       ; == word[DGROUP:0x90b8 + idx*2]
++   *     18589: push ax ; add [0x90b0],ax
++   *     1858e: mov ax,0x510 ; mov bx,0x90ae ; lcall [0x6c8]
++   *     18598: pop ax ; sub [0x90b0],ax ; lret
++   *     1859e: mov ax,[0x90b6] ; add [0x90b0],ax ; addw [0x90ae],2
++   *     185aa: push ax ; mov ax,0x518 ; mov bx,0x90ae ; lcall [0x6c8]
++   *     185b5: pop ax ; sub [0x90b0],ax ; subw [0x90ae],2 ; lret
++   * Ghidra dereferenced word[DGROUP:0x6d34] as a host pointer (DAT_2000_2d34 holds the NEAR OFFSET --
++   * patch 300 stores it that way), read the -0x6f48 table as raw host memory with `int` (4-byte)
++   * elements where the asm reads WORDs, and dropped both far-call argument pairs.  Unreachable until
++   * patches 499/500/501 let the player-death sequence complete. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di, ax;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x508,0x90ae);   /* 1856b/18568/1856e */
++  di = (unsigned short)DAT_2000_2d34;                                   /* 18572 */
++  if ((dg[(unsigned short)(di + 0x90)] & 0x80) == 0) {                  /* 18576 */
++    unsigned short bx = (unsigned short)((unsigned short)dg[(unsigned short)(di + 0x90)] << 1); /* 1857d-18583 */
++    ax = *(unsigned short *)(dg + (unsigned short)(0x90b8 + bx));       /* 18585 mov ax,[bx-0x6f48] */
++    *(unsigned short *)(dg + 0x90b0) += ax;                             /* 1858a */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x510,0x90ae); /* 1858e-18594 */
++    *(unsigned short *)(dg + 0x90b0) -= ax;                             /* 18599 */
+     return;
+   }
+-  DAT_2000_50b0 = DAT_2000_50b0 + DAT_2000_50b6;
+-  DAT_2000_50ae = DAT_2000_50ae + 2;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-  DAT_2000_50b0 = DAT_2000_50b0 - iVar1;
+-  DAT_2000_50ae = DAT_2000_50ae + -2;
++  ax = *(unsigned short *)(dg + 0x90b6);                                /* 1859e */
++  *(unsigned short *)(dg + 0x90b0) += ax;                               /* 185a1 */
++  *(unsigned short *)(dg + 0x90ae) += 2;                                /* 185a5 */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x518,0x90ae);   /* 185ab-185b1 */
++  *(unsigned short *)(dg + 0x90b0) -= ax;                               /* 185b6 */
++  *(unsigned short *)(dg + 0x90ae) -= 2;                                /* 185ba */
+   return;
+ }
+ 

@@ -1,0 +1,230 @@
+PATCH 495: the remaining weapon-SPAWN methods 778a / 77cf / 7814 / 784a -- patch 429's 7745 defect, four more times.
+
+The 7e29 far table (image 0x7e77, indexed by byte[di+0x91]<<1) selects the weapon spawn method:
+0 -> 0f69:80b5 = 7745 (fixed by patch 429), 2 -> 778a, 4 -> 7814, 6 -> 77cf; 784a is the same idiom on
+the dispense path.  All four carry the identical set of decompile defects:
+
+  * the firer DI is a DGROUP NEAR OFFSET (7e29 passes it as param_4, or param_3 for 7814 / param_2 for
+    784a) and was dereferenced as a host pointer -> SIGSEGV on the first shot;
+  * the ammo counter is a WORD (`decw 0xaf(%di)` / 0xb3 / 0xb1; 784a's 0xb5 is a BYTE) read as 4-byte int;
+  * b1df's returned projectile was DROPPED -- the asm is `call 1b1df ; mov si,di ; pop di`, so SI is the
+    NEW object and DI the firer -- and Ghidra substituted the uninitialised `unaff_CS` pseudo-var for
+    BOTH in the whole tail (b73b/b767/b6c9/9a50 and every [+0xa8]/[+0x3c]/[+0x92] store);
+  * the clc/stc CF contract was lost.  7e29 reads it (g_fist_cf) to choose bf77 (spawn failed) over
+    bf94 / the bf3c muzzle effect.
+
+Two asm details specific to 7814: it is gated on `testw $0x7,[DGROUP:0x6cde]` (nonzero -> clc, no ammo
+touched, and NO a265 aim call, unlike its siblings), and a b1df failure lands on the clc exit (0x17846),
+not the stc one -- only the empty-magazine path (0x17848) sets CF.  784a's failure path plays the
+a4a2(0x3031) cue with DI (the firer) still live.
+
+This code was unreachable until patch 494 fixed the hull velocity decomposition: before it no unit ever
+closed to firing range and 7e29 was entered 0 times in a 20000-tick AZER1 self-play.  With 494 the first
+live engagement reaches it and UKRAINE3 faulted at 778a <- 7e29 <- 7c1d <- c0e5 <- c0ca <- 459a.
+--- a/fist.c
++++ b/fist.c
+@@ -59833,27 +59833,32 @@
+              undefined2 param_5)
+ 
+ {
+-  undefined2 uVar1;
+-  int unaff_CS;
+-  undefined1 uVar2;
+-  
+-  uVar2 = 0;
+-  if (*(int *)(param_4 + 0xaf) != 0) {
+-    *(int *)(param_4 + 0xaf) = *(int *)(param_4 + 0xaf) + -1;
+-    *(undefined1 *)(param_4 + 0xe6) = 3;
+-    FUN_1000_a265(param_1,param_2,param_4);
+-    uVar1 = (undefined2)param_2;
+-    FUN_1000_b1df(9,param_4);
+-    if (!(bool)uVar2) {
+-      FUN_0000_b73b(uVar1,param_4,unaff_CS,param_5);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 0x14;
+-      FUN_0000_9b5c(unaff_CS);
+-      FUN_0000_c047(0xc,param_3,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0x3c) = 0x10;
+-      *(undefined1 *)(unaff_CS + 0x92) = 0;
+-      return;
+-    }
+-  }
++  /* PATCH 495: the three remaining WEAPON-SPAWN methods of the 7e29 far table, carrying patch 429's
++   * 7745 defect verbatim (asm 0x1778a-0x177ce; DS=DGROUP=0x1c00, CS=0x0f69).  Ghidra base-lost the firer
++   * DI (a DGROUP near offset arriving in param_4) and host-deref'd it, read the WORD ammo counter as a
++   * 4-byte int, DROPPED b1df's returned projectile (asm `mov si,di; pop di` -> SI=new object, DI=firer)
++   * and substituted the uninitialised `unaff_CS` pseudo-var for BOTH the projectile and the firer in the
++   * tail, and lost the clc/stc CF contract 7e29 reads (g_fist_cf) to pick bf77 / bf94 / bf3c.
++   * Unreachable until patch 494 fixed the hull velocity: before it no unit ever closed to firing range,
++   * so 7e29 was entered 0 times; with 494 the very first live engagement (UKRAINE3) faults here. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_4;
++  unsigned int proj;
++  (void)param_1; (void)param_2; (void)param_3; (void)param_5;
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0xaf)) == 0) { g_fist_cf = 1; return; } /* 1778a/177cd stc */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xaf)) -= 1;   /* 17791 decw [di+0xaf] */
++  dg[(unsigned short)(di + 0xe6)] = 3;                          /* 17795 */
++  FUN_1000_a265(0, 0, (int *)(uintptr_t)di);                    /* 1779b */
++  proj = (unsigned short)FUN_1000_b1df(9, (int *)(uintptr_t)di);/* 177a3; 177a6 mov si,di; 177a8 pop di */
++  if (g_fist_cf) { g_fist_cf = 1; return; }                     /* 177a9 jb 177cd */
++  FUN_0000_b73b(0, (int)proj, (int)di, 0);                      /* 177ab lcall b73b (si=proj, di=firer) */
++  dg[(unsigned short)(di + 0xa8)] = 0x14;                       /* 177b0 */
++  FUN_0000_9b5c((int)di);                                       /* 177b5 */
++  FUN_0000_c047(0xc, 0, (int)di);                               /* 177bd */
++  dg[(unsigned short)(di + 0x3c)] = 0x10;                       /* 177c2 */
++  dg[(unsigned short)(di + 0x92)] = 0;                          /* 177c6 */
++  g_fist_cf = 0;                                                /* 177cb clc */
+   return;
+ }
+ 
+@@ -59865,27 +59870,32 @@
+              undefined2 param_5)
+ 
+ {
+-  undefined2 uVar1;
+-  int unaff_CS;
+-  undefined1 uVar2;
+-  
+-  uVar2 = 0;
+-  if (*(int *)(param_4 + 0xb3) != 0) {
+-    *(int *)(param_4 + 0xb3) = *(int *)(param_4 + 0xb3) + -1;
+-    *(undefined1 *)(param_4 + 0xea) = 3;
+-    FUN_1000_a265(param_1,param_2,param_4);
+-    uVar1 = (undefined2)param_2;
+-    FUN_1000_b1df(10,param_4);
+-    if (!(bool)uVar2) {
+-      FUN_0000_b767(uVar1,param_4,unaff_CS,param_5);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 0x14;
+-      FUN_0000_9b5c(unaff_CS);
+-      FUN_0000_c047(0xc,param_3,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0x3c) = 0x10;
+-      *(undefined1 *)(unaff_CS + 0x92) = 0;
+-      return;
+-    }
+-  }
++  /* PATCH 495: the three remaining WEAPON-SPAWN methods of the 7e29 far table, carrying patch 429's
++   * 7745 defect verbatim (asm 0x177cf-0x17813; DS=DGROUP=0x1c00, CS=0x0f69).  Ghidra base-lost the firer
++   * DI (a DGROUP near offset arriving in param_4) and host-deref'd it, read the WORD ammo counter as a
++   * 4-byte int, DROPPED b1df's returned projectile (asm `mov si,di; pop di` -> SI=new object, DI=firer)
++   * and substituted the uninitialised `unaff_CS` pseudo-var for BOTH the projectile and the firer in the
++   * tail, and lost the clc/stc CF contract 7e29 reads (g_fist_cf) to pick bf77 / bf94 / bf3c.
++   * Unreachable until patch 494 fixed the hull velocity: before it no unit ever closed to firing range,
++   * so 7e29 was entered 0 times; with 494 the very first live engagement (UKRAINE3) faults here. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_4;
++  unsigned int proj;
++  (void)param_1; (void)param_2; (void)param_3; (void)param_5;
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0xb3)) == 0) { g_fist_cf = 1; return; } /* 177cf/17812 stc */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xb3)) -= 1;   /* 177d6 decw [di+0xb3] */
++  dg[(unsigned short)(di + 0xea)] = 3;                          /* 177da */
++  FUN_1000_a265(0, 0, (int *)(uintptr_t)di);                    /* 177e0 */
++  proj = (unsigned short)FUN_1000_b1df(10, (int *)(uintptr_t)di);/* 177e8; 177eb mov si,di; 177ed pop di */
++  if (g_fist_cf) { g_fist_cf = 1; return; }                     /* 177ee jb 17812 */
++  FUN_0000_b767(0, (int)proj, (int)di, 0);                      /* 177f0 lcall b767 (si=proj, di=firer) */
++  dg[(unsigned short)(di + 0xa8)] = 0x14;                       /* 177f5 */
++  FUN_0000_9b5c((int)di);                                       /* 177fa */
++  FUN_0000_c047(0xc, 0, (int)di);                               /* 17802 */
++  dg[(unsigned short)(di + 0x3c)] = 0x10;                       /* 17807 */
++  dg[(unsigned short)(di + 0x92)] = 0;                          /* 1780b */
++  g_fist_cf = 0;                                                /* 17810 clc */
+   return;
+ }
+ 
+@@ -59916,22 +59926,32 @@
+ void __allregs FUN_1000_7814(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  undefined2 unaff_CS;
+-  bool bVar1;
+-  
+-  if ((DAT_2000_2cde & 7) == 0) {
+-    bVar1 = false;
+-    if (*(int *)(param_3 + 0xb1) == 0) {
+-      return;
+-    }
+-    *(int *)(param_3 + 0xb1) = *(int *)(param_3 + 0xb1) + -1;
+-    *(undefined1 *)(param_3 + 0xe8) = 3;
+-    FUN_1000_b1df(7,param_3);
+-    if (!bVar1) {
+-      FUN_0000_b6c9(param_1,param_3,unaff_CS,param_4);
+-      FUN_0000_c047(6,param_2,unaff_CS);
+-    }
+-  }
++  /* PATCH 495: the three remaining WEAPON-SPAWN methods of the 7e29 far table, carrying patch 429's
++   * 7745 defect verbatim (asm 0x17814-0x17849; DS=DGROUP=0x1c00, CS=0x0f69).  Ghidra base-lost the firer
++   * DI (a DGROUP near offset arriving in param_3) and host-deref'd it, read the WORD ammo counter as a
++   * 4-byte int, DROPPED b1df's returned projectile (asm `mov si,di; pop di` -> SI=new object, DI=firer)
++   * and substituted the uninitialised `unaff_CS` pseudo-var for BOTH the projectile and the firer in the
++   * tail, and lost the clc/stc CF contract 7e29 reads (g_fist_cf) to pick bf77 / bf94 / bf3c.
++   * Unreachable until patch 494 fixed the hull velocity: before it no unit ever closed to firing range,
++   * so 7e29 was entered 0 times; with 494 the very first live engagement (UKRAINE3) faults here. */
++  /* Two asm details this method does NOT share with its siblings: it is gated on
++   * `testw $0x7,[DGROUP:0x6cde]` (17814; nonzero -> 17846 clc, no ammo touched, NO a265 aim), and a b1df
++   * failure lands on 17846 (clc) rather than the stc exit -- only the empty-magazine path (17848) sets CF. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_3;
++  unsigned int proj;
++  (void)param_1; (void)param_2; (void)param_4;
++  g_fist_cf = 0;
++  if ((DAT_2000_2cde & 7) != 0) return;                         /* 17814/1781a -> 17846 clc */
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0xb1)) == 0) { g_fist_cf = 1; return; } /* 1781c -> 17848 stc */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xb1)) -= 1;   /* 17823 decw [di+0xb1] */
++  dg[(unsigned short)(di + 0xe8)] = 3;                          /* 17827 */
++  proj = (unsigned short)FUN_1000_b1df(7, (int *)(uintptr_t)di);/* 17831; 17834 mov si,di; 17836 pop di */
++  if (g_fist_cf) { g_fist_cf = 0; return; }                     /* 17837 jb 17846 (clc) */
++  FUN_0000_b6c9(0, (int)proj, (int)di, 0);                      /* 17839 lcall b6c9 (si=proj, di=firer) */
++  FUN_0000_c047(6, 0, (int)di);                                 /* 17841 */
++  g_fist_cf = 0;                                                /* 17846 clc */
+   return;
+ }
+ 
+@@ -59941,23 +59961,33 @@
+ void __allregs FUN_1000_784a(undefined4 param_1,int param_2)
+ 
+ {
+-  int iVar1;
+-  int unaff_CS;
+-  bool bVar2;
+-  
+-  bVar2 = false;
+-  iVar1 = param_2;
+-  if (*(char *)(param_2 + 0xb5) != '\0') {
+-    *(char *)(param_2 + 0xb5) = *(char *)(param_2 + 0xb5) + -1;
+-    FUN_1000_b1df(0x14,param_2);
+-    iVar1 = unaff_CS;
+-    if (!bVar2) {
+-      FUN_0000_9a50((int)param_1,param_2,unaff_CS);
+-      FUN_0000_c047(0x27,param_1,unaff_CS);
++  /* PATCH 495: the three remaining WEAPON-SPAWN methods of the 7e29 far table, carrying patch 429's
++   * 7745 defect verbatim (asm 0x1784a-0x17879; DS=DGROUP=0x1c00, CS=0x0f69).  Ghidra base-lost the firer
++   * DI (a DGROUP near offset arriving in param_2) and host-deref'd it, read the WORD ammo counter as a
++   * 4-byte int, DROPPED b1df's returned projectile (asm `mov si,di; pop di` -> SI=new object, DI=firer)
++   * and substituted the uninitialised `unaff_CS` pseudo-var for BOTH the projectile and the firer in the
++   * tail, and lost the clc/stc CF contract 7e29 reads (g_fist_cf) to pick bf77 / bf94 / bf3c.
++   * Unreachable until patch 494 fixed the hull velocity: before it no unit ever closed to firing range,
++   * so 7e29 was entered 0 times; with 494 the very first live engagement (UKRAINE3) faults here. */
++  /* This one dispenses a BYTE-counted store ([di+0xb5]) and, on the empty/failed path, plays the
++   * a4a2(0x3031) "out of ammo" cue with DI (the FIRER) still live -- the decompile passed unaff_CS. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_2;
++  unsigned int proj;
++  (void)param_1;
++  if (dg[(unsigned short)(di + 0xb5)] != 0) {                   /* 1784a cmpb [di+0xb5],0 */
++    dg[(unsigned short)(di + 0xb5)] -= 1;                       /* 17851 decb */
++    proj = (unsigned short)FUN_1000_b1df(0x14, (int *)(uintptr_t)di); /* 1785a; 1785d mov si,di; 1785f pop di */
++    if (!g_fist_cf) {                                           /* 17860 jb 17871 */
++      FUN_0000_9a50(0, (int)proj, (int)di);                     /* 17862 lcall 9a50 (si=new, di=parent) */
++      FUN_0000_c047(0x27, 0, (int)di);                          /* 1786a */
++      g_fist_cf = 0;                                            /* 1786f clc */
+       return;
+     }
+   }
+-  FUN_1000_a4a2(0x3031,iVar1);
++  FUN_1000_a4a2(0x3031, (int)di);                               /* 17875 */
++  g_fist_cf = 1;                                                /* 17878 stc */
+   return;
+ }
+ 

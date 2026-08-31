@@ -1,0 +1,72 @@
+PATCH 500: 500f walked the DGROUP:0x6d3c cell table with a 4-byte stride and host-deref'd its entries.
+
+asm 0x500f-0x502e (DS=DGROUP=0x1c00):
+    5010: bb 3c 6d     mov  bx,0x6d3c
+    5013: b9 10 00     mov  cx,0x10
+    5016: 8b 07        mov  ax,[bx]        ; WORD entry = an object NEAR OFFSET
+    5018: 0b c0        or   ax,ax
+    501a: 74 07        je   0x5023
+    501c: 8b f8        mov  di,ax
+    501e: 83 3d 03     cmpw [di],0x3       ; UNSIGNED WORD compare of the object's type word
+    5021: 76 07        jbe  0x502a
+    5023: 83 c3 02     add  bx,2           ; WORD stride
+    5026: e2 ee        loop 0x5016
+    5028: 33 c0        xor  ax,ax
+    502a: e8 02 00     call 0x502f         ; AX = the chosen near offset (502f opens `mov di,ax`)
+
+The table is the 32-entry WORD cell index patch 264 already walks in FUN_1000_6049; 500f scans the
+first 16 -- the player's own side.  Ghidra typed it `int *`, so `piVar3 + 1` strode FOUR bytes (half the
+entries were never examined and each pair was read as one 32-bit value), and then dereferenced the near
+offset as a host pointer in `*puVar1 < 4`.
+
+Unreachable until patch 499 unblocked the impact cascade, because 500f only runs from a93e's
+`di == word[DGROUP:0x6d34]` branch -- the frame on which the PLAYER object is destroyed.  With 499 in,
+AZER1, AZER3, AZER5, AZER6 and CYPRUS1 all SIGSEGV'd here at
+  500f <- a93e <- b39c <- c336 <- c31e <- bbb7.
+--- a/fist.c
++++ b/fist.c
+@@ -14910,21 +14910,29 @@
+ void __allregs FUN_0000_500f(void)
+ 
+ {
+-  uint *puVar1;
+-  int iVar2;
+-  int *piVar3;
+-  
+-  piVar3 = (int *)&DAT_2000_2d3c;
+-  iVar2 = 0x10;
+-  do {
+-    puVar1 = (uint *)*piVar3;
+-    if ((puVar1 != (uint *)0x0) && (*puVar1 < 4)) goto LAB_0000_502a;
+-    piVar3 = piVar3 + 1;
+-    iVar2 = iVar2 + -1;
+-  } while (iVar2 != 0);
+-  puVar1 = (uint *)0x0;
+-LAB_0000_502a:
+-  FUN_0000_502f(puVar1);
++  /* PATCH 500: pick the first PLAYER-SIDE cell entry whose type word is <= 3 and hand it to 502f
++   * (asm 0x500f-0x502e; DS=DGROUP=0x1c00):
++   *     5010: mov bx,0x6d3c ; 5013: mov cx,0x10
++   *     5016: mov ax,[bx]   ; 5018: or ax,ax ; 501a: je 0x5023
++   *     501c: mov di,ax     ; 501e: cmpw [di],0x3 ; 5021: jbe 0x502a
++   *     5023: add bx,2      ; 5026: loop 0x5016  ; 5028: xor ax,ax
++   *     502a: call 0x502f   ; AX = the chosen object's NEAR OFFSET (502f: `mov di,ax`)
++   * The table at DGROUP:0x6d3c is the same 32-entry WORD cell index patch 264 walks in 6049; here only
++   * the first 16 (the player's own side) are scanned.  Ghidra typed it `int *` -- so `piVar3 + 1` strode
++   * FOUR bytes, half the entries were never seen and each pair was read as one 32-bit value -- and then
++   * dereferenced the near offset as a host pointer (`*puVar1 < 4`), which SIGSEGV'd the moment the
++   * player object was destroyed (a93e's `di == word[0x6d34]` branch).  Unreachable until patch 499
++   * unblocked the impact cascade; then AZER1/AZER3/AZER5/AZER6/CYPRUS1 all faulted here.
++   * The comparison is `cmpw [di],3; jbe` -- an UNSIGNED WORD compare against 3, not `< 4` on a dword. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short *tab = (unsigned short *)(dg + 0x6d3c);
++  unsigned short ax = 0;
++  int n;
++  for (n = 0; n < 0x10; n++) {
++    unsigned short e = tab[n];                       /* 5016 mov ax,[bx]; 5023 add bx,2 */
++    if (e != 0 && *(unsigned short *)(dg + e) <= 3) { ax = e; break; }  /* 5018/501e/5021 */
++  }
++  FUN_0000_502f((int *)(uintptr_t)ax);               /* 502a call 502f (AX = near offset) */
+   return;
+ }
+ 

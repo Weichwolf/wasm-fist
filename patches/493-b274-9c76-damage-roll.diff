@@ -1,0 +1,77 @@
+PATCH 493: the damage roll b274 and its caller 9c76 -- the last remaining self-play crash (SAUDI3).
+
+b274 (asm 0xb274-0xb2a1): bx is a DGROUP NEAR OFFSET into the per-weapon damage table (9c76 forms it as
+0x9b5d + ax) and the roll is ((rand()&0xff) * byte[bx+1] >> 8) + byte[bx] + 1, scaled by word[0x9bae] --
+or word[0x9bb0] when the current target word[0x9bb2] carries byte[+0x16] bit3 -- then >> 8.  Ghidra
+deref'd bx as a host pointer.  9c76 (asm 0x9c76-0x9c96) is the per-type DAMAGE method c31e dispatches
+with the object's NEAR offset as ARG0 (AX still holds the weapon index c31e stashed at word[0x9bdb]); it
+adds the roll to byte[di+0x1a] and at 0x14 destroys the object and decrements word[0x930a].  Ghidra took
+the object from param_2 -- a stale stack slot -- and deref'd it as a host pointer.
+With this and patch 492 the 47-mission native self-play sweep has 46 missions running crash-free; the
+remaining one is INDIA3, which never reaches the mission at all (board:0006 spawn OOM).
+--- a/fist.c
++++ b/fist.c
+@@ -26075,17 +26075,22 @@
+ void __allregs FUN_0000_9c76(int param_1,int param_2)
+ 
+ {
+-  uint uVar1;
+-  int iVar2;
+-  
+-  uVar1 = FUN_0000_b274(param_1 + -0x64a3);
+-  *(char *)(param_2 + 0x1a) = *(char *)(param_2 + 0x1a) + (char)uVar1;
+-  if (*(byte *)(param_2 + 0x1a) < 0x14) {
+-    return;
+-  }
+-  iVar2 = FUN_1000_b354(param_2);
+-  FUN_1000_b2ef(iVar2);
+-  DAT_2000_530a = DAT_2000_530a + -1;
++  /* PATCH 493: the per-type DAMAGE method for the soft targets (asm 0x9c76-0x9c96; DS=DGROUP=0x1c00),
++   * dispatched by c31e (patch 256) with the object's NEAR offset as ARG0 and AX still holding the weapon
++   * index c31e stashed at word[DGROUP:0x9bdb].  `mov bx,0x9b5d; add bx,ax` selects the damage-table entry
++   * for b274, the roll is added to byte[di+0x1a], and at 0x14 the object is destroyed (b354/b2ef) and the
++   * live-soft-target count word[DGROUP:0x930a] decremented.  Ghidra took the object from param_2 (a stale
++   * slot) and deref'd it as a host pointer. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t ax = (uint16_t)DAT_2000_5bdb;                       /* c322 mov [0x9bdb],ax */
++  uint8_t roll;
++  (void)param_2;
++  roll = (uint8_t)FUN_0000_b274((byte *)(uintptr_t)(uint16_t)(0x9b5d + ax));
++  dg[(uint16_t)(di + 0x1a)] = (uint8_t)(dg[(uint16_t)(di + 0x1a)] + roll);
++  if (dg[(uint16_t)(di + 0x1a)] < 0x14) return;                /* 9c81 cmpb 0x14; jae */
++  FUN_1000_b2ef(FUN_1000_b354((int)di));
++  DAT_2000_530a = DAT_2000_530a + -1;                          /* 9c92 decw [0x930a] */
+   return;
+ }
+ 
+@@ -29461,9 +29466,16 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_b274) @ 0000:b274 ===== */
+ 
+ uint __allregs FUN_0000_b274(byte *param_1)
++
+ {
+-  /* board:0012 NOTE 447: DAT_a3b2 = current-target near offset; rebase to DGROUP (== PATCH 266 inline). */
++  /* PATCH 493: the DAMAGE ROLL (asm 0xb274-0xb2a1; DS=DGROUP=0x1c00).  bx=param_1 is a DGROUP NEAR
++   * OFFSET into the per-weapon damage table (9c76 forms it as 0x9b5d + ax); the roll is
++   *   ((rand()&0xff) * byte[bx+1] >> 8) + byte[bx] + 1, scaled by word[0x9bae] -- or word[0x9bb0] when the
++   * current target word[0x9bb2] has byte[+0x16] bit3 -- and shifted right 8.
++   * Ghidra deref'd bx as a HOST pointer, so SAUDI3's self-play SEGV'd the moment a hit was resolved
++   * (b274 <- 9c76 <- c31e <- bbb7). */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned char *tbl = dg + (uint16_t)(uintptr_t)param_1;
+   uint uVar1;
+   int iVar2;
+   uVar1 = FUN_0000_0291();
+@@ -29471,9 +29483,10 @@
+   if ((dg[(unsigned short)((unsigned short)DAT_2000_a3b2 + 0x16)] & 8) != 0) {
+     iVar2 = DAT_2000_a3b0;
+   }
+-  return (((uVar1 & 0xff) * (uint)param_1[1] >> 8) + *param_1 + 1) * iVar2 >> 8;
++  return (((uVar1 & 0xff) * (uint)tbl[1] >> 8) + tbl[0] + 1) * iVar2 >> 8;
+ }
+ 
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_b2a2) @ 0000:b2a2 ===== */
+ 
+ void __allregs FUN_0000_b2a2(void)

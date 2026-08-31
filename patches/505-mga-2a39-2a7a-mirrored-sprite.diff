@@ -1,0 +1,211 @@
+PATCH 505: the mirrored transparency-sprite pair 2a39 / 2a7a -- FUN_0000_2ae9 / FUN_0000_2b1e's twins.
+
+FUN_0000_2a39 (asm 0x2a39-0x2a79) is structurally FUN_0000_2ae9 (patch 312): resolve the sprite through
+260c, then split on the returned flags --
+    2a3a: 8b 3e 24 07  mov di,[0x724] ; 2a3e: call 0x260c ; 2a41: jb 0x2a78 ; 2a43: jne 0x2a6d
+    ZF=1: push si/es ; mov bx,0x1588 ; call 0x2d6d ; movw [0x794],0x7c8 ; movw [0x796],0x140 ;
+          pop es/si ; mov di,[0x1588] ; mov dx,[0x158e] ; xor cx,cx ; call 0x2a7a ; call 0x2e12
+    ZF=0: mov di,cx (260c's CX) ; mov dx,[0x158e] ; xor cx,cx ; call 0x2a7a
+Ghidra used the always-false `in_CF`/`in_ZF` flag artifacts, so it took the CF==0 path unconditionally,
+gated the 2d6d branch on the wrong flag, called 2a7a ONCE for both branches with the wrong DI, and passed
+the source pointer as a raw parameter instead of the ES:SI that 260c publishes (m_260c_recseg/recoff,
+patch 114; m_260c_cx, patch 303).
+
+FUN_0000_2a7a (asm 0x2a7a-0x2ae8) is FUN_0000_2b1e (patch 446) with the destination cursor walking
+BACKWARDS -- `stos al` followed by `sub di,2`, and `dec di` on a transparent byte, both a net -1 with the
+write at the pre-decrement DI:
+    2a7a: mov ax,es                     ; the SOURCE segment 260c left in ES:SI
+    2a7c: add di,di ; add di,[0x794] ; mov di,[di] ; add di,dx ; dec di
+    2a87: mov bp,[0x724] ; mov es,[bp+0] ; mov bp,[bp+4] ; xor bp,cx ; sub bp,cx
+    2a95: push ds ; mov ds,ax
+    2a98: mov cx,[si-4] ; xor dx,dx ; xchg dl,cl ; xchg cl,ch    ; cx = rows (hi byte), dx = cols (lo)
+    2aa1: cmpb [si-2],2 ; je 0x2ac3
+    plain (0x2aa7): per row `lodsb; or al,al; je -> dec di; else stos al; sub di,2`, then
+                    `add di,dx ; add di,bp`
+    RLE   (0x2ac3): per row save DI in DX, `lodsb; sub di,ax` (skip), `lodsb; mov cx,ax` (run), the same
+                    transparent-byte loop, then `mov di,dx ; add di,bp`
+Ghidra base-lost all three bases -- the [0x794] row table (read as a host `int *`), the [0x724]
+framebuffer descriptor (`mov es,[bp+0]` / `mov bp,[bp+4]`, both SS=DGROUP-relative) and the source
+segment carried in ES -- and used the source parameter as a raw host pointer.  Rebuilt in patch 446's
+style with 16-bit real-mode wrap on BOTH the source and destination offsets.
+
+This pair is the top SIGSEGV of the post-494 combat cascade: with the AI actually firing, the
+player-death cockpit repaint reaches it via 2a7a <- 2a39 <- 8682 <- 7fc7.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -6911,23 +6911,37 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_2a39) @ 0000:2a39 ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ void __allregs
+ FUN_0000_2a39(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  undefined1 in_ZF = 0;
+-  
+-  FUN_0000_260c(param_1,param_3,_DAT_1000_c724);
+-  if (!(bool)in_CF) {
+-    if ((bool)in_ZF) {
+-                    /* WARNING: Subroutine does not return */
+-      FUN_0000_2d6d((undefined1 *)&DAT_1000_d588);
+-    }
+-    FUN_0000_2a7a(0,_DAT_1000_d58e,param_4,param_2);
++  /* PATCH 505: the MIRRORED transparency-sprite METHOD (asm 0x2a39-0x2a79), FUN_0000_2ae9's twin
++   * (patch 312) -- same 260c resolve, same ZF split, but blitting through 2a7a (which walks the
++   * destination BACKWARDS) instead of 2b1e:
++   *     2a3a: mov di,[0x724] ; 2a3e: call 0x260c ; 2a41: jb 0x2a78 ; 2a43: jne 0x2a6d
++   *     ZF=1: push si/es ; mov bx,0x1588 ; call 0x2d6d ; movw [0x794],0x7c8 ; movw [0x796],0x140 ;
++   *           pop es/si ; mov di,[0x1588] ; mov dx,[0x158e] ; xor cx,cx ; call 0x2a7a ; call 0x2e12
++   *     ZF=0: mov di,cx  (260c's CX) ; mov dx,[0x158e] ; xor cx,cx ; call 0x2a7a
++   * Ghidra used the always-false in_CF/in_ZF flag artifacts, so it took the CF==0 path unconditionally,
++   * ran the 2d6d branch on the wrong flag, called 2a7a ONCE for both branches with the wrong DI, and
++   * passed the source pointer as a raw parameter instead of 260c's published ES:SI.  Use the 260c shim
++   * statics exactly as patch 312 does. */
++  (void)param_1; (void)param_2; (void)param_3; (void)param_4;
++  FUN_0000_260c(param_1,param_3,_DAT_1000_c724);                       /* 2a3e */
++  if (m_260c_cf) return;                                               /* 2a41 jb 0x2a78 */
++  if (m_260c_zf) {                                                     /* 2a43 jne 0x2a6d */
++    FUN_0000_2d6d((int *)(uintptr_t)0x1588);                           /* 2a4a */
++    *(uint16_t *)(g_mem + 0x1c794) = 0x7c8;                            /* 2a4d */
++    *(uint16_t *)(g_mem + 0x1c796) = 0x140;                            /* 2a53 */
++    FUN_0000_2a7a(0,(int)(uint16_t)*(uint16_t *)(g_mem + 0x1d58e),     /* dx = word[0x158e] */
++                  (byte *)(uintptr_t)m_260c_recoff,                    /* si = the sprite record */
++                  (int)(uint16_t)*(uint16_t *)(g_mem + 0x1d588));      /* di = word[0x1588] */
++    FUN_0000_2e12();                                                   /* 2a69 */
++    return;
+   }
++  FUN_0000_2a7a(0,(int)(uint16_t)*(uint16_t *)(g_mem + 0x1d58e),
++                (byte *)(uintptr_t)m_260c_recoff,
++                (int)(uint16_t)m_260c_cx);                             /* 2a6d mov di,cx */
+   return;
+ }
+ 
+@@ -6962,69 +6976,71 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_2a7a) @ 0000:2a7a ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ void __allregs FUN_0000_2a7a(uint param_1,int param_2,byte *param_3,int param_4)
+ 
+ {
+-  byte *pbVar1;
+-  undefined2 uVar2;
+-  uint uVar3;
+-  uint uVar4;
+-  uint uVar5;
+-  int iVar6;
+-  byte *pbVar7;
+-  byte *pbVar8;
+-  byte *pbVar9;
+-  undefined2 unaff_ES;
+-  
+-  pbVar7 = (byte *)(*(int *)(param_4 * 2 + _DAT_1000_c794) + param_2 + -1);
+-  uVar2 = *_DAT_1000_c724;
+-  iVar6 = (_DAT_1000_c724[2] ^ param_1) - param_1;
+-  uVar3 = *(uint *)(param_3 + -4) >> 8;
+-  uVar5 = *(uint *)(param_3 + -4) & 0xff;
+-  uVar4 = uVar5;
+-  if (param_3[-2] != 2) {
++  /* PATCH 505: the MIRRORED transparency blit (asm 0x2a7a-0x2ae8) -- FUN_0000_2b1e's twin (patch 446),
++   * identical except that the destination cursor walks BACKWARDS (`stos al` then `sub di,2`, and
++   * `dec di` on a transparent byte -- both a net -1 with the write at the pre-decrement DI).
++   *     2a7a: mov ax,es                          ; the SOURCE segment 260c published in ES:SI
++   *     2a7c: add di,di ; add di,[0x794] ; mov di,[di] ; add di,dx ; dec di
++   *     2a87: mov bp,[0x724] ; mov es,[bp+0] ; mov bp,[bp+4] ; xor bp,cx ; sub bp,cx
++   *     2a95: push ds ; mov ds,ax
++   *     2a98: mov cx,[si-4] ; xor dx,dx ; xchg dl,cl ; xchg cl,ch   ; cx = rows (hi), dx = cols (lo)
++   *     2aa1: cmpb [si-2],2 ; je 0x2ac3
++   *     plain: per row  `lodsb; or al,al; je -> dec di; else stos al; sub di,2`, then
++   *            `add di,dx ; add di,bp`
++   *     RLE  : per row  save DI in DX, `lodsb; sub di,ax` (skip), `lodsb; mov cx,ax` (run), then the
++   *            same transparent-byte loop, then `mov di,dx ; add di,bp`
++   * Ghidra base-lost all three bases -- the [0x794] row table (read as a host `int *`), the
++   * [0x724] framebuffer descriptor (`mov es,[bp+0]` / `mov bp,[bp+4]`, both SS=DGROUP-relative) and the
++   * source segment carried in ES -- and used the source parameter as a raw host pointer.  Rebuilt in the
++   * 2b1e style with 16-bit real-mode wrap on BOTH the source and destination offsets. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t fb_di  = *(uint16_t *)(dg + 0x724);                          /* 2a87 */
++  uint16_t fb_seg = *(uint16_t *)(dg + fb_di);                          /* 2a8b mov es,[bp+0] */
++  uint16_t pitch  = *(uint16_t *)(dg + (uint16_t)(fb_di + 4));          /* 2a8e mov bp,[bp+4] */
++  uint16_t stride = (uint16_t)((pitch ^ (uint16_t)param_1) - (uint16_t)param_1); /* 2a91/2a93 */
++  uint16_t rowtab = *(uint16_t *)(dg + 0x794);
++  uint16_t rowoff = *(uint16_t *)(dg + (uint16_t)((uint16_t)param_4 * 2 + rowtab)); /* 2a7c-2a82 */
++  uint8_t *fb   = g_mem + ((uint32_t)fb_seg << 4);
++  uint16_t off  = (uint16_t)(rowoff + (uint16_t)param_2 - 1);           /* 2a84 add di,dx ; 2a86 dec di */
++  uint8_t *src  = g_mem + ((uint32_t)m_260c_recseg << 4);
++  uint16_t soff = (uint16_t)(uintptr_t)param_3;
++  uint16_t w    = *(uint16_t *)(src + (uint16_t)(soff - 4));            /* 2a98 mov cx,[si-4] */
++  uint16_t rows = (uint16_t)(w >> 8);
++  uint16_t cols = (uint16_t)(w & 0xff);
++  if (rows == 0) return;
++  if (src[(uint16_t)(soff - 2)] != 2) {                                 /* 2aa1 cmpb [si-2],2 */
+     do {
++      uint16_t n = cols;                                                /* 2aa8 mov cx,dx */
+       do {
+-        pbVar8 = pbVar7;
+-        pbVar1 = param_3;
+-        param_3 = param_3 + 1;
+-        if (*pbVar1 != 0) {
+-          *pbVar8 = *pbVar1;
+-        }
+-        uVar4 = uVar4 - 1;
+-        pbVar7 = pbVar8 + -1;
+-      } while (uVar4 != 0);
+-      uVar3 = uVar3 - 1;
+-      uVar4 = uVar5;
+-      pbVar7 = pbVar8 + iVar6 + uVar5 + -1;
+-    } while (uVar3 != 0);
++        uint8_t v = src[soff]; soff = (uint16_t)(soff + 1);             /* 2aaa lodsb */
++        if (v != 0) fb[off] = v;                                        /* 2aaf stos al */
++        off = (uint16_t)(off - 1);                                      /* 2ab0 sub di,2 / 2ab7 dec di */
++        n = (uint16_t)(n - 1);
++      } while (n != 0);
++      off  = (uint16_t)(off + cols + stride);                           /* 2aba add di,dx ; add di,bp */
++      rows = (uint16_t)(rows - 1);
++    } while (rows != 0);
+     return;
+   }
+   do {
+-    pbVar8 = param_3 + 1;
+-    pbVar9 = pbVar7 + -(uint)*param_3;
+-    param_3 = param_3 + 2;
+-    for (uVar4 = (uint)*pbVar8; uVar4 != 0; uVar4 = uVar4 - 1) {
+-      while( true ) {
+-        pbVar1 = param_3;
+-        param_3 = param_3 + 1;
+-        if (*pbVar1 == 0) break;
+-        *pbVar9 = *pbVar1;
+-        pbVar9 = pbVar9 + -1;
+-        uVar4 = uVar4 - 1;
+-        if (uVar4 == 0) goto LAB_0000_2ae0;
+-      }
+-      pbVar9 = pbVar9 + -1;
++    uint16_t rowstart = off;                                            /* 2ac6 mov dx,di */
++    uint16_t skip, cnt;
++    skip = src[soff]; soff = (uint16_t)(soff + 1);                      /* 2ac8 lodsb */
++    off  = (uint16_t)(off - skip);                                      /* 2ac9 sub di,ax */
++    cnt  = src[soff]; soff = (uint16_t)(soff + 1);                      /* 2acb lodsb ; mov cx,ax */
++    while (cnt != 0) {                                                  /* 2ace jcxz 0x2ae0 */
++      uint8_t v = src[soff]; soff = (uint16_t)(soff + 1);               /* 2ad0 lodsb */
++      if (v != 0) fb[off] = v;                                          /* 2ad5 stos al */
++      off = (uint16_t)(off - 1);                                        /* 2ad6 sub di,2 / 2add dec di */
++      cnt = (uint16_t)(cnt - 1);
+     }
+-LAB_0000_2ae0:
+-    pbVar7 = pbVar7 + iVar6;
+-    uVar3 = uVar3 - 1;
+-    if (uVar3 == 0) {
+-      return;
+-    }
+-  } while( true );
++    off  = (uint16_t)(rowstart + stride);                               /* 2ae0 mov di,dx ; add di,bp */
++    rows = (uint16_t)(rows - 1);
++  } while (rows != 0);
++  return;
+ }
+ 
+ 

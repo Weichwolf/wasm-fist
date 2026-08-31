@@ -1,0 +1,119 @@
+PATCH 501: the player-death camera hand-off -- 5087 and 5fca base-loss.
+
+Both are reached only from FUN_0000_a93e's `di == word[DGROUP:0x6d34]` branch, i.e. the frame on which
+the PLAYER object is destroyed, so neither could run before patches 499/500 unblocked the impact cascade
+and got a93e that far.
+
+FUN_0000_5087 (asm 0x5087-0x50a1) latches the camera-anchor object's X/Y:
+    5088: 8b 3e e0 7a   mov di,[0x7ae0]      ; an object NEAR OFFSET (ab03 compares DI against it)
+    508e: 74 10         je  0x50a0
+    5090: 66 8b 45 04   mov eax,[di+4]  ; 5094: 66 a3 84 7b  mov [0x7b84],eax
+    5098: 66 8b 45 08   mov eax,[di+8]  ; 509c: 66 a3 88 7b  mov [0x7b88],eax
+Ghidra dereferenced word[0x7ae0] as a host pointer.
+
+FUN_1000_5fca (asm 0x15fca-0x16014) hands the camera to the next friendly vehicle: it walks the
+DGROUP:0x6d3c WORD cell table -- the same table as patches 264 and 500 -- starting at the dead object's
+own cell group (`movzbw bx,[di+0x1b]; shl bx,3`), stepping 2 bytes and wrapping at 0x40, for at most
+0x20 entries, and takes the first live non-wreck candidate on the SAME side (`[si+0x16]&8 == [di+0x16]&8`)
+-> 466c (which already takes the near offset, patch 300) + bedc; if none, 5cce.
+Ghidra typed the table `int *` -- indexing it with a byte offset while reading 4 bytes per entry -- and
+dereferenced every near offset as a host pointer (`*piVar1 != 0x17`, `piVar1[0xb]`).
+
+Measured: with 500 in, AZER1/AZER3/AZER5/AZER6/CYPRUS1 SIGSEGV'd at 5087 <- a93e <- b39c <- c336 <-
+c31e <- bbb7; 5fca is the very next call in the same sequence and carries the same defect.
+
+Noted honestly: AX at 5fca's 0x16000 exit is (ah<<8)|al, and AH is written only inside the loop, so on
+the path where no candidate is ever examined it is a dead input; it is modelled as 0.
+--- a/fist.c
++++ b/fist.c
+@@ -14986,9 +14986,18 @@
+ void __allregs FUN_0000_5087(void)
+ 
+ {
+-  if (DAT_2000_3ae0 != 0) {
+-    DAT_2000_3b84 = *(undefined4 *)(DAT_2000_3ae0 + 4);
+-    DAT_2000_3b88 = *(undefined4 *)(DAT_2000_3ae0 + 8);
++  /* PATCH 501: latch the camera-anchor object's position (asm 0x5087-0x50a1; DS=DGROUP=0x1c00):
++   *     5088: mov di,[0x7ae0] ; 508c: or di,di ; 508e: je 0x50a0
++   *     5090: mov eax,[di+4]  ; 5094: mov [0x7b84],eax
++   *     5098: mov eax,[di+8]  ; 509c: mov [0x7b88],eax
++   * word[DGROUP:0x7ae0] is an object NEAR OFFSET (ab03 compares DI against it, patch 246); Ghidra
++   * dereferenced it as a host pointer.  Reached only from a93e's `di == word[0x6d34]` player-death
++   * branch, so it first faulted once patch 500 let that branch get this far. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_3ae0;
++  if (di != 0) {
++    *(unsigned int *)(dg + 0x7b84) = *(unsigned int *)(dg + (unsigned short)(di + 4));
++    *(unsigned int *)(dg + 0x7b88) = *(unsigned int *)(dg + (unsigned short)(di + 8));
+   }
+   return;
+ }
+@@ -57130,30 +57139,45 @@
+ void __allregs FUN_1000_5fca(int *param_1)
+ 
+ {
+-  int *piVar1;
+-  uint uVar2;
+-  int iVar3;
+-  uint uVar4;
+-  
+-  uVar2 = (uint)(*(byte *)(param_1 + 0xb) & 8);
+-  uVar4 = (uint)*(byte *)((int)param_1 + 0x1b) << 3;
+-  iVar3 = 0x20;
+-  do {
+-    piVar1 = (int *)*(int *)((int)(undefined2 *)&DAT_2000_2d3c + uVar4);
+-    if ((((piVar1 != (int *)0x0) && (piVar1 != param_1)) && (*piVar1 != 0x17)) &&
+-       (uVar2 = CONCAT11((char)piVar1[0xb],(char)uVar2) & 0x8ff, (char)(uVar2 >> 8) == (char)uVar2))
+-    {
+-      FUN_0000_466c(piVar1);
+-      FUN_0000_bedc();
+-      return;
+-    }
+-    uVar4 = uVar4 + 2;
+-    if (0x3f < uVar4) {
+-      uVar4 = 0;
++  /* PATCH 501: hand the camera to the next FRIENDLY vehicle after the player's is destroyed
++   * (asm 0x15fca-0x16014; DS=DGROUP=0x1c00, di=param_1 = the destroyed object's NEAR OFFSET):
++   *     15fca: mov al,[di+0x16] ; and al,8            ; the object's side bit
++   *     15fcf: movzbw bx,[di+0x1b] ; shl bx,3         ; start at this object's cell group
++   *     15fd6: mov cx,0x20
++   *   L: 15fd9: mov si,[bx+0x6d3c]                    ; WORD entry = a candidate NEAR OFFSET
++   *      15fdd: or si,si ; je next ; 15fe1: cmp si,di ; je next
++   *      15fe5: cmpw [si],0x17 ; je next              ; skip wrecks
++   *      15fea: mov ah,[si+0x16] ; and ah,8 ; cmp ah,al ; je found
++   * next: 15ff4: add bx,2 ; cmp bx,0x40 ; jb .. ; xor bx,bx   ; WORD stride, wrap at 32 entries
++   *      15ffe: loop L
++   *      16000: lcall 0:5cce ; lret                   ; nobody left -> 5cce
++   * found: 16007: mov di,si ; lcall 0:466c ; lcall 0:bedc ; lret
++   * The same DGROUP:0x6d3c WORD cell table as patch 264/500.  Ghidra typed it `int *` (indexing
++   * `(int *)((int)&DAT_2000_2d3c + uVar4)` with a byte offset but reading 4 bytes) and dereferenced
++   * every near offset as a host pointer -- `*piVar1 != 0x17` and `piVar1[0xb]` -- so this SIGSEGV'd on
++   * the player-death frame.  466c already takes the NEAR OFFSET (patch 300).
++   * AX at the 0x16000 exit is (ah<<8)|al: AL is set at entry, AH only inside the loop, so on the
++   * never-examined path AH is a dead input -- modelled as 0. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  unsigned char al = (unsigned char)(dg[(unsigned short)(di + 0x16)] & 8);
++  unsigned char ah = 0;
++  unsigned short bx = (unsigned short)((unsigned short)dg[(unsigned short)(di + 0x1b)] << 3);
++  int cx;
++  for (cx = 0x20; cx != 0; cx--) {
++    unsigned short si = *(unsigned short *)(dg + (unsigned short)(0x6d3c + bx));
++    if (si != 0 && si != di && *(unsigned short *)(dg + si) != 0x17) {
++      ah = (unsigned char)(dg[(unsigned short)(si + 0x16)] & 8);
++      if (ah == al) {                                   /* 15ff2 je 0x16006 */
++        FUN_0000_466c((int *)(uintptr_t)si);            /* 16009 lcall 466c (DI = si) */
++        FUN_0000_bedc();                                /* 1600f */
++        return;
++      }
+     }
+-    iVar3 = iVar3 + -1;
+-  } while (iVar3 != 0);
+-  FUN_0000_5cce(piVar1);
++    bx = (unsigned short)(bx + 2);                      /* 15ff4 */
++    if (bx >= 0x40) bx = 0;                             /* 15ff7/15ffc */
++  }
++  FUN_0000_5cce((undefined2)(unsigned short)(((unsigned short)ah << 8) | al)); /* 16000 lcall 5cce */
+   return;
+ }
+ 

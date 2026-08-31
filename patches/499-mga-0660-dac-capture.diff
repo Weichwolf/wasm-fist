@@ -1,0 +1,181 @@
+PATCH 499: the MGA DAC-capture entry 0660 spun forever -- the AZER1 self-play hang.
+
+FUN_0000_0660 (asm 0x660-0x730) is FUN_0000_04f1's exact twin and carried the identical defect patch 092
+fixed there:
+    6be: bb 88 07        mov  bx,0x788
+    6c1: 8c d9           mov  cx,ds
+    6c3: b8 00 03        mov  ax,0x300
+    6c6: ff 1e e4 00     lcall [DGROUP:0xe4]      ; the device-object palette method
+    6ca: 72 35           jb   0x701               ; CF selects CLEAR (1) vs CAPTURE (0)
+Ghidra dropped BOTH the method's three register arguments (it emitted `(...)(0)`) and its returned CF,
+inventing `bVar6 = false` and folding the whole CF==0 branch into `if (!bVar6) { do { } while (true); }`.
+
+Until patch 497 repaired the CS=0 weapon-station dispatch nothing ever fired, so the impact cascade never
+ran and this was unreachable.  With 497 an AZER1 self-play HANGS between t=6500 and t=6800, stack:
+  0660 <- 0647 <- 063c <- a5c4 <- a93e <- b39c <- c336 <- c31e <- bbb7 <- b5e7
+i.e. the first projectile impact resolved against the player.  (My crash sweep scored the hang as
+"ran clean" because a hung run and a survived run both end in the timeout; the sweep now needs a
+progress check, not just an exit code.)
+
+Reconstructed 1:1 from the asm:
+  CF==0 (0x6cc-0x700): wait one INT-8 tick on DGROUP:0x44e -- `mov ax,[0x44e]; L: cmp [0x44e],ax; je L`,
+        driven by the cooperative fist_timer_pump(), the same idiom as 04f1's fade path and patch 017 --
+        then incb [0x738], read the whole 768-byte DAC through ports 0x3c7/0x3c9 into the buffer SEGMENT
+        word[0x788], decb [0x738], and arm the 0x732 continuation at word[0x5e8].
+  CF==1 (0x701-0x730): es=word[0x782], di=[cs:0x848]*3, cx=[cs:0x84a]*3, zero that run, word[0x780]=0x782,
+        byte[0x786]=1.
+Both ES bases are real-mode SEGMENTS that Ghidra lost (it used `[cs:0x848]*3` as a bare host pointer).
+
+Store widths restored to the asm in BOTH functions -- [0x786] and [0x738] are BYTE (`c6 06 86 07 00`,
+`fe 06 38 07`, `fe 0e 38 07`), [0x5e8] and [0x780] are WORD (`c7 06 e8 05 ...`).  04f1's accessors were
+undefined2/undefined4 and clobbered [0x787] and [0x5ea..0x5eb]; that is corrected here too, since it is
+the same two instructions in the same twin pair.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1676,8 +1676,10 @@
+   undefined2 *puVar5;
+   bool bVar6;
+   
+-  DAT_1000_c786 = 0;
+-  _DAT_1000_c5e8 = 0;
++  /* PATCH 499: asm 0x4f1 `c6 06 86 07 00` is a BYTE store and 0x4f6 `c7 06 e8 05 00 00` a WORD store;
++   * the decompile's undefined2/undefined4 accessors clobbered [0x787] and [0x5ea..0x5eb]. */
++  *(unsigned char  *)(g_mem + 0x1c786) = 0;
++  *(unsigned short *)(g_mem + 0x1c5e8) = 0;
+   DAT_0000_0632 = 0;
+   DAT_0000_0634 = (undefined2)(0x10000 / (ulong)(param_1 + (uint)(param_1 == 0)));
+   DAT_0000_0638 = (param_2 - param_4) + 1;
+@@ -1704,7 +1706,8 @@
+        * dispatches c5e8); it does NOT block here (the asm retfs at 0x586). */
+       unsigned short t = *(unsigned short *)(g_mem + 0x1c44e);
+       while (*(unsigned short *)(g_mem + 0x1c44e) == t) fist_timer_pump();   /* asm 0x536 je 0x536 */
+-      DAT_1000_c738 = DAT_1000_c738 + 1;                                     /* asm 0x53c inc [0x738] */
++      *(unsigned char *)(g_mem + 0x1c738) =                                  /* asm 0x53c `fe 06` incb */
++          (unsigned char)(*(unsigned char *)(g_mem + 0x1c738) + 1);           /* PATCH 499: BYTE, not WORD */
+       DAT_0000_0636 = DAT_0000_0636 * 3;                                     /* asm 0x548-0x552 x3 */
+       DAT_0000_0638 = DAT_0000_0638 * 3;                                     /* asm 0x557-0x562 x3 */
+       {
+@@ -1712,8 +1715,9 @@
+         int i; out(0x3c7,0);                                                 /* DAC read index = 0 */
+         for (i = 0; i < 0x300; i++) pb[i] = (unsigned char)in(0x3c9);        /* asm 0x575 read 768 */
+       }
+-      DAT_1000_c738 = DAT_1000_c738 + -1;                                    /* asm 0x57c dec [0x738] */
+-      DAT_1000_c5e8 = 0x5b8;                                                 /* asm 0x580 cont = 05b8 */
++      *(unsigned char *)(g_mem + 0x1c738) =                                  /* asm 0x57c `fe 0e` decb */
++          (unsigned char)(*(unsigned char *)(g_mem + 0x1c738) - 1);           /* PATCH 499: BYTE, not WORD */
++      *(unsigned short *)(g_mem + 0x1c5e8) = 0x5b8;                          /* asm 0x580 movw cont=05b8 */
+       return;
+     }
+   }
+@@ -1727,7 +1731,7 @@
+     for (uVar3 = 0; uVar3 < uVar4; uVar3 = uVar3 + 1) dst[uVar3] = 0;
+   }
+   _DAT_1000_c780 = 0x782;
+-  DAT_1000_c786 = 1;
++  *(unsigned char *)(g_mem + 0x1c786) = 1;   /* PATCH 499: asm 0x5b1 `c6 06 86 07 01` is a BYTE store */
+   return;
+ }
+ 
+@@ -1840,54 +1844,58 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_0660) @ 0000:0660 ===== */
+ 
+-/* WARNING: Removing unreachable block (ram,0x000006d5) */
+-/* WARNING: Removing unreachable block (ram,0x000006ef) */
+-/* WARNING: Removing unreachable block (ram,0x000006f5) */
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ void __allregs
+ FUN_0000_0660(int param_1,int param_2,undefined2 param_3,int param_4,int param_5,int param_6)
+-
+ {
+-  undefined2 *puVar1;
+-  undefined2 uVar2;
+-  uint uVar3;
+-  uint uVar4;
+-  undefined2 *puVar5;
+-  bool bVar6;
+-  
+-  DAT_1000_c786 = 0;
+-  _DAT_1000_c5e8 = 0;
+-  DAT_0000_084a = (param_2 - param_4) + 1;
+-  DAT_0000_083c = 0;
+-  DAT_0000_083e = (undefined2)(0x10000 / (ulong)(param_1 + (uint)(param_1 == 0)));
+-  DAT_0000_0840 = 0;
+-  DAT_0000_0842 = (undefined2)(0x10000 / (ulong)(param_5 + (uint)(param_5 == 0)));
+-  bVar6 = false;
+-  DAT_0000_0844 = 0;
+-  DAT_0000_0846 = (undefined2)(0x10000 / (ulong)(param_6 + (uint)(param_6 == 0)));
+-  DAT_0000_0848 = param_4;
+-  DAT_0000_084c = param_3;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0e4)))(0);
+-  uVar2 = _DAT_1000_c782;
+-  if (!bVar6) {
+-    do {
+-    } while( true );
+-  }
+-  puVar5 = (undefined2 *)(DAT_0000_0848 * 3);
+-  uVar4 = DAT_0000_084a * 3;
+-  for (uVar3 = uVar4 >> 1; uVar3 != 0; uVar3 = uVar3 - 1) {
+-    puVar1 = puVar5;
+-    puVar5 = puVar5 + 1;
+-    *puVar1 = 0;
+-  }
+-  for (uVar4 = (uint)((uVar4 & 1) != 0); uVar4 != 0; uVar4 = uVar4 - 1) {
+-    puVar1 = puVar5;
+-    puVar5 = (undefined2 *)((int)puVar5 + 1);
+-    *(undefined1 *)puVar1 = 0;
++  /* PATCH 499: the DAC-CAPTURE / palette-run-clear entry (asm 0x660-0x730), FUN_0000_04f1's exact twin
++   * and carrying the identical defect patch 092 fixed there: `0x6be bx=0x788; 0x6c1 cx=ds; 0x6c3 ax=0x300;
++   * 0x6c6 lcall [DGROUP:0xe4]; 0x6ca jb 0x701` -- Ghidra dropped BOTH the method's three register
++   * arguments and its returned CF, then folded the whole CF==0 branch into `do { } while (true)`.
++   * With patch 497 the impact/damage cascade finally reaches it (bbb7 -> c31e -> c336 -> b39c -> a93e ->
++   * a5c4 -> 063c -> 0647 -> 0660) and AZER1 HUNG there between t=6500 and t=6800.
++   *   CF==0: wait one INT-8 tick on DGROUP:0x44e (cooperatively pumped -- the same idiom as 04f1's fade
++   *          path and patch 017), then read the whole 768-byte DAC into the buffer segment [0x788] via
++   *          ports 0x3c7/0x3c9 and arm the 0x732 continuation at DGROUP:0x5e8.
++   *   CF==1: clear the [0x782]:[cs:0x848]*3 palette-buffer run of [cs:0x84a]*3 bytes and mark done.
++   * The ES bases (word[0x788] / word[0x782] are real-mode SEGMENTS) were lost -- Ghidra used
++   * `[cs:0x848]*3` as a bare host pointer.  Store widths restored to the asm: [0x786] and [0x738] are
++   * BYTE (`c6 06 86 07 00`, `fe 06 38 07`), [0x5e8] and [0x780] are WORD. */
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  dg[0x786] = 0;                                          /* 660 movb [0x786],0 */
++  *(unsigned short *)(dg + 0x5e8) = 0;                    /* 665 movw [0x5e8],0 */
++  DAT_0000_084c = param_3;                                /* 66b mov cs:[0x84c],dx */
++  DAT_0000_0848 = param_4;                                /* 670 mov cs:[0x848],bx */
++  DAT_0000_084a = (unsigned short)((unsigned short)param_2 - (unsigned short)param_4 + 1); /* 675/677/678 */
++  DAT_0000_083c = 0;                                      /* 687 */
++  DAT_0000_083e = (unsigned short)(0x10000u /
++      (unsigned)((unsigned short)param_1 + (unsigned)((unsigned short)param_1 == 0)));      /* 67d-690 */
++  DAT_0000_0840 = 0;                                      /* 69c */
++  DAT_0000_0842 = (unsigned short)(0x10000u /
++      (unsigned)((unsigned short)param_5 + (unsigned)((unsigned short)param_5 == 0)));      /* 694-6a5 */
++  DAT_0000_0844 = 0;                                      /* 6b1 */
++  DAT_0000_0846 = (unsigned short)(0x10000u /
++      (unsigned)((unsigned short)param_6 + (unsigned)((unsigned short)param_6 == 0)));      /* 6a9-6ba */
++  g_fist_cf = 0;
++  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0e4)))(0x300,0x788,0x1c00);  /* 6be-6c6 */
++  if (g_fist_cf == 0) {                                                      /* 6ca jb 0x701 */
++    unsigned short t = *(volatile unsigned short *)(dg + 0x44e);
++    while (*(volatile unsigned short *)(dg + 0x44e) == t) fist_timer_pump(); /* 6cc/6cf/6d3 */
++    dg[0x738] = (unsigned char)(dg[0x738] + 1);                              /* 6d5 incb */
++    { unsigned char *pb = g_mem + (((unsigned long)*(unsigned short *)(dg + 0x788)) << 4);  /* 6db es */
++      int n; out(0x3c7,0);                                                   /* 6e1-6e6 */
++      for (n = 0; n < 0x300; n++) pb[n] = (unsigned char)in(0x3c9); }        /* 6ec-6f3 */
++    dg[0x738] = (unsigned char)(dg[0x738] - 1);                              /* 6f6 decb */
++    *(unsigned short *)(dg + 0x5e8) = 0x732;                                 /* 6fa movw */
++    return;
+   }
+-  _DAT_1000_c780 = 0x782;
+-  DAT_1000_c786 = 1;
++  { unsigned char *dst = g_mem + (((unsigned long)*(unsigned short *)(dg + 0x782)) << 4)    /* 701 es */
++                       + (unsigned short)((unsigned short)DAT_0000_0848 * 3);               /* 705-70e */
++    unsigned short n = (unsigned short)((unsigned short)DAT_0000_084a * 3);                 /* 710-719 */
++    unsigned short q; for (q = 0; q < n; q++) dst[q] = 0; }                                 /* 71b-723 */
++  *(unsigned short *)(dg + 0x780) = 0x782;                                                  /* 725 movw */
++  dg[0x786] = 1;                                                                            /* 72b movb */
+   return;
+ }
+ 
