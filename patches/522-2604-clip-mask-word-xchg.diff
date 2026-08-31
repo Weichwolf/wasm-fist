@@ -1,0 +1,52 @@
+PATCH 522: the sprite CLIP-MASK setter 2604 is a WORD xchg, not a dword one.
+
+asm 0x2604-0x260b:
+    2604: 98           cbtw                  ; sign-extend AL into AX
+    2605: 87 06 86 15  xchg ax,[0x1586]      ; 16-BIT exchange -- the OLD word is the return value
+    2609: 3c 01        cmp  al,1
+    260b: cb           lret
+
+`_DAT_1000_d586` is an undefined4 accessor, so the decompile read AND wrote FOUR bytes: writing
+`(int)param_1` put the sign-extension high half into DGROUP:0x1588..0x1589 -- the clip word
+FUN_0000_260c fills with its own result (`mov [0x1588],ax` at 0x2649) and that 26a1/279d/294d read back
+as the blit row.  So every call to this setter silently corrupted the row of the next sprite blit.
+
+Restored to the asm width.  The `cmp al,1` flag output stays dropped, as before.
+
+This is the last piece of the t=275 native<->wasm RENDER delta, which after patch 521 is exactly
+DGROUP:0x1586 (0xffac native / 0 wasm) and 0x1588 (0xffff / 0), with every simulation block identical.
+2604 has no caller in the decompiled tree -- it is reached through a device-method vector -- so its
+`param_1` is whatever the caller left in AL; that is a separate question from the store width, and the
+width is unambiguous from the encoding.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -6043,13 +6043,22 @@
+ undefined2 __allregs FUN_0000_2604(char param_1)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  uVar1 = _DAT_1000_d586;
+-  LOCK();
+-  _DAT_1000_d586 = (int)param_1;
+-  UNLOCK();
+-  return uVar1;
++  /* PATCH 522: the sprite CLIP-MASK setter is a WORD xchg, not a dword one.  asm 0x2604-0x260b:
++   *     2604: 98           cbtw                  ; sign-extend AL into AX
++   *     2605: 87 06 86 15  xchg ax,[0x1586]      ; 16-BIT exchange
++   *     2609: 3c 01        cmp  al,1
++   *     260b: cb           lret
++   * `_DAT_1000_d586` is an undefined4 accessor, so the decompile read AND wrote FOUR bytes: the write
++   * of `(int)param_1` put the sign-extension high half into DGROUP:0x1588..0x1589 -- the clip word
++   * FUN_0000_260c then fills with its own result (`mov [0x1588],ax` at 0x2649) and that 26a1/279d/294d
++   * read back as the blit row.  Restored to the asm width; the `cmp al,1` flag output stays dropped as
++   * before.
++   * This is the last piece of the t=275 native<->wasm RENDER delta: DGROUP:0x1586 (0xffac vs 0) and
++   * 0x1588 (0xffff vs 0), with every simulation block identical. */
++  unsigned short *p = (unsigned short *)(g_mem + 0x1d586);
++  unsigned short old = *p;                                   /* xchg: the OLD word is the return */
++  *p = (unsigned short)(short)(signed char)param_1;          /* 2604 cbtw */
++  return old;
+ }
+ 
+ 

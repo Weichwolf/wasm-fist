@@ -6091,3 +6091,43 @@ NEXT: watchpoint DGROUP:0x158a for ALL writes inside tick 274 on both targets an
 divergence is in a later one.  The inputs to check, in order: 260c's param_1 (the sprite-directory byte
 offset) at each call, the directory segment word[DGROUP:0x4f0], and the resolved record's header word
 word[recseg:recoff-4] against the mask word[0x1586].
+
+## cont.65j -- the render delta is down to ONE WORD
+
+Two more carriers, both in the MGA sprite path, both found by the same three-run method:
+
+  521  FUN_0000_26a1, FUN_0000_279d and FUN_0000_294d each read the POSITION DESCRIPTOR from a different
+       __allregs slot -- param_4, param_3, param_4 -- while FUN_0000_2ae9 (patch 312) already read
+       param_2.  All four are reached ONLY through device-method vectors, and every [0x6b4] caller in
+       this tree passes (ax, bx), so no single call shape could satisfy them.  MEASURED: with the
+       handlers themselves fixed (517), FUN_0000_787d hands 26a1 ax=0x380 / bx=0x8eee exactly as the asm
+       says, and 260c was STILL receiving 0xe515 -- param_4, stack garbage.  A watchpoint capturing ALL
+       eight writes to DGROUP:0x158a inside tick 274 showed every one of that frame's 260c calls taking
+       its descriptor from the wrong slot.  All three now read param_2.  Divergence moved t=274 -> t=275.
+
+  522  FUN_0000_2604, the sprite CLIP-MASK setter, is a WORD xchg:
+           2604: 98 cbtw ; 2605: 87 06 86 15 xchg ax,[0x1586] ; 2609: 3c 01 cmp al,1 ; 260b: cb lret
+       `_DAT_1000_d586` is an undefined4 accessor, so the decompile read AND wrote four bytes and the
+       sign-extension high half landed in DGROUP:0x1588..0x1589 -- the clip word 260c fills with its own
+       result (`mov [0x1588],ax` at 0x2649) and that 26a1/279d/294d read back as the blit ROW.  Every
+       call to the setter silently corrupted the next sprite blit's row.
+
+WHERE IT STANDS.  A whole-DGROUP dump of AZER1 at t=275, native vs wasm, differs in 14 bytes:
+
+    0x03e2 0x0686 0x078e 0x16b0 0x2662 0x2672 0x3ae2   -- far-vector slots and their high halves;
+                                                          native holds 0x081f/0x080a/0xc9c6, the TOP
+                                                          HALVES OF REAL HOST ADDRESSES, against 0 on
+                                                          wasm.  Different by construction, correctly
+                                                          excluded from the fingerprint.
+    0x1586..0x1587                                     -- the clip MASK.  The only real one left.
+
+So: the simulation is bit-identical, and the render delta is now exactly ONE WORD.  0x1586 is written
+only by 2604, and a watchpoint shows it is NOT written after t=272 -- it is set during setup and its
+value is the sign-extended AL the caller left, which the port does not thread (2604 has no decompiled
+caller; it is reached through a device-method vector).  Its native value is 0xffac, i.e. AL = -84.
+
+NEXT: find the vector through which 2604 is invoked and thread its AL.  The word 0x2604 appears in the
+MGA image at offsets 0x2bb0 and 0x540c -- two method tables; identify which table entry is live during
+mission setup and what the engine puts in AL there.  Note the board already records that FUN_0000_60d9,
+the other known route to mga-0x2604, is never reached and leaves the SRC descriptor word[0x7ac0]
+unpopulated, so this is a different, live path.
