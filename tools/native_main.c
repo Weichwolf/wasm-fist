@@ -653,9 +653,12 @@ void fist_timer_pump(void){
              * around them.  Enumerating them keeps the fingerprint free of host addresses while letting
              * the same first-differing-tick walk continue into the render side. */
             { static const unsigned short rw[] = {
-                0x03e2,0x03e3, 0x078e,0x078f,
-                0x1586,0x1587,0x1588,0x1589,0x158a,0x158b,0x158c,0x158d,0x158e,0x158f,
-                0x16b0,0x16b1, 0x2672, 0x3ae2,0x3ae3 };
+                /* ONLY the MGA sprite CLIP block 260c computes (patch 114).  The other low-DGROUP words
+                 * the cont.65f dump flagged -- 0x03e2, 0x0686, 0x16b0, 0x2663, 0x2672, 0x3ae2 -- are
+                 * FAR-VECTOR slots or their high halves (native shows 0x081f/0x080a there, the top halves
+                 * of real host addresses, against 0 on wasm), so they differ by construction and must
+                 * stay out of any fingerprint. */
+                0x1586,0x1587,0x1588,0x1589,0x158a,0x158b,0x158c,0x158d,0x158e,0x158f };
               unsigned h=2166136261u;
               for (unsigned q=0;q<sizeof(rw)/sizeof(rw[0]);q++){ h^=g_mem[0x1c000+rw[q]]; h*=16777619u; }
               fprintf(stderr," R%08x",h); }
