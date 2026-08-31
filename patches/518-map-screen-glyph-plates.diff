@@ -1,0 +1,245 @@
+PATCH 518: eleven map-screen glyph plates emitted as a bare arg-less `lcall [0x6b4]`.
+
+A correct scan of build/fist.c -- functions whose ENTIRE body is
+`(*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(); return;` -- finds 48 such handlers.  Eleven of
+them are the map-screen glyph plates, in three shapes:
+
+  simple  `mov ax,K ; add ax,[0x7b9c] ; lea bx,[bx+4] ; lcall [0x6b4]`
+      50a2 K=0x0fd8   51be 0x1000   520f 0x1010   5299 0x1020   52e3 0x1030   534f 0x1040
+
+  mode-selected  `mov ax,K ; cmpw [0x7b9e],M ; jne .. ; add ax,[0x7b9c] ; lea bx,[bx+4] ; lcall`
+      53af K=0x1050 M=0x18
+
+  edit-gated  `testb [0x6dab],2 ; je .. ; mov ax,K ; cmpw [0x7b9e],M ; jne .. ; add ax,[0x7b9c] ;
+               jmp .. ; <else> mov ax,K2 ; lea bx,[bx+4] ; lcall`
+      50ea K=0x0fe8 M=0x19 K2=0x0ff8    5486 0x1080/0x1b/0x1090
+      5555 0x1098 M=0x1a K2=0x10a8      56af 0x10b0/0x1c/0x10c0
+
+word[DGROUP:0x7b9c] is the map palette/glyph base, word[0x7b9e] the active map mode and byte[0x6dab] bit1
+the EDIT-mode flag (the same flag patch 246's neighbourhood calls "enter EDITING mode").  BX is the
+display-list element's DGROUP NEAR OFFSET, which BOTH the 2057 and 209e walks publish to DGROUP:0x3e08
+(`mov [0x3e08],bx`) immediately before dispatching; the port's dispatch cannot carry it, so it is read
+back from there, exactly as patches 503/504/509 do.
+
+Ghidra emitted the entire body of each as a bare arg-less `lcall [0x6b4]`, so the paint service ran with
+whatever AX and BX happened to hold -- no glyph id and no element.  These are the map/editor screens, a
+surface the goal names explicitly.
+--- a/fist.c
++++ b/fist.c
+@@ -15021,7 +15021,15 @@
+ void __allregs FUN_0000_50a2(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `mov ax,0xfd8 ; add ax,[0x7b9c] ; lea bx,[bx+4] ; lcall [0x6b4]` (asm 0x50a2-0x50b0), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  ax = (unsigned short)(0xfd8 + *(unsigned short *)(dg + 0x7b9c));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -15068,7 +15076,22 @@
+ void __allregs FUN_0000_50ea(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `testb [0x6dab],2 ; je .. ; mov ax,0xfe8 ; cmpw [0x7b9e],0x19 ; jne .. ;
++   * add ax,[0x7b9c]` (else `mov ax,0xff8`) (asm 0x50ea-0x510b), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  if ((dg[0x6dab] & 2) != 0) {                                       /* the EDIT-mode gate */
++    ax = 0xfe8;
++    if (*(unsigned short *)(dg + 0x7b9e) == 0x19)
++      ax = (unsigned short)(ax + *(unsigned short *)(dg + 0x7b9c));
++  } else {
++    ax = 0xff8;
++  }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -15171,7 +15194,15 @@
+ void __allregs FUN_0000_51be(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `mov ax,0x1000 ; add ax,[0x7b9c] ; lea bx,[bx+4] ; lcall [0x6b4]` (asm 0x51be-0x51cc), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  ax = (unsigned short)(0x1000 + *(unsigned short *)(dg + 0x7b9c));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -15210,7 +15241,15 @@
+ void __allregs FUN_0000_520f(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `mov ax,0x1010 ; add ax,[0x7b9c] ; lea bx,[bx+4] ; lcall [0x6b4]` (asm 0x520f-0x521d), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  ax = (unsigned short)(0x1010 + *(unsigned short *)(dg + 0x7b9c));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -15282,7 +15321,15 @@
+ void __allregs FUN_0000_5299(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `mov ax,0x1020 ; add ax,[0x7b9c] ; lea bx,[bx+4] ; lcall [0x6b4]` (asm 0x5299-0x52a7), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  ax = (unsigned short)(0x1020 + *(unsigned short *)(dg + 0x7b9c));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -15320,7 +15367,15 @@
+ void __allregs FUN_0000_52e3(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `mov ax,0x1030 ; add ax,[0x7b9c] ; lea bx,[bx+4] ; lcall [0x6b4]` (asm 0x52e3-0x52f1), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  ax = (unsigned short)(0x1030 + *(unsigned short *)(dg + 0x7b9c));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -15378,7 +15433,15 @@
+ void __allregs FUN_0000_534f(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `mov ax,0x1040 ; add ax,[0x7b9c] ; lea bx,[bx+4] ; lcall [0x6b4]` (asm 0x534f-0x535d), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  ax = (unsigned short)(0x1040 + *(unsigned short *)(dg + 0x7b9c));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -15433,7 +15496,17 @@
+ void __allregs FUN_0000_53af(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `mov ax,0x1050 ; cmpw [0x7b9e],0x18 ; jne .. ; add ax,[0x7b9c]` (asm 0x53af-0x53c4), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  ax = 0x1050;
++  if (*(unsigned short *)(dg + 0x7b9e) == 0x18)                       /* the active map mode */
++    ax = (unsigned short)(ax + *(unsigned short *)(dg + 0x7b9c));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -15507,7 +15580,22 @@
+ void __allregs FUN_0000_5486(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `testb [0x6dab],2 ; je .. ; mov ax,0x1080 ; cmpw [0x7b9e],0x1b ; jne .. ;
++   * add ax,[0x7b9c]` (else `mov ax,0x1090`) (asm 0x5486-0x54a7), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  if ((dg[0x6dab] & 2) != 0) {                                       /* the EDIT-mode gate */
++    ax = 0x1080;
++    if (*(unsigned short *)(dg + 0x7b9e) == 0x1b)
++      ax = (unsigned short)(ax + *(unsigned short *)(dg + 0x7b9c));
++  } else {
++    ax = 0x1090;
++  }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -15594,7 +15682,22 @@
+ void __allregs FUN_0000_5555(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `testb [0x6dab],2 ; je .. ; mov ax,0x1098 ; cmpw [0x7b9e],0x1a ; jne .. ;
++   * add ax,[0x7b9c]` (else `mov ax,0x10a8`) (asm 0x5555-0x5576), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  if ((dg[0x6dab] & 2) != 0) {                                       /* the EDIT-mode gate */
++    ax = 0x1098;
++    if (*(unsigned short *)(dg + 0x7b9e) == 0x1a)
++      ax = (unsigned short)(ax + *(unsigned short *)(dg + 0x7b9c));
++  } else {
++    ax = 0x10a8;
++  }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -15718,7 +15821,22 @@
+ void __allregs FUN_0000_56af(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 518: `testb [0x6dab],2 ; je .. ; mov ax,0x10b0 ; cmpw [0x7b9e],0x1c ; jne .. ;
++   * add ax,[0x7b9c]` (else `mov ax,0x10c0`) (asm 0x56af-0x56d0), a map-screen glyph plate the 2057/209e
++   * display-list walks dispatch.  BX is the list element's DGROUP NEAR OFFSET, which both walks publish
++   * to DGROUP:0x3e08 before dispatching; the port's dispatch cannot carry it, so it is read back there.
++   * Ghidra emitted the ENTIRE body as a bare arg-less `lcall [0x6b4]` -- no glyph id, no BX. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
++  unsigned short ax;
++  if ((dg[0x6dab] & 2) != 0) {                                       /* the EDIT-mode gate */
++    ax = 0x10b0;
++    if (*(unsigned short *)(dg + 0x7b9e) == 0x1c)
++      ax = (unsigned short)(ax + *(unsigned short *)(dg + 0x7b9c));
++  } else {
++    ax = 0x10c0;
++  }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
