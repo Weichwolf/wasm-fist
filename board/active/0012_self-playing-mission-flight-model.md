@@ -6035,3 +6035,33 @@ with rc=0, BUDGET=120s):
   37 of the 48 arg-less handlers remain; enumerate each by its own asm and fix it the same way.  That is
   the single highest-yield remaining batch -- it is now responsible for both the render-side parity
   divergence and a share of the crashes.
+
+## cont.65i -- the arg-less `lcall [0x6b4]` batch: 35/47 -> 38/47, and no hangs left
+
+Patch 519 finished the bulk of the batch: 24 more handlers whose ENTIRE body Ghidra had emitted as
+`(*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(); return;`.  22 are the dominant shape
+
+    mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,K ; lea bx,[bx+4] ; lcall [0x6b4]
+    751d K=0x1490  7557 0x1450  75bd 0x14a0  75d6 0x14b0  75ef 0x1480  7627 0x1550  7640 0x1560
+    7a32 0x01a0    7a6c 0x01c0  7aa5 0x01b0  7ae3 0x01d0  7afc 0x01e0
+    8e04 0x0748    8e1d 0x0758  8e59 0x0a10  8e72 0x0a20
+    9476 0x0a30    94ae 0x0b90  9512 0x0ba0  9550 0x0bc0  958c 0x0bd0  95a5 0x0be0
+
+plus two selectors: 74da (glyph base depends on the player vehicle TYPE word[di] < 2) and 95be
+(on byte[di+0x1a] bit3).
+
+MEASURED (47 missions, cooperative tick, empty player input, REACH t=20000 with rc=0, BUDGET=120s):
+
+    AZER 7/7   CYPRUS 7/7   INDIA 5/7   SAUDI 5/7   SYRIA 4/7   TRAIN 2/4   UKRAINE 8/8   = 38/47
+
+    cont.65   18/47  ->  cont.65c  35/47  ->  cont.65i  38/47
+    remaining, ALL SEGV, no hangs left: INDIA2, INDIA5, SAUDI3, SAUDI7, SYRIA2, SYRIA6, SYRIA7,
+    TRAIN3, TRAIN4.
+
+CYPRUS went 5/7 -> 7/7 on this patch alone (CYPRUS4's hang and CYPRUS5's SEGV were both a glyph plate
+painting with an unset AX/BX), and the AZER1 message-overlay hang -- cont.65c "frontier A" -- is closed.
+
+STILL OPEN from the 48: 7597 (a different source byte, byte[DGROUP:0x8d5f], and a FIXED bx=0x8dc4),
+7fff and 8ba1 (a `mul`/shift-derived table index), 8d88, and the CS=0x1000 group 6e3d, 7100, 8668, 8708,
+8725, 906d, 96bb, 97da, 9ab5 -- table lookups, two of them through the `mov gs,[0x70]` STRING SEGMENT,
+the same GS base patch 510 had to restore in 8463.  Each needs its own asm; they are the next batch.
