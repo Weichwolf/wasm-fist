@@ -1,0 +1,141 @@
+PATCH 510: the radio-message and compass cockpit cells 842d / 8463.
+
+Two more 209e paint methods.  BX is the display-list element's DGROUP NEAR OFFSET (published to
+DGROUP:0x3e08 by the walk) and BP the walk base (g_fist_paintbp, patch 142); both were dereferenced as
+host pointers and the WORD [bx+2] read as a 4-byte int.
+
+FUN_1000_842d (asm 0x1842d-0x18462):
+    1842d: mov si,[bx+2] ; movb [bp+si],3
+    18433: mov al,[0x1548] ; or al,al ; je 0x18450 ; js 0x1843d ; lret
+    1843d: and al,0x7f ; cmp al,3 ; jne 0x1844f
+    18443: mov bx,0x8fc4 ; lcall [0x694] ; movb [0x1548],0
+    18450: testw [0x6d16],1 ; je 0x1844f ; call 0x1a8d7 ; movw [0x1552],0x8fc4
+The BX=0x8fc4 argument of the [0x694] far call was dropped.
+
+FUN_1000_8463 (asm 0x18463-0x184c2), its sibling, adds two more defects: DAT_2000_2d34 -- the PLAYER's
+NEAR OFFSET -- dereferenced as a host pointer, and the `mov gs,[0x70]` STRING-SEGMENT base of the
+compass table dropped, so Ghidra read `[bx+0x253a]` at the bare host address 0x253a:
+    1848c: mov ax,[di+0x89] ; add ax,0x400 ; mov bl,ah ; and bx,0xf8 ; shr bx,1 ; shr bx,1
+    1849d: mov gs,[0x70] ; mov ax,gs:[bx+0x253a] ; mov [0x1550],ax ; movw [0x1552],0x8fa8
+
+842d was the top SIGSEGV of the post-509 sweep (842d <- 7f53 <- 209e <- 206f <- 459a).
+--- a/fist.c
++++ b/fist.c
+@@ -61676,22 +61676,33 @@
+ void __allregs FUN_1000_842d(int param_1,int param_2)
+ 
+ {
+-  *(undefined1 *)(param_2 + *(int *)(param_1 + 2)) = 3;
+-  if (DAT_1000_d548 == 0) {
+-    if ((DAT_2000_2d16 & 1) != 0) {
+-      FUN_1000_a8d7();
+-      DAT_1000_d552 = 0x8fc4;
+-      return;
+-    }
++  /* PATCH 510: the RADIO-MESSAGE cockpit cell (asm 0x1842d-0x18462), a 209e paint method:
++   *     1842d: mov si,[bx+2] ; movb [bp+si],3     ; mark the list cell dirty
++   *     18433: mov al,[0x1548] ; or al,al ; je 0x18450 ; js 0x1843d ; lret
++   *     1843d: and al,0x7f ; cmp al,3 ; jne 0x1844f
++   *     18443: mov bx,0x8fc4 ; lcall [0x694] ; movb [0x1548],0
++   *     18450: testw [0x6d16],1 ; je 0x1844f ; call 0x1a8d7 ; movw [0x1552],0x8fc4
++   * BX is the display-list element's NEAR OFFSET (the walk publishes it to DGROUP:0x3e08) and BP the
++   * walk base (g_fist_paintbp, patch 142); Ghidra dereferenced both as host pointers and read the WORD
++   * [bx+2] as a 4-byte int, and dropped the BX=0x8fc4 argument of the [0x694] far call. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  extern unsigned short g_fist_paintbp;
++  unsigned short bx0 = *(unsigned short *)(dg + 0x3e08);
++  unsigned short si  = *(unsigned short *)(dg + (unsigned short)(bx0 + 2));
++  unsigned char al;
++  (void)param_1; (void)param_2;
++  dg[(unsigned short)(g_fist_paintbp + si)] = 3;                       /* 18430 */
++  al = dg[0x1548];                                                     /* 18433 */
++  if (al == 0) {                                                       /* 18436/18438 */
++    if ((*(unsigned short *)(dg + 0x6d16) & 1) == 0) return;           /* 18450 testw; je */
++    FUN_1000_a8d7();                                                   /* 18459 */
++    *(unsigned short *)(dg + 0x1552) = 0x8fc4;                         /* 1845c movw */
++    return;
+   }
+-  else {
+-    if (-1 < (char)DAT_1000_d548) {
+-      return;
+-    }
+-    if ((DAT_1000_d548 & 0x7f) == 3) {
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c694)))();
+-      DAT_1000_d548 = 0;
+-    }
++  if ((signed char)al >= 0) return;                                    /* 1843a js / 1843c lret */
++  if ((al & 0x7f) == 3) {                                              /* 1843d/1843f */
++    ((void (*)(unsigned short))fist_icall_far((uint32_t)(DAT_1000_c694)))(0x8fc4); /* 18443/18446 */
++    dg[0x1548] = 0;                                                    /* 1844a movb */
+   }
+   return;
+ }
+@@ -61702,29 +61713,48 @@
+ void __allregs FUN_1000_8463(int param_1,int param_2)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
+-  *(undefined1 *)(param_2 + *(int *)(param_1 + 2)) = 3;
+-  if (DAT_1000_d548 == 0) {
+-    if ((DAT_2000_2d16 & 1) == 0) {
+-      FUN_1000_a80b(0xf,iVar1);
+-      DAT_1000_d54a = 8;
+-      DAT_1000_d550 = *(undefined2 *)(((*(int *)(iVar1 + 0x89) + 0x400U >> 8 & 0xf8) >> 2) + 0x253a)
+-      ;
+-      DAT_1000_d552 = 0x8fa8;
+-      return;
++  /* PATCH 510: 842d's sibling -- the COMPASS/heading cockpit cell (asm 0x18463-0x184c2):
++   *     18463: mov di,[0x6d34]                    ; the PLAYER's NEAR OFFSET
++   *     18467: mov si,[bx+2] ; movb [bp+si],3
++   *     1846d: mov al,[0x1548] ; or al,al ; je 0x18479 ; jns 0x18478(lret) ; jmp 0x184b0
++   *     18479: testw [0x6d16],1 ; jne 0x184c2
++   *     18481: mov al,0xf ; call 0x1a80b ; movb [0x154a],8
++   *     1848c: mov ax,[di+0x89] ; add ax,0x400 ; mov bl,ah ; and bx,0xf8 ; shr bx,1 ; shr bx,1
++   *     1849d: mov gs,[0x70] ; mov ax,gs:[bx+0x253a] ; mov [0x1550],ax ; movw [0x1552],0x8fa8
++   *     184b0: and al,0x7f ; cmp al,2 ; jne 0x184c2 ; mov bx,0x8fa8 ; lcall [0x694] ; movb [0x1548],0
++   * Four defects: the element/walk-base host-derefs, the player near offset host-deref'd, the
++   * `mov gs,[0x70]` STRING-SEGMENT base of the 0x253a table dropped (Ghidra read it at the bare host
++   * address 0x253a), and the [0x694] far call's BX argument dropped. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  extern unsigned short g_fist_paintbp;
++  unsigned short di  = (unsigned short)DAT_2000_2d34;                  /* 18463 */
++  unsigned short bx0 = *(unsigned short *)(dg + 0x3e08);
++  unsigned short si  = *(unsigned short *)(dg + (unsigned short)(bx0 + 2));
++  unsigned char al;
++  (void)param_1; (void)param_2;
++  dg[(unsigned short)(g_fist_paintbp + si)] = 3;                       /* 1846a */
++  al = dg[0x1548];                                                     /* 1846d */
++  if (al != 0) {                                                       /* 18470/18472 */
++    if ((signed char)al >= 0) return;                                  /* 18474 jns 18478 */
++    if ((al & 0x7f) == 2) {                                            /* 184b0/184b2 */
++      ((void (*)(unsigned short))fist_icall_far((uint32_t)(DAT_1000_c694)))(0x8fa8); /* 184b6/184b9 */
++      dg[0x1548] = 0;                                                  /* 184bd movb */
+     }
++    return;
+   }
+-  else {
+-    if (-1 < (char)DAT_1000_d548) {
+-      return;
+-    }
+-    if ((DAT_1000_d548 & 0x7f) == 2) {
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c694)))();
+-      DAT_1000_d548 = 0;
+-    }
++  if ((*(unsigned short *)(dg + 0x6d16) & 1) != 0) return;             /* 18479 testw; jne */
++  FUN_1000_a80b(0xf,(int)di);                                          /* 18481/18484 */
++  dg[0x154a] = 8;                                                      /* 18487 movb */
++  {
++    unsigned short ax = (unsigned short)
++        (*(unsigned short *)(dg + (unsigned short)(di + 0x89)) + 0x400);  /* 1848c/18490 */
++    unsigned short bx = (unsigned short)((((unsigned short)(ax >> 8)) & 0xf8) >> 2); /* 18493-1849b */
++    unsigned short gs = *(unsigned short *)(dg + 0x70);                  /* 1849d mov gs,[0x70] */
++    *(unsigned short *)(dg + 0x1550) =
++        *(unsigned short *)(g_mem + ((unsigned long)gs << 4)
++                            + (unsigned short)(bx + 0x253a));            /* 184a1/184a6 */
+   }
++  *(unsigned short *)(dg + 0x1552) = 0x8fa8;                             /* 184a9 movw */
+   return;
+ }
+ 

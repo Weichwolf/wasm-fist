@@ -1,0 +1,93 @@
+PATCH 511: the target-range / gauge cockpit block 8302.
+
+asm 0x18302-0x1838f, reached from the 209e walk via 7f44 -> 8390 -> 8302:
+    18302: mov ax,6 ; call 0x1524e                     ; 524e(6)
+    18309: mov ax,0xd ; mov di,[0x6d34]                ; the PLAYER's NEAR OFFSET
+    18310: testb [di+0x1a],0x10 ; je .. ; mov ax,0xe0  ; the readout colour
+    18319: call 0x1530b
+    1831d: cmpw [di+0x97],0 ; je 0x18358                ; no locked target -> skip the range readout
+    18324: cmpb [di+0xa8],0 ; jne 0x18338               ; reload timer
+    1832b: mov ax,0x47 ; mov bx,0x96 ; mov si,0x2514 ; call 0x1a7e0
+    18338: mov ax,0x4a ; mov bx,0xa0 ; call 0x152d1
+    18342: mov ax,[di+0x99] ; shl ax,2 ; mov si,0x1f8c ; lcall 0:2e8 ; mov si,0x1f8d ; call 0x1552b
+    18358: mov ax,0x28 ; mov bx,0x114 ; call 0x1a2e9    ; a2e9(0x28,0x114,di)
+
+DAT_2000_2d34 holds the PLAYER's NEAR OFFSET (patch 300) and every `[di+off]` here was dereferenced as
+a host pointer; the WORD reads [di+0x97] and [di+0x99] were additionally emitted as 4-byte ints, and
+a7e0's SI argument (0x2514) was dropped.
+
+8302 was the top SIGSEGV of the post-510 sweep (8302 <- 8390 <- 7f44 <- 209e).
+--- a/fist.c
++++ b/fist.c
+@@ -61575,32 +61575,48 @@
+ void __allregs FUN_1000_8302(undefined2 param_1,undefined2 param_2)
+ 
+ {
++  /* PATCH 511: the TARGET-RANGE / gauge cockpit block (asm 0x18302-0x1838f):
++   *     18302: mov ax,6 ; call 0x1524e                     ; 524e(6)
++   *     18309: mov ax,0xd ; mov di,[0x6d34]                ; the PLAYER's NEAR OFFSET
++   *     18310: testb [di+0x1a],0x10 ; je .. ; mov ax,0xe0
++   *     18319: call 0x1530b                                ; 530b(colour)
++   *     1831d: cmpw [di+0x97],0 ; je 0x18358                ; no locked target -> skip the readout
++   *     18324: cmpb [di+0xa8],0 ; jne 0x18338
++   *     1832b: mov ax,0x47 ; mov bx,0x96 ; mov si,0x2514 ; call 0x1a7e0
++   *     18338: mov ax,0x4a ; mov bx,0xa0 ; call 0x152d1     ; 52d1(0x4a,0xa0)
++   *     18342: mov ax,[di+0x99] ; shl ax,2 ; mov si,0x1f8c ; lcall 0:2e8 ; mov si,0x1f8d ; call 0x1552b
++   *     18358: mov ax,0x28 ; mov bx,0x114 ; call 0x1a2e9    ; a2e9(0x28,0x114,di)
++   *     ... 524e(2), a4b2(), a520(0x4b,0x12), a52e(0x4b,0xda), a547(0x14), a4e9(0xa,0x12), a5a9()
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); every [di+off] here was dereferenced as a
++   * host pointer, and the WORD reads [di+0x97] / [di+0x99] were emitted as 4-byte ints.  a7e0's SI
++   * argument (0x2514) was dropped too. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di;
+   undefined2 uVar1;
+-  int iVar2;
+-  
+-  FUN_1000_524e(6);
+-  uVar1 = 0xd;
+-  if ((*(byte *)(DAT_2000_2d34 + 0x1a) & 0x10) != 0) {
+-    uVar1 = 0xe0;
+-  }
+-  iVar2 = DAT_2000_2d34;
+-  FUN_1000_530b(uVar1);
+-  if (*(int *)(iVar2 + 0x97) != 0) {
+-    if (*(char *)(iVar2 + 0xa8) == '\0') {
+-      FUN_1000_a7e0(0x47,0x96);
++  (void)param_1; (void)param_2;
++  FUN_1000_524e(6);                                                    /* 18302/18306 */
++  di = (unsigned short)DAT_2000_2d34;                                  /* 1830c */
++  uVar1 = 0xd;                                                         /* 18309 */
++  if ((dg[(unsigned short)(di + 0x1a)] & 0x10) != 0) uVar1 = 0xe0;     /* 18310/18316 */
++  FUN_1000_530b(uVar1);                                                /* 1831a */
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0x97)) != 0) {    /* 1831d cmpw */
++    if (dg[(unsigned short)(di + 0xa8)] == 0) {                        /* 18324 cmpb */
++      FUN_1000_a7e0(0x47,0x96);                                        /* 1832b-18335 */
+     }
+-    FUN_1000_52d1(0x4a,0xa0);
+-    FUN_0000_02e8(*(int *)(iVar2 + 0x99) << 2,(undefined1 *)&DAT_1000_df8c);
+-    thunk_FUN_1000_5531((undefined1 *)&DAT_1000_df8d);
++    FUN_1000_52d1(0x4a,0xa0);                                          /* 18338-1833f */
++    FUN_0000_02e8((undefined2)(unsigned short)
++        (*(unsigned short *)(dg + (unsigned short)(di + 0x99)) << 2),
++        (undefined1 *)&DAT_1000_df8c);                                 /* 18342-1834c */
++    thunk_FUN_1000_5531((undefined1 *)&DAT_1000_df8d);                 /* 18350/18355 */
+   }
+-  FUN_1000_a2e9(0x28,0x114,iVar2);
+-  FUN_1000_524e(2);
+-  FUN_1000_a4b2();
+-  FUN_1000_a520(0x4b,0x12);
+-  FUN_1000_a52e(0x4b,0xda);
+-  FUN_1000_a547(0x14);
+-  FUN_1000_a4e9(10,0x12);
+-  FUN_1000_a5a9();
++  FUN_1000_a2e9(0x28,0x114,(int)di);                                   /* 18358-1835e */
++  FUN_1000_524e(2);                                                    /* 18361/18365 */
++  FUN_1000_a4b2();                                                     /* 18368 */
++  FUN_1000_a520(0x4b,0x12);                                            /* 1836b/18371 */
++  FUN_1000_a52e(0x4b,0xda);                                            /* 18374/1837a */
++  FUN_1000_a547(0x14);                                                 /* 1837d/18380 */
++  FUN_1000_a4e9(10,0x12);                                              /* 18383/18389 */
++  FUN_1000_a5a9();                                                     /* 1838c */
+   return;
+ }
+ 

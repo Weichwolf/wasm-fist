@@ -1,0 +1,44 @@
+PATCH 512: the cockpit-view reset event 7f29.
+
+asm 0x7f29-0x7f3d, dispatched by the 2057 display-list walk:
+    7f29: 80 0e 84 8f 25  orb  [0x8f84],0x25    ; a BYTE or -- DAT_2000_4f84 is typed undefined2, so the
+                                                ; decompile's `| 0x25` also wrote DGROUP:0x8f85
+    7f2e: 8b 3e 34 6d     mov  di,[0x6d34]      ; the PLAYER's NEAR OFFSET
+    7f32: c6 85 a0 00 00  movb [di+0xa0],0
+    7f37: e8 f1 2a        call 0xaa2b           ; DI live
+    7f3a: e8 7e a3        call 0x22bb
+
+DAT_2000_2d34 holds the player's near offset (patch 300) and was dereferenced as a host pointer.
+7f29 is the top SIGSEGV of the post-511 sweep on AZER3/AZER5/AZER6/CYPRUS1/CYPRUS3/CYPRUS4/CYPRUS5
+(7f29 <- 2057 <- 2032).
+--- a/fist.c
++++ b/fist.c
+@@ -21600,13 +21600,21 @@
+ void __allregs FUN_0000_7f29(undefined4 param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
+-  DAT_2000_4f84 = DAT_2000_4f84 | 0x25;
+-  *(undefined1 *)(DAT_2000_2d34 + 0xa0) = 0;
+-  FUN_0000_aa2b(param_1,iVar1);
+-  FUN_0000_22bb();
++  /* PATCH 512: the COCKPIT-VIEW reset event (asm 0x7f29-0x7f3d), dispatched by the 2057 display-list
++   * walk:
++   *     7f29: 80 0e 84 8f 25  orb  [0x8f84],0x25    ; a BYTE or -- DAT_2000_4f84 is typed undefined2,
++   *                                                 ; so the decompile's `| 0x25` also wrote [0x8f85]
++   *     7f2e: 8b 3e 34 6d     mov  di,[0x6d34]      ; the PLAYER's NEAR OFFSET
++   *     7f32: c6 85 a0 00 00  movb [di+0xa0],0
++   *     7f37: e8 f1 2a        call 0xaa2b           ; DI live
++   *     7f3a: e8 7e a3        call 0x22bb
++   * Ghidra dereferenced DAT_2000_2d34 -- the player's near offset (patch 300) -- as a host pointer. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  dg[0x8f84] = (unsigned char)(dg[0x8f84] | 0x25);          /* 7f29 orb, BYTE */
++  dg[(unsigned short)(di + 0xa0)] = 0;                      /* 7f32 movb */
++  FUN_0000_aa2b(param_1,(int *)(uintptr_t)di);              /* 7f37 (DI live) */
++  FUN_0000_22bb();                                          /* 7f3a */
+   return;
+ }
+ 
