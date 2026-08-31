@@ -5849,3 +5849,42 @@ is precisely the "recover ground-truth register/segment values" use the oracle e
 
 REGRESSION GATE: the native verify matrix is 177 PASS / 0 FAIL across patches 492-512, i.e. the whole
 combat cascade landed without breaking a single existing flow.
+
+## cont.65e -- a DISPROVEN hypothesis, recorded: e1a6's op-0x54 inbox value
+
+The remaining native<->wasm divergences in AZER2 (t=334, DGROUP:0xc006) and SYRIA1 (t=3703,
+DGROUP:0xb20f) were both watchpointed to the SAME store, with the whole DGROUP identical on the
+preceding tick in each case:
+
+    FUN_0000_e1a6, asm 0xe1a6-0xe1d0:
+      e1a6: push di ; e1a7: lea di,[di+4] ; e1ac: mov gs,[0xea2e] ; e1b0: mov si,[0xea2c]
+      e1b4: mov gs:[si+0x3f2],ebx        <- the op-0x54 terrain-height inbox
+      e1c3: call 0xe339 ; e1c6: pop di ; e1c7: mov [di+0x18],al ; e1ca: mov al,[di+0xd]
+      e1cd: sub al,[di+0x18] ; ret
+
+The posted value is a REGISTER no caller sets.  All three call sites -- b63e (in b5e7), b886, b9fa --
+have the identical shape (update [di+4]/[di+8]/[di+0xc]; `cmpw [di+0xd],0x80`; call; branch on the sign
+of AL) and none of them touches BX.  In the port it is therefore an uninitialised stack slot: a stable
+0xffffcc38 under gcc -m32, a different stable value under emcc.  That is the carrier.
+
+HYPOTHESIS TESTED: that the posted value is the object's own position pair, obj+4.  Three arguments
+supported it -- [di+0x18] is compared against [di+0xd], the ground height e1d1 stores for the SAME object
+(adcd/9db1), and b5e7 has just moved that object; the extender-side decode of op-0x54 already records the
+inbox as "the DGROUP near offset of a position pair, written by e1d1/e1a6/adcd/9db1 as obj+4"; and
+`lea di,[di+4]` at 0xe1a7 computes exactly that and is otherwise dead.  Against it: the encoding at
+0xe1b4 (`66 65 89 9c f2 03`, ModRM 9c -> reg=011) names EBX, not EDI.
+
+FALSIFIER, stated in advance: if the reconstruction is right, AZER2 and SYRIA1 become bit-identical.
+
+RESULT: DISPROVEN.  AZER2 still diverges (now at line 63 instead of 61) and SYRIA1 at 3432 instead of
+3430 -- the divergence moved but did not close -- and the 47-mission progress sweep REGRESSED in the
+INDIA/SAUDI group from 9/14 to 6/14.  The patch was therefore NOT landed; it is kept out of patches/ on
+purpose.  (It did change native behaviour substantially -- SYRIA1's in-cockpit window went 4793 -> 5726
+ticks and AZER3's 233 -> 5686 -- so the value genuinely feeds the terrain height; it simply is not obj+4.)
+
+NEXT, and this one needs the oracle rather than more static reading: recover what the ORIGINAL posts at
+TCB+0x3f2 with the DOSBox write-trace --
+    FIST_MEMARM_BOOT=1 FISTLOG=<prefix> FIST_WATCHFLAT=<engine-flat of TCB+0x3f2>
+which logs the live cs:eip and value of every write to that word.  Read the real EBX out of it, then
+reconstruct e1a6 from ground truth.  This is exactly the "recover ground-truth register values (e.g. the
+real CS behind a `mov [mem],cs`)" use the instrumented DOSBox exists for.
