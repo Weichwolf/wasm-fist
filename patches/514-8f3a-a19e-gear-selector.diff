@@ -1,0 +1,110 @@
+PATCH 514: 8f3a took the object from an uninitialised parameter and lost ad3b's AL -- the second
+native<->wasm divergence carrier.
+
+FUN_0000_8f3a (asm 0x8f3a-0x8f48) is `mov [di+0x90],al ; movb [di+0xca],3 ; lcall 0f69:7a5b`, reached
+ONLY through FUN_0000_a19e's per-object-type dispatch, which passes the object as a HOST POINTER in its
+single argument (patch 283).  Patch 394 had taken the object from `param_2` instead -- an uninitialised
+stack slot -- and used the low byte of the host pointer as AL.
+
+AL is ad3b's gear-direction selector, which patch 283 explicitly recorded as dropped:
+    ad3b: cmpb [di+0x90],1 ; ja 0xad56(ret)
+    ad42: cmpw [di+0x34],0xe00 ; jl 0xad57
+    ad49: cmpb [di+0x90],1 ; je 0xad56(ret)   ; ad50: mov al,1 ; call 0xa19e
+    ad57: cmpb [di+0x90],0 ; je 0xad56(ret)   ; ad5e: mov al,0 ; jmp 0xad52
+a19e's dispatch is one-argument, so AL now travels in g_fist_a19e_al -- the mechanism patch 142 uses for
+the walk base BP.  0x8f49 (`mov al,1 ; jmp 0x8f3a`) is the same thing as a thunk.
+
+Reading the object from an uninitialised slot is undefined behaviour, so gcc -m32 and emcc disagreed.
+Measured on AZER4: the targets are bit-identical through t=292 and differ at t=293 in exactly ONE byte,
+DGROUP:0x9004 (3 on native, unchanged 0x68 on wasm) -- and 0x9004 == 0x8f3a + 0xca, i.e. this very store
+executed with the garbage `param_2 == 0x8f3a`, the function's own address left on the stack.
+--- a/fist.c
++++ b/fist.c
+@@ -883,8 +883,8 @@
+ void __allregs FUN_0000_8e85(undefined2 param_1);
+ void __allregs FUN_0000_8ea3(uint param_1);
+ void __allregs FUN_0000_8ec8(uint param_1,undefined2 param_2,undefined4 param_3,undefined2 param_4,int param_5);
+-void __allregs FUN_0000_8f3a(undefined1 param_1,int param_2);
+-void __allregs thunk_FUN_0000_8f3a(undefined1 param_1,undefined2 param_2);
++void __allregs FUN_0000_8f3a(int param_1,int param_2);
++void __allregs thunk_FUN_0000_8f3a(int param_1,undefined2 param_2);
+ void __allregs FUN_0000_8f8d(int param_1);
+ void __allregs FUN_0000_8f9f(int param_1);
+ void __allregs FUN_0000_8fde(int param_1);
+@@ -24354,13 +24354,22 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_8f3a) @ 0000:8f3a ===== */
+ 
+-void __allregs FUN_0000_8f3a(undefined1 param_1,int param_2)
++void __allregs FUN_0000_8f3a(int param_1,int param_2)
+ 
+ {
+-  /* PATCH 394 (TRAIN3 twin #2): base-loss -- param_2 = DI = object DGROUP near offset (asm 0x8f3a
+-     `mov [di+0x90],al; mov [di+0xca],3`); Ghidra deref'd it as a host ptr (fault 0x8fca=0x8f00+0xca). */
+-  uint8_t *o = g_mem + 0x1c000 + (uint16_t)param_2;
+-  o[0x90] = param_1;
++  /* PATCH 514 (supersedes 394's parameter choice): asm 0x8f3a is `mov [di+0x90],al ; movb [di+0xca],3 ;
++   * lcall 0f69:7a5b`, reached ONLY through a19e's one-argument dispatch, which passes the object as a
++   * HOST POINTER (patch 283) -- so the object is param_1, not param_2, and param_2 was uninitialised
++   * stack.  AL is the gear-direction selector ad3b sets (1 at 0xad50, 0 at 0xad5e) and which patch 283
++   * explicitly recorded as dropped through a19e's 1-param signature; it is published as
++   * g_fist_a19e_al.  Reading the object from an uninitialised slot is undefined behaviour and was the
++   * native<->wasm divergence carrier: on AZER4 the targets are bit-identical to t=292 and differ at
++   * t=293 in exactly one byte, DGROUP:0x9004 -- which is [0x8f3a + 0xca], i.e. this store with the
++   * garbage `param_2 == 0x8f3a`. */
++  extern unsigned char g_fist_a19e_al;
++  uint8_t *o = (uint8_t *)(uintptr_t)param_1;
++  (void)param_2;
++  o[0x90] = g_fist_a19e_al;
+   o[0xca] = 3;
+   FUN_1000_70eb();
+   return;
+@@ -24369,10 +24378,15 @@
+ 
+ /* ===== thunk_FUN_0000_8f3a @ 0000:8f49 ===== */
+ 
+-void __allregs thunk_FUN_0000_8f3a(undefined1 param_1,undefined2 param_2)
++void __allregs thunk_FUN_0000_8f3a(int param_1,undefined2 param_2)
+ 
+ {
+-  FUN_0000_8f3a(1,param_2);
++  /* PATCH 514: asm 0x8f49 is `mov al,1 ; jmp 0x8f3a` -- it only preloads AL and falls into 8f3a with DI
++   * (the object) untouched.  Dispatched by a19e with the object host pointer as the single argument. */
++  extern unsigned char g_fist_a19e_al;
++  (void)param_2;
++  g_fist_a19e_al = 1;
++  FUN_0000_8f3a(param_1,0);
+   return;
+ }
+ 
+@@ -29146,6 +29160,14 @@
+    * [di+0x34] crosses 0xe00 in the wrong direction, retracts/extends via a19e.  Ghidra deref'd param_1
+    * as a host pointer + read [di+0x34] as a 32-bit int (asm WORD).  Rebased to the DGROUP model.  (The
+    * asm al=1/0 gear-direction selector is dropped through a19e's 1-param sig -- gear-state only.) */
++  /* PATCH 514: restore the al=1/0 gear-direction selector patch 283 recorded as dropped.  asm:
++   *   ad3b: cmpb [di+0x90],1 ; ja 0xad56(ret)
++   *   ad42: cmpw [di+0x34],0xe00 ; jl 0xad57
++   *   ad49: cmpb [di+0x90],1 ; je 0xad56(ret)   ; ad50: mov al,1 ; call 0xa19e
++   *   ad57: cmpb [di+0x90],0 ; je 0xad56(ret)   ; ad5e: mov al,0 ; jmp 0xad52
++   * a19e's dispatch is one-argument, so AL travels in g_fist_a19e_al -- the same mechanism patch 142
++   * uses for the walk base BP. */
++  extern unsigned char g_fist_a19e_al;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned int di = (unsigned short)param_1;
+   if (dg[(unsigned short)(di + 0x90)] < 2) {
+@@ -29153,9 +29175,13 @@
+       if (dg[(unsigned short)(di + 0x90)] == '\0') {
+         return;
+       }
++      g_fist_a19e_al = 0;                         /* ad5e mov al,0 */
+     }
+-    else if (dg[(unsigned short)(di + 0x90)] == '\x01') {
+-      return;
++    else {
++      if (dg[(unsigned short)(di + 0x90)] == '\x01') {
++        return;
++      }
++      g_fist_a19e_al = 1;                         /* ad50 mov al,1 */
+     }
+     FUN_0000_a19e((int *)(uintptr_t)di);
+   }

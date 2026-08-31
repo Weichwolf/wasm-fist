@@ -1,0 +1,207 @@
+PATCH 513: the 209e dirty-walk dispatched its handlers with AX read from UNINITIALISED STACK.
+
+This is the native<->wasm parity carrier.  Measured on AZER4: the two targets are bit-identical through
+t=292 and diverge at t=293 in DGROUP block 0 at exactly ONE byte -- DGROUP:0x9004 goes 0x68 -> 3 on
+native and stays 0x68 on wasm.  3 is the display-list cell's "dirty" mark, written by the walk's input
+handlers as `movb [bp+si],3`, and they only reach it when `test ax,0x80` is true and `test ax,1` false.
+
+The asm keeps AX live all the way in:
+    459a/45f7: ... call 0x4691 ; call 0x206f          ; AX = the event/poll word
+    206f:      mov bx,[0x3e04] ; mov dx,[0x3e06] ; mov bp,[0x3afe] ; call 0x209e   ; AX untouched
+    209e:      mov di,[bx+2] ; mov al,(bp,di) ; mov cl,[0x73d] ; shr al,cl ; mov (bp,di),al
+               jae .. ; mov [0x3e08],bx ; mov di,[bx] ; call *0x423c(di)
+so at `20b6 call *0x423c(%di)` AX = (AH from 206f's caller) : (AL = the cell byte AFTER the shift).  The
+handlers test AL bits 0/2/4/7 and AH bit 2 (`test ax,0x400`).
+
+Two defects.  Ghidra typed 206f's parameter `undefined1`, throwing the high byte away, and the three
+call sites narrowed with `(char)`.  And the port's dirty-walk dispatch was ARG-LESS, so every handler's
+`param_1` was whatever happened to be on the stack -- genuinely undefined behaviour, and therefore a
+different value under gcc -m32 than under emcc.  That is exactly the class of divergence the
+native<->wasm invariant exists to catch, and it is why the AI-combat cascade (patch 494 onward) broke
+parity in several missions: it made far more of this walk reachable.
+
+Fixed at the source: 206f publishes g_fist_evax (the same mechanism patch 142 uses for the walk base BP),
+209e composes g_fist_paintax = (g_fist_evax & 0xff00) | <shifted cell byte> immediately before the
+dispatch AND passes it as the dispatch argument, so every handler -- the ten patch-504/509 input
+handlers explicitly, and all the others through their own `param_1` -- now sees the register the asm
+actually has in flight instead of stack garbage.
+--- a/fist.c
++++ b/fist.c
+@@ -4,7 +4,8 @@
+  */
+ #include "ghidra_compat.h"
+ extern unsigned short g_fist_render_si, g_fist_render_dx;  /* board:0012 file-scope */
+-extern unsigned short g_fist_b1df_ax, g_fist_0578_bx, g_fist_03a9_dx;  /* PATCH 462: b1df AX (display index), 0578 BX (pitch), 03a9 DX */
++extern unsigned short g_fist_b1df_ax, g_fist_0578_bx, g_fist_03a9_dx;
++extern unsigned short g_fist_evax, g_fist_paintax;  /* PATCH 513: the dirty-walk's live AX */  /* PATCH 462: b1df AX (display index), 0578 BX (pitch), 03a9 DX */
+ extern unsigned short g_fist_fp_dx, g_fist_fp_cx;  /* PATCH 468: the 0d13..0e22 fixed-point block's DX (exponent) / CX register lanes */
+ extern unsigned short g_fist_r48_dx, g_fist_r48_cx, g_fist_3e29_cx;  /* PATCH 469: 1322/129f 48-bit DX:CX lanes; 3e29's CX (screen x) */
+ extern uint32_t g_fist_ext_esi; extern unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi, g_fist_1345_bp;  /* PATCH 471: op-0x40 register lanes; 1345's BP (list header) */
+@@ -205,7 +206,7 @@
+ void __allregs FUN_0000_2032(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_0000_2043(int param_1,int param_2);
+ void __allregs FUN_0000_2057(int *param_1,int *param_2,undefined2 param_3);
+-void __allregs FUN_0000_206f(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
++void __allregs FUN_0000_206f(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_0000_208a(int param_1,int param_2);
+ void __allregs FUN_0000_209e(int *param_1,int *param_2,int param_3);
+ undefined4 __allregs FUN_0000_20c5(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+@@ -8309,7 +8310,7 @@
+     uVar6 = 0x3ae0;
+     uVar4 = 0;
+     iVar3 = FUN_0000_1cdb(0x2be9,0,0x34,0x10,iVar5,0x3ae0);
+-    FUN_0000_206f((char)iVar3,uVar4,iVar5,uVar6);
++    FUN_0000_206f((undefined2)iVar3,uVar4,iVar5,uVar6);  /* PATCH 513: AX is 16-bit */
+     return;
+   }
+   do {
+@@ -8364,7 +8365,7 @@
+   uVar4 = 0x3ae0;
+   uVar2 = 0;
+   iVar1 = FUN_0000_1cdb(0x2be9,0,0x34,0x10,0x378,0x3ae0);
+-  FUN_0000_206f((char)iVar1,uVar2,uVar3,uVar4);
++  FUN_0000_206f((undefined2)iVar1,uVar2,uVar3,uVar4);  /* PATCH 513: AX is 16-bit */
+   return;
+ }
+ 
+@@ -8999,9 +9000,14 @@
+ /* ===== ((uint)(uintptr_t)&FUN_0000_206f) @ 0000:206f ===== */
+ 
+ void __allregs
+-FUN_0000_206f(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
++FUN_0000_206f(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
++  /* PATCH 513: AX arrives here LIVE (459a/45f7 call 206f with the 4691 event/poll word in AX) and stays
++   * live through 209e into every dirty-walk handler -- 206f touches only bx/dx/bp and 209e only AL.
++   * Ghidra typed the parameter `undefined1`, so the high byte was thrown away, and the walk's dispatch
++   * is arg-less, so the handlers read AX from UNINITIALISED STACK.  Publish it. */
++  { extern unsigned short g_fist_evax; g_fist_evax = (unsigned short)param_1; }
+   FUN_0000_209e(DAT_1000_fe06,DAT_1000_fe04,DAT_1000_fafe);
+   LOCK();
+   DAT_1000_fe00 = 0;
+@@ -9071,12 +9077,19 @@
+       *cell = (uint8_t)(bVar1 >> cl);
+       if (carry) {
+         extern unsigned short g_fist_paintbp;
++        /* PATCH 513: at `20b6 call *0x423c(%di)` the live AX is (AH from 206f's caller) : (AL = the
++         * cell byte AFTER `shr al,cl`, 0x20a7).  The port's dispatch is arg-less, so publish it the way
++         * patch 142 publishes BP; the input handlers test AL bits 0/2/4/7 and AH bit 2 (`test ax,0x400`). */
++        { extern unsigned short g_fist_evax, g_fist_paintax;
++          g_fist_paintax = (unsigned short)((g_fist_evax & 0xff00) | *cell); }
+         *(uint16_t *)(dg + 0x3e08) = bx;
+         g_fist_paintbp = bp;                                 /* PATCH 142: publish the walk base (bp is a
+                                                               * live register the paint methods read) */
+         uint16_t nd  = *(uint16_t *)(dg + bx);
+         uint16_t off = *(uint16_t *)(dg + (uint16_t)(nd + 0x423c));
+-        ((void (*)(void))fist_icall_near(0x0u, off))();
++        /* PATCH 513: pass the live AX -- the asm's `call *0x423c(%di)` runs with it in flight and
++         * the handlers test AL bits 0/2/4/7 and AH bit 2.  Handlers that do not read AX ignore it. */
++        ((void (*)(unsigned))fist_icall_near(0x0u, off))((unsigned)g_fist_paintax);
+       }
+       bx = (uint16_t)(bx + 0xc);
+       in_CF = (uint8_t)(bx < dx);
+@@ -13532,7 +13545,7 @@
+      * loop, NOT the inner event drain -- the drain is gated by `for(;2ce2!=0;)`, skipped while [0x452] is
+      * frozen, so a pump there would deadlock.  This makes [0x452] advance and the flight-model SIM STEP run. */
+     fist_timer_pump();
+-    FUN_0000_206f((char)iVar2,param_1,param_3,param_4);
++    FUN_0000_206f((undefined2)iVar2,param_1,param_3,param_4);  /* PATCH 513: AX is 16-bit */
+     LOCK();
+     UNLOCK();
+     DAT_2000_2ce2 = DAT_2000_2ce2 + (DAT_1000_c452 - DAT_2000_2ce0);
+@@ -21932,7 +21945,7 @@
+   extern unsigned short g_fist_paintbp;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+-  unsigned int ax = param_1;
++  unsigned int ax = g_fist_paintax;   /* PATCH 513: the walk's live AX, not the arg-less param */
+   (void)g_fist_paintbp;
+   if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }              /* 80b5/80b8 -> 80e9 stc */
+   g_fist_cf = 0;
+@@ -21993,7 +22006,7 @@
+   extern unsigned short g_fist_paintbp;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+-  unsigned int ax = param_1;
++  unsigned int ax = g_fist_paintax;   /* PATCH 513: the walk's live AX, not the arg-less param */
+   unsigned short bx, bp, si;
+   if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }              /* 8123/8126 -> 8150 stc */
+   g_fist_cf = 0;
+@@ -22051,7 +22064,7 @@
+   extern unsigned short g_fist_paintbp;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+-  unsigned int ax = param_1;
++  unsigned int ax = g_fist_paintax;   /* PATCH 513: the walk's live AX, not the arg-less param */
+   (void)g_fist_paintbp;
+   if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }              /* 816d/8170 -> 819a stc */
+   g_fist_cf = 0;
+@@ -22101,7 +22114,7 @@
+   extern unsigned short g_fist_paintbp;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+-  unsigned int ax = param_1;
++  unsigned int ax = g_fist_paintax;   /* PATCH 513: the walk's live AX, not the arg-less param */
+   (void)g_fist_paintbp;
+   if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }              /* 81b7/81ba -> 81e4 stc */
+   g_fist_cf = 0;
+@@ -22155,7 +22168,7 @@
+   extern unsigned short g_fist_paintbp;
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+-  unsigned int ax = param_1;
++  unsigned int ax = g_fist_paintax;   /* PATCH 513: the walk's live AX, not the arg-less param */
+   (void)g_fist_paintbp;
+   if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }              /* 820b/820e -> 8241 stc */
+   g_fist_cf = 0;
+@@ -22603,7 +22616,8 @@
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   extern unsigned char g_fist_cf;
+-  unsigned int ax = param_1;
++  extern unsigned short g_fist_paintax;
++  unsigned int ax = g_fist_paintax;   /* PATCH 513: the walk's live AX, not the arg-less param */
+   if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }
+   g_fist_cf = 0;
+   if ((ax & 1) != 0) return;
+@@ -22645,7 +22659,8 @@
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   extern unsigned char g_fist_cf;
+-  unsigned int ax = param_1;
++  extern unsigned short g_fist_paintax;
++  unsigned int ax = g_fist_paintax;   /* PATCH 513: the walk's live AX, not the arg-less param */
+   if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }
+   g_fist_cf = 0;
+   if ((ax & 1) != 0) return;
+@@ -22690,7 +22705,8 @@
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   extern unsigned char g_fist_cf;
+-  unsigned int ax = param_1;
++  extern unsigned short g_fist_paintax;
++  unsigned int ax = g_fist_paintax;   /* PATCH 513: the walk's live AX, not the arg-less param */
+   if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }
+   g_fist_cf = 0;
+   if ((ax & 1) != 0) return;
+@@ -22812,7 +22828,8 @@
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   extern unsigned char g_fist_cf;
+-  unsigned int ax = param_1;
++  extern unsigned short g_fist_paintax;
++  unsigned int ax = g_fist_paintax;   /* PATCH 513: the walk's live AX, not the arg-less param */
+   if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }
+   g_fist_cf = 0;
+   if ((ax & 1) != 0) return;
+@@ -22861,7 +22878,8 @@
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   extern unsigned char g_fist_cf;
+-  unsigned int ax = param_1;
++  extern unsigned short g_fist_paintax;
++  unsigned int ax = g_fist_paintax;   /* PATCH 513: the walk's live AX, not the arg-less param */
+   if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }
+   g_fist_cf = 0;
+   if ((ax & 1) != 0) return;

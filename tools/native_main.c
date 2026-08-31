@@ -1367,6 +1367,16 @@ unsigned short g_fist_ev_node;
  * is up (the cursor redraw updates fafe), so the dialog's container repaint after a row-select walked
  * the wrong element list and the red selection bar never moved.  Publish the real walk bp here. */
 unsigned short g_fist_paintbp;
+/* board:0012 patch 513: the 209e dirty-walk's live AX.  459a/45f7 call 206f with the 4691 event/poll
+ * word in AX; 206f leaves it alone and 209e clobbers only AL (the cell byte after `shr al,cl`), so the
+ * handlers the walk dispatches run with (AH from the caller):(AL from the cell).  The port's dispatch is
+ * arg-less, so 206f publishes g_fist_evax and 209e composes g_fist_paintax for the handlers to read --
+ * the same mechanism patch 142 uses for the walk base BP. */
+/* board:0012 patch 514: ad3b's al=1/0 gear-direction selector, which a19e's one-argument dispatch
+ * cannot carry (patch 283 recorded it as dropped). */
+unsigned char g_fist_a19e_al;
+unsigned short g_fist_evax;
+unsigned short g_fist_paintax;
 
 /* PATCH 309: the 3-in/3-out rotation FUN_0000_0459 (a192 thunk -> 0459) camera-delta trig.
  * a20d feeds a192(ax=word[di+0x10], dx=0xaaa) with the vehicle heading cx=word[di+0x38] (asm 0x1a232
