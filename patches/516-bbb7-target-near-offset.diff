@@ -1,0 +1,40 @@
+PATCH 516: bbb7 stored a TRUNCATED HOST POINTER in the current-target word DGROUP:0xe3b2.
+
+asm 0xbbb7-0xbbc5:
+    bbb7: 89 3e b2 e3     mov  [0xe3b2],di      ; the hit object's DGROUP NEAR OFFSET
+    bbbb: 57              push di
+    bbbc: 8b 36 25 9a     mov  si,[0x9a25]
+    bbc1: e8 5a 07        call 0xc31e
+    bbc4: 5f              pop  di ; ret
+FUN_0000_b274 (patch 493) reads that word straight back as a near offset:
+    b274: ... mov si,-0x1c4e ; mov dx,-0x1c52 ; testb $0x8,0x16(%si) ...
+
+b5e7's call site passes the object as a HOST POINTER (`FUN_0000_bbb7(obj[0x2a], obj[0x29],
+(int)(intptr_t)obj)`) and DAT_2000_a3b2 is a WORD accessor, so the decompile stored the LOW 16 BITS OF A
+HOST ADDRESS into DGROUP:0xe3b2 -- host-address dependent by construction, and therefore a different
+value under gcc -m32 than under emcc even with ASLR off.
+
+This is the native<->wasm divergence that surfaced the moment patch 515 closed the e1a6 one: AZER2 at
+t=336 and SYRIA1 at t=3705, both in DGROUP block 41, both at exactly the word 0xe3b2..0xe3b3 -- 0x822e on
+native against 0x5619 on wasm -- with the whole DGROUP identical on the preceding tick.  It is also a
+correctness bug in its own right: the damage roll b274 scales by the wrong target's armour flag.
+--- a/fist.c
++++ b/fist.c
+@@ -31176,7 +31176,16 @@
+ void __allregs FUN_0000_bbb7(undefined2 param_1,undefined2 param_2,undefined2 param_3)
+ 
+ {
+-  DAT_2000_a3b2 = param_3;
++  /* PATCH 516: asm 0xbbb7 `mov [0xe3b2],di` stores the HIT OBJECT'S DGROUP NEAR OFFSET -- b274 (patch
++   * 493) reads it back as one (`mov si,-0x1c4e ; testb 0x16(%si),8`).  b5e7's call site passes the
++   * object as a HOST POINTER (`(int)(intptr_t)obj`), and DAT_2000_a3b2 is a WORD accessor, so the
++   * decompile stored the low 16 bits of a HOST ADDRESS into DGROUP:0xe3b2.
++   * That value is host-address dependent by construction: it was the native<->wasm divergence that
++   * surfaced once patch 515 closed the e1a6 one -- AZER2 t=336 and SYRIA1 t=3705, both in DGROUP block
++   * 41, both at exactly the WORD 0xe3b2..0xe3b3 (0x822e on native, 0x5619 on wasm), with the whole
++   * DGROUP identical on the preceding tick.  Rebase to the near offset. */
++  DAT_2000_a3b2 = (undefined2)(unsigned short)
++      ((unsigned char *)(uintptr_t)param_3 - ((unsigned char *)g_mem + 0x1c000));
+   FUN_0000_c31e(param_1,param_2,DAT_2000_5a25,param_3);
+   return;
+ }
