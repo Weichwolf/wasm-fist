@@ -5803,3 +5803,49 @@ METHOD that made this tractable, worth repeating: fix ONLY the measured top SIGS
 sweep, rebuild, re-sweep.  The order actually walked was
   82ee -> 8329 -> 8024 -> 85bd -> 842d -> 8302 -> 7f29,
 and 7f29 alone took seven missions from SEGV to clean.
+
+## cont.65d -- the parity carriers: uninitialised stack, twice
+
+The AI-combat cascade made far more of the engine reachable, and with it two pieces of genuine undefined
+behaviour that gcc -m32 and emcc resolve differently.  Both are fixed at the source (patches 513, 514).
+
+METHOD, which worked cleanly and should be reused: diff the per-tick FIST_SIMHASH fingerprints to get the
+first differing tick; FIST_SIMDUMP the whole DGROUP on BOTH targets at that tick and the one before;
+`cmp -l` them -- the answer was a SINGLE byte both times -- then hardware-watchpoint that byte on native
+with a tick condition and read the backtrace.  Total: three runs per carrier.
+
+  513  The 209e dirty-walk dispatched its handlers with AX read from UNINITIALISED STACK.  The asm keeps
+       AX live from 459a/45f7 (the 4691 event/poll word) through 206f (which touches only bx/dx/bp) into
+       209e, which clobbers only AL; at `20b6 call *0x423c(%di)` AX is (AH from the caller):(AL = the cell
+       byte after `shr al,cl`), and the handlers test AL bits 0/2/4/7 and AH bit 2.  Ghidra typed 206f's
+       parameter `undefined1` and the port's dispatch was arg-less.  206f now publishes g_fist_evax and
+       209e composes g_fist_paintax and passes it as the dispatch argument.
+
+  514  FUN_0000_8f3a took the object from an uninitialised parameter and lost ad3b's AL.  8f3a is reached
+       ONLY through a19e's one-argument dispatch, which passes the object as a HOST POINTER (patch 283);
+       patch 394 had taken it from `param_2`, an uninitialised stack slot, and used the low byte of that
+       host pointer as AL.  AL is ad3b's gear-direction selector (1 at 0xad50, 0 at 0xad5e) -- which
+       patch 283 had itself recorded as "dropped through a19e's 1-param sig".  It now travels in
+       g_fist_a19e_al.
+       The evidence was exact: on AZER4 the targets are bit-identical through t=292 and differ at t=293
+       in ONE byte, DGROUP:0x9004 == 0x8f3a + 0xca -- this store executed with the garbage
+       `param_2 == 0x8f3a`, the function's own address left on the stack.
+
+PARITY NOW (6000-tick in-mission windows, FIST_SIMHASH over DGROUP 0x9000..0xefff):
+    AZER1  IDENTICAL      AZER4  IDENTICAL  (was: diverged at t=293)
+    AZER2  diverges t=334   SYRIA1 diverges t=3703   AZER3 diverges
+
+AZER2's carrier is located but not yet closed, and it is instructive: the byte is DGROUP:0xc006 ==
+obj(0xbfee)+0x18, written by FUN_0000_e1a6's `mov [di+0x18],al` -- the op-0x54 terrain height.  The whole
+DGROUP is IDENTICAL at t=333, so the difference is in the QUERY, not the map: e1a6 posts EBX into the
+extender TCB inbox at TCB+0x3f2 (`e1b4 mov %ebx,%gs:0x3f2(%si)`) and the shim's op-0x54 handler reads the
+position pair from there.  EBX is a live register neither b5e7 nor c0e5 sets -- the decompile threads it
+as b5e7's `param_3`, which c0e5 (a one-argument call) does not supply, so it is stack garbage again.  The
+observed value 0xffffcc38 is a plausible object+4 offset but NOT this object's (which would be 0xbff2),
+so it is a leftover from an earlier object in the same walk.
+NEXT for this one: recover the ORIGINAL EBX with the DOSBox write-trace -- `FIST_MEMARM_BOOT=1
+FISTLOG=<p> FIST_WATCHFLAT=<engine-flat of TCB+0x3f2>` -- and see what the real engine posts there.  That
+is precisely the "recover ground-truth register/segment values" use the oracle exists for.
+
+REGRESSION GATE: the native verify matrix is 177 PASS / 0 FAIL across patches 492-512, i.e. the whole
+combat cascade landed without breaking a single existing flow.
