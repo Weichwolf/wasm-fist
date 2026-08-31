@@ -6162,3 +6162,31 @@ Native verify matrix 177 PASS / 0 FAIL, re-run per patch series.
 NEXT: AZER2 at t=373, block 0xb800, with the same three-run method.  Then SYRIA1's early cockpit exit --
 the fingerprint stops because byte[DGROUP:0x1549] leaves 0x1c on wasm, so the carrier is whatever drives
 that transition, and it is below 0x9000 and outside the enumerated render set.
+
+## cont.65l -- where AZER2 stands, and the low-DGROUP words that are NOT vector slots
+
+AZER2 now diverges at t=373, in the SIM region: DGROUP:0xb8e3..0xb8e6 goes non-zero on native and stays
+zero on wasm.  Watchpointed to FUN_1000_b1df(param_1=4, ...) <- FUN_0000_ba33 <- FUN_0000_b5e7 -- the
+object-spawn registrar (patch 462).  Native spawns an object into that slot on this tick; wasm does not.
+
+A FULL-DGROUP dump at t=372 (the tick before) differs in only 12 bytes:
+
+    0x03e2  0x0686  0x078e  0x16b0  0x2662  0x2672  0x3ae2   (each a word)
+
+Most are far-vector slots or their high halves and differ by construction.  But three of them are NOT
+explained that way and must be treated as real:
+
+    0x078e   native 0x132a  /  wasm 0xd71a   -- BOTH halves differ, so not a host-address high half.
+                                                Written during startup by FUN_0000_d99b (<- cae6 <- 00d0)
+                                                and again later; the value has the shape of a real-mode
+                                                SEGMENT (linear 0x132a0 / 0xd71a0), i.e. a memory-manager
+                                                allocation that lands in a DIFFERENT place on the two
+                                                targets.
+    0x2662   native 0     /  wasm 13
+    0x2672   native 15    /  wasm 1
+
+If the allocator hands out different segments on native and wasm, that is a real invariant break in its
+own right, and it is the obvious candidate for AZER2's spawn decision: b1df's pool/slot choice would
+follow.  NEXT for AZER2: watchpoint DGROUP:0x078e across the whole run on both targets and compare the
+write sequences, then trace the allocation that produces it.  Do NOT add these words to the fingerprint
+until their nature is settled -- cont.65g already shows what happens when host-address slots get into it.
