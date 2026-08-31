@@ -1,0 +1,59 @@
+PATCH 523: the mission render walk's two [0x6b0] calls are a SAVE/RESTORE pair, and both halves were lost.
+
+asm 0x378e-0x37cc (FUN_0000_378e, the mission-object render-walk dispatcher, patch 194):
+    378e: b8 ff ff        mov   ax,0xffff
+    3791: ff 1e b0 06     lcall [0x6b0]
+    3795: 50              push  ax            <- the RETURNED previous mask
+    3796: ... the walk ...
+    37c2: 58              pop   ax            <- restore it
+    37c3: ff 1e b0 06     lcall [0x6b0]
+    37c7: 83 06 86 4a 02  addw  [0x4a86],2
+
+[DGROUP:0x6b0] is the MGA sprite CLIP-MASK setter FUN_0000_2604 -- `cbtw ; xchg ax,[0x1586]` (patch 522)
+-- and because it is an XCHG it RETURNS the previous mask.  The walk forces the mask to 0xffff for its
+duration and puts the old value back afterwards.  (The vector-install table at MGA image 0x5406 is
+(slot, method) pairs: 0x06ac->0x25d1, 0x06b0->0x2604, 0x06b4->0x26a1, 0x06b8->0x2660.)
+
+Ghidra dropped BOTH the `push ax` and the `pop ax`, so the restoring call ran with whatever happened to
+be in AX -- uninitialised, hence a different value under gcc -m32 than under emcc.
+
+This is the last native<->wasm divergence outside the shim's own far-vector slots.  With patches 517-522
+in, a whole-DGROUP dump of AZER1 at t=275 differs in exactly ONE real word -- DGROUP:0x1586, 0xffac on
+native against 0 on wasm -- every simulation block being identical; the remaining 12 differing bytes are
+far-vector slots and their high halves (native holds 0x081f/0x080a/0xc9c6, the top halves of real host
+addresses), which differ by construction.
+--- a/fist.c
++++ b/fist.c
+@@ -11921,7 +11921,21 @@
+    * and folded the iterator/CF.  Rebased onto g_mem+0x1c000; CF via the shim global g_fist_cf. */
+   extern unsigned char g_fist_cf;
+   extern unsigned short g_fist_iter_si;                               /* PATCH 292: c33c's updated si */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b0)))(0xffff);        /* ax=0xffff; call far [0x6b0] */
++  /* PATCH 523: the two [0x6b0] calls are a SAVE/RESTORE PAIR around the walk.  asm 0x378e:
++   *     378e: mov ax,0xffff ; 3791: lcall [0x6b0] ; 3795: push ax      <- the RETURNED old mask
++   *     ...
++   *     37c2: pop ax        ; 37c3: lcall [0x6b0]                      <- restore it
++   * [DGROUP:0x6b0] is the MGA sprite CLIP-MASK setter FUN_0000_2604 (`cbtw ; xchg ax,[0x1586]`,
++   * patch 522) -- an XCHG, so it RETURNS the previous mask.  The walk forces the mask to 0xffff for its
++   * duration and puts the old value back afterwards.  Ghidra dropped both the `push ax` and the
++   * `pop ax`, so the restoring call passed whatever was in AX -- uninitialised, and therefore a
++   * different value under gcc -m32 than under emcc.
++   * This is the LAST native<->wasm divergence outside the shim's own far-vector slots: with 517-522 in,
++   * a whole-DGROUP dump of AZER1 at t=275 differs in exactly ONE real word, DGROUP:0x1586 (0xffac on
++   * native, 0 on wasm), every simulation block being identical. */
++  unsigned short saved_mask =
++      ((unsigned short (*)(unsigned short))fist_icall_far((uint32_t)(DAT_1000_c6b0)))(0xffff);
++                                                                       /* 378e/3791/3795 push ax */
+   for (;;) {
+     uint16_t si = *(uint16_t *)(g_mem + 0x1c000 + 0x4b9e);            /* si=word[0x4b9e] */
+     uint16_t sidx;
+@@ -11935,7 +11949,8 @@
+     sidx = *(uint8_t *)(g_mem + 0x1c000 + 0x6bc2);                    /* dl=byte[0x6bc2]; si=dx */
+     (*(code *)fist_icall_near(0x0u, *(uint16_t *)(g_mem + 0x1c000 + sidx + 0x4b52)))(); /* [si+0x4b52] */
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b0)))();             /* call far [0x6b0] */
++  ((unsigned short (*)(unsigned short))fist_icall_far((uint32_t)(DAT_1000_c6b0)))(saved_mask);
++                                                                      /* 37c2 pop ax; 37c3 lcall [0x6b0] */
+   DAT_2000_0a86 = (uint16_t)(DAT_2000_0a86 + 2);                      /* addw 2,[0x4a86] */
+   return;
+ }
