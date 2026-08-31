@@ -5910,3 +5910,38 @@ real CS behind a `mov [mem],cs`)" use the instrumented DOSBox exists for.
     3. the extender voxel writer 9200 (SAUDI3, SYRIA2) and the MGA blitter 26de (INDIA3).
     4. the display-list builder 66f2 / 5fb0 (TRAIN3), including 5fb0's lost `mov gs,[0x70]` string-segment
        base -- the same GS defect as 8463.
+
+## cont.65f -- two more parity carriers closed, and the remainder is now provably RENDER-side
+
+Patches 515 and 516 (see the commit for the asm) closed the next two carriers.  515 was withdrawn once
+and then re-landed, and the reason is worth keeping: the falsifier I had stated for it ("parity closes")
+assumes a SINGLE carrier, which nothing in this cascade has ever been.  The right question is where the
+divergence MOVES.  Before 515 AZER2 diverged at t=334 in DGROUP block 24 and SYRIA1 at t=3703 in block 17,
+both watchpointed to e1a6's store; after it, both diverged in block 41 (0xe200) two ticks later -- carrier
+closed, next one exposed.  516 then closed that one (bbb7 storing the low 16 bits of a HOST ADDRESS into
+the current-target word DGROUP:0xe3b2, which b274 reads back as a near offset).
+
+STATE (6000-tick windows):
+    AZER1  IDENTICAL        AZER4  IDENTICAL
+    AZER2  divergence pushed from t=336 to ~t=490
+    SYRIA1 IDENTICAL over its whole 3471-tick overlapping window
+
+AND THE DECISIVE MEASUREMENT.  SYRIA1's wasm run stops emitting the fingerprint at t=3471 (it leaves the
+cockpit: byte[DGROUP:0x1549] stops being 0x1c) while native carries on.  A WHOLE-DGROUP dump at t=3471
+on both targets:
+
+    total differing bytes: 17      at/above 0x9000: 0      below 0x9000: 17
+    0x03e2..0x03e3   0x078e..0x078f   0x1586..0x158f   0x16b0..0x16b1   0x2672   0x3ae2..0x3ae3
+
+Every remaining byte is BELOW 0x9000 -- i.e. the entire object/AI/sim region is bit-identical, and what
+still differs is render state: 0x1586..0x158e are the MGA sprite CLIP words FUN_0000_260c computes
+(patch 114), and this board already flagged exactly that range at cont.64 as "a render-side leak into
+DGROUP, not a sim divergence".  Native has 0x1586=0xffac / 0x1588=0xffff where wasm has zeros, i.e. 260c
+took the "clipped out" exit on one target and not the other.
+
+So the native<->wasm frontier is no longer in the simulation at all.  It is FUN_0000_260c and the sprite
+pipeline it feeds -- and the low DGROUP is precisely the window the FIST_SIMHASH fingerprint deliberately
+excludes (it holds the shim's far-vector table with real host addresses), so the fingerprint can no
+longer see it.  NEXT: extend the fingerprint with a second, explicitly enumerated set of low-DGROUP
+render words (0x1586..0x158f, 0x3ae2, 0x078e, 0x03e2, 0x16b0, 0x2672) so the walk can continue with the
+same three-run method, and chase 260c's clip decision from there.
