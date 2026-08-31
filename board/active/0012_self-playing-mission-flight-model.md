@@ -5968,3 +5968,35 @@ NEXT: walk it with the same three-run method, starting at t=274 -- dump both tar
 watchpoint the first differing byte.  The prime suspect is already named: FUN_0000_260c's clip
 calculation (patch 114), whose outputs are 0x1586..0x158e, where native had 0xffac/0xffff and wasm zeros
 at SYRIA1 t=3471 -- one target taking the "clipped out" exit and the other not.
+
+## cont.65h -- the render frontier, narrowed to one call chain
+
+Patch 517 fixed five more cockpit glyph plates that Ghidra had emitted as a body containing nothing but
+`(*(code *)fist_icall_far(DAT_1000_c6b4))();` -- no player lookup, no glyph id, no BX.  They were found by
+an image-wide scan for the exact asm shape
+
+    mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,K ; mov bx,B ; lcall [0x6b4]
+
+which yields seven sites; 0x81e6/0x81f8 were already patch 504, the other five are 0x73d4 (K=0x1470,
+B=0x8dcc), 0x787d (0x380/0x8eee), 0x8bfb + 0x8c0d (0x838/0x9176 and 0x848/0x917e, two plates in one
+function) and 0x8dc6 (0x7d8/0x916e).
+
+BEFORE 517 the watchpoint on the clip word showed 787d handing 260c a glyph id of 274 -- the TICK
+COUNTER, because after patch 513 the dirty walk correctly passes its live AX and 787d was not consuming
+it.  AFTER 517 it hands over 0x380 and BX=0x8eee, exactly as the asm says, and native's DGROUP:0x158a
+goes from 0x0421 to 0 -- i.e. to wasm's value.
+
+The render column still differs at t=274, so the chain is not yet closed, but it is now narrowed to a
+single call path with correct inputs:
+
+    m_mga_FUN_0000_260c  <-  m_mga_FUN_0000_26a1  <-  FUN_0000_787d  <-  209e  <-  206f  <-  459a
+
+and the residue is 3 words: DGROUP:0x158a..0x158b and 0x158e (the rest of the 13-byte whole-DGROUP delta
+at t=274 is far-vector high halves -- 0x03e2, 0x0686, 0x16b0, 0x2663, 0x2672, 0x3ae2 hold 0x081f/0x080a/
+0xc9c6 on native against 0 on wasm, i.e. the top halves of real host addresses, which differ by
+construction and are correctly excluded from the fingerprint).
+
+NEXT: watchpoint 0x158a for ALL writes within tick 274 (not just the first) on both targets and compare
+the sequences; 260c is called more than once per frame and the divergence is in a later call.  There are
+also 46 more functions whose entire body is that same bare arg-less `lcall [0x6b4]` -- the scan above only
+matched the ONE asm shape -- so enumerate the rest by their own asm and fix them the same way.
