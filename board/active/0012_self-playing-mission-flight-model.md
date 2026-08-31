@@ -6065,3 +6065,29 @@ STILL OPEN from the 48: 7597 (a different source byte, byte[DGROUP:0x8d5f], and 
 7fff and 8ba1 (a `mul`/shift-derived table index), 8d88, and the CS=0x1000 group 6e3d, 7100, 8668, 8708,
 8725, 906d, 96bb, 97da, 9ab5 -- table lookups, two of them through the `mov gs,[0x70]` STRING SEGMENT,
 the same GS base patch 510 had to restore in 8463.  Each needs its own asm; they are the next batch.
+
+## cont.65i (cont.) -- the 48-handler set is closed; the render parity carrier is NOT in it
+
+Patch 520 finished the batch (5 in 517, 11 in 518, 24 in 519, 13 in 520).  The last thirteen needed their
+own asm: 7597 (glyph index from byte[DGROUP:0x8d5f], FIXED bx=0x8dc4, DI loaded and unused), 7fff (a 16x16
+`mul` whose HIGH half indexes word[DGROUP:0x9014+ix]), 8ba1/906d/9ab5 (lookups through the
+`mov gs,[0x70]` STRING SEGMENT -- the base Ghidra drops every time, cf. patch 510's 8463), 8668/8708/8725
+(DGROUP:0x90c0 / 0x91d0 tables indexed by byte[di+0x63] / [di+0x64]), 8d88/6e3d/97da (80eb's three-way
+shape) and 7100/96bb (indexed by byte[bp+si+1] with a +8 match bonus).
+
+MEASURED after 520: the self-play sweep is UNCHANGED at 38/47 -- 519 was the patch that moved it -- and,
+importantly, the native<->wasm RENDER column still diverges at t=274 on AZER1, AZER4 and SYRIA1 while
+every SIM column stays identical for the whole 5726-tick window.
+
+So the render carrier is NOT one of the 48 arg-less handlers.  That is a useful negative result: the
+batch had to be done (each of those 48 was calling the paint service with an AX and BX the port never
+set) but it does not explain the clip divergence.  The frontier is unchanged and now isolated:
+
+    FUN_0000_260c's clip calculation (patch 114) -- outputs DGROUP:0x1586..0x158f -- reached via
+    m_mga_FUN_0000_26a1 <- FUN_0000_787d <- 209e, differing from the FIRST in-mission tick.
+
+NEXT: watchpoint DGROUP:0x158a for ALL writes inside tick 274 on both targets and compare the SEQUENCES.
+260c runs more than once per frame and the earlier single-shot watchpoint only caught the first call; the
+divergence is in a later one.  The inputs to check, in order: 260c's param_1 (the sprite-directory byte
+offset) at each call, the directory segment word[DGROUP:0x4f0], and the resolved record's header word
+word[recseg:recoff-4] against the mask word[0x1586].
