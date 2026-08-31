@@ -6000,3 +6000,38 @@ NEXT: watchpoint 0x158a for ALL writes within tick 274 (not just the first) on b
 the sequences; 260c is called more than once per frame and the divergence is in a later call.  There are
 also 46 more functions whose entire body is that same bare arg-less `lcall [0x6b4]` -- the scan above only
 matched the ONE asm shape -- so enumerate the rest by their own asm and fix them the same way.
+
+## cont.65h (cont.) -- patch 518, and a measurement lesson about the sweep budget
+
+Patch 518 fixed eleven MAP-SCREEN glyph plates, found by a CORRECTED scan (the first one used a sloppy
+regex and produced a wrong list and a wrong count -- the real figure is 48 functions whose ENTIRE body is
+`(*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(); return;`).  Three asm shapes, all keyed on the
+map palette base word[0x7b9c], the active mode word[0x7b9e] and the EDIT gate byte[0x6dab] bit1:
+    simple          50a2 K=0x0fd8  51be 0x1000  520f 0x1010  5299 0x1020  52e3 0x1030  534f 0x1040
+    mode-selected   53af K=0x1050 M=0x18
+    edit-gated      50ea 0x0fe8/0x19/0x0ff8   5486 0x1080/0x1b/0x1090
+                    5555 0x1098/0x1a/0x10a8   56af 0x10b0/0x1c/0x10c0
+These are the map/editor screens, a surface the goal names explicitly.
+
+MEASUREMENT LESSON, the second of this round.  With 517/518 in, AZER3 and AZER6 started reporting
+HANG/slow -- and they were neither: they now genuinely PAINT their glyph plates, so they need more
+wall-clock, and the sweep's 40 s budget had silently become a false-failure detector.  At BUDGET=120 they
+pass.  The earlier "32/47" figure was measured with the too-tight budget and is not comparable.
+
+FINAL MEASURED STATE this round (47 missions, cooperative tick, empty player input, must REACH t=20000
+with rc=0, BUDGET=120s):
+
+    AZER     7/7      CYPRUS  5/7      INDIA  4/7      SAUDI  5/7
+    SYRIA    4/7      TRAIN   2/4      UKRAINE 8/8                     TOTAL 35/47
+
+    remaining: CYPRUS4, INDIA2 slow/hang;  CYPRUS5, INDIA3, INDIA5, SAUDI3, SAUDI7, SYRIA2, SYRIA6,
+               SYRIA7, TRAIN3, TRAIN4 SEGV.
+
+    AZER1 -- the message-overlay hang of cont.65c frontier A -- is CLOSED by 517/518: it was one of the
+    arg-less `lcall [0x6b4]` handlers feeding the MGA RLE decoder a glyph id and BX that were never set.
+
+  native verify matrix: 177 PASS / 0 FAIL, re-run on the exact HEAD build (through patch 517).
+
+  37 of the 48 arg-less handlers remain; enumerate each by its own asm and fix it the same way.  That is
+  the single highest-yield remaining batch -- it is now responsible for both the render-side parity
+  divergence and a share of the crashes.
