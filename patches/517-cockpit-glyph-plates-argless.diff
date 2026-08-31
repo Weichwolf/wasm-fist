@@ -1,0 +1,96 @@
+PATCH 517: five more cockpit glyph plates emitted as a bare arg-less `lcall [0x6b4]`.
+
+An image-wide scan for the exact shape
+    mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,K ; mov bx,B ; lcall [0x6b4]
+finds seven sites; two (0x81e6, 0x81f8) were already fixed by patch 504.  The remaining five:
+
+    0x73d4  K=0x1470  B=0x8dcc      FUN_0000_73d4
+    0x787d  K=0x0380  B=0x8eee      FUN_0000_787d
+    0x8bfb  K=0x0838  B=0x9176  \
+    0x8c0d  K=0x0848  B=0x917e   >  FUN_0000_8bfb, two plates in one function
+    0x8dc6  K=0x07d8  B=0x916e      FUN_0000_8dc6
+
+DAT_2000_2d34 holds the PLAYER's NEAR OFFSET (patch 300).  Ghidra emitted every one of these as a body
+containing nothing but `(*(code *)fist_icall_far(DAT_1000_c6b4))();` -- no player lookup, no glyph id, no
+BX -- so the paint service ran on whatever AX and BX happened to hold at the call.
+
+787d is the one that matters most right now: it is dispatched by the 209e dirty walk, so after patch 513
+it received the walk's real AX (on the first mission frame that is the tick counter) as its glyph id and
+still no BX, and it feeds FUN_0000_26a1 -> FUN_0000_260c, whose clip outputs at DGROUP:0x1586..0x158f are
+the native<->wasm RENDER divergence the extended fingerprint reports at t=274, the first in-mission tick
+(watchpointed: 260c <- 26a1 <- 787d <- 209e <- 206f <- 459a).
+--- a/fist.c
++++ b/fist.c
+@@ -19681,7 +19681,15 @@
+ void __allregs FUN_0000_73d4(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 517: a cockpit glyph plate (asm 0x73d4-0x73e6):
++   *     mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,0x1470 ; mov bx,0x8dcc ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300).  Ghidra emitted the whole body as a bare
++   * arg-less `lcall [0x6b4]` -- no player lookup, no glyph id, no BX -- so the paint service ran on
++   * whatever AX and BX happened to hold. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1470),0x8dcc);
+   return;
+ }
+ 
+@@ -20557,7 +20565,15 @@
+ void __allregs FUN_0000_787d(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 517: a cockpit glyph plate (asm 0x787d-0x788f):
++   *     mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,0x380 ; mov bx,0x8eee ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300).  Ghidra emitted the whole body as a bare
++   * arg-less `lcall [0x6b4]` -- no player lookup, no glyph id, no BX -- so the paint service ran on
++   * whatever AX and BX happened to hold. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x380),0x8eee);
+   return;
+ }
+ 
+@@ -23857,8 +23873,19 @@
+ void __allregs FUN_0000_8bfb(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 517: the two-glyph cockpit plate (asm 0x8bfb-0x8c1f):
++   *     mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,0x838 ; mov bx,0x9176 ; lcall [0x6b4]
++   *     mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,0x848 ; mov bx,0x917e ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300).  Ghidra emitted the whole body as a bare
++   * arg-less `lcall [0x6b4]` -- no player lookup, no glyph id, no BX -- so the paint service ran on
++   * whatever AX and BX happened to hold. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x838),0x9176);   /* 8bfb-8c09 */
++  di = (unsigned short)DAT_2000_2d34;                                       /* 8c0d re-read */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x848),0x917e);   /* 8c0d-8c1b */
+   return;
+ }
+ 
+@@ -24154,7 +24181,15 @@
+ void __allregs FUN_0000_8dc6(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 517: a cockpit glyph plate (asm 0x8dc6-0x8dd8):
++   *     mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,0x7d8 ; mov bx,0x916e ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300).  Ghidra emitted the whole body as a bare
++   * arg-less `lcall [0x6b4]` -- no player lookup, no glyph id, no BX -- so the paint service ran on
++   * whatever AX and BX happened to hold. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x7d8),0x916e);
+   return;
+ }
+ 
