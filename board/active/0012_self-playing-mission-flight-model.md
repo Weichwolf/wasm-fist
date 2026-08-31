@@ -5751,3 +5751,55 @@ FRONTIER (the next thing to chase, in order):
      value-filter a watchpoint on the first differing byte.
   4. only then is the win/lose evaluator (a5dc, already correct: result 0 when word[0x978e] hits 0 with
      word[0x9790] != 0; result 1 when the friendly count word[0x6d38] hits 0) able to fire.
+
+## cont.65c -- the cockpit-HUD cascade worked through: 18/47 -> 35/47
+
+Patches 506-512 continue the cascade patch 494 opened.  Every one is the same pair of defects in a
+different 209e/2057 display-list method: BX (the list element's DGROUP NEAR OFFSET, which the walk
+publishes to DGROUP:0x3e08) and DAT_2000_2d34 (the PLAYER's near offset, patch 300) dereferenced as HOST
+pointers; most also emitted the WORD inc/dec pairs as 4-byte read-modify-writes, dropped the
+`lcall [0x6b4]` / `lcall [0x694]` argument pairs, and -- for the input handlers -- dropped the clc/stc
+contract the walk consumes.
+
+  506  82a1 (ammo plate; the entire `movzbw bx,[bp+si+1]; add bx,[0x6d34]; mov ax,[bx+0xad]` ammo lookup
+       was missing and 02c5 was handed the CS artifact 0xf69 to format) and 82ee (READY/LOADING).
+  507  8329 + 834a/8358/836e/83c9.  0x8342 IS the dispatch table, not a function (image bytes
+       `4a 83 58 83 6e 83 c9 83`) -- a CS=0 table of patch 497's class -- and three of the four targets
+       had been emitted as a bare `lcall [0x6b4]` with NO BODY AT ALL.
+  508  8024, 804b (glyph plates), 8072 (turret bearing; DISCARDED 524e's return and used two
+       uninitialised `extraout_AH` for its two 530b calls).
+  509  848c, 849f, 84c5, 84d8, 8503, 8516, 853f, 8558, 8573, 8590, 85bd, 85da.
+  510  842d, 8463 (radio message, compass).  8463 also lost the `mov gs,[0x70]` STRING-SEGMENT base of
+       its compass table -- Ghidra read `[bx+0x253a]` at the bare host address 0x253a.
+  511  8302 (target range / gauges).
+  512  7f29 (cockpit-view reset): `orb [0x8f84],0x25` is a BYTE or, but DAT_2000_4f84 is typed
+       undefined2, so the decompile also clobbered DGROUP:0x8f85.
+
+MEASURED (47 missions, cooperative tick, empty player input, must REACH t=20000 with rc=0):
+    cont.65   18 / 47
+    cont.65c  35 / 47
+    remaining: AZER1, CYPRUS4, INDIA1, INDIA2 hang; INDIA3, INDIA5, SAUDI3, SYRIA2, SYRIA6, TRAIN3,
+               TRAIN4, UKRAINE4 SEGV.
+
+THREE NAMED FRONTIERS remain, one per subsystem:
+
+  A. the MESSAGE-OVERLAY hang (AZER1, CYPRUS4).  NOT a defect in patch 510: `mov bx,0x8fc4; lcall
+     [0x694]` is what the asm says, and threading BX now reaches the MGA RLE decoder 23d8 with the
+     message element at DGROUP:0x8fc4 whose DATA OFFSET word[0x8fc4+0x1a] is 0 -- while its segment
+     word[0x8fc4] is a plausible 0x76e5 and the message state byte[0x1548] a correct 0x83.  The
+     overlay's resource has never been populated.  Find who fills [0x8fc4+0x1a] and why it has not run.
+
+  B. the EXTENDER VOXEL WRITER (SAUDI3, SYRIA2): m_ext_FUN_0000_9200 faults in the patch-286
+     self-modifying colormap sampler, reached straight from fist_extender_gate.  Map/state specific --
+     two missions, one site.
+
+  C. the DISPLAY-LIST BUILDER (TRAIN3): FUN_1000_66f2 <- FUN_0000_5fb0.  66f2 is a pure `stos`
+     sequence into ES:DI (asm 0x166f2-0x1671a: [di+2]=si, [di+4]=ax, [di+8]=0, [di+0xa]=dword[si],
+     [di+0xe]=[di+0x12]=dword[si+4], [di+0x16..0x1c]=0, then di += 0x14) whose ES base and SI source are
+     both lost; 5fb0 additionally loses the `mov gs,[0x70]` string-segment base of its `gs:0x12c7(%bx)`
+     store -- the same GS defect as 8463.  INDIA3 is the MGA blitter 26de <- 26a1, the same class.
+
+METHOD that made this tractable, worth repeating: fix ONLY the measured top SIGSEGV of the previous
+sweep, rebuild, re-sweep.  The order actually walked was
+  82ee -> 8329 -> 8024 -> 85bd -> 842d -> 8302 -> 7f29,
+and 7f29 alone took seven missions from SEGV to clean.
