@@ -1,0 +1,64 @@
+PATCH 524: three stores of a TRUNCATED HOST POINTER into the far-pointer word DGROUP:0x78e.
+
+DGROUP:0x78e pairs with the segment word at 0x790 as a far pointer.  Three sites write its offset:
+
+    dad2: a1 2c ea   mov ax,[0xea2c]     ; the TCB OFFSET word
+    dad5: 05 ea 00   add ax,0xea
+    dad8: a3 8e 07   mov [0x78e],ax
+  (twice -- FUN_0000_dab0 and its sibling), and
+
+    db07: b8 b8 ed   mov ax,0xedb8       ; a NEAR OFFSET constant
+    db0a: a3 8e 07   mov [0x78e],ax
+
+`DAT_2000_aa2c` is #defined as a HOST POINTER -- `g_mem + (word[0xea2e]<<4) + word[0xea2c]` -- so
+`DAT_2000_aa2c + 0xea` assigned to the 16-bit `DAT_1000_c78e` stored the low 16 bits of a HOST ADDRESS.
+The third site had `(undefined1 *)&DAT_2000_adb8`, i.e. the host address of the DGROUP variable that
+happens to live at 0xedb8, where the asm loads the near offset 0xedb8 itself.  Both are patch 516's
+class: a host-address-derived value in a DGROUP word, different by construction between gcc -m32 and
+emcc.
+
+MEASURED: this is AZER2's remaining native<->wasm divergence.  DGROUP:0x78e held 0x132a on native against
+0xd71a on wasm from the first mission frame (word[0xea2c] being 0x1240 / 0xd630 there); two ticks after
+the fingerprint first differs, at t=373, native spawns an object into slot DGROUP:0xb8e3 through
+b1df <- ba33 <- b5e7 and wasm does not -- with the whole DGROUP otherwise identical at t=372.
+--- a/fist.c
++++ b/fist.c
+@@ -36372,7 +36372,12 @@
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c56c)))();
+     return;
+   }
+-  DAT_1000_c78e = DAT_2000_aa2c + 0xea;
++  /* PATCH 524: `mov ax,[0xea2c] ; add ax,0xea ; mov [0x78e],ax` (asm 0xdad2) -- a 16-BIT read of the TCB
++   * OFFSET word DGROUP:0xea2c, plus 0xea, into the 16-bit word DGROUP:0x78e, which pairs with the segment
++   * at 0x790 as a far pointer.  DAT_2000_aa2c is #defined as a HOST POINTER
++   * (g_mem + (word[0xea2e]<<4) + word[0xea2c]), so `DAT_2000_aa2c + 0xea` stored into a WORD wrote the
++   * low 16 bits of a HOST ADDRESS -- host-dependent by construction, exactly patch 516's class. */
++  DAT_1000_c78e = (undefined2)(uint16_t)(*(uint16_t *)(g_mem + 0x2aa2c) + 0xea);
+   DAT_2000_a6f1 = 0;
+   DAT_1000_c790 = DAT_2000_aa2e;
+   *(undefined1 *)(DAT_2000_aa2c + 0xcf) = 0;
+@@ -36392,7 +36397,12 @@
+   
+   uVar2 = DAT_2000_aa2e;
+   iVar1 = DAT_2000_aa2c;
+-  DAT_1000_c78e = DAT_2000_aa2c + 0xea;
++  /* PATCH 524: `mov ax,[0xea2c] ; add ax,0xea ; mov [0x78e],ax` (asm 0xdad2) -- a 16-BIT read of the TCB
++   * OFFSET word DGROUP:0xea2c, plus 0xea, into the 16-bit word DGROUP:0x78e, which pairs with the segment
++   * at 0x790 as a far pointer.  DAT_2000_aa2c is #defined as a HOST POINTER
++   * (g_mem + (word[0xea2e]<<4) + word[0xea2c]), so `DAT_2000_aa2c + 0xea` stored into a WORD wrote the
++   * low 16 bits of a HOST ADDRESS -- host-dependent by construction, exactly patch 516's class. */
++  DAT_1000_c78e = (undefined2)(uint16_t)(*(uint16_t *)(g_mem + 0x2aa2c) + 0xea);
+   DAT_2000_a6f1 = 0;
+   DAT_1000_c790 = DAT_2000_aa2e;
+   *(undefined1 *)(DAT_2000_aa2c + 0xcf) = 0;
+@@ -36413,7 +36423,9 @@
+   uVar2 = DAT_2000_aa2e;
+   iVar1 = DAT_2000_aa2c;
+   DAT_2000_a6f1 = 1;
+-  DAT_1000_c78e = (undefined1 *)&DAT_2000_adb8;
++  /* PATCH 524: asm 0xdb07 `mov ax,0xedb8 ; mov [0x78e],ax` -- a NEAR OFFSET constant, not the host
++   * address of the DGROUP variable that happens to live there. */
++  DAT_1000_c78e = (undefined2)0xedb8;
+   *(undefined1 *)(DAT_2000_aa2c + 0xcf) = 1;
+   DAT_1000_c790 = 0x1c00;
+   DAT_1000_c78c = *(undefined2 *)(iVar1 + 0x54);
