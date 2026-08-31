@@ -5888,3 +5888,25 @@ TCB+0x3f2 with the DOSBox write-trace --
 which logs the live cs:eip and value of every write to that word.  Read the real EBX out of it, then
 reconstruct e1a6 from ground truth.  This is exactly the "recover ground-truth register values (e.g. the
 real CS behind a `mov [mem],cs`)" use the instrumented DOSBox exists for.
+
+## cont.65 SUMMARY -- verified state at the end of this round
+
+  native verify matrix   177 PASS / 0 FAIL   (re-run on the HEAD binary, i.e. with 513/514 in)
+  47-mission self-play   35 / 47 reach t=20000 with rc=0   (was 18/47 at the start of cont.65c,
+                         and before patch 494 the number was meaningless: no unit had ever fired)
+  native <-> wasm        AZER1 and AZER4 bit-identical over 5726 in-mission ticks;
+                         AZER2 / AZER3 / SYRIA1 still diverge, all three through the SAME store
+                         (e1a6's op-0x54 inbox) -- see cont.65e for the disproven hypothesis and the
+                         oracle run that settles it.
+
+  still failing: AZER1, CYPRUS4, INDIA1, INDIA2 hang; INDIA3, INDIA5, SAUDI3, SYRIA2, SYRIA6, TRAIN3,
+                 TRAIN4, UKRAINE4 SEGV.
+
+  ORDER OF WORK for the next round, highest leverage first:
+    1. the e1a6 op-0x54 inbox, via the DOSBox write-trace (cont.65e) -- closes three parity divergences
+       and probably several of the SEGVs, since it feeds every object's terrain height.
+    2. the message-overlay hang (cont.65c frontier A): who populates the compiled sprite the MGA RLE
+       decoder 23d8 reads at DGROUP:0x8fc4.
+    3. the extender voxel writer 9200 (SAUDI3, SYRIA2) and the MGA blitter 26de (INDIA3).
+    4. the display-list builder 66f2 / 5fb0 (TRAIN3), including 5fb0's lost `mov gs,[0x70]` string-segment
+       base -- the same GS defect as 8463.
