@@ -1,0 +1,332 @@
+PATCH 520: the last thirteen arg-less `lcall [0x6b4]` cockpit handlers.
+
+Completes the batch started by patches 517/518/519.  Every one had its ENTIRE body emitted by Ghidra as
+`(*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(); return;`.  DAT_2000_2d34 is the PLAYER's NEAR
+OFFSET (patch 300); BX is the display-list element's near offset, which both the 2057 and 209e walks
+publish to DGROUP:0x3e08, and BP the walk base (g_fist_paintbp, patch 142).
+
+  7597   the odd one out: `movzbw ax,[0x8d5f] ; add ax,0x1460 ; mov bx,0x8dc4` -- the glyph index comes
+         from byte[DGROUP:0x8d5f], not the player, and BX is FIXED (DI is loaded and then unused).
+  7fff   `mov ax,[di+0x5d] ; mov bx,0x1a ; mul bx ; mov bx,dx ; and bx,0x1e ; mov ax,[bx-0x6fec]`
+         -- a 16x16 multiply whose HIGH half indexes word[DGROUP:0x9014 + ix].
+  8ba1   `mov bl,[di+0x5f] ; shr bl,1 x3 ; and bx,0x1e ; mov gs,[0x70] ; mov ax,gs:[bx+0x2740]`
+  906d   the same with `shr bl,3` and table gs:0x2b10
+  9ab5   `mov bl,[di+0x63] ; and bx,0xf ; shl bx,1 ; mov gs,[0x70] ; mov ax,gs:[bx+0x290c]`
+         -- these three go through the `mov gs,[0x70]` STRING SEGMENT, the same base patch 510 had to
+         restore in 8463 and which Ghidra drops every time.
+  8668   `mov bl,[di+0x63] ; and bx,0xf ; shl bx,1 ; mov ax,[bx-0x6f40]`   (DGROUP:0x90c0)
+  8708   the same, table DGROUP:0x91d0, then `add ax,0x9d0`
+  8725   byte[di+0x64], table DGROUP:0x91d0, then `add ax,0x9f0`
+  8d88, 6e3d, 97da   FUN_0000_80eb's shape (patch 504): a three-way base chosen by byte[bp+[bx+2]+1],
+         then +8 if it matches byte[di+0x86] else + byte[di+0x3f].  Bases 0x768/0x778/0x788,
+         0x14c0/0x14d0/0x14e0 and 0xa80/0xa90/0xaa0.
+  7100   `mov bl,[bp+si+1] ; movzbw ax,bl ; shl ax,4 ; add ax,0x1510`, then +8 if bl == byte[di+0x90]
+         else + byte[di+0x3f]
+  96bb   `mov bl,[bp+si+1] ; mov ax,[bx-0x6dc6]` (DGROUP:0x923a, byte-indexed -- the ids are pre-scaled),
+         then +8 if bl == byte[di+0x91] else + byte[di+0x3f]
+
+With this the 48-handler set is closed: 5 in 517, 11 in 518, 24 in 519, 13 here (7597 and the rest).
+--- a/fist.c
++++ b/fist.c
+@@ -20173,7 +20173,13 @@
+ void __allregs FUN_0000_7597(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: asm 0x7597-0x75aa `mov di,[0x6d34] ; movzbw ax,[0x8d5f] ; add ax,0x1460 ;
++   * mov bx,0x8dc4 ; lcall [0x6b4]`.  Unlike its neighbours this one takes the glyph index from
++   * byte[DGROUP:0x8d5f] and uses a FIXED bx=0x8dc4 -- it does NOT read the display-list element (DI is
++   * loaded and then unused).  Ghidra emitted the whole body as a bare arg-less `lcall [0x6b4]`. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short ax = (unsigned short)(dg[0x8d5f] + 0x1460);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0x8dc4);
+   return;
+ }
+ 
+@@ -22077,7 +22083,20 @@
+ void __allregs FUN_0000_7fff(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x7fff-0x801d), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     push bx ; mov di,[0x6d34] ; mov ax,[di+0x5d] ; mov bx,0x1a ; mul bx ; mov bx,dx ;
++   *     and bx,0x1e ; mov ax,[bx-0x6fec] ; pop bx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  { unsigned long p = (unsigned long)*(unsigned short *)(dg + (unsigned short)(di + 0x5d)) * 0x1au;
++    unsigned short ix = (unsigned short)((p >> 16) & 0x1e);          /* DX of the mul, masked */
++    ax = *(unsigned short *)(dg + (unsigned short)(0x9014 + ix)); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -24073,7 +24092,20 @@
+ void __allregs FUN_0000_8ba1(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x8ba1-0x8bc3), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     mov di,[0x6d34] ; push bx ; mov bl,[di+0x5f] ; shr bl,1 x3 ; and bx,0x1e ;
++   *     mov gs,[0x70] ; mov ax,gs:[bx+0x2740] ; pop bx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x5f)] >> 3) & 0x1e);
++    unsigned short gs = *(unsigned short *)(dg + 0x70);               /* the STRING segment */
++    ax = *(unsigned short *)(g_mem + ((unsigned long)gs << 4) + (unsigned short)(0x2740 + ix)); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -24411,7 +24443,26 @@
+ void __allregs FUN_0000_8d88(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x8d88-0x8dbf), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     push bp ; mov di,[0x6d34] ; add bp,[bx+2] ; mov dl,[bp+1] ; mov ax,0x768 ; cmp dl,1 ; je .. ;
++   *     mov ax,0x778 ; cmp dl,2 ; je .. ; mov ax,0x788 ; cmp dl,[di+0x86] ; jne .. ; add ax,8 ; jmp .. ;
++   *     movzbw dx,[di+0x3f] ; add ax,dx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks, and BP the walk base (g_fist_paintbp, patch 142). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  extern unsigned short g_fist_paintbp;
++  { unsigned short bp = (unsigned short)(g_fist_paintbp
++            + *(unsigned short *)(dg + (unsigned short)(bx - 4 + 2)));
++    unsigned char dl = dg[(unsigned short)(bp + 1)];
++    ax = 0x768;
++    if (dl != 1) { ax = 0x778; if (dl != 2) ax = 0x788; }
++    if (dl == dg[(unsigned short)(di + 0x86)]) ax = (unsigned short)(ax + 8);
++    else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -59720,7 +59771,26 @@
+ void __allregs FUN_1000_6e3d(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x16e3d-0x16e74), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     push bp ; mov di,[0x6d34] ; add bp,[bx+2] ; mov dl,[bp+1] ; mov ax,0x14c0 ; cmp dl,1 ; je .. ;
++   *     mov ax,0x14d0 ; cmp dl,2 ; je .. ; mov ax,0x14e0 ; cmp dl,[di+0x86] ; jne .. ; add ax,8 ; jmp .. ;
++   *     movzbw dx,[di+0x3f] ; add ax,dx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks, and BP the walk base (g_fist_paintbp, patch 142). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  extern unsigned short g_fist_paintbp;
++  { unsigned short bp = (unsigned short)(g_fist_paintbp
++            + *(unsigned short *)(dg + (unsigned short)(bx - 4 + 2)));
++    unsigned char dl = dg[(unsigned short)(bp + 1)];
++    ax = 0x14c0;
++    if (dl != 1) { ax = 0x14d0; if (dl != 2) ax = 0x14e0; }
++    if (dl == dg[(unsigned short)(di + 0x86)]) ax = (unsigned short)(ax + 8);
++    else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -59914,7 +59984,24 @@
+ void __allregs FUN_1000_7100(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x17100-0x1712d), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     push bx ; mov di,[0x6d34] ; mov si,[bx+2] ; mov bl,[bp+si+1] ; movzbw ax,bl ; shl ax,4 ;
++   *     add ax,0x1510 ; cmp bl,[di+0x90] ; jne .. ; add ax,8 ; jmp .. ;
++   *     movzbw bx,[di+0x3f] ; add ax,bx ; pop bx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks, and BP the walk base (g_fist_paintbp, patch 142). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  extern unsigned short g_fist_paintbp;
++  { unsigned short si = *(unsigned short *)(dg + (unsigned short)(bx - 4 + 2));
++    unsigned char bl = dg[(unsigned short)(g_fist_paintbp + si + 1)];
++    ax = (unsigned short)((bl << 4) + 0x1510);
++    if (bl == dg[(unsigned short)(di + 0x90)]) ax = (unsigned short)(ax + 8);
++    else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -62407,7 +62494,19 @@
+ void __allregs FUN_1000_8668(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x18668-0x18681), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     push bx ; mov di,[0x6d34] ; mov bl,[di+0x63] ; and bx,0xf ; shl bx,1 ;
++   *     mov ax,[bx-0x6f40] ; pop bx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x63)] & 0xf) << 1);
++    ax = *(unsigned short *)(dg + (unsigned short)(0x90c0 + ix)); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -62477,7 +62576,19 @@
+ void __allregs FUN_1000_8708(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x18708-0x18724), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     push bx ; mov di,[0x6d34] ; mov bl,[di+0x63] ; and bx,0xf ; shl bx,1 ;
++   *     mov ax,[bx-0x6e30] ; add ax,0x9d0 ; pop bx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x63)] & 0xf) << 1);
++    ax = (unsigned short)(*(unsigned short *)(dg + (unsigned short)(0x91d0 + ix)) + 0x9d0); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -62487,7 +62598,19 @@
+ void __allregs FUN_1000_8725(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x18725-0x18741), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     push bx ; mov di,[0x6d34] ; mov bl,[di+0x64] ; and bx,0xf ; shl bx,1 ;
++   *     mov ax,[bx-0x6e30] ; add ax,0x9f0 ; pop bx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x64)] & 0xf) << 1);
++    ax = (unsigned short)(*(unsigned short *)(dg + (unsigned short)(0x91d0 + ix)) + 0x9f0); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -63402,7 +63525,20 @@
+ void __allregs FUN_1000_906d(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x1906d-0x1908c), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     mov di,[0x6d34] ; push bx ; mov bl,[di+0x5f] ; shr bl,3 ; and bx,0x1e ;
++   *     mov gs,[0x70] ; mov ax,gs:[bx+0x2b10] ; pop bx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x5f)] >> 3) & 0x1e);
++    unsigned short gs = *(unsigned short *)(dg + 0x70);
++    ax = *(unsigned short *)(g_mem + ((unsigned long)gs << 4) + (unsigned short)(0x2b10 + ix)); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -63960,7 +64096,24 @@
+ void __allregs FUN_1000_96bb(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x196bb-0x196e5), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     push bx ; mov si,[bx+2] ; mov bl,[bp+si+1] ; xor bh,bh ; mov ax,[bx-0x6dc6] ;
++   *     mov di,[0x6d34] ; cmp bl,[di+0x91] ; jne .. ; add ax,8 ; jmp .. ;
++   *     movzbw bx,[di+0x3f] ; add ax,bx ; pop bx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks, and BP the walk base (g_fist_paintbp, patch 142). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  extern unsigned short g_fist_paintbp;
++  { unsigned short si = *(unsigned short *)(dg + (unsigned short)(bx - 4 + 2));
++    unsigned char bl = dg[(unsigned short)(g_fist_paintbp + si + 1)];
++    ax = *(unsigned short *)(dg + (unsigned short)(0x923a + bl));
++    if (bl == dg[(unsigned short)(di + 0x91)]) ax = (unsigned short)(ax + 8);
++    else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -64055,7 +64208,26 @@
+ void __allregs FUN_1000_97da(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x197da-0x19811), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     push bp ; mov di,[0x6d34] ; add bp,[bx+2] ; mov dl,[bp+1] ; mov ax,0xa80 ; cmp dl,1 ; je .. ;
++   *     mov ax,0xa90 ; cmp dl,2 ; je .. ; mov ax,0xaa0 ; cmp dl,[di+0x86] ; jne .. ; add ax,8 ; jmp .. ;
++   *     movzbw dx,[di+0x3f] ; add ax,dx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks, and BP the walk base (g_fist_paintbp, patch 142). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  extern unsigned short g_fist_paintbp;
++  { unsigned short bp = (unsigned short)(g_fist_paintbp
++            + *(unsigned short *)(dg + (unsigned short)(bx - 4 + 2)));
++    unsigned char dl = dg[(unsigned short)(bp + 1)];
++    ax = 0xa80;
++    if (dl != 1) { ax = 0xa90; if (dl != 2) ax = 0xaa0; }
++    if (dl == dg[(unsigned short)(di + 0x86)]) ax = (unsigned short)(ax + 8);
++    else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -64343,7 +64515,20 @@
+ void __allregs FUN_1000_9ab5(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 520: a cockpit glyph plate (asm 0x19ab5-0x19ad3), one of the 48 handlers whose ENTIRE body Ghidra
++   * emitted as a bare arg-less `lcall [0x6b4]`.
++   *     push bx ; mov di,[0x6d34] ; mov bl,[di+0x63] ; and bx,0xf ; shl bx,1 ;
++   *     mov gs,[0x70] ; mov ax,gs:[bx+0x290c] ; pop bx ; lea bx,[bx+4] ; lcall [0x6b4]
++   * DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300); BX is the display-list element's near offset,
++   * published to DGROUP:0x3e08 by the 2057/209e walks. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x63)] & 0xf) << 1);
++    unsigned short gs = *(unsigned short *)(dg + 0x70);
++    ax = *(unsigned short *)(g_mem + ((unsigned long)gs << 4) + (unsigned short)(0x290c + ix)); }
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
