@@ -1,0 +1,138 @@
+PATCH 508: three more cockpit-HUD methods -- 8024, 804b, 8072.
+
+FUN_0000_8024 (asm 0x8024-0x8044) and FUN_0000_804b (asm 0x804b-0x806b) are the same glyph plate twice:
+    8024: 8b 3e 34 6d     mov    di,[0x6d34]              ; the PLAYER's NEAR OFFSET
+    8028: 0f b6 45 3f     movzbw ax,[di+0x3f]
+    802c: 05 c8 04        add    ax,0x4c8                 ; (804b: 0x4d8)
+    802f: 8d 5f 04        lea    bx,[bx+4]
+    8032: 83 07 01        addw   [bx],1
+    8035: 83 47 02 03     addw   [bx+2],3                 ; (804b: 0x2f)
+    8039: ff 1e b4 06     lcall  [0x6b4]
+    803d: 83 2f 01        subw   [bx],1
+    8040: 83 6f 02 03     subw   [bx+2],3                 ; (804b: 0x2f)
+BX is the display-list element's near offset (the 209e walk publishes it to DGROUP:0x3e08, patch 142).
+Ghidra host-deref'd the element, emitted all four `addw/subw` as 4-byte int read-modify-writes (which
+also clobber [bx+8..9]), and dropped both the player lookup and the far call's (ax,bx) argument pair.
+
+FUN_0000_8072 (asm 0x8072-0x80b4), the turret-bearing readout:
+    8072: mov ax,2 ; lcall 0f69:5bbe                  ; 524e(2) -- its AH feeds BOTH 530b calls
+    807a: mov ax,0x54 ; mov bx,0x9a ; lcall 0f69:5c41 ; 52d1(0x54,0x9a)
+    8085: mov al,0x44 ; lcall 0f69:5c7b               ; 530b
+    808c: mov si,0x96b5 ; lcall 0f69:5e9b             ; thunk_5531 over DGROUP:0x96b5
+    8094: mov al,0x39 ; lcall 0f69:5c7b               ; 530b with the SAME AH -- only AL is reloaded
+    809b: mov di,[0x6d34] ; mov ax,[di+0x89]          ; the PLAYER's turret bearing WORD
+    80a3: call 0x31c ; mov si,0x1f8c ; call 0x2c5 ; mov si,0x1f8e ; lcall 0f69:5e9b
+Ghidra DISCARDED 524e's return value and used two uninitialised `extraout_AH` pseudo-vars for the two
+530b calls, passed thunk_5531 the raw near offset 0x96b5 where it takes a HOST pointer (patch 139), and
+dereferenced DAT_2000_2d34 as a host pointer.
+
+8024 was the top SIGSEGV of the post-507 sweep (8024 <- 209e <- 206f <- 459a).
+--- a/fist.c
++++ b/fist.c
+@@ -21810,14 +21810,23 @@
+ void __allregs FUN_0000_8024(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  *piVar1 = *piVar1 + 1;
+-  *(int *)(param_1 + 6) = *(int *)(param_1 + 6) + 3;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -3;
++  /* PATCH 508: a cockpit glyph plate (asm 0x8024-0x8044), a 209e paint method with the family defect:
++   *     8024: mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,0x4c8   ; the glyph id
++   *     lea bx,[bx+4] ; addw [bx],1 ; addw [bx+2],0x3 ; lcall [0x6b4] ; subw [bx],1 ; subw [bx+2],0x3
++   * BX is the display-list element's NEAR OFFSET (the walk publishes it to DGROUP:0x3e08, patch 142)
++   * and DAT_2000_2d34 the PLAYER's near offset; Ghidra host-deref'd the element, emitted the four
++   * `addw/subw` as 4-byte int read-modify-writes (which also clobber [bx+8..9]), and dropped both the
++   * player lookup and the far call's (ax,bx) argument pair. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x4c8);
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  (void)param_1;
++  *(unsigned short *)(dg + bx) += 1;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 0x3;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  *(unsigned short *)(dg + bx) -= 1;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 0x3;
+   return;
+ }
+ 
+@@ -21837,14 +21846,23 @@
+ void __allregs FUN_0000_804b(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  *piVar1 = *piVar1 + 1;
+-  *(int *)(param_1 + 6) = *(int *)(param_1 + 6) + 0x2f;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -0x2f;
++  /* PATCH 508: 8024's twin (asm 0x804b-0x806b), a 209e paint method with the family defect:
++   *     804b: mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,0x4d8   ; the glyph id
++   *     lea bx,[bx+4] ; addw [bx],1 ; addw [bx+2],0x2f ; lcall [0x6b4] ; subw [bx],1 ; subw [bx+2],0x2f
++   * BX is the display-list element's NEAR OFFSET (the walk publishes it to DGROUP:0x3e08, patch 142)
++   * and DAT_2000_2d34 the PLAYER's near offset; Ghidra host-deref'd the element, emitted the four
++   * `addw/subw` as 4-byte int read-modify-writes (which also clobber [bx+8..9]), and dropped both the
++   * player lookup and the far call's (ax,bx) argument pair. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x4d8);
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  (void)param_1;
++  *(unsigned short *)(dg + bx) += 1;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 0x2f;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  *(unsigned short *)(dg + bx) -= 1;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 0x2f;
+   return;
+ }
+ 
+@@ -21864,18 +21882,30 @@
+ void __allregs FUN_0000_8072(void)
+ 
+ {
+-  undefined1 extraout_AH;
+-  undefined1 extraout_AH_00;
+-  uint uVar1;
+-  
+-  FUN_1000_524e(2);
+-  FUN_1000_52d1(0x54,0x9a);
+-  FUN_1000_530b(CONCAT11(extraout_AH,0x44));
+-  thunk_FUN_1000_5531(0x96b5);
+-  FUN_1000_530b(CONCAT11(extraout_AH_00,0x39));
+-  uVar1 = FUN_0000_031c(*(undefined2 *)(DAT_2000_2d34 + 0x89));
+-  FUN_0000_02c5(uVar1,(undefined1 *)&DAT_1000_df8c);
+-  thunk_FUN_1000_5531((undefined1 *)&DAT_1000_df8e);
++  /* PATCH 508: the TURRET-BEARING readout (asm 0x8072-0x80b4):
++   *     8072: mov ax,2 ; lcall 0f69:5bbe                 ; 524e(2) -- its AH feeds BOTH 530b calls
++   *     807a: mov ax,0x54 ; mov bx,0x9a ; lcall 0f69:5c41; 52d1(0x54,0x9a)
++   *     8085: mov al,0x44 ; lcall 0f69:5c7b              ; 530b
++   *     808c: mov si,0x96b5 ; lcall 0f69:5e9b            ; thunk_5531 over DGROUP:0x96b5
++   *     8094: mov al,0x39 ; lcall 0f69:5c7b              ; 530b with the SAME AH -- only AL is reloaded
++   *     809b: mov di,[0x6d34] ; mov ax,[di+0x89]         ; the PLAYER's turret bearing WORD
++   *     80a3: call 0x31c ; mov si,0x1f8c ; call 0x2c5 ; mov si,0x1f8e ; lcall 0f69:5e9b
++   * Ghidra DISCARDED 524e's return and used two uninitialised `extraout_AH` pseudo-vars for the 530b
++   * calls, passed thunk_5531 the raw near offset 0x96b5 where it takes a HOST pointer (patch 139), and
++   * dereferenced DAT_2000_2d34 -- the player's NEAR OFFSET -- as a host pointer. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di;
++  undefined2 uVar1;
++  uint uVar2;
++  uVar1 = FUN_1000_524e(2);                                              /* 8072/8075 */
++  FUN_1000_52d1(0x54,0x9a);                                              /* 807a-8080 */
++  FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0x44));                /* 8085/8087 */
++  thunk_FUN_1000_5531((char *)(dg + 0x96b5));                            /* 808c/808f */
++  FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0x39));                /* 8094/8096 */
++  di = (unsigned short)DAT_2000_2d34;                                    /* 809b */
++  uVar2 = FUN_0000_031c(*(unsigned short *)(dg + (unsigned short)(di + 0x89)));  /* 809f/80a3 */
++  FUN_0000_02c5(uVar2,(undefined1 *)&DAT_1000_df8c);                     /* 80a6/80a9 */
++  thunk_FUN_1000_5531((undefined1 *)&DAT_1000_df8e);                     /* 80ac/80af */
+   return;
+ }
+ 

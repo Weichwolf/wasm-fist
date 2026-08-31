@@ -1,0 +1,361 @@
+PATCH 509: twelve more cockpit-HUD paint/input methods (848c, 849f, 84c5, 84d8, 8503, 8516, 853f, 8558,
+8573, 8590, 85bd, 85da).
+
+Same family as patches 503/504/506/508.  BX is the display-list element's DGROUP NEAR OFFSET (the 209e
+walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the PLAYER's near offset (patch 300);
+Ghidra dereferenced both as host pointers, emitted the WORD inc/dec pairs as 4-byte read-modify-writes,
+dropped the `lcall [0x6b4]` argument pairs, and for the input handlers dropped the clc/stc contract the
+walk consumes.
+
+GLYPH PLATES -- `mov di,[0x6d34]; movzbw ax,[di+0x3f]; add ax,K; lea bx,[bx+4]; [incw (bx); incw
+[bx+2];] lcall [0x6b4] [; decw (bx); decw [bx+2]]`:
+    848c  K=0x488   84c5  K=0x728   8503  K=0x4b8   853f  K=0x498   8558  K=0x4a8
+    8573  K=0x4e8 (with the inc/dec pair)          85bd  K=0x4f8 (with the inc/dec pair)
+
+INPUT HANDLERS -- `test ax,0x80; je -> stc` / `test ax,1; jne -> clc`, then
+`xorb [di+0x3f],8; movb [di+F],3`, and on bits 0x14 a tail:
+    849f  F=0xed, tail `call 0xa345` with DI live
+    84d8  F=0xee, tail `movb [di+0x3f],0; lcall 0f69:8bb0` (== linear 0x18240, FUN_1000_8240)
+    8516  F=0xef, plus `call 0xaae8` BEFORE the 0x14 test, tail `call 0xa751`, both with DI live
+    8590  F=0xf7, tail `cmpb [di+0x8d],8; jae ..; shlb [di+0x8d],1`   (zoom in)
+    85da  F=0xf6, tail `cmpb [di+0x8d],1; je ..;  shrb [di+0x8d],1`   (zoom out)
+
+85bd was the top SIGSEGV of the post-508 sweep (85bd <- 209e <- 206f <- 459a).
+--- a/fist.c
++++ b/fist.c
+@@ -22570,7 +22570,15 @@
+ void __allregs FUN_0000_848c(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 509: a cockpit glyph plate (asm 0x848c-0x849e).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x488);
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -22580,20 +22588,21 @@
+ void __allregs FUN_0000_849f(uint param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
+-  if ((param_1 & 0x80) == 0) {
+-    return;
+-  }
+-  if ((param_1 & 1) == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x3f) = *(byte *)(DAT_2000_2d34 + 0x3f) ^ 8;
+-    *(undefined1 *)(iVar1 + 0xed) = 3;
+-    if ((param_1 & 0x14) == 0) {
+-      return;
+-    }
+-    FUN_0000_a345(iVar1);
+-  }
++  /* PATCH 509: a cockpit input handler (asm 0x849f-0x84c4).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair, and lost the clc/stc contract the walk consumes. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  extern unsigned char g_fist_cf;
++  unsigned int ax = param_1;
++  if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }
++  g_fist_cf = 0;
++  if ((ax & 1) != 0) return;
++  dg[(unsigned short)(di + 0x3f)] = (unsigned char)(dg[(unsigned short)(di + 0x3f)] ^ 8);
++  dg[(unsigned short)(di + 0xed)] = 3;
++  if ((ax & 0x14) == 0) return;
++  FUN_0000_a345((int)di);                /* 84be call a345 (DI live) */
+   return;
+ }
+ 
+@@ -22603,7 +22612,15 @@
+ void __allregs FUN_0000_84c5(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 509: a cockpit glyph plate (asm 0x84c5-0x84d7).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x728);
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -22613,21 +22630,22 @@
+ void __allregs FUN_0000_84d8(uint param_1,undefined4 param_2)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
+-  if ((param_1 & 0x80) == 0) {
+-    return;
+-  }
+-  if ((param_1 & 1) == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x3f) = *(byte *)(DAT_2000_2d34 + 0x3f) ^ 8;
+-    *(undefined1 *)(iVar1 + 0xee) = 3;
+-    if ((param_1 & 0x14) == 0) {
+-      return;
+-    }
+-    *(undefined1 *)(iVar1 + 0x3f) = 0;
+-    FUN_1000_8240(param_2,iVar1);
+-  }
++  /* PATCH 509: a cockpit input handler (asm 0x84d8-0x8502).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair, and lost the clc/stc contract the walk consumes. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  extern unsigned char g_fist_cf;
++  unsigned int ax = param_1;
++  if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }
++  g_fist_cf = 0;
++  if ((ax & 1) != 0) return;
++  dg[(unsigned short)(di + 0x3f)] = (unsigned char)(dg[(unsigned short)(di + 0x3f)] ^ 8);
++  dg[(unsigned short)(di + 0xee)] = 3;
++  if ((ax & 0x14) == 0) return;
++  dg[(unsigned short)(di + 0x3f)] = 0;   /* 84f6 movb [di+0x3f],0 */
++  FUN_1000_8240(0,(int)di);              /* 84fa lcall 0f69:8bb0 == linear 0x18240 */
+   return;
+ }
+ 
+@@ -22637,7 +22655,15 @@
+ void __allregs FUN_0000_8503(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 509: a cockpit glyph plate (asm 0x8503-0x8515).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x4b8);
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -22649,22 +22675,22 @@
+              undefined2 param_5)
+ 
+ {
+-  int *piVar1;
+-  int iVar2;
+-  
+-  iVar2 = DAT_2000_2d34;
+-  if ((param_1 & 0x80) == 0) {
+-    return;
+-  }
+-  if ((param_1 & 1) == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x3f) = *(byte *)(DAT_2000_2d34 + 0x3f) ^ 8;
+-    *(undefined1 *)(iVar2 + 0xef) = 3;
+-    piVar1 = FUN_0000_aae8(param_1,iVar2);
+-    if (((uint)piVar1 & 0x14) == 0) {
+-      return;
+-    }
+-    FUN_0000_a751(piVar1,param_2,param_3,param_4,param_5,iVar2);
+-  }
++  /* PATCH 509: a cockpit input handler (asm 0x8516-0x853e).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair, and lost the clc/stc contract the walk consumes. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  extern unsigned char g_fist_cf;
++  unsigned int ax = param_1;
++  if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }
++  g_fist_cf = 0;
++  if ((ax & 1) != 0) return;
++  dg[(unsigned short)(di + 0x3f)] = (unsigned char)(dg[(unsigned short)(di + 0x3f)] ^ 8);
++  dg[(unsigned short)(di + 0xef)] = 3;
++  FUN_0000_aae8((int *)(uintptr_t)0,(int *)(uintptr_t)di); /* 852e call aae8 (DI live) */
++  if ((ax & 0x14) == 0) return;
++  FUN_0000_a751(0,0,0,0,0,(int)di);      /* 8538 call a751 (DI live) */
+   return;
+ }
+ 
+@@ -22674,7 +22700,15 @@
+ void __allregs FUN_0000_853f(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 509: a cockpit glyph plate (asm 0x853f-0x8551).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x498);
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -22694,7 +22728,15 @@
+ void __allregs FUN_0000_8558(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 509: a cockpit glyph plate (asm 0x8558-0x856a).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x4a8);
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -22732,14 +22774,20 @@
+ void __allregs FUN_0000_8573(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  *piVar1 = *piVar1 + 1;
+-  *(int *)(param_1 + 6) = *(int *)(param_1 + 6) + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 509: a cockpit glyph plate (asm 0x8573-0x858f).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x4e8);
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  (void)param_1;
++  *(unsigned short *)(dg + bx) += 1;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 1;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  *(unsigned short *)(dg + bx) -= 1;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 1;
+   return;
+ }
+ 
+@@ -22749,22 +22797,23 @@
+ void __allregs FUN_0000_8590(uint param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
+-  if ((param_1 & 0x80) == 0) {
+-    return;
+-  }
+-  if ((param_1 & 1) == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x3f) = *(byte *)(DAT_2000_2d34 + 0x3f) ^ 8;
+-    *(undefined1 *)(iVar1 + 0xf7) = 3;
+-    if ((param_1 & 0x14) == 0) {
+-      return;
+-    }
+-    if (*(byte *)(iVar1 + 0x8d) < 8) {
+-      *(char *)(iVar1 + 0x8d) = *(char *)(iVar1 + 0x8d) << 1;
+-    }
+-  }
++  /* PATCH 509: a cockpit input handler (asm 0x8590-0x85bc).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair, and lost the clc/stc contract the walk consumes. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  extern unsigned char g_fist_cf;
++  unsigned int ax = param_1;
++  if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }
++  g_fist_cf = 0;
++  if ((ax & 1) != 0) return;
++  dg[(unsigned short)(di + 0x3f)] = (unsigned char)(dg[(unsigned short)(di + 0x3f)] ^ 8);
++  dg[(unsigned short)(di + 0xf7)] = 3;
++  if ((ax & 0x14) == 0) return;
++  if (dg[(unsigned short)(di + 0x8d)] < 8)                       /* 85ae cmpb [di+0x8d],8; jae */
++    dg[(unsigned short)(di + 0x8d)] =
++        (unsigned char)(dg[(unsigned short)(di + 0x8d)] << 1);   /* 85b5 shlb [di+0x8d],1 */
+   return;
+ }
+ 
+@@ -22774,14 +22823,20 @@
+ void __allregs FUN_0000_85bd(int param_1)
+ 
+ {
+-  int *piVar1;
+-  
+-  piVar1 = (int *)(param_1 + 4);
+-  *piVar1 = *piVar1 + 1;
+-  *(int *)(param_1 + 6) = *(int *)(param_1 + 6) + 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  *piVar1 = *piVar1 + -1;
+-  piVar1[1] = piVar1[1] + -1;
++  /* PATCH 509: a cockpit glyph plate (asm 0x85bd-0x85d9).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x4f8);
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  (void)param_1;
++  *(unsigned short *)(dg + bx) += 1;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 1;
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  *(unsigned short *)(dg + bx) -= 1;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 1;
+   return;
+ }
+ 
+@@ -22791,22 +22846,23 @@
+ void __allregs FUN_0000_85da(uint param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = DAT_2000_2d34;
+-  if ((param_1 & 0x80) == 0) {
+-    return;
+-  }
+-  if ((param_1 & 1) == 0) {
+-    *(byte *)(DAT_2000_2d34 + 0x3f) = *(byte *)(DAT_2000_2d34 + 0x3f) ^ 8;
+-    *(undefined1 *)(iVar1 + 0xf6) = 3;
+-    if ((param_1 & 0x14) == 0) {
+-      return;
+-    }
+-    if (*(char *)(iVar1 + 0x8d) != '\x01') {
+-      *(byte *)(iVar1 + 0x8d) = *(byte *)(iVar1 + 0x8d) >> 1;
+-    }
+-  }
++  /* PATCH 509: a cockpit input handler (asm 0x85da-0x8606).  BX is the display-list element's
++   * DGROUP NEAR OFFSET (the 209e walk publishes it to DGROUP:0x3e08, patch 142) and DAT_2000_2d34 the
++   * PLAYER's near offset (patch 300); Ghidra dereferenced both as host pointers, emitted the WORD
++   * inc/dec pairs as 4-byte read-modify-writes and dropped the far call's (ax,bx) argument pair, and lost the clc/stc contract the walk consumes. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  extern unsigned char g_fist_cf;
++  unsigned int ax = param_1;
++  if ((ax & 0x80) == 0) { g_fist_cf = 1; return; }
++  g_fist_cf = 0;
++  if ((ax & 1) != 0) return;
++  dg[(unsigned short)(di + 0x3f)] = (unsigned char)(dg[(unsigned short)(di + 0x3f)] ^ 8);
++  dg[(unsigned short)(di + 0xf6)] = 3;
++  if ((ax & 0x14) == 0) return;
++  if (dg[(unsigned short)(di + 0x8d)] != 1)                      /* 85f8 cmpb [di+0x8d],1; je */
++    dg[(unsigned short)(di + 0x8d)] =
++        (unsigned char)(dg[(unsigned short)(di + 0x8d)] >> 1);   /* 85ff shrb [di+0x8d],1 */
+   return;
+ }
+ 

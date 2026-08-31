@@ -1,0 +1,193 @@
+PATCH 507: the weapon-station HUD state dispatcher 8329 and its four targets.
+
+asm 0x8329-0x8341, a 209e paint method (BX = the display-list element's near offset, published to
+DGROUP:0x3e08; BP = the walk base, published as g_fist_paintbp, patch 142):
+    8329: 8b 77 02        mov    si,[bx+2]
+    832c: 8a 5a 01        mov    bl,[bp+si+1] ; xor bh,bh    ; the weapon-station index
+    8331: 8b 3e 34 6d     mov    di,[0x6d34]                 ; the PLAYER's NEAR OFFSET
+    8335: 0f b6 81 b7 00  movzbw ax,[bx+di+0xb7] ; mov si,ax ; that station's HUD state
+    833c: 2e ff 94 42 83  call   *%cs:-0x7cbe(%si)           ; == word[CS0:0x8342 + si]
+
+FUN_0000_8342 is NOT a function: 0x8342 IS the four-entry dispatch table {834a, 8358, 836e, 83c9}
+(image bytes `4a 83 58 83 6e 83 c9 83`), which Ghidra typed as code and whose body decodes to a
+`sbbw` through a fabricated pointer.  The index SI is unscaled because the stored state values are
+pre-scaled by 2.  It is a CS=0x0000 table -- exactly the class patch 497 fixed -- and the decompile
+read it through a chain of host dereferences.
+
+All four targets run with BX = the station index and DI = the player near offset, and Ghidra emitted
+three of them as bare `lcall [0x6b4]` with no body at all:
+    834a  state 0: ax=0x700, bx=word[DGROUP:(idx*2 + 0x9066)]
+    8358  state 1: ax=(byte[DGROUP:idx+di+0xb9] << 3) + 0x700, bx=word[DGROUP:(idx*2 + 0x906a)]
+    83c9  state 3: byte-for-byte 8358's twin
+    836e  state 2: the ARMED plate -- 0x718 through the 0x906a table, then, if byte[di+0x3f] is set,
+          0x720 through the 0x906e table, then the text position from word[DGROUP:(idx*2 + 0x9072)]
+          -> 52d1/524e/530b, and finally the round count byte[DGROUP:idx+di+0xb5] formatted into
+          DGROUP:0x1f8c by 02c5 and drawn by thunk_5547.  Ghidra host-deref'd the 0x9072 table entry,
+          dropped both far-call argument pairs, host-deref'd the player for the `[di+0x3f]` test, and
+          read the round count from a fabricated `[param_2 + 0x869]`.
+
+The port's icall is arg-less, so the four are dispatched by value with (bx, di) passed explicitly --
+the same shape patch 497 uses for 91b8's station table -- with an honest icall fallback for any value
+outside the four.
+--- a/fist.c
++++ b/fist.c
+@@ -772,10 +772,10 @@
+ void __allregs FUN_0000_831f(undefined2 param_1);
+ void __allregs FUN_0000_8329(int param_1,int param_2);
+ void __allregs FUN_0000_8342(int param_1,int param_2);
+-void __allregs FUN_0000_834a(void);
+-void __allregs FUN_0000_8358(void);
++void __allregs FUN_0000_834a(int param_1,int param_2);
++void __allregs FUN_0000_8358(int param_1,int param_2);
+ void __allregs FUN_0000_836e(int param_1,int param_2);
+-void __allregs FUN_0000_83c9(void);
++void __allregs FUN_0000_83c9(int param_1,int param_2);
+ void __allregs FUN_0000_83df(uint param_1,int param_2,int param_3);
+ void __allregs FUN_0000_8406(uint param_1,int param_2,int param_3);
+ void __allregs FUN_0000_840e(uint param_1,int param_2,int param_3);
+@@ -22285,9 +22285,33 @@
+ void __allregs FUN_0000_8329(int param_1,int param_2)
+ 
+ {
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)
+-             (*(byte *)((uint)*(byte *)(param_2 + *(int *)(param_1 + 2) + 1) + DAT_2000_2d34 + 0xb7)
+-             + 0x8342))))();
++  /* PATCH 507: the WEAPON-STATION HUD state dispatcher (asm 0x8329-0x8341), a 209e paint method:
++   *     8329: mov si,[bx+2] ; 832c: mov bl,[bp+si+1] ; xor bh,bh   ; the station index
++   *     8331: mov di,[0x6d34]                                       ; the PLAYER's NEAR OFFSET
++   *     8335: movzbw ax,[bx+di+0xb7] ; mov si,ax                    ; the station's HUD state
++   *     833c: 2e ff 94 42 83  call *%cs:-0x7cbe(%si)                ; == word[CS0:0x8342 + si]
++   * FUN_0000_8342 is not a function: 0x8342 IS the four-entry dispatch table {834a, 8358, 836e, 83c9}
++   * (image bytes 4a 83 58 83 6e 83 c9 83), which Ghidra typed as code -- the index SI is unscaled
++   * because the stored state values are pre-scaled by 2.  It is a CS=0x0000 table, exactly the class
++   * patch 497 fixed, and the decompile read it through a chain of host dereferences.
++   * The four targets all run with BX = the station index and DI = the player near offset; the port's
++   * icall is arg-less, so they are called directly with both, the way patch 497 dispatches 91b8's. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  extern unsigned short g_fist_paintbp;
++  unsigned short bx0 = *(unsigned short *)(dg + 0x3e08);
++  unsigned short si  = *(unsigned short *)(dg + (unsigned short)(bx0 + 2));   /* 8329 */
++  unsigned short bx  = dg[(unsigned short)(g_fist_paintbp + si + 1)];         /* 832c/832f */
++  unsigned short di  = (unsigned short)DAT_2000_2d34;                         /* 8331 */
++  unsigned short st  = dg[(unsigned short)(bx + di + 0xb7)];                  /* 8335 */
++  unsigned short vec = *(unsigned short *)((unsigned char *)g_mem + (unsigned short)(0x8342 + st)); /* 833c */
++  (void)param_1; (void)param_2;
++  switch (vec) {
++    case 0x834a: FUN_0000_834a((int)bx,(int)di); break;
++    case 0x8358: FUN_0000_8358((int)bx,(int)di); break;
++    case 0x836e: FUN_0000_836e((int)bx,(int)di); break;
++    case 0x83c9: FUN_0000_83c9((int)bx,(int)di); break;
++    default:     ((void (*)(int,int))fist_icall_near(0x0u,vec))((int)bx,(int)di); break;
++  }
+   return;
+ }
+ 
+@@ -22309,20 +22333,37 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_834a) @ 0000:834a ===== */
+ 
+-void __allregs FUN_0000_834a(void)
++void __allregs FUN_0000_834a(int param_1,int param_2)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 507: station HUD state 0 (asm 0x834a-0x8357).  bx=param_1 = the station index,
++   * di=param_2 = the player (unused here).
++   *     834a: mov ax,0x700 ; 834d: shl bx,1 ; 834f: mov bx,[bx-0x6f9a] ; 8353: lcall [0x6b4]
++   * `[bx-0x6f9a]` is word[DGROUP:(bx*2 + 0x9066)]; Ghidra dropped the whole body and both call args. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)((unsigned short)param_1 << 1);
++  (void)param_2;
++  bx = *(unsigned short *)(dg + (unsigned short)(bx + 0x9066));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x700,bx);
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_8358) @ 0000:8358 ===== */
+ 
+-void __allregs FUN_0000_8358(void)
++void __allregs FUN_0000_8358(int param_1,int param_2)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 507: station HUD state 1 (asm 0x8358-0x836d), 83c9's identical twin:
++   *     8358: movzbw ax,[bx+di+0xb9] ; 835d: shl ax,3 ; 8360: add ax,0x700
++   *     8363: shl bx,1 ; 8365: mov bx,[bx-0x6f96] ; 8369: lcall [0x6b4]
++   * `[bx+di+0xb9]` is the player's per-station sub-state BYTE and `[bx-0x6f96]` is
++   * word[DGROUP:(bx*2 + 0x906a)].  Ghidra dropped the entire body. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)param_1, di = (unsigned short)param_2;
++  unsigned short ax = (unsigned short)((dg[(unsigned short)(bx + di + 0xb9)] << 3) + 0x700);
++  bx = *(unsigned short *)(dg + (unsigned short)((unsigned short)(bx << 1) + 0x906a));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 
+@@ -22332,29 +22373,53 @@
+ void __allregs FUN_0000_836e(int param_1,int param_2)
+ 
+ {
+-  undefined2 *puVar1;
++  /* PATCH 507: station HUD state 2 -- the ARMED plate with its round counter (asm 0x836e-0x83c8):
++   *     836e: mov ax,0x718 ; shl bx,1 ; push di ; push bx
++   *     8375: mov bx,[bx-0x6f96] ; lcall [0x6b4] ; pop bx ; pop di
++   *     837f: testb [di+0x3f],0xff ; je 0x8394
++   *     8385: push di ; push bx ; mov ax,0x720 ; mov bx,[bx-0x6f92] ; lcall [0x6b4] ; pop bx ; pop di
++   *     8394: push bx ; mov bx,[bx-0x6f8e] ; mov ax,[bx] ; mov bx,[bx+2] ; lcall 0f69:5c41
++   *     83a3: mov ax,2 ; lcall 0f69:5bbe ; mov al,0xe ; lcall 0f69:5c7b
++   *     83b2: pop bx ; shr bx,1 ; movzbw ax,[bx+di+0xb5]
++   *     83ba: mov si,0x1f8c ; call 0x2c5 ; mov si,0x1f8e ; lcall 0f69:5eb1
++   * The three tables are word[DGROUP:(bx*2 + 0x906a / 0x906e / 0x9072)] and the count is the player's
++   * per-station BYTE [bx+di+0xb5] -- Ghidra host-deref'd the 0x9072 table entry, dropped both far-call
++   * argument pairs, host-deref'd the player for the `[di+0x3f]` test, and read the round count from a
++   * fabricated `[param_2 + 0x869]`. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short st = (unsigned short)param_1, di = (unsigned short)param_2;
++  unsigned short bx2 = (unsigned short)(st << 1);                            /* 8371 shl bx,1 */
++  unsigned short bx, cnt;
+   undefined2 uVar2;
+-  
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  if (*(char *)(param_2 + 0x3f) != '\0') {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  bx = *(unsigned short *)(dg + (unsigned short)(bx2 + 0x906a));             /* 8375 */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x718,bx);            /* 836e/8379 */
++  if (dg[(unsigned short)(di + 0x3f)] != 0) {                                /* 837f */
++    bx = *(unsigned short *)(dg + (unsigned short)(bx2 + 0x906e));           /* 838a */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x720,bx);          /* 8387/838e */
+   }
+-  puVar1 = (undefined2 *)*(int *)(param_1 * 2 + -0x6f8e);
+-  FUN_1000_52d1(*puVar1,puVar1[1]);
+-  uVar2 = FUN_1000_524e(2);
+-  FUN_1000_530b(CONCAT11((char)((uint)uVar2 >> 8),0xe));
+-  FUN_0000_02c5((uint)*(byte *)(param_2 + 0x869),(undefined1 *)&DAT_1000_df8c);
+-  thunk_FUN_1000_5547((undefined1 *)&DAT_1000_df8e);
++  bx = *(unsigned short *)(dg + (unsigned short)(bx2 + 0x9072));             /* 8395 */
++  FUN_1000_52d1(*(unsigned short *)(dg + bx),
++                *(unsigned short *)(dg + (unsigned short)(bx + 2)));         /* 8399-839e */
++  uVar2 = FUN_1000_524e(2);                                                  /* 83a3/83a6 */
++  FUN_1000_530b(CONCAT11((char)((uint)uVar2 >> 8),0xe));                     /* 83ab/83ad */
++  cnt = dg[(unsigned short)(st + di + 0xb5)];                                /* 83b3/83b5 */
++  FUN_0000_02c5(cnt,(undefined1 *)&DAT_1000_df8c);                           /* 83ba/83bd */
++  thunk_FUN_1000_5547((undefined1 *)&DAT_1000_df8e);                         /* 83c0/83c3 */
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_83c9) @ 0000:83c9 ===== */
+ 
+-void __allregs FUN_0000_83c9(void)
++void __allregs FUN_0000_83c9(int param_1,int param_2)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 507: station HUD state 3 (asm 0x83c9-0x83de) -- byte-for-byte 8358's twin. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)param_1, di = (unsigned short)param_2;
++  unsigned short ax = (unsigned short)((dg[(unsigned short)(bx + di + 0xb9)] << 3) + 0x700);
++  bx = *(unsigned short *)(dg + (unsigned short)((unsigned short)(bx << 1) + 0x906a));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
+   return;
+ }
+ 

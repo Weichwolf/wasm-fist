@@ -1,0 +1,121 @@
+PATCH 506: the ammo-count and READY/LOADING HUD plates (82a1, 82ee).
+
+Two more 209e paint methods with the family defect: BX is the display-list element's DGROUP NEAR OFFSET
+and BP the walk base (the walk publishes BX to DGROUP:0x3e08 and BP to g_fist_paintbp, patch 142), and
+DAT_2000_2d34 is the PLAYER's NEAR OFFSET (patch 300).  Both were dereferenced as host pointers.
+
+FUN_0000_82a1 (asm 0x82a1-0x82ed), the ammo-count plate:
+    82a2: mov si,[bx+2] ; 82a5: movzbw bx,[bp+si+1]     ; the weapon-station index
+    82a9: add bx,[0x6d34] ; 82ad: mov ax,[bx+0xad]      ; the PLAYER's per-station ammo WORD
+    82b1: pop bx ; push ax ; lea bx,[bx+4]
+    82b6: mov ax,[bx] ; mov bx,[bx+2] ; lcall 0f69:5c41 ; 52d1(x,y)
+    82c0: mov ax,2 ; lcall 0f69:5bbe                    ; 524e(2)
+    82c8: mov al,0x4f ; lcall 0f69:5c7b                 ; 530b, AH = 524e's high byte
+    82cf: mov si,0x96ac ; lcall 0f69:5e9b               ; thunk_5531 over DGROUP:0x96ac
+    82d7: mov al,0xe ; lcall 0f69:5c7b                  ; 530b with the SAME AH -- only AL is reloaded
+    82de: pop ax ; mov si,0x1f8c ; call 0x2c5           ; format the ammo count into DGROUP:0x1f8c
+    82e5: mov si,0x1f8d ; lcall 0f69:5e9b
+Four defects: the element host-deref'd; the entire ammo lookup dropped, with 02c5 handed the CS artifact
+0xf69 as the value to format; thunk_5531 (which takes a HOST pointer, patch 139) passed the raw near
+offset 0x96ac; and the uninitialised `extraout_AH` used for the second 530b although the asm reloads
+only AL.
+
+FUN_0000_82ee (asm 0x82ee-0x8328), the READY/LOADING plate: same element base-loss, the player near
+offset host-deref'd in `cmpb [di+0xa8],0` (the reload timer that picks LOADING over READY), and the AL=0
+argument of the `lcall [0x60a]` dropped.  This was the top SIGSEGV of the post-505 sweep
+(82ee <- 209e <- 206f <- 459a).
+--- a/fist.c
++++ b/fist.c
+@@ -22198,16 +22198,41 @@
+ void __allregs FUN_0000_82a1(int param_1)
+ 
+ {
++  /* PATCH 506: the AMMO-COUNT HUD plate (asm 0x82a1-0x82ed), a 209e paint method: BX = the display-list
++   * element's NEAR OFFSET and BP = the walk base (the walk publishes BX to DGROUP:0x3e08 and BP to
++   * g_fist_paintbp, patch 142).
++   *     82a2: mov si,[bx+2] ; 82a5: movzbw bx,[bp+si+1]      ; the weapon-station index
++   *     82a9: add bx,[0x6d34] ; 82ad: mov ax,[bx+0xad]       ; the PLAYER's per-station ammo WORD
++   *     82b1: pop bx ; push ax ; lea bx,[bx+4]
++   *     82b6: mov ax,[bx] ; mov bx,[bx+2] ; lcall 0f69:5c41  ; 52d1(x,y)
++   *     82c0: mov ax,2 ; lcall 0f69:5bbe                     ; 524e(2)
++   *     82c8: mov al,0x4f ; lcall 0f69:5c7b                  ; 530b -- AH is 524e's high byte
++   *     82cf: mov si,0x96ac ; lcall 0f69:5e9b                ; thunk_5531 over DGROUP:0x96ac
++   *     82d7: mov al,0xe ; lcall 0f69:5c7b                   ; 530b -- the SAME AH, not a fresh one
++   *     82de: pop ax ; mov si,0x1f8c ; call 0x2c5            ; format the ammo count into DGROUP:0x1f8c
++   *     82e5: mov si,0x1f8d ; lcall 0f69:5e9b
++   * Ghidra host-deref'd the element (`param_1 + 4`), dropped the whole ammo lookup and passed 02c5 the
++   * CS artifact 0xf69 as the value to format, passed thunk_5531 the raw near offset 0x96ac where it
++   * takes a HOST pointer (patch 139), and used the uninitialised `extraout_AH` for the second 530b
++   * although the asm reloads only AL. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  extern unsigned short g_fist_paintbp;
++  unsigned short bx0 = *(unsigned short *)(dg + 0x3e08);
++  unsigned short si  = *(unsigned short *)(dg + (unsigned short)(bx0 + 2));      /* 82a2 */
++  unsigned short idx = dg[(unsigned short)(g_fist_paintbp + si + 1)];            /* 82a5 */
++  unsigned short ammo = *(unsigned short *)(dg + (unsigned short)
++                          ((unsigned short)DAT_2000_2d34 + idx + 0xad));         /* 82a9/82ad */
++  unsigned short bx = (unsigned short)(bx0 + 4);                                 /* 82b3 */
+   undefined2 uVar1;
+-  undefined1 extraout_AH;
+-  
+-  FUN_1000_52d1(*(undefined2 *)(param_1 + 4),*(undefined2 *)(param_1 + 6));
+-  uVar1 = FUN_1000_524e(2);
+-  FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0x4f));
+-  thunk_FUN_1000_5531(0x96ac);
+-  FUN_1000_530b(CONCAT11(extraout_AH,0xe));
+-  FUN_0000_02c5(0xf69,(undefined1 *)&DAT_1000_df8c);
+-  thunk_FUN_1000_5531((undefined1 *)&DAT_1000_df8d);
++  (void)param_1;
++  FUN_1000_52d1(*(unsigned short *)(dg + bx),
++                *(unsigned short *)(dg + (unsigned short)(bx + 2)));             /* 82b6-82bb */
++  uVar1 = FUN_1000_524e(2);                                                      /* 82c0/82c3 */
++  FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0x4f));                        /* 82c8/82ca */
++  thunk_FUN_1000_5531((char *)(dg + 0x96ac));                                    /* 82cf/82d2 */
++  FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0xe));                         /* 82d7/82d9 */
++  FUN_0000_02c5(ammo,(undefined1 *)&DAT_1000_df8c);                              /* 82de-82e2 */
++  thunk_FUN_1000_5531((undefined1 *)&DAT_1000_df8d);                             /* 82e5/82e8 */
+   return;
+ }
+ 
+@@ -22217,18 +22242,30 @@
+ void __allregs FUN_0000_82ee(int param_1)
+ 
+ {
++  /* PATCH 506: the READY / LOADING HUD plate (asm 0x82ee-0x8328), a 209e paint method:
++   *     82ee: xor al,al ; lea bx,[bx+4] ; push bx ; lcall [0x60a] ; pop bx
++   *     82f9: mov ax,[bx] ; mov bx,[bx+2] ; lcall 0f69:5c41       ; 52d1(x,y)
++   *     8303: mov ax,2 ; lcall 0f69:5bbe                          ; 524e(2)
++   *     830b: mov al,0xe ; lcall 0f69:5c7b                        ; 530b
++   *     8312: mov di,[0x6d34] ; mov si,0x90fa
++   *     8319: cmpb [di+0xa8],0 ; jne 0x8323 ; mov si,0x9102       ; reload timer -> LOADING / READY
++   *     8323: lcall 0f69:5e9b                                     ; thunk_5531
++   * Ghidra host-deref'd both the element (`param_1 + 4/6`) and DAT_2000_2d34 -- the PLAYER's NEAR
++   * OFFSET -- and dropped the AL=0 argument of the [0x60a] far call.  This was the top SIGSEGV of the
++   * post-505 sweep (82ee <- 209e <- 206f <- 459a). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);    /* 82f0 */
++  unsigned short di, sio;
+   undefined2 uVar1;
+-  char *pcVar2;
+-  
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
+-  FUN_1000_52d1(*(undefined2 *)(param_1 + 4),*(undefined2 *)(param_1 + 6));
+-  uVar1 = FUN_1000_524e(2);
+-  FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0xe));
+-  pcVar2 = (char *)s_LOADING_2000_50fa;
+-  if (*(char *)(DAT_2000_2d34 + 0xa8) == '\0') {
+-    pcVar2 = (char *)s_READY_2000_5102;
+-  }
+-  thunk_FUN_1000_5531(pcVar2);
++  (void)param_1;
++  ((void (*)(unsigned short))fist_icall_far((uint32_t)(DAT_1000_c60a)))(0);      /* 82ee/82f4 */
++  FUN_1000_52d1(*(unsigned short *)(dg + bx),
++                *(unsigned short *)(dg + (unsigned short)(bx + 2)));             /* 82f9-82fe */
++  uVar1 = FUN_1000_524e(2);                                                      /* 8303/8306 */
++  FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0xe));                         /* 830b/830d */
++  di  = (unsigned short)DAT_2000_2d34;                                           /* 8312 */
++  sio = (dg[(unsigned short)(di + 0xa8)] == 0) ? 0x9102 : 0x90fa;                /* 8319-8320 */
++  thunk_FUN_1000_5531((char *)(dg + sio));                                       /* 8323 */
+   return;
+ }
+ 
