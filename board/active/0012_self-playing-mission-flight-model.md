@@ -6229,3 +6229,10 @@ because the test was not misspecified and must not be edited to go green.
 
 TWO RULES worth keeping: a bit-identity win on two missions is not evidence that a change is correct --
 only the full matrix is; and "every caller I wrote uses convention X" is not "every caller uses X".
+
+  ADDENDUM to cont.65m: the "renderer got heavier" half of that false trail is ALSO unsupported.  The
+  tick counts a 22 s run reached varied 1688..5075 across otherwise identical runs, which I read as a
+  ~2.5x slowdown from patches 517-521; `uptime` during those runs shows a load average of 6-8 from
+  unrelated work on the machine (a large C++ build and a long-running Python job).  No claim about the
+  cost of the new paint handlers is supported by anything measured here; if it ever matters, measure it
+  on an idle machine against a fixed tick target, not a wall-clock one.
