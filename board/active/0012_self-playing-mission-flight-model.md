@@ -6293,3 +6293,38 @@ NEXT, unchanged in substance:
      full DGROUP differing in 8 bytes the tick before, of which 0x2662 and 0x2672 are not vector slots.
   3. no mission yet reaches a resolved victory/defeat; a5dc's evaluator is correct and waiting on the
      goal objects actually being destroyed.
+
+## cont.65p -- SAUDI3 / SYRIA2 diagnosed: a `loop` with a NEGATIVE count in the extender voxel writer
+
+Both crash at the same instruction, and it is NOT a base-loss.  m_ext_FUN_0000_9200, asm at extender
+image 0x9200 (32-bit PM):
+
+    9223: mov  eax,[0x9114] ; movzbl eax,(ecx,eax,1) ; mov [0x910c],eax   ; the per-column skip byte
+    9231: or   eax,eax ; je 0x923f
+    9235: add  edi,eax ; mov ecx,eax ; <advance the texture coords eax times> ; loop
+    923f: mov  ecx,[0x90f0] ; shr ecx,1 ; sub ecx,eax
+    9250: <two pixels per iteration: shld/shld, `mov al,0x7fffffff(%eax)` -- the self-modifying colormap
+           sampler patch 286 resolves to [ext+0x3918] -- `stos al,%es:(%edi)`>
+    927a: loop 0x9250
+
+`loop` is a do-while on ECX, which is exactly what the decompile emits (`do { ... } while (iVar4 != 0)`).
+So the original has the same shape: it depends on the count never going negative.
+
+MEASURED at the SAUDI3 fault (gdb, at the SIGSEGV):
+
+    [ext+0x90f0] = 0x140   (320, the render width)      -> width>>1 = 160
+    [ext+0x910c] = 0x00c0  (192, the per-column byte)
+    ECX = 160 - 192 = -32  -> as an unsigned LOOP count, ~4.29e9 iterations
+    [ext+0x3918] = 0xc8815b50 (the colormap base, a plausible malloc'd host pointer)
+    faulting address 0xc881817f -- i.e. the sampler walked off the end of the colormap while `stos`
+    walked EDI off the framebuffer.
+
+So the defect is UPSTREAM of 9200: the per-column skip byte read from the table at [ext+0x9114] must be
+<= [ext+0x90f0]>>1 and here it is not.  Either that table is being filled wrongly, or [0x90f0] does not
+hold what this code expects at this call.  Note 192 is a plausible HEIGHT (200-line screen) while
+0x90f0/2 = 160 is half a WIDTH -- the two look like different units, which is the first thing to check.
+
+NEXT for this one: find who fills [ext+0x9114]'s table and what [ext+0x90f0] is supposed to be at the
+op-0x24 entry; the frame-matched oracle capture (tools/oracle/capture_9200_framematched.sh, FIST_R9200CAP)
+records exactly these globals per 9200 pass in the ORIGINAL, so the correct values are directly
+observable rather than guessable.
