@@ -1,0 +1,38 @@
+PATCH 527: FUN_0000_0757 -- the arctangent-of-a-4-word-vector entry lost its DGROUP base.
+
+SAUDI7's SIGSEGV (t=3906), the last of the three distinct faults behind the nine failing self-play
+missions:
+
+    #0 FUN_0000_0757 (param_1=0xca2a)   #1 FUN_0000_0749   #2 FUN_0000_902c
+    #3 FUN_0000_c0e5   #4 FUN_0000_c0ca   #5 FUN_0000_459a
+
+asm 0x757 (DS=DGROUP=0x1c00), verified against re_out/fist_dat_image.bin:
+
+    757: 8b 47 04    mov ax,[bx+4]
+    75a: 8b 57 06    mov dx,[bx+6]
+    75d: 8b 4f 02    mov cx,[bx+2]
+    760: 8b 1f       mov bx,[bx]
+    762: eb 1a       jmp 0x77e            ; -> FUN_0000_077e(ax,cx,dx,bx), the patch-476 arctangent
+
+BX is a DGROUP NEAR OFFSET -- 0xca2a here, threaded down from 902c.  Ghidra typed the parameter
+`undefined2 *` and dereferenced it as a host address.  The argument order it recovered is correct;
+only the base is missing.  This is the same defect patch 324 fixed in 3d4c, the other caller of 077e.
+
+--- a/fist.c
++++ b/fist.c
+@@ -5378,7 +5378,14 @@
+ void __allregs FUN_0000_0757(undefined2 *param_1)
+ 
+ {
+-  FUN_0000_077e(param_1[2],param_1[1],param_1[3],*param_1);
++  /* PATCH 527: the ARCTANGENT-of-a-4-word-vector entry (asm 0x757-0x763, DS=DGROUP=0x1c00):
++   *     757: mov ax,[bx+4] / mov dx,[bx+6] / mov cx,[bx+2] / mov bx,[bx] / jmp 0x77e
++   * BX is a DGROUP NEAR OFFSET (0xca2a on SAUDI7, passed down from 902c <- c0e5 <- c0ca), but Ghidra
++   * typed param_1 as `undefined2 *` and dereferenced it as a HOST pointer -> SIGSEGV at t=3906.  The
++   * argument ORDER Ghidra recovered is right (077e takes ax,cx,dx,bx = +4,+2,+6,+0); only the base was
++   * lost.  Same class as patch 324's fix of 3d4c, which is the other caller of 077e. */
++  uint16_t *p = (uint16_t *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1);
++  FUN_0000_077e(p[2],p[1],p[3],p[0]);
+   return;
+ }
+ 

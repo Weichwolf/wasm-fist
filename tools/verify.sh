@@ -505,7 +505,13 @@ run_target() { # $1=target $2=hz $3=ms/dumptick $4=mouse-script $5=out.ppm $6=da
     *) dumpenv=(FIST_RUNMS="$ms");;
   esac
   if [ "$t" = native ]; then
-    timeout 40 env "${ddenv[@]}" FIST_TICK_HZ="$hz" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NATIVE" >/dev/null 2>&1; echo $?
+    # 90 s, not 40: `campaign-missions` (the highest tick pin in the table, tick=8008) needs 43-44 s on
+    # an IDLE machine here, and does so at HEAD and with every 492+ patch held back alike -- so the old
+    # 40 s watchdog killed a CORRECT run reproducibly, and did so before this session's patches existed.
+    # The watchdog is not the specification (the assertion is the AE=0 framebuffer compare below); it
+    # only has to be loose enough not to shoot a correct run and tight enough to catch a hang, which
+    # runs forever.  90 s matches the native budget run_missfb/run_terrain already use.
+    timeout 90 env "${ddenv[@]}" FIST_TICK_HZ="$hz" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NATIVE" >/dev/null 2>&1; echo $?
   else
     timeout 120 env "${ddenv[@]}" FIST_TICK_HZ="$hz" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
@@ -648,7 +654,18 @@ run_terrain() { # $1=target $2=battle ; echo full-framebuffer ppm or ""  -- FIST
   local out="$TMP/tr.$t.ppm"
   local bexp=(); [ -n "$bt" ] && bexp=(FIST_FSG_BATTLE="$bt")
   if [ "$t" = native ]; then
-    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=25000 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
+    # FIST_SIMRUN=1 on the NATIVE side is what makes this flow's comparison MEAN anything.  The capture
+    # is pinned to the Nth op-0x24 post, and the post COUNT is equal on both targets -- but the STATE at
+    # that post was not: measured with FIST_MISSFB_DGDUMP, native reached the 1st post at [0x452]=41 and
+    # wasm at 314, so the flow was comparing two different simulation states and its PASSes were
+    # incidental (patch 501 made the captured frame depend on the difference and it began FAILing at 104
+    # bytes).  The asymmetry is the tick GATE: wasm-node ticks via `if (fist_mission_time())`, native's
+    # FIST_COOP_TICK is UNGATED (-> 354, worse), and FIST_SIMRUN applies the identical gate -> 314, the
+    # same value as wasm.  Before the capture point FIST_SIMRUN's other two effects are inert (both are
+    # gated on d549==0x1c, the cockpit view, which is not yet active); what it changes here is only the
+    # tick source: no SIGALRM, one cooperative tick per pump, exactly like wasm.  The assertion below is
+    # unchanged.  board:0002
+    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=25000 FIST_SIMRUN=1 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
   else
     timeout 220 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=25000 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
   fi

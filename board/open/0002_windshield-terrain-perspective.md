@@ -2072,3 +2072,113 @@ matrix stays green) but the ORIGINAL runs bd09, so the port's terrain frame dive
 whatever bd09 would have drawn/updated.  This is (part of) the terrain oracle-fidelity residual.  Fix is
 gated on board:0007's object-reference unification (fixing bd09 in isolation changed AZER1 by 206 bytes,
 unverifiable without a CR3-aware oracle recapture -- the same tooling gate board:0002 already names).
+
+## The five `terrain-*` verify flows compare two DIFFERENT simulation states (measured)
+
+The matrix now reports `FAIL terrain-azer1/saudi1/cyprus1/india1/syria1 ... nat!=wasm(104)`.  Bisected
+and root-caused; the headline is that **the flow's own determinism claim is false**, and the failure is
+the flow finally reporting a divergence that was there all along.
+
+### What the flow does
+
+`run_terrain` captures 0xA0000 at the **Nth op-0x24 post** (`FIST_MISSFB_N`, default 1) and `_exit(0)`s.
+The shim comments that as "a pure post-count -> DETERMINISTIC and native<->wasm-safe".  The post COUNT is
+indeed equal on both targets.  The STATE at that post is not.
+
+### The measurement
+
+A new shim seam `FIST_MISSFB_DGDUMP=<path>` writes the whole 64 KB DGROUP at the capture point (the
+per-tick FIST_SIMHASH cannot reach in-mission: the 459a loop never re-enters `fist_timer_pump`, so
+`[0x452]` is frozen and no tick-indexed fingerprint advances).  On AZER1, at the 1st op-0x24 post:
+
+| build | native `[0x452]` | wasm `[0x452]` | DGROUP diff | framebuffer diff |
+|---|---|---|---|---|
+| without patch 501            |  41 |  314 |   56 B | **0** |
+| with patch 501 (HEAD)        |  40 |  314 |   64 B | 206 B |
+| `FIST_COOP_TICK=1`, no 501   | 354 |  314 | 1238 B | 0 |
+
+Native's value does NOT move with `FIST_TICK_HZ` (41 at both 25000 and 1000; 354 at 25000, 1000 AND
+100 under coop), and each target is individually reproducible (three native runs and two wasm runs
+byte-identical).  So this is a DETERMINISTIC ~270-tick difference in how far the engine has run when
+the first op-0x24 is posted -- not jitter.
+
+A double-counting hypothesis was tested and DISPROVEN: `tick_handler` suppresses only on
+`g_mission_coop`, so under `FIST_COOP_TICK` the SIGALRM handler does keep calling `tick_advance()` --
+but `g_tick_pending` is capped at 8, the per-pump coop tick keeps it saturated, and suppressing the
+async source measurably changes nothing (354 before and after).  The shim change was reverted rather
+than shipped with a rationale that does not hold.
+
+### Why it surfaced now
+
+Patch 501 (the player-death camera hand-off) made `FUN_1000_5fca -> 466c` reachable at this point, and
+the resulting frame DEPENDS on how far the sim has run.  Before it, the captured frame happened not to,
+so the flow passed while comparing tick 41 against tick 314.  The 206 differing bytes are 70 pixels in
+an 11x7 block at the very top-left corner (0,0)-(10,6): native paints a flat grey 32, wasm a glyph-like
+0/52/60 pattern -- a rendered STRING, consistent with the camera hand-off drawing the new vehicle's name.
+
+### What this means
+
+  1. `terrain-*` is not currently evidence of native<->wasm terrain identity, in EITHER direction.  Its
+     earlier PASSes were incidental.
+  2. The real defect is upstream of the flow: the two targets reach the first op-0x24 post after a
+     different number of INT-8 ticks.  That is a sim-state divergence, and it is the thing to fix --
+     not the assertion, which is correct as written.
+  3. The fix is NOT `FIST_COOP_TICK`: it makes native 354 vs wasm 314, i.e. worse.  The pump COUNT
+     before the first op-0x24 differs between the targets by ~40 pumps under coop; find why.
+
+Next: instrument the pump count and the op-0x24 post site on both targets and find the poll loop whose
+iteration count differs.  `FIST_MISSFB_DGDUMP` plus `[0x452]` is the probe; both targets emit it.
+
+### FOUND: the asymmetry is the tick GATE, and native already has the matching one
+
+`fist_timer_pump` gates the cooperative tick differently on the two targets:
+
+    wasm (node, g_web_mode==0):   } else if (fist_mission_time()) fist_wasm_tick();
+    native FIST_COOP_TICK:        if (coop) { tick_advance(); }                  <- UNGATED
+    native FIST_SIMRUN:           else if (simrun) { if (fist_mission_time()) tick_advance(); }
+
+`fist_mission_time()` is `!g_fist_after_map || seen_cockpit` -- tick freely before the map loads, then
+HOLD through mission-load until the cockpit view is first seen.  wasm-node applies it; `FIST_COOP_TICK`
+does not, which is why coop overshoots (354 vs 314).  `FIST_SIMRUN` applies exactly the same gate.
+
+Measured on terrain-azer1, native `[0x452]` at the 1st op-0x24 post:
+
+    FIST_SIMRUN=1     -> 314     == wasm's 314
+    FIST_COOP_TICK=1  -> 354
+    (default SIGALRM) ->  42     (and 41 on an earlier build -- wall-clock, so not even stable)
+
+So the flow becomes state-equivalent by running native with `FIST_SIMRUN=1`.  That is not a weakening of
+the assertion -- the assertion (native fb == wasm fb) is untouched and becomes MEANINGFUL for the first
+time, because the two sides finally sample the same simulation state.  It is also exactly what the goal
+requires of every mission: a purely cooperative tick with no wall-clock dependency.
+
+### Result of the gate fix: the sim state is now IDENTICAL; 8 known bytes and a 7x5 corner block remain
+
+With `FIST_SIMRUN=1` on the native side of `run_terrain` (tools/verify.sh), measured on AZER1 and SAUDI1:
+
+    [0x452] at the 1st op-0x24 post:   native 314 == wasm 314          (was 41 vs 314)
+    DGROUP differing bytes:            8                                (was 64)
+    framebuffer differing bytes:       104                              (unchanged)
+
+The 8 remaining DGROUP bytes are IDENTICAL on both missions and are all already-known slots:
+
+    0x0686 0x0687   far-vector slot -- holds the high half of a real HOST address (native 0x081f, wasm 0)
+    0x16b0 0x16b1   ditto (native 0x080a, wasm 0)
+    0x3ae2 0x3ae3   ditto (native 0xb9c6, wasm 0)
+    0x2663          NOT a vector slot -- native 0xe4, wasm 0x00
+    0x2672          NOT a vector slot -- native 0x0b, wasm 0x01
+
+0x2663/0x2672 are the same two bytes cont.65l already flagged on AZER2 ("NOT vector slots and look like
+a memory-manager allocation landing differently on the two targets") -- so they are now pinned twice,
+independently, on different missions and through a different harness.  That makes them the next drill.
+
+The framebuffer remainder is much sharper than "104 bytes": it is **35 pixels forming a 7x5 block at
+(0,0)-(6,4)**, byte-for-byte the same block on AZER1 and SAUDI1, i.e. mission-INDEPENDENT chrome and not
+terrain at all.  Native fills it with a single value (89 in all 35 pixels); wasm draws a structured
+pattern (0, 52, 60, 60, 60, 52, ...).  A uniform fill against a glyph-shaped pattern in a 7x5 cell at
+the screen origin reads as one character of a small font: something draws a STRING there on wasm and a
+flat rect on native.
+
+So the terrain surface itself is now byte-identical across targets on these two missions; what is left
+is one corner glyph and two allocator bytes.  Note the flow is still reported FAIL, correctly -- the
+assertion has not been touched, only the two sides made contemporaneous.

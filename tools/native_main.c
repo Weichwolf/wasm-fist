@@ -2537,6 +2537,19 @@ int fist_extender_gate(void) {
                 fprintf(stderr,"[missfb-mean] terrain rows8-88 nonblack=%ld/25600 distinct=%d mean RGB=(%ld,%ld,%ld)\n",
                     nb, nd, nb?sr/nb:0, nb?sg/nb:0, nb?sb/nb:0);
             }
+            /* FIST_MISSFB_DGDUMP=<path>: write the whole 64 KB DGROUP at the FB capture point.  This
+             * is the three-run parity method for a mission FRAME -- the per-tick FIST_SIMHASH cannot
+             * reach here, because the in-mission 459a loop never re-enters fist_timer_pump, so [0x452]
+             * is frozen and no tick-indexed fingerprint advances.
+             * CAUTION, measured: the op-0x24 post count being equal does NOT make the two targets'
+             * snapshots contemporaneous.  On terrain-azer1 the 1st op-0x24 post finds [0x452]=41 on
+             * native (SIGALRM time base, and the value does not move with FIST_TICK_HZ) and 314 on
+             * wasm; with FIST_COOP_TICK=1 native reads 354, again independent of FIST_TICK_HZ.  So the
+             * flow compares two DIFFERENT simulation states and any equality it reports is incidental.
+             * Read the [0x452] in both dumps before drawing a conclusion from a diff.  board:0002 */
+            { const char *dgp=getenv("FIST_MISSFB_DGDUMP");
+              if (dgp) { FILE *f=fopen(dgp,"wb"); if(f){ fwrite(g_mem+0x1c000,1,0x10000,f); fclose(f);
+                         fprintf(stderr,"[missfb] DGROUP dumped -> %s\n", dgp); } } }
             { const char *fbp=getenv("FIST_MISSFB"); if(fbp) fist_dump_framebuffer(fbp); }
             _exit(0);
         }

@@ -1,0 +1,391 @@
+PATCH 526: the c33c display-list phase handlers 5fb0 / 6016 and their record builder 66f2.
+
+FOUR of the nine remaining self-play SIGSEGVs -- INDIA2 (t=5801), INDIA5 (t=1988), TRAIN3 (t=9515),
+TRAIN4 (t=835) -- crash at the SAME instruction with the SAME arguments:
+
+    #0 FUN_1000_66f2 (param_1=20, param_2=0x0, param_3=265604)
+    #1 FUN_0000_5fb0 (param_1=0x40d84)
+    #2 FUN_0000_c33c (si=0, di=27582)          <- the patch-310 render-record iterator
+    #3 FUN_0000_378e  #4 FUN_0000_22dd  #5 FUN_0000_459a
+
+c33c walks a 10-entry phase-handler table at DGROUP:0xe6f5 and calls each handler through
+`call *[bx+0xe6f5]` with NO arguments, keeping the ES:DI record cursor in g_fist_render_di (patch 310)
+and the handler's CF verdict in g_fist_cf (patch 463).  5fb0 is handler idx 2 and 6016 its sibling;
+both were left pristine, so Ghidra's invented `param_1` (0x40d84 -- whatever happened to be in the
+register) was used as the destination pointer and every DGROUP near offset in the pair was
+dereferenced as a host address.
+
+asm-verified against re_out/fist_dat_image.bin:
+
+  0x166f2 (= 0f69:0x7062, the builder called by 5fb0)
+      add di,2 / mov ax,si; stosw / mov bx,cx; stosw / add di,2 / mov ax,0; stosw
+      mov eax,[si]; stosd / mov eax,[si+4]; stosd; stosd / xor ax,ax; stosw x4 / add di,0x14 / lret
+    -> ES:DI destination (ES = DGROUP, the patch-310 cursor), DS:SI source (si = word[0x7d20], a
+       DGROUP near offset), and DI = entry+0x32 on return -- all three dropped.
+
+  0x5fb0 (handler idx 2)
+      testb [0x7d1c],0xff; jne 6014            ; stc = phase finished
+      si=[0x7d20]; al=0x14; ah=byte[0x7d1d]; lcall 0f69:7062
+      ax=[0x7d22]; stosw / ax=[0x7d20]; stosw / [0x7d22]=ax
+      bx=[0x7c04]; mov gs,[0x70]; mov gs:[bx+0x12c7],ax
+      addw [0x7c04],2 / addw [0x7d20],8 / decw [0x7d1e]; jne 6012
+      incw [0x7d24] / decw [0x7d26] / cmpw [0x7d26],4; jne 6003 / al=[0x7d29]; [0x7d28]=al
+      lcall 0f69:708b (= 671b) / jae 6012 / si=0xffff; movb [0x7d1c],0xff
+      6012: clc; ret        6014: stc; ret
+    -> the two stosw's land at the DI 66f2 left behind, not at param_1+0/+2; the `mov gs,[0x70]`
+       STRSEG base on the [bx+0x12c7] ring slot was dropped (the 8463/9ab5 GS class); and Ghidra
+       synthesised `bVar1 = DAT_2000_3d26 < 4` from the `cmpw` -- the CF the `jae` tests is the one
+       671b RETURNS (patch 292 publishes it in g_fist_cf), and `jae` skips on CF=0, so the
+       phase-finished flag is set when CF=1, i.e. when 671b reports the cell list exhausted.
+
+  0x6016 (the sibling that replays the ring 5fb0 fills; the next SIGSEGV once 5fb0 stops crashing)
+      bx=[0x7c06]; cmp bx,[0x7c04]; jae 6051   ; stc = ring drained
+      mov gs,[0x70]; mov si,gs:[bx+0x12c7]
+      add di,2; xor ax,ax; stosw / al=0x10,ah=0; stosw; stosw; stosw
+      mov eax,[si]; stosd / mov eax,[si+4]; stosd; stosd / add di,0x1c / ax=0x13a8; stosw
+      addw [0x7c06],2; clc; ret
+    -> same three defects; DI = entry+0x34 on return.
+
+The GS reconstruction follows patch 229's idiom: STRSEG = word[DGROUP:0x70], base g_mem+(STRSEG<<4),
+16-bit effective offset (bx+0x12c7).
+
+ALSO in this patch: FUN_0000_38aa (asm 0x38aa-0x390b), the render method 378e dispatches on the records
+5fb0/6016 build -- with the builders fixed it becomes the very next SIGSEGV in all four missions, at the
+same tick and in the same frame, so it belongs to the same surface.  Its four defects (object near-offset
+deref'd as a host pointer, 3d4c's dropped CX output substituted by the incoming cx, int*-scaled viewport
+field reads, and the dropped AL/BX arguments to the [0x648]/[0x654] far vector) are documented at the
+site.
+
+--- a/fist.c
++++ b/fist.c
+@@ -12045,25 +12045,50 @@
+ void __allregs FUN_0000_38aa(undefined2 param_1,int param_2,int param_3)
+ 
+ {
++  /* PATCH 526: the LINE/graticule render method (asm 0x38aa-0x390b), dispatched by 378e through
++   * word[DGROUP: byte[0x6bc2] + 0x4b52] on the records 5fb0/6016 build -- i.e. the very next SIGSEGV
++   * after the builders stop crashing (INDIA2/INDIA5/TRAIN3/TRAIN4, same tick, same frame).  asm:
++   *     push bx; mov bx,[bx+0x32]; call 3d4c; pop bx; neg ax; mov [0x6c16],ax; mov [0x6c18],cx
++   *     push bx; mov bx,[bx+0x34]; call 3d4c; pop bx; neg ax; mov [0x6c1a],ax; mov [0x6c1c],cx
++   *     mov di,[0x156a]
++   *     mov ax,[di+0xa]; shr ax,1; add [0x6c16],ax; add [0x6c1a],ax
++   *     mov ax,[di+0xc]; shr ax,1; add [0x6c18],ax; add [0x6c1c],ax
++   *     cmpb [bx+4],0x16; je 38fe
++   *     mov al,[bx+5]; mov bx,0x6c16; lcall [0x648]; call 4096; ret
++   *  38fe: mov al,[bx+5]; mov bx,0x6c16; lcall [0x654]; call 4096; ret
++   * Four defects.  (1) BX is the object DGROUP NEAR OFFSET (the record 66f2/6016 wrote at di+0x32/+0x34)
++   * -- Ghidra deref'd param_3 as a host pointer.  (2) `mov [0x6c18],cx` / `mov [0x6c1c],cx` store 3d4c's
++   * SECOND output; __allregs returns AX only, so Ghidra substituted the INCOMING cx (param_2).  3d4c
++   * itself stores that same CX into word[0x6c38] (patch 324), so read it back from there -- provably the
++   * identical value, no new shim global.  (3) `DAT_1000_d56a + 10` / `+ 0xc` is int*-scaled (int==4 under
++   * gcc -m32) so it read +40/+48; the asm reads the 16-bit words at di+0xa/+0xc -- the patch-391 idiom
++   * (cast to uint16_t*, [5] and [6]).  (4) the far call's arguments AL=byte[bx+5] and BX=0x6c16 (the
++   * 4-word rect this function just filled) were dropped; [0x648] is FUN_0000_161c(al,rect,--), patch 136. */
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t obj = (uint16_t)param_3;
++  uint16_t *vp;
++  uint16_t half;
+   int iVar1;
+-  uint uVar2;
+-  
+-  iVar1 = FUN_0000_3d4c(*(undefined2 *)(param_3 + 0x32));
+-  DAT_2000_2c16 = -iVar1;
+-  DAT_2000_2c18 = param_2;
+-  iVar1 = FUN_0000_3d4c(*(undefined2 *)(param_3 + 0x34));
+-  uVar2 = *(uint *)(DAT_1000_d56a + 10) >> 1;
+-  DAT_2000_2c16 = DAT_2000_2c16 + uVar2;
+-  DAT_2000_2c1a = uVar2 - iVar1;
+-  uVar2 = *(uint *)(DAT_1000_d56a + 0xc) >> 1;
+-  DAT_2000_2c18 = DAT_2000_2c18 + uVar2;
+-  DAT_2000_2c1c = param_2 + uVar2;
+-  if (*(char *)(param_3 + 4) != '\x16') {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c648)))();
+-    FUN_0000_4096();
+-    return;
++  (void)param_1; (void)param_2;
++  iVar1 = FUN_0000_3d4c((uint *)(uintptr_t)*(uint16_t *)(dg + (uint16_t)(obj + 0x32)));
++  DAT_2000_2c16 = (undefined2)(uint16_t)-iVar1;
++  DAT_2000_2c18 = DAT_2000_2c38;                          /* mov [0x6c18],cx */
++  iVar1 = FUN_0000_3d4c((uint *)(uintptr_t)*(uint16_t *)(dg + (uint16_t)(obj + 0x34)));
++  DAT_2000_2c1a = (undefined2)(uint16_t)-iVar1;
++  DAT_2000_2c1c = DAT_2000_2c38;                          /* mov [0x6c1c],cx */
++  vp = (uint16_t *)DAT_1000_d56a;                         /* di = word[0x156a] (patch 325 rebased) */
++  half = (uint16_t)(vp[5] >> 1);                          /* word[di+0xa] >> 1 */
++  DAT_2000_2c16 = (undefined2)(uint16_t)(DAT_2000_2c16 + half);
++  DAT_2000_2c1a = (undefined2)(uint16_t)(DAT_2000_2c1a + half);
++  half = (uint16_t)(vp[6] >> 1);                          /* word[di+0xc] >> 1 */
++  DAT_2000_2c18 = (undefined2)(uint16_t)(DAT_2000_2c18 + half);
++  DAT_2000_2c1c = (undefined2)(uint16_t)(DAT_2000_2c1c + half);
++  {
++    uint8_t   al  = *(uint8_t *)(dg + (uint16_t)(obj + 5));
++    uint32_t  vec = (*(uint8_t *)(dg + (uint16_t)(obj + 4)) == 0x16)
++                      ? (uint32_t)DAT_1000_c654 : (uint32_t)DAT_1000_c648;
++    ((void (*)(uint8_t,int *,uint16_t))fist_icall_far(vec))(al,(int *)(dg + 0x6c16),0);
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c654)))();
+   FUN_0000_4096();
+   return;
+ }
+@@ -12851,30 +12876,50 @@
+ void __allregs FUN_0000_4096(void)
+ 
+ {
+-  char cVar1;
+-  int iVar2;
+-  
+-  if (DAT_2000_2b74 != (char *)&DAT_2000_bfff) {
+-    iVar2 = *DAT_1000_d56a;
+-    if (iVar2 == DAT_1000_c722) {
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_d59c)))();
+-      cVar1 = *DAT_2000_2b74;
+-      if (cVar1 != -1) {
+-        *DAT_2000_2b74 = -1;
+-        DAT_2000_2b76 = cVar1;
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a0)))();
+-        return;
+-      }
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_d5a0)))();
+-      return;
+-    }
+-    cVar1 = *DAT_2000_2b74;
+-    if (cVar1 != -1) {
+-      *DAT_2000_2b74 = -1;
+-      DAT_2000_2b76 = cVar1;
+-      return;
+-    }
+-  }
++  /* PATCH 526: the software mouse-cursor XOR-restore (asm 0x4096-0x40c6 + the 0x40bf page-flip variant),
++   * 38aa's tail call and hence the next SIGSEGV after 38aa is fixed.  asm:
++   *     ax=[0x6b74]; cmp ax,0xffff; je ret
++   *     di=[0x156a]; di=[di]; cmp di,[0x722]; je 40bf
++   *     mov es,di; mov di,ax; mov al,0xff; mov ah,es:[di]; cmp ah,al; jne 40b8; ret
++   *  40b8: stosb (es:[di]=0xff); mov [0x6b76],ah; stc; ret
++   *  40bf: lcall [0x159c]; di=[0x156a]; mov es,[di]; di=[0x6b74]; al=0xff; ah=es:[di]
++   *        cmp ah,al; je 40e1; stosb; mov [0x6b76],ah; lcall [0x15a0]; stc; ret
++   *  40e1: lcall [0x15a0]; clc; ret
++   * word[0x6b74] is a 16-bit OFFSET into the framebuffer segment word[DGROUP:word[0x156a]] (= vp[0], the
++   * patch-391 FB segment), NOT a pointer: Ghidra typed it `int **` and both compared it against the
++   * address of a DGROUP symbol (`(char *)&DAT_2000_bfff` standing in for the 0xffff sentinel) and
++   * dereferenced it as a host pointer.  `*DAT_1000_d56a` also read 4 bytes where the asm reads the
++   * 16-bit word at DGROUP:word[0x156a].  CF (stc/clc) published via g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t ax = *(uint16_t *)(dg + 0x6b74);
++  uint16_t di, es;
++  uint8_t  ah;
++  if (ax == 0xffff) return;                                        /* cmp ax,0xffff; je 40b7 */
++  di = *(uint16_t *)(dg + *(uint16_t *)(dg + 0x156a));             /* di=[0x156a]; di=word[DGROUP:di] */
++  if (di == (uint16_t)DAT_1000_c722) {                             /* je 40bf: the page-flip variant */
++    ((void (*)(void))fist_icall_far((uint32_t)(DAT_1000_d59c)))();
++    es = *(uint16_t *)(dg + *(uint16_t *)(dg + 0x156a));           /* 40c3/40c7: re-read after the call */
++    di = *(uint16_t *)(dg + 0x6b74);
++    ah = *(uint8_t *)(g_mem + ((uint32_t)es << 4) + di);
++    if (ah != 0xff) {
++      *(uint8_t *)(g_mem + ((uint32_t)es << 4) + di) = 0xff;
++      *(uint8_t *)(dg + 0x6b76) = ah;
++      ((void (*)(void))fist_icall_far((uint32_t)(DAT_1000_d5a0)))();
++      g_fist_cf = 1;                                               /* 40df stc */
++      return;
++    }
++    ((void (*)(void))fist_icall_far((uint32_t)(DAT_1000_d5a0)))();
++    g_fist_cf = 0;                                                 /* 40e5 clc */
++    return;
++  }
++  es = di;                                                          /* mov es,di */
++  di = ax;                                                          /* mov di,ax */
++  ah = *(uint8_t *)(g_mem + ((uint32_t)es << 4) + di);
++  if (ah == 0xff) return;                                           /* cmp ah,al; jne 40b8 -> equal: ret */
++  *(uint8_t *)(g_mem + ((uint32_t)es << 4) + di) = 0xff;            /* 40b8 stosb */
++  *(uint8_t *)(dg + 0x6b76) = ah;
++  g_fist_cf = 1;                                                    /* 40bd stc */
+   return;
+ }
+ 
+@@ -16843,32 +16888,55 @@
+ void __allregs FUN_0000_5fb0(undefined2 *param_1)
+ 
+ {
+-  undefined2 unaff_ES;
+-  bool bVar1;
+-  
+-  if (DAT_2000_3d1c == '\0') {
+-    FUN_1000_66f2(CONCAT11(DAT_2000_3d1d,0x14),DAT_2000_3d20,param_1);
+-    *param_1 = DAT_2000_3d22;
+-    DAT_2000_3d22 = DAT_2000_3d20;
+-    param_1[1] = DAT_2000_3d20;
+-    *(int *)(DAT_2000_3c04 + 0x12c7) = DAT_2000_3d22;
+-    DAT_2000_3c04 = DAT_2000_3c04 + 2;
+-    DAT_2000_3d20 = DAT_2000_3d20 + 8;
+-    DAT_2000_3d1e = DAT_2000_3d1e + -1;
+-    if (DAT_2000_3d1e == 0) {
+-      DAT_2000_3d24 = DAT_2000_3d24 + 1;
+-      DAT_2000_3d26 = DAT_2000_3d26 - 1;
+-      bVar1 = DAT_2000_3d26 < 4;
+-      if (DAT_2000_3d26 == 4) {
+-        DAT_2000_3d28 = DAT_2000_3d29;
+-      }
+-      FUN_1000_671b();
+-      if (bVar1) {
+-        DAT_2000_3d1c = -1;
+-      }
++  /* PATCH 526: c33c phase-handler (asm 0x5fb0-0x6015) -- emits ONE display-list record per call.
++   *   testb [0x7d1c],0xff; jne 6014 (stc = this phase is finished, c33c advances)
++   *   si=[0x7d20]; al=0x14; ah=byte[0x7d1d]; lcall 0f69:7062  (= 66f2, advances DI to entry+0x32)
++   *   ax=[0x7d22]; stosw / ax=[0x7d20]; stosw / [0x7d22]=ax
++   *   bx=[0x7c04]; mov gs,[0x70]; mov gs:[bx+0x12c7],ax        <- GS = STRSEG (the 8463/9ab5 class)
++   *   addw [0x7c04],2 / addw [0x7d20],8 / decw [0x7d1e]; jne 6012
++   *   incw [0x7d24]; decw [0x7d26]; cmpw [0x7d26],4; jne 6003; al=[0x7d29]; [0x7d28]=al
++   *   lcall 0f69:708b (= 671b); jae 6012; si=0xffff; movb [0x7d1c],0xff
++   *   6012: clc; ret     6014: stc; ret
++   * Four defects: (a) c33c dispatches its handlers with NO arguments, so `param_1` (the ES:DI record
++   * cursor) is garbage -- take DI from g_fist_render_di like every other patch-310 writer; (b) the two
++   * stosw's land at the DI 66f2 left behind (entry+0x32/+0x34), not at param_1+0/+2; (c) the STRSEG
++   * (GS) base on the [bx+0x12c7] slot was dropped and the near offset deref'd as a host pointer;
++   * (d) `bVar1` was synthesised from the `cmpw [0x7d26],4` -- the CF at 6008 is the one 671b RETURNS
++   * (patch 292 publishes it in g_fist_cf), and `jae` skips on CF=0, so the flag is set when CF=1. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_di;
++  uint8_t *dg = g_mem + 0x1c000;
++  (void)param_1;
++  if (*(uint8_t *)(dg + 0x7d1c) != 0) { g_fist_cf = 1; return; }      /* 6014: stc */
++  FUN_1000_66f2((undefined2)(uint16_t)(((uint16_t)*(uint8_t *)(dg + 0x7d1d) << 8) | 0x14),
++                (undefined4 *)(uintptr_t)*(uint16_t *)(dg + 0x7d20),
++                (int)(uint16_t)g_fist_render_di);
++  {
++    uint16_t di = g_fist_render_di;
++    uint16_t ax;
++    *(uint16_t *)(dg + di) = *(uint16_t *)(dg + 0x7d22);              /* stosw word[0x7d22] */
++    ax = *(uint16_t *)(dg + 0x7d20);
++    *(uint16_t *)(dg + (uint16_t)(di + 2)) = ax;                      /* stosw word[0x7d20] */
++    g_fist_render_di = (uint16_t)(di + 4);
++    *(uint16_t *)(dg + 0x7d22) = ax;
++    {
++      uint16_t bx      = *(uint16_t *)(dg + 0x7c04);
++      unsigned strseg  = *(uint16_t *)(dg + 0x70);                    /* mov gs,[0x70] */
++      *(uint16_t *)(g_mem + ((unsigned)strseg << 4) + (uint16_t)(bx + 0x12c7)) = ax;
+     }
+-    return;
+   }
++  *(uint16_t *)(dg + 0x7c04) = (uint16_t)(*(uint16_t *)(dg + 0x7c04) + 2);
++  *(uint16_t *)(dg + 0x7d20) = (uint16_t)(*(uint16_t *)(dg + 0x7d20) + 8);
++  *(uint16_t *)(dg + 0x7d1e) = (uint16_t)(*(uint16_t *)(dg + 0x7d1e) - 1);
++  if (*(uint16_t *)(dg + 0x7d1e) == 0) {
++    *(uint16_t *)(dg + 0x7d24) = (uint16_t)(*(uint16_t *)(dg + 0x7d24) + 1);
++    *(uint16_t *)(dg + 0x7d26) = (uint16_t)(*(uint16_t *)(dg + 0x7d26) - 1);
++    if (*(uint16_t *)(dg + 0x7d26) == 4)
++      *(uint8_t *)(dg + 0x7d28) = *(uint8_t *)(dg + 0x7d29);
++    FUN_1000_671b();
++    if (g_fist_cf) *(uint8_t *)(dg + 0x7d1c) = 0xff;                  /* jae 6012 -> only when CF=1 */
++  }
++  g_fist_cf = 0;                                                       /* 6012: clc */
+   return;
+ }
+ 
+@@ -16878,24 +16946,42 @@
+ void __allregs FUN_0000_6016(int param_1)
+ 
+ {
+-  undefined4 *puVar1;
+-  undefined4 uVar2;
+-  undefined2 unaff_ES;
+-  
+-  if (DAT_2000_3c06 < DAT_2000_3c04) {
+-    puVar1 = (undefined4 *)*(int *)(DAT_2000_3c06 + 0x12c7);
+-    *(undefined2 *)(param_1 + 2) = 0;
+-    *(undefined2 *)(param_1 + 4) = 0x10;
+-    *(undefined2 *)(param_1 + 6) = 0x10;
+-    *(undefined2 *)(param_1 + 8) = 0x10;
+-    *(undefined4 *)(param_1 + 10) = *puVar1;
+-    uVar2 = puVar1[1];
+-    *(undefined4 *)(param_1 + 0xe) = uVar2;
+-    *(undefined4 *)(param_1 + 0x12) = uVar2;
+-    *(undefined2 *)(param_1 + 0x32) = 0x13a8;
+-    DAT_2000_3c06 = DAT_2000_3c06 + 2;
+-    return;
++  /* PATCH 526: the SECOND c33c phase-handler of the same family (asm 0x6016-0x6055), which replays the
++   * records 5fb0 queued in the STRSEG slot ring [0x7c06 .. 0x7c04):
++   *   bx=[0x7c06]; cmp bx,[0x7c04]; jae 6051 (si=0xffff; stc = ring drained)
++   *   mov gs,[0x70]; mov si,gs:[bx+0x12c7]          <- same STRSEG base as 5fb0's writer
++   *   add di,2; xor ax,ax; stosw / al=0x10,ah=0; stosw; stosw; stosw
++   *   mov eax,[si]; stosd / mov eax,[si+4]; stosd; stosd / add di,0x1c / ax=0x13a8; stosw
++   *   addw [0x7c06],2; clc; ret
++   * Identical defect set to 5fb0: the arg-less c33c dispatch makes `param_1` garbage (DI comes from
++   * g_fist_render_di), the GS/STRSEG base on the ring slot was dropped and the resulting DGROUP near
++   * offset deref'd as a host pointer, and the DI advance (entry+0x34 on return) was lost.  Left
++   * unpatched it is the very next SIGSEGV once 5fb0 stops crashing. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_di;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = *(uint16_t *)(dg + 0x7c06);
++  (void)param_1;
++  if (bx >= *(uint16_t *)(dg + 0x7c04)) { g_fist_cf = 1; return; }    /* 6051: stc */
++  {
++    unsigned strseg = *(uint16_t *)(dg + 0x70);                       /* mov gs,[0x70] */
++    uint16_t si = *(uint16_t *)(g_mem + ((unsigned)strseg << 4) + (uint16_t)(bx + 0x12c7));
++    uint16_t di = g_fist_render_di;
++    uint32_t d0, d1;
++    *(uint16_t *)(dg + (uint16_t)(di + 2)) = 0;
++    *(uint16_t *)(dg + (uint16_t)(di + 4)) = 0x10;
++    *(uint16_t *)(dg + (uint16_t)(di + 6)) = 0x10;
++    *(uint16_t *)(dg + (uint16_t)(di + 8)) = 0x10;
++    d0 = *(uint32_t *)(dg + si);                                      /* mov eax,[si] (DS=DGROUP) */
++    d1 = *(uint32_t *)(dg + (uint16_t)(si + 4));
++    *(uint32_t *)(dg + (uint16_t)(di + 0xa))  = d0;
++    *(uint32_t *)(dg + (uint16_t)(di + 0xe))  = d1;
++    *(uint32_t *)(dg + (uint16_t)(di + 0x12)) = d1;
++    *(uint16_t *)(dg + (uint16_t)(di + 0x32)) = 0x13a8;               /* add di,0x1c; stosw */
++    g_fist_render_di = (uint16_t)(di + 0x34);
+   }
++  *(uint16_t *)(dg + 0x7c06) = (uint16_t)(bx + 2);
++  g_fist_cf = 0;                                                       /* 604f: clc */
+   return;
+ }
+ 
+@@ -59053,20 +59139,33 @@
+ void __allregs FUN_1000_66f2(undefined2 param_1,undefined4 *param_2,int param_3)
+ 
+ {
+-  undefined4 uVar1;
+-  undefined2 unaff_ES;
+-  
+-  *(undefined2 *)(param_3 + 2) = param_2;
+-  *(undefined2 *)(param_3 + 4) = param_1;
+-  *(undefined2 *)(param_3 + 8) = 0;
+-  *(undefined4 *)(param_3 + 10) = *param_2;
+-  uVar1 = param_2[1];
+-  *(undefined4 *)(param_3 + 0xe) = uVar1;
+-  *(undefined4 *)(param_3 + 0x12) = uVar1;
+-  *(undefined2 *)(param_3 + 0x16) = 0;
+-  *(undefined2 *)(param_3 + 0x18) = 0;
+-  *(undefined2 *)(param_3 + 0x1a) = 0;
+-  *(undefined2 *)(param_3 + 0x1c) = 0;
++  /* PATCH 526: the phase-idx display-list RECORD BUILDER (asm 0x166f2 = 0f69:0x7062, DS=DGROUP=0x1c00).
++   * asm:  add di,2 / push ax; mov ax,si; stosw / pop ax; mov bx,cx; stosw / add di,2 / mov ax,0; stosw
++   *       mov eax,[si]; stosd / mov eax,[si+4]; stosd; stosd / xor ax,ax; stosw x4 / add di,0x14 / lret
++   * TWO bases dropped: the ES:DI destination (the patch-310 render-record cursor, ES=DGROUP, threaded
++   * through g_fist_render_di) and the DS:SI source (param_2 = word[DGROUP:0x7d20], a DGROUP NEAR OFFSET,
++   * deref'd as a host pointer -> SIGSEGV in INDIA2/INDIA5/TRAIN3/TRAIN4).  Ghidra also dropped the DI
++   * advance, which the caller 5fb0 depends on: on return DI = entry+0x32, and 5fb0's own two stosw's
++   * land there, NOT at entry+0/+2 as the pristine decompile has them. */
++  extern unsigned short g_fist_render_di;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_3;
++  uint16_t si = (uint16_t)(uintptr_t)param_2;
++  *(uint16_t *)(dg + (uint16_t)(di + 2)) = si;                       /* mov ax,si; stosw */
++  *(uint16_t *)(dg + (uint16_t)(di + 4)) = (uint16_t)param_1;        /* stosw (ax = ah:0x14) */
++  *(uint16_t *)(dg + (uint16_t)(di + 8)) = 0;
++  {
++    uint32_t d0 = *(uint32_t *)(dg + si);                            /* mov eax,[si] */
++    uint32_t d1 = *(uint32_t *)(dg + (uint16_t)(si + 4));            /* mov eax,[si+4] */
++    *(uint32_t *)(dg + (uint16_t)(di + 0xa))  = d0;
++    *(uint32_t *)(dg + (uint16_t)(di + 0xe))  = d1;
++    *(uint32_t *)(dg + (uint16_t)(di + 0x12)) = d1;                  /* stosd twice, same eax */
++  }
++  *(uint16_t *)(dg + (uint16_t)(di + 0x16)) = 0;
++  *(uint16_t *)(dg + (uint16_t)(di + 0x18)) = 0;
++  *(uint16_t *)(dg + (uint16_t)(di + 0x1a)) = 0;
++  *(uint16_t *)(dg + (uint16_t)(di + 0x1c)) = 0;
++  g_fist_render_di = (uint16_t)(di + 0x32);                          /* di = entry+0x1e, then add di,0x14 */
+   return;
+ }
+ 

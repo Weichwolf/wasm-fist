@@ -6435,3 +6435,62 @@ mis-derived.
 
 Until that is answered, no patch here would be asm-verified -- and guessing between (a) and (b) is
 exactly the improvisation the method forbids.  SYRIA2 shares this crash.
+
+## cont.65r -- the nine self-play SIGSEGVs are THREE faults, and two of them are now fixed
+
+Backtracing all nine at once (INDIA2 INDIA5 SAUDI3 SAUDI7 SYRIA2 SYRIA6 SYRIA7 TRAIN3 TRAIN4) collapses
+them into three distinct sites -- the "nine remaining crashes" figure was nine SYMPTOMS, not nine bugs:
+
+| fault site | missions | tick | status |
+|---|---|---|---|
+| `FUN_1000_66f2 <- FUN_0000_5fb0 <- c33c <- 378e` | INDIA2 (5801) INDIA5 (1988) TRAIN3 (9515) TRAIN4 (835) | -- | **fixed, patch 526** |
+| `m_ext_FUN_0000_9200 <- gate <- e339 <- df0e <- FUN_1000_8390 <- 7f44 <- 209e` | SAUDI3 (665) SYRIA2 (5498) SYRIA6 (947) SYRIA7 (1873) | -- | diagnosed, cont.65q; needs the oracle |
+| `FUN_0000_0757 <- 0749 <- 902c <- c0e5 <- c0ca` | SAUDI7 (3906) | -- | **fixed, patch 527** |
+
+All four of the first group crash at the SAME instruction with the SAME arguments
+(`param_1=20, param_2=0x0, param_3=265604`), which is what made them one bug rather than four.
+
+### Patch 526 -- the c33c display-list phase handlers
+
+c33c (patch 310) walks a 10-entry phase-handler table at DGROUP:0xe6f5, calling each through
+`call *[bx+0xe6f5]` with NO arguments and keeping the ES:DI record cursor in `g_fist_render_di` and the
+handler's CF verdict in `g_fist_cf`.  Handlers 5fb0 and 6016, their record builder 66f2, the render
+method 38aa that consumes the records, and 38aa's tail call 4096 were all still pristine, so Ghidra's
+invented `param_1` (0x40d84 -- whatever was in the register) was used as a destination pointer and every
+DGROUP near offset in the chain was dereferenced as a host address.  Fixing them is a strict cascade --
+each fix moved the fault one call deeper in the SAME frame at the SAME tick:
+
+    66f2 -> 38aa -> 4096 -> (no crash)
+
+Defects landed, all asm-verified against re_out/fist_dat_image.bin:
+
+  * 66f2  ES:DI destination base, DS:SI source base, and the DI advance (entry+0x32) the caller depends on
+  * 5fb0  arg-less dispatch (DI from g_fist_render_di), the two stosw's landing at 66f2's advanced DI,
+          the dropped `mov gs,[0x70]` STRSEG base on the [bx+0x12c7] ring slot, and a `bVar1` Ghidra
+          synthesised from a `cmpw` where the `jae` actually tests the CF 671b RETURNS
+  * 6016  the same three defects on the sibling that replays the ring (the next crash if left alone)
+  * 38aa  object near-offset as a host pointer, 3d4c's dropped CX output substituted by the incoming cx,
+          int*-scaled viewport field reads (+40/+48 instead of +0xa/+0xc), and the dropped AL/BX
+          arguments to the [0x648]/[0x654] far vector
+  * 4096  word[0x6b74] is a 16-bit OFFSET into the FB segment word[DGROUP:word[0x156a]], not a pointer;
+          Ghidra both compared it against the ADDRESS of a DGROUP symbol and dereferenced it
+
+### The new frontier this exposes: a self-referential node in the memory-manager free list
+
+With 526 in, the four missions no longer crash -- they run the rest of the frame and then SPIN, in
+`FUN_1000_0a31 <- 184b <- 182a <- 23be <- 2322 <- 22dd`, at build/fist.c:43124:
+
+    while (ax > MM_S16(ds, 0x00)) ds = MM_S16(ds, 0x0c);     /* asm 10b84: cmp [0], ax ; ja -> [0xc] */
+
+Sampled state (TRAIN4, four samples ~8 s apart, identical): `ax = 0xff00`, `ds` settles on `0xe8d1`,
+and the node there reads ALL ZERO -- `word[0xe8d1<<4] = 0` -- so `0xff00 > 0` forever.  The asm walk
+(10b84 `ja` -> [0xc], 10b90 `jb` -> [0xe]) is equally unbounded on real hardware, so the original
+depends on the sorted circular free list being well-formed: the port's list is corrupt, this is not a
+missing guard.  `g_fist_render_di` is unchanged (0x6bbe) at the hang, so the new record writes are not
+the corrupting party -- the allocation path 2322/23be simply became reachable once 378e stopped
+crashing the frame.  The MM is already heavily patched (023 / 025 / 184 / 213); this is the next drill.
+
+NOTE on measuring progress here: `[DGROUP:0x452]` is RESET on a mission phase change, so it is not a
+monotonic clock across a whole run.  TRAIN4 reaches `FIST_DUMPTICK=4300` cleanly and only then spins
+with `[0x452]` back at 835 -- the two readings are not in conflict, and `prog.sh`'s rc==0 must not be
+read as "ran to N ticks" without checking the exit line.
