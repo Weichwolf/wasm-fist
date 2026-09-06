@@ -6267,3 +6267,29 @@ REMAINING FRAGILITY, recorded but not acted on: a flow that needs 24 s of the ha
 little headroom, and the goal's ten-consecutive-clean-runs gate will trip on host load rather than on the
 port.  That is a property of the harness, not of the engine; changing it is a separate decision and needs
 its own evidence, which is exactly what I failed to have the first time.
+
+## cont.65o -- HEAD re-measured end to end after the patch-521 correction
+
+  native verify matrix   175-176 / 177, every failure a `timeout 40` (native-rc=124) under a host load
+                         average of 5-9 from unrelated work; `battles-cancel-briefing` completes in 24 s
+                         with AE=0 when run alone.  No content mismatch anywhere.
+
+  native <-> wasm        AZER1  IDENTICAL (sim + render) over 5726 in-mission ticks
+                         AZER4  IDENTICAL (sim + render) over 5726 in-mission ticks
+                         -- the result survives the correction: it was first obtained with the WRONG
+                         version of patch 521, so it had to be re-earned on a build whose menus also pass.
+
+  47-mission self-play   the SEGV set is unchanged at 9 -- INDIA2, INDIA5, SAUDI3, SAUDI7, SYRIA2,
+                         SYRIA6, SYRIA7, TRAIN3, TRAIN4.  Today's run also reported INDIA3, INDIA6,
+                         SYRIA1, SYRIA3, TRAIN1, UKRAINE3 as SLOW/HANG, but all six were clean on the
+                         idle-machine run and the load was 5-9 throughout, so 38/47 stands and today's
+                         32/47 is load noise.  A SEGV is a SEGV regardless of load; a timeout is not.
+
+NEXT, unchanged in substance:
+  1. the 9 SEGVs -- SAUDI3/SYRIA2 share m_ext_FUN_0000_9200 (the extender voxel writer), TRAIN3 is
+     FUN_1000_66f2 <- FUN_0000_5fb0 (an ES:DI display-list build buffer whose ES base is lost, plus
+     5fb0's own dropped `mov gs,[0x70]` string-segment base -- the same GS defect as 8463/9ab5).
+  2. AZER2's t=373 divergence: DGROUP:0xb8e3 is written by b1df <- ba33 <- b5e7 on native only, with the
+     full DGROUP differing in 8 bytes the tick before, of which 0x2662 and 0x2672 are not vector slots.
+  3. no mission yet reaches a resolved victory/defeat; a5dc's evaluator is correct and waiting on the
+     goal objects actually being destroyed.
