@@ -1,0 +1,608 @@
+PATCH 521: the [DGROUP:0x6b4] paint calls pass the position descriptor in ARGUMENT 4, not argument 2.
+
+FUN_0000_26a1 -- the sprite blit dispatcher the [0x6b4] vector points at (vector-install table at MGA
+image 0x5406, (slot, method) pairs: 0x06ac->0x25d1, 0x06b0->0x2604, 0x06b4->0x26a1, 0x06b8->0x2660) --
+runs as `push bx ; mov di,[0x724] ; call 0x260c`, so AX (the sprite-directory byte offset) and BX (the
+position descriptor) arrive LIVE from the caller.  Ghidra's __allregs varnode order places BX in 26a1's
+param_4, and the call sites that predate this series already use exactly that shape:
+
+    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(sprite, 0, 0, rect_off, 0);
+
+Patches 503-520 introduced 64 new call sites that passed `(ax, bx)` instead, so 26a1 read the descriptor
+from param_4 -- stack garbage -- on every one of them.  All 64 are converted to the established shape.
+
+HOW THE CONVENTION WAS ESTABLISHED, recorded because I got it backwards first.  My initial attempt
+changed the CALLEE (26a1, and "for uniformity" 279d and 294d) to read param_2.  That broke every menu
+and dialog screen: the native verify matrix went 177 PASS / 0 FAIL -> 1 PASS / 26 FAIL, mainmenu at
+ref-AE=9675.  Restricting the change to 26a1 alone did not help either (tick 2264 instead of 5075, same
+AE).  Breaking on 26a1 during the mainmenu flow shows why:
+
+    26a1 p1=13d8 p2=0000 p3=0000 p4=f790 p5=0000
+    #1  FUN_0000_e9f0     #2  FUN_0000_209e
+
+the menu's own caller passes the descriptor 0xf790 in param_4 -- exactly the MAINMENU case patch 114's
+header already documents ("for the MAINMENU box (ax=0x13d8, pos=0xf790) word[clip]==0xa000 => ZF=1 =>
+the full path").  The callee was right all along; the new callers were wrong.
+
+MEASURED: with the handlers fixed (patch 517) FUN_0000_787d hands 26a1 ax=0x380 / bx=0x8eee exactly as
+the asm says, and before this patch 260c still received 0xe515.  A watchpoint capturing all eight writes
+to DGROUP:0x158a inside tick 274 showed every one of that frame's 260c calls taking its descriptor from
+the wrong slot.
+--- a/fist.c
++++ b/fist.c
+@@ -15051,7 +15051,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
+   unsigned short ax;
+   ax = (unsigned short)(0xfd8 + *(unsigned short *)(dg + 0x7b9c));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -15113,7 +15113,7 @@
+   } else {
+     ax = 0xff8;
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -15224,7 +15224,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
+   unsigned short ax;
+   ax = (unsigned short)(0x1000 + *(unsigned short *)(dg + 0x7b9c));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -15271,7 +15271,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
+   unsigned short ax;
+   ax = (unsigned short)(0x1010 + *(unsigned short *)(dg + 0x7b9c));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -15351,7 +15351,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
+   unsigned short ax;
+   ax = (unsigned short)(0x1020 + *(unsigned short *)(dg + 0x7b9c));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -15397,7 +15397,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
+   unsigned short ax;
+   ax = (unsigned short)(0x1030 + *(unsigned short *)(dg + 0x7b9c));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -15463,7 +15463,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);   /* lea bx,[bx+4] */
+   unsigned short ax;
+   ax = (unsigned short)(0x1040 + *(unsigned short *)(dg + 0x7b9c));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -15528,7 +15528,7 @@
+   ax = 0x1050;
+   if (*(unsigned short *)(dg + 0x7b9e) == 0x18)                       /* the active map mode */
+     ax = (unsigned short)(ax + *(unsigned short *)(dg + 0x7b9c));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -15617,7 +15617,7 @@
+   } else {
+     ax = 0x1090;
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -15719,7 +15719,7 @@
+   } else {
+     ax = 0x10a8;
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -15858,7 +15858,7 @@
+   } else {
+     ax = 0x10c0;
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -20004,7 +20004,7 @@
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)]
+             + ((*(unsigned short *)(dg + di) < 2) ? 0x14f0 : 0x1500));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -20074,7 +20074,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1490);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -20117,7 +20117,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1450);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -20201,7 +20201,7 @@
+    * loaded and then unused).  Ghidra emitted the whole body as a bare arg-less `lcall [0x6b4]`. */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short ax = (unsigned short)(dg[0x8d5f] + 0x1460);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0x8dc4);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,0x8dc4,0);
+   return;
+ }
+ 
+@@ -20260,7 +20260,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x14a0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -20290,7 +20290,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x14b0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -20320,7 +20320,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1480);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -20365,7 +20365,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1550);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -20395,7 +20395,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1560);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -21127,7 +21127,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1a0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -21173,7 +21173,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1c0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -21216,7 +21216,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1b0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -21260,7 +21260,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1d0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -21290,7 +21290,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1e0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -22118,7 +22118,7 @@
+   { unsigned long p = (unsigned long)*(unsigned short *)(dg + (unsigned short)(di + 0x5d)) * 0x1au;
+     unsigned short ix = (unsigned short)((p >> 16) & 0x1e);          /* DX of the mul, masked */
+     ax = *(unsigned short *)(dg + (unsigned short)(0x9014 + ix)); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -22152,7 +22152,7 @@
+   (void)param_1;
+   *(unsigned short *)(dg + bx) += 1;
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 0x3;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   *(unsigned short *)(dg + bx) -= 1;
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 0x3;
+   return;
+@@ -22188,7 +22188,7 @@
+   (void)param_1;
+   *(unsigned short *)(dg + bx) += 1;
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 0x2f;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   *(unsigned short *)(dg + bx) -= 1;
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 0x2f;
+   return;
+@@ -22293,7 +22293,7 @@
+   if (dl == dg[(unsigned short)(di + 0x86)]) ax = (unsigned short)(ax + 8);   /* 8109/810f */
+   else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]);           /* 8114/8118 */
+   bx = (unsigned short)(bx + 4);                                /* 811a lea bx,[bx+4] */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);  /* 811d */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);  /* 811d */
+   return;
+ }
+ 
+@@ -22352,7 +22352,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);    /* 815d lea bx,[bx+4] */
+   (void)param_1;
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 7;                 /* 8160 addw [bx+2],7 */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);             /* 8164 lcall [0x6b4] */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);             /* 8164 lcall [0x6b4] */
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 7;                 /* 8168 subw [bx+2],7 */
+   return;
+ }
+@@ -22403,7 +22403,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);      /* 81a7 */
+   (void)param_1; (void)g_fist_cf; (void)g_fist_paintbp;
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 0x2f;   /* 81aa addw [bx+2],0x2f */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);  /* 81ae */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);  /* 81ae */
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 0x2f;   /* 81b2 subw */
+   return;
+ }
+@@ -22518,7 +22518,7 @@
+   if (bl == dg[(unsigned short)(di + 0x91)]) ax = (unsigned short)(ax + 8);  /* 8254/825a */
+   else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]);          /* 825f/8263 */
+   bx = (unsigned short)(bx0 + 4);                                            /* 8266 */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);               /* 8269 */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);               /* 8269 */
+   return;
+ }
+ 
+@@ -22721,7 +22721,7 @@
+   unsigned short bx = (unsigned short)param_1, di = (unsigned short)param_2;
+   unsigned short ax = (unsigned short)((dg[(unsigned short)(bx + di + 0xb9)] << 3) + 0x700);
+   bx = *(unsigned short *)(dg + (unsigned short)((unsigned short)(bx << 1) + 0x906a));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -22777,7 +22777,7 @@
+   unsigned short bx = (unsigned short)param_1, di = (unsigned short)param_2;
+   unsigned short ax = (unsigned short)((dg[(unsigned short)(bx + di + 0xb9)] << 3) + 0x700);
+   bx = *(unsigned short *)(dg + (unsigned short)((unsigned short)(bx << 1) + 0x906a));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -22906,7 +22906,7 @@
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x488);
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -22949,7 +22949,7 @@
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x728);
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -22993,7 +22993,7 @@
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x4b8);
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -23039,7 +23039,7 @@
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x498);
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -23067,7 +23067,7 @@
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   unsigned short ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x4a8);
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -23116,7 +23116,7 @@
+   (void)param_1;
+   *(unsigned short *)(dg + bx) += 1;
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   *(unsigned short *)(dg + bx) -= 1;
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 1;
+   return;
+@@ -23166,7 +23166,7 @@
+   (void)param_1;
+   *(unsigned short *)(dg + bx) += 1;
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) += 1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   *(unsigned short *)(dg + bx) -= 1;
+   *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 1;
+   return;
+@@ -24127,7 +24127,7 @@
+   { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x5f)] >> 3) & 0x1e);
+     unsigned short gs = *(unsigned short *)(dg + 0x70);               /* the STRING segment */
+     ax = *(unsigned short *)(g_mem + ((unsigned long)gs << 4) + (unsigned short)(0x2740 + ix)); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -24484,7 +24484,7 @@
+     if (dl != 1) { ax = 0x778; if (dl != 2) ax = 0x788; }
+     if (dl == dg[(unsigned short)(di + 0x86)]) ax = (unsigned short)(ax + 8);
+     else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -24556,7 +24556,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x748);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -24586,7 +24586,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x758);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -24633,7 +24633,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0xa10);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -24663,7 +24663,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0xa20);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -25692,7 +25692,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0xa30);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -25742,7 +25742,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0xb90);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -25805,7 +25805,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0xba0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -25849,7 +25849,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0xbc0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -25896,7 +25896,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0xbd0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -25926,7 +25926,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0xbe0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -25957,7 +25957,7 @@
+   unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
+   unsigned short ax;
+   ax = (unsigned short)(((dg[(unsigned short)(di + 0x1a)] & 8) != 0) ? 0xad8 : 0xad0);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -59824,7 +59824,7 @@
+     if (dl != 1) { ax = 0x14d0; if (dl != 2) ax = 0x14e0; }
+     if (dl == dg[(unsigned short)(di + 0x86)]) ax = (unsigned short)(ax + 8);
+     else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -60035,7 +60035,7 @@
+     ax = (unsigned short)((bl << 4) + 0x1510);
+     if (bl == dg[(unsigned short)(di + 0x90)]) ax = (unsigned short)(ax + 8);
+     else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -61678,7 +61678,7 @@
+     uint16_t pos = (uint16_t)(bx + 4);
+     (*(uint16_t *)(dg + pos))++;
+     (*(uint16_t *)(dg + (uint16_t)(pos + 2)))++;
+-    ((void (*)(uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax, pos);
++    ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax, 0, 0, pos, 0);
+     (*(uint16_t *)(dg + pos))--;
+     (*(uint16_t *)(dg + (uint16_t)(pos + 2)))--;
+   }
+@@ -62540,7 +62540,7 @@
+   unsigned short ax;
+   { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x63)] & 0xf) << 1);
+     ax = *(unsigned short *)(dg + (unsigned short)(0x90c0 + ix)); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -62622,7 +62622,7 @@
+   unsigned short ax;
+   { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x63)] & 0xf) << 1);
+     ax = (unsigned short)(*(unsigned short *)(dg + (unsigned short)(0x91d0 + ix)) + 0x9d0); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -62644,7 +62644,7 @@
+   unsigned short ax;
+   { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x64)] & 0xf) << 1);
+     ax = (unsigned short)(*(unsigned short *)(dg + (unsigned short)(0x91d0 + ix)) + 0x9f0); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -63572,7 +63572,7 @@
+   { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x5f)] >> 3) & 0x1e);
+     unsigned short gs = *(unsigned short *)(dg + 0x70);
+     ax = *(unsigned short *)(g_mem + ((unsigned long)gs << 4) + (unsigned short)(0x2b10 + ix)); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -64147,7 +64147,7 @@
+     ax = *(unsigned short *)(dg + (unsigned short)(0x923a + bl));
+     if (bl == dg[(unsigned short)(di + 0x91)]) ax = (unsigned short)(ax + 8);
+     else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -64261,7 +64261,7 @@
+     if (dl != 1) { ax = 0xa90; if (dl != 2) ax = 0xaa0; }
+     if (dl == dg[(unsigned short)(di + 0x86)]) ax = (unsigned short)(ax + 8);
+     else ax = (unsigned short)(ax + dg[(unsigned short)(di + 0x3f)]); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -64562,7 +64562,7 @@
+   { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x63)] & 0xf) << 1);
+     unsigned short gs = *(unsigned short *)(dg + 0x70);
+     ax = *(unsigned short *)(g_mem + ((unsigned long)gs << 4) + (unsigned short)(0x290c + ix)); }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,bx,0);
+   return;
+ }
+ 
