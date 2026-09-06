@@ -6328,3 +6328,110 @@ NEXT for this one: find who fills [ext+0x9114]'s table and what [ext+0x90f0] is 
 op-0x24 entry; the frame-matched oracle capture (tools/oracle/capture_9200_framematched.sh, FIST_R9200CAP)
 records exactly these globals per 9200 pass in the ORIGINAL, so the correct values are directly
 observable rather than guessable.
+
+## cont.65q -- SAUDI3 / SYRIA2: the windshield-MASK index and the viewport RECT disagree
+
+Following cont.65p to its end.  The 9200 loop is faithful; the crash is a state the original cannot be
+in.  Everything below is MEASURED (gdb on /tmp/fist_native, SAUDI3 and AZER1, FIST_SIMRUN self-play).
+
+### The mechanism, exactly
+
+The extender op-8 thunk (image 0x10e0) is `call 8df0; call 3931; ret`.
+
+`8df0` (= Ghidra's FUN_0000_8deb/8df0, identical bodies; the port calls 8deb) derives the render
+globals from the CURRENT view record `[ext+0xc93]`:
+
+    [0x90f0] = word[c93+0x1c] - word[c93+0x18]     ; viewport WIDTH  (r - l)
+    [0x90f8] = word[c93+0x1a] - word[c93+0x16]     ; viewport HEIGHT (b - t)
+    [0x90ac] = 320 - width                         ; row-stride remainder
+    [0x9114] = dword[0x748c + 4*byte[c93+0xcd]]    ; the WINDSHIELD-MASK table for this view
+
+`3931` then reaches one of three near-identical masked framebuffer writers (0x9150, 0x9200, 0x9310).
+Each walks ECX = 0 .. [0x90f8]-1 (one ROW per outer pass) and per row does
+
+    skip = mask[ECX] ; edi += skip ; ECX_inner = (width>>1) - skip ; ... ; loop
+
+i.e. a symmetric left/right inset of `skip` pixels per row (the EDI bookkeeping at 927e/9284 adds
+`[0x90ac] + skip` back, so each row advances exactly 320).  `loop` is a do-while on ECX, so
+**`mask[row]` must never exceed `width>>1`, and the mask table must be at least `height` bytes long.**
+
+### The five masks and the five mode-setters
+
+`0x748c` is a 5-entry dword array -> `0x74a0, 0x7568, 0x75b9, 0x7607, 0x7653`, and the byte data
+immediately follows it, so the table LENGTHS are fixed by the layout:
+
+| idx | table  | length | shape                                    |
+|-----|--------|--------|------------------------------------------|
+|  0  | 0x74a0 | **200**| all zeros -- an unmasked full screen     |
+|  1  | 0x7568 | **81** | 6 4 3 2 1 0 ... 0 1 2 3 4 5 6 7 8 8 9    |
+|  2  | 0x75b9 | **78** | 1 0 ... 0 1                              |
+|  3  | 0x7607 | **76** | 8 6 5 4 3 2 1 1 0 ... 0 1 1 2 3 4 5 7    |
+|  4  | 0x7653 | 1      | end-of-data filler                       |
+
+`byte[c93+0xcd]` is written by exactly five engine sites, each `les di,[0xea2c]; movb $N,%es:0xcd(%di)`
+(scan of the whole FIST.DAT image for `c6 85 cd 00`):
+
+    0x738b -> 0    0x779b -> 1    0x7f01 -> 2 (FUN_0000_7eb7)    0x8a87 -> 3    0x92c1 -> 0
+
+### The anchor that proves the pairing is exact
+
+Steady state in EVERY mission: mode byte = 1, `word[DGROUP:0x1552]` = 0x8e91, and ddff copies that
+descriptor's rect into the record -> **(16,5)-(304,86) = 288 x 81**.  mask[1] is **81** bytes.  Exact.
+2269 op-8 passes in SAUDI3, no crash.  The mask table length IS the viewport height, by design.
+
+### What the port does instead
+
+`FUN_0000_7eb7` (mode byte := 2) fires in BOTH missions, from an identical path
+`459a -> 206f -> 209e(0x3d10) / 466c -> 7ea6 -> 1cdb -> 1ff5 -> 201a(0x3d10) -> 7eb7`:
+
+| mission | tick of the mode-2 flip | rect at the next op-8 | mask | result                          |
+|---------|-------------------------|-----------------------|------|---------------------------------|
+| AZER1   | 6653                    | 0x8e91 = 288 x **81** |  78  | reads 3 bytes past -> 8,6,5 -> WRONG pixels, survives |
+| SAUDI3  | 625                     | 0x8f8c = 320 x **195**|  78  | row 157 reads the code padding 0xc0=192 > 160 -> ECX = 160-192 = -32 -> ~4.29e9 iterations -> SIGSEGV |
+
+So it is not a SAUDI3 bug: **AZER1 renders 3 rows of garbage at the same transition** and only escapes
+the SIGSEGV because 81 overruns the 78-byte table by 3 instead of by 117.  AZER1's clean
+native<->wasm byte-identity is preserved because BOTH targets do the same wrong thing.
+
+### The one open question
+
+The mode-2 resource block (`0x8f82`, size 0x3d8, loaded by FUN_0000_7f19 via `FUN_0000_153c(0x28,...)`)
+holds, at a 0x1c stride:
+
+    0x8f8c  (0,2)-(320,197)  320 x 195
+    0x8fa8  (0,2)-(318,200)  318 x 198
+    0x8fc4  (2,3)-(320,183)  318 x 180
+    0x8fe0  (14,5)-(306,83)  292 x **78**     <-- matches mask[2] EXACTLY, the way 0x8e91 matches mask[1]
+
+`0x8fe0` is the mode-2 main 3-D window.  But **no engine site ever writes 0x8fe0 into `word[0x1552]`**:
+a scan of the image for the literal `52 15` finds 6 reads (`8b 1e 52 15`) and 15 immediate writes
+(`c7 06 52 15 imm`), whose immediates are 0x7aa4 0x8d60 0x8d10 0x8d2c 0x8e91 0x8ec9 0x8ead 0x8f8c
+0x8fc4 0x8fa8 0x9118 0x9150 0x9134 0x91fe 0x921a.  The mode-2 INIT branch of FUN_1000_8390
+(asm 0x183b1, guarded by `byte[0x1548]==0`) sets 0x8f8c, and its RENDER branch (`al<0 && (al&0x7f)==1`,
+asm 0x183dd `lcall 0:df0e`) posts the op.
+
+So exactly one of these two is wrong in the port and the asm alone cannot say which:
+
+  (a) the mode byte should NOT be 2 at this point -- 7eb7 is being dispatched when a sibling
+      (0x738b / 0x92c1, both -> 0, the 200-row unmasked table, which fits 195 AND 81) should be; or
+  (b) the mode byte is right and `word[0x1552]` should be 0x8fe0, i.e. the port misses the write --
+      but no such write exists in the image, so this would mean 0x1552 is not the pointer ddff should
+      be reading in mode 2.
+
+(a) is the better-supported reading: mask[0] is 200 zero bytes, which is exactly "full screen, no
+windshield", and it accommodates both observed rects without over-read.
+
+### The oracle settles it in one run
+
+Under `third_party/dosbox-fist`, reach SAUDI3 and arm the CR3-aware watch on the two engine fields:
+
+    FIST_MEMARM_BOOT=1 FISTLOG=<pfx> FIST_WATCHFLAT=<engine-flat of DGROUP:0x1552> FIST_WATCHFLATSPAN=2
+
+(the engine-flat DGROUP base comes from a `capture_9200_framematched.sh` `.cam.txt` `dsb`), and a
+second run watching the extender TCB byte `+0xcd` (TCB flat = word[0xea2e]:word[0xea2c]).  The answer
+is simply: **when the original writes 0x8f8c to 0x1552, what is byte[TCB+0xcd]?**  If it is 0, (a)
+holds and the fix is in the 0x3d10 method dispatch; if it is 2, (b) holds and ddff's source pointer is
+mis-derived.
+
+Until that is answered, no patch here would be asm-verified -- and guessing between (a) and (b) is
+exactly the improvisation the method forbids.  SYRIA2 shares this crash.
