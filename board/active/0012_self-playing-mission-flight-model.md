@@ -6190,3 +6190,42 @@ own right, and it is the obvious candidate for AZER2's spawn decision: b1df's po
 follow.  NEXT for AZER2: watchpoint DGROUP:0x078e across the whole run on both targets and compare the
 write sequences, then trace the allocation that produces it.  Do NOT add these words to the fingerprint
 until their nature is settled -- cont.65g already shows what happens when host-address slots get into it.
+
+## cont.65m -- a wrong patch, three wrong diagnoses, and the harness foot-gun behind all of them
+
+RECORDED IN FULL because the correction is the useful part.
+
+THE WRONG PATCH.  The first version of patch 521 changed the CALLEE: FUN_0000_26a1 (and, "for
+uniformity", 279d and 294d) to read the sprite position descriptor from param_2 instead of the
+__allregs slot Ghidra assigned.  It made AZER1 and AZER4 native<->wasm identical, and I committed it on
+that evidence alone (11655e4).  It also broke every menu and dialog screen.
+
+The callee was right all along.  Breaking on 26a1 during the mainmenu flow:
+
+    26a1 p1=13d8 p2=0000 p3=0000 p4=f790 p5=0000
+    #1  FUN_0000_e9f0     #2  FUN_0000_209e
+
+-- the menu's own caller passes the descriptor 0xf790 in param_4, exactly the MAINMENU case patch 114's
+header documents, and the pre-existing call sites already use `(sprite, 0, 0, rect_off, 0)`.  It was the
+64 call sites patches 503-520 added that were wrong, passing `(ax, bx)`.  Patch 521 now converts those
+64 callers instead, and 279d/294d are left alone.
+
+THE FOOT-GUN, which is why it took three attempts to see that.  tools/verify.sh takes the binary from
+the NATIVE ENVIRONMENT VARIABLE, not from its second argument:
+
+    NATIVE="${NATIVE:-/tmp/fist_native}"      # $1 is WHICH (native|wasm|both); $2 is IGNORED
+
+So `bash tools/verify.sh native /tmp/mybuild` silently tests /tmp/fist_native.  Every "the matrix is
+red" run I made was measuring a stale binary that still had the broken patch, while every standalone
+run of the same flow -- with the same env, against the same reference -- gave AE=0.  That mismatch sent
+me down two false trails: first that the failures were environmental (a 2.7 GB tmpfs), then that the
+wall-clock FIST_RUNMS sampling had become fragile because the renderer got heavier.  I went as far as
+probing all 29 wall-clock flows for a settled tick (they all reach their reference frame by tick 1700)
+and converting the flow table to tick pins -- then reverted that change once the real cause was found,
+because the test was not misspecified and must not be edited to go green.
+
+    ALWAYS:  NATIVE=/path/to/binary bash tools/verify.sh native
+    NEVER:   bash tools/verify.sh native /path/to/binary
+
+TWO RULES worth keeping: a bit-identity win on two missions is not evidence that a change is correct --
+only the full matrix is; and "every caller I wrote uses convention X" is not "every caller uses X".
