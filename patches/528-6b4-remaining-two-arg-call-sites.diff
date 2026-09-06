@@ -1,0 +1,132 @@
+PATCH 528: the eleven [0x6b4] paint-vector call sites patch 521 left at TWO arguments.
+
+Patch 521 established that the `lcall [0x6b4]` paint service is FUN_0000_26a1, which takes FIVE
+arguments, and that the asm's `mov bx,<position descriptor>` is the FOURTH of them -- it converted 64
+call sites from `(ax,bx)` to `(ax,0,0,bx,0)`.  Eleven sites were missed and still passed two.
+
+This is not cosmetic, and it is not symmetric across the targets.  The call is written through a
+`(code *)` cast, so the compiler infers the indirect-call signature FROM THE ARGUMENT LIST: two
+arguments produce a 2-parameter signature.  Under gcc -m32 that is caller-cleans cdecl, so 26a1 simply
+reads parameters 3/4/5 off whatever the stack happened to hold and, more often than not, still paints
+something.  Under wasm the signature is part of `call_indirect` and a 2-parameter signature does not
+match 26a1's 5-parameter type, so the call does not paint at all.  That is a native<->wasm divergence
+by construction.
+
+MEASURED, on the terrain-azer1 flow with the two sides finally sampling the same simulation state
+(see the tick-gate fix in tools/verify.sh):
+
+    native: exactly one blit into framebuffer row 0 --
+            [26de] dst=0xa0000 cx=0 col=0 row=0 recseg=0x55e9 srcoff=0x5d260 hdr=07050008
+                   src: 19 19 19 19 07 12 0b 19 34 07 ...
+            i.e. a 7x5 sprite, and those bytes are byte-for-byte what the native framebuffer holds at
+            (0,0)-(6,4).
+    wasm:   ZERO blits into row 0.
+
+The 35 pixels of that 7x5 block were the ENTIRE remaining framebuffer difference between the targets on
+both AZER1 and SAUDI1 (104 bytes, mission-independent).  The caller is FUN_0000_787d, whose asm is
+    787d: mov di,[0x6d34] ; movzbw ax,[di+0x3f] ; add ax,0x380 ; mov bx,0x8eee ; lcall [0x6b4]
+-- ax the glyph id, bx the position descriptor -- and patch 517 reconstructed the arguments but emitted
+them as `(ax,bx)`.
+
+All eleven sites verified against re_out/fist_dat_image.bin; every one is the same
+`mov ax,<id>` / `mov bx,<position>` / `lcall *0x6b4` shape:
+
+    0000:73d4   add ax,0x1470 ; mov bx,0x8dcc      0000:787d   add ax,0x380  ; mov bx,0x8eee
+    0000:81e6   add ax,0x428  ; mov bx,0x90d6      0000:81e6   add ax,0x438  ; mov bx,0x90de
+    0000:834a   mov ax,0x700  ; mov bx,[bx*2-0x6f9a]
+    0000:836e   mov ax,0x718  ; mov bx,[bx*2-0x6f96]
+    0000:836e   mov ax,0x720  ; mov bx,[bx*2-0x6f92]
+    0000:8bfb   add ax,0x838  ; mov bx,0x9176      0000:8bfb   add ax,0x848  ; mov bx,0x917e
+    0000:8dc6   add ax,0x7d8  ; mov bx,0x916e
+    1000:8568   mov bx,0x90ae ; mov ax,0x508
+
+After this patch the [0x6b4] sites are 96 five-argument, 20 arg-less and 1 four-argument.  The arg-less
+group is a DIFFERENT class (a bare `lcall [0x6b4]` with AX/BX ambient from the caller) and is not
+touched here.
+
+--- a/fist.c
++++ b/fist.c
+@@ -19922,7 +19922,7 @@
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
+-      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1470),0x8dcc);
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x1470),0,0,0x8dcc,0);
+   return;
+ }
+ 
+@@ -20894,7 +20894,7 @@
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
+-      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x380),0x8eee);
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x380),0,0,0x8eee,0);
+   return;
+ }
+ 
+@@ -22546,10 +22546,10 @@
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   (void)g_fist_cf; (void)g_fist_paintbp;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
+-      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x428),0x90d6);   /* 81ea-81f4 */
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x428),0,0,0x90d6,0);   /* 81ea-81f4 */
+   di = (unsigned short)DAT_2000_2d34;                                       /* 81f8 re-read */
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
+-      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x438),0x90de);   /* 81fc-8206 */
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x438),0,0,0x90de,0);   /* 81fc-8206 */
+   return;
+ }
+ 
+@@ -22795,7 +22795,7 @@
+   unsigned short bx = (unsigned short)((unsigned short)param_1 << 1);
+   (void)param_2;
+   bx = *(unsigned short *)(dg + (unsigned short)(bx + 0x9066));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x700,bx);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x700,0,0,bx,0);
+   return;
+ }
+ 
+@@ -22843,10 +22843,10 @@
+   unsigned short bx, cnt;
+   undefined2 uVar2;
+   bx = *(unsigned short *)(dg + (unsigned short)(bx2 + 0x906a));             /* 8375 */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x718,bx);            /* 836e/8379 */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x718,0,0,bx,0);            /* 836e/8379 */
+   if (dg[(unsigned short)(di + 0x3f)] != 0) {                                /* 837f */
+     bx = *(unsigned short *)(dg + (unsigned short)(bx2 + 0x906e));           /* 838a */
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x720,bx);          /* 8387/838e */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x720,0,0,bx,0);          /* 8387/838e */
+   }
+   bx = *(unsigned short *)(dg + (unsigned short)(bx2 + 0x9072));             /* 8395 */
+   FUN_1000_52d1(*(unsigned short *)(dg + bx),
+@@ -24279,10 +24279,10 @@
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
+-      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x838),0x9176);   /* 8bfb-8c09 */
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x838),0,0,0x9176,0);   /* 8bfb-8c09 */
+   di = (unsigned short)DAT_2000_2d34;                                       /* 8c0d re-read */
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
+-      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x848),0x917e);   /* 8c0d-8c1b */
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x848),0,0,0x917e,0);   /* 8c0d-8c1b */
+   return;
+ }
+ 
+@@ -24605,7 +24605,7 @@
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di = (unsigned short)DAT_2000_2d34;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))
+-      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x7d8),0x916e);
++      ((unsigned short)(dg[(unsigned short)(di + 0x3f)] + 0x7d8),0,0,0x916e,0);
+   return;
+ }
+ 
+@@ -62560,7 +62560,7 @@
+    * patches 499/500/501 let the player-death sequence complete. */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+   unsigned short di, ax;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x508,0x90ae);   /* 1856b/18568/1856e */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(0x508,0,0,0x90ae,0);   /* 1856b/18568/1856e */
+   di = (unsigned short)DAT_2000_2d34;                                   /* 18572 */
+   if ((dg[(unsigned short)(di + 0x90)] & 0x80) == 0) {                  /* 18576 */
+     unsigned short bx = (unsigned short)((unsigned short)dg[(unsigned short)(di + 0x90)] << 1); /* 1857d-18583 */

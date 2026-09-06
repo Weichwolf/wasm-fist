@@ -2541,6 +2541,9 @@ int fist_extender_gate(void) {
              * is the three-run parity method for a mission FRAME -- the per-tick FIST_SIMHASH cannot
              * reach here, because the in-mission 459a loop never re-enters fist_timer_pump, so [0x452]
              * is frozen and no tick-indexed fingerprint advances.
+             * It dumps the whole low 1 MB, not just DGROUP: the first divergence found this way was a
+             * glyph-index STRING living in the string segment around linear 0x5d2a2, i.e. outside
+             * DGROUP entirely, so a DGROUP-only dump reported "identical" while the frame differed.
              * CAUTION, measured: the op-0x24 post count being equal does NOT make the two targets'
              * snapshots contemporaneous.  On terrain-azer1 the 1st op-0x24 post finds [0x452]=41 on
              * native (SIGALRM time base, and the value does not move with FIST_TICK_HZ) and 314 on
@@ -2548,8 +2551,8 @@ int fist_extender_gate(void) {
              * flow compares two DIFFERENT simulation states and any equality it reports is incidental.
              * Read the [0x452] in both dumps before drawing a conclusion from a diff.  board:0002 */
             { const char *dgp=getenv("FIST_MISSFB_DGDUMP");
-              if (dgp) { FILE *f=fopen(dgp,"wb"); if(f){ fwrite(g_mem+0x1c000,1,0x10000,f); fclose(f);
-                         fprintf(stderr,"[missfb] DGROUP dumped -> %s\n", dgp); } } }
+              if (dgp) { FILE *f=fopen(dgp,"wb"); if(f){ fwrite(g_mem,1,0x100000,f); fclose(f);
+                         fprintf(stderr,"[missfb] low 1 MB dumped -> %s (DGROUP at +0x1c000)\n", dgp); } } }
             { const char *fbp=getenv("FIST_MISSFB"); if(fbp) fist_dump_framebuffer(fbp); }
             _exit(0);
         }

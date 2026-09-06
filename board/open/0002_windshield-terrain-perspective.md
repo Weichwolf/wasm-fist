@@ -2182,3 +2182,30 @@ flat rect on native.
 So the terrain surface itself is now byte-identical across targets on these two missions; what is left
 is one corner glyph and two allocator bytes.  Note the flow is still reported FAIL, correctly -- the
 assertion has not been touched, only the two sides made contemporaneous.
+
+### CLOSED (pending the full matrix): all five terrain flows are native == wasm, 0 bytes
+
+The 7x5 corner block was not a rendering difference -- the sprite was drawn on native and NOT AT ALL on
+wasm.  Traced by instrumenting the patch-114 blitter 26de on both targets (diagnostic only, in build/,
+not committed):
+
+    native: [26de] dst=0xa0000 cx=0 col=0 row=0 recseg=0x55e9 srcoff=0x5d260 hdr=07050008
+                   src: 19 19 19 19 07 12 0b 19 34 07 ...      <- exactly the native corner content
+    wasm:   no blit into row 0 at all
+
+Cause: `FUN_0000_787d` calls the `[0x6b4]` paint vector with TWO arguments where FUN_0000_26a1 takes
+five.  Patch 521 converted 64 such sites and missed eleven.  The call goes through a `(code *)` cast, so
+the compiler infers the indirect-call signature FROM THE ARGUMENT LIST -- under gcc -m32 cdecl the
+callee just reads params 3/4/5 off the stack and usually still paints, under wasm the 2-parameter
+signature does not match 26a1's 5-parameter type in `call_indirect` and the call paints nothing.  A
+native<->wasm divergence by construction, and the reason this class only ever shows up on wasm.
+
+Patch 528 converts all eleven (each verified against the asm; the arg-less group is a different class
+and is untouched).  Measured after it, with the native side under FIST_SIMRUN so both targets sample
+the same state:
+
+    AZER1 0    SAUDI1 0    CYPRUS1 0    INDIA1 0    SYRIA1 0     bytes differing
+
+So the terrain surface is byte-identical native<->wasm on all five covered missions.  Note what closed
+it was NOT a terrain fix: the voxel render was already identical once the two sides were made
+contemporaneous; what remained was one missed argument list.
