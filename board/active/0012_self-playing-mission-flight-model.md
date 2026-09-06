@@ -6236,3 +6236,34 @@ only the full matrix is; and "every caller I wrote uses convention X" is not "ev
   unrelated work on the machine (a large C++ build and a long-running Python job).  No claim about the
   cost of the new paint handlers is supported by anything measured here; if it ever matters, measure it
   on an idle machine against a fixed tick target, not a wall-clock one.
+
+## cont.65n -- the gate, measured properly
+
+With patch 521 corrected and the harness invoked the right way (`NATIVE=... bash tools/verify.sh native`,
+NOT `bash tools/verify.sh native <binary>` -- see cont.65m), the native verify matrix on HEAD is
+
+    run 1:  176 passed, 1 failed
+    run 2:  175 passed, 2 failed
+
+and EVERY failure is `native-rc=124` -- the harness's `timeout 40` firing -- on `battles-cancel-briefing`
+and `campaign-missions`, never a content mismatch.  Both are tick-pinned flows (`tick=6000`).  Run
+standalone, `battles-cancel-briefing` completes in 24 s with AE=0 against its genuine DOSBox reference.
+The machine carried a load average of 5-8 from unrelated work throughout, which is enough to push a 24 s
+flow past a 40 s cap.
+
+AND THE PERFORMANCE QUESTION IS SETTLED, against my own earlier guess.  I had suspected patches 517-521
+(the ~64 paint handlers that now actually paint) of roughly halving the engine's tick rate.  Timing the
+SAME flow to the SAME tick target on the SAME machine:
+
+    build with patches <= 516 :  24 s, 24 s
+    HEAD (through patch 525)  :  23 s, 24 s
+
+No measurable difference.  The paint batch costs nothing detectable here; the earlier 1688..5075 tick
+spread was entirely host load.  Both the "renderer got heavier" and the "wall-clock sampling has become
+fragile" theories are dead, and tools/verify.sh is unchanged -- the flow table was NOT converted to tick
+pins, because the test was never misspecified.
+
+REMAINING FRAGILITY, recorded but not acted on: a flow that needs 24 s of the harness's 40 s budget has
+little headroom, and the goal's ten-consecutive-clean-runs gate will trip on host load rather than on the
+port.  That is a property of the harness, not of the engine; changing it is a separate decision and needs
+its own evidence, which is exactly what I failed to have the first time.
