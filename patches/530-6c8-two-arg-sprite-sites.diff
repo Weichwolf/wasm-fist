@@ -1,0 +1,51 @@
+PATCH 530: two [0x6c8] sprite-draw sites still passed the position descriptor as argument TWO.
+
+Found by an ARITY CENSUS over every `fist_icall_far` vector in build/fist.c -- the mechanical check the
+528 and 529 findings implied.  For each vector it counts the argument lists at every call site and
+flags the minority.  `DAT_1000_c6c8` came out {5-arg: 7, 2-arg: 2, 1-arg: 7, 0-arg: 18}, and the two
+2-arg sites have exactly the `(sprite id, position descriptor)` shape the [0x6b4] sites had:
+
+    fist.c:62577   (0x510,0x90ae)
+    fist.c:62584   (0x518,0x90ae)
+
+[0x6c8] resolves to FUN_0000_294d, NOT to 26a1 (the far-vector table in a live DGROUP dump reads
+`word[0x6c8]:word[0x6ca]` = 3e78:294d).  294d takes FIVE parameters and mirrors 26a1's shape -- the
+established 5-arg form at these sites is `(spr,0,0,pos,0)`, so BX is the FOURTH argument (patch 521).
+A 2-argument list leaves the callee reading arguments 3/4/5 off the stack under gcc -m32, while wasm's
+call_indirect rejects the signature outright and paints nothing.
+
+asm-verified vs re_out/fist_dat_image.bin, both inside FUN_1000_8568:
+
+    1858e: mov ax,0x510 ; 18591: mov bx,0x90ae ; 18594: lcall *0x6c8
+    185ab: mov ax,0x518 ; 185ae: mov bx,0x90ae ; 185b1: lcall *0x6c8
+
+Note the same function's FIRST call, `1856b lcall *0x6b4` with ax=0x508 / bx=0x90ae, was already
+converted to `(0x508,0,0,0x90ae,0)` by patch 528 -- so within one function the [0x6b4] site was fixed
+and these two [0x6c8] siblings were left behind.  That is exactly why the census was worth running.
+
+The census's other minority sites are NOT touched here: most involve `unaff_CS` / a literal `0xf69`
+leaking into the argument list, which is the segment-leak class (board:0010), not this one.
+--- a/fist.c
++++ b/fist.c
+@@ -62574,14 +62574,19 @@
+     unsigned short bx = (unsigned short)((unsigned short)dg[(unsigned short)(di + 0x90)] << 1); /* 1857d-18583 */
+     ax = *(unsigned short *)(dg + (unsigned short)(0x90b8 + bx));       /* 18585 mov ax,[bx-0x6f48] */
+     *(unsigned short *)(dg + 0x90b0) += ax;                             /* 1858a */
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x510,0x90ae); /* 1858e-18594 */
++    /* PATCH 530: asm 1858e `mov ax,0x510; mov bx,0x90ae; lcall *0x6c8` -- the [0x6c8] sprite-draw
++     * service is FUN_0000_294d (five params, mirroring 26a1), and BX is the POSITION descriptor,
++     * its FOURTH argument (patch 521).  The [0x6b4] call at the top of THIS function was already
++     * converted by patch 528; these two [0x6c8] siblings were missed. */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x510,0,0,0x90ae,0); /* 1858e-18594 */
+     *(unsigned short *)(dg + 0x90b0) -= ax;                             /* 18599 */
+     return;
+   }
+   ax = *(unsigned short *)(dg + 0x90b6);                                /* 1859e */
+   *(unsigned short *)(dg + 0x90b0) += ax;                               /* 185a1 */
+   *(unsigned short *)(dg + 0x90ae) += 2;                                /* 185a5 */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x518,0x90ae);   /* 185ab-185b1 */
++  /* PATCH 530: asm 185ab `mov ax,0x518; mov bx,0x90ae; lcall *0x6c8` -- same as above. */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x518,0,0,0x90ae,0);   /* 185ab-185b1 */
+   *(unsigned short *)(dg + 0x90b0) -= ax;                               /* 185b6 */
+   *(unsigned short *)(dg + 0x90ae) -= 2;                                /* 185ba */
+   return;
