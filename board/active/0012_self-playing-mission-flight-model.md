@@ -6954,3 +6954,39 @@ the fault is upstream of 23d8 exactly as patch 537 turned out to be.
 Method note for this item: three attributions this session were made from resemblance rather than
 measurement, and all three were wrong (the FIST_COOP_TICK double-count; the cont.65y retraction; this).
 Each cost more to unwind than the measurement would have cost up front.
+
+### CORRECTION 2: neither 532 alone nor 533/534/535 alone -- they are INDEPENDENTLY sufficient
+
+The previous entry named patch 532 as the cause.  That is also wrong, and a like-for-like measurement
+(both builds instrumented, so the comparison is fair) shows why:
+
+    532 HELD, 533..537 in   ->  7133 ticks in 120 s   23d8: 10 calls/tick, 61510 iters/tick
+    532 IN,   533..537 in   ->  7126 ticks in 120 s   23d8: 10 calls/tick, 61510 iters/tick
+
+Identical.  Putting that beside the earlier runs:
+
+    hold >= 532  (only 530,531 in)                     FAST   (22 s to t=20000)
+    hold >= 536  (532..535 in)                         slow
+    533/534/535 held, 532 in                           slow
+    532 held, 533..537 in                              slow
+
+So **532 alone is sufficient, and 533/534/535 alone are sufficient**.  Each independently causes it.
+My "the cause is patch 532, not 533/534/535" was a false dichotomy built on a single one-sided test.
+
+The correct statement is the general one: **restoring rendering the port had been skipping costs
+roughly 15x** (900 ticks/s -> ~59 ticks/s on the instrumented build), and every patch that restores
+some of it contributes.  532 fixed three HUD calls; 533/534/535 restored 26 class slots.  Both add real
+draws.
+
+And 23d8 is NOT the differentiator: its per-tick workload (10 calls, 61510 iterations, desc=0x8fc4,
+word[desc]=0x7c4c) is IDENTICAL in every configuration measured.  The 16/16 stack profile means only
+that 23d8 is the single biggest cost overall -- it is present equally in the fast and slow builds.  The
+extra ~15x lives in the newly-enabled draw paths (294d / 2a39 / 2ae9 -> c8b2 -> ca2f), not in 23d8.
+
+So the earlier "wrong control stream" hypothesis for SYRIA1 is unsupported too: the stream is the same
+in the fast configuration, which reaches t=20000 in 22 s.  61510 iterations/tick is simply what this
+mission's blit costs, and it is affordable -- until the rest of the rendering is switched on.
+
+NEXT (and only now is this the right question): profile the newly-enabled draw path.  ca2f / c8b2 are
+called per object per frame; measure calls and cost there, and compare the port's per-frame draw count
+against the original's via the frame-matched oracle capture before optimising anything.
