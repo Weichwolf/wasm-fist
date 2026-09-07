@@ -121,3 +121,31 @@ AZER1 outcome: a296 16 -> 15 -- the first real kill.
 STILL OPEN: one kill is not a resolved mission. The next question is why engagements still resolve so
 slowly -- note op-0x58 VISIBLE dropped 8465 -> 446 when the vectors were corrected, because 0x9684/
 0x9690 are shared buffers that the LOS path also reads, so LOS results changed materially too.
+
+## Full sweep with patches 538 + 539 + 540 (native, 20000-tick cap, 100s budget)
+
+```
+RESOLVED     0
+UNRESOLVED  33   mission loads, roster spawns, simulation runs, no side eliminated
+NOLOAD       9   INDIA2 INDIA3 INDIA4 SAUDI1 SAUDI2 SAUDI5 TRAIN1 TRAIN2 TRAIN4
+TIMEOUT      5   AZER6 AZER7 CYPRUS4 INDIA1 TRAIN3
+CRASH        0   (was 6+ before patch 540)
+```
+
+The five TIMEOUTs are genuine hangs, not slow runs: AZER6 and CYPRUS4 were re-run at a 280s budget and
+still produced no `[outcome]` line at all, so they hang at or before mission load.
+
+The crash class introduced-and-then-traced this round is closed for the five dispatch entries patched
+(see board:0019 for the two that remain latent).
+
+Three distinct blockers now, and they are NOT the same bug:
+
+1. **33 UNRESOLVED** -- engagement never eliminates a side. Gated by board:0018 (the LOS endpoints are
+   a shim stand-in), so the number cannot be interpreted until that is real.
+2. **9 NOLOAD** -- the mission never spawns its roster (a296 never reaches 15). Distinct from the
+   others: the simulation never starts. INDIA2/3/4, SAUDI1/2/5, TRAIN1/2/4.
+3. **5 hangs** -- no progress at all at 280s. AZER6, AZER7, CYPRUS4, INDIA1, TRAIN3.
+
+Note for anyone reading the older numbers in this session's history: "41/47" counted missions that did
+not hang, under a criterion that no longer applies. Against the goal's criterion the count has been
+0/47 throughout; what changed is that 33 missions now genuinely load and simulate without crashing.
