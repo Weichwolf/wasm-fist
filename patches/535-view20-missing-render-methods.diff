@@ -1,0 +1,158 @@
+PATCH 535: five more object-render methods that the port did not have (view 0x20).
+
+Auditing ALL FOUR of c4df's per-view method tables -- not just the cockpit one patch 533 stumbled into
+-- shows the gap is structural.  c4df picks the table by d549 (0x1e cockpit -> STRSEG+0x3632,
+0x20 -> +0x35fa, 0x22 -> +0x35c2, else -> +0x358a) and indexes it by classid*2.  Reading all four out
+of a memory dump and checking each distinct target against the port:
+
+    view 0x1e : c7ca c7ca c7ca c7ca c5e7 c829 c829 c86e c86e c86e c86e c86e c86e c86e c86e
+                c5e7 c715 c5e7 c5e7 c5e7 c5e7 c70d c5e7 c774
+    view 0x20 : c817 c817 c817 c817 c7a5 c82d c82d c874 c874 c874 c874 c874 c874 c874 c874
+                c5e7 c74d c5e7 c5e7 c5e7 c5e7 c713 c5e7 c77d
+    view 0x22 : c783 c783 c783 c783 c5e7 c783 c783 c5e7 ... (c5e7 thereafter)
+    default   : all present
+
+24 distinct targets; TEN were absent from the port entirely (neither defined nor in the fist_icall
+fmap).  Patches 533/534 added c86e, c829 and c894.  This patch adds five more, all of which need only
+templates already established, and all in view 0x20 -- which was missing 18 of its 24 class slots:
+
+    c713  "stc ; ret"                                              1 slot
+    c874  "stc ; ret"                                              8 slots  (classes 7..14)
+    c77d  "mov ah,0x1 ; call 0xc8b2 ; ret"                         1 slot   (the c70d template, AH=1)
+    c82d  blink-gated c8b2 draw, AH = ([si+0x16]&8) ? 0x0c : 0x0f  2 slots
+    c817  "testb [si+0x16],8 / cmpb [si+0x36],0" -> c894 or stc    4 slots
+
+16 class slots.  Two targets remain missing in view 0x20 (c74d, c7a5), two in view 0x1e (c715, c774),
+and one in view 0x22 (c783, 6 slots) -- all left on the board because each needs something not yet
+established: c715/c74d append si to a STRSEG list at gs:[bx+0x366a] under a 0x40 bound, c774 needs the
+c8c2 argument convention, and c7a5/c783 carry their own arithmetic.
+
+Note what "stc ; ret" means here and why it is not a stub: CF=1 is the object-method protocol for
+"nothing drawn, keep walking" (patch 310 threads it through g_fist_cf, patch 463 documents it).  The
+ORIGINAL method for those nine class slots really is two instructions; the port simply had no function
+there at all, so c4df's data-driven dispatch resolved to nothing.
+
+--- a/fist.c
++++ b/fist.c
+@@ -1294,6 +1294,11 @@
+ void __allregs FUN_0000_c86e(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 533 */
+ void __allregs FUN_0000_c894(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 534 */
+ void __allregs FUN_0000_c829(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 534 */
++void __allregs FUN_0000_c713(void);  /* PATCH 535 */
++void __allregs FUN_0000_c874(void);  /* PATCH 535 */
++void __allregs FUN_0000_c77d(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 535 */
++void __allregs FUN_0000_c82d(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 535 */
++void __allregs FUN_0000_c817(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 535 */
+ void __allregs FUN_0000_c7ca(undefined2 param_1,int param_2,undefined2 param_3);
+ void __allregs FUN_0000_c8b2(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+ void __allregs FUN_0000_c8c2(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 *param_5);
+@@ -33604,6 +33609,97 @@
+   return;
+ }
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_c713) @ 0000:c713 ===== */
++
++void __allregs FUN_0000_c713(void)
++{
++  /* PATCH 535: asm "c713: stc ; c714: ret" -- the view-0x20 render method for one object class.  The
++   * whole body is the carry flag: CF=1 tells c4df's walk to keep going (patch 310/463 thread it). */
++  extern unsigned char g_fist_cf;
++  g_fist_cf = 1;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c874) @ 0000:c874 ===== */
++
++void __allregs FUN_0000_c874(void)
++{
++  /* PATCH 535: asm "c874: stc ; c875: ret".  Same two instructions as c713, but this one is the
++   * view-0x20 method for EIGHT object classes (7..14) -- the single largest missing slot count. */
++  extern unsigned char g_fist_cf;
++  g_fist_cf = 1;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c77d) @ 0000:c77d ===== */
++
++void __allregs
++FUN_0000_c77d(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
++             undefined2 param_5)
++{
++  /* PATCH 535: asm "c77d: mov ah,0x1 ; call 0xc8b2 ; ret" -- the c70d/c86e template again (patch 463),
++   * with AH=0x01. */
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  FUN_0000_c8b2(CONCAT11(1,0),(undefined2)(unsigned short)(*(unsigned short *)(dg + si) << 1),0,(undefined2)si,0);
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;(void)param_5;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c82d) @ 0000:c82d ===== */
++
++void __allregs
++FUN_0000_c82d(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
++             undefined2 param_5)
++{
++  /* PATCH 535: asm
++   *     c82d: testw $0x20,0x452 ; je c843      ; blink phase clear -> skip
++   *     c835: mov ah,0xf
++   *     c837: testb $0x8,0x16(si) ; je c83f
++   *     c83d: mov ah,0xc
++   *     c83f: call 0xc8b2 ; ret                ; c8b2 ends with clc
++   *     c843: stc ; ret
++   * The blink test is on the frame timer [0x452] exactly as in c894 (patch 534), and the AH choice is
++   * the same [si+0x16] bit-3 test, here selecting 0x0c instead of 0x0e. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;(void)param_5;
++  if ((*(unsigned short *)(dg + 0x452) & 0x20) == 0) { g_fist_cf = 1; return; }   /* c843 stc */
++  {
++    unsigned char ah = (dg[(unsigned short)(si + 0x16)] & 8) ? 0x0c : 0x0f;
++    FUN_0000_c8b2(CONCAT11(ah,0),(undefined2)(unsigned short)(*(unsigned short *)(dg + si) << 1),
++                  0,(undefined2)si,0);
++  }
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c817) @ 0000:c817 ===== */
++
++void __allregs
++FUN_0000_c817(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
++             undefined2 param_5)
++{
++  /* PATCH 535: asm
++   *     c817: testb $0x8,0x16(si) ; je c823
++   *     c81d: cmpb $0x0,0x36(si)  ; je c827
++   *     c823: call 0xc894 ; ret                ; the blinking draw added by patch 534
++   *     c827: stc ; ret
++   * i.e. draw unless the object has [si+0x16] bit 3 set AND a non-zero byte at [si+0x36]. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  if ((dg[(unsigned short)(si + 0x16)] & 8) != 0 && dg[(unsigned short)(si + 0x36)] != 0) {
++    g_fist_cf = 1;                                                              /* c827 stc */
++    return;
++  }
++  FUN_0000_c894(param_1,param_2,param_3,param_4,param_5);                       /* c823 */
++  return;
++}
++
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c7ca) @ 0000:c7ca ===== */
+ 
+@@ -75617,6 +75713,11 @@
+   {0xc86eu,(void*)&FUN_0000_c86e},   /* PATCH 533 */
+   {0xc894u,(void*)&FUN_0000_c894},   /* PATCH 534 */
+   {0xc829u,(void*)&FUN_0000_c829},   /* PATCH 534 */
++  {0xc713u,(void*)&FUN_0000_c713},   /* PATCH 535 */
++  {0xc874u,(void*)&FUN_0000_c874},   /* PATCH 535 */
++  {0xc77du,(void*)&FUN_0000_c77d},   /* PATCH 535 */
++  {0xc82du,(void*)&FUN_0000_c82d},   /* PATCH 535 */
++  {0xc817u,(void*)&FUN_0000_c817},   /* PATCH 535 */
+   {0xc7cau,(void*)&FUN_0000_c7ca},
+   {0xc8b2u,(void*)&FUN_0000_c8b2},
+   {0xc8c2u,(void*)&FUN_0000_c8c2},
