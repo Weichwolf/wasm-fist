@@ -97,3 +97,43 @@ states the units DO occupy and what the transition out of them requires.  Compar
 via the write-trace oracle (FIST_WATCHFLAT on the object's +0x40/+0x43 state bytes) -- that gives the
 original's state sequence for the same mission and turns "never engages" into a named missing
 transition.
+
+## CORRECTION: units DO fire. This item's premise was built on DEAD COUNTERS.
+
+Live instrumentation inside FUN_0000_afa2 itself, AZER1 to t=20000:
+
+    n=1800 afa2 calls | w5796_3=0  noTarget=1310  mask=215  rangeGate=0  subcall=0  aimFail=82  FIRE=193
+
+**193 fire-trigger calls.**  The gate is reached ~1800 times, and 193 of those pass every gate and call
+FUN_0000_a286.  Units acquire targets (490 of 1800 have one), aim converges more often than not
+(193 fire vs 82 aim-fail), and the range gate never rejects.
+
+The `[chain] a286-request=0 / 7e29-dispatch=0 / 7745-spawn=0` and `[spawn] b1df-total=0` readings this
+item was founded on are DEAD COUNTERS: their engine-side increments live in patches that have since
+been rewritten, so they print 0 unconditionally.  That was ALREADY recorded in this board's own history
+earlier in the session, and I used them anyway without checking they were live.  A counter that reads
+zero is not evidence until you have seen it read non-zero.
+
+Two further mistakes of mine that this corrects:
+
+  * "afa2 is called exactly once" -- wrong, and it was a misreading of my OWN instrument: the print
+    threshold was `n % 2000` while the function is called ~1300 times, so the single line I saw was the
+    `n == 1` line, not a total.  Two counters in ONE binary then gave dispatch_idx10=1000 against
+    afa2_entered=1299.
+  * "the AI state machine never reaches the engage state" -- wrong.  byte[obj+0x42] cycles uniformly
+    over all 16 indices (939 each at n=15000), because it is an ANIMATION frame counter, not an AI
+    state; index 10 is dispatched ~1300 times and the table is intact (tableA[10]=afa2 throughout).
+
+## The REAL open question
+
+Units fire 193 times in 20000 ticks and NOTHING DIES -- the live object count a296 stays at 11 for the
+whole run.  So the break is downstream of the trigger:
+
+    a286 sets byte[obj+0x92] = 0x30   (the fire request / cooldown)
+      -> ? weapon dispatch (7e29)
+      -> ? projectile spawn (b1df / 7745)
+      -> ? impact + damage -> object destroyed -> a296 decrements
+
+NEXT: put LIVE counters on that chain -- byte[obj+0x92] transitions, entries to 7e29 and b1df, and
+a296 decrements -- and find the first stage that never runs.  Do not reuse the existing [chain]/[spawn]
+counters without first proving each one can read non-zero.
