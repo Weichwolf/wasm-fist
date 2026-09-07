@@ -137,3 +137,26 @@ whole run.  So the break is downstream of the trigger:
 NEXT: put LIVE counters on that chain -- byte[obj+0x92] transitions, entries to 7e29 and b1df, and
 a296 decrements -- and find the first stage that never runs.  Do not reuse the existing [chain]/[spawn]
 counters without first proving each one can read non-zero.
+
+## CORRECTION 2 (measured, live counters)
+
+The premise is dead. Live counters on all four per-class weapon functions (the four `byte[obj+0x92]`
+countdown consumers at asm `0x7c65 / 0x882c / 0x9074 / 0x9822`, which call `7e29 / 899c / 91b8 / 99a2`
+respectively) over 1500 aim-gate evaluations in AZER1:
+
+```
+[wpn] afa2=1500 7e29=0 899c=1 91b8=5704 99a2=0 a286=138 | a296=11
+```
+
+- `a286` (fire request, sets `byte[obj+0x92]=0x30`) fires 138 times.
+- `91b8` — the weapon function for the class the AZER1 units actually are — runs 5704 times.
+  138 requests x ~48 countdown ticks ~= 6600: the countdown consumer is working exactly as the asm says.
+- `a296` goes 13 -> 11 over the run: units DO die.
+
+My first counter (`7e29` only) read 0 because only ONE of the four consumer sites calls `7e29`; the
+other three call their own per-class weapon function. The earlier `[chain]/[spawn]` counters were dead,
+and `FUN_0000_7745` (named in one of them) is not a function entry at all -- `objdump` at `0x7745`
+yields `add %al,-0x403f(%bx,%di)`, i.e. the counter's naming was fiction.
+
+Nothing in this item survives. The weapon chain is not the defect. Close as DISPROVEN; the real
+remaining blocker is the six hanging missions (INDIA2, INDIA3, INDIA5, SYRIA1, TRAIN3, TRAIN4).
