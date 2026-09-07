@@ -1,0 +1,74 @@
+PATCH 537: FUN_1000_84c3 called the MGAVIDEO bg-element loader with NO arguments; the resulting garbage
+name index made an unbounded string copy overwrite the palette globals and then the far-vector table.
+
+This is the AZER1 hang recorded in cont.65y, traced to its origin.
+
+asm 1000:84c3 (linear 0x184c3):
+
+    184c3: mov al,1
+    184c5: lcall *0x1594
+    184c9: mov bx,0x8f7e          ; descriptor offset
+    184cc: mov cx,ds              ; descriptor segment = DGROUP = 0x1c00
+    184ce: mov ax,2               ; string-table NAME INDEX
+    184d1: lcall *0x560           ; -> mga FUN_0000_0310
+
+[0x560] is FUN_0000_0310(param_1 = ax name index, param_2 = cx descriptor seg, param_3 = bx descriptor
+off) -- established by patch 111.  The C called it with an EMPTY argument list, so 0310 read all three
+off the stack.  ax came out 0x7af (measured).
+
+The failure chain, every step measured:
+
+  1. 0310 passes ax to FUN_0000_0197, the driver string-table copy (patch 063).  0197 indexes a
+     near-offset table by ax and copies the NUL-terminated string it finds into DGROUP:0x740.  The copy
+     is UNBOUNDED -- the asm at 0x1b2 is "lods ; stos ; or al,al ; jne", with no length -- which is
+     faithful: the ORIGINAL relies on the index naming a real string.
+  2. With ax = 0x7af the index is wrong, the "string" is arbitrary bytes, and the copy runs past the
+     0x4c-byte buffer at DGROUP:0x740 into the palette globals at 0x782/0x78c/0x790.
+  3. word[DGROUP:0x78c], the palette START INDEX, became 0x859.  FUN_0000_0410 computes
+     cnt = 0x100 - idx, which wraps to 0xF8A7 = 63655, and copies cnt*3 = 190965 bytes from
+     (0x05a8<<4)+idx*3 -- a range covering DGROUP -- writing the fill byte 0x32 over everything,
+     including the far-vector table.
+  4. word[DGROUP:0x03c] became 0x32323232, then partial values.  FUN_1000_1394 dispatches [0x03c];
+     it resolved to linear 0x484, which is mid-function code inside an arithmetic routine, and
+     FUN_1000_09bc span on it forever with [0x452] frozen at 0.
+
+Measured at the corrupting write (AZER1, tick 6693):
+
+    [0x03c]=0x32323232  es[0x782]=0x05a8  idx[0x78c]=0x0859  srcseg[0x790]=0x0869  soff[0x78e]=0x05b8
+
+and the bad index arrived at tick 6653 from
+    m_mga_FUN_0000_0197(param_1=0x7af) <- m_mga_FUN_0000_0310(param_1=1967=0x7af)
+      <- FUN_1000_84c3 <- FUN_0000_7f3e <- FUN_0000_7f5f
+
+NOTE FOR board:0014: this is a 0-ARGUMENT call site, which that item's audit deliberately skips as
+"the arg-less dispatch class -- identify the carrier and thread it, not invent arguments".  That
+general rule stands, but the test is wrong as written: a 0-arg site is only ambient if the asm does NOT
+set the registers locally.  Here it sets all three, three instructions before the lcall.  The audit
+should therefore flag 0-arg sites whose immediately preceding asm loads AX/BX/CX, instead of excluding
+every 0-arg site outright.
+
+Not touched here: the "mov al,1 ; lcall *0x1594" immediately above, which drops al=1 the same way.
+Its target's parameter roles are not yet established.
+
+--- a/fist.c
++++ b/fist.c
+@@ -62699,7 +62699,18 @@
+ 
+ {
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
++  /* PATCH 537: asm 0x184c9 "mov bx,0x8f7e ; mov cx,ds ; mov ax,2 ; lcall *0x560" -- the three
++   * arguments are set THREE INSTRUCTIONS before the call, so this is not the ambient/arg-less class.
++   * [0x560] is the MGAVIDEO bg-element loader FUN_0000_0310(param_1=ax name index, param_2=cx
++   * descriptor segment, param_3=bx descriptor offset) -- patch 111.  Called with no arguments, 0310
++   * received ax = stack residue (0x7af observed) and passed it to FUN_0000_0197, whose string copy
++   * into DGROUP:0x740 is UNBOUNDED by design (asm 0x1b2 "lods; stos; or al,al; jne").  Indexing the
++   * wrong string ran that copy past the 0x4c-byte buffer and over the palette globals at
++   * DGROUP:0x78c/0x782/0x790 -- word[0x78c] became 0x859, so FUN_0000_0410's "cnt = 0x100 - idx"
++   * wrapped to 63655 and it copied 190965 bytes across DGROUP, wiping the far-vector table at 0x03c.
++   * FUN_1000_1394 then dispatched [0x03c] to linear 0x484 (mid-function code) and FUN_1000_09bc span
++   * there forever with [0x452] frozen -- the AZER1 hang of cont.65y.  cx = ds = DGROUP = 0x1c00. */
++  ((void (*)(undefined2,undefined2,int))fist_icall_far((uint32_t)(DAT_1000_c560)))(2,0x1c00,0x8f7e);
+   if (DAT_2000_4f8a == '\0') {
+     /* PATCH 401: FUN_1000_84c3 dropped the register-arg setup Ghidra could not thread through the
+        fist_icall_far indirect dispatch -- the [DGROUP:0x68c] method (= mga FUN_0000_2004, the cockpit-

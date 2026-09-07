@@ -1,0 +1,62 @@
+PATCH 536: three UNCACHED getenv() calls in the two hottest dispatch functions.
+
+Found by sampling SYRIA6's hang: the stack was
+
+    #0 __GI_getenv (name="FIST_CURTRACE")
+    #1 fist_icall_near (seg=0, off=21326)   fist_icall.c:306
+    #2 FUN_0000_1e88  #3 FUN_0000_1e4b  #4 FUN_0000_459a
+
+i.e. the process was inside getenv, called from the near-dispatch path, called from the mission loop.
+
+fist_icall() and fist_icall_near() are THE indirect-call dispatchers -- every far and near indirect
+call in the engine goes through them -- and three diagnostic gates in them called getenv() on every
+single dispatch:
+
+    fist_icall      "FIST_SND_CALLTRACE"   (inner module-scan loop)
+    fist_icall      "FIST_NO_THUNK"        (inner module-scan loop)
+    fist_icall_near "FIST_CURTRACE"        (every seg==0 dispatch)
+
+getenv is a linear scan of environ, so this is a per-dispatch string search over the whole environment
+block.  The same file already caches every other diagnostic gate in a function-static (see the
+FIST_UPDCNT, FIST_ROSTER and FIST_20EA sites); these three were simply missed.
+
+Behaviour-neutral by construction: the env vars are read once instead of once per call, and none of
+them is expected to change during a run.  This is a shim/dispatch performance fix, not an engine
+correction -- but re_out/ is pristine, so it lands as a patch like everything else.
+
+--- a/fist_icall.c
++++ b/fist_icall.c
+@@ -160,7 +160,10 @@
+             uint32_t off = linear - o->base;             /* module-relative offset (base-0 fmap key) */
+             if (o->fmap) {
+                 void *fn = lookup_ovl_fun(o, off);
+-                if (getenv("FIST_SND_CALLTRACE") && o->name[0]=='S' && o->name[1]=='O')
++                /* PATCH 536: cache the env lookup.  This is fist_icall's inner loop -- an
++                 * UNCACHED getenv() here runs on EVERY far dispatch in the whole port. */
++                static int sndct = -1; if (sndct < 0) sndct = getenv("FIST_SND_CALLTRACE") ? 1 : 0;
++                if (sndct && o->name[0]=='S' && o->name[1]=='O')
+                     fprintf(stderr, "[sndcall] SOUNDDVR+0x%x %s\n", off, fn?"(fmap)":"(miss)");
+                 if (fn) return (code *)fn;
+                 /* FAR-ENTRY THUNK.  Many driver method vectors point at a 4-byte far wrapper
+@@ -170,7 +173,8 @@
+                  * fmap.  Resolve it faithfully to the inner near function -- executing the thunk IS a
+                  * near-call into that function then a far-return, which the inner __allregs C function
+                  * already models.  (e.g. MGAVIDEO 0x2d1b -> call 0x2d1f -> FUN_0000_2d1f.) */
+-                if (off + 4 <= o->size && !getenv("FIST_NO_THUNK")) {
++                static int nothunk = -1; if (nothunk < 0) nothunk = getenv("FIST_NO_THUNK") ? 1 : 0;
++                if (off + 4 <= o->size && !nothunk) {                    /* PATCH 536: cached */
+                     unsigned char *b = g_mem + linear;
+                     if (b[0] == 0xE8 && b[3] == 0xCB) {
+                         int rel = (short)(b[1] | (b[2] << 8));
+@@ -303,7 +307,10 @@
+      * render phase d549=0x1c (its script @0x6c82 includes the object renderer 0x286e), while the port stays
+      * in phase 0x1e (d549=0x1e from 67e3) because it reads d548 as a positive WORD -> 22dd never RESEEDs
+      * (never consults d549).  Read-only, behaviour-neutral. */
+-    if (seg == 0 && getenv("FIST_CURTRACE")) {
++    /* PATCH 536: cache it -- this is fist_icall_near's hot path and the getenv ran on EVERY near
++     * dispatch.  SYRIA6 was sampled INSIDE this getenv while spinning in the 459a mission loop. */
++    static int curtr = -1; if (curtr < 0) curtr = getenv("FIST_CURTRACE") ? 1 : 0;
++    if (seg == 0 && curtr) {
+         extern int g_fist_after_map;
+         if (g_fist_after_map) {
+             uint8_t *dg = g_mem + 0x1c000;
