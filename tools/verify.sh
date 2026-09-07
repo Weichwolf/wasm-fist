@@ -714,9 +714,14 @@ run_editsim() { # $1=target $2=battle $3=edit-env(default FIST_EDIT_ADDTANK) ; e
   run_mission "$t" "$dd" "$b" "2c"                                        # op-0x2c spawn on the EDITED dd
 }
 
-echo "== verify ($WHICH) =="
+# FIST_FLOWS: optional extended-regex selecting which flows to run (default: all).  The matrix is ~50
+# minutes end to end, which is longer than a single background task reliably survives here, so being
+# able to run it in named chunks -- FIST_FLOWS='^(intro|mainmenu|about)$' -- is what makes a full pass
+# achievable at all.  Selection only; it changes no flow's behaviour or assertion.
+echo "== verify ($WHICH)${FIST_FLOWS:+ [filter: $FIST_FLOWS]} =="
 for row in "${FLOWS[@]}"; do
   IFS='|' read -r name hz ms inp ref <<<"$row"
+  if [ -n "${FIST_FLOWS:-}" ]; then case "$name" in *) printf '%s' "$name" | grep -Eq "$FIST_FLOWS" || continue;; esac; fi
   ok=1; detail=""
   if [ "$name" = editor-fsg-roundtrip ] || [ "${name#editor-fsg-}" != "$name" ]; then
     # Editor .FSG load->save fixed-point round-trip for a named battle.  The battle name is in the
