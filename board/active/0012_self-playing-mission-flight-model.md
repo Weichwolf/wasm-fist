@@ -6990,3 +6990,39 @@ mission's blit costs, and it is affordable -- until the rest of the rendering is
 NEXT (and only now is this the right question): profile the newly-enabled draw path.  ca2f / c8b2 are
 called per object per frame; measure calls and cost there, and compare the port's per-frame draw count
 against the original's via the frame-matched oracle capture before optimising anything.
+
+### THE ROOT: the port renders the frame ~57 times per engine tick, because the shim forces d548
+
+Instrumented FUN_0000_ca2f -- the display-list record builder every object draw funnels through --
+counting calls per engine tick alongside the live object count (word[0xe296]):
+
+    AZER1   744 ca2f calls/tick   with 13 objects
+    SYRIA1  690 ca2f calls/tick   with 10 objects
+
+That is ~57 draw calls per object per tick.  A 1994 engine rendering 13 tanks does not do that: the
+display list is being walked about 57 times per engine tick.
+
+This is the d548 frame-present emulation, and the shim says so itself:
+
+    "the in-mission 459a present-poll spins on op-0x4c WITHOUT re-entering fist_timer_pump -> d548
+     never flips 1->0x81 -> the loop never advances back to the per-tick sim c0ca ... emulate that
+     here so the present completes every op-0x4c and the frame loop keeps running the sim."
+
+Forcing bit7 on EVERY op-0x4c completes a present every time the loop polls, so the frame loop re-runs
+the whole render many times before the tick advances.  Each of those renders was nearly free while most
+object classes dispatched to nothing and the HUD calls passed garbage; patches 532..535 made them real,
+and 57 redundant frames per tick became a ~15x slowdown.
+
+**So the performance frontier and the forbidden approximation are ONE problem.**  They do not need to be
+attacked separately, and the ordering is settled: fix the handshake, and the render load drops by ~57x
+on its own.  Optimising the draw path first would be optimising work that should not be happening.
+
+This also retires, correctly this time and with a measurement behind it, the three attributions above:
+the slowdown is not patch 532, not 533/534/535, and not 23d8's control stream.  Those patches only
+changed the COST of each redundant frame.  The redundancy is the defect.
+
+Next: make the 459a present-poll re-enter the tick pump (or otherwise let 23ce's terminator be the only
+writer of bit7, as the engine intends -- 23ce is reached 134204 times in AZER1 to t=12000, so the
+script does run to completion), then delete both shim forcings and re-measure ca2f calls/tick.  The
+target is ~1 render per tick, i.e. ~13 ca2f calls/tick on AZER1.  FIST_NO_D548EMU=1 is the seam;
+success is missions behaving identically with and without it.
