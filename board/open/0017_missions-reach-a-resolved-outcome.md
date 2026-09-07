@@ -149,3 +149,41 @@ Three distinct blockers now, and they are NOT the same bug:
 Note for anyone reading the older numbers in this session's history: "41/47" counted missions that did
 not hang, under a criterion that no longer applies. Against the goal's criterion the count has been
 0/47 throughout; what changed is that 33 missions now genuinely load and simulate without crashing.
+
+## CORRECTION 2: the "NOLOAD" class was my own instrument, and combat is far more alive than reported
+
+`g_a296_loaded` was gated on `a296 >= 15` -- a threshold sized for AZER1's roster. Roster size is PER
+MISSION: TRAIN1 fields **3** vehicles. So every small-roster mission was reported as "never loaded",
+and a mission that actually RESOLVED would have been reported that way too, because the resolved test
+required the same flag.
+
+Re-measured with the gate fixed (in-mission and a296>0, keeping a high-water mark):
+
+| mission | peak a296 | final a296 | kills |
+|---------|-----------|------------|-------|
+| SAUDI2  | 13 |  7 | **6** |
+| INDIA3  | 10 |  6 | **4** |
+| SAUDI1  | 13 |  9 | 4 |
+| SAUDI5  | 14 | 10 | 4 |
+| TRAIN4  | 13 | 10 | 3 |
+| INDIA2  | 14 | 12 | 2 |
+| INDIA4  | 14 | 13 | 1 |
+| TRAIN2  | 13 | 13 | 0 |
+| TRAIN1  |  3 |  3 | 0 |
+
+All nine load, spawn, and simulate. None was a NOLOAD. The corrected sweep is **42 of 47 missions
+loading and simulating with real combat attrition, 5 hanging, 0 resolving**.
+
+## Attrition STALLS -- more ticks do not help
+
+SAUDI2 kills 6 of 13 early and then stops. Run to a 60000-tick cap it is still at exactly 7:
+
+```
+20000 ticks: a296=7  peak=13
+60000 ticks: a296=7  peak=13
+```
+
+So the missions do not fail to resolve for want of time. Something stops engagement after an initial
+burst -- the same shape as AZER1 (16 -> 15, then nothing). That is one question, not 42, and it is
+the next thing to isolate: whether surviving units stop acquiring targets (board:0018's LOS), stop
+being acquirable, or stop firing.

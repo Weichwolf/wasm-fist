@@ -342,7 +342,8 @@ long g_min_a296 = 0x7fffffff;
 long g_min_los = 0x7fffffffL;
 unsigned short g_fist_op54_proj=0;
 long g_op58_n=0, g_op58_oor=0, g_op58_occ=0, g_op58_vis=0;   /* board:0012: op-0x58 LOS call/return census */
-int  g_a296_loaded = 0;           /* set once a296>=15 seen (AZER1 spawned its roster) */
+int  g_a296_loaded = 0;           /* set once the mission is in-mission AND a296>0 (its roster spawned) */
+long g_peak_a296 = 0;             /* the roster's high-water mark, so "resolved" is peak>0 && a296==0 */
 static volatile sig_atomic_t g_tick_pending;     /* raised by the timer source, drained by the pump */
 #define TICK_PENDING_CAP 8
 /* One tick of the host time base: bump the BIOS 18.2 Hz counter (0040:006C) and queue one INT-8 ISR
@@ -471,12 +472,12 @@ void fist_set_int8_handler(uint32_t linear){
 static void fist_dump_and_exit(const char *why){
     fprintf(stderr, "[fist] %s: dumping frame + exiting (video-mode=0x%02x, [0x452]=%u)\n",
             why, fist_vga_mode(), *(uint16_t*)(g_mem+0x1c452));
-    { extern long g_min_a296; extern int g_a296_loaded;
-      fprintf(stderr, "[outcome] a294=%d a296=%d  loaded=%d min_a296=%ld  %s\n",
+    { extern long g_min_a296, g_peak_a296; extern int g_a296_loaded;
+      fprintf(stderr, "[outcome] a294=%d a296=%d  loaded=%d min_a296=%ld peak_a296=%ld  %s\n",
               *(uint16_t*)(g_mem+0x1c000+0xe294), *(uint16_t*)(g_mem+0x1c000+0xe296),
-              g_a296_loaded, g_min_a296,
-              (g_a296_loaded && *(uint16_t*)(g_mem+0x1c000+0xe296)==0) ? "*** RESOLVED: enemy side eliminated ***" :
-              (g_a296_loaded ? "(mission loaded, not resolved)" : "(mission never loaded a296>=15)"));
+              g_a296_loaded, g_min_a296, g_peak_a296,
+              (g_a296_loaded && g_peak_a296 > 0 && *(uint16_t*)(g_mem+0x1c000+0xe296)==0) ? "*** RESOLVED: enemy side eliminated ***" :
+              (g_a296_loaded ? "(mission loaded, not resolved)" : "(mission never loaded a roster)"));
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }
@@ -732,8 +733,13 @@ void fist_timer_pump(void){
       /* Cheap (NO I/O -> non-perturbing) mission-outcome tracker: any fprintf in the hot pump changes the
        * pump/tick ratio and breaks the timing-sensitive menu/mission-load, so record a296 silently and
        * report once at exit (fist_dump_and_exit).  board:0012 */
+      /* The roster size is PER MISSION -- AZER1 fields ~16 vehicles, TRAIN1 fields 3 -- so the old
+       * `a296 >= 15` gate silently reported every small-roster mission as "never loaded", and would
+       * have reported a RESOLVED one that way too.  Gate on being in-mission with a live roster and
+       * keep the high-water mark instead.  board:0017 */
       { int b = *(uint16_t *)(g_mem + 0x1c000 + 0xe296);
-        if (b >= 15) g_a296_loaded = 1;
+        if (in_mission && b > 0) g_a296_loaded = 1;
+        if (b > g_peak_a296) g_peak_a296 = b;
         if (g_a296_loaded && b < g_min_a296) g_min_a296 = b; }
       /* DIAGNOSTIC (FIST_FIXFACTION): test the aa08 side-filter hypothesis -- force byte[obj+0x16] bit3
        * = the unit's SIDE (byte[type-0x19ec]&1), so [0x16]&8 cleanly separates factions.  If units then
