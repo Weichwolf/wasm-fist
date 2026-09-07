@@ -1,0 +1,220 @@
+PATCH 540: four object state-machine methods dispatched with DI live bound the object to a stack-
+residue parameter and host-deref'd it.  Latent until patches 538/539 let a weapon resolve a hit.
+
+Both dispatches hand the target exactly ONE argument -- the object's DGROUP NEAR OFFSET in DI:
+
+  c31e (the per-type ACTION dispatch, asm 0xc31e):
+      c31e: mov %bx,-0x6427          ; [0x9bd9] = BX
+      c322: mov %ax,0x9bdb           ; [0x9bdb] = AX   <- AX is NOT written again before c32c
+      c325: push %di
+      c326: mov %si,%di              ; DI = the object
+      c328: mov (%si),%si
+      c32a: shl $1,%si
+      c32c: call *-0x1ab0(%si)       ; dispatch, DI (and AX) live
+
+  9e2b's state table (asm 0x9ecd `call cs:[0x9f0f+bx]`), whose 7 entries are
+      9f1d 9f66 9fe5 a069 a07c a02a a03f
+  (patch 497's comment lists six; the seventh, a03f, is the one AZER4 reaches).
+
+Patch 256 and patch 497 pass that near offset as the single argument, so it lands in param_1.  Ghidra,
+however, bound each function's DI varnode to a LATER parameter, which at run time is stack residue --
+measured param_3=1280 in a0c8 and param_2 garbage in a03f -- and then dereferenced it as a host
+pointer.  Every one of these is a SIGSEGV the moment its state is entered.
+
+  a0c8  the DAMAGE-APPLY method (asm 0xa0c8-0xa134).  Needs BOTH live registers:
+        DI  = the object (param_1, per c326 above);
+        AX  = the weapon index -- c322 stores it to [0x9bdb] and does not touch AX again before the
+              call, so AX at entry IS word[DGROUP:0x9bdb] = DAT_2000_5bdb.  That is an identity the
+              asm guarantees, not an inference.
+        `a0ce mov $0x9b3f,%bx ; a0d1 add %ax,%bx` then forms the DGROUP near offset into the per-weapon
+        damage table that b274 takes (patch 493); Ghidra's `param_1 + -0x64c1` is the same 0x9b3f+ax
+        as a sign-flipped host int.
+  a03f  entry 6 of the 9e2b table (asm 0xa03f-0xa068).  Same base-loss; also `a045 mov 0x2e(%di),%ax`
+        is a WORD read, which Ghidra took as an int.
+  a02a  entry 5 (asm 0xa02a-0xa03e).  param_1 IS the object but every field was read through it as a
+        host pointer.
+  a069  entry 3 (asm 0xa069-0xa07b).  Same, plus `cmpw $0x0,0x23(%di)` is a WORD compare read as 4
+        bytes.
+
+Callee conventions are left exactly as they are and each call site is matched to the one its callee
+already expects: ba33 and b354 take the object NEAR OFFSET (their bodies do `(uint16_t)param`), while
+a097 and 9da1 read their argument as a HOST pointer (9da1's only caller is a02a).
+
+Measured, AZER1..AZER4 self-play, 20000 ticks:
+
+  before:  AZER3 SIGSEGV (a0c8), AZER4 SIGSEGV (a03f)
+  after:   AZER3 exit 0 a296=18, AZER4 exit 0 a296=15, AZER1 exit 0 a296=15, AZER2 exit 0 a296=18
+
+NOT fixed here, and deliberately: entries 9f66 and 9fe5 of the same table carry the same base-loss but
+also need the 054c/register-threading convention established before they can be reconstructed
+honestly.  They are recorded on the board rather than guessed at.
+
+--- a/fist.c
++++ b/fist.c
+@@ -27563,14 +27563,20 @@
+ void __allregs FUN_0000_a02a(int param_1)
+ 
+ {
++  /* PATCH 540: entry 5 of the 9e2b state table (asm 0xa02a-0xa03e).  param_1 IS the object near offset
++   * (the dispatch's single argument), but every field was read through it as a host pointer.  9da1 and
++   * b354 disagree on convention and both are left as they are: 9da1 reads its argument as a host
++   * pointer (its only caller is this one), b354 wants the near offset (patch 363). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  unsigned char *o = dg + di;
+   int iVar1;
+-  
+-  if (*(char *)(param_1 + 0x18) != '\0') {
++  if (o[0x18] != 0) {                                           /* a02a cmpb $0,0x18(%di); a02e je */
+     return;
+   }
+-  FUN_0000_9da1(param_1);
+-  iVar1 = FUN_1000_b354(param_1);
+-  FUN_1000_b2ef(iVar1);
++  FUN_0000_9da1((int)(intptr_t)o);                              /* a031 call 9da1 (DI live) */
++  iVar1 = FUN_1000_b354((int)di);                               /* a034 lcall 0f69:bcc4 */
++  FUN_1000_b2ef(iVar1);                                         /* a039 lcall 0f69:bc5f */
+   return;
+ }
+ 
+@@ -27580,18 +27586,27 @@
+ void __allregs FUN_0000_a03f(undefined4 param_1,int param_2)
+ 
+ {
++  /* PATCH 540: entry 6 of the 9e2b state table (asm 0xa03f-0xa068), the same shape patch 498 fixed for
++   * a07c: the 9ecd dispatch `call cs:[0x9f0f+bx]` runs with DI = the object NEAR OFFSET and the port
++   * passes it as the call's single argument, so it lands in param_1 -- param_2 is stack residue and
++   * Ghidra bound the object to THAT.  Also `a045 mov 0x2e(%di),%ax` is a WORD read (Ghidra used int).
++   * ba33 and b354 both want the near offset. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  unsigned char *o = dg + di;
++  uint16_t ax;
+   int iVar1;
+-  
+-  if (*(char *)(param_2 + 0x18) != '\0') {
+-    iVar1 = *(int *)(param_2 + 0x2e) + 0x5b0;
+-    *(int *)(param_2 + 0x2e) = iVar1;
+-    *(undefined1 *)(param_2 + 0x30) = (char)((uint)iVar1 >> 8);
++  (void)param_2;
++  if (o[0x18] != 0) {                                           /* a03f cmpb $0,0x18(%di); a043 je */
++    ax = (uint16_t)(*(uint16_t *)(o + 0x2e) + 0x5b0);           /* a045/a048 WORD */
++    *(uint16_t *)(o + 0x2e) = ax;                               /* a04b */
++    o[0x30] = (unsigned char)(ax >> 8);                         /* a04e mov %ah,0x30(%di) */
+     return;
+   }
+-  FUN_0000_ba33(0x9c65,param_2);
+-  FUN_0000_be8b(9,param_1);
+-  iVar1 = FUN_1000_b354(param_2);
+-  FUN_1000_b2ef(iVar1);
++  FUN_0000_ba33(0x9c65,(undefined2)di);                         /* a052/a055 (ax=template, di=object) */
++  FUN_0000_be8b(9,param_1);                                     /* a058/a05b */
++  iVar1 = FUN_1000_b354((int)di);                               /* a05e lcall 0f69:bcc4 */
++  FUN_1000_b2ef(iVar1);                                         /* a063 lcall 0f69:bc5f */
+   return;
+ }
+ 
+@@ -27601,9 +27616,14 @@
+ void __allregs FUN_0000_a069(int param_1)
+ 
+ {
+-  if (*(int *)(param_1 + 0x23) == 0) {
+-    *(undefined1 *)(param_1 + 0x25) = 2;
+-    *(char *)(param_1 + 0x31) = *(char *)(param_1 + 0x31) + ((byte)DAT_2000_543a & 1);
++  /* PATCH 540: entry 3 of the 9e2b state table (asm 0xa069-0xa07b).  Same near-offset-as-host-pointer
++   * base-loss, plus `a069 cmpw $0x0,0x23(%di)` is a WORD compare (Ghidra read 4 bytes). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  unsigned char *o = dg + di;
++  if (*(uint16_t *)(o + 0x23) == 0) {                           /* a069 cmpw; a06d jne */
++    o[0x25] = 2;                                                /* a06f movb $0x2,0x25(%di) */
++    o[0x31] = (unsigned char)(o[0x31] + ((byte)DAT_2000_543a & 1)); /* a073/a076/a078 */
+   }
+   return;
+ }
+@@ -27648,39 +27668,62 @@
+ void __allregs FUN_0000_a0c8(int param_1,undefined4 param_2,int param_3)
+ 
+ {
++  /* PATCH 540: the object DAMAGE-APPLY method (asm 0xa0c8-0xa134; DS=DGROUP=0x1c00), reached from the
++   * c31e per-type action dispatch.  Two live registers, both recoverable exactly from the asm:
++   *
++   *   DI = the object.  c31e is `c326 mov %si,%di ; c328 mov (%si),%si ; c32c call *-0x1ab0(%si)`, so
++   *        the dispatch target runs with DI = the object NEAR OFFSET.  Patch 256's c31e passes it as
++   *        the call's single argument, which lands in param_1 -- param_3 is stack residue (measured
++   *        1280), and Ghidra bound the object to THAT, host-deref'ing it: `*(char *)(param_3 + 0x25)`
++   *        is the SIGSEGV.
++   *   AX = the weapon/damage index.  c31e's `c322 mov %ax,0x9bdb` stores it and AX is not written
++   *        again before `c32c call`, so AX at entry IS word[DGROUP:0x9bdb] = DAT_2000_5bdb.  That is
++   *        an identity the asm guarantees, not an inference.
++   *
++   * `a0ce mov $0x9b3f,%bx ; a0d1 add %ax,%bx` forms a DGROUP near offset into the per-weapon damage
++   * table, which is exactly what b274 takes (patch 493); Ghidra's `param_1 + -0x64c1` is that same
++   * 0x9b3f+ax as a sign-flipped host int.  ba33 and b354 both want the object NEAR OFFSET; a097 reads
++   * its argument as a host pointer, so it keeps one.
++   *
++   * Latent until now: this path only runs once a weapon actually resolves a hit on a target, which
++   * patches 538 (range test) and 539 (aim vectors) made possible for the first time. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;                    /* c326: DI = the object near offset */
++  unsigned char *o = dg + di;
++  uint16_t ax = (uint16_t)DAT_2000_5bdb;              /* c322: AX, saved and unmodified across c32c */
++  uint16_t bx = (uint16_t)(0x9b3f + ax);              /* a0ce/a0d1 */
+   byte bVar1;
+   uint uVar2;
+   int iVar3;
+-  undefined4 uVar4;
+-  
+-  if (*(char *)(param_3 + 0x25) != '\f') {
+-    uVar4 = CONCAT22((int)((ulong)param_2 >> 0x10),param_1 + -0x64c1);
+-    uVar2 = FUN_0000_b274(param_1 + -0x64c1);
+-    *(char *)(param_3 + 0x33) = *(char *)(param_3 + 0x33) + (char)uVar2;
+-    if (99 < *(byte *)(param_3 + 0x33)) {
+-      if ((*(byte *)(param_3 + 0x16) & 8) == 0) {
+-        DAT_2000_39a0 = DAT_2000_39a0 + 1;
++  (void)param_2; (void)param_3;
++
++  if (o[0x25] != 0x0c) {                                        /* a0c8 cmpb $0xc,0x25(%di); a0cc je */
++    uVar2 = FUN_0000_b274((byte *)(uintptr_t)bx);               /* a0d3 call b274 (bx = DGROUP offset) */
++    o[0x33] = (unsigned char)(o[0x33] + (char)uVar2);           /* a0d6 add %al,0x33(%di) */
++    if (0x63 < o[0x33]) {                                       /* a0d9 cmpb $0x64; a0dd jae a0f9 */
++      if ((o[0x16] & 8) == 0) {
++        DAT_2000_39a0 = DAT_2000_39a0 + 1;                      /* a0ff incw 0x79a0 */
+       }
+       else {
+-        DAT_2000_399c = DAT_2000_399c + 1;
++        DAT_2000_399c = DAT_2000_399c + 1;                      /* a105 incw 0x799c */
+       }
+-      bVar1 = FUN_0000_0291();
+-      if (0x7f < bVar1) {
+-        FUN_0000_ba33(0x9c65,param_3);
+-        FUN_0000_be8b(9,uVar4);
+-        iVar3 = FUN_1000_b354(param_3);
+-        FUN_1000_b2ef(iVar3);
++      bVar1 = (byte)FUN_0000_0291();                            /* a109 call 0x291 */
++      if (0x7f < bVar1) {                                       /* a10c cmp $0x80,%al; a10e jb a127 */
++        FUN_0000_ba33(0x9c65,(undefined2)di);                   /* a110/a113 (ax=template, di=object) */
++        FUN_0000_be8b(9,(undefined4)bx);                        /* a116/a119 */
++        iVar3 = FUN_1000_b354((int)di);                         /* a11c lcall 0f69:bcc4 (di=object) */
++        FUN_1000_b2ef(iVar3);                                   /* a121 lcall 0f69:bc5f */
+         return;
+       }
+-      *(undefined1 *)(param_3 + 0x25) = 0xc;
+-      *(undefined2 *)(param_3 + 0x1d) = 0x20;
+-      *(undefined1 *)(param_3 + 0x32) = 0;
++      o[0x25] = 0xc;                                            /* a127 */
++      *(undefined2 *)(o + 0x1d) = 0x20;                         /* a12b movw $0x20,0x1d(%di) */
++      o[0x32] = 0;                                              /* a130 */
+       return;
+     }
+-    if (((*(byte *)(param_3 + 0x16) & 8) == 0) && ((*(byte *)(param_3 + 0x17) & 2) == 0)) {
+-      *(byte *)(param_3 + 0x17) = *(byte *)(param_3 + 0x17) | 2;
+-      FUN_0000_befb(0x26,(int)uVar4);
+-      FUN_0000_a097(param_3);
++    if (((o[0x16] & 8) == 0) && ((o[0x17] & 2) == 0)) {         /* a0df/a0e3, a0e5/a0e9 */
++      o[0x17] |= 2;                                             /* a0eb orb $0x2,0x17(%di) */
++      FUN_0000_befb(0x26,(int)bx);                              /* a0ef/a0f2 (al=0x26, bx live) */
++      FUN_0000_a097((int)(intptr_t)o);                          /* a0f5 call a097 (host ptr: see above) */
+     }
+   }
+   return;
