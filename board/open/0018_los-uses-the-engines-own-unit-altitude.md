@@ -208,3 +208,14 @@ correct by construction -- `e20a` sends `eye LUT + dword[obj+0xc]` and that IS t
 defect is that `dword[obj+0xc]` is not maintained for every moving object. Find what drives the
 terrain follow for types 0x00/0x01 in the original, and why op-0x54 fires so rarely; then delete the
 shim stand-in, which at that point has nothing left to mask.
+
+### Not the frame gate (checked)
+
+The terrain probe in `9e2b` is gated on `(word[DGROUP:0x6cde] & 3) == 0`, and that counter IS
+incremented once per object-update walk (`FUN_0000_c0e5`: `DAT_2000_2cde = DAT_2000_2cde + 1`, and
+DAT_2000_2cde is the same address as DGROUP:0x6cde). So the gate opens on one walk in four as intended
+-- it is not the reason op-0x54 fires so rarely. The remaining candidate is how many objects actually
+reach a probing step method: `9e2b` has no DIRECT callers, it is reached only through the c0e5 step
+table, and the type->target map sampled on AZER1
+(`00->7c1d 01->87df 02->902c 03->97d5 04->bab4 08/0b/0d->b5e7 10->b51f 11->9b11 12->9bc6 13->c0ba
+15->9c4f 17->bc0c 1a->bc46 1b->b355`) contains no entry for it at all.
