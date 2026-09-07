@@ -6494,3 +6494,96 @@ NOTE on measuring progress here: `[DGROUP:0x452]` is RESET on a mission phase ch
 monotonic clock across a whole run.  TRAIN4 reaches `FIST_DUMPTICK=4300` cleanly and only then spins
 with `[0x452]` back at 835 -- the two readings are not in conflict, and `prog.sh`'s rc==0 must not be
 read as "ran to N ticks" without checking the exit line.
+
+## cont.65s -- after 526/527/528: the crash groups moved, and the harness rests on a shim EMULATION
+
+Re-swept the nine with a corrected progress check (`rc==0` alone is not "reached N ticks": the app can
+exit cleanly on its own, and `[0x452]` is reset on a mission phase change -- read the dump line):
+
+| mission | before | now |
+|---|---|---|
+| INDIA2  | 66f2 SEGV (t=5801) | `FUN_0000_5aeb <- c4df <- c33c <- 378e` SEGV, same tick -- moved DEEPER |
+| SAUDI7  | 0757 SEGV (t=3906) | `m_ext_FUN_0000_9200` SEGV, same tick -- 527 worked, joins the 9200 group |
+| INDIA5 TRAIN3 TRAIN4 | 66f2 SEGV | HANG (the MM free-list spin, cont.65r) |
+| SAUDI3 SYRIA2 SYRIA6 SYRIA7 | 9200 SEGV | unchanged |
+
+So the nine are now: **five in 9200** (SAUDI3 SAUDI7 SYRIA2 SYRIA6 SYRIA7), three in the memory-manager
+spin (INDIA5 TRAIN3 TRAIN4), one new at 5aeb (INDIA2).  9200 is now the single biggest bucket.
+
+### The finding that reframes all of it
+
+`FIST_SIMRUN` is not just a tick gate.  It also forces the frame-present handshake, in TWO places in
+tools/native_main.c, and the code says so itself:
+
+    /* board:0012 EXPERIMENT: complete the frame-present handshake INSIDE the op-0x4c gate ... the
+       in-mission 459a present-poll spins on op-0x4c WITHOUT re-entering fist_timer_pump -> d548 never
+       flips 1->0x81 -> the loop never advances back to the per-tick sim c0ca -> the mission freezes
+       after ~3 spawn frames.  The real flight model OR-s bit7 into d548 to signal "frame ready";
+       emulate that here so the present completes every op-0x4c and the frame loop keeps running. */
+    if (getenv("FIST_SIMRUN") && op == 0x4c && g_mem[0x1c000+0x1549] == 0x1c) { ... |= 0x80; }
+
+That is a stub/approximation of exactly the kind the goal forbids, and EVERY self-play number in this
+board item was measured on top of it.  Without `FIST_SIMRUN` SAUDI3 and SYRIA6 do not SEGV -- they hang
+with no dump, i.e. the render branch that reaches 9200 is never entered at all.
+
+The engine has the real setter.  Image 0x23ce (`FUN_0000_23ce`, already reconstructed by patch 194 and
+correct):
+
+    23ce: call 0x40ec
+    23d1: orb $0x80,0x1548          <- frame ready
+    23d6: word[0x450]=0             <- makes the 22dd interpreter loop exit
+    23db: byte[0x154d]=0
+    23de: cursor = word[0x4a88]
+
+and 0x23ce is entry 5 of the phase-0x1c render-script table at DGROUP:0x6c82 that the 22dd cursor walk
+dispatches (patch 306).  So the correct behaviour is: the render script runs to its TERMINATOR, and the
+terminator raises bit7.  The shim raising bit7 on every op-0x4c instead means the frame loop advances
+whether or not the script actually completed -- which is a plausible direct cause of 8390's RENDER
+branch running in a state the original never renders in, i.e. the mode-2 mask/rect contradiction of
+cont.65q.
+
+So cont.65q's "one open question" may not need the oracle after all: if the script reaches 23ce on its
+own, the emulation can be DELETED and the mask/rect state should never arise.  Measuring now whether
+22dd / c33c / 23ce are reached at all in an in-mission AZER1 run.  (First attempt used
+FIST_DUMPTICK=3000, which is before the mission even loads -- `a296` never reached 15 -- so it proved
+nothing; redoing at 12000.)
+
+### The measurement, and what it overturns
+
+`FUN_0000_23ce` is hit **134204 times** in AZER1 to `[0x452]=12000` (`a294=101 a296=11`, mission loaded).
+So the render script DOES run to its terminator and the engine's own `orb $0x80,[0x1548]` DOES fire,
+constantly.  **The shim comment's premise -- "d548 never flips 1->0x81" -- is false on this path.**
+
+But the emulation is nevertheless load-bearing.  Added `FIST_NO_D548EMU=1` (default off) to disable both
+forcings and measured:
+
+    AZER1  SEGV     SAUDI3  SEGV     SYRIA6  SEGV     TRAIN4  HANG
+
+AZER1 previously reached t=20000 cleanly.  Its backtrace without the emulation:
+
+    #0 m_ext_FUN_0000_9200   #1 fist_extender_gate   #2 e339   #3 df0e(param_3=0xc05c)
+    #4 FUN_1000_8390   #5 FUN_0000_7f44             TICK = 6693
+
+**t=6693 is exactly AZER1's mode-2 transition** -- cont.65q measured the mode byte flipping to 2 at
+t=6653 and the single idx=2 op-0x24 post landing at t=6693 with the rect still 288x81 (81 rows over a
+78-byte mask: a 3-byte over-read that survives).  With the emulation off, the rect at that same post is
+the full-screen 320x195 one, and it is the 117-byte over-read that kills it.
+
+So the three threads are ONE thread:
+
+  * the 9200 SEGV (5 missions) is not a defect in 9200 or in its mask/rect inputs -- it is an ORDERING
+    problem at the mode-2 view transition;
+  * what sets that ordering is the d548 frame-present handshake;
+  * the port's handshake is partly performed by a shim emulation whose stated justification does not
+    hold, and whose real reason for being necessary is UNKNOWN.
+
+That also means cont.65q's "which of (a) the mode byte or (b) the descriptor is wrong" was the wrong
+question: BOTH are what the engine legitimately produces, and what differs from the original is WHEN
+the op-0x24 render is posted relative to the view switch.  AZER1 surviving was luck (3 bytes vs 117),
+not correctness -- the 78-byte mask is over-read on AZER1 too, and its windshield rows 78..80 are drawn
+with bytes taken from the NEXT mask table.
+
+NEXT (and this is now the core of board:0012, not a side quest): make the frame-present handshake
+faithful -- 459a's present poll, op 0x4c, and 23ce's terminator -- so bit7 is raised only where the
+engine raises it, then delete the emulation.  `FIST_NO_D548EMU=1` is the seam to measure against; the
+success criterion is that the missions behave the SAME with and without it.
