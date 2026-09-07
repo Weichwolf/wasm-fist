@@ -6895,3 +6895,33 @@ The frame-matched oracle capture (tools/oracle/capture_9200_framematched.sh) can
 blits per frame; a counter in 23d8 counts the port's.  That comparison decides whether this is a
 faithfulness bug or an implementation-cost bug, and it must be answered before any optimisation, or the
 optimisation will hide a divergence.
+
+### SYRIA1 measured: same call count, 58x the decode work, and 100% of samples in 23d8
+
+Instrumented FUN_0000_23d8 (diagnostic in build/, not committed) to count calls and outer
+control-word iterations per engine tick:
+
+    AZER1  (fast)   10 calls/tick,  1060 iterations/tick   ->  ~106 runs per call
+    SYRIA1 (slow)   10 calls/tick, 61510 iterations/tick   -> ~6151 runs per call
+
+So the port does NOT call it more often -- 10 per tick in both.  Each call decodes ~58x more.  That
+answers the first half of the question this item posed.
+
+A 16-sample stack profile of SYRIA1 puts **16 of 16 samples in m_mga_FUN_0000_23d8**, so the wall time
+really is there.  But note the arithmetic: 61510 outer iterations/tick at ~0.8 ticks/s is only ~49K
+iterations/second, which is far too slow to BE the cost on a modern CPU.  The outer loop is therefore
+not what is expensive -- the INNER copy loops are.  Each pass at LAB_0000_2414 copies `a` bytes, and
+`a` comes straight out of the control stream, so a stream that is not a real sprite yields enormous
+run lengths.
+
+That is the shape of a WRONG CONTROL STREAM, not of legitimate work: 6151 runs of large size, ten times
+per tick, for a 318x180 element.  Patch 529 fixed 23d8's ARGUMENTS (param_2 = 0x8fc4 is a real
+descriptor, param_1 = 3 = d548&0x7f, both confirmed in the sampled stack), so what remains suspect is
+the stream those arguments select: 23d8 takes `ctrl = g_mem + (word[desc] << 4)` (patch 294, asm
+"BP = word[desc] ; DS = BP").  For descriptor 0x8fc4 the loaded block had +0 = 0x7b04 and +2 = 0x00a0.
+
+NEXT, and it is the direct analogue of what patch 537 turned out to be: verify that descriptor 0x8fc4's
+content is now correct after 537 -- i.e. that word[0x8fc4] really is a control-stream SEGMENT and that
+the bytes there are a sprite.  537 proved once already that a "descriptor" in this block can be the
+content of the WRONG FILE.  Compare word[0x8fc4] and the first bytes of its stream against the same
+mission under the DOSBox oracle before assuming the decoder or the workload is at fault.
