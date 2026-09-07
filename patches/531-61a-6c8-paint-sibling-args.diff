@@ -1,0 +1,142 @@
+PATCH 531: the four 5acc/5b41/5bb6/5c2b paint siblings, and 584a's [0x61a] call (board:0014).
+
+Patch 190 already worked this out ONCE, for FUN_0000_584a, and said so at the site:
+
+    "the nested paint method [0x6c8]=294d (587f `call [0x6c8]`) is reached with ax=the popped UNMASKED
+     value (sprite-directory offset = 294d param_1) and bx=node+4 (position descriptor = 294d param_4).
+     Patch 181 dropped BOTH -> 294d/298a blitted a garbage sprite (runaway 298a SIGSEGV)."
+
+Its four siblings -- FUN_0000_5acc, 5b41, 5bb6, 5c2b (patches 182/183) -- have the identical body and
+were left calling `(ax)` alone.  All four asm bodies are the same instruction for instruction, differing
+only in the sprite constant:
+
+    5acc/5b41/5bb6/5c2b:
+        lea bx,[bx+4]                  ; bx = node+4, the POSITION descriptor
+        mov al,0 ; lcall *0x61a
+        mov ax,0xf88 / 0xf98 / 0xfa8 / 0xfb8 ; add ax,[0x7b9c]      ; ax = sprite id
+        incw (bx) ; incw 2(bx)
+        lcall *0x6c8                   ; <- AX = sprite id, BX = descriptor, both live
+        decw (bx) ; decw 2(bx) ; ret
+
+BX is provably live across the [0x61a] call: the asm bumps [bx] and [bx+2] immediately after it.
+
+Two vectors are corrected, nine sites in all:
+
+  * `[0x6c8]` -> FUN_0000_294d, FIVE parameters.  Four sites passed `(ax)`; now `(ax,0,0,bx,0)`, patch
+    190's established form.
+  * `[0x61a]` -> FUN_0000_11db(uint16_t bx, uint8_t al) -- a rect OUTLINE draw whose very first act is
+    `FUN_0000_2d6d(bx)` and `(int16_t *)(dg + bx)`.  Five sites passed ONE argument (four passed `0`,
+    584a passed the masked `ax & 0xff00`), so on native it drew from the rect at DGROUP:0 and on wasm
+    the 1-argument signature did not match 11db's type and it drew nothing.  Now `(bx, 0)`.
+
+NOT touched here, and left on board:0014: the sixth [0x61a] site, fist.c:65926 in FUN_1000_a547
+(asm 1a584 `mov bx,0x967c; lcall *0x61a`).  BX is unambiguous there, but AL is NOT set before the call
+-- the last write was `mov al,0x50` at 1a577, consumed by the [0x60a] call, with `call 0x15313` in
+between.  AL is therefore ambient and must not be invented.
+
+--- a/fist.c
++++ b/fist.c
+@@ -16146,7 +16146,10 @@
+      PATCH 190: the nested paint method [0x6c8]=294d (587f `call [0x6c8]`) is reached with ax=the popped
+      UNMASKED value (sprite-directory offset = 294d param_1) and bx=node+4 (position descriptor = 294d
+      param_4).  Patch 181 dropped BOTH -> 294d/298a blitted a garbage sprite (runaway 298a SIGSEGV). */
+-  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))((uint16_t)(ax & 0xff00));
++  /* PATCH 531: same as the four siblings -- [0x61a] is 11db(bx, al), and the asm here is
++   * `lea bx,[bx+4]; mov al,0; lcall *0x61a`.  Patch 190 corrected this function's [0x6c8] call but
++   * left its [0x61a] one passing the masked AX as the (single) argument. */
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(bx, 0);
+   *(uint16_t *)(dg + bx)                     += 1;                 /* incw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2))     += 1;                 /* incw [bx+2] */
+   ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax_full,0,0,bx,0);
+@@ -16337,11 +16340,20 @@
+      word[DGROUP:0x7b9c]) between the incw's. */
+   uint8_t *dg = g_mem + 0x1c000;
+   uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);        /* lea bx,[bx+4] */
+-  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))(0);  /* mov al,0; c61a (ax hi undefined) */
++  /* PATCH 531: [0x61a] is FUN_0000_11db(uint16_t bx, uint8_t al) -- a rect OUTLINE draw that
++   * dereferences DGROUP:bx at once.  asm: `lea bx,[bx+4]; mov al,0; lcall *0x61a`, so bx = node+4 (the
++   * position descriptor) and al = 0.  Passing a single argument aimed it at DGROUP:0 on native and,
++   * because the 1-arg signature does not match 11db's type, drew nothing at all on wasm. */
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(bx, 0);
+   uint16_t ax = (uint16_t)(0xf88 + *(uint16_t *)(dg + 0x7b9c));    /* mov ax,0xf88; add ax,[0x7b9c] */
+   *(uint16_t *)(dg + bx)                 += 1;                     /* incw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2)) += 1;                     /* incw [bx+2] */
+-  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax); /* c6c8(ax) */
++  /* PATCH 531: [0x6c8] is FUN_0000_294d, five params, and patch 190 already established for the
++   * sibling FUN_0000_584a that it is reached with ax = the sprite-directory offset (param_1) and
++   * bx = node+4 (the position descriptor, param_4) -- dropping both made 294d/298a blit a garbage
++   * sprite there.  These four siblings kept only ax; bx is live across the [0x61a] call (the asm
++   * bumps [bx]/[bx+2] around it). */
++  ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax,0,0,bx,0);
+   *(uint16_t *)(dg + bx)                 -= 1;                     /* decw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2)) -= 1;                     /* decw [bx+2] */
+   return;
+@@ -16389,11 +16401,20 @@
+      offset) published by 209e to DGROUP:0x3e08; SS=DS=DGROUP. */
+   uint8_t *dg = g_mem + 0x1c000;
+   uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);        /* lea bx,[bx+4] */
+-  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))(0);  /* mov al,0; c61a */
++  /* PATCH 531: [0x61a] is FUN_0000_11db(uint16_t bx, uint8_t al) -- a rect OUTLINE draw that
++   * dereferences DGROUP:bx at once.  asm: `lea bx,[bx+4]; mov al,0; lcall *0x61a`, so bx = node+4 (the
++   * position descriptor) and al = 0.  Passing a single argument aimed it at DGROUP:0 on native and,
++   * because the 1-arg signature does not match 11db's type, drew nothing at all on wasm. */
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(bx, 0);
+   uint16_t ax = (uint16_t)(0xf98 + *(uint16_t *)(dg + 0x7b9c));      /* mov ax,0xf98; add ax,[0x7b9c] */
+   *(uint16_t *)(dg + bx)                 += 1;                     /* incw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2)) += 1;                     /* incw [bx+2] */
+-  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax); /* c6c8(ax) */
++  /* PATCH 531: [0x6c8] is FUN_0000_294d, five params, and patch 190 already established for the
++   * sibling FUN_0000_584a that it is reached with ax = the sprite-directory offset (param_1) and
++   * bx = node+4 (the position descriptor, param_4) -- dropping both made 294d/298a blit a garbage
++   * sprite there.  These four siblings kept only ax; bx is live across the [0x61a] call (the asm
++   * bumps [bx]/[bx+2] around it). */
++  ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax,0,0,bx,0);
+   *(uint16_t *)(dg + bx)                 -= 1;                     /* decw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2)) -= 1;                     /* decw [bx+2] */
+   return;
+@@ -16441,11 +16462,20 @@
+      offset) published by 209e to DGROUP:0x3e08; SS=DS=DGROUP. */
+   uint8_t *dg = g_mem + 0x1c000;
+   uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);        /* lea bx,[bx+4] */
+-  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))(0);  /* mov al,0; c61a */
++  /* PATCH 531: [0x61a] is FUN_0000_11db(uint16_t bx, uint8_t al) -- a rect OUTLINE draw that
++   * dereferences DGROUP:bx at once.  asm: `lea bx,[bx+4]; mov al,0; lcall *0x61a`, so bx = node+4 (the
++   * position descriptor) and al = 0.  Passing a single argument aimed it at DGROUP:0 on native and,
++   * because the 1-arg signature does not match 11db's type, drew nothing at all on wasm. */
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(bx, 0);
+   uint16_t ax = (uint16_t)(0xfa8 + *(uint16_t *)(dg + 0x7b9c));      /* mov ax,0xfa8; add ax,[0x7b9c] */
+   *(uint16_t *)(dg + bx)                 += 1;                     /* incw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2)) += 1;                     /* incw [bx+2] */
+-  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax); /* c6c8(ax) */
++  /* PATCH 531: [0x6c8] is FUN_0000_294d, five params, and patch 190 already established for the
++   * sibling FUN_0000_584a that it is reached with ax = the sprite-directory offset (param_1) and
++   * bx = node+4 (the position descriptor, param_4) -- dropping both made 294d/298a blit a garbage
++   * sprite there.  These four siblings kept only ax; bx is live across the [0x61a] call (the asm
++   * bumps [bx]/[bx+2] around it). */
++  ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax,0,0,bx,0);
+   *(uint16_t *)(dg + bx)                 -= 1;                     /* decw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2)) -= 1;                     /* decw [bx+2] */
+   return;
+@@ -16493,11 +16523,20 @@
+      offset) published by 209e to DGROUP:0x3e08; SS=DS=DGROUP. */
+   uint8_t *dg = g_mem + 0x1c000;
+   uint16_t bx = (uint16_t)(*(uint16_t *)(dg + 0x3e08) + 4);        /* lea bx,[bx+4] */
+-  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c61a)))(0);  /* mov al,0; c61a */
++  /* PATCH 531: [0x61a] is FUN_0000_11db(uint16_t bx, uint8_t al) -- a rect OUTLINE draw that
++   * dereferences DGROUP:bx at once.  asm: `lea bx,[bx+4]; mov al,0; lcall *0x61a`, so bx = node+4 (the
++   * position descriptor) and al = 0.  Passing a single argument aimed it at DGROUP:0 on native and,
++   * because the 1-arg signature does not match 11db's type, drew nothing at all on wasm. */
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(bx, 0);
+   uint16_t ax = (uint16_t)(0xfb8 + *(uint16_t *)(dg + 0x7b9c));      /* mov ax,0xfb8; add ax,[0x7b9c] */
+   *(uint16_t *)(dg + bx)                 += 1;                     /* incw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2)) += 1;                     /* incw [bx+2] */
+-  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax); /* c6c8(ax) */
++  /* PATCH 531: [0x6c8] is FUN_0000_294d, five params, and patch 190 already established for the
++   * sibling FUN_0000_584a that it is reached with ax = the sprite-directory offset (param_1) and
++   * bx = node+4 (the position descriptor, param_4) -- dropping both made 294d/298a blit a garbage
++   * sprite there.  These four siblings kept only ax; bx is live across the [0x61a] call (the asm
++   * bumps [bx]/[bx+2] around it). */
++  ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax,0,0,bx,0);
+   *(uint16_t *)(dg + bx)                 -= 1;                     /* decw [bx] */
+   *(uint16_t *)(dg + (uint16_t)(bx + 2)) -= 1;                     /* decw [bx+2] */
+   return;
