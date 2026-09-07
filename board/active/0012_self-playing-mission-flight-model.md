@@ -6867,3 +6867,31 @@ So the correct reading of the three facts was: the first two are right, and the 
     TRAIN3  HANG   same MM family
     SYRIA1  HANG   REGRESSED: patch 529 had it reaching 20000 in 23 s.  Re-measure -- the added object
                    rendering (533/534/535) is the obvious suspect, exactly as it was for AZER1.
+
+### SYRIA1's regression is a SLOWDOWN, not a hang -- and patch 529 still holds
+
+Sampled with 537 in: tick 7450 -> 7478 -> 7504 over 70 s, i.e. **~0.8 ticks/second**.  It is
+progressing, not spinning.  The stack at every sample:
+
+    #0 m_mga_FUN_0000_23d8 (param_1=3, param_2=0x8fc4)
+    #1 FUN_1000_842d  #2 FUN_0000_7f53  #3 FUN_0000_209e(0x3d10)  #4 FUN_0000_206f  #5 FUN_0000_459a
+
+The arguments are now CORRECT -- param_2 = 0x8fc4 is a real descriptor and param_1 = 3 is d548&0x7f --
+which is exactly what patch 529 established, so 529 is not regressed.  What changed is FREQUENCY: with
+533/534/535 restoring 26 class slots of object rendering, the per-frame blit load went up by orders of
+magnitude, and 23d8 is the expensive one.  Before 533, SYRIA1 reached t=20000 in 23 s; now it manages
+~0.8 ticks/s.
+
+So the correct reading of both AZER1 (before 537) and SYRIA1 is: the newly-enabled rendering is doing
+real work the port previously skipped entirely, and the port is far too slow at it.  For AZER1 that
+slowness was incidental -- its actual failure was the 537 corruption.  For SYRIA1 no corruption is in
+evidence and the cost looks genuine.
+
+This is a PERFORMANCE frontier, and it is now on the critical path: the goal requires every mission to
+play to a resolved victory/defeat, which cannot happen at 0.8 ticks/s.  It is also a fair question
+whether 23d8 should be this expensive -- the original ran this on a 386.  Before optimising anything,
+establish whether the port calls it more often than the original does, or whether each call costs more.
+The frame-matched oracle capture (tools/oracle/capture_9200_framematched.sh) can count the original's
+blits per frame; a counter in 23d8 counts the port's.  That comparison decides whether this is a
+faithfulness bug or an implementation-cost bug, and it must be answered before any optimisation, or the
+optimisation will hide a divergence.
