@@ -891,15 +891,19 @@ void fist_timer_pump(void){
      * aa10=0x24 -> e339 -> the extender 9200 windshield voxel render.  Emulate the always-ready extender
      * here.  GATED on d549==0x1c (the cockpit view, only ever set on the in-mission 459a path) so it is
      * strictly behaviour-neutral for the 19 menu/pre-mission verify flows. */
-    /* FIST_NO_D548EMU=1 disables BOTH d548 frame-ready forcings (here and in the op-0x4c gate) so the
-     * engine's own terminator FUN_0000_23ce (`orb $0x80,[0x1548]`, patch 194 -- entry 5 of the phase-0x1c
-     * render script) is the only writer, as on the original.  Measured: 23ce is reached 134204 times in
-     * AZER1 to [0x452]=12000, so the emulation's stated premise ("d548 never flips 1->0x81") does not
-     * hold on that path.  board:0012 */
-    { static int sr=-1, noemu=-1; if(sr<0) sr=getenv("FIST_SIMRUN")?1:0;
-      if(noemu<0) noemu=getenv("FIST_NO_D548EMU")?1:0;
+    /* d548 frame-ready: the ENGINE's own terminator FUN_0000_23ce ("orb $0x80,[0x1548]", patch 194 --
+     * entry 5 of the phase-0x1c render script) is the only writer, as on the original.  The shim used
+     * to force the bit here and in the op-0x4c gate; that was an APPROXIMATION and it is now OFF BY
+     * DEFAULT.  Measured: 23ce is reached 134204 times in AZER1 to [0x452]=12000, so the emulation's
+     * stated premise ("d548 never flips 1->0x81") does not hold; and with patch 537 in, a full
+     * 47-mission sweep gives 41/47 with the forcing disabled -- the same count and the same six
+     * failures (INDIA2 INDIA3 INDIA5 SYRIA1 TRAIN3 TRAIN4) as with it enabled.  Those six are the
+     * precise list of where the handshake is still genuinely broken.
+     * FIST_D548EMU=1 restores the old forcing for A/B comparison only.  board:0012 */
+    { static int sr=-1, emu=-1; if(sr<0) sr=getenv("FIST_SIMRUN")?1:0;
+      if(emu<0) emu=getenv("FIST_D548EMU")?1:0;
       uint8_t h = g_mem[0x1c000 + 0x1548];
-      if (noemu) goto d548_emu_done;
+      if (!emu) goto d548_emu_done;
       if (g_mem[0x1c000 + 0x1549] == 0x1c && (h & 0x7f) != 0 &&
           ((sr && (h & 0x80) == 0) || h == 1))
           g_mem[0x1c000 + 0x1548] = (uint8_t)(sr ? (h | 0x80) : 0x81);
@@ -1611,7 +1615,8 @@ int fist_extender_gate(void) {
      * per-tick sim c0ca -> the mission freezes after ~3 spawn frames.  The real flight model OR-s bit7
      * into d548 to signal "frame ready"; emulate that here so the present completes every op-0x4c and
      * the frame loop keeps running the sim. */
-    if (getenv("FIST_SIMRUN") && !getenv("FIST_NO_D548EMU") && op == 0x4c && g_mem[0x1c000 + 0x1549] == 0x1c) {
+    /* OFF BY DEFAULT (see the note in fist_timer_pump): FIST_D548EMU=1 restores it for comparison. */
+    if (getenv("FIST_D548EMU") && getenv("FIST_SIMRUN") && op == 0x4c && g_mem[0x1c000 + 0x1549] == 0x1c) {
         uint8_t h = g_mem[0x1c000 + 0x1548];
         if ((h & 0x80) == 0 && (h & 0x7f) != 0) g_mem[0x1c000 + 0x1548] = h | 0x80;  /* OR bit7 into waiting 1/2/3 (oracle) */
     }
