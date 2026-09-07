@@ -6626,3 +6626,38 @@ index where 8df0 reads it, or not at all.
 The decisive experiment is unchanged and still needs the oracle: with the original at the point where
 it sets `word[0x1552]=0x8f8c`, what is `byte[TCB+0xcd]`?  If 0, the port is missing a mode-0 setter on
 the full-screen path; if 2, the descriptor content is what differs.
+
+### cont.65u -- mask index 2 is NEVER valid in the port, in any mission, at any moment
+
+Instrumented `8deb` (diagnostic only, in build/, not committed) to log every distinct (mask index,
+viewport) pair it establishes.  Eight missions:
+
+| mission | pairs observed |
+|---|---|
+| AZER1   | idx=1 w=288 h=81 tbl_len=81 **fits** ; idx=2 w=288 h=81 tbl_len=78 **OVER-READ** |
+| SAUDI3  | idx=1 w=288 h=81 fits ; idx=2 w=**320 h=195** tbl_len=78 **OVER-READ** |
+| SYRIA6  | idx=1 w=288 h=81 fits ; idx=2 w=320 h=195 tbl_len=78 **OVER-READ** |
+| AZER4 SAUDI1 CYPRUS1 TRAIN1 | idx=1 w=288 h=81 fits -- and nothing else |
+| UKRAINE1 | no 8deb pass at all |
+
+Three facts fall out, and none of them needed the oracle:
+
+  1. **idx=1 always pairs with 288x81 and always fits, in every mission.**  The design invariant
+     (table length == viewport height) is confirmed a second way.
+  2. **idx=2 NEVER fits -- not once, in any mission.**  It is used only in states its own 78-byte table
+     cannot cover.  A mask that is never usable is not a mask the engine ever selects there, so the
+     port reaches a state the original does not.
+  3. **On AZER1, idx=2 pairs with 288x81 -- the SAME viewport idx=1 had.**  The mode byte flipped to 2
+     while the viewport did not change at all.  So the flip is not accompanied by the view switch it
+     implies: 7eb7 sets the byte, and nothing establishes the mode-2 view.  On SAUDI3/SYRIA6 the
+     viewport HAS moved on (to the full-screen 320x195 of a different renderer) by the time the pass
+     happens, which is why they over-read by 117 bytes instead of 3 and die.
+  4. idx=0 and idx=3 are never selected at all in these eight missions.
+
+That makes reading (a) of cont.65q much the stronger one: the defect is that `FUN_0000_7eb7` sets the
+mode byte to 2 in a context where the original does not, or where the original follows it with the
+mode-2 view setup the port never performs.  It is NOT a descriptor-content problem (cont.65t already
+retracted that branch), and it is NOT a defect in 9200.
+
+The oracle question narrows accordingly, and is now a single yes/no: in the original, is
+`byte[TCB+0xcd]` ever 2?  If it never is, 7eb7's dispatch is the bug.
