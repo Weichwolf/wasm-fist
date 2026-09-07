@@ -6925,3 +6925,32 @@ content is now correct after 537 -- i.e. that word[0x8fc4] really is a control-s
 the bytes there are a sprite.  537 proved once already that a "descriptor" in this block can be the
 content of the WRONG FILE.  Compare word[0x8fc4] and the first bytes of its stream against the same
 mission under the DOSBox oracle before assuming the decoder or the workload is at fault.
+
+### CORRECTION: SYRIA1's slowdown is patch 532, NOT 533/534/535
+
+I attributed SYRIA1's regression to the added object-render methods twice -- in a board entry and in a
+commit message -- on the strength of "AZER1 behaved that way, so this is the same", without testing it.
+It is wrong.  Measured:
+
+    533/534/535 held back (532, 536, 537 in)   ->  STILL SLOW (timeout at 120 s)
+    hold >= 530  (529 and below)               ->  22 s
+    hold >= 532  (530, 531 in)                 ->  22 s
+    hold >= 536  (532..535 in)                 ->  timeout
+
+The first line alone refutes the attribution; the bisect isolates **patch 532**.
+
+532 is the three-call cockpit-HUD block in FUN_1000_8cbf / FUN_1000_93f3, where the [0x6d8] call had
+been passing `unaff_CS` as the position descriptor and the [0x6c8]/[0x6d0] calls passed a bare `(0)`.
+With garbage arguments those draws did nothing; with correct ones they draw.  So the pattern is the
+same as AZER1's -- a correct fix enabling work the port had been skipping -- but the patch responsible
+is a different one, and saying otherwise sent the analysis at the wrong target.
+
+Note the profile still puts 16/16 samples in FUN_0000_23d8, which is the [0x694] vector, NOT the
+[0x6c8]/[0x6d0]/[0x6d8] ones 532 touched.  So 532 does not call 23d8 directly -- it changes something
+23d8 later consumes.  That is the thread to pull: measure 23d8's runs-per-call with and without 532.
+If it jumps from ~106 to ~6151, 532 is feeding it a different (and probably wrong) control stream, and
+the fault is upstream of 23d8 exactly as patch 537 turned out to be.
+
+Method note for this item: three attributions this session were made from resemblance rather than
+measurement, and all three were wrong (the FIST_COOP_TICK double-count; the cont.65y retraction; this).
+Each cost more to unwind than the measurement would have cost up front.
