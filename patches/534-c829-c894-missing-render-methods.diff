@@ -1,0 +1,115 @@
+PATCH 534: FUN_0000_c829 and FUN_0000_c894 -- the render method for object classes 5 and 6, and the
+helper it tails into, were both MISSING.
+
+The second and third of the three absent cockpit-view methods patch 533 uncovered.  c4df dispatches
+mvec = word[STRSEG : classid*2 + 0x3632], and that table sends classes 5..6 to 0xc829, which the port
+did not define and did not register in the fist_icall fmap.  0xc829 is a pure thunk into 0xc894, which
+was likewise absent.
+
+asm-verified vs re_out/fist_dat_image.bin:
+
+    c829: e8 68 00     call 0xc894
+    c82c: c3           ret
+
+    c894: b4 0f        mov ah,0xf
+    c896: f6 44 16 08  testb $0x8,0x16(%si)
+    c89a: 74 02        je   0xc89e            ; bit clear -> keep 0xf
+    c89c: b4 0e        mov ah,0xe
+    c89e: f6 44 17 08  testb $0x8,0x17(%si)
+    c8a2: 74 08        je   0xc8ac            ; bit clear -> draw
+    c8a4: f7 06 52 04 20 00  testw $0x20,0x452
+    c8aa: 74 04        je   0xc8b0            ; blink phase clear -> skip
+    c8ac: e8 03 00     call 0xc8b2
+    c8af: c3           ret
+    c8b0: f9           stc
+    c8b1: c3           ret
+
+So c894 is the BLINKING variant of the c8b2 draw: it draws unless the object's [si+0x17] bit 3 is set
+AND the frame-timer blink bit [0x452]&0x20 is clear.  AH selects the sprite kind, 0x0e when the
+object's [si+0x16] bit 3 is set and 0x0f otherwise.
+
+Both are reconstructed in the arg-less c4df context that patch 463 established for the identical
+FUN_0000_c70d: si = g_fist_render_si (the object), bx = classid*2 (live from c4df), bp -> 0.  c8b2 ends
+with clc (patch 463 threads that through g_fist_cf), so only the 0xc8b0 stc path needs an explicit
+g_fist_cf = 1.
+
+With 533 and 534 in, the five cockpit-view method targets are: 0xc7ca (present), 0xc5e7 (present),
+0xc829 + 0xc86e (added), 0xc715 (STILL MISSING -- classid 16; it is longer, indexes
+word[DGROUP:bx-0x17f3] by byte[si+0x1c], calls 0xc8c2, and on its else path appends si to a STRSEG list
+at gs:[bx+0x366a] with a 0x40 bound; left on board:0014's sibling item).
+
+--- a/fist.c
++++ b/fist.c
+@@ -1292,6 +1292,8 @@
+ void __allregs FUN_0000_c6fa(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_0000_c70d(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+ void __allregs FUN_0000_c86e(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 533 */
++void __allregs FUN_0000_c894(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 534 */
++void __allregs FUN_0000_c829(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 534 */
+ void __allregs FUN_0000_c7ca(undefined2 param_1,int param_2,undefined2 param_3);
+ void __allregs FUN_0000_c8b2(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+ void __allregs FUN_0000_c8c2(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 *param_5);
+@@ -33554,6 +33556,54 @@
+   return;
+ }
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_c894) @ 0000:c894 ===== */
++
++void __allregs
++FUN_0000_c894(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
++             undefined2 param_5)
++
++{
++  /* PATCH 534: asm 0xc894-0xc8b1, the helper 0xc829 tails into.  Same arg-less c4df context as
++   * c70d/c86e (si = g_fist_render_si, bx = classid*2):
++   *     c894: mov ah,0xf
++   *     c896: testb [si+0x16],8 ; je c89e      ; bit clear -> keep 0xf
++   *     c89c: mov ah,0xe
++   *     c89e: testb [si+0x17],8 ; je c8ac      ; bit clear -> draw
++   *     c8a4: testw [0x452],0x20 ; je c8b0     ; blink phase clear -> skip
++   *     c8ac: call c8b2 ; ret                  ; c8b2 ends with clc (patch 463)
++   *     c8b0: stc ; ret
++   * So it draws unless the object's [si+0x17] bit3 is set AND the frame-timer blink bit [0x452]&0x20
++   * is clear -- i.e. it is the BLINKING variant of the c8b2 draw. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  unsigned char  ah = (dg[(unsigned short)(si + 0x16)] & 8) ? 0x0e : 0x0f;   /* c896/c89c */
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;(void)param_5;
++  if ((dg[(unsigned short)(si + 0x17)] & 8) == 0 ||
++      (*(unsigned short *)(dg + 0x452) & 0x20) != 0) {                        /* c89e/c8a4 */
++    FUN_0000_c8b2(CONCAT11(ah,0),(undefined2)(unsigned short)(*(unsigned short *)(dg + si) << 1),
++                  0,(undefined2)si,0);                                        /* c8ac (clc inside) */
++    return;
++  }
++  g_fist_cf = 1;                                                              /* c8b0 stc */
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c829) @ 0000:c829 ===== */
++
++void __allregs
++FUN_0000_c829(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
++             undefined2 param_5)
++
++{
++  /* PATCH 534: asm `c829: call 0xc894 ; c82c: ret` -- a pure thunk, and the cockpit-view render method
++   * for object classes 5 and 6.  Like c86e it was never promoted, so c4df's
++   * `mvec = word[STRSEG:classid*2 + 0x3632]` had nothing to reach. */
++  FUN_0000_c894(param_1,param_2,param_3,param_4,param_5);
++  return;
++}
++
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c7ca) @ 0000:c7ca ===== */
+ 
+@@ -75565,6 +75615,8 @@
+   {0xc6fau,(void*)&FUN_0000_c6fa},
+   {0xc70du,(void*)&FUN_0000_c70d},
+   {0xc86eu,(void*)&FUN_0000_c86e},   /* PATCH 533 */
++  {0xc894u,(void*)&FUN_0000_c894},   /* PATCH 534 */
++  {0xc829u,(void*)&FUN_0000_c829},   /* PATCH 534 */
+   {0xc7cau,(void*)&FUN_0000_c7ca},
+   {0xc8b2u,(void*)&FUN_0000_c8b2},
+   {0xc8c2u,(void*)&FUN_0000_c8c2},
