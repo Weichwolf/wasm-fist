@@ -51,3 +51,27 @@ NEXT: the movement step for type 0x02 is one of those CS-table sub-methods. Audi
 0x90a0 and 0x91a7 tables the way patch 542 audited the 9e2b table -- dump both tables from the image,
 check each target exists in the port and takes the object it is handed, and find the one that should do
 `dword[obj+4] += f(heading, speed)`. The same audit is then owed to 7c1d (type 0x00) and 87df (0x01).
+
+## CORRECTION: the measurement stands, the inference does not
+
+"No unit's X/Y ever changes" is measured and holds. But the claim that this is a DEFECT is not
+established, and the table above invited the wrong reading. Following it up:
+
+- **Type 0x11 DOES move**, and it is not a unit. Its X runs in the tens of millions and wraps
+  (`10226323 -> 3280673 -> 21496623 -> 14550973 -> 7539798` across samples) while Y barely changes --
+  a scrolling backdrop layer advanced by the global `dword[0x92f2]`, not a vehicle.
+- **Type 0x10 is a static emitter**, confirmed from asm 0xb51f-0xb582: it adds table offsets to a
+  SCRATCH position at 0x9c7f/0x9c83 and calls bb64. It is not supposed to translate.
+- **Types 0x05/0x06 -- the real ground-vehicle mover (9e2b, which does `o+4 += 03a9(heading,speed)`) --
+  are simply absent from AZER1.** The step table was dumped from the image and the port dispatches it
+  correctly, so this is faithful.
+
+That leaves type 0x02 as the only candidate for "a unit that ought to move", and whether it ought to is
+NOT established. Its objects carry a rotating heading and a non-zero speed word, but `902c`'s asm does
+not integrate position and neither does the sub-chain reached from it. It is entirely possible that
+AZER1's type-0x02 objects are static defensive positions that engage at range, in which case nothing
+here is wrong and the mission is meant to be decided by fire, not manoeuvre.
+
+DO NOT treat "units never move" as a bug until it is shown that the ORIGINAL moves them. The cheap test
+is the oracle: run AZER1 under dosbox-fist and watch whether the type-0x02 objects' dword[obj+4]
+changes. Until then this item is a QUESTION, not a defect.
