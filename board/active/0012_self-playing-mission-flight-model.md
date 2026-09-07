@@ -6587,3 +6587,42 @@ NEXT (and this is now the core of board:0012, not a side quest): make the frame-
 faithful -- 459a's present poll, op 0x4c, and 23ce's terminator -- so bit7 is raised only where the
 engine raises it, then delete the emulation.  `FIST_NO_D548EMU=1` is the seam to measure against; the
 success criterion is that the missions behave the SAME with and without it.
+
+### cont.65t -- two inferences in cont.65q were UNSUPPORTED; retracting them
+
+1. **"0x8fe0 is mode 2's main window because 292x78 matches mask[2]=78 exactly."**  It is not a peer
+   record.  Dumping the loaded blocks shows every live descriptor carries two non-zero header words --
+   mode 1: `0x8e91 +0=0x4c30 +2=0x00a0`; mode 2: `0x8f8c +0=0x7970`, `0x8fa8 +0=0x7a30`,
+   `0x8fc4 +0=0x7b04`, all `+2=0x00a0` -- while `0x8fe0` has `+0=0 +2=0`.  The 292x78 was a
+   coincidence in uninitialised space, and the whole "(b) word[0x1552] should be 0x8fe0" branch of
+   cont.65q goes with it.
+
+2. **"7eb7 and 8390 are methods of the same display-list node (0x3d10)."**  No: in
+   `FUN_0000_201a(param_1, param_2, ...)` param_1 is dx = the walk LIMIT and param_2 is bx = the HEAD
+   (patch 056).  The backtraces show `param_2=0x3b00, param_1=0x3d10`, i.e. a walk over ~30 nodes from
+   0x3b00 to 0x3d10 -- so both being "0x3d10" says only that they were dispatched by the same walk, not
+   by the same object.  The two may well belong to different view objects, which reopens the reading
+   that the full-screen renderer should be running with mask index 0 (its 200-byte all-zero table fits
+   any height) and that the port is missing the mode-0 setter (0x738b or 0x92c1) on that path.
+
+What survives unchanged, and is measured:
+
+  * mask table length IS the viewport height by design -- mode 1 pairs 81 rows with an 81-byte table,
+    and the last byte the loop reads (0x7568+80 = 0x75b8) is exactly the byte before table[2] starts.
+  * the mode byte is written exactly ONCE per run, to 2, by FUN_0000_7eb7 (asm `movb $2,%es:0xcd(%di)`,
+    unconditional), reached through the 201a walk.
+  * `word[0x1552] = 0x8f8c` is a hardcoded immediate in 8390's INIT branch (asm 0x183b1), and the block
+    loaded there genuinely decodes to (0,2)-(320,197) = 320x195.
+  * **every mission that reaches mode 2 over-reads mask[2]**, not just the ones that crash: AZER1 reads
+    81 bytes from a 78-byte table and draws windshield rows 78..80 from the next table's bytes.  It
+    survives only because 8,6,5 are small; the 5 crashing missions read 117 bytes past and hit the
+    0xc0 in the code padding.
+
+A caution for the next session: `(*(unsigned char**)(g_mem+fist_ext_base+0xc93))[0xcd]` is NOT a safe
+probe outside the extender's own call -- c93 is the extender's live TCB pointer and reads as garbage
+(0xc4c4d2d2 observed) at other times, so a "cd=0" sampled at 8390's entry means nothing.  Read the mask
+index where 8df0 reads it, or not at all.
+
+The decisive experiment is unchanged and still needs the oracle: with the original at the point where
+it sets `word[0x1552]=0x8f8c`, what is `byte[TCB+0xcd]`?  If 0, the port is missing a mode-0 setter on
+the full-screen path; if 2, the descriptor content is what differs.
