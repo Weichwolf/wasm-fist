@@ -7026,3 +7026,46 @@ writer of bit7, as the engine intends -- 23ce is reached 134204 times in AZER1 t
 script does run to completion), then delete both shim forcings and re-measure ca2f calls/tick.  The
 target is ~1 render per tick, i.e. ~13 ca2f calls/tick on AZER1.  FIST_NO_D548EMU=1 is the seam;
 success is missions behaving identically with and without it.
+
+### CORRECTION 3: the d548 emulation is NOT the cause of the ~57x render load. That claim was wrong.
+
+The previous entry was committed as "ROOT CAUSE" and predicted that disabling the emulation would drop
+the render load ~57x, to about one render per tick.  Measured on AZER1:
+
+    WITH the emulation :  744 ca2f calls/tick, 13 objects
+    WITHOUT it         :  868 ca2f calls/tick, 11 objects
+
+No reduction -- slightly MORE.  So the forcing of d548 bit7 is not what makes the port walk the display
+list ~57 times per engine tick.  The many-renders-per-tick behaviour is inherent to the port's frame
+loop and pump cadence: `[0x452]` advances once per fist_timer_pump, and the engine's frame loop runs
+many frames between pumps.  Whether 57 is FAITHFUL is still unknown and still needs the oracle -- but
+it is not caused by the emulation, and removing the emulation will not fix the speed.
+
+That is the fifth attribution in this session made ahead of the measurement that would settle it
+(FIST_COOP_TICK double-count; the cont.65y retraction; "SYRIA1 is 533/534/535"; "SYRIA1 is 532"; and
+now this).  Every one was stated with more confidence than the evidence carried, and each cost a round
+trip to unwind.  The rule that keeps being violated is simple: when the experiment is one command away,
+run it BEFORE writing the conclusion, not after.
+
+### What IS established, and it is worth having
+
+With patch 537 in, the d548 emulation is no longer needed by 41 of 47 missions:
+
+    FIST_NO_D548EMU=1, full 47-mission sweep:  41/47
+    default (emulation on), same sweep:        41/47
+    identical count, and the SAME six missions fail: INDIA2 INDIA3 INDIA5 SYRIA1 TRAIN3 TRAIN4
+    (all HANG with the emulation off; no SEGVs)
+
+Before 537, disabling it made AZER1 SEGV at 9200 immediately.  537 fixed the DGROUP corruption the
+emulation had been masking, so the engine's own 23ce terminator now carries the handshake unaided.
+
+So the approximation the goal forbids CAN be deleted, and the six missions that still fail without it
+are the precise list of where the handshake is genuinely still broken.  That is the real result of this
+round; the performance claim attached to it was not.
+
+Next, in this order:
+  1. make FIST_NO_D548EMU the default (delete both shim forcings), run the 177-flow matrix -- note the
+     pump-side forcing also fires OUTSIDE FIST_SIMRUN for the h==1 case, so the menu flows are exposed
+     to this change and the matrix is the gate;
+  2. separately, and only with the oracle: establish how many renders per PIT tick the ORIGINAL does,
+     before treating 57 as a defect at all.
