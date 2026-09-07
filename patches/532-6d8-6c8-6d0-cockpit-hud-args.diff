@@ -1,0 +1,94 @@
+PATCH 532: the three-call cockpit-HUD blocks in FUN_1000_8cbf and FUN_1000_93f3 (board:0014).
+
+Both functions end their frame with the same three vector calls, and the asm sets AX and BX explicitly
+before each one:
+
+    1000:8cbf   18d40: mov bx,0x91c8 ; mov ax,0    ; lcall *0x6d8
+                18d4a: mov bx,0x91b8 ; mov ax,0x18 ; lcall *0x6c8
+                18d54: mov bx,0x91c0 ; mov ax,0x18 ; lcall *0x6d0
+    1000:93f3   19470: mov bx,0x92e6 ; mov ax,0    ; lcall *0x6d8
+                1947a: mov bx,0x92d6 ; mov ax,0x18 ; lcall *0x6c8
+                19484: mov bx,0x92de ; mov ax,0x18 ; lcall *0x6d0
+
+The descriptors match the DGROUP globals the same C block writes just above (DAT_2000_51c8/51cc =
+0x91c8/0x91cc, DAT_2000_52e6/52ea = 0x92e6/0x92ea), which confirms the reading.
+
+Three defects, six sites:
+
+  * `[0x6d8]` -> FUN_0000_2ae9.  The call passed `(0, unaff_CS, uVar3)`: `unaff_CS` sat in param_2 --
+    which patch 312 states outright is BX, the position descriptor -- and it is an UNINITIALISED
+    pseudo-var, i.e. the patch-525 class: undefined behaviour, and a different value under gcc -m32
+    than under emcc.  Now `(0, <desc>, 0)`; param_3 is unused by 2ae9's body.
+  * `[0x6c8]` -> FUN_0000_294d (five params, ax=param_1, bx=param_4).  Passed `(0)`; AX is 0x18 here,
+    not 0, and the descriptor was missing entirely.  Now `(0x18,0,0,<desc>,0)`.
+  * `[0x6d0]` -> FUN_0000_2a39 (four params).  Passed `(0)`.  Now `(0x18,0,<desc>,0)`.
+
+IMPORTANT, and the reason each target must be read individually: the `__allregs` parameter order is
+PER-FUNCTION.  BX is param_4 in 294d, param_2 in 2ae9, and param_3 in 2a39 -- the last established by
+2a39's own reconstruction (patch 505), whose body calls `FUN_0000_260c(param_1,param_3,..)` where 2ae9's
+calls `FUN_0000_260c(param_1,param_2,..)`.  Generalising a single (ax,bx) convention across these
+vectors would silently mis-place the descriptor.
+
+NOT touched, and left on board:0014: the third member of this family, FUN_1000_6f1f (asm 0x16f1f, the
+mode-0 view whose INIT sets word[0x1552]=0x8d60).  Its block has the same three calls, but AX at its
+[0x6d8] site is branch-dependent -- `16fc7: mov ax,8 ; testb [di+0x1a],0x10 ; je ; mov ax,0x10` on one
+path and `16fe1: mov ax,0` on the path through the [0x6c8]/[0x6d0] pair -- and the decompile dropped
+that selection as well as the arity.  Fixing it is a reconstruction, not an arity correction, and it
+needs the `di = word[0x6d34]` player-vehicle base threading with it.
+
+--- a/fist.c
++++ b/fist.c
+@@ -63452,10 +63452,23 @@
+       if ((7 < (*(undefined2 *)(g_mem+0x2561a)) + 3U) && ((*(undefined2 *)(g_mem+0x2561a)) + 3U < 0x4a)) {
+         DAT_2000_51c8 = (*(undefined2 *)(g_mem+0x2561a)) + -2;
+         DAT_2000_51cc = (*(undefined2 *)(g_mem+0x2561a)) + 9;
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6d8)))(0,unaff_CS,uVar3);
++        /* PATCH 532 (8cbf): asm `mov bx,0x91c8 ; mov ax,0 ; lcall *0x6d8`.  [0x6d8] is FUN_0000_2ae9,
++         * and patch 312 states its mapping outright: "ax=param_1 = sprite-directory byte offset;
++         * bx=param_2 = position descriptor".  The old call passed `unaff_CS` as param_2 -- an
++         * UNINITIALISED pseudo-var (the patch-525 class: undefined behaviour, and a different value
++         * under gcc -m32 than under emcc) -- where the asm has a literal descriptor. */
++        ((void (*)(undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c6d8)))(0,0x91c8,0);
+       }
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0);
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6d0)))(0);
++      /* PATCH 532 (8cbf): asm `mov bx,0x91b8 ; mov ax,0x18 ; lcall *0x6c8` -- [0x6c8] is FUN_0000_294d,
++       * five params, ax=param_1 and bx=param_4.  AX is 0x18 here, not 0. */
++      ((void (*)(undefined2,undefined2,undefined2,undefined2,undefined2))
++         fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x18,0,0,0x91b8,0);
++      /* PATCH 532 (8cbf): asm `mov bx,0x91c0 ; mov ax,0x18 ; lcall *0x6d0` -- [0x6d0] is FUN_0000_2a39,
++       * four params.  Its own reconstruction (patch 505) calls FUN_0000_260c(param_1,param_3,..), so
++       * for THIS target bx is param_3, not param_2 -- the __allregs parameter order is per-function
++       * and must be read from each target, never generalised. */
++      ((void (*)(undefined2,undefined2,undefined2,undefined2))
++         fist_icall_far((uint32_t)(DAT_1000_c6d0)))(0x18,0,0x91c0,0);
+       param_2 = extraout_DX;
+     }
+     FUN_1000_8c2d(param_1,param_2);
+@@ -64070,10 +64083,23 @@
+       if ((0xb < (*(undefined2 *)(g_mem+0x2561a)) + 7U) && ((*(undefined2 *)(g_mem+0x2561a)) + 7U < 0x51)) {
+         DAT_2000_52e6 = (*(undefined2 *)(g_mem+0x2561a)) + 2;
+         DAT_2000_52ea = (*(undefined2 *)(g_mem+0x2561a)) + 0xd;
+-        (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6d8)))(0,unaff_CS,uVar3);
++        /* PATCH 532 (93f3): asm `mov bx,0x92e6 ; mov ax,0 ; lcall *0x6d8`.  [0x6d8] is FUN_0000_2ae9,
++         * and patch 312 states its mapping outright: "ax=param_1 = sprite-directory byte offset;
++         * bx=param_2 = position descriptor".  The old call passed `unaff_CS` as param_2 -- an
++         * UNINITIALISED pseudo-var (the patch-525 class: undefined behaviour, and a different value
++         * under gcc -m32 than under emcc) -- where the asm has a literal descriptor. */
++        ((void (*)(undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c6d8)))(0,0x92e6,0);
+       }
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0);
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6d0)))(0);
++      /* PATCH 532 (93f3): asm `mov bx,0x92d6 ; mov ax,0x18 ; lcall *0x6c8` -- [0x6c8] is FUN_0000_294d,
++       * five params, ax=param_1 and bx=param_4.  AX is 0x18 here, not 0. */
++      ((void (*)(undefined2,undefined2,undefined2,undefined2,undefined2))
++         fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x18,0,0,0x92d6,0);
++      /* PATCH 532 (93f3): asm `mov bx,0x92de ; mov ax,0x18 ; lcall *0x6d0` -- [0x6d0] is FUN_0000_2a39,
++       * four params.  Its own reconstruction (patch 505) calls FUN_0000_260c(param_1,param_3,..), so
++       * for THIS target bx is param_3, not param_2 -- the __allregs parameter order is per-function
++       * and must be read from each target, never generalised. */
++      ((void (*)(undefined2,undefined2,undefined2,undefined2))
++         fist_icall_far((uint32_t)(DAT_1000_c6d0)))(0x18,0,0x92de,0);
+       param_2 = extraout_DX;
+     }
+     FUN_1000_9368(param_1,param_2);
