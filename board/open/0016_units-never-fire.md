@@ -64,3 +64,36 @@ answer is upstream exactly as it was for the 9200 group (patch 537) and the pale
   * a gdb `watch -l` on g_mem+0x1c549 reported ZERO writes across that same run while the byte
     demonstrably changes -- the watchpoint was silently ineffective.  Do not trust a negative
     watchpoint result on g_mem without a positive control.
+
+## Traced one level further: the AI state machine never reaches the engage state
+
+FUN_0000_afa2 is called **exactly once** in a full AZER1 run to t=20000 (instrumented count), and that
+one call rejects at gate 2 (`si = word[di+0x97] == 0`, no target).  So the gate analysis above is not
+even the question yet -- the gate is essentially never invoked.
+
+afa2 has NO direct callers.  It is reached two ways, both via a per-object AI state dispatch at 0xab62:
+
+    ab62: shl bx,1 ; and bx,0x1e          ; bx = AI state index 0..15, doubled
+    ab67: testw [di+0x40],1
+    ab6c: je 0xab74
+    ab6e: call *[bx-0x6724]               ; table A @ DGROUP:0x98dc
+    ab74: call *[bx-0x6704]               ; table B @ DGROUP:0x98fc
+
+Table A (DGROUP:0x98dc, 16 entries) reads:
+
+    idx  2:ab88  3:ad2f  4:ad08  5:af97  6:b011  7:ae66  8:ae32  9:ae5c
+    idx 10:afa2 11:b017 12:b0be 13:b053 14:af97 15:ae66
+
+So the fire gate runs only when the object's AI state index is **10** (afa2 directly), or **5**/**14**
+(af97, which pre-checks word[di] in {1,3} and falls through into afa2).  Bit 0 of word[di+0x40] selects
+table A over table B.
+
+**The units never reach those states.**  That is the actual defect, and it is upstream of everything in
+the gate list above: perception works (6681 VISIBLE), range is satisfied, but the AI state machine does
+not transition into engage.
+
+NEXT: instrument the ab62 dispatcher to histogram the state index per object per tick, and see which
+states the units DO occupy and what the transition out of them requires.  Compare against the original
+via the write-trace oracle (FIST_WATCHFLAT on the object's +0x40/+0x43 state bytes) -- that gives the
+original's state sequence for the same mission and turns "never engages" into a named missing
+transition.
