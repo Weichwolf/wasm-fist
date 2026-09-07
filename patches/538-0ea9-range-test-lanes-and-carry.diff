@@ -1,0 +1,200 @@
+PATCH 538: FUN_0000_0ea9, the 3-lane proximity/range test, modelled each 32-bit coordinate lane as a
+64-bit value -- and never set the carry its callers branch on.
+
+This is the primitive under EVERY collision and proximity walk in the engine (bb1b, bb64, a0ab, 08e8,
+...).  asm 0x0ea9-0x0f2f, DS=DGROUP=0x1c00, cx = the bound, bx/si = two coordinate triples:
+
+     ea9: mov    %cx,%bp            ; bp = bound
+     eab: xor    %cl,%cl            ; cl = sign flag
+     ead: mov    (%bx),%ax          ; lane X low
+     eaf: mov    0x2(%bx),%dx       ; lane X high   -> ONE int32, held as two words
+     eb2: sub    (%si),%ax
+     eb4: sbb    0x2(%si),%dx
+     eb7: jns    0xec2
+     eb9: dec    %cl               ; negative
+     ebb: neg    %ax
+     ebd: jae    0xf25             ; CF=0 only when ax was 0 -> neg dx
+     ebf: xor    $0xffff,%dx       ; else 32-bit negate = neg ax / not dx
+     ec2: jne    0xf23             ; high word != 0 -> FAIL (clc)
+     ec4: cmp    %bp,%ax
+     ec6: ja     0xf23             ; |delta| > bound (UNSIGNED) -> FAIL
+     ec8: mov    %ax,0x2024        ; record lane X
+     ecb: mov    %dx,0x2026
+     ecf: mov    %cl,0x2030        ; BYTE
+     ed3: xor    %cl,%cl
+     ed5: mov    0x4(%bx),%ax      ; lane Y at +4/+6 ... same shape, records 0x2028/0x202a/0x2031
+     eff: mov    0x8(%bx),%ax      ; lane Z at +8/+0xa
+     f0b: mov    %ax,0x202c        ; recorded BEFORE the abs -- the SIGNED delta
+     f0e: mov    %dx,0x202e
+     f12: jns    0xf1d             ; ... and NO bound check: the test is 2-D by design
+     f1d: mov    %cl,0x2032        ; BYTE
+     f21: stc                      ; HIT
+     f22: ret
+     f23: clc                      ; MISS
+     f24: ret
+
+Two defects, both fatal to combat:
+
+1. WIDTH/LANE.  Ghidra typed the operands `uint *` and paired element[0] (=X) with element[1] (=Y) as
+   one lane's low and high halves.  So lane 1 compared X against a "high word" that is really Y, lane 2
+   compared Z, and Y was never compared at all.  Its `uVar5 ^ 0xffff` also flips only the low 16 bits
+   of a 32-bit variable, so the negate is not the asm's `neg ax` / `xor dx,0xffff` pair either.
+
+2. NO CARRY.  The pristine function never assigns g_fist_cf, yet every caller branches on it -- bb1b
+   is `call 0ea9; jae <next candidate>` (patch 284 threads the carry through g_fist_cf).  The range
+   test's answer was therefore a STALE carry left behind by an unrelated call.
+
+Measured in AZER1 self-play before this patch: all 8000 sampled projectile range tests "hit", and 7994
+of those hits were against the six type-0x1b objects -- which sit at z=7936..13824 while the vehicles
+sit at z=1280..2048.  Each bogus hit ran the impact path and spawned a type-0x4 explosion template, so
+the small-object roster (a294, cap 0x96=150 in b21d) saturated and refused 7429 further allocations;
+with the roster full no unit could fire a projectile at all.
+
+After: a294 150 -> 114 (no longer saturating), a296 11 -> 16 (the spurious kills are gone), and the
+simulation runs materially further (op-0x58 LOS queries 17795 -> 30190 over the same tick budget).
+
+Lane Z stays deliberately un-gated, exactly as the asm has it.  The 0x2030/0x2031/0x2032 stores are
+BYTE stores; the DAT_1000_e030/e031 macros are undefined2 and would clobber the neighbouring lane's
+sign byte, so this writes bytes.
+
+--- a/fist.c
++++ b/fist.c
+@@ -6699,69 +6699,77 @@
+ uint __allregs FUN_0000_0ea9(uint param_1,uint *param_2,uint *param_3)
+ 
+ {
+-  uint uVar1;
+-  uint uVar2;
+-  undefined1 uVar3;
+-  undefined1 uVar4;
+-  uint uVar5;
+-  uint uVar6;
+-  bool bVar7;
+-  
+-  uVar3 = 0;
+-  uVar1 = *param_2 - *param_3;
+-  uVar5 = (param_2[1] - param_3[1]) - (uint)(*param_2 < *param_3);
+-  bVar7 = uVar5 == 0;
+-  if ((int)uVar5 < 0) {
+-    uVar3 = 0xff;
+-    bVar7 = uVar1 == 0;
+-    uVar1 = -uVar1;
+-    if (bVar7) {
+-      uVar5 = -uVar5;
+-      bVar7 = uVar5 == 0;
+-    }
+-    else {
+-      uVar5 = uVar5 ^ 0xffff;
+-      bVar7 = uVar5 == 0;
+-    }
+-  }
+-  uVar2 = uVar1;
+-  if ((bVar7) && (uVar1 <= param_1)) {
+-    DAT_1000_e024 = uVar1;
+-    DAT_1000_e026 = uVar5;
+-    DAT_1000_e030 = uVar3;
+-    uVar4 = 0;
+-    uVar2 = param_2[2] - param_3[2];
+-    uVar6 = (param_2[3] - param_3[3]) - (uint)(param_2[2] < param_3[2]);
+-    bVar7 = uVar6 == 0;
+-    if ((int)uVar6 < 0) {
+-      uVar4 = 0xff;
+-      bVar7 = uVar2 == 0;
+-      uVar2 = -uVar2;
+-      if (bVar7) {
+-        uVar6 = -uVar6;
+-        bVar7 = uVar6 == 0;
+-      }
+-      else {
+-        uVar6 = uVar6 ^ 0xffff;
+-        bVar7 = uVar6 == 0;
+-      }
+-    }
+-    if ((bVar7) && (uVar2 <= param_1)) {
+-      DAT_1000_e028 = uVar2;
+-      DAT_1000_e02a = uVar6;
+-      DAT_1000_e031 = uVar4;
+-      DAT_1000_e032 = 0;
+-      uVar1 = param_2[4] - param_3[4];
+-      DAT_1000_e02e = (param_2[5] - param_3[5]) - (uint)(param_2[4] < param_3[4]);
+-      DAT_1000_e02c = uVar1;
+-      if (DAT_1000_e02e < 0) {
+-        DAT_1000_e032 = 0xff;
+-        uVar1 = -uVar1;
+-      }
+-      return uVar1;
++  /* PATCH 538: the 3-lane proximity/range test (asm 0x0ea9-0x0f2f; DS=DGROUP=0x1c00), the primitive
++   * under EVERY collision and proximity walk in the engine (bb1b, bb64, a0ab, 08e8, ...).  cx=the
++   * bound (bp); bx=param_2 and si=param_3 are two coordinate triples of THREE INT32 LANES, each held
++   * as two words: [bx]/[bx+2] = X, [bx+4]/[bx+6] = Y, [bx+8]/[bx+0xa] = Z.
++   *
++   * Ghidra typed the operands `uint *` and then modelled each lane as a 64-BIT value split over two
++   * array elements: it paired element[0] (=X) with element[1] (=Y) as one lane's low/high halves, so
++   * lane 1 tested X against a "high word" that is really Y, lane 2 tested Z, and Y was never tested
++   * at all.  Its `uVar5 ^ 0xffff` also flips only the low 16 bits of a 32-bit variable, so even the
++   * negate is not the asm's 32-bit `neg ax / xor dx,0xffff` pair.
++   *
++   * Worse, the pristine version NEVER SETS THE CARRY, yet every caller branches on it -- bb1b does
++   * `call 0ea9; jae next` (patch 284 threads it through g_fist_cf).  So the range test's answer was
++   * a STALE carry left by some unrelated call.  Measured in AZER1 self-play: every one of 8000
++   * projectile "range hits" passed, and 7994 of them were against the six type-0x1b objects, which
++   * sit at z=7936..13824 while the vehicles sit at z=1280..2048.
++   *
++   * Reconstructed 1:1 per lane: 32-bit difference; `jns` on the sign of the HIGH word; on negative,
++   * `neg ax` then `neg dx` (when ax was 0) else `xor dx,0xffff`; FAIL (clc) unless the high word is 0
++   * AND the low word is <= the bound (an UNSIGNED `ja`).  Lane Z is DELIBERATELY not bound-checked --
++   * the asm stores its signed delta to 0x202c/0x202e and its sign to 0x2032 and falls into `stc`, so
++   * the test is 2-D by design.  0x2030/0x2031/0x2032 are BYTE stores (`mov %cl,...`); the
++   * DAT_1000_e030/e031 macros are undefined2 and would clobber the neighbouring sign byte, so write
++   * bytes.  Out: CF=1 on a hit (g_fist_cf), AX = |dZ| low word. */
++  extern unsigned char g_fist_cf;
++  const unsigned char *b = (const unsigned char *)param_2;   /* bx */
++  const unsigned char *s = (const unsigned char *)param_3;   /* si */
++  uint16_t bp = (uint16_t)param_1;                           /* 0ea9 mov bp,cx */
++  uint16_t ax, dx, ax0;
++  unsigned char cl;
++
++#define FIST_0EA9_LANE(byte_off)                                                      \
++  do {                                                                                \
++    uint32_t d_ = *(const uint32_t *)(b + (byte_off))                                 \
++                - *(const uint32_t *)(s + (byte_off));      /* sub ax / sbb dx */     \
++    ax = (uint16_t)d_; dx = (uint16_t)(d_ >> 16); cl = 0;                             \
++    if ((int16_t)dx < 0) {                                  /* jns */                 \
++      cl = 0xff;                                            /* dec cl */              \
++      ax0 = ax; ax = (uint16_t)(0u - (unsigned)ax);          /* neg ax */             \
++      dx = ax0 ? (uint16_t)(dx ^ 0xffffu)                   /* jae only when ax==0 */ \
++               : (uint16_t)(0u - (unsigned)dx);                                       \
++    }                                                                                 \
++  } while (0)
++
++  FIST_0EA9_LANE(0);                                        /* 0ead-0ec6 lane X */
++  if (dx != 0 || ax > bp) { g_fist_cf = 0; return ax; }     /* 0ec2 jne / 0ec6 ja -> 0f23 clc */
++  *(uint16_t *)(g_mem + 0x1e024) = ax;                      /* 0ec8 mov [0x2024],ax */
++  *(uint16_t *)(g_mem + 0x1e026) = dx;                      /* 0ecb mov [0x2026],dx */
++  g_mem[0x1e030] = cl;                                      /* 0ecf mov [0x2030],cl (BYTE) */
++
++  FIST_0EA9_LANE(4);                                        /* 0ed5-0ef0 lane Y */
++  if (dx != 0 || ax > bp) { g_fist_cf = 0; return ax; }     /* 0eec jne / 0ef0 ja -> 0f23 clc */
++  *(uint16_t *)(g_mem + 0x1e028) = ax;                      /* 0ef2 mov [0x2028],ax */
++  *(uint16_t *)(g_mem + 0x1e02a) = dx;                      /* 0ef5 mov [0x202a],dx */
++  g_mem[0x1e031] = cl;                                      /* 0ef9 mov [0x2031],cl (BYTE) */
++
++  {                                                         /* 0eff-0f1d lane Z: recorded, NOT gated */
++    uint32_t d_ = *(const uint32_t *)(b + 8) - *(const uint32_t *)(s + 8);
++    ax = (uint16_t)d_; dx = (uint16_t)(d_ >> 16); cl = 0;
++    *(uint16_t *)(g_mem + 0x1e02c) = ax;                    /* 0f0b: the SIGNED delta, before abs */
++    *(uint16_t *)(g_mem + 0x1e02e) = dx;                    /* 0f0e */
++    if ((int16_t)dx < 0) {                                  /* 0f12 jns */
++      cl = 0xff;
++      ax0 = ax; ax = (uint16_t)(0u - (unsigned)ax);
++      dx = ax0 ? (uint16_t)(dx ^ 0xffffu) : (uint16_t)(0u - (unsigned)dx);
+     }
+   }
+-  return uVar2;
++  g_mem[0x1e032] = cl;                                      /* 0f1d mov [0x2032],cl (BYTE) */
++  g_fist_cf = 1;                                            /* 0f21 stc */
++  return ax;
++#undef FIST_0EA9_LANE
+ }
+ 
+ 
