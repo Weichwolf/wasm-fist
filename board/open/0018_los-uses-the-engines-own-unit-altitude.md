@@ -72,3 +72,35 @@ NEXT: this needs the oracle, not experimentation. Arm the patched DOSBox on an o
 (`FIST_MEMARM_BOOT=1 FISTLOG=<prefix>` with `FIST_WATCHFLAT` on the TCB endpoint words) and read what
 the ORIGINAL puts in `tcb+0xda` / `tcb+0xe6` at op-0x58, plus what its op-0x58 returns. That is the
 only way to settle both the endpoint space and the occlusion ratio.
+
+## CONFIRMED: the LOS stand-in is what stops missions resolving
+
+Traced the stall to its cause. At the stall point in SAUDI2 (t=35439, a296 stuck at 8):
+
+```
+[stall] t=35439 a296=8 | fire-req(a286)=43 shots=0 ammo-empty=0 roster-full=18 |
+        [t2 tgt=0000 a=90/16/5] [t3 tgt=0000 a=11264/36865/1025] [t2 tgt=0000 a=90/13/5]
+```
+
+Every live vehicle has `tgt=0000` -- no target -- while ammo is plentiful and fire requests are frozen
+at 43. So the blocker is target ACQUISITION, not ammo, weapons, or the roster.
+
+`FUN_0000_a6e3` (target acquire, patch 425) sets `word[self+0x97] = candidate` and then validates it
+with `e20a` -> the op-0x58 LOS. **When LOS says occluded it clears the target again.** With the
+stand-in occluding 95% of in-range queries, units acquire almost nothing, and whatever they do acquire
+they lose.
+
+Chain: LOS stand-in -> 95% occlusion -> a6e3 clears the target -> tgt=0000 -> no fire requests ->
+attrition stalls -> no mission resolves.
+
+Proof by probe (diagnostic only, NOT committed as a default): forcing the terrain-occlusion test to
+pass roughly doubles attrition in SAUDI2:
+
+```
+normal:          13 -> 7
+LOS forced open: 13 -> 3
+```
+
+SAUDI2 still does not reach 0, so LOS is not the *only* factor -- but it is the dominant gate, and no
+mission-resolution number is meaningful until the endpoints are real. This item is now the top blocker
+for board:0017.

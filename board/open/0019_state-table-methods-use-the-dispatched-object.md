@@ -44,3 +44,33 @@ Both need a convention established first, and guessing it would be worse than le
 NEXT: establish 054c's multi-register return threading, then reconstruct 9fe5; then resolve b7a9 and
 9f66 together. Both are latent SIGSEGVs, so they are a hard blocker for any long self-play run that
 reaches those states.
+
+## More sites, found by driving combat harder
+
+With the board:0018 probe forcing LOS open (so units actually engage), AZER1 reaches another instance
+of the same class within 40000 ticks:
+
+```
+#0  FUN_0000_86e3 (param_1=49495)      <- 0xC157, a DGROUP near offset, host-deref'd
+#1  FUN_0000_8711 (param_1=49495)
+#2  FUN_0000_afa2  (the aim gate)
+#3  FUN_0000_af97
+#4  FUN_0000_ab03
+```
+
+`FUN_0000_86e3` is pristine and reads `[param_1 + 0xb7]`, `[param_1 + 0xb5]`, `[param_1 + 0xb8]`,
+`[param_1 + 0xe0]`, `[param_1 + 0xe2]` through a near offset used as a host pointer.
+
+Its caller `FUN_0000_8711` carries a second defect worth fixing at the same time:
+
+```c
+undefined1 in_CF = 0;
+FUN_0000_86e3(param_1);
+if ((bool)in_CF) { FUN_0000_86b8(param_1); }
+```
+
+`in_CF` is a fabricated local initialised to 0, so `86b8` is dead code -- the asm's carry out of 86e3
+is dropped, exactly the class patch 284/497 threading (`g_fist_cf`) exists to fix.
+
+These do not fire in the default build today because units rarely engage; they WILL fire as soon as
+board:0018 is fixed. They are a hard prerequisite for it, not an independent nicety.
