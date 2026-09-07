@@ -6661,3 +6661,42 @@ retracted that branch), and it is NOT a defect in 9200.
 
 The oracle question narrows accordingly, and is now a single yes/no: in the original, is
 `byte[TCB+0xcd]` ever 2?  If it never is, 7eb7's dispatch is the bug.
+
+### cont.65v -- the contradiction, stated exactly, and what it is NOT
+
+Three more things checked, all static or measured, all narrowing:
+
+  * **The dispatch is faithful.**  `201a` does `mov bx,[0x3e08]; mov di,[bx]; call *0x3e18(di)`.  Both
+    SAUDI3 and AZER1 reach 7eb7 from node **0x3b0c**, whose di is 0x150, and the STATIC image at
+    DGROUP:0x3e18+0x150 = 0x3f68 holds **0x7eb7**.  So the display list genuinely says "element 0x150's
+    method is the mask-index-2 setter".  The earlier reading "7eb7 is dispatched when it shouldn't be"
+    is therefore also unsupported -- the port is doing what the data says.
+  * **Node 0x3b0c's own fields are `0150 0003 0000 0000 00c8 0140`** -- i.e. 200 and 320.  A 320x200
+    element.  mask[0] is 200 bytes of zeros; mask[2] is 78.
+  * **The mode-2 resource contains no record a 78-row mask could cover.**  Scanning the whole loaded
+    block 0x8f82..0x935a for records with the live-record header (+2 == 0x00a0) finds exactly three:
+    320x195, 318x198, 318x180.  The mode-1 block similarly holds exactly three: 288x81, 50x45, 72x56.
+    So there is no "the port picked the wrong record" explanation left either -- mode 2 has no small
+    record to pick.
+
+So the contradiction is now sharp, and every local explanation has been eliminated:
+
+    element 0x150  --(static method table)-->  7eb7  --(unconditional asm)-->  mask index 2
+    mask index 2   --(static array at 0x748c)-->  0x75b9, and the data ends 78 bytes later at 0x7607
+    mode-2 resource 0x28  --(loaded block)-->  three viewports, 195/198/180 rows, none <= 78
+
+Every one of those three links is STATIC data in FIST.DAT or an unconditional instruction.  They cannot
+all hold simultaneously on real hardware, because 9200's `loop` would run ~4.29e9 times.  Therefore one
+of my readings of the DATA is wrong -- not of the port.  The candidates left are exactly two:
+
+  (i)  the mask array at 0x748c is not 5 entries of {ptr}, or its entries are not "start of a per-row
+       byte table whose length is the viewport height" -- even though mode 1 pairs 81 with 81 exactly,
+       across all eight missions measured, and the last byte read (0x75b8) is precisely the byte before
+       entry 2 begins; or
+  (ii) the resource loaded at 0x8f82 is not what the original loads there (a defect in FUN_0000_153c or
+       in the resource id), so the three near-full-screen records are not the original's.
+
+(ii) is now the better bet, and it is testable WITHOUT the oracle: read resource 0x28 straight out of
+the FISTDATA archive and compare it byte-for-byte with the 0x3d8 bytes the port put at DGROUP:0x8f82.
+If they differ, 153c is the defect and the whole 9200 group falls out of it.  That is the next step --
+cheaper than the oracle run, and it does not depend on reaching a mission under DOSBox.
