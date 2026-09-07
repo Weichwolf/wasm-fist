@@ -153,3 +153,58 @@ NEXT: locate the extender's PM service dispatcher in `re_out/fist_image.bin` and
 handler. That is ground truth already in the repository and settles both the endpoint scale and the
 occlusion rule without any oracle run. Until then no mission-resolution number is meaningful, because
 target acquisition is decided by whichever of the three models is installed.
+
+## The original op-0x58 handler is IN THE TREE, and it settles the scale
+
+`re_out/fist_image.bin` contains the extender's real LOS service at **0x8030-0x811e**. Decoded:
+
+```
+8030: mov 0xc93,%edi                  ; the TCB
+8036: mov 0xde(%edi),%ebx  ...        ; target X/Y/Z  (0xde/0xe2/0xe6)
+8048: sub 0xd2(%edi),%ebx  ...        ; minus self X/Y/Z (0xd2/0xd6/0xda)
+805a: cmp $0x40000,%edx / jge         ; the same +-0x40000 range gate the shim has
+808a: shl $0xd,%edx ; shl $0xd,%ebx ; neg %edx ; shl $0x10,%eax
+8095: mov $0x3000000,%ebp             ; the same step normalisation loop
+80ba: mov 0x85bc,%esi                 ; the heightmap
+80d1: mov 0xd2(%edi),%ebx ...         ; march from SELF
+80eb: shl $0x10,%ebp                  ; self Z << 16
+810a: movzbl (%eax,%esi,1),%edi       ; terrain byte
+810e: shl $0x18,%edi                  ; h << 24
+8111: cmp %ebp,%edi / jae 811c        ; OCCLUDED
+8117: xor %eax,%eax / not %eax / ret  ; -1  = clear LOS
+811c: xor %eax,%eax / ret             ;  0  = blocked
+```
+
+Two conclusions, neither of which needed an oracle run:
+
+1. **The shim's marching is a faithful reimplementation** -- same range gate, same normalisation, same
+   index packing, same return values. Only the ENDPOINTS are substituted.
+2. **The scale is proven.** `shl $0x10` on the self Z against `shl $0x18` on the terrain byte means the
+   comparison is `h<<8` vs `Z`. So an object's Z must be in terrain scale, i.e. `terrain_byte << 8`.
+   The stand-in is therefore not a modelling choice -- it is masking wrong object Z.
+
+## Census: which object types are actually on the ground (AZER1, t>8000)
+
+`Z[+0xc]` is always `ground_byte[+0xd] << 8`, so the engine's altitude really is the ground byte.
+
+| type | ground byte | terrain byte | delta |
+|------|-------------|--------------|-------|
+| 0x1a, 0x1b (static map objects) | 31..63 | 31..63 | **exactly 0** |
+| 0x10 (AI tanks, moving)         | 35..63 | 23..65 | -26..+24 (slew lag) |
+| 0x02, 0x03, 0x11                | 0..82  | 37..79 | -79..+35 |
+| **0x00, 0x01**                  | **5, 6** | **36, 72** | **-31, -66** |
+
+The mechanism WORKS -- types 0x1a/0x1b sit exactly on the terrain. Types 0x00 and 0x01 are buried by
+31 and 66 height units (about 8000 and 17000 in Z), and they are exactly the two whose step methods are
+`7c1d` and `87df`, neither of which calls the op-0x54 terrain probe. The only probe callers are
+`9a50`, `9ae9`, `9db1`, `9e2b`, `adcd` (plus two extender-module functions).
+
+Note also that op-0x54 fires FEWER THAN 500 times in a 20000-tick AZER1 run -- for ~150 live objects
+that is nowhere near "every 4th frame per object", so the per-frame terrain follow is largely not
+running even for the types that do call it.
+
+REVISED NEXT STEP (this supersedes "capture the original's TCB endpoints"): the endpoints are already
+correct by construction -- `e20a` sends `eye LUT + dword[obj+0xc]` and that IS the right quantity. The
+defect is that `dword[obj+0xc]` is not maintained for every moving object. Find what drives the
+terrain follow for types 0x00/0x01 in the original, and why op-0x54 fires so rarely; then delete the
+shim stand-in, which at that point has nothing left to mask.
