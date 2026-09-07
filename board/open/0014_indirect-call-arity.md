@@ -38,14 +38,34 @@ Mechanical, and it needs no run:
   3. count the arguments at every `fist_icall_far((uint32_t)(DAT_1000_cXXX))` call site;
   4. list the sites that disagree.
 
-## Remaining candidates (from that audit, HEAD after 530)
+## Remaining candidates (corrected audit, HEAD after 530)
 
-    0x60a -> 1091 (3)   13 sites at 2 or 1        0x68c -> 2004 (11)  10 sites at 3
-    0x6c8 -> 294d (5)    7 sites at 1             0x560 -> 0310  (4)   8 sites at 3
-    0x61a -> 11db (2)    6 sites at 1             0x594 -> 04a3  (0)   5 sites at 1-2
-    0x6d0 -> 2a39 (4)    3 sites at 1             0x558 -> 026e  (2)   3 sites at 1 or 3
-    0x6b4 -> 26a1 (5)    2 sites at 1 and 4       0x544 -> 0166  (3)   2 sites at 4
-    0x554 0x55c 0x564 0x584 0x5a4 0x5fe 0x67c 0x6d8 0x540   1 site each
+**The first version of this list was WRONG and is replaced.**  My extractor matched the parameter list
+with `FUN_0000_XXXX\(([^;]*?)\);`, which also matches each function's DEFINITION -- there the `)` is
+not followed by `;`, so the match ran on into the body and counted the commas it found there.  Later
+matches overwrote earlier ones, so every function whose definition follows its declaration got an
+inflated count: 1091 read as 3 params (really 2), 2004 as 11 (really 3), 0310 as 4 (really 3).  The
+three largest "clusters" I first published -- [0x60a] 13 sites, [0x68c] 10 sites, [0x560] 8 sites --
+were artefacts of that bug and are NOT defects.  Extract the declaration by scanning to the matching
+paren and requiring the next non-space character to be `;`.
+
+Corrected: **17 vectors, ~35 sites**, over the MGA-segment (0x3e78) vectors whose target declaration is
+resolvable:
+
+    0x6c8 -> 294d (5)   7 sites at 1        0x594 -> 04a3 (0)   5 sites at 1-2
+    0x61a -> 11db (2)   6 sites at 1        0x558 -> 026e (2)   3 sites at 1 or 3
+    0x6d0 -> 2a39 (4)   3 sites at 1        0x6b4 -> 26a1 (5)   2 sites, at 1 and 4
+    0x544 -> 0166 (3)   2 sites at 4        0x5b0 -> 084e (1)   2 sites at 2
+    0x60a -> 1091 (2)   2 sites, at 3 and 1 (the twelve 2-arg sites are CORRECT)
+    0x540 0x554 0x55c 0x564 0x584 0x5a4 0x67c 0x6d8   1 site each
+
+Two shapes dominate and should be treated separately:
+
+  * sites passing a literal `0xf69` or `unaff_CS` as the FIRST argument -- that is the far-call SEGMENT
+    leaking into the argument list, i.e. the board:0010 segment class, not this one.  Fixing the arity
+    without removing the leak would just move the bug.
+  * sites passing a single `0` or `ax` to a 4- or 5-parameter target (e.g. the seven [0x6c8] 1-arg
+    sites) -- these are the closest in shape to 528/529/530 and are the ones to verify first.
 
 ## The discipline this item must keep
 
