@@ -1,0 +1,227 @@
+PATCH 541: the weapon-station service cluster -- six functions that host-deref'd the object near
+offset, and two dropped carries that made a whole branch dead code.
+
+Found by driving combat hard enough to reach it: with board:0018's LOS probe forcing target
+acquisition to succeed, AZER1 SIGSEGVs inside FUN_0000_86e3 (measured param_1=0xC157, a DGROUP near
+offset used as a host pointer) on the path afa2 -> 8711 -> 86e3.
+
+  86e3  asm 0x86e3-0x8710.  Picks station 0 if `[di+0xb7]==4 && [di+0xb5]!=0`, else station 1 if
+        `[di+0xb8]==4`, else `86fe stc` and returns.  On success calls 0f69:0x8be0 (linear 0x18270 =
+        FUN_1000_8270 -- the port's target was already right), sets [di+0xe0]/[di+0xe2]=3, `870f clc`.
+        Ghidra host-deref'd the object AND dropped the carry.
+  8711  asm 0x8711-0x8719 is `call 86e3 ; jae 8719 ; call 86b8`.  So 86b8 runs exactly when 86e3
+        returned CARRY SET.  Ghidra emitted `undefined1 in_CF = 0;` -- a fabricated local -- making
+        FUN_0000_86b8 unreachable dead code.
+  86b8  asm 0x86b8-0x86de.  Claims the first free station slot (`[di+bx+0xb7]==0` -> set 2), `86cc stc`
+        when neither is free, `86dd clc` when one was claimed.  Same base-loss, same dropped carry.
+  8270  asm 0x18270-0x182b5 (= 0f69:0x8be0), the FIRE service.  Host-deref'd the firer AND the target
+        link: `18277 mov 0x97(%di),%si ; 1827f testb $0x10,0x16(%si)` reads the TARGET's flags through
+        SI, a DGROUP near offset, which the pristine code dereferenced as a host pointer.  It also
+        bound b1df's new object to a dead `unaff_CS` and its carry to a dead `bVar4`, discarding the
+        spawn result -- the asm's `1828e call b1df ; 18291 mov %di,%si ; 18293 pop %di` puts the NEW
+        object in SI and restores the firer in DI (the patch-462 split).
+  842f  asm 0x842f-0x844a.  `8436 mov -0x6f9e(%bx),%bx` reads word[DGROUP:bx*2+0x9062], a per-station
+        field offset, which Ghidra deref'd as a host int*; `843f pop %bx` restores the UNSHIFTED
+        station index for the 8be0 call.
+  844b  asm 0x844b, one line: `xorb $0x8,0x3f(%di)`, host-deref'd.
+
+Callee conventions are unchanged and each call site matched to what its callee already expects:
+b8d1 takes HOST pointers, c047 and a4a2 take NEAR OFFSETS, b1df returns the new object's near offset.
+
+Default build: AZER1/AZER4/SAUDI2/TRAIN1 outcomes unchanged (no regression) -- this path is rarely
+reached today precisely because board:0018's LOS stand-in stops units from acquiring targets.
+Under the LOS probe the 86e3 SIGSEGV is gone; AZER1 then reaches FUN_0000_9f66, which board:0019
+already names as the next open entry of the same class.
+
+--- a/fist.c
++++ b/fist.c
+@@ -22990,10 +22990,19 @@
+ void __allregs FUN_0000_842f(uint param_1,int param_2,int param_3)
+ 
+ {
+-  *(byte *)(param_3 + 0x3f) = *(byte *)(param_3 + 0x3f) ^ 8;
+-  *(undefined1 *)(*(int *)(param_2 * 2 + -0x6f9e) + param_3 + 0xbc) = 3;
+-  if ((param_1 & 0x14) != 0) {
+-    FUN_1000_8270(param_2,param_3);
++  /* PATCH 541: weapon-station service, asm 0x842f-0x844a (DS=DGROUP=0x1c00).  ax=param_1, bx=the
++   * STATION index, di=the object NEAR OFFSET.  `8436 mov -0x6f9e(%bx),%bx` reads word[DGROUP:bx*2+
++   * 0x9062] (a per-station field offset) which Ghidra deref'd as a host int*, and every [di+..] was a
++   * host deref.  `843f pop %bx` restores the UNSHIFTED station for the 8be0 call. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)param_2;
++  uint16_t di = (uint16_t)param_3;
++  uint16_t t;
++  dg[(uint16_t)(di + 0x3f)] ^= 8;                                        /* 8432 xorb $0x8,0x3f(%di) */
++  t = *(uint16_t *)(dg + (uint16_t)((uint16_t)(bx << 1) + 0x9062));      /* 8430 shl / 8436 mov */
++  dg[(uint16_t)(di + t + 0xbc)] = 3;                                     /* 843a movb $3,0xbc(%bx,%di) */
++  if ((param_1 & 0x14) != 0) {                                           /* 8440 test / 8443 je */
++    FUN_1000_8270((int)bx,(int)di);                                      /* 8445 lcall 0f69:8be0 */
+   }
+   return;
+ }
+@@ -23004,7 +23013,9 @@
+ void __allregs FUN_0000_844b(int param_1)
+ 
+ {
+-  *(byte *)(param_1 + 0x3f) = *(byte *)(param_1 + 0x3f) ^ 8;
++  /* PATCH 541: asm 0x844b `xorb $0x8,0x3f(%di); ret` -- di is the object NEAR OFFSET, host-deref'd. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  dg[(uint16_t)((uint16_t)param_1 + 0x3f)] ^= 8;
+   return;
+ }
+ 
+@@ -23434,15 +23445,24 @@
+ void __allregs FUN_0000_86b8(int param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = 0;
+-  if ((*(char *)(param_1 + 0xb7) != '\0') && (iVar1 = 1, *(char *)(param_1 + 0xb8) != '\0')) {
+-    return;
++  /* PATCH 541: asm 0x86b8-0x86de (DS=DGROUP=0x1c00), di=the object NEAR OFFSET.  Host-pointer
++   * base-loss on every field, and the function's RESULT IS ITS CARRY -- `86cc stc` when neither
++   * station slot is free, `86dd clc` when one was claimed -- which Ghidra dropped entirely. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t bx = 0;                                                       /* 86b8 mov $0x0,%bx */
++  if (dg[(uint16_t)(di + bx + 0xb7)] != 0) {                             /* 86bb cmpb; 86c0 je */
++    bx = 1;                                                              /* 86c2 mov $0x1,%bx */
++    if (dg[(uint16_t)(di + bx + 0xb7)] != 0) {                           /* 86c5 cmpb; 86ca je */
++      g_fist_cf = 1;                                                     /* 86cc stc */
++      return;
++    }
+   }
+-  *(undefined1 *)(iVar1 + param_1 + 0xb7) = 2;
+-  *(undefined1 *)(param_1 + 0xe0) = 3;
+-  *(undefined1 *)(param_1 + 0xe2) = 3;
++  dg[(uint16_t)(di + bx + 0xb7)] = 2;                                    /* 86ce movb $2 */
++  dg[(uint16_t)(di + 0xe0)] = 3;                                         /* 86d3 */
++  dg[(uint16_t)(di + 0xe2)] = 3;                                         /* 86d8 */
++  g_fist_cf = 0;                                                         /* 86dd clc */
+   return;
+ }
+ 
+@@ -23452,16 +23472,27 @@
+ void __allregs FUN_0000_86e3(int param_1)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  uVar1 = 0;
+-  if (((*(char *)(param_1 + 0xb7) != '\x04') || (*(char *)(param_1 + 0xb5) == '\0')) &&
+-     (uVar1 = 1, *(char *)(param_1 + 0xb8) != '\x04')) {
+-    return;
++  /* PATCH 541: asm 0x86e3-0x8710 (DS=DGROUP=0x1c00), di=the object NEAR OFFSET, reached from the aim
++   * gate afa2 via 8711.  Two defects: the object was host-deref'd (SIGSEGV as soon as units actually
++   * engage -- measured param_1=0xC157), and the function's carry -- `86fe stc` for "no station ready",
++   * `870f clc` for "serviced" -- was dropped, which is what makes 8711's 86b8 branch dead.
++   * `lcall 0f69:8be0` is linear 0x18270 = FUN_1000_8270, so the port's target was already right. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t bx = 0;                                                       /* 86e3 mov $0x0,%bx */
++  if (!(dg[(uint16_t)(di + bx + 0xb7)] == 4 &&                           /* 86e6/86eb */
++        dg[(uint16_t)(di + bx + 0xb5)] != 0)) {                          /* 86ed/86f2 */
++    bx = 1;                                                              /* 86f4 mov $0x1,%bx */
++    if (dg[(uint16_t)(di + bx + 0xb7)] != 4) {                           /* 86f7/86fc */
++      g_fist_cf = 1;                                                     /* 86fe stc */
++      return;
++    }
+   }
+-  FUN_1000_8270(uVar1,param_1);
+-  *(undefined1 *)(param_1 + 0xe0) = 3;
+-  *(undefined1 *)(param_1 + 0xe2) = 3;
++  FUN_1000_8270((int)bx,(int)di);                                        /* 8700 lcall 0f69:8be0 */
++  dg[(uint16_t)(di + 0xe0)] = 3;                                         /* 8705 */
++  dg[(uint16_t)(di + 0xe2)] = 3;                                         /* 870a */
++  g_fist_cf = 0;                                                         /* 870f clc */
+   return;
+ }
+ 
+@@ -23471,11 +23502,13 @@
+ void __allregs FUN_0000_8711(undefined2 param_1)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
+-  FUN_0000_86e3(param_1);
+-  if ((bool)in_CF) {
+-    FUN_0000_86b8(param_1);
++  /* PATCH 541: asm 0x8711-0x8719.  `8714 jae 8719` skips on CF=0, so 86b8 runs exactly when 86e3
++   * returned CARRY SET.  Ghidra emitted `undefined1 in_CF = 0;` -- a fabricated local -- which made
++   * FUN_0000_86b8 unreachable dead code.  Thread 86e3's real carry through g_fist_cf (patch 284). */
++  extern unsigned char g_fist_cf;
++  FUN_0000_86e3((int)(uint16_t)param_1);                                 /* 8711 call 86e3 */
++  if (g_fist_cf) {                                                       /* 8714 jae 8719 */
++    FUN_0000_86b8((int)(uint16_t)param_1);                               /* 8716 call 86b8 */
+   }
+   return;
+ }
+@@ -62453,34 +62486,41 @@
+ void __allregs FUN_1000_8270(int param_1,int param_2)
+ 
+ {
+-  char *pcVar1;
+-  undefined2 uVar2;
+-  undefined2 in_register_0000000e;
+-  undefined4 uVar3;
+-  int unaff_CS;
+-  bool bVar4;
+-  
+-  uVar3 = CONCAT22(in_register_0000000e,param_1);
+-  if (*(char *)(param_1 + param_2 + 0xb5) == '\0') {
+-    uVar2 = 0x2fc9;
+-  }
+-  else if ((*(int *)(param_2 + 0x97) == 0) ||
+-          (bVar4 = false, (*(byte *)(*(int *)(param_2 + 0x97) + 0x16) & 0x10) == 0)) {
+-    uVar2 = 0x2fb5;
++  /* PATCH 541: the weapon-station FIRE service (asm 0x18270-0x182b5 = 0f69:0x8be0; DS=DGROUP=0x1c00).
++   * bx=param_1 the STATION index, di=param_2 the firer NEAR OFFSET.  Ghidra host-deref'd the firer AND
++   * the target link -- `18277 mov 0x97(%di),%si` then `1827f testb $0x10,0x16(%si)` reads the TARGET's
++   * flags through SI, a DGROUP near offset, which the pristine code dereferenced as a host pointer.
++   * It also bound b1df's new object to a dead `unaff_CS` and its carry to a dead `bVar4`, so the spawn
++   * result was discarded: asm `1828e call b1df ; 18291 mov %di,%si ; 18293 pop %di` puts the NEW object
++   * in SI and restores the firer in DI (the patch-462 split).  b8d1 takes host pointers; c047 and a4a2
++   * take near offsets. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)param_1;
++  uint16_t di = (uint16_t)param_2;
++  uint16_t tone, si, tgt;
++  if (dg[(uint16_t)(di + bx + 0xb5)] == 0) {                             /* 18270/18275 -> 182a9 */
++    tone = 0x2fc9;
+   }
+   else {
+-    pcVar1 = (char *)(param_1 + param_2 + 0xb5);
+-    *pcVar1 = *pcVar1 + -1;
+-    FUN_1000_b1df(0xf,param_2);
+-    if (!bVar4) {
+-      FUN_0000_b8d1(param_2,unaff_CS);
+-      FUN_0000_c047(0x18,uVar3,unaff_CS);
+-      return;
++    tgt = *(uint16_t *)(dg + (uint16_t)(di + 0x97));                     /* 18277 mov 0x97(%di),%si */
++    if (tgt == 0 || (dg[(uint16_t)(tgt + 0x16)] & 0x10) == 0) {          /* 1827b/1827f/18283 -> 182ae */
++      tone = 0x2fb5;
++    }
++    else {
++      dg[(uint16_t)(di + bx + 0xb5)]--;                                  /* 18285 decb */
++      si = (uint16_t)FUN_1000_b1df(0xf,(int *)(uintptr_t)di);            /* 1828e; 18291 mov %di,%si */
++      if (g_fist_cf) {                                                   /* 18294 jb 182a4 */
++        tone = 0x2fd7;
++      }
++      else {
++        FUN_0000_b8d1((int)(intptr_t)(dg + si),(int)(intptr_t)(dg + di)); /* 18296 (host ptrs) */
++        FUN_0000_c047(0x18,0,(int)di);                                    /* 1829b/1829e */
++        return;                                                           /* 182a3 lret */
++      }
+     }
+-    uVar2 = 0x2fd7;
+-    param_2 = unaff_CS;
+   }
+-  FUN_1000_a4a2(uVar2,param_2);
++  FUN_1000_a4a2(tone,(int)di);                                            /* 182b1/182b2 call a4a2 */
+   return;
+ }
+ 

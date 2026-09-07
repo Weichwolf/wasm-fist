@@ -1,0 +1,271 @@
+PATCH 542: the last two entries of the 9e2b state table -- 9f66 and 9fe5 -- plus b7a9, and 054c's
+dropped CX:DX return.  The table is now complete.
+
+board:0019 named these two as OPEN because each needed a convention established before it could be
+reconstructed honestly.  Both are now settled from the asm.
+
+Same dispatch as patches 497/498/540: `9ecd call cs:[0x9f0f+bx]` runs with DI = the object NEAR OFFSET
+and the port passes it as the call's single argument, so it lands in param_1.  Ghidra bound the object
+to a later parameter -- stack residue -- and host-deref'd it.  Both SIGSEGV as soon as units actually
+engage, which is why they were only reachable under board:0018's LOS probe.
+
+  9f66  asm 0x9f66-0x9fe4, the guided weapon's hold/spawn/reacquire step.  Two call targets had to be
+        resolved through the 0f69 segment before this could be written:
+          9f82 `lcall 0f69:0xbb4f` -> linear 0x1B1DF = FUN_1000_b1df (spawn type 0xe), with the asm's
+               `9f87 mov %di,%si ; 9f89 pop %di` being patch 462's split (SI = NEW object, DI = firer);
+               Ghidra bound the new object to a dead `unaff_CS`.
+          9fcf `lcall 0f69:0xa86c` -> linear 0x19EFC = FUN_1000_9efc, the target-acquisition scan
+               (patch 483), ax=0x320=800 -- which the pristine code already had right.
+  b7a9  asm 0xb7a9-0xb807, the guided-weapon launch init and 9f66's only callee of its kind.  ax=the
+        target link, si=the NEW object, di=the firer, both near offsets, both host-deref'd.  The three
+        coordinate copies are 32-bit (`66` prefix at b7ce/b7d6/b7de).
+  9fe5  asm 0x9fe5-0xa029, the track/arm step.  This is the one that needed 054c's multi-register
+        return.  054c is called with SI = the object's coordinate triple (`9fec lea 0x4(%di),%si`) and
+        DI = one of two DGROUP reference points chosen by the side bit ([di+0x16]&8 -> 0x9444 else
+        0x943c).  Its return state is exact: asm 0x554 `push %ax`, 0x558 `push %ax ; push %dx`, then
+        0x56f `pop %dx ; pop %cx ; pop %ax` -- so AX=bearing, BX=pitch, CX=range LOW, DX=range HIGH.
+        `a004 mov %ch,%cl ; a006 mov %dl,%ch` then rebuilds (range >> 8) in CX.  The pristine code
+        FABRICATED that word from its own parameters (`CONCAT11((char)param_2, uVar4)`) because Ghidra
+        dropped everything but AX.
+  054c  now publishes CX and DX the way patch 473 already publishes BX, captured where 08e8's dx:ax
+        still stands in DGROUP:0x458/0x45a.  (`9fe5 testw $0x7,0x6cde` sets flags nothing reads.)
+
+Default build: AZER1/AZER4/SAUDI2 outcomes unchanged -- these paths are rarely reached today precisely
+because board:0018's LOS stand-in stops units from acquiring targets.
+
+Under the LOS probe, where they ARE reached, the whole 9e2b table is now clean:
+
+  before 541:  AZER1 SIGSEGV in 86e3
+  after  541:  AZER1 SIGSEGV in 9f66
+  after  542:  AZER1 exit 0, a296 16 -> 11 (five kills), AZER4 20 -> 14, SAUDI2 13 -> 3
+
+--- a/fist.c
++++ b/fist.c
+@@ -10,6 +10,7 @@
+ extern unsigned short g_fist_r48_dx, g_fist_r48_cx, g_fist_3e29_cx;  /* PATCH 469: 1322/129f 48-bit DX:CX lanes; 3e29's CX (screen x) */
+ extern uint32_t g_fist_ext_esi; extern unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi, g_fist_1345_bp;  /* PATCH 471: op-0x40 register lanes; 1345's BP (list header) */
+ extern unsigned short g_fist_054c_bx;  /* PATCH 473: 054c/bbc6 BX out = the PITCH (077e over the Z delta) */
++extern unsigned short g_fist_054c_cx, g_fist_054c_dx;  /* PATCH 542: 054c CX:DX out = the 32-bit RANGE */
+ void __allregs FUN_1000_ac39(int param_1); void __allregs FUN_1000_ac5d(int param_1);
+ void __allregs FUN_1000_ac81(int param_1); void __allregs FUN_1000_aca5(int param_1);  /* PATCH 492 */
+ 
+@@ -5055,6 +5056,10 @@
+   uVar1 = FUN_0000_0731(param_2,param_3);
+   FUN_0000_08e8((long *)(intptr_t)param_2,(long *)(intptr_t)param_3);
+   uVar2 = (undefined2)DAT_1000_c458;
++  /* PATCH 542: asm 0x558 `push %ax ; push %dx` / 0x56f `pop %dx ; pop %cx` -- 08e8's range survives the
++   * 077e call in CX:DX.  Capture it here, where 08e8's dx:ax still stands in DGROUP:0x458/0x45a. */
++  g_fist_054c_cx = (unsigned short)DAT_1000_c458;   /* 0x570 pop %cx = the range LOW word  */
++  g_fist_054c_dx = (unsigned short)DAT_1000_c45a;   /* 0x56f pop %dx = the range HIGH word */
+   g_fist_054c_bx = (unsigned short)FUN_0000_077e(*(uint *)(param_3 + 8) - *(uint *)(param_2 + 8),
+                 (uint)(unsigned short)DAT_1000_c45a,
+                 (*(int *)(param_3 + 10) - *(int *)(param_2 + 10)) -
+@@ -27512,48 +27517,59 @@
+ void __allregs FUN_0000_9f66(undefined2 param_1,undefined4 param_2,int param_3)
+ 
+ {
+-  uint uVar1;
+-  int iVar2;
+-  int unaff_CS;
+-  bool bVar3;
+-  
+-  if (*(int *)(param_3 + 0x1f) != 0) {
+-    if ((*(byte *)(*(int *)(param_3 + 0x1f) + 0x16) & 1) == 0) {
+-      bVar3 = false;
+-      if ((*(byte *)(param_3 + 0x16) & 8) == 0) {
+-        DAT_2000_2db0 = 1;
+-      }
+-      FUN_1000_b1df(0xe,param_3);
+-      if (!bVar3) {
+-        FUN_0000_b7a9(*(undefined2 *)(unaff_CS + 0x1f),param_3,unaff_CS);
+-        FUN_0000_be8b(0x1b,param_2);
+-      }
+-      *(char *)(unaff_CS + 0x31) = *(char *)(unaff_CS + 0x31) + '\x01';
+-      param_3 = unaff_CS;
+-      if (*(byte *)(unaff_CS + 0x31) < 0x18) {
+-        if ((*(byte *)(unaff_CS + 0x31) & 3) != 0) {
+-          uVar1 = FUN_0000_0291();
+-          *(int *)(unaff_CS + 0x23) = (uVar1 & 0xf) + 8;
+-          *(undefined1 *)(unaff_CS + 0x25) = 6;
++  /* PATCH 542: entry 1 of the 9e2b state table (asm 0x9f66-0x9fe4; DS=DGROUP=0x1c00) -- the guided
++   * weapon's per-frame state: hold the current target, spawn its effect, or reacquire.  The `9ecd
++   * call cs:[0x9f0f+bx]` dispatch runs with DI = the object NEAR OFFSET and passes it as the call's
++   * single argument, so it lands in param_1; Ghidra bound the object to param_3 (stack residue) and
++   * host-deref'd it, and bound b1df's new object to a dead `unaff_CS`.
++   *   9f82 `lcall 0f69:0xbb4f` is linear 0x1B1DF = FUN_1000_b1df (spawn type 0xe), and the asm's
++   *   `9f87 mov %di,%si ; 9f89 pop %di` is patch 462's split: SI = the NEW object, DI = the firer.
++   *   9fcf `lcall 0f69:0xa86c` is linear 0x19EFC = FUN_1000_9efc, the target-acquisition scan
++   *   (patch 483), called with ax=0x320 = 800 -- which the pristine code already had right.
++   * a097 reads its argument as a host pointer (see patch 540). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t si = *(uint16_t *)(dg + (uint16_t)(di + 0x1f));       /* 9f66 mov 0x1f(%di),%si */
++  uint16_t nw, r;
++  (void)param_2; (void)param_3;
++  if (si != 0) {                                                  /* 9f69/9f6b je 9fcc */
++    if ((dg[(uint16_t)(si + 0x16)] & 1) == 0) {                   /* 9f6d/9f71 jne 9fc7 */
++      if ((dg[(uint16_t)(di + 0x16)] & 8) == 0) {                 /* 9f73/9f77 */
++        dg[0x6db0] = 1;                                           /* 9f79 movb $0x1,0x6db0 */
++      }
++      nw = (uint16_t)FUN_1000_b1df(0xe,(int *)(uintptr_t)di);     /* 9f82; 9f87 mov %di,%si */
++      if (!(bool)g_fist_cf) {                                     /* 9f8a jb 9f99 */
++        FUN_0000_b7a9(*(uint16_t *)(dg + (uint16_t)(di + 0x1f)),  /* 9f8c mov 0x1f(%di),%ax */
++                      (int)nw,(int)di);                            /* 9f90 call b7a9 */
++        FUN_0000_be8b(0x1b,0);                                     /* 9f93/9f96 */
++      }
++      dg[(uint16_t)(di + 0x31)]++;                                 /* 9f99 incb 0x31(%di) */
++      if (dg[(uint16_t)(di + 0x31)] < 0x18) {                      /* 9f9c/9fa0 jae 9fc3 */
++        if ((dg[(uint16_t)(di + 0x31)] & 3) != 0) {                /* 9fa2/9fa6 je 9fb9 */
++          r = (uint16_t)FUN_0000_0291();                           /* 9fa8 call 0x291 */
++          *(uint16_t *)(dg + (uint16_t)(di + 0x23)) =
++              (uint16_t)((r & 0xf) + 8);                           /* 9fab/9fae/9fb1 */
++          dg[(uint16_t)(di + 0x25)] = 6;                           /* 9fb4 */
+           return;
+         }
+-        *(undefined1 *)(unaff_CS + 0x25) = 8;
+-        *(undefined2 *)(unaff_CS + 0x23) = 300;
++        dg[(uint16_t)(di + 0x25)] = 8;                             /* 9fb9 */
++        *(uint16_t *)(dg + (uint16_t)(di + 0x23)) = 0x12c;         /* 9fbd movw $0x12c */
+         return;
+       }
+-      goto LAB_0000_9fc3;
++      FUN_0000_a097((int)(intptr_t)(dg + di));                     /* 9fc3 call a097 */
++      return;
+     }
+-    *(undefined2 *)(param_3 + 0x1f) = 0;
++    *(uint16_t *)(dg + (uint16_t)(di + 0x1f)) = 0;                 /* 9fc7 movw $0x0,0x1f(%di) */
+   }
+-  iVar2 = FUN_1000_9efc(800,param_1,param_3);
+-  if (iVar2 != 0) {
+-    *(int *)(param_3 + 0x1f) = iVar2;
+-    *(undefined1 *)(param_3 + 0x25) = 0;
+-    *(undefined2 *)(param_3 + 0x1d) = 0x40;
++  nw = (uint16_t)FUN_1000_9efc(0x320,0,(undefined2 *)(uintptr_t)di); /* 9fcc/9fcf */
++  if (nw != 0) {                                                   /* 9fd4/9fd6 je 9fc3 */
++    *(uint16_t *)(dg + (uint16_t)(di + 0x1f)) = nw;                 /* 9fd8 */
++    dg[(uint16_t)(di + 0x25)] = 0;                                  /* 9fdb */
++    *(uint16_t *)(dg + (uint16_t)(di + 0x1d)) = 0x40;               /* 9fdf movw $0x40 */
+     return;
+   }
+-LAB_0000_9fc3:
+-  FUN_0000_a097(param_3);
++  FUN_0000_a097((int)(intptr_t)(dg + di));                          /* 9fc3 */
+   return;
+ }
+ 
+@@ -27563,31 +27579,40 @@
+ void __allregs FUN_0000_9fe5(undefined2 param_1,undefined2 param_2,int param_3,int param_4)
+ 
+ {
+-  undefined4 *puVar1;
+-  undefined2 uVar2;
+-  undefined1 uVar4;
+-  uint uVar3;
+-  
+-  uVar4 = (undefined1)((uint)param_1 >> 8);
+-  puVar1 = (undefined4 *)&DAT_2000_543c;
+-  if ((*(byte *)(param_3 + 0x16) & 8) != 0) {
+-    puVar1 = (undefined4 *)&DAT_2000_5444;
+-  }
+-  uVar2 = FUN_0000_054c(param_2,param_3 + 4,puVar1);
+-  *(undefined2 *)(param_4 + 0x2e) = uVar2;
+-  uVar3 = CONCAT11((char)param_2,uVar4);
+-  *(uint *)(param_4 + 0x21) = uVar3;
+-  if (0x1e < uVar3) {
+-    if (0x78 < uVar3) {
+-      return;
+-    }
+-    *(undefined2 *)(param_4 + 0x1d) = 0x10;
++  /* PATCH 542: entry 2 of the 9e2b state table (asm 0x9fe5-0xa029; DS=DGROUP=0x1c00) -- the guided
++   * weapon's track/arm step.  The `9ecd call cs:[0x9f0f+bx]` dispatch runs with DI = the object NEAR
++   * OFFSET and passes it as the single argument, so it lands in param_1; Ghidra bound the object to
++   * param_3/param_4 (stack residue) and host-deref'd it.
++   *   `9fec lea 0x4(%di),%si` and `9fef/9ff8 mov $0x943c|$0x9444,%ax ; 9ffb mov %ax,%di` -- 054c is
++   *   called with SI = the object's coordinate triple and DI = one of two DGROUP reference points,
++   *   selected by the object's side bit [di+0x16]&8.
++   *   054c returns AX=bearing, BX=pitch, CX=range LOW, DX=range HIGH (asm 0x558 push/0x56f pop).
++   *   `a004 mov %ch,%cl ; a006 mov %dl,%ch` rebuilds (range >> 8) in CX -- the pristine code
++   *   FABRICATED that word out of its own parameters (`CONCAT11((char)param_2, uVar4)`) because
++   *   Ghidra dropped 054c's multi-register return.  Threaded via g_fist_054c_cx/dx.
++   *   `9fe5 testw $0x7,0x6cde` sets flags that nothing reads -- no branch consumes them. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  extern unsigned short g_fist_054c_cx, g_fist_054c_dx;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t tbl, bearing, cx;
++  (void)param_2; (void)param_3; (void)param_4;
++  tbl = ((dg[(uint16_t)(di + 0x16)] & 8) != 0) ? 0x9444 : 0x943c;      /* 9ff2/9ff6/9ff8 */
++  bearing = (uint16_t)FUN_0000_054c(0,
++              (int)(intptr_t)(dg + (uint16_t)(di + 4)),                 /* 9fec lea 0x4(%di),%si */
++              (int)(intptr_t)(dg + tbl));                               /* 9ffb mov %ax,%di */
++  *(uint16_t *)(dg + (uint16_t)(di + 0x2e)) = bearing;                  /* a001 mov %ax,0x2e(%di) */
++  cx = (uint16_t)(((g_fist_054c_dx & 0xff) << 8) | (g_fist_054c_cx >> 8)); /* a004/a006 */
++  *(uint16_t *)(dg + (uint16_t)(di + 0x21)) = cx;                       /* a008 mov %cx,0x21(%di) */
++  if (cx <= 0x1e) {                                                     /* a00b/a00e jbe a01c */
++    dg[(uint16_t)(di + 0x25)] = 0xa;                                    /* a01c movb $0xa */
++    *(uint16_t *)(dg + (uint16_t)(di + 0x1d)) = 0;                      /* a020 movw $0 */
++    dg[(uint16_t)(di + 0x32)] = 0;                                      /* a025 movb $0 */
+     return;
+   }
+-  *(undefined1 *)(param_4 + 0x25) = 10;
+-  *(undefined2 *)(param_4 + 0x1d) = 0;
+-  *(undefined1 *)(param_4 + 0x32) = 0;
+-  return;
++  if (cx <= 0x78) {                                                     /* a010/a013 jbe a016 */
++    *(uint16_t *)(dg + (uint16_t)(di + 0x1d)) = 0x10;                   /* a016 movw $0x10 */
++  }
++  return;                                                               /* a015 / a01b ret */
+ }
+ 
+ 
+@@ -31365,24 +31390,32 @@
+ void __allregs FUN_0000_b7a9(undefined2 param_1,int param_2,int param_3)
+ 
+ {
+-  *(undefined2 *)(param_2 + 0x1b) = param_1;
+-  *(int *)(param_2 + 0x2f) = param_3;
+-  *(undefined1 *)(param_2 + 0x2c) = 2;
+-  *(undefined1 *)(param_2 + 0x2b) = 0;
+-  *(undefined2 *)(param_2 + 0x27) = 0;
+-  *(undefined2 *)(param_2 + 0x12) = 0;
+-  *(undefined2 *)(param_2 + 0x1d) = 0x80;
+-  *(byte *)(param_2 + 0x16) = *(byte *)(param_2 + 0x16) | *(byte *)(param_3 + 0x16) & 8;
+-  *(undefined4 *)(param_2 + 4) = *(undefined4 *)(param_3 + 4);
+-  *(undefined4 *)(param_2 + 8) = *(undefined4 *)(param_3 + 8);
+-  *(undefined4 *)(param_2 + 0xc) = *(undefined4 *)(param_3 + 0xc);
+-  *(byte *)(param_2 + 0x17) = *(byte *)(param_2 + 0x17) | 1;
+-  *(undefined2 *)(param_2 + 0x29) = 0x3ffc;
+-  *(undefined2 *)(param_2 + 0x10) = *(undefined2 *)(param_3 + 0x10);
+-  *(undefined1 *)(param_2 + 0x2e) = 6;
+-  *(undefined1 *)(param_2 + 0x31) = 0;
+-  if ((*(byte *)(param_3 + 0x16) & 8) != 0) {
+-    *(undefined1 *)(param_2 + 0x31) = 5;
++  /* PATCH 542: guided-weapon launch init (asm 0xb7a9-0xb807; DS=DGROUP=0x1c00).  ax=param_1 the target
++   * link, si=param_2 the NEW object, di=param_3 the firer -- both NEAR OFFSETS, both host-deref'd by
++   * Ghidra.  Its only caller is 9f66.  The coordinate copies are 32-bit (`66` prefix at b7ce/b7d6/b7de);
++   * everything else is the width the asm uses. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t si = (uint16_t)param_2;                                 /* the NEW object */
++  uint16_t di = (uint16_t)param_3;                                 /* the firer */
++  *(uint16_t *)(dg + (uint16_t)(si + 0x1b)) = (uint16_t)param_1;   /* b7a9 mov %ax,0x1b(%si) */
++  *(uint16_t *)(dg + (uint16_t)(si + 0x2f)) = di;                  /* b7ac mov %di,0x2f(%si) */
++  dg[(uint16_t)(si + 0x2c)] = 2;                                   /* b7af */
++  dg[(uint16_t)(si + 0x2b)] = 0;                                   /* b7b3 */
++  *(uint16_t *)(dg + (uint16_t)(si + 0x27)) = 0;                   /* b7b7 */
++  *(uint16_t *)(dg + (uint16_t)(si + 0x12)) = 0;                   /* b7bc */
++  *(uint16_t *)(dg + (uint16_t)(si + 0x1d)) = 0x80;                /* b7c1 */
++  dg[(uint16_t)(si + 0x16)] |= (dg[(uint16_t)(di + 0x16)] & 8);    /* b7c6/b7c9/b7cb */
++  *(uint32_t *)(dg + (uint16_t)(si + 4))   = *(uint32_t *)(dg + (uint16_t)(di + 4));   /* b7ce/b7d2 */
++  *(uint32_t *)(dg + (uint16_t)(si + 8))   = *(uint32_t *)(dg + (uint16_t)(di + 8));   /* b7d6/b7da */
++  *(uint32_t *)(dg + (uint16_t)(si + 0xc)) = *(uint32_t *)(dg + (uint16_t)(di + 0xc)); /* b7de/b7e2 */
++  dg[(uint16_t)(si + 0x17)] |= 1;                                  /* b7e6 orb $0x1 */
++  *(uint16_t *)(dg + (uint16_t)(si + 0x29)) = 0x3ffc;              /* b7ea */
++  *(uint16_t *)(dg + (uint16_t)(si + 0x10)) =
++      *(uint16_t *)(dg + (uint16_t)(di + 0x10));                   /* b7ef/b7f2 */
++  dg[(uint16_t)(si + 0x2e)] = 6;                                   /* b7f5 */
++  dg[(uint16_t)(si + 0x31)] = 0;                                   /* b7f9 */
++  if ((dg[(uint16_t)(di + 0x16)] & 8) != 0) {                      /* b7fd/b801 */
++    dg[(uint16_t)(si + 0x31)] = 5;                                 /* b803 */
+   }
+   return;
+ }

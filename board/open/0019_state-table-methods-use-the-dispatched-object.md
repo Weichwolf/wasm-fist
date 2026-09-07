@@ -21,8 +21,8 @@ run time -- and dereferenced it as a host pointer. Each is a SIGSEGV the moment 
 | a069  | fixed, patch 540 |
 | a02a  | fixed, patch 540 |
 | a03f  | fixed, patch 540 (this is the one AZER4 reaches) |
-| **9f66** | **OPEN** |
-| **9fe5** | **OPEN** |
+| 9f66  | fixed, patch 542 |
+| 9fe5  | fixed, patch 542 |
 
 The same defect class also hit `a0c8`, reached through the *other* dispatch (`c31e`, asm 0xc31e), fixed
 in patch 540.
@@ -74,3 +74,35 @@ is dropped, exactly the class patch 284/497 threading (`g_fist_cf`) exists to fi
 
 These do not fire in the default build today because units rarely engage; they WILL fire as soon as
 board:0018 is fixed. They are a hard prerequisite for it, not an independent nicety.
+
+## CLOSED for the 9e2b table; the weapon-station cluster came with it
+
+All seven entries are now reconstructed from their own disassembly (497, 498, 540, 542), and the two
+that board:0019 held open were settled rather than guessed:
+
+- **9fe5** needed 054c's multi-register return. Established from `054c`'s own asm: `0x554 push %ax`,
+  `0x558 push %ax ; push %dx`, `0x56f pop %dx ; pop %cx ; pop %ax` -- so AX=bearing, BX=pitch,
+  CX=range LOW, DX=range HIGH. CX/DX are now threaded the way patch 473 already threads BX. The
+  pristine code had fabricated the range word out of its own parameters.
+- **9f66** needed its two 0f69-segment call targets resolved: `lcall 0f69:0xbb4f` = linear 0x1B1DF =
+  b1df, and `lcall 0f69:0xa86c` = linear 0x19EFC = 9efc. (An arithmetic slip first put the second at
+  0x1A0FC, which disassembles to a bare `lret` -- the wrong answer, caught by checking it.)
+  Its callee **b7a9** was fixed with it.
+
+Patch 541 additionally closed the weapon-station cluster reached from the aim gate -- 86e3, 8711,
+86b8, 8270, 842f, 844b -- which carried the same base-loss plus TWO dropped carries: 86e3's and
+86b8's `stc`/`clc` results, and `8711`'s fabricated `undefined1 in_CF = 0` that made FUN_0000_86b8
+unreachable dead code.
+
+Verified under board:0018's LOS probe, which is the only way to reach these paths today:
+
+```
+before 541:  AZER1 SIGSEGV in 86e3
+after  541:  AZER1 SIGSEGV in 9f66
+after  542:  AZER1 exit 0, a296 16 -> 11 (five kills); AZER4 20 -> 14; SAUDI2 13 -> 3
+```
+
+No crash remains under the probe on the missions tested. Matrix 177/0 on both targets.
+
+This item stays OPEN only until the same audit is run over the OTHER dispatch tables -- the class is
+"every dispatched method reads the object it was handed", and only 9e2b and c31e have been swept.

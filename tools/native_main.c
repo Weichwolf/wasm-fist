@@ -1434,6 +1434,10 @@ uint32_t g_fist_ext_esi;           /* PATCH 471: op-0x40 (e132) ESI lane = polyg
 unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi;   /* PATCH 471: op-0x40 CX/DX/DI lanes */
 unsigned short g_fist_1345_bp;     /* PATCH 471: 1345 BP out = the MEMMGR list header (0x16d4/0x16f6/0x1718) */
 unsigned short g_fist_054c_bx;     /* PATCH 473: 054c/bbc6 BX out = the pitch (077e over the Z delta) */
+/* PATCH 542: 054c also returns the 32-bit RANGE in CX:DX -- asm 0x558 `push %ax ; push %dx` then
+ * 0x56f `pop %dx ; pop %cx`, so at return CX = the range LOW word and DX = the range HIGH word.
+ * FUN_0000_9fe5 consumes both (`a004 mov %ch,%cl ; a006 mov %dl,%ch` = range>>8). */
+unsigned short g_fist_054c_cx, g_fist_054c_dx;
 unsigned short g_fist_render_di;   /* 2471<->writers: dest node cursor (in/out, advanced by ca2f/c962) */
 unsigned short g_fist_render_dx;   /* c4df->method->c962: per-type record code (dl=byte[type-0x1b74]) */
 
