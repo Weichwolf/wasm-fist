@@ -1,0 +1,58 @@
+PATCH 529: two [0x694] call sites passed the DESCRIPTOR as the wrong argument.
+
+Same class as patch 528, on a different vector.  The [0x694] target is the MGA segmented RLE sprite
+blitter FUN_0000_23d8(param_1, param_2), where param_2 is the descriptor (patch 294: "desc arrives as a
+DGROUP near-offset value (both callers pass a value)").  The correctly-reconstructed sites pass two
+arguments -- fist.c has `(0,0x7aa4)`, `(0,0x8ec9)` and, in FUN_1000_7a38, `((DAT_1000_d548 & 0x7f),
+0x8ead)`.  Two sites passed only ONE, so the descriptor landed in param_1 and param_2 was stack garbage.
+
+asm-verified vs re_out/fist_dat_image.bin:
+
+    1000:842d   18443: mov bx,0x8fc4 ; 18446: lcall *0x694     (AL = d548&0x7f, tested ==3 at 1843f)
+    1000:8463   184b6: mov bx,0x8fa8 ; 184b9: lcall *0x694     (AL = d548&0x7f, tested ==2 at 184b2)
+
+BX is the descriptor in both, exactly as in the 7a38 sibling.
+
+MEASURED, SYRIA1: sampled in `m_mga_FUN_0000_23d8 <- FUN_1000_842d <- FUN_0000_7f53 <- 209e` with
+`param_1=36804 (=0x8fc4, the descriptor, in the WRONG slot)` and `param_2=0xffffdfd3`.  23d8 then took
+`desc = g_mem+0x1c000+0xdfd3` -- a wild descriptor -- and its control-stream loop (which terminates only
+on a zero control word) walked garbage.  The cost is visible as a cliff, not a crash:
+
+    SYRIA1  tick 12000 -> 18 s     tick 13000 -> 19 s     tick 14000 -> 57 s
+    AZER1   tick 14000 -> 19 s
+
+i.e. ~38 s spent between ticks 13000 and 14000, which is why SYRIA1 was scored HANG at a 150 s budget
+and still failed at 600 s.
+
+Note patch 294's oracle justification ("desc=DGROUP:0x7aa4, which is GENUINELY EMPTY in BOTH the
+original and the port, so the RLE terminates crash-free") covers the 4937/c694 caller only.  It does not
+extend to these two, which pass 0x8fc4 / 0x8fa8.
+
+--- a/fist.c
++++ b/fist.c
+@@ -62419,7 +62419,13 @@
+   }
+   if ((signed char)al >= 0) return;                                    /* 1843a js / 1843c lret */
+   if ((al & 0x7f) == 3) {                                              /* 1843d/1843f */
+-    ((void (*)(unsigned short))fist_icall_far((uint32_t)(DAT_1000_c694)))(0x8fc4); /* 18443/18446 */
++    /* PATCH 529: asm 18443 `mov bx,0x8fc4; lcall *0x694` -- BX is the DESCRIPTOR, and the [0x694]
++     * target FUN_0000_23d8(param_1, param_2) takes it as param_2.  Passing ONE argument left param_2 as
++     * stack garbage (0xdfd3 observed), so the RLE blitter decoded a wild control stream.  AL here is
++     * d548&0x7f (the branch above tests it == 3); the correctly-reconstructed sibling FUN_1000_7a38
++     * passes exactly `(DAT_1000_d548 & 0x7f, <desc>)`. */
++    ((void (*)(unsigned short,unsigned short))fist_icall_far((uint32_t)(DAT_1000_c694)))
++        ((unsigned short)(DAT_1000_d548 & 0x7f), 0x8fc4);            /* 18443/18446 */
+     dg[0x1548] = 0;                                                    /* 1844a movb */
+   }
+   return;
+@@ -62455,7 +62461,9 @@
+   if (al != 0) {                                                       /* 18470/18472 */
+     if ((signed char)al >= 0) return;                                  /* 18474 jns 18478 */
+     if ((al & 0x7f) == 2) {                                            /* 184b0/184b2 */
+-      ((void (*)(unsigned short))fist_icall_far((uint32_t)(DAT_1000_c694)))(0x8fa8); /* 184b6/184b9 */
++      /* PATCH 529: asm 184b6 `mov bx,0x8fa8; lcall *0x694` -- same defect as 842d above. */
++    ((void (*)(unsigned short,unsigned short))fist_icall_far((uint32_t)(DAT_1000_c694)))
++        ((unsigned short)(DAT_1000_d548 & 0x7f), 0x8fa8); /* 184b6/184b9 */
+       dg[0x1548] = 0;                                                  /* 184bd movb */
+     }
+     return;

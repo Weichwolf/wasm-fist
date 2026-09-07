@@ -6728,3 +6728,47 @@ Current classification, all backtraced:
 SYRIA1 being merely slow means the "HANG" label in a sweep is only as good as the budget; re-testing the
 four HANGs at 600 s to separate genuine spins (the MM free-list one is a true infinite loop, sampled
 four times 8 s apart at the same instruction) from budget overruns.
+
+### cont.65x -- SYRIA1 FIXED (patch 529): 36/47 -> 37/47, and a second vector in the 528 class
+
+SYRIA1 was scored HANG, and still failed at a 600 s budget -- but a sampled stack showed it executing
+normally at t=12962, so it was a SLOWDOWN, not a spin.  Chasing that instead of accepting the label
+found the bug.  A tick ladder localised a cliff:
+
+    SYRIA1  12000 -> 18 s   13000 -> 19 s   14000 -> 57 s        AZER1  14000 -> 19 s
+
+~38 s burned between ticks 13000 and 14000.  Sampled there:
+
+    m_ext... no: m_mga_FUN_0000_23d8(param_1=36804, param_2=0xffffdfd3)
+      <- FUN_1000_842d <- FUN_0000_7f53 <- 209e <- 206f
+
+36804 is 0x8fc4 -- the DESCRIPTOR, sitting in param_1 -- and param_2 is stack garbage.  The [0x694]
+target is the MGA segmented RLE blitter `FUN_0000_23d8(param_1, param_2)` whose descriptor is param_2
+(patch 294).  The correctly-reconstructed sites pass two arguments -- `(0,0x7aa4)`, `(0,0x8ec9)`, and in
+FUN_1000_7a38 `((DAT_1000_d548 & 0x7f), 0x8ead)` -- but FUN_1000_842d and FUN_1000_8463 passed ONE.  So
+23d8 took `desc = g_mem+0x1c000+0xdfd3`, a wild descriptor, and its control-stream loop -- which
+terminates only on a zero control word -- walked garbage until it happened to find one.
+
+asm-verified: `18443: mov bx,0x8fc4 ; 18446: lcall *0x694` and `184b6: mov bx,0x8fa8 ; 184b9: lcall
+*0x694`, AL = d548&0x7f in both (the branches above test it ==3 and ==2).
+
+After patch 529: SYRIA1 reaches tick 20000 in 23 s; the 14000 mark drops 57 s -> 26 s.
+
+Two things worth carrying forward:
+
+  * this is the **same class as patch 528** (an indirect call whose argument list does not match the
+    target's arity) on a DIFFERENT vector, so the class is not exhausted.  528 swept [0x6b4]; 529
+    swept [0x694].  Every other `fist_icall_far` vector should get the same arity census -- it is a
+    mechanical check and it has now paid twice.
+  * patch 294's oracle justification ("desc=0x7aa4 is GENUINELY EMPTY in both original and port, so the
+    RLE terminates crash-free") covers only the 4937/c694 caller.  It was silently being relied on for
+    callers passing 0x8fc4/0x8fa8, where it does not hold.
+
+Baseline now **37/47**; ten failures: INDIA2 INDIA3 INDIA5 SAUDI3 SAUDI7 SYRIA2 SYRIA6 SYRIA7 TRAIN3
+TRAIN4.
+
+CAUTION for any sweep: a self-play run WRITES `armoredfist/FISTDATA/.FPL` (230 bytes, the player file).
+`armoredfist/` is read-only per the project rules, so a sweep leaves the tree dirty and, worse, carries
+state between runs -- which is a determinism hazard for exactly the byte-identity this item is about.
+`tools/verify.sh` already handles this for its WRITEFLOWS by copying the datadir; `prog2.sh` does not.
+Restore with `git checkout -- armoredfist/` after sweeping, or point FIST_DATADIR at a copy.
