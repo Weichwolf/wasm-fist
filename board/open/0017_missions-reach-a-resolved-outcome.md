@@ -86,3 +86,38 @@ stage to trace -- and it is a different question from the one this item started 
 
 TODO (hygiene): delete the dead `[SPLASH]`/`[chain]`/`[7e29]`/`[reload]`/`[spawn]` counters from
 tools/native_main.c. They have now caused two false conclusions and cost more than they are worth.
+
+## The second defect: the AI never aimed (patch 539)
+
+With 538 in, projectiles stopped hitting the decoy objects but hit nothing else either: their closest
+approach to any object over 538010 range tests was 11601 units against a collision bound of 1280.
+
+The launch path is direct-fire: for a firer of type != 0x1a, `ace0` sends the projectile along the
+firer's own heading `word[di+0x10]` (`b793` passes ax=0, which asm 0xb79c `mov $0x0,%ax` confirms).
+Logging launches against a reference atan2 -- and confirming the engine's convention is
+`vx = s*sin(h)`, `vy = s*cos(h)`, which the logged velocities match exactly -- showed the heading was
+139 degrees off.
+
+The turret slew is NOT at fault: `word[di+0x10]` tracks the computed aim `word[di+0x9b]` exactly. The
+**computed aim itself** was wrong. And the angle solver is not at fault either: `FUN_0000_0731`
+returns 54998 where a reference atan2 gives 54997, one unit of fixed-point rounding.
+
+It was being fed garbage. `a265` builds the two aim vectors at DGROUP:0x9684 (self) and 0x9690
+(target), and the asm writes all six slots with the 0x66 prefix -- `mov %eax,0x9684`, i.e. DWORD
+stores. The port declared every slot `undefined2`, so each 32-bit world coordinate was truncated to
+its low word:
+
+```
+[a265] di=cf11 obj=(570286,1201009,2048)  si=c34d tgt=(549136,1017675,0)
+       vec5684=( 45998,  21361,4096)      vec5690=( 24848,  34635,1792)
+```
+
+Fixed by widening the six macros to `undefined4` in patches/539-aim-vectors-are-dwords.diff. The slots
+are 4 bytes apart with no overlap and every existing user already treats them as wide.
+
+Measured aiming error at launch, AZER1: before -139 deg and -115 deg; after **+0.01 deg**.
+AZER1 outcome: a296 16 -> 15 -- the first real kill.
+
+STILL OPEN: one kill is not a resolved mission. The next question is why engagements still resolve so
+slowly -- note op-0x58 VISIBLE dropped 8465 -> 446 when the vectors were corrected, because 0x9684/
+0x9690 are shared buffers that the LOS path also reads, so LOS results changed materially too.

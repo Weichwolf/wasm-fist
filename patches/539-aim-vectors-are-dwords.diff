@@ -1,0 +1,72 @@
+PATCH 539: the AI aiming vectors at DGROUP:0x9684/0x9690 are DWORD triples, but the port declared all
+six slots `undefined2` -- so every 32-bit world coordinate was truncated to its low 16 bits.
+
+asm 1a265 (FUN_1000_a265, the target aiming-vector calc) writes them with the 0x66 operand-size
+prefix, i.e. 32-bit stores:
+
+   1a270: 66 8b 45 04    mov    0x4(%di),%eax     ; self X  (DWORD)
+   1a274: 66 a3 84 96    mov    %eax,0x9684       ; DWORD store
+   1a278: 66 8b 45 08    mov    0x8(%di),%eax     ; self Y
+   1a27c: 66 a3 88 96    mov    %eax,0x9688
+   1a284: 66 0f b7 87 .. movzwl -0x1a40(%bx),%eax ; per-type height LUT
+   1a28a: 66 03 45 0c    add    0xc(%di),%eax     ; + self Z   (32-bit add)
+   1a28e: 66 a3 8c 96    mov    %eax,0x968c
+   1a292: 66 8b 44 04    mov    0x4(%si),%eax     ; target X
+   1a296: 66 a3 90 96    mov    %eax,0x9690
+   1a29a: 66 8b 44 08    mov    0x8(%si),%eax     ; target Y
+   1a29e: 66 a3 94 96    mov    %eax,0x9694
+   1a2c2: 66 03 44 0c    add    0xc(%si),%eax     ; target Z + LUT
+   1a2c6: 66 a3 98 96    mov    %eax,0x9698
+   1a2ca: be 84 96       mov    $0x9684,%si       ; -> a18e over the two vectors
+   1a2cd: bf 90 96       mov    $0x9690,%di
+
+The macros were `(*(undefined2 *)(g_mem+0x2568x))`.  Every one of the six assignments therefore stored
+only the low word and left the high word holding whatever the previous occupant of those bytes was,
+while the consumers (0731 bearing, 0927 range, 077e pitch) read all six back as 32-bit.
+
+The angle solver itself is fine.  Measured with a reference atan2, FUN_0000_0731 returns 54998 where
+the true bearing is 54997 -- one unit of fixed-point rounding.  It was simply being fed garbage:
+
+  [a265] di=cf11 obj=(   570286,  1201009,  2048)  si=c34d tgt=(   549136,  1017675,     0)
+         vec5684=(    45998,    21361,  4096)      vec5690=(    24848,    34635,  1792)
+
+Consequence: every AI unit aimed along a bearing computed from truncated coordinates.  The turret slew
+is not at fault -- word[di+0x10] tracks the computed aim word[di+0x9b] exactly; the computed aim was
+simply wrong.  Measured aiming error at launch, AZER1:
+
+  before:  used=26200 required=  856   (-139 deg)
+           used=54998 required=33965   (-115 deg)
+  after:   used=33966 required=33965   (+0.01 deg)
+
+This is why projectiles never came within the collision bound: with patch 538's range test corrected,
+the closest approach of any projectile to any object over 538010 tests was 11601 units against a bound
+of 1280.  The projectiles were flying accurately along a bearing that pointed nowhere near the target.
+
+The six slots are 4 bytes apart with no overlap (0x25684..0x2569b, and DAT_2000_569c begins exactly
+where 0x25698's dword ends), so widening the macros is exact.  Every existing user already treats them
+as wide -- a265 and ace0 assign 32-bit expressions to them, and the 1adea/1ae0d and 67221-67267 sites
+read and add them as `long`.
+
+AZER1 after: a296 16 -> 15 (a real kill), a294 105.
+
+--- a/fist.c
++++ b/fist.c
+@@ -3494,12 +3494,12 @@
+ #define DAT_2000_567c (*(undefined2 *)(g_mem+0x2567c))
+ #define DAT_2000_567e (*(undefined2 *)(g_mem+0x2567e))
+ #define DAT_2000_5680 (*(undefined2 *)(g_mem+0x25680))
+-#define DAT_2000_5684 (*(undefined2 *)(g_mem+0x25684))
+-#define DAT_2000_5688 (*(undefined2 *)(g_mem+0x25688))
+-#define DAT_2000_568c (*(undefined2 *)(g_mem+0x2568c))
+-#define DAT_2000_5690 (*(undefined2 *)(g_mem+0x25690))
+-#define DAT_2000_5694 (*(undefined2 *)(g_mem+0x25694))
+-#define DAT_2000_5698 (*(undefined2 *)(g_mem+0x25698))
++#define DAT_2000_5684 (*(undefined4 *)(g_mem+0x25684))  /* PATCH 539: DWORD (asm `mov %eax,0x9684`) */
++#define DAT_2000_5688 (*(undefined4 *)(g_mem+0x25688))  /* PATCH 539: DWORD (asm `mov %eax,0x9688`) */
++#define DAT_2000_568c (*(undefined4 *)(g_mem+0x2568c))  /* PATCH 539: DWORD (asm `mov %eax,0x968c`) */
++#define DAT_2000_5690 (*(undefined4 *)(g_mem+0x25690))  /* PATCH 539: DWORD (asm `mov %eax,0x9690`) */
++#define DAT_2000_5694 (*(undefined4 *)(g_mem+0x25694))  /* PATCH 539: DWORD (asm `mov %eax,0x9694`) */
++#define DAT_2000_5698 (*(undefined4 *)(g_mem+0x25698))  /* PATCH 539: DWORD (asm `mov %eax,0x9698`) */
+ #define DAT_2000_569c (*(undefined2 *)(g_mem+0x2569c))
+ #define DAT_2000_569e (*(undefined2 *)(g_mem+0x2569e))
+ #define DAT_2000_56a0 (*(undefined2 *)(g_mem+0x256a0))
