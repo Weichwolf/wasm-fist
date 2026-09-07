@@ -104,3 +104,52 @@ LOS forced open: 13 -> 3
 SAUDI2 still does not reach 0, so LOS is not the *only* factor -- but it is the dominant gate, and no
 mission-resolution number is meaningful until the endpoints are real. This item is now the top blocker
 for board:0017.
+
+## What the endpoints MEAN (from the engine's own code, not a guess)
+
+`FUN_0000_e20a` (patch 425) is what fills the TCB before posting op-0x58, and it is unambiguous:
+
+```c
+*(uint32_t *)(tcb + 0xd2) = dword[self + 4];      /* self X */
+*(uint32_t *)(tcb + 0xd6) = dword[self + 8];      /* self Y */
+*(uint32_t *)(tcb + 0xda) = word[DGROUP:(selftype*2 - 0x1a40)] + dword[self + 0xc];
+*(uint32_t *)(tcb + 0xde) = dword[tgt + 4];       /* target X */
+*(uint32_t *)(tcb + 0xe2) = dword[tgt + 8];       /* target Y */
+*(uint32_t *)(tcb + 0xe6) = <target's height LUT> + dword[tgt + 0xc];
+```
+
+So each Z endpoint is **a per-type eye-height LUT plus the object's own Z**. That is exactly what an LOS
+wants -- the stand-in is not filling a hole in the data, it is discarding data that is already there.
+
+What is NOT established is the SCALE relationship. Vehicles carry `dword[obj+0xc]` around 1280..2048,
+while the extender's terrain is `heightmap_byte << 8`, i.e. 12544..22016 for the same map. Either the
+engine Z is a height above ground (and terrain must be added), or the two are in different units, or
+the type-0x1b objects at Z=7936..13824 are a third case.
+
+## Three endpoint models tested; all three are inconclusive
+
+| model | AZER1 VISIBLE | AZER1 kills | AZER4 kills | SAUDI2 kills |
+|---|---|---|---|---|
+| stand-in `terrain + 1792`      |   446 | 1 | 5 | 6 |
+| engine Z raw                   |    68 | 0 | 6 | 6 |
+| `terrain + engine Z`           | 36142 | 1 | 6 | **4** |
+
+Each helps some missions and hurts others; `terrain + engine Z` makes LOS wildly permissive (80x the
+visible count) because a target Z of 19968 lands the endpoint far above the terrain. None was shipped.
+
+## Ruled out, so nobody repeats it
+
+- The extender is NOT missing from the tree: `tools/extract_image.py` extracts the whole 32-bit app
+  image (FIST.RUN 0x583a..0x117ca = 49040 bytes = `re_out/fist_image.bin`). There is no second module
+  and no other file: the game ships only FIST.RUN, FIST.DAT, MGAVIDEO.DVR and SOUNDDVR.DVR.
+- `FIST_EXTGATE_LIN` (0x8799) is where the ENGINE far-jumps, not the dispatcher's address inside the
+  extender image; disassembling `fist_image.bin` at 0x8799 gives unrelated terrain code.
+- The only indexed jump in the extender image, `0xae56 jmp *0xae60(,%eax,4)`, is a 9-entry SPRITE-TYPE
+  dispatcher (the adjacent string is "PKLOT: Illegal Sprite Type"), not the service dispatcher.
+- `re_out/fist_ext.c` decompiles only part of the extender (the KDV player cluster); its single
+  `switch` is a blit routine.
+
+NEXT: locate the extender's PM service dispatcher in `re_out/fist_image.bin` and read op-0x58's real
+handler. That is ground truth already in the repository and settles both the endpoint scale and the
+occlusion rule without any oracle run. Until then no mission-resolution number is meaningful, because
+target acquisition is decided by whichever of the three models is installed.
