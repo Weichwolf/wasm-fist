@@ -6815,3 +6815,55 @@ Find 0340/0410's row/column count for this call and where it comes from.  If it 
 mode-2 descriptor (0x8f8c, 320x195) that the 9200 mask contradiction turns on, then ONE wrong geometry
 explains both, and cont.65v's remaining question ("is the resource loaded at 0x8f82 what the original
 loads there?") becomes the single root cause for the whole 9200 group AND this hang.
+
+## cont.65z -- the 9200 group is CLOSED. 36/47 -> 41/47, from one dropped argument list.
+
+Full 47-mission sweep after patch 537:
+
+    reached-20000 = 41/47
+    problems: INDIA2(SEGV) INDIA3(HANG) INDIA5(HANG) SYRIA1(HANG) TRAIN3(HANG) TRAIN4(SEGV)
+
+**All five members of the 9200 group now reach t=20000** -- SAUDI3, SAUDI7, SYRIA2, SYRIA6, SYRIA7 --
+plus the AZER1 hang cont.65y introduced.  Six missions recovered by a single patch.
+
+### What the 9200 contradiction actually was
+
+cont.65p..65v spent a long time proving that three STATIC facts could not all hold at once:
+
+    element 0x150 -> 7eba -> mask index 2      (static method table + unconditional asm)
+    mask index 2  -> a 78-byte table           (static array at 0x748c)
+    mode-2 resource -> 195/198/180-row records (the loaded block at 0x8f82)
+
+and concluded (cont.65v) that "one of my readings of the DATA is wrong", naming as the cheapest test:
+compare resource 0x28 in FISTDATA against the bytes 153c actually loaded at DGROUP:0x8f82.
+
+The answer is that the third fact was not data at all -- **the port had loaded the WRONG FILE**.
+FUN_0000_0310's job is to build an 8.3 filename into DGROUP:0x740 and open it; FUN_1000_84c3 called it
+with no arguments, so its name index was stack residue, FUN_0000_0197 copied an arbitrary "string" into
+the 0x4c-byte name buffer, and that overrun also smashed the palette globals behind it.  The block at
+0x8f82 was never resource 0x28's content.  The mask/viewport pairing was never contradictory in the
+original; only in the port.
+
+So the correct reading of the three facts was: the first two are right, and the third was not a fact.
+
+### Corrections to my own record in this item
+
+  * cont.65y asserted the AZER1 hang and the 9200 group share a root cause.  I retracted that one step
+    later on a misread of es[0x782].  **The retraction was wrong; cont.65y was right.**  They share
+    patch 537's cause exactly.
+  * cont.65q's option (a) -- "7eb7 sets the mode byte to 2 in a context where the original does not" --
+    is also wrong.  7eb7's dispatch is faithful (cont.65t established that from the static method
+    table).  Neither (a) nor (b) was the answer; the descriptor CONTENT was corrupt.
+  * cont.65u's "mask index 2 is NEVER valid in the port, in any mission" was a correct MEASUREMENT and
+    a correct inference from it, and it pointed the right way -- but I read it as indicting the mode
+    byte rather than the descriptor block.
+
+### Remaining six
+
+    INDIA2  SEGV   5aeb <- c4df (arg-less method; its param_1 is an ambient AX -- do not fabricate)
+    TRAIN4  SEGV   was f8e9 via a missing method; re-check after 533/534/535
+    INDIA3  HANG   was board:0006's cockpit spawn SEGV at t=274; now a hang -- re-classify
+    INDIA5  HANG   the memory-manager free-list spin (cont.65r), a true infinite loop
+    TRAIN3  HANG   same MM family
+    SYRIA1  HANG   REGRESSED: patch 529 had it reaching 20000 in 23 s.  Re-measure -- the added object
+                   rendering (533/534/535) is the obvious suspect, exactly as it was for AZER1.
