@@ -1,0 +1,88 @@
+PATCH 533: FUN_0000_c86e -- the cockpit render method for object classes 7..14 was MISSING entirely.
+
+Found by following TRAIN4's SIGSEGV after patch 531 moved it.  The fault was inside FUN_0000_f8e9 --
+which is not a function entry at all but a loop head in an interrupt-disabled list-splice routine
+(the real entry is 0xf909: `or bx,bx; pushf; cli; push ds; mov es,ds; mov ds,bx`) -- reached straight
+from c4df's object-render dispatch.  A render method cannot be that, so the method vector was resolving
+to nothing.
+
+Measured at the fault: `g_fist_render_si = 0xb0ad`, `classid = word[DGROUP:0xb0ad] = 13`, `d549 = 0x1e`
+(cockpit), `STRSEG = 0x2d74`.  c4df computes `mvec = word[STRSEG : classid*2 + 0x3632]`, and reading
+that table out of a memory dump gives:
+
+    classid  0..3 -> 0xc7ca      classid 4      -> 0xc5e7
+    classid  5..6 -> 0xc829      classid 7..14  -> 0xc86e
+    classid 15    -> 0xc5e7      classid 16     -> 0xc715      classid 17..19 -> 0xc5e7
+
+So classid 13's method is 0xc86e.  Of those five targets, THREE are absent from the port -- 0xc715,
+0xc829 and 0xc86e are neither defined nor present in the fist_icall fmap -- and between them they cover
+classes 5..14 and 16, i.e. the bulk of the object registry.  Ghidra simply never promoted them.
+
+This is the "un-seeded function" class, but reached through a DATA-DRIVEN method table rather than a
+trap, which is why a trap-trace sweep (board:0001) did not turn it up.
+
+0xc86e is three instructions:
+
+    c86e: b4 0d        mov ah,0xd
+    c870: e8 3f 00     call 0xc8b2
+    c873: c3           ret
+
+and is instruction-for-instruction the twin of FUN_0000_c70d (asm `c70d: mov ah,0xf; call c8b2; ret`),
+which patch 463 already reconstructed for class 0x15:
+
+    si = g_fist_render_si;
+    FUN_0000_c8b2(CONCAT11(0xf,0), (classid*2), 0, si, 0);   /* bx=classid*2 live from c4df; bp -> 0 */
+
+So this patch is that reconstruction verbatim with AH=0x0d, plus the declaration and the fist_icall
+fmap entry so the dispatch can actually reach it.
+
+Still missing and left on the board: 0xc829 (`call 0xc894; ret` -- and 0xc894 is ALSO absent) and
+0xc715 (longer; reads byte[si+0x1c], indexes word[bx-0x17f3], calls 0xc8c2).
+
+--- a/fist.c
++++ b/fist.c
+@@ -1291,6 +1291,7 @@
+ void __allregs FUN_0000_c6e7(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_0000_c6fa(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_0000_c70d(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
++void __allregs FUN_0000_c86e(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 533 */
+ void __allregs FUN_0000_c7ca(undefined2 param_1,int param_2,undefined2 param_3);
+ void __allregs FUN_0000_c8b2(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+ void __allregs FUN_0000_c8c2(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 *param_5);
+@@ -33531,6 +33532,28 @@
+   return;
+ }
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_c86e) @ 0000:c86e ===== */
++
++void __allregs
++FUN_0000_c86e(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
++             undefined2 param_5)
++
++{
++  /* PATCH 533: asm 0xc86e `mov ah,0xd; call c8b2; ret` -- the cockpit-view (d549==0x1e) render method
++   * for object classes 7..14, i.e. the BULK of the object registry.  Ghidra never promoted it, so it
++   * was neither defined nor in the fist_icall fmap, and c4df's data-driven dispatch
++   * `mvec = word[STRSEG:classid*2 + 0x3632]` resolved 0xc86e to nothing.
++   * Instruction-for-instruction the twin of FUN_0000_c70d (patch 463, class 0x15) with AH=0x0d instead
++   * of 0x0f, so it takes patch 463's reconstruction verbatim: arg-less dispatch, si = the object from
++   * g_fist_render_si, bx = classid*2 live from c4df, bp untraced at this entry -> 0. */
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  FUN_0000_c8b2(CONCAT11(0xd,0),(undefined2)(unsigned short)(*(unsigned short *)(dg + si) << 1),0,(undefined2)si,0);
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;(void)param_5;
++  return;
++}
++
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c7ca) @ 0000:c7ca ===== */
+ 
+@@ -75541,6 +75564,7 @@
+   {0xc6e7u,(void*)&FUN_0000_c6e7},
+   {0xc6fau,(void*)&FUN_0000_c6fa},
+   {0xc70du,(void*)&FUN_0000_c70d},
++  {0xc86eu,(void*)&FUN_0000_c86e},   /* PATCH 533 */
+   {0xc7cau,(void*)&FUN_0000_c7ca},
+   {0xc8b2u,(void*)&FUN_0000_c8b2},
+   {0xc8c2u,(void*)&FUN_0000_c8c2},
