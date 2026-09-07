@@ -6772,3 +6772,46 @@ CAUTION for any sweep: a self-play run WRITES `armoredfist/FISTDATA/.FPL` (230 b
 state between runs -- which is a determinism hazard for exactly the byte-identity this item is about.
 `tools/verify.sh` already handles this for its WRITEFLOWS by copying the datadir; `prog2.sh` does not.
 Restore with `git checkout -- armoredfist/` after sweeping, or point FIST_DATADIR at a copy.
+
+## cont.65y -- patches 533/534/535 are correct and cost AZER1: an MGA blit overruns into the DGROUP vector table
+
+Honest accounting first: after 533/534/535 the self-play count moves **37/47 -> 36/47**.  AZER1, which
+previously reached t=20000, now hangs.  AZER4, SAUDI1, CYPRUS1 and UKRAINE1 are unaffected, and the
+177-flow matrix is still 177/0, so it is one mission, not a broad regression.
+
+I am keeping the patches.  They restore 26 class slots of object rendering that were dispatching to
+NOTHING (board:0015), they are asm-verbatim from established templates, and the matrix -- including the
+reference-backed mission-cockpit flows -- is clean.  What they do is TRIGGER a latent defect, and
+reverting them would re-hide it.
+
+### The defect
+
+Watchpoint on the far-vector slot DGROUP:0x03c during AZER1:
+
+    >>> [0x03c] = 0x32323232   render_di=0x4c0a  tick=6693
+    #0 m_mga_FUN_0000_0410
+    #1 m_mga_FUN_0000_0340 (param_1=0, param_2=g_mem+151422)
+    #2 FUN_1000_7eba
+    #3 FUN_0000_7f5f
+
+0x32323232 is a fill pattern, and `param_2 = g_mem+151422` is DGROUP:0x8f7e -- inside the mode-2
+descriptor block.  So 0340 was asked to fill starting at DGROUP:0x8f7e and 0410 ran all the way down to
+DGROUP:0x03c, overwriting the engine's far-vector table.  Afterwards FUN_1000_1394 dispatches
+`[DGROUP:0x03c]`, which now resolves to linear 0x484 -- mid-function code inside an arithmetic routine,
+not an entry -- and FUN_1000_09bc spins on it forever with `[0x452]` frozen at 0.
+
+**tick 6693 is AZER1's mode-2 transition** -- the exact tick cont.65q/65s measured for the mode byte
+flip and the single idx=2 op-0x24 post.  So this is the SAME event as the 9200 mask/viewport
+contradiction, seen from the other side: at that transition the port performs an MGA fill whose extent
+is wrong.  A runaway blit count is also exactly the 9200 failure mode (cont.65p: a `loop` with
+(width>>1) - skip negative).
+
+That makes two independent runaway-extent blits at the same transition, which is a strong hint that the
+common input -- the mode-2 viewport geometry -- is what is wrong, not each blit separately.
+
+### Next
+
+Find 0340/0410's row/column count for this call and where it comes from.  If it derives from the same
+mode-2 descriptor (0x8f8c, 320x195) that the 9200 mask contradiction turns on, then ONE wrong geometry
+explains both, and cont.65v's remaining question ("is the resource loaded at 0x8f82 what the original
+loads there?") becomes the single root cause for the whole 9200 group AND this hang.
