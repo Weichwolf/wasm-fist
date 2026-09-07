@@ -6700,3 +6700,31 @@ of my readings of the DATA is wrong -- not of the port.  The candidates left are
 the FISTDATA archive and compare it byte-for-byte with the 0x3d8 bytes the port put at DGROUP:0x8f82.
 If they differ, 153c is the defect and the whole 9200 group falls out of it.  That is the next step --
 cheaper than the oracle run, and it does not depend on reaching a mission under DOSBox.
+
+## cont.65w -- the real self-play baseline is 36/47, and the inherited "9 failing" list was incomplete
+
+First full 47-mission sweep of this session, with the corrected progress check (prog2.sh: require the
+`FIST_DUMPTICK: dumping frame + exiting` line, because rc==0 alone also covers a clean early exit):
+
+    reached-20000 = 36/47
+    problems: INDIA2(SEGV) INDIA3(SEGV) INDIA5(HANG) SAUDI3(SEGV) SAUDI7(SEGV) SYRIA1(HANG)
+              SYRIA2(SEGV) SYRIA6(SEGV) SYRIA7(SEGV) TRAIN3(HANG) TRAIN4(HANG)
+
+**INDIA3 and SYRIA1 are NOT regressions.**  Held 526/527/528 back, rebuilt, and both fail identically
+without them.  They were simply never in the inherited nine -- that list came from a summary, not from
+a sweep, and only those nine were ever re-tested.  So the honest baseline is 36/47 with ELEVEN
+failures, not 38/47 with nine.  (Two of the eleven were mis-tracked, none newly broken.)
+
+Current classification, all backtraced:
+
+| group | missions | site |
+|---|---|---|
+| extender voxel writer | SAUDI3 SAUDI7 SYRIA2 SYRIA6 SYRIA7 | `m_ext_FUN_0000_9200` -- the mask/viewport contradiction, cont.65q..65v |
+| memory-manager spin   | INDIA5 TRAIN3 TRAIN4 | `FUN_1000_0a31` free-list insert, self-referential node (cont.65r) |
+| display-list method   | INDIA2 | `FUN_0000_5aeb <- c4df` -- base-loss + two movb-as-undefined2 width errors, but its param_1 is an ambient AX the arg-less dispatch drops, so it must NOT be patched by fabricating one |
+| cockpit spawn         | INDIA3 | `m_mga_FUN_0000_26de <- 26a1 <- FUN_0000_8243 <- 209e` at t=274 -- this is **board:0006** (india3-cockpit-spawn), already an open item.  Note 8243 calls 26a1 in the correct 5-arg form (1104,0,0,15300,0), so patch 528 is not implicated |
+| slow, not hung        | SYRIA1 | sampled at t=12962 inside `fist_timer_pump -> FUN_1000_30f8 -> out(0x20,0x20)` (the PIC EOI) -- normal execution, it simply did not reach 20000 inside the 150 s budget |
+
+SYRIA1 being merely slow means the "HANG" label in a sweep is only as good as the budget; re-testing the
+four HANGs at 600 s to separate genuine spins (the MM free-list one is a true infinite loop, sampled
+four times 8 s apart at the same instruction) from budget overruns.
