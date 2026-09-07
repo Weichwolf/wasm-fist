@@ -52,3 +52,37 @@ pointed at the engine-flat linear of `a294` (DGROUP+0xe294) in an original AZER1
 occupancy trajectory against the port's. If the original's `a294` never approaches 0x96, the defect is
 upstream in whatever spawns type 0x04; if it does, the refusals are normal and the missing resolution
 is a different stage.
+
+## CORRECTION (measured) -- the root cause is one function, and the table above is wrong twice
+
+Two rows of the table above came from **dead shim counters** in `tools/native_main.c` (`[SPLASH]`,
+`[chain]`, `[7e29]`, `[reload]`, `[spawn]`) that print zero unconditionally. They are not wired to the
+code they name. Trusting them produced a false premise here and in board:0016.
+
+Live counters give the real chain: `bb1b` is entered **12548** times (not 0), the impact dispatch
+`c14f` returns a hit **9440** times, the firer filter rejects **none**, and the damage call `bbb7`
+runs **9500** times. Nothing was blocked. The impacts were simply **against the wrong objects**:
+
+```
+[hit] impacted object types: 00:3 01:1 13:2 1b:7994
+```
+
+7994 of 8000 impacts hit object type 0x1b -- six permanent objects at z=7936..13824, while the
+vehicles sit at z=1280..2048.
+
+The cause is `FUN_0000_0ea9`, the 3-lane proximity/range test under every collision walk in the
+engine. Pristine Ghidra modelled each 32-bit coordinate lane as a 64-bit value (pairing X with Y as
+one lane's low/high halves, testing Z as lane 2, never testing Y), and -- decisively -- **never set
+the carry its callers branch on**, so every range answer was a stale carry from an unrelated call.
+Fixed asm-verified in `patches/538-0ea9-range-test-lanes-and-carry.diff`.
+
+The roster saturation described above was a SYMPTOM: each bogus hit spawned a type-0x4 explosion
+template until `a294` hit its 0x96 cap. After patch 538: a294 150 -> 114, a296 11 -> 16, LOS queries
+17795 -> 30190 over the same tick budget.
+
+STILL OPEN: with the false hits gone, AZER1 now kills nothing at all (min_a296=16). Projectiles no
+longer explode on the type-0x1b objects but do not yet reach their targets either. That is the next
+stage to trace -- and it is a different question from the one this item started with.
+
+TODO (hygiene): delete the dead `[SPLASH]`/`[chain]`/`[7e29]`/`[reload]`/`[spawn]` counters from
+tools/native_main.c. They have now caused two false conclusions and cost more than they are worth.
