@@ -559,3 +559,48 @@ So applying the section is NOT step 1. The correct order is functions first, wir
 6. Re-sweep all 47 against the corrected criterion.
 
 Every address needed for steps 1-3 is now known; none of it requires further search.
+
+### The complete missing set: 13 functions in the 0f69 CRT cluster
+
+Followed the dependency all the way down. `FUN_1000_3328` (task-create) is a thin wrapper:
+
+```
+13328: push %ds ; pushf ; cli ; push %cs ; pop %ds   ; DS = 0f69
+1332d: mov $0x3bf1,%si      ; the task list head, 0f69:0x3bf1
+13330: mov %cs,%cx          ; the task entry's segment
+13332: mov $0x3bf6,%di
+13335: lcall *%ss:0x32e     ; the LIST-INSERT primitive (SS=DGROUP)
+1333a: popf ; pop %ds ; lret
+```
+
+`[DGROUP:0x32e]` comes from reloc section **si=0x274** (the CRT list primitives, DGROUP:0x312..0x33e),
+which the port also never applies. **But the good news: the two primitives task-create actually needs
+are already in the port** -- `[0x32a]` = FUN_1000_4ce7 and `[0x32e]` = FUN_1000_4d05 both exist. The
+core list machinery is there; only wrappers and callers are missing.
+
+Both sections have SOME missing targets, which is why neither can be applied before promotion:
+
+```
+si=0x274 (list primitives, 12 entries)   missing: 4c96, 4ccd, 4de3, 4e98, 4f07
+si=0x1b8 (task wrappers,   7 entries)    missing: 32f3, 3303, 3328
+mission task cluster                     missing: 5cd8, 5d9b, 5dfe, 5e36, 5e52
+```
+
+That is **13 functions, all in the 0f69 CRT cluster** -- coherent, because nothing in the port has ever
+called into the cooperative-task subsystem, so Ghidra never promoted it. This is the subsystem the
+shim's extender-gate comment deferred as "a later-stage concern".
+
+FINAL ORDER OF WORK (every address known; no search left):
+
+1. Promote the 13: `1000:32f3 3303 3328` · `1000:4c96 4ccd 4de3 4e98 4f07` ·
+   `1000:5cd8 5d9b 5dfe 5e36 5e52`.
+2. Apply reloc sections **si=0x274** then **si=0x1b8** (si=0x038 is NOT needed -- `[0x2a]`/`[0x58]`
+   are already seeded by g_dgroup_init; verified by measurement).
+3. Fix `DAT_2000_a814` to a BYTE (asm `movb`/`testb`; the `undefined2` macro clobbers 0xe815).
+4. Change tools/selfplay.sh: a mission ends on `byte[DGROUP:0xe814] != 0`, outcome in
+   `word[DGROUP:0x6da0]` -- not on a296 reaching 0.
+5. Re-sweep all 47 against the corrected criterion, and verify a mission actually loads WWIN/WLOSE/
+   EWIN/ELOSE via be0e (indices 0x0c/0x10/0x14/0x18), which no run has ever done.
+
+Expect each promotion to need the same asm-verified treatment as patches 540-545 (dispatch objects,
+dropped carries, WORD-vs-DWORD widths) rather than a mechanical paste.
