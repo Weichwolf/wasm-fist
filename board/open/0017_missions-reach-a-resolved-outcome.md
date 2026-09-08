@@ -433,3 +433,52 @@ ORDER OF WORK:
    undefined2 clobbers 0xe815).
 3. Re-measure, and change tools/selfplay.sh's criterion: a battle ends on `byte[DGROUP:0xe814] != 0`
    with the outcome in `word[DGROUP:0x6da0]`, NOT on a296 reaching 0.
+
+### The installer found -- and it is a whole missing CLUSTER, not two functions
+
+Searching by raw bytes produced only false matches (0xcfa4, 0x172ff, 0x206cd all land mid-instruction
+or straddle unrelated table words -- all retracted). Searching by SEGMENT OFFSET instead is what works:
+linear 0x15e52 = `0f69:0x67c2`, and that constant appears in the region itself:
+
+```
+1000:5dfe (the installer)
+   15e0f: push %cs ; pop %es
+   15e11: mov $0x67c2,%bx      ; ES:BX = 0f69:0x67c2 = linear 0x15e52 = THE TIMELINE TASK
+   15e14: lcall *0x442         ; the CRT's TASK-CREATE vector
+```
+
+`lcall *0x442` occurs exactly TWICE in the whole engine -- at 0x15e14 above and at 0x15cf3, which is
+the same shape:
+
+```
+1000:5cd8 (sibling installer)
+   15cd8: cmpb $0xff,0x6cdb ; jne ...          ; state gate
+   15ce2: mov %cs,%bx ; mov $0x6596,%si ; mov %cs,%cs:(%si)   ; patch CS into a stored far pointer
+   15cea: lcall *0x2a
+   15cee: push %cs ; pop %es
+   15cf0: mov $0x670b,%bx      ; ES:BX = 0f69:0x670b = linear 0x15d9b = another TASK
+   15cf3: lcall *0x442         ; CREATE TASK
+```
+
+**The port is missing this entire cluster.** Its function list jumps `FUN_1000_5c8a -> FUN_1000_5cf7`
+and `FUN_1000_5dfc -> FUN_1000_5e98`, so at minimum these are absent:
+
+```
+1000:5cd8  task installer A   (creates the task at 0f69:0x670b)
+1000:5d9b  task A
+1000:5dfe  task installer B   (creates the timeline task at 0f69:0x67c2)
+1000:5e36  ESC/abort key handler -> outcome 4
+1000:5e52  the TIMELINE task  -> outcome 5 + mission over
+```
+
+So the mission's whole cooperative task set is unpromoted, which is why nothing ever raises
+byte[DGROUP:0xe814] and no mission ends.
+
+REVISED ORDER OF WORK:
+1. Establish what the shim does for the CRT vectors `[DGROUP:0x442]` (task-create) and `[0x2a]`. If the
+   shim does not implement a task-create, that is the prerequisite -- and the scheduler at
+   0f69:0x3f17 (linear 0x135a7) is the consumer it must feed.
+2. Promote 1000:0x5cd8..0x5e97 as a unit (they are one cluster and share the installer pattern).
+3. Fix `DAT_2000_a814` to a BYTE (asm uses movb/testb; the undefined2 macro clobbers 0xe815).
+4. Change tools/selfplay.sh: a mission ends on `byte[DGROUP:0xe814] != 0`, with the outcome code in
+   `word[DGROUP:0x6da0]` (3, 4, 5 seen so far) -- not on a296 reaching 0.
