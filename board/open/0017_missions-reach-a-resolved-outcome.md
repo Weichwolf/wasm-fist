@@ -231,3 +231,33 @@ so the original does not resolve AZER1 by rapid annihilation either. That is wea
 NEXT: find the reader of the DGROUP:0x9f38 table and the flag it switches on, then teach
 tools/selfplay.sh to watch THAT rather than a296. Until then, "0 of 47 resolved" is a statement about
 this harness's criterion as much as about the engine.
+
+## CAVEAT RESOLVED: the engine's own outcome path is never reached either
+
+The previous section raised two possibilities -- (a) missions really fail to reach the engine's end
+state, or (b) they reach it and this harness cannot see it. **It is (a).**
+
+`FUN_0000_be0e` (asm 0xbe0e) is the mission-script loader: `dx = word[DGROUP:0x9f2c + bx]` is the
+filename offset and bx selects the script, so bx = 0x0c -> WWIN.MS3, 0x10 -> WLOSE, 0x14 -> EWIN,
+0x18 -> ELOSE, 0x1c -> MSN1, 0x20 -> MSN2. Instrumented to log every distinct index loaded during
+self-play:
+
+```
+AZER1   idx 0x00 (t=74)   0x04 (t=4382)   0x08 (t=235)   0x20 = MSN2 (t=274)
+SAUDI2  idx 0x00 (t=74)   0x04 (t=4382)   0x08 (t=235)
+```
+
+**No run ever loads 0x0c, 0x10, 0x14 or 0x18.** The engine never selects a win or lose script, so the
+harness's `a296 -> 0` criterion and the engine's own outcome path agree: no mission ends. The
+measurement is not the problem.
+
+(Checked and eliminated on the way: the table at DGROUP:0x9f54 that `be75` indexes holds 0x1c/0x20/0x24
+-- the MSN1/MSN2/MSN3 briefing screens picked at random -- not outcomes. And the `mov $0xc,%bx` /
+`$0x14` / `$0x18` sites at 0x58fa/0x5908/0x5916 are stubs into a common handler at 0x5932, i.e. .MS3
+script-command entry points, not the outcome dispatcher.)
+
+NEXT: find what SHOULD call be0e with 0x0c/0x10/0x14/0x18 -- the win/lose decision itself. The
+remaining unexamined callers in the port are at fist.c:38200 (`FUN_0000_be0e(*(uint16_t *)(R + bx + 6))`,
+a computed index) and fist.c:68961. The asm call sites of 0xbe0e are 0xbdfc, 0xbe05, 0xbe82, 0xe5b9,
+0xe718, 0xe800, 0xe8bb and 0x1bba3 -- the 0xe5xx-0xe8xx cluster is the most likely home of the
+mission-end decision and has not been read yet.
