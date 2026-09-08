@@ -399,3 +399,37 @@ width class as patch 539, and it must be fixed with the rest.
 NEXT: promote 1000:0x5e00..0x5e97 (at minimum the timeline task at 0x5e52 and the key handler at
 0x5e36), work out how the task is installed into the 0f69 scheduler's ready list, fix the a814 width,
 and re-measure. This is the concrete path to a mission actually ending.
+
+### The three missing functions, and what is still unknown about installing them
+
+Disassembled the whole unpromoted span. `FUN_1000_5dfc` in the port covers only asm 0x15dfc-0x15dfd
+(`stc ; lret`); everything after it up to 0x15e98 is absent. Three real functions live there:
+
+```
+1000:5dfe  mission init/teardown.  Gated on byte[0x6cdb]==1; clears bit6 and sets 0x22 in byte[0x6cc6],
+           calls [0x442] with bx=0x67c2, then [0x2a] and [0x15a0], clears 0x6cdb and 0x16ac.
+           Returns CF=0 on the taken path, CF=1 otherwise.
+1000:5e36  the ESC/abort KEY handler.  ah == 0x01 | 0x10 | 0x39 -> outcome 4 + mission over.
+           Cannot fire under self-play's empty input.
+1000:5e52  the TIMED EVENT-LIST task (the one that matters).  A coroutine: `ljmp $0x0,$0x0` at 0x15e52
+           is its YIELD, patched at run time by the 0f69 CRT's task switcher; the body at 0x15e57 loops
+           back to it.  Ticks down byte[0x6cc8]; when it expires, advances the far event list at
+           dword[0x6cc2]; when that list terminates (0xffff) it sets outcome 5 and raises mission-over.
+```
+
+**NOT yet known: how 0x5e52 is installed into the scheduler.** It has no static reference in the image
+-- an apparent hit at image 0x206cd is a FALSE MATCH, an odd offset straddling two entries of an
+unrelated word table (`... 56d1 5767 57d6 ...` at DGROUP:0x46c0). So the task address is either computed
+or written by the CRT's own task-creation call. That has to be found before the task can be transcribed
+faithfully rather than invented.
+
+Callers of the other two ARE locatable and are the place to start: 0x5e36 is referenced at image
+0xcfa4 (CS=0 code) and 0x172ff (1000: code); 0x5dfe at 0x119d6, 0x1232b and 0x1e645.
+
+ORDER OF WORK:
+1. Read the referencing sites above -- they show how this family is registered, which very likely names
+   the same mechanism 0x5e52 uses.
+2. Promote the three functions and fix `DAT_2000_a814` to a BYTE (asm uses movb/testb; the port's
+   undefined2 clobbers 0xe815).
+3. Re-measure, and change tools/selfplay.sh's criterion: a battle ends on `byte[DGROUP:0xe814] != 0`
+   with the outcome in `word[DGROUP:0x6da0]`, NOT on a296 reaching 0.
