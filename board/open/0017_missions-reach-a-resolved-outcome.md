@@ -482,3 +482,43 @@ REVISED ORDER OF WORK:
 3. Fix `DAT_2000_a814` to a BYTE (asm uses movb/testb; the undefined2 macro clobbers 0xe815).
 4. Change tools/selfplay.sh: a mission ends on `byte[DGROUP:0xe814] != 0`, with the outcome code in
    `word[DGROUP:0x6da0]` (3, 4, 5 seen so far) -- not on a296 reaching 0.
+
+### PREREQUISITE IDENTIFIED: two reloc sections the port never applies
+
+The CRT vectors the missing task cluster needs are supplied by the engine's own DGROUP relocation table
+(image 0x33520, applied by `fist_apply_reloc_section(si, is_far)`). Enumerating every section in that
+table and checking which the port applies:
+
+```
+si=0x038  0f69  20 entries  DGROUP:0x0a..0x64   -- includes 0x2a = 0f69:0279  and 0x58 = 0f69:0314
+si=0x174  0f69  16 entries  DGROUP:0x344..0x394 -- APPLIED (fist_ensure_dlist_vecs)
+si=0x1b8  0f69   7 entries  DGROUP:0x426..0x442 -- includes 0x442 = 0f69:3c98  (TASK-CREATE)
+si=0x1d8  0f69   9 entries  DGROUP:0x3fe..0x41e -- APPLIED; includes 0x40a = 0f69:3f17 (SCHEDULER)
+```
+
+**The port applies only si=0x174 and si=0x1d8.** So `[DGROUP:0x40a]`, the loop's continue-predicate, is
+live -- which is why the mission loop runs at all -- but `[DGROUP:0x442]`, the TASK-CREATE vector the
+missing installers call, is never populated. `[0x2a]` and `[0x58]` (the scheduler entry named in the
+shim's own extender-gate comment) come from si=0x038, also unapplied.
+
+This closes the analysis. The shim's comment at the extender gate says it plainly:
+
+> "A cooperative-task scheduler is a later-stage concern and is not on the path to first light."
+
+That deferral is exactly what blocks mission resolution. The machinery is all present in the image --
+task-create at 0f69:0x3c98 (linear 0x13328), scheduler at 0f69:0x3f17 (linear 0x135a7) -- and only the
+wiring is missing.
+
+## COMPLETE ORDER OF WORK for the next pass
+
+1. Apply reloc sections **si=0x1b8** and **si=0x038** (same mechanism, same function, one line each) so
+   `[0x442]`, `[0x2a]` and `[0x58]` go live. Verify against the oracle DGROUP sample the way si=0x174
+   and si=0x1d8 already are (`tools/oracle/samples/dgroup_0x0_0x100.bin`).
+2. Confirm the task-create at 0f69:0x3c98 and the scheduler at 0f69:0x3f17 actually run in the port
+   (they are engine/CRT code, not shim code -- they may work once their vectors exist).
+3. Promote **1000:0x5cd8..0x5e97** as a unit: 5cd8 (installer A), 5d9b (task A), 5dfe (installer B),
+   5e36 (key handler), 5e52 (the timeline task).
+4. Fix `DAT_2000_a814` to a BYTE (asm uses `movb`/`testb`; the `undefined2` macro clobbers 0xe815).
+5. Change tools/selfplay.sh: a mission ends on `byte[DGROUP:0xe814] != 0`, outcome in
+   `word[DGROUP:0x6da0]` -- not on a296 reaching 0.
+6. Re-measure the 47-mission sweep against the corrected criterion.
