@@ -522,3 +522,40 @@ wiring is missing.
 5. Change tools/selfplay.sh: a mission ends on `byte[DGROUP:0xe814] != 0`, outcome in
    `word[DGROUP:0x6da0]` -- not on a296 reaching 0.
 6. Re-measure the 47-mission sweep against the corrected criterion.
+
+### Attempted step 1 -- and it exposed the real blocker: the TASK-CREATE target itself is unpromoted
+
+Applied reloc section si=0x1b8 and measured. `[DGROUP:0x442]` populated correctly
+(`0f69:3c98`), and usefully, `[0x2a]` and `[0x58]` turned out to be ALREADY SET
+(`0f69:0279` / `0f69:0314`) by `g_dgroup_init` -- so **si=0x038 does not need applying**.
+
+But the run REGRESSED: `MAP-LOAD` never fires, the battle never starts (`a294=0 a296=0
+loaded=0`). Checking every target in the section explains why:
+
+| vector | target | in the port? |
+|--------|--------|--------------|
+| 0x426 = 0f69:3943 | FUN_1000_2fd3 | yes |
+| 0x42a = 0f69:39d4 | FUN_1000_3064 | yes |
+| 0x42e = 0f69:3b33 | FUN_1000_31c3 | yes |
+| 0x436 = 0f69:3c63 | FUN_1000_32f3 | **NO** |
+| 0x43a = 0f69:3c73 | FUN_1000_3303 | **NO** |
+| 0x43e = 0f69:3c88 | FUN_1000_3318 | yes |
+| **0x442 = 0f69:3c98** | **FUN_1000_3328 (TASK-CREATE)** | **NO** |
+
+**The task-create function itself is unpromoted.** Making the vectors live points three of
+seven at nothing, which is strictly worse than the null vectors the shim traps cleanly --
+hence the front-end breakage. The change was REVERTED (behaviour confirmed restored:
+AZER1 back to a296 16 -> 14).
+
+So applying the section is NOT step 1. The correct order is functions first, wiring last:
+
+1. Promote **FUN_1000_3328** (task-create), **3303**, **32f3** -- the CRT task machinery.
+2. Promote **1000:0x5cd8..0x5e97** -- installer A, task A, installer B (0x5dfe), the key
+   handler (0x5e36), the timeline task (0x5e52).
+3. THEN apply reloc section si=0x1b8 (si=0x038 is unnecessary -- already seeded).
+4. Fix `DAT_2000_a814` to a BYTE (asm `movb`/`testb`; `undefined2` clobbers 0xe815).
+5. Change tools/selfplay.sh: end on `byte[DGROUP:0xe814] != 0`, outcome in
+   `word[DGROUP:0x6da0]`.
+6. Re-sweep all 47 against the corrected criterion.
+
+Every address needed for steps 1-3 is now known; none of it requires further search.
