@@ -81,3 +81,37 @@ Note also the 0-argument sites (hundreds of them).  Those are the arg-less-dispa
 really does `lcall *<vec>` with the registers ambient from the caller, so the fix is to identify the
 carrier and thread it (as patches 310/463/513 do with `g_fist_render_si` / `g_fist_render_dx` /
 `g_fist_paintax`), not to invent arguments.  They are NOT part of this item.
+
+## Re-audit at HEAD (after 547-556): the [0x6c8] cluster is the ARG-LESS class, not the arity class
+
+This item nominated the seven `[0x6c8]` 1-argument sites as "the ones to verify first".  Re-reading them
+at HEAD, that nomination is wrong in a way worth recording: the remaining sites are not short argument
+lists, they are ZERO-argument dispatches --
+
+    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+
+-- mixed in with sites patch 530 already converted to the full five:
+
+    ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax,0,0,bx,0);
+
+The target's asm settles what they need.  `294d` (MGA segment, `re_out/fist_mga_image.bin`) opens
+
+    294d: 53            push %bx
+    294e: 8b 3e 24 07   mov  0x724,%di
+    2952: e8 b7 fc      call 0x260c        ; 260c(ax, bx, [0x724])
+
+and patch 136 already records the contract: **AX is the sprite-directory byte offset and BX the
+position descriptor**.  So every remaining zero-argument site needs AX and BX read out of the asm AT
+THAT SITE -- which is this item's own "identify the carrier and thread it" class, explicitly excluded
+from it, not the arity class.
+
+Consequence for whoever picks this up: the `[0x6c8]` line in the candidate table above should be read
+as "sites already converted by 530, plus N arg-less sites belonging to the carrier class", and the
+first-to-verify recommendation should move to a vector whose sites really do pass a short list.  The
+same re-check is owed for the other clusters before any of them is trusted.
+
+A live example of why the carrier class matters, from board:0007: `FUN_0000_c33c` dispatches its ten
+phase handlers with `call *0xe6f5(%bx)` and ES:DI ambient, and `FUN_0000_c38b` -- one of the ten -- had
+Ghidra's invented `param_2` deref'd as a host pointer.  Measured `param_2 = g_mem - 620`, an
+out-of-bounds write that SEGV'd AZER7 as soon as patch 553 made the branch reachable.  Patch 554 fixes
+it by taking the cursor from `g_fist_render_di`, exactly as this item prescribes.

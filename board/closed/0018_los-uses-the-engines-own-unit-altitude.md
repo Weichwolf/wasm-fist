@@ -1,5 +1,5 @@
 Type: bug
-Status: open   (the stand-in is REMOVED; see the final section)
+Status: closed
 Parent: 0017
 Title: unit line-of-sight uses the engine's own unit altitude, not a shim stand-in
 
@@ -349,3 +349,25 @@ Caveat kept deliberately: the oracle dumps are taken at write counts, not at tic
 comparison is still owed.
 
 Matrix: 177 passed, 0 failed on both targets.
+
+## CLOSED
+
+The title condition holds: the shim no longer substitutes the LOS Z endpoints, op-0x58 passes
+`tcb+0xda` / `tcb+0xe6` through exactly as the extender's own handler at 0x8030 does, and the old
+substitution survives only behind `FIST_LOS_STANDIN=1` for A/B.
+
+Re-confirmed independently at close (AZER1, t=9000, `FIST_DUMP_REG`), reading the object bodies rather
+than any counter:
+
+    type 00 @c05c   byte[+0x0d] = 0x2c   byte[+0x1d] = 0x2c
+    type 01 @c157   byte[+0x0d] = 0x47   byte[+0x1d] = 0x47
+
+`byte[+0xd] == byte[+0x1d]` exactly, and both sit in the 44..71 band the oracle shows for the original
+(81 -> 64 across its two dumps) instead of the constant 5 this item recorded before the clamp. So op
+0x1c writes the terrain height, the 7c1d/87df step methods copy it, object Z is `ground<<8`, and that
+is the scale the op-0x58 handler compares against. The stand-in has nothing left to mask.
+
+STILL OWED, and deliberately carried forward rather than buried: the oracle agreement (`a296` 16 -> 14
+on both) is taken at write counts, not at tick 20000, so it is evidence of direction and rate, not a
+tick-exact match. A tick-aligned comparison belongs to board:0017's oracle work, where the same dumps
+are needed anyway.

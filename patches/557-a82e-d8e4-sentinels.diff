@@ -1,0 +1,68 @@
+PATCH 557: the last two SETTLED constant-false sentinels.
+
+Same class as patches 548 and 551 -- a `uint16_t` promotes to `int`, so a Ghidra-emitted `== -1` can
+never be true and the guard is dead.  board:0022 carries the class; these are the two remaining members
+whose width and constant are both proven from the image.
+
+## DGROUP:0xe82e -- `DAT_2000_a82e`
+
+Nine references, every one word-width, and the one the port renders as `== -1` is unambiguous:
+
+    cb74: c7 06 2e e8 ff ff   movw  $0xffff,0xe82e
+    cb7c: c7 06 2e e8 00 00   movw  $0x0,0xe82e
+    cbd8: c7 06 2e e8 02 00   movw  $0x2,0xe82e
+    cf8e: 83 3e 2e e8 02      cmpw  $0x2,0xe82e
+    cfe2: 83 3e 2e e8 02      cmpw  $0x2,0xe82e
+    d176: 83 3e 2e e8 02      cmpw  $0x2,0xe82e
+    d199: 83 3e 2e e8 ff      cmpw  $0xffff,0xe82e     <- the site
+    d1b0: 83 3e 2e e8 00      cmpw  $0x0,0xe82e
+   1b676: 83 3e 2e e8 02      cmpw  $0x2,0xe82e
+
+## DGROUP:0x18e4 -- `DAT_1000_d8e4`, the ready-queue head
+
+`DAT_1000_XXXX` with XXXX >= 0xc000 is DGROUP XXXX-0xc000 (see patch 553), so this is DGROUP:0x18e4 --
+the queue head the port's own patch-comment for `FUN_1000_3907` already calls `[0x18e4]`:
+
+   13455: c7 06 e4 18 ff ff   movw  $0xffff,0x18e4
+   135b8: 83 3e e4 18 ff      cmpw  $0xffff,0x18e4
+   135e7: 8b 1e e4 18         mov   0x18e4,%bx
+   135ec: a3 e4 18            mov   %ax,0x18e4
+   13915: 83 3e e4 18 ff      cmpw  $0xffff,0x18e4     <- the site, inside FUN_1000_3907 (asm 0x13907)
+
+This one is not cosmetic.  `FUN_1000_3907` returns the carry that `FUN_0000_e714`'s idle loop branches
+on -- patch's own note: "stc/lret when [0x3e00]!=0 or the queue is EMPTY [0x18e4]==0xffff", and `jae`
+in e714 means CF=1 runs the idle housekeeping.  With `!= -1` always true, the port cleared CF whenever
+`[0x3e00]` was zero, i.e. it reported "event queue non-empty" even when the queue was empty, and the
+idle path never ran on that condition.
+
+## Still not settled, and deliberately left
+
+`DAT_1000_e02e` (DGROUP:0x202e) has NO plausible absolute-displacement reference in the image, so its
+width cannot be read the way the others were -- it is reached through a base register or is a
+register-modelled temporary.  It also carries the `< 0` subclass (`DAT_1000_e02e < 0` on an unsigned is
+equally a constant false) and sits in a 32-bit compare helper Ghidra otherwise treats as signed
+(SBORROW2, and a `(int)` cast on one of its two `< 0` tests but not the other).  Width and signedness
+have to be settled together there, from the containing function, not from a displacement scan.
+
+board:0022
+
+--- a/fist.c
++++ b/fist.c
+@@ -35466,7 +35466,7 @@
+ void __allregs FUN_0000_d199(void)
+ 
+ {
+-  if (DAT_2000_a82e == -1) {
++  if (DAT_2000_a82e == 0xffff) {  /* PATCH 557: d199 cmpw $0xffff,0xe82e */
+     DAT_2000_a85d = 4;
+     DAT_2000_a8ee = 3;
+     DAT_2000_a8f8 = 3;
+@@ -50071,7 +50071,7 @@
+   /* PATCH: restore the dropped CF return (asm 0x13907: clc/lret when the event queue is non-empty,
+    * stc/lret when [0x3e00]!=0 or the queue is empty [0x18e4]==0xffff).  Ghidra dropped the flag ops.
+    * CF drives the caller's `jae` (e714 idle loop: CF=1 => run idle housekeeping c52c/096c). */
+-  if ((DAT_1000_fe00 == '\0') && (DAT_1000_d8e4 != -1)) {
++  if ((DAT_1000_fe00 == '\0') && (DAT_1000_d8e4 != 0xffff)) {  /* PATCH 557: 13915 cmpw $0xffff,0x18e4 */
+     g_fist_cf = 0;   /* 1391c clc; lret (queue non-empty) */
+     return;
+   }

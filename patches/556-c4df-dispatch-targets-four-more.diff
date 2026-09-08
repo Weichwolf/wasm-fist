@@ -1,0 +1,219 @@
+PATCH 556: four of board:0015's five remaining dispatch targets.
+
+`FUN_0000_c4df` picks each object's render method from a per-VIEW table in STRSEG, and ten of the 24
+distinct targets were never promoted by Ghidra -- the dispatch resolved to nothing.  Patches 533/534/535
+landed five of them.  This lands four more; the fifth (`c783`) is NOT here and the reason is below.
+
+    c715   view 0x1e, 1 slot
+    c74d   view 0x20, 1 slot
+    c774   view 0x1e, 1 slot
+    c7a5   view 0x20, 1 slot
+
+Each is a verbatim transcription of its asm, quoted in full at the site, using the conventions patches
+310/463/535 established: SI from `g_fist_render_si`, the record cursor threaded through
+`g_fist_render_di`, and the carry protocol through `g_fist_cf` (CF=1 "nothing drawn, keep walking";
+`c8b2` and `c8c2` both end in `clc`).
+
+## What made these four writable
+
+board:0015 recorded these as blocked on "the c8c2 argument convention, or the STRSEG deferred-object
+list write".  Both are settled by reading the callees:
+
+- **`c8c2` takes only AH.**  Its asm forces `AL=0x10` itself (`c8cc: b0 10`), and the port's patch-310
+  body renders that as `CONCAT11((char)(param_1 >> 8), 0x10)`.  So `c774`'s inherited AL is a
+  DON'T CARE, and `c715` -- which does `mov %ax,%bx ; xor %ah,%ah` -- is fully determined.
+- **The STRSEG append is unambiguous in the asm.**  `c74d` and `c715`'s else-arm share it verbatim:
+
+      c75b: 8b 1e e0 e6        mov   0xe6e0,%bx          ; the deferred-object count
+      c75f: 83 fb 40           cmp   $0x40,%bx
+      c762: 73 0e              jae   0xc772              ; bound: 0x20 entries
+      c764: 8e 2e 70 00        mov   0x70,%gs            ; GS = STRSEG, as 5fb0 and a5dc already do
+      c768: 65 89 b7 6a 36     mov   %si,%gs:0x366a(%bx)
+      c76d: 83 06 e0 e6 02     addw  $0x2,0xe6e0
+
+  The port already writes STRSEG this way in `FUN_0000_5fb0` (patch 526) and `FUN_1000_a5dc`, so there
+  was nothing new to establish -- only to read.
+
+## Why `c783` is still not here
+
+`c783` sets AL and inherits AH:
+
+    c79d: b0 0e    mov  $0xe,%al
+    c79f: e8 10 01 call 0xc8b2
+
+`c8b2` forces AL=0x12 (so c783's own `mov $0xe,%al` is DEAD in the original) and passes AX through to
+`ca2f`, which stores the WHOLE word: `ca3a: ab  stos %ax,%es:(%di)`.  So AH reaches the record and
+matters -- and neither `c4df` (which sets DX, not AX: `c4fd mov 0xe48c(%bx),%dl ; c501 xor %dh,%dh`)
+nor its view-0x22 arm at `c559` sets AH.  It is threaded from further up.  Writing it would mean
+inventing a value that lands in a live record field, so it is left for whoever establishes AH's source.
+
+board:0015
+
+--- a/fist.c
++++ b/fist.c
+@@ -1298,6 +1298,10 @@
+ void __allregs FUN_0000_c894(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 534 */
+ void __allregs FUN_0000_c829(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 534 */
+ void __allregs FUN_0000_c713(void);  /* PATCH 535 */
++void __allregs FUN_0000_c715(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 556 */
++void __allregs FUN_0000_c74d(void);  /* PATCH 556 */
++void __allregs FUN_0000_c774(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 556 */
++void __allregs FUN_0000_c7a5(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 556 */
+ void __allregs FUN_0000_c874(void);  /* PATCH 535 */
+ void __allregs FUN_0000_c77d(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 535 */
+ void __allregs FUN_0000_c82d(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 535 */
+@@ -33978,6 +33982,143 @@
+   return;
+ }
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_c715) @ 0000:c715 ===== */
++
++void __allregs
++FUN_0000_c715(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
++             undefined2 param_5)
++{
++  /* PATCH 556: asm
++   *     c715: f6 06 ab 6d 02   testb  $0x2,0x6dab      ; EDIT mode?
++   *     c71a: 74 12            je     0xc72e
++   *     c71c: 0f b6 5c 1c      movzbw 0x1c(%si),%bx
++   *     c720: d1 e3            shl    $1,%bx
++   *     c722: 8b 87 0d e8      mov    0xe80d(%bx),%ax  ; (-0x17f3) the per-[si+0x1c] sprite word
++   *     c726: 8b d8            mov    %ax,%bx          ; BX = the whole word
++   *     c728: 32 e4            xor    %ah,%ah          ; AX = its low byte
++   *     c72a: e8 95 01         call   0xc8c2 ; ret      ; c8c2 ends with clc
++   *     c72e: <the deferred-object append, identical to c74d's> ; c74b: stc ; ret
++   * Both AX and BX are fully determined here, which is why this one could be written and c783 could
++   * not: c8c2 takes AH from its first argument and forces AL=0x10 itself. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;(void)param_5;
++  if ((dg[0x6dab] & 2) != 0) {
++    unsigned short bx = (unsigned short)(dg[(unsigned short)(si + 0x1c)] << 1);
++    unsigned short ax = *(unsigned short *)(dg + (unsigned short)(0xe80d + bx));
++    FUN_0000_c8c2((undefined2)(unsigned short)(ax & 0xff),(undefined2)ax,0,(undefined2)si,0);
++    return;
++  }
++  /* c72e: the deferred-object list append, then stc */
++  if (dg[(unsigned short)(si + 0x1c)] != 1) {
++    unsigned short bx = *(unsigned short *)(dg + 0xe6e0);
++    if (bx < 0x40) {
++      unsigned strseg = *(unsigned short *)(dg + 0x70);                /* mov 0x70,%gs */
++      *(unsigned short *)(g_mem + ((unsigned)strseg << 4) + (unsigned short)(0x366a + bx)) = si;
++      *(unsigned short *)(dg + 0xe6e0) = (unsigned short)(bx + 2);
++    }
++  }
++  g_fist_cf = 1;                                                       /* c74b stc */
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c74d) @ 0000:c74d ===== */
++
++void __allregs FUN_0000_c74d(void)
++{
++  /* PATCH 556: asm
++   *     c74d: f7 06 2c 6d 04 00  testw $0x4,0x6d2c
++   *     c753: 74 1d              je    0xc772
++   *     c755: 80 7c 1c 01        cmpb  $0x1,0x1c(%si)
++   *     c759: 74 17              je    0xc772
++   *     c75b: 8b 1e e0 e6        mov   0xe6e0,%bx         ; (-0x1920) the deferred-object count
++   *     c75f: 83 fb 40           cmp   $0x40,%bx
++   *     c762: 73 0e              jae   0xc772             ; bound: at most 0x20 entries
++   *     c764: 8e 2e 70 00        mov   0x70,%gs           ; GS = STRSEG
++   *     c768: 65 89 b7 6a 36     mov   %si,%gs:0x366a(%bx)
++   *     c76d: 83 06 e0 e6 02     addw  $0x2,0xe6e0
++   *     c772: f9 c3              stc ; ret
++   * The view-0x20 method that DEFERS an object instead of drawing it: it appends SI to the list at
++   * STRSEG:0x366a and always returns CF=1, so c4df's walk continues.  Every path ends at the same
++   * stc -- there is no drawing arm. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  if (((*(unsigned short *)(dg + 0x6d2c) & 4) != 0) && (dg[(unsigned short)(si + 0x1c)] != 1)) {
++    unsigned short bx = *(unsigned short *)(dg + 0xe6e0);
++    if (bx < 0x40) {
++      unsigned strseg = *(unsigned short *)(dg + 0x70);
++      *(unsigned short *)(g_mem + ((unsigned)strseg << 4) + (unsigned short)(0x366a + bx)) = si;
++      *(unsigned short *)(dg + 0xe6e0) = (unsigned short)(bx + 2);
++    }
++  }
++  g_fist_cf = 1;                                                       /* c772 stc */
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c774) @ 0000:c774 ===== */
++
++void __allregs
++FUN_0000_c774(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
++             undefined2 param_5)
++{
++  /* PATCH 556: asm
++   *     c774: bb b0 13   mov  $0x13b0,%bx
++   *     c777: 32 e4      xor  %ah,%ah
++   *     c779: e8 46 01   call 0xc8c2 ; ret
++   * A fixed-sprite draw: BX is the literal 0x13b0 and AH is zeroed.  AL is inherited and is a
++   * DON'T CARE -- c8c2 forces AL=0x10 itself and uses only AH from its first argument -- which is why
++   * this one is determined despite not setting AL. */
++  extern unsigned short g_fist_render_si;
++  unsigned short si = g_fist_render_si;
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;(void)param_5;
++  FUN_0000_c8c2(0,0x13b0,0,(undefined2)si,0);
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c7a5) @ 0000:c7a5 ===== */
++
++void __allregs
++FUN_0000_c7a5(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
++             undefined2 param_5)
++{
++  /* PATCH 556: asm
++   *     c7a5: 80 3e 49 15 20   cmpb  $0x20,0x1549   ; only in view 0x20
++   *     c7aa: 75 1c            jne   0xc7c8
++   *     c7ac: f6 44 17 01      testb $0x1,0x17(%si)
++   *     c7b0: 74 16            je    0xc7c8
++   *     c7b2: 8a 64 19         mov   0x19(%si),%ah
++   *     c7b5: c0 ec 02         shr   $0x2,%ah
++   *     c7b8: f6 dc            neg   %ah
++   *     c7ba: 80 c4 0c         add   $0xc,%ah
++   *     c7bd: 80 fc 0c         cmp   $0xc,%ah
++   *     c7c0: 76 02            jbe   0xc7c4          ; UNSIGNED -- keep 0..0xc
++   *     c7c2: 32 e4            xor   %ah,%ah         ; else 0
++   *     c7c4: e8 eb 00         call  0xc8b2 ; ret     ; c8b2 ends with clc
++   *     c7c8: f9 c3            stc ; ret
++   * AH is a damage/brightness step derived from byte[si+0x19]: `12 - (v >> 2)`, clamped to 0 when the
++   * unsigned result exceeds 12 (i.e. when v>>2 > 12 and the byte wrapped).  This one sets AH itself,
++   * so it is fully determined. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  (void)param_1;(void)param_2;(void)param_3;(void)param_4;(void)param_5;
++  if ((dg[0x1549] != 0x20) || ((dg[(unsigned short)(si + 0x17)] & 1) == 0)) {
++    g_fist_cf = 1; return;                                             /* c7c8 stc */
++  }
++  {
++    unsigned char ah = (unsigned char)(0x0c - (unsigned char)(dg[(unsigned short)(si + 0x19)] >> 2));
++    if (ah > 0x0c) ah = 0;                                             /* c7bd/c7c0 unsigned */
++    FUN_0000_c8b2(CONCAT11(ah,0),(undefined2)(unsigned short)(*(unsigned short *)(dg + si) << 1),
++                  0,(undefined2)si,0);
++  }
++  return;
++}
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c874) @ 0000:c874 ===== */
+ 
+ void __allregs FUN_0000_c874(void)
+@@ -76112,6 +76253,10 @@
+   {0xc894u,(void*)&FUN_0000_c894},   /* PATCH 534 */
+   {0xc829u,(void*)&FUN_0000_c829},   /* PATCH 534 */
+   {0xc713u,(void*)&FUN_0000_c713},   /* PATCH 535 */
++  {0xc715u,(void*)&FUN_0000_c715},   /* PATCH 556 */
++  {0xc74du,(void*)&FUN_0000_c74d},   /* PATCH 556 */
++  {0xc774u,(void*)&FUN_0000_c774},   /* PATCH 556 */
++  {0xc7a5u,(void*)&FUN_0000_c7a5},   /* PATCH 556 */
+   {0xc874u,(void*)&FUN_0000_c874},   /* PATCH 535 */
+   {0xc77du,(void*)&FUN_0000_c77d},   /* PATCH 535 */
+   {0xc82du,(void*)&FUN_0000_c82d},   /* PATCH 535 */

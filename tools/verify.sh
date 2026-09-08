@@ -435,7 +435,10 @@ FLOWS=(
   "mission-cockpit-2c-ukraine7|25000|missfb|UKRAINE7|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   "mission-cockpit-2c-ukraine8|25000|missfb|UKRAINE8|$ROOT/ref/mission_saudi1_cockpit_native320.png"
   # ---- remaining battles: cockpit spawn native<->wasm bit-identity (no DOSBox ref yet -> native==wasm
-  # only, the hard invariant).  Completes the 47-mission cockpit set except INDIA3 (board:0006 spawn OOM).
+  # only, the hard invariant).  This now completes the 47-mission cockpit set: INDIA3 was the last
+  # exclusion (board:0006, a near-heap OOM in the 2004 bbox-analyzer reached via 84c3) and it spawns
+  # crash-free at HEAD -- 56728/64000 non-zero pixels, 182 distinct indices, i.e. a real cockpit.
+  "mission-cockpit-india3|25000|missfb|INDIA3|"
   "mission-cockpit-azer6|25000|missfb|AZER6|"
   "mission-cockpit-cyprus5|25000|missfb|CYPRUS5|"
   "mission-cockpit-saudi5|25000|missfb|SAUDI5|"

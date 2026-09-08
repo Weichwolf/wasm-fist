@@ -174,3 +174,139 @@ object-ref root ALSO causes board:0003's terrain FB code-layout-fragility -- fis
 Ghidra register pseudo-vars (unaff_/extraout_/in_ESP) read as garbage; native (garbage, recompile-
 dependent) vs wasm (spec-zero) diverge under any hot-path recompile (proven: -ftrivial-auto-var-init=zero
 makes native terrain code-layout-invariant).  One fix -- restore the dropped register writes -- serves both.
+
+## The cascade is not closed: three more sites, and a way to enumerate them
+
+Patch 553 (board:0023) narrowed DGROUP:0x1549 -- the mission-state discriminator -- to the byte all
+fourteen of its references use. As a word, `DAT_1000_d549 == 0x1e` also demanded that byte 0x154a be
+zero, and 0x154a is a live counter, so the comparison was effectively never true. Narrowing it made a
+branch of the c33c render phase-walk reachable **for the first time**, and behind it sat this cascade.
+
+**AZER7 now SEGVs** on the committed tree (5fc4249). The 177-flow matrix passes on both targets because
+its AZER7 cockpit flow does not run far enough to reach it -- which is itself a gap worth closing.
+
+### What the layout lottery was hiding
+
+These are out-of-bounds WRITES that happened to land in mapped memory. Whether one faults depends on
+what sits below `g_mem` in .bss, so adding two globals to the shim was enough to turn silent corruption
+into a crash. Measured on the first one: `param_2 = g_mem - 620`. A build differing only by an added
+counter crashed somewhere else entirely. Timing is equally unreliable as a signal -- the pre-554 build
+ran AZER7's 20000 ticks in 31 s *while performing the bad write*, so that number was never a baseline.
+
+### Use AddressSanitizer, not luck
+
+`tools/build_native.sh` already honours an `ASAN` variable (`make native` passes `ASAN=' '` to disable
+it), so the whole class can be enumerated precisely:
+
+    ASAN='-fsanitize=address' bash tools/build_native.sh /tmp/fist_asan
+    ASAN_OPTIONS=detect_leaks=0 setarch -R env FIST_DATADIR=<scratch> FIST_SIMRUN=1 FIST_COOP_TICK=1 \
+      FIST_FSG_BATTLE=AZER7 FIST_DUMPTICK=6000 FIST_MOUSE="<menu script>" /tmp/fist_asan
+
+Each run names one site with a full stack. Fix, rebuild, repeat.
+
+### Sites found so far
+
+| site | reached via | defect | patch |
+|------|-------------|--------|-------|
+| `FUN_0000_c38b` | 378e -> c33c (phase 9) | the ES:DI record cursor was Ghidra's invented `param_2`, i.e. stack residue, because c33c dispatches its handlers with NO arguments | 554 |
+| `FUN_1000_b330` | 378e -> c33c -> c4df -> 5652 | the display-table slot's near offset deref'd as a host pointer, plus `unaff_CS` fabricated into the loop counter and cursor | 555 |
+| `FUN_0000_f81d` | e714 -> e4bb -> 38cc -> 35a7 | the relocation-CLEAR walk: `(undefined2 *)(param_3 + 2)` is a near offset as a host pointer, and `*(undefined2 *)*puVar1 = 0` deref's the loaded word as one too | OPEN |
+| `FUN_0000_c9af` | 378e -> c33c (phase 6) | the deferred-object list is in STRSEG, not DGROUP; the object is a near offset; `param_1` is the ES:DI cursor again; clc/stc dropped | 558 |
+
+### The cascade has a PRODUCER/CONSUMER shape, and that is why it keeps reappearing
+
+`FUN_0000_c9af` was not found by ASan or by a crash -- it was switched ON by patch 556.  c33c's phase
+handlers `c74d` and `c715` are the PRODUCERS of a deferred-object list in STRSEG; `c9af` is its
+CONSUMER.  Both producers were among board:0015's unpromoted dispatch targets, so before 556 they
+resolved to nothing, the list was never populated, `bx >= count` held on c9af's very first test, and it
+returned before touching any of its four defects.  Landing the producers made the consumer run for the
+first time and AZER1 SEGV'd one second into the mission.
+
+Bisected explicitly: with 556 removed AZER1 runs clean; with it in, SEGV; 557 makes no difference.
+
+This is the third instance of the same shape in this item (553 -> 554, 556 -> 558), and it predicts the
+rest: **the render walk's defects are ordered by reachability, not by address.**  Fixing a dispatch or a
+width does not "cause" a regression -- it advances the frontier to the next never-executed function.
+Expect one more of these each time a producer is connected, and read the consumer BEFORE landing the
+producer where the pairing is visible.
+
+Two of my own test errors are recorded here because both produced confident wrong answers:
+
+- a bisect run with `FIST_DUMPTICK=3000` exits while still in the TITLE.KDV intro, before the mission
+  loads at all, so every arm "passed".  Any crash test must run past the point under test.
+- testing a new patch after `tools/build_native.sh` alone re-measures the OLD binary; `make patch` has
+  to regenerate `build/` first.
+
+`FUN_0000_f81d` is in a different subsystem from the other two (the extender relocation service, not the
+render walk), so the cascade is not confined to c33c's handlers.
+
+### Why `FUN_0000_f81d` is NOT patched with the other two
+
+It cannot be written correctly yet, and guessing would be worse than leaving it.  The asm (0xf81a) is:
+
+    f81a: e8 a6 ff     call 0xf7c3          ; returns BX = word[SS:0x74] -- a SEGMENT
+    f81d: 0b db / 74   or %bx,%bx ; je 0xf81a    ; retry until non-zero
+    f823: 1e           push %ds
+    f824: 16 07        push %ss ; pop %es   ; ES = SS
+    f826: 8e db        mov %bx,%ds          ; DS = that segment
+    f828: 83 c6 02     add $0x2,%si
+    f837: ad           lods %ds:(%si),%ax   ; walk the list IN THAT SEGMENT
+    f838: 0b c0 / 75   or %ax,%ax ; jne 0xf82f
+    f82f: 8b f8        mov %ax,%di
+    f831: 83 c6 02     add $0x2,%si         ; entries are PAIRS
+    f834: 8b c3        mov %bx,%ax          ; AX = 0
+    f836: ab           stos %ax,%es:(%di)   ; word[ES:DI] = 0
+
+so it is a two-segment walk -- a list read through DS=BX, zeroes written through ES=SS -- with a
+2-word stride.  The port has it as a single host-pointer walk with a 4-byte stride and no segment at
+all.  Three prerequisites are missing:
+
+  1. `FUN_0000_f7c3` must RETURN BX (`f7e6: mov 0x74,%bx`); the port's version returns `undefined4`
+     but every path is a bare `return;`, so the segment is dropped at the source.
+  2. SI comes from the caller, which reaches f81d through the far vector `[ds:0x0e]` (patch 346 notes
+     `mov si,0x2c4 ; lcall [ds:0x0e]`), not through a C call.
+  3. **SS is not DGROUP here.**  The asm tests `byte[SS:0x76]` at 0xf7c6, and the port renders that as
+     `DAT_2000_bb06` = DGROUP:0xfb06.  Those cannot both be right.  This is the extender/kernel
+     context where SS is its own segment, which is board:0009 and board:0021 territory.
+
+Settling (3) is the prerequisite for (1) and (2), and it is a segment-context question, not a
+base-loss one.  Recorded here so the site is not lost, and left for whoever closes 0009/0021.
+
+### NOT established
+
+- How many sites remain. Three were found in three runs; the rate says nothing about the total.
+- Whether patch 554 is correct as well as crash-free. With it AZER7 takes 700 s for 20000 ticks against
+  40 s on the pre-547 tree, and the c38b found path fires exactly ONCE (di=0x6bbe, sel=0x10, both
+  correct). Until the 17x is explained, 554 should be read as "stops the fault" rather than "restores
+  the original behaviour".
+
+  The most likely explanation, and how to test it: c38b's record header is 0x10, which `caab` stores at
+  DGROUP:0x6bc2 (= the record base 0x6bbe + 4), and 0x6bc2 is exactly the byte 0x378e reads to pick the
+  render method:
+
+      37b0: 8a 16 c2 6b   mov  0x6bc2,%dl
+      37b6: ff 94 52 4b   call *0x4b52(%si)
+
+  The table at DGROUP:0x4b52 gives sel=0x10 -> **0x3823**, and 0x3823 is a sprite/bitmap blit: it loads
+  a far pointer (`3838: les %es:(%si),%si`) and computes a bounding box into 0x6c16/0x6c18/0x6c1a/
+  0x6c1c before drawing. So the port may simply be performing, once per frame, a real blit it had been
+  skipping entirely -- in which case the cost is inherent and the pre-547 40 s was fast because the
+  frame was INCOMPLETE. That is a hypothesis, not a finding. Testing it means counting 0x3823's
+  invocations and its blit extent per frame, and ideally diffing a rendered frame against the oracle:
+  if the port was skipping a real sprite pass, the AZER7 windshield should differ from the original
+  BEFORE 554 and match after.
+
+### ASan is clean after 554+555
+
+Two runs with both patches applied:
+
+    AZER7 -> [0x452]=1500 under ASan   rc=0, no diagnostic
+    AZER7 -> 30 minutes under ASan     no diagnostic at all (timed out, still clean)
+
+The first is a completed run to a cap; the second is an incomplete run that simply never faulted. So
+the two fixed sites are gone and nothing else fired in that window. That is NOT a proof that the
+cascade is exhausted -- the sanitized build is slow enough that a full mission has not been covered --
+but it is the first evidence that the render walk survives the branch patch 553 opened.
+
+`tools/asan_selfplay.sh` is committed so the next pass starts from a one-command enumerator rather than
+rediscovering the method.

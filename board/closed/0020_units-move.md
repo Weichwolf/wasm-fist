@@ -1,5 +1,5 @@
 Type: bug
-Status: open
+Status: closed
 Parent: 0017
 Title: every mobile unit integrates its position each tick
 
@@ -165,3 +165,31 @@ AZER1: a296 16 -> 12 (four kills, up from one); op-0x58 VISIBLE 446 -> 12697; ou
 STILL OPEN in this item's parent chain: the ground byte remains wrong for types 00/01/02 -- the
 original's units terrain-follow AS THEY MOVE (gnd 81->64 over the same interval) and the port's do
 not -- which is board:0018's remaining half. And no mission RESOLVES yet.
+
+## CLOSED
+
+The title condition -- every mobile unit integrates its position each tick -- holds, and the two things
+this item listed as still open in its parent chain have since been closed by board:0018 and board:0021.
+
+Re-measured on the current tree (AZER1, `FIST_SIMTRACE=2000`), reading the object's own X/Y and the
+velocity fields that feed them:
+
+    t=314   X=584582  Y=1141637   h55=56 s57=224 vx59=15 vy5b=-23
+    t=338   X=585000  Y=1141125   h55=56 s57=224 vx59=18 vy5b=-21
+    t=343   X=585090  Y=1141020   h55=56 s57=224 vx59=18 vy5b=-21
+
+Position advances every tick, in the direction and at the magnitude the decomposed velocity implies, so
+the chain a401 -> a1d6 -> 7cd5/88e4/912d integrates end to end.  Over the same run `a296` falls 16 -> 10
+and `a294` climbs 67 -> 120, i.e. the sim is both moving and fighting.
+
+The ground byte this item recorded as "STILL OPEN in this item's parent chain" is fixed: with op 0x1c
+and patch 545 in, `byte[+0xd] == byte[+0x1d]` exactly and both are live terrain heights (0x2c for the
+type-00 slot, 0x47 for type-01), which is board:0018's and board:0021's close condition.
+
+METHOD NOTE, because it cost a wrong reading here: `FIST_DUMP_REG` is a ONE-SHOT dump (`static int
+dumped_reg`), so it fires at the first in-mission pump regardless of `FIST_DUMPTICK`.  Comparing two
+runs with different `FIST_DUMPTICK` values compares a snapshot with ITSELF and shows every object
+stationary.  Use `FIST_SIMTRACE=N`, which is tick-gated, for anything that needs two points in time.
+
+NOT claimed by this close: that missions resolve by attrition.  That is board:0017, which stays open --
+only outcome 2 (TIME EXPIRED) has ever been observed.

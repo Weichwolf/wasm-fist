@@ -945,3 +945,91 @@ cannot answer it. NEXT: put the DOSBox oracle on `0x978e`, `0x6d38` and `a296` t
 and compare the three trajectories. If the original's 0x978e also holds constant, the victory path is
 simply not AZER1's outcome and the thing to do is find a mission whose own side wins; if it falls, the
 defect is in whatever should be clearing `byte[obj+0x17] & 8`.
+
+## What the victory condition actually counts: `byte[obj+0x17] & 8` marks OBJECTIVES
+
+With patch 550 removing the `_DAT_2000_578c` clobber, `live` (DGROUP:0x978e) is trustworthy for the
+first time, and it is a flat 13 for the whole of AZER1. Breaking that 13 down by object type at one
+instant (AZER1, `FIST_DUMP_REG`, 83 live objects):
+
+    type   total   with [0x17]&8
+    0000     2          0
+    0001     2          0
+    0002     9          2
+    0003     3          2
+    0010    25          0
+    0011     3          0
+    0015    27          0
+    001a     6          6
+    001b     6          3
+                       --
+                       13
+
+**Nine of the thirteen are types 0x1a/0x1b -- the STATIC MAP OBJECTS** this board's own census
+(board:0018) identified as sitting exactly on the terrain and never moving. The other four are two
+type-0x02 and two type-0x03 vehicles. Meanwhile the 25 type-0x10 AI tanks and the 27 type-0x15 objects
+carry the bit not at all.
+
+So bit 3 of `byte[obj+0x17]` is not "alive" or "enemy" -- it marks the mission's OBJECTIVES, and
+FUN_1000_a5dc's outcome 0 at 0x1a6ae is "every objective destroyed" = VICTORY. That is a coherent
+design and it explains the constant 13: with the player's side losing (0x6d38 falls 4 -> 1) nothing on
+the port's side ever gets close to destroying the objective set.
+
+### What this changes about the two unobserved outcomes
+
+- **Outcome 0 (VICTORY) requires destroying 13 objectives, nine of them static structures.** Under
+  EMPTY player input with the player's own tank stationary, that is not obviously something AZER1's AI
+  side would ever achieve, so its absence may be correct rather than a defect.
+- **Outcome 1 (DEFEAT) is much closer.** It fires when `byte[0x6d38]` -- the own-side live count --
+  reaches zero, and AZER1 gets to 1 before the clock expires. A longer clock would very likely reach 0.
+
+That makes the mission TIME LIMIT the decisive variable, and it is a four-value setting (5 / 15 / 30 /
+none, from the table at DGROUP:0x7b14). The harness drives the menu path, which takes the 15-minute
+default. Two ways to settle it, in order of cost:
+
+1. **Run the sweep.** 47 missions differ in roster balance; if outcomes 0 or 1 are reachable at all at
+   15 minutes, some mission will show one. This needs no new capability.
+2. **Reach the "no limit" setting**, where a5dc's clock branch is skipped entirely (`1a5ef: cmpb
+   $0xff,0x6da6`) and victory/defeat become the ONLY exits. That needs the menu coordinates of the
+   time-limit control, or the saved-settings path at 0xd5df where a zero `byte[0xe987]` defaults to
+   0xff.
+
+Until one of those runs, "no mission reaches outcome 0 or 1" is an observation about a 15-minute clock
+and five missions, not a proven defect.
+
+## The self-play cost changed again: rendering the deferred list is ~6x
+
+Patches 556 and 558 connected c33c's deferred-object producers (`c74d`, `c715`) to their consumer
+(`c9af`).  Before them the list was never populated and c9af returned on its first test; now it draws.
+Measured on AZER1:
+
+    before 556/558   resolves in 141 s
+    after            exceeds the sweep's 900 s budget
+
+and instrumenting the drain shows why -- and shows it is NOT a runaway:
+
+    [c9af] drawn#8200000 cursor=4 count=34 sub=0 di=0x6bf0     (12000 ticks)
+
+`count=34` is 17 list entries, each with up to 8 sub-parts (`sub` 0..7, masked by
+`byte[0x9646+sub]` against `byte[si+0x1b]`), so a full drain is ~136 records.  `di` is reset to 0x6bbe
+by c33c on every call and advanced to 0x6bf0 (+0x32) by c9af, i.e. ONE record at a time, consumed by
+378e's render dispatch before the next -- the same pipeline `caab` and `ca2f` use.  The cursor advances
+and wraps, and `FUN_0000_c99c` (called from c33c's re-init) resets count/cursor/sub each walk.
+
+So the port is now performing a per-frame display-list render it previously skipped in full, and the
+cost is inherent rather than a defect.  Consequences that must be carried:
+
+- **The sweep budget must be raised.** Missions that resolve now take 90-285 s; AZER1, AZER4 and AZER7
+  exceed 900 s.  A full 47-mission sweep needs ~2400 s per mission and several hours.
+- **The earlier "~2 minutes per mission" figure is obsolete**, as the "~20 minutes" figure before it
+  was wrong for a different reason.  Any cost estimate in this item should be read with the patch level
+  it was measured at.
+
+Partial sweep at 554-558 (8 of 47 dispatched, 900 s budget, 2 jobs, sharing the machine with a matrix
+run):
+
+    AZER2 RESOLVED code2 277s   AZER3 RESOLVED code2  90s   AZER5 RESOLVED code2 285s
+    AZER6 RESOLVED code2 271s   CYPRUS1 RESOLVED code2 263s
+    AZER1 TIMEOUT   AZER4 TIMEOUT   AZER7 TIMEOUT      (0 crashes)
+
+Zero crashes is the result that matters here -- before 554/555/558 this set produced SEGVs.

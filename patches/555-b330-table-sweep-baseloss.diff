@@ -1,0 +1,91 @@
+PATCH 555: `FUN_1000_b330` deref'd a display-table slot's near offset as a host pointer.
+
+Second site of the same cascade as patch 554, found by running the self-play under AddressSanitizer
+instead of waiting for the layout lottery to make it fault:
+
+    ==781953==ERROR: AddressSanitizer: SEGV on unknown address 0x0000aef5
+        #0 FUN_1000_b330  build/fist.c:68039
+        #1 FUN_0000_5652  build/fist.c:15955
+        #2 FUN_0000_c4df  build/fist.c:33555
+        #3 FUN_0000_c33c  build/fist.c:33310
+        #4 FUN_0000_378e  build/fist.c:12056
+
+0x0000aef5 is a bare DGROUP near offset.  The function removes every entry of one object TYPE from the
+182-entry display table at DGROUP:0xdfbc; its only caller passes 0x15.  Asm 0x1b330 is quoted in full
+at the site.
+
+Two defects:
+
+  - BASE LOSS.  `puVar1 = (undefined2 *)*puVar4` takes the slot's near offset and `*puVar1` deref's it
+    as a host pointer.  The asm is `mov (%si),%di` then `cmp (%di),%ax`, both DS-relative, so the type
+    compare is word[DGROUP:di].
+  - THE LOOP STATE.  Ghidra emitted `param_1 = puVar4; puVar3 = unaff_CS; puVar4 = unaff_CS;` inside
+    the hit branch -- `unaff_CS` is an uninitialised pseudo-variable, so a single match replaced the
+    key, the counter AND the cursor with garbage.  The asm does the opposite: it PUSHES AX, CX and SI
+    around the two calls and pops them back (0x1b340 / 0x1b34b), precisely so the sweep continues
+    unchanged.  As decompiled, the first removal destroyed the walk.
+
+board:0007
+
+--- a/fist.c
++++ b/fist.c
+@@ -68023,26 +68023,41 @@
+ void __allregs FUN_1000_b330(undefined2 *param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  int iVar2;
+-  undefined2 *puVar3;
+-  undefined2 *puVar4;
+-  undefined2 *unaff_CS;
+-  
+-  puVar4 = (undefined2 *)&DAT_2000_9fbc;
+-  puVar3 = (undefined2 *)0xb6;
++  /* PATCH 555: remove every display-table entry of a given object TYPE (asm 0x1b330).  AX is the type
++   * -- its only caller is `FUN_0000_5652` with 0x15 -- and the walk is over the 182-entry table at
++   * DGROUP:0xdfbc, stride 4:
++   *
++   *   1b330: be bc df     mov  $0xdfbc,%si
++   *   1b333: b9 b6 00     mov  $0xb6,%cx
++   *   1b336: 8b 3c        mov  (%si),%di        ; di = the slot's near offset
++   *   1b338: 0b ff / 74   or   %di,%di ; je 1b34e
++   *   1b33c: 3b 05        cmp  (%di),%ax        ; word[DGROUP:di] is the object's TYPE
++   *   1b33e: 75 0e        jne  0x1b34e
++   *   1b340: 50 51 56     push %ax ; push %cx ; push %si
++   *   1b344: e8 0d 00     call 0x1b354          ; -> index of di in the table
++   *   1b348: e8 a4 ff     call 0x1b2ef          ; free that index
++   *   1b34b: 5e 59 58     pop  %si ; pop %cx ; pop %ax
++   *   1b34e: 83 c6 04     add  $0x4,%si
++   *   1b351: e2 e3        loop 0x1b336
++   *
++   * Two defects.  BASE LOSS: `*puVar1` deref'd the slot's DGROUP near offset as a host pointer, so the
++   * type compare read a wild address -- ASan catches it as `SEGV on unknown address 0x0000aef5` in
++   * this function, reached from the c33c phase walk via c4df -> 5652.  And the loop state: Ghidra
++   * invented `puVar3 = unaff_CS; puVar4 = unaff_CS; param_1 = puVar4` inside the hit branch, where the
++   * asm simply PUSHES AX/CX/SI around the two calls and pops them back, so the sweep continues with
++   * the same key, count and cursor.  As decompiled, one hit destroyed the loop. */
++  unsigned char *dg = g_mem + 0x1c000;
++  uint16_t ax = (uint16_t)(uintptr_t)param_1;      /* the type to remove (0x15 from 5652) */
++  uint16_t si = 0xdfbc;
++  int cx = 0xb6;
+   do {
+-    puVar1 = (undefined2 *)*puVar4;
+-    if ((puVar1 != (undefined2 *)0x0) && (param_1 == (undefined2 *)*puVar1)) {
+-      iVar2 = FUN_1000_b354(puVar1);
+-      FUN_1000_b2ef(iVar2);
+-      param_1 = puVar4;
+-      puVar3 = unaff_CS;
+-      puVar4 = unaff_CS;
++    uint16_t di = *(uint16_t *)(dg + si);                        /* 1b336 */
++    if ((di != 0) && (*(uint16_t *)(dg + di) == ax)) {           /* 1b338 / 1b33c */
++      FUN_1000_b2ef(FUN_1000_b354((int)(uint16_t)di));           /* 1b344 / 1b348 */
+     }
+-    puVar4 = puVar4 + 2;
+-    puVar3 = (undefined2 *)((int)puVar3 + -1);
+-  } while (puVar3 != (undefined2 *)0x0);
++    si = (uint16_t)(si + 4);                                     /* 1b34e */
++    cx = cx + -1;
++  } while (cx != 0);                                             /* 1b351 loop */
+   return;
+ }
+ 

@@ -15,13 +15,27 @@ asm width where it is already known:
 
 | variable            | DGROUP  | sites | asm width | sentinel | status |
 |---------------------|---------|-------|-----------|----------|--------|
-| `DAT_2000_5fd9`     | 0x9fd9  | 4     | WORD      | 0xffff   | SETTLED |
-| `DAT_2000_5fd6`     | 0x9fd6  | 2     | BYTE      | 0xff     | SETTLED -- needs narrowing too |
-| `DAT_2000_2db6`     | 0x6db6  | 1     | WORD      | 0xffff   | SETTLED |
-| `DAT_2000_a918`     | 0xe918  | 3     | BYTE (`mov %al,0xe918`) | ? | needs the compare instruction |
-| `DAT_2000_a82e`     | 0xe82e  | 1     | not located | ?      | assigned 0xffff by the port |
-| `DAT_1000_e02e`     | seg 1000| 1     | not located | ?      | also has the `< 0` subclass |
-| `DAT_1000_d8e4`     | seg 1000| 1     | not located | ?      | a list head with a 0xffff sentinel |
+| `DAT_2000_2da2`     | 0x6da2  | 9     | WORD      | 0xffff   | FIXED -- patch 548 |
+| `DAT_2000_5fd9`     | 0x9fd9  | 4     | WORD      | 0xffff   | FIXED -- patch 551 |
+| `DAT_2000_2db6`     | 0x6db6  | 1     | WORD      | 0xffff   | FIXED -- patch 551 |
+| `DAT_2000_5fd6`     | 0x9fd6  | 2     | BYTE      | 0xff     | FIXED -- patch 550 (narrowed too) |
+| `DAT_2000_a918`     | 0xe918  | 3     | BYTE      | 0xff     | FIXED -- patch 552 (narrowed too) |
+| `DAT_2000_a82e`     | 0xe82e  | 1     | WORD      | 0xffff   | FIXED -- patch 557 |
+| `DAT_1000_d8e4`     | 0x18e4  | 1     | WORD      | 0xffff   | FIXED -- patch 557 |
+| `DAT_1000_e02e`     | 0x202e  | 1     | NOT LOCATED | ?      | the only one left -- see below |
+
+The `DAT_1000_` two were locatable once patch 553 established that `DAT_1000_XXXX` with XXXX >= 0xc000
+is DGROUP XXXX-0xc000: `DAT_1000_d8e4` is DGROUP:0x18e4, the ready-queue head, with `cmpw $0xffff`
+at 0x13915 inside `FUN_1000_3907`.  That one was not cosmetic -- it decides the carry `FUN_0000_e714`'s
+idle loop branches on, so the port reported "event queue non-empty" when the queue was empty.
+
+### The one that remains: `DAT_1000_e02e` (DGROUP:0x202e)
+
+It has NO plausible absolute-displacement reference in the image, so its width cannot be read the way
+the other seven were; it is reached through a base register or is a register-modelled temporary.  It
+also carries the `< 0` subclass and sits in a 32-bit compare helper Ghidra otherwise treats as signed
+(SBORROW2, plus an `(int)` cast on ONE of its two `< 0` tests and not the other).  Width and signedness
+have to be settled together, from the containing function.
 
 The three settled ones, with their evidence:
 

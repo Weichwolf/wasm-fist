@@ -1,0 +1,158 @@
+PATCH 558: the deferred-object drain, the consumer patch 556 switched on.
+
+`FUN_0000_c9af` is c33c's phase-6 handler and the CONSUMER of the deferred-object list that `c74d` and
+`c715` append to.  Those two appenders were among board:0015's missing dispatch targets, so until patch
+556 they resolved to nothing, the list was never populated, `bx >= count` held on the very first test
+and c9af returned immediately.  With 556 landed the list fills, c9af walks it for the first time, and
+its own base-losses become live -- AZER1 SEGVs one second into the mission:
+
+    #0  FUN_0000_c9af (param_1=265604)  build/fist.c:34508
+    #1  FUN_0000_c33c (si=0, di=27582)
+    #2  FUN_0000_378e
+    #3  FUN_0000_22dd
+    #4  FUN_0000_459a
+
+Bisected: with 556 removed AZER1 runs clean, with it in place it SEGVs, and 557 makes no difference.
+This is the same shape as 553 -> 554: a correct patch makes dead code reachable and the code behind it
+turns out never to have been reconstructed.  The fix is this function, not withholding 556.
+
+The asm (0xc9af-0xca2e) is quoted in full at the site.  Four defects:
+
+  (a) THE LIST IS IN STRSEG.  `c9b9: mov 0x70,%gs ; c9bd: mov %gs:0x366a(%bx),%si` -- the port had
+      `*(int *)(DAT_2000_a6dc + 0x366a)`, i.e. the cursor added to a host pointer with no segment at
+      all.  The port already performs this exact GS store correctly in c74d/c715 (556), 5fb0 (526) and
+      a5dc, so the idiom was established.
+  (b) BASE LOSS on the object.  `*(byte *)(iVar1 + 0x1b)` deref'd a DGROUP near offset as a host
+      pointer; the asm is `test %al,0x1b(%si)`, DS-relative.
+  (c) THE RECORD CURSOR.  `param_1` is ES:DI, and c33c dispatches its handlers with no arguments, so it
+      was stack residue -- patch 554's class.  It is `g_fist_render_di`, advanced here by 0x32 exactly
+      as `caab` and `ca2f` advance it (`add $0x2,%di` + 20 bytes of stores + `add $0x1c,%di`).
+  (d) THE CARRY.  `ca10: clc` (drawn, c33c stops) and `ca2e: stc` (exhausted, c33c advances), both
+      exits leaving SI=0xffff.  Ghidra dropped both.
+
+Note the two stores at 0xc9f3/0xc9f5 write the SAME 32-bit value to [di+0xe] and [di+0x12]; that is
+what the asm does (`66 ab` twice with no reload), not a transcription slip.
+
+board:0007
+
+--- a/fist.c
++++ b/fist.c
+@@ -34495,38 +34495,89 @@
+ void __allregs FUN_0000_c9af(int param_1)
+ 
+ {
+-  int iVar1;
+-  uint uVar2;
+-  long lVar3;
+-  undefined2 unaff_ES;
+-  
+-  while( true ) {
+-    uVar2 = DAT_2000_a6de;
+-    if (DAT_2000_a6e0 <= DAT_2000_a6dc) {
++  /* PATCH 558: the DEFERRED-OBJECT drain (asm 0xc9af-0xca2e) -- c33c phase 6, the consumer of the list
++   * that c74d and c715 append to (patch 556).  Until 556 those two appenders resolved to nothing, so
++   * the list was always empty, `bx >= count` held on the first test and this function returned
++   * immediately; with them landed it actually walks the list and its own defects become live.
++   *
++   *   c9af: 8b 1e dc e6      mov  0xe6dc,%bx           ; cursor
++   *   c9b3: 3b 1e e0 e6      cmp  0xe6e0,%bx           ; count
++   *   c9b7: 73 71            jae  0xca2a               ; done
++   *   c9b9: 8e 2e 70 00      mov  0x70,%gs             ; GS = STRSEG
++   *   c9bd: 65 8b b7 6a 36   mov  %gs:0x366a(%bx),%si  ; the deferred object (a DGROUP near offset)
++   *   c9c2: 8b 1e de e6      mov  0xe6de,%bx           ; sub-index 0..7
++   *   c9c6: 8a 87 46 96      mov  0x9646(%bx),%al      ; per-slot mask
++   *   c9ca: 84 44 1b         test %al,0x1b(%si)
++   *   c9cd: 75 43            jne  0xca12               ; masked -> advance and retry
++   *   c9cf: c1 e3 03         shl  $0x3,%bx
++   *   c9d2: 83 c7 02         add  $0x2,%di
++   *   c9d5: 33 c0 / ab       xor %ax,%ax ; stos        ; [di+2] = 0
++   *   c9d8: b0 12 / b4 0d    mov $0x12,%al ; mov $0xd,%ah
++   *   c9dc: ab ab ab         stos x3                   ; [di+4],[di+6],[di+8] = 0x0d12
++   *   c9df: 66 8b 44 04      mov  0x4(%si),%eax
++   *   c9e3: 66 03 87 8b 9c   add  0x9c8b(%bx),%eax
++   *   c9e8: 66 ab            stos %eax                 ; [di+0xa]
++   *   c9ea: 66 8b 44 08      mov  0x8(%si),%eax
++   *   c9ee: 66 03 87 8f 9c   add  0x9c8f(%bx),%eax
++   *   c9f3: 66 ab / 66 ab    stos %eax ; stos %eax     ; [di+0xe] and [di+0x12], the SAME value
++   *   c9f7: 83 c7 1c         add  $0x1c,%di            ; total advance 0x32, as caab/ca2f
++   *   ca10: f8 c3            clc ; ret                 ; drawn
++   *   ca2a: be ff ff/f9/c3   mov $0xffff,%si ; stc ; ret
++   *
++   * Four defects:
++   *  (a) `*(int *)(DAT_2000_a6dc + 0x366a)` -- the list lives in STRSEG (`mov 0x70,%gs`), not DGROUP,
++   *      and the cursor was added to a host pointer.  The port already does this GS store correctly in
++   *      c74d/c715 (patch 556), 5fb0 (526) and a5dc.
++   *  (b) `*(byte *)(iVar1 + 0x1b)` -- the object is a DGROUP near offset, deref'd as a host pointer.
++   *  (c) `param_1` is the ES:DI record cursor, which c33c dispatches with NO arguments (patch 554's
++   *      class); it is `g_fist_render_di`, advanced by 0x32 here.
++   *  (d) the carry return was dropped: clc = drawn (c33c stops), stc = exhausted (c33c advances), and
++   *      both exits leave SI = 0xffff. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_di, g_fist_iter_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  (void)param_1;
++  for (;;) {
++    unsigned short bx = *(unsigned short *)(dg + 0xe6dc);
++    unsigned short sub, si, di;
++    unsigned strseg;
++    if (bx >= *(unsigned short *)(dg + 0xe6e0)) {                      /* c9b7 jae */
++      g_fist_iter_si = 0xffff; g_fist_cf = 1; return;                  /* ca2a */
++    }
++    strseg = *(unsigned short *)(dg + 0x70);                           /* c9b9 */
++    si = *(unsigned short *)(g_mem + ((unsigned)strseg << 4) + (unsigned short)(0x366a + bx));
++    sub = *(unsigned short *)(dg + 0xe6de);                            /* c9c2 */
++    if ((dg[(unsigned short)(0x9646 + sub)] & dg[(unsigned short)(si + 0x1b)]) == 0) {
++      bx = (unsigned short)(sub << 3);                                 /* c9cf */
++      di = (unsigned short)(g_fist_render_di + 2);                     /* c9d2 */
++      *(unsigned short *)(dg + di) = 0;                                /* c9d7 */
++      *(unsigned short *)(dg + (unsigned short)(di + 2)) = 0x0d12;     /* c9dc */
++      *(unsigned short *)(dg + (unsigned short)(di + 4)) = 0x0d12;
++      *(unsigned short *)(dg + (unsigned short)(di + 6)) = 0x0d12;
++      *(unsigned int *)(dg + (unsigned short)(di + 8)) =
++          *(unsigned int *)(dg + (unsigned short)(si + 4))
++        + *(unsigned int *)(dg + (unsigned short)(0x9c8b + bx));       /* c9df/c9e3 */
++      {
++        unsigned int v = *(unsigned int *)(dg + (unsigned short)(si + 8))
++                       + *(unsigned int *)(dg + (unsigned short)(0x9c8f + bx));  /* c9ea/c9ee */
++        *(unsigned int *)(dg + (unsigned short)(di + 12)) = v;         /* c9f3 */
++        *(unsigned int *)(dg + (unsigned short)(di + 16)) = v;         /* c9f5 -- the same value */
++      }
++      g_fist_render_di = (unsigned short)(di + 20 + 0x1c);             /* c9f7: net +0x32 from entry */
++      *(unsigned short *)(dg + 0xe6de) = (unsigned short)(sub + 1);    /* c9fa */
++      if (*(unsigned short *)(dg + 0xe6de) >= 8) {                     /* c9fe */
++        *(unsigned short *)(dg + 0xe6de) = 0;
++        *(unsigned short *)(dg + 0xe6dc) = (unsigned short)(*(unsigned short *)(dg + 0xe6dc) + 2);
++      }
++      g_fist_cf = 0;                                                   /* ca10 clc = drawn */
+       return;
+     }
+-    iVar1 = *(int *)(DAT_2000_a6dc + 0x366a);
+-    if ((*(byte *)(iVar1 + 0x1b) & ((undefined1 *)&DAT_2000_5646)[DAT_2000_a6de]) == 0) break;
+-    DAT_2000_a6de = DAT_2000_a6de + 1;
+-    if (7 < DAT_2000_a6de) {
+-      DAT_2000_a6de = 0;
+-      DAT_2000_a6dc = DAT_2000_a6dc + 2;
++    *(unsigned short *)(dg + 0xe6de) = (unsigned short)(sub + 1);      /* ca12 */
++    if (*(unsigned short *)(dg + 0xe6de) >= 8) {
++      *(unsigned short *)(dg + 0xe6de) = 0;
++      *(unsigned short *)(dg + 0xe6dc) = (unsigned short)(*(unsigned short *)(dg + 0xe6dc) + 2);
+     }
+-  }
+-  *(undefined2 *)(param_1 + 2) = 0;
+-  *(undefined2 *)(param_1 + 4) = 0xd12;
+-  *(undefined2 *)(param_1 + 6) = 0xd12;
+-  *(undefined2 *)(param_1 + 8) = 0xd12;
+-  *(long *)(param_1 + 10) = *(long *)(iVar1 + 4) + ((undefined4 *)&DAT_2000_5c8b)[uVar2 * 2];
+-  lVar3 = *(long *)(iVar1 + 8) + ((undefined4 *)&DAT_2000_5c8f)[uVar2 * 2];
+-  *(long *)(param_1 + 0xe) = lVar3;
+-  *(long *)(param_1 + 0x12) = lVar3;
+-  DAT_2000_a6de = DAT_2000_a6de + 1;
+-  if (7 < DAT_2000_a6de) {
+-    DAT_2000_a6de = 0;
+-    DAT_2000_a6dc = DAT_2000_a6dc + 2;
+-  }
+-  return;
++  }                                                                    /* ca28 jmp 0xc9af */
+ }
+ 
+ 

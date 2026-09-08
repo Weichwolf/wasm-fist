@@ -1,0 +1,152 @@
+PATCH 554: c33c's phase handler 0xc38b wrote its record through stack residue.
+
+`FUN_0000_c33c` walks a table of ten phase handlers at DGROUP:0xe6f5 and dispatches each one as
+
+    c36f: ff 97 f5 e6      call *0xe6f5(%bx)
+
+-- a NEAR call with no arguments, ES:DI simply inherited from 0x378e, which sets it once:
+
+    3796: 8c d8 / 8e c0    mov %ds,%ax ; mov %ax,%es      ; ES = DS = DGROUP
+    379e: bf be 6b         mov $0x6bbe,%di                ; the record cursor
+
+Four of the ten handlers write through that cursor (0x5fb0, 0x6016, 0xc9af, 0xc38b), each advancing DI
+for the next.  Patches 310 and 526 established the port's model for it -- the shim global
+`g_fist_render_di`, published by c33c and advanced by every writer -- and converted three of the four.
+0xc38b was the one left, and it still deref'd Ghidra's invented `param_2` as a host pointer.  Since the
+dispatch passes no arguments, `param_2` is stack residue.  Measured on AZER7:
+
+    Program received signal SIGSEGV
+    0x08086a48 in FUN_0000_c38b (param_1=3460, param_2=0x81d2ff4) at build/fist.c:33350
+    33350       *param_2 = 0x1340;
+    g_mem = 0x81d3260 ; param_2 - g_mem = -620
+
+620 bytes BEFORE the address space.  Patch 526's own header had already named this function's problem
+in as many words ("c33c dispatches its handlers with NO arguments, so param_1 ... is garbage").
+
+## Why it only surfaced now
+
+The write was always wrong; it was unreachable.  The guard is
+
+    c392: 80 3e 49 15 1e   cmpb $0x1e,0x1549
+
+and DGROUP:0x1549 was declared `undefined2`, so the port's `DAT_1000_d549 == '\x1e'` also required byte
+0x154a to be zero -- and 0x154a is a live counter with twelve of its own references.  Patch 553
+narrowed 0x1549 to the byte all fourteen of its references use, which made the branch reachable for the
+first time and turned a latent out-of-bounds write into a visible SEGV.  Verified by bisect: with the
+553 tree the crash reproduces, and it does not on the pre-547 tree.
+
+That is the patch working as intended.  The fix is this function, not un-narrowing 0x1549.
+
+## The three defects
+
+(a) the record write and the `stos` cursor -- described above;
+(b) BASE LOSS: `*(byte *)(DAT_2000_3ae0 + 0x1b)` deref'd a DGROUP near offset as a host pointer, where
+    the asm reads `movzbw 0x1b(%si)` = byte[DGROUP:si+0x1b].  (`DAT_2000_3ae0` is declared `int **`,
+    which is how it got there.)  On the [0x6d2c]&0x80 path only, so it had not fired yet;
+(c) the RETURN CONTRACT: both exits do `mov $0xffff,%si`, and the carry is the phase result -- `clc` =
+    found, so c33c stops; `stc` = empty, so c33c advances to the next phase.  Ghidra dropped both.
+    c33c presets `g_fist_cf = 1` before the call and reads it after, so only the found path clears it.
+
+The rewritten body follows the asm's control flow exactly, including its single fall-through at 0xc3bc,
+rather than duplicating the emit block down two arms.
+
+## NOT fixed here
+
+`caab`'s second argument is BP -- `cad5: mov %bp,%ax ; ab stos %ax,%es:(%di)`, landing in record field
++0x1a.  c38b does not set BP, and caab has exactly one caller in the whole image (this one), so BP is
+inherited from above 0x378e and is stack residue in the port as well.  It is passed through unchanged
+rather than replaced with an invented value, so this patch changes nothing about that field.
+board:0014 carries it.
+
+board:0014
+
+--- a/fist.c
++++ b/fist.c
+@@ -33334,22 +33334,72 @@
+ void __allregs FUN_0000_c38b(undefined2 param_1,undefined2 *param_2)
+ 
+ {
+-  int iVar1;
+-  undefined2 unaff_ES;
+-  
+-  if (((DAT_2000_a6ee == '\0') && (DAT_1000_d549 == '\x1e')) && (DAT_2000_3ae0 != 0)) {
+-    iVar1 = DAT_2000_3ae0;
+-    if ((DAT_2000_2d2c & 1) == 0) {
+-      if ((DAT_2000_2d2c & 0x80) == 0) {
+-        return;
+-      }
+-      iVar1 = ((undefined2 *)&DAT_2000_2d3c)[(uint)*(byte *)(DAT_2000_3ae0 + 0x1b) * 4];
+-    }
+-    DAT_2000_a6ee = 1;
+-    FUN_0000_caab(0x10,param_1,iVar1,param_2);
+-    *param_2 = 0x1340;
+-    return;
++  /* PATCH 554: the one c33c phase-handler that patch 310/526 never converted to the threaded ES:DI
++   * record cursor.  asm 0xc38b:
++   *
++   *   c38b: 80 3e ee e6 00     cmpb   $0x0,0xe6ee
++   *   c392: 80 3e 49 15 1e     cmpb   $0x1e,0x1549      ; the mission-state byte
++   *   c399: 8b 36 e0 7a        mov    0x7ae0,%si        ; SI = current object near offset
++   *   c3a1: f7 06 2c 6d 01 00  testw  $0x1,0x6d2c       ; set -> use SI as-is
++   *   c3a9: f7 06 2c 6d 80 00  testw  $0x80,0x6d2c      ; clear -> nothing to emit
++   *   c3b1: 0f b6 5c 1b        movzbw 0x1b(%si),%bx     ; DS-relative byte[DGROUP:si+0x1b]
++   *   c3b5: c1 e3 03           shl    $0x3,%bx
++   *   c3b8: 8b b7 3c 6d        mov    0x6d3c(%bx),%si
++   *   c3bc: c6 06 ee e6 01     movb   $0x1,0xe6ee
++   *   c3c1: b0 10 / 32 e4      mov    $0x10,%al ; xor %ah,%ah
++   *   c3c5: e8 e3 06           call   0xcaab            ; emits its record at ES:DI, DI += 0x32
++   *   c3c8: b8 40 13           mov    $0x1340,%ax
++   *   c3cb: ab                 stos   %ax,%es:(%di)     ; then one more word at the NEW DI
++   *   c3cc: be ff ff / f8 / c3 mov $0xffff,%si ; clc ; ret    <- FOUND
++   *   c3d1: be ff ff / f9 / c3 mov $0xffff,%si ; stc ; ret    <- empty, c33c advances a phase
++   *
++   * Three defects, all in one function:
++   *
++   * (a) THE OUT-OF-BOUNDS WRITE.  c33c dispatches its handlers with NO arguments -- the asm is
++   *     `call *0xe6f5(%bx)` and ES:DI is simply inherited -- so `param_2` was stack residue used as a
++   *     host pointer.  Measured on AZER7: param_2 = g_mem-620, i.e. 620 bytes BEFORE the address
++   *     space, and `*param_2 = 0x1340` faults.  The cursor is the shim global g_fist_render_di,
++   *     published by c33c (patch 310) and advanced by caab; patch 526 did exactly this for the
++   *     sibling handler 0x5fb0 and named this function's problem in its own header.
++   *
++   *     This did not crash before patch 553 because the 0x1549 guard could not be reached: 0x1549 was
++   *     declared a WORD, so `== 0x1e` also demanded byte 0x154a be zero, and 0x154a is a live counter.
++   *     Narrowing it to the byte the asm reads made the branch reachable for the first time and turned
++   *     a latent out-of-bounds write into a visible SEGV.  The write was always wrong.
++   *
++   * (b) BASE LOSS.  `*(byte *)(DAT_2000_3ae0 + 0x1b)` deref'd a DGROUP near offset as a host pointer;
++   *     the asm reads byte[DGROUP:si+0x1b].  (DAT_2000_3ae0 is declared `int **`, which is how it got
++   *     there.)  Reached only on the [0x6d2c]&0x80 path, so it had not fired yet.
++   *
++   * (c) THE RETURN CONTRACT.  Both exits set SI=0xffff, and the carry is the phase result: clc =
++   *     found (c33c stops), stc = empty (c33c advances to the next phase).  Ghidra dropped both.
++   *     c33c presets g_fist_cf=1 and reads it after the call, so only the found path must clear it.
++   *
++   * NOT fixed here, and NOT to be assumed correct: caab's second argument is BP (`cad5: mov %bp,%ax ;
++   * stos`, landing in record field +0x1a).  c38b does not set BP and caab has exactly one caller, so
++   * BP is inherited from somewhere above 378e and is stack residue in the port too.  It is passed
++   * through unchanged here rather than replaced by an invented value; board:0014 carries it. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_di, g_fist_iter_si;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t si, di;
++  (void)param_2;
++  g_fist_iter_si = 0xffff;                                      /* both exits: mov $0xffff,%si */
++  if (*(uint8_t *)(dg + 0xe6ee) != 0) { g_fist_cf = 1; return; }              /* c38b/c390 */
++  if (*(uint8_t *)(dg + 0x1549) != 0x1e) { g_fist_cf = 1; return; }           /* c392/c397 */
++  si = *(uint16_t *)(dg + 0x7ae0);                                            /* c399 */
++  if (si == 0) { g_fist_cf = 1; return; }                                     /* c39f */
++  if ((*(uint16_t *)(dg + 0x6d2c) & 1) == 0) {                                /* c3a1 */
++    if ((*(uint16_t *)(dg + 0x6d2c) & 0x80) == 0) { g_fist_cf = 1; return; }  /* c3a9 */
++    si = *(uint16_t *)(dg + (uint16_t)(0x6d3c +                               /* c3b8 */
++         (uint16_t)(*(uint8_t *)(dg + (uint16_t)(si + 0x1b)) << 3)));         /* c3b1/c3b5 */
+   }
++  *(uint8_t *)(dg + 0xe6ee) = 1;                                              /* c3bc */
++  FUN_0000_caab(0x10,param_1,(int)(uint16_t)si,param_2);   /* c3c5; caab takes DI from the global */
++  di = g_fist_render_di;
++  *(uint16_t *)(dg + di) = 0x1340;                                            /* c3cb stos */
++  g_fist_render_di = (uint16_t)(di + 2);
++  g_fist_cf = 0;                                                              /* c3cf clc = FOUND */
+   return;
+ }
+ 

@@ -57,15 +57,40 @@ protocol for "nothing drawn, keep walking" (threaded via g_fist_cf by patches 31
 
 ## Remaining
 
-    c715  view 0x1e, 1 slot   testb [0x6dab],2 ; byte[si+0x1c] indexes word[DGROUP:bx-0x17f3] ; c8c2
-                              else: append si to the STRSEG list at gs:[bx+0x366a], bound word[0xe6e0] < 0x40
-    c74d  view 0x20, 1 slot   the same STRSEG-list append, gated on word[0x6d2c]&4
-    c774  view 0x1e, 1 slot   mov bx,0x13b0 ; xor ah,ah ; call 0xc8c2   -- needs the c8c2 arg convention
-    c7a5  view 0x20, 1 slot   own arithmetic on byte[si+0x19] (shr 2, neg, add 0xc, clamp)
-    c783  view 0x22, 6 slots  three-way flag test on [si+0x16]/[si+0x17]/word[0x6cde], then al=0xe
+    patch 556   c715 c74d c774 c7a5       4 class slots (2 view 0x1e, 2 view 0x20)
 
-None of these is hard, but each needs something the tree has not established yet (the c8c2 argument
-convention, or the STRSEG deferred-object list write).  They must be read out of the asm, not guessed.
+Both things this section listed as "not established yet" turned out to be readable rather than open:
+
+- **The c8c2 argument convention.**  c8c2 forces `AL=0x10` itself (`c8cc: b0 10`) and takes only AH
+  from its caller -- the port's patch-310 body already renders exactly that as
+  `CONCAT11((char)(param_1 >> 8), 0x10)`.  So `c774`'s inherited AL is a DON'T CARE, and `c715`
+  (`mov %ax,%bx ; xor %ah,%ah`) is fully determined.  Neither needed a new convention.
+- **The STRSEG deferred-object list write.**  The asm spells it out, and the port already performs the
+  same GS/STRSEG store in `FUN_0000_5fb0` (patch 526) and `FUN_1000_a5dc`:
+
+      c75b: mov 0xe6e0,%bx ; cmp $0x40,%bx ; jae ...    ; count, bounded at 0x20 entries
+      c764: mov 0x70,%gs   ; mov %si,%gs:0x366a(%bx)
+      c76d: addw $0x2,0xe6e0
+
+  `c74d` is entirely this append and always returns CF=1 -- it has no drawing arm at all -- and it is
+  also `c715`'s else-branch.
+
+### Still open: c783 (view 0x22, 6 slots)
+
+This one is genuinely blocked, and on a different thing than this item first supposed.  It sets AL and
+inherits AH:
+
+    c79d: b0 0e     mov  $0xe,%al
+    c79f: e8 10 01  call 0xc8b2
+
+`c8b2` forces `AL=0x12`, so c783's own `mov $0xe,%al` is DEAD CODE in the original -- and it passes AX
+through to `ca2f`, which stores the WHOLE word (`ca3a: ab  stos %ax,%es:(%di)`).  So AH reaches a live
+record field and matters.  Neither `c4df` (which sets DX, not AX: `c4fd mov 0xe48c(%bx),%dl ; c501 xor
+%dh,%dh`) nor its view-0x22 arm at `c559` sets AH, so it is threaded from above c4df.
+
+NEXT for this item: find AH's source above c4df -- the oracle write-trace on the record field ca2f
+writes it into would name the writer in one run -- then c783 is a five-line transcription like the
+other four.
 
 ## Extend the audit
 

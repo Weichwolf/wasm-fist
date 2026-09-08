@@ -1,5 +1,5 @@
 Type: discovery
-Status: open
+Status: closed
 Parent: 0018
 Title: every extender service handler is located in re_out/fist_image.bin
 
@@ -105,3 +105,28 @@ crashes. Shipping that would be worse than not having it.
 ORDER OF WORK for the next attempt: fix `7da5` (and audit a19e's whole `-0x69a2` dispatch table the way
 patch 542 audited the 9e2b table) FIRST, then re-apply op 0x20 + op 0x1c and verify the ground byte
 against the oracle -- type 00 should track 81 -> 64 rather than sitting at 5.
+
+## CLOSED
+
+The title condition -- every extender service handler is located in `re_out/fist_image.bin` -- was met
+by the table above and its three anchors, and the implementation work this item then blocked on has
+landed:
+
+- patch 545 fixed `FUN_0000_7da5` and the rest of a19e's `-0x69a2` dispatch table, which was the SIGSEGV
+  that stopped op 0x1c from being wired up;
+- ops 0x20 and 0x1c are both implemented in `tools/native_main.c`, op 0x20 without the
+  `g_fist_after_map` gate as this item established it must be.
+
+Verified at close by reading the object bodies (AZER1, t=9000, `FIST_DUMP_REG`):
+
+    type 00 @c05c   byte[+0x0d] = 0x2c   byte[+0x1d] = 0x2c
+    type 01 @c157   byte[+0x0d] = 0x47   byte[+0x1d] = 0x47
+
+which is this item's own acceptance test -- "type 00 should track 81 -> 64, not sit at 5" -- satisfied:
+the values are live terrain heights and the ground byte equals the clamp byte exactly.
+
+NOT claimed by this close: that every LOCATED handler is IMPLEMENTED. The shim implements ops 0x0c,
+0x18, 0x1c, 0x20, 0x24, 0x2c, 0x4c, 0x54, 0x58, 0x64, 0x70, 0x78, 0x80; the remaining ops the engine
+posts (0x04, 0x08, 0x10, 0x14, 0x28, 0x3c, 0x40, 0x44, 0x50, 0x5c, 0x60, 0x74, 0x7c) still return 0.
+Locating them was this item; implementing them belongs to board:0009 (the extender service), which
+stays open and now has their addresses to work from.
