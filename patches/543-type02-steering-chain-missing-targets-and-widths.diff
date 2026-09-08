@@ -1,0 +1,204 @@
+PATCH 543: two MISSING dispatch targets in the type-0x02 steering chain, and five sub-methods that
+read a WORD command as a 4-byte int through a host pointer.
+
+Found by auditing the type-0x02 sub-method tables the way patch 542 audited the 9e2b table.  `902c`
+(the type-0x02 per-frame update, patch 365) dispatches two CS=0 tables with DI live:
+
+    9060: call *%cs:-0x6f60(%bx)     ; table1 @0x90a0, bx = byte[di+0x3d] & 0x1e
+    906a: call *%cs:-0x6e59(%bx)     ; table2 @0x91a7, bx = byte[di+0x3e]
+
+Dumping both from the image and checking every target against the port:
+
+    table1: 917d a202 a631 aa37 a202 91a6 90c0 ab03 9160 a202 91a6 a904 a9a0 a202 a46e ab03   (all present)
+    table2: 91b7 a376 a3a8 a3e2 a3ec 0000 a3f6 a432 ...
+
+`a3f6` (entry +12) and `a432` (entry +14) were NOT DEFINED IN THE PORT AT ALL -- the board:0015 class.
+Both are real functions with the same shape:
+
+    a3f6: push %cs ; call 0xaae8
+          mov 0x90(%di),%bl ; xor %bh,%bh ; shl $1,%bx
+          call *%cs:-0x5bf8(%bx)        ; CS=0 sub-table @0xa408 = {a410, a41b, a426, a427}
+    a432: ... identical, sub-table @0xa444 = {a44c, a44c, a44c, a45c}
+
+so those table entries dispatched into nothing and the steering command word[di+0x57] was never driven.
+
+The six sub-targets all existed but were pristine, and every one of them carries TWO defects: the
+object near offset is host-deref'd, and `word[di+0x57]` is a WORD (`cmpw`/`incw`/`decw`) that Ghidra
+read and wrote as a 4-byte int -- which also clobbers the neighbouring field at [di+0x59].  The
+compares are SIGNED (`jge`/`jle`).  Fixed here: a410, a41b, a427, a44c, a45c (a426 is a bare `ret` and
+was already correct).  None of the six had any direct caller -- they are reachable only through the
+tables the port could not dispatch -- so setting their convention to the near offset is free.
+
+HONEST SCOPE: this does NOT make units move.  With it applied, AZER1/AZER4/SAUDI2 outcomes are
+unchanged and the type-0x02 objects' positions are still frozen, with word[di+0x57] still 0.  It is
+landed as what it is -- two missing functions and five width/base errors, all asm-verified -- and the
+open question of whether type 0x02 is even supposed to translate is recorded in board:0020.
+
+--- a/fist.c
++++ b/fist.c
+@@ -1056,6 +1056,8 @@
+ void __allregs FUN_0000_a3e2(undefined2 param_1,int param_2);
+ void __allregs FUN_0000_a3ec(undefined2 param_1,int param_2);
+ char __allregs FUN_0000_a408(undefined2 param_1,undefined1 *param_2,undefined1 *param_3);
++void __allregs FUN_0000_a3f6(int param_1);   /* PATCH 543: missing dispatch target */
++void __allregs FUN_0000_a432(int param_1);   /* PATCH 543: missing dispatch target */
+ void __allregs FUN_0000_a410(int param_1);
+ void __allregs FUN_0000_a41b(int param_1);
+ void __allregs FUN_0000_a426(void);
+@@ -28403,13 +28405,60 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_a3f6) @ 0000:a3f6 ===== */
++
++void __allregs FUN_0000_a3f6(int param_1)
++
++{
++  /* PATCH 543: a MISSING dispatch target (board:0015).  asm 0xa3f6-0xa407, entry +12 of the type-0x02
++   * sub-method table at 0x91a7 (`902c` -> `906a call *%cs:-0x6e59(%bx)`, bx = byte[di+0x3e]).  The port
++   * had no such function at all, so that entry dispatched into nothing and the unit's steering command
++   * word[di+0x57] was never driven.
++   *     a3f6: push %cs ; a3f7: call 0xaae8
++   *     a3fa: mov 0x90(%di),%bl ; a3fe: xor %bh,%bh ; a400: shl $1,%bx
++   *     a402: call *%cs:-0x5bf8(%bx)      ; CS=0 table at 0xa408 = {a410, a41b, a426, a427}
++   * DI stays live across both calls. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t bx = (uint16_t)(dg[(uint16_t)(di + 0x90)] << 1);
++  FUN_0000_aae8(0,(int *)(uintptr_t)di);                             /* a3f7 call aae8 (di live) */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)((unsigned char *)g_mem + (uint16_t)(0xa408 + bx))))((int)di); /* a402 */
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_a432) @ 0000:a432 ===== */
++
++void __allregs FUN_0000_a432(int param_1)
++
++{
++  /* PATCH 543: a MISSING dispatch target (board:0015).  asm 0xa432-0xa443, entry +14 of the same
++   * 0x91a7 table; identical shape to a3f6 but its own CS=0 sub-table at 0xa444 = {a44c, a44c, a44c,
++   * a45c} -- the "centre the steering command" variants. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  uint16_t bx = (uint16_t)(dg[(uint16_t)(di + 0x90)] << 1);
++  FUN_0000_aae8(0,(int *)(uintptr_t)di);                             /* a433 call aae8 */
++  (*(code *)fist_icall_near(0x0u,
++      *(uint16_t *)((unsigned char *)g_mem + (uint16_t)(0xa444 + bx))))((int)di); /* a43e */
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_a410) @ 0000:a410 ===== */
+ 
++/* PATCH 543: type-0x02 steering command step (asm 0xa410-a41a).  di = the object NEAR OFFSET; the command
++ * word[di+0x57] is a WORD (`cmpw`/`incw`/`decw`), which Ghidra read and wrote as a 4-byte int -- that
++ * clobbers the neighbouring field at [di+0x59] -- and it host-deref'd the near offset.  The compares
++ * are SIGNED (jge/jle). */
+ void __allregs FUN_0000_a410(int param_1)
+ 
+ {
+-  if (*(int *)(param_1 + 0x57) < 0xfe) {
+-    *(int *)(param_1 + 0x57) = *(int *)(param_1 + 0x57) + 1;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  if ((int16_t)*(uint16_t *)(dg + (uint16_t)(di + 0x57)) < 0xfe) {   /* a410 cmpw; a415 jge */
++    *(uint16_t *)(dg + (uint16_t)(di + 0x57)) += 1;                  /* a417 incw */
+   }
+   return;
+ }
+@@ -28417,12 +28466,17 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_a41b) @ 0000:a41b ===== */
+ 
++/* PATCH 543: type-0x02 steering command step (asm 0xa41b-a425).  di = the object NEAR OFFSET; the command
++ * word[di+0x57] is a WORD (`cmpw`/`incw`/`decw`), which Ghidra read and wrote as a 4-byte int -- that
++ * clobbers the neighbouring field at [di+0x59] -- and it host-deref'd the near offset.  The compares
++ * are SIGNED (jge/jle). */
+ void __allregs FUN_0000_a41b(int param_1)
+ 
+ {
+-  if (*(int *)(param_1 + 0x57) < 0xfe) {
+-    *(int *)(param_1 + 0x57) = *(int *)(param_1 + 0x57) + 1;
+-    return;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  if ((int16_t)*(uint16_t *)(dg + (uint16_t)(di + 0x57)) < 0xfe) {   /* a41b cmpw; a420 jge */
++    *(uint16_t *)(dg + (uint16_t)(di + 0x57)) += 1;                  /* a422 incw */
+   }
+   return;
+ }
+@@ -28439,12 +28493,17 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_a427) @ 0000:a427 ===== */
+ 
++/* PATCH 543: type-0x02 steering command step (asm 0xa427-a431).  di = the object NEAR OFFSET; the command
++ * word[di+0x57] is a WORD (`cmpw`/`incw`/`decw`), which Ghidra read and wrote as a 4-byte int -- that
++ * clobbers the neighbouring field at [di+0x59] -- and it host-deref'd the near offset.  The compares
++ * are SIGNED (jge/jle). */
+ void __allregs FUN_0000_a427(int param_1)
+ 
+ {
+-  if (-0xfe < *(int *)(param_1 + 0x57)) {
+-    *(int *)(param_1 + 0x57) = *(int *)(param_1 + 0x57) + -1;
+-    return;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  if ((int16_t)*(uint16_t *)(dg + (uint16_t)(di + 0x57)) > (int16_t)0xff02) { /* a427 cmpw; a42c jle */
++    *(uint16_t *)(dg + (uint16_t)(di + 0x57)) -= 1;                  /* a42e decw */
+   }
+   return;
+ }
+@@ -28474,15 +28533,19 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_a44c) @ 0000:a44c ===== */
+ 
++/* PATCH 543: type-0x02 steering command step (asm 0xa44c-a45b).  di = the object NEAR OFFSET; the command
++ * word[di+0x57] is a WORD (`cmpw`/`incw`/`decw`), which Ghidra read and wrote as a 4-byte int -- that
++ * clobbers the neighbouring field at [di+0x59] -- and it host-deref'd the near offset.  The compares
++ * are SIGNED (jge/jle). */
+ void __allregs FUN_0000_a44c(int param_1)
+ 
+ {
+-  if (*(int *)(param_1 + 0x57) != 0) {
+-    if (*(int *)(param_1 + 0x57) < 0) {
+-      *(int *)(param_1 + 0x57) = *(int *)(param_1 + 0x57) + 1;
+-      return;
+-    }
+-    *(int *)(param_1 + 0x57) = *(int *)(param_1 + 0x57) + -1;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)param_1;
++  int16_t w = (int16_t)*(uint16_t *)(dg + (uint16_t)(di + 0x57));
++  if (w != 0) {                                                      /* a44c cmpw; a450 je */
++    if (w < 0) *(uint16_t *)(dg + (uint16_t)(di + 0x57)) += 1;        /* a452 jl -> a458 incw */
++    else       *(uint16_t *)(dg + (uint16_t)(di + 0x57)) -= 1;        /* a454 decw */
+   }
+   return;
+ }
+@@ -28490,10 +28553,15 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_a45c) @ 0000:a45c ===== */
+ 
++/* PATCH 543: type-0x02 steering command step (asm 0xa45c-a461).  di = the object NEAR OFFSET; the command
++ * word[di+0x57] is a WORD (`cmpw`/`incw`/`decw`), which Ghidra read and wrote as a 4-byte int -- that
++ * clobbers the neighbouring field at [di+0x59] -- and it host-deref'd the near offset.  The compares
++ * are SIGNED (jge/jle). */
+ void __allregs FUN_0000_a45c(int param_1)
+ 
+ {
+-  *(undefined2 *)(param_1 + 0x57) = 0;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  *(uint16_t *)(dg + (uint16_t)((uint16_t)param_1 + 0x57)) = 0;      /* a45c movw $0x0 */
+   return;
+ }
+ 
+@@ -75607,6 +75675,8 @@
+   {0xa3e2u,(void*)&FUN_0000_a3e2},
+   {0xa3ecu,(void*)&FUN_0000_a3ec},
+   {0xa408u,(void*)&FUN_0000_a408},
++  {0xa3f6u,(void*)&FUN_0000_a3f6},
++  {0xa432u,(void*)&FUN_0000_a432},
+   {0xa410u,(void*)&FUN_0000_a410},
+   {0xa41bu,(void*)&FUN_0000_a41b},
+   {0xa426u,(void*)&FUN_0000_a426},
