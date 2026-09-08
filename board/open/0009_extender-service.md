@@ -117,3 +117,36 @@ factor table, the [0x5260] RGB palette, BOTH blend formulas byte-exact, the RGB-
 steps -- each verified native==wasm bit-exact.  This is a focused but real graphics-primitive recovery for
 a dedicated session (with the symbol map above as its ready inputs), NOT a quick tail-of-session patch;
 rushing the blend/match math would silently fail bit-identity.
+
+## Measured census: which ops the engine ACTUALLY posts (AZER1, 13000 ticks)
+
+board:0021 located every handler in `re_out/fist_image.bin` and listed the ops it believed the engine
+posts.  Running the shim's own `FIST_OPHIST` histogram gives the measured set instead of the inferred
+one:
+
+    posted:  0x00 0x04 0x08 0x18 0x24 0x44 0x4c 0x50 0x5c 0x60 0x64 0x68 0x6c 0x70 0x74 0x78 0x7c
+    counts:  op24 = 46617 (the per-frame render), op60 = 16, op44 = 2, op18 = 1
+
+Two corrections to 0021's list follow from it:
+
+- **0x28 is NEVER posted.**  Its handler at 0x8470 is the same three-call shape as op 0x24's at 0x82c0
+  -- `call 0x8120` (camera/projection) then a tile writer then `call 0x82d0` -- but with the writer
+  **0x92c0** where op 0x24 uses **0x9200**.  Two terrain render paths, and the engine only ever asks
+  for one of them in a battle.  So op 0x28 is not a missing windshield feed; that hypothesis is dead.
+- **0x10, 0x14, 0x3c and 0x40 are not posted either** in this flow, so implementing them has no
+  observable effect here and they should drop down the priority order.
+
+The ops the engine posts that the shim still returns 0 for, with their located handlers:
+
+    0x00 -> 0x0f77   0x04 -> 0x10c9   0x08 -> 0x10e0   0x44 -> 0x10da   0x50 -> 0x1266
+    0x5c -> 0x10fd   0x60 -> 0x10f1   0x68 -> 0x76fd   0x6c -> 0x77e2   0x74 -> 0x6f17
+    0x7c -> 0x77a4
+
+That is the actionable list for this item -- eleven handlers, all present in the tree at known
+addresses, all reachable by the engine.  Priority should follow the counts: op 0x60 (16 calls) and
+op 0x44 (2) are rare and probably setup; the rest fire once or not at all in this window and need a
+longer census before ordering them.
+
+CAVEAT on the census: it is one battle (AZER1) over 13000 ticks.  Ops tied to surfaces this flow never
+reaches -- the editor, the campaign screens, serial link -- cannot appear in it.  Re-run per surface
+before treating an absence as proof.

@@ -2066,6 +2066,26 @@ int fist_extender_gate(void) {
          * above (the 32-bit flight model that writes TCB+0x3a/+0x3c per frame is paged out).  dosbox-fist
          * guest-RAM at the AZER1 render (oracle_azer1_tcb_camera.txt): pitch(+0x3a)=384 roll(+0x3c)=256..384;
          * the port's stale values were +0x3a=0 / +0x3c=-256.  Applied on the default op-0x24 render path. */
+        /* DIAGNOSTIC (FIST_CAMPROBE): what does the ENGINE leave in the TCB attitude fields before the
+         * seeds below overwrite them?  FUN_0000_dd15 (patch 306) transcribes asm 0xdd53/0xdd74/0xdd90,
+         * which DO write rec+0x3e/+0x3c/+0x3a from the player object -- so the "paged out" premise of
+         * the seeds needs re-testing.  Read-only, env-gated. */
+        if (getenv("FIST_CAMPROBE")) {
+            static long n=0; static uint16_t lp=0xffff,lr=0xffff,lf=0xffff;
+            uint16_t p=*(uint16_t*)(tcb+0x3a), r=*(uint16_t*)(tcb+0x3c), f=*(uint16_t*)(tcb+0x3e);
+            if (p!=lp||r!=lr||f!=lf||((n%20000)==0))
+                fprintf(stderr,"[camprobe] #%ld engine pitch=%u roll=%u foc=%u\n",n,p,r,f);
+            lp=p;lr=r;lf=f;n++;
+        }
+        /* MEASURED (board:0002): the "paged out" premise below is WRONG for these two fields.  The
+         * ENGINE writes them every frame -- FUN_0000_dd15 (patch 306) transcribes asm 0xdd74/0xdd90,
+         * `mov %ax,%es:0x3c(%di)` / `mov %ax,%es:0x3a(%di)` into this same TCB -- and FIST_CAMPROBE
+         * shows 1275 live changes over an AZER1 run (pitch -1280..+704, roll -384..-128).  These seeds
+         * therefore DESTROY a computed camera rather than fill a hole.
+         * They are kept for now only because removing them does NOT improve the frame (full-frame AE
+         * 29192 -> 29234 against ref/mission_azer1_cockpit_native320.png, i.e. unchanged) AND because
+         * the engine's computed values disagree in SIGN with the oracle capture at the same frame
+         * (+384/+256).  That disagreement -- not the seeds -- is the next thing to settle. */
         *(uint16_t*)(tcb+0x3a) = 384;   /* pitch */
         *(uint16_t*)(tcb+0x3c) = 256;   /* roll  */
         /* FIST_FULLCAM (diagnostic sweep): override the FULL render-camera position to an

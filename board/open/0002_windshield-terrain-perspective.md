@@ -2210,3 +2210,221 @@ the same state:
 So the terrain surface is byte-identical native<->wasm on all five covered missions.  Note what closed
 it was NOT a terrain fix: the voxel render was already identical once the two sides were made
 contemporaneous; what remained was one missed argument list.
+
+## VISUAL spot-check against the original at HEAD (patches through 558)
+
+The matrix's AE=0 on 56 mission-cockpit flows is easy to over-read, so this records what it does and
+does not cover.  `tools/verify.sh` compares only `MC_REGION="100x92+80+96"` -- cols 80..180, rows
+96..188, the CENTRAL DASHBOARD CHROME.  Measured on AZER1 at HEAD:
+
+    central chrome (the region the matrix checks)   AE = 0
+    full 320x200 frame                              AE = 29192  of 64000
+
+29192 is essentially the whole windshield (rows 0..95 = 30720 px).  So "the cockpit flows pass" means
+the chrome is pixel-identical to the DOSBox reference; it says nothing about the view.
+
+Looked at side by side (port capture vs `ref/mission_azer1_cockpit_native320.png`), the difference is
+not subtle and is not confined to the terrain:
+
+| element              | original                                        | port |
+|----------------------|-------------------------------------------------|------|
+| windshield           | sky + clouds, horizon, receding terrain, gunsight, `-05.0` range | blue/white dithered NOISE, no sky, no horizon |
+| HUD text             | `GOALS REMAINING: 13`, `1628`                   | absent |
+| left panel           | green terrain minimap + `140` heading            | black / empty |
+| radar scope          | red contact wedge on the green scope             | empty scope |
+| ammo readouts        | `0006`/`0009`, `2000`/`0005`, `LOADING`          | `8888`/`8888`, `READY` |
+| dashboard chrome     | metal frame, gauges, buttons, labels             | IDENTICAL (AE=0) |
+
+So the port draws the cockpit furniture exactly and almost none of its CONTENT.  That is a broader
+statement than this item's title (which is about the voxel perspective) and the extra elements --
+minimap, radar contacts, HUD text, ammo values -- should be treated as siblings of it, not as separate
+surprises.  The `8888` ammo placeholders in particular look like an un-fed display rather than a
+rendering fault.
+
+### The original's own HUD confirms board:0017's objective-bit reading
+
+The reference frame reads **`GOALS REMAINING: 13`**, and an independent count on the port -- objects in
+the 0xdfbc table with `byte[obj+0x17] & 8` -- is exactly **13** (6 of type 0x1a, 3 of type 0x1b, 2 of
+type 0x02, 2 of type 0x03).  The engine is labelling that bit "goals" on screen.  That settles what
+FUN_1000_a5dc's victory test at 0x1a694 counts: outcome 0 is "every objective destroyed", and the nine
+static map objects among the 13 are objectives, not scenery.  Recorded in board:0017 as well.
+
+## THE ROOT: the render camera is four oracle-anchored CONSTANTS, not a computed camera
+
+This item has been chasing the terrain stages (heightmap build, projection, the 9200 texel walk).  An
+audit of `tools/native_main.c`'s op-0x24 handler says the fault is upstream of all of them: the port
+does not COMPUTE the render camera at all.  On the default in-mission render path it writes:
+
+    *(int32_t *)(tcb+0x34) = (h << 8) + 1792;   /* eye height -- "oracle-anchored eye" */
+    if (*(uint16_t *)(tcb+0x3e) == 0)
+        *(uint16_t *)(tcb+0x3e) = 256;          /* focal  -- "oracle-anchored spawn value" */
+    *(uint16_t *)(tcb+0x3a) = 384;              /* pitch  -- unconditional */
+    *(uint16_t *)(tcb+0x3c) = 256;              /* roll   -- unconditional */
+
+with the shim's own comments stating why: *"the 32-bit flight model that writes TCB+0x3a/+0x3c per
+frame is paged out"*, *"PROVEN paged out -- there is NO store to +0x3a/+0x3c in EITHER static image"*.
+The values come from a DOSBox guest-RAM capture at one AZER1 frame
+(`oracle_azer1_tcb_camera.txt`: pitch=384, roll=256..384).
+
+So the windshield is rendered from a camera whose attitude, focal length and eye height are FIXED at
+one captured frame's values while the tank moves.  It cannot track the original except at that frame,
+and no amount of work on the projection or the texel walk changes that.  These are exactly the
+"Naeherungen" the project goal forbids, and they are the honest reason this item is still open.
+
+### CORRECTION, measured: the "paged out" premise is WRONG for pitch/roll/focal
+
+The shim's claim is narrower than it reads.  It says zero stores in `re_out/fist.c` (the DECOMPILE) and
+zero in `re_out/fist_image.bin` (the EXTENDER).  Both are true.  Neither covers the ENGINE IMAGE, and a
+byte scan finds four stores there:
+
+    dd59: 26 89 45 3e   mov %ax,%es:0x3e(%di)   ; FOCAL = byte[0x154a] << 8
+    dd74: 26 89 45 3c   mov %ax,%es:0x3c(%di)   ; ROLL  = word[obj+0x22]
+    dd90: 26 89 45 3a   mov %ax,%es:0x3a(%di)   ; PITCH = word[obj+0x24] + adjustment
+    dda3: 26 89 45 3a   mov %ax,%es:0x3a(%di)   ; pitch override when byte[obj+0x17]&2
+
+`%es:%di` is this very TCB (0xddad reads DGROUP:0xea2c, the far pointer the shim uses).  And the port
+ALREADY HAS this: `FUN_0000_dd15`, reconstructed by patch 306, transcribes all four.
+
+Confirmed at runtime with a read-only probe (`FIST_CAMPROBE`) reading the TCB attitude at op-0x24
+BEFORE the seeds overwrite it -- **1275 live changes over one AZER1 run**:
+
+    pitch  64256(-1280), 64896(-640), 704, 576, 65472(-64)   varying every few frames
+    roll   65280(-256), 65152(-384), 65408(-128)             varying
+    foc    256                                                the engine's own value
+
+So the seeds do not fill a hole; they DESTROY a camera the engine computes.
+
+### But removing them does not fix the frame -- and that is the useful part
+
+A/B against `ref/mission_azer1_cockpit_native320.png`:
+
+    seeds ON   full-frame AE = 29192   central chrome AE = 0
+    seeds OFF  full-frame AE = 29234   central chrome AE = 0
+
+Unchanged.  The windshield is not wrong because the attitude is frozen.  The seeds were left in place
+(the committed default is unchanged) because removing them neither helps nor is clearly more faithful:
+**the engine's computed values disagree in SIGN with the oracle** at the same frame, which records
+pitch=+384 roll=+256..384 while the engine produces mostly negative values.
+
+That disagreement is the concrete next step, and it is much narrower than "reconstruct the flight
+model": either `dd15`'s inputs (`word[obj+0x22]`, `word[obj+0x24]`, `byte[obj+0x3c]`, `byte[obj+0xa7]`)
+are wrong in the port, or something writes the TCB attitude after dd15.  Both are testable against the
+oracle without any new capability.
+
+### What that means for the ordering of work
+
+- This item is NOT simply blocked on board:0012 as previously written here.  The camera attitude is
+  computed by the ENGINE, is present in the port, and is live.  What is unverified is whether its
+  INPUTS are right.
+- The earlier reading -- "a wrong-INDEX signature, so look at the colormap or the texel walk" -- is not
+  contradicted, but it is downstream.  A wrong camera produces wrong indices.
+- The one remaining stand-in that is NOT active is the LOS unit-Z (board:0018), now behind
+  `FIST_LOS_STANDIN` and off by default.
+
+### Inventory of active approximations in the render path (for the goal's "ohne Stubs/Guards/Naeherungen")
+
+    tcb+0x34  eye height   oracle-anchored, recomputed per frame from the heightmap
+    tcb+0x3a  pitch        constant 384
+    tcb+0x3c  roll         constant 256
+    tcb+0x3e  focal        constant 256 when the engine leaves it 0
+
+Everything else in the op-0x24 path (`FIST_FULLCAM`, `FIST_ISO`, `FIST_TILEFILL`, `[tfollow]`) is
+env-gated diagnostics and off by default.
+
+## THE ACTUAL ROOT (traced end to end this round): the default path never BUILDS the terrain
+
+Three candidate roots were eliminated by reading the code rather than guessing:
+
+1. **The camera SOURCE is correct.**  `FUN_1000_a80b` (patch 202) copies the player object's X/Y/Z into
+   the camera block at DGROUP:0x155a/0x155e/0x1562 and the focal source into byte[0x154a] -- exactly
+   asm 0x1a82c-0x1a848.  Present and rebased.
+2. **The camera -> TCB copy is correct.**  `FUN_0000_dd15` (patch 306) writes rec+0x2c..0x36 (position),
+   +0x38 (heading), +0x3e (focal), +0x3c (roll) and +0x3a (pitch) -- exactly asm 0xdd20-0xdd90.
+   Present.
+3. **The attitude seeds are not the cause.**  They DO clobber live engine values (1275 changes per run,
+   measured), but removing them leaves the frame unchanged (full-frame AE 29192 -> 29234).
+
+What is actually happening is in `tools/native_main.c`'s op-0x24 handler.  The DEFAULT path runs only
+
+    m_ext_FUN_0000_8deb();      /* viewport */
+    m_ext_FUN_0000_85d0();      /* camera   */
+    /* ... then the default 8120 -> 9200 texel walk samples the tile buffer */
+
+and the VOXEL TERRAIN BUILD -- 689a's sky/tile resample and 6980's terrain overlay, the two stages that
+FILL that tile buffer -- sit behind `if (getenv("FIST_TERRAIN"))`, which is OFF by default.  Worse, that
+branch is not self-sufficient either: before it can run it seeds
+
+    tools/oracle/samples/voxel6980_ramps.bin   -> ext+0x3a24 / ext+0x3e24   (oracle-captured ramps)
+    *(uint32_t*)(xb+0x90b0) = 0x00003d00;      /* "paged-out proj consts" */
+    *(uint32_t*)(xb+0x90b4) = 0x00020000;
+
+So in a normal in-mission frame the port never builds the terrain at all: `9200` samples a stale tile
+buffer, and what I photographed as "noise" is that stale buffer being walked with a valid camera.  The
+`tile3918 nz=65536 dist=175` census is consistent -- the buffer HAS data, it is simply not this frame's
+terrain.
+
+That also explains board:0008's "terrain covers 5/47 missions": the five `terrain-*` matrix flows pass
+`FIST_TERRAIN=1` and get the seeded path; the 56 `mission-cockpit` flows do not, which is why they only
+ever compare the central chrome.
+
+### Traced further the same round: the projection constants are NOT paged out either
+
+They are INITIALISED DATA in the extender image, and the shim seeds them with the values they already
+hold:
+
+    file[0x90b0] = 0x00003d00      the shim writes 0x00003d00
+    file[0x90b4] = 0x00020000      the shim writes 0x00020000
+
+Both are 16.16 fixed-point scale factors (read at 0x68c4 and 0x8253, each followed by `imul` +
+`shrd $0x10`).  0x90b4 has two loads and zero stores in the whole image because it never NEEDS a store
+-- it is static.  So that seeding is redundant, and the default path already has the right constants.
+
+### With the terrain build ENABLED, the geometry is real and the COLOURS are wrong
+
+`FIST_TERRAIN=1` on AZER1 (same capture, same reference):
+
+    default          full-frame AE 29192   windshield = fine dithered NOISE
+    FIST_TERRAIN=1   full-frame AE 29311   windshield = COHERENT RIDGES with light and shadow
+
+Visually the difference is unmistakable: the gated path produces real voxel terrain geometry.  What it
+does not produce is the right palette -- the view is blue/white where the original is brown/olive, i.e.
+exactly the "wrong-INDEX / scatters more colours" signature recorded earlier in this item.  The AE
+barely moves because a structurally-correct image in the wrong colours scores no better than noise.
+
+### The ramp chain, measured at RUNTIME (an earlier reading in this section was WRONG)
+
+The colours come from the two tables at ext+0x3a24/+0x3e24, which the shim loads from
+`tools/oracle/samples/voxel6980_ramps.bin`.  Removing that file is decisive:
+
+    FIST_TERRAIN=1 without the ramp file  ->  SIGFPE (rc=136), divide by zero
+
+**RETRACTED:** a first pass concluded "the ramp buffer is never allocated" from `file[0x3909] = 0` in
+the image.  That was inferred from the static image without checking the running program, and it is
+wrong.  Probed at runtime:
+
+    ext+0x3909 (destination ptr) = 0x08304200      <- ALLOCATED, not null
+    ext+0x3a24[0..3]             = 1 1 1 1         <- the INPUT tables, still their initialised value
+    ext+0x3e24[0..1]             = 1 1             <- same
+    ext+0x90c0 = 0   ext+0x38f1 = 0x100   ext+0x3a20 = 0xc8
+
+Reading the port's `FUN_0000_395e` (`build/fist_ext.c:4346`) settles the direction of the data: 0x3a24
+and 0x3e24 are its **inputs**, not its outputs.  It reads them, scales by `DAT_0000_90c0`, and writes
+the resulting ramp bytes through the 0x3909 pointer:
+
+    uVar2 = (ramp[i] * DAT_0000_90c0) >> 24;
+    uVar2 = (0xffffffff / (longlong)(int)uVar2) << 5;    <- the divide that faults
+
+With the tables at their initialised 1 and `90c0` zero, `uVar2` is 0 and the division faults.  So the
+oracle ramp file is not standing in for 395e at all -- 395e works.  It is standing in for **whatever
+builds the 0x3a24/0x3e24 tables**, which the port never does.
+
+Neither table has a single absolute-displacement store anywhere in the extender image, so the builder
+writes them through a base register.  Finding it is the concrete next step: it is a table builder, not
+an allocation and not the flight model.
+
+### Method note, because this section got it wrong once
+
+Three "paged out" or "missing" claims were checked this round and **all three were wrong**: the camera
+attitude (computed by the engine, patch 306), the projection constants (initialised data in the image),
+and the ramp destination pointer (allocated at runtime).  Reading a value out of the static image is
+not evidence about the running program.  Probe first.
