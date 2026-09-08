@@ -2492,16 +2492,65 @@ The engine has the matching UI strings (`DETAIL SET TO HIGH`, `DETAIL SET TO MED
 fist_dat_image.bin 0x2ef43/0x2ef2e), and the SETTINGS screen renders LOW / MEDIUM / HIGH DETAIL
 correctly, so the selection surface exists and only the LOAD is missing.
 
+### THE LOADER FOUND: extender op 0x44, which the shim returns 0 for
+
+The filenames are lower-case in the EXTENDER image, which is why the earlier scan for `HIGH.DTL`
+missed them:
+
+    re_out/fist_image.bin  0x76b6 "low.dtl"   0x76d5 "medium.dtl"   0x76ef "high.dtl"
+
+and the code around them is exactly the load, into exactly the address this item predicted:
+
+    7660: <entry>
+    7670: c6 05 5c 39 00 00 01   movb $0x1,0x395c              ; default detail
+    7677: 80 bb cc 00 00 00 00   cmpb $0x0,0xcc(%ebx)          ; TCB+0xcc
+    767e: 74 15                  je   0x7695
+    7680: b8 9a 68 00 00         mov  $0x689a,%eax             ; the SKY-RESAMPLE routine
+    7685: a3 58 39 00 00         mov  %eax,0x3958              ; ... into the sky fn pointer
+    768a: 8a 83 cc 00 00 00      mov  0xcc(%ebx),%al
+    7690: a2 5c 39 00 00         mov  %al,0x395c
+    7695: 8b 1d 93 0c 00 00      mov  0xc93,%ebx               ; the TCB
+    769b: 8a 83 d1 00 00 00      mov  0xd1(%ebx),%al           ; TCB+0xd1 = DETAIL LEVEL 0/1/2
+    76a1: 3c 00 / 75 1b          cmp  $0x0,%al ; jne ...
+    76a5: be b6 76 00 00         mov  $0x76b6,%esi             ; "low.dtl"
+    76aa: b8 20 3a 00 00         mov  $0x3a20,%eax             ; DESTINATION = ext+0x3a20
+    76af: e8 7e e9 ff ff         call 0x6032                   ; the DOS file load
+
+`0x6032` is a real file load (`mov $0x4e00,%ax` = INT 21h AH=4Eh, `mov $0x33,%cx` attributes), and its
+entry `0x7660` has exactly ONE caller in the image:
+
+    10da: e8 81 65 00 00   call 0x7660
+    10df: c3               ret
+
+**0x10da is extender op 0x44** (board:0021's located table).  The measured op census has `op44 = 2`
+calls -- the engine DOES post it -- and board:0021 lists 0x44 among the ops the shim returns 0 for.
+
+So one unimplemented service explains three separate symptoms at once:
+
+  - the voxel ramps at ext+0x3a20/0x3a24/0x3e24 are never loaded  -> 395e divides by zero, and with the
+    oracle stand-in the terrain renders in the wrong palette;
+  - `ext+0x3958` (the SKY-RESAMPLE function pointer, 0x689a) is never set -> no sky;
+  - `ext+0x395c` (the detail level) is never set.
+
+That also closes the loop on the goal's "Detailstufe" clause: the setting is read from `byte[TCB+0xd1]`
+and selects one of three ramp files, so detail level is not cosmetic -- it changes the terrain tables.
+
 ### What to implement, and the one thing still to establish
 
-Load `<LOW|MEDIUM|HIGH>.DTL` as 2052 bytes to ext+0x3a20 when the detail level is selected.  Two things
-must be read out of the asm before writing it, NOT guessed:
+Implement extender **op 0x44** in the shim as a transcription of 0x7660, exactly as ops 0x1c/0x20/0x54/
+0x58 are already transcribed:
 
-1. **who issues the load** -- almost certainly through `0x36bf`, the extender's buffer/resource manager
-   (it is what allocates 0x3909 at 0x852b and registers against the table at 0x28ac).  The filename is
-   not a literal in either image, so it is composed from the detail setting at run time;
-2. **when** -- at settings-accept, at map load, or lazily on the first render.
+    if (byte[TCB+0xcc]) { ext+0x3958 = 0x689a; ext+0x395c = byte[TCB+0xcc]; } else ext+0x395c = 1;
+    load "low.dtl" | "medium.dtl" | "high.dtl"  (by byte[TCB+0xd1] == 0|1|2)
+        -> 2052 bytes at ext+0x3a20   (count, then table A at +4, table B at +0x404)
 
-Both are answerable from the engine's detail-setting handler, and this is now a bounded file-load, not
-a reconstruction.  It also directly serves the goal's "Detailstufe" clause: all three detail levels
-select a different ramp file, so the setting is not cosmetic.
+Both prerequisites this section previously listed are now answered: the loader is op 0x44 and it runs
+at whatever point the engine posts that op (measured: twice per mission).  The remaining care is that
+`ext+0x3958` is a FUNCTION POINTER into the extender's own code (0x689a) -- the shim must set whatever
+its render chain dispatches through, not the raw constant, unless it already reads 0x3958 as an
+extender-relative address.
+
+STILL NOT VERIFIED, and not to be assumed: that loading the ramps alone makes the windshield match.
+It removes the divide-by-zero and supplies the real tables, but the sky pointer and the detail value
+are set by the same handler and have never run either, so the frame after implementing op 0x44 has to
+be re-measured against the reference rather than predicted.
