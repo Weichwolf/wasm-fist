@@ -298,3 +298,46 @@ NEXT, in this order:
    can be measured honestly for either.
 2. Instrument the .MS3 command dispatcher at 0x5932 (its stubs are already located) to see which
    commands run in a mission and which condition is evaluated but never satisfied.
+
+## The mission loop and its end-predicate, traced correctly
+
+The in-mission loop is asm 0xe753-0xe76a inside `FUN_0000_e714`:
+
+```
+e74d: movw $0x0,0x452          ; reset the frame timer
+e753: call 0x206f              ; the per-frame work
+e756: lcall 0f69:0x4277 ; jae e766
+e75d: lcall *0x52c
+e761: lcall 0f69:0x12dc
+e766: lcall *0x40a             ; <-- the CONTINUE predicate, returns CF
+e76a: jb 0xe753                ; loop while CF=1; CF=0 ends the screen/mission
+```
+
+**The port's loop is FAITHFUL** -- it has all three intermediate calls and evaluates `[0x40a]`, looping
+on that call's carry. (I first read a truncated grep of only the `do {` / `} while` lines and wrongly
+concluded the port had dropped them; it had not.)
+
+Resolved `[DGROUP:0x40a]` at RUNTIME rather than by guessing at a name: it is `0f69:0x3f17` =
+**linear 0x135A7 = FUN_1000_35a7**. (The port's inline comment says "35a7", which I first disassembled
+at CS=0 -- the wrong address, a data-copy routine. The 0f69 segment has to be resolved to linear.)
+
+asm 0x135a7 is the **cooperative TASK SCHEDULER**, not a mission-outcome test:
+
+```
+135a7: testb $0xff,0x6a ; jne back        ; re-entrancy guard
+135ae: call 0x13920
+135b1: testb $0xff,0x3e00 ; jne 0x13610
+135b8: cmpw $0xffff,0x18e4 ; je 0x13610   ; ready-list EMPTY -> 0x13610
+135bf: mov 0x18e0,%bx ... lcall *0xc(%bx) ; dispatch the head task
+135d9: pushf ; cli ; ...                   ; unlink/relink the ready list at 0x18e0/0x18e4/0x18e8
+```
+
+So "the mission ends" is not an outcome test at all -- the screen runs until the scheduler says stop,
+i.e. until a TASK signals completion. The mission-end decision therefore lives in whatever task the
+mission installs, and the outcome script load (be0e with 0x0c/0x10/0x14/0x18) would be that task's
+action.
+
+NEXT: instrument the scheduler's ready list (DGROUP-relative 0x18e0 head / 0x18e4 next / 0x18e8 free,
+in the 0f69 cluster's own data) to enumerate which tasks are queued during a battle and whether a
+mission-supervisor task is installed at all. That is the concrete question behind "no mission resolves",
+and it is a queue-contents question, not another asm-reading one.
