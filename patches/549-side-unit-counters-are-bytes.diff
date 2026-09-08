@@ -1,0 +1,98 @@
+PATCH 549: the side unit counters DGROUP:0x6d38..0x6d3b are four bytes, and their pair stores are words.
+
+FUN_1000_a5dc decides victory and defeat from these counters:
+
+    1a678: 80 3e ab 6d 00    cmpb  $0x0,0x6dab       ; not in the editor
+    1a67d: 75 3b             jne   0x1a6ba
+    1a67f: 80 3e 3a 6d 00    cmpb  $0x0,0x6d3a       ; own side ever had units?
+    1a684: 74 34             je    0x1a6ba
+    1a686: 80 3e 38 6d 00    cmpb  $0x0,0x6d38       ; own side wiped?
+    1a68b: 74 2e             je    0x1a6bb            ; -> outcome 1 (DEFEAT)
+    1a68d: 83 3e 90 97 00    cmpw  $0x0,-0x6870       ; opposing set ever had units?
+    1a692: 74 26             je    0x1a6ba
+    1a694: 83 3e 8e 97 00    cmpw  $0x0,-0x6872       ; opposing set wiped?
+    1a699: 75 1f             jne   0x1a6ba
+    ...
+    1a6ae: c7 06 a0 6d 00 00 movw  $0x0,0x6da0        ; -> outcome 0 (VICTORY)
+
+The census task FUN_1000_6049 (asm 0x16049, rebuilt by patch 264) fills them.  It counts two halves of
+the 32-entry cell-index table at DGROUP:0x6d3c into two register halves and commits them like this:
+
+    16083: 8b c8             mov   %ax,%cx
+    16085: 89 0e 38 6d       mov   %cx,0x6d38         ; CL -> 0x6d38 live A, CH -> 0x6d39 live B
+    16089: 3a 0e 3a 6d       cmp   0x6d3a,%cl
+    1608d: 76 04             jbe   0x16093
+    1608f: 88 0e 3a 6d       mov   %cl,0x6d3a         ; peak A
+    16093: 3a 2e 3b 6d       cmp   0x6d3b,%ch
+    16097: 76 04             jbe   0x1609d
+    16099: 88 2e 3b 6d       mov   %ch,0x6d3b         ; peak B
+
+So the layout is four bytes -- live A, live B, peak A, peak B -- written as one word plus two byte
+stores, and read back only by byte (`cmpb` at 0x1a67f/0x1a686, `movzbw` at 0x162ba/0x1bb05).  There is
+no 32-bit access to either address anywhere in the image.
+
+Two width errors sat on top of that:
+
+  - `DAT_2000_2d38`, `DAT_2000_2d3a` and `DAT_2000_2d3b` were `undefined2`, so each scalar test covered
+    TWO bytes.  `DAT_2000_2d38 == 0` therefore demanded that BOTH sides be at zero, and the defeat
+    outcome at 0x1a6bb -- the one that fires when the OWN side is destroyed while the enemy survives --
+    was unreachable in exactly the case it exists for.  `DAT_2000_2d3b = ...` also wrote 0x6d3c.
+  - `_DAT_2000_2d38` and `_DAT_2000_2d3a` were `undefined4`, so each pair store wrote four bytes.  The
+    asm is `movw`: 0x4423 `movw $0x0,0x6d38`, 0x4429 `movw $0x0,0x6d3a`, 0x16085 `mov %cx,0x6d38`.
+    `_DAT_2000_2d3a = 0` at mission init therefore cleared 0x6d3a..0x6d3d, wiping the first entry of
+    the very cell-index table at 0x6d3c that FUN_1000_6049 then walks.
+
+Note that 0x6d3a and 0x6d3c also serve as BIASED table bases elsewhere (`mov 0x6d3a(%bx),%si` /
+`mov %si,0x6d3c(%bx)` at 0x1a9cb/0x1a9fc, with `bx = ((byte[di+0x1b] << 2) + byte[di+0x1c]) << 1`).
+That is not a conflict: the index is at least 8, so those accesses never touch the four counter bytes.
+
+Only the five declarations change; every expression that uses them is already what the asm says.
+
+board:0017
+
+--- a/fist.c
++++ b/fist.c
+@@ -2998,9 +2998,25 @@
+ #define DAT_2000_2d2f (*(undefined2 *)(g_mem+0x22d2f))
+ #define DAT_2000_2d32 (*(undefined2 *)(g_mem+0x22d32))
+ #define DAT_2000_2d34 (*(int **)(g_mem+0x22d34))
+-#define DAT_2000_2d38 (*(undefined2 *)(g_mem+0x22d38))
+-#define DAT_2000_2d3a (*(undefined2 *)(g_mem+0x22d3a))
+-#define DAT_2000_2d3b (*(undefined2 *)(g_mem+0x22d3b))
++/* PATCH 549: the side unit counters at DGROUP:0x6d38..0x6d3b are four BYTES, two per side.
++ * 0x16085 stores the pair with one word write and the two peaks with byte writes:
++ *   16083: 8b c8          mov  %ax,%cx
++ *   16085: 89 0e 38 6d    mov  %cx,0x6d38     ; CL -> 0x6d38 live A, CH -> 0x6d39 live B
++ *   16089: 3a 0e 3a 6d    cmp  0x6d3a,%cl
++ *   1608d: 76 04          jbe  0x16093
++ *   1608f: 88 0e 3a 6d    mov  %cl,0x6d3a     ; peak A
++ *   16093: 3a 2e 3b 6d    cmp  0x6d3b,%ch
++ *   16097: 76 04          jbe  0x1609d
++ *   16099: 88 2e 3b 6d    mov  %ch,0x6d3b     ; peak B
++ * Every scalar access is byte-width (`cmpb $0x0,0x6d38` at 0x1a686, `cmpb $0x0,0x6d3a` at
++ * 0x1a67f, `movzbw 0x6d38,%ax` at 0x1bb05, `movzbw 0x6d3a,%ax` at 0x162ba); no access anywhere
++ * in the image is 32-bit.  As words, FUN_1000_a5dc's two guards each tested TWO bytes:
++ * `DAT_2000_2d38 == 0` demanded that BOTH sides be wiped, so the defeat outcome at 0x1a6bb
++ * (outcome 1, fired when the OWN side reaches zero) could not be reached while any enemy
++ * remained -- which is every case that matters.  board:0017 */
++#define DAT_2000_2d38 (*(undefined1 *)(g_mem+0x22d38))
++#define DAT_2000_2d3a (*(undefined1 *)(g_mem+0x22d3a))
++#define DAT_2000_2d3b (*(undefined1 *)(g_mem+0x22d3b))
+ #define DAT_2000_2d3c (*(undefined2 *)(g_mem+0x22d3c))
+ #define DAT_2000_2d5c (*(undefined2 *)(g_mem+0x22d5c))
+ #define DAT_2000_2d84 (*(undefined2 *)(g_mem+0x22d84))
+@@ -3941,8 +3957,12 @@
+ #define _DAT_1000_e030 (*(undefined4 *)(g_mem+0x1e030))
+ #define _DAT_2000_2cc2 (*(undefined4 *)(g_mem+0x22cc2))
+ #define _DAT_2000_2cc4 (*(undefined4 *)(g_mem+0x22cc4))
+-#define _DAT_2000_2d38 (*(undefined4 *)(g_mem+0x22d38))
+-#define _DAT_2000_2d3a (*(undefined4 *)(g_mem+0x22d3a))
++/* PATCH 549: the two PAIR stores are `movw`, not 32-bit -- 0x4423 `movw $0x0,0x6d38`, 0x4429
++ * `movw $0x0,0x6d3a`, 0x16085 `mov %cx,0x6d38`.  As undefined4 each wrote four bytes, so
++ * `_DAT_2000_2d3a = 0` also cleared 0x6d3c -- the base of the 32-entry cell-index table that
++ * FUN_1000_6049 (patch 264) walks -- and `_DAT_2000_2d38 = ...` clobbered both peaks. */
++#define _DAT_2000_2d38 (*(undefined2 *)(g_mem+0x22d38))
++#define _DAT_2000_2d3a (*(undefined2 *)(g_mem+0x22d3a))
+ #define _DAT_2000_578c (*(undefined4 *)(g_mem+0x2578c))
+ #define _DAT_2000_5f1e (*(undefined4 *)(g_mem+0x25f1e))
+ #define _DAT_2000_a902 (*(undefined4 *)(g_mem+0x2a902))

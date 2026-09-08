@@ -343,7 +343,14 @@ long g_min_los = 0x7fffffffL;
 unsigned short g_fist_op54_proj=0;
 long g_op58_n=0, g_op58_oor=0, g_op58_occ=0, g_op58_vis=0;   /* board:0012: op-0x58 LOS call/return census */
 int  g_a296_loaded = 0;           /* set once the mission is in-mission AND a296>0 (its roster spawned) */
-long g_peak_a296 = 0;             /* the roster's high-water mark, so "resolved" is peak>0 && a296==0 */
+/* The ENGINE's own end-of-mission state, latched the tick it appears.  byte[DGROUP:0xe814] is the flag
+ * FUN_0000_459a's loop exits on and word[DGROUP:0x6da0] is the outcome code written just before it by
+ * every one of the six writers, so this is the goal's "resolved victory/defeat state" read from the
+ * engine rather than inferred from a roster count.  The flag lives for only a few ticks -- the mission
+ * loop leaves on the next iteration -- so it has to be sampled every pump, not on a stride.  board:0017 */
+int  g_mission_over = 0;
+int  g_mission_outcome = -1;
+long g_peak_a296 = 0;             /* the roster's high-water mark (reported only; "resolved" is g_mission_over) */
 static volatile sig_atomic_t g_tick_pending;     /* raised by the timer source, drained by the pump */
 #define TICK_PENDING_CAP 8
 /* One tick of the host time base: bump the BIOS 18.2 Hz counter (0040:006C) and queue one INT-8 ISR
@@ -472,12 +479,17 @@ void fist_set_int8_handler(uint32_t linear){
 static void fist_dump_and_exit(const char *why){
     fprintf(stderr, "[fist] %s: dumping frame + exiting (video-mode=0x%02x, [0x452]=%u)\n",
             why, fist_vga_mode(), *(uint16_t*)(g_mem+0x1c452));
-    { extern long g_min_a296, g_peak_a296; extern int g_a296_loaded;
-      fprintf(stderr, "[outcome] a294=%d a296=%d  loaded=%d min_a296=%ld peak_a296=%ld  %s\n",
+    { extern long g_min_a296, g_peak_a296; extern int g_a296_loaded, g_mission_over, g_mission_outcome;
+      /* 0x1a6ae, 0x1a6bb and 0x1a60b write these three; 3/4/5 come from the other flag-writers
+       * (0x6115, the 0x15e4c abort handler, the 0x15e8c timeline task). */
+      static const char *const oc[] = { "VICTORY (opposing side destroyed)", "DEFEAT (own side lost)",
+                                        "TIME EXPIRED", "outcome 3", "ABORTED", "outcome 5" };
+      const char *ocs = (g_mission_outcome >= 0 && g_mission_outcome < 6) ? oc[g_mission_outcome] : "outcome ?";
+      fprintf(stderr, "[outcome] a294=%d a296=%d  loaded=%d min_a296=%ld peak_a296=%ld  over=%d code=%d  %s\n",
               *(uint16_t*)(g_mem+0x1c000+0xe294), *(uint16_t*)(g_mem+0x1c000+0xe296),
-              g_a296_loaded, g_min_a296, g_peak_a296,
-              (g_a296_loaded && g_peak_a296 > 0 && *(uint16_t*)(g_mem+0x1c000+0xe296)==0) ? "*** RESOLVED: enemy side eliminated ***" :
-              (g_a296_loaded ? "(mission loaded, not resolved)" : "(mission never loaded a roster)"));
+              g_a296_loaded, g_min_a296, g_peak_a296, g_mission_over, g_mission_outcome,
+              g_mission_over        ? ocs :
+              g_a296_loaded         ? "(mission loaded, not resolved)" : "(mission never loaded a roster)");
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }
@@ -741,6 +753,14 @@ void fist_timer_pump(void){
         if (in_mission && b > 0) g_a296_loaded = 1;
         if (b > g_peak_a296) g_peak_a296 = b;
         if (g_a296_loaded && b < g_min_a296) g_min_a296 = b; }
+      { extern int g_mission_over, g_mission_outcome; unsigned char *dg = g_mem + 0x1c000;
+        if (in_mission && !g_mission_over && dg[0xe814] != 0) {
+          g_mission_over = 1; g_mission_outcome = *(uint16_t *)(dg + 0x6da0);
+          /* FIST_STOP_ON_OUTCOME=1: stop the moment the engine resolves the mission.  This is the
+           * self-play sweep's terminating condition -- a mission runs for as long as it takes rather
+           * than to a tick cap, and cannot be cut off before it resolves.  board:0017 */
+          { static int soo = -1; if (soo < 0) soo = getenv("FIST_STOP_ON_OUTCOME") ? 1 : 0;
+            if (soo) fist_dump_and_exit("mission resolved"); } } }
       /* DIAGNOSTIC (FIST_FIXFACTION): test the aa08 side-filter hypothesis -- force byte[obj+0x16] bit3
        * = the unit's SIDE (byte[type-0x19ec]&1), so [0x16]&8 cleanly separates factions.  If units then
        * engage the OTHER side (combat -> deaths, a296 drops), the faction bit was a real blocker.  Few
@@ -753,6 +773,25 @@ void fist_timer_pump(void){
           unsigned char *f16=&dg[(unsigned short)(s+0x16)];
           *f16 = (unsigned char)((*f16 & ~8) | (side<<3)); }
       }
+      /* DIAGNOSTIC (FIST_DUMP_END): trace the mission-over supervisor (1000:a5dc) guard by guard.
+       * The flag byte[DGROUP:0xe814] is what FUN_0000_459a exits on, word[0x6da0] is the outcome code
+       * and word[0x6da2] the teardown countdown; 0x6da6:0x6da7:0x6da8 is the mission clock and
+       * 0x6d38/0x6d3a the own-side live and peak counts.  Env-gated, read-only, printed every
+       * FIST_DUMP_END pumps.  board:0017 */
+      { static long endn = -1, endt = 0;
+        if (endn < 0) { const char *e = getenv("FIST_DUMP_END"); endn = e ? atol(e) : 0; }
+        if (endn > 0 && in_mission && (endt++ % endn) == 0) {
+          unsigned char *dg = g_mem + 0x1c000;
+          fprintf(stderr,
+            "[end] t=%ld out=%04x tmr=%04x | 6da6=%02x 6da7=%02x 6da8=%02x | 6dab=%02x 6d3a=%02x 6d38=%02x 6db0=%02x"
+            " | live=%u peak=%u prev=%u | e814=%02x a296=%u\n",
+            endt-1,
+            *(unsigned short*)(dg+0x6da0), *(unsigned short*)(dg+0x6da2),
+            dg[0x6da6], dg[0x6da7], dg[0x6da8],
+            dg[0x6dab], dg[0x6d3a], dg[0x6d38], dg[0x6db0],
+            *(unsigned short*)(dg+0x978e), *(unsigned short*)(dg+0x9790), *(unsigned short*)(dg+0x9792),
+            dg[0xe814], *(unsigned short*)(dg+0xe296));
+        } }
       /* DIAGNOSTIC (FIST_DUMP_REG): one-shot dump of the 0x9fbc object registry once in-mission, to
        * resolve the tree object model for the plant-tree editor harness (tree type discriminator +
        * body/coord layout). Reads only; env-gated; no effect on any flow. */
@@ -859,7 +898,11 @@ void fist_timer_pump(void){
      * and completes well before N; choose N large enough that both targets have settled into the modal
      * loop -- see the campaign-missions flow comment in tools/verify.sh.)  Takes precedence over FIST_RUNMS. */
     static long g_dumptick = -2;
-    if (g_dumptick == -2) { const char *d = getenv("FIST_DUMPTICK"); g_dumptick = d ? atol(d) : -1; }
+    if (g_dumptick == -2) { const char *d = getenv("FIST_DUMPTICK"); g_dumptick = d ? atol(d) : -1;
+        /* [0x452] is a 16-bit engine counter, so any cap above 0xffff can NEVER be reached and the run
+         * would spin to its wall-clock watchdog instead.  Say so rather than hang silently. */
+        if (g_dumptick > 0xffff) fprintf(stderr, "[fist] WARNING: FIST_DUMPTICK=%ld exceeds the 16-bit "
+            "range of [0x452] and can never fire; use FIST_STOP_ON_OUTCOME or FIST_RUNMS.\n", g_dumptick); }
     if (g_dumptick > 0) {
         uint16_t cur = *(uint16_t*)(g_mem + 0x1c452);
         if ((long)cur >= g_dumptick) fist_dump_and_exit("FIST_DUMPTICK");

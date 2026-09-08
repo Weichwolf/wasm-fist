@@ -1,0 +1,162 @@
+PATCH 547: DGROUP:0x6da4..0x6db0 is a run of thirteen BYTE variables -- the mission clock among them.
+
+`FUN_1000_a5dc` is the mission supervisor.  Its first branch ends the mission when the countdown
+word DGROUP:0x6da2 reaches zero, and its second ends it when the mission CLOCK reaches 00:00:00:
+
+    1a5ef: 80 3e a6 6d ff    cmpb  $0xff,0x6da6      ; clock disabled?
+    1a5f4: 74 22             je    0x1a618
+    1a5f6: 80 3e a6 6d 00    cmpb  $0x0,0x6da6       ; minutes
+    1a5fb: 75 1b             jne   0x1a618
+    1a5fd: 80 3e a7 6d 00    cmpb  $0x0,0x6da7       ; seconds
+    1a602: 75 14             jne   0x1a618
+    1a604: 80 3e a8 6d 00    cmpb  $0x0,0x6da8       ; sub-seconds
+    1a609: 75 0d             jne   0x1a618
+    1a60b: c7 06 a0 6d 02 00 movw  $0x2,0x6da0       ; outcome 2 = TIME EXPIRED
+    1a611: c7 06 a2 6d 02 00 movw  $0x2,0x6da2       ; ... arm the 2-tick teardown
+
+The clock is armed at 0x47c7 (`movb $0x3c,0x6da6` / `movb $0x0,0x6da7` / `movb $0x0,0x6da8`), or per
+mission from the limit table at 0x7b14 (`5167: mov 0x7b14(%bx),%al ; 516e: mov %al,0x6da6`), and
+stepped by FUN_0000_4712 with a two-stage borrow (the decb/cmpb $0xff/movb $0x3b chain quoted at the
+macro block).  Every access to all three is byte-width.
+
+Ghidra typed the whole run 0x6da4..0x6db0 `undefined2`.  Because the thirteen are ADJACENT BYTES, each
+macro aliases its successor:
+
+    DAT_2000_2da6  covered bytes 0x6da6..0x6da7   (minutes + seconds)
+    DAT_2000_2da7  covered bytes 0x6da7..0x6da8   (seconds + sub-seconds)
+    DAT_2000_2da8  covered bytes 0x6da8..0x6da9   (sub-seconds + a live flag)
+
+so `DAT_2000_2da8 = DAT_2000_2da8 - 1` stepped a 16-bit value 0x0000 -> 0xffff and the underflow test
+never matched.  The borrow never propagated, the clock never reached zero, and outcome 2 was
+unreachable.  Measured over 3.19M cooperative ticks of AZER1 before this patch:
+
+    [end] t=3186000 out=0000 tmr=ffff | 6da6=0f 6da7=00 6da8=01 | ... | e814=00
+    [end] t=3188000 out=0000 tmr=ffff | 6da6=0f 6da7=00 6da8=f4 | ... | e814=00
+
+-- 0x6da8 walks straight through 0x00 and wraps to 0xf4 instead of reloading to 0x3b, and 0x6da7 is
+still 0x00 after 45 minutes of mission clock.  No mission could ever time out.
+
+The evidence for the run being bytes is exhaustive rather than local.  Classifying every memory
+operand in the image (branch targets excluded) gives, for the offsets bracketing and covering it:
+
+    0x6da0  word 11  byte  0      <- genuine word (outcome code)
+    0x6da2  word 15  byte  0      <- genuine word (teardown countdown)
+    0x6da4  word  0  byte  2
+    0x6da5  word  0  byte  3
+    0x6da6  word  0  byte  9
+    0x6da7  word  0  byte  8
+    0x6da8  word  0  byte  6
+    0x6da9  word  0  byte  3
+    0x6daa  word  0  byte  5
+    0x6dab  word  0  byte 50
+    0x6dac  word  0  byte  7
+    0x6dad  word  0  byte  7
+    0x6dae  word  0  byte 17
+    0x6daf  word  0  byte  3
+    0x6db0  word  0  byte  4
+    0x6db2  word  7  byte  0      <- genuine word
+    0x6db4  word 18  byte  0      <- genuine word
+
+122 byte accesses, zero word accesses, cleanly bracketed by real words on both sides.
+
+The aliasing damaged more than the clock: 0x6da9 and 0x6daa are live byte flags (`movb $0x1,0x6da9`
+at 0xe8fc, `cmpb $0x1,0x6da9` at 0x1633c, `movb $0x1,0x6daa` at 0x1630a, `cmpb $0x1,0x6daa` at
+0xe864/0x1bb5c/0x1bbe6), so `DAT_2000_2da9 = 1` also zeroed 0x6daa, and `DAT_2000_2daa = 1` also
+zeroed 0x6dab -- the editor/pause flag that a5dc itself branches on at 0x1a678 and that fifty other
+sites test.  Narrowing the run removes all of it at once.
+
+The three `== -1` in FUN_0000_4712 and the `!= 0xffff` in FUN_1000_a5dc are repaired in the same
+patch because the narrowing forces them: the asm constant is the byte 0xff, and an unsigned char
+promotes to int, so `== -1` is a constant false.
+
+board:0017
+
+--- a/fist.c
++++ b/fist.c
+@@ -3010,19 +3010,46 @@
+ #define DAT_2000_2d9d (*(undefined2 *)(g_mem+0x22d9d))
+ #define DAT_2000_2da0 (*(undefined2 *)(g_mem+0x22da0))
+ #define DAT_2000_2da2 (*(undefined2 *)(g_mem+0x22da2))
+-#define DAT_2000_2da4 (*(undefined2 *)(g_mem+0x22da4))
+-#define DAT_2000_2da5 (*(undefined2 *)(g_mem+0x22da5))
+-#define DAT_2000_2da6 (*(undefined2 *)(g_mem+0x22da6))
+-#define DAT_2000_2da7 (*(undefined2 *)(g_mem+0x22da7))
+-#define DAT_2000_2da8 (*(undefined2 *)(g_mem+0x22da8))
+-#define DAT_2000_2da9 (*(undefined2 *)(g_mem+0x22da9))
+-#define DAT_2000_2daa (*(undefined2 *)(g_mem+0x22daa))
+-#define DAT_2000_2dab (*(undefined2 *)(g_mem+0x22dab))
+-#define DAT_2000_2dac (*(undefined2 *)(g_mem+0x22dac))
+-#define DAT_2000_2dad (*(undefined2 *)(g_mem+0x22dad))
+-#define DAT_2000_2dae (*(undefined2 *)(g_mem+0x22dae))
+-#define DAT_2000_2daf (*(undefined2 *)(g_mem+0x22daf))
+-#define DAT_2000_2db0 (*(undefined2 *)(g_mem+0x22db0))
++/* PATCH 547: DGROUP:0x6da4..0x6db0 is a run of THIRTEEN independent BYTE variables, not words.
++ * Across the whole image these thirteen offsets take 122 byte accesses (movb/cmpb/decb/testb/
++ * xorb/movzbw, `mov %al,0x6daX`, `mov 0x6daX,%al`) and ZERO word accesses; the genuine words
++ * DGROUP:0x6da2 and DGROUP:0x6db2 bracket the run on both sides.  Ghidra typed all thirteen
++ * `undefined2`, so each one ALIASES its successor and every store clobbers the next variable.
++ *
++ * The consequence is the mission clock.  0x6da6/0x6da7/0x6da8 are MM:SS:sub of the countdown
++ * armed at 0x47c7 (`movb $0x3c,0x6da6` = 60) and stepped by FUN_0000_4712:
++ *
++ *   472e: fe 0e a8 6d       decb  0x6da8
++ *   4732: 80 3e a8 6d ff    cmpb  $0xff,0x6da8      ; underflow?
++ *   4737: 75 19             jne   0x4752
++ *   4739: c6 06 a8 6d 3b    movb  $0x3b,0x6da8      ; reload 59 ...
++ *   473e: fe 0e a7 6d       decb  0x6da7            ; ... and borrow into seconds
++ *   4742: 80 3e a7 6d ff    cmpb  $0xff,0x6da7
++ *   4747: 75 09             jne   0x4752
++ *   4749: c6 06 a7 6d 3b    movb  $0x3b,0x6da7
++ *   474e: fe 0e a6 6d       decb  0x6da6            ; ... and into minutes
++ *
++ * As a word, 0x6da8 steps 0x0000 -> 0xffff, so the `== 0xff` underflow test never fires: the
++ * borrow never propagates, the clock never reaches 00:00:00, and the mission-over evaluation
++ * at 1a5ef (`byte 0x6da6/0x6da7/0x6da8 ALL ZERO -> outcome 2`) can never be reached.  Measured
++ * over 3.19M cooperative ticks of AZER1: 0x6da8 free-runs downward and wraps (0x01 -> 0xf4)
++ * while 0x6da7 stays 0x00 forever.  The word stores also corrupt real neighbours -- 0x6da9 and
++ * 0x6daa are live byte flags (`movb $0x1,0x6da9` at 0xe8fc, `cmpb $0x1,0x6daa` at 0xe864), and
++ * `DAT_2000_2daa = 1` was overwriting 0x6dab, the editor/pause flag a5dc itself branches on.
++ * board:0017 */
++#define DAT_2000_2da4 (*(undefined1 *)(g_mem+0x22da4))
++#define DAT_2000_2da5 (*(undefined1 *)(g_mem+0x22da5))
++#define DAT_2000_2da6 (*(undefined1 *)(g_mem+0x22da6))
++#define DAT_2000_2da7 (*(undefined1 *)(g_mem+0x22da7))
++#define DAT_2000_2da8 (*(undefined1 *)(g_mem+0x22da8))
++#define DAT_2000_2da9 (*(undefined1 *)(g_mem+0x22da9))
++#define DAT_2000_2daa (*(undefined1 *)(g_mem+0x22daa))
++#define DAT_2000_2dab (*(undefined1 *)(g_mem+0x22dab))
++#define DAT_2000_2dac (*(undefined1 *)(g_mem+0x22dac))
++#define DAT_2000_2dad (*(undefined1 *)(g_mem+0x22dad))
++#define DAT_2000_2dae (*(undefined1 *)(g_mem+0x22dae))
++#define DAT_2000_2daf (*(undefined1 *)(g_mem+0x22daf))
++#define DAT_2000_2db0 (*(undefined1 *)(g_mem+0x22db0))
+ #define DAT_2000_2db2 (*(undefined2 *)(g_mem+0x22db2))
+ #define DAT_2000_2db4 (*(undefined2 *)(g_mem+0x22db4))
+ #define DAT_2000_2db6 (*(undefined2 *)(g_mem+0x22db6))
+@@ -13906,12 +13933,14 @@
+ void __allregs FUN_0000_4712(void)
+ 
+ {
+-  if (((DAT_2000_2da6 != -1) &&
++  /* PATCH 547: `cmpb $0xff` at 0x4712/0x4732/0x4742 -- an unsigned char promotes to int, so the
++   * Ghidra-emitted `== -1` is a constant false and the borrow chain above never ran. */
++  if (((DAT_2000_2da6 != 0xff) &&
+       (((DAT_2000_2da6 != '\0' || (DAT_2000_2da7 != '\0')) || (DAT_2000_2da8 != '\0')))) &&
+-     (DAT_2000_2da8 = DAT_2000_2da8 + -1, DAT_2000_2da8 == -1)) {
++     (DAT_2000_2da8 = DAT_2000_2da8 + -1, DAT_2000_2da8 == 0xff)) {
+     DAT_2000_2da8 = ';';
+     DAT_2000_2da7 = DAT_2000_2da7 + -1;
+-    if (DAT_2000_2da7 == -1) {
++    if (DAT_2000_2da7 == 0xff) {
+       DAT_2000_2da7 = ';';
+       DAT_2000_2da6 = DAT_2000_2da6 + -1;
+     }
+@@ -66471,7 +66500,7 @@
+     }
+     return;
+   }
+-  if ((((DAT_2000_2da6 != 0xffff) && (DAT_2000_2da6 == '\0')) && (DAT_2000_2da7 == '\0')) &&
++  if ((((DAT_2000_2da6 != 0xff) && (DAT_2000_2da6 == '\0')) && (DAT_2000_2da7 == '\0')) &&  /* PATCH 547: 1a5ef is cmpb $0xff */
+      (DAT_2000_2da8 == '\0')) {
+     DAT_2000_2da0 = 2;
+     DAT_2000_2da2 = 2;

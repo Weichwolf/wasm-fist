@@ -7,21 +7,40 @@
 # victory/defeat state, native and WASM byte-identical".  It is deliberately committed rather than
 # ad-hoc: the failing set has to be reproducible by anyone, on demand.
 #
-#   tools/selfplay.sh [native|wasm|both] [tick-cap] [mission-regex]
+#   tools/selfplay.sh [native|wasm|both] [tick-cap|""] [mission-regex]
 #
-# Classification per mission, from the shim's `[outcome]` line (tools/native_main.c):
-#   RESOLVED   a296 reached 0 after the roster loaded -- one side eliminated
-#   UNRESOLVED the mission loaded and simulated but no side was eliminated inside the tick cap
-#   NOLOAD     a296 never reached >=15, i.e. the roster never spawned
+# The tick cap is optional and normally left empty: a mission runs until the ENGINE resolves it.  Pass
+# one only to bound an investigation, and keep it under 0xffff (see below).
+#
+# Classification per mission, from the shim's `[outcome]` line (tools/native_main.c).  The criterion is
+# the ENGINE's own end-of-mission state, not a roster count: byte[DGROUP:0xe814] is the flag that
+# FUN_0000_459a's mission loop exits on, and word[DGROUP:0x6da0] is the outcome code every one of the
+# six flag-writers sets just before raising it.
+#
+#   RESOLVED   the engine raised byte[0xe814]; `code=` says which outcome
+#                0 VICTORY (opposing side destroyed, 1a6ae)   1 DEFEAT (own side lost, 1a6bb)
+#                2 TIME EXPIRED (mission clock hit 00:00:00, 1a60b)
+#                3 (6115)   4 ABORTED (15e4c)   5 (15e8c timeline task)
+#   UNRESOLVED the mission loaded and simulated but the engine never resolved it inside the budget
+#   NOLOAD     the roster never spawned
 #   TIMEOUT    the wall-clock watchdog fired (a hang, or simply slower than the budget)
 #   CRASH      non-zero exit that is not the watchdog
+#
+# A mission runs until the ENGINE resolves it (FIST_STOP_ON_OUTCOME=1), not to a tick cap.  A cap could
+# not express this anyway: [DGROUP:0x452] is 16-bit, so any FIST_DUMPTICK above 0xffff never fires, and
+# one 15-minute mission is ~54000 sim ticks -- close enough to the ceiling to be a trap.  The wall-clock
+# budget is the only bound, and it must be generous: a full mission is ~20 minutes of native CPU.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TARGET="${1:-native}"; TICKCAP="${2:-20000}"; FILTER="${3:-.}"
+TARGET="${1:-native}"; TICKCAP="${2:-}"; FILTER="${3:-.}"   # TICKCAP empty = no cap; the engine decides
 BIN="${NATIVE:-/tmp/fist_native}"
 OUTJS="${OUTJS:-/tmp/fisttest/fistrun.js}"
 NODE="$(ls "$HOME"/Git/emsdk/node/*/bin/node 2>/dev/null | head -1)"; NODE="${NODE:-node}"
-BUDGET="${FIST_SELFPLAY_TIMEOUT:-240}"
+BUDGET="${FIST_SELFPLAY_TIMEOUT:-1800}"
+# A full mission is ~20 minutes of native CPU, so a serial 47-mission sweep is most of a day.  The runs
+# are independent, so run several at once; each gets its OWN datadir because a run writes .FPL pilot
+# files back.  SP_JOBS=1 restores serial order.
+JOBS="${SP_JOBS:-$(nproc 2>/dev/null || echo 2)}"
 # The BATTLES -> OK -> ACCEPT menu navigation that drives patch 380's FIST_FSG_BATTLE into any of
 # the 47 .FSG.  Identical to verify.sh's MC_MOUSE; without it the engine never leaves the menu and
 # every mission reports NOLOAD.  Player input inside the mission stays EMPTY -- the last event is a
@@ -29,8 +48,8 @@ BUDGET="${FIST_SELFPLAY_TIMEOUT:-240}"
 SP_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0; 7200:40:186:0"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
-# Runs write back into FISTDATA (.FPL pilot files); never let a sweep mutate the read-only originals.
-DD="$TMP/data"; cp -r "$ROOT/armoredfist" "$DD"
+# Runs write back into FISTDATA (.FPL pilot files); never let a sweep mutate the read-only originals,
+# and never let two parallel runs share one copy.
 
 missions=(); for f in "$ROOT"/armoredfist/FISTDATA/*.FSG "$ROOT"/armoredfist/FISTDATA/*.fsg; do
   [ -e "$f" ] || continue; b="$(basename "$f")"; b="${b%.*}"
@@ -39,52 +58,70 @@ missions=(); for f in "$ROOT"/armoredfist/FISTDATA/*.FSG "$ROOT"/armoredfist/FIS
 done
 IFS=$'\n' missions=($(printf '%s\n' "${missions[@]}" | sort -u)); unset IFS
 
-run_one() {  # $1=target $2=mission -> prints "STATE|min_a296|secs"
-  local tgt="$1" m="$2" st t0 t1 rc out
+run_one() {  # $1=target $2=mission -> prints "STATE|outcome-code|secs"
+  local tgt="$1" m="$2" st t0 t1 rc out DD
   out="$TMP/$tgt.$m.err"
+  DD="$TMP/data.$tgt.$m"; cp -r "$ROOT/armoredfist" "$DD"
   t0=$SECONDS
   if [ "$tgt" = native ]; then
     setarch -R env FIST_DATADIR="$DD" FIST_SIMRUN=1 FIST_COOP_TICK=1 \
-      FIST_FSG_BATTLE="$m" FIST_DUMPTICK="$TICKCAP" FIST_MOUSE="$SP_MOUSE" \
+      FIST_FSG_BATTLE="$m" FIST_STOP_ON_OUTCOME=1 ${TICKCAP:+FIST_DUMPTICK=$TICKCAP} FIST_MOUSE="$SP_MOUSE" \
       timeout "$BUDGET" "$BIN" >/dev/null 2>"$out"; rc=$?
   else
     env FIST_DATADIR="$DD" FIST_SIMRUN=1 FIST_COOP_TICK=1 \
-      FIST_FSG_BATTLE="$m" FIST_DUMPTICK="$TICKCAP" FIST_MOUSE="$SP_MOUSE" \
+      FIST_FSG_BATTLE="$m" FIST_STOP_ON_OUTCOME=1 ${TICKCAP:+FIST_DUMPTICK=$TICKCAP} FIST_MOUSE="$SP_MOUSE" \
       timeout "$BUDGET" "$NODE" "$OUTJS" >/dev/null 2>"$out"; rc=$?
   fi
-  t1=$((SECONDS - t0))
-  local line min
+  t1=$((SECONDS - t0)); rm -rf "$DD"
+  local line code
   line="$(grep -m1 '^\[outcome\]' "$out" 2>/dev/null || true)"
-  min="$(printf '%s' "$line" | sed -n 's/.*min_a296=\([0-9-]*\).*/\1/p')"; min="${min:--}"
+  code="$(printf '%s' "$line" | sed -n 's/.*code=\(-\?[0-9]*\).*/\1/p')"; code="${code:--}"
   if   [ "$rc" = 124 ];                                    then st=TIMEOUT
   elif [ -z "$line" ] && [ "$rc" != 0 ];                   then st=CRASH
-  elif printf '%s' "$line" | grep -q 'RESOLVED';           then st=RESOLVED
+  elif printf '%s' "$line" | grep -q 'over=1';             then st=RESOLVED
   elif printf '%s' "$line" | grep -q 'never loaded';       then st=NOLOAD
   elif [ -n "$line" ];                                     then st=UNRESOLVED
   else                                                          st=CRASH
   fi
-  printf '%s|%s|%s' "$st" "$min" "$t1"
+  printf '%s|%s|%s' "$st" "$code" "$t1"
 }
 
-printf '=== self-play sweep: target=%s tick-cap=%s missions=%d budget=%ss ===\n' \
-       "$TARGET" "$TICKCAP" "${#missions[@]}" "$BUDGET"
+printf '=== self-play sweep: target=%s missions=%d budget=%ss jobs=%s ===\n' \
+       "$TARGET" "${#missions[@]}" "$BUDGET" "$JOBS"
+
+# One job per mission, at most $JOBS at a time; results land in files and are reported in mission order
+# so the output is identical whatever the scheduling.
+work_one() {
+  local m="$1"
+  if [ "$TARGET" = both ]; then
+    { run_one native "$m"; printf '\n'; run_one wasm "$m"; printf '\n'; } > "$TMP/res.$m"
+  else
+    { run_one "$TARGET" "$m"; printf '\n'; } > "$TMP/res.$m"
+  fi
+}
+for m in "${missions[@]}"; do
+  while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n; done
+  work_one "$m" &
+done
+wait
+
 pass=0; fail=0; declare -a failed=()
 for m in "${missions[@]}"; do
   if [ "$TARGET" = both ]; then
-    IFS='|' read -r ns nm nt <<<"$(run_one native "$m")"
-    IFS='|' read -r ws wm wt <<<"$(run_one wasm   "$m")"
+    IFS='|' read -r ns nm nt < <(sed -n 1p "$TMP/res.$m")
+    IFS='|' read -r ws wm wt < <(sed -n 2p "$TMP/res.$m")
     if [ "$ns" = RESOLVED ] && [ "$ws" = RESOLVED ] && [ "$nm" = "$wm" ]; then
-      printf '  %-10s RESOLVED   both (min_a296=%s)  %ss/%ss\n' "$m" "$nm" "$nt" "$wt"; pass=$((pass+1))
+      printf '  %-10s RESOLVED   both (code=%s)  %ss/%ss\n' "$m" "$nm" "$nt" "$wt"; pass=$((pass+1))
     else
-      printf '  %-10s native=%-10s(%s) wasm=%-10s(%s)  %ss/%ss\n' "$m" "$ns" "$nm" "$ws" "$wm" "$nt" "$wt"
+      printf '  %-10s native=%-10s(code=%s) wasm=%-10s(code=%s)  %ss/%ss\n' "$m" "$ns" "$nm" "$ws" "$wm" "$nt" "$wt"
       fail=$((fail+1)); failed+=("$m")
     fi
   else
-    IFS='|' read -r s mn tt <<<"$(run_one "$TARGET" "$m")"
+    IFS='|' read -r s mn tt < <(sed -n 1p "$TMP/res.$m")
     if [ "$s" = RESOLVED ]; then
-      printf '  %-10s RESOLVED   (min_a296=%s)  %ss\n' "$m" "$mn" "$tt"; pass=$((pass+1))
+      printf '  %-10s RESOLVED   (code=%s)  %ss\n' "$m" "$mn" "$tt"; pass=$((pass+1))
     else
-      printf '  %-10s %-10s (min_a296=%s)  %ss\n' "$m" "$s" "$mn" "$tt"; fail=$((fail+1)); failed+=("$m")
+      printf '  %-10s %-10s (code=%s)  %ss\n' "$m" "$s" "$mn" "$tt"; fail=$((fail+1)); failed+=("$m")
     fi
   fi
 done

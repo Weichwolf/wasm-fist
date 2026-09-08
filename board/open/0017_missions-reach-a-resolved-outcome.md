@@ -713,3 +713,132 @@ with this result in front of them.
 NEXT: instrument the three flag-writers the port already has (their asm sites 0x4457, 0x6115, 0x1a5e9)
 during a battle and record which guard each one fails; and locate 0x4168 in the port. That is a
 counter-measurement, not a search, and it does not risk corrupting an SMC chain.
+
+### COUNTER-MEASUREMENT RESULT: the mission clock could not reach zero -- two width/signedness defects
+
+The counter-measurement above was run: `FUN_1000_a5dc` was instrumented guard by guard during an AZER1
+battle (env-gated `FIST_DUMP_END` in the shim, read-only).
+
+First correction to the plan: **`1000:a5ef`/`a60b`/`a6ae`/`a6bb` are NOT unpromoted.** The gap in the
+port's function list between `FUN_1000_a5dc` and `FUN_1000_a6c8` is because a5dc's body EXTENDS over
+the whole region -- the port has the victory/defeat evaluation, and it transcribes the asm faithfully.
+The board:0015 suspicion was wrong.
+
+`FUN_1000_a5dc` has two ways to end a mission, and both were unreachable:
+
+1. **the teardown countdown** word[0x6da2] -- armed to 0xffff (= none pending) at 0x47b2;
+2. **the mission clock** byte[0x6da6]:byte[0x6da7]:byte[0x6da8] reaching 00:00:00, which sets
+   outcome 2 at 0x1a60b and arms a 2-tick teardown.
+
+The measurement showed the clock frozen. Over 3.19M cooperative ticks:
+
+    [end] t=3186000 out=0000 tmr=ffff | 6da6=0f 6da7=00 6da8=01 | e814=00
+    [end] t=3188000 out=0000 tmr=ffff | 6da6=0f 6da7=00 6da8=f4 | e814=00
+
+sub-seconds walked through 0x00 and wrapped to 0xf4 instead of reloading to 0x3b, and seconds stayed
+0x00 for the entire run. Two independent Ghidra defects, each fixed by an asm-verified patch:
+
+- **patch 547** -- DGROUP:0x6da4..0x6db0 is a run of THIRTEEN adjacent BYTE variables (122 byte
+  accesses in the image, zero word accesses, bracketed by the genuine words 0x6da2 and 0x6db2). All
+  thirteen were typed `undefined2`, so each macro aliased its successor. `DAT_2000_2da8 - 1` therefore
+  stepped a 16-bit value 0x0000 -> 0xffff and the `cmpb $0xff` underflow test at 0x4732 never matched:
+  the borrow chain in `FUN_0000_4712` never propagated. The aliasing also corrupted live neighbours --
+  `DAT_2000_2daa = 1` was zeroing 0x6dab, the flag a5dc itself branches on at 0x1a678.
+- **patch 548** -- `DAT_2000_2da2 == -1` is a CONSTANT FALSE. The macro is `uint16_t`, which promotes
+  to `int`, so it can never equal -1. Ghidra emitted this for NINE of the ten `cmpw $0xffff,0x6da2`
+  sites (0x52f2, 0x535e, 0x53c5, 0x54a8, 0x5577, 0x56d1, 0x5767, 0x57f8, 0xbf3c) and the correct
+  `!= 0xffff` for the tenth. In each of the nine the test is the function's first statement and its
+  body is the then-branch, so nine in-mission command handlers were no-ops for the whole mission.
+
+After both patches the clock runs correctly -- seconds count 0x3b -> 0x00 and borrow into minutes:
+
+    [end] t=0       ... | 6da6=0e 6da7=3b 6da8=14 |
+    [end] t=3180000 ... | 6da6=09 6da7=20 6da8=06 |
+
+### The tick cap, not just the code, was hiding this
+
+The measured rate is ~4000 engine ticks per mission-minute (~159 cooperative pumps per engine tick).
+AZER1's limit comes from the per-mission table at 0x7b14 (`5167: mov 0x7b14(%bx),%al ; 516e: mov
+%al,0x6da6`) and is 15 minutes = **~60000 engine ticks**. `tools/selfplay.sh` was sweeping at 20000.
+So even with a working clock the sweep's cap was 3x too small to observe a timeout. Both facts were
+needed; either alone would have kept every mission UNRESOLVED.
+
+### Still open
+
+- Confirm end to end that expiry raises byte[0xe814] and reaches the outcome screen (long run in
+  flight at the time of writing).
+- `tools/selfplay.sh` still classifies on `a296` (side eliminated). Its criterion must become
+  byte[DGROUP:0xe814] != 0 with the outcome code read from word[DGROUP:0x6da0]: outcome 2 is TIME
+  EXPIRED, 0 and 1 are the two evaluated results at 0x1a6ae/0x1a6bb, and 3/4/5 come from the other
+  flag-writers. A timeout is a resolved state, but it is not the same resolved state as a victory.
+- The elimination path (`live == 0` at 0x1a694, counting objects in the 0xdfbc table with
+  `byte[si+0x17] & 8`) still never fires: `live` stays 11..13 while `a296` falls only 16 -> 14 over a
+  full mission. Combat happens but is far too slow to wipe a side.
+- **The `undefined2 == -1` class is not exhausted.** Seven further sites survive: DGROUP:0x9fd9 (x4),
+  0x9fd6, 0xe918 (x2), 0xe82e, 0x6db6, and two in the 0x1000 segment (0x1e02e, 0x1d8e4). Each is a
+  constant false today. They were left out of patch 548 because each needs its own asm width and
+  branch-sense check first. `DAT_2000_2b74 == -1` (x2) is a different class -- an `int **` sentinel.
+
+### FIRST RESOLVED MISSION
+
+AZER1, native, empty player input, purely cooperative tick:
+
+    [fist] mission resolved: dumping frame + exiting (video-mode=0x13, [0x452]=54294)
+    [outcome] a294=120 a296=8  loaded=1 min_a296=8 peak_a296=16  over=1 code=2  TIME EXPIRED
+
+byte[DGROUP:0xe814] raised, word[DGROUP:0x6da0] = 2. The tick count matches the prediction from the
+clock rate exactly: a 15-minute limit at 60 sub-ticks per second is 15*60*60 = 54000 sim ticks, and the
+engine resolved at 54294.
+
+A third defect was found and fixed on the way there:
+
+- **patch 549** -- the side unit counters at DGROUP:0x6d38..0x6d3b are FOUR BYTES (live A, live B,
+  peak A, peak B), written by one word store plus two byte stores at 0x16085, and read back only by
+  `cmpb`/`movzbw`. `DAT_2000_2d38`/`2d3a`/`2d3b` were `undefined2`, so a5dc's `DAT_2000_2d38 == 0`
+  demanded BOTH sides be wiped and the defeat outcome at 0x1a6bb was unreachable in exactly the case
+  it exists for. `_DAT_2000_2d38`/`_DAT_2000_2d3a` were `undefined4` where the asm is `movw`, so
+  `_DAT_2000_2d3a = 0` at mission init also cleared 0x6d3c -- the base of the cell-index table that
+  the census task FUN_1000_6049 walks.
+
+Patch 548 also changed the simulation materially, which is the expected consequence of nine revived
+handlers: before it AZER1 lost 2 of 16 vehicles over a whole mission (a296 16 -> 14); after it, 8
+(16 -> 8), and the own-side live count 0x6d38 fell 4 -> 1.
+
+### Harness changes that this required
+
+- `FIST_STOP_ON_OUTCOME=1` (shim): stop the moment byte[0xe814] is raised, and report the outcome code.
+  A mission now runs until the ENGINE resolves it rather than to a tick cap.
+- `FIST_DUMPTICK` cannot express this bound at all: `[DGROUP:0x452]` is read as a `uint16_t`, so any
+  value above 0xffff never fires and the run spins to its wall-clock watchdog. One 15-minute mission is
+  ~54000 sim ticks, close enough to the ceiling to be a trap. The shim now warns instead of hanging.
+- `tools/selfplay.sh` classifies on `over=`/`code=` from the engine, not on `a296`, and its default
+  wall-clock budget is 1800s -- a full mission is ~20 minutes of native CPU at ~161 pumps per sim tick.
+
+### Open, and NOT to be assumed settled
+
+- **Only outcome 2 (TIME EXPIRED) has been observed.** A timeout is a resolved state and it is what the
+  goal's criterion reads, but it is not a victory or a defeat. Outcomes 0 and 1 remain unobserved.
+- The own-side count 0x6d38 fell 4 -> 1 but not to 0, so the defeat path at 0x1a6bb was approached and
+  not reached within the mission clock.
+- The victory path at 0x1a694 (`word[0x9790] != 0 && word[0x978e] == 0`) has still never fired.
+
+  Chasing the probe's `live=0` readings found a FOURTH width defect, and also invalidated the readings.
+  a5dc is the only writer of 0x978e *in the asm*, and the probe cannot sample inside its recount window
+  (that loop makes no pump calls), so a zero reading had to mean another writer -- and there is one:
+
+      #define _DAT_2000_578c (*(undefined4 *)(g_mem+0x2578c))     /* 0x978c */
+      ab0a: a3 8c 97      mov  %ax,0x978c                          /* a WORD store */
+
+  `a3` is `mov %ax,moffs16` -- two bytes. As an `undefined4` the port writes FOUR, so every call to this
+  per-object update overwrites 0x978e/0x978f, the live-object counter. (0x978c itself is read by byte
+  elsewhere -- `testb $0x3,0x978c` at 0xafbb, `mov 0x978c,%al` at 0xafd6 and 0x1abbb -- so it is a word
+  written whole and read by halves; only the declared WIDTH is wrong.)
+
+  This does NOT by itself explain the victory failure: a5dc zeroes, counts and tests 0x978e inside one
+  call, with no engine code in between, so the clobber cannot corrupt its own decision. What it does
+  corrupt is `prev` (0x1a618 copies the leftover 0x978e to 0x9792), which gates the "count decreased"
+  notification at 0x1a66b. And it means every `live=` figure reported from outside a5dc in this item is
+  worthless. The victory path remains unexplained and has to be measured INSIDE a5dc.
+- The ~161 cooperative pumps per sim tick is unexplained. It does not affect determinism -- time passes
+  only when pumped -- but it sets the sweep's cost at ~20 minutes of CPU per mission, and if the
+  original's ratio is ~1 it points at something in the pump/wait path.

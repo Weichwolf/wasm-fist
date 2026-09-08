@@ -1,0 +1,124 @@
+PATCH 548: `word == -1` is a constant false -- nine in-mission handlers never ran.
+
+DGROUP:0x6da2 is the mission teardown countdown: 0xffff means NO teardown pending (armed that way at
+0x47b2, `movw $0xffff,0x6da2`), and FUN_1000_a5dc raises the mission-over flag when a non-0xffff value
+counts down to zero.  Ten sites in the image ask "is the mission still running?" with
+
+    cmpw $0xffff,0x6da2
+
+at 0x52f2, 0x535e, 0x53c5, 0x54a8, 0x5577, 0x56d1, 0x5767, 0x57f8, 0xbf3c and 0x1a5dc.
+
+Ghidra rendered the a5dc one as `!= 0xffff` and the other NINE as `== -1`.  `DAT_2000_2da2` is
+`undefined2` = `uint16_t`, which promotes to `int` under the usual arithmetic conversions, so the
+compared value ranges over 0..65535 and `== -1` is a CONSTANT FALSE.  (The same expression against an
+`undefined4` would be correct -- -1 converts to UINT_MAX there -- which is why the idiom is not
+uniformly wrong and has to be judged per declared width.)
+
+In each of the nine, the test is the function's FIRST statement and its body is the then-branch, so
+every one of those functions was a no-op for the whole mission.  All nine are in-mission command
+handlers reached through the indirect-call table (they decode `param_1 & 0x80` as the key-down bit and
+toggle engine flags); the port registers each at its own address, e.g. `{0x52f2u,&FUN_0000_52f2}`.
+
+    0000:52f2  FUN_0000_52f2
+    0000:535e  FUN_0000_535e
+    0000:53c5  FUN_0000_53c5
+    0000:54a8  FUN_0000_54a8
+    0000:5577  FUN_0000_5577
+    0000:56d1  FUN_0000_56d1
+    0000:5767  FUN_0000_5767
+    0000:57f8  FUN_0000_57f8
+    0000:bf3c  FUN_0000_bf3c
+
+This patch changes only the constant; the comparison, the operand and the branch sense are already
+what the asm says.
+
+Seven further `undefined2 == -1` / `!= -1` sites survive elsewhere in the tree (DGROUP:0x9fd9,
+0x9fd6, 0xe918, 0xe82e, 0x6db6 and two in the 0x1000 segment).  They are the same class but each
+needs its own asm width and branch-sense check before it is touched, so they are NOT in this patch --
+board:0017 carries them.
+
+board:0017
+
+--- a/fist.c
++++ b/fist.c
+@@ -15520,7 +15520,7 @@
+ {
+   ulong uVar1;
+   
+-  if (DAT_2000_2da2 == -1) {
++  if (DAT_2000_2da2 == 0xffff) {  /* PATCH 548: cmpw $0xffff */
+     if ((param_1 & 0x80) == 0) {
+       return;
+     }
+@@ -15586,7 +15586,7 @@
+ {
+   ulong uVar1;
+   
+-  if (DAT_2000_2da2 == -1) {
++  if (DAT_2000_2da2 == 0xffff) {  /* PATCH 548: cmpw $0xffff */
+     if ((param_1 & 0x80) == 0) {
+       return;
+     }
+@@ -15649,7 +15649,7 @@
+ void __allregs FUN_0000_53c5(uint param_1,int param_2)
+ 
+ {
+-  if (DAT_2000_2da2 == -1) {
++  if (DAT_2000_2da2 == 0xffff) {  /* PATCH 548: cmpw $0xffff */
+     if ((param_1 & 0x80) == 0) {
+       return;
+     }
+@@ -15738,7 +15738,7 @@
+ void __allregs FUN_0000_54a8(uint param_1,undefined4 param_2,undefined2 param_3,int param_4)
+ 
+ {
+-  if ((DAT_2000_2da2 == -1) && ((DAT_2000_2dab & 2) != 0)) {
++  if ((DAT_2000_2da2 == 0xffff) && ((DAT_2000_2dab & 2) != 0)) {  /* PATCH 548: cmpw $0xffff */
+     if ((param_1 & 0x80) == 0) {
+       return;
+     }
+@@ -15840,7 +15840,7 @@
+ void __allregs FUN_0000_5577(uint param_1,int param_2)
+ 
+ {
+-  if ((DAT_2000_2da2 == -1) && ((DAT_2000_2dab & 2) != 0)) {
++  if ((DAT_2000_2da2 == 0xffff) && ((DAT_2000_2dab & 2) != 0)) {  /* PATCH 548: cmpw $0xffff */
+     if ((param_1 & 0x80) == 0) {
+       return;
+     }
+@@ -15981,7 +15981,7 @@
+              undefined2 param_6)
+ 
+ {
+-  if ((DAT_2000_2da2 == -1) && ((DAT_2000_2dab & 2) != 0)) {
++  if ((DAT_2000_2da2 == 0xffff) && ((DAT_2000_2dab & 2) != 0)) {  /* PATCH 548: cmpw $0xffff */
+     if ((param_1 & 0x80) == 0) {
+       return;
+     }
+@@ -16078,7 +16078,7 @@
+   uint uVar1;
+   bool bVar2;
+   
+-  if ((DAT_2000_2da2 == -1) && (DAT_2000_2dac == '\0')) {
++  if ((DAT_2000_2da2 == 0xffff) && (DAT_2000_2dac == '\0')) {  /* PATCH 548: cmpw $0xffff */
+     if ((param_1 & 0x80) == 0) {
+       return;
+     }
+@@ -16144,7 +16144,7 @@
+ void __allregs FUN_0000_57f8(uint param_1,int param_2)
+ 
+ {
+-  if (DAT_2000_2da2 == -1) {
++  if (DAT_2000_2da2 == 0xffff) {  /* PATCH 548: cmpw $0xffff */
+     if ((DAT_2000_3a40 != 0) || ((param_1 & 0x80) == 0)) {
+       return;
+     }
+@@ -32585,7 +32585,7 @@
+ {
+   undefined2 in_register_0000000e;
+   
+-  if ((((DAT_2000_2da2 == -1) && (param_3 == DAT_2000_2d34)) &&
++  if ((((DAT_2000_2da2 == 0xffff) && (param_3 == DAT_2000_2d34)) &&  /* PATCH 548: cmpw $0xffff */
+       /* PATCH 263: di=object near offset in param_3; byte[di+0x16] was a host-ptr deref (base-loss). */
+       ((((unsigned char *)g_mem + 0x1c000)[(unsigned short)((unsigned short)param_3 + 0x16)] & 8) == 0)) &&
+      ((param_1 != -1 && (0x1d < (uint)(DAT_1000_c452 - DAT_2000_5fca))))) {
