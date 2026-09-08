@@ -485,11 +485,19 @@ static void fist_dump_and_exit(const char *why){
       static const char *const oc[] = { "VICTORY (opposing side destroyed)", "DEFEAT (own side lost)",
                                         "TIME EXPIRED", "outcome 3", "ABORTED", "outcome 5" };
       const char *ocs = (g_mission_outcome >= 0 && g_mission_outcome < 6) ? oc[g_mission_outcome] : "outcome ?";
-      fprintf(stderr, "[outcome] a294=%d a296=%d  loaded=%d min_a296=%ld peak_a296=%ld  over=%d code=%d  %s\n",
+      /* board:0017 -- report the words the verdict gate at 1a678 actually branches on (own/other alive
+       * byte[0x6d38]/[0x6d39], objectives left/peak word[0x978e]/[0x9790]) and the player's registry
+       * slot (word[0xdfbc], index 0): a run that left the sim with NO verdict and player=0000 is sitting
+       * at the engine's own PL: vehicle-selector prompt after the player's vehicle was destroyed -- the
+       * second mission-end path, which tools/selfplay.sh must not file under TIMEOUT. */
+      { unsigned char *dg = g_mem + 0x1c000; unsigned pslot = *(uint16_t*)(dg + 0xdfbc);
+      fprintf(stderr, "[outcome] a294=%d a296=%d  loaded=%d min_a296=%ld peak_a296=%ld  over=%d code=%d  alive=%u/%u obj=%u/%u player=%04x  %s\n",
               *(uint16_t*)(g_mem+0x1c000+0xe294), *(uint16_t*)(g_mem+0x1c000+0xe296),
               g_a296_loaded, g_min_a296, g_peak_a296, g_mission_over, g_mission_outcome,
+              dg[0x6d38], dg[0x6d39], *(uint16_t*)(dg+0x978e), *(uint16_t*)(dg+0x9790), pslot,
               g_mission_over        ? ocs :
-              g_a296_loaded         ? "(mission loaded, not resolved)" : "(mission never loaded a roster)");
+              (g_a296_loaded && pslot == 0) ? "(player vehicle destroyed -- at the PL: prompt, no verdict)" :
+              g_a296_loaded         ? "(mission loaded, not resolved)" : "(mission never loaded a roster)"); }
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }
@@ -761,6 +769,18 @@ void fist_timer_pump(void){
            * than to a tick cap, and cannot be cut off before it resolves.  board:0017 */
           { static int soo = -1; if (soo < 0) soo = getenv("FIST_STOP_ON_OUTCOME") ? 1 : 0;
             if (soo) fist_dump_and_exit("mission resolved"); } } }
+      /* board:0017 -- the SECOND mission-end path.  When the player's vehicle is destroyed the engine
+       * frees registry slot 0 (word[DGROUP:0xdfbc]) and the mission loop (e714) raises its PL: vehicle-
+       * selector prompt, spinning in e4bb with no verdict ever written.  Under empty input that prompt
+       * is never dismissed, so a FIST_STOP_ON_OUTCOME run must end here too, through the same exit, and
+       * say so in [outcome] (player=0000) instead of being cut off by `timeout` and filed as TIMEOUT.
+       * 300 consecutive pumps with slot 0 empty is far longer than any respawn/reassignment window. */
+      { static int soo2 = -1, empty_pumps = 0; extern int g_a296_loaded, g_mission_over;
+        if (soo2 < 0) soo2 = getenv("FIST_STOP_ON_OUTCOME") ? 1 : 0;
+        if (soo2 && g_a296_loaded && !g_mission_over) {
+          if (*(uint16_t *)(g_mem + 0x1c000 + 0xdfbc) == 0) { if (++empty_pumps >= 300) fist_dump_and_exit("player vehicle destroyed (PL: prompt)"); }
+          else empty_pumps = 0;
+        } }
       /* DIAGNOSTIC (FIST_FIXFACTION): test the aa08 side-filter hypothesis -- force byte[obj+0x16] bit3
        * = the unit's SIDE (byte[type-0x19ec]&1), so [0x16]&8 cleanly separates factions.  If units then
        * engage the OTHER side (combat -> deaths, a296 drops), the faction bit was a real blocker.  Few
@@ -838,7 +858,7 @@ void fist_timer_pump(void){
       /* DIAGNOSTIC (FIST_SIMTRACE=N): every N engine ticks ([0x452]) print live-object count, the two
        * side unit-counts (a294/a296), and a fingerprint of all live object bodies -- to see whether the
        * per-tick sim (c0e5) ADVANCES (fp changes = movement/state; a294/a296 drop = destroys). Reads only. */
-      { static long strace=-2, hb=-1; static int plive=-1,pa=-1,pb=-1,pg=-1;
+      { static long strace=-2, hb=-1; static int plive=-1,pa=-1,pb=-1,pg=-1,pu38=-1,pu3a=-1;
         if (strace==-2){ const char*e=getenv("FIST_SIMTRACE"); strace=e?atol(e):-1; }
         if (strace>0 && in_mission) {
           unsigned char *dg=g_mem+0x1c000;
@@ -849,21 +869,75 @@ void fist_timer_pump(void){
             if(dg[(unsigned short)(s+0x17)]&0x80) firereq++;   /* [0x17]&0x80 = fire-request set */
             if(dg[(unsigned short)(s+0x92)]) cool++;            /* [0x92] = fire timer/countdown */
             if(*(unsigned short*)(dg+(unsigned short)(s+0x97))) tgt++; if(dg[(unsigned short)(s+0x94)]) tcnt++; if(*(unsigned short*)(dg+(unsigned short)(s+0x9d))) cand++; }  /* [0x97] = acquired target */
+          /* board:0007 -- of the acquired targets ([0x97]), how many are OBJECTIVE-flagged structures?
+           * The a6e3 accept filter rejects only [0x17]&0x40 and [0x16]&0x01, and the census shows the
+           * enemy objectives carry f17=1c/f16=4e -- they pass it.  So if tgtobj stays 0 the exclusion is
+           * upstream, in whatever builds the candidate ([0x9d]) list, not in the accept test. */
+          int tgtobj=0, tgtstruct=0;
+          for(int i=0;i<0xb6;i++){ unsigned short s=fbc[i*2]; if(!s)continue;
+            unsigned short tv=*(unsigned short*)(dg+(unsigned short)(s+0x97)); if(!tv)continue;
+            if(dg[(unsigned short)(tv+0x17)]&0x08) tgtobj++;
+            { unsigned short tt=*(unsigned short*)(dg+tv); if(tt==0x1a||tt==0x1b||tt==0x03) tgtstruct++; } }
           /* DGROUP-relative offset of DAT_2000_XXXX = XXXX + 0x4000 (DAT base seg 0x2000 = DGROUP 0x1c00 + 0x400). */
           int a=*(unsigned short*)(dg+0xe294), b=*(unsigned short*)(dg+0xe296);
+          /* board:0007 -- THE OUTCOME GATE (asm 1a678..1a6c7) READS NONE OF a294/a296.  It tests, in
+           * order: byte[0x6dab]!=0 -> return (editor//no-verdict mode); byte[0x6d3a]==0 -> return (the
+           * player side never had a unit, i.e. pre-spawn); byte[0x6d38]==0 -> DEFEAT (outcome 1);
+           * word[0x9790]==0 -> return (no objective ever existed); word[0x978e]!=0 -> return, else
+           * VICTORY (outcome 0).  0x6d38/0x6d39 are the ALIVE counts per side written as one word by
+           * the counter at 1a6049 (slot table 0x6d3c, 2x16 near ptrs, a slot is alive when word[di]
+           * != 0x17); 0x6d3a/0x6d3b are their running high-water marks.  Tracing a294/a296 instead of
+           * these is why the verdict looked unreachable: they are a different pair entirely. */
+          int u38=dg[0x6d38], u39=dg[0x6d39], u3a=dg[0x6d3a], u3b=dg[0x6d3b], edt=dg[0x6dab];
+          int g8e=*(unsigned short*)(dg+0x978e), g90=*(unsigned short*)(dg+0x9790);
+          int ov=*(unsigned short*)(dg+0x6da0), oc=*(unsigned short*)(dg+0x6da2);
+          /* board:0007 -- one-shot census of the OBJECTIVE-flagged objects (byte[+0x17]&8), the set the
+           * victory gate counts.  Per object: type word[obj], team bit (b1df keys it on
+           * byte[word[obj]-0x19ec]&1), damage accumulator byte[+0x1a] and its threshold byte[+0x1b]
+           * (bd09: destroyed when the 8-bit add carries or acc >= threshold), and the destroyed flag
+           * byte[+0x19]&4.  A threshold of 0 or an already-set destroyed bit would mean the object can
+           * never take the bd36 edge that clears the objective bit. */
+          { static int censused=0;
+            if (!censused && g8e>0) { censused=1;
+              for(int i=0;i<0xb6;i++){ unsigned short so=fbc[i*2]; if(!so) continue;
+                if(!(dg[(unsigned short)(so+0x17)]&0x08)) continue;
+                unsigned short ty=*(unsigned short*)(dg+so);
+                int team=dg[(unsigned short)(ty-0x19ec)]&1;
+                fprintf(stderr,"[objcensus] slot=%04x type=%04x team=%d acc=%u thr=%u dead=%d f16=%02x f17=%02x f19=%02x\n",
+                  so,ty,team,dg[(unsigned short)(so+0x1a)],dg[(unsigned short)(so+0x1b)],
+                  (dg[(unsigned short)(so+0x19)]&4)?1:0,dg[(unsigned short)(so+0x16)],
+                  dg[(unsigned short)(so+0x17)],dg[(unsigned short)(so+0x19)]);
+              }
+              /* the player object's team, for comparison */
+              { unsigned short ps0=fbc[0];
+                if(ps0){ unsigned short pty=*(unsigned short*)(dg+ps0);
+                  fprintf(stderr,"[objcensus] PLAYER slot=%04x type=%04x team=%d\n",ps0,pty,dg[(unsigned short)(pty-0x19ec)]&1); } }
+            } }
           long bucket=t/strace;
           /* player tank = registry index 0 (slot c05c, t=0); track its position (obj+4,+8 = 32-bit X,Y)
            * to see whether AUTO CONTROL is DRIVING it (position moves) or it sits idle. */
           unsigned short ps=fbc[0]; long px=0,py=0; int pctl=0;
           short vh=0,vs=0,vx=0,vy=0,f26=0,f30=0;
+          /* board:0017 -- the player's DRIVE group.  [0x3e] is the drive-state index into 7c1d's table-2
+           * (0 = none; 2/4 = a376/a3a8 turn; 6/8 = a3e2/a3ec heading step; 0xc = a3f6 steer) -- the unit
+           * AI in the 0x1000 cluster WRITES it (171d0..18a92, gated on the control-device setting
+           * word[0x8b43]); [0x3f]&8 is the AUTO/MANUAL label toggle; [0x40]&1 is set by aae8 when a
+           * manual drive routine runs; [0x38] is speed; [0x30]/[0x8b] heading words; [0xa0] the
+           * input-device sub-state (a487).  cmd3e counts LIVE objects with a nonzero [0x3e], i.e. how
+           * many units the AI is commanding through that table at all. */
+          int p3e=0,p3f=0,p40=0,p38=0,p30=0,p8b=0,pa0=0,p19=0,p86=0,cmd3e=0,dev=*(unsigned short*)(dg+0x8b43);
+          for(int i=0;i<0xb6;i++){ unsigned short s=fbc[i*2]; if(s&&dg[(unsigned short)(s+0x3e)]) cmd3e++; }
           if(ps){ px=*(int*)(dg+(unsigned short)(ps+4)); py=*(int*)(dg+(unsigned short)(ps+8)); pctl=dg[(unsigned short)(ps+0x17)];
+            p3e=dg[(unsigned short)(ps+0x3e)]; p3f=dg[(unsigned short)(ps+0x3f)]; p40=*(unsigned short*)(dg+(unsigned short)(ps+0x40));
+            p38=*(short*)(dg+(unsigned short)(ps+0x38)); p30=*(short*)(dg+(unsigned short)(ps+0x30)); p8b=*(short*)(dg+(unsigned short)(ps+0x8b));
+            pa0=dg[(unsigned short)(ps+0xa0)]; p19=dg[(unsigned short)(ps+0x19)]; p86=dg[(unsigned short)(ps+0x86)];
             vh=*(short*)(dg+(unsigned short)(ps+0x55)); vs=*(short*)(dg+(unsigned short)(ps+0x57));
             vx=*(short*)(dg+(unsigned short)(ps+0x59)); vy=*(short*)(dg+(unsigned short)(ps+0x5b));
             f26=*(short*)(dg+(unsigned short)(ps+0x26)); f30=*(short*)(dg+(unsigned short)(ps+0x30)); }
-          if (live!=plive||a!=pa||b!=pb||goals!=pg||bucket!=hb){
-            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d firereq=%d cool=%d tgt=%d tcnt=%d cand=%d  player{slot=%04x X=%ld Y=%ld f17=%02x h55=%d s57=%d vx59=%d vy5b=%d f26=%d f30=%d}%s\n",
-              t,live,goals,a,b,firereq,cool,tgt,tcnt,cand,ps,px,py,pctl,vh,vs,vx,vy,f26,f30,(live!=plive||a!=pa||b!=pb||goals!=pg)?"  <<CHANGE":"");
-            plive=live;pa=a;pb=b;pg=goals;hb=bucket;
+          if (live!=plive||a!=pa||b!=pb||goals!=pg||u38!=pu38||u3a!=pu3a||bucket!=hb){
+            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d firereq=%d cool=%d tgt=%d tcnt=%d cand=%d tgtobj=%d tgtstruct=%d  gate{alive=%d/%d hw=%d/%d obj=%d/%d edit=%d verdict=%d/%d}  player{slot=%04x X=%ld Y=%ld f17=%02x h55=%d s57=%d vx59=%d vy5b=%d f26=%d f30=%d drive{3e=%d 3f=%02x 40=%04x 38=%d 30=%d 8b=%d a0=%d 19=%02x 86=%d} dev=%d cmd3e=%d}%s\n",
+              t,live,goals,a,b,firereq,cool,tgt,tcnt,cand,tgtobj,tgtstruct,u38,u39,u3a,u3b,g8e,g90,edt,ov,oc,ps,px,py,pctl,vh,vs,vx,vy,f26,f30,p3e,p3f,p40,p38,p30,p8b,pa0,p19,p86,dev,cmd3e,(live!=plive||a!=pa||b!=pb||goals!=pg||u38!=pu38||u3a!=pu3a)?"  <<CHANGE":"");
+            plive=live;pa=a;pb=b;pg=goals;hb=bucket;pu38=u38;pu3a=u3a;
           }
         }
       }
@@ -1468,6 +1542,7 @@ unsigned short g_fist_render_si;   /* c4df->method: source object near-offset */
 /* PATCH 462 (board:0007/0012): dropped multi-register outputs of the object-spawn/aim chain. */
 unsigned short g_fist_b1df_ax;     /* b1df: AX = display-table index of the freshly spawned object */
 unsigned short g_fist_0578_bx;     /* 0578 (a18e): BX = pitch (077e over the Z delta) */
+unsigned short g_fist_02e8_si;     /* PATCH 563: SI = the CRT number printer's output cursor (02e8 -> 541b -> 030b) */
 unsigned short g_fist_03a9_dx;     /* 03a9: DX = M*cos(A) (AX = M*sin(A) is the return) */
 unsigned short g_fist_fp_dx;       /* PATCH 468: 0d13/0d55/0db5/0df7/0e22 DX lane (exponent in/out) */
 unsigned short g_fist_fp_cx;       /* PATCH 468: 0df7/0e22 CX lane (divisor/multiplier exponent in) */
@@ -1713,6 +1788,77 @@ int fist_extender_gate(void) {
      * op-0x58 handlers above already use.  0x7fa0 samples the heightmap at four points around the
      * object along a heading taken from the 512-entry table at extender 0x9450 (entry a and a+128,
      * i.e. the cos/sin pair), each `sar $6`, and returns the two slopes <<23. */
+    /* board:0002 op 0x44 -- the DETAIL / terrain-table setup service.  The engine posts it (measured:
+     * 2 calls per mission with FIST_OPHIST) and the shim used to return 0, which is why the voxel ramp
+     * tables were never loaded and the windshield rendered from a stale tile.
+     *
+     * The extender's handler is a two-hop, 0x10da -> 0x7660, and 0x10da is op 0x44 in the located
+     * service table (board:0021).  asm 0x7660:
+     *
+     *   7670: c6 05 5c 39 00 00 01   movb $0x1,0x395c            ; default detail
+     *   7677: 80 bb cc 00 00 00 00   cmpb $0x0,0xcc(%ebx)        ; TCB+0xcc
+     *   767e: 74 15                  je   0x7695
+     *   7680: b8 9a 68 00 00         mov  $0x689a,%eax           ; the sky-resample routine ...
+     *   7685: a3 58 39 00 00         mov  %eax,0x3958            ; ... into the sky fn pointer
+     *   768a: 8a 83 cc 00 00 00      mov  0xcc(%ebx),%al
+     *   7690: a2 5c 39 00 00         mov  %al,0x395c
+     *   7695: 8b 1d 93 0c 00 00      mov  0xc93,%ebx             ; the TCB
+     *   769b: 8a 83 d1 00 00 00      mov  0xd1(%ebx),%al         ; TCB+0xd1 = detail level 0/1/2
+     *   76a1: 3c 00 / 75 1b          cmp  $0x0,%al ; jne ...
+     *   76a5: be b6 76 00 00         mov  $0x76b6,%esi           ; "low.dtl" (also "medium.dtl","high.dtl")
+     *   76aa: b8 20 3a 00 00         mov  $0x3a20,%eax           ; destination
+     *   76af: e8 7e e9 ff ff         call 0x6032                 ; DOS file load (INT 21h AH=4Eh)
+     *
+     * The three files are FISTDATA/{LOW,MEDIUM,HIGH}.DTL, each exactly 2052 bytes, and they map onto
+     * the extender globals contiguously -- which is why nothing in the image ever addresses 0x3a24 or
+     * 0x3e24, and why table B is exactly table A * 150 (both ship precomputed):
+     *
+     *     file[0x000] -> ext+0x3a20   the count      LOW=125  MEDIUM=190  HIGH=250
+     *     file[0x004] -> ext+0x3a24   table A        256 dwords
+     *     file[0x404] -> ext+0x3e24   table B        256 dwords
+     *
+     * NOT gated on g_fist_after_map: like op 0x20 (board:0021) this runs during mission setup, and the
+     * render gate would stop it from ever firing.
+     *
+     * The 0x3958 store is performed as the asm does.  Note `FUN_0000_689a` does NOT exist in
+     * build/fist_ext.c (it is in the undecompiled part of the extender), but the port already holds
+     * 0x689a there at render time and ext+0x395d is non-zero, so FUN_0000_3931 takes its 686f/6c00
+     * branch and never dispatches through the pointer.  Writing it changes nothing today and keeps the
+     * transcription faithful. */
+    if (op == 0x44 && g_ext_ready) {
+        uint8_t  *xb44 = g_mem + FIST_EXT_BASE;
+        uint32_t  tcb44_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        uint8_t  *tcb44 = g_mem + tcb44_lin;
+        xb44[0x395c] = 1;                                        /* 7670 */
+        if (tcb44[0xcc] != 0) {                                  /* 7677 */
+            *(uint32_t*)(xb44 + 0x3958) = 0x689a;                /* 7680/7685 */
+            xb44[0x395c] = tcb44[0xcc];                          /* 768a/7690 */
+        }
+        {   static const char *const dtl_lc[3] = { "low.dtl", "medium.dtl", "high.dtl" };
+            static const char *const dtl_uc[3] = { "LOW.DTL", "MEDIUM.DTL", "HIGH.DTL" };
+            unsigned lvl = tcb44[0xd1];                           /* 769b */
+            if (lvl < 3) {                                        /* 76a1: only 0/1/2 load a file */
+                const char *dd = getenv("FIST_DATADIR"); if (!dd) dd = "armoredfist";
+                char pth[512]; FILE *f = 0;
+                const char *const *cand[2] = { dtl_lc, dtl_uc };
+                for (int c = 0; c < 2 && !f; c++) {
+                    snprintf(pth, sizeof pth, "%s/FISTDATA/%s", dd, cand[c][lvl]); f = fopen(pth, "rb");
+                    if (!f) { snprintf(pth, sizeof pth, "%s/%s", dd, cand[c][lvl]); f = fopen(pth, "rb"); }
+                }
+                if (f) {
+                    size_t n = fread(xb44 + 0x3a20, 1, 2052, f);  /* 76aa/76af: count + both tables */
+                    fclose(f);
+                    if (getenv("FIST_DTLLOG"))
+                        fprintf(stderr, "[dtl] op44 loaded %s (%zu B) -> ext+0x3a20; count=%u\n",
+                                cand[0][lvl], n, *(uint32_t*)(xb44 + 0x3a20));
+                } else if (getenv("FIST_DTLLOG")) {
+                    fprintf(stderr, "[dtl] op44: %s not found under '%s'\n", dtl_uc[lvl], dd);
+                }
+            }
+        }
+        *(uint16_t*)(dg + 0xea10) = 0;
+        return 0;
+    }
     if (op == 0x1c && g_ext_ready && g_fist_after_map) {
         *(uint16_t*)(dg + 0xea10) = 0;
         uint8_t *xb1c = g_mem + FIST_EXT_BASE;

@@ -1,0 +1,117 @@
+PATCH 559: selecting any DETAIL level crashes the port -- base-loss in the settings-string builder.
+
+Found by driving the real UI rather than by reading code.  The SETTINGS screen renders correctly (its
+CONTROL/DISPLAY/SOUND columns, the LED radio buttons, ACCEPT/CANCEL), and clicking LOW DETAIL at
+(237,40) visibly moves the lit LED from HIGH to LOW.  Accepting then SEGVs:
+
+    #0  FUN_0000_6f90 (param_1=35721, param_2=0x0)  build/fist.c:19327
+    #1  FUN_0000_6e8d   #2  FUN_0000_6a4a   #3  FUN_0000_e714
+
+`FUN_0000_6f90` (asm 0x6f90-0x7009) builds the settings string.  Six of its ten fields are table
+lookups of exactly this shape:
+
+    6f98: 0f b6 1e 45 8b   movzbw 0x8b45,%bx        ; the setting's value
+    6f9d: 8a 87 5d 8b      mov    0x8b5d(%bx),%al   ; DS-relative -> byte[DGROUP:0x8b5d + value]
+    6fa1: a2 a9 8a         mov    %al,0x8aa9
+
+-- an index into the character table at DGROUP:0x8b5d.  Ghidra emitted the SUM as a host pointer,
+`*(undefined1 *)(DAT_2000_4b45 + 0x8b5d)`, so the first lookup dereferences ~0x8b5d and dies.
+
+Two further defects in the same function:
+
+  - the three `>> 1` fields are not lookups but they were mis-widened.  `mov 0x8b47,%ax ; shr $1,%al ;
+    add $0x30,%al` loads a WORD and shifts only AL, so the result is `byte[0x8b47] >> 1` + '0';
+    Ghidra's `(byte)(word >> 1)` differs whenever bit 8 of the word is set.
+  - the tail is `lcall *[0x2b4] ; mov $0x8ab3,%di ; cld ; rep movsb %ds:(%si),%es:(%di)`.  DS and ES are
+    both DGROUP here, so the destination is DGROUP:0x8ab3 and the source is DGROUP:si -- Ghidra used
+    both as host pointers.
+
+## NOT fixed here
+
+SI arrives as 0.  `FUN_0000_6e8d` BEGINS with the call to this function -- asm 0x6e8d is the call
+instruction itself -- so SI is threaded down from 6a4a and above, and the port's arg-less far dispatch
+does not carry it.  That is board:0014's carrier class, not this one.  Transcribing the copy as
+DGROUP:si is still the faithful reading; the zero is a defect one level up, and with it the copy moves
+the wrong bytes instead of faulting.
+
+This patch stops the crash and makes the ten field writes correct.  It does NOT make the detail level
+take effect: `byte[TCB+0xd1]` is 4 at the render, outside the 0/1/2 the extender's .DTL loader accepts
+(board:0002), so no ramp file loads either way.
+
+board:0007
+
+--- a/fist.c
++++ b/fist.c
+@@ -19323,25 +19323,54 @@
+   undefined1 *puVar3;
+   undefined2 unaff_ES;
+   
+-  DAT_2000_4aa8 = (char)DAT_2000_4b43 + '0';
+-  DAT_2000_4aa9 = *(undefined1 *)(DAT_2000_4b45 + 0x8b5d);
+-  DAT_2000_4ab2 = *(undefined1 *)(DAT_2000_4b50 + 0x8b5d);
+-  DAT_2000_4aab = *(undefined1 *)(DAT_2000_4b46 + 0x8b5d);
+-  DAT_2000_4aac = ((byte)(DAT_2000_4b47 >> 1) & 0x7f) + 0x30;
+-  DAT_2000_4aad = ((byte)(DAT_2000_4b49 >> 1) & 0x7f) + 0x30;
+-  DAT_2000_4aae = ((byte)(DAT_2000_4b4b >> 1) & 0x7f) + 0x30;
+-  DAT_2000_4aaf = *(undefined1 *)(DAT_2000_4b4d + 0x8b5d);
+-  DAT_2000_4ab1 = *(undefined1 *)(DAT_2000_4b4e + 0x8b5d);
+-  DAT_2000_4ab0 = *(undefined1 *)(DAT_2000_4b4f + 0x8b5d);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c2b4)))();
+-  puVar3 = (undefined1 *)0x8ab3;
+-  for (; param_1 != 0; param_1 = param_1 + -1) {
+-    puVar2 = puVar3;
+-    puVar3 = puVar3 + 1;
+-    puVar1 = param_2;
+-    param_2 = param_2 + 1;
+-    *puVar2 = *puVar1;
++  /* PATCH 559: the SETTINGS-string builder (asm 0x6f90-0x7009), reached from the SETTINGS screen's
++   * accept path (6a4a -> 6e8d -> 6f90).  Every one of its six table lookups is
++   *
++   *     6f98: 0f b6 1e 45 8b   movzbw 0x8b45,%bx        ; the setting's value, 0..N
++   *     6f9d: 8a 87 5d 8b      mov    0x8b5d(%bx),%al   ; DS-relative: byte[DGROUP:0x8b5d + value]
++   *     6fa1: a2 a9 8a         mov    %al,0x8aa9
++   *
++   * i.e. an index into the character table at DGROUP:0x8b5d.  Ghidra emitted
++   * `*(undefined1 *)(DAT_2000_4b45 + 0x8b5d)` -- the SUM deref'd as a host pointer -- so selecting any
++   * detail level SEGVs the port outright:
++   *
++   *     #0 FUN_0000_6f90 (param_1=35721, param_2=0x0)  build/fist.c:19327
++   *     #1 FUN_0000_6e8d  #2 FUN_0000_6a4a  #3 FUN_0000_e714
++   *
++   * reproduced by driving the real UI (SETTINGS at (160,123), LOW DETAIL at (237,40), ACCEPT at
++   * (258,190)) -- the click lands correctly, the LED moves to LOW DETAIL, and the port then dies.
++   *
++   * The three `>> 1` fields are NOT table lookups: `mov 0x8b47,%ax ; shr $1,%al ; add $0x30,%al` loads
++   * a word but shifts only AL, so the value is byte[0x8b47] >> 1 + '0'.  Ghidra's `(byte)(word >> 1)`
++   * differs whenever bit 8 of the word is set.
++   *
++   * The tail is `lcall *[0x2b4] ; mov $0x8ab3,%di ; cld ; rep movsb %ds:(%si),%es:(%di)`.  DS and ES
++   * are DGROUP here, so both ends are near offsets: the destination is DGROUP:0x8ab3 and the source is
++   * DGROUP:si.  Ghidra used both as host pointers.
++   *
++   * NOT fixed here: SI arrives as 0.  `FUN_0000_6e8d` BEGINS with the call to this function (asm
++   * 0x6e8d is the call instruction itself), so SI is threaded from 6a4a and above, and the port's
++   * arg-less far dispatch does not carry it -- board:0014's carrier class.  Transcribing the copy
++   * faithfully as DGROUP:si is still right; the zero is a separate defect one level up. */
++  {
++    uint8_t *dg = (uint8_t *)g_mem + 0x1c000;
++    dg[0x8aa8] = (uint8_t)(dg[0x8b43] + 0x30);                          /* 6f90 */
++    dg[0x8aa9] = dg[(uint16_t)(dg[0x8b45] + 0x8b5d)];                   /* 6f98 */
++    dg[0x8ab2] = dg[(uint16_t)(dg[0x8b50] + 0x8b5d)];                   /* 6fa4 */
++    dg[0x8aab] = dg[(uint16_t)(dg[0x8b46] + 0x8b5d)];                   /* 6fb0 */
++    dg[0x8aac] = (uint8_t)((dg[0x8b47] >> 1) + 0x30);                   /* 6fbd */
++    dg[0x8aad] = (uint8_t)((dg[0x8b49] >> 1) + 0x30);                   /* 6fc7 */
++    dg[0x8aae] = (uint8_t)((dg[0x8b4b] >> 1) + 0x30);                   /* 6fd1 */
++    dg[0x8aaf] = dg[(uint16_t)(dg[0x8b4d] + 0x8b5d)];                   /* 6fdb */
++    dg[0x8ab1] = dg[(uint16_t)(dg[0x8b4e] + 0x8b5d)];                   /* 6fe7 */
++    dg[0x8ab0] = dg[(uint16_t)(dg[0x8b4f] + 0x8b5d)];                   /* 6ff3 */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c2b4)))();             /* 6fff */
++    {   uint16_t di = 0x8ab3, si = (uint16_t)(uintptr_t)param_2;        /* 7003 */
++        for (; param_1 != 0; param_1 = param_1 + -1)                    /* 7007 rep movsb */
++            dg[(uint16_t)(di++)] = dg[(uint16_t)(si++)];
++    }
+   }
++  (void)puVar1; (void)puVar2; (void)puVar3;
+   return;
+ }
+ 

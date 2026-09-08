@@ -1,0 +1,213 @@
+PATCH 563: the HUD number formatter -- 0000:02e8, its UNPROMOTED emitter 0000:030b, and the CRT digit
+chain 0f69:5d8b (FUN_1000_541b / 54ac / 54b4 / 54c2).  "GOALS REMAINING:+U".
+
+The mission supervisor prints the objective count with `1a655 mov $0x1f8c,%si ; lcall 0:2e8` and copies
+the two bytes at DGROUP:0x1f8f into the HUD text at es:0x2d8e (patch 550's site).  The original shows
+"13"; the port shows "+U" -- whatever stale bytes the buffer held, because nothing ever writes it:
+
+  * 02e8 installs a per-character callback in the CRT printer's far pointer [0x684]:[0x686] --
+    0000:030b = `mov %al,(%si) ; inc %si ; lret` -- calls 0f69:5d8b (= FUN_1000_541b), restores the
+    pointer and NUL-terminates at the ADVANCED SI.  030b was never promoted (board:0015 -- the icall table
+    has 0x31c but not 0x30b), so the far call through [0x684] resolved to nothing; and the decompile
+    wrote the NUL at the buffer START and pushed `unaff_CS` into [0x686].
+  * 541b converts AX to BCD -- DX = ten-thousands, CX = the other four digits packed by `add $0x10,%ch`
+    / `inc %ch` / `add $0x10,%cl` / `add %ax,%cx` -- forces byte[0x2672]=1 (no leading-zero blanking:
+    always five characters, which is why a5dc copies buffer+3), then emits DL via 54c2 and CX via 54ac.
+    Ghidra kept the digit-count loops, never packed CX, and passed `unaff_CS` to 54ac.
+  * 54ac -> 54b4 -> 54c2 is a FALL-THROUGH chain (`push %ax ; mov %ah,%al ; call next ; pop %ax` and
+    then falling into `next` with AL): four digits, two digits, one digit.  Ghidra modelled every
+    fall-through operand as `unaff_CS` and called the callback with NO argument -- AL (the character)
+    and SI (the cursor) are both implicit register carries.
+
+SI is carried untouched from 02e8's caller through the whole chain and advanced only by 030b.  It is
+modelled as `g_fist_02e8_si` (a DGROUP near offset, the precedent being g_fist_0578_bx / g_fist_b1df_ax
+for a18e's and b1df's implicit register returns), seeded by 02e8 from its host-pointer argument
+(every caller passes &DAT_1000_dfXX) and used by 030b to write dg[si]; AL is passed positionally.
+
+Callers of 02e8 besides a5dc: the per-vehicle ammo readouts (`FUN_0000_02e8(word[...+0xad], &DAT_1000_df8c)`
+at fist.c:65162 and its siblings) -- the "8888" placeholders on the cockpit's ammo counters are the
+same stale buffer.  54d8/54e0/54e8 are a parallel DX-emitting chain reached by other formatters and are
+not touched here.
+
+--- a/fist.c
++++ b/fist.c
+@@ -5,6 +5,8 @@
+ #include "ghidra_compat.h"
+ extern unsigned short g_fist_render_si, g_fist_render_dx;  /* board:0012 file-scope */
+ extern unsigned short g_fist_b1df_ax, g_fist_0578_bx, g_fist_03a9_dx;
++extern unsigned short g_fist_02e8_si;   /* PATCH 563: SI = the CRT number printer's output cursor (02e8 -> 541b -> 030b) */
++void __allregs FUN_0000_030b(unsigned char al);   /* PATCH 563: the per-character emitter behind [0x684] */
+ extern unsigned short g_fist_evax, g_fist_paintax;  /* PATCH 513: the dirty-walk's live AX */  /* PATCH 462: b1df AX (display index), 0578 BX (pitch), 03a9 DX */
+ extern unsigned short g_fist_fp_dx, g_fist_fp_cx;  /* PATCH 468: the 0d13..0e22 fixed-point block's DX (exponent) / CX register lanes */
+ extern unsigned short g_fist_r48_dx, g_fist_r48_cx, g_fist_3e29_cx;  /* PATCH 469: 1322/129f 48-bit DX:CX lanes; 3e29's CX (screen x) */
+@@ -4671,13 +4673,38 @@
+ void __allregs FUN_0000_02e8(undefined2 param_1,undefined1 *param_2)
+ 
+ {
+-  undefined2 unaff_CS;
+-  
+-  DAT_1000_c684 = 0x30b;
+-  FUN_1000_541b(param_1);
+-  DAT_1000_c684 = DAT_1000_c686;
+-  DAT_1000_c686 = unaff_CS;
+-  *param_2 = 0;
++  /* PATCH 563: format AX as a 5-digit zero-padded decimal at DS:SI (asm 0000:02e8-030a).
++   *   2e8 push [0x684] ; push [0x686]            save the CRT printer's character callback (far ptr)
++   *   2f0 movw $0x30b,[0x684] ; mov %cs,[0x686]  install 0000:030b -- `mov %al,(%si); inc %si; lret`
++   *   2fa lcall 0f69:5d8b                        = FUN_1000_541b: packs AX to BCD and emits 5 digits
++   *   2ff pop [0x686] ; pop [0x684]              restore
++   *   307 movb $0,(%si)                          NUL at the ADVANCED cursor
++   * SI is the output cursor, carried untouched through 541b/54ac/54b4/54c2 into the callback, which
++   * advances it.  Ghidra dropped the carry (the callback was never even promoted), pushed the wrong
++   * segment (unaff_CS) into [0x686], and wrote the NUL at the buffer START.  param_2 arrives as a host
++   * pointer into DGROUP (every caller passes &DAT_1000_dfXX); the cursor is kept as a DGROUP near
++   * offset in g_fist_02e8_si so the emitter can write dg[si] and bump it. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short save684 = DAT_1000_c684, save686 = DAT_1000_c686;          /* 2e8/2ec */
++  DAT_1000_c684 = 0x30b; DAT_1000_c686 = 0;                                 /* 2f0/2f6 (CS=0) */
++  g_fist_02e8_si = (unsigned short)((unsigned char *)param_2 - dg);
++  FUN_1000_541b(param_1);                                                    /* 2fa */
++  DAT_1000_c686 = save686; DAT_1000_c684 = save684;                          /* 2ff/303 */
++  dg[g_fist_02e8_si] = 0;                                                    /* 307 */
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_030b) @ 0000:030b ===== */
++
++void __allregs FUN_0000_030b(unsigned char al)
++
++{
++  /* PATCH 563: the emitter the CRT printer reaches through `lcall *[0x684]` -- an UNPROMOTED dispatch
++   * target (board:0015): `30b mov %al,(%si) ; 30d inc %si ; 30e lret`.  AL = the character, SI = the
++   * cursor 02e8 seeded. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  dg[g_fist_02e8_si] = al;
++  g_fist_02e8_si = (unsigned short)(g_fist_02e8_si + 1);
+   return;
+ }
+ 
+@@ -53905,37 +53932,22 @@
+ int __allregs FUN_1000_541b(uint param_1)
+ 
+ {
+-  uint uVar1;
+-  int iVar2;
+-  uint uVar3;
+-  int iVar4;
+-  undefined2 unaff_CS;
+-  bool bVar5;
+-  
+-  iVar2 = 0;
+-  do {
+-    iVar4 = iVar2;
+-    uVar3 = param_1;
+-    param_1 = uVar3 + 0xd8f0;
+-    iVar2 = iVar4 + 1;
+-  } while (9999 < uVar3);
+-  do {
+-    bVar5 = 999 < uVar3;
+-    uVar1 = uVar3;
+-    uVar3 = uVar3 - 1000;
+-  } while (bVar5);
+-  do {
+-    uVar3 = uVar1;
+-    uVar1 = uVar3 - 100;
+-  } while (99 < uVar3);
+-  do {
+-    bVar5 = 9 < uVar3;
+-    uVar3 = uVar3 - 10;
+-  } while (bVar5);
+-  DAT_1000_e672 = 1;
+-  FUN_1000_54c2((char)iVar4);
+-  FUN_1000_54ac(unaff_CS);
+-  return iVar4;
++  /* PATCH 563: the CRT's 5-digit decimal printer (asm 0f69:5d8b = 1541b-15468).  AX -> DX = the
++   * ten-thousands count (1541f..15428), CX = the remaining four digits packed BCD (thousands into CH
++   * high nibble, hundreds CH low, tens CL high, ones CL low: `add $0x10,%ch` / `inc %ch` / `add
++   * $0x10,%cl` / `add %ax,%cx`), then `movb $1,[0x2672]` (no leading-zero blanking -> always five
++   * characters), `54c2(dl)` emits the ten-thousands digit and `54ac(cx)` the other four.  Returns
++   * AX = DX.  Ghidra kept the count loops, never packed the BCD, and passed `unaff_CS` to 54ac. */
++  unsigned int ax = param_1 & 0xffff, dx = 0, ch = 0, cl = 0;
++  while (ax >= 10000) { ax -= 10000; dx++; }                     /* 1541f..15428 */
++  while (ax >= 1000)  { ax -= 1000;  ch += 0x10; }               /* 15429..15434 */
++  while (ax >= 100)   { ax -= 100;   ch += 1; }                  /* 15437..15441 */
++  while (ax >= 10)    { ax -= 10;    cl += 0x10; }               /* 15443..1544e */
++  cl += ax;                                                       /* 15451 add %ax,%cx */
++  DAT_1000_e672 = 1;                                              /* 15453 */
++  FUN_1000_54c2((byte)dx);                                        /* 1545b/1545e */
++  FUN_1000_54ac((unsigned short)((ch << 8) | (cl & 0xff)));       /* 15461/15463 */
++  return (int)dx;                                                 /* 15467 pop %ax (= dx) */
+ }
+ 
+ 
+@@ -54032,16 +54044,11 @@
+ void __allregs FUN_1000_54ac(uint param_1)
+ 
+ {
+-  byte unaff_CS;
+-  
+-  FUN_1000_54b4((char)(param_1 >> 8));
+-  FUN_1000_54c2(((byte)(param_1 >> 1) & 0x7f) >> 3);
+-  DAT_1000_e672 = DAT_1000_e672 | unaff_CS & 0xf;
+-  if (DAT_1000_e672 != 0) {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
+-    return;
+-  }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
++  /* PATCH 563: emit four BCD digits from AX (asm 154ac-154d7, a fall-through chain): `push %ax ; mov
++   * %ah,%al ; call 154b4 ; pop %ax` then FALLS INTO 154b4 with AL.  Ghidra modelled the fall-through
++   * operand as `unaff_CS`. */
++  FUN_1000_54b4((byte)(param_1 >> 8));                            /* 154ac..154b3 (AH) */
++  FUN_1000_54b4((byte)param_1);                                   /* fall-through with AL */
+   return;
+ }
+ 
+@@ -54051,15 +54058,10 @@
+ void __allregs FUN_1000_54b4(byte param_1)
+ 
+ {
+-  byte unaff_CS;
+-  
+-  FUN_1000_54c2(param_1 >> 4);
+-  DAT_1000_e672 = DAT_1000_e672 | unaff_CS & 0xf;
+-  if (DAT_1000_e672 != 0) {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
+-    return;
+-  }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
++  /* PATCH 563: emit two BCD digits from AL (asm 154b4-154d0): `push %ax ; shr $4 ; call 154c2 ; pop
++   * %ax` then FALLS INTO 154c2 with the low nibble. */
++  FUN_1000_54c2((byte)(param_1 >> 4));                            /* 154b4..154c1 */
++  FUN_1000_54c2(param_1);                                         /* fall-through, 154c2 masks */
+   return;
+ }
+ 
+@@ -54069,12 +54071,14 @@
+ void __allregs FUN_1000_54c2(byte param_1)
+ 
+ {
+-  DAT_1000_e672 = DAT_1000_e672 | param_1 & 0xf;
+-  if (DAT_1000_e672 != 0) {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
+-    return;
+-  }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
++  /* PATCH 563: emit one digit (asm 154c2-154d7): `and $0xf,%al ; or %al,[0x2672] ; je blank ; or
++   * $0x30,%al ; lcall *[0x684]` / blank: `mov $0x20,%al ; lcall *[0x684]`.  [0x2672] is the
++   * leading-zero flag (sticky once any nonzero digit has been seen).  The character goes to the
++   * callback in AL; Ghidra called it with no argument. */
++  unsigned char al = param_1 & 0xf;
++  DAT_1000_e672 = (unsigned char)(DAT_1000_e672 | al);
++  if (DAT_1000_e672 != 0) al |= 0x30; else al = 0x20;
++  (*(void (__allregs *)(unsigned char))fist_icall_far((uint32_t)(DAT_1000_c684)))(al);
+   return;
+ }
+ 
+@@ -75117,6 +75121,7 @@
+   {0x2c5u,(void*)&FUN_0000_02c5},
+   {0x2e8u,(void*)&FUN_0000_02e8},
+   {0x311u,(void*)&FUN_0000_0311},
++  {0x30bu,(void*)&FUN_0000_030b},   /* PATCH 563 */
+   {0x31cu,(void*)&FUN_0000_031c},
+   {0x355u,(void*)&FUN_0000_0355},
+   {0x368u,(void*)&FUN_0000_0368},

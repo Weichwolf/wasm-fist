@@ -1033,3 +1033,156 @@ run):
     AZER1 TIMEOUT   AZER4 TIMEOUT   AZER7 TIMEOUT      (0 crashes)
 
 Zero crashes is the result that matters here -- before 554/555/558 this set produced SEGVs.
+
+## The gate variables measured directly -- and the instrument that was watching the wrong pair
+
+Every "no outcome" observation in this item up to here was made through `FIST_SIMTRACE`, which prints
+`a294`/`a296` (DGROUP:0xe294/0xe296, the two ROSTER occupancy counts). **The outcome gate reads neither
+of them.** Decoding 1a678..1a6c7 instruction by instruction:
+
+    1a678  cmpb $0x0,0x6dab   jne -> lret      no verdict at all while 0x6dab is set
+    1a67f  cmpb $0x0,0x6d3a   je  -> lret      own-side HIGH-WATER zero = pre-spawn, no verdict
+    1a686  cmpb $0x0,0x6d38   je  -> 1a6bb     own side wiped out            -> DEFEAT  (code 1)
+    1a68d  cmpw $0x0,0x9790   je  -> lret      no objective ever existed, no verdict
+    1a694  cmpw $0x0,0x978e   jne -> lret      objectives remain
+                              else 1a6ae       every objective destroyed     -> VICTORY (code 0)
+
+and their producer, the side-strength counter at 1a6049, is a two-pass walk over the slot table at
+DGROUP:0x6d3c (2-byte near pointers, 16 per side; a slot counts as ALIVE when `word[di] != 0x17`):
+
+    byte[0x6d38] = cl   own side alive        byte[0x6d3a] = max(byte[0x6d3a], cl)   own high-water
+    byte[0x6d39] = ch   other side alive      byte[0x6d3b] = max(byte[0x6d3b], ch)   its high-water
+
+`FIST_SIMTRACE` now prints these five plus `0x978e`/`0x9790`/`0x6da0`/`0x6da2` as a `gate{...}` group,
+so the verdict is read from the words the engine actually branches on. AZER3, native, one full run to
+the engine's own TIME EXPIRED:
+
+    t=314    live=97  goals=11  gate{alive=6/16 hw=6/16 obj=11/11 edit=0 verdict=0/65535}
+    t=54283  live=136 goals=11  gate{alive=5/13 hw=6/16 obj=11/11 edit=0 verdict=2/2}
+
+Three things this settles:
+
+- **The gate machinery is correct and demonstrably fires.** `verdict` flips 0/65535 -> 2/2 at exactly
+  the tick the clock reaches zero. Nothing about the outcome path is broken.
+- **Combat kills units.** Own side 6 -> 5, other side 16 -> 13 over the mission. The chain this item
+  spent so long opening does work end to end.
+- **`obj` NEVER MOVES.** Eleven objectives at t=314, eleven at t=54283. VICTORY is gated on `0x978e`
+  reaching zero, so in this run it is unreachable by construction -- not "nearly reached".
+
+## The objectives are never damaged AT ALL, and it is not the accept filter
+
+Censusing the objective set itself (the objects the gate counts, `byte[+0x17]&8`) with each one's
+damage accumulator `byte[+0x1a]`, its destruction threshold `byte[+0x1b]` (bd09 destroys when the 8-bit
+add carries or acc >= thr) and its team bit (`byte[word[obj]-0x19ec]&1`, b1df's own keying) -- AZER3,
+first tick with a loaded roster:
+
+    4x type 0003  team 1  acc=17 thr=6    <- the PLAYER's own team
+    3x type 001b  team 0  acc=0  thr=223/31/185
+    4x type 001a  team 0  acc=0  thr=80/80/4/4
+       PLAYER     team 1
+
+and at the end of the run every team-0 objective still reads `acc=0`. Not one point of damage is ever
+applied to an objective in 54283 ticks. Two of them have `thr=4` -- a single hit would destroy them.
+
+The obvious suspect, target-acquisition filtering structures out, is **eliminated**. The accept test at
+0000:a6e3 rejects a candidate on exactly two bits:
+
+    a6e9  testb $0x40,0x17(%si)  jne reject
+    a6ef  testb $0x1,0x16(%si)   jne reject      (bit 0 = bd36's destroyed marker)
+
+and the enemy objectives carry `f17=1c` / `f16=4e`, so they pass both. Measuring it directly rather
+than arguing it: counting, per tick, how many acquired targets (`word[+0x97]`) are objective-flagged,
+AZER3 reaches **`tgtobj=4`, `tgtstruct=3`** and holds nonzero values across the run. AI units DO
+select objective structures as targets.
+
+So the break is neither in the verdict, nor in the objective bookkeeping, nor in target selection. It
+is between **target acquired** and **damage applied** -- the impact/damage leg, whose entry bd09 is
+itself correct (its carry test `((unsigned)old + al) <= 0xff` faithfully reproduces `bd2b jb`, patch
+447) and is dispatched per-type from the table at DGROUP:0xe584. Note also that `firereq` -- the
+`[+0x17]&0x80` fire-request bit -- reads 0 at every sampled tick of the whole run while units still
+die, so either the bit is consumed within a tick or the sampled bit is not the one the fire path sets.
+That is the next thing to measure, and it is a narrow target.
+
+### Whether this is a DEFECT at all is now an oracle question, and the oracle run exists
+
+Four of AZER3's eleven objectives sit on the PLAYER's own team, which makes "destroy every objective"
+an unlikely reading of the mission and reinforces this item's earlier finding that outcome selection is
+data-driven from the .MS3 script. Whether a faithful engine resolves a battle at all when the player
+never touches the controls cannot be settled from the port; it needs the original.
+
+`tools/oracle/census_outcome.sh` (new) settles it. It drives stock FIST.RUN under the instrumented
+DOSBox to the default battle with the same click sequence `tools/selfplay.sh` feeds the port, then
+sits still, with `FIST_WATCHFLAT=0x22da0 FIST_WATCHFLATSPAN=0x10` armed -- the engine-flat address of
+DGROUP:0x6da0 (DGROUP is segment 0x1c00 over an image loaded at linear 0), so the span covers the
+outcome word, its countdown 0x6da2, the mission clock 0x6da6/7/8 and the 0x6dab gate, and every write
+is logged with the live `cs:eip` that made it. Low traffic, and decisive:
+
+- original writes 0 or 1 -> the port has a real defect on the damage leg, and this item stays a bug;
+- original writes 2 (TIME EXPIRED) with its objectives untouched -> the port is FAITHFUL, and the
+  goal's "every mission plays through to a resolved victory/defeat state" is not something this engine
+  does with an idle player. That would be a finding about the requirement, not a licence to force an
+  outcome -- forcing one would be exactly the Umgehung the project forbids.
+
+Until that log is read, "outcomes 0 and 1 never fire" remains an observation, as this item already
+warned two sections above -- now with the gate variables actually in view.
+
+## CORRECTION and the second mission-end path: the player's tank, the PL:1 prompt, and what "AUTO CONTROL" is
+
+The previous section's "the player tank never moved once across the entire run" was measured on AZER3
+and does not generalise.  On the DEFAULT battle (AZER1 -- the one the oracle's click sequence also
+selects) the port's player object DRIVES: X 584582 -> 711214, Y 1141637 -> 993366 over 7500 ticks,
+hull speed word[+0x57] = 224 from the first in-mission tick, velocity [+0x59]/[+0x5b] nonzero.  On AZER3
+word[+0x57] is 0 throughout.  The two missions differ in the player's initial/commanded speed, not in
+the port's code path.
+
+**What drives it is NOT an autopilot.**  Traced every candidate:
+
+- `a57a` (called each tick by all four type-A templates, acting only on the player) is the JOYSTICK
+  DEVICE controller: `table_976c[word[0x8b43]]` where word[0x8b43] is the SETTINGS screen's CONTROL
+  field (NO JOYSTICK / STD JOYSTICK / FLIGHTSTICK W-THROTTLE / THRUSTMASTER FCS / CH FLIGHTSTICK PRO /
+  THRUSTMASTER WCS / EXTERNAL DRIVER = 0..6 -> a5ea a5eb a5f1 a62a a624 a630 a59b), then
+  `table_9778[byte[+0xa0]]` = the key sub-state a487 sets.  With device 0 and no keys both are `ret`.
+  In the port the whole controller was a silent no-op (the callers passed the host pointer, so its
+  `cmp 0x6d34,%di` never matched) -- patch 562 restores it and its unpatched drive-state cluster
+  (a376/a3a8/a3e2/a5b0/a5cd/a5f1).  Real, but not the self-play question.
+- The HUD's "AUTO CONTROL" is the SETTINGS screen's separate AUTO TURRET CONTROL checkbox
+  (byte[+0x3f]&8, toggled by the cockpit click handlers at 0x74b9..0x8471) -- turret auto-aim.
+- The 12 `cmp 0x6d34,%di` "is the player" sites in the engine are aim/HUD/message/damage specials;
+  none drives the hull.  `a631` even EXCLUDES the player from the unit-AI targeting call.
+- `[+0x38]` is the GUN ELEVATION, not the speed (a202 nudges it on the elevation keys with clamps
+  0x238c / -0x1554, a2a8 zeroes it on target loss, a265 writes a18e's pitch into it).  The hull speed
+  is word[+0x57] (a410..a431, clamp +-0xfe).
+
+So under empty input nothing in the type-0 method touches the hull; the AZER1 motion comes from the
+mission's initial state (word[+0x57]=224 at the first tick), and it is the ORACLE, not the code, that
+says whether the original's tank moves the same way -- `tools/oracle/census_outcome.sh` is armed on
+the default battle for exactly that (its RAM dump also yields the original's word[0x8b43] at
+0x2d190+0x8b43 and the player object at 0x2d190+0xc05c).
+
+**The second mission-end path.**  At t=7550 the port's AZER1 player object is destroyed (own side 4 ->
+2, the 0xc05c slot freed) and the engine leaves the sim: the backtrace sits in `e4bb <- e714 <- cae6`
+pumping the PIT wait in 30f8 with [0x452] racing, and the framebuffer shows the cockpit with the
+**"PL:1" platoon-vehicle selector** in the windshield -- the prompt the original raises when your
+vehicle is gone (`e714` is the mission loop itself, `cb32` its single call site in the mission-entry
+sequence).  The a5dc verdict never fired (`verdict=0/65535`, own alive 2 not 0), so:
+
+- `over=`/`code=` (the harness's classifier) sees only the a5dc verdict; a player-death end reads as
+  TIMEOUT.  The sweep's "TIMEOUT" class conflates "still fighting" with "sitting at PL:1".
+- Under EMPTY input this prompt is never dismissed, so on every mission where the player's vehicle
+  dies before the clock expires the run cannot reach any verdict.  That is the engine's own behaviour,
+  not a port defect.  Whether the sweep may send one dismissing click (the same class of input it
+  already uses to enter the mission) is a policy decision for the requirement's owner, not something to
+  paper over in the harness.
+
+**A visible HUD defect found on that screen: "GOALS REMAINING:+U".**  The original shows the count.
+The chain: a5dc `1a655 mov $0x1f8c,%si ; lcall 0:2e8` formats word[0x978e] into DGROUP:0x1f8c and copies
+the two bytes at 0x1f8f into the HUD text at es:0x2d8e.  `02e8` installs the per-character emitter
+`030b` (`mov %al,(%si); inc %si; lret`) as the CRT printer's callback ([0x684]=0x30b,[0x686]=cs), calls
+0f69:5d8b = FUN_1000_541b, and NUL-terminates at the advanced SI.  541b BCD-packs the value (DX =
+ten-thousands, CX = the four remaining digits) and forces byte[0x2672]=1 so all five digits print
+zero-padded -- "00013", which is why the copy takes buffer+3.  54ac/54b4/54c2 are a fall-through
+nibble-emitter chain passing each digit in AL through `lcall *[0x684]`.  In the port: `FUN_0000_030b`
+does not exist (unpromoted dispatch target, board:0015 class -- only 0x31c is in the icall table), the
+emitters call the callback with NO arguments (AL and SI dropped), 541b passes `unaff_CS` where the
+packed CX goes, and 02e8 writes its NUL at the buffer START.  Nothing is ever written, the buffer keeps
+stale bytes, and the HUD prints them.  Patch 563.

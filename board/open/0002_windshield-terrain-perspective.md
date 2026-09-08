@@ -2555,33 +2555,78 @@ It removes the divide-by-zero and supplies the real tables, but the sky pointer 
 are set by the same handler and have never run either, so the frame after implementing op 0x44 has to
 be re-measured against the reference rather than predicted.
 
-### BLOCKER measured before implementing: TCB+0xd1 is 4, and the loader only accepts 0/1/2
+### RETRACTED: TCB+0xd1 is 0, not 4 -- op 0x44 is NOT blocked
 
-Probed at the op-0x24 render (AZER1):
+An earlier revision of this section recorded `TCB+0xd1 = 4` and concluded that op 0x44 would be a no-op
+because the extender's loader only tests 0/1/2.  **That reading is retracted.**  It came from a single
+probe run that cannot be reproduced.  Re-measured three times with the same binary and the same input
+script:
 
-    TCB+0xcc = 1     TCB+0xd1 = 4
-    ext 0x3958 = 0x0000689a    0x395c = 1    0x395d = 1    0x3a20 = 200
+    run1  TCB+0xcc=1  TCB+0xd1=0
+    run2  TCB+0xcc=1  TCB+0xd1=0
+    run3  TCB+0xcc=1  TCB+0xd1=0
+    the three captured frames are byte-identical (one md5)
 
-Three things follow:
+and the same value on a build WITHOUT patch 559, so 559 is not what changed it either.  The port is
+deterministic here; the "4" was my error, and the conclusion drawn from it was wrong.
 
-1. **The detail selector is out of range.**  0x7660 tests `cmp $0x0/$0x1/$0x2` against `byte[TCB+0xd1]`
-   and falls through otherwise, so with 4 the ORIGINAL's own code would load no .DTL either.
-   Implementing op 0x44 as-is would therefore change nothing until TCB+0xd1 carries 0, 1 or 2.
-2. **The sky pointer is already 0x689a** and is NOT on this path anyway: `0x395d = 1` is non-zero, so
-   `FUN_0000_3931` takes its `686f/6c00` branch and never dispatches through 0x3958.  That matters
-   because `FUN_0000_689a` does NOT exist in `build/fist_ext.c` -- it is in the undecompiled part of the
-   extender -- so an implementation that sets 0x3958 would be writing a pointer the icall map cannot
-   resolve.  Leave it alone.
-3. `ext+0x3a20 = 200` is the image default, confirming no .DTL has ever been loaded.
+So `byte[TCB+0xd1] = 0` selects **low.dtl**, which IS in range, and extender op 0x44 can be implemented
+as specified above.  What remains uncertain is whether 0 is the RIGHT value: the SETTINGS screen shows
+HIGH DETAIL selected, and the engine's own settings byte at DGROUP:0x8b4b is 4 -- the values there are
+stored DOUBLED (patch 559's `(dg[0x8b4b] >> 1) + '0'` yields '2' = HIGH).  So the engine believes HIGH
+(2) while the TCB carries 0.  Whether that mismatch is a second defect or simply a different encoding
+has to be measured after op 0x44 is implemented, not guessed at now.
 
-**Where the 4 comes from is the next question, and it is NOT the shim.**  Neither the engine image nor
-`tools/native_main.c` contains a single store to `[reg+0xd1]` or to the word at `[reg+0xd0]` -- scanned
-both.  The TCB is a runtime task block ("create-task: 3888 bytes -> task seg 0x9000") that the ENGINE
-builds, and the individual field writes the port does perform (dd15, a80b) go to other offsets.  So
-+0xd1 arrives via the block initialisation of the TCB, i.e. from a template, and the value 4 is
-whatever that template holds.
+    DGROUP 0x8b43..0x8b52 = 00 00 00 01 00 00 02 00 04 00 00 00 01 00 2f 06
+                                                    ^^ 0x8b4b = 4 = HIGH, doubled
 
-ORDER OF WORK, revised: find what sets `byte[TCB+0xd1]` from the engine's detail setting FIRST -- the
-SETTINGS screen already renders and selects LOW/MEDIUM/HIGH correctly -- and only then implement
-op 0x44.  Implementing the loader against an out-of-range selector would be a no-op that looks like a
-fix.
+### Still true, and still the reason not to set 0x3958
+
+`ext+0x395d = 1`, so `FUN_0000_3931` takes its `686f/6c00` branch and never dispatches through
+`ext+0x3958`.  `FUN_0000_689a` does not exist in `build/fist_ext.c` -- it is in the undecompiled part of
+the extender -- so an implementation must NOT write that pointer, only the ramps and 0x395c.
+
+## op 0x44 IMPLEMENTED -- the oracle ramp stand-in is gone
+
+Extender op 0x44 is now a verbatim transcription of asm 0x7660 in the shim (see the disassembly above).
+Measured:
+
+    [dtl] op44 loaded low.dtl (2052 B) -> ext+0x3a20; count=125      (twice, matching the 2 posts)
+
+and the decisive test -- move `tools/oracle/samples/voxel6980_ramps.bin` aside and run the terrain path:
+
+    before op 0x44:  SIGFPE (rc=136), divide by zero in 395e
+    after  op 0x44:  rc=0, the windshield renders coherent terrain from the game's own LOW.DTL
+
+So the load-bearing oracle capture is no longer needed for the ramps.  That is one approximation
+removed rather than relocated.
+
+The default frame is unchanged (chrome AE=0, full AE=29192) because the terrain BUILD is still gated
+behind FIST_TERRAIN; with the gate on, full AE is 29306 against 29311 for the oracle ramps, i.e. the
+real tables are equivalent in AE terms and the palette is still wrong.
+
+## Why the FIST_TERRAIN path can NEVER be right on these maps: 6980 is a 1024-square raycaster
+
+    6ae3: 0f a4 e9 0a          shld $0xa,%ebp,%ecx            ; 10 bits
+    6ae7: 0f a4 d9 0a          shld $0xa,%ebx,%ecx            ; + 10 bits -> a 20-bit index
+    6b1a: 8a 84 0e 00 00 10 00 mov  0x100000(%esi,%ecx,1),%al ; colours at HM + 1 MB
+
+`FUN_0000_6980` indexes a **1024 x 1024** map and reads its colormap at HM+0x100000.  The maps this port
+loads are **2048 x 2048** (`detail[0x8490]=0xb`, `dim[0x8494]=2048`), whose colormap the shim's own
+FIST_TERRAIN comment places at HM+0x400000.  So when that path forces 6980:
+
+  - the height index packs y<<10 | x, i.e. the wrong stride for a 2048-wide map;
+  - the colour read at HM+0x100000 lands INSIDE THE HEIGHTMAP, not in the colormap.
+
+The windshield is therefore drawing height bytes as colour indices -- which is exactly the blue/white
+palette over structurally-plausible ridges that the screenshots show.  This is not a mis-tuned path; it
+is the wrong raycaster for the map size, and it explains why FIST_TERRAIN was never made the default.
+
+There is direct evidence the engine HAS variants for this: op 0x24's handler chains `8120 -> 9200` while
+op 0x28's chains `8120 -> 92c0`, and `ext+0x3958` selects between sky resamplers 0x6877 and 0x689a.
+
+REVISED next step for this item: stop trying to fix the FIST_TERRAIN/6980 path.  The default path
+(op 0x24 -> 8120 -> 9200) is the one the engine actually posts 46617 times a mission; what it lacks is a
+tile builder for a 2048-square map.  Find which routine the original uses to fill the tile at that
+detail -- the 0x9200/0x92c0 pair and the 0x6877/0x689a pair are the candidates, and `ext+0x395c` (which
+op 0x44 now sets from TCB+0xcc) is what selects between them.

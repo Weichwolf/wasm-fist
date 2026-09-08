@@ -1,0 +1,112 @@
+PATCH 560: complete patch 407 -- the other four SMC'd colormap-offset reads.
+
+The extender's terrain renderer is SELF-MODIFYING: the map-load setup writes the map's detail and its
+derived sizes directly into the raycaster's instruction immediates.  From asm 0x8a7a onward:
+
+    8a7a: a1 90 84 00 00   mov  0x8490,%eax      ; the detail (9..12)
+    8a7f: a2 66 6d 00 00   mov  %al,0x6d66       ; -> the imm8 of `shld $0xa` at 0x6d63
+    8a84: a2 6a 6d 00 00   mov  %al,0x6d6a       ; ... and ~30 more shift immediates across the
+    ...                                          ;     whole terrain pipeline (0x6ae6, 0x7fc7,
+    8b10: a2 34 94 00 00   mov  %al,0x9434       ;     0x8f48, 0x9068, 0x8485, 0x9429, ...)
+    8b15: a1 98 84 00 00   mov  0x8498,%eax      ; the colormap offset = dim*dim
+    8b1a: a3 9d 6d 00 00   mov  %eax,0x6d9d      ; -> the disp32 of the colour read at 0x6d9a
+    8b1f: a3 1d 6e 00 00   mov  %eax,0x6e1d
+    8b24: a3 1d 6b 00 00   mov  %eax,0x6b1d
+    8b29: a3 9d 6b 00 00   mov  %eax,0x6b9d
+
+so the `shld $0xa` and `+0x100000` that a static disassembly shows are DEFAULTS, not the running
+values.  On these maps (`detail[0x8490]=0xb`, `dim=2048`) they become 0xb and 0x400000.
+
+Exactly four colour reads are patched, in `FUN_0000_6b03`, `FUN_0000_6b83`, `FUN_0000_6d83` and
+`FUN_0000_6e03`.  Patch 407 ("6980-smc-dynamic") already converted the SMC-dependent code in
+`FUN_0000_6977` to read `DAT_0000_8490` / `DAT_0000_8498` instead of the baked literals -- and the port
+does compute both correctly (`build/fist_ext.c`: `bRam00006ae6 = detail`, `DAT_0000_8494 = 1 << detail`,
+`iRam00006b1d = dim*dim`, `DAT_0000_8498 = iRam00006b1d`).  But 407 stopped at 6977; the other four
+functions still carry the literal `0x100000`, so on a 2048-square map they would read colours from
+1 MB into the heightmap instead of from the colormap at 4 MB.
+
+This patch applies 407's own fix to the remaining eight sites (two per function).
+
+MEASURED, and the reason this is not claimed as a render fix: it changes nothing on the paths currently
+exercised.  AZER1 with FIST_TERRAIN=1 gives full-frame AE 29306 before and 29311 after against
+ref/mission_azer1_cockpit_native320.png, i.e. the four functions are not the ones running there --
+6977 is, and 407 already covers it.  The change is landed because it is asm-verified and because
+leaving a known-wrong literal in code the SMC explicitly parameterises is exactly the latent-defect
+shape this cascade keeps producing: wrong until something makes it reachable, then wrong loudly.
+
+board:0002
+
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -11151,7 +11151,7 @@
+   bVar1 = *(byte *)((int)&DAT_0000_4e60 + param_3);
+   *(byte *)((int)&DAT_0000_4e60 + param_3) = param_1;
+   UNLOCK();
+-  uVar3 = *(undefined1 *)(param_6 + 0x100000 + param_2);
++  uVar3 = *(undefined1 *)(param_6 + (int)DAT_0000_8498 + param_2);
+   puVar7 = (undefined1 *)(&DAT_0000_4a60)[param_3];
+   for (uVar4 = (uint)(byte)(param_1 - bVar1); uVar4 != 0; uVar4 = uVar4 - 1) {
+     *puVar7 = uVar3;
+@@ -11176,7 +11176,7 @@
+   bVar2 = (&DAT_0000_4e5f)[iVar5];
+   (&DAT_0000_4e5f)[iVar5] = bVar1;
+   UNLOCK();
+-  uVar3 = *(undefined1 *)(param_6 + 0x100000 + uVar4);
++  uVar3 = *(undefined1 *)(param_6 + (int)DAT_0000_8498 + uVar4);
+   puVar7 = *(undefined1 **)(&DAT_0000_4a5c + iVar5 * 4);
+   for (uVar4 = (uint)(byte)(bVar1 - bVar2); uVar4 != 0; uVar4 = uVar4 - 1) {
+     *puVar7 = uVar3;
+@@ -11254,7 +11254,7 @@
+   bVar2 = (&DAT_0000_4e5f)[param_3];
+   (&DAT_0000_4e5f)[param_3] = param_1;
+   UNLOCK();
+-  uVar3 = *(undefined1 *)(param_6 + 0x100000 + param_2);
++  uVar3 = *(undefined1 *)(param_6 + (int)DAT_0000_8498 + param_2);
+   puVar9 = *(undefined1 **)(&DAT_0000_4a5c + param_3 * 4);
+   for (uVar5 = (uint)(byte)(param_1 - bVar2); uVar5 != 0; uVar5 = uVar5 - 1) {
+     *puVar9 = uVar3;
+@@ -11298,7 +11298,7 @@
+       bVar1 = *(byte *)((int)&DAT_0000_4e60 + iVar6);
+       *(byte *)((int)&DAT_0000_4e60 + iVar6) = bVar2;
+       UNLOCK();
+-      uVar3 = *(undefined1 *)(param_6 + 0x100000 + uVar4);
++      uVar3 = *(undefined1 *)(param_6 + (int)DAT_0000_8498 + uVar4);
+       puVar9 = (undefined1 *)(&DAT_0000_4a60)[iVar6];
+       for (uVar4 = (uint)(byte)(bVar2 - bVar1); uVar4 != 0; uVar4 = uVar4 - 1) {
+         *puVar9 = uVar3;
+@@ -11650,7 +11650,7 @@
+   bVar1 = *(byte *)((int)&DAT_0000_4e60 + param_3);
+   *(byte *)((int)&DAT_0000_4e60 + param_3) = param_1;
+   UNLOCK();
+-  cVar3 = *(char *)(param_6 + 0x100000 + param_2);
++  cVar3 = *(char *)(param_6 + (int)DAT_0000_8498 + param_2);
+   pcVar7 = (char *)(&DAT_0000_4a60)[param_3];
+   for (uVar4 = (uint)(byte)(param_1 - bVar1); uVar4 != 0; uVar4 = uVar4 - 1) {
+     *pcVar7 = ((byte)(cVar3 + 0xb0U) >> 2) + 0x50;
+@@ -11675,7 +11675,7 @@
+   bVar2 = (&DAT_0000_4e5f)[iVar5];
+   (&DAT_0000_4e5f)[iVar5] = bVar1;
+   UNLOCK();
+-  cVar3 = *(char *)(param_6 + 0x100000 + uVar4);
++  cVar3 = *(char *)(param_6 + (int)DAT_0000_8498 + uVar4);
+   pcVar7 = *(char **)(&DAT_0000_4a5c + iVar5 * 4);
+   for (uVar4 = (uint)(byte)(bVar1 - bVar2); uVar4 != 0; uVar4 = uVar4 - 1) {
+     *pcVar7 = ((byte)(cVar3 + 0xb0U) >> 2) + 0x50;
+@@ -11753,7 +11753,7 @@
+   bVar2 = (&DAT_0000_4e5f)[param_3];
+   (&DAT_0000_4e5f)[param_3] = param_1;
+   UNLOCK();
+-  cVar3 = *(char *)(param_6 + 0x100000 + param_2);
++  cVar3 = *(char *)(param_6 + (int)DAT_0000_8498 + param_2);
+   pcVar9 = *(char **)(&DAT_0000_4a5c + param_3 * 4);
+   for (uVar5 = (uint)(byte)(param_1 - bVar2); uVar5 != 0; uVar5 = uVar5 - 1) {
+     *pcVar9 = ((byte)(cVar3 + 0xb0U) >> 2) + 0x50;
+@@ -11797,7 +11797,7 @@
+       bVar1 = *(byte *)((int)&DAT_0000_4e60 + iVar6);
+       *(byte *)((int)&DAT_0000_4e60 + iVar6) = bVar2;
+       UNLOCK();
+-      cVar3 = *(char *)(param_6 + 0x100000 + uVar4);
++      cVar3 = *(char *)(param_6 + (int)DAT_0000_8498 + uVar4);
+       pcVar9 = (char *)(&DAT_0000_4a60)[iVar6];
+       for (uVar4 = (uint)(byte)(bVar2 - bVar1); uVar4 != 0; uVar4 = uVar4 - 1) {
+         *pcVar9 = ((byte)(cVar3 + 0xb0U) >> 2) + 0x50;

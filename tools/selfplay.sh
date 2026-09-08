@@ -79,6 +79,7 @@ run_one() {  # $1=target $2=mission -> prints "STATE|outcome-code|secs"
   if   [ "$rc" = 124 ];                                    then st=TIMEOUT
   elif [ -z "$line" ] && [ "$rc" != 0 ];                   then st=CRASH
   elif printf '%s' "$line" | grep -q 'over=1';             then st=RESOLVED
+  elif printf '%s' "$line" | grep -q 'player=0000';         then st=PLAYERDEAD   # at the PL: prompt (board:0017)
   elif printf '%s' "$line" | grep -q 'never loaded';       then st=NOLOAD
   elif [ -n "$line" ];                                     then st=UNRESOLVED
   else                                                          st=CRASH

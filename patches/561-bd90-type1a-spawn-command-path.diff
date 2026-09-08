@@ -1,0 +1,109 @@
+PATCH 561: the type-0x1a SPAWN 0000:bd90 and its caller 0000:4f5d -- patch 429/495's weapon-spawn idiom
+on the PLAYER-COMMAND path.
+
+Reached from the command dispatch table at DGROUP:0x7c4c (near offsets into CS=0000: 4aea 4bfc 4bf0
+4bf0 4c7a 4dcc 4e09 4ff6 4b6d 4c29 4f88 4fa0 4eca 4bf0 4f32 4f5d 4bf0, then a run of 5949 = the default
+handler); 0x4f5d is index 15.  Three defects, all of the classes CLAUDE.md names:
+
+  * BASE LOSS.  bd90's `push %bx` / `pop %bx` around the far call made Ghidra classify BX as
+    callee-saved, so it invented the `unaff_CS` pseudo-var and dereferenced it as a HOST pointer
+    (`*unaff_CS`, `unaff_CS[1]`).  BX is an INPUT: 4f6e loads it with the NEAR OFFSET 0x7b94, and the
+    two reads are dg[0x7b94..0x7b9b] -- the position 3f3c just wrote there via si.  The caller
+    correspondingly passed `&DAT_2000_3b94` (= g_mem+0x23b94) truncated into a CONCAT22 low half, which
+    only equals 0x7b94 when g_mem happens to be 64K-aligned.
+
+  * DROPPED b1df RETURN.  bd94 `lcall 0f69:bb4f` is FUN_1000_b1df(0x1a, di), which RETURNS THE NEW
+    OBJECT IN DI (see patch 462's header on b1df itself).  The decompile discarded the return and kept
+    storing through param_2, i.e. it built the spawn on the PARENT record and orphaned the freshly
+    allocated slot -- the same misread patch 462 fixed inside b1df and 495 fixed at four call sites.
+
+  * CONSTANT-FALSE CF.  `undefined1 in_CF = 0` killed bd9a's `jb bdb6`, so b1df's roster-full failure
+    edge never ran and bdb4 clc / bdb6 stc -- the contract 4f74's `jb` reads -- was lost.  4f5d could
+    therefore never select its "spawn failed" message 0xd7b over the success one 0xd4a.
+
+Type 0x1a is one of the OBJECTIVE-STRUCTURE classes: an AZER3 census of the objects the victory gate
+counts (byte[+0x17]&8) returns 4x type 0003 on the player's own team plus 3x type 001b and 4x type 001a
+on the enemy's, so this command places/spawns one of the very objects 1a694's `cmpw $0x0,0x978e`
+victory test enumerates.
+
+Not reachable from AI-vs-AI self-play (empty player input never issues command 15), so this patch moves
+no self-play outcome; it is landed because it is asm-verified and because a base-loss deref left in a
+command handler is precisely the latent-defect shape this cascade keeps producing -- inert until the
+surface that reaches it is exercised, then a SIGSEGV.
+
+4f62/4f65's `mov 0x4(%bx),%ax; mov 0x6(%bx),%bx` are dead and stay dropped: 3f3c overwrites BX at its
+first instruction (`mov 0x1552,%bx`) and AX at its second.
+
+--- a/fist.c
++++ b/fist.c
+@@ -14949,12 +14949,18 @@
+   undefined2 uVar1;
+   undefined1 uVar2;
+   
+-  uVar2 = 0;
++  /* PATCH 561: bd90's caller.  4f6e loads bx with the NEAR OFFSET 0x7b94, not a host pointer -- the
++   * decompile passed `&DAT_2000_3b94` (= g_mem+0x23b94) truncated into the low half of a CONCAT22, which
++   * is only 0x7b94 when g_mem happens to be 64K-aligned.  And 4f74's `jb` reads the CF that bd90 now
++   * sets, choosing message 0xd7b (spawn failed) over 0xd4a; `uVar2 = 0` had made that a constant-true
++   * success.  (4f62/4f65's `mov 0x4(%bx),%ax; mov 0x6(%bx),%bx` are dead: 3f3c overwrites both
++   * registers at its first two instructions, so dropping them is faithful.) */
++  extern unsigned char g_fist_cf;
+   if ((param_1 & 10) != 0) {
+     uVar1 = (undefined2)((ulong)param_2 >> 0x10);
+-    FUN_0000_3f3c((undefined4 *)&DAT_2000_3b94);
+-    FUN_0000_bd90((undefined4 *)CONCAT22(uVar1,(undefined4 *)&DAT_2000_3b94),param_3);
+-    if (!(bool)uVar2) {
++    FUN_0000_3f3c((undefined4 *)&DAT_2000_3b94);                       /* 4f68 si=0x7b94 */
++    FUN_0000_bd90((undefined4 *)(uintptr_t)0x7b94U,param_3);           /* 4f6e bx=0x7b94 */
++    if (!g_fist_cf) {                                                  /* 4f74 jb 4f7f */
+       FUN_1000_66cd(0xd4a);
+       return;
+     }
+@@ -32352,19 +32358,34 @@
+ void __allregs FUN_0000_bd90(undefined4 param_1,int param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined4 *unaff_CS;
+-  undefined1 in_CF = 0;
+-  
+-  uVar1 = (undefined2)((ulong)param_1 >> 0x10);
+-  FUN_1000_b1df(0x1a,param_2);
+-  if (!(bool)in_CF) {
+-    *(undefined1 *)(param_2 + 0x19) = DAT_2000_5a0e;
+-    *(undefined4 *)(param_2 + 4) = *unaff_CS;
+-    *(undefined4 *)(param_2 + 8) = unaff_CS[1];
+-    FUN_0000_bcd5((undefined4 *)CONCAT22(uVar1,unaff_CS),param_2);
+-    return;
+-  }
++  /* PATCH 561: the type-0x1a SPAWN (asm 0000:bd90-bd b7) -- patch 429/495's weapon-spawn idiom once more,
++   * on the player-command path this time (DGROUP:0x7c4c dispatch table, index 15 -> 0000:4f5d -> bd90).
++   *
++   *   bd90 push %bx / bd99 pop %bx  -- BX is an INPUT: the near offset of the source record whose 8
++   *     position bytes are copied into the new object.  The push/pop pair made Ghidra classify BX as
++   *     callee-saved, so it invented the `unaff_CS` pseudo-var and dereferenced it as a HOST pointer
++   *     (`*unaff_CS`, `unaff_CS[1]`) -- base loss.  4f6e passes bx=0x7b94, so the real read is
++   *     dg[0x7b94..0x7b9b].
++   *   bd94 lcall 0f69:bb4f = FUN_1000_b1df(0x1a, di).  b1df RETURNS THE NEW OBJECT IN DI (see its own
++   *     patch-462 header) -- the decompile dropped the return and kept writing through param_2, i.e. it
++   *     built the spawn on the PARENT record and orphaned the freshly allocated slot.
++   *   bd9a jb bdb6 -- b1df's roster-full CF.  `in_CF = 0` made that edge constant-false, so the failure
++   *     path (bdb6 stc) never ran and 4f5d could never pick its "spawn failed" message (0xd7b) over the
++   *     success one (0xd4a).  bdb4 clc / bdb6 stc is the CF contract the caller reads (g_fist_cf). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(uintptr_t)param_1;        /* bd90/bd99 push/pop bx */
++  unsigned int di;
++
++  di = (unsigned short)FUN_1000_b1df(0x1a,(int *)(uintptr_t)(unsigned short)param_2); /* bd91/bd94 */
++  if (g_fist_cf) { g_fist_cf = 1; return; }                      /* bd9a jb -> bdb6 stc */
++  dg[(unsigned short)(di + 0x19)] = (unsigned char)DAT_2000_5a0e;                     /* bd9c/bd9f */
++  *(unsigned int *)(dg + (unsigned short)(di + 4)) =
++      *(unsigned int *)(dg + bx);                                                     /* bda2/bda5 */
++  *(unsigned int *)(dg + (unsigned short)(di + 8)) =
++      *(unsigned int *)(dg + (unsigned short)(bx + 4));                               /* bda9/bdad */
++  FUN_0000_bcd5((undefined4 *)(uintptr_t)bx,(int)(unsigned short)di);                 /* bdb1 */
++  g_fist_cf = 0;                                                 /* bdb4 clc */
+   return;
+ }
+ 

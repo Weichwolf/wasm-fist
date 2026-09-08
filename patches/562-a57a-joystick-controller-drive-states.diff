@@ -1,0 +1,292 @@
+PATCH 562: the player's joystick-device controller 0000:a57a and the drive-state cluster it switches on
+(a376 a3a8 a3e2 a5b0 a5cd a5f1) -- base loss, dropped dispatch arity, and mis-widened WORD fields.
+
+a57a is called once per tick by all four type-A update templates (7c1d/87df/902c/97d5, `call 0xa57a`
+right after the fire step) and acts only on the player's object (`cmp 0x6d34,%di`).  While no manual
+routine is engaged (`testw $1,0x40(%di)`) it runs the per-device tick selected by word[DGROUP:0x8b43]
+through the table at 0x976c, then the input sub-state byte[di+0xa0] through the table at 0x9778.
+word[0x8b43] is the SETTINGS screen's CONTROL field -- NO JOYSTICK / STD JOYSTICK / FLIGHTSTICK
+W-THROTTLE / THRUSTMASTER FCS / CH FLIGHTSTICK PRO / THRUSTMASTER WCS / EXTERNAL DRIVER, 0..6 -- and the
+0x976c entries are a5ea a5eb a5f1 a62a a624 a630 a59b in that order (the settings string builder 6f90,
+patch 559, prints it as its first digit).  The port had every one of these dead:
+
+  * the callers passed the HOST pointer, so a57a's `param_1 == DAT_2000_2d34` (host pointer vs the near
+    offset 0xc05c) was never true and the whole controller was a silent no-op -- no crash to flag it;
+  * inside, `[di+0x40]` / `[di+0xa0]` were host derefs and both table lookups bare host addresses;
+  * both dispatches passed NO argument to targets that read DI (the 556-class arity defect);
+  * a376/a3a8 (turn), a3e2 (heading step), a5b0/a5cd (gun elevation), a5f1 (flightstick tick) all
+    host-deref'd DI, read their rate/far tables at bare addresses, and widened the WORD fields [di+0x8b]
+    (heading), [di+0x30], [di+0x38] (elevation, SIGNED clamps 0x238c / -0x1554) to 4-byte ints -- the
+    same width class as patches 547-553;
+  * a5f1's `lcall *0x971e(%bx)` is a FAR-pointer table (type*4; type 0 -> 0f69:7fe1 = FUN_1000_7671)
+    that Ghidra turned into a near icall with 0xf69 passed as an ARGUMENT.
+
+Convention: DI is threaded positionally into the target's param_1 (patch 455 for a3ec, 543 for
+a3f6/a432 -- the already-correct members of this same cluster).  aae8's AX pass-through is dead on every
+path: its per-type takeover table at 0x995a has entries only for types 0..3 (784d 7faf 8cc8 9407) and
+none reads AX (784d is `movb $3,0xc7(%di); ret`), so `aae8(di, di)` / `aae8(0, di)` are exact.
+
+Not a self-play change: with empty input and the default device 0 the 0x976c entry is a5ea = `ret` and
+[di+0xa0] stays 0 -> a59b = `ret`, so nothing here moves an AI-vs-AI run.  It IS the player's control
+path -- every joystick mode named on the SETTINGS screen ran through a dead function.
+
+What this cluster is NOT: it is not "AUTO CONTROL".  The HUD's AUTO CONTROL label is the SETTINGS
+screen's separate AUTO TURRET CONTROL checkbox (byte[di+0x3f]&8, toggled by the cockpit click handlers
+at 0x74b9..0x8471), i.e. turret auto-aim.  No code path drives the player's hull without input; [di+0x38]
+is the GUN ELEVATION (a202 nudges it on the elevation keys, a2a8 zeroes it on target loss, a265 writes
+a18e's pitch into it), and the hull speed is word[di+0x57] (a410..a431).
+
+--- a/fist.c
++++ b/fist.c
+@@ -21758,7 +21758,7 @@
+    * UKRAINE3 it opened on garbage and faulted.  Pass the near offset. */
+   FUN_0000_7e29(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+ LAB_0000_7c7b:
+-  FUN_0000_a57a(param_4);
++  FUN_0000_a57a(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));   /* PATCH 562: DI near offset */
+   FUN_0000_a9ea(param_1,uVar3,param_4);
+   *(byte *)(param_4 + 0x17) = *(byte *)(param_4 + 0x17) & 0xbf;
+   if (*(char *)(param_4 + 0x96) != '\0') {
+@@ -23788,7 +23788,7 @@
+   }
+   FUN_0000_899c(param_4);
+ LAB_0000_8842:
+-  FUN_0000_a57a(param_4);
++  FUN_0000_a57a(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));   /* PATCH 562: DI near offset */
+   FUN_0000_a9ea(param_1,uVar3,param_4);
+   *(byte *)(param_4 + 0x17) = *(byte *)(param_4 + 0x17) & 0xbf;
+   if (*(char *)(param_4 + 0x96) != '\0') {
+@@ -23880,7 +23880,7 @@
+   }
+   FUN_0000_899c(pbVar13);
+ LAB_0000_8842:
+-  FUN_0000_a57a(pbVar13);
++  FUN_0000_a57a((int)(pbVar13 - ((unsigned char *)g_mem + 0x1c000)));           /* PATCH 562: DI near offset */
+   FUN_0000_a9ea(uVar6,uVar8,pbVar13);
+   pbVar13[0x17] = pbVar13[0x17] & 0xbf;
+   if (pbVar13[0x96] != 0) {
+@@ -25238,7 +25238,7 @@
+   }
+   FUN_0000_91b8(param_4);
+ LAB_0000_908a:
+-  FUN_0000_a57a(param_4);
++  FUN_0000_a57a(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));   /* PATCH 562: DI near offset */
+   FUN_0000_a9ea(param_1,uVar3,param_4);
+   *(byte *)(param_4 + 0x17) = *(byte *)(param_4 + 0x17) & 0xbf;
+   if (*(char *)(param_4 + 0x96) != '\0') {
+@@ -28457,18 +28457,25 @@
+ void __allregs FUN_0000_a376(undefined2 param_1,int param_2)
+ 
+ {
+-  uint uVar1;
+-  uint uVar2;
+-  
+-  FUN_0000_aae8(param_1,param_2);
+-  FUN_0000_a2a8(param_2);
+-  uVar1 = *(uint *)(((uint)-(DAT_2000_5746 + -0xa0) >> 2 & 0x1e) + 0x9748);
+-  uVar2 = uVar1;
+-  if ((*(char *)(param_2 + 0x86) != '\x01') && (uVar2 = uVar1 >> 1, 3 < *(byte *)(param_2 + 0x86)))
+-  {
+-    uVar2 = uVar1 >> 2;
++  /* PATCH 562: turn-left drive state (asm 0000:a376), reached from a57a's 0x9778 table via
++   * a59c/a5a6 (which first set word[0x9746] = 0x58 / 0xe8) and from 7c1d's [di+0x3e] table.  DI is
++   * threaded positionally into param_1 (patch 455's convention).  The rate is word[DGROUP:0x9748 +
++   * (((-(word[0x9746] - 0xa0)) >> 2) & 0x1e)], halved once unless byte[di+0x86]==1 and again when
++   * byte[di+0x86] > 3, and applied to the WORD heading at [di+0x8b] (`sub %ax,0x8b(%di)`) -- Ghidra
++   * host-deref'd di, read the table at a bare host address and widened the heading to int. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  (void)param_2;
++  FUN_0000_aae8((int *)(uintptr_t)di,(int *)(uintptr_t)di);
++  FUN_0000_a2a8((int)di);
++  unsigned short rate = *(unsigned short *)(dg + 0x9746);
++  unsigned short ax = *(unsigned short *)(dg + (unsigned short)(0x9748 + ((unsigned short)(-(int)(rate - 0xa0)) >> 2 & 0x1e)));
++  if (dg[(unsigned short)(di + 0x86)] != 1) {
++    ax >>= 1;
++    if (dg[(unsigned short)(di + 0x86)] > 3) ax >>= 1;
+   }
+-  *(int *)(param_2 + 0x8b) = *(int *)(param_2 + 0x8b) - uVar2;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x8b)) =
++      (unsigned short)(*(unsigned short *)(dg + (unsigned short)(di + 0x8b)) - ax);
+   return;
+ }
+ 
+@@ -28478,18 +28485,25 @@
+ void __allregs FUN_0000_a3a8(undefined2 param_1,int param_2)
+ 
+ {
+-  uint uVar1;
+-  uint uVar2;
+-  
+-  FUN_0000_aae8(param_1,param_2);
+-  FUN_0000_a2a8(param_2);
+-  uVar1 = *(uint *)((DAT_2000_5746 - 0xa0U >> 2 & 0x1e) + 0x9748);
+-  uVar2 = uVar1;
+-  if ((*(char *)(param_2 + 0x86) != '\x01') && (uVar2 = uVar1 >> 1, 3 < *(byte *)(param_2 + 0x86)))
+-  {
+-    uVar2 = uVar1 >> 2;
++  /* PATCH 562: turn-right drive state (asm 0000:a3a8), reached from a57a's 0x9778 table via
++   * a59c/a5a6 (which first set word[0x9746] = 0x58 / 0xe8) and from 7c1d's [di+0x3e] table.  DI is
++   * threaded positionally into param_1 (patch 455's convention).  The rate is word[DGROUP:0x9748 +
++   * ((((word[0x9746] - 0xa0)) >> 2) & 0x1e)], halved once unless byte[di+0x86]==1 and again when
++   * byte[di+0x86] > 3, and applied to the WORD heading at [di+0x8b] (`add %ax,0x8b(%di)`) -- Ghidra
++   * host-deref'd di, read the table at a bare host address and widened the heading to int. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  (void)param_2;
++  FUN_0000_aae8((int *)(uintptr_t)di,(int *)(uintptr_t)di);
++  FUN_0000_a2a8((int)di);
++  unsigned short rate = *(unsigned short *)(dg + 0x9746);
++  unsigned short ax = *(unsigned short *)(dg + (unsigned short)(0x9748 + ((unsigned short)(rate - 0xa0) >> 2 & 0x1e)));
++  if (dg[(unsigned short)(di + 0x86)] != 1) {
++    ax >>= 1;
++    if (dg[(unsigned short)(di + 0x86)] > 3) ax >>= 1;
+   }
+-  *(int *)(param_2 + 0x8b) = *(int *)(param_2 + 0x8b) + uVar2;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x8b)) =
++      (unsigned short)(*(unsigned short *)(dg + (unsigned short)(di + 0x8b)) + ax);
+   return;
+ }
+ 
+@@ -28510,8 +28524,13 @@
+ void __allregs FUN_0000_a3e2(undefined2 param_1,int param_2)
+ 
+ {
+-  FUN_0000_aae8(param_1,param_2);
+-  *(int *)(param_2 + 0x30) = *(int *)(param_2 + 0x30) + -0xb6;
++  /* PATCH 562: a3ec's twin (patch 455) -- `push cs; call aae8; sub word[di+0x30],0xb6`.  DI in param_1. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  (void)param_2;
++  FUN_0000_aae8((int *)(uintptr_t)di,(int *)(uintptr_t)di);
++  *(unsigned short *)(dg + (unsigned short)(di + 0x30)) =
++      (unsigned short)(*(unsigned short *)(dg + (unsigned short)(di + 0x30)) - 0xb6);
+   return;
+ }
+ 
+@@ -28854,12 +28873,34 @@
+ void __allregs FUN_0000_a57a(int param_1)
+ 
+ {
+-  if (param_1 == DAT_2000_2d34) {
+-    if ((*(uint *)(param_1 + 0x40) & 1) == 0) {
+-      (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(DAT_2000_4b43 * 2 + -0x6894))))();
+-    }
+-    (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*(byte *)(param_1 + 0xa0) + 0x9778))))();
++  /* PATCH 562: the PLAYER's joystick-device controller (asm 0000:a57a-a59a), called every tick by all
++   * four type-A update templates (7c1d/87df/902c/97d5 at their `call 0xa57a`) with DI = the object.
++   *   a57a cmp 0x6d34,%di ; jne ret          only the player's object (word[DGROUP:0x6d34])
++   *   a580 testw $1,0x40(%di) ; jne a591     bit 0 = a manual routine already engaged (aae8 sets it)
++   *   a587 mov 0x8b43,%bx ; shl 1 ; call *0x976c(%bx)
++   *        word[DGROUP:0x8b43] is the SETTINGS screen's CONTROL device (NO JOYSTICK / STD JOYSTICK /
++   *        FLIGHTSTICK W-THROTTLE / THRUSTMASTER FCS / CH FLIGHTSTICK PRO / THRUSTMASTER WCS / EXTERNAL
++   *        DRIVER = 0..6), and the table at DGROUP:0x976c is its per-device tick routine
++   *        (a5ea a5eb a5f1 a62a a624 a630 a59b ...).
++   *   a591 movzbw 0xa0(%di),%bx ; call *0x9778(%bx)
++   *        byte[di+0xa0] is the input sub-state a487 sets from the key bits (0/2/4/6/8), dispatched
++   *        through the table at DGROUP:0x9778 (a59b a59c a5a6 a5b0 a5cd ...).
++   * Defects: the callers pass the HOST pointer, so `param_1 == DAT_2000_2d34` was never true and the
++   * whole function was a silent no-op; both `[di+...]` reads were host derefs; both table lookups were
++   * computed as bare host addresses; and both dispatches passed NO argument to targets that read DI.
++   * Convention (patches 455/543): DI is threaded positionally into the target's param_1.  aae8's AX
++   * pass-through is dead on every path -- the per-type takeover methods in its 0x995a table (784d 7faf
++   * 8cc8 9407, types 0..3) never read AX (784d is `movb $3,0xc7(%di); ret`). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  if (di != *(unsigned short *)(dg + 0x6d34)) return;                              /* a57a/a57e */
++  if ((*(unsigned short *)(dg + (unsigned short)(di + 0x40)) & 1) == 0) {         /* a580/a585 */
++    unsigned short dev = *(unsigned short *)(dg + 0x8b43);                          /* a587 */
++    (*(code *)fist_icall_near(0x0u,
++        *(unsigned short *)(dg + (unsigned short)(dev * 2 + 0x976c))))((int)di);   /* a58d */
+   }
++  (*(code *)fist_icall_near(0x0u,
++      *(unsigned short *)(dg + (unsigned short)(dg[(unsigned short)(di + 0xa0)] + 0x9778))))((int)di); /* a591/a596 */
+   return;
+ }
+ 
+@@ -28900,13 +28941,18 @@
+ void __allregs FUN_0000_a5b0(undefined2 param_1,int param_2)
+ 
+ {
+-  FUN_0000_aae8(param_1,param_2);
+-  FUN_0000_a2a8(param_2);
++  /* PATCH 562: elevation-up drive state (asm 0000:a5b0): aae8; a2a8; a233 (ramps word[0x9602]);
++   * `add %ax,0x38(%di)`; `cmpw $0x238c ; jle ; movw $0x238c` -- SIGNED clamp on the WORD at [di+0x38].
++   * DI in param_1.  (a1e9, the keyboard twin, has the same body.) */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  (void)param_2;
++  FUN_0000_aae8((int *)(uintptr_t)di,(int *)(uintptr_t)di);
++  FUN_0000_a2a8((int)di);
+   FUN_0000_a233();
+-  *(int *)(param_2 + 0x38) = *(int *)(param_2 + 0x38) + DAT_2000_5602;
+-  if (0x238c < *(int *)(param_2 + 0x38)) {
+-    *(undefined2 *)(param_2 + 0x38) = 0x238c;
+-  }
++  short *w = (short *)(dg + (unsigned short)(di + 0x38));
++  *w = (short)(*w + (short)DAT_2000_5602);
++  if (*w > 0x238c) *w = 0x238c;
+   return;
+ }
+ 
+@@ -28916,13 +28962,17 @@
+ void __allregs FUN_0000_a5cd(undefined2 param_1,int param_2)
+ 
+ {
+-  FUN_0000_aae8(param_1,param_2);
+-  FUN_0000_a2a8(param_2);
++  /* PATCH 562: elevation-down drive state (asm 0000:a5cd): `sub %ax,0x38(%di)`; `cmpw $0xeaac ; jge ;
++   * movw $0xeaac` -- SIGNED clamp at -0x1554 on the WORD at [di+0x38].  DI in param_1. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  (void)param_2;
++  FUN_0000_aae8((int *)(uintptr_t)di,(int *)(uintptr_t)di);
++  FUN_0000_a2a8((int)di);
+   FUN_0000_a233();
+-  *(int *)(param_2 + 0x38) = *(int *)(param_2 + 0x38) - DAT_2000_5602;
+-  if (*(int *)(param_2 + 0x38) < -0x1554) {
+-    *(undefined2 *)(param_2 + 0x38) = 0xeaac;
+-  }
++  short *w = (short *)(dg + (unsigned short)(di + 0x38));
++  *w = (short)(*w - (short)DAT_2000_5602);
++  if (*w < -0x1554) *w = (short)0xeaac;
+   return;
+ }
+ 
+@@ -28951,21 +29001,21 @@
+ void __allregs FUN_0000_a5f1(int *param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  
+-  FUN_1000_a174(param_1);
+-  if (*(byte *)(param_1 + 0x52) < 0x50) {
+-    *(undefined1 *)(param_1 + 0x43) = 1;
+-  }
+-  else if (*(byte *)(param_1 + 0x52) < 0xa0) {
+-    *(undefined1 *)(param_1 + 0x43) = 2;
+-  }
+-  else {
+-    *(undefined1 *)(param_1 + 0x43) = 6;
+-  }
+-  puVar1 = (undefined2 *)(*param_1 * 4 + -0x68e2);
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))(0xf69);
+-  FUN_1000_701b();
++  /* PATCH 562: the FLIGHTSTICK W/ THROTTLE device tick (asm 0000:a5f1, entry 2 of a57a's 0x976c
++   * table).  DI = the player.  `lcall 0f69:aae4` (= FUN_1000_a174, stick deltas [di+0xa1/0xa2] ->
++   * heading); classify the throttle axis byte[di+0xa4] into the speed class byte[di+0x86] (<0x50 -> 1,
++   * <0xa0 -> 2, else 6); then `mov (%di),%bx ; shl $2 ; lcall *0x971e(%bx)` -- a FAR pointer table at
++   * DGROUP:0x971e indexed by type*4 (type 0 -> 0f69:7fe1 = FUN_1000_7671) -- and `lcall 0f69:798b`
++   * (FUN_1000_701b).  Ghidra scaled the offsets by int* (+0x52 for [+0xa4], +0x43 for [+0x86]), read the
++   * far table at a bare host address, and turned the far call into a near icall with 0xf69 as an ARGUMENT. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)(uintptr_t)param_1;
++  FUN_1000_a174((int)di);                                                           /* a5f1 */
++  unsigned char ax = dg[(unsigned short)(di + 0xa4)];                               /* a5f6 */
++  dg[(unsigned short)(di + 0x86)] = (ax < 0x50) ? 1 : (ax < 0xa0) ? 2 : 6;         /* a5fa..a615 */
++  unsigned short type = *(unsigned short *)(dg + di);                               /* a615 */
++  (*(code *)fist_icall_far(*(uint32_t *)(dg + (unsigned short)(type * 4 + 0x971e))))((int)di); /* a61a */
++  FUN_1000_701b();                                                                  /* a61e */
+   return;
+ }
+ 
