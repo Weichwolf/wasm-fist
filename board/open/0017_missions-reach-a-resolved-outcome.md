@@ -261,3 +261,40 @@ remaining unexamined callers in the port are at fist.c:38200 (`FUN_0000_be0e(*(u
 a computed index) and fist.c:68961. The asm call sites of 0xbe0e are 0xbdfc, 0xbe05, 0xbe82, 0xe5b9,
 0xe718, 0xe800, 0xe8bb and 0x1bba3 -- the 0xe5xx-0xe8xx cluster is the most likely home of the
 mission-end decision and has not been read yet.
+
+## The outcome selection is DATA-DRIVEN, in the .MS3 script -- not a hardcoded engine constant
+
+Read `be0e`'s call cluster. The one that matters is asm 0xe59f-0xe5bd:
+
+```
+e59f: lea 0x8(%bx),%ax ; mov %ax,0xf6ec
+e5a5: mov %es:0x2(%bx),%ax ; mov %ax,0xf6e0      ; ES-relative record fields
+e5ac: mov %es:0x4(%bx),%ax ; mov %ax,0xf6e2
+e5b4: mov %es:0x6(%bx),%bx                       ; <-- the SCRIPT INDEX comes from the RECORD
+e5b9: call 0xbe0e                                ; load that script
+e5bd: mov -0x15d2,%es                            ; ES = word[DGROUP:0xea2e]
+```
+
+(the port's `fist.c:38200`, `FUN_0000_be0e(*(uint16_t *)(R + bx + 6))`). The other three sites are
+fixed screens: 0xe800 and 0xe8bb both pass bx=8.
+
+So nothing in the engine hardcodes "load WWIN when the enemy is dead". The .MS3 script for the mission
+carries the screen index in its records, and the interpreter -- whose command handlers are the
+0x58ec/0x58f3/0x58fa/0x5901/0x5908/0x5916 stubs into the common dispatcher at 0x5932 -- evaluates the
+condition and follows the record. The engine's outcome path is reached only when a script command fires.
+
+### A distinction this session has NOT been testing
+
+`tools/selfplay.sh` drives missions through the BATTLES menu (`FIST_FSG_BATTLE`, the 47 `.FSG` files).
+The `MSN1/MSN2/MSN3.MS3` scripts are the CAMPAIGN mission scripts, and `WWIN/WLOSE/EWIN/ELOSE.MS3` are
+campaign outcome screens. It is entirely possible that a BATTLE ends by a different mechanism than a
+campaign mission, in which case looking for a WWIN/ELOSE load in a battle run is looking for the wrong
+event -- the same kind of criterion error as the `a296 >= 15` roster gate and the `a296 -> 0` resolution
+test.
+
+NEXT, in this order:
+1. Determine how a BATTLE (.FSG) signals its end, as opposed to a campaign mission. The goal's wording
+   covers both ("Kampagnen- und Battle-Missionen"), so both paths must be identified before "resolved"
+   can be measured honestly for either.
+2. Instrument the .MS3 command dispatcher at 0x5932 (its stubs are already located) to see which
+   commands run in a mission and which condition is evaluated but never satisfied.
