@@ -2554,3 +2554,34 @@ STILL NOT VERIFIED, and not to be assumed: that loading the ramps alone makes th
 It removes the divide-by-zero and supplies the real tables, but the sky pointer and the detail value
 are set by the same handler and have never run either, so the frame after implementing op 0x44 has to
 be re-measured against the reference rather than predicted.
+
+### BLOCKER measured before implementing: TCB+0xd1 is 4, and the loader only accepts 0/1/2
+
+Probed at the op-0x24 render (AZER1):
+
+    TCB+0xcc = 1     TCB+0xd1 = 4
+    ext 0x3958 = 0x0000689a    0x395c = 1    0x395d = 1    0x3a20 = 200
+
+Three things follow:
+
+1. **The detail selector is out of range.**  0x7660 tests `cmp $0x0/$0x1/$0x2` against `byte[TCB+0xd1]`
+   and falls through otherwise, so with 4 the ORIGINAL's own code would load no .DTL either.
+   Implementing op 0x44 as-is would therefore change nothing until TCB+0xd1 carries 0, 1 or 2.
+2. **The sky pointer is already 0x689a** and is NOT on this path anyway: `0x395d = 1` is non-zero, so
+   `FUN_0000_3931` takes its `686f/6c00` branch and never dispatches through 0x3958.  That matters
+   because `FUN_0000_689a` does NOT exist in `build/fist_ext.c` -- it is in the undecompiled part of the
+   extender -- so an implementation that sets 0x3958 would be writing a pointer the icall map cannot
+   resolve.  Leave it alone.
+3. `ext+0x3a20 = 200` is the image default, confirming no .DTL has ever been loaded.
+
+**Where the 4 comes from is the next question, and it is NOT the shim.**  Neither the engine image nor
+`tools/native_main.c` contains a single store to `[reg+0xd1]` or to the word at `[reg+0xd0]` -- scanned
+both.  The TCB is a runtime task block ("create-task: 3888 bytes -> task seg 0x9000") that the ENGINE
+builds, and the individual field writes the port does perform (dd15, a80b) go to other offsets.  So
++0xd1 arrives via the block initialisation of the TCB, i.e. from a template, and the value 4 is
+whatever that template holds.
+
+ORDER OF WORK, revised: find what sets `byte[TCB+0xd1]` from the engine's detail setting FIRST -- the
+SETTINGS screen already renders and selects LOW/MEDIUM/HIGH correctly -- and only then implement
+op 0x44.  Implementing the loader against an out-of-range selector would be a no-op that looks like a
+fix.
