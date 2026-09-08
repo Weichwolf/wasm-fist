@@ -75,3 +75,49 @@ here is wrong and the mission is meant to be decided by fire, not manoeuvre.
 DO NOT treat "units never move" as a bug until it is shown that the ORIGINAL moves them. The cheap test
 is the oracle: run AZER1 under dosbox-fist and watch whether the type-0x02 objects' dword[obj+4]
 changes. Until then this item is a QUESTION, not a defect.
+
+## ORACLE VERDICT: confirmed a defect. Types 00/01/02 move in the original.
+
+Ran the in-repo oracle headless (Xvfb + `third_party/dosbox-fist` via `tools/oracle/census_azer1.sh`,
+`FIST_MEMARM_BOOT=1`) and dumped guest RAM twice in the same deterministic AZER1 run, at 600M and 1000M
+recorded writes.
+
+Locating DGROUP in the dump: the engine runs under the extender's paging (`cr3=0xe000`), so it is NOT
+at a guessable address. Found it by SIGNATURE -- the per-type step table `7c1d 87df 902c 97d5 bab4
+9e2b 9e2b b5e7` is unique -- at guest **0x2d190**, which independently matches the dump header's
+`ss=2d19` (SS=DS=DGROUP, exactly the engine's model). a294=64, a296=16, 80 live objects.
+
+Object positions between the two samples:
+
+```
+ off  type      A(X,Y)                 B(X,Y)              delta         Z A->B    gnd A->B
+ c05c  00  (  598662, 1125164)  (  639585, 1078998)  (+40923,-46166)  20736->16384  81->64
+ c157  01  (  572664, 1155516)  (  624964, 1116122)  (+52300,-39394)   8960->22016  35->86
+ c92f  02  (  463818,  760119)  (  510072,  801795)  (+46254,+41676)     768->2304   3->9
+ ca2a  02  (  412946,  709202)  (  464906,  759406)  (+51960,+50204)    2816->1536  11->6
+ cb25  02  (  387500,  699672)  (  444178,  744379)  (+56678,+44707)    9216->2816  36->11
+ cc20  02  (  371689,  681290)  (  425157,  727576)  (+53468,+46286)    2304->2816   9->11
+ ce16  01  (  567576, 1190816)  (  618024, 1143364)  (+50448,-47452)    6400->11520  25->45
+ cf11  00  (  575820, 1175669)  (  601034, 1118632)  (+25214,-57037)    8704->24576  34->96
+
+ per type:  00: moved 2 / static 0    01: moved 2 / static 0    02: moved 4 / static 4
+            03,10,15,1a,1b: 0 moved / 60 static
+```
+
+So:
+
+- **Types 00, 01 and 02 DO translate in the original**, by 40000-57000 units between samples, in
+  coherent directions (00/01 heading +X/-Y, 02 heading +X/+Y). In the port all three are frozen.
+- **Their Z tracks the terrain as they move** (gnd 81->64, 35->86, 3->9, 36->11). So these types
+  terrain-follow too, which settles board:0018's other half.
+- Types 0x10 and 0x15 are static in the ORIGINAL as well -- confirming the b51f emitter reading and
+  that "not everything is supposed to move" was the right caution.
+
+This item is therefore a DEFECT, not a question, and it is the same defect as board:0018: types
+00/01/02 neither move nor terrain-follow in the port. Both are downstream of whatever drives their
+per-frame physics.
+
+NEXT: the port's spawn positions match the original exactly (e.g. the type-02 at (549136,1017675) is in
+both), so the divergence begins at the per-frame update. Instrument the original's writers of
+`dword[obj+4]` for offset c05c with `FIST_WATCHFLAT` at the CR3-aware engine-flat address of
+DGROUP:0xc060 and read the `cs:eip` of the writer -- that names the function the port is failing to run.
