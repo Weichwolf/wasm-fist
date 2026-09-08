@@ -681,3 +681,35 @@ write-trace on the task-list head at 0f69:0x3bf1 during a battle, which shows wh
 actually does to the chain at mission entry. Reconstructing an SMC jump-chain primitive from a guessed
 contract would corrupt the chain silently, and this is the one place in the remaining work where a
 wrong sign is not caught by the matrix.
+
+### ORACLE NEGATIVE RESULT: the original does NOT install tasks on that list during a battle
+
+Ran the write-trace on the task-list head. Address mapping (verified): the original's DGROUP sits at
+guest 0x2d190 where the port's is 0x1c000, so the load offset is +0x11190; the head at port-linear
+0x13281 (= 0f69:0x3bf1) is guest **0x24411**. Watched 6 bytes, which covers +1..+3 -- exactly where
+`FUN_1000_4ce7` writes (`prev.fwd := (BX+5):ES` stores at `[si+1]` and `[si+3]`, not at `[si+0]`).
+
+Result over a full battle run: **33 writes, every one `val=00` from a single `cs=02dd eip=0000444f`** --
+a memory-clearing pass at init. No node is ever spliced in.
+
+So the original does not install a task on this list during a battle. That **rules out the theory that
+a missing task installation is what stops battles ending**, and by extension weakens the whole
+"promote the 13 functions" plan as the route to mission resolution:
+
+- 1000:5dfe and 1000:5cd8 (the installers) are evidently not reached in a battle in the ORIGINAL either;
+- so the battle's mission-over flag must be raised by one of the OTHER writers -- 0x4168, 0x4457 or
+  0x1a5e9 -- and all three of those ARE present in the port (FUN_0000_4457, FUN_0000_6104 for 0x6115,
+  FUN_1000_a5dc for 0x1a5e9).
+
+That inverts the question. It is no longer "what code is missing" but "what CONDITION do the writers
+the port already has never see". 0x4168 is the one not yet located in the port and is the first thing
+to identify; 0x4457/0x6115/0x1a5e9 should be instrumented to see which of their guards fails.
+
+NOT established, and not to be assumed: whether the timeline task at 1000:5e52 runs in the original by
+some other installation path, or whether it belongs to the CAMPAIGN flow rather than battles. The
+earlier sections of this item that treat the 13-function promotion as the critical path should be read
+with this result in front of them.
+
+NEXT: instrument the three flag-writers the port already has (their asm sites 0x4457, 0x6115, 0x1a5e9)
+during a battle and record which guard each one fails; and locate 0x4168 in the port. That is a
+counter-measurement, not a search, and it does not risk corrupting an SMC chain.
