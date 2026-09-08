@@ -121,3 +121,47 @@ NEXT: the port's spawn positions match the original exactly (e.g. the type-02 at
 both), so the divergence begins at the per-frame update. Instrument the original's writers of
 `dword[obj+4]` for offset c05c with `FIST_WATCHFLAT` at the CR3-aware engine-flat address of
 DGROUP:0xc060 and read the `cs:eip` of the writer -- that names the function the port is failing to run.
+
+## ROOT CAUSE FOUND AND FIXED: patch 544
+
+The break is a single width error in `FUN_1000_a401`, the throttle controller that every vehicle's
+movement step reaches via `lcall 0f69:0xad71`:
+
+```
+1a423: 8b 5d 34    mov 0x34(%di),%bx     ; 16-BIT -- no 0x66 prefix
+1a426: c1 fb 09    sar $0x9,%bx          ; 16-bit SIGNED shift
+1a42c: f7 c3 00 80 test $0x8000,%bx      ; the bit-15 test only makes sense on a WORD
+1a434: 83 fb 1f    cmp $0x1f,%bx         ; clamp 0..0x1f, then index the STRSEG speed-limit table
+```
+
+Ghidra read `*(int *)(param_1 + 0x34)` -- a DWORD -- so the index was formed from [di+0x34] paired with
+the neighbouring field [di+0x36], and landed in a ZERO region of the limit table about half the time.
+Measured over 120000 calls in AZER1: **limit==0 on 66067, non-zero on 53933**.
+
+The full chain that produced "no unit ever moves":
+
+```
+a401  target = min(word[di+0x57] >> 2, limit)      limit 0 half the time -> target collapses to 0
+a401  inc/dec word[di+0x55] toward target          speed oscillated 43 -> 37 -> 11, never held
+a1d6  decomposes [di+0x55]>>1 into [di+0x59]/[di+0x5b]   -> velocity ~0
+7cd5/88e4/912d  [di+4] += (short)[di+0x59]         -> NET DISPLACEMENT ZERO
+```
+
+Everything else in the chain was already correct: the movement functions exist and integrate, `a1d6`
+was fixed by patch 494, `ac7e` sets the orders bit (measured 250/250), and the throttle command
+word[di+0x57] was a healthy 272 (0x110).
+
+Oracle-verified against the two guest-RAM dumps -- the original's deltas and the port's post-patch
+deltas agree in direction and magnitude:
+
+```
+original  type 00  (598662,1125164) -> (639585,1078998)    (+40923,-46166)
+port      type 00  (623412,1096311) -> (662976,1050153) -> (702284,1003995) -> (728254,960222)
+```
+
+AZER1: a296 16 -> 12 (four kills, up from one); op-0x58 VISIBLE 446 -> 12697; out-of-range
+12607 -> 7564 (the sides are closing).
+
+STILL OPEN in this item's parent chain: the ground byte remains wrong for types 00/01/02 -- the
+original's units terrain-follow AS THEY MOVE (gnd 81->64 over the same interval) and the port's do
+not -- which is board:0018's remaining half. And no mission RESOLVES yet.

@@ -1,0 +1,66 @@
+PATCH 544: FUN_1000_a401 read the speed-limit table index as a DWORD where the asm reads a WORD --
+so no AI unit could hold a throttle, and no unit ever moved.
+
+asm 0x1a423 (the throttle controller, reached from every vehicle's movement step 7cd5/88e4/912d via
+`lcall 0f69:0xad71`):
+
+   1a423: 8b 5d 34       mov    0x34(%di),%bx     ; 16-BIT -- there is NO 0x66 prefix
+   1a426: c1 fb 09       sar    $0x9,%bx          ; 16-bit SIGNED shift
+   1a429: 83 c3 10       add    $0x10,%bx
+   1a42c: f7 c3 00 80    test   $0x8000,%bx       ; the bit-15 test only makes sense on a WORD
+   1a434: 83 fb 1f       cmp    $0x1f,%bx         ; clamp to 0..0x1f
+   ...  bx then indexes the STRSEG speed-limit table read at 1a44f
+
+Ghidra read `*(int *)(param_1 + 0x34)` -- a DWORD -- so the index was computed from [di+0x34] paired
+with the neighbouring field [di+0x36].  The resulting index landed in a ZERO region of the limit table
+roughly half the time; measured over 120000 calls in AZER1: limit==0 on 66067, non-zero on 53933.
+
+The consequence is the whole movement chain:
+
+  a401 target speed = min(word[di+0x57] >> 2, limit)
+       -> limit 0 for half the frames, so the target collapses to 0
+  a401 inc/decs word[di+0x55] toward that target  (1a479 decw / 1a491 incw)
+       -> the speed oscillated (measured 43 -> 37 -> 11) and never held
+  a1d6 decomposes [di+0x55]>>1 into the velocity pair [di+0x59]/[di+0x5b]
+       -> velocity ~0
+  7cd5 / 88e4 / 912d integrate `[di+4] += (short)[di+0x59]`, `[di+8] += (short)[di+0x5b]`
+       -> NET DISPLACEMENT ZERO: no unit in any mission ever moved.
+
+Units that cannot move cannot close, so the two sides stayed ~158670 apart, line-of-sight stayed
+blocked, targets were never acquired, and no mission could reach a resolved victory/defeat.
+
+ORACLE-VERIFIED.  Two guest-RAM dumps of the same deterministic AZER1 run under third_party/dosbox-fist
+(600M and 1000M recorded writes; DGROUP located by the unique step-table signature at guest 0x2d190,
+confirmed by the dump header's ss=2d19) show the original moving its units:
+
+   type 00  (598662,1125164) -> (639585,1078998)   delta (+40923,-46166)
+   type 01  (572664,1155516) -> (624964,1116122)   delta (+52300,-39394)
+   type 02  (463818, 760119) -> (510072, 801795)   delta (+46254,+41676)
+
+After this patch the port moves them the same way and in the same direction:
+
+   type 00  (623412,1096311) -> (662976,1050153) -> (702284,1003995) -> (728254,960222)
+   type 01  (556615,1156197) -> (563209,1151801) -> (568600,1147232) -> (572352,1141658)
+
+AZER1: a296 16 -> 12 (four kills, up from one); op-0x58 VISIBLE 446 -> 12697 and out-of-range
+12607 -> 7564, i.e. the units are actually closing.
+
+Still open: the ground byte stays wrong for these types (board:0018's other half -- the original's
+units terrain-follow as they move, gnd 81->64, and the port's do not), and no mission RESOLVES yet.
+
+--- a/fist.c
++++ b/fist.c
+@@ -66205,7 +66205,12 @@
+      (*(int *)(param_1 + 0x5d) == 0)) {
+     *(undefined2 *)(param_1 + 0x57) = 0;
+   }
+-  uVar2 = (*(int *)(param_1 + 0x34) >> 9) + 0x10;
++  /* PATCH 544: `1a423 mov 0x34(%di),%bx` has NO 0x66 prefix -- it is a 16-BIT read, and `1a426 sar
++   * $0x9,%bx` a 16-bit signed shift.  Ghidra read a DWORD, so the speed-limit table index was computed
++   * from [di+0x34] paired with the next field [di+0x36].  The index then landed in a zero region of the
++   * STRSEG limit table about half the time, the target speed collapsed to 0, and every unit oscillated
++   * between accelerating and being forced back to a standstill -- net displacement zero. */
++  uVar2 = (uint)(int)(((int16_t)*(uint16_t *)(param_1 + 0x34)) >> 9) + 0x10;
+   if ((uVar2 & 0x8000) != 0) {
+     uVar2 = 0;
+   }
