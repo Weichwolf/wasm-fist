@@ -29,17 +29,17 @@
 # A mission runs until the ENGINE resolves it (FIST_STOP_ON_OUTCOME=1), not to a tick cap.  A cap could
 # not express this anyway: [DGROUP:0x452] is 16-bit, so any FIST_DUMPTICK above 0xffff never fires, and
 # one 15-minute mission is ~54000 sim ticks -- close enough to the ceiling to be a trap.  The wall-clock
-# budget is the only bound, and it must be generous: a full mission is ~20 minutes of native CPU.
+# budget is the only bound.  A 15-minute mission is ~2 minutes of native CPU (~54000 sim ticks at ~161
+# cooperative pumps each), so the default below is generous by a wide margin rather than tight.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET="${1:-native}"; TICKCAP="${2:-}"; FILTER="${3:-.}"   # TICKCAP empty = no cap; the engine decides
 BIN="${NATIVE:-/tmp/fist_native}"
 OUTJS="${OUTJS:-/tmp/fisttest/fistrun.js}"
 NODE="$(ls "$HOME"/Git/emsdk/node/*/bin/node 2>/dev/null | head -1)"; NODE="${NODE:-node}"
-BUDGET="${FIST_SELFPLAY_TIMEOUT:-1800}"
-# A full mission is ~20 minutes of native CPU, so a serial 47-mission sweep is most of a day.  The runs
-# are independent, so run several at once; each gets its OWN datadir because a run writes .FPL pilot
-# files back.  SP_JOBS=1 restores serial order.
+BUDGET="${FIST_SELFPLAY_TIMEOUT:-900}"
+# The runs are independent, so run several at once; each gets its OWN datadir because a run writes .FPL
+# pilot files back and two parallel runs must not share one.  SP_JOBS=1 restores serial order.
 JOBS="${SP_JOBS:-$(nproc 2>/dev/null || echo 2)}"
 # The BATTLES -> OK -> ACCEPT menu navigation that drives patch 380's FIST_FSG_BATTLE into any of
 # the 47 .FSG.  Identical to verify.sh's MC_MOUSE; without it the engine never leaves the menu and

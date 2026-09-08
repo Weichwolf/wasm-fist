@@ -1,5 +1,6 @@
 Type: feature
 Area: audio
+Title: the mission and menu audio stream is bit-identical to the original
 
 The mission + menu audio stream (SB/GUS + OPL, driven by the ported sound
 engine) is bit-identical to the original given the same input and RNG state,

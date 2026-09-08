@@ -1,6 +1,13 @@
 Type: feature
 Area: oracle
 Tags: oracle instrument
+Title: a guest-RAM oracle capture makes any engine field byte-comparable to the port
+Note: renumbered from 0007.  This item took 0007 first (c79809e, 2026-08-20, "board: file 0007
+      (guest-RAM oracle capture); 0002+0006 depend on it"), and 0007_ukraine1-terrain-baseloss
+      took the same number two days later (89d8601).  The base-loss item keeps 0007 because six
+      patches, tools/native_main.c and the project goal all cite `board:0007` meaning IT; this one
+      moved instead.  0002 and 0006 carried `Depends: 0007` meaning THIS item -- c79809e says so in
+      as many words -- and were repointed to 0024 with the renumber.
 
 A guest-RAM oracle capture reaches a chosen mission tick in the ORIGINAL and dumps
 guest RAM, so any engine or extender field is byte-comparable to the port's g_mem:

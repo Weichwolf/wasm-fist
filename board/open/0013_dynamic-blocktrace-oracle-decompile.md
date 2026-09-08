@@ -1,6 +1,7 @@
 Type: tooling
 Area: oracle
 Tags: dosbox blocktrace decompile flight-model overlay cfg smc icall determinism
+Title: the executed extender model is recoverable from a dynamic basic-block trace of the oracle
 
 The port can reconstruct the actually-executed extender flight/combat model (the overlay + the CS
 clusters that static Ghidra cannot resolve) from a DYNAMIC basic-block trace of the patched DOSBox --

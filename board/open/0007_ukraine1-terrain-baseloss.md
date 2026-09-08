@@ -1,6 +1,7 @@
 Type: bug
 Area: engine
 Tags: baseloss terrain
+Title: every map renders its voxel terrain crash-free -- the base-loss cascade is closed
 
 UKRAINE1 (and likely other maps) render their in-mission voxel terrain (FIST_TERRAIN op-0x24 path)
 crash-free like AZER1/SAUDI1/CYPRUS1/INDIA1/SYRIA1 do -- once the UKRAINE1-exposed base-loss CASCADE in

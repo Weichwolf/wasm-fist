@@ -1,5 +1,6 @@
 Type: feature
 Area: input
+Title: every input mode is faithful, keyboard through joystick to the serial link
 
 Every input mode is faithful: keyboard, mouse, joystick (port 0x201), and the
 serial-link two-player path produce the same engine response as the original for

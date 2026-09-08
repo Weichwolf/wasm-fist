@@ -1,6 +1,7 @@
 Type: refactor
 Area: ghidra-decompile
 Parent: 0003
+Title: the decompile threads segment-register dataflow, emitting real CS/ES instead of unaff_ pseudo-vars
 
 The Ghidra decompile threads the 16-bit SEGMENT-REGISTER dataflow (CS/ES/DS/SS) faithfully, so the
 `re_out/` decompile emits real segment values instead of uninitialised `unaff_CS`/`unaff_ES` (and dropped

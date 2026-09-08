@@ -1,6 +1,7 @@
 Type: feature
 Area: render
 Tags: voxel oracle
+Title: the windshield voxel terrain renders bit-identical to the original for every battle
 
 The windshield voxel-space terrain view (rows 0-95 of the 320x200 mission
 framebuffer) renders bit-identical to the original for every battle: a

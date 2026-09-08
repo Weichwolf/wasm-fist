@@ -1,6 +1,7 @@
 Type: bug
 Area: sim
 Tags: combat victory-condition board0012
+Title: an AI unit that sees an enemy in range fires at it
 
 Units engage: an AI unit that sees an enemy in range fires at it, so missions reach a resolved
 victory/defeat state instead of running forever.

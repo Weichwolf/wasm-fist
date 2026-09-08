@@ -1,6 +1,7 @@
 Type: bug
 Area: decompile
 Tags: wasm-divergence arity icall
+Title: every indirect call passes exactly as many arguments as its target takes
 
 Every indirect call in the port passes exactly as many arguments as its target takes, so that no
 `call_indirect` signature mismatch exists on wasm and no callee reads its arguments off stack residue

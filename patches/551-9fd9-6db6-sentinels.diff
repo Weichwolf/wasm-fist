@@ -1,0 +1,87 @@
+PATCH 551: two more `word == -1` constant-false sentinels.
+
+Same class as patch 548: `DAT_2000_...` declared `undefined2` is a `uint16_t`, which promotes to `int`,
+so a Ghidra-emitted `== -1` can never be true and the guard is dead.  board:0022 carries the class.
+
+## DGROUP:0x9fd9 -- four sites, one word
+
+The image contains exactly seven references to the displacement, and every one is word-width:
+
+    bddd: c7 06 d9 9f ff ff  movw  $0xffff,0x9fd9
+    be00: 8b 1e d9 9f        mov   0x9fd9,%bx
+    be0e: 3b 1e d9 9f        cmp   0x9fd9,%bx
+    be14: 83 3e d9 9f ff     cmpw  $0xffff,0x9fd9
+    be25: 89 1e d9 9f        mov   %bx,0x9fd9
+    be6e: c7 06 d9 9f ff ff  movw  $0xffff,0x9fd9
+    c096: 83 3e d9 9f ff     cmpw  $0xffff,0x9fd9
+
+The declaration is already right; only the constant was wrong.  The port's four `== -1`/`!= -1` sites
+map onto the two `cmpw $0xffff` compares -- two pairs of Ghidra functions share a tail, the same way
+`FUN_0000_bee2` and `FUN_0000_bee8` both fall through to 0xbeef.
+
+## DGROUP:0x6db6 -- the wraparound arm of a list-cycling loop
+
+0x6db6 is a genuine word (`incw`, `decw`, `cmpw`, `movw $0xffff,0x6db6` at 0x1bef3).  The loop that
+steps the list BACKWARDS reads:
+
+    1bf16: ff 0e b6 6d       decw  0x6db6
+    1bf1a: a1 b6 6d          mov   0x6db6,%ax
+    1bf1d: 3d ff ff          cmp   $0xffff,%ax
+    1bf20: 75 08             jne   0x1bf2a          ; no underflow -> use this index
+    1bf22: a1 d0 6d          mov   0x6dd0,%ax       ; underflowed -> wrap to the end ...
+    1bf25: a3 b6 6d          mov   %ax,0x6db6
+    1bf28: eb ec             jmp   0x1bf16          ; ... and step again
+
+The port's `if (DAT_2000_2db6 != -1) break;` was always true, so the break was always taken and the
+wraparound arm was unreachable: stepping backwards off the start of the list could never wrap to its
+end.
+
+board:0022
+
+--- a/fist.c
++++ b/fist.c
+@@ -32423,7 +32423,7 @@
+ 
+ {
+   if (param_1 != DAT_2000_5fd9) {
+-    if (DAT_2000_5fd9 == -1) {
++    if (DAT_2000_5fd9 == 0xffff) {  /* PATCH 551: cmpw $0xffff */
+       FUN_0000_be67();
+     }
+     if (param_1 != -1) {
+@@ -32788,7 +32788,7 @@
+   if (!bVar2) {
+     return;
+   }
+-  if (DAT_2000_5fd9 != -1) {
++  if (DAT_2000_5fd9 != 0xffff) {  /* PATCH 551: cmpw $0xffff */
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c05c)))();
+     DAT_1000_c06a = 0xcd;
+   }
+@@ -32818,7 +32818,7 @@
+   if (!bVar1) {
+     return;
+   }
+-  if (DAT_2000_5fd9 != -1) {
++  if (DAT_2000_5fd9 != 0xffff) {  /* PATCH 551: cmpw $0xffff */
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c05c)))();
+     DAT_1000_c06a = 0xcd;
+   }
+@@ -32837,7 +32837,7 @@
+   if (!(bool)in_CF) {
+     return;
+   }
+-  if (DAT_2000_5fd9 != -1) {
++  if (DAT_2000_5fd9 != 0xffff) {  /* PATCH 551: cmpw $0xffff */
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c05c)))();
+     DAT_1000_c06a = 0xcd;
+   }
+@@ -69475,7 +69475,7 @@
+   do {
+     while( true ) {
+       DAT_2000_2db6 = DAT_2000_2db6 + -1;
+-      if (DAT_2000_2db6 != -1) break;
++      if (DAT_2000_2db6 != 0xffff) break;  /* PATCH 551: cmpw $0xffff */
+       DAT_2000_2db6 = DAT_2000_2dd0;
+     }
+   } while (((undefined1 *)&DAT_2000_2e15)[DAT_2000_2db6 * 0xfd] == '\x02');

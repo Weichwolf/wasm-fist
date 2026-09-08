@@ -1,6 +1,7 @@
 Type: bug
 Area: decompile
 Tags: unpromoted dispatch render
+Title: every function named by a dispatch table exists in the port and is reachable
 
 Every function named by one of the engine's data-driven dispatch tables exists in the port and is
 reachable through the fist_icall map, so no table entry resolves to nothing.

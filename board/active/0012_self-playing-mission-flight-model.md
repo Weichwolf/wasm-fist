@@ -1,6 +1,7 @@
 Type: feature
 Area: flight-model
 Tags: mission simulation extender oracle transaction-log
+Title: a campaign mission plays itself to a resolved win/lose, native and wasm byte-identical
 
 One AZER1 campaign mission plays itself to a resolved win/lose under the port --
 the engine's AI drives both sides with empty player input, deterministic

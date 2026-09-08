@@ -1,0 +1,404 @@
+PATCH 552: forty-eight variables narrowed to the byte the image actually accesses.
+
+This is the systematic pass of the class that patches 546, 547, 549 and 550 each hit one instance of.
+A too-WIDE declaration is the damaging direction: the macro overlaps its neighbour, so every store
+corrupts an unrelated live variable.  Patch 547 (the mission clock) and 550 (the victory counter) were
+both found by chasing a symptom back to one of these; the point of this patch is to stop finding them
+one corrupted subsystem at a time.
+
+## How the set was chosen
+
+`tools/width_triage.py --byte` (board:0023) scans every `DAT_2000_*` macro in the tree, locates each
+one's 2-byte absolute displacement in `re_out/fist_dat_image.bin`, and classifies every reference by
+the opcode immediately preceding it -- modrm /06 and moffs forms, with a 0x66 operand-size prefix
+within the preceding five bytes marking 32-bit.  A macro enters this patch only if ALL FOUR hold:
+
+  1. declared `undefined2`;
+  2. at least one BYTE-width reference in the image;
+  3. ZERO word-width and ZERO 32-bit references;
+  4. ZERO unclassified references -- a 2-byte match whose preceding opcode is in neither table is
+     either data or an addressing form the scanner does not know, and the one reference that would
+     disprove the narrowing could be exactly that one.  128 macros pass 1-3; only these pass 4 as well.
+
+and it has a LIVE SUCCESSOR: the next byte is itself referenced by the image, so the too-wide store was
+actually corrupting something.  A too-wide byte with a dead neighbour is harmless and is left alone.
+
+The classifier is validated against a patch whose answer is already known: patch 539 widened
+`DAT_2000_5684` to a dword, and the scanner reports 11 of its 13 references as genuinely 32-bit.
+
+Every use of all 48 was then audited for anything that depends on the wide read -- a comparison or
+assignment against a constant above 0xff, a `-1` sentinel, an address-taken use, a shift.  Exactly ONE
+came back, and it is handled below.  The other 47 are declaration-only changes.
+
+## The one with width-dependent uses: DGROUP:0xe918
+
+Six references, every one byte-width, sentinel 0xff:
+
+    d243: c6 06 18 e9 ff    movb  $0xff,0xe918
+    d264: 80 3e 18 e9 ff    cmpb  $0xff,0xe918
+    d272: 80 3e 18 e9 02    cmpb  $0x2,0xe918
+    d337: a2 18 e9          mov   %al,0xe918
+    d3b8: c6 06 18 e9 02    movb  $0x2,0xe918
+    d3c5: c6 06 18 e9 00    movb  $0x0,0xe918
+
+Its `= -1` and two `!= -1` become 0xff.  They have to change here rather than in a sentinel patch: an
+unsigned char promotes to int, so once narrowed the `-1` form would be a constant false (board:0022).
+
+## The set
+
+Adjacent RUNS are the shape to notice -- each member aliased the next, exactly like DGROUP:0x6da4..0x6db0:
+0x87ca/0x87cc/0x87cd/0x87ce/0x87cf, 0x87d1..0x87d6, 0x8aae..0x8ab1, 0x8e46..0x8e55, 0x6c42..0x6c45,
+0x7a34/0x7a35, 0x7d1c/0x7d1d, 0x9934/0x9935.
+
+`refs` is the number of byte-width references to the variable, `succ` the number to its successor byte:
+
+    DAT_2000_3a34        0x7a34   refs=4   succ=9
+    DAT_2000_b6f4        0xf6f4   refs=3   succ=7
+    DAT_2000_b6b9        0xf6b9   refs=7   succ=6
+    DAT_2000_a6ee        0xe6ee   refs=3   succ=6
+    DAT_2000_b886        0xf886   refs=5   succ=5
+    DAT_2000_5935        0x9935   refs=4   succ=5
+    DAT_2000_56aa        0x96aa   refs=2   succ=5
+    DAT_2000_495e        0x895e   refs=10  succ=4
+    DAT_2000_2cdb        0x6cdb   refs=9   succ=4
+    DAT_2000_47d5        0x87d5   refs=4   succ=4
+    DAT_2000_5934        0x9934   refs=3   succ=4
+    DAT_2000_3ae9        0x7ae9   refs=3   succ=4
+    DAT_2000_47d4        0x87d4   refs=2   succ=4
+    DAT_2000_5c7d        0x9c7d   refs=4   succ=3
+    DAT_2000_3d28        0x7d28   refs=4   succ=3
+    DAT_2000_3d1c        0x7d1c   refs=4   succ=3
+    DAT_2000_4ab0        0x8ab0   refs=3   succ=3
+    DAT_2000_4aaf        0x8aaf   refs=3   succ=3
+    DAT_2000_4aae        0x8aae   refs=3   succ=3
+    DAT_2000_3ae2        0x7ae2   refs=1   succ=3
+    DAT_2000_3a35        0x7a35   refs=9   succ=2
+    DAT_2000_3b1f        0x7b1f   refs=5   succ=2
+    DAT_2000_5f1b        0x9f1b   refs=3   succ=2
+    DAT_2000_4ab1        0x8ab1   refs=3   succ=2
+    DAT_2000_3d1d        0x7d1d   refs=3   succ=2
+    DAT_2000_47d3        0x87d3   refs=2   succ=2
+    DAT_2000_47d2        0x87d2   refs=2   succ=2
+    DAT_2000_47d1        0x87d1   refs=2   succ=2
+    DAT_2000_2c45        0x6c45   refs=2   succ=2
+    DAT_2000_2c44        0x6c44   refs=2   succ=2
+    DAT_2000_4a94        0x8a94   refs=1   succ=2
+    DAT_2000_47ce        0x87ce   refs=1   succ=2
+    DAT_2000_2d2e        0x6d2e   refs=1   succ=2
+    DAT_2000_a918        0xe918   refs=6   succ=1
+    DAT_2000_2c42        0x6c42   refs=5   succ=1
+    DAT_2000_47d6        0x87d6   refs=4   succ=1
+    DAT_2000_4a95        0x8a95   refs=2   succ=1
+    DAT_2000_47cf        0x87cf   refs=2   succ=1
+    DAT_2000_4e55        0x8e55   refs=1   succ=1
+    DAT_2000_4e54        0x8e54   refs=1   succ=1
+    DAT_2000_4e52        0x8e52   refs=1   succ=1
+    DAT_2000_4e48        0x8e48   refs=1   succ=1
+    DAT_2000_4e46        0x8e46   refs=1   succ=1
+    DAT_2000_4cfd        0x8cfd   refs=1   succ=1
+    DAT_2000_47e7        0x87e7   refs=1   succ=1
+    DAT_2000_47cd        0x87cd   refs=1   succ=1
+    DAT_2000_47cc        0x87cc   refs=1   succ=1
+    DAT_2000_47ca        0x87ca   refs=1   succ=1
+
+Re-running `python3 tools/width_triage.py --byte` after this patch reproduces the selection: the 48
+above no longer appear, because they are no longer declared `undefined2`.
+
+board:0023
+
+--- a/fist.c
++++ b/fist.c
+@@ -2958,10 +2958,10 @@
+ #define DAT_2000_2c3a (*(undefined2 *)(g_mem+0x22c3a))
+ #define DAT_2000_2c3e (*(undefined2 *)(g_mem+0x22c3e))
+ #define DAT_2000_2c40 (*(undefined2 *)(g_mem+0x22c40))
+-#define DAT_2000_2c42 (*(undefined2 *)(g_mem+0x22c42))
++#define DAT_2000_2c42 (*(undefined1 *)(g_mem+0x22c42))
+ #define DAT_2000_2c43 (*(undefined2 *)(g_mem+0x22c43))
+-#define DAT_2000_2c44 (*(undefined2 *)(g_mem+0x22c44))
+-#define DAT_2000_2c45 (*(undefined2 *)(g_mem+0x22c45))
++#define DAT_2000_2c44 (*(undefined1 *)(g_mem+0x22c44))
++#define DAT_2000_2c45 (*(undefined1 *)(g_mem+0x22c45))
+ #define DAT_2000_2c46 (*(undefined2 *)(g_mem+0x22c46))
+ #define DAT_2000_2c4e (*(undefined2 *)(g_mem+0x22c4e))
+ #define DAT_2000_2c50 (*(undefined2 *)(g_mem+0x22c50))
+@@ -2978,7 +2978,7 @@
+ #define DAT_2000_2cc2 (*(int **)(g_mem+0x22cc2))
+ #define DAT_2000_2cca (*(undefined2 *)(g_mem+0x22cca))
+ #define DAT_2000_2ccc (*(undefined2 *)(g_mem+0x22ccc))
+-#define DAT_2000_2cdb (*(undefined2 *)(g_mem+0x22cdb))
++#define DAT_2000_2cdb (*(undefined1 *)(g_mem+0x22cdb))
+ #define DAT_2000_2cde (*(undefined2 *)(g_mem+0x22cde))
+ #define DAT_2000_2ce0 (*(undefined2 *)(g_mem+0x22ce0))
+ #define DAT_2000_2ce2 (*(undefined2 *)(g_mem+0x22ce2))
+@@ -2994,7 +2994,7 @@
+ #define DAT_2000_2d18 (*(undefined2 *)(g_mem+0x22d18))
+ #define DAT_2000_2d1a (*(undefined2 *)(g_mem+0x22d1a))
+ #define DAT_2000_2d2c (*(undefined2 *)(g_mem+0x22d2c))
+-#define DAT_2000_2d2e (*(undefined2 *)(g_mem+0x22d2e))
++#define DAT_2000_2d2e (*(undefined1 *)(g_mem+0x22d2e))
+ #define DAT_2000_2d2f (*(undefined2 *)(g_mem+0x22d2f))
+ #define DAT_2000_2d32 (*(undefined2 *)(g_mem+0x22d32))
+ #define DAT_2000_2d34 (*(int **)(g_mem+0x22d34))
+@@ -3123,8 +3123,8 @@
+ #define DAT_2000_3a2e (*(undefined2 *)(g_mem+0x23a2e))
+ #define DAT_2000_3a30 (*(undefined2 *)(g_mem+0x23a30))
+ #define DAT_2000_3a32 (*(undefined2 *)(g_mem+0x23a32))
+-#define DAT_2000_3a34 (*(undefined2 *)(g_mem+0x23a34))
+-#define DAT_2000_3a35 (*(undefined2 *)(g_mem+0x23a35))
++#define DAT_2000_3a34 (*(undefined1 *)(g_mem+0x23a34))
++#define DAT_2000_3a35 (*(undefined1 *)(g_mem+0x23a35))
+ #define DAT_2000_3a36 (*(undefined2 *)(g_mem+0x23a36))
+ #define DAT_2000_3a38 (*(undefined2 *)(g_mem+0x23a38))
+ #define DAT_2000_3a3c (*(undefined2 *)(g_mem+0x23a3c))
+@@ -3136,11 +3136,11 @@
+ #define DAT_2000_3aa2 (*(undefined2 *)(g_mem+0x23aa2))
+ #define DAT_2000_3adc (*(undefined2 *)(g_mem+0x23adc))
+ #define DAT_2000_3ae0 (*(int **)(g_mem+0x23ae0))
+-#define DAT_2000_3ae2 (*(undefined2 *)(g_mem+0x23ae2))
++#define DAT_2000_3ae2 (*(undefined1 *)(g_mem+0x23ae2))
+ #define DAT_2000_3ae3 (*(undefined2 *)(g_mem+0x23ae3))
+ #define DAT_2000_3ae5 (*(undefined2 *)(g_mem+0x23ae5))
+ #define DAT_2000_3ae7 (*(undefined2 *)(g_mem+0x23ae7))
+-#define DAT_2000_3ae9 (*(undefined2 *)(g_mem+0x23ae9))
++#define DAT_2000_3ae9 (*(undefined1 *)(g_mem+0x23ae9))
+ #define DAT_2000_3aea (*(undefined2 *)(g_mem+0x23aea))
+ #define DAT_2000_3aec (*(undefined2 *)(g_mem+0x23aec))
+ #define DAT_2000_3aee (*(undefined2 *)(g_mem+0x23aee))
+@@ -3149,7 +3149,7 @@
+ #define DAT_2000_3b1a (*(undefined2 *)(g_mem+0x23b1a))
+ #define DAT_2000_3b1c (*(undefined2 *)(g_mem+0x23b1c))
+ #define DAT_2000_3b1e (*(undefined2 *)(g_mem+0x23b1e))
+-#define DAT_2000_3b1f (*(undefined2 *)(g_mem+0x23b1f))
++#define DAT_2000_3b1f (*(undefined1 *)(g_mem+0x23b1f))
+ #define DAT_2000_3b20 (*(undefined2 *)(g_mem+0x23b20))
+ #define DAT_2000_3b84 (*(undefined2 *)(g_mem+0x23b84))
+ #define DAT_2000_3b88 (*(undefined2 *)(g_mem+0x23b88))
+@@ -3198,14 +3198,14 @@
+ #define DAT_2000_3d06 (*(undefined2 *)(g_mem+0x23d06))
+ #define DAT_2000_3d0e (*(undefined2 *)(g_mem+0x23d0e))
+ #define DAT_2000_3d1a (*(undefined2 *)(g_mem+0x23d1a))
+-#define DAT_2000_3d1c (*(undefined2 *)(g_mem+0x23d1c))
+-#define DAT_2000_3d1d (*(undefined2 *)(g_mem+0x23d1d))
++#define DAT_2000_3d1c (*(undefined1 *)(g_mem+0x23d1c))
++#define DAT_2000_3d1d (*(undefined1 *)(g_mem+0x23d1d))
+ #define DAT_2000_3d1e (*(undefined2 *)(g_mem+0x23d1e))
+ #define DAT_2000_3d20 (*(undefined2 *)(g_mem+0x23d20))
+ #define DAT_2000_3d22 (*(undefined2 *)(g_mem+0x23d22))
+ #define DAT_2000_3d24 (*(undefined2 *)(g_mem+0x23d24))
+ #define DAT_2000_3d26 (*(undefined2 *)(g_mem+0x23d26))
+-#define DAT_2000_3d28 (*(undefined2 *)(g_mem+0x23d28))
++#define DAT_2000_3d28 (*(undefined1 *)(g_mem+0x23d28))
+ #define DAT_2000_3d29 (*(undefined2 *)(g_mem+0x23d29))
+ #define DAT_2000_3d2a (*(undefined2 *)(g_mem+0x23d2a))
+ #define DAT_2000_3d40 (*(undefined2 *)(g_mem+0x23d40))
+@@ -3219,25 +3219,25 @@
+ #define DAT_2000_47c2 (*(undefined2 *)(g_mem+0x247c2))
+ #define DAT_2000_47c4 (*(undefined2 *)(g_mem+0x247c4))
+ #define DAT_2000_47c9 (*(undefined2 *)(g_mem+0x247c9))
+-#define DAT_2000_47ca (*(undefined2 *)(g_mem+0x247ca))
++#define DAT_2000_47ca (*(undefined1 *)(g_mem+0x247ca))
+ #define DAT_2000_47cb (*(undefined2 *)(g_mem+0x247cb))
+-#define DAT_2000_47cc (*(undefined2 *)(g_mem+0x247cc))
+-#define DAT_2000_47cd (*(undefined2 *)(g_mem+0x247cd))
+-#define DAT_2000_47ce (*(undefined2 *)(g_mem+0x247ce))
+-#define DAT_2000_47cf (*(undefined2 *)(g_mem+0x247cf))
++#define DAT_2000_47cc (*(undefined1 *)(g_mem+0x247cc))
++#define DAT_2000_47cd (*(undefined1 *)(g_mem+0x247cd))
++#define DAT_2000_47ce (*(undefined1 *)(g_mem+0x247ce))
++#define DAT_2000_47cf (*(undefined1 *)(g_mem+0x247cf))
+ #define DAT_2000_47d0 (*(undefined2 *)(g_mem+0x247d0))
+-#define DAT_2000_47d1 (*(undefined2 *)(g_mem+0x247d1))
+-#define DAT_2000_47d2 (*(undefined2 *)(g_mem+0x247d2))
+-#define DAT_2000_47d3 (*(undefined2 *)(g_mem+0x247d3))
+-#define DAT_2000_47d4 (*(undefined2 *)(g_mem+0x247d4))
+-#define DAT_2000_47d5 (*(undefined2 *)(g_mem+0x247d5))
+-#define DAT_2000_47d6 (*(undefined2 *)(g_mem+0x247d6))
++#define DAT_2000_47d1 (*(undefined1 *)(g_mem+0x247d1))
++#define DAT_2000_47d2 (*(undefined1 *)(g_mem+0x247d2))
++#define DAT_2000_47d3 (*(undefined1 *)(g_mem+0x247d3))
++#define DAT_2000_47d4 (*(undefined1 *)(g_mem+0x247d4))
++#define DAT_2000_47d5 (*(undefined1 *)(g_mem+0x247d5))
++#define DAT_2000_47d6 (*(undefined1 *)(g_mem+0x247d6))
+ #define DAT_2000_47d7 (*(undefined2 *)(g_mem+0x247d7))
+ #define DAT_2000_47da (*(undefined2 *)(g_mem+0x247da))
+ #define DAT_2000_47dd (*(undefined2 *)(g_mem+0x247dd))
+ #define DAT_2000_47e0 (*(undefined2 *)(g_mem+0x247e0))
+ #define DAT_2000_47e4 (*(undefined2 *)(g_mem+0x247e4))
+-#define DAT_2000_47e7 (*(undefined2 *)(g_mem+0x247e7))
++#define DAT_2000_47e7 (*(undefined1 *)(g_mem+0x247e7))
+ #define DAT_2000_47ea (*(undefined2 *)(g_mem+0x247ea))
+ #define DAT_2000_47ed (*(undefined2 *)(g_mem+0x247ed))
+ #define DAT_2000_47f0 (*(undefined2 *)(g_mem+0x247f0))
+@@ -3313,7 +3313,7 @@
+ #define DAT_2000_4959 (*(undefined2 *)(g_mem+0x24959))
+ #define DAT_2000_495a (*(undefined2 *)(g_mem+0x2495a))
+ #define DAT_2000_495b (*(undefined2 *)(g_mem+0x2495b))
+-#define DAT_2000_495e (*(undefined2 *)(g_mem+0x2495e))
++#define DAT_2000_495e (*(undefined1 *)(g_mem+0x2495e))
+ #define DAT_2000_495f (*(undefined2 *)(g_mem+0x2495f))
+ #define DAT_2000_4961 (*(undefined2 *)(g_mem+0x24961))
+ #define DAT_2000_4963 (*(undefined2 *)(g_mem+0x24963))
+@@ -3336,8 +3336,8 @@
+ #define DAT_2000_4a8e (*(undefined2 *)(g_mem+0x24a8e))
+ #define DAT_2000_4a90 (*(undefined2 *)(g_mem+0x24a90))
+ #define DAT_2000_4a92 (*(undefined2 *)(g_mem+0x24a92))
+-#define DAT_2000_4a94 (*(undefined2 *)(g_mem+0x24a94))
+-#define DAT_2000_4a95 (*(undefined2 *)(g_mem+0x24a95))
++#define DAT_2000_4a94 (*(undefined1 *)(g_mem+0x24a94))
++#define DAT_2000_4a95 (*(undefined1 *)(g_mem+0x24a95))
+ #define DAT_2000_4a98 (*(undefined2 *)(g_mem+0x24a98))
+ #define DAT_2000_4a9a (*(undefined2 *)(g_mem+0x24a9a))
+ #define DAT_2000_4aa8 (*(undefined2 *)(g_mem+0x24aa8))
+@@ -3345,10 +3345,10 @@
+ #define DAT_2000_4aab (*(undefined2 *)(g_mem+0x24aab))
+ #define DAT_2000_4aac (*(undefined2 *)(g_mem+0x24aac))
+ #define DAT_2000_4aad (*(undefined2 *)(g_mem+0x24aad))
+-#define DAT_2000_4aae (*(undefined2 *)(g_mem+0x24aae))
+-#define DAT_2000_4aaf (*(undefined2 *)(g_mem+0x24aaf))
+-#define DAT_2000_4ab0 (*(undefined2 *)(g_mem+0x24ab0))
+-#define DAT_2000_4ab1 (*(undefined2 *)(g_mem+0x24ab1))
++#define DAT_2000_4aae (*(undefined1 *)(g_mem+0x24aae))
++#define DAT_2000_4aaf (*(undefined1 *)(g_mem+0x24aaf))
++#define DAT_2000_4ab0 (*(undefined1 *)(g_mem+0x24ab0))
++#define DAT_2000_4ab1 (*(undefined1 *)(g_mem+0x24ab1))
+ #define DAT_2000_4ab2 (*(undefined2 *)(g_mem+0x24ab2))
+ #define DAT_2000_4b43 (*(undefined2 *)(g_mem+0x24b43))
+ #define DAT_2000_4b45 (*(undefined2 *)(g_mem+0x24b45))
+@@ -3400,7 +3400,7 @@
+ #define DAT_2000_4cf4 (*(undefined2 *)(g_mem+0x24cf4))
+ #define DAT_2000_4cf7 (*(undefined2 *)(g_mem+0x24cf7))
+ #define DAT_2000_4cfa (*(undefined2 *)(g_mem+0x24cfa))
+-#define DAT_2000_4cfd (*(undefined2 *)(g_mem+0x24cfd))
++#define DAT_2000_4cfd (*(undefined1 *)(g_mem+0x24cfd))
+ #define DAT_2000_4d00 (*(undefined2 *)(g_mem+0x24d00))
+ #define DAT_2000_4d03 (*(undefined2 *)(g_mem+0x24d03))
+ #define DAT_2000_4d06 (*(undefined2 *)(g_mem+0x24d06))
+@@ -3426,19 +3426,19 @@
+ #define DAT_2000_4e34 (*(undefined2 *)(g_mem+0x24e34))
+ #define DAT_2000_4e36 (*(undefined2 *)(g_mem+0x24e36))
+ #define DAT_2000_4e38 (*(undefined2 *)(g_mem+0x24e38))
+-#define DAT_2000_4e46 (*(undefined2 *)(g_mem+0x24e46))
++#define DAT_2000_4e46 (*(undefined1 *)(g_mem+0x24e46))
+ #define DAT_2000_4e47 (*(undefined2 *)(g_mem+0x24e47))
+-#define DAT_2000_4e48 (*(undefined2 *)(g_mem+0x24e48))
++#define DAT_2000_4e48 (*(undefined1 *)(g_mem+0x24e48))
+ #define DAT_2000_4e49 (*(undefined2 *)(g_mem+0x24e49))
+ #define DAT_2000_4e4b (*(undefined2 *)(g_mem+0x24e4b))
+ #define DAT_2000_4e4d (*(undefined2 *)(g_mem+0x24e4d))
+ #define DAT_2000_4e4f (*(undefined2 *)(g_mem+0x24e4f))
+ #define DAT_2000_4e50 (*(undefined2 *)(g_mem+0x24e50))
+ #define DAT_2000_4e51 (*(undefined2 *)(g_mem+0x24e51))
+-#define DAT_2000_4e52 (*(undefined2 *)(g_mem+0x24e52))
++#define DAT_2000_4e52 (*(undefined1 *)(g_mem+0x24e52))
+ #define DAT_2000_4e53 (*(undefined2 *)(g_mem+0x24e53))
+-#define DAT_2000_4e54 (*(undefined2 *)(g_mem+0x24e54))
+-#define DAT_2000_4e55 (*(undefined2 *)(g_mem+0x24e55))
++#define DAT_2000_4e54 (*(undefined1 *)(g_mem+0x24e54))
++#define DAT_2000_4e55 (*(undefined1 *)(g_mem+0x24e55))
+ #define DAT_2000_4e56 (*(undefined2 *)(g_mem+0x24e56))
+ #define DAT_2000_4e57 (*(undefined2 *)(g_mem+0x24e57))
+ #define DAT_2000_4e58 (*(undefined2 *)(g_mem+0x24e58))
+@@ -3550,7 +3550,7 @@
+ #define DAT_2000_569e (*(undefined2 *)(g_mem+0x2569e))
+ #define DAT_2000_56a0 (*(undefined2 *)(g_mem+0x256a0))
+ #define DAT_2000_56a8 (*(undefined2 *)(g_mem+0x256a8))
+-#define DAT_2000_56aa (*(undefined2 *)(g_mem+0x256aa))
++#define DAT_2000_56aa (*(undefined1 *)(g_mem+0x256aa))
+ #define DAT_2000_56ab (*(undefined2 *)(g_mem+0x256ab))
+ #define DAT_2000_56ec (*(undefined2 *)(g_mem+0x256ec))
+ #define DAT_2000_56ee (*(undefined2 *)(g_mem+0x256ee))
+@@ -3585,8 +3585,8 @@
+ #define DAT_2000_57a8 (*(undefined2 *)(g_mem+0x257a8))
+ #define DAT_2000_57aa (*(undefined2 *)(g_mem+0x257aa))
+ #define DAT_2000_57ba (*(undefined2 *)(g_mem+0x257ba))
+-#define DAT_2000_5934 (*(undefined2 *)(g_mem+0x25934))
+-#define DAT_2000_5935 (*(undefined2 *)(g_mem+0x25935))
++#define DAT_2000_5934 (*(undefined1 *)(g_mem+0x25934))
++#define DAT_2000_5935 (*(undefined1 *)(g_mem+0x25935))
+ #define DAT_2000_5936 (*(undefined2 *)(g_mem+0x25936))
+ #define DAT_2000_5938 (*(undefined2 *)(g_mem+0x25938))
+ #define DAT_2000_593a (*(undefined2 *)(g_mem+0x2593a))
+@@ -3612,7 +3612,7 @@
+ #define DAT_2000_5bd7 (*(undefined2 *)(g_mem+0x25bd7))
+ #define DAT_2000_5bd9 (*(undefined2 *)(g_mem+0x25bd9))
+ #define DAT_2000_5bdb (*(undefined2 *)(g_mem+0x25bdb))
+-#define DAT_2000_5c7d (*(undefined2 *)(g_mem+0x25c7d))
++#define DAT_2000_5c7d (*(undefined1 *)(g_mem+0x25c7d))
+ #define DAT_2000_5c7e (*(undefined2 *)(g_mem+0x25c7e))
+ #define DAT_2000_5c7f (*(undefined2 *)(g_mem+0x25c7f))
+ #define DAT_2000_5c83 (*(undefined2 *)(g_mem+0x25c83))
+@@ -3630,7 +3630,7 @@
+ #define DAT_2000_5dc7 (*(undefined2 *)(g_mem+0x25dc7))
+ #define DAT_2000_5f17 (*(undefined2 *)(g_mem+0x25f17))
+ #define DAT_2000_5f19 (*(undefined2 *)(g_mem+0x25f19))
+-#define DAT_2000_5f1b (*(undefined2 *)(g_mem+0x25f1b))
++#define DAT_2000_5f1b (*(undefined1 *)(g_mem+0x25f1b))
+ #define DAT_2000_5f1c (*(undefined2 *)(g_mem+0x25f1c))
+ /* PATCH 550: 0x9f1e is a flag word updated by BYTE in one place and by WORD in another --
+  *   bde4: 80 0e 1e 9f 20     orb   $0x20,0x9f1e
+@@ -3697,7 +3697,7 @@
+ #define DAT_2000_a6e8 (*(undefined2 *)(g_mem+0x2a6e8))
+ #define DAT_2000_a6ea (*(undefined2 *)(g_mem+0x2a6ea))
+ #define DAT_2000_a6ec (*(undefined2 *)(g_mem+0x2a6ec))
+-#define DAT_2000_a6ee (*(undefined2 *)(g_mem+0x2a6ee))
++#define DAT_2000_a6ee (*(undefined1 *)(g_mem+0x2a6ee))
+ #define DAT_2000_a6ef (*(undefined2 *)(g_mem+0x2a6ef))
+ #define DAT_2000_a6f1 (*(undefined2 *)(g_mem+0x2a6f1))
+ #define DAT_2000_a709 (*(undefined2 *)(g_mem+0x2a709))
+@@ -3762,7 +3762,7 @@
+ #define DAT_2000_a912 (*(undefined2 *)(g_mem+0x2a912))
+ #define DAT_2000_a914 (*(undefined2 *)(g_mem+0x2a914))
+ #define DAT_2000_a916 (*(undefined2 *)(g_mem+0x2a916))
+-#define DAT_2000_a918 (*(undefined2 *)(g_mem+0x2a918))
++#define DAT_2000_a918 (*(undefined1 *)(g_mem+0x2a918))
+ #define DAT_2000_a919 (*(undefined2 *)(g_mem+0x2a919))
+ #define DAT_2000_a927 (*(undefined2 *)(g_mem+0x2a927))
+ #define DAT_2000_a938 (*(undefined2 *)(g_mem+0x2a938))
+@@ -3819,7 +3819,7 @@
+ #define DAT_2000_adb8 (*(undefined2 *)(g_mem+0x2adb8))
+ #define DAT_2000_adb9 (*(undefined2 *)(g_mem+0x2adb9))
+ #define DAT_2000_adba (*(undefined2 *)(g_mem+0x2adba))
+-#define DAT_2000_b6b9 (*(undefined2 *)(g_mem+0x2b6b9))
++#define DAT_2000_b6b9 (*(undefined1 *)(g_mem+0x2b6b9))
+ #define DAT_2000_b6ba (*(undefined2 *)(g_mem+0x2b6ba))
+ #define DAT_2000_b6bc (*(undefined2 *)(g_mem+0x2b6bc))
+ #define DAT_2000_b6be (*(undefined2 *)(g_mem+0x2b6be))
+@@ -3838,7 +3838,7 @@
+ #define DAT_2000_b6ec (*(int **)(g_mem+0x2b6ec))
+ #define DAT_2000_b6f0 (*(undefined2 *)(g_mem+0x2b6f0))
+ #define DAT_2000_b6f2 (*(undefined2 *)(g_mem+0x2b6f2))
+-#define DAT_2000_b6f4 (*(undefined2 *)(g_mem+0x2b6f4))
++#define DAT_2000_b6f4 (*(undefined1 *)(g_mem+0x2b6f4))
+ #define DAT_2000_b6f5 (*(undefined2 *)(g_mem+0x2b6f5))
+ #define DAT_2000_b6f7 (*(undefined2 *)(g_mem+0x2b6f7))
+ #define DAT_2000_b6f9 (*(undefined2 *)(g_mem+0x2b6f9))
+@@ -3862,7 +3862,7 @@
+ #define DAT_2000_b851 (*(undefined2 *)(g_mem+0x2b851))
+ #define DAT_2000_b882 (*(undefined2 *)(g_mem+0x2b882))
+ #define DAT_2000_b885 (*(undefined2 *)(g_mem+0x2b885))
+-#define DAT_2000_b886 (*(undefined2 *)(g_mem+0x2b886))
++#define DAT_2000_b886 (*(undefined1 *)(g_mem+0x2b886))
+ #define DAT_2000_b887 (*(undefined2 *)(g_mem+0x2b887))
+ #define DAT_2000_b88f (*(undefined2 *)(g_mem+0x2b88f))
+ #define DAT_2000_b891 (*(undefined2 *)(g_mem+0x2b891))
+@@ -35510,7 +35510,7 @@
+   uVar4 = 0x6d;
+   uVar6 = 0x34;
+   uVar2 = FUN_0000_1d84(0x50,0x6d,0x34,0xe933);
+-  DAT_2000_a918 = -1;
++  DAT_2000_a918 = 0xff;   /* PATCH 552: movb $0xff,0xe918 at 0xd243 */
+   do {
+     uVar8 = in_CF;
+     FUN_0000_206f((char)uVar2,uVar4,param_1,uVar7);
+@@ -35527,8 +35527,8 @@
+       if ((bool)uVar8) break;
+       uVar9 = 0xd264;
+       FUN_0000_1e4b(uVar2,uVar4,uVar6,uVar7);
+-      uVar8 = DAT_2000_a918 != -1;
+-      if (DAT_2000_a918 != -1) {
++      uVar8 = DAT_2000_a918 != 0xff;   /* PATCH 552: cmpb $0xff,0xe918 at 0xd264 */
++      if (DAT_2000_a918 != 0xff) {     /* PATCH 552: cmpb $0xff,0xe918 at 0xd264 */
+         iVar1 = FUN_0000_1cdb(unaff_CS,uVar5,uVar3,iVar1,param_1,uVar7);
+         if (DAT_2000_a918 != '\x02') {
+           return CONCAT22(extraout_var,iVar1);

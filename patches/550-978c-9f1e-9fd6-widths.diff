@@ -1,0 +1,132 @@
+PATCH 550: four more declarations narrowed to the width the image actually uses.
+
+Found by `tools/width_triage.py` (board:0023) and each confirmed against the instruction.
+
+## DGROUP:0x978c -- and the victory counter it was overwriting
+
+    ab0a: a3 8c 97          mov   %ax,0x978c          ; `a3` = mov %ax,moffs16 -- TWO bytes
+    afbb: f6 06 8c 97 03    testb $0x3,0x978c
+    afd6: a0 8c 97          mov   0x978c,%al
+   1abbb: a0 8c 97          mov   0x978c,%al
+
+Four references, all byte or word, none 32-bit.  The port declared BOTH accessors too wide:
+`_DAT_2000_578c` as `undefined4` and `DAT_2000_578c` as `undefined2`.  The dword one carries the only
+store in the tree --
+
+    _DAT_2000_578c = FUN_0000_0291();
+
+-- so every call wrote 0x978c..0x978f and clobbered **DGROUP:0x978e, the live-object count that
+FUN_1000_a5dc's victory test reads** (0x1a624 zeroes it, 0x1a636 counts it up, 0x1a694 tests it against
+zero).  `FUN_0000_0291` returns `undefined4`; the asm keeps only AX, which the narrowing now does too.
+
+This does NOT by itself explain why the victory outcome never fires -- a5dc zeroes, counts and tests
+0x978e inside one call with no engine code in between, so the clobber cannot corrupt its own decision.
+It does corrupt the leftover value 0x1a618 copies into `prev` (0x9792), which gates the count-decreased
+notification at 0x1a66b, and it invalidated every `live=` figure measured from outside a5dc.
+
+## DGROUP:0x9f1e -- a flag word updated by byte and by word, never as a dword
+
+    bde4: 80 0e 1e 9f 20    orb   $0x20,0x9f1e
+    bdeb: f6 06 1e 9f 10    testb $0x10,0x9f1e
+    be37: 81 0e 1e 9f 20 03 orw   $0x320,0x9f1e
+
+Same shape: `DAT_2000_5f1e` was `undefined2` where the asm reads and writes one byte, and
+`_DAT_2000_5f1e` was `undefined4` where `orw` writes two, so `_DAT_2000_5f1e |= 800` (Ghidra's decimal
+for 0x320) also wrote 0x9f20/0x9f21.
+
+## DGROUP:0x9fd6 -- a byte sitting directly below a live word
+
+    beb7: 80 3e d6 9f ff    cmpb  $0xff,0x9fd6
+    bebc: 74 1d             je    0xbedb
+    bebe: a1 d7 9f          mov   0x9fd7,%ax          ; DAT_2000_5fd7 -- a WORD
+    bec1: 3b 06 de 6c       cmp   0x6cde,%ax
+    bec7: a0 d6 9f          mov   0x9fd6,%al
+    bed6: c6 06 d6 9f ff    movb  $0xff,0x9fd6
+    bedc: c6 06 d6 9f ff    movb  $0xff,0x9fd6
+    beef: a2 d6 9f          mov   %al,0x9fd6
+
+Five references, every one byte-width.  Declared `undefined2`, so `DAT_2000_5fd6 = 0xff` wrote 0x00ff
+and zeroed 0x9fd7 -- the word the guard on the very next line reads.  `DAT_2000_5fd7` is correctly
+declared `undefined2` and is written by `mov %bx,0x9fd7` at 0xbef6, so the neighbour is real state.
+
+Narrowing it forces its two sentinel constants: the asm compares and stores the BYTE 0xff, and an
+unsigned char promotes to int, so the Ghidra-emitted `-1` would be a constant false.  Those two lines
+change here rather than in patch 551 because the narrowing is what requires them.
+
+board:0023
+
+--- a/fist.c
++++ b/fist.c
+@@ -3567,7 +3567,10 @@
+ #define DAT_2000_5768 (*(undefined2 *)(g_mem+0x25768))
+ #define DAT_2000_576a (*(int **)(g_mem+0x2576a))
+ #define DAT_2000_578a (*(undefined2 *)(g_mem+0x2578a))
+-#define DAT_2000_578c (*(undefined2 *)(g_mem+0x2578c))
++/* PATCH 550: 0x978c is written whole as a WORD (`ab0a: a3 8c 97  mov %ax,0x978c`) but READ by byte
++ * (`afd6/1abbb: a0 8c 97  mov 0x978c,%al`, `afbb: f6 06 8c 97 03  testb $0x3,0x978c`).  The byte
++ * accessor must be one byte wide; see the word accessor below.  board:0023 */
++#define DAT_2000_578c (*(undefined1 *)(g_mem+0x2578c))
+ #define DAT_2000_578e (*(undefined2 *)(g_mem+0x2578e))
+ #define DAT_2000_5790 (*(undefined2 *)(g_mem+0x25790))
+ #define DAT_2000_5792 (*(undefined2 *)(g_mem+0x25792))
+@@ -3629,7 +3632,12 @@
+ #define DAT_2000_5f19 (*(undefined2 *)(g_mem+0x25f19))
+ #define DAT_2000_5f1b (*(undefined2 *)(g_mem+0x25f1b))
+ #define DAT_2000_5f1c (*(undefined2 *)(g_mem+0x25f1c))
+-#define DAT_2000_5f1e (*(undefined2 *)(g_mem+0x25f1e))
++/* PATCH 550: 0x9f1e is a flag word updated by BYTE in one place and by WORD in another --
++ *   bde4: 80 0e 1e 9f 20     orb   $0x20,0x9f1e
++ *   bdeb: f6 06 1e 9f 10     testb $0x10,0x9f1e
++ *   be37: 81 0e 1e 9f 20 03  orw   $0x320,0x9f1e
++ * -- and never as a dword.  board:0023 */
++#define DAT_2000_5f1e (*(undefined1 *)(g_mem+0x25f1e))
+ #define DAT_2000_5f20 (*(undefined2 *)(g_mem+0x25f20))
+ #define DAT_2000_5f22 (*(undefined2 *)(g_mem+0x25f22))
+ #define DAT_2000_5fc8 (*(undefined2 *)(g_mem+0x25fc8))
+@@ -3638,7 +3646,15 @@
+ #define DAT_2000_5fce (*(undefined2 *)(g_mem+0x25fce))
+ #define DAT_2000_5fd0 (*(undefined2 *)(g_mem+0x25fd0))
+ #define DAT_2000_5fd4 (*(undefined2 *)(g_mem+0x25fd4))
+-#define DAT_2000_5fd6 (*(undefined2 *)(g_mem+0x25fd6))
++/* PATCH 550: 0x9fd6 is a BYTE sitting directly below the live WORD 0x9fd7 --
++ *   beb7: 80 3e d6 9f ff     cmpb $0xff,0x9fd6
++ *   bebe: a1 d7 9f           mov  0x9fd7,%ax        <- DAT_2000_5fd7, a word
++ *   bec7: a0 d6 9f           mov  0x9fd6,%al
++ *   bed6: c6 06 d6 9f ff     movb $0xff,0x9fd6
++ *   beef: a2 d6 9f           mov  %al,0x9fd6
++ * -- so as a word every store here also wrote 0x9fd7, the value the very next test reads.  Its two
++ * sentinel constants become 0xff with the narrowing, since an unsigned char is never -1.  board:0023 */
++#define DAT_2000_5fd6 (*(undefined1 *)(g_mem+0x25fd6))
+ #define DAT_2000_5fd7 (*(undefined2 *)(g_mem+0x25fd7))
+ #define DAT_2000_5fd9 (*(undefined2 *)(g_mem+0x25fd9))
+ #define DAT_2000_5fdd (*(undefined2 *)(g_mem+0x25fdd))
+@@ -3963,8 +3979,14 @@
+  * FUN_1000_6049 (patch 264) walks -- and `_DAT_2000_2d38 = ...` clobbered both peaks. */
+ #define _DAT_2000_2d38 (*(undefined2 *)(g_mem+0x22d38))
+ #define _DAT_2000_2d3a (*(undefined2 *)(g_mem+0x22d3a))
+-#define _DAT_2000_578c (*(undefined4 *)(g_mem+0x2578c))
+-#define _DAT_2000_5f1e (*(undefined4 *)(g_mem+0x25f1e))
++/* PATCH 550: `a3` is `mov %ax,moffs16` -- TWO bytes.  As an undefined4 the single store
++ * `_DAT_2000_578c = FUN_0000_0291();` wrote 0x978c..0x978f and overwrote DGROUP:0x978e, the
++ * live-object count that FUN_1000_a5dc's victory test at 0x1a694 reads (0x1a624 zeroes it, 0x1a636
++ * counts it, 0x1a694 tests it).  board:0023 */
++#define _DAT_2000_578c (*(undefined2 *)(g_mem+0x2578c))
++/* PATCH 550: the word accessor for 0x9f1e (`orw $0x320` at 0xbe37).  As an undefined4 it also wrote
++ * 0x9f20/0x9f21.  board:0023 */
++#define _DAT_2000_5f1e (*(undefined2 *)(g_mem+0x25f1e))
+ #define _DAT_2000_a902 (*(undefined4 *)(g_mem+0x2a902))
+ #define _DAT_2000_aa2c (*(undefined4 *)(g_mem+0x2aa2c))
+ #define _DAT_3000_a4bc (*(undefined4 *)(g_mem+0x3a4bc))
+@@ -32519,10 +32541,10 @@
+ void __allregs FUN_0000_beb7(undefined2 param_1)
+ 
+ {
+-  if ((DAT_2000_5fd6 != -1) && (DAT_2000_5fd7 == DAT_2000_2cde)) {
++  if ((DAT_2000_5fd6 != 0xff) && (DAT_2000_5fd7 == DAT_2000_2cde)) {   /* PATCH 550: cmpb $0xff */
+     FUN_0000_befb(DAT_2000_5fd6,param_1);
+     DAT_2000_5fca = DAT_1000_c452;
+-    DAT_2000_5fd6 = -1;
++    DAT_2000_5fd6 = 0xff;                                              /* PATCH 550: movb $0xff */
+   }
+   return;
+ }

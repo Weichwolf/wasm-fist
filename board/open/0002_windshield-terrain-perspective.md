@@ -1,7 +1,8 @@
 Type: bug
 Area: render
 Tags: voxel oracle
-Depends: 0007
+Depends: 0024
+Title: the windshield shows a correct first-person voxel perspective with sky, horizon and receding terrain
 
 The windshield renders the terrain in a correct first-person voxel-space
 perspective — sky above, a horizon line, terrain receding below — instead of the

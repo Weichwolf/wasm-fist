@@ -1,6 +1,7 @@
 Type: feature
 Area: extender-shim
 Parent: 0003
+Title: the extender task-execution service is implemented faithfully in the shim
 
 The Doug-Huffman extender TASK-EXECUTION service (real-mode->PM callback gate, linear 0x8799) is
 implemented faithfully in the platform shim, so every engine `extender op` renders/executes bit-identically

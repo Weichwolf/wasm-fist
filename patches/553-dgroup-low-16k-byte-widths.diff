@@ -1,0 +1,88 @@
+PATCH 553: the first 16 KB of DGROUP was never triaged -- six more byte variables, including the
+mission-state discriminator.
+
+Ghidra names a DGROUP variable by the segment it guessed, so ONE variable space has two spellings:
+
+    DAT_2000_XXXX  ->  g_mem+0x2XXXX  ->  DGROUP offset 0x4000+XXXX    (DGROUP 0x4000..)
+    DAT_1000_XXXX  ->  g_mem+0x1XXXX  ->  DGROUP offset XXXX-0xc000    (DGROUP 0x0000..0x3fff)
+
+`tools/width_triage.py` only knew the first spelling, so patch 552's sweep silently skipped the whole
+first 16 KB of DGROUP.  Two of the port's own patch comments prove the mapping: `DAT_1000_d8e4` is the
+ready-queue head the asm calls `[0x18e4]`, and `DAT_1000_fe00` is `[0x3e00]`.  With the scanner
+corrected, six more macros meet patch 552's criteria -- declared `undefined2`, byte-width references
+only, no reference the scanner cannot decode, and a LIVE successor byte.
+
+    DAT_1000_d549   DGROUP:0x1549   14 byte refs, successor referenced 12x
+    DAT_1000_d54a   DGROUP:0x154a   12 byte refs, successor referenced  4x
+    DAT_1000_d54b   DGROUP:0x154b    4 byte refs, successor referenced  5x
+    DAT_1000_d54f   DGROUP:0x154f    5 byte refs, successor referenced  6x
+    DAT_1000_c44a   DGROUP:0x044a    1 byte ref,  successor referenced  3x
+    DAT_1000_de7a   DGROUP:0x1e7a    2 byte refs, successor referenced  2x
+
+DGROUP:0x1549 is the MISSION-STATE discriminator -- the byte the engine sets to 0x1c on entering the
+cockpit, 0x1e, 0x22, 0x14, 0x16 elsewhere, and that the shim reads to know it is in a mission
+(`g_mem[0x1c000 + 0x1549] == 0x1c`).  Every one of its fourteen references is byte-width:
+
+    c394: 80 3e 49 15 1e    cmpb $0x1e,0x1549
+    c509: 80 3e 49 15 1c    cmpb $0x1c,0x1549
+    c510: 80 3e 49 15 20    cmpb $0x20,0x1549
+    3aa2: a0 49 15          mov  0x1549,%al
+    23b4: 8a 1e 49 15       mov  0x1549,%bl
+
+and 0x154a directly after it is a live byte with twelve of its own (`8a 0e 4a 15`, `a0 4a 15`,
+`a2 4a 15`, `c6 06 4a 15 ..`), so writing 0x1549 as a word was overwriting it on every store --
+`DAT_1000_d549 = 0x1c` at the cockpit transition, `= 0x1e`, `= 0x22`.  0x1549/0x154a/0x154b/0x154f is
+one run of mode bytes, the same shape as DGROUP:0x6da4..0x6db0 in patch 547.
+
+Every use of all six was audited for anything that depends on the wide read; all are byte-semantic
+(`== '\x1e'`, `= 0x1c`, `= 0`, `= 0xff`, `& 0xf`).  `DAT_1000_de7a & 0xfff0` is unchanged in meaning:
+the asm is `a0 7a 1e ; 24 f0` (`mov 0x1e7a,%al ; and $0xf0,%al`) and an unsigned char promotes to int,
+so the wider mask still selects the same bits.  These six are declaration-only changes.
+
+`build/fist_decomp.c` is the pristine decompile that `assemble` consumes, not a compiled translation
+unit, so there is no second definition of these macros to keep in step.
+
+Two `undefined4` macros in the same newly-visible range (DGROUP:0x1f91 and 0x1f92) are NOT in this
+patch: they are written by BOTH `movw` and `movb`, and they overlap each other, so they need their
+containing functions disassembled rather than a triage verdict.  board:0023 carries them.
+
+board:0023
+
+--- a/fist.c
++++ b/fist.c
+@@ -2538,7 +2538,7 @@
+ #define DAT_1000_c446 (*(undefined2 *)(g_mem+0x1c446))
+ #define DAT_1000_c447 (*(undefined2 *)(g_mem+0x1c447))
+ #define DAT_1000_c448 (*(undefined2 *)(g_mem+0x1c448))
+-#define DAT_1000_c44a (*(undefined2 *)(g_mem+0x1c44a))
++#define DAT_1000_c44a (*(undefined1 *)(g_mem+0x1c44a))
+ #define DAT_1000_c44b (*(undefined2 *)(g_mem+0x1c44b))
+ #define DAT_1000_c44c (*(undefined2 *)(g_mem+0x1c44c))
+ #define DAT_1000_c44e (*(undefined2 *)(g_mem+0x1c44e))
+@@ -2637,13 +2637,13 @@
+ #define DAT_1000_c794 (*(undefined2 *)(g_mem+0x1c794))
+ #define DAT_1000_cf69 (*(undefined2 *)(g_mem+0x1cf69))
+ #define DAT_1000_d548 (*(undefined2 *)(g_mem+0x1d548))
+-#define DAT_1000_d549 (*(undefined2 *)(g_mem+0x1d549))
+-#define DAT_1000_d54a (*(undefined2 *)(g_mem+0x1d54a))
+-#define DAT_1000_d54b (*(undefined2 *)(g_mem+0x1d54b))
++#define DAT_1000_d549 (*(undefined1 *)(g_mem+0x1d549))
++#define DAT_1000_d54a (*(undefined1 *)(g_mem+0x1d54a))
++#define DAT_1000_d54b (*(undefined1 *)(g_mem+0x1d54b))
+ #define DAT_1000_d54c (*(undefined2 *)(g_mem+0x1d54c))
+ #define DAT_1000_d54d (*(undefined2 *)(g_mem+0x1d54d))
+ #define DAT_1000_d54e (*(undefined2 *)(g_mem+0x1d54e))
+-#define DAT_1000_d54f (*(undefined2 *)(g_mem+0x1d54f))
++#define DAT_1000_d54f (*(undefined1 *)(g_mem+0x1d54f))
+ #define DAT_1000_d550 (*(undefined2 *)(g_mem+0x1d550))
+ #define DAT_1000_d552 (*(undefined2 *)(g_mem+0x1d552))
+ #define DAT_1000_d554 (*(undefined2 *)(g_mem+0x1d554))
+@@ -2781,7 +2781,7 @@
+ #define DAT_1000_de1e (*(undefined2 *)(g_mem+0x1de1e))
+ #define DAT_1000_de20 (*(undefined2 *)(g_mem+0x1de20))
+ #define DAT_1000_de78 (*(undefined2 *)(g_mem+0x1de78))
+-#define DAT_1000_de7a (*(undefined2 *)(g_mem+0x1de7a))
++#define DAT_1000_de7a (*(undefined1 *)(g_mem+0x1de7a))
+ #define DAT_1000_de7d (*(undefined2 *)(g_mem+0x1de7d))
+ #define DAT_1000_df00 (*(undefined2 *)(g_mem+0x1df00))
+ #define DAT_1000_df7e (*(undefined2 *)(g_mem+0x1df7e))

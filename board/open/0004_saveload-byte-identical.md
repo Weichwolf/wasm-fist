@@ -1,5 +1,6 @@
 Type: feature
 Area: io
+Title: game save/load round-trips byte-identical
 
 Game save/load round-trips byte-identical: saving a mission/campaign state and
 reloading reproduces the exact engine state (same framebuffer + RNG on resume),

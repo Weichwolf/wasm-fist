@@ -763,6 +763,47 @@ AZER1's limit comes from the per-mission table at 0x7b14 (`5167: mov 0x7b14(%bx)
 So even with a working clock the sweep's cap was 3x too small to observe a timeout. Both facts were
 needed; either alone would have kept every mission UNRESOLVED.
 
+### The mission time limit is a SETTING, with four values
+
+The table the clock is armed from (`5167: mov 0x7b14(%bx),%al ; 516e: mov %al,0x6da6`, `bx = ax >> 1`)
+is four bytes at DGROUP:0x7b14, and they are:
+
+    05 0f 1e ff        =  5 minutes / 15 / 30 / NO LIMIT
+
+So it is a global game option, not a per-mission value, and AZER1's 15 was the default rather than
+anything specific to AZER1. 0xff is handled by the engine as "no clock": `1a5ef: cmpb $0xff,0x6da6`
+skips the whole time branch in a5dc, and `16597: cmpb $0xff,0x6da6` skips the HUD readout.
+
+Two consequences:
+
+- **The sweep is bounded by this.** At 15 minutes a mission is ~54000 sim ticks and ~25 minutes of
+  native CPU. At 30 it is twice that; at "no limit" a mission can only end by victory, defeat or abort,
+  so a sweep run with that setting would not terminate on the clock at all.
+- **It is one of the settings the goal requires to work**, and all four values need covering: 5 and 30
+  are untested, and the 0xff path is the one that makes the victory/defeat evaluation the ONLY exit --
+  which makes it the sharpest test of that evaluation, not merely another option.
+
+The selection reaches the clock by two different routes, which matters for how to drive it:
+
+    5167: 8a 87 14 7b   mov 0x7b14(%bx),%al    ; MENU path, bx = selection >> 1
+    516b: a2 af 6d      mov %al,0x6daf         ; ... remembered at DGROUP:0x6daf
+    516e: a2 a6 6d      mov %al,0x6da6
+
+    d5df: a0 87 e9      mov 0xe987,%al         ; RESTORE path, from the saved block
+    d5e2: 0a c0         or  %al,%al
+    d5e4: 75 02         jne 0xd5e8
+    d5e6: b0 ff         mov $0xff,%al          ; a zero saved value means NO LIMIT
+    d5e8: a2 af 6d      mov %al,0x6daf
+    d5eb: a2 a6 6d      mov %al,0x6da6
+
+The battle flow the harness drives takes the MENU path, so it gets the default 15 regardless of what is
+saved. Reaching 0xff needs a click on the time-limit control, whose coordinates are not known yet, so
+it is not the cheapest next experiment.
+
+The cheapest one is the sweep itself: any mission whose own side is WINNING resolves by victory before
+the clock can expire, and any whose own side is wiped resolves by defeat. Running all 47 is therefore
+also the test of whether outcomes 0 and 1 are reachable at all.
+
 ### Still open
 
 - Confirm end to end that expiry raises byte[0xe814] and reaches the outcome screen (long run in
@@ -811,8 +852,23 @@ handlers: before it AZER1 lost 2 of 16 vehicles over a whole mission (a296 16 ->
 - `FIST_DUMPTICK` cannot express this bound at all: `[DGROUP:0x452]` is read as a `uint16_t`, so any
   value above 0xffff never fires and the run spins to its wall-clock watchdog. One 15-minute mission is
   ~54000 sim ticks, close enough to the ceiling to be a trap. The shim now warns instead of hanging.
-- `tools/selfplay.sh` classifies on `over=`/`code=` from the engine, not on `a296`, and its default
-  wall-clock budget is 1800s -- a full mission is ~20 minutes of native CPU at ~161 pumps per sim tick.
+- `tools/selfplay.sh` classifies on `over=`/`code=` from the engine, not on `a296`.
+
+  **CORRECTION.** An earlier revision of this item said a full mission is ~20 minutes of native CPU.
+  That was WRONG, and the error is instructive: it was read off the `end3`/`end4` runs, which set
+  `FIST_DUMPTICK` to 75000 and 68000. `[DGROUP:0x452]` is read as a `uint16_t`, so neither value can
+  ever be reached -- those runs finished their mission in the normal time and then SPUN to the
+  wall-clock watchdog waiting for a tick that would never come, and the spin got attributed to the
+  mission. Measured properly, with a fresh datadir and nothing else claiming the CPU:
+
+      AZER1, no diagnostic      141 s
+      AZER1, FIST_DUMP_END set  146 s     (the diagnostic costs ~3%)
+      AZER1, inside the sweep   114 s
+
+  all four runs identical in engine terms ([0x452]=54294, code=2, a294=120, a296=8). So a 15-minute
+  mission is about **two minutes** of native CPU, and the whole 47-mission sweep is under an hour at
+  two jobs rather than the ~10 hours the wrong figure implied. The ~161 cooperative pumps per sim tick
+  is unaffected and still holds (8.7M pumps over 54294 ticks).
 
 ### Open, and NOT to be assumed settled
 
@@ -840,5 +896,52 @@ handlers: before it AZER1 lost 2 of 16 vehicles over a whole mission (a296 16 ->
   notification at 0x1a66b. And it means every `live=` figure reported from outside a5dc in this item is
   worthless. The victory path remains unexplained and has to be measured INSIDE a5dc.
 - The ~161 cooperative pumps per sim tick is unexplained. It does not affect determinism -- time passes
-  only when pumped -- but it sets the sweep's cost at ~20 minutes of CPU per mission, and if the
-  original's ratio is ~1 it points at something in the pump/wait path.
+  only when pumped -- and it costs far less than first thought (see the CORRECTION above), but if the
+  original's ratio is ~1 it still points at something in the pump/wait path.
+
+### With the counter repaired (patch 550), the victory condition is now measurable
+
+Re-ran AZER1 with 550/551 applied. The outcome is bit-identical to the run before them --
+`[0x452]=54294`, `code=2`, `a294=120`, `a296=8`, `min_a296=8`, `peak_a296=16` -- so the patches removed
+the corruption without perturbing the simulation. What changed is the counter itself:
+
+    before 550:  live=0 / live=13 alternating,   prev=0  for the whole mission
+    after  550:  live=13 stable,                 prev=13
+
+So the earlier readings really were the `_DAT_2000_578c` clobber, and the victory test now has a
+trustworthy input. The measurement it yields is the next thread:
+
+**`live` stays at exactly 13 for the whole mission while `a296` falls 16 -> 8.**
+
+The first reading of that was that objects are not being unlinked on death. That is WRONG, and the asm
+says so. `FUN_1000_b2ef` (0x1b2ef) is the free path and it does clear the slot:
+
+    1b2ef: 8b d8             mov  %ax,%bx
+    1b2f2: c1 e3 02          shl  $0x2,%bx           ; stride 4, as a5dc's walk uses
+    1b2f5: 8b bf bc df       mov  0xdfbc(%bx),%di
+    1b2fd: 80 4d 16 01       orb  $0x1,0x16(%di)     ; mark freed
+    1b301: c7 87 bc df 00 00 movw $0x0,0xdfbc(%bx)   ; CLEAR THE SLOT
+    1b307: ff 8f be df       decw 0xdfbe(%bx)        ; the entry's second word is a refcount
+    1b31c: ff 0e 94 e2       decw 0xe294             ; ... and the per-side count
+    1b32a: ff 0e 96 e2       decw 0xe296
+
+a5dc's walk skips a zero slot (`or %si,%si ; je`), so a freed object leaves `live` correctly.
+
+The likelier reading is that the two numbers simply count different populations, and that nothing here
+is broken:
+
+  - `0x6d38` is the OWN side's live count and gates the DEFEAT outcome at 0x1a6bb. It fell 4 -> 1 over
+    the mission: the player's side is being destroyed.
+  - `0x978e` counts every 0xdfbc entry with `byte[si+0x17] & 8`, with no side filter, and gates the
+    VICTORY outcome at 0x1a6ae. It is 13 from the first sample and never moves.
+  - `a296` is the vehicle roster (stride 0xfb at 0xc05c) -- a third structure again.
+
+So AZER1 as the port simulates it is a mission the player's side is LOSING, and the clock expired
+before `0x6d38` reached zero. That is a coherent outcome, not obviously a defect.
+
+What is NOT established: whether the original does the same. A set of 13 that never loses a member
+while eight vehicles die is the kind of number that is either correct or badly wrong, and the port
+cannot answer it. NEXT: put the DOSBox oracle on `0x978e`, `0x6d38` and `a296` through an AZER1 battle
+and compare the three trajectories. If the original's 0x978e also holds constant, the victory path is
+simply not AZER1's outcome and the thing to do is find a mission whose own side wins; if it falls, the
+defect is in whatever should be clearing `byte[obj+0x17] & 8`.
