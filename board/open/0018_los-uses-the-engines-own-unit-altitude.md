@@ -1,5 +1,5 @@
 Type: bug
-Status: open
+Status: open   (the stand-in is REMOVED; see the final section)
 Parent: 0017
 Title: unit line-of-sight uses the engine's own unit altitude, not a shim stand-in
 
@@ -321,3 +321,31 @@ guess between three models.
 NOTE on the kill counts: they moved (AZER1 12 -> 13, SAUDI2 6 -> 10) when the clamp went in. That is
 NOT a regression to chase -- units were previously buried ~15000 units below the ground, so every LOS
 answer was wrong in the permissive direction. The engagement numbers only become meaningful now.
+
+## THE STAND-IN IS REMOVED -- op-0x58 now uses the engine's endpoints verbatim, as the original does
+
+This item's title condition is met. The shim no longer overwrites the LOS Z endpoints; it passes
+`tcb+0xda` / `tcb+0xe6` through exactly as the extender's own handler at 0x8030 does. The old
+substitution survives only behind `FIST_LOS_STANDIN=1`, for A/B, and is off by default.
+
+Three independent lines had to agree before this could be defaulted, and they do:
+
+1. **The asm.** The original op-0x58 (0x8030-0x811e, decoded earlier) reads the TCB endpoints and
+   applies NO terrain substitution -- `80eb shl $0x10,%ebp` on the self Z against `810e shl $0x18` on
+   the terrain byte.
+2. **The scale.** With the op-0x1c ground clamp in, object Z is `ground<<8` and the ground byte now
+   equals the terrain under the object exactly (delta +0). The endpoint `e20a` sends is
+   `eye-LUT + dword[obj+0xc]`, which is that scale plus the per-type eye height.
+3. **The oracle.** Between the two guest-RAM dumps the ORIGINAL's attrition is `a296` 16 -> 14
+   (type 02 going 9 -> 8, type 03 3 -> 2). The port with the stand-in REMOVED gives peak 16 -> final
+   14 -- the same. With the stand-in it gave 13, i.e. one kill MORE than the original.
+
+Earlier in this item three endpoint models were tried and all three were inconclusive. They were
+inconclusive because the object Z was wrong at the time; none of them could have been right. With the
+clamp landed the question answers itself.
+
+Caveat kept deliberately: the oracle dumps are taken at write counts, not at tick 20000, so the
+16 -> 14 agreement is strong evidence of direction and rate, not a tick-exact match. A tick-aligned
+comparison is still owed.
+
+Matrix: 177 passed, 0 failed on both targets.

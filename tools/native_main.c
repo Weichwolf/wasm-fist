@@ -1737,12 +1737,13 @@ int fist_extender_gate(void) {
         /* board:0012 unit-Z terrain-follow (camera-Z class stand-in for the absent overlay unit-altitude:
          * the flight-model per-unit ground-clamp is paged out, exactly like the camera-Z at op-0x24).
          * Use the LOS's OWN fixed-10 terrain index so endpoints sit on the sampled terrain + eye. */
-        if (hm) {
+        { static int standin = -1; if (standin < 0) standin = getenv("FIST_LOS_STANDIN") ? 1 : 0;
+        if (hm && standin) {
             uint32_t oi = ((((uint32_t)(-(int32_t)((uint32_t)oy<<13))>>22)&0x3ff)<<10) | (((uint32_t)ox<<13)>>22 &0x3ff);
             uint32_t ci = ((((uint32_t)(-(int32_t)((uint32_t)cy<<13))>>22)&0x3ff)<<10) | (((uint32_t)cx<<13)>>22 &0x3ff);
             oz = ((int32_t)hm[oi&0x3fffff]<<8) + 1792;
             cz = ((int32_t)hm[ci&0x3fffff]<<8) + 1792;
-        }
+        } }
         { extern long g_min_los,g_min_a296; long ad=(cx>ox?cx-ox:ox-cx)+(cy>oy?cy-oy:oy-cy); if(g_min_a296<16 && ad<g_min_los) g_min_los=ad; }
         { extern long g_op58_n; g_op58_n++; }
         int32_t dx=cx-ox, dy=cy-oy, dz=cz-oz;
