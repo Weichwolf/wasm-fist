@@ -634,3 +634,50 @@ REMAINING (unchanged in substance, now with 4d05's state known):
 5. Apply reloc sections si=0x274 then si=0x1b8 (si=0x038 NOT needed -- measured already seeded).
 6. Change tools/selfplay.sh to end on `byte[DGROUP:0xe814] != 0` with the outcome in
    `word[DGROUP:0x6da0]`, then re-sweep and confirm be0e finally loads 0x0c/0x10/0x14/0x18.
+
+### CORRECTION: `[DGROUP:0x442]` is the WALK/UNLINK path, not "task-create"
+
+Disassembled `FUN_1000_4d05` (asm 0x14d05-0x14d44) in full:
+
+```
+14d05: push %ds
+14d06: lea 0x5(%bx),%bp        ; BP = BX+5  (this node's own jump-target offset)
+14d09: mov %es,%dx             ; DX = ES    (this node's segment)
+14d0d: lds 0x1(%si),%si ; sub $0x5,%si      ; step: follow the chain's far pointer, back up to the header
+14d13: mov 0x1(%si),%ax ; cmp %di,%ax ; je 14d27      ; fwd offset == DI ?
+14d1a: cmp %bp,%ax ; jne 14d0d                        ; else is it OUR node?
+14d1e: mov 0x3(%si),%ax ; cmp %dx,%ax ; jne 14d0d     ; ...and our segment?
+14d25: jmp 14d31
+14d27: mov 0x3(%si),%ax ; cmp %cx,%ax ; jne 14d21
+14d2e: pop %ds ; stc ; lret    ; FOUND DI:CX -> CF=1
+14d31: mov %es:0x1(%bx),%ax ; mov %ax,0x1(%si)        ; UNLINK: prev.fwd := node.fwd
+14d38: mov %es:0x3(%bx),%ax ; mov %ax,0x3(%si)
+14d42: pop %ds ; clc ; lret    ; CF=0
+```
+
+So 4d05 walks the SMC chain from DS:SI and either reports DI:CX present (CF=1) or unlinks the
+(BX+5):ES node (CF=0). It is the **walk/unlink** primitive; `FUN_1000_4ce7` (patch 012) is the insert.
+
+Following the vectors through:
+
+```
+[DGROUP:0x43e] -> 0f69:3c88 -> 1000:3318 -> lcall *%ss:0x32a -> FUN_1000_4ce7  (INSERT)
+[DGROUP:0x442] -> 0f69:3c98 -> 1000:3328 -> lcall *%ss:0x32e -> FUN_1000_4d05  (WALK/UNLINK)
+```
+
+and the two mission installers (asm 0x15cd8, 0x15dfe) both call **`lcall *0x442`** -- the walk/unlink
+path, NOT the insert path. **So labelling `[0x442]` "TASK-CREATE" in the earlier entries was wrong.**
+
+What that means is not yet settled and must not be guessed: either the installers are DEREGISTERING a
+previous instance (with the actual insert happening elsewhere), or 4d05's contract is
+"present? -> CF=1, else splice out and let the caller insert", or the wrapper at 1000:3328 does more
+than the three instructions visible before its `lcall`. The wrapper's own body is
+`push ds ; pushf ; cli ; push cs ; pop ds ; mov $0x3bf1,%si ; mov %cs,%cx ; mov $0x3bf6,%di ;
+lcall *%ss:0x32e ; popf ; pop ds ; lret` -- it supplies the list head (0f69:0x3bf1) and the search key
+(0f69:0x3bf6) but NOT BX/ES, which come from the installer.
+
+NEXT: settle the create/remove question before writing any of it -- the cheapest way is the oracle
+write-trace on the task-list head at 0f69:0x3bf1 during a battle, which shows what the original
+actually does to the chain at mission entry. Reconstructing an SMC jump-chain primitive from a guessed
+contract would corrupt the chain silently, and this is the one place in the remaining work where a
+wrong sign is not caught by the matrix.
