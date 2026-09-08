@@ -71,3 +71,37 @@ shim already transcribes op 0x54 and op 0x58 -- reading the object list at `[0xc
 heightmap the op-0x54/0x58 handlers already use. Then re-measure the ground byte against the oracle
 (type 00 should track 81 -> 64, not sit at 5) and delete board:0018's LOS stand-in, which at that point
 has nothing left to mask.
+
+## Implementation attempt: op 0x20 works, op 0x1c is blocked behind another latent defect
+
+Transcribed both handlers into the shim and measured. Findings, all kept because they are the
+prerequisites for the next attempt:
+
+1. **op 0x20 must NOT carry the `g_fist_after_map` gate.** It is posted during MISSION INIT, right
+   after the engine seeds the TCB (`t[0x26]=0x1c00` the DGROUP segment, `t[0x28]=0x6d3c` the object
+   list, `t[0x2a]=0xdfbc` the display table). With the render services' after-map gate it never runs,
+   and `[0xc99]`/`[0xca1]` stay ZERO -- measured: op 0x1c fired 19600 times and skipped every one for
+   want of a list.
+2. **op 0x1c is called constantly** once in mission (19600 times in 20000 ticks), so the engine really
+   does expect this service every frame.
+3. With op 0x20's gate corrected so the globals populate, the run SIGSEGVs -- **not in the new code**
+   but in `FUN_0000_7da5`, reached `ad2f -> ad3b -> a19e -> 7da5`. That function is pristine:
+
+   ```c
+   void __allregs FUN_0000_7da5(undefined1 param_1,int param_2)
+   { *(undefined1 *)(param_2 + 0x90) = param_1; *(undefined1 *)(param_2 + 0xd6) = 3; ... }
+   ```
+
+   `param_2` is stack residue (measured 32165) and the object arrives from `a19e`'s dispatch
+   (patch 283: `mov bx,[di] ; shl bx,1 ; call [bx-0x69a2]`, DI live, one argument). asm 0x7da5 is
+   `mov %al,0x90(%di) ; movb $3,0xd6(%di) ; call 70eb` -- it needs BOTH AL and DI, and only DI is
+   passed. Exactly the class patch 540 fixed for a0c8, where AX was recovered from the word the
+   dispatcher had just stored.
+
+The shim transcription was REVERTED rather than shipped: it changes behaviour (a294 105 -> 66, and
+AZER1's four kills went to zero) without yet fixing the ground byte, and in its corrected-gate form it
+crashes. Shipping that would be worse than not having it.
+
+ORDER OF WORK for the next attempt: fix `7da5` (and audit a19e's whole `-0x69a2` dispatch table the way
+patch 542 audited the 9e2b table) FIRST, then re-apply op 0x20 + op 0x1c and verify the ground byte
+against the oracle -- type 00 should track 81 -> 64 rather than sitting at 5.
