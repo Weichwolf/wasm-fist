@@ -341,3 +341,61 @@ NEXT: instrument the scheduler's ready list (DGROUP-relative 0x18e0 head / 0x18e
 in the 0f69 cluster's own data) to enumerate which tasks are queued during a battle and whether a
 mission-supervisor task is installed at all. That is the concrete question behind "no mission resolves",
 and it is a queue-contents question, not another asm-reading one.
+
+## ROOT CAUSE FOUND: the mission-over flag, its six writers, and the missing timeline task
+
+`FUN_0000_459a` IS the mission -- `e714` calls it once and everything after the call is teardown +
+outcome. Its loop (asm 0x459a-0x460c) is gated on a single flag:
+
+```
+45a3: movb $0x0,-0x17ec        ; byte[DGROUP:0xe814] = 0, cleared at mission ENTRY
+45c8: testb $0xff,-0x17ec
+45cd: jne 0x4614               ; NONZERO -> leave the mission
+45e1: ... call *0x6ce4 ; call 0xc0ca ; call 0x461b   ; the per-frame work
+45fb: jne 45c8
+```
+
+**`byte[DGROUP:0xe814]` is the MISSION-OVER flag.** Six asm sites raise it, and each first writes an
+OUTCOME CODE to `word[DGROUP:0x6da0]`:
+
+| asm | outcome | in the port? |
+|-----|---------|--------------|
+| 0x4168  | (adds 2 to 0x4a86 first) | not located |
+| 0x4457  | -- | yes, FUN_0000_4457 |
+| 0x6115  | 3 | yes, FUN_0000_6104 |
+| **0x15e4c** | **4** | **NO** |
+| **0x15e8c** | **5** | **NO** |
+| 0x1a5e9 | (decw 0x6da2 first) | yes, FUN_1000_a5dc |
+
+The port's function list jumps straight from `FUN_1000_5dfc` to `FUN_1000_5e98`, so everything in
+1000:0x5e00..0x5e97 was never promoted -- the board:0015 class.
+
+The one that matters for self-play is the task at **1000:0x5e52-0x5e97**, a cooperative TIMED
+EVENT-LIST task (note the `ljmp $0x0,$0x0` yield point at 0x15e52, patched at run time by the 0f69
+CRT's task switcher):
+
+```
+15e5f: decb 0x6cc8            ; count down the current delay
+15e63: jne <yield>
+15e72: les 0x6cc2,%si         ; FAR pointer to the mission's event list
+15e76: lods %es:(%si),%ax
+15e78: cmp $0xffff,%ax ; je 15e86   ; END OF LIST
+15e7d: mov %ax,0x6cc8 ; mov %si,0x6cc2 ; <yield>    ; else take the next delay
+15e86: movw $0x5,0x6da0       ; OUTCOME = 5
+15e8c: movb $0xff,-0x17ec     ; MISSION OVER
+```
+
+So **a battle ends when its scripted timeline is exhausted** -- not by annihilation. That also explains
+why the oracle only kills 2 vehicles in its sample: the original is not racing to wipe the enemy out,
+it is running a timeline.
+
+(The other missing site, 0x15e36-0x15e51, is a KEY handler -- `ah` = 0x01/0x10/0x39 -> outcome 4 -- so
+it is the player's abort path and would not fire under the empty input self-play uses.)
+
+Also noted: the port's `DAT_2000_a814` macro is `undefined2` (16-bit) while every asm access is a BYTE
+(`movb $0xff` / `testb $0xff`). Writing it as a word clobbers the neighbouring byte at 0xe815. Same
+width class as patch 539, and it must be fixed with the rest.
+
+NEXT: promote 1000:0x5e00..0x5e97 (at minimum the timeline task at 0x5e52 and the key handler at
+0x5e36), work out how the task is installed into the 0f69 scheduler's ready list, fix the a814 width,
+and re-measure. This is the concrete path to a mission actually ending.
