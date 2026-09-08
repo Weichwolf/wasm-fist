@@ -2428,3 +2428,45 @@ Three "paged out" or "missing" claims were checked this round and **all three we
 attitude (computed by the engine, patch 306), the projection constants (initialised data in the image),
 and the ramp destination pointer (allocated at runtime).  Reading a value out of the static image is
 not evidence about the running program.  Probe first.
+
+## The ramp tables are supplied from OUTSIDE the extender image
+
+Continuing the trace, with every step checked rather than inferred:
+
+- **The destination IS allocated, by the extender itself.**  `0x852b: lea 0x3909,%edx ; ecx=0x100<<8 ;
+  call 0x36bf` -- a 64 KB allocation whose address is stored at 0x3909.  `0x36bf` is the extender's
+  buffer/resource manager (it registers against a table at 0x28ac).  The runtime probe agrees:
+  ext+0x3909 = 0x08304200.  Same shape at 0x8505 (0x85c4) and 0x8545 (0x390d).
+- **Nothing in the extender image ever addresses 0x3a24 or 0x3e24.**  Zero absolute-displacement
+  stores, zero `mov $imm,%reg`, zero `lea` of either address.  By contrast 395e's OUTPUTS (0x4224 /
+  0x4624) have three and four immediate loads respectively, so the scan does find this pattern when it
+  is present.
+- **`re_out/fist_ext.c` contains exactly two references to them**, both READS inside 395e (lines
+  4367/4368).  But that decompile is only the KDV cluster -- most of the 49 KB extender image is not
+  decompiled at all -- so "not in fist_ext.c" is not evidence.  The byte scan above is.
+- **395e's callers only gate it**, `if (DAT_90c0 != DAT_90c4) { DAT_90c4 = DAT_90c0; 395e(); }` -- a
+  lazy rebuild when the focal divisor changes.  Nobody fills the inputs there either.
+
+So the two 256-dword tables are supplied from outside the extender's own code.  What the real values
+look like, from the oracle capture:
+
+    0x3a24[0..11]  0x197d 0x2fff 0x3e32 0x4e6b 0x60b6 0x751d 0x8baa 0xa466 0xbf58 0xdc89 0xfc00 0x11dc5
+    0x3e24[0..11]  0xeef4d 0x1c1f86 0x247118 0x2df2ab 0x38aabd 0x449f49 ...
+
+    second differences of A: 518, 530, 540, 550, 559, 566, 575, 582, 590   (a smooth perspective curve)
+    and B = A * 150 EXACTLY  (0xeef4d/0x197d = 149.9, 0x1c1f86/0x2fff = 150.0)
+
+That B is a constant multiple of A is the most useful structural fact here: only ONE table is
+independent, and the other is derived.  A itself looks like a tangent/secant table over the field of
+view, with the first entry (0x197d) off the trend -- probably a horizon clamp.
+
+### Two candidates for where they come from, and how to tell them apart
+
+1. **A loaded resource**, the way 532.PAL is loaded into the extender at map time.  Test: search the
+   game's data archives for a 1024- or 2048-byte member whose first dwords are 0x197d, 0x2fff, ...
+2. **Written by the 16-bit engine** through the same route it uses for other extender globals.  Test:
+   the oracle write-trace (`FIST_MEMARM_BOOT=1` with `FIST_WATCHFLAT` on the extender-flat address of
+   0x3a24) names the writer's cs:eip in one run.
+
+The second is decisive and needs no guessing.  It is the concrete next step for this item, and it is
+much narrower than anything this item previously pointed at.
