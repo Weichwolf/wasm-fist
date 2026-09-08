@@ -219,3 +219,48 @@ reach a probing step method: `9e2b` has no DIRECT callers, it is reached only th
 table, and the type->target map sampled on AZER1
 (`00->7c1d 01->87df 02->902c 03->97d5 04->bab4 08/0b/0d->b5e7 10->b51f 11->9b11 12->9bc6 13->c0ba
 15->9c4f 17->bc0c 1a->bc46 1b->b355`) contains no entry for it at all.
+
+## Where the altitude for types 00/01/02 actually comes from (traced, not guessed)
+
+Types 00/01/02 do NOT terrain-probe, and that is FAITHFUL. Their step methods begin:
+
+```
+7c1d: mov 0x1d(%di),%al ; mov %al,0xd(%di)     ; type 00
+87df: (identical)                               ; type 01
+902c: (identical)                               ; type 02
+```
+
+so their ground byte is a straight copy of `byte[di+0x1d]` every frame. The real terrain-follow is
+`FUN_1000_adcd` (asm 0x1adcd = 0f69:0xb73d -- `lea 0x4(%di),%di ; lcall e1d1 ; mov %al,0xd(%di)`),
+which the port has correctly (patch 222). It has EIGHT call sites in the asm --
+`554d 9af6 9c16 b306 b433 b50b bc2c bcf7` -- and **none of them is in the 00/01/02 step chain**. All
+eight are present in the port. So "types 00/01/02 never probe the terrain" is the original's design,
+not a port defect, and the earlier reading of this item was wrong on that point.
+
+That moves the question to `byte[di+0x1d]`, which carries their altitude. Its only asm writers are:
+
+- `0xf1b8` (`mov %ax,0x1d(%di)`), inside the mission/object LOADER at 0xf1a1 -- it sets [di+0x19] and
+  [di+0x1d] from a parsed value;
+- `0x1ae32`, inside the guidance routine at 0x1addb, which writes the velocity triple
+  [di+0x1d]/[di+0x1f]/[di+0x21] from a192 -- i.e. +0x1d is a UNION field with a different meaning for
+  guided objects.
+
+Measured discrepancy against the oracle, same object slot, AZER1:
+
+```
+original  type 00 @c05c:  gnd 81 -> 64   (Z 20736 -> 16384)
+port      type 00:        gnd 5, constant (Z 1280)
+```
+
+So the port's `[di+0x1d]` is 5 where the original's is 81 -- the divergence is already present in the
+value the object carries, not in the per-frame copy, which the port performs correctly.
+
+NEXT: compare `byte[di+0x1d]` at SPAWN between the port and the oracle for the same object slot. If it
+is already 5 vs 81 at spawn, the defect is in the loader at 0xf1a1 (or whatever feeds it); if it starts
+equal and then diverges, the writer at 0x1ae32 / the guidance path is where to look. Do not assume
+either -- the two writers mean opposite things.
+
+Also noted while reading 7c1d (a separate, small, real defect, NOT yet patched): asm
+`7c26 sar $0x8,%ax` is an ARITHMETIC shift feeding `byte[di+0xa7]`, and the port has
+`(char)((uint)*(undefined2 *)(param_4 + 0x38) >> 8)` -- a LOGICAL shift on an unsigned, which differs
+for negative headings. The same line appears in the 87df and 902c heads.
