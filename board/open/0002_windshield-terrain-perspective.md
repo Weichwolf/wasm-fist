@@ -2460,13 +2460,48 @@ That B is a constant multiple of A is the most useful structural fact here: only
 independent, and the other is derived.  A itself looks like a tangent/secant table over the field of
 view, with the first entry (0x197d) off the trend -- probably a horizon clamp.
 
-### Two candidates for where they come from, and how to tell them apart
+### FOUND: they are a DATA FILE, selected by the DETAIL LEVEL setting
 
-1. **A loaded resource**, the way 532.PAL is loaded into the extender at map time.  Test: search the
-   game's data archives for a 1024- or 2048-byte member whose first dwords are 0x197d, 0x2fff, ...
-2. **Written by the 16-bit engine** through the same route it uses for other extender globals.  Test:
-   the oracle write-trace (`FIST_MEMARM_BOOT=1` with `FIST_WATCHFLAT` on the extender-flat address of
-   0x3a24) names the writer's cs:eip in one run.
+Candidate 1 was right and took one scan of `armoredfist/`:
 
-The second is decisive and needs no guessing.  It is the concrete next step for this item, and it is
-much narrower than anything this item previously pointed at.
+    armoredfist/FISTDATA/HIGH.DTL    table A at offset 0x4    table B at offset 0x404
+
+`HIGH.DTL` -- HIGH DETAIL.  There are three, all exactly 2052 bytes:
+
+    LOW.DTL     count = 125   A[0] = 0x22bb
+    MEDIUM.DTL  count = 190   A[0] = 0x15c2
+    HIGH.DTL    count = 250   A[0] = 0x197d
+
+and the layout maps ONE-TO-ONE onto the extender globals, contiguously:
+
+    file[0x000] -> ext+0x3a20   the count      (4 bytes)
+    file[0x004] -> ext+0x3a24   table A        (256 dwords, 1024 bytes)
+    file[0x404] -> ext+0x3e24   table B        (256 dwords, 1024 bytes)
+                                               ------------------------
+                                               2052 bytes = the file size
+
+That is why nothing in the extender image ever addresses 0x3a24 or 0x3e24: they are not computed at
+all, they are READ IN as one contiguous block starting at 0x3a20.  It also explains the `B = A * 150`
+relation -- both tables ship together, precomputed by NovaLogic.
+
+The port loads none of the three.  `ext+0x3a20` holds 200 at runtime, which is the IMAGE's initialised
+default and matches no file (125/190/250), and the tables keep their initialised 1s -- which is exactly
+the divide-by-zero in 395e.
+
+The engine has the matching UI strings (`DETAIL SET TO HIGH`, `DETAIL SET TO MEDIUM` at
+fist_dat_image.bin 0x2ef43/0x2ef2e), and the SETTINGS screen renders LOW / MEDIUM / HIGH DETAIL
+correctly, so the selection surface exists and only the LOAD is missing.
+
+### What to implement, and the one thing still to establish
+
+Load `<LOW|MEDIUM|HIGH>.DTL` as 2052 bytes to ext+0x3a20 when the detail level is selected.  Two things
+must be read out of the asm before writing it, NOT guessed:
+
+1. **who issues the load** -- almost certainly through `0x36bf`, the extender's buffer/resource manager
+   (it is what allocates 0x3909 at 0x852b and registers against the table at 0x28ac).  The filename is
+   not a literal in either image, so it is composed from the detail setting at run time;
+2. **when** -- at settings-accept, at map load, or lazily on the first render.
+
+Both are answerable from the engine's detail-setting handler, and this is now a bounded file-load, not
+a reconstruction.  It also directly serves the goal's "Detailstufe" clause: all three detail levels
+select a different ramp file, so the setting is not cosmetic.
