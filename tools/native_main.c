@@ -1631,6 +1631,90 @@ int fist_extender_gate(void) {
      * returns [obj+0xd]-[obj+0x18] (the slope) so the AI can tell up- from down-hill.  Same heightmap and
      * index packing as the decoded op-0x58 LOS handler below (ext+0x85bc, the op-0x24 voxel map).  It used
      * to answer only the projectile query (g_fist_op54_proj), leaving every OBJECT height 0. */
+    /* board:0021 op 0x20 -- publish the engine's object-list view to the extender globals.
+     * asm 0x0f8b (the service table at file offset 0xcb3 maps op/4 -> handler; op 0x20 -> 0x0f8b):
+     *     f8b: mov 0xc93,%ebx            ; the TCB
+     *     f91: movzwl 0x26(%ebx),%eax    ; the engine's DGROUP SEGMENT
+     *     f95: shl $0x4,%eax             ; -> linear
+     *     f98: add 0x807,%eax            ; + the guest-RAM base
+     *     f9d: mov %eax,0xca1            ; [0xca1] = the DGROUP flat base
+     *     fa2: movzwl 0x28(%ebx),%edi ; add %eax,%edi ; mov %edi,0xc99   ; the object list
+     *     fae: movzwl 0x2a(%ebx),%edi ; add %eax,%edi ; mov %edi,0xc9d   ; a second list
+     * In our model the "flat base" is the host address of DGROUP, so [0xca1] is g_mem+0x1c000 and the
+     * two list pointers are that plus their TCB near offsets.  Without this op the port left
+     * [0xc99]/[0xca1] at ZERO (measured), so op 0x1c below had no list to walk. */
+    /* op 0x20 is posted during MISSION INIT, before g_fist_after_map goes true (the engine seeds the
+     * TCB right above the post: t[0x26]=0x1c00 the DGROUP segment, t[0x28]=0x6d3c the object list,
+     * t[0x2a]=0xdfbc), so it must NOT carry the after-map gate the render services use. */
+    if (op == 0x20 && g_ext_ready) {
+        *(uint16_t*)(dg + 0xea10) = 0;
+        uint8_t *xb20 = g_mem + FIST_EXT_BASE;
+        uint32_t tcb20 = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        uint8_t *tcb = g_mem + tcb20;
+        uint32_t base = (uint32_t)(uintptr_t)dg;                       /* f95/f98: the DGROUP flat base */
+        *(uint32_t*)(xb20+0xca1) = base;                               /* f9d */
+        *(uint32_t*)(xb20+0xc99) = base + *(uint16_t*)(tcb+0x28);      /* fa2/fa6/fa8 */
+        *(uint32_t*)(xb20+0xc9d) = base + *(uint16_t*)(tcb+0x2a);      /* fae/fb2/fb4 */
+        return 0;
+    }
+    /* board:0021 op 0x1c -- the PER-UNIT GROUND CLAMP, asm 0x1109-0x11a4.  This is the writer of
+     * byte[obj+0x1d] that board:0018 was missing; the type-00/01/02 step methods then copy it into the
+     * ground byte ([obj+0xd]) and the object Z is ground<<8, which is the scale op-0x58 compares.
+     *     1109: mov 0xc99,%edi ; 110f: mov $0x20,%ecx        ; 32 list entries, stride 2
+     *     1116: movzwl (%edi),%edi ; 1119: or %di,%di ; je next
+     *     111e: add 0xca1,%edi                               ; -> the object
+     *     1124: cmpw $0x3,(%edi) ; ja next                   ; ONLY object types 0..3
+     *     ... 0x7fa0 twice (slopes along [obj+0x26] and [obj+0x10]) -> [obj+0x32/0x34], [obj+0x22/0x24]
+     *     1190: call 0x8480 ; 1195: mov %al,0x1d(%edi)       ; the terrain height
+     * 0x8480 is `shld $0xa` twice + a heightmap byte read -- the same index packing the op-0x54 and
+     * op-0x58 handlers above already use.  0x7fa0 samples the heightmap at four points around the
+     * object along a heading taken from the 512-entry table at extender 0x9450 (entry a and a+128,
+     * i.e. the cos/sin pair), each `sar $6`, and returns the two slopes <<23. */
+    if (op == 0x1c && g_ext_ready && g_fist_after_map) {
+        *(uint16_t*)(dg + 0xea10) = 0;
+        uint8_t *xb1c = g_mem + FIST_EXT_BASE;
+        uint8_t *hm1c = (uint8_t*)(uintptr_t)(*(uint32_t*)(xb1c+0x85bc));
+        uint32_t list = *(uint32_t*)(xb1c+0xc99), base = *(uint32_t*)(xb1c+0xca1);
+        if (!hm1c || !list || !base) return 0;
+        const int32_t *trig = (const int32_t *)(xb1c + 0x9450);
+        uint8_t *lp = (uint8_t *)(uintptr_t)list;
+        for (int n = 0; n < 0x20; n++, lp += 2) {                       /* 1114/1199/119e */
+            uint16_t noff = *(uint16_t *)lp;                            /* 1116 movzwl (%edi),%edi */
+            if (noff == 0) continue;                                    /* 1119 or/je */
+            uint8_t *o = (uint8_t *)(uintptr_t)(base + noff);           /* 111e add 0xca1 */
+            if (*(uint16_t *)o > 3) continue;                           /* 1124 cmpw $0x3 ; ja */
+            for (int pass = 0; pass < 2; pass++) {                      /* 1142 and 116e */
+                int32_t ebx = (int32_t)((uint32_t)*(int32_t *)(o+4) << 13);   /* 1134/1160 shl $0xd */
+                int32_t edx = -(int32_t)((uint32_t)*(int32_t *)(o+8) << 13);  /* 1131/1137 */
+                int16_t ang = *(int16_t *)(o + (pass ? 0x10 : 0x26));    /* 1139 / 1165 movswl */
+                uint32_t eax = (uint32_t)(-(int32_t)((uint32_t)(int32_t)ang << 16)); /* shl 16 ; neg */
+                uint32_t ti = eax >> 23;                                 /* 7fa0 shr $0x17 */
+                int32_t ebp = trig[ti] >> 6, edi2 = trig[ti + 128] >> 6; /* 7faa/7fac/7fb2/7fb5 */
+                int32_t bx2, dx2; uint8_t h0, h1; int32_t ecx, ebx2;
+                bx2 = ebx - edi2; dx2 = edx + ebp;                       /* 7fbe/7fc0 */
+                h0 = hm1c[(((((uint32_t)dx2)>>22)&0x3ff)<<10 | (((uint32_t)bx2)>>22)&0x3ff) & 0x3fffff];
+                bx2 += edi2*2; dx2 -= ebp*2;                             /* 7fcf..7fd5 */
+                h1 = hm1c[(((((uint32_t)dx2)>>22)&0x3ff)<<10 | (((uint32_t)bx2)>>22)&0x3ff) & 0x3fffff];
+                ecx = (int32_t)((uint32_t)(int32_t)(int8_t)(uint8_t)(h0 - h1) << 23); /* 7fe1/7fe4/7fe7 */
+                bx2 -= edi2; dx2 += ebp;                                 /* 7fea/7fec */
+                bx2 -= ebp;  dx2 -= edi2;                                /* 7fef/7ff1 */
+                h0 = hm1c[(((((uint32_t)dx2)>>22)&0x3ff)<<10 | (((uint32_t)bx2)>>22)&0x3ff) & 0x3fffff];
+                bx2 += ebp*2; dx2 += edi2*2;                             /* 8000..8006 */
+                h1 = hm1c[(((((uint32_t)dx2)>>22)&0x3ff)<<10 | (((uint32_t)bx2)>>22)&0x3ff) & 0x3fffff];
+                ebx2 = (int32_t)((uint32_t)(int32_t)(int8_t)(uint8_t)(h0 - h1) << 23); /* 8012/8015/8018 */
+                if (pass == 0) { *(uint16_t *)(o+0x34) = (uint16_t)((uint32_t)ecx >> 16);   /* 114b */
+                                 *(uint16_t *)(o+0x32) = (uint16_t)((uint32_t)ebx2 >> 16); } /* 1152 */
+                else           { *(uint16_t *)(o+0x24) = (uint16_t)((uint32_t)ecx >> 16);   /* 1177 */
+                                 *(uint16_t *)(o+0x22) = (uint16_t)((uint32_t)ebx2 >> 16); } /* 117e */
+            }
+            {   int32_t ebx = (int32_t)((uint32_t)*(int32_t *)(o+4) << 13);   /* 1182/118b */
+                int32_t edx = -(int32_t)((uint32_t)*(int32_t *)(o+8) << 13);  /* 1185/1188/118e */
+                uint32_t idx = ((((uint32_t)edx)>>22)&0x3ff)<<10 | (((uint32_t)ebx)>>22)&0x3ff; /* 8480 */
+                o[0x1d] = hm1c[idx & 0x3fffff];                          /* 1195 mov %al,0x1d(%edi) */
+            }
+        }
+        return 0;
+    }
     if (op == 0x54 && g_ext_ready && g_fist_after_map) {
         *(uint16_t*)(dg + 0xea10) = 0; uint8_t *xb54=g_mem+FIST_EXT_BASE; uint8_t *hm54=(uint8_t*)(uintptr_t)(*(uint32_t*)(xb54+0x85bc));
         uint32_t tcb54 = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);

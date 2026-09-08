@@ -295,3 +295,29 @@ other than %di/%si/%bx/%bp, or written as part of a wider store. NEXT: rather th
 the oracle's write-trace directly -- `FIST_MEMARM_BOOT=1 FISTLOG=<prefix>` with `FIST_WATCHFLAT` on the
 CR3-aware engine-flat address of DGROUP:0xc079 (slot c05c + 0x1d) and read the `cs:eip` of whoever
 writes it. That names the function in one run instead of enumerating addressing modes.
+
+## FIXED: the ground byte now tracks the terrain exactly (patch 545 + the op-0x20/0x1c services)
+
+Implementing the two missing extender services from board:0021 -- op 0x20 (publish the object-list view)
+and op 0x1c (the per-unit ground clamp, a transcription of asm 0x1109-0x11a4 including its `0x7fa0`
+slope probe and `0x8480` height lookup) -- required patch 545 first, because with op 0x1c wired up the
+engine reaches a state that SIGSEGV'd in `FUN_0000_7da5`.
+
+Measured, AZER1 at t>8000, `delta = ground_byte - terrain_height_under_the_object`:
+
+```
+before:  type 00 -42   type 01 -45   type 02 -78, -79, -68, -63   type 03 -45, -34, -26
+after:   type 00  -5   type 02/03 all  +0
+```
+
+Every stationary object now sits EXACTLY on the terrain, and the one moving unit lags by a single frame
+-- which is precisely what the oracle shows for the original (its type-00 slot tracks 81 -> 64 across
+the two dumps rather than holding a constant).
+
+So the object Z (`ground<<8`) is now in the same scale the op-0x58 handler compares against, and the
+LOS stand-in has nothing left to mask. Removing it is now a separate, verifiable step rather than a
+guess between three models.
+
+NOTE on the kill counts: they moved (AZER1 12 -> 13, SAUDI2 6 -> 10) when the clamp went in. That is
+NOT a regression to chase -- units were previously buried ~15000 units below the ground, so every LOS
+answer was wrong in the permissive direction. The engagement numbers only become meaningful now.

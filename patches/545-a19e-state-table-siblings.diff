@@ -1,0 +1,194 @@
+PATCH 545: the three siblings of the case patch 514 fixed -- a19e's state-change table has FOUR
+entries and only one of them had been corrected.
+
+`FUN_0000_a19e` (patch 283) is the per-object-type STATE-CHANGE dispatch: asm 0xa19e is
+`mov bx,[di] ; shl bx,1 ; call [bx-0x69a2]`, i.e. word[DGROUP:0x965e + type*2], called with DI live and
+passed by the port as the object HOST POINTER (one argument).
+
+Dumped from the image at offset 0x2565e, the table has exactly four valid entries -- everything past
+type 3 is ASCII data, so this is the "vehicle family" dispatch:
+
+    type 00 -> 7da5     type 01 -> 8679     type 02 -> 8f3a     type 03 -> 96cb
+
+All four are the same three-instruction shape, differing only in the second byte offset:
+
+    7da5: mov %al,0x90(%di) ; movb $0x3,0xd6(%di) ; lcall 0f69:0x7a5b   (= linear 0x110EB = 70eb)
+    8679: mov %al,0x90(%di) ; movb $0x3,0xc8(%di) ; lcall 0f69:0x7a5b
+    8f3a: mov %al,0x90(%di) ; movb $0x3,0xca(%di) ; lcall 0f69:0x7a5b   <- fixed by patch 514
+    96cb: mov %al,0x90(%di) ; movb $0x3,0xd2(%di) ; lcall 0f69:0x7a5b
+
+Patch 514 established the convention for 8f3a and left its three siblings pristine: the object is
+param_1 (a19e's host pointer), param_2 is UNINITIALISED STACK, and AL -- the gear-direction selector
+ad3b sets, dropped through a19e's 1-param signature -- is published as g_fist_a19e_al.  The three
+untouched functions dereferenced param_2, measured as 32165, which is a SIGSEGV the moment their state
+is entered.  Their `mov al,1 ; jmp` thunks carried the same defect and are fixed with them.
+
+This is a hard prerequisite for the extender op-0x1c ground clamp (board:0021): with op 0x1c wired up
+the engine reaches this state and crashed in 7da5 (ad2f -> ad3b -> a19e -> 7da5) until this patch.
+
+Measured, no regression on its own: AZER1 a296 12 (unchanged), AZER4 15, SAUDI2 6 (one better).
+
+--- a/fist.c
++++ b/fist.c
+@@ -726,8 +726,8 @@
+ void __allregs FUN_0000_7d81(int param_1,int param_2);
+ int __allregs FUN_0000_7d92(int param_1,int param_2,undefined2 param_3,int param_4,undefined1 *param_5);
+ void __allregs FUN_0000_7da2(void);
+-void __allregs FUN_0000_7da5(undefined1 param_1,int param_2);
+-void __allregs thunk_FUN_0000_7da5(undefined1 param_1,undefined2 param_2);
++void __allregs FUN_0000_7da5(int param_1,int param_2);          /* PATCH 545: object is param_1 (host ptr), AL via g_fist_a19e_al */
++void __allregs thunk_FUN_0000_7da5(int param_1,undefined2 param_2);  /* PATCH 545 */
+ void __allregs FUN_0000_7ddc(int param_1);
+ void __allregs FUN_0000_7e29(int param_1);
+ void __allregs FUN_0000_7e77(undefined2 *param_1,int param_2,undefined2 param_3);
+@@ -803,8 +803,8 @@
+ void __allregs FUN_0000_85bd(int param_1);
+ void __allregs FUN_0000_85da(uint param_1);
+ void __allregs FUN_0000_8607(uint param_1,undefined2 param_2,undefined4 param_3,undefined2 param_4,int param_5);
+-void __allregs FUN_0000_8679(undefined1 param_1,int param_2);
+-void __allregs thunk_FUN_0000_8679(undefined1 param_1,undefined2 param_2);
++void __allregs FUN_0000_8679(int param_1,int param_2);          /* PATCH 545: object is param_1 (host ptr), AL via g_fist_a19e_al */
++void __allregs thunk_FUN_0000_8679(int param_1,undefined2 param_2);  /* PATCH 545 */
+ void __allregs FUN_0000_86b0(int param_1,undefined2 param_2,int param_3);
+ void __allregs FUN_0000_86b8(int param_1);
+ void __allregs FUN_0000_86e3(int param_1);
+@@ -957,8 +957,8 @@
+ void __allregs FUN_0000_9667(int param_1);
+ void __allregs FUN_0000_9699(int param_1);
+ void __allregs FUN_0000_96c0(undefined2 param_1);
+-void __allregs FUN_0000_96cb(undefined1 param_1,int param_2);
+-void __allregs thunk_FUN_0000_96cb(undefined1 param_1,undefined2 param_2);
++void __allregs FUN_0000_96cb(int param_1,int param_2);          /* PATCH 545: object is param_1 (host ptr), AL via g_fist_a19e_al */
++void __allregs thunk_FUN_0000_96cb(int param_1,undefined2 param_2);  /* PATCH 545 */
+ void __allregs FUN_0000_973a(int param_1);
+ void __allregs FUN_0000_9787(int param_1);
+ void __allregs FUN_0000_97d5(undefined4 param_1,undefined4 param_2,undefined4 param_3,int param_4);
+@@ -21877,11 +21877,21 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_7da5) @ 0000:7da5 ===== */
+ 
+-void __allregs FUN_0000_7da5(undefined1 param_1,int param_2)
++void __allregs FUN_0000_7da5(int param_1,int param_2)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x90) = param_1;
+-  *(undefined1 *)(param_2 + 0xd6) = 3;
++  /* PATCH 545: the sibling of the case patch 514 fixed for 8f3a, in the SAME four-entry a19e table.
++   * asm 0x7da5 is `mov %al,0x90(%di) ; movb $0x3,0xd6(%di) ; lcall 0f69:0x7a5b` (= linear 0x110EB =
++   * FUN_1000_70eb).  It is reached ONLY through a19e's one-argument dispatch (patch 283:
++   * `mov bx,[di] ; shl bx,1 ; call [bx-0x69a2]`), which passes the object as a HOST POINTER -- so the
++   * object is param_1 and param_2 was UNINITIALISED STACK, which the port then dereferenced (measured
++   * param_2=32165 -> SIGSEGV as soon as this state is entered).  AL is the gear-direction selector
++   * ad3b sets and a19e drops through its 1-param signature; it is published as g_fist_a19e_al. */
++  extern unsigned char g_fist_a19e_al;
++  uint8_t *o = (uint8_t *)(uintptr_t)param_1;
++  (void)param_2;
++  o[0x90] = g_fist_a19e_al;
++  o[0xd6] = 3;
+   FUN_1000_70eb();
+   return;
+ }
+@@ -21889,10 +21899,15 @@
+ 
+ /* ===== thunk_FUN_0000_7da5 @ 0000:7db4 ===== */
+ 
+-void __allregs thunk_FUN_0000_7da5(undefined1 param_1,undefined2 param_2)
++void __allregs thunk_FUN_0000_7da5(int param_1,undefined2 param_2)
+ 
+ {
+-  FUN_0000_7da5(1,param_2);
++  /* PATCH 545: asm `mov al,1 ; jmp 0x7da5` -- it only preloads AL and falls into 7da5 with DI (the
++   * object) untouched.  Dispatched by a19e with the object host pointer as the single argument. */
++  extern unsigned char g_fist_a19e_al;
++  (void)param_2;
++  g_fist_a19e_al = 1;
++  FUN_0000_7da5(param_1,0);
+   return;
+ }
+ 
+@@ -23417,11 +23432,21 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_8679) @ 0000:8679 ===== */
+ 
+-void __allregs FUN_0000_8679(undefined1 param_1,int param_2)
++void __allregs FUN_0000_8679(int param_1,int param_2)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x90) = param_1;
+-  *(undefined1 *)(param_2 + 200) = 3;
++  /* PATCH 545: the sibling of the case patch 514 fixed for 8f3a, in the SAME four-entry a19e table.
++   * asm 0x8679 is `mov %al,0x90(%di) ; movb $0x3,0xc8(%di) ; lcall 0f69:0x7a5b` (= linear 0x110EB =
++   * FUN_1000_70eb).  It is reached ONLY through a19e's one-argument dispatch (patch 283:
++   * `mov bx,[di] ; shl bx,1 ; call [bx-0x69a2]`), which passes the object as a HOST POINTER -- so the
++   * object is param_1 and param_2 was UNINITIALISED STACK, which the port then dereferenced (measured
++   * param_2=32165 -> SIGSEGV as soon as this state is entered).  AL is the gear-direction selector
++   * ad3b sets and a19e drops through its 1-param signature; it is published as g_fist_a19e_al. */
++  extern unsigned char g_fist_a19e_al;
++  uint8_t *o = (uint8_t *)(uintptr_t)param_1;
++  (void)param_2;
++  o[0x90] = g_fist_a19e_al;
++  o[0xc8] = 3;
+   FUN_1000_70eb();
+   return;
+ }
+@@ -23429,10 +23454,15 @@
+ 
+ /* ===== thunk_FUN_0000_8679 @ 0000:8688 ===== */
+ 
+-void __allregs thunk_FUN_0000_8679(undefined1 param_1,undefined2 param_2)
++void __allregs thunk_FUN_0000_8679(int param_1,undefined2 param_2)
+ 
+ {
+-  FUN_0000_8679(1,param_2);
++  /* PATCH 545: asm `mov al,1 ; jmp 0x8679` -- it only preloads AL and falls into 8679 with DI (the
++   * object) untouched.  Dispatched by a19e with the object host pointer as the single argument. */
++  extern unsigned char g_fist_a19e_al;
++  (void)param_2;
++  g_fist_a19e_al = 1;
++  FUN_0000_8679(param_1,0);
+   return;
+ }
+ 
+@@ -26271,11 +26301,21 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_96cb) @ 0000:96cb ===== */
+ 
+-void __allregs FUN_0000_96cb(undefined1 param_1,int param_2)
++void __allregs FUN_0000_96cb(int param_1,int param_2)
+ 
+ {
+-  *(undefined1 *)(param_2 + 0x90) = param_1;
+-  *(undefined1 *)(param_2 + 0xd2) = 3;
++  /* PATCH 545: the sibling of the case patch 514 fixed for 8f3a, in the SAME four-entry a19e table.
++   * asm 0x96cb is `mov %al,0x90(%di) ; movb $0x3,0xd2(%di) ; lcall 0f69:0x7a5b` (= linear 0x110EB =
++   * FUN_1000_70eb).  It is reached ONLY through a19e's one-argument dispatch (patch 283:
++   * `mov bx,[di] ; shl bx,1 ; call [bx-0x69a2]`), which passes the object as a HOST POINTER -- so the
++   * object is param_1 and param_2 was UNINITIALISED STACK, which the port then dereferenced (measured
++   * param_2=32165 -> SIGSEGV as soon as this state is entered).  AL is the gear-direction selector
++   * ad3b sets and a19e drops through its 1-param signature; it is published as g_fist_a19e_al. */
++  extern unsigned char g_fist_a19e_al;
++  uint8_t *o = (uint8_t *)(uintptr_t)param_1;
++  (void)param_2;
++  o[0x90] = g_fist_a19e_al;
++  o[0xd2] = 3;
+   FUN_1000_70eb();
+   return;
+ }
+@@ -26283,10 +26323,15 @@
+ 
+ /* ===== thunk_FUN_0000_96cb @ 0000:96da ===== */
+ 
+-void __allregs thunk_FUN_0000_96cb(undefined1 param_1,undefined2 param_2)
++void __allregs thunk_FUN_0000_96cb(int param_1,undefined2 param_2)
+ 
+ {
+-  FUN_0000_96cb(1,param_2);
++  /* PATCH 545: asm `mov al,1 ; jmp 0x96cb` -- it only preloads AL and falls into 96cb with DI (the
++   * object) untouched.  Dispatched by a19e with the object host pointer as the single argument. */
++  extern unsigned char g_fist_a19e_al;
++  (void)param_2;
++  g_fist_a19e_al = 1;
++  FUN_0000_96cb(param_1,0);
+   return;
+ }
+ 
