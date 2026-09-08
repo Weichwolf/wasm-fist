@@ -187,3 +187,47 @@ So the missions do not fail to resolve for want of time. Something stops engagem
 burst -- the same shape as AZER1 (16 -> 15, then nothing). That is one question, not 42, and it is
 the next thing to isolate: whether surviving units stop acquiring targets (board:0018's LOS), stop
 being acquirable, or stop firing.
+
+## Sweep after patches 538-545 + the op-0x20/0x1c services + LOS de-approximation
+
+```
+RESOLVED     0
+UNRESOLVED  45
+TIMEOUT      2   INDIA1, TRAIN3
+NOLOAD       0
+CRASH        0
+```
+
+Hangs went **5 -> 2**: AZER6, AZER7 and CYPRUS4 now run to completion (they were confirmed hangs at a
+280s budget before). 45 of 47 missions load, spawn, move, terrain-follow and engage without crashing.
+
+## CAVEAT on "resolved": the criterion is MINE, not the engine's
+
+`tools/selfplay.sh` calls a mission resolved when `a296` reaches 0 -- one side eliminated. That is a
+construction of this harness, not something read out of the engine, and it should not be inherited
+uncritically. The game ships four mission-outcome scripts:
+
+```
+FISTDATA/WWIN.MS3  WLOSE.MS3  EWIN.MS3  ELOSE.MS3
+```
+
+and their names sit in a packed table at DGROUP:0x9f7a with a 4-byte-spaced index table at
+DGROUP:0x9f38 (image 0x25f38: WWIN, WLOSE, EWIN, ELOSE, MSN1, ...). So the engine has its OWN
+mission-end path that selects among win/lose scripts -- and it may well end a mission on an objective,
+a timer, or a base-loss cascade rather than on annihilation.
+
+I did NOT find the code that indexes that table: there is no asm reference to 0x9f38 or -0x60c8, so it
+is reached through a computed or register-held base.
+
+This matters for the goal's wording. Two possibilities, and they are NOT yet distinguished:
+(a) missions genuinely fail to reach the engine's own end state -- a real defect; or
+(b) missions do reach it and this harness cannot see it, because it is watching a296 instead of the
+    engine's outcome flag -- in which case the measurement is wrong, exactly like the `a296 >= 15`
+    roster gate was.
+
+The oracle bears on this: between its two dumps the ORIGINAL killed only 2 vehicles (a296 16 -> 14),
+so the original does not resolve AZER1 by rapid annihilation either. That is weak evidence for (b).
+
+NEXT: find the reader of the DGROUP:0x9f38 table and the flag it switches on, then teach
+tools/selfplay.sh to watch THAT rather than a296. Until then, "0 of 47 resolved" is a statement about
+this harness's criterion as much as about the engine.
