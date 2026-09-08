@@ -1,0 +1,47 @@
+PATCH 546: the mission-over flag DGROUP:0xe814 is a BYTE, not a word.
+
+`FUN_0000_459a` IS the mission -- FUN_0000_e714 calls it once and everything after the call is teardown
+plus the outcome screen.  Its loop is gated on this one flag:
+
+    45a3: c6 06 14 e8 00    movb  $0x0,-0x17ec     ; cleared on mission ENTRY
+    45c8: f6 06 14 e8 ff    testb $0xff,-0x17ec    ; the loop's exit test
+    45cd: 75 45             jne   0x4614           ; NONZERO -> leave the mission
+
+and six sites raise it, each first writing an outcome code to word[DGROUP:0x6da0]:
+
+    4168: c6 06 14 e8 ff    movb $0xff,-0x17ec
+    4457: c6 06 14 e8 ff    movb $0xff,-0x17ec
+    6115: c6 06 14 e8 ff    movb $0xff,-0x17ec     (outcome 3)
+   15e4c: c6 06 14 e8 ff    movb $0xff,-0x17ec     (outcome 4 -- the ESC/abort handler)
+   15e8c: c6 06 14 e8 ff    movb $0xff,-0x17ec     (outcome 5 -- the timeline task)
+   1a5e9: c6 06 14 e8 ff    movb $0xff,-0x17ec
+
+Every one of the eight accesses is BYTE-width; there is no word access to 0xe814 anywhere in the image.
+Ghidra typed the variable `undefined2`, so each of the port's stores also wrote DGROUP:0xe815.  That
+neighbour is real memory, not padding -- 0xe816 is a live descriptor address (`cb07 mov $0xe816,%bx`,
+the MSPRITE0 sprite sheet the shim's patch 133 loads), so a word store reaches into that record.
+
+Behaviour today is unchanged (measured: AZER1 a296 16 -> 14, SAUDI2 13 -> 12, both identical to before)
+because the flag's only readers test it against zero and 0x00ff still reads nonzero in the low byte.
+It is landed now because it is asm-verified and because it becomes load-bearing the moment the mission
+task cluster is promoted: board:0017 records that the two writers which actually end a BATTLE
+(15e4c, 15e8c) live in the unpromoted 0f69 cooperative-task subsystem.
+
+--- a/fist.c
++++ b/fist.c
+@@ -3643,7 +3643,14 @@
+ #define DAT_2000_a6f1 (*(undefined2 *)(g_mem+0x2a6f1))
+ #define DAT_2000_a709 (*(undefined2 *)(g_mem+0x2a709))
+ #define DAT_2000_a70b (*(undefined2 *)(g_mem+0x2a70b))
+-#define DAT_2000_a814 (*(undefined2 *)(g_mem+0x2a814))
++/* PATCH 546: the MISSION-OVER flag is a BYTE.  Every one of the eight asm accesses is byte-width --
++ * `c6 06 14 e8 ff  movb $0xff,-0x17ec` at 0x4168/0x4457/0x6115/0x15e4c/0x15e8c/0x1a5e9,
++ * `c6 06 14 e8 00  movb $0x0,-0x17ec`  at 0x45a3 (cleared on mission entry), and
++ * `f6 06 14 e8 ff  testb $0xff,-0x17ec` at 0x45c8 (the mission loop's exit test) -- there is NO word
++ * access anywhere.  Ghidra typed it undefined2, so every store also wrote DGROUP:0xe815; 0xe816 is a
++ * live descriptor address (`cb07 mov $0xe816,%bx`, the MSPRITE0 sheet of patch 133), so the neighbour
++ * is real memory, not padding.  board:0017 */
++#define DAT_2000_a814 (*(undefined1 *)(g_mem+0x2a814))
+ #define DAT_2000_a82e (*(undefined2 *)(g_mem+0x2a82e))
+ #define DAT_2000_a830 (*(undefined2 *)(g_mem+0x2a830))
+ #define DAT_2000_a834 (*(undefined2 *)(g_mem+0x2a834))

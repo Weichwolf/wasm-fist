@@ -604,3 +604,33 @@ FINAL ORDER OF WORK (every address known; no search left):
 
 Expect each promotion to need the same asm-verified treatment as patches 540-545 (dispatch objects,
 dropped carries, WORD-vs-DWORD widths) rather than a mechanical paste.
+
+### Step 3 done (patch 546); and what the list machinery actually is
+
+`DAT_2000_a814` is now a BYTE. All eight asm accesses to DGROUP:0xe814 are byte-width
+(`movb`/`testb`); the port's `undefined2` typing made every store also write 0xe815, and 0xe816 is a
+live descriptor address (`cb07 mov $0xe816,%bx`, patch 133's MSPRITE0 sheet). Behaviour is unchanged
+today -- the flag's readers only test against zero -- but it becomes load-bearing the moment the task
+cluster is promoted. Matrix 177/0 both targets.
+
+Also established while reading the primitives: **the CRT task list is a self-modifying far-jump chain.**
+`FUN_1000_4ce7` (patch 012, already in the port) writes opcode **0xEA (JMP FAR)** at the new node and
+splices `new.fwd := prev.fwd ; prev.fwd := (BX+5):ES`. That is why the timeline task at 1000:0x5e52
+begins with `ljmp $0x0,$0x0` -- the node IS a far jump, and the scheduler patches its target. So the
+"yield" is not a call/return discipline at all; the tasks are a linked chain of JMP FARs the CRT rewires.
+
+That reframes the remaining work. `FUN_1000_4d05` -- the list walk/remove at `[DGROUP:0x32e]`, the one
+`FUN_1000_3328` (task-create) actually calls -- IS present in the port but is PRISTINE: it carries an
+`unaff_ES` pseudo-var and host-pointer derefs (`*(int *)(param_3 + 1)`), i.e. it does not work. It
+needs the same asm-verified reconstruction as 4ce7 got in patch 012, against asm 0x14d05 (`lds
+0x1(%si),%si ; sub $0x5,%si` -- it walks the chain by loading each node's far pointer).
+
+REMAINING (unchanged in substance, now with 4d05's state known):
+
+1. Reconstruct `FUN_1000_4d05` (pristine, unaff_ES + host derefs) -- prerequisite for task-create.
+2. Promote `1000:32f3 3303 3328` (the task wrappers -- trivial, thin `cli`/`DS=CS`/`lcall *%ss:0x32a|0x32e` shells).
+3. Promote `1000:4c96 4ccd 4de3 4e98 4f07` (the rest of si=0x274's targets).
+4. Promote `1000:5cd8 5d9b 5dfe 5e36 5e52` (the mission task cluster).
+5. Apply reloc sections si=0x274 then si=0x1b8 (si=0x038 NOT needed -- measured already seeded).
+6. Change tools/selfplay.sh to end on `byte[DGROUP:0xe814] != 0` with the outcome in
+   `word[DGROUP:0x6da0]`, then re-sweep and confirm be0e finally loads 0x0c/0x10/0x14/0x18.
