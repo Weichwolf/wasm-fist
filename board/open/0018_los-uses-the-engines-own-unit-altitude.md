@@ -264,3 +264,34 @@ Also noted while reading 7c1d (a separate, small, real defect, NOT yet patched):
 `7c26 sar $0x8,%ax` is an ARITHMETIC shift feeding `byte[di+0xa7]`, and the port has
 `(char)((uint)*(undefined2 *)(param_4 + 0x38) >> 8)` -- a LOGICAL shift on an unsigned, which differs
 for negative headings. The same line appears in the 87df and 902c heads.
+
+### Oracle: `word[di+0x1d]` IS the live altitude for types 00/01/02, and it updates per-frame
+
+Read from both dumps, same slots:
+
+```
+                600M                    1000M
+ c05c  type 00  [0x1d]=81  gnd=81   ->  [0x1d]=64  gnd=64
+ c157  type 01  [0x1d]=35  gnd=35   ->  [0x1d]=86  gnd=86
+ c92f  type 02  [0x1d]= 3  gnd= 3   ->  [0x1d]= 9  gnd= 9
+ cb25  type 02  [0x1d]=36  gnd=36   ->  [0x1d]=10  gnd=10
+```
+
+`word[di+0x1d] == gnd[di+0xd]` exactly, in every sample, and both track the terrain as the unit moves.
+So the step method's copy is right and the live value really is the terrain height.
+
+The per-frame writer of the VEHICLE meaning of +0x1d has NOT been found. Eliminated so far:
+
+- `0xf1b8` -- the mission loader at 0xf1a1. It writes [di+0x19] = v-5 and [di+0x1d] = v+5 from one parsed
+  value; the oracle's [0x19] is a per-type constant (384 for types 00/01, 256 for type 02) that does NOT
+  pair with [0x1d]=81/35/71 under that formula, so [0x1d] is overwritten after load.
+- `0x1ae32` and `0x1adac` -- both write the VELOCITY TRIPLE [.+0x1d]/[+0x1f]/[+0x21] from a192 for a
+  NEWLY SPAWNED object (SI), i.e. the guided-projectile meaning of the union field, not the vehicle one.
+- `FUN_1000_adcd`, the real terrain probe: its eight asm call sites are `554d 9af6 9c16 b306 b433 b50b
+  bc2c bcf7`, all present in the port, none in the 00/01/02 chain.
+
+So the writer is reached by a path not yet enumerated -- most likely addressed through a base register
+other than %di/%si/%bx/%bp, or written as part of a wider store. NEXT: rather than grepping forms, use
+the oracle's write-trace directly -- `FIST_MEMARM_BOOT=1 FISTLOG=<prefix>` with `FIST_WATCHFLAT` on the
+CR3-aware engine-flat address of DGROUP:0xc079 (slot c05c + 0x1d) and read the `cs:eip` of whoever
+writes it. That names the function in one run instead of enumerating addressing modes.
