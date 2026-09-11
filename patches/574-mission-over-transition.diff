@@ -1,0 +1,251 @@
+PATCH 574: the mission-over transition -- 5f64's CF, the two byte-wide flags 0x7b1e/0x87bd, and the
+cockpit marker producers c47d/c4a2 with their record writers b4cd/b4a3.
+
+board:0017.  With the meshes loaded (573) the AZER1 self-play reaches DEFEAT; three defects then stood
+between the verdict and the debrief, each found by watching the byte it corrupted:
+
+  5f64  the platoon-label phase INIT (c33c's walk INIT calls it every frame) runs 671b for the first
+        label group and `jb 5fa9` marks the phase done when there is none.  Ghidra hard-wired that CF
+        to false: on the DEFEAT frame every own vehicle is a wreck, 671b finds no group, and 5fb0 then
+        runs with [0x7d1c]=0 and a stale [0x7d1e]=0 -- its `dec [0x7d1e] ; jne` never reaches 671b, it
+        emits one label record per call for 65536 calls, and its STRSEG:[0x12c7+[0x7c04]] store marches
+        128 KB past the label table over the MEMMGR descriptor pool at 0x34020; the per-frame compaction
+        096c/0dc2 then walks a zeroed free list for ever (the hang after the verdict).
+        (5f83 `movb [0x7d29],0x29` is a byte store; DAT_2000_3d29 is typed as a word.)
+  0x87bd  every one of the 26 asm accesses is `mov BYTE [0x87bd],3` (the cockpit damage flash, 60f4 and
+        the 506d..5d3d sites); Ghidra typed DAT_2000_47bd as a WORD, so each store zeroed byte[0x87be] =
+        the low byte of the cockpit container's child-list offset (record 0x87b8+6, copied by 4823's
+        1e27 from template 0x2bed).  With childlo 0x64 -> 0, container node 3b24's children became
+        0x3af0..0x3c20 -- its own parent list -- and the first repaint after the player's vehicle was
+        hit recursed 20d6/20ea until the stack overflowed (the transition's SIGSEGV).
+  0x7b1e  likewise (byte in every access: 47bd/5267/526e/5280/5287/5d1b/5d66/60f4; typed as a word):
+        the word store cleared the view flag byte[0x7b1f] that c528 and 1682b test.
+  c47d/c4a2  c33c phase handlers 0 and 8, the cockpit-view (byte[0x1549]==0x1e) marker and position-
+        sprite producers: their CF was dropped (board:0015) and their record writers 0f69:be3d = b4cd
+        and 0f69:be13 = b4a3 received stack residue as the ES:DI record cursor (a host deref of 3460
+        on the first cockpit frame after the verdict).  Rebuilt: c47d walks the STRSEG entries
+        [0xe6e4]..[0xe6e2] (stride 5, {x, y, colour}) into method-0x12 (37cd pixel) records; c4a2 walks
+        the position list [0xe70b] ([0xe709] entries, stride 8) into method-0x10 (3823 sprite 0x1398)
+        records; both through g_fist_render_di like the patch-310/526 writers.
+
+After 574 the self-play runs through DEFEAT, e814, the pilot-file save (616e), the statistics update
+(6220) and into e4bb's screen without a crash or hang.  What e4bb shows is the command-map template
+0x2d1d; the original shows "MISSION LOST / BATTLE STATISTICS ... PRESS ANY KEY TO PROCEED" over a
+picture -- ba63 fills those strings into STRSEG:0x41dc.. and the container node 3b24's child list
+0x3b54.. is where they are drawn; the port's frame has the map toolbar and no text.  Measured next
+(tools/oracle/census_debrief.sh: the original's post-verdict sequence frame by frame).
+--- a/fist.c
++++ b/fist.c
+@@ -3170,7 +3170,7 @@
+ #define DAT_2000_3b18 (*(undefined2 *)(g_mem+0x23b18))
+ #define DAT_2000_3b1a (*(undefined2 *)(g_mem+0x23b1a))
+ #define DAT_2000_3b1c (*(undefined2 *)(g_mem+0x23b1c))
+-#define DAT_2000_3b1e (*(undefined2 *)(g_mem+0x23b1e))
++#define DAT_2000_3b1e (*(undefined1 *)(g_mem+0x23b1e))   /* PATCH 574: every asm access to 0x7b1e is a BYTE (47bd/5267/526e/5280/5287/5d1b/5d66/60f4); the word type clobbered the view flag byte[0x7b1f] */
+ #define DAT_2000_3b1f (*(undefined1 *)(g_mem+0x23b1f))
+ #define DAT_2000_3b20 (*(undefined2 *)(g_mem+0x23b20))
+ #define DAT_2000_3b84 (*(undefined2 *)(g_mem+0x23b84))
+@@ -3237,7 +3237,7 @@
+ #define DAT_2000_4697 (*(undefined2 *)(g_mem+0x24697))
+ #define DAT_2000_46db (*(undefined2 *)(g_mem+0x246db))
+ #define DAT_2000_46f4 (*(undefined2 *)(g_mem+0x246f4))
+-#define DAT_2000_47bd (*(undefined2 *)(g_mem+0x247bd))
++#define DAT_2000_47bd (*(undefined1 *)(g_mem+0x247bd))   /* PATCH 574: every asm access to 0x87bd is `mov BYTE [0x87bd],3` (26 sites); the word type zeroed byte[0x87be] = the low byte of the cockpit container's child-list offset (record 0x87b8+6), which made the container walk its own parent list after the player's vehicle was hit -- the debrief transition recursed 20d6/20ea until the stack overflowed */
+ #define DAT_2000_47c2 (*(undefined2 *)(g_mem+0x247c2))
+ #define DAT_2000_47c4 (*(undefined2 *)(g_mem+0x247c4))
+ #define DAT_2000_47c9 (*(undefined2 *)(g_mem+0x247c9))
+@@ -17189,26 +17189,35 @@
+ void __allregs FUN_0000_5f64(void)
+ 
+ {
+-  bool bVar1;
+-  
++  /* PATCH 574: the INIT of the platoon-label phase (asm 0x5f64-0x5faf), called by c33c's walk INIT
++   * every frame: reset the label cursor [0x7c04]/[0x7c06] and the done flag [0x7d1c]; when the view
++   * shows labels ([0x6d2c]&0x20) seed the group iterator ([0x7d24]=0, [0x7d26]=4 or 8, the two colour
++   * bytes) and run 671b for the first group -- `jb 5fa9`: no live group means the phase is done
++   * ([0x7d1c]=0xff, CF=1).  Ghidra hard-wired that CF to false, so once every own vehicle was a
++   * wreck (the DEFEAT frame) 5fb0 ran with [0x7d1c]=0 and a stale [0x7d1e]=0: its `dec [0x7d1e] ;
++   * jne` never reached 671b again and it emitted a label record per call for 65536 calls, its
++   * STRSEG:[0x12c7+[0x7c04]] store marching 128 KB past the label table -- over the MEMMGR descriptor
++   * pool at 0x34020, after which the per-frame compaction 096c/0dc2 walked a zeroed free list forever. */
++  extern unsigned char g_fist_cf;
+   DAT_2000_3c04 = 0;
+   DAT_2000_3c06 = 0;
+   DAT_2000_3d1c = 0;
+   if ((DAT_2000_2d2c & 0x20) != 0) {
+     DAT_2000_3d24 = 0;
+-    DAT_2000_3d29 = 0x29;
++    *(uint8_t *)(g_mem + 0x23d29) = 0x29;             /* 5f83 movb [0x7d29],0x29 (DAT_2000_3d29 is typed as a word) */
+     DAT_2000_3d28 = 0x26;
+     DAT_2000_3d26 = 4;
+-    bVar1 = false;
+     if ((DAT_2000_2dab & 2) != 0) {
+       DAT_2000_3d26 = 8;
+     }
+-    FUN_1000_671b();
+-    if (!bVar1) {
+-      return;
++    g_fist_cf = 0;
++    FUN_1000_671b();                                  /* 5fa0 lcall f69:708b ; jb 5fa9 */
++    if (!g_fist_cf) {
++      return;                                         /* 5fa7 clc ; ret */
+     }
+   }
+-  DAT_2000_3d1c = 0xff;
++  DAT_2000_3d1c = 0xff;                               /* 5fa9 */
++  g_fist_cf = 1;                                      /* 5fae stc */
+   return;
+ }
+ 
+@@ -33951,11 +33960,19 @@
+ void __allregs FUN_0000_c47d(undefined2 param_1)
+ 
+ {
+-  if ((DAT_1000_d549 == '\x1e') && (DAT_2000_a6e4 < DAT_2000_a6e2)) {
+-    FUN_1000_b4cd(DAT_2000_a6e4,param_1);
++  /* PATCH 574: c33c phase-handler idx0 (asm 0xc47d-0xc4a1): in the cockpit view (byte[0x1549]==0x1e)
++   * emit one MARKER record per STRSEG entry between [0xe6e4] and [0xe6e2] (stride 5) through
++   * 0f69:be3d = b4cd (bx = the entry), then `add [0xe6e4],5 ; clc`; otherwise stc.  Ghidra dropped
++   * the CF and passed its stack residue as b4cd's record cursor (board:0015). */
++  extern unsigned char g_fist_cf;
++  (void)param_1;
++  if (DAT_1000_d549 == '\x1e' && DAT_2000_a6e4 < DAT_2000_a6e2) {
++    FUN_1000_b4cd((undefined2 *)(uintptr_t)DAT_2000_a6e4, 0);
+     DAT_2000_a6e4 = DAT_2000_a6e4 + 5;
++    g_fist_cf = 0;                                    /* c49b clc */
+     return;
+   }
++  g_fist_cf = 1;                                      /* c4a0 stc */
+   return;
+ }
+ 
+@@ -33965,13 +33982,22 @@
+ void __allregs FUN_0000_c4a2(undefined2 param_1)
+ 
+ {
+-  if ((((DAT_1000_d549 == '\x1e') && ((DAT_1000_c452 & 0x10) == 0)) && ((DAT_2000_2d2c & 0x81) != 0)
+-      ) && (((DAT_2000_2dab & 2) != 0 && (DAT_2000_a709 != 0)))) {
+-    FUN_1000_b4a3(param_1);
++  /* PATCH 574: c33c phase-handler idx8 (asm 0xc4a2-0xc4de): in the cockpit view, on the ticks whose
++   * bit 4 is clear, with [0x6d2c]&0x81 and byte[0x6dab]&2, emit one SPRITE record (kind 0x10, sprite
++   * 0x1398) per remaining entry [0xe709] of the position list at [0xe70b] (stride 8) through
++   * 0f69:be13 = b4a3, then `add [0xe70b],8 ; dec [0xe709] ; clc`; otherwise stc.  CF was dropped
++   * and b4a3 received stack residue as its record cursor (board:0015). */
++  extern unsigned char g_fist_cf;
++  (void)param_1;
++  if (DAT_1000_d549 == '\x1e' && (DAT_1000_c452 & 0x10) == 0 && (DAT_2000_2d2c & 0x81) != 0 &&
++      (DAT_2000_2dab & 2) != 0 && DAT_2000_a709 != 0) {
++    FUN_1000_b4a3(0);
+     DAT_2000_a70b = DAT_2000_a70b + 8;
+     DAT_2000_a709 = DAT_2000_a709 + -1;
++    g_fist_cf = 0;                                    /* c4d8 clc */
+     return;
+   }
++  g_fist_cf = 1;                                      /* c4dd stc */
+   return;
+ }
+ 
+@@ -68933,20 +68959,30 @@
+ void __allregs FUN_1000_b4a3(int param_1)
+ 
+ {
+-  undefined4 uVar1;
+-  int iVar2;
+-  undefined2 unaff_ES;
+-  
+-  iVar2 = DAT_2000_a70b;
+-  *(undefined2 *)(param_1 + 2) = 0;
+-  *(undefined2 *)(param_1 + 4) = 0x10;
+-  *(undefined2 *)(param_1 + 6) = 0x10;
+-  *(undefined2 *)(param_1 + 8) = 0x10;
+-  *(undefined4 *)(param_1 + 10) = *(undefined4 *)(iVar2 + -0x18f3);
+-  uVar1 = *(undefined4 *)(iVar2 + -0x18ef);
+-  *(undefined4 *)(param_1 + 0xe) = uVar1;
+-  *(undefined4 *)(param_1 + 0x12) = uVar1;
+-  *(undefined2 *)(param_1 + 0x32) = 0x1398;
++  /* PATCH 574: the position-sprite record writer (0f69:be13, asm 0x1b4a3-0x1b4cc), c4a2's callee.
++   *     bx = [0xe70b] ; add di,2 ; stosw 0 ; ax = 0x10 ; stosw x3 ; eax = dword[bx+0xe70d] ; stosd ;
++   *     eax = dword[bx+0xe711] ; stosd ; stosd ; add di,0x1c ; stosw 0x1398 ; retf
++   * i.e. method 0x10 (3823, the sprite blit) at the 3-D position [rec+0xa..0x15], sprite id 0x1398 at
++   * [rec+0x32].  ES:DI = the deferred render record (g_fist_render_di); Ghidra wrote it through a host
++   * pointer and read the list through the DGROUP-scaled `iVar2 - 0x18f3`. */
++  extern unsigned short g_fist_render_di;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint16_t bx = DAT_2000_a70b;
++  uint16_t di = (uint16_t)(g_fist_render_di + 2);
++  uint32_t eax;
++  (void)param_1;
++  *(uint16_t *)(dg + di) = 0;    di = (uint16_t)(di + 2);
++  *(uint16_t *)(dg + di) = 0x10; di = (uint16_t)(di + 2);
++  *(uint16_t *)(dg + di) = 0x10; di = (uint16_t)(di + 2);
++  *(uint16_t *)(dg + di) = 0x10; di = (uint16_t)(di + 2);
++  eax = *(uint32_t *)(dg + (uint16_t)(bx + 0xe70d));
++  *(uint32_t *)(dg + di) = eax;  di = (uint16_t)(di + 4);
++  eax = *(uint32_t *)(dg + (uint16_t)(bx + 0xe711));
++  *(uint32_t *)(dg + di) = eax;  di = (uint16_t)(di + 4);
++  *(uint32_t *)(dg + di) = eax;  di = (uint16_t)(di + 4);
++  di = (uint16_t)(di + 0x1c);
++  *(uint16_t *)(dg + di) = 0x1398; di = (uint16_t)(di + 2);
++  g_fist_render_di = di;
+   return;
+ }
+ 
+@@ -68956,27 +68992,36 @@
+ void __allregs FUN_1000_b4cd(undefined2 *param_1,int param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined2 uVar2;
+-  uint uVar3;
+-  undefined2 unaff_ES;
+-  
+-  uVar1 = DAT_1000_c070;
+-  *(undefined2 *)(param_2 + 2) = 0;
+-  uVar2 = CONCAT11(*(undefined1 *)(param_1 + 2),0x12);
+-  *(undefined2 *)(param_2 + 4) = uVar2;
+-  *(undefined2 *)(param_2 + 6) = uVar2;
+-  *(undefined2 *)(param_2 + 8) = uVar2;
+-  *(undefined1 *)(param_2 + 10) = 0;
+-  *(undefined2 *)(param_2 + 0xb) = *param_1;
+-  *(undefined1 *)(param_2 + 0xd) = 0;
+-  *(undefined1 *)(param_2 + 0xe) = 0;
+-  uVar3 = param_1[1];
+-  *(uint *)(param_2 + 0xf) = uVar3;
+-  uVar3 = uVar3 & 0xff00;
+-  *(undefined1 *)(param_2 + 0x11) = 0;
+-  *(uint *)(param_2 + 0x12) = uVar3;
+-  *(uint *)(param_2 + 0x14) = uVar3;
++  /* PATCH 574: the MARKER record writer (0f69:be3d, asm 0x1b4cd-0x1b4fb), c47d's callee.  BX = a
++   * STRSEG entry {word x, word y, byte colour}; ES:DI = the deferred render record (DGROUP:0x6bbe,
++   * the g_fist_render_di cursor of the patch-310 writers):
++   *     add di,2 ; stosw 0 ; ax = 0x12 | colour<<8 ; stosw x3 ; stosb 0 ; stosw x ; stosb 0 ; stosb 0 ;
++   *     ax = y ; stosw ; stosb 0 (al=0) ; stosw ax ; stosw ax ; add di,0x1c ; retf
++   * i.e. method 0x12 (37cd, the single pixel) with colour [rec+5], X [rec+0xb], Y [rec+0xf].  Ghidra
++   * wrote it through a host pointer (param_2) and read the entry from DGROUP instead of STRSEG. */
++  extern unsigned short g_fist_render_di;
++  uint8_t *dg = g_mem + 0x1c000;
++  uint8_t *gs = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x70) << 4);   /* mov gs,[0x70] */
++  uint16_t bx = (uint16_t)(uintptr_t)param_1;
++  uint16_t di = (uint16_t)(g_fist_render_di + 2);
++  uint16_t ax;
++  (void)param_2;
++  *(uint16_t *)(dg + di) = 0; di = (uint16_t)(di + 2);
++  ax = (uint16_t)(0x12 | ((uint16_t)gs[(uint16_t)(bx + 4)] << 8));
++  *(uint16_t *)(dg + di) = ax; di = (uint16_t)(di + 2);
++  *(uint16_t *)(dg + di) = ax; di = (uint16_t)(di + 2);
++  *(uint16_t *)(dg + di) = ax; di = (uint16_t)(di + 2);
++  dg[di] = 0; di = (uint16_t)(di + 1);
++  *(uint16_t *)(dg + di) = *(uint16_t *)(gs + bx); di = (uint16_t)(di + 2);
++  dg[di] = 0; di = (uint16_t)(di + 1);
++  dg[di] = 0; di = (uint16_t)(di + 1);
++  ax = *(uint16_t *)(gs + (uint16_t)(bx + 2));
++  *(uint16_t *)(dg + di) = ax; di = (uint16_t)(di + 2);
++  dg[di] = 0; di = (uint16_t)(di + 1);
++  ax &= 0xff00;                                                       /* xor al,al */
++  *(uint16_t *)(dg + di) = ax; di = (uint16_t)(di + 2);
++  *(uint16_t *)(dg + di) = ax; di = (uint16_t)(di + 2);
++  g_fist_render_di = (uint16_t)(di + 0x1c);
+   return;
+ }
+ 
