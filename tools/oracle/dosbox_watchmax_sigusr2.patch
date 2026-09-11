@@ -1,0 +1,47 @@
+# Instrumented-DOSBox additions on top of dosbox_vga_terrain_trace.patch / dosbox_opl_trace.patch:
+#  - FIST_WATCHMAX overrides the 40000-entry FIST_WATCHPHYS cap; the watch log stays open across hits.
+#  - adlib.cpp claims SIGUSR2 only when FISTOPLLOG is set, so the RAM-dump signal reaches vga_memory.
+# Apply from third_party/dosbox-build/dosbox-0.74-3/ with patch -p0.  board:0017
+--- src/hardware/vga_memory.cpp
++++ src/hardware/vga_memory.cpp
+@@ -526,17 +526,21 @@
+ 			if (r9200_passno >= r9200_maxpass) r9200_cap = 0;   /* stop after N frames */
+ 		}
+ 	}
+-	if (fist_watch_hi && ph >= fist_watch_lo && ph < fist_watch_hi && fist_watch_hits < 40000) {
++	/* FIST_WATCHMAX overrides the 40000-entry cap (a whole-object trace of the player fills it in 20 s
++	 * of mission); the file stays open across hits instead of being reopened per line. */
++	static long fist_watch_max = -1;
++	if (fist_watch_max < 0) { const char *e = getenv("FIST_WATCHMAX"); fist_watch_max = e ? atol(e) : 40000; }
++	if (fist_watch_hi && ph >= fist_watch_lo && ph < fist_watch_hi && fist_watch_hits < fist_watch_max) {
+ 		fist_watch_hits++;
+-		char wpath[600]; snprintf(wpath, sizeof wpath, "%s.watch.txt", fist_prefix);
+-		FILE *wf = fopen(wpath, "a");
++		static FILE *wf = 0;
++		if (!wf) { char wpath[600]; snprintf(wpath, sizeof wpath, "%s.watch.txt", fist_prefix); wf = fopen(wpath, "a"); }
+ 		if (wf) {
+ 			Bit32u ssb = SegPhys(ss), flatip = SegPhys(cs) + reg_eip;
+ 			fprintf(wf, "WATCH ph=%08x val=%02x flatip=%08x cs=%04x eip=%08x ss=%04x sp=%08x stack:",
+ 				ph, val, flatip, SegValue(cs), reg_eip, SegValue(ss), reg_esp);
+ 			for (int k = 0; k < 20; k++) fprintf(wf, " %04x", mem_readw(ssb + reg_esp + k * 2));
+ 			fprintf(wf, "\n");
+-			fclose(wf);
++			if ((fist_watch_hits & 0x3ff) == 0) fflush(wf);
+ 		}
+ 	}
+ 	if (fist_wf_span) {
+--- src/hardware/adlib.cpp
++++ src/hardware/adlib.cpp
+@@ -57,8 +57,10 @@
+ 	if ( !fist_opl_init ) {
+ 		fist_opl_init = true;
+ 		const char *p = getenv("FISTOPLLOG");
+-		if ( p && *p ) { fist_opl_f = fopen(p, "w"); }
+-		signal(SIGUSR2, fist_opl_sig);
++		/* Only claim SIGUSR2 when an OPL log is requested: the first OPL port write otherwise STOLE the
++		 * RAM-dump signal from vga_memory's fist_sig (last signal() wins), so census scripts that armed
++		 * FIST_MEMARM_BOOT and sent SIGUSR2 mid-mission never got their .ram.bin. */
++		if ( p && *p ) { fist_opl_f = fopen(p, "w"); signal(SIGUSR2, fist_opl_sig); }
+ 	}
+ 	if ( fist_opl_dump ) {
+ 		fist_opl_dump = 0;

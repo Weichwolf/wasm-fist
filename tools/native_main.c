@@ -96,8 +96,10 @@ void objtrap_trap(int sig, siginfo_t *si, void *uc) {   /* SIGTRAP: after the si
     if (g_objtrap_page) mprotect(g_objtrap_page, sysconf(_SC_PAGESIZE), PROT_READ);  /* re-arm */
     if (g_objtrap_pend_eip) {
         unsigned short v = *(unsigned short *)g_objtrap_target;
-        fprintf(stderr, "[objtrap] c834+0 <- 0x%04x  by EIP=0x%08lx%s\n", v, g_objtrap_pend_eip,
-                (v!=0 && v!=1) ? "  <<< GARBAGE" : "");
+        unsigned char *dg_ = g_mem + 0x1c000;
+        fprintf(stderr, "[objtrap] dg:%04lx <- 0x%04x  by EIP=0x%08lx  t=%u clock=%02x:%02x:%02x\n",
+                (unsigned long)(g_objtrap_target - (uintptr_t)dg_), v, g_objtrap_pend_eip,
+                *(uint16_t *)(dg_ + 0x452), dg_[0x6da6], dg_[0x6da7], dg_[0x6da8]);
         g_objtrap_pend_eip = 0;
     }
     u->uc_mcontext.gregs[16 /*REG_EFL*/] &= ~0x100UL;   /* clear TF */
@@ -490,13 +492,14 @@ static void fist_dump_and_exit(const char *why){
        * slot (word[0xdfbc], index 0): a run that left the sim with NO verdict and player=0000 is sitting
        * at the engine's own PL: vehicle-selector prompt after the player's vehicle was destroyed -- the
        * second mission-end path, which tools/selfplay.sh must not file under TIMEOUT. */
-      { unsigned char *dg = g_mem + 0x1c000; unsigned pslot = *(uint16_t*)(dg + 0xdfbc);
-      fprintf(stderr, "[outcome] a294=%d a296=%d  loaded=%d min_a296=%ld peak_a296=%ld  over=%d code=%d  alive=%u/%u obj=%u/%u player=%04x  %s\n",
+      { unsigned char *dg = g_mem + 0x1c000; unsigned pobj = *(uint16_t*)(dg + 0x6d34);
+      fprintf(stderr, "[outcome] a294=%d a296=%d  loaded=%d min_a296=%ld peak_a296=%ld  over=%d code=%d  alive=%u/%u obj=%u/%u verdict=%u/%u player=%04x(type=%04x dead=%d)  %s\n",
               *(uint16_t*)(g_mem+0x1c000+0xe294), *(uint16_t*)(g_mem+0x1c000+0xe296),
               g_a296_loaded, g_min_a296, g_peak_a296, g_mission_over, g_mission_outcome,
-              dg[0x6d38], dg[0x6d39], *(uint16_t*)(dg+0x978e), *(uint16_t*)(dg+0x9790), pslot,
+              dg[0x6d38], dg[0x6d39], *(uint16_t*)(dg+0x978e), *(uint16_t*)(dg+0x9790),
+              *(uint16_t*)(dg+0x6da0), *(uint16_t*)(dg+0x6da2), pobj,
+              pobj ? *(uint16_t*)(dg+pobj) : 0, pobj ? ((dg[(uint16_t)(pobj+0x19)] & 4) ? 1 : 0) : -1,
               g_mission_over        ? ocs :
-              (g_a296_loaded && pslot == 0) ? "(player vehicle destroyed -- at the PL: prompt, no verdict)" :
               g_a296_loaded         ? "(mission loaded, not resolved)" : "(mission never loaded a roster)"); }
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
@@ -762,25 +765,39 @@ void fist_timer_pump(void){
         if (b > g_peak_a296) g_peak_a296 = b;
         if (g_a296_loaded && b < g_min_a296) g_min_a296 = b; }
       { extern int g_mission_over, g_mission_outcome; unsigned char *dg = g_mem + 0x1c000;
-        if (in_mission && !g_mission_over && dg[0xe814] != 0) {
+        /* Latch on the VERDICT, not on the mission-over flag: a5dc writes 0x6da0 and starts the countdown
+         * word 0x6da2 (0x3c / 5 / 2, from 0xffff) in the same instant, and the countdown stays visible for
+         * 2..60 supervisor rounds of 8 ticks each -- whereas 0xe814 is set by the LAST decrement and
+         * consumed by the mission loop's very next `testb 0xe814` (45c8), which leaves the mission and
+         * flips 0x1549 before any pump can observe the flag with in_mission still true.  That is how a
+         * TIME EXPIRED on AZER1 went unlatched and the run sat at the post-mission menu.  Outcomes 3/4/5
+         * (6115, 15e46, 15e86) write 0x6da0 and 0xe814 without a countdown, so the flag stays as the
+         * second trigger.  board:0017 */
+        /* NOT gated on in_mission: byte[0x1549] cycles 00/1c/20/22 within a tick (it is a phase byte, not
+         * a mission-state flag), so a pump that lands on any phase but 0x1c missed the verdict -- AZER1's
+         * TIME EXPIRED went unlatched that way while AZER2/3/5/6 latched by phase luck.  The roster
+         * high-water (g_a296_loaded) says a mission has run; 0x6da2 is 0xffff from 47b2 at mission entry
+         * until the verdict, so nothing stale can latch. */
+        if (g_a296_loaded && !g_mission_over && (*(uint16_t *)(dg + 0x6da2) != 0xffff || dg[0xe814] != 0)) {
           g_mission_over = 1; g_mission_outcome = *(uint16_t *)(dg + 0x6da0);
           /* FIST_STOP_ON_OUTCOME=1: stop the moment the engine resolves the mission.  This is the
            * self-play sweep's terminating condition -- a mission runs for as long as it takes rather
            * than to a tick cap, and cannot be cut off before it resolves.  board:0017 */
           { static int soo = -1; if (soo < 0) soo = getenv("FIST_STOP_ON_OUTCOME") ? 1 : 0;
             if (soo) fist_dump_and_exit("mission resolved"); } } }
-      /* board:0017 -- the SECOND mission-end path.  When the player's vehicle is destroyed the engine
-       * frees registry slot 0 (word[DGROUP:0xdfbc]) and the mission loop (e714) raises its PL: vehicle-
-       * selector prompt, spinning in e4bb with no verdict ever written.  Under empty input that prompt
-       * is never dismissed, so a FIST_STOP_ON_OUTCOME run must end here too, through the same exit, and
-       * say so in [outcome] (player=0000) instead of being cut off by `timeout` and filed as TIMEOUT.
-       * 300 consecutive pumps with slot 0 empty is far longer than any respawn/reassignment window. */
-      { static int soo2 = -1, empty_pumps = 0; extern int g_a296_loaded, g_mission_over;
-        if (soo2 < 0) soo2 = getenv("FIST_STOP_ON_OUTCOME") ? 1 : 0;
-        if (soo2 && g_a296_loaded && !g_mission_over) {
-          if (*(uint16_t *)(g_mem + 0x1c000 + 0xdfbc) == 0) { if (++empty_pumps >= 300) fist_dump_and_exit("player vehicle destroyed (PL: prompt)"); }
-          else empty_pumps = 0;
-        } }
+      /* FIST_WATCHBYTE=<dgroup-off>[,<off>...] (diagnostic, default OFF): poll up to 8 DGROUP bytes every
+       * pump and print each CHANGE with the tick and mission clock.  Needs no arming and no page
+       * protection -- FIST_OBJTRAP (mprotect at the op-0x2c gate) never fires in the self-play flow, which
+       * silently produced "no writer" for bytes written every tick.  board:0017 */
+      { static int nwb = -1; static unsigned woff[8]; static int wprev[8];
+        if (nwb < 0) { nwb = 0; const char *e = getenv("FIST_WATCHBYTE");
+          while (e && *e && nwb < 8) { woff[nwb] = (unsigned)strtoul(e, (char **)&e, 0); wprev[nwb] = -1; nwb++;
+            while (*e == ',' || *e == ' ') e++; } }
+        if (nwb > 0 && g_a296_loaded) { unsigned char *dg = g_mem + 0x1c000;
+          for (int i = 0; i < nwb; i++) { int v = dg[woff[i] & 0xffff];
+            if (v != wprev[i]) { fprintf(stderr, "[watchbyte] dg:%04x %02x -> %02x  t=%u clock=%02x:%02x:%02x\n",
+                woff[i] & 0xffff, wprev[i] & 0xff, v, *(uint16_t *)(dg + 0x452), dg[0x6da6], dg[0x6da7], dg[0x6da8]);
+              wprev[i] = v; } } } }
       /* DIAGNOSTIC (FIST_FIXFACTION): test the aa08 side-filter hypothesis -- force byte[obj+0x16] bit3
        * = the unit's SIDE (byte[type-0x19ec]&1), so [0x16]&8 cleanly separates factions.  If units then
        * engage the OTHER side (combat -> deaths, a296 drops), the faction bit was a real blocker.  Few
@@ -860,9 +877,12 @@ void fist_timer_pump(void){
        * per-tick sim (c0e5) ADVANCES (fp changes = movement/state; a294/a296 drop = destroys). Reads only. */
       { static long strace=-2, hb=-1; static int plive=-1,pa=-1,pb=-1,pg=-1,pu38=-1,pu3a=-1;
         if (strace==-2){ const char*e=getenv("FIST_SIMTRACE"); strace=e?atol(e):-1; }
-        if (strace>0 && in_mission) {
+        /* gate on a loaded roster, not on byte[0x1549]==0x1c: the discriminator leaves 0x1c when the
+         * player's vehicle is destroyed and the engine switches the player to another platoon vehicle
+         * (word[0x6d34] changes), and the trace went dark exactly there.  board:0017 */
+        { extern int g_a296_loaded; if (strace>0 && g_a296_loaded) {
           unsigned char *dg=g_mem+0x1c000;
-          unsigned t=*(unsigned short*)(dg+0x452);
+          unsigned t=*(unsigned short*)(dg+0x452); int st1549=dg[0x1549];
           unsigned short *fbc=(unsigned short*)(dg+0xdfbc);
           int live=0,goals=0,firereq=0,cool=0,tgt=0,tcnt=0,cand=0; for(int i=0;i<0xb6;i++){ unsigned short s=fbc[i*2]; if(!s)continue; live++;
             if(dg[(unsigned short)(s+0x17)]&0x08) goals++;
@@ -891,6 +911,7 @@ void fist_timer_pump(void){
           int u38=dg[0x6d38], u39=dg[0x6d39], u3a=dg[0x6d3a], u3b=dg[0x6d3b], edt=dg[0x6dab];
           int g8e=*(unsigned short*)(dg+0x978e), g90=*(unsigned short*)(dg+0x9790);
           int ov=*(unsigned short*)(dg+0x6da0), oc=*(unsigned short*)(dg+0x6da2);
+          int cmm=dg[0x6da6], css=dg[0x6da7], csub=dg[0x6da8];   /* the mission clock MM:SS:sub (4712 steps it) */
           /* board:0007 -- one-shot census of the OBJECTIVE-flagged objects (byte[+0x17]&8), the set the
            * victory gate counts.  Per object: type word[obj], team bit (b1df keys it on
            * byte[word[obj]-0x19ec]&1), damage accumulator byte[+0x1a] and its threshold byte[+0x1b]
@@ -908,15 +929,25 @@ void fist_timer_pump(void){
                   (dg[(unsigned short)(so+0x19)]&4)?1:0,dg[(unsigned short)(so+0x16)],
                   dg[(unsigned short)(so+0x17)],dg[(unsigned short)(so+0x19)]);
               }
+              /* the side slot table 0x6d3c: 16 own then 16 other near offsets, with type and ammo words */
+              for(int sd=0;sd<2;sd++){ fprintf(stderr,"[objcensus] side%d:",sd);
+                for(int k=0;k<16;k++){ unsigned short o=*(unsigned short*)(dg+0x6d3c+sd*32+k*2); if(!o) continue;
+                  fprintf(stderr," %04x(t%02x hp%u ammo %u/%u/%u/%u)",o,*(unsigned short*)(dg+o),dg[(unsigned short)(o+0x3a)],
+                    *(unsigned short*)(dg+(unsigned short)(o+0xaf)),*(unsigned short*)(dg+(unsigned short)(o+0xb1)),
+                    *(unsigned short*)(dg+(unsigned short)(o+0xb3)),dg[(unsigned short)(o+0xb5)]); }
+                fprintf(stderr,"\n"); }
               /* the player object's team, for comparison */
-              { unsigned short ps0=fbc[0];
+              { unsigned short ps0=*(unsigned short*)(dg+0x6d34);
                 if(ps0){ unsigned short pty=*(unsigned short*)(dg+ps0);
                   fprintf(stderr,"[objcensus] PLAYER slot=%04x type=%04x team=%d\n",ps0,pty,dg[(unsigned short)(pty-0x19ec)]&1); } }
             } }
           long bucket=t/strace;
           /* player tank = registry index 0 (slot c05c, t=0); track its position (obj+4,+8 = 32-bit X,Y)
            * to see whether AUTO CONTROL is DRIVING it (position moves) or it sits idle. */
-          unsigned short ps=fbc[0]; long px=0,py=0; int pctl=0;
+          /* the player is word[DGROUP:0x6d34] (every `cmp 0x6d34,%di` is-player test in the engine); registry
+           * index 0 (word[0xdfbc]) only HAPPENS to hold it from mission start and is reused by the next spawn
+           * once the vehicle is destroyed -- reading fbc[0] here misreported a projectile as the player. */
+          unsigned short ps=*(unsigned short*)(dg+0x6d34); long px=0,py=0; int pctl=0;
           short vh=0,vs=0,vx=0,vy=0,f26=0,f30=0;
           /* board:0017 -- the player's DRIVE group.  [0x3e] is the drive-state index into 7c1d's table-2
            * (0 = none; 2/4 = a376/a3a8 turn; 6/8 = a3e2/a3ec heading step; 0xc = a3f6 steer) -- the unit
@@ -935,11 +966,11 @@ void fist_timer_pump(void){
             vx=*(short*)(dg+(unsigned short)(ps+0x59)); vy=*(short*)(dg+(unsigned short)(ps+0x5b));
             f26=*(short*)(dg+(unsigned short)(ps+0x26)); f30=*(short*)(dg+(unsigned short)(ps+0x30)); }
           if (live!=plive||a!=pa||b!=pb||goals!=pg||u38!=pu38||u3a!=pu3a||bucket!=hb){
-            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d firereq=%d cool=%d tgt=%d tcnt=%d cand=%d tgtobj=%d tgtstruct=%d  gate{alive=%d/%d hw=%d/%d obj=%d/%d edit=%d verdict=%d/%d}  player{slot=%04x X=%ld Y=%ld f17=%02x h55=%d s57=%d vx59=%d vy5b=%d f26=%d f30=%d drive{3e=%d 3f=%02x 40=%04x 38=%d 30=%d 8b=%d a0=%d 19=%02x 86=%d} dev=%d cmd3e=%d}%s\n",
-              t,live,goals,a,b,firereq,cool,tgt,tcnt,cand,tgtobj,tgtstruct,u38,u39,u3a,u3b,g8e,g90,edt,ov,oc,ps,px,py,pctl,vh,vs,vx,vy,f26,f30,p3e,p3f,p40,p38,p30,p8b,pa0,p19,p86,dev,cmd3e,(live!=plive||a!=pa||b!=pb||goals!=pg||u38!=pu38||u3a!=pu3a)?"  <<CHANGE":"");
+            fprintf(stderr,"[simtrace] t=%u live=%d goals=%d a294=%d a296=%d firereq=%d cool=%d tgt=%d tcnt=%d cand=%d tgtobj=%d tgtstruct=%d  gate{alive=%d/%d hw=%d/%d obj=%d/%d edit=%d verdict=%d/%d clock=%02x:%02x:%02x st=%02x}  player{slot=%04x X=%ld Y=%ld f17=%02x h55=%d s57=%d vx59=%d vy5b=%d f26=%d f30=%d drive{3e=%d 3f=%02x 40=%04x 38=%d 30=%d 8b=%d a0=%d 19=%02x 86=%d} dev=%d cmd3e=%d}%s\n",
+              t,live,goals,a,b,firereq,cool,tgt,tcnt,cand,tgtobj,tgtstruct,u38,u39,u3a,u3b,g8e,g90,edt,ov,oc,cmm,css,csub,st1549,ps,px,py,pctl,vh,vs,vx,vy,f26,f30,p3e,p3f,p40,p38,p30,p8b,pa0,p19,p86,dev,cmd3e,(live!=plive||a!=pa||b!=pb||goals!=pg||u38!=pu38||u3a!=pu3a)?"  <<CHANGE":"");
             plive=live;pa=a;pb=b;pg=goals;hb=bucket;pu38=u38;pu3a=u3a;
           }
-        }
+        } }
       }
     }
 #endif

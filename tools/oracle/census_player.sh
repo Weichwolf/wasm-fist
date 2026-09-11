@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# board:0017 -- does the ORIGINAL resolve a mission to VICTORY/DEFEAT when the player never touches the
-# controls?  Drives stock FIST.RUN under the instrumented DOSBox to the default battle with the same
-# click sequence tools/selfplay.sh feeds the port (160,100 BATTLES / 205,128 OK / 40,186 ACCEPT), then
-# sits still.  FIST_WATCHFLAT is armed on the engine-flat address of DGROUP:0x6da0 -- the outcome word
-# FUN_1000_a5dc writes (0 VICTORY at 1a6ae, 1 DEFEAT at 1a6bb, 2 TIME EXPIRED at 1a60b) -- with a 0x10
-# span that also covers its countdown 0x6da2, the mission clock 0x6da6/7/8 and the 0x6dab gate.  DGROUP
-# is segment 0x1c00 over an image loaded at linear 0, so the flat address is 0x1c000+0x6da0 = 0x22da0.
+# board:0017 -- per-write trace of the ORIGINAL's PLAYER OBJECT (registry slot 0 = DGROUP:0xc05c) on the
+# default battle with no input: every write to +0x00..+0xff (type, X/Y/Z, speed word[+0x57], damage
+# byte[+0x1a], the destroyed bit [+0x19]&4 ...) with the live cs:eip, so the port's per-tick trace of the same
+# object can be set against it tick for tick.  Same driver as census_outcome.sh; the watch window moves.
 #
 #   OC_WALL=<sec>  how long to sit in the mission (default 1500 = 25 min wall)
 #   the mission's own limit is 15 or 30 min of MISSION time (table DGROUP:0x7b14 = 05 0f 1e ff)
@@ -19,7 +16,7 @@ if [ -z "$OC_INNER" ]; then
 fi
 [ -x /tmp/xclick ] || cc -O2 "$ROOT/tools/oracle/xclick.c" -o /tmp/xclick -lX11 -l:libXtst.so.6
 WORK="$(mktemp -d /tmp/oco.XXXXXX)"; DATA="$WORK/armoredfist"; cp -a "$ROOT/armoredfist" "$DATA"
-CONF="$WORK/db.conf"; PREFIX="${OC_PREFIX:-$ROOT/scratch/oracle/outcome}"; mkdir -p "$(dirname "$PREFIX")"; rm -f "$PREFIX".*
+CONF="$WORK/db.conf"; PREFIX="${OC_PREFIX:-$ROOT/scratch/oracle/player}"; mkdir -p "$(dirname "$PREFIX")"; rm -f "$PREFIX".*
 cat > "$CONF" <<CFG
 [sdl]
 fullscreen=false
@@ -41,7 +38,8 @@ c:
 LOADGAME -K400,0,1000 -X5000 FIST.RUN
 CFG
 export FISTLOG="$PREFIX" FIST_MEMARM_BOOT=1
-export FIST_WATCHPHYS=0x33f38 FIST_WATCHSPAN=0x8
+export FIST_WATCHPHYS=$((0x2d190+0xc05c+0x80)) FIST_WATCHSPAN=0x80   # [0x391ec,0x392ec) = player object +0x00..+0xff
+export FIST_WATCHMAX=20000000   # the stock cap (40000 entries) fills in 20 s of mission
 "$DOSBOX" -conf "$CONF" -exit >"$PREFIX.dosbox.log" 2>&1 &
 DPID=$!
 sleep 55
@@ -60,8 +58,8 @@ kill -USR2 $DPID 2>/dev/null || true; sleep 30     # request the RAM dump, let i
 [ -s "$PREFIX.ram.bin" ] || { echo "[oco] no ram.bin after first SIGUSR2 -- retrying"; kill -USR2 $DPID 2>/dev/null || true; sleep 30; }
 kill $DPID 2>/dev/null || true; wait 2>/dev/null || true
 echo "[oco] watch log:"; ls -la "$PREFIX".watch.txt 2>/dev/null || echo "  (none)"
-echo "[oco] every write to the OUTCOME word 0x6da0 (phys 0x33f30/31) and the countdown 0x6da2 (0x33f32/33):"
-grep -E 'ph=00033f3[0123] ' "$PREFIX.watch.txt" 2>/dev/null | cut -c1-96 | uniq -c | head -60 || true
+echo "[oco] writes per object field (phys - 0x391ec), top 40:"
+awk '/^WATCH ph=/{split($2,a,"=");printf "%s\n", strtonum("0x"a[2])-0x391ec}' "$PREFIX.watch.txt" 2>/dev/null | sort -n | uniq -c | sort -rn | head -40 || true
 echo "[oco] last 12 lines of the window:"; tail -12 "$PREFIX.watch.txt" 2>/dev/null | cut -c1-96 || true
 echo "[oco] gate variables from the RAM dump:"; ls -la "$PREFIX".ram.bin 2>/dev/null && python3 "$ROOT/tools/oracle/read_counters.py" "$PREFIX.ram.bin" || echo "  (no ram.bin)"
 rm -rf "$WORK"

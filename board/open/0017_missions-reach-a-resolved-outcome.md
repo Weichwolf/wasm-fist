@@ -1186,3 +1186,88 @@ does not exist (unpromoted dispatch target, board:0015 class -- only 0x31c is in
 emitters call the callback with NO arguments (AL and SI dropped), 541b passes `unaff_CS` where the
 packed CX goes, and 02e8 writes its NUL at the buffer START.  Nothing is ever written, the buffer keeps
 stale bytes, and the HUD prints them.  Patch 563.
+
+## ORACLE RESULT: the original reaches DEFEAT on AZER1 with no input -- and two corrections
+
+`tools/oracle/census_outcome.sh` (stock FIST.RUN under the instrumented DOSBox, default battle = AZER1,
+no input after ACCEPT, `FIST_WATCHPHYS` on the original's DGROUP:0x6da0 at guest 0x33f30), twice:
+
+    ph=33f30 <- 01   cs:eip 2082:b02b = flat 0x2b84b = port 0x1a6bb   movw $0x1,0x6da0   DEFEAT
+    ph=33f32 <- 05   cs:eip 2082:b031 = flat 0x2b851 = port 0x1a6c1   movw $0x5,0x6da2
+    ph=33f32 <- 04 03 02 01 00   from 2082:af53 = port 0x1a5e3         decw 0x6da2 (x5)
+
+at mission clock 09:11 remaining = 5:49 elapsed, i.e. **the original's own side is wiped out** (the
+1a686 `cmpb $0,0x6d38` edge) with the sim running the whole way.  The first run's evidence died with
+/tmp in a reboot; the second reproduced it.  DOSBox runs this mission at ~0.3x real time (clock 11:19
+after 12 min wall), so the 15-minute limit is unreachable inside the 25-minute window and TIME EXPIRED
+was never a candidate here.  The verdict is real, reproducible, and it is DEFEAT.
+
+**Correction 1 -- "AUTO CONTROL" IS hull auto-drive, not the turret checkbox.**  `ab03` sits in the
+type-0 (player) update template's table1 at entries 7 and 15 (`0x7c91`: 7d69 a202 a631 aa37 a202 7cbf
+7cb2 **ab03** 7cb1 a202 7cb1 a904 a9a0 a202 a46e **ab03**) with no player exclusion, and it dispatches the
+movement state machine (`table_98dc`/`table_98fc` -> `ad2f`/`ad08` -> `ac9e` the formation follower
+that sets bit 1 of [+0x40] and the waypoint [+0x49]/[+0x4d]; `ad62` the class-speed setter, table
+DGROUP:0x992c whose entry 3 is exactly the 0xe0 = 224 the port's player carries).  The player's own
+tank drives itself in formation until manual takeover (aae8's bit-0 path).  `a631` excludes the player
+only from `0f69:aa1b` = FUN_1000_a0ab, the *targeting* pass.  So the port's player driving at 224 is
+FAITHFUL, and the previous section's "no code path drives the player's hull without input" was wrong.
+
+**Correction 2 -- there is no "PL: prompt" mission-end path.**  `FIST_OBJTRAP=0xe814` on the port's
+AZER1: **nobody writes the mission-over flag** in the first 9000 ticks, and at t=9000 the sim is still
+in-mission with `alive=2/10` and registry index 0 = 0xa84c, a small object.  What happened at t=7550 is
+that the player's vehicle was destroyed, its registry entry freed, and **index 0 reused by the next
+spawn** -- `fbc[0]` was never a stable handle for the player; the player is `word[DGROUP:0x6d34]`
+(every `cmp 0x6d34,%di` in the engine).  The "player=0000 -> at the PL: prompt" stop and the
+`PLAYERDEAD` sweep class were built on that misread and are removed; `[outcome]` and `FIST_SIMTRACE`
+now read the player through 0x6d34 and report its destroyed bit.  The e714/e4bb state gdb'd three days
+ago was reached at some LATER point that run never characterised (e714 builds MAINMENU.MRL -- it is the
+main menu's screen loop, not a mission dialog; the "PL: 1" box over an unrepainted cockpit is a menu
+modal whose identity is still open).
+
+What is now being measured: the port's AZER1 run to its own verdict (`FIST_STOP_ON_OUTCOME`, no tick
+cap, `FIST_OBJTRAP=0xe814` armed) -- if it writes DEFEAT the two agree in kind and the comparison moves
+to the tick; if it does not, the port has a divergence between the third own-vehicle death (t=7550,
+4:10) and the original's fourth (5:49).  `tools/oracle/census_player.sh` (per-write trace of the
+original's player object, `FIST_WATCHPHYS` over 0x2d190+0xc05c span 0x80) is the next oracle run
+either way: it gives the original's player X/Y/speed/damage per write, against the port's per tick.
+
+## The debrief numbers: the port's combat is an order of magnitude less lethal than the original's
+
+The original's post-verdict screen (`ref/oracle_azer1_debrief_defeat_320.png`, captured by census_outcome.sh
+at the end of the DEFEAT run) reads:
+
+    MISSION LOST            OBJECTIVES REMAINING: 08
+    ENEMY GROUND KILLS: 10  ENEMY AIR KILLS: 01
+    GROUND UNITS LOST: 04   UNITS REMAINING: 00     AIR UNITS LOST: 00   FRATRICIDE: 00
+
+against the port's AZER1 run to its own verdict (`FIST_SIMTRACE` with the gate group, 54283 ticks):
+
+                              original (5:49)     port (15:00)
+    objectives destroyed      5 of 13             0 of 13
+    enemy units killed        11                  2   (a296 12 -> 10, both before t=7133)
+    own units lost            4 of 4              2 of 4 (t=789 and t=7550; none after)
+    verdict                   DEFEAT              TIME EXPIRED
+
+Two things this settles:
+
+- **The original's AI destroys objectives.**  Five of the thirteen fell to it with the player idle, so
+  `obj=13/13` in the port is a DEFECT, not "the player's job" -- the earlier hedge in this item is
+  withdrawn.
+- **The port's kill chain works but almost never completes.**  Both sides fire throughout (a294, the
+  small-object roster, oscillates 112..123 every tick to the end), targets are acquired (tgt/tgtobj
+  nonzero), yet after t=7550 (4:10) not one unit on either side dies for eleven minutes.  The original
+  kills 15 units in under six.  Whatever is wrong sits between the shot and the kill -- flight, the
+  bb1b proximity test (`cx = word[si+0x14]+0x100 ; call 0xea9 ; call 0xc14f`), or bd09's damage
+  lookup -- and it is wrong by a factor of ten, not by a rounding.
+
+Instrument corrections that the measurement needed (all shim-side): `FIST_STOP_ON_OUTCOME` now latches
+on the verdict countdown (0x6da2 != 0xffff, or 0xe814) and is gated on the roster high-water, not on
+`byte[0x1549]==0x1c` -- that byte cycles 00/1c/20/22 within a tick (it is a phase byte, not a
+mission-state flag), which is why AZER1 "timed out" in the sweep while AZER2/3/5/6 "resolved" by phase
+luck; `[outcome]` prints the verdict words and the player via 0x6d34.  Oracle-side: the instrumented
+DOSBox's watch log capped at 40000 entries (FIST_WATCHMAX now overrides it, file kept open), and
+adlib.cpp's OPL hook was stealing SIGUSR2 from the RAM-dump handler on its first port write -- every
+mid-mission `.ram.bin` request had silently gone to the OPL logger.  Both fixed and rebuilt.
+
+The mission's clock runs at 60 ticks/s ([0x452]); a 15-minute mission is 54000 ticks.  Earlier
+"30 ticks/s" figures in this item were derived from a wrong 30-minute assumption for AZER3.
