@@ -793,7 +793,7 @@ void fist_timer_pump(void){
         if (nwb < 0) { nwb = 0; const char *e = getenv("FIST_WATCHBYTE");
           while (e && *e && nwb < 8) { woff[nwb] = (unsigned)strtoul(e, (char **)&e, 0); wprev[nwb] = -1; nwb++;
             while (*e == ',' || *e == ' ') e++; } }
-        if (nwb > 0 && g_a296_loaded) { unsigned char *dg = g_mem + 0x1c000;
+        if (nwb > 0) { unsigned char *dg = g_mem + 0x1c000;   /* ungated: vectors are watched from boot */
           for (int i = 0; i < nwb; i++) { int v = dg[woff[i] & 0xffff];
             if (v != wprev[i]) { fprintf(stderr, "[watchbyte] dg:%04x %02x -> %02x  t=%u clock=%02x:%02x:%02x\n",
                 woff[i] & 0xffff, wprev[i] & 0xff, v, *(uint16_t *)(dg + 0x452), dg[0x6da6], dg[0x6da7], dg[0x6da8]);
@@ -1574,6 +1574,7 @@ unsigned short g_fist_render_si;   /* c4df->method: source object near-offset */
 unsigned short g_fist_b1df_ax;     /* b1df: AX = display-table index of the freshly spawned object */
 unsigned short g_fist_0578_bx;     /* 0578 (a18e): BX = pitch (077e over the Z delta) */
 unsigned short g_fist_02e8_si;     /* PATCH 563: SI = the CRT number printer's output cursor (02e8 -> 541b -> 030b) */
+unsigned short g_fist_177f_bx;     /* PATCH 571: 177f's BX out -- the largest free block when the MEMMGR request fails */
 unsigned short g_fist_03a9_dx;     /* 03a9: DX = M*cos(A) (AX = M*sin(A) is the return) */
 unsigned short g_fist_fp_dx;       /* PATCH 468: 0d13/0d55/0db5/0df7/0e22 DX lane (exponent in/out) */
 unsigned short g_fist_fp_cx;       /* PATCH 468: 0df7/0e22 CX lane (divisor/multiplier exponent in) */

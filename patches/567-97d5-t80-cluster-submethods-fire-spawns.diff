@@ -1,0 +1,404 @@
+PATCH 567: the T-80 (type 3) cluster that patch 566 switched on -- 97d5's dispatched sub-methods
+997d/986e/987b/98fb, its fire step 99a2, the four weapon spawns 0f69:a4ee/a4a9/a533/a585
+(= FUN_1000_9b7e/9b39/9bc3/9c15), and the two remaining host-pointer call sites in 97d5.
+
+Producer/consumer, once more: patch 252's DS-relative table1 meant no T-80 ever ran its per-tick
+methods, so all of them stayed in Ghidra's pristine form -- the object near offset dereferenced as a
+host pointer, the WORD ammo counters read as 4-byte ints, b1df's returned projectile (`mov si,di ;
+pop di`: SI = new object, DI = firer) dropped for `unaff_CS`, the clc/stc contract lost, and 99a2's
+far dispatch table `lcall DWORD cs:[0x99f4 + [di+0x91]*2]` read as a near call through a string
+literal's address.  With 566 in place the first tick of the first T-80 faulted in 986e (SIGSEGV at
+0xc559 = a near offset used as a host pointer).
+
+Every function is the twin of an already-patched type-0 one and takes its conventions from it:
+
+    997d  reload countdown [+0xa8] -> [+0xd7]=3           (7d69 / 276-278 class)
+    986e  `testb $8,[+0x16] ; movw $0x190,[+0xad]`        (7cb2, patch 278: timer 0xf there, ammo 400 here)
+    987b  rack reload loop: word[+0xb1] <- byte[+0xbb] up to 4, bf3c(0x17) per round, gated on
+          word[0x6cde]&0xff0 and the [+0x19]&1 arm bit; DI positional in param_1 (Ghidra: param_2)
+    98fb  FUN_1000_9ffc(di) (patch 275, near offset) + the [+0x3d]&0xe0 servo reset
+    99a2  fire dispatch: gate [+0x91]==6 || [+0xa8]==0, far table 0x99f4, CF -> bf77 / live target
+          -> bf94 / muzzle bf3c(byte[0x9246 + [+0x91]>>1])                        (7e29, patches 428/496)
+    9b39 9b7e 9bc3 9c15  the spawns                                                (778a 7745 7814 77cf, 429/495)
+          9b39: ammo [+0xaf], a265 aim, b1df(0xc), b77d, [+0xa8]=2, 9b5c, c047(3), [+0x92]=0, [+0x3c]=0x10
+          9b7e: ammo [+0xad], a265, b1df(0xd), b793, same tail
+          9bc3: ammo [+0xb1], NO aim call, b1df(0xb), b6e3(ax = remaining [+0xb1]), [+0xa8]=2, c047(0x18),
+                [+0x92]=0, then bfeb with DI = the TARGET when word[+0x97] is a vehicle (type <= 3);
+                a b1df failure lands on the clc exit
+          9c15: gated `testw $7,[0x6cde]`, ammo [+0xb3], b1df(7), b6c9, [+0xa8]=0, c047(6); clc on failure
+    97d5  `call 0x99a2` and `call 0xa57a` with DI = the near offset (patch 496's fix for the 7e29 site;
+          the a57a site is the fifth one, missed by patch 562)
+
+The spawn signatures keep Ghidra's arity as patch 495 did (DI in param_4 for the 5-arg 9b39/9b7e, in
+param_3 for the 4-arg 9bc3/9c15), and 99a2 threads it per entry the way 7e29 does.
+
+Measured before this patch (AZER1 self-play with 566 alone): SIGSEGV in 986e on the first T-80 tick.
+Measured with 562-565 but without 566/567: the three T-80s inert for 15 minutes.  Original: DEFEAT at
+5:49 with 10 enemy ground kills.
+
+--- a/fist.c
++++ b/fist.c
+@@ -26604,9 +26604,9 @@
+   else {
+     *(char *)(param_4 + 0x92) = *(char *)(param_4 + 0x92) + -1;
+   }
+-  FUN_0000_99a2(param_4);
++  FUN_0000_99a2(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));   /* PATCH 567: DI near offset (496's fix for 7e29) */
+ LAB_0000_9838:
+-  FUN_0000_a57a(param_4);
++  FUN_0000_a57a(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));   /* PATCH 567: the fifth a57a site patch 562 missed */
+   FUN_0000_a9ea(param_1,uVar3,param_4);
+   *(byte *)(param_4 + 0x17) = *(byte *)(param_4 + 0x17) & 0xbf;
+   if (*(char *)(param_4 + 0x96) != '\0') {
+@@ -26686,9 +26686,12 @@
+ void __allregs FUN_0000_986e(int param_1)
+ 
+ {
+-  if ((*(byte *)(param_1 + 0x16) & 8) != 0) {
+-    *(undefined2 *)(param_1 + 0xad) = 400;
+-  }
++  /* PATCH 567: asm 0x986e `testb $8,0x16(%%di) ; je ; movw $0x190,0xad(%%di)` -- 7cb2's twin (patch 278,
++   * timer 0xf there) with the main-gun ammo word[+0xad] reset to 400 while [+0x16]&8 is set. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  if ((dg[(unsigned short)(di + 0x16)] & 8) != 0)
++    *(unsigned short *)(dg + (unsigned short)(di + 0xad)) = 0x190;
+   return;
+ }
+ 
+@@ -26698,21 +26701,27 @@
+ void __allregs FUN_0000_987b(undefined2 param_1,int param_2)
+ 
+ {
+-  if ((DAT_2000_2cde & 0xff0) == 0) {
+-    if ((*(byte *)(param_2 + 0x19) & 1) == 0) {
+-      if ((*(int *)(param_2 + 0xb1) != 4) && (*(char *)(param_2 + 0xbb) != '\0')) {
+-        *(byte *)(param_2 + 0x19) = *(byte *)(param_2 + 0x19) | 1;
+-      }
+-    }
+-    else {
+-      while ((*(int *)(param_2 + 0xb1) != 4 && (*(char *)(param_2 + 0xbb) != '\0'))) {
+-        *(byte *)(param_2 + 0x19) = *(byte *)(param_2 + 0x19) & 0xfe;
+-        *(int *)(param_2 + 0xb1) = *(int *)(param_2 + 0xb1) + 1;
+-        *(char *)(param_2 + 0xbb) = *(char *)(param_2 + 0xbb) + -1;
+-        FUN_0000_bf3c(0x17,param_1,param_2);
+-        *(undefined1 *)(param_2 + 0xe4) = 3;
+-      }
+-    }
++  /* PATCH 567: the T-80 rack reload (asm 0x987b-0x98c2).  DI arrives positionally in param_1 (Ghidra's
++   * signature put it in param_2).  `testw $0xff0,[0x6cde] ; jne ret` (no reload while those flags are
++   * up); with [+0x19]&1 clear: arm the reload bit when the ready rack word[+0xb1] != 4 and the store
++   * byte[+0xbb] != 0; with it set: LOOP moving rounds -- clear the bit, incw [+0xb1], decb [+0xbb],
++   * bf3c(al=0x17) reload cue, byte[+0xe4]=3 -- until the rack holds 4 or the store is empty.  The
++   * WORD/BYTE widths are the asm's; Ghidra read [+0xb1] as a 4-byte int. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  (void)param_2;
++  if ((*(unsigned short *)(dg + 0x6cde) & 0xff0) != 0) return;
++  if ((dg[(unsigned short)(di + 0x19)] & 1) == 0) {
++    if (*(unsigned short *)(dg + (unsigned short)(di + 0xb1)) != 4 && dg[(unsigned short)(di + 0xbb)] != 0)
++      dg[(unsigned short)(di + 0x19)] |= 1;
++    return;
++  }
++  while (*(unsigned short *)(dg + (unsigned short)(di + 0xb1)) != 4 && dg[(unsigned short)(di + 0xbb)] != 0) {
++    dg[(unsigned short)(di + 0x19)] &= 0xfe;
++    *(unsigned short *)(dg + (unsigned short)(di + 0xb1)) += 1;
++    dg[(unsigned short)(di + 0xbb)] -= 1;
++    FUN_0000_bf3c(0x17, 0, (int)di);
++    dg[(unsigned short)(di + 0xe4)] = 3;
+   }
+   return;
+ }
+@@ -26747,10 +26756,14 @@
+ void __allregs FUN_0000_98fb(int param_1)
+ 
+ {
+-  FUN_1000_9ffc(param_1);
+-  if ((*(byte *)(param_1 + 0x3d) & 0xe0) == 0) {
+-    *(undefined1 *)(param_1 + 0xf8) = 3;
+-    *(undefined1 *)(param_1 + 0xf7) = 3;
++  /* PATCH 567: asm 0x98fb `lcall 0f69:a96c` (= FUN_1000_9ffc, the roll-rate integrator, patch 275 --
++   * takes DI as a near offset) ; `testb $0xe0,0x3d(%%di) ; jne ; movb $3,0xf8(%%di) ; movb $3,0xf7(%%di)`. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  FUN_1000_9ffc((int)di);
++  if ((dg[(unsigned short)(di + 0x3d)] & 0xe0) == 0) {
++    dg[(unsigned short)(di + 0xf8)] = 3;
++    dg[(unsigned short)(di + 0xf7)] = 3;
+   }
+   return;
+ }
+@@ -26813,14 +26826,18 @@
+ void __allregs FUN_0000_997d(int param_1)
+ 
+ {
+-  char *pcVar1;
+-  
+-  if (*(char *)(param_1 + 0xa8) != '\0') {
+-    pcVar1 = (char *)(param_1 + 0xa8);
+-    *pcVar1 = *pcVar1 + -1;
+-    if (*pcVar1 == '\0') {
+-      *(undefined1 *)(param_1 + 0xd7) = 3;
+-    }
++  /* PATCH 567: the T-80 (type 3) cluster patch 566 switched on -- the 97d5 template's own dispatched
++   * sub-methods, its fire step and the four weapon spawns, all still in Ghidra's host-pointer form
++   * because no T-80 had ever executed them (patch 252's DS-relative table sent every dispatch into
++   * garbage).  Same class and same conventions as the type-0 set: 276/277/278 (sub-methods), 428/496
++   * (fire step), 429/495 (spawns).  DI (the object) arrives positionally in param_1. */
++  /* asm 0x997d: `cmpb $0,0xa8(%di) ; je ; decb 0xa8(%di) ; jne ; movb $3,0xd7(%di)` -- the reload
++   * countdown; at zero the turret-servo state byte[+0xd7] is set to 3. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  if (dg[(unsigned short)(di + 0xa8)] != 0) {
++    dg[(unsigned short)(di + 0xa8)] -= 1;
++    if (dg[(unsigned short)(di + 0xa8)] == 0) dg[(unsigned short)(di + 0xd7)] = 3;
+   }
+   return;
+ }
+@@ -26881,27 +26898,32 @@
+ void __allregs FUN_0000_99a2(int param_1)
+ 
+ {
+-  uint uVar1;
+-  bool bVar2;
+-  
+-  *(byte *)(param_1 + 0x19) = *(byte *)(param_1 + 0x19) & 0xfe;
++  /* PATCH 567: the T-80 FIRE DISPATCH (asm 0x99a2-0x99f3), 7e29's twin (patches 428/496).  DI = the
++   * firer near offset.  `andb $0xfe,0x19(%%di)` ; `lcall 0f69:7a46` (= FUN_1000_70d6) ; byte[+0xd7]=3 ;
++   * gate `[+0x91]==6 || [+0xa8]==0` ; `lcall DWORD cs:[0x99f4 + [+0x91]*2]` -- four far pointers
++   * 0f69:a4ee/a4a9/a533/a585 = FUN_1000_9b7e/9b39/9bc3/9c15, the T-80's weapon spawns, DI = firer,
++   * CF back ; CF=1 -> bf77 ; a live non-friendly target [+0x97] -> bf94 ; else the muzzle effect
++   * bf3c(byte[0x9246 + [+0x91]>>1]).  Ghidra read the far table as a near call through a string
++   * literal's address, dropped the CF and host-deref'd everything. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  dg[(unsigned short)(di + 0x19)] &= 0xfe;
+   FUN_1000_70d6();
+-  *(undefined1 *)(param_1 + 0xd7) = 3;
+-  if ((*(char *)(param_1 + 0x91) == '\x06') || (*(char *)(param_1 + 0xa8) == '\0')) {
+-    bVar2 = false;
+-    (**(code **)((char *)s_INHIBIT_OFF_ACTION__ACT_CTR__PIN_2000_597d + 0x77 +
+-                (uint)*(byte *)(param_1 + 0x91) * 2))(0xf69);
+-    if (!bVar2) {
+-      if ((*(int *)(param_1 + 0x97) != 0) && ((*(byte *)(*(int *)(param_1 + 0x97) + 0x16) & 8) == 0)
+-         ) {
+-        FUN_0000_bf94(param_1);
+-        return;
+-      }
+-      uVar1 = (uint)(*(byte *)(param_1 + 0x91) >> 1);
+-      FUN_0000_bf3c(*(undefined1 *)(uVar1 + 0x9246),uVar1,param_1);
+-      return;
+-    }
+-    FUN_0000_bf77(param_1);
++  dg[(unsigned short)(di + 0xd7)] = 3;
++  if (dg[(unsigned short)(di + 0x91)] == 6 || dg[(unsigned short)(di + 0xa8)] == 0) {
++    unsigned bx = (unsigned)dg[(unsigned short)(di + 0x91)] << 1;
++    uint32_t fp = *(uint32_t *)(g_mem + (unsigned short)(0x99f4 + bx));
++    g_fist_cf = 0;
++    if (bx >= 4)   /* entries 2/3 (9bc3/9c15) take DI in param_3, entries 0/1 (9b7e/9b39) in param_4 */
++      ((void (*)(undefined2,undefined4,int,undefined2))fist_icall_far(fp))(0,0,(int)di,0);
++    else
++      ((void (*)(undefined2,undefined4,undefined4,int,undefined2))fist_icall_far(fp))(0,0,0,(int)di,0);
++    if (g_fist_cf) { FUN_0000_bf77((int)di); return; }
++    { unsigned short si = *(unsigned short *)(dg + (unsigned short)(di + 0x97));
++      if (si != 0 && (dg[(unsigned short)(si + 0x16)] & 8) == 0) { FUN_0000_bf94((int)di); return; } }
++    { unsigned bx2 = (unsigned)(dg[(unsigned short)(di + 0x91)] >> 1);
++      FUN_0000_bf3c(dg[(unsigned short)(bx2 + 0x9246)], bx2, (int)di); }
+   }
+   return;
+ }
+@@ -65832,27 +65854,27 @@
+              undefined2 param_5)
+ 
+ {
+-  undefined2 uVar1;
+-  int unaff_CS;
+-  undefined1 uVar2;
+-  
+-  uVar2 = 0;
+-  if (*(int *)(param_4 + 0xaf) != 0) {
+-    *(int *)(param_4 + 0xaf) = *(int *)(param_4 + 0xaf) + -1;
+-    *(undefined1 *)(param_4 + 0xe2) = 3;
+-    FUN_1000_a265(param_1,param_2,param_4);
+-    uVar1 = (undefined2)param_2;
+-    FUN_1000_b1df(0xc,param_4);
+-    if (!(bool)uVar2) {
+-      FUN_0000_b77d(uVar1,param_4,unaff_CS,param_5);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 2;
+-      FUN_0000_9b5c(unaff_CS);
+-      FUN_0000_c047(3,param_3,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0x92) = 0;
+-      *(undefined1 *)(unaff_CS + 0x3c) = 0x10;
+-      return;
+-    }
+-  }
++  /* PATCH 567: T-80 weapon spawn (asm 0x19b39), the type-3 twin of patch 495's 778a: the firer DI
++   * (near offset, positional param_1), the WORD ammo counter, b1df's returned projectile (`mov si,di ;
++   * pop di` -> SI=new, DI=firer) and the clc/stc contract 99a2 reads through g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_4;
++  unsigned int proj;
++  (void)param_1; (void)param_2; (void)param_3; (void)param_5;
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0xaf)) == 0) { g_fist_cf = 1; return; } /* 19b39/19b7c stc */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xaf)) -= 1;   /* 19b40 decw [di+0xaf] */
++  dg[(unsigned short)(di + 0xe2)] = 3;                          /* 19b44 */
++  FUN_1000_a265(0, 0, (int *)(uintptr_t)di);                    /* 19b4a */
++  proj = (unsigned short)FUN_1000_b1df(0xc, (int *)(uintptr_t)di);/* 19b52; 19b55 mov si,di; 19b57 pop di */
++  if (g_fist_cf) { g_fist_cf = 1; return; }                     /* 19b58 jb 19b7c */
++  FUN_0000_b77d(0, (int)proj, (int)di, 0);                      /* 19b5a lcall b77d (si=proj, di=firer) */
++  dg[(unsigned short)(di + 0xa8)] = 2;                          /* 19b5f */
++  FUN_0000_9b5c((int)di);                                       /* 19b64 */
++  FUN_0000_c047(3, 0, (int)di);                                 /* 19b6c */
++  dg[(unsigned short)(di + 0x92)] = 0;                          /* 19b71 */
++  dg[(unsigned short)(di + 0x3c)] = 0x10;                       /* 19b76 */
++  g_fist_cf = 0;                                                /* 19b7a clc */
+   return;
+ }
+ 
+@@ -65864,27 +65886,27 @@
+              undefined2 param_5)
+ 
+ {
+-  undefined2 uVar1;
+-  int unaff_CS;
+-  undefined1 uVar2;
+-  
+-  uVar2 = 0;
+-  if (*(int *)(param_4 + 0xad) != 0) {
+-    *(int *)(param_4 + 0xad) = *(int *)(param_4 + 0xad) + -1;
+-    *(undefined1 *)(param_4 + 0xe0) = 3;
+-    FUN_1000_a265(param_1,param_2,param_4);
+-    uVar1 = (undefined2)param_2;
+-    FUN_1000_b1df(0xd,param_4);
+-    if (!(bool)uVar2) {
+-      FUN_0000_b793(uVar1,param_4,unaff_CS,param_5);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 2;
+-      FUN_0000_9b5c(unaff_CS);
+-      FUN_0000_c047(3,param_3,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0x92) = 0;
+-      *(undefined1 *)(unaff_CS + 0x3c) = 0x10;
+-      return;
+-    }
+-  }
++  /* PATCH 567: T-80 weapon spawn (asm 0x19b7e), the type-3 twin of patch 495's 7745: the firer DI
++   * (near offset, positional param_1), the WORD ammo counter, b1df's returned projectile (`mov si,di ;
++   * pop di` -> SI=new, DI=firer) and the clc/stc contract 99a2 reads through g_fist_cf. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_4;
++  unsigned int proj;
++  (void)param_1; (void)param_2; (void)param_3; (void)param_5;
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0xad)) == 0) { g_fist_cf = 1; return; } /* 19b7e/19bc1 stc */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xad)) -= 1;   /* 19b85 decw [di+0xad] */
++  dg[(unsigned short)(di + 0xe0)] = 3;                          /* 19b89 */
++  FUN_1000_a265(0, 0, (int *)(uintptr_t)di);                    /* 19b8f */
++  proj = (unsigned short)FUN_1000_b1df(0xd, (int *)(uintptr_t)di);/* 19b97; 19b9a mov si,di; 19b9c pop di */
++  if (g_fist_cf) { g_fist_cf = 1; return; }                     /* 19b9d jb 19bc1 */
++  FUN_0000_b793(0, (int)proj, (int)di, 0);                      /* 19b9f lcall b793 */
++  dg[(unsigned short)(di + 0xa8)] = 2;                          /* 19ba4 */
++  FUN_0000_9b5c((int)di);                                       /* 19ba9 */
++  FUN_0000_c047(3, 0, (int)di);                                 /* 19bb1 */
++  dg[(unsigned short)(di + 0x92)] = 0;                          /* 19bb6 */
++  dg[(unsigned short)(di + 0x3c)] = 0x10;                       /* 19bbb */
++  g_fist_cf = 0;                                                /* 19bbf clc */
+   return;
+ }
+ 
+@@ -65894,27 +65916,30 @@
+ void __allregs FUN_1000_9bc3(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  uint *puVar1;
+-  int unaff_CS;
+-  bool bVar2;
+-  
+-  bVar2 = false;
+-  if (*(int *)(param_3 + 0xb1) != 0) {
+-    *(int *)(param_3 + 0xb1) = *(int *)(param_3 + 0xb1) + -1;
+-    *(undefined1 *)(param_3 + 0xe4) = 3;
+-    FUN_1000_b1df(0xb,param_3);
+-    if (!bVar2) {
+-      FUN_0000_b6e3(*(undefined2 *)(unaff_CS + 0xb1),param_1,param_3,unaff_CS,param_4);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 2;
+-      FUN_0000_c047(0x18,param_2,unaff_CS);
+-      *(undefined1 *)(unaff_CS + 0x92) = 0;
+-      puVar1 = (uint *)*(int *)(unaff_CS + 0x97);
+-      if ((puVar1 != (uint *)0x0) && (*puVar1 < 4)) {
+-        FUN_0000_bfeb(puVar1);
+-      }
+-    }
+-    return;
+-  }
++  /* PATCH 567: T-80 weapon spawn (asm 0x19bc3), the type-3 twin of patch 495's 7814: the firer DI
++   * (near offset, positional param_1), the WORD ammo counter, b1df's returned projectile (`mov si,di ;
++   * pop di` -> SI=new, DI=firer) and the clc/stc contract 99a2 reads through g_fist_cf. */
++  /* This one has no a265 aim call; after the spawn it passes the remaining rack count word[+0xb1] in
++   * AX to b6e3 (the lateral-offset launcher, patch 462), plays c047(0x18), and -- when the target
++   * word[+0x97] is a vehicle (type <= 3) -- runs bfeb with DI = the TARGET (`mov si,di ; lcall bfeb`).
++   * A b1df failure lands on the clc exit (19c11), not the stc one. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_3;
++  unsigned int proj;
++  (void)param_1; (void)param_2; (void)param_4;
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0xb1)) == 0) { g_fist_cf = 1; return; } /* 19bc3/19c13 stc */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xb1)) -= 1;   /* 19bca decw [di+0xb1] */
++  dg[(unsigned short)(di + 0xe4)] = 3;                          /* 19bce */
++  proj = (unsigned short)FUN_1000_b1df(0xb, (int *)(uintptr_t)di);/* 19bd8; 19bdb mov si,di; 19bdd pop di */
++  if (g_fist_cf) { g_fist_cf = 0; return; }                     /* 19bde jb 19c11 (clc) */
++  FUN_0000_b6e3(*(unsigned short *)(dg + (unsigned short)(di + 0xb1)), 0, (int)proj, (int)di, 0); /* 19be0/19be4 */
++  dg[(unsigned short)(di + 0xa8)] = 2;                          /* 19be9 */
++  FUN_0000_c047(0x18, 0, (int)di);                              /* 19bf1 */
++  dg[(unsigned short)(di + 0x92)] = 0;                          /* 19bf6 */
++  { unsigned short si = *(unsigned short *)(dg + (unsigned short)(di + 0x97));   /* 19bfb */
++    if (si != 0 && *(unsigned short *)(dg + si) <= 3) FUN_0000_bfeb((int)si); } /* 19c03..19c0b */
++  g_fist_cf = 0;                                                /* 19c11 clc */
+   return;
+ }
+ 
+@@ -65924,23 +65949,26 @@
+ void __allregs FUN_1000_9c15(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  int unaff_CS;
+-  bool bVar1;
+-  
+-  if ((DAT_2000_2cde & 7) == 0) {
+-    bVar1 = false;
+-    if (*(int *)(param_3 + 0xb3) == 0) {
+-      return;
+-    }
+-    *(int *)(param_3 + 0xb3) = *(int *)(param_3 + 0xb3) + -1;
+-    *(undefined1 *)(param_3 + 0xe6) = 3;
+-    FUN_1000_b1df(7,param_3);
+-    if (!bVar1) {
+-      FUN_0000_b6c9(param_1,param_3,unaff_CS,param_4);
+-      *(undefined1 *)(unaff_CS + 0xa8) = 0;
+-      FUN_0000_c047(6,param_2,unaff_CS);
+-    }
+-  }
++  /* PATCH 567: T-80 weapon spawn (asm 0x19c15), the type-3 twin of patch 495's 77cf: the firer DI
++   * (near offset, positional param_1), the WORD ammo counter, b1df's returned projectile (`mov si,di ;
++   * pop di` -> SI=new, DI=firer) and the clc/stc contract 99a2 reads through g_fist_cf. */
++  /* Gated on `testw $7,[0x6cde]` (nonzero -> clc, nothing touched); no a265 call; b6c9 launcher;
++   * byte[+0xa8]=0; c047(6); a b1df failure lands on the clc exit (19c4c). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_3;
++  unsigned int proj;
++  (void)param_1; (void)param_2; (void)param_4;
++  if ((*(unsigned short *)(dg + 0x6cde) & 7) != 0) { g_fist_cf = 0; return; }            /* 19c15 */
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0xb3)) == 0) { g_fist_cf = 1; return; } /* 19c1d/19c4e stc */
++  *(unsigned short *)(dg + (unsigned short)(di + 0xb3)) -= 1;   /* 19c24 decw [di+0xb3] */
++  dg[(unsigned short)(di + 0xe6)] = 3;                          /* 19c28 */
++  proj = (unsigned short)FUN_1000_b1df(7, (int *)(uintptr_t)di);/* 19c32; 19c35 mov si,di; 19c37 pop di */
++  if (g_fist_cf) { g_fist_cf = 0; return; }                     /* 19c38 jb 19c4c (clc) */
++  FUN_0000_b6c9(0, (int)proj, (int)di, 0);                      /* 19c3a lcall b6c9 */
++  dg[(unsigned short)(di + 0xa8)] = 0;                          /* 19c3f */
++  FUN_0000_c047(6, 0, (int)di);                                 /* 19c47 */
++  g_fist_cf = 0;                                                /* 19c4c clc */
+   return;
+ }
+ 

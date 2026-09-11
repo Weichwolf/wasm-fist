@@ -1,0 +1,531 @@
+PATCH 570: the MGAVIDEO clipped line drawer 1677 rebuilt 1:1 -- the clip block was 32-bit and never wrote
+the clipped endpoint back.
+
+fist_mga.c FUN_0000_1677 (asm 0x1677-0x1951) is the line primitive behind every HUD line: reticle,
+graticule, the polyline records 5fb0 emits every frame.  Patch 136 rebased its bases and left the clip
+"control flow as the pristine decompile (faithful)".  It was not: Ghidra emulated the `cmp ; lahf ;
+rol ax,1` outcodes as sign tests over 32-bit `uint` differences of zero-extended words -- the asm's
+outcode is the 16-bit SF of each `cmp` -- and its rendering of the 1722 clip step (imulw/idivw on
+[bp-0xa]/[bp-0xc], written back through SI to the point being clipped) never reached the coordinates the
+draw section reads.  First seen on AZER1 with 562-569: the frame after the player's last vehicle dies
+(word[0x6d34]=0) projects a polyline point to x = 28759; the unclipped draw read rowtab[28759] far past
+the 320-entry table and the pixel address left g_mem (SIGSEGV at 1677+... in m_mga 1677 <- 161c <- 38aa
+<- 378e).  In the original the same line is clipped to the window edge -- it keeps rendering frames
+through the 40-tick DEFEAT countdown with no vehicle at all.
+
+Reconstruction, in 16-bit arithmetic throughout:
+  * outcodes L<<3 | R<<2 | T<<1 | B from the 16-bit sign of x-xmin, xmax-x, y-ymin, ymax-y against the
+    descriptor's window (desc = DGROUP:word[0x724]: [6]=xmin [8]=ymin [0xa]=xmax+1 [0xc]=ymax+1);
+    shared-side reject; both-inside -> draw; the [bp-0x10] toggle gives ONE clipping pass, a second
+    failure rejects;
+  * the 1722 step per endpoint: L/R move x to the edge and y by ddy*(edge-x)/ddx, T/B move y to the
+    edge and x by ddx*(edge-y)/ddy (T/B only when actually past the edge: `jge`/`jl`), imulw/idivw
+    signed and truncating, written back, then the other endpoint (xchg cl,ch ; jcxz -> recompute);
+  * draw: the MGA target is COLUMN-major -- pixel = fb + rowtab[x] + y, rowtab = word[DGROUP:0x794],
+    one column = desc[4] bytes; vertical fill (rep stosw + stosb / the xor pair), horizontal fill (two
+    pixels per `loop` across columns), and Bresenham y-major (1812) / x-major (1850) each in the solid
+    `stos` and the `cs:0x161b` XOR form, stepping columns by +-pitch (`inc bp` in the solid x-major loop
+    undoes the stos advance).
+
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -4118,301 +4118,218 @@
+ void __allregs FUN_0000_1677(byte param_1,uint *param_2,undefined2 param_3)
+ 
+ {
+-  byte *pbVar1;
+-  uint16_t *puVar2;
+-  byte bVar4;
+-  byte bVar5;
+-  int iVar6;
+-  int iVar7;
+-  uint uVar8;
+-  uint uVar9;
+-  uint uVar10;
+-  uint uVar11;
+-  uint uVar12;
+-  int iVar13;
+-  byte *pbVar14;
+-  uint16_t *puVar15;
+-  char in_AF = 0;   /* PATCH 136: Ghidra flag-artifact; AF is irrelevant to the SF-based outcode but if left uninitialised (0xAA under pattern-init / stack garbage otherwise) its <<4 pollutes bit7 of the outcode byte -> the clip wrongly rejects the line (the flaky-garbage class). */
+-  bool bVar16;
+-  byte local_12;
+-  uint local_a;
+-  uint local_8;
+-  uint local_6;
+-  uint local_4;
+-  undefined2 uStack_2;
+-
+-  /* PATCH 136: clipped rect/line filler (asm 0x1677..0x1951) -- the REVIEW box draw (via 161c): draws the
+-     title separator line + wireframe-box borders, clipped to the display window.  Cohen-Sutherland outcode
+-     clip + solid/XOR fill; control flow is the pristine decompile (faithful), only the BASE-LOSS / POINTER-
+-     SCALING are rebuilt (same classes as 1091/26de): the DGROUP:0x724 near offset (typed by Ghidra as a
+-     host int** -> wild deref) is really a near offset to the fb/clip descriptor (desc=(int16*)(DG+word
+-     [0x724]); desc[0]=fb seg, desc[2]=row pitch, desc[3..6]=clip x0/y0/x1/y1); the DGROUP:0x794 rowtable
+-     near offset + the dropped ES=fb-seg base rebuild the pixel address fb+rowtab[y]+x; param_2 (the 4-word
+-     rect read as int[]=+4 scaling) is read as int16 words; puVar15/puVar2 (uint*=4B, but the fills
+-     stosw/stosb are 16-bit) become uint16_t*. */
++  /* PATCH 570: the MGAVIDEO clipped LINE drawer (asm 0x1677-0x1951), rebuilt 1:1 in 16-bit arithmetic,
++   * superseding patch 136's clip block -- which kept Ghidra's flag-emulation over 32-bit `uint`
++   * differences and lost the write-back of the clipped endpoint, so a line whose projection lies far
++   * outside the window (x = 28759 on the first AZER1 frame after the player's last vehicle died) was
++   * drawn UNCLIPPED: rowtab[x] read 57518 bytes past the table and the pixel address left g_mem.  The
++   * original's clipper takes such a line to the window edge and draws the rest.
++   *
++   *   in: AL = colour, BX = &{x0,y0,x1,y1} (four words), desc = DGROUP:word[0x724]: [0]=fb seg,
++   *       [4]=pitch, [6]=xmin, [8]=ymin, [0xa]=xmax+1, [0xc]=ymax+1; rowtab = word[DGROUP:0x794],
++   *       rowtab[x] = word[DGROUP:rowtab+2x] is the COLUMN base (the MGA target is column-major: pixel
++   *       address = rowtab[x] + y, one column = pitch bytes); cs:0x161b = XOR mode.
++   *   16a9  outcodes: each `cmp ; lahf ; rol ax,1` takes the 16-bit SIGN of (x-xmin) / (xmax-x) /
++   *         (y-ymin) / (ymax-y) -> code = L<<3 | R<<2 | T<<1 | B per endpoint; `test cl,al ; jne`
++   *         rejects when both share a side; jcxz -> draw; [bp-0x10]^=0xff ; jne -> a SECOND failed pass
++   *         rejects.
++   *   1722  clip one endpoint by its code: L/R move x to the edge and y by dy*(edge-x)/dx (imulw/idivw,
++   *         16-bit signed, truncating), T/B move y to the edge and x by dx*(edge-y)/dy; T and B are
++   *         only applied when the point is actually past the edge (`jge`/`jl` skips).
++   *   17b9  x0==x1 -> 1890 vertical fill (rep stosw + stosb, or the xor pair); dy==0 -> 18f2 horizontal
++   *         fill (two pixels per `loop` over rowtab columns); else Bresenham, y-major (1812) or x-major
++   *         (1850), solid `stos` or XOR `xor [di],al`, stepping columns by +-pitch. */
+   uint8_t *DG = g_mem + 0x1c000;
+   int16_t *desc = (int16_t *)(DG + *(uint16_t *)(DG + 0x724));
+-  uint16_t fbseg = (uint16_t)desc[0];
++  uint8_t *fb = g_mem + ((uint32_t)(uint16_t)desc[0] << 4);
+   uint16_t rowtab = *(uint16_t *)(DG + 0x794);
+-  uint8_t *fb = g_mem + ((uint32_t)fbseg << 4);
+   int16_t *rect = (int16_t *)param_2;
+ #define ROWOFF_1677(x) (*(uint16_t *)(DG + (uint16_t)((uint16_t)(x) * 2 + rowtab)))
+-  uStack_2 = param_3;
+-  iVar13 = desc[2];
+-  local_a = (uint16_t)rect[0];
+-  local_8 = (uint16_t)rect[1];
+-  local_6 = (uint16_t)rect[2];
+-  local_4 = (uint16_t)rect[3];
+-  local_12 = 0xff;
+-  do {
+-    uVar8 = desc[3];
+-    uVar12 = desc[5] - 1;
+-    uVar9 = local_a - uVar8;
+-    uVar11 = uVar12 - local_a;
+-    bVar4 = ((int)((uint)(byte)(((int)uVar9 < 0) << 7 | (uVar9 == 0) << 6 | in_AF << 4 |
+-                                ((POPCOUNT(uVar9 & 0xff) & 1U) == 0) << 2 | 2U | local_a < uVar8) <<
+-                  8) < 0) << 1 |
+-            (char)(((int)uVar11 < 0) << 7 | (uVar11 == 0) << 6 | in_AF << 4 |
+-                   ((POPCOUNT(uVar11 & 0xff) & 1U) == 0) << 2 | 2U | uVar12 < local_a) < '\0';
+-    uVar10 = (uint)bVar4;
+-    uVar9 = local_6 - uVar8;
+-    uVar11 = uVar12 - local_6;
+-    bVar5 = ((int)((uint)(byte)(((int)uVar9 < 0) << 7 | (uVar9 == 0) << 6 | in_AF << 4 |
+-                                ((POPCOUNT(uVar9 & 0xff) & 1U) == 0) << 2 | 2U | local_6 < uVar8) <<
+-                  8) < 0) << 1 |
+-            (char)(((int)uVar11 < 0) << 7 | (uVar11 == 0) << 6 | in_AF << 4 |
+-                   ((POPCOUNT(uVar11 & 0xff) & 1U) == 0) << 2 | 2U | uVar12 < local_6) < '\0';
+-    bVar16 = (bVar5 & bVar4) == 0;
+-    do {
+-      do {
+-        if (!bVar16) {
+-          return;
+-        }
+-        uVar8 = desc[4];
+-        uVar12 = desc[6] - 1;
+-        uVar9 = local_8 - uVar8;
+-        uVar11 = uVar12 - local_8;
+-        bVar4 = ((char)uVar10 << 1 |
+-                (char)(((int)uVar9 < 0) << 7 | (uVar9 == 0) << 6 | in_AF << 4 |
+-                       ((POPCOUNT(uVar9 & 0xff) & 1U) == 0) << 2 | 2U | local_8 < uVar8) < '\0') <<
+-                1 | (char)(((int)uVar11 < 0) << 7 | (uVar11 == 0) << 6 | in_AF << 4 |
+-                           ((POPCOUNT(uVar11 & 0xff) & 1U) == 0) << 2 | 2U | uVar12 < local_8) <
+-                    '\0';
+-        uVar10 = (uint)bVar4;
+-        uVar9 = local_4 - uVar8;
+-        uVar11 = uVar12 - local_4;
+-        bVar5 = (bVar5 << 1 |
+-                (char)(((int)uVar9 < 0) << 7 | (uVar9 == 0) << 6 | in_AF << 4 |
+-                       ((POPCOUNT(uVar9 & 0xff) & 1U) == 0) << 2 | 2U | local_4 < uVar8) < '\0') <<
+-                1 | (char)(((int)uVar11 < 0) << 7 | (uVar11 == 0) << 6 | in_AF << 4 |
+-                           ((POPCOUNT(uVar11 & 0xff) & 1U) == 0) << 2 | 2U | uVar12 < local_4) <
+-                    '\0';
+-        bVar16 = (bVar5 & bVar4) == 0;
+-      } while (!bVar16);
+-      uVar10 = CONCAT11(bVar5,bVar4);
+-      if (uVar10 == 0) {
+-        if (local_a == local_6) {
+-          puVar15 = (uint16_t *)(fb + ROWOFF_1677(local_a) + local_8);
+-          if (DAT_0000_161b == '\0') {
+-            uVar8 = local_4 - local_8;
+-            if (uVar8 != 0) {
+-              if (local_4 < local_8) {
+-                puVar15 = (uint *)((int)puVar15 + uVar8);
+-                uVar8 = -uVar8;
+-              }
+-              for (uVar9 = uVar8 >> 1; uVar9 != 0; uVar9 = uVar9 - 1) {
+-                puVar2 = puVar15;
+-                puVar15 = puVar15 + 1;
+-                *puVar2 = CONCAT11(param_1,param_1);
+-              }
+-              for (uVar8 = (uint)((uVar8 & 1) != 0); uVar8 != 0; uVar8 = uVar8 - 1) {
+-                puVar2 = puVar15;
+-                puVar15 = (uint *)((int)puVar15 + 1);
+-                *(byte *)puVar2 = param_1;
+-              }
+-            }
+-            return;
+-          }
+-          uVar8 = local_4 - local_8;
+-          if (uVar8 != 0) {
+-            if (local_4 < local_8) {
+-              puVar15 = (uint *)((int)puVar15 + uVar8);
+-              uVar8 = -uVar8;
+-            }
+-            uVar9 = uVar8 >> 1;
+-            if ((uVar8 & 1) != 0) {
+-              *(byte *)puVar15 = (byte)*puVar15 ^ param_1;
+-              puVar15 = (uint *)((int)puVar15 + 1);
+-            }
+-            for (; uVar9 != 0; uVar9 = uVar9 - 1) {
+-              *puVar15 = *puVar15 ^ CONCAT11(param_1,param_1);
+-              puVar15 = puVar15 + 1;
+-            }
+-          }
+-          return;
+-        }
+-        uVar8 = local_4 - local_8;
+-        if (local_4 < local_8) {
+-          pbVar14 = (fb + ROWOFF_1677(local_6) + local_4);
+-          uVar8 = -uVar8;
+-          uVar9 = local_6 - local_a;
+-          if (local_a <= local_6) goto LAB_0000_180e;
+-        }
+-        else {
+-          if (uVar8 == 0) {
+-            uVar8 = local_a - local_6;
+-            if (uVar8 != 0) {
+-              if (local_a < local_6) {
+-                uVar8 = -uVar8;
+-                local_6 = local_a;
+-              }
+-              pbVar14 = (fb + ROWOFF_1677(local_6) + local_8);
+-              if (DAT_0000_161b != '\0') {
+-                uVar11 = uVar8 >> 1;
+-                uVar9 = uVar11 + 1;
+-                if ((uVar8 & 1) != 0) goto LAB_0000_1946;
+-                do {
+-                  *pbVar14 = *pbVar14 ^ param_1;
+-                  pbVar14 = pbVar14 + iVar13;
+-                  uVar9 = uVar11;
+-LAB_0000_1946:
+-                  *pbVar14 = *pbVar14 ^ param_1;
+-                  pbVar14 = pbVar14 + iVar13;
+-                  uVar11 = uVar9 - 1;
+-                } while (uVar11 != 0);
+-                return;
+-              }
+-              uVar11 = uVar8 >> 1;
+-              uVar9 = uVar11 + 1;
+-              if ((uVar8 & 1) != 0) goto LAB_0000_1927;
+-              do {
+-                *pbVar14 = param_1;
+-                pbVar14 = pbVar14 + iVar13;
+-                uVar9 = uVar11;
+-LAB_0000_1927:
+-                *pbVar14 = param_1;
+-                pbVar14 = pbVar14 + iVar13;
+-                uVar11 = uVar9 - 1;
+-              } while (uVar11 != 0);
+-            }
+-            return;
+-          }
+-          pbVar14 = (fb + ROWOFF_1677(local_a) + local_8);
+-          uVar9 = local_a - local_6;
+-          if (local_6 <= local_a) goto LAB_0000_180e;
+-        }
+-        uVar9 = -uVar9;
+-        iVar13 = -iVar13;
+-LAB_0000_180e:
+-        if (uVar8 <= uVar9) {
+-          iVar7 = -((int)uVar9 >> 1);
+-          iVar6 = uVar9 + 1;
+-          if (DAT_0000_161b == '\0') {
+-            while( true ) {
+-              *pbVar14 = param_1;
+-              pbVar14 = pbVar14 + (1 - (iVar13 + 1));
+-              iVar6 = iVar6 + -1;
+-              if (iVar6 == 0) break;
+-              iVar7 = iVar7 + uVar8;
+-              if (-1 < iVar7) {
+-                pbVar14 = pbVar14 + 1;
+-                iVar7 = iVar7 - uVar9;
+-              }
+-            }
+-            return;
+-          }
+-          while( true ) {
+-            *pbVar14 = *pbVar14 ^ param_1;
+-            pbVar14 = pbVar14 + -iVar13;
+-            iVar6 = iVar6 + -1;
+-            if (iVar6 == 0) break;
+-            iVar7 = iVar7 + uVar8;
+-            if (-1 < iVar7) {
+-              pbVar14 = pbVar14 + 1;
+-              iVar7 = iVar7 - uVar9;
+-            }
+-          }
+-          return;
+-        }
+-        iVar7 = -((int)uVar8 >> 1);
+-        iVar6 = uVar8 + 1;
+-        if (DAT_0000_161b == '\0') {
+-          while( true ) {
+-            pbVar1 = pbVar14;
+-            pbVar14 = pbVar14 + 1;
+-            *pbVar1 = param_1;
+-            iVar6 = iVar6 + -1;
+-            if (iVar6 == 0) break;
+-            iVar7 = iVar7 + uVar9;
+-            if (-1 < iVar7) {
+-              pbVar14 = pbVar14 + -iVar13;
+-              iVar7 = iVar7 - uVar8;
+-            }
+-          }
+-          return;
+-        }
+-        while( true ) {
+-          *pbVar14 = *pbVar14 ^ param_1;
+-          pbVar14 = pbVar14 + 1;
+-          iVar6 = iVar6 + -1;
+-          if (iVar6 == 0) break;
+-          iVar7 = iVar7 + uVar9;
+-          if (-1 < iVar7) {
+-            pbVar14 = pbVar14 + -iVar13;
+-            iVar7 = iVar7 - uVar8;
+-          }
+-        }
+-        return;
++#define SF16(v) ((uint8_t)(((uint16_t)(v) >> 15) & 1))
++  uint8_t  al = param_1;
++  uint16_t colw = (uint16_t)(((uint16_t)al << 8) | al);       /* 167d mov ah,al ; [bp-0x12] */
++  int16_t  pitch = desc[2];                                    /* [bp-0x14] */
++  int16_t  x0 = rect[0], y0 = rect[1], x1 = rect[2], y1 = rect[3];
++  uint8_t  pass = 0xff;                                        /* [bp-0x10] */
++  int16_t  ddy = 0, ddx = 0;                                   /* [bp-0xa], [bp-0xc] */
++  uint8_t  c0, c1;
++  (void)param_3;
++  for (;;) {                                                   /* 16a9 */
++    int16_t xmin = desc[3], xmax = (int16_t)(desc[5] - 1);
++    int16_t ymin = desc[4], ymax = (int16_t)(desc[6] - 1);
++    uint8_t c0x = (uint8_t)((SF16(x0 - xmin) << 1) | SF16(xmax - x0));   /* L<<1 | R */
++    uint8_t c1x = (uint8_t)((SF16(x1 - xmin) << 1) | SF16(xmax - x1));
++    if (c0x & c1x) return;                                     /* 16d2 -> 1672 */
++    c0 = (uint8_t)((c0x << 2) | (SF16(y0 - ymin) << 1) | SF16(ymax - y0));   /* L R T B */
++    c1 = (uint8_t)((c1x << 2) | (SF16(y1 - ymin) << 1) | SF16(ymax - y1));
++    if (c0 & c1) return;                                       /* 16fb -> 16d2 -> 1672 */
++    if (c0 == 0 && c1 == 0) break;                             /* 16ff jcxz 171f -> draw */
++    pass ^= 0xff;                                              /* 1701 */
++    if (pass != 0) return;                                     /* 1705 jne 16d2 -> reject */
++    ddy = (int16_t)(y1 - y0);                                  /* 1707 */
++    ddx = (int16_t)(x1 - x0);                                  /* 1710 */
++    {
++      int16_t *px[2] = { &x0, &x1 }, *py[2] = { &y0, &y1 };
++      uint8_t  cl = c0, ch = c1;
++      int k = 0;
++      for (;;) {                                               /* 17af */
++        if (cl != 0) {                                         /* 1722: clip point k by cl */
++          int16_t bx = *px[k], dx = *py[k];
++          if (cl & 8) {                                        /* left */
++            int32_t ax = (int16_t)(xmin - bx);
++            cl ^= 8;
++            bx = xmin;
++            ax = (int16_t)((ax * ddy) / ddx);                  /* imulw [bp-0xa] ; idivw [bp-0xc] */
++            dx = (int16_t)(ax + *py[k]);
++          }
++          if (cl & 2) {                                        /* top */
++            cl ^= 2;
++            if (dx < ymin) {                                   /* 174e cmp ; jge skip */
++              int32_t ax = (int16_t)(ymin - *py[k]);
++              ax = (int16_t)((ax * ddx) / ddy);                /* imulw [bp-0xc] ; idivw [bp-0xa] */
++              bx = (int16_t)(ax + *px[k]);
++              dx = ymin;
++            }
++          }
++          if (cl & 4) {                                        /* right */
++            cl ^= 4;
++            if (bx >= (int16_t)(xmax + 1)) {                   /* 176e cmp ; jl skip */
++              int32_t ax = (int16_t)(xmax - *px[k]);
++              bx = xmax;
++              ax = (int16_t)((ax * ddy) / ddx);
++              dx = (int16_t)(ax + *py[k]);
++            }
++          }
++          if (cl & 1) {                                        /* bottom */
++            cl ^= 1;
++            if (dx >= (int16_t)(ymax + 1)) {                   /* 178d cmp ; jl skip */
++              int32_t ax = (int16_t)(ymax - *py[k]);
++              ax = (int16_t)((ax * ddx) / ddy);
++              bx = (int16_t)(ax + *px[k]);
++              dx = ymax;
++            }
++          }
++          *px[k] = bx; *py[k] = dx;                            /* 17a3/17a5 */
++        }
++        k = 1;                                                 /* 17a8 lea si,[bp-4] */
++        { uint8_t t = cl; cl = ch; ch = t; }                   /* 17ab xchg cl,ch */
++        if (cl == 0 && ch == 0) break;                         /* 17ad jcxz 17b6 -> 16a9 */
+       }
+-      local_12 = local_12 ^ 0xff;
+-      bVar16 = local_12 == 0;
+-    } while (!bVar16);
+-    iVar6 = local_4 - local_8;
+-    iVar7 = local_6 - local_a;
+-    puVar15 = &local_a;
+-    do {
+-      if ((char)uVar10 != '\0') {
+-        uVar8 = puVar15[1];
+-        uVar9 = *puVar15;
+-        if ((uVar10 & 8) != 0) {
+-          uVar10 = uVar10 ^ 8;
+-          uVar9 = desc[3];
+-          uVar8 = (int)(((long)(int)(uVar9 - *puVar15) * (long)iVar6) / (long)iVar7) + puVar15[1];
+-        }
+-        if ((uVar10 & 2) != 0) {
+-          uVar10 = uVar10 ^ 2;
+-          uVar11 = desc[4];
+-          if ((int)uVar8 < (int)uVar11) {
+-            uVar9 = (int)(((long)(int)(uVar11 - puVar15[1]) * (long)iVar7) / (long)iVar6) + *puVar15
+-            ;
+-            uVar8 = uVar11;
+-          }
+-        }
+-        if ((uVar10 & 4) != 0) {
+-          uVar10 = uVar10 ^ 4;
+-          if ((int)desc[5] <= (int)uVar9) {
+-            uVar9 = desc[5] - 1;
+-            uVar8 = (int)(((long)(int)(uVar9 - *puVar15) * (long)iVar6) / (long)iVar7) + puVar15[1];
++    }
++  }
++  /* 17b9: draw {x0,y0}-{x1,y1} */
++  if (x0 == x1) {                                              /* 17bc/17bf -> 1890 vertical */
++    uint16_t di = (uint16_t)(ROWOFF_1677(x0) + (uint16_t)y0);
++    uint16_t cx = (uint16_t)(y1 - y0);
++    if (cx == 0) return;
++    if ((int16_t)cx < 0) { di = (uint16_t)(di + cx); cx = (uint16_t)(0 - cx); }   /* jae / add di,cx ; neg cx */
++    if (DAT_0000_161b == 0) {
++      uint16_t n = cx >> 1, odd = cx & 1;
++      while (n--) { *(uint16_t *)(fb + di) = colw; di = (uint16_t)(di + 2); }     /* rep stosw */
++      if (odd) { fb[di] = al; di = (uint16_t)(di + 1); }                            /* adc cx,cx ; rep stosb */
++    } else {
++      uint16_t n = cx >> 1, odd = cx & 1;
++      if (odd) { fb[di] ^= al; di = (uint16_t)(di + 1); }                           /* 18dc jae / xor [di],al */
++      while (n--) { *(uint16_t *)(fb + di) ^= colw; di = (uint16_t)(di + 2); }     /* 18e5 loop */
++    }
++    return;
++  }
++  {
++    int16_t dy = (int16_t)(y1 - y0);
++    if (dy == 0) {                                             /* 17cc je 18f2 horizontal */
++      uint16_t di = (uint16_t)x1, cx = (uint16_t)(x0 - x1);
++      if (cx == 0) return;
++      if ((int16_t)cx < 0) { di = (uint16_t)x0; cx = (uint16_t)(0 - cx); }   /* 18fe jae / mov di,ax ; neg cx */
++      di = (uint16_t)(ROWOFF_1677(di) + (uint16_t)y0);
++      {
++        uint16_t odd = cx & 1, n = (uint16_t)((cx >> 1) + 1);
++        int first = odd;
++        if (!odd) n--;                                         /* shr ; inc ; jb ; dec */
++        if (DAT_0000_161b == 0) {
++          uint16_t dxs = (uint16_t)(pitch - 1);
++          while (n--) {
++            if (!first) { fb[di] = al; di = (uint16_t)(di + 1 + dxs); }   /* 1924 stos ; add di,dx */
++            first = 0;
++            fb[di] = al; di = (uint16_t)(di + 1 + dxs);                     /* 1927 stos ; add di,dx */
++          }
++        } else {
++          uint16_t dxs = (uint16_t)pitch;
++          while (n--) {
++            if (!first) { fb[di] ^= al; di = (uint16_t)(di + dxs); }        /* 1942 xor ; add di,dx */
++            first = 0;
++            fb[di] ^= al; di = (uint16_t)(di + dxs);                          /* 1946 */
+           }
+         }
+-        if ((uVar10 & 1) != 0) {
+-          uVar10 = uVar10 ^ 1;
+-          if ((int)desc[6] <= (int)uVar8) {
+-            uVar8 = desc[6] - 1;
+-            uVar9 = (int)(((long)(int)(uVar8 - puVar15[1]) * (long)iVar7) / (long)iVar6) + *puVar15;
++      }
++      return;
++    }
++    {
++      uint16_t di; int16_t cx, bp = pitch; uint16_t adx;
++      if ((uint16_t)y1 >= (uint16_t)y0) {                      /* 17ca jb 17ef (unsigned) */
++        di = (uint16_t)(ROWOFF_1677(x0) + (uint16_t)y0);       /* 17ce */
++        cx = (int16_t)(x0 - x1);
++        if ((uint16_t)x0 < (uint16_t)x1) { cx = (int16_t)(0 - cx); bp = (int16_t)(0 - bp); }  /* 17e5 jae / 180a */
++        adx = (uint16_t)dy;
++      } else {
++        di = (uint16_t)(ROWOFF_1677(x1) + (uint16_t)y1);       /* 17ef */
++        adx = (uint16_t)(0 - (uint16_t)dy);                    /* neg dx */
++        cx = (int16_t)(x1 - x0);
++        if ((uint16_t)x1 < (uint16_t)x0) { cx = (int16_t)(0 - cx); bp = (int16_t)(0 - bp); }  /* 1808 jae / 180a */
++      }
++      if ((uint16_t)cx < adx) {                                /* 180e cmp cx,dx ; jae 1850 : y-major */
++        int16_t si = (int16_t)(0 - ((int16_t)adx >> 1));       /* 1812..1816 */
++        uint16_t bx = (uint16_t)(adx + 1);
++        if (DAT_0000_161b == 0) {
++          for (;;) {                                           /* 1824 */
++            fb[di] = al; di = (uint16_t)(di + 1);              /* stos */
++            if (--bx == 0) return;
++            si = (int16_t)(si + cx);
++            if (si < 0) continue;                              /* js 1824 */
++            di = (uint16_t)(di - (uint16_t)bp);                /* sub di,bp */
++            si = (int16_t)(si - (int16_t)adx);
++          }
++        } else {
++          for (;;) {                                           /* 183a */
++            fb[di] ^= al; di = (uint16_t)(di + 1);
++            if (--bx == 0) return;
++            si = (int16_t)(si + cx);
++            if (si < 0) continue;
++            di = (uint16_t)(di - (uint16_t)bp);
++            si = (int16_t)(si - (int16_t)adx);
++          }
++        }
++      } else {                                                 /* 1850 x-major */
++        int16_t si = (int16_t)(0 - (cx >> 1));
++        uint16_t bx = (uint16_t)(cx + 1);
++        if (DAT_0000_161b == 0) {
++          bp = (int16_t)(bp + 1);                              /* 1861 inc bp (undoes the stos advance) */
++          for (;;) {                                           /* 1862 */
++            fb[di] = al; di = (uint16_t)(di + 1);              /* stos */
++            di = (uint16_t)(di - (uint16_t)bp);                /* sub di,bp */
++            if (--bx == 0) return;
++            si = (int16_t)(si + (int16_t)adx);
++            if (si < 0) continue;                              /* js 1862 */
++            di = (uint16_t)(di + 1);                           /* inc di */
++            si = (int16_t)(si - cx);
++          }
++        } else {
++          for (;;) {                                           /* 187a */
++            fb[di] ^= al;
++            di = (uint16_t)(di - (uint16_t)bp);
++            if (--bx == 0) return;
++            si = (int16_t)(si + (int16_t)adx);
++            if (si < 0) continue;
++            di = (uint16_t)(di + 1);
++            si = (int16_t)(si - cx);
+           }
+         }
+-        *puVar15 = uVar9;
+-        puVar15[1] = uVar8;
+       }
+-      puVar15 = &local_6;
+-      uVar10 = CONCAT11((char)uVar10,(char)(uVar10 >> 8));
+-    } while (uVar10 != 0);
+-  } while( true );
++    }
++  }
++#undef SF16
+ #undef ROWOFF_1677
+ }
+ 
+-
+ /* ===== ((uint)(uintptr_t)&FUN_0000_1952) @ 0000:1952 ===== */
+ 
+ void __allregs FUN_0000_1952(undefined1 param_1,undefined2 param_2,undefined2 param_3)

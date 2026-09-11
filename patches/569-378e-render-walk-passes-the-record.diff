@@ -1,0 +1,100 @@
+PATCH 569: the render walk 378e passes BX = the deferred record to its methods; 37cd rebuilt; 3823's CX
+is 3d4c's output.
+
+asm 0x37ab-0x37b6: `mov bx,0x6bbe ; xor dx,dx ; mov dl,[0x6bc2] ; mov si,dx ; call [si+0x4b52]` -- every
+render method in the 0x4b52 table (3663 390c 3823 37cd 38aa 390d 32a6) is entered with BX = the current
+deferred record at DGROUP:0x6bbe.  Patch 194's dispatch was `(*vec)()`: 3823/37cd/38aa's param_3 and
+390d's param_1 were stack residue.  It never showed because c33c's producers were unreachable until
+patches 556/558 and, after them, the residue happened to be harmless -- until the first AZER1 self-play
+with a live T-80 (566/567): the walk hung for ever in the MGA blitter m_mga_298a with a record pointer
+of 0xcc08 (next run 0xcc28) -- an address inside vehicle 11's body -- whose "sprite id" word resolved
+to a sprite header of width 0, i.e. `loop` x 65536 x 65536.  __allregs is positional and the methods
+differ in arity, so the record is passed in all three slots.
+
+37cd (entry 9, method id 0x12 = the id c9af stamps into each record it drains) was pristine: the record
+host-deref'd, and 3d4c's Y output taken from the incoming CX.  3823 (patch 391) had the same CX misread:
+`3827 call 3d4c` returns the Y projection in CX (`3d94 mov [0x6c38],cx ; ret`), 3830 pushes it and
+385b/3893 add it -- an OUTPUT of the call, not an input of the method.  Both now read word[0x6c38]; 38aa
+(patch 526) already did.
+
+390d (entry 12, method id 0x18, the two-point 3d99 line) stays pristine in this patch: it is a
+different family, was not on the path measured here, and will fault loudly rather than draw garbage
+when a producer first emits id 0x18 (board:0015).
+
+--- a/fist.c
++++ b/fist.c
+@@ -12103,7 +12103,13 @@
+      * returned si so word[0x4b9e]!=0 and the phase walk advances instead of restarting. */
+     *(uint16_t *)(g_mem + 0x1c000 + 0x4b9e) = g_fist_iter_si;         /* word[0x4b9e]=si (asm 0x37a7) */
+     sidx = *(uint8_t *)(g_mem + 0x1c000 + 0x6bc2);                    /* dl=byte[0x6bc2]; si=dx */
+-    (*(code *)fist_icall_near(0x0u, *(uint16_t *)(g_mem + 0x1c000 + sidx + 0x4b52)))(); /* [si+0x4b52] */
++    /* PATCH 569: asm 0x37ab `mov bx,0x6bbe` -- every render method in the 0x4b52 table receives BX = the
++     * current deferred RECORD.  The arg-less dispatch left 3823/37cd/38aa's param_3 (and 390d's param_1)
++     * as stack residue: the AZER1 self-play that first drew a T-80 shot hung forever in the MGA blitter
++     * (m_mga 298a) on a record pointer of 0xcc08 / 0xcc28 -- inside vehicle 11's body -- whose "sprite
++     * id" resolved to a zero-width header.  __allregs is positional and the methods differ in arity, so
++     * the record goes in every slot. */
++    ((void (*)(int,int,int))fist_icall_near(0x0u, *(uint16_t *)(g_mem + 0x1c000 + sidx + 0x4b52)))(0x6bbe, 0x6bbe, 0x6bbe); /* [si+0x4b52] */
+   }
+   ((unsigned short (*)(unsigned short))fist_icall_far((uint32_t)(DAT_1000_c6b0)))(saved_mask);
+                                                                       /* 37c2 pop ax; 37c3 lcall [0x6b0] */
+@@ -12117,21 +12123,33 @@
+ void __allregs FUN_0000_37cd(undefined2 param_1,int param_2,int param_3)
+ 
+ {
+-  int iVar1;
+-  uint uVar2;
+-  uint uVar3;
+-  
+-  iVar1 = FUN_0000_3d4c(0x6bc8);
+-  uVar3 = ((uint)DAT_1000_d56a[5] >> 1) + -iVar1;
+-  if (uVar3 < (uint)DAT_1000_d56a[5]) {
+-    uVar2 = ((uint)DAT_1000_d56a[6] >> 1) + param_2;
+-    if ((((uVar2 < (uint)DAT_1000_d56a[6]) &&
+-         (*(undefined1 *)(uVar2 + *(int *)(uVar3 * 2 + DAT_1000_c794)) =
+-               *(undefined1 *)(param_3 + 5), *(int *)(param_3 + 2) != DAT_1000_d554)) &&
+-        (DAT_2000_2b6e == -iVar1)) && (DAT_2000_2b70 == param_2)) {
+-      DAT_2000_2b72 = *(undefined2 *)(param_3 + 2);
+-    }
+-  }
++  /* PATCH 569: the single-pixel render method (asm 0x37cd-0x3822), table 0x4b52 entry 9 (method id
++   * 0x12 -- the id c9af stamps into every record it drains).  BX = the deferred record (param_3, a
++   * DGROUP near offset); `push bx ; mov bx,0x6bc8 ; call 3d4c ; pop bx` projects the record's point
++   * (AX = X, CX = Y via word[0x6c38]); `neg ax ; mov dx,ax`; vp = word[0x156a]: sx = vp.w/2 + dx must
++   * be < vp.w, sy = vp.h/2 + cx must be < vp.h (both UNSIGNED `jae ret`); the pixel goes to
++   * es:[rowtab[sx] + sy] (es = vp[0], rowtab = word[0x794]) from the record's colour byte[bx+5]; then,
++   * when word[bx+2] != word[0x1554] and (dx,cx) == (word[0x6b6e],word[0x6b70]) -- the reticle -- the
++   * record's id word[bx+2] is published to word[0x6b72].  Ghidra host-deref'd the record and used the
++   * incoming param_2 for 3d4c's CX output. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int bx = (unsigned short)param_3;
++  (void)param_1; (void)param_2;
++  int ax = FUN_0000_3d4c(0x6bc8);
++  uint16_t cx = (uint16_t)DAT_2000_2c38;                                      /* 3d94 */
++  uint16_t dx = (uint16_t)(-ax);                                              /* 37d5/37d7 */
++  uint16_t *vp = (uint16_t *)DAT_1000_d56a;                                   /* di = word[0x156a] */
++  uint16_t sx = (uint16_t)((vp[5] >> 1) + dx);                                /* 37df..37e6 */
++  if (sx >= vp[5]) return;                                                    /* 37e8 jae */
++  uint16_t rowent = *(uint16_t *)(dg + (uint16_t)(sx * 2 + DAT_1000_c794));   /* 37ec/37ee */
++  uint16_t sy = (uint16_t)((vp[6] >> 1) + cx);                                /* 37f2..37f9 */
++  if (sy >= vp[6]) return;                                                    /* 37fb jae */
++  { uint8_t *fb = g_mem + (((uint32_t)vp[0]) << 4);                           /* es = word[di] */
++    fb[(uint16_t)(sy + rowent)] = dg[(uint16_t)(bx + 5)]; }                  /* 37ff..3806 movsb */
++  if (*(uint16_t *)(dg + (uint16_t)(bx + 2)) == (uint16_t)DAT_1000_d554) return;   /* 380a */
++  if (*(uint16_t *)(dg + 0x6b6e) != dx) return;                              /* 3810 */
++  if (*(uint16_t *)(dg + 0x6b70) != cx) return;                              /* 3816 */
++  *(uint16_t *)(dg + 0x6b72) = *(uint16_t *)(dg + (uint16_t)(bx + 2));       /* 381c/381f */
+   return;
+ }
+ 
+@@ -12158,6 +12176,10 @@
+   uint uVar2;
+   uint uVar4;
+   iVar1 = FUN_0000_3d4c(0x6bc8);
++  /* PATCH 569: `3827 call 3d4c` returns the Y projection in CX (3d94 `mov [0x6c38],cx ; ret`), which
++   * 3830 pushes and 385b/3893 add -- it is 3d4c's OUTPUT, not a caller input; patch 391 read the
++   * incoming param_2 (residue) for it.  Take it from the asm's own copy at word[0x6c38]. */
++  { int cx_ = (int)(uint16_t)DAT_2000_2c38; (void)param_2; param_2 = cx_; }
+   DAT_2000_2c16 = (vp[5] >> 1) + -iVar1;                  /* vp[5]=word[di+0xa]=width */
+   {
+     uint16_t es  = *(uint16_t *)(dg + 0x4f0);             /* sprite-dir seg (word[DGROUP:0x4f0]) */

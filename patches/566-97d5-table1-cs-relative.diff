@@ -1,0 +1,41 @@
+PATCH 566: 97d5 (the type-3 / T-80 update template) dispatches its table1 CS-relative, not DS-relative.
+
+asm 0x9804-0x9813:  addb $2,0x3d(%di) ; movzbw 0x3d(%di),%bx ; and $0x1e,%bl ; call *%cs:-0x67b2(%bx)
+i.e. word[CS:0x984e + (byte[di+0x3d] & 0x1e)] with CS=0 -- linear 0x984e, where the 16 entries are
+997d a202 a631 aa37 a202 9990 986e ab03 987b a202 98fb a904 a9a0 a202 a46e ab03 (targeting a631,
+movement ab03, the animation/servo steps ...).  The three sibling templates read theirs the same way
+and their patches did it right: 244 (7c1d, g_mem+0x7c91), 250 (87df, g_mem+0x8858), 365 (902c,
+g_mem+0x90a0).  Patch 252 rebased 97d5's onto DGROUP (g_mem+0x1c000+0x984e), whose contents are
+`0000 bff4 0200 3ffc 0200 3ffc 0400 0000 0000 7ff8 0200 7ff8 0400 0000 0200 0000`.
+
+Consequence, measured on AZER1 self-play: FIST_TRACE_TRAPS reports 0x00000 0x0bff4 0x00200 0x03ffc
+0x00400 0x07ff8 as unmapped indirect targets -- that garbage table verbatim -- and a FIST_WATCHBYTE
+on T-80 c252 shows position, target word[+0x97], cooldown [+0x92], AI state [+0x43], drive state
+[+0x3e], speed [+0x57] and ammo all UNCHANGED from spawn to TIME EXPIRED.  The T-80s never acquired a
+target, never moved, never fired and were never hit; the port's whole battle was the nine AH-64s.  The
+original's debrief for the same mission counts 10 ENEMY GROUND KILLS and reaches DEFEAT at 5:49.
+
+table2 (`9818: call *%cs:-0x666f(%bx)` = cs:0x9991) was already CS-relative in 252 and is unchanged.
+
+--- a/fist.c
++++ b/fist.c
+@@ -26582,9 +26582,17 @@
+   *(char *)(param_4 + 0x3d) = *(char *)(param_4 + 0x3d) + '\x02';
+   uVar2 = CONCAT31((int3)(((ulong)uVar4 << 0x10) >> 8),*(undefined1 *)(param_4 + 0x3d)) & 0xffffff1e
+   ;
+-  /* PATCH 252: table1 DS-relative word[DGROUP:0x984e+(byte[di+0x3d]&0x1e)], DI live */
++  /* PATCH 252: table1 word[0x984e+(byte[di+0x3d]&0x1e)], DI live.
++   * PATCH 566: the table is CS-RELATIVE -- asm 0x980f `call *%cs:-0x67b2(%bx)` (CS=0, so linear 0x984e,
++   * the 16 near offsets 997d a202 a631 aa37 a202 9990 986e ab03 987b a202 98fb a904 a9a0 a202 a46e
++   * ab03), the same shape as 7c1d/87df/902c whose patches 244/250/365 read theirs at g_mem+off.  252
++   * read DGROUP:0x984e instead -- `0000 bff4 0200 3ffc 0200 3ffc 0400 0000 ...` -- so every type-3
++   * (T-80) update dispatched into garbage: FIST_TRACE_TRAPS on AZER1 listed exactly 0x00000, 0x0bff4,
++   * 0x00200, 0x03ffc, 0x00400, 0x07ff8 as unmapped targets, and the three T-80s sat inert for the
++   * whole 15 minutes (no target, no movement, no shot, never hit) while the original's debrief counts
++   * them among its ground kills. */
+   (*(code *)fist_icall_near(0x0u,
+-      *(uint16_t *)((unsigned char *)g_mem + 0x1c000 + (uint16_t)(0x984e + ((uint)uVar2 & 0x1e)))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
++      *(uint16_t *)((unsigned char *)g_mem + (uint16_t)(0x984e + ((uint)uVar2 & 0x1e)))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+   uVar3 = CONCAT22((int)(uVar2 >> 0x10),(uint)*(byte *)(param_4 + 0x3e));
+   /* PATCH 252: table2 CS-relative word[cs=0:0x9991+byte[di+0x3e]], DI live */
+   (*(code *)fist_icall_near(0x0u,

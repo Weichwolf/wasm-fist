@@ -99,3 +99,16 @@ c4df's four: the 22dd render-script table at DGROUP:0x6c82, the 201a/209e elemen
 DGROUP:0x3e18, and the extender op table.  A target that resolves to nothing is silent on native
 (it lands in whatever the trampoline does) and is a native<->wasm divergence generator as surely as
 board:0014's arity mismatches.
+
+## Found while opening the kill chain (board:0017, patches 564-570)
+
+- Every target of c14f's interaction table (DGROUP:0xe518: 7c09 87cb 9018 97c1 9c97 a0a1 b382 bc32
+  bd69 c31c) was unpromoted -- patch 564 adds them.  The icall trap's "returning 0" leaves g_fist_cf
+  untouched, which is how a missing handler silently became a hit.
+- 0000:030b (patch 563), FUN_1000_177f (scratch/parked/571) were unpromoted; FUN_1000_9b39/9b7e/9bc3/
+  9c15 existed but pristine (567).
+- The FUN map was unsorted after hand-inserted entries (534/535/543/556/563) and its binary search
+  missed present functions -- patch 565 sorts a copy at first use, so insertion order no longer
+  matters.
+- Still open: 390d (render method id 0x18, the two-point 3d99 line) is pristine; c47d/c4a2 (label
+  vertex producers of the c33c phase table) set no CF in C and so never deliver a record.

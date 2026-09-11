@@ -1271,3 +1271,47 @@ mid-mission `.ram.bin` request had silently gone to the OPL logger.  Both fixed 
 
 The mission's clock runs at 60 ticks/s ([0x452]); a 15-minute mission is 54000 ticks.  Earlier
 "30 ticks/s" figures in this item were derived from a wrong 30-minute assumption for AZER3.
+
+## The kill chain, found and repaired in seven patches -- and the first DEFEAT the port ever wrote
+
+Working from the original's debrief numbers (10 ground + 1 air kills, 4 own lost, 5 objectives at
+5:49) against the port's (2 / 2 / 0 at 15:00), the chain was opened link by link on AZER1 self-play:
+
+    564  c14f's ten per-type INTERACTION handlers (DGROUP:0xe518) were all unpromoted; the icall trap
+         left 0ea9's carry in place, so every object inside a shell's 2-D range circle -- trees, the
+         type-0x10 markers, wrecks -- was "hit" and the shell detonated there.  With them: kills 2->6,
+         objectives 0->3 by 5:52 (the original's order of magnitude).
+    565  the icall FUN map is bsearched but had been left unsorted by 534/535/543/556/563; patch 535's
+         four render methods existed and were "unmapped".  Sort a private copy once.
+    566  97d5 (the T-80 template) dispatched its table1 DS-relative (patch 252) into DGROUP garbage --
+         FIST_TRACE_TRAPS listed that garbage verbatim -- so the three T-80s never targeted, moved or
+         fired for 15 minutes.  The whole battle had been the nine AH-64s.
+    567  the T-80 cluster 566 switched on: 997d/986e/987b/98fb, the fire step 99a2 and its four spawns
+         9b39/9b7e/9bc3/9c15, the fifth a57a call site patch 562 missed -- all pristine host derefs.
+    568  60e5, the side-table clear on a failed wreck spawn, walked the 32 WORD slots as ints: a dead
+         vehicle stayed counted alive and the DEFEAT edge could not fire.  After it the port's own
+         side reaches 0 and `0x6da0 = 1` is written -- the FIRST time the port has ever produced a
+         verdict other than TIME EXPIRED.
+    569  378e passed nothing to its render methods (BX = the deferred record 0x6bbe in the asm); 3823/
+         37cd read stack residue and hung the MGA blitter on a record pointer inside vehicle 11.
+    570  the MGA line clipper (m_mga 1677) was 32-bit and never wrote the clipped endpoint back; the
+         frame after the last own vehicle dies projects a polyline point to x=28759 and the unclipped
+         draw left g_mem.  Rebuilt 1:1 in 16-bit arithmetic.
+
+Each was the producer/consumer shape this board keeps recording: the correct patch reaches code that
+had never executed and finds it pristine.  After 570 the run writes DEFEAT, starts the countdown, and
+hangs in the sprite blitter on records whose sprite HEADERS are garbage -- the sheets were never
+loaded -- which is board:0024 (the memory manager and the model budget), the gate to the mission-over
+exit and to every drawn object.
+
+Spread, not defect: two oracle runs of the same mission gave DEFEAT at 5:49 with 11 kills and DEFEAT
+at 1:38 with 1 kill -- the original's battles vary widely run to run (the RNG is not seeded from the
+tick), so a port run has to be compared on distribution and mechanics, not on a single tally.  The
+one-shot player death (109 vs 122 damage, 2:07 vs 1:38) and the per-phase kill rates now sit inside
+that spread.
+
+Corrections to earlier sections: FIST_OBJTRAP never fires in the self-play flow (zero hits on a byte
+written every tick), so the "nobody writes 0xe814" claim was an unsupported reading of a dead
+instrument (the conclusion held on the clock trace); FIST_WATCHBYTE replaces it.  390d (render method
+id 0x18) is still pristine and will fault when first emitted; c47d/c4a2 never deliver their label
+records because their C sets no CF (board:0015).

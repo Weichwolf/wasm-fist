@@ -1,0 +1,56 @@
+PATCH 565: fist_icall's FUN map is binary-searched but no longer sorted -- sort a private copy once.
+
+lookup_fun() bsearches fist_fmap[] (emitted into fist.c by the assemble stage, sorted by linear
+address).  Patches 534/535/543/556/563 appended their newly promoted functions' entries by hand at the
+wrong positions, so the array now contains 0xc894 before 0xc829 before 0xc713, 0xa408 before 0xa3f6,
+0x311 before 0x30b, and a binary search over that misses entries that are present.  Measured with
+FIST_TRACE_TRAPS on an AZER1 self-play: 0xc713, 0xc77d, 0xc817 and 0xc874 -- patch 535's "missing
+render methods", every one of them defined and in the table -- were reported as "no FUN_ there;
+returning 0".  They never ran.
+
+The array is const, so lookup_fun sorts a malloc'd copy on first use and searches that.  The emitted
+map's order stops mattering; a patch that inserts an entry anywhere is correct.
+
+--- a/fist_icall.c
++++ b/fist_icall.c
+@@ -14,20 +14,36 @@
+  */
+ #include "ghidra_compat.h"
+ #include <stdio.h>
+-#include <stdlib.h>
+ 
+ /* ---- trace ---- */
+ static int g_trace = -1;
+ static int traceon(void){ if(g_trace<0) g_trace = getenv("FIST_TRACE_TRAPS")?1:0; return g_trace; }
+ 
+-/* ---- binary search of the sorted {linear -> &FUN} map emitted into fist.c ---- */
++/* ---- binary search of the {linear -> &FUN} map emitted into fist.c ---- */
++/* PATCH 565: the map is bsearched but was NOT sorted any more -- patches 534/535/543/556/563 inserted
++ * their new entries by hand at the wrong spots (0xc894 before 0xc829 before 0xc713, 0xa408 before
++ * 0xa3f6, 0x311 before 0x30b ...), and a binary search over an unsorted array misses entries that are
++ * present: FIST_TRACE_TRAPS on AZER1 listed 0xc713/0xc77d/0xc817/0xc874 (patch 535's render methods,
++ * all defined) as "no FUN_ there".  Sort a private copy once; the emitted array stays const. */
++static const struct fist_fent *fist_fmap_sorted;
++static int fist_fent_cmp(const void *a, const void *b)
++{
++    uint32_t x = ((const struct fist_fent *)a)->lin, y = ((const struct fist_fent *)b)->lin;
++    return x < y ? -1 : x > y ? 1 : 0;
++}
+ static void *lookup_fun(uint32_t lin)
+ {
++    if (!fist_fmap_sorted) {
++        struct fist_fent *m = (struct fist_fent *)malloc(fist_fmap_n * sizeof *m);
++        memcpy(m, fist_fmap, fist_fmap_n * sizeof *m);
++        qsort(m, fist_fmap_n, sizeof *m, fist_fent_cmp);
++        fist_fmap_sorted = m;
++    }
+     unsigned lo = 0, hi = fist_fmap_n;
+     while (lo < hi) {
+         unsigned mid = lo + ((hi - lo) >> 1);
+-        uint32_t m = fist_fmap[mid].lin;
+-        if (m == lin) return fist_fmap[mid].fn;
++        uint32_t m = fist_fmap_sorted[mid].lin;
++        if (m == lin) return fist_fmap_sorted[mid].fn;
+         if (m < lin)  lo = mid + 1; else hi = mid;
+     }
+     return NULL;

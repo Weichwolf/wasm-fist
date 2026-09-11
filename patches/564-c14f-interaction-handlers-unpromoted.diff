@@ -1,0 +1,340 @@
+PATCH 564: the projectile INTERACTION handlers -- all ten targets of c14f's per-type dispatch
+(DGROUP:0xe518) were unpromoted, so every 2-D range contact was a hit.
+
+bb1b (patch 284) is the "what did this projectile strike" walk: for each candidate with [+0x16]&0x40
+inside 0ea9's 2-D range circle it dispatches c14f = `mov bx,[si] ; shl bx,1 ; jmp [bx-0x1ae8]`, the
+per-type INTERACTION test, and takes the first candidate whose handler returns CF=1.  The port had NONE
+of the ten handlers that table points at -- an indirect call into them hit the icall trap, which
+returns 0 without touching g_fist_cf, so bb1b read the carry 0ea9 had just left: 1.  Every object in
+the range circle "interacted", the first one in table order won, and a shell that passed within a few
+hundred units of a tree, a wreck or one of AZER1's 25 type-0x10 markers detonated there instead of
+flying on to the tank it was aimed at.
+
+The handlers, decoded from the asm (DI = bb1b's self = the projectile, SI = the candidate, CF out):
+
+  7c09 87cb 9018 97c1   types 00..03, the vehicles:  eax = [di+0xc]-[si+0xc] ; cmp eax,BAND ; jae clc ;
+                        stc  -- UNSIGNED, bands 0x800 0x900 0x800 0x700 (a projectile below the target
+                        never hits)
+  b382 / bc32           type 0x1b structure (band 0xc00) / type 0x17 wreck (0x500), same shape
+  bd69                  type 0x1a structure: band = word[0x9ebf + byte[si+0x19]*2] (per-variant height),
+                        >>2 when the projectile has [+0x19]&4
+  a0a1                  types 05/06: `call 0x291` random AL ; `cmp al,[0x95e4 + word[di]]` -- a hit
+                        chance keyed on the PROJECTILE's type (0x80 for type 7, 0x26/0x4c for 8..13,
+                        0xfd for 15) -- then a SIGNED Z band of +-0x200
+  9c97                  type 0x15, the trees: `clc ; ret` -- projectiles pass through
+  c31c                  the default for 18 types (04, 07..14, 16, 18, 19): `clc ; ret`
+
+c14f now passes (si, di) as near offsets -- bb1b's DI was never threaded to it -- and the handlers set
+g_fist_cf.  No other caller of c14f or of the ten exists (the asm has exactly one `jmp [bx-0x1ae8]`).
+
+Measured against the original (board:0017): with the player idle on AZER1 the original's debrief shows
+ENEMY GROUND KILLS 10 + AIR 01, GROUND UNITS LOST 04, OBJECTIVES REMAINING 08 of 13, at 5:49 -- DEFEAT.
+The port before this patch: 2 enemy kills, 2 own losses, 0 objectives, over the full 15:00 -- TIME
+EXPIRED, with both sides firing the whole time.  This is the mechanism by which shots stopped becoming
+kills.
+
+--- a/fist.c
++++ b/fist.c
+@@ -1257,7 +1257,19 @@
+ void __allregs FUN_0000_c0ca(undefined4 param_1);
+ void __allregs FUN_0000_c0e5(undefined2 param_1);
+ void __allregs FUN_0000_c123(int param_1);
+-void __allregs FUN_0000_c14f(int *param_1);
++void __allregs FUN_0000_c14f(int si,int di);   /* PATCH 564: (candidate, projectile) near offsets */
++/* PATCH 564: the ten per-type interaction handlers c14f dispatches (DGROUP:0xe518, type*2), all
++ * unpromoted before.  Contract: si = the candidate object, di = the projectile (bb1b's self); CF out. */
++void __allregs FUN_0000_7c09(int si,int di);
++void __allregs FUN_0000_87cb(int si,int di);
++void __allregs FUN_0000_9018(int si,int di);
++void __allregs FUN_0000_97c1(int si,int di);
++void __allregs FUN_0000_9c97(int si,int di);
++void __allregs FUN_0000_a0a1(int si,int di);
++void __allregs FUN_0000_b382(int si,int di);
++void __allregs FUN_0000_bc32(int si,int di);
++void __allregs FUN_0000_bd69(int si,int di);
++void __allregs FUN_0000_c31c(int si,int di);
+ void __allregs FUN_0000_c157(void);
+ undefined2 __allregs FUN_0000_c164(void);   /* PATCH 168: returns the found table-entry near-offset in AX (asm si), CF via g_fist_cf */
+ uint __allregs FUN_0000_c182(uint param_1,undefined2 param_2,undefined2 param_3,uint *param_4,int param_5);
+@@ -32149,7 +32161,7 @@
+                   (uint *)(dg + (unsigned short)(di + 4)),
+                   (uint *)(dg + (unsigned short)(si + 4)));
+     if (!(bool)g_fist_cf) continue;                 /* bb4f jae bb21 (CF=0 -> continue) */
+-    FUN_0000_c14f((int *)(uintptr_t)si);
++    FUN_0000_c14f((int)si,(int)di);                /* PATCH 564: the handlers read DI (self) too */
+     if (!(bool)g_fist_cf) continue;                 /* bb5a jae bb21 */
+     DAT_2000_5a25 = (unsigned short)si;             /* bb5c mov word[0x9a25],si */
+     g_fist_cf = 1;                                  /* bb60 stc */
+@@ -33092,21 +33104,187 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c14f) @ 0000:c14f ===== */
+ 
+-void __allregs FUN_0000_c14f(int *param_1)
++void __allregs FUN_0000_c14f(int si,int di)
+ 
+ {
+   /* PATCH 284: the per-object-type INTERACTION dispatch (asm 0xc14f-0xc156; DS=DGROUP=0x1c00), called
+-   * from bb1b.  si=object near offset in param_1; asm `mov bx,[si]; shl bx,1; jmp [bx-0x1ae8]` tail-jumps
+-   * to a type-specific handler word[DG:(word[si]*2-0x1ae8)] with SI (the object) live.  Ghidra deref'd
+-   * *param_1 as a host pointer + dropped the object arg.  The handlers read the object as a HOST POINTER,
+-   * so pass g_mem+0x1c000+si; the handler's carry flows back to bb1b via g_fist_cf. */
++   * from bb1b.  asm `mov bx,[si]; shl bx,1; jmp [bx-0x1ae8]` tail-jumps to word[DG:(word[si]*2+0xe518)]
++   * with SI (the candidate) AND DI (bb1b's self, the projectile) live.
++   * PATCH 564: every one of the ten targets (7c09 87cb 9018 97c1 9c97 a0a1 b382 bc32 bd69 c31c) was
++   * unpromoted, so this dispatch always hit the icall trap, which returns without touching g_fist_cf --
++   * the carry bb1b then read was 0ea9's 2-D range hit, i.e. EVERY object inside the range circle,
++   * trees and the type-0x10 markers included, counted as the thing the projectile struck.  The handlers
++   * take (si, di) as near offsets and set g_fist_cf. */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+-  unsigned int si = (unsigned short)(uintptr_t)param_1;
+-  uint16_t vec = *(uint16_t *)(dg + (unsigned short)((unsigned short)(*(uint16_t *)(dg + si) << 1) - 0x1ae8));
+-  (*(code *)fist_icall_near(0x0u,vec))((int)(intptr_t)(dg + si));
++  unsigned int sio = (unsigned short)si;
++  uint16_t vec = *(uint16_t *)(dg + (unsigned short)((unsigned short)(*(uint16_t *)(dg + sio) << 1) - 0x1ae8));
++  ((void (*)(int,int))fist_icall_near(0x0u,vec))((int)sio,(int)(unsigned short)di);
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_7c09) @ 0000:7c09 ===== */
++
++void __allregs FUN_0000_7c09(int si,int di)
++
++{
++  /* PATCH 564: projectile-vs-type-0 vehicle (M1) interaction (asm 0000:7c09): `mov eax,[di+0xc] ; sub eax,[si+0xc] ;
++   * cmp eax,0x800 ; jae clc ; stc` -- a hit when the projectile's Z minus the target's Z is below
++   * 0x800 as an UNSIGNED 32-bit value (a projectile under the target never hits). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint32_t dz = *(uint32_t *)(dg + (unsigned short)((unsigned short)di + 0xc))
++              - *(uint32_t *)(dg + (unsigned short)((unsigned short)si + 0xc));
++  g_fist_cf = (dz < 0x800u) ? 1 : 0;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_87cb) @ 0000:87cb ===== */
++
++void __allregs FUN_0000_87cb(int si,int di)
++
++{
++  /* PATCH 564: projectile-vs-type-1 vehicle interaction (asm 0000:87cb): `mov eax,[di+0xc] ; sub eax,[si+0xc] ;
++   * cmp eax,0x900 ; jae clc ; stc` -- a hit when the projectile's Z minus the target's Z is below
++   * 0x900 as an UNSIGNED 32-bit value (a projectile under the target never hits). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint32_t dz = *(uint32_t *)(dg + (unsigned short)((unsigned short)di + 0xc))
++              - *(uint32_t *)(dg + (unsigned short)((unsigned short)si + 0xc));
++  g_fist_cf = (dz < 0x900u) ? 1 : 0;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_9018) @ 0000:9018 ===== */
++
++void __allregs FUN_0000_9018(int si,int di)
++
++{
++  /* PATCH 564: projectile-vs-type-2 vehicle interaction (asm 0000:9018): `mov eax,[di+0xc] ; sub eax,[si+0xc] ;
++   * cmp eax,0x800 ; jae clc ; stc` -- a hit when the projectile's Z minus the target's Z is below
++   * 0x800 as an UNSIGNED 32-bit value (a projectile under the target never hits). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint32_t dz = *(uint32_t *)(dg + (unsigned short)((unsigned short)di + 0xc))
++              - *(uint32_t *)(dg + (unsigned short)((unsigned short)si + 0xc));
++  g_fist_cf = (dz < 0x800u) ? 1 : 0;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_97c1) @ 0000:97c1 ===== */
++
++void __allregs FUN_0000_97c1(int si,int di)
++
++{
++  /* PATCH 564: projectile-vs-type-3 vehicle interaction (asm 0000:97c1): `mov eax,[di+0xc] ; sub eax,[si+0xc] ;
++   * cmp eax,0x700 ; jae clc ; stc` -- a hit when the projectile's Z minus the target's Z is below
++   * 0x700 as an UNSIGNED 32-bit value (a projectile under the target never hits). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint32_t dz = *(uint32_t *)(dg + (unsigned short)((unsigned short)di + 0xc))
++              - *(uint32_t *)(dg + (unsigned short)((unsigned short)si + 0xc));
++  g_fist_cf = (dz < 0x700u) ? 1 : 0;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_b382) @ 0000:b382 ===== */
++
++void __allregs FUN_0000_b382(int si,int di)
++
++{
++  /* PATCH 564: projectile-vs-type-0x1b structure interaction (asm 0000:b382): `mov eax,[di+0xc] ; sub eax,[si+0xc] ;
++   * cmp eax,0xc00 ; jae clc ; stc` -- a hit when the projectile's Z minus the target's Z is below
++   * 0xc00 as an UNSIGNED 32-bit value (a projectile under the target never hits). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint32_t dz = *(uint32_t *)(dg + (unsigned short)((unsigned short)di + 0xc))
++              - *(uint32_t *)(dg + (unsigned short)((unsigned short)si + 0xc));
++  g_fist_cf = (dz < 0xc00u) ? 1 : 0;
+   return;
+ }
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_bc32) @ 0000:bc32 ===== */
++
++void __allregs FUN_0000_bc32(int si,int di)
++
++{
++  /* PATCH 564: projectile-vs-type-0x17 wreck interaction (asm 0000:bc32): `mov eax,[di+0xc] ; sub eax,[si+0xc] ;
++   * cmp eax,0x500 ; jae clc ; stc` -- a hit when the projectile's Z minus the target's Z is below
++   * 0x500 as an UNSIGNED 32-bit value (a projectile under the target never hits). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint32_t dz = *(uint32_t *)(dg + (unsigned short)((unsigned short)di + 0xc))
++              - *(uint32_t *)(dg + (unsigned short)((unsigned short)si + 0xc));
++  g_fist_cf = (dz < 0x500u) ? 1 : 0;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_9c97) @ 0000:9c97 ===== */
++
++void __allregs FUN_0000_9c97(int si,int di)
++
++{
++  /* PATCH 564: type-0x15 (the map's trees) interaction: `clc ; ret` -- projectiles pass through.  (9c99,
++   * the height-table variant right behind it, is not in the 0xe518 table.) */
++  extern unsigned char g_fist_cf;
++  (void)si; (void)di;
++  g_fist_cf = 0;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_a0a1) @ 0000:a0a1 ===== */
++
++void __allregs FUN_0000_a0a1(int si,int di)
++
++{
++  /* PATCH 564: type-5/6 interaction (asm 0000:a0a1): `call 0x291` (AL = random byte) ; `mov bx,[di] ;
++   * cmp al,[bx+0x95e4] ; jae clc` -- a per-PROJECTILE-type hit chance, byte table DGROUP:0x95e4 (type 7
++   * = 0x80, 8..13 = 0x26/0x4c, 15 = 0xfd); then `eax = [di+0xc]-[si+0xc] ; cmp eax,0x200 ; jg clc ;
++   * cmp eax,-0x200 ; jl clc ; stc` -- a SIGNED Z band of +-0x200. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int dio = (unsigned short)di, sio = (unsigned short)si;
++  unsigned char al = (unsigned char)(unsigned int)FUN_0000_0291();
++  unsigned short ptype = *(unsigned short *)(dg + dio);
++  if (al >= dg[(unsigned short)(0x95e4 + ptype)]) { g_fist_cf = 0; return; }
++  int32_t dz = (int32_t)(*(uint32_t *)(dg + (unsigned short)(dio + 0xc)) - *(uint32_t *)(dg + (unsigned short)(sio + 0xc)));
++  if (dz > 0x200 || dz < -0x200) { g_fist_cf = 0; return; }
++  g_fist_cf = 1;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_bd69) @ 0000:bd69 ===== */
++
++void __allregs FUN_0000_bd69(int si,int di)
++
++{
++  /* PATCH 564: type-0x1a structure interaction (asm 0000:bd69): `eax = [di+0xc]-[si+0xc] ; bx =
++   * byte[si+0x19]*2 ; ebx = word[0x9ebf+bx]` (the variant's height, zero-extended) ; `test byte[di+0x19],4
++   * ; jz ; shr ebx,2` (a flagged projectile gets a quarter of the band) ; `cmp eax,ebx ; jae clc ; stc`
++   * (UNSIGNED). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int dio = (unsigned short)di, sio = (unsigned short)si;
++  uint32_t dz = *(uint32_t *)(dg + (unsigned short)(dio + 0xc)) - *(uint32_t *)(dg + (unsigned short)(sio + 0xc));
++  uint32_t band = *(uint16_t *)(dg + (unsigned short)(0x9ebf + (dg[(unsigned short)(sio + 0x19)] << 1)));
++  if (dg[(unsigned short)(dio + 0x19)] & 4) band >>= 2;
++  g_fist_cf = (dz < band) ? 1 : 0;
++  return;
++}
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c31c) @ 0000:c31c ===== */
++
++void __allregs FUN_0000_c31c(int si,int di)
++
++{
++  /* PATCH 564: the DEFAULT interaction for 18 of the 28 types in the 0xe518 table (04, 07..14, 16, 18,
++   * 19): `clc ; ret` -- no interaction.  Its absence is what turned every 2-D range contact with the
++   * type-0x10 markers into a hit. */
++  extern unsigned char g_fist_cf;
++  (void)si; (void)di;
++  g_fist_cf = 0;
++  return;
++}
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c157) @ 0000:c157 ===== */
+ 
+@@ -75821,6 +75999,7 @@
+   {0x7b21u,(void*)&FUN_0000_7b21},
+   {0x7b91u,(void*)&FUN_0000_7b91},
+   {0x7bcfu,(void*)&FUN_0000_7bcf},
++  {0x7c09u,(void*)&FUN_0000_7c09},   /* PATCH 564 */
+   {0x7c1du,(void*)&FUN_0000_7c1d},
+   {0x7c91u,(void*)&FUN_0000_7c91},
+   {0x7cb1u,(void*)&FUN_0000_7cb1},
+@@ -75921,6 +76100,7 @@
+   {0x871au,(void*)&FUN_0000_871a},
+   {0x8744u,(void*)&FUN_0000_8744},
+   {0x8791u,(void*)&FUN_0000_8791},
++  {0x87cbu,(void*)&FUN_0000_87cb},   /* PATCH 564 */
+   {0x87dfu,(void*)&FUN_0000_87df},
+   {0x8858u,(void*)&FUN_0000_8858},
+   {0x8878u,(void*)&FUN_0000_8878},
+@@ -75998,6 +76178,7 @@
+   {0x8f8du,(void*)&FUN_0000_8f8d},
+   {0x8f9fu,(void*)&FUN_0000_8f9f},
+   {0x8fdeu,(void*)&FUN_0000_8fde},
++  {0x9018u,(void*)&FUN_0000_9018},   /* PATCH 564 */
+   {0x902cu,(void*)&FUN_0000_902c},
+   {0x90a0u,(void*)&FUN_0000_90a0},
+   {0x90c0u,(void*)&FUN_0000_90c0},
+@@ -76070,6 +76251,7 @@
+   {0x96dau,(void*)&thunk_FUN_0000_96cb},
+   {0x973au,(void*)&FUN_0000_973a},
+   {0x9787u,(void*)&FUN_0000_9787},
++  {0x97c1u,(void*)&FUN_0000_97c1},   /* PATCH 564 */
+   {0x97d5u,(void*)&FUN_0000_97d5},
+   {0x984eu,(void*)&FUN_0000_984e},
+   {0x986eu,(void*)&FUN_0000_986e},
+@@ -76105,6 +76287,7 @@
+   {0x9c4fu,(void*)&FUN_0000_9c4f},
+   {0x9c5du,(void*)&FUN_0000_9c5d},
+   {0x9c76u,(void*)&FUN_0000_9c76},
++  {0x9c97u,(void*)&FUN_0000_9c97},   /* PATCH 564 */
+   {0x9c99u,(void*)&FUN_0000_9c99},
+   {0x9cb6u,(void*)&FUN_0000_9cb6},
+   {0x9cc9u,(void*)&FUN_0000_9cc9},
+@@ -76128,6 +76311,7 @@
+   {0xa069u,(void*)&FUN_0000_a069},
+   {0xa07cu,(void*)&FUN_0000_a07c},
+   {0xa097u,(void*)&FUN_0000_a097},
++  {0xa0a1u,(void*)&FUN_0000_a0a1},   /* PATCH 564 */
+   {0xa0c8u,(void*)&FUN_0000_a0c8},
+   {0xa135u,(void*)&FUN_0000_a135},
+   {0xa15au,(void*)&FUN_0000_a15a},
+@@ -76278,6 +76462,7 @@
+   {0xb2dfu,(void*)&FUN_0000_b2df},
+   {0xb32fu,(void*)&FUN_0000_b32f},
+   {0xb355u,(void*)&FUN_0000_b355},
++  {0xb382u,(void*)&FUN_0000_b382},   /* PATCH 564 */
+   {0xb396u,(void*)&FUN_0000_b396},
+   {0xb407u,(void*)&FUN_0000_b407},
+   {0xb40bu,(void*)&FUN_0000_b40b},
+@@ -76321,10 +76506,12 @@
+   {0xbbc6u,(void*)&FUN_0000_bbc6},
+   {0xbc0cu,(void*)&FUN_0000_bc0c},
+   {0xbc2cu,(void*)&FUN_0000_bc2c},
++  {0xbc32u,(void*)&FUN_0000_bc32},   /* PATCH 564 */
+   {0xbc46u,(void*)&FUN_0000_bc46},
+   {0xbcbfu,(void*)&FUN_0000_bcbf},
+   {0xbcd5u,(void*)&FUN_0000_bcd5},
+   {0xbd09u,(void*)&FUN_0000_bd09},
++  {0xbd69u,(void*)&FUN_0000_bd69},   /* PATCH 564 */
+   {0xbd90u,(void*)&FUN_0000_bd90},
+   {0xbdb8u,(void*)&FUN_0000_bdb8},
+   {0xbdccu,(void*)&FUN_0000_bdcc},
+@@ -76375,6 +76562,7 @@
+   {0xc2fbu,(void*)&FUN_0000_c2fb},
+   {0xc30eu,(void*)&FUN_0000_c30e},
+   {0xc30fu,(void*)&FUN_0000_c30f},
++  {0xc31cu,(void*)&FUN_0000_c31c},   /* PATCH 564 */
+   {0xc31eu,(void*)&FUN_0000_c31e},
+   {0xc335u,(void*)&FUN_0000_c335},
+   {0xc336u,(void*)&FUN_0000_c336},

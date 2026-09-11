@@ -1,0 +1,49 @@
+PATCH 568: FUN_1000_60e5, the side-table CLEAR on a failed wreck spawn, walked the 32 WORD slots as ints.
+
+a93e (the vehicle destroy, patches 281/462) replaces the dead vehicle in the side table 0x6d3c by its
+wreck through 60f9 when b1df(0x17) succeeds, and CLEARS the slot through 60e5 when it fails -- the
+small-object roster is capped at 150 and an explosion's effects can fill it at the moment a vehicle
+dies.  60f9 was rebuilt by patch 462; 60e5 stayed pristine: `piVar2 = (int *)&DAT_2000_2d3c; ...
+piVar2 + 1` -- a 4-byte stride over 4-byte compares against a 16-bit near offset -- so it never
+cleared anything.  The dead vehicle's record (type 0x13, never 0x17) stayed in the table and the side
+counter at 1a6049 (`cmpw $0x17,(%di)`) kept it alive: the DEFEAT edge `cmpb $0,0x6d38` could not fire.
+
+Measured: AZER1 self-play with 562-567 ended TIME EXPIRED with alive=1/11 and player=ce16 of type 0x13.
+The original's DEFEAT dump shows all four own slots pointing at type-0x17 wrecks (b41d b0e4 b076 ae87)
+-- 60f9's swap -- or cleared.
+
+--- a/fist.c
++++ b/fist.c
+@@ -59453,18 +59453,20 @@
+ void __allregs FUN_1000_60e5(int param_1)
+ 
+ {
+-  int iVar1;
+-  int *piVar2;
+-  
+-  iVar1 = 0x20;
+-  piVar2 = (int *)&DAT_2000_2d3c;
+-  do {
+-    if (param_1 == *piVar2) {
+-      *piVar2 = 0;
+-    }
+-    piVar2 = piVar2 + 1;
+-    iVar1 = iVar1 + -1;
+-  } while (iVar1 != 0);
++  /* PATCH 568: side-table CLEAR (asm 0x160e5-0x160f8): `mov cx,0x20 ; mov si,0x6d3c ; loop: cmp [si],di ;
++   * jne ; movw [si],0 ; add si,2` -- 32 WORD slots, DI = the object being removed.  a93e takes this
++   * branch when the wreck spawn b1df(0x17) fails (small-object roster at its 150 cap -- an explosion's
++   * effects can fill it exactly when a vehicle dies).  Ghidra walked the table as int* (4-byte stride
++   * over 4-byte values), so the dead vehicle was never cleared: its record, still type 0x13, stayed in
++   * the table and the 1a6049 side count kept it ALIVE, which is why an AZER1 self-play ended TIME
++   * EXPIRED with own=1 and the player sitting in a type-0x13 wreck while the original reaches DEFEAT.
++   * 60f9, the success-path twin, is patch 462. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int i;
++  for (i = 0; i < 0x20; i++) {
++    if (*(unsigned short *)(dg + 0x6d3c + i * 2) == (unsigned short)param_1)
++      *(unsigned short *)(dg + 0x6d3c + i * 2) = 0;
++  }
+   return;
+ }
+ 
