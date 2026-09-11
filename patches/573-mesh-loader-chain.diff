@@ -1,0 +1,1127 @@
+PATCH 573: the mesh loader chain -- 19d1/1a45/183f/1692/1735 rebuilt, the FILEMGR leaves carry DS and CF,
+extender ops 0x3c/0x4c, the resource relocation callback 15c2, and three arg-less cockpit blits.
+
+board:0025.  With 571 (the model budget) and 572 (0c7f's unlink) the STRSEG:0x802 model walk reached
+every model, and each load failed one level down.  The chain, read from the asm and rebuilt 1:1:
+
+  183f  the per-model LOD driver (lod&8: 19d1 + 1a45('00') + 197b + 1a45('08') + 1996; lod&0x10:
+        1a45('16') + 19b9; lod&0x20: 1a45('32')); every CF hard-wired false before -> now g_fist_cf
+        from the loaders, the 18dc release tail with the failing lod class in cx.
+  19d1  the .MAL loader: [0x550] name, ".MAL" swapped into [0x748]/[0x74a], 1 KB through [0xe4] into
+        DGROUP:0x26e4[idx], [0x384] batch load into that segment (DAT_1000_2b5e for 2593), extender op
+        0x4c (cx=dx=seg, si=0, di=0x300) -> the 256-byte palette-remap LUT at seg:0x300.  Ghidra had
+        fabricated the CFs as `0xd91b < idx*2` and called every vector without arguments.
+  1a45  the streaming mesh loader: [0x38c] open, 16-byte record headers through [0x394], the facing
+        indices rotated by -0x20 mod 0x40, the descriptor slot word[rec+0x44+2*min], the scratch
+        segment through [0xe4] (handle DGROUP:0x3ad6, freed and re-allocated per record by 184b's
+        bit-7 path), the body read with DS = that segment, word[0x276c+idx] = the part count, the
+        texel translation through the .MAL LUT unless byte[0x3ada], op 0x3c (cx = es:[0], dx:si =
+        es:0) whose EDX goes to es:[2], the final allocation into the descriptor and the rep movsb,
+        the close with the slot in bx.  The fabricated open-CF had leaked 276e's four slots (0025).
+  1692  1684's twin (byte[0x3ada]=0xff, the two models without palette translation): 183f's CF and
+        `call 1724` = `pop ax ; stc ; ret` (return CF=1 when the facing-0 descriptor is unallocated).
+  1735  the third table vector (TREES, three entries) promoted and dispatched from 4308 like 1684; it
+        had trapped, so TREES.* never loaded.
+  1774  [0xe4]: bytes -> paragraphs with the 17-bit carry, then 177f (patch 571) -- the guard byte
+        was DAT_2000_d1d4 (g_mem+0x2d1d4, the SS=0x2ba9 placeholder), a stray byte in the DOS heap.
+  27f7/2871  the READ leaf's INT 21h reads the caller's DS:DX; DS is threaded (1a45 reads into the
+        scratch segment); the leaf's CF is INT 21h's.  276e: CF=1 when all four slots are taken, CF=0
+        on the no-variant exit; 2825 and 2593 return their CF (open failures) through g_fist_cf.
+  11f4  (fist_ext.c) extender op 0x3c: the source is (dx<<4)+si+[0x807] in the guest-RAM window =
+        g_mem (Ghidra read [0x807] as the DGROUP word), and the append position inside the model
+        block -- the handler's EDX -- is published in g_fist_ext_edx_out.
+  gate  (tools/native_main.c) ops 0x3c (11f4 with the patch-471 register lanes) and 0x4c (123f ->
+        9e60: the .MAL palette remap).  fist_dos.c: INT 21h AH=43 is an existence probe, as DOS's --
+        the FILEMGR's variant walks (276e/2733/26fc/2825) select the on-disk file with it.
+  15c2  the resource-object relocation callback 1541 installs ([S+4]=0x15c2, [S+6]=CS) and the
+        MEMMGR's 1019 far-calls with AX=old paragraph, DX=new, BX=kind: `call cs:[bx+0x15c9] ; retf`
+        over {15d9, 15c8 x6, 15fa}.  Unpromoted before, so every block move left the sprite directory
+        [0x4f0] pointing at the old paragraphs; 15d9 (move the entries' segment words by dx-ax) and
+        15fa (re-home them to dx) rebuilt -- Ghidra had host-deref'd es:[0]/es:[2] and dropped [0x4f0].
+        1019 passes bx as the third argument.
+  7fcd/5a1d/3823  three arg-less MGA blit sites of patch 520/531's class, reached in the AZER1
+        self-play once real sprite sheets were loaded: 7fcd (the azimuth needle, [0x6c8] x2) blitted a
+        stack value as its sprite id -> a wild record whose header height ran 298a thousands of rows
+        past the 288x81 view surface, over MSPRITE2's block and its directory header; 5a1d ([0x60a]
+        al=0x17, [0x61a] al=1, [0x6c8] ax=0xfc8) and 3823 (ax=[bx+0x32], bx=0x6c16) likewise.  3823's
+        rect right edge is left + the WIDTH byte (384f `mov dh,0` before 3860 `add ax,dx`); patch 391
+        added the whole header word.  121 sites of the class remain (board:0015).
+
+Measured (FIST_OPENLOG vs the oracle's LD_PRELOAD open trace, AZER1 accept): the 160 model files now
+open in the original's order, file for file (M1_A.MAL .. HIND.M32, TREES included); MSN2.MS3,
+MSPRITE5.BIN, MSPRITE1.BIN, M1CON.MRL follow as in the original.  Still different: the original opens
+BURM_D2.KLC/BURM_C2.KLC five times between the models and MSN2.MS3 (the TCB's default map names at
+DGROUP:0xea7c -- an extender op the gate does not run yet), RESOURCE.RES x4 where the port reads the
+loose *.MEG files, WVSOUNDS.BIN/DSOUNDS.BIN (sound), INTRO.MS3 (boot); the port additionally opens
+MSPRITE2.BIN/M2CON.MRL/CCV.MRL after the player's vehicle dies (7eb7's view reset).  The self-play
+runs to DEFEAT (own side lost) at 3:38 mission time without a crash or hang; the original's DEFEAT
+comes at 5:49 -- the sim is not yet congruent (board:0017).
+--- a/fist.c
++++ b/fist.c
+@@ -161,6 +161,7 @@
+ void __allregs FUN_0000_159d(int param_1,int param_2,int param_3,int *param_4,int *param_5,undefined2 param_6);
+ void __allregs FUN_0000_15a8(int param_1,int *param_2,undefined2 *param_3,undefined2 param_4);
+ void __allregs FUN_0000_15b3(int param_1,int param_2,int *param_3,undefined2 *param_4,undefined2 param_5);
++void __allregs FUN_0000_15c2(int param_1,int param_2,int param_3);   /* PATCH 573: the resource relocation callback */
+ void __allregs FUN_0000_15c8(void);
+ void __allregs FUN_0000_15cb(int param_1,int param_2,undefined2 *param_3);
+ void __allregs FUN_0000_15d9(int param_1,int param_2);
+@@ -174,6 +175,7 @@
+ undefined2 * __allregs FUN_0000_1692(undefined2 *param_1,uint param_2,undefined4 param_3,undefined2 param_4, undefined2 param_5);
+ undefined2 __allregs FUN_0000_1724(undefined2 param_1);
+ void __allregs FUN_0000_1827(undefined2 param_1);
++undefined2 __allregs FUN_0000_1735(undefined2 param_1,uint param_2,undefined4 param_3,undefined2 param_4, undefined2 param_5);   /* PATCH 573: the third STRSEG:0x802 loader vector */
+ undefined2 __allregs FUN_0000_183f(undefined2 param_1,uint param_2,undefined4 param_3,undefined2 param_4, undefined2 param_5);
+ void __allregs FUN_0000_18dc(int param_1,int param_2);
+ void __allregs FUN_0000_197b(void);
+@@ -1714,7 +1716,7 @@
+ void __allregs FUN_1000_161d(int param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_1000_1727(int param_1,int param_2,int param_3);
+ undefined4 __allregs FUN_1000_175d(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+-void __allregs FUN_1000_1774(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
++uint __allregs FUN_1000_1774(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);   /* PATCH 573: CF/BX out through 177f */
+ uint __allregs FUN_1000_1796(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ uint __allregs FUN_1000_177f(int param_1,uint param_2,undefined2 param_3);   /* PATCH 571: the [0xe8] allocator front-end */
+ extern unsigned short g_fist_177f_bx;   /* PATCH 571: 177f's BX out (the largest free block on failure) */
+@@ -1780,12 +1782,12 @@
+ void __allregs FUN_1000_2765(int param_1,int param_2,undefined2 param_3);
+ uint __allregs FUN_1000_276e(uint param_1,int param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_1000_27e2(int param_1);
+-int  __allregs FUN_1000_27f7(int param_1,int param_2,int param_3);  /* PATCH 160: slot,cx,dx */
++int  __allregs FUN_1000_27f7(int param_1,int param_2,int param_3,int param_4);  /* PATCH 160: slot,cx,dx ; PATCH 573: ds */
+ int  __allregs FUN_1000_280a(int param_1,int param_2,int param_3);  /* PATCH 160: slot,cx,dx */
+ void __allregs FUN_1000_281e(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+ undefined2 __allregs FUN_1000_2825(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+ void __allregs FUN_1000_2867(int param_1);                         /* PATCH 160: FILEMGR v0 CLOSE */
+-int __allregs FUN_1000_2871(int param_1,int param_2,int param_3);  /* PATCH 160: FILEMGR v0 READ  */
++int __allregs FUN_1000_2871(int param_1,int param_2,int param_3,int param_4);  /* PATCH 160: FILEMGR v0 READ ; PATCH 573: ds */
+ int __allregs FUN_1000_287b(int param_1,int param_2,int param_3);  /* PATCH 160: FILEMGR v0 SEEK  */
+ void __allregs FUN_1000_288e(void);
+ void __allregs FUN_1000_2890(void);
+@@ -7716,6 +7718,24 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_15c2) @ 0000:15c2 ===== */
++
++void __allregs FUN_0000_15c2(int param_1,int param_2,int param_3)
++
++{
++  /* PATCH 573: the resource-object callback 1541 installs in every descriptor ([S+4] = 0x15c2, [S+6] =
++   * CS) and the MEMMGR's 1019 far-calls with AX = the block's paragraph, DX = the candidate paragraph
++   * and BX = the notification kind: `call cs:[bx+0x15c9] ; retf`, table {15d9, 15c8 x6, 15fa} for
++   * bx = 0, 2 .. 0xe.  It was unpromoted: the icall trap swallowed every relocation notice, so a
++   * moved resource block left the sprite directory [0x4f0] pointing at its old paragraphs. */
++  static const uint16_t tab[8] = { 0x15d9, 0x15c8, 0x15c8, 0x15c8, 0x15c8, 0x15c8, 0x15c8, 0x15fa };
++  uint16_t m = tab[((uint16_t)param_3 >> 1) & 7];
++  if (m == 0x15d9) FUN_0000_15d9(param_1, param_2);
++  else if (m == 0x15fa) FUN_0000_15fa(param_2);
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_15c8) @ 0000:15c8 ===== */
+ 
+ void __allregs FUN_0000_15c8(void)
+@@ -7784,16 +7804,19 @@
+ void __allregs FUN_0000_15d9(int param_1,int param_2)
+ 
+ {
+-  undefined2 uVar1;
+-  int iVar2;
+-  int *piVar3;
+-  
+-  uVar1 = DAT_1000_c4f0;
+-  piVar3 = (int *)(*(int *)0x0 + 2);
+-  for (iVar2 = *(int *)&DAT_1000_c002; iVar2 != 0; iVar2 = iVar2 + -1) {
+-    *piVar3 = *piVar3 - (param_1 - param_2);
+-    piVar3 = piVar3 + 4;
+-  }
++  /* PATCH 573: the resource directory's RELOCATION method (15c2 kind 0), asm 0x15d9-0x15f9.  AX = the
++   * resource block's old paragraph, DX = its new one (1019: ax=node.base, dx=candidate.base).  The
++   * block's first two words are the directory index of its first entry and its entry count; every
++   * entry's segment word (entries are 8 bytes, the segment at +2) in the directory segment [0x4f0] is
++   * moved by dx-ax.  Ghidra host-deref'd es:[0]/es:[2] as address 0/DGROUP:2 and dropped [0x4f0]. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char *blk = g_mem + ((uint32_t)(uint16_t)param_1 << 4);          /* 15d9 mov es,ax */
++  unsigned char *dir = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x4f0) << 4);  /* 15ed mov ds,[0x4f0] */
++  uint16_t di = (uint16_t)(*(uint16_t *)(blk + 0) + 2);                     /* 15db/15e0 */
++  uint16_t cx = *(uint16_t *)(blk + 2);                                     /* 15e3 */
++  uint16_t ax = (uint16_t)((uint16_t)param_1 - (uint16_t)param_2);          /* 15e8 sub ax,dx */
++  for (; cx != 0; cx--, di = (uint16_t)(di + 8))                            /* 15ea jcxz ; 15f1..15f6 */
++    *(uint16_t *)(dir + di) -= ax;
+   return;
+ }
+ 
+@@ -7803,21 +7826,17 @@
+ void __allregs FUN_0000_15fa(int param_1)
+ 
+ {
+-  int iVar1;
+-  undefined2 uVar2;
+-  int iVar3;
+-  int *piVar4;
+-  
+-  uVar2 = DAT_1000_c4f0;
+-  piVar4 = (int *)(*(int *)0x0 + 2);
+-  iVar3 = *(int *)&DAT_1000_c002;
+-  if (iVar3 != 0) {
+-    iVar1 = *piVar4;
+-    do {
+-      *piVar4 = *piVar4 - (iVar1 - param_1);
+-      piVar4 = piVar4 + 4;
+-      iVar3 = iVar3 + -1;
+-    } while (iVar3 != 0);
++  /* PATCH 573: the resource directory's RE-HOME method (15c2 kind 0xe, 0d2e's reload path), asm
++   * 0x15fa-0x161c: DX = the block's paragraph; every entry the block owns (index es:[0], count
++   * es:[2]) gets its segment word set to DX (`ax=[di] ; sub ax,dx ; sub [di],ax`). */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char *blk = g_mem + ((uint32_t)(uint16_t)param_1 << 4);          /* 15fa mov es,dx */
++  unsigned char *dir = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x4f0) << 4);  /* 160c mov ds,[0x4f0] */
++  uint16_t di = (uint16_t)(*(uint16_t *)(blk + 0) + 2);
++  uint16_t cx = *(uint16_t *)(blk + 2);
++  for (; cx != 0; cx--, di = (uint16_t)(di + 8)) {
++    uint16_t ax = (uint16_t)(*(uint16_t *)(dir + di) - (uint16_t)param_1);
++    *(uint16_t *)(dir + di) -= ax;
+   }
+   return;
+ }
+@@ -7930,65 +7949,60 @@
+              undefined2 param_5)
+ 
+ {
+-  byte *pbVar1;
+-  int *piVar2;
+-  int iVar3;
+-  int *piVar4;
+-  int iVar5;
+-  bool bVar6;
+-  
+-  DAT_1000_e68c = (undefined2 *)0x0;
+-  bVar6 = false;
+-  DAT_1000_e674 = param_1;
+-  DAT_1000_e676 = param_4;
+-  DAT_1000_e678 = param_2;
+-  if ((param_2 & 8) != 0) {
+-    FUN_0000_183f(param_1,param_2,param_3,param_4,param_5);
+-    if (bVar6) {
+-      FUN_0000_18dc(DAT_1000_e674,8);
+-      return DAT_1000_e68c;
+-    }
+-    /* PATCH 165 (asm 0x16be..0x1715): ES=DS=DGROUP; every ptr here is a DGROUP near-offset (or a
+-       segment loaded from one), not a host ptr.  mrec = word[DGROUP:(word[DGROUP:0x2674])+0x27f4] =
+-       the model-record base near-offset (asm 16be `mov si,[0x2674]; mov si,[si+0x27f4]`); Ghidra
+-       rendered it as DAT_1000_e674[0x13fa] (int** with the 0x27f4/2=0x13fa scaling) -> a wild host
+-       deref = the SIGSEGV (gdb fault at 1692+231, chain 4308->1684->1692).  The descriptor near-offset
+-       di = word[DGROUP:(mrec+0x20)] (16c6/16c9).  asm 16e3 also loads ES from word[DGROUP:di] and
+-       copies es:[6]->es:[8] (a SEGMENT window, NOT DGROUP:c006/c008 which Ghidra emitted).  All
+-       offsets are 16-bit -> in-bounds; the fan-out/fill logic is otherwise instruction-faithful.
+-       Model-loader path; not reached by the 19 verify flows (a bare host deref would already SIGSEGV
+-       them).  Same DGROUP base-loss class as patches 163/164 (1996/19b9). */
+-    {
+-      unsigned char *dg = g_mem + 0x1c000;
+-      uint16_t mrec = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4));
+-      uint16_t di = *(uint16_t *)(dg + (uint16_t)(mrec + 0x20));      /* 16c9 mov di,[si] */
+-      unsigned char *pb = dg + (uint16_t)(di + 2);                    /* 16cb byte[DGROUP:di+2] */
+-      int i;
+-      *pb |= 0x20;
+-      if ((char)*pb < '\0') {                                        /* 16cf jns -> else */
+-        if ((*pb & 0x10) != 0) {                                      /* 16d1 testb 0x10 */
+-          FUN_1000_0d2e(di,param_5,di);                              /* 16d9 lcall f69:169e (ax=di) */
+-        }
+-      }
+-      else {
+-        FUN_0000_1724(0x16e3);                                       /* 16e0 (identity) */
+-      }
+-      {
+-        uint16_t seg = *(uint16_t *)(dg + di);                        /* 16e3 mov es,[DGROUP:di] */
+-        unsigned char *es = g_mem + ((uint32_t)seg << 4);
+-        *(uint16_t *)(es + 8) = *(uint16_t *)(es + 6);               /* 16e5/16e9 es:[8]=es:[6] */
+-      }
+-      {                                                               /* 16f3 rep stosw: fill 0x20 words */
+-        uint16_t p = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4));  /* = mrec */
+-        for (i = 0x20; i != 0; i--) { *(uint16_t *)(dg + p) = di; p = (uint16_t)(p + 2); }
+-      }
+-      {                                                               /* 1708 orb[DGROUP:di+2]|=0x22 x0x10 */
+-        uint16_t p = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4)) + 0x44);
+-        for (i = 0x10; i != 0; i--) { *(dg + (uint16_t)(p + 2)) |= 0x22; p = (uint16_t)(p + 4); }
++  /* PATCH 573: asm 0x1692-0x1726 (DS=ES=DGROUP), the loader vector behind 1684 (the byte[0x3ada]=0xff
++   * "no palette translation" twin of 183f; STRSEG:0x802 entries for the two 1684 models).  AX=model
++   * index, BX=name index, CX=lod bits -- 183f's varnode order (patch 467).  Two CFs Ghidra hard-wired
++   * to false: 183f's (16bc `jb 1719` -> 18dc(cx=8), stc) and 16cf `jns 16e0` -> `call 1724` = `pop ax ;
++   * stc ; ret`, which returns from THIS function with CF=1 when the facing-0 descriptor word[rec+0x20]
++   * is not allocated (flags bit 7 clear) -- rendered as an identity call before.  Patch 165's body
++   * (the descriptor touch, es:[8]=es:[6], the 0x20-word fill, the 0x10 |=0x22 marks) is unchanged. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = g_mem + 0x1c000;
++  uint16_t mrec, di;
++  unsigned char *pb;
++  int i;
++
++  *(uint16_t *)(dg + 0x268c) = 0;
++  *(uint16_t *)(dg + 0x2674) = (uint16_t)(uintptr_t)param_1;
++  *(uint16_t *)(dg + 0x2676) = (uint16_t)param_4;
++  *(uint16_t *)(dg + 0x2678) = (uint16_t)param_2;
++  if ((*(uint16_t *)(dg + 0x2678) & 8) != 0) {
++    g_fist_cf = 0;
++    FUN_0000_183f(*(uint16_t *)(dg + 0x2674), *(uint16_t *)(dg + 0x2678), 0, *(uint16_t *)(dg + 0x2676), 0);
++    if (g_fist_cf) {                                                  /* 16bc jb 1719 */
++      FUN_0000_18dc((int)*(uint16_t *)(dg + 0x2674), 8);
++      g_fist_cf = 1;                                                  /* 1722 stc */
++      return (undefined2 *)(uintptr_t)*(uint16_t *)(dg + 0x268c);
++    }
++    mrec = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4));
++    di = *(uint16_t *)(dg + (uint16_t)(mrec + 0x20));                 /* 16c9 mov di,[si] */
++    pb = dg + (uint16_t)(di + 2);                                     /* 16cb orb [di+2],0x20 */
++    *pb |= 0x20;
++    if ((char)*pb < '\0') {                                           /* 16cf jns 16e0 */
++      if ((*pb & 0x10) != 0) {                                        /* 16d1 testb [di+2],0x10 */
++        FUN_1000_0d2e(di,param_5,di);                                 /* 16d9 lcall f69:169e (ax=di) */
+       }
+-      param_1 = (undefined2 *)(uintptr_t)di;                          /* 1717 clc; ret ax=di */
+     }
++    else {
++      g_fist_cf = 1;                                                  /* 16e0 call 1724 = pop ax ; stc ; ret */
++      return (undefined2 *)(uintptr_t)0x16e3;
++    }
++    {
++      uint16_t seg = *(uint16_t *)(dg + di);                          /* 16e3 mov es,[DGROUP:di] */
++      unsigned char *es = g_mem + ((uint32_t)seg << 4);
++      *(uint16_t *)(es + 8) = *(uint16_t *)(es + 6);                  /* 16e5/16e9 es:[8]=es:[6] */
++    }
++    {                                                                 /* 16f3 rep stosw: 0x20 words = di */
++      uint16_t p = mrec;
++      for (i = 0x20; i != 0; i--) { *(uint16_t *)(dg + p) = di; p = (uint16_t)(p + 2); }
++    }
++    {                                                                 /* 1708 orb [di+2],0x22 x0x10, stride 4 */
++      uint16_t p = (uint16_t)(mrec + 0x44);
++      for (i = 0x10; i != 0; i--) { *(dg + (uint16_t)(p + 2)) |= 0x22; p = (uint16_t)(p + 4); }
++    }
++    param_1 = (undefined2 *)(uintptr_t)di;                            /* ax = di */
+   }
++  g_fist_cf = 0;                                                      /* 1717 clc ; ret */
+   return param_1;
+ }
+ 
+@@ -8012,6 +8026,84 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_1735) @ 0000:1735 ===== */
++
++undefined2 __allregs
++FUN_0000_1735(undefined2 param_1,uint param_2,undefined4 param_3,undefined2 param_4,
++             undefined2 param_5)
++
++{
++  /* PATCH 573: asm 0x1735-0x182e, the third STRSEG:0x802 loader vector (model 0x3a's three entries
++   * carry it; 4308 dispatched it through the icall trap = a silent skip).  Same varnode order as 183f.
++   * lod&8: 183f, then word[rec+0x30] = word[rec+0x2e] = word[rec+0x20]; lod&0x10 and lod&0x20: 183f
++   * again, each with its own cx for the 1827 release tail (18dc, stc).  Then the eight descriptors
++   * word[rec+0x20..0x2e] are touched (|0x20; 0d2e when bit 4; es:[8]=es:[6] when bit 7 -- `call 17df`
++   * = `add sp,2` skips that copy otherwise), rec+0x20..0x2f is copied to rec+0x30.. and then
++   * rec+0x20..0x3f to rec+0x40.., and nine descriptors from rec+0x44 (stride 4) get |0x22. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = g_mem + 0x1c000;
++  uint16_t cx, rec, si, di;
++  int i;
++
++  *(uint16_t *)(dg + 0x268c) = 0;
++  *(uint16_t *)(dg + 0x2674) = (uint16_t)param_1;
++  *(uint16_t *)(dg + 0x2676) = (uint16_t)param_4;
++  *(uint16_t *)(dg + 0x2678) = (uint16_t)param_2;
++  (void)param_3;
++#define M573_183F(lodcx) do {                                                                  \
++    g_fist_cf = 0;                                                                             \
++    FUN_0000_183f(*(uint16_t *)(dg + 0x2674), *(uint16_t *)(dg + 0x2678), 0,                   \
++                  *(uint16_t *)(dg + 0x2676), 0);                                              \
++    cx = (lodcx); if (g_fist_cf) goto release; } while (0)
++  if ((*(uint16_t *)(dg + 0x2678) & 8) != 0) {
++    M573_183F(8);                                                     /* 1759 */
++    rec = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4));
++    *(uint16_t *)(dg + (uint16_t)(rec + 0x30)) = *(uint16_t *)(dg + (uint16_t)(rec + 0x20));
++    *(uint16_t *)(dg + (uint16_t)(rec + 0x2e)) = *(uint16_t *)(dg + (uint16_t)(rec + 0x20));
++  }
++  if ((*(uint16_t *)(dg + 0x2678) & 0x10) != 0) {
++    M573_183F(0x10);                                                  /* 1785 */
++  }
++  if ((*(uint16_t *)(dg + 0x2678) & 0x20) != 0) {
++    M573_183F(0x20);                                                  /* 17a0 */
++  }
++#undef M573_183F
++  rec = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4));
++  si = (uint16_t)(rec + 0x20);
++  for (i = 8; i != 0; i--, si = (uint16_t)(si + 2)) {                 /* 17b8..17e5 */
++    unsigned char *pb;
++    di = *(uint16_t *)(dg + si);
++    pb = dg + (uint16_t)(di + 2);
++    *pb |= 0x20;                                                      /* 17ba orb [di+2],0x20 */
++    if ((char)*pb < '\0') {                                           /* 17be jns 17cf (-> call 17df: skip) */
++      if ((*pb & 0x10) != 0) {                                        /* 17c0 testb [di+2],0x10 */
++        FUN_1000_0d2e(di,param_5,di);                                 /* 17c8 lcall f69:169e (ax=di) */
++      }
++      {
++        uint16_t seg = *(uint16_t *)(dg + di);                        /* 17d2 mov es,[di] */
++        unsigned char *es = g_mem + ((uint32_t)seg << 4);
++        *(uint16_t *)(es + 8) = *(uint16_t *)(es + 6);                /* 17d4/17d8 es:[8]=es:[6] */
++      }
++    }
++  }
++  for (i = 0; i < 8; i++)                                             /* 17fc rep movsw x8: rec+0x20.. -> rec+0x30.. */
++    *(uint16_t *)(dg + (uint16_t)(rec + 0x30 + i * 2)) = *(uint16_t *)(dg + (uint16_t)(rec + 0x20 + i * 2));
++  for (i = 0; i < 0x10; i++)                                          /* 180c rep movsw x16: rec+0x20.. -> rec+0x40.. */
++    *(uint16_t *)(dg + (uint16_t)(rec + 0x40 + i * 2)) = *(uint16_t *)(dg + (uint16_t)(rec + 0x20 + i * 2));
++  di = (uint16_t)(rec + 0x44);
++  for (i = 9; i != 0; i--) {                                          /* 181c orb [di+2],0x22 x9, stride 4 */
++    *(dg + (uint16_t)(di + 2)) |= 0x22;
++    di = (uint16_t)(di + 4);
++  }
++  g_fist_cf = 0;                                                      /* 1825 clc ; ret (ax = ds) */
++  return 0x1c00;
++release:                                                              /* 1827 */
++  FUN_0000_18dc((int)*(uint16_t *)(dg + 0x2674), (int)cx);
++  g_fist_cf = 1;                                                      /* 182d stc */
++  return *(uint16_t *)(dg + 0x2674);
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_183f) @ 0000:183f ===== */
+ 
+ undefined2 __allregs
+@@ -8019,56 +8111,50 @@
+              undefined2 param_5)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined2 in_register_0000000e;
+-  undefined4 uVar2;
+-  undefined2 uVar3;
+-  undefined1 uVar4;
+-  bool bVar5;
+-  
+-  DAT_1000_e68c = 0;
+-  uVar4 = false;
+-  DAT_1000_e674 = param_1;
+-  DAT_1000_e676 = param_4;
+-  DAT_1000_e678 = param_2;
+-  if ((param_2 & 8) != 0) {
+-    uVar2 = CONCAT22(in_register_0000000e,param_4);
+-    FUN_0000_19d1(param_1,uVar2,param_5);
+-    uVar1 = 0;
+-    if ((bool)uVar4) goto LAB_0000_18d1;
+-    uVar2 = CONCAT22((int)((ulong)uVar2 >> 0x10),DAT_1000_e676);
+-    FUN_0000_1a45(0x3030,DAT_1000_e674,param_3,uVar2);
+-    uVar3 = (undefined2)((ulong)uVar2 >> 0x10);
+-    uVar1 = 0;
+-    if ((bool)uVar4) goto LAB_0000_18d1;
++  /* PATCH 573: the per-model LOD driver, asm 0x183f-0x18db (DS=DGROUP).  AX=model index -> [0x2674],
++   * BX=name index -> [0x2676], CX=lod bits -> [0x2678].  lod&8: 19d1 (.MAL) then 1a45('00'), 197b
++   * (the 32 facing slots -> the empty descriptor rec+0x44), 1a45('08'), 1996; lod&0x10: 1a45('16'),
++   * 19b9; lod&0x20: 1a45('32').  Every load's CF (g_fist_cf now, from 276e/27f7/1774/e115) selects the
++   * release tail 18d1 = 18dc(ax=[0x2674], cx = the lod class that failed: 0, 0, 8, 0x10, 0x20) and a
++   * CF=1 return; AX = [0x268c], the count of files that reached their EOF record.  Ghidra hard-wired
++   * every CF to false and passed the name as a CONCAT'd high word. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = g_mem + 0x1c000;
++  uint16_t cx;
++
++  *(uint16_t *)(dg + 0x268c) = 0;
++  *(uint16_t *)(dg + 0x2674) = (uint16_t)param_1;
++  *(uint16_t *)(dg + 0x2676) = (uint16_t)param_4;
++  *(uint16_t *)(dg + 0x2678) = (uint16_t)param_2;
++  (void)param_3; (void)param_5;
++#define M573_1A45(ext, lodcx) do {                                                             \
++    g_fist_cf = 0;                                                                             \
++    FUN_0000_1a45((ext), (int)*(uint16_t *)(dg + 0x2674), 0,                                   \
++                  (undefined2 *)(uintptr_t)*(uint16_t *)(dg + 0x2676));                        \
++    cx = (lodcx); if (g_fist_cf) goto release; } while (0)
++  if ((*(uint16_t *)(dg + 0x2678) & 8) != 0) {
++    g_fist_cf = 0;                                                    /* 185f call 19d1 (ax=[0x2674], bx=[0x2676]) */
++    FUN_0000_19d1((int)*(uint16_t *)(dg + 0x2674), (undefined4)*(uint16_t *)(dg + 0x2676), 0);
++    cx = 0; if (g_fist_cf) goto release;
++    M573_1A45(0x3030, 0);                                             /* 1872 '00' */
+     FUN_0000_197b();
+-    uVar2 = CONCAT22(uVar3,DAT_1000_e676);
+-    FUN_0000_1a45(0x3830,DAT_1000_e674,param_3,uVar2);
+-    in_register_0000000e = (undefined2)((ulong)uVar2 >> 0x10);
+-    uVar1 = 8;
+-    if ((bool)uVar4) goto LAB_0000_18d1;
++    M573_1A45(0x3830, 8);                                             /* 1888 '08' */
+     FUN_0000_1996();
+   }
+-  bVar5 = false;
+-  if ((DAT_1000_e678 & 0x10) != 0) {
+-    uVar2 = CONCAT22(in_register_0000000e,DAT_1000_e676);
+-    FUN_0000_1a45(0x3631,DAT_1000_e674,param_3,uVar2);
+-    in_register_0000000e = (undefined2)((ulong)uVar2 >> 0x10);
+-    uVar1 = 0x10;
+-    if (bVar5) goto LAB_0000_18d1;
++  if ((*(uint16_t *)(dg + 0x2678) & 0x10) != 0) {
++    M573_1A45(0x3631, 0x10);                                          /* 18a6 '16' */
+     FUN_0000_19b9();
+   }
+-  bVar5 = false;
+-  if ((DAT_1000_e678 & 0x20) != 0) {
+-    FUN_0000_1a45(0x3233,DAT_1000_e674,param_3,CONCAT22(in_register_0000000e,DAT_1000_e676));
+-    uVar1 = 0x20;
+-    if (bVar5) {
+-LAB_0000_18d1:
+-      FUN_0000_18dc(DAT_1000_e674,uVar1);
+-      return DAT_1000_e68c;
+-    }
++  if ((*(uint16_t *)(dg + 0x2678) & 0x20) != 0) {
++    M573_1A45(0x3233, 0x20);                                          /* 18c4 '32' */
+   }
+-  return DAT_1000_e68c;
++#undef M573_1A45
++  g_fist_cf = 0;                                                      /* 18cf clc */
++  return *(uint16_t *)(dg + 0x268c);
++release:                                                              /* 18d1 */
++  FUN_0000_18dc((int)*(uint16_t *)(dg + 0x2674), (int)cx);
++  g_fist_cf = 1;                                                      /* 18da stc */
++  return *(uint16_t *)(dg + 0x268c);
+ }
+ 
+ 
+@@ -8239,192 +8325,193 @@
+ void __allregs FUN_0000_19d1(int param_1,undefined4 param_2,undefined2 param_3)
+ 
+ {
+-  byte *pbVar1;
+-  undefined2 uVar2;
+-  undefined2 uVar3;
+-  int iVar4;
+-  undefined2 uVar6;
+-  undefined4 uVar5;
+-  bool bVar7;
+-  
+-  uVar6 = (undefined2)((ulong)param_2 >> 0x10);
+-  ((undefined2 (*)(undefined2*))fist_icall_far((uint32_t)(DAT_1000_c550)))((undefined2*)DAT_1000_e676);
+-  uVar3 = DAT_1000_c74a;
+-  uVar2 = DAT_1000_c748;
+-  LOCK();
+-  DAT_1000_c748 = 0x4d2e;
+-  UNLOCK();
+-  LOCK();
+-  DAT_1000_c74a = 0x4c41;
+-  UNLOCK();
+-  bVar7 = 0xd91b < (uint)(param_1 * 2);
+-  iVar4 = param_1 * 2 + 0x26e4;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0e4)))();
+-  uVar5 = CONCAT22(uVar6,iVar4);
+-  if (!bVar7) {
+-    bVar7 = false;
+-    /* PATCH 161: 2733 batch-LOAD (asm 0x1a01 `mov es,[bx]; xor di,di; mov bx,0x740; lcall [0x384]`).
+-       Publish the allocated .MAL segment (DGROUP:[0x26e4+idx*2], written by the [0xe4] alloc) in
+-       DAT_1000_2b5e -- 2593 reads it for ES:0 (patch 101 convention) -- and pass DX=filename=0x740
+-       (the driver-built name buffer) to 2733 (param_2=DX). */
+-    DAT_1000_2b5e = *(uint16_t *)(g_mem + 0x1c000 + (uint16_t)iVar4);
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c384)))(0, 0x740, 0, 0);
+-    uVar5 = CONCAT22(uVar6,iVar4);
+-    DAT_1000_c748 = uVar2;
+-    DAT_1000_c74a = uVar3;
+-    if (!bVar7) {
+-      FUN_0000_e16c(uVar5);
+-      return;
+-    }
+-  }
+-  pbVar1 = (byte *)((int)uVar5 + 2);
+-  *pbVar1 = *pbVar1 | 0x22;
++  /* PATCH 573: the .MAL (model palette) loader, asm 0x19d1-0x1a2a rebuilt 1:1 (DS=DGROUP).  AX=model
++   * index, BX=name index.  [0x550] (MGA 0197) builds the name from BX into DGROUP:0x740; the extension
++   * words [0x748]/[0x74a] are swapped to ".MAL" around the load and restored; a 1 KB buffer is
++   * allocated through [0xe4] (=1774 -> 177f -> 184b, CF out) into the handle DGROUP:0x26e4[idx];
++   * [0x384] (=2733 -> 281e -> 2593) batch-loads the file into that segment at offset 0 (ES:0 --
++   * published for 2593 in DAT_1000_2b5e, the patch-101/161 convention); then extender op 0x4c (e16c)
++   * with cx=dx=seg, si=0, di=0x300 (ext 123f -> 9e60) builds the 256-byte palette-remap LUT at
++   * seg:0x300 from the 768-byte palette at seg:0 -- the table 1a45's xlat translates every mesh
++   * texel through.  1a25: the handle's flags |= 0x22 and CF=1 on either failure.  Ghidra fabricated
++   * both CFs as `0xd91b < idx*2` and dropped every register argument of the three calls. */
++  extern unsigned char g_fist_cf;
++  extern uint32_t g_fist_ext_esi;
++  extern unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi;
++  unsigned char *dg = g_mem + 0x1c000;
++  uint16_t bx, seg, save748, save74a;
++
++  (void)param_3;
++  ((undefined2 (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c550)))((undefined2)param_2);  /* 19d2 mov ax,bx ; lcall [0x550] */
++  save748 = *(uint16_t *)(dg + 0x748); *(uint16_t *)(dg + 0x748) = 0x4d2e;     /* 19dc xchg [0x748],".M" */
++  save74a = *(uint16_t *)(dg + 0x74a); *(uint16_t *)(dg + 0x74a) = 0x4c41;     /* 19e4 xchg [0x74a],"AL" */
++  bx = (uint16_t)((uint16_t)param_1 * 2 + 0x26e4);                             /* 19e9 the handle DGROUP:0x26e4[idx] */
++  g_fist_cf = 0;                                                               /* 19f5 ax=0x400 ; cx=ds ; lcall [0xe4] */
++  ((uint (*)(uint,undefined2,undefined2,undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c0e4)))
++      (0x400, 0x1c00, 0, bx, 0, 0);
++  if (g_fist_cf) goto fail;                                                    /* 19fa jb 1a25 */
++  seg = *(uint16_t *)(dg + bx);                                                /* 19fd mov es,[bx] ; xor di,di */
++  DAT_1000_2b5e = seg;
++  g_fist_cf = 0;                                                               /* 1a04 bx=0x740 (dx=0x740 from 0197) ; lcall [0x384] */
++  ((void (*)(undefined2,int,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c384)))(0, 0x740, 0, 0);
++  *(uint16_t *)(dg + 0x74a) = save74a;                                         /* 1a09 pop [0x74a] */
++  *(uint16_t *)(dg + 0x748) = save748;                                         /* 1a0d pop [0x748] */
++  if (g_fist_cf) goto fail;                                                    /* 1a11 jb 1a25 */
++  seg = *(uint16_t *)(dg + bx);                                                /* 1a14 ax=[bx] ; si=0 ; dx=ax ; di=0x300 ; cx=ax */
++  g_fist_ext_ecx = seg; g_fist_ext_edx = seg; g_fist_ext_esi = 0; g_fist_ext_edi = 0x300;
++  FUN_0000_e16c((undefined4)bx);                                               /* 1a1f call e16c = op 0x4c (ebx = the handle) */
++  g_fist_cf = 0;                                                               /* 1a23 clc */
++  return;
++fail:
++  *(dg + (uint16_t)(bx + 2)) |= 0x22;                                          /* 1a25 orb [bx+2],0x22 ; stc */
++  g_fist_cf = 1;
+   return;
+ }
+ 
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_1a45) @ 0000:1a45 ===== */
+ 
+-/* WARNING: Restarted to delay deadcode elimination for space: ram */
+-
+ void __allregs FUN_0000_1a45(undefined2 param_1,int param_2,undefined4 param_3,undefined2 *param_4)
+ 
+ {
+-  byte *pbVar1;
+-  undefined1 *puVar2;
+-  uint *puVar3;
+-  byte *pbVar4;
+-  undefined1 *puVar5;
+-  byte *pbVar6;
+-  uint *puVar7;
+-  undefined2 *puVar8;
+-  byte *pbVar9;
+-  undefined2 *puVar10;
+-  undefined2 uVar11;
+-  int iVar12;
+-  uint uVar13;
+-  ulong uVar14;
+-  ulong uVar15;
+-  undefined4 uVar16;
+-  undefined2 uVar17;
+-  uint *puVar18;
+-  undefined1 *puVar19;
+-  uint *puVar20;
+-  undefined1 *puVar21;
+-  undefined1 uVar22;
+-  bool bVar23;
+-  
+-  uVar13 = (uint)((ulong)param_3 >> 0x10);
+-  uVar22 = 0xd91b < (uint)(param_2 * 2);
+-  DAT_1000_fad2 = param_2 * 2 + 0x26e4;
+-  ((undefined2 (*)(undefined2*))fist_icall_far((uint32_t)(DAT_1000_c550)))((undefined2*)DAT_1000_e676);
+-  DAT_1000_e67a = 0;
+-  uVar14 = (ulong)uVar13 << 0x10;
+-  DAT_1000_c74a = param_1;
+-  /* PATCH 161: streaming OPEN (asm 0x1a62 `mov dx,0x740; lcall [0x38c]`) = 276e; DX=filename buffer
+-     0x740 -> 276e param_2.  Returns the FILEMGR slot index (stored in DAT_1000_e67a). */
+-  uVar11 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c38c)))(0, 0x740, 0, 0);
+-  if ((bool)uVar22) {
+-LAB_0000_1a2b:
+-    DAT_1000_fad8 = DAT_1000_fad8 | 0x22;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c390)))();
+-    return;
+-  }
+-  uVar22 = false;
+-  DAT_1000_e67a = uVar11;
+-  while( true ) {
+-    do {
+-      DAT_1000_e67c = 0;
+-      uVar11 = (undefined2)((ulong)param_4 >> 0x10);
+-      uVar14 = uVar14 & 0xffff0000;
+-      /* PATCH 161: READ (asm 0x1a74 `mov bx,[0x267a](slot); mov cx,0x10; mov dx,0x267c; lcall [0x394]`)
+-         = 27f7(slot, cx=0x10 count, dx=0x267c buffer).  Reads the 16-byte model header into
+-         DGROUP:0x267c (=DAT_1000_e67c); returns AX=bytes-read. */
+-      iVar12 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c394)))(DAT_1000_e67a, 0x10, 0x267c);
+-      do {
+-        if ((bool)uVar22) goto LAB_0000_1a2b;
+-        if (DAT_1000_e67c == 0) {
+-          DAT_1000_e68c = DAT_1000_e68c + 1;
+-          goto LAB_0000_1a2b;
+-        }
+-        if (iVar12 != 0x10) goto LAB_0000_1a2b;
+-        uVar13 = DAT_1000_e67e;
+-        if (DAT_1000_e67e != 0xfffe) {
+-          uVar15 = CONCAT22(uVar11,-(uint)(DAT_1000_e67e < 0x20)) & 0xffff0040;
+-          DAT_1000_e67e = (DAT_1000_e67e - 0x20) + (int)uVar15;
+-          uVar11 = (undefined2)(uVar15 >> 0x10);
+-          uVar13 = (DAT_1000_e680 - 0x20) + (-(uint)(DAT_1000_e680 < 0x20) & 0x40);
+-        }
+-        iVar12 = (DAT_1000_e67e - uVar13 & -(uint)(DAT_1000_e67e < uVar13)) + uVar13;
+-        bVar23 = iVar12 < 0;
+-        DAT_1000_fad4 = (undefined2 *)(iVar12 * 2 + *(int *)(DAT_1000_e674 + 0x27f4) + 0x44);
+-        DAT_1000_e680 = uVar13;
+-        iVar12 = (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0e4)))();
+-        puVar10 = DAT_1000_fad4;
+-        uVar22 = true;
+-      } while (bVar23);
+-      puVar8 = (undefined2 *)*(int *)(DAT_1000_e674 + 0x27f4);
+-      param_4 = (undefined2 *)CONCAT22(uVar11,puVar8);
+-      *(undefined2 *)((int)puVar8 + DAT_1000_e67e) = DAT_1000_fad4;
+-      *(undefined2 *)((int)puVar8 + DAT_1000_e680) = puVar10;
+-      uVar17 = DAT_1000_fad6;
+-      puVar20 = (uint *)0x0;
+-      puVar18 = (uint *)&DAT_1000_e67c;
+-      for (iVar12 = 8; iVar12 != 0; iVar12 = iVar12 + -1) {
+-        puVar7 = puVar20;
+-        puVar20 = puVar20 + 1;
+-        puVar3 = puVar18;
+-        puVar18 = puVar18 + 1;
+-        *puVar7 = *puVar3;
+-      }
+-      uVar22 = DAT_1000_e67c < 0x10;
+-      DAT_1000_e67c = DAT_1000_e67c - 0x10;
+-    } while (DAT_1000_e67c == 0);
+-    uVar16 = CONCAT22(uVar11,DAT_1000_e67a);
+-    uVar14 = CONCAT22((int)(uVar14 >> 0x10),0x10);
+-    uVar13 = (**(code **)&DAT_1000_c394)();
+-    if ((!(bool)uVar22) && (uVar22 = true, uVar13 == DAT_1000_e67c)) {
+-      *(uint *)(DAT_1000_e674 + 0x276c) =
+-           (uint)-(*(int *)&DAT_1000_c006 - *(int *)*(int *)&DAT_1000_c006) >> 1;
+-      if (DAT_1000_fada == '\0') {
+-        uVar16 = CONCAT22((int)((ulong)uVar16 >> 0x10),0x300);
+-        pbVar9 = (byte *)*(undefined2 *)*(undefined2 *)&DAT_1000_c00e;
+-        pbVar6 = pbVar9;
+-        for (iVar12 = *(int *)0x0 - (int)pbVar9; iVar12 != 0; iVar12 = iVar12 + -1) {
+-          pbVar1 = pbVar9;
+-          pbVar9 = pbVar9 + 1;
+-          pbVar4 = pbVar6;
+-          pbVar6 = pbVar6 + 1;
+-          *pbVar4 = *(byte *)(ulong)(*pbVar1 + 0x300);
+-        }
++  /* PATCH 573: the streaming MESH loader, asm 0x1a45-0x1bd8 rebuilt 1:1 (DS=DGROUP).  AX = the two
++   * extension characters ('00','08','16','32' -> word[0x74a]), BX = the name index for [0x550], CX =
++   * the model index.  [0x38c] (=276e) opens the file into one of the four FILEMGR slots (CF = none
++   * free / no variant on disk); each record is a 16-byte header read through [0x394] (=27f7, bx=slot,
++   * cx=0x10, dx=0x267c, ds=DGROUP): word[0]=byte length incl. the header, 0 = the EOF record (count
++   * [0x268c]++, close, CF=0); words [2]/[4] = the two facing byte-offsets the record serves (each
++   * rotated by -0x20 mod 0x40 unless 0xfffe), the lower one selecting its descriptor slot
++   * word[rec+0x44+2*min] -> [0x3ad4], both facing-table entries word[rec+facing] pointing at it.  The
++   * record body is read into a scratch segment allocated through [0xe4] (=1774; the handle DGROUP:0x3ad6
++   * is re-used, 184b frees the previous node when its flags bit 7 is still set) with the caller's
++   * DS=that segment; word[0x276c+idx] = (word[es:[es:6]] - word[es:6]) / 2 = the part count; unless
++   * byte[0x3ada] (the 1684/1727 wrappers) the texel bytes es:[es:[es:0xe]] .. es:[es:0] are translated
++   * through the .MAL LUT at [DGROUP:0x26e4[idx]]:0x300 (19d1 / op 0x4c); extender op 0x3c (e115, cx =
++   * es:[0], dx:si = es:0) appends the record to the extender's model block and returns its 32-bit
++   * address in EDX (stored at es:[2], the pointer 2e49 posts to the op-0x40 rasterizer, patch 471);
++   * the final word[es:[es:0xe]] bytes are allocated through [0xe4] into the descriptor slot [0x3ad4]
++   * and copied there (1bbf rep movsb); the scratch handle is released (flags |= 0x22).  Failures:
++   * 1a42 -> 1a2b (close, CF kept) before the record loop; 1bca (close, CF=1) inside it.
++   * Ghidra's rendering tested a fabricated `0xd91b < idx*2` for the open's CF, called every vector
++   * argument-less, deref'd the scratch segment as host address 0 and DGROUP:0x0002/0x0006/0x000e for
++   * es:[2]/es:[6]/es:[0xe], and dropped the EDX result -- no mesh was ever loaded (board:0025). */
++  extern unsigned char g_fist_cf;
++  extern uint32_t g_fist_ext_esi, g_fist_ext_edx_out;
++  extern unsigned short g_fist_ext_ecx, g_fist_ext_edx;
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char *eb;
++  uint16_t ax, bx, cx, di, es, idx = (uint16_t)param_2;
++
++  (void)param_3;
++  *(uint16_t *)(dg + 0x3ad2) = (uint16_t)(idx * 2 + 0x26e4);                    /* 1a45..1a4d */
++  ((undefined2 (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c550)))((undefined2)(uintptr_t)param_4);  /* 1a52 mov ax,bx ; lcall [0x550] */
++  *(uint16_t *)(dg + 0x74a) = (uint16_t)param_1;                                  /* 1a58 pop [0x74a] */
++  *(uint16_t *)(dg + 0x267a) = 0;
++  g_fist_cf = 0;                                                                  /* 1a62 mov dx,0x740 ; lcall [0x38c] = 276e */
++  ax = (uint16_t)((uint (*)(uint,int,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c38c)))(0, 0x740, 0, 0);
++  if (g_fist_cf) goto fail_1a42;                                                  /* 1a69 jb 1a42 */
++  *(uint16_t *)(dg + 0x267a) = ax;
++  for (;;) {                                                                      /* 1a6e: one record per pass */
++    *(uint16_t *)(dg + 0x267c) = 0;
++    bx = *(uint16_t *)(dg + 0x267a);
++    g_fist_cf = 0;                                                                /* 1a7e lcall [0x394] = 27f7 (slot, cx=0x10, dx=0x267c, ds) */
++    ax = (uint16_t)((int (*)(int,int,int,int))fist_icall_far((uint32_t)(DAT_1000_c394)))((int)bx, 0x10, 0x267c, 0x1c00);
++    if (g_fist_cf) goto fail_1a42;                                                /* 1a82 jb 1a42 */
++    if (*(uint16_t *)(dg + 0x267c) == 0) {                                        /* 1a84 -> 1a3b: the EOF record */
++      *(uint16_t *)(dg + 0x268c) += 1;
++      g_fist_cf = 0;                                                              /* 1a3f clc */
++      goto close_1a2b;
++    }
++    if (ax != 0x10) goto fail_1a42;                                               /* 1a8c cmp ax,0x10 ; jne 1a42 */
++    ax = *(uint16_t *)(dg + 0x267e);
++    if (ax != 0xfffe) {                                                           /* 1a94 */
++      ax = (uint16_t)(ax - 0x20 + (ax < 0x20 ? 0x40 : 0));                        /* 1a99 sub ; sbb ; and 0x40 ; add */
++      *(uint16_t *)(dg + 0x267e) = ax;
++      ax = *(uint16_t *)(dg + 0x2680);
++      ax = (uint16_t)(ax - 0x20 + (ax < 0x20 ? 0x40 : 0));                        /* 1aa9 */
++    }
++    *(uint16_t *)(dg + 0x2680) = ax;                                              /* 1ab3 */
++    di = (uint16_t)(*(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4)) + 0x44);  /* 1ab6..1abe */
++    bx = *(uint16_t *)(dg + 0x267e);
++    cx = *(uint16_t *)(dg + 0x2680);
++    if (cx < bx) bx = cx;                                                         /* 1ac9 sub ; sbb ; and ; add = unsigned min */
++    *(uint16_t *)(dg + 0x3ad4) = (uint16_t)(bx * 2 + di);                         /* 1ad1..1ad5 */
++    g_fist_cf = 0;                                                                /* 1ae1 ax=[0x267c] ; bx=0x3ad6 ; cx=ds ; lcall [0xe4] */
++    ((uint (*)(uint,undefined2,undefined2,undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c0e4)))
++        (*(uint16_t *)(dg + 0x267c), 0x1c00, 0, 0x3ad6, 0, 0);
++    if (g_fist_cf) goto fail_1a42;                                                /* 1ae5 jb 1a82 (-> jb 1a42) */
++    ax = *(uint16_t *)(dg + 0x3ad4);
++    bx = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x27f4));
++    *(uint16_t *)(dg + (uint16_t)(bx + *(uint16_t *)(dg + 0x267e))) = ax;         /* 1af6 [bx+di],ax (di=[0x267e]) */
++    *(uint16_t *)(dg + (uint16_t)(bx + *(uint16_t *)(dg + 0x2680))) = ax;         /* 1afc [bx+di],ax (di=[0x2680]) */
++    es = *(uint16_t *)(dg + 0x3ad6);                                              /* 1afe mov es,[0x3ad6] */
++    eb = g_mem + ((uint32_t)es << 4);
++    memcpy(eb, dg + 0x267c, 16);                                                  /* 1b0a rep movsw x8: the header */
++    *(uint16_t *)(dg + 0x267c) -= 0x10;                                           /* 1b0c */
++    if (*(uint16_t *)(dg + 0x267c) == 0) continue;                                /* 1b11/1b13 -> 1a6e */
++    cx = *(uint16_t *)(dg + 0x267c);
++    bx = *(uint16_t *)(dg + 0x267a);
++    g_fist_cf = 0;                                                                /* 1b26 ds=es ; dx=0x10 ; lcall ss:[0x394] */
++    ax = (uint16_t)((int (*)(int,int,int,int))fist_icall_far((uint32_t)(DAT_1000_c394)))((int)bx, (int)cx, 0x10, (int)es);
++    if (g_fist_cf) goto fail_1bca;                                                /* 1b2c jb 1b85 (-> jb 1bca) */
++    if (ax != *(uint16_t *)(dg + 0x267c)) goto fail_1bca;                         /* 1b2e cmp ; stc ; jne 1b85 */
++    {
++      uint16_t s6 = *(uint16_t *)(eb + 6);                                        /* 1b35 si=es:[6] ; sub si,es:[si] ; neg ; shr */
++      *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x2674) + 0x276c)) =
++          (uint16_t)((uint16_t)(*(uint16_t *)(eb + s6) - s6) >> 1);
++    }
++    if (dg[0x3ada] == 0) {                                                        /* 1b49: translate the texels through the .MAL LUT */
++      unsigned char *lut = g_mem + ((uint32_t)*(uint16_t *)(dg + *(uint16_t *)(dg + 0x3ad2)) << 4) + 0x300;  /* 1b55 ds=[[0x3ad2]] ; bx=0x300 */
++      uint16_t si = *(uint16_t *)(eb + 0xe);                                      /* 1b5f si=es:[0xe] ; si=es:[si] */
++      uint16_t n;
++      si = *(uint16_t *)(eb + si);
++      n = (uint16_t)(*(uint16_t *)(eb + 0) - si);                                 /* 1b5a/1b69 cx=es:[0]-si */
++      for (di = si; n != 0; n--) {                                                /* 1b6f lodsb es ; xlat ; stosb */
++        eb[di] = lut[eb[si]];
++        si = (uint16_t)(si + 1); di = (uint16_t)(di + 1);
+       }
+-      uVar14 = CONCAT22((int)(uVar14 >> 0x10),uVar17);
+-      iVar12 = FUN_0000_e115(uVar16);
+-      uVar22 = iVar12 == 0;
+-    }
+-    if ((bool)uVar22) break;
+-    *(ulong *)&DAT_1000_c002 = uVar14;
+-    uVar17 = (undefined2)((ulong)uVar16 >> 0x10);
+-    uVar14 = uVar14 & 0xffff0000;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0e4)))();
+-    uVar11 = DAT_1000_fad6;
+-    if ((bool)uVar22) break;
+-    param_4 = (undefined2 *)CONCAT22(uVar17,DAT_1000_fad4);
+-    uVar17 = *DAT_1000_fad4;
+-    puVar19 = (undefined1 *)0x0;
+-    puVar21 = (undefined1 *)0x0;
+-    for (iVar12 = *(int *)*(undefined2 *)&DAT_1000_c00e; iVar12 != 0; iVar12 = iVar12 + -1) {
+-      puVar5 = puVar21;
+-      puVar21 = puVar21 + 1;
+-      puVar2 = puVar19;
+-      puVar19 = puVar19 + 1;
+-      *puVar5 = *puVar2;
++      bx = 0x300;
++    }
++    else {
++      bx = *(uint16_t *)(dg + 0x267a);                                            /* bx still the slot from 1b1a */
++    }
++    g_fist_ext_ecx = *(uint16_t *)(eb + 0);                                       /* 1b76 cx=es:[0] ; si=0 ; dx=es */
++    g_fist_ext_esi = 0;
++    g_fist_ext_edx = es;
++    ax = (uint16_t)FUN_0000_e115((undefined4)bx);                                 /* 1b7f call e115 = op 0x3c */
++    if (ax < 1) goto fail_1bca;                                                   /* 1b82 cmp ax,1 ; jb 1bca */
++    *(uint32_t *)(eb + 2) = g_fist_ext_edx_out;                                   /* 1b87 mov es:[2],edx */
++    {
++      uint16_t si = *(uint16_t *)(eb + 0xe);                                      /* 1b91 si=es:[0xe] ; ax=es:[si] */
++      ax = *(uint16_t *)(eb + si);
+     }
+-    uVar22 = false;
+-    DAT_1000_fad8 = DAT_1000_fad8 | 0x22;
++    bx = *(uint16_t *)(dg + 0x3ad4);
++    g_fist_cf = 0;                                                                /* 1ba4 cx=ds ; dx=es:[0] ; lcall [0xe4] */
++    ((uint (*)(uint,undefined2,undefined2,undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c0e4)))
++        (ax, 0x1c00, *(uint16_t *)(eb + 0), bx, 0, 0);
++    if (g_fist_cf) goto fail_1bca;                                                /* 1ba8 jb 1bca */
++    {
++      unsigned char *db = g_mem + ((uint32_t)*(uint16_t *)(dg + *(uint16_t *)(dg + 0x3ad4)) << 4);  /* 1baf es=[[0x3ad4]] */
++      uint16_t si = *(uint16_t *)(eb + 0xe);                                      /* 1bb5 si=ds:[0xe] ; cx=[si] */
++      uint16_t n = *(uint16_t *)(eb + si);
++      memcpy(db, eb, n);                                                          /* 1bbf rep movsb */
++    }
++    dg[0x3ad8] |= 0x22;                                                           /* 1bc2 ; jmp 1a6e */
++  }
++fail_1bca:                                                                        /* 1bca */
++  dg[0x3ad8] |= 0x22;
++  ((void (*)(int))fist_icall_far((uint32_t)(DAT_1000_c390)))((int)*(uint16_t *)(dg + 0x267a));  /* 1bd3 lcall [0x390] = 27e2 */
++  g_fist_cf = 1;                                                                  /* 1bd7 stc */
++  return;
++fail_1a42:                                                                        /* 1a42 stc ; jmp 1a2b */
++  g_fist_cf = 1;
++close_1a2b:                                                                       /* 1a2b pushf ; ... ; popf */
++  {
++    unsigned char cf = g_fist_cf;
++    dg[0x3ad8] |= 0x22;
++    ((void (*)(int))fist_icall_far((uint32_t)(DAT_1000_c390)))((int)*(uint16_t *)(dg + 0x267a));  /* 1a35 lcall [0x390] */
++    g_fist_cf = cf;
+   }
+-  DAT_1000_fad8 = DAT_1000_fad8 | 0x22;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c390)))();
+   return;
+ }
+ 
+@@ -12193,8 +12280,13 @@
+   }
+   DAT_2000_2c1a = (uint16_t)(DAT_2000_2c16 + ((uVar4 >> 8) & 0xff));
+   DAT_2000_2c18 = (vp[6] >> 1) + param_2;                 /* vp[6]=word[di+0xc]=height */
+-  DAT_2000_2c1c = (uint16_t)(DAT_2000_2c18 + (uVar4 & 0xffff));  /* asm add dx,ax = full hdr word */
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
++  /* PATCH 573: 384f `mov dh,0` clears the height byte BEFORE 3860 `add ax,dx` -- the rect's right edge is
++   * left + the WIDTH byte only; patch 391 added the whole header word (right = left + width + 256*height). */
++  DAT_2000_2c1c = (uint16_t)(DAT_2000_2c18 + (uVar4 & 0xff));
++  /* PATCH 573: asm 0x3865 `mov ax,[bx+0x32] ; mov bx,0x6c16 ; lcall [0x6c8]` -- the sprite id and the
++   * rect were dropped (patch 531's class); 294d/298a blitted a garbage record. */
++  ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))
++      (*(uint16_t *)(dg + (uint16_t)(obj + 0x32)),0,0,0x6c16,0);
+   vp = (uint16_t *)DAT_1000_d56a;                         /* asm re-reads di=word[0x156a] at 0x3873 */
+   uVar4 = (vp[5] >> 1) + -iVar1;                          /* X */
+   if (uVar4 < (uint)vp[5]) {
+@@ -13414,6 +13506,9 @@
+            the MGA pitch-cache nodes at DGROUP:0x798.. and the STRSEG word at 0x70 -> c4df dispatched
+            vector 0x0007 (re-entered the app entry) and hung in 2ebe's tick wait. */
+         FUN_0000_1684(ax, cx, 0, bx, 0);
++      } else if (vec == 0x1735) {
++        /* PATCH 573: the third loader vector (model 0x3a), same varnode order; it trapped before. */
++        FUN_0000_1735(ax, cx, 0, bx, 0);
+       } else {
+         (*(code *)fist_icall_near(0x0u, vec))(ax, bx, cx);
+       }
+@@ -16490,9 +16585,17 @@
+ void __allregs FUN_0000_5a1d(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c60a)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c61a)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
++  /* PATCH 573: a cockpit plate (asm 0x5a1d-0x5a33), patch 520/531's arg-less class:
++   *     lea bx,[bx+4] ; mov al,0x17 ; lcall [0x60a] ; mov al,1 ; lcall [0x61a] ; mov ax,0xfc8 ; lcall [0x6c8]
++   * bx = the display-list element (DGROUP:0x3e08, published by 209e) + 4 = its rect; [0x60a] = MGA 1091
++   * rect fill (bx, al=colour 0x17), [0x61a] = MGA 11db rect outline (bx, al=1), [0x6c8] = MGA 294d
++   * transparency blit (ax = sprite id 0xfc8, bx = rect).  Its garbage sprite id reached 298a with a
++   * wild record once the sprite sheets were real. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  ((void (*)(undefined2,undefined1))fist_icall_far((uint32_t)(DAT_1000_c60a)))(bx, 0x17);
++  ((void (*)(uint16_t,uint8_t))fist_icall_far((uint32_t)(DAT_1000_c61a)))(bx, 1);
++  ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0xfc8,0,0,bx,0);
+   return;
+ }
+ 
+@@ -22451,8 +22554,26 @@
+ void __allregs FUN_0000_7fcd(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
++  /* PATCH 573: the cockpit AZIMUTH-NEEDLE plate (asm 0x7fcd-0x7ffe), an arg-less `lcall [0x6c8]` body
++   * of patch 520's class that was still unthreaded: with real sprite sheets loaded its garbage sprite
++   * id (a stack value) resolved to a wild record whose header height ran MGA 298a thousands of rows
++   * past the 288x81 view surface -- straight over MSPRITE2's block and its directory header.
++   *     mov di,[0x6d34] ; mov si,[di+0x55] ; test si,0x8000 ; je ; neg si       (the needle angle)
++   *     shr si,1 ; and si,0xfffe ; cmp si,0x26 ; jbe ; mov si,0x26           (table index, capped)
++   *     mov ax,[si-0x7014] ; push ax ; mov ax,0x520 ; lea bx,[bx+4] ; lcall [0x6c8] ; pop ax ; lcall [0x6c8]
++   * [si-0x7014] = DGROUP:0x8fec[si]; BX = the display-list element (DGROUP:0x3e08, published by 209e);
++   * [0x6c8] = MGA 294d (transparency blit: ax = sprite id, bx = rect). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short si = *(unsigned short *)(dg + (unsigned short)(di + 0x55));
++  unsigned short ax;
++  if (si & 0x8000) si = (unsigned short)(0u - si);
++  si = (unsigned short)((si >> 1) & 0xfffe);
++  if (si > 0x26) si = 0x26;
++  ax = *(unsigned short *)(dg + (unsigned short)(si + 0x8fec));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x520,0,0,bx,0);
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax,0,0,bx,0);
+   return;
+ }
+ 
+@@ -44798,7 +44919,7 @@
+       fprintf(stderr, "[memmgr] 1019 relocation-notify callback fired (bx=%d tgt=%08x)\n",
+               param_1, tgt);
+     }
+-    (*(code *)fist_icall_far(tgt))(dx, MM_S16(es, 0x00));  /* lcall [di+4] (ax=node.base, dx=cand.base) */
++    (*(code *)fist_icall_far(tgt))(dx, MM_S16(es, 0x00), param_1);  /* lcall [di+4] (ax=node.base, dx=cand.base, bx=kind) -- PATCH 573: bx threaded for 15c2 */
+   }
+   return;
+ }
+@@ -45773,24 +45894,19 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_1774) @ 1000:1774 ===== */
+ 
+-void __allregs
++uint __allregs
+ FUN_1000_1774(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4,
+              undefined2 param_5,undefined2 param_6)
+ 
+ {
+-  uint uVar1;
+-  bool bVar2;
+-  
+-  uVar1 = param_1 + 0xf >> 1;
+-  bVar2 = (uVar1 & 4) != 0;
+-  DAT_2000_d1d4 = DAT_2000_d1d4 + '\x01';
+-  FUN_1000_184b((uVar1 | (uint)(0xfff0 < param_1) << 0xf) >> 3,param_2,param_3,param_4,param_5,
+-                param_6);
+-  DAT_2000_d1d4 = DAT_2000_d1d4 + -1;
+-  if (!bVar2) {
+-    return;
+-  }
+-  return;
++  /* PATCH 573: asm 0x11774 `add ax,0xf ; rcr ax,1 ; shr ax,1 x3` = bytes -> paragraphs with the 17-bit
++   * carry, falling into 177f (patch 571: the guarded allocator front-end, CF and BX out) -- the
++   * vector DGROUP:0xe4 the model loaders 19d1/1a45 allocate through.  Register order as 184b's:
++   * AX=param_1, CX=param_2, BX=param_4.  Ghidra had folded the guard byte ss:0x1744 to DAT_2000_d1d4
++   * (g_mem+0x2d1d4, the SS=0x2ba9 placeholder -- a byte bumped in the DOS heap) and returned nothing. */
++  (void)param_3; (void)param_5; (void)param_6;
++  return FUN_1000_177f((int)(uint16_t)(((uint32_t)(uint16_t)param_1 + 0xfu) >> 4),
++                       (uint)(uint16_t)param_4, param_2);
+ }
+ 
+ 
+@@ -47654,6 +47770,7 @@
+   byte in_OF;
+   byte in_NT;
+   uint uStack0002;
++  extern unsigned char g_fist_cf;
+   
+   uRam000f0014 = 0x21;
+   uRam000f0000 = 0x3d00;
+@@ -47677,6 +47794,7 @@
+   uVar2 = uRam000f0000;
+   uStack0002 = 0x1c00;
+   uVar1 = DAT_1000_2b62;
++  g_fist_cf = 1;                                   /* PATCH 573: 125ab `jb 1260c` -- an open failure returns CF=1 (19d1 `jb 1a25`) */
+   if (!(bool)uRam000f0012) {
+     do {
+       DAT_1000_2b62 = uVar1;
+@@ -47714,6 +47832,7 @@
+                  (uint)(in_AF & 1) * 0x10 | (uint)(in_PF & 1) * 4 | (uint)bVar3;
+     fist_int_dispatch();
+     uVar2 = (DAT_1000_2b62 - DAT_1000_2b64) * 0x10 + DAT_1000_2b60;
++    g_fist_cf = bVar3;                             /* PATCH 573: 125dd clc / 125c5 `jb 125de` = the read's CF, kept across the close (pushf/popf) */
+   }
+   return uVar2;
+ }
+@@ -48051,6 +48170,7 @@
+       if (*(char *)(CX + 0x2b7e + iVar5) == '\0') {
+         uVar2 = CONCAT11((char)((uint)uVar1 >> 8),CX[0x2b7e]);
+         *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = CX[0x2b7e];
++        g_fist_cf = 0;                                       /* PATCH 573: 127d7 -- no variant on disk returns CF=0 (the `or al,al` ZF exit), AX=43xx */
+         return uVar2;
+       }
+       *(uint8_t *)(g_mem + 0x1c000 + (uint16_t)param_2 + 10) = *(char *)(CX + 0x2b7e + iVar5);
+@@ -48087,6 +48207,7 @@
+       iVar5 = iVar5 + 1;
+     } while( true );
+   }
++  g_fist_cf = 1;                                             /* PATCH 573: 127e0 `stc ; retf` -- all four slots occupied */
+   return param_1;
+   }
+ }
+@@ -48114,17 +48235,19 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_27f7) @ 1000:27f7 ===== */
+ 
+-int __allregs FUN_1000_27f7(int param_1,int param_2,int param_3)
++int __allregs FUN_1000_27f7(int param_1,int param_2,int param_3,int param_4)
+ 
+ {
+   /* PATCH 159/160 (asm 0x127f7): dispatch slot param_1's READ op via cs:[type+0x2b9a] with bx=handle
+      (does NOT clear the slot).  cs-data -> g_mem+0xf690.  Handler 0f69:0x31e1 (`mov ah,0x3f; int 21h`)
+      reads bx=handle + cx/dx from the caller's regs -> PATCH 160 forwards param_2(cx=count)/param_3
+-     (dx=buffer) to the READ leaf and returns AX=bytes-read. */
++     (dx=buffer) to the READ leaf and returns AX=bytes-read.
++     PATCH 573: the leaf's INT 21h reads DS:DX -- the caller's DS, which 1a45 (asm 0x1b24 `mov ds,ax`
++     with ax=es, the record's scratch segment) points away from DGROUP; param_4 carries it. */
+   uint8_t *CX = g_mem + 0xf690;
+   uint16_t handle = *(uint16_t *)(CX + 0x2b6a + (uint16_t)param_1);
+   uint16_t type = *(uint16_t *)(CX + 0x2b74 + (uint16_t)param_1);
+-  return (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b9a + type)))(handle,param_2,param_3);
++  return (*(code *)fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b9a + type)))(handle,param_2,param_3,param_4);
+ }
+ 
+ 
+@@ -48170,6 +48293,7 @@
+   undefined2 uVar1;
+   undefined2 unaff_ES;
+   uint uStack000a;
++  extern unsigned char g_fist_cf;
+   
+   uRam000f0014 = 0x21;
+   uRam000f0000 = 0x4300;
+@@ -48183,6 +48307,7 @@
+   uRam000f0010 = unaff_ES;
+   fist_int_dispatch();
+   uVar1 = uRam000f0000;
++  g_fist_cf = 1;                                   /* PATCH 573: 1282c `jb 12866` -- the attr probe's CF is the return CF */
+   if (!(bool)uRam000f0012) {
+     uRam000f0014 = 0x21;
+     uRam000f0000 = 0x3d00;
+@@ -48212,6 +48337,7 @@
+     uRam000f0010 = unaff_ES;
+     fist_int_dispatch();
+     uVar1 = DAT_1000_2b5c;
++    g_fist_cf = (unsigned char)(uRam000f0012 & 1);  /* PATCH 573: the final seek's CF (12866 ret) */
+   }
+   return uVar1;
+ }
+@@ -48242,15 +48368,17 @@
+ }
+ 
+ /* ===== 0f69:0x31e1 = linear 0x12871 : READ (mov ah,0x3f; int 21h) -> AX=bytes ===== */
+-int __allregs FUN_1000_2871(int param_1,int param_2,int param_3)
++int __allregs FUN_1000_2871(int param_1,int param_2,int param_3,int param_4)
+ {
++  extern unsigned char g_fist_cf;
+   uRam000f0014 = 0x21;
+   uRam000f0000 = 0x3f00;                          /* AH=3f read */
+   uRam000f0002 = param_1;                         /* BX = handle */
+   uRam000f0004 = param_2;                         /* CX = count  */
+-  iRam000f0006 = param_3;                         /* DX = buffer (DGROUP) */
+-  uRam000f000e = 0x1c00;                          /* DS = DGROUP (small model) */
++  iRam000f0006 = param_3;                         /* DX = buffer */
++  uRam000f000e = param_4;                         /* DS = the caller's (PATCH 573: 1a45 reads into the record's scratch segment) */
+   fist_int_dispatch();
++  g_fist_cf = (unsigned char)(uRam000f0012 & 1);  /* PATCH 573: the leaf's CF is INT 21h's (1a45 `jb 1a42` / `jb 1b85`) */
+   return uRam000f0000;
+ }
+ 
+@@ -75545,6 +75673,7 @@
+   {0x159du,(void*)&FUN_0000_159d},
+   {0x15a8u,(void*)&FUN_0000_15a8},
+   {0x15b3u,(void*)&FUN_0000_15b3},
++  {0x15c2u,(void*)&FUN_0000_15c2},   /* PATCH 573 */
+   {0x15c8u,(void*)&FUN_0000_15c8},
+   {0x15cbu,(void*)&FUN_0000_15cb},
+   {0x15d9u,(void*)&FUN_0000_15d9},
+@@ -75557,6 +75686,7 @@
+   {0x1684u,(void*)&FUN_0000_1684},
+   {0x1692u,(void*)&FUN_0000_1692},
+   {0x1724u,(void*)&FUN_0000_1724},
++  {0x1735u,(void*)&FUN_0000_1735},   /* PATCH 573 */
+   {0x1827u,(void*)&FUN_0000_1827},
+   {0x183fu,(void*)&FUN_0000_183f},
+   {0x18dcu,(void*)&FUN_0000_18dc},
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -1707,7 +1707,15 @@
+ undefined4 __allregs FUN_0000_11f4(uint param_1,uint param_2,uint param_3)
+ 
+ {
+-  int *piVar1;
++  /* PATCH 573: extender service op 0x3c (asm 0x11f4-0x123a), the engine's mesh-record upload (1a45
++   * `call e115` with cx = the byte count, dx:si = the record's scratch segment:0).  The block is
++   * appended to the ONE model block owned by the handle at 0x123b (3439: first call registers it,
++   * every later call grows it and returns the append position), the bytes are copied from the
++   * 16-bit source at (dx<<4)+si+[0x807] -- the guest-RAM window, which in this model is g_mem
++   * (Ghidra had read [0x807] as the DGROUP word segment(0x1c00,0x807)) -- and the handler leaves
++   * the append position in EDX, which the engine stores at es:[2] (1b87) as the address 2e49 later
++   * posts to the op-0x40 rasterizer; publish it in g_fist_ext_edx_out for the gate.  eax = -1 / 0. */
++  extern uint32_t g_fist_ext_edx_out;
+   undefined4 *puVar2;
+   uint uVar3;
+   undefined4 *puVar4;
+@@ -1715,8 +1723,9 @@
+   uVar3 = (param_1 & 0xffff) + 0xf & 0xfffffff0;
+   puVar2 = (undefined4 *)FUN_0000_3439(2,uVar3,&LAB_0000_123b,0x10,param_3,0x1214);
+   if (puVar2 != (undefined4 *)0x0) {
+-    piVar1 = (int *)segment(0x1c00,0x807);
+-    puVar4 = (undefined4 *)((param_3 & 0xffff) + (param_2 & 0xffff) * 0x10 + *piVar1);
++    g_fist_ext_edx_out = (uint32_t)(uintptr_t)puVar2;                              /* 122d mov edx,edi */
++    puVar4 = (undefined4 *)(g_mem + *(uint32_t *)(g_mem + fist_ext_base + 0x807)
++                            + (param_2 & 0xffff) * 0x10 + (param_3 & 0xffff));    /* 121d..122b */
+     for (uVar3 = uVar3 >> 2; uVar3 != 0; uVar3 = uVar3 - 1) {
+       *puVar2 = *puVar4;
+       puVar4 = puVar4 + 1;

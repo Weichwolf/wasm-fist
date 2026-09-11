@@ -1,0 +1,169 @@
+PATCH 571: the MEMMGR front-end FUN_1000_177f behind DGROUP:0xe8, its reloc section, and the model
+memory budget -- the port loaded 8 of AZER1's 160 model files.
+
+An LD_PRELOAD open-trace of the original entering AZER1 (tools/oracle/opentrace.c through
+trace_click3.sh) lists, after AZER1.FSG and the map, 41 models x {.MAL .M00 .M08} then every .M16 then
+every .M32 -- 160 model files -- then MSN2.MS3, MSPRITE5.BIN, MSPRITE1.BIN, M1CON.MRL.  The port's own
+open log (FIST_OPENLOG) on the same path: M1_A.MAL/.M00/.M08, M1_B.MAL/.M00/.M08, then ONLY the .MAL of
+every other model, no TREES.MAL at all, no .M16/.M32.  The mesh loads are refused by a memory budget:
+
+  42cc  mov ax,0xffff ; mov bx,0x157c ; mov cx,ds ; lcall [0xe8]     "how much memory is there"
+        word[0x6d9b] = max(word[0x6d9b], BX) ; word[0x6d9d] = word[0x6d9b] - 0x1280
+  4397  sub [0x6d9d],ax ; jb 43a2                                    per model, in the 4308 walk
+
+DGROUP:0xe8 is installed by the far reloc section si=0xec (30 vectors, DGROUP:0x78..0xf8) as
+0f69:20ef = FUN_1000_177f: `incb ss:0x1744 ; call 184b ; decb ss:0x1744 ; jb -> mov bx,ss:[0x16d8]` --
+the guard makes the allocator return CF instead of taking the fatal 13e4 exit, and on failure BX is the
+LARGEST FREE BLOCK (paragraphs).  Three port defects stacked on this one vector:
+
+  * patch 383 dropped the section-0xec install at 06bc as "a no-op" (it argued only 182a/184b, which
+    patch 022 calls directly, were in it) -- so DGROUP:0xe8 stayed 0 and every `lcall [0xe8]` trapped;
+  * 177f was never promoted;
+  * 42cc's decompile kept the INPUT bx (0x157c) as the answer: the budget was 0x157c-0x1280 = 0x2fc
+    paragraphs = 12 KB on any machine, which is two meshes.  The oracle's DGROUP sample
+    (tools/oracle/samples/dgroup_0x0_0x100.bin) reads 20ef 2382 at 0xe8 -- the vector is live in the
+    original from boot.
+
+This patch promotes 177f (BX out through g_fist_177f_bx, CF through g_fist_cf), reinstates the section
+install at 06bc via the loader-role applier, and makes the four callers pass (AX, BX, CX) and read BX
+back: 42cc and the shared 4354 tail (Ghidra duplicated it into 4308/4330/4354) with ax=0xffff, and the
+two menu sites e813/e8df with their ax=0x1000 allocation into the same struct.
+
+Consequence for the rest of the port: with no meshes the render walk drew units, trees, wrecks and
+shots from records that never held a model -- the "windshield shows chrome and no content" of
+board:0001/0002 and the sprite-blit hang of patch 569's finding (zero-width sprite headers) are
+downstream of this.  It is also why the T-80s (patch 566/567) could shoot but never appear.
+
+--- a/fist.c
++++ b/fist.c
+@@ -1716,6 +1716,8 @@
+ undefined4 __allregs FUN_1000_175d(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_1000_1774(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+ uint __allregs FUN_1000_1796(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
++uint __allregs FUN_1000_177f(int param_1,uint param_2,undefined2 param_3);   /* PATCH 571: the [0xe8] allocator front-end */
++extern unsigned short g_fist_177f_bx;   /* PATCH 571: 177f's BX out (the largest free block on failure) */
+ uint __allregs FUN_1000_17a1(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_1000_17da(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ undefined4 __allregs FUN_1000_17e5(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+@@ -13356,8 +13358,15 @@
+ {
+   uint uVar1;
+   
+-  uVar1 = 0x157c;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0e8)))();
++  /* PATCH 571: asm 0x42cc `mov ax,0xffff ; mov bx,0x157c ; mov cx,ds ; lcall [0xe8]` -- ask the MEMMGR
++   * front-end 177f for everything; it fails and returns the LARGEST FREE BLOCK in BX.  Then
++   * `word[0x6d9b] = max(word[0x6d9b], bx)` (the sub/cmc/sbb/and/add idiom) and the model budget
++   * word[0x6d9d] = that - 0x1280.  Ghidra kept the INPUT bx (0x157c) as the answer and dropped the
++   * call's arguments, so the budget was 0x2fc paragraphs whatever the machine had: the STRSEG:0x802
++   * model walk (4308/4397 `sub [0x6d9d],ax ; jb`) refused every mesh after M1_B.M08, and no .M16/.M32
++   * detail level ever loaded -- the original opens 160 model files on AZER1, the port 8. */
++  ((uint (*)(int,uint,undefined2))fist_icall_far((uint32_t)(DAT_1000_c0e8)))(0xffff, 0x157c, 0x1c00);
++  uVar1 = g_fist_177f_bx;
+   DAT_2000_2d9b = (DAT_2000_2d9b - uVar1 & -(uint)(uVar1 <= DAT_2000_2d9b)) + uVar1;
+   DAT_2000_2d9d = DAT_2000_2d9b + -0x1280;
+   DAT_2000_2d86 = 0xff;
+@@ -13431,8 +13440,8 @@
+   FUN_0000_1676(0x1c,0x6d88);
+   FUN_0000_1676(0x28,0x6d88);
+   FUN_0000_1664();
+-  uVar1 = 0x157c;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0e8)))(0);
++  ((uint (*)(int,uint,undefined2))fist_icall_far((uint32_t)(DAT_1000_c0e8)))(0xffff, 0x157c, 0x1c00);  /* PATCH 571: 4386 */
++  uVar1 = g_fist_177f_bx;                         /* the largest free block -> word[0x454] */
+   DAT_1000_c454 = uVar1;
+   return;
+ }
+@@ -13457,8 +13466,8 @@
+   FUN_0000_1676(0x1c,0x6d88);
+   FUN_0000_1676(0x28,0x6d88);
+   FUN_0000_1664();
+-  uVar1 = 0x157c;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0e8)))();
++  ((uint (*)(int,uint,undefined2))fist_icall_far((uint32_t)(DAT_1000_c0e8)))(0xffff, 0x157c, 0x1c00);  /* PATCH 571: 4386 */
++  uVar1 = g_fist_177f_bx;                         /* the largest free block -> word[0x454] */
+   DAT_1000_c454 = uVar1;
+   return;
+ }
+@@ -13478,8 +13487,8 @@
+   FUN_0000_1676(0x1c,0x6d88);
+   FUN_0000_1676(0x28,0x6d88);
+   FUN_0000_1664();
+-  uVar1 = 0x157c;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0e8)))();
++  ((uint (*)(int,uint,undefined2))fist_icall_far((uint32_t)(DAT_1000_c0e8)))(0xffff, 0x157c, 0x1c00);  /* PATCH 571: 4386 */
++  uVar1 = g_fist_177f_bx;                         /* the largest free block -> word[0x454] */
+   DAT_1000_c454 = uVar1;
+   return;
+ }
+@@ -39223,7 +39232,7 @@
+             FUN_0000_e006(8);
+             FUN_0000_d755(0x4509);
+             FUN_0000_9d26(8);
+-            (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0e8)))(0xf69, 0xf69);
++            ((uint (*)(int,uint,undefined2))fist_icall_far((uint32_t)(DAT_1000_c0e8)))(0x1000, 0x157c, 0x1c00);  /* PATCH 571: e813 */
+             DAT_1000_d57e = DAT_1000_d57e | 0x21;
+             FUN_0000_be67();
+             (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))(0xf69);
+@@ -39383,7 +39392,7 @@
+     FUN_0000_9d26(uVar3);
+     uVar2 = 0x157c;
+     uVar1 = 0x1c00;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c0e8)))(0xf69,uVar6);
++    ((uint (*)(int,uint,undefined2))fist_icall_far((uint32_t)(DAT_1000_c0e8)))(0x1000, 0x157c, 0x1c00);  /* PATCH 571: e8df */
+     DAT_1000_d57e = DAT_1000_d57e | 0x21;
+     FUN_0000_be67();
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_d594)))(0xf69);
+@@ -43482,6 +43491,13 @@
+     FUN_1000_1af3(param_1,uVar3,uVar2,uVar4,puVar5,unaff_CS,param_3);
+     FUN_1000_1dfa(param_1,uVar3,uVar2,uVar4,puVar5);
+     uVar3 = 0;
++    /* PATCH 571: patch 383 dropped this install on the reasoning that section 0xec only carried the
++     * 182a/184b vectors patch 022 resolves directly.  It carries 30 vectors, DGROUP:0x78..0xf8, among
++     * them DGROUP:0xe8 = 0f69:20ef = FUN_1000_177f -- the MEMMGR front-end 42cc/4354/e714/e87a call
++     * through.  With the section absent the vector stayed 0, every `lcall [0xe8]` hit the icall trap
++     * and the model memory budget was never measured.  Install the section here as the asm does
++     * (`xor bx,bx ; mov si,0xec ; lcall [0x12]`), via the loader-role applier. */
++    { extern int fist_apply_reloc_section(unsigned short,int); fist_apply_reloc_section(0xec,1); }
+     /* PATCH 383: dropped the base-lost FAR-applier dispatch `mov si,0xec; lcall [ds:0x12]` (asm
+        0x106e8).  DGROUP:0x12 = the inert/base-lost far applier f842; this indirect __allregs call
+        drops SI/param_1, so f842 runs on uninitialised stack garbage (wild `*(uint16*)dgroup_off`
+@@ -45772,6 +45788,30 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_1000_177f) @ 1000:177f ===== */
++
++uint __allregs FUN_1000_177f(int param_1,uint param_2,undefined2 param_3)
++
++{
++  /* PATCH 571: the MEMMGR front-end behind the far vector DGROUP:0xe8 = 0f69:20ef (asm 0x1177f-0x11795),
++   * unpromoted before.  AX = size in paragraphs, CX:BX = the caller's descriptor struct (every caller
++   * passes DGROUP:0x157c).  `incb ss:0x1744` arms the guard that makes 184b return CF instead of jumping
++   * to the fatal 13e4 handler, `call 184b`, `decb ss:0x1744`, and on CF `mov bx,ss:[0x16d8]` -- the
++   * largest free block -- so an `ax=0xffff` request is the engine's "how much memory is there" idiom:
++   * 42cc/4354 read BX back (threaded through g_fist_177f_bx).  SS=DGROUP (patch 156). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  extern unsigned char g_fist_cf;
++  uint r;
++  dg[0x1744] += 1;
++  g_mm_cf = 0;
++  r = FUN_1000_184b(param_1, 0x1c00, 0, (undefined2 *)(uintptr_t)(unsigned short)param_2, 0, 0);
++  dg[0x1744] -= 1;
++  if (g_mm_cf) { g_fist_177f_bx = *(unsigned short *)(dg + 0x16d8); g_fist_cf = 1; }
++  else         { g_fist_177f_bx = (unsigned short)param_2;            g_fist_cf = 0; }
++  (void)param_3;
++  return r;
++}
++
+ /* ===== ((uint)(uintptr_t)&FUN_1000_1796) @ 1000:1796 ===== */
+ 
+ uint __allregs FUN_1000_1796(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+@@ -77049,6 +77089,7 @@
+   {0x11727u,(void*)&FUN_1000_1727},
+   {0x1175du,(void*)&FUN_1000_175d},
+   {0x11774u,(void*)&FUN_1000_1774},
++  {0x1177fu,(void*)&FUN_1000_177f},   /* PATCH 571 */
+   {0x11796u,(void*)&FUN_1000_1796},
+   {0x117a1u,(void*)&FUN_1000_17a1},
+   {0x117dau,(void*)&FUN_1000_17da},

@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <setjmp.h>
 #include <dirent.h>
+#include <unistd.h>
 
 /* ---- reg-file accessors (alias the exact g_mem the engine marshals through) ---- */
 #define RF(off)  (g_mem + 0xf0000u + (off))
@@ -57,6 +58,37 @@ extern volatile int g_fist_exit_code;
 
 /* case-insensitive open across the data dirs; returns FILE* or NULL. */
 static const char *datadir(void){ const char *d = getenv("FIST_DATADIR"); return d ? d : "armoredfist"; }
+
+/* resolve_ci(): the search open_ci performs, without opening -- for INT 21h AH=43 (get attributes), the
+ * existence probe the FILEMGR variant walks (276e/2733/2825) run before every open.  DOS answers it from
+ * the directory (DOSBox: stat), so it must neither create a handle nor appear in the open log.  Writes
+ * the resolved path into `out` and returns 1, or returns 0 when no candidate exists. */
+static int resolve_ci(const char *name, char *out, size_t outsz)
+{
+    if (!name || !name[0]) return 0;
+    { const char *b = name; for (const char *p=name; *p; ++p) if (*p=='\\'||*p=='/') b=p+1; if (!*b) return 0; }
+    char clean[260]; size_t j=0;
+    for (const char *p=name; *p && j<sizeof(clean)-1; ++p){ if(*p==' ') continue; clean[j++] = (*p=='\\')?'/':*p; }
+    clean[j]=0;
+    const char *dirs[4]; int nd=0;
+    static char d0[300];
+    snprintf(d0,sizeof d0,"%s/FISTDATA", datadir()); dirs[nd++]=d0;
+    dirs[nd++]=datadir();
+    dirs[nd++]="."; dirs[nd++]="FISTDATA";
+    for (int di=0; di<nd; ++di){
+        char path[600];
+        snprintf(path,sizeof path,"%s/%s", dirs[di], clean);
+        if (access(path, F_OK) == 0) { snprintf(out,outsz,"%s",path); return 1; }
+        char buf[600]; strncpy(buf,path,sizeof buf-1); buf[sizeof buf-1]=0;
+        char *comp=buf,*q; for(q=buf;*q;++q) if(*q=='/') comp=q+1;
+        size_t cl=strlen(comp); if(!cl) continue;
+        for(size_t i=0;i<cl;i++) comp[i]=(char)toupper((unsigned char)comp[i]);
+        if (access(buf, F_OK) == 0) { snprintf(out,outsz,"%s",buf); return 1; }
+        for(size_t i=0;i<cl;i++) comp[i]=(char)tolower((unsigned char)comp[i]);
+        if (access(buf, F_OK) == 0) { snprintf(out,outsz,"%s",buf); return 1; }
+    }
+    return 0;
+}
 
 static FILE *open_ci(const char *name, const char *mode)
 {
@@ -388,8 +420,13 @@ static void dos_int(void)
         fseek(g_htab[h], off, whence);
         long pos = ftell(g_htab[h]);
         R_AX=(uint16_t)(pos & 0xffff); R_DX=(uint16_t)((pos>>16)&0xffff); set_cf(0); return; }
-    case 0x43: /* get/set file attributes -> CX=attr, succeed */
-        R_CX=0x20; set_cf(0); return;
+    case 0x43: { /* get/set file attributes, DS:DX=name.  AL=0 get -> CX=attr, or CF=1/AX=2 when the file
+                  * does not exist: the FILEMGR's extension-variant walks (276e/2733/2825 `mov ax,0x4300 ;
+                  * int 21h ; jb next`) select the on-disk variant by this probe, and 276e's "no variant"
+                  * exit depends on the miss.  AL=1 set -> succeed. */
+        char *nm = (char*)(g_mem + lin(R_DS, R_DX)); char rp[600];
+        if ((R_AL & 0xff) == 0 && !resolve_ci(nm, rp, sizeof rp)) { R_AX=2; set_cf(1); return; }
+        R_CX=0x20; set_cf(0); return; }
     case 0x57: /* get/set file date/time -> succeed */
         set_cf(0); return;
     case 0x48: { /* allocate memory, BX=paragraphs -> AX=segment (or CF=1, BX=max avail) */

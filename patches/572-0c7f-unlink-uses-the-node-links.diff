@@ -1,0 +1,41 @@
+PATCH 572: MEMMGR 0c7f (the discard-and-reinsert strategy) unlinked through the free-list head instead
+of the node's own next link.
+
+asm 0x10ca0: `8e 06 0c 00` = `mov es,[ds:0xc]` -- DS is the allocated node being discarded, so this is
+node.next; `mov ax,[0xe]` is node.prev; then `es:[0xe]=ax` / `es=ax` / `es:[0xc]=bx` splice the node out
+of the ALLOCATED list.  Patch 025's C read `*(ctl + 0x0c)` -- the control frame's free-list head, which
+the asm would have written as `8e 46 0c` -- so the free list's LOW sentinel was spliced into the
+allocated chain and its own links clobbered; the 1110/1114 sorted insert that immediately follows then
+walked a free list whose sentinel's next was itself, for ever.
+
+Reached for the first time by the mission-load memory query (42cc: 0xffff paragraphs through DGROUP:
+0xe8, scratch/parked/571 -> board:0025): the allocator's strategy chain runs 0bd1 (discard cached
+blocks -- the free list grows from 0x15b7 to 0x3a08 paragraphs, correctly), 0c21 (stubbed), 0c7d, then
+0c7f.  Traced with a gdb free-list dump at each strategy: the list is intact entering 0c7f and cyclic
+after it.  The original's list at this point (oracle RAM dump, board:0025) keeps LOW -> ... -> HIGH.
+
+--- a/fist.c
++++ b/fist.c
+@@ -44404,12 +44404,18 @@
+     if (MM_S8(es, di + 2) & 1) {                     /* testb es:[di+2],1 ; jne */
+       FUN_1000_1019(4);
+       MM_S8(es, di + 2) &= 0x7f;                     /* andb es:[di+2],0x7f */
+-      es = *(uint16_t *)(ctl + 0x0c);                /* mov es,[bp+0xc] */
+-      ax = MM_S16(ds, 0x0e);                          /* mov ax,[0xe] */
+-      MM_S16(es, 0x0e) = ax;                          /* mov es:[0xe],ax */
++      /* PATCH 572: `0ca0: 8e 06 0c 00` is `mov es,[ds:0xc]` -- the NODE's next link (DS = the node),
++       * not `mov es,[bp+0xc]` (the free-list head, which would be 8e 46 0c).  The unlink below is
++       * next.prev = prev ; prev.next = next on the ALLOCATED list.  Reading ctl[0xc] instead spliced the
++       * free list's LOW sentinel into the allocated chain, and the 1110 insert that follows then walked
++       * a free list whose sentinel pointed at itself -- for ever.  First reached by the 0xffff memory
++       * query 42cc issues at mission load (board:0025). */
++      es = MM_S16(ds, 0x0c);                          /* mov es,[0xc]  (node.next) */
++      ax = MM_S16(ds, 0x0e);                          /* mov ax,[0xe]  (node.prev) */
++      MM_S16(es, 0x0e) = ax;                          /* mov es:[0xe],ax   next.prev = prev */
+       bx = es;                                        /* mov bx,es */
+       es = ax;                                        /* mov es,ax */
+-      MM_S16(es, 0x0c) = bx;                          /* mov es:[0xc],bx */
++      MM_S16(es, 0x0c) = bx;                          /* mov es:[0xc],bx   prev.next = next */
+       ax = *(uint16_t *)(ctl + 0x04);                 /* mov ax,[4] (ctl[4]) */
+       *(uint16_t *)(ctl + 0x04) = (uint16_t)(*(uint16_t *)(ctl + 0x04) + ax); /* add [bp+4],ax */
+       g_mm_ds = ds; g_mm_es = es; g_mm_ctl = ctl;

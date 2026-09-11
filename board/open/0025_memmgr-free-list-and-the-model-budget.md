@@ -1,6 +1,8 @@
 Type: bug
 Status: open
 Parent: 0001
+Note: renumbered from 0024 (commit 430604b filed it as 0024; that number belongs to the closed
+      guest-RAM oracle capture item).
 Title: every mission loads every model and sprite sheet the original loads -- the CRT memory manager
        measures free memory and can insert into its free list
 
@@ -107,3 +109,35 @@ the chunked `rep movsw`/[0x394] reads into that segment (1afe..1b33); the per-mo
 0x27f4[idx] and 0x276c[idx]; the sub-block walk at 1b50 with the 0x300 stride; the close with the
 slot in BX), and confirm 276e's slot release on close.  Then the .M16/.M32 passes should follow from
 the table's lod bits, and FIST_OPENLOG should match the oracle open-trace file for file.
+
+## Step 3 landed (patches 571/572/573, 2026-09-11)
+
+The chain rebuilt from the asm -- 183f/1692/1735/19d1/1a45, 1774 -> 177f, the FILEMGR leaves with DS and
+CF, extender ops 0x3c/0x4c in the gate, INT 21h AH=43 as an existence probe -- and two things the loads
+uncovered: the resource relocation callback 15c2 (1541's [S+4]) had never been promoted, so every
+MEMMGR block move left the sprite directory [0x4f0] stale, and three arg-less cockpit blits (7fcd,
+5a1d, 3823) drew garbage records over live blocks (board:0014 lists the 118 remaining sites).
+
+Measured (FIST_OPENLOG vs the oracle open trace): the 160 model files open in the original's order,
+file for file; the self-play runs to DEFEAT at 3:38 without a crash or hang (the original: 5:49).
+
+Still open here:
+- the original opens BURM_D2.KLC/BURM_C2.KLC five times between the models and MSN2.MS3 -- the TCB's
+  default map names (DGROUP:0xea7c "5.SKY 502.PAL BURM_D2.KLC BURM_C2.KLC WVSOUNDS.BIN").  Measured
+  (FIST_EXTLOG): at that point the engine posts extender op 0x60 sixteen times, which the gate does
+  not handle.  Op 0x60 = ext 0x8650: from the posted position (TCB+0xd2/+0xd6, <<13 >> (32-detail))
+  it samples a (4<<(detail-9))-square window of the heightmap for its min/max; when the range is <= 9
+  it decodes the KLC named at TCB+0x5a through 643c into [0x8644] and resamples it with bc06/bed2 to
+  the map's detail -- a local terrain patch.  The original's five BURM pairs are the five posts that
+  passed the range test.  Belongs to board:0009 (the extender services); it changes what the voxel
+  renderer sees around those five objects.
+- the budget: the port's DOS AH=48 reports 0xe820 paragraphs, the original ~0x4656; word[0x454] and any
+  memory-dependent branch differ until the shim's conventional-memory map matches DOSBox's.
+- 0c21 (the block-relocating probe) is still a stub that answers "not found"; the 0xffff query runs it.
+- 0d2e (the resource touch/reload, f69:169e) is still Ghidra's: it writes DGROUP:2/6/8 for the node's
+  fields, dispatches [bp+0x18] under CS 0x1000 instead of 0f69 (ctl1/ctl2's 262a/29bf are the reload
+  methods, ctl0's 1026 is `stc ; ret`), and calls 0d70 with the wrong argument.  Reached when a
+  descriptor carries flag 0x10 (discarded) -- not yet on AZER1.
+- the port additionally opens MSPRITE2.BIN/M2CON.MRL/CCV.MRL when the player's vehicle dies (7eb7's
+  view reset with the descriptor 0x8f82 unallocated); whether the original does the same after its
+  1:38 death is unmeasured (open3.log ends at the spawn).

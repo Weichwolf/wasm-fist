@@ -1301,7 +1301,7 @@ Working from the original's debrief numbers (10 ground + 1 air kills, 4 own lost
 Each was the producer/consumer shape this board keeps recording: the correct patch reaches code that
 had never executed and finds it pristine.  After 570 the run writes DEFEAT, starts the countdown, and
 hangs in the sprite blitter on records whose sprite HEADERS are garbage -- the sheets were never
-loaded -- which is board:0024 (the memory manager and the model budget), the gate to the mission-over
+loaded -- which is board:0025 (the memory manager and the model budget), the gate to the mission-over
 exit and to every drawn object.
 
 Spread, not defect: two oracle runs of the same mission gave DEFEAT at 5:49 with 11 kills and DEFEAT
@@ -1315,3 +1315,27 @@ written every tick), so the "nobody writes 0xe814" claim was an unsupported read
 instrument (the conclusion held on the clock trace); FIST_WATCHBYTE replaces it.  390d (render method
 id 0x18) is still pristine and will fault when first emitted; c47d/c4a2 never deliver their label
 records because their C sets no CF (board:0015).
+
+## The verdict reached, then the transition (patches 573/574, 2026-09-11)
+
+With the meshes and sprite sheets loaded (board:0025, patch 573) the AZER1 self-play runs to DEFEAT at
+3:38 -- inside the original's spread (5:49 / 1:38) -- and no longer hangs in the blitter.  Behind the
+verdict, three more defects, each found by a watchpoint on the byte it corrupted (patch 574):
+5f64's dropped CF let 5fb0 emit 65536 label records on the DEFEAT frame and overwrite the MEMMGR
+descriptor pool (the hang after the verdict); the word-typed byte flags 0x87bd/0x7b1e zeroed the
+cockpit container's child-list offset and the view flag (the 20d6/20ea recursion on the first repaint
+after the player's vehicle is hit); c47d/c4a2 and their writers b4cd/b4a3 were pristine (the first
+cockpit-view frame after the verdict host-deref'd 3460).
+
+The flow after e814 is now: 459a returns -> [0x59c], 1631 (every model released), be86, be67, 616e
+(the pilot file written -- as "        .FPL": no player is selected in the self-play), 6220 (points,
+battles won/lost), e4bb (template 0x2d1d).  The port's e4bb frame is the command-map toolbar over a
+black map; the original's post-verdict screen is "MISSION LOST / BATTLE STATISTICS / PRESS ANY KEY TO
+PROCEED" over a picture (ref/oracle_azer1_debrief_defeat.png).  ba63 (called by e4bb) fills the
+statistics strings into STRSEG:0x41dc..0x4305 and the 0x2d1d container node 3b24's child list is where
+a text block would be drawn -- what draws the picture and the text is the next measurement
+(tools/oracle/census_debrief.sh captures the original every 20 s through the verdict).
+
+Also noted on the way: 4397 (the STRSEG:0x802 budget-reserve vector) and 0x019ae/0x1f6c2/0x0011d/
+0x0e800/0x00f69/0x01d23/0xc862/0xc888/0xc783/0x1c06d/0x13f7f/0x1360f/0x0f9a4/0x01b31 are still icall
+traps on the AZER1 path (FIST_TRACE_TRAPS); board:0015.

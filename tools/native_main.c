@@ -1582,6 +1582,7 @@ unsigned short g_fist_r48_dx, g_fist_r48_cx;   /* PATCH 469: 1322/129f 48-bit re
 unsigned short g_fist_3e29_cx;     /* PATCH 469: 3e29 CX out (projected screen x) */
 uint32_t g_fist_ext_esi;           /* PATCH 471: op-0x40 (e132) ESI lane = polygon linear address */
 unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi;   /* PATCH 471: op-0x40 CX/DX/DI lanes */
+uint32_t g_fist_ext_edx_out;       /* PATCH 573: op-0x3c (e115) EDX result = the uploaded record's address in the model block */
 unsigned short g_fist_1345_bp;     /* PATCH 471: 1345 BP out = the MEMMGR list header (0x16d4/0x16f6/0x1718) */
 unsigned short g_fist_054c_bx;     /* PATCH 473: 054c/bbc6 BX out = the pitch (077e over the Z delta) */
 /* PATCH 542: 054c also returns the 32-bit RANGE in CX:DX -- asm 0x558 `push %ax ; push %dx` then
@@ -1889,6 +1890,33 @@ int fist_extender_gate(void) {
             }
         }
         *(uint16_t*)(dg + 0xea10) = 0;
+        return 0;
+    }
+    /* board:0025 op 0x3c -- MESH-RECORD UPLOAD (ext 0x11f4, patch 573).  The engine's 1a45 posts every
+     * record of a .M00/.M08/.M16/.M32 file with cx = the byte count and dx:si = the record's scratch
+     * segment:0; the handler appends it to the extender's single model block (3439 on the handle at
+     * ext 0x123b, growing it per call) and returns eax = -1 with EDX = the record's address, which the
+     * engine stores at es:[2] -- the pointer 2e49 posts to the op-0x40 rasterizer.  The 16-bit
+     * registers reach the gate through the patch-471 lanes; EDX goes back through g_fist_ext_edx_out
+     * (published by the patched 11f4).  Posted during the ACCEPT mission cascade, before the map's
+     * after-map gate -- like op 0x20/0x44. */
+    if (op == 0x3c && g_ext_ready) {
+        extern uint32_t m_ext_FUN_0000_11f4(unsigned, unsigned, unsigned);
+        *(uint16_t*)(dg + 0xea10) = 0;
+        return (int)m_ext_FUN_0000_11f4(g_fist_ext_ecx, g_fist_ext_edx, (unsigned)g_fist_ext_esi);
+    }
+    /* board:0025 op 0x4c -- .MAL PALETTE REMAP (ext 0x123f -> 9e60, patch 573).  19d1 posts it after
+     * loading a model's 768-byte palette to seg:0 with cx=dx=seg, si=0, di=0x300: 9e60 writes the
+     * 256-entry nearest-colour LUT (against the mission palette the op-0x18 map load reduced to) at
+     * seg:0x300, and 1a45 translates every mesh texel through it.  asm 123f: esi = (dx<<4)+si+[0x807],
+     * edi = (cx<<4)+di+[0x807], call 9e60.  ([0x807] = the guest-RAM window = g_mem here.) */
+    if (op == 0x4c && g_ext_ready) {
+        extern void m_ext_FUN_0000_9e60(unsigned char, unsigned char *, unsigned char *);
+        uint8_t *xb4c = g_mem + FIST_EXT_BASE;
+        uint32_t base4c = *(uint32_t*)(xb4c + 0x807);
+        *(uint16_t*)(dg + 0xea10) = 0;
+        m_ext_FUN_0000_9e60(0, g_mem + base4c + ((uint32_t)g_fist_ext_edx << 4) + (uint16_t)g_fist_ext_esi,
+                               g_mem + base4c + ((uint32_t)g_fist_ext_ecx << 4) + g_fist_ext_edi);
         return 0;
     }
     if (op == 0x1c && g_ext_ready && g_fist_after_map) {

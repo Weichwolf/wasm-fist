@@ -115,3 +115,21 @@ phase handlers with `call *0xe6f5(%bx)` and ES:DI ambient, and `FUN_0000_c38b` -
 Ghidra's invented `param_2` deref'd as a host pointer.  Measured `param_2 = g_mem - 620`, an
 out-of-bounds write that SEGV'd AZER7 as soon as patch 553 made the branch reachable.  Patch 554 fixes
 it by taking the cursor from `g_fist_render_di`, exactly as this item prescribes.
+
+## Measured after patch 573 (2026-09-11): the arg-less DGROUP:0x6xx driver-method sites
+
+`grep 'fist_icall_far((uint32_t)(DAT_1000_c6..)))()' build/fist.c` -- 118 dispatches in 73 functions
+still call an MGAVIDEO method with no arguments (the class patches 520/531 opened): [0x60a] rect fill x17,
+[0x61a] rect outline x13, [0x6b4] sprite blit x19, [0x6c8] transparency blit x14, [0x6bc] x5, [0x684]
+x9, [0x68c]/[0x694]/[0x6a8]/[0x6d0] x5 each, the rest 1-4 each.  Each of them blits or fills with a
+stack value for its sprite id / colour and (usually) a stale bx for its rect.  Three of them were the
+AZER1 self-play's memory corruptors once real sprite sheets loaded (7fcd, 5a1d, 3823: patch 573); the
+70 others are silent only because their flows are not yet driven.  Functions:
+
+    286e 28b7 2908 290e 32a6 3de2 3de5 4937 4da3 524e 549f 54e0 54e8 54f6 550e 5531 5547 555f 5571
+    5579 57a9 57d8 5965 6092 6448 64a4 6612 664e 66b1 6730 684e 688a 6909 6beb 73ed 74a9 74e3 7570
+    75cc 8342 862b 8682 8b0d 8b57 8bc4 8bcd 8cce 8d01 8d67 8daa 8e0a 8e76 8ef3 8fb6 9364 9385 939e
+    9497 94f5 9774 989e 98d2 99e2 9a68 9ad4 aa4e bc12 d27e d2bd d2f5 d443 d480 eb07
+
+Each is a 3-10 instruction asm read (ax = sprite id or colour, bx = element+4 from DGROUP:0x3e08 or a
+fixed rect); mechanical, and the fix for the whole class is one patch per cockpit/screen group.
