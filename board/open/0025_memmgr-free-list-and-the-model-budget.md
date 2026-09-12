@@ -141,3 +141,29 @@ Still open here:
 - the port additionally opens MSPRITE2.BIN/M2CON.MRL/CCV.MRL when the player's vehicle dies (7eb7's
   view reset with the descriptor 0x8f82 unallocated); whether the original does the same after its
   1:38 death is unmeasured (open3.log ends at the spawn).
+
+## The out-of-memory path is the MEMMGR's swap (2026-09-12, board:0027's root)
+
+The second cockpit's console (M2CON.MRL, 0x663 paragraphs, loaded by 84c3 -> 0310 -> 26fc -> 250d
+-> 184b when the player's vehicle is lost) comes out torn because its block is handed to the next
+allocation while it is in use.  Measured with the MEMMGR lists dumped at each step ($SC/mmfree.py):
+before the load the free list holds only a 1-paragraph and a 0x281-paragraph block; 184b -> 0a31
+then splits the ALLOCATED 0x1000-paragraph block at 0x5c54 (owner DGROUP:0x157c, the model budget)
+into a 0x663 node owned by the descriptor 0x8f7e and a 0x99d remainder -- and leaves both on the
+FREE list.  2004's next 182a (0xc00 bytes for the child 0x8f8c) takes the 0x5c54 node, and the
+compiled-sprite records `03 05 40 01` overwrite the console's RLE stream before 0340 decodes it.
+
+The asm behind it (0x10c21-0x10c7a): when no free block fits, 0c21 walks the allocated list for a
+node whose owner flag has bit 2 set and bit 6 clear and runs 1c68 (1d5c/1d9c: copy the block's
+paragraphs elsewhere, mark the node 0x30, drop the owner) and, failing that, 1fcc (211f/2149, then a
+far call through DGROUP:0xd242 with the block's size and segments in DGROUP:0xd328..0xd336 -- the
+move service outside conventional memory) -- the block is SWAPPED OUT so its paragraphs can be
+reused; 1345/0d70 and the flag-0x10 reload (0d2e, the ctl1/ctl2 methods 262a/29bf) bring it back
+when its owner touches it.  The port's 0c21 answers "not found" (the message
+`[memmgr] FUN_1000_0c21 block-relocating probe (1c68/1fcc) reached -- unimplemented`), and
+0a31's carve then runs with no room taken -- the corrupt split above.  1c68, 1cba, 1d51, 1d5c,
+1d9c, 1df2, 1dfa, 1eab, 1eb4, 1f3b, 1f43, 1fcc, 204f, 211f, 2149 and the [0xd242] service are
+Ghidra's (DS-relative node fields rendered as DAT_1000_c000..).  This is the next MEMMGR item: the
+swap-out/swap-in pair, faithful to the asm, with the moved paragraphs kept where the original keeps
+them (the [0xd242] service's memory), so a mission that fills conventional memory -- every one, once
+the player's vehicle is lost -- loads its later resources into blocks that stay valid.

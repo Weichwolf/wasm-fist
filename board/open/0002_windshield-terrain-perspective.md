@@ -2765,6 +2765,9 @@ When the player's tank is destroyed the original switches the view to another ve
 gauges, then "ENGINE DAMAGED / NIGHT VISION DAMAGED").  The port's frame after that switch is a torn
 cockpit -- the panel art four times too wide, duplicated, the HUD texts (PL:1, GOALS REMAINING, the
 range readout) in their right places on top -- under a red palette that never returns (FIST_DUMPTICK
-2000 and 4000 on AZER1, tools/native_main.c FIST_FBDUMP).  Frame 1700 is the clean M1 cockpit.  Two
-things to find: the second cockpit's blit path (a stride or a planar/linear confusion in the MGA
-driver's port, since the first cockpit's blit is fine) and the red flash that does not fade.
+2000 and 4000 on AZER1, tools/native_main.c FIST_FBDUMP).  Frame 1700 is the clean M1 cockpit.
+
+The red was a5c4's dropped immediates (patch 585: `mov ax,0x40 ; mov si,0x20 ; mov di,0x20 ; lcall
+[0x5c4]` -- the fade to black the loss plays, 64/32/32 frames per channel, confirmed by the oracle's
+register trace of MGAVIDEO 0660) and 063c's folded wait.  The torn console is the Bradley cockpit's
+own paint chain, which no M1 flow ever ran -- board:0027.

@@ -1,0 +1,80 @@
+PATCH 585: the player-loss flash -- a5c4's three immediates (red 64, green 32, blue 32 frames) and the
+063c/0655 waits.
+
+board:0002.  When the player's vehicle is destroyed, a93e's a5c4 (`push di ; push [0x452] ; mov ax,0x40 ;
+mov si,0x20 ; mov di,0x20 ; lcall [0x5c4] ; pop [0x452] ; pop di ; retf`) runs MGAVIDEO 063c: 0647 sets
+the DAC run (bx = 0, cx = 0xff, dx = 0xffff) and 0660 arms the per-channel fade 0732 -- each channel's
+accumulator counts up at 0x10000/frames per retrace, the intensity table is i * (0x10000 - acc) >> 16,
+so a channel dims to black over its frame count and stays there once the accumulator wraps (rate and
+accumulator both 0); when all three are 0 the stepper unregisters.  063c then spins on 09c6 (`call 9c6 ;
+jb`) until it has.  The oracle's register trace (scratch/oracle/regtrace_0660) shows AX = 0x40, SI = DI =
+0x20 at 0660 on every player loss.
+
+Ghidra dropped the three immediates at a5c4's indirect call, so the port's 0660 took whatever lay on the
+stack -- in AZER1 red 16992, green 32, blue 51752: green black in 32 frames, blue in one, red dimming for
+21845 frames -- and 063c's wait was folded to one pass, so the cockpit switch ran under the tint instead
+of after the fade.  Every frame after the switch was red (FIST_DUMPTICK 1860..4000).  With the
+immediates and the wait, the fade runs to black in 64 retraces and the switch follows it, as the
+original's.  0655 (`call 660 ; call 9c6 ; jb`) carried the same folded wait.
+
+--- a/fist.c
++++ b/fist.c
+@@ -67765,8 +67765,13 @@
+ {
+   undefined2 uVar1;
+   
++  /* PATCH 585: asm 0x1a5c4 `push di ; push [0x452] ; mov ax,0x40 ; mov si,0x20 ; mov di,0x20 ; lcall
++   * [0x5c4] ; pop [0x452] ; pop di ; retf` -- the player-loss flash: MGAVIDEO 063c (0647 -> 0660) fades
++   * the DAC to black, red 64 frames, green and blue 32, and waits for it.  Ghidra dropped the three
++   * immediates at the indirect call, so 0660 took whatever was on the stack: the green and blue rates
++   * came out 0 and 2048 -- black at once and a red that lingered for 21845 frames. */
+   uVar1 = DAT_1000_c452;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c5c4)))();
++  ((void (*)(unsigned short, unsigned short, unsigned short))fist_icall_far((uint32_t)(DAT_1000_c5c4)))(0x40, 0x20, 0x20);
+   DAT_1000_c452 = uVar1;
+   return;
+ }
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1819,15 +1819,16 @@
+ void __allregs FUN_0000_063c(undefined2 param_1,undefined2 param_2,undefined2 param_3)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  undefined1 uVar1;
+-  
++  /* PATCH 585: `call 647 ; L: call 9c6 ; jb L ; retf` -- arm the RGB fade (AX/SI/DI = the per-channel
++   * frame counts) and wait until its retrace stepper has unregistered itself, the retrace pump stepping
++   * it meanwhile (the 084e idiom, patch 575).  Ghidra folded the CF to a one-pass loop. */
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
+   FUN_0000_0647(param_1,param_2,param_3);
+   do {
+-    uVar1 = in_CF;
++    fist_timer_pump();
+     FUN_0000_09c6();
+-    in_CF = 1;
+-  } while ((bool)uVar1);
++  } while (g_fist_cf);
+   return;
+ }
+ 
+@@ -1852,12 +1853,15 @@
+   undefined1 in_CF = 0;
+   undefined1 uVar1;
+   
++  /* PATCH 585: the same wait as 063c (`call 660 ; L: call 9c6 ; jb L ; retf`). */
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
++  (void)in_CF; (void)uVar1;
+   FUN_0000_0660(param_1,param_2,param_3,param_4,param_5,param_6);
+   do {
+-    uVar1 = in_CF;
++    fist_timer_pump();
+     FUN_0000_09c6();
+-    in_CF = 1;
+-  } while ((bool)uVar1);
++  } while (g_fist_cf);
+   return;
+ }
+ 
