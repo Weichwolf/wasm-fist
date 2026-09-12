@@ -83,3 +83,12 @@ pump (the mouse callback runs there).  AZER4 / INDIA6 / UKRAINE7 resolve in 7-12
 Open: the wasm web player's pacing (fist_web_vblank, Atomics.wait) is untested in a browser; the
 r92/9200 capture scripts and census_debrief.sh still assume the old FIST_MOUSE unit where they drive
 the port (they drive DOSBox with xclick, unaffected).
+
+## The BIOS chain (patch 582)
+
+30f8's chain to the saved INT-8 vector ([0x44b] bit 1) had far-called 0000:0008 since the beginning:
+2ebe stored the AH=35 result with a 4-byte write that zeroed [0x434] and Ghidra's pre-INT ES.  With
+the two word stores the chain reaches fist_dos.c's INT 08 and 0040:006C advances as the original's
+does (1890 chains in a 20 s AZER1 run).  `fist_set_int8_handler` recognises the magic FE00:0008 the
+engine hands back on its way out as "the BIOS handler again" (g_int8_set = 0) instead of installing
+the trampoline as the ISR.

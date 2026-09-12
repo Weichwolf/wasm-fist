@@ -1,0 +1,375 @@
+PATCH 582: the CRT's near-hook trampoline (018a/0199 through DGROUP:0x3a), which is how the scheduler
+poll steps the RNG; the task continuation's segment (3566) and its `lret` (0x1360f); the saved INT-8
+vector (2ebe) as two words; the per-tick handler 5db8 and the idle handler 773e of word[0x6ce4].
+
+board:0015 / board:0017 / board:0026.  The trap census on AZER1 after patch 581 left five targets, and
+each of them was a different reading error of the same mechanism:
+
+  018a/0199  `ff 16 3a 00` is `call [ss:0x3a]` -- a NEAR call (ModRM /2) in the trampoline's own segment
+         0, not the far call [0x3c]:[0x3a] patch 073 modelled at 3920 (`push [0x310] ; ljmp [0x48]`,
+         [0x48] = 0000:0199, [0x310] = 0x291): segment 0x018a (the word at [0x3c] is the 0x18a
+         trampoline's OFFSET) put the target at linear 0x1b31.  [0x310] = 0x291 is the LFSR step
+         FUN_0000_0291, so every scheduler poll (35ae, 38e5) advances the RNG once -- the port's RNG
+         did not move there at all.  018a itself (`call [ss:0x3a] ; retf`, the [0x3c] vector) and its
+         callers 1384/1394/13a4/13b4/13c4/13d4/3d07 read and wrote the slot through Ghidra's static SS
+         0x2ba9 (DAT_2000_baca = 0x2baca, DAT_2000_bd02 = 0x2bd02 ..): the slot is DGROUP:0x3a, the
+         sources DGROUP:0x272/0x26e/0x282/0x284/0x290/0x294/0x162c.  The hooks are 0 until installed
+         and the `ret` at 0000:0000 is what a null hook runs -- emitted as FUN_0000_0000; 3835's
+         constant hook 0x1c66 (`clc ; ret`) likewise.
+  3566   `mov [si+0x10],cs` stored 0x1000; the oracle executes 3566 and 35a7 at 2082:3ed6 / 2082:3f17
+         (the 0f69 cluster), so the continuation both arm is 0f69:3f7f = the bare `lret` at 0x1360f,
+         which the next poll far-calls (135ca).  35a7 already had 0xf69 (patch 073); 3566 did not, and
+         neither target existed: FUN_1000_360f is that `lret`.
+  2ebe   `mov cs:[0x382a],bx ; mov cs:[0x382c],es ; mov [0x432],bx ; mov [0x434],es` after INT 21h
+         AH=35: the 4-byte DAT_1000_c432 store zeroed [0x434] and Ghidra's `unaff_ES` is the ES from
+         before the INT.  30f8's chain to the saved vector ([0x44b] bit 1) far-called 0000:0008 on every
+         interrupt and the BIOS tick at 0040:006C never moved.  Two word stores of BX and the returned
+         ES (the shim's FE00:0008), which fist_icall routes to the INT 08 service.  The shim's
+         set-vector now recognises that magic as "the BIOS handler again" when the engine restores it.
+  5db8   FUN_0000_4886 installs word[0x6ce4] = 0x5db8 and the main loop near-calls it once per sim tick
+         (45ed); unpromoted, so the whole mode ran with its tick handler dispatching into the void.
+         Transcribed from 0x5db8-0x5e5e: the 500f call, the [0x7a40]/[0x6cde] gate to 69c0, the
+         [0x7a50]/[0x7ae7] countdowns, the two near state tables at 0x7d08/0x7d10 and the [0x1594]
+         message with AX chosen by [0x7aea]/[0x7c52]/[0x7aec]/[0x1eb5]/[0x1f35].  72ee's idle handler
+         0x773e is a bare `ret`, as c30e.
+
+  Measured: AZER1 and TRAIN2 run to their verdicts with no trap at all (FIST_TRACE_TRAPS empty).  The
+  RNG now steps once per poll, so the battles change: AZER1 DEFEAT at tick 5358 (1:29; the original's
+  two runs: 5:49 and 1:38), TRAIN2 DEFEAT at 19134 (5:19; the original loses at ~4:30) -- the kind now
+  agrees on both.  The original seeds its RNG from the clock and its poll count from CPU speed, so a
+  tick-for-tick match with the oracle is not a property the original has with itself; native and wasm
+  stay identical because the poll count is the clock model's (board:0026).
+
+--- a/fist.c
++++ b/fist.c
+@@ -187,6 +187,8 @@
+ void __allregs FUN_0000_1c22(undefined2 param_1,uint param_2,int param_3,int param_4,int param_5,int param_6);
+ void __allregs FUN_0000_1c62(void);
+ void __allregs FUN_0000_1c64(void);
++void __allregs FUN_0000_1c66(void);
++void __allregs FUN_0000_0000(void);
+ void __allregs FUN_0000_1c68(void);
+ void __allregs FUN_0000_1c6a(void);
+ void __allregs FUN_0000_1ca5(void);
+@@ -468,6 +470,8 @@
+ void __allregs FUN_0000_5d33(void);
+ undefined4 __allregs FUN_0000_5d43(undefined2 param_1);
+ void __allregs FUN_0000_5d80(void);
++void __allregs FUN_0000_5db8(void);
++void __allregs FUN_0000_773e(void);
+ void __allregs FUN_0000_5e5f(void);
+ void __allregs FUN_0000_5e60(void);
+ void __allregs FUN_0000_5e82(void);
+@@ -1862,6 +1866,7 @@
+ undefined2 * __allregs FUN_1000_349b(uint param_1,undefined2 param_2);
+ undefined2 __allregs FUN_1000_34f5(uint param_1);
+ void __allregs FUN_1000_3566(undefined2 *param_1);
++void __allregs FUN_1000_360f(void);
+ uint __allregs FUN_1000_35a7(void);
+ char __allregs FUN_1000_3638(char param_1);
+ void __allregs FUN_1000_3645(undefined2 param_1,undefined2 param_2,undefined2 *param_3,int param_4);
+@@ -4541,7 +4546,12 @@
+ void __allregs FUN_0000_018a(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_2000_baca)))();
++  /* PATCH 582: asm 0x18a `call [ss:0x3a] ; retf` -- `ff 16`, a NEAR call in this trampoline's own
++   * segment 0 to the hook offset its caller dropped into DGROUP:0x3a (1384.., 380e.., 3d07: `push
++   * [0x2xx] ; pop [0x3a] ; lcall [0x3c]`, [0x3c] = 0000:018a).  Ghidra read the slot through its static
++   * SS (0x2ba9 -> DAT_2000_baca = 0x2baca) as a 4-byte far pointer.  The null hook (offset 0) is the
++   * `ret` at 0000:0000. */
++  (*(code *)fist_icall_near(0u, *(uint16_t *)(g_mem + 0x1c03a)))();
+   return;
+ }
+ 
+@@ -8598,6 +8608,17 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_0000) @ 0000:0000 ===== */
++
++void __allregs FUN_0000_0000(void)
++
++{
++  /* PATCH 582: the `ret` at linear 0 -- the CRT's null NEAR hook: the DGROUP:0x26e/0x272/0x282/0x284/
++   * 0x290/0x294 slots hold 0 until something installs a hook, and 018a near-calls whatever is there. */
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_1c64) @ 0000:1c64 ===== */
+ 
+ void __allregs FUN_0000_1c64(void)
+@@ -8607,6 +8628,18 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_1c66) @ 0000:1c66 ===== */
++
++void __allregs FUN_0000_1c66(void)
++
++{
++  /* PATCH 582: `clc ; ret` -- the hook 3835 installs (`mov word [0x3a],0x1c66 ; lcall [0x3c]`). */
++  extern unsigned char g_fist_cf;
++  g_fist_cf = 0;
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_1c68) @ 0000:1c68 ===== */
+ 
+ void __allregs FUN_0000_1c68(void)
+@@ -17135,6 +17168,51 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_5db8) @ 0000:5db8 ===== */
++
++void __allregs FUN_0000_5db8(void)
++
++{
++  /* PATCH 582: the per-sim-tick handler FUN_0000_4886 installs in word[DGROUP:0x6ce4] (48c6), which the
++   * main loop near-calls once per tick (45ed `call [0x6ce4]`); unpromoted -- reached only through that
++   * vector -- so every tick of that mode dispatched into the void.  asm 0x5db8-0x5e5e, DS = DGROUP:
++   *   di = [0x7ae0]; if di == 0 or byte[di+0x16]&1: call 500f
++   *   if [0x7a40] != 0: if byte[0x6cde] == 0: lcall 0f69:7330 (69c0); ret
++   *   if [0x7a50] != 0 and --[0x7a50] == 0: byte[0x7a52] = 0; byte[0x87c2] = 3
++   *   if [0x7ae7] != 0: --[0x7ae7]
++   *   call [0x7d08 + [0x7d06]]; call [0x7d10 + [0x7d0e]]          (two near state tables)
++   *   if byte[0x7aea] == 0: lcall [0x1594] with ax = 0 if bytes 0x1eb5 and 0x1f35 are both negative, else 0xd
++   *   else if ([0x7c52] == 0 or == 0x10) and [0x7aec] == 0: lcall [0x1594] with ax = [0x7c98 + [0x7c52]]
++   *   else: lcall [0x1594] with ax = 4 */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = *(uint16_t *)(dg + 0x7ae0), bx, ax;
++  if (di == 0 || (dg[(uint16_t)(di + 0x16)] & 1) != 0) FUN_0000_500f();                    /* 5dbc-5dc6 */
++  if (*(uint16_t *)(dg + 0x7a40) != 0) {                                                  /* 5dc9 */
++    if ((*(uint16_t *)(dg + 0x6cde) & 0xff) == 0) FUN_1000_69c0();                        /* 5dd0/5dd8 */
++    return;
++  }
++  if (*(uint16_t *)(dg + 0x7a50) != 0 && --*(uint16_t *)(dg + 0x7a50) == 0) {             /* 5dde-5de9 */
++    dg[0x7a52] = 0; dg[0x87c2] = 3;                                                       /* 5deb/5df0 */
++  }
++  if (*(uint16_t *)(dg + 0x7ae7) != 0) --*(uint16_t *)(dg + 0x7ae7);                      /* 5df5-5dfc */
++  bx = *(uint16_t *)(dg + 0x7d06);
++  (*(code *)fist_icall_near(0u, *(uint16_t *)(dg + (uint16_t)(bx + 0x7d08))))();          /* 5e00/5e04 */
++  bx = *(uint16_t *)(dg + 0x7d0e);
++  (*(code *)fist_icall_near(0u, *(uint16_t *)(dg + (uint16_t)(bx + 0x7d10))))();          /* 5e08/5e0c */
++  if (dg[0x7aea] == 0) {                                                                  /* 5e10 -> 5e41 */
++    ax = ((signed char)dg[0x1eb5] < 0 && (signed char)dg[0x1f35] < 0) ? 0 : 0xd;          /* 5e41-5e5a */
++  } else {
++    bx = *(uint16_t *)(dg + 0x7c52);                                                      /* 5e17 */
++    if ((bx == 0 || bx == 0x10) && *(uint16_t *)(dg + 0x7aec) == 0)
++      ax = *(uint16_t *)(dg + (uint16_t)(bx + 0x7c98));                                   /* 5e2c-5e30 */
++    else
++      ax = 4;                                                                             /* 5e39 */
++  }
++  ((void (*)(uint))fist_icall_far((uint32_t)(DAT_1000_d594)))(ax);                        /* lcall [0x1594] */
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_5e5f) @ 0000:5e5f ===== */
+ 
+ void __allregs FUN_0000_5e5f(void)
+@@ -21056,6 +21134,17 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_773e) @ 0000:773e ===== */
++
++void __allregs FUN_0000_773e(void)
++
++{
++  /* PATCH 582: `ret` -- the idle [0x6ce4] tick handler 72ee installs (`mov word [0x6ce4],0x773e`),
++   * the twin of c30e. */
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_7740) @ 0000:7740 ===== */
+ 
+ undefined4 __allregs FUN_0000_7740(int param_1,undefined2 param_2,undefined2 param_3)
+@@ -45716,7 +45805,9 @@
+ void __allregs FUN_1000_1384(void)
+ 
+ {
+-  DAT_2000_baca = DAT_2000_bd02;
++  /* PATCH 582: `push [ss:0x272] ; pop [ss:0x3a] ; lcall [ss:0x3c]`, SS = DGROUP (Ghidra's static SS 0x2ba9
++   * put both words at 0x2bXXX); 018a then near-calls the hook. */
++  *(uint16_t *)(g_mem + 0x1c03a) = *(uint16_t *)(g_mem + 0x1c272);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c03c)))();
+   return;
+ }
+@@ -45727,7 +45818,9 @@
+ void __allregs FUN_1000_1394(void)
+ 
+ {
+-  DAT_2000_baca = DAT_2000_bcfe;
++  /* PATCH 582: `push [ss:0x26e] ; pop [ss:0x3a] ; lcall [ss:0x3c]`, SS = DGROUP (Ghidra's static SS 0x2ba9
++   * put both words at 0x2bXXX); 018a then near-calls the hook. */
++  *(uint16_t *)(g_mem + 0x1c03a) = *(uint16_t *)(g_mem + 0x1c26e);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c03c)))();
+   return;
+ }
+@@ -45738,7 +45831,9 @@
+ void __allregs FUN_1000_13a4(void)
+ 
+ {
+-  DAT_2000_baca = DAT_2000_bd12;
++  /* PATCH 582: `push [ss:0x282] ; pop [ss:0x3a] ; lcall [ss:0x3c]`, SS = DGROUP (Ghidra's static SS 0x2ba9
++   * put both words at 0x2bXXX); 018a then near-calls the hook. */
++  *(uint16_t *)(g_mem + 0x1c03a) = *(uint16_t *)(g_mem + 0x1c282);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c03c)))();
+   return;
+ }
+@@ -45749,7 +45844,9 @@
+ void __allregs FUN_1000_13b4(void)
+ 
+ {
+-  DAT_2000_baca = DAT_2000_bd14;
++  /* PATCH 582: `push [ss:0x284] ; pop [ss:0x3a] ; lcall [ss:0x3c]`, SS = DGROUP (Ghidra's static SS 0x2ba9
++   * put both words at 0x2bXXX); 018a then near-calls the hook. */
++  *(uint16_t *)(g_mem + 0x1c03a) = *(uint16_t *)(g_mem + 0x1c284);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c03c)))();
+   return;
+ }
+@@ -45760,7 +45857,9 @@
+ void __allregs FUN_1000_13c4(void)
+ 
+ {
+-  DAT_2000_baca = DAT_2000_bd20;
++  /* PATCH 582: `push [ss:0x290] ; pop [ss:0x3a] ; lcall [ss:0x3c]`, SS = DGROUP (Ghidra's static SS 0x2ba9
++   * put both words at 0x2bXXX); 018a then near-calls the hook. */
++  *(uint16_t *)(g_mem + 0x1c03a) = *(uint16_t *)(g_mem + 0x1c290);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c03c)))();
+   return;
+ }
+@@ -45771,7 +45870,9 @@
+ void __allregs FUN_1000_13d4(void)
+ 
+ {
+-  DAT_2000_baca = DAT_2000_bd24;
++  /* PATCH 582: `push [ss:0x294] ; pop [ss:0x3a] ; lcall [ss:0x3c]`, SS = DGROUP (Ghidra's static SS 0x2ba9
++   * put both words at 0x2bXXX); 018a then near-calls the hook. */
++  *(uint16_t *)(g_mem + 0x1c03a) = *(uint16_t *)(g_mem + 0x1c294);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c03c)))();
+   return;
+ }
+@@ -49861,8 +49962,12 @@
+   uRam000f000c = param_3;
+   uRam000f0010 = unaff_ES;
+   fist_int_dispatch();
++  /* PATCH 582: 12ed1-12edf `mov cs:[0x382a],bx ; mov cs:[0x382c],es ; mov [0x432],bx ; mov [0x434],es`
++   * -- the saved INT-8 vector (INT 21h AH=35's ES:BX, the shim's FE00:0008) as two WORDS.  The 4-byte
++   * DAT_1000_c432 store and Ghidra's `unaff_ES` (the pre-call ES) left [0x434] = 0, so 30f8's chain to
++   * the BIOS tick far-called 0000:0008 and trapped on every interrupt. */
+   DAT_1000_382a = uRam000f0002;
+-  DAT_1000_c432 = uRam000f0002;
++  *(unsigned short *)(g_mem + 0x1c432) = uRam000f0002;
+   DAT_1000_c452 = 0;
+   DAT_1000_d8ca = 0;
+   DAT_1000_c44e = 0;
+@@ -49875,8 +49980,8 @@
+   uVar1 = uRam000f0004;
+   uVar3 = uRam000f0008;
+   uVar4 = uRam000f000a;
+-  DAT_1000_382c = unaff_ES;
+-  DAT_1000_c434 = unaff_ES;
++  DAT_1000_382c = uRam000f0010;                       /* PATCH 582: the ES the INT returned */
++  DAT_1000_c434 = uRam000f0010;
+   FUN_1000_2f71();
+   uStack0002 = 0x1000;
+   FUN_1000_2fd3();
+@@ -50799,7 +50904,9 @@
+   QW(bx + 4) = QW(si + 6);
+   QW(bx + 6) = QW(si + 8);
+   QW(si + 0xe) = 0x3f7f;
+-  QW(si + 0x10) = 0x1000;                  /* cs = engine seg */
++  QW(si + 0x10) = 0xf69;                   /* PATCH 582: `mov [si+0x10],cs` -- 3566 runs as 0f69:3ed6 (the
++                                            * oracle executes it at 2082:3ed6), so the armed continuation is
++                                            * 0f69:3f7f = the `lret` at 0x1360f, as 35a7 (135d6) stores it. */
+   return;
+ }
+ 
+@@ -50873,6 +50980,18 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_1000_360f) @ 1000:360f ===== */
++
++void __allregs FUN_1000_360f(void)
++
++{
++  /* PATCH 582: the bare `lret` at 0x1360f = 0f69:3f7f, the task continuation 3566/35a7 arm after a
++   * dispatch (`mov word [si+0xe],0x3f7f ; mov [si+0x10],cs`): the next poll far-calls it (135ca) and it
++   * returns at once. */
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_1000_3638) @ 1000:3638 ===== */
+ 
+ char __allregs FUN_1000_3638(char param_1)
+@@ -51148,7 +51267,11 @@
+    * [DGROUP:0x48] as the static-SS host word DAT_2000_bad8) and the push/pop; reconstruct faithfully.
+    * DGROUP = g_mem+0x1c000. */
+   *(uint16_t *)(g_mem + 0x1c03a) = *(uint16_t *)(g_mem + 0x1c310);    /* pop [0x310] -> [0x3a] low */
+-  return (*(code *)fist_icall_far(*(uint32_t *)(g_mem + 0x1c03a)))(); /* call far [0x3a] */
++  /* PATCH 582: 0x19e is `ff 16 3a 00` = `call [ss:0x3a]`, a NEAR call in the [0x48] vector's segment 0
++   * -- not a far call through [0x3c] (that word is the 0x18a trampoline's offset, and 018a:0291 was the
++   * 0x1b31 trap).  [0x310] = 0x291 = the LFSR step FUN_0000_0291: every scheduler poll (35ae) advances
++   * the RNG once, which the far-call reading skipped. */
++  return (*(code *)fist_icall_near(0u, *(uint16_t *)(g_mem + 0x1c03a)))();
+ }
+ 
+ 
+@@ -51666,7 +51789,8 @@
+ void __allregs FUN_1000_3d07(void)
+ 
+ {
+-  DAT_2000_baca = DAT_2000_d0bc;
++  /* PATCH 582: `push [ss:0x162c] ; pop [ss:0x3a] ; lcall [ss:0x3c]` with SS = DGROUP, as 1384. */
++  *(uint16_t *)(g_mem + 0x1c03a) = *(uint16_t *)(g_mem + 0x1d62c);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c03c)))();
+   return;
+ }
+@@ -76054,6 +76178,7 @@
+ 
+ /* ---- RULE 2: indirect-call FUN map (linear -> &FUN), sorted for fist_icall binary search ---- */
+ const struct fist_fent fist_fmap[] = {
++  {0x0u,(void*)&FUN_0000_0000},
+   {0x4u,(void*)&app_entry},
+   {0x7u,(void*)&FUN_0000_0007},
+   {0xb8u,(void*)&FUN_0000_00b8},
+@@ -76189,6 +76314,7 @@
+   {0x1c22u,(void*)&FUN_0000_1c22},
+   {0x1c62u,(void*)&FUN_0000_1c62},
+   {0x1c64u,(void*)&FUN_0000_1c64},
++  {0x1c66u,(void*)&FUN_0000_1c66},
+   {0x1c68u,(void*)&FUN_0000_1c68},
+   {0x1c6au,(void*)&FUN_0000_1c6a},
+   {0x1ca5u,(void*)&FUN_0000_1ca5},
+@@ -76477,6 +76603,7 @@
+   {0x5d33u,(void*)&FUN_0000_5d33},
+   {0x5d43u,(void*)&FUN_0000_5d43},
+   {0x5d80u,(void*)&FUN_0000_5d80},
++  {0x5db8u,(void*)&FUN_0000_5db8},
+   {0x5e5fu,(void*)&FUN_0000_5e5f},
+   {0x5e60u,(void*)&FUN_0000_5e60},
+   {0x5e82u,(void*)&FUN_0000_5e82},
+@@ -76672,6 +76799,7 @@
+   {0x76e8u,(void*)&FUN_0000_76e8},
+   {0x76eeu,(void*)&FUN_0000_76ee},
+   {0x771au,(void*)&FUN_0000_771a},
++  {0x773eu,(void*)&FUN_0000_773e},
+   {0x7740u,(void*)&FUN_0000_7740},
+   {0x7751u,(void*)&FUN_0000_7751},
+   {0x77b3u,(void*)&FUN_0000_77b3},
+@@ -77860,6 +77988,7 @@
+   {0x134f5u,(void*)&FUN_1000_34f5},
+   {0x13566u,(void*)&FUN_1000_3566},
+   {0x135a7u,(void*)&FUN_1000_35a7},
++  {0x1360fu,(void*)&FUN_1000_360f},
+   {0x13638u,(void*)&FUN_1000_3638},
+   {0x13645u,(void*)&FUN_1000_3645},
+   {0x13653u,(void*)&FUN_1000_3653},

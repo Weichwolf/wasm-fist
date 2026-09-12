@@ -457,6 +457,11 @@ static int      g_in_isr;            /* re-entry guard: never run the ISR from i
 static long     g_isr_runs;          /* diagnostic count */
 
 void fist_set_int8_handler(uint32_t linear){
+    if (linear == FIST_INTVEC_LIN + 8) {    /* the engine hands back the AH=35 vector it saved: BIOS again */
+        g_int8_set = 0;
+        fprintf(stderr, "[fist] INT-8 (PIT) vector restored to the BIOS handler\n");
+        return;
+    }
     g_int8_lin = linear; g_int8_set = 1;
     fprintf(stderr, "[fist] INT-8 (PIT) ISR installed @ linear 0x%05x -> cooperative pump armed\n", linear);
 }

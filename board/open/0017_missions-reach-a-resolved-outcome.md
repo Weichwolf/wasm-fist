@@ -1468,3 +1468,20 @@ the kind still disagrees there, and the per-tick comparison against the oracle's
 next instrument.  Sweep with 581 (`scratch/oracle/sweep581.log`): 47 of 47 resolve -- 23 DEFEAT, 23
 TIME EXPIRED, 1 VICTORY (TRAIN2); 7506 s of CPU over the sweep, the longest mission 724 s (the renderer
 now builds the tile and perspective-maps it every frame).  Gate 581: 178/178 native and wasm.
+
+## The RNG steps once per scheduler poll (patch 582, board:0015)
+
+The CRT's near-hook trampoline (0199: `pop [0x3a] ; call [ss:0x3a]`, a NEAR call) makes 3920 step the
+LFSR FUN_0000_0291 on every scheduler poll (35ae in 35a7, 38e5 in 38de); patch 073 had read it as a
+far call and the port trapped there instead -- the port's RNG advanced only from the direct 0291
+callers.  With the step in place every battle changes: AZER1 DEFEAT at 5358 (1:29) against the
+original's 5:49 and 1:38; TRAIN2 DEFEAT at 19134 (5:19) against the original's ~4:30 -- the kind
+agrees on both now.  Two consequences for the congruence work:
+
+- The original seeds the LFSR from the clock and its poll count per frame from CPU speed, and its own
+  runs spread 1:38..5:49 on AZER1.  Tick-for-tick equality with an oracle run is therefore not a
+  property the original has with itself; the comparison that is meaningful is per-tick equality
+  given the same RNG state and the same poll count -- i.e. the census_player.sh trace with the
+  oracle's seed and its poll cadence reproduced, or a statistical match of outcomes.
+- Native and wasm stay identical because the poll count is the clock model's (board:0026): two AZER1
+  runs on the port give the same verdict tick and the same FIST_SIMHASH sequence (1870 lines).

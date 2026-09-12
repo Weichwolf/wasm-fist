@@ -130,3 +130,42 @@ c862/c876/c888 (render methods), 8e80 and 689a (extender mid-entries) -- and wha
             reads from the type-2/3 update templates' second tables)
     155cd..1562d   the 55c5 number-formatter family (only 55c5 is a function; its own save/restore of
             [0x684] is Ghidra's `[0x686] = CS ; [0x684] = old [0x686]` mash)
+
+### Patch 582 -- the census closed on AZER1 and TRAIN2
+
+Every one of the first four lines above was a reading of the CRT's near-hook trampoline, and the
+AH=35 line was a misdiagnosis of the shim: fist_dos.c hands out FE00:0008 correctly; it was 2ebe's
+store that lost it.
+
+- `call [ss:0x3a]` (0x18a, 0x19e) is `ff 16` -- a NEAR call in segment 0 to the hook offset the caller
+  dropped into DGROUP:0x3a.  [0x3c]:[0x3e] = 0000:018a is the vector TO that trampoline, and the word
+  at [0x3c] is not a segment.  Patch 073 modelled 3920 (`push [0x310] ; ljmp [0x48]`, [0x48] =
+  0000:0199) as a far call [0x3c]:[0x3a] -> 018a:0291 = 0x1b31.  [0x310] = 0x291 is the LFSR step
+  FUN_0000_0291.  **Every scheduler poll (35ae, 38e5) steps the RNG once in the original; the port's
+  RNG did not move there.**  The oracle's block trace has the 1119:0199 / 019e / 0291 blocks and the
+  1119:0000 block (the null hook's `ret`, which 1384 reaches through hook slot [0x272] = 0).
+- 018a and its seven `push [0x2xx] ; pop [0x3a] ; lcall [0x3c]` callers (1384 1394 13a4 13b4 13c4
+  13d4, 3d07) used Ghidra's static SS 0x2ba9 for the slot (DAT_2000_baca = 0x2baca) -- the boot-time
+  null-vector trap.  DGROUP-based now; FUN_0000_0000 (`ret`) and FUN_0000_1c66 (`clc ; ret`, 3835's
+  constant hook) exist.
+- 13f7f / 1360f: 3566 stored CS = 0x1000 into the task continuation where the oracle runs 3566 and
+  35a7 at 2082:3ed6 / 2082:3f17 (0f69).  The continuation is 0f69:3f7f = the `lret` at 0x1360f,
+  FUN_1000_360f now.
+- 00008: `mov [0x432],bx ; mov [0x434],es` after INT 21h AH=35 -- the 4-byte DAT_1000_c432 store zeroed
+  [0x434] and `unaff_ES` was the pre-INT ES.  Word stores of BX and the returned ES; 30f8's chain
+  reaches fist_dos.c's INT 08 (1890 chains in a 20 s AZER1 run) and the BIOS tick moves.
+- One more target the census had not reached: word[0x6ce4] = 0x5db8, the per-sim-tick handler
+  FUN_0000_4886 installs at the verdict, near-called by the main loop 45ed once per tick; unpromoted.
+  Transcribed (FUN_0000_5db8), with 72ee's idle handler 0x773e (`ret`).
+
+AZER1 to its verdict and 60 s beyond it (the debrief), TRAIN2 to its verdict: FIST_TRACE_TRAPS prints
+nothing.  Not reproduced in those runs, so still listed rather than closed: the 97d5/902c garbage
+sub-dispatches (seen after tick 18500 before 582 -- the RNG change moved every battle) and the 55c5
+family.  That family is decoded, for when a run reaches it: reloc section 0x2f0 installs
+DGROUP:0x4a8..0x4ec = 0f69:5f35.. = the fourteen buffered formatters 55c5..562d, each `mov word
+[0x3a],<0f69-offset> ; jmp 5633` where 5633 pushes [0x684]:[0x686], sets the glyph vector to the buffer
+emitter 0f69:5fc5 (0x15655: `mov [di],al ; inc di ; retf`), `push cs ; call [0x3a]` (near, in 0f69:
+5cf7 -> 0x15387, 5d8b -> 541b, 5de1 -> 0x15471 ..) and pops the vector back.  FUN_1000_55c5's body is
+Ghidra's `[0x686] = CS ; [0x684] = old [0x686]` mash and the other thirteen do not exist; no site in
+the decompile calls [0x4a8..0x4ec] by name (no `lcall [0x4xx]` in the image either), so whoever
+dispatches them does it through a computed offset that has not been seen executing yet.
