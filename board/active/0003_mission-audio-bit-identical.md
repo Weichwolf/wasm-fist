@@ -2910,6 +2910,9 @@ and frees the channel when `0x15ef>>16 >= 0x15e3` (the sample length) -- i.e. a 
 the original's channel occupancy at a given tick means advancing the mixer a fixed
 samples-per-tick (the oracle's sample_rate / frame_rate) so it is tick-deterministic rather than
 wall-clock-paced -- the one place the original's own sim is not wall-clock-independent, and the
-resolution that keeps the port both deterministic and congruent.  Until the mixer is driven that
-way and op 0x64 runs 786a/22ab with BX published to b39c, the player's hit reaction is the last
-open sim divergence (board:0017); the AI-vs-AI verdict is unaffected (DEFEAT on both sides).
+resolution that keeps the port both deterministic and congruent.  This mixer work is required for the
+mission AUDIO STREAM.  It is NOT what the player's hit reaction needs: board:0017 has since verified
+that b39c's threshold read after a064's callout is a064's BX-clobber bug reading DGROUP:[channel+4], a
+model-dependent code-segment byte (a captured a080 gate carries BX = 2, a mixer channel), an inherent
+flat-vs-relocated boundary the mixer cannot close.  So op 0x64 / 786a / 22ab and the samples-per-tick
+mixer are owed for the audio stream, not for the sim.
