@@ -1,0 +1,27 @@
+PATCH 598: the T-80's fire dispatch 99a2 indexes its far table by the station byte's double.
+
+board:0017.  99a2 dispatches `lcall cs:[0x99f4 + bx]` with `movzbw [di+0x91] ; shl bx,1`: the station
+byte is 0/2/4/6, so bx is the BYTE offset of a 4-byte far pointer -- entries 0/1 (9b7e/9b39, which
+take DI in their fourth slot) are bx 0/4 and entries 2/3 (9bc3/9c15, DI in the third) bx 8/12.  Patch
+567's `bx >= 4` sent station 2 -- the AT-8 missile, 9b39 -- its DI in the wrong slot: 9b39 fired for
+object 0, i.e. DGROUP:0 (a projectile with firer 0 and the heading DGROUP:0x10 = a service vector's
+0x0f69), and since byte[0+0x3c] took the reload instead of the T-80's the tank fired again every step.
+The seeded replay's first differing draw on the full AZER1 run (step 1777: an extra ace0 draw).
+
+--- a/fist.c
++++ b/fist.c
+@@ -27306,7 +27306,13 @@
+     unsigned bx = (unsigned)dg[(unsigned short)(di + 0x91)] << 1;
+     uint32_t fp = *(uint32_t *)(g_mem + (unsigned short)(0x99f4 + bx));
+     g_fist_cf = 0;
+-    if (bx >= 4)   /* entries 2/3 (9bc3/9c15) take DI in param_3, entries 0/1 (9b7e/9b39) in param_4 */
++    /* PATCH 598: the station byte [+0x91] is 0/2/4/6 and `shl bx,1` makes it the BYTE offset of a 4-byte
++     * far pointer, so entries 0/1 (9b7e/9b39, DI in param_4) are bx 0/4 and entries 2/3 (9bc3/9c15,
++     * DI in param_3) bx 8/12.  Patch 567's `bx >= 4` sent station 2 -- the AT-8 missile, 9b39 -- its DI
++     * in the wrong slot: 9b39 fired for object 0, DGROUP:0 (the projectile's firer 0, heading DGROUP:0x10
++     * = a service vector's 0x0f69), and with byte[0+0x3c] set instead of the T-80's the tank fired again
++     * every step (the seeded replay's first differing draw on the full AZER1 run, step 1777; board:0017). */
++    if (bx >= 8)
+       ((void (*)(undefined2,undefined4,int,undefined2))fist_icall_far(fp))(0,0,(int)di,0);
+     else
+       ((void (*)(undefined2,undefined4,undefined4,int,undefined2))fist_icall_far(fp))(0,0,0,(int)di,0);

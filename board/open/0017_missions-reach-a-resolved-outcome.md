@@ -1545,3 +1545,34 @@ resolves at 5:49.  The next measurement is the same replay over a capture that r
 the dumps every 10th step), which turns "the port is congruent for 2726 steps" into "the port
 resolves AZER1 as the original does, at the original's tick, given its cadence".  Then the sweep's
 verdicts can be read against the oracle's per mission.
+
+## The full AZER1 run: the port resolves it as the original does (patches 597-599)
+
+The capture that reaches the verdict exists (`tools/oracle/replay_capture.sh`, OC_WALL=400,
+OC_DUMPEVERY=10: scratch/oracle/regtrace_azer1full, 12348 sim steps, DEFEAT at the oracle's tick
+15303..15312 = 12299..12308 ticks into the mission).  Replayed on the tree at 596 it diverged at
+step 1491 (a state byte), then at 1777 (an extra draw); each divergence read against the asm was a
+port defect, none of them visible in the 45-second run:
+
+| step | what differed | the defect (patch) |
+|---|---|---|
+| ~1485 | the AH-64's fire flag bit (04 for 02) | a02d's draw died at the effect spawn -- `push ax ; ... ; pop ax` (597) |
+| 1777 | an extra launch draw; a projectile with firer 0 every step after | 99a2's far-table index: station 2 (the AT-8) dispatched with DI in the wrong slot (598) |
+| 3207 | the AH-64 fired 20 steps early | 8b7c/917d's reload and callout tables read from the image instead of DGROUP (599) |
+
+With 599 the port draws the oracle's numbers at every one of the 12307 sim steps to the verdict and
+latches DEFEAT at 12308 ticks into the mission, inside the oracle's ten-tick dump stride
+(`scratch/oracle/rpfull/cmp599.txt`).  That is the congruence the goal names for one mission: the
+same verdict at the same tick, given the original's cadence.
+
+What still differs in the object tables (from step 3261): the guided shell at 0xae50 carries the
+other parity of c64a's heading flip (+0x11 18/98, +0x2c 80/00) and so acquires a target the
+original's does not (+0x2f 4dc3/0000).  c64a runs once per frame the shell is DRAWN, so the two
+sides drew that shell in different frames while every sim byte agreed -- the object pass's
+visibility gate (adcd's op-0x54 result at byte[+0xd], the display-list walk 2471/c33c/c4df) or the
+render phase that carries the object pass ran differently in some frame.  It did not change a draw
+in this run; it can.  Next: log c64a's calls per object per step on both sides (the regtrace on
+0xc659 with ESI; a hook in c64a) and compare, then read the pass that differs.  Then the same
+replay for a second mission and a second run of AZER1 (the cadence is the original's own variable,
+board:0015; the sweep's verdicts are the port's under its own clock -- `tools/selfplay.sh` now
+prints the verdict tick and the player's vehicle type per mission so the two can be read together).

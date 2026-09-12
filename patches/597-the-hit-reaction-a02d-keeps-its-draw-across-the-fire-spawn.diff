@@ -1,0 +1,47 @@
+PATCH 597: the hit reaction a02d keeps its draw across the fire spawn; 459a's verdict exit reports to
+the replay.
+
+board:0017.  a02d (the "catch fire" reaction, patch 267) draws once and, when the object has no fire
+bits yet, spawns the type-0x1a effect around that draw: `push ax ; mov al,0x1a ; lcall bf3c ; pop ax`
+(0x1a045-0x1a04d).  Ghidra took `mov al,0x1a` for the draw's death and set it to 0 after the spawn,
+so the first fire on an unlit object always chose the flag LUT's entry 0 (DGROUP:0x964e: bit 1) where
+the original draws LUT[rand & 7] -- bit 2 for the type-2 object at 0xc34d at AZER1's step ~1485, the
+seeded replay's first differing byte on the full-mission run.
+
+The mission loop's exit on the verdict flag byte[0xe814] (both entries, 459a and 45f7) calls
+fist_mission_end_trace(): the replay's three schedules end there and the INT-8s return to the clock,
+so the flows after the mission run as they do unscheduled (the port had spun in e4bb's poll wait
+with the interrupts still held).
+
+--- a/fist.c
++++ b/fist.c
+@@ -14016,6 +14016,7 @@
+       while( true ) {
+         do {
+           if (DAT_2000_a814 != '\0') {
++            { extern void fist_mission_end_trace(void); fist_mission_end_trace(); }   /* PATCH 597: the verdict -- the replay schedules end here (board:0017) */
+             FUN_0000_be86();
+             FUN_0000_be67();
+             return;
+@@ -14082,6 +14083,7 @@
+       while( true ) {
+         do {
+           if (DAT_2000_a814 != '\0') {
++            { extern void fist_mission_end_trace(void); fist_mission_end_trace(); }   /* PATCH 597: the verdict -- the replay schedules end here (board:0017) */
+             FUN_0000_be86();
+             FUN_0000_be67();
+             return;
+@@ -67215,8 +67217,12 @@
+   uVar1 = FUN_0000_b26a();
+   if ((DAT_2000_5bd9 == 10) || ((uVar1 & 0x78) == 0)) {
+     if ((dg[(unsigned short)(di + 0x19)] & 6) == 0) {
++      /* PATCH 597: `push ax ; mov al,0x1a ; lcall bf3c ; pop ax` (0x1a045-0x1a04d) -- the draw survives
++       * the spawn call; Ghidra's `uVar1 = 0` took `mov al,0x1a` for its death, so the first fire on an
++       * unlit object always chose flag LUT[0] (0x964e: bit 1) where the original draws LUT[rand & 7]
++       * (bit 2 at AZER1's step ~1485 for the type-2 object at 0xc34d -- the seeded replay's first
++       * differing byte on the full-mission run, board:0017). */
+       FUN_0000_bf3c(0x1a,param_1,param_2);
+-      uVar1 = 0;
+     }
+     dg[(unsigned short)(di + 0x19)] =
+         (unsigned char)(dg[(unsigned short)(di + 0x19)] | dg[(unsigned short)((uVar1 & 7) + 0x964e)]);

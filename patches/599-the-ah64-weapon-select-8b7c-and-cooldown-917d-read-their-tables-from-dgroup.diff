@@ -1,0 +1,37 @@
+PATCH 599: the AH-64's weapon select 8b7c and its cooldown 917d read their tables from DGROUP.
+
+board:0017.  `mov al,[bx-0x6e7a]` / `[bx-0x6e6a]` (0x18b99/0x18ba1) and `mov al,[bx-0x6e65]` (0x9198)
+carry no segment override: DS = DGROUP, the tables are DGROUP:0x9186 (the reload per station: 14 14 28
+00 08), DGROUP:0x9196 and DGROUP:0x919b (the callout ids) -- as the M1/M3/T-80 twins 7957/7fb0/9640
+already read them.  Patch 366 had taken the CS=0 image bytes at those offsets (code), so the AH-64's
+weapon change never started its 0x14-frame reload: the seeded replay's AH-64 (c34d) fired 20 steps
+before the original's (full AZER1 run, step 3207).  With 597-599 the port draws the oracle's 12307
+sim draws to the verdict and resolves AZER1 as the original does (DEFEAT) within the same ten ticks.
+
+--- a/fist.c
++++ b/fist.c
+@@ -25872,7 +25872,7 @@
+     if (dg[(unsigned short)(off + 0xa8)] == 0 &&
+         *(unsigned short *)(dg + (unsigned short)(off + 0xac + dg[(unsigned short)(off + 0x91)])) != 0) {
+       unsigned uVar2 = (unsigned)(dg[(unsigned short)(off + 0x91)] >> 1);
+-      FUN_0000_bf3c(g_mem[0x919b + uVar2], uVar2, param_1);
++      FUN_0000_bf3c(dg[(unsigned short)(0x919b + uVar2)], uVar2, param_1);   /* PATCH 599: `mov al,[bx-0x6e65]` is DS-relative -- DGROUP:0x919b (0b 09 0a ..), not the image's code bytes */
+       dg[(unsigned short)(off + 0xcf)] = 3;
+     }
+   }
+@@ -65197,8 +65197,13 @@
+     if (param_1 != 6 && param_1 != dg[(unsigned short)(off + 0xa5)]) {
+       dg[(unsigned short)(off + 0xa5)] = param_1;
+       unsigned uVar1 = (unsigned)(param_1 >> 1);
+-      dg[(unsigned short)(off + 0xa8)] = g_mem[0x9186 + uVar1];
+-      FUN_0000_bf3c(g_mem[0x9196 + uVar1], uVar1, param_2);
++      /* PATCH 599: `mov al,[bx-0x6e7a]` / `[bx-0x6e6a]` carry no segment override -- DS = DGROUP, the
++       * tables are DGROUP:0x9186 (the reload per station: 14 14 28 00 08) and DGROUP:0x9196 (the callout
++       * ids), as in the M1/M3/T-80 twins 7957/7fb0/9640.  Patch 366 read the engine image at 0x9186 --
++       * code bytes -- so the AH-64's weapon change never started its reload: the seeded replay's AH-64
++       * (c34d) fired 0x14 steps before the original's (board:0017, full AZER1 run, step 3207). */
++      dg[(unsigned short)(off + 0xa8)] = dg[(unsigned short)(0x9186 + uVar1)];
++      FUN_0000_bf3c(dg[(unsigned short)(0x9196 + uVar1)], uVar1, param_2);
+     }
+     dg[(unsigned short)(off + 0xd2)] = 3;
+     dg[(unsigned short)(off + 0xd4)] = 3;

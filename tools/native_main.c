@@ -1465,6 +1465,7 @@ unsigned short g_fist_c0e5_si;
  * 0x11454/0x1d275/0x24288 -- the two streams set against each other give the tick where the poll
  * cadence or a sim draw first differs.  Off unless the variable is set; no engine state touched. */
 static FILE *g_rngtrace_f; static int g_rngtrace_init;
+static int g_frame_active;   /* FIST_FRAME_SCHEDULE (below) */
 static FILE *rngtrace_file(void) {
     if (!g_rngtrace_init) { const char *p = getenv("FIST_RNGTRACE"); g_rngtrace_init = 1;
         if (p && (g_rngtrace_f = fopen(p, "w"))) setvbuf(g_rngtrace_f, NULL, _IOLBF, 1 << 16); }   /* the dump path _exit()s */
@@ -1491,8 +1492,8 @@ static void rng_sched_load(void) {
     fclose(f); g_rng_sched_active = 1;
     fprintf(stderr, "[rngsched] %d sim steps scheduled\n", g_rng_sched_n);
 }
-void fist_poll_trace(void) {
-    FILE *f = rngtrace_file(); if (f) fprintf(f, "poll t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
+void fist_poll_trace(void) {   /* the live poll cadence -- not under the schedule, whose polls come from the file */
+    FILE *f = rngtrace_file(); if (f && !g_rng_sched_active) fprintf(f, "poll t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
 }
 static void frame_sched_load(void); static void phase_sched_load(void);
 void fist_mission_trace(void) {   /* 4754, the battle load: the first mission draw (4779) follows */
@@ -1532,6 +1533,14 @@ void fist_phase_trace(void) {   /* after each 22f7 phase dispatch */
     if (g_phase_active && ++g_phase_cnt >= g_phase_cur) *(uint16_t *)(g_mem + 0x1c450) = 0;
 }
 void fist_render_end_trace(void) { }
+/* 459a's exit on the verdict flag byte[0xe814]: the schedules are over -- the INT-8s return to the
+ * clock so the flows after the mission (e4bb's poll wait, the debrief) run as they do unscheduled. */
+void fist_mission_end_trace(void) {
+    FILE *f = rngtrace_file(); if (f) fprintf(f, "end t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
+    { extern int g_int8_replay; g_int8_replay = 0; }
+    g_rng_sched_active = 0; g_phase_active = 0;
+    g_frame_active = 0;
+}
 void fist_map_trace(void) {
     FILE *f = rngtrace_file(); if (f) fprintf(f, "map t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
 }
@@ -1539,7 +1548,7 @@ void fist_map_trace(void) {
  * markers).  At the mission loop's top (459a's cooperative pump, patch 295) the port pumps until
  * [0x452] has moved by that many ticks -- zero for the renders the original squeezed in without a tick
  * passing -- so the sim/render interleaving is the oracle's.  Active with the RNG schedule. */
-static int *g_frame_sched; static int g_frame_n, g_frame_i, g_frame_active;
+static int *g_frame_sched; static int g_frame_n, g_frame_i;
 static void frame_sched_load(void) {
     const char *p = getenv("FIST_FRAME_SCHEDULE"); FILE *f; int cap = 0, v;
     if (!p || !(f = fopen(p, "r"))) return;
