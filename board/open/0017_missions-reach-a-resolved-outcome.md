@@ -1634,3 +1634,13 @@ the sound service (board:0003).  UKRAINE2 starts the player in the Bradley under
 at step 2523; the three missions without an early hit on the player run to the capture's end
 without a differing draw.  The fps-phase byte ([di+0x1a] of the type-5/6 vehicles) is the
 oracle machine's load time (the [0x452] offset), not the port's.
+
+## Sweep 609 (`scratch/oracle/sweep609.log`): 47 of 47, no crash, no timeout
+
+Every one of the 47 battles resolves on the 609 tree (`tools/selfplay.sh native`, 2673 s of CPU):
+43 DEFEAT, 2 VICTORY (SAUDI4, TRAIN2), 2 TIME EXPIRED (SAUDI6, SYRIA7).  UKRAINE2 no longer
+crashes (patch 591's MEMMGR-relocator ES fix), so the sweep is crash- and timeout-free for the
+first time.  The verdict distribution is the port's under its own clock; the replay census above is
+what measures it against the original per tick -- and finds the sim congruent up to the player's
+hit reaction (the op-0x64 sound channel, board:0003).  The sweep prints each mission's verdict tick
+and the player's vehicle type (all type 0000 = the player's own on the empty-input self-play).
