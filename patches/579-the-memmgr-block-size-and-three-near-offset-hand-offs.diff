@@ -1,0 +1,146 @@
+PATCH 579: MEMMGR's block-size query returns ECX (2f95) and 89b0's map scale-up loops use it; three
+call sites hand a near offset where the callee takes one (a0ab -> c31e, the four update templates ->
+a0a4).
+
+board:0017 / board:0025.  The sweep after patch 578 (units drive) lost two missions:
+
+  SAUDI7  crashed at mission load: the 512-square C30.KLC colormap is doubled twice to 2048, and each
+          step is `call 2f95 ; shl ecx,2 ; call 345c` (fist_image.bin 0x8c85-0x8c93) -- 2f95 looks the
+          pointer slot up (3661) and returns the block's byte size in ECX (`mov ecx,[esi*4+0x2bcc]`),
+          which the decompile dropped (void).  Ghidra's loops used a stale register instead: the
+          colormap loop asked for [0x8498] x4 = 16 MB on its first step, MEMMGR raised "Not enough
+          free XMS memory" (0f64 -> TCB word 0 = 0xffff), e339's task tail far-called the [0x58]
+          restart trampoline 0f69:0314, and the port's Ghidra rendering of that (FUN_1000_f9a4, a
+          byte-add loop over a host pointer) faulted.  2f95 now returns the size; the heightmap,
+          colormap and the 0x3911 ramp-block loops use it (four sites, two in 89b0's duplicate body).
+  CYPRUS1 froze at tick 3157: a0ab's collision branch for a type-0x15 object calls c31e with the
+          OTHER object in SI; patch 271 passed the host pointer, patch 256's c31e takes the near
+          offset -- truncated to 0x0268, b39c's `or word[di+0x40],0x20` landed on [0x2a8], the ISR's
+          tick gate (31c3: `test byte [0x2a8],0xff ; jne` skips `inc word [0x452]`), and the sim
+          never stepped again.  The same class at a0a4: the four update templates 7c1d / 87df / 902c /
+          97d5 call it with the object as a host pointer, and a0a4 (patch 420) compares its low word
+          with [0x6d34] -- so the player's proximity/collision search (a0ab) never ran.  All pass the
+          near offset now.
+
+  Effect: 47/47 resolve (CYPRUS1 DEFEAT at 25117, SAUDI7 DEFEAT at 22413); AZER1's DEFEAT moves to
+  13870 with the player colliding like the original's.
+
+--- a/fist.c
++++ b/fist.c
+@@ -21961,7 +21961,7 @@
+   (*(code *)fist_icall_near(0x0u,
+       *(uint16_t *)((unsigned char *)g_mem + 0x7d92 + *(byte *)(param_4 + 0x3e))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+   uStack0002 = 0;
+-  FUN_1000_a0a4(uVar1,uVar3,param_4);
++  FUN_1000_a0a4(uVar1,uVar3,(int *)(uintptr_t)(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000)));   /* PATCH 579: DI near offset -- a0a4 compares it with [0x6d34] */
+   if (*(char *)(param_4 + 0x92) == '\0') {
+     if ((*(byte *)(param_4 + 0x17) & 0x80) == 0) goto LAB_0000_7c7b;
+   }
+@@ -24017,7 +24017,7 @@
+   /* PATCH 250: CS-relative table2 (CS=0) word[g_mem+0x898b+byte[di+0x3e]], DI live */
+   (*(code *)fist_icall_near(0x0u,
+       *(uint16_t *)((unsigned char *)g_mem + 0x898b + *(byte *)(param_4 + 0x3e))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+-  FUN_1000_a0a4(uVar1,uVar3,param_4);
++  FUN_1000_a0a4(uVar1,uVar3,(int *)(uintptr_t)(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000)));   /* PATCH 579: DI near offset -- a0a4 compares it with [0x6d34] */
+   if (*(char *)(param_4 + 0x92) == '\0') {
+     if ((*(byte *)(param_4 + 0x17) & 0x80) == 0) goto LAB_0000_8842;
+   }
+@@ -25467,7 +25467,7 @@
+   /* PATCH 365: CS-relative table2 word[g_mem+0x91a7+byte[di+0x3e]], DI live */
+   (*(code *)fist_icall_near(0x0u,
+       *(uint16_t *)((unsigned char *)g_mem + 0x91a7 + *(byte *)(param_4 + 0x3e))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+-  FUN_1000_a0a4(uVar1,uVar3,param_4);
++  FUN_1000_a0a4(uVar1,uVar3,(int *)(uintptr_t)(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000)));   /* PATCH 579: DI near offset -- a0a4 compares it with [0x6d34] */
+   if (*(char *)(param_4 + 0x92) == '\0') {
+     if ((*(byte *)(param_4 + 0x17) & 0x80) == 0) goto LAB_0000_908a;
+   }
+@@ -26796,7 +26796,7 @@
+   /* PATCH 252: table2 CS-relative word[cs=0:0x9991+byte[di+0x3e]], DI live */
+   (*(code *)fist_icall_near(0x0u,
+       *(uint16_t *)((unsigned char *)g_mem + (uint16_t)(0x9991 + *(byte *)(param_4 + 0x3e)))))(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));
+-  FUN_1000_a0a4(uVar1,uVar3,param_4);
++  FUN_1000_a0a4(uVar1,uVar3,(int *)(uintptr_t)(param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000)));   /* PATCH 579: DI near offset -- a0a4 compares it with [0x6d34] */
+   if (*(char *)(param_4 + 0x92) == '\0') {
+     if ((*(byte *)(param_4 + 0x17) & 0x80) == 0) goto LAB_0000_9838;
+   }
+@@ -66943,7 +66943,7 @@
+       *(short *)(dg + (unsigned short)(di + 0x57)) =                 /* a15d sar word[di+0x57],1 */
+           (short)(*(short *)(dg + (unsigned short)(di + 0x57)) >> 1);
+       FUN_0000_c047(0x30,0,(int)di);                                 /* a161 mov ax,0x30; call c047 */
+-      FUN_0000_c31e(0,0,(int *)(dg + si),(int)si);                   /* a16e xor ax; xor bx; call c31e (si=other) */
++      FUN_0000_c31e(0,0,(int *)(uintptr_t)si,(int)si);               /* a16e xor ax; xor bx; call c31e (si=other) -- PATCH 579: c31e (patch 256) takes the NEAR offset; the host pointer truncated to 0x0268 sent b39c's `or word[di+0x40],0x20` onto [0x2a8], the ISR's tick gate (CYPRUS1 froze at tick 3157) */
+       return;
+     }
+     FUN_0000_c047(0x2d,0,(int)di);                                   /* a12a mov ax,0x2d; call c047 */
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -259,7 +259,7 @@
+ undefined4 __allregs FUN_0000_27e8(int param_1,uint param_2);
+ ushort __allregs FUN_0000_2810(void);
+ undefined4 __allregs FUN_0000_2f7c(undefined4 param_1);
+-void __allregs FUN_0000_2f95(undefined4 param_1,undefined4 param_2);
++uint __allregs FUN_0000_2f95(undefined4 param_1,undefined4 param_2);   /* PATCH 579: returns ECX = the block's size */
+ void __allregs FUN_0000_2faa(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+ undefined4 __allregs FUN_0000_327d(uint param_1,undefined4 *param_2);
+ undefined4 __allregs FUN_0000_3289(uint param_1,undefined4 *param_2);
+@@ -3276,12 +3276,18 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_2f95) @ 0000:2f95 ===== */
+ 
+-void __allregs FUN_0000_2f95(undefined4 param_1,undefined4 param_2)
++uint __allregs FUN_0000_2f95(undefined4 param_1,undefined4 param_2)
+ 
+ {
++  /* PATCH 579: MEMMGR "size of the block behind pointer slot EDX" (asm 0x2f95-0x2fa9): 3661 looks the
++   * slot up (ESI = its index, [0x2f60] in this port), then `mov ecx,[esi*4+0x2bcc]` returns the
++   * block's byte size in ECX.  Ghidra typed it void, so 89b0's map scale-up loops -- `call 2f95 ;
++   * shl ecx,2 ; call 345c` (grow the block x4, then bdc4/bc06 double the map) -- were given a stale
++   * register instead: the colormap loop asked for [0x8498] x4 = 16 MB on the first step and MEMMGR
++   * aborted the mission load (SAUDI7: the 512-square C30.KLC colormap needs two doublings to 2048). */
+   DAT_0000_2f5c = param_2;
+   FUN_0000_3661(param_1);
+-  return;
++  return (uint)(&DAT_0000_2bcc)[DAT_0000_2f60];
+ }
+ 
+ 
+@@ -13299,8 +13305,7 @@
+   iVar9 = DAT_0000_0c93 + 0x7a;
+   FUN_0000_643c(DAT_0000_85bc,(short)iVar3,uVar5,(short)uVar7,param_1,iVar9,param_3);
+   while (DAT_0000_5578 < DAT_0000_8494) {
+-    FUN_0000_2f95(&DAT_0000_85bc,0x8bd5);
+-    iVar3 = iVar3 << 2;
++    iVar3 = FUN_0000_2f95(&DAT_0000_85bc,0x8bd5) << 2;   /* PATCH 579: 8bd5 shl ecx,2 -- 2f95's ECX */
+     FUN_0000_345c(iVar3,&DAT_0000_85bc,iVar9,0x8be3);
+     param_3 = DAT_0000_85bc;
+     FUN_0000_bc06(DAT_0000_85bc);
+@@ -13324,8 +13329,7 @@
+   uVar2 = DAT_0000_85b8;
+   FUN_0000_9ec0(DAT_0000_8498,uVar10,DAT_0000_85b8);
+   while (DAT_0000_5578 < DAT_0000_8494) {
+-    FUN_0000_2f95(&DAT_0000_85b8,0x8c8a);
+-    iVar3 = iVar3 << 2;
++    iVar3 = FUN_0000_2f95(&DAT_0000_85b8,0x8c8a) << 2;   /* PATCH 579: 8c8a shl ecx,2 -- 2f95's ECX */
+     FUN_0000_345c(iVar3,&DAT_0000_85b8,uVar2,0x8c98);
+     param_3 = DAT_0000_85b8;
+     FUN_0000_bdc4(DAT_0000_85b8);
+@@ -13372,8 +13376,7 @@
+     while (cVar1 = (char)iVar3 + -1, iVar9 = CONCAT31((int3)((uint)iVar3 >> 8),cVar1), cVar1 != '\0'
+           ) {
+       iVar3 = iVar9;
+-      FUN_0000_2f95(&DAT_0000_3911,0x8db3);
+-      FUN_0000_345c(iVar9 << 2,&DAT_0000_3911,uVar2,0x8dc1);
++      FUN_0000_345c(FUN_0000_2f95(&DAT_0000_3911,0x8db3) << 2,&DAT_0000_3911,uVar2,0x8dc1);   /* PATCH 579 */
+       FUN_0000_bdc4(DAT_0000_3911);
+       DAT_0000_3915 = DAT_0000_3915 + '\x01';
+       DAT_0000_3916 = DAT_0000_3916 + '\x01';
+@@ -13454,8 +13457,7 @@
+     while (cVar4 = (char)iVar7 + -1, iVar8 = CONCAT31((int3)((uint)iVar7 >> 8),cVar4), cVar4 != '\0'
+           ) {
+       iVar7 = iVar8;
+-      FUN_0000_2f95(&DAT_0000_3911,0x8db3);
+-      FUN_0000_345c(iVar8 << 2,&DAT_0000_3911,uVar3,0x8dc1);
++      FUN_0000_345c(FUN_0000_2f95(&DAT_0000_3911,0x8db3) << 2,&DAT_0000_3911,uVar3,0x8dc1);   /* PATCH 579 */
+       FUN_0000_bdc4(DAT_0000_3911);
+       DAT_0000_3915 = DAT_0000_3915 + '\x01';
+       DAT_0000_3916 = DAT_0000_3916 + '\x01';

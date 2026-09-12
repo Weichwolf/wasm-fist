@@ -112,3 +112,21 @@ board:0014's arity mismatches.
   matters.
 - Still open: 390d (render method id 0x18, the two-point 3d99 line) is pristine; c47d/c4a2 (label
   vertex producers of the c33c phase table) set no CF in C and so never deliver a record.
+
+## The trap census on the rebuilt gate (2026-09-12)
+
+`FIST_TRACE_TRAPS` now prints the tick and a native backtrace per unmapped target, and
+`FIST_TRAP_BREAK=<linear>` stops gdb at one of them (re_out/fist_icall.c).  A 40 s AZER1 run listed
+every dispatch into the void; patch 581 emitted the mission-time ones -- 4397 (the model budget),
+b061/b062/b081/b09e (the fire-mission subtasks, b040's table read in the wrong segment), c783/c845/
+c862/c876/c888 (render methods), 8e80 and 689a (extender mid-entries) -- and what remains is:
+
+    00000   at boot, 018a <- 1384 <- 06bc: a null vector
+    01b31   3920 <- 35a7 (the frame poll's method vector, 3637 calls in 20 s) and 01391 later
+    00008   30f8's BIOS chain through [0x432] = 0000:0008 -- the saved INT-8 vector is the IVT
+            slot's address, not its content (fist_dos.c AH=35), so the BIOS tick never chains
+    13f7f, 1360f   35a7's vectors on the mission-entry poll
+    000a1 09900 0a200 0a600 09100   97d5 / 902c sub-dispatches after tick 18500 (garbage table
+            reads from the type-2/3 update templates' second tables)
+    155cd..1562d   the 55c5 number-formatter family (only 55c5 is a function; its own save/restore of
+            [0x684] is Ghidra's `[0x686] = CS ; [0x684] = old [0x686]` mash)

@@ -37,14 +37,21 @@ static void *lookup_fun(uint32_t lin)
 static unsigned g_pending_vec;   /* set by fist_icall immediately before the site calls the tramp */
 static int int_chain_tramp(void){ fist_int_chain(g_pending_vec); return 0; }
 
+#ifndef __EMSCRIPTEN__
+#include <execinfo.h>   /* the trap trace names its caller (FIST_TRACE_TRAPS) */
+#endif
 /* ---- honest trap trampoline: an unmapped indirect target. Log (deduped) + return 0, never jump. */
 static uint32_t g_trap_lin;
 static long     g_trap_count;
 static uint32_t g_trap_seen[512];
 static int      g_trap_nseen;
+void fist_dbg_trap(void) { __asm__ __volatile__(""); }   /* gdb: break here with FIST_TRAP_BREAK=<linear> */
 static int trap_tramp(void)
 {
     ++g_trap_count;
+    { static long want = -1;
+      if (want < 0) { const char *e = getenv("FIST_TRAP_BREAK"); want = e ? strtol(e, 0, 0) : 0; }
+      if (want && g_trap_lin == (uint32_t)want) fist_dbg_trap(); }
     if (traceon()) {
         int dup = 0;
         for (int i = 0; i < g_trap_nseen; ++i) if (g_trap_seen[i] == g_trap_lin) { dup = 1; break; }
@@ -52,7 +59,11 @@ static int trap_tramp(void)
             if (g_trap_nseen < (int)(sizeof g_trap_seen/sizeof g_trap_seen[0]))
                 g_trap_seen[g_trap_nseen++] = g_trap_lin;
             fprintf(stderr, "[icall] TRAP unmapped indirect call -> linear 0x%05x "
-                            "(no FUN_ there; returning 0)\n", g_trap_lin);
+                            "(no FUN_ there; returning 0) t=%u\n", g_trap_lin,
+                    *(unsigned short *)(g_mem + 0x1c452));
+#ifndef __EMSCRIPTEN__
+            { void *bt[6]; int n = backtrace(bt, 6); backtrace_symbols_fd(bt + 1, n > 1 ? n - 1 : 0, 2); }
+#endif
         }
     }
     return 0;

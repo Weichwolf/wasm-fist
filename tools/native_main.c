@@ -1690,42 +1690,22 @@ static void ext_module_init(void) {
             g_ext_ready ? "READY" : "(SHORT READ)");
 }
 
-/* FUN_0000_689a -- the extender's per-frame PERSPECTIVE tile-RESAMPLE (sky/horizon rows 160-255).
- * Absent from the port's fist_ext.c decompile (paged-out PM code); reconstructed from the exact pinned
- * asm formula (tools/oracle/sim_lighttile_689a.py, verified ~100% on the sky rows vs the frame-matched
- * capture).  It fills the WHOLE 256x256 colormap tile @[0x3918] column-major from the static 128KB decoded
- * 5.SKY source @[0x3911] (built by 89b0's tail under [0x395c]!=0), which FUN_0000_6980 then overlays on
- * the terrain rows 0-159.  Globals: 90c0 scale, 90b0/90b4 projection, 90dc/90e0 world angle; 38ed/38f1=256. */
-static void fist_ext_689a(uint8_t *xb) {
-    uint32_t src_p = *(uint32_t*)(xb+0x3911), tile_p = *(uint32_t*)(xb+0x3918);
-    if (!src_p || !tile_p) return;
-    uint8_t *src  = (src_p <0x100000)?(xb+src_p ):(uint8_t*)(uintptr_t)src_p;
-    uint8_t *tile = (tile_p<0x100000)?(xb+tile_p):(uint8_t*)(uintptr_t)tile_p;
-    uint32_t c0=*(uint32_t*)(xb+0x90c0), b0=*(uint32_t*)(xb+0x90b0), b4=*(uint32_t*)(xb+0x90b4);
-    uint32_t dc=*(uint32_t*)(xb+0x90dc), e0=*(uint32_t*)(xb+0x90e0);
-    enum { D38ed=256, D38f1=256 };
-    uint32_t ebp0 = (uint32_t)(((uint64_t)c0 * (uint64_t)b0) >> 16);          /* mul + shrd 16 (u) */
-    int32_t  esi0 = (int32_t)(((int64_t)(int32_t)ebp0 * (int64_t)(int32_t)b4) >> 16); /* imul + shrd 16 (s) */
-    uint32_t ebp  = ebp0 << 3;
-    uint32_t edx  = (uint32_t)(-(int32_t)e0) - (uint32_t)((D38ed>>1) * esi0);  /* [0x910c] */
-    uint32_t ebx0 = (dc>>3) - (uint32_t)((uint32_t)(D38f1>>1) * ebp);          /* [0x9110] */
-    int out=0;
-    for (int col=0; col<D38f1; col++) {
-        uint32_t srccol = ((edx>>22)&0x3ff)<<7;
-        uint32_t ebx = ebx0;
-        for (int k=0;k<(D38ed>>1);k++) {
-            tile[out]   = src[(srccol+((ebx>>25)&0x7f))&0x1ffff]; ebx+=ebp;
-            tile[out+1] = src[(srccol+((ebx>>25)&0x7f))&0x1ffff]; ebx+=ebp;
-            out+=2;
-        }
-        edx += (uint32_t)esi0;
-    }
-}
 
 int g_fist_after_map = 0;   /* set once op 0x18 (map load) has fired -> roster probe gate */
 void fist_dbg_op2c(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoint at the op-0x2c gate */
 void fist_dbg_op18(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoint at the first op-0x18 map-load (arm d548 watchpoint here) */
 void fist_dbg_fbwild(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoint when a blit dest lands outside the framebuffer (wild write) */
+extern void m_ext_FUN_0000_8df0(void), m_ext_FUN_0000_3931(void), m_ext_FUN_0000_82d0(void);
+/* The extender's heightmap index (0x8480 and every sampler: `shld eax,edx,DETAIL ; shld eax,ebx,DETAIL ;
+ * mov al,[esi+eax]`): the top DETAIL bits of the y and x fixed-point coordinates, y-major.  DETAIL is
+ * [ext+0x8490] (11 for the 2048-square maps); the map loader 89b0 patches it into the shld immediates
+ * of every sampler at map load.  A 10 baked in here indexed a 1024-square map -- half the rows, every
+ * sample from the wrong place -- and the ground clamp (op 0x1c), the height service (op 0x54) and the
+ * line of sight (op 0x58) all answered for the wrong terrain.  board:0002 */
+static inline uint32_t fist_hm_index(uint32_t y, uint32_t x, unsigned d) {
+    return ((y >> (32 - d)) << d) | (x >> (32 - d));
+}
+
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
@@ -1844,7 +1824,8 @@ int fist_extender_gate(void) {
         {   static const char *const dtl_lc[3] = { "low.dtl", "medium.dtl", "high.dtl" };
             static const char *const dtl_uc[3] = { "LOW.DTL", "MEDIUM.DTL", "HIGH.DTL" };
             unsigned lvl = tcb44[0xd1];                           /* 769b */
-            if (lvl < 3) {                                        /* 76a1: only 0/1/2 load a file */
+            if (lvl > 2) lvl = 2;                                 /* 76a1/76c0: 0 -> low, 1 -> medium, anything else -> high */
+            {
                 const char *dd = getenv("FIST_DATADIR"); if (!dd) dd = "armoredfist";
                 char pth[512]; FILE *f = 0;
                 const char *const *cand[2] = { dtl_lc, dtl_uc };
@@ -1900,6 +1881,7 @@ int fist_extender_gate(void) {
         uint32_t list = *(uint32_t*)(xb1c+0xc99), base = *(uint32_t*)(xb1c+0xca1);
         if (!hm1c || !list || !base) return 0;
         const int32_t *trig = (const int32_t *)(xb1c + 0x9450);
+        const unsigned d1c = *(uint32_t*)(xb1c + 0x8490);
         uint8_t *lp = (uint8_t *)(uintptr_t)list;
         for (int n = 0; n < 0x20; n++, lp += 2) {                       /* 1114/1199/119e */
             uint16_t noff = *(uint16_t *)lp;                            /* 1116 movzwl (%edi),%edi */
@@ -1915,25 +1897,28 @@ int fist_extender_gate(void) {
                 int32_t ebp = trig[ti] >> 6, edi2 = trig[ti + 128] >> 6; /* 7faa/7fac/7fb2/7fb5 */
                 int32_t bx2, dx2; uint8_t h0, h1; int32_t ecx, ebx2;
                 bx2 = ebx - edi2; dx2 = edx + ebp;                       /* 7fbe/7fc0 */
-                h0 = hm1c[(((((uint32_t)dx2)>>22)&0x3ff)<<10 | (((uint32_t)bx2)>>22)&0x3ff) & 0x3fffff];
+                h0 = hm1c[fist_hm_index((uint32_t)dx2, (uint32_t)bx2, d1c)];
                 bx2 += edi2*2; dx2 -= ebp*2;                             /* 7fcf..7fd5 */
-                h1 = hm1c[(((((uint32_t)dx2)>>22)&0x3ff)<<10 | (((uint32_t)bx2)>>22)&0x3ff) & 0x3fffff];
+                h1 = hm1c[fist_hm_index((uint32_t)dx2, (uint32_t)bx2, d1c)];
                 ecx = (int32_t)((uint32_t)(int32_t)(int8_t)(uint8_t)(h0 - h1) << 23); /* 7fe1/7fe4/7fe7 */
                 bx2 -= edi2; dx2 += ebp;                                 /* 7fea/7fec */
                 bx2 -= ebp;  dx2 -= edi2;                                /* 7fef/7ff1 */
-                h0 = hm1c[(((((uint32_t)dx2)>>22)&0x3ff)<<10 | (((uint32_t)bx2)>>22)&0x3ff) & 0x3fffff];
+                h0 = hm1c[fist_hm_index((uint32_t)dx2, (uint32_t)bx2, d1c)];
                 bx2 += ebp*2; dx2 += edi2*2;                             /* 8000..8006 */
-                h1 = hm1c[(((((uint32_t)dx2)>>22)&0x3ff)<<10 | (((uint32_t)bx2)>>22)&0x3ff) & 0x3fffff];
+                h1 = hm1c[fist_hm_index((uint32_t)dx2, (uint32_t)bx2, d1c)];
                 ebx2 = (int32_t)((uint32_t)(int32_t)(int8_t)(uint8_t)(h0 - h1) << 23); /* 8012/8015/8018 */
-                if (pass == 0) { *(uint16_t *)(o+0x34) = (uint16_t)((uint32_t)ecx >> 16);   /* 114b */
-                                 *(uint16_t *)(o+0x32) = (uint16_t)((uint32_t)ebx2 >> 16); } /* 1152 */
-                else           { *(uint16_t *)(o+0x24) = (uint16_t)((uint32_t)ecx >> 16);   /* 1177 */
-                                 *(uint16_t *)(o+0x22) = (uint16_t)((uint32_t)ebx2 >> 16); } /* 117e */
+                /* 801b `pop ebx` hands the FIRST pair's slope back in EBX and leaves the second in ECX:
+                 * 114b/1177 store ECX (the second) at +0x34/+0x24, 1152/117e EBX (the first) at
+                 * +0x32/+0x22.  They were crossed here, which flipped the hull's pitch and roll against
+                 * the oracle's trajectory (oracle pitch 384 -> 1920 while the port fell to -768). */
+                if (pass == 0) { *(uint16_t *)(o+0x34) = (uint16_t)((uint32_t)ebx2 >> 16);  /* 114b */
+                                 *(uint16_t *)(o+0x32) = (uint16_t)((uint32_t)ecx >> 16); }  /* 1152 */
+                else           { *(uint16_t *)(o+0x24) = (uint16_t)((uint32_t)ebx2 >> 16);  /* 1177 */
+                                 *(uint16_t *)(o+0x22) = (uint16_t)((uint32_t)ecx >> 16); }  /* 117e */
             }
             {   int32_t ebx = (int32_t)((uint32_t)*(int32_t *)(o+4) << 13);   /* 1182/118b */
                 int32_t edx = -(int32_t)((uint32_t)*(int32_t *)(o+8) << 13);  /* 1185/1188/118e */
-                uint32_t idx = ((((uint32_t)edx)>>22)&0x3ff)<<10 | (((uint32_t)ebx)>>22)&0x3ff; /* 8480 */
-                o[0x1d] = hm1c[idx & 0x3fffff];                          /* 1195 mov %al,0x1d(%edi) */
+                o[0x1d] = hm1c[fist_hm_index((uint32_t)edx, (uint32_t)ebx, d1c)];   /* 8480 ; 1195 mov %al,0x1d(%edi) */
             }
         }
         return 0;
@@ -1944,8 +1929,8 @@ int fist_extender_gate(void) {
         uint16_t pp = g_fist_op54_proj ? (uint16_t)(g_fist_op54_proj + 4)
                                        : (uint16_t)*(uint32_t*)(g_mem + tcb54 + 0x3f2);
         int32_t X=*(int32_t*)(dg+pp),Y=*(int32_t*)(dg+(uint16_t)(pp+4));
-        uint32_t idx=((((uint32_t)(-(int32_t)((uint32_t)Y<<13))>>22)&0x3ff)<<10)|(((uint32_t)X<<13)>>22&0x3ff);
-        return hm54?(int)hm54[idx&0x3fffff]:0; }
+        uint32_t idx=fist_hm_index((uint32_t)(-(int32_t)((uint32_t)Y<<13)), (uint32_t)X<<13, *(uint32_t*)(xb54+0x8490));
+        return hm54?(int)hm54[idx]:0; }
     if (op == 0x58 && g_ext_ready && g_fist_after_map) {
         /* board:0012 e339 clobber fix: a SERVICE op consumes its selector so e339's task-scheduler tail
          * (far-jmp [DGROUP:0x58] when aa10!=0 && TCB!=0) does NOT overwrite the LOS result with a trap-0.
@@ -1962,10 +1947,10 @@ int fist_extender_gate(void) {
          * Use the LOS's OWN fixed-10 terrain index so endpoints sit on the sampled terrain + eye. */
         { static int standin = -1; if (standin < 0) standin = getenv("FIST_LOS_STANDIN") ? 1 : 0;
         if (hm && standin) {
-            uint32_t oi = ((((uint32_t)(-(int32_t)((uint32_t)oy<<13))>>22)&0x3ff)<<10) | (((uint32_t)ox<<13)>>22 &0x3ff);
-            uint32_t ci = ((((uint32_t)(-(int32_t)((uint32_t)cy<<13))>>22)&0x3ff)<<10) | (((uint32_t)cx<<13)>>22 &0x3ff);
-            oz = ((int32_t)hm[oi&0x3fffff]<<8) + 1792;
-            cz = ((int32_t)hm[ci&0x3fffff]<<8) + 1792;
+            uint32_t oi = fist_hm_index((uint32_t)(-(int32_t)((uint32_t)oy<<13)), (uint32_t)ox<<13, *(uint32_t*)(xb+0x8490));
+            uint32_t ci = fist_hm_index((uint32_t)(-(int32_t)((uint32_t)cy<<13)), (uint32_t)cx<<13, *(uint32_t*)(xb+0x8490));
+            oz = ((int32_t)hm[oi]<<8) + 1792;
+            cz = ((int32_t)hm[ci]<<8) + 1792;
         } }
         { extern long g_min_los,g_min_a296; long ad=(cx>ox?cx-ox:ox-cx)+(cy>oy?cy-oy:oy-cy); if(g_min_a296<16 && ad<g_min_los) g_min_los=ad; }
         { extern long g_op58_n; g_op58_n++; }
@@ -1980,8 +1965,8 @@ int fist_extender_gate(void) {
         int32_t rx=ox<<13, ry=-(oy<<13), rz=oz<<16;                           /* march from object */
         for (int32_t i=0; i<ecx; i++) {
             rx+=sdx; ry+=sdy; rz+=sdz;
-            uint32_t idx = ((((uint32_t)ry>>22)&0x3ff)<<10) | (((uint32_t)rx>>22)&0x3ff); /* shld,10 index */
-            uint32_t h = (uint32_t)hm[idx & 0x3fffff] << 24;
+            uint32_t idx = fist_hm_index((uint32_t)ry, (uint32_t)rx, *(uint32_t*)(xb+0x8490));   /* 8102/8106 shld,DETAIL */
+            uint32_t h = (uint32_t)hm[idx] << 24;
             if (h >= (uint32_t)rz) { extern long g_op58_occ; g_op58_occ++; return 0; } /* terrain occludes */
         }
         { extern long g_op58_vis; g_op58_vis++; }
@@ -2169,8 +2154,8 @@ int fist_extender_gate(void) {
             uint32_t cm = *(uint32_t*)(xb+0x3918);
             long nz=0; int seen[256]={0}, dist=0;
             if (cm) { uint8_t *t=(uint8_t*)(uintptr_t)cm; for(int i=0;i<65536;i++){ if(t[i]){nz++;} if(!seen[t[i]]){seen[t[i]]=1;dist++;} } }
-            fprintf(stderr,"[ophist] total=%ld op40(ad1e)=%ld op24(9200)=%ld op0c=%ld op18=%ld op54=%ld op60=%ld op44=%ld | tile3918 nz=%ld dist=%d\n",
-                total, ophist[0x40], ophist[0x24], ophist[0x0c], ophist[0x18], ophist[0x54], ophist[0x60], ophist[0x44], nz, dist);
+            fprintf(stderr,"[ophist] total=%ld op40(ad1e)=%ld op24(9200)=%ld op08(tile)=%ld op0c=%ld op18=%ld op54=%ld op60=%ld op44=%ld | tile3918 nz=%ld dist=%d\n",
+                total, ophist[0x40], ophist[0x24], ophist[0x08], ophist[0x0c], ophist[0x18], ophist[0x54], ophist[0x60], ophist[0x44], nz, dist);
         }
     }
     /* ------------------------------------------------------------------------------------------------
@@ -2207,331 +2192,79 @@ int fist_extender_gate(void) {
      * oracle alt=12800 = (43+7)<<8, i.e. alt = (h<<8) + FIST_EYE_HT where FIST_EYE_HT = 7<<8 = 1792
      * (the M1A2 eye height, 7 world units, in the extender's <<8 world scale).  Heightmap index math =
      * 0x8650's own: tile = (camXY<<13)>>(32-detail), idx = ((tileY&mask)<<detail)+(tileX&mask). */
-    if (op == 0x24 && g_ext_ready && g_fist_after_map) {
+    /* board:0002 op 0x08 -- the TERRAIN TILE BUILD, posted once per frame right before op 0x24.  The
+     * service table (fist_image.bin 0xcb3) maps it to 0x10e0 = `call 8df0 ; call 3931`: the viewport
+     * from the TCB, then 3931 = the camera (85d0), the sky/tile resampler through [0x3958] (0x6877) and
+     * the raycaster 6980 into the 256-square tile that op 0x24's 9200 perspective-maps.  Read off the
+     * original's block trace (scratch/oracle/blktrace); the shim used to return 0 for it, so every
+     * windshield frame sampled a tile nobody had built. */
+    if (op == 0x08 && g_ext_ready && g_fist_after_map) {
+        uint8_t  *xb  = g_mem + FIST_EXT_BASE;
+        uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)(g_mem + tcb_lin);
+        *(uint16_t*)(dg + 0xea10) = 0;
+        m_ext_FUN_0000_8df0();
+        m_ext_FUN_0000_3931();
+        return 0;
+    }
+    /* board:0002 op 0x24 -- the WINDSHIELD RENDER.  The service table maps it to 0x82c0 = `call 8120 ;
+     * call 9200 ; call 82d0`: 8120 projects the camera 85d0 set at op 0x08 into the per-row texel steps
+     * and leaves the per-pixel steps in ESI/EBP (asm 0x8239-0x8251: 90c0*9104 >> 32 and 90c0*9108 >> 32,
+     * which the decompile computes but does not return), 9200 walks the tile 3918 into the windshield
+     * window, 82d0 projects the target marker TCB+0xd2 for the HUD.  One frame period of machine time
+     * per render (board:0026).  What used to be here -- 8deb/85d0 again, oracle-anchored camera seeds
+     * (altitude, focal, pitch, roll) and the FIST_TERRAIN / FIST_TILEFILL / FIST_ISO / FIST_INJECT_*
+     * scaffolds -- modelled a chain the original never runs; the tile is op 0x08's, the camera the
+     * engine's (dd15 writes the TCB every frame). */
+    /* board:0002 op 0x5c -- the MAP INSET (0x7990): the destination surface, width and height from the
+     * TCB (+2:+4 seg:off, +0x1e, +0x22) into 90ec/90f0/90f4/90f8, then the camera (85d0), the top-down
+     * colormap walk through the shade LUT (8e80) and the platoon/objective markers (79d7).  Posted by
+     * dc12 on the view-0x20 frames; the shim never served it -- the inset showed the buffer's residue. */
+    if (op == 0x5c && g_ext_ready && g_fist_after_map) {
         uint8_t  *xb  = g_mem + FIST_EXT_BASE;
         uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
         uint8_t  *tcb = g_mem + tcb_lin;
         uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
+        extern void m_ext_FUN_0000_85d0(void), m_ext_FUN_0000_8e80(void), m_ext_FUN_0000_79d7(unsigned, unsigned short);
         *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)tcb;
-        /* terrain-follow camera-Z (0x8650 index math, oracle-anchored eye) */
-        uint32_t detail = *(uint32_t*)(xb+0x8490), mask = *(uint32_t*)(xb+0x849c);
-        uint8_t *hm = (uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0x85bc));
-        if (hm && detail) {
-            int32_t cx = *(int32_t*)(tcb+0x2c), cy = *(int32_t*)(tcb+0x30);
-            uint32_t tx = ((uint32_t)cx << 13) >> (32-detail);
-            uint32_t ty = ((uint32_t)(-(int32_t)((uint32_t)cy<<13))) >> (32-detail);
-            uint8_t  h  = hm[(((ty & mask) << detail) + (tx & mask)) & 0x3fffff];
-            *(int32_t*)(tcb+0x34) = (h << 8) + 1792;   /* FIST_EYE_HT = 7<<8 (oracle spawn alt 12800) */
-        }
-        /* CAMERA FOCAL (TCB+0x3e): 85d0's divisor `DAT_90c0 = 0xffffffff / word[TCB+0x3e]` (+ _DAT_90c8 =
-         * the raw value).  The absent 32-bit-PM flight model writes it each frame; the port's static images
-         * leave it 0 -> integer divide-by-zero SIGFPE in the extender windshield render (residual #2, the
-         * degenerate camera).  A GUARD (d=1) only fixes the reciprocal -> _DAT_90c8 stays 0 -> AE=126; the
-         * oracle-anchored spawn value is 256 (== the FIST_MISSFB_RENDER seed above, docs/mission_cockpit.md
-         * camera) which fixes BOTH.  Unconditional on the op-0x24 in-mission render path -- never reached by
-         * the 35 front-end verify flows (they never post op-0x24), so behaviour-neutral for them. */
-        if (*(uint16_t*)(tcb+0x3e) == 0) *(uint16_t*)(tcb+0x3e) = 256;
-        /* CAMERA PITCH/ROLL bridge (the render camera's ATTITUDE, TCB+0x3a/+0x3c).
-         * 8120 reads +0x3a (pitch) -> 90e8 and +0x3c (roll) -> 90e4, i.e. the horizon tilt/
-         * height of the perspective projection.  The absent 32-bit-PM flight model writes them
-         * each frame (the tank settling/climbing over AZER1); PROVEN paged out -- there is NO
-         * store to +0x3a/+0x3c in EITHER static image (0 in re_out/fist.c, 0 in re_out/fist_image.bin;
-         * only 8120 @0x8126/0x8132 READS them), and the engine feeds only heading +0x38 via a20d.
-         * Direct DOSBox capture at the AZER1 windshield render (docs/oracle_camera_bridge.md,
-         * tools/oracle/capture_9200_framematched.sh + the [r92cam] instrumentation): the ref/AE-min
-         * frame (oracle alt=12800, matching the seed above) holds +0x3a=384 / +0x3c=256; the port's
-         * LIVE camera is stale +0x3a=0 / +0x3c=-256.  Oracle-anchored spawn seed, exactly like the
-         * alt terrain-follow above; gated with FIST_TILEFILL so the default frame is unchanged. */
-        /* Oracle-anchored spawn seed for the render camera's ATTITUDE, same class as the alt/focal seeds
-         * above (the 32-bit flight model that writes TCB+0x3a/+0x3c per frame is paged out).  dosbox-fist
-         * guest-RAM at the AZER1 render (oracle_azer1_tcb_camera.txt): pitch(+0x3a)=384 roll(+0x3c)=256..384;
-         * the port's stale values were +0x3a=0 / +0x3c=-256.  Applied on the default op-0x24 render path. */
-        /* DIAGNOSTIC (FIST_CAMPROBE): what does the ENGINE leave in the TCB attitude fields before the
-         * seeds below overwrite them?  FUN_0000_dd15 (patch 306) transcribes asm 0xdd53/0xdd74/0xdd90,
-         * which DO write rec+0x3e/+0x3c/+0x3a from the player object -- so the "paged out" premise of
-         * the seeds needs re-testing.  Read-only, env-gated. */
-        if (getenv("FIST_CAMPROBE")) {
-            static long n=0; static uint16_t lp=0xffff,lr=0xffff,lf=0xffff;
-            uint16_t p=*(uint16_t*)(tcb+0x3a), r=*(uint16_t*)(tcb+0x3c), f=*(uint16_t*)(tcb+0x3e);
-            if (p!=lp||r!=lr||f!=lf||((n%20000)==0))
-                fprintf(stderr,"[camprobe] #%ld engine pitch=%u roll=%u foc=%u\n",n,p,r,f);
-            lp=p;lr=r;lf=f;n++;
-        }
-        /* MEASURED (board:0002): the "paged out" premise below is WRONG for these two fields.  The
-         * ENGINE writes them every frame -- FUN_0000_dd15 (patch 306) transcribes asm 0xdd74/0xdd90,
-         * `mov %ax,%es:0x3c(%di)` / `mov %ax,%es:0x3a(%di)` into this same TCB -- and FIST_CAMPROBE
-         * shows 1275 live changes over an AZER1 run (pitch -1280..+704, roll -384..-128).  These seeds
-         * therefore DESTROY a computed camera rather than fill a hole.
-         * They are kept for now only because removing them does NOT improve the frame (full-frame AE
-         * 29192 -> 29234 against ref/mission_azer1_cockpit_native320.png, i.e. unchanged) AND because
-         * the engine's computed values disagree in SIGN with the oracle capture at the same frame
-         * (+384/+256).  That disagreement -- not the seeds -- is the next thing to settle. */
-        *(uint16_t*)(tcb+0x3a) = 384;   /* pitch */
-        *(uint16_t*)(tcb+0x3c) = 256;   /* roll  */
-        /* FIST_FULLCAM (diagnostic sweep): override the FULL render-camera position to an
-         * oracle frame-match value (X/Y/alt/head/foc/det).  Format "X:Y:alt:head:foc:det". */
-        if (getenv("FIST_FULLCAM")) {
-            long cv[6]={0,0,0,0,0,0}; const char*s=getenv("FIST_FULLCAM"); int i=0;
-            while(s && *s && i<6){ cv[i++]=strtol(s,(char**)&s,0); if(*s==':')s++; }
-            *(int32_t*)(tcb+0x2c)=cv[0]; *(int32_t*)(tcb+0x30)=cv[1]; *(int32_t*)(tcb+0x34)=cv[2];
-            *(uint16_t*)(tcb+0x38)=(uint16_t)cv[3]; *(uint16_t*)(tcb+0x3e)=(uint16_t)cv[4]; tcb[0xcc]=(uint8_t)cv[5];
-        }
-        /* FIST_ISO -- CAMERA vs RAY-TABLE isolation seam (diagnostic, default OFF, applied on every
-         * op-0x24 post so post #1 = the dumped spawn frame reflects the override).  Overrides the LIVE
-         * TCB camera and/or the ray tables before the SAME default render chain, to pin whether the
-         * port's divergent terrain-colour is driven by the CAMERA (position/orientation) or the RAY/
-         * projection tables (3a24/3e24).  8120/9200 read the camera from the TCB (0x2c/0x30/0x34 XY/alt,
-         * 0x38 heading, 0x3a/0x3c pitch, 0x3e foc) + baked const tables; 3a24/3e24 are read by 395e (not
-         * in this chain) -- so RAYZERO is the irrelevance test. */
-        if (getenv("FIST_ISO")) {
-            if (getenv("FIST_ISO_CAMXY")) {   /* full V18 settled oracle camera (position too) */
-                *(int32_t*)(tcb+0x2c)=609696; *(int32_t*)(tcb+0x30)=1112229; *(int32_t*)(tcb+0x34)=29184;
-            }
-            if (getenv("FIST_ISO_CAM")) {      /* oracle ORIENTATION only (keep spawn XY/alt) */
-                *(uint16_t*)(tcb+0x38)=19745; *(uint16_t*)(tcb+0x3a)=0;
-                *(uint16_t*)(tcb+0x3c)=128;   *(uint16_t*)(tcb+0x3e)=256;
-                tcb[0xcd]=1; tcb[0xcf]=0;
-            }
-            if (getenv("FIST_ISO_PITCH")) *(int16_t*)(tcb+0x3c)=(int16_t)strtol(getenv("FIST_ISO_PITCH"),0,0);
-            if (getenv("FIST_ISO_3A"))    *(int16_t*)(tcb+0x3a)=(int16_t)strtol(getenv("FIST_ISO_3A"),0,0);
-            if (getenv("FIST_ISO_FOC"))   *(uint16_t*)(tcb+0x3e)=(uint16_t)strtoul(getenv("FIST_ISO_FOC"),0,0);
-            if (getenv("FIST_ISO_HEAD"))  *(uint16_t*)(tcb+0x38)=(uint16_t)strtoul(getenv("FIST_ISO_HEAD"),0,0);
-            if (getenv("FIST_ISO_RAYZERO")) { memset(xb+0x3a24,0,256*4); memset(xb+0x3e24,0,256*4); *(uint32_t*)(xb+0x90c4)=0; }
-            if (getenv("FIST_ISO_RAYFF"))   { memset(xb+0x3a24,0xff,256*4); memset(xb+0x3e24,0xff,256*4); *(uint32_t*)(xb+0x90c4)=0; }
-            { const char *r3=getenv("FIST_ISO_RAY3A24"), *r7=getenv("FIST_ISO_RAY3E24");
-              if (r3){FILE*f=fopen(r3,"rb"); if(f){fread(xb+0x3a24,1,256*4,f);fclose(f);}}
-              if (r7){FILE*f=fopen(r7,"rb"); if(f){fread(xb+0x3e24,1,256*4,f);fclose(f);}}
-              if (r3||r7) *(uint32_t*)(xb+0x90c4)=0; }
-        }
-        /* the decompiled extender render chain (viewport -> camera -> projection -> texel walk) */
-        m_ext_FUN_0000_8deb();
+        *(uint16_t*)(dg + 0xea10) = 0;
+        *(uint32_t*)(xb+0x90ec) = ((uint32_t)*(uint16_t*)(tcb+2) << 4) + *(uint16_t*)(tcb+4) + *(uint32_t*)(xb+0x807);   /* 7996-79a9 */
+        *(uint32_t*)(xb+0x90f0) = *(uint16_t*)(tcb+0x1e);                                                         /* 79ae */
+        *(uint32_t*)(xb+0x90f4) = *(uint16_t*)(tcb+0x1e) >> 1;                                                    /* 79b7 */
+        *(uint32_t*)(xb+0x90f8) = *(uint16_t*)(tcb+0x22);                                                         /* 79be */
         m_ext_FUN_0000_85d0();
-        /* FIST_TERRAIN (clean minimal path): the map-load's heightmap [0x85bc] + colormap [0x85b8] are
-         * ALREADY contiguous (mapprobe: CM = HM + DAT_8498 = HM+0x400000, both 4MB), so 6980 reads them
-         * correctly WITH NO buffer rebuild -- unlike the bit-rotted FIST_TILEFILL scaffold (sized for a
-         * 1024^2/2MB map, it overflows on this 2048^2 map -> crash).  Seed the paged-out ramps +
-         * projection constants, force 395e (90c4=0), run 689a's sky/tile + 6980's terrain overlay, then
-         * the default 8120->9200 samples the freshly-built tile.  board:0002 */
-        if (getenv("FIST_TERRAIN")) {
-            static int seeded=0;
-            if (!seeded) { seeded=1;
-                FILE*rf=fopen("tools/oracle/samples/voxel6980_ramps.bin","rb");
-                if(rf){ static uint8_t rb[4096]; if(fread(rb,1,4096,rf)==4096){ memcpy(xb+0x3a24,rb,1024); memcpy(xb+0x3e24,rb+1024,1024);} fclose(rf); }
-                *(uint32_t*)(xb+0x90b0)=0x00003d00; *(uint32_t*)(xb+0x90b4)=0x00020000;   /* paged-out proj consts */
-            }
-            *(uint32_t*)(xb+0x90c4)=0;   /* force 6980->395e proj rebuild from the real ramps + native 90c0 */
-            if (!getenv("FIST_TERRAIN_NO689A")) fist_ext_689a(xb);
-            extern void m_ext_FUN_0000_6980(void);
-            m_ext_FUN_0000_6980();
-            /* FIST_CMRENDER (board:0002): dump the RENDER-TIME colormap ([0x85bc]+0x100000, post-689a
-             * lighting/reduce -- the same stage the live-paging oracle r69.r6980.map_cm.bin captures) for a
-             * LIKE-STAGE byte-diff vs the map-load dump's 0.359% (which was pre-lighting). */
-            if (getenv("FIST_CMRENDER")) {
-                uint32_t hmb=*(uint32_t*)(xb+0x85bc);
-                if(hmb){ FILE*f=fopen(getenv("FIST_CMRENDER"),"wb"); if(f){ fwrite((void*)(uintptr_t)(hmb+0x100000),1,0x100000,f); fclose(f);
-                    fprintf(stderr,"[cmrender] post-689a render-time CM dumped -> %s\n", getenv("FIST_CMRENDER")); } }
-            }
-        }
-        /* FIST_TILEFILL (EXPERIMENTAL, default OFF) -- run the per-frame terrain TILE-FILL
-         * FUN_0000_6980 (NovaLogic voxel raycaster) BEFORE 9200 samples the tile, so 9200 walks a
-         * freshly-built terrain tile instead of the stale map-load tile.  6980 reads the camera set by
-         * 85d0 + the colour source at [0x85bc]+coord+0x100000.  Two shim seeds needed for a faithful
-         * native march (both are paged-out engine constants absent from fist_image.bin):
-         *   (a) the source depth ramps 3a24/3e24 (all-1 in the image, paged-boot-filled) -- banked from
-         *       the frame-matched capture; 6980->395e recomputes 4224/4624 from these + the native 90c0.
-         *   (b) a CONTIGUOUS heightmap+colormap buffer: the real extender maps the colormap at
-         *       HM_base+0x100000, but the port's Route-1 map-load allocs [0x85bc]/[0x85b8] separately, so
-         *       6980's [0x85bc]+0x100000 colour read lands in the wrong buffer.  Build HM[0..1MB] +
-         *       colormap[0..1MB]@+0x100000 and point [0x85bc] there for the 6980 call. */
-        if (getenv("FIST_TILEFILL")) {
-            static int seeded=0;
-            if (!seeded) { seeded=1;
-                FILE*rf=fopen(getenv("FIST_TILEFILL_RAMPS")?getenv("FIST_TILEFILL_RAMPS"):"tools/oracle/samples/voxel6980_ramps.bin","rb");
-                if(rf){ static uint8_t rb[4096]; if(fread(rb,1,4096,rf)==4096){ memcpy(xb+0x3a24,rb,1024); memcpy(xb+0x3e24,rb+1024,1024);} fclose(rf);
-                    fprintf(stderr,"[tilefill] seeded ramps 3a24/3e24 from bank\n"); }
-                /* 90b0/90b4 = paged-out projection constants (no writer in fist_image.bin; camera-independent).
-                 * 689a's perspective resample + 8120's projection read them.  Seed the banked values. */
-                *(uint32_t*)(xb+0x90b0)=0x00003d00; *(uint32_t*)(xb+0x90b4)=0x00020000;
-            }
-            static uint8_t *hmcm=0; static uint32_t hm_src=0;
-            uint32_t hmb=*(uint32_t*)(xb+0x85bc), cmb=*(uint32_t*)(xb+0x85b8);
-            if(getenv("FIST_GAPCHK")){ static int gc=0; if(!gc){gc=1;
-                fprintf(stderr,"[gapchk] [0x85bc](HM)=%08x [0x85b8](CM)=%08x  cmb-hmb=%d (0x%x)  expect 0x100000=%d\n",
-                    hmb,cmb,(int)(cmb-hmb),(int)(cmb-hmb),0x100000);}}
-            const char*rf2=getenv("FIST_TILEFILL_RED");   /* override colour source (e.g. light reduce) */
-            const char*hf2=getenv("FIST_TILEFILL_HM");    /* DIAGNOSTIC: override heightmap (frame-match) */
-            if (hmb && cmb) {
-                if(!hmcm) hmcm=(uint8_t*)malloc(0x200000);
-                if(getenv("FIST_TILEFILL_DS")){
-                    /* 6980 walks a 1024^2 map (asm: two shld $0xa = 20-bit index); the port's
-                     * HM/colormap are 2048^2 (4MB).  Build a genuine 1024^2 DOWNSAMPLE (every
-                     * other row/col of the 2048^2 source) so 6980's [base]+ecx / [base]+0x100000+ecx
-                     * land on a 1024^2 HM + contiguous 1024^2 colormap. */
-                    uint8_t *H=(uint8_t*)(uintptr_t)hmb, *C=(uint8_t*)(uintptr_t)cmb;
-                    int avg=getenv("FIST_TILEFILL_AVG")!=0;
-                    int sub=getenv("FIST_TILEFILL_SUB")!=0;   /* top-left 1024x1024 sub-block */
-                    if(sub){ for(int y=0;y<1024;y++) for(int x=0;x<1024;x++){
-                        hmcm[y*1024+x]          = H[y*2048+x];
-                        hmcm[0x100000+y*1024+x] = C[y*2048+x]; } hm_src=hmb; }
-                    else {
-                    int ph=getenv("FIST_TILEFILL_PH")?atoi(getenv("FIST_TILEFILL_PH")):0;
-                    int py=(ph>>1)&1, px=ph&1;   /* phase 0..3 = (dy,dx) in the 2x2 */
-                    for(int y=0;y<1024;y++) for(int x=0;x<1024;x++){
-                        int i=(y*2+py)*2048+(x*2+px);
-                        if(avg){
-                            hmcm[y*1024+x]=(H[i]+H[i+1]+H[i+2048]+H[i+2049])>>2;
-                            hmcm[0x100000+y*1024+x]=(C[i]+C[i+1]+C[i+2048]+C[i+2049])>>2;
-                        } else {
-                            hmcm[y*1024+x]           = H[i];
-                            hmcm[0x100000+y*1024+x]  = C[i]; } }
-                    hm_src=hmb;
-                    }
-                } else {
-                if(hmb!=hm_src){ memcpy(hmcm,(void*)(uintptr_t)hmb,0x100000); hm_src=hmb; }
-                if(hf2){ FILE*f=fopen(hf2,"rb"); if(f){fread(hmcm,1,0x100000,f);fclose(f); hm_src=0;} }
-                if(rf2){ FILE*f=fopen(rf2,"rb"); if(f){fread(hmcm+0x100000,1,0x100000,f);fclose(f);} }
-                else memcpy(hmcm+0x100000,(void*)(uintptr_t)cmb,0x100000);
-                }
-                /* FIST_TILEFILL_CMDUMP=path : bank the port's LIVE colour source ([0x85b8], 1MB) read-only */
-                if(getenv("FIST_TILEFILL_CMDUMP")){ static int cd=0; if(!cd){cd=1;
-                    FILE*f=fopen(getenv("FIST_TILEFILL_CMDUMP"),"wb"); if(f){fwrite(hmcm+0x100000,1,0x100000,f);fclose(f);}
-                    FILE*g=fopen("/tmp/port_hm.bin","wb"); if(g){fwrite(hmcm,1,0x100000,g);fclose(g);} } }
-            }
-            *(uint32_t*)(xb+0x90c4)=0;   /* force 395e proj rebuild from the seeded ramps + native 90c0 */
-            /* 689a fills the WHOLE tile (sky rows 160-255 exact; terrain rows 0-159 then overlaid by 6980) */
-            if (!getenv("FIST_TILEFILL_NO689A")) fist_ext_689a(xb);
-            uint32_t s85bc=*(uint32_t*)(xb+0x85bc);
-            if(hmcm) *(uint32_t*)(xb+0x85bc)=(uint32_t)(uintptr_t)hmcm;
-            /* 6980 (NovaLogic voxel raycaster) overlays terrain rows 0-159 on top of 689a's tile */
-            extern void m_ext_FUN_0000_6980(void);
-            uint32_t tp=*(uint32_t*)(xb+0x3918);
-            uint8_t *tl=(tp&&tp<0x100000)?(xb+tp):(uint8_t*)(uintptr_t)tp;
-            static uint8_t pre[0x10000]; int wantdump = getenv("FIST_TILEFILL_TDUMP") && tl;
-            if (wantdump) memcpy(pre,tl,0x10000);
-            m_ext_FUN_0000_6980();
-            if (getenv("FIST_TILEDUMP") && tl) { static int done=0; if(!done){done=1;
-                FILE*f=fopen(getenv("FIST_TILEDUMP"),"wb"); if(f){fwrite(tl,1,0x10000,f);fclose(f);} } }
-            if (wantdump) { static int td=0; if(!td){td=1;
-                long chg=0,cnz=0; int seen[256]={0},d0=0;
-                for(int col=0;col<256;col++)for(int row=0;row<160;row++){int i=col*256+row;
-                    if(tl[i]!=pre[i])chg++; if(tl[i]){cnz++; if(!seen[tl[i]]){seen[tl[i]]=1;d0++;}}}
-                fprintf(stderr,"[tilefill] 6980 wrote rows0-159: changed=%ld nz=%ld distinct=%d  proj[0x3909]=%08x 90c0=%08x 90fc=%08x 9100=%08x\n",
-                    chg,cnz,d0,*(uint32_t*)(xb+0x3909),*(uint32_t*)(xb+0x90c0),*(uint32_t*)(xb+0x90fc),*(uint32_t*)(xb+0x9100)); } }
-            *(uint32_t*)(xb+0x85bc)=s85bc;
-        }
+        m_ext_FUN_0000_8e80();
+        m_ext_FUN_0000_79d7(0, 0);
+        *(uint32_t*)(xb+0xc93) = save_c93;
+        return 0;
+    }
+    /* board:0002 op 0x2c -- the SECONDARY viewport (the map inset; view 0x20 on the alternate frames):
+     * the service table maps it to 0x8460 = `call 8120 ; call 9130 ; call 82d0`, 9200's twin with a
+     * 50% blend into the destination (fist_ext.c FUN_0000_9129).  The shim never served it. */
+    if (op == 0x2c && g_ext_ready && g_fist_after_map) {
+        uint8_t  *xb  = g_mem + FIST_EXT_BASE;
+        uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
+        *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)(g_mem + tcb_lin);
         m_ext_FUN_0000_8120();
-        /* FIST_ISO_PROJ (diagnostic): overwrite the post-8120 projection globals + horizon table with the
-         * captured ORACLE spawn values (RAM dump docs/oracle_mission_spawn.md), bypassing the port's 8120,
-         * to prove whether the full renderer input state (projection + horizon) is the complete colour fix. */
-        if (getenv("FIST_ISO_PROJ")) {
-            *(uint32_t*)(xb+0x90b8)=0xfff9b7aa; *(uint32_t*)(xb+0x90bc)=0x00ffec42;
-            *(uint32_t*)(xb+0x90d4)=0xb1c0a498; *(uint32_t*)(xb+0x90d8)=0x39331d90;
-            *(uint32_t*)(xb+0x90b4)=0x00020000; *(uint32_t*)(xb+0x90c0)=0x01000000;
-            *(uint32_t*)(xb+0x9104)=0x7ff62180; *(uint32_t*)(xb+0x9108)=0xfcdbd542;
-            *(uint32_t*)(xb+0x90e8)=0x02000000;
-            if (getenv("FIST_ISO_HZ")) {
-                static const uint8_t hz[81]={6,4,3,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,8,9,9};
-                uint32_t hp=*(uint32_t*)(xb+0x9114); uint8_t*ht=(hp&&hp<0x100000)?(xb+hp):(uint8_t*)(uintptr_t)hp;
-                if(ht) memcpy(ht,hz,81);
-            }
-        }
-        if (getenv("FIST_ISO_TILE")) {   /* load a 64KB tile into the 3918 colormap buffer (oracle live tile) */
-            uint32_t cm=*(uint32_t*)(xb+0x3918); uint8_t*t=(cm&&cm<0x100000)?(xb+cm):(uint8_t*)(uintptr_t)cm;
-            if(t){FILE*f=fopen(getenv("FIST_ISO_TILE"),"rb"); if(f){fread(t,1,65536,f);fclose(f);}}
-        }
         { int32_t c0 = *(int32_t*)(xb+0x90c0), v04 = *(int32_t*)(xb+0x9104), v08 = *(int32_t*)(xb+0x9108);
           int32_t esi = (int32_t)(((int64_t)c0*v04)>>32), ebp = (int32_t)(((int64_t)c0*v08)>>32);
-          /* FIST_R3D_GDUMP (diagnostic, default OFF): dump the exact global state 9200 reads, at the
-           * moment of the terrain texel-walk call, so the port-vs-oracle rendered-index localization
-           * can verify projection-global injection actually reaches 9200. */
-          if (getenv("FIST_R3D_GDUMP")) {
-              uint8_t *ht=(uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0x9114));
-              fprintf(stderr,"[r3d] 90d4=%08x 90d8=%08x 90b8=%08x 90bc=%08x 90c0=%08x 9104=%08x 9108=%08x "
-                  "90f0=%u 90f8=%u 9114=%08x hz[0..8]=",
-                  *(uint32_t*)(xb+0x90d4),*(uint32_t*)(xb+0x90d8),*(uint32_t*)(xb+0x90b8),*(uint32_t*)(xb+0x90bc),
-                  *(uint32_t*)(xb+0x90c0),*(uint32_t*)(xb+0x9104),*(uint32_t*)(xb+0x9108),
-                  *(uint32_t*)(xb+0x90f0),*(uint32_t*)(xb+0x90f8),*(uint32_t*)(xb+0x9114));
-              if(ht) for(int i=0;i<9;i++) fprintf(stderr,"%d,",ht[i]);
-              fprintf(stderr," param(ebp,esi)=%d,%d\n",ebp,esi);
-          }
-          /* FIST_R3D_PSCALE (diagnostic): scale 9200's depth-step params to probe the sampler-address
-           * localization (NUM/DEN as integer ratio, e.g. "2/1"). Default OFF -> behaviour-neutral. */
-          if (getenv("FIST_R3D_PSCALE")) { long n=1,d=1; sscanf(getenv("FIST_R3D_PSCALE"),"%ld/%ld",&n,&d);
-              if(d){ esi=(int32_t)((int64_t)esi*n/d); ebp=(int32_t)((int64_t)ebp*n/d); } }
-          /* FIST_INJECT_ALLGLOBALS (diagnostic, DEFAULT OFF) -- THE DECISIVE INPUT-STATE TEST.
-           * The runtime-9200 capture (docs/oracle_runtime_9200_capture.md) proved the port's compiled
-           * FUN_0000_9200 is BYTE-IDENTICAL to the oracle's running renderer.  9200's rendered INDEX
-           * output is therefore a PURE FUNCTION of {90d4,90d8 (U/V base), esi/ebp (per-texel step),
-           * 90b8/90bc (per-column step), 90f0/90f8 (counts), the horizon table @9114, the 256x256
-           * colormap tile @3918}.  90a8/90ac are DEST geometry (host fb pointer + advance), NOT value-
-           * determining -- left untouched so pixels land where the port already draws them.  This seam
-           * overwrites the COMPLETE value-determining set with the FRAME-MATCHED oracle byte values
-           * (scratch/oracle/mspawn.ram.bin @ ext phys 0x131000, self-consistent with the committed
-           * oracle_mission_spawn_framematched_idx.bin), BYPASSING 8120 entirely, and sets esi/ebp
-           * DIRECTLY (not via the 90c0*9104 derivation).  If the resulting raw 0xA0000 index buffer
-           * then matches the frame-matched oracle idx, the divergence is INPUT-STATE (8120/camera);
-           * if it stays unchanged, the affine renderer + these globals cannot reproduce the oracle. */
-          if (getenv("FIST_INJECT_ALLGLOBALS")) {
-              *(uint32_t*)(xb+0x90b4)=0x00020000; *(uint32_t*)(xb+0x90b8)=0xfff9b7aa;
-              *(uint32_t*)(xb+0x90bc)=0x00ffec42; *(uint32_t*)(xb+0x90c0)=0x01000000;
-              *(uint32_t*)(xb+0x90d4)=0xb1c0a498; *(uint32_t*)(xb+0x90d8)=0x39331d90;
-              *(uint32_t*)(xb+0x90e8)=0x02000000; *(uint32_t*)(xb+0x90ac)=0x00000020;
-              *(uint32_t*)(xb+0x90f0)=0x00000120; *(uint32_t*)(xb+0x90f8)=0x00000051;
-              *(uint32_t*)(xb+0x9104)=0x7ff62180; *(uint32_t*)(xb+0x9108)=0xfcdbd542;
-              esi=0x007ff621; ebp=(int32_t)0xfffcdbd5;   /* frame-matched oracle per-texel step */
-              /* horizon table: 9114 is EXT-RELATIVE (0x7568 < 0x100000) in the port -> xb+off */
-              { static const uint8_t hz[81]={6,4,3,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,8,9,9};
-                uint32_t hp=*(uint32_t*)(xb+0x9114); uint8_t*ht=(hp<0x100000)?(xb+hp):(uint8_t*)(uintptr_t)hp;
-                memcpy(ht,hz,81); }
-              /* colormap tile @3918: HOST pointer (patch 286).  FIST_INJECT_TILE=<64KB file> */
-              { uint32_t cm=*(uint32_t*)(xb+0x3918); uint8_t*t=(cm&&cm<0x100000)?(xb+cm):(uint8_t*)(uintptr_t)cm;
-                const char*tf=getenv("FIST_INJECT_TILE");
-                if(t&&tf){FILE*f=fopen(tf,"rb"); if(f){fread(t,1,65536,f);fclose(f);}} }
-              if (getenv("FIST_R3D_GDUMP2"))
-                  fprintf(stderr,"[inject] post-override 90d4=%08x 90d8=%08x 90b8=%08x 90bc=%08x 90f0=%u 90f8=%u "
-                      "esi=%08x ebp=%08x 3918=%08x\n",
-                      *(uint32_t*)(xb+0x90d4),*(uint32_t*)(xb+0x90d8),*(uint32_t*)(xb+0x90b8),*(uint32_t*)(xb+0x90bc),
-                      *(uint32_t*)(xb+0x90f0),*(uint32_t*)(xb+0x90f8),(uint32_t)esi,(uint32_t)ebp,*(uint32_t*)(xb+0x3918));
-          }
-          /* FIST_INJECT_CAPFILE (diagnostic, DEFAULT OFF) -- THE globals<->VRAM FRAME-MATCHED
-           * validation.  Loads a self-consistent (globals, tile, horizon) triple captured from
-           * ONE oracle 9200 invocation (tools/oracle/capture_9200_framematched.sh -> .cap:
-           * hdr[magic,passno,esi,ebp,hzptr] + ext[0x9000..0x9200] + horizon[256] + tile[65536]),
-           * overwrites the port's value-determining projection globals (NOT 90a8, the port's HOST
-           * fb dest ptr) + esi/ebp DIRECT + the horizon + the 3918 colormap tile, and renders the
-           * port's faithful 9200.  If the port's raw 0xA0000 idx then reproduces the SAME 9200
-           * call's VRAM, the renderer+globals path is proven end-to-end (methodology validated). */
-          if (getenv("FIST_INJECT_CAPFILE")) {
-              FILE*cf=fopen(getenv("FIST_INJECT_CAPFILE"),"rb");
-              if(cf){
-                  unsigned char cap[20+0x200+256];
-                  if(fread(cap,1,sizeof cap,cf)==sizeof cap){
-                      uint32_t cesi=*(uint32_t*)(cap+8), cebp=*(uint32_t*)(cap+12);
-                      unsigned char*cg=cap+20;                 /* cg[o-0x9000] == ext[o] */
-                      #define CG(o) (*(uint32_t*)(cg+((o)-0x9000)))
-                      *(uint32_t*)(xb+0x90b4)=CG(0x90b4); *(uint32_t*)(xb+0x90b8)=CG(0x90b8);
-                      *(uint32_t*)(xb+0x90bc)=CG(0x90bc); *(uint32_t*)(xb+0x90c0)=CG(0x90c0);
-                      *(uint32_t*)(xb+0x90d4)=CG(0x90d4); *(uint32_t*)(xb+0x90d8)=CG(0x90d8);
-                      *(uint32_t*)(xb+0x90e8)=CG(0x90e8); *(uint32_t*)(xb+0x90ac)=CG(0x90ac);
-                      *(uint32_t*)(xb+0x90f0)=CG(0x90f0); *(uint32_t*)(xb+0x90f8)=CG(0x90f8);
-                      *(uint32_t*)(xb+0x9104)=CG(0x9104); *(uint32_t*)(xb+0x9108)=CG(0x9108);
-                      esi=(int32_t)cesi; ebp=(int32_t)cebp;
-                      #undef CG
-                      { uint32_t hp=*(uint32_t*)(xb+0x9114); uint8_t*ht=(hp&&hp<0x100000)?(xb+hp):(uint8_t*)(uintptr_t)hp;
-                        if(ht) memcpy(ht,cap+20+0x200,128); }
-                      if(!getenv("FIST_INJECT_CAP_NOTILE")){
-                        uint32_t cm=*(uint32_t*)(xb+0x3918); uint8_t*t=(cm&&cm<0x100000)?(xb+cm):(uint8_t*)(uintptr_t)cm;
-                        static unsigned char tile[65536];
-                        if(fread(tile,1,65536,cf)==65536 && t) memcpy(t,tile,65536); }
-                  }
-                  fclose(cf);
-              }
-              if(getenv("FIST_R3D_GDUMP2"))
-                  fprintf(stderr,"[capinj] 90d4=%08x 90d8=%08x 90b8=%08x 90bc=%08x esi=%08x ebp=%08x 90f0=%u 90f8=%u 3918=%08x\n",
-                      *(uint32_t*)(xb+0x90d4),*(uint32_t*)(xb+0x90d8),*(uint32_t*)(xb+0x90b8),*(uint32_t*)(xb+0x90bc),
-                      (uint32_t)esi,(uint32_t)ebp,*(uint32_t*)(xb+0x90f0),*(uint32_t*)(xb+0x90f8),*(uint32_t*)(xb+0x3918));
-          }
+          extern void m_ext_FUN_0000_9129(int, int);
+          m_ext_FUN_0000_9129(ebp, esi); }
+        m_ext_FUN_0000_82d0();
+        *(uint32_t*)(xb+0xc93) = save_c93;
+        /* falls through to the op-0x2c capture diagnostics below (FIST_MISSFB2C) */
+    }
+    if (op == 0x24 && g_ext_ready && g_fist_after_map) {
+        uint8_t  *xb  = g_mem + FIST_EXT_BASE;
+        uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
+        *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)(g_mem + tcb_lin);
+        m_ext_FUN_0000_8120();
+        { int32_t c0 = *(int32_t*)(xb+0x90c0), v04 = *(int32_t*)(xb+0x9104), v08 = *(int32_t*)(xb+0x9108);
+          int32_t esi = (int32_t)(((int64_t)c0*v04)>>32), ebp = (int32_t)(((int64_t)c0*v08)>>32);
           m_ext_FUN_0000_9200(ebp, esi); }
+        m_ext_FUN_0000_82d0();
         *(uint32_t*)(xb+0xc93) = save_c93;
         /* The frame's machine time (board:0026).  The mission loop 459a does not wait for the retrace:
          * it renders, counts the [0x452] ticks that passed, steps the sim once per tick, renders again --
@@ -2545,39 +2278,12 @@ int fist_extender_gate(void) {
            * AZER1 resolves at the same tick with 8000, 17025 and 46500 (board:0026). */
           static long fc = -1; if (fc < 0) { const char *e = getenv("FIST_FRAME_COUNTS"); fc = e ? atol(e) : 0; }
           fist_clock_advance(fc > 0 ? (unsigned)fc : fist_clock_frame_counts()); }
-        /* ------------------------------------------------------------------------------------------
-         * MISSION DAC TERRAIN BAND (extender role).  9200 samples the terrain colormap (tile 0x3918),
-         * which contains ONLY palette indices 80..255 (min index=80, asm/oracle-verified -- the
-         * cockpit uses 0..79).  The engine's DAC mirror word[DGROUP:0x782] holds ONLY the cockpit
-         * band 0..79; indices 80..255 are BLACK, so the correctly-rendered voxel terrain displayed
-         * black (the "windshield collapse" was a palette-band artifact, NOT a render bug -- 9200 fills
-         * the full windshield, verified 25341/25600 non-black once the terrain band is coloured).
-         * PALETTE FINDING (2026-07-17, oracle DAC capture) -- the FAITHFUL terrain DAC is the extender's
-         * SORTED-DISPLAY palette at ext+0x5260, NOT 532.pal (ext+0x5598).  PROVEN byte-exact: the oracle's
-         * live VGA DAC[80..255] at the AZER1 spawn frame (instrumented DOSBox SIGUSR2 vga.dac dump,
-         * tools/oracle/capture_mission_spawn.sh -> mspawn.pal.bin, sample committed) == the port's own
-         * ext+0x5260 band 528/528 (mean 8bit (119.5,104.1,79.8) = oracle exact), while 5598 (532.pal)
-         * matches only 14/528 (mean (113.9,83.1,56.5)).  ASM: the map-load palette-finalise FUN_0000_9f65
-         * calls FUN_0000_9f10 (sort ext+0x5598 in-place by luminance R+2G+B) then copies the sorted table
-         * into ext+0x5260 (`puVar6=&DAT_0000_5260; for(0xc0 dwords) *puVar6=*puVar5;`) and into the
-         * per-frame display palette TCB+0xea -- 5260 is what the ORIGINAL uploads to the DAC.
-         * BUT swapping the merge to 5260 REGRESSES the composite spawn frame (terrain mean rows8-88
-         * 107.6,78.7,56.6 -> 81.7,68.5,50.6, further from oracle 122.5,111.9,89.0; full SAD 5.29M->5.53M),
-         * because the ~80%-dominant residual is the 9200 SAMPLER/INDEX, not the palette: the port renders
-         * SCRAMBLED indices vs the oracle (many distinct idx 80..179 all land where the oracle shows one
-         * bright ~(120,110,80) terrain colour).  An ideal PER-INDEX remap (the docs' "59% palette") leaves
-         * 23.6/chan sampler-locked and is NOT the real palette -- the faithful 5260 gives 142/px vs 5598's
-         * 133/px.  So per the camera-orientation precedent (don't land a faithful change that regresses the
-         * metric with no colour benefit), the default keeps 5598; FIST_MISSFB_PAL5260=1 flips to the
-         * faithful source for reproduction.  TRUE frontier = the 9200 sampler/tile3918 (colormap-groundtruth,
-         * voxel-projection/terrain-color-fidelity), not the palette. */
-        { uint8_t *eng782  = g_mem + ((uint32_t)(*(uint16_t*)(dg+0x782))<<4);
-          /* ext+0x5260 = the extender's SORTED-DISPLAY palette (asm 9f65 sorts 5598->5260 by luminance
-           * and uploads 5260 -- the FAITHFUL terrain DAC).  It only helped once the tile-fill produced the
-           * correct light tile (the earlier "5260 regresses" was measured against the stale dark tile), so
-           * select it when the tile-fill is active. */
-          uint8_t *extpal  = xb + ((getenv("FIST_MISSFB_PAL5260")||getenv("FIST_TILEFILL")) ? 0x5260 : 0x5598);
-          if (*(uint16_t*)(dg+0x782)) for (int i=80*3;i<768;i++) eng782[i] = extpal[i] & 0x3f; }
+        /* The terrain band of the DAC (indices [TCB+0x54]..255) is the engine's own business: dad2 points
+         * [0x78e]:[0x790] at TCB+0xea -- the luminance-sorted 532.pal 9f70 leaves there -- and the MGA
+         * method [0x56c] (0410) copies it into the palette buffer [0x782].  The merge that used to sit
+         * here re-copied ext+0x5598 over that band on every frame, and 0x5598 holds the SKY's PCX
+         * palette by then (643c reads it there after the sky image), which painted the terrain
+         * blue-grey. */
     }
     if (op == 0x24 && getenv("FIST_OP24TRACE") && g_ext_ready) {
         static int nt = 0;

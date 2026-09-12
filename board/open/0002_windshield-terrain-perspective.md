@@ -2630,3 +2630,93 @@ REVISED next step for this item: stop trying to fix the FIST_TERRAIN/6980 path. 
 tile builder for a 2048-square map.  Find which routine the original uses to fill the tile at that
 detail -- the 0x9200/0x92c0 pair and the 0x6877/0x689a pair are the candidates, and `ext+0x395c` (which
 op 0x44 now sets from TCB+0xcc) is what selects between them.
+
+## THE ORIGINAL'S RENDER CHAIN, READ OFF A BLOCK TRACE (2026-09-12)
+
+`tools/oracle/blktrace_mission.sh` (FIST_BLKTRACE over every code segment; the hook now keeps a set for
+linear addresses above 32 MB, where the extender maps the 32-bit app -- selector 0x002b at linear
+0x10000000 + image offset) records every instruction the original executes from boot through 150 s of
+AZER1, once each, in first-execution order (`scratch/oracle/blktrace/blk.txt`, 25746 lines, 4459 of
+them the app).  Attributed to fist_ext.c's functions, the mission phase runs, in this order:
+
+    bd0e bd62 a02e 643c 5f17 5fbe 5fd3 6008 6542 5f6c 2f95 bc06 bc5a 4a3c 9ec0 9e60 bdc4 8ce2 3930
+    91e5 92a1 9119 11a6 8480 85d0 7fa0 8df0 3931 6877 6980 395e 6b03 6b83 ae84 ad1e 82b8 8120 9200
+    9238 82d0 7940 79d7 7f32
+
+Three facts the shim's op-0x24 handler had wrong:
+
+- **The terrain tile is built by op 0x08, not op 0x24.**  The service table (file offset 0xcb3, op/4 ->
+  handler) has op 0x08 -> 0x10e0 = `call 8df0 ; call 3931`, and 3931 = `call 85d0 (camera) ; cmpb
+  [0x395d],0 ; jne -> 686f+6c00 ; call [0x3958] (= 0x6877, the sky/tile resampler -- not 689a) ; call
+  6980 (the raycaster)`.  The engine posts op 0x08 once per frame, right before op 0x24 (measured with
+  FIST_OPHIST: 8737 of each in 20 s), and the shim returns 0 for it -- so 9200 perspective-maps a tile
+  nobody rebuilt.  op 0x24 (0x82c0) is only `8120 ; 9200 ; 82d0`.
+- **6980 IS the raycaster for these maps.**  Its `shld $0xa` pairs and the `0x7fffffff` immediates are
+  SELF-MODIFIED at map load: the live bytes are `shld $0xb` (2048 = 11 bits) and real buffer offsets
+  (6adc `mov eax,0x242f3`, 6ad0/6ad6 `add ebx,-0xaab / sub ebp,-0x6f9`, 925a/926f `mov al,[eax+0x44200]`
+  = the colormap base 91e5 patches in).  Fourteen shld sites (6ae3/6ae7/6b63/6b67, 7fc4..8106, 8482/8486,
+  8f45..8f6b) carry the detail bits; the decompile bakes the pre-patch literals, but its patchers
+  (bRam00006ae6.. / uRam00006add..) already write the image copy in g_mem -- the readers have to read
+  the immediates from the image instead of the literals.  The "1024-square raycaster" verdict above
+  was read off the static bytes.
+- **The chain the shim runs (8deb, 85d0, then FIST_TERRAIN's 689a) is not the original's** (8df0, 85d0,
+  6877, 6980, 395e, 6b03/6b83; then ae84/ad1e for op 0x40; then 8120/9200+9238/82d0).
+
+Next: dispatch the gate through the service table to the decompiled handlers (op 0x08 -> 10e0 first),
+model the self-modified immediates as reads of the image, and retire the oracle-anchored camera seeds
+(pitch/roll/focal/altitude) the moment the engine's own TCB writes drive a faithful chain.
+
+## THE WINDSHIELD RENDERS AS THE ORIGINAL'S (patch 580 + the gate rewrite, 2026-09-12)
+
+What the trace said, done: the shim's gate now serves op 0x08 as 8df0 + 3931 (85d0, [0x3958], 6980) and
+op 0x24 as 8120 + 9200 + 82d0, nothing else -- the 8deb/85d0 re-run, the four oracle-anchored camera
+seeds (altitude, focal, pitch, roll) and the FIST_TERRAIN / FIST_TILEFILL / FIST_ISO / FIST_INJECT_*
+scaffolds are gone with the palette merge.  Seven defects fell out on the way, each measured against
+the oracle:
+
+- **The palette merge painted the terrain blue-grey.**  It re-copied ext+0x5598 over the DAC's terrain
+  band every frame, and by then 0x5598 holds the SKY's PCX palette (643c reads it there after the sky
+  image).  The engine's own path was right all along: dad2 points [0x78e]:[0x790] at TCB+0xea (the
+  luminance-sorted 532.pal 9f70 leaves there), the MGA method [0x56c] copies it into [0x782].  With the
+  merge gone the port's DAC equals the oracle's pass-8 DAC 256/256.
+- **op 0x44 loaded no ramp file for detail 4.**  The shim's transcription loaded low/medium/high for
+  levels 0/1/2 only; the asm (76a1/76c0) loads low for 0, medium for 1 and HIGH for everything else --
+  the oracle runs at 4 ("SUPER DETAIL").  Without the tables 395e divided by zero.
+- **Every heightmap sampler in the shim indexed a 1024-square map.**  op 0x1c, 0x54 and 0x58 packed
+  `(y>>22)<<10 | x>>22`; the original's samplers carry `shld eax,edx,DETAIL ; shld eax,ebx,DETAIL` with
+  DETAIL patched to 11 by 89b0 at map load.  Half the rows, every height from the wrong place: that
+  was TRAIN2's "0 VISIBLE" LOS and the wrong unit altitudes.
+- **op 0x1c stored the two slopes crossed.**  7fa0 returns the first pair's slope in EBX (`pop ebx`)
+  and the second in ECX; 114b/1177 store ECX at +0x34/+0x24 and EBX at +0x32/+0x22.  The port had them
+  swapped, which sent the hull's pitch and roll the wrong way: the oracle's AZER1 pitch climbs 384 ->
+  512 -> 640 -> ... 1920 and its roll falls 384 -> 256 -> ... -896 over the drive
+  (tools/oracle/samples/oracle_camera_bridge_trajectory.txt); the port fell to pitch -768 / roll +896.
+  Now: 384/384, 512/256, 640/-128, 896/-768 at frames 3/30/60/120.
+- **689a was never a function** (patch 580): the sky resampler is an unpromoted mid-entry of 6877; the
+  icall trapped and the sky rows were never filled.
+- **[0x3916] was a dword store** (patch 580): `movb [0x3916],10` as a 4-byte write zeroed the low word
+  of the tile pointer [0x3918]; the tile was built 0x4200 bytes below its buffer and 9200 sampled the
+  ramp buffer's tail as its top 60 rows.
+- **82d0 read its depth tables as host addresses** (patch 580).
+
+Measured at the matched camera (X=584132 Y=1142327 pitch 384 roll 256, the oracle's
+`oracle_9200_framematched_pass08.*`): the tile is 65536/65536 bytes identical, the nine 9200 inputs
+(90d4/90d8/90b8/90bc/9104/9108, ESI/EBP, 90f0/90f8) identical, the DAC identical, the windshield
+91.6% pixel-identical -- the rest is the original's HUD overlay (PL:1 UN:1, GOALS REMAINING, the
+reticle) and symmetric palette-swapped texel pairs in the oracle PNG.  Frame 3's camera (X/Y/alt/
+heading/focal/pitch/roll) equals the oracle's frame 1 field for field.
+
+Patch 581 closed most of what the same frame still lacked: the ammo/speed readouts (the glyph
+vector's segment word was zeroed by a 4-byte store after every readout), the map inset (op 0x5c was
+never served: 8e80's top-down colormap walk through the shade LUT, whose builder indexed the sorted
+palette in dwords), the night battles (6c00, 3931's [0x395d] branch, crashed on their first frame),
+op 0x2c's blended walk (9129) and five render methods of the view-0x20/0x1e/0x22 tables.  The HUD
+overlays (PL:/UN:, the reticle, GOALS REMAINING, the range) were never missing -- FIST_MISSFB captures
+inside the op-0x24 gate, before the engine paints them; the watchdog dump shows them.  AZER1 frame 8 is
+now 96.3 % pixel-identical to the oracle's pass-8 frame, the inset 97.9 %.
+
+Still open on this surface: the heading readout above the inset ("147°"), the unit dots' frame parity
+on the inset, the radar's sweep, frame 1's attitude (the port renders its first frame before the first
+op 0x1c, pitch 0 / roll -256 where the oracle already shows 384/384), and the op-0x60 map stamps
+(8650: the objective/crater images pressed into the height- and colormaps at mission start, 16 posts
+the shim still returns 0 for).

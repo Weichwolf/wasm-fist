@@ -1428,3 +1428,43 @@ REMAINING 03, ENEMY GROUND KILLS 03, GROUND UNITS LOST 06, UNITS REMAINING 00.  
 whole way, 6 of 7 own units alive, 5 of 5 objectives, and the LOS service answered 305928 queries with
 0 VISIBLE (209806 out of range, 96122 occluded).  Two divergences to run down against that oracle:
 the platoon does not drive on this map, and nothing has line of sight on it.
+
+## TRAIN2 resolves: the throttle-command state table (patch 578, 2026-09-12)
+
+Why nobody drove on TRAIN2: ad2f's `call WORD [bx-0x6810]` is a DS-relative call through the table at
+DGROUP:0x97f0 = {ad62 ad8c ae06 addb ae07 ae25 ae26 ae2c}, the throttle-command setters selected by the
+movement state byte[di+0x43] (0: the class speed from word[0x992c + 2*word[desc+6]]; 2: by the range
+word [di+0x53]; 6: by the formation distance [di+0x99]; 8: by the sub-state [di+0x45]; 0xc/0xe: halt).
+Patch 366 read that table from the code segment, so the dispatch always trapped and word[di+0x57]
+stayed whatever the .FSG record spawned it with -- 224 on AZER1 (which is why board:0020 saw its units
+drive), 0 on TRAIN2.  The six setters were host-pointer derefs in the decompile; rebuilt.
+
+With the units driving, the type-3 (T-72/T-80) turret step 9911/991f -- still handing a265 the object
+as a HOST pointer, which a265 (patch 274) takes as a near offset -- wrote a265's aim result through
+DI = 0x03b7, i.e. `mov [di+0x9b],ax` onto the frame timer [0x452]: the clock jumped by tens of
+thousands of ticks per aim (gdb: `watch *(unsigned short*)(g_mem+0x1c452) if > 20000`, first hit in
+FUN_1000_a265 <- 991f <- 9911 <- 97d5).  Both rebuilt in the DGROUP model.
+
+Result: TRAIN2 resolves -- DEFEAT (own side lost) at tick 14582 = 4:03; the oracle's debrief appears
+between its 4:01 and 5:01 captures (MISSION LOST, GROUND UNITS LOST 06).  AZER1's DEFEAT moves from
+2:23 (8595) to 3:33 (12758) against the original's 5:49; the port takes 1 of AZER1's 13 objectives and
+1 of TRAIN2's 5 where the original's debriefs show 13 remaining and 03 remaining.  The kind agrees on
+both; the tick and the objective count are the next comparison.
+
+Sweep with 578 (`scratch/oracle/sweep578.log`): 45 of 47 -- driving units exposed two more hand-offs
+(patch 579): SAUDI7's map load died in MEMMGR because 2f95's ECX (the block size) was dropped and the
+colormap scale-up asked for 16 MB; CYPRUS1 froze at tick 3157 because a0ab handed c31e a host pointer
+whose low word 0x0268 put b39c's `or word[di+0x40],0x20` on [0x2a8], the ISR's tick gate.  The same
+class in the four update templates' a0a4 call (the player's collision search never ran).  With 579
+all 47 resolve on the probe (CYPRUS1 25117, SAUDI7 22413, AZER1 13870); the 579 sweep
+(`scratch/oracle/sweep579.log`): 47 of 47.
+
+The windshield work that followed (board:0002, patches 580/581 and the gate rewrite) changed the sim
+as well -- the heightmap samplers behind the ground clamp, the height service and the LOS had indexed a
+1024-square map (half the rows) and the ground clamp stored the two slopes crossed, so every unit's
+altitude, attitude and line of sight moved.  AZER1's DEFEAT is at 18518 (5:08) now, against the
+original's 5:49; TRAIN2 resolves as a VICTORY at 16453 (4:34) where the original loses at ~4:30 --
+the kind still disagrees there, and the per-tick comparison against the oracle's player trace is the
+next instrument.  Sweep with 581 (`scratch/oracle/sweep581.log`): 47 of 47 resolve -- 23 DEFEAT, 23
+TIME EXPIRED, 1 VICTORY (TRAIN2); 7506 s of CPU over the sweep, the longest mission 724 s (the renderer
+now builds the tile and perspective-maps it every frame).  Gate 581: 178/178 native and wasm.

@@ -1,0 +1,289 @@
+PATCH 578: the throttle-command state table (ad2f reads DGROUP:0x97f0, not the code segment) and the
+type-3 turret step (9911/991f in the DGROUP model).
+
+board:0017.  Found on TRAIN2, the one mission of 47 that did not resolve: its saved block sets no time
+limit, the original reaches DEFEAT on it in five minutes (scratch/oracle/train2), and the port's
+roster never moved -- every vehicle at its spawn position with word[di+0x57] = 0 for 12 minutes.
+
+  ad2f   `movzx bx,[di+0x43] ; call WORD [bx-0x6810]` is a DS-relative call through DGROUP:0x97f0 --
+         the same shape as its siblings ab88 / ac75 / ad08 at 0x9810 / 0x9800 / 0x9820.  Patch 366
+         read the table from the CODE segment (g_mem+0x97f0), where the bytes are the instruction
+         stream (e8 00 01 1d ..), so the dispatch always hit the icall trap and the THROTTLE-COMMAND
+         setters selected by the movement state byte[di+0x43] never ran.  Table (image 0x257f0):
+         {ad62 ad8c ae06 addb ae07 ae25 ae26 ae2c}.  A unit whose .FSG record spawned it with a
+         throttle command drove on that command forever (AZER1's 224); one spawned with 0 never drove.
+  ad62   state 0, the CLASS speed: [di+0x40]&2 else 0; [di+0x53] <= 8 -> 0x50; else word[0x992c +
+         2*word[desc+6]], desc = [0x9796] (the class descriptor ab03 publishes).
+  ad8c   state 2, speed by RANGE [di+0x53]: no orders bit / 0xffff / <= 3 -> 0; <= 8 -> 0x10;
+         <= 0x20 -> 0x20; <= 0x30 -> 0x80; <= 0x50 -> 0xf0; else 0x110.
+  addb   state 6, by the formation distance [di+0x99]: < 0x2d -> -0x30; < 0x3c -> 0; < 0x5a -> 0x50;
+         else 0xf0.
+  ae07   state 8, by the sub-state [di+0x45]: 2 -> 0; 6 -> -0x30; else 0x40.
+  ae26/ae2c  states 0xc / 0xe: halt.   (ae06 / ae25 are `ret`.)
+         All six deref'd DI as a host pointer in the decompile.
+  9911/991f  the type-3 (T-72/T-80) turret step, reached from 97d5 with the object as a HOST pointer:
+         991f's `lcall 0f69:abd5` (FUN_1000_a265, rebuilt by patch 274 with DI as a near offset)
+         truncated that pointer to 0x03b7, and a265's `mov [di+0x9b],ax` landed on the frame timer
+         [0x452] -- once the units drove and acquired targets, TRAIN2's clock jumped by tens of
+         thousands of ticks per aim.  Both rebuilt in the DGROUP model (heading = [di+0x26]+[di+0x89];
+         the turret slews toward [di+0x8b] by at most 0x16c, redraw bytes and 76e8 on a step); 97d5
+         passes the near offset.
+
+  Effect: TRAIN2 resolves -- DEFEAT at tick 14582 (4:03); the original's debrief is on screen between
+  its 4:01 and 5:01 captures.  AZER1's DEFEAT moves from 2:23 to 3:33 (the original: 5:49).
+
+--- a/fist.c
++++ b/fist.c
+@@ -26770,7 +26770,7 @@
+     *(char *)(param_4 + 0x3c) = *(char *)(param_4 + 0x3c) + -1;
+   }
+   FUN_0000_98c3((int)param_3,param_4);
+-  FUN_0000_9911((int)param_1,param_2,param_4);
++  FUN_0000_9911((int)param_1,param_2,param_4 - (int)(intptr_t)((unsigned char *)g_mem + 0x1c000));   /* PATCH 578: DI near offset */
+   FUN_0000_9976((int)param_1,param_2,param_3,param_4);
+   uVar1 = (undefined2)param_2;
+   uVar4 = (uint)((ulong)param_3 >> 0x10);
+@@ -26973,8 +26973,15 @@
+ void __allregs FUN_0000_9911(undefined2 param_1,undefined4 param_2,int param_3)
+ 
+ {
+-  FUN_0000_991f(param_1,param_2,param_3);
+-  *(int *)(param_3 + 0x10) = *(int *)(param_3 + 0x26) + *(int *)(param_3 + 0x89);
++  /* PATCH 578: type-3 turret step (asm 0x9911-0x991e, DI = the unit as a DGROUP near offset): 991f, then
++   * word[di+0x10] = word[di+0x26] + word[di+0x89] (the hull heading plus the turret offset).  Ghidra
++   * deref'd DI as a host pointer, and 97d5 handed it one. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)param_3;
++  FUN_0000_991f(param_1, param_2, (int)di);
++  *(unsigned short *)(dg + (unsigned short)(di + 0x10)) =
++      (unsigned short)(*(unsigned short *)(dg + (unsigned short)(di + 0x26)) +
++                       *(unsigned short *)(dg + (unsigned short)(di + 0x89)));
+   return;
+ }
+ 
+@@ -26984,27 +26991,37 @@
+ void __allregs FUN_0000_991f(undefined2 param_1,undefined4 param_2,int param_3)
+ 
+ {
+-  uint uVar1;
+-  int iVar2;
+-  uint uVar3;
+-  
+-  if (*(int *)(param_3 + 0x97) != 0) {
+-    FUN_1000_a265(param_1,param_2,param_3);
+-    *(int *)(param_3 + 0x8b) = *(int *)(param_3 + 0x9b) - *(int *)(param_3 + 0x26);
+-  }
+-  uVar1 = *(int *)(param_3 + 0x8b) - *(int *)(param_3 + 0x89);
+-  uVar3 = (int)uVar1 >> 0xf;
+-  uVar1 = (uVar1 ^ uVar3) - uVar3;
+-  iVar2 = ((uVar1 - 0x16c & -(uint)(uVar1 < 0x16c)) + 0x16c ^ uVar3) - uVar3;
+-  if (iVar2 != 0) {
+-    *(int *)(param_3 + 0x89) = *(int *)(param_3 + 0x89) + iVar2;
+-    *(undefined1 *)(param_3 + 0xd1) = 3;
+-    *(undefined1 *)(param_3 + 0xce) = 3;
++  /* PATCH 578: type-3 turret slew (asm 0x991f-0x9975, DI = the unit near offset).  With a target
++   * [di+0x97]: `lcall 0f69:abd5` (FUN_1000_a265, the aim solver -- it takes DI as a near offset, so the
++   * host pointer the pristine passed was truncated to 0x03b7 and its `mov [di+0x9b],ax` landed on the
++   * frame timer [0x452], TRAIN2's clock jumping by tens of thousands of ticks) then [di+0x8b] =
++   * [di+0x9b] - [di+0x26].  Then the turret [di+0x89] steps toward [di+0x8b] by at most 0x16c (abs,
++   * clamp, re-sign); a nonzero step sets the redraw bytes [di+0xd1]/[di+0xce] = 3 and calls 76e8.
++   * [di+0xa9] = 0x80, [di+0xaa] = [di+0xab] = 0. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)param_3;
++  short d, s, a;
++  if (*(unsigned short *)(dg + (unsigned short)(di + 0x97)) != 0) {
++    FUN_1000_a265(param_1, param_2, (int *)(uintptr_t)di);
++    *(unsigned short *)(dg + (unsigned short)(di + 0x8b)) =
++        (unsigned short)(*(unsigned short *)(dg + (unsigned short)(di + 0x9b)) -
++                         *(unsigned short *)(dg + (unsigned short)(di + 0x26)));
++  }
++  d = (short)(*(unsigned short *)(dg + (unsigned short)(di + 0x8b)) -
++              *(unsigned short *)(dg + (unsigned short)(di + 0x89)));
++  s = (short)(d >> 15);                                            /* cwd */
++  a = (short)((d ^ s) - s);                                        /* |d| */
++  if ((unsigned short)a > 0x16c) a = 0x16c;                        /* sub/sbb/and/add clamp */
++  a = (short)((a ^ s) - s);
++  if (a != 0) {
++    *(unsigned short *)(dg + (unsigned short)(di + 0x89)) += (unsigned short)a;
++    dg[(unsigned short)(di + 0xd1)] = 3;
++    dg[(unsigned short)(di + 0xce)] = 3;
+     FUN_0000_76e8();
+   }
+-  *(undefined1 *)(param_3 + 0xa9) = 0x80;
+-  *(undefined1 *)(param_3 + 0xaa) = 0;
+-  *(undefined1 *)(param_3 + 0xab) = 0;
++  dg[(unsigned short)(di + 0xa9)] = 0x80;
++  dg[(unsigned short)(di + 0xaa)] = 0;
++  dg[(unsigned short)(di + 0xab)] = 0;
+   return;
+ }
+ 
+@@ -30480,12 +30497,17 @@
+ void __allregs FUN_0000_ad2f(int param_1)
+ 
+ {
+-  /* PATCH 366: di=near offset; asm 0xad2f: bx=byte[di+0x43]; call NEAR word[CS:bx+0x97f0] (CS=0 table);
+-   * then ad3b(di).  Rebase [di+0x43], the CS=0 table to g_mem+0x97f0, thread di. */
++  /* PATCH 366: di=near offset; asm 0xad2f: bx=byte[di+0x43]; call NEAR word[bx-0x6810]; then ad3b(di).
++   * PATCH 578: that table is DGROUP:0x97f0 (`ff 97 f0 97` is a DS-relative call through [bx-0x6810],
++   * like its three siblings ab88/ac75/ad08 at 0x9810/0x9800/0x9820) -- patch 366 read it from the CODE
++   * segment (g_mem+0x97f0), where the bytes are code (e8 00 01 1d ..), so every dispatch hit the
++   * icall trap and the THROTTLE-COMMAND setters {ad62 ad8c ae06 addb ae07 ae25 ae26 ae2c} (indexed by the
++   * movement state byte[di+0x43]) never ran: a unit whose .FSG record spawned it with word[di+0x57] = 0
++   * never drove (TRAIN2's whole roster; AZER1's carried 224 from the file). */
+   unsigned char *dg = g_mem + 0x1c000;
+   unsigned short off = (unsigned short)param_1;
+   unsigned bx = dg[(unsigned short)(off + 0x43)];
+-  (*(code *)fist_icall_near(0x0u, *(unsigned short *)((unsigned char *)g_mem + 0x97f0 + bx)))(param_1);
++  (*(code *)fist_icall_near(0x0u, *(unsigned short *)(dg + (unsigned short)(0x97f0 + bx))))(param_1);
+   FUN_0000_ad3b(param_1);
+   return;
+ }
+@@ -30535,15 +30557,20 @@
+ void __allregs FUN_0000_ad62(int param_1)
+ 
+ {
+-  if ((*(uint *)(param_1 + 0x40) & 2) == 0) {
+-    *(undefined2 *)(param_1 + 0x57) = 0;
+-    return;
+-  }
+-  if (8 < *(uint *)(param_1 + 0x53)) {
+-    *(undefined2 *)(param_1 + 0x57) = *(undefined2 *)(*(int *)(DAT_2000_5796 + 6) * 2 + -0x66d4);
+-    return;
++  /* PATCH 578: movement state 0 -- the CLASS speed (asm 0xad62-0xad8b, DI = the unit): `test [di+0x40],2 ;
++   * je -> [di+0x57] = 0 ; cmp [di+0x53],8 ; jbe -> 0x50 ; si = [0x9796] (the class descriptor ab03 set) ;
++   * bx = [si+6] ; [di+0x57] = word[0x992c + bx*2]`.  Ghidra deref'd DI as a host pointer. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)param_1;
++  unsigned short v;
++  if ((*(unsigned short *)(dg + (unsigned short)(di + 0x40)) & 2) == 0) v = 0;
++  else if (*(unsigned short *)(dg + (unsigned short)(di + 0x53)) <= 8) v = 0x50;
++  else {
++    unsigned short si = *(unsigned short *)(dg + 0x9796);
++    unsigned short bx = *(unsigned short *)(dg + (unsigned short)(si + 6));
++    v = *(unsigned short *)(dg + (unsigned short)(0x992c + bx * 2));
+   }
+-  *(undefined2 *)(param_1 + 0x57) = 0x50;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x57)) = v;
+   return;
+ }
+ 
+@@ -30553,28 +30580,20 @@
+ void __allregs FUN_0000_ad8c(int param_1)
+ 
+ {
+-  if ((((*(uint *)(param_1 + 0x40) & 2) == 0) || (*(int *)(param_1 + 0x53) == -1)) ||
+-     (*(uint *)(param_1 + 0x53) < 4)) {
+-    *(undefined2 *)(param_1 + 0x57) = 0;
+-    return;
+-  }
+-  if (*(uint *)(param_1 + 0x53) < 9) {
+-    *(undefined2 *)(param_1 + 0x57) = 0x10;
+-    return;
+-  }
+-  if (0x20 < *(uint *)(param_1 + 0x53)) {
+-    if (*(uint *)(param_1 + 0x53) < 0x31) {
+-      *(undefined2 *)(param_1 + 0x57) = 0x80;
+-      return;
+-    }
+-    if (0x50 < *(uint *)(param_1 + 0x53)) {
+-      *(undefined2 *)(param_1 + 0x57) = 0x110;
+-      return;
+-    }
+-    *(undefined2 *)(param_1 + 0x57) = 0xf0;
+-    return;
+-  }
+-  *(undefined2 *)(param_1 + 0x57) = 0x20;
++  /* PATCH 578: movement state 2 -- speed by RANGE to the waypoint (asm 0xad8c-0xadda, DI = the unit):
++   * no orders bit, range 0xffff or <= 3 -> 0; <= 8 -> 0x10; <= 0x20 -> 0x20; <= 0x30 -> 0x80;
++   * <= 0x50 -> 0xf0; else 0x110.  Unsigned compares.  Ghidra deref'd DI as a host pointer. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)param_1;
++  unsigned short r = *(unsigned short *)(dg + (unsigned short)(di + 0x53));
++  unsigned short v;
++  if ((*(unsigned short *)(dg + (unsigned short)(di + 0x40)) & 2) == 0 || r == 0xffff || r <= 3) v = 0;
++  else if (r <= 8)    v = 0x10;
++  else if (r <= 0x20) v = 0x20;
++  else if (r <= 0x30) v = 0x80;
++  else if (r <= 0x50) v = 0xf0;
++  else                v = 0x110;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x57)) = v;
+   return;
+ }
+ 
+@@ -30584,22 +30603,17 @@
+ void __allregs FUN_0000_addb(int param_1)
+ 
+ {
+-  uint uVar1;
+-  
+-  uVar1 = *(uint *)(param_1 + 0x99);
+-  if (uVar1 < 0x2d) {
+-    *(undefined2 *)(param_1 + 0x57) = 0xffd0;
+-    return;
+-  }
+-  if (0x3b < uVar1) {
+-    if (0x59 < uVar1) {
+-      *(undefined2 *)(param_1 + 0x57) = 0xf0;
+-      return;
+-    }
+-    *(undefined2 *)(param_1 + 0x57) = 0x50;
+-    return;
+-  }
+-  *(undefined2 *)(param_1 + 0x57) = 0;
++  /* PATCH 578: movement state 6 -- speed by the FORMATION distance word [di+0x99] (asm 0xaddb-0xae05):
++   * < 0x2d -> -0x30 (reverse); < 0x3c -> 0; < 0x5a -> 0x50; else 0xf0.  Ghidra deref'd DI. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)param_1;
++  unsigned short a = *(unsigned short *)(dg + (unsigned short)(di + 0x99));
++  unsigned short v;
++  if (a < 0x2d)      v = 0xffd0;
++  else if (a < 0x3c) v = 0;
++  else if (a < 0x5a) v = 0x50;
++  else               v = 0xf0;
++  *(unsigned short *)(dg + (unsigned short)(di + 0x57)) = v;
+   return;
+ }
+ 
+@@ -30618,15 +30632,12 @@
+ void __allregs FUN_0000_ae07(int param_1)
+ 
+ {
+-  if (*(char *)(param_1 + 0x45) == '\x02') {
+-    *(undefined2 *)(param_1 + 0x57) = 0;
+-    return;
+-  }
+-  if (*(char *)(param_1 + 0x45) != '\x06') {
+-    *(undefined2 *)(param_1 + 0x57) = 0x40;
+-    return;
+-  }
+-  *(undefined2 *)(param_1 + 0x57) = 0xffd0;
++  /* PATCH 578: movement state 8 -- by the sub-state byte [di+0x45] (asm 0xae07-0xae24): 2 -> 0,
++   * 6 -> -0x30, else 0x40.  Ghidra deref'd DI. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)param_1;
++  unsigned char s = dg[(unsigned short)(di + 0x45)];
++  *(unsigned short *)(dg + (unsigned short)(di + 0x57)) = (s == 2) ? 0 : (s == 6) ? 0xffd0 : 0x40;
+   return;
+ }
+ 
+@@ -30645,7 +30656,8 @@
+ void __allregs FUN_0000_ae26(int param_1)
+ 
+ {
+-  *(undefined2 *)(param_1 + 0x57) = 0;
++  /* PATCH 578: movement state 0xc -- halt (asm 0xae26: `movw [di+0x57],0`).  Ghidra deref'd DI. */
++  *(unsigned short *)((unsigned char *)g_mem + 0x1c000 + (unsigned short)((unsigned short)param_1 + 0x57)) = 0;
+   return;
+ }
+ 
+@@ -30655,7 +30667,8 @@
+ void __allregs FUN_0000_ae2c(int param_1)
+ 
+ {
+-  *(undefined2 *)(param_1 + 0x57) = 0;
++  /* PATCH 578: movement state 0xe -- halt (asm 0xae2c: `movw [di+0x57],0`).  Ghidra deref'd DI. */
++  *(unsigned short *)((unsigned char *)g_mem + 0x1c000 + (unsigned short)((unsigned short)param_1 + 0x57)) = 0;
+   return;
+ }
+ 

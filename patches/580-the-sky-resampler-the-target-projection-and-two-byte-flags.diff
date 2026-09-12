@@ -1,0 +1,143 @@
+PATCH 580: the sky resampler 689a (an unpromoted mid-entry of 6877), the op-0x24 tail 82d0's table
+base, and the byte width of the sky-block counters 3915/3916.
+
+board:0002.  Read off the original's block trace (scratch/oracle/blktrace): the tile is built by op
+0x08 (10e0 = 8df0 ; 3931 = 85d0 ; [0x3958] ; 6980) and op 0x24 is 8120 ; 9200 ; 82d0 -- the shim now
+dispatches both that way (tools/native_main.c, same commit), and three things in the decompile stood
+in the way:
+
+  689a   `call [0x3958]` in 3931 lands on 0x689a once op 0x44 has set it (TCB+0xcc != 0): the sky
+         resampler that fills the whole tile from the 5.SKY bitmap before 6980 overlays the terrain
+         columns (asm 0x689a-0x6976).  Ghidra saw 6877 (the flat-fill variant) and left 689a a
+         mid-entry with no function, so the port's icall trapped and the sky rows stayed whatever the
+         buffer held.  Emitted here from the asm: 910c = -90e0 - (38ed/2)*esi, 9110 = 90dc>>3 -
+         (38f1/2)*ebp with ebp = (90c0*90b0)>>16 << 3 and esi = (ebp0*90b4)>>16 (also 90bc); per row
+         the sky row is (edx >> (32-[3916])) << ([3916]-3) past [3911], per pixel the column ebx >> 25.
+  82d0   projects the target marker TCB+0xd2/0xd6 through the depth tables 395e builds at 0x4620 /
+         0x4624 / 0x4224 -- Ghidra read the three as host addresses (never called until now).
+  3915/3916  the sky block's row-count/shift bytes (asm 8d2b/8d32 movb, 8dcc/8dd2 incb, 6925 mov cl)
+         were typed as dwords: `[0x3916] = 10` as a 4-byte store put 0 into the low word of the tile
+         pointer [0x3918] (0x08324200 -> 0x08320000), so 689a/6980 built the tile 0x4200 bytes below its
+         buffer and the top 60 rows of what 9200 sampled were the ramp buffer's tail (board:0023 class).
+
+  Measured (AZER1, tools/oracle/samples/oracle_9200_framematched_pass08.*): at the matched camera
+  (X=584132 Y=1142327, pitch 384, roll 256) the port's tile is 65536/65536 bytes identical to the
+  oracle's, 9200's inputs (90d4/90d8/90b8/90bc, esi/ebp) and the DAC identical, the windshield 91.6%
+  pixel-identical -- the rest is the original's HUD overlay (PL:1 UN:1, GOALS REMAINING, the reticle)
+  and palette-swapped texel pairs.
+
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -99,6 +99,7 @@
+ #define FUN_0000_6542 m_ext_FUN_0000_6542
+ #define FUN_0000_686f m_ext_FUN_0000_686f
+ #define FUN_0000_6877 m_ext_FUN_0000_6877
++#define FUN_0000_689a m_ext_FUN_0000_689a
+ #define FUN_0000_6977 m_ext_FUN_0000_6977
+ #define FUN_0000_6980 m_ext_FUN_0000_6980
+ #define FUN_0000_6b03 m_ext_FUN_0000_6b03
+@@ -303,6 +304,7 @@
+ undefined8 * __allregs FUN_0000_6542(undefined8 *param_1,int param_2,undefined2 param_3,undefined4 *param_4,byte *param_5, byte *param_6,int param_7);
+ void __allregs FUN_0000_686f(void);
+ void __allregs FUN_0000_6877(void);
++void __allregs FUN_0000_689a(void);   /* PATCH 580: the sky resampler, 6877's unpromoted mid-entry */
+ void __allregs FUN_0000_6977(void);
+ void __allregs FUN_0000_6980(void);
+ void __allregs FUN_0000_6b03(byte param_1,uint param_2,int param_3,uint param_4,uint param_5,int param_6, uint param_7,uint param_8,uint param_9);
+@@ -490,8 +492,8 @@
+ #define DAT_0000_3905 (*(undefined4 *)(g_mem+fist_ext_base+0x3905))
+ #define DAT_0000_390d (*(undefined4 *)(g_mem+fist_ext_base+0x390d))
+ #define DAT_0000_3911 (*(undefined4 *)(g_mem+fist_ext_base+0x3911))
+-#define DAT_0000_3915 (*(undefined4 *)(g_mem+fist_ext_base+0x3915))
+-#define DAT_0000_3916 (*(undefined4 *)(g_mem+fist_ext_base+0x3916))
++#define DAT_0000_3915 (*(undefined1 *)(g_mem+fist_ext_base+0x3915))   /* PATCH 580: a BYTE (asm 8d2b/8d32 movb, 8dcc/8dd2 incb, 6925 mov cl) -- the dword store clobbered the tile pointer [0x3918] */
++#define DAT_0000_3916 (*(undefined1 *)(g_mem+fist_ext_base+0x3916))   /* PATCH 580: a BYTE (asm 8d2b/8d32 movb, 8dcc/8dd2 incb, 6925 mov cl) -- the dword store clobbered the tile pointer [0x3918] */
+ #define DAT_0000_3918 (*(undefined4 *)(g_mem+fist_ext_base+0x3918))
+ #define DAT_0000_391c (*(undefined4 *)(g_mem+fist_ext_base+0x391c))
+ #define DAT_0000_3924 (*(undefined4 *)(g_mem+fist_ext_base+0x3924))
+@@ -10994,6 +10996,50 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_689a) @ 0000:689a ===== */
++
++void __allregs FUN_0000_689a(void)
++
++{
++  /* PATCH 580: the SKY resampler -- 3931's `call [0x3958]` target once op 0x44 has set [0x3958] = 0x689a
++   * (TCB+0xcc != 0; 6877 itself is the flat-fill variant for the no-sky detail).  Asm 0x689a-0x6976,
++   * an unpromoted mid-entry of 6877.  Fills the whole tile [0x3918] ([0x38f1] rows of [0x38ed] bytes)
++   * from the sky bitmap at [0x3911] before 6980 overlays the terrain columns:
++   *     910c = -90e0 ; 9110 = 90dc >> 3
++   *     ebp = (90c0 * 90b0) >> 16 (mul, unsigned) ; esi = (ebp * 90b4) >> 16 (imul) ; ebp <<= 3
++   *     910c -= (38ed >> 1) * esi ; 9110 -= (38f1 >> 1) * ebp ; 90bc = esi
++   *     per row (edx from 910c, += 90bc): sky row = (edx >> (32 - [3916])) << ([3916] - 3), + [3911]
++   *     per pixel (ebx from 9110, += ebp): sky column = ebx >> 25 ; two bytes per stosw. */
++  uint8_t  *xb = g_mem + fist_ext_base;
++  uint32_t  c0 = DAT_0000_90c0, b0 = *(uint32_t *)(xb + 0x90b0);
++  int32_t   b4 = (int32_t)DAT_0000_90b4;
++  uint32_t  ebp0 = (uint32_t)(((uint64_t)c0 * (uint64_t)b0) >> 16);
++  int32_t   esi  = (int32_t)(((int64_t)(int32_t)ebp0 * (int64_t)b4) >> 16);
++  uint32_t  ebp  = ebp0 << 3;
++  uint32_t  rows = DAT_0000_38f1, cols = DAT_0000_38ed;
++  uint8_t  *src  = (uint8_t *)(uintptr_t)DAT_0000_3911;
++  uint8_t  *edi  = (uint8_t *)(uintptr_t)DAT_0000_3918;
++  unsigned  cl   = (uint8_t)DAT_0000_3916;
++  uint32_t  edx, ebx0, r;
++  DAT_0000_910c = (uint32_t)(-(int32_t)DAT_0000_90e0) - (cols >> 1) * (uint32_t)esi;
++  *(uint32_t *)(xb + 0x9110) = (DAT_0000_90dc >> 3) - (rows >> 1) * ebp;
++  DAT_0000_90bc = (uint32_t)esi;
++  ebx0 = *(uint32_t *)(xb + 0x9110);
++  edx  = DAT_0000_910c;
++  for (r = rows; r != 0; r--) {
++    uint8_t *row = src + (((edx >> (32 - cl)) << (cl - 3)));
++    uint32_t ebx = ebx0, k;
++    for (k = cols >> 1; k != 0; k--) {
++      edi[0] = row[ebx >> 25]; ebx += ebp;
++      edi[1] = row[ebx >> 25]; ebx += ebp;
++      edi += 2;
++    }
++    edx += DAT_0000_90bc;
++  }
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_6980) @ 0000:6980 ===== */
+ 
+ /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+@@ -13079,6 +13125,9 @@
+ void __allregs FUN_0000_82d0(void)
+ 
+ {
++  /* PATCH 580: the op-0x24 tail (0x82c0 = 8120 ; 9200 ; 82d0) -- projects the target marker TCB+0xd2/0xd6
++   * for the HUD through the depth tables 395e builds at 0x4620 / 0x4624 / 0x4224 (image-relative, asm
++   * 0x8340 `cmp [ebx*4+0x4620],eax` etc.).  Ghidra read the three tables as host addresses. */
+   int iVar1;
+   uint uVar2;
+   int iVar3;
+@@ -13097,13 +13146,13 @@
+         uVar2 = 0;
+         uVar4 = _FUN_0000_3a20 >> 1;
+         uVar5 = _FUN_0000_3a20;
+-        if (*(uint *)(uVar4 * 4 + 0x4620) < (uint)(iVar6 * -8)) {
++        if (*(uint *)(g_mem+fist_ext_base + uVar4 * 4 + 0x4620) < (uint)(iVar6 * -8)) {
+           uVar2 = uVar4;
+           uVar5 = uVar4;
+         }
+         do {
+-          if ((uint)(iVar6 * -8) <= *(uint *)(uVar2 * 4 + 0x4624)) {
+-            uVar5 = *(uint *)(uVar2 * 4 + 0x4224) >> 3;
++          if ((uint)(iVar6 * -8) <= *(uint *)(g_mem+fist_ext_base + uVar2 * 4 + 0x4624)) {
++            uVar5 = *(uint *)(g_mem+fist_ext_base + uVar2 * 4 + 0x4224) >> 3;
+             _DAT_0000_ba6b = uVar2;
+             if (((uVar5 != 0) &&
+                 (iVar6 = ((int)(char)-(((*(undefined1 *)(g_mem+fist_ext_base+0x90df)) >> 1) - *(byte *)(DAT_0000_0c93 + 0xdb))
+@@ -17428,6 +17477,7 @@
+   {0x6542u,(void*)&FUN_0000_6542},
+   {0x686fu,(void*)&FUN_0000_686f},
+   {0x6877u,(void*)&FUN_0000_6877},
++  {0x689au,(void*)&FUN_0000_689a},
+   {0x6977u,(void*)&FUN_0000_6977},
+   {0x6980u,(void*)&FUN_0000_6980},
+   {0x6b03u,(void*)&FUN_0000_6b03},

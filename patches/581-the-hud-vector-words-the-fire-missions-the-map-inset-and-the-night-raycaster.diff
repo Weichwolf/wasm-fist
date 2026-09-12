@@ -1,0 +1,750 @@
+PATCH 581: the glyph vector's word width (02e8/02c5/5531), the fire-mission subtasks (b040's segment
+and its four handlers), five render methods c4df dispatched into the void, the model-budget vector 4397,
+the map inset's walk (8e80, 7f32, the 9f70 shade LUT), op 0x2c's texel walk (9129), the night raycaster
+(6c00) and the divide-error handler at two extender divisions.
+
+board:0002 / board:0015 / board:0017.  Found with the trap trace (FIST_TRACE_TRAPS now prints the tick
+and a native backtrace; FIST_TRAP_BREAK=<linear> stops gdb at one target) on AZER1 after the gate
+rewrite, and by comparing the port's frames with the oracle's pass-8 capture:
+
+  02e8/02c5  the number printers save/restore the glyph vector [0x684]:[0x686] around 541b.  The port's
+         DAT_1000_c684 accessor is 4 bytes wide, so `[0x684] = save684` wrote 0 over the segment
+         [0x686] just restored: after every readout the vector read 0000:19ae and the next drawstring
+         dispatched into segment 0 -- no ammo digits, no PL:UN box, no GOALS REMAINING.  02c5 (the
+         near twin) had also lost its pop pair to `[0x684] = [0x686] ; [0x686] = CS`.  5531 (the
+         far-entry drawstring) now hands the MGA glyph method its character like the 552b thunk does.
+  b040   the fire-mission subtask dispatcher runs in the 0f69 cluster: `cs:[si-0x4637]` is the table
+         {b9d1 b9d2 b9f1 ba0e} at 0x1b059, 0f69-relative.  Patch 260 based it on CS=0x1000, read the
+         data word 0xf6c2 and trapped; the four states (idle, the 0x258-tick cooldown, the fuse, the
+         artillery spawn -- b1df type 0x16 at the target scattered by ((b26a&0xff)-0x80)<<6, grounded
+         by adcd) are emitted as FUN_1000_b061/b062/b081/b09e and take BX (the record) as their arg.
+  c783/c845/c862/c876/c888  the render methods of the view-0x20/0x1e/0x22 tables (STRSEG:0x35fa /
+         0x3632 / 0x35c2) for classes 0x1a/0x1b and the view-0x22 vehicles: sprite selection by the
+         object's flags, the blinking draw c894, `stc` for the skips.  None was emitted.
+  4397   the model budget: `sub [0x6d9d],ax ; jb` charges every mesh of the STRSEG:0x802 loader
+         table against the paragraphs 42cc reserved (patch 571); exhausted -> the CRT's message
+         services and CF=1 (or the [0x58] restart for BX=0xb93).  Trapped before.
+  8e80   op 0x5c's map walk (7990: the TCB's surface/size into 90ec/90f0/90f4/90f8, 85d0, 8e80, 79d7),
+         8df0's unpromoted mid-entry: the heading's cos/sin rotate a top-down walk of the colormap
+         through the shade LUT [0x85c4] into the inset surface.  7f32 (the platoon/objective marker
+         blitter) based its destination on the linear 90ec; the LUT builder in 9f70 (`lea ebx,
+         [edi*3+0x5260] ; al = [ebx]+[ebx+1]+[ebx+1]+[ebx+2] ; div 0x17`) indexed the sorted palette
+         in dwords -- 256/256 LUT bytes now equal the oracle's.
+  9129   op 0x2c's texel walk (0x8460 = 8120 ; 9130 ; 82d0), 9200's twin with a 50 % blend: the
+         self-modified sampler displacement read from [0x3918], the horizon table as an image offset.
+  6c00   the NIGHT raycaster (3931's other branch, [0x395d] = TCB+0xcf): 6980 with its own
+         self-modified sites and `sub al,0x50 ; shr al,2 ; add al,0x50` on every terrain texel.
+         Ghidra's own 6c00 kept the host-address table reads; AZER3 and twelve other night
+         battles crashed on their first frame.
+  85d0/395e  `div ecx` / `idiv ebx` with a zero divisor (a zero focal once the view's vehicle is gone,
+         a zero ramp product): the extender routes #DE to the engine's INT-0 handler 0f69:5b36,
+         which steps past the DIV and returns AX = 0xffff with EAX otherwise untouched -- EAX =
+         0xffffffff.  Modelled at both sites.
+
+  Measured (AZER1 frame 8 against oracle_9200_framematched_pass08.png): 96.3 % of the frame
+  pixel-identical, the map inset 97.9 %, the ammo readouts 0015/0020/2000/0005 as the original's.
+
+--- a/fist.c
++++ b/fist.c
+@@ -333,6 +333,7 @@
+ void __allregs FUN_0000_4308(void);
+ void __allregs FUN_0000_4330(int param_1);
+ void __allregs FUN_0000_4354(void);
++void __allregs FUN_0000_4397(int param_1,int param_2,int param_3);   /* PATCH 581: the model-budget loader vector */
+ void __allregs FUN_0000_43c1(uint *param_1);
+ void __allregs FUN_0000_4413(void);
+ void __allregs FUN_0000_4430(uint param_1,undefined2 param_2);
+@@ -1316,6 +1317,11 @@
+ void __allregs FUN_0000_c6fa(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_0000_c70d(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+ void __allregs FUN_0000_c86e(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 533 */
++void __allregs FUN_0000_c783(void);   /* PATCH 581: the five render methods c4df dispatched into the void */
++void __allregs FUN_0000_c845(void);
++void __allregs FUN_0000_c862(void);
++void __allregs FUN_0000_c876(void);
++void __allregs FUN_0000_c888(void);
+ void __allregs FUN_0000_c894(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 534 */
+ void __allregs FUN_0000_c829(undefined1 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);  /* PATCH 534 */
+ void __allregs FUN_0000_c713(void);  /* PATCH 535 */
+@@ -2321,6 +2327,10 @@
+ void __allregs FUN_1000_b004(undefined1 param_1,undefined2 param_2);
+ void __allregs FUN_1000_b02a(undefined2 param_1);
+ void __allregs FUN_1000_b040(int *param_1);
++void __allregs FUN_1000_b061(int param_1);   /* PATCH 581: the fire-mission subtasks b040 dispatches */
++void __allregs FUN_1000_b062(int param_1);
++void __allregs FUN_1000_b081(int param_1);
++void __allregs FUN_1000_b09e(int param_1);
+ void __allregs FUN_1000_b10c(int param_1,int *param_2);
+ undefined4 __allregs FUN_1000_b158(void);
+ void __allregs FUN_1000_b175(void);
+@@ -4678,13 +4688,19 @@
+ void __allregs FUN_0000_02c5(undefined2 param_1,undefined1 *param_2)
+ 
+ {
+-  undefined2 unaff_CS;
+-  
+-  DAT_1000_c684 = 0x30b;
+-  FUN_1000_541b(param_1);
+-  DAT_1000_c684 = DAT_1000_c686;
+-  DAT_1000_c686 = unaff_CS;
+-  *param_2 = 0;
++  /* PATCH 581: the near twin of 02e8 (asm 0x2c5-0x2e7, `ret` where 02e8 `retf`s): save [0x684]:[0x686],
++   * install the buffer emitter 030b:CS (CS = 0 here), format AX through 0f69:5d8b (541b) into DS:SI,
++   * restore both words, NUL-terminate at the advanced SI.  Ghidra rendered the pop pair as
++   * `[0x684] = [0x686] ; [0x686] = CS`, which left the glyph vector as 0000:xxxx after every ammo /
++   * count readout (82a1, 8340, 45cf ..) -- the next drawstring dispatched into segment 0 and the HUD
++   * digits never drew. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short save684 = *(unsigned short *)(dg + 0x684), save686 = *(unsigned short *)(dg + 0x686);   /* 2c5/2c9 */
++  *(unsigned short *)(dg + 0x684) = 0x30b; *(unsigned short *)(dg + 0x686) = 0;   /* 2cd/2d3 (CS=0) */
++  g_fist_02e8_si = (unsigned short)((unsigned char *)param_2 - dg);
++  FUN_1000_541b(param_1);                                                    /* 2d7 */
++  *(unsigned short *)(dg + 0x686) = save686; *(unsigned short *)(dg + 0x684) = save684;   /* 2dc/2e0 */
++  dg[g_fist_02e8_si] = 0;                                                    /* 2e4 */
+   return;
+ }
+ 
+@@ -4706,11 +4722,15 @@
+    * pointer into DGROUP (every caller passes &DAT_1000_dfXX); the cursor is kept as a DGROUP near
+    * offset in g_fist_02e8_si so the emitter can write dg[si] and bump it. */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+-  unsigned short save684 = DAT_1000_c684, save686 = DAT_1000_c686;          /* 2e8/2ec */
+-  DAT_1000_c684 = 0x30b; DAT_1000_c686 = 0;                                 /* 2f0/2f6 (CS=0) */
++  unsigned short save684 = *(unsigned short *)(dg + 0x684), save686 = *(unsigned short *)(dg + 0x686);   /* 2e8/2ec */
++  /* PATCH 581: the vector words are WORDS -- DAT_1000_c684 is a 4-byte accessor, and `[0x684] = save684`
++   * through it wrote 0 over the segment [0x686] just restored: every HUD readout left the glyph vector as
++   * 0000:19ae and the next drawstring dispatched into segment 0 (the missing GOALS REMAINING / PL:UN /
++   * ammo digits). */
++  *(unsigned short *)(dg + 0x684) = 0x30b; *(unsigned short *)(dg + 0x686) = 0;   /* 2f0/2f6 (CS=0) */
+   g_fist_02e8_si = (unsigned short)((unsigned char *)param_2 - dg);
+   FUN_1000_541b(param_1);                                                    /* 2fa */
+-  DAT_1000_c686 = save686; DAT_1000_c684 = save684;                          /* 2ff/303 */
++  *(unsigned short *)(dg + 0x686) = save686; *(unsigned short *)(dg + 0x684) = save684;   /* 2ff/303 */
+   dg[g_fist_02e8_si] = 0;                                                    /* 307 */
+   return;
+ }
+@@ -13613,6 +13633,36 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_4397) @ 0000:4397 ===== */
++
++void __allregs FUN_0000_4397(int param_1,int param_2,int param_3)
++
++{
++  /* PATCH 581: the fourth vector of the STRSEG:0x802 model-load table (12 of its 110 entries; the
++   * others are 183f/1684/1735, patches 158/467/573): the MODEL BUDGET.  asm 0x4397-0x43bf:
++   *     4397: mov dx,[0x6d9d] ; sub [0x6d9d],ax ; jb 43a2 ; ret         AX = the entry's size ([+4])
++   *     43a2: push bx ; es = [0x70] ; si = 0xb72 ; lcall [0x5c] ; pop si ; push si ; lcall [0x60] ;
++   *           pop si ; cmp si,0xb93 ; je -> jmp far [0x58] ; stc ; ret
++   * i.e. charge the mesh against the paragraphs 42cc set aside (patch 571); once they run out, log the
++   * name at STRSEG:0xb72 through the CRT's message services and return CF=1, which 4308 takes as
++   * "stop, load the backward list at lower detail" -- or restart the game outright when BX (the
++   * entry's [+2]) is 0xb93.  Never emitted by Ghidra (a table target), so the icall trapped: no entry
++   * was ever charged and 4308 walked the whole table whatever the budget said. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short ax = (unsigned short)param_1, bx = (unsigned short)param_2;
++  unsigned short budget = *(unsigned short *)(dg + 0x6d9d);
++  (void)param_3;
++  *(unsigned short *)(dg + 0x6d9d) = (unsigned short)(budget - ax);
++  if (budget >= ax) { g_fist_cf = 0; return; }                          /* 439f jb / 43a1 ret */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c05c)))();               /* 43aa: the name at STRSEG:0xb72 */
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c060)))();               /* 43b0 */
++  if (bx == 0xb93) { (*(code *)fist_icall_far(*(uint32_t *)(dg + 0x58)))(); return; }   /* 43bd jmp far [0x58] */
++  g_fist_cf = 1;                                                        /* 43bb stc */
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_43c1) @ 0000:43c1 ===== */
+ 
+ void __allregs FUN_0000_43c1(uint *param_1)
+@@ -34590,6 +34640,98 @@
+   return;
+ }
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_c783) @ 0000:c783 ===== */
++
++void __allregs FUN_0000_c783(void)
++
++{
++  /* PATCH 581: the view-0x22 render method for the vehicle classes 0-3, 5, 6, 0x1a, 0x1b (STRSEG:0x35c2;
++   * asm 0xc783-0xc7a4): draw the object unless it is hidden ([si+0x16]&1), and only enemies
++   * ([si+0x16]&8); an enemy flagged [si+0x17]&8 is drawn only on the frames with [0x6cde]&2 set.
++   * `mov al,0xe ; call c8b2` -- c8b2 overwrites AL with 0x12, AH is the live register c4df dispatched
++   * with (untraced here; 0).  c8b2 ends with clc; the skips are `stc ; ret`. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  if ((dg[(unsigned short)(si + 0x16)] & 1) || !(dg[(unsigned short)(si + 0x16)] & 8) ||
++      ((dg[(unsigned short)(si + 0x17)] & 8) && !(*(unsigned short *)(dg + 0x6cde) & 2))) {
++    g_fist_cf = 1; return;                                                  /* c7a3 stc */
++  }
++  FUN_0000_c8b2(CONCAT11(0,0xe),(undefined2)(unsigned short)(*(unsigned short *)(dg + si) << 1),0,(undefined2)si,0);
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c845) @ 0000:c845 ===== */
++
++void __allregs FUN_0000_c845(void)
++
++{
++  /* PATCH 581: the cockpit-view (0x1e) render method for class 0x1b (STRSEG:0x3632; asm 0xc845-0xc861):
++   * sprite 0x1388, 0x1390 for an enemy ([si+0x16]&8), 0x13b0 once damaged ([si+0x19] != 0); `xor ah,ah ;
++   * call c8c2 ; stosw ; clc` -- c8c2 pops BX back into AX after ca2f and stores it, and this method
++   * stores it a second time. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_si, g_fist_render_di;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  unsigned short bx = (dg[(unsigned short)(si + 0x16)] & 8) ? 0x1390 : 0x1388;
++  if (dg[(unsigned short)(si + 0x19)] != 0) bx = 0x13b0;
++  FUN_0000_c8c2(0,bx,0,(undefined2)si,0);
++  { unsigned short di = g_fist_render_di; *(unsigned short *)(dg + di) = bx; g_fist_render_di = (unsigned short)(di + 2); }   /* c85f stosw */
++  g_fist_cf = 0;
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c862) @ 0000:c862 ===== */
++
++void __allregs FUN_0000_c862(void)
++
++{
++  /* PATCH 581: the view-0x20 render method for class 0x1b (STRSEG:0x35fa; asm 0xc862-0xc86d): undamaged
++   * ([si+0x19] == 0) -> the blinking draw c894, else `stc`. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  if (dg[(unsigned short)(g_fist_render_si + 0x19)] != 0) { g_fist_cf = 1; return; }
++  FUN_0000_c894(0,0,0,0,0);
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c876) @ 0000:c876 ===== */
++
++void __allregs FUN_0000_c876(void)
++
++{
++  /* PATCH 581: the cockpit-view (0x1e) render method for class 0x1a (STRSEG:0x3632; asm 0xc876-0xc887):
++   * sprite 0x13a0, 0x13b0 when [si+0x19]&4; `xor ah,ah ; call c8c2 ; ret` (clc from c8c2). */
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short si = g_fist_render_si;
++  FUN_0000_c8c2(0,(dg[(unsigned short)(si + 0x19)] & 4) ? 0x13b0 : 0x13a0,0,(undefined2)si,0);
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_c888) @ 0000:c888 ===== */
++
++void __allregs FUN_0000_c888(void)
++
++{
++  /* PATCH 581: the view-0x20 render method for class 0x1a (STRSEG:0x35fa; asm 0xc888-0xc893):
++   * `test [si+0x19],4 ; jne stc` else the blinking draw c894. */
++  extern unsigned char  g_fist_cf;
++  extern unsigned short g_fist_render_si;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  if (dg[(unsigned short)(g_fist_render_si + 0x19)] & 4) { g_fist_cf = 1; return; }
++  FUN_0000_c894(0,0,0,0,0);
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c894) @ 0000:c894 ===== */
+ 
+ void __allregs
+@@ -54828,13 +54970,16 @@
+ void __allregs FUN_1000_5531(char *param_1)
+ 
+ {
++  /* PATCH 581: the far-entry drawstring (asm 0x15531; 552b is its `jmp` thunk, patch 139): `lods al ;
++   * lcall [0x684]` per glyph -- AL is the character the glyph method (MGA 19ae) draws.  Threaded here
++   * as the thunk already does; the arg-less call handed 19ae a stale register. */
+   char *pcVar1;
+   
+   while( true ) {
+     pcVar1 = param_1;
+     param_1 = param_1 + 1;
+     if ((*pcVar1 == '\0') || ((*pcVar1 == '$' && (*param_1 == '\0')))) break;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
++    ((void (*)(uint16_t))fist_icall_far((uint32_t)(DAT_1000_c684)))((uint8_t)*pcVar1);
+   }
+   return;
+ }
+@@ -68606,14 +68751,19 @@
+    * Rebuilt: bx = the DGROUP near offset of param_1; the method-offset table is at CS=0x1000 (the
+    * dispatched subtasks 0xb059/0xb062/... sit immediately after this function in the seg-0x1000
+    * region).  asm 0x1b040 testb [0x6dab],0 is a dead (always-false) guard, elided. */
++  /* PATCH 581: b040 runs in the 0f69 cluster (linear 0x1b040 = 0f69:b9b0), so `cs:[si-0x4637]` is
++   * linear 0xf690 + 0xb9c9 + si = 0x1b059, the four-entry table {b9d1 b9d2 b9f1 ba0e} right after the
++   * loop, and its entries are 0f69-relative (b9d1 -> 0x1b061 `ret`, b9d2 -> 0x1b062 the cooldown,
++   * b9f1 -> 0x1b081, ba0e -> 0x1b09e).  Patch 260 based both on CS=0x1000: state 0 read 0x1b9c9's
++   * data word 0xf6c2 and dispatched into segment 0x1000 -- the fire-mission subtasks never ran. */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+-  unsigned char *cs = (unsigned char *)g_mem + 0x10000;   /* CS = 0x1000 */
++  unsigned char *cs = (unsigned char *)g_mem + 0xf690;    /* CS = 0x0f69 */
+   unsigned int bx = (unsigned short)((intptr_t)param_1 - (intptr_t)dg);
+   int cx = 0x10;
+   do {
+     unsigned short si = *(unsigned short *)(dg + (unsigned short)bx);
+     unsigned short off = *(unsigned short *)(cs + (unsigned short)(si - 0x4637));
+-    (*(code *)fist_icall_near(0x1000u,off))();
++    ((void (*)(int))fist_icall_near(0xf69u,off))((int)bx);        /* BX = the record, live across the call */
+     bx = (unsigned short)(bx + 0xe);
+     cx = cx + -1;
+   } while (cx != 0);
+@@ -68758,6 +68908,87 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_1000_b061) @ 1000:b061 ===== */
++
++void __allregs FUN_1000_b061(int param_1)
++
++{
++  /* PATCH 581: fire-mission subtask state 0 (0f69:b9d1, asm 0x1b061): idle -- `ret`. */
++  (void)param_1;
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_1000_b062) @ 1000:b062 ===== */
++
++void __allregs FUN_1000_b062(int param_1)
++
++{
++  /* PATCH 581: fire-mission subtask state 2 (0f69:b9d2, asm 0x1b062-0x1b080; BX = the 0xe-byte record
++   * aea6 filled): once 0x258 ticks of [0x6cde] have passed since the request [bx+2], go to state 4 with
++   * an 0x12-tick fuse and play the cue byte [0x9f1b] (0xff own side / 0x20 enemy) through befb. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)param_1;
++  if ((unsigned short)(*(unsigned short *)(dg + 0x6cde) - *(unsigned short *)(dg + (unsigned short)(bx + 2))) < 0x258)
++    return;
++  *(unsigned short *)(dg + bx) = 4;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) = 0x12;
++  FUN_0000_befb((char)dg[0x9f1b], 0);
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_1000_b081) @ 1000:b081 ===== */
++
++void __allregs FUN_1000_b081(int param_1)
++
++{
++  /* PATCH 581: fire-mission subtask state 4 (0f69:b9f1, asm 0x1b081-0x1b09d): count the fuse [bx+2]
++   * down; below zero -> state 6 with (b26a & 3) + 10 rounds in [bx+4] and the fuse cleared. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)param_1;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 1;
++  if ((short)*(unsigned short *)(dg + (unsigned short)(bx + 2)) >= 0) return;
++  *(unsigned short *)(dg + bx) = 6;
++  *(unsigned short *)(dg + (unsigned short)(bx + 4)) = (unsigned short)(((unsigned)FUN_0000_b26a() & 3) + 10);
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) = 0;
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_1000_b09e) @ 1000:b09e ===== */
++
++void __allregs FUN_1000_b09e(int param_1)
++
++{
++  /* PATCH 581: fire-mission subtask state 6 (0f69:ba0e, asm 0x1b09e-0x1b10b): every time the fuse
++   * [bx+2] runs below zero, spawn one artillery round (b1df type 0x16; a full roster ends the turn) at
++   * the target [bx+6]/[bx+0xa] scattered by ((b26a & 0xff) - 0x80) << 6 on each axis, ground it
++   * (adcd), give it 0xc8 in [di+0x19], and count a round off [bx+4]: below zero -> state 0, else
++   * the next fuse is (b26a & 7) + 6. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short bx = (unsigned short)param_1, di;
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) -= 1;
++  if ((short)*(unsigned short *)(dg + (unsigned short)(bx + 2)) >= 0) return;
++  di = (unsigned short)FUN_1000_b1df(0x16, (int *)0);
++  if (g_fist_cf) return;
++  *(int32_t *)(dg + (unsigned short)(di + 4)) =
++      (int32_t)(((unsigned)FUN_0000_b26a() & 0xff) - 0x80) * 64 + *(int32_t *)(dg + (unsigned short)(bx + 6));
++  *(int32_t *)(dg + (unsigned short)(di + 8)) =
++      (int32_t)(((unsigned)FUN_0000_b26a() & 0xff) - 0x80) * 64 + *(int32_t *)(dg + (unsigned short)(bx + 0xa));
++  FUN_1000_adcd(di);
++  *(unsigned short *)(dg + (unsigned short)(di + 0x19)) = 0xc8;
++  *(unsigned short *)(dg + (unsigned short)(bx + 4)) -= 1;
++  if ((short)*(unsigned short *)(dg + (unsigned short)(bx + 4)) < 0) {
++    *(unsigned short *)(dg + bx) = 0;
++    return;
++  }
++  *(unsigned short *)(dg + (unsigned short)(bx + 2)) = (unsigned short)(((unsigned)FUN_0000_b26a() & 7) + 6);
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_1000_b1df) @ 1000:b1df ===== */
+ 
+ int __allregs FUN_1000_b1df(undefined2 param_1,int *param_2)
+@@ -76111,6 +76342,7 @@
+   {0x4308u,(void*)&FUN_0000_4308},
+   {0x4330u,(void*)&FUN_0000_4330},
+   {0x4354u,(void*)&FUN_0000_4354},
++  {0x4397u,(void*)&FUN_0000_4397},
+   {0x43c1u,(void*)&FUN_0000_43c1},
+   {0x4413u,(void*)&FUN_0000_4413},
+   {0x4430u,(void*)&FUN_0000_4430},
+@@ -77094,6 +77326,11 @@
+   {0xc6fau,(void*)&FUN_0000_c6fa},
+   {0xc70du,(void*)&FUN_0000_c70d},
+   {0xc86eu,(void*)&FUN_0000_c86e},   /* PATCH 533 */
++  {0xc783u,(void*)&FUN_0000_c783},
++  {0xc845u,(void*)&FUN_0000_c845},
++  {0xc862u,(void*)&FUN_0000_c862},
++  {0xc876u,(void*)&FUN_0000_c876},
++  {0xc888u,(void*)&FUN_0000_c888},
+   {0xc894u,(void*)&FUN_0000_c894},   /* PATCH 534 */
+   {0xc829u,(void*)&FUN_0000_c829},   /* PATCH 534 */
+   {0xc713u,(void*)&FUN_0000_c713},   /* PATCH 535 */
+@@ -78091,6 +78328,10 @@
+   {0x1b004u,(void*)&FUN_1000_b004},
+   {0x1b02au,(void*)&FUN_1000_b02a},
+   {0x1b040u,(void*)&FUN_1000_b040},
++  {0x1b061u,(void*)&FUN_1000_b061},
++  {0x1b062u,(void*)&FUN_1000_b062},
++  {0x1b081u,(void*)&FUN_1000_b081},
++  {0x1b09eu,(void*)&FUN_1000_b09e},
+   {0x1b10cu,(void*)&FUN_1000_b10c},
+   {0x1b158u,(void*)&FUN_1000_b158},
+   {0x1b175u,(void*)&FUN_1000_b175},
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -140,6 +140,7 @@
+ #define FUN_0000_8ce2 m_ext_FUN_0000_8ce2
+ #define FUN_0000_8deb m_ext_FUN_0000_8deb
+ #define FUN_0000_8df0 m_ext_FUN_0000_8df0
++#define FUN_0000_8e80 m_ext_FUN_0000_8e80
+ #define FUN_0000_8fa0 m_ext_FUN_0000_8fa0
+ #define FUN_0000_9119 m_ext_FUN_0000_9119
+ #define FUN_0000_9129 m_ext_FUN_0000_9129
+@@ -345,6 +346,7 @@
+ void __allregs FUN_0000_8ce2(int param_1,undefined4 param_2,undefined4 param_3,undefined4 *param_4, undefined4 param_5);
+ void __allregs FUN_0000_8deb(void);
+ void __allregs FUN_0000_8df0(void);
++void __allregs FUN_0000_8e80(void);   /* PATCH 581: op 0x5c's map walk, 8df0's unpromoted mid-entry */
+ void __allregs FUN_0000_8fa0(void);
+ void __allregs FUN_0000_9119(void);
+ void __allregs FUN_0000_9129(int param_1,int param_2);
+@@ -4385,7 +4387,10 @@
+     lVar1 = (ulonglong)*(uint *)(g_mem+fist_ext_base+0x3a24 + iVar9 * 4) * (ulonglong)DAT_0000_90c0;
+     uVar2 = (uint)lVar1 >> 0x18 | (int)((ulonglong)lVar1 >> 0x20) << 8;
+     *(uint *)(g_mem+fist_ext_base+0x4224 + iVar9 * 4) = uVar2;
+-    uVar2 = (int)(0xffffffff / (longlong)(int)uVar2) << 5;
++    /* PATCH 581: 39b9 `idiv ebx` with edx:eax = 0:0xffffffff: a zero ramp*90c0 product raises #DE (so does
++     * 1, as a quotient overflow -- the C division gives the same 0xffffffff there) and the INT-0 handler
++     * leaves EAX = 0xffffffff (see 85d0). */
++    uVar2 = (uVar2 ? (int)(0xffffffff / (longlong)(int)uVar2) : (int)0xffffffff) << 5;
+     iVar5 = 0x80;
+     uVar8 = 0;
+     do {
+@@ -11546,10 +11551,17 @@
+ void __allregs FUN_0000_6c00(void)
+ 
+ {
++  /* PATCH 581: the NIGHT raycaster -- 3931's other branch ([0x395d] = TCB+0xcf != 0: AZER3 and the
++   * other night battles).  Byte-for-byte 6980 (patches 286/..) with its own self-modified sites
++   * (6d52/6d58/6d5d and 6dd2/6dd8/6ddd for the ray steps and the ramp pointer, 6d5e/6dde for the
++   * per-ray row advance, 6d66/6d6a/6de6/6dea for DETAIL) and one extra step on every terrain texel:
++   * `sub al,0x50 ; shr al,2 ; add al,0x50` (6da1 / 6e21) -- the colour index compressed into the
++   * darkest quarter of its ramp.  Ghidra's own 6c00 kept the host-address table reads 6980 was
++   * cured of, and crashed on the first frame of AZER3. */
+   byte bVar1;
+   int *piVar2;
+   byte bVar3;
+-  char cVar4;
++  undefined1 uVar4;
+   int iVar5;
+   uint uVar6;
+   uint uVar7;
+@@ -11561,7 +11573,7 @@
+   undefined4 *puVar13;
+   int iVar14;
+   int *piVar15;
+-  char *pcVar16;
++  undefined1 *puVar16;
+   undefined4 *puVar17;
+   
+   if (DAT_0000_90c0 != DAT_0000_90c4) {
+@@ -11572,16 +11584,16 @@
+   uVar12 = ~(DAT_0000_90e0 << 9) >> 1;
+   iVar5 = (DAT_0000_90e0 >> 0x17) * 4;
+   DAT_0000_90fc = (int)((ulonglong)
+-                       ((longlong)*(int *)(((uint)(uintptr_t)&FUN_0000_944b) + iVar5 + 5) * (longlong)(int)uVar12) >>
++                       ((longlong)*(int *)(g_mem+fist_ext_base+0x9450 + iVar5) * (longlong)(int)uVar12) >>
+                       0x20) +
+-                 (int)((ulonglong)((longlong)*(int *)(iVar5 + 0x9454) * (longlong)iVar14) >> 0x20);
++                 (int)((ulonglong)((longlong)*(int *)(g_mem+fist_ext_base+0x9454 + iVar5) * (longlong)iVar14) >> 0x20);
+   DAT_0000_90fc = DAT_0000_90fc * 2;
+   DAT_0000_9100 = (int)((ulonglong)
+-                       ((longlong)*(int *)(&DAT_0000_9650 + iVar5) * (longlong)(int)uVar12) >> 0x20)
+-                 + (int)((ulonglong)((longlong)*(int *)(&DAT_0000_9654 + iVar5) * (longlong)iVar14)
++                       ((longlong)*(int *)(g_mem+fist_ext_base+0x9650 + iVar5) * (longlong)(int)uVar12) >> 0x20)
++                 + (int)((ulonglong)((longlong)*(int *)(g_mem+fist_ext_base+0x9654 + iVar5) * (longlong)iVar14)
+                         >> 0x20);
+   DAT_0000_9100 = DAT_0000_9100 * 2;
+-  _uRam00006d5d = CONCAT31((int3)((uint)LAB_0000_3909 >> 8),-(byte)((uint)DAT_0000_90dc >> 0x19));
++  _uRam00006d5d = CONCAT31((int3)((*(uint *)(g_mem+fist_ext_base+0x3909)) >> 8),-(byte)((uint)DAT_0000_90dc >> 0x19));
+   puVar13 = &DAT_0000_4e60;
+   _uRam00006ddd = _uRam00006d5d;
+   for (uVar12 = DAT_0000_38f1 >> 2; uVar12 != 0; uVar12 = uVar12 - 1) {
+@@ -11607,65 +11619,65 @@
+   uVar12 = 0;
+ LAB_0000_6ce0:
+   iVar14 = DAT_0000_85bc;
+-  uVar6 = *(uint *)(uVar12 * 4 + 0x4624) >> 1;
++  uVar6 = *(uint *)(g_mem+fist_ext_base + 0x4624 + uVar12 * 4) >> 1;
+   uVar10 = DAT_0000_90d8 +
+-           (int)((ulonglong)((longlong)(int)uVar6 * (longlong)DAT_0000_9100) >> 0x20) * -2;
++           (int)((ulonglong)((longlong)(int)uVar6 * (longlong)(int)DAT_0000_9100) >> 0x20) * -2;
+   uVar9 = DAT_0000_90d4 +
+-          (int)((ulonglong)((longlong)(int)uVar6 * (longlong)DAT_0000_90fc) >> 0x20) * -2;
+-  iVar5 = *(int *)(uVar12 * 4 + 0x4224);
+-  uRam00006d52 = (undefined4)((ulonglong)((longlong)iVar5 * (longlong)DAT_0000_9100) >> 0x20);
+-  uRam00006d58 = (undefined4)((ulonglong)((longlong)iVar5 * (longlong)DAT_0000_90fc) >> 0x20);
++          (int)((ulonglong)((longlong)(int)uVar6 * (longlong)(int)DAT_0000_90fc) >> 0x20) * -2;
++  iVar5 = *(int *)(g_mem+fist_ext_base + 0x4224 + uVar12 * 4);
++  *(int *)(g_mem+fist_ext_base+0x6d52) = (int)((ulonglong)((longlong)iVar5 * (longlong)(int)DAT_0000_9100) >> 0x20);
++  *(int *)(g_mem+fist_ext_base+0x6d58) = (int)((ulonglong)((longlong)iVar5 * (longlong)(int)DAT_0000_90fc) >> 0x20);
+   iVar5 = ram0x000038fd;
+   uVar6 = uVar9;
+   uVar11 = uVar10;
+-  uRam00006dd2 = uRam00006d52;
+-  uRam00006dd8 = uRam00006d58;
++  *(int *)(g_mem+fist_ext_base+0x6dd2) = *(int *)(g_mem+fist_ext_base+0x6d52);
++  *(int *)(g_mem+fist_ext_base+0x6dd8) = *(int *)(g_mem+fist_ext_base+0x6d58);
+   do {
+-    uVar7 = (uVar11 >> 0x16) << 10 | uVar6 >> 0x16;
+-    bVar3 = *(byte *)CONCAT31(0x7fffff,*(char *)(iVar14 + uVar7) + -1);
++    uVar7 = (uVar11 >> (0x20 - DAT_0000_8490)) << DAT_0000_8490 | uVar6 >> (0x20 - DAT_0000_8490);
++    bVar3 = *(byte *)(uintptr_t)((_uRam00006d5d & 0xffffff00) | (((uint)(byte)_uRam00006d5d + (uint)(byte)*(char *)(iVar14 + uVar7)) & 0xff));
+     if (*(byte *)((int)&DAT_0000_4e60 + iVar5) < bVar3) {
+       LOCK();
+       bVar1 = *(byte *)((int)&DAT_0000_4e60 + iVar5);
+       *(byte *)((int)&DAT_0000_4e60 + iVar5) = bVar3;
+       UNLOCK();
+-      cVar4 = *(char *)(iVar14 + 0x100000 + uVar7);
+-      pcVar16 = (char *)(&DAT_0000_4a60)[iVar5];
++      uVar4 = (undefined1)((((uint8_t)(*(uint8_t *)(iVar14 + DAT_0000_8498 + uVar7) - 0x50)) >> 2) + 0x50);   /* 6da1 sub al,0x50 ; shr al,2 ; add al,0x50 */
++      puVar16 = (undefined1 *)(&DAT_0000_4a60)[iVar5];
+       for (uVar7 = (uint)(byte)(bVar3 - bVar1); uVar7 != 0; uVar7 = uVar7 - 1) {
+-        *pcVar16 = ((byte)(cVar4 + 0xb0U) >> 2) + 0x50;
+-        pcVar16 = pcVar16 + 1;
++        *puVar16 = uVar4;
++        puVar16 = puVar16 + 1;
+       }
+-      (&DAT_0000_4a60)[iVar5] = pcVar16;
++      (&DAT_0000_4a60)[iVar5] = puVar16;
+       iVar8 = ram0x000038fd;
+-      if (iVar5 + 1 == DAT_0000_3905) break;
++      if (iVar5 + 1 == DAT_0000_3905) goto LAB_0000_6dd0;
+     }
+     else {
+       iVar8 = ram0x000038fd;
+-      if (iVar5 + 1 == DAT_0000_3905) break;
++      if (iVar5 + 1 == DAT_0000_3905) goto LAB_0000_6dd0;
+     }
+     iVar5 = iVar5 + 1;
+-    uVar6 = uVar6 + 0x7fffffff;
+-    uVar11 = uVar11 + 0x80000001;
++    uVar6 = uVar6 + *(int *)(g_mem+fist_ext_base+0x6d52);
++    uVar11 = uVar11 - *(int *)(g_mem+fist_ext_base+0x6d58);
+   } while( true );
+   while( true ) {
+     LOCK();
+-    bVar1 = (&DAT_0000_4e5f)[iVar8];
+-    (&DAT_0000_4e5f)[iVar8] = bVar3;
++    bVar1 = *(byte *)(g_mem+fist_ext_base + 0x4e5f + iVar8);
++    *(byte *)(g_mem+fist_ext_base + 0x4e5f + iVar8) = bVar3;
+     UNLOCK();
+-    cVar4 = *(char *)(iVar14 + 0x100000 + uVar6);
+-    pcVar16 = *(char **)(&DAT_0000_4a5c + iVar8 * 4);
++    uVar4 = (undefined1)((((uint8_t)(*(uint8_t *)(iVar14 + DAT_0000_8498 + uVar6) - 0x50)) >> 2) + 0x50);   /* 6e21 sub al,0x50 ; shr al,2 ; add al,0x50 */
++    puVar16 = *(undefined1 **)(g_mem+fist_ext_base + 0x4a5c + iVar8 * 4);
+     for (uVar6 = (uint)(byte)(bVar3 - bVar1); uVar6 != 0; uVar6 = uVar6 - 1) {
+-      *pcVar16 = ((byte)(cVar4 + 0xb0U) >> 2) + 0x50;
+-      pcVar16 = pcVar16 + 1;
++      *puVar16 = uVar4;
++      puVar16 = puVar16 + 1;
+     }
+-    *(char **)(&DAT_0000_4a5c + iVar8 * 4) = pcVar16;
++    *(undefined1 **)(g_mem+fist_ext_base + 0x4a5c + iVar8 * 4) = puVar16;
+     iVar8 = iVar8 + -1;
+     if (iVar8 == DAT_0000_3901) break;
+ LAB_0000_6dd0:
+-    uVar9 = uVar9 + 0x80000001;
+-    uVar10 = uVar10 + 0x7fffffff;
+-    uVar6 = (uVar10 >> 0x16) << 10 | uVar9 >> 0x16;
+-    bVar3 = *(byte *)CONCAT31(0x7fffff,*(char *)(iVar14 + uVar6) + -1);
+-    if (bVar3 <= (byte)(&DAT_0000_4e5f)[iVar8]) {
++    uVar9 = uVar9 - *(int *)(g_mem+fist_ext_base+0x6dd2);
++    uVar10 = uVar10 + *(int *)(g_mem+fist_ext_base+0x6dd8);
++    uVar6 = (uVar10 >> (0x20 - DAT_0000_8490)) << DAT_0000_8490 | uVar9 >> (0x20 - DAT_0000_8490);
++    bVar3 = *(byte *)(uintptr_t)((_uRam00006d5d & 0xffffff00) | (((uint)(byte)_uRam00006d5d + (uint)(byte)*(char *)(iVar14 + uVar6)) & 0xff));
++    if (bVar3 <= *(byte *)(g_mem+fist_ext_base + 0x4e5f + iVar8)) {
+       iVar8 = iVar8 + -1;
+       if (iVar8 == DAT_0000_3901) break;
+       goto LAB_0000_6dd0;
+@@ -12979,7 +12991,10 @@
+   char *pcVar7;
+   char *pcVar8;
+   
+-  pcVar8 = (char *)(DAT_0000_90ec + DAT_0000_7f26 * DAT_0000_90f0 + _DAT_0000_7f22);
++  /* PATCH 581: 90ec is the map surface's guest-linear address ([0x807] = 0 here) -- base it on g_mem;
++   * the glyph (param_3) is already a host pointer (&DAT_7efb..), the bc90 LUT trick works because the
++   * block is 256-aligned. */
++  pcVar8 = (char *)(g_mem + DAT_0000_90ec + DAT_0000_7f26 * DAT_0000_90f0 + _DAT_0000_7f22);
+   pcVar7 = (char *)(param_3 + _DAT_0000_7f2e);
+   iVar6 = param_1 - DAT_0000_7f2a;
+   iVar5 = DAT_0000_90f0 - DAT_0000_7f2a;
+@@ -13240,7 +13255,13 @@
+   }
+   DAT_0000_90dc = uVar1 << 0x11;
+   DAT_0000_90e0 = (uint)*(ushort *)(DAT_0000_0c93 + 0x38) * -0x10000;
+-  DAT_0000_90c0 = (int)(0xffffffff / (ulonglong)(uint)*(ushort *)(DAT_0000_0c93 + 0x3e));
++  /* PATCH 581: 8634 `div ecx` with edx:eax = 0:0xffffffff.  A zero focal (TCB+0x3e = [0x154a] << 6, and
++   * [0x154a] is the view's vehicle byte +0x8d, 0 once the player's own vehicle is gone) raises #DE; the
++   * extender routes exception 0 to the engine's INT-0 handler 0f69:5b36, which steps past the DIV and
++   * returns AX = 0xffff with the rest of EAX untouched -- so EAX stays 0xffffffff (patch 575 measured
++   * the same handler under the MGA's `div si`). */
++  { uint32_t foc = *(ushort *)(DAT_0000_0c93 + 0x3e);
++    DAT_0000_90c0 = foc ? (int)(0xffffffffu / foc) : (int)0xffffffff; }
+   _DAT_0000_90c8 = (uint)*(ushort *)(DAT_0000_0c93 + 0x3e);
+   return;
+ }
+@@ -13564,6 +13585,52 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_8e80) @ 0000:8e80 ===== */
++
++void __allregs FUN_0000_8e80(void)
++
++{
++  /* PATCH 581: the top-down MAP walk of op 0x5c (7990 = the TCB's destination/size into 90ec/90f0/90f8,
++   * 85d0, 8e80, 79d7) -- an unpromoted mid-entry behind 8df0.  Asm 0x8e80-0x8f9b: the heading's
++   * cos/sin from the 0x9450/0x9650 tables (index -90e0 >> 23) scaled by the focal reciprocal 90c0
++   * give the per-pixel steps ESI/EBP (also 90bc/90b8); the start 90d4/90d8 is centred on the
++   * (90f0/2, 90f8/2) window; each pixel samples the colormap [0x85b8] at the DETAIL-packed index
++   * (`shld eax,edx,DETAIL ; shld eax,ebx,DETAIL`, 89b0 patches 8f48/8f4c/8f6a/8f6e) and maps the
++   * byte through the 256-byte shade LUT [0x85c4] into the surface at 90ec (a guest-linear address,
++   * [0x807] = 0 in this port). */
++  uint8_t  *xb = g_mem + fist_ext_base;
++  unsigned  d  = *(uint32_t *)(xb + 0x8490);
++  uint32_t  ti = ((uint32_t)(-(int32_t)DAT_0000_90e0)) >> 23;
++  int32_t   fc = *(int32_t *)(xb + 0x9450 + ti * 4), fs = *(int32_t *)(xb + 0x9650 + ti * 4);
++  int32_t   c0 = (int32_t)DAT_0000_90c0;
++  int32_t   esi = (int32_t)(((int64_t)c0 * fc) >> 32), ebp = (int32_t)(((int64_t)c0 * fs) >> 32);
++  uint32_t  rows = DAT_0000_90f8, cols = DAT_0000_90f0;
++  const uint8_t *cm  = (const uint8_t *)(uintptr_t)DAT_0000_85b8;
++  const uint8_t *lut = (const uint8_t *)(uintptr_t)_LAB_0000_85c4;
++  uint8_t  *edi = g_mem + DAT_0000_90ec;
++  uint32_t  ebx0, edx0, r;
++  DAT_0000_90fc = (uint32_t)fc;
++  DAT_0000_9100 = (uint32_t)fs;
++  DAT_0000_90b8 = (uint32_t)ebp;                                   /* imul 0x10000 ; shrd 16 */
++  DAT_0000_90bc = (uint32_t)esi;
++  DAT_0000_90d4 -= (cols >> 1) * (uint32_t)ebp;
++  DAT_0000_90d8 -= (cols >> 1) * (uint32_t)esi;
++  DAT_0000_90d4 += (rows >> 1) * DAT_0000_90bc;
++  DAT_0000_90d8 -= (rows >> 1) * DAT_0000_90b8;
++  ebx0 = DAT_0000_90d4; edx0 = DAT_0000_90d8;
++  for (r = rows; r != 0; r--) {
++    uint32_t ebx = ebx0, edx = edx0, k;
++    for (k = cols >> 1; k != 0; k--) {
++      *edi++ = lut[cm[((edx >> (32 - d)) << d) | (ebx >> (32 - d))]]; edx += (uint32_t)esi; ebx += (uint32_t)ebp;
++      *edi++ = lut[cm[((edx >> (32 - d)) << d) | (ebx >> (32 - d))]]; edx += (uint32_t)esi; ebx += (uint32_t)ebp;
++    }
++    ebx0 -= DAT_0000_90bc;
++    edx0 += DAT_0000_90b8;
++  }
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_8fa0) @ 0000:8fa0 ===== */
+ 
+ void __allregs FUN_0000_8fa0(void)
+@@ -13636,6 +13703,10 @@
+ void __allregs FUN_0000_9129(int param_1,int param_2)
+ 
+ {
++  /* PATCH 581: op 0x2c's texel walk (0x8460 = 8120 ; 9130 ; 82d0; the function starts at 9130 behind
++   * three nops).  9200's twin with a 50% blend: a texel <= 0xb4 is averaged with the destination
++   * pixel (`adc al,[edi] ; rcr al,1`).  The sampler's displacement is self-modified by 9119 from
++   * [0x3918] (asm 918c/91a9); Ghidra baked the pre-patch 0x7fffffff -- read the tile pointer. */
+   byte *pbVar1;
+   byte bVar2;
+   int iVar3;
+@@ -13652,7 +13723,7 @@
+   uVar9 = DAT_0000_90d4;
+   pbVar10 = DAT_0000_90a8;
+   do {
+-    DAT_0000_910c = (uint)*(byte *)(iVar3 + DAT_0000_9114);
++    DAT_0000_910c = (uint)*(byte *)(g_mem+fist_ext_base + DAT_0000_9114 + iVar3);   /* PATCH 581: the horizon table is an image offset (as 9200, patch 286) */
+     uVar6 = uVar7;
+     uVar8 = uVar9;
+     if (DAT_0000_910c != 0) {
+@@ -13666,14 +13737,14 @@
+     }
+     iVar5 = (DAT_0000_90f0 >> 1) - DAT_0000_910c;
+     do {
+-      bVar2 = *(byte *)(((uVar6 >> 0x18) << 8 | uVar8 >> 0x18) + 0x7fffffff);
++      bVar2 = *(byte *)((uint8_t*)(uintptr_t)DAT_0000_3918 + ((uVar6 >> 0x18) << 8 | uVar8 >> 0x18));
+       if (bVar2 < 0xb5) {
+         bVar2 = (byte)(bVar2 + *pbVar10 + (bVar2 < 0xb4)) >> 1 |
+                 (CARRY1(bVar2,*pbVar10) || CARRY1(bVar2 + *pbVar10,bVar2 < 0xb4)) << 7;
+       }
+       pbVar1 = pbVar10 + 1;
+       *pbVar10 = bVar2;
+-      bVar2 = *(byte *)(((uVar6 + param_2 >> 0x18) << 8 | uVar8 + param_1 >> 0x18) + 0x7fffffff);
++      bVar2 = *(byte *)((uint8_t*)(uintptr_t)DAT_0000_3918 + ((uVar6 + param_2 >> 0x18) << 8 | uVar8 + param_1 >> 0x18));
+       if (bVar2 < 0xb5) {
+         bVar2 = (byte)(bVar2 + *pbVar1 + (bVar2 < 0xb4)) >> 1 |
+                 (CARRY1(bVar2,*pbVar1) || CARRY1(bVar2 + *pbVar1,bVar2 < 0xb4)) << 7;
+@@ -14815,8 +14886,11 @@
+   do {
+     iVar1 = iVar7 * 3;
+     uVar4 = 0x17;
+-    *pbVar3 = (byte)((&DAT_0000_5260)[iVar1] + (&DAT_0000_5261)[iVar1] + (&DAT_0000_5261)[iVar1] +
+-                    (&DAT_0000_5262)[iVar1]) / 0x17;
++    /* PATCH 581: the map shade LUT -- asm 9fe0 `lea ebx,[edi*3+0x5260] ; al = [ebx]+[ebx+1]+[ebx+1]+[ebx+2]
++     * ; div 0x17` walks the sorted palette BYTES (stride 3, 8-bit sum); the dword accessors indexed it in
++     * dwords, so the inset's shading came from the wrong entries. */
++    *pbVar3 = (byte)(((unsigned char *)&DAT_0000_5260)[iVar1] + ((unsigned char *)&DAT_0000_5261)[iVar1] +
++                     ((unsigned char *)&DAT_0000_5261)[iVar1] + ((unsigned char *)&DAT_0000_5262)[iVar1]) / 0x17;
+     pbVar3 = pbVar3 + 1;
+     iVar7 = iVar7 + 1;
+     iVar2 = iVar2 + -1;
+@@ -14872,8 +14946,11 @@
+   do {
+     iVar1 = iVar7 * 3;
+     uVar4 = 0x17;
+-    *pbVar3 = (byte)((&DAT_0000_5260)[iVar1] + (&DAT_0000_5261)[iVar1] + (&DAT_0000_5261)[iVar1] +
+-                    (&DAT_0000_5262)[iVar1]) / 0x17;
++    /* PATCH 581: the map shade LUT -- asm 9fe0 `lea ebx,[edi*3+0x5260] ; al = [ebx]+[ebx+1]+[ebx+1]+[ebx+2]
++     * ; div 0x17` walks the sorted palette BYTES (stride 3, 8-bit sum); the dword accessors indexed it in
++     * dwords, so the inset's shading came from the wrong entries. */
++    *pbVar3 = (byte)(((unsigned char *)&DAT_0000_5260)[iVar1] + ((unsigned char *)&DAT_0000_5261)[iVar1] +
++                     ((unsigned char *)&DAT_0000_5261)[iVar1] + ((unsigned char *)&DAT_0000_5262)[iVar1]) / 0x17;
+     pbVar3 = pbVar3 + 1;
+     iVar7 = iVar7 + 1;
+     iVar2 = iVar2 + -1;
+@@ -17518,6 +17595,7 @@
+   {0x8ce2u,(void*)&FUN_0000_8ce2},
+   {0x8debu,(void*)&FUN_0000_8deb},
+   {0x8df0u,(void*)&FUN_0000_8df0},
++  {0x8e80u,(void*)&FUN_0000_8e80},
+   {0x8fa0u,(void*)&FUN_0000_8fa0},
+   {0x9119u,(void*)&FUN_0000_9119},
+   {0x9129u,(void*)&FUN_0000_9129},

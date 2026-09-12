@@ -79,3 +79,15 @@ flight functions, findable by oracle-vs-port execution diff + the targeted write
 the unit-Z / aa08-threshold fields) -- both now unblocked by this in-repo binary.  NEXT: write-trace the
 unit-Z [obj+0xc] writer to pin the terrain-follow physics, map its eip -> FUN_1000, and fix why the port's
 copy does not set it.
+
+## The 32-bit app is at linear 0x10000000 (2026-09-12)
+
+The first hook dropped every instruction above 32 MB (its dedup bitmap's range), and the extender maps
+the game's 32-bit image (fist_image.bin, phys 0x130000 under DOSBox) at linear 0x10000000 under
+selector 0x002b -- so the app never appeared in a trace, and a CS=0x1119 scope traced the engine's
+segment 0 instead (the oracle's 1119/2082/2119 are the port's 0000/0f69/1000 clusters; 4ec3 the MGA,
+4ab0 the SOUNDDVR, 0008/02dd/0249 the extender kernel).  The hook keeps an open-addressing set for the
+high range now (`tools/oracle/dosbox_blktrace.patch`), `tools/oracle/blktrace_mission.sh` drives a
+battle (OC_BATTLE, OC_WALL) and writes the phase marks, and `scratch/oracle/blktrace/blk.txt` is the
+AZER1 trace: 25746 unique instructions, 4459 of the app, in first-execution order.  What it settled for
+the windshield is on board:0002 (op 0x08 builds the tile; the self-modified shld/immediates).
