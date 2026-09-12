@@ -1,0 +1,278 @@
+PATCH 594: the trigonometry's carry and second lane -- 05dd/05e2's 1.0 flag, 03a9/0459/05b7/05bc
+reading it, 0578's CX and a265's range word, 9a32's wind vector, b059's body.
+
+board:0017.  Found by the seeded replay (patch 592) on AZER1, each verified against its asm:
+
+  05dd, 05e2  the sine/cosine lookups return the 1.0 case in CF: `stc` on the two exits (the angle
+              0x4000 exactly, and the interpolation carrying past 0xffff), `clc` (0x64a) otherwise --
+              in particular when the interpolation lands on 0xffff without a carry (table[255] =
+              0xffff with a fraction that rounds to 0).  The port had tested the VALUE for 0xffff and
+              took the shortcut one LSB early: the player's hull velocity at heading 0x7fc9 came out
+              -30 for the original's -29 (step 1738).
+  03a9, 0459  `call 5e2 ; jb skip ; mul` -- each mul is skipped on that CARRY, now g_fist_cf.
+  05b7, 05bc  `call 5e2 ; jb 5c4` -- the carry, not the `add ah,0x40` carry Ghidra kept (05b7) nor
+              a dead local (05bc).
+  0578, a265  0578 ends `pop cx ; mov bx,ax` with 0927's LOW word (the range) in CX; a265's
+              `shl edx,8 ; mov dl,ch ; mov [di+0x99],dx` (0x1a2d6-0x1a2e3) builds the range in
+              256-units from 0927's high word and that CH.  Patch 462 had taken CH from the height
+              LUT word: every vehicle's range word sat at 0x07xx; the oracle's moves (step 101).
+  9a32        the wind vector: `[0x92ee]=ax ; [0x92f0]=bx ; dx=bx ; call 3a9 ; movsx eax,ax ;
+              [0x92f2]=eax ; movsx eax,dx ; [0x92f6]=eax` -- 03a9's TWO lanes sign-extended to
+              dwords (9b11/9c4f add them to 32-bit positions).  Ghidra stored the raw magnitude as
+              the y lane through a 16-bit accessor: every smoke child drifted +magnitude in y, never
+              negative (step 1948).
+  b059        at the asm's widths (0xb059-0xb0bd): `call b112 ; sub ax,[di+0x10]` a WORD bearing
+              difference (`cmp ax,0x4000 ; jb ; cmp ax,0xc000 ; jb` = within +-90 degrees); `movsx
+              eax,[di+0x59] ; shl eax,3` to dword[0x9962], the same for [di+0x5b] to dword[0x9966];
+              with byte[di+0x45] set `mov dx,0x40 ; mov ax,[di+0x26] ; call 3a9` gives BOTH lanes;
+              `lcall 0f69:b2a0 (a930) ; jae ; orw [di+0x40],8` sets bit 3 (the "blocked ahead" bit
+              ae7b/af10 test) on a930's CARRY.  Ghidra read 32-bit words, stored 16 of the 32 result
+              bits, took the magnitude 0x40 for the DX lane and folded the CF test to a constant
+              (step 2358).
+
+--- a/fist.c
++++ b/fist.c
+@@ -4860,14 +4860,15 @@
+   uint16_t v, sgn, p1, p2;
+   (void)param_3;
+   if (neg) M = (uint16_t)(0 - M);
++  extern unsigned char g_fist_cf;   /* PATCH 594: the `jb` that skips the mul is 5e2/5dd's CARRY, not the value */
+   v   = (uint16_t)FUN_0000_05e2(A);
+   sgn = (uint16_t)((A & 0x8000) ? 0xffff : 0);
+-  p1  = (v == 0xffff) ? M : (uint16_t)(((uint32_t)v * (uint32_t)M) >> 16);
++  p1  = g_fist_cf ? M : (uint16_t)(((uint32_t)v * (uint32_t)M) >> 16);
+   p1  = (uint16_t)((p1 ^ sgn) - sgn);
+   if (neg) p1 = (uint16_t)(0 - p1);
+   v   = (uint16_t)FUN_0000_05dd(A);
+   sgn = (uint16_t)(((uint16_t)(0x4000 - A) & 0x8000) ? 0xffff : 0);
+-  p2  = (v == 0xffff) ? M : (uint16_t)(((uint32_t)v * (uint32_t)M) >> 16);
++  p2  = g_fist_cf ? M : (uint16_t)(((uint32_t)v * (uint32_t)M) >> 16);
+   p2  = (uint16_t)((p2 ^ sgn) - sgn);
+   if (neg) p2 = (uint16_t)(0 - p2);
+   g_fist_03a9_dx = p1;
+@@ -4993,9 +4994,10 @@
+   int cx_out, dx_out, ax_out;
+ 
+   /* block 1 (asm 0x46b-0x480): 5e2(H) -> cx output */
++  extern unsigned char g_fist_cf;   /* PATCH 594: the `jb` that skips each mul is 5e2/5dd's CARRY, not the value */
+   v    = (uint16_t)FUN_0000_05e2(H);
+   sgn  = (uint16_t)(H & 0x8000 ? 0xffff : 0);              /* dx = sign(H) from 5e2's entry cwd */
+-  prod = (v == 0xffff) ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);  /* jb skips mul */
++  prod = g_fist_cf ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);  /* jb skips mul */
+   sgn  = (uint16_t)(sgn ^ L8);
+   prod = (uint16_t)((prod ^ sgn) - sgn);                  /* xor dx,cx; sbb dx,cx (apply sign) */
+   cx_out = (short)prod;                                    /* push dx @0x480 -> pop cx @0x4c4 */
+@@ -5004,12 +5006,12 @@
+   v    = (uint16_t)FUN_0000_05dd(H);
+   sgn  = (uint16_t)((uint16_t)(0x4000 - H) & 0x8000 ? 0xffff : 0);  /* sign(0x4000-H) */
+   L8   = (uint16_t)(L8 ^ sgn);                            /* xor [bp-8],dx */
+-  L6   = (v == 0xffff) ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);   /* mov [bp-6],dx (V2) */
++  L6   = g_fist_cf ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);   /* mov [bp-6],dx (V2) */
+ 
+   /* block 3 (asm 0x494-0x4aa): 5e2(L2) -> dx output */
+   v    = (uint16_t)FUN_0000_05e2(L2);
+   sgn  = (uint16_t)(L2 & 0x8000 ? 0xffff : 0);
+-  prod = (v == 0xffff) ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);
++  prod = g_fist_cf ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);
+   sgn  = (uint16_t)(sgn ^ L8);
+   prod = (uint16_t)((prod ^ sgn) - sgn);                  /* xor dx,cx; sub dx,cx */
+   dx_out = (short)prod;                                    /* push dx @0x4aa -> pop dx @0x4c3 */
+@@ -5017,7 +5019,7 @@
+   /* block 4 (asm 0x4ab-0x4c1): 5dd(L2) -> ax output */
+   v    = (uint16_t)FUN_0000_05dd(L2);
+   sgn  = (uint16_t)((uint16_t)(0x4000 - L2) & 0x8000 ? 0xffff : 0);
+-  prod = (v == 0xffff) ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);
++  prod = g_fist_cf ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);
+   sgn  = (uint16_t)(sgn ^ L8);
+   prod = (uint16_t)((prod ^ sgn) - sgn);
+   ax_out = (short)prod;                                    /* mov ax,dx @0x4c1 */
+@@ -5254,9 +5256,10 @@
+    * with `mov bx,ax; mov cx,dx` = 0927's LOW word in bx and HIGH word in cx (Ghidra passed the dead input
+    * param_2 as cx); `mov bx,ax` publishes 077e's result (the PITCH) in BX, consumed by ace0/addb/a265 via
+    * g_fist_0578_bx.  Out: ax=bearing, bx=pitch, cx=range lo, dx=range hi. */
+-  extern uint16_t g_fist_0927_dx;
++  extern uint16_t g_fist_0927_dx, g_fist_0578_cx;
+   uVar1 = FUN_0000_0731(param_4,param_5);
+   iVar2 = FUN_0000_0927(param_1,param_2,param_3,param_4,param_5);
++  g_fist_0578_cx = (uint16_t)iVar2;   /* PATCH 594: `pop cx` -- 0927's LOW word (the range) leaves in CX; a265 reads CH */
+   g_fist_0578_bx = (unsigned short)FUN_0000_077e(*(uint *)(param_5 + 8) - *(uint *)(param_4 + 8),g_fist_0927_dx,
+                 (*(int *)(param_5 + 10) - *(int *)(param_4 + 10)) -
+                 (uint)(*(uint *)(param_5 + 8) < *(uint *)(param_4 + 8)),iVar2);
+@@ -5301,10 +5304,14 @@
+   int iVar1;
+   bool bVar3;
+   
++  /* PATCH 594: `neg ax ; add ah,0x40 ; call 5e2 ; jb 5c4` -- the jb is 5e2's CARRY (the 1.0 flag),
++   * not the carry of the `add ah,0x40` Ghidra kept in bVar3.  (DL = 0xf0 / 0 on the two exits is not
++   * carried: 0426, its only reader, is Ghidra's unreached stack-frame residue.) */
++  extern unsigned char g_fist_cf;
+   bVar2 = (byte)((uint)-param_1 >> 8);
+-  bVar3 = 0xbf < bVar2;
++  (void)bVar3;
+   iVar1 = FUN_0000_05e2(CONCAT11(bVar2 + 0x40,(char)-param_1));
+-  if (!bVar3) {
++  if (!g_fist_cf) {
+     return iVar1;
+   }
+   return 1;
+@@ -5317,10 +5324,10 @@
+ 
+ {
+   int iVar1;
+-  undefined1 in_CF = 0;
++  extern unsigned char g_fist_cf;   /* PATCH 594: `call 5e2 ; jb 5c4` -- the CARRY, not a dead local */
+   
+   iVar1 = FUN_0000_05e2(param_1);
+-  if (!(bool)in_CF) {
++  if (!g_fist_cf) {
+     return iVar1;
+   }
+   return 1;
+@@ -5355,8 +5362,15 @@
+   int iVar6;
+   
+   uVar3 = CONCAT11((char)((uint)-param_1 >> 8) + '@',(char)-param_1) & 0x7fff;
++  /* PATCH 594: the CARRY is the 1.0 flag -- set on the two `stc` exits (0x4000 exactly, and the
++   * interpolation carrying past 0xffff), CLEAR when the interpolation lands on 0xffff without a carry
++   * (table[255] = 0xffff, a frac that rounds to 0).  03a9/0459 skip their `mul` on CF alone; the port
++   * had tested the VALUE for 0xffff and took the 1.0 shortcut one LSB early (the player's hull velocity
++   * at heading 0x7fc9: -29 in the original, -30 here -- board:0017, sim step 1738). */
++  extern unsigned char g_fist_cf;
+   if (0x3fff < uVar3) {
+     if (uVar3 == 0x4000) {
++      g_fist_cf = 1;
+       return -1;
+     }
+     uVar3 = CONCAT11((char)(-uVar3 >> 8) + -0x80,(char)-uVar3);
+@@ -5372,10 +5386,13 @@
+       uVar3 = uVar3 + CONCAT11(cVar5,bVar2);
+     }
+     if (CARRY2(uVar3,uVar1)) {
++      g_fist_cf = 1;
+       return -1;
+     }
++    g_fist_cf = 0;
+     return uVar3 + uVar1;
+   }
++  g_fist_cf = 0;   /* 0x64a clc */
+   return *(uint16_t *)(g_mem + 0x1c000 + ((uVar3 & 0x3fff) >> 6) * 2 + 0x2042); /* PATCH 157 */
+ }
+ 
+@@ -5393,8 +5410,15 @@
+   int iVar6;
+   
+   uVar3 = param_1 & 0x7fff;
++  /* PATCH 594: the CARRY is the 1.0 flag -- set on the two `stc` exits (0x4000 exactly, and the
++   * interpolation carrying past 0xffff), CLEAR when the interpolation lands on 0xffff without a carry
++   * (table[255] = 0xffff, a frac that rounds to 0).  03a9/0459 skip their `mul` on CF alone; the port
++   * had tested the VALUE for 0xffff and took the 1.0 shortcut one LSB early (the player's hull velocity
++   * at heading 0x7fc9: -29 in the original, -30 here -- board:0017, sim step 1738). */
++  extern unsigned char g_fist_cf;
+   if (0x3fff < uVar3) {
+     if (uVar3 == 0x4000) {
++      g_fist_cf = 1;
+       return -1;
+     }
+     uVar3 = CONCAT11((char)(-uVar3 >> 8) + -0x80,(char)-uVar3);
+@@ -5410,10 +5434,13 @@
+       uVar3 = uVar3 + CONCAT11(cVar5,bVar2);
+     }
+     if (CARRY2(uVar3,uVar1)) {
++      g_fist_cf = 1;
+       return -1;
+     }
++    g_fist_cf = 0;
+     return uVar3 + uVar1;
+   }
++  g_fist_cf = 0;   /* 0x64a clc */
+   return *(uint16_t *)(g_mem + 0x1c000 + ((uVar3 & 0x3fff) >> 6) * 2 + 0x2042); /* PATCH 157 */
+ }
+ 
+@@ -27338,11 +27365,17 @@
+ {
+   int iVar1;
+   
++  /* PATCH 594: the WIND vector (asm 0x9a32-0x9a4e): `[0x92ee]=ax ; [0x92f0]=bx ; dx=bx ; call 3a9 ;
++   * movsx eax,ax ; [0x92f2]=eax ; movsx eax,dx ; [0x92f6]=eax` -- 03a9's TWO lanes, sign-extended to
++   * DWORDS (9b11/9c4f add them to the 32-bit positions).  Ghidra stored the raw magnitude as the y lane
++   * (the same dropped-DX class as a1d6/patch 494) through a 16-bit accessor: every smoke child drifted
++   * +magnitude in y instead of the wind's cosine, and never negative (board:0017, sim step 1948). */
++  extern unsigned short g_fist_03a9_dx;
+   DAT_2000_52ee = param_1;
+   DAT_2000_52f0 = param_2;
+   iVar1 = FUN_0000_03a9(param_1,param_2,param_2);
+-  DAT_2000_52f2 = (long)iVar1;
+-  DAT_2000_52f6 = (long)param_2;
++  *(int32_t *)(g_mem + 0x252f2) = (int32_t)(int16_t)iVar1;
++  *(int32_t *)(g_mem + 0x252f6) = (int32_t)(int16_t)g_fist_03a9_dx;
+   return;
+ }
+ 
+@@ -31200,26 +31233,30 @@
+     param_3 = (int)(intptr_t)(_dg + (uint16_t)param_3);
+     param_4 = (int)(intptr_t)(_dg + (uint16_t)param_4);
+   }
+-  iVar1 = FUN_0000_b112(param_3,param_4);
+-  uVar2 = iVar1 - *(int *)(param_4 + 0x10);
+-  if ((uVar2 < 0x4000) || (0xbfff < uVar2)) {
+-    DAT_2000_5962 = (long)*(int *)(param_4 + 0x59) << 3;
+-    DAT_2000_5966 = (long)*(int *)(param_4 + 0x5b) << 3;
+-    bVar4 = false;
+-    if (*(char *)(param_4 + 0x45) != '\0') {
+-      iVar3 = 0x40;
+-      iVar1 = FUN_0000_03a9(*(undefined2 *)(param_4 + 0x26),0x40,param_2);
+-      DAT_2000_5962 = (long)iVar1 << 3;
+-      param_1 = (long)iVar3 << 3;
+-      bVar4 = (long)iVar3 << 2 < 0;
+-      DAT_2000_5966 = param_1;
+-    }
+-    DAT_2000_57a0 = 0xe00;
+-    FUN_1000_a930((int)param_1,param_2,param_3,param_4);
+-    if (bVar4) {
+-      *(uint *)(param_4 + 0x40) = *(uint *)(param_4 + 0x40) | 8;
+-    }
+-  }
++  /* PATCH 594: the body at the asm's widths (0xb059-0xb0bd): `call b112 ; sub ax,[di+0x10]` is a WORD
++   * bearing difference (`cmp ax,0x4000 ; jb ok ; cmp ax,0xc000 ; jb skip` = within +-90 degrees);
++   * `movsx eax,[di+0x59] ; shl eax,3 -> dword[0x9962]`, the same for [di+0x5b] -> dword[0x9966]; with
++   * byte[di+0x45] set, `mov dx,0x40 ; mov ax,[di+0x26] ; call 3a9` gives BOTH lanes (movsx/shl 3 each)
++   * -- Ghidra read the 32-bit words, stored 16 of the 32 result bits, took the magnitude 0x40 for the
++   * DX lane and folded the CF `lcall 0f69:b2a0 (a930) ; jae ; orw [di+0x40],8` into a constant: bit 3
++   * of the flags word (the "blocked ahead" bit ae7b/af10 test) was never set (board:0017, step 2358). */
++  { extern unsigned char g_fist_cf; extern unsigned short g_fist_03a9_dx;
++    uint16_t bear = (uint16_t)((uint16_t)FUN_0000_b112(param_3,param_4) - *(uint16_t *)(param_4 + 0x10));
++    (void)uVar2; (void)iVar3; (void)bVar4; (void)iVar1;
++    if (bear < 0x4000 || bear >= 0xc000) {
++      *(int32_t *)(g_mem + 0x25962) = (int32_t)*(int16_t *)(param_4 + 0x59) << 3;
++      *(int32_t *)(g_mem + 0x25966) = (int32_t)*(int16_t *)(param_4 + 0x5b) << 3;
++      if (*(char *)(param_4 + 0x45) != '\0') {
++        int16_t ax = (int16_t)FUN_0000_03a9(*(undefined2 *)(param_4 + 0x26),0x40,param_2);
++        *(int32_t *)(g_mem + 0x25962) = (int32_t)ax << 3;
++        *(int32_t *)(g_mem + 0x25966) = (int32_t)(int16_t)g_fist_03a9_dx << 3;
++      }
++      DAT_2000_57a0 = 0xe00;
++      FUN_1000_a930((int)param_1,param_2,param_3,param_4);
++      if (g_fist_cf) {
++        *(uint16_t *)(param_4 + 0x40) |= 8;
++      }
++    } }
+   return;
+ }
+ 
+@@ -67479,11 +67516,14 @@
+   /* PATCH 462: asm 1a2d6-1a2e3 `mov [di+0x9b],ax; mov [di+0x38],bx; shl edx,8; mov dl,ch; mov [di+0x99],dx`
+    * -- bx = a18e's pitch (g_fist_0578_bx), dx = its range HIGH word (0927's, g_fist_0927_dx), ch = the
+    * height-LUT word's high byte (1a2c0 `mov ch,ah`).  Patch 274 stored the LUT INDEX and a param mash. */
+-  { extern uint16_t g_fist_0927_dx;
++  { extern uint16_t g_fist_0927_dx, g_fist_0578_cx;
+   *(unsigned short *)(dg + (unsigned short)(di + 0x9b)) = uVar3;
+   *(unsigned short *)(dg + (unsigned short)(di + 0x38)) = g_fist_0578_bx;
++  /* PATCH 594: CH at 1a2e1 is 0578's exit CX = 0927's range LOW word (`pop cx`), not the height-LUT
++   * word: word[di+0x99] = (range_hi << 8) | (range_lo >> 8) = the range in 256-units.  Patch 462's
++   * LUT byte left every vehicle's range word at 0x07xx; the oracle's moves (board:0017, step 101). */
+   *(unsigned short *)(dg + (unsigned short)(di + 0x99)) =
+-      (unsigned short)(((unsigned int)g_fist_0927_dx << 8) | ((uVar2 >> 8) & 0xff)); }
++      (unsigned short)(((unsigned int)g_fist_0927_dx << 8) | ((g_fist_0578_cx >> 8) & 0xff)); }
+   return;
+ }
+ 

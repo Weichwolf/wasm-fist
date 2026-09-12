@@ -200,3 +200,47 @@ and MGAVIDEO loads at SOUNDDVR + 0x413 as in the oracle (0x4ab0 + 0x413 = 0x4ec3
 layout difference to the oracle is the heap start: SOUNDDVR sits 0xad paragraphs higher above
 DGROUP in the port (0x1e44) than in the oracle (0x1d97) -- the conventional-memory map (the AH=48
 answer, the PSP/environment the loader lays out) is the item above.
+
+The 0c21 probe's remaining fire aside, the movers had a second defect (patch 591): both 0dc2's deep
+path and 0ecb end with `mov es,[bp+0xc] ; mov es,es:[0xc]` (0x10ebd, 0x10f72) -- ES leaves as the
+free list's FIRST node, and the allocator's compaction step (0x10a9a-0x10aac: `call 0bef ; jb ; cmp
+es:[4],ax ; jb split`) sizes that node and carves the request from it.  The port's movers left
+g_mm_es at the node they had just relocated (the bx=2 notify call's ES), so 0a31 sized the moved
+block, found it large enough, and split the request off its HEAD: the block's node shrank and its
+paragraph moved up while its owner -- the resource descriptor, the sprite directory entries the
+15c2/15d9 relocation method had just re-based -- kept the old paragraph, now the new block's.
+UKRAINE2 (sweep 590, the click-shift 0/1 timings) crashed on it 22 seconds after the fact: at t=1216
+the render's 22496-byte allocation took the compaction path, 0ecb moved the MSPRITE2 sheet (0x90e
+paragraphs, descriptor 0x8f82) to 0x79f5, 0a31 split 0x57e paragraphs off it (node base 0x7f73,
+size 0x390; directory entries still 0x79f5 -- gdb watchpoints on the node's base and size words,
+the descriptor and directory entry 0x460), and the cockpit later blitted sprite 0x460 from the
+paragraph the 0x156c surface had meanwhile been given: SIGSEGV in MGA 26de <- 26a1 <- 8243.  With
+591 UKRAINE2 resolves (TIME EXPIRED) on that timing, in the Bradley cockpit the mission starts in.
+The shared tail (0x10d9e) now publishes the same ES for 0bef's `mov cx,es:[0]` after a CF=1 return.
+
+The free TOTAL was wrong from the first purge (patch 596): 0c7f -- the allocator's last resort
+before compaction, which purges the first allocated block whose descriptor carries bit 0 -- adds
+`mov ax,[4]` to `[bp+4]` with DS = the purged node, i.e. the node's size; patch 025 had read the
+control block's own word 4, doubling the total at every purge.  After the mission load the port's
+total stood at 0xc1d1 paragraphs against a free list summing to 0x10f0, while the oracle's counter
+equals its list sum in every dump (cm85b8boot 0x1097, mspawn 0x1151, azer3_spawn 0xfec) -- so
+0a31's `cmp [bp+4],ax ; ja` (0x10a95), the route to the 0c21 swap probe, was taken only by 42cc's
+0xffff size query and the order of compaction and purge under memory pressure was not the
+original's.  With 596 the
+counter equals the list (0x10f0 at AZER1's first sim step); the seeded replay (board:0017) stays
+at zero differing bytes over its 2726 steps, and UKRAINE2 resolves.
+
+What 0c21's probes are (the `[memmgr] FUN_1000_0c21 ... reached` line, still a stub): 1c68 swaps
+the block out to EXPANDED memory -- allocate its size from the pool DGROUP:0x16f6 (0a31 with BP =
+0x16f6), map the EMS pages (1d9c, `call ss:[0x1764]`), `rep movsw` the block in, mark the
+descriptor 0x30 -- and 1fcc to EXTENDED memory (pool 0x1718, XMS function 0Bh through the driver
+entry [0x17b2] with the move record at 0x1898); 0c21 then frees the conventional block, and 0d2e
+brings a swapped block back (kind 0xe, 15fa's re-home).  The pools are built at start-up from the
+XMS driver (INT 2Fh 4300h/4310h; 1dfa: functions 08h query, 10h UMB requests into the MAIN pool,
+09h/0Ah allocate/free) and from EMS ("EMMXXXX0" behind the INT 67h vector, [0x1764]).  Both are
+EMPTY in the oracle: every DGROUP dump has the two pool headers zero and no UMBs (the FIST.RUN
+extender takes the extended memory for its own heap before the engine asks), so 1c68 and 1fcc
+fail there as the stub's "not found" does here -- faithful by accident.  Promoting them (with
+0a31 over the second and third control blocks, which the port's 0a31 already takes as a parameter)
+retires the stub without changing a flow; giving the shim an XMS/EMS the oracle does not have
+would.

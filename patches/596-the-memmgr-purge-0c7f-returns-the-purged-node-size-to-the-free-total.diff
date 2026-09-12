@@ -1,0 +1,49 @@
+PATCH 596: the MEMMGR purge 0c7f returns the purged node's size to the free total, not the total
+to itself.
+
+board:0025.  0c7f is the allocator's last resort before compaction (0x10ae2): walk the allocated
+list for the first block whose owner descriptor carries bit 0 (purgeable), notify the owner (1019,
+kind 4), clear the descriptor's bit 7, unlink the node and insert it into the free list (1110).
+Its `mov ax,[4] ; add [bp+4],ax` (0x10cb4) is DS-relative -- DS is the node being purged -- so the
+free total grows by that node's SIZE.  Patch 025 read the control block's own word 4 (the total),
+doubling it at every purge: after the mission load's purges the port's total stood at 0xc1d1
+paragraphs against a free list summing to 0x10f0 (the oracle's counter equals its list sum at
+every dump: cm85b8boot 0x1097, mspawn 0x1151, azer3_spawn 0xfec), so 0a31's `cmp [bp+4],ax ; ja`
+(0x10a95, the route to the 0c21 swap probe) was taken only by 42cc's 0xffff size query, and the
+compaction and purge order the original runs through under memory pressure was not the port's.  Two register carries
+go with it: 1019 reads the node at DS and the descriptor segment ES `les di,[6]` left (the port
+passed the list head it had entered with), and 0x10cbd `mov ds,bx ; or bx,bx` leaves DS = the
+purged node's successor on the allocated list with ZF from it.
+
+--- a/fist.c
++++ b/fist.c
+@@ -45001,6 +45001,7 @@
+   for (;;) {
+     di = MM_S16(ds, 0x06); es = MM_S16(ds, 0x08);    /* les di,[6] */
+     if (MM_S8(es, di + 2) & 1) {                     /* testb es:[di+2],1 ; jne */
++      g_mm_ds = ds; g_mm_es = es;                    /* PATCH 596: 1019 reads the node at DS (`mov dx,[0] ; lds di,[6]`), ES = the descriptor segment `les di,[6]` left -- the walker's DS, not the list head g_mm_ds still held */
+       FUN_1000_1019(4);
+       MM_S8(es, di + 2) &= 0x7f;                     /* andb es:[di+2],0x7f */
+       /* PATCH 572: `0ca0: 8e 06 0c 00` is `mov es,[ds:0xc]` -- the NODE's next link (DS = the node),
+@@ -45015,12 +45016,19 @@
+       bx = es;                                        /* mov bx,es */
+       es = ax;                                        /* mov es,ax */
+       MM_S16(es, 0x0c) = bx;                          /* mov es:[0xc],bx   prev.next = next */
+-      ax = *(uint16_t *)(ctl + 0x04);                 /* mov ax,[4] (ctl[4]) */
++      /* PATCH 596: 0x10cb4 `mov ax,[4]` is DS-relative -- DS is the NODE being purged, so AX = its size
++       * (the paragraphs returned to the pool), and `add [bp+4],ax` grows the free total by that.  Patch
++       * 025 read ctl[4] = the free total itself, so every purge DOUBLED the total: after the mission
++       * load's purges it stood at 0xc1d1 paragraphs against a free list summing to 0x10f0 (the oracle's
++       * counter equals its list at every dump), and 0a31's `cmp [bp+4],ax ; ja` (0x10a95: is the
++       * request within the free total at all?) took the 0c21 route only for 42cc's 0xffff query.
++       * 0x10cbd `mov ds,bx ; or bx,bx`: DS leaves as the purged node's NEXT, ZF from it. */
++      ax = MM_S16(ds, 0x04);                          /* mov ax,[4] (node.size) */
+       *(uint16_t *)(ctl + 0x04) = (uint16_t)(*(uint16_t *)(ctl + 0x04) + ax); /* add [bp+4],ax */
+       g_mm_ds = ds; g_mm_es = es; g_mm_ctl = ctl;
+       FUN_1000_1110((int)(uintptr_t)ctl);             /* call 0x11110 */
++      g_mm_ds = bx; g_mm_zf = (bx == 0);              /* mov ds,bx ; or bx,bx */
+       g_mm_cf = 0;                                    /* or bx,bx clears CF */
+-      g_mm_ds = g_mm_ds; g_mm_es = g_mm_es;
+       return;
+     }
+     ax = MM_S16(ds, 0x0c); ds = ax;

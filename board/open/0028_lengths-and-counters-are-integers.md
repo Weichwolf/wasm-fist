@@ -35,3 +35,9 @@ Most are near offsets passed as pointer-typed arguments (harmless: no arithmetic
 is the subset used as a bound or a counter: a pointer compared with a small constant, a pointer
 decremented in a loop step, a pointer difference added to a pointer.  Each is an asm read of the
 `scas`/`cmp cx` it came from; the native==wasm gate on the flow that reaches it is the proof.
+
+b355 (patch 593) is the class's sim-side case: `inc word [di+0x1b] ; test word [di+0x1b],0x3f ; mov
+ax,[di+0x1d] ; cmp ax,0x80 ; jbe` -- a 16-bit counter and a 16-bit throttle that Ghidra read as 32-bit
+ints, so the throttle compare took the two bytes above it along and fired the type-0x11 child spawn
+(and its RNG draw) at the fifth sim step of AZER1, where the original's word 0 does not.  The first
+divergence the seeded replay (board:0017) reported.

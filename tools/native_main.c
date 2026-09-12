@@ -615,8 +615,10 @@ static void fist_dump_and_exit(const char *why){
  * wrap (fist_int8_fire), and everything that only needs looking at once per interrupt -- the scripted
  * input, the dump/watchdog checks, the diagnostics -- runs from there (fist_pump_slow). */
 void fist_timer_pump(void){
-    extern void fist_clock_advance(unsigned);
+    extern void fist_clock_advance(unsigned); extern int g_int8_force;
+    g_int8_force = 1;      /* an explicit pump (a spin-wait) delivers its interrupt even under the frame-schedule replay */
     fist_clock_advance(1);
+    g_int8_force = 0;
 }
 
 /* Once per INT-8 (from fist_int8_fire, after the ISR) and once per BIOS tick before the engine has its
@@ -1011,7 +1013,7 @@ static unsigned long long g_int8_last_clock;
     X(g_fist_b71_dx) X(g_fist_b71_cx) X(g_fist_b71_bx) X(g_fist_baf_dx) X(g_fist_0927_dx) \
     X(g_fist_0541_cx) X(g_fist_0541_dx) X(g_ext_find_cf) X(g_fist_ev_node) X(g_fist_paintbp) \
     X(g_fist_a19e_al) X(g_fist_evax) X(g_fist_paintax) X(g_fist_rot_h) X(g_fist_rot_dx) X(g_fist_rot_cx) \
-    X(g_fist_render_si) X(g_fist_b1df_ax) X(g_fist_0578_bx) X(g_fist_02e8_si) X(g_fist_177f_bx) \
+    X(g_fist_render_si) X(g_fist_b1df_ax) X(g_fist_0578_bx) X(g_fist_0578_cx) X(g_fist_c8e8_si) X(g_fist_02e8_si) X(g_fist_177f_bx) \
     X(g_fist_ctx_bx) X(g_fist_03a9_dx) X(g_fist_fp_dx) X(g_fist_fp_cx) X(g_fist_r48_dx) X(g_fist_r48_cx) \
     X(g_fist_3e29_cx) X(g_fist_ext_esi) X(g_fist_ext_ecx) X(g_fist_ext_edx) X(g_fist_ext_edi) \
     X(g_fist_op50_si) X(g_fist_op50_dx) X(g_fist_op50_cx) X(g_fist_op50_edx) X(g_fist_op50_esi) X(g_fist_op50_edi) X(g_ext_edx) \
@@ -1022,7 +1024,7 @@ static unsigned long long g_int8_last_clock;
 extern unsigned char g_fist_cf, g_ext_find_cf, g_fist_a19e_al;
 extern unsigned short g_fist_c0e5_si, g_fist_iter_si, g_fist_ev_node, g_fist_paintbp, g_fist_evax,
     g_fist_paintax, g_fist_rot_h, g_fist_rot_dx, g_fist_rot_cx, g_fist_render_si, g_fist_b1df_ax,
-    g_fist_0578_bx, g_fist_02e8_si, g_fist_177f_bx, g_fist_ctx_bx, g_fist_03a9_dx, g_fist_fp_dx,
+    g_fist_0578_bx, g_fist_0578_cx, g_fist_c8e8_si, g_fist_02e8_si, g_fist_177f_bx, g_fist_ctx_bx, g_fist_03a9_dx, g_fist_fp_dx,
     g_fist_fp_cx, g_fist_r48_dx, g_fist_r48_cx, g_fist_3e29_cx, g_fist_ext_ecx, g_fist_ext_edx,
     g_fist_ext_edi, g_fist_1345_bp, g_fist_054c_bx, g_fist_054c_cx, g_fist_054c_dx, g_fist_render_di,
     g_fist_render_dx, g_mga_fade_es;
@@ -1458,6 +1460,130 @@ unsigned char g_fist_cf;
  * register).  A DGROUP near-offset into the 0xdfbc object list. */
 unsigned short g_fist_c0e5_si;
 
+/* board:0017 -- FIST_RNGTRACE=<path>: every LFSR result (0291, `rng <ax> t=<tick>`) and every sim
+ * step (c0e5, `sim t=<tick>`) in order, the port's side of the oracle's FIST_REGTRACE at 0x11447/
+ * 0x11454/0x1d275/0x24288 -- the two streams set against each other give the tick where the poll
+ * cadence or a sim draw first differs.  Off unless the variable is set; no engine state touched. */
+static FILE *g_rngtrace_f; static int g_rngtrace_init;
+static FILE *rngtrace_file(void) {
+    if (!g_rngtrace_init) { const char *p = getenv("FIST_RNGTRACE"); g_rngtrace_init = 1;
+        if (p && (g_rngtrace_f = fopen(p, "w"))) setvbuf(g_rngtrace_f, NULL, _IOLBF, 1 << 16); }   /* the dump path _exit()s */
+    return g_rngtrace_f;
+}
+void fist_rng_trace(unsigned short v) {
+    FILE *f = rngtrace_file();
+#ifndef __EMSCRIPTEN__
+    if (f) fprintf(f, "rng %04x t=%u from=%p<%p\n", v, *(uint16_t *)(g_mem + 0x1c452), __builtin_return_address(1), __builtin_return_address(2));   /* 0291's caller and its caller (-O0 frames) */
+#else
+    if (f) fprintf(f, "rng %04x t=%u\n", v, *(uint16_t *)(g_mem + 0x1c452));
+#endif
+}
+/* FIST_RNG_SCHEDULE=<file>: one integer per line = the oracle's poll count before each of its mission
+ * sim steps (from the FIST_REGTRACE P/S markers).  Active from the seed point: the live poll's LFSR
+ * step is suppressed (fist_icall_near) and the schedule's count is stepped here before each sim step,
+ * so the sim draws exactly the oracle's values as long as it draws the same number of times. */
+int g_rng_sched_active; static int *g_rng_sched; static int g_rng_sched_n, g_rng_sched_i;
+int fist_rng_noop(void) { return 0; }
+static void rng_sched_load(void) {
+    const char *p = getenv("FIST_RNG_SCHEDULE"); FILE *f; int cap = 0, v;
+    if (!p || !(f = fopen(p, "r"))) return;
+    while (fscanf(f, "%d", &v) == 1) { if (g_rng_sched_n == cap) { cap = cap ? cap * 2 : 4096; g_rng_sched = realloc(g_rng_sched, cap * sizeof *g_rng_sched); } g_rng_sched[g_rng_sched_n++] = v; }
+    fclose(f); g_rng_sched_active = 1;
+    fprintf(stderr, "[rngsched] %d sim steps scheduled\n", g_rng_sched_n);
+}
+void fist_poll_trace(void) {
+    FILE *f = rngtrace_file(); if (f) fprintf(f, "poll t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
+}
+static void frame_sched_load(void); static void phase_sched_load(void);
+void fist_mission_trace(void) {   /* 4754, the battle load: the first mission draw (4779) follows */
+    FILE *f = rngtrace_file(); if (f) fprintf(f, "mission t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
+    { static int done; if (done) return; done = 1;
+      { const char *sd = getenv("FIST_RNG_SEED");
+        if (sd) { unsigned v[5]; if (sscanf(sd, "%x,%x,%x,%x,%x", &v[0], &v[1], &v[2], &v[3], &v[4]) == 5) {
+            *(uint16_t *)(g_mem + 0x1df82) = (uint16_t)v[0];
+            for (int i = 0; i < 4; i++) *(uint16_t *)(g_mem + 0x1df84 + 2 * i) = (uint16_t)v[1 + i];
+            if (f) fprintf(f, "seed t=%u\n", *(uint16_t *)(g_mem + 0x1c452)); }
+          rng_sched_load(); frame_sched_load(); phase_sched_load(); } } }
+}
+/* The sync point: the extender's op-0x18 MAP-LOAD entry (the oracle's 0x100010ca) -- before the
+ * mission's own initialisation draws.  FIST_RNG_SEED=<ptr>,<w84>,<w86>,<w88>,<w8a> (hex): the LFSR
+ * state the oracle had there; the schedule's first count is the polls before the first sim step. */
+/* FIST_PHASE_SCHEDULE=<file>: one integer per render = the oracle's render-phase dispatches (22f7)
+ * in that 22dd call -- its INT-8 budget word[0x450] expired after that many; with the INT-8s held the
+ * port's budget never expires, so the schedule zeroes it after the same count. */
+static int *g_phase_sched; static int g_phase_n, g_phase_i, g_phase_cnt, g_phase_active;
+static void phase_sched_load(void) {
+    const char *p = getenv("FIST_PHASE_SCHEDULE"); FILE *f; int cap = 0, v;
+    if (!p || !(f = fopen(p, "r"))) return;
+    while (fscanf(f, "%d", &v) == 1) { if (g_phase_n == cap) { cap = cap ? cap * 2 : 4096; g_phase_sched = realloc(g_phase_sched, cap * sizeof *g_phase_sched); } g_phase_sched[g_phase_n++] = v; }
+    fclose(f); g_phase_active = 1;
+    fprintf(stderr, "[phasesched] %d renders scheduled\n", g_phase_n);
+}
+static int g_phase_cur;
+void fist_render_trace(void) {   /* every 22dd entry, phase loop or not: one schedule entry per call */
+    FILE *f = rngtrace_file(); if (f) fprintf(f, "render t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
+    g_phase_cnt = 0;
+    if (g_phase_active) { g_phase_cur = (g_phase_i < g_phase_n) ? g_phase_sched[g_phase_i] : 0x7fffffff;
+        if (g_phase_i == g_phase_n) fprintf(stderr, "[phasesched] schedule exhausted at t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
+        g_phase_i++; }
+}
+void fist_phase_trace(void) {   /* after each 22f7 phase dispatch */
+    FILE *f = rngtrace_file(); if (f) fprintf(f, "phase t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
+    if (g_phase_active && ++g_phase_cnt >= g_phase_cur) *(uint16_t *)(g_mem + 0x1c450) = 0;
+}
+void fist_render_end_trace(void) { }
+void fist_map_trace(void) {
+    FILE *f = rngtrace_file(); if (f) fprintf(f, "map t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
+}
+/* FIST_FRAME_SCHEDULE=<file>: one integer per render = the oracle's sim steps before it (its 22dd
+ * markers).  At the mission loop's top (459a's cooperative pump, patch 295) the port pumps until
+ * [0x452] has moved by that many ticks -- zero for the renders the original squeezed in without a tick
+ * passing -- so the sim/render interleaving is the oracle's.  Active with the RNG schedule. */
+static int *g_frame_sched; static int g_frame_n, g_frame_i, g_frame_active;
+static void frame_sched_load(void) {
+    const char *p = getenv("FIST_FRAME_SCHEDULE"); FILE *f; int cap = 0, v;
+    if (!p || !(f = fopen(p, "r"))) return;
+    while (fscanf(f, "%d", &v) == 1) { if (g_frame_n == cap) { cap = cap ? cap * 2 : 4096; g_frame_sched = realloc(g_frame_sched, cap * sizeof *g_frame_sched); } g_frame_sched[g_frame_n++] = v; }
+    fclose(f); g_frame_active = 1;
+    { extern int g_int8_replay; g_int8_replay = 1; }
+    fprintf(stderr, "[framesched] %d renders scheduled\n", g_frame_n);
+}
+void fist_frame_tick(void) {
+    if (!g_frame_active) { fist_timer_pump(); return; }
+    if (g_frame_i >= g_frame_n) { if (g_frame_i == g_frame_n) fprintf(stderr, "[framesched] schedule exhausted at t=%u\n", *(uint16_t *)(g_mem + 0x1c452)); g_frame_i++; fist_timer_pump(); return; }
+    /* the loop's own accounting: sim steps this frame = [0x452] - word[0x6ce0] (2ce0, the tick at the
+     * last paint); the render's port accesses may already have moved the clock, so pump the rest. */
+    /* the clock still runs (retrace edges, the PIT reads) but its INT-8s are held (g_int8_replay);
+     * the schedule fires exactly n of them here, so the loop's `2ce2 += [0x452] - 2ce0` is the oracle's. */
+    { int n = g_frame_sched[g_frame_i++]; int guard = 1000; extern void fist_int8_fire(void);
+      uint16_t t0 = *(uint16_t *)(g_mem + 0x1c452);
+      while ((uint16_t)(*(uint16_t *)(g_mem + 0x1c452) - t0) < (uint16_t)n && guard-- > 0) fist_int8_fire(); }
+}
+void fist_sim_trace(void) {
+    FILE *f = rngtrace_file();
+    /* FIST_STEP0_DUMP=<path>: g_mem's first megabyte at the first mission sim step -- the port's state at
+     * the sync point, against the oracle's FIST_REGTRACE_DUMPLIN=1d275 RAM image. */
+    { static long hits, n = -1, every = -1; extern int g_fist_after_map;
+      if (g_fist_after_map) { ++hits;
+        if (n < 0) { const char *dn = getenv("FIST_STEPN_DUMP"); n = dn ? atol(dn) : 1; const char *de = getenv("FIST_STEPEVERY_DUMP"); every = de ? atol(de) : 0; }
+        /* the Nth mission sim step (FIST_STEPN_DUMP, default 1), or every k steps into <file>.<hit> (FIST_STEPEVERY_DUMP) */
+        { const char *dp = getenv("FIST_STEP0_DUMP"); char nm[512]; const char *fn = 0;
+          if (dp) { if (every) { if ((hits - 1) % every == 0) { snprintf(nm, sizeof nm, "%s.%ld", dp, hits); fn = nm; } } else if (hits == n) fn = dp; }
+          if (fn) { FILE *df = fopen(fn, "wb"); if (df) {
+              const char *dz = getenv("FIST_STEP_DUMPLEN");   /* a DGROUP window (from 0x1c000) instead of the megabyte */
+              if (dz) fwrite(g_mem + 0x1c000, 1, strtoul(dz, 0, 16), df); else fwrite(g_mem, 1, 0x100000, df); fclose(df);
+              fprintf(stderr, "[step0] g_mem dumped at t=%u hit %ld -> %s\n", *(uint16_t *)(g_mem + 0x1c452), hits, fn); } } }
+        { static long stop = -1; if (stop < 0) { const char *st = getenv("FIST_STOP_AT_STEP"); stop = st ? atol(st) : 0; }
+          if (stop && hits == stop) { fprintf(stderr, "[step0] FIST_STOP_AT_STEP %ld reached at t=%u\n", stop, *(uint16_t *)(g_mem + 0x1c452)); fflush(NULL); exit(0); } } } }
+    if (g_rng_sched_active) {
+        int n = (g_rng_sched_i < g_rng_sched_n) ? g_rng_sched[g_rng_sched_i] : 0;
+        if (g_rng_sched_i == g_rng_sched_n) fprintf(stderr, "[rngsched] schedule exhausted at t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
+        g_rng_sched_i++;
+        while (n-- > 0) { extern undefined4 __allregs FUN_0000_0291(void); FUN_0000_0291(); }
+    }
+    if (f) fprintf(f, "sim t=%u\n", *(uint16_t *)(g_mem + 0x1c452));
+}
+
 /* PATCH 292: the mission-object-roster iterator FUN_0000_c33c returns its updated SI register (always
  * 0xffff on both the found and exhausted exits -- asm 0xc381/0xc386 `mov si,0xffff`) here; its caller
  * FUN_0000_378e stores it into word[DGROUP:0x4b9e] (asm 0x37a7 `mov [0x4b9e],si`) so the NEXT iterator
@@ -1553,7 +1679,9 @@ unsigned short g_fist_rot_cx;   /* output: 0459's cx (Z delta) */
 unsigned short g_fist_render_si;   /* c4df->method: source object near-offset */
 /* PATCH 462 (board:0007/0012): dropped multi-register outputs of the object-spawn/aim chain. */
 unsigned short g_fist_b1df_ax;     /* b1df: AX = display-table index of the freshly spawned object */
-unsigned short g_fist_0578_bx;     /* 0578 (a18e): BX = pitch (077e over the Z delta) */
+unsigned short g_fist_0578_bx;
+unsigned short g_fist_0578_cx;     /* PATCH 594: 0578's exit CX = 0927's range LOW word (a265's CH) */
+unsigned short g_fist_c8e8_si;     /* PATCH 595: c8e8's exit SI (advanced past its copy; c64a's second add) */
 unsigned short g_fist_02e8_si;     /* PATCH 563: SI = the CRT number printer's output cursor (02e8 -> 541b -> 030b) */
 unsigned short g_fist_177f_bx;     /* PATCH 571: 177f's BX out -- the largest free block when the MEMMGR request fails */
 unsigned short g_fist_ctx_bx;      /* PATCH 575: 024f/026e's BX out -- the surface / text context they replaced */
@@ -2786,6 +2914,7 @@ int fist_extender_gate(void) {
         static int map_loaded = 0;
         if (!map_loaded) {
             map_loaded = 1;
+            { extern void fist_map_trace(void); fist_map_trace(); }   /* board:0017 FIST_RNGTRACE sync point */
             uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
             uint32_t inbox   = *(uint32_t *)(g_mem + tcb_lin + 0x3f2);
             uint8_t *xb = g_mem + FIST_EXT_BASE;

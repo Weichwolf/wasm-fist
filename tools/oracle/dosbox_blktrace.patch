@@ -65,8 +65,30 @@ third_party/dosbox-build/dosbox-0.74-3/src/cpu/core_normal.cpp then `make`.
 +		}
 +		if (fist_reg_f) { Bit32u lin = (Bit32u)core.cseip;
 +			for (int i = 0; i < fist_reg_n; i++) if (lin == fist_reg_lin[i]) {
-+				fprintf(fist_reg_f, "%04x:%08x lin=%08x eax=%08x ebx=%08x ecx=%08x edx=%08x esi=%08x edi=%08x ebp=%08x esp=%08x t=%.4f\n",
++				/* ret= the word at ss:sp -- at a `ret` linear this is the caller's return offset (board:0017's
++				 * RNG-draw attribution); [sp+2] for a far return's segment. */
++				fprintf(fist_reg_f, "%04x:%08x lin=%08x eax=%08x ebx=%08x ecx=%08x edx=%08x esi=%08x edi=%08x ebp=%08x esp=%08x ret=%04x:%04x t=%.4f\n",
 +					(unsigned)SegValue(cs), (unsigned)reg_eip, (unsigned)lin, (unsigned)reg_eax, (unsigned)reg_ebx, (unsigned)reg_ecx,
-+					(unsigned)reg_edx, (unsigned)reg_esi, (unsigned)reg_edi, (unsigned)reg_ebp, (unsigned)reg_esp, PIC_FullIndex());
++					(unsigned)reg_edx, (unsigned)reg_esi, (unsigned)reg_edi, (unsigned)reg_ebp, (unsigned)reg_esp,
++					(unsigned)mem_readw(SegPhys(ss) + (reg_esp & 0xffff)), (unsigned)mem_readw(SegPhys(ss) + ((reg_esp + 2) & 0xffff)), PIC_FullIndex());
 +				fflush(fist_reg_f); }
++			/* FIST_REGTRACE_DUMPLIN=<hex> FIST_REGTRACE_DUMPFILE=<path>: the guest's physical RAM (16 MB) the
++			 * first time execution reaches that linear -- the original's whole state at a sync point
++			 * (board:0017: the object table at the first mission sim step). */
++			static int dump_init = 0; static Bit32u dump_lin = 0; static const char* dump_file = 0; static long dump_n = 1, dump_every = 0, dump_hits = 0; static Bitu dump_base = 0, dump_len = 0;
++			if (!dump_init) { dump_init = 1; const char* dl = getenv("FIST_REGTRACE_DUMPLIN"); dump_file = getenv("FIST_REGTRACE_DUMPFILE");
++				if (dl) dump_lin = (Bit32u)strtoul(dl, 0, 16); const char* dn = getenv("FIST_REGTRACE_DUMPN"); if (dn) dump_n = atol(dn);
++				const char* de = getenv("FIST_REGTRACE_DUMPEVERY"); if (de) dump_every = atol(de);
++				const char* db = getenv("FIST_REGTRACE_DUMPBASE"); if (db) dump_base = (Bitu)strtoul(db, 0, 16);   /* a window: phys base, byte length */
++				const char* dz = getenv("FIST_REGTRACE_DUMPLEN"); if (dz) dump_len = (Bitu)strtoul(dz, 0, 16); }
++			/* the Nth hit (FIST_REGTRACE_DUMPN, default 1), or -- FIST_REGTRACE_DUMPEVERY=k -- hits 1, 1+k, 1+2k, ...
++			 * into <file>.<hit> (the sim state every k steps, for the state diff at the step the RNG streams part) */
++			if (dump_file && lin == dump_lin) { ++dump_hits; char nm[512]; const char* fn = 0;
++				if (dump_every) { if ((dump_hits - 1) % dump_every == 0) { snprintf(nm, sizeof nm, "%s.%ld", dump_file, dump_hits); fn = nm; } }
++				else if (dump_hits == dump_n) fn = dump_file;
++				if (fn) { FILE* df = fopen(fn, "wb");
++					if (df) { Bitu bytes = MEM_TotalPages() * 4096; if (bytes > 16u*1024*1024) bytes = 16u*1024*1024;
++						if (dump_len) { if (dump_base + dump_len <= bytes) fwrite(MemBase + dump_base, 1, dump_len, df); }
++						else fwrite(MemBase, 1, bytes, df);
++						fclose(df); fprintf(stderr, "[regtrace] RAM dumped at lin=%08x hit %ld -> %s\n", (unsigned)lin, dump_hits, fn); } } }
 +		}

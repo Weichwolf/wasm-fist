@@ -1,0 +1,87 @@
+PATCH 592: the oracle-replay instrument -- the engine's RNG, sim-step, render and mission-load seams
+report to the shim, and the shim can drive them from the original's schedules.
+
+board:0017.  Five hooks, each a one-line call into tools/native_main.c, inert unless an environment
+variable names a file:
+
+  0291  fist_rng_trace(result)   every LFSR draw (FIST_RNGTRACE: `rng <ax> t=<tick> from=<callers>`)
+  c0e5  fist_sim_trace()         every sim step (`sim t=`), the per-step dumps (FIST_STEP0_DUMP /
+                                 FIST_STEPN_DUMP / FIST_STEPEVERY_DUMP / FIST_STEP_DUMPLEN), the stop
+                                 (FIST_STOP_AT_STEP) and the RNG schedule's polls (FIST_RNG_SCHEDULE:
+                                 the oracle's poll count before each sim step, stepped here while the
+                                 live poll 3920 -> [0x3a] = 0291 is muted in fist_icall_near)
+  4754  fist_mission_trace()     the battle load = the sync point: FIST_RNG_SEED seeds the LFSR's
+                                 pointer and four rolling words (DGROUP:0x1f82..0x1f8a) with the
+                                 oracle's state there and loads the three schedules
+  22dd  fist_render_trace()      every render (`render t=`); fist_phase_trace() after each 22f7
+                                 dispatch (FIST_PHASE_SCHEDULE: the oracle's dispatches per render --
+                                 the INT-8 budget word[0x450] is zeroed after that many, since the
+                                 held INT-8s never expire it); fist_render_end_trace()
+  459a  fist_frame_tick()        in place of the loop's cooperative pump (patch 295): with
+                                 FIST_FRAME_SCHEDULE (the oracle's sim steps per render) the INT-8s
+                                 are held (g_int8_replay, re_out/fist_vga.c) and fired here in the
+                                 oracle's number; an explicit spin-wait pump (a fade) still gets its
+                                 interrupts (g_int8_force)
+
+The oracle's side is the patched DOSBox's FIST_REGTRACE at 0x11447/0x11454 (0291's returns, EAX =
+the draw), 0x1d275 (c0e5), 0x24288 (the INT-8 ISR), 0x158e4 (4754), 0x1346d (22dd), 0x13487 (the
+22f7 dispatch); tools/oracle/replay_sched.py turns its log into the seed and the three schedules,
+tools/oracle/replay_cmp.py sets the two draw streams against each other per sim step.  With the
+seed and the schedules the port draws the oracle's values as long as it draws the same number of
+times: the first differing step names the diverging code.  Run on AZER1 (oracle run 13, 45 s, 2726
+sim steps) it found the fourteen defects of patches 593-595, after which every draw and every
+object-table byte of the 2726 steps match the oracle's.
+
+--- a/fist.c
++++ b/fist.c
+@@ -4689,6 +4689,7 @@
+   *(uint16_t *)(g_mem + 0x1c000 + _p) = _v;
+   DAT_1000_c342 = (uint16_t)(_v - 1);                  /* ss:0x342 = 0x1c342 (the consumer reads DAT_1000_c342) */
+   (void)uVar1;(void)uVar2;
++  { extern void fist_rng_trace(unsigned short); fist_rng_trace((uint16_t)(_v - 1)); }   /* PATCH 592: FIST_RNGTRACE (board:0017) */
+   return (uint16_t)(_v - 1);
+   }
+ }
+@@ -9866,6 +9867,7 @@
+ {
+   undefined2 uVar1;
+ 
++  { extern void fist_render_trace(void); fist_render_trace(); }   /* PATCH 592: FIST_RNGTRACE (board:0017) */
+   /* PATCH 308: d548 is a SIGNED BYTE (asm 0x22dd `cmpb $1,[0x1548]; jl 0x2307`), not the 16-bit word.
+      The phase-complete handler 0x23ce does `orb $0x80,[0x1548]` -> d548 becomes 0x80..0xff (NEGATIVE);
+      Ghidra typed DAT_1000_d548 undefined2, so `'\0' < DAT_1000_d548` read the WORD (d549 in the high
+@@ -9881,7 +9883,9 @@
+          (DAT_2000_0a86), target = word[DGROUP:bx] (double indirection, DS=DGROUP=0x1c00).  Ghidra typed
+          0a86 int** so `*DAT_2000_0a86` wild-derefed the near-offset as a host pointer. */
+       (*(code *)fist_icall_near(0x0u,*(uint16_t *)(g_mem+0x1c000+(uint16_t)DAT_2000_0a86)))(uVar1);
++      { extern void fist_phase_trace(void); fist_phase_trace(); }   /* PATCH 592: FIST_RNGTRACE / the phase budget replay (board:0017) */
+     } while (DAT_1000_c450 != 0);
++    { extern void fist_render_end_trace(void); fist_render_end_trace(); }   /* PATCH 592 */
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(uVar1, 0);   /* PATCH 575: `pop bx ; lcall [0x554]` restores it */
+     return;
+   }
+@@ -13973,7 +13977,7 @@
+      * our substitute is one pump per OUTER iteration (one tick per rendered frame).  Placed in the OUTER
+      * loop, NOT the inner event drain -- the drain is gated by `for(;2ce2!=0;)`, skipped while [0x452] is
+      * frozen, so a pump there would deadlock.  This makes [0x452] advance and the flight-model SIM STEP run. */
+-    fist_timer_pump();
++    { extern void fist_frame_tick(void); fist_frame_tick(); }   /* PATCH 592: the pump, or the oracle's frame schedule (board:0017) */
+     FUN_0000_206f((undefined2)iVar2,param_1,param_3,param_4);  /* PATCH 513: AX is 16-bit */
+     LOCK();
+     UNLOCK();
+@@ -14255,6 +14259,7 @@
+ {
+   undefined1 in_CF = 0;
+   
++  { extern void fist_mission_trace(void); fist_mission_trace(); }   /* PATCH 592: FIST_RNGTRACE sync point (board:0017) */
+   FUN_0000_4779();
+   if (getenv("FIST_FSG_BATTLE")) {
+     /* PATCH 380: override the loaded battle filename so the .FSG harness can exercise ANY battle,
+@@ -33526,6 +33531,7 @@
+   int iVar1;
+   int *piVar2;
+   
++  { extern void fist_sim_trace(void); fist_sim_trace(); }   /* PATCH 592: FIST_RNGTRACE (board:0017) */
+   FUN_0000_4712();
+   DAT_2000_2cde = DAT_2000_2cde + 1;
+   FUN_0000_beb7(param_1);

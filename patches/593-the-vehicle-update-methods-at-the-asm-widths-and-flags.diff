@@ -1,0 +1,166 @@
+PATCH 593: the vehicle update methods at the asm's widths and flags -- 7d0f/8917's heading store,
+88e4/912d/98c3's slew and move flags, 8925's turret slew, b355's counter and throttle.
+
+board:0017 / board:0023 / board:0028.  Found by the seeded replay (patch 592) on AZER1 as the first
+object-table bytes that differ from the oracle's, each verified against its asm:
+
+  7d0f, 8917  `mov ax,[di+0x26] ; add ax,[di+0x89] ; mov [di+0x10],ax` -- a WORD.  Ghidra's 32-bit
+              store put the sum's high half over word[di+0x12] (c296's 0x28) every frame (step 26).
+  88e4, 912d, 98c3  the twins of 7cd5 (patch 245): a401/a395 return CF (`stc`/`clc` before `lret`),
+              read here as g_fist_cf.  Ghidra's dead `in_CF = 0` never marked the turret slew (+0xc5/
+              +0xc9/+0xc4) and marked the object MOVED (+0xec/+0xc8/+0xce,+0xd1, and 76e8) every frame
+              whether a395 had moved it or not: the oracle's enemies carry 0 in those bytes for the
+              first 26 steps, the port's carried 3.
+  8925        the M3's turret slew (asm 0x8925-0x8970), the twin of 7d1d (patch 426), all WORD:
+              [0x8b] = [0x9b] - [0x26]; err = [0x8b] - [0x89]; cwd/xor/sub abs; clamp 0x16c; add
+              WORD [di+0x89].  Ghidra's 32-bit fields and `>> 0xf` abs never converged: the port's
+              Bradleys spun their turrets (word[+0x89] = 0x238c where the oracle's is 0, step 26).
+  b355        `inc word [di+0x1b] ; test word [di+0x1b],0x3f ; mov ax,[di+0x1d] ; cmp ax,0x80 ; jbe ;
+              lcall 9caa ; dec word [di+0x1d]` -- WORDS.  Ghidra's 32-bit reads took bytes +0x1f/
+              +0x20 into the throttle compare and fired the type-0x11 child spawn (and its RNG draw)
+              at the fifth sim step, where the original's word 0 does not: the first divergence the
+              replay reported.
+
+--- a/fist.c
++++ b/fist.c
+@@ -22226,8 +22226,11 @@
+ void __allregs FUN_0000_7d0f(int param_1)
+ 
+ {
++  /* PATCH 593: `mov ax,[di+0x26] ; add ax,[di+0x89] ; mov [di+0x10],ax` -- a WORD; Ghidra's 32-bit
++   * store clobbered word[di+0x12] (0x28 from c296) with the sum's high half every frame (board:0023;
++   * found by the object-state diff against the oracle at sim step 26, board:0017). */
+   FUN_0000_7d1d(param_1);
+-  *(int *)(param_1 + 0x10) = *(int *)(param_1 + 0x26) + *(int *)(param_1 + 0x89);
++  *(uint16_t *)(param_1 + 0x10) = (uint16_t)(*(uint16_t *)(param_1 + 0x26) + *(uint16_t *)(param_1 + 0x89));
+   return;
+ }
+ 
+@@ -24341,14 +24344,17 @@
+ void __allregs FUN_0000_88e4(undefined2 param_1,int param_2)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
++  /* PATCH 593: the twin of 7cd5 (patch 245) for this vehicle type -- a401/a395 return CF via lret
++   * (stc/clc), threaded through g_fist_cf; Ghidra's dead `in_CF = 0` never marked the turret slew
++   * and marked the object MOVED (+ 76e8) every frame whether a395 moved it or not.  The oracle's
++   * enemies carry 0 in that byte for the first 26 steps of AZER1; the port's carried 3 (board:0017). */
++  extern unsigned char g_fist_cf;
+   FUN_1000_a401(param_2);
+-  if ((bool)in_CF) {
++  if ((bool)g_fist_cf) {
+     *(undefined1 *)(param_2 + 0xc5) = 3;
+   }
+   FUN_1000_a395(param_2);
+-  if (!(bool)in_CF) {
++  if (!(bool)g_fist_cf) {
+     *(undefined1 *)(param_2 + 0xec) = 3;
+     FUN_0000_76e8();
+   }
+@@ -24364,8 +24370,11 @@
+ void __allregs FUN_0000_8917(int param_1)
+ 
+ {
++  /* PATCH 593: `mov ax,[di+0x26] ; add ax,[di+0x89] ; mov [di+0x10],ax` -- a WORD; Ghidra's 32-bit
++   * store clobbered word[di+0x12] (0x28 from c296) with the sum's high half every frame (board:0023;
++   * found by the object-state diff against the oracle at sim step 26, board:0017). */
+   FUN_0000_8925(param_1);
+-  *(int *)(param_1 + 0x10) = *(int *)(param_1 + 0x26) + *(int *)(param_1 + 0x89);
++  *(uint16_t *)(param_1 + 0x10) = (uint16_t)(*(uint16_t *)(param_1 + 0x26) + *(uint16_t *)(param_1 + 0x89));
+   return;
+ }
+ 
+@@ -24377,17 +24386,20 @@
+ {
+   uint uVar1;
+   int iVar2;
+-  uint uVar3;
+   
+-  if (*(int *)(param_1 + 0x97) != 0) {
+-    *(int *)(param_1 + 0x8b) = *(int *)(param_1 + 0x9b) - *(int *)(param_1 + 0x26);
++  /* PATCH 593: the M3's TURRET SLEW (asm 0x8925-0x8970) -- the twin of 7d1d, all WORD (patch 426):
++   * [0x8b]=[0x9b]-[0x26]; err=[0x8b]-[0x89]; cwd/xor/sub 16-bit abs; clamp to 0x16c; add WORD[di+0x89].
++   * Ghidra's 32-bit fields and `>> 0xf` abs never converged; the port's Bradleys spun their turrets
++   * (word[+0x89] = 0x238c where the oracle's is 0 at sim step 26, board:0017). */
++  if (*(short *)(param_1 + 0x97) != 0) {
++    *(short *)(param_1 + 0x8b) = *(short *)(param_1 + 0x9b) - *(short *)(param_1 + 0x26);
+   }
+-  uVar1 = *(int *)(param_1 + 0x8b) - *(int *)(param_1 + 0x89);
+-  uVar3 = (int)uVar1 >> 0xf;
+-  uVar1 = (uVar1 ^ uVar3) - uVar3;
+-  iVar2 = ((uVar1 - 0x16c & -(uint)(uVar1 < 0x16c)) + 0x16c ^ uVar3) - uVar3;
++  iVar2 = (short)(*(short *)(param_1 + 0x8b) - *(short *)(param_1 + 0x89));
++  uVar1 = (iVar2 < 0) ? -iVar2 : iVar2;
++  if (0x16c <= (int)uVar1) uVar1 = 0x16c;
++  iVar2 = (short)((iVar2 < 0) ? -(int)uVar1 : (int)uVar1);
+   if (iVar2 != 0) {
+-    *(int *)(param_1 + 0x89) = *(int *)(param_1 + 0x89) + iVar2;
++    *(short *)(param_1 + 0x89) = *(short *)(param_1 + 0x89) + iVar2;
+     *(undefined1 *)(param_1 + 0xec) = 3;
+     FUN_0000_76e8();
+   }
+@@ -25766,14 +25778,17 @@
+ void __allregs FUN_0000_912d(undefined2 param_1,int param_2)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
++  /* PATCH 593: the twin of 7cd5 (patch 245) for this vehicle type -- a401/a395 return CF via lret
++   * (stc/clc), threaded through g_fist_cf; Ghidra's dead `in_CF = 0` never marked the turret slew
++   * and marked the object MOVED (+ 76e8) every frame whether a395 moved it or not.  The oracle's
++   * enemies carry 0 in that byte for the first 26 steps of AZER1; the port's carried 3 (board:0017). */
++  extern unsigned char g_fist_cf;
+   FUN_1000_a401(param_2);
+-  if ((bool)in_CF) {
++  if ((bool)g_fist_cf) {
+     *(undefined1 *)(param_2 + 0xc9) = 3;
+   }
+   FUN_1000_a395(param_2);
+-  if (!(bool)in_CF) {
++  if (!(bool)g_fist_cf) {
+     *(undefined1 *)(param_2 + 200) = 3;
+     FUN_0000_76e8();
+   }
+@@ -27059,14 +27074,17 @@
+ void __allregs FUN_0000_98c3(undefined2 param_1,int param_2)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
++  /* PATCH 593: the twin of 7cd5 (patch 245) for this vehicle type -- a401/a395 return CF via lret
++   * (stc/clc), threaded through g_fist_cf; Ghidra's dead `in_CF = 0` never marked the turret slew
++   * and marked the object MOVED (+ 76e8) every frame whether a395 moved it or not.  The oracle's
++   * enemies carry 0 in that byte for the first 26 steps of AZER1; the port's carried 3 (board:0017). */
++  extern unsigned char g_fist_cf;
+   FUN_1000_a401(param_2);
+-  if ((bool)in_CF) {
++  if ((bool)g_fist_cf) {
+     *(undefined1 *)(param_2 + 0xc4) = 3;
+   }
+   FUN_1000_a395(param_2);
+-  if (!(bool)in_CF) {
++  if (!(bool)g_fist_cf) {
+     *(undefined1 *)(param_2 + 0xce) = 3;
+     *(undefined1 *)(param_2 + 0xd1) = 3;
+     FUN_0000_76e8();
+@@ -31498,10 +31516,15 @@
+    * verbatim).  Simple template: increment [di+0x1b] counter, throttle [di+0x1d] via ext 9caa, clear
+    * state bits when [di+0x19]==1.  Mission-cascade only. */
+   param_2 = (int)(intptr_t)((unsigned char *)g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_1);
+-  *(int *)(param_2 + 0x1b) = *(int *)(param_2 + 0x1b) + 1;
+-  if (((*(uint *)(param_2 + 0x1b) & 0x3f) == 0) && (0x80 < *(uint *)(param_2 + 0x1d))) {
+-    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(uint *)(param_2 + 0x1d)),(int)(uint16_t)(uintptr_t)param_1);  /* PATCH 462: di near-offset */
+-    *(int *)(param_2 + 0x1d) = *(int *)(param_2 + 0x1d) + -1;
++  /* PATCH 593: the counter and the throttle are WORDS -- `inc word [di+0x1b] ; test word [di+0x1b],0x3f ;
++   * mov ax,[di+0x1d] ; cmp ax,0x80 ; jbe ; lcall 9caa ; dec word [di+0x1d]`.  Ghidra read and wrote
++   * them as 32-bit ints: the throttle compare took bytes +0x1f/+0x20 along and fired the type-0x11
++   * child spawn (and its RNG draw) at the fifth sim step of AZER1 where the original's word 0 does not
++   * -- the first divergence the seeded RNG replay (patch 591, board:0017) reported. */
++  *(uint16_t *)(param_2 + 0x1b) = (uint16_t)(*(uint16_t *)(param_2 + 0x1b) + 1);
++  if (((*(uint16_t *)(param_2 + 0x1b) & 0x3f) == 0) && (0x80 < *(uint16_t *)(param_2 + 0x1d))) {
++    FUN_1000_9caa(CONCAT22((int)((ulong)param_1 >> 0x10),*(uint16_t *)(param_2 + 0x1d)),(int)(uint16_t)(uintptr_t)param_1);  /* PATCH 462: di near-offset */
++    *(uint16_t *)(param_2 + 0x1d) = (uint16_t)(*(uint16_t *)(param_2 + 0x1d) - 1);
+   }
+   if (*(char *)(param_2 + 0x19) == '\x01') {
+     *(byte *)(param_2 + 0x16) = *(byte *)(param_2 + 0x16) & 0xf9;

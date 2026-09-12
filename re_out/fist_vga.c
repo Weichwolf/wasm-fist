@@ -110,11 +110,13 @@ unsigned long long fist_pit0_next_wrap(void){ unsigned p = pit_period(0);
     unsigned long long e = g_clock - g_pit_base[0]; return g_pit_base[0] + (e / p + 1) * p; }
 /* Step the clock to `target`, firing the channel-0 interrupt at every wrap on the way (the ISR may
  * re-program the channel, which restarts the count from that instant, as on the 8253). */
+int g_int8_replay;   /* board:0017 FIST_FRAME_SCHEDULE: the INT-8s come from the schedule, not the clock */
+int g_int8_force;    /* ... except from an explicit spin-wait pump (a fade, a delay): those need the interrupt */
 void fist_clock_advance_to(unsigned long long target){
     extern void fist_int8_fire(void);
     while (g_clock < target) {
         unsigned long long w = fist_pit0_next_wrap();
-        if (w <= target) { g_clock = w; fist_int8_fire(); }
+        if (w <= target) { g_clock = w; if (!g_int8_replay || g_int8_force) fist_int8_fire(); }
         else g_clock = target;
     }
 }

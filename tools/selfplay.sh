@@ -84,7 +84,11 @@ run_one() {  # $1=target $2=mission -> prints "STATE|outcome-code|secs"
   elif [ -n "$line" ];                                     then st=UNRESOLVED
   else                                                          st=CRASH
   fi
-  printf '%s|%s|%s' "$st" "$code" "$t1"
+  # the engine's tick at the verdict and the player's vehicle type, for the census (board:0017)
+  local tick ptype
+  tick="$(grep -m1 'mission resolved' "$out" 2>/dev/null | sed -n 's/.*\[0x452\]=\([0-9]*\).*/\1/p')"
+  ptype="$(printf '%s' "$line" | sed -n 's/.*player=[0-9a-f]*(type=\([0-9a-f]*\).*/\1/p')"
+  printf '%s|%s|%s|%s|%s' "$st" "$code" "$t1" "${tick:--}" "${ptype:--}"
 }
 
 printf '=== self-play sweep: target=%s missions=%d budget=%ss jobs=%s ===\n' \
@@ -109,18 +113,18 @@ wait
 pass=0; fail=0; declare -a failed=()
 for m in "${missions[@]}"; do
   if [ "$TARGET" = both ]; then
-    IFS='|' read -r ns nm nt < <(sed -n 1p "$TMP/res.$m")
-    IFS='|' read -r ws wm wt < <(sed -n 2p "$TMP/res.$m")
-    if [ "$ns" = RESOLVED ] && [ "$ws" = RESOLVED ] && [ "$nm" = "$wm" ]; then
-      printf '  %-10s RESOLVED   both (code=%s)  %ss/%ss\n' "$m" "$nm" "$nt" "$wt"; pass=$((pass+1))
+    IFS='|' read -r ns nm nt nk np < <(sed -n 1p "$TMP/res.$m")
+    IFS='|' read -r ws wm wt wk wp < <(sed -n 2p "$TMP/res.$m")
+    if [ "$ns" = RESOLVED ] && [ "$ws" = RESOLVED ] && [ "$nm" = "$wm" ] && [ "$nk" = "$wk" ]; then
+      printf '  %-10s RESOLVED   both (code=%s tick=%s type=%s)  %ss/%ss\n' "$m" "$nm" "$nk" "$np" "$nt" "$wt"; pass=$((pass+1))
     else
-      printf '  %-10s native=%-10s(code=%s) wasm=%-10s(code=%s)  %ss/%ss\n' "$m" "$ns" "$nm" "$ws" "$wm" "$nt" "$wt"
+      printf '  %-10s native=%-10s(code=%s tick=%s) wasm=%-10s(code=%s tick=%s)  %ss/%ss\n' "$m" "$ns" "$nm" "$nk" "$ws" "$wm" "$wk" "$nt" "$wt"
       fail=$((fail+1)); failed+=("$m")
     fi
   else
-    IFS='|' read -r s mn tt < <(sed -n 1p "$TMP/res.$m")
+    IFS='|' read -r s mn tt tk tp < <(sed -n 1p "$TMP/res.$m")
     if [ "$s" = RESOLVED ]; then
-      printf '  %-10s RESOLVED   (code=%s)  %ss\n' "$m" "$mn" "$tt"; pass=$((pass+1))
+      printf '  %-10s RESOLVED   (code=%s tick=%s type=%s)  %ss\n' "$m" "$mn" "$tk" "$tp" "$tt"; pass=$((pass+1))
     else
       printf '  %-10s %-10s (code=%s)  %ss\n' "$m" "$s" "$mn" "$tt"; fail=$((fail+1)); failed+=("$m")
     fi

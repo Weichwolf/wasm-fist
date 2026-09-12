@@ -245,6 +245,10 @@ code *fist_icall_far(uint32_t farptr)
 /* NEAR call [mem]: only the offset is stored; the segment is the caller's CS (passed by the site). */
 code *fist_icall_near(uint16_t seg, uint16_t off)
 {
+    /* board:0017 FIST_RNG_SCHEDULE: the scheduler poll's LFSR step (3920 -> [0x3a] = 0291) is replayed
+     * from the oracle's per-sim-step poll counts instead (fist_sim_trace); the live poll steps nothing. */
+    { extern int g_rng_sched_active; extern int fist_rng_noop(void); extern void fist_poll_trace(void);
+      if (seg == 0 && off == 0x291) { fist_poll_trace(); if (g_rng_sched_active) return (code *)fist_rng_noop; } }
     /* FIST_UPDCNT (diagnostic, default OFF): count near-dispatches to the per-vehicle-type UPDATE methods
      * (7c1d=M1 87df=M3 902c=AH-64 97d5=T80) that c0e5's per-frame object-update walk fires. If the count
      * stays 0 in-mission, the sim (c0e5) is not advancing -> the turret slew / unit movement is frozen. */

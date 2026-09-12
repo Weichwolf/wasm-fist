@@ -1,0 +1,121 @@
+PATCH 595: the projectile class -- c64a keeps the original's un-restored heading flip, b5e7 passes
+near offsets and the hit aspect, b39c multiplies in 16 bits.
+
+board:0017.  Found by the seeded replay (patch 592) on AZER1, each verified against its asm and,
+for c64a, against the oracle's write trace:
+
+  c64a, c8e8  the ORIGINAL's bug, kept.  c64a draws a shell with `addw $0x8000,0x10(%si) ; call c8e8 ;
+              addw $0x8000,0x10(%si)`, and c8e8 leaves SI advanced past the bytes its `rep movsb`
+              copied (si + word[type*2-0x1b58] + count): the second add does NOT restore the heading
+              it flipped, it adds 0x8000 to the word at the advanced SI + 0x10 (word[obj+0x2b] for a
+              type-0xb shell).  The heading stays flipped by 180 degrees after every frame the shell
+              is drawn in, and the guided shell's seeker (addb's cone test on word[+0x10]) keeps or
+              loses its lock by the parity of the frames drawn.  The oracle's FIST_WATCHPHYS trace
+              shows exactly this (1119:c659 -> +0x10, 1119:c667 -> +0x2c's high byte, every frame);
+              the port had restored +0x10 and diverged at the first guided shot.  c8e8 publishes its
+              exit SI (g_fist_c8e8_si), c64a's second add reads it.
+  b5e7        `call ba33` and `lcall 0f69:bcc4 (b354)` take DI = the object's NEAR offset: ba33/ba5d
+              read the parent at DGROUP:di (the host pointer truncated to 16 bits placed the explosion
+              at garbage), b354 matches the offset against the display table (the host pointer never
+              matched, b2ef(-1) wrote below the table and the spent shell was never removed -- it hit
+              again the next step).  On the destruct branch SI is bb1b's exit register = the HIT
+              object (bb1b walks the display table and stores the match at [0x9a25] on its stc exit),
+              not the c0e5 cursor patch 335 took it for: [0x9bd7] = (-shell.heading - target.heading)
+              >> 12 is the hit ASPECT b39c indexes the armour table with (the cursor's word gave a
+              random armour byte: the T-80's damage byte 0x27 for the original's 0x25, step 353).
+  b39c        each `imul dx,ax ; shr ax,8` keeps the LOW 16 bits of the product before the shift;
+              the third product (the damage x the 0x9606 scale) passes 0xffff routinely and the port's
+              32-bit products gave the T-80 0x27 where the original's byte took 0x25 (step 353).
+
+--- a/fist.c
++++ b/fist.c
+@@ -31951,7 +31951,7 @@
+           param_3 = CONCAT22(p3hi, (uint16_t)(w0 * 2));               /* b6a5 shl bx,1 -> param_3 low */
+           uv2 = *(uint16_t *)(dg + (uint16_t)(w0 * 2 - 0x6423));      /* b6a7 mov ax,[bx-0x6423] */
+         }
+-        FUN_0000_ba33(uv2, (int)(intptr_t)obj);                       /* b6b5 call ba33 (ax=uv2, di=object) */
++        FUN_0000_ba33(uv2, (int)di);                                  /* b6b5 call ba33 (ax=uv2, di=object) -- PATCH 595: the NEAR offset (ba33/ba5d read the parent at DGROUP:di; the host pointer truncated to 16 bits placed the explosion at garbage) */
+         FUN_0000_be8b(0xf, param_3);                                  /* b6b8 ax=0xf; call be8b */
+       } else {                                                        /* b643 destruct branch */
+         if (*(uint16_t *)(obj + 0x23) != 0) {                         /* b643 cmpw [di+0x23],0; jne b64f */
+@@ -31962,7 +31962,12 @@
+         if (!(unsigned char)g_fist_cf) return;                        /* b64c jb b653 (CF=0 -> b64e ret) */
+         if (*(uint16_t *)(obj + 0x27) == DAT_2000_5a25) return;       /* b653 cmp [di+0x27],[0x9a25]; je ret */
+         {
+-          uint16_t si = g_fist_c0e5_si;                               /* live c0e5 cursor (SI) */
++          /* PATCH 595: SI here is bb1b's exit register = the HIT object (bb1b walks the display table
++           * and leaves the match in SI, storing it at [0x9a25] on its stc exit) -- not the c0e5 cursor
++           * patch 335 took it for.  [0x9bd7] = (-shell.heading - target.heading) >> 12 is the hit
++           * ASPECT that indexes the armour table in b39c; the cursor's word gave a random armour byte
++           * (the T-80's damage byte 0x27 for the original's 0x25 -- board:0017, step 353). */
++          uint16_t si = (uint16_t)DAT_2000_5a25;                      /* bb1b's SI = word[0x9a25] */
+           DAT_2000_5bd7 = (uint16_t)((uint16_t)(- *(int16_t *)(obj + 0x10)
+                               - *(int16_t *)(dg + (uint16_t)(si + 0x10))) >> 0xc); /* b65c-b667 */
+         }
+@@ -31976,12 +31981,12 @@
+           FUN_0000_bfce(uv2);                                         /* b688 call bfce */
+           uv2 = 0x9c4d;                                               /* b68c */
+         }
+-        FUN_0000_ba33(uv2, (int)(intptr_t)obj);                       /* b6b5 call ba33 */
++        FUN_0000_ba33(uv2, (int)di);                                  /* b6b5 call ba33 -- PATCH 595: the NEAR offset (see above) */
+         FUN_0000_be8b(0xf, param_3);                                  /* b6b8 be8b */
+       }
+     }
+     {
+-      int iv1 = FUN_1000_b354((int)(intptr_t)obj);                    /* b6be lcall 0xf69:0xbcc4 (di=object) */
++      int iv1 = FUN_1000_b354((int)di);   /* b6be lcall 0xf69:0xbcc4 (di=object) -- PATCH 595: b354 matches the NEAR offset against the display table; the host pointer never matched, b2ef(-1) wrote below the table and the spent shell was never removed (it hit again next step, board:0017) */
+       FUN_1000_b2ef(iv1);                                             /* b6c3 lcall 0xf69:0xbc5f */
+     }
+   }
+@@ -34608,7 +34613,16 @@
+   }
+   *(unsigned short *)(dg + (unsigned short)(si + 0x10)) += 0x8000;
+   FUN_0000_c8e8((int)g_fist_render_dx,0x1e,0,(int)si,0);
+-  *(unsigned short *)(dg + (unsigned short)(si + 0x10)) += 0x8000;
++  /* PATCH 595: the ORIGINAL's bug, kept.  c8e8 leaves SI advanced past the bytes its `rep movsb`
++   * copied (si + word[type*2-0x1b58] + count), and c667's `addw $0x8000,0x10(%si)` therefore does NOT
++   * restore the heading it flipped at c659: it adds 0x8000 to the word at the advanced SI + 0x10
++   * (word[obj+0x2b] for a type-0xb shell) and the object's heading stays flipped by 180 degrees
++   * after every frame it is drawn in -- the guided shell's seeker (addb's cone test on word[+0x10])
++   * then keeps or loses its lock by the parity of the frames drawn.  The oracle's write trace shows
++   * exactly this (1119:c659 -> +0x10, 1119:c667 -> +0x2c high byte, every frame); the port had
++   * restored +0x10 and diverged from the original at the first guided shot (board:0017). */
++  { extern unsigned short g_fist_c8e8_si;
++    *(unsigned short *)(dg + (unsigned short)(g_fist_c8e8_si + 0x10)) += 0x8000; }
+   g_fist_cf = 0;
+   return;
+ }
+@@ -35279,6 +35293,7 @@
+   for (unsigned i = 0; i < cnt; i++)
+     *(uint8_t *)(dg + (uint16_t)(di + i)) = *(uint8_t *)(dg + (uint16_t)(src + i));
+   g_fist_render_di = (uint16_t)(di + cnt);
++  { extern unsigned short g_fist_c8e8_si; g_fist_c8e8_si = (uint16_t)(src + cnt); }   /* PATCH 595: the SI the `rep movsb` leaves (c64a's second add reads it) */
+   g_fist_cf = 0;
+   return;
+ }
+@@ -69530,18 +69545,21 @@
+   siB = *(unsigned short *)(dg + (unsigned short)(si + 0xe3b8));   /* table B */
+   bx = *(unsigned short *)(dg + (unsigned short)(bx0 + siB));      /* damage-record base */
+   bx = (unsigned short)(bx + ax0);                                /* += param_1 -> record near offset */
++  /* PATCH 595: each `imul dx,ax ; shr ax,8` keeps the LOW 16 bits of the product before the shift --
++   * the third product (the damage x the 0x9606 scale) passes 0xffff routinely and the port's full
++   * 32-bit products gave the T-80 a 0x27 where the original's byte took 0x25 (board:0017, step 353). */
+   ax = (unsigned int)FUN_0000_b26a() & 0xff;                      /* random */
+   dx = dg[(unsigned short)(bx + 1)];
+-  ax = (ax * dx) >> 8;
++  ax = (uint16_t)(ax * dx) >> 8;
+   dx = (unsigned int)dg[(unsigned short)bx] + 1;
+-  ax = ax + dx;
++  ax = (uint16_t)(ax + dx);
+   dx = dg[(unsigned short)(bxA + (unsigned short)DAT_2000_5bd7)]; /* armour table [bxA + DAT_5bd7] */
+-  ax = (ax * dx) >> 8;
++  ax = (uint16_t)(ax * dx) >> 8;
+   DAT_2000_5606 = DAT_2000_a3ae;
+   if ((dg[(unsigned short)((unsigned short)DAT_2000_a3b2 + 0x16)] & 8) != 0) {
+     DAT_2000_5606 = DAT_2000_a3b0;
+   }
+-  ax = (ax * (unsigned int)(unsigned short)DAT_2000_5606) >> 8;
++  ax = (uint16_t)(ax * (unsigned int)(unsigned short)DAT_2000_5606) >> 8;
+   al = (unsigned char)ax;
+   oldv = dg[(unsigned short)(di + 0x3a)];
+   {

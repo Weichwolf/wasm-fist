@@ -1,0 +1,52 @@
+PATCH 591: the MEMMGR relocators 0dc2/0ecb return ES = the first free node, the node 0a31 then
+carves the request from.
+
+board:0025.  Both block movers end with `mov es,[bp+0xc] ; mov es,es:[0xc]` (0x10ebd, 0x10f72): ES
+leaves as the free list's first node.  The allocator's compaction step (0x10a9a-0x10aac: `call 0bef
+; jb fail ; cmp es:[4],ax ; jb split ; je exact`) sizes THAT node and splits the request off it
+(0x10b1a: `mov ax,es:[0] ; add ax,cx ; mov es:[0],ax ; sub es:[4],cx`).  The port's 0dc2 and 0ecb
+(patch 188) left g_mm_es at the node they had just relocated -- the ES of the bx=2 notify call --
+so 0a31 sized the moved block, found it large enough, and carved the request from its head: the
+block's node shrank by the request and its paragraph moved up by it while its owner (the resource
+descriptor, its sprite directory entries) still named the old paragraph, now the new block's.
+
+UKRAINE2 (sweep 590, the click-shift 0/1 timings): at t=1216 the render's 22496-byte allocation
+(23be <- 2322 <- 22dd) took the compaction path, 0ecb moved the MSPRITE2 sheet (0x90e paragraphs,
+descriptor 0x8f82) from 0x7af1 to 0x79f5, 0a31 then split 0x57e paragraphs off it: node base
+0x7f73, size 0x390, directory entries still 0x79f5 (gdb watchpoints on the node's base/size words,
+the descriptor and directory entry 0x460).  22 seconds later the cockpit blitted sprite 0x460
+from the paragraph the 0x156c surface had meanwhile been given -- SIGSEGV in MGA 26de <- 26a1 <-
+8243.  The shared tail (0x10d9e) publishes the same ES for 0bef's `mov cx,es:[0]` after a CF=1
+return, which was reading the walker's own stale copy.
+
+--- a/fist.c
++++ b/fist.c
+@@ -45152,6 +45152,10 @@
+     g_mm_ds = cur; FUN_1000_0cce(save_cx, (int)(uintptr_t)(g_mem + 0x1c000 + 0x16d4), 0);
+     g_mm_ds = cur; g_mm_es = cur; FUN_1000_1019(2); /* relocation-notify hook bx=2 */
+     FUN_1000_0f80();                    /* debug (gated off) */
++    /* PATCH 591: 0x10ebd `mov es,[bp+0xc] ; mov es,es:[0xc]` -- ES leaves as the FIRST FREE NODE, the
++       node 0a31's `cmp es:[4],ax ; jb split` (0x10aa7) carves the request from.  The port left g_mm_es at
++       the relocated node (the 1019 bx=2 call's ES): 0a31 then split the block it had just moved. */
++    g_mm_es = NODE16(SS16(0x16e0), 0x0c);
+     g_mm_zf = (save_next == 0); g_mm_ds = save_next; g_mm_cf = 0; /* or ax,ax; mov ds,ax; ret CF=0 */
+     return 0;
+   }
+@@ -45160,7 +45164,8 @@
+   ax = SS16(0x29e);
+   if (ax != 0) NODE8(ax, 0xbda) = 0x58;      /* movb es:[0xbda],0x58 when ss:[0x29e]!=0 */
+   es = SS16(0x16e0);
+-  es = NODE16(es, 0x0c);                      /* es = es:[0xc] (side effect only) */
++  es = NODE16(es, 0x0c);                      /* es = es:[0xc] (the first free node) */
++  g_mm_es = es;                                /* PATCH 591: published -- 0bef reads es:[0] after the CF=1 return */
+   ax = NODE16(ds, 0x0c);                       /* ax = ds:[0xc] (successor node seg) */
+   g_mm_zf = (ax == 0);                         /* or ax,ax -> ZF */
+   g_mm_ds = ax;                                /* mov ds,ax */
+@@ -45233,6 +45238,7 @@
+   ds = save_ds;                          /* pop ds (curnode) @0x10f64 */
+   g_mm_ds = ds; g_mm_es = ds; FUN_1000_1019(2);        /* notify hook bx=2 */
+   FUN_1000_0f80();
++  g_mm_es = MM_S16(MM_ABS16(0x16e0), 0x0c);   /* PATCH 591: 0x10f72 mov es,[bp+0xc] ; mov es,es:[0xc] (first free node) */
+   g_mm_zf = (save_next == 0); g_mm_ds = save_next; g_mm_cf = 0;  /* or ax,ax; mov ds,ax; ret CF=0 */
+   return save_next;
+ }

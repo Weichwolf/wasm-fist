@@ -162,3 +162,15 @@ needs the containing functions read in full, not a triage verdict, so it is left
 DONE when: every `undefined4` above is either corrected by an asm-verified patch or shown to be
 genuinely 32-bit, DGROUP:0x1f91/0x1f92 are un-merged as described, and the byte-only tail with dead
 successors is either narrowed or explicitly accepted with the reason recorded.
+
+## Found by the seeded replay (board:0017, patches 593-595)
+
+The oracle-replay instrument compares the object tables byte for byte at every sim step, and the
+first differing byte of each divergence was a width: 7d0f/8917's heading store (`mov [di+0x10],ax`,
+a word; Ghidra's int store clobbered word[+0x12]), 8925's turret slew (all word, like 7d1d), b355's
+counter and throttle (`inc word [di+0x1b]`, `mov ax,[di+0x1d]`; the int reads took bytes +0x1f/+0x20
+along), b059's bearing difference and its two `movsx eax,[di+0x59/0x5b] ; shl eax,3` lanes, b39c's
+three `imul dx,ax ; shr ax,8` products (the LOW 16 bits before the shift -- the third passes 0xffff
+routinely), and a265's word[+0x99] built from CH of 0578's exit CX.  Each is in its patch with the
+asm; the method (a byte-for-byte object diff against the original at the first divergent step) is
+the width audit's instrument from here: it finds the widths that matter in the order they matter.

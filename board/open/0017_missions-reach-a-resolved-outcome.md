@@ -1495,3 +1495,53 @@ each frame with its registers, board:0014) changes the AZER1 trajectory again --
 2100 is 002 where it was 089 -- while the DEFEAT stays at 5357 (5358 before): the object-render pass
 and the reticle test 403f now see the surface they were meant to; which trajectory is the original's
 is the congruence run's question, not the sweep's.
+
+## The seeded replay: the port draws the oracle's numbers (patches 592-595)
+
+The comparison the section above asked for exists.  The patched DOSBox's FIST_REGTRACE reports the
+original's seams -- 0291's returns (EAX = the draw), the INT-8 ISR, c0e5 (the sim step), the 3920
+poll trampoline, 4754 (the battle load), 22dd (the render) and its 22f7 phase dispatches -- and
+dumps the DGROUP window at every sim step (`tools/oracle/replay_capture.sh`).  From that log
+`tools/oracle/replay_sched.py` recovers the LFSR state at the battle load (the last four draws
+before it: state word = draw + 1) and three schedules: polls per sim step, sim steps per render,
+phase dispatches per render.  The port (patch 592: five one-line hooks at 0291, c0e5, 4754, 22dd
+and 459a's pump, all inert without their variables) seeds the LFSR with that state, mutes its own
+scheduler poll and steps the schedule's count before each sim step, holds the clock's INT-8s and
+fires the schedule's number before each frame, and zeroes the render budget word[0x450] after the
+scheduled dispatches.  `tools/oracle/replay_run.sh` drives it; `replay_cmp.py` sets the two draw
+streams against each other per sim step and names each draw's caller on both sides;
+`replay_objdiff.py` compares the object tables of the two DGROUP windows at every step.
+
+The point of the exercise: with the same state and the same cadence the port draws the oracle's
+values as long as it draws the same NUMBER of times and stores the same bytes -- the first step
+whose draws or objects differ names the diverging code, with the register trace to read it against.
+On AZER1 (oracle run 13, 45 s, 2726 sim steps, scratch/oracle/regtrace_rng13) that found, in order:
+
+| step | what differed | the defect (patch) |
+|---|---|---|
+| 5 | a type-0x11 child spawned (an extra draw) | b355's counter/throttle read as 32-bit ints (593) |
+| 26 | word[+0x12] of every vehicle; the slew/move "3" bytes; word[+0x89] of the Bradleys | 7d0f/8917's 32-bit heading store; 88e4/912d/98c3's dead CF; 8925's 32-bit slew (593) |
+| 101 | word[+0x99] of every vehicle | a265's range word built from the height LUT instead of 0578's CX (594) |
+| 353 | the T-80's damage byte 0x27 for 0x25 | b5e7's hit aspect from the wrong SI; b39c's 32-bit products (595) |
+| 353 | the spent shell hit again | b5e7's host pointers where ba33/b354 take near offsets (595) |
+| 567 | the guided shell's lock, kept or lost by the parity of the frames drawn | c64a's second `addw $0x8000` restores nothing in the original -- c8e8 advances SI; kept as the original's bug (595) |
+| 1738 | the player's hull velocity, -30 for -29 | 05dd/05e2's 1.0 flag is the CARRY, tested one LSB early as the value (594) |
+| 1948 | every smoke child's y drift | 9a32 stored 03a9's magnitude as the wind's second lane (594) |
+| 2358 | word[+0x40] bit 3 of a blocked vehicle | b059's body: 32-bit reads, 16 of 32 result bits, the DX lane, a930's CF folded (594) |
+
+After 595 the 2726 steps replay with identical draws at every step and ZERO differing bytes in the
+object tables (the vehicles' render-bookkeeping bytes excluded, they are the renderer's and the
+render count is not replayed).  Verified from the tree: `replay_run.sh /tmp/fist_native AZER1
+<prefix> scratch/oracle/regtrace_rng13/regs.txt` -> "first differing step None"; `replay_objdiff.py`
+-> "scanned 2726 steps, 0 differing".
+
+What this does and does not establish.  It establishes that the sim -- the update methods, the
+projectiles, the trigonometry, the damage model, the RNG consumption -- computes what the original
+computes for 45 seconds of a mission, byte for byte, given the original's cadence.  It does not yet
+establish the cadence itself (the original's poll count per frame is CPU-speed-bound, its seed is
+the clock's -- board:0015's finding), nor the outcome: the run is 45 s of a mission the original
+resolves at 5:49.  The next measurement is the same replay over a capture that reaches the verdict
+(OC_WALL to the mission's end, ~350 s of oracle time, a 6 GB dump set at one window per step -- or
+the dumps every 10th step), which turns "the port is congruent for 2726 steps" into "the port
+resolves AZER1 as the original does, at the original's tick, given its cadence".  Then the sweep's
+verdicts can be read against the oracle's per mission.
