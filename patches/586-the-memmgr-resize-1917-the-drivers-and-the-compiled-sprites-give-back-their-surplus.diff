@@ -1,0 +1,118 @@
+PATCH 586: the MEMMGR resize DGROUP:0xd4 = 1917 -- the drivers' init and the compiled-sprite finalizer
+give their surplus paragraphs back, as the original's blocks show.
+
+board:0025 / board:0027.  DGROUP:0xd4 (0f69:2287, linear 0x11917) is `push ax ; call 1345 ; jb fail ;
+mov cx,ds ; mov ds,ax ; pop ax ; push cx ; call 0cce ; pop ds ; retf`: find the block owned by CX:BX,
+split its tail beyond AX paragraphs back onto the free list (0cce, patch 188).  Three callers, none
+of which the port had threaded:
+
+  MGAVIDEO init (driver asm 0x5e-0x74)   `mov ax,0x46a0 ; add ax,0xf ; rcr/shr x3 ; mov bx,0x3e4 ;
+         mov cx,ds ; lcall [0xd4]` -- after copying its five data templates out (f98b), the driver
+         keeps 0x46a of its 0x7ca paragraphs.  The port's init (patch 035) called it, but the linear
+         was routed to a sound-driver stand-in that searched for the 0x4fa work object and resized
+         nothing.  The oracle's MGAVIDEO block is 0x46a paragraphs; the port's was 0x7ca.
+  SOUNDDVR init (driver asm 0xae-0xb9)   `mov ax,0x413 ; sub ax,0 ; mov bx,0x4fa ; mov cx,ds ;
+         lcall [0xd4]` -- 0x413 of 0x434.  The port's call passed nothing.
+  MGAVIDEO 21d6 (asm 0x22a1-0x22b6)      the compiled-sprite finalizer of the cockpit-instrument
+         analyzer 2004: `mov ax,di ; add ax,0xf ; rcr/shr x3 ; lea bx,[bx] ; mov cx,ds ; lcall [0xd4]`
+         -- each 0xc00-byte scratch (2004's alloc1) shrinks to the compacted sprite: the oracle's
+         three M1 children are 0x20/0x15/0x18 paragraphs, the port's stayed 0xc0.  Arg-less before.
+
+  The heap the original has at the cockpit switch is the heap the port now has: with 14 KB of driver
+  image and 8 KB of scratch returned, the free tail at the switch is 32064 bytes, M2CON.MRL (26160)
+  loads into it, and the Bradley console renders as the oracle's 60-second frame (86 % of the console
+  rows pixel-identical; the rest is the AUTO CONTROL label, the radar and the dynamic instruments --
+  board:0027).  Before, the load ran the MEMMGR's out-of-memory path (board:0025) and the block was
+  handed to the next allocation.
+
+  The shim's fist_icall no longer routes 0x11917 to the stand-in (re_out/fist_icall.c; the stand-in and
+  its never-read g_snd_workobj_seg are gone from re_out/fist_sb.c).
+
+--- a/fist.c
++++ b/fist.c
+@@ -1740,6 +1740,7 @@
+ undefined4 __allregs FUN_1000_17e5(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4);
+ void __allregs FUN_1000_181a(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
+ void __allregs FUN_1000_182a(uint param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5,undefined2 param_6);
++uint __allregs FUN_1000_1917(unsigned short ax, unsigned short bx, unsigned short cx);   /* PATCH 586: the MEMMGR resize (DGROUP:0xd4) */
+ uint __allregs FUN_1000_184b(int param_1,uint param_2,undefined2 param_3,undefined2 *param_4,undefined2 param_5, undefined2 param_6);
+ void __allregs FUN_1000_18d1(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+ void __allregs FUN_1000_18e4(undefined2 param_1,undefined2 param_2,undefined2 param_3);
+@@ -46521,6 +46522,28 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_1000_1917) @ 1000:1917 ===== */
++
++uint __allregs FUN_1000_1917(unsigned short ax, unsigned short bx, unsigned short cx)
++
++{
++  /* PATCH 586: DGROUP:0xd4 = 0f69:2287 -- the MEMMGR RESIZE a driver calls at the end of its init to
++   * give back the part of its image it no longer needs: `push ax ; call 1345 ; jb fail ; mov cx,ds ;
++   * mov ds,ax ; pop ax ; push cx ; call 0cce ; pop ds ; retf` -- AX = the new size in paragraphs,
++   * CX:BX = the owner struct; 1345 finds the block, 0cce (patch 188) splits its tail back onto the
++   * free list.  MGAVIDEO's init asks for 0x46a of its 0x7ca paragraphs (struct 0x3e4), SOUNDDVR's for
++   * 0x413 of 0x434 (struct 0x4fa) -- the oracle's blocks are exactly that size.  The shim had routed
++   * the linear to a sound-driver stand-in that searched for 0x4fa and resized nothing, so both drivers
++   * kept their whole images: 14 KB less heap, and a mission that fills it (the second cockpit's console
++   * after the player's vehicle is lost) hit the swap path with no swap.  Unpromoted before. */
++  uint16_t node = (uint16_t)FUN_1000_1345(cx, bx);                 /* 11918 call 1345 (cx:bx owner) */
++  if (node == 0) { g_mm_cf = 1; return 0; }                        /* 1191b jb -> pop ax ; retf (CF=1) */
++  g_mm_ds = node;                                                  /* 1191f mov ds,ax */
++  FUN_1000_0cce(ax, 0, 0);                                         /* 11923 call 0cce (ax = new size) */
++  return (uint)node;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_1000_18d1) @ 1000:18d1 ===== */
+ 
+ void __allregs FUN_1000_18d1(undefined2 param_1,undefined2 param_2,undefined2 param_3)
+@@ -77878,6 +77901,7 @@
+   {0x1182au,(void*)&FUN_1000_182a},
+   {0x1184bu,(void*)&FUN_1000_184b},
+   {0x118d1u,(void*)&FUN_1000_18d1},
++  {0x11917u,(void*)&FUN_1000_1917},
+   {0x118e4u,(void*)&FUN_1000_18e4},
+   {0x1195du,(void*)&FUN_1000_195d},
+   {0x11a14u,(void*)&FUN_1000_1a14},
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -444,7 +444,9 @@
+       fist_apply_reloc_at((unsigned short)(fist_snd_base >> 4), 0xa, 1);
+       fist_apply_reloc_section(0xec, 1);   /* install DGROUP:0xd4=1917 / 0xf4=107a (si=0xec far) */
+       (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c0f4u)))(0);
+-      (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c0d4u)))(0);
++      /* PATCH 586: driver asm 0xae-0xb9 `mov ax,0x413 ; sub ax,0 ; mov bx,0x4fa ; mov cx,ds ; lcall [0xd4]`
++       * -- resize this driver's block (struct DGROUP:0x4fa) to 0x413 paragraphs (FUN_1000_1917). */
++      ((void (*)(unsigned, unsigned, unsigned))fist_icall_far(*(uint32_t *)(g_mem+0x1c0d4u)))(0x413, 0x4fa, 0x1c00);
+     }
+     }
+     return;
+@@ -503,7 +505,7 @@
+     if ((DAT_0000_005a == 0x2ba9) && (*(int *)0x0 == -0x343d)) {
+       (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c012u)))(0);
+       (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c0f4u)))(0);
+-      (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c0d4u)))(0);
++      ((void (*)(unsigned, unsigned, unsigned))fist_icall_far(*(uint32_t *)(g_mem+0x1c0d4u)))(0x413, 0x4fa, 0x1c00);   /* PATCH 586 */
+     }
+     return;
+   }
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -5167,7 +5167,15 @@
+     uVar4 = uVar4 >> 1;
+     if (uVar4 == 0) {
+       *out = 0;
+-      (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0d4)))();
++      /* PATCH 586: 22a1-22b6 `stosw ; pop ds ; pop bx ; mov ax,di ; add ax,0xf ; rcr/shr x3 ; mov cx,ds ;
++       * lcall [0xd4]` -- resize the child's block (bx = the child descriptor, cx = DGROUP) to the
++       * compacted sprite's paragraphs.  Arg-less before: with [0xd4] live (FUN_1000_1917) it would
++       * have resized whatever CX:BX the stack held; while it was uninstalled the 0xc00-byte buffers
++       * (2004's alloc1) stayed whole -- 3 x ~2.7 KB of the M1 cockpit's heap the original returns. */
++      { uint16_t di_bytes = (uint16_t)((uint8_t *)(out + 1) - (uint8_t *)(g_mem + ((uint32_t)uVar2 << 4)));
++        uint16_t childoff = (uint16_t)((uint8_t *)param_1 - (g_mem + 0x1c000));
++        ((void (*)(unsigned, unsigned, unsigned))fist_icall_far((uint32_t)(_DAT_1000_c0d4)))
++            ((unsigned)((di_bytes + 0xfu) >> 4), childoff, 0x1c00); }
+       return;
+     }
+     do {

@@ -93,6 +93,16 @@ int fist_ovl_register(const char *name, uint32_t base, uint32_t size)
     struct fist_ovl *o = &fist_ovl_tab[fist_ovl_n++];
     size_t k=0; for (; name[k] && k<sizeof(o->name)-1; ++k) o->name[k]=name[k]; o->name[k]=0;
     o->base = base; o->size = size; o->fmap = NULL; o->fmap_n = 0; o->base_slot = NULL;
+    /* A block the MEMMGR hands out INSIDE an earlier overlay's registered range proves that overlay's
+     * block ends there: the size recorded here is the load size, but a driver may shrink its own block
+     * afterwards (SOUNDDVR's init resizes to 0x413 paragraphs, 12 bytes short of its 0x413c-byte image,
+     * FUN_1000_1917), and the next load then lands right after it.  Clip, or the linear-range lookup in
+     * fist_icall resolves the new driver's entry inside the old one (MGAVIDEO 0x3e57:0009 ->
+     * "SOUNDDVR.DVR+0x4132", and the video driver never initialises). */
+    for (int i = 0; i < fist_ovl_n - 1; ++i) {
+        struct fist_ovl *e = &fist_ovl_tab[i];
+        if (base > e->base && base < e->base + e->size) e->size = base - e->base;
+    }
     for (const struct fist_ovl_known *w = fist_ovl_known; w->name; ++w){
         if (name_eq(w->name, o->name)){
             /* wire only if the driver unit is actually compiled in (weak-undefined -> NULL slots) */
@@ -166,11 +176,9 @@ code *fist_icall(uint32_t linear)
     /* Doug-Huffman extender service gate (e339's `lcall [DGROUP:0xea16]`) -> the shim handler. */
     if (linear == FIST_EXTGATE_LIN)
         return (code *)fist_extender_gate;
-    /* SOUND device-registration service fns UNRECOVERED by Ghidra -> loader-shim helpers (iter 8).
-     * The driver init FUN_0000_0078 calls DGROUP:0xd4 (=0xf69:0x2287=0x11917=FUN_1000_1917 owner-tag
-     * MEMMGR search) and DGROUP:0xf4 (=0xf69:0x19ea=0x1107a=FUN_1000_107a IRQ/timer-ISR register).
-     * See fist_sb.c + docs/audio.md §14. */
-    if (linear == 0x11917) { extern void fist_snd_1917(void); return (code *)fist_snd_1917; }
+    /* The IRQ/timer-ISR register the drivers call through DGROUP:0xf4 (=0xf69:0x19ea=0x1107a) -- the
+     * shim owns the PIT/INT-8 layer, so the chain splice is its (fist_sb.c).  DGROUP:0xd4 (0x11917)
+     * is the MEMMGR resize, FUN_1000_1917 in the engine's fmap since patch 586. */
     if (linear == 0x1107a) { extern void fist_snd_107a(void); return (code *)fist_snd_107a; }
     /* MULTI-MODULE: a target inside a loaded overlay's range -> that module's FUN via its fmap. */
     for (int i = 0; i < fist_ovl_n; ++i) {

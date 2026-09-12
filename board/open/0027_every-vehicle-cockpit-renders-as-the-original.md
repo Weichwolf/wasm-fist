@@ -38,3 +38,23 @@ original's order (500f 5087 5fca 466c 7ea6 1cdb 77c3 7eb7 7f19 bedc 7f5f 84c3 03
 85bd 842d 8463 83df, gdb-traced) and the decoder 0340 is byte-exact on M2CON.MRL (a Python PackBits
 of the file equals the oracle's static console pixels); what it decodes is the sprite records 2004
 wrote over the stream.  Blocked on 0025's swap.
+
+Unblocked by the MEMMGR resize (patch 586, board:0025): the heap the original has at the switch is
+the heap the port has, M2CON.MRL loads into the free tail, the Bradley console renders.  Patch 587
+then took the four Bradley paint methods that still carried Ghidra's arguments (82ee's fill, 852f's
+label and its AH background byte, 862b's needles, 8682's mirrored glyph).  82ee's was the last static
+artefact: `xor al,al ; lea bx,[bx+4] ; lcall [0x60a]` passed as `(0)` fills a rect read from
+DGROUP:0 in a stack colour -- four full-height columns of index 224 every 64 pixels over the whole
+cockpit (a gdb watchpoint on (118,150) named MGA 1091 <- 82ee).
+
+Measured on the tick-2100 AZER1 frame against the oracle's 60-second frame (scratch/oracle/watch_c252,
+the two are not the same instant): columns 0..255 of the console rows differ only in the TEMP/OIL
+needles (rows 131-135), the compass strip (rows 111-124, cols 156-169), a 25-pixel gauge pointer at
+(83..89, 104..108), the mouse pointer the scripted run parks at (40,186) (MGA 0db8/0e3b, the cursor
+save/restore -- not the console), and the map inset's frame at cols 243-255; columns 256..319 are the
+map inset and the radar (dynamic).  What remains for the Bradley is the tick-aligned oracle
+comparison (board:0017's congruence run) for the dynamic instruments and the radar sweep; then the
+T-80 and the helicopters.  The display list the cockpit walks at tick 2100 (43 nodes: 7f5f 7f44
+7f82 7fcd 7fff 801e 7fb5 8152 819c 7fc1 7fc7 82ee 8243x4 82a1x4 81e6x2 8329x2 8450x2 853f 8558 8024
+804b 8072 848c 84c5 8503 80ebx3 85bd 8573 7f53 7f59) contains none of the arg-less driver dispatches
+board:0014 lists -- the Bradley's methods are the 0x1000-cluster 852f/862b/8682 family, now done.

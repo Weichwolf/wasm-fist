@@ -1,0 +1,119 @@
+PATCH 587: the Bradley cockpit's paint methods carry their register arguments -- 82ee's fill, 852f's
+label, 862b's needles, 8682's glyph plate.
+
+board:0027 / board:0014.  Four 209e-dispatched paint methods of the M2 (Bradley) console still called
+their driver methods with Ghidra's argument lists:
+
+  82ee (the READY / LOADING plate)   `xor al,al ; lea bx,[bx+4] ; push bx ; lcall [0x60a] ; pop bx`
+        -- the solid rect fill (MGA 1091) takes BX = the element's rect and AL = 0.  Patch 506
+        passed the single `0` as BX: the fill took its rect from DGROUP:0 and its colour from the
+        stack, and painted four full-height columns of index 224 every 64 pixels across the whole
+        cockpit (measured on the tick-2100 frame against the oracle's 60-second frame; a gdb
+        watchpoint on (118,150) named 1091 <- 82ee as the writer).
+  852f (USER / AUTO CONTROL label)   `lea bx,[bx+4] ; xor al,al ; lcall [0x60a] ; mov ax,[bx] ;
+        mov bx,[bx+2] ; call 52d1 ; mov ax,0 ; call 524e ; mov al,0xf ; call 530b ; ... mov al,0xe ;
+        call 530b` -- the element comes from DGROUP:0x3e08 (patch 142); the colour word 530b stores
+        carries AH = the high byte of 524e's return (the glyph background), which `mov al,0xe`
+        leaves untouched: CONCAT11(hi(old font), 0xe), not 0xe.  The label's row was 98 % of the
+        oracle's after this.
+  862b (TEMP and OIL needles)        `mov bx,[di+0x5f] ... shl ; imul 0x12 ; and 0x1e ; mov ax,
+        [0x902e+bx] ; mov bx,0x9052 ; lcall [0x6b4]` twice (byte[di+0x60], table 0x9040, rect
+        0x905a) -- the sprite blit (MGA 26a1, C order ax,0,0,bx,0) had no arguments.
+  8682 (a Bradley glyph plate)       `mov bx,[0x3e08] ; add bx,4 ; mov al,[di+0x64] ; and al,0xf ;
+        shl ; mov ax,[0x90c0+bx] ; lcall [0x6d0]` -- the mirrored blit (MGA 2a39, C order ax,0,bx,0)
+        had no arguments.
+
+  With 586 (the heap the original has at the cockpit switch) and this patch the tick-2100 Bradley
+  console matches the oracle's 60-second frame in every static pixel of columns 0..255; what differs
+  is dynamic (the needles, the map inset, the radar, the mouse pointer the scripted run parks at
+  (40,186)).
+
+--- a/fist.c
++++ b/fist.c
+@@ -23291,7 +23291,11 @@
+   unsigned short di, sio;
+   undefined2 uVar1;
+   (void)param_1;
+-  ((void (*)(unsigned short))fist_icall_far((uint32_t)(DAT_1000_c60a)))(0);      /* 82ee/82f4 */
++  /* PATCH 587: 82ee's `xor al,al ; lea bx,[bx+4] ; lcall [0x60a]` hands the driver's solid rect
++   * fill (MGA 1091) BX = the element's rect AND AL = 0; patch 506 passed the single `0` as BX, so the
++   * fill took its rect from DGROUP:0 and its colour from the stack -- four full-height columns of
++   * index 224 every 64 pixels across the whole cockpit (board:0027). */
++  ((void (*)(unsigned short, unsigned char))fist_icall_far((uint32_t)(DAT_1000_c60a)))(bx, 0); /* 82ee/82f4 */
+   FUN_1000_52d1(*(unsigned short *)(dg + bx),
+                 *(unsigned short *)(dg + (unsigned short)(bx + 2)));             /* 82f9-82fe */
+   uVar1 = FUN_1000_524e(2);                                                      /* 8303/8306 */
+@@ -64322,16 +64326,24 @@
+   undefined2 uVar1;
+   undefined1 extraout_AH;
+   uint8_t *dg = g_mem + 0x1c000;
+-  uint16_t o = (uint16_t)param_1;
+-  
++  /* PATCH 587: the Bradley console's USER/AUTO CONTROL label (asm 0x1852f-0x18567): `lea bx,[bx+4] ;
++   * mov ax,[bx] ; inc ax ; mov bx,[bx+2] ; add bx,3 ; call 52d1` -- the cursor from the element's rect,
++   * BX = the display-list element the 209e dirty-walk dispatches this method for arg-less and publishes
++   * to DGROUP:0x3e08 (patch 142; 8390 reads it the same way).  param_1 was the stack's contents, and the
++   * label went to (garbage, 0): the top-left corner of the screen. */
++  uint16_t o = *(uint16_t *)(dg + 0x3e08);
++  (void)param_1;
+   FUN_1000_52d1(*(uint16_t *)(dg + (uint16_t)(o + 4)) + 1,*(uint16_t *)(dg + (uint16_t)(o + 6)) + 3);
+   uVar1 = FUN_1000_524e(2);
+   FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0xf));
+-  uVar1 = 0x2d64;
++  /* PATCH 587: `mov al,0xe` after `mov al,0xf ; call 530b` leaves AH = the high byte of 524e's return
++   * (the old font index, 0) -- 530b stores the whole AX as the text colour word [+0x16], AH the glyph
++   * background.  Ghidra's extraout_AH put an undefined byte there: an opaque grey behind AUTO CONTROL. */
++  (void)extraout_AH;
+   if ((*(uint16_t *)(dg + (uint16_t)((uint16_t)(uintptr_t)DAT_2000_2d34 + 0x40)) & 1) != 0) {
+-    FUN_1000_530b(CONCAT11(extraout_AH,0xe));
++    FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0xe));
+     uVar1 = 0x2d71;
+-  }
++  } else uVar1 = 0x2d64;
+   thunk_FUN_1000_55ae(uVar1);
+   return;
+ }
+@@ -64429,8 +64441,21 @@
+ void __allregs FUN_1000_862b(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))();
++  /* PATCH 587: the Bradley's TEMP and OIL needles (asm 0x1862b-0x18667):
++   *     mov di,[0x6d34] ; mov ah,[di+0x5f] ; xor al,al ; mov bx,0x12 ; mul bx ; mov bx,dx ; and bx,0x1e ;
++   *     mov ax,[bx+0x902e] ; mov bx,0x9052 ; lcall [0x6b4]
++   * then the same from [di+0x60] through the table 0x9040 into the rect 0x905a.  DX of the 16x16
++   * multiply = (byte << 8) * 0x12 >> 16 = byte * 0x12 >> 8: the needle sprite index.  Both calls were
++   * arg-less (the whole body Ghidra kept was two bare `lcall [0x6b4]`s). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx, ax;
++  bx = (unsigned short)((((unsigned)dg[(unsigned short)(di + 0x5f)] << 8) * 0x12u >> 16) & 0x1e);
++  ax = *(unsigned short *)(dg + (unsigned short)(0x902e + bx));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,0x9052,0);
++  bx = (unsigned short)((((unsigned)dg[(unsigned short)(di + 0x60)] << 8) * 0x12u >> 16) & 0x1e);
++  ax = *(unsigned short *)(dg + (unsigned short)(0x9040 + bx));
++  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6b4)))(ax,0,0,0x905a,0);
+   return;
+ }
+ 
+@@ -64462,7 +64487,18 @@
+ void __allregs FUN_1000_8682(void)
+ 
+ {
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6d0)))();
++  /* PATCH 587: a Bradley glyph plate through the MIRRORED sprite method (asm 0x18682-0x1869b):
++   *     push bx ; mov di,[0x6d34] ; mov bl,[di+0x64] ; and bx,0xf ; shl bx,1 ; mov ax,[bx+0x90c0] ;
++   *     pop bx ; lea bx,[bx+4] ; lcall [0x6d0]
++   * 8668's twin with [0x6d0] = MGAVIDEO 2a39 (patch 505), whose __allregs order puts BX third
++   * (patch 532).  BX = the element from DGROUP:0x3e08.  Arg-less before. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned short di = (unsigned short)DAT_2000_2d34;
++  unsigned short bx = (unsigned short)(*(unsigned short *)(dg + 0x3e08) + 4);
++  unsigned short ax;
++  { unsigned short ix = (unsigned short)((dg[(unsigned short)(di + 0x64)] & 0xf) << 1);
++    ax = *(unsigned short *)(dg + (unsigned short)(0x90c0 + ix)); }
++  ((void (*)(undefined2,undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c6d0)))(ax,0,bx,0);
+   return;
+ }
+ 

@@ -1488,3 +1488,10 @@ agrees on both now.  Two consequences for the congruence work:
 
 Sweep with 582 (`scratch/oracle/sweep582.log`): 47 of 47 resolve -- 19 DEFEAT, 28 TIME EXPIRED, 0
 VICTORY; 6770 s of CPU, the longest 569 s.  TRAIN2 now DEFEAT (was the one VICTORY), as the original.
+
+Sweep with 584 (`scratch/oracle/sweep584.log`, the map stamps and the object projection served):
+47 of 47 resolve -- 20 DEFEAT, 27 TIME EXPIRED, 0 VICTORY.  Patch 588 (the viewport bind 286e runs
+each frame with its registers, board:0014) changes the AZER1 trajectory again -- the heading at tick
+2100 is 002 where it was 089 -- while the DEFEAT stays at 5357 (5358 before): the object-render pass
+and the reticle test 403f now see the surface they were meant to; which trajectory is the original's
+is the congruence run's question, not the sweep's.

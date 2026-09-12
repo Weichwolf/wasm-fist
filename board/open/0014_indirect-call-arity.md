@@ -133,3 +133,38 @@ AZER1 self-play's memory corruptors once real sprite sheets loaded (7fcd, 5a1d, 
 
 Each is a 3-10 instruction asm read (ax = sprite id or colour, bx = element+4 from DGROUP:0x3e08 or a
 fixed rect); mechanical, and the fix for the whole class is one patch per cockpit/screen group.
+
+## Measured on the AZER1 self-play (2026-09-12): which of the sites run at all
+
+gdb breakpoints on the 66 functions that still dispatch a driver method arg-less at HEAD (109 sites,
+the 573 census minus what 573-587 took) and on the 11 sites of the arity audit (a non-empty list that
+is shorter or longer than the target's), one AZER1 run to tick 2100:
+
+| function | hits | site | patch |
+|---|---|---|---|
+| 286e | 895 | `[0x664]` viewport bind, arg-less -- 3fca bound word[0x578..0x588] from stack residue on native, zeros on wasm | 588 |
+| a547 | 895 | `[0x61a]` outline without AL, the font restored from unaff_CS | 588 |
+| aa4e | 4 | `[0x626]` XOR highlight, arg-less; MGA 1290 itself was a 2d6d prologue | 588 |
+| cdc4 | 1 | `[0x6b4]` 3 of 5 | open |
+
+Everything else in the two lists does not execute on the self-play -- those sites belong to screens
+the self-play does not visit, and are the cockpit/screen groups this item prescribes.
+
+Two lessons for the audit itself:
+
+- A SHORT list hides from the arg-less grep.  82ee (patch 587) passed `(0)` to the two-register fill
+  `xor al,al ; lea bx,[bx+4] ; lcall [0x60a]` -- BX took the 0, AL the stack -- and painted four
+  full-height columns over the Bradley cockpit.  The arity audit (target parameter count vs argument
+  count) catches these; the value audit (the asm read) is still the only thing that catches a
+  right-length list of wrong values (6350's `(0xf69,uVar3,uVar4)`, 6453's `(0xf69,uVar2)`).
+- The [0x60a]/[0x61a] sites are 59 in the asm (`lcall *0x60a` x31, `*0x61a` x28 over both code
+  windows); joined by enclosing function to the C sites, 23 functions still carry arg-less or wrong
+  lists there (3de2 3de5 4937 57a9 6350 6453 6612 664e 66b1 6730 684e 688a 6909 d27e d2bd d2f5 d443
+  d480 6448 6beb 8fb6 9774 9a68): each is `lea bx,[bx+4]` (the element's rect) or an immediate
+  rect, and an immediate colour or one from a table -- a 3-10 instruction read each, listed with
+  their asm in the session's join ($SC/sites0.txt) and to be rebuilt per screen group with the
+  host-pointer element derefs those functions also carry.
+
+A third class surfaced next to this one (patch 589, 21bd): lengths Ghidra types as `char *` and loops
+that decrement a pointer to `(char *)0x0` -- UB the wasm backend folds into infinite loops and
+unbounded scans.  That is board:0028.

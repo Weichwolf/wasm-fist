@@ -1,0 +1,157 @@
+PATCH 589: the base-name builder 21bd scans in 16-bit lengths; 18d1 unlinks the node 1345 found.
+
+board:0014 (found by gate 586's wasm audio flows).  21bd (asm 0x21bd-0x222a) builds the 8-character
+base name of the file name at DGROUP:0x740 into the owner record DGROUP:0x6b7e and releases the block
+that record owns (18d1).  Patch 064 rebased the buffer but kept Ghidra's scan loops, which carry every
+LENGTH as a `char *` -- `pcVar7 + (-1 - (int)pcVar10)`, compared against `(char *)0x9`, decremented to
+`(char *)0x0`.  That is pointer arithmetic that never denotes an object; the wasm backend (-O2) folds
+it: the `!= 0` bounds of the backward `\` scan and of the copy loop become `true`, the `\` scan runs
+below the buffer until it meets a `\` byte anywhere in DGROUP, and the copy loop has no exit at all
+(`loop { store8 ; br 0 } ; unreachable` in the emitted code).  On wasm this stayed invisible only
+because the MGAVIDEO init's [0x550] (MGA 0197) rewrites 0x740 to BACKLAND.BIN first, the runaway scan
+then yields a stem of 191 and the copy is skipped; native (-O0) copied "BACKLAND" -- a silent
+native/wasm divergence in the owner record.  The moment [0x550] was not installed (the audio flows,
+whose SOUNDDVR resize in 586 moved MGAVIDEO to 0x3e57 -- the shim's overlay lookup then resolved its
+entry inside SOUNDDVR's stale range, re_out/fist_icall.c) the stem was 8 and the copy loop ran off the
+end of memory: "RuntimeError: memory access out of bounds".
+
+  The three scans are now what the asm does, in 16-bit offsets: `repnz scasb` for the NUL, the
+  backward `\` scan (`std ; repnz scasb ; cld ; add di,2`) to the base-name start, the forward `.` scan
+  to the stem end, `cmp cx,8 ; ja`, eight spaces (`mov ax,0x2020 ; stosw x4` -- Ghidra had turned the
+  immediate into `&DAT_1000_e020`, the low 16 bits of a host address) and `rep movsb`.
+  18d1 (asm 0x118d1): `call 1345 ; jb ; push ds ; mov ds,ax ; call 0d70 ; pop ds` -- 0d70 unlinks the
+  node 1345 returned from the list whose header 1345 left in BP (g_fist_1345_bp); patch 065 handed it
+  21bd's AX as the header pointer, and 21bd passed `&DAT_2000_2b78` (a host pointer) as the owner
+  offset 0x6b78, so the search could never match.
+
+--- a/fist.c
++++ b/fist.c
+@@ -9686,81 +9686,43 @@
+ void __allregs FUN_0000_21bd(undefined2 param_1,char *param_2)
+ 
+ {
+-  undefined2 *puVar1;
+-  char *pcVar2;
+-  char *pcVar3;
+-  undefined2 *puVar4;
+-  int iVar5;
+-  char *pcVar6;
+-  char *pcVar7;
+-  undefined2 *puVar8;
+-  undefined2 *puVar9;
+-  char *pcVar10;
+-  
+   /* PATCH 064: filename base-name builder (asm 0x21bd), ES=DS=DGROUP.  Two losses: (a) the c550
+      driver-string-table call (0197) dropped its ax=0x148 arg (asm `mov ax,0x148; call [ds:0x550]`);
+      (b) param_2 (the source filename buffer) is a DGROUP NEAR offset (0x740) that Ghidra treated as a
+-     host pointer -> the '\' / '.' scan loops dereferenced host 0x740 (SIGSEGV).  Thread the 0x148 arg
+-     and rebase param_2 to g_mem+DGROUP; all subsequent pointer arithmetic is difference-based so it is
+-     preserved by the uniform rebase.  DAT_1000_c740 (=0x1c740) and DAT_2000_2b7e/2b78 (=0x22b7e/0x22b78
+-     = DGROUP:0x6b7e/0x6b78) are already correct absolute linear addresses. */
++     host pointer -> the '\' / '.' scan loops dereferenced host 0x740 (SIGSEGV).
++     PATCH 589: the three scans rewritten with 16-bit lengths.  Ghidra's version carried every length
++     as a `char *` (`pcVar7 + (-1 - (int)pcVar10)`, compared against `(char *)0x9`, decremented to
++     `(char *)0x0`): pointer arithmetic that never denotes an object, which the wasm backend (-O2)
++     folds -- the `!= 0` loop bounds become `true`, the copy loop loses its exit, and the run dies of
++     "memory access out of bounds" as soon as the base name is copied.  Also `mov ax,0x2020` (two
++     spaces) had become `(undefined2 *)&DAT_1000_e020`, the low 16 bits of a host address.  asm:
++       push si ; ax=0x148 ; lcall [0x550] ; es=ds ; movsw 0x740->0x6b7e x0x20 ; pop si
++       di=si ; al=0 ; cx=-1 ; repnz scasb ; dec di            ; di = the NUL
++       cx=di-si ; je ret                                      ; empty name
++       si=di ; dec di ; std ; al='\' ; inc cx ; repnz scasb ; cld ; add di,2    ; di = base start
++       cx=si-di ; je ret ; si=di ; al='.' ; inc cx ; repnz scasb ; dec di         ; di = '.' or the NUL
++       cx=di-si ; cmp cx,8 ; ja ret
++       di=0x6b7e ; ax=0x2020 ; stosw x4 ; di=0x6b7e ; rep movsb                    ; 8 spaces, stem
++       bx=0x6b78 ; cx=ds ; lcall 0f69:2241 (=18d1) ; word[0x6b78]=0 ; ret */
++  uint8_t  *dg  = g_mem + 0x1c000;
++  uint16_t  si  = (uint16_t)(uintptr_t)param_2;
++  uint16_t  nul, start, dot, len, n;
+   ((undefined2 (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c550)))(0x148);
+-  param_2 = (char *)(g_mem + 0x1c000 + (uint16_t)(uintptr_t)param_2);
+-  puVar8 = (undefined2 *)&DAT_1000_c740;
+-  puVar9 = (undefined2 *)&DAT_2000_2b7e;
+-  for (iVar5 = 0x20; iVar5 != 0; iVar5 = iVar5 + -1) {
+-    puVar4 = puVar9;
+-    puVar9 = puVar9 + 1;
+-    puVar1 = puVar8;
+-    puVar8 = puVar8 + 1;
+-    *puVar4 = *puVar1;
+-  }
+-  iVar5 = -1;
+-  pcVar7 = param_2;
+-  do {
+-    if (iVar5 == 0) break;
+-    iVar5 = iVar5 + -1;
+-    pcVar2 = pcVar7;
+-    pcVar7 = pcVar7 + 1;
+-  } while (*pcVar2 != '\0');
+-  if (pcVar7 + (-1 - (int)param_2) != (char *)0x0) {
+-    pcVar10 = pcVar7 + -2;
+-    pcVar6 = pcVar7 + (-1 - (int)param_2) + 1;
+-    do {
+-      if (pcVar6 == (char *)0x0) break;
+-      pcVar6 = pcVar6 + -1;
+-      pcVar2 = pcVar10;
+-      pcVar10 = pcVar10 + -1;
+-    } while (*pcVar2 != '\\');
+-    pcVar10 = pcVar10 + 2;
+-    if (pcVar7 + (-1 - (int)pcVar10) != (char *)0x0) {
+-      pcVar6 = pcVar7 + (-1 - (int)pcVar10) + 1;
+-      pcVar7 = pcVar10;
+-      do {
+-        if (pcVar6 == (char *)0x0) break;
+-        pcVar6 = pcVar6 + -1;
+-        pcVar2 = pcVar7;
+-        pcVar7 = pcVar7 + 1;
+-      } while (*pcVar2 != '.');
+-      pcVar7 = pcVar7 + (-1 - (int)pcVar10);
+-      if (pcVar7 < (char *)0x9) {
+-        DAT_2000_2b7e = (undefined2 *)&DAT_1000_e020;
+-        DAT_2000_2b80 = (undefined2 *)&DAT_1000_e020;
+-        DAT_2000_2b82 = (undefined2 *)&DAT_1000_e020;
+-        DAT_2000_2b84 = (undefined2 *)&DAT_1000_e020;
+-        pcVar6 = (char *)&DAT_2000_2b7e;
+-        for (; pcVar7 != (char *)0x0; pcVar7 = pcVar7 + -1) {
+-          pcVar3 = pcVar6;
+-          pcVar6 = pcVar6 + 1;
+-          pcVar2 = pcVar10;
+-          pcVar10 = pcVar10 + 1;
+-          *pcVar3 = *pcVar2;
+-        }
+-        FUN_1000_18d1(0x1c00,(undefined2 *)&DAT_2000_2b78,param_1);
+-        DAT_2000_2b78 = 0;
+-      }
+-    }
+-  }
++  for (n = 0; n < 0x20; n++)                                             /* rep movsw 0x740 -> 0x6b7e */
++    *(uint16_t *)(dg + (uint16_t)(0x6b7e + n * 2)) = *(uint16_t *)(dg + (uint16_t)(0x740 + n * 2));
++  for (nul = si; dg[nul] != 0; nul = (uint16_t)(nul + 1)) ;             /* repnz scasb al=0 */
++  len = (uint16_t)(nul - si);
++  if (len == 0) return;
++  for (start = nul; start != si && dg[(uint16_t)(start - 1)] != '\\'; start = (uint16_t)(start - 1)) ;
++  len = (uint16_t)(nul - start);                                         /* base-name length */
++  if (len == 0) return;
++  for (dot = start; dg[dot] != 0 && dg[dot] != '.'; dot = (uint16_t)(dot + 1)) ;
++  len = (uint16_t)(dot - start);                                         /* stem length */
++  if (len > 8) return;
++  for (n = 0; n < 8; n++) dg[(uint16_t)(0x6b7e + n)] = 0x20;             /* ax=0x2020 ; stosw x4 */
++  for (n = 0; n < len; n++) dg[(uint16_t)(0x6b7e + n)] = dg[(uint16_t)(start + n)];   /* rep movsb */
++  FUN_1000_18d1(0x1c00,(undefined2 *)(uintptr_t)0x6b78,0x2020);   /* bx=0x6b78 ; cx=ds ; ax=0x2020 */
++  DAT_2000_2b78 = 0;
+   return;
+ }
+ 
+@@ -46571,7 +46533,12 @@
+      called 0d70; the real gate is 1345 CF (found).  found <=> 1345 return != 0. */
+   undefined4 r = FUN_1000_1345(param_1,param_2);
+   if ((uint16_t)r != 0) {
+-    FUN_1000_0d70(param_3);
++    /* PATCH 589: `push ds ; mov ds,ax ; call 0d70 ; pop ds` -- 0d70 unlinks the node 1345 returned
++     * (DS) from the list whose header 1345 left in BP (published as g_fist_1345_bp); patch 065 handed
++     * it 21bd's AX as the header pointer. */
++    (void)param_3;
++    g_mm_ds = (uint16_t)r;
++    FUN_1000_0d70((int)(uintptr_t)(g_mem + 0x1c000 + g_fist_1345_bp));
+   }
+   return;
+ }

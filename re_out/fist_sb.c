@@ -52,14 +52,12 @@ unsigned short g_snd_reg_es;   /* ES: descriptor SEGMENT = word[DGROUP:0x9f1c] *
 unsigned short g_snd_cfg_letter;
 
 /* ---- device REGISTRATION: FUN_1000_1917 (DGROUP:0xd4) + FUN_1000_107a (DGROUP:0xf4) ----
- * These two engine service functions are UNRECOVERED by Ghidra (no C body); the driver init
- * (FUN_0000_0078, asm 0x78) calls them via the far vectors DGROUP:0xd4/0xf4 to register the sound
- * device.  Iteration 8 recovers them as LOADER-SHIM helpers (approved -- 107a is an INT-8/IRQ chain
- * register the shim owns; 1917 is an owner-tagged MEMMGR search over the pools patch 345 builds).
- * They are wired into fist_icall (linear 0x11917 / 0x1107a) so the driver init's lcall lands here
- * once the si=0xec far section installs DGROUP:0xd4/0xf4 (patch 355).  Gated: only reached under
- * FIST_SB (the whole sound-config dispatch is FIST_SB-installed).  Asm-verified vs fist_dat_image.bin
- * (1917 @0x11917 / search 0x11345 / 107a @0x1107a / INT-chain insert 0x14ce7). */
+ * The IRQ/timer-ISR register the driver init (FUN_0000_0078, asm 0x78) calls through DGROUP:0xf4 to
+ * register the sound device is UNRECOVERED by Ghidra (no C body); the shim owns the INT-8 layer, so
+ * it is a loader-shim helper wired into fist_icall (linear 0x1107a).  Its sibling DGROUP:0xd4 (0x11917)
+ * is the MEMMGR resize -- FUN_1000_1917, patch 586 (a stand-in here used to search the pools for
+ * the 0x4fa work object and resize nothing).  Gated: only reached under FIST_SB.  Asm-verified vs
+ * fist_dat_image.bin (107a @0x1107a / INT-chain insert 0x14ce7). */
 extern unsigned char g_mem[];
 extern uint32_t fist_snd_base;            /* SOUNDDVR load base (linear); seg = base>>4 */
 
@@ -67,40 +65,6 @@ extern uint32_t fist_snd_base;            /* SOUNDDVR load base (linear); seg = 
  * cooperative per-tick drive (the shim owns the PIT).  seg = SOUNDDVR load seg, off = 0x3d6. */
 unsigned short g_snd_isr_seg;             /* 0 until 107a registers it */
 unsigned short g_snd_isr_off = 0x3d6;
-unsigned short g_snd_workobj_seg;         /* the (0x4fa,DGROUP)-owned device work object, if found */
-
-/* FUN_1000_1917 (asm 0x11917): search pools 0x16d4/0x16f6/0x1718 for the block owned by
- * (bx=0x4fa, cx=DGROUP=0x1c00); if found, ds=block + format via 0x10cce and return its seg; else
- * CF=1 (fail).  The owner search 0x1135f: head = word[DGROUP:pool+0xa]; walk next = word[blk:0xc];
- * match word[blk:0x6]==bx && word[blk:0x8]==cx. */
-static unsigned short snd_pool_search(unsigned short pool_off, unsigned short bx, unsigned short cx)
-{
-    unsigned short blk = *(unsigned short *)(g_mem + 0x1c000u + pool_off + 0xa);
-    while (blk) {
-        unsigned long base = (unsigned long)blk << 4;
-        if (*(unsigned short *)(g_mem + base + 6) == bx &&
-            *(unsigned short *)(g_mem + base + 8) == cx)
-            return blk;                          /* found */
-        blk = *(unsigned short *)(g_mem + base + 0xc);
-    }
-    return 0;                                    /* not found */
-}
-
-void fist_snd_1917(void)
-{
-    /* asm constants at the call site (FUN_0000_0078 asm 0xae..0xb9): ax=0x413 sub 0, bx=0x4fa, cx=ds */
-    unsigned short bx = 0x4fa, cx = 0x1c00;
-    unsigned short blk = snd_pool_search(0x16d4, bx, cx);
-    if (!blk) blk = snd_pool_search(0x16f6, bx, cx);
-    if (!blk) blk = snd_pool_search(0x1718, bx, cx);
-    /* NB the caller (FUN_0000_0078) discards 1917's return/CF, so we do not touch the shared frame
-     * scheduler CF (g_fist_cf) here -- record the found work object for the sequencer only. */
-    if (!blk) { g_snd_workobj_seg = 0; if (sbtrace()) fprintf(stderr,"[snd] 1917: no (0x4fa,DGROUP) work object in pools (fail)\n"); return; }
-    g_snd_workobj_seg = blk;
-    if (sbtrace()) fprintf(stderr,"[snd] 1917: device work object found @ seg 0x%04x (pools)\n", blk);
-    /* format (0x10cce) is the block reformat; the found block is already MEMMGR-live -> a bit-exact
-     * reformat is deferred (no menu consumer reads it before the sequencer streams). */
-}
 
 /* FUN_1000_107a (asm 0x1107a): register the driver IRQ/timer handler.  0x14ce7 inserts SOUNDDVR
  * cs:0x3d6 into the INT-8 handler chain (a standard far-jmp chain-splice at es:bx = snd_seg:0x3d6).

@@ -167,3 +167,36 @@ Ghidra's (DS-relative node fields rendered as DAT_1000_c000..).  This is the nex
 swap-out/swap-in pair, faithful to the asm, with the moved paragraphs kept where the original keeps
 them (the [0xd242] service's memory), so a mission that fills conventional memory -- every one, once
 the player's vehicle is lost -- loads its later resources into blocks that stay valid.
+
+## The out-of-memory path was reached because the drivers never gave their surplus back (2026-09-12)
+
+Before the swap, the budget: the original's heap at the cockpit switch is 14 KB larger than the
+port's was, and that is the whole margin M2CON.MRL needed.  DGROUP:0xd4 (0f69:2287 = 0x11917) is the
+MEMMGR RESIZE -- `push ax ; call 1345 ; jb ; mov cx,ds ; mov ds,ax ; pop ax ; push cx ; call 0cce ;
+pop ds ; retf`: find the block owned by CX:BX, split its tail beyond AX paragraphs back onto the free
+list -- and three callers use it that the port had not threaded (patch 586): MGAVIDEO's init keeps
+0x46a of its 0x7ca paragraphs after copying its five data templates out (the shim had routed the
+linear to a sound-driver stand-in that resized nothing), SOUNDDVR's init keeps 0x413 of 0x434 (the
+port's call passed nothing), and MGAVIDEO 21d6 -- the compiled-sprite finalizer of the cockpit-
+instrument analyzer 2004 -- shrinks each 0xc00-byte scratch to its compacted sprite (the oracle's
+three M1 children are 0x20/0x15/0x18 paragraphs; the port's stayed 0xc0; the call was arg-less).
+With 586 the free tail at the switch is 32064 bytes, M2CON.MRL (26160) loads into it and the Bradley
+console renders (board:0027).  `[memmgr] FUN_1000_0c21 ... reached` still fires once per AZER1 run --
+some later allocation still meets the probe; which one, and whether the original swaps there too, is
+the next measurement before the swap pair is written.
+
+A consequence for the shim (re_out/fist_icall.c, fist_ovl_register): the overlay table records each
+driver's LOAD size, but SOUNDDVR's resize ends its block 12 bytes short of its 0x413c-byte image and
+MGAVIDEO then loads at 0x3e57 instead of 0x3e78 -- the linear-range lookup resolved MGAVIDEO's entry
+3e57:0009 inside SOUNDDVR's stale range ("TRAP overlay call -> SOUNDDVR.DVR+0x4132") and the video
+driver never initialised in the audio flows (gate 586's three wasm failures).  A load that lands
+inside an earlier overlay's range now clips that range: the MEMMGR's word on where a block ends.
+The audio flows had been running without a video driver since their creation and had never noticed
+-- they compare WAVs; a frame check of those flows is owed.
+
+Patch 590 removes the port's FIST_SB gate from the SOUNDDVR init's registration (the driver has none:
+asm 0x8b-0x9a tests only SS == cs:0x5a and word[ds:0] == 0xcbc3), so the resize runs in every flow
+and MGAVIDEO loads at SOUNDDVR + 0x413 as in the oracle (0x4ab0 + 0x413 = 0x4ec3).  The remaining
+layout difference to the oracle is the heap start: SOUNDDVR sits 0xad paragraphs higher above
+DGROUP in the port (0x1e44) than in the oracle (0x1d97) -- the conventional-memory map (the AH=48
+answer, the PSP/environment the loader lays out) is the item above.

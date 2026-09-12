@@ -1,0 +1,28 @@
+PATCH 590: the SOUNDDVR init registers its device -- and gives its surplus back -- unconditionally.
+
+board:0025.  The driver's init (asm 0x78-0xbe) runs its registration whenever SS == cs:0x5a and
+word[ds:0] == 0xcbc3: `mov bx,cs ; mov si,0xa ; lcall [0x12]` (the method-vector install), `mov
+bx,0x3d6 ; lcall [0xf4]` (the timer-ISR register) and `mov ax,0x413 ; mov bx,0x4fa ; mov cx,ds ;
+lcall [0xd4]` (the resize, patch 586).  Patch 344 had put the whole block behind the shim's FIST_SB
+switch, so in every flow without it the block stayed 0x434 paragraphs and MGAVIDEO loaded at
+SOUNDDVR + 0x434 where the oracle has it at + 0x413 (its MGAVIDEO segment 0x4ec3 is SOUNDDVR's
+0x4ab0 + 0x413).  The gate stays where the shim owns the hardware: fist_snd_isr_tick drives the
+driver's ISR body only under FIST_OPL, as before, so the audio-less flows do not sequence music.
+
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -439,7 +439,13 @@
+     extern int fist_apply_reloc_at(unsigned short,unsigned short,int);
+     extern int fist_apply_reloc_section(unsigned short,int);
+     extern uint32_t fist_snd_base;
+-    if (fist_sb_enabled() && DAT_0000_005a == 0x1c00 &&
++    /* PATCH 590: the registration is not gated in the driver (asm 0x8b-0x9a tests only SS == cs:0x5a
++     * and word[ds:0] == 0xcbc3); the FIST_SB gate of patch 344 was the port's, and it left the block
++     * at 0x434 paragraphs -- the oracle's MGAVIDEO sits at SOUNDDVR + 0x413, the port's at + 0x434 in
++     * every flow that did not set FIST_SB (board:0025).  The ISR tick itself stays behind FIST_OPL
++     * in the shim (fist_snd_isr_tick), as before. */
++    (void)fist_sb_enabled;
++    if (DAT_0000_005a == 0x1c00 &&
+         *(short *)(g_mem+0x1c000u) == (short)0xcbc3) {
+       fist_apply_reloc_at((unsigned short)(fist_snd_base >> 4), 0xa, 1);
+       fist_apply_reloc_section(0xec, 1);   /* install DGROUP:0xd4=1917 / 0xf4=107a (si=0xec far) */
