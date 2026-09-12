@@ -1669,4 +1669,24 @@ far-off point turns into 2 ULP of bearing.  The port's read is correct for its m
 0x1119/0x2082 there without breaking fist_icall, which resolves those very segments.  So this is an
 inherent flat-vs-relocated-model boundary surfacing through a targetless idle-animation heading --
 outcome-neutral (both DEFEAT), no engine stub/guard/approximation involved -- explicitly accepted.
-The only remaining SIM divergence is thus the audio-coupled player hit (board:0003).
+
+The PLAYER-HIT divergence is the SAME class, not an audio block (correcting the earlier note): b39c's
+a080 gate is `cmp [bx+4],al ; ja`, and a064's sound callout (bf3c -> e2c2, op 0x64) clobbers BX to
+the mixer channel 22ab assigned -- verified: a captured a080 gate carries BX = 0x00000002 (channel 2)
+where the non-firing calls carry BX = 0xe3d6 (the real reaction record).  So the original reads
+DGROUP:[channel+4] -- and [channel+4] is again a boot far-pointer table byte whose value is the code
+segment: channel 2 -> byte[6] = 0x01 in BOTH models (no divergence), channels 0/1 -> byte[4]/[5] =
+0x19/0x11 relocated vs 0x00/0x00 flat (divergence).  Building the mission mixer would NOT close this:
+even with the oracle's exact channel, [channel+4] reads the port's flat code segment, not the
+relocated one.  It is the original's own BX-clobber bug reading a model-dependent segment byte --
+the identical accepted boundary, outcome-neutral.
+
+Conclusion for board:0017.  The mission simulation is oracle-congruent to the fullest extent the flat
+memory model permits: across 7 missions of 5 theatres every model-INDEPENDENT computation matches the
+original byte-for-byte per sim step (RNG, objects, shells, LOS, rotations), 47/47 resolve, and native
+== wasm throughout.  The only residuals are two of the original's own bugs that read model-DEPENDENT
+code-segment bytes through a clobbered BX (the targetless idle bearing and the a064-callout immobilize
+threshold), both outcome-neutral and inherent to flat-vs-relocated -- not stubs, guards, or
+approximations in the port.  Matching them byte-for-byte would require carrying the guest's relocated
+code paragraphs (0x1119/0x2082/0x2119) throughout DGROUP and teaching fist_icall to map them back --
+a whole-shim refactor with no behavioural gain, explicitly declined.
