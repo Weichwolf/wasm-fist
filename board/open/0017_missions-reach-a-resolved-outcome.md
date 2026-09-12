@@ -1644,3 +1644,19 @@ first time.  The verdict distribution is the port's under its own clock; the rep
 what measures it against the original per tick -- and finds the sim congruent up to the player's
 hit reaction (the op-0x64 sound channel, board:0003).  The sweep prints each mission's verdict tick
 and the player's vehicle type (all type 0000 = the player's own on the empty-input self-play).
+
+## Broadening the census (INDIA1, SYRIA2): a systematic 2-ULP bearing, outcome-neutral
+
+`replay_mission.sh` on two more theatres: INDIA1's 3652 sim steps and SYRIA2's 17655 all draw the
+oracle's values; the object tables differ only in a hull-heading pair.  INDIA1's M3 at cb25 and
+SYRIA2's T-80 at cd1b come out 2 low in word[+0x26] (and so word[+0x10] = [0x26]+[0x89], and +0x30)
+once the vehicle turns -- while every RNG draw still matches, so it is a deterministic computation
+diff, not a cadence one.  It traces up: a395 (the heading integrator, patch 423) converges [+0x26]
+toward the target heading [+0x30], which ac2f sets to `0541 + 0x8000`; 0541 returns 731's bearing;
+731 is the fixed-point arctangent 077e over the position delta.  The positions are byte-identical at
+the divergence, so the 2 ULP is a rounding inside the 731/927/077e trig chain (077e's table
+interpolation `((delta.lo*frac + 0x80) >> 8) + (delta.hi==1 ? frac : 0)` is verified matching the
+asm 0x7f6-0x819, so the residue is in 927, the `div cx` octant fraction, or an input lane not yet
+isolated).  It is below the outcome level -- both missions resolve DEFEAT as the sweep and the
+oracle do -- but it is a real deviation (goal: no approximations).  Next: capture 731's entry/exit
+(EDI/ESI in, AX out) for the diverging vehicle and match the octant-fraction rounding.
