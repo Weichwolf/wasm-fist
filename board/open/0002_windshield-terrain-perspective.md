@@ -2716,7 +2716,55 @@ inside the op-0x24 gate, before the engine paints them; the watchdog dump shows 
 now 96.3 % pixel-identical to the oracle's pass-8 frame, the inset 97.9 %.
 
 Still open on this surface: the heading readout above the inset ("147°"), the unit dots' frame parity
-on the inset, the radar's sweep, frame 1's attitude (the port renders its first frame before the first
-op 0x1c, pitch 0 / roll -256 where the oracle already shows 384/384), and the op-0x60 map stamps
-(8650: the objective/crater images pressed into the height- and colormaps at mission start, 16 posts
-the shim still returns 0 for).
+on the inset, the radar's sweep, and frame 1's attitude (the port renders its first frame before the
+first op 0x1c, pitch 0 / roll -256 where the oracle already shows 384/384).
+
+## The map stamps, and a register the original leaves stale (patch 583)
+
+Op 0x60 (10f1 -> 8650) presses the burn-mark pair BURM_D2/BURM_C2.KLC into the height- and colormaps
+at every wreck the mission places (e043 posts, 9cfc/9d26 keep the list; AZER1 posts 16).  8650,
+8840 (the height press) and 88af (the colour press through the sorted palette and ac70) were not in
+the decompile; patch 583 transcribes them and the shim serves the op.
+
+The transcription alone pressed one crater the original does not and skipped one it does.  The
+flatness window (max - min of the heightmap over 33 cells square, > 9 rejects) is placed with
+`sub ebx,edx` after `mov dl,4 ; shl dl,cl` -- DL alone is set, and the rest of EDX is the previous
+service's exit value, which the extender preserves across the real/protected switches.  The
+oracle's register trace (FIST_REGTRACE in tools/oracle/dosbox_blktrace.patch, scratch/oracle/
+regtrace*/regs.txt) shows it at every post: the spawn's op-0x54 handler leaves -(y << 13) (bits
+8..10 clear, the window where it belongs), a pressed stamp leaves ac70's best distance (0x3c1 /
+0x2a4 -> the next window 784 / 528 cells off), a rejected one leaves DH = 0.  The port carries the
+register as `g_ext_edx` through ac70, 8650, bed2/bc06 and the op-0x54 handler.  With it the port's
+maps after AZER1's 16 posts are byte-identical to the oracle's live maps (both 4 MB, read through the
+extender's page tables from scratch/oracle/player.ram.bin), and the 38 accept/reject decisions of
+AZER1, TRAIN2 and CYPRUS1 equal the oracle's.
+
+What the model does not carry: the engine's own 16-bit DX between two services (the decompile does
+not materialise it), and EDX after 643c when a colour image has no opaque pixel (then 3376's heap
+walk sets it; the one stamp pair the game ships always reaches ac70).  At the mission-start posts
+the preceding service is the spawn's op 0x54 in all three traced missions; a wreck placed mid-battle
+follows whatever service ran last.
+
+## The object projection, op 0x50 (patch 584)
+
+The depth sorter 2471 (and 3eb3 for 2908/290e's effect record) posts op 0x50 for every render node;
+ba7d turns the node's world position into screen x/y and a depth row, and 3ed4 hands those to the
+op-0x40 model rasterizer.  ba7d was not in the decompile and the shim returned 0, so every node sat
+at (0,0) at depth 0: the terrain rendered, the vehicles never did.  Patch 584 transcribes ba7d and
+carries its five results through the shim's op-0x50 lanes into the node.  Checked against the
+oracle's register trace of ba7d on AZER1's first frame: the four nodes the original projects are the
+four the port projects, with the same x, depth and rows; the y differs by the height byte alone --
+the port renders its first frame before the first sim tick has run 97d5 (the T-80 update: `mov al,
+[di+0x1d] ; mov [di+0xd],al`, the ground clamp's height into the object), the original after it.
+That is the frame-1 pacing item above, seen from another side.
+
+## The cockpit switch after the player's vehicle is lost (2026-09-12, open)
+
+When the player's tank is destroyed the original switches the view to another vehicle of the platoon
+(the oracle's 20-second captures of AZER1 go from the M1 cockpit to the T-80-style one with analog
+gauges, then "ENGINE DAMAGED / NIGHT VISION DAMAGED").  The port's frame after that switch is a torn
+cockpit -- the panel art four times too wide, duplicated, the HUD texts (PL:1, GOALS REMAINING, the
+range readout) in their right places on top -- under a red palette that never returns (FIST_DUMPTICK
+2000 and 4000 on AZER1, tools/native_main.c FIST_FBDUMP).  Frame 1700 is the clean M1 cockpit.  Two
+things to find: the second cockpit's blit path (a stride or a planar/linear confusion in the MGA
+driver's port, since the first cockpit's blit is fine) and the red flash that does not fade.

@@ -1,0 +1,257 @@
+PATCH 583: extender op 0x60 -- the map stamps (8650, 8840, 88af) and the 32-bit app's EDX carried
+across the service calls (ac70's exit).
+
+board:0002.  The engine posts op 0x60 (e043: a world position and the two 16-byte image names
+BURM_D2.KLC / BURM_C2.KLC in the TCB) for every burn mark of a mission -- 9cfc records one per
+pre-placed wreck at mission setup, 9d26 replays the list, up to 32 -- and the service (10f1 = `call
+8650`) presses the height image into the heightmap [0x85bc] and the colour image into the colormap
+[0x85b8] around it.  None of 8650/8840/88af was in the decompile (the gate is their only caller); the
+shim returned 0 for every post, so no mission's terrain carried its craters.  Transcribed from
+0x8650-0x89a2 (fist_image.bin):
+
+  8650   centre = ((x << 13) >> (32-DETAIL), (-y << 13) >> (32-DETAIL)); DETAIL < 9 -> -1; a flatness
+         window of (2 * (4 << (DETAIL-9)) + 1) cells square: max - min of the heightmap > 9 -> -1;
+         643c loads the height image into the 0x8644 scratch, bed2 x (10-DETAIL) or bc06 x
+         (DETAIL-10) rescale it in place, the centre backs off by w/2, h/2 and 8840 presses it;
+         the same again with the colour image, 4a3c, ac64 = [0x28a5], ac60 = 0xff, 88af.
+  8840   cell = clamp0(pixel + cell - 0x80), byte arithmetic, columns wrapping on the mask, rows on
+         the map size.
+  88af   the pixel's own palette entry (643c leaves the image palette at 0x5598) is read for its G
+         byte: 0x1f is transparent; else the cell's colour (the sorted map palette at 0x5260) is
+         darkened (`shl bl,3` clear: * ((g & 0x1f) << 2 | 0x80) >> 8) or tinted (set: * ~((g & 0x1f)
+         << 1) >> 8 + (g >> 1)) and ac70's nearest palette index replaces the cell.
+
+  The window origin is `sub ebx,edx` / `sub ebp,edx` after `mov dl,4 ; shl dl,cl` -- only DL is set;
+  the rest of EDX is whatever the previous service left in the app's register, which the extender
+  preserves across its mode switches.  So the original's flatness test looks at the terrain 256*k
+  cells away from the crater for k = bits 8..10 of that stale value: with 8650's own exit (ac70's
+  best distance 0x3c1 or 0x2a4 after a pressed stamp, dh = 0 after a rejected one) the window moves
+  by 784 or 528 cells for the next post.  A register trace of the oracle (tools/oracle/
+  dosbox_blktrace.patch FIST_REGTRACE, scratch/oracle/regtrace*) shows exactly that at every one of
+  AZER1's 16 posts, and -(y << 13) from the spawn's op-0x54 handler at the first.  The port carries
+  it as g_ext_edx (tools/native_main.c): ac70's exit, 8650's paths, bed2/bc06, op 0x54.
+
+  Measured: the port's height- and colormaps after AZER1's 16 posts are byte-identical to the
+  oracle's (4 MB each, the live maps read through the extender's page tables); the 38 accept/reject
+  decisions of AZER1, TRAIN2 and CYPRUS1 equal the oracle's.  A model without the stale EDX presses
+  a crater at (388,1189) the original does not and skips the one at (620,201) it does.
+
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -136,6 +136,9 @@
+ #define FUN_0000_8480 m_ext_FUN_0000_8480
+ #define FUN_0000_84c0 m_ext_FUN_0000_84c0
+ #define FUN_0000_85d0 m_ext_FUN_0000_85d0
++#define FUN_0000_8650 m_ext_FUN_0000_8650
++#define FUN_0000_8840 m_ext_FUN_0000_8840
++#define FUN_0000_88af m_ext_FUN_0000_88af
+ #define FUN_0000_89b0 m_ext_FUN_0000_89b0
+ #define FUN_0000_8ce2 m_ext_FUN_0000_8ce2
+ #define FUN_0000_8deb m_ext_FUN_0000_8deb
+@@ -347,6 +350,9 @@
+ void __allregs FUN_0000_8deb(void);
+ void __allregs FUN_0000_8df0(void);
+ void __allregs FUN_0000_8e80(void);   /* PATCH 581: op 0x5c's map walk, 8df0's unpromoted mid-entry */
++undefined4 __allregs FUN_0000_8650(void);                            /* PATCH 583: op 0x60, the map stamps */
++void __allregs FUN_0000_8840(const uint8_t *esi, uint8_t *edi);
++void __allregs FUN_0000_88af(const uint8_t *esi, uint8_t *edi);
+ void __allregs FUN_0000_8fa0(void);
+ void __allregs FUN_0000_9119(void);
+ void __allregs FUN_0000_9129(int param_1,int param_2);
+@@ -555,6 +561,8 @@
+ #define DAT_0000_85bc (*(undefined4 *)(g_mem+fist_ext_base+0x85bc))
+ #define DAT_0000_85c0 (*(undefined4 *)(g_mem+fist_ext_base+0x85c0))
+ #define DAT_0000_8644 (*(undefined4 *)(g_mem+fist_ext_base+0x8644))
++#define DAT_0000_8648 (*(undefined4 *)(g_mem+fist_ext_base+0x8648))   /* PATCH 583: the stamp centre */
++#define DAT_0000_864c (*(undefined4 *)(g_mem+fist_ext_base+0x864c))
+ #define DAT_0000_8f48 (*(undefined4 *)(g_mem+fist_ext_base+0x8f48))
+ #define DAT_0000_8f4c (*(undefined4 *)(g_mem+fist_ext_base+0x8f4c))
+ #define DAT_0000_8f6a (*(undefined4 *)(g_mem+fist_ext_base+0x8f6a))
+@@ -13267,6 +13275,163 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_8650) @ 0000:8650 ===== */
++
++undefined4 __allregs FUN_0000_8650(void)
++
++{
++  /* PATCH 583: extender op 0x60 (service 10f1 = `call 8650`), the MAP STAMPS: the engine's e043 posts a
++   * world position (TCB+0xd2/0xd6) and two 16-byte image names (TCB+0x5a, TCB+0x6a) for every objective
++   * and crater of a mission (9cfc/9d26, up to 32); the height image is pressed into the heightmap
++   * [0x85bc] and the colour image into the colormap [0x85b8] around that position.  Unpromoted -- the
++   * gate is its only caller.  Asm 0x8650-0x8835:
++   *   8648 = (x << 13) >> (32-DETAIL) ; 864c = (-y << 13) >> (32-DETAIL)        (map cell of the centre)
++   *   DETAIL < 9 -> -1 ; half = 4 << (DETAIL-9) (a byte shift; carry -> -1)
++   *   min/max of the heightmap over the (2*half+1)-square around the centre; max-min > 9 -> -1
++   *   643c(eax = [0x8644], esi = TCB+0x5a) ; bed2 x (10-DETAIL) or bc06 x (DETAIL-10) ; centre on w/2,h/2
++   *   8840 (height stamp) ; the centre again ; 643c(TCB+0x6a) ; 4a3c ; the same rescale and centring
++   *   ac64 = [0x28a5] ; ac60 = 0xff ; 88af (colour stamp) ; 0 */
++  uint8_t  *xb   = g_mem + fist_ext_base;
++  uint8_t  *tcb  = (uint8_t *)DAT_0000_0c93;
++  unsigned  d    = xb[0x8490];
++  uint32_t  mask = *(uint32_t *)(xb + 0x849c);
++  const uint8_t *hm = (const uint8_t *)(uintptr_t)DAT_0000_85bc;
++  uint8_t  *img  = (uint8_t *)(uintptr_t)DAT_0000_8644;
++  uint8_t   lo = 0xff, hi = 0, half, side, r, c;
++  uint32_t  bx0, bp;
++  int       n;
++  DAT_0000_8648 = ((uint32_t)(*(int32_t *)(tcb + 0xd2) << 13)) >> (32 - d);          /* 8656-8669 */
++  DAT_0000_864c = ((uint32_t)-(*(int32_t *)(tcb + 0xd6) << 13)) >> (32 - d);         /* 866e-867b */
++  if (d < 9) return 0xffffffff;                                                       /* 8680-8689 */
++  if (d - 9 == 6) return 0xffffffff;                 /* 8691 `shl dl,cl`: the carry is bit 2 of 4 leaving */
++  half = (uint8_t)(4u << (d - 9));                                                    /* 868f/8691 */
++  side = (uint8_t)(2 * half + 1);                                                     /* 86b9-86bd, 86c5-86c9 */
++  /* The window origin is `sub ebx,edx` / `sub ebp,edx` with only DL set (`mov dl,4 ; shl dl,cl`): the
++   * rest of EDX is whatever the previous service left in the 32-bit app's register (the extender
++   * preserves it across the mode switches) -- the oracle's register trace (scratch/oracle/regtrace*)
++   * shows 0x290a8000 at AZER1's first post and each successful stamp's ac70 distance (0x3c1, 0x2a4)
++   * at the next.  Modelled as g_ext_edx: the previous 8650's exit, ac70's best distance, the op-0x54
++   * handler's -(y << 13); bits 8..10 of the low word displace the window (the mask is 0x7ff).
++   * Every one of AZER1's 16 decisions and both maps come out identical to the oracle's with it. */
++  { extern unsigned g_ext_edx; uint32_t edx = (g_ext_edx & 0xffffff00u) | half;      /* 868f/8691 */
++    bx0  = DAT_0000_8648 - edx;                                                       /* 86a5-86ab */
++    bp   = DAT_0000_864c - edx;                                                       /* 86ad-86b3 */
++    g_ext_edx = (g_ext_edx & 0xffff0000u) | half; }         /* 86f3 `pop edx` after the last row: dh = 0 */
++  for (r = side; r != 0; r--) {                                                       /* 86c5: rows */
++    uint32_t bx = bx0;
++    bp &= mask;                                                                       /* 86cb */
++    for (c = side; c != 0; c--) {                                                     /* 86d3: columns */
++      uint8_t v = hm[(bp << d) + (bx & mask)];
++      if (v < lo) lo = v;                                                             /* 86e2-86e6 */
++      if (v > hi) hi = v;                                                             /* 86e8-86ec */
++      bx++;
++    }
++    bp++;                                                                             /* 86f5 */
++  }
++  if ((uint8_t)(hi - lo) > 9) return 0xffffffff;                                      /* 86fa-8701 */
++  FUN_0000_643c((uint *)img, 0, 0, 0, 0, (undefined4)(uintptr_t)(tcb + 0x5a), 0);    /* 8707-8715 */
++  n = 10 - (int)d;                                                                    /* 871a-8727 */
++  { extern unsigned g_ext_edx;                                    /* bed2 leaves EDX = the width it halved, bc06 0 */
++    if (n > 0) { for (; n != 0; n--) { FUN_0000_bed2(img); g_ext_edx = DAT_0000_5578 << 1; } }   /* 873c: shrink */
++    else       { for (n = -n; n != 0; n--) { FUN_0000_bc06((int)(intptr_t)img); g_ext_edx = 0; } } } /* 872b: enlarge */
++  DAT_0000_8648 -= DAT_0000_5578 >> 1;                                                /* 874b-8752 */
++  DAT_0000_864c -= DAT_0000_557c >> 1;                                                /* 8758-875f */
++  FUN_0000_8840(img, (uint8_t *)(uintptr_t)DAT_0000_85bc);                            /* 8765-8771 */
++  DAT_0000_8648 = ((uint32_t)(*(int32_t *)(tcb + 0xd2) << 13)) >> (32 - d);          /* 8776-878f */
++  DAT_0000_864c = ((uint32_t)-(*(int32_t *)(tcb + 0xd6) << 13)) >> (32 - d);         /* 8794-87a1 */
++  FUN_0000_643c((uint *)img, 0, 0, 0, 0, (undefined4)(uintptr_t)(tcb + 0x6a), 0);    /* 87a6-87b4 */
++  FUN_0000_4a3c();                                                                    /* 87b9 */
++  n = 10 - (int)d;                                                                    /* 87be-87cb */
++  { extern unsigned g_ext_edx;
++    if (n > 0) { for (; n != 0; n--) { FUN_0000_bed2(img); g_ext_edx = DAT_0000_5578 << 1; } }
++    else       { for (n = -n; n != 0; n--) { FUN_0000_bc06((int)(intptr_t)img); g_ext_edx = 0; } } }
++  DAT_0000_8648 -= DAT_0000_5578 >> 1;                                                /* 87ef-8803 */
++  DAT_0000_864c -= DAT_0000_557c >> 1;
++  DAT_0000_ac64 = DAT_0000_28a5;                                                      /* 8809-880e */
++  DAT_0000_ac60 = 0xff;                                                               /* 8813 */
++  FUN_0000_88af(img, (uint8_t *)(uintptr_t)DAT_0000_85b8);                            /* 881d-8829 */
++  return 0;                                                                           /* 882e */
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_8840) @ 0000:8840 ===== */
++
++void __allregs FUN_0000_8840(const uint8_t *esi, uint8_t *edi)
++
++{
++  /* PATCH 583: the HEIGHT stamp (asm 0x8840-0x88ae): [0x8838] = map end; the row start is the centre's
++   * row ((864c & mask) << DETAIL), the column 8648 & mask; for h rows of w pixels: cell = clamp0(pixel
++   * + cell - 0x80) (byte arithmetic, the add wraps), columns wrap on the mask, rows on the map size. */
++  uint8_t  *xb   = g_mem + fist_ext_base;
++  unsigned  d    = xb[0x8490];
++  uint32_t  mask = *(uint32_t *)(xb + 0x849c), rows, cols, bp0, bp;
++  uint8_t  *end  = edi + DAT_0000_8498;
++  *(uint32_t *)(xb + 0x8838) = (uint32_t)(uintptr_t)end;                              /* 8841-8849 */
++  edi += (DAT_0000_864c & mask) << d;                                                 /* 884e-886d */
++  bp0  = DAT_0000_8648 & mask;                                                        /* 8861-8867 */
++  for (rows = DAT_0000_557c; rows != 0; rows--) {                                     /* 886f/8875 */
++    bp = bp0;
++    for (cols = DAT_0000_5578; cols != 0; cols--) {                                   /* 887c */
++      uint8_t al = (uint8_t)(*esi++ + edi[bp]);                                       /* 887c-887d */
++      al = (al < 0x80) ? 0 : (uint8_t)(al - 0x80);                                    /* 8882-8886 */
++      edi[bp] = al;                                                                   /* 8888 */
++      bp = (bp + 1) & mask;                                                           /* 888d-888e */
++    }
++    edi += DAT_0000_8494;                                                             /* 8897 */
++    if (edi >= end) edi -= DAT_0000_8498;                                             /* 889d-88a5 */
++  }
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_88af) @ 0000:88af ===== */
++
++void __allregs FUN_0000_88af(const uint8_t *esi, uint8_t *edi)
++
++{
++  /* PATCH 583: the COLOUR stamp (asm 0x88af-0x89a2), the same walk over the colormap.  The stamp
++   * pixel's own palette entry (643c left the image palette at 0x5598) is read for its G byte: 0x1f
++   * is transparent; otherwise the cell's colour (the sorted map palette at 0x5260, 3 bytes per index)
++   * is shaded by it -- bit 5 clear: each component * ((g & 0x1f) << 2 | 0x80) >> 8; bit 5 set: each
++   * component * ~((g & 0x1f) << 1) >> 8 + ((g & 0x1f) >> 1) -- and ac70 finds the nearest palette
++   * index in [ac64 .. ac60] for the result, which replaces the cell. */
++  uint8_t  *xb   = g_mem + fist_ext_base;
++  unsigned  d    = xb[0x8490];
++  uint32_t  mask = *(uint32_t *)(xb + 0x849c), rows, cols, bp0, bp;
++  uint8_t  *end  = edi + DAT_0000_8498;
++  *(uint32_t *)(xb + 0x8838) = (uint32_t)(uintptr_t)end;                              /* 88b0-88b8 */
++  edi += (DAT_0000_864c & mask) << d;                                                 /* 88bd-88dc */
++  bp0  = DAT_0000_8648 & mask;                                                        /* 88d0-88d6 */
++  for (rows = DAT_0000_557c; rows != 0; rows--) {                                     /* 88de/88e4 */
++    bp = bp0;
++    for (cols = DAT_0000_5578; cols != 0; cols--) {                                   /* 88eb */
++      uint8_t g = xb[0x5599 + 3u * *esi++];                                           /* 88ec-88f6 */
++      if (g != 0x1f) {                                                                /* 88f7 */
++        const uint8_t *rgb = xb + 0x5260 + 3u * edi[bp];                              /* 88fc-8902 */
++        uint8_t bl = (uint8_t)(g << 3);                                               /* 8909 shl bl,3 */
++        if (((g >> 5) & 1) == 0) {                                                    /* the carry: bit 5 */
++          bl = (uint8_t)((bl >> 1) + 0x80);                                           /* 890e-8910 */
++          xb[0xac68] = (uint8_t)((rgb[0] * bl) >> 8);                                 /* 8913-8917 */
++          xb[0xac69] = (uint8_t)((rgb[1] * bl) >> 8);
++          xb[0xac6a] = (uint8_t)((rgb[2] * bl) >> 8);
++        } else {
++          uint8_t bh;
++          bl >>= 2; bh = (uint8_t)~bl; bl >>= 2;                                      /* 8935-893c */
++          xb[0xac68] = (uint8_t)(((rgb[0] * bh) >> 8) + bl);                          /* 893f-8945 */
++          xb[0xac69] = (uint8_t)(((rgb[1] * bh) >> 8) + bl);
++          xb[0xac6a] = (uint8_t)(((rgb[2] * bh) >> 8) + bl);
++        }
++        edi[bp] = (uint8_t)FUN_0000_ac70();                                           /* 8969-8972 */
++      }
++      bp = (bp + 1) & mask;                                                           /* 8977-8978 */
++    }
++    edi += DAT_0000_8494;                                                             /* 8987 */
++    if (edi >= end) edi -= DAT_0000_8498;                                             /* 898d-8995 */
++  }
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_89b0) @ 0000:89b0 ===== */
+ 
+ /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+@@ -15344,11 +15509,12 @@
+     if (uVar7 < uVar5) {                 /* asm acd4 jb acda: better match */
+       uVar5 = uVar7;                     /* edx = edi (best distance) */
+       ebx_best = ebp_idx;                /* ebx = ebp (best index) */
+-      if (uVar7 == 0) return ebx_best;   /* asm ace0 je ace5: exact match, done */
++      if (uVar7 == 0) { extern unsigned g_ext_edx; g_ext_edx = 0; return ebx_best; }   /* asm ace0 je ace5: exact match, done -- EDX = 0 (PATCH 583) */
+     }
+     ebp_idx = ebp_idx + 1;               /* inc ebp */
+     iVar4 = iVar4 + -1;                  /* loop (dec ecx) */
+   } while (iVar4 != 0);
++  { extern unsigned g_ext_edx; g_ext_edx = uVar5; }   /* PATCH 583: EDX = the best distance on exit, a stale-register carry 8650 reads */
+   return ebx_best;
+ }
+ 
+@@ -17591,6 +17757,9 @@
+   {0x8480u,(void*)&FUN_0000_8480},
+   {0x84c0u,(void*)&FUN_0000_84c0},
+   {0x85d0u,(void*)&FUN_0000_85d0},
++  {0x8650u,(void*)&FUN_0000_8650},
++  {0x8840u,(void*)&FUN_0000_8840},
++  {0x88afu,(void*)&FUN_0000_88af},
+   {0x89b0u,(void*)&FUN_0000_89b0},
+   {0x8ce2u,(void*)&FUN_0000_8ce2},
+   {0x8debu,(void*)&FUN_0000_8deb},

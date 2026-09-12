@@ -1,7 +1,9 @@
 board:0013 dynamic basic-block trace -- dump every EXECUTED instruction once (dedup by linear: a
 bitmap below 32 MB, an open-addressing set above it -- the extender maps the 32-bit app high) as "cs:eip linear <16 opcode bytes>", to reconstruct the executed program (overlay flight model,
 indirect edges, SMC, the code static Ghidra cannot reach).  Env: FIST_BLKTRACE=<path>, optional
-FIST_BLKTRACE_LO/_HI (hex linear scope) and FIST_BLKTRACE_CS (hex, one code segment).  Insert in the
+FIST_BLKTRACE_LO/_HI (hex linear scope) and FIST_BLKTRACE_CS (hex, one code segment).  Also
+FIST_REGTRACE=<path> FIST_REGTRACE_LIN=<hex>[,<hex>..]: the general registers each time execution
+reaches one of the listed linears (the extender's register carries, board:0002).  Insert in the
 normal core's per-instruction loop (after the 0a28 hook), before the C_DEBUG block.  Apply to
 third_party/dosbox-build/dosbox-0.74-3/src/cpu/core_normal.cpp then `make`.
 --- a/src/cpu/core_normal.cpp
@@ -50,4 +52,21 @@ third_party/dosbox-build/dosbox-0.74-3/src/cpu/core_normal.cpp then `make`.
 +					fprintf(fist_blk_f,"%04x:%08x %08x %s\n",(unsigned)SegValue(cs),(unsigned)reg_eip,(unsigned)lin,b);
 +				}
 +			}
++		}
++		/* board:0002 FIST_REGTRACE=<path> FIST_REGTRACE_LIN=<hex>[,<hex>..]: the general registers every
++		 * time execution reaches one of the listed linears (the extender's stale-register carries). */
++		static int fist_reg_init = 0; static FILE* fist_reg_f = 0; static Bit32u fist_reg_lin[16]; static int fist_reg_n = 0;
++		if (!fist_reg_init) { fist_reg_init = 1;
++			const char* p = getenv("FIST_REGTRACE");
++			if (p) { fist_reg_f = fopen(p, "w");
++				const char* l = getenv("FIST_REGTRACE_LIN");
++				while (l && *l && fist_reg_n < 16) { fist_reg_lin[fist_reg_n++] = (Bit32u)strtoul(l, (char**)&l, 16); if (*l == ',') l++; }
++			}
++		}
++		if (fist_reg_f) { Bit32u lin = (Bit32u)core.cseip;
++			for (int i = 0; i < fist_reg_n; i++) if (lin == fist_reg_lin[i]) {
++				fprintf(fist_reg_f, "%04x:%08x lin=%08x eax=%08x ebx=%08x ecx=%08x edx=%08x esi=%08x edi=%08x ebp=%08x esp=%08x t=%.4f\n",
++					(unsigned)SegValue(cs), (unsigned)reg_eip, (unsigned)lin, (unsigned)reg_eax, (unsigned)reg_ebx, (unsigned)reg_ecx,
++					(unsigned)reg_edx, (unsigned)reg_esi, (unsigned)reg_edi, (unsigned)reg_ebp, (unsigned)reg_esp, PIC_FullIndex());
++				fflush(fist_reg_f); }
 +		}

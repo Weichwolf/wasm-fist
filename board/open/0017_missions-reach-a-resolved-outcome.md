@@ -1485,3 +1485,6 @@ agrees on both now.  Two consequences for the congruence work:
   oracle's seed and its poll cadence reproduced, or a statistical match of outcomes.
 - Native and wasm stay identical because the poll count is the clock model's (board:0026): two AZER1
   runs on the port give the same verdict tick and the same FIST_SIMHASH sequence (1870 lines).
+
+Sweep with 582 (`scratch/oracle/sweep582.log`): 47 of 47 resolve -- 19 DEFEAT, 28 TIME EXPIRED, 0
+VICTORY; 6770 s of CPU, the longest 569 s.  TRAIN2 now DEFEAT (was the one VICTORY), as the original.

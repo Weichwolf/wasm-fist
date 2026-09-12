@@ -1,0 +1,205 @@
+PATCH 584: extender op 0x50 -- the object projection (ba7d) -- and its two callers 2471/3eb3.
+
+board:0002.  The depth sorter 2471 posts op 0x50 for every render node (3eb3: `lea si,[bx+0xa] ; mov
+dx,[bx+6] ; call e189`), and 2908/290e post it for the effect record 0x6bbe.  The service (1266 =
+`movzx esi,si ; add esi,[0xca1] ; call ba7d`) turns the node's world position into a screen position and
+a depth row; ba7d was not in the decompile and the shim returned 0, so every node landed at (0,0) at
+depth 0 and the model rasterizer (op 0x40) never drew a vehicle where it stands.  Transcribed from
+0xba7d-0xbc05:
+
+  ba7d   ba7b = the height byte [esi+9]; ba73 = dx << 22; ebx = x - 90cc (within +-0x80000), ebp =
+         -(y - 90d0) (within +-0x40000), both << 12; lateral = hi(9100 * ebx) - hi(90fc * ebp), depth =
+         -(hi(9100 * ebp) + hi(90fc * ebx)) (<= 0x1fffffff); the depth << 3 less ba73 (a negative
+         difference is folded into ba73 and the depth becomes 0); the 0x4624 row table searched from
+         the middle when past the middle row ([0x3a20] rows), the near row ba6f; depth + ba73 searched
+         on, the far row ba6b; scale = 0x4224[row] >> 3 (0 fails); y = ((height - (90df >> 1)) as a
+         signed byte << 18) / scale + 0x80, x = lateral / scale + 0x80, both within +-0x800.
+         Returns AX = y, CX = x, EDX = the depth, ESI/EDI = the far/near rows; on failure AX = CX =
+         0xfc18, EDX = -1, ESI = EDI = 0x32.
+  3eb3   stores AX/CX/EDX/SI/DI into the node (+0x26/+0x28/+0x2a/+0x2e/+0x30) and returns CF =
+         (EDX == -1); Ghidra took BX as a host pointer and stored the incoming registers.  2471's
+         inline copy stored 0 for AX/CX and the cursor for DI.  The registers travel through the
+         shim's op-0x50 lanes (g_fist_op50_*).
+
+  Measured against the oracle's register trace of ba7d (scratch/oracle/regtrace_op50): on AZER1's
+  first frame the four nodes the original projects successfully are the four the port projects, with
+  the same x, the same depth and the same rows (43/0x769864e8/185-184, 297/0x53754350/157-156,
+  196/0xc13a5c30/232-232, 54/0xce790ac8/240-239); y differs there only by the height byte the port's
+  first frame has not yet set (board:0002's frame-1 pacing).  The fail/success pattern over the frame
+  is the original's.
+
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -181,6 +181,7 @@
+ #define FUN_0000_ac70 m_ext_FUN_0000_ac70
+ #define FUN_0000_ad1e m_ext_FUN_0000_ad1e
+ #define FUN_0000_ae84 m_ext_FUN_0000_ae84
++#define FUN_0000_ba7d m_ext_FUN_0000_ba7d
+ #define FUN_0000_bc06 m_ext_FUN_0000_bc06
+ #define FUN_0000_bc5a m_ext_FUN_0000_bc5a
+ #define FUN_0000_bc9c m_ext_FUN_0000_bc9c
+@@ -393,6 +394,7 @@
+ uint __allregs caseD_0(uint param_1,uint param_2,short param_3,byte *param_4);
+ void __allregs caseD_5(uint param_1,uint param_2,char *param_3);
+ undefined4 __allregs caseD_2(undefined4 param_1,uint param_2,short param_3,char *param_4);
++unsigned __allregs FUN_0000_ba7d(const uint8_t *esi, uint16_t dx);   /* PATCH 584: op 0x50, the object projection */
+ void __allregs FUN_0000_bc06(int param_1);
+ void __allregs FUN_0000_bc5a(int param_1,int param_2,undefined4 *param_3,byte *param_4,byte *param_5);
+ void __allregs FUN_0000_bc9c(void);
+@@ -17118,6 +17120,73 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_ba7d) @ 0000:ba7d ===== */
++
++unsigned __allregs FUN_0000_ba7d(const uint8_t *esi, uint16_t dx)
++
++{
++  /* PATCH 584: extender op 0x50 (1266: `movzx esi,si ; add esi,[0xca1] ; call ba7d`) -- the OBJECT
++   * PROJECTION the depth sorter 2471/3eb3 posts for every render node (si = node+0xa, the world X/Y
++   * dwords and the height byte at +9; dx = word[node+6], an altitude in 1/1024 cells): the position
++   * relative to the camera (90cc/90d0) rotated by 90fc/9100 into (lateral esi, depth edi), the depth
++   * shifted by 3 and pushed back by dx << 22, then the row of the 0x4624 depth table it falls in
++   * (searched from the middle when beyond the middle row, [0x3a20] rows), the row's scale from 0x4224
++   * (>> 3), and the screen y = -((camera height 90df >> 1) - height) << 18 / scale + 0x80 and
++   * x = lateral / scale + 0x80, both within +-0x800.  Returns AX = y, CX = x, EDX = the depth,
++   * ESI/EDI = the far/near rows (ba6b/ba6f); on any failure AX = CX = 0xfc18, EDX = -1, ESI = EDI =
++   * 0x32.  Unpromoted; the shim returned 0, so every node was projected to (0,0) at depth 0 and no
++   * vehicle was ever drawn in place.  Asm 0xba7d-0xbc05. */
++  extern uint16_t g_fist_op50_cx; extern uint32_t g_fist_op50_edx, g_fist_op50_esi, g_fist_op50_edi;
++  uint8_t  *xb = g_mem + fist_ext_base;
++  const uint32_t *tab = (const uint32_t *)(xb + 0x4624);
++  int32_t  ebx, ebp, lat, dep, sc, v;
++  uint32_t edi, k, n, rows, half, ba73;
++  int8_t   al;
++  *(uint16_t *)(xb + 0xba7b) = esi[9];                                          /* ba7d-ba84 */
++  ba73 = (uint32_t)dx << 22; *(uint32_t *)(xb + 0xba73) = ba73;                 /* ba8b-ba91 */
++  ebx = *(const int32_t *)esi - (int32_t)_DAT_0000_90cc;                        /* ba97-ba99 */
++  if (ebx > 0x80000 || ebx < -0x80000) goto fail;                               /* ba9f-bab1 */
++  ebx = (int32_t)((uint32_t)ebx << 12);                                         /* bab7 */
++  ebp = -(*(const int32_t *)(esi + 4) - (int32_t)_DAT_0000_90d0);               /* baba-bac3 */
++  if (ebp > 0x40000 || ebp < -0x40000) goto fail;                               /* bac5-bad7 */
++  ebp = (int32_t)((uint32_t)ebp << 12);                                         /* badd */
++  lat = (int32_t)(((int64_t)(int32_t)DAT_0000_9100 * ebx) >> 32)                /* bae0-bae7 */
++      - (int32_t)(((int64_t)(int32_t)DAT_0000_90fc * ebp) >> 32);               /* bae9-baf0 */
++  dep = -((int32_t)(((int64_t)(int32_t)DAT_0000_9100 * ebp) >> 32)              /* baf2-baf9 */
++      + (int32_t)(((int64_t)(int32_t)DAT_0000_90fc * ebx) >> 32));              /* bafb-bb04 */
++  if ((uint32_t)dep > 0x1fffffffu) goto fail;                                   /* bb06 */
++  k = 0; edi = (uint32_t)dep << 3;                                              /* bb12-bb14 */
++  if (edi >= ba73) edi -= ba73;                                                 /* bb17 sub ; jae */
++  else { ba73 -= edi; *(uint32_t *)(xb + 0xba73) = ba73; edi = 0; }             /* bb1f-bb27 */
++  rows = _FUN_0000_3a20; half = rows >> 1;                                      /* bb2e-bb34 */
++  if (edi > tab[half - 1]) { k = half; n = half; } else n = rows;               /* bb36-bb40 */
++  for (;;) { if (edi <= tab[k]) break; k++; if (--n == 0) goto fail; }          /* bb46-bb4f */
++  *(uint32_t *)(xb + 0xba6f) = k;                                               /* bb54 */
++  if (edi + ba73 < edi) goto fail;                                              /* bb5a add ; jb */
++  edi += ba73;
++  for (;;) { if (edi <= tab[k]) break; k++; if (--n == 0) goto fail; }          /* bb66-bb6f */
++  sc = (int32_t)(*(const uint32_t *)(xb + 0x4224 + k * 4) >> 3);                /* bb71/bb7e */
++  *(uint32_t *)(xb + 0xba6b) = k;                                               /* bb78 */
++  if (sc == 0) goto fail;                                                       /* bb81 */
++  al = (int8_t)(-(int8_t)((uint8_t)(xb[0x90df] >> 1) - (uint8_t)xb[0xba7b]));   /* bb83-bb90 */
++  v = ((int32_t)al << 18) / sc + 0x80;                                          /* bb92-bb9b */
++  if (v > 0x800 || v < -0x800) goto fail;                                       /* bba0-bbac */
++  *(uint16_t *)(xb + 0xba79) = (uint16_t)v;                                     /* bbae */
++  v = lat / sc + 0x80;                                                          /* bbb4-bbb9 */
++  if (v > 0x800 || v < -0x800) goto fail;                                       /* bbbe-bbca */
++  *(uint16_t *)(xb + 0xba77) = (uint16_t)v;                                     /* bbcc */
++  g_fist_op50_cx  = *(uint16_t *)(xb + 0xba77);                                 /* bbd2 */
++  g_fist_op50_edx = edi;                                                        /* bbdf */
++  g_fist_op50_esi = *(uint32_t *)(xb + 0xba6b);                                 /* bbe1 */
++  g_fist_op50_edi = *(uint32_t *)(xb + 0xba6f);                                 /* bbe7 */
++  return *(uint16_t *)(xb + 0xba79);                                            /* bbd9 */
++fail:
++  g_fist_op50_cx = 0xfc18; g_fist_op50_edx = 0xffffffffu;                       /* bbee-bbf6 */
++  g_fist_op50_esi = 0x32; g_fist_op50_edi = 0x32;                               /* bbfb-bc00 */
++  return 0xfc18;                                                                /* bbf2 */
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_bc06) @ 0000:bc06 ===== */
+ 
+ void __allregs FUN_0000_bc06(int param_1)
+@@ -17805,6 +17874,7 @@
+   {0xaee9u,(void*)&caseD_0},
+   {0xb423u,(void*)&caseD_5},
+   {0xb732u,(void*)&caseD_2},
++  {0xba7du,(void*)&FUN_0000_ba7d},
+   {0xbc06u,(void*)&FUN_0000_bc06},
+   {0xbc5au,(void*)&FUN_0000_bc5a},
+   {0xbc9cu,(void*)&FUN_0000_bc9c},
+--- a/fist.c
++++ b/fist.c
+@@ -10219,19 +10219,24 @@
+     { extern unsigned short g_fist_render_di;
+       di = (uint16_t)((g_fist_render_di + 1) & 0xfffe); }
+     *(uint16_t *)(dg + bx) = di;              /* 24a6: word[bx]=di (node link = next free node) */
+-    /* 24a8: inline 3eb3(node=bx) -> CF = (edx == -1) (asm 0x3eb3): project the node via e189 op-0x50. */
++    /* 24a8: inline 3eb3(node=bx) -> CF = (edx == -1) (asm 0x3eb3): project the node via e189 op-0x50.
++     * PATCH 584: `lea si,[bx+0xa] ; mov dx,[bx+6] ; push bx ; call e189 ; pop bx` -- the service (ba7d)
++     * takes SI and DX in the registers and returns AX = screen y, CX = screen x, EDX = the depth and DI =
++     * its near row; the __allregs model threads them through the shim's op-0x50 lanes.  The stores were
++     * 0 for AX/CX and the cursor for DI while the service was unserved. */
+     {
+       uint8_t  *nd = dg + bx;
+       uint32_t e_edx;
+-      /* si=bx+0xa (coord ptr), dx=word[bx+6]; ebx (ambient) -> e189 op-0x50 projection.  e189 returns
+-         the projected coordinate in edx (ax/cx are the extraout multi-return, dropped by the current
+-         reconstruction -> stored as 0 pending the op-0x50 service). */
+-      e_edx = (uint32_t)FUN_0000_e189((uint32_t)(uint16_t)bx);
+-      *(uint16_t *)(nd + 0x26) = 0;                       /* [bx+0x26]=ax (extraout, residual) */
+-      *(uint16_t *)(nd + 0x28) = 0;                       /* [bx+0x28]=cx (extraout, residual) */
+-      *(uint32_t *)(nd + 0x2a) = e_edx;                   /* [bx+0x2a]=edx */
+-      *(uint16_t *)(nd + 0x2e) = (uint16_t)(bx + 0xa);    /* [bx+0x2e]=si (OFFSET bx+0xa) */
+-      *(uint16_t *)(nd + 0x30) = di;                      /* [bx+0x30]=di */
++      extern uint16_t g_fist_op50_si, g_fist_op50_dx, g_fist_op50_cx; extern uint32_t g_fist_op50_edx, g_fist_op50_edi;
++      g_fist_op50_si = (uint16_t)(bx + 0xa);              /* 3eb3 lea si,[bx+0xa] */
++      g_fist_op50_dx = *(uint16_t *)(dg + (uint16_t)(bx + 6));   /* 3eb6 mov dx,[bx+6] */
++      ax = (uint16_t)FUN_0000_e189((uint32_t)(uint16_t)bx);
++      e_edx = g_fist_op50_edx;
++      *(uint16_t *)(nd + 0x26) = ax;                      /* 3ebe [bx+0x26]=ax */
++      *(uint16_t *)(nd + 0x28) = g_fist_op50_cx;          /* 3ec1 [bx+0x28]=cx */
++      *(uint32_t *)(nd + 0x2a) = e_edx;                   /* 3ec4 [bx+0x2a]=edx */
++      *(uint16_t *)(nd + 0x2e) = (uint16_t)(bx + 0xa);    /* 3ec8 [bx+0x2e]=si */
++      *(uint16_t *)(nd + 0x30) = (uint16_t)g_fist_op50_edi;   /* 3ecb [bx+0x30]=di (the service's) */
+       if (e_edx == 0xffffffff) continue;                  /* 24ad: jb 0x2486 (behind camera) */
+     }
+     /* 24af: 8e8(si=0x155a camera, di=bx+0xa node) -> ax:dx = view distance (in DAT_1000_c458/c45a) */
+@@ -13041,19 +13046,24 @@
+ void __allregs FUN_0000_3eb3(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4)
+ 
+ {
+-  undefined2 uVar1;
+-  undefined4 uVar2;
+-  undefined2 in_register_0000000e;
+-  int iVar3;
+-  
+-  iVar3 = param_3 + 10;
+-  uVar2 = CONCAT22((int)((ulong)param_2 >> 0x10),*(undefined2 *)(param_3 + 6));
+-  uVar1 = FUN_0000_e189(CONCAT22(in_register_0000000e,param_3));
+-  *(undefined2 *)(param_3 + 0x26) = uVar1;
+-  *(undefined2 *)(param_3 + 0x28) = param_1;
+-  *(undefined4 *)(param_3 + 0x2a) = uVar2;
+-  *(int *)(param_3 + 0x2e) = iVar3;
+-  *(undefined2 *)(param_3 + 0x30) = param_4;
++  /* PATCH 584: asm 0x3eb3-0x3ed3 -- project the render node BX (a DGROUP near offset; 2908/290e pass
++   * 0x6bbe) through op 0x50: `lea si,[bx+0xa] ; mov dx,[bx+6] ; push bx ; call e189 ; pop bx`, then
++   * [bx+0x26] = AX, [bx+0x28] = CX, [bx+0x2a] = EDX, [bx+0x2e] = SI, [bx+0x30] = DI, and CF = (EDX ==
++   * -1) via `cmp edx,-1 ; cmc`.  Ghidra took BX as a host pointer and stored the incoming CX/DX/DI. */
++  extern unsigned char g_fist_cf;
++  extern uint16_t g_fist_op50_si, g_fist_op50_dx, g_fist_op50_cx; extern uint32_t g_fist_op50_edx, g_fist_op50_edi;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)param_3, ax;
++  (void)param_1; (void)param_2; (void)param_4;
++  g_fist_op50_si = (uint16_t)(bx + 0xa);
++  g_fist_op50_dx = *(uint16_t *)(dg + (uint16_t)(bx + 6));
++  ax = (uint16_t)FUN_0000_e189((uint32_t)bx);
++  *(uint16_t *)(dg + (uint16_t)(bx + 0x26)) = ax;
++  *(uint16_t *)(dg + (uint16_t)(bx + 0x28)) = g_fist_op50_cx;
++  *(uint32_t *)(dg + (uint16_t)(bx + 0x2a)) = g_fist_op50_edx;
++  *(uint16_t *)(dg + (uint16_t)(bx + 0x2e)) = (uint16_t)(bx + 0xa);
++  *(uint16_t *)(dg + (uint16_t)(bx + 0x30)) = (uint16_t)g_fist_op50_edi;
++  g_fist_cf = (g_fist_op50_edx == 0xffffffffu);
+   return;
+ }
+ 

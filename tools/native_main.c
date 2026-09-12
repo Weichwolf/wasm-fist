@@ -1014,6 +1014,7 @@ static unsigned long long g_int8_last_clock;
     X(g_fist_render_si) X(g_fist_b1df_ax) X(g_fist_0578_bx) X(g_fist_02e8_si) X(g_fist_177f_bx) \
     X(g_fist_ctx_bx) X(g_fist_03a9_dx) X(g_fist_fp_dx) X(g_fist_fp_cx) X(g_fist_r48_dx) X(g_fist_r48_cx) \
     X(g_fist_3e29_cx) X(g_fist_ext_esi) X(g_fist_ext_ecx) X(g_fist_ext_edx) X(g_fist_ext_edi) \
+    X(g_fist_op50_si) X(g_fist_op50_dx) X(g_fist_op50_cx) X(g_fist_op50_edx) X(g_fist_op50_esi) X(g_fist_op50_edi) X(g_ext_edx) \
     X(g_fist_ext_edx_out) X(g_fist_1345_bp) X(g_fist_054c_bx) X(g_fist_054c_cx) X(g_fist_054c_dx) \
     X(g_fist_render_di) X(g_fist_render_dx) X(g_mga_fade_es)
 #define FIST_ISR_SAVE(v)   __typeof__(v) isr_##v = v;
@@ -1029,6 +1030,8 @@ extern int g_fist_r_cx;
 extern uint16_t g_fist_b71_dx, g_fist_b71_cx, g_fist_b71_bx, g_fist_baf_dx, g_fist_0927_dx,
     g_fist_0541_cx, g_fist_0541_dx;
 extern uint32_t g_fist_ext_esi, g_fist_ext_edx_out;
+extern uint16_t g_fist_op50_si, g_fist_op50_dx, g_fist_op50_cx;
+extern uint32_t g_fist_op50_edx, g_fist_op50_esi, g_fist_op50_edi, g_ext_edx;
 #define FIST_ISR_REGFILE_LIN 0xf0000u
 #define FIST_ISR_REGFILE_LEN 0x40u
 
@@ -1697,6 +1700,20 @@ static void ext_module_init(void) {
 
 
 int g_fist_after_map = 0;   /* set once op 0x18 (map load) has fired -> roster probe gate */
+/* The 32-bit app's EDX as the last service left it.  The extender preserves the app's registers across
+ * its mode switches, so a service that reads EDX before writing it sees the previous service's exit
+ * value -- 8650 (op 0x60) does exactly that for its flatness window (`sub ebx,edx` with only DL set),
+ * which is why the original presses a crater into some terrain and not into other, equally flat
+ * terrain.  Kept by the handlers whose exit EDX the asm fixes: op 0x54 (-(y << 13)), 8650's own paths,
+ * ac70's best distance, bed2/bc06.  The engine's 16-bit DX between two services is not carried (the
+ * decompile does not materialise it); at the mission-start stamps the preceding service is always the
+ * spawn's op 0x54, whose value the engine leaves alone (oracle traces of AZER1/TRAIN2/CYPRUS1).  board:0002 */
+uint32_t g_ext_edx;
+/* The op-0x50 register lanes (patch 584): 2471/3eb3 post the node's coordinate pair (SI = node+0xa) and
+ * altitude (DX = word[node+6]) in the registers; ba7d answers in AX (screen y), CX (x), EDX (depth),
+ * ESI/EDI (the far/near depth rows).  AX travels as the gate's return, the rest through these. */
+uint16_t g_fist_op50_si, g_fist_op50_dx, g_fist_op50_cx;
+uint32_t g_fist_op50_edx, g_fist_op50_esi, g_fist_op50_edi;
 void fist_dbg_op2c(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoint at the op-0x2c gate */
 void fist_dbg_op18(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoint at the first op-0x18 map-load (arm d548 watchpoint here) */
 void fist_dbg_fbwild(void) { __asm__ __volatile__(""); }   /* clean gdb breakpoint when a blit dest lands outside the framebuffer (wild write) */
@@ -1935,6 +1952,7 @@ int fist_extender_gate(void) {
                                        : (uint16_t)*(uint32_t*)(g_mem + tcb54 + 0x3f2);
         int32_t X=*(int32_t*)(dg+pp),Y=*(int32_t*)(dg+(uint16_t)(pp+4));
         uint32_t idx=fist_hm_index((uint32_t)(-(int32_t)((uint32_t)Y<<13)), (uint32_t)X<<13, *(uint32_t*)(xb54+0x8490));
+        g_ext_edx = (uint32_t)(-(int32_t)((uint32_t)Y<<13));   /* 11bb-11c1: the app's EDX on exit (op 0x60 reads it stale) */
         return hm54?(int)hm54[idx]:0; }
     if (op == 0x58 && g_ext_ready && g_fist_after_map) {
         /* board:0012 e339 clobber fix: a SERVICE op consumes its selector so e339's task-scheduler tail
@@ -2149,6 +2167,10 @@ int fist_extender_gate(void) {
         }
     }
     /* FIST_OPHIST -- temporary op histogram + 3918 tile-fill probe (read-only diagnostic). */
+    if (getenv("FIST_OPSEQ")) { static int n; if (n < 4000) { n++;
+        uint32_t t = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        fprintf(stderr, "[opseq] %02x  +5a='%.16s' +6a='%.16s' +7a='%.16s' +3f2=%08x\n", op,
+                (char*)(g_mem+t+0x5a), (char*)(g_mem+t+0x6a), (char*)(g_mem+t+0x7a), *(uint32_t*)(g_mem+t+0x3f2)); } }
     if (getenv("FIST_OPHIST")) {
         static long ophist[0x100]; static long total;
         static int firstseen[0x100];
@@ -2197,6 +2219,40 @@ int fist_extender_gate(void) {
      * oracle alt=12800 = (43+7)<<8, i.e. alt = (h<<8) + FIST_EYE_HT where FIST_EYE_HT = 7<<8 = 1792
      * (the M1A2 eye height, 7 world units, in the extender's <<8 world scale).  Heightmap index math =
      * 0x8650's own: tile = (camXY<<13)>>(32-detail), idx = ((tileY&mask)<<detail)+(tileX&mask). */
+    /* board:0002 op 0x50 -- the OBJECT PROJECTION (service 1266 = `movzx esi,si ; add esi,[0xca1] ; call
+     * ba7d`, fist_ext.c FUN_0000_ba7d): every render node's world position to a screen position and a
+     * depth row, once per node per frame from the depth sorter 2471 (and 3eb3 for 2908/290e's record).
+     * The shim used to return 0, so every node sat at (0,0) at depth 0 and the models never drew in place. */
+    if (op == 0x50 && g_ext_ready && g_fist_after_map) {
+        extern unsigned m_ext_FUN_0000_ba7d(const uint8_t *, uint16_t);
+        *(uint16_t *)(dg + 0xea10) = 0;
+        { int r = (int)m_ext_FUN_0000_ba7d(dg + g_fist_op50_si, g_fist_op50_dx);
+          if (getenv("FIST_OP50TRACE")) { static long n; if (n++ < 400) fprintf(stderr, "[op50] t=%u si=%04x X=%d Y=%d h=%u dx=%u -> y=%d x=%d depth=%08x rows=%u/%u\n",
+              *(uint16_t*)(dg+0x452), g_fist_op50_si, *(int32_t*)(dg+g_fist_op50_si), *(int32_t*)(dg+g_fist_op50_si+4), dg[g_fist_op50_si+9], g_fist_op50_dx,
+              (int16_t)r, (int16_t)g_fist_op50_cx, g_fist_op50_edx, g_fist_op50_esi, g_fist_op50_edi); }
+          return r; }
+    }
+    /* board:0002 op 0x60 -- the MAP STAMPS (service 10f1 = `call 8650`, fist_ext.c FUN_0000_8650): the
+     * objective and crater images e043 posts for a mission (a position and two 16-byte image names in
+     * the TCB) pressed into the height- and colormaps.  The shim used to return 0 for the 16-odd posts
+     * of every mission, so the terrain carried no objectives. */
+    if (op == 0x60 && g_ext_ready && g_fist_after_map) {
+        uint8_t  *xb  = g_mem + FIST_EXT_BASE;
+        uint32_t tcb_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
+        uint32_t save_c93 = *(uint32_t*)(xb+0xc93);
+        extern unsigned m_ext_FUN_0000_8650(void);
+        unsigned r;
+        *(uint32_t*)(xb+0xc93) = (uint32_t)(uintptr_t)(g_mem + tcb_lin);
+        *(uint16_t *)(dg + 0xea10) = 0;                    /* served: e339 restarts through [0x58] otherwise */
+        g_fist_ext_int = 1;                                /* 643c opens the two .KLC through the flat FILEMGR */
+        r = m_ext_FUN_0000_8650();
+        g_fist_ext_int = 0;
+        *(uint32_t*)(xb+0xc93) = save_c93;
+        if (getenv("FIST_OP60TRACE"))
+            fprintf(stderr, "[op60] stamp '%.16s' / '%.16s' at (%d,%d) -> %d\n", (char*)(g_mem + tcb_lin + 0x5a),
+                    (char*)(g_mem + tcb_lin + 0x6a), *(int32_t*)(g_mem + tcb_lin + 0xd2), *(int32_t*)(g_mem + tcb_lin + 0xd6), (int)r);
+        return (int)r;
+    }
     /* board:0002 op 0x08 -- the TERRAIN TILE BUILD, posted once per frame right before op 0x24.  The
      * service table (fist_image.bin 0xcb3) maps it to 0x10e0 = `call 8df0 ; call 3931`: the viewport
      * from the TCB, then 3931 = the camera (85d0), the sky/tile resampler through [0x3958] (0x6877) and
