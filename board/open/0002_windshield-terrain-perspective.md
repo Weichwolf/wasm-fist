@@ -2771,3 +2771,15 @@ The red was a5c4's dropped immediates (patch 585: `mov ax,0x40 ; mov si,0x20 ; m
 [0x5c4]` -- the fade to black the loss plays, 64/32/32 frames per channel, confirmed by the oracle's
 register trace of MGAVIDEO 0660) and 063c's folded wait.  The torn console is the Bradley cockpit's
 own paint chain, which no M1 flow ever ran -- board:0027.
+
+## The 206-byte corner diff is closed at the native↔wasm level (gate 609)
+
+The 206-byte native-vs-wasm corner diff above was a symptom of the OLD tick model (SIGALRM async
+tick + FIST_COOP_TICK gate): the two targets reached the first op-0x24 post after a different number
+of ticks (native 41 vs wasm 314).  The PIT clock was since unified (board:0026) -- one clock in PIT
+counts, the INT-8 delivered from the pump, native and wasm stepping it identically.  With it the
+five `terrain-*` flows (AZER1/SAUDI1/CYPRUS1/INDIA1/SYRIA1, full 320x200 framebuffer) PASS
+native==wasm in gate 609, and every one of the 178 verify flows is native==wasm.  So this diff is
+no longer open: the native↔wasm terrain-identity invariant holds across theatres.  What remains on
+this item is the ORACLE-framebuffer congruence of the voxel band (the terrain rendered by 689a/6980/
+9200 vs the original's), a distinct axis measured by screenshot/refcapture, not by native==wasm.
