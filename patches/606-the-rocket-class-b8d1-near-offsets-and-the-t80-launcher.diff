@@ -1,0 +1,206 @@
+PATCH 606: the rocket class -- b8d1's near offsets, the T-80's launcher 9699/96c0/9667/9af3.
+
+board:0017.  b8d1, the type-0xf rocket init (asm 0xb8d1-0xb917), takes SI = the new object and DI =
+the firer as near offsets: `mov [si+0x2b],di` stores the firer's WORD.  Ghidra's host-pointer body
+stored the firer's 32-bit host address over +0x2b..+0x2e (b945/b998 read the word and the two bytes
+above are the rocket's own), and the M3's launcher 8270 (patch 541) passed host pointers to match;
+the port's rocket at 0xb22e diverged from the original's from step 6331 of the third full AZER1
+run.  The T-80's side of the same class was Ghidra's throughout: 9699 (the trigger, `bx = 0 if
+byte[di+0xb7] == 4 else 1 if byte[di+0xb8] == 4 else stc`), 96c0 (`call 9699 ; jae ; call 9667` on
+the CF), 9667 (the rack arming, byte[di+bx+0xb7] = 2) and 9af3 (the launcher, the twin of 8270) --
+host derefs of a near offset, a host pointer fed to b1df, the CF dropped.  All four rebuilt from
+their asm in the DGROUP model.
+
+--- a/fist.c
++++ b/fist.c
+@@ -26785,16 +26785,22 @@
+ void __allregs FUN_0000_9667(int param_1)
+ 
+ {
+-  int iVar1;
+-  
+-  iVar1 = 0;
+-  if (((*(char *)(param_1 + 0xb7) != '\0') || (*(char *)(param_1 + 0xb5) == '\0')) &&
+-     (iVar1 = 1, *(char *)(param_1 + 0xb8) != '\0')) {
+-    return;
+-  }
+-  *(undefined1 *)(iVar1 + param_1 + 0xb7) = 2;
+-  *(undefined1 *)(param_1 + 0xc6) = 3;
+-  *(undefined1 *)(param_1 + 200) = 3;
++  /* PATCH 606: the T-80's rocket-rack arming (asm 0x9667-0x9694): DI = the object NEAR offset.  Rack 0
++   * when byte[di+0xb7] == 0 and byte[di+0xb5] != 0, else rack 1 when byte[di+0xb8] == 0, else `stc ;
++   * ret`; the rack's state byte [di+bx+0xb7] = 2, the two "3" bytes, clc.  Ghidra read the object
++   * through a host pointer and dropped the CF. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  unsigned int bx = 0;
++  if (dg[(unsigned short)(di + 0xb7)] != 0 || dg[(unsigned short)(di + 0xb5)] == 0) {
++    bx = 1;
++    if (dg[(unsigned short)(di + 0xb8)] != 0) { g_fist_cf = 1; return; }
++  }
++  dg[(unsigned short)(di + bx + 0xb7)] = 2;
++  dg[(unsigned short)(di + 0xc6)] = 3;
++  dg[(unsigned short)(di + 0xc8)] = 3;
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -26804,15 +26810,22 @@
+ void __allregs FUN_0000_9699(int param_1)
+ 
+ {
+-  undefined2 uVar1;
+-  
+-  uVar1 = 0;
+-  if ((*(char *)(param_1 + 0xb7) != '\x04') && (uVar1 = 1, *(char *)(param_1 + 0xb8) != '\x04')) {
+-    return;
+-  }
+-  FUN_1000_9af3(uVar1,param_1);
+-  *(undefined1 *)(param_1 + 0xc6) = 3;
+-  *(undefined1 *)(param_1 + 200) = 3;
++  /* PATCH 606: the T-80's rocket trigger (asm 0x9699-0x96bf): DI = the object NEAR offset (the 97d5
++   * state table's argument, patch 252); bx = 0 if byte[di+0xb7] == 4 else 1 if byte[di+0xb8] == 4,
++   * else `stc ; ret`; `lcall 0f69:a463` (= FUN_1000_9af3 with bx, di); then the two "3" bytes and clc.
++   * Ghidra read the object through a host pointer and dropped the CF the caller 96c0 tests. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_1;
++  unsigned int bx = 0;
++  if (dg[(unsigned short)(di + 0xb7)] != 4) {
++    bx = 1;
++    if (dg[(unsigned short)(di + 0xb8)] != 4) { g_fist_cf = 1; return; }
++  }
++  FUN_1000_9af3((int)bx,(int)di);
++  dg[(unsigned short)(di + 0xc6)] = 3;
++  dg[(unsigned short)(di + 0xc8)] = 3;
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -26822,10 +26835,11 @@
+ void __allregs FUN_0000_96c0(undefined2 param_1)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
++  /* PATCH 606: `call 9699 ; jae ret ; jmp 9667` -- the CF 9699 returns (stc when neither rack is
++   * ready), threaded through g_fist_cf; Ghidra's dead `in_CF = 0` never took the 9667 branch. */
++  extern unsigned char g_fist_cf;
+   FUN_0000_9699(param_1);
+-  if ((bool)in_CF) {
++  if ((bool)g_fist_cf) {
+     FUN_0000_9667(param_1);
+   }
+   return;
+@@ -32351,17 +32365,26 @@
+ void __allregs FUN_0000_b8d1(int param_1,int param_2)
+ 
+ {
+-  *(byte *)(param_1 + 0x17) = *(byte *)(param_1 + 0x17) | 1;
+-  *(int *)(param_1 + 0x2b) = param_2;
+-  *(undefined1 *)(param_1 + 0x2a) = 0;
+-  *(undefined2 *)(param_1 + 0x26) = 0;
+-  *(undefined2 *)(param_1 + 0x28) = 0x16c;
+-  *(undefined2 *)(param_1 + 0x1c) = 0xa0;
+-  *(undefined4 *)(param_1 + 4) = *(undefined4 *)(param_2 + 4);
+-  *(undefined4 *)(param_1 + 8) = *(undefined4 *)(param_2 + 8);
+-  *(long *)(param_1 + 0xc) = *(long *)(param_2 + 0xc) + 0xc00;
+-  *(undefined2 *)(param_1 + 0x1a) = *(undefined2 *)(param_2 + 0x97);
+-  *(undefined2 *)(param_1 + 0x10) = *(undefined2 *)(param_2 + 0x10);
++  /* PATCH 606: the type-0xf ROCKET init (asm 0xb8d1-0xb917; DS=DGROUP=0x1c00): SI = the new object,
++   * DI = the firer, both NEAR offsets (param_1/param_2).  `mov [si+0x2b],di` stores the firer's WORD;
++   * Ghidra's host-pointer body stored the firer's 32-bit host address there (b945/b998 read the word
++   * and the two bytes above it are the rocket's own), and its callers 8270 (the M3's launcher) and
++   * 9af3 (the T-80's) passed host pointers to match.  The seeded replay's third full AZER1 run had
++   * the port's rocket at 0xb22e diverge from the original's from step 6331 (board:0017). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int si = (unsigned short)param_1, di = (unsigned short)param_2;
++  unsigned char *o = dg + si, *f = dg + di;
++  o[0x17] |= 1;                                                       /* b8d1 orb $1,[si+0x17] */
++  *(uint16_t *)(o + 0x2b) = (uint16_t)di;                             /* b8d5 mov [si+0x2b],di */
++  o[0x2a] = 0;                                                        /* b8d8 */
++  *(uint16_t *)(o + 0x26) = 0;                                        /* b8dc */
++  *(uint16_t *)(o + 0x28) = 0x16c;                                    /* b8e1 */
++  *(uint16_t *)(o + 0x1c) = 0xa0;                                     /* b8e6 */
++  *(uint32_t *)(o + 4) = *(uint32_t *)(f + 4);                        /* b8eb/b8ef */
++  *(uint32_t *)(o + 8) = *(uint32_t *)(f + 8);                        /* b8f3/b8f7 */
++  *(uint32_t *)(o + 0xc) = *(uint32_t *)(f + 0xc) + 0xc00;            /* b8fb-b906 movsx 0xc00 + [di+0xc] */
++  *(uint16_t *)(o + 0x1a) = *(uint16_t *)(f + 0x97);                  /* b90a/b90e */
++  *(uint16_t *)(o + 0x10) = *(uint16_t *)(f + 0x10);                  /* b911/b914 */
+   return;
+ }
+ 
+@@ -64107,7 +64130,7 @@
+         tone = 0x2fd7;
+       }
+       else {
+-        FUN_0000_b8d1((int)(intptr_t)(dg + si),(int)(intptr_t)(dg + di)); /* 18296 (host ptrs) */
++        FUN_0000_b8d1((int)si,(int)di);                                  /* 18296 lcall b8d1 (si = the rocket, di = the firer; PATCH 606: near offsets) */
+         FUN_0000_c047(0x18,0,(int)di);                                    /* 1829b/1829e */
+         return;                                                           /* 182a3 lret */
+       }
+@@ -66667,34 +66690,39 @@
+ void __allregs FUN_1000_9af3(int param_1,int param_2)
+ 
+ {
+-  char *pcVar1;
+-  undefined2 uVar2;
+-  undefined2 in_register_0000000e;
+-  undefined4 uVar3;
+-  int unaff_CS;
+-  bool bVar4;
+-  
+-  uVar3 = CONCAT22(in_register_0000000e,param_1);
+-  if (*(char *)(param_1 + param_2 + 0xb5) == '\0') {
+-    uVar2 = 0x2fc9;
+-  }
+-  else if ((*(int *)(param_2 + 0x97) == 0) ||
+-          (bVar4 = false, (*(byte *)(*(int *)(param_2 + 0x97) + 0x16) & 0x10) == 0)) {
+-    uVar2 = 0x2fb5;
++  /* PATCH 606: the T-80's rocket launcher (asm 0x19af3-0x19b38), the twin of the M3's 8270 (patch
++   * 541): bx = the rack (param_1), di = the firer NEAR offset (param_2).  byte[di+bx+0xb5] rounds;
++   * the target word[di+0x97] must be live with byte[+0x16] bit 4; `push di ; mov ax,0xf ; call b1df ;
++   * mov si,di ; pop di ; jb` spawns the rocket (SI) and b8d1 (si, di) initialises it; c047(0x18); the
++   * three failure tones go to a4a2(tone, di).  Ghidra host-deref'd the object, fed b1df a host
++   * pointer and stored the rocket through the unaff_CS placeholder. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t bx = (uint16_t)param_1;
++  uint16_t di = (uint16_t)param_2;
++  uint16_t tone, si, tgt;
++  if (dg[(uint16_t)(di + bx + 0xb5)] == 0) {                             /* 19af3/19af8 -> 19b2c */
++    tone = 0x2fc9;
+   }
+   else {
+-    pcVar1 = (char *)(param_1 + param_2 + 0xb5);
+-    *pcVar1 = *pcVar1 + -1;
+-    FUN_1000_b1df(0xf,param_2);
+-    if (!bVar4) {
+-      FUN_0000_b8d1(param_2,unaff_CS);
+-      FUN_0000_c047(0x18,uVar3,unaff_CS);
+-      return;
++    tgt = *(uint16_t *)(dg + (uint16_t)(di + 0x97));                     /* 19afa mov 0x97(%di),%si */
++    if (tgt == 0 || (dg[(uint16_t)(tgt + 0x16)] & 0x10) == 0) {          /* 19afe/19b02 -> 19b31 */
++      tone = 0x2fb5;
++    }
++    else {
++      dg[(uint16_t)(di + bx + 0xb5)]--;                                  /* 19b08 decb */
++      si = (uint16_t)FUN_1000_b1df(0xf,(int *)(uintptr_t)di);            /* 19b11; 19b14 mov %di,%si */
++      if (g_fist_cf) {                                                   /* 19b17 jb 19b27 */
++        tone = 0x2fd7;
++      }
++      else {
++        FUN_0000_b8d1((int)si,(int)di);                                  /* 19b19 lcall b8d1 */
++        FUN_0000_c047(0x18,0,(int)di);                                    /* 19b1e/19b21 */
++        return;                                                           /* 19b26 lret */
++      }
+     }
+-    uVar2 = 0x2fd7;
+-    param_2 = unaff_CS;
+   }
+-  FUN_1000_a4a2(uVar2,param_2);
++  FUN_1000_a4a2(tone,(int)di);                                            /* 19b34/19b35 call a4a2 */
+   return;
+ }
+ 

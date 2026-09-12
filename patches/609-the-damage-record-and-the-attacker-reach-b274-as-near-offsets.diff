@@ -1,0 +1,53 @@
+PATCH 609: the damage record and the attacker reach b274 as near offsets -- bd09's roll, bbb7's
+[0xe3b2].
+
+board:0017.  bd09, the structure's damage handler (asm 0xbd09-0xbd68), calls b274 with BX = the
+per-state record `word[byte[di+0x19]*2 - 0x6119] + ax` -- a DGROUP near offset, which b274 (patch
+493) takes as one; the port passed a host pointer whose low half named a garbage record, so the
+roll's magnitude was random and `shr al,2` was modelled on the roll's 16 bits instead of AL.  bbb7
+(`mov [0xe3b2],di ; mov si,[0x9a25] ; call c31e`) stores the ATTACKER's near offset for b274's side
+test (`mov si,[0xe3b2] ; testb [si+0x16],8` picks the damage scale); patch 516 subtracted the
+DGROUP base from a value only b5e7 passed as a host pointer, so the rocket's, the child's and the
+9c76 callers' hits left a garbage attacker there.  On SAUDI1's replay the structure at 0xa090
+survived the rocket that destroys it in the original (step 5848); with 609 the 17777 sim steps of
+that capture match to the last draw and the object tables differ nowhere.
+
+--- a/fist.c
++++ b/fist.c
+@@ -32016,7 +32016,7 @@
+                               - *(int16_t *)(dg + (uint16_t)(si + 0x10))) >> 0xc); /* b65c-b667 */
+         }
+         param_3 = CONCAT22(p3hi, (uint16_t)obj[0x29]);                /* b66b bx=[di+0x29] (live into be8b) */
+-        FUN_0000_bbb7((uint)obj[0x2a], (uint)obj[0x29], (int)(intptr_t)obj); /* b66b-b673 (ax=[di+0x2a],bx=[di+0x29]) */
++        FUN_0000_bbb7((uint)obj[0x2a], (uint)obj[0x29], (int)di); /* b66b-b673 (ax=[di+0x2a],bx=[di+0x29]; PATCH 609: di, the near offset) */
+         if (*(uint16_t *)obj == 7) {                                  /* b676 cmpw [di],7; je b6ad */
+           uv2 = 0x9c45;                                               /* b6ad */
+         } else {
+@@ -32798,8 +32798,13 @@
+    * surfaced once patch 515 closed the e1a6 one -- AZER2 t=336 and SYRIA1 t=3705, both in DGROUP block
+    * 41, both at exactly the WORD 0xe3b2..0xe3b3 (0x822e on native, 0x5619 on wasm), with the whole
+    * DGROUP identical on the preceding tick.  Rebase to the near offset. */
+-  DAT_2000_a3b2 = (undefined2)(unsigned short)
+-      ((unsigned char *)(uintptr_t)param_3 - ((unsigned char *)g_mem + 0x1c000));
++  /* PATCH 609: DI is the ATTACKER's near offset in every caller (b5e7's shell, b998's rocket, 9b11's
++   * child, the two 9c76 sites); bbb7 stores it as [0xe3b2] for b274's side test (`mov si,[0xe3b2] ;
++   * testb [si+0x16],8` picks the damage scale).  Patch 516 subtracted the DGROUP base from a value
++   * only b5e7 passed as a host pointer, so the near-offset callers left a garbage attacker there and
++   * b274 scaled their damage by whichever side a random byte named: on SAUDI1's replay the structure at
++   * 0xa090 survived the rocket hit at step 5848 that destroys it in the original (board:0017). */
++  DAT_2000_a3b2 = (undefined2)(unsigned short)param_3;
+   FUN_0000_c31e(param_1,param_2,DAT_2000_5a25,param_3);
+   return;
+ }
+@@ -32989,9 +32994,9 @@
+   if ((dg[(unsigned short)(di + 0x19)] & 4) == 0) {
+     unsigned short bx = *(unsigned short *)(dg + (unsigned short)((unsigned)dg[(unsigned short)(di + 0x19)] * 2 - 0x6119));
+     bx = (unsigned short)(bx + ax0);
+-    unsigned int uVar4 = FUN_0000_b274((byte *)(dg + bx));
++    unsigned int uVar4 = FUN_0000_b274((byte *)(uintptr_t)bx);   /* PATCH 609: b274 takes the record's NEAR offset (patch 493); the host pointer's low half named a garbage record */
+     unsigned char al = (unsigned char)uVar4;
+-    if (DAT_2000_5bd9 == 4) al = (unsigned char)((uVar4 >> 2) & 0x3f);
++    if (DAT_2000_5bd9 == 4) al = (unsigned char)(al >> 2);   /* PATCH 609: bd25 `shr al,2` -- the BYTE, not the roll's 16 bits */
+     unsigned char old = dg[(unsigned short)(di + 0x1a)];
+     dg[(unsigned short)(di + 0x1a)] = (unsigned char)(old + al);
+     if ((((unsigned)old + al) <= 0xff) && (dg[(unsigned short)(di + 0x1a)] < dg[(unsigned short)(di + 0x1b)])) {

@@ -1,0 +1,35 @@
+PATCH 604: the M3's rack reload 8886 takes its object from the first slot.
+
+board:0017.  87df's phase table (`addb $2,[di+0x3d] ; and bx,0x1e ; call cs:[bx-0x77a8]`, entry 10 =
+8886) dispatches with the object's near offset as the only argument, as every other entry reads it
+and as the T-80's twin 987b (patch 567) does; patch 265 read Ghidra's param_2, a stack residue, so
+the reload never armed its own object.  The gate `testw $0xff0,[0x6cde]` opens for sixteen steps in
+every 4096: at step 4101 of the third full AZER1 run the original's M3 at 0xc157 took byte[+0x19]
+bit 0, the port's never did.  bf3c(0x17) takes the object in its third slot (patch 263).
+
+--- a/fist.c
++++ b/fist.c
+@@ -24325,7 +24325,13 @@
+    * advances the mount and fires bf3c(0x17,...,di).  Ghidra deref'd di as host pointers (and int width
+    * on word[di+0xad]) -> SIGSEGV.  Rebuilt in the DGROUP model. */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+-  unsigned int di = (unsigned short)param_2;
++  /* PATCH 604: DI arrives positionally in param_1 -- 87df's phase table (`call cs:[bx-0x77a8]`, entry
++   * 10 = 8886) dispatches with the object in the first slot, like the T-80's twin 987b (patch 567);
++   * patch 265 read Ghidra's param_2, a stack residue, so the M3's rack reload never armed its own
++   * object: the oracle's M3 at 0xc157 carried byte[+0x19] bit 0 from step 4101 of the third full
++   * AZER1 run, the port's never did (board:0017). */
++  unsigned int di = (unsigned short)param_1;
++  (void)param_2;
+   if ((DAT_2000_2cde & 0xff0) == 0) {
+     if ((dg[(unsigned short)(di + 0x19)] & 1) == 0) {
+       if ((*(unsigned short *)(dg + (unsigned short)(di + 0xad)) != 2) &&
+@@ -24340,7 +24346,7 @@
+         *(unsigned short *)(dg + (unsigned short)(di + 0xad)) =
+             (unsigned short)(*(unsigned short *)(dg + (unsigned short)(di + 0xad)) + 1);
+         dg[(unsigned short)(di + 0xbb)] = (unsigned char)(dg[(unsigned short)(di + 0xbb)] - 1);
+-        FUN_0000_bf3c(0x17,param_1,param_2);
++        FUN_0000_bf3c(0x17,0,(int)di);   /* PATCH 604: bf3c takes the object in its third slot (patch 263) */
+         dg[(unsigned short)(di + 0xd6)] = 3;
+       }
+     }

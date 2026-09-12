@@ -1,0 +1,45 @@
+PATCH 605: the threat scan aa08 compares the AX its bail-outs leave.
+
+board:0017.  aa08's per-candidate tail (0x1aafd: `testb $8,[si+0x17] ; je ; cmp ax,[0x9942] ; jae ;
+mov [0x9942],ax ; mov [0x9940],si`) picks the nearest shooter by whatever AX holds when the candidate
+reaches it: 0 from the LOS (`or ax,ax ; je`), 0xff00 | rank after `mov al,[bx]` when the rank bails
+(AH is the LOS result's 0xff), 08e8's low range word when `or dh,dh` bails, and the packed range
+otherwise.  Patch 334 carried 0xffff through the rank and range bails, so a candidate the original
+ranks first (a low AL) lost to one it does not: the M3 at 0xc157 held the bearing 0x6968 to one
+emplacement in the oracle and 0x5f2f to another in the port (step 5621 of the third run), and the
+first full run's M3 at 0xce16 the same from step 5241.
+
+--- a/fist.c
++++ b/fist.c
+@@ -68468,6 +68468,14 @@
+               (int *)(uintptr_t)cand,(int *)(uintptr_t)obj); /* 1aaa5 call e1f0 (LOS op 0x58) */
+     if (rax != 0) {                                       /* 1aaaa or ax,ax; je 1aafd    */
+       uint8_t rank = *(uint8_t *)(dg + (uint16_t)(*(uint16_t *)cand + *(uint16_t *)(dg+0x9944))); /* 1aaae-1aab4 */
++      /* PATCH 605: AX is LIVE at 1aafd -- the value the tail compares with [0x9942] to pick the nearest
++       * shooter is whatever the bail-out left in it: 0 from the LOS, 0xff00|rank after `mov al,[bx]`
++       * (AH is the LOS result's 0xff), 08e8's low range word when its high byte bails (`or dh,dh`), and
++       * the packed range otherwise.  The port carried 0xffff through the rank and range bails, so a
++       * candidate the original ranks as the nearest shooter (a low AL after the rank bail) lost to
++       * one it does not: the M3 at 0xc157 held the bearing 0x6968 to one emplacement in the oracle and
++       * 0x5f2f to another here (third full AZER1 run, step 5621, board:0017). */
++      rax = (uint16_t)(0xff00 | rank);                    /* 1aab4 mov al,[bx] (AH = 0xff) */
+       if (rank <= *(uint8_t *)(dg + 0x9935)) {            /* 1aab6 cmp; ja -> 1aafd      */
+         if (rank != *(uint8_t *)(dg + 0x9935)) {          /* 1aabc je -> skip reset      */
+           *(uint16_t *)(dg + 0x993e) = 0xffff;            /* 1aabe */
+@@ -68477,6 +68485,7 @@
+         FUN_0000_08e8((long *)(uintptr_t)(cand + 4),(long *)(uintptr_t)(obj + 4)); /* 1aad8 a17e->08e8 */
+         {
+           uint16_t rlo = DAT_1000_c458, rhi = DAT_1000_c45a;   /* 08e8 dx:ax == c45a:c458 */
++          rax = rlo;                                      /* PATCH 605: 08e8's AX is the live AX when `or dh,dh` bails */
+           if ((uint8_t)(rhi >> 8) == 0) {                 /* 1aade or dh,dh; jne -> 1aafd */
+             rax = (uint16_t)(((rhi & 0xff) << 8) | ((rlo >> 8) & 0xff)); /* 1aae2 al=ah; ah=dl */
+             if (rax <= *(uint16_t *)(dg + 0x993a) &&       /* 1aae6 cmp; ja -> 1aafd      */
+@@ -68489,7 +68498,7 @@
+         }
+       }
+     }
+-    /* after_los @ 1aafd (rax = octant range, or e1f0's return if bailed above): */
++    /* after_los @ 1aafd: rax = the live AX (patch 605) */
+     if ((cand[0x17] & 8) == 0) continue;                  /* 1aafd test [si+0x17],8; je   */
+     if (rax >= *(uint16_t *)(dg + 0x9942)) continue;      /* 1ab05 cmp; jae               */
+     *(uint16_t *)(dg + 0x9942) = rax;                     /* 1ab0d */

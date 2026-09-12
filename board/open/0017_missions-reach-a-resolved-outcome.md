@@ -1576,3 +1576,61 @@ in this run; it can.  Next: log c64a's calls per object per step on both sides (
 replay for a second mission and a second run of AZER1 (the cadence is the original's own variable,
 board:0015; the sweep's verdicts are the port's under its own clock -- `tools/selfplay.sh` now
 prints the verdict tick and the player's vehicle type per mission so the two can be read together).
+
+## Three more captures, seven more defects, and the sound channel in the damage chain (patches 604-608)
+
+Each new capture of AZER1 is a new seed and a new battle, and each replay of it against the tree
+has found what the earlier runs did not exercise.  The instrument grew with them: the shell-draw
+seam (600), the line-of-sight service call by call (`los`/`losr` lines against the oracle's
+0x1000805a/0x10001108 -- 17090 calls of the third capture, all identical, so the shim's op-0x58
+ray-cast is the original's), and 0459's rotation call by call (607).
+
+| capture | step | what differed | the defect (patch) |
+|---|---|---|---|
+| 2nd | 2321 | the reinforcement's position | d501's word copies of the header's dword positions (601) |
+| 2nd | 2682 | no shell drawn after the switch | the render-phase byte as a word (602) |
+| 2nd | 2321 | the reinforcement's height | 9db1's op-0x54 query at the timeout entry, not DI (603) |
+| 3rd | 4101 | the M3's reload bit | 8886's object from the wrong slot (604) |
+| 3rd | 5621 | the M3's threat bearing | aa08's bail-outs carried 0xffff where AX is live (605) |
+| 3rd | 6331 | the rocket's launcher word | b8d1's host pointers; the T-80's launcher (606) |
+| 4th | 8 | every level rocket's speed, +1 per step | 0459's second block: the carry 5dd returns is cleared by the `xor` before the `jb` -- the original multiplies unconditionally (608) |
+
+Still open on the third and fourth captures, at the last few steps before the verdict: the hit
+reaction chain of b39c for the PLAYER's vehicle.  `cmp [bx+4],al ; ja` decides a080 (immobilize)
+against the type's reaction record -- unless a064's callout ran, because bf3c's e2c2 posts op 0x64
+(the sound service) and returns with the extender's registers: BX is then the mixer channel 22ab
+chose (0..2), and the compare reads DGROUP:[channel+4].  The original's own bug, and one whose
+outcome depends on the mixer's channel state, i.e. on which sounds are still playing -- the sound
+service the port does not run in missions yet (board:0003).  Until op 0x64 is served by the
+decompiled 786a/22ab with its exit registers published (the g_ext_edx class), the player's hits
+diverge there; the third capture's draws matched to step 12167 of 12301 and the fourth's to 5030
+of 5397, the verdict on both sides DEFEAT.
+
+The oracle's DGROUP dumps also show what the replay cannot align: [0x452] at the mission's first
+step is the oracle machine's load time (3004 there, 199 here), so the fps meter's 480-tick window
+(4691) resets [0x6d14] at different steps and the type-5/6 objects' animation phase byte
+([di+0x1a] = [0x6d14] & 7) differs by that offset -- the original's own variable, not the port's.
+
+## The congruence census (patches 604-609): five missions against the original
+
+`tools/oracle/replay_mission.sh <BATTLE>` captures the original playing the battle (a fresh seed
+each time, 300 s), replays the capture on the port and reports the first step whose draws, shell
+draws, LOS calls or 0459 rotations differ.  With 609 (b274 reached with near offsets: bd09's
+damage record and bbb7's attacker -- SAUDI1's structure at 0xa090 had survived the rocket that
+destroys it in the original):
+
+| battle | sim steps | draws | shells drawn | LOS | rotations | objects |
+|---|---|---|---|---|---|---|
+| SAUDI1 | 17777 | all | all | -- | all (sim) | none differ |
+| TRAIN1 | 17865 | all | all | -- | all | the fps-phase byte only |
+| CYPRUS1 | 17638 | all | all | -- | all | the fps-phase byte only |
+| AZER1 (3rd) | 12167 of 12301 | to the player's hit | all | 17090, all | -- | the player's hit |
+| AZER1 (4th) | 5030 of 5397 | to the player's hit | all | -- | 1513, all | the player's hit |
+| UKRAINE2 | 2523 of 17627 | to the player's hit | -- | -- | -- | the player's hit |
+
+The one open sim divergence is the player's hit reaction (the previous section): b39c's
+immobilize test after a064's callout reads DGROUP:[channel+4], the mixer channel op 0x64 chose --
+the sound service (board:0003).  UKRAINE2 starts the player in the Bradley under fire and meets it
+at step 2523; the three missions without an early hit on the player run to the capture's end
+without a differing draw.  The fps-phase byte ([di+0x1a] of the type-5/6 vehicles) is the
+oracle machine's load time (the [0x452] offset), not the port's.

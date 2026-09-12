@@ -1,0 +1,19 @@
+PATCH 607: the replay instrument reports every 0459 rotation.
+
+board:0017.  0459, the 3-D rotation every projectile's velocity comes from, reports its inputs and
+its three lanes (fist_rot_trace, `rot <ax> <cx> <dx> -> <ax> <dx> <cx>` in FIST_RNGTRACE, inert
+without the variable) against the oracle's regtrace at its entry 0x115e9 and exit 0x11657
+(tools/oracle/replay_capture.sh OC_EXTRA_LIN=115e9,11657); tools/oracle/replay_rotcmp.py compares
+them call by call.  On the fourth full AZER1 capture it found patch 608 in 1513 traced calls.
+
+--- a/fist.c
++++ b/fist.c
+@@ -5026,6 +5026,8 @@
+ 
+   g_fist_rot_dx = (uint16_t)dx_out;
+   g_fist_rot_cx = (uint16_t)cx_out;
++  { extern void fist_rot_trace(unsigned, unsigned, unsigned, unsigned, unsigned, unsigned);
++    fist_rot_trace((uint16_t)param_1, H, (uint16_t)param_2, (uint16_t)ax_out, (uint16_t)dx_out, (uint16_t)cx_out); }   /* PATCH 607: FIST_RNGTRACE `rot` (board:0017) */
+   return ax_out;
+ }
+ 

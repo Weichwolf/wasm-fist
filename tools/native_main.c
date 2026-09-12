@@ -1533,6 +1533,20 @@ void fist_phase_trace(void) {   /* after each 22f7 phase dispatch */
     if (g_phase_active && ++g_phase_cnt >= g_phase_cur) *(uint16_t *)(g_mem + 0x1c450) = 0;
 }
 void fist_render_end_trace(void) { }
+void fist_los_trace(int32_t dx, int32_t dy, int32_t dz) {   /* op 0x58's deltas (the oracle's regtrace at 0x1000805a: EBX/EDX/EAX) */
+    FILE *f = rngtrace_file(); if (f) fprintf(f, "los %08x %08x %08x t=%u\n", (uint32_t)dx, (uint32_t)dy, (uint32_t)dz, *(uint16_t *)(g_mem + 0x1c452));
+}
+void fist_los_result(int r) {   /* ... and its verdict (0x10001108: EAX) */
+    FILE *f = rngtrace_file(); if (f) fprintf(f, "losr %08x\n", (uint32_t)r);
+}
+void fist_rot_trace(unsigned ax, unsigned cx, unsigned dx, unsigned oax, unsigned odx, unsigned ocx) {   /* 0459 in (ax cx dx) -> out (ax dx cx); the oracle's regtrace at 0x115e9/0x11657 */
+    FILE *f = rngtrace_file(); if (!f) return;
+#ifndef __EMSCRIPTEN__
+    fprintf(f, "rot %04x %04x %04x -> %04x %04x %04x from=%p<%p\n", ax, cx, dx, oax, odx, ocx, __builtin_return_address(1), __builtin_return_address(2));   /* 0459's caller and its caller (-O0 frames): the render's a20d is not the sim's */
+#else
+    fprintf(f, "rot %04x %04x %04x -> %04x %04x %04x\n", ax, cx, dx, oax, odx, ocx);
+#endif
+}
 void fist_draw_trace(unsigned short si) {   /* c64a's heading flip: one line per shell drawn (the oracle's regtrace at 0xc659) */
     FILE *f = rngtrace_file(); if (f) fprintf(f, "draw %04x t=%u\n", si, *(uint16_t *)(g_mem + 0x1c452));
 }
@@ -2118,7 +2132,9 @@ int fist_extender_gate(void) {
         { extern long g_min_los,g_min_a296; long ad=(cx>ox?cx-ox:ox-cx)+(cy>oy?cy-oy:oy-cy); if(g_min_a296<16 && ad<g_min_los) g_min_los=ad; }
         { extern long g_op58_n; g_op58_n++; }
         int32_t dx=cx-ox, dy=cy-oy, dz=cz-oz;
-        if (!hm || dx>=0x40000 || dy>=0x40000 || dx<=-0x40000 || dy<=-0x40000) { extern long g_op58_oor; g_op58_oor++; return 0; } /* out of range */
+        { extern void fist_los_trace(int32_t, int32_t, int32_t); fist_los_trace(dx, dy, dz); }   /* board:0017 FIST_RNGTRACE `los` (the oracle's 0x1000805a) */
+        /* 0x805a-0x8084: `cmp $0x40000 ; jge` / `cmp $0xfffbffff ; jle` -- out of range at >= 0x40000 and at <= -0x40001 */
+        if (!hm || dx>=0x40000 || dy>=0x40000 || dx<=-0x40001 || dy<=-0x40001) { extern long g_op58_oor; g_op58_oor++; { extern void fist_los_result(int); fist_los_result(0); } return 0; } /* out of range */
         dx<<=13; dy<<=13; dy=-dy; dz<<=16;                                    /* scale; Y flip */
         int32_t ecx=1;
         for(;;){ ecx<<=1; dx>>=1; dy>>=1; dz>>=1;                             /* normalise the step */
@@ -2130,9 +2146,10 @@ int fist_extender_gate(void) {
             rx+=sdx; ry+=sdy; rz+=sdz;
             uint32_t idx = fist_hm_index((uint32_t)ry, (uint32_t)rx, *(uint32_t*)(xb+0x8490));   /* 8102/8106 shld,DETAIL */
             uint32_t h = (uint32_t)hm[idx] << 24;
-            if (h >= (uint32_t)rz) { extern long g_op58_occ; g_op58_occ++; return 0; } /* terrain occludes */
+            if (h >= (uint32_t)rz) { extern long g_op58_occ; g_op58_occ++; { extern void fist_los_result(int); fist_los_result(0); } return 0; } /* terrain occludes */
         }
         { extern long g_op58_vis; g_op58_vis++; }
+        { extern void fist_los_result(int); fist_los_result(-1); }
         return -1;                                                           /* 0xffffffff = clear LOS */
     }
     /* FIST_DBG_OP2C: clean gdb breakpoint at the first op-0x2c gate (crash-bucket secondary-viewport paint) */

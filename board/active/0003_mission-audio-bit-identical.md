@@ -2899,3 +2899,11 @@ actively in progress via patches 188+.  Concrete ordered next steps: (1) impleme
 viewport-geometry init so the op-0x4c loop terminates; (2) implement FUN_1000_0c21's deep follow-on; (3)
 per-vec 4308 else-branch threading; (4) re-verify mission-audio WAV native==wasm.  Menu/intro audio stays
 CLOSED (patch 412).  Nothing to revert; tree clean.
+
+The sim depends on the sound service (board:0017, patch 605's neighbour): bf3c's e2c2 posts op
+0x64 and the extender's handler 786a returns with 22ab's registers -- EBX = the mixer channel
+(0..2) it assigned, ECX = the sample length, ESI/EAX = the sample -- and b39c's damage chain then
+reads its immobilize threshold from DGROUP:[channel+4] for the player's vehicle.  The port does not
+serve op 0x64 in missions (the gate returns 0 without running 786a), so the player's hit reactions
+cannot follow the original's until the mixer's channel table (extender 0x15d7..0x15ff, decompiled
+as fist_ext.c 22ab/2377) is driven by the service and its exit registers published.

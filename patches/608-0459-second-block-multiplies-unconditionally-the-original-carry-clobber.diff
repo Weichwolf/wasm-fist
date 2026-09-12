@@ -1,0 +1,26 @@
+PATCH 608: 0459's second block multiplies unconditionally -- the original's carry clobber, kept.
+
+board:0017.  `484 call 5dd ; 487 xor [bp-8],dx ; 48a mov dx,[bp-6] ; 48d jb 491 ; 48f mul dx`: the XOR
+between the call and the jb clears the carry 5dd returned, so the block that scales the magnitude
+by the pitch's cosine multiplies unconditionally -- with a level pitch (5dd(0) = 0xffff, stc) the
+horizontal magnitude is M - 1, not M.  The other three blocks test the carry through flag-neutral
+movs and the port models them so; patch 594 had modelled this one the same way.  1513 of the 1513
+0459 calls of the fourth full AZER1 capture match with the multiply and 1069 without: every level
+rocket of the port flew one unit per step faster than the original's.
+
+--- a/fist.c
++++ b/fist.c
+@@ -5006,7 +5006,12 @@
+   v    = (uint16_t)FUN_0000_05dd(H);
+   sgn  = (uint16_t)((uint16_t)(0x4000 - H) & 0x8000 ? 0xffff : 0);  /* sign(0x4000-H) */
+   L8   = (uint16_t)(L8 ^ sgn);                            /* xor [bp-8],dx */
+-  L6   = g_fist_cf ? L6 : (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);   /* mov [bp-6],dx (V2) */
++  /* PATCH 608: the ORIGINAL's bug, kept.  `484 call 5dd ; 487 xor [bp-8],dx ; 48a mov dx,[bp-6] ; 48d jb
++   * 491 ; 48f mul dx` -- the XOR between the call and the jb clears the carry 5dd returned, so block 2
++   * multiplies unconditionally: with a level pitch (5dd(0) = 0xffff, stc) the horizontal magnitude
++   * becomes M - 1, not M.  The other three blocks test the carry through flag-neutral movs.  1513 of
++   * 1513 traced 0459 calls of the fourth full AZER1 run match with this and 1069 without (board:0017). */
++  L6   = (uint16_t)(((uint32_t)v * (uint32_t)L6) >> 16);   /* mov [bp-6],dx (V2) */
+ 
+   /* block 3 (asm 0x494-0x4aa): 5e2(L2) -> dx output */
+   v    = (uint16_t)FUN_0000_05e2(L2);
