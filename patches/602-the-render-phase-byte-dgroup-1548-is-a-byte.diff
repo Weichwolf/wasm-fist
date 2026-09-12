@@ -1,0 +1,24 @@
+PATCH 602: the render-phase byte DGROUP:0x1548 is a byte.
+
+board:0017 / board:0023.  Every one of the 46 accesses in the image is a byte access -- `mov al,
+[0x1548]`, `cmpb`, `movb`, `orb $0x80` (0x22bd, 0x22dd, 0x2315, 0x23d1, 0x494d, ..., 0x1a8d7); the
+word beside it, 0x1549, is the viewport kind (0x1c cockpit / 0x20 map / 0x22 external) the object
+pass c4df selects its method table by.  Ghidra typed DAT_1000_d548 as a word: every `= 0/1/2/3`
+store zeroed the viewport byte and every `== 0` test read it.  The M1 cockpit's windshield method
+795c survived by accident (its map sibling's word store zeroed 0x1549 for it); after the switch to
+the Bradley the map's method 842d stores its byte correctly, so 0x1549 stayed 0x20, 8390's word
+test never saw zero, and the windshield never started another phase sequence: no object pass, no
+shell drawn, the port's 3D view frozen behind the Bradley's instruments for the rest of the mission
+(the seeded replay's shell-draw lists, patch 600, empty from step 2682).
+
+--- a/fist.c
++++ b/fist.c
+@@ -2679,7 +2679,7 @@
+ #define DAT_1000_c790 (*(undefined2 *)(g_mem+0x1c790))
+ #define DAT_1000_c794 (*(undefined2 *)(g_mem+0x1c794))
+ #define DAT_1000_cf69 (*(undefined2 *)(g_mem+0x1cf69))
+-#define DAT_1000_d548 (*(undefined2 *)(g_mem+0x1d548))
++#define DAT_1000_d548 (*(undefined1 *)(g_mem+0x1d548))   /* PATCH 602: a BYTE -- every one of the 46 accesses in the image is movb/cmpb/orb/`mov al` (0x22bd..0x1a8d7); the word macro's stores zeroed the viewport byte 0x1549 and its tests read it (board:0017) */
+ #define DAT_1000_d549 (*(undefined1 *)(g_mem+0x1d549))
+ #define DAT_1000_d54a (*(undefined1 *)(g_mem+0x1d54a))
+ #define DAT_1000_d54b (*(undefined1 *)(g_mem+0x1d54b))

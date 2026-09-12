@@ -1,0 +1,42 @@
+PATCH 601: the .FSG header's eight map positions are copied as dwords.
+
+board:0017 / board:0023.  d501's tail (0xd59f-0xd5db) is eight `mov eax,[0xe988+4k] ; mov [dst],eax`:
+the pair at 0x7b84/0x7b88, the pair at 0x7a38/0x7a3c, and the two reinforcement entry points at
+0x943c/0x9440 and 0x9444/0x9448 that 9db1 seeds a respawned vehicle's position from.  Ghidra typed
+all eight as words and the port copied the low halves: its reinforcements entered the map at
+(0xa514, 0x2d68) where the original's enter at (0xfa514, 0xd2d68) -- the seeded replay's first
+differing object on the second full AZER1 run (step 2321), and the DEFEAT that run ends in came a
+thousand steps early.
+
+--- a/fist.c
++++ b/fist.c
+@@ -37245,14 +37245,21 @@
+           uRam000f0010 = unaff_ES;
+           fist_int_dispatch();
+           DAT_2000_2dac = DAT_2000_a984;
+-          DAT_2000_3b84 = DAT_2000_a988;
+-          DAT_2000_3b88 = DAT_2000_a98c;
+-          DAT_2000_3a38 = DAT_2000_a990;
+-          DAT_2000_3a3c = DAT_2000_a994;
+-          DAT_2000_543c = DAT_2000_a998;
+-          DAT_2000_5440 = DAT_2000_a99c;
+-          DAT_2000_5444 = DAT_2000_a9a0;
+-          DAT_2000_5448 = DAT_2000_a9a4;
++          /* PATCH 601: 0xd59f-0xd5db are eight `mov eax,[0xe988+4k] ; mov [dst],eax` -- the .FSG header's
++           * 32-bit map positions: the pair at 0x7b84/0x7b88, the pair at 0x7a38/0x7a3c and the two
++           * reinforcement entry points at 0x943c/0x9440 and 0x9444/0x9448 (9db1 seeds a respawned
++           * vehicle from them).  Ghidra typed all eight as words and dropped the high halves: the
++           * port's reinforcements entered at (0xa514, 0x2d68) where the original's enter at (0xfa514,
++           * 0xd2d68) -- the seeded replay's first differing object on the second full AZER1 run
++           * (step 2321, board:0017). */
++          *(uint32_t *)(g_mem + 0x23b84) = *(uint32_t *)(g_mem + 0x2a988);
++          *(uint32_t *)(g_mem + 0x23b88) = *(uint32_t *)(g_mem + 0x2a98c);
++          *(uint32_t *)(g_mem + 0x23a38) = *(uint32_t *)(g_mem + 0x2a990);
++          *(uint32_t *)(g_mem + 0x23a3c) = *(uint32_t *)(g_mem + 0x2a994);
++          *(uint32_t *)(g_mem + 0x2543c) = *(uint32_t *)(g_mem + 0x2a998);
++          *(uint32_t *)(g_mem + 0x25440) = *(uint32_t *)(g_mem + 0x2a99c);
++          *(uint32_t *)(g_mem + 0x25444) = *(uint32_t *)(g_mem + 0x2a9a0);
++          *(uint32_t *)(g_mem + 0x25448) = *(uint32_t *)(g_mem + 0x2a9a4);
+           uVar3 = (undefined3)((ulong)DAT_2000_a9a4 >> 8);
+           uVar2 = (uint)CONCAT31(uVar3,DAT_2000_a987);
+           if (DAT_2000_a987 == '\0') {

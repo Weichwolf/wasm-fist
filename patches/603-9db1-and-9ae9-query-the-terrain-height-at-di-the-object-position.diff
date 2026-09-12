@@ -1,0 +1,51 @@
+PATCH 603: 9db1 and 9ae9 query the terrain height at DI, the object's position.
+
+board:0017.  The op-0x54 terrain-height service (extender 0x11a6: `movzwl di,edi ; add edi,[0xca1] ;
+mov ebx,[edi] ; mov edx,[edi+4] ; ... call 0x8480`) takes the position through DI; the EBX that e1d1
+stores in the TCB inbox is not read by it.  Both callers set DI = the object + 4 (`push di ; lea
+di,[di+4] ; call e1d1 ; pop di ; mov [di+0xd],al`, 0x9e1e and 0x9ae9).  Patch 298 had 9db1 pass
+its BX -- the timeout-table entry -- so a respawned vehicle took the "height" of that entry's bytes
+(0x2b for the original's 0x17, second full AZER1 run, step 2321) and slewed toward the ground for
+twenty steps longer; 9ae9 (a player-command spawn) was Ghidra's, storing through the unaff_CS
+placeholder.  The port's e1d1 keeps posting its argument to the inbox, where the shim's op-0x54
+reads it as DI: the convention holds as long as every caller passes DI, which they now do.
+
+--- a/fist.c
++++ b/fist.c
+@@ -27451,12 +27451,13 @@
+ undefined4 __allregs FUN_0000_9ae9(undefined4 param_1)
+ 
+ {
+-  undefined1 uVar1;
+-  int unaff_CS;
+-  
+-  uVar1 = FUN_0000_e1d1(param_1);
+-  *(undefined1 *)(unaff_CS + 0xd) = uVar1;
+-  return;
++  /* PATCH 603: `push di ; lea di,[di+4] ; call e1d1 ; pop di ; mov [di+0xd],al` -- DI = the object near
++   * offset (param_1); the op-0x54 height at its position lands in byte[di+0xd].  Ghidra passed a stale
++   * EBX and stored through the unaff_CS placeholder (a host deref). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)(uintptr_t)param_1;
++  dg[(unsigned short)(di + 0xd)] = (unsigned char)FUN_0000_e1d1((unsigned int)(unsigned short)(di + 4));
++  return 0;
+ }
+ 
+ 
+@@ -27995,7 +27996,15 @@
+   }
+   *(unsigned int *)(o + 0x26) = *(unsigned int *)(s + 4);
+   *(unsigned int *)(o + 0x2a) = *(unsigned int *)(s + 8);
+-  alv = (unsigned char)FUN_0000_e1d1((unsigned int)(unsigned short)param_1);
++  /* PATCH 603: 9e1e `push di ; lea di,[di+4] ; call e1d1 ; pop di ; mov [di+0xd],al` -- the op-0x54
++   * terrain-height service (extender 0x11a6: `movzwl di,edi ; add edi,[0xca1] ; mov ebx,[edi] ; mov
++   * edx,[edi+4]`) reads the position through DI, the new object's +4; the EBX e1d1 stores in the inbox
++   * is not read by it.  Patch 298 passed the timeout-table entry (EBX) and the respawned vehicle took
++   * the "height" of the entry's bytes: 0x2b for the original's 0x17 on the second full AZER1 run
++   * (step 2321, board:0017), then slewed toward the real ground for 20 steps longer than the original.
++   * (param_1 stays as the caller's BX -- 9d7a's `pop bx ; push bx` -- for the record.) */
++  (void)param_1;
++  alv = (unsigned char)FUN_0000_e1d1((unsigned int)(unsigned short)(di + 4));
+   o[0xd] = alv;
+   return;
+ }

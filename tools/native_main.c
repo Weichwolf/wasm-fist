@@ -1533,6 +1533,9 @@ void fist_phase_trace(void) {   /* after each 22f7 phase dispatch */
     if (g_phase_active && ++g_phase_cnt >= g_phase_cur) *(uint16_t *)(g_mem + 0x1c450) = 0;
 }
 void fist_render_end_trace(void) { }
+void fist_draw_trace(unsigned short si) {   /* c64a's heading flip: one line per shell drawn (the oracle's regtrace at 0xc659) */
+    FILE *f = rngtrace_file(); if (f) fprintf(f, "draw %04x t=%u\n", si, *(uint16_t *)(g_mem + 0x1c452));
+}
 /* 459a's exit on the verdict flag byte[0xe814]: the schedules are over -- the INT-8s return to the
  * clock so the flows after the mission (e4bb's poll wait, the debrief) run as they do unscheduled. */
 void fist_mission_end_trace(void) {

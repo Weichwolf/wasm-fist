@@ -1,0 +1,21 @@
+PATCH 600: the replay instrument reports every shell the object pass draws.
+
+board:0017.  c64a, the guided shell's render method, flips the shell's heading by 0x8000 for the
+draw and -- the original's own bug, patch 595 -- never flips it back, so a shell's seeker parity is
+decided by the frames it was drawn in.  The render pass is therefore part of the sim's spec, and the
+replay must compare it: a one-line hook at the flip (fist_draw_trace, `draw <object> t=<tick>` in
+FIST_RNGTRACE, inert without the variable) against the oracle's regtrace at 0xc659 (linear 0x1d7e9,
+ESI = the shell; tools/oracle/replay_capture.sh), per sim step, by tools/oracle/replay_drawcmp.py.
+On the second full AZER1 capture it showed the port drawing no shell at all after the cockpit
+switch: patches 602/603.
+
+--- a/fist.c
++++ b/fist.c
+@@ -34619,6 +34619,7 @@
+     FUN_0000_c8e8(0x3a,(int)(unsigned short)(*(unsigned short *)(dg + si) << 1),0x8ff,(int)si,0);
+     return;
+   }
++  { extern void fist_draw_trace(unsigned short); fist_draw_trace(si); }   /* PATCH 600: FIST_RNGTRACE `draw` -- the flip below runs once per frame the shell is drawn (board:0017) */
+   *(unsigned short *)(dg + (unsigned short)(si + 0x10)) += 0x8000;
+   FUN_0000_c8e8((int)g_fist_render_dx,0x1e,0,(int)si,0);
+   /* PATCH 595: the ORIGINAL's bug, kept.  c8e8 leaves SI advanced past the bytes its `rep movsb`
