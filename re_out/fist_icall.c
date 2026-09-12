@@ -138,8 +138,16 @@ static void dump_module_vecs(struct fist_ovl *o){
 }
 
 /* ---- core resolver: linear target -> host code* ---- */
+/* The machine time of a dispatched call (board:0026): the CPU model is one PIT count per port access
+ * or pump, one frame period per windshield render, and this much per indirect call -- so an engine loop
+ * that only calls methods (the menus' event drain, e714 -> 206f/35a7/3920) still lets time pass at a
+ * rate the host can afford, instead of iterating thousands of times per vblank.  8 counts = 6.7 us, a
+ * small method on a 486; the sim is tick-driven and indifferent to the exact figure (the AZER1 verdict
+ * tick is the same at 8000, 17025 and 46500 counts per frame), so this only sets the pace. */
+#define FIST_ICALL_COUNTS 8u
 code *fist_icall(uint32_t linear)
 {
+    { extern void fist_clock_advance(unsigned); fist_clock_advance(FIST_ICALL_COUNTS); }
     if (linear >= FIST_INTVEC_LIN && linear < FIST_INTVEC_LIN + 0x100) {
         g_pending_vec = linear - FIST_INTVEC_LIN;
         return (code *)int_chain_tramp;

@@ -69,9 +69,12 @@ recognizing them is half the work:
 - **Voxel-Space terrain** (Comanche lineage): a column-major ray-cast over a heightmap, **fixed-point
   integer only** (no FP in the raycaster), per-column texel walk (`689a` sky/tile resample → `6980`
   raycaster → `9200` tile→fb writer). Determinism-relevant: no x87 rounding to diverge native↔wasm.
-- **Cooperative timing on a PIT tick.** `[0x452]` (frame timer) is bumped by the INT-8 sub-handler; the
-  engine spin-waits on tick counters, so time "passes" only when the pump runs — the seam the port drives
-  cooperatively (`fist_timer_pump`).
+- **The PIT is the vblank.** 2fd3 calibrates the PIT to one vertical-retrace period, 30f8 re-arms it at
+  every retrace, and `[0x452]` (the 60 Hz frame timer) is derived from that interrupt; the engine
+  spin-waits on tick counters and retrace polls.  The port keeps ONE clock in PIT counts (fist_vga.c,
+  board:0026): every port access and pump is a count, every dispatched call and every windshield render
+  has its cost, the INT-8 is delivered at each channel-0 wrap from the pump (`fist_timer_pump` ->
+  `fist_int8_fire`), and native and wasm step it identically.
 
 ## The chain
 
@@ -175,7 +178,8 @@ ground-truth register/segment values (e.g. the real CS behind a `mov [mem],cs`),
 diverging byte, or to map a subsystem's data flow. Caveat: the 16-bit engine runs UNDER the extender's PM
 paging (`cr3=0xe000`), so an engine DGROUP field is NOT at guest phys `0x1c000` — use `FIST_WATCHFLAT`
 (CR3-aware) with the engine-flat linear, or read `dsb`/`csb` from a `capture_9200`/`_6980` `.cam.txt` to
-locate the relocated DGROUP first.
+locate the relocated DGROUP first. `FIST_EXCLOG=<path>` logs every CPU exception with its registers and the
+80 instructions that follow -- how the extender/engine handle a fault (e.g. #DE) is then on record.
 
 ## What decides done
 

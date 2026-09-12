@@ -44,8 +44,9 @@ JOBS="${SP_JOBS:-$(nproc 2>/dev/null || echo 2)}"
 # The BATTLES -> OK -> ACCEPT menu navigation that drives patch 380's FIST_FSG_BATTLE into any of
 # the 47 .FSG.  Identical to verify.sh's MC_MOUSE; without it the engine never leaves the menu and
 # every mission reports NOLOAD.  Player input inside the mission stays EMPTY -- the last event is a
-# release at t=7200ms, well before the roster spawns, so the run is pure AI-vs-AI from there on.
-SP_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0; 7200:40:186:0"
+# release at t=431 vblanks after the menu entry (~7 s of game time), well before the roster spawns, so the
+# run is pure AI-vs-AI from there on.
+SP_MOUSE="12:160:100:0; 48:160:100:1; 84:160:100:0; 180:205:128:0; 216:205:128:1; 251:205:128:0; 323:40:186:0; 359:40:186:1; 395:40:186:0; 431:40:186:0"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 # Runs write back into FISTDATA (.FPL pilot files); never let a sweep mutate the read-only originals,
@@ -64,11 +65,11 @@ run_one() {  # $1=target $2=mission -> prints "STATE|outcome-code|secs"
   DD="$TMP/data.$tgt.$m"; cp -r "$ROOT/armoredfist" "$DD"
   t0=$SECONDS
   if [ "$tgt" = native ]; then
-    setarch -R env FIST_DATADIR="$DD" FIST_SIMRUN=1 FIST_COOP_TICK=1 \
+    setarch -R env FIST_DATADIR="$DD" FIST_SIMRUN=1 \
       FIST_FSG_BATTLE="$m" FIST_STOP_ON_OUTCOME=1 ${TICKCAP:+FIST_DUMPTICK=$TICKCAP} FIST_MOUSE="$SP_MOUSE" \
       timeout "$BUDGET" "$BIN" >/dev/null 2>"$out"; rc=$?
   else
-    env FIST_DATADIR="$DD" FIST_SIMRUN=1 FIST_COOP_TICK=1 \
+    env FIST_DATADIR="$DD" FIST_SIMRUN=1 \
       FIST_FSG_BATTLE="$m" FIST_STOP_ON_OUTCOME=1 ${TICKCAP:+FIST_DUMPTICK=$TICKCAP} FIST_MOUSE="$SP_MOUSE" \
       timeout "$BUDGET" "$NODE" "$OUTJS" >/dev/null 2>"$out"; rc=$?
   fi

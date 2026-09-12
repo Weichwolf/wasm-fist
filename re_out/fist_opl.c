@@ -223,9 +223,12 @@ int fist_opl_in(int port)
     return 0xff;
 }
 
-/* Called once per engine INT-8 (PIT) tick from the ISR drain: advance the OPL synth by one real PIT
- * period's worth of samples (rate * pit_div / PIT_HZ), accumulator for the fractional remainder. */
-void fist_opl_tick(void)
+/* Called once per INT-8 from fist_int8_fire with the PIT counts that passed since the previous one
+ * (board:0026): advance the OPL synth by that much real time in samples (rate * counts / PIT_HZ),
+ * accumulator for the fractional remainder.  fist_opl_tick() keeps the old one-reload-per-call form. */
+void fist_opl_tick_counts(unsigned counts);
+void fist_opl_tick(void){ fist_opl_tick_counts((unsigned)fist_vga_pit0_div()); }
+void fist_opl_tick_counts(unsigned counts)
 {
     if (!fist_opl_enabled() || !g_rate_set) return;
     if (g_samples_per_seq == 0.0) {
@@ -235,7 +238,7 @@ void fist_opl_tick(void)
         g_samples_per_seq = (double)g_rate / hz;
         if (opltrace()) fprintf(stderr, "[opl] MUSIC_HZ=%.2f -> %.3f samples/seq-advance\n", hz, g_samples_per_seq);
     }
-    int div = fist_vga_pit0_div();
+    int div = (int)counts;
     if (getenv("FIST_OPLDIV")) { static long tk=0; extern uint8_t g_mem[];
         long c452=*(uint16_t*)(g_mem+0x1c452);
         if (tk<12 || (tk%500)==0) fprintf(stderr,"[opldiv] opltick=%ld [0x452]=%ld div=%d\n",tk,c452,div);

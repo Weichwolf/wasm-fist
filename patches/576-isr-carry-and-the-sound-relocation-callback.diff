@@ -1,0 +1,241 @@
+PATCH 576: the INT-8 handler's byte rotate and chain carry, and the sound resource's relocation
+callback (bdcc's CS, the c06d thunk, SOUNDDVR 01fd).
+
+board:0026 / board:0017.  Found while giving the port the original's time base (the PIT/VGA clock in the
+shim, board:0026), which made two dormant defects visible:
+
+  30f8/31c3  `rcl BYTE PTR [0x44b],1` after `call 31c3` rotates 31c3's return carry -- the wrap of the
+         BIOS-chain accumulator `add [0x18be],ax` at its tail -- into the flag byte whose bit 1 selects
+         the chain to the saved INT 8 ([0x432]) and whose bit 0 skips the EOI.  Ghidra widened it to a
+         WORD rotate with a constant 0 carry: the low byte of [0x44c] -- the retrace period 2fd3 had
+         just measured -- lost a bit per interrupt (0x427f -> 0x42fe -> 0x42fc -> ..), and the BIOS
+         tick was never chained.  Byte rotate, CF threaded through g_fist_cf (31c3's `test [0x6b] ;
+         jne` early return leaves CF = 0).
+
+  bdcc   `mov [0x9f22],cs` -- the sound descriptor's relocation callback is 0xc06d:CS.  The decompile
+         stored CS = 0x1000; the oracle stores 1119:c06d (scratch/oracle/player.ram.bin, DGROUP:0x9f1c
+         = cc 59 a0 03 6d c0 19 11), and with DGROUP 0x2d19 <-> 0x1c00 the oracle's 0x1119 is the
+         port's segment 0 -- bdcc runs under the 0x0000 cluster.  1000:c06d is DGROUP:0x6d.
+  c06d   the thunk itself was never emitted: `call cs:[bx+0xc073] ; retf`, table {c084 (kind 0: the
+         block moved), c0b0 (2: [0x53c] unlock), c0b6 (4: be67), c083 x5}.  c084 = `push ax ; push dx ;
+         lcall [0x538]` (SOUNDDVR 0245: lock) `; pop ; pop ; clc ; lcall [0x518]` (SOUNDDVR 01fd) `;
+         jb c096` (report through [0x5c] if a song is loaded).  Ghidra dropped AX/DX and the CF.
+  01fd   (fist_snd.c) SOUNDDVR "the block at AX is now at DX": es = cs:[0x831] (the driver's data
+         page); es:[6] (the song segment) and es:[0] (the queued one-shot) are re-homed when they equal
+         AX, CF = 0; if neither matches and either is nonzero, `int 5 ; stc`.  Ghidra read es:[6] as
+         DGROUP:6 and es:[0] as host address 0.
+
+  Effect: the menu music's block is compacted at boot (patch 575's faithful fade-buffer allocations
+  move it from 0x4c61 to 0x4c31); without the callback the driver kept playing from 0x4c61 -- the
+  MAINMENU.MS3 melody matched the oracle for 130 notes and then decoded garbage, and the voice chain
+  read from the stale paragraphs cycled (the 0c39 hang).  With it: 239/239 notes, no hang.
+
+--- a/fist.c
++++ b/fist.c
+@@ -1251,7 +1251,8 @@
+ void __allregs FUN_0000_c047(int param_1,undefined4 param_2,int param_3);
+ void __allregs FUN_0000_c073(int param_1,int param_2);
+ void __allregs FUN_0000_c083(void);
+-void __allregs FUN_0000_c084(void);
++void __allregs FUN_0000_c084(int param_1,int param_2);
++void __allregs FUN_0000_c06d(int param_1,int param_2,int param_3);   /* PATCH 576: the sound resource's relocation thunk */
+ void __allregs FUN_0000_c08e(void);
+ void __allregs FUN_0000_c0b0(void);
+ void __allregs FUN_0000_c0b6(void);
+@@ -32726,10 +32727,13 @@
+ {
+   /* board:0012 byte-identity (CS-carry): asm bdd2 `mov [DGROUP:0x9f22],cs` saves a FAR pointer 0xc06d:CS.
+      Ghidra's unaff_CS pseudo-var is host-address garbage that DIFFERS native<->wasm (0x0808 vs 0x0000), so
+-     the stored segment -- and any later `lcall [5f20]` through it -- diverges between targets.  bdcc runs
+-     under the main-engine CS=0x1000 (board:0010). */
++     the stored segment -- and any later `lcall [5f20]` through it -- diverges between targets.
++     PATCH 576: bdcc runs under the 0x0000 cluster, not 0x1000: the oracle's descriptor reads 1119:c06d
++     (scratch/oracle/player.ram.bin, DGROUP:0x9f1c = cc 59 a0 03 6d c0 19 11) and the oracle's 0x1119 is
++     the port's segment 0 (DGROUP 0x2d19 <-> 0x1c00, so 0x2119 <-> 0x1000 and 0x1119 <-> 0x0000); 0000:c06d
++     is the relocation thunk FUN_0000_c06d, 1000:c06d would be DGROUP:0x6d. */
+   DAT_2000_5f20 = 0xc06d;
+-  DAT_2000_5f22 = 0x1000;
++  DAT_2000_5f22 = 0x0000;
+   /* PATCH 352: thread the dropped AL = byte[DGROUP:0x248] (asm bdd6) for the c508->014e dispatch. */
+   { extern unsigned short g_snd_cfg_letter; g_snd_cfg_letter = g_mem[0x1c248]; }
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c508)))();
+@@ -33174,15 +33178,19 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c084) @ 0000:c084 ===== */
+ 
+-void __allregs FUN_0000_c084(void)
++void __allregs FUN_0000_c084(int param_1,int param_2)
+ 
+ {
+-  bool bVar1;
+-  
++  /* PATCH 576: the sound resource's MOVE notice (c06d kind 0, asm 0xc084-0xc095): `push ax ; push dx ;
++   * lcall [0x538]` (SOUNDDVR 0245: lock, no arguments) `; pop ; pop ; clc ; lcall [0x518]` (SOUNDDVR
++   * 01fd: "the block at AX is now at DX", CF=1 when the driver holds neither) `; jb c096 ; ret`; c096
++   * reports through [0x5c] only if a song is loaded ([0x9fd9] != 0xffff).  Ghidra dropped AX/DX and the
++   * CF.  param_1 = AX (old paragraph), param_2 = DX (new paragraph). */
++  extern unsigned char g_fist_cf;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c538)))();
+-  bVar1 = false;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c518)))();
+-  if (!bVar1) {
++  g_fist_cf = 0;
++  ((void (*)(int,int))fist_icall_far((uint32_t)(DAT_1000_c518)))(param_1, param_2);
++  if (!g_fist_cf) {
+     return;
+   }
+   if (DAT_2000_5fd9 != 0xffff) {  /* PATCH 551: cmpw $0xffff */
+@@ -33193,6 +33201,27 @@
+ }
+ 
+ 
++/* ===== ((uint)(uintptr_t)&FUN_0000_c06d) @ 0000:c06d ===== */
++
++void __allregs FUN_0000_c06d(int param_1,int param_2,int param_3)
++
++{
++  /* PATCH 576: the SOUND resource's relocation callback -- bdcc stores it as [0x9f20] = 0xc06d, [0x9f22]
++   * = CS in the sound descriptor DGROUP:0x9f1c, and the MEMMGR's 1019 far-calls it with AX = the block's
++   * old paragraph, DX = the new one, BX = the notification kind.  asm 0xc06d `call cs:[bx+0xc073] ;
++   * retf`, table {c084 (kind 0: moved -> lock the driver, 01fd re-homes its song segment), c0b0 (kind 2:
++   * unlock), c0b6 (kind 4: be67), c083 x5 (ret)}.  Ghidra emitted no function for the thunk (the icall
++   * trapped), so a moved music block left the driver playing from the old paragraphs -- the menu song
++   * decoded garbage as soon as a boot-time compaction moved it. */
++  static const uint16_t tab[8] = { 0xc084, 0xc0b0, 0xc0b6, 0xc083, 0xc083, 0xc083, 0xc083, 0xc083 };
++  uint16_t m = tab[((uint16_t)param_3 >> 1) & 7];
++  if (m == 0xc084) FUN_0000_c084(param_1, param_2);
++  else if (m == 0xc0b0) FUN_0000_c0b0();
++  else if (m == 0xc0b6) FUN_0000_c0b6();
++  return;
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_c08e) @ 0000:c08e ===== */
+ 
+ void __allregs FUN_0000_c08e(void)
+@@ -49839,12 +49868,18 @@
+     uVar4 = 0;
+     if (DAT_1000_d8d4 != 0) {
+       bVar1 = 0;
+-      if ((DAT_1000_c44b & 1) == 0) {
++      if ((g_mem[0x1c44b] & 1) == 0) {                     /* PATCH 576: `test BYTE [0x44b],1` */
+         out(0x20,0x20);
+       }
+       FUN_1000_31c3((char)DAT_1000_d8d4,param_3,param_2,param_4,param_1,param_5,param_6,param_7,
+                     param_8,param_9,param_10);
+-      DAT_1000_c44b = DAT_1000_c44b << 1 | bVar1;
++      /* PATCH 576: asm 0x1314f `rcl BYTE PTR [0x44b],1` -- a BYTE rotate through 31c3's return carry
++       * (the BIOS-chain accumulator wrap): bit 1 then selects the chain to the saved INT 8 at [0x432]
++       * below, bit 0 skips the EOI on the next interrupt (the chained handler sends it).  Ghidra widened
++       * it to a word rotate with a constant 0 carry: [0x44c], the retrace period 2fd3 measured, lost a
++       * bit per interrupt, and the BIOS tick was never chained. */
++      { extern unsigned char g_fist_cf; unsigned char *dg = g_mem + 0x1c000;
++        dg[0x44b] = (unsigned char)((dg[0x44b] << 1) | (g_fist_cf & 1)); }
+       iVar3 = (DAT_1000_d8d4 + 1) - DAT_1000_d8d2;
+       DAT_1000_d8d4 = -iVar3;
+       uVar2 = DAT_1000_d8c6;
+@@ -49860,15 +49895,16 @@
+     }
+   }
+   bVar1 = 0;
+-  if ((DAT_1000_c44b & 1) == 0) {
++  if ((g_mem[0x1c44b] & 1) == 0) {                         /* PATCH 576: `test BYTE [0x44b],1` */
+     out(0x20,0x20);
+   }
+   FUN_1000_31c3((char)uVar4,param_3,param_2,param_4,param_1,param_5,param_6,param_7,param_8,param_9,
+                 param_10);
+-  DAT_1000_c44b = DAT_1000_c44b << 1 | bVar1;
++  { extern unsigned char g_fist_cf; unsigned char *dg = g_mem + 0x1c000;           /* PATCH 576: 0x13198, as above */
++    dg[0x44b] = (unsigned char)((dg[0x44b] << 1) | (g_fist_cf & 1)); }
+   DAT_1000_d8c4 = DAT_1000_d8c6;
+ LAB_1000_31a2:
+-  if ((DAT_1000_c44b & 2) != 0) {
++  if ((g_mem[0x1c44b] & 2) != 0) {                         /* PATCH 576: `test BYTE [0x44b],2` -> chain */
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c432)))();
+     return param_2;
+   }
+@@ -49933,8 +49969,15 @@
+         DAT_1000_d8ca = DAT_1000_d8ca >> 1;
+       }
+     }
++    /* PATCH 576: asm 0x1328c-0x13293 `mov ax,[0x18c0] ; add [0x18be],ax ; retf` -- the carry of the
++     * BIOS-chain accumulator is what 30f8 shifts into byte [0x44b] (`rcl BYTE [0x44b],1`) right after
++     * this returns; the `test [0x6b],0xff ; jne retf` early exit leaves CF = 0.  Threaded via g_fist_cf. */
++    { extern unsigned char g_fist_cf;
++      g_fist_cf = (uint16_t)(DAT_1000_d8be + DAT_1000_d8c0) < DAT_1000_d8be; }
+     DAT_1000_d8be = DAT_1000_d8be + DAT_1000_d8c0;
++    return;
+   }
++  { extern unsigned char g_fist_cf; g_fist_cf = 0; }
+   return;
+ }
+ 
+@@ -76906,6 +76949,7 @@
+   {0xc047u,(void*)&FUN_0000_c047},
+   {0xc073u,(void*)&FUN_0000_c073},
+   {0xc083u,(void*)&FUN_0000_c083},
++  {0xc06du,(void*)&FUN_0000_c06d},
+   {0xc084u,(void*)&FUN_0000_c084},
+   {0xc08eu,(void*)&FUN_0000_c08e},
+   {0xc0b0u,(void*)&FUN_0000_c0b0},
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -671,42 +671,25 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_01fd) @ 0000:01fd ===== */
+ 
+-/* WARNING: Removing unreachable block (ram,0x0000023f) */
+-
+ int __allregs FUN_0000_01fd(int param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
+-  undefined2 uVar1;
+-  uint uVar2;
+-  byte in_AF;
+-  char cVar3;
+-  byte in_TF;
+-  byte in_IF;
+-  byte in_NT;
+-  
+-  uVar1 = DAT_0000_0831;
+-  cVar3 = *(int *)&DAT_1000_c006 == param_1;
+-  if ((bool)cVar3) {
+-    *(undefined2 *)&DAT_1000_c006 = param_2;
+-  }
+-  if (*(int *)0x0 == param_1) {
+-    *(undefined2 *)0x0 = param_2;
+-    cVar3 = cVar3 + '\x01';
+-  }
+-  if ((cVar3 == '\0') && (uVar2 = *(uint *)&DAT_1000_c006 | *(uint *)0x0, uVar2 != 0)) {
+-    uRam000f0002 = *(undefined2 *)&DAT_1000_c006;
+-    uRam000f0004 = *(undefined2 *)0x0;
+-    uRam000f0014 = 5;
+-    uRam000f000e = 0x1c00;
+-    uRam000f0010 = uVar1;
+-    iRam000f0000 = param_1;
+-    uRam000f0006 = param_2;
+-    uRam000f0008 = uVar2;
+-    uRam000f000a = param_4;
+-    uRam000f000c = param_3;
+-    fist_int_dispatch();
+-    return iRam000f0000;
+-  }
++  /* PATCH 576: SOUNDDVR method [DGROUP:0x518] -- "the block at paragraph AX moved to DX" (driver asm
++   * 0x1fd-0x244), the engine's c06d relocation callback calls it for the sound/music resource: with
++   * es = cs:[0x831] (the driver's data page) replace es:[6] (the song's segment) and/or es:[0] (the
++   * queued one-shot's segment) when they equal AX; CF=0 if either matched.  Otherwise, if either is
++   * nonzero, `int 5` (a driver breakpoint) and CF=1.  Ghidra read es:[0]/es:[6] as host addresses 0 and
++   * DGROUP:6, so the port could not run the notification: the song segment stayed the old paragraph. */
++  extern unsigned char g_fist_cf;
++  unsigned char *D = g_mem + ((uint32_t)(uint16_t)DAT_0000_0831 << 4);
++  uint16_t ax = (uint16_t)param_1, dx = (uint16_t)param_2;
++  int matched = 0;
++  (void)param_3; (void)param_4;
++  if (*(uint16_t *)(D + 6) == ax) { *(uint16_t *)(D + 6) = dx; matched++; }
++  if (*(uint16_t *)(D + 0) == ax) { *(uint16_t *)(D + 0) = dx; matched++; }
++  if (matched) { g_fist_cf = 0; return param_1; }
++  if ((*(uint16_t *)(D + 6) | *(uint16_t *)(D + 0)) == 0) { g_fist_cf = 0; return param_1; }
++  g_fist_cf = 1;                                            /* 0x23f `int 5` ; stc -- the driver's own trap */
+   return param_1;
+ }
+ 

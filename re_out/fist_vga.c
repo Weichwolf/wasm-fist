@@ -62,48 +62,87 @@ void fist_vga_set_mode(int mode)
 int  fist_vga_mode(void){ return g_vmode; }
 
 /* ================= port I/O ================= */
-static int g_3da_toggle;
-static unsigned short g_pit[3] = {0xffff,0xffff,0xffff};
-/* PIT channel-0 reload divisor (INT-8 rate = 1193182/div): the OPL shim uses it to advance the FM synth
- * by the real per-tick sample count.  0 divisor == 65536. */
-int fist_vga_pit0_div(void){ return g_pit[0] ? g_pit[0] : 0x10000; }
-static int g_pit_sub[3];
 
-/* Service the MGAVIDEO palette-upload semaphore DGROUP:0x786 bit0 == the driver's vertical-retrace ISR
- * FUN_0000_0b1f (asm 0xb25: `shr BYTE ds:0x786,1; jae ...`): when bit0 is set, upload the 768-byte 6-bit
- * palette buffer at word[DGROUP:0x782] to the DAC (out 0x3c8,0; 768x out 0x3c9).  On the original this is
- * an ASYNC IRQ that fires ~70Hz regardless of the main loop; our port has no retrace IRQ, so it is driven
- * from BOTH the in(0x3da) retrace poll the engine busy-waits on AND the cooperative INT-8 timer pump
- * (fist_timer_pump) -- the pump is the "time passes / IRQs fire" heartbeat, so decoupling the palette
- * upload from an explicit in(0x3da) poll mirrors the async retrace IRQ faithfully.  Idempotent. */
-void fist_vga_service_retrace(void)
-{
-    if (g_mem[0x1c786] & 1) {
-        g_mem[0x1c786] >>= 1;
-        unsigned pseg = *(unsigned short *)(g_mem + 0x1c782);
-        const unsigned char *pb = g_mem + ((unsigned)pseg << 4);
-        for (int i = 0; i < 256; i++) {
-            g_pal[i][0] = pb[i*3+0] & 0x3f;
-            g_pal[i][1] = pb[i*3+1] & 0x3f;
-            g_pal[i][2] = pb[i*3+2] & 0x3f;
-        }
-    }
-    /* The real driver retrace ISR (MGAVIDEO 0x0b1f) uploads the present palette, THEN calls the
-     * registered per-frame palette-fade step at word[DGROUP:0x5e8] (which advances the fade ramp,
-     * rewrites the present buffer, and re-arms 0x786 for the next upload).  This shim stands in for
-     * that ISR, so we invoke the fade step here.  Gate on the exact marker the SETTINGS fade setup
-     * (MGAVIDEO 0x0874) writes -- offset word 0x5e8 == 0x946 -- so no other screen's vtable slot is
-     * ever called; 0x0946 clears it to 0 when the fade completes (present == loaded-1, the settled
-     * DOSBox palette).  0x0946 does no port I/O, so this is not re-entrant into in()/out(). */
-    if (*(unsigned short *)(g_mem + 0x1c5e8) == 0x946) {
-        extern code *fist_icall_far(uint32_t);
-        ((void (*)(void))fist_icall_far(*(uint32_t *)(g_mem + 0x1c5e8)))();
+/* ---- The machine clock: the PIT and the VGA retrace on one virtual time line (board:0026) ----
+ *
+ * The engine makes the PIT interrupt its vertical-retrace interrupt: 2fd3 measures one retrace period in
+ * PIT counts (30de polls 0x3da between two retrace edges while the counter free-runs) into [0x44c], 3064
+ * scales the 60 Hz frame tick [0x452] from it (d8b8 = [0x44c] << 16 / 0x4dae), and the ISR 30f8 waits
+ * for the retrace and re-programs the PIT on every interrupt.  So time is ONE thing here: a count of PIT
+ * clocks (1193182 Hz).  Every port access and every cooperative pump costs one count (an infinitely fast
+ * CPU whose I/O takes 0.84 us -- DOSBox at cycles=max is that machine too); the PIT channel 0 counter and
+ * the VGA status derive from the count; the INT-8 fires when the channel-0 counter wraps.
+ *
+ * The oracle machine (DOSBox, mode 13h): htotal 100 chars at 25.175/8 MHz, vtotal 449 lines -> 70.086 Hz,
+ * 17024.6 counts per frame; the retrace pulse is lines 412..414 (int10_modes.cpp: vrstart = vdispend+12,
+ * vrend = vrstart+2), 76 counts.  2fd3 measures 0x427f = 17023 there (every RAM capture agrees), so the
+ * model's frame is FRAME_COUNTS long such that the same measurement reads 17023 here: the two 30de returns
+ * are exact retrace-start edges, the reload (3 outs) and the latch (1 out) sit between them, and the
+ * count read is 65536 - (P - 2) -> P = 17025.
+ *
+ * A status poll that would spin (the same status as the previous poll, nothing else in between) jumps
+ * the clock to one count before the next status edge: the sequence of observed statuses is exactly what
+ * polling every count would show, the poll COUNT is not (the PLL in 30f8 keys its reload on it and
+ * settles on a slightly earlier interrupt; the interrupt PERIOD stays one frame either way, and that is
+ * what [0x452] and the sound driver see).  fist_clock_advance() fires the INT-8 for every channel-0 wrap
+ * it steps across, in order, so a jump never skips an interrupt. */
+#define PIT_HZ_       1193182u
+#define FRAME_COUNTS  17025u          /* one mode-13h frame, see above */
+#define FRAME_LINES   449.0           /* vtotal */
+#define VRETRACE_LINE 412             /* vrstart (vdispend + 12); the pulse lasts to line 414 */
+#define VDISPEND_LINE 400             /* status bit 0 (blanking) from here to the end of the frame */
+static unsigned long long g_clock;            /* PIT counts since power-on */
+static unsigned short g_pit_reload[3] = {0,0,0};   /* 0 == 65536 */
+static unsigned char  g_pit_mode[3], g_pit_rw[3];  /* control word: mode, access (1 lo,2 hi,3 lo/hi) */
+static unsigned char  g_pit_wsub[3], g_pit_rsub[3];
+static unsigned short g_pit_wlatch[3];
+static unsigned long long g_pit_base[3];      /* clock at which the current count started */
+static int            g_pit_latched[3]; static unsigned short g_pit_latch[3];
+static unsigned long long g_last_3da_clock = 0; static int g_last_3da_status = -1;
+int fist_vga_pit0_div(void){ return g_pit_reload[0] ? g_pit_reload[0] : 0x10000; }
+unsigned long long fist_clock_now(void){ return g_clock; }
+unsigned fist_clock_frame_counts(void){ return FRAME_COUNTS; }
+static unsigned pit_period(int ch){ return g_pit_reload[ch] ? g_pit_reload[ch] : 0x10000u; }
+static unsigned pit_count(int ch){            /* the channel's current count (modes 2/3: reload - elapsed) */
+    unsigned p = pit_period(ch); unsigned long long e = (g_clock - g_pit_base[ch]) % p;
+    return (unsigned)(p - e) & 0xffff; }
+unsigned long long fist_pit0_next_wrap(void){ unsigned p = pit_period(0);
+    unsigned long long e = g_clock - g_pit_base[0]; return g_pit_base[0] + (e / p + 1) * p; }
+/* Step the clock to `target`, firing the channel-0 interrupt at every wrap on the way (the ISR may
+ * re-program the channel, which restarts the count from that instant, as on the 8253). */
+void fist_clock_advance_to(unsigned long long target){
+    extern void fist_int8_fire(void);
+    while (g_clock < target) {
+        unsigned long long w = fist_pit0_next_wrap();
+        if (w <= target) { g_clock = w; fist_int8_fire(); }
+        else g_clock = target;
     }
 }
+void fist_clock_advance(unsigned n){ fist_clock_advance_to(g_clock + n); }
+static int vga_status(unsigned long long c){   /* port 0x3da at clock c: bit3 vsync, bit0 vertical blanking */
+    double line = (double)(unsigned)(c % FRAME_COUNTS) * (FRAME_LINES / FRAME_COUNTS); int r = 0;
+    if (line >= VRETRACE_LINE && line <= VRETRACE_LINE + 2) r |= 8;
+    if (line >= VDISPEND_LINE) r |= 1;                   /* (the per-line horizontal blank is not modelled:
+                                                            nothing in the engine or the drivers reads bit 0) */
+    return r;
+}
+static unsigned long long vga_next_status_edge(unsigned long long c){ /* first clock > c with a different status */
+    int s = vga_status(c); unsigned long long t = c + 1;
+    /* bit 0 changes every scanline; bit 3 twice a frame -- walk in scanline steps, then refine */
+    while (vga_status(t) == s) { t += 1; }
+    return t;
+}
+/* The MGAVIDEO palette upload and the per-tick DAC service are the ENGINE's: its INT-8 handler
+ * (FUN_1000_31c3) far-calls the driver method at DGROUP:0x5e4 once per tick -- 0be2 on a machine
+ * LOADGAME rates >= 0x31 (patch 575: the rating arrives through the LOADGAME hand-off script, see
+ * native_main.c setup_dos_env) -- which uploads word[0x782] to the DAC when bit0 of [0x786] is set,
+ * runs the DAC animation list and the fade stepper at [0x5e8].  The shim used to stand in for that
+ * ISR here (an upload per pump and per in(0x3da) poll, no animation list); with the driver's own
+ * method live the stand-in is gone, and in(0x3da) is only the retrace-status toggle. */
 
 int in(int port)
 {
-    fist_timer_pump();   /* cooperative PIT-ISR tick: the engine polls ports in its wait/render loops */
+    fist_timer_pump();   /* one PIT count of machine time, and the INT-8 it may bring (board:0026) */
     port &= 0xffff;
     if (fist_opl_owns(port)) return fist_opl_in(port);  /* OPL FM 0x388 status (FIST_OPL/FIST_SB) */
     if (fist_sb_owns(port)) return fist_sb_in(port);   /* SB DSP + 8237 DMA window (FIST_SB, default off) */
@@ -114,13 +153,23 @@ int in(int port)
         int v = g_pal[g_dac_ridx & 0xff][g_dac_rsub];
         if (++g_dac_rsub==3){ g_dac_rsub=0; g_dac_ridx=(g_dac_ridx+1)&0xff; }
         return v & 0x3f; }
-    case 0x3da: case 0x3ba: /* input status 1: toggle retrace bits so vsync polls exit */
-        g_3da_toggle ^= 0x09;
-        fist_vga_service_retrace();   /* vblank boundary: upload the palette if 0340 requested it */
-        return g_3da_toggle;
-    case 0x40: case 0x41: case 0x42: { /* PIT counter read (latch low/high alternating) */
-        int ch=port-0x40; int v = g_pit_sub[ch]? (g_pit[ch]>>8):(g_pit[ch]&0xff);
-        g_pit_sub[ch]^=1; g_pit[ch]--; return v & 0xff; }
+    case 0x3da: case 0x3ba: { /* input status 1 from the clock; a spinning poll jumps to the next edge */
+        int st = vga_status(g_clock);
+        if (st == g_last_3da_status && g_clock == g_last_3da_clock + 1) {
+            unsigned long long e = vga_next_status_edge(g_clock);
+            fist_clock_advance_to(e - 1);           /* the NEXT poll (+1) lands exactly on the edge */
+            st = vga_status(g_clock);
+        }
+        g_last_3da_clock = g_clock; g_last_3da_status = st;
+        return st; }
+    case 0x40: case 0x41: case 0x42: { /* PIT counter read: the latched value, else the live count */
+        int ch=port-0x40; unsigned v = g_pit_latched[ch] ? g_pit_latch[ch] : pit_count(ch);
+        int b;
+        if (g_pit_rw[ch] == 1) b = v & 0xff;
+        else if (g_pit_rw[ch] == 2) b = (v >> 8) & 0xff;
+        else { b = g_pit_rsub[ch] ? (v >> 8) & 0xff : v & 0xff; g_pit_rsub[ch] ^= 1; }
+        if (g_pit_rw[ch] != 3 || !g_pit_rsub[ch]) g_pit_latched[ch] = 0;   /* both bytes read: unlatch */
+        return b; }
     case 0x60: return 0;        /* keyboard data: no scan code */
     case 0x61: return 0x20;     /* PPI port B (refresh toggle bit) */
     case 0x64: return 0x00;     /* keyboard status: no data available */
@@ -134,7 +183,7 @@ int in(int port)
 
 void out(int port, int val)
 {
-    fist_timer_pump();   /* cooperative PIT-ISR tick (see in()) */
+    fist_timer_pump();   /* one PIT count of machine time (see in()) */
     port &= 0xffff; val &= 0xff;
     if (fist_opl_owns(port)) { fist_opl_out(port, val); return; }  /* OPL FM 0x388/0x389 (FIST_OPL/FIST_SB) */
     if (fist_sb_owns(port)) { fist_sb_out(port, val); return; }   /* SB DSP + 8237 DMA (FIST_SB, default off) */
@@ -145,11 +194,21 @@ void out(int port, int val)
         g_pal[g_dac_widx & 0xff][g_dac_wsub] = (unsigned char)(val & 0x3f);
         if (++g_dac_wsub==3){ g_dac_wsub=0; g_dac_widx=(g_dac_widx+1)&0xff; }
         return;
-    case 0x40: case 0x41: case 0x42: { /* PIT counter load */
-        int ch=port-0x40;
-        if(!g_pit_sub[ch]) g_pit[ch]=(g_pit[ch]&0xff00)|val; else g_pit[ch]=(g_pit[ch]&0x00ff)|(val<<8);
-        g_pit_sub[ch]^=1; return; }
-    case 0x43: return;   /* PIT control */
+    case 0x40: case 0x41: case 0x42: { /* PIT counter load: the new period starts when the write completes */
+        int ch=port-0x40; int done = 0;
+        if (g_pit_rw[ch] == 1) { g_pit_wlatch[ch] = (unsigned short)val; done = 1; }
+        else if (g_pit_rw[ch] == 2) { g_pit_wlatch[ch] = (unsigned short)(val << 8); done = 1; }
+        else if (!g_pit_wsub[ch]) { g_pit_wlatch[ch] = (unsigned short)((g_pit_wlatch[ch] & 0xff00) | val); g_pit_wsub[ch] = 1; }
+        else { g_pit_wlatch[ch] = (unsigned short)((g_pit_wlatch[ch] & 0x00ff) | (val << 8)); g_pit_wsub[ch] = 0; done = 1; }
+        if (done) { g_pit_reload[ch] = g_pit_wlatch[ch]; g_pit_base[ch] = g_clock; }
+        return; }
+    case 0x43: {         /* PIT control word: channel, access mode, counting mode; access 0 = latch */
+        int ch = (val >> 6) & 3, rw = (val >> 4) & 3;
+        if (ch == 3) return;
+        if (rw == 0) { g_pit_latch[ch] = (unsigned short)pit_count(ch); g_pit_latched[ch] = 1; g_pit_rsub[ch] = 0; return; }
+        g_pit_rw[ch] = (unsigned char)rw; g_pit_mode[ch] = (unsigned char)((val >> 1) & 7);
+        g_pit_wsub[ch] = 0; g_pit_rsub[ch] = 0; g_pit_latched[ch] = 0;
+        return; }
     case 0x3c0: case 0x3c1: /* attribute controller */
     case 0x3c2: case 0x3c3: /* misc output / feature */
     case 0x3c4: case 0x3c5: /* sequencer (map mask etc.) */

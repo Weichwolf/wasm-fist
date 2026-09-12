@@ -287,6 +287,9 @@ int fist_extender_gate(void);         /* native_main: the extender create-task/s
  * FIST_PSP_SEG is the DOS-entry ES = PSP segment the engine stores into DGROUP:0x68 (DAT_1000_c068). */
 #define FIST_PSP_SEG 0x9800u          /* linear 0x98000: above heap-top 0x90000, below VGA 0xA0000 */
 #define FIST_ENV_SEG 0x9900u          /* linear 0x99000: DOS environment block */
+#define FIST_RUN_PSP_SEG 0x9a00u      /* linear 0x9a000: FIST.RUN's own PSP (LOADGAME's child) -- its command
+                                         tail points at the hardware/OS detection script (board:0017) */
+#define FIST_HWCFG_SEG 0x9b00u        /* linear 0x9b000: that script, byte-exact from the oracle machine */
 void fist_install_dgroup(void);       /* native_main: (re)install DGROUP service table after CRT clear */
 void fist_ensure_dlist_vecs(void);    /* native_main: install display-list element method vectors (si=0x174) */
 

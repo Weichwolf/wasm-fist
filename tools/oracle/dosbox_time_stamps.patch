@@ -1,0 +1,22 @@
+board:0026 emulated-time stamps -- every FIST_WATCHPHYS/FIST_WATCHFLAT line ends in " t=<ms>" (PIC_FullIndex)
+and every 9200 pass capture line is preceded by "[r92cam-now t=<ms>] ", so writes and windshield frames
+can be related to time: the oracle's in-mission frame rate (scratch/oracle/fps: 25.7 fps on this host,
+0 or 1 frames per [0x452] tick) came from a FIST_WATCHPHYS on [0x452] (phys 0x2d5e2) plus
+FIST_R9200CAP=1 FIST_R92_NOMEMARM=1 FIST_R9200MAX=100000 in one run.  Also arms FIST_R9200CAP from the
+FIST_MEMARM_BOOT constructor (the lazy init that used to read it never ran once the boot arm had set
+fist_inited).  Apply to third_party/dosbox-build/dosbox-0.74-3/src/hardware/vga_memory.cpp, then `make`.
+--- a/src/hardware/vga_memory.cpp
++++ b/src/hardware/vga_memory.cpp
+@@ the [r92cam-now] print in r9200_snapshot() @@
++			fprintf(cf, "[r92cam-now t=%.3f] ", PIC_FullIndex());   /* board:0026: emulated ms of this pass */
+ 			fprintf(cf, "[r92cam-now #%d] tcbptr=%08x la=%08x lb=%08x  A[ext-rel]: X=%d Y=%d alt=%d head=%u pitch(+3a)=%d roll(+3c)=%d foc=%u det=%u | B[abs]: X=%d Y=%d alt=%d head=%u pitch=%d roll=%d foc=%u det=%u\n",
+@@ the WATCH line in fist_memrec() @@
+ 			for (int k = 0; k < 20; k++) fprintf(wf, " %04x", mem_readw(ssb + reg_esp + k * 2));
+-			fprintf(wf, "\n");
++			fprintf(wf, " t=%.3f\n", PIC_FullIndex());   /* board:0026: emulated ms, to relate writes to time */
+ 			if ((fist_watch_hits & 0x3ff) == 0) fflush(wf);
+@@ fist_boot_arm() @@
++	if (getenv("FIST_R9200CAP")) {          /* board:0026: the boot arm used to skip the lazy init that reads this */
++		r9200_cap = 1; const char *mp = getenv("FIST_R9200MAX"); if (mp) r9200_maxpass = atoi(mp); }
+ 	fist_inited = true;
+ 	fist_armed  = 1;   /* VGA-write histogram armed too (harmless) */

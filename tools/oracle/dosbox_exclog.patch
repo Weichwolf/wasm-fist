@@ -1,0 +1,44 @@
+board:0017 CPU exception log -- every exception the guest raises (number, error code, cs:eip, the
+general registers, segments, flags) plus the next 80 instructions executed (cs:eip, 8 opcode bytes,
+registers) so a handler's effect on the faulting context is on record.  Found with it: the MGA
+driver's `mov dx,1 ; div si` overflows for a 1-step palette fade (#DE); the extender routes exception 0
+to the ENGINE's INT-0 handler 1000:5b36, which skips the DIV and returns AX = 0xffff.  Env:
+FIST_EXCLOG=<path>.  Apply to third_party/dosbox-build/dosbox-0.74-3 (src/cpu/cpu.cpp: the head of
+CPU_Exception; src/cpu/core_normal.cpp: the per-instruction loop, after the BLKTRACE hook and before
+the C_DEBUG block), then `make`.  The extender's paging faults (exception 14) dominate the file -- grep
+'^EXC 0 '.
+--- a/src/cpu/cpu.cpp
++++ b/src/cpu/cpu.cpp
+@@ CPU_Exception @@
+-void CPU_Exception(Bitu which,Bitu error ) {
+-//	LOG_MSG("Exception %d error %x",which,error);
+-	cpu.exception.error=error;
++/* board:0017 FIST_EXCLOG=<path>: log every CPU exception (number, cs:eip, regs) and have core_normal
++ * trace the next 80 instructions so the handler's effect on the faulting context is on record
++ * (the MGA driver's 0x874 `div si` overflows for a 1-step fade -- what does the extender do with it?). */
++FILE* fist_exc_f = 0; int fist_exc_trace_left = 0; static int fist_exc_init = 0;
++void CPU_Exception(Bitu which,Bitu error ) {
++//	LOG_MSG("Exception %d error %x",which,error);
++	if (!fist_exc_init) { fist_exc_init = 1; const char* p = getenv("FIST_EXCLOG"); if (p) fist_exc_f = fopen(p, "w"); }
++	if (fist_exc_f) {
++		fprintf(fist_exc_f, "EXC %u err=%x cs=%04x eip=%08x ax=%04x bx=%04x cx=%04x dx=%04x si=%04x di=%04x ss=%04x sp=%08x ds=%04x es=%04x fl=%08x\n",
++			(unsigned)which, (unsigned)error, (unsigned)SegValue(cs), (unsigned)reg_eip, (unsigned)reg_ax, (unsigned)reg_bx,
++			(unsigned)reg_cx, (unsigned)reg_dx, (unsigned)reg_si, (unsigned)reg_di, (unsigned)SegValue(ss), (unsigned)reg_esp,
++			(unsigned)SegValue(ds), (unsigned)SegValue(es), (unsigned)reg_flags);
++		fflush(fist_exc_f); fist_exc_trace_left = 80;
++	}
++	cpu.exception.error=error;
+--- a/src/cpu/core_normal.cpp
++++ b/src/cpu/core_normal.cpp
+@@ after the BLKTRACE hook, before the C_DEBUG block in CPU_Core_Normal_Run() @@
++		{ extern FILE* fist_exc_f; extern int fist_exc_trace_left;
++		  if (fist_exc_trace_left > 0 && fist_exc_f) { fist_exc_trace_left--;
++			Bit32u lin = (Bit32u)core.cseip; char b[17]; for (int i=0;i<8;i++) sprintf(b+i*2,"%02x",(unsigned)mem_readb(lin+i));
++			fprintf(fist_exc_f, "  %04x:%08x %s ax=%04x bx=%04x cx=%04x dx=%04x si=%04x sp=%04x ss=%04x fl=%04x\n",
++				(unsigned)SegValue(cs), (unsigned)reg_eip, b, (unsigned)reg_ax, (unsigned)reg_bx, (unsigned)reg_cx, (unsigned)reg_dx,
++				(unsigned)reg_si, (unsigned)reg_sp, (unsigned)SegValue(ss), (unsigned)reg_flags);
++			if (!fist_exc_trace_left) fflush(fist_exc_f); }
++		}
+ #if C_DEBUG
+ #if C_HEAVY_DEBUG
+ 		if (DEBUG_HeavyIsBreakpoint()) {

@@ -8,7 +8,7 @@
 # (see tools/consecutive.sh — analog to DD2's passrun.sh/consecutive.sh).
 #
 # Usage:  bash tools/verify.sh [native|wasm|both]   (default: both)
-# A FLOW = { name, tick-hz, run-ms, input-script (optional), dosbox-ref (optional) }. Flows are added
+# A FLOW = { name, (unused), run-ms, input-script (optional), dosbox-ref (optional) }. Flows are added
 # here as screens/missions/settings/editor land; keep each flow DETERMINISTIC (fixed tick + scripted input).
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,7 +19,8 @@ WHICH="${1:-both}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 pass=0; fail=0
 
-# --- FLOW TABLE: name | tickhz | runms | mouse-script(FIST_MOUSE, may be empty) | dosbox-ref(may be empty) ---
+# --- FLOW TABLE: name | (unused; was the SIGALRM rate before the PIT/VGA clock, board:0026) | runms |
+#     mouse-script(FIST_MOUSE: t = vblanks after the menu entry) | dosbox-ref(may be empty) ---
 # Extend as coverage grows.  The mouse-script field is the scripted-input program (FIST_MOUSE =
 # "pump:x:y:btn; ..."); it may contain spaces/semicolons but MUST NOT contain '|'.
 FLOWS=(
@@ -41,8 +42,8 @@ FLOWS=(
   # extender/KDV player image, a `make kernel-image` build artifact -- gitignored, like the other images).
   "intro|25000|kdvframe=385||$ROOT/ref/intro_title_native320.png"
   "mainmenu|25000|22000||$ROOT/ref/main_menu_native320.png"
-  "about|25000|22000|200:160:139:0; 800:160:139:1; 1400:160:139:0; 2000:160:138:0|$ROOT/ref/about_native320.png"
-  "settings|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 2000:160:126:0|$ROOT/ref/settings_native320.png"
+  "about|25000|22000|12:160:139:0; 48:160:139:1; 84:160:139:0; 120:160:138:0|$ROOT/ref/about_native320.png"
+  "settings|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 120:160:126:0|$ROOT/ref/settings_native320.png"
   # SETTINGS toggle interaction (patch 318): open SETTINGS (160,126), then CLICK the SKY checkbox
   # (181,23) -> the display-list element ACTIVATE handler 6af0 -> 6b27 -> 6bb1 toggles the SKY state
   # byte (0x8b46 1->0), sets the status "SKY DISABLED", marks the widget dirty (0x8ba9), and the
@@ -54,7 +55,7 @@ FLOWS=(
   # wrong renderer).  Static frame (no blink) -> plain FIST_RUNMS dump.  READ-only (settings persist
   # only on ACCEPT).  ref via tools/refcapture_click2.sh 160 126 181 23 (2 independent DOSBox captures
   # AE=0 -> deterministic, non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
-  "settings-sky|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:23:0; 3600:181:23:1; 4200:181:23:0; 4800:181:23:0|$ROOT/ref/settings_sky_native320.png"
+  "settings-sky|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:181:23:0; 216:181:23:1; 251:181:23:0; 287:181:23:0|$ROOT/ref/settings_sky_native320.png"
   # SETTINGS RADIO toggle (patch 319): open SETTINGS (160,126), then CLICK the MEDIUM DETAIL radio
   # (181,52).  The default DETAIL is HIGH (lit); clicking MEDIUM runs the ACTIVATE handler 6af0 -> 6b27
   # (now threads the handler id BX -> the radio handlers, patch 319) -> 6bcc(bx=0x14) -> 6eb8(2): sets
@@ -65,7 +66,7 @@ FLOWS=(
   # frame (no blink) -> plain FIST_RUNMS dump.  READ-only (a radio persists only on ACCEPT).  ref via
   # tools/refcapture_click2.sh 160 126 181 52 40 8 8 (2 independent DOSBox captures AE=0 -> deterministic,
   # non-circular).  AE=0 native AND wasm; native md5 == wasm md5, deterministic (5x single md5).
-  "settings-detail-med|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:52:0; 3600:181:52:1; 4200:181:52:0; 4800:181:52:0|$ROOT/ref/settings_detail_med_native320.png"
+  "settings-detail-med|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:181:52:0; 216:181:52:1; 251:181:52:0; 287:181:52:0|$ROOT/ref/settings_detail_med_native320.png"
   # SETTINGS RADIO toggle (patch 319), DETAIL group's THIRD radio (LOW): open SETTINGS (160,126), click
   # the LOW DETAIL radio (181,44 -- the DETAIL radios stack LOW/MED/HIGH at y 44/52/60, default HIGH lit).
   # Same 6bcc handler as MED but bx=0x12 -> 6eb8(value 0): sets DETAIL word 0x8b47=0, status "DETAIL SET
@@ -75,27 +76,27 @@ FLOWS=(
   # engine patch (319 covers all three DETAIL radios).  Static frame -> plain FIST_RUNMS dump.  READ-only.
   # ref via tools/refcapture_click2.sh 160 126 181 44 40 8 8 (2 independent DOSBox captures AE=0 ->
   # deterministic, non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
-  "settings-detail-low|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:44:0; 3600:181:44:1; 4200:181:44:0; 4800:181:44:0|$ROOT/ref/settings_detail_low_native320.png"
+  "settings-detail-low|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:181:44:0; 216:181:44:1; 251:181:44:0; 287:181:44:0|$ROOT/ref/settings_detail_low_native320.png"
   # SETTINGS RADIO toggle (patch 319), SOUND-FX group (3 radios): open SETTINGS, click the MEDIUM SOUND-FX
   # radio (246,150).  Default SOUND FX = HIGH (lit); the click -> 6af0 -> 6b27 -> 6bde(bx=0x1e..) ->
   # 6ee2: SOUND-FX state word 0x8b4b, marks the 3 SOUND-FX widgets dirty (4bc1/4bc4/4bc7, BYTE) -> the
   # lit indicator MOVES HIGH->MEDIUM (6d16 renderer).  No status change (SOUND has no 7018 status line).
   # ref via tools/refcapture_click2.sh 160 126 246 150 40 8 8 (2x AE=0, non-circular).  AE=0 both targets.
-  "settings-sound-fx-med|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:246:150:0; 3600:246:150:1; 4200:246:150:0; 4800:246:150:0|$ROOT/ref/settings_sound_fx_med_native320.png"
+  "settings-sound-fx-med|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:246:150:0; 216:246:150:1; 251:246:150:0; 287:246:150:0|$ROOT/ref/settings_sound_fx_med_native320.png"
   # settings-sound-fx-off: SOUND FX radio OFF (x246, the aligned column).  Default is HIGH; clicking OFF
   # (246,137) selects it (LED moves HIGH->OFF, 6ee2/6d16 renderer).  No engine change needed (the radio
   # dirty/render already correct at this column); pure coverage of the OFF radio state.  AE=0 both targets.
-  "settings-sound-fx-off|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:246:137:0; 3600:246:137:1; 4200:246:137:0; 4800:246:137:0|$ROOT/ref/settings_sound_fx_off_native320.png"
+  "settings-sound-fx-off|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:246:137:0; 216:246:137:1; 251:246:137:0; 287:246:137:0|$ROOT/ref/settings_sound_fx_off_native320.png"
   # SETTINGS RADIO toggle (patch 319), MUSIC group (2 radios): open SETTINGS, click the OFF MUSIC radio
   # (181,136).  Default MUSIC = ON (lit); the click -> 6b27 -> 6bd5 -> 6ed4: MUSIC state word 0x8b49,
   # marks the 2 MUSIC widgets dirty (uRam00024bb8/4bbb, BYTE) -> the lit indicator MOVES ON->OFF (6d05
   # renderer).  ref via tools/refcapture_click2.sh 160 126 181 136 40 8 8 (2x AE=0, non-circular).  AE=0
   # both targets.  (Together detail-med/sound-fx-med/music-off exercise every patch-319 change: the 6b27
   # arg thread, the 6eb8 status base-loss, and all 8 radio dirty-flag BYTE retypings.)
-  "settings-music-off|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:136:0; 3600:181:136:1; 4200:181:136:0; 4800:181:136:0|$ROOT/ref/settings_music_off_native320.png"
+  "settings-music-off|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:181:136:0; 216:181:136:1; 251:181:136:0; 287:181:136:0|$ROOT/ref/settings_music_off_native320.png"
   # settings-smoke-off: DISPLAY SMOKE EFFECTS checkbox toggle OFF (patch 387 fixed the LED re-render --
   # store-width dirty-flag 0x8bb5, patch-318/319 class).  Click SETTINGS(160,126) -> SMOKE LED(181,83).
-  "settings-smoke-off|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:181:83:0; 3600:181:83:1; 4200:181:83:0; 4800:181:83:0|$ROOT/ref/settings_smoke_off_native320.png"
+  "settings-smoke-off|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:181:83:0; 216:181:83:1; 251:181:83:0; 287:181:83:0|$ROOT/ref/settings_smoke_off_native320.png"
   # SETTINGS joystick-TYPE radio toggle (patch 320), CONTROL column (5 radios): open SETTINGS (160,126),
   # click the STD JOYSTICK radio (35,34).  Default = NO JOYSTICK (lit).  The click -> 6af0 -> 6b27 ->
   # 6b55 (base-loss fixed by 320): reads the type index (1) via byte[DGROUP:0x8b5f+1], calls 6c38 ->
@@ -107,61 +108,61 @@ FLOWS=(
   # ref via tools/refcapture_click2.sh 160 126 35 34 40 10 10 (2 independent DOSBox captures AE=0,
   # non-circular; port md5 139294fd != any circular self-compare).  AE=0 native AND wasm; native md5 ==
   # wasm md5, deterministic (3x single md5).
-  "settings-joystick|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:34:0; 3600:35:34:1; 4200:35:34:0; 4800:35:34:0|$ROOT/ref/settings_joystick_native320.png"
+  "settings-joystick|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:35:34:0; 216:35:34:1; 251:35:34:0; 287:35:34:0|$ROOT/ref/settings_joystick_native320.png"
   # SETTINGS joystick radios (x35 aligned column): each selects a joystick type (LED moves), AE=0 both
   # targets, no engine change (the joystick radio render is already correct -- settings-joystick=STD).
-  "settings-joy-flightstick|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:46:0; 3600:35:46:1; 4200:35:46:0; 4800:35:46:0|$ROOT/ref/settings_joy_flightstick_native320.png"
-  "settings-joy-tmfcs|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:58:0; 3600:35:58:1; 4200:35:58:0; 4800:35:58:0|$ROOT/ref/settings_joy_tmfcs_native320.png"
-  "settings-joy-ch|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:69:0; 3600:35:69:1; 4200:35:69:0; 4800:35:69:0|$ROOT/ref/settings_joy_ch_native320.png"
-  "settings-joy-tmwcs|25000|22000|200:160:126:0; 800:160:126:1; 1400:160:126:0; 3000:35:88:0; 3600:35:88:1; 4200:35:88:0; 4800:35:88:0|$ROOT/ref/settings_joy_tmwcs_native320.png"
-  "review|25000|22000|200:160:113:0; 800:160:113:1; 1400:160:113:0; 2000:160:113:0|$ROOT/ref/review_native320.png"
-  "selplayer|25000|22000|200:160:74:0; 800:160:74:1; 1400:160:74:0; 2000:160:74:0|$ROOT/ref/selplayer_native320.png"
-  "battles|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 2000:160:100:0|$ROOT/ref/battles_native320.png"
-  "campaigns|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 2000:160:87:0|$ROOT/ref/campaigns_native320.png"
+  "settings-joy-flightstick|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:35:46:0; 216:35:46:1; 251:35:46:0; 287:35:46:0|$ROOT/ref/settings_joy_flightstick_native320.png"
+  "settings-joy-tmfcs|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:35:58:0; 216:35:58:1; 251:35:58:0; 287:35:58:0|$ROOT/ref/settings_joy_tmfcs_native320.png"
+  "settings-joy-ch|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:35:69:0; 216:35:69:1; 251:35:69:0; 287:35:69:0|$ROOT/ref/settings_joy_ch_native320.png"
+  "settings-joy-tmwcs|25000|22000|12:160:126:0; 48:160:126:1; 84:160:126:0; 180:35:88:0; 216:35:88:1; 251:35:88:0; 287:35:88:0|$ROOT/ref/settings_joy_tmwcs_native320.png"
+  "review|25000|22000|12:160:113:0; 48:160:113:1; 84:160:113:0; 120:160:113:0|$ROOT/ref/review_native320.png"
+  "selplayer|25000|22000|12:160:74:0; 48:160:74:1; 84:160:74:0; 120:160:74:0|$ROOT/ref/selplayer_native320.png"
+  "battles|25000|22000|12:160:100:0; 48:160:100:1; 84:160:100:0; 120:160:100:0|$ROOT/ref/battles_native320.png"
+  "campaigns|25000|22000|12:160:87:0; 48:160:87:1; 84:160:87:0; 120:160:87:0|$ROOT/ref/campaigns_native320.png"
   # Interaction flows (patch 142): open a list dialog, then CLICK A ROW inside it -> the red selection
   # bar moves to the clicked row.  Two different dialogs (SELECT PLAYER via CAMPAIGNS row 87 selecting
   # KKR; SELECT BATTLE via BATTLES row 100 selecting AZER5).  The dialog covers the menu-item click
   # position (rows 87/100 are inside the panel), so no cursor ghost remains.
-  "campaigns-select|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:130:119:0; 3600:130:119:1; 4200:130:119:0; 4800:130:119:0|$ROOT/ref/campaigns_select_native320.png"
-  "battles-select|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:130:119:0; 3600:130:119:1; 4200:130:119:0; 4800:130:119:0|$ROOT/ref/battles_select_native320.png"
+  "campaigns-select|25000|22000|12:160:87:0; 48:160:87:1; 84:160:87:0; 180:130:119:0; 216:130:119:1; 251:130:119:0; 287:130:119:0|$ROOT/ref/campaigns_select_native320.png"
+  "battles-select|25000|22000|12:160:100:0; 48:160:100:1; 84:160:100:0; 180:130:119:0; 216:130:119:1; 251:130:119:0; 287:130:119:0|$ROOT/ref/battles_select_native320.png"
   # Close flow (patch 143): open the CAMPAIGNS list dialog, then click CANCEL -> the dialog closes and
   # the plain main menu is restored (the CANCEL button @205,140 is the final cursor rest position, so no
   # ghost).  Exercises the cb74/cb7c OK/CANCEL return-to-menu path (previously a base-lost SIGSEGV).
-  "cancel|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:205:140:0; 3600:205:140:1; 4200:205:140:0|$ROOT/ref/cancel_native320.png"
+  "cancel|25000|22000|12:160:87:0; 48:160:87:1; 84:160:87:0; 180:205:140:0; 216:205:140:1; 251:205:140:0|$ROOT/ref/cancel_native320.png"
   # Close flow via the OTHER list-dialog front-end: BATTLES opens the SELECT BATTLE .FSG list (47 entries,
   # cb7c) then CANCEL @205,140 -> menu restored.  Independently exercises cb7c's shared-body close path
   # (distinct enumerate + dialog from campaigns/cb74); the destination frame is the plain menu.
-  "battles-cancel|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:140:0; 3600:205:140:1; 4200:205:140:0|$ROOT/ref/battles_cancel_native320.png"
+  "battles-cancel|25000|22000|12:160:100:0; 48:160:100:1; 84:160:100:0; 180:205:140:0; 216:205:140:1; 251:205:140:0|$ROOT/ref/battles_cancel_native320.png"
   # Scroll flow (patch 144): open the BATTLES SELECT BATTLE list (47 entries) then PRESS-AND-HOLD the
   # down-scroll arrow (172,135).  The game's own auto-repeat (a85b=d103) steps the view down until it
   # CLAMPS at the bottom (offset 39 -> UKRAINE1-8, red bar on UKRAINE1).  The clamp is a deterministic
   # endpoint independent of the exact iteration/tick count, so native, wasm and DOSBox all settle on the
   # identical frame.  Ref captured mid-hold (button still down) via tools/refcapture_scroll.sh so the
   # arrow's pressed state matches; the port script holds the button through the capture (no release).
-  "battles-scroll|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:172:135:0; 3600:172:135:1|$ROOT/ref/battles_scroll_native320.png"
+  "battles-scroll|25000|22000|12:160:100:0; 48:160:100:1; 84:160:100:0; 180:172:135:0; 216:172:135:1|$ROOT/ref/battles_scroll_native320.png"
   # Page-scroll flow (patch 145): open the BATTLES list, then SINGLE-CLICK the scrollbar TRACK below
   # the thumb (172,115) -> ce37 press path -> d146 PAGE DOWN (+8 rows; cef4 clamps the selection into
   # view) -> CYPRUS2..INDIA2, red bar on CYPRUS2.  A single click is a deterministic endpoint (no hold
   # timing); the final cursor rests on the track inside the panel, so no ghost.
-  "battles-page|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:172:115:0; 3600:172:115:1; 4200:172:115:0|$ROOT/ref/battles_page_native320.png"
+  "battles-page|25000|22000|12:160:100:0; 48:160:100:1; 84:160:100:0; 180:172:115:0; 216:172:115:1; 251:172:115:0|$ROOT/ref/battles_page_native320.png"
   # OK-path WRITE flow (patch 146): open SELECT PLAYER (row 74), then click OK (205,128) on the default
   # player D.  The engine SAVES the profile -- 6a9c reads+checksums D.FPL, 6ade rewrites it (byte-identical)
   # -- copies the name into CURRENT PLAYER (STRSEG:0xbf1, [0x6dad]=1), and returns to the menu, which now
   # draws "CURRENT PLAYER:D" at the bottom.  This is a WRITE flow -> isolated in a fresh scratch datadir
   # (see WRITEFLOWS above); the ref is captured the same way (tools/refcapture_ok.sh 160 74 205 128).
-  "selplayer-ok|25000|22000|200:160:74:0; 800:160:74:1; 1400:160:74:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 4800:205:128:0|$ROOT/ref/selplayer_ok_native320.png"
+  "selplayer-ok|25000|22000|12:160:74:0; 48:160:74:1; 84:160:74:0; 180:205:128:0; 216:205:128:1; 251:205:128:0; 287:205:128:0|$ROOT/ref/selplayer_ok_native320.png"
   # OK-path WRITE flow (patch 146), the ROW-SELECT variant: open SELECT PLAYER (row 74), SELECT the KKR
   # row (130,119 -> a838=4), then OK (205,128).  Exercises the non-default name copy (e9bd from
   # STRSEG:(a838*0x10+0x3776)) + the .FPL I/O for a different profile (KKR.FPL) -> the menu draws
   # "CURRENT PLAYER:KKR".  Isolated (write flow); ref via tools/refcapture_ok3.sh 160 74 130 119 205 128.
-  "selplayer-ok-kkr|25000|22000|200:160:74:0; 800:160:74:1; 1400:160:74:0; 2400:130:119:0; 2800:130:119:1; 3200:130:119:0; 3800:205:128:0; 4200:205:128:1; 4600:205:128:0; 5000:205:128:0|$ROOT/ref/selplayer_ok_kkr_native320.png"
+  "selplayer-ok-kkr|25000|22000|12:160:74:0; 48:160:74:1; 84:160:74:0; 144:130:119:0; 168:130:119:1; 192:130:119:0; 228:205:128:0; 251:205:128:1; 275:205:128:0; 299:205:128:0|$ROOT/ref/selplayer_ok_kkr_native320.png"
   # CAMPAIGNS -> OK -> the SELECT A CAMPAIGN screen (patch 148).  Click CAMPAIGNS (row 87) to open the
   # SELECT PLAYER roster, then OK (205,128) to pick the default player D -> e78c copies the name + reads
   # the .FPL, then opens FUN_0000_ec7e = the campaign modal screen: a left LIST of the 7 decrypted campaign
   # names (TRAINING [red-selected]..BURNING FROST, from patch 147's ef5e chain), a right HARDWARE group
   # (WESTERN [red]/EASTERN radios), OK/CANCEL.  ec7e's first settled frame is the deliverable (READ-only:
   # 6ade only fires on ec7e's own OK), isolated anyway (WRITE flow); ref via tools/refcapture_ok.sh 160 87 205 128.
-  "campaigns-ok|25000|22000|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 4800:205:128:0|$ROOT/ref/campaigns_ok_native320.png"
+  "campaigns-ok|25000|22000|12:160:87:0; 48:160:87:1; 84:160:87:0; 180:205:128:0; 216:205:128:1; 251:205:128:0; 287:205:128:0|$ROOT/ref/campaigns_ok_native320.png"
   # CAMPAIGNS -> OK -> campaign-OK -> the INTRODUCTORY CAMPAIGN mission-select screen (patches 149/150).
   # THREE clicks: CAMPAIGNS (row 87) opens the SELECT PLAYER roster; OK (205,128) picks player D and opens
   # the SELECT A CAMPAIGN modal (ec7e); campaign-OK (203,159) runs ec7e's tail -- f0f1 parses the selected
@@ -176,7 +177,7 @@ FLOWS=(
   # wall-clock FIST_RUNMS dump lands at a target-dependent phase and diverges).  ref via
   # tools/refcapture_ok3.sh 160 87 205 128 203 159 (3x AE=0, non-circular; DOSBox blink phase = selected
   # marker black, reproducible at SETTLE=8).  AE=0 native AND wasm; native md5 == wasm md5, deterministic.
-  "campaign-missions|25000|tick=8008|200:160:87:0; 800:160:87:1; 1400:160:87:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:203:159:0; 6000:203:159:1; 6600:203:159:0; 7200:203:159:0|$ROOT/ref/campaign_missions_native320.png"
+  "campaign-missions|25000|tick=8008|12:160:87:0; 48:160:87:1; 84:160:87:0; 180:205:128:0; 216:205:128:1; 251:205:128:0; 323:203:159:0; 359:203:159:1; 395:203:159:0; 431:203:159:0|$ROOT/ref/campaign_missions_native320.png"
   # BATTLES -> OK -> the mission BRIEFING screen (patch 151).  TWO clicks: BATTLES (row 100) opens the
   # SELECT BATTLE .FSG list dialog (cb7c); OK (205,128) picks the default battle AZER1 -> e87a proceeds
   # (asm `jae 0xe891`) into `7088(0)` = the mission-briefing modal dialog (id=0).  Its SETUP FUN_0000_7162
@@ -186,7 +187,7 @@ FLOWS=(
   # .FSW; the editor build + its .FPL write are deferred behind ACCEPT).  ref via
   # tools/refcapture_ok.sh 160 100 205 128 (2 independent DOSBox captures AE=0 -> deterministic,
   # non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
-  "battles-ok|25000|22000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 4800:205:128:0|$ROOT/ref/battles_ok_native320.png"
+  "battles-ok|25000|22000|12:160:100:0; 48:160:100:1; 84:160:100:0; 180:205:128:0; 216:205:128:1; 251:205:128:0; 287:205:128:0|$ROOT/ref/battles_ok_native320.png"
   # BATTLES -> OK -> briefing -> CANCEL -> menu (patches 152/153).  THREE clicks: BATTLES (row 100) opens
   # the SELECT BATTLE .FSG list (cb7c); OK (205,128) picks AZER1 -> the mission-briefing modal (7088 id=0);
   # CANCEL (78,186 -- the 2nd bottom button, right of ACCEPT@40,186) dismisses it.  The briefing button
@@ -200,7 +201,7 @@ FLOWS=(
   # catch).  READ-only (briefing 7162 only reads AZER1.FSW).  ref via
   # tools/refcapture_ok3.sh 160 100 205 128 78 186 40 8 8 (DOSBox also returns to menu on CANCEL, cursor@78,186;
   # 2 independent captures AE=0, non-circular).  AE=0 native AND wasm; native md5 == wasm md5.
-  "battles-cancel-briefing|25000|tick=6000|200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:78:186:0; 6000:78:186:1; 6600:78:186:0; 7200:78:186:0|$ROOT/ref/battles_cancel_briefing_native320.png"
+  "battles-cancel-briefing|25000|tick=6000|12:160:100:0; 48:160:100:1; 84:160:100:0; 180:205:128:0; 216:205:128:1; 251:205:128:0; 323:78:186:0; 359:78:186:1; 395:78:186:0; 431:78:186:0|$ROOT/ref/battles_cancel_briefing_native320.png"
   # EDITOR .FSG battle-SAVE round-trip (patches 360/361) -- the first LEVEL/MISSION-EDITOR DoD
   # deliverable, DATA-level (no terrain/render dependency).  Special-cased below (file compare, not
   # framebuffer): BATTLES->OK->ACCEPT loads AZER1.FSG via FUN_0000_d501; the patch-361 harness hook
@@ -514,9 +515,9 @@ run_target() { # $1=target $2=hz $3=ms/dumptick $4=mouse-script $5=out.ppm $6=da
     # The watchdog is not the specification (the assertion is the AE=0 framebuffer compare below); it
     # only has to be loose enough not to shoot a correct run and tight enough to catch a hang, which
     # runs forever.  90 s matches the native budget run_missfb/run_terrain already use.
-    timeout 90 env "${ddenv[@]}" FIST_TICK_HZ="$hz" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 90 env "${ddenv[@]}" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NATIVE" >/dev/null 2>&1; echo $?
   else
-    timeout 120 env "${ddenv[@]}" FIST_TICK_HZ="$hz" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+    timeout 120 env "${ddenv[@]}" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
 }
 
@@ -531,16 +532,16 @@ fresh_datadir() { # $1=tag ; echo path
 # 360) right after d501 (pre-sim, deterministic) and exits.  The DoD round-trip is a FIXED POINT
 # (load canonicalizes each unit, so the editor-authored file is not itself a fixed point, but a
 # re-saved file IS): load(orig)->save = file1; load(file1)->save = file2; assert file1==file2.
-RT_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0; 7200:40:186:0"
+RT_MOUSE="12:160:100:0; 48:160:100:1; 84:160:100:0; 180:205:128:0; 216:205:128:1; 251:205:128:0; 323:40:186:0; 359:40:186:1; 395:40:186:0; 431:40:186:0"
 run_fsg() { # $1=target $2=datadir $3=battle(optional,default AZER1) ; echo rc (one load->save->exit)
   local t="$1" dd="$2" b="${3:-AZER1}"
   # FIST_FSG_BATTLE (patch 380) overrides the loaded battle filename so ANY .FSG can be exercised with
   # the single RT_MOUSE navigation (BATTLES->OK->ACCEPT); it selects AZER1 by default, so passing
   # b=AZER1 is behaviour-identical to the un-generalized flow.  Env mirrored to wasm by wasm_pre.js.
   if [ "$t" = native ]; then
-    timeout 120 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 120 env FIST_DATADIR="$dd" FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
   else
-    timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+    timeout 150 env FIST_DATADIR="$dd" FIST_RUNMS=30000 FIST_FSG_ROUNDTRIP=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
 }
 run_roundtrip() { # $1=target $2=battle(default AZER1) ; echo path-to-file1 on success, empty on failure
@@ -578,9 +579,9 @@ run_edit() { # $1=target $2=datadir $3=battle(default AZER1) $4=edit-env(default
   # a friendly unit gains/loses exactly one tank.  Default AZER1 + add-tank -> the original flow.
   local t="$1" dd="$2" b="${3:-AZER1}" ev="${4:-FIST_EDIT_ADDTANK}"
   if [ "$t" = native ]; then
-    timeout 120 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 "$ev"=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 120 env FIST_DATADIR="$dd" FIST_RUNMS=30000 "$ev"=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NATIVE" >/dev/null 2>&1; echo $?
   else
-    timeout 150 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 FIST_RUNMS=30000 "$ev"=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+    timeout 150 env FIST_DATADIR="$dd" FIST_RUNMS=30000 "$ev"=1 FIST_FSG_BATTLE="$b" FIST_MOUSE="$RT_MOUSE" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
   fi
 }
 run_addtank() { # $1=target $2=battle(default AZER1) $3=edit-env(default FIST_EDIT_ADDTANK) ; echo edited-file or ""
@@ -628,7 +629,7 @@ run_remtank() { # $1=target $2=battle(default AZER1) ; echo path-to-edited-file 
 }
 
 # ---- MISSION cockpit render (FIST_MISSFB op-0x24 post #1) -> region-cropped PPM ----
-MC_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0; 7200:40:186:0"
+MC_MOUSE="12:160:100:0; 48:160:100:1; 84:160:100:0; 180:205:128:0; 216:205:128:1; 251:205:128:0; 323:40:186:0; 359:40:186:1; 395:40:186:0; 431:40:186:0"
 MC_REGION="100x92+80+96"   # cols80-180 rows96-188 central chrome
 run_mission() { # $1=target $2=datadir [$3=battle] [$4=mode: ""=op-0x24 spawn, "2c"=op-0x2c spawn] ; echo crop-ppm or ""
   local t="$1" dd="$2" bt="${3:-}" mode="${4:-}"
@@ -641,9 +642,9 @@ run_mission() { # $1=target $2=datadir [$3=battle] [$4=mode: ""=op-0x24 spawn, "
   # first op-0x2c post (=spawn, cross-target deterministic like op-0x24 post #1).
   local m2c=(); [ "$mode" = 2c ] && m2c=(FIST_MISSFB2C=1 FIST_MISSFB_N=1)
   if [ "$t" = native ]; then
-    timeout 90  env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 "${bexp[@]}" "${m2c[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
+    timeout 90  env FIST_DATADIR="$dd" "${bexp[@]}" "${m2c[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
   else
-    timeout 220 env FIST_DATADIR="$dd" FIST_TICK_HZ=25000 "${bexp[@]}" "${m2c[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 220 env FIST_DATADIR="$dd" "${bexp[@]}" "${m2c[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
   fi
   [ -s "$out" ] || { echo ""; return 1; }
   convert "$out" -crop "$MC_REGION" +repage "$reg" 2>/dev/null || { echo ""; return 1; }
@@ -668,25 +669,25 @@ run_terrain() { # $1=target $2=battle ; echo full-framebuffer ppm or ""  -- FIST
     # gated on d549==0x1c, the cockpit view, which is not yet active); what it changes here is only the
     # tick source: no SIGALRM, one cooperative tick per pump, exactly like wasm.  The assertion below is
     # unchanged.  board:0002
-    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=25000 FIST_SIMRUN=1 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
+    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_SIMRUN=1 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
   else
-    timeout 220 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=25000 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 220 env FIST_DATADIR="$ROOT/armoredfist" FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
   fi
   [ -s "$out" ] || { echo ""; return 1; }
   echo "$out"
 }
 run_audio() { # $1=target $2=dumptick(default 120) ; echo wav or ""  -- OPL FM audio, tick-pinned, native<->wasm
-  # board:0003: the OPL FM audio stream is native==wasm bit-identical under pure-cooperative ticking
-  # (FIST_COOP_TICK, FIST_TICK_HZ=1000 so div=250 is stable).  Since patch 411 (d97e returns e339's op-0x78
+  # board:0003: the OPL FM audio stream is native==wasm bit-identical -- both targets step the same
+  # PIT/VGA clock (board:0026).  Since patch 411 (d97e returns e339's op-0x78
   # status) BOTH targets play the title intro identically, so the stream stays bit-identical ACROSS the
   # intro->menu transition -- audio-intro pins [0x452]=300 (past the transition); audio-opl-init pins the
   # [0x452]=120 OPL-init window.
   local t="$1" dt="${2:-120}"
   local out="$TMP/au.$t.$dt.wav"
   if [ "$t" = native ]; then
-    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK="$dt" FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NATIVE" >/dev/null 2>&1
+    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK="$dt" FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NATIVE" >/dev/null 2>&1
   else
-    timeout 240 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK="$dt" FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 240 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK="$dt" FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NODE" "$OUTJS" >/dev/null 2>&1
   fi
   [ -s "$out" ] || { echo ""; return 1; }
   echo "$out"
@@ -699,9 +700,9 @@ run_audio_reglog() { # $1=target ; echo reglog-path or ""  -- port engine OPL no
   local t="$1"
   local out="$TMP/aureg.$t.reglog"          # NB separate line: $t must be set before it is used (set -u)
   if [ "$t" = native ]; then
-    timeout 120 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK=30000 FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NATIVE" >/dev/null 2>&1
+    timeout 120 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK=30000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NATIVE" >/dev/null 2>&1
   else
-    timeout 300 env FIST_DATADIR="$ROOT/armoredfist" FIST_TICK_HZ=1000 FIST_DUMPTICK=30000 FIST_COOP_TICK=1 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 300 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK=30000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
   fi
   [ -s "$out" ] || { echo ""; return 1; }
   echo "$out"

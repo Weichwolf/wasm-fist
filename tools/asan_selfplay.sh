@@ -19,7 +19,7 @@ DD="$(mktemp -d)/data"; cp -r "$ROOT/armoredfist" "$DD"    # runs write .FPL bac
 trap 'rm -rf "$(dirname "$DD")"' EXIT
 
 # Identical menu navigation to tools/selfplay.sh -- BATTLES -> OK -> ACCEPT, then EMPTY player input.
-SP_MOUSE="200:160:100:0; 800:160:100:1; 1400:160:100:0; 3000:205:128:0; 3600:205:128:1; 4200:205:128:0; 5400:40:186:0; 6000:40:186:1; 6600:40:186:0; 7200:40:186:0"
+SP_MOUSE="12:160:100:0; 48:160:100:1; 84:160:100:0; 180:205:128:0; 216:205:128:1; 251:205:128:0; 323:40:186:0; 359:40:186:1; 395:40:186:0; 431:40:186:0"
 
 echo "[asan] building $BIN"
 ASAN='-fsanitize=address' bash "$ROOT/tools/build_native.sh" "$BIN" >/dev/null 2>&1 \
@@ -27,7 +27,7 @@ ASAN='-fsanitize=address' bash "$ROOT/tools/build_native.sh" "$BIN" >/dev/null 2
 
 echo "[asan] $M to [0x452]=$CAP"
 ASAN_OPTIONS=detect_leaks=0 setarch -R env \
-  FIST_DATADIR="$DD" FIST_SIMRUN=1 FIST_COOP_TICK=1 FIST_FSG_BATTLE="$M" \
+  FIST_DATADIR="$DD" FIST_SIMRUN=1 FIST_FSG_BATTLE="$M" \
   FIST_DUMPTICK="$CAP" FIST_MOUSE="$SP_MOUSE" \
   timeout "${ASAN_BUDGET:-1800}" "$BIN" >/dev/null 2>"$ERR"
 rc=$?

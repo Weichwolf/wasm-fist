@@ -324,20 +324,18 @@ extern void app_entry(undefined2, undefined2, undefined2, undefined2, undefined2
 void fist_input_pump(void);              /* scripted deterministic input (defined below) */
 extern int g_menu_ready;
 
-/* ====================== TIMER-DRIVEN EXECUTION MODEL ======================
- * The engine installs its OWN INT-8 (PIT) ISR (DOS set-vector 0x08 -> FUN_1000_30f8 @ linear 0x130f8)
- * and busy-waits on the tick counters that ISR maintains (DGROUP:0x452 in FUN_1000_3346, DGROUP:0x18ca
- * in FUN_1000_3352, ...). On the original the PIT IRQ fires ~18.2x/s (or the reprogrammed rate) and
- * asynchronously preempts those spins to run the ISR. Our host is single-threaded and MUST NOT run
- * engine C from inside a signal handler (unsafe re-entrancy), so we drive the ISR COOPERATIVELY:
- *   - a periodic SIGALRM only bumps the BIOS tick (0040:006C) and raises a pending-tick flag
- *     (async-signal-safe: no engine code, no libc);
- *   - fist_timer_pump() drains pending ticks at safe points (the engine's spin-waits and the port-I/O
- *     shims) by invoking the engine's installed INT-8 ISR via the indirect-call dispatcher, guarded
- *     against re-entry. So DGROUP:0x452 advances and the spins clear, without corrupting engine state.
- * RATE KNOB (determinism): FIST_TICK_HZ sets the SIGALRM frequency (default 200 Hz). Each SIGALRM =
- * one pending ISR invocation (capped). For Stage-1 unblocking any correct-enough rate works; the knob
- * is the seam a later deterministic (instruction-counted) tick source will replace. */
+/* ====================== THE TIME BASE ======================
+ * The engine installs its OWN INT-8 (PIT) ISR (DOS set-vector 0x08 -> FUN_1000_30f8 @ linear 0x130f8),
+ * calibrates the PIT to one vertical-retrace period (2fd3) and re-arms it at every retrace inside the
+ * ISR: the INT-8 IS the vblank, [0x452] is the 60 Hz frame tick it derives, and everything time-driven
+ * (the sim's per-tick step, the driver's DAC service, the sound sequencer) hangs off that interrupt.
+ * The port keeps ONE clock for all of it -- a count of PIT clocks (1193182 Hz) in fist_vga.c
+ * (board:0026): every port access and every cooperative pump is one count, the channel-0 counter and the
+ * VGA retrace status derive from the count, and the interrupt fires when channel 0 wraps.  The host is
+ * single-threaded and MUST NOT run engine C from a signal handler, so the interrupt is delivered from
+ * the pump (fist_int8_fire), guarded against re-entry; a wrap that lands while the ISR runs is held and
+ * delivered when it returns, as the PIC would.  No SIGALRM, no "one tick per pump": native and wasm step
+ * the same clock the same way, so [0x452] and the whole sim evolve in lockstep on both. */
 #define BIOS_TICK_LIN 0x46C
 unsigned short g_fist_a18e_bx=0;
 long g_min_a296 = 0x7fffffff;
@@ -353,40 +351,9 @@ int  g_a296_loaded = 0;           /* set once the mission is in-mission AND a296
 int  g_mission_over = 0;
 int  g_mission_outcome = -1;
 long g_peak_a296 = 0;             /* the roster's high-water mark (reported only; "resolved" is g_mission_over) */
-static volatile sig_atomic_t g_tick_pending;     /* raised by the timer source, drained by the pump */
-#define TICK_PENDING_CAP 8
-/* One tick of the host time base: bump the BIOS 18.2 Hz counter (0040:006C) and queue one INT-8 ISR
- * invocation. Async-signal-safe (native SIGALRM handler) AND callable synchronously (wasm pump). */
-static void tick_advance(void){
-    (*(volatile uint32_t*)(g_mem+BIOS_TICK_LIN))++;
-    if (g_tick_pending < TICK_PENDING_CAP) g_tick_pending++;
-}
-/* Set once the mission (cockpit view d549==0x1c) is entered: from then on the INT-8 time base is driven
- * purely COOPERATIVELY (one tick per fist_timer_pump, exactly like wasm) and the async SIGALRM stops
- * contributing, so [0x452] and the whole live mission sim evolve in lockstep native<->wasm.  See the
- * MISSION-COOP note in fist_timer_pump. */
-static volatile sig_atomic_t g_mission_coop = 0;
-#ifndef __EMSCRIPTEN__
-static void tick_handler(int sig){ (void)sig; if (g_mission_coop) return; tick_advance(); }
 static void start_timer(void){
-    struct sigaction sa = {0}; sa.sa_handler = tick_handler; sa.sa_flags = SA_RESTART;
-    sigaction(SIGALRM, &sa, 0);
-    long hz = 200; const char *e = getenv("FIST_TICK_HZ"); if (e){ long v = atol(e); if (v>0 && v<=100000) hz = v; }
-    long usec = 1000000L / hz; if (usec < 1) usec = 1;
-    struct itimerval it; it.it_interval.tv_sec=0; it.it_interval.tv_usec=usec;
-    it.it_value = it.it_interval; setitimer(ITIMER_REAL, &it, 0);
-    fprintf(stderr, "[fist] host timer started (%ld Hz SIGALRM; INT-8 ISR pumped cooperatively)\n", hz);
+    fprintf(stderr, "[fist] time base: the PIT/VGA clock (one count per port access or pump; INT-8 on the channel-0 wrap)\n");
 }
-#else
-/* wasm has no SIGALRM/setitimer. The tick is driven COOPERATIVELY: each fist_timer_pump() advances the
- * time base by one tick (fist_wasm_tick, called at the top of the pump). fist_timer_pump is invoked from
- * the engine's spin-waits and port-I/O shims, so ticks accrue in lockstep with engine progress -- the
- * same deterministic seam FIST_TICK_HZ selects on native, here at "one tick per safe point". The rendered
- * frame does not depend on the tick RATE (the menu is static once painted), so this is native-parity. */
-static void start_timer(void){
-    fprintf(stderr, "[fist] wasm cooperative time base (one INT-8 tick per pump; no SIGALRM)\n");
-}
-void fist_wasm_tick(void){ tick_advance(); }
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 /* Browser harness: the engine runs BLOCKING in a Web Worker (no ASYNCIFY -- the browser rejects the
@@ -420,6 +387,30 @@ EM_JS(void, fist_web_post_audio_js, (short *buf, int n, int rate), {
 void fist_web_post_audio(void){
   int n = fist_web_audio_pull(g_web_aud, 8192);
   if (n > 0) fist_web_post_audio_js(g_web_aud, n, fist_web_audio_rate());
+}
+/* One vblank of live web play (called from the INT-8, board:0026): hold the worker until the wall clock
+ * has reached this much machine time (Atomics.wait on a private buffer -- the engine blocks the worker
+ * anyway, and a sleep keeps the core free), then post the frame and the audio that this interrupt's
+ * span produced.  A tab that fell far behind (hidden) resynchronises instead of racing to catch up. */
+EM_JS(void, fist_web_sleep_ms_js, (double ms), {
+  if (ms <= 0) return;
+  if (self.__fsleep === undefined) {
+    try { self.__fsleep = new Int32Array(new SharedArrayBuffer(4)); } catch (e) { self.__fsleep = null; }
+  }
+  if (self.__fsleep) { Atomics.wait(self.__fsleep, 0, 0, ms); return; }
+  var end = performance.now() + ms; while (performance.now() < end) {}   /* no SAB (not cross-origin isolated): spin */
+});
+void fist_web_vblank(void){
+  extern unsigned long long fist_clock_now(void);
+  static double t0 = -1; static unsigned long long c0 = 0;
+  double now = emscripten_get_now();
+  unsigned long long c = fist_clock_now();
+  if (t0 < 0) { t0 = now; c0 = c; }
+  double target = t0 + (double)(c - c0) * (1000.0 / 1193182.0);
+  if (target - now > 250.0) { t0 = now - (double)(c - c0) * (1000.0 / 1193182.0); target = now; }  /* resync */
+  if (target > now) fist_web_sleep_ms_js(target - now);
+  fist_web_post_frame();
+  fist_web_post_audio();
 }
 /* Live mouse: mirror the FIST_MOUSE transition->flags delivery (movement 0x01; L press/rel 0x02/0x04;
  * R press/rel 0x08/0x10) so a browser mouse event drives the engine's INT-33h handler faithfully. */
@@ -457,7 +448,6 @@ static volatile int g_web_mode = 0;
  * (non-returning; blocks the worker, which is fine -- the UI thread stays live). */
 EMSCRIPTEN_KEEPALIVE void fist_web_start(void){ g_web_mode = 1; extern int main(int,char**);
     static char a0[]="fist"; char *av[1]={a0}; main(1,av); }
-#endif
 #endif
 
 /* ---- the engine's installed INT-8 (PIT) ISR entry, captured at DOS set-vector 0x08 ---- */
@@ -615,15 +605,20 @@ static void fist_dump_and_exit(const char *why){
  * switches d549 between the mission viewports (0x1c cockpit, 0x1e/0x20/0x22 the map/external/kill views)
  * and the old `d549==0x1c` gate froze [0x452] the moment the view changed -> the frame loop spun forever
  * in the per-frame AI (a930->a19a->0927) with time stopped.  Sticky: latch on the first cockpit frame. */
-static int fist_mission_time(void)
-{
-    extern int g_fist_after_map;
-    static int seen_cockpit = 0;
-    if (g_mem[0x1c000 + 0x1549] == 0x1c) seen_cockpit = 1;
-    return !g_fist_after_map || seen_cockpit;
+/* The cooperative pump: one PIT count of machine time (board:0026).  Every port access and every engine
+ * spin-wait calls it, so it must cost next to nothing; the clock delivers the INT-8 at each channel-0
+ * wrap (fist_int8_fire), and everything that only needs looking at once per interrupt -- the scripted
+ * input, the dump/watchdog checks, the diagnostics -- runs from there (fist_pump_slow). */
+void fist_timer_pump(void){
+    extern void fist_clock_advance(unsigned);
+    fist_clock_advance(1);
 }
 
-void fist_timer_pump(void){
+/* Once per INT-8 (from fist_int8_fire, after the ISR) and once per BIOS tick before the engine has its
+ * vector: the per-interrupt bookkeeping and diagnostics.  [0x452] only moves in the ISR, so a per-tick
+ * check sees every value it takes; the mission-outcome latch samples the verdict word, which lives for
+ * many ticks. */
+static void fist_pump_slow(void){
     /* board:0012 -- CROSS-TARGET self-play parity trace (FIST_SIMTRACE2=N, default OFF).  Unlike the
      * native-only SIMTRACE block below (inside the #else), this runs on BOTH native and wasm so an
      * in-mission run's tick-by-tick object-registry fingerprint is diffable native<->wasm for ANY mission
@@ -696,63 +691,13 @@ void fist_timer_pump(void){
       }
     }
 #ifdef __EMSCRIPTEN__
-    { extern void fist_wasm_tick(void); extern int g_fist_after_map;
-      /* EXPERIMENT: hold the cooperative tick during mission-LOAD-pre-cockpit so c452 stays frozen at the
-         spawn frame, matching native (native's SIGALRM barely fires in a fast run -> c452~1 at spawn, and
-         459a reaches the spawn op-0x24 WITHOUT advancing c452).  Otherwise wasm's 1-tick-per-pump over-
-         accumulates c452 during the slow load + 206f render spins -> 459a's per-tick sim (c0ca->op-0x1c)
-         fires before the spawn op-0x24 -> HANG (SAUDI1/SYRIA1/INDIA1).  Tick normally in menus/intro
-         (!g_fist_after_map) and once the cockpit view is active (d549==0x1c). */
-      /* LIVE web play (g_web_mode) must ADVANCE the mission sim so the tank spawns and the cockpit
-         renders -- the frozen-c452 hold below is only for the deterministic FIST_MISSFB node-wasm
-         capture (g_web_mode==0), which matches native's fast-run frozen frame.  board:0001 */
-      if (g_web_mode) {
-          /* REALTIME PACING: the pump spins at CPU speed (~MHz), so ticking once per pump ran the OPL +
-             mission sim ~18x too fast (audio 825k/s vs 44100).  Pace the tick to WALLCLOCK at the
-             PIT-programmed INT-8 rate (1193182/pit_div) -- exactly the rate the OPL samples/tick
-             (rate*pit_div/PIT_HZ) assumes -> OPL generates 44100/s and the sim runs at real speed.
-             board:0003 */
-          extern int fist_vga_pit0_div(void);
-          static double last_now = -1, acc = 0;
-          double now = emscripten_get_now();
-          if (last_now < 0) last_now = now;
-          int div = fist_vga_pit0_div(); if (div < 1) div = 0x10000;
-          double tick_hz = 1193182.0 / (double)div;
-          acc += (now - last_now) * (tick_hz / 1000.0);
-          last_now = now;
-          int budget = 0;
-          while (acc >= 1.0 && budget < 8192) { fist_wasm_tick(); acc -= 1.0; budget++; }
-          if (acc > tick_hz) acc = tick_hz;   /* fell far behind (tab hidden etc.) -> don't spiral */
-      } else if (fist_mission_time()) fist_wasm_tick();
-      if (g_web_mode) { void fist_web_pump_input(void), fist_web_post_frame(void), fist_web_post_audio(void);
-                        /* ~60Hz cadence (pump is ~1MHz): deliver ONE input event + post ONE frame per
-                         * tick, so a press and its release land on DIFFERENT engine frames -> real click.
-                         * Audio posts on a coarser count so each chunk is ~tens of ms of PCM. */
-                        static int wc=0; if ((++wc % 4096)==0){ fist_web_pump_input(); fist_web_post_frame(); }
-                        if ((wc & 0xffff)==0) fist_web_post_audio(); }
-    }
+    /* LIVE web play: the wall-clock pacing, the frame post and the audio post ride on the INT-8 (one per
+     * vblank, fist_int8_fire -> fist_web_vblank); this slow path runs once per interrupt too, so feeding
+     * ONE queued browser input event here lands a press and its release on different engine frames.
+     * board:0001/0003 */
+    if (g_web_mode) { void fist_web_pump_input(void); fist_web_pump_input(); }
 #else
-    /* Debug seam: FIST_COOP_TICK=1 drives the INT-8 time base COOPERATIVELY on native too (one tick
-     * per pump, exactly like wasm) so the engine can be traced under gdb without gdb having to process
-     * thousands of SIGALRM/sec. The rendered frame does not depend on the tick RATE (the menu is a fixed
-     * point once painted), so a coop-tick native run reaches the same deterministic menu/sub-screen frame
-     * as the SIGALRM-timed run -- diagnostics only; the shipped run keeps the SIGALRM timer.
-     *
-     * MISSION-COOP (default ON in-mission): the MENUS are timing-independent fixed points, so native's
-     * SIGALRM cadence and wasm's cooperative cadence converge to the same frame -- but the MISSION is a
-     * live sim that keeps evolving every INT-8 tick, so the two cadences reach DIFFERENT sim states at the
-     * same logical point (native drains up-to-4 wall-clock ticks/pump -> [0x452]=1 at map-load; wasm
-     * advances exactly 1 tick/pump -> [0x452]=274).  That tick-count divergence is what makes the in-mission
-     * DGROUP (event queue + object subsystem) differ native<->wasm.  Fix: once the cockpit view is active
-     * (d549==0x1c, the same in-mission gate the frame-ready handshake below uses), drive native's tick
-     * EXACTLY like wasm -- one tick per pump, discarding any SIGALRM-accumulated pending -- so [0x452] and
-     * the whole mission sim evolve in lockstep on both targets.  Behaviour-neutral for the 28 menu/settings/
-     * intro/editor flows (they never set d549==0x1c).  FIST_NOMISSIONCOOP=1 opts out (keeps SIGALRM). */
-    { static int coop = -1, nomc = -1, simrun = -1;
-      if (coop < 0) coop = getenv("FIST_COOP_TICK") ? 1 : 0;
-      if (nomc < 0) nomc = getenv("FIST_NOMISSIONCOOP") ? 1 : 0;
-      if (simrun < 0) simrun = getenv("FIST_SIMRUN") ? 1 : 0;
-      int in_mission = (g_mem[0x1c000 + 0x1549] == 0x1c);
+    { int in_mission = (g_mem[0x1c000 + 0x1549] == 0x1c);
       /* Cheap (NO I/O -> non-perturbing) mission-outcome tracker: any fprintf in the hot pump changes the
        * pump/tick ratio and breaks the timing-sensitive menu/mission-load, so record a296 silently and
        * report once at exit (fist_dump_and_exit).  board:0012 */
@@ -865,12 +810,6 @@ void fist_timer_pump(void){
             fprintf(stderr,"\n");
           }
         }
-      }
-      if (coop) { tick_advance(); }
-      else if (simrun) { if (fist_mission_time()) tick_advance(); }
-      else if (in_mission && !nomc) {           /* wasm-parity cadence: one tick per pump, no SIGALRM */
-          if (!g_mission_coop) { g_mission_coop = 1; g_tick_pending = 0; }  /* transition: stop async ticks, flush menu-phase leftover */
-          tick_advance();
       }
       /* DIAGNOSTIC (FIST_SIMTRACE=N): every N engine ticks ([0x452]) print live-object count, the two
        * side unit-counts (a294/a296), and a fingerprint of all live object bodies -- to see whether the
@@ -1017,11 +956,8 @@ void fist_timer_pump(void){
         long long now = (long long)tv.tv_sec*1000LL + tv.tv_usec/1000LL;
         if (now >= g_deadline_ms) fist_dump_and_exit("FIST_RUNMS watchdog");
     }
-    /* Async vertical-retrace IRQ (palette upload): fires on the timer heartbeat regardless of whether
-     * the engine's current loop polls in(0x3da) -- mirrors the original's async retrace ISR (FUN_0000_0b1f)
-     * that uploads word[DGROUP:0x782] to the DAC ~70Hz.  Without this the DAC stays black in loops (e.g.
-     * the main-menu idle) that never reach an explicit in(0x3da). */
-    { extern void fist_vga_service_retrace(void); fist_vga_service_retrace(); }
+    /* The palette upload / fade step / DAC animation run inside the engine's own INT-8 handler
+     * (31c3 -> [DGROUP:0x5e4] = MGA 0be2, patch 575) each drained tick below -- no shim retrace here. */
     /* EXTENDER frame-ready handshake (we ARE the Doug-Huffman extender).  On the mission cockpit path
      * FUN_1000_a84c sets d549(0x1549)=0x1c + FUN_1000_795c sets d548(0x1548)=1 ("cockpit view, waiting
      * for the next frame").  The extender's 32-bit-PM flight model -- which is NOT in FIST.DAT -- signals
@@ -1047,28 +983,47 @@ void fist_timer_pump(void){
           ((sr && (h & 0x80) == 0) || h == 1))
           g_mem[0x1c000 + 0x1548] = (uint8_t)(sr ? (h | 0x80) : 0x81);
       d548_emu_done: ; }
-    if (!g_int8_set || g_in_isr) return;
-    { extern void fist_queue_check(const char*); fist_queue_check("pre-isr"); }
-    int budget = 4;
-    while (g_tick_pending > 0 && budget-- > 0){
-        g_tick_pending--;                         /* benign race w/ SIGALRM: at worst drops a tick */
+    fist_input_pump();
+}
+
+/* The INT-8: the engine's installed ISR (FUN_1000_30f8), then the sound driver's timer work and the
+ * OPL synth for the machine time that passed since the previous interrupt.  Called by the clock
+ * (fist_vga.c) at every channel-0 wrap; never re-entered -- a wrap met while the ISR runs (its own
+ * 0x3da polls and DAC uploads move the clock) is one held interrupt, delivered on return, as the PIC's
+ * single edge latch would.  Before the engine installs its vector the wrap only advances the BIOS tick. */
+static int g_int8_held;
+static unsigned long long g_int8_last_clock;
+void fist_int8_fire(void){
+    extern unsigned long long fist_clock_now(void);
+    if (!g_int8_set) {                      /* the BIOS INT 8 until the engine takes the vector; after
+                                               that 30f8 chains to it through [0x432] (fist_dos.c INT 08) */
+        (*(volatile uint32_t*)(g_mem+BIOS_TICK_LIN))++;
+        fist_pump_slow();
+        return; }
+    if (g_in_isr) { g_int8_held = 1; return; }
+    do {
+        g_int8_held = 0;
         code *fn = fist_icall(g_int8_lin);
-        if (!fn) break;
+        if (!fn) return;
+        { extern void fist_queue_check(const char*); fist_queue_check("pre-isr"); }
         g_in_isr = 1;
         ((int(*)(int,int,int,int,int,int,int,int,int,int))fn)(0,0,0,0,0,0,0,0,0,0);
         g_isr_runs++;
+        { extern long g_ready_vblanks; extern int g_menu_ready; if (g_menu_ready) g_ready_vblanks++; }
         { extern void fist_snd_isr_tick(void); fist_snd_isr_tick(); } /* drive the SOUNDDVR timer-ISR music sequencer (FIST_SB) */
-        { extern void fist_opl_tick(void); fist_opl_tick(); }   /* advance OPL FM by one PIT period */
-        /* board:0001 cause-2 (audio cadence determinism): keep g_in_isr=1 ACROSS the snd/opl ticks, not
-           just the ISR body.  fist_opl_tick's note dispatch writes OPL regs via out(), and out() pumps the
-           cooperative PIT tick (fist_timer_pump) -- with g_in_isr=0 that nested pump ran tick_advance +
-           drained + called fist_opl_tick AGAIN, generating EXTRA samples whose count differs native<->wasm
-           (the intro/menu music WAV then diverges).  Reset AFTER the ticks so the whole ISR+audio step is
-           atomic and the nested pump is a no-op. */
+        { unsigned long long now = fist_clock_now();
+          extern void fist_opl_tick_counts(unsigned);            /* the OPL synth for the counts that passed */
+          fist_opl_tick_counts((unsigned)(now - g_int8_last_clock)); g_int8_last_clock = now; }
+        /* board:0001 cause-2 (audio cadence determinism): g_in_isr stays 1 ACROSS the snd/opl ticks --
+           fist_opl_tick's note dispatch writes OPL regs via out(), whose pump must not deliver a nested
+           interrupt (it is held instead), so the whole ISR+audio step is atomic on both targets. */
         g_in_isr = 0;
         { extern void fist_queue_check(const char*); fist_queue_check("post-isr"); }
-    }
-    fist_input_pump();
+        fist_pump_slow();
+#ifdef __EMSCRIPTEN__
+        if (g_web_mode) fist_web_vblank();                       /* pace to the wall clock, post frame + audio */
+#endif
+    } while (g_int8_held);
 }
 
 /* DIAGNOSTIC (FIST_QCHK=1): validate the event-queue free-list + ready-list invariants each pump so a
@@ -1124,7 +1079,7 @@ void fist_queue_check(const char *where){
  * key the script on the pump count AFTER menu-enter (fist_ensure_dlist_vecs); the exact count differs
  * native vs wasm but the *outcome* (which item, which sub-screen) does not, so both converge to the same
  * stable sub-screen frame.  FIST_MOUSE selects the script:
- *   FIST_MOUSE="t:x:y:b; t:x:y:b; ..."   t = pump-after-ready trigger; x,y = PIXEL pos (0..319,0..199);
+ *   FIST_MOUSE="t:x:y:b; t:x:y:b; ..."   t = vblanks (INT-8s, 70.09 Hz) after the menu entry; x,y = PIXEL pos (0..319,0..199);
  *   b = button mask (bit0=left, bit1=right).  Steps fire in order as t is crossed; each move/button
  *   transition is delivered as the corresponding event(s).  A step with the same pos+buttons re-asserts
  *   position (idempotent).  't' can be scaled by FIST_INPUT_SCALE (default 1). */
@@ -1171,7 +1126,7 @@ static void deliver_mouse_event(unsigned flags, unsigned vx, unsigned vy, unsign
 static struct { long t; unsigned x,y,b; } g_mstep[MAX_MSTEP];
 static int  g_mstep_n = -1;    /* -1 = not parsed yet; 0 = no script */
 static int  g_mstep_i = 0;     /* next step to fire */
-static long g_ready_pumps = 0; /* pumps since menu ready */
+long g_ready_vblanks = 0;      /* INT-8s (vblanks, 70.09 Hz) since the menu entry -- the script's time unit (board:0026) */
 static unsigned g_last_btn = 0;
 
 static void parse_script(void){
@@ -1224,12 +1179,11 @@ void fist_input_pump(void){
     }
     if (g_mstep_n < 0) parse_script();
     if (g_mstep_n == 0 || !g_menu_ready || !g_mouse_handler_lin) return;
-    g_ready_pumps++;
-    while (g_mstep_i < g_mstep_n && g_ready_pumps >= g_mstep[g_mstep_i].t){
+    while (g_mstep_i < g_mstep_n && g_ready_vblanks >= g_mstep[g_mstep_i].t){
         unsigned nx=g_mstep[g_mstep_i].x, ny=g_mstep[g_mstep_i].y, nb=g_mstep[g_mstep_i].b;
         unsigned vx = nx*2, vy = ny;           /* mode-13h virtual coords: x doubled, y 1:1 */
-        fprintf(stderr, "[input] step %d @pump%ld -> move (%u,%u) btn %u->%u\n",
-                g_mstep_i, g_ready_pumps, nx, ny, g_last_btn, nb);
+        fprintf(stderr, "[input] step %d @vblank%ld [0x452]=%u -> move (%u,%u) btn %u->%u\n",
+                g_mstep_i, g_ready_vblanks, *(uint16_t *)(g_mem + 0x1c452), nx, ny, g_last_btn, nb);
         /* movement event first (bit0) */
         deliver_mouse_event(0x01, vx, vy, g_last_btn);
         /* button transitions: left=bit0 of mask, right=bit1 */
@@ -1417,32 +1371,10 @@ void fist_install_dgroup(void) {
      * as code); only the list-management memory must stay faithful. TODO: locate the exact engine init
      * and demote this to a patch. */
     *(uint16_t *)(g_mem + 0x119c0) = 0xdb8b;
-    /* Video chipset id: DGROUP:0x246 (DAT_1000_c246). FUN_0000_134e reads it as the detected video
-     * chipset and, when == 0x56, sets the driver drive-letter byte to 'M' (0x4d) -> "..\MGAVIDEO.DVR"
-     * (patch 021 pokes it into the template at DGROUP:0x743). It is ONLY EVER READ in the engine -- a
-     * hardware-detection subsystem (VESA/chipset probe) that our port does not run populates it. The
-     * value the original detect produces on this title's supported Matrox (MGA) path is 0x56; model that
-     * detect result here in the loader role (honest: the field the not-run probe would have written).
-     * Without it DAT_1000_c246 stays 0 -> drive letter 0 -> the video filename truncates to "..\". */
-    g_mem[DGROUP_LIN + 0x246] = 0x56;
-    /* System-requirements memory fields, read by FUN_0000_cb45 (the "enough memory to run" gate,
-     * called from cae6 just before the env-config decoder d99b).  cb45 requires:
-     *   DGROUP:0x260 (conventional free KB) >= 0x1e5 (485)     else "NOT ENOUGH CONVENTIONAL MEMORY"
-     *   DGROUP:0x258 (XMS free KB)          >= 0x9c4 (2500)    else "NOT ENOUGH XMS MEMORY"
-     *   DGROUP:0x26c (free disk space)      >= 0x32  (50)      else "NOT ENOUGH FREE HARD DRIVE SPACE"
-     * and DGROUP:0x258 additionally auto-selects the detail level in FUN_0000_db3f (<5000 => LOW,
-     * 5000..11000 => MEDIUM, >11000 => HIGH).  None of these three fields has ANY writer in the engine
-     * decompile (grep + a full store-opcode scan of the image: no store to 0x258/0x260/0x26c) -- they
-     * are populated from LOADGAME's hardware/OS detection blob (unpacked LOADGAME format, per-line
-     * ASCII-hex `X<xmsver>,<xms_free_KB>` / `D<dosver>,<conv_free>` etc.), which our port does not run.
-     * Seed them in the loader role (as with the video chipset DAT_1000_c246 above) using the values a
-     * real reference machine yields -- the 32MB oracle machine: XMS free ~0x7B40 KB (=> HIGH detail),
-     * conventional free 0x279 KB (from the captured `D0500,0279` line), plenty of disk.  Without them
-     * cb45 takes its error path (far-calls the "not enough memory" reporter, which our shim traps to 0
-     * -> execution wrongly continues).  TODO: wire the LOADGAME hw-blob parse and demote to a patch. */
-    *(uint16_t *)(g_mem + DGROUP_LIN + 0x258) = 0x7b40;   /* XMS free KB  (>11000 => HIGH detail) */
-    *(uint16_t *)(g_mem + DGROUP_LIN + 0x260) = 0x0279;   /* conventional free KB */
-    *(uint16_t *)(g_mem + DGROUP_LIN + 0x26c) = 0x0064;   /* free disk space */
+    /* DGROUP:0x240.. (CPU class, speed rating, video chipset, mouse version, XMS/EMS free, DOS version,
+     * conventional/disk free ..) are NOT written by the engine: they come from LOADGAME's hardware/OS
+     * detection script, handed over through the FIST.RUN PSP -- seeded below in setup_dos_env
+     * (the PSP + environment block), where the whole handshake lives.  board:0017 */
     /* FRAME/EVENT SCHEDULER method vectors -- reloc-table section si=0x1d8 (leading seg 0xf69):
      *   DGROUP:0x3fe=0xf69:0x3e0b  0x402=0x3e65  0x406=0x3e05  0x412=0x3ed6
      *   DGROUP:0x40a=0xf69:0x3f17 (the frame/vsync POLL FUN_1000_35a7 that FUN_1000_38cc spins on)
@@ -1575,6 +1507,7 @@ unsigned short g_fist_b1df_ax;     /* b1df: AX = display-table index of the fres
 unsigned short g_fist_0578_bx;     /* 0578 (a18e): BX = pitch (077e over the Z delta) */
 unsigned short g_fist_02e8_si;     /* PATCH 563: SI = the CRT number printer's output cursor (02e8 -> 541b -> 030b) */
 unsigned short g_fist_177f_bx;     /* PATCH 571: 177f's BX out -- the largest free block when the MEMMGR request fails */
+unsigned short g_fist_ctx_bx;      /* PATCH 575: 024f/026e's BX out -- the surface / text context they replaced */
 unsigned short g_fist_03a9_dx;     /* 03a9: DX = M*cos(A) (AX = M*sin(A) is the return) */
 unsigned short g_fist_fp_dx;       /* PATCH 468: 0d13/0d55/0db5/0df7/0e22 DX lane (exponent in/out) */
 unsigned short g_fist_fp_cx;       /* PATCH 468: 0df7/0e22 CX lane (divisor/multiplier exponent in) */
@@ -2559,6 +2492,18 @@ int fist_extender_gate(void) {
           }
           m_ext_FUN_0000_9200(ebp, esi); }
         *(uint32_t*)(xb+0xc93) = save_c93;
+        /* The frame's machine time (board:0026).  The mission loop 459a does not wait for the retrace:
+         * it renders, counts the [0x452] ticks that passed, steps the sim once per tick, renders again --
+         * on the oracle machine that is ~1.1 frames per tick (the 9200 pass captures move the camera
+         * one sim step almost every frame), i.e. one windshield render per vblank.  A port with an
+         * infinitely fast CPU rendered 34 frames per vblank instead, all of them unseen.  So one render
+         * costs one frame period here: the clock steps a vblank (the INT-8 in it lands mid-render, as
+         * the real one preempted the renderer), and the loop's tick arithmetic sees what the oracle's did. */
+        { extern void fist_clock_advance(unsigned); extern unsigned fist_clock_frame_counts(void);
+          /* FIST_FRAME_COUNTS=<n> (diagnostic): another per-frame cost, to show the sim's indifference --
+           * AZER1 resolves at the same tick with 8000, 17025 and 46500 (board:0026). */
+          static long fc = -1; if (fc < 0) { const char *e = getenv("FIST_FRAME_COUNTS"); fc = e ? atol(e) : 0; }
+          fist_clock_advance(fc > 0 ? (unsigned)fc : fist_clock_frame_counts()); }
         /* ------------------------------------------------------------------------------------------
          * MISSION DAC TERRAIN BAND (extender role).  9200 samples the terrain colormap (tile 0x3918),
          * which contains ONLY palette indices 80..255 (min index=80, asm/oracle-verified -- the
@@ -3765,12 +3710,10 @@ int fist_extender_gate(void) {
             *(uint16_t *)(dg + 0xea1a), *(uint16_t *)(dg + 0xea1c), *(uint16_t *)(dg + 0xea1e)); }
 #ifdef __EMSCRIPTEN__
     /* LIVE web play: the mission loop does NOT re-enter fist_timer_pump (see FIST_R3D_DUMP note above),
-       so ticks/palette-fade/frame-post starve in-mission.  op 0x24 is the per-frame cockpit render -- drive
-       the retrace service (palette upload + fade ramp) and post one frame per render from this seam.
-       board:0001 */
+       so input/frame-post starve in-mission.  op 0x24 is the per-frame cockpit render -- post one frame
+       per render from this seam (the palette is the engine ISR's business, patch 575).  board:0001 */
     if (g_web_mode && op == 0x24) {
-        extern void fist_vga_service_retrace(void), fist_web_pump_input(void), fist_web_post_frame(void), fist_web_post_audio(void);
-        fist_vga_service_retrace();
+        extern void fist_web_pump_input(void), fist_web_post_frame(void), fist_web_post_audio(void);
         fist_web_pump_input();
         fist_web_post_frame();
         fist_web_post_audio();
@@ -3807,12 +3750,50 @@ static void setup_dos_env(void) {
      * extender role is the shim, so the far-call to linear 0x8799 routes through fist_icall (honest
      * logged trap today; a faithful extender-service handler is the documented next seam).  Seeding
      * the REAL captured blob makes d99b decode the true vector rather than garbage. */
+    /* The blob's FIRST word is the PSP of FIST.RUN itself (the LOADGAME child; the extender's own PSP
+     * is the one at [DGROUP:0x68]): FUN_0000_fd1b decodes it into DGROUP:0x16c4 and FUN_0000_ff2c reads
+     * THAT PSP's command tail, "\r" + 4 hex digits offset + 4 hex digits segment = a far pointer to the
+     * hardware/OS detection SCRIPT LOADGAME.EXE leaves in memory (its `-K400,0,1000 -X5000 FIST.RUN`
+     * line is LOADGAME's, not the engine's).  Oracle ground truth (DOSBox, scratch/oracle/player.ram.bin):
+     * env blob "025402==117900000?300526" -> PSP 0x0254, whose tail is "\r016401D4" -> script at
+     * 01D4:0164 (the text below, byte-exact).  The engine parses it against the option tables at
+     * STRSEG:0x15c/0x16c (section letter -> option letter -> DGROUP word pair):
+     *     >H  C4934,0034 -> [0x242]=0x4934 [0x244]=0x0034  (LOADGAME's CPU speed rating: the MGA driver
+     *                       picks its unguarded per-tick DAC method 0be2 for >= 0x31, the engine its
+     *                       386 blit variants for > 0x32, SOUNDDVR its fast config for > 0x31)
+     *         V0056      -> [0x246]=0x56 (video chipset)      M0805,0400 -> [0x24e]=0x0805 (mouse 8.05)
+     *         A0220 I0007 D0001 H0005 T0006  (no H-section entries: skipped by the engine)
+     *     >M  X0300,3B40 -> [0x258]=0x3b40 XMS free KB (=> HIGH detail in db3f)   E0400,3B40 -> [0x25a]
+     *     >O  D0500,0279 -> [0x260]=0x279 conventional free KB   CADAD,0217 -> [0x264]   HFFFF -> [0x26c]
+     *     >Z  end
+     * The script is the ORACLE MACHINE's description and is reproduced verbatim so the port runs the
+     * same driver/engine variants the reference does.  board:0017 */
     uint32_t env = (uint32_t)FIST_ENV_SEG << 4;
     uint8_t *e = g_mem + env;
     size_t k = 0;
-    const char *blob = "06=90762117900000?300526";   /* oracle-captured extender config blob */
-    while (*blob) e[k++] = (uint8_t)*blob++;
+    { char blob[32];                                 /* oracle-captured extender config blob, PSP word ours */
+      snprintf(blob, sizeof blob, "%c%c%c%c0762117900000?300526",   /* fd1b: nibble = char - 0x30 */
+               0x30 + ((FIST_RUN_PSP_SEG >> 12) & 0xf), 0x30 + ((FIST_RUN_PSP_SEG >> 8) & 0xf),
+               0x30 + ((FIST_RUN_PSP_SEG >> 4) & 0xf), 0x30 + (FIST_RUN_PSP_SEG & 0xf));
+      for (const char *b = blob; *b; b++) e[k++] = (uint8_t)*b; }
     e[k++] = 0;                 /* end of the config blob string (d99b decodes up to here) */
+    {
+        static const char script[] =
+            ">H\r\nC4934,0034\r\nV0056\r\nM0805,0400\r\nA0220\r\nI0007\r\nD0001\r\nH0005\r\nT0006\r\n"
+            ">M\r\nX0300,3B40\r\nE0400,3B40\r\n"
+            ">O\r\nD0500,0279\r\nCADAD,0217\r\nHFFFF\r\n"
+            ">M\r\nX0300,3B40\r\nE0400,3B40\r\n"
+            ">Z\r\n";
+        uint32_t rpsp = (uint32_t)FIST_RUN_PSP_SEG << 4, hw = (uint32_t)FIST_HWCFG_SEG << 4;
+        char tail[16];
+        memset(g_mem + rpsp, 0, 0x100);
+        *(uint16_t *)(g_mem + rpsp + 0x00) = 0x20cd;
+        *(uint16_t *)(g_mem + rpsp + 0x2c) = FIST_ENV_SEG;
+        snprintf(tail, sizeof tail, "\r%04X%04X", 0u, (unsigned)FIST_HWCFG_SEG);   /* off, seg */
+        g_mem[rpsp + 0x80] = (uint8_t)strlen(tail);
+        memcpy(g_mem + rpsp + 0x81, tail, strlen(tail));
+        memcpy(g_mem + hw, script, sizeof script);
+    }
     const char *v = "PATH=C:\\";
     while (*v) e[k++] = (uint8_t)*v++;
     e[k++] = 0;                 /* end of PATH= string */
@@ -3821,8 +3802,9 @@ static void setup_dos_env(void) {
     const char *p = "C:\\FIST.DAT";
     while (*p) e[k++] = (uint8_t)*p++;
     e[k++] = 0;
-    fprintf(stderr, "[fist] DOS loader: DGROUP table installed, PSP seg 0x%04x, env seg 0x%04x\n",
-            FIST_PSP_SEG, FIST_ENV_SEG);
+    fprintf(stderr, "[fist] DOS loader: DGROUP table installed, PSP seg 0x%04x, env seg 0x%04x, "
+            "FIST.RUN PSP 0x%04x -> hw script at 0x%04x:0000\n", FIST_PSP_SEG, FIST_ENV_SEG,
+            FIST_RUN_PSP_SEG, FIST_HWCFG_SEG);
     setup_bda();
 }
 
@@ -4050,7 +4032,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "[fist] FIST_NORUN set: link/load OK, not entering engine.\n");
         return 0;
     }
-    if (!getenv("FIST_NO_ITIMER") && !getenv("FIST_SIMRUN")) start_timer();
+    start_timer();
     int reason = setjmp(g_fist_exit);
     if (reason == 0) {
         fprintf(stderr, "[fist] calling app_entry()\n");

@@ -1,0 +1,1576 @@
+PATCH 575: the debrief as the original shows it -- the mission-over phase machine, the MGA palette
+fades and the driver's per-tick DAC service, the LOADGAME hand-off, and the text/surface contexts.
+
+board:0017.  After 574 the DEFEAT verdict reached e4bb and the debrief phases ran 0..5, yet the frame
+stayed black; the oracle's frame-by-frame capture (tools/oracle/census_debrief.sh, frames 16/17) shows
+what should be there: the WLOSE picture dimmed to ~53 %, "MISSION LOST" + the battle statistics typed
+one glyph per tick in white, "PRESS ANY KEY TO PROCEED...", then a static wait for a key.  Getting there
+took the corrections below, each verified against the engine/driver asm and, where the CPU is involved,
+the instrumented DOSBox (FIST_EXCLOG, a new hook).
+
+A. The debrief phase machine (fist.c, 0f69:c4be.. = 1000:bb4e..bc86)
+  e528   the class-0x36 dirty method dispatches a FAR table (DGROUP:0xf72b = 0f69:{bb4e bb58 bc39 bc58
+         bc77 bc86}); Ghidra called it near -> nothing ran.
+  bb58   phase 1: [0x594] (04a3, DAC black), the outcome picture (tables 0xf703/0xf70b, campaign
+         0x16/0x18) through [0x560]/[0x564], be0e, `ax=1 ; dx=[0xf6d4] ; lcall [0x5b0]` (084e fade-in),
+         0240(0x14), bb34 (DAC 0xff = white + [0x58c] snapshot), `ax=0x80 bx=0 cx=0xfe dx=0x3c ; lcall
+         [0x5a4]` (04e6: dim indices 0..0xfe to 0x8800/0x10000 over 60 vblanks -- 04f1 is 1774-ordered
+         (AX, CX, DX, BX), the first draft had bx=0x3c, cx=0: 0xff4f bytes walked past the present
+         buffer), 38cc, [0xf6d6]|=0x22, [0xf76f]=3, phase++, the text pointer (0x413c or per outcome
+         [0xf6fb+2*[0x6da0]]), 52d1(10,0x12)/524e(0)/530b(0xff).  Ghidra called every driver vector
+         without arguments and host-deref'd both tables.
+  bc12   the typewriter: one STRSEG glyph per [0x452] tick through [0x684] (19ae), CF at the NUL.
+  bc39/bc58/bc77  phases 2..4 chain the three texts ("BATTLE STATISTICS" at (0x32,0x12), "PRESS ANY
+         KEY" at (0xb4,0x12)) on bc12's CF; bb4e byte/word.
+  [0x59c] the fade-OUT callers 3fba/40ec called [0x59c] (04cd) instead of [0x159c]; e714/e814's two
+         sites passed garbage/0xf69 as AX -- the asm says 0x20 / 0x10 steps.
+  DAT_2000_3a48/4d4a/4e8a/4f84/5110/51f6/b6c6  resource-descriptor FLAG BYTES ([S+2]); typed as words,
+         `= bVar` zeroed the 0x0d callback-mask byte next to them -> no relocation notices -> stale
+         sprite directory after MEMMGR moves.
+
+B. The MGA palette fades (fist_mga.c)
+  0478   `mov es,[0x782] ; xor di,di ; call 0483` -- the DAC snapshot into the present buffer (was a
+         NULL host pointer).
+  04f1/0660/0874  the 0x300-byte fade buffer is allocated through [0xe4] = 1774 (AX, CX, DX, BX ..):
+         the old (0x300, 0x788, 0x1c00) put the handle offset in CX and left BX = 0 -> the buffer went
+         to the handle at DGROUP:0000.  0874 no longer re-uses a stale [0x788] (patch 132): the
+         driver allocates every time and 184b frees the previous node.
+  05b8/0732  the two steppers 04f1/0660 register at [0x5e8] were pristine host-pointer walks: rebuilt
+         1:1 (saturating accumulators, 64-entry ramps, present = ramp[snapshot], count-down/limit,
+         un-register + `[0x78a]|=0x22`).  Registered in far form (driver segment in 0x5ea).
+  09c6   `cmp [0x5e8],1 ; cmc` -> CF while a stepper is registered; 04cd/04e6/084e `call 9c6 ; jb`
+         WAIT for it (Ghidra folded the CF to one pass, so no fade ever took time).
+  0874/04f1 rate  `mov dx,1 ; div si` = 0x10000/si: for si == 1 the quotient overflows and the CPU
+         raises #DE; the ENGINE's INT-0 handler 1000:5b36 skips the DIV and returns AX = 0xffff.
+         Oracle (FIST_EXCLOG): EXC 0 at the driver's 0x895 -> extender 1119:00cb -> 2082:5b36 -> iret
+         with ax=ffff.  So the debrief's 1-step fade-in arms the ramp saturated and settles on the
+         first tick (present = loaded - 1, the driver's own quirk).  The C division gave 0: the ramp
+         never rose, and the stepper ran 65535 pumps -- the black screen.
+
+C. The driver's per-tick DAC service and the LOADGAME hand-off
+  The engine's INT-8 handler 31c3 far-calls [DGROUP:0x5e4] each tick: 0b1f (guarded by the same
+  [0x738] nesting byte 31c3 already bumped, so it never runs from there) or, on a machine LOADGAME
+  rates >= 0x31, the unguarded 0be2 (driver init 0x13d-0x14c, WORD compares and a WORD store into the
+  vector's offset -- Ghidra compared dwords and stored a dword, zeroing the segment).  The original
+  runs 0be2 (RAM: [0x5e4] = 4ec3:0be2, [0x242] = 0x4934); the port had [0x242] = 0, ran the inert
+  0b1f, and the shim stood in with a palette upload per pump and per in(0x3da) poll.
+  0be2   rebuilt 1:1: `shr [0x786],1 ; jae` -> upload word[0x782] (768 bytes) to the DAC; with
+         [0x2a8]|[0x787] == 0 walk the DAC ANIMATION list at seg [[0x3fc]] (records {size, flags,
+         countdown, reload, DAC index, count, split, ptr, data}: type 1 uploads (count-split)*3 bytes
+         at ptr then split*3 inline, 2..4 count*3 at ptr) and advance it (0c89); `call [0x5e8]`; the
+         [0x738] bump/unbump.  Ghidra swapped every (port, value), walked everything from host 0.
+  0c89   the animation advance (rotate forward/backward with split, block step with wrap and the
+         0x20/0x10/0x08 end-and-chain flags, one-shot 3/4), rebuilt 1:1 in the list segment.
+  ff2c   the LOADGAME script parser (0f69:089c + the 0x1000b/0x1001f helpers): DS = [0x16c4] = the
+         FIST.RUN PSP (fd1b decodes it from the extender blob), the tail's last 8 chars = offset,
+         segment of the script; '>' + letter selects a section (STRSEG:0x15c), an option letter reads
+         one/two 4-hex-digit words into the DGROUP vars its table names (STRSEG:0x16c); ">Z" ends with
+         CF=0.  Ghidra read the tail from DGROUP:0x80, walked the tables as host pointers, dropped
+         every CF; fd1b now honours `jb fd59`.  The shim (native_main.c setup_dos_env) seeds the
+         FIST.RUN PSP and the byte-exact oracle script (">H C4934,0034 V0056 M0805,0400 .. >M X0300,3B40
+         E0400,3B40 >O D0500,0279 CADAD,0217 HFFFF .. >Z") in place of the four hand-seeded words.
+  With [0x242] = 0x4934 the engine's 2144 patches its blit loops for a 386 (cs:25fb/3dff: `mov eax`/
+  `shl eax,16` = the same fill replicated to dwords -- no semantic change for the C, documented here)
+  (SOUNDDVR's >= 0x32 device config at 0x252 is still never reached, so nothing changes there yet).
+  fist_vga.c: the stand-in is gone; in(0x3da) is the retrace-status toggle only.
+
+D. The text and surface contexts (024f/026e and their 17 engine sites)
+  `mov bx,X ; lcall [0x554]/[0x558] ; push bx .. pop bx ; lcall [..]`: the driver methods swap the
+  surface ([0x724]) / text ([0x736]) context and return the PREVIOUS one in BX (`xchg ; push ax ..
+  pop bx`).  Ghidra dropped BX at 22dd, 2908/290e (x3), 49b5, 4da3, 65c2 (x2), a755 and restored with
+  0 or nothing, so [0x736] was 0 from the first in-mission string on and every later text -- the
+  debrief's -- ran on the do-once descriptor at DGROUP:0.  g_fist_ctx_bx (shim lane) carries the
+  return; 4da3's 294d/161c and 2908's 294d get their registers back too.
+
+Left open (board:0017/0014): 29e4 (a `pop bx` tail shared by jmp) stays arg-less; 2908/290e's
+[0x156a] descriptor reads are still int*-scaled.  The INT-8 rate ([0x44c] = 0x427f = one vblank on the
+oracle) that decides how many 0be2 steps a [0x452] tick sees is the shim's PIT/VGA clock since
+board:0026 (landed with patch 576), so the fades now take the original's vblanks.
+
+--- a/fist.c
++++ b/fist.c
+@@ -3152,7 +3152,7 @@
+ #define DAT_2000_3a3c (*(undefined2 *)(g_mem+0x23a3c))
+ #define DAT_2000_3a40 (*(undefined2 *)(g_mem+0x23a40))
+ #define DAT_2000_3a44 (*(undefined2 *)(g_mem+0x23a44))
+-#define DAT_2000_3a48 (*(undefined2 *)(g_mem+0x23a48))
++#define DAT_2000_3a48 (*(undefined1 *)(g_mem+0x23a48))   /* PATCH 575: a resource descriptor's FLAG BYTE ([S+2]; every asm access is a BYTE and/or/test) -- typed as a word, the `= bVar` store zeroed [S+3], the callback-mask bits 1541 set (0x0d), so the MEMMGR never told 15c2 about the block's later moves and the sprite directory went stale */
+ #define DAT_2000_3a50 (*(undefined2 *)(g_mem+0x23a50))
+ #define DAT_2000_3a52 (*(undefined2 *)(g_mem+0x23a52))
+ #define DAT_2000_3aa2 (*(undefined2 *)(g_mem+0x23aa2))
+@@ -3429,7 +3429,7 @@
+ #define DAT_2000_4d0a (*(undefined2 *)(g_mem+0x24d0a))
+ #define DAT_2000_4d0c (*(undefined2 *)(g_mem+0x24d0c))
+ #define DAT_2000_4d0e (*(undefined2 *)(g_mem+0x24d0e))
+-#define DAT_2000_4d4a (*(undefined2 *)(g_mem+0x24d4a))
++#define DAT_2000_4d4a (*(undefined1 *)(g_mem+0x24d4a))   /* PATCH 575: a resource descriptor's FLAG BYTE ([S+2]; every asm access is a BYTE and/or/test) -- typed as a word, the `= bVar` store zeroed [S+3], the callback-mask bits 1541 set (0x0d), so the MEMMGR never told 15c2 about the block's later moves and the sprite directory went stale */
+ #define DAT_2000_4d50 (*(undefined2 *)(g_mem+0x24d50))
+ #define DAT_2000_4d52 (*(undefined4 *)(g_mem+0x24d52))
+ #define DAT_2000_4d56 (*(undefined2 *)(g_mem+0x24d56))
+@@ -3480,7 +3480,7 @@
+ #define DAT_2000_4e72 (*(undefined2 *)(g_mem+0x24e72))
+ #define DAT_2000_4e75 (*(undefined2 *)(g_mem+0x24e75))
+ #define DAT_2000_4e86 (*(undefined2 *)(g_mem+0x24e86))
+-#define DAT_2000_4e8a (*(undefined2 *)(g_mem+0x24e8a))
++#define DAT_2000_4e8a (*(undefined1 *)(g_mem+0x24e8a))   /* PATCH 575: a resource descriptor's FLAG BYTE ([S+2]; every asm access is a BYTE and/or/test) -- typed as a word, the `= bVar` store zeroed [S+3], the callback-mask bits 1541 set (0x0d), so the MEMMGR never told 15c2 about the block's later moves and the sprite directory went stale */
+ #define DAT_2000_4e90 (*(undefined2 *)(g_mem+0x24e90))
+ #define DAT_2000_4ee6 (*(undefined2 *)(g_mem+0x24ee6))
+ #define DAT_2000_4eea (*(undefined2 *)(g_mem+0x24eea))
+@@ -3488,7 +3488,7 @@
+ #define DAT_2000_4f14 (*(undefined2 *)(g_mem+0x24f14))
+ #define DAT_2000_4f1a (*(undefined2 *)(g_mem+0x24f1a))
+ #define DAT_2000_4f80 (*(undefined2 *)(g_mem+0x24f80))
+-#define DAT_2000_4f84 (*(undefined2 *)(g_mem+0x24f84))
++#define DAT_2000_4f84 (*(undefined1 *)(g_mem+0x24f84))   /* PATCH 575: a resource descriptor's FLAG BYTE ([S+2]; every asm access is a BYTE and/or/test) -- typed as a word, the `= bVar` store zeroed [S+3], the callback-mask bits 1541 set (0x0d), so the MEMMGR never told 15c2 about the block's later moves and the sprite directory went stale */
+ #define DAT_2000_4f8a (*(undefined2 *)(g_mem+0x24f8a))
+ #define DAT_2000_4fe4 (*(undefined2 *)(g_mem+0x24fe4))
+ #define DAT_2000_4fe8 (*(undefined2 *)(g_mem+0x24fe8))
+@@ -3496,7 +3496,7 @@
+ #define DAT_2000_50b0 (*(undefined2 *)(g_mem+0x250b0))
+ #define DAT_2000_50b6 (*(undefined2 *)(g_mem+0x250b6))
+ #define DAT_2000_510c (*(undefined2 *)(g_mem+0x2510c))
+-#define DAT_2000_5110 (*(undefined2 *)(g_mem+0x25110))
++#define DAT_2000_5110 (*(undefined1 *)(g_mem+0x25110))   /* PATCH 575: a resource descriptor's FLAG BYTE ([S+2]; every asm access is a BYTE and/or/test) -- typed as a word, the `= bVar` store zeroed [S+3], the callback-mask bits 1541 set (0x0d), so the MEMMGR never told 15c2 about the block's later moves and the sprite directory went stale */
+ #define DAT_2000_5116 (*(undefined2 *)(g_mem+0x25116))
+ #define DAT_2000_51a6 (*(undefined2 *)(g_mem+0x251a6))
+ #define DAT_2000_51a8 (*(undefined2 *)(g_mem+0x251a8))
+@@ -3504,7 +3504,7 @@
+ #define DAT_2000_51c8 (*(undefined2 *)(g_mem+0x251c8))
+ #define DAT_2000_51cc (*(undefined2 *)(g_mem+0x251cc))
+ #define DAT_2000_51f2 (*(undefined2 *)(g_mem+0x251f2))
+-#define DAT_2000_51f6 (*(undefined2 *)(g_mem+0x251f6))
++#define DAT_2000_51f6 (*(undefined1 *)(g_mem+0x251f6))   /* PATCH 575: a resource descriptor's FLAG BYTE ([S+2]; every asm access is a BYTE and/or/test) -- typed as a word, the `= bVar` store zeroed [S+3], the callback-mask bits 1541 set (0x0d), so the MEMMGR never told 15c2 about the block's later moves and the sprite directory went stale */
+ #define DAT_2000_51fc (*(undefined2 *)(g_mem+0x251fc))
+ #define DAT_2000_524a (*(undefined2 *)(g_mem+0x2524a))
+ #define DAT_2000_524c (*(undefined2 *)(g_mem+0x2524c))
+@@ -3848,7 +3848,7 @@
+ #define DAT_2000_b6bf (*(undefined2 *)(g_mem+0x2b6bf))
+ #define DAT_2000_b6c0 (*(undefined2 *)(g_mem+0x2b6c0))
+ #define DAT_2000_b6c2 (*(undefined2 *)(g_mem+0x2b6c2))
+-#define DAT_2000_b6c6 (*(undefined2 *)(g_mem+0x2b6c6))
++#define DAT_2000_b6c6 (*(undefined1 *)(g_mem+0x2b6c6))   /* PATCH 575: a resource descriptor's FLAG BYTE ([S+2]; every asm access is a BYTE and/or/test) -- typed as a word, the `= bVar` store zeroed [S+3], the callback-mask bits 1541 set (0x0d), so the MEMMGR never told 15c2 about the block's later moves and the sprite directory went stale */
+ #define DAT_2000_b6ce (*(undefined2 *)(g_mem+0x2b6ce))
+ #define DAT_2000_b6d6 (*(undefined2 *)(g_mem+0x2b6d6))
+ #define DAT_2000_b6e0 (*(undefined2 *)(g_mem+0x2b6e0))
+@@ -9853,6 +9853,7 @@
+   if (0 < (int)*(int8_t *)(g_mem + 0x1d548)) {
+     uVar1 = (undefined2)(uint16_t)((uintptr_t)DAT_1000_d56a - (uintptr_t)(g_mem + 0x1c000));  /* FIX A */
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(uVar1, 0);   /* PATCH 395 */
++    { extern unsigned short g_fist_ctx_bx; uVar1 = g_fist_ctx_bx; }     /* PATCH 575: `push bx` -- the previous surface */
+     DAT_1000_c450 = 3;
+     do {
+       /* PATCH 185: asm 0x22f3 `mov bx,[0x4a86]; call word ptr [bx]` -- bx = the cursor WORD near-offset
+@@ -9860,7 +9861,7 @@
+          0a86 int** so `*DAT_2000_0a86` wild-derefed the near-offset as a host pointer. */
+       (*(code *)fist_icall_near(0x0u,*(uint16_t *)(g_mem+0x1c000+(uint16_t)DAT_2000_0a86)))(uVar1);
+     } while (DAT_1000_c450 != 0);
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(uVar1, 0);   /* PATCH 395: bx=d56a descriptor */
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(uVar1, 0);   /* PATCH 575: `pop bx ; lcall [0x554]` restores it */
+     return;
+   }
+   DAT_2000_0a86 = DAT_2000_0a88;  /* PATCH 185: WORD copy (asm 0x2307 `mov ax,[0x4a88]; mov [0x4a86],ax`), not a ptr cast */
+@@ -10910,6 +10911,7 @@
+   int iVar7;
+   undefined2 uVar8;
+   undefined1 uVar9;
++  unsigned short ctx_prev;
+   
+   uRam00022bc8 = *param_4;
+   DAT_2000_2bca = param_4[1];
+@@ -10919,7 +10921,13 @@
+   DAT_2000_2bd2 = ((int)param_3 >> 0xf) + param_4[5] + (uint)CARRY2(param_3,param_4[4]);
+   uVar6 = CONCAT22(in_register_0000000a,DAT_2000_2bd2);
+   DAT_2000_2bf0 = param_1;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
++  /* PATCH 575: asm 0x2932 `mov bx,[0x156a] ; lcall [0x554] ; push bx` -- select the mission viewport
++   * surface as the blit target and keep the previous one (024f returns it in BX, g_fist_ctx_bx) for
++   * the `pop bx ; lcall [0x554]` on every exit (29dd/29e4).  Ghidra dropped BX both ways, so the
++   * marker blits went to the do-once descriptor at DGROUP:0 and [0x724] was left 0. */
++  { extern unsigned short g_fist_ctx_bx;
++    ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)*(uint16_t *)(g_mem+0x1d56a), 0);
++    ctx_prev = g_fist_ctx_bx; }
+   uVar8 = 0x6bc8;
+   iVar1 = FUN_0000_0846((undefined2 *)&DAT_1000_d55a,0x6bc8);
+   bVar4 = (byte)((uint)(iVar1 - DAT_2000_2c2a) >> 8);
+@@ -10951,19 +10959,21 @@
+               DAT_2000_2c18 = uVar5;
+               if (uVar2 < *(uint *)(DAT_1000_d56a + 0xc)) {
+                 DAT_2000_2c1c = uVar2;
+-                (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-                (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
++                /* PATCH 575: asm 29d3 `mov ax,[0x6bf0] ; mov bx,0x6c16 ; lcall [0x6c8]` = 294d(ax sprite,
++                 * 0, 0, bx rect, 0); then `pop bx ; lcall [0x554]` restores the previous surface. */
++                ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(DAT_2000_2bf0,0,0,0x6c16,0);
++                ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)ctx_prev, 0);
+                 return;
+               }
+             }
+           }
+         }
+       }
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
++      ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)ctx_prev, 0);   /* PATCH 575: 29e4 */
+       return;
+     }
+   }
+-  FUN_0000_29e4();
++  ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)ctx_prev, 0);   /* PATCH 575: 2905 -> 29e4 */
+   return;
+ }
+ 
+@@ -10986,6 +10996,7 @@
+   undefined2 uVar10;
+   undefined1 uVar11;
+   undefined2 *puStack_2;
++  unsigned short ctx_prev;
+   
+   ppuVar8 = &puStack_2;
+   cVar1 = '\x03';
+@@ -11003,7 +11014,13 @@
+        ((int)param_2 >> 0xf) + *(int *)(param_4 + 10) + (uint)CARRY2(param_2,*(uint *)(param_4 + 8))
+   ;
+   uVar7 = CONCAT22(in_register_0000000a,DAT_2000_2bd2);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
++  /* PATCH 575: asm 0x2932 `mov bx,[0x156a] ; lcall [0x554] ; push bx` -- select the mission viewport
++   * surface as the blit target and keep the previous one (024f returns it in BX, g_fist_ctx_bx) for
++   * the `pop bx ; lcall [0x554]` on every exit (29dd/29e4).  Ghidra dropped BX both ways, so the
++   * marker blits went to the do-once descriptor at DGROUP:0 and [0x724] was left 0. */
++  { extern unsigned short g_fist_ctx_bx;
++    ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)*(uint16_t *)(g_mem+0x1d56a), 0);
++    ctx_prev = g_fist_ctx_bx; }
+   uVar10 = 0x6bc8;
+   iVar2 = FUN_0000_0846((undefined2 *)&DAT_1000_d55a,0x6bc8);
+   bVar5 = (byte)((uint)(iVar2 - DAT_2000_2c2a) >> 8);
+@@ -11035,19 +11052,21 @@
+               DAT_2000_2c18 = uVar6;
+               if (uVar3 < *(uint *)(DAT_1000_d56a + 0xc)) {
+                 DAT_2000_2c1c = uVar3;
+-                (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-                (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
++                /* PATCH 575: asm 29d3 `mov ax,[0x6bf0] ; mov bx,0x6c16 ; lcall [0x6c8]` = 294d(ax sprite,
++                 * 0, 0, bx rect, 0); then `pop bx ; lcall [0x554]` restores the previous surface. */
++                ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(DAT_2000_2bf0,0,0,0x6c16,0);
++                ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)ctx_prev, 0);
+                 return;
+               }
+             }
+           }
+         }
+       }
+-      (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
++      ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)ctx_prev, 0);   /* PATCH 575: 29e4 */
+       return;
+     }
+   }
+-  FUN_0000_29e4();
++  ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)ctx_prev, 0);   /* PATCH 575: 2905 -> 29e4 */
+   return;
+ }
+ 
+@@ -14602,6 +14621,7 @@
+   uint uVar3;
+   int *piVar4;
+   undefined2 unaff_CS;
++  unsigned short ctx_prev;
+   
+   if (((DAT_2000_3ae0 != (int *)0x0) && (DAT_2000_3ae7 != 0)) &&
+      ((piVar4 = DAT_2000_3ae0, (DAT_2000_2d2c & 1) != 0 ||
+@@ -14611,7 +14631,13 @@
+   {
+     DAT_2000_3aee = DAT_1000_d56c;
+     DAT_2000_3b12 = DAT_1000_d578;
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c558)))();
++    /* PATCH 575: asm 0x49f0 `mov bx,0x7aee ; lcall [0x558] ; push bx` -- select the text context at
++     * DGROUP:0x7aee (026e returns the previous one in BX, g_fist_ctx_bx) and restore it at 0x4aa4
++     * `pop bx ; lcall [0x558]`.  Ghidra dropped BX both ways: the text state ran on DGROUP:0 and
++     * [0x736] was left 0, so every later text (the debrief's, for one) drew into a bogus surface. */
++    { extern unsigned short g_fist_ctx_bx;
++      ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c558)))((int *)0x7aee, 0);
++      ctx_prev = g_fist_ctx_bx; }
+     DAT_2000_4689 = (*(byte *)((int)piVar4 + 0x1b) & 3) + 0x31;
+     puVar1 = (undefined2 *)*(int *)(*piVar4 * 2 + -0x799a);
+     DAT_2000_4690 = *puVar1;
+@@ -14636,7 +14662,7 @@
+       unaff_CS = 0xf69;
+       thunk_FUN_1000_5531(0x8686);
+     }
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c558)))(unaff_CS);
++    ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c558)))((int *)(uintptr_t)ctx_prev, 0);   /* PATCH 575 */
+     return;
+   }
+   return;
+@@ -14936,10 +14962,17 @@
+ 
+ {
+   if (DAT_2000_3a34 != '\0') {
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c648)))();
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
++    /* PATCH 575: asm 0x4daa-0x4dc7: `mov bx,[0x156a] ; lcall [0x554] ; push bx` (the viewport surface,
++     * previous one returned in BX); `mov bx,0x7a2c ; mov ax,0x12d8 ; lcall [0x6c8]` = 294d(sprite
++     * 0x12d8 at rect 0x7a2c); `mov al,0xe ; mov bx,0x7a24 ; lcall [0x648]`; `pop bx ; lcall [0x554]`.
++     * Ghidra dropped every register. */
++    extern unsigned short g_fist_ctx_bx;
++    unsigned short ctx_prev;
++    ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)*(uint16_t *)(g_mem+0x1d56a), 0);
++    ctx_prev = g_fist_ctx_bx;
++    ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(0x12d8,0,0,0x7a2c,0);
++    ((void (*)(uint8_t,int*,uint16_t))fist_icall_far((uint32_t)(DAT_1000_c648)))(0xe,(int*)(g_mem+0x1c000+0x7a24),0);   /* 161c: al, bx=rect (host-based, as 1677 reads it) */
++    ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)ctx_prev, 0);
+   }
+   return;
+ }
+@@ -38125,7 +38158,7 @@
+   if (ax == 0xffff) return;                            /* cmp ax,0xffff; je ret */
+   di = *(uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1d56a)); /* di=word[word[0x156a]] (page seg) */
+   if (di == *(uint16_t *)(g_mem + 0x1c722)) {          /* cmp di,word[0x722]; je 0x4115 */
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c59c)))();
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_d59c)))();  /* PATCH 575: asm 4023/4116 `lcall [0x159c]` (MGA 2d39) -- patch 194 read the 0x59c fade-out vector */
+     es = *(uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1d56a));
+     di = *(uint16_t *)(g_mem + 0x22b74);
+     { uint8_t *p = g_mem + (((uint32_t)es << 4) + di);
+@@ -38172,7 +38205,7 @@
+     fprintf(stderr, "[3fba] page_seg=0x%04x di=0x%04x cx=0x%04x dx=0x%04x lin=0x%06x\n",
+             es, di, cx, dx, ((uint32_t)es << 4) + di);
+   if (ax == *(uint16_t *)(g_mem + 0x1c722)) {                           /* cmp ax,word[0x722]; je 0x4022 */
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c59c)))();
++    (*(code *)fist_icall_far((uint32_t)(DAT_1000_d59c)))();  /* PATCH 575: asm 4023/4116 `lcall [0x159c]` (MGA 2d39) -- patch 194 read the 0x59c fade-out vector */
+     es = *(uint16_t *)(g_mem + 0x1c000 + *(uint16_t *)(g_mem + 0x1d56a));
+     { uint8_t *p = g_mem + (((uint32_t)es << 4) + di);
+       *(uint8_t *)(g_mem + 0x22b76) = *p; *p = 0xff; }
+@@ -38844,7 +38877,7 @@
+   uVar1 = (undefined2)((ulong)param_1 >> 0x10);
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))();
+   FUN_0000_e584(CONCAT22(uVar1,0x4404));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c59c)))();
++  ((void (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c59c)))(0x20);   /* PATCH 575: e451 `mov ax,0x20 ; lcall [0x59c]` = MGA 04cd fade-out in 0x20 steps; the arg was dropped */
+   return;
+ }
+ 
+@@ -38961,11 +38994,13 @@
+ void __allregs FUN_0000_e528(void)
+ 
+ {
+-  /* board:0012: debrief state-machine dispatch (asm `call near [DGROUP:(b6f5*4 - 0x8d5)]`).  Ghidra deref'd
+-     the DGROUP table offset as a host pointer.  Rebase to DGROUP. */
++  /* PATCH 575: the debrief phase dispatch (asm 0xe528 `mov bx,[0xf6f5] ; shl bx,2 ; call DWORD PTR
++   * [bx-0x8d5]`): the table at DGROUP:0xf72b holds FAR pointers (0f69:c4be c4c8 c5a9 c5c8 c5e7 c5f6 =
++   * bb4e bb58 bc39 bc58 bc77 bc86).  The earlier rebase dispatched the low word NEAR under CS 0, i.e.
++   * to 0x0000:c4be -- nothing -- so the debrief never left phase 0. */
+   unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
+-  uint16_t vec = *(uint16_t *)(dg + (unsigned short)(DAT_2000_b6f5 * 4 - 0x8d5));
+-  (*(code *)fist_icall_near(0x0u,vec))();
++  uint32_t vec = *(uint32_t *)(dg + (unsigned short)(*(uint16_t *)(dg + 0xf6f5) * 4 + 0xf72b));
++  (*(code *)fist_icall_far(vec))();
+   return;
+ }
+ 
+@@ -39388,7 +39423,7 @@
+             DAT_2000_2ce7 = 1;
+             FUN_0000_5d12();
+             FUN_0000_459a(0x1c00, 0x157c, 0x4509, (undefined1 *)&DAT_2000_39a9);
+-            (*(code *)fist_icall_far((uint32_t)(DAT_1000_c59c)))(0xf69);
++            ((void (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c59c)))(0x10);   /* PATCH 575: e844 `mov ax,0x10 ; lcall [0x59c]` -- fade-out after the mission (0xf69 was a leftover) */
+             FUN_0000_1631(0x157c);
+             FUN_0000_be86();
+             FUN_0000_be67();
+@@ -39548,7 +39583,7 @@
+     DAT_2000_2ce7 = 1;
+     FUN_0000_5d12();
+     FUN_0000_459a(uVar1,uVar2,uVar4,puVar5);
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c59c)))(0xf69);
++    ((void (*)(undefined2))fist_icall_far((uint32_t)(DAT_1000_c59c)))(0x10);   /* PATCH 575: e90c `mov ax,0x10 ; lcall [0x59c]` */
+     FUN_0000_1631(uVar2);
+     FUN_0000_be86();
+     FUN_0000_be67();
+@@ -42302,6 +42337,7 @@
+   } while (iVar3 != 0);
+   DAT_1000_d6c4 = param_4;
+   FUN_0000_ff2c(param_4);
++  { extern unsigned char g_fist_cf; bVar5 = g_fist_cf != 0; }   /* PATCH 575: asm fd48 `jb fd59` */
+   if (!bVar5) {
+     FUN_0000_fd79();
+     if (!bVar5) {
+@@ -42644,83 +42680,76 @@
+ void __allregs FUN_0000_ff2c(undefined2 param_1)
+ 
+ {
+-  undefined2 uVar1;
+-  byte bVar2;
+-  char cVar3;
+-  uint uVar4;
+-  int iVar5;
+-  byte *pbVar6;
+-  char *pcVar7;
+-  int iVar9;
+-  undefined1 uVar10;
+-  bool bVar11;
+-  undefined2 uVar12;
+-  char *pcVar8;
+-  
+-  uVar12 = 0x1c00;
+-  uVar4 = *(byte *)&DAT_1000_c080 & 0x7f;
+-  if (8 < (byte)uVar4) {
+-    uVar10 = uVar4 + 0x81 < 8;
+-    iVar9 = uVar4 + 0x79;
+-    iVar5 = FUN_0000_ffdd((byte)uVar4,param_1,iVar9);
+-    if (!(bool)uVar10) {
+-      DAT_2000_d158 = CONCAT22((*(undefined2 *)(g_mem+0x2d15a)),iVar5);
+-      iVar5 = FUN_0000_ffdd((char)iVar5,param_1,iVar9);
+-      uVar1 = DAT_2000_bb00;
+-      if (!(bool)uVar10) {
+-        DAT_2000_d158 = CONCAT22(iVar5,(int)DAT_2000_d158);
+-        iVar5 = (int)DAT_2000_d158;
+-LAB_0000_ff5e:
+-        bVar2 = FUN_1000_001f(iVar5);
+-        if (!(bool)uVar10) {
+-          bVar11 = bVar2 < 0x3e;
+-          if (bVar2 == 0x3e) {
+-            cVar3 = FUN_1000_001f(iVar5);
+-            if (bVar11) {
+-              return;
+-            }
+-            pcVar7 = (char *)0x159;
+-            do {
+-              pcVar8 = pcVar7;
+-              pcVar7 = pcVar8 + 3;
+-              if (*pcVar7 == '\0') goto LAB_0000_ffcd;
+-            } while (cVar3 != *pcVar7);
+-            iVar9 = *(int *)(pcVar8 + 4);
+-            *(int *)0x16c = iVar9;
+-            if (iVar9 == 0) {
+-              return;
+-            }
+-LAB_0000_ffcd:
+-            uVar10 = 0;
+-            func_0x0001000b();
+-          }
+-          else {
+-            for (pbVar6 = (byte *)*(undefined2 *)0x16c; uVar10 = 0, *pbVar6 != 0;
+-                pbVar6 = pbVar6 + 5) {
+-              uVar10 = bVar2 < *pbVar6;
+-              if (bVar2 == *pbVar6) {
+-                iVar9 = FUN_0000_ffdd(bVar2,pbVar6,iVar5);
+-                if (!(bool)uVar10) {
+-                  **(int **)(pbVar6 + 1) = iVar9;
+-                  bVar2 = FUN_1000_001f(iVar5);
+-                  if (((!(bool)uVar10) && (uVar10 = bVar2 < 0x2c, bVar2 == 0x2c)) &&
+-                     (iVar9 = FUN_0000_ffdd(0x2c,pbVar6,iVar5), !(bool)uVar10)) {
+-                    **(int **)(pbVar6 + 3) = iVar9;
+-                  }
+-                }
+-                iVar5 = iVar5 + -1;
+-                func_0x0001000b();
+-                goto LAB_0000_ff5e;
+-              }
+-            }
+-            func_0x0001000b(uVar12);
+-          }
+-          goto LAB_0000_ff5e;
++  /* PATCH 575: the LOADGAME hardware/OS script parser (0f69:089c, asm 0xff2c-0x1000a + 0x1000b/0x1001f),
++   * rebuilt 1:1.  DS = [ss:0x16c4] (FIST.RUN's PSP, decoded by fd1b from the extender blob); the PSP
++   * command tail's last 8 chars are two 4-hex-digit words (offset, then segment) -> DS:SI = the script
++   * LOADGAME left in memory (">H\r\nC4934,0034\r\n..." -- see native_main.c's setup_dos_env).  ES = STRSEG
++   * ([0x70]): es:[0x15c] = section table {letter, option-table offset} x3 bytes, es:[0x16c] = the
++   * current option table {letter, DGROUP var, DGROUP var} x5 bytes.  Per line: '>' + letter selects a
++   * section (table offset 0 = ">Z" = done, CF=0); an option letter reads one 4-hex-digit word into
++   * ss:[var1] and, after a ',', a second into ss:[var2]; unknown letters skip the line.  CF=1 when the
++   * tail is shorter than 9 chars, a word fails to parse, or the script ends without ">Z".  Ghidra read
++   * the tail from DGROUP:0x80, walked the tables as host pointers and dropped every CF. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = g_mem + 0x1c000;
++  uint32_t ds = (uint32_t)*(uint16_t *)(dg + 0x16c4) << 4;
++  unsigned char *es = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x70) << 4);
++  uint16_t si, ax, bx, bp;
++  unsigned char al, n;
++  (void)param_1;
++  g_fist_cf = 1;
++  al = g_mem[ds + 0x80] & 0x7f;                                   /* ff35: lodsb ; and ax,0x7f */
++  if (al < 9) return;                                             /* ff39: cmp al,9 ; jb -> CF=1 */
++  si = (uint16_t)(0x81 + al - 8);                                 /* ff3d: add si,ax ; sub si,8 */
++#define FF_GETC()  (al = g_mem[ds + si], si = (uint16_t)(si + 1), al == 0)     /* 1001f: lodsb ; cmp al,1 */
++#define FF_HEX4(dst, fail) do { ax = 0;                                 /* ffdd: four hex digits */ \
++    for (n = 4; n != 0; n--) { \
++      if (FF_GETC()) goto fail; \
++      if (al < 0x30) goto fail; al = (unsigned char)(al - 0x30);         /* sub al,0x30 ; jb */ \
++      if (al > 9) { if (al < 7) goto fail; al = (unsigned char)(al - 7); /* sub al,7 ; jb */ \
++                    if (al > 0xf) goto fail; }                           /* cmp al,0xf ; ja */ \
++      ax = (uint16_t)((ax << 4) | al); } \
++    (dst) = ax; } while (0)
++#define FF_SKIPLINE() do { for (;;) {                                  /* 1000b: to the next line */ \
++      if (FF_GETC()) break;                                              /* NUL: the callers ignore CF */ \
++      if (al == 0xd) { if (FF_GETC(), al != 0xa) si = (uint16_t)(si - 1); break; } } } while (0)
++  FF_HEX4(*(uint16_t *)(dg + 0x16c8), script_end);                /* ff42: the pointer's offset */
++  FF_HEX4(*(uint16_t *)(dg + 0x16ca), script_end);                /* ff4b: .. and segment */
++  ds = (uint32_t)*(uint16_t *)(dg + 0x16ca) << 4;                 /* ff54: lds si,[0x16c8] */
++  si = *(uint16_t *)(dg + 0x16c8);
++  for (;;) {                                                      /* ff5e */
++    if (FF_GETC()) goto script_end;
++    if (al == '>') {                                              /* ffa8: section */
++      if (FF_GETC()) goto script_end;
++      for (bx = 0x15c; es[bx] != 0; bx = (uint16_t)(bx + 3)) {
++        if (es[bx] == al) {
++          ax = *(uint16_t *)(es + bx + 1);
++          *(uint16_t *)(es + 0x16c) = ax;
++          if (ax == 0) { g_fist_cf = 0; return; }                 /* ffd2: ">Z" -- done */
++          break;
+         }
+       }
++      FF_SKIPLINE();
++      continue;
+     }
+-  }
+-  return;
++    bx = *(uint16_t *)(es + 0x16c);                               /* ff67: the section's option table */
++    while (es[bx] != 0 && es[bx] != al) bx = (uint16_t)(bx + 5);
++    if (es[bx] == 0) { FF_SKIPLINE(); continue; }                 /* ff7c: unknown option */
++    { uint16_t v;
++      FF_HEX4(v, hex_fail); bp = *(uint16_t *)(es + bx + 1); *(uint16_t *)(dg + bp) = v;   /* ff86: mov [bp],ax */
++      if (!FF_GETC() && al == ',') {
++        FF_HEX4(v, hex_fail); bp = *(uint16_t *)(es + bx + 3); *(uint16_t *)(dg + bp) = v; /* ff9b */
++      }
++    }
++  hex_fail:
++    si = (uint16_t)(si - 1);                                      /* ffa2: dec si ; skip the line */
++    FF_SKIPLINE();
++  }
++script_end:
++  return;                                                         /* CF=1: no/short tail, bad word, no ">Z" */
++#undef FF_GETC
++#undef FF_HEX4
++#undef FF_SKIPLINE
+ }
+ 
+ 
+@@ -60338,11 +60367,19 @@
+   undefined2 uVar3;
+   int iVar4;
+   undefined2 uVar5;
++  unsigned short ctx_prev, surf_prev;
+   
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))();
++  /* PATCH 575: asm 0x165c2-0x165de: `mov bx,[0x156a] ; lcall [0x554] ; push bx` (the viewport surface)
++   * then `mov bx,0x7aee ; lcall [0x558] ; push bx` (the text context); both previous values come back
++   * in BX (g_fist_ctx_bx) and are restored in reverse at 0x1667b-0x16681.  Ghidra dropped all four. */
++  { extern unsigned short g_fist_ctx_bx;
++    ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)*(uint16_t *)(g_mem+0x1d56a), 0);
++    surf_prev = g_fist_ctx_bx; }
+   DAT_2000_3aee = DAT_1000_d56c;
+   DAT_2000_3b12 = DAT_1000_d578;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c558)))();
++  { extern unsigned short g_fist_ctx_bx;
++    ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c558)))((int *)0x7aee, 0);
++    ctx_prev = g_fist_ctx_bx; }
+   /* PATCH 296: thread the dropped indirect-call args (asm 0x165df mov bx,0x7c3e; 0x165e2 mov ax,0x1358;
+    * 0x165e5 lcall [0x6c8]).  [0x6c8]=FUN_0000_294d(param_1=ax=sprite-dir offset, param_4=bx=position
+    * descriptor); Ghidra dropped both -> 294d resolved a garbage sprite id -> 298a wild deref (SIGSEGV).
+@@ -60371,8 +60408,8 @@
+   uVar3 = 0;
+   FUN_1000_530b(CONCAT11(extraout_AH_00,0xe));
+   thunk_FUN_1000_5531((char *)(g_mem + 0x246cc));
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c558)))(0,uVar3,uVar5);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c554)))(0);
++  ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c558)))((int *)(uintptr_t)ctx_prev, 0);    /* PATCH 575 */
++  ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c554)))((int *)(uintptr_t)surf_prev, 0);   /* PATCH 575 */
+   return;
+ }
+ 
+@@ -67444,10 +67481,17 @@
+ {
+   undefined2 uVar1;
+   undefined2 uVar2;
++  unsigned short ctx_prev;
+   
+   DAT_2000_5620 = DAT_1000_d56c;
+   DAT_2000_5644 = DAT_1000_d578;
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c558)))();
++  /* PATCH 575: asm 0x1a761 `mov bx,0x9620 ; lcall [0x558] ; push bx` .. 0x1a7a1 `pop bx ; lcall [0x558]`:
++   * the text context at DGROUP:0x9620 for this string, the previous one restored after (026e returns
++   * it in BX, g_fist_ctx_bx).  Ghidra dropped BX and restored with 0 -> [0x736] = 0 for every later
++   * text, the debrief's included. */
++  { extern unsigned short g_fist_ctx_bx;
++    ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c558)))((int *)0x9620, 0);
++    ctx_prev = g_fist_ctx_bx; }
+   FUN_1000_52d1(0x28,2);
+   uVar1 = FUN_1000_524e(2);
+   FUN_1000_530b(CONCAT11((char)((uint)uVar1 >> 8),0xe));
+@@ -67456,7 +67500,7 @@
+   FUN_0000_02e8(uVar1,(undefined1 *)&DAT_1000_df8c);
+   _DAT_1000_df91 = 0x17;
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c490)))(0,uVar2);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c558)))(0);
++  ((void (*)(int *,undefined2))fist_icall_far((uint32_t)(DAT_1000_c558)))((int *)(uintptr_t)ctx_prev, 0);   /* PATCH 575 */
+   return;
+ }
+ 
+@@ -69830,8 +69874,11 @@
+ void __allregs FUN_1000_bb4e(void)
+ 
+ {
+-  DAT_2000_b76f = 3;
+-  DAT_2000_b6f5 = DAT_2000_b6f5 + 1;
++  /* PATCH 575: DEBRIEF phase 0 (0f69:c4be): `movb [0xf76f],3 ; incw [0xf6f5]` -- both byte/word as
++   * the asm says (DAT_2000_b76f is typed as a word). */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  dg[0xf76f] = 3;
++  *(uint16_t *)(dg + 0xf6f5) += 1;
+   return;
+ }
+ 
+@@ -69841,32 +69888,53 @@
+ void __allregs FUN_1000_bb58(void)
+ 
+ {
+-  undefined2 extraout_DX;
++  /* PATCH 575: DEBRIEF phase 1 (0f69:c4c8, asm 0x1bb58-0x1bc11): the picture and the first text.
++   *     lcall [0x594]                                    MGA 04a3: DAC cleared (black)
++   *     [0x6daa]==1 ? ax = [0x6db4] ? 0x18 : 0x16        the campaign pictures
++   *                 : bx=[0x6da0]*2 ; ax=[bx+0xf703] ; dx=[bx+0xf70b]       per outcome
++   *                   [0x6db4] ? ax=[bx+0xf713] ; dx=[bx+0xf71b]
++   *     push dx ; bx=0xf6d4 ; cx=ds ; lcall [0x560]      MGA 0310: bg loader (name index ax -> descriptor)
++   *     bx=0xf6d4 ; cx=ds ; lcall [0x564]                MGA 0340: paint it
++   *     pop bx ; call be0e                               the screen resource (bx = the table's dx)
++   *     ax=1 ; dx=[0xf6d4] ; lcall [0x5b0]               MGA 084e: fade the picture's palette in
++   *     ax=0x14 ; call 0240                              20 ticks
++   *     call bb34                                        DAC index 0xff = white ; [0x58c] (04 78: snapshot)
++   *     ax=0x80 ; bx=0 ; cx=0xfe ; dx=0x3c ; lcall [0x5a4]   MGA 04e6: DIM indices 0..0xfe to 0x8800/0x10000 (53 %) over 60 vblanks (0xff = the text white stays)
++   *     lcall 0f69:423c = 38cc                           vsync
++   *     orb [0xf6d6],0x22 ; movb [0xf76f],3 ; incw [0xf6f5] ; [0xf6f7]=0x413c
++   *     [0x6daa]!=1 ? [0xf6f7] = [[0x6da0]*2+0xf6fb]     "MISSION LOST" / "TIME EXPIRED" / "ABORTED"
++   *     ax=0xa ; bx=0x12 ; call 52d1 ; ax=0 ; call 524e ; al=0xff ; call 530b   text cursor, font, colour
++   * Ghidra called every driver vector without arguments and host-deref'd the two tables. */
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t ax, dx = 0, bx;
+   undefined2 uVar1;
+-  
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))();
+-  uVar1 = extraout_DX;
+-  if (DAT_2000_2daa != '\x01') {
+-    uVar1 = *(undefined2 *)(DAT_2000_2da0 * 2 + -0x8f5);
+-    if (DAT_2000_2db4 != 0) {
+-      uVar1 = *(undefined2 *)(DAT_2000_2da0 * 2 + -0x8e5);
++  if (dg[0x6daa] == 1) {
++    ax = (*(uint16_t *)(dg + 0x6db4) != 0) ? 0x18 : 0x16;   /* dx: whatever [0x594] left (not modelled) */
++  } else {
++    bx = (uint16_t)(*(uint16_t *)(dg + 0x6da0) * 2);
++    ax = *(uint16_t *)(dg + (uint16_t)(bx + 0xf703));
++    dx = *(uint16_t *)(dg + (uint16_t)(bx + 0xf70b));
++    if (*(uint16_t *)(dg + 0x6db4) != 0) {
++      ax = *(uint16_t *)(dg + (uint16_t)(bx + 0xf713));
++      dx = *(uint16_t *)(dg + (uint16_t)(bx + 0xf71b));
+     }
+   }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c560)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c564)))();
+-  FUN_0000_be0e(uVar1);
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c5b0)))(0);
+-  uVar1 = 0;
++  ((void (*)(undefined2,undefined2,int))fist_icall_far((uint32_t)(DAT_1000_c560)))(ax, 0x1c00, 0xf6d4);
++  ((void (*)(undefined2, undefined2 *))fist_icall_far((uint32_t)(DAT_1000_c564)))(0x1c00, (undefined2 *)(dg + 0xf6d4));
++  FUN_0000_be0e((int)dx);
++  { extern unsigned short g_mga_fade_es; g_mga_fade_es = *(uint16_t *)(dg + 0xf6d4); }
++  ((void (*)(undefined2, undefined2))fist_icall_far((uint32_t)(DAT_1000_c5b0)))(1, *(uint16_t *)(dg + 0xf6d4));
+   FUN_0000_0240(0x14);
+   FUN_1000_bb34();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c5a4)))(0,uVar1);
++  ((void (*)(undefined2,undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(DAT_1000_c5a4)))(0x80, 0xfe, 0x3c, 0);   /* (ax, cx, dx, bx): 04f1 is 1774-ordered, see 04d8 */
+   FUN_1000_38cc();
+-  DAT_2000_b6d6 = DAT_2000_b6d6 | 0x22;
+-  DAT_2000_b76f = 3;
+-  DAT_2000_b6f5 = DAT_2000_b6f5 + 1;
+-  DAT_2000_b6f7 = 0x413c;
+-  if (DAT_2000_2daa != '\x01') {
+-    DAT_2000_b6f7 = *(undefined2 *)(DAT_2000_2da0 * 2 + -0x905);
++  dg[0xf6d6] |= 0x22;
++  dg[0xf76f] = 3;
++  *(uint16_t *)(dg + 0xf6f5) += 1;
++  *(uint16_t *)(dg + 0xf6f7) = 0x413c;
++  if (dg[0x6daa] != 1) {
++    *(uint16_t *)(dg + 0xf6f7) = *(uint16_t *)(dg + (uint16_t)(*(uint16_t *)(dg + 0x6da0) * 2 + 0xf6fb));
+   }
+   FUN_1000_52d1(10,0x12);
+   uVar1 = FUN_1000_524e(0);
+@@ -69880,17 +69948,25 @@
+ void __allregs FUN_1000_bc12(void)
+ 
+ {
+-  char *pcVar1;
+-  
+-  pcVar1 = DAT_2000_b6f7;
+-  if (DAT_1000_c452 != DAT_2000_b6f9) {
+-    DAT_2000_b6f9 = DAT_1000_c452;
+-    DAT_2000_b6f7 = DAT_2000_b6f7 + 1;
+-    if (*pcVar1 == '\0') {
+-      return;
+-    }
+-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c684)))();
+-  }
++  /* PATCH 575: the debrief TYPEWRITER (0f69:c582, asm 0x1bc12-0x1bc38): one character per tick.
++   *     ax=[0x452] ; cmp ax,[0xf6f9] ; je clc            same tick: nothing
++   *     [0xf6f9]=ax ; es=[0x70] ; si=[0xf6f7] ; incw [0xf6f7] ; al=es:[si]
++   *     or al,al ; je stc                                 NUL: the text is finished (CF=1)
++   *     lcall [0x684] ; clc                               MGA 19ae: draw the glyph
++   * The text pointer is a STRSEG offset; Ghidra deref'd it as a host char*, and the callers
++   * (bc39/bc58/bc77) hard-wired the returned CF to false. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t ax = *(uint16_t *)(dg + 0x452), si;
++  unsigned char al;
++  if (ax == *(uint16_t *)(dg + 0xf6f9)) { g_fist_cf = 0; return; }
++  *(uint16_t *)(dg + 0xf6f9) = ax;
++  si = *(uint16_t *)(dg + 0xf6f7);
++  *(uint16_t *)(dg + 0xf6f7) = (uint16_t)(si + 1);
++  al = *(unsigned char *)(g_mem + ((uint32_t)*(uint16_t *)(dg + 0x70) << 4) + si);
++  if (al == 0) { g_fist_cf = 1; return; }
++  ((void (*)(unsigned))fist_icall_far((uint32_t)(DAT_1000_c684)))(al);
++  g_fist_cf = 0;
+   return;
+ }
+ 
+@@ -69900,13 +69976,15 @@
+ void __allregs FUN_1000_bc39(void)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
+-  DAT_2000_b76f = 3;
++  /* PATCH 575: DEBRIEF phase 2 (0f69:c5a9): type the outcome text; at its NUL (bc12 CF=1) advance to
++   * "BATTLE STATISTICS" (STRSEG:0x4239) at (0x32,0x12). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  dg[0xf76f] = 3;
+   FUN_1000_bc12();
+-  if ((bool)in_CF) {
+-    DAT_2000_b6f5 = DAT_2000_b6f5 + 1;
+-    DAT_2000_b6f7 = 0x4239;
++  if (g_fist_cf) {
++    *(uint16_t *)(dg + 0xf6f5) += 1;
++    *(uint16_t *)(dg + 0xf6f7) = 0x4239;
+     FUN_1000_52d1(0x32,0x12);
+   }
+   return;
+@@ -69918,13 +69996,15 @@
+ void __allregs FUN_1000_bc58(void)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
+-  DAT_2000_b76f = 3;
++  /* PATCH 575: DEBRIEF phase 3 (0f69:c5c8): type the statistics; at their NUL advance to "PRESS ANY
++   * KEY TO PROCEED..." (STRSEG:0x43de) at (0xb4,0x12). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  dg[0xf76f] = 3;
+   FUN_1000_bc12();
+-  if ((bool)in_CF) {
+-    DAT_2000_b6f5 = DAT_2000_b6f5 + 1;
+-    DAT_2000_b6f7 = 0x43de;
++  if (g_fist_cf) {
++    *(uint16_t *)(dg + 0xf6f5) += 1;
++    *(uint16_t *)(dg + 0xf6f7) = 0x43de;
+     FUN_1000_52d1(0xb4,0x12);
+   }
+   return;
+@@ -69936,12 +70016,14 @@
+ void __allregs FUN_1000_bc77(void)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  
+-  DAT_2000_b76f = 3;
++  /* PATCH 575: DEBRIEF phase 4 (0f69:c5e7): type the prompt; at its NUL advance to phase 5 (bc86,
++   * nothing -- e4bb waits for the key/click that sets [0xf6be]). */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  dg[0xf76f] = 3;
+   FUN_1000_bc12();
+-  if ((bool)in_CF) {
+-    DAT_2000_b6f5 = DAT_2000_b6f5 + 1;
++  if (g_fist_cf) {
++    *(uint16_t *)(dg + 0xf6f5) += 1;
+   }
+   return;
+ }
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -936,8 +936,14 @@
+     uint16_t sec_seg = *(uint16_t *)(g_mem + 0x1c000 + 0x70e);
+     fist_apply_reloc_at(sec_seg, 8, 1);
+   }
+-  if ((_DAT_1000_c706 != 0x5981) && (0x30 < _DAT_1000_c242)) {
+-    _DAT_1000_c5e4 = 0xbe2;
++  /* PATCH 575: asm 0x13d-0x14c `cmp WORD [0x706],0x5981 ; je ; cmp WORD [0x242],0x31 ; jb ;
++   * mov WORD [0x5e4],0xbe2` -- word compares and a WORD store into the far vector's offset (its segment
++   * word 0x5e6 keeps the driver segment the reloc install put there).  Ghidra compared dwords and stored
++   * a dword, zeroing the segment -> the engine's INT-8 far-call landed at linear 0xbe2.  [0x242] is
++   * LOADGAME's CPU rating (0x4934 on the oracle machine, delivered by the hand-off script), so the
++   * unguarded per-tick DAC method 0be2 is the one the original runs. */
++  if ((*(uint16_t *)(g_mem + 0x1c706) != 0x5981) && (0x30 < *(uint16_t *)(g_mem + 0x1c242))) {
++    *(uint16_t *)(g_mem + 0x1c5e4) = 0xbe2;
+   }
+   (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c02e)))();
+   (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c578)))();
+@@ -1080,10 +1086,13 @@
+    * g_mem+DGROUP+off with explicit 16-bit word accesses; word index 2 = byte +4. */
+   uint16_t off = (uint16_t)(uintptr_t)param_1;
+   uint16_t *p = (uint16_t *)(g_mem + 0x1c000 + off);
++  extern unsigned short g_fist_ctx_bx;
+   while (p[0] == 0) {
+     p[0] = 0xa000;
+     p[2] = 0x140;
+   }
++  g_fist_ctx_bx = *(uint16_t *)(g_mem + 0x1c724);   /* PATCH 575: asm 0x257 `xchg [0x724],ax ; push ax .. pop bx`
++                                                        -- the PREVIOUS surface comes back in BX */
+   *(uint16_t *)(g_mem + 0x1c724) = off;
+   FUN_0000_02c1(p[2],param_2);
+   return;
+@@ -1105,10 +1114,13 @@
+      16-bit word accesses (word index 0x12 = byte +0x24) and store the OFFSET into DGROUP:0x736. */
+   uint16_t off = (uint16_t)(uintptr_t)param_1;
+   uint16_t *p = (uint16_t *)(g_mem + 0x1c000 + off);
++  extern unsigned short g_fist_ctx_bx;
+   while (p[0] == 0) {
+     p[0] = 0xa000;
+     p[0x12] = 0x140;
+   }
++  g_fist_ctx_bx = *(uint16_t *)(g_mem + 0x1c736);   /* PATCH 575: asm 0x276 `xchg [0x736],ax ; push ax .. pop bx`
++                                                        -- the PREVIOUS text context comes back in BX */
+   *(uint16_t *)(g_mem + 0x1c736) = off;
+   FUN_0000_02c1(p[0x12],param_2);
+   return;
+@@ -1546,7 +1558,11 @@
+ void __allregs FUN_0000_0478(void)
+ 
+ {
+-  FUN_0000_0483(0);
++  /* PATCH 575: DGROUP:0x58c = the DAC SNAPSHOT (driver asm 0x478: `mov es,[0x782] ; xor di,di ; call
++   * 0483`): 0483 reads the 768 DAC bytes (0x3c7 index 0, 0x3c9) into the palette buffer at
++   * word[DGROUP:0x782]:0.  Ghidra dropped ES:DI and passed host NULL.  First reached by the debrief
++   * (1bb34: index 0xff set to white, then the snapshot the fade [0x5a4] starts from). */
++  FUN_0000_0483(g_mem + ((uint32_t)*(uint16_t *)(g_mem + 0x1c782) << 4));
+   return;
+ }
+ 
+@@ -1617,15 +1633,16 @@
+ void __allregs FUN_0000_04cd(undefined2 param_1)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  undefined1 uVar1;
+-  
++  /* PATCH 575: `call 9c6 ; jb` -- wait until the fade stepper the entry armed has unregistered itself
++   * ([0x5e8] == 0); the cooperative retrace/tick pump steps it meanwhile.  Ghidra folded the CF to a
++   * one-pass loop, so the port never waited for a fade. */
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
+   FUN_0000_04d8(param_1);
+   do {
+-    uVar1 = in_CF;
++    fist_timer_pump();
+     FUN_0000_09c6();
+-    in_CF = 1;
+-  } while ((bool)uVar1);
++  } while (g_fist_cf);
+   return;
+ }
+ 
+@@ -1646,15 +1663,16 @@
+ FUN_0000_04e6(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  undefined1 uVar1;
+-  
++  /* PATCH 575: `call 9c6 ; jb` -- wait until the fade stepper the entry armed has unregistered itself
++   * ([0x5e8] == 0); the cooperative retrace/tick pump steps it meanwhile.  Ghidra folded the CF to a
++   * one-pass loop, so the port never waited for a fade. */
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
+   FUN_0000_04f1(param_1,param_2,param_3,param_4);
+   do {
+-    uVar1 = in_CF;
++    fist_timer_pump();
+     FUN_0000_09c6();
+-    in_CF = 1;
+-  } while ((bool)uVar1);
++  } while (g_fist_cf);
+   return;
+ }
+ 
+@@ -1681,7 +1699,12 @@
+   *(unsigned char  *)(g_mem + 0x1c786) = 0;
+   *(unsigned short *)(g_mem + 0x1c5e8) = 0;
+   DAT_0000_0632 = 0;
+-  DAT_0000_0634 = (undefined2)(0x10000 / (ulong)(param_1 + (uint)(param_1 == 0)));
++  /* PATCH 575: asm 0x50f `mov dx,1 ; div si` = 0x10000/si.  For si == 1 the quotient does not fit AX
++   * and the CPU raises #DE; the ENGINE's INT-0 handler (1000:5b36) skips the DIV and returns AX=0xffff
++   * (oracle FIST_EXCLOG: EXC 0 at the driver's 0x895 -> extender 1119:00cb -> 2082:5b36 -> iret
++   * ax=ffff), so a 1-step fade arms the ramp saturated and settles on the first tick. */
++  DAT_0000_0634 = (param_1 + (uint)(param_1 == 0) == 1) ? 0xffff
++                : (undefined2)(0x10000 / (ulong)(param_1 + (uint)(param_1 == 0)));
+   DAT_0000_0638 = (param_2 - param_4) + 1;
+   DAT_0000_0636 = param_4;
+   DAT_0000_063a = param_3;
+@@ -1697,7 +1720,12 @@
+     extern unsigned char g_fist_cf;
+     extern void fist_timer_pump(void);
+     g_fist_cf = 0;
+-    (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0e4)))(0x300,0x788,0x1c00);
++    /* PATCH 575: `mov bx,0x788 ; mov cx,ds ; mov ax,0x300 ; lcall [0xe4]` = 1774 (patch 571/573), whose
++     * register order is (AX, CX, DX, BX, ..): the old (0x300, 0x788, 0x1c00) put the descriptor offset in
++     * CX and left BX = 0, so once [0xe4] was live the 0x300-byte fade buffer was allocated into the
++     * handle at DGROUP:0000. */
++    ((void (*)(unsigned,undefined2,undefined2,undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(_DAT_1000_c0e4)))
++        (0x300, 0x1c00, 0, 0x788, 0, 0);
+     if (g_fist_cf == 0) {
+       /* FADE path (asm 0x533-0x586): wait one INT-8 tick (DGROUP:0x44e, cooperatively pumped -- same
+        * class as patch 017/072/3a14), SAVE the current 768-byte DAC palette into the buffer segment
+@@ -1717,7 +1745,9 @@
+       }
+       *(unsigned char *)(g_mem + 0x1c738) =                                  /* asm 0x57c `fe 0e` decb */
+           (unsigned char)(*(unsigned char *)(g_mem + 0x1c738) - 1);           /* PATCH 499: BYTE, not WORD */
+-      *(unsigned short *)(g_mem + 0x1c5e8) = 0x5b8;                          /* asm 0x580 movw cont=05b8 */
++      /* asm 0x580 `movw [0x5e8],0x5b8`: the retrace ISR near-calls it inside the driver; the shim's
++       * retrace dispatches the far form (segment in 0x5ea), the convention 0874 established (PATCH 575). */
++      *(uint32_t *)(g_mem + 0x1c5e8) = ((uint32_t)(uint16_t)(fist_mga_base >> 4) << 16) | 0x5b8;
+       return;
+     }
+   }
+@@ -1738,58 +1768,48 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_05b8) @ 0000:05b8 ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ void __allregs FUN_0000_05b8(void)
+ 
+ {
+-  byte *pbVar1;
+-  char *pcVar2;
+-  byte *pbVar3;
+-  undefined2 uVar4;
+-  undefined2 uVar5;
+-  char cVar6;
+-  int iVar7;
+-  uint uVar8;
+-  byte *pbVar9;
+-  char *pcVar10;
+-  byte *pbVar11;
+-  bool bVar12;
+-  char local_42 [66];
+-  
+-  uVar5 = _DAT_1000_c788;
+-  uVar4 = _DAT_1000_c782;
+-  DAT_0000_0632 = -(uint)!CARRY2(DAT_0000_0634,DAT_0000_0632) & DAT_0000_0634 + DAT_0000_0632;
+-  cVar6 = '\0';
+-  uVar8 = 0;
+-  pcVar10 = local_42;
+-  iVar7 = 0x40;
+-  do {
+-    pcVar2 = pcVar10;
+-    pcVar10 = pcVar10 + 1;
+-    *pcVar2 = cVar6;
+-    bVar12 = CARRY2(uVar8,-DAT_0000_0632);
+-    uVar8 = uVar8 + -DAT_0000_0632;
+-    cVar6 = cVar6 + bVar12;
+-    iVar7 = iVar7 + -1;
+-  } while (iVar7 != 0);
+-  iVar7 = DAT_0000_0638 - (int)DAT_0000_0636;
+-  pbVar9 = DAT_0000_0636;
+-  pbVar11 = DAT_0000_0636;
+-  do {
+-    pbVar1 = pbVar9;
+-    pbVar9 = pbVar9 + 1;
+-    pbVar3 = pbVar11;
+-    pbVar11 = pbVar11 + 1;
+-    *pbVar3 = *(byte *)ZEXT24(local_42 + *pbVar1);
+-    iVar7 = iVar7 + -1;
+-  } while (iVar7 != 0);
+-  DAT_1000_c786 = 1;
+-  if ((DAT_0000_0632 != 0) && (DAT_0000_063a = DAT_0000_063a + -1, DAT_0000_063a != 0)) {
+-    return;
++  /* PATCH 575: the per-vblank PALETTE FADE STEP the retrace ISR (0b1f `call [0x5e8]`) runs after 04f1
++   * armed it -- driver asm 0x5b8-0x631, rebuilt 1:1:
++   *     acc = cs:[0x632] + cs:[0x634], 0 once it wraps (add ; cmc ; sbb bx,bx ; and bx,ax)
++   *     table[0..63] on the stack: table[i] = (i * (0x10000 - acc)) >> 16   (stosb ; add dx,bx ; adc al,ah)
++   *     for cs:[0x638]-cs:[0x636] bytes from cs:[0x636]: present[i] = table[snapshot[i]]
++   *         (ds = [0x788] the snapshot 04f1 took, es = [0x782] the present buffer, xlat ss:[bx])
++   *     [0x786] = 1 (upload) ; acc != 0 && --cs:[0x63a] != 0 -> ret ; else [0x5e8] = 0, [0x78a] |= 0x22
++   * A ramp from the snapshot down towards black, stopped after cs:[0x63a] steps: the debrief calls it
++   * with 0x80 steps and a 0x3c-step limit, i.e. the picture dims to 53 % under the text.  Ghidra had
++   * the DAC-index walk as host pointers (`pbVar9 = DAT_0000_0636`) and the table indexed by a
++   * host-zero-extended byte. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char table[64];
++  uint16_t sum = (uint16_t)(DAT_0000_0634 + DAT_0000_0632);
++  uint16_t acc = ((uint32_t)DAT_0000_0634 + DAT_0000_0632 > 0xffffu) ? 0 : sum;
++  uint16_t bx = (uint16_t)(0u - acc), dx = 0;
++  unsigned char al = 0;
++  uint16_t si, cx;
++  unsigned char *snap, *present;
++  int i;
++  DAT_0000_0632 = acc;
++  for (i = 0; i < 0x40; i++) {                                 /* 5ea stosb ; add dx,bx ; adc al,ah(=0) */
++    table[i] = al;
++    if ((uint32_t)dx + bx > 0xffffu) al++;
++    dx = (uint16_t)(dx + bx);
++  }
++  snap    = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x788) << 4);    /* 5c3 mov ds,[0x788] */
++  present = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x782) << 4);    /* 5f1 pop es (= [0x782]) */
++  si = DAT_0000_0636;
++  cx = (uint16_t)(DAT_0000_0638 - si);
++  for (; cx != 0; cx--, si++)                                  /* 603 lodsb ; xlat ss:[bx] ; stosb */
++    present[si] = table[snap[si] & 0x3f];
++  *(unsigned char *)(dg + 0x786) = 1;                          /* 60a movb [0x786],1 */
++  if (DAT_0000_0632 != 0) {                                    /* 60f test cs:[0x632] */
++    DAT_0000_063a = (uint16_t)(DAT_0000_063a - 1);             /* 618 dec cs:[0x63a] */
++    if (DAT_0000_063a != 0) return;
+   }
+-  _DAT_1000_c5e8 = 0;
+-  DAT_1000_c78a = DAT_1000_c78a | 0x22;
++  *(unsigned short *)(dg + 0x5e8) = 0;                         /* 623 movw [0x5e8],0 */
++  *(unsigned char *)(dg + 0x78a) |= 0x22;                      /* 629 orb [0x78a],0x22 */
+   return;
+ }
+ 
+@@ -1878,7 +1898,9 @@
+   DAT_0000_0846 = (unsigned short)(0x10000u /
+       (unsigned)((unsigned short)param_6 + (unsigned)((unsigned short)param_6 == 0)));      /* 6a9-6ba */
+   g_fist_cf = 0;
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c0e4)))(0x300,0x788,0x1c00);  /* 6be-6c6 */
++  /* PATCH 575: (AX, CX, DX, BX ..) is 1774's order -- `bx=0x788 ; cx=ds ; ax=0x300` (see 04f1). */
++  ((void (*)(unsigned,undefined2,undefined2,undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(_DAT_1000_c0e4)))
++      (0x300, 0x1c00, 0, 0x788, 0, 0);                                        /* 6be-6c6 */
+   if (g_fist_cf == 0) {                                                      /* 6ca jb 0x701 */
+     unsigned short t = *(volatile unsigned short *)(dg + 0x44e);
+     while (*(volatile unsigned short *)(dg + 0x44e) == t) fist_timer_pump(); /* 6cc/6cf/6d3 */
+@@ -1887,7 +1909,7 @@
+       int n; out(0x3c7,0);                                                   /* 6e1-6e6 */
+       for (n = 0; n < 0x300; n++) pb[n] = (unsigned char)in(0x3c9); }        /* 6ec-6f3 */
+     dg[0x738] = (unsigned char)(dg[0x738] - 1);                              /* 6f6 decb */
+-    *(unsigned short *)(dg + 0x5e8) = 0x732;                                 /* 6fa movw */
++    *(uint32_t *)(dg + 0x5e8) = ((uint32_t)(uint16_t)(fist_mga_base >> 4) << 16) | 0x732;  /* 6fa movw (far form, PATCH 575) */
+     return;
+   }
+   { unsigned char *dst = g_mem + (((unsigned long)*(unsigned short *)(dg + 0x782)) << 4)    /* 701 es */
+@@ -1902,96 +1924,60 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_0732) @ 0000:0732 ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-
+ void __allregs FUN_0000_0732(void)
+ 
+ {
+-  byte *pbVar1;
+-  char *pcVar2;
+-  byte *pbVar3;
+-  undefined2 uVar4;
+-  undefined2 uVar5;
+-  char cVar6;
+-  int iVar7;
+-  uint uVar8;
+-  byte *pbVar9;
+-  char *pcVar10;
+-  byte *pbVar11;
+-  bool bVar12;
+-  char local_c2 [64];
+-  char local_82 [64];
+-  char local_42 [66];
+-  
+-  uVar5 = _DAT_1000_c788;
+-  uVar4 = _DAT_1000_c782;
+-  bVar12 = CARRY2(DAT_0000_083c,DAT_0000_083e);
+-  DAT_0000_083c = DAT_0000_083c + DAT_0000_083e & -(uint)!bVar12;
+-  DAT_0000_083e = DAT_0000_083e & -(uint)!bVar12;
+-  cVar6 = '\0';
+-  uVar8 = 0;
+-  pcVar10 = local_c2;
+-  iVar7 = 0x40;
+-  do {
+-    pcVar2 = pcVar10;
+-    pcVar10 = pcVar10 + 1;
+-    *pcVar2 = cVar6;
+-    bVar12 = CARRY2(uVar8,-DAT_0000_083c);
+-    uVar8 = uVar8 + -DAT_0000_083c;
+-    cVar6 = cVar6 + bVar12;
+-    iVar7 = iVar7 + -1;
+-  } while (iVar7 != 0);
+-  bVar12 = CARRY2(DAT_0000_0840,DAT_0000_0842);
+-  DAT_0000_0840 = DAT_0000_0840 + DAT_0000_0842 & -(uint)!bVar12;
+-  DAT_0000_0842 = DAT_0000_0842 & -(uint)!bVar12;
+-  cVar6 = '\0';
+-  uVar8 = 0;
+-  pcVar10 = local_82;
+-  iVar7 = 0x40;
+-  do {
+-    pcVar2 = pcVar10;
+-    pcVar10 = pcVar10 + 1;
+-    *pcVar2 = cVar6;
+-    bVar12 = CARRY2(uVar8,-DAT_0000_0840);
+-    uVar8 = uVar8 + -DAT_0000_0840;
+-    cVar6 = cVar6 + bVar12;
+-    iVar7 = iVar7 + -1;
+-  } while (iVar7 != 0);
+-  DAT_0000_0844 = DAT_0000_0840 + DAT_0000_0842 & -(uint)!CARRY2(DAT_0000_0840,DAT_0000_0842);
+-  DAT_0000_0846 = DAT_0000_0842 & -(uint)!CARRY2(DAT_0000_0840,DAT_0000_0842);
+-  cVar6 = '\0';
+-  uVar8 = 0;
+-  pcVar10 = local_42;
+-  iVar7 = 0x40;
+-  do {
+-    pcVar2 = pcVar10;
+-    pcVar10 = pcVar10 + 1;
+-    *pcVar2 = cVar6;
+-    bVar12 = CARRY2(uVar8,-DAT_0000_0844);
+-    uVar8 = uVar8 + -DAT_0000_0844;
+-    cVar6 = cVar6 + bVar12;
+-    iVar7 = iVar7 + -1;
+-  } while (iVar7 != 0);
+-  pbVar9 = (byte *)(DAT_0000_0848 * 3);
+-  pbVar11 = pbVar9;
+-  cVar6 = (char)DAT_0000_084a;
+-  do {
+-    *pbVar11 = *(byte *)ZEXT24(local_c2 + *pbVar9);
+-    pbVar1 = pbVar9 + 2;
+-    pbVar3 = pbVar11 + 2;
+-    pbVar11[1] = *(byte *)ZEXT24(local_82 + pbVar9[1]);
+-    pbVar9 = pbVar9 + 3;
+-    pbVar11 = pbVar11 + 3;
+-    *pbVar3 = *(byte *)ZEXT24(local_42 + *pbVar1);
+-    cVar6 = cVar6 + -1;
+-  } while (cVar6 != '\0');
+-  DAT_1000_c786 = 1;
+-  if (((DAT_0000_083c != 0 || DAT_0000_0840 != 0) || DAT_0000_0844 != 0) &&
+-     (DAT_0000_084c = DAT_0000_084c + -1, DAT_0000_084c != 0)) {
+-    return;
++  /* PATCH 575: the RGB-TINT fade step the retrace ISR runs after 0660 armed it (driver asm 0x732-0x83a),
++   * rebuilt 1:1.  Three saturating accumulators with their rates -- cs:[0x83c]/[0x83e] (R),
++   * cs:[0x840]/[0x842] (G) and, as the asm has it, the G pair advanced ONCE MORE and stored into
++   * cs:[0x844]/[0x846] (B) -- each `add ; cmc ; sbb bx,bx ; and ax,bx ; and dx,bx` (both become 0 on
++   * the wrap); three 64-entry ramps table[i] = (i * (0x10000 - acc)) >> 16 on the stack; then for
++   * byte cs:[0x84a] entries from cs:[0x848]*3: present[3k+c] = table_c[snapshot[3k+c]] (ds = [0x788],
++   * es = [0x782], xlat ss:[bx]); [0x786] = 1; all three accumulators 0, or cs:[0x84c] counted down,
++   * ends it ([0x5e8] = 0, [0x78a] |= 0x22).  Ghidra indexed the ramps with host-zero-extended bytes
++   * and walked the DAC run as a host pointer; the retrace never reached it before because the shim
++   * dispatched only 0874's stepper. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char tab[3][64];
++  uint16_t acc[3], rate[3];
++  unsigned char *snap, *present;
++  uint16_t si, bx, dx;
++  unsigned char al, n;
++  int c, i;
++  /* R */
++  { uint32_t s = (uint32_t)DAT_0000_083c + DAT_0000_083e; uint16_t m = (s > 0xffffu) ? 0 : 0xffff;
++    acc[0] = (uint16_t)s & m; rate[0] = DAT_0000_083e & m; DAT_0000_083c = acc[0]; DAT_0000_083e = rate[0]; }
++  /* G */
++  { uint32_t s = (uint32_t)DAT_0000_0840 + DAT_0000_0842; uint16_t m = (s > 0xffffu) ? 0 : 0xffff;
++    acc[1] = (uint16_t)s & m; rate[1] = DAT_0000_0842 & m; DAT_0000_0840 = acc[1]; DAT_0000_0842 = rate[1]; }
++  /* B: from the (already advanced) G pair, stored into 0x844/0x846 -- as the asm does (7a7-7c0) */
++  { uint32_t s = (uint32_t)DAT_0000_0840 + DAT_0000_0842; uint16_t m = (s > 0xffffu) ? 0 : 0xffff;
++    acc[2] = (uint16_t)s & m; rate[2] = DAT_0000_0842 & m; DAT_0000_0844 = acc[2]; DAT_0000_0846 = rate[2]; }
++  for (c = 0; c < 3; c++) {
++    bx = (uint16_t)(0u - acc[c]); dx = 0; al = 0;
++    for (i = 0; i < 0x40; i++) {                               /* stosb ; add dx,bx ; adc al,ah(=0) */
++      tab[c][i] = al;
++      if ((uint32_t)dx + bx > 0xffffu) al++;
++      dx = (uint16_t)(dx + bx);
++    }
+   }
+-  _DAT_1000_c5e8 = 0;
+-  DAT_1000_c78a = DAT_1000_c78a | 0x22;
++  snap    = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x788) << 4);    /* 73e mov ds,[0x788] */
++  present = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x782) << 4);    /* 7d7 pop es (= [0x782]) */
++  si = (uint16_t)(DAT_0000_0848 * 3);                               /* 7e3-7eb */
++  n = (unsigned char)DAT_0000_084a;                                 /* 7ef mov ah,cs:[0x84a] */
++  do {                                                              /* 7f4..808 */
++    present[si] = tab[0][snap[si] & 0x3f]; si++;
++    present[si] = tab[1][snap[si] & 0x3f]; si++;
++    present[si] = tab[2][snap[si] & 0x3f]; si++;
++    n--;
++  } while (n != 0);
++  *(unsigned char *)(dg + 0x786) = 1;                               /* 80c movb [0x786],1 */
++  if ((DAT_0000_083c | DAT_0000_0840 | DAT_0000_0844) != 0) {       /* 811-81f */
++    DAT_0000_084c = (uint16_t)(DAT_0000_084c - 1);                  /* 821 dec cs:[0x84c] */
++    if (DAT_0000_084c != 0) return;
++  }
++  *(unsigned short *)(dg + 0x5e8) = 0;                              /* 82c */
++  *(unsigned char *)(dg + 0x78a) |= 0x22;                           /* 832 */
+   return;
+ }
+ 
+@@ -2001,15 +1987,16 @@
+ undefined4 __allregs FUN_0000_084e(undefined2 param_1)
+ 
+ {
+-  undefined1 in_CF = 0;
+-  undefined1 uVar1;
+-  
++  /* PATCH 575: `call 9c6 ; jb` -- wait until the fade stepper the entry armed has unregistered itself
++   * ([0x5e8] == 0); the cooperative retrace/tick pump steps it meanwhile.  Ghidra folded the CF to a
++   * one-pass loop, so the port never waited for a fade. */
++  extern unsigned char g_fist_cf;
++  extern void fist_timer_pump(void);
+   FUN_0000_0859(param_1);
+   do {
+-    uVar1 = in_CF;
++    fist_timer_pump();
+     FUN_0000_09c6();
+-    in_CF = 1;
+-  } while ((bool)uVar1);
++  } while (g_fist_cf);
+   return;
+ }
+ 
+@@ -2074,22 +2061,24 @@
+   DAT_1000_c786 = 0;
+   _DAT_1000_c5e8 = 0;
+   DAT_0000_09bc = 0;
+-  DAT_0000_09be = (undefined2)(0x10000 / (ulong)(param_1 + (uint)(param_1 == 0)));
++  DAT_0000_09be = (param_1 + (uint)(param_1 == 0) == 1) ? 0xffff          /* PATCH 575: #DE -> 0xffff, as 04f1 */
++                : (undefined2)(0x10000 / (ulong)(param_1 + (uint)(param_1 == 0)));
+   DAT_0000_09c0 = off;
+   DAT_0000_09c2 = cnt;
+   DAT_0000_09c4 = param_3;
+   memcpy(present, loaded, cnt);                              /* copy1: present <- loaded palette */
+-  /* [0xe4] crossfade-target device-alloc: DGROUP:0xe4 is an as-yet-uninstalled device method vector
+-     (same class as the word[0x782] alloc via DGROUP:0xcc, patch 049) -> resolve the real MEMMGR alloc
+-     FUN_1000_182a directly and allocate the 0x300-byte target buffer into word[DGROUP:0x788].  This
+-     makes the FADE path (0x8de-not-taken) run instead of the present-only path, so the palette settles
+-     at present=ramp[target] with acc=0xffff == loaded-1 (the byte-exact DOSBox post-fade palette). */
+-  if (*(uint16_t *)(g_mem+0x1c788) == 0) {
+-    typedef void (*a182a_t)(unsigned,undefined2,undefined2,undefined2,undefined2,undefined2);
+-    ((a182a_t)fist_icall(0x1182a))(0x300, 0x1c00, 0, 0x788, 0, 0);
+-    target = g_mem + ((uint32_t)(*(uint16_t *)(g_mem+0x1c788)) << 4) + off;
+-  }
+-  if (*(uint16_t *)(g_mem+0x1c788) != 0) {                   /* 0x8de jae + a real target buffer */
++  /* asm 0x8d2: `mov bx,0x788 ; mov cx,ds ; mov ax,0x300 ; lcall [0xe4] ; jb 0x932` -- the crossfade
++     target is allocated through the MEMMGR front-end EVERY time (184b frees the previous node when
++     the handle's bit 7 is still set, and re-allocates).  PATCH 575: patch 132 had bypassed the
++     vector (DGROUP:0xe4 was 0 then) and, worse, re-used a nonzero word[0x788] without allocating --
++     once the buffer had been released (`orb [0x78a],0x22` at the end of every fade) and its
++     paragraphs handed to a resource, the next fade-in wrote the palette over that resource.  With
++     [0xe4] = 1774 (patches 571/573) the faithful call stands; CF selects the present-only path. */
++  g_fist_cf = 0;
++  ((void (*)(unsigned,undefined2,undefined2,undefined2,undefined2,undefined2))fist_icall_far((uint32_t)(_DAT_1000_c0e4)))
++      (0x300, 0x1c00, 0, 0x788, 0, 0);
++  target = g_mem + ((uint32_t)(*(uint16_t *)(g_mem+0x1c788)) << 4) + off;
++  if (!g_fist_cf) {                                          /* 0x8de jae: a target buffer */
+     memcpy(target, present, cnt);                            /* copy2: target <- present (loaded) */
+     memset(present, 0, cnt);                                 /* copy3: zero present (fade from black) */
+     _DAT_1000_c780 = 0x782;
+@@ -2159,6 +2148,11 @@
+ void __allregs FUN_0000_09c6(void)
+ 
+ {
++  /* PATCH 575: driver asm 0x9c6 `cmp WORD [0x5e8],1 ; cmc ; retf` -- CF = a fade stepper is still
++   * registered.  The 04cd/04e6/084e entries spin on it (`call 9c6 ; jb`) until the retrace ISR has
++   * stepped the fade to its end; Ghidra folded the CF away and the port returned at once. */
++  extern unsigned char g_fist_cf;
++  g_fist_cf = (*(unsigned short *)(g_mem + 0x1c5e8) >= 1) ? 1 : 0;
+   return;
+ }
+ 
+@@ -2498,86 +2492,67 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_0be2) @ 0000:0be2 ===== */
+ 
+-/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+-/* WARNING: Restarted to delay deadcode elimination for space: ram */
+-
+ void __allregs FUN_0000_0be2(undefined2 param_1)
+ 
+ {
+-  char *pcVar1;
+-  undefined1 *puVar2;
+-  int *piVar3;
+-  undefined2 uVar4;
+-  byte bVar5;
+-  int iVar6;
+-  int *piVar7;
+-  undefined1 *puVar8;
+-  int *piVar9;
+-  bool bVar10;
+-  
+-  DAT_1000_c738 = DAT_1000_c738 + '\x01';
+-  bVar10 = (bool)(DAT_1000_c786 & 1);
+-  DAT_1000_c786 = DAT_1000_c786 >> 1;
+-  if (bVar10) {
+-    out(0x3c8,0);
+-    puVar8 = (undefined1 *)0x0;
+-    iVar6 = 0x300;
+-    while (iVar6 != 0) {
+-      iVar6 = iVar6 + -1;
+-      puVar2 = puVar8;
+-      puVar8 = puVar8 + 1;
+-      out(*puVar2,0x3c9);
++  /* PATCH 575: the driver's per-INT-8 DAC service on a >= 0x31-rated machine (driver asm 0xbe2-0xc55;
++   * init 0x13d-0x14c installs it at DGROUP:0x5e4 instead of the guarded 0b1f, and the engine's INT-8
++   * handler 31c3 far-calls [0x5e4] once per tick when the driver is not busy).  Rebuilt 1:1:
++   *     inc [0x738]
++   *     shr [0x786],1 ; jae      -> bit0 set: out 3c8,0 ; ds=[0x782] ; rep outs 3c9 (768 bytes)
++   *     [0x2a8]|[0x787] == 0     -> the DAC ANIMATION list at seg [[0x3fc]]: records {size, flags,
++   *         countdown, reload, DAC index, count, split, ptr, data..}; an active (0x80) record whose
++   *         countdown reaches 0 uploads: type 1 (rotate) the (count-split)*3 bytes at ptr then split*3
++   *         inline bytes, types 2..4 count*3 bytes at ptr; then 0c89 advances every expired record
++   *     call [0x5e8] ; dec [0x738]
++   * Ghidra swapped every `out` (port, value), walked the palette and the list as host pointers and
++   * dropped the ds/es loads; the shim's retrace stand-in (fist_vga.c) covered only the upload, on a
++   * per-pump cadence, and never reached the animation list. */
++  unsigned char *dg = g_mem + 0x1c000;
++  (void)param_1;
++  dg[0x738] = (unsigned char)(dg[0x738] + 1);
++  {
++    unsigned char b = dg[0x786];
++    dg[0x786] = (unsigned char)(b >> 1);
++    if (b & 1) {
++      const unsigned char *pal = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x782) << 4);
++      int i;
++      out(0x3c8, 0);
++      for (i = 0; i < 0x300; i++) out(0x3c9, pal[i]);
+     }
+   }
+-  if (DAT_1000_c2a8 == '\0' && DAT_1000_c787 == '\0') {
+-    uVar4 = *_DAT_1000_c3fc;
+-    for (piVar7 = (int *)0x0; *piVar7 != 0; piVar7 = (int *)((int)piVar7 + *piVar7)) {
+-      bVar5 = *(byte *)(piVar7 + 1);
+-      if ((int)((uint)bVar5 << 8) < 0) {
+-        pcVar1 = (char *)((int)piVar7 + 3);
+-        *pcVar1 = *pcVar1 + -1;
+-        if (*pcVar1 == '\0') {
+-          out(0x3c8,*(undefined1 *)((int)piVar7 + 5));
+-          bVar5 = bVar5 & 7;
+-          if (bVar5 != 0) {
+-            if (bVar5 < 2) {
+-              puVar8 = (undefined1 *)piVar7[4];
+-              iVar6 = (uint)(byte)((char)piVar7[3] - *(char *)((int)piVar7 + 7)) * 3;
+-              while (iVar6 != 0) {
+-                iVar6 = iVar6 + -1;
+-                puVar2 = puVar8;
+-                puVar8 = puVar8 + 1;
+-                out(*puVar2,0x3c9);
+-              }
+-              if (*(byte *)((int)piVar7 + 7) != 0) {
+-                piVar9 = piVar7 + 5;
+-                iVar6 = (uint)*(byte *)((int)piVar7 + 7) * 3;
+-                while (iVar6 != 0) {
+-                  iVar6 = iVar6 + -1;
+-                  piVar3 = piVar9;
+-                  piVar9 = (int *)((int)piVar9 + 1);
+-                  out((char)*piVar3,0x3c9);
+-                }
+-              }
+-            }
+-            else if ((bVar5 == 2) || (bVar5 < 5)) {
+-              puVar8 = (undefined1 *)piVar7[4];
+-              iVar6 = (uint)*(byte *)(piVar7 + 3) * 3;
+-              while (iVar6 != 0) {
+-                iVar6 = iVar6 + -1;
+-                puVar2 = puVar8;
+-                puVar8 = puVar8 + 1;
+-                out(*puVar2,0x3c9);
+-              }
+-            }
+-          }
+-        }
++  if ((dg[0x2a8] | dg[0x787]) == 0) {
++    unsigned char *ls = g_mem + ((uint32_t)*(uint16_t *)(dg + *(uint16_t *)(dg + 0x3fc)) << 4);
++    uint16_t bx = 0, si, cx;
++    unsigned char ah;
++    for (; *(uint16_t *)(ls + bx) != 0; bx = (uint16_t)(bx + *(uint16_t *)(ls + bx))) {   /* c18-c1e */
++      ah = ls[bx + 2];
++      if (!(ah & 0x80)) continue;
++      ls[bx + 3] = (unsigned char)(ls[bx + 3] - 1);
++      if (ls[bx + 3] != 0) continue;
++      out(0x3c8, ls[bx + 5]);
++      ah &= 7;
++      if (ah == 0) continue;
++      if (ah < 2) {                                                 /* c56: rotate -- two runs */
++        cx = (uint16_t)(unsigned char)(ls[bx + 6] - ls[bx + 7]);
++        si = *(uint16_t *)(ls + bx + 8);
++        for (cx = (uint16_t)(cx * 3); cx != 0; cx--) out(0x3c9, ls[si++]);
++        cx = ls[bx + 7];
++        if (cx == 0) continue;
++        si = (uint16_t)(bx + 0xa);
++        for (cx = (uint16_t)(cx * 3); cx != 0; cx--) out(0x3c9, ls[si++]);
++      } else if (ah <= 4) {                                         /* c79: one run */
++        cx = ls[bx + 6];
++        si = *(uint16_t *)(ls + bx + 8);
++        for (cx = (uint16_t)(cx * 3); cx != 0; cx--) out(0x3c9, ls[si++]);
+       }
+     }
+-    FUN_0000_0c89();
++    FUN_0000_0c89();                                                /* c49 */
+   }
+-  (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c5e8)))();
+-  DAT_1000_c738 = DAT_1000_c738 + -1;
++  if (*(uint16_t *)(dg + 0x5e8) != 0)                               /* c4d: `call [0x5e8]` -- the fade
++     stepper 05b8/0732/0946 (stored in far form, patch 575); offset 0 of the driver is `ret` */
++    (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c5e8)))();
++  dg[0x738] = (unsigned char)(dg[0x738] - 1);
+   return;
+ }
+ 
+@@ -2668,91 +2643,78 @@
+ void __allregs FUN_0000_0c89(void)
+ 
+ {
+-  char *pcVar1;
+-  byte *pbVar2;
+-  char cVar3;
+-  byte bVar4;
+-  int iVar5;
+-  byte bVar6;
+-  int *piVar7;
+-  uint uVar8;
+-  int *piVar9;
+-  
+-  piVar9 = (int *)0x0;
+-  do {
+-    if (*piVar9 == 0) {
+-      return;
++  /* PATCH 575: the DAC ANIMATION advance (driver asm 0xc89-0xdb3), the second half of 0be2/0b1f: for
++   * every active record whose countdown hit 0, reload the countdown and step the animation --
++   *     type 1 (rotate):  forward (flags & 0x40 clear): ptr += 3, and once the run's end passes the
++   *         record end bump split; both past the end -> split = 0, ptr = data start.  Backward:
++   *         ptr -= 3, below the data -> split = count-1, ptr = record end - 3; else past the end ->
++   *         split-- (floored at 0)
++   *     type 2 (block):   ptr -= count*3 (0x40: += count*3), wrapping to the record's other end; a
++   *         wrap with 0x20 set or 0x10 clear ends the record (flags &= 0x5f) and, with 0x08, activates
++   *         the NEXT record with this record's reload as its countdown
++   *     types 3/4:        one-shot -- flags &= 0x7f
++   * DS = the list segment [[0x3fc]] (the callers' `mov ds,[bx]`); Ghidra walked it from host address 0. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char *ls = g_mem + ((uint32_t)*(uint16_t *)(dg + *(uint16_t *)(dg + 0x3fc)) << 4);
++  uint16_t bx, ax, cx, di, si, end;
++  unsigned char ah, al;
++  for (bx = 0; *(uint16_t *)(ls + bx) != 0; bx = (uint16_t)(bx + *(uint16_t *)(ls + bx))) {   /* c8d-c93 */
++    ah = ls[bx + 2];
++    if (!(ah & 0x80)) continue;
++    if (ls[bx + 3] != 0) continue;
++    ls[bx + 3] = ls[bx + 4];                                        /* ca2: reload the countdown */
++    al = (unsigned char)(ah & 7);
++    if (al == 0) continue;
++    end = (uint16_t)(bx + *(uint16_t *)(ls + bx));
++    if (al < 2) {                                                   /* cbe: rotate */
++      di = (uint16_t)((uint16_t)(unsigned char)(ls[bx + 6] - ls[bx + 7]) * 3 + *(uint16_t *)(ls + bx + 8));
++      if (!(ah & 0x40)) {                                           /* cd4: forward */
++        *(uint16_t *)(ls + bx + 8) = (uint16_t)(*(uint16_t *)(ls + bx + 8) + 3);
++        if (di < end) continue;
++        ls[bx + 7] = (unsigned char)(ls[bx + 7] + 1);
++        if (*(uint16_t *)(ls + bx + 8) < end) continue;
++        ls[bx + 7] = 0;
++        *(uint16_t *)(ls + bx + 8) = (uint16_t)(bx + 0xa);
++        continue;
++      }
++      ax = (uint16_t)(*(uint16_t *)(ls + bx + 8) - 3);              /* cf4: backward */
++      *(uint16_t *)(ls + bx + 8) = ax;
++      if (ax < (uint16_t)(bx + 0xa)) {                              /* d19 */
++        ls[bx + 7] = (unsigned char)(ls[bx + 6] - 1);
++        *(uint16_t *)(ls + bx + 8) = (uint16_t)(end - 3);
++        continue;
++      }
++      if (di < end) continue;
++      if (ls[bx + 7] == 0) { ls[bx + 7] = 0; continue; }            /* d0c: sub 1 ; jb -> 0 */
++      ls[bx + 7] = (unsigned char)(ls[bx + 7] - 1);
++      continue;
+     }
+-    bVar4 = *(byte *)(piVar9 + 1);
+-    if (((int)((uint)bVar4 << 8) < 0) && (*(char *)((int)piVar9 + 3) == '\0')) {
+-      *(undefined1 *)((int)piVar9 + 3) = (char)piVar9[2];
+-      uVar8 = CONCAT11(bVar4,bVar4) & 0xff07;
+-      if ((bVar4 & 7) != 0) {
+-        bVar6 = (byte)uVar8;
+-        if ((bVar4 & 7) < 2) {
+-          uVar8 = (uint)(byte)((char)piVar9[3] - *(char *)((int)piVar9 + 7)) * 3 + piVar9[4];
+-          if ((bVar4 & 0x40) == 0) {
+-            piVar9[4] = piVar9[4] + 3;
+-            iVar5 = *piVar9;
+-            if (((uint)((int)piVar9 + iVar5) <= uVar8) &&
+-               (*(char *)((int)piVar9 + 7) = *(char *)((int)piVar9 + 7) + '\x01',
+-               (uint)((int)piVar9 + iVar5) <= (uint)piVar9[4])) {
+-              *(undefined1 *)((int)piVar9 + 7) = 0;
+-              piVar9[4] = (int)(piVar9 + 5);
+-            }
+-          }
+-          else {
+-            iVar5 = piVar9[4];
+-            piVar9[4] = iVar5 + -3;
+-            if ((int *)(iVar5 + -3) < piVar9 + 5) {
+-              *(char *)((int)piVar9 + 7) = (char)piVar9[3] + -1;
+-              piVar9[4] = (int)piVar9 + *piVar9 + -3;
+-            }
+-            else if ((uint)((int)piVar9 + *piVar9) <= uVar8) {
+-              pcVar1 = (char *)((int)piVar9 + 7);
+-              cVar3 = *pcVar1;
+-              *pcVar1 = *pcVar1 + -1;
+-              if (cVar3 == '\0') {
+-                *(undefined1 *)((int)piVar9 + 7) = 0;
+-              }
+-            }
+-          }
+-        }
+-        else if (bVar6 == 2) {
+-          if ((bVar4 & 0x40) == 0) {
+-            bVar4 = *(byte *)(piVar9 + 3);
+-            piVar7 = (int *)(piVar9[4] + (uint)bVar4 * -3);
+-            piVar9[4] = (int)piVar7;
+-            if (piVar7 < piVar9 + 5) {
+-              piVar9[4] = (int)piVar9 + (uint)bVar4 * -3 + *piVar9;
+-              bVar4 = *(byte *)(piVar9 + 1);
+-joined_r0x00000d88:
+-              if ((((bVar4 & 0x20) != 0) || ((bVar4 & 0x10) == 0)) &&
+-                 (*(byte *)(piVar9 + 1) = bVar4 & 0x5f, (bVar4 & 8) != 0)) {
+-                iVar5 = *piVar9;
+-                pbVar2 = (byte *)((int)piVar9 + iVar5 + 2);
+-                *pbVar2 = *pbVar2 | 0x80;
+-                *(undefined1 *)((int)piVar9 + iVar5 + 3) = (char)piVar9[2];
+-              }
+-            }
+-          }
+-          else {
+-            uVar8 = (uint)*(byte *)(piVar9 + 3) * 3 + piVar9[4];
+-            piVar9[4] = uVar8;
+-            if ((uint)((int)piVar9 + *piVar9) <= uVar8) {
+-              piVar9[4] = (int)(piVar9 + 5);
+-              bVar4 = *(byte *)(piVar9 + 1);
+-              goto joined_r0x00000d88;
+-            }
+-          }
+-        }
+-        else if (bVar6 < 5) {
+-          *(byte *)(piVar9 + 1) = (byte)(uVar8 >> 8) & 0x7f;
+-        }
++    if (al == 2) {                                                  /* d2e: block */
++      cx = (uint16_t)(ls[bx + 6] * 3);
++      if (!(ah & 0x40)) {
++        ax = (uint16_t)(*(uint16_t *)(ls + bx + 8) - cx);
++        *(uint16_t *)(ls + bx + 8) = ax;
++        if (ax >= (uint16_t)(bx + 0xa)) continue;
++        *(uint16_t *)(ls + bx + 8) = (uint16_t)(end - cx);
++      } else {
++        ax = (uint16_t)(cx + *(uint16_t *)(ls + bx + 8));
++        *(uint16_t *)(ls + bx + 8) = ax;
++        if (ax < end) continue;
++        *(uint16_t *)(ls + bx + 8) = (uint16_t)(bx + 0xa);
+       }
++      al = ls[bx + 2];                                              /* d56/d83: the wrap ends it? */
++      if (!(al & 0x20) && (al & 0x10)) continue;
++      al &= 0x5f;                                                   /* d91 */
++      ls[bx + 2] = al;
++      if (!(al & 8)) continue;
++      si = end;                                                     /* d9a: chain to the next record */
++      ls[si + 2] |= 0x80;
++      ls[si + 3] = ls[bx + 4];
++      continue;
+     }
+-    piVar9 = (int *)((int)piVar9 + *piVar9);
+-  } while( true );
++    if (al <= 4) ls[bx + 2] = (unsigned char)(ah & 0x7f);           /* dab: one-shot */
++  }
++  return;
+ }
+ 
+ 

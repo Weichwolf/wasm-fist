@@ -1339,3 +1339,60 @@ a text block would be drawn -- what draws the picture and the text is the next m
 Also noted on the way: 4397 (the STRSEG:0x802 budget-reserve vector) and 0x019ae/0x1f6c2/0x0011d/
 0x0e800/0x00f69/0x01d23/0xc862/0xc888/0xc783/0x1c06d/0x13f7f/0x1360f/0x0f9a4/0x01b31 are still icall
 traps on the AZER1 path (FIST_TRACE_TRAPS); board:0015.
+
+## The debrief shown as the original shows it (patch 575, 2026-09-12)
+
+The oracle capture (`tools/oracle/census_debrief.sh`, `scratch/oracle/debrief/f_0016..0017.png`,
+20 s apart) fixes what follows the verdict: the WLOSE picture dimmed to about half, "MISSION LOST /
+OBJECTIVES REMAINING: 13 / BATTLE STATISTICS ..." typed one glyph per tick in white, "PRESS ANY KEY TO
+PROCEED...", then a static wait -- frames 17..74 (20 min) are byte-identical.  The port now reaches
+that screen (AZER1, tick 14500: picture dimmed, the same text at the same places; ENEMY GROUND KILLS
+02 / GROUND UNITS LOST 04 / EXPERIENCE 0 against the original's 03 / 04 / 100 -- the sim's own
+timeline, and 6223's `kills*[0x79c3] - lost*[0x79c5]` clamped at 0 agrees with both).
+
+What stood between (all in patch 575):
+
+- e528 dispatched the debrief phase table near; bb58's five driver calls had no arguments; the 04e6
+  dim call had (ax,bx,cx,dx) where 04f1 takes (ax,cx,dx,bx) -- 0xff4f bytes walked past the present
+  buffer.
+- The MGA fade steppers 05b8/0732 and the 0478 snapshot were pristine, 09c6's CF was folded (no fade
+  ever waited), the 0x300-byte fade buffer was allocated into DGROUP:0000 (1774's register order).
+- `mov dx,1 ; div si` with si == 1 in 0874/04f1 raises #DE.  The extender routes exception 0 to the
+  ENGINE's INT-0 handler 1000:5b36, which scans forward for the DIV opcode, returns past it with AX =
+  0xffff (DX untouched).  Measured with a new oracle hook (`FIST_EXCLOG=<path>`: every exception with
+  registers + the next 80 instructions): EXC 0 cs=4ec3 eip=0895 -> 1119:00cb -> 2082:5b36 -> iret
+  ax=ffff.  The C division gave 0 -> the fade-in never rose: the black debrief.
+- [DGROUP:0x5e4], the per-tick driver method the engine's INT-8 handler 31c3 calls, is 0be2 on the
+  original (RAM: 4ec3:0be2) because LOADGAME rates the machine 0x4934 (>= 0x31); the port had
+  [0x242] = 0 and the guarded 0b1f, which 31c3's own [0x738] bump makes inert -- the shim's retrace
+  stand-in (an upload per pump and per in(0x3da)) covered for it.  0be2/0c89 are rebuilt (upload, the
+  DAC animation list at seg [[0x3fc]], the stepper call), the stand-in is gone.
+- [0x242]/[0x244]/[0x246]/[0x24e]/[0x258]/[0x25a]/[0x260]/[0x264]/[0x26c] come from LOADGAME's
+  hardware/OS script: the extender blob's first word is FIST.RUN's PSP (0x0254 under DOSBox), that
+  PSP's command tail is "\r016401D4" = a far pointer to the script text at 01D4:0164
+  (`scratch/oracle/player.ram.bin`; the text is quoted in native_main.c setup_dos_env), parsed by
+  ff2c against the option tables at STRSEG:0x15c/0x16c.  The shim seeds the PSP and the byte-exact
+  script; the parser is rebuilt; the four hand-seeded words are gone.
+- [0x736]/[0x724] (text/surface context) were 0 from the first in-mission string on: 024f/026e
+  return the previous context in BX and 17 sites (22dd, 2908/290e, 49b5, 4da3, 65c2, a755) dropped
+  it; the debrief's text drew into a bogus surface.
+
+Found on the way, not yet done:
+
+- The INT-8 time base (done since: board:0026, the PIT/VGA clock).  2fd3 calibrates [0x44c] as the PIT count of one vertical retrace period
+  (30de polls 0x3da) and 3064 scales [0x452] to 60 Hz from it; 30f8 re-arms the PIT on every tick
+  after waiting for the retrace, so the INT-8 IS the vblank.  Original: [0x44c] = 0x427f = 70.09 Hz,
+  d8b8 = 0xdb24 -> 1.17 INT-8 per [0x452] tick.  Port: [0x44c] = 0x100 (the shim's PIT counter),
+  d8b8 = 0x34b -> 78 INT-8 per tick.  Every per-INT-8 consumer (31c3's retrace section: 0be2, 3a00,
+  [0x15b0], [0x2b0]; 335b's timers; the sound driver's sequencer) runs ~66x more often per frame tick
+  than on the original.  The fades therefore settle within a tick instead of over 0.5-1 s, and any
+  INT-8-scheduled sim work is off by the same factor -- a candidate cause for board:0007's cadence.
+  The port's PIT/0x3da model must yield 0x427f: one retrace per 17023 PIT counts, deterministically.
+- 2144 self-modifies the fill loops for a 386 when [0x242] > 0x32 (cs:25fb <- 0x66, cs:3dff <-
+  `shl eax,16`): the same fill replicated to dwords; the C keeps the word form (semantically equal).
+  SOUNDDVR's >= 0x32 device config at 0x252 would now take its fast path -- but that method is still
+  never reached in the port (with or without FIST_SB/FIST_OPL), which is why fist_sb.c hand-inits the
+  voice slots; its decompile writes cs:[0x60..] as host pointers and must be rebuilt before it is.
+- 2908/290e read the [0x156a] descriptor int*-scaled (`+ 6` = +24 bytes); 29e4 (a shared `pop bx`
+  tail) stays arg-less; the DAC animation list holds one inactive record (DAC 0xff yellow/green every
+  32 ticks) whose activator 13eb has no direct caller found yet.
