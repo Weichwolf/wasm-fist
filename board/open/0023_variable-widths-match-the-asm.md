@@ -174,3 +174,13 @@ three `imul dx,ax ; shr ax,8` products (the LOW 16 bits before the shift -- the 
 routinely), and a265's word[+0x99] built from CH of 0578's exit CX.  Each is in its patch with the
 asm; the method (a byte-for-byte object diff against the original at the first divergent step) is
 the width audit's instrument from here: it finds the widths that matter in the order they matter.
+
+## The 731 arctangent is bit-exact (board:0017 census)
+
+077e (the fixed-point arctangent behind every bearing/pitch, 0731/054c/0578/059a) was fuzzed as an
+asm-faithful model against the port's C transcription over 300000 random 32-bit vector pairs with the
+real DGROUP arctan table: zero mismatches.  The interpolation `((delta.lo*frac + 0x80) >> 8) +
+(delta.hi==1 ? frac : 0)`, the octant fold, the normalise/scale loops, the clamped `div cx` and the
+3-bit octant rotate all match.  The one census divergence that pointed here (a 2-ULP heading on a
+targetless vehicle) is a garbage-input read of a model-dependent code segment, not a width or
+rounding defect -- recorded on board:0017.

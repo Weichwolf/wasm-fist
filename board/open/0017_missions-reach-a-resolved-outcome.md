@@ -1657,6 +1657,16 @@ toward the target heading [+0x30], which ac2f sets to `0541 + 0x8000`; 0541 retu
 the divergence, so the 2 ULP is a rounding inside the 731/927/077e trig chain (077e's table
 interpolation `((delta.lo*frac + 0x80) >> 8) + (delta.hi==1 ? frac : 0)` is verified matching the
 asm 0x7f6-0x819, so the residue is in 927, the `div cx` octant fraction, or an input lane not yet
-isolated).  It is below the outcome level -- both missions resolve DEFEAT as the sweep and the
-oracle do -- but it is a real deviation (goal: no approximations).  Next: capture 731's entry/exit
-(EDI/ESI in, AX out) for the diverging vehicle and match the octant-fraction rounding.
+isolated).  RESOLVED, and NOT a computation bug: 077e is bit-exact against the asm over 300k random inputs, so
+731 is faithful.  The divergence is a garbage-input read.  At the divergent step the vehicle has
+word[+0x97] == 0 (NO current target) and fires its rear-idle animation (ac09/abde, gated by
+byte[+0x40] bit 0x40 / bit 1), whose 0541 computes a bearing to "the object at offset 0" -- i.e. it
+reads DGROUP:[4]/[8]/[c] as a target position.  Those are the boot-installed far-pointer table
+entries whose SEGMENT words are model-dependent: the oracle (relocated guest) holds 0x1119/0x2082
+(the engine's relocated code paragraphs), the port (flat, base 0) holds 0x0000/0x0f69 (its own valid
+segments).  731's `target - self` then differs in one low word by ~0x1119, which the arctangent of a
+far-off point turns into 2 ULP of bearing.  The port's read is correct for its model; it cannot hold
+0x1119/0x2082 there without breaking fist_icall, which resolves those very segments.  So this is an
+inherent flat-vs-relocated-model boundary surfacing through a targetless idle-animation heading --
+outcome-neutral (both DEFEAT), no engine stub/guard/approximation involved -- explicitly accepted.
+The only remaining SIM divergence is thus the audio-coupled player hit (board:0003).
