@@ -12,6 +12,12 @@ if [ -z "$OC_INNER" ]; then
 fi
 [ -x /tmp/xclick ] || cc -O2 "$ROOT/tools/oracle/xclick.c" -o /tmp/xclick -lX11 -l:libXtst.so.6
 WORK="$(mktemp -d /tmp/ocd.XXXXXX)"; DATA="$WORK/armoredfist"; cp -a "$ROOT/armoredfist" "$DATA"
+# OC_BATTLE=<name>: leave only that .FSG in the copy, so the list dialog's default (its first entry) is
+# that battle and the same three clicks reach it -- the port's FIST_FSG_BATTLE for the oracle.
+if [ -n "${OC_BATTLE:-}" ]; then
+  find "$DATA/FISTDATA" -maxdepth 1 -iname '*.fsg' ! -iname "$OC_BATTLE.fsg" -delete
+  echo "[ocd] battle $OC_BATTLE: $(ls "$DATA/FISTDATA" | grep -ic '\.fsg$') .FSG left"
+fi
 CONF="$WORK/db.conf"; OUT="${OC_OUT:-$ROOT/scratch/oracle/debrief}"; mkdir -p "$OUT"; rm -f "$OUT"/f_*.png "$OUT"/outcome.*
 PREFIX="$OUT/outcome"
 cat > "$CONF" <<CFG

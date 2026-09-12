@@ -993,12 +993,51 @@ static void fist_pump_slow(void){
  * single edge latch would.  Before the engine installs its vector the wrap only advances the BIOS tick. */
 static int g_int8_held;
 static unsigned long long g_int8_last_clock;
+
+/* The interrupt frame.  An IRQ is transparent to the code it lands in: the CPU pushes FLAGS, the ISR
+ * pushes every register it touches and iret restores the lot.  In the flat model those registers are
+ * the shim lanes -- the CF and the non-AX outputs the __allregs prototypes thread through globals --
+ * plus the INT reg-file at 0xf0000, which is the registers of a DOS/BIOS call in flight (the ISR fires
+ * from inside fist_icall and the port pumps, i.e. anywhere).  31c3 leaves its timer carry in g_fist_cf
+ * for 30f8, and a dispatch met by the interrupt then read that carry as its own callee's clc/stc -- a
+ * c33c phase handler's `stc` came back as "found" and 2471 linked a node to itself (AZER4, board:0026). */
+#define FIST_ISR_LANES(X) \
+    X(g_fist_cf) X(g_fist_c0e5_si) X(g_fist_iter_si) X(g_fist_r_cx) \
+    X(g_fist_b71_dx) X(g_fist_b71_cx) X(g_fist_b71_bx) X(g_fist_baf_dx) X(g_fist_0927_dx) \
+    X(g_fist_0541_cx) X(g_fist_0541_dx) X(g_ext_find_cf) X(g_fist_ev_node) X(g_fist_paintbp) \
+    X(g_fist_a19e_al) X(g_fist_evax) X(g_fist_paintax) X(g_fist_rot_h) X(g_fist_rot_dx) X(g_fist_rot_cx) \
+    X(g_fist_render_si) X(g_fist_b1df_ax) X(g_fist_0578_bx) X(g_fist_02e8_si) X(g_fist_177f_bx) \
+    X(g_fist_ctx_bx) X(g_fist_03a9_dx) X(g_fist_fp_dx) X(g_fist_fp_cx) X(g_fist_r48_dx) X(g_fist_r48_cx) \
+    X(g_fist_3e29_cx) X(g_fist_ext_esi) X(g_fist_ext_ecx) X(g_fist_ext_edx) X(g_fist_ext_edi) \
+    X(g_fist_ext_edx_out) X(g_fist_1345_bp) X(g_fist_054c_bx) X(g_fist_054c_cx) X(g_fist_054c_dx) \
+    X(g_fist_render_di) X(g_fist_render_dx) X(g_mga_fade_es)
+#define FIST_ISR_SAVE(v)   __typeof__(v) isr_##v = v;
+#define FIST_ISR_RESTORE(v) v = isr_##v;
+extern unsigned char g_fist_cf, g_ext_find_cf, g_fist_a19e_al;
+extern unsigned short g_fist_c0e5_si, g_fist_iter_si, g_fist_ev_node, g_fist_paintbp, g_fist_evax,
+    g_fist_paintax, g_fist_rot_h, g_fist_rot_dx, g_fist_rot_cx, g_fist_render_si, g_fist_b1df_ax,
+    g_fist_0578_bx, g_fist_02e8_si, g_fist_177f_bx, g_fist_ctx_bx, g_fist_03a9_dx, g_fist_fp_dx,
+    g_fist_fp_cx, g_fist_r48_dx, g_fist_r48_cx, g_fist_3e29_cx, g_fist_ext_ecx, g_fist_ext_edx,
+    g_fist_ext_edi, g_fist_1345_bp, g_fist_054c_bx, g_fist_054c_cx, g_fist_054c_dx, g_fist_render_di,
+    g_fist_render_dx, g_mga_fade_es;
+extern int g_fist_r_cx;
+extern uint16_t g_fist_b71_dx, g_fist_b71_cx, g_fist_b71_bx, g_fist_baf_dx, g_fist_0927_dx,
+    g_fist_0541_cx, g_fist_0541_dx;
+extern uint32_t g_fist_ext_esi, g_fist_ext_edx_out;
+#define FIST_ISR_REGFILE_LIN 0xf0000u
+#define FIST_ISR_REGFILE_LEN 0x40u
+
 void fist_int8_fire(void){
     extern unsigned long long fist_clock_now(void);
+    FIST_ISR_LANES(FIST_ISR_SAVE)
+    uint8_t isr_regfile[FIST_ISR_REGFILE_LEN];
+    memcpy(isr_regfile, g_mem + FIST_ISR_REGFILE_LIN, FIST_ISR_REGFILE_LEN);
     if (!g_int8_set) {                      /* the BIOS INT 8 until the engine takes the vector; after
                                                that 30f8 chains to it through [0x432] (fist_dos.c INT 08) */
         (*(volatile uint32_t*)(g_mem+BIOS_TICK_LIN))++;
         fist_pump_slow();
+        FIST_ISR_LANES(FIST_ISR_RESTORE)
+        memcpy(g_mem + FIST_ISR_REGFILE_LIN, isr_regfile, FIST_ISR_REGFILE_LEN);
         return; }
     if (g_in_isr) { g_int8_held = 1; return; }
     do {
@@ -1024,6 +1063,8 @@ void fist_int8_fire(void){
         if (g_web_mode) fist_web_vblank();                       /* pace to the wall clock, post frame + audio */
 #endif
     } while (g_int8_held);
+    FIST_ISR_LANES(FIST_ISR_RESTORE)                             /* iret */
+    memcpy(g_mem + FIST_ISR_REGFILE_LIN, isr_regfile, FIST_ISR_REGFILE_LEN);
 }
 
 /* DIAGNOSTIC (FIST_QCHK=1): validate the event-queue free-list + ready-list invariants each pump so a

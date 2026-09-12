@@ -62,6 +62,24 @@ Measured with it:
   1:38 to 5:49, so a tick-for-tick match needs the same initial conditions (RNG seed, click ticks) --
   board:0017's business, not the clock's.
 
+## The interrupt frame (2026-09-12)
+
+The clock made the INT-8 fire from inside `fist_icall` dispatches and port accesses, i.e. anywhere --
+which is right -- and the ISR's carry leaked: 31c3 leaves the wrap of its BIOS-chain accumulator in
+`g_fist_cf` for 30f8's `rcl BYTE [0x44b],1`, and a dispatch the interrupt landed in read that carry as
+its own callee's clc/stc.  Measured on AZER4: c33c's phase handler c3dc (`stc` = nothing this phase)
+came back "found" once at tick 1861, 2471 stored a node link to the node itself, and the depth-sort
+walk spun (six of six gdb samples in the insertion loop; 6 ticks/s from there on).  UKRAINE7's crash
+(a display-table entry into the middle of a DCBS record, type 0x7103 -> method 0x7400) and INDIA6's
+stall were the same leak at other sites.  A census over whole runs (UKRAINE7 125k interrupts, AZER4
+25k) found `g_fist_cf` changed across 65% of the ISR runs and no other lane and never the INT reg-file.
+
+An IRQ is transparent to the code it lands in (pushf / the ISR's push-pop / iret), so
+`fist_int8_fire` now saves every shim register lane (the CF and the non-AX outputs the __allregs
+prototypes thread through globals: 44 of them, `FIST_ISR_LANES`) and the INT reg-file at 0xf0000
+(the registers of a DOS/BIOS call in flight) and restores them after the ISR, its audio step and the
+pump (the mouse callback runs there).  AZER4 / INDIA6 / UKRAINE7 resolve in 7-12 s with it.
+
 Open: the wasm web player's pacing (fist_web_vblank, Atomics.wait) is untested in a browser; the
 r92/9200 capture scripts and census_debrief.sh still assume the old FIST_MOUSE unit where they drive
 the port (they drive DOSBox with xclick, unaffected).

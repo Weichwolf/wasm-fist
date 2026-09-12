@@ -74,7 +74,10 @@ recognizing them is half the work:
   spin-waits on tick counters and retrace polls.  The port keeps ONE clock in PIT counts (fist_vga.c,
   board:0026): every port access and pump is a count, every dispatched call and every windshield render
   has its cost, the INT-8 is delivered at each channel-0 wrap from the pump (`fist_timer_pump` ->
-  `fist_int8_fire`), and native and wasm step it identically.
+  `fist_int8_fire`), and native and wasm step it identically.  The interrupt is transparent to the
+  code it lands in: `fist_int8_fire` saves and restores every shim register lane (`FIST_ISR_LANES`:
+  `g_fist_cf` and the non-AX outputs the `__allregs` model threads through globals) and the INT
+  reg-file -- the pushf / iret of the original.
 
 ## The chain
 

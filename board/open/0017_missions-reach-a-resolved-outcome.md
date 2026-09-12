@@ -1396,3 +1396,35 @@ Found on the way, not yet done:
 - 2908/290e read the [0x156a] descriptor int*-scaled (`+ 6` = +24 bytes); 29e4 (a shared `pop bx`
   tail) stays arg-less; the DAC animation list holds one inactive record (DAC 0xff yellow/green every
   32 ticks) whose activator 13eb has no direct caller found yet.
+
+## The AI's fire dispatch and the sweep after the clock (patch 577, 2026-09-12)
+
+The 47-mission self-play sweep on the clock model (`scratch/oracle/sweep576.log`) resolved 39: AZER4,
+INDIA6, SAUDI3, TRAIN1-3 timed out, SAUDI5 and UKRAINE7 crashed.
+
+- SAUDI5 crashed in the AI's turn: a28c (`call DWORD gs:[bx+0x3131]`, the unit type's weapon-spawn
+  method in the STRSEG far table {0f69:81ba, 8bb0, 92cb, a5c0}) and a29b (`jmp WORD gs:[bx+0x3141]`,
+  the near table {7e87, 89fe, 921a, 9a04} of animation-state setters, four routines Ghidra never saw
+  behind the 7e77 far table) read their tables as host pointers; 8240 and 9c50 were pristine
+  (unaff_CS for both objects); b0be reads the AX the four methods leave (0x27 / 0x3031), which the
+  void prototypes dropped; aea6, the fire-support request, was a host-pointer walk over the battery
+  and fire-mission tables and had lost 0459's three outputs.  All rebuilt; the two tables verified
+  against the oracle's RAM (STRSEG 0x3e8d: 2082:81ba.. and 7e87..).
+- SAUDI3 never left its first cockpit frame: b4fc (c33c phase 1, the objective markers) wrote its
+  record through a stack-residue pointer and reported neither the CF nor the cursor.
+- AZER4, INDIA6 and UKRAINE7 were the shim: the ISR's carry leaking into the interrupted dispatch
+  (board:0026, the interrupt frame).
+
+Sweep with patch 577 and the frame (`scratch/oracle/sweep577.log`): 46 of 47 resolve (ten as DEFEAT --
+AZER1 AZER7 CYPRUS4 INDIA1 INDIA3 INDIA6 SAUDI2 SAUDI7 SYRIA4 TRAIN3 -- the other 36 TIME EXPIRED at the
+default 15 minutes), the longest in 183 s of CPU.
+TRAIN2 does not: its saved block carries no time limit ([0xe987] = 0xff -> [0x6da6] = 0xff, the
+RESTORE path), so only a verdict can end it -- and the original reaches one.  The oracle on TRAIN2
+(`OC_BATTLE=TRAIN2 tools/oracle/census_debrief.sh`, `scratch/oracle/train2/`: the .FSG list reduced to
+the one file so the same three clicks select it): at 241 s the player's tank drives at 5 mph, heading
+079, HEAT 0003 of 0005 left, GOALS REMAINING 03; by 301 s the debrief -- MISSION LOST, OBJECTIVES
+REMAINING 03, ENEMY GROUND KILLS 03, GROUND UNITS LOST 06, UNITS REMAINING 00.  The port's TRAIN2 at
+12 minutes: the player at its spawn position throughout (X/Y constant from tick 202), a296 = 13 the
+whole way, 6 of 7 own units alive, 5 of 5 objectives, and the LOS service answered 305928 queries with
+0 VISIBLE (209806 out of range, 96122 occluded).  Two divergences to run down against that oracle:
+the platoon does not drive on this map, and nothing has line of sight on it.

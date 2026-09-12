@@ -1,0 +1,642 @@
+PATCH 577: the AI's fire and weapon-select dispatches (a28c/a29b and their STRSEG tables), the four
+weapon-spawn methods' AX, the fire-support request (aea6) and the objective-marker phase (b4fc).
+
+board:0017.  Found by the self-play sweep after the time base (board:0026): SAUDI5 crashed in the AI's
+turn, SAUDI3 never left its first cockpit frame.  Everything below is asm-verified against
+re_out/fist_dat_image.bin; the two STRSEG tables against scratch/oracle/player.ram.bin (oracle
+STRSEG 0x3e8d, 0x2082 <-> the port's 0x0f69 cluster).
+
+  a28c   `mov gs,[0x70] ; mov bx,[di] ; shl bx,2 ; call DWORD gs:[bx+0x3131] ; ret` -- the unit's
+         type word selects a FAR method in the STRSEG table {0f69:81ba, 8bb0, 92cb, a5c0} =
+         FUN_1000_784a / 8240 / 895b / 9c50, the weapon-spawn methods, called with DI = the unit.
+         Ghidra host-deref'd DI, read the table from DGROUP and called it near.  The caller b0be tests
+         the AX they leave (`cmp al,0x4c ; test al,0x20`), so a28c now returns it.
+  a29b   `.. shl bx,1 ; jmp WORD gs:[bx+0x3141]` -- the near table {7e87, 89fe, 921a, 9a04}, one per
+         unit type, each `movzx bx,[di+0x91] ; add bl,2 ; cmp bl,6 ; jbe ; xor bl,bl` then
+         `call 7963` / `lcall 0f69:892c` (FUN_1000_7fbc) / `0f69:94ec` (8b7c) / `0f69:9fbe` (964e), the
+         per-type animation-state setters.  Ghidra saw no code at the four targets (they sit behind
+         the 7e77 far table) and read the jump table as a host pointer; they are emitted here.
+  784a/8240/895b/9c50  return AX: 0x27 on the spawn path (c047 keeps it unless DI is the audible unit
+         [0x9fdf], then e2c2's op-0x64 result) and 0x3031 on the fail path (a4a2 preserves it).  8240
+         (0f69:8bb0) and 9c50 (0f69:a5c0) are rebuilt like patch 495's 784a: `cmpb [di+0xfa],0 ; je
+         fail ; decb ; push di ; ax=0x14 ; call b1df ; mov si,di ; pop di ; jb fail ; lcall 9a50 ;
+         ax=0x27 ; lcall c047 ; clc ; retf` (9c50 has no ammo counter) -- Ghidra dropped b1df's
+         projectile, the CF and DI (unaff_CS).
+  aea6   (0f69:b816) the FIRE-SUPPORT request, b0be's `test al,0x20` branch: the side's battery count
+         [0x9ccb]/[0x9ccd], the cooldown [0x9f17+bx] against [0x6cde], bf3c(4), the first battery with
+         rounds ([si+0x1f]), then -- without a target [di+0x97] -- an aim point 0x9684 stepped 0x28
+         times along the unit's heading (a192 -> 0459 with cx = [di+0x38], outputs << 6) until e1d1's
+         terrain rises above its Z byte; the fire-mission slot (16 x 0xe at 0x9ce7 / 0x9dc7) gets
+         {2, [0x6cde], target pos or the point}; 66cd(STRSEG:0x3193), bee2(0x29 / 0x2a), the cues
+         0x2f0f / 0x2f40 / 0x2ef7.  Ghidra host-deref'd DI and the tables and lost 0459's outputs and
+         e1d1's AX.
+  b4fc   (0f69:be6c) c33c phase 1, the OBJECTIVE MARKERS of the cockpit view: gated on [0x6d2c]&2,
+         [0x6dab]&2, [0xe6ef] < 2 and [0x1549] == 0x1e; emits one 0x34-byte record at the render
+         cursor (`add di,2 ; stosw 0, 0x10, 0, 0 ; three dwords ; add di,0x1c ; the sprite word`),
+         `clc` = found.  Ghidra wrote the record through a stack-residue pointer and dropped the CF
+         and the cursor (g_fist_render_di, patch 310) -- SAUDI3 never left its first cockpit frame.
+
+  Effect: SAUDI3, SAUDI5 resolve; the sweep's AZER4 / INDIA6 / UKRAINE7 needed the shim's interrupt
+  frame as well (tools/native_main.c, same commit): the ISR's own carry leaked into the interrupted
+  dispatch through g_fist_cf.
+
+--- a/fist.c
++++ b/fist.c
+@@ -1047,6 +1047,10 @@
+ void __allregs FUN_0000_a286(int param_1);
+ undefined4 __allregs FUN_0000_a28c(int *param_1);
+ void __allregs FUN_0000_a29b(int *param_1);
++void __allregs FUN_0000_7e87(int *param_1);   /* PATCH 577: a29b's per-type targets */
++void __allregs FUN_0000_89fe(int *param_1);
++void __allregs FUN_0000_921a(int *param_1);
++void __allregs FUN_0000_9a04(int *param_1);
+ undefined4 __allregs FUN_0000_a2a8(int param_1);
+ void __allregs FUN_0000_a2bb(uint param_1,int param_2,uint *param_3,int param_4);
+ void __allregs FUN_0000_a2da(undefined2 param_1);
+@@ -2131,7 +2135,7 @@
+ void __allregs FUN_1000_77cf(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+ void __allregs FUN_1000_77f9(char param_1,int param_2,int param_3,int param_4,int param_5);
+ void __allregs FUN_1000_7814(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4);
+-void __allregs FUN_1000_784a(undefined4 param_1,int param_2);
++unsigned __allregs FUN_1000_784a(undefined4 param_1,int param_2);   /* PATCH 577: returns AX */
+ void __allregs FUN_1000_787a(uint param_1);
+ void __allregs FUN_1000_78a4(uint param_1);
+ void __allregs FUN_1000_78ca(undefined2 param_1,undefined2 param_2);
+@@ -2165,7 +2169,7 @@
+ void __allregs FUN_1000_8176(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+ void __allregs FUN_1000_81bb(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+ void __allregs FUN_1000_8205(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4);
+-void __allregs FUN_1000_8240(undefined4 param_1,int param_2);
++unsigned __allregs FUN_1000_8240(undefined4 param_1,int param_2);   /* PATCH 577: returns AX */
+ void __allregs FUN_1000_8270(int param_1,int param_2);
+ void __allregs FUN_1000_82b6(uint param_1);
+ void __allregs FUN_1000_82dc(uint param_1);
+@@ -2191,7 +2195,7 @@
+ void __allregs FUN_1000_888c(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+ void __allregs FUN_1000_88d1(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+ void __allregs FUN_1000_8916(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+-void __allregs FUN_1000_895b(undefined4 param_1,int param_2);
++unsigned __allregs FUN_1000_895b(undefined4 param_1,int param_2);   /* PATCH 577: returns AX */
+ void __allregs FUN_1000_8963(byte param_1,undefined4 param_2,int param_3,int param_4);
+ void __allregs FUN_1000_8995(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4);
+ void __allregs FUN_1000_89d0(uint param_1);
+@@ -2259,7 +2263,7 @@
+ void __allregs FUN_1000_9b7e(undefined2 param_1,undefined4 param_2,undefined4 param_3,int param_4, undefined2 param_5);
+ void __allregs FUN_1000_9bc3(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4);
+ void __allregs FUN_1000_9c15(undefined2 param_1,undefined4 param_2,int param_3,undefined2 param_4);
+-void __allregs FUN_1000_9c50(undefined4 param_1,undefined2 param_2);
++unsigned __allregs FUN_1000_9c50(undefined4 param_1,undefined2 param_2);   /* PATCH 577: returns AX */
+ void __allregs FUN_1000_9c75(uint param_1);
+ ulong __allregs FUN_1000_9caa(ulong param_1,int param_2);
+ ulong __allregs FUN_1000_9cfd(ulong param_1,int param_2);
+@@ -28582,11 +28586,17 @@
+ undefined4 __allregs FUN_0000_a28c(int *param_1)
+ 
+ {
+-  undefined2 *puVar1;
+-  
+-  puVar1 = (undefined2 *)(*param_1 * 4 + 0x3131);
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*puVar1)))();
+-  return;
++  /* PATCH 577: the AI's FIRE dispatch (asm 0xa28c-0xa29a): `mov gs,[0x70] ; mov bx,[di] ; shl bx,2 ;
++   * call DWORD gs:[bx+0x3131] ; ret` -- the unit's TYPE word selects a far method in the STRSEG table
++   * at 0x3131 {0f69:81ba, 8bb0, 92cb, a5c0} = FUN_1000_784a/8240/895b/9c50, the weapon-spawn methods
++   * (patch 495's 7e29 family), called with DI = the unit.  b0be (the AI turn) reads the AX they leave.
++   * Ghidra host-deref'd DI as an int*, read the table from DGROUP and called it near. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char *ss = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x70) << 4);
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  uint16_t bx = (uint16_t)(*(uint16_t *)(dg + di) << 2);
++  uint32_t vec = *(uint32_t *)(ss + (uint16_t)(bx + 0x3131));
++  return ((unsigned (*)(undefined4,int))fist_icall_far(vec))(0, (int)di);
+ }
+ 
+ 
+@@ -28595,9 +28605,78 @@
+ void __allregs FUN_0000_a29b(int *param_1)
+ 
+ {
+-                    /* WARNING: Could not recover jumptable at 0x0000a2a3. Too many branches */
+-                    /* WARNING: Treating indirect jump as call */
+-  (*(code *)fist_icall_near(0x0u,(uint16_t)(*(undefined2 *)(*param_1 * 2 + 0x3141))))();
++  /* PATCH 577: the AI's WEAPON-SELECT dispatch (asm 0xa29b-0xa2a7): `mov gs,[0x70] ; mov bx,[di] ;
++   * shl bx,1 ; jmp WORD gs:[bx+0x3141]` -- the STRSEG near table {7e87, 89fe, 921a, 9a04} per unit
++   * type, each `bl = [di+0x91] + 2 ; > 6 -> 0 ; call 7963 / 0f69:892c / 94ec / 9fbe` (the per-type
++   * animation-state setters 7963 / FUN_1000_7fbc / 8b7c / 964e).  Ghidra saw no code at those four
++   * (they sit behind the 7e77 data table) and read this table as a host pointer. */
++  unsigned char *dg = g_mem + 0x1c000;
++  unsigned char *ss = g_mem + ((uint32_t)*(uint16_t *)(dg + 0x70) << 4);
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  uint16_t bx = (uint16_t)(*(uint16_t *)(dg + di) << 1);
++  uint16_t off = *(uint16_t *)(ss + (uint16_t)(bx + 0x3141));
++  ((void (*)(int *))fist_icall_near(0x0u, off))(param_1);
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_7e87) @ 0000:7e87 ===== */
++
++void __allregs FUN_0000_7e87(int *param_1)
++
++{
++  /* PATCH 577: a29b's per-type target for type 0 (asm 0x7e87-0x7e9a, behind the 7e77 far table Ghidra
++   * took for code): `movzx bx,BYTE [di+0x91] ; add bl,2 ; cmp bl,6 ; jbe ; xor bl,bl ; call 7963`. */
++  unsigned char *dg = g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  unsigned char bl = (unsigned char)(dg[(uint16_t)(di + 0x91)] + 2);
++  if (bl > 6) bl = 0;
++  FUN_0000_7963(bl, (int)di);
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_89fe) @ 0000:89fe ===== */
++
++void __allregs FUN_0000_89fe(int *param_1)
++
++{
++  /* PATCH 577: a29b's target for type 1 (asm 0x89fe-0x8a12): as 7e87, `lcall 0f69:892c` = FUN_1000_7fbc. */
++  unsigned char *dg = g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  unsigned char bl = (unsigned char)(dg[(uint16_t)(di + 0x91)] + 2);
++  if (bl > 6) bl = 0;
++  FUN_1000_7fbc(bl, (int)di);
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_921a) @ 0000:921a ===== */
++
++void __allregs FUN_0000_921a(int *param_1)
++
++{
++  /* PATCH 577: a29b's target for type 2 (asm 0x921a-0x922e): as 7e87, `lcall 0f69:94ec` = FUN_1000_8b7c. */
++  unsigned char *dg = g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  unsigned char bl = (unsigned char)(dg[(uint16_t)(di + 0x91)] + 2);
++  if (bl > 6) bl = 0;
++  FUN_1000_8b7c(bl, (int)di);
++  return;
++}
++
++
++/* ===== ((uint)(uintptr_t)&FUN_0000_9a04) @ 0000:9a04 ===== */
++
++void __allregs FUN_0000_9a04(int *param_1)
++
++{
++  /* PATCH 577: a29b's target for type 3 (asm 0x9a04-0x9a18): as 7e87, `lcall 0f69:9fbe` = FUN_1000_964e. */
++  unsigned char *dg = g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  unsigned char bl = (unsigned char)(dg[(uint16_t)(di + 0x91)] + 2);
++  if (bl > 6) bl = 0;
++  FUN_1000_964e(bl, (int)di);
+   return;
+ }
+ 
+@@ -62410,7 +62489,7 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_784a) @ 1000:784a ===== */
+ 
+-void __allregs FUN_1000_784a(undefined4 param_1,int param_2)
++unsigned __allregs FUN_1000_784a(undefined4 param_1,int param_2)
+ 
+ {
+   /* PATCH 495: the three remaining WEAPON-SPAWN methods of the 7e29 far table, carrying patch 429's
+@@ -62435,12 +62514,12 @@
+       FUN_0000_9a50(0, (int)proj, (int)di);                     /* 17862 lcall 9a50 (si=new, di=parent) */
+       FUN_0000_c047(0x27, 0, (int)di);                          /* 1786a */
+       g_fist_cf = 0;                                            /* 1786f clc */
+-      return;
++      return 0x27;                                              /* PATCH 577: AX as c047 leaves it (see 8240) */
+     }
+   }
+   FUN_1000_a4a2(0x3031, (int)di);                               /* 17875 */
+   g_fist_cf = 1;                                                /* 17878 stc */
+-  return;
++  return 0x3031;                                                /* PATCH 577: a4a2 preserves AX */
+ }
+ 
+ 
+@@ -63539,27 +63618,34 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_8240) @ 1000:8240 ===== */
+ 
+-void __allregs FUN_1000_8240(undefined4 param_1,int param_2)
++unsigned __allregs FUN_1000_8240(undefined4 param_1,int param_2)
+ 
+ {
+-  int iVar1;
+-  int unaff_CS;
+-  bool bVar2;
+-  
+-  bVar2 = false;
+-  iVar1 = param_2;
+-  if (*(char *)(param_2 + 0xfa) != '\0') {
+-    *(char *)(param_2 + 0xfa) = *(char *)(param_2 + 0xfa) + -1;
+-    FUN_1000_b1df(0x14,param_2);
+-    iVar1 = unaff_CS;
+-    if (!bVar2) {
+-      FUN_0000_9a50((int)param_1,param_2,unaff_CS);
+-      FUN_0000_c047(0x27,param_1,unaff_CS);
+-      return;
++  /* PATCH 577: the type-1 WEAPON-SPAWN method (0f69:8bb0, asm 0x18240-0x1826f), the sibling of patch
++   * 495's 784a with the same four defects (DI host-deref'd, b1df's projectile and CF dropped, unaff_CS
++   * for both objects): `cmpb [di+0xfa],0 ; je fail ; decb ; push di ; ax=0x14 ; call b1df ; mov si,di ;
++   * pop di ; jb fail ; lcall 9a50 ; ax=0x27 ; lcall c047 ; clc ; retf` / fail: `ax=0x3031 ; call a4a2 ;
++   * stc ; retf`.  Returns AX: c047 keeps 0x27 unless DI is the audible unit [0x9fdf] (then e2c2's op-0x64
++   * result -- 0 through the shim's gate); a4a2 preserves 0x3031.  b0be's `cmp al,0x4c ; test al,0x20`
++   * read it. */
++  extern unsigned char g_fist_cf;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  unsigned int di = (unsigned short)param_2;
++  unsigned int proj;
++  (void)param_1;
++  if (dg[(unsigned short)(di + 0xfa)] != 0) {
++    dg[(unsigned short)(di + 0xfa)] -= 1;
++    proj = (unsigned short)FUN_1000_b1df(0x14, (int *)(uintptr_t)di);
++    if (!g_fist_cf) {
++      FUN_0000_9a50(0, (int)proj, (int)di);
++      FUN_0000_c047(0x27, 0, (int)di);
++      g_fist_cf = 0;
++      return 0x27;
+     }
+   }
+-  FUN_1000_a4a2(0x3031,iVar1);
+-  return;
++  FUN_1000_a4a2(0x3031, (int)di);
++  g_fist_cf = 1;
++  return 0x3031;
+ }
+ 
+ 
+@@ -64367,7 +64453,7 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_895b) @ 1000:895b ===== */
+ 
+-void __allregs FUN_1000_895b(undefined4 param_1,int param_2)
++unsigned __allregs FUN_1000_895b(undefined4 param_1,int param_2)
+ 
+ {
+   /* PATCH 474: AH-64 station 8 -- the FLARE/CHAFF dispenser (asm 0x1895b-0x18994; di=param_2, the
+@@ -64381,17 +64467,17 @@
+   (void)param_1;
+   if (*(uint16_t *)(o + 0xb4) == 0) {
+     FUN_1000_a4a2(0x3031,(int)di);                                        /* 1898c */
+-    g_fist_cf = 1; return;
++    g_fist_cf = 1; return 0x3031;                                         /* PATCH 577: AX, see 8240 */
+   }
+   *(uint16_t *)(o + 0xb4) -= 1;
+   o[0xe4] = 3;
+   si = (uint16_t)FUN_1000_b1df(0x14,(int *)(uintptr_t)di);
+-  if ((bool)g_fist_cf) { FUN_1000_a4a2(0x3031,(int)di); g_fist_cf = 1; return; }
++  if ((bool)g_fist_cf) { FUN_1000_a4a2(0x3031,(int)di); g_fist_cf = 1; return 0x3031; }
+   FUN_0000_9a50(0,(int)si,(int)di);
+   o[0xa8] = 8;
+   FUN_0000_c047(0x27,0,(int)di);
+   g_fist_cf = 0;
+-  return;
++  return 0x27;
+ }
+ 
+ 
+@@ -66279,20 +66365,26 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_9c50) @ 1000:9c50 ===== */
+ 
+-void __allregs FUN_1000_9c50(undefined4 param_1,undefined2 param_2)
++unsigned __allregs FUN_1000_9c50(undefined4 param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 unaff_CS;
+-  undefined1 in_CF = 0;
+-  
+-  FUN_1000_b1df(0x14,param_2);
+-  if (!(bool)in_CF) {
+-    FUN_0000_9a50((int)param_1,param_2,unaff_CS);
+-    FUN_0000_c047(0x27,param_1,unaff_CS);
+-    return;
++  /* PATCH 577: the type-3 WEAPON-SPAWN method (0f69:a5c0, asm 0x19c50-0x19c74): no ammo counter --
++   * `push di ; ax=0x14 ; call b1df ; mov si,di ; pop di ; jb fail ; lcall 9a50 ; ax=0x27 ; lcall c047 ;
++   * clc ; retf` / fail as 8240.  Ghidra dropped the projectile, the CF and DI (unaff_CS). */
++  extern unsigned char g_fist_cf;
++  unsigned int di = (unsigned short)param_2;
++  unsigned int proj;
++  (void)param_1;
++  proj = (unsigned short)FUN_1000_b1df(0x14, (int *)(uintptr_t)di);
++  if (!g_fist_cf) {
++    FUN_0000_9a50(0, (int)proj, (int)di);
++    FUN_0000_c047(0x27, 0, (int)di);
++    g_fist_cf = 0;
++    return 0x27;
+   }
+-  FUN_1000_a4a2(0x3031,unaff_CS);
+-  return;
++  FUN_1000_a4a2(0x3031, (int)di);
++  g_fist_cf = 1;
++  return 0x3031;
+ }
+ 
+ 
+@@ -68368,109 +68460,89 @@
+ void __allregs FUN_1000_aea6(int *param_1)
+ 
+ {
+-  int *piVar1;
+-  char cVar2;
+-  int iVar3;
+-  long lVar4;
+-  int iVar5;
+-  undefined2 uVar6;
+-  int iVar7;
+-  long lVar8;
+-  uint uVar9;
+-  int *piVar10;
+-  long lVar11;
+-  int unaff_CS;
+-  undefined2 uStack_12;
+-  undefined2 uStack_10;
+-  undefined2 uStack_e;
+-  undefined2 uStack_c;
+-  undefined2 uStack_a;
+-  
+-  iVar5 = 0;
+-  if ((*(byte *)(param_1 + 0xb) & 8) != 0) {
+-    iVar5 = 2;
+-  }
+-  if (0x1df < (uint)(DAT_2000_2cde - *(int *)((int)(undefined2 *)&DAT_2000_5f17 + iVar5))) {
+-    FUN_0000_bf3c(4,iVar5,param_1);
+-    if (iVar5 != 0) {
+-      uVar9 = unaff_CS << 2;
+-LAB_1000_aed6:
+-      iVar3 = *(int *)((int)(undefined2 *)&DAT_2000_5ccf + uVar9);
+-      if (*(int *)(iVar3 + 0x1f) == 0) goto code_r0x0001aee0;
+-      piVar1 = (int *)(iVar3 + 0x1f);
+-      *piVar1 = *piVar1 + -1;
+-      *(int *)((int)(undefined2 *)&DAT_2000_5f17 + (uVar9 >> 2)) = DAT_2000_2cde;
+-      if (*(int *)((int)param_1 + 0x97) == 0) {
+-        DAT_2000_5684 = *(long *)(param_1 + 2);
+-        DAT_2000_5688 = *(long *)(param_1 + 4);
+-        DAT_2000_568c = (ulong)*(uint *)(*param_1 * 2 + -0x1a40) + *(long *)(param_1 + 6);
+-        iVar5 = param_1[0x1c];
+-        iVar7 = 0x40;
+-        param_1 = (int *)0x0;
+-        iVar3 = FUN_0000_a192(iVar5,0x40);
+-        lVar4 = (long)iVar3 << 6;
+-        lVar8 = (long)iVar7 << 6;
+-        lVar11 = (long)iVar5 << 6;
+-        uVar6 = 0x28;
+-        while( true ) {
+-          DAT_2000_5684 = DAT_2000_5684 + lVar4;
+-          DAT_2000_5688 = DAT_2000_5688 + lVar8;
+-          DAT_2000_568c = DAT_2000_568c + lVar11;
+-          uStack_a = (undefined2)lVar4;
+-          uStack_e = (undefined2)lVar8;
+-          uStack_c = (undefined2)((ulong)lVar8 >> 0x10);
+-          uStack_12 = (undefined2)lVar11;
+-          uStack_10 = (undefined2)((ulong)lVar11 >> 0x10);
+-          cVar2 = FUN_0000_e1d1(lVar11);
+-          lVar11 = CONCAT22(uStack_12,uVar6);
+-          lVar8 = CONCAT22(uStack_e,uStack_10);
+-          lVar4 = CONCAT22(uStack_a,uStack_c);
+-          if ((char)((*(undefined1 *)(g_mem+0x2568d)) - cVar2) < '\0') break;
+-          uVar6 = 0xffff;
+-        }
+-      }
+-      FUN_1000_a4a2(0x2f40,param_1);
+-      piVar10 = (int *)&DAT_2000_5ce7;
+-      iVar5 = DAT_2000_5ce3;
+-      if ((*(byte *)(param_1 + 0xb) & 8) != 0) {
+-        piVar10 = (int *)&DAT_2000_5dc7;
+-        iVar5 = DAT_2000_5ce5;
+-      }
+-      if (iVar5 == 0) {
+-        iVar5 = 0x10;
+-        do {
+-          if (*piVar10 == 0) {
+-            *piVar10 = 2;
+-            piVar10[1] = DAT_2000_2cde;
+-            iVar5 = *(int *)((int)param_1 + 0x97);
+-            *(undefined4 *)(piVar10 + 3) = *(undefined4 *)(iVar5 + 4);
+-            *(undefined4 *)(piVar10 + 5) = *(undefined4 *)(iVar5 + 8);
+-            if (iVar5 == 0) {
+-              *(long *)(piVar10 + 3) = DAT_2000_5684;
+-              *(long *)(piVar10 + 5) = DAT_2000_5688;
+-            }
+-            FUN_1000_66cd(0x3193);
+-            FUN_0000_bee2(0x29,0xb4,param_1);
+-            return;
+-          }
+-          piVar10 = piVar10 + 7;
+-          iVar5 = iVar5 + -1;
+-        } while (iVar5 != 0);
+-        return;
+-      }
+-      goto LAB_1000_aee5;
+-    }
+-    FUN_1000_a4a2(0x2f0f,param_1);
+-LAB_1000_aee5:
+-    FUN_0000_bee2(0x2a,0xb4,param_1);
+-    FUN_1000_a4a2(0x2ef7,param_1);
++  /* PATCH 577: the AI's FIRE-SUPPORT request (0f69:b816, asm 0x1aea6-0x1b003), b0be's `test al,0x20`
++   * branch; DI = the requesting unit.  Rebuilt 1:1 in the DGROUP model:
++   *     bx=0 ; ax=[0x9ccb] ; [di+0x16]&8 -> bx=2 ; ax=[0x9ccd]          the side's battery count
++   *     [0x6cde]-[0x9f17+bx] < 0x1e0 -> retf                             cooldown
++   *     bf3c(al=4, bx, di) ; cx = ax ; jcxz -> cue 0x2f0f, message 0x2a   no batteries
++   *     bx<<=2 ; cx batteries: si=[0x9ccf+bx] ; [si+0x1f] != 0 -> found ; bx+=2   (rounds left)
++   *     none -> bee2(0x2a, 0xb4, di) ; a4a2(0x2ef7, di) ; retf
++   *     found: bx>>=2 ; dec [si+0x1f] ; [0x9f17+bx] = [0x6cde]
++   *     no target [di+0x97]: point 0x9684 = pos + type height, stepped 0x28 times by the unit's
++   *       heading/speed vector (a192 -> 0459: ax=[di+0x10], cx=[di+0x38], dx=0x40; outputs <<6)
++   *       until e1d1's terrain height rises above the point's Z byte
++   *     a4a2(0x2f40, di) ; ax=[0x9ce3] ; bx=0x9ce7 (enemy: ax=[0x9ce5], bx=0x9dc7)
++   *     ax == 0 -> the no-battery tail ; 16 fire-mission slots of 0xe: first [bx]==0, none -> retf
++   *     [bx]=2 ; [bx+2]=[0x6cde] ; [bx+6..]=target pos ([si+4],[si+8]) or the stepped point
++   *     66cd(0x3193) ; bee2(0x29, 0xb4, di) ; retf
++   * Ghidra host-deref'd DI and the tables and lost 0459's three outputs and e1d1's AX. */
++  extern unsigned short g_fist_rot_h, g_fist_rot_dx, g_fist_rot_cx;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = (uint16_t)(uintptr_t)param_1;
++  uint16_t bx = 0, ax = *(uint16_t *)(dg + 0x9ccb), cx, si = 0;
++  if (dg[(uint16_t)(di + 0x16)] & 8) { bx = 2; ax = *(uint16_t *)(dg + 0x9ccd); }
++  if ((uint16_t)(*(uint16_t *)(dg + 0x6cde) - *(uint16_t *)(dg + (uint16_t)(0x9f17 + bx))) < 0x1e0) return;
++  FUN_0000_bf3c(4, bx, (int)di);
++  cx = ax;
++  if (cx == 0) {                                                      /* 1aef7 */
++    FUN_1000_a4a2(0x2f0f, (int)di);
++    goto none;
++  }
++  bx = (uint16_t)(bx << 2);
++  for (;;) {                                                          /* 1aed6 */
++    si = *(uint16_t *)(dg + (uint16_t)(bx + 0x9ccf));
++    if (*(uint16_t *)(dg + (uint16_t)(si + 0x1f)) != 0) break;
++    bx = (uint16_t)(bx + 2);
++    if (--cx == 0) goto none;
++  }
++  bx = (uint16_t)(bx >> 2);                                           /* 1af00 */
++  *(uint16_t *)(dg + (uint16_t)(si + 0x1f)) -= 1;
++  *(uint16_t *)(dg + (uint16_t)(0x9f17 + bx)) = *(uint16_t *)(dg + 0x6cde);
++  if (*(uint16_t *)(dg + (uint16_t)(di + 0x97)) == 0) {              /* 1af0d: no target -> a point ahead */
++    uint16_t type = *(uint16_t *)(dg + di);
++    int32_t vx, vy, vz; int k;
++    *(uint32_t *)(dg + 0x9684) = *(uint32_t *)(dg + (uint16_t)(di + 4));
++    *(uint32_t *)(dg + 0x9688) = *(uint32_t *)(dg + (uint16_t)(di + 8));
++    *(uint32_t *)(dg + 0x968c) = (uint32_t)*(uint16_t *)(dg + (uint16_t)(type * 2 + 0xe5c0))
++                               + *(uint32_t *)(dg + (uint16_t)(di + 0xc));
++    g_fist_rot_h = *(uint16_t *)(dg + (uint16_t)(di + 0x38));         /* cx = [di+0x38] */
++    ax = (uint16_t)FUN_0000_0459(*(uint16_t *)(dg + (uint16_t)(di + 0x10)), 0x40);   /* a192 -> 0459 */
++    vx = (int32_t)(int16_t)ax << 6;
++    vy = (int32_t)(int16_t)g_fist_rot_dx << 6;
++    vz = (int32_t)(int16_t)g_fist_rot_cx << 6;
++    for (k = 0x28; k != 0; k--) {                                     /* 1af60 */
++      unsigned char al;
++      *(int32_t *)(dg + 0x9684) += vx;
++      *(int32_t *)(dg + 0x9688) += vy;
++      *(int32_t *)(dg + 0x968c) += vz;
++      al = (unsigned char)FUN_0000_e1d1(0x9684);                      /* 1af79: di = 0x9684 */
++      if ((signed char)(dg[0x968d] - al) < 0) break;                  /* 1af7e-1af8b */
++    }
++  }
++  FUN_1000_a4a2(0x2f40, (int)di);                                     /* 1af90 */
++  ax = *(uint16_t *)(dg + 0x9ce3); bx = 0x9ce7;
++  if (dg[(uint16_t)(di + 0x16)] & 8) { bx = 0x9dc7; ax = *(uint16_t *)(dg + 0x9ce5); }
++  if (ax == 0) goto none;                                             /* 1afac */
++  for (cx = 0x10; *(uint16_t *)(dg + bx) != 0; ) {                    /* 1afb3 */
++    bx = (uint16_t)(bx + 0xe);
++    if (--cx == 0) return;                                            /* 1afbd -> 1aef6 retf */
++  }
++  *(uint16_t *)(dg + bx) = 2;                                         /* 1afc0 */
++  *(uint16_t *)(dg + (uint16_t)(bx + 2)) = *(uint16_t *)(dg + 0x6cde);
++  si = *(uint16_t *)(dg + (uint16_t)(di + 0x97));
++  *(uint32_t *)(dg + (uint16_t)(bx + 6)) = *(uint32_t *)(dg + (uint16_t)(si + 4));
++  *(uint32_t *)(dg + (uint16_t)(bx + 0xa)) = *(uint32_t *)(dg + (uint16_t)(si + 8));
++  if (si == 0) {
++    *(uint32_t *)(dg + (uint16_t)(bx + 6)) = *(uint32_t *)(dg + 0x9684);
++    *(uint32_t *)(dg + (uint16_t)(bx + 0xa)) = *(uint32_t *)(dg + 0x9688);
+   }
++  FUN_1000_66cd((char *)(uintptr_t)0x3193);                           /* 1aff2: si = STRSEG:0x3193 */
++  FUN_0000_bee2(0x29, 0xb4, (int)di);
++  return;
++none:                                                                 /* 1aee5 */
++  FUN_0000_bee2(0x2a, 0xb4, (int)di);
++  FUN_1000_a4a2(0x2ef7, (int)di);
+   return;
+-code_r0x0001aee0:
+-  uVar9 = uVar9 + 2;
+-  iVar5 = iVar5 + -1;
+-  if (iVar5 == 0) goto LAB_1000_aee5;
+-  goto LAB_1000_aed6;
+ }
+ 
+ 
+@@ -69118,51 +69190,55 @@
+ void __allregs FUN_1000_b4fc(int param_1)
+ 
+ {
+-  uint uVar1;
+-  undefined4 *puVar2;
+-  undefined4 uVar3;
+-  int iVar4;
+-  undefined2 unaff_ES;
+-  
+-  uVar1 = DAT_2000_a6ef;
+-  if (((((DAT_2000_2d2c & 2) != 0) && ((DAT_2000_2dab & 2) != 0)) && (DAT_2000_a6ef < 2)) &&
+-     (DAT_1000_d549 == '\x1e')) {
+-    *(undefined2 *)(param_1 + 2) = 0;
+-    *(undefined2 *)(param_1 + 4) = 0x10;
+-    *(undefined2 *)(param_1 + 6) = 0;
+-    puVar2 = (undefined4 *)(param_1 + 10);
+-    *(undefined2 *)(param_1 + 8) = 0;
+-    uVar1 = DAT_2000_a6ef + 1;
+-    if (DAT_2000_a6ef == 0) {
+-      DAT_2000_a6ef = uVar1;
+-      *puVar2 = DAT_2000_543c;
+-      uVar3 = DAT_2000_5440;
+-      *(undefined4 *)(param_1 + 0xe) = DAT_2000_5440;
+-      *(undefined4 *)(param_1 + 0x12) = uVar3;
+-      *(undefined2 *)(param_1 + 0x32) = 0x1378;
+-      return;
+-    }
+-    if (DAT_2000_a6ef == 1) {
+-      DAT_2000_a6ef = uVar1;
+-      *puVar2 = DAT_2000_5444;
+-      uVar3 = DAT_2000_5448;
+-      *(undefined4 *)(param_1 + 0xe) = DAT_2000_5448;
+-      *(undefined4 *)(param_1 + 0x12) = uVar3;
+-      *(undefined2 *)(param_1 + 0x32) = 0x1380;
+-      return;
+-    }
+-    if (1 < DAT_2000_a6ef) {
+-      iVar4 = DAT_2000_a6ef - 2;
+-      DAT_2000_a6ef = uVar1;
+-      *puVar2 = ((undefined4 *)&DAT_2000_a440)[iVar4];
+-      uVar3 = ((undefined4 *)&DAT_2000_a448)[iVar4];
+-      *(undefined4 *)(param_1 + 0xe) = uVar3;
+-      *(undefined4 *)(param_1 + 0x12) = uVar3;
+-      *(undefined2 *)(param_1 + 0x32) = *(undefined2 *)((DAT_2000_a6ef - 3) * 2 + -0x1bb0);
+-      return;
+-    }
++  /* PATCH 577: c33c phase-handler idx1 (0f69:be6c, asm 0x1b4fc-0x1b59a): the OBJECTIVE-MARKER records
++   * of the cockpit view.  Gated on word[0x6d2c]&2, byte[0x6dab]&2, [0xe6ef] < 2 and the view byte
++   * [0x1549] == 0x1e; else `stc ; retf` (nothing this call).  Emits one record at the render cursor
++   * ES:DI (the c33c/2471 node): `add di,2 ; stosw 0 ; stosw 0x10 ; stosw 0 ; stosw 0` then, by the
++   * running index [0xe6ef] (post-incremented): 0 -> dwords [0x943c], [0x9440], [0x9440] and sprite
++   * 0x1378; 1 -> [0x9444], [0x9448], [0x9448] and 0x1380; >= 2 -> the tables at 0xe440/0xe448 (index
++   * [0xe6ef]-3 after the increment) and word[0xe450+2*index]; `add di,0x1c` before the sprite word;
++   * `clc ; retf` = found, DI advanced by 0x34.  Ghidra wrote the record through a stack-residue
++   * pointer (the shim's globals took the hits) and dropped both the CF and the cursor -- SAUDI3 never
++   * left its first cockpit frame. */
++  extern unsigned char g_fist_cf;
++  extern unsigned short g_fist_render_di;
++  unsigned char *dg = (unsigned char *)g_mem + 0x1c000;
++  uint16_t di = g_fist_render_di, n;
++  (void)param_1;
++  if (!(*(uint16_t *)(dg + 0x6d2c) & 2) || !(dg[0x6dab] & 2) ||
++      *(uint16_t *)(dg + 0xe6ef) >= 2 || dg[0x1549] != 0x1e) {
++    g_fist_cf = 1; return;                                          /* 1b53e stc */
++  }
++  di = (uint16_t)(di + 2);
++  *(uint16_t *)(dg + di) = 0;        di = (uint16_t)(di + 2);
++  *(uint16_t *)(dg + di) = 0x10;     di = (uint16_t)(di + 2);
++  *(uint16_t *)(dg + di) = 0;        di = (uint16_t)(di + 2);
++  *(uint16_t *)(dg + di) = 0;        di = (uint16_t)(di + 2);
++  n = *(uint16_t *)(dg + 0xe6ef);
++  *(uint16_t *)(dg + 0xe6ef) = (uint16_t)(n + 1);
++  if (n == 0) {                                                       /* 1b56d */
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + 0x943c); di = (uint16_t)(di + 4);
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + 0x9440); di = (uint16_t)(di + 4);
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + 0x9440); di = (uint16_t)(di + 4);
++    di = (uint16_t)(di + 0x1c);
++    *(uint16_t *)(dg + di) = 0x1378;   di = (uint16_t)(di + 2);
++  } else if (n == 1) {                                                /* 1b584 */
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + 0x9444); di = (uint16_t)(di + 4);
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + 0x9448); di = (uint16_t)(di + 4);
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + 0x9448); di = (uint16_t)(di + 4);
++    di = (uint16_t)(di + 0x1c);
++    *(uint16_t *)(dg + di) = 0x1380;   di = (uint16_t)(di + 2);
++  } else {                                                            /* 1b540 (unreachable: n < 2 above) */
++    uint16_t bx = (uint16_t)((*(uint16_t *)(dg + 0xe6ef) - 3) << 2);
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + (uint16_t)(bx + 0xe440)); di = (uint16_t)(di + 4);
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + (uint16_t)(bx + 0xe448)); di = (uint16_t)(di + 4);
++    *(uint32_t *)(dg + di) = *(uint32_t *)(dg + (uint16_t)(bx + 0xe448)); di = (uint16_t)(di + 4);
++    di = (uint16_t)(di + 0x1c);
++    bx = (uint16_t)((*(uint16_t *)(dg + 0xe6ef) - 3) << 1);
++    *(uint16_t *)(dg + di) = *(uint16_t *)(dg + (uint16_t)(bx + 0xe450)); di = (uint16_t)(di + 2);
+   }
+-  DAT_2000_a6ef = uVar1;
++  g_fist_render_di = di;
++  g_fist_cf = 0;                                                      /* clc ; retf */
+   return;
+ }
+ 
+@@ -76740,6 +76816,10 @@
+   {0xa265u,(void*)&FUN_0000_a265},
+   {0xa26du,(void*)&FUN_0000_a26d},
+   {0xa286u,(void*)&FUN_0000_a286},
++  {0x7e87u,(void*)&FUN_0000_7e87},
++  {0x89feu,(void*)&FUN_0000_89fe},
++  {0x921au,(void*)&FUN_0000_921a},
++  {0x9a04u,(void*)&FUN_0000_9a04},
+   {0xa28cu,(void*)&FUN_0000_a28c},
+   {0xa29bu,(void*)&FUN_0000_a29b},
+   {0xa2a8u,(void*)&FUN_0000_a2a8},
