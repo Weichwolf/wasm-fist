@@ -2900,10 +2900,16 @@ viewport-geometry init so the op-0x4c loop terminates; (2) implement FUN_1000_0c
 per-vec 4308 else-branch threading; (4) re-verify mission-audio WAV native==wasm.  Menu/intro audio stays
 CLOSED (patch 412).  Nothing to revert; tree clean.
 
-The sim depends on the sound service (board:0017, patch 605's neighbour): bf3c's e2c2 posts op
-0x64 and the extender's handler 786a returns with 22ab's registers -- EBX = the mixer channel
-(0..2) it assigned, ECX = the sample length, ESI/EAX = the sample -- and b39c's damage chain then
-reads its immobilize threshold from DGROUP:[channel+4] for the player's vehicle.  The port does not
-serve op 0x64 in missions (the gate returns 0 without running 786a), so the player's hit reactions
-cannot follow the original's until the mixer's channel table (extender 0x15d7..0x15ff, decompiled
-as fist_ext.c 22ab/2377) is driven by the service and its exit registers published.
+The sim depends on the sound service (board:0017): bf3c's e2c2 posts op 0x64, the extender's 786a
+assigns a mixer channel via 22ab, and b39c's damage chain reads its immobilize threshold from
+DGROUP:[channel+4] with BX = that channel (the port keeps BX = the reaction record and never runs
+the service).  The channel state that feeds it is NOT frame-driven: the SB mixer (extender 0x2630,
+decompiled reference) advances each channel's play cursor 0x15ef by its pitch 0x15cb per MIX CALL
+and frees the channel when `0x15ef>>16 >= 0x15e3` (the sample length) -- i.e. a channel is busy for
+(length/pitch) SAMPLES at the SB output rate, not for a fixed number of game ticks.  So reproducing
+the original's channel occupancy at a given tick means advancing the mixer a fixed
+samples-per-tick (the oracle's sample_rate / frame_rate) so it is tick-deterministic rather than
+wall-clock-paced -- the one place the original's own sim is not wall-clock-independent, and the
+resolution that keeps the port both deterministic and congruent.  Until the mixer is driven that
+way and op 0x64 runs 786a/22ab with BX published to b39c, the player's hit reaction is the last
+open sim divergence (board:0017); the AI-vs-AI verdict is unaffected (DEFEAT on both sides).
