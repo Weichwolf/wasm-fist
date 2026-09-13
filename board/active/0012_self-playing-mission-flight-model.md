@@ -7256,3 +7256,10 @@ Still to close this axis fully: (a) extend the native==wasm SIMHASH to RESOLUTIO
 few long missions, in case an unaff_ES read bites past t=2500; (b) the 30 unsampled missions; (c) re-run
 the seeded oracle replay (board:0017) to confirm 610's CS values match the original; (d) re-pass the 10x
 wasm gate on the 610 tree.
+
+## patch 610: full native verify matrix GREEN, no regression (2026-09-13)
+
+`tools/verify.sh native` on the 610 tree: 178 pass / 0 fail -- every menu/screen/dialog/setting, the
+editor round-trip, the terrain and cockpit flows, audio, all still bit-correct.  So resolving unaff_CS to
+the cluster segment fixes the native==wasm in-mission divergence AND regresses nothing in the matrix.
+(wasm-side matrix + the 10x gate re-pass still to run.)
