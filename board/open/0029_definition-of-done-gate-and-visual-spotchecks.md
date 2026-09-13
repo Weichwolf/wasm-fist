@@ -49,3 +49,25 @@ surfaces; today's 10/10 is the endurance proof for the surfaces already in the m
 
 DONE when: proof (1) reaches 10/10 on a tree where every surface named in the goal is implemented,
 and proof (2) covers every surface class (static: done; dynamic windshield + cockpits: open).
+
+## patch 610 tree: FULL matrix 178/0 both targets; native==wasm byte-identical (2026-09-13)
+
+The 610 tree (the native==wasm in-mission fix) passes the complete 178-flow matrix on BOTH targets:
+  - native: 178 pass / 0 fail (one `verify.sh native` run).
+  - wasm:   178 pass / 0 fail (run in foreground chunks -- terrain 5, cockpit/spawn/mission 57,
+    selplayer/battles/menu 14, settings/campaign 17, fsg/audio/editor/... 85, cancel 1 = 178, every
+    chunk 0 fail).
+  - native==wasm: byte-identical per-tick to RESOLUTION on AZER1 (6978 ticks) and to t=2500 on 16 more
+    missions across all theatres (board:0012).
+So proof(1) holds for ONE full pass on the 610 tree, both targets, plus the native==wasm invariant that
+the 609 tree lacked in-mission.
+
+ENVIRONMENT LIMITATION for the 10x ENDURANCE re-run: this sandbox OOM-kills long-running BACKGROUND tasks
+under memory pressure regardless of their actual footprint -- the wasm gate died at flow 8 (a light
+settings flow, node RSS 29 MB, 13 GB free), and the 47-mission selfplay and the SIMHASH sweep were
+killed the same way; foreground Bash calls (auto-backgrounded at 600 s) survive.  So `tools/wasm_gate.sh`
+(a ~2 h background loop) cannot complete here.  The 10x endurance was achieved on the 609 tree
+(wasm_gate_609.log); 610 changes only sim VALUES (native==wasm preserved, full matrix 178/0 both
+targets), so it preserves the endurance -- but a literal 10x re-run needs either a chunked foreground
+harness or an environment without the background-kill.  Recommend a `wasm_gate.sh` mode that runs each
+pass as a sequence of foreground-sized chunks.
