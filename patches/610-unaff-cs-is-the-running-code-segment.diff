@@ -1,0 +1,489 @@
+PATCH 610: unaff_CS is the running code segment (push-cs), = this cluster's CS -- board:0010/0012.
+
+The decompile reads `unaff_CS` (CS register, unaffected in the function) uninitialised at 52 sites and
+passes it on -- overwhelmingly the NovaLogic `push cs ; call/lcall` idiom (CLAUDE.md: "push cs SAVE the
+running code segment").  CS inside a Ghidra FUN_SEG_off function IS that cluster's segment (the name
+encodes it): FUN_1000_* -> 0x1000, FUN_0000_*/app_entry/caseD_* -> 0x0000, FUN_0f69_* -> 0x0f69.  Ghidra
+left it an uninitialised C local because CS context is not set (board:0010, the pipeline gap).
+
+Reading an uninitialised local is UNDEFINED BEHAVIOUR, and it is the sole cause of the in-mission
+native != wasm divergence (board:0012): gcc -O0 (native) reads deterministic stack garbage, gcc -O2
+(the wasm build's level, and clang/emcc) treats it as undefined and evaluates it differently, so the two
+targets diverge mid-mission (first at INDIA1 t=295 -> the framebuffer differs by 70 KB at AZER1 t=2000).
+Proven by isolation: -O0 vs -O2 diverge at the same tick (same platform, so it is UB not a platform gap);
+zeroing ONLY the unaff_CS/unaff_ES declarations converges both; and the single unaff_CS in FUN_1000_a7e0
+(`push cs ; call 5591`, 1000:a7e0) is the exact site for INDIA1 -- with `= 0x1000` there, and with the
+whole class resolved to the cluster CS here, the per-tick DGROUP SIMHASH is byte-identical native==wasm
+to resolution across AZER1/CYPRUS1/INDIA1/SAUDI1/SYRIA1.  The value is the asm-correct one (the segment
+the original CPU pushes), not merely deterministic, so it is congruent with the original, not a guard or
+approximation.
+--- a/fist.c
++++ b/fist.c
+@@ -7394,7 +7394,7 @@
+ 
+ {
+   byte bVar1;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   bool bVar2;
+   
+   DAT_1000_c3e0 = 0x1374;
+@@ -9672,7 +9672,7 @@
+ 
+ {
+   undefined2 extraout_DX;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   if (0x32 < DAT_1000_c242) {
+     DAT_0000_25fb = 0x66;
+@@ -14064,7 +14064,7 @@
+   undefined2 uVar3;
+   undefined2 in_register_0000000e;
+   undefined4 uVar4;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   bool bVar5;
+   
+   uVar4 = CONCAT22(in_register_0000000e,param_2);
+@@ -14566,7 +14566,7 @@
+ {
+   byte bVar1;
+   byte bVar2;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))();
+   bVar1 = DAT_2000_3a44 | 0x20;
+@@ -14605,7 +14605,7 @@
+ {
+   byte bVar1;
+   byte bVar2;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar3;
+   
+   DAT_2000_2ce6 = 2;
+@@ -14729,7 +14729,7 @@
+   int iVar2;
+   uint uVar3;
+   int *piVar4;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   unsigned short ctx_prev;
+   
+   if (((DAT_2000_3ae0 != (int *)0x0) && (DAT_2000_3ae7 != 0)) &&
+@@ -17674,7 +17674,7 @@
+ {
+   byte bVar1;
+   byte bVar2;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   bVar1 = DAT_2000_480a | 0x20;
+   if ((char)bVar1 < '\0') {
+@@ -18167,7 +18167,7 @@
+   undefined2 uVar7;
+   int *piVar8;
+   undefined2 uVar9;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined1 uVar10;
+   undefined1 uVar11;
+   undefined2 uVar12;
+@@ -18488,7 +18488,7 @@
+   undefined2 uVar6;
+   undefined2 uVar7;
+   undefined2 uVar8;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined1 uVar9;
+   undefined1 uVar10;
+   undefined2 uVar11;
+@@ -19832,7 +19832,7 @@
+   undefined2 uVar10;
+   undefined2 **ppuVar11;
+   undefined2 uVar12;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined1 uVar13;
+   undefined1 uVar14;
+   undefined2 *puStack_2;
+@@ -19901,7 +19901,7 @@
+   undefined2 uVar6;
+   undefined2 uVar7;
+   undefined2 uVar8;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar9;
+   undefined1 in_CF = 0;
+   undefined1 uVar10;
+@@ -20329,7 +20329,7 @@
+ 
+ {
+   int iVar1;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   iVar1 = DAT_2000_2d34;
+   *(byte *)(DAT_2000_2d34 + 0x17) = *(byte *)(DAT_2000_2d34 + 0x17) & 0xfd;
+@@ -28112,7 +28112,7 @@
+ 
+ {
+   undefined2 *puVar1;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar2;
+   
+   in(0x9f);
+@@ -31851,7 +31851,7 @@
+ 
+ {
+   uint uVar1;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   bool bVar2;
+   
+   /* PATCH 253: object-type-E per-frame UPDATE method (asm 0xb51f-0xb582; b355 family).  c0e5 dispatches
+@@ -35774,7 +35774,7 @@
+   int iVar4;
+   undefined1 *puVar5;
+   undefined1 *puVar6;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   bool bVar7;
+   
+   DAT_2000_a82e = 0xffff;
+@@ -35834,7 +35834,7 @@
+   int iVar4;
+   undefined1 *puVar5;
+   undefined1 *puVar6;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   bool bVar7;
+   
+   DAT_2000_a82e = 0;
+@@ -35930,7 +35930,7 @@
+   undefined2 uVar5;
+   undefined2 uVar6;
+   undefined2 uVar7;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar8;
+   undefined1 in_CF = 0;
+   undefined1 uVar9;
+@@ -36765,7 +36765,7 @@
+   undefined2 uVar5;
+   undefined2 uVar6;
+   undefined2 uVar7;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined1 in_CF = 0;
+   undefined1 uVar8;
+   undefined2 uVar9;
+@@ -39261,7 +39261,7 @@
+ {
+   byte bVar1;
+   byte bVar2;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   if (DAT_2000_b6c2 == 0) {
+     (*(code *)fist_icall_far((uint32_t)(DAT_1000_c594)))();
+@@ -39978,7 +39978,7 @@
+ 
+ {
+   undefined2 uVar1;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 in_FS;
+   undefined1 in_CF = 0;
+   bool in_PF;
+@@ -40620,7 +40620,7 @@
+   undefined4 uVar3;
+   char *pcVar4;
+   undefined2 uVar5;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined1 uVar6;
+   undefined1 uVar7;
+   undefined2 uVar8;
+@@ -42987,7 +42987,7 @@
+   undefined1 extraout_AH;
+   uint uVar3;
+   undefined2 uVar4;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   bool bVar5;
+   
+   /* PATCH 009: restore the segment bases Ghidra dropped in fe47 (the FISTDATA data-path detector).
+@@ -43046,7 +43046,7 @@
+   char cVar2;
+   uint uVar3;
+   undefined2 uVar4;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined1 in_CF = 0;
+   bool bVar5;
+   
+@@ -43093,7 +43093,7 @@
+   char cVar1;
+   undefined1 extraout_AH;
+   uint uVar2;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x0;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar3;
+   
+   cVar1 = FUN_1000_23ba();
+@@ -43592,7 +43592,7 @@
+ 
+ {
+   undefined2 unaff_ES;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   if (((DAT_1000_d6ce == 0x5dc4) && (DAT_1000_c247 == 'M')) && (DAT_1000_c29e != 0)) {
+     param_2 = 0xc18;
+@@ -43681,7 +43681,7 @@
+   int iVar3;
+   byte *pbVar4;
+   undefined1 *puVar6;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   bool bVar7;
+   undefined2 uVar8;
+   byte *pbVar5;
+@@ -43848,7 +43848,7 @@
+   uint uVar7;
+   undefined1 *puVar8;
+   undefined2 uVar9;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar10;
+   
+   iVar2 = 0x201;
+@@ -43904,7 +43904,7 @@
+   int iVar4;
+   undefined1 *puVar5;
+   undefined1 *puVar6;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   uVar3 = DAT_1000_c29e;
+   puVar6 = (undefined1 *)0x99c;
+@@ -43932,7 +43932,7 @@
+   int iVar3;
+   undefined1 *puVar4;
+   undefined1 *puVar5;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   uVar2 = DAT_1000_c29e;
+   puVar5 = (undefined1 *)0x0;
+@@ -43959,7 +43959,7 @@
+   int iVar3;
+   undefined1 *puVar4;
+   undefined1 *puVar5;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   uVar2 = DAT_1000_c29e;
+   puVar5 = (undefined1 *)0x0;
+@@ -44133,7 +44133,7 @@
+   undefined2 uVar4;
+   undefined1 *puVar5;
+   undefined2 unaff_ES;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined1 uVar6;
+   
+   puVar5 = (undefined1 *)0x19bb;
+@@ -47636,7 +47636,7 @@
+ 
+ {
+   undefined2 unaff_ES;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uStack001a;
+   undefined2 uStack001c;
+   
+@@ -49889,7 +49889,7 @@
+   byte bVar1;
+   byte bVar2;
+   undefined2 unaff_ES;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uStack0002;
+   
+   FUN_1000_2df6(param_1,param_2,param_3,param_5,param_6,param_7);
+@@ -50664,7 +50664,7 @@
+ void __allregs FUN_1000_3318(void)
+ 
+ {
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)0x32a)))();
+   return;
+@@ -51099,7 +51099,7 @@
+   undefined2 uVar3;
+   undefined2 *puVar4;
+   uint uVar5;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   /* PATCH 073: frame/event SCHEDULER pump -- reloc-section 0x1d8 method vector DGROUP:0x40a = seeded
+    * FUN_1000_35a7, the poll FUN_1000_38cc spins on (asm 0x135a7..0x1363f).  Ghidra typed the DGROUP
+@@ -51799,7 +51799,7 @@
+ void __allregs FUN_1000_3b97(undefined2 param_1)
+ 
+ {
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   LOCK();
+   DAT_1000_c300 = 0;
+@@ -52527,7 +52527,7 @@
+   undefined1 *puVar5;
+   int iVar6;
+   int iVar7;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   bool bVar8;
+   
+   bVar8 = false;
+@@ -54362,7 +54362,7 @@
+ 
+ {
+   undefined2 unaff_ES;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   if (param_1 == -1) {
+     param_1 = 0x596f;
+@@ -54570,7 +54570,7 @@
+ void __allregs FUN_1000_511a(void)
+ 
+ {
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   if ((DAT_1000_5955 != 0xfe) && (DAT_1000_5955 != 0xff)) {
+     (*(code *)fist_icall_far(*(uint32_t *)(g_mem+0x1c05cu)))(0x1000,0x1c00);
+@@ -54677,7 +54677,7 @@
+ 
+ {
+   undefined2 uVar1;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   uVar1 = 0x5b36;
+   FUN_0000_017b(0x5b36);
+@@ -55231,7 +55231,7 @@
+ {
+   code *pcVar1;
+   undefined2 *puVar2;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uStack_5;
+   
+   *(byte *)(param_2 + param_3) = *(byte *)(param_2 + param_3) ^ (byte)((uint)param_1 >> 8);
+@@ -55491,7 +55491,7 @@
+ 
+ {
+   undefined2 uVar1;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   uVar1 = DAT_1000_c686;
+   DAT_1000_c03a = 0x5cf7;
+@@ -55561,7 +55561,7 @@
+   undefined2 *puVar23;
+   byte *pbVar24;
+   undefined2 unaff_ES;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   int *piVar25;
+   bool bVar26;
+   bool bVar27;
+@@ -61423,7 +61423,7 @@
+   undefined1 *puVar2;
+   undefined2 uVar3;
+   uint *puVar4;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar5;
+   undefined2 uVar6;
+   undefined2 uVar7;
+@@ -62899,7 +62899,7 @@
+ 
+ {
+   undefined2 in_register_0000000e;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   char in_CF;
+   
+   *(char *)(param_2 + param_3) = *(char *)(param_2 + param_3) + param_1 + -0x66 + in_CF;
+@@ -63076,7 +63076,7 @@
+   undefined4 uVar1;
+   undefined2 extraout_DX;
+   int iVar2;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar3;
+   uint8_t *dg = g_mem + 0x1c000;
+   uint16_t bx_elem, bp_base, si_off;
+@@ -64258,7 +64258,7 @@
+   undefined4 uVar1;
+   undefined2 extraout_DX;
+   int iVar2;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar3;
+   uint8_t *dg = g_mem + 0x1c000;
+   uint16_t bx_elem, bp_base, si_off;
+@@ -65357,7 +65357,7 @@
+   undefined4 uVar1;
+   undefined2 extraout_DX;
+   int iVar2;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar3;
+   
+   *(undefined1 *)(param_4 + *(int *)((int)param_3 + 2)) = 3;
+@@ -65630,7 +65630,7 @@
+ {
+   undefined2 uVar1;
+   undefined1 extraout_AH;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   if (*(char *)(param_2 + *(int *)(param_1 + 2) + 1) != '\b') {
+     FUN_1000_52d1(*(undefined2 *)(param_1 + 4),*(undefined2 *)(param_1 + 6));
+@@ -65989,7 +65989,7 @@
+   undefined4 uVar1;
+   undefined2 extraout_DX;
+   int iVar2;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar3;
+   
+   *(undefined1 *)(param_4 + *(int *)((int)param_3 + 2)) = 3;
+@@ -68105,7 +68105,7 @@
+ 
+ {
+   undefined2 uVar1;
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   undefined2 uVar2;
+   
+   FUN_1000_52d1(param_1,param_2);
+@@ -68191,7 +68191,7 @@
+ void __allregs FUN_1000_a7e0(undefined2 param_1,undefined2 param_2)
+ 
+ {
+-  undefined2 unaff_CS;
++  undefined2 unaff_CS = 0x1000;  /* PATCH 610: push-cs = this cluster CS (board:0010) */
+   
+   FUN_1000_52d1(param_1,param_2);
+   thunk_FUN_1000_5591(unaff_CS);

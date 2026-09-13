@@ -7219,3 +7219,27 @@ NEXT (targeted, if a full re-decompile is deferred): find the specific unaff_ES/
 INDIA1 t=295 path (the first-diverging tick) and patch those to the asm-correct segment, asm-verified,
 as the minimal correctness fix; then widen.  The `-Wuninitialized` list + the SIMHASH first-diverging
 tick localise the site.
+
+## FIXED (2026-09-13): patch 610 -- unaff_CS = the cluster CS; native==wasm holds in-mission
+
+Localised the exact site with the reliable lever (zeroing unaff_ES/CS is a true fix, so a zero-range
+bisection over the declarations is reliable, unlike pragma/split-TU): the single divergence-driving read
+for INDIA1 is `unaff_CS` in FUN_1000_a7e0 (1000:a7e0 `push cs ; call 5591`).  Its asm-correct value is
+the cluster CS = 0x1000.  Generalised: every `unaff_CS` in a FUN_SEG_ function is that cluster's segment
+(FUN_1000_*->0x1000, FUN_0000_*/app_entry/caseD_*->0x0000, FUN_0f69_*->0x0f69) -- the push-cs idiom.
+
+patch 610 resolves all 52 unaff_CS reads to their cluster constant.  Result on the REAL build (native
+gcc -O0, wasm emcc -O2), per-tick DGROUP SIMHASH to t=3000:
+
+  AZER1 / CYPRUS1 / INDIA1 / SAUDI1 / SYRIA1  -- all mism=0, native==wasm BYTE-IDENTICAL.
+
+The value is asm-correct (the segment the original CPU pushes), so it is congruent with the original, not
+a determinism band-aid -- it also changes plain -O0 from its former garbage (the garbage was wrong; 0x1000
+is right).  Menus/settings verify still green (mainmenu/about/selplayer/settings-detail-med 4/4).
+
+REMAINING on this axis: (1) unaff_ES (142 reads) -- NOT a cluster constant (ES is a data segment loaded
+per context); none drove the 5-theatre divergence (unaff_CS alone converged all 5), but a full 47-mission
+native==wasm sweep must confirm no unaff_ES/extraout/flag site bites another mission; run selfplay `both`
++ per-tick SIMHASH across all 47.  (2) confirm oracle-congruence: re-run the seeded oracle replay
+(board:0017) on the 610 tree -- 0x1000 should match the oracle (it is what it pushed) where the old
+garbage happened to.  (3) re-pass the 10x wasm gate on the 610 tree.
