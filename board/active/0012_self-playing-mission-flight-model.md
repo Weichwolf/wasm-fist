@@ -7158,3 +7158,32 @@ UBSan-clean: an uninitialised C local the __allregs model never sets on some pat
 g_mem[] index the optimizer assumes in-range, or an unspecified evaluation-order read of a global
 register lane).  The fix is an asm-verified patch that makes the C well-defined, so ALL opt levels and
 both targets agree -- not lowering the wasm opt level.
+
+## The UB is real and fixable, but resists bisection (2026-09-13 cont.2)
+
+Two more things established, narrowing what the UB is NOT:
+
+1. NOT host-address / code-layout dependent.  Built native -O0 twice, once with
+   `-falign-functions=256` (shifts every function's absolute address): per-tick SIMHASH IDENTICAL.  So
+   the divergence is NOT the flat-model boundary board:0017 accepted (a sim read of a DGROUP boot
+   far-pointer byte whose value is a host/code address) -- those bytes would change with layout and did
+   not perturb the sim.  It is a genuine, fixable UB, not an inherent flat-vs-relocated artifact.
+
+2. FUN_1000_524e is INNOCENT despite two bisections implicating it.  Instrumented 524e to log its inputs
+   (structoff/esseg/idx/si0/pv[0..5]) and output: it is called ONCE at setup, and its log is BYTE-
+   IDENTICAL at -O0 and -O1.  Yet both the `#pragma GCC optimize` region bisection AND the validated
+   split-TU bisection (fileA[first..M) at -O1, fileB[M..end) at -O0; sanity S1 diverges / S2 identical)
+   converge on the 54786..54832 = 524e boundary.  So both bisection methods share a blind spot here: the
+   result flips with 524e's TU/opt placement, but 524e's own behaviour does not change -- the true UB is
+   IPA-/TU-composition-entangled (moving 524e between the -O1 and -O0 function sets changes the -O1
+   codegen of the SET, not of 524e), so contiguous-range bisection mislocalises it.
+
+Net: the divergence is a real UB in fist.c that gcc exploits from -O1 up (INDIA1 t=295), reaches the
+framebuffer (AZER1 t=2000, 70 KB), is none of the flag-disablable classes, is UBSan-clean, is not
+layout-dependent, and is not isolable by pragma or split-TU bisection because it is IPA-entangled.
+Reliable localisation needs a tool this box lacks: MemorySanitizer/valgrind (to name an uninitialised or
+wild read directly) or an LTO/whole-program divergence trace.  The split-TU harness (scratchpad
+splittest.sh + alldecls.h, validated) is reusable once such a tool -- or a per-instruction gdb
+divergence trace between the -O0 and -O1 binaries watching g_mem[0x1c792] (the earliest non-far-vector
+diverging byte at t=295) -- pins the function.  The fix remains an asm-verified patch making the C
+well-defined so all opt levels and both targets agree; NOT lowering the wasm opt level.
