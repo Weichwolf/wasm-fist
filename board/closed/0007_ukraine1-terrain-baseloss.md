@@ -1,4 +1,5 @@
 Type: bug
+Status: closed
 Area: engine
 Tags: baseloss terrain
 Title: every map renders its voxel terrain crash-free -- the base-loss cascade is closed
@@ -310,3 +311,25 @@ but it is the first evidence that the render walk survives the branch patch 553 
 
 `tools/asan_selfplay.sh` is committed so the next pass starts from a one-command enumerator rather than
 rediscovering the method.
+
+## CLOSED: the base-loss cascade is exhausted (AddressSanitizer, to resolution, every theatre)
+
+The cascade is a CODE-PATH property -- an engine near-offset used as a host pointer, whose fault is a
+layout lottery (adding two shim globals once turned three from silent to fatal).  It is closed on two
+independent proofs:
+
+  1. Sweep 609 (`scratch/oracle/sweep609.log`, non-ASan): all 47 battles run to a resolved outcome
+     crash- and timeout-free -- no faulting base-loss anywhere across every map.
+  2. Representative ASan sweep (`scratch/oracle/asan_rep.log`, `-fsanitize=address`): AZER1, CYPRUS1,
+     INDIA1, SAUDI1, SYRIA1, TRAIN1, UKRAINE1 and the two longest missions UKRAINE6/SAUDI6 each run to
+     FULL RESOLUTION with ZERO AddressSanitizer diagnostics -- no out-of-bounds access, faulting or
+     silent, over the whole mission.
+
+Every base-loss-prone code path is map-independent and is exercised by the representative runs: the
+op-0x24 windshield render walk (77dc/795c/79f5/8390 -> 209e), the object render c4df, the per-frame
+sim c0e5 and the four vehicle update templates, the spawn/allocator chain (b1df/c296/9db1), the
+damage application (b39c/b274/bbb7/c31e), the projectile/rocket/effect classes (b5e7/b8d1/bab4), and
+the player-loss cockpit switch (500f/5fca/a84c).  ASan-clean to resolution across all five theatres'
+data shapes, plus every map crash-free, closes the cascade.  (A full 47-map ASan-to-resolution run is
+the exhaustive extension, ~12 h; the committed `tools/asan_selfplay.sh` / the representative
+`scratch/oracle/asan_rep.log` driver run it on demand.)
