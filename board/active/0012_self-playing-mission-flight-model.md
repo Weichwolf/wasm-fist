@@ -7187,3 +7187,35 @@ splittest.sh + alldecls.h, validated) is reusable once such a tool -- or a per-i
 divergence trace between the -O0 and -O1 binaries watching g_mem[0x1c792] (the earliest non-far-vector
 diverging byte at t=295) -- pins the function.  The fix remains an asm-verified patch making the C
 well-defined so all opt levels and both targets agree; NOT lowering the wasm opt level.
+
+## ROOT CAUSE FOUND: the uninitialized unaff_ES/unaff_CS segment lanes (= board:0010) (2026-09-13 cont.3)
+
+Decisive.  Compiling fist.c at -O2 with `-Wuninitialized` (the build normally uses `-w`) reports 194
+DEFINITE "is used uninitialized" reads -- the decompile's register/flag pseudo-vars.  By frequency:
+unaff_ES 62, unaff_CS 25, in_CF 19, extraout_var 16, extraout_AH 13, in_register_* 18, extraout_DX 8,
+in_ZF/AF/PF/OF/SF/TF/NT ~25.  These are the __allregs model's UNRESOLVED register lanes -- read before
+set.  Reading them is UB: -O0 reads deterministic stack garbage, the optimizer treats them as undefined
+and evaluates differently -> the native(-O0) vs wasm(-O2) divergence.
+
+Proof it is THESE and specifically the SEGMENT lanes:
+  - -O0 +`-ftrivial-auto-var-init=zero`  ==  -O2 +same  -> IDENTICAL (zeroing all autos converges both).
+  - Zeroing ONLY the 196 `undefined2 unaff_ES;` / `unaff_CS;` declarations (nothing else) ALSO makes
+    -O0 == -O2 IDENTICAL.  So unaff_ES/unaff_CS ALONE drive the entire in-mission divergence.
+
+This is EXACTLY board:0010 ("setting CS and ES context in Ghidra eliminates the unaff_CS/unaff_ES
+pseudo-vars").  board:0010 is therefore ON THE CRITICAL PATH for the native==wasm invariant, not just a
+decompile-tidiness item: until CS/ES context is set (so those reads resolve to their real constant
+segment values), the engine reads undefined ES/CS on the sim path and native != wasm in-mission.
+
+Not a compiler flag fix: zeroing also CHANGES plain -O0 (mism=1185 vs the current -O0 baseline), so the
+values are load-bearing -- the reads must resolve to the ASM-CORRECT segment values (what board:0010's
+PrepAnalysis CS/ES context yields), not 0.  Whether 0 happens to match the oracle is unverified and
+almost certainly wrong for the es:[...] blit/access sites.  The fix is mechanical and in-method: set the
+CS/ES segment context in tools/ghidra/PrepAnalysis, re-run `make image`, and the pseudo-vars vanish with
+their real values threaded -- then re-run the per-tick SIMHASH native==wasm check to confirm 0 diffs to
+resolution, and the seeded oracle replay (board:0017) to confirm still-congruent.
+
+NEXT (targeted, if a full re-decompile is deferred): find the specific unaff_ES/unaff_CS read(s) on the
+INDIA1 t=295 path (the first-diverging tick) and patch those to the asm-correct segment, asm-verified,
+as the minimal correctness fix; then widen.  The `-Wuninitialized` list + the SIMHASH first-diverging
+tick localise the site.
