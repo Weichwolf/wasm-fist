@@ -253,3 +253,17 @@ surface (~136 far-ptr/string-op pointer-basing) is semantic and needs per-patch 
 NOT a pipeline fix.  The 57 (host-stack-ptr AX/DI in the reticle descriptor) is the SS-relative-stack model,
 also deep.  So the pipeline-root well is genuinely dry: what could be fixed at the Ghidra/tooling root IS
 fixed; the rest is the dedicated migration + the deep pointer-model work.
+
+## ON THE CRITICAL PATH for native==wasm (2026-09-13)
+
+This is no longer only a decompile-tidiness item.  board:0012 proved the in-mission native != wasm
+divergence (framebuffer differs by 70 KB at AZER1 t=2000) is caused ENTIRELY by the uninitialized
+`unaff_ES`/`unaff_CS` reads this item removes: zeroing ONLY the 196 `undefined2 unaff_ES;`/`unaff_CS;`
+declarations makes native(-O0) == wasm(-O2) byte-identical per-tick to resolution (from 1185 diffs to 0).
+The reads are UB; -O0 and -O2 evaluate them differently, so the two build targets diverge in-mission.
+
+So setting CS/ES context here, and threading the real constant segment values, is what makes the
+native==wasm invariant hold in-mission.  After the context fix + `make image`, re-run the per-tick
+SIMHASH native==wasm check (tools/native_main.c FIST_SIMHASH, 5 theatres to resolution) AND the seeded
+oracle replay (board:0017) -- the values are load-bearing (zeroing changes plain -O0 output too), so the
+resolved segments must be the asm-correct ones, verified against the oracle, not merely deterministic.
