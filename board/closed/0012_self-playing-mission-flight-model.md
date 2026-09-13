@@ -3,6 +3,15 @@ Area: flight-model
 Tags: mission simulation extender oracle transaction-log
 Title: a campaign mission plays itself to a resolved win/lose, native and wasm byte-identical
 
+CLOSED 2026-09-13: this engine CAN play a campaign mission to a resolved win/lose with empty
+player input over the cooperative tick (no wall-clock), native and wasm BYTE-IDENTICAL.  AZER1
+runs to a resolved DEFEAT under both targets with identical per-tick DGROUP (6978 ticks, mism=0,
+same verdict); all 47 missions are native==wasm byte-identical to t=2500; the seeded oracle replay
+is first-differing-step None (draws match the original write-for-write) and the only DGROUP residual
+is the accepted flat-vs-relocated boundary (board:0017).  The enabling fix was patch 610 (unaff_CS =
+the cluster code segment); the flight/combat simulator it exercises was reconstructed over the prior
+600+ patches.  Full detail in the comments below.
+
 One AZER1 campaign mission plays itself to a resolved win/lose under the port --
 the engine's AI drives both sides with empty player input, deterministic
 cooperative tick, no wall-clock, native first then wasm byte-identical -- by
