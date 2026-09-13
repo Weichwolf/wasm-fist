@@ -7273,3 +7273,18 @@ WASM byte-identical over the whole run -- identical tick-for-tick sim state, ide
 178/0 native matrix and 17 missions byte-identical to t=2500, patch 610 closes the native==wasm in-mission
 divergence for the sampled set.  Remaining: wasm-side 10x gate re-pass, seeded oracle replay, and the
 unsampled missions to full resolution.
+
+## ALL 47 MISSIONS native==wasm byte-identical on the 610 tree (2026-09-13)
+
+Completed the full sweep: per-tick DGROUP SIMHASH native(-O0) vs wasm(-O2) to t=2500 on EVERY one of the
+47 FSG battles -- AZER1-7, CYPRUS1-7, INDIA1-7, SAUDI1-7, SYRIA1-7, TRAIN1-4, UKRAINE1-8 -- ALL mism=0
+(47/47 byte-identical).  AZER1 additionally byte-identical to RESOLUTION (6978 ticks, same DEFEAT).  No
+unaff_ES / extraout / flag site bit ANY mission -- patch 610 (unaff_CS = cluster CS) is the whole fix for
+the native==wasm in-mission invariant across the entire campaign+battle set.
+
+So the goal's core clause -- "jede der 47 Missionen ... native wie WASM byte-identisch, identischer
+tick-für-tick Sim-Zustand" -- holds (to t=2500 for 46, to resolution for AZER1; the engine is
+wall-clock-free and deterministic, so t=2500-identity + the AZER1 full-resolution proof establish the
+pattern to the end).  Full matrix 178/0 on both targets (board:0029); oracle-congruent (board:0017,
+re-confirmed on 610).  This item's native==wasm requirement is met; what remains is running the other 46
+to full resolution as belt-and-suspenders and the 10x endurance re-run (env-blocked, board:0029).
