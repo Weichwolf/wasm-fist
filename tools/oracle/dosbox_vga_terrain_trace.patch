@@ -43,7 +43,7 @@
  
 --- src/hardware/vga_memory.cpp
 +++ src/hardware/vga_memory.cpp
-@@ -27,6 +27,784 @@
+@@ -27,6 +27,787 @@
  #include "pic.h"
  #include "inout.h"
  #include "setup.h"
@@ -170,6 +170,7 @@
 +static Bit8u    r9200_glob[0x200];        /* ext[0x9000..0x9200] snapshot (frame F) */
 +static Bit32u   r9200_esi = 0, r9200_ebp = 0, r9200_hzptr = 0;
 +static Bit8u    r9200_hz[256];            /* horizon table contents (frame F) */
++static Bit8u    r9200_tileshadow[65536];  /* colormap tile @ 0x44200 SNAPSHOT-TIME (frame F, not F+1) */
 +static Bit32u   r9200_base = 0x10000000;  /* extender flat base = SegPhys(cs) at the write */
 +/* ==== wasm-fist CAMERA capture: the render-time TCB camera 8120 reads at 9200-entry ==== */
 +static Bit32u   r9200_tcbptr = 0;         /* value at ext ds:[0xc93] = current-TCB ptr */
@@ -197,6 +198,10 @@
 +	r9200_hzptr = mem_readd(r9200_base + 0x9114);
 +	Bit32u ht = r9200_base + (r9200_hzptr & 0x00ffffffu); /* ext-relative horizon pointer */
 +	for (int i = 0; i < 256; i++) r9200_hz[i] = mem_readb(ht + i);
++	/* SNAPSHOT the colormap tile HERE (at 9200-F's first write) -- 6980-F built it during op-0x08-F,
++	 * before op-0x24-F, so 0x44200 now holds FRAME F's tile.  The old deferred read (at 8120-F+1) got
++	 * frame F+1's tile after 6980-F+1 rebuilt it -> a one-frame skew that mis-sampled every contour. */
++	for (int i = 0; i < 65536; i++) r9200_tileshadow[i] = mem_readb(r9200_base + 0x44200 + i);
 +	/* the current-TCB pointer 8120 uses: ds:[0xc93]; camera fields at TCB+0x2c..+0x3e.
 +	 * The extender DATA selector base may differ from CS base -> read [0xc93] via DS base. */
 +	Bit32u dsb = SegPhys(ds), csb = SegPhys(cs), ssb = SegPhys(ss);
@@ -261,9 +266,7 @@
 +		fwrite(hdr, 4, 5, f);
 +		fwrite(r9200_glob, 1, 0x200, f);
 +		fwrite(r9200_hz, 1, 256, f);
-+		static Bit8u tile[65536];          /* colormap tile @ ext-flat 0x44200 (SMC 3918 base) */
-+		for (int i = 0; i < 65536; i++) tile[i] = mem_readb(r9200_base + 0x44200 + i);
-+		fwrite(tile, 1, 65536, f);
++		fwrite(r9200_tileshadow, 1, 65536, f);   /* frame-F tile snapshotted synchronously with the globals */
 +		fclose(f);
 +	}
 +	snprintf(path, sizeof path, "%s.pass%02d.vram.bin", fist_prefix, r9200_passno);
@@ -828,7 +831,7 @@
  
  
  #ifndef C_VGARAM_CHECKED
-@@ -377,6 +1155,7 @@
+@@ -377,6 +1158,7 @@
  			return readHandler<Bit32u>( addr );
  	}
  	void writeb(PhysPt addr, Bitu val ) {
@@ -836,7 +839,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -385,6 +1164,7 @@
+@@ -385,6 +1167,7 @@
  		writeCache<Bit8u>( addr, val );
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -844,7 +847,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -399,6 +1179,7 @@
+@@ -399,6 +1182,7 @@
  		writeCache<Bit16u>( addr, val );
  	}
  	void writed(PhysPt addr,Bitu val) {
@@ -852,7 +855,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED(addr);
-@@ -433,6 +1214,7 @@
+@@ -433,6 +1217,7 @@
  		flags=PFLAG_NOCODE;
  	}
  	void writeb(PhysPt addr,Bitu val) {
@@ -860,7 +863,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -440,6 +1222,7 @@
+@@ -440,6 +1225,7 @@
  		writeHandler(addr+0,(Bit8u)(val >> 0));
  	}
  	void writew(PhysPt addr,Bitu val) {
@@ -868,7 +871,7 @@
  		addr = PAGING_GetPhysicalAddress(addr) & vgapages.mask;
  		addr += vga.svga.bank_write_full;
  		addr = CHECKED2(addr);
-@@ -448,6 +1231,7 @@
+@@ -448,6 +1234,7 @@
  		writeHandler(addr+1,(Bit8u)(val >> 8));
  	}
  	void writed(PhysPt addr,Bitu val) {

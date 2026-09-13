@@ -2783,3 +2783,52 @@ native==wasm in gate 609, and every one of the 178 verify flows is native==wasm.
 no longer open: the native↔wasm terrain-identity invariant holds across theatres.  What remains on
 this item is the ORACLE-framebuffer congruence of the voxel band (the terrain rendered by 689a/6980/
 9200 vs the original's), a distinct axis measured by screenshot/refcapture, not by native==wasm.
+
+## The windshield voxel WRITER (9200) is byte-exact with the original (2026-09-13)
+
+Proven, not asserted.  New falsifiable instrument `FIST_R92REPLAY` (tools/native_main.c, op-0x24 gate):
+loads a self-consistent oracle capture (`capture_9200_framematched.sh` .cap = hdr{esi,ebp,hzptr} +
+glob[0x9000..0x9200] + hz[256] + tile[65536]), injects EXACTLY what the original's 9200 read
+(globals, the Route-1 tile pointer 0x3918, the horizon table at ext+0x7568, the per-texel steps
+ebp/esi), calls the port's `m_ext_FUN_0000_9200`, dumps 0xA0000.  Isolates the writer: no camera, no
+6980 tile-build, no 8120 projection, no palette (indices compared, not colours).
+
+Result on the AZER1 spawn frame (r92sync.pass01, self-consistent):
+
+| pixels 9200 writes (fb rows 5-85) | 23172 |
+| exact-match vs oracle VRAM        | 22371 |
+| HUD overdraw (PL:1/reticle/GOALS, drawn by other passes -- not 9200) | 801 |
+| terrain mismatch                  | **0** |
+| **writer fidelity (excl. overdraw)** | **22371/22371 = 100.000%** |
+
+Geometry recovered from the asm: 9200 writes column-major with per-column stride EXACTLY 320
+(6 skip + 276 body + 6+90ac=38 tail), so voxel column c == fb row 5+c; the windshield voxel band is
+fb rows 5..85, cols 16..298.  This matches the V18 `rows5-86` viewport check.
+
+The asm confirms the decompile is faithful (no port bug): `shld $8,edx,eax` extracts the top byte
+UNSIGNED (no SHR/SAR ambiguity); the push/pop column-base model == the port's `uVar5=uVar6` copy
+pattern; the per-pixel step is `add esi,edx / add ebp,ebx` == `uVar5+=param_2 / uVar7+=param_1` with
+the shim call `9200(ebp,esi)`.
+
+### The 5% that wasn't the port -- an oracle-CAPTURE bug (tile-frame-skew)
+
+First pass measured 95.0%, residual edge-localised (mismatch mean local-gradient 12.2 vs matched 6.6;
+54% on strong edges vs 28%) -- the signature of a sub-texel phase error, not arithmetic.  Root cause
+was in the capture tool, not the port: `capture_9200_framematched.sh` read the tile from ext+0x44200
+at the DEFERRED dump boundary (8120-F+1), AFTER 6980-F+1 had already rebuilt it -> a **frame-F+1 tile
+paired with frame-F globals/VRAM**.  Measured directly: the frame-F tile differs from the frame-F+1
+tile by 7921/65536 bytes (12%), concentrated where the camera drift between frames moves contours.
+Fixed in `tools/oracle/dosbox_vga_terrain_trace.patch`: snapshot the tile synchronously with the
+globals (at 9200-F's first write).  Recaptured -> 100.000%.
+
+### Status
+
+The title symptom ("fills the whole windshield with near-field terrain and no sky/horizon", 75.5%
+diff) is GONE: the port renders correct sky+clouds, a horizon/ridge line, and receding textured
+terrain, byte-identical to the original at the writer level (visual triptych + the table above).
+
+Remaining for FULL in-play oracle-congruence of the band (kept open): prove the port's 6980 raycaster
+builds the same tile as the oracle's from a matched camera, and 8120 computes the same projection
+globals -- i.e. congruence of the two stages FEEDING 9200 (this test injected the oracle's tile +
+globals to isolate the writer).  Data on hand: voxel6980_framematched_pass08.bin.gz, r69.r6980.*,
+sim_voxel6980_framematched.py.

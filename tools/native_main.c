@@ -2567,6 +2567,40 @@ int fist_extender_gate(void) {
         long want2c = getenv("FIST_MISSFB_N") ? atol(getenv("FIST_MISSFB_N")) : 120;
         if (++n2c == want2c) { fist_dump_framebuffer(getenv("FIST_MISSFB")); _exit(0); }
     }
+    /* board:0002 FIST_R92REPLAY -- PURE 9200-WRITER congruence test.  Given a self-consistent oracle
+     * capture (.cap = hdr{magic,passno,esi,ebp,hzptr} + glob[0x9000..0x9200] + hz[256] + tile[65536],
+     * tools/oracle/capture_9200_framematched.sh), inject EXACTLY the globals/tile/horizon/steps the
+     * original's 9200 read, call the port's 9200, and dump 0xA0000.  Compares the WRITER in isolation:
+     * no camera, no 6980 tile-build, no 8120 projection, no palette (indices only).  9200 writes column-
+     * major with per-column stride 320 (6 skip + 276 body + 6+90ac=38 tail), so voxel column c == fb row
+     * 5+c -> the windshield is fb rows 5..85, cols 16..298.  Fires at the first op-0x24 (full engine +
+     * extender init guaranteed); the live camera is irrelevant (all of 9200's inputs are overwritten). */
+    if (op == 0x24 && getenv("FIST_R92REPLAY") && g_ext_ready) {
+        uint8_t *xb = g_mem + FIST_EXT_BASE;
+        FILE *cf = fopen(getenv("FIST_R92REPLAY"), "rb");
+        if (!cf) { fprintf(stderr, "[r92replay] cannot open %s\n", getenv("FIST_R92REPLAY")); _exit(2); }
+        uint32_t hdr[5]; static uint8_t glob[0x200], hz[256], tile[65536];
+        if (fread(hdr,4,5,cf)!=5 || hdr[0]!=0x43323952u) { fprintf(stderr,"[r92replay] bad magic %08x\n",hdr[0]); _exit(2); }
+        if (fread(glob,1,0x200,cf)!=0x200 || fread(hz,1,256,cf)!=256 || fread(tile,1,65536,cf)!=65536) { fprintf(stderr,"[r92replay] short read\n"); _exit(2); }
+        fclose(cf);
+        uint32_t esi=hdr[2], ebp=hdr[3], hzptr=hdr[4];
+        memcpy(xb+0x9000, glob, 0x200);                                  /* 90d4/90d8/90b8/90bc/90ac/90f0/90f8/9114 */
+        memcpy(xb+(hzptr & 0x00ffffffu), hz, 256);                       /* horizon table at ext+0x7568 (9114 flat off) */
+        *(uint32_t*)(xb+0x3918) = (uint32_t)(uintptr_t)tile;             /* Route-1 host ptr -> the oracle colormap tile */
+        uint32_t glob_90a8 = *(uint32_t*)(glob+0xa8);
+        uint32_t voff = (glob_90a8 & 0x000fffffu) - 0xA0000u;            /* VGA offset (0x650 = fb row 5, col 16) */
+        memset(g_mem+0xA0000, 0, 0x10000);
+        *(uint32_t*)(xb+0x90a8) = (uint32_t)(uintptr_t)(g_mem+0xA0000+voff);
+        fprintf(stderr, "[r92replay] pass %u esi=%08x ebp=%08x hzptr=%08x voff=%05x 90f0=%u 90f8=%u tile-distinct via 3918\n",
+                hdr[1], esi, ebp, hzptr, voff, *(uint32_t*)(xb+0x90f0), *(uint32_t*)(xb+0x90f8));
+        m_ext_FUN_0000_9200((int)ebp, (int)esi);
+        const char *outp = getenv("FIST_R92REPLAY_OUT");
+        if (outp) { FILE*of=fopen(outp,"wb"); if(of){ fwrite(g_mem+0xA0000,1,0x10000,of); fclose(of);} }
+        { uint8_t*fb=g_mem+0xA0000; long nz=0; int h[256]={0},nd=0;
+          for(long r=5;r<86;r++)for(long c=0;c<320;c++){uint8_t p=fb[r*320+c]; if(p)nz++; if(!h[p]){h[p]=1;nd++;}}
+          fprintf(stderr,"[r92replay] RENDER fb rows5-85 nonzero=%ld distinct=%d\n",nz,nd); }
+        _exit(0);
+    }
     if (op == 0x24 && getenv("FIST_MISSFB") && g_ext_ready) {
         static int nseen = 0;
         long want = getenv("FIST_MISSFB_N") ? atol(getenv("FIST_MISSFB_N")) : 1;
