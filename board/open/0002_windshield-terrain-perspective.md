@@ -2832,3 +2832,40 @@ builds the same tile as the oracle's from a matched camera, and 8120 computes th
 globals -- i.e. congruence of the two stages FEEDING 9200 (this test injected the oracle's tile +
 globals to isolate the writer).  Data on hand: voxel6980_framematched_pass08.bin.gz, r69.r6980.*,
 sim_voxel6980_framematched.py.
+
+## The colour gate is CLOSED -- the port's rendered tile is LIGHT, matching the oracle (2026-09-13)
+
+The long "dark C32 vs LIGHT reduce" thread (GATE A, the [0x85bc]+0x100000 lead) is resolved in the
+port's favour, and the earlier "the port has the dark C32 defect" was a STALE map-load-time reading.
+New read-only instrument `FIST_TILESTAT` (native_main.c, op-0x24) dumps the render-time value range of
+the built tile [0x3918] (what 9200 samples) and of the 6980 source [0x85bc]+0x100000.
+
+Measured, AZER1 self-play (FIST_SIMRUN, to tick 3000):
+
+| frame | tile[0x3918] min | max | mean | distinct |
+|-------|------|-----|------|----------|
+| post#1 (spawn transient) | 166 | 252 | 182.1 | 25 |
+| post#2..40 (settled)     | 123-124 | 252 | 199.2 | 66-68 |
+| **oracle settled (bundle pass08)** | **123** | **252** | **199.3** | **66** |
+
+The port's settled tile is statistically IDENTICAL to the oracle's (min/max/mean/distinct all match).
+So the port DOES run the per-frame lighting/reduce pass that fills the tile with LIGHT values -- the
+`[0x85bc]+0x100000` base staying dark (min 10 max 85) is just the map-load colormap; it is NOT what
+feeds the final tile.  post#1 (min 166, distinct 25) is the one-frame spawn transient (frame-1 pacing).
+
+What this proves and what it does not: the tile VALUES are congruent -- correct lighting, full 123..252
+range, exact distinct count (66) -- which closes the colour gate.  It does NOT by itself prove the 6980
+RAYCASTER GEOMETRY byte-for-byte, because dune terrain is statistically homogeneous (two different
+camera views share the histogram).  Geometry byte-proof is the one remaining windshield sub-item.
+
+## Remaining: 6980 raycaster geometry, byte-exact (the 9200 method, applied to 6980)
+
+The clean path (no camera-frame-matching, exactly as the 9200 proof worked): the frame-matched 6980
+bundle (voxel6980_framematched_pass08.bin.gz / capture_6980_framematched.sh, FIST_R6980CAP) is a
+self-consistent {world camera ext[0x9000..0x9200], ramps 3a24/3e24/4224/4624, heightmap, LIGHT
+colormap, output tile, 6980-shadow} snapshotted during ONE 6980.  Build a `FIST_R6980REPLAY` harness
+(analog of FIST_R92REPLAY): inject those into the port, call m_ext_FUN_0000_6980, compare the built
+tile to the bundle tile byte-for-byte.  If the capture proves frame-skewed like 9200's did, apply the
+same synchronous-snapshot fix to capture_6980_framematched (dosbox_vga_terrain_trace.patch).  6980
+fans out across the per-detail fill sub-functions (6b03/6b83/6d83/6e03) reading ~20 globals + the
+map/colormap pointers 85bc/85b8/3909/3918 -- enumerate those from the bundle's 16-global header.

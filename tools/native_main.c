@@ -2575,6 +2575,23 @@ int fist_extender_gate(void) {
      * major with per-column stride 320 (6 skip + 276 body + 6+90ac=38 tail), so voxel column c == fb row
      * 5+c -> the windshield is fb rows 5..85, cols 16..298.  Fires at the first op-0x24 (full engine +
      * extender init guaranteed); the live camera is irrelevant (all of 9200's inputs are overwritten). */
+    /* board:0002 FIST_TILESTAT -- render-time (op-0x24) value-range of the built voxel tile [0x3918].
+     * The colour gate: the oracle's per-frame lighting/reduce pass fills [0x85bc]+0x100000 with the
+     * LIGHT reduce (tile max ~252) before 6980; if the port leaves the map-load's dark C32 there, the
+     * built tile maxes ~104.  Read-only, prints the first N posts then continues. */
+    if (op == 0x24 && getenv("FIST_TILESTAT") && g_ext_ready) {
+        static int ns=0; long want=getenv("FIST_TILESTAT_N")?atol(getenv("FIST_TILESTAT_N")):3;
+        if (++ns <= want) {
+            uint8_t *xb = g_mem + FIST_EXT_BASE;
+            uint32_t t=*(uint32_t*)(xb+0x3918); uint32_t hmp=*(uint32_t*)(xb+0x85bc);
+            if (t) { uint8_t*p=(uint8_t*)(uintptr_t)t; int mn=255,mx=0,h[256]={0},d=0; long nz=0,sum=0;
+                for(int i=0;i<0x10000;i++){uint8_t v=p[i]; if(v){nz++;sum+=v;} if(v<mn)mn=v; if(v>mx)mx=v; if(!h[v]){h[v]=1;d++;}}
+                int cmn=255,cmx=0; if(hmp){uint8_t*c=(uint8_t*)(uintptr_t)(hmp+0x100000); for(int i=0;i<0x40000;i++){if(c[i]<cmn)cmn=c[i]; if(c[i]>cmx)cmx=c[i];}}
+                fprintf(stderr,"[tilestat] post#%d tile[0x3918]: min=%d max=%d mean=%.1f distinct=%d nz=%ld | [0x85bc]+0x100000(6980 src) min=%d max=%d %s\n",
+                    ns,mn,mx,nz?(double)sum/nz:0,d,nz,cmn,cmx, cmx<=110?"<= DARK C32":(cmx>=200?"<= LIGHT reduce":"?"));
+            }
+        }
+    }
     if (op == 0x24 && getenv("FIST_R92REPLAY") && g_ext_ready) {
         uint8_t *xb = g_mem + FIST_EXT_BASE;
         FILE *cf = fopen(getenv("FIST_R92REPLAY"), "rb");
