@@ -7263,3 +7263,13 @@ wasm gate on the 610 tree.
 editor round-trip, the terrain and cockpit flows, audio, all still bit-correct.  So resolving unaff_CS to
 the cluster segment fixes the native==wasm in-mission divergence AND regresses nothing in the matrix.
 (wasm-side matrix + the 10x gate re-pass still to run.)
+
+## patch 610: AZER1 native==wasm BYTE-IDENTICAL to RESOLUTION (2026-09-13)
+
+Full-run proof, not a prefix: AZER1 played to its resolved outcome under both targets with per-tick
+DGROUP SIMHASH -- native 6978 ticks (max t=8347), wasm 6978 ticks (max t=8347), common=6978, mism=0,
+identical tick-sets, SAME verdict (DEFEAT code=1).  The goal's core clause holds for AZER1: native and
+WASM byte-identical over the whole run -- identical tick-for-tick sim state, identical outcome.  With the
+178/0 native matrix and 17 missions byte-identical to t=2500, patch 610 closes the native==wasm in-mission
+divergence for the sampled set.  Remaining: wasm-side 10x gate re-pass, seeded oracle replay, and the
+unsampled missions to full resolution.
