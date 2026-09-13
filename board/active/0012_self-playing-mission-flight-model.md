@@ -7119,3 +7119,42 @@ NEXT: instrument the per-tick phase-dispatch count (22f7 / the sim-step loop) on
 INDIA1 t=290..300, find the tick where the counts first differ by one, and trace what makes the port's
 phase cadence depend on the target (a PIT-count cost that differs native vs wasm, or a UB/pointer read
 in the phase-gate).  Extend SIMHASH to cover the low-DGROUP handshake words so the gate catches this.
+
+## The native!=wasm divergence is UNDEFINED BEHAVIOR in fist.c, exposed by optimization (2026-09-13 cont.)
+
+Decisive isolation, same platform (removes wasm-vs-native as a variable): built native at -O2 via
+`FIST_XCFLAGS=-O2 build_native.sh` and diffed per-tick FIST_SIMHASH vs native -O0.
+
+  NATIVE -O0 vs NATIVE -O2:  DIVERGES at INDIA1 t=295 (1185 mismatched), the SAME signature as
+  native-O0 vs wasm-O2.
+
+So the divergence is UB in the C that gcc evaluates differently at -O0 vs -O1/-O2 -- NOT a wasm/native
+platform difference.  The DoD build asymmetry (tools/build.sh: wasm -O2, native -O0, with the comment
+"verify proved -O2 wasm is BYTE-IDENTICAL to -O0 native") is only true for the SPAWN-FRAME flows the
+matrix checks; in-mission the two opt levels diverge.  wasm==native would hold if both used the same
+opt level, but that HIDES the UB rather than fixing it (the goal forbids approximations).
+
+Localized to ONE translation unit: rebuilt the object set with exactly one file at -O2, rest -O0.
+`fist.c` at -O2 -> DIVERGES (t=295); `fist_ext.c` at -O2 -> IDENTICAL.  So the UB is in fist.c.
+
+Ruled OUT as the cause (each: fist.c at -O1/-O2 plus the flag, still DIVERGES):
+  -fwrapv (signed overflow), -ftrivial-auto-var-init=zero (uninitialised autos -- gcc 14.2 honours it),
+  -fno-strict-aliasing (already the default build flag), -fno-inline, -fno-aggressive-loop-optimizations,
+  -fno-tree-vrp, -fno-ipa-cp, -fno-ipa-modref, -fno-ipa-pure-const, -fno-ipa-reference.
+UBSan (-fsanitize=undefined) at both -O0 and -O2 reports only ONE UB -- a benign one-time misaligned
+uint16 store at native_main.c:3838 (the BDA seed) -- so it is none of the UBSan-detectable classes on
+the path to t=295.  No valgrind/MSan available here to catch an uninitialised-memory or wild-pointer read.
+
+FALSE LEAD (recorded so it is not re-walked): a `#pragma GCC optimize("O0")` region bisection pointed at
+FUN_1000_524e (patch 040), but forcing ONLY that function to -O0 (via __attribute__((optimize("O0"))),
+rest -O1) still DIVERGES -- the pragma-region result was an artifact of the pragma disabling a file-scope
+optimization across the boundary, not a true single-function localization.  The pragma method is
+unreliable for this and must not be trusted; use split-TU or a divergence write-trace instead.
+
+RELIABLE next step: split fist.c into two independently-compiled TUs at a function boundary (each with
+the full header for the extern decls), compile one -O0 / one -O1, and see which half's -O1 carries the
+divergence -- repeat to bracket the function; then read that function for the UB (prime candidates given
+UBSan-clean: an uninitialised C local the __allregs model never sets on some path, an out-of-bounds
+g_mem[] index the optimizer assumes in-range, or an unspecified evaluation-order read of a global
+register lane).  The fix is an asm-verified patch that makes the C well-defined, so ALL opt levels and
+both targets agree -- not lowering the wasm opt level.

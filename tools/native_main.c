@@ -649,6 +649,8 @@ static void fist_pump_slow(void){
         if (sh && g_mem[0x1c000+0x1549]==0x1c) {
           unsigned t2 = *(unsigned short*)(g_mem+0x1c452);
           if (t2 != pt) { pt = t2;
+            { extern unsigned long long fist_clock_now(void);
+              fprintf(stderr,"[simclk] t=%u clk=%llu\n", t2, fist_clock_now()); }
             fprintf(stderr,"[simhash] t=%u", t2);
             /* blocks over DGROUP 0x9000..0xefff: the object rosters, display table and AI scratch.  The
              * LOW DGROUP is deliberately excluded -- it holds the far-vector table the shim installs
