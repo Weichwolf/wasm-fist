@@ -32,8 +32,20 @@ against a tick-aligned oracle capture) -- and the vehicle cockpits beyond the M1
 ## Proof (1): the 10x wasm endurance
 
 `tools/wasm_gate.sh` grinds 10 consecutive clean `verify.sh wasm` runs (178 flows each; one FAIL
-resets to 0).  Run on the 609 tree.  DONE when the log reaches "10 consecutive clean wasm runs
-achieved" AND proof (2)'s dynamic surfaces are closed.
+resets to 0).
+
+ACHIEVED on the 609 tree (`scratch/oracle/wasm_gate_609.log`): runs #1..#10 each 178 pass / 0 fail,
+consecutive 10/10, zero failures, zero resets, 02:27..04:30.  So the current 178-flow matrix passes
+the 10x endurance -- the WASM build is error-free and reproducible across the whole matrix ten times
+over.
+
+The honest remaining gap for proof (1) is MATRIX BREADTH, not endurance: the 178 flows cover every
+menu/screen/dialog/setting (vs the oracle), the .FSG editor round-trip, the audio note/WAV flows, the
+per-theatre cockpit chrome and spawn frames, and native==wasm terrain -- but NOT yet the dynamic
+windshield voxel band vs the oracle (board:0002), the T-80/heli cockpits (board:0027), the full
+mission audio stream vs the oracle (board:0003/0011), game save/load (board:0004), the serial link, or
+browser pacing (board:0026).  The gate must be RE-PASSED 10x after the matrix is extended to those
+surfaces; today's 10/10 is the endurance proof for the surfaces already in the matrix.
 
 DONE when: proof (1) reaches 10/10 on a tree where every surface named in the goal is implemented,
 and proof (2) covers every surface class (static: done; dynamic windshield + cockpits: open).
