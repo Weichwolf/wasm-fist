@@ -1690,3 +1690,25 @@ threshold), both outcome-neutral and inherent to flat-vs-relocated -- not stubs,
 approximations in the port.  Matching them byte-for-byte would require carrying the guest's relocated
 code paragraphs (0x1119/0x2082/0x2119) throughout DGROUP and teaching fist_icall to map them back --
 a whole-shim refactor with no behavioural gain, explicitly declined.
+
+## Oracle-congruence RE-CONFIRMED on the patch-610 tree (2026-09-13)
+
+Re-ran the seeded oracle replay (replay_sched.py + replay_run.sh + replay_cmp.py) of AZER1 on the 610
+native binary against the canonical fixture scratch/oracle/regtrace_rng13/regs.txt (2726 sim steps):
+
+  oracle steps 2727, port steps 2726, FIRST DIFFERING STEP = None.
+
+So the model-INDEPENDENT draw stream (RNG, the sim's per-step draws) is byte-for-byte congruent with the
+original on the 610 tree -- patch 610 did NOT regress oracle-congruence.
+
+Full per-step DGROUP vs the oracle's dg.bin.N (2726 dumps): the sim region 0x9000..0xefff differs by only
+~64 bytes/24576, and EVERY differing byte is the flat-vs-relocated model boundary this item already
+accepts -- e.g. word@0x9720.. port=0f69 / oracle=2082 (the 0xf69 CRT cluster segment), word@0x9f22 port=
+0000 / oracle=1119 (relocated seg-0), pointers whose halves differ by exactly 0x1119 (the relocation
+delta: 0x9108 port=2cc2 / oracle=3ddb, 0x91ee port=2ce4 / oracle=3dfd).  No object/roster/shell/LOS byte
+outside this class differs.  patch 610's `unaff_CS = 0x1000` is itself part of this boundary: the flat
+model's running CS is 0x1000, the oracle's relocated CS for that cluster is 0x2119 -- 610 gives the
+flat-model-CORRECT value (making native==wasm), and its difference from the oracle is the same inherent,
+outcome-neutral relocation boundary, not a defect.  So on 610 the mission simulation is oracle-congruent
+to the fullest extent the flat memory model permits, exactly as this item concluded pre-610, and now with
+native==wasm holding in-mission as well.
