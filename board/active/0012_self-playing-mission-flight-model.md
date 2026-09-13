@@ -7243,3 +7243,16 @@ native==wasm sweep must confirm no unaff_ES/extraout/flag site bites another mis
 + per-tick SIMHASH across all 47.  (2) confirm oracle-congruence: re-run the seeded oracle replay
 (board:0017) on the 610 tree -- 0x1000 should match the oracle (it is what it pushed) where the old
 garbage happened to.  (3) re-pass the 10x wasm gate on the 610 tree.
+
+## patch 610 broadly verified: 17 missions native==wasm byte-identical (2026-09-13)
+
+Per-tick DGROUP SIMHASH native(-O0) vs wasm(-O2), to t=2500, on the 610 tree:
+  AZER1 AZER3 AZER6 CYPRUS1 CYPRUS3 INDIA1 INDIA3 INDIA5 SAUDI1 SAUDI6 SYRIA1 SYRIA4
+  TRAIN2 TRAIN4 UKRAINE1 UKRAINE2 UKRAINE6  -- ALL mism=0 (17/17 byte-identical).
+No unaff_ES / extraout / flag site bit any of these; unaff_CS was the whole divergence for the sampled
+missions.  The full native verify matrix (regression gate) is green so far (21 pass / 0 fail, running).
+
+Still to close this axis fully: (a) extend the native==wasm SIMHASH to RESOLUTION (not just t=2500) on a
+few long missions, in case an unaff_ES read bites past t=2500; (b) the 30 unsampled missions; (c) re-run
+the seeded oracle replay (board:0017) to confirm 610's CS values match the original; (d) re-pass the 10x
+wasm gate on the 610 tree.
