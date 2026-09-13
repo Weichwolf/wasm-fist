@@ -7070,3 +7070,52 @@ Next, in this order:
      to this change and the matrix is the gate;
   2. separately, and only with the oracle: establish how many renders per PIT tick the ORIGINAL does,
      before treating 57 as a defect at all.
+
+## CRITICAL (2026-09-13): native != wasm in-mission -- the SIMHASH "native==wasm throughout" was blind to LOW DGROUP
+
+Measured, not asserted.  Per-tick FIST_SIMHASH diff native vs wasm, 5 theatres (AZER1/CYPRUS1/INDIA1/
+SAUDI1/SYRIA1), FIST_SIMRUN both sides, cockpit-aligned (both start t=202):
+
+| mission | first sim-block(0x9000+) divergence | framebuffer |
+|---------|--------------------------------------|-------------|
+| INDIA1  | t=298 (block 41 = 0xd200)            | DIFFERS by t=2500 (735 B) |
+| AZER1   | t=1070 (block 3 = 0x9600)            | DIFFERS by t=2000 (**70362 B**) |
+| SYRIA1  | t=677                                | identical at t=1500 |
+| CYPRUS1 | t=1189                               | (not yet framebuffer-checked) |
+| SAUDI1  | t=1955                               | (not yet framebuffer-checked) |
+
+So native and wasm are NOT byte-identical in-mission, and it reaches the FRAMEBUFFER (AZER1 t=2000:
+70362/192000 bytes differ).  The 10x wasm gate and the terrain-* flows never caught this: they compare
+native==wasm only at the FIRST op-0x24 post (the spawn frame, ~t=200), before the divergence.
+
+### The root is LOW DGROUP -- the phase/tick handshake, which SIMHASH blocks 0..47 (0x9000+) never hash
+
+FIST_SIMDUMP of the full DGROUP (0x0..0xefff) at INDIA1 t=294 (clean, only the 3 known benign far-
+vector words 0x16b0/0x2662/0x3ae2 differ) vs t=295 (first real divergence).  The 23 diverging bytes at
+t=295 are ALL in low DGROUP, led by the phase handshake:
+
+  - **0x1548 (d548)** native=0x81 wasm=0x00 -- the phase-complete byte (patch 308: 23ce `orb $0x80`).
+    Native has the phase marked complete; wasm has not.  This item's own d548.
+  - **0x6d14 (global animation phase)** native=0x52 wasm=0x53 -- off by one (board:0017: 4691 resets it;
+    type-5/6 objects read [di+0x1a]=[0x6d14]&7).  Identical at t=294 -> diverges exactly at t=295.
+  - **0x1f8c/0x1f8d ("GOALS REMAINING" formatted string, a5dc 1a655)** native="0350" wasm="20+11".
+  - plus 0x0792, 0x158a/0x158e (sprite clip), 0x15d6, 0x2666.. (sprite/reticle coords), which follow.
+
+So at engine tick 295 native and wasm dispatch a DIFFERENT number of phases (22f7 phase dispatch /
+sim-steps-per-frame).  This is a phase-CADENCE divergence between the two targets -- board:0026 (the
+PIT/INT-8 time base) was believed to make native and wasm step identically, but the phase count per
+tick diverges by one here.  Because SIMHASH hashes only 0x9000..0xefff (+10 clip bytes), it was blind
+to the d548/6d14/1f8c handshake bytes and reported "native==wasm" while the true divergence sat in low
+DGROUP from t=295, only reaching the object rosters (0x9000+) at t=298.
+
+### Consequence for the board
+
+board:0017's "47/47 resolve, native == wasm throughout" is FALSIFIED for the tick-for-tick and
+framebuffer clauses: the OUTCOME may still match (unchecked to resolution this round), but the per-tick
+sim state and the framebuffer do not.  The goal's "identischer tick-für-tick Sim-Zustand" and "denselben
+Framebuffer, Frame für Frame" are not met until this phase-cadence divergence is fixed.
+
+NEXT: instrument the per-tick phase-dispatch count (22f7 / the sim-step loop) on both targets around
+INDIA1 t=290..300, find the tick where the counts first differ by one, and trace what makes the port's
+phase cadence depend on the target (a PIT-count cost that differs native vs wasm, or a UB/pointer read
+in the phase-gate).  Extend SIMHASH to cover the low-DGROUP handshake words so the gate catches this.
