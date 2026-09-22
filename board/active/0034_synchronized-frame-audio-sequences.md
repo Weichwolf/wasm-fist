@@ -40,10 +40,18 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
   has 395 calls, 298 distinct instruction counts (54,357–317,270), confirming variable cost.
   The measured first-call cost converts to 4,183 PIT counts, below the diagnostic 5,134-count
   charge; that trial cannot establish the cost of work surrounding the decoder.
-  Reproduce with
-  `tools/oracle/build_kdv_profile_oracle.sh`, `FIST_DOSBOX_CORE=normal`,
+  A same-core stage trace places first KDV open at 548.110 ms, file access at 548.170,
+  present at 548.179, decode at 549.053–552.558, DAC at 552.559 and framebuffer fill at
+  553.189. The 0.873-ms pre-decode and 0.631-ms post-decode intervals need separate models.
+  Uninstrumented `core=normal` and prior `core=auto` have equal mode-13 contents/timestamps
+  across 197 common events, but their subframe KDV timing differs. The stage hook itself shifts
+  event 51 by 1 µs; use it to attribute stages, not as a timing reference. Keep core and hooks
+  fixed for comparisons. Reproduce with `tools/oracle/build_kdv_{profile,stage}_oracle.sh`,
+  `FIST_DOSBOX_CORE=normal`, `FIST_KDV_STAGE=<path>`,
   `FIST_KDV_PROFILE=<path>` and `FIST_KDV_PROFILE_N=3`; trace:
-  `scratch/sequence-capture/kdv-profile-{3calls,60k,full}.tsv` and `kdv-exceptions*.txt`.
+  `scratch/sequence-capture/kdv-stage-points.tsv`, `kdv-profile-{3calls,60k,full}.tsv`
+  and `kdv-exceptions*.txt`. Both instrumented builders round-trip; `bash tools/check_flow.sh
+  '^intro$'` passes native/WASM at this revision (`scratch/verify/run.N4pOhl/`).
 - Browser canvas may drop worker posts because it retains only `latest`. OPL/SB write separate
   WAVs; browser drains only OPL. Neither is final mixed PCM (owners 0026 and 0003).
 

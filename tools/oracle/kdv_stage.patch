@@ -1,0 +1,22 @@
+--- a/src/cpu/core_normal.cpp
++++ b/src/cpu/core_normal.cpp
+@@ -145,4 +145,19 @@
+ Bits CPU_Core_Normal_Run(void) {
+ 	while (CPU_Cycles-->0) {
+ 		LOADIP;
++		static int fist_kdv_stage_init = 0;
++		static FILE *fist_kdv_stage_file = 0;
++		static unsigned fist_kdv_stage_count[7] = {0};
++		static const unsigned fist_kdv_stage_ip[7] = {0x11cb,0x11dd,0x6f3e,0x7120,0x7135,0x746a,0x746b};
++		if (!fist_kdv_stage_init) {
++			fist_kdv_stage_init = 1;
++			const char *path = getenv("FIST_KDV_STAGE");
++			if (path) fist_kdv_stage_file = fopen(path, "w");
++		}
++		if (fist_kdv_stage_file && SegValue(cs) == 0x2b) {
++			for (unsigned i = 0; i < 7; i++) if (reg_eip == fist_kdv_stage_ip[i] && fist_kdv_stage_count[i]++ < 3) {
++				fprintf(fist_kdv_stage_file, "%04x %u %.6f\n", reg_eip, fist_kdv_stage_count[i], PIC_FullIndex());
++				fflush(fist_kdv_stage_file);
++			}
++		}
+ 		static int fist_kdv_profile_init = 0, fist_kdv_profile_active = 0;
