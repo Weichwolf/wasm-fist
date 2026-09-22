@@ -27,13 +27,18 @@ never trims an unmatched emulator frame.
 - A cursor-count override changes part of the mismatch but not all of it (`oracle-cursor{0,15b}-*`).
   The loader text surface itself is not pinned. Reject cursor/blink forcing: it masks a changing
   producer and cannot establish the attributed application boundary.
+- A temporary first-`FIST.DAT` hook that restores the recorded text/BDA state reproduces all frame
+  bytes through the historic 227-frame prefix (`oracle-arm-state-695/`). Its output clock misses
+  two later rounding edges; a uniform origin offset merely moves the first failure to event 22.
+  The missing state is the live VGA/PIC event queue and fractional phase. Reject timestamp offsets:
+  the versioned hook must seed or preserve that queue state at the DAT transition.
 
 ## Next
 
-1. Restore a minimal, versioned Oracle hook at the attributed DAT transition. It must record or
-   restore the complete required start state, open the sequence there, and prove that two runs
-   have identical first records. Then extend the reference beyond 229 port frames and report the
-   first unequal record.
+1. Restore a minimal, versioned Oracle hook at the attributed DAT transition. It must restore the
+   recorded B800/BDA state and seed the VGA/PIC event queue at its measured fractional phase, then
+   open the sequence there. Prove two runs have identical records through the 227-frame fixture,
+   extend beyond 229 port frames, and report the first unequal record.
 2. Capture and compare the corresponding PCM prefix. Preserve timestamps; no rounding or prefix
    trim.
 3. Keep title-frame timing work in 0034 and this item limited to the application boundary.
