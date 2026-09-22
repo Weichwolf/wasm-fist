@@ -24,15 +24,22 @@ handoff and calls `app_entry()` directly. With `FIST_VGA_TRACE=1 FIST_DUMPTICK=2
 WASM each report only mode 13 at 84.987 ms (`scratch/sequence-capture/loader-vga-probe/`).
 `re_out/fist_vga.c` captures sequences only in mode 13. These runs prove a start-path/capture
 asymmetry; they do not yet prove that the game itself draws 640×400 graphics.
+The game's title text is already byte-identical in native and WASM:
+`Armored Fist\r\n(C) Copyright 1994 by NovaLogic, Inc.\r\n` occurs once in each captured
+stderr (`loader-vga-probe/native-traps.log`, `wasm-console.log`). `re_out/fist_dos.c` DOS
+AH=09 sends those bytes only to stderr; its BIOS text services do not render, and
+`fist_vga.c` has no text-mode presentation. The first missing application-visible output
+is therefore the text screen, not the string producer.
 
 ## Next
 
-1. Capture with a fixed mounted path and identify which process writes each changed 640×400
-   frame. Keep the measured exec/stdout/mode/presentation events and choose a common launch
-   instant with an explicit initial text-screen state.
-2. Make the port's capture begin at that instant and implement the application's stdout and
-   text-mode presentation before mode 13, if that instant precedes them. Preserve the Oracle
-   pre-boundary record separately; never hide it by trimming a failed comparison.
+1. Capture at a fixed mounted path with a trace of text VRAM, cursor and DAC at the common
+   launch instant (before the game's AH=09 output). Attribute later text-screen changes to
+   shell, launcher and engine; retain the exec/stdout/mode/presentation events above.
+2. Initialize the port's text adapter from that matched initial state. Route DOS AH=09 and
+   reached BIOS text services through the adapter; present its 640×400 indexed frames at the
+   original retrace times before mode 13. Compare the first changed pixel and palette entry.
+   Preserve pre-boundary Oracle records; never trim a failed comparison.
 3. Run the same timed launch scenario on all three targets; compare full post-boundary frame
    dimensions, pixels, palettes, timestamps and PCM with strict completion checks.
 
