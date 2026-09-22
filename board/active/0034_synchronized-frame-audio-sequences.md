@@ -5,64 +5,51 @@ Depends: 0033
 
 ## Contract
 
-Capture every presented frame with its presentation time and the continuous PCM stream over explicit
-scenario start/end boundaries. Same initial state, timed input and devices; no host-stack equality.
+Capture every indexed frame, all 256 palette entries, presentation time and continuous PCM over
+explicit scenario boundaries. Same initial state, timed input and devices; no host-stack equality.
 
 ## Evidence
 
-- Rebuilt instrumented DOSBox with `bash tools/oracle/build_sequence_oracle.sh` (the wrapper checks
-  base/patched source hashes and applies `tools/oracle/sequence_probe.patch`); run
-  `bash tools/oracle/probe_sequence.sh 50 scratch/sequence-probe/intro-menu` on an isolated asset copy.
-  The run observed 3429 `RENDER_EndUpdate` calls (70 at 640×400, 3358 at 320×200, one zero mode),
-  48928 `MIXER_MixData` calls, zero capture-state changes and two aborted render updates. The first
-  320×200 frame completed at 1030.744 ms. Of those 3358 frames, 2963 caused no host surface update;
-  repeated scanouts must still be represented. Evidence: `scratch/sequence-probe/intro-menu/dosbox.log`
-  and `scratch/sequence-probe/summary.txt`. This is a timed probe, not a complete output capture.
-- Full unmasked Oracle capture: `bash tools/oracle/capture_sequence.sh 50
-  scratch/sequence-capture/intro-menu` yielded 3448 frame records and 2,182,440 stereo sample
-  frames at 44,100 Hz; both streams have validated completion records. The last captured 320×200
-  frame has AE=0 against `ref/main_menu_native320.png` after palette resolution. Evidence:
-  `scratch/sequence-capture/intro-menu/` (including SHA-256, stream validator output and PPM).
-  A separate four-second run with both capture and probe enabled counted 146,372 mixer samples
-  and exactly 146,372 captured samples, including the first 1103-sample mixer step.
-  `FISTSEQ1` stores ordered pixel-index frames plus RGB8 palette and microsecond timestamps in `.frames`,
-  and continuous stereo PCM16 LE with sample positions in `.pcm`. Both end with checked record counts;
-  `sequence_format.py` rejects truncated, reordered and malformed streams. This proves the Oracle
-  writer, not port parity or exact scenario synchronization.
-- The first mixer step generated 1103 samples; all later steps in this run generated at most 1024.
-  `MIXER_MixData` limits the old `CAPTURE_AddWave` call to 1024 samples. A capture armed at boot
-  would omit 79 samples from that step; normal menu recording starts later. Instrument the final
-  mixer without this cap and assert total emitted sample count.
-- `RENDER_EndUpdate` reaches `CAPTURE_AddImage` only under capture state; ordinary presentation
-  cannot be inferred from existing image captures. Inspect abort and frameskip before treating
-  this callback as a completed scanout. `PIC_FullIndex` gives DOSBox time in milliseconds.
+- `build_sequence_oracle.sh` plus `capture_sequence.sh` captured 3448 Oracle frame events and
+  2,182,440 stereo PCM frames at 44,100 Hz with complete `FISTSEQ1` footers. The final 320×200
+  frame has AE=0 against `ref/main_menu_native320.png`. A paired probe counted every one of
+  146,372 generated samples, including the first 1103-sample mixer step that legacy
+  `CAPTURE_AddWave` would truncate to 1024. Evidence: `scratch/sequence-capture/intro-menu/`.
+- `RENDER_EndUpdate` is the capture boundary; most repeated scanouts do not change the host
+  surface, and `CAPTURE_AddImage` only runs when recording is armed. `sequence_format.py` rejects
+  incomplete streams. The callback's abort/frameskip semantics still need proof as presentation.
 - Native and Node-WASM now emit complete frame-only `FISTSEQ1` captures at INT-8 and op 0x24.
   `bash tools/capture_port_sequence.sh {native,wasm} 400 <fresh-dir>` yielded 465 events each;
   timestamps and RGB frames match byte-for-byte. At tick 120 both emitted 138 events.
   Evidence: `scratch/sequence-capture/port-{native,wasm}-400/`. PCM is still absent.
-- The Oracle has 69 preceding non-320×200 loader frames. After the first 320×200 frame, the
-  first *visible* RGB mismatch is relative frame 7, pixel (144,58), green 0 vs 4: the port
-  displays the next KDV image three scanouts before the original. Original first image change is
-  at guest 1173.424 ms; port at 198.608 ms (different boot origins). The first following frame
-  interval differs by 644 µs. Unused palette entries differ even earlier; they do not alter RGB.
-  The ordinal alignment is diagnostic only: full-stream parity still includes the loader frames.
-  A gated original memory-write trace (`FIST_E584LOG`, local DOSBox probe) records `e584` at
-  guest 1145.240 ms with DS=2d19, duration `[b6e0]=4`, first `[b6e6]=4` at 1146.165 ms, and
-  subsequent `[b6e6]` values 8, 12, 16 at 1216.677, 1288.017, 1345.090 ms.
-  The original first 320×200 scanout is 1030.744 ms; the first index-48 image is 1102.084 ms,
-  71.340 ms later. Port scanout starts at 99.373 ms and reaches that same indexed image at
-  127.271 ms, 27.898 ms later. The net 43.442 ms onset gap is about three 14.268 ms scanouts;
-  the first nine distinct RGB images occur in the same order, but their scanout ordinals are
-  `0,10,15,19,24,29,33,38,43` versus `0,7,11,16,21,25,30,35,39`. This points to startup
-  phase/timing before treating KDV decode content as wrong. Port `FIST_KDV_TRACE` locates KDV OPEN
-  at 114.222 ms (`c452=3`, `b6e0=4`, `b6e6=3`), only 14.849 ms after its first 320×200
-  scanout; the original enters `e584` 114.496 ms after its first 320×200 scanout. The port's
-  first decoded KDV frame is at 114.867 ms and the second at 184.997 ms. Thus the pre-`e584`
-  path is roughly 100 ms shorter in the port, while the first visible KDV image is delayed
-  after that entry; the net 43 ms image gap is not itself a wait-loop diagnosis. Evidence:
-  `scratch/sequence-capture/trace-e584/dosbox.log`,
-  `scratch/sequence-capture/port-trace-{native,wasm}-new/port.log` and full streams above.
-  Trace the mode-switch→animation setup and first two op-0x78 posts on both sides before patching.
+- `cycles=max` changes startup event times between Oracle runs; its 69 loader frames and
+  three-frame intro offset are provenance, not a stable timing baseline. Use
+  `FIST_DOSBOX_CYCLES='fixed 30000'` with `build_timing_oracle.sh` and the sequence runners.
+  Two independent fixed-cycle probes gave identical first 320×200 scanout (475.189 ms), `e584`
+  entry (546.979 ms), `TITLE.KDV` open (548.162 ms), and first two writes to pixel (144,58)
+  (553.103/621.253 ms). Evidence: `scratch/sequence-capture/fixed30k-{a,b}/`.
+- A five-second fixed-cycle Oracle capture has 30 preceding loader frames. Its first nine distinct
+  320×200 RGB images have the same hashes/order as native and WASM, but change at ordinals
+  `0,11,16,20,25,30,34,39,44` versus `0,7,11,16,21,25,30,35,39`. The first visible mismatch
+  is frame 7, pixel (144,58). Strict comparison finds an earlier palette mismatch at the first
+  320×200 frame, entry 17 red=20 versus 0, even though both index buffers match. Loader frames
+  are earlier still. Ordinal alignment is diagnostic only; neither difference can be masked.
+  `compare_frames.py` now fails on every palette/index byte, including unused entries.
+  Evidence: `scratch/sequence-capture/fixed30k-full/` and
+  `port-vga-{native,wasm}/`.
+- The original's MGA `04a3` palette-clear request starts 535.011 ms, returns 546.468 ms:
+  11.457 ms awaiting its vblank service. In the port, the corresponding DAC reset is 113.524 ms
+  and KDV opens 114.222 ms: patch 070 services it synchronously. Relative to the first 320×200
+  scanout, the request occurs at 59.822 ms in the Oracle and 14.151 ms in the port. The
+  45.671 ms preceding gap and missing vblank wait are separate causes to trace. Original KDV
+  writes come from extender `0x10007120`; its descriptor has `[b6e0]=4` timer ticks. Evidence:
+  `scratch/sequence-capture/fixed30k-full/dosbox.log`,
+  `scratch/sequence-capture/port-vga-{native,wasm}/port.log`.
+- `bash tools/check_flow.sh '^(intro|settings-sky)$'` passed tests, patch checks, both builds and
+  both selected flows after adding gated port tracing; the earlier full 178-flow matrix was
+  green before that trace-only change. Evidence: `scratch/verify/run.gKbZLj/` and
+  `scratch/verify/full-0034-frames/`. Strict palette/index comparison passed 28 unit tests
+  and all 138 native/WASM frame events; evidence: `scratch/sequence-capture/strict-palette-tests.log`.
 - Browser worker posts at INT-8 and op 0x24; `fist_web_post_frame` forces the palette. The
   canvas keeps only `latest` until `requestAnimationFrame`, so worker posts may be dropped from
   actual display. This needs browser measurement under 0026; Node runs cannot prove it.
@@ -71,10 +58,9 @@ scenario start/end boundaries. Same initial state, timed input and devices; no h
 
 ## Next
 
-1. Reconstruct the original mode-switch→animation setup and first two op-0x78 posts against
-   the port. Capture timed `[0x452]`/`[b6e6]` and decoder output at the first visible
-   transition; correct the first divergent producer, then repeat complete frame-sequence
-   comparison on both targets.
+1. Recover the original mode-switch→MGA-04a3 call chain and account for its 45.671 ms work in
+   the port clock. Restore 04a3's vblank-serviced palette upload/wait (patch 070) from original
+   IRQ evidence. Re-capture fixed-cycle Oracle/native/WASM streams; diagnose the first mismatch.
 2. Implement a single final port mixer owner (0003) and emit continuous PCM, including SB effects;
    the two existing WAV writers and OPL-only browser feed do not satisfy this capture.
 3. Drive original and both ports to the same explicit *virtual* scenario end and timed inputs. The

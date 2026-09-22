@@ -1,0 +1,49 @@
+--- a/src/hardware/vga_memory.cpp
++++ b/src/hardware/vga_memory.cpp
+@@ -533,6 +533,17 @@
+ 	/* FIST_WATCHMAX overrides the 40000-entry cap (a whole-object trace of the player fills it in 20 s
+ 	 * of mission); the file stays open across hits instead of being reopened per line. */
+ 	static long fist_watch_max = -1;
++	if (getenv("FIST_MGAENTRYLOG") && reg_eip >= 0x4a3 && reg_eip <= 0x4cc) {
++		static Bit32u last_eip = 0xffffffffu;
++		if (reg_eip != last_eip) {
++			fprintf(stderr, "FIST_MGA_ENTRY %.6f cs=%04x eip=%04x ph=%08x val=%02x\n",
++				PIC_FullIndex(), SegValue(cs), reg_eip, ph, val);
++			last_eip = reg_eip;
++		}
++	}
++	if (getenv("FIST_E584LOG") && reg_eip >= 0xe584 && reg_eip <= 0xe6db)
++		fprintf(stderr, "FIST_E584 %.6f cs=%04x eip=%04x ds=%04x dsb=%08x ph=%08x val=%02x\n",
++			PIC_FullIndex(), SegValue(cs), reg_eip, SegValue(ds), SegPhys(ds), ph, val);
+ 	if (fist_watch_max < 0) { const char *e = getenv("FIST_WATCHMAX"); fist_watch_max = e ? atol(e) : 40000; }
+ 	if (fist_watch_hi && ph >= fist_watch_lo && ph < fist_watch_hi && fist_watch_hits < fist_watch_max) {
+ 		fist_watch_hits++;
+@@ -818,6 +829,9 @@
+ 	}
+ 	if (!fist_armed) return;
+ 	Bit32u off = addr & 0x1ffff;
++	if (getenv("FIST_INTRO_PIXELLOG") && off == 18704)
++		fprintf(stderr, "FIST_PIXEL %.6f cs=%04x eip=%08x flatip=%08x value=%02x\n",
++			PIC_FullIndex(), SegValue(cs), reg_eip, SegPhys(cs) + reg_eip, val & 0xff);
+ 	if (off >= 0x10000) return;             /* only the visible 320x200 range */
+ 	Bit32u ipl = SegPhys(cs) + reg_eip;
+ 	Bit32u csv = SegValue(cs), eipv = reg_eip;
+--- a/src/dos/dos_files.cpp
++++ b/src/dos/dos_files.cpp
+@@ -30,6 +30,7 @@
+ #include "dos_inc.h"
+ #include "drives.h"
+ #include "cross.h"
++#include "pic.h"
+ 
+ #define DOS_FILESTART 4
+ 
+@@ -506,6 +507,8 @@
+ }
+ 
+ bool DOS_OpenFile(char const * name,Bit8u flags,Bit16u * entry) {
++	if (getenv("FIST_KDV_FILELOG") && strstr(name, ".KDV"))
++		fprintf(stderr, "FIST_KDV_FILE %.6f name=%s flags=%u\n", PIC_FullIndex(), name, flags);
+ 	/* First check for devices */
+ 	if (flags>2) LOG(LOG_FILES,LOG_ERROR)("Special file open command %X file %s",flags,name);
+ 	else LOG(LOG_FILES,LOG_NORMAL)("file open command %X file %s",flags,name);

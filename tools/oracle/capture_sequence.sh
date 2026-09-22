@@ -25,7 +25,7 @@ memsize=16
 [cpu]
 core=auto
 cputype=auto
-cycles=max
+cycles=${FIST_DOSBOX_CYCLES:-max}
 [sblaster]
 sbtype=sb16
 sbbase=220

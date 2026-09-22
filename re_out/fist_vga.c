@@ -203,7 +203,11 @@ void out(int port, int val)
     if (fist_opl_owns(port)) { fist_opl_out(port, val); return; }  /* OPL FM 0x388/0x389 (FIST_OPL/FIST_SB) */
     if (fist_sb_owns(port)) { fist_sb_out(port, val); return; }   /* SB DSP + 8237 DMA (FIST_SB, default off) */
     switch (port) {
-    case 0x3c8: g_dac_widx = val; g_dac_wsub = 0; return;     /* set DAC write index */
+    case 0x3c8:
+        if (getenv("FIST_VGA_TRACE") && g_vmode == 0x13 && val == 0)
+            fprintf(stderr, "[vga] DAC reset t=%.6f c452=%u\n",
+                (double)g_clock * 1000.0 / PIT_HZ_, *(uint16_t *)(g_mem + 0x1c452));
+        g_dac_widx = val; g_dac_wsub = 0; return;     /* set DAC write index */
     case 0x3c7: g_dac_ridx = val; g_dac_rsub = 0; return;     /* set DAC read index */
     case 0x3c9: /* DAC data write: R,G,B (6-bit) */
         g_pal[g_dac_widx & 0xff][g_dac_wsub] = (unsigned char)(val & 0x3f);
