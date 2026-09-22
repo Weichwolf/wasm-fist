@@ -88,13 +88,12 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   it is not the later engine producer.
 - Port `op` tracing places the first KDV extender `0x6c` at 512.152 ms, after the first
   MGAVIDEO reset at 496.943 ms. Its one-IRQ yield cannot account for the earlier gap.
-- `oracle-startuphist-622/` counts 1,763,178 original instructions from the mode-13 BIOS
-  return through the first DAC upload. The apparent `1000:4bb7` loop is a CS-overlap alias:
-  the running image executes it at `2082:3cb6` (linear `0x244d6`), reached by the direct
-  `2ebe:2f18 -> 3346` call. Patch 017 already reconstructs `FUN_1000_3346` as the
-  `ss:[452]` wait. Its obsolete `fist_timer_pump` model and an exact one-load/two-instruction
-  replacement both produce the same full native sequence through event 35, so this wait does
-  not explain the missing six milliseconds.
+- `oracle-gap-profile-627/` counts 1,763,172 original instructions from the BIOS mode-set DAC
+  reset through the first MGAVIDEO reset (408.582→503.000 ms). The 1,643,811 hottest instructions
+  are the `[0x44e]` wait at running `2082:439b`, whose bytes belong to `FUN_1000_3a14` under the
+  live CS mapping, not the similarly shaped `4bb7/4bcc` Ghidra identities. Patch 044 already
+  implements 3a14's two `[0x44e]` tick waits. Replacing unrelated 3346/4bb7 bodies does not alter
+  the capture and is discarded.
 
 ## Next
 
