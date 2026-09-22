@@ -2,17 +2,19 @@ PATCH 617: count the original KDV decoder instructions by branch and write predi
 
 The assembly at 7135..746a has five cell paths. The fixed setup/row/header work,
 per-path costs and conditional stores in this patch reproduce all 395 TITLE.KDV
-Oracle IP histograms (tools/oracle/check_kdv_instruction_formula.py). This hook
-records the decoder's work without yet charging the virtual clock; file-read
-cycle caps, page faults and interleaved ISRs still require separate timing models.
+Oracle IP histograms (tools/oracle/check_kdv_instruction_formula.py). The exact
+count is charged at the decoder boundary, before the DAC upload and framebuffer
+copy. File-read cycle caps, page faults and instruction-level IRQ interleaving
+remain separate timing work.
 --- a/fist_ext.c
 +++ b/fist_ext.c
-@@ -12317,10 +12317,13 @@
+@@ -12317,10 +12317,14 @@
    uint uVar9;
    uint uVar10;
    char *pcVar11;
 +  uint64_t instruction_count = 7;
 +  extern void fist_kdv_instruction_count(uint64_t);
++  extern void fist_clock_charge_cpu_instructions(unsigned);
    
    uVar3 = DAT_0000_5578;
    iVar2 = DAT_0000_5578 * 3;
@@ -75,11 +77,12 @@ cycle caps, page faults and interleaved ISRs still require separate timing model
        }
        param_3 = param_3 + 4;
        uVar10 = (uint)CONCAT11((char)(uVar9 >> 8) + '\x01',(byte)uVar9 >> 2);
-@@ -12526,6 +12541,7 @@
+@@ -12526,6 +12541,8 @@
      param_3 = param_3 + iVar2;
      uVar6 = uVar6 - 1;
    } while (uVar6 != 0);
 +  fist_kdv_instruction_count(instruction_count);
++  fist_clock_charge_cpu_instructions((unsigned)instruction_count);
    return;
  }
  

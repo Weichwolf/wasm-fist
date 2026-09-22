@@ -21,12 +21,13 @@ Report the first unequal event, byte or sample. Missing, truncated or masked out
   match each other and the first six Oracle mode-13 frames (`fractional-*/`). Absolute start,
   startup capture boundary/launcher presentation, phase/long-run rounding and mixed PCM remain
   unmatched (0036).
-- First content difference: mode-13 frame 7. Original KDV fills the framebuffer between the
-  first and second 50-row draw parts; the port fills it earlier. Original present→decode costs
-  1,042/331/380 PIT counts for frames 1–3, decoder→DAC 4,183/2,459/2,443, DAC→fill
-  753–757; the port charges zero for the first two stages and 769 for the last. The first
-  decode executes 102,357 instructions plus 15 first-touch faults at 187 cycles each.
-  Use `FIST_DOSBOX_CORE=normal` for comparable timing. Stage/profile traces:
+- The KDV decoder now charges its exact recovered `7135..746a` instruction count before DAC
+  upload and framebuffer copy. The first 171 native frames now have Oracle-identical indices
+  and palettes; their first unequal record is event 36, 560,798 versus 560,797 us. Twelve of
+  171 timestamps are one microsecond early. Original present→decode costs 1,042/331/380 PIT
+  counts for frames 1–3, decoder→DAC 4,183/2,459/2,443, DAC→fill 753–757. The first decode
+  executes 102,357 instructions plus 15 first-touch faults at 187 cycles each. Use
+  `FIST_DOSBOX_CORE=normal` for comparable timing. Stage/profile traces:
   `scratch/sequence-capture/kdv-stage-readcost.tsv`,
   `kdv-profile-{3calls,60k,full}.tsv`, `kdv-exceptions*.txt`.
 - DOSBox `INT 21h/3Fh` charges `4×read bytes`, capped by the remaining 1-ms CPU slice
@@ -54,9 +55,10 @@ Report the first unequal event, byte or sample. Missing, truncated or masked out
 
 ## Next
 
-1. Reproduce DOSBox's read-cycle slice cap in the port clock. Apply decoder cost during cell
-   execution so PIT/ISR events interleave; model first-touch faults. Compare complete frame
-   contents and timestamps through the first difference, including the post-IRQ cockpit.
+1. Reproduce DOSBox's read-cycle slice cap and first-touch faults. Refine the decoder boundary
+   charge to cell execution only when a trace proves an intervening observable event. Compare
+   complete frame contents and timestamps through the first difference, including the post-IRQ
+   cockpit.
 2. Resolve the startup capture boundary and launcher output in 0036. Align VGA phase, timed
    inputs and float PIC event rounding. Compare every frame's order, size, time, indices and
    palette without silently dropping a prefix.
