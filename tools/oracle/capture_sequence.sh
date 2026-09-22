@@ -23,7 +23,7 @@ scaler=none
 [dosbox]
 memsize=16
 [cpu]
-core=auto
+core=${FIST_DOSBOX_CORE:-auto}
 cputype=auto
 cycles=${FIST_DOSBOX_CYCLES:-max}
 [sblaster]

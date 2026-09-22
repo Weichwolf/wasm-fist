@@ -1,0 +1,44 @@
+--- a/src/cpu/core_normal.cpp
++++ b/src/cpu/core_normal.cpp
+@@ -147,0 +148,41 @@
++		static int fist_kdv_profile_init = 0, fist_kdv_profile_active = 0;
++		static int fist_kdv_profile_calls = 0, fist_kdv_profile_max = 1;
++		static FILE *fist_kdv_profile_file = 0;
++		static unsigned long long fist_kdv_profile_total = 0, fist_kdv_profile_other = 0;
++		static unsigned long long fist_kdv_profile_ip[0x10000];
++		if (!fist_kdv_profile_init) {
++			fist_kdv_profile_init = 1;
++			const char *path = getenv("FIST_KDV_PROFILE");
++			if (path) fist_kdv_profile_file = fopen(path, "w");
++			const char *limit = getenv("FIST_KDV_PROFILE_N");
++			if (limit) fist_kdv_profile_max = atoi(limit);
++		}
++		if (fist_kdv_profile_file) {
++			if (!fist_kdv_profile_active && SegValue(cs) == 0x2b && reg_eip == 0x7135) {
++				fist_kdv_profile_active = 1;
++				fist_kdv_profile_total = fist_kdv_profile_other = 0;
++				fprintf(fist_kdv_profile_file, "call %d begin %.6f\n",
++					fist_kdv_profile_calls + 1, PIC_FullIndex());
++			}
++			if (fist_kdv_profile_active) {
++				fist_kdv_profile_total++;
++				if (SegValue(cs) == 0x2b && reg_eip < 0x10000) fist_kdv_profile_ip[reg_eip]++;
++				else fist_kdv_profile_other++;
++				if (SegValue(cs) == 0x2b && reg_eip == 0x746a) {
++					fprintf(fist_kdv_profile_file, "call %d end %.6f total %llu other %llu\n",
++						fist_kdv_profile_calls + 1, PIC_FullIndex(),
++						fist_kdv_profile_total, fist_kdv_profile_other);
++					for (unsigned i = 0; i < 0x10000; i++)
++						if (fist_kdv_profile_ip[i]) {
++							fprintf(fist_kdv_profile_file, "%04x %llu\n", i, fist_kdv_profile_ip[i]);
++							fist_kdv_profile_ip[i] = 0;
++						}
++					fflush(fist_kdv_profile_file);
++					fist_kdv_profile_active = 0;
++					if (++fist_kdv_profile_calls >= fist_kdv_profile_max) {
++						fclose(fist_kdv_profile_file);
++						fist_kdv_profile_file = 0;
++					}
++				}
++			}
++		}
