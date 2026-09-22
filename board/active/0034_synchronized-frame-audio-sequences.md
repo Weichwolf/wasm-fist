@@ -34,17 +34,22 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
   time still drifts by 11 µs over 23 intervals (`scratch/sequence-capture/trial-cost5134-*/`).
 - DOSBox `7135` decodes 4,000 cells per KDV frame. The first three calls execute 102,357,
   61,827 and 61,417 instructions and take 3.5054, 2.0609 and 2.0472 ms. Branch-dependent
-  work, not a fixed first-frame delay, must advance the port clock. Reproduce with
+  work must advance the port clock. The first call also faults on 15 new framebuffer pages:
+  `(102357 + 15×187)/30000 = 3.5054 ms`; the 60000-cycle run independently gives
+  1.7527 ms for the same counts and faults. Later calls have no such faults. A full title run
+  has 395 calls, 298 distinct instruction counts (54,357–317,270), confirming variable cost.
+  Reproduce with
   `tools/oracle/build_kdv_profile_oracle.sh`, `FIST_DOSBOX_CORE=normal`,
   `FIST_KDV_PROFILE=<path>` and `FIST_KDV_PROFILE_N=3`; trace:
-  `scratch/sequence-capture/kdv-profile-3calls.tsv`.
+  `scratch/sequence-capture/kdv-profile-{3calls,60k,full}.tsv` and `kdv-exceptions*.txt`.
 - Browser canvas may drop worker posts because it retains only `latest`. OPL/SB write separate
   WAVs; browser drains only OPL. Neither is final mixed PCM (owners 0026 and 0003).
 
 ## Next
 
-1. Model the original KDV decoder's branch-dependent CPU work and the inherited fractional VGA
-   phase; compare complete frame contents and timestamps through the first differing event.
+1. Model the KDV decoder's branch-dependent instruction count and first-touch page-fault cost,
+   then the inherited fractional VGA phase; compare complete frame contents and timestamps
+   through the first differing event.
    Verify the post-IRQ cockpit capture against the Original presentation phase.
 2. Capture loader frames. Establish identical virtual scenario start/end and timed input; compare
    complete frame order, dimensions, timestamps, indices and palettes without truncation.
