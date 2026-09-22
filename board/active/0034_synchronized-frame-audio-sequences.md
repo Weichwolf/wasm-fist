@@ -81,6 +81,13 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
   `scratch/sequence-capture/kdv-stage-points.tsv`, `kdv-profile-{3calls,60k,full}.tsv`
   and `kdv-exceptions*.txt`. Both instrumented builders round-trip; `bash tools/check_flow.sh
   '^intro$'` passes native/WASM at this revision (`scratch/verify/run.N4pOhl/`).
+- `tools/oracle/check_kdv_instruction_formula.py scratch/sequence-capture/kdv-profile-full.tsv`
+  proves an asm-derived count for every one of 395 decoder calls: fixed `7+7×rows+2×headers`,
+  plus per-cell `82×two-bit + 97×one-bit + 25×solid + 64×raw + 13×skip`, plus
+  `2×two-bit-writes + one-bit-writes + raw-writes`. Seven calls have interleaved ISR work;
+  compare the formula to IPs `7135..746a`, not the whole call's total. The port can count
+  these branch/write predicates as it decodes instead of carrying a frame-cost table.
+  The reaching intro flow passes both targets (`scratch/verify/run.zMnHIH/`).
 - Browser canvas may drop worker posts because it retains only `latest`. OPL/SB write separate
   WAVs; browser drains only OPL. Neither is final mixed PCM (owners 0026 and 0003).
 - `tools/oracle/compare_sequences.py` validates complete frame/PCM streams and reports the
