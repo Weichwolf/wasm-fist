@@ -20,11 +20,17 @@ never trims an unmatched emulator frame.
 - KDV owns the title-frame timing; its gate and PIC scanout reconstruction belong to 0034. Do not
   alter startup phase to hide a later producer defect.
 - Native and WASM match all 229 captured frame records. The timestamp is part of the contract.
+- A new five-second fixed-30k Oracle run reaches 297 frames but differs in its first shell frame
+  (`oracle-start-boundary-689/`). The historic matching capture was made with a temporary
+  instrumented start-state hook that has been restored out of DOSBox. A normal launcher run is
+  therefore not a continuation of `oracle-pre-dat`; do not use it as a reference for this item.
 
 ## Next
 
-1. Keep the shared start state and phase inputs fixed. Extend the fixed-30k Oracle capture beyond
-   the port's bound; compare the full continuous prefix and report the first unequal record.
+1. Restore a minimal, versioned Oracle hook at the attributed DAT transition. It must record or
+   restore the complete required start state, open the sequence there, and prove that two runs
+   have identical first records. Then extend the reference beyond 229 port frames and report the
+   first unequal record.
 2. Capture and compare the corresponding PCM prefix. Preserve timestamps; no rounding or prefix
    trim.
 3. Keep title-frame timing work in 0034 and this item limited to the application boundary.
