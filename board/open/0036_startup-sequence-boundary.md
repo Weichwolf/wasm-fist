@@ -86,6 +86,8 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   tick 1) from the first MGAVIDEO reset at 503.001 ms. The port initializes its DAC state
   directly during mode 13, so this BIOS write has no pre-event-35 observable difference;
   it is not the later engine producer.
+- Port `op` tracing places the first KDV extender `0x6c` at 512.152 ms, after the first
+  MGAVIDEO reset at 496.943 ms. Its one-IRQ yield cannot account for the earlier gap.
 - `oracle-startuphist-622/` counts 1,763,178 original instructions from the mode-13 BIOS
   return through the first DAC upload. The apparent `1000:4bb7` loop is a CS-overlap alias:
   the running image executes it at `2082:3cb6` (linear `0x244d6`), reached by the direct
