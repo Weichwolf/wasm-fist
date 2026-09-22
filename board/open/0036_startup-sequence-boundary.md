@@ -32,7 +32,12 @@ never trims an unmatched emulator frame.
   `746a` 552.557900, `746b` 552.558033 and `7120` 553.189300 ms. The pre-decoder path reads
   768 and 5,000 bytes, then transfers 64 KB at `7120`. Charging only the exact decoder and the
   16,000-cycle transfer yields an event-36 scan with 16,000 black and 48,000 index-48 pixels.
-  The missing pre-decoder/dispatcher contract is therefore observable; do not encode a delay.
+- The prior "omitted dispatcher" diagnosis is rejected. `oracle-event36-stack-659` shows the
+  `11cb`/`11dd` return to `0f57`; `fist_image.bin:0f30` indexes `cb3[op]`, where `0x70 -> 11cb`
+  and `0x78 -> 11dd`. The port already calls the right routines. It collapses their real-mode DOS
+  and Extender instruction paths into host calls. Frames 2 and 3 establish a fixed 1,675-cycle
+  non-I/O pre-decoder remainder after their DOS paths; the byte-transfer paths still vary with
+  CPU-slice position and must be reconstructed rather than fitted as a wall-time delay.
 - Clean captures `port-phase-clean-650` and `wasm-phase-clean-650` match native/WASM exactly
   through event 67. Event 68 differs only in timestamp: native 1,017,375 us, WASM 1,017,376 us.
   This violates the contract; do not call the targets identical.
@@ -40,10 +45,10 @@ never trims an unmatched emulator frame.
 
 ## Next
 
-1. Recover the omitted PM frame-op dispatcher before changing output. For frame 1 its measured
-   stages are `11dd` 548.179300 → `7135` 549.052500 → `746a` 552.557900 → `7120` 553.189300 →
-   first VRAM store 553.722733 ms. Account separately for the 768/5,000-byte reads, decoder and
-   64-KB transfer. Advance time before stores. Do not encode a delay.
+1. Reconstruct the collapsed KDV I/O path before changing output. For frame 1 its measured stages
+   are `11dd` 548.179300 → `7135` 549.052500 → `746a` 552.557900 → `7120` 553.189300 → first
+   VRAM store 553.722733 ms. Account separately for the 768/5,000-byte reads, the 1,675-cycle
+   Extender remainder, decoder and 64-KB transfer. Preserve CPU-slice state; do not fit a delay.
 2. Explain the native/WASM one-microsecond event-68 discrepancy from the sequence timestamp
    conversion. Add a regression that compares the full frame record, including time; do not round
    the comparison or the capture format.
