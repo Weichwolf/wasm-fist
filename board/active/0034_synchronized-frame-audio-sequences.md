@@ -14,16 +14,18 @@ Report the first unequal event, byte or sample. Missing, truncated or masked out
 - The fixed-30000-cycle Oracle has 4,151 frames and 2,626,325 stereo samples with valid footers
   (`scratch/sequence-capture/kdv-profile-full-run/`). Its first 30 frames are 640×400 DOSBox
   shell/launcher output; frame 26 includes Armored Fist's copyright text, frames 27–29 are black.
-  Mode 13 starts at 475.189 ms after one skipped 640×400 presentation. DOSBox retains that
-  mode's period `100×449/(28322000/9 truncated)
-  = 14.268064195 ms` and schedules events with float PIC indices. The port's fractional
-  scanout now spans 328,165 µs over 24 frames versus Oracle 328,166 µs; native/WASM contents
-  match each other and the first six Oracle mode-13 frames (`fractional-*/`). Absolute start,
-  startup capture boundary/launcher presentation, phase/long-run rounding and mixed PCM remain
-  unmatched (0036).
+  Mode 13 starts at 475.189 ms after one skipped 640×400 presentation. DOSBox schedules each
+  scanout part through a `float` PIC index, then executes it on the 30,000-cycles/ms CPU quantum.
+  The trace changes from 3.17774258 ms text parts to 3.17775571 ms mode-13 parts at the switch
+  (`oracle-drawfloat-675/dosbox.log`); the latter follows the mode-13 3,146,875 Hz character
+  clock, while text uses 3,146,888 Hz. A global clock replacement breaks event 4; rescaling the
+  accumulated phase at the switch breaks event 33. The replacement must reproduce the PIC float
+  event queue, not substitute a rational clock or phase scale. Native/WASM contents match each
+  other and the first six Oracle mode-13 frames (`fractional-*/`). Absolute start, startup capture
+  boundary/launcher presentation, phase/long-run rounding and mixed PCM remain unmatched (0036).
 - The KDV decoder now charges its exact recovered `7135..746a` instruction count before DAC
   upload and framebuffer copy. The first 171 native frames now have Oracle-identical indices
-  and palettes; their first unequal record is event 36, 560,798 versus 560,797 us. Twelve of
+  and palettes; their first unequal record is event 36, 560,798 versus 560,797 us. Eleven of
   171 timestamps are one microsecond early. Original present→decode costs 1,042/331/380 PIT
   counts for frames 1–3, decoder→DAC 4,183/2,459/2,443, DAC→fill 753–757. The first decode
   executes 102,357 instructions plus 15 first-touch faults at 187 cycles each. Use
