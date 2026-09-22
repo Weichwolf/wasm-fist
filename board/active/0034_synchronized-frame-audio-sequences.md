@@ -66,6 +66,12 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
   A port timing model must preserve read sizes, slice budget and exception cost. The rebuilt
   profiler/stage Oracle round-trips; `bash tools/check_flow.sh '^intro$'` passes both targets
   (`scratch/verify/run.9ZOcCA/`).
+- A reverted diagnostic charged the port `4×read bytes` without the DOSBox slice cap. It moved
+  the first three present→decode intervals to 923/344/391 PIT counts versus the Original's
+  1,042/331/380. Adding only the measured first decoder cost (4,183 counts) at `7135` then
+  made all 24 captured mode-13 frame contents and palettes match the Original
+  (`scratch/sequence-capture/readcost-decoder-gdb/`). This validates the producer of the
+  scanout difference, not a general timing model; absolute times and PCM still disagree.
   Uninstrumented `core=normal` and prior `core=auto` have equal mode-13 contents/timestamps
   across 197 common events, but their subframe KDV timing differs. The stage hook itself shifts
   event 51 by 1 µs; use it to attribute stages, not as a timing reference. Keep core and hooks
