@@ -57,9 +57,10 @@ the first unequal event, byte or sample; reject missing or incomplete output wit
 - In a diagnostic run, charging 5,134 PIT counts before the first KDV decode plus the trial IRQ wait
   and four-part scanout makes all 24 captured mode-13 frames byte-identical in indices and palette
   across Original/native/WASM. The Original-to-port presentation offset drifts from 319.792 to
-  319.781 ms, so timing is still unequal. DOSBox's 100×449 characters at 25.175 MHz / 8 give
-  17,024.4677 PIT counts/frame; the port uses 17,025. That predicts 10.26 µs drift over 23
-  intervals. This is a measured first-frame probe, not a validated
+  319.781 ms, so timing is still unequal. DOSBox retains its 14.268064-ms loader-mode vertical
+  period when mode 13's computed 14.268123 ms differs by less than its 0.0001-ms rearm threshold;
+  the port uses 14.268569 ms. That predicts 11.62 µs drift over 23 intervals. This is a measured
+  first-frame probe, not a validated
   general decoder-cost model or a passing full matrix. Evidence:
   `scratch/sequence-capture/trial-cost5134-{native,wasm}/`.
 - DOSBox uses four 50-row `VGA_DrawPart` samples per mode-13 presentation. The port now latches each
