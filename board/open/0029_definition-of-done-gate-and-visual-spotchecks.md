@@ -1,73 +1,35 @@
 Type: feature
-Status: open
-Parent: 0000
-Title: the port passes the definition-of-done gate -- 10x consecutive wasm matrix + visual spot-checks vs the original
+Title: The complete port passes the current exhaustive correctness gate
 
-The goal's two-part correctness proof (CLAUDE.md "What decides done"):
+## Contract
 
-  1. the full test matrix runs error-free TEN consecutive times over `tools/wasm_gate.sh`
-     (one failure resets the counter to zero);
-  2. at representative points of every surface, render spot-checks are compared VISUALLY against the
-     original (screenshot comparison, not only a byte hash).
+On one identified revision, cover every required surface and pass the entire WASM matrix ten
+consecutive times, independently confirmed by a subagent. Any failed or incomplete run resets the
+streak. Native parity, original references and visual checks are separate required evidence.
 
-## Proof (2): visual spot-checks vs the DOSBox original -- the static surfaces are DONE
+## Evidence
 
-Every `ref/*_native320.png` is a GENUINE 1:1 unscaled 320x200 DOSBox capture of the original
-(`tools/refcapture_*.sh`), so the verify matrix's per-flow comparison IS a port-vs-original check, not
-merely native-vs-wasm.  Confirmed directly this round:
+Historical 609 log `scratch/oracle/wasm_gate_609.log`: ten clean 178-flow runs. The 610 record has
+one complete 178-flow pass on each target, not a fresh ten-run streak. Reported killed background
+processes do not prove an OOM cause without system evidence and do not waive the gate.
+Missing coverage includes dynamic terrain/projection, all cockpits, mission sample audio, campaign
+progression, gameplay input/link, browser pacing and full mission tails (owning items in README).
 
-  - All 29 menu / screen / dialog / settings surfaces with an oracle ref (mainmenu, about, review,
-    selplayer[+ok/+kkr], battles[+select/+cancel/+scroll/+page/+ok], campaigns[+select/+ok/+cancel],
-    and every settings sub-state: sky, detail med/low, sound-fx med/off, music off, smoke off,
-    joystick + flightstick/tmfcs/ch/tmwcs) render **pixel-identical** to their DOSBox capture on the
-    port -- 29/29 identical, 0 differ (rendered on /tmp/fist_native, hashed vs ref).
-  - A port-vs-original montage (main menu, battles, cockpit chrome) was eyeballed: indistinguishable.
+## Next
 
-So for the menu/screen/dialog/settings class, "the matrix passes" is already "the player cannot tell
-the port from the original".  What remains for proof (2): the DYNAMIC surfaces -- the in-mission
-windshield voxel band (board:0002, oracle-framebuffer congruence) and the cockpit instruments/radar
-(frame-timed; verified per-tick against g_mem in board:0017, but not yet as a still-frame screenshot
-against a tick-aligned oracle capture) -- and the vehicle cockpits beyond the M1/M2 (board:0027).
+1. Build an explicit surface→flow→original-reference inventory. Derive expected flow names from
+   that inventory and fail omissions/duplicates; a hardcoded minimum count can hide missing coverage.
+2. Harden `tools/wasm_gate.sh`: check process exit status as well as summaries, fix the tested build
+   identity, and preserve all ten complete results. Recommendation: bounded foreground chunks may
+   form one pass only if every expected flow completes once on the same build.
+3. Fill coverage through owning items; add representative visual comparisons for each surface class.
+   Palette/frame/audio masks must follow a proved contract, never conceal a failing surface.
+4. Run `bash tools/verify.sh both` explicitly: separate native/wasm runs skip cross-target
+   comparisons in several branches. Complete parity evidence, then obtain ten clean WASM passes and the
+   required independent confirmation. Rebuilds or material matrix changes require a fresh streak.
 
-## Proof (1): the 10x wasm endurance
+## Accept
 
-`tools/wasm_gate.sh` grinds 10 consecutive clean `verify.sh wasm` runs (178 flows each; one FAIL
-resets to 0).
-
-ACHIEVED on the 609 tree (`scratch/oracle/wasm_gate_609.log`): runs #1..#10 each 178 pass / 0 fail,
-consecutive 10/10, zero failures, zero resets, 02:27..04:30.  So the current 178-flow matrix passes
-the 10x endurance -- the WASM build is error-free and reproducible across the whole matrix ten times
-over.
-
-The honest remaining gap for proof (1) is MATRIX BREADTH, not endurance: the 178 flows cover every
-menu/screen/dialog/setting (vs the oracle), the .FSG editor round-trip, the audio note/WAV flows, the
-per-theatre cockpit chrome and spawn frames, and native==wasm terrain -- but NOT yet the dynamic
-windshield voxel band vs the oracle (board:0002), the T-80/heli cockpits (board:0027), the full
-mission audio stream vs the oracle (board:0003/0011), game save/load (board:0004), the serial link, or
-browser pacing (board:0026).  The gate must be RE-PASSED 10x after the matrix is extended to those
-surfaces; today's 10/10 is the endurance proof for the surfaces already in the matrix.
-
-DONE when: proof (1) reaches 10/10 on a tree where every surface named in the goal is implemented,
-and proof (2) covers every surface class (static: done; dynamic windshield + cockpits: open).
-
-## patch 610 tree: FULL matrix 178/0 both targets; native==wasm byte-identical (2026-09-13)
-
-The 610 tree (the native==wasm in-mission fix) passes the complete 178-flow matrix on BOTH targets:
-  - native: 178 pass / 0 fail (one `verify.sh native` run).
-  - wasm:   178 pass / 0 fail (run in foreground chunks -- terrain 5, cockpit/spawn/mission 57,
-    selplayer/battles/menu 14, settings/campaign 17, fsg/audio/editor/... 85, cancel 1 = 178, every
-    chunk 0 fail).
-  - native==wasm: byte-identical per-tick to RESOLUTION on AZER1 (6978 ticks) and to t=2500 on 16 more
-    missions across all theatres (board:0012).
-So proof(1) holds for ONE full pass on the 610 tree, both targets, plus the native==wasm invariant that
-the 609 tree lacked in-mission.
-
-ENVIRONMENT LIMITATION for the 10x ENDURANCE re-run: this sandbox OOM-kills long-running BACKGROUND tasks
-under memory pressure regardless of their actual footprint -- the wasm gate died at flow 8 (a light
-settings flow, node RSS 29 MB, 13 GB free), and the 47-mission selfplay and the SIMHASH sweep were
-killed the same way; foreground Bash calls (auto-backgrounded at 600 s) survive.  So `tools/wasm_gate.sh`
-(a ~2 h background loop) cannot complete here.  The 10x endurance was achieved on the 609 tree
-(wasm_gate_609.log); 610 changes only sim VALUES (native==wasm preserved, full matrix 178/0 both
-targets), so it preserves the endurance -- but a literal 10x re-run needs either a chunked foreground
-harness or an environment without the background-kill.  Recommend a `wasm_gate.sh` mode that runs each
-pass as a sequence of foreground-sized chunks.
+Every surface in AGENTS.md is covered; exact original/native/WASM checks and visual checks pass.
+Ten complete consecutive runs on the final revision are retained with no unexplained skips or failures.
+Historical passes, prefix parity and an equal verdict cannot substitute for this result.

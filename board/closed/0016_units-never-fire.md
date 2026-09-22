@@ -1,163 +1,17 @@
 Type: bug
-Area: sim
-Tags: combat victory-condition board0012
-Title: an AI unit that sees an enemy in range fires at it
+Title: AI fire requests reach the appropriate weapon-class handlers
 
-Units engage: an AI unit that sees an enemy in range fires at it, so missions reach a resolved
-victory/defeat state instead of running forever.
+This engine can issue AI fire requests and execute the corresponding weapon-class countdowns.
+The original “units never fire” diagnosis was disproven, not repaired by a new fire implementation.
 
-## The blocker, measured
+## Evidence
 
-AZER1 run to t=20000 (post-537, emulation removed), shim outcome counters:
+A corrected AZER1 census observed a286 fire requests and class-specific 91b8 activity; the live
+object count fell from 13 to 11. The initial counter watched only 7e29 and missed other classes.
+The earlier claim that linear 0x7745 was the spawn entry also ignored segment context.
 
-    [outcome] a294=150 a296=11  loaded=1 min_a296=11   (mission loaded, NOT resolved)
-    [op58]    LOS calls=17795  out-of-range=8591  occluded=2523  VISIBLE=6681
-    [range]   min cross-unit |dx|+|dy| = 158670        (threshold 0x40000 = 262144)
-    [chain]   a286-request=0   7e29-dispatch=0   7745-spawn=0
-    [spawn]   b1df-total=0
-    [7e29]    entered=0        gate-open=0
+## Preserve
 
-So the sim is alive and the perception layer WORKS -- 17795 line-of-sight queries, 6681 of them
-returning VISIBLE, and the closest cross-side pair is well inside the engagement threshold.  But the
-fire chain never starts: not one fire request, not one projectile, not one kill.  `a296` (live object
-count) never moves off 11.
-
-**That is why no mission reaches a resolved victory/defeat.**  It is not the win/lose evaluator --
-FUN_0000_a5dc is correct (victory when word[0x978e] hits 0 with word[0x9790] != 0; defeat when the
-friendly count word[0x6d38] hits 0).  Nothing ever dies, so neither condition can be reached.
-
-## Where it stops
-
-FUN_0000_a286 is the fire trigger ("mov BYTE [di+0x92],0x30", patch 427) and has exactly ONE caller,
-the aim gate at 0xafa2..0xb008:
-
-    afa2: bx = word[0x9796] ; cmpw [bx],3        ; je ret
-    afab: si = word[di+0x97]                     ; the TARGET
-    afaf: or si,si ; je ret                      ; <-- no target -> never fires
-    afb3: testb [di+0x16],8 ; jne afc0
-    afb9: testb [0x978c],3 ; jne ret
-    afc0: cmpw [di+0x99],0xc8 ; jbe afde
-    afc8: testw [di+0x40],0x80 ; jne afde
-    afcf: bx = word[0x9796] ; bx = word[bx]
-    afd5: al = byte[0x978c] ; cmp al,[bx-0x66ae] ; jae ret
-    afde: testb [si+0x16],0x10 ; je afee
-    afe4: cmpw [di],1 ; je 8711     afe9: cmpw [di],3 ; je 96c0
-    afee: ax = word[di+0x8b] - word[di+0x89]     ; aim error = target bearing - current aim
-    aff6: cmp ax,0xb6   ; jb  a286               ; FIRE if |error| < 182
-    affb: cmp ax,0xff4a ; jb  ret
-    b000: call a286
-
-Six independent gates precede the shot.  The next step is to instrument them and find WHICH one
-rejects -- most likely candidates, in order: word[di+0x97] (no target acquired), the [0x978c] mask, or
-an aim error that never converges inside +/-0xb6.
-
-## Do NOT
-
-Do not "fix" this by forcing a target or widening the aim window.  Every gate above is a faithful
-transcription of the asm; if the port never satisfies one, the defect is in what FEEDS it, and the
-answer is upstream exactly as it was for the 9200 group (patch 537) and the palette overrun.
-
-## Notes cleared while finding this
-
-  * board:0001's "the port stays in render phase d549=0x1e, the original reaches 0x1c" is OUTDATED:
-    FUN_1000_a84c ("movb $0x1c,[0x1549]", patch 302) is reached 41322 times in AZER1 to t=9000, and
-    patch 308 already fixed the signed-byte read of d548 that the note blamed.
-  * a gdb `watch -l` on g_mem+0x1c549 reported ZERO writes across that same run while the byte
-    demonstrably changes -- the watchpoint was silently ineffective.  Do not trust a negative
-    watchpoint result on g_mem without a positive control.
-
-## Traced one level further: the AI state machine never reaches the engage state
-
-FUN_0000_afa2 is called **exactly once** in a full AZER1 run to t=20000 (instrumented count), and that
-one call rejects at gate 2 (`si = word[di+0x97] == 0`, no target).  So the gate analysis above is not
-even the question yet -- the gate is essentially never invoked.
-
-afa2 has NO direct callers.  It is reached two ways, both via a per-object AI state dispatch at 0xab62:
-
-    ab62: shl bx,1 ; and bx,0x1e          ; bx = AI state index 0..15, doubled
-    ab67: testw [di+0x40],1
-    ab6c: je 0xab74
-    ab6e: call *[bx-0x6724]               ; table A @ DGROUP:0x98dc
-    ab74: call *[bx-0x6704]               ; table B @ DGROUP:0x98fc
-
-Table A (DGROUP:0x98dc, 16 entries) reads:
-
-    idx  2:ab88  3:ad2f  4:ad08  5:af97  6:b011  7:ae66  8:ae32  9:ae5c
-    idx 10:afa2 11:b017 12:b0be 13:b053 14:af97 15:ae66
-
-So the fire gate runs only when the object's AI state index is **10** (afa2 directly), or **5**/**14**
-(af97, which pre-checks word[di] in {1,3} and falls through into afa2).  Bit 0 of word[di+0x40] selects
-table A over table B.
-
-**The units never reach those states.**  That is the actual defect, and it is upstream of everything in
-the gate list above: perception works (6681 VISIBLE), range is satisfied, but the AI state machine does
-not transition into engage.
-
-NEXT: instrument the ab62 dispatcher to histogram the state index per object per tick, and see which
-states the units DO occupy and what the transition out of them requires.  Compare against the original
-via the write-trace oracle (FIST_WATCHFLAT on the object's +0x40/+0x43 state bytes) -- that gives the
-original's state sequence for the same mission and turns "never engages" into a named missing
-transition.
-
-## CORRECTION: units DO fire. This item's premise was built on DEAD COUNTERS.
-
-Live instrumentation inside FUN_0000_afa2 itself, AZER1 to t=20000:
-
-    n=1800 afa2 calls | w5796_3=0  noTarget=1310  mask=215  rangeGate=0  subcall=0  aimFail=82  FIRE=193
-
-**193 fire-trigger calls.**  The gate is reached ~1800 times, and 193 of those pass every gate and call
-FUN_0000_a286.  Units acquire targets (490 of 1800 have one), aim converges more often than not
-(193 fire vs 82 aim-fail), and the range gate never rejects.
-
-The `[chain] a286-request=0 / 7e29-dispatch=0 / 7745-spawn=0` and `[spawn] b1df-total=0` readings this
-item was founded on are DEAD COUNTERS: their engine-side increments live in patches that have since
-been rewritten, so they print 0 unconditionally.  That was ALREADY recorded in this board's own history
-earlier in the session, and I used them anyway without checking they were live.  A counter that reads
-zero is not evidence until you have seen it read non-zero.
-
-Two further mistakes of mine that this corrects:
-
-  * "afa2 is called exactly once" -- wrong, and it was a misreading of my OWN instrument: the print
-    threshold was `n % 2000` while the function is called ~1300 times, so the single line I saw was the
-    `n == 1` line, not a total.  Two counters in ONE binary then gave dispatch_idx10=1000 against
-    afa2_entered=1299.
-  * "the AI state machine never reaches the engage state" -- wrong.  byte[obj+0x42] cycles uniformly
-    over all 16 indices (939 each at n=15000), because it is an ANIMATION frame counter, not an AI
-    state; index 10 is dispatched ~1300 times and the table is intact (tableA[10]=afa2 throughout).
-
-## The REAL open question
-
-Units fire 193 times in 20000 ticks and NOTHING DIES -- the live object count a296 stays at 11 for the
-whole run.  So the break is downstream of the trigger:
-
-    a286 sets byte[obj+0x92] = 0x30   (the fire request / cooldown)
-      -> ? weapon dispatch (7e29)
-      -> ? projectile spawn (b1df / 7745)
-      -> ? impact + damage -> object destroyed -> a296 decrements
-
-NEXT: put LIVE counters on that chain -- byte[obj+0x92] transitions, entries to 7e29 and b1df, and
-a296 decrements -- and find the first stage that never runs.  Do not reuse the existing [chain]/[spawn]
-counters without first proving each one can read non-zero.
-
-## CORRECTION 2 (measured, live counters)
-
-The premise is dead. Live counters on all four per-class weapon functions (the four `byte[obj+0x92]`
-countdown consumers at asm `0x7c65 / 0x882c / 0x9074 / 0x9822`, which call `7e29 / 899c / 91b8 / 99a2`
-respectively) over 1500 aim-gate evaluations in AZER1:
-
-```
-[wpn] afa2=1500 7e29=0 899c=1 91b8=5704 99a2=0 a286=138 | a296=11
-```
-
-- `a286` (fire request, sets `byte[obj+0x92]=0x30`) fires 138 times.
-- `91b8` — the weapon function for the class the AZER1 units actually are — runs 5704 times.
-  138 requests x ~48 countdown ticks ~= 6600: the countdown consumer is working exactly as the asm says.
-- `a296` goes 13 -> 11 over the run: units DO die.
-
-My first counter (`7e29` only) read 0 because only ONE of the four consumer sites calls `7e29`; the
-other three call their own per-class weapon function. The earlier `[chain]/[spawn]` counters were dead,
-and `FUN_0000_7745` (named in one of them) is not a function entry at all -- `objdump` at `0x7745`
-yields `add %al,-0x403f(%bx,%di)`, i.e. the counter's naming was fiction.
-
-Nothing in this item survives. The weapon chain is not the defect. Close as DISPROVEN; the real
-remaining blocker is the six hanging missions (INDIA2, INDIA3, INDIA5, SYRIA1, TRAIN3, TRAIN4).
+Count the actual handlers for every reached class and prove each diagnostic can observe a nonzero
+case. Counter silence is not proof of unreachable engine behavior. Broader combat/oracle fidelity
+belongs to board:0017; dispatch completeness belongs to board:0015.

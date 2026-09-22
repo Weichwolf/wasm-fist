@@ -1,170 +1,32 @@
 Type: bug
-Area: decompile
-Tags: wasm-divergence arity icall
-Title: every indirect call passes exactly as many arguments as its target takes
+Title: Indirect calls preserve the original argument and return-register contract
 
-Every indirect call in the port passes exactly as many arguments as its target takes, so that no
-`call_indirect` signature mismatch exists on wasm and no callee reads its arguments off stack residue
-on native.
+## Contract
 
-## Why this is a capability and not a tidy-up
+Each indirect call supplies the target's actual live inputs and exposes its outputs/flags on both
+targets. Matching C arity alone does not establish the correct register values.
 
-The call sites go through a `(code *)` cast, so the C compiler infers the indirect-call signature FROM
-THE ARGUMENT LIST.  The two targets diverge:
+## Evidence
 
-  * **gcc -m32** is caller-cleans cdecl: a short argument list means the callee reads the missing
-    arguments off whatever the stack happens to hold.  It usually "works" -- it paints something, it
-    returns -- so nothing fails visibly.
-  * **wasm** puts the signature in `call_indirect` and type-checks it.  A short list does not match the
-    target's type, and the call does not happen at all.
+Patches 528–530 repaired MGA sprite/descriptor mismatches; 573/587/588 fixed further reached
+sites. Historical remaining examples: cdc4 → vector 0x6b4 with a short list; wrong-valued lists
+in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/6730/684e/
+688a/6909/d27e/d2bd/d2f5/d443/d480/6448/6beb/8fb6/9774/9a68. Re-audit the current tree.
 
-So this defect class is INVISIBLE on native and silently drops work on wasm.  It is, by construction, a
-native<->wasm divergence generator, and it is exactly what was behind the terrain-flow failure.
+## Next
 
-## Already found and fixed by this class (3 for 3)
+1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and
+   a declaration terminator; the earlier regex counted commas inside definitions and invented bugs.
+2. Classify sites: missing/extra arguments, correct count but wrong register values, ambient-register
+   calls, and far-segment constants leaked into arguments. Cover all classes; arg-less grep misses
+   short nonempty lists.
+3. For one screen/cockpit group, read caller and callee asm. Thread explicit register carriers with
+   correct widths and a typed call. Preserve non-AX returns and CF; never pad unknown inputs with zero.
+4. Drive the screen that reaches each repaired site, then run both target matrices. Use 0027's
+   vehicle coverage; an AZER1 census cannot clear unseen screens.
 
-| patch | vector | target | sites |
-|---|---|---|---|
-| 528 | `[0x6b4]` | `26a1` (5 params) | 11 sites at 2 args -- the whole remaining `terrain-*` framebuffer difference (a 7x5 sprite drawn on native, not drawn at all on wasm) |
-| 529 | `[0x694]` | `23d8` (2 params) | 2 sites at 1 arg -- descriptor landed in param_1, param_2 was stack garbage; SYRIA1's 38-second stall |
-| 530 | `[0x6c8]` | `294d` (5 params) | 2 sites at 2 args, in a function whose `[0x6b4]` sibling 528 had already fixed |
+## Accept
 
-## The audit that finds them
-
-Mechanical, and it needs no run:
-
-  1. resolve each far vector to its target -- the vector table is DGROUP `0x600..0x6e8`, far pointers
-     `off=word[vec], seg=word[vec+2]`, and the MGA module segment is `0x3e78` in a live dump;
-  2. read the target's parameter count from its declaration;
-  3. count the arguments at every `fist_icall_far((uint32_t)(DAT_1000_cXXX))` call site;
-  4. list the sites that disagree.
-
-## Remaining candidates (corrected audit, HEAD after 530)
-
-**The first version of this list was WRONG and is replaced.**  My extractor matched the parameter list
-with `FUN_0000_XXXX\(([^;]*?)\);`, which also matches each function's DEFINITION -- there the `)` is
-not followed by `;`, so the match ran on into the body and counted the commas it found there.  Later
-matches overwrote earlier ones, so every function whose definition follows its declaration got an
-inflated count: 1091 read as 3 params (really 2), 2004 as 11 (really 3), 0310 as 4 (really 3).  The
-three largest "clusters" I first published -- [0x60a] 13 sites, [0x68c] 10 sites, [0x560] 8 sites --
-were artefacts of that bug and are NOT defects.  Extract the declaration by scanning to the matching
-paren and requiring the next non-space character to be `;`.
-
-Corrected: **17 vectors, ~35 sites**, over the MGA-segment (0x3e78) vectors whose target declaration is
-resolvable:
-
-    0x6c8 -> 294d (5)   7 sites at 1        0x594 -> 04a3 (0)   5 sites at 1-2
-    0x61a -> 11db (2)   6 sites at 1        0x558 -> 026e (2)   3 sites at 1 or 3
-    0x6d0 -> 2a39 (4)   3 sites at 1        0x6b4 -> 26a1 (5)   2 sites, at 1 and 4
-    0x544 -> 0166 (3)   2 sites at 4        0x5b0 -> 084e (1)   2 sites at 2
-    0x60a -> 1091 (2)   2 sites, at 3 and 1 (the twelve 2-arg sites are CORRECT)
-    0x540 0x554 0x55c 0x564 0x584 0x5a4 0x67c 0x6d8   1 site each
-
-Two shapes dominate and should be treated separately:
-
-  * sites passing a literal `0xf69` or `unaff_CS` as the FIRST argument -- that is the far-call SEGMENT
-    leaking into the argument list, i.e. the board:0010 segment class, not this one.  Fixing the arity
-    without removing the leak would just move the bug.
-  * sites passing a single `0` or `ax` to a 4- or 5-parameter target (e.g. the seven [0x6c8] 1-arg
-    sites) -- these are the closest in shape to 528/529/530 and are the ones to verify first.
-
-## The discipline this item must keep
-
-The declared parameter counts come from Ghidra's `__allregs` model and are THEMSELVES reconstructions,
-not ground truth.  A mismatch therefore means "one of the two is wrong", not "the call site is wrong".
-Every one of 528/529/530 was landed only after reading the asm at the call site and confirming which
-register carries which argument (`mov ax,<id>` / `mov bx,<descriptor>` / `lcall *<vec>`).  A mass
-conversion on the strength of the declaration alone would be exactly the kind of guess this project
-forbids, and would silently bake a wrong prototype into 30 call sites.
-
-Note also the 0-argument sites (hundreds of them).  Those are the arg-less-dispatch class: the asm
-really does `lcall *<vec>` with the registers ambient from the caller, so the fix is to identify the
-carrier and thread it (as patches 310/463/513 do with `g_fist_render_si` / `g_fist_render_dx` /
-`g_fist_paintax`), not to invent arguments.  They are NOT part of this item.
-
-## Re-audit at HEAD (after 547-556): the [0x6c8] cluster is the ARG-LESS class, not the arity class
-
-This item nominated the seven `[0x6c8]` 1-argument sites as "the ones to verify first".  Re-reading them
-at HEAD, that nomination is wrong in a way worth recording: the remaining sites are not short argument
-lists, they are ZERO-argument dispatches --
-
-    (*(code *)fist_icall_far((uint32_t)(DAT_1000_c6c8)))();
-
--- mixed in with sites patch 530 already converted to the full five:
-
-    ((void (*)(uint,uint,uint,uint,uint))fist_icall_far((uint32_t)(DAT_1000_c6c8)))(ax,0,0,bx,0);
-
-The target's asm settles what they need.  `294d` (MGA segment, `re_out/fist_mga_image.bin`) opens
-
-    294d: 53            push %bx
-    294e: 8b 3e 24 07   mov  0x724,%di
-    2952: e8 b7 fc      call 0x260c        ; 260c(ax, bx, [0x724])
-
-and patch 136 already records the contract: **AX is the sprite-directory byte offset and BX the
-position descriptor**.  So every remaining zero-argument site needs AX and BX read out of the asm AT
-THAT SITE -- which is this item's own "identify the carrier and thread it" class, explicitly excluded
-from it, not the arity class.
-
-Consequence for whoever picks this up: the `[0x6c8]` line in the candidate table above should be read
-as "sites already converted by 530, plus N arg-less sites belonging to the carrier class", and the
-first-to-verify recommendation should move to a vector whose sites really do pass a short list.  The
-same re-check is owed for the other clusters before any of them is trusted.
-
-A live example of why the carrier class matters, from board:0007: `FUN_0000_c33c` dispatches its ten
-phase handlers with `call *0xe6f5(%bx)` and ES:DI ambient, and `FUN_0000_c38b` -- one of the ten -- had
-Ghidra's invented `param_2` deref'd as a host pointer.  Measured `param_2 = g_mem - 620`, an
-out-of-bounds write that SEGV'd AZER7 as soon as patch 553 made the branch reachable.  Patch 554 fixes
-it by taking the cursor from `g_fist_render_di`, exactly as this item prescribes.
-
-## Measured after patch 573 (2026-09-11): the arg-less DGROUP:0x6xx driver-method sites
-
-`grep 'fist_icall_far((uint32_t)(DAT_1000_c6..)))()' build/fist.c` -- 118 dispatches in 73 functions
-still call an MGAVIDEO method with no arguments (the class patches 520/531 opened): [0x60a] rect fill x17,
-[0x61a] rect outline x13, [0x6b4] sprite blit x19, [0x6c8] transparency blit x14, [0x6bc] x5, [0x684]
-x9, [0x68c]/[0x694]/[0x6a8]/[0x6d0] x5 each, the rest 1-4 each.  Each of them blits or fills with a
-stack value for its sprite id / colour and (usually) a stale bx for its rect.  Three of them were the
-AZER1 self-play's memory corruptors once real sprite sheets loaded (7fcd, 5a1d, 3823: patch 573); the
-70 others are silent only because their flows are not yet driven.  Functions:
-
-    286e 28b7 2908 290e 32a6 3de2 3de5 4937 4da3 524e 549f 54e0 54e8 54f6 550e 5531 5547 555f 5571
-    5579 57a9 57d8 5965 6092 6448 64a4 6612 664e 66b1 6730 684e 688a 6909 6beb 73ed 74a9 74e3 7570
-    75cc 8342 862b 8682 8b0d 8b57 8bc4 8bcd 8cce 8d01 8d67 8daa 8e0a 8e76 8ef3 8fb6 9364 9385 939e
-    9497 94f5 9774 989e 98d2 99e2 9a68 9ad4 aa4e bc12 d27e d2bd d2f5 d443 d480 eb07
-
-Each is a 3-10 instruction asm read (ax = sprite id or colour, bx = element+4 from DGROUP:0x3e08 or a
-fixed rect); mechanical, and the fix for the whole class is one patch per cockpit/screen group.
-
-## Measured on the AZER1 self-play (2026-09-12): which of the sites run at all
-
-gdb breakpoints on the 66 functions that still dispatch a driver method arg-less at HEAD (109 sites,
-the 573 census minus what 573-587 took) and on the 11 sites of the arity audit (a non-empty list that
-is shorter or longer than the target's), one AZER1 run to tick 2100:
-
-| function | hits | site | patch |
-|---|---|---|---|
-| 286e | 895 | `[0x664]` viewport bind, arg-less -- 3fca bound word[0x578..0x588] from stack residue on native, zeros on wasm | 588 |
-| a547 | 895 | `[0x61a]` outline without AL, the font restored from unaff_CS | 588 |
-| aa4e | 4 | `[0x626]` XOR highlight, arg-less; MGA 1290 itself was a 2d6d prologue | 588 |
-| cdc4 | 1 | `[0x6b4]` 3 of 5 | open |
-
-Everything else in the two lists does not execute on the self-play -- those sites belong to screens
-the self-play does not visit, and are the cockpit/screen groups this item prescribes.
-
-Two lessons for the audit itself:
-
-- A SHORT list hides from the arg-less grep.  82ee (patch 587) passed `(0)` to the two-register fill
-  `xor al,al ; lea bx,[bx+4] ; lcall [0x60a]` -- BX took the 0, AL the stack -- and painted four
-  full-height columns over the Bradley cockpit.  The arity audit (target parameter count vs argument
-  count) catches these; the value audit (the asm read) is still the only thing that catches a
-  right-length list of wrong values (6350's `(0xf69,uVar3,uVar4)`, 6453's `(0xf69,uVar2)`).
-- The [0x60a]/[0x61a] sites are 59 in the asm (`lcall *0x60a` x31, `*0x61a` x28 over both code
-  windows); joined by enclosing function to the C sites, 23 functions still carry arg-less or wrong
-  lists there (3de2 3de5 4937 57a9 6350 6453 6612 664e 66b1 6730 684e 688a 6909 d27e d2bd d2f5 d443
-  d480 6448 6beb 8fb6 9774 9a68): each is `lea bx,[bx+4]` (the element's rect) or an immediate
-  rect, and an immediate colour or one from a table -- a 3-10 instruction read each, listed with
-  their asm in the session's join ($SC/sites0.txt) and to be rebuilt per screen group with the
-  host-pointer element derefs those functions also carry.
-
-A third class surfaced next to this one (patch 589, 21bd): lengths Ghidra types as `char *` and loops
-that decrement a pointer to `(char *)0x0` -- UB the wasm backend folds into infinite loops and
-unbounded scans.  That is board:0028.
+Every indirect site has a verified input/output contract and a reaching test or explicit unresolved
+record. No native stack-residue arguments or WASM signature mismatches remain. Keep target discovery
+in board:0015 and object-specific contracts in board:0019.

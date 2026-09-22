@@ -2,9 +2,9 @@
 
 A faithful, **bit-identical** port of NovaLogic's 1994 *Armored Fist* (`FIST.DAT` — a 16-bit segmented
 DOS protected-mode engine with **Voxel-Space** terrain, hand-written 386 assembly by Kyle Freeman) to
-reproducible C compiling to native and WebAssembly. Given the same mission, RNG seed, and input, the port
-produces the same 320×200 palette framebuffer and audio stream as the original running under DOSBox/QEMU —
-every frame, every menu, every mission — and the native and WebAssembly builds are byte-identical to each
+reproducible C compiling to native and WebAssembly. The target: given the same mission, RNG seed and
+input, produce the same 320×200 palette framebuffer and audio stream as the original running under DOSBox/QEMU —
+every frame, every menu, every mission — with native and WebAssembly output byte-identical to each
 other. That is a falsifiable target: two byte streams either match or they do not.
 
 The engine C is **mechanically derived from the binary via Ghidra** (`make image` → decompile → assemble
@@ -20,8 +20,9 @@ commercial game all the way to a complete, bit-verified native+WebAssembly port.
 FIST.DAT → tools/decompile.sh → make patch → make native / make wasm → tools/verify.sh
 ```
 
-- **CLAUDE.md** — vision, architecture, approach, and conventions (start here; `make help` is the map).
-- **board/** — the live work state, one file per capability: `board/open` · `board/active` · `board/closed`.
+- **[AGENTS.md](AGENTS.md)** — target, architecture and working rules (start here; `make help` is the map).
+- **[board/README.md](board/README.md)** — work order, developer instructions and capability ownership.
+  State: `board/open` · `board/active` · `board/closed`.
 - **patches/** — every asm-verified engine correction, applied `-F0 --fuzz=0` onto `re_out/`.
 
 Original game files live under `armoredfist/` at run time (read-only); `third_party/` and extracted images

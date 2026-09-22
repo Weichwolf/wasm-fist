@@ -1,37 +1,18 @@
 Type: feature
-Area: oracle
-Tags: oracle instrument
-Title: a guest-RAM oracle capture makes any engine field byte-comparable to the port
-Note: renumbered from 0007.  This item took 0007 first (c79809e, 2026-08-20, "board: file 0007
-      (guest-RAM oracle capture); 0002+0006 depend on it"), and 0007_ukraine1-terrain-baseloss
-      took the same number two days later (89d8601).  The base-loss item keeps 0007 because six
-      patches, tools/native_main.c and the project goal all cite `board:0007` meaning IT; this one
-      moved instead.  0002 and 0006 carried `Depends: 0007` meaning THIS item -- c79809e says so in
-      as many words -- and were repointed to 0024 with the renumber.
+Title: Original guest RAM can be captured and compared with port state
 
-A guest-RAM oracle capture reaches a chosen mission tick in the ORIGINAL and dumps
-guest RAM, so any engine or extender field is byte-comparable to the port's g_mem:
-the engine DGROUP relocates to a known guest-physical base, and the extender's TCB
-and near-heap pool are readable there. This is the single capability that lets a
-port field be checked against the original at a mission spawn rather than only at
-the framebuffer.
+This engine can be investigated against mission-time RAM captured from the original under DOSBox.
 
-Two routes exist and either satisfies this: an instrumented DOSBox (dosbox-fist)
-that reaches missions and dumps RAM at a tick, or QEMU driven into a mission with
-pmemsave. QEMU currently boots the engine but its render loop stays frozen at the
-solid clear (a VGA-retrace / PIT-timing difference), and dosbox-fist needs a dosbox
-source tree to patch — building one of these is the work.
+## Evidence
 
-It unblocks two waiting items: the spawn TCB camera state (0002) and the INDIA3
-near-heap headroom question (0006).
+`third_party/dosbox-fist` and `tools/oracle/dosbox_vga_terrain_trace.patch` provide instrumented
+captures. `tools/oracle/capture_tcb_camera.sh` drives mission entry with FIST_R9200CAP and emits
+camera metadata, full guest RAM, VRAM, palette and terrain inputs. The first AZER1 capture resolved
+the previously unknown spawn camera.
 
-## Comments
+## Preserve
 
-Delivered via the instrumented dosbox route. Built dosbox-0.74-3 from source with
-tools/oracle/dosbox_vga_terrain_trace.patch (-p0; touches include/mem.h +
-src/hardware/vga_memory.cpp) against system SDL1.2 -> third_party/dosbox-fist.
-tools/oracle/capture_tcb_camera.sh drives it (xvfb + XTEST nav like the burst
-tool) with FIST_R9200CAP=1; when the mission renders (guest reaches ext 0x9200)
-the patch writes $FISTLOG.cam.txt (the render-time TCB camera) plus .passNN.ram.bin
-(full 16 MB guest RAM) and VRAM/palette/src3911 dumps. First run (AZER1) captured
-the original's camera cleanly, immediately resolving 0002's camera question.
+Resolve engine-linear addresses through current segment bases and CR3; port DGROUP 0x1c000 is not
+a fixed guest physical address. Use FIST_WATCHFLAT with FIST_MEMARM_BOOT/FISTLOG for writes.
+For stage proofs, snapshot inputs and outputs at the same call boundary (board:0002).
+This item was formerly numbered 0007; memory-manager work formerly numbered 0024 is now 0025.
