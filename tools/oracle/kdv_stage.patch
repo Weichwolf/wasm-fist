@@ -1,6 +1,6 @@
 --- a/src/cpu/core_normal.cpp
 +++ b/src/cpu/core_normal.cpp
-@@ -145,4 +145,19 @@
+@@ -145,4 +145,48 @@
  Bits CPU_Core_Normal_Run(void) {
  	while (CPU_Cycles-->0) {
  		LOADIP;
@@ -8,15 +8,44 @@
 +		static FILE *fist_kdv_stage_file = 0;
 +		static unsigned fist_kdv_stage_count[7] = {0};
 +		static const unsigned fist_kdv_stage_ip[7] = {0x11cb,0x11dd,0x6f3e,0x7120,0x7135,0x746a,0x746b};
++		static unsigned fist_kdv_pre_calls = 0;
++		static unsigned long long fist_kdv_pre_instructions = 0;
++		static int fist_kdv_pre_active = 0;
++		static double fist_kdv_pre_last_time = 0;
++		static unsigned fist_kdv_pre_last_cs = 0, fist_kdv_pre_last_ip = 0;
 +		if (!fist_kdv_stage_init) {
 +			fist_kdv_stage_init = 1;
 +			const char *path = getenv("FIST_KDV_STAGE");
 +			if (path) fist_kdv_stage_file = fopen(path, "w");
 +		}
-+		if (fist_kdv_stage_file && SegValue(cs) == 0x2b) {
-+			for (unsigned i = 0; i < 7; i++) if (reg_eip == fist_kdv_stage_ip[i] && fist_kdv_stage_count[i]++ < 3) {
-+				fprintf(fist_kdv_stage_file, "%04x %u %.6f\n", reg_eip, fist_kdv_stage_count[i], PIC_FullIndex());
-+				fflush(fist_kdv_stage_file);
++		if (fist_kdv_stage_file) {
++			if (!fist_kdv_pre_active && fist_kdv_pre_calls < 3 && SegValue(cs) == 0x2b && reg_eip == 0x11dd) {
++				fist_kdv_pre_active = 1;
++				fist_kdv_pre_instructions = 0;
++				fist_kdv_pre_last_time = PIC_FullIndex();
++				fist_kdv_pre_last_cs = SegValue(cs);
++				fist_kdv_pre_last_ip = reg_eip;
 +			}
++			if (fist_kdv_pre_active) {
++				double now = PIC_FullIndex();
++				if (now - fist_kdv_pre_last_time > 0.01)
++					fprintf(fist_kdv_stage_file, "gap %u %04x:%04x %04x:%04x %.6f ax=%u cx=%u cycles=%d\n",
++						fist_kdv_pre_calls + 1, fist_kdv_pre_last_cs, fist_kdv_pre_last_ip,
++						SegValue(cs), reg_eip, now - fist_kdv_pre_last_time,
++						reg_ax, reg_cx, CPU_Cycles);
++				fist_kdv_pre_last_time = now;
++				fist_kdv_pre_last_cs = SegValue(cs);
++				fist_kdv_pre_last_ip = reg_eip;
++				if (SegValue(cs) == 0x2b && reg_eip == 0x7135) {
++					fprintf(fist_kdv_stage_file, "pre %u %llu %.6f\n", ++fist_kdv_pre_calls,
++						fist_kdv_pre_instructions, now);
++					fist_kdv_pre_active = 0;
++				} else fist_kdv_pre_instructions++;
++			}
++			if (SegValue(cs) == 0x2b) for (unsigned i = 0; i < 7; i++)
++				if (reg_eip == fist_kdv_stage_ip[i] && fist_kdv_stage_count[i]++ < 3) {
++					fprintf(fist_kdv_stage_file, "%04x %u %.6f\n", reg_eip, fist_kdv_stage_count[i], PIC_FullIndex());
++					fflush(fist_kdv_stage_file);
++				}
 +		}
  		static int fist_kdv_profile_init = 0, fist_kdv_profile_active = 0;

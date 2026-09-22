@@ -57,6 +57,15 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
   the port omits both variable costs. DAC→fill is already close: 769 port counts versus
   753–757 Original counts. Model pre-decode, decoder and post-DAC costs
   separately; a 5,134-count lump only crosses one scanout boundary.
+  The pre-decode gap trace (`scratch/sequence-capture/kdv-stage-readcost.tsv`) counts
+  1,771/1,180/1,180 guest instructions but 26,196/8,319/9,564 elapsed DOSBox cycles.
+  The long gaps occur at `f000:14a1→14a5`, the DOSBox `INT 21h/3Fh` read callback:
+  reads are 768+5,000, 768+1,381 and 768+1,671 bytes. `src/dos/dos.cpp:modify_cycles`
+  charges `4×bytes`, capped by the remaining 1-ms CPU slice; the trace shows capped reads
+  when `CPU_Cycles=4` afterward. Smaller gaps at `0008:1938→193c` include fault handling.
+  A port timing model must preserve read sizes, slice budget and exception cost. The rebuilt
+  profiler/stage Oracle round-trips; `bash tools/check_flow.sh '^intro$'` passes both targets
+  (`scratch/verify/run.9ZOcCA/`).
   Uninstrumented `core=normal` and prior `core=auto` have equal mode-13 contents/timestamps
   across 197 common events, but their subframe KDV timing differs. The stage hook itself shifts
   event 51 by 1 µs; use it to attribute stages, not as a timing reference. Keep core and hooks
@@ -75,7 +84,7 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
 
 ## Next
 
-1. Model the missing present→decode and decode→DAC costs from the original paths, including
+1. Reproduce DOSBox's file-read cycle charge and slice cap in the port clock, then model
    branch-dependent decoder instructions and first-touch faults. Compare full frame contents
    and timestamps through the first difference; align inherited VGA phase and loader frames.
    Verify the post-IRQ cockpit capture against the Original presentation phase.

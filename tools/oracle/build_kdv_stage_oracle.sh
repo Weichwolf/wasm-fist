@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TREE="$ROOT/third_party/dosbox-build/dosbox-0.74-3"
 CORE="$TREE/src/cpu/core_normal.cpp"
-STAGE=6f7aa3541d31c0d0381c489c5ec6704b0d0b3cdd837c7c6205125ca95211f940
+STAGE=a427a92012fd1a5af04cc9af77ac317b9dd251fa07e33b0d3d23cbaf0c9fa279
 PROFILE=d6ad21e50b9d722b7d58cc3d54bf1f55d549b0423915a3da049f198ad9f00aff
 
 hash="$(sha256sum "$CORE" | cut -d' ' -f1)"
