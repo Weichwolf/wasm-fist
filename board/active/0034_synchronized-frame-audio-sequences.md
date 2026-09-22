@@ -35,6 +35,12 @@ Report the first unequal event, byte or sample. Missing, truncated or masked out
 - Frame timestamps now use exact integer microsecond rounding. Native and WASM match all 171
   captured frame records, including time (`{port,wasm}-inttime-672`); the Oracle's event-36
   one-microsecond lead remains a clock-model discrepancy.
+- The Oracle PIC trace records the missing queue state: scanout callbacks schedule from the stored
+  `srv_lag`, not a global frame phase (`oracle-vga-pic-676/`). A local model with the observed text
+  and mode-13 part delays reproduces 170 of 171 reference timestamps; native and WASM reproduce
+  that model identically (`{port,wasm}-piclag-{679,680}`). Event 98 remains one microsecond late.
+  It lies exactly on a 30,000-cycles/ms dispatch boundary, so do not commit the model yet: recover
+  whether `PIC_RunQueue` executes the callback at the preceding or following CPU cycle.
 - A one-cycle timestamp offset is rejected: it fixes later rounding edges but breaks Oracle event
   22 (`346,776` versus `346,777` us, `port-inttime-plus1-673`). Keep the exact conversion.
 - DOSBox `INT 21h/3Fh` charges `4×read bytes`, capped by the remaining 1-ms CPU slice
@@ -66,9 +72,10 @@ Report the first unequal event, byte or sample. Missing, truncated or masked out
    charge to cell execution only when a trace proves an intervening observable event. Compare
    complete frame contents and timestamps through the first difference, including the post-IRQ
    cockpit.
-2. Resolve the startup capture boundary and launcher output in 0036. Align VGA phase, timed
-   inputs and float PIC event rounding. Compare every frame's order, size, time, indices and
-   palette without silently dropping a prefix.
+2. Resolve the PIC CPU-boundary rule at event 98, then land the `srv_lag` scanout model only when
+   all 171 reference timestamps match. Resolve the startup capture boundary and launcher output
+   in 0036. Compare every frame's order, size, time, indices and palette without silently dropping
+   a prefix.
 3. Route OPL and SB through one continuous mixer (0003); compare every PCM sample and fail on
    missing, reordered or unfinished output.
 
