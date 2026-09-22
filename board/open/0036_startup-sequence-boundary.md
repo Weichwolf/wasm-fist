@@ -100,28 +100,23 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   The loop contract therefore matches; the 8.299469-ms displacement already exists at entry.
   Its subsequent `0x201` reads take 1.000 µs in DOSBox and the port reaches the next tick at
   525.893787 ms. Do not alter patch 044 to compensate for an earlier divergence.
-- `FUN_1000_30de` is the preceding CRTC-status wait (`in 0x3da`). Oracle calls end at
-  418.499233, 432.767300 and 447.035400 ms; the port ends them at 426.882068, 441.150638 and
-  455.419207 ms. The second and third each take 14.266667 ms in both runs. The first port wait
-  is 1.151967 ms too long, but its entry is already 7.231084 ms late. `oracle-timer-init-638.reg`
-  places the matching second `2fd3` timer calibration at 408.582200 ms; port-timer-636 enters it
-  at 415.804965 ms. The remaining primary gap is therefore between the mode-set return and `2fd3`,
-  not joystick timing or the recurrent CRTC wait.
-- The `2fd3` caller is `MGAVIDEO:00e8`, call site `4ec3:0132`. Its port trace gives entry
-  415.784851, INT 10 completion 415.791556 and `2fd3` return 455.430940 ms. Oracle's
-  `oracle-mga00e8-640.reg` gives entry 408.127900 ms. The whole driver mode-call is therefore
-  already 7.656951 ms late before its INT 10 invocation; inspect the caller of `00e8` next.
-- `00e8` is called after the initial `2ebe` calibration. `oracle-2ebe-return-642.reg` records
-  `2ebe` entry 329.985800 and return 404.240600 ms; `port-premode-641/port.log` returns at
-  412.650375 ms. The 8.409775-ms error is inside that initial calibration, before the later
-  driver mode-set call. Its inner `2fd3`/CRTC waits require a separate phase trace.
+- `FUN_1000_30de` is the preceding CRTC-status wait (`in 0x3da`). The unanchored captures 630–645
+  omitted the required `FIST_TEXT_STATE` and `FIST_TEXT_PHASE_NS`; their timing attribution is
+  rejected. With that start contract, `port-initcal-anchored-646` matches the initial calibration:
+  first CRTC edge 332.890540 vs Oracle 332.890800 ms and `3346` return 404.254338 vs 404.237500 ms.
+  The real second `2fd3` starts at 407.423176 vs 408.582200 ms and ends at 441.162371 vs
+  447.042400 ms. Its first `30de` wait is 5.181104 vs 9.916133 ms; its next two retain the
+  14.266667-ms period and propagate the resulting phase error.
+- The `2fd3` caller is `MGAVIDEO:00e8`, call site `4ec3:0132`. Any comparison of its unanchored
+  timestamps is invalid; rerun it with the text-state contract before assigning the remaining
+  1.159024-ms pre-`2fd3` offset to its caller.
 
 ## Next
 
-1. Split the initial `2ebe` calibration. It is 8.409775 ms late at return and feeds the late
-   `MGAVIDEO:00e8` entry. Recover its `2fd3` and CRTC phase contract, then align the first four
-   MGAVIDEO DAC calls without hiding the event-35 palette difference. Preserve events 0–34 as a
-   strict prefix of the full comparison.
+1. Reproduce every mode-13 timing measurement with `FIST_TEXT_STATE` and `FIST_TEXT_PHASE_NS`.
+   Trace `MGAVIDEO:00e8` through its second `2fd3`: the port enters 1.159024 ms early, and its
+   first CRTC wait loses 4.735029 ms. Align the first four MGAVIDEO DAC calls without hiding the
+   event-35 palette difference. Preserve events 0–34 as a strict prefix of the full comparison.
 2. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7` so calibration
    starts at 90 and evolves as measured. Recheck mode-set time and mixed audio.
 3. Complete continuous PCM and subsequent sequence parity with 0034/0003.
