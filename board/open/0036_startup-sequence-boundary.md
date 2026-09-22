@@ -77,12 +77,19 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   532.648 (`3`) and 546.917 ms (`4`); the port does so at 496.943, 526.281 and
   540.951 ms. The port therefore clears the DAC about 6 ms before event 35, while the
   Oracle clear follows it at 546.972 (`kdv-normal-trace/`, `text-boot-native-9/`).
+- `oracle-startuphist-622/` counts 1,763,178 original instructions from the mode-13 BIOS
+  return through the first DAC upload. `1000:4bb7` alone contributes 821,906 executions
+  each of `cmp ss:[0x452],ax` and `je 4bb7` (1,643,811 total): it waits for the BIOS tick.
+  Ghidra reduced `FUN_1000_4bb7` to an infinite C loop. The port does not currently enter
+  that path, so restoring its body alone cannot account for the missing delay; recover its
+  gate/caller before changing behaviour.
 
 ## Next
 
-1. Recover the mode-set-to-first-INT-8 timing contract. The MGAVIDEO DAC method is proven;
-   align its first four calls without hiding the event-35 palette difference. Preserve events
-   0–34 as a strict prefix of the full comparison.
+1. Recover the gate/caller that reaches original `FUN_1000_4bb7` after mode set, then restore
+   its `ss:[0x452]` BIOS-tick wait with its measured instruction contract. The MGAVIDEO DAC
+   method is proven; align its first four calls without hiding the event-35 palette difference.
+   Preserve events 0–34 as a strict prefix of the full comparison.
 2. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7` so calibration
    starts at 90 and evolves as measured. Recheck mode-set time and mixed audio.
 3. Complete continuous PCM and subsequent sequence parity with 0034/0003.
