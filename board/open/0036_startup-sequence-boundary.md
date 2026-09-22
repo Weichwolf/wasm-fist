@@ -20,27 +20,23 @@ never trims an unmatched emulator frame.
 - KDV owns the title-frame timing; its gate and PIC scanout reconstruction belong to 0034. Do not
   alter startup phase to hide a later producer defect.
 - Native and WASM match all 229 captured frame records. The timestamp is part of the contract.
-- A new five-second fixed-30k Oracle run reaches 297 frames but differs in its first shell frame
-  (`oracle-start-boundary-689/`). The historic matching capture was made with a temporary
-  instrumented start-state hook that has been restored out of DOSBox. A normal launcher run is
-  therefore not a continuation of `oracle-pre-dat`; do not use it as a reference for this item.
-- A cursor-count override changes part of the mismatch but not all of it (`oracle-cursor{0,15b}-*`).
-  The loader text surface itself is not pinned. Reject cursor/blink forcing: it masks a changing
-  producer and cannot establish the attributed application boundary.
-- A temporary first-`FIST.DAT` hook that restores the recorded text/BDA state reproduces all frame
-  bytes through the historic 227-frame prefix (`oracle-arm-state-695/`). Its output clock misses
-  two later rounding edges; a uniform origin offset merely moves the first failure to event 22.
-  The missing state is the live VGA/PIC event queue and fractional phase. Reject timestamp offsets:
-  the versioned hook must seed or preserve that queue state at the DAT transition.
+- `tools/oracle/sequence_start_state.patch` restores the recorded B800/BDA fixture when DOSBox enters
+  `FIST.RUN`; `capture_sequence.sh` decodes and verifies the versioned fixture. It does not alter the
+  VGA/PIC queue, cursor, scanout or timestamps. `build_sequence_oracle.sh` applies and verifies the hook.
+- Fixed-30k captures `oracle-start-state-{700,701}` are identical over all 297 frames. Their first 227
+  records match `start-state-probe/` exactly in timestamp, dimensions, palette and pixels; both extend
+  70 records beyond that fixture. A third runner-driven capture (`702`) matches its complete 296-record
+  prefix; external F9 delivery accounts for the one-record length difference.
+- PCM capture is not deterministic yet. Against the historic stream, Oracle event 99 starts at the same
+  sample position 5331 but contains 45 frames instead of 44. Repeated runs also end with different sample
+  counts. Mixer callback batching is observable in the file and must be normalized at the producer.
 
 ## Next
 
-1. Restore a minimal, versioned Oracle hook at the attributed DAT transition. It must restore the
-   recorded B800/BDA state and seed the VGA/PIC event queue at its measured fractional phase, then
-   open the sequence there. Prove two runs have identical records through the 227-frame fixture,
-   extend beyond 229 port frames, and report the first unequal record.
-2. Capture and compare the corresponding PCM prefix. Preserve timestamps; no rounding or prefix
-   trim.
+1. Emit Oracle PCM in deterministic sample-position blocks independent of SDL mixer callback sizes.
+   Preserve every sample and derive each timestamp from its sample position; do not trim or round a prefix.
+2. Compare the complete common PCM prefix across two Oracle runs, then against native and WASM from the
+   same start state. Report the first unequal sample or boundary.
 3. Keep title-frame timing work in 0034 and this item limited to the application boundary.
 
 ## Accept

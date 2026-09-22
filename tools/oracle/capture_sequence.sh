@@ -37,7 +37,15 @@ c:
 LOADGAME -K400,0,1000 -X5000 FIST.RUN
 CFG
 cc -O2 "$ROOT/tools/oracle/xkey.c" -o "$OUT/xkey" -lX11 -l:libXtst.so.6
-export SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 FIST_SEQUENCE="$OUT/sequence"
+if [ -z "${FIST_SEQUENCE_START_STATE:-}" ]; then
+  FIST_SEQUENCE_START_STATE="$OUT/start-state"
+  base64 -d "$ROOT/tools/oracle/start_state.text.gz.b64" | gzip -dc > "$FIST_SEQUENCE_START_STATE.text"
+  base64 -d "$ROOT/tools/oracle/start_state.bda.gz.b64" | gzip -dc > "$FIST_SEQUENCE_START_STATE.bda"
+fi
+printf '%s  %s\n' \
+  95497cd569be155a0efb76408a22f54fbe00dc8a267d19e7ad9375b70088bacb "$FIST_SEQUENCE_START_STATE.text" \
+  5c1a8ad522ad0d6019ccb91847f7eff7fd611e9f710eed350e80afa77fe799d7 "$FIST_SEQUENCE_START_STATE.bda" | sha256sum -c -
+export SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 FIST_SEQUENCE="$OUT/sequence" FIST_SEQUENCE_START_STATE
 timeout --signal=TERM "$((DURATION_SEC+30))" xvfb-run -a --server-args="-screen 0 1024x768x24" bash -c '
   "$1" -conf "$2" -exit > "$3" 2>&1 &
   process=$!

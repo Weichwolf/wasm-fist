@@ -1,0 +1,54 @@
+--- a/src/dos/dos_execute.cpp
++++ b/src/dos/dos_execute.cpp
+@@ -20,6 +20,8 @@
+ 
+ #include <string.h>
+ #include <ctype.h>
++#include <stdio.h>
++#include <stdlib.h>
+ #include "dosbox.h"
+ #include "mem.h"
+ #include "dos_inc.h"
+@@ -27,9 +29,34 @@
+ #include "callback.h"
+ #include "debug.h"
+ #include "cpu.h"
++#include "pic.h"
+ 
+ const char * RunningProgram="DOSBOX";
+ 
++static void fist_sequence_restore_start_state(char const *name) {
++	static bool restored;
++	const char *prefix = getenv("FIST_SEQUENCE_START_STATE");
++	if (restored || !prefix || !strstr(name, "FIST.RUN")) return;
++	char path[1024];
++	const struct { const char *suffix; PhysPt base; Bitu size; } regions[] = {
++		{ ".text", 0xb8000, 4000 }, { ".bda", 0x400, 256 }
++	};
++	for (Bitu region = 0; region < 2; ++region) {
++		if (snprintf(path, sizeof(path), "%s%s", prefix, regions[region].suffix) >= (int)sizeof(path))
++			E_Exit("FIST sequence state path");
++		FILE *file = fopen(path, "rb");
++		if (!file) E_Exit("FIST sequence state open");
++		for (Bitu i = 0; i < regions[region].size; ++i) {
++			int byte = fgetc(file);
++			if (byte == EOF) E_Exit("FIST sequence state short read");
++			mem_writeb(regions[region].base + i, (Bit8u)byte);
++		}
++		if (fgetc(file) != EOF || fclose(file)) E_Exit("FIST sequence state length");
++	}
++	restored = true;
++	fprintf(stderr, "[start-state] %.6f text=0xb8000+4000 bda=0x400+256\n", PIC_FullIndex());
++}
++
+ #ifdef _MSC_VER
+ #pragma pack(1)
+ #endif
+@@ -260,6 +287,7 @@ bool DOS_Execute(char * name,PhysPt block_pt,Bit8u flags) {
+ 	Bitu headersize=0,imagesize=0;
+ 	DOS_ParamBlock block(block_pt);
+ 
++	fist_sequence_restore_start_state(name);
+ 	block.LoadData();
+ 	//Remove the loadhigh flag for the moment!
+ 	if(flags&0x80) LOG(LOG_EXEC,LOG_ERROR)("using loadhigh flag!!!!!. dropping it");
