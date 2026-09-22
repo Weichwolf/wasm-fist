@@ -258,6 +258,8 @@ int  fist_load_overlay(const char *name, uint16_t load_seg, uint16_t reloc);
  * linear is captured from DOS set-vector 0x08 (fist_dos.c) via fist_set_int8_handler(). */
 void  fist_timer_pump(void);
 void  fist_set_int8_handler(uint32_t linear);
+void  fist_clock_charge_cpu_instructions(unsigned count);
+void  fist_clock_wait_bios_ticks(unsigned count);
 
 /* Saved-INT-vector MAGIC: INT 21h AH=35 (get-vector) hands the engine a synthetic, CALLABLE
  * seg:off. seg = FIST_INTVEC_SEG, off = the interrupt number n. When the engine later far-calls

@@ -1,0 +1,20 @@
+PATCH 619: restore the six BIOS-tick wait after the copyright banner (board:0036).
+
+The asm at f6f6..f70a sets CX=6, reads 0040:006C, waits for each change,
+loops, then returns. Patch 004 replaced a decompiler infinite loop with a
+return but omitted this wait. The platform clock now advances to each PIT0
+wrap, dispatching the BIOS INT8 and intervening VGA scanout in order.
+--- a/fist.c
++++ b/fist.c
+@@ -42009,9 +42009,8 @@
+   uRam000f000a = param_6;
+   uRam000f000c = param_4;
+   fist_int_dispatch();
+-  return;  /* PATCH 004: FUN_0000_f6e9 = print-banner (INT21 AH=09) then a 6-tick BIOS-timer delay
+-              (0040:006C) then retf. Ghidra pruned the timer-wait blocks (flag mis-analysis) and left a
+-              bogus `do{}while(true)` hard hang. Restore the return; the startup delay is a no-op here. */
++  fist_clock_wait_bios_ticks(6);
++  return;
+ }
+ 
+ 

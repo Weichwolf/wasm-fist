@@ -22,14 +22,16 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   text attributes reconstruct frame 0 with zero pixel differences. Frame 1 is the
   old state in rows 0–299 and the scrolled title state in rows 300–399, also zero
   differences; DOSBox scans four 100-row parts.
-- The port now stores text VRAM at `g_mem+0xb8000`, keeps cursor/mode in the BDA, routes
-  DOS AH=09 to it and captures text scanout. With `FIST_TEXT_STATE=<prefix>` and
-  `FIST_TEXT_PHASE_NS=20960467,20168067` (DAT EXEC, preceding vertical), native/WASM
-  frame files are identical; their first five times exactly match Oracle: 32,879,
-  47,147, 61,415, 75,683, 89,951 µs (`text-phase-{native,wasm}-1/`). Port frame 0
-  has Oracle frame 2's full pixels/palette because the title is emitted too early.
-  The strict whole-sequence check still fails on missing port mixed PCM. The existing
-  178 flows pass both targets in disjoint groups 45+45+44+44 (`scratch/verify/text-phase-full/`).
+- The port captures text VRAM, BDA cursor, 8×16 glyph scanout and the source's cursor
+  blink. `FIST_TEXT_STATE=.../loader-vga-probe/oracle-pre-dat` and
+  `FIST_TEXT_PHASE_NS=20960467,20168067` select the original DAT-EXEC state/vertical.
+  Against the matching-path `start-state-probe/sequence.frames`, native and WASM now
+  match **every byte and time of frames 0–26** (640×400 indexed pixels and 256-entry
+  palettes); their complete 51-frame files are identical (`text-boot-{native,wasm}-6/`).
+  The strict full-frame comparison first fails at event 27: Oracle 418,117 µs,
+  black 640×400; port 469,305 µs, 320×200. Mixed port PCM is still absent.
+  `make check`, 29 tests and all 178 existing flows pass both targets with exact
+  45+45+44+44 coverage (`scratch/verify/startup-phase-g{0..3}/`).
 - `cursor-trace/dosbox.log`: the current text vertical begins at 20.168067 ms with
   cursor count 1, cell 1840, scanlines 13–14. After the title scroll it is cell
   1920; count 8 makes frame 7's 16 cursor pixels visible, count 16 clears them.
@@ -38,19 +40,33 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   `54ce/54cf/54d1/54d2` execute 193,993 times each: `nop; jmp; dec ax; jne` in
   `FUN_1000_4b5e`. Original call inputs are `0,59849,40799,27809`
   (`boot-call-trace/`); its first input comes from `FUN_0000_f738`, whose asm leaves
-  AX=0. The port's missing return instead passes 287 and its 32-bit C loop charges
-  no virtual CPU time. Oracle uses fixed 30,000 CPU cycles/ms.
+  AX=0. Patch 618 returns AX=0, wraps the loop at 16 bits and charges its four
+  instructions per iteration through a fractional 30,000-cycle/ms clock. The BIOS
+  PIT begins in mode 3, whose latched count falls by two per PIT tick (DOSBox
+  `timer.cpp`); the port now reads it that way. Patch 619 restores the six BIOS-tick
+  wait at `f6e9` that patch 004 had omitted.
+- `oracle-timer-619/` versus `text-boot-native-5/timer-stages-phase-gdb.log`:
+  first `30de` retrace return is 332.893233 versus 332.893054 ms after anchoring
+  text VGA status to the measured vertical. `515e` begins at 404.240700 versus
+  404.267748 ms, but the mode-13 call is 408.148600 versus 404.889614 ms.
+  `oracle-{exec,hist,sndhist,sndcal}-619/` isolates the gap: the two `4B/03`
+  overlay loads take only 22/11 µs, and there are no DOS `3F` reads. The
+  SOUNDDVR cluster executes 86,583 instructions between them, including 42,240
+  hits each at the `07f4` delay loop's `dec ax/jne`; its 26 calls use calibration
+  values 90→114. The port starts at 256 and decrements, and charges no CPU
+  time for that loop. DOSBox `VGA_StartResize` delays renderer setup by 50 ms;
+  Oracle presents three black 640×400 frames after the mode-set call.
 
 ## Next
 
-1. Patch `FUN_0000_f738` to return its asm-proven AX=0. Make `FUN_1000_4b5e` wrap AX at
-   16 bits and charge the four executed guest instructions per iteration through a
-   fractional 30,000-cycles/ms → PIT clock. Keep scanout/interrupts interleaved. Compare
-   original/native/WASM from frame 0; profile any residual timing difference.
-2. Capture a fixed-path initial state including DAC and cursor phase. Implement the
-   measured cursor blink and reached BIOS text services; match every launch frame and
-   the transition to mode 13 without excluding application output.
-3. Complete the strict PCM and subsequent sequence comparison with 0034/0003.
+1. Recover the PIT2/port-61 contract in SOUNDDVR `07b7` against Oracle so its
+   calibration starts at 90 and evolves as measured. Then restore `07f4`'s 16-bit
+   AX loop and measured CPU-instruction cost; recheck mode-set time and mixed audio.
+   Preserve the 27 matching text frames as a strict prefix of the full comparison.
+2. Model `VGA_StartResize` and the intervening black 640×400 presentations; align the
+   first 320×200 frame's dimensions, time, indices and palette. Capture canonical
+   shell path, DAC and cursor phase together for a reproducible full launch scenario.
+3. Complete continuous PCM and subsequent sequence parity with 0034/0003.
 
 ## Accept
 

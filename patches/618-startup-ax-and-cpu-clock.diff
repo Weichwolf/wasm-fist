@@ -1,0 +1,33 @@
+PATCH 618: preserve AX and elapsed CPU work in the CRT startup delay (board:0036).
+
+At f738, xor ax,ax is not followed by an AX write before lret at f77e; the
+callee returns AX=0. At 4b5e the original repeats nop/jmp/dec ax/jne until
+16-bit AX wraps to zero. The measured four calls execute 193993 iterations,
+775972 instructions, before the first copyright text write. Charge those
+instructions to the fixed-30000-cycles/ms DOSBox CPU clock, preserving the
+fractional PIT remainder and dispatching intermediate scanout/interrupts.
+--- a/fist.c
++++ b/fist.c
+@@ -42111,7 +42111,7 @@
+      LIVE at runtime (oracle: DGROUP:0x12 = 0xf69:0x1b2 -> FUN_0000_f842). Re-install them here, the
+      loader role, so `call far [DGROUP:0xNN]` resolves instead of trapping to linear 0. */
+   fist_install_dgroup();
+-  return;
++  return 0;
+ }
+ 
+ 
+@@ -53081,10 +53081,9 @@
+ 
+ {
+   uint uVar1;
+-  
+-  do {
+-    param_1 = param_1 + -1;
+-  } while (param_1 != 0);
++  unsigned iterations = (uint16_t)param_1;
++  if (iterations == 0) iterations = 0x10000u;
++  fist_clock_charge_cpu_instructions(iterations * 4);
+   uVar1 = FUN_1000_4b6a();
+   return uVar1 | 1;
+ }

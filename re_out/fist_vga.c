@@ -116,8 +116,10 @@ static unsigned long long g_clock;            /* PIT counts since power-on */
 static unsigned long long g_sequence_next;
 static unsigned long long g_sequence_vertical_num;
 static unsigned long long g_sequence_event_num;
+static unsigned long long g_sequence_event_cycles;
 static unsigned long long g_text_vertical_num;
 static int g_text_phase_set;
+static unsigned g_text_frame_count;
 static unsigned char g_sequence_pixels[640 * 400];
 static unsigned g_sequence_part;
 static int g_sequence_dispatch;
@@ -132,6 +134,10 @@ void fist_text_init(void)
     g_mem[0x44a] = 80;
     g_mem[0x44b] = 0;
     g_mem[0x450] = g_mem[0x451] = g_mem[0x462] = 0;
+    g_mem[0x460] = 7;
+    g_mem[0x461] = 6;
+    g_mem[0x485] = 16;
+    g_mem[0x487] = 0x60;
     const char *prefix = getenv("FIST_TEXT_STATE");
     if (prefix) {
         char path[1024];
@@ -197,15 +203,38 @@ void fist_text_write(unsigned ch)
 
 static void fist_text_scan_part(unsigned part)
 {
+    unsigned col = g_mem[0x450], row = g_mem[0x451];
+    unsigned start = g_mem[0x461], end = g_mem[0x460];
+    int cursor = (g_text_frame_count & 8) && col < 80 && row < 25 && g_mem[0x485] &&
+        (start & 0x60) != 0x20;
+    if (cursor && !(g_mem[0x487] & 9) && !((start | end) & 0xe0)) {
+        unsigned height = g_mem[0x485] - 1;
+        if (end < start) {
+            if (end) { start = end; end = height; }
+        } else if ((start | end) >= height || end != height - 1 || start != height) {
+            if (end > 3) {
+                if (start + 2 < end) {
+                    if (start > 2) start = (height + 1) / 2;
+                    end = height;
+                } else {
+                    start = start - end + height;
+                    end = height;
+                    if (height > 12) { --start; --end; }
+                }
+            }
+        }
+    }
     for (unsigned y = part * 100; y < (part + 1) * 100; ++y) {
         unsigned char *dst = g_sequence_pixels + y * 640;
-        for (unsigned col = 0; col < 80; ++col) {
-            unsigned cell = 2 * ((y / 16) * 80 + col);
+        for (unsigned xcell = 0; xcell < 80; ++xcell) {
+            unsigned cell = 2 * ((y / 16) * 80 + xcell);
             unsigned ch = g_text_cells[cell], attr = g_text_cells[cell + 1];
             unsigned glyph = fist_text_font[ch * 16 + y % 16];
             for (unsigned x = 0; x < 8; ++x)
-                dst[col * 8 + x] = glyph & (0x80u >> x) ? attr & 15 : (attr >> 4) & 7;
+                dst[xcell * 8 + x] = glyph & (0x80u >> x) ? attr & 15 : (attr >> 4) & 7;
         }
+        if (cursor && y / 16 == row && y % 16 >= start && y % 16 <= end)
+            memset(dst + col * 8, g_text_cells[2 * (row * 80 + col) + 1] & 15, 8);
     }
 }
 
@@ -214,7 +243,16 @@ static unsigned long long fist_sequence_part_clock(unsigned part)
 {
     g_sequence_event_num = g_sequence_vertical_num +
         VGA_FRAME_NUM * VDISPEND_LINE * part / (449u * 4u);
-    return (g_sequence_event_num + VGA_CLOCK_ - 1) / VGA_CLOCK_;
+    const unsigned long long denom = (unsigned long long)PIT_HZ_ * VGA_CLOCK_;
+    unsigned long long pit = g_sequence_event_num / VGA_CLOCK_;
+    unsigned long long pit_fraction = g_sequence_event_num % VGA_CLOCK_;
+    unsigned long long seconds = pit / PIT_HZ_, remainder = pit % PIT_HZ_;
+    unsigned long long scaled = remainder * 30000000u;
+    unsigned long long fractional = (scaled % PIT_HZ_) * VGA_CLOCK_ + pit_fraction * 30000000u;
+    g_sequence_event_cycles = seconds * 30000000u + scaled / PIT_HZ_ +
+        (fractional + denom - 1) / denom;
+    return (g_sequence_event_cycles / 30000000u) * PIT_HZ_ +
+        ((g_sequence_event_cycles % 30000000u) * PIT_HZ_ + 30000000u - 1) / 30000000u;
 }
 
 static void fist_sequence_mode_set(void)
@@ -225,6 +263,7 @@ static void fist_sequence_mode_set(void)
     g_sequence_vertical_num = g_vmode == 3 && g_text_phase_set ? g_text_vertical_num :
         (ready / FRAME_COUNTS + 1) * FRAME_COUNTS * (unsigned long long)VGA_CLOCK_;
     g_sequence_part = 0;
+    g_text_frame_count = 1;
     g_sequence_next = fist_sequence_part_clock(1);
     if (g_vmode == 3 && g_text_phase_set && g_sequence_next <= g_clock) abort();
 }
@@ -238,7 +277,7 @@ void fist_sequence_present(void)
         for (unsigned lane = 0; lane < 3; ++lane)
             palette[i][lane] = (unsigned char)((g_pal[i][lane] << 2) | (g_pal[i][lane] >> 4));
     unsigned width = g_vmode == 3 ? 640 : FB_W, height = g_vmode == 3 ? 400 : FB_H;
-    fist_sequence_frame((double)g_sequence_event_num * 1000.0 / (PIT_HZ_ * (double)VGA_CLOCK_), width, height, width,
+    fist_sequence_frame((double)g_sequence_event_cycles / 30000.0, width, height, width,
                         g_sequence_pixels, &palette[0][0]);
 }
 void fist_sequence_finish(void){ fist_sequence_close(); }
@@ -256,7 +295,7 @@ void fist_kdv_instruction_count(uint64_t count)
     fflush(log);
 }
 static unsigned short g_pit_reload[3] = {0,0,0};   /* 0 == 65536 */
-static unsigned char  g_pit_mode[3], g_pit_rw[3];  /* control word: mode, access (1 lo,2 hi,3 lo/hi) */
+static unsigned char  g_pit_mode[3] = {3,0,0}, g_pit_rw[3];  /* BIOS channel 0 starts in mode 3 */
 static unsigned char  g_pit_wsub[3], g_pit_rsub[3];
 static unsigned short g_pit_wlatch[3];
 static unsigned long long g_pit_base[3];      /* clock at which the current count started */
@@ -267,7 +306,8 @@ unsigned fist_clock_frame_counts(void){ return FRAME_COUNTS; }
 static unsigned pit_period(int ch){ return g_pit_reload[ch] ? g_pit_reload[ch] : 0x10000u; }
 static unsigned pit_count(int ch){            /* the channel's current count (modes 2/3: reload - elapsed) */
     unsigned p = pit_period(ch); unsigned long long e = (g_clock - g_pit_base[ch]) % p;
-    return (unsigned)(p - e) & 0xffff; }
+    unsigned count = (unsigned)(p - e);
+    return (g_pit_mode[ch] == 3 ? count * 2 : count) & 0xffff; }
 unsigned long long fist_pit0_next_wrap(void){ unsigned p = pit_period(0);
     unsigned long long e = g_clock - g_pit_base[0]; return g_pit_base[0] + (e / p + 1) * p; }
 /* Step the clock to `target`, firing the channel-0 interrupt at every wrap on the way (the ISR may
@@ -290,6 +330,7 @@ void fist_clock_advance_to(unsigned long long target){
                 g_sequence_dispatch = 0;
                 g_sequence_part = 0;
                 g_sequence_vertical_num += VGA_FRAME_NUM;
+                if (g_vmode == 3) ++g_text_frame_count;
             }
             g_sequence_next = fist_sequence_part_clock(g_sequence_part + 1);
             if (same_tick && (!g_int8_replay || g_int8_force)) fist_int8_fire();
@@ -299,8 +340,31 @@ void fist_clock_advance_to(unsigned long long target){
     }
 }
 void fist_clock_advance(unsigned n){ fist_clock_advance_to(g_clock + n); }
+void fist_clock_charge_cpu_instructions(unsigned count)
+{
+    static unsigned remainder;
+    uint64_t numerator = (uint64_t)remainder + (uint64_t)count * PIT_HZ_;
+    unsigned ticks = (unsigned)(numerator / 30000000u);
+    remainder = (unsigned)(numerator % 30000000u);
+    if (ticks) fist_clock_advance(ticks);
+}
+void fist_clock_wait_bios_ticks(unsigned count)
+{
+    const uint16_t *tick = (const uint16_t *)(g_mem + 0x46c);
+    while (count--) {
+        uint16_t previous = *tick;
+        do { fist_clock_advance_to(fist_pit0_next_wrap()); } while (*tick == previous);
+    }
+}
 static int vga_status(unsigned long long c){   /* port 0x3da at clock c: bit3 vsync, bit0 vertical blanking */
-    double line = (double)(unsigned)(c % FRAME_COUNTS) * (FRAME_LINES / FRAME_COUNTS); int r = 0;
+    double line;
+    if (g_vmode == 3 && g_text_phase_set && c * VGA_CLOCK_ >= g_text_vertical_num) {
+        unsigned long long phase = (c * VGA_CLOCK_ - g_text_vertical_num) % VGA_FRAME_NUM;
+        line = (double)phase * 449.0 / VGA_FRAME_NUM;
+    } else {
+        line = (double)(unsigned)(c % FRAME_COUNTS) * (FRAME_LINES / FRAME_COUNTS);
+    }
+    int r = 0;
     if (line >= VRETRACE_LINE && line <= VRETRACE_LINE + 2) r |= 8;
     if (line >= VDISPEND_LINE) r |= 1;                   /* (the per-line horizontal blank is not modelled:
                                                             nothing in the engine or the drivers reads bit 0) */
