@@ -38,6 +38,8 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
   `(102357 + 15×187)/30000 = 3.5054 ms`; the 60000-cycle run independently gives
   1.7527 ms for the same counts and faults. Later calls have no such faults. A full title run
   has 395 calls, 298 distinct instruction counts (54,357–317,270), confirming variable cost.
+  The measured first-call cost converts to 4,183 PIT counts, below the diagnostic 5,134-count
+  charge; that trial cannot establish the cost of work surrounding the decoder.
   Reproduce with
   `tools/oracle/build_kdv_profile_oracle.sh`, `FIST_DOSBOX_CORE=normal`,
   `FIST_KDV_PROFILE=<path>` and `FIST_KDV_PROFILE_N=3`; trace:
@@ -47,9 +49,9 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
 
 ## Next
 
-1. Model the KDV decoder's branch-dependent instruction count and first-touch page-fault cost,
-   then the inherited fractional VGA phase; compare complete frame contents and timestamps
-   through the first differing event.
+1. Trace timing from KDV open through decode, blit and DAC; model branch-dependent decoder
+   instructions and first-touch faults separately from surrounding work. Then match the inherited
+   fractional VGA phase and compare complete frames and timestamps through the first difference.
    Verify the post-IRQ cockpit capture against the Original presentation phase.
 2. Capture loader frames. Establish identical virtual scenario start/end and timed input; compare
    complete frame order, dimensions, timestamps, indices and palettes without truncation.
