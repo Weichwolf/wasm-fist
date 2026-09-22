@@ -24,6 +24,10 @@ never trims an unmatched emulator frame.
 - The correction closes the former event-35 palette failure. `start-state-probe` and
   `port-initcal-phase-trace-649` are byte/time-identical through event 35. The first Oracle
   difference is event 36: 560,798 us versus 560,797 us; pixel 0 differs.
+- Oracle `oracle-event36-fill-653` identifies the first title-frame VRAM writer as
+  `002b:7132` at 553.722733 ms. `oracle-event36-e584-654` reaches the frame-op call at
+  548.175100 ms. Port frame 1 completes at 548.186278 ms. Its recovered decoder count is
+  102,357 instructions (3.412 ms at 30 MHz), leaving about 2.14 ms of unmodelled file/service work.
 - Clean captures `port-phase-clean-650` and `wasm-phase-clean-650` match native/WASM exactly
   through event 67. Event 68 differs only in timestamp: native 1,017,375 us, WASM 1,017,376 us.
   This violates the contract; do not call the targets identical.
@@ -31,9 +35,10 @@ never trims an unmatched emulator frame.
 
 ## Next
 
-1. Capture event 36 in DOSBox and both ports with the state and phase variables above. Identify
-   its producer and recover the register/segment/width/flag contract. Fix the first byte before
-   examining later frames.
+1. Account for the title-frame producer before changing output: `002b:7132` first writes at
+   553.722733 ms after the 548.175100-ms frame-op call. Separate decoder, file-read and extender
+   service instruction costs; advance time before, never after, the VRAM stores. Fix event 36 only
+   once that contract is measured.
 2. Explain the native/WASM one-microsecond event-68 discrepancy from the sequence timestamp
    conversion. Add a regression that compares the full frame record, including time; do not round
    the comparison or the capture format.
