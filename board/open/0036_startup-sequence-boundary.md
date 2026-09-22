@@ -24,6 +24,9 @@ never trims an unmatched emulator frame.
   (`oracle-start-boundary-689/`). The historic matching capture was made with a temporary
   instrumented start-state hook that has been restored out of DOSBox. A normal launcher run is
   therefore not a continuation of `oracle-pre-dat`; do not use it as a reference for this item.
+- A cursor-count override changes part of the mismatch but not all of it (`oracle-cursor{0,15b}-*`).
+  The loader text surface itself is not pinned. Reject cursor/blink forcing: it masks a changing
+  producer and cannot establish the attributed application boundary.
 
 ## Next
 
