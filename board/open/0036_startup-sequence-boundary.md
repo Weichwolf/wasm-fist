@@ -28,6 +28,11 @@ never trims an unmatched emulator frame.
   `002b:7132` at 553.722733 ms. `oracle-event36-e584-654` reaches the frame-op call at
   548.175100 ms. Port frame 1 completes at 548.186278 ms. Its recovered decoder count is
   102,357 instructions (3.412 ms at 30 MHz), leaving about 2.14 ms of unmodelled file/service work.
+- `oracle-event36-stage-656` separates frame 1: `11dd` 548.179300, `7135` 549.052500,
+  `746a` 552.557900, `746b` 552.558033 and `7120` 553.189300 ms. The pre-decoder path reads
+  768 and 5,000 bytes, then transfers 64 KB at `7120`. Charging only the exact decoder and the
+  16,000-cycle transfer yields an event-36 scan with 16,000 black and 48,000 index-48 pixels.
+  The missing pre-decoder/dispatcher contract is therefore observable; do not encode a delay.
 - Clean captures `port-phase-clean-650` and `wasm-phase-clean-650` match native/WASM exactly
   through event 67. Event 68 differs only in timestamp: native 1,017,375 us, WASM 1,017,376 us.
   This violates the contract; do not call the targets identical.
@@ -35,10 +40,10 @@ never trims an unmatched emulator frame.
 
 ## Next
 
-1. Account for the title-frame producer before changing output: `002b:7132` first writes at
-   553.722733 ms after the 548.175100-ms frame-op call. Separate decoder, file-read and extender
-   service instruction costs; advance time before, never after, the VRAM stores. Fix event 36 only
-   once that contract is measured.
+1. Recover the omitted PM frame-op dispatcher before changing output. For frame 1 its measured
+   stages are `11dd` 548.179300 → `7135` 549.052500 → `746a` 552.557900 → `7120` 553.189300 →
+   first VRAM store 553.722733 ms. Account separately for the 768/5,000-byte reads, decoder and
+   64-KB transfer. Advance time before stores. Do not encode a delay.
 2. Explain the native/WASM one-microsecond event-68 discrepancy from the sequence timestamp
    conversion. Add a regression that compares the full frame record, including time; do not round
    the comparison or the capture format.
