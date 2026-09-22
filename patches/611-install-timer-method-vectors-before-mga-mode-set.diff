@@ -1,0 +1,24 @@
+PATCH 611: restore the 2ebe timer-method reloc install before the MGA mode set (board:0034).
+
+The original writes DGROUP:0x426=2082:3943 at 404.239 ms (watch ph=0x2d5b6), immediately before
+MGAVIDEO 00e8 sets mode 13h at 407.577 ms. Its source is the engine's si=0x1b8 FAR relocation
+section: (0x426,0x3943) plus section segment 0x0f69, rebased to base-zero 0x12fd3 = 2fd3.
+MGAVIDEO 00e8 then lcall [0x426] at asm 0x12e; the original re-enters 2fd3 and reloads PIT 0
+with 65536 after the mode set. Patch 127 elided the install because the decompiled f842 had lost
+BX/SI and later timing diverged. The existing exact reloc-section helper supplies the proven
+f842 effect without executing its invalid C body. This restores the actual callback, not a
+clock delay or output mask.
+--- a/fist.c
++++ b/fist.c
+@@ -50171,9 +50171,2 @@
+-  /* patch127: `xor bx,bx; mov si,0x1b8; lcall [DGROUP:0x12]` = the FAR reloc applier f842.  Ghidra
+-   * dropped BX/SI at the site AND the string-op segment bases inside f842, so the raw call ran the
+-   * base-lost C on UNINITIALISED register-arg garbage -> f842's `if(param_1!=0) uVar1=*param_3;` derefs
+-   * a wild pointer when the garbage BX is nonzero => the FLAKY static-menu SIGSEGV.  The applier's real
+-   * effect (installing the DGROUP:0x426.. method vectors) has NO observable effect on the static menu
+-   * (native/wasm both render the byte-exact menu, AE=0 vs DOSBox, without it) but under the cooperative
+-   * wasm time base it diverges execution (wasm starves at a pre-menu frame).  Elide the inert call -- the
+-   * deterministic, native<->wasm-identical behaviour, same class as patch 053.  (Faithful install +
+-   * a cooperative pump for the spin-wait it enables is deferred to the sub-screen frontier.) */
++  { extern int fist_apply_reloc_section(unsigned short,int);
++    fist_apply_reloc_section(0x1b8, 1); }

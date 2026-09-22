@@ -1,0 +1,29 @@
+PATCH 613: thread ES:BX and DS:SI through the reached 3318 callback (board:0034).
+
+SOUNDDVR asm 014e:154-15b sets ES=CS (the sound overlay segment), BX=0x1cd, then FAR-calls
+DGROUP:0x43e. The vector installed by section 0x1b8 reaches engine 3318. Engine asm
+1000:331b-3320 sets DS=CS, SI=0x3bf1, then FAR-calls SS:0x32a. That target is 4ce7, whose
+validated patch 012 takes encoded far ES:BX and DS:SI to splice a callback node. After
+patch 612 fixed the far-vector address, calling it without these register inputs passed
+native stack garbage / WASM undefined values. Thread both original far pointers explicitly.
+The Oracle writes SOUNDDVR:0x1cd = `ea f6 3b 82 20` at 518.060 ms, i.e. the new node
+inherits the old 2082:3bf6 link; the base-zero port must retain the same offset and
+store the corresponding 0f69 segment. Evidence: scratch/sequence-capture/snd-node/mem.watch.txt.
+--- a/fist.c
++++ b/fist.c
+@@ -1856 +1856 @@
+-void __allregs FUN_1000_3318(void);
++void __allregs FUN_1000_3318(uint32_t es_bx);
+@@ -50657 +50657 @@
+-void __allregs FUN_1000_3318(void)
++void __allregs FUN_1000_3318(uint32_t es_bx)
+@@ -50662 +50662,2 @@
+-  (*(code *)fist_icall_far((uint32_t)(*(undefined4 *)(g_mem + 0x1c32a))))();
++  ((void (*)(undefined1 *,int))fist_icall_far((uint32_t)(*(undefined4 *)(g_mem + 0x1c32a))))(
++      (undefined1 *)(uintptr_t)es_bx, (int)((0xf69u << 16) | 0x3bf1u));
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -594 +594,2 @@
+-    (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c43e)))();
++    (*(code *)fist_icall_far((uint32_t)(_DAT_1000_c43e)))(
++        ((uint32_t)(fist_snd_base >> 4) << 16) | 0x1cdu);

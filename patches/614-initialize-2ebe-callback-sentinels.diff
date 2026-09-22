@@ -1,0 +1,17 @@
+PATCH 614: initialize both 2ebe self-modifying far-JMP sentinels (board:0034).
+
+Original 1000:2ebe-2ec8 sets DI=3ba6, calls [SS:0x31e], then sets DI=3bf1 and calls
+it again. The target is 4cb9, which writes `ea <DI+5> <caller-CS>` at CS:DI.
+Oracle writes 2082:3bf1 = `ea f6 3b 82 20` at 329.914 ms; port base-zero equivalent
+is 0f69:3bf1 = `ea f6 3b 69 0f` at linear 0x13281. Ghidra dropped DI and caller CS
+at both indirect calls, so the port left the second sentinel as raw image bytes and
+patch 613's sound-node splice inherited a bogus link. The existing asm-backed 4cb9
+implementation (patch 011) takes the two original inputs and writes both nodes.
+Evidence: scratch/sequence-capture/snd-head/mem.watch.txt and FIST.DAT 0x12ebe.
+--- a/fist.c
++++ b/fist.c
+@@ -50130,2 +50130,2 @@
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c31e)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c31e)))();
++  FUN_1000_4cb9((undefined1 *)0x3ba6,0x0f69);
++  FUN_1000_4cb9((undefined1 *)0x3bf1,0x0f69);

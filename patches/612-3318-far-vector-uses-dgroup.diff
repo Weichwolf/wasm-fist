@@ -1,0 +1,12 @@
+PATCH 612: FUN_1000_3318 calls the SS:0x32a FAR vector through DGROUP (board:0034).
+
+The newly live timer section reaches this sound-driver callback. Original asm at 1000:331b
+sets DS=CS, then 1000:3320 `lcall *%ss:0x32a`; SS is DGROUP and the operand is four bytes.
+Ghidra emitted a host dereference of address 0x32a and a near call. At the reaching native
+crash, DGROUP:0x32a held 0x0f69:5657 (linear 0x14ce7). Resolve that FAR value using the
+existing dispatcher. The same instruction is in FIST.DAT image 0x13320.
+--- a/fist.c
++++ b/fist.c
+@@ -50662 +50662 @@
+-  (*(code *)fist_icall_near(0x1000u,(uint16_t)(*(undefined2 *)0x32a)))();
++  (*(code *)fist_icall_far((uint32_t)(*(undefined4 *)(g_mem + 0x1c32a))))();
