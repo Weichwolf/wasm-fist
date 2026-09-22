@@ -40,6 +40,7 @@ static int g_dac_ridx, g_dac_rsub;
 
 static int g_trace = -1;
 static int traceon(void){ if(g_trace<0){ extern char*getenv(const char*); g_trace=getenv("FIST_TRACE_TRAPS")?1:0;} return g_trace; }
+static void fist_sequence_mode_set(void);
 
 /* Sound Blaster shim (fist_sb.c): SB port window trapping.  Default OFF (FIST_SB unset) -> fist_sb_owns
  * returns 0 for every port -> the switch below runs exactly as before -> zero effect on the video flows. */
@@ -60,6 +61,9 @@ void fist_vga_set_mode(int mode)
         extern unsigned long long fist_clock_now(void);
         fprintf(stderr, "[vga] mode %02x t=%.6f\n", g_vmode,
                 (double)fist_clock_now() * 1000.0 / 1193182.0);
+        fprintf(stderr, "[vga] vectors 426=%08x 53c=%08x d8b4=%u\n",
+                *(uint32_t *)(g_mem + 0x1c426), *(uint32_t *)(g_mem + 0x1c53c),
+                g_mem[0x1d8b4]);
     }
     if (traceon()) fprintf(stderr, "[vga] set video mode 0x%02x (%s)\n", g_vmode,
         g_vmode==0x13 ? "320x200x256 linear" : "other");
@@ -71,6 +75,7 @@ void fist_vga_set_mode(int mode)
             fprintf(stderr, "[vga] mode13 DAC17=%u,%u,%u\n",
                     g_pal[17][0], g_pal[17][1], g_pal[17][2]);
     }
+    fist_sequence_mode_set();
 }
 int  fist_vga_mode(void){ return g_vmode; }
 
@@ -105,10 +110,22 @@ int  fist_vga_mode(void){ return g_vmode; }
 #define VRETRACE_LINE 412             /* vrstart (vdispend + 12); the pulse lasts to line 414 */
 #define VDISPEND_LINE 400             /* status bit 0 (blanking) from here to the end of the frame */
 static unsigned long long g_clock;            /* PIT counts since power-on */
+static unsigned long long g_sequence_next;
+static int g_sequence_dispatch;
+
+static void fist_sequence_mode_set(void)
+{
+    g_sequence_next = 0;
+    if (g_vmode != 0x13 || !getenv("FIST_SEQUENCE")) return;
+    unsigned long long ready = g_clock + (50ull * PIT_HZ_ + 500) / 1000;
+    unsigned long long vertical = (ready / FRAME_COUNTS + 1) * FRAME_COUNTS;
+    unsigned lines = (unsigned)FRAME_LINES;
+    g_sequence_next = vertical + (FRAME_COUNTS * VDISPEND_LINE + lines / 2) / lines;
+}
 
 void fist_sequence_present(void)
 {
-    if (!getenv("FIST_SEQUENCE") || g_vmode != 0x13) return;
+    if (!g_sequence_dispatch || !getenv("FIST_SEQUENCE") || g_vmode != 0x13) return;
     unsigned char palette[256][4];
     for (unsigned i = 0; i < 256; ++i)
         for (unsigned lane = 0; lane < 3; ++lane)
@@ -141,7 +158,16 @@ void fist_clock_advance_to(unsigned long long target){
     extern void fist_int8_fire(void);
     while (g_clock < target) {
         unsigned long long w = fist_pit0_next_wrap();
-        if (w <= target) { g_clock = w; if (!g_int8_replay || g_int8_force) fist_int8_fire(); }
+        if (g_sequence_next && g_sequence_next <= target && g_sequence_next <= w) {
+            int same_tick = g_sequence_next == w;
+            g_clock = g_sequence_next;
+            g_sequence_next += FRAME_COUNTS;
+            g_sequence_dispatch = 1;
+            fist_sequence_present();
+            g_sequence_dispatch = 0;
+            if (same_tick && (!g_int8_replay || g_int8_force)) fist_int8_fire();
+        }
+        else if (w <= target) { g_clock = w; if (!g_int8_replay || g_int8_force) fist_int8_fire(); }
         else g_clock = target;
     }
 }

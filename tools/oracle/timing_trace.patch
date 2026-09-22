@@ -88,3 +88,18 @@
 +	if (getenv("FIST_PICTRACE") && port == 0x21 && PIC_FullIndex() < 600.0)
 +		fprintf(stderr, "FIST_PICMASK %.6f cs=%04x eip=%08x val=%02x\n",
 +			PIC_FullIndex(), SegValue(cs), reg_eip, val);
+--- a/src/hardware/vga_draw.cpp
++++ b/src/hardware/vga_draw.cpp
+@@ -22,0 +23,2 @@
++#include <stdio.h>
++#include <stdlib.h>
+@@ -755,0 +758,4 @@
++	if (getenv("FIST_SCANTRACE") && PIC_FullIndex() < 650.0)
++		fprintf(stderr, "FIST_SCAN_VERTICAL %.6f mode=%u width=%u height=%u period=%.6f\n",
++			PIC_FullIndex(), (unsigned)vga.mode, (unsigned)vga.draw.width,
++			(unsigned)vga.draw.height, vga.draw.delay.vtotal);
+@@ -972,0 +979,4 @@
++	if (getenv("FIST_SCANTRACE") && PIC_FullIndex() < 650.0)
++		fprintf(stderr, "FIST_SCAN_SETUP %.6f mode=%u old=%ux%u\n",
++			PIC_FullIndex(), (unsigned)vga.mode,
++			(unsigned)vga.draw.width, (unsigned)vga.draw.height);

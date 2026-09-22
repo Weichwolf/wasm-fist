@@ -5,99 +5,84 @@ Depends: 0033
 
 ## Contract
 
-Capture every indexed frame, all 256 palette entries, presentation time and continuous PCM over
-explicit scenario boundaries. Same initial state, timed input and devices; no host-stack equality.
+Capture every presented indexed frame, all 256 palette entries, presentation time and continuous
+mixed PCM over explicit scenario boundaries. Match initial state, timed input and devices. Report
+the first unequal byte/event; no masks, truncation or host-stack equality.
 
 ## Evidence
 
-- `build_sequence_oracle.sh` plus `capture_sequence.sh` captured 3448 Oracle frame events and
-  2,182,440 stereo PCM frames at 44,100 Hz with complete `FISTSEQ1` footers. The final 320×200
-  frame has AE=0 against `ref/main_menu_native320.png`. A paired probe counted every one of
-  146,372 generated samples, including the first 1103-sample mixer step that legacy
-  `CAPTURE_AddWave` would truncate to 1024. Evidence: `scratch/sequence-capture/intro-menu/`.
-- `RENDER_EndUpdate` is the capture boundary; most repeated scanouts do not change the host
-  surface, and `CAPTURE_AddImage` only runs when recording is armed. `sequence_format.py` rejects
-  incomplete streams. The callback's abort/frameskip semantics still need proof as presentation.
-- Native and Node-WASM now emit complete frame-only `FISTSEQ1` captures at INT-8 and op 0x24.
-  `bash tools/capture_port_sequence.sh {native,wasm} 400 <fresh-dir>` yielded 465 events each;
-  timestamps and RGB frames match byte-for-byte. At tick 120 both emitted 138 events.
-  Evidence: `scratch/sequence-capture/port-{native,wasm}-400/`. PCM is still absent.
-- `cycles=max` changes startup event times between Oracle runs; its 69 loader frames and
-  three-frame intro offset are provenance, not a stable timing baseline. Use
-  `FIST_DOSBOX_CYCLES='fixed 30000'` with `build_timing_oracle.sh` and the sequence runners.
-  Two independent fixed-cycle probes gave identical first 320×200 scanout (475.189 ms), `e584`
-  entry (546.979 ms), `TITLE.KDV` open (548.162 ms), and first two writes to pixel (144,58)
-  (553.103/621.253 ms). Evidence: `scratch/sequence-capture/fixed30k-{a,b}/`.
-- A five-second fixed-cycle Oracle capture has 30 preceding loader frames. Its first nine distinct
-  320×200 RGB images have the same hashes/order as native and WASM, but change at ordinals
-  `0,11,16,20,25,30,34,39,44` versus `0,7,11,16,21,25,30,35,39`. The first visible mismatch
-  is frame 7, pixel (144,58). Strict comparison finds an earlier palette mismatch at the first
-  320×200 frame, entry 17 red=20 versus 0, even though both index buffers match. Loader frames
-  are earlier still. Ordinal alignment is diagnostic only; neither difference can be masked.
-  `compare_frames.py` now fails on every palette/index byte, including unused entries.
-  Evidence: `scratch/sequence-capture/fixed30k-full/` and
-  `port-vga-{native,wasm}/`.
-- DOSBox BIOS mode 13h writes its 256-entry DAC table at 407.706 ms; the first 320×200 frame's
-  entire palette equals that table. The port previously left its DAC zeroed. The shim now loads
-  the captured BIOS table on mode set, but its first driver `0be2` upload still overwrites it
-  before the first captured frame: port mode set 84.987 ms, `0be2` DAC reset 98.716 ms, frame
-  99.373 ms. Oracle mode set enters 407.577 ms, first `0be2` DAC reset 503.000 ms. The early
-  driver service, not a missing palette constant alone, owns the first output mismatch.
-  Evidence: `scratch/sequence-capture/int10trace-fixed/dosbox.log`,
-  `scratch/sequence-capture/palette-caller-port/port.log`.
-- Fixed-cycle Oracle programs PIT 0 with zero (65,536 counts) at 407.999, 418.502 and
-  447.041 ms after the mode-set entry at 407.577 ms. Its first driver `0be2` service occurs
-  at 503.000 ms. The port last programs 65,536 at 41.642 ms, before its 84.987 ms mode set,
-  then reloads 16,624 at 84.439 ms and 16,657 at 98.707 ms; `0be2` runs at 98.716 ms.
-  Recover the original `39xx`/`3c3b` PIT path and its port counterpart before changing clock
-  constants. Evidence: `scratch/sequence-capture/pittrace-fixed/dosbox.log`,
-  `scratch/sequence-capture/pit-port-{native,wasm}/port.log`.
-- Port call-site tracing assigns its 41.633/41.642 ms reloads to engine `32cb`, and
-  every reload from 70.170 ms onward to engine ISR `30f8`. The original post-mode
-  65,536-count writes are in loader CS `2082` at `395f`, `3970` and `3c3b`; do not
-  equate those loader steps with the engine ISR. Evidence:
-  `scratch/sequence-capture/pit-caller-native/port.log` and `pittrace-fixed/dosbox.log`.
-- The original's MGA `04a3` palette-clear request starts 535.011 ms, returns 546.468 ms:
-  11.457 ms awaiting its vblank service. In the port, the corresponding DAC reset is 113.524 ms
-  and KDV opens 114.222 ms: patch 070 services it synchronously. DOSBox `VGA_StartResize` delays
-  the new host surface 50 ms, so the first 320×200 callback is not the BIOS mode-switch instant.
-  Relative to the actual mode-set call, `04a3` starts after 127.434 ms in the Oracle versus
-  28.536 ms in the port; model the preceding work and presentation scheduling separately.
-  Original KDV writes come from extender `0x10007120`; its descriptor has `[b6e0]=4` ticks. Evidence:
-  `scratch/sequence-capture/fixed30k-full/dosbox.log`,
-  `scratch/sequence-capture/port-vga-{native,wasm}/port.log`.
-- The mode-13 BIOS DAC initialization passed the full 178-flow native/WASM matrix: four
-  disjoint groups returned 0 with 45+45+44+44 unique passes. The tested binary and verifier
-  hashes still match `scratch/verify/full-bios-palette/sha256.txt`. A subsequent gated PIT
-  trace change was rebuilt on both targets; it does not run without `FIST_VGA_TRACE`.
-  Evidence: `scratch/verify/full-bios-palette/`. Strict palette/index comparison passed 28 unit tests
-  and all 138 native/WASM frame events; evidence: `scratch/sequence-capture/strict-palette-tests.log`.
-- Browser worker posts at INT-8 and op 0x24; `fist_web_post_frame` forces the palette. The
-  canvas keeps only `latest` until `requestAnimationFrame`, so worker posts may be dropped from
-  actual display. This needs browser measurement under 0026; Node runs cannot prove it.
-- OPL and SB each open `FIST_AUDIO_WAV` independently with `wb`; browser audio drains only OPL.
-  This file is not final mixed output. Owner for that defect: 0003.
+- The sequence Oracle (`build_sequence_oracle.sh`, `capture_sequence.sh`) captured 3,448 frame
+  events and 2,182,440 stereo samples at 44,100 Hz with valid footers. DOSBox frame capture is
+  `RENDER_EndUpdate`, including unchanged scanouts. Use `FIST_DOSBOX_CYCLES='fixed 30000'` for
+  reproducible timing; `cycles=max` varies. Evidence: `scratch/sequence-capture/intro-menu/`,
+  `fixed30k-{a,b}/`, `fixed30k-full/`.
+- Native and Node-WASM now capture at a VGA scanout event after the 50-ms mode resize, next
+  vertical timer and 400 visible lines, independently of INT-8. Both emit 24 identical
+  indexed events through tick 20; PCM is absent. The first two 320x200 frames match the
+  fixed-cycle Oracle byte-for-byte (all 64,000 indices and 768 palette bytes). The third
+  differs at palette entry 17: Oracle DAC upload at 503.000 ms precedes its 503.725-ms
+  scanout by 0.725 ms; port upload at 184.327 ms follows its 183.934-ms scanout by
+  0.393 ms. Both the last zero PIT reload and first scanout occur 2.8 ms later relative
+  to mode set in the port; the remaining gap is reload→DAC service: 57.073 ms versus
+  55.959 ms in the Oracle. First scanout times differ by a constant 319.792 ms
+  (475.189/155.397 ms);
+  a common scenario start marker is still needed. Earlier 640x400 loader frames are not
+  captured by the port yet. Evidence: `scratch/sequence-capture/fixed30k-full/`,
+  `scanout2-{native,wasm}/`; `compare_frames.py` checks every byte (28 unit tests).
+- Original `2ebe` applies FAR relocation section `0x1b8` at 404.239 ms, installing
+  `DGROUP:0x426=2082:3943` (base-zero `0f69:3943` = timer `2fd3`). MGAVIDEO `00e8`
+  calls it after BIOS mode 13h. Patch 127 had elided this section; port vector `0x426`
+  was zero. Patches 611/612 restore the section and fix the newly reached `3318` FAR
+  vector through `SS:0x32a`. Patches 613/614 thread the sound driver's `ES:BX` and
+  initialize the two callback sentinels omitted by Ghidra. At the reached splice,
+  SOUNDDVR:0x1cd is `ea f6 3b 69 0f` in the port, the base-zero equivalent of the
+  Oracle's `ea f6 3b 82 20`. The first driver `0be2` service is now 99.340 ms after
+  port mode set versus 95.423 ms after Oracle mode set; formerly it was 13.729 ms.
+  Evidence: `scratch/sequence-capture/vector-426/mem.watch.txt`, `calib-flag/mem.watch.txt`,
+  `patch614-native/port.log`, `patch614-gdb-node.log`, `snd-node/mem.watch.txt`,
+  `pittrace-fixed/dosbox.log`.
+- Oracle presentation timing: BIOS mode 13h enters at 407.577 ms; delayed
+  `VGA_SetupDrawing` at 457.582 ms; next vertical timer at 462.478 ms;
+  `RENDER_EndUpdate(false)` first captures 320x200 at 475.189 ms, then every 14.268 ms.
+  Driver DAC upload starts 503.000 ms. `FIST_SCANTRACE` reproduces this chain via
+  `build_timing_oracle.sh`. Evidence: `scratch/sequence-capture/scantrace-original/dosbox.log`.
+- The third-frame DAC miss is caused by the port's `in(0x3da)` fast-forward.
+  At the first post-calibration IRQ the Oracle polls at 501.968–502.994 ms,
+  with bit 3 clear, then exits `30f8` after its 1000-read timeout. The port
+  enters `30f8` at 182.186 ms with the same limit, but makes only five reads:
+  its unchanged-status shortcut jumps from 182.187 to 183.934 and 184.316 ms.
+  It reaches the DAC at 184.327 ms, after the 183.934-ms third scanout.
+  Evidence: `scratch/sequence-capture/3da-original/dosbox.log`,
+  `port-3da-gdb.log`, `port-int8-gdb.log`. Remove the shortcut and verify the
+  1000-read timeout against both targets before adjusting any clock cost.
+- Oracle MGA `04a3` request starts 535.011 ms and returns 546.468 ms after vblank service.
+  Port patch 070 still services it synchronously; port KDV opens after its immediate reset.
+  Browser canvas may drop worker posts because it retains only `latest`. OPL/SB write separate
+  WAVs and browser drains only OPL; neither is final mixed PCM. Owners: 0026 and 0003.
+- Patches 611–614 passed all 178 existing native/WASM flows (45+45+44+44 unique, all exit 0;
+  tested hashes retained in `scratch/verify/full-611-614/`). The scanout change passed
+  `bash tools/check_flow.sh '^(intro|settings-sky)$'` on both targets and 141/141 strict
+  native/WASM frame events through tick 120. Evidence: `scratch/verify/run.FHZPVC/`,
+  `scratch/sequence-capture/scanout120-{native,wasm}/`. Its exact-source full matrix
+  passed all 178 flows (45+45+44+44 unique, all exit 0; hashes retained under
+  `scratch/verify/full-scanout/`). This validates existing coverage, not full
+  Original/native/WASM sequence parity.
 
 ## Next
 
-1. Compare original loader `395f`/`3970`/`3c3b` PIT programming and hand-off to engine
-   `32cb`/`30f8` with the loader shim. Explain why the original retains a 65,536-count
-   period after mode set while the port restores ~16,657 before `0be2`. Correct that producer;
-   account separately for DOSBox's 50-ms host-surface resize. Then restore `04a3`'s vblank
-   wait (patch 070) from IRQ evidence and repeat the strict three-way capture.
-2. Implement a single final port mixer owner (0003) and emit continuous PCM, including SB effects;
-   the two existing WAV writers and OPL-only browser feed do not satisfy this capture.
-3. Drive original and both ports to the same explicit *virtual* scenario end and timed inputs. The
-   current 50-second Oracle run ends with Ctrl+F9 at 49.228 seconds of guest time. Add a common start
-   marker and completion condition; retain the full boot capture as provenance.
-4. Compare sequence order, frame time/dimensions/RGB and continuous PCM format/samples.
-   Audio chunk sizes may differ. Report the first difference, retain all artifacts and seed failures
-   for dropped/reordered frames, changed samples and incomplete captures.
+1. Remove the `0x3da` unchanged-status fast-forward; prove the first `30f8`
+   timeout, DAC upload and third frame against the Oracle. Then recover the
+   separate 2.8-ms post-mode VGA phase difference, compare complete 320x200
+   sequences at a common scenario start marker, restore `04a3`'s vblank wait
+   from IRQ evidence and account for preceding loader frames.
+2. Give the port one final mixer owner (0003), emitting continuous PCM including SB effects.
+3. Drive all three runs to the same explicit virtual scenario end with timed input; compare
+   event order, frame timing/dimensions/indices/palette and full PCM samples. Seed failures
+   for dropped/reordered events, changed samples and incomplete captures.
 
 ## Accept
 
-All three captures cover the same complete intro/menu scenario with independent oracle provenance.
-The runner reports the first differing frame/time/sample; dropped, added or reordered frames,
-changed samples and unfinished captures fail. Seed these faults to prove detection. A reproducible
-original/port difference stays red and gets its producer WI; capture completion does not close
-parity (0012), audio fidelity (0003) or presentation timing (0026).
+All three captures cover the same complete intro/menu scenario with independent Oracle
+provenance. The runner reports the first differing event/time/byte/sample; missing, changed
+or unfinished output fails. A remaining reproducible difference keeps parity (0012), audio
+(0003) or presentation timing (0026) open with its producer named.
