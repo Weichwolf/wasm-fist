@@ -29,7 +29,7 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   match **every byte and time of frames 0–26** (640×400 indexed pixels and 256-entry
   palettes); their complete 51-frame files are identical (`text-boot-{native,wasm}-6/`).
   The strict full-frame comparison first fails at event 27: Oracle 418,117 µs,
-  black 640×400; port 469,305 µs, 320×200. Mixed port PCM is still absent.
+  black 640×400; port 483,574 µs, 320×200 after patch 620. Mixed port PCM is still absent.
   `make check`, 29 tests and all 178 existing flows pass both targets with exact
   45+45+44+44 coverage (`scratch/verify/startup-phase-g{0..3}/`).
 - `cursor-trace/dosbox.log`: the current text vertical begins at 20.168067 ms with
@@ -53,15 +53,22 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   overlay loads take only 22/11 µs, and there are no DOS `3F` reads. The
   SOUNDDVR cluster executes 86,583 instructions between them, including 42,240
   hits each at the `07f4` delay loop's `dec ax/jne`; its 26 calls use calibration
-  values 90→114. The port starts at 256 and decrements, and charges no CPU
-  time for that loop. DOSBox `VGA_StartResize` delays renderer setup by 50 ms;
+  values 90→114. Patch 620 restores the 16-bit return and charges the asm loop's
+  CPU instructions; the port now gets 86→110. DOSBox's I/O delay guard suppresses
+  PIT2 port delays near the end of a CPU slice (`oracle-pit2-620/`), which the port
+  does not yet reproduce. The port mode-13 call is 407.410 ms versus 408.149 ms.
+  DOSBox `VGA_StartResize` delays renderer setup by 50 ms;
   Oracle presents three black 640×400 frames after the mode-set call.
+- With patch 620, native/WASM full 51-frame captures match each other exactly and both
+  retain the 27-event Oracle prefix (`text-boot-{native,wasm}-7/`). `make check`,
+  29 unit tests and all 178 flows pass on both targets with exact disjoint
+  45+45+44+44 coverage (`scratch/verify/snd620-g{0..3}/`).
 
 ## Next
 
-1. Recover the PIT2/port-61 contract in SOUNDDVR `07b7` against Oracle so its
-   calibration starts at 90 and evolves as measured. Then restore `07f4`'s 16-bit
-   AX loop and measured CPU-instruction cost; recheck mode-set time and mixed audio.
+1. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7`
+   against Oracle so calibration starts at 90 and evolves as measured. Recheck
+   mode-set time and mixed audio.
    Preserve the 27 matching text frames as a strict prefix of the full comparison.
 2. Model `VGA_StartResize` and the intervening black 640×400 presentations; align the
    first 320×200 frame's dimensions, time, indices and palette. Capture canonical

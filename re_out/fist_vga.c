@@ -300,14 +300,20 @@ static unsigned char  g_pit_wsub[3], g_pit_rsub[3];
 static unsigned short g_pit_wlatch[3];
 static unsigned long long g_pit_base[3];      /* clock at which the current count started */
 static int            g_pit_latched[3]; static unsigned short g_pit_latch[3];
+static unsigned char g_port61;
 int fist_vga_pit0_div(void){ return g_pit_reload[0] ? g_pit_reload[0] : 0x10000; }
 unsigned long long fist_clock_now(void){ return g_clock; }
 unsigned fist_clock_frame_counts(void){ return FRAME_COUNTS; }
 static unsigned pit_period(int ch){ return g_pit_reload[ch] ? g_pit_reload[ch] : 0x10000u; }
-static unsigned pit_count(int ch){            /* the channel's current count (modes 2/3: reload - elapsed) */
-    unsigned p = pit_period(ch); unsigned long long e = (g_clock - g_pit_base[ch]) % p;
-    unsigned count = (unsigned)(p - e);
-    return (g_pit_mode[ch] == 3 ? count * 2 : count) & 0xffff; }
+static unsigned pit_count(int ch){
+    unsigned p = pit_period(ch); unsigned e = (unsigned)((g_clock - g_pit_base[ch]) % p);
+    if (g_pit_mode[ch] == 3) {
+        unsigned phase = e * 2;
+        if (phase > p) phase -= p;
+        return (p - phase) & 0xfffe;
+    }
+    return (p - e) & 0xffff;
+}
 unsigned long long fist_pit0_next_wrap(void){ unsigned p = pit_period(0);
     unsigned long long e = g_clock - g_pit_base[0]; return g_pit_base[0] + (e / p + 1) * p; }
 /* Step the clock to `target`, firing the channel-0 interrupt at every wrap on the way (the ISR may
@@ -401,7 +407,7 @@ int in(int port)
         if (g_pit_rw[ch] != 3 || !g_pit_rsub[ch]) g_pit_latched[ch] = 0;   /* both bytes read: unlatch */
         return b; }
     case 0x60: return 0;        /* keyboard data: no scan code */
-    case 0x61: return 0x20;     /* PPI port B (refresh toggle bit) */
+    case 0x61: g_port61 ^= 0x30; return g_port61;
     case 0x64: return 0x00;     /* keyboard status: no data available */
     case 0x201: return 0xf0;    /* joystick: no buttons pressed, timers low */
     case 0x20: case 0xa0: return 0;   /* PIC */
@@ -467,7 +473,11 @@ void out(int port, int val)
     case 0x3d8: case 0x3d9: /* mode/color select */
     case 0x20: case 0xa0:   /* PIC EOI */
     case 0x21: case 0xa1:   /* PIC mask */
-    case 0x61: case 0x64:   /* PPI / kbd cmd */
+    case 0x61:
+        if ((g_port61 ^ val) & 1 && (val & 1)) g_pit_base[2] = g_clock;
+        g_port61 = (unsigned char)val;
+        return;
+    case 0x64:   /* kbd cmd */
         return;
     default:
         if (traceon()) fprintf(stderr, "[port] out 0x%03x, 0x%02x\n", port, val);

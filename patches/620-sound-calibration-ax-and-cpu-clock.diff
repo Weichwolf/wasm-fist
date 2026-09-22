@@ -1,0 +1,44 @@
+PATCH 620: restore SOUNDDVR 07f4's 16-bit AX delay and return (board:0036).
+
+Asm 080b..0815 repeats mov ax,[cs:5a6]; dec ax; jne for CX=16, then
+neg ax at 0823 returns a 16-bit PIT2 count. Across 26 Oracle startup calls,
+both dec and jne execute 42,240 times (oracle-sndhist-619). The generated C
+used 32-bit loop/neg semantics and charged no guest CPU work; its negative
+int return sent 077f down the wrong calibration branch. Charge the measured
+instruction count through the fixed-30000-cycle clock, preserving scanout.
+--- a/fist_snd.c
++++ b/fist_snd.c
+@@ -1429,29 +1429,21 @@
+   byte bVar1;
+   undefined1 uVar2;
+   undefined1 uVar3;
+-  int iVar4;
+-  int iVar5;
+   
+   out(0x43,0xb6);
+   out(0x42,0);
+   out(0x42,0);
+   bVar1 = in(0x61);
+   out(0x61,bVar1 & 0xfc | 1);
+-  iVar5 = 0x10;
+-  iVar4 = DAT_0000_05a6;
+-  do {
+-    do {
+-      iVar4 = iVar4 + -1;
+-    } while (iVar4 != 0);
+-    iVar5 = iVar5 + -1;
+-    iVar4 = DAT_0000_05a6;
+-  } while (iVar5 != 0);
++  unsigned iterations = (uint16_t)DAT_0000_05a6;
++  if (iterations == 0) iterations = 0x10000u;
++  fist_clock_charge_cpu_instructions(16u * (2u * iterations + 2u) + 1u);
+   out(0x43,0x86);
+   uVar2 = in(0x42);
+   uVar3 = in(0x42);
+   bVar1 = in(0x61);
+   out(0x61,bVar1 & 0xfc);
+-  return -CONCAT11(uVar3,uVar2);
++  return (uint16_t)(-CONCAT11(uVar3,uVar2));
+ }
+ 
+ 
