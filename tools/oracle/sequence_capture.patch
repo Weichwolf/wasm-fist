@@ -1,0 +1,31 @@
+--- a/src/gui/render.cpp
++++ b/src/gui/render.cpp
+@@ -36,0 +37 @@
++#include "fist_sequence_capture.h"
+@@ -208,0 +210,5 @@
++	if (getenv("FIST_SEQUENCE") && !abort && render.src.width && render.src.height) {
++		if (render.src.bpp != 8) fist_sequence_fail("unsupported video depth");
++		fist_sequence_frame(PIC_FullIndex(), render.src.width, render.src.height,
++			render.scale.cachePitch, (Bit8u *)&scalerSourceCache, (Bit8u *)&render.pal.rgb);
++	}
+--- a/src/hardware/mixer.cpp
++++ b/src/hardware/mixer.cpp
+@@ -41,0 +42 @@
++#include "../gui/fist_sequence_capture.h"
+@@ -362,0 +364,16 @@
++	}
++	if (getenv("FIST_SEQUENCE")) {
++		Bitu added = needed-mixer.done;
++		Bitu readpos = (mixer.pos+mixer.done)&MIXER_BUFMASK;
++		double time = PIC_FullIndex();
++		while (added) {
++			Bit16s stereo[512][2];
++			Bitu count = added < 512 ? added : 512;
++			for (Bitu i=0; i<count; ++i) {
++				stereo[i][0] = MIXER_CLIP(mixer.work[readpos][0] >> MIXER_VOLSHIFT);
++				stereo[i][1] = MIXER_CLIP(mixer.work[readpos][1] >> MIXER_VOLSHIFT);
++				readpos = (readpos+1)&MIXER_BUFMASK;
++			}
++			fist_sequence_audio(time, mixer.freq, &stereo[0][0], count);
++			added -= count;
++		}
