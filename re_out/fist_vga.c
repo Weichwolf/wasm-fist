@@ -116,6 +116,8 @@ static unsigned long long g_clock;            /* PIT counts since power-on */
 static unsigned long long g_sequence_next;
 static unsigned long long g_sequence_vertical_num;
 static unsigned long long g_sequence_event_num;
+static unsigned long long g_text_vertical_num;
+static int g_text_phase_set;
 static unsigned char g_sequence_pixels[640 * 400];
 static unsigned g_sequence_part;
 static int g_sequence_dispatch;
@@ -144,6 +146,23 @@ void fist_text_init(void)
         if (bda[0x49] != 3 || bda[0x4a] != 80 || bda[0x4b] || bda[0x62] ||
             bda[0x51] >= 25 || bda[0x50] >= 80) abort();
         memcpy(g_mem + 0x400, bda, sizeof bda);
+    }
+    const char *phase = getenv("FIST_TEXT_PHASE_NS");
+    if (phase) {
+        unsigned long long start_ns, vertical_ns;
+        char extra;
+        if (!prefix || sscanf(phase, "%llu,%llu%c", &start_ns, &vertical_ns, &extra) != 2 ||
+            vertical_ns > start_ns ||
+            start_ns > (UINT64_MAX - 500000000ull) / PIT_HZ_) abort();
+        unsigned long long start_num = start_ns * PIT_HZ_;
+        g_clock = (start_num + 500000000ull) / 1000000000ull;
+        unsigned long long vertical_num = vertical_ns * PIT_HZ_;
+        unsigned long long whole = vertical_num / 1000000000ull;
+        unsigned long long frac = vertical_num % 1000000000ull;
+        if (whole > (UINT64_MAX - VGA_CLOCK_) / VGA_CLOCK_) abort();
+        g_text_vertical_num = whole * VGA_CLOCK_ +
+            (frac * VGA_CLOCK_ + 500000000ull) / 1000000000ull;
+        g_text_phase_set = 1;
     }
     g_vmode = 3;
     memcpy(g_pal, fist_text_dac, sizeof g_pal);
@@ -203,9 +222,11 @@ static void fist_sequence_mode_set(void)
     g_sequence_next = 0;
     if ((g_vmode != 0x13 && g_vmode != 3) || !getenv("FIST_SEQUENCE")) return;
     unsigned long long ready = g_clock + (g_vmode == 0x13 ? (50ull * PIT_HZ_ + 500) / 1000 : 0);
-    g_sequence_vertical_num = (ready / FRAME_COUNTS + 1) * FRAME_COUNTS * (unsigned long long)VGA_CLOCK_;
+    g_sequence_vertical_num = g_vmode == 3 && g_text_phase_set ? g_text_vertical_num :
+        (ready / FRAME_COUNTS + 1) * FRAME_COUNTS * (unsigned long long)VGA_CLOCK_;
     g_sequence_part = 0;
     g_sequence_next = fist_sequence_part_clock(1);
+    if (g_vmode == 3 && g_text_phase_set && g_sequence_next <= g_clock) abort();
 }
 
 void fist_sequence_present(void)

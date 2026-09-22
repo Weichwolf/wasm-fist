@@ -4,67 +4,56 @@ Parent: 0034
 
 ## Contract
 
-Define the same observable launch instant for DOSBox, native and WASM. Capture every frame and
-PCM sample from that point, including any output the game launcher or extender actually produces.
-Do not drop a prefix merely to obtain a match; distinguish emulator shell from application output.
+Define the same observable launch instant and initial state for DOSBox, native and WASM.
+Compare every presented indexed frame, all 256 palette entries, time and continuous PCM from
+that point. Attribute DOSBox shell and application output; never trim a mismatching prefix.
 
 ## Evidence
 
-The 4,151-frame Oracle capture at `scratch/sequence-capture/kdv-profile-full-run/sequence.frames`
-starts at DOSBox startup: frames 0–26 are nonblack 640×400 shell screens; frame 26 includes
-`Armored Fist (C) Copyright 1994 by NovaLogic, Inc.` below the command line. Frames 27–29 are
-black 640×400, and the first 320×200 frame is number 30 at 475,189 µs. The 640×400 period is
-14,268 µs. DOSBox hooks (`scratch/sequence-capture/start-boundary-fixed30k/dosbox.log`) show
-`LOADGAME.EXE` exec at 0.9987 ms, `FIST.RUN` at 9.606767 ms, `FIST.DAT` at 20.960467 ms,
-the game's stdout text beginning at 46.9856 ms, and mode 13 set at 408.1486 ms. The later
-first mode-13 presentation is a different event. The captures' 640×400 pixels differ where
-their mount paths appear in the DOSBox shell; compare them only with a matched shell state.
-Port `tools/native_main.c:main` instead loads `FIST.DAT`, synthesizes the PSP/hardware
-handoff and calls `app_entry()` directly. With `FIST_VGA_TRACE=1 FIST_DUMPTICK=20`, native and
-WASM each report only mode 13 at 84.987 ms (`scratch/sequence-capture/loader-vga-probe/`).
-`re_out/fist_vga.c` captures sequences only in mode 13. These runs prove a start-path/capture
-asymmetry; they do not yet prove that the game itself draws 640×400 graphics.
-The game's title text is already byte-identical in native and WASM:
-`Armored Fist\r\n(C) Copyright 1994 by NovaLogic, Inc.\r\n` occurs once in each captured
-stderr (`loader-vga-probe/native-traps.log`, `wasm-console.log`). `re_out/fist_dos.c` DOS
-AH=09 sends those bytes only to stderr; its BIOS text services do not render, and
-`fist_vga.c` has no text-mode presentation. The first missing application-visible output
-is therefore the text screen, not the string producer.
-An Oracle hook at `DOS_Execute(FIST.DAT)` captured 4,000 text VRAM bytes at `0xb8000` and
-the 256-byte BIOS data area (`loader-vga-probe/oracle-pre-dat.{text,bda}`): mode 3, 80
-columns, page 0, cursor `(row 23, col 0)` at 20.960467 ms. Expanding each character with
-DOSBox's 8×16 ROM font (`src/ints/int10_memory.cpp:int10_font_16`), foreground `attr&15`
-and background `(attr>>4)&7` reproduces **all 256,000 indexed pixels** of the first
-640×400 frame at 32.879 ms. Apply the observed AH=09 CR/LF text to that state with normal
-80×25 scroll: Oracle frame 1 at 47.147 ms equals the *old* state for rows 0–299 and the
-*new* state for rows 300–399, each with zero pixel differences. The scanout is four
-100-row parts; a whole-frame text snapshot would be wrong at the transition.
-The port now keeps text VRAM at `g_mem+0xb8000` and cursor/mode in the BIOS data area,
-loads an optional exact initial state via `FIST_TEXT_STATE=<prefix>.{text,bda}`, routes
-DOS AH=09 into it and captures 8×16 text scanout in four 100-row parts. With the captured
-initial state, both port targets produce identical complete frame files; their first
-text frame's 256 palette entries and all 256,000 pixels equal Oracle frame 2 (stable
-post-title state), but at 26.980 ms versus Oracle's 61.415 ms
-(`scratch/sequence-capture/text-gmem-{native,wasm}-1/`). GDB places the port's first
-title byte at PIT count 12; the Oracle emits it 26.025133 ms after `FIST.DAT` exec.
-The missing interval includes DOS loading and executed work, not a justified fixed delay.
-The strict full-sequence comparator still fails on the absent port PCM stream.
+- Oracle `scratch/sequence-capture/kdv-profile-full-run/sequence.frames` starts with 30
+  640×400 text frames: shell plus the game's copyright output, then three black frames.
+  Mode 13 first presents at 475.189 ms. Shell pixels include the mounted path, so a
+  canonical path is required. `start-boundary-fixed30k/dosbox.log` puts `LOADGAME.EXE`
+  at 0.998700 ms, `FIST.RUN` at 9.606767, `FIST.DAT` EXEC at 20.960467, its actual
+  code entry at 20.997200 (`exec-stage-trace/`), first title byte at 46.985600, and
+  the mode-13 set at 408.148600 ms.
+- Oracle pre-DAT `loader-vga-probe/oracle-pre-dat.{text,bda}` holds all 4,000 text bytes,
+  256 BDA bytes, mode 3, 80 columns and cursor `(23,0)`. DOSBox's 8×16 glyphs plus
+  text attributes reconstruct frame 0 with zero pixel differences. Frame 1 is the
+  old state in rows 0–299 and the scrolled title state in rows 300–399, also zero
+  differences; DOSBox scans four 100-row parts.
+- The port now stores text VRAM at `g_mem+0xb8000`, keeps cursor/mode in the BDA, routes
+  DOS AH=09 to it and captures text scanout. With `FIST_TEXT_STATE=<prefix>` and
+  `FIST_TEXT_PHASE_NS=20960467,20168067` (DAT EXEC, preceding vertical), native/WASM
+  frame files are identical; their first five times exactly match Oracle: 32,879,
+  47,147, 61,415, 75,683, 89,951 µs (`text-phase-{native,wasm}-1/`). Port frame 0
+  has Oracle frame 2's full pixels/palette because the title is emitted too early.
+  The strict whole-sequence check still fails on missing port mixed PCM. The existing
+  178 flows pass both targets in disjoint groups 45+45+44+44 (`scratch/verify/text-phase-full/`).
+- `cursor-trace/dosbox.log`: the current text vertical begins at 20.168067 ms with
+  cursor count 1, cell 1840, scanlines 13–14. After the title scroll it is cell
+  1920; count 8 makes frame 7's 16 cursor pixels visible, count 16 clears them.
+- `boot-ip-trace/dosbox.log`: from DAT entry to first AH=09, DOSBox executes 776,424
+  guest instructions, 776,408 in relocated CS `2082` (relative `0xf69`). Four IPs
+  `54ce/54cf/54d1/54d2` execute 193,993 times each: `nop; jmp; dec ax; jne` in
+  `FUN_1000_4b5e`. Original call inputs are `0,59849,40799,27809`
+  (`boot-call-trace/`); its first input comes from `FUN_0000_f738`, whose asm leaves
+  AX=0. The port's missing return instead passes 287 and its 32-bit C loop charges
+  no virtual CPU time. Oracle uses fixed 30,000 CPU cycles/ms.
 
 ## Next
 
-1. Capture with a fixed mounted path and retain the pre-`FIST.DAT` 4,000-byte text state,
-   BDA cursor and all 256 DAC entries as explicit scenario inputs. Attribute later changes
-   to shell, launcher and engine; the first two pixel frames are already characterized above.
-2. Measure and model the launch CPU/file/overlay costs before the first AH=09 byte, then
-   align the text scanout phase. The port must present the Oracle's pre-title frame and
-   mixed old/new transition frame at their real times, not merely its stable post-title
-   frame. Add the VGA cursor phase and reached BIOS text services; frame 7 adds 16 cursor
-   pixels at `(x=0..7,y=397..398)`, toggling every eight frames.
-   Preserve pre-boundary Oracle records; never trim a failed comparison.
-3. Run the same timed launch scenario on all three targets; compare full post-boundary frame
-   dimensions, pixels, palettes, timestamps and PCM with strict completion checks.
+1. Patch `FUN_0000_f738` to return its asm-proven AX=0. Make `FUN_1000_4b5e` wrap AX at
+   16 bits and charge the four executed guest instructions per iteration through a
+   fractional 30,000-cycles/ms → PIT clock. Keep scanout/interrupts interleaved. Compare
+   original/native/WASM from frame 0; profile any residual timing difference.
+2. Capture a fixed-path initial state including DAC and cursor phase. Implement the
+   measured cursor blink and reached BIOS text services; match every launch frame and
+   the transition to mode 13 without excluding application output.
+3. Complete the strict PCM and subsequent sequence comparison with 0034/0003.
 
 ## Accept
 
-The boundary has independent Oracle provenance, accounts for every excluded DOSBox-only frame,
-and all application-produced launch output through the first mode-13 frame matches both ports.
+The common boundary has independent Oracle provenance, accounts for excluded emulator-only
+frames, and every application-produced frame/time/palette/PCM event through the first
+mode-13 presentation matches native and WASM with complete captures.
