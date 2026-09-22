@@ -30,15 +30,25 @@ stderr (`loader-vga-probe/native-traps.log`, `wasm-console.log`). `re_out/fist_d
 AH=09 sends those bytes only to stderr; its BIOS text services do not render, and
 `fist_vga.c` has no text-mode presentation. The first missing application-visible output
 is therefore the text screen, not the string producer.
+An Oracle hook at `DOS_Execute(FIST.DAT)` captured 4,000 text VRAM bytes at `0xb8000` and
+the 256-byte BIOS data area (`loader-vga-probe/oracle-pre-dat.{text,bda}`): mode 3, 80
+columns, page 0, cursor `(row 23, col 0)` at 20.960467 ms. Expanding each character with
+DOSBox's 8×16 ROM font (`src/ints/int10_memory.cpp:int10_font_16`), foreground `attr&15`
+and background `(attr>>4)&7` reproduces **all 256,000 indexed pixels** of the first
+640×400 frame at 32.879 ms. Apply the observed AH=09 CR/LF text to that state with normal
+80×25 scroll: Oracle frame 1 at 47.147 ms equals the *old* state for rows 0–299 and the
+*new* state for rows 300–399, each with zero pixel differences. The scanout is four
+100-row parts; a whole-frame text snapshot would be wrong at the transition.
 
 ## Next
 
-1. Capture at a fixed mounted path with a trace of text VRAM, cursor and DAC at the common
-   launch instant (before the game's AH=09 output). Attribute later text-screen changes to
-   shell, launcher and engine; retain the exec/stdout/mode/presentation events above.
+1. Capture with a fixed mounted path and retain the pre-`FIST.DAT` 4,000-byte text state,
+   BDA cursor and all 256 DAC entries as explicit scenario inputs. Attribute later changes
+   to shell, launcher and engine; the first two pixel frames are already characterized above.
 2. Initialize the port's text adapter from that matched initial state. Route DOS AH=09 and
-   reached BIOS text services through the adapter; present its 640×400 indexed frames at the
-   original retrace times before mode 13. Compare the first changed pixel and palette entry.
+   reached BIOS text services through the adapter. Render 8×16 glyphs, attributes, cursor
+   and scrolling; sample four 100-row parts at their actual retrace times before mode 13.
+   Compare the first changed pixel and palette entry.
    Preserve pre-boundary Oracle records; never trim a failed comparison.
 3. Run the same timed launch scenario on all three targets; compare full post-boundary frame
    dimensions, pixels, palettes, timestamps and PCM with strict completion checks.
