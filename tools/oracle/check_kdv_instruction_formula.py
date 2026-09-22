@@ -65,23 +65,34 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('profile')
     parser.add_argument('--image', default='re_out/fist_image.bin')
+    parser.add_argument('--port-counts', help='compare a native or WASM 7135 instruction log')
     args = parser.parse_args()
     try:
         groups = stores(args.image)
         profiles = calls(args.profile)
         if not profiles:
             raise ValueError('no completed decoder calls')
+        port = None
+        if args.port_counts:
+            port = [tuple(map(int, line.split())) for line in Path(args.port_counts).read_text().splitlines()]
+            if len(port) != len(profiles):
+                raise ValueError(f'port has {len(port)} calls, Oracle has {len(profiles)}')
         mixed = 0
-        for index, total, other, ip in profiles:
+        for ordinal, (index, total, other, ip) in enumerate(profiles, 1):
+            if index != ordinal:
+                raise ValueError(f'expected call {ordinal}, found {index}')
             actual = sum(count for address, count in ip.items() if 0x7135 <= address <= 0x746a)
             expected = predicted(ip, groups)
             if actual != expected:
                 raise ValueError(f'call {index}: decoder {actual}, formula {expected}')
+            if port is not None and port[index - 1] != (index, actual):
+                raise ValueError(f'call {index}: port {port[index - 1]}, Oracle {(index, actual)}')
             if total != actual:
                 mixed += 1
                 if total - actual < other:
                     raise ValueError(f'call {index}: invalid non-decoder count')
-        print(f'PASS: {len(profiles)} decoder calls; {mixed} include interleaved non-decoder work')
+        print(f'PASS: {len(profiles)} decoder calls' + (' match the port' if port is not None else '')
+              + f'; {mixed} include interleaved non-decoder work')
     except (OSError, subprocess.CalledProcessError, ValueError) as error:
         parser.exit(1, f'FAIL: {error}\n')
 

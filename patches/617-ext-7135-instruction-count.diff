@@ -1,0 +1,85 @@
+PATCH 617: count the original KDV decoder instructions by branch and write predicates (board:0034).
+
+The assembly at 7135..746a has five cell paths. The fixed setup/row/header work,
+per-path costs and conditional stores in this patch reproduce all 395 TITLE.KDV
+Oracle IP histograms (tools/oracle/check_kdv_instruction_formula.py). This hook
+records the decoder's work without yet charging the virtual clock; file-read
+cycle caps, page faults and interleaved ISRs still require separate timing models.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -12317,10 +12317,13 @@
+   uint uVar9;
+   uint uVar10;
+   char *pcVar11;
++  uint64_t instruction_count = 7;
++  extern void fist_kdv_instruction_count(uint64_t);
+   
+   uVar3 = DAT_0000_5578;
+   iVar2 = DAT_0000_5578 * 3;
+   uVar6 = DAT_0000_557c >> 2;
++  instruction_count += 7 * (uint64_t)uVar6;
+   uVar10 = (uint)param_1;
+   do {
+     uVar7 = uVar3 >> 2;
+@@ -12328,12 +12331,16 @@
+       uVar9 = uVar10 & 0xffff03ff;
+       pcVar11 = param_2;
+       if ((uVar10 & 0x300) == 0) {
++        instruction_count += 2;
+         uVar9 = CONCAT31((int3)(uVar9 >> 8),*param_2);
+         pcVar11 = param_2 + 1;
+       }
+       if ((uVar9 & 2) == 0) {
+         if ((uVar9 & 1) == 0) {
++          instruction_count += 82;
+           uVar10 = *(uint *)(pcVar11 + 3);
++          for (unsigned shift = 0; shift < 32; shift += 2)
++            instruction_count += ((uVar10 >> shift) & 3) != 0 ? 2 : 0;
+           if ((uVar10 & 3) != 0) {
+             *param_3 = pcVar11[(uVar10 & 3) - 1];
+           }
+@@ -12386,7 +12393,10 @@
+           param_2 = pcVar11 + 7;
+         }
+         else {
++          instruction_count += 97;
+           uVar1 = *(ushort *)(pcVar11 + 2);
++          for (unsigned bit = 0; bit < 16; ++bit)
++            instruction_count += pcVar11[(uVar1 >> bit) & 1] != 0;
+           if (pcVar11[(uVar1 & 1) != 0] != '\0') {
+             *param_3 = pcVar11[(uVar1 & 1) != 0];
+           }
+@@ -12444,6 +12454,9 @@
+           param_2 = pcVar11 + 1;
+           cVar4 = *pcVar11;
+           if (cVar4 == '\0') {
++            instruction_count += 64;
++            for (unsigned bit = 1; bit <= 16; ++bit)
++              instruction_count += pcVar11[bit] != 0;
+             uVar5 = *(undefined4 *)param_2;
+             if ((char)uVar5 != '\0') {
+               *param_3 = (char)uVar5;
+@@ -12511,6 +12524,7 @@
+             }
+           }
+           else {
++            instruction_count += 25;
+             uVar5 = CONCAT22(CONCAT11(cVar4,cVar4),CONCAT11(cVar4,cVar4));
+             *(undefined4 *)param_3 = uVar5;
+             *(undefined4 *)(param_3 + uVar3) = uVar5;
+@@ -12518,6 +12532,7 @@
+             *(undefined4 *)(param_3 + iVar2) = uVar5;
+           }
+         }
++        else instruction_count += 13;
+       }
+       param_3 = param_3 + 4;
+       uVar10 = (uint)CONCAT11((char)(uVar9 >> 8) + '\x01',(byte)uVar9 >> 2);
+@@ -12526,6 +12541,7 @@
+     param_3 = param_3 + iVar2;
+     uVar6 = uVar6 - 1;
+   } while (uVar6 != 0);
++  fist_kdv_instruction_count(instruction_count);
+   return;
+ }
+ 

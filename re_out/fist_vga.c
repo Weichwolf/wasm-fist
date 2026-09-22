@@ -145,6 +145,19 @@ void fist_sequence_present(void)
                         g_sequence_pixels, &palette[0][0]);
 }
 void fist_sequence_finish(void){ fist_sequence_close(); }
+void fist_kdv_instruction_count(uint64_t count)
+{
+    const char *path = getenv("FIST_KDV_INSTRLOG");
+    if (!path) return;
+    static FILE *log;
+    static unsigned frame;
+    if (!log) {
+        log = fopen(path, "w");
+        if (!log) abort();
+    }
+    fprintf(log, "%u %llu\n", ++frame, (unsigned long long)count);
+    fflush(log);
+}
 static unsigned short g_pit_reload[3] = {0,0,0};   /* 0 == 65536 */
 static unsigned char  g_pit_mode[3], g_pit_rw[3];  /* control word: mode, access (1 lo,2 hi,3 lo/hi) */
 static unsigned char  g_pit_wsub[3], g_pit_rsub[3];
