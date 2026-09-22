@@ -4087,6 +4087,8 @@ int main(int argc, char **argv) {
 #endif
     load_image();
     setup_dos_env();
+    extern void fist_text_init(void);
+    fist_text_init();
     ext_module_init();          /* load + register the extender KDV-player module (re_out/fist_ext.c) */
     if (getenv("FIST_6980PROVE")) { fist_6980_prove(); return 0; }
     if (getenv("FIST_OVL_SELFTEST")) { ovl_selftest(); return 0; }

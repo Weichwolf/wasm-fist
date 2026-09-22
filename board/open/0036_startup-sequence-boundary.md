@@ -39,16 +39,27 @@ and background `(attr>>4)&7` reproduces **all 256,000 indexed pixels** of the fi
 80×25 scroll: Oracle frame 1 at 47.147 ms equals the *old* state for rows 0–299 and the
 *new* state for rows 300–399, each with zero pixel differences. The scanout is four
 100-row parts; a whole-frame text snapshot would be wrong at the transition.
+The port now keeps text VRAM at `g_mem+0xb8000` and cursor/mode in the BIOS data area,
+loads an optional exact initial state via `FIST_TEXT_STATE=<prefix>.{text,bda}`, routes
+DOS AH=09 into it and captures 8×16 text scanout in four 100-row parts. With the captured
+initial state, both port targets produce identical complete frame files; their first
+text frame's 256 palette entries and all 256,000 pixels equal Oracle frame 2 (stable
+post-title state), but at 26.980 ms versus Oracle's 61.415 ms
+(`scratch/sequence-capture/text-gmem-{native,wasm}-1/`). GDB places the port's first
+title byte at PIT count 12; the Oracle emits it 26.025133 ms after `FIST.DAT` exec.
+The missing interval includes DOS loading and executed work, not a justified fixed delay.
+The strict full-sequence comparator still fails on the absent port PCM stream.
 
 ## Next
 
 1. Capture with a fixed mounted path and retain the pre-`FIST.DAT` 4,000-byte text state,
    BDA cursor and all 256 DAC entries as explicit scenario inputs. Attribute later changes
    to shell, launcher and engine; the first two pixel frames are already characterized above.
-2. Initialize the port's text adapter from that matched initial state. Route DOS AH=09 and
-   reached BIOS text services through the adapter. Render 8×16 glyphs, attributes, cursor
-   and scrolling; sample four 100-row parts at their actual retrace times before mode 13.
-   Compare the first changed pixel and palette entry.
+2. Measure and model the launch CPU/file/overlay costs before the first AH=09 byte, then
+   align the text scanout phase. The port must present the Oracle's pre-title frame and
+   mixed old/new transition frame at their real times, not merely its stable post-title
+   frame. Add the VGA cursor phase and reached BIOS text services; frame 7 adds 16 cursor
+   pixels at `(x=0..7,y=397..398)`, toggling every eight frames.
    Preserve pre-boundary Oracle records; never trim a failed comparison.
 3. Run the same timed launch scenario on all three targets; compare full post-boundary frame
    dimensions, pixels, palettes, timestamps and PCM with strict completion checks.

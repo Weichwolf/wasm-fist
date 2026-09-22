@@ -364,11 +364,11 @@ static void dos_int(void)
     case 0x33: /* get/set ctrl-break -> DL=0 */
         R_DX &= 0xff00; set_cf(0); return;
     case 0x06: /* direct console I/O: DL=0xff -> input (AL=0,ZF), else output DL */
-        if (R_DX & 0xff) { fputc(R_DX & 0xff, stderr); } else { R_AL = 0; }
+        if (R_DX & 0xff) { extern void fist_text_write(unsigned); fist_text_write(R_DX & 0xff); fputc(R_DX & 0xff, stderr); } else { R_AL = 0; }
         set_cf(0); return;
     case 0x09: { /* print '$'-terminated string at DS:DX */
         uint32_t p = lin(R_DS, R_DX);
-        for (int i=0;i<4096 && p+i<FIST_MEM_SIZE;i++){ char c=g_mem[p+i]; if(c=='$')break; fputc(c,stderr);}
+        for (int i=0;i<4096 && p+i<FIST_MEM_SIZE;i++){ char c=g_mem[p+i]; if(c=='$')break; extern void fist_text_write(unsigned); fist_text_write((unsigned char)c); fputc(c,stderr);}
         set_cf(0); return; }
     case 0x3b: /* chdir -- accept (files resolved via search path in open_ci) */
     case 0x47: /* get current dir -> fill DS:SI with "" */

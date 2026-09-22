@@ -12,6 +12,8 @@
 #include <string.h>
 #include "../tools/oracle/fist_sequence_capture.h"
 #include "fist_vga_bios_palette.h"
+#include "fist_vga_text_font.h"
+#include "fist_vga_text_palette.h"
 
 #define VGA_FB   0xA0000u
 #define FB_W 320
@@ -33,6 +35,8 @@ EMSCRIPTEN_KEEPALIVE void fist_web_force_palette(void){
 }
 #endif
 static int g_vmode = -1;              /* last video mode set via INT 10h / this shim */
+#define TEXT_SZ (80u * 25u * 2u)
+static unsigned char *const g_text_cells = g_mem + 0xb8000u;
 
 /* DAC state machine (ports 0x3C8 write-index, 0x3C7 read-index, 0x3C9 data) */
 static int g_dac_widx, g_dac_wsub;    /* write index + sub-component (0=R,1=G,2=B) */
@@ -112,9 +116,79 @@ static unsigned long long g_clock;            /* PIT counts since power-on */
 static unsigned long long g_sequence_next;
 static unsigned long long g_sequence_vertical_num;
 static unsigned long long g_sequence_event_num;
-static unsigned char g_sequence_pixels[FB_SZ];
+static unsigned char g_sequence_pixels[640 * 400];
 static unsigned g_sequence_part;
 static int g_sequence_dispatch;
+
+void fist_text_init(void)
+{
+    for (unsigned i = 0; i < 80 * 25; ++i) {
+        g_text_cells[2 * i] = ' ';
+        g_text_cells[2 * i + 1] = 7;
+    }
+    g_mem[0x449] = 3;
+    g_mem[0x44a] = 80;
+    g_mem[0x44b] = 0;
+    g_mem[0x450] = g_mem[0x451] = g_mem[0x462] = 0;
+    const char *prefix = getenv("FIST_TEXT_STATE");
+    if (prefix) {
+        char path[1024];
+        if (snprintf(path, sizeof path, "%s.text", prefix) >= (int)sizeof path) abort();
+        FILE *f = fopen(path, "rb");
+        if (!f || fread(g_text_cells, 1, TEXT_SZ, f) != TEXT_SZ ||
+            fgetc(f) != EOF || fclose(f)) abort();
+        if (snprintf(path, sizeof path, "%s.bda", prefix) >= (int)sizeof path) abort();
+        unsigned char bda[256];
+        f = fopen(path, "rb");
+        if (!f || fread(bda, 1, sizeof bda, f) != sizeof bda || fgetc(f) != EOF || fclose(f)) abort();
+        if (bda[0x49] != 3 || bda[0x4a] != 80 || bda[0x4b] || bda[0x62] ||
+            bda[0x51] >= 25 || bda[0x50] >= 80) abort();
+        memcpy(g_mem + 0x400, bda, sizeof bda);
+    }
+    g_vmode = 3;
+    memcpy(g_pal, fist_text_dac, sizeof g_pal);
+    fist_sequence_mode_set();
+}
+
+void fist_text_write(unsigned ch)
+{
+    if (g_vmode != 3) return;
+    unsigned row = g_mem[0x451], col = g_mem[0x450];
+    switch (ch & 0xff) {
+    case 7: break;
+    case 8: if (col) --col; break;
+    case '\r': col = 0; break;
+    case '\n': ++row; break;
+    default:
+        g_text_cells[2 * (row * 80 + col)] = ch;
+        if (++col == 80) { col = 0; ++row; }
+        break;
+    }
+    if (row == 25) {
+        memmove(g_text_cells, g_text_cells + 160, TEXT_SZ - 160);
+        for (unsigned i = TEXT_SZ - 160; i < TEXT_SZ; i += 2) {
+            g_text_cells[i] = ' ';
+            g_text_cells[i + 1] = 7;
+        }
+        --row;
+    }
+    g_mem[0x450] = col;
+    g_mem[0x451] = row;
+}
+
+static void fist_text_scan_part(unsigned part)
+{
+    for (unsigned y = part * 100; y < (part + 1) * 100; ++y) {
+        unsigned char *dst = g_sequence_pixels + y * 640;
+        for (unsigned col = 0; col < 80; ++col) {
+            unsigned cell = 2 * ((y / 16) * 80 + col);
+            unsigned ch = g_text_cells[cell], attr = g_text_cells[cell + 1];
+            unsigned glyph = fist_text_font[ch * 16 + y % 16];
+            for (unsigned x = 0; x < 8; ++x)
+                dst[col * 8 + x] = glyph & (0x80u >> x) ? attr & 15 : (attr >> 4) & 7;
+        }
+    }
+}
 
 /* DOSBox VGA_DrawPart samples four 50-row bands before RENDER_EndUpdate. */
 static unsigned long long fist_sequence_part_clock(unsigned part)
@@ -127,8 +201,8 @@ static unsigned long long fist_sequence_part_clock(unsigned part)
 static void fist_sequence_mode_set(void)
 {
     g_sequence_next = 0;
-    if (g_vmode != 0x13 || !getenv("FIST_SEQUENCE")) return;
-    unsigned long long ready = g_clock + (50ull * PIT_HZ_ + 500) / 1000;
+    if ((g_vmode != 0x13 && g_vmode != 3) || !getenv("FIST_SEQUENCE")) return;
+    unsigned long long ready = g_clock + (g_vmode == 0x13 ? (50ull * PIT_HZ_ + 500) / 1000 : 0);
     g_sequence_vertical_num = (ready / FRAME_COUNTS + 1) * FRAME_COUNTS * (unsigned long long)VGA_CLOCK_;
     g_sequence_part = 0;
     g_sequence_next = fist_sequence_part_clock(1);
@@ -136,12 +210,14 @@ static void fist_sequence_mode_set(void)
 
 void fist_sequence_present(void)
 {
-    if (!g_sequence_dispatch || !getenv("FIST_SEQUENCE") || g_vmode != 0x13) return;
+    if (!g_sequence_dispatch || !getenv("FIST_SEQUENCE") ||
+        (g_vmode != 0x13 && g_vmode != 3)) return;
     unsigned char palette[256][4];
     for (unsigned i = 0; i < 256; ++i)
         for (unsigned lane = 0; lane < 3; ++lane)
             palette[i][lane] = (unsigned char)((g_pal[i][lane] << 2) | (g_pal[i][lane] >> 4));
-    fist_sequence_frame((double)g_sequence_event_num * 1000.0 / (PIT_HZ_ * (double)VGA_CLOCK_), FB_W, FB_H, FB_W,
+    unsigned width = g_vmode == 3 ? 640 : FB_W, height = g_vmode == 3 ? 400 : FB_H;
+    fist_sequence_frame((double)g_sequence_event_num * 1000.0 / (PIT_HZ_ * (double)VGA_CLOCK_), width, height, width,
                         g_sequence_pixels, &palette[0][0]);
 }
 void fist_sequence_finish(void){ fist_sequence_close(); }
@@ -184,8 +260,9 @@ void fist_clock_advance_to(unsigned long long target){
         if (g_sequence_next && g_sequence_next <= target && g_sequence_next <= w) {
             int same_tick = g_sequence_next == w;
             g_clock = g_sequence_next;
-            memcpy(g_sequence_pixels + g_sequence_part * FB_SZ / 4,
-                   g_mem + VGA_FB + g_sequence_part * FB_SZ / 4, FB_SZ / 4);
+            if (g_vmode == 3) fist_text_scan_part(g_sequence_part);
+            else memcpy(g_sequence_pixels + g_sequence_part * FB_SZ / 4,
+                        g_mem + VGA_FB + g_sequence_part * FB_SZ / 4, FB_SZ / 4);
             if (++g_sequence_part == 4) {
                 g_sequence_dispatch = 1;
                 fist_sequence_present();
