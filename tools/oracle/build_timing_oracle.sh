@@ -37,7 +37,7 @@ if [ "$vga_hash" = cfcd97fcf3aa4ddd7370eef783afcc8600742ba22ecd38e304b258f197224
   draw_hash="$(sha256sum "$DRAW" | cut -d' ' -f1)"
   misc_hash="$(sha256sum "$MISC" | cut -d' ' -f1)"
 fi
-if [ "$vga_hash" != 0c48465ada7feab06c0e2cf7663d55a166bdcdc4c710818feff405218cedd8a9 ] ||
+if [ "$vga_hash" != a48fbbe096df86cb57321f63e765dfac99c01bbfbd0368a2984368340ff03cc4 ] ||
    [ "$files_hash" != ec7df6f3961655ecc614f25faa33bcd0bcfab5c9e6dc2f13e9e3e1ad39521099 ] ||
    [ "$dac_hash" != 73e1f9df13792e9a5aa7254477bc63d6a9f239f43925bee13193d4ad4cbd44b3 ] ||
    [ "$int10_hash" != 183b3ee0c17dc399b7d1c00260c7e2032fedd4013808563892077ea8813ad2e7 ] ||

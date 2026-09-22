@@ -25,7 +25,11 @@
 +	if (getenv("FIST_E584LOG") && reg_eip >= 0xe584 && reg_eip <= 0xe6db)
 +		fprintf(stderr, "FIST_E584 %.6f cs=%04x eip=%04x ds=%04x dsb=%08x ph=%08x val=%02x\n",
 +			PIC_FullIndex(), SegValue(cs), reg_eip, SegValue(ds), SegPhys(ds), ph, val);
-@@ -820,0 +845,3 @@
+@@ -820,0 +845,7 @@
++	if (getenv("FIST_FILLTRACE") && PIC_FullIndex() > 535.0 && PIC_FullIndex() < 580.0 &&
++		(off == 0 || off == 16000 || off == 63999))
++		fprintf(stderr, "FIST_FILL %.6f off=%u val=%u cs=%04x eip=%08x\n",
++			PIC_FullIndex(), off, val & 0xff, SegValue(cs), reg_eip);
 +	if (getenv("FIST_INTRO_PIXELLOG") && off == 18704)
 +		fprintf(stderr, "FIST_PIXEL %.6f cs=%04x eip=%08x flatip=%08x value=%02x\n",
 +			PIC_FullIndex(), SegValue(cs), reg_eip, SegPhys(cs) + reg_eip, val & 0xff);

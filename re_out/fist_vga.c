@@ -98,12 +98,8 @@ int  fist_vga_mode(void){ return g_vmode; }
  * are exact retrace-start edges, the reload (3 outs) and the latch (1 out) sit between them, and the
  * count read is 65536 - (P - 2) -> P = 17025.
  *
- * A status poll that would spin (the same status as the previous poll, nothing else in between) jumps
- * the clock to one count before the next status edge: the sequence of observed statuses is exactly what
- * polling every count would show, the poll COUNT is not (the PLL in 30f8 keys its reload on it and
- * settles on a slightly earlier interrupt; the interrupt PERIOD stays one frame either way, and that is
- * what [0x452] and the sound driver see).  fist_clock_advance() fires the INT-8 for every channel-0 wrap
- * it steps across, in order, so a jump never skips an interrupt. */
+ * Each status poll consumes one count. The timeout at 30f8 depends on the number of reads, even when
+ * their returned status is unchanged. fist_clock_advance() fires every channel-0 wrap in order. */
 #define PIT_HZ_       1193182u
 #define FRAME_COUNTS  17025u          /* one mode-13h frame, see above */
 #define FRAME_LINES   449.0           /* vtotal */
