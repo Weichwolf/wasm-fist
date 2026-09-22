@@ -2,7 +2,7 @@
 # Stage-2 REFERENCE ORACLE: boot the ORIGINAL Armored Fist under DOSBox headless and capture a frame.
 # Validated: the game boots through the Doug-Huffman extender into VGA graphics mode under DOSBox's DPMI.
 # This is the bit-verify reference source (analog to DD2's Wine refcapture). QEMU (qemu-system-i386 +
-# gdb / -icount record-replay) is the instruction-level microscope for cycle-exact dumps (see CLAUDE.md).
+# gdb / -icount record-replay) is the instruction-level microscope for cycle-exact dumps (see AGENTS.md).
 #
 # Usage: tools/refcapture.sh [WAIT_SECONDS] [OUT.png]   (needs xvfb; SDL1 DOSBox 0.74)
 # TODO(refine): drive to a STABLE, known frame (menu) — wait for a specific screen / script keystrokes;

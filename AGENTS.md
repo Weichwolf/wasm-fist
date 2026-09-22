@@ -13,8 +13,8 @@ internal memory/write traces are diagnostic, not an independent equality require
 - Use local binaries/source first. Oracle: `third_party/dosbox-fist`, source `third_party/dosbox-build/`.
   `FIST_WATCHFLAT` follows guest paging; port DGROUP `0x1c000` is not guest physical `0x1c000`.
 - Keep `armoredfist/` read-only; use isolated copies for runs. Match capture boundaries before diffing.
-- Prove a reaching failure, fix it, run its regression on both targets. `make check` verifies patches;
-  `make native`, `make wasm`, `bash tools/verify.sh both` verify builds and explicit cross-target parity.
+- Prove a reaching failure, fix it, run its regression on both targets. `bash tools/check_flow.sh` runs tests,
+  patch checks, both builds and explicit cross-target comparisons; optional regex selects flows.
   Filtered runs are partial evidence; complete required regression coverage before acceptance.
 - Tests specify behavior. Change an expectation only when original evidence proves it wrong.
   Missing output, unequal lengths, incomplete runs and missing required references must fail.

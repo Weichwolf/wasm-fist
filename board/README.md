@@ -5,26 +5,18 @@ Read `../AGENTS.md`, then the selected work item and its dependencies. The direc
 
 ## Execution protocol for Sol
 
-1. Take one bounded **Next** step. Confirm the cited behavior in current patched code or a fresh run.
-2. Treat **Evidence** as scoped observations. Historical results need their recorded revision;
-   **recommendations** are proposed designs, not established facts or permission to alter the original.
-3. Capture the first differing presented frame or PCM sample, identify its original producer,
-   and recover the register,
-   segment, width and flag contract. Patch that contract and its dependent consumers together.
-4. For implementation changes use `make check`, build native and WASM, then run
-   `bash tools/verify.sh both`. Separate native/wasm passes omit cross-target comparisons in some
-   branches. Add the reaching regression flow; a green unrelated matrix does not validate a fix.
-5. Replace the item's current evidence/next step after the run. Record revision, exact command,
-   expected/observed result and evidence path. Do not append another session transcript.
-6. Close only when **Accept** is demonstrated. Move partial work back to open with the missing proof.
-   If original behavior or required input is unknown, obtain it before implementing dependent code.
+1. Read the current WI. Reproduce its **Next** step; historical evidence needs its revision.
+2. Find the first differing output and recover its producer's register/segment/width/flag contract.
+3. Add the reaching regression; fix that contract. Recommendations remain hypotheses until measured.
+4. Run `bash tools/check_flow.sh '^flow-name$'`: tests, patch check, both builds and comparison.
+   Omit the filter for the complete existing matrix. Artifacts land under `scratch/verify/run.*`.
+   Do not edit running scripts or overwrite tested binaries; retain failures for diagnosis.
+5. Record command, revision, expected/observed result and evidence path. Complete required regression
+   coverage, then commit and push the bounded change. Close only when **Accept** is demonstrated.
 
-Use isolated game-data copies for runs that write profiles. Preserve original assets. For a failing
-experiment, retain the decisive counterexample and next discriminating measurement, not every guess.
-Do not delete tests, weaken comparisons, mask observable differences or zero unknown registers to pass.
-
-Internal memory/register/write equality is diagnostic. Acceptance compares full frame/audio output
-and timing under matched inputs. Persistent/editor files retain their explicit round-trip contracts.
+Use isolated copies for writes. Never weaken tests, mask differences or zero unknown state to pass.
+Compare complete presented frames/PCM and timing under matched inputs; memory traces diagnose failures.
+Editor/persistence files retain their round-trip contracts. Missing original behavior requires measurement.
 
 ## Work order
 
@@ -33,26 +25,13 @@ for unrelated proof. This is a dependency/feedback order, not a claim that every
 
 | Order | Work items | Deliverable |
 | --- | --- | --- |
-| 1 | 0033 → 0034 → 0012 | Strict output checks, synchronized sequence capture, full-run parity. |
+| 1 | 0034 → 0012 | Synchronized sequence capture, then full-run parity; strict checks 0033 delivered. |
 | 2 | 0002 → 0001, 0027 | Strict existing terrain replay, full render chain, all cockpits. |
 | 3 | 0017 | Reproduce and remove behavior differences caused by guest/host address representation. |
 | 4 | 0003 → 0011 | Matched audio event/sample traces, mixer fidelity, content gates. |
 | 5 | 0026, 0004, 0005 → 0030/0031/0032 | Browser timing, persisted progression, gameplay input/link. |
 | As reached | 0009, 0010, 0013–0015, 0019, 0022/0023/0025/0028 | Bounded service, ABI, width, memory or tooling defects. |
 | Final | 0029 | Complete surface inventory, visual proof and fresh ten-run WASM gate. |
-
-```mermaid
-flowchart LR
-  r2["0002 tile + projection"] --> r1["0001 full windshield"]
-  a3["0003 audio fidelity"] --> a11["0011 content gates"]
-  i5["0005 input"] --> i30["0030 keyboard/mouse"]
-  i5 --> i31["0031 joystick"]
-  i5 --> i32["0032 serial"]
-  r1 --> gate["0029 exhaustive gate"]
-  a11 --> gate
-  sim["0012 full-run parity + 0017 original fidelity"] --> gate
-  rest["0004 persistence + 0026 browser + 0027 cockpits + input"] --> gate
-```
 
 ## Ownership and completion coverage
 

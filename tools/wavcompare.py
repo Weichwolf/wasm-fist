@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""wavcompare.py -- audio-verify metric for the port's PCM vs the DOSBox oracle WAV.
+"""Diagnostic correlation only; strict acceptance is tools/compare_output.py pcm.
+
+wavcompare.py -- audio diagnostic for the port's PCM vs the DOSBox oracle WAV.
 
 The framebuffer analog is `compare -metric AE`.  Audio needs a resample-tolerant metric because the two
 sides differ in mixer sample rate (the port emits PCM at the DSP-programmed rate; DOSBox resamples the
@@ -7,7 +9,7 @@ SB stream to 44100 stereo).  This mono-mixes both, resamples to a common rate, a
 cross-correlation lag, and reports:
   - peak/RMS of each
   - normalized cross-correlation at best lag (1.0 = identical waveform)
-  - per-sample AE at an amplitude tolerance (the eventual bit-exact gate: AE==0 at tol 0)
+  - per-sample AE at an amplitude tolerance (an overlap metric, never a full-stream bit-exact gate)
 
 Usage: tools/wavcompare.py A.wav B.wav [--rate 22050] [--tol 0]
 """
@@ -65,6 +67,6 @@ def main():
     else: aa,bb=a,b[-lag:]
     m=min(len(aa),len(bb)); ae=sum(1 for i in range(m) if abs(aa[i]-bb[i])>o.tol)
     print("per-sample AE(|d|>%d)= %d / %d (%.2f%%)"%(o.tol,ae,m,100*ae/m if m else 0))
-    print("VERDICT:", "BIT-EXACT" if ae==0 else ("STRONG MATCH" if corr>0.95 else ("PARTIAL" if corr>0.5 else "MISMATCH")))
+    print("VERDICT:", "NO SAMPLES EXCEED TOLERANCE IN ALIGNED OVERLAP (diagnostic only)" if ae==0 else ("STRONG MATCH" if corr>0.95 else ("PARTIAL" if corr>0.5 else "MISMATCH")))
 
 if __name__=='__main__': main()

@@ -11,7 +11,7 @@
 #
 # Every engine correction is a patches/NNN-*.diff with its rationale in the file header.
 # The decompile (re_out/fist_decomp.c, fist.c) is committed so `make patch` is reproducible without Ghidra.
-# Doctrine: no guards, no approximations, no band-aids — see CLAUDE.md. Reference oracle = DOSBox + QEMU.
+# Doctrine: no guards, no approximations, no band-aids — see AGENTS.md. Reference oracle = DOSBox + QEMU.
 #
 # NOTE (Phase 0): targets past `image` come online as their tools land; this file is the plan of record.
 

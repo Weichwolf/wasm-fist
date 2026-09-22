@@ -14,9 +14,18 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 NATIVE="${NATIVE:-/tmp/fist_native}"
 OUTJS="${OUTJS:-/tmp/fisttest/fistrun.js}"
-NODE="$(ls "$HOME"/Git/emsdk/node/*/bin/node 2>/dev/null | head -1)"; NODE="${NODE:-node}"
+NODE="${NODE:-$(ls "$HOME"/Git/emsdk/node/*/bin/node 2>/dev/null | head -1)}"; NODE="${NODE:-node}"
 WHICH="${1:-both}"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+case "$WHICH" in native|wasm|both) ;; *) echo "invalid target: $WHICH" >&2; exit 2;; esac
+output_check() { python3 "$ROOT/tools/compare_output.py" "$@"; } # board:0033
+if [ -n "${FIST_VERIFY_OUT:-}" ]; then
+  mkdir -p "$FIST_VERIFY_OUT" || exit 2
+  TMP="$(mktemp -d "$FIST_VERIFY_OUT/capture.XXXXXX")" || exit 2
+  echo "artifacts: $TMP"
+else
+  TMP="$(mktemp -d)" || exit 2
+  trap 'rm -rf "$TMP"' EXIT
+fi
 pass=0; fail=0
 
 # --- FLOW TABLE: name | (unused; was the SIGALRM rate before the PIT/VGA clock, board:0026) | runms |
@@ -515,9 +524,9 @@ run_target() { # $1=target $2=hz $3=ms/dumptick $4=mouse-script $5=out.ppm $6=da
     # The watchdog is not the specification (the assertion is the AE=0 framebuffer compare below); it
     # only has to be loose enough not to shoot a correct run and tight enough to catch a hang, which
     # runs forever.  90 s matches the native budget run_missfb/run_terrain already use.
-    timeout 90 env "${ddenv[@]}" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NATIVE" >/dev/null 2>&1; echo $?
+    timeout 90 env "${ddenv[@]}" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NATIVE" >"$out.log" 2>&1; echo $?
   else
-    timeout 120 env "${ddenv[@]}" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NODE" "$OUTJS" >/dev/null 2>&1; echo $?
+    timeout 120 env "${ddenv[@]}" "${dumpenv[@]}" FIST_MOUSE="$mouse" FIST_FBDUMP="$out" "$NODE" "$OUTJS" >"$out.log" 2>&1; echo $?
   fi
 }
 
@@ -633,7 +642,7 @@ MC_MOUSE="12:160:100:0; 48:160:100:1; 84:160:100:0; 180:205:128:0; 216:205:128:1
 MC_REGION="100x92+80+96"   # cols80-180 rows96-188 central chrome
 run_mission() { # $1=target $2=datadir [$3=battle] [$4=mode: ""=op-0x24 spawn, "2c"=op-0x2c spawn] ; echo crop-ppm or ""
   local t="$1" dd="$2" bt="${3:-}" mode="${4:-}"
-  local out="$TMP/mc.$t.ppm" reg="$TMP/mc.$t.reg.ppm"
+  local out="$TMP/$name.$t.ppm" reg="$TMP/$name.$t.reg.ppm"
   # $3 selects a non-default battle via patch 380's FIST_FSG_BATTLE (drives the same MC_MOUSE
   # BATTLES->OK->ACCEPT navigation into any of the 47 .FSG).  Empty -> default AZER1 (behaviour-neutral).
   local bexp=(); [ -n "$bt" ] && bexp=(FIST_FSG_BATTLE="$bt")
@@ -642,11 +651,11 @@ run_mission() { # $1=target $2=datadir [$3=battle] [$4=mode: ""=op-0x24 spawn, "
   # first op-0x2c post (=spawn, cross-target deterministic like op-0x24 post #1).
   local m2c=(); [ "$mode" = 2c ] && m2c=(FIST_MISSFB2C=1 FIST_MISSFB_N=1)
   if [ "$t" = native ]; then
-    timeout 90  env FIST_DATADIR="$dd" "${bexp[@]}" "${m2c[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
+    timeout 90  env FIST_DATADIR="$dd" "${bexp[@]}" "${m2c[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >"$out.log" 2>&1 || { echo ""; return 1; }
   else
-    timeout 220 env FIST_DATADIR="$dd" "${bexp[@]}" "${m2c[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 220 env FIST_DATADIR="$dd" "${bexp[@]}" "${m2c[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >"$out.log" 2>&1 || { echo ""; return 1; }
   fi
-  [ -s "$out" ] || { echo ""; return 1; }
+  output_check frame "$out" >/dev/null || { echo ""; return 1; }
   convert "$out" -crop "$MC_REGION" +repage "$reg" 2>/dev/null || { echo ""; return 1; }
   echo "$reg"
 }
@@ -669,11 +678,11 @@ run_terrain() { # $1=target $2=battle ; echo full-framebuffer ppm or ""  -- FIST
     # gated on d549==0x1c, the cockpit view, which is not yet active); what it changes here is only the
     # tick source: no SIGALRM, one cooperative tick per pump, exactly like wasm.  The assertion below is
     # unchanged.  board:0002
-    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_SIMRUN=1 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >/dev/null 2>&1
+    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_SIMRUN=1 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >"$out.log" 2>&1 || { echo ""; return 1; }
   else
-    timeout 220 env FIST_DATADIR="$ROOT/armoredfist" FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 220 env FIST_DATADIR="$ROOT/armoredfist" FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >"$out.log" 2>&1 || { echo ""; return 1; }
   fi
-  [ -s "$out" ] || { echo ""; return 1; }
+  output_check frame "$out" >/dev/null || { echo ""; return 1; }
   echo "$out"
 }
 run_audio() { # $1=target $2=dumptick(default 120) ; echo wav or ""  -- OPL FM audio, tick-pinned, native<->wasm
@@ -685,11 +694,11 @@ run_audio() { # $1=target $2=dumptick(default 120) ; echo wav or ""  -- OPL FM a
   local t="$1" dt="${2:-120}"
   local out="$TMP/au.$t.$dt.wav"
   if [ "$t" = native ]; then
-    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK="$dt" FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NATIVE" >/dev/null 2>&1
+    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK="$dt" FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NATIVE" >"$out.log" 2>&1 || { echo ""; return 1; }
   else
-    timeout 240 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK="$dt" FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 240 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK="$dt" FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NODE" "$OUTJS" >"$out.log" 2>&1 || { echo ""; return 1; }
   fi
-  [ -s "$out" ] || { echo ""; return 1; }
+  output_check pcm "$out" >/dev/null || { echo ""; return 1; }
   echo "$out"
 }
 run_audio_reglog() { # $1=target ; echo reglog-path or ""  -- port engine OPL note stream over the menu
@@ -700,9 +709,9 @@ run_audio_reglog() { # $1=target ; echo reglog-path or ""  -- port engine OPL no
   local t="$1"
   local out="$TMP/aureg.$t.reglog"          # NB separate line: $t must be set before it is used (set -u)
   if [ "$t" = native ]; then
-    timeout 120 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK=30000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NATIVE" >/dev/null 2>&1
+    timeout 120 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK=30000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NATIVE" >"$out.log" 2>&1 || { echo ""; return 1; }
   else
-    timeout 300 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK=30000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NODE" "$OUTJS" >/dev/null 2>&1
+    timeout 300 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK=30000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NODE" "$OUTJS" >"$out.log" 2>&1 || { echo ""; return 1; }
   fi
   [ -s "$out" ] || { echo ""; return 1; }
   echo "$out"
@@ -785,6 +794,9 @@ for row in "${FLOWS[@]}"; do
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
   fi
+  if [ -n "$ref" ] && ! convert "$ref" null: >/dev/null 2>&1; then
+    echo "  FAIL $name (invalid or missing required reference: $ref)"; fail=$((fail+1)); continue
+  fi
   if [ "${name#editor-sim-}" != "$name" ] || [ "${name#editor-remsim-}" != "$name" ]; then
     # EDITOR "simulate" leg: edit $b.FSG (add-tank, or remove-tank for editor-remsim-*), then load+spawn
     # that edited battle and compare its op-0x2c cockpit central-chrome AE=0 vs the shared DOSBox ref,
@@ -817,12 +829,12 @@ for row in "${FLOWS[@]}"; do
     # in the flow's 3rd field as "audio" (=120) or "audio:N" (=N).  (audio-menu-content is the port-vs-
     # ORACLE content gate, handled in its own branch below -- excluded here so it does not fall through.)
     audt=120; case "$ms" in audio:*) audt="${ms#audio:}";; esac
-    detail=" [OPL FM audio, coop tick-pinned [0x452]=$audt, full-WAV native==wasm]"
+    detail=" [OPL FM audio, coop tick-pinned [0x452]=$audt, complete PCM native==wasm]"
     rn=""; rw=""
     if [ "$WHICH" != wasm ];   then rn="$(run_audio native "$audt")"; [ -n "$rn" ] || { ok=0; detail+=" native-no-wav"; }; fi
     if [ "$WHICH" != native ]; then rw="$(run_audio wasm "$audt")";   [ -n "$rw" ] || { ok=0; detail+=" wasm-no-wav"; }; fi
     if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
-      d=$(cmp -l "$rn" "$rw" 2>/dev/null | wc -l); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
+      d=$(output_check pcm "$rn" "$rw" 2>&1) || { ok=0; detail+=" $d"; }
     fi
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
@@ -852,7 +864,7 @@ for row in "${FLOWS[@]}"; do
     if [ "$WHICH" != wasm ];   then rn="$(run_terrain native "$tbt")"; [ -n "$rn" ] || { ok=0; detail+=" native-no-frame"; }; fi
     if [ "$WHICH" != native ]; then rw="$(run_terrain wasm "$tbt")";   [ -n "$rw" ] || { ok=0; detail+=" wasm-no-frame"; }; fi
     if [ "$WHICH" = both ] && [ -n "$rn" ] && [ -n "$rw" ]; then
-      d=$(cmp -l "$rn" "$rw" 2>/dev/null | wc -l); [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
+      d=$(output_check frame "$rn" "$rw" 2>&1) || { ok=0; detail+=" $d"; }
     fi
     if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
     continue
@@ -903,18 +915,20 @@ for row in "${FLOWS[@]}"; do
   if [ "$WHICH" != native ]; then
     rc=$(run_target wasm "$hz" "$ms" "$inp" "$TMP/$name.wasm.ppm" "$ddW"); [ "$rc" = 0 ] || { ok=0; detail+=" wasm-rc=$rc"; }
   fi
-  # (2) native<->wasm bit-identical
-  if [ "$WHICH" = both ] && [ -s "$TMP/$name.nat.ppm" ] && [ -s "$TMP/$name.wasm.ppm" ]; then
-    d=$(cmp -l "$TMP/$name.nat.ppm" "$TMP/$name.wasm.ppm" 2>/dev/null | wc -l)
-    [ "$d" = 0 ] || { ok=0; detail+=" nat!=wasm($d)"; }
+  for t in native wasm; do
+    [ "$WHICH" = both ] || [ "$WHICH" = "$t" ] || continue
+    suffix=nat; [ "$t" = wasm ] && suffix=wasm
+    cap="$TMP/$name.$suffix.ppm"
+    d=$(output_check frame "$cap" 2>&1) || { ok=0; detail+=" $t:$d"; continue; }
+    if [ -n "$ref" ]; then
+      if ae=$(compare -metric AE "$cap" "$ref" /dev/null 2>&1) && [ "$ae" = 0 ]; then :
+      else ok=0; detail+=" $t:ref-AE=$ae"; fi
+    fi
+  done
+  if [ "$WHICH" = both ]; then
+    d=$(output_check frame "$TMP/$name.nat.ppm" "$TMP/$name.wasm.ppm" 2>&1) || { ok=0; detail+=" $d"; }
   fi
-  # (3) vs DOSBox native reference
-  cap="$TMP/$name.nat.ppm"; [ "$WHICH" = wasm ] && cap="$TMP/$name.wasm.ppm"
-  if [ -n "$ref" ] && [ -f "$ref" ] && [ -s "$cap" ]; then
-    ae=$(compare -metric AE "$cap" "$ref" /dev/null 2>&1)
-    [ "$ae" = 0 ] || { ok=0; detail+=" ref-AE=$ae"; }
-  elif [ -n "$ref" ]; then detail+=" (no-ref)"; fi
   if [ "$ok" = 1 ]; then echo "  PASS $name$detail"; pass=$((pass+1)); else echo "  FAIL $name$detail"; fail=$((fail+1)); fi
 done
 echo "== verify: $pass passed, $fail failed =="
-[ "$fail" = 0 ]
+[ "$fail" = 0 ] && [ "$pass" -gt 0 ]
