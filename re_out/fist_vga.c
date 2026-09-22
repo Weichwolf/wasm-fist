@@ -140,7 +140,6 @@ static unsigned char  g_pit_wsub[3], g_pit_rsub[3];
 static unsigned short g_pit_wlatch[3];
 static unsigned long long g_pit_base[3];      /* clock at which the current count started */
 static int            g_pit_latched[3]; static unsigned short g_pit_latch[3];
-static unsigned long long g_last_3da_clock = 0; static int g_last_3da_status = -1;
 int fist_vga_pit0_div(void){ return g_pit_reload[0] ? g_pit_reload[0] : 0x10000; }
 unsigned long long fist_clock_now(void){ return g_clock; }
 unsigned fist_clock_frame_counts(void){ return FRAME_COUNTS; }
@@ -179,12 +178,6 @@ static int vga_status(unsigned long long c){   /* port 0x3da at clock c: bit3 vs
                                                             nothing in the engine or the drivers reads bit 0) */
     return r;
 }
-static unsigned long long vga_next_status_edge(unsigned long long c){ /* first clock > c with a different status */
-    int s = vga_status(c); unsigned long long t = c + 1;
-    /* bit 0 changes every scanline; bit 3 twice a frame -- walk in scanline steps, then refine */
-    while (vga_status(t) == s) { t += 1; }
-    return t;
-}
 /* The MGAVIDEO palette upload and the per-tick DAC service are the ENGINE's: its INT-8 handler
  * (FUN_1000_31c3) far-calls the driver method at DGROUP:0x5e4 once per tick -- 0be2 on a machine
  * LOADGAME rates >= 0x31 (patch 575: the rating arrives through the LOADGAME hand-off script, see
@@ -206,15 +199,7 @@ int in(int port)
         int v = g_pal[g_dac_ridx & 0xff][g_dac_rsub];
         if (++g_dac_rsub==3){ g_dac_rsub=0; g_dac_ridx=(g_dac_ridx+1)&0xff; }
         return v & 0x3f; }
-    case 0x3da: case 0x3ba: { /* input status 1 from the clock; a spinning poll jumps to the next edge */
-        int st = vga_status(g_clock);
-        if (st == g_last_3da_status && g_clock == g_last_3da_clock + 1) {
-            unsigned long long e = vga_next_status_edge(g_clock);
-            fist_clock_advance_to(e - 1);           /* the NEXT poll (+1) lands exactly on the edge */
-            st = vga_status(g_clock);
-        }
-        g_last_3da_clock = g_clock; g_last_3da_status = st;
-        return st; }
+    case 0x3da: case 0x3ba: return vga_status(g_clock);
     case 0x40: case 0x41: case 0x42: { /* PIT counter read: the latched value, else the live count */
         int ch=port-0x40; unsigned v = g_pit_latched[ch] ? g_pit_latch[ch] : pit_count(ch);
         int b;
