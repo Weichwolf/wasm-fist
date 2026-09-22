@@ -64,9 +64,10 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   29 unit tests and all 178 flows pass on both targets with exact disjoint
   45+45+44+44 coverage (`scratch/verify/snd620-g{0..3}/`).
 - `oracle-iocal-621/` records the SOUNDDVR I/O contract directly: DOSBox uses write/read
-  delays of 21/29 CPU cycles while the current slice has at least three such delays left;
-  it applies zero delay below that threshold and refills the slice after the decoder returns.
-  The port has no CPU-slice state yet, so its calibration remains 86→110 rather than 90→114.
+  delays of 21/29 CPU cycles (0.700/0.967 us at the fixed 30 MHz rate) while the current
+  slice has at least three such delays left; it applies zero delay below that threshold and
+  refills the slice after the decoder returns. The port has no CPU-slice state yet, so its
+  calibration remains 86→110 rather than 90→114.
 - The port models `VGA_StartResize`: after the mode-13 BIOS call it keeps the active
   640×400 scanout, clears its three pending presentations, then changes drawing mode at the
   measured 50-ms setup event without resetting the vertical phase. The strict comparison now
@@ -77,6 +78,10 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   532.648 (`3`) and 546.917 ms (`4`); the port does so at 496.943, 526.281 and
   540.951 ms. The port therefore clears the DAC about 6 ms before event 35, while the
   Oracle clear follows it at 546.972 (`kdv-normal-trace/`, `text-boot-native-9/`).
+- `oracle-dacreq-624/` separates the BIOS mode-set DAC reset at 408.278 ms (`f000:1304`,
+  tick 1) from the first MGAVIDEO reset at 503.001 ms. The port initializes its DAC state
+  directly during mode 13, so this BIOS write has no pre-event-35 observable difference;
+  it is not the later engine producer.
 - `oracle-startuphist-622/` counts 1,763,178 original instructions from the mode-13 BIOS
   return through the first DAC upload. The apparent `1000:4bb7` loop is a CS-overlap alias:
   the running image executes it at `2082:3cb6` (linear `0x244d6`), reached by the direct
