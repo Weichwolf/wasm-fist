@@ -26,6 +26,8 @@ memsize=16
 core=${FIST_DOSBOX_CORE:-auto}
 cputype=auto
 cycles=${FIST_DOSBOX_CYCLES:-max}
+[mixer]
+nosound=true
 [sblaster]
 sbtype=sb16
 sbbase=220
