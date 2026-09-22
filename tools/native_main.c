@@ -3304,7 +3304,7 @@ int fist_extender_gate(void) {
      * FMV won't render and model op 0x78 -> complete to reach the reversible main menu), this is a faithful
      * no-op (logged, never silently swallowed) -- it does NOT render, and 0xA0000 stays black for the
      * intro FMV specifically. */
-    /* FRAME OPS (0x64 post-frame-data / 0x78 present) -> drive the REAL extender KDV player.  The
+    /* FRAME OPS (0x70 open / 0x78 present) -> drive the REAL extender KDV player.  The
      * consumer the earlier notes could not find in FIST.DAT IS this extender code (now linked as the
      * EXT module): on the first frame op OPEN TITLE.KDV (asset name from TCB+0xBA), then DECODE+PRESENT
      * one frame per op -> pixels land in g_mem[0xA0000].  (op 0x78's return gates e584's intro loop;
@@ -3364,7 +3364,7 @@ int fist_extender_gate(void) {
             _exit(0);
         }
     }
-    if (kdv_drive && (op == 0x64 || op == 0x78) && g_ext_ready) {
+    if (kdv_drive && (op == 0x70 || op == 0x78) && g_ext_ready) {
         /* Intro already finished: keep signalling "animation complete" so e584 stays out of its loop
          * (the present op 0x78 return gates e584; nonzero => proceed to the menu). */
         if (g_kdv_done) return (op == 0x78) ? 1 : 0;

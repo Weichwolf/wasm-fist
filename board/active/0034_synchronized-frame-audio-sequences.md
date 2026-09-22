@@ -34,6 +34,10 @@ Report the first unequal event, byte or sample. Missing, truncated or masked out
   768+1,671 bytes. A reverted uncapped read-cost trial plus the measured first decoder cost
   matches all 24 Oracle frame contents/palettes, proving the producer of frame 7 but not a
   general timing model (`scratch/sequence-capture/readcost-decoder-gdb/`).
+- The original gate trace is `00,20,04,44,68,44,6c,70,78,64,78,…`: `0x70` enters `11cb`
+  (open), `0x78` enters `11dd` (decode/present), and `0x64` follows the first blit. Native
+  has the same order (`port-op70-opseq-666`), so its KDV gate now opens on `0x70`; the prior
+  `0x64` condition was false routing. This corrects control flow, not collapsed timing.
 - Assembly `7135..746a` yields an exact instruction formula: `7+7×rows+2×headers` plus
   `82×two-bit + 97×one-bit + 25×solid + 64×raw + 13×skip` per cell, plus
   `2×two-bit-writes + one-bit-writes + raw-writes`. Patch 617 counts these predicates while
