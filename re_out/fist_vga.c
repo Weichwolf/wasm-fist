@@ -107,16 +107,27 @@ int  fist_vga_mode(void){ return g_vmode; }
 #define VDISPEND_LINE 400             /* status bit 0 (blanking) from here to the end of the frame */
 static unsigned long long g_clock;            /* PIT counts since power-on */
 static unsigned long long g_sequence_next;
+static unsigned long long g_sequence_vertical;
+static unsigned char g_sequence_pixels[FB_SZ];
+static unsigned g_sequence_part;
 static int g_sequence_dispatch;
+
+/* DOSBox VGA_DrawPart samples four 50-row bands before RENDER_EndUpdate. */
+static unsigned long long fist_sequence_part_clock(unsigned part)
+{
+    return g_sequence_vertical +
+        (FRAME_COUNTS * VDISPEND_LINE * part + (unsigned)FRAME_LINES * 2) /
+        ((unsigned)FRAME_LINES * 4);
+}
 
 static void fist_sequence_mode_set(void)
 {
     g_sequence_next = 0;
     if (g_vmode != 0x13 || !getenv("FIST_SEQUENCE")) return;
     unsigned long long ready = g_clock + (50ull * PIT_HZ_ + 500) / 1000;
-    unsigned long long vertical = (ready / FRAME_COUNTS + 1) * FRAME_COUNTS;
-    unsigned lines = (unsigned)FRAME_LINES;
-    g_sequence_next = vertical + (FRAME_COUNTS * VDISPEND_LINE + lines / 2) / lines;
+    g_sequence_vertical = (ready / FRAME_COUNTS + 1) * FRAME_COUNTS;
+    g_sequence_part = 0;
+    g_sequence_next = fist_sequence_part_clock(1);
 }
 
 void fist_sequence_present(void)
@@ -127,7 +138,7 @@ void fist_sequence_present(void)
         for (unsigned lane = 0; lane < 3; ++lane)
             palette[i][lane] = (unsigned char)((g_pal[i][lane] << 2) | (g_pal[i][lane] >> 4));
     fist_sequence_frame((double)g_clock * 1000.0 / PIT_HZ_, FB_W, FB_H, FB_W,
-                        g_mem + VGA_FB, &palette[0][0]);
+                        g_sequence_pixels, &palette[0][0]);
 }
 void fist_sequence_finish(void){ fist_sequence_close(); }
 static unsigned short g_pit_reload[3] = {0,0,0};   /* 0 == 65536 */
@@ -156,10 +167,16 @@ void fist_clock_advance_to(unsigned long long target){
         if (g_sequence_next && g_sequence_next <= target && g_sequence_next <= w) {
             int same_tick = g_sequence_next == w;
             g_clock = g_sequence_next;
-            g_sequence_next += FRAME_COUNTS;
-            g_sequence_dispatch = 1;
-            fist_sequence_present();
-            g_sequence_dispatch = 0;
+            memcpy(g_sequence_pixels + g_sequence_part * FB_SZ / 4,
+                   g_mem + VGA_FB + g_sequence_part * FB_SZ / 4, FB_SZ / 4);
+            if (++g_sequence_part == 4) {
+                g_sequence_dispatch = 1;
+                fist_sequence_present();
+                g_sequence_dispatch = 0;
+                g_sequence_part = 0;
+                g_sequence_vertical += FRAME_COUNTS;
+            }
+            g_sequence_next = fist_sequence_part_clock(g_sequence_part + 1);
             if (same_tick && (!g_int8_replay || g_int8_force)) fist_int8_fire();
         }
         else if (w <= target) { g_clock = w; if (!g_int8_replay || g_int8_force) fist_int8_fire(); }
