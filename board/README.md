@@ -25,7 +25,7 @@ for unrelated proof. This is a dependency/feedback order, not a claim that every
 
 | Order | Work items | Deliverable |
 | --- | --- | --- |
-| 1 | 0034 → 0012 | Synchronized sequence capture, then full-run parity; strict checks 0033 delivered. |
+| 1 | 0034 → 0036 → 0012 | Synchronized sequence capture and start boundary, then full-run parity; strict checks 0033 delivered. |
 | 2 | 0002 → 0001, 0027 | Strict existing terrain replay, full render chain, all cockpits. |
 | 3 | 0017 | Reproduce and remove behavior differences caused by guest/host address representation. |
 | 4 | 0003 → 0011 | Matched audio event/sample traces, mixer fidelity, content gates. |
@@ -39,7 +39,7 @@ for unrelated proof. This is a dependency/feedback order, not a claim that every
 | --- | --- |
 | Whole windshield, all battles/detail/night modes | 0001; stage proofs 0002 |
 | Vehicle consoles, dynamic instruments, radar, loss/switch transitions | 0027 |
-| Full-run presented-frame/PCM parity and timing | 0012; strict checks 0033, sequence capture 0034 |
+| Full-run presented-frame/PCM parity and timing | 0012; strict checks 0033, sequence capture 0034, launch boundary 0036 |
 | Original simulation, objectives, outcomes and debrief | 0017 |
 | OPL, digital effects, mixer and device configurations | 0003; content regression fixtures 0011 |
 | Profiles, campaign progression, reload behavior | 0004 |
