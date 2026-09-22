@@ -1,0 +1,45 @@
+PATCH 616: let MGAVIDEO 04a3 wait for its IRQ-cleared palette semaphore (board:0034).
+
+Original 04a3 writes byte DGROUP:0x786=1 at 535.011 ms, then spins at
+04c5/04cc until 0be2 shifts it to zero at 546.916 ms. Patch 070 serviced
+and cleared it synchronously and used a 16-bit store that also cleared
+0x787. The real 0be2 ISR is now installed. Keep the asm-backed buffer clear
+and descriptor write, set only byte 0x786, then pump the PIT until the ISR
+clears it. Evidence: scratch/sequence-capture/c786-orig.watch.txt.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -1603,3 +1603,4 @@
+-  undefined2 *puVar1;
+-  int iVar2;
+-  undefined2 *puVar3;
++  uint16_t palseg = *(uint16_t *)(g_mem + 0x1c782);
++  uint8_t *pal = g_mem + ((uint32_t)palseg << 4);
++  extern void fist_timer_pump(void);
++
+@@ -1607,21 +1608,5 @@
+-  {
+-    /* PATCH 070 (driver asm 0x4a3..0x4cc): clear the palette buffer + request+service a vblank DAC
+-       upload.  Ghidra dropped ES=word[DGROUP:0x782] (the palette-buffer segment) so the 0x180-word
+-       clear wrote to host 0, and folded the "spin until the retrace ISR clears DGROUP:0x786" wait to
+-       while(true).  DGROUP accesses (0x780/0x782/0x786) are already correctly based (driver DS = engine
+-       DGROUP).  Our port runs no driver vertical-retrace IRQ, so the request the ISR FUN_0000_0b1f
+-       would honour (its `if (0x786 & 1)` branch: out 0x3c8,0 then upload the 0x300-byte palette buffer
+-       to 0x3c9) is serviced synchronously here, then 0x786 is cleared. */
+-    uint16_t palseg = *(uint16_t *)(g_mem + 0x1c782);        /* word[DGROUP:0x782] = buffer segment */
+-    uint8_t *pal    = g_mem + ((uint32_t)palseg << 4);       /* palette buffer at palseg:0 */
+-    int i;
+-    for (i = 0; i < 0x300; i++) pal[i] = 0;                  /* rep stosw 0x180 words = 0 (es:di base) */
+-    *(uint16_t *)(g_mem + 0x1c780) = 0x782;                  /* DGROUP:0x780 = 0x782 (word) */
+-    *(uint16_t *)(g_mem + 0x1c786) = 1;                      /* request upload (bit0) */
+-    if (*(uint16_t *)(g_mem + 0x1c786) & 1) {                /* vblank service (0b1f 0x786-branch) */
+-      out(0x3c8, 0);
+-      for (i = 0; i < 0x300; i++) out(0x3c9, pal[i]);
+-    }
+-    *(uint16_t *)(g_mem + 0x1c786) = 0;                      /* retrace ISR cleared the semaphore */
+-  }
+-  return;
++  /* PATCH 616: 04a3-04cc waits for the real 0be2 IRQ to clear byte [0x786]. */
++  for (int i = 0; i < 0x300; ++i) pal[i] = 0;
++  *(uint16_t *)(g_mem + 0x1c780) = 0x782;
++  g_mem[0x1c786] = 1;
++  while (g_mem[0x1c786]) fist_timer_pump();

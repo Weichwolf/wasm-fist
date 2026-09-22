@@ -1807,6 +1807,7 @@ static uint16_t g_ext_next_seg = EXT_TASK_POOL_BASE;
 extern void m_ext_FUN_0000_11cb(int, int, int, int, int);   /* KDV OPEN wrapper */
 extern void m_ext_FUN_0000_11dd(int, int, int);             /* KDV DECODE+PRESENT wrapper */
 extern void m_ext_FUN_0000_6f17(int, int, int, int, int, int); /* KDV close/free wrapper */
+extern void fist_clock_advance(unsigned);
 extern void m_ext_FUN_0000_89b0(unsigned, unsigned, unsigned); /* op-0x18 MAP-LOAD setup (terrain/pal/sky) */
 extern void m_ext_FUN_0000_84c0(unsigned);                     /* extender task-setup allocator (bc90 matrix etc.) */
 extern void m_ext_FUN_0000_8deb(void);                         /* voxel viewport setup (90a8/90f0/90f8/9114) */
@@ -1899,6 +1900,11 @@ static inline uint32_t fist_hm_index(uint32_t y, uint32_t x, unsigned d) {
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
+    /* board:0034 Original intro op-0x6c yields across the next IRQ before MGAVIDEO 04a3. */
+    if (op == 0x6c && !g_kdv_done) {
+        uint16_t tick = *(volatile uint16_t *)(dg + 0x452);
+        while (tick == *(volatile uint16_t *)(dg + 0x452)) fist_timer_pump();
+    }
     /* board:0012 EXPERIMENT: complete the frame-present handshake INSIDE the op-0x4c gate (not only in
      * the PIT pump at line ~711), because the in-mission 459a present-poll spins on op-0x4c WITHOUT
      * re-entering fist_timer_pump -> d548 never flips 1->0x81 -> the loop never advances back to the
@@ -2574,12 +2580,21 @@ int fist_extender_gate(void) {
     }
     /* FIST_MISSFB2C -- capture 0xA0000 after the Nth op-0x2c post.  The FSG-battle / crash-bucket missions
      * (AZER3 etc.) render the windshield through the op-0x2c SECONDARY-viewport path, which the ENGINE
-     * itself paints into 0xA0000 (no extender op-0x24 emulation) -- so just snapshot the live framebuffer
-     * + current DAC and _exit.  Read-only, default OFF; never reached by the front-end verify flows. */
+     * itself paints into 0xA0000 (no extender op-0x24 emulation). Let the next retrace service the
+     * palette request before capturing the presented framebuffer and DAC. */
     if (op == 0x2c && getenv("FIST_MISSFB2C") && getenv("FIST_MISSFB") && g_ext_ready && g_fist_after_map) {
         static int n2c = 0;
         long want2c = getenv("FIST_MISSFB_N") ? atol(getenv("FIST_MISSFB_N")) : 120;
-        if (++n2c == want2c) { fist_dump_framebuffer(getenv("FIST_MISSFB")); _exit(0); }
+        if (++n2c == want2c) {
+            extern unsigned fist_clock_frame_counts(void);
+            fist_clock_advance(fist_clock_frame_counts());
+            if (dg[0x786]) {
+                fprintf(stderr, "[missfb] palette upload still pending at presented-frame capture\n");
+                _exit(2);
+            }
+            fist_dump_framebuffer(getenv("FIST_MISSFB"));
+            _exit(0);
+        }
     }
     /* board:0002 FIST_R92REPLAY -- PURE 9200-WRITER congruence test.  Given a self-consistent oracle
      * capture (.cap = hdr{magic,passno,esi,ebp,hzptr} + glob[0x9000..0x9200] + hz[256] + tile[65536],
