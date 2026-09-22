@@ -11,10 +11,14 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
 
 ## Evidence
 
-- The fixed-30000-cycle DOSBox Oracle captured 3,448 presented frames and 2,182,440 stereo
-  samples with valid footers (`scratch/sequence-capture/fixed30k-full/`). Mode-13 presentation
-  starts at 475.189 ms. DOSBox retains its 14.268064-ms loader-mode vertical period after the
-  mode switch because the 0.000059-ms difference is below its 0.0001-ms rearm threshold.
+- The fixed-30000-cycle DOSBox Oracle captured 4,151 presented frames and 2,626,325 stereo
+  samples with valid footers (`scratch/sequence-capture/kdv-profile-full-run/`). The earlier
+  `fixed30k-full` artifact contains only 258 frames and 168,864 samples. Mode-13 presentation
+  starts at 475.189 ms; the mode switch skips one 14.268-ms presentation. DOSBox retains the
+  loader-mode period `100×449/(28322000/9 truncated) = 14.268064195 ms` because the mode-13
+  period differs by less than its 0.0001-ms rearm threshold. Across 4,149 uninterrupted
+  intervals the Oracle emits 3,881 × 14,268 µs and 268 × 14,269 µs. The port's fixed 17,025
+  PIT counts give 14.268569 ms, explaining its roughly 11-µs drift over 23 intervals.
 - The port captures four 50-row VGA draw parts at their sampling times and the palette at the
   final part. Native/WASM produce 24 byte-identical indexed events through tick 20; the first
   six mode-13 frame contents also match the Original (`scratch/sequence-capture/patch616irq-*/`).
@@ -57,9 +61,9 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
 
 ## Next
 
-1. Trace timing from KDV open through decode, blit and DAC; model branch-dependent decoder
-   instructions and first-touch faults separately from surrounding work. Then match the inherited
-   fractional VGA phase and compare complete frames and timestamps through the first difference.
+1. Model the inherited fractional VGA period and phase, then the measured KDV open/decode/DAC/
+   framebuffer stages, including branch-dependent decoder instructions and first-touch faults.
+   Compare complete frames and timestamps through the first difference.
    Verify the post-IRQ cockpit capture against the Original presentation phase.
 2. Capture loader frames. Establish identical virtual scenario start/end and timed input; compare
    complete frame order, dimensions, timestamps, indices and palettes without truncation.
