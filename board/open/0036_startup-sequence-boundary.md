@@ -100,11 +100,18 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   The loop contract therefore matches; the 8.299469-ms displacement already exists at entry.
   Its subsequent `0x201` reads take 1.000 µs in DOSBox and the port reaches the next tick at
   525.893787 ms. Do not alter patch 044 to compensate for an earlier divergence.
+- `FUN_1000_30de` is the preceding CRTC-status wait (`in 0x3da`). Oracle calls end at
+  418.499233, 432.767300 and 447.035400 ms; the port ends them at 426.882068, 441.150638 and
+  455.419207 ms. The second and third each take 14.266667 ms in both runs. The first port wait
+  is 1.151967 ms too long, but its entry is already 7.231084 ms late. `oracle-timer-init-638.reg`
+  places the matching second `2fd3` timer calibration at 408.582200 ms; port-timer-636 enters it
+  at 415.804965 ms. The remaining primary gap is therefore between the mode-set return and `2fd3`,
+  not joystick timing or the recurrent CRTC wait.
 
 ## Next
 
-1. Trace control-flow and clock boundaries from the mode-13 BIOS return to `3a14` entry. The first
-   unresolved displacement is 8.299469 ms; the `3a14` wait itself is matched. Align its first four
+1. Trace the mode-set caller's return-to-`2fd3` contract. The port reaches `2fd3` 7.222765 ms after
+   the Oracle. Then recover the first `30de` wait's 1.151967-ms phase error. Align the first four
    MGAVIDEO DAC calls without hiding the event-35 palette difference. Preserve events 0–34 as a
    strict prefix of the full comparison.
 2. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7` so calibration
