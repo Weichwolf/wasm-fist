@@ -288,8 +288,8 @@ void fist_sequence_present(void)
         for (unsigned lane = 0; lane < 3; ++lane)
             palette[i][lane] = (unsigned char)((g_pal[i][lane] << 2) | (g_pal[i][lane] >> 4));
     unsigned width = g_sequence_mode == 3 ? 640 : FB_W, height = g_sequence_mode == 3 ? 400 : FB_H;
-    fist_sequence_frame((double)g_sequence_event_cycles / 30000.0, width, height, width,
-                        g_sequence_pixels, &palette[0][0]);
+    fist_sequence_frame_us((g_sequence_event_cycles + 15u) / 30u, width, height, width,
+                           g_sequence_pixels, &palette[0][0]);
 }
 void fist_sequence_finish(void){ fist_sequence_close(); }
 void fist_kdv_instruction_count(uint64_t count)

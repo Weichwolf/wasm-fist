@@ -30,6 +30,9 @@ Report the first unequal event, byte or sample. Missing, truncated or masked out
   `FIST_DOSBOX_CORE=normal` for comparable timing. Stage/profile traces:
   `scratch/sequence-capture/kdv-stage-readcost.tsv`,
   `kdv-profile-{3calls,60k,full}.tsv`, `kdv-exceptions*.txt`.
+- Frame timestamps now use exact integer microsecond rounding. Native and WASM match all 171
+  captured frame records, including time (`{port,wasm}-inttime-672`); the Oracle's event-36
+  one-microsecond lead remains a clock-model discrepancy.
 - DOSBox `INT 21h/3Fh` charges `4×read bytes`, capped by the remaining 1-ms CPU slice
   (`src/dos/dos.cpp:modify_cycles`). First three KDV calls read 768+5,000, 768+1,381 and
   768+1,671 bytes. A reverted uncapped read-cost trial plus the measured first decoder cost

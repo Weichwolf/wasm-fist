@@ -17,14 +17,15 @@ never trims an unmatched emulator frame.
   560,797 us. Its frame data now matches; only the timestamp differs.
 - The differing title-frame writer is KDV. Its timing and gate reconstruction belong to 0034;
   do not alter startup phase to hide it.
-- Native and WASM agree through event 67. Event 68 differs by one microsecond. The timestamp is
+- Native and WASM match all 171 captured frame records, including timestamps. The timestamp is
   part of the contract.
 
 ## Next
 
 1. Keep the shared start state and phase inputs fixed. Run the full comparator after each timing
    change and report the first unequal record.
-2. Trace the native/WASM event-68 conversion. Preserve microseconds; no rounding or prefix trim.
+2. Recover the Oracle's remaining event-36 one-microsecond lead. Preserve microseconds; no
+   rounding or prefix trim.
 3. Move title-frame timing work to 0034. Keep this item limited to the application boundary.
 
 ## Accept

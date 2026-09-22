@@ -71,10 +71,26 @@ static inline uint64_t fist_sequence_time(double milliseconds) {
 
 static inline void fist_sequence_frame(double milliseconds, uint32_t width, uint32_t height,
                                        uint32_t pitch, const uint8_t *pixels, const uint8_t *palette) {
+    uint64_t time = fist_sequence_time(milliseconds);
     if (!fist_sequence_open('F')) return;
     if (pitch < width) fist_sequence_fail("frame pitch shorter than width");
     fist_sequence_byte('F');
-    fist_sequence_u64(fist_sequence_time(milliseconds));
+    fist_sequence_u64(time);
+    fist_sequence_u32(width);
+    fist_sequence_u32(height);
+    for (unsigned index = 0; index < 256; ++index)
+        fist_sequence_bytes(palette + index * 4, 3);
+    for (uint32_t row = 0; row < height; ++row)
+        fist_sequence_bytes(pixels + (size_t)row * pitch, width);
+    ++fist_sequence.records;
+}
+
+static inline void fist_sequence_frame_us(uint64_t time, uint32_t width, uint32_t height,
+                                          uint32_t pitch, const uint8_t *pixels, const uint8_t *palette) {
+    if (!fist_sequence_open('F')) return;
+    if (pitch < width) fist_sequence_fail("frame pitch shorter than width");
+    fist_sequence_byte('F');
+    fist_sequence_u64(time);
     fist_sequence_u32(width);
     fist_sequence_u32(height);
     for (unsigned index = 0; index < 256; ++index)
