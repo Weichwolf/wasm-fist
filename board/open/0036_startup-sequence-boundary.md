@@ -68,6 +68,10 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   slice has at least three such delays left; it applies zero delay below that threshold and
   refills the slice after the decoder returns. The port has no CPU-slice state yet, so its
   calibration remains 86→110 rather than 90→114.
+- Replacing the port's one-PIT-count access cost with only the 21/29-cycle base moves its first
+  DAC reset from 496.943 to 497.070 ms and mode 13 from 407.410 to 407.289 ms. It cannot close
+  the 503.001-ms target and is discarded: a global base-cost substitution is not the decoder
+  slice contract.
 - The port models `VGA_StartResize`: after the mode-13 BIOS call it keeps the active
   640×400 scanout, clears its three pending presentations, then changes drawing mode at the
   measured 50-ms setup event without resetting the vertical phase. The strict comparison now
