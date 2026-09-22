@@ -72,11 +72,17 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   measured 50-ms setup event without resetting the vertical phase. The strict comparison now
   matches events 0–34 exactly; event 35 (546,529 µs) first differs at palette byte 5
   (`170 != 0`) and the port thereafter draws index 24 (`text-boot-{native,wasm}-8/`).
+- The event-35 palette producer is the engine's MGAVIDEO DAC method (`4ec3:0bf2..0bff`),
+  reached from the INT-8 service. Original resets the DAC at 503.001 (`[0x452]=1`),
+  532.648 (`3`) and 546.917 ms (`4`); the port does so at 496.943, 526.281 and
+  540.951 ms. The port therefore clears the DAC about 6 ms before event 35, while the
+  Oracle clear follows it at 546.972 (`kdv-normal-trace/`, `text-boot-native-9/`).
 
 ## Next
 
-1. Find the Oracle writer of the palette value that first differs at event 35 and recover
-   its timing/IRQ contract. Preserve events 0–34 as a strict prefix of the full comparison.
+1. Recover the mode-set-to-first-INT-8 timing contract. The MGAVIDEO DAC method is proven;
+   align its first four calls without hiding the event-35 palette difference. Preserve events
+   0–34 as a strict prefix of the full comparison.
 2. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7` so calibration
    starts at 90 and evolves as measured. Recheck mode-set time and mixed audio.
 3. Complete continuous PCM and subsequent sequence parity with 0034/0003.
