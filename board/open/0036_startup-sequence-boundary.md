@@ -107,13 +107,17 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   places the matching second `2fd3` timer calibration at 408.582200 ms; port-timer-636 enters it
   at 415.804965 ms. The remaining primary gap is therefore between the mode-set return and `2fd3`,
   not joystick timing or the recurrent CRTC wait.
+- The `2fd3` caller is `MGAVIDEO:00e8`, call site `4ec3:0132`. Its port trace gives entry
+  415.784851, INT 10 completion 415.791556 and `2fd3` return 455.430940 ms. Oracle's
+  `oracle-mga00e8-640.reg` gives entry 408.127900 ms. The whole driver mode-call is therefore
+  already 7.656951 ms late before its INT 10 invocation; inspect the caller of `00e8` next.
 
 ## Next
 
-1. Trace the mode-set caller's return-to-`2fd3` contract. The port reaches `2fd3` 7.222765 ms after
-   the Oracle. Then recover the first `30de` wait's 1.151967-ms phase error. Align the first four
-   MGAVIDEO DAC calls without hiding the event-35 palette difference. Preserve events 0–34 as a
-   strict prefix of the full comparison.
+1. Trace the caller that enters `MGAVIDEO:00e8`; it is 7.656951 ms late before INT 10. Then recover
+   the first `30de` wait's 1.151967-ms phase error. Align the first four MGAVIDEO DAC calls without
+   hiding the event-35 palette difference. Preserve events 0–34 as a strict prefix of the full
+   comparison.
 2. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7` so calibration
    starts at 90 and evolves as measured. Recheck mode-set time and mixed audio.
 3. Complete continuous PCM and subsequent sequence parity with 0034/0003.
