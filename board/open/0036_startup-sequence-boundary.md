@@ -78,22 +78,18 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   540.951 ms. The port therefore clears the DAC about 6 ms before event 35, while the
   Oracle clear follows it at 546.972 (`kdv-normal-trace/`, `text-boot-native-9/`).
 - `oracle-startuphist-622/` counts 1,763,178 original instructions from the mode-13 BIOS
-  return through the first DAC upload. `1000:4bb7` alone contributes 821,906 executions
-  each of `cmp ss:[0x452],ax` and `je 4bb7` (1,643,811 total): it waits for the BIOS tick.
-  Ghidra reduced `FUN_1000_4bb7` to an infinite C loop. The port does not currently enter
-  that path, so restoring its body alone cannot account for the missing delay; recover its
-  gate/caller before changing behaviour.
-- A temporary exact reconstruction of `4bb7` and its four `ss:[452]` gates applies and builds,
-  but leaves the full native capture byte-identical through its event-35 mismatch. A GDB
-  breakpoint on `FUN_1000_4bb7` does not fire before tick 20. The patch was discarded: this is
-  evidence that the port is missing the original call path, not permission to synthesize its wait.
+  return through the first DAC upload. The apparent `1000:4bb7` loop is a CS-overlap alias:
+  the running image executes it at `2082:3cb6` (linear `0x244d6`), reached by the direct
+  `2ebe:2f18 -> 3346` call. Patch 017 already reconstructs `FUN_1000_3346` as the
+  `ss:[452]` wait. Its obsolete `fist_timer_pump` model and an exact one-load/two-instruction
+  replacement both produce the same full native sequence through event 35, so this wait does
+  not explain the missing six milliseconds.
 
 ## Next
 
-1. Recover the original call site and port dispatch that reach `FUN_1000_4bb7` after mode set,
-   then restore its `ss:[0x452]` BIOS-tick wait with its measured instruction contract. The
-   MGAVIDEO DAC method is proven; align its first four calls without hiding the event-35 palette
-   difference. Preserve events 0–34 as a strict prefix of the full comparison.
+1. Trace the first control-flow and clock divergence after the mode-13 BIOS return through the
+   first MGAVIDEO DAC call. The DAC method is proven; align its first four calls without hiding
+   the event-35 palette difference. Preserve events 0–34 as a strict prefix of the full comparison.
 2. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7` so calibration
    starts at 90 and evolves as measured. Recheck mode-set time and mixed audio.
 3. Complete continuous PCM and subsequent sequence parity with 0034/0003.
