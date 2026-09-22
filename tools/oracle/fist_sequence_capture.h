@@ -11,6 +11,10 @@ typedef struct FistSequenceState {
     FILE *file;
     uint64_t records;
     uint64_t samples;
+    uint32_t audio_rate;
+    uint32_t audio_frames;
+    int16_t audio[512 * 2];
+    char kind;
 } FistSequenceState;
 
 static FistSequenceState fist_sequence;
@@ -36,13 +40,29 @@ static inline void fist_sequence_bytes(const void *data, size_t size) {
     if (fwrite(data, 1, size, fist_sequence.file) != size) fist_sequence_fail("write failed");
 }
 
+static inline void fist_sequence_audio_record(const int16_t *stereo, uint32_t frames) {
+    uint64_t time = (fist_sequence.samples * 1000000u + fist_sequence.audio_rate / 2) /
+                    fist_sequence.audio_rate;
+    fist_sequence_byte('A');
+    fist_sequence_u64(time);
+    fist_sequence_u64(fist_sequence.samples);
+    fist_sequence_u32(fist_sequence.audio_rate);
+    fist_sequence_u32(frames);
+    fist_sequence_bytes(stereo, (size_t)frames * 4);
+    fist_sequence.samples += frames;
+    ++fist_sequence.records;
+}
+
 static inline void fist_sequence_close() {
     if (!fist_sequence.file) return;
+    if (fist_sequence.kind == 'A' && fist_sequence.audio_frames)
+        fist_sequence_audio_record(fist_sequence.audio, fist_sequence.audio_frames);
     fist_sequence_byte('E');
     fist_sequence_u64(fist_sequence.records);
     fist_sequence_u64(fist_sequence.samples);
     if (fclose(fist_sequence.file)) fist_sequence_fail("close failed");
     fist_sequence.file = NULL;
+    fist_sequence.audio_frames = 0;
 }
 
 static inline bool fist_sequence_open(char kind) {
@@ -60,6 +80,7 @@ static inline bool fist_sequence_open(char kind) {
     if (!fist_sequence.file) fist_sequence_fail("open failed");
     fist_sequence_bytes("FISTSEQ1", 8);
     fist_sequence_byte(kind);
+    fist_sequence.kind = kind;
     if (atexit(fist_sequence_close)) fist_sequence_fail("atexit registration failed");
     return true;
 }
@@ -103,14 +124,21 @@ static inline void fist_sequence_frame_us(uint64_t time, uint32_t width, uint32_
 static inline void fist_sequence_audio(double milliseconds, uint32_t rate,
                                        const int16_t *stereo, uint32_t frames) {
     if (!frames || !fist_sequence_open('A')) return;
-    fist_sequence_byte('A');
-    fist_sequence_u64(fist_sequence_time(milliseconds));
-    fist_sequence_u64(fist_sequence.samples);
-    fist_sequence_u32(rate);
-    fist_sequence_u32(frames);
-    fist_sequence_bytes(stereo, (size_t)frames * 4);
-    fist_sequence.samples += frames;
-    ++fist_sequence.records;
+    (void)milliseconds;
+    if (!fist_sequence.audio_rate) fist_sequence.audio_rate = rate;
+    if (rate != fist_sequence.audio_rate) fist_sequence_fail("PCM rate changed");
+    while (frames) {
+        uint32_t space = 512 - fist_sequence.audio_frames;
+        uint32_t count = frames < space ? frames : space;
+        memcpy(fist_sequence.audio + fist_sequence.audio_frames * 2, stereo, (size_t)count * 4);
+        fist_sequence.audio_frames += count;
+        stereo += count * 2;
+        frames -= count;
+        if (fist_sequence.audio_frames == 512) {
+            fist_sequence_audio_record(fist_sequence.audio, 512);
+            fist_sequence.audio_frames = 0;
+        }
+    }
 }
 
 #endif

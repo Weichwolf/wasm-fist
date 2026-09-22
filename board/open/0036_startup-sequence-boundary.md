@@ -31,6 +31,9 @@ never trims an unmatched emulator frame.
   sample 18,862). Oracle sequence capture now uses DOSBox `nosound=true`, whose emulated 1 ms tick drives
   the mixer without a host audio thread. `oracle-nosound-{703,704}` match exactly over their common 4,283
   PCM records and 297 frames; external F9 delivery only changes the suffix length.
+- The shared sequence writer now emits canonical 512-frame PCM records, timestamps each from exact sample
+  position/rate and flushes one final partial record. `oracle-pcm-blocks-{707,708}` match completely:
+  157 frames plus 101,827 stereo samples in 199 PCM records. Callback batching is no longer observable.
 
 ## Next
 
