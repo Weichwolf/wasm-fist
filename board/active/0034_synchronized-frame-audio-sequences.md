@@ -18,13 +18,18 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
   loader-mode period `100×449/(28322000/9 truncated) = 14.268064195 ms` because the mode-13
   period differs by less than its 0.0001-ms rearm threshold. Across 4,149 uninterrupted
   intervals the Oracle emits 3,881 × 14,268 µs and 268 × 14,269 µs. The port's fixed 17,025
-  PIT counts give 14.268569 ms, explaining its roughly 11-µs drift over 23 intervals.
+  PIT counts give 14.268569 ms, explaining its roughly 11-µs drift over 23 intervals. DOSBox
+  queues VGA events with `float` PIC indices; the exact long-run timestamp sequence still needs
+  that rounding and the inherited phase, beyond the rational hardware period.
 - The port captures four 50-row VGA draw parts at their sampling times and the palette at the
-  final part. Native/WASM produce 24 byte-identical indexed events through tick 20; the first
-  six mode-13 frame contents also match the Original (`scratch/sequence-capture/patch616irq-*/`).
+  final part. The scanout schedule now retains the loader's fractional VGA period: native/WASM
+  produce 24 byte-identical events over 328,165 µs versus the Oracle's 328,166 µs; the former
+  17,025-count schedule took 328,177 µs. The first six mode-13 frame contents match the Original
+  (`scratch/sequence-capture/fractional-*/`, `patch616irq-*/`).
   The port starts at 155.397 ms, omits the preceding 640x400 loader frames and mixed PCM, and
-  has no common scenario start marker. All 178 existing native/WASM flows pass with hashes and
-  exact coverage in `scratch/verify/full-616irq/`.
+  has no common scenario start marker. All 178 existing native/WASM flows pass after the
+  fractional scheduler change, with hashes and exact disjoint coverage in
+  `scratch/verify/full-fractional/`.
 - Original intro op `0x6c` crosses the next IRQ before MGAVIDEO `04a3`; `04a3` requests a palette
   upload via byte `0x786` and waits for the following ISR. Patch 616 restores that wait. The
   op-`0x2c` cockpit dump previously captured before the IRQ with DAC black, palette buffer valid
@@ -46,7 +51,12 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
   charge; that trial cannot establish the cost of work surrounding the decoder.
   A same-core stage trace places first KDV open at 548.110 ms, file access at 548.170,
   present at 548.179, decode at 549.053–552.558, DAC at 552.559 and framebuffer fill at
-  553.189. The 0.873-ms pre-decode and 0.631-ms post-decode intervals need separate models.
+  553.189. A GDB trace of the port at `scratch/sequence-capture/gdb-kdv-stage/trace.log`
+  puts `11dd`, `7135` and `746b` on the same PIT count. Original present→decode takes
+  1,042/331/380 PIT counts for the first three frames and decode→DAC takes 4,183/2,459/2,443;
+  the port omits both variable costs. DAC→fill is already close: 769 port counts versus
+  753–757 Original counts. Model pre-decode, decoder and post-DAC costs
+  separately; a 5,134-count lump only crosses one scanout boundary.
   Uninstrumented `core=normal` and prior `core=auto` have equal mode-13 contents/timestamps
   across 197 common events, but their subframe KDV timing differs. The stage hook itself shifts
   event 51 by 1 µs; use it to attribute stages, not as a timing reference. Keep core and hooks
@@ -58,12 +68,16 @@ byte or sample. Missing or incomplete output fails; no masks or truncated compar
   '^intro$'` passes native/WASM at this revision (`scratch/verify/run.N4pOhl/`).
 - Browser canvas may drop worker posts because it retains only `latest`. OPL/SB write separate
   WAVs; browser drains only OPL. Neither is final mixed PCM (owners 0026 and 0003).
+- `tools/oracle/compare_sequences.py` validates complete frame/PCM streams and reports the
+  chronologically first unequal time, layout, palette byte, pixel byte or PCM byte. It confirms
+  the 24 native/WASM frames match; full comparison fails because the port has no PCM stream.
+  `python3 -m unittest tests/test_compare_sequences.py` covers ordering and invalid footers.
 
 ## Next
 
-1. Model the inherited fractional VGA period and phase, then the measured KDV open/decode/DAC/
-   framebuffer stages, including branch-dependent decoder instructions and first-touch faults.
-   Compare complete frames and timestamps through the first difference.
+1. Model the missing present→decode and decode→DAC costs from the original paths, including
+   branch-dependent decoder instructions and first-touch faults. Compare full frame contents
+   and timestamps through the first difference; align inherited VGA phase and loader frames.
    Verify the post-IRQ cockpit capture against the Original presentation phase.
 2. Capture loader frames. Establish identical virtual scenario start/end and timed input; compare
    complete frame order, dimensions, timestamps, indices and palettes without truncation.

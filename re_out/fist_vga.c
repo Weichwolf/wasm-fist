@@ -102,12 +102,16 @@ int  fist_vga_mode(void){ return g_vmode; }
  * their returned status is unchanged. fist_clock_advance() fires every channel-0 wrap in order. */
 #define PIT_HZ_       1193182u
 #define FRAME_COUNTS  17025u          /* one mode-13h frame, see above */
+/* DOSBox retains the loader's 9-dot VGA clock through the mode-13h switch. */
+#define VGA_CLOCK_    (28322000u / 9u)
+#define VGA_FRAME_NUM (100ull * 449u * PIT_HZ_)
 #define FRAME_LINES   449.0           /* vtotal */
 #define VRETRACE_LINE 412             /* vrstart (vdispend + 12); the pulse lasts to line 414 */
 #define VDISPEND_LINE 400             /* status bit 0 (blanking) from here to the end of the frame */
 static unsigned long long g_clock;            /* PIT counts since power-on */
 static unsigned long long g_sequence_next;
-static unsigned long long g_sequence_vertical;
+static unsigned long long g_sequence_vertical_num;
+static unsigned long long g_sequence_event_num;
 static unsigned char g_sequence_pixels[FB_SZ];
 static unsigned g_sequence_part;
 static int g_sequence_dispatch;
@@ -115,9 +119,9 @@ static int g_sequence_dispatch;
 /* DOSBox VGA_DrawPart samples four 50-row bands before RENDER_EndUpdate. */
 static unsigned long long fist_sequence_part_clock(unsigned part)
 {
-    return g_sequence_vertical +
-        (FRAME_COUNTS * VDISPEND_LINE * part + (unsigned)FRAME_LINES * 2) /
-        ((unsigned)FRAME_LINES * 4);
+    g_sequence_event_num = g_sequence_vertical_num +
+        VGA_FRAME_NUM * VDISPEND_LINE * part / (449u * 4u);
+    return (g_sequence_event_num + VGA_CLOCK_ - 1) / VGA_CLOCK_;
 }
 
 static void fist_sequence_mode_set(void)
@@ -125,7 +129,7 @@ static void fist_sequence_mode_set(void)
     g_sequence_next = 0;
     if (g_vmode != 0x13 || !getenv("FIST_SEQUENCE")) return;
     unsigned long long ready = g_clock + (50ull * PIT_HZ_ + 500) / 1000;
-    g_sequence_vertical = (ready / FRAME_COUNTS + 1) * FRAME_COUNTS;
+    g_sequence_vertical_num = (ready / FRAME_COUNTS + 1) * FRAME_COUNTS * (unsigned long long)VGA_CLOCK_;
     g_sequence_part = 0;
     g_sequence_next = fist_sequence_part_clock(1);
 }
@@ -137,7 +141,7 @@ void fist_sequence_present(void)
     for (unsigned i = 0; i < 256; ++i)
         for (unsigned lane = 0; lane < 3; ++lane)
             palette[i][lane] = (unsigned char)((g_pal[i][lane] << 2) | (g_pal[i][lane] >> 4));
-    fist_sequence_frame((double)g_clock * 1000.0 / PIT_HZ_, FB_W, FB_H, FB_W,
+    fist_sequence_frame((double)g_sequence_event_num * 1000.0 / (PIT_HZ_ * (double)VGA_CLOCK_), FB_W, FB_H, FB_W,
                         g_sequence_pixels, &palette[0][0]);
 }
 void fist_sequence_finish(void){ fist_sequence_close(); }
@@ -174,7 +178,7 @@ void fist_clock_advance_to(unsigned long long target){
                 fist_sequence_present();
                 g_sequence_dispatch = 0;
                 g_sequence_part = 0;
-                g_sequence_vertical += FRAME_COUNTS;
+                g_sequence_vertical_num += VGA_FRAME_NUM;
             }
             g_sequence_next = fist_sequence_part_clock(g_sequence_part + 1);
             if (same_tick && (!g_int8_replay || g_int8_force)) fist_int8_fire();
