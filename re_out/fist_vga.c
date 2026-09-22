@@ -386,7 +386,7 @@ void fist_clock_wait_bios_ticks(unsigned count)
 }
 static int vga_status(unsigned long long c){   /* port 0x3da at clock c: bit3 vsync, bit0 vertical blanking */
     double line;
-    if (g_vmode == 3 && g_text_phase_set && c * VGA_CLOCK_ >= g_text_vertical_num) {
+    if (g_text_phase_set && c * VGA_CLOCK_ >= g_text_vertical_num) {
         unsigned long long phase = (c * VGA_CLOCK_ - g_text_vertical_num) % VGA_FRAME_NUM;
         line = (double)phase * 449.0 / VGA_FRAME_NUM;
     } else {
