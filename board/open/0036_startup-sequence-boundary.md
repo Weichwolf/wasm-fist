@@ -29,7 +29,7 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   match **every byte and time of frames 0–26** (640×400 indexed pixels and 256-entry
   palettes); their complete 51-frame files are identical (`text-boot-{native,wasm}-6/`).
   The strict full-frame comparison first fails at event 27: Oracle 418,117 µs,
-  black 640×400; port 483,574 µs, 320×200 after patch 620. Mixed port PCM is still absent.
+  black 640×400; port 483,574 µs, 320×200 before the resize model. Mixed port PCM is still absent.
   `make check`, 29 tests and all 178 existing flows pass both targets with exact
   45+45+44+44 coverage (`scratch/verify/startup-phase-g{0..3}/`).
 - `cursor-trace/dosbox.log`: the current text vertical begins at 20.168067 ms with
@@ -63,16 +63,22 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   retain the 27-event Oracle prefix (`text-boot-{native,wasm}-7/`). `make check`,
   29 unit tests and all 178 flows pass on both targets with exact disjoint
   45+45+44+44 coverage (`scratch/verify/snd620-g{0..3}/`).
+- `oracle-iocal-621/` records the SOUNDDVR I/O contract directly: DOSBox uses write/read
+  delays of 21/29 CPU cycles while the current slice has at least three such delays left;
+  it applies zero delay below that threshold and refills the slice after the decoder returns.
+  The port has no CPU-slice state yet, so its calibration remains 86→110 rather than 90→114.
+- The port models `VGA_StartResize`: after the mode-13 BIOS call it keeps the active
+  640×400 scanout, clears its three pending presentations, then changes drawing mode at the
+  measured 50-ms setup event without resetting the vertical phase. The strict comparison now
+  matches events 0–34 exactly; event 35 (546,529 µs) first differs at palette byte 5
+  (`170 != 0`) and the port thereafter draws index 24 (`text-boot-{native,wasm}-8/`).
 
 ## Next
 
-1. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7`
-   against Oracle so calibration starts at 90 and evolves as measured. Recheck
-   mode-set time and mixed audio.
-   Preserve the 27 matching text frames as a strict prefix of the full comparison.
-2. Model `VGA_StartResize` and the intervening black 640×400 presentations; align the
-   first 320×200 frame's dimensions, time, indices and palette. Capture canonical
-   shell path, DAC and cursor phase together for a reproducible full launch scenario.
+1. Find the Oracle writer of the palette value that first differs at event 35 and recover
+   its timing/IRQ contract. Preserve events 0–34 as a strict prefix of the full comparison.
+2. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7` so calibration
+   starts at 90 and evolves as measured. Recheck mode-set time and mixed audio.
 3. Complete continuous PCM and subsequent sequence parity with 0034/0003.
 
 ## Accept

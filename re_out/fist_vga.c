@@ -118,7 +118,10 @@ static unsigned long long g_sequence_vertical_num;
 static unsigned long long g_sequence_event_num;
 static unsigned long long g_sequence_event_cycles;
 static unsigned long long g_text_vertical_num;
+static unsigned long long g_sequence_resize_ready;
 static int g_text_phase_set;
+static int g_sequence_mode = -1;
+static int g_sequence_blank;
 static unsigned g_text_frame_count;
 static unsigned char g_sequence_pixels[640 * 400];
 static unsigned g_sequence_part;
@@ -257,9 +260,17 @@ static unsigned long long fist_sequence_part_clock(unsigned part)
 
 static void fist_sequence_mode_set(void)
 {
-    g_sequence_next = 0;
     if ((g_vmode != 0x13 && g_vmode != 3) || !getenv("FIST_SEQUENCE")) return;
-    unsigned long long ready = g_clock + (g_vmode == 0x13 ? (50ull * PIT_HZ_ + 500) / 1000 : 0);
+    if (g_vmode == 0x13 && g_sequence_mode == 3 && g_sequence_next) {
+        g_sequence_resize_ready = g_clock + (50ull * PIT_HZ_ + 500) / 1000;
+        g_sequence_blank = 1;
+        return;
+    }
+    g_sequence_next = 0;
+    g_sequence_resize_ready = 0;
+    g_sequence_mode = g_vmode;
+    g_sequence_blank = 0;
+    unsigned long long ready = g_clock;
     g_sequence_vertical_num = g_vmode == 3 && g_text_phase_set ? g_text_vertical_num :
         (ready / FRAME_COUNTS + 1) * FRAME_COUNTS * (unsigned long long)VGA_CLOCK_;
     g_sequence_part = 0;
@@ -276,7 +287,7 @@ void fist_sequence_present(void)
     for (unsigned i = 0; i < 256; ++i)
         for (unsigned lane = 0; lane < 3; ++lane)
             palette[i][lane] = (unsigned char)((g_pal[i][lane] << 2) | (g_pal[i][lane] >> 4));
-    unsigned width = g_vmode == 3 ? 640 : FB_W, height = g_vmode == 3 ? 400 : FB_H;
+    unsigned width = g_sequence_mode == 3 ? 640 : FB_W, height = g_sequence_mode == 3 ? 400 : FB_H;
     fist_sequence_frame((double)g_sequence_event_cycles / 30000.0, width, height, width,
                         g_sequence_pixels, &palette[0][0]);
 }
@@ -324,10 +335,21 @@ void fist_clock_advance_to(unsigned long long target){
     extern void fist_int8_fire(void);
     while (g_clock < target) {
         unsigned long long w = fist_pit0_next_wrap();
-        if (g_sequence_next && g_sequence_next <= target && g_sequence_next <= w) {
+        if (g_sequence_resize_ready && g_sequence_resize_ready <= target &&
+            g_sequence_resize_ready <= w && (!g_sequence_next || g_sequence_resize_ready <= g_sequence_next)) {
+            g_clock = g_sequence_resize_ready;
+            g_sequence_resize_ready = 0;
+            g_sequence_mode = 0x13;
+            g_sequence_blank = 0;
+            g_sequence_part = 0;
+            g_sequence_vertical_num += VGA_FRAME_NUM;
+            g_sequence_next = fist_sequence_part_clock(1);
+        }
+        else if (g_sequence_next && g_sequence_next <= target && g_sequence_next <= w) {
             int same_tick = g_sequence_next == w;
             g_clock = g_sequence_next;
-            if (g_vmode == 3) fist_text_scan_part(g_sequence_part);
+            if (g_sequence_blank) memset(g_sequence_pixels + g_sequence_part * 64000u, 0, 64000u);
+            else if (g_sequence_mode == 3) fist_text_scan_part(g_sequence_part);
             else memcpy(g_sequence_pixels + g_sequence_part * FB_SZ / 4,
                         g_mem + VGA_FB + g_sequence_part * FB_SZ / 4, FB_SZ / 4);
             if (++g_sequence_part == 4) {
