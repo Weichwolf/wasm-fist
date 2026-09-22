@@ -117,6 +117,8 @@ static unsigned long long g_sequence_next;
 static unsigned long long g_sequence_vertical_num;
 static unsigned long long g_sequence_event_num;
 static unsigned long long g_sequence_event_cycles;
+static unsigned long long g_sequence_pic_tick;
+static unsigned long long g_sequence_pic_part_tick;
 static unsigned long long g_text_vertical_num;
 static unsigned long long g_sequence_resize_ready;
 static int g_text_phase_set;
@@ -126,6 +128,43 @@ static unsigned g_text_frame_count;
 static unsigned char g_sequence_pixels[640 * 400];
 static unsigned g_sequence_part;
 static int g_sequence_dispatch;
+static float g_sequence_pic_vertical_lag;
+static float g_sequence_pic_part_lag;
+static int g_sequence_pic_ready;
+
+#define VGA_TEXT_PART_MS   3.17774248f
+#define VGA_MODE13_PART_MS 3.17775559f
+#define VGA_VERTICAL_MS    14.2680645f
+
+/* DOSBox queues float residuals and exposes its float PIC tick in the capture callback. */
+static void fist_sequence_pic_step(float delay)
+{
+    float next = delay + g_sequence_pic_part_lag;
+    unsigned whole = (unsigned)next;
+    g_sequence_pic_part_tick += whole;
+    g_sequence_pic_part_lag = next - whole;
+}
+
+static void fist_sequence_pic_advance_vertical(void)
+{
+    float next = VGA_VERTICAL_MS + g_sequence_pic_vertical_lag;
+    unsigned whole = (unsigned)next;
+    g_sequence_pic_tick += whole;
+    g_sequence_pic_vertical_lag = next - whole;
+}
+
+static void fist_sequence_pic_part(unsigned part)
+{
+    if (part == 1) {
+        g_sequence_pic_part_tick = g_sequence_pic_tick;
+        g_sequence_pic_part_lag = g_sequence_pic_vertical_lag;
+    }
+    fist_sequence_pic_step(g_sequence_mode == 0x13 ? VGA_MODE13_PART_MS : VGA_TEXT_PART_MS);
+    float cycles = g_sequence_pic_part_lag * 30000.0f;
+    unsigned long long fractional = (unsigned long long)cycles;
+    if ((float)fractional < cycles) ++fractional;
+    g_sequence_event_cycles = g_sequence_pic_part_tick * 30000u + fractional;
+}
 
 void fist_text_init(void)
 {
@@ -244,6 +283,7 @@ static void fist_text_scan_part(unsigned part)
 /* DOSBox VGA_DrawPart samples four 50-row bands before RENDER_EndUpdate. */
 static unsigned long long fist_sequence_part_clock(unsigned part)
 {
+    if (g_sequence_pic_ready) fist_sequence_pic_part(part);
     g_sequence_event_num = g_sequence_vertical_num +
         VGA_FRAME_NUM * VDISPEND_LINE * part / (449u * 4u);
     const unsigned long long denom = (unsigned long long)PIT_HZ_ * VGA_CLOCK_;
@@ -252,10 +292,11 @@ static unsigned long long fist_sequence_part_clock(unsigned part)
     unsigned long long seconds = pit / PIT_HZ_, remainder = pit % PIT_HZ_;
     unsigned long long scaled = remainder * 30000000u;
     unsigned long long fractional = (scaled % PIT_HZ_) * VGA_CLOCK_ + pit_fraction * 30000000u;
-    g_sequence_event_cycles = seconds * 30000000u + scaled / PIT_HZ_ +
+    unsigned long long scanout_cycles = seconds * 30000000u + scaled / PIT_HZ_ +
         (fractional + denom - 1) / denom;
-    return (g_sequence_event_cycles / 30000000u) * PIT_HZ_ +
-        ((g_sequence_event_cycles % 30000000u) * PIT_HZ_ + 30000000u - 1) / 30000000u;
+    if (!g_sequence_pic_ready) g_sequence_event_cycles = scanout_cycles;
+    return (scanout_cycles / 30000000u) * PIT_HZ_ +
+        ((scanout_cycles % 30000000u) * PIT_HZ_ + 30000000u - 1) / 30000000u;
 }
 
 static void fist_sequence_mode_set(void)
@@ -273,6 +314,13 @@ static void fist_sequence_mode_set(void)
     unsigned long long ready = g_clock;
     g_sequence_vertical_num = g_vmode == 3 && g_text_phase_set ? g_text_vertical_num :
         (ready / FRAME_COUNTS + 1) * FRAME_COUNTS * (unsigned long long)VGA_CLOCK_;
+    if (g_vmode == 3 && g_text_phase_set) {
+        unsigned long long denom = (unsigned long long)VGA_CLOCK_ * PIT_HZ_;
+        unsigned long long milliseconds = g_sequence_vertical_num * 1000u;
+        g_sequence_pic_tick = milliseconds / denom;
+        g_sequence_pic_vertical_lag = (float)(milliseconds % denom) / (float)denom;
+        g_sequence_pic_ready = 1;
+    }
     g_sequence_part = 0;
     g_text_frame_count = 1;
     g_sequence_next = fist_sequence_part_clock(1);
@@ -288,8 +336,13 @@ void fist_sequence_present(void)
         for (unsigned lane = 0; lane < 3; ++lane)
             palette[i][lane] = (unsigned char)((g_pal[i][lane] << 2) | (g_pal[i][lane] >> 4));
     unsigned width = g_sequence_mode == 3 ? 640 : FB_W, height = g_sequence_mode == 3 ? 400 : FB_H;
-    fist_sequence_frame_us((g_sequence_event_cycles + 15u) / 30u, width, height, width,
-                           g_sequence_pixels, &palette[0][0]);
+    unsigned long long time = (g_sequence_event_cycles + 15u) / 30u;
+    if (g_sequence_pic_ready) {
+        unsigned long long milliseconds = g_sequence_event_cycles / 30000u;
+        float fraction = (float)(g_sequence_event_cycles % 30000u) / 30000.0f;
+        time = (unsigned long long)(((double)milliseconds + (double)fraction) * 1000.0 + 0.5);
+    }
+    fist_sequence_frame_us(time, width, height, width, g_sequence_pixels, &palette[0][0]);
 }
 void fist_sequence_finish(void){ fist_sequence_close(); }
 void fist_kdv_instruction_count(uint64_t count)
@@ -343,6 +396,7 @@ void fist_clock_advance_to(unsigned long long target){
             g_sequence_blank = 0;
             g_sequence_part = 0;
             g_sequence_vertical_num += VGA_FRAME_NUM;
+            fist_sequence_pic_advance_vertical();
             g_sequence_next = fist_sequence_part_clock(1);
         }
         else if (g_sequence_next && g_sequence_next <= target && g_sequence_next <= w) {
@@ -358,6 +412,7 @@ void fist_clock_advance_to(unsigned long long target){
                 g_sequence_dispatch = 0;
                 g_sequence_part = 0;
                 g_sequence_vertical_num += VGA_FRAME_NUM;
+                fist_sequence_pic_advance_vertical();
                 if (g_vmode == 3) ++g_text_frame_count;
             }
             g_sequence_next = fist_sequence_part_clock(g_sequence_part + 1);
