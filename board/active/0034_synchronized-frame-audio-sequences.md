@@ -45,7 +45,24 @@ scenario start/end boundaries. Same initial state, timed input and devices; no h
   displays the next KDV image three scanouts before the original. Original first image change is
   at guest 1173.424 ms; port at 198.608 ms (different boot origins). The first following frame
   interval differs by 644 µs. Unused palette entries differ even earlier; they do not alter RGB.
-  Diagnose e584's `[b6e0]` wait, `[0x452]` ISR phase and op-0x78 posts before patching.
+  The ordinal alignment is diagnostic only: full-stream parity still includes the loader frames.
+  A gated original memory-write trace (`FIST_E584LOG`, local DOSBox probe) records `e584` at
+  guest 1145.240 ms with DS=2d19, duration `[b6e0]=4`, first `[b6e6]=4` at 1146.165 ms, and
+  subsequent `[b6e6]` values 8, 12, 16 at 1216.677, 1288.017, 1345.090 ms.
+  The original first 320×200 scanout is 1030.744 ms; the first index-48 image is 1102.084 ms,
+  71.340 ms later. Port scanout starts at 99.373 ms and reaches that same indexed image at
+  127.271 ms, 27.898 ms later. The net 43.442 ms onset gap is about three 14.268 ms scanouts;
+  the first nine distinct RGB images occur in the same order, but their scanout ordinals are
+  `0,10,15,19,24,29,33,38,43` versus `0,7,11,16,21,25,30,35,39`. This points to startup
+  phase/timing before treating KDV decode content as wrong. Port `FIST_KDV_TRACE` locates KDV OPEN
+  at 114.222 ms (`c452=3`, `b6e0=4`, `b6e6=3`), only 14.849 ms after its first 320×200
+  scanout; the original enters `e584` 114.496 ms after its first 320×200 scanout. The port's
+  first decoded KDV frame is at 114.867 ms and the second at 184.997 ms. Thus the pre-`e584`
+  path is roughly 100 ms shorter in the port, while the first visible KDV image is delayed
+  after that entry; the net 43 ms image gap is not itself a wait-loop diagnosis. Evidence:
+  `scratch/sequence-capture/trace-e584/dosbox.log`,
+  `scratch/sequence-capture/port-trace-{native,wasm}-new/port.log` and full streams above.
+  Trace the mode-switch→animation setup and first two op-0x78 posts on both sides before patching.
 - Browser worker posts at INT-8 and op 0x24; `fist_web_post_frame` forces the palette. The
   canvas keeps only `latest` until `requestAnimationFrame`, so worker posts may be dropped from
   actual display. This needs browser measurement under 0026; Node runs cannot prove it.
@@ -54,9 +71,10 @@ scenario start/end boundaries. Same initial state, timed input and devices; no h
 
 ## Next
 
-1. Measure the first KDV timing difference against the original e584 contract. Capture timed
-   `[b6e0]`, `[b6e6]`, `[0x452]` and op-0x78 events across the first visible transition; correct
-   their producer, then repeat complete frame-sequence comparison on both targets.
+1. Reconstruct the original mode-switch→animation setup and first two op-0x78 posts against
+   the port. Capture timed `[0x452]`/`[b6e6]` and decoder output at the first visible
+   transition; correct the first divergent producer, then repeat complete frame-sequence
+   comparison on both targets.
 2. Implement a single final port mixer owner (0003) and emit continuous PCM, including SB effects;
    the two existing WAV writers and OPL-only browser feed do not satisfy this capture.
 3. Drive original and both ports to the same explicit *virtual* scenario end and timed inputs. The

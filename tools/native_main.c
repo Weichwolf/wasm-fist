@@ -3364,6 +3364,13 @@ int fist_extender_gate(void) {
             memcpy(g_ext_kdv_tcb + 0xBA, g_mem + 0x90000 + 0xBA, 16);
             *(uint32_t *)(g_mem + FIST_EXT_BASE + 0xc93) = (uint32_t)(uintptr_t)g_ext_kdv_tcb;
             fprintf(stderr, "[ext] KDV OPEN (asset '%.13s' via extender TCB+0xBA)\n", g_ext_kdv_tcb + 0xBA);
+            if (getenv("FIST_KDV_TRACE")) {
+                extern unsigned long long fist_clock_now(void);
+                fprintf(stderr, "[ext] KDV open t=%.6f c452=%u b6e0=%u b6e6=%u\n",
+                    (double)fist_clock_now() * 1000.0 / 1193182.0,
+                    *(uint16_t *)(g_mem + 0x1c452), *(uint16_t *)(g_mem + 0x2b6e0),
+                    *(uint16_t *)(g_mem + 0x2b6e6));
+            }
             m_ext_FUN_0000_11cb(0, 0, 0, 0, 0);
             g_kdv_open = 1;
         }
@@ -3455,9 +3462,12 @@ int fist_extender_gate(void) {
                 _exit(0);
             }
             if (getenv("FIST_KDV_TRACE")) {
+                extern unsigned long long fist_clock_now(void);
                 uint8_t *eb = g_mem + FIST_EXT_BASE;
-                fprintf(stderr, "[ext] KDV frame %ld eof=%d off=%u size=%u fcnt=%u w=%u h=%u\n",
-                    g_kdv_frames, g_ext_eof,
+                fprintf(stderr, "[ext] KDV frame %ld t=%.6f c452=%u b6e0=%u b6e6=%u eof=%d off=%u size=%u fcnt=%u w=%u h=%u\n",
+                    g_kdv_frames, (double)fist_clock_now() * 1000.0 / 1193182.0,
+                    *(uint16_t *)(g_mem + 0x1c452), *(uint16_t *)(g_mem + 0x2b6e0),
+                    *(uint16_t *)(g_mem + 0x2b6e6), g_ext_eof,
                     *(uint32_t*)(eb+0x5570), *(uint32_t*)(eb+0x937), *(uint32_t*)(eb+0x6e84),
                     *(uint32_t*)(eb+0x5578), *(uint32_t*)(eb+0x557c));
             }
