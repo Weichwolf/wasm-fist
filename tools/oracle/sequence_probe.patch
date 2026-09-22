@@ -1,17 +1,8 @@
 --- a/src/gui/render.cpp
 +++ b/src/gui/render.cpp
-@@ -30,6 +30,7 @@
- #include "mapper.h"
- #include "cross.h"
- #include "hardware.h"
+@@ -32,0 +33 @@
 +#include "pic.h"
- #include "support.h"
- 
- #include "render_scalers.h"
-@@ -205,6 +206,13 @@
- 	if (GCC_UNLIKELY(!render.updating))
- 		return;
- 	RENDER_DrawLine = RENDER_EmptyLineHandler;
+@@ -207,0 +209,7 @@
 +	if (getenv("FIST_SEQPROBE")) {
 +		fprintf(stderr, "FIST_FRAME %.6f %u %u %u %u %u %u %u\n",
 +			PIC_FullIndex(), (unsigned)render.src.width, (unsigned)render.src.height,
@@ -19,26 +10,12 @@
 +			(unsigned)abort, (unsigned)(render.scale.outWrite != 0), (unsigned)CaptureState);
 +		fflush(stderr);
 +	}
- 	if (GCC_UNLIKELY(CaptureState & (CAPTURE_IMAGE|CAPTURE_VIDEO))) {
- 		Bitu pitch, flags;
- 		flags = 0;
-@@ -631,4 +639,3 @@
- 	MAPPER_AddHandler(IncreaseFrameSkip,MK_f8,MMOD1,"incfskip","Inc Fskip");
- 	GFX_SetTitle(-1,render.frameskip.max,false);
- }
--
 --- a/src/hardware/mixer.cpp
 +++ b/src/hardware/mixer.cpp
-@@ -361,6 +361,12 @@
- 		chan->Mix(needed);
- 		chan=chan->next;
- 	}
+@@ -363,0 +364,6 @@
 +	if (getenv("FIST_SEQPROBE")) {
 +		fprintf(stderr, "FIST_MIX %.6f %u %u %u %u\n", PIC_FullIndex(),
 +			(unsigned)needed, (unsigned)mixer.done,
 +			(unsigned)(needed-mixer.done), (unsigned)CaptureState);
 +		fflush(stderr);
 +	}
- 	if (CaptureState & (CAPTURE_WAVE|CAPTURE_VIDEO)) {
- 		Bit16s convert[1024][2];
- 		Bitu added=needed-mixer.done;

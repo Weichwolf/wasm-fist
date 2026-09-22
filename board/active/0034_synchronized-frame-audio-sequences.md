@@ -10,7 +10,8 @@ scenario start/end boundaries. Same initial state, timed input and devices; no h
 
 ## Evidence
 
-- Rebuilt instrumented DOSBox from local source with `tools/oracle/sequence_probe.patch`; run
+- Rebuilt instrumented DOSBox with `bash tools/oracle/build_sequence_probe.sh` (the wrapper checks
+  base/patched source hashes and applies `tools/oracle/sequence_probe.patch`); run
   `bash tools/oracle/probe_sequence.sh 50 scratch/sequence-probe/intro-menu` on an isolated asset copy.
   The run observed 3429 `RENDER_EndUpdate` calls (70 at 640×400, 3358 at 320×200, one zero mode),
   48928 `MIXER_MixData` calls, zero capture-state changes and two aborted render updates. The first
