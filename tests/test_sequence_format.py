@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -10,7 +12,9 @@ SPEC.loader.exec_module(FORMAT)
 
 
 def frame(time, pixel):
-    return b'F' + struct.pack('<QII', time, 1, 1) + bytes(768) + bytes((pixel,))
+    palette = bytearray(768)
+    palette[pixel * 3] = pixel
+    return b'F' + struct.pack('<QII', time, 1, 1) + palette + bytes((pixel,))
 
 
 def audio(time, position, frames):
@@ -36,7 +40,7 @@ class SequenceFormatTest(unittest.TestCase):
         self.assertEqual((result['records'], result['first'], result['last']), (2, 3, 4))
         output = Path(self.tmp.name) / 'last.ppm'
         self.assertEqual(FORMAT.extract_frame(self.path, -1, output), (4, 1, 1))
-        self.assertEqual(output.read_bytes(), b'P6\n1 1\n255\n\0\0\0')
+        self.assertEqual(output.read_bytes(), b'P6\n1 1\n255\n\1\0\0')
 
     def test_complete_audio_contiguous_across_chunks(self):
         result = self.check('A', sequence('A', audio(1, 0, 2) + audio(2, 2, 3), 2, 5))
@@ -63,6 +67,33 @@ class SequenceFormatTest(unittest.TestCase):
                            ('F', sequence('F', b'', 0, 0))):
             with self.subTest(kind=kind, length=len(data)), self.assertRaises(ValueError):
                 self.check(kind, data)
+
+    def test_frame_comparator_reports_first_difference(self):
+        other = Path(self.tmp.name) / 'other'
+        script = Path(__file__).resolve().parents[1] / 'tools/oracle/compare_frames.py'
+        self.path.write_bytes(sequence('F', frame(3, 1) + frame(4, 1), 2, 0))
+        for data, expected in ((sequence('F', frame(3, 1) + frame(4, 1), 2, 0), 'equal 2'),
+                               (sequence('F', frame(3, 1) + frame(5, 1), 2, 0), 'time/dimensions'),
+                               (sequence('F', frame(3, 1) + frame(4, 2), 2, 0), 'pixel x=0 y=0'),
+                               (sequence('F', frame(3, 1), 1, 0), 'ends before')):
+            with self.subTest(expected=expected):
+                other.write_bytes(data)
+                result = subprocess.run([sys.executable, str(script), str(self.path), str(other)],
+                                        capture_output=True, text=True)
+                self.assertIn(expected, result.stdout + result.stderr)
+                self.assertEqual(result.returncode, 0 if expected.startswith('equal') else 1)
+
+    def test_unreferenced_palette_entries_do_not_change_visible_output(self):
+        other = Path(self.tmp.name) / 'other'
+        script = Path(__file__).resolve().parents[1] / 'tools/oracle/compare_frames.py'
+        a = bytearray(sequence('F', frame(3, 0), 1, 0))
+        b = bytearray(a)
+        b[9 + 1 + 16 + 3] = 255
+        self.path.write_bytes(a)
+        other.write_bytes(b)
+        result = subprocess.run([sys.executable, str(script), str(self.path), str(other)],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == '__main__':

@@ -372,6 +372,8 @@ EM_JS(void, fist_web_post_frame_js, (unsigned char *fb, unsigned char *pal), {
 void fist_web_post_frame(void){   /* posts unconditionally; the caller sets the ~60Hz cadence */
   extern void fist_web_force_palette(void);
   fist_web_force_palette();        /* in-mission the retrace-poll DAC upload may lag the render; force it */
+  extern void fist_sequence_present(void);
+  fist_sequence_present();
   fist_web_post_frame_js(g_mem + 0xA0000, fist_web_palette());
 }
 /* Web audio: the engine runs blocking in the worker, so the worker PUSHES generated OPL PCM (mono s16)
@@ -601,6 +603,7 @@ static void fist_dump_and_exit(const char *why){
                 fprintf(stderr,"\n[geomdump] ptrs d552(0x1552)=%04x d556a(0x156a)=%04x  d548(0x1548 flags)=%02x\n",
                         *(uint16_t*)(D+0x1552), *(uint16_t*)(D+0x156a), D[0x1548]);
             }
+            { extern void fist_sequence_finish(void); fist_sequence_finish(); }
             _exit(0);
 }
 
@@ -1048,6 +1051,12 @@ void fist_int8_fire(void){
                                                that 30f8 chains to it through [0x432] (fist_dos.c INT 08) */
         (*(volatile uint32_t*)(g_mem+BIOS_TICK_LIN))++;
         fist_pump_slow();
+        extern void fist_sequence_present(void);
+#ifdef __EMSCRIPTEN__
+        if (!g_web_mode) fist_sequence_present();
+#else
+        fist_sequence_present();
+#endif
         FIST_ISR_LANES(FIST_ISR_RESTORE)
         memcpy(g_mem + FIST_ISR_REGFILE_LIN, isr_regfile, FIST_ISR_REGFILE_LEN);
         return; }
@@ -1073,6 +1082,9 @@ void fist_int8_fire(void){
         fist_pump_slow();
 #ifdef __EMSCRIPTEN__
         if (g_web_mode) fist_web_vblank();                       /* pace to the wall clock, post frame + audio */
+        else { extern void fist_sequence_present(void); fist_sequence_present(); }
+#else
+        { extern void fist_sequence_present(void); fist_sequence_present(); }
 #endif
     } while (g_int8_held);
     FIST_ISR_LANES(FIST_ISR_RESTORE)                             /* iret */
@@ -3738,6 +3750,12 @@ int fist_extender_gate(void) {
         fist_web_post_audio();
     }
 #endif
+    if (op == 0x24) {
+#ifdef __EMSCRIPTEN__
+        if (!g_web_mode)
+#endif
+        { extern void fist_sequence_present(void); fist_sequence_present(); }
+    }
     return 0;
 }
 

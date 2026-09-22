@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../tools/oracle/fist_sequence_capture.h"
 
 #define VGA_FB   0xA0000u
 #define FB_W 320
@@ -92,6 +93,18 @@ int  fist_vga_mode(void){ return g_vmode; }
 #define VRETRACE_LINE 412             /* vrstart (vdispend + 12); the pulse lasts to line 414 */
 #define VDISPEND_LINE 400             /* status bit 0 (blanking) from here to the end of the frame */
 static unsigned long long g_clock;            /* PIT counts since power-on */
+
+void fist_sequence_present(void)
+{
+    if (!getenv("FIST_SEQUENCE") || g_vmode != 0x13) return;
+    unsigned char palette[256][4];
+    for (unsigned i = 0; i < 256; ++i)
+        for (unsigned lane = 0; lane < 3; ++lane)
+            palette[i][lane] = (unsigned char)((g_pal[i][lane] << 2) | (g_pal[i][lane] >> 4));
+    fist_sequence_frame((double)g_clock * 1000.0 / PIT_HZ_, FB_W, FB_H, FB_W,
+                        g_mem + VGA_FB, &palette[0][0]);
+}
+void fist_sequence_finish(void){ fist_sequence_close(); }
 static unsigned short g_pit_reload[3] = {0,0,0};   /* 0 == 65536 */
 static unsigned char  g_pit_mode[3], g_pit_rw[3];  /* control word: mode, access (1 lo,2 hi,3 lo/hi) */
 static unsigned char  g_pit_wsub[3], g_pit_rsub[3];

@@ -2,15 +2,16 @@
 #define FIST_SEQUENCE_CAPTURE_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-struct FistSequenceState {
+typedef struct FistSequenceState {
     FILE *file;
     uint64_t records;
     uint64_t samples;
-};
+} FistSequenceState;
 
 static FistSequenceState fist_sequence;
 
