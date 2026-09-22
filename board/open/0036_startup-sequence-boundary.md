@@ -12,21 +12,22 @@ never trims an unmatched emulator frame.
 
 - Use `FIST_TEXT_STATE=scratch/sequence-capture/loader-vga-probe/oracle-pre-dat` and
   `FIST_TEXT_PHASE_NS=20960467,20168067`. This selects the attributed pre-DAT mode-3 state.
-- The phase fix retains the loader's VGA phase through the mode-13 switch. Native and WASM now
-  match the Oracle through event 35. Event 36 is the first difference: 560,798 us versus
-  560,797 us. Its frame data now matches; only the timestamp differs.
-- The differing title-frame writer is KDV. Its timing and gate reconstruction belong to 0034;
-  do not alter startup phase to hide it.
-- Native and WASM match all 171 captured frame records, including timestamps. The timestamp is
-  part of the contract.
+- The phase fix retains the loader's VGA phase through the mode-13 switch. With the fixed
+  30,000-cycles/ms Oracle, all 227 complete records in `start-state-probe/` match native and
+  WASM exactly in time, dimensions, palette and pixels (`{port,wasm}-picfinal-688`). Both ports
+  continue for two more frames because the Oracle capture ends; that is a capture bound, not a
+  matching verdict for the suffix.
+- KDV owns the title-frame timing; its gate and PIC scanout reconstruction belong to 0034. Do not
+  alter startup phase to hide a later producer defect.
+- Native and WASM match all 229 captured frame records. The timestamp is part of the contract.
 
 ## Next
 
-1. Keep the shared start state and phase inputs fixed. Run the full comparator after each timing
-   change and report the first unequal record.
-2. Recover the Oracle's remaining event-36 one-microsecond lead. Preserve microseconds; no
-   rounding or prefix trim.
-3. Move title-frame timing work to 0034. Keep this item limited to the application boundary.
+1. Keep the shared start state and phase inputs fixed. Extend the fixed-30k Oracle capture beyond
+   the port's bound; compare the full continuous prefix and report the first unequal record.
+2. Capture and compare the corresponding PCM prefix. Preserve timestamps; no rounding or prefix
+   trim.
+3. Keep title-frame timing work in 0034 and this item limited to the application boundary.
 
 ## Accept
 
