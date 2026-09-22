@@ -83,13 +83,17 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   Ghidra reduced `FUN_1000_4bb7` to an infinite C loop. The port does not currently enter
   that path, so restoring its body alone cannot account for the missing delay; recover its
   gate/caller before changing behaviour.
+- A temporary exact reconstruction of `4bb7` and its four `ss:[452]` gates applies and builds,
+  but leaves the full native capture byte-identical through its event-35 mismatch. A GDB
+  breakpoint on `FUN_1000_4bb7` does not fire before tick 20. The patch was discarded: this is
+  evidence that the port is missing the original call path, not permission to synthesize its wait.
 
 ## Next
 
-1. Recover the gate/caller that reaches original `FUN_1000_4bb7` after mode set, then restore
-   its `ss:[0x452]` BIOS-tick wait with its measured instruction contract. The MGAVIDEO DAC
-   method is proven; align its first four calls without hiding the event-35 palette difference.
-   Preserve events 0–34 as a strict prefix of the full comparison.
+1. Recover the original call site and port dispatch that reach `FUN_1000_4bb7` after mode set,
+   then restore its `ss:[0x452]` BIOS-tick wait with its measured instruction contract. The
+   MGAVIDEO DAC method is proven; align its first four calls without hiding the event-35 palette
+   difference. Preserve events 0–34 as a strict prefix of the full comparison.
 2. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7` so calibration
    starts at 90 and evolves as measured. Recheck mode-set time and mixed audio.
 3. Complete continuous PCM and subsequent sequence parity with 0034/0003.
