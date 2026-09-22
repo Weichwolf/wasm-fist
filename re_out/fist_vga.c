@@ -240,8 +240,13 @@ void out(int port, int val)
         if (done) {
             g_pit_reload[ch] = g_pit_wlatch[ch]; g_pit_base[ch] = g_clock;
             if (ch == 0 && getenv("FIST_VGA_TRACE") && g_clock < 200u * (PIT_HZ_ / 1000u))
+#ifndef __EMSCRIPTEN__
+                fprintf(stderr, "[vga] PIT0 reload=%u t=%.6f caller=%p\n", pit_period(0),
+                        (double)g_clock * 1000.0 / PIT_HZ_, __builtin_return_address(0));
+#else
                 fprintf(stderr, "[vga] PIT0 reload=%u t=%.6f\n", pit_period(0),
                         (double)g_clock * 1000.0 / PIT_HZ_);
+#endif
         }
         return; }
     case 0x43: {         /* PIT control word: channel, access mode, counting mode; access 0 = latch */

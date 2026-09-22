@@ -52,6 +52,11 @@ explicit scenario boundaries. Same initial state, timed input and devices; no ho
   Recover the original `39xx`/`3c3b` PIT path and its port counterpart before changing clock
   constants. Evidence: `scratch/sequence-capture/pittrace-fixed/dosbox.log`,
   `scratch/sequence-capture/pit-port-{native,wasm}/port.log`.
+- Port call-site tracing assigns its 41.633/41.642 ms reloads to engine `32cb`, and
+  every reload from 70.170 ms onward to engine ISR `30f8`. The original post-mode
+  65,536-count writes are in loader CS `2082` at `395f`, `3970` and `3c3b`; do not
+  equate those loader steps with the engine ISR. Evidence:
+  `scratch/sequence-capture/pit-caller-native/port.log` and `pittrace-fixed/dosbox.log`.
 - The original's MGA `04a3` palette-clear request starts 535.011 ms, returns 546.468 ms:
   11.457 ms awaiting its vblank service. In the port, the corresponding DAC reset is 113.524 ms
   and KDV opens 114.222 ms: patch 070 services it synchronously. DOSBox `VGA_StartResize` delays
@@ -75,8 +80,8 @@ explicit scenario boundaries. Same initial state, timed input and devices; no ho
 
 ## Next
 
-1. Compare the original `39xx`/`3c3b` PIT programming, DAC-request writes and INT-8 dispatch
-   to the port at corresponding engine calls. Explain why the original retains a 65,536-count
+1. Compare original loader `395f`/`3970`/`3c3b` PIT programming and hand-off to engine
+   `32cb`/`30f8` with the loader shim. Explain why the original retains a 65,536-count
    period after mode set while the port restores ~16,657 before `0be2`. Correct that producer;
    account separately for DOSBox's 50-ms host-surface resize. Then restore `04a3`'s vblank
    wait (patch 070) from IRQ evidence and repeat the strict three-way capture.
