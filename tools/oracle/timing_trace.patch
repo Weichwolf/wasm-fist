@@ -38,17 +38,27 @@
 +		fprintf(stderr, "FIST_KDV_FILE %.6f name=%s flags=%u\n", PIC_FullIndex(), name, flags);
 --- a/src/hardware/vga_dac.cpp
 +++ b/src/hardware/vga_dac.cpp
-@@ -22,0 +23,4 @@
+@@ -22,0 +23,5 @@
 +#include "pic.h"
 +#include "regs.h"
++#include "mem.h"
 +#include <stdlib.h>
 +#include <stdio.h>
-@@ -95,0 +100,4 @@
+@@ -95,0 +101,7 @@
++	if (getenv("FIST_PALBUFTRACE") && PIC_FullIndex() > 500.0 && PIC_FullIndex() < 504.0)
++		fprintf(stderr, "FIST_PALRESET %.6f cs=%04x eip=%08x index=%u\n", PIC_FullIndex(), SegValue(cs), reg_eip, val);
 +	if (getenv("FIST_DACTRACE") && val == 0 && PIC_FullIndex() < 800.0)
-+		fprintf(stderr, "FIST_DAC %.6f cs=%04x eip=%08x entry17=%u,%u,%u\n",
++		fprintf(stderr, "FIST_DAC %.6f cs=%04x eip=%08x entry17=%u,%u,%u dsb=%08x c452=%u\n",
 +			PIC_FullIndex(), SegValue(cs), reg_eip,
-+			vga.dac.rgb[17].red, vga.dac.rgb[17].green, vga.dac.rgb[17].blue);
-@@ -117,0 +126,4 @@
++			vga.dac.rgb[17].red, vga.dac.rgb[17].green, vga.dac.rgb[17].blue,
++			SegPhys(ds), mem_readw(SegPhys(ds) + 0x452));
+@@ -105,0 +118,5 @@
++	if (getenv("FIST_PALBUFTRACE") && PIC_FullIndex() > 500.0 && PIC_FullIndex() < 504.0 &&
++		vga.dac.write_index >= 95 && vga.dac.write_index <= 100)
++		fprintf(stderr, "FIST_PALBUF %.6f cs=%04x eip=%08x ds=%04x dsb=%08x index=%u lane=%u val=%u dsbyte=%u\n",
++			PIC_FullIndex(), SegValue(cs), reg_eip, SegValue(ds), SegPhys(ds),
++			vga.dac.write_index, vga.dac.pel_index, val, mem_readb(SegPhys(ds) + 3*vga.dac.write_index + vga.dac.pel_index));
+@@ -117,0 +135,4 @@
 +		if (getenv("FIST_DACTRACE") && vga.dac.write_index == 17 && PIC_FullIndex() < 800.0)
 +			fprintf(stderr, "FIST_DAC17 %.6f cs=%04x eip=%08x value=%u,%u,%u\n",
 +				PIC_FullIndex(), SegValue(cs), reg_eip,
@@ -69,12 +79,13 @@
 +#include "regs.h"
 +#include <stdio.h>
 +#include <stdlib.h>
-@@ -192,0 +196,4 @@
+@@ -192,0 +196,5 @@
 +	if (getenv("FIST_PITTRACE") && port == 0x40 && PIC_FullIndex() < 600.0)
-+		fprintf(stderr, "FIST_PIT40 %.6f cs=%04x eip=%08x val=%02x mode=%u state=%u cntr=%u new=%u\n",
++		fprintf(stderr, "FIST_PIT40 %.6f cs=%04x eip=%08x val=%02x mode=%u state=%u cntr=%u new=%u c452=%u\n",
 +			PIC_FullIndex(), SegValue(cs), reg_eip, val, pit[0].mode,
-+			pit[0].write_state, pit[0].cntr, pit[0].new_mode ? 1u : 0u);
-@@ -291,0 +299,3 @@
++			pit[0].write_state, pit[0].cntr, pit[0].new_mode ? 1u : 0u,
++			mem_readw(SegPhys(ds) + 0x452));
+@@ -291,0 +300,3 @@
 +	if (getenv("FIST_PITTRACE") && ((val >> 6) & 3) == 0 && PIC_FullIndex() < 600.0)
 +		fprintf(stderr, "FIST_PIT43 %.6f cs=%04x eip=%08x val=%02x\n",
 +			PIC_FullIndex(), SegValue(cs), reg_eip, val);
@@ -103,3 +114,18 @@
 +		fprintf(stderr, "FIST_SCAN_SETUP %.6f mode=%u old=%ux%u\n",
 +			PIC_FullIndex(), (unsigned)vga.mode,
 +			(unsigned)vga.draw.width, (unsigned)vga.draw.height);
+--- a/src/hardware/vga_misc.cpp
++++ b/src/hardware/vga_misc.cpp
+@@ -21,0 +22 @@
++#include "cpu.h"
+@@ -25,0 +27,2 @@
++#include <stdio.h>
++#include <stdlib.h>
+@@ -54,0 +58,7 @@
++	}
++	if (getenv("FIST_3DATRACE") && PIC_FullIndex() >= 400.0 && PIC_FullIndex() < 550.0) {
++		static Bit8u last=0xff;
++		if (retval != last) fprintf(stderr, "FIST_3DA %.6f cs=%04x eip=%08x status=%02x line=%.6f vr=%.6f/%.6f vd=%.6f\n",
++			PIC_FullIndex(), SegValue(cs), reg_eip, retval, timeInFrame,
++			vga.draw.delay.vrstart, vga.draw.delay.vrend, vga.draw.delay.vdend);
++		last=retval;

@@ -1,0 +1,45 @@
+PATCH 615: preserve the RGB byte stride in MGAVIDEO's default palette ramp (board:0034).
+
+Oracle last-writer of palette byte 293 is MGAVIDEO 0a57 (stosb): raw blue=2 at
+DS=532d:125, read by the 0be2 DAC upload at 503.0195 ms. The port's source byte
+is zero and its third presented frame first differs there. 0a50-0a63 is
+xor ax,ax; xor dh,dh; mov cx,20h; stosw; xchg al,dh; stosb; xchg al,dh;
+add ax,bx; add dh,dl; loop. Ghidra typed DI as int*: *DI writes four bytes and
+DI+1 addresses +4, so the previous patch 048's claim that 0a50 was faithful
+is disproven. Store the 16-bit AX and 8-bit DH at offsets 0,1,2, advance DI by
+three, and retain 16-/8-bit arithmetic wrap. Evidence:
+scratch/sequence-capture/palbuf-writer2.flatwriters.txt and
+scratch/sequence-capture/palbuf2-original/dosbox.log.
+--- a/fist_mga.c
++++ b/fist_mga.c
+@@ -2266,5 +2266,3 @@
+-  int *piVar1;
+-  int iVar2;
+-  int iVar3;
+-  char cVar4;
+-  undefined2 unaff_ES;
++  unsigned char *dst = (unsigned char *)param_3;
++  uint16_t ax = 0, bx = (uint16_t)param_2;
++  uint8_t dh = 0, dl = (uint8_t)param_1;
+@@ -2272,12 +2270,9 @@
+-  iVar2 = 0;
+-  cVar4 = '\0';
+-  iVar3 = 0x20;
+-  do {
+-    piVar1 = param_3 + 1;
+-    *param_3 = iVar2;
+-    param_3 = (int *)((int)param_3 + 3);
+-    *(char *)piVar1 = cVar4;
+-    iVar2 = iVar2 + param_2;
+-    cVar4 = cVar4 + param_1;
+-    iVar3 = iVar3 + -1;
+-  } while (iVar3 != 0);
++  /* PATCH 615: 0a50-0a63 stores one 16-bit AX and one 8-bit DH per RGB entry. */
++  for (int i = 0; i < 0x20; ++i) {
++    dst[0] = (uint8_t)ax;
++    dst[1] = (uint8_t)(ax >> 8);
++    dst[2] = dh;
++    dst += 3;
++    ax = (uint16_t)(ax + bx);
++    dh = (uint8_t)(dh + dl);
++  }
