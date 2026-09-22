@@ -111,13 +111,17 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   415.784851, INT 10 completion 415.791556 and `2fd3` return 455.430940 ms. Oracle's
   `oracle-mga00e8-640.reg` gives entry 408.127900 ms. The whole driver mode-call is therefore
   already 7.656951 ms late before its INT 10 invocation; inspect the caller of `00e8` next.
+- `00e8` is called after the initial `2ebe` calibration. `oracle-2ebe-return-642.reg` records
+  `2ebe` entry 329.985800 and return 404.240600 ms; `port-premode-641/port.log` returns at
+  412.650375 ms. The 8.409775-ms error is inside that initial calibration, before the later
+  driver mode-set call. Its inner `2fd3`/CRTC waits require a separate phase trace.
 
 ## Next
 
-1. Trace the caller that enters `MGAVIDEO:00e8`; it is 7.656951 ms late before INT 10. Then recover
-   the first `30de` wait's 1.151967-ms phase error. Align the first four MGAVIDEO DAC calls without
-   hiding the event-35 palette difference. Preserve events 0–34 as a strict prefix of the full
-   comparison.
+1. Split the initial `2ebe` calibration. It is 8.409775 ms late at return and feeds the late
+   `MGAVIDEO:00e8` entry. Recover its `2fd3` and CRTC phase contract, then align the first four
+   MGAVIDEO DAC calls without hiding the event-35 palette difference. Preserve events 0–34 as a
+   strict prefix of the full comparison.
 2. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7` so calibration
    starts at 90 and evolves as measured. Recheck mode-set time and mixed audio.
 3. Complete continuous PCM and subsequent sequence parity with 0034/0003.
