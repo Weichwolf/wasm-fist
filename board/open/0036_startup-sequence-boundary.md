@@ -94,12 +94,19 @@ that point. Attribute DOSBox shell and application output; never trim a mismatch
   live CS mapping, not the similarly shaped `4bb7/4bcc` Ghidra identities. Patch 044 already
   implements 3a14's two `[0x44e]` tick waits. Replacing unrelated 3346/4bb7 bodies does not alter
   the capture and is discarded.
+- `oracle-calib-631.profile` splits that wait: original `3a14` enters at 447.171700 ms and leaves
+  its first `[0x44e]` loop at 503.568200 ms (56.396500 ms). The port trace
+  `port-3a14-630/port.log` enters at 455.471169 and leaves at 511.869103 ms (56.397934 ms).
+  The loop contract therefore matches; the 8.299469-ms displacement already exists at entry.
+  Its subsequent `0x201` reads take 1.000 µs in DOSBox and the port reaches the next tick at
+  525.893787 ms. Do not alter patch 044 to compensate for an earlier divergence.
 
 ## Next
 
-1. Trace the first control-flow and clock divergence after the mode-13 BIOS return through the
-   first MGAVIDEO DAC call. The DAC method is proven; align its first four calls without hiding
-   the event-35 palette difference. Preserve events 0–34 as a strict prefix of the full comparison.
+1. Trace control-flow and clock boundaries from the mode-13 BIOS return to `3a14` entry. The first
+   unresolved displacement is 8.299469 ms; the `3a14` wait itself is matched. Align its first four
+   MGAVIDEO DAC calls without hiding the event-35 palette difference. Preserve events 0–34 as a
+   strict prefix of the full comparison.
 2. Recover the remaining PIT2/port-61 CPU-slice I/O timing in SOUNDDVR `07b7` so calibration
    starts at 90 and evolves as measured. Recheck mode-set time and mixed audio.
 3. Complete continuous PCM and subsequent sequence parity with 0034/0003.
