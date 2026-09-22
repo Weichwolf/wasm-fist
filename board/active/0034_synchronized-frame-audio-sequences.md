@@ -37,18 +37,35 @@ explicit scenario boundaries. Same initial state, timed input and devices; no ho
   `compare_frames.py` now fails on every palette/index byte, including unused entries.
   Evidence: `scratch/sequence-capture/fixed30k-full/` and
   `port-vga-{native,wasm}/`.
+- DOSBox BIOS mode 13h writes its 256-entry DAC table at 407.706 ms; the first 320×200 frame's
+  entire palette equals that table. The port previously left its DAC zeroed. The shim now loads
+  the captured BIOS table on mode set, but its first driver `0be2` upload still overwrites it
+  before the first captured frame: port mode set 84.987 ms, `0be2` DAC reset 98.716 ms, frame
+  99.373 ms. Oracle mode set enters 407.577 ms, first `0be2` DAC reset 503.000 ms. The early
+  driver service, not a missing palette constant alone, owns the first output mismatch.
+  Evidence: `scratch/sequence-capture/int10trace-fixed/dosbox.log`,
+  `scratch/sequence-capture/palette-caller-port/port.log`.
+- Fixed-cycle Oracle programs PIT 0 with zero (65,536 counts) at 407.999, 418.502 and
+  447.041 ms after the mode-set entry at 407.577 ms. Its first driver `0be2` service occurs
+  at 503.000 ms. The port last programs 65,536 at 41.642 ms, before its 84.987 ms mode set,
+  then reloads 16,624 at 84.439 ms and 16,657 at 98.707 ms; `0be2` runs at 98.716 ms.
+  Recover the original `39xx`/`3c3b` PIT path and its port counterpart before changing clock
+  constants. Evidence: `scratch/sequence-capture/pittrace-fixed/dosbox.log`,
+  `scratch/sequence-capture/pit-port-{native,wasm}/port.log`.
 - The original's MGA `04a3` palette-clear request starts 535.011 ms, returns 546.468 ms:
   11.457 ms awaiting its vblank service. In the port, the corresponding DAC reset is 113.524 ms
-  and KDV opens 114.222 ms: patch 070 services it synchronously. Relative to the first 320×200
-  scanout, the request occurs at 59.822 ms in the Oracle and 14.151 ms in the port. The
-  45.671 ms preceding gap and missing vblank wait are separate causes to trace. Original KDV
-  writes come from extender `0x10007120`; its descriptor has `[b6e0]=4` timer ticks. Evidence:
+  and KDV opens 114.222 ms: patch 070 services it synchronously. DOSBox `VGA_StartResize` delays
+  the new host surface 50 ms, so the first 320×200 callback is not the BIOS mode-switch instant.
+  Relative to the actual mode-set call, `04a3` starts after 127.434 ms in the Oracle versus
+  28.536 ms in the port; model the preceding work and presentation scheduling separately.
+  Original KDV writes come from extender `0x10007120`; its descriptor has `[b6e0]=4` ticks. Evidence:
   `scratch/sequence-capture/fixed30k-full/dosbox.log`,
   `scratch/sequence-capture/port-vga-{native,wasm}/port.log`.
-- `bash tools/check_flow.sh '^(intro|settings-sky)$'` passed tests, patch checks, both builds and
-  both selected flows after adding gated port tracing; the earlier full 178-flow matrix was
-  green before that trace-only change. Evidence: `scratch/verify/run.gKbZLj/` and
-  `scratch/verify/full-0034-frames/`. Strict palette/index comparison passed 28 unit tests
+- The mode-13 BIOS DAC initialization passed the full 178-flow native/WASM matrix: four
+  disjoint groups returned 0 with 45+45+44+44 unique passes. The tested binary and verifier
+  hashes still match `scratch/verify/full-bios-palette/sha256.txt`. A subsequent gated PIT
+  trace change was rebuilt on both targets; it does not run without `FIST_VGA_TRACE`.
+  Evidence: `scratch/verify/full-bios-palette/`. Strict palette/index comparison passed 28 unit tests
   and all 138 native/WASM frame events; evidence: `scratch/sequence-capture/strict-palette-tests.log`.
 - Browser worker posts at INT-8 and op 0x24; `fist_web_post_frame` forces the palette. The
   canvas keeps only `latest` until `requestAnimationFrame`, so worker posts may be dropped from
@@ -58,9 +75,11 @@ explicit scenario boundaries. Same initial state, timed input and devices; no ho
 
 ## Next
 
-1. Recover the original mode-switch→MGA-04a3 call chain and account for its 45.671 ms work in
-   the port clock. Restore 04a3's vblank-serviced palette upload/wait (patch 070) from original
-   IRQ evidence. Re-capture fixed-cycle Oracle/native/WASM streams; diagnose the first mismatch.
+1. Compare the original `39xx`/`3c3b` PIT programming, DAC-request writes and INT-8 dispatch
+   to the port at corresponding engine calls. Explain why the original retains a 65,536-count
+   period after mode set while the port restores ~16,657 before `0be2`. Correct that producer;
+   account separately for DOSBox's 50-ms host-surface resize. Then restore `04a3`'s vblank
+   wait (patch 070) from IRQ evidence and repeat the strict three-way capture.
 2. Implement a single final port mixer owner (0003) and emit continuous PCM, including SB effects;
    the two existing WAV writers and OPL-only browser feed do not satisfy this capture.
 3. Drive original and both ports to the same explicit *virtual* scenario end and timed inputs. The

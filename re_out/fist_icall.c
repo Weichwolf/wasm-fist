@@ -169,6 +169,10 @@ static void dump_module_vecs(struct fist_ovl *o){
 code *fist_icall(uint32_t linear)
 {
     { extern void fist_clock_advance(unsigned); fist_clock_advance(FIST_ICALL_COUNTS); }
+    { extern uint32_t fist_mga_base; extern unsigned long long fist_clock_now(void);
+      if (getenv("FIST_VGA_TRACE") && linear == fist_mga_base + 0x4a3)
+          fprintf(stderr, "[vga] MGA 04a3 call t=%.6f\n",
+                  (double)fist_clock_now() * 1000.0 / 1193182.0); }
     if (linear >= FIST_INTVEC_LIN && linear < FIST_INTVEC_LIN + 0x100) {
         g_pending_vec = linear - FIST_INTVEC_LIN;
         return (code *)int_chain_tramp;

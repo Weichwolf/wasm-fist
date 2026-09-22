@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../tools/oracle/fist_sequence_capture.h"
+#include "fist_vga_bios_palette.h"
 
 #define VGA_FB   0xA0000u
 #define FB_W 320
@@ -55,10 +56,21 @@ void fist_opl_out(int port, int val);
 void fist_vga_set_mode(int mode)
 {
     g_vmode = mode & 0xff;
+    if (getenv("FIST_VGA_TRACE")) {
+        extern unsigned long long fist_clock_now(void);
+        fprintf(stderr, "[vga] mode %02x t=%.6f\n", g_vmode,
+                (double)fist_clock_now() * 1000.0 / 1193182.0);
+    }
     if (traceon()) fprintf(stderr, "[vga] set video mode 0x%02x (%s)\n", g_vmode,
         g_vmode==0x13 ? "320x200x256 linear" : "other");
     /* mode set clears the display in real VGA; zero the aperture the engine will draw into. */
-    if (g_vmode==0x13) memset(g_mem+VGA_FB, 0, FB_SZ);
+    if (g_vmode==0x13) {
+        memcpy(g_pal, fist_mode13_dac, sizeof g_pal);
+        memset(g_mem+VGA_FB, 0, FB_SZ);
+        if (getenv("FIST_VGA_TRACE"))
+            fprintf(stderr, "[vga] mode13 DAC17=%u,%u,%u\n",
+                    g_pal[17][0], g_pal[17][1], g_pal[17][2]);
+    }
 }
 int  fist_vga_mode(void){ return g_vmode; }
 
@@ -205,8 +217,14 @@ void out(int port, int val)
     switch (port) {
     case 0x3c8:
         if (getenv("FIST_VGA_TRACE") && g_vmode == 0x13 && val == 0)
+#ifndef __EMSCRIPTEN__
+            fprintf(stderr, "[vga] DAC reset t=%.6f c452=%u caller=%p\n",
+                (double)g_clock * 1000.0 / PIT_HZ_, *(uint16_t *)(g_mem + 0x1c452),
+                __builtin_return_address(0));
+#else
             fprintf(stderr, "[vga] DAC reset t=%.6f c452=%u\n",
                 (double)g_clock * 1000.0 / PIT_HZ_, *(uint16_t *)(g_mem + 0x1c452));
+#endif
         g_dac_widx = val; g_dac_wsub = 0; return;     /* set DAC write index */
     case 0x3c7: g_dac_ridx = val; g_dac_rsub = 0; return;     /* set DAC read index */
     case 0x3c9: /* DAC data write: R,G,B (6-bit) */
@@ -219,7 +237,12 @@ void out(int port, int val)
         else if (g_pit_rw[ch] == 2) { g_pit_wlatch[ch] = (unsigned short)(val << 8); done = 1; }
         else if (!g_pit_wsub[ch]) { g_pit_wlatch[ch] = (unsigned short)((g_pit_wlatch[ch] & 0xff00) | val); g_pit_wsub[ch] = 1; }
         else { g_pit_wlatch[ch] = (unsigned short)((g_pit_wlatch[ch] & 0x00ff) | (val << 8)); g_pit_wsub[ch] = 0; done = 1; }
-        if (done) { g_pit_reload[ch] = g_pit_wlatch[ch]; g_pit_base[ch] = g_clock; }
+        if (done) {
+            g_pit_reload[ch] = g_pit_wlatch[ch]; g_pit_base[ch] = g_clock;
+            if (ch == 0 && getenv("FIST_VGA_TRACE") && g_clock < 200u * (PIT_HZ_ / 1000u))
+                fprintf(stderr, "[vga] PIT0 reload=%u t=%.6f\n", pit_period(0),
+                        (double)g_clock * 1000.0 / PIT_HZ_);
+        }
         return; }
     case 0x43: {         /* PIT control word: channel, access mode, counting mode; access 0 = latch */
         int ch = (val >> 6) & 3, rw = (val >> 4) & 3;
