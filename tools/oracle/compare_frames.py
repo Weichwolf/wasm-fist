@@ -25,24 +25,24 @@ def compare(a, b):
                 raise ValueError(f'frame {frame}: time/dimensions {headers[0]} != {headers[1]}')
             time_us, width, height = headers[0]
             palettes = [exact(stream, 768) for stream in files]
+            if palettes[0] != palettes[1]:
+                lane = next(i for i, (a, b) in enumerate(zip(*palettes)) if a != b)
+                raise ValueError(f'frame {frame} at {time_us} us: palette entry={lane // 3} '
+                                 f'lane={lane % 3}, value {palettes[0][lane]} != {palettes[1][lane]}')
             offset = 0
             remaining = width * height
             while remaining:
                 size = min(65536, remaining)
                 chunks = [exact(stream, size) for stream in files]
-                if chunks[0] == chunks[1] and palettes[0] == palettes[1]:
+                if chunks[0] == chunks[1]:
                     offset += size
                     remaining -= size
                     continue
-                for byte, (left, right) in enumerate(zip(*chunks)):
-                    a = palettes[0][left * 3:left * 3 + 3]
-                    b = palettes[1][right * 3:right * 3 + 3]
-                    if a != b:
-                        pixel = offset + byte
-                        lane = next(i for i, (x, y) in enumerate(zip(a, b)) if x != y)
-                        raise ValueError(f'frame {frame} at {time_us} us: pixel x={pixel % width} '
-                                         f'y={pixel // width} RGB lane={lane}, value {a[lane]} != {b[lane]} '
-                                         f'(indices {left}/{right})')
+                byte = next(i for i, (a, b) in enumerate(zip(*chunks)) if a != b)
+                pixel = offset + byte
+                left, right = chunks[0][byte], chunks[1][byte]
+                raise ValueError(f'frame {frame} at {time_us} us: pixel x={pixel % width} '
+                                 f'y={pixel // width}, indices {left} != {right}')
                 offset += size
                 remaining -= size
             frame += 1

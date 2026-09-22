@@ -74,7 +74,7 @@ class SequenceFormatTest(unittest.TestCase):
         self.path.write_bytes(sequence('F', frame(3, 1) + frame(4, 1), 2, 0))
         for data, expected in ((sequence('F', frame(3, 1) + frame(4, 1), 2, 0), 'equal 2'),
                                (sequence('F', frame(3, 1) + frame(5, 1), 2, 0), 'time/dimensions'),
-                               (sequence('F', frame(3, 1) + frame(4, 2), 2, 0), 'pixel x=0 y=0'),
+                               (sequence('F', frame(3, 1) + frame(4, 2), 2, 0), 'palette entry=1 lane=0'),
                                (sequence('F', frame(3, 1), 1, 0), 'ends before')):
             with self.subTest(expected=expected):
                 other.write_bytes(data)
@@ -83,7 +83,7 @@ class SequenceFormatTest(unittest.TestCase):
                 self.assertIn(expected, result.stdout + result.stderr)
                 self.assertEqual(result.returncode, 0 if expected.startswith('equal') else 1)
 
-    def test_unreferenced_palette_entries_do_not_change_visible_output(self):
+    def test_unreferenced_palette_entries_still_fail(self):
         other = Path(self.tmp.name) / 'other'
         script = Path(__file__).resolve().parents[1] / 'tools/oracle/compare_frames.py'
         a = bytearray(sequence('F', frame(3, 0), 1, 0))
@@ -93,7 +93,21 @@ class SequenceFormatTest(unittest.TestCase):
         other.write_bytes(b)
         result = subprocess.run([sys.executable, str(script), str(self.path), str(other)],
                                 capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('palette entry=1 lane=0', result.stderr)
+
+    def test_equal_rgb_with_different_indices_still_fails(self):
+        other = Path(self.tmp.name) / 'other'
+        script = Path(__file__).resolve().parents[1] / 'tools/oracle/compare_frames.py'
+        a = bytearray(sequence('F', frame(3, 0), 1, 0))
+        b = bytearray(a)
+        b[9 + 1 + 16 + 768] = 1
+        self.path.write_bytes(a)
+        other.write_bytes(b)
+        result = subprocess.run([sys.executable, str(script), str(self.path), str(other)],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('pixel x=0 y=0, indices 0 != 1', result.stderr)
 
 
 if __name__ == '__main__':
