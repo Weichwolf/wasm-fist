@@ -28,10 +28,10 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   Formula and original CPU/queue proofs belong to 0026; versioned start fixture belongs to 0036.
 - Matched 30000-ms original captures 796/797 reach the stable main menu: all 2100 frames and
   `1103 + floor(29999×722534/16384) = 1324058` PCM samples match. Last original frame visually checked.
-  Native 798/WASM 799 match all frame bytes and the isolated previous-clock baseline 800.
+  Native 809/WASM 810 match all frame bytes and previous captures 798/799 (also baseline 800).
   Original palettes/times match; pixels differ at 23 events (`2100−23 = 2077` equal), first still 443.
-  Complete comparison fails missing port PCM. Proofs: `cpu-retirement/{complete-30s,capture}-proof.json`
-  under `scratch/sequence-capture/`. Timing implementation and regression status belong to 0026.
+  Complete comparison fails missing port PCM. Proofs: `start-epoch/capture-proof.json` and
+  `cpu-retirement/complete-30s-proof.json` under `scratch/sequence-capture/`. Timing belongs to 0026.
 - PCM length follows 0003's mixer: `1103 + floor((end_ms−1)×722534/16384)`.
   Ports still lack final mixed sequence PCM. `--frames-only` is diagnostic, never acceptance.
 

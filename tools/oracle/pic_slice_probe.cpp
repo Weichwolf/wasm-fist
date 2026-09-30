@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         scanout > start || tick > 10000 || !(lag >= 0 && lag < 1)) return 2;
     char *tail;
     unsigned long target = strtoul(argv[2], &tail, 10);
-    if (!*argv[2] || *tail || target < 76 || target > 10000 || target < tick) return 2;
+    if (!*argv[2] || *tail || target > 10000 || target < tick) return 2;
     unsigned long index = strtoul(argv[3], &tail, 10);
     if (!*argv[3] || *tail || index >= 30000) return 2;
     for (unsigned i = 0; i < PIC_QUEUESIZE - 1; ++i) pic_queue.entries[i].next = &pic_queue.entries[i + 1];

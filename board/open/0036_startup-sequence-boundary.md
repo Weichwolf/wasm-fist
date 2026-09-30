@@ -24,12 +24,15 @@ Device time belongs to 0026, mixed output to 0003, complete capture/comparison t
   The difference is `629918−628814 = 1104` cycles, or `1104/30000 = 0.0368 ms`.
   GDB probe 784 confirms 38 costed `FIST.DAT` mask reads: `38×29 = 1102` cycles;
   remaining slice `1186−1102 = 84 < 3×29 = 87` suppresses subsequent I/O delays.
-  Two subsequent loop decrements account for the remaining cycles. The port skips
+  RETF and the first application fetch account for the remaining two decrements. The port skips
   this DOS loader work; do not call the fixture an exact application-entry CPU phase or fit an offset.
   Both probes retain all 742 frame/PCM bytes. Proof: `pixel-443/cpu-start-source-proof.json`
   under `scratch/sequence-capture/`; full clock/handoff correction remains with 0026.
 - Exact fixture CPU phase is `628814×1193182 = 25009×30000000 + 19546148` PIT numerator units.
-  The port rounds this to 25010 whole counts, adding `10453852/1193182 = 8.761322…` CPU cycles.
+  The previous port rounded to 25010, adding `10453852/1193182 = 8.761322…` CPU cycles.
+  `test_initial_cpu_phase_matches_original_queue` restores cycle 628814/budget 1186 on both targets;
+  the actual-source PIC probe rejects the old 628822/1178. Proof: `start-epoch/phase-proof.json`.
+  Accepted: 46 tests, both builds, 178 flows, exit 0; `run.6eoNh3/` (0026).
   Original 802 confirms all 38 costed loader reads see mask `0xf8` (IRQ2 clear); no extra mask write.
   Its complete 30000-ms frame/PCM streams match 797. Proof: `cpu-retirement/read-mask-30s-proof.json`.
 - Original fixture/capture provenance: `pic-dispatch-362/`; current content/timing comparisons are in 0034.
@@ -38,8 +41,8 @@ Device time belongs to 0026, mixed output to 0003, complete capture/comparison t
 
 ## Next
 
-1. Preserve the measured DOS EXEC slice and fractional CPU phase; model loader reads in 0026.
-   Preserve this attributed fixture; do not replace its timestamp with a fitted application phase.
+1. Execute the real MZ header/image/relocation reads in 0026: 1151 reads, I/O suppression at budget 84,
+   then RETF/application fetch. Share the overlay loader; preserve page rounding/EOF and this fixture.
 2. Reproduce this fixture after device-time/mixer changes, including the first frame and sample.
 3. Use 0034's `FIST_SEQUENCE_END_MS` for matched captures. Investigate start-state defects here.
 

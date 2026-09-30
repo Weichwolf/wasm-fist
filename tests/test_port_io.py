@@ -127,6 +127,19 @@ class PortIoTest(unittest.TestCase):
                         self.assertEqual(result.returncode, 0, result.stderr)
                         self.assertEqual(result.stdout, expected)
 
+    def test_initial_cpu_phase_matches_original_queue(self):
+        prefix, state = self.pic_fixture()
+        start_ns = int(state.read_text().splitlines()[1].split()[0])
+        cycle = (start_ns * 3 + 50) // 100
+        expected = subprocess.check_output([self.pic_probe, str(state), str(cycle // 30000),
+                                            str(cycle % 30000)], text=True)
+        for target, run in self.commands:
+            with self.subTest(target=target):
+                result = subprocess.run([*run, 'start-cpu'], env=dict(os.environ, FIST_TEXT_STATE=str(prefix)),
+                                        capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, expected)
+
     def test_cpu_retirement_matches_original_queue(self):
         prefix, state = self.pic_fixture()
         cases = ((6355, 6529, '290708'), (6355, 6529, '290712'),

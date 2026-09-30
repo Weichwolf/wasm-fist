@@ -24,6 +24,15 @@ static void check_endpoint(void)
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && !strcmp(argv[1], "start-cpu")) {
+        extern void fist_text_init(void);
+        extern unsigned fist_clock_cpu_slice(uint64_t *);
+        fist_text_init();
+        uint64_t cycle;
+        unsigned remaining = fist_clock_cpu_slice(&cycle);
+        printf("%llu %u\n", (unsigned long long)cycle, remaining);
+        return 0;
+    }
     if ((argc == 4 && !strcmp(argv[1], "pic-slice")) ||
         (argc == 5 && !strcmp(argv[1], "pic-retire"))) {
         extern void fist_text_init(void), fist_clock_charge_cpu_instructions(unsigned);
@@ -34,7 +43,8 @@ int main(int argc, char **argv)
         assert(tick >= 76 && tick <= 10000 && index < 30000);
         fist_text_init();
         fist_vga_set_mode(0x13);
-        uint64_t current = fist_clock_now() * 30000000u / 1193182u;
+        uint64_t current;
+        fist_clock_cpu_slice(&current);
         uint64_t target = (uint64_t)tick * 30000u + index;
         assert(target > current && target - current <= UINT32_MAX);
         fist_clock_advance_cpu_cycles((unsigned)(target - current));

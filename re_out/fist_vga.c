@@ -212,8 +212,10 @@ void fist_text_init(void)
             g_text_pic_tick > UINT32_MAX || !(g_text_pic_lag >= 0 && g_text_pic_lag < 1) ||
             vertical_ns > start_ns ||
             start_ns > (UINT64_MAX - 500000000ull) / PIT_HZ_) abort();
-        unsigned long long start_num = start_ns * PIT_HZ_;
-        g_clock = (start_num + 500000000ull) / 1000000000ull;
+        /* The fixture rounds a fixed-core CPU timestamp to nanoseconds. */
+        uint64_t start_cpu = (start_ns / 100) * 3 + ((start_ns % 100) * 3 + 50) / 100;
+        uint64_t start_num = start_cpu * PIT_HZ_;
+        clock_set((FistClock){start_num / CPU_HZ_, start_num % CPU_HZ_});
         unsigned long long vertical_num = vertical_ns * PIT_HZ_;
         unsigned long long whole = vertical_num / 1000000000ull;
         unsigned long long frac = vertical_num % 1000000000ull;
