@@ -24,15 +24,17 @@ static void check_endpoint(void)
 
 int main(int argc, char **argv)
 {
-    if (argc == 5 && !strcmp(argv[1], "pit")) {
-        extern void fist_clock_advance(unsigned);
+    if (argc == 5 && (!strcmp(argv[1], "pit") || !strcmp(argv[1], "pit-cpu") || !strcmp(argv[1], "pit-cpu-base"))) {
+        extern void fist_clock_advance(unsigned), fist_clock_charge_cpu_instructions(unsigned);
         unsigned mode = strtoul(argv[2], NULL, 10), period = strtoul(argv[3], NULL, 10);
         unsigned elapsed = strtoul(argv[4], NULL, 10);
         assert((mode == 2 || mode == 3) && period && period <= 65536 && elapsed);
+        if (!strcmp(argv[1], "pit-cpu-base")) fist_clock_charge_cpu_instructions(123);
         out(0x43, 0x30 | (mode << 1));
         out(0x40, period & 0xff);
         out(0x40, period >> 8);
-        fist_clock_advance(elapsed - 1);
+        if (!strcmp(argv[1], "pit")) fist_clock_advance(elapsed - 1);
+        else fist_clock_charge_cpu_instructions(elapsed);
         out(0x43, 0);
         unsigned low = in(0x40), high = in(0x40);
         printf("%u\n", low | (high << 8));

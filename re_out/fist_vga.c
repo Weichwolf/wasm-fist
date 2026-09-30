@@ -86,27 +86,10 @@ int  fist_vga_mode(void){ return g_vmode; }
 
 /* ================= port I/O ================= */
 
-/* ---- The machine clock: the PIT and the VGA retrace on one virtual time line (board:0026) ----
- *
- * The engine makes the PIT interrupt its vertical-retrace interrupt: 2fd3 measures one retrace period in
- * PIT counts (30de polls 0x3da between two retrace edges while the counter free-runs) into [0x44c], 3064
- * scales the 60 Hz frame tick [0x452] from it (d8b8 = [0x44c] << 16 / 0x4dae), and the ISR 30f8 waits
- * for the retrace and re-programs the PIT on every interrupt.  So time is ONE thing here: a count of PIT
- * clocks (1193182 Hz).  Every port access and every cooperative pump costs one count (an infinitely fast
- * CPU whose I/O takes 0.84 us -- DOSBox at cycles=max is that machine too); the PIT channel 0 counter and
- * the VGA status derive from the count; the INT-8 fires when the channel-0 counter wraps.
- *
- * The oracle machine (DOSBox, mode 13h): htotal 100 chars at 25.175/8 MHz, vtotal 449 lines -> 70.086 Hz,
- * 17024.6 counts per frame; the retrace pulse is lines 412..414 (int10_modes.cpp: vrstart = vdispend+12,
- * vrend = vrstart+2), 76 counts.  2fd3 measures 0x427f = 17023 there (every RAM capture agrees), so the
- * model's frame is FRAME_COUNTS long such that the same measurement reads 17023 here: the two 30de returns
- * are exact retrace-start edges, the reload (3 outs) and the latch (1 out) sit between them, and the
- * count read is 65536 - (P - 2) -> P = 17025.
- *
- * Each status poll consumes one count. The timeout at 30f8 depends on the number of reads, even when
- * their returned status is unchanged. fist_clock_advance() fires every channel-0 wrap in order. */
+/* Preserve CPU phase below a PIT count; I/O/pump and fallback retrace costs remain approximate. */
 #define PIT_HZ_       1193182u
-#define FRAME_COUNTS  17025u          /* one mode-13h frame, see above */
+#define CPU_HZ_       30000000u
+#define FRAME_COUNTS  17025u
 /* DOSBox retains the loader's 9-dot VGA clock through the mode-13h switch. */
 #define VGA_CLOCK_    (28322000u / 9u)
 #define VGA_FRAME_NUM (100ull * 449u * PIT_HZ_)
@@ -114,6 +97,13 @@ int  fist_vga_mode(void){ return g_vmode; }
 #define VRETRACE_LINE 412             /* vrstart (vdispend + 12); the pulse lasts to line 414 */
 #define VDISPEND_LINE 400             /* status bit 0 (blanking) from here to the end of the frame */
 static unsigned long long g_clock;            /* PIT counts since power-on */
+static unsigned g_clock_fraction;             /* fractional count, denominator 30000000 */
+typedef struct { unsigned long long counts; unsigned fraction; } FistClock;
+static FistClock clock_now(void){ return (FistClock){g_clock, g_clock_fraction}; }
+static void clock_set(FistClock time){ g_clock = time.counts; g_clock_fraction = time.fraction; }
+static int clock_before(FistClock a, FistClock b){
+    return a.counts < b.counts || (a.counts == b.counts && a.fraction < b.fraction);
+}
 static unsigned long long g_sequence_next;
 static unsigned long long g_sequence_vertical_num;
 static unsigned long long g_sequence_event_num;
@@ -294,13 +284,13 @@ static unsigned long long fist_sequence_part_clock(unsigned part)
     unsigned long long pit = g_sequence_event_num / VGA_CLOCK_;
     unsigned long long pit_fraction = g_sequence_event_num % VGA_CLOCK_;
     unsigned long long seconds = pit / PIT_HZ_, remainder = pit % PIT_HZ_;
-    unsigned long long scaled = remainder * 30000000u;
-    unsigned long long fractional = (scaled % PIT_HZ_) * VGA_CLOCK_ + pit_fraction * 30000000u;
-    unsigned long long scanout_cycles = seconds * 30000000u + scaled / PIT_HZ_ +
+    unsigned long long scaled = remainder * CPU_HZ_;
+    unsigned long long fractional = (scaled % PIT_HZ_) * VGA_CLOCK_ + pit_fraction * CPU_HZ_;
+    unsigned long long scanout_cycles = seconds * CPU_HZ_ + scaled / PIT_HZ_ +
         (fractional + denom - 1) / denom;
     if (!g_sequence_pic_ready) g_sequence_event_cycles = scanout_cycles;
-    return (scanout_cycles / 30000000u) * PIT_HZ_ +
-        ((scanout_cycles % 30000000u) * PIT_HZ_ + 30000000u - 1) / 30000000u;
+    return (scanout_cycles / CPU_HZ_) * PIT_HZ_ +
+        ((scanout_cycles % CPU_HZ_) * PIT_HZ_ + CPU_HZ_ - 1) / CPU_HZ_;
 }
 
 static void fist_sequence_mode_set(void)
@@ -364,7 +354,7 @@ static unsigned short g_pit_reload[3] = {0,0,0};   /* 0 == 65536 */
 static unsigned char  g_pit_mode[3] = {3,0,0}, g_pit_rw[3];  /* BIOS channel 0 starts in mode 3 */
 static unsigned char  g_pit_wsub[3], g_pit_rsub[3];
 static unsigned short g_pit_wlatch[3];
-static unsigned long long g_pit_base[3];      /* clock at which the current count started */
+static FistClock g_pit_base[3];
 static int            g_pit_latched[3]; static unsigned short g_pit_latch[3];
 static unsigned char g_port61;
 int fist_vga_pit0_div(void){ return g_pit_reload[0] ? g_pit_reload[0] : 0x10000; }
@@ -373,10 +363,12 @@ unsigned fist_clock_frame_counts(void){ return FRAME_COUNTS; }
 static unsigned pit_period(int ch){ return g_pit_reload[ch] ? g_pit_reload[ch] : 0x10000u; }
 static unsigned pit_count(int ch){
     unsigned p = pit_period(ch);
+    double elapsed = (double)(g_clock - g_pit_base[ch].counts) +
+        ((double)g_clock_fraction - g_pit_base[ch].fraction) / CPU_HZ_;
     if (g_pit_mode[ch] == 2 || g_pit_mode[ch] == 3) {
         float frequency = (float)PIT_HZ_ / (float)p;
         float delay = 1000.0f / frequency;
-        double index = fmod((double)(g_clock - g_pit_base[ch]) * 1000.0 / PIT_HZ_, delay);
+        double index = fmod(elapsed * 1000.0 / PIT_HZ_, delay);
         if (g_pit_mode[ch] == 3) {
             index *= 2;
             if (index > delay) index -= delay;
@@ -384,26 +376,33 @@ static unsigned pit_count(int ch){
         unsigned count = (unsigned)(p - (index / delay) * p);
         return count & (g_pit_mode[ch] == 3 ? 0xfffe : 0xffff);
     }
-    unsigned e = (unsigned)((g_clock - g_pit_base[ch]) % p);
+    unsigned e = (unsigned long long)elapsed % p;
     return (p - e) & 0xffff;
 }
-unsigned long long fist_pit0_next_wrap(void){ unsigned p = pit_period(0);
-    unsigned long long e = g_clock - g_pit_base[0]; return g_pit_base[0] + (e / p + 1) * p; }
+static FistClock pit_next_wrap(void){
+    unsigned p = pit_period(0);
+    unsigned long long e = g_clock - g_pit_base[0].counts;
+    if (g_clock_fraction < g_pit_base[0].fraction) --e;
+    return (FistClock){g_pit_base[0].counts + (e / p + 1) * p, g_pit_base[0].fraction};
+}
+unsigned long long fist_pit0_next_wrap(void){ FistClock next = pit_next_wrap();
+    return next.counts + (next.fraction != 0); }
 /* Step the clock to `target`, firing the channel-0 interrupt at every wrap on the way (the ISR may
  * re-program the channel, which restarts the count from that instant, as on the 8253). */
 int g_int8_replay;   /* board:0017 FIST_FRAME_SCHEDULE: the INT-8s come from the schedule, not the clock */
 int g_int8_force;    /* ... except from an explicit spin-wait pump (a fade, a delay): those need the interrupt */
-void fist_clock_advance_to(unsigned long long target){
+static void clock_advance_to(FistClock target){
     extern void fist_int8_fire(void);
     uint64_t end_ms = fist_sequence_end_ms();
     uint64_t end_clock = end_ms ? (end_ms * PIT_HZ_ + 999) / 1000 : 0;
-    int complete = end_clock && target >= end_clock;
-    if (complete) target = end_clock - 1;
-    while (g_clock < target) {
-        unsigned long long w = fist_pit0_next_wrap();
-        if (g_sequence_resize_ready && g_sequence_resize_ready <= target &&
-            g_sequence_resize_ready <= w && (!g_sequence_next || g_sequence_resize_ready <= g_sequence_next)) {
-            g_clock = g_sequence_resize_ready;
+    int complete = end_clock && !clock_before(target, (FistClock){end_clock, 0});
+    if (complete) target = (FistClock){end_clock - 1, 0};
+    while (clock_before(clock_now(), target)) {
+        FistClock w = pit_next_wrap();
+        FistClock resize = {g_sequence_resize_ready, 0}, next = {g_sequence_next, 0};
+        if (g_sequence_resize_ready && !clock_before(target, resize) &&
+            !clock_before(w, resize) && (!g_sequence_next || !clock_before(next, resize))) {
+            clock_set(resize);
             g_sequence_resize_ready = 0;
             g_sequence_mode = 0x13;
             g_sequence_blank = 0;
@@ -412,9 +411,9 @@ void fist_clock_advance_to(unsigned long long target){
             fist_sequence_pic_advance_vertical();
             g_sequence_next = fist_sequence_part_clock(1);
         }
-        else if (g_sequence_next && g_sequence_next <= target && g_sequence_next <= w) {
-            int same_tick = g_sequence_next == w;
-            g_clock = g_sequence_next;
+        else if (g_sequence_next && !clock_before(target, next) && !clock_before(w, next)) {
+            int same_tick = !clock_before(next, w) && !clock_before(w, next);
+            clock_set(next);
             if (g_sequence_blank) memset(g_sequence_pixels + g_sequence_part * 64000u, 0, 64000u);
             else if (g_sequence_mode == 3) fist_text_scan_part(g_sequence_part);
             else memcpy(g_sequence_pixels + g_sequence_part * FB_SZ / 4,
@@ -431,30 +430,28 @@ void fist_clock_advance_to(unsigned long long target){
             g_sequence_next = fist_sequence_part_clock(g_sequence_part + 1);
             if (same_tick && (!g_int8_replay || g_int8_force)) fist_int8_fire();
         }
-        else if (w <= target) { g_clock = w; if (!g_int8_replay || g_int8_force) fist_int8_fire(); }
-        else g_clock = target;
+        else if (!clock_before(target, w)) { clock_set(w); if (!g_int8_replay || g_int8_force) fist_int8_fire(); }
+        else clock_set(target);
     }
     if (complete) {
-        g_clock = end_clock;
+        clock_set((FistClock){end_clock, 0});
         fist_sequence_endpoint_complete();
         exit(0);
     }
 }
-void fist_clock_advance(unsigned n){ fist_clock_advance_to(g_clock + n); }
+void fist_clock_advance_to(unsigned long long target){ clock_advance_to((FistClock){target, 0}); }
+void fist_clock_advance(unsigned n){ clock_advance_to((FistClock){g_clock + n, g_clock_fraction}); }
 void fist_clock_charge_cpu_instructions(unsigned count)
 {
-    static unsigned remainder;
-    uint64_t numerator = (uint64_t)remainder + (uint64_t)count * PIT_HZ_;
-    unsigned ticks = (unsigned)(numerator / 30000000u);
-    remainder = (unsigned)(numerator % 30000000u);
-    if (ticks) fist_clock_advance(ticks);
+    uint64_t numerator = (uint64_t)g_clock_fraction + (uint64_t)count * PIT_HZ_;
+    clock_advance_to((FistClock){g_clock + numerator / CPU_HZ_, (unsigned)(numerator % CPU_HZ_)});
 }
 void fist_clock_wait_bios_ticks(unsigned count)
 {
     const uint16_t *tick = (const uint16_t *)(g_mem + 0x46c);
     while (count--) {
         uint16_t previous = *tick;
-        do { fist_clock_advance_to(fist_pit0_next_wrap()); } while (*tick == previous);
+        do { clock_advance_to(pit_next_wrap()); } while (*tick == previous);
     }
 }
 static int vga_status(unsigned long long c){   /* port 0x3da at clock c: bit3 vsync, bit0 vertical blanking */
@@ -542,7 +539,7 @@ void out(int port, int val)
         else if (!g_pit_wsub[ch]) { g_pit_wlatch[ch] = (unsigned short)((g_pit_wlatch[ch] & 0xff00) | val); g_pit_wsub[ch] = 1; }
         else { g_pit_wlatch[ch] = (unsigned short)((g_pit_wlatch[ch] & 0x00ff) | (val << 8)); g_pit_wsub[ch] = 0; done = 1; }
         if (done) {
-            g_pit_reload[ch] = g_pit_wlatch[ch]; g_pit_base[ch] = g_clock;
+            g_pit_reload[ch] = g_pit_wlatch[ch]; g_pit_base[ch] = clock_now();
             if (ch == 2 && getenv("FIST_SPEAKER_TRACE"))
                 fprintf(stderr, "FIST_SPEAKER counter %.9f count=%u mode=%u type=%u\n",
                         (double)g_clock * 1000.0 / PIT_HZ_, pit_period(2), g_pit_mode[2], g_port61 & 3);
@@ -576,7 +573,7 @@ void out(int port, int val)
         if (((g_port61 ^ val) & 3) && getenv("FIST_SPEAKER_TRACE"))
             fprintf(stderr, "FIST_SPEAKER type %.9f type=%u previous=%u\n",
                     (double)g_clock * 1000.0 / PIT_HZ_, val & 3, g_port61 & 3);
-        if ((g_port61 ^ val) & 1 && (val & 1)) g_pit_base[2] = g_clock;
+        if ((g_port61 ^ val) & 1 && (val & 1)) g_pit_base[2] = clock_now();
         g_port61 = (unsigned char)val;
         return;
     case 0x64:   /* kbd cmd */

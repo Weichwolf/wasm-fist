@@ -61,6 +61,20 @@ class PortIoTest(unittest.TestCase):
                 result = subprocess.run(run, capture_output=True, text=True, timeout=30)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_pit_latches_preserve_sub_count_cpu_time(self):
+        for mode in (2, 3):
+            for period in (200, 8191, 17023, 65536):
+                for instructions in (1, 2, 20, 25, 26, 27, 123, 30000):
+                    elapsed = 1 + instructions * 1193182 / 30000000
+                    expected = subprocess.check_output([self.pit_probe, str(mode), str(period), str(elapsed)], text=True)
+                    for target, run in self.commands:
+                        for command in ('pit-cpu', 'pit-cpu-base'):
+                            with self.subTest(target=target, mode=mode, period=period, instructions=instructions, command=command):
+                                result = subprocess.run([*run, command, str(mode), str(period), str(instructions)],
+                                                        capture_output=True, text=True, timeout=30)
+                                self.assertEqual(result.returncode, 0, result.stderr)
+                                self.assertEqual(result.stdout, expected)
+
     def test_capture_ends_on_the_requested_clock_boundary(self):
         for end_ms in (31, 32, 999, 1000, 3000):
             captures = []

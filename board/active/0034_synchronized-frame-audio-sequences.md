@@ -28,7 +28,8 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   port starts at 6364.404592 ms, before it. Callback 88's pure decoder count matches.
   Original pre-decoder DOS/kernel work is absent from the port (0026). The bounded CPU trace
   accounts for all 35,524 cycles before decoder 88; do not inject that measured total as a delay.
-  Captures `oracle-cpu-final-770`/native 771/WASM 772 retain every respective baseline output byte.
+  CPU trace 770 and VGA queue/delay probes 776/780 retain all original 742 frame/PCM bytes.
+  Native 781/WASM 782 retain all 762/763 frame bytes after the sub-PIT phase correction (0026).
 - PCM count follows the original mixer: `1103 + floor((end_ms−1)×722534/16384)`, yielding
   133,358/207,005/442,058 samples at 3000/4670/10000 ms. Ports still lack final mixed sequence PCM
   (0003); the complete comparator correctly fails the missing file. `--frames-only` is diagnostic.
@@ -39,19 +40,16 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   `tools/oracle/check_kdv_instruction_formula.py`, patch 617. DOS transfer/slice timing belongs to 0026.
 - `FIST_KDV_STAGE_N` (default three hits/IP) expands `FIST_KDV_STAGE=<file>`; 395 exposes later
   callbacks. CPU source is hash-checked. Original 748 retains all 742 frame/PCM bytes; invalid limits fail.
-- PIT regression compares actual original `timer.cpp:counter_latch` in 70 cases on each target;
-  unmodified port fails 80 subtests. All 38 tool tests pass with the correction.
-  `bash tools/check_flow.sh` passes all 178 existing flows on both targets on base `68bf531`
-  plus the PIT patch (`scratch/verify/run.lwhih4/`); pinned binary/script hashes still match.
-  This accepts the bounded PIT correction, not complete original frame/audio parity.
-- CPU trace verification: `bash tools/check_flow.sh '^(intro|mainmenu|audio-opl-init)$'` passes
-  three flows on both targets (`scratch/verify/run.gdovpa/`). Port binary/script hashes match the
-  prior full 178-flow run. Original 770 retains complete 742 frame/PCM sequences; trace misuse
-  and write failures stop without an endpoint. Attribution commands and test scope live in 0026.
+- Accepted phase correction: `bash tools/check_flow.sh` passes all 43 tests, exact patch checks,
+  both builds and all 178 existing cross-target flows (`scratch/verify/run.2Oucs7/`, base `b37def0`
+  plus saved patch). Tested source diffs and binary/script hashes match current files.
+  This proves bounded timer phase behavior; complete original frame/audio parity remains open.
+  Timer/CPU regressions and scoped original-source proofs belong to 0026.
 
 ## Next
 
-1. Implement the recovered DOS/Extender kernel transfer and instruction-time contract in 0026.
+1. Implement shared PIC event/slice ownership and the recovered DOS/Extender kernel transfer
+   and instruction-time contract in 0026, including the attributed DOS-load handoff (0036).
    Fix callback 88's premature copy and compare every 10000-ms record on both targets.
    Do not adjust capture phase, inject a fitted delay or mask fields.
 2. Extend the matched endpoint through the first stable original menu, then timed inputs. Compare
