@@ -4,7 +4,8 @@ Parent: 0034
 
 ## Contract
 
-Own one original-attributed DAT-entry fixture and frame/PCM origin. Preserve the prefix and times.
+Own one original-attributed DOS-load fixture, application handoff and frame/PCM origin.
+Preserve the prefix and timing.
 Device time belongs to 0026, mixed output to 0003, complete capture/comparison to 0034.
 
 ## Evidence
@@ -12,12 +13,21 @@ Device time belongs to 0026, mixed output to 0003, complete capture/comparison t
 - `capture_sequence.sh` materializes and hash-checks `.text`, `.bda`, `.vga` from versioned assets
   under `tools/oracle/start_state.*`. `sequence_start_state.patch` restores B800/BDA at `FIST.RUN`.
   Set port `FIST_TEXT_STATE=<oracle-capture>/start-state`; no separate phase environment is needed.
-- `.vga` distinguishes measured clock/scanout phases (20,960,467/20,168,067 ns) from queued PIC
+- `.vga` distinguishes measured DOS-load/scanout phases (20,960,467/20,168,067 ns) from queued PIC
   origin: tick 20, float lag `0x3e2c1900` = `0x1.5832p-3` = 0.168064117431640625 ms.
   Original queue: `float(0.9000000953674316 + float(14.2680641955)) − 15` gives this residual.
   GDB probe: `tools/oracle/start_state_pic.gdb`; log `oracle-pic-start-741/dosbox.log` under
   `scratch/sequence-capture/`. Dispatch cycle 5042 is later than the queued origin; conflating them
   caused six 1-us presentation errors. Missing/malformed `.vga` now fails on both targets.
+- Original CPU trace 783 attributes the fixture clock to `f000:14a1`, DOS EXEC callback,
+  at cycle 628814. Application `1119:0004` appears at cycle 629918 after loop decrement.
+  The difference is `629918−628814 = 1104` cycles, or `1104/30000 = 0.0368 ms`.
+  GDB probe 784 confirms 38 costed `FIST.DAT` mask reads: `38×29 = 1102` cycles;
+  remaining slice `1186−1102 = 84 < 3×29 = 87` suppresses subsequent I/O delays.
+  Two subsequent loop decrements account for the remaining cycles. The port skips
+  this DOS loader work; do not call the fixture an exact application-entry CPU phase or fit an offset.
+  Both probes retain all 742 frame/PCM bytes. Proof: `pixel-443/cpu-start-source-proof.json`
+  under `scratch/sequence-capture/`; full clock/handoff correction remains with 0026.
 - Original 742 retains complete 731/734 frame/PCM bytes. Native 743/WASM 744 match every one of
   its 698 presentation times and each other; four content differences remain in 0034.
   Proof: `scratch/sequence-capture/pic-dispatch-362/`, filtered flows `scratch/verify/run.ksO3t0/`.
@@ -26,8 +36,10 @@ Device time belongs to 0026, mixed output to 0003, complete capture/comparison t
 
 ## Next
 
-1. Reproduce this fixture after device-time/mixer changes, including the first frame and sample.
-2. Use 0034's `FIST_SEQUENCE_END_MS` for matched captures. Investigate start-state defects here.
+1. Recover the original CPU slice at DOS EXEC and model loader reads/boundaries in 0026.
+   Preserve this attributed fixture; do not replace its timestamp with a fitted application phase.
+2. Reproduce this fixture after device-time/mixer changes, including the first frame and sample.
+3. Use 0034's `FIST_SEQUENCE_END_MS` for matched captures. Investigate start-state defects here.
 
 Reproduce: build with `bash tools/oracle/build_sequence_oracle.sh`; run
 `bash tools/oracle/capture_sequence.sh 10 <fresh-original-dir>`. For each port set
