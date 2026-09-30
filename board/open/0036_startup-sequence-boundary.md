@@ -34,14 +34,19 @@ never trims an unmatched emulator frame.
 - The shared sequence writer now emits canonical 512-frame PCM records, timestamps each from exact sample
   position/rate and flushes one final partial record. `oracle-pcm-blocks-{707,708}` match completely:
   157 frames plus 101,827 stereo samples in 199 PCM records. Callback batching is no longer observable.
+- A temporary per-channel DOSBox mixer probe on the same boundary identified the first nonzero sample:
+  stereo sample 18,887 (428,276 us), channel `SPKR`, delta -7,045,120 on both sides. The port has no
+  PC-speaker PCM producer. Its first audio mismatch therefore precedes OPL and SB mixing.
 
 ## Next
 
-1. Emit native and WASM mixed PCM sequence records from the same start state and sample clock. Include
-   silence and use deterministic sample-position blocks; do not substitute the OPL-only or SB-only rings.
-2. Compare the complete common PCM prefix against `oracle-nosound-703`. Report the first unequal sample
-   or boundary, trace its producer and fix that contract.
-3. Keep title-frame timing work in 0034 and this item limited to the application boundary.
+1. Capture PIT channel 2 and port `0x61` state/events at the shared boundary. Reproduce the original
+   PC-speaker sample stream from that evidence; do not fit a waveform to the captured PCM.
+2. Add one final stereo mixer and sequence owner for PC speaker, OPL and SB. Include silence and emit
+   deterministic sample-position blocks on native and WASM from the shared PIT clock.
+3. Compare the complete common PCM prefix against the Oracle. Report the first unequal sample or
+   boundary and fix its producer contract.
+4. Keep title-frame timing work in 0034 and this item limited to the application boundary.
 
 ## Accept
 

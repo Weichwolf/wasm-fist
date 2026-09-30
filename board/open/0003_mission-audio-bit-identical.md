@@ -20,13 +20,17 @@ and debrief. Match both targets and the original at a defined sample rate and ca
 - Source audit at 22dfff2: OPL and SB have independent `wav_open()` writers targeting the same
   `FIST_AUDIO_WAV` file with `wb`. Browser `fist_web_post_audio()` drains only OPL. A simultaneous
   OPL+SB run must first prove final mixer ownership; two equal WAVs can share missing digital effects.
+- Startup-boundary mixer attribution identifies DOSBox `SPKR` as the first nonzero source at stereo
+  sample 18,887. The port has PIT channel-2 state but no PC-speaker PCM producer. OPL+SB alone cannot
+  match the original final mix.
 
 ## Next
 
 1. Capture fresh native/WASM/original menu and AZER1 streams with matched devices, rate, RNG and
    boundaries. Establish the first differing event or sample before choosing a fix.
-2. Compare timed OPL register writes and SB channel/DMA events separately, then mixed PCM.
-   Recommendation: one final mixer owns WAV/browser output; preserve device streams for diagnosis.
+2. Compare timed PC-speaker, OPL and SB events separately, then mixed PCM. Recover DOSBox-compatible
+   PIT channel-2/port-`0x61` synthesis first. One final mixer owns WAV/browser/sequence output; preserve
+   device streams for diagnosis.
    Reproduce simultaneous OPL+SB emission and buffer saturation before changing either output path.
    Recommendation: drive sample production with an integer remainder accumulator over the shared
    PIT clock; derive the conversion from captured rate/timing, not a fitted MUSIC_DIV constant.
