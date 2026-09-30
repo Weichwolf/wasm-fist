@@ -43,17 +43,22 @@ if [ "$cpu_hash" = a427a92012fd1a5af04cc9af77ac317b9dd251fa07e33b0d3d23cbaf0c9fa
   patch -p1 --fuzz=0 -d "$TREE" < "$ROOT/tools/oracle/kdv_stage_limit.patch"
   source_hashes
 fi
+if [ "$cpu_hash" = 92cced0a7094315667c679c2a3be464a472cffd5876db56b1e0268249ae8dbae ]; then
+  patch -p1 --fuzz=0 -d "$TREE" < "$ROOT/tools/oracle/cpu_trace.patch"
+  source_hashes
+fi
 if { [ "$render_hash" != c61b728e565fe3c3b86d94728e45d6649348113b4145c73aacb0b20019421ad2 ] &&
      [ "$render_hash" != 3a7c2007435883faea4e291d89296e0d697a29236525337b628b70ad717a701e ]; } ||
    [ "$mixer_hash" != 38ce5a7c87f00a725429fbb66537d07abc3a31dfc52d1eb88c1789ff2d50fe4c ] ||
    [ "$execute_hash" != 89f88e209349354346c0de76c4e312cbb27152b0eb613e42578c314c0b8a9211 ] ||
    [ "$speaker_hash" != 012d4ef255753aa750a4672ef39c01f8a8b3c156117f6b155ebc41d75a966b60 ] ||
    [ "$pic_hash" != 0fc7198e98ef69e7d9b1f0268f7a87bee733db34d49151f2850f5fe698eb777a ] ||
-   [ "$cpu_hash" != 92cced0a7094315667c679c2a3be464a472cffd5876db56b1e0268249ae8dbae ]; then
+   [ "$cpu_hash" != 48887f6b04f2ab294769b20a01c6371958dda26be86017b947090b5e4dc66195 ]; then
   echo 'DOSBox source differs from the expected base/probe/capture revisions' >&2
   exit 1
 fi
 cp "$ROOT/tools/oracle/fist_sequence_capture.h" "$TREE/src/gui/fist_sequence_capture.h"
 cp "$ROOT/tools/oracle/fist_sequence_endpoint.h" "$TREE/src/gui/fist_sequence_endpoint.h"
+cp "$ROOT/tools/oracle/fist_cpu_trace.h" "$TREE/src/cpu/fist_cpu_trace.h"
 make -C "$TREE" -j4
 printf 'DOSBox sequence capture: %s\n' "$TREE/src/dosbox"
