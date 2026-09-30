@@ -3,71 +3,71 @@ Title: The shared device clock and browser presentation preserve original timing
 
 ## Contract
 
-One shared clock owns PIT/retrace/interrupt/I/O event time on both targets. Device and capture
-producers consume it. Browser pacing preserves simulation/audio state and observable ordering.
+One clock owns PIT/retrace/interrupt/I/O time on both targets. Device/capture producers consume it.
+Browser pacing preserves simulation/audio state and observable ordering.
 
 ## Evidence
 
-- Shared PIT clock/ISR preservation: patches 576/582. One count per port/pump and eight per
-  indirect call remain approximations, not fixed-30k Oracle proof.
-- PIT modes 2/3 preserve original `counter_latch`: at reload 65536,
-  `delay = 1000f/(1193182f/65536f) = 54.92539978027344 ms`;
-  after 17022 counts the remaining count is 48513.999574…, truncated to 48513.
-  `65536−48513 = 17023`, versus old 17022. This fixes palette 405 and pixels 648/662 (0034).
-  `pit_latch_probe.cpp`: 70 cases × two targets; old port fails 80 subtests, fix passes all.
-- CPU work, timer baselines and current IRQ wrap model now share fractional PIT phase:
-  `elapsed = whole_counts + fraction/30000000`; one CPU cycle adds `1193182/30000000` counts.
-  Actual `counter_latch` verifies 2 modes × 4 reloads × 8 intervals × 2 initial phases × 2 targets
-  = 256 added cases. The initial 128-case subset had 44 reaching failures before correction.
-  `bash tools/check_flow.sh` passes all 43 tests, patches, both builds and 178 cross-target flows:
-  `scratch/verify/run.2Oucs7/` (base `b37def0` plus saved patch; current source/binary hashes match).
-  Native 781/WASM 782 retain every 762/763 frame byte; event 443 remains unequal.
-- Event 443 still differs. Before decoder callback 88, original DOS reads return 8/768/8/16384/3072
-  bytes. `dos.cpp:modify_cycles` consumes `4×AX` only when `4×AX+5 < CPU_Cycles`; otherwise
-  it leaves five cycles. The cap is the current PIC-event slice, not a fixed millisecond.
-  Original GDB traces measure 32/716/32/26644/1406 consumed cycles, plus 29 mask-read cycles
-  per call. `CPU_IODelayRemoved` is not elapsed time. Both port DOS 3F paths omit these costs.
-  Kernel asm `0008:18fe..1957` splits at `fs:6e4` (16384 here); REP copies at 1938/1945.
-  Source: `scratch/sequence-capture/pixel-443/kernel-read.asm`, original 768.
-- Queue probe 776 identifies the caps: PanningLatch at 6354.076545715332 ms and VerticalTimer
-  at 6355.188701629639 ms. The port omits both as standalone CPU slice boundaries.
-  Probe 780 recovers original float delays; its complete frame/PCM bytes match 742.
-  Actual `PIC_RunQueue/PIC_AddEvent/TIMER_AddTick` reproduces all five slices and `CPU_CycleLeft`:
-  `scratch/sequence-capture/pixel-443/pic-slice-source-proof.json` (VGA queue scope only).
-- Bounded original trace: `FIST_CPU_TRACE=<file> FIST_CPU_TRACE_WINDOW=6354:6356` with
-  `bash tools/oracle/capture_sequence.sh 10 <fresh-output>`; analyze with
-  `python3 tools/oracle/cpu_trace.py <file> --start 2b:11dd --stop 2b:7135`.
-  Observe registers/segments after cycle decrement; no extra opcode reads or guest writes.
-  Require a complete fixed-cycle window/footer. Ten config/write-error cases fail without an endpoint.
-- Callback 88: `1316 + 28975 + 5055 + 191 − 15 + 2 = 35524` cycles between 11dd and 7135,
-  hence `35524/30000 = 1.184133… ms`. Terms: instructions, extra DOS callback costs, kernel REP,
-  palette REP, zero-cycle POP/MOV SS and empty REP, and exhausted-loop/PIC boundaries.
-  Source: `pre-88-attribution-final.json`/`cpu-88-final.txt` under `scratch/sequence-capture/pixel-443/`.
-  Original 770 retains all 742 frame/PCM bytes; prior cross-target proof: `scratch/verify/run.gdovpa/`.
-- Pre-speaker: 23 mask reads in `localFile::Read` before SOUNDDVR, proved by 720/721.
-- Original first PIT-2 reload: 404.277133346 ms; port: 404.283671728 ms.
-  Difference: `404.283671728−404.277133346 = 0.006538382 ms`. Do not fit an audio offset.
-- Fixed-30k normal core normally charges one cycle/instruction. `iohandler.cpp` charges
-  `30000/1024 = 29` extra cycles/read and `30000/1365 = 21` extra cycles/write
-  (integer division), suppressed when fewer than three delay costs remain in the slice.
-  Preserve instruction boundaries and slice remainder when modeling an observable event.
-- Port 0x61 isolation: `tests/port_io.c`. Accepted `3302901`: 178 flows, `scratch/verify/run.lwhih4/`.
-- Port mouse scripts use menu-relative vblanks; Oracle XTEST uses wall time.
+- PIT modes 2/3 match original `counter_latch`. Mode 2 at reload 65536 uses
+  `1000f/(1193182f/65536f) = 54.92539978027344 ms`. After 17022 counts the remaining
+  48513.999574… truncates to 48513: `65536−48513 = 17023`, versus old 17022.
+  `pit_latch_probe.cpp`: 70 cases × 2 targets; old port fails 80 subtests. Fix resolves three 0034 events.
+- CPU work, timer baselines and the current IRQ-wrap model preserve fractional PIT phase:
+  `elapsed = whole_counts + fraction/30000000`; each CPU cycle adds `1193182/30000000` counts.
+  Actual `counter_latch`: 2 modes × 4 reloads × 8 intervals × 2 phases × 2 targets = 256 cases.
+  Initial 128-case subset had 44 reaching failures. Accepted `839ae5e`: 43 tests, patches, both builds,
+  178 flows; `scratch/verify/run.2Oucs7/`. Full original PIT event/IRQ ordering remains unproved.
+- `fist_clock_cpu_slice` projects the next PIC dispatch budget from shared clock/VGA state:
+  PanningLatch, retrace, vertical interrupt, chained bands and millisecond limits. The calendar runs
+  without capture; `FIST_OPENLOG` reports both DOS 3F paths' read budgets. `pic_slice_probe.cpp`
+  compiles actual `PIC_RunQueue/PIC_AddEvent/TIMER_AddTick`: (16 cases + 1 capture case) × 2 targets
+  = 34 passing comparisons. Old projection failed 14/26; the previous origin's creation mode fixes
+  six further failures. Transition proof covers post-resize queued state, not resize timing.
+- Mode 13 uses `25175000/8 = 3146875` pixels/s; text uses `28322000/9 = 3146888`.
+  `SetupDrawing` retains cached vtotal for changes below 0.0001 ms while other delays change.
+  Original probes 776/780/785 recover caps/geometry; their complete frame/PCM bytes match 742.
+  This projection does not track running `CPU_Cycles` or prove the complete PIT queue/IRQ contract.
+- Accepted projection: `bash tools/check_flow.sh` passes 44 tests, exact patches, both builds
+  and all 178 existing flows; `scratch/verify/run.EKVpOw/` (base `839ae5e` + saved patch).
+  Matched native 789/WASM 790 retain all prior frame bytes; 434 read-budget records agree.
+  Frame 443 and missing final PCM remain open in 0034. Proofs: `scratch/sequence-capture/pic-slices/`.
+- Before decoder 88, original reads 8/768/8/16384/3072 bytes; the port reads 19456 unsplit.
+  `dos.cpp`: subtract `4×AX` iff `4×AX+5 < CPU_Cycles`, otherwise set five cycles.
+  GDB proves costs 32/716/32/26644/1406 plus 29 mask-read cycles each, capped by the active
+  PIC slice. `CPU_IODelayRemoved` is not elapsed time; below-five budgets can gain cycles.
+  Actual `dos.cpp/iohandler.cpp` probe: 303 boundary cases plus all five observed callbacks
+  (`pic-slices/io-dos-source-proof.json`). Original 786 sees no below-five DOS cap in this run.
+  Both port 3F paths omit costs.
+  Kernel `0008:18fe..1957` splits at `fs:6e4` (16384 here); REP copies at 1938/1945.
+- Callback 88: `1316 + 28975 + 5055 + 191 − 15 + 2 = 35524` cycles, or `35524/30000`
+  = 1.184133… ms: instructions, DOS, kernel REP, palette REP, zero-cycle SS/REP, loop boundaries.
+  Source: `pixel-443/{kernel-read.asm,pre-88-attribution-final.json,cpu-88-final.txt}` under
+  `scratch/sequence-capture/`. Original 770 retains all 742 frame/PCM bytes. Trace with
+  `FIST_CPU_TRACE=<file> FIST_CPU_TRACE_WINDOW=6354:6356` during an original 10-second capture;
+  analyze with `python3 tools/oracle/cpu_trace.py <file> --start 2b:11dd --stop 2b:7135`. Require footer.
+- Original 792/793 retain all 742 frame/PCM bytes. Decoder 88 → palette entry costs
+  `290708+3+3 = 290714`: decoder, caller, three exhausted-loop cycles at queued draw bands.
+  Palette → copy: `(4×768+11)+756×21 = 18959`; 13 of 769 writes suppress extra delay.
+  Copy → return: `16000+5 = 16005` cycles; REP resumes across a millisecond boundary.
+  Proofs: `pic-slices/{decoder-88-retirement,palette-copy-88-source}-proof.json`.
+- Original normal core costs one cycle/instruction with SS/REP exceptions. I/O extra costs:
+  `30000/1024 = 29` per read, `30000/1365 = 21` per write; suppress below three delay costs.
+  Port per-I/O/pump and indirect-call charges remain approximations (patches 576/582).
+- Pre-speaker: 23 `localFile::Read` mask reads before SOUNDDVR (720/721). First PIT-2 reload:
+  port 404.283671728 minus original 404.277133346 = 0.006538382 ms late. Do not fit an offset.
+  Port mouse scripts use menu-relative vblanks; original XTEST uses wall time.
 
 ## Next
 
-1. Model all original queued VGA/PIT events on the shared clock with original float delays,
-   millisecond slice limits and exhausted-loop boundaries. Preserve 0036's DOS-load CPU handoff.
-   Regress the five source-proved slices before charging DOS packet caps, mask reads, gateway/hook
-   instructions and REP. Recover branch counts from asm/trace; never fit a 35524-cycle delay.
-   Preserve reaching failures; regress all 10000-ms events on both targets, especially 443.
-2. Attribute the pre-speaker reads/calls; recover PIT-0 ISR return and SOUNDDVR I/O costs.
-   Repair the shared time contract and compare the first event before extending the trace.
-3. Verify retrace/reload/IRQ order through calibration/re-arm. Supply timed events to 0003 and
-   frame capture to 0034; neither implements a separate device clock.
-4. Audit mouse-time scripts (r92/9200, debrief). Run `make web`; measure input/presentation,
+1. Track active CPU slices and normal-core retirement/exhausted-loop decrements before
+   charging DOS costs, including below-five credits. Prove the three decoder-boundary cycles.
+   Regress both targets. Recover packet splits, gateway/hook instructions and REP from asm/trace;
+   preserve 0036's handoff and match every 10000-ms event, especially 443. Never fit 35524 cycles.
+2. Attribute pre-speaker reads/calls, PIT-0 ISR return and SOUNDDVR I/O. Verify reload/re-arm/IRQ order.
+   Supply device events to 0003 and scanout to 0034; neither owns a separate clock.
+3. Audit mouse scripts (r92/9200, debrief). Run `make web`; measure input/presentation,
    background/resume, audio continuity and Atomics.wait/shared-memory prerequisites. Pace at
-   presentation boundaries; retain traces. No wall-clock-dependent simulation ticks.
+   presentation boundaries; no wall-clock-dependent simulation ticks.
 
 ## Accept
 

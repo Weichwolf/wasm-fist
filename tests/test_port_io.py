@@ -42,6 +42,10 @@ class PortIoTest(unittest.TestCase):
         subprocess.run(['g++', '-std=gnu++11', *sdl_flags, '-I' + str(tree / 'include'), '-I' + str(tree),
                         '-ffunction-sections', '-fdata-sections', str(ROOT / 'tools/oracle/pit_latch_probe.cpp'),
                         '-Wl,--gc-sections', '-lm', '-o', cls.pit_probe], check=True, capture_output=True, text=True)
+        cls.pic_probe = str(cls.directory / 'pic-probe')
+        subprocess.run(['g++', '-std=gnu++11', *sdl_flags, '-I' + str(tree / 'include'), '-I' + str(tree),
+                        '-ffunction-sections', '-fdata-sections', str(ROOT / 'tools/oracle/pic_slice_probe.cpp'),
+                        '-Wl,--gc-sections', '-lm', '-o', cls.pic_probe], check=True, capture_output=True, text=True)
 
     def test_pit_latches_match_original_float_period_and_rounding(self):
         for mode in (2, 3):
@@ -91,6 +95,33 @@ class PortIoTest(unittest.TestCase):
                     captures.append(frames.read_bytes())
             if len(captures) == 2:
                 self.assertEqual(*captures)
+
+    def test_cpu_slices_match_original_vga_queue(self):
+        prefix = self.directory / 'pic-start'
+        for suffix in ('text', 'bda'):
+            source = ROOT / f'tools/oracle/start_state.{suffix}.gz.b64'
+            Path(str(prefix) + '.' + suffix).write_bytes(gzip.decompress(base64.b64decode(source.read_bytes())))
+        state = Path(str(prefix) + '.vga')
+        state.write_bytes((ROOT / 'tools/oracle/start_state.vga').read_bytes())
+        cases = ((6354, 1198), (6354, 1546), (6354, 2972), (6354, 3322), (6355, 4221),
+                 (6354, 2296), (6354, 2297), (6355, 5661), (6355, 5662),
+                 (6358, 10993), (6358, 10994), (6358, 10995),
+                 (76, 1000), (76, 2000), (76, 3843), (76, 3844))
+        for tick, index in cases:
+            scenario = ['transition'] if tick == 76 else []
+            expected = subprocess.check_output([self.pic_probe, str(state), str(tick), str(index), *scenario], text=True)
+            for target, run in self.commands:
+                for capture in ((False, True) if (tick, index) == (6354, 1546) else (False,)):
+                    with self.subTest(target=target, tick=tick, index=index, capture=capture):
+                        env = dict(os.environ, FIST_TEXT_STATE=str(prefix))
+                        env.pop('FIST_SEQUENCE_END_MS', None)
+                        env.pop('FIST_SEQUENCE', None)
+                        if capture:
+                            env['FIST_SEQUENCE'] = str(self.directory / f'pic-{target}')
+                        result = subprocess.run([*run, 'pic-slice', str(tick), str(index)], env=env,
+                                                capture_output=True, text=True, timeout=30)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(result.stdout, expected)
 
     def test_invalid_capture_endpoint_fails(self):
         for value in ('', '0', '-1', '3.5', '4294967296', 'x'):

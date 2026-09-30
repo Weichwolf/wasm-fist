@@ -90,8 +90,9 @@ int  fist_vga_mode(void){ return g_vmode; }
 #define PIT_HZ_       1193182u
 #define CPU_HZ_       30000000u
 #define FRAME_COUNTS  17025u
-/* DOSBox retains the loader's 9-dot VGA clock through the mode-13h switch. */
+/* SetupDrawing retains vtotal when the mode-switch difference is below 0.0001 ms. */
 #define VGA_CLOCK_    (28322000u / 9u)
+#define VGA_MODE13_CLOCK_ (25175000u / 8u)
 #define VGA_FRAME_NUM (100ull * 449u * PIT_HZ_)
 #define FRAME_LINES   449.0           /* vtotal */
 #define VRETRACE_LINE 412             /* vrstart (vdispend + 12); the pulse lasts to line 414 */
@@ -110,6 +111,10 @@ static unsigned long long g_sequence_event_num;
 static unsigned long long g_sequence_event_cycles;
 static unsigned long long g_sequence_pic_tick;
 static unsigned long long g_sequence_pic_part_tick;
+static unsigned long long g_sequence_pic_previous_tick;
+static float g_sequence_pic_previous_lag;
+static int g_sequence_pic_previous_ready;
+static int g_sequence_pic_previous_mode;
 static unsigned long long g_text_vertical_num;
 static unsigned long long g_text_pic_tick;
 static float g_text_pic_lag;
@@ -125,9 +130,9 @@ static float g_sequence_pic_vertical_lag;
 static float g_sequence_pic_part_lag;
 static int g_sequence_pic_ready;
 
-#define VGA_TEXT_PART_MS   3.17774248f
-#define VGA_MODE13_PART_MS 3.17775559f
-#define VGA_VERTICAL_MS    14.2680645f
+#define VGA_TEXT_PART_MS   ((float)(100.0 * 100 * 1000 / VGA_CLOCK_))
+#define VGA_MODE13_PART_MS ((float)(100.0 * 100 * 1000 / VGA_MODE13_CLOCK_))
+#define VGA_VERTICAL_MS    ((float)(100.0 * 449 * 1000 / VGA_CLOCK_))
 
 /* DOSBox queues float residuals and exposes its float PIC tick in the capture callback. */
 static void fist_sequence_pic_step(float delay)
@@ -140,6 +145,10 @@ static void fist_sequence_pic_step(float delay)
 
 static void fist_sequence_pic_advance_vertical(void)
 {
+    g_sequence_pic_previous_tick = g_sequence_pic_tick;
+    g_sequence_pic_previous_lag = g_sequence_pic_vertical_lag;
+    g_sequence_pic_previous_ready = g_sequence_pic_ready;
+    g_sequence_pic_previous_mode = g_sequence_mode;
     float next = VGA_VERTICAL_MS + g_sequence_pic_vertical_lag;
     unsigned whole = (unsigned)next;
     g_sequence_pic_tick += whole;
@@ -295,7 +304,7 @@ static unsigned long long fist_sequence_part_clock(unsigned part)
 
 static void fist_sequence_mode_set(void)
 {
-    if ((g_vmode != 0x13 && g_vmode != 3) || !getenv("FIST_SEQUENCE")) return;
+    if (g_vmode != 0x13 && g_vmode != 3) return;
     if (g_vmode == 0x13 && g_sequence_mode == 3 && g_sequence_next) {
         g_sequence_resize_ready = g_clock + (50ull * PIT_HZ_ + 500) / 1000;
         g_sequence_blank = 1;
@@ -305,6 +314,7 @@ static void fist_sequence_mode_set(void)
     g_sequence_resize_ready = 0;
     g_sequence_mode = g_vmode;
     g_sequence_blank = 0;
+    g_sequence_pic_previous_ready = 0;
     unsigned long long ready = g_clock;
     g_sequence_vertical_num = g_vmode == 3 && g_text_phase_set ? g_text_vertical_num :
         (ready / FRAME_COUNTS + 1) * FRAME_COUNTS * (unsigned long long)VGA_CLOCK_;
@@ -387,6 +397,67 @@ static FistClock pit_next_wrap(void){
 }
 unsigned long long fist_pit0_next_wrap(void){ FistClock next = pit_next_wrap();
     return next.counts + (next.fraction != 0); }
+static uint64_t clock_cpu_cycles(FistClock time)
+{
+    return (time.counts / PIT_HZ_) * CPU_HZ_ +
+        ((time.counts % PIT_HZ_) * CPU_HZ_ + time.fraction) / PIT_HZ_;
+}
+static void pic_slice_limit(unsigned *slice, uint64_t tick, unsigned index,
+                            uint64_t event_tick, float event_lag)
+{
+    if (event_tick < tick) return;
+    float deadline = ((float)(event_tick - tick) + event_lag) * 30000.0f;
+    if (deadline <= index) return;
+    unsigned cycles = (unsigned)(deadline - index);
+    if (!cycles) cycles = 1;
+    if (cycles < *slice) *slice = cycles;
+}
+static void pic_slice_vga(unsigned *slice, uint64_t tick, unsigned index,
+                          uint64_t origin_tick, float origin_lag, int mode, int parts)
+{
+    unsigned clock = mode == 0x13 ? VGA_MODE13_CLOCK_ : VGA_CLOCK_;
+    const float delays[] = {0, VGA_VERTICAL_MS,
+        (float)(100.0 * VRETRACE_LINE * 1000 / clock),
+        (float)(100.0 * (VRETRACE_LINE + 2) * 1000 / clock),
+        (float)(100.0 * VDISPEND_LINE * 1000 / clock + 0.005)};
+    for (unsigned i = 0; i < sizeof delays / sizeof *delays; ++i) {
+        float next = origin_lag + delays[i];
+        unsigned whole = (unsigned)next;
+        pic_slice_limit(slice, tick, index, origin_tick + whole, next - whole);
+    }
+    if (parts) {
+        for (unsigned part = 0; part < 4; ++part) {
+            float next = origin_lag + (mode == 0x13 ? VGA_MODE13_PART_MS : VGA_TEXT_PART_MS);
+            unsigned whole = (unsigned)next;
+            origin_tick += whole;
+            origin_lag = next - whole;
+            pic_slice_limit(slice, tick, index, origin_tick, origin_lag);
+        }
+    }
+}
+unsigned fist_clock_cpu_slice(uint64_t *cycle)
+{
+    uint64_t cpu = clock_cpu_cycles(clock_now()), tick = cpu / 30000u;
+    if (cycle) *cycle = cpu;
+    unsigned index = cpu % 30000u, slice = 30000u - index;
+    uint64_t pit = clock_cpu_cycles(pit_next_wrap());
+    if (pit > cpu && pit - cpu < slice) slice = (unsigned)(pit - cpu);
+    if (g_sequence_pic_ready) {
+        pic_slice_vga(&slice, tick, index, g_sequence_pic_tick, g_sequence_pic_vertical_lag, g_sequence_mode, 1);
+        if (g_sequence_pic_previous_ready)
+            pic_slice_vga(&slice, tick, index, g_sequence_pic_previous_tick, g_sequence_pic_previous_lag,
+                          g_sequence_pic_previous_mode, 0);
+    }
+    else if (g_sequence_next) {
+        uint64_t draw = clock_cpu_cycles((FistClock){g_sequence_next, 0});
+        if (draw > cpu && draw - cpu < slice) slice = (unsigned)(draw - cpu);
+    }
+    if (g_sequence_resize_ready) {
+        uint64_t resize = clock_cpu_cycles((FistClock){g_sequence_resize_ready, 0});
+        if (resize > cpu && resize - cpu < slice) slice = (unsigned)(resize - cpu);
+    }
+    return slice;
+}
 /* Step the clock to `target`, firing the channel-0 interrupt at every wrap on the way (the ISR may
  * re-program the channel, which restarts the count from that instant, as on the 8253). */
 int g_int8_replay;   /* board:0017 FIST_FRAME_SCHEDULE: the INT-8s come from the schedule, not the clock */
@@ -404,11 +475,11 @@ static void clock_advance_to(FistClock target){
             !clock_before(w, resize) && (!g_sequence_next || !clock_before(next, resize))) {
             clock_set(resize);
             g_sequence_resize_ready = 0;
-            g_sequence_mode = 0x13;
             g_sequence_blank = 0;
             g_sequence_part = 0;
             g_sequence_vertical_num += VGA_FRAME_NUM;
             fist_sequence_pic_advance_vertical();
+            g_sequence_mode = 0x13;
             g_sequence_next = fist_sequence_part_clock(1);
         }
         else if (g_sequence_next && !clock_before(target, next) && !clock_before(w, next)) {

@@ -49,6 +49,15 @@ static inline uint32_t lin(uint16_t seg, uint16_t off){ return ((uint32_t)seg <<
 static int g_trace = -1;
 static int traceon(void){ if (g_trace < 0) g_trace = getenv("FIST_TRACE_TRAPS") ? 1 : 0; return g_trace; }
 #define TRACE(...) do{ if(traceon()) fprintf(stderr, __VA_ARGS__);}while(0)
+static void trace_read_slice(int handle, uint32_t requested, size_t actual)
+{
+    if (!getenv("FIST_OPENLOG")) return;
+    extern unsigned fist_clock_cpu_slice(uint64_t *);
+    uint64_t cycle;
+    unsigned slice = fist_clock_cpu_slice(&cycle);
+    fprintf(stderr, "[read-cycles] h=%d n=%u actual=%zu cpu=%llu slice=%u\n",
+            handle, requested, actual, (unsigned long long)cycle, slice);
+}
 
 /* ---- program-exit (INT 21h/4Ch) unwinds back to native_main so we can dump the framebuffer ---- */
 extern jmp_buf g_fist_exit;
@@ -406,6 +415,7 @@ static void dos_int(void)
         int h=R_BX; uint16_t n=R_CX; uint32_t p=lin(R_DS,R_DX);
         if(h<5||h>=MAXH||!g_htab[h]){ R_AX=6; set_cf(1); return; }  /* 6 = invalid handle */
         size_t r = (p<FIST_MEM_SIZE) ? fread(g_mem+p,1,n,g_htab[h]) : 0;
+        trace_read_slice(h, n, r);
         TRACE("[dos] 3F read  h=%d n=%u -> %zu\n", h, n, r);
         R_AX=(uint16_t)r; set_cf(0); return; }
     case 0x40: { /* write, BX=handle CX=count DS:DX=buf -> AX=bytes */
@@ -626,6 +636,7 @@ static void dos_int_ext(void)
         if (h < 5 || h >= MAXH || !g_htab[h]) { R_AX = 6; set_cf(1); return; }
         long pos = ftell(g_htab[h]);
         size_t r = fread(buf, 1, n, g_htab[h]);
+        trace_read_slice(h, n, r);
         if (getenv("FIST_OPENLOG")) {
             uint32_t rel = (uint32_t)(buf - (g_mem + 0x100000));
             fprintf(stderr,"[readlog] h=%d filepos=%ld n=%u -> %zu  destEXT+0x%x%s\n",

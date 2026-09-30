@@ -40,11 +40,12 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   `tools/oracle/check_kdv_instruction_formula.py`, patch 617. DOS transfer/slice timing belongs to 0026.
 - `FIST_KDV_STAGE_N` (default three hits/IP) expands `FIST_KDV_STAGE=<file>`; 395 exposes later
   callbacks. CPU source is hash-checked. Original 748 retains all 742 frame/PCM bytes; invalid limits fail.
-- Accepted phase correction: `bash tools/check_flow.sh` passes all 43 tests, exact patch checks,
-  both builds and all 178 existing cross-target flows (`scratch/verify/run.2Oucs7/`, base `b37def0`
-  plus saved patch). Tested source diffs and binary/script hashes match current files.
-  This proves bounded timer phase behavior; complete original frame/audio parity remains open.
-  Timer/CPU regressions and scoped original-source proofs belong to 0026.
+- Accepted PIC budget projection (0026) preserves all 698 native 781/WASM 782 frame bytes in 789/790,
+  with matched fixture/devices/10000-ms endpoint. All palettes/times match the original; only event
+  443 pixels differ. Full comparison still fails missing mixed PCM. Proof: `pic-slices/final-capture-proof.json`
+  under `scratch/sequence-capture/`. `bash tools/check_flow.sh` passes all 44 tests, exact patches,
+  both builds and 178 existing cross-target flows: `scratch/verify/run.EKVpOw/` (base `839ae5e` + patch).
+  Timing source proofs and regressions belong to 0026.
 
 ## Next
 
