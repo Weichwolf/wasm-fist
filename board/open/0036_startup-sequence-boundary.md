@@ -37,16 +37,38 @@ never trims an unmatched emulator frame.
 - A temporary per-channel DOSBox mixer probe on the same boundary identified the first nonzero sample:
   stereo sample 18,887 (428,276 us), channel `SPKR`, delta -7,045,120 on both sides. The port has no
   PC-speaker PCM producer. Its first audio mismatch therefore precedes OPL and SB mixing.
+- `FIST_SPEAKER_TRACE=1` now records PIT-2 reloads, speaker mode transitions and the first original
+  mono sample. The versioned `speaker_trace.patch` is applied/hash-checked by the sequence Oracle builder;
+  port I/O emits reload/type diagnostics under the same switch. `oracle-speaker-711` records 27 reloads
+  and 54 transitions from SOUNDDVR `07b7/07f4`: the first reload is count 512, mode 3 at 404.277133346 ms,
+  with speaker state/volume zero. The first callback at 405 ms emits -860 at offset 12 of 44 samples.
+- DOSBox `SetType(0/1)` enqueues -5000 even with the speaker output disabled. Its integrated ramp produces
+  the first nonzero PCM; the calibration is not silent. Default mixer prebuffer is 25 ms: initial 1103
+  samples plus `floor(403 * 722534 / 16384)` samples through tick 404 plus callback offset 12 = 18,887.
+  The Q14 increment is `floor((44100 << 14)/1000)`. Preserve this initial fill and remainder contract.
+- `port-speaker-714` and `wasm-speaker-713` match all 81 diagnostic events and all 229 complete frame
+  records. Their first reload is 404.283671728 ms, 6.538382 us later than the Oracle. These diagnostics
+  establish port parity and identify timing work, not original PCM equality. Oracle 711's first 101,827
+  samples equal capture 707's complete PCM payload; the remaining Oracle suffix was not compared.
 
 ## Next
 
-1. Capture PIT channel 2 and port `0x61` state/events at the shared boundary. Reproduce the original
-   PC-speaker sample stream from that evidence; do not fit a waveform to the captured PCM.
+1. Use the speaker trace to recover instruction/I/O costs at SOUNDDVR `07b7/07f4`; fix the first event
+  mismatch before matching later samples. Recover DOSBox `ForwardPIT`, queued transitions and callback
+   ramp integration from `src/hardware/pcspeaker.cpp`; do not fit a waveform or a start offset.
 2. Add one final stereo mixer and sequence owner for PC speaker, OPL and SB. Include silence and emit
    deterministic sample-position blocks on native and WASM from the shared PIT clock.
 3. Compare the complete common PCM prefix against the Oracle. Report the first unequal sample or
    boundary and fix its producer contract.
 4. Keep title-frame timing work in 0034 and this item limited to the application boundary.
+
+Reproduce: build with `bash tools/oracle/build_sequence_oracle.sh`; export `FIST_SPEAKER_TRACE=1`,
+`FIST_DOSBOX_CORE=normal`, `FIST_DOSBOX_CYCLES='fixed 30000'`; run
+`bash tools/oracle/capture_sequence.sh 4 <fresh-dir>`. For ports set the start fixture/phase above,
+`FIST_SPEAKER_TRACE=1 FIST_OPL=1 FIST_SB=1`; run `bash tools/capture_port_sequence.sh <target> 170 <fresh-dir>`.
+Diagnostic change verification: `bash tools/check_flow.sh '^(intro|audio-opl-init)$'` passes both flows
+on both targets, all 29 tool tests and the patch check (`scratch/verify/run.I04VHg/`). This is partial
+matrix evidence; the full original PCM contract remains open.
 
 ## Accept
 

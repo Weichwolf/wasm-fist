@@ -1,0 +1,33 @@
+--- a/src/hardware/pcspeaker.cpp
++++ b/src/hardware/pcspeaker.cpp
+@@ -163,6 +163,7 @@
+ }
+ 
+ void PCSPEAKER_SetCounter(Bitu cntr,Bitu mode) {
++	if (getenv("FIST_SPEAKER_TRACE")) fprintf(stderr,"FIST_SPEAKER counter %.9f count=%u mode=%u type=%u rate=%u index=%.9g last=%.9g volume=%.9g wanted=%.9g queued=%u\n",PIC_FullIndex(),(unsigned)cntr,(unsigned)mode,(unsigned)spkr.mode,(unsigned)spkr.rate,spkr.pit_index,spkr.pit_last,spkr.volcur,spkr.volwant,(unsigned)spkr.used);
+ 	if (!spkr.last_ticks) {
+ 		if(spkr.chan) spkr.chan->Enable(true);
+ 		spkr.last_index=0;
+@@ -218,6 +219,7 @@
+ }
+ 
+ void PCSPEAKER_SetType(Bitu mode) {
++	if (getenv("FIST_SPEAKER_TRACE")) fprintf(stderr,"FIST_SPEAKER type %.9f type=%u previous=%u\n",PIC_FullIndex(),(unsigned)mode,(unsigned)spkr.mode);
+ 	if (!spkr.last_ticks) {
+ 		if(spkr.chan) spkr.chan->Enable(true);
+ 		spkr.last_index=0;
+@@ -303,6 +305,14 @@
+ 		*stream++=(Bit16s)(value/sample_add);
+ 	}
+ 	if(spkr.chan) spkr.chan->AddSamples_m16(len,(Bit16s*)MixTemp);
++	static bool traced_first_sample;
++	if (!traced_first_sample && getenv("FIST_SPEAKER_TRACE")) {
++		for (Bitu i=0; i<len; ++i) if (((Bit16s*)MixTemp)[i]) {
++			fprintf(stderr,"FIST_SPEAKER first %.9f length=%u offset=%u value=%d type=%u mode=%u volume=%.9g wanted=%.9g\n",PIC_FullIndex(),(unsigned)len,(unsigned)i,(int)((Bit16s*)MixTemp)[i],(unsigned)spkr.mode,(unsigned)spkr.pit_mode,spkr.volcur,spkr.volwant);
++			traced_first_sample=true;
++			break;
++		}
++	}
+ 
+ 	//Turn off speaker after 10 seconds of idle or one second idle when in off mode
+ 	bool turnoff = false;

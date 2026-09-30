@@ -525,6 +525,9 @@ void out(int port, int val)
         else { g_pit_wlatch[ch] = (unsigned short)((g_pit_wlatch[ch] & 0x00ff) | (val << 8)); g_pit_wsub[ch] = 0; done = 1; }
         if (done) {
             g_pit_reload[ch] = g_pit_wlatch[ch]; g_pit_base[ch] = g_clock;
+            if (ch == 2 && getenv("FIST_SPEAKER_TRACE"))
+                fprintf(stderr, "FIST_SPEAKER counter %.9f count=%u mode=%u type=%u\n",
+                        (double)g_clock * 1000.0 / PIT_HZ_, pit_period(2), g_pit_mode[2], g_port61 & 3);
             if (ch == 0 && getenv("FIST_VGA_TRACE") && g_clock < 200u * (PIT_HZ_ / 1000u))
 #ifndef __EMSCRIPTEN__
                 fprintf(stderr, "[vga] PIT0 reload=%u t=%.6f caller=%p\n", pit_period(0),
@@ -551,6 +554,9 @@ void out(int port, int val)
     case 0x20: case 0xa0:   /* PIC EOI */
     case 0x21: case 0xa1:   /* PIC mask */
     case 0x61:
+        if (port == 0x61 && ((g_port61 ^ val) & 3) && getenv("FIST_SPEAKER_TRACE"))
+            fprintf(stderr, "FIST_SPEAKER type %.9f type=%u previous=%u\n",
+                    (double)g_clock * 1000.0 / PIT_HZ_, val & 3, g_port61 & 3);
         if ((g_port61 ^ val) & 1 && (val & 1)) g_pit_base[2] = g_clock;
         g_port61 = (unsigned char)val;
         return;

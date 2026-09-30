@@ -75,7 +75,7 @@ Report the first unequal event, byte or sample. Missing, truncated or masked out
    cockpit.
 2. Resolve the startup capture boundary and launcher output in 0036. Compare every frame's order,
    size, time, indices and palette without silently dropping a prefix.
-3. Route OPL and SB through one continuous mixer (0003); compare every PCM sample and fail on
+3. Route PC speaker, OPL and SB through one continuous mixer (0003/0036); compare every PCM sample and fail on
    missing, reordered or unfinished output.
 
 ## Accept
