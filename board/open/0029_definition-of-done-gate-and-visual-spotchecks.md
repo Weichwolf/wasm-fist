@@ -19,6 +19,12 @@ any clean result with at least 176 PASS lines. The gate now derives the root, pi
 WASM/tool hashes, rejects tracked changes, clears flow filters, checks producer status plus an exact
 dynamic summary, and retains every run under one evidence directory. `tools/consecutive.sh` owns this logic;
 `wasm_gate.sh` only selects WASM. No historical streak was carried forward.
+Build review found C/C++ failures could reuse stale objects when stderr lacked `error:`.
+Node/browser builders now require a successful compiler exit; `tests/test_build.py` reaches all
+four failure paths. Source inventory and warning policy remain duplicated across the three builders.
+Real node/browser builds pass (`scratch/review/build-integrity/`); node WASM bytes are unchanged.
+All 32 tool tests pass (`scratch/verify/run.we53cO/tests-final.log`). The same engine binaries pass
+the complete existing 178-flow cross-target matrix; original sequence/coverage requirements remain open.
 
 ## Next
 
@@ -28,7 +34,8 @@ dynamic summary, and retains every run under one evidence directory. `tools/cons
    Palette/frame/audio masks must follow a proved contract, never conceal a failing surface.
 3. Split compiler policy between generated engine C and hand-written shims. Remove current shim
    warnings, then compile shims with `-Wall -Wextra -Werror`; retain only documented generated-code
-   suppressions for the mechanical decompile.
+   suppressions for the mechanical decompile. Share the source inventory; keep native/node/browser
+   optimization, diagnostics and linker configuration explicit.
 4. Run `bash tools/verify.sh both` explicitly: separate native/wasm runs skip cross-target
    comparisons in several branches. Complete parity evidence, then obtain ten clean WASM passes and the
    required independent confirmation. Rebuilds or material matrix changes require a fresh streak.

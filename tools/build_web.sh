@@ -24,15 +24,17 @@ for m in mga snd ext; do [ -f "$SRCDIR/fist_$m.c" ] && UNITS_C="$UNITS_C $SRCDIR
 OBJS=""; err=0
 for c in $UNITS_C; do
   o="$OBJDIR/$(basename "$c" .c).o"
-  "$EMCC" -c $F $INCL "$c" -o "$o" 2>"$OBJDIR/cc.txt" || true
-  grep -q 'error:' "$OBJDIR/cc.txt" && { echo "ERR $(basename "$c"):"; grep 'error:' "$OBJDIR/cc.txt"|head -6; err=1; }
+  if ! "$EMCC" -c $F $INCL "$c" -o "$o" 2>"$OBJDIR/cc.txt"; then
+    echo "ERR $(basename "$c"):"; cat "$OBJDIR/cc.txt"; err=1
+  fi
   OBJS="$OBJS $o"
 done
 CXXF="-O2 -std=gnu++11 -w -fno-rtti -fno-exceptions -fno-strict-aliasing"
 for pair in "$SRCDIR/fist_opl_dbopl.cpp:-I$SRCDIR -I$SRCDIR/opl" "$SRCDIR/opl/dbopl.cpp:-I$SRCDIR/opl"; do
   src="${pair%%:*}"; inc="${pair#*:}"; o="$OBJDIR/$(basename "$src" .cpp).o"
-  "$EMXX" -c $CXXF $inc "$src" -o "$o" 2>"$OBJDIR/cc.txt" || true
-  grep -q 'error:' "$OBJDIR/cc.txt" && { echo "ERR $(basename "$src"):"; grep 'error:' "$OBJDIR/cc.txt"|head -6; err=1; }
+  if ! "$EMXX" -c $CXXF $inc "$src" -o "$o" 2>"$OBJDIR/cc.txt"; then
+    echo "ERR $(basename "$src"):"; cat "$OBJDIR/cc.txt"; err=1
+  fi
   OBJS="$OBJS $o"
 done
 [ "$err" = 1 ] && { echo "build aborted"; exit 1; }

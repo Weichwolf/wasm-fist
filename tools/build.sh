@@ -41,9 +41,8 @@ done
 OBJS=""; err=0
 for c in $UNITS_C; do
   o="${OBJDIR:-/tmp}/wasm_$(basename "$c" .c).o"
-  "$EMCC" -c $F $INCL "$c" -o "$o" 2>${OBJDIR:-/tmp}/fist_wcc.txt || true
-  if grep -q 'error:' ${OBJDIR:-/tmp}/fist_wcc.txt; then
-    echo "ERROR compiling $(basename "$c"):"; grep 'error:' ${OBJDIR:-/tmp}/fist_wcc.txt | head -8; err=1
+  if ! "$EMCC" -c $F $INCL "$c" -o "$o" 2>${OBJDIR:-/tmp}/fist_wcc.txt; then
+    echo "ERROR compiling $(basename "$c"):"; cat ${OBJDIR:-/tmp}/fist_wcc.txt; err=1
   fi
   OBJS="$OBJS $o"
 done
@@ -53,9 +52,8 @@ CXXF="-O2 -std=gnu++11 -w -fno-rtti -fno-exceptions -fno-strict-aliasing"
 for pair in "$SRCDIR/fist_opl_dbopl.cpp:-I$SRCDIR -I$SRCDIR/opl" "$SRCDIR/opl/dbopl.cpp:-I$SRCDIR/opl"; do
   src="${pair%%:*}"; inc="${pair#*:}"
   o="${OBJDIR:-/tmp}/wasm_$(basename "$src" .cpp).o"
-  "$EMXX" -c $CXXF $inc "$src" -o "$o" 2>${OBJDIR:-/tmp}/fist_wcc.txt || true
-  if grep -q 'error:' ${OBJDIR:-/tmp}/fist_wcc.txt; then
-    echo "ERROR compiling $(basename "$src"):"; grep 'error:' ${OBJDIR:-/tmp}/fist_wcc.txt | head -8; err=1
+  if ! "$EMXX" -c $CXXF $inc "$src" -o "$o" 2>${OBJDIR:-/tmp}/fist_wcc.txt; then
+    echo "ERROR compiling $(basename "$src"):"; cat ${OBJDIR:-/tmp}/fist_wcc.txt; err=1
   fi
   OBJS="$OBJS $o"
 done
