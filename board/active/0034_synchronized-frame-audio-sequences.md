@@ -27,6 +27,12 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   Original content parity still fails: event 405 differs in palette, 443/648/662 in pixels.
   Attribution: `scratch/sequence-capture/pic-dispatch-362/attribution-final.json`.
   The last visual frame is still the helicopter intro; this is not a complete intro/menu proof.
+- Frame 405's palette defect comes from timer calibration (0026), before DAC synthesis:
+  original callback 80 starts at 5811.847067 ms; both ports at 5826.158122 ms.
+  Original period/increment are 17023/56100, ports 17022/56097. After callback 79 the original
+  reaches counter 321 in four IRQs, ports need five. Derivation and state traces:
+  `scratch/sequence-capture/palette-405/cause.json`, original 755/native 756/WASM 759.
+  Do not fit a period, fade value or capture offset; recover the calibration's I/O timing.
 - PCM count follows the original mixer: `1103 + floor((end_ms−1)×722534/16384)`, yielding
   133,358/207,005/442,058 samples at 3000/4670/10000 ms. Ports still lack final mixed sequence PCM
   (0003); the complete comparator correctly fails the missing file. `--frames-only` is diagnostic.
@@ -40,6 +46,10 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   Formula: `7+7×rows+2×headers +82×two-bit +97×one-bit +25×solid +64×raw +13×skip`,
   plus `2×two-bit-writes +one-bit-writes +raw-writes`. First decode: 102,357 instructions;
   15 first-touch faults cost 187 cycles each. DOS `3Fh` read cost is `4×bytes`, capped by the 1-ms slice.
+- Original stage probe now accepts `FIST_KDV_STAGE_N` (default three hits/IP); use 395 with
+  `FIST_KDV_STAGE=<file>` for later callbacks. Build hash-checks the CPU source/patch.
+  Original 748 with expanded tracing retains all 742 frame/PCM bytes; a one-hit capture retains
+  all original 1000-ms bytes. Invalid limits fail; the producer never reports a reached endpoint.
 - Boundary/fixture tests fail at their unmodified bases on both targets and pass after each fix. All 37 tool tests
   pass; `bash tools/check_flow.sh '^(intro|mainmenu|audio-opl-init)$'` passes its three flows on
   both targets (`scratch/verify/run.ksO3t0/`). This is partial matrix evidence.
@@ -47,7 +57,8 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
 
 ## Next
 
-1. Trace the original palette upload at event 405, then decoder/framebuffer writes at 443/648/662.
+1. Recover 2fd3's calibration/reload/latch instruction and I/O costs in 0026; reproduce callback 80
+   and frame 405. Then trace decoder/framebuffer writes at 443/648/662.
    Recover intervening instruction/read/fault/ISR costs; do not adjust capture phase or mask fields.
 2. Extend the matched endpoint through the first stable original menu, then timed inputs. Compare
    every record; retain the first unequal producer. Reuse the versioned 0036 fixture.

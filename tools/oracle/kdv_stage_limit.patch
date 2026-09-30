@@ -1,0 +1,15 @@
+--- a/src/cpu/core_normal.cpp
++++ b/src/cpu/core_normal.cpp
+@@ -150,0 +151 @@
++		static unsigned fist_kdv_stage_limit = 3;
+@@ -160,0 +162,7 @@
++			const char *value = getenv("FIST_KDV_STAGE_N");
++			if (value) {
++				char *tail;
++				unsigned long limit = strtoul(value, &tail, 10);
++				if (!*value || *tail || !limit || limit > 1000000) E_Exit("Invalid KDV stage limit");
++				fist_kdv_stage_limit = (unsigned)limit;
++			}
+@@ -187 +195 @@
+-				if (reg_eip == fist_kdv_stage_ip[i] && fist_kdv_stage_count[i]++ < 3) {
++				if (reg_eip == fist_kdv_stage_ip[i] && fist_kdv_stage_count[i]++ < fist_kdv_stage_limit) {
