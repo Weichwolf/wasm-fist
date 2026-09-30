@@ -59,7 +59,7 @@ for run in $(seq 1 "$MAXITER"); do
     exit 2
   fi
 
-  if FIST_VERIFY_OUT="$dir" NATIVE="$NATIVE" OUTJS="$OUTJS" NODE="$NODE" \
+  if FIST_FLOWS= FIST_VERIFY_OUT="$dir" NATIVE="$NATIVE" OUTJS="$OUTJS" NODE="$NODE" \
       bash "$ROOT/tools/verify.sh" "$WHICH" > "$dir/verify.log" 2>&1; then
     rc=0
   else

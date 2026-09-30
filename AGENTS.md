@@ -12,6 +12,7 @@ internal memory/write traces are diagnostic, not an independent equality require
   parallel paths with duplicated state or acceptance logic.
 - Generated engine C in `re_out/` stays pristine. Corrections are asm-backed `patches/NNN-*.diff`
   with rationale; `build/` is disposable. Hand-written shim and tools may be edited directly.
+- `build/` has one writer. Run build targets sequentially or in one `make` invocation.
 - Use local binaries/source first. Oracle: `third_party/dosbox-fist`, source `third_party/dosbox-build/`.
   `FIST_WATCHFLAT` follows guest paging; port DGROUP `0x1c000` is not guest physical `0x1c000`.
 - Keep `armoredfist/` read-only; use isolated copies for runs. Match capture boundaries before diffing.
