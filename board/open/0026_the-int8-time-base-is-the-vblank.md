@@ -1,31 +1,49 @@
 Type: feature
-Title: The PIT clock and browser presentation preserve original timing
+Title: The shared device clock and browser presentation preserve original timing
 
 ## Contract
 
-Keep one deterministic PIT timeline and transparent interrupts on both targets; pace browser
-presentation without changing simulation/audio state or hiding timing differences from the original.
+One shared clock owns PIT/retrace/interrupt/I/O event time on both targets. Device and capture
+producers consume it. Browser pacing preserves simulation/audio state and observable ordering.
 
 ## Evidence
 
-The shared clock, ISR register/flag save-restore and BIOS chaining landed (576/582 and shim work).
-Mode-13h period is modeled as 17025 PIT counts; calibration measures 0x427f. The historical PLL reload
-settled near 0x411c versus oracle 0x426e because status-poll skipping changed poll count. Equal average
-frame rate does not by itself settle that difference. Scripted mouse times now use menu-relative
-vblanks; old FIST_COOP_TICK/FIST_TICK_HZ/SIGALRM instructions are obsolete.
+- Shared PIT clock, ISR register/flag preservation and BIOS chaining landed in 576/582.
+  Current coarse model charges one PIT count per port/pump and eight per indirect call
+  (`re_out/fist_icall.c:FIST_ICALL_COUNTS`). These are approximations, not fixed-30k Oracle proof.
+- Mode-13 calibration measures 0x427f; legacy model period is 17025 counts. Earlier poll skipping
+  changed reload 0x411c versus Oracle 0x426e. Matching average frame rate does not prove event order.
+- Temporary instruction/I/O probes `oracle-speaker-instruction-720`/`port-speaker-io-721`
+  locate the first speaker event gap upstream of SOUNDDVR: original PIT-0 reload 0x4175,
+  port 0x4174; EOI at 404.233733326 versus 404.234224117 ms. Original has 23 reads of PIC
+  port 0x21 before driver entry. `src/dos/drive_local.cpp:localFile::Read` reads that mask
+  on every file read; do not label this a BIOS polling loop without caller attribution.
+- Original first PIT-2 reload: 404.277133346 ms; port: 404.283671728 ms.
+  Difference: `404.283671728−404.277133346 = 0.006538382 ms`. Do not fit an audio offset.
+- Fixed-30k normal core charges one cycle/instruction. `iohandler.cpp` charges
+  `30000/1024 = 29` extra cycles/read and `30000/1365 = 21` extra cycles/write
+  (integer division), suppressed when fewer than three delay costs remain in the slice.
+  Preserve instruction boundaries and slice remainder when modeling an observable event.
+- VGA/PIC ignored writes fell through to speaker port 0x61, changing its state and PIT-2 base.
+  `tests/port_io.c` reaches the defect on both targets; the dispatch now isolates port 0x61.
+- Verification on base `65d42dc` plus the recorded patch: `bash tools/check_flow.sh` passes all
+  178 existing flows on both targets (`scratch/verify/run.we53cO/`). The final port regression
+  fails on unmodified base C and passes with the fix on native/WASM; logs retain both results.
+  This proves the bounded dispatch fix, not complete original frame/audio parity.
+- Scripted mouse timing is menu-relative vblanks. Old COOP_TICK/TICK_HZ/SIGALRM advice is obsolete;
+  DOSBox wall-clock XTEST timing differs from port vblank scripts.
 
 ## Next
 
-1. Capture retrace, channel-0 reload and INT-8 events around calibration and re-arm. Determine whether
-   poll skipping changes observable event/sample order; preserve it exactly if it does.
-2. Audit port-driving oracle scripts for old mouse-time units, especially r92/9200 and debrief tools.
-   Keep DOSBox wall-clock XTEST timing distinct from port vblank scripts.
-3. Run the actual browser worker build (`make web`); measure vblank/presentation and input latency,
-   background/resume and audio continuity. Verify Atomics.wait/shared-memory prerequisites.
-4. Recommendation: pace at the presentation boundary using the existing deterministic clock;
-   do not inject wall-clock-dependent simulation ticks. Retain an event trace to compare with node.
+1. Attribute the pre-speaker reads/calls; recover PIT-0 ISR return and SOUNDDVR I/O costs.
+   Repair the shared time contract and compare the first event before extending the trace.
+2. Verify retrace/reload/IRQ order through calibration/re-arm. Supply timed events to 0003 and
+   frame capture to 0034; neither implements a separate device clock.
+3. Audit old mouse-time scripts (r92/9200, debrief). Run `make web`; measure input/presentation,
+   background/resume and audio continuity, including Atomics.wait/shared-memory prerequisites.
+4. Pace at the presentation boundary; retain event traces. No wall-clock-dependent simulation ticks.
 
 ## Accept
 
-Matched PIT/retrace/ISR effects and sample ordering, correct fades, responsive live browser play,
-and native↔WASM parity. No claim of browser functionality based solely on node matrix passes.
+Matched original PIT/retrace/ISR effects and sample order, responsive browser play and cross-target
+parity. Node matrix passes alone do not establish browser behavior.

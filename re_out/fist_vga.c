@@ -553,8 +553,9 @@ void out(int port, int val)
     case 0x3d8: case 0x3d9: /* mode/color select */
     case 0x20: case 0xa0:   /* PIC EOI */
     case 0x21: case 0xa1:   /* PIC mask */
+        return;
     case 0x61:
-        if (port == 0x61 && ((g_port61 ^ val) & 3) && getenv("FIST_SPEAKER_TRACE"))
+        if (((g_port61 ^ val) & 3) && getenv("FIST_SPEAKER_TRACE"))
             fprintf(stderr, "FIST_SPEAKER type %.9f type=%u previous=%u\n",
                     (double)g_clock * 1000.0 / PIT_HZ_, val & 3, g_port61 & 3);
         if ((g_port61 ^ val) & 1 && (val & 1)) g_pit_base[2] = g_clock;
