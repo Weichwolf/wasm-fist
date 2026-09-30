@@ -17,7 +17,8 @@ progression, gameplay input/link, browser pacing and full mission tails (owning 
 Project audit at `bf26d8f` found that `tools/wasm_gate.sh` used an absolute checkout path and accepted
 any clean result with at least 176 PASS lines. The gate now derives the root, pins the revision and
 WASM/tool hashes, rejects tracked changes, checks producer status plus an exact dynamic summary, and
-retains every run under one evidence directory. No historical streak was carried forward.
+retains every run under one evidence directory. `tools/consecutive.sh` now owns this logic;
+`wasm_gate.sh` only selects WASM. No historical streak was carried forward.
 
 ## Next
 

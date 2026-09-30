@@ -8,6 +8,8 @@ internal memory/write traces are diagnostic, not an independent equality require
   current code and evidence. Update the WI instead of appending session transcripts.
 - Find the first differing output, trace its producer, recover the original register/segment/width/
   flag contract. No guessed constants, missing-work stubs, output masks or guards that hide defects.
+- Keep one owner for each output and verification contract. Prefer small composable tools over
+  parallel paths with duplicated state or acceptance logic.
 - Generated engine C in `re_out/` stays pristine. Corrections are asm-backed `patches/NNN-*.diff`
   with rationale; `build/` is disposable. Hand-written shim and tools may be edited directly.
 - Use local binaries/source first. Oracle: `third_party/dosbox-fist`, source `third_party/dosbox-build/`.
