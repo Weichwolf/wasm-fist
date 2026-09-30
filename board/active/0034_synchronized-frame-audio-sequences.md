@@ -5,81 +5,46 @@ Depends: 0033
 
 ## Contract
 
-For matched initial state, timed input and devices, compare every presented indexed frame, all
-256 palette entries, presentation time and continuous mixed PCM across the same scenario bounds.
-Report the first unequal event, byte or sample. Missing, truncated or masked output fails.
+Under matched start state, timed input and devices, compare every presented indexed frame,
+all 256 palette entries, presentation time and continuous mixed PCM over identical scenario bounds.
+Report the first unequal event/byte/sample. Missing, truncated or masked output fails.
 
 ## Evidence
 
-- The fixed-30000-cycle Oracle has 4,151 frames and 2,626,325 stereo samples with valid footers
-  (`scratch/sequence-capture/kdv-profile-full-run/`). Its first 30 frames are 640×400 DOSBox
-  shell/launcher output; frame 26 includes Armored Fist's copyright text, frames 27–29 are black.
-  Mode 13 starts at 475.189 ms after one skipped 640×400 presentation. DOSBox schedules each
-  scanout part through a `float` PIC index, then executes it on the 30,000-cycles/ms CPU quantum.
-  The trace changes from 3.17774258 ms text parts to 3.17775571 ms mode-13 parts at the switch
-  (`oracle-drawfloat-675/dosbox.log`); the latter follows the mode-13 3,146,875 Hz character
-  clock, while text uses 3,146,888 Hz. A global clock replacement breaks event 4; rescaling the
-  accumulated phase at the switch breaks event 33. The replacement must reproduce the PIC float
-  event queue, not substitute a rational clock or phase scale. Native/WASM contents match each
-  other and the first six Oracle mode-13 frames (`fractional-*/`). Absolute start, startup capture
-  boundary/launcher presentation, phase/long-run rounding and mixed PCM remain unmatched (0036).
-- The KDV decoder now charges its exact recovered `7135..746a` instruction count before DAC
-  upload and framebuffer copy. The first 171 native frames now have Oracle-identical indices
-  and palettes; their first unequal record is event 36, 560,798 versus 560,797 us. Eleven of
-  171 timestamps are one microsecond early. Original present→decode costs 1,042/331/380 PIT
-  counts for frames 1–3, decoder→DAC 4,183/2,459/2,443, DAC→fill 753–757. The first decode
-  executes 102,357 instructions plus 15 first-touch faults at 187 cycles each. Use
-  `FIST_DOSBOX_CORE=normal` for comparable timing. Stage/profile traces:
-  `scratch/sequence-capture/kdv-stage-readcost.tsv`,
-  `kdv-profile-{3calls,60k,full}.tsv`, `kdv-exceptions*.txt`.
-- Frame timestamps now use exact integer microsecond rounding. Native and WASM match all 171
-  captured frame records, including time (`{port,wasm}-inttime-672`); the Oracle's event-36
-  one-microsecond lead remains a clock-model discrepancy.
-- The Oracle PIC trace records the missing queue state: scanout callbacks schedule from the stored
-  `srv_lag`, not a global frame phase (`oracle-vga-pic-676/`). A local model with the observed text
-  and mode-13 part delays now reproduces all 171 reference timestamps. `PIC_RunQueue` dispatches at
-  the first 30,000-cycles/ms cycle at or after the queued float index; capture timestamps then use
-  DOSBox's float PIC tick fraction, not an exact rational cycle fraction. This resolves event 98:
-  `1445.417499989 ms` records as 1,445,417 µs (`oracle-draw-fixed-685/`). Native, WASM and Oracle
-  times match (`{port,wasm}-picfinal-686`), and native/WASM frame streams match completely.
-- A one-cycle timestamp offset is rejected: it fixes later rounding edges but breaks Oracle event
-  22 (`346,776` versus `346,777` us, `port-inttime-plus1-673`). Keep the exact conversion.
-- DOSBox `INT 21h/3Fh` charges `4×read bytes`, capped by the remaining 1-ms CPU slice
-  (`src/dos/dos.cpp:modify_cycles`). First three KDV calls read 768+5,000, 768+1,381 and
-  768+1,671 bytes. A reverted uncapped read-cost trial plus the measured first decoder cost
-  matches all 24 Oracle frame contents/palettes, proving the producer of frame 7 but not a
-  general timing model (`scratch/sequence-capture/readcost-decoder-gdb/`).
-- The original gate trace is `00,20,04,44,68,44,6c,70,78,64,78,…`: `0x70` enters `11cb`
-  (open), `0x78` enters `11dd` (decode/present), and `0x64` follows the first blit. Native
-  has the same order (`port-op70-opseq-666`), so its KDV gate now opens on `0x70`; the prior
-  `0x64` condition was false routing. This corrects control flow, not collapsed timing.
-- Assembly `7135..746a` yields an exact instruction formula: `7+7×rows+2×headers` plus
-  `82×two-bit + 97×one-bit + 25×solid + 64×raw + 13×skip` per cell, plus
-  `2×two-bit-writes + one-bit-writes + raw-writes`. Patch 617 counts these predicates while
-  decoding, without charging time. `bash tools/check_kdv_counts.sh
-  scratch/sequence-capture/kdv-profile-full.tsv <fresh-out>` proves all 395 native and WASM
-  counts match the pure Oracle decoder; seven calls include interleaved ISR work
-  (`scratch/sequence-capture/kdv-count-check-617/`). Keep file reads, faults and ISR cost
-  separate from the decoder formula. All 178 existing flows pass both targets with exact
-  coverage and binary hashes (`scratch/verify/full-kdv-instruction-meter/`).
-- Patch 616 restores the MGAVIDEO palette IRQ wait; all 23 cockpit flows pass both targets
-  (`scratch/verify/run.hKE2yL/`). The strict frame/PCM comparator is
-  `tools/oracle/compare_sequences.py`; its ordering/completion test passes. Browser canvas
-  drops superseded worker posts, and OPL/SB are not yet one mixed PCM stream (0026/0003).
+- Capture/comparison owners: `tools/oracle/capture_sequence.sh`,
+  `tools/capture_port_sequence.sh`, `tools/oracle/compare_sequences.py`; strict format checks in 0033.
+- Original fixed-30k full capture: 4,151 frames, 2,626,325 stereo samples, valid footers
+  (`scratch/sequence-capture/kdv-profile-full-run/`). Shell/launcher prefix and attributed
+  application-start fixture are distinguished in 0036; never drop unmatched records.
+- PIC scanout schedules from stored float `srv_lag`, dispatches on the first eligible CPU cycle,
+  and exposes a float tick fraction. The shared shim reproduces all 171 reference timestamps
+  (`{port,wasm}-picfinal-686`). Global rational-clock replacement, mode-switch phase scaling
+  and a one-cycle offset each broke earlier records. Do not revive those approximations.
+- KDV open/decode/present order is `00,20,04,44,68,44,6c,70,78,64,78,…`; `0x70` opens
+  `11cb`, `0x78` enters `11dd`. The old `0x64` open condition was false routing.
+- Patch 617 meters asm `7135..746a`: `7+7×rows+2×headers`, plus cell costs
+  `82×two-bit + 97×one-bit + 25×solid + 64×raw + 13×skip`, plus
+  `2×two-bit-writes + one-bit-writes + raw-writes`. All 395 native/WASM counts match
+  the pure Oracle decoder; seven callbacks include separate ISR work
+  (`kdv-count-check-617/`). First decode: 102,357 instructions and 15 faults at 187 cycles each.
+- DOSBox `INT 21h/3Fh` charges `4×read bytes`, capped by the remaining 1-ms slice.
+  First three KDV reads are 768+5,000, 768+1,381, 768+1,671 bytes. Separate read/fault/ISR
+  costs from cell execution. Traces: `kdv-stage-readcost.tsv`, `kdv-profile-*.tsv`,
+  `kdv-exceptions*.txt` under `scratch/sequence-capture/`.
+- Historical full 178-flow cross-target pass: `scratch/verify/full-kdv-instruction-meter/`.
+  Frame boundary evidence is in 0036; missing PC-speaker/final mixed PCM is owned by 0003.
+  Browser presentation drops belong to 0026. None of these subset proofs closes this contract.
 
 ## Next
 
-1. Reproduce DOSBox's read-cycle slice cap and first-touch faults. Refine the decoder boundary
-   charge to cell execution only when a trace proves an intervening observable event. Compare
-   complete frame contents and timestamps through the first difference, including the post-IRQ
-   cockpit.
-2. Resolve the startup capture boundary and launcher output in 0036. Compare every frame's order,
-   size, time, indices and palette without silently dropping a prefix.
-3. Route PC speaker, OPL and SB through one continuous mixer (0003/0036); compare every PCM sample and fail on
-   missing, reordered or unfinished output.
+1. Replace wall-clock/F9 capture termination with a matched emulated scenario endpoint. Current
+   Oracle captures vary in suffix length; a common prefix is diagnostic, not full-run acceptance.
+2. Reproduce the 0036 start fixture on all three targets; compare complete intro/menu records.
+   Hand the first event-time discrepancy to 0026 and first mixed-PCM discrepancy to 0003.
+3. Refine read-slice/fault/decoder timing only where a trace proves an intervening observable event.
+   Extend synchronized coverage through the post-IRQ cockpit; retain the first unequal producer.
 
 ## Accept
 
 All three complete intro/menu captures have independent Oracle provenance and identical frame,
-palette, time and PCM sequences. Remaining flight, audio or timing differences stay with
-0012, 0003 or 0026 and name their first differing producer.
+palette, time and PCM sequences. Flight/audio/timing extensions remain with 0012/0003/0026.
