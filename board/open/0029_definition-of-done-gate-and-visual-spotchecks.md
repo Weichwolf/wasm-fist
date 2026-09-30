@@ -14,16 +14,20 @@ one complete 178-flow pass on each target, not a fresh ten-run streak. Reported 
 processes do not prove an OOM cause without system evidence and do not waive the gate.
 Missing coverage includes dynamic terrain/projection, all cockpits, mission sample audio, campaign
 progression, gameplay input/link, browser pacing and full mission tails (owning items in README).
+Project audit at `bf26d8f` found that `tools/wasm_gate.sh` used an absolute checkout path and accepted
+any clean result with at least 176 PASS lines. The gate now derives the root, pins the revision and
+WASM/tool hashes, rejects tracked changes, checks producer status plus an exact dynamic summary, and
+retains every run under one evidence directory. No historical streak was carried forward.
 
 ## Next
 
 1. Build an explicit surface→flow→original-reference inventory. Derive expected flow names from
    that inventory and fail omissions/duplicates; a hardcoded minimum count can hide missing coverage.
-2. Harden `tools/wasm_gate.sh`: check process exit status as well as summaries, fix the tested build
-   identity, and preserve all ten complete results. Recommendation: bounded foreground chunks may
-   form one pass only if every expected flow completes once on the same build.
-3. Fill coverage through owning items; add representative visual comparisons for each surface class.
+2. Fill coverage through owning items; add representative visual comparisons for each surface class.
    Palette/frame/audio masks must follow a proved contract, never conceal a failing surface.
+3. Split compiler policy between generated engine C and hand-written shims. Remove current shim
+   warnings, then compile shims with `-Wall -Wextra -Werror`; retain only documented generated-code
+   suppressions for the mechanical decompile.
 4. Run `bash tools/verify.sh both` explicitly: separate native/wasm runs skip cross-target
    comparisons in several branches. Complete parity evidence, then obtain ten clean WASM passes and the
    required independent confirmation. Rebuilds or material matrix changes require a fresh streak.
