@@ -22,17 +22,16 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   stereo samples. Native 729 and WASM 730 match all frame records, palettes, indices and times.
   At 4670 ms, original 735/native 736 both contain 324 equal frames; the frame at 4670 ms is excluded.
 - Complete 10000-ms original runs 731/734/742 match all 698 frames and 442,058 samples.
-  Native 743/WASM 744 match each other and all original times. Restoring the exact queued PIC
-  origin (0036) fixes six 1-us errors, first event 362 at 5,212,186 versus 5,212,187 us.
-  Original content parity still fails: event 405 differs in palette, 443/648/662 in pixels.
-  Attribution: `scratch/sequence-capture/pic-dispatch-362/attribution-final.json`.
-  The last visual frame is still the helicopter intro; this is not a complete intro/menu proof.
-- Frame 405's palette defect comes from timer calibration (0026), before DAC synthesis:
-  original callback 80 starts at 5811.847067 ms; both ports at 5826.158122 ms.
-  Original period/increment are 17023/56100, ports 17022/56097. After callback 79 the original
-  reaches counter 321 in four IRQs, ports need five. Derivation and state traces:
-  `scratch/sequence-capture/palette-405/cause.json`, original 755/native 756/WASM 759.
-  Do not fit a period, fade value or capture offset; recover the calibration's I/O timing.
+  Native 762/WASM 763 match each other. The exact queued PIC origin (0036) fixes six 1-us errors;
+  original PIT latch rounding (0026) fixes palette event 405 and pixel events 648/662.
+  All 698 palettes/times now match; only event 443 pixels differ, first byte 32004: 13 versus 14.
+  Attribution: `scratch/sequence-capture/pit-calibration/attribution.json`.
+  Last frame is still the helicopter intro; full intro/menu acceptance remains unproved.
+- At event 443 (6,367,900 us), 8,674 pixels differ exclusively in rows 100–149.
+  Original framebuffer copy 7120 starts at 6365.540100 ms, after the third scanout band;
+  port starts at 6364.404592 ms, before it. Callback 88's pure decoder count matches.
+  Original pre-decoder DOS reads consume CPU slice time absent from the port (0026).
+  GDB captures `oracle-read-cycles-766`/`oracle-pre-88-767` retain every original 742 frame/PCM byte.
 - PCM count follows the original mixer: `1103 + floor((end_ms−1)×722534/16384)`, yielding
   133,358/207,005/442,058 samples at 3000/4670/10000 ms. Ports still lack final mixed sequence PCM
   (0003); the complete comparator correctly fails the missing file. `--frames-only` is diagnostic.
@@ -40,26 +39,24 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   GDB proves event 362 dispatches at cycle 5595; the old rounded origin produced 5596.
   Source-derived fixture and reproduction: `tools/oracle/start_state.{vga,pic.gdb}` (0036).
   Global rational-clock replacement, mode-switch phase scaling and a one-cycle offset broke earlier records.
-- KDV gate order is `00,20,04,44,68,44,6c,70,78,64,78,…`: `0x70` opens `11cb`, `0x78`
-  enters `11dd`. Patch 617 meters asm `7135..746a`; all 395 native/WASM counts match the pure
-  Oracle decoder (`kdv-count-check-617/`), seven callbacks include separate ISR work.
-  Formula: `7+7×rows+2×headers +82×two-bit +97×one-bit +25×solid +64×raw +13×skip`,
-  plus `2×two-bit-writes +one-bit-writes +raw-writes`. First decode: 102,357 instructions;
-  15 first-touch faults cost 187 cycles each. DOS `3Fh` read cost is `4×bytes`, capped by the 1-ms slice.
+- Patch 617 meters asm `7135..746a`; all 395 native/WASM counts match the pure Oracle decoder
+  (`kdv-count-check-617/`), seven callbacks include separate ISR work. Formula and fault costs:
+  `tools/check_kdv_instruction_formula.py`, patch 617. DOS transfer/slice timing belongs to 0026.
 - Original stage probe now accepts `FIST_KDV_STAGE_N` (default three hits/IP); use 395 with
   `FIST_KDV_STAGE=<file>` for later callbacks. Build hash-checks the CPU source/patch.
   Original 748 with expanded tracing retains all 742 frame/PCM bytes; a one-hit capture retains
   all original 1000-ms bytes. Invalid limits fail; the producer never reports a reached endpoint.
-- Boundary/fixture tests fail at their unmodified bases on both targets and pass after each fix. All 37 tool tests
-  pass; `bash tools/check_flow.sh '^(intro|mainmenu|audio-opl-init)$'` passes its three flows on
-  both targets (`scratch/verify/run.ksO3t0/`). This is partial matrix evidence.
-  Historical full 178-flow proof: `full-kdv-instruction-meter/`.
+- PIT regression compares actual original `timer.cpp:counter_latch` in 70 cases on each target;
+  unmodified port fails 80 subtests. All 38 tool tests pass with the correction.
+  `bash tools/check_flow.sh` passes all 178 existing flows on both targets on base `68bf531`
+  plus the PIT patch (`scratch/verify/run.lwhih4/`); pinned binary/script hashes still match.
+  This accepts the bounded PIT correction, not complete original frame/audio parity.
 
 ## Next
 
-1. Recover 2fd3's calibration/reload/latch instruction and I/O costs in 0026; reproduce callback 80
-   and frame 405. Then trace decoder/framebuffer writes at 443/648/662.
-   Recover intervening instruction/read/fault/ISR costs; do not adjust capture phase or mask fields.
+1. Recover callback 88's file-transfer packetization, CPU slice boundaries and surrounding
+   instructions in 0026. Fix its premature copy and compare every 10000-ms record on both targets.
+   Do not adjust capture phase, inject a fitted delay or mask fields.
 2. Extend the matched endpoint through the first stable original menu, then timed inputs. Compare
    every record; retain the first unequal producer. Reuse the versioned 0036 fixture.
 3. Implement the final mixer in 0003 on 0026's shared device time; require complete mixed stereo PCM.

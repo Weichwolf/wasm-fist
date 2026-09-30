@@ -24,6 +24,20 @@ static void check_endpoint(void)
 
 int main(int argc, char **argv)
 {
+    if (argc == 5 && !strcmp(argv[1], "pit")) {
+        extern void fist_clock_advance(unsigned);
+        unsigned mode = strtoul(argv[2], NULL, 10), period = strtoul(argv[3], NULL, 10);
+        unsigned elapsed = strtoul(argv[4], NULL, 10);
+        assert((mode == 2 || mode == 3) && period && period <= 65536 && elapsed);
+        out(0x43, 0x30 | (mode << 1));
+        out(0x40, period & 0xff);
+        out(0x40, period >> 8);
+        fist_clock_advance(elapsed - 1);
+        out(0x43, 0);
+        unsigned low = in(0x40), high = in(0x40);
+        printf("%u\n", low | (high << 8));
+        return 0;
+    }
     if (argc == 2 && !strcmp(argv[1], "sequence")) {
         extern void fist_text_init(void), fist_clock_advance(unsigned);
         g_end_clock = (strtoull(getenv("FIST_SEQUENCE_END_MS"), NULL, 10) * 1193182u + 999) / 1000;

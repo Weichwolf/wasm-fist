@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "../tools/oracle/fist_sequence_endpoint.h"
 #include "fist_vga_bios_palette.h"
 #include "fist_vga_text_font.h"
@@ -371,12 +372,19 @@ unsigned long long fist_clock_now(void){ return g_clock; }
 unsigned fist_clock_frame_counts(void){ return FRAME_COUNTS; }
 static unsigned pit_period(int ch){ return g_pit_reload[ch] ? g_pit_reload[ch] : 0x10000u; }
 static unsigned pit_count(int ch){
-    unsigned p = pit_period(ch); unsigned e = (unsigned)((g_clock - g_pit_base[ch]) % p);
-    if (g_pit_mode[ch] == 3) {
-        unsigned phase = e * 2;
-        if (phase > p) phase -= p;
-        return (p - phase) & 0xfffe;
+    unsigned p = pit_period(ch);
+    if (g_pit_mode[ch] == 2 || g_pit_mode[ch] == 3) {
+        float frequency = (float)PIT_HZ_ / (float)p;
+        float delay = 1000.0f / frequency;
+        double index = fmod((double)(g_clock - g_pit_base[ch]) * 1000.0 / PIT_HZ_, delay);
+        if (g_pit_mode[ch] == 3) {
+            index *= 2;
+            if (index > delay) index -= delay;
+        }
+        unsigned count = (unsigned)(p - (index / delay) * p);
+        return count & (g_pit_mode[ch] == 3 ? 0xfffe : 0xffff);
     }
+    unsigned e = (unsigned)((g_clock - g_pit_base[ch]) % p);
     return (p - e) & 0xffff;
 }
 unsigned long long fist_pit0_next_wrap(void){ unsigned p = pit_period(0);

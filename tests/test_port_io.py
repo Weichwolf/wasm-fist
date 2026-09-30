@@ -27,7 +27,7 @@ class PortIoTest(unittest.TestCase):
         sources = [str(ROOT / 'tests/port_io.c'), str(ROOT / 're_out/fist_vga.c')]
         flags = ['-I' + str(ROOT / 're_out'), '-ffunction-sections', '-fdata-sections']
         native, wasm = (str(cls.directory / name) for name in ('ports', 'ports.js'))
-        targets = [('native', ['gcc', '-m32', *flags, *sources, '-Wl,--gc-sections', '-o', native], [native]),
+        targets = [('native', ['gcc', '-m32', *flags, *sources, '-Wl,--gc-sections', '-lm', '-o', native], [native]),
                    ('wasm', [tool('emcc', 'Git/emsdk/upstream/emscripten/emcc'), *flags, *sources,
                              '-sASSERTIONS=1', '-sNODERAWFS=1', '-sEXIT_RUNTIME=1',
                              '--pre-js', str(ROOT / 'tools/wasm_pre.js'), '-o', wasm],
@@ -36,6 +36,24 @@ class PortIoTest(unittest.TestCase):
         for target, build, run in targets:
             subprocess.run(build, check=True, capture_output=True, text=True, timeout=120)
             cls.commands.append((target, run))
+        tree = ROOT / 'third_party/dosbox-build/dosbox-0.74-3'
+        cls.pit_probe = str(cls.directory / 'pit-probe')
+        sdl_flags = subprocess.check_output(['sdl-config', '--cflags'], text=True).split()
+        subprocess.run(['g++', '-std=gnu++11', *sdl_flags, '-I' + str(tree / 'include'), '-I' + str(tree),
+                        '-ffunction-sections', '-fdata-sections', str(ROOT / 'tools/oracle/pit_latch_probe.cpp'),
+                        '-Wl,--gc-sections', '-lm', '-o', cls.pit_probe], check=True, capture_output=True, text=True)
+
+    def test_pit_latches_match_original_float_period_and_rounding(self):
+        for mode in (2, 3):
+            for period in (200, 8191, 17023, 65536):
+                for elapsed in sorted({1, 2, 123, 17022, period // 2, period - 1, period, period + 1, 2 * period + 17}):
+                    args = [str(value) for value in (mode, period, elapsed)]
+                    expected = subprocess.check_output([self.pit_probe, *args], text=True)
+                    for target, run in self.commands:
+                        with self.subTest(target=target, mode=mode, period=period, elapsed=elapsed):
+                            result = subprocess.run([*run, 'pit', *args], capture_output=True, text=True, timeout=30)
+                            self.assertEqual(result.returncode, 0, result.stderr)
+                            self.assertEqual(result.stdout, expected)
 
     def test_unrelated_ports_preserve_speaker_and_pit2(self):
         for target, run in self.commands:
