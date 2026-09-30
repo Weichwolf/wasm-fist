@@ -42,6 +42,17 @@ class SequenceFormatTest(unittest.TestCase):
         self.assertEqual(FORMAT.extract_frame(self.path, -1, output), (4, 1, 1))
         self.assertEqual(output.read_bytes(), b'P6\n1 1\n255\n\1\0\0')
 
+    def test_frames_only_does_not_claim_complete_audio(self):
+        Path(str(self.path) + '.frames').write_bytes(sequence('F', frame(3, 1), 1, 0))
+        Path(str(self.path) + '.end').write_bytes(b'FISTEND1\n3000\n')
+        script = Path(__file__).resolve().parents[1] / 'tools/oracle/sequence_format.py'
+        command = [sys.executable, str(script), str(self.path), '--end-ms', '3000']
+        result = subprocess.run([*command, '--frames-only'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('.pcm', result.stderr)
+
     def test_complete_audio_contiguous_across_chunks(self):
         result = self.check('A', sequence('A', audio(1, 0, 2) + audio(2, 2, 3), 2, 5))
         self.assertEqual(result['samples'], 5)

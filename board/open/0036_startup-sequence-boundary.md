@@ -14,6 +14,8 @@ Retain the prefix and timestamps. This item owns the start fixture; 0026 owns de
   `FIST_TEXT_PHASE_NS=20960467,20168067`. The versioned `sequence_start_state.patch`
   restores recorded B800/BDA at `FIST.RUN` entry; fixture hashes are checked. It retains the
   original VGA/PIC queue, cursor, scanout and time. KDV title timing belongs to 0034.
+  Use `<oracle-capture>/start-state` from a fresh `capture_sequence.sh` run instead of depending on
+  the old scratch path. Capture 727's versioned fixture reproduces all 207 frames on both targets.
 - All 227 complete Oracle records in `start-state-probe/` match native/WASM indices, full
   palette, dimensions and time (`{port,wasm}-picfinal-688`). Both ports continue two frames;
   external Oracle termination explains length, not suffix equality.
@@ -36,14 +38,14 @@ Retain the prefix and timestamps. This item owns the start fixture; 0026 owns de
 ## Next
 
 1. Reproduce the fixture after timing/mixer changes; include the first frame and sample.
-2. Use 0034's matched scenario endpoint for complete captures. Investigate boundary differences
+2. Use `FIST_SEQUENCE_END_MS` from 0034 for matched captures. Investigate boundary differences
    here; route device-clock and mixed-output defects to their owners.
 3. Keep evidence to the current boundary result; retain superseded trials in Git.
 
 Reproduce: `bash tools/oracle/build_sequence_oracle.sh`; use `FIST_DOSBOX_CORE=normal`,
 `FIST_DOSBOX_CYCLES='fixed 30000'`, `FIST_SPEAKER_TRACE=1` with
-`bash tools/oracle/capture_sequence.sh 4 <fresh-dir>`. For ports set the fixture/phase above and
-`FIST_SPEAKER_TRACE=1 FIST_OPL=1 FIST_SB=1`;
+`bash tools/oracle/capture_sequence.sh 3 <fresh-dir>`. For ports set the fixture/phase above and
+`FIST_SPEAKER_TRACE=1 FIST_OPL=1 FIST_SB=1 FIST_SEQUENCE_END_MS=3000`;
 `bash tools/capture_port_sequence.sh <native|wasm> 170 <fresh-dir>`.
 
 ## Accept

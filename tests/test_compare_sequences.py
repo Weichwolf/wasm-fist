@@ -28,6 +28,26 @@ def pcm(sample=0):
 
 
 class CompareSequencesTest(unittest.TestCase):
+    def test_endpoint_is_required_matched_and_complete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            left, right = (Path(directory) / name for name in ('left', 'right'))
+            for prefix in (left, right):
+                write_capture(prefix, 'F', [(200, frame())])
+                write_capture(prefix, 'A', [(100, pcm())])
+            command = ['python3', str(COMPARE), str(left), str(right), '--end-ms', '3000']
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            Path(str(left) + '.end').write_bytes(b'FISTEND1\n3000\n')
+            result = subprocess.run(command[:-2], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            for data in (b'FISTEND1\n4000\n', b'FISTEND1\n0\n', b'FISTEND1\n4294967296\n', b'FISTEND1\n3000\njunk'):
+                Path(str(right) + '.end').write_bytes(data)
+                result = subprocess.run(command, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1, result.stdout)
+            Path(str(right) + '.end').write_bytes(b'FISTEND1\n3000\n')
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout)
+
     def test_complete_and_first_chronological_difference(self):
         with tempfile.TemporaryDirectory() as directory:
             left, right = (Path(directory) / name for name in ('left', 'right'))

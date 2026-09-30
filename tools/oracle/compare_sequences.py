@@ -5,7 +5,7 @@ from itertools import zip_longest
 from pathlib import Path
 import struct
 
-from sequence_format import exact, validate
+from sequence_format import exact, validate, validate_endpoint
 
 
 def records(path, kind):
@@ -52,8 +52,12 @@ def main():
     parser.add_argument('left')
     parser.add_argument('right')
     parser.add_argument('--frames-only', action='store_true', help='diagnose frames before PCM capture exists')
+    parser.add_argument('--end-ms', type=int, help='require both captures to reach this endpoint')
     args = parser.parse_args()
     try:
+        if args.end_ms is not None or any(Path(prefix + '.end').exists() for prefix in (args.left, args.right)):
+            end_ms = validate_endpoint(args.left, args.end_ms)
+            validate_endpoint(args.right, end_ms)
         differences = [compare(args.left, args.right, kind)
                        for kind in (('F',) if args.frames_only else ('F', 'A'))]
     except (OSError, ValueError) as error:

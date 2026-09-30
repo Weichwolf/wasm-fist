@@ -6,11 +6,13 @@ RENDER="$TREE/src/gui/render.cpp"
 MIXER="$TREE/src/hardware/mixer.cpp"
 EXECUTE="$TREE/src/dos/dos_execute.cpp"
 SPEAKER="$TREE/src/hardware/pcspeaker.cpp"
+PIC="$TREE/src/hardware/pic.cpp"
 source_hashes() {
   render_hash="$(sha256sum "$RENDER" | cut -d' ' -f1)"
   mixer_hash="$(sha256sum "$MIXER" | cut -d' ' -f1)"
   execute_hash="$(sha256sum "$EXECUTE" | cut -d' ' -f1)"
   speaker_hash="$(sha256sum "$SPEAKER" | cut -d' ' -f1)"
+  pic_hash="$(sha256sum "$PIC" | cut -d' ' -f1)"
 }
 source_hashes
 if [ "$render_hash" = 3bce9f5aded634ec34497a0ee8875e89e0b90cdb7de6e72bbbb81482c09dc7fc ] &&
@@ -31,14 +33,20 @@ if [ "$speaker_hash" = 0a2856bd1a460760646cba25631e4d5c92e78af627bb76858321e94fb
   patch -p1 --fuzz=0 -d "$TREE" < "$ROOT/tools/oracle/speaker_trace.patch"
   source_hashes
 fi
+if [ "$pic_hash" = 9ce9d0b0de68f0253791d45e7c5365043bceb147485fe66839aa2f957f193b99 ]; then
+  patch -p1 --fuzz=0 -d "$TREE" < "$ROOT/tools/oracle/sequence_endpoint.patch"
+  source_hashes
+fi
 if { [ "$render_hash" != c61b728e565fe3c3b86d94728e45d6649348113b4145c73aacb0b20019421ad2 ] &&
      [ "$render_hash" != 3a7c2007435883faea4e291d89296e0d697a29236525337b628b70ad717a701e ]; } ||
    [ "$mixer_hash" != 38ce5a7c87f00a725429fbb66537d07abc3a31dfc52d1eb88c1789ff2d50fe4c ] ||
    [ "$execute_hash" != 89f88e209349354346c0de76c4e312cbb27152b0eb613e42578c314c0b8a9211 ] ||
-   [ "$speaker_hash" != 012d4ef255753aa750a4672ef39c01f8a8b3c156117f6b155ebc41d75a966b60 ]; then
+   [ "$speaker_hash" != 012d4ef255753aa750a4672ef39c01f8a8b3c156117f6b155ebc41d75a966b60 ] ||
+   [ "$pic_hash" != 0fc7198e98ef69e7d9b1f0268f7a87bee733db34d49151f2850f5fe698eb777a ]; then
   echo 'DOSBox source differs from the expected base/probe/capture revisions' >&2
   exit 1
 fi
 cp "$ROOT/tools/oracle/fist_sequence_capture.h" "$TREE/src/gui/fist_sequence_capture.h"
+cp "$ROOT/tools/oracle/fist_sequence_endpoint.h" "$TREE/src/gui/fist_sequence_endpoint.h"
 make -C "$TREE" -j4
 printf 'DOSBox sequence capture: %s\n' "$TREE/src/dosbox"

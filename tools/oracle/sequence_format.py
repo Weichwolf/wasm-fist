@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 import struct
 import sys
+import re
 
 
 def exact(stream, size):
@@ -10,6 +11,17 @@ def exact(stream, size):
     if len(data) != size:
         raise ValueError('incomplete sequence record')
     return data
+
+
+def validate_endpoint(prefix, expected_ms=None):
+    data = Path(str(prefix) + '.end').read_bytes()
+    match = re.fullmatch(rb'FISTEND1\n([1-9][0-9]*)\n', data)
+    if not match:
+        raise ValueError('invalid capture endpoint record')
+    end_ms = int(match[1])
+    if end_ms > 0xffffffff or (expected_ms is not None and end_ms != expected_ms):
+        raise ValueError('capture endpoint does not match the requested milliseconds')
+    return end_ms
 
 
 def validate(path, kind):
@@ -86,11 +98,16 @@ def main():
     parser.add_argument('prefix')
     parser.add_argument('--frame', type=int)
     parser.add_argument('--ppm')
+    parser.add_argument('--end-ms', type=int)
+    parser.add_argument('--frames-only', action='store_true', help='validate a diagnostic frame capture without PCM')
     args = parser.parse_args()
     if (args.frame is None) != (args.ppm is None):
         parser.error('--frame and --ppm must be used together')
     try:
-        for suffix, kind in (('.frames', 'F'), ('.pcm', 'A')):
+        if args.end_ms is not None:
+            print(f'endpoint_ms: {validate_endpoint(args.prefix, args.end_ms)}')
+        streams = (('.frames', 'F'),) if args.frames_only else (('.frames', 'F'), ('.pcm', 'A'))
+        for suffix, kind in streams:
             result = validate(args.prefix + suffix, kind)
             print(f'{kind}: {result}')
         if args.frame is not None:

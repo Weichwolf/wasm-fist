@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../tools/oracle/fist_sequence_capture.h"
+#include "../tools/oracle/fist_sequence_endpoint.h"
 #include "fist_vga_bios_palette.h"
 #include "fist_vga_text_font.h"
 #include "fist_vga_text_palette.h"
@@ -386,6 +386,10 @@ int g_int8_replay;   /* board:0017 FIST_FRAME_SCHEDULE: the INT-8s come from the
 int g_int8_force;    /* ... except from an explicit spin-wait pump (a fade, a delay): those need the interrupt */
 void fist_clock_advance_to(unsigned long long target){
     extern void fist_int8_fire(void);
+    uint64_t end_ms = fist_sequence_end_ms();
+    uint64_t end_clock = end_ms ? (end_ms * PIT_HZ_ + 999) / 1000 : 0;
+    int complete = end_clock && target >= end_clock;
+    if (complete) target = end_clock - 1;
     while (g_clock < target) {
         unsigned long long w = fist_pit0_next_wrap();
         if (g_sequence_resize_ready && g_sequence_resize_ready <= target &&
@@ -420,6 +424,11 @@ void fist_clock_advance_to(unsigned long long target){
         }
         else if (w <= target) { g_clock = w; if (!g_int8_replay || g_int8_force) fist_int8_fire(); }
         else g_clock = target;
+    }
+    if (complete) {
+        g_clock = end_clock;
+        fist_sequence_endpoint_complete();
+        exit(0);
     }
 }
 void fist_clock_advance(unsigned n){ fist_clock_advance_to(g_clock + n); }
