@@ -25,10 +25,10 @@ static void check_endpoint(void)
 int main(int argc, char **argv)
 {
     if (argc == 2 && !strcmp(argv[1], "sequence")) {
-        extern void fist_vga_set_mode(int), fist_clock_advance(unsigned);
+        extern void fist_text_init(void), fist_clock_advance(unsigned);
         g_end_clock = (strtoull(getenv("FIST_SEQUENCE_END_MS"), NULL, 10) * 1193182u + 999) / 1000;
         atexit(check_endpoint);
-        fist_vga_set_mode(3);
+        fist_text_init();
         fist_clock_advance(4 * 1193182u);
         return 42;
     }

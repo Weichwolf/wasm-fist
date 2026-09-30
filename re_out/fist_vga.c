@@ -120,6 +120,8 @@ static unsigned long long g_sequence_event_cycles;
 static unsigned long long g_sequence_pic_tick;
 static unsigned long long g_sequence_pic_part_tick;
 static unsigned long long g_text_vertical_num;
+static unsigned long long g_text_pic_tick;
+static float g_text_pic_lag;
 static unsigned long long g_sequence_resize_ready;
 static int g_text_phase_set;
 static int g_sequence_mode = -1;
@@ -194,12 +196,13 @@ void fist_text_init(void)
         if (bda[0x49] != 3 || bda[0x4a] != 80 || bda[0x4b] || bda[0x62] ||
             bda[0x51] >= 25 || bda[0x50] >= 80) abort();
         memcpy(g_mem + 0x400, bda, sizeof bda);
-    }
-    const char *phase = getenv("FIST_TEXT_PHASE_NS");
-    if (phase) {
         unsigned long long start_ns, vertical_ns;
-        char extra;
-        if (!prefix || sscanf(phase, "%llu,%llu%c", &start_ns, &vertical_ns, &extra) != 2 ||
+        if (snprintf(path, sizeof path, "%s.vga", prefix) >= (int)sizeof path) abort();
+        f = fopen(path, "rb");
+        if (!f || fscanf(f, "FISTVGA1\n%llu %llu\n%llu %a", &start_ns, &vertical_ns,
+                         &g_text_pic_tick, &g_text_pic_lag) != 4 ||
+            fgetc(f) != '\n' || fgetc(f) != EOF || fclose(f) ||
+            g_text_pic_tick > UINT32_MAX || !(g_text_pic_lag >= 0 && g_text_pic_lag < 1) ||
             vertical_ns > start_ns ||
             start_ns > (UINT64_MAX - 500000000ull) / PIT_HZ_) abort();
         unsigned long long start_num = start_ns * PIT_HZ_;
@@ -315,10 +318,8 @@ static void fist_sequence_mode_set(void)
     g_sequence_vertical_num = g_vmode == 3 && g_text_phase_set ? g_text_vertical_num :
         (ready / FRAME_COUNTS + 1) * FRAME_COUNTS * (unsigned long long)VGA_CLOCK_;
     if (g_vmode == 3 && g_text_phase_set) {
-        unsigned long long denom = (unsigned long long)VGA_CLOCK_ * PIT_HZ_;
-        unsigned long long milliseconds = g_sequence_vertical_num * 1000u;
-        g_sequence_pic_tick = milliseconds / denom;
-        g_sequence_pic_vertical_lag = (float)(milliseconds % denom) / (float)denom;
+        g_sequence_pic_tick = g_text_pic_tick;
+        g_sequence_pic_vertical_lag = g_text_pic_lag;
         g_sequence_pic_ready = 1;
     }
     g_sequence_part = 0;

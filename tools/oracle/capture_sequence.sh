@@ -50,10 +50,12 @@ if [ -z "${FIST_SEQUENCE_START_STATE:-}" ]; then
   FIST_SEQUENCE_START_STATE="$OUT/start-state"
   base64 -d "$ROOT/tools/oracle/start_state.text.gz.b64" | gzip -dc > "$FIST_SEQUENCE_START_STATE.text"
   base64 -d "$ROOT/tools/oracle/start_state.bda.gz.b64" | gzip -dc > "$FIST_SEQUENCE_START_STATE.bda"
+  cp "$ROOT/tools/oracle/start_state.vga" "$FIST_SEQUENCE_START_STATE.vga"
 fi
 printf '%s  %s\n' \
   95497cd569be155a0efb76408a22f54fbe00dc8a267d19e7ad9375b70088bacb "$FIST_SEQUENCE_START_STATE.text" \
-  5c1a8ad522ad0d6019ccb91847f7eff7fd611e9f710eed350e80afa77fe799d7 "$FIST_SEQUENCE_START_STATE.bda" | sha256sum -c -
+  5c1a8ad522ad0d6019ccb91847f7eff7fd611e9f710eed350e80afa77fe799d7 "$FIST_SEQUENCE_START_STATE.bda" \
+  2b15a5e6f618bce966ae54fd0cb101009ce54041f65eb3fa2f28bcf40aed0d65 "$FIST_SEQUENCE_START_STATE.vga" | sha256sum -c -
 export SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=x11 FIST_SEQUENCE="$OUT/sequence" FIST_SEQUENCE_START_STATE
 timeout --signal=TERM "$(((FIST_SEQUENCE_END_MS+999)/1000+30))" \
   xvfb-run -a --server-args="-screen 0 1024x768x24" \

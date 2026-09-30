@@ -1,5 +1,7 @@
-import os
+import base64
+import gzip
 import importlib.util
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -68,6 +70,26 @@ class PortIoTest(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn('FIST_SEQUENCE:', result.stderr)
                     self.assertFalse(Path(str(prefix) + '.end').exists())
+
+    def test_start_fixture_requires_its_original_vga_queue_state(self):
+        prefix = self.directory / 'start-state'
+        for suffix in ('text', 'bda'):
+            source = ROOT / f'tools/oracle/start_state.{suffix}.gz.b64'
+            Path(str(prefix) + '.' + suffix).write_bytes(gzip.decompress(base64.b64decode(source.read_bytes())))
+        state = Path(str(prefix) + '.vga')
+        valid = (ROOT / 'tools/oracle/start_state.vga').read_bytes()
+        for target, run in self.commands:
+            for data in (None, b'FISTVGA1\n20960467 20168067\n20 nan\n', valid + b'junk', valid):
+                with self.subTest(target=target, data=data):
+                    if data is None:
+                        state.unlink(missing_ok=True)
+                    else:
+                        state.write_bytes(data)
+                    capture = self.directory / f'state-{target}'
+                    env = dict(os.environ, FIST_TEXT_STATE=str(prefix), FIST_SEQUENCE=str(capture),
+                               FIST_SEQUENCE_END_MS='3000')
+                    result = subprocess.run([*run, 'sequence'], env=env, capture_output=True, text=True, timeout=30)
+                    self.assertEqual(result.returncode == 0, data == valid, result.stderr)
 
 
 if __name__ == '__main__':
