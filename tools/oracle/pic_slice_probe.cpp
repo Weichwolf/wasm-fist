@@ -8,7 +8,7 @@ Bits CPU_Core_Normal_Trap_Run(void) { abort(); }
 void CPU_Interrupt(Bitu, Bitu, Bitu) { abort(); }
 void E_Exit(const char *, ...) { abort(); }
 
-/* Only queue/slice semantics are under test; no guest work, VGA register effects or IRQ delivery. */
+/* PIC and no-op normal-loop retirement only; guest instructions, VGA effects and IRQs are excluded. */
 static void latch(Bitu) {}
 static unsigned pixel_clock = 25175000u / 8u;
 static void part(Bitu count) {
@@ -24,7 +24,8 @@ static void vertical(Bitu) {
 static void resize(Bitu) { pixel_clock = 25175000u / 8u; PIC_RemoveEvents(part); }
 
 int main(int argc, char **argv) {
-    if (argc != 4 && (argc != 5 || strcmp(argv[4], "transition"))) return 2;
+    if (argc != 4 && (argc != 5 || strcmp(argv[4], "transition")) &&
+        (argc != 6 || strcmp(argv[4], "retire"))) return 2;
     unsigned long long start, scanout, tick;
     float lag;
     FILE *fixture = fopen(argv[1], "rb");
@@ -55,5 +56,20 @@ int main(int argc, char **argv) {
     CPU_Cycles = 0;
     CPU_CycleLeft = 30000 - index;
     assert(PIC_RunQueue());
+    if (argc == 6) {
+        const char *input = argv[5];
+        do {
+            char *end;
+            unsigned long count = strtoul(input, &end, 10);
+            if (!*input || end == input || !count || count > 0xfffffffful || (*end && *end != ',')) return 2;
+            while (count) {
+                while (CPU_Cycles-- > 0) if (!--count) break;
+                if (!count) break;
+                while (!PIC_RunQueue()) TIMER_AddTick();
+            }
+            if (!*end) break;
+            input = end + 1;
+        } while (1);
+    }
     printf("%llu %d\n", (unsigned long long)(PIC_Ticks * CPU_CycleMax + PIC_TickIndexND()), CPU_Cycles);
 }

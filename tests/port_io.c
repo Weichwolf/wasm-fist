@@ -24,8 +24,10 @@ static void check_endpoint(void)
 
 int main(int argc, char **argv)
 {
-    if (argc == 4 && !strcmp(argv[1], "pic-slice")) {
+    if ((argc == 4 && !strcmp(argv[1], "pic-slice")) ||
+        (argc == 5 && !strcmp(argv[1], "pic-retire"))) {
         extern void fist_text_init(void), fist_clock_charge_cpu_instructions(unsigned);
+        extern void fist_clock_advance_cpu_cycles(unsigned);
         extern void fist_vga_set_mode(int);
         extern unsigned fist_clock_cpu_slice(uint64_t *);
         unsigned tick = strtoul(argv[2], NULL, 10), index = strtoul(argv[3], NULL, 10);
@@ -35,7 +37,18 @@ int main(int argc, char **argv)
         uint64_t current = fist_clock_now() * 30000000u / 1193182u;
         uint64_t target = (uint64_t)tick * 30000u + index;
         assert(target > current && target - current <= UINT32_MAX);
-        fist_clock_charge_cpu_instructions((unsigned)(target - current));
+        fist_clock_advance_cpu_cycles((unsigned)(target - current));
+        if (argc == 5) {
+            const char *input = argv[4];
+            do {
+                char *tail;
+                unsigned long count = strtoul(input, &tail, 10);
+                assert(*input && tail != input && count && count <= UINT32_MAX && (!*tail || *tail == ','));
+                fist_clock_charge_cpu_instructions((unsigned)count);
+                if (!*tail) break;
+                input = tail + 1;
+            } while (1);
+        }
         uint64_t cycle;
         unsigned slice = fist_clock_cpu_slice(&cycle);
         printf("%llu %u\n", (unsigned long long)cycle, slice);

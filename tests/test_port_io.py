@@ -96,13 +96,17 @@ class PortIoTest(unittest.TestCase):
             if len(captures) == 2:
                 self.assertEqual(*captures)
 
-    def test_cpu_slices_match_original_vga_queue(self):
+    def pic_fixture(self):
         prefix = self.directory / 'pic-start'
         for suffix in ('text', 'bda'):
             source = ROOT / f'tools/oracle/start_state.{suffix}.gz.b64'
             Path(str(prefix) + '.' + suffix).write_bytes(gzip.decompress(base64.b64decode(source.read_bytes())))
         state = Path(str(prefix) + '.vga')
         state.write_bytes((ROOT / 'tools/oracle/start_state.vga').read_bytes())
+        return prefix, state
+
+    def test_cpu_slices_match_original_vga_queue(self):
+        prefix, state = self.pic_fixture()
         cases = ((6354, 1198), (6354, 1546), (6354, 2972), (6354, 3322), (6355, 4221),
                  (6354, 2296), (6354, 2297), (6355, 5661), (6355, 5662),
                  (6358, 10993), (6358, 10994), (6358, 10995),
@@ -122,6 +126,26 @@ class PortIoTest(unittest.TestCase):
                                                 capture_output=True, text=True, timeout=30)
                         self.assertEqual(result.returncode, 0, result.stderr)
                         self.assertEqual(result.stdout, expected)
+
+    def test_cpu_retirement_matches_original_queue(self):
+        prefix, state = self.pic_fixture()
+        cases = ((6355, 6529, '290708'), (6355, 6529, '290712'),
+                 (6355, 6529, '1,290707'), (6355, 6529, '100000,190708'),
+                 (6358, 10990, '3'), (6358, 10990, '3,1'), (6358, 10990, '1,1,1,1'),
+                 (6354, 1198, '1098'), (6354, 1198, '1098,1'),
+                 (6354, 29998, '2'), (6354, 29998, '2,1'), (6354, 29998, '1,1,1'))
+        for tick, index, counts in cases:
+            expected = subprocess.check_output([self.pic_probe, str(state), str(tick), str(index),
+                                                'retire', counts], text=True)
+            for target, run in self.commands:
+                with self.subTest(target=target, tick=tick, index=index, counts=counts):
+                    env = dict(os.environ, FIST_TEXT_STATE=str(prefix))
+                    env.pop('FIST_SEQUENCE_END_MS', None)
+                    env.pop('FIST_SEQUENCE', None)
+                    result = subprocess.run([*run, 'pic-retire', str(tick), str(index), counts], env=env,
+                                            capture_output=True, text=True, timeout=30)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout, expected)
 
     def test_invalid_capture_endpoint_fails(self):
         for value in ('', '0', '-1', '3.5', '4294967296', 'x'):

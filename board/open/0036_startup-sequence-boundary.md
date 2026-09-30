@@ -28,15 +28,17 @@ Device time belongs to 0026, mixed output to 0003, complete capture/comparison t
   this DOS loader work; do not call the fixture an exact application-entry CPU phase or fit an offset.
   Both probes retain all 742 frame/PCM bytes. Proof: `pixel-443/cpu-start-source-proof.json`
   under `scratch/sequence-capture/`; full clock/handoff correction remains with 0026.
-- Original 742 retains complete 731/734 frame/PCM bytes. Native 743/WASM 744 match every one of
-  its 698 presentation times and each other; four content differences remain in 0034.
-  Proof: `scratch/sequence-capture/pic-dispatch-362/`, filtered flows `scratch/verify/run.ksO3t0/`.
+- Exact fixture CPU phase is `628814×1193182 = 25009×30000000 + 19546148` PIT numerator units.
+  The port rounds this to 25010 whole counts, adding `10453852/1193182 = 8.761322…` CPU cycles.
+  Original 802 confirms all 38 costed loader reads see mask `0xf8` (IRQ2 clear); no extra mask write.
+  Its complete 30000-ms frame/PCM streams match 797. Proof: `cpu-retirement/read-mask-30s-proof.json`.
+- Original fixture/capture provenance: `pic-dispatch-362/`; current content/timing comparisons are in 0034.
 - Audio origin remains unresolved: original first nonzero stereo sample 18,887 at 428,276 us
   comes from `SPKR`; the port's first counter is 6.538382 us late. Continue in 0003/0026.
 
 ## Next
 
-1. Recover the original CPU slice at DOS EXEC and model loader reads/boundaries in 0026.
+1. Preserve the measured DOS EXEC slice and fractional CPU phase; model loader reads in 0026.
    Preserve this attributed fixture; do not replace its timestamp with a fitted application phase.
 2. Reproduce this fixture after device-time/mixer changes, including the first frame and sample.
 3. Use 0034's `FIST_SEQUENCE_END_MS` for matched captures. Investigate start-state defects here.

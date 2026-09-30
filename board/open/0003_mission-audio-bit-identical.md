@@ -19,6 +19,7 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
 - In `oracle-speaker-711`, counter 512/mode 3 starts at 404.277133346 ms; the 405-ms
   callback first emits -860 at offset 12. Preserve DOSBox `ForwardPIT`, queued transitions
   and ramp integration from `src/hardware/pcspeaker.cpp`; do not fit a waveform/start offset.
+  `SetType(0/1/2/3)` selects OFF/PIT_OFF/ON/PIT_ON; raw port-61 bits are not the `SPKR_MODES` enum.
 - Original 25-ms prebuffer: `floor(44100×25/1000)+1 = 1103` initial samples. Q14 tick increment
   `floor((44100<<14)/1000) = 722534`; `1103+floor(403×722534/16384)+12 = 18887`.
   Preserve fill, remainder, interpolation and final clipping. Event-clock discrepancies belong to 0026.

@@ -100,8 +100,15 @@ int  fist_vga_mode(void){ return g_vmode; }
 static unsigned long long g_clock;            /* PIT counts since power-on */
 static unsigned g_clock_fraction;             /* fractional count, denominator 30000000 */
 typedef struct { unsigned long long counts; unsigned fraction; } FistClock;
+static FistClock g_cpu_time = {UINT64_MAX, 0};
+static unsigned g_cpu_remaining;
 static FistClock clock_now(void){ return (FistClock){g_clock, g_clock_fraction}; }
 static void clock_set(FistClock time){ g_clock = time.counts; g_clock_fraction = time.fraction; }
+static int clock_equal(FistClock a, FistClock b){ return a.counts == b.counts && a.fraction == b.fraction; }
+static FistClock clock_after_cpu(unsigned count){
+    uint64_t numerator = (uint64_t)g_clock_fraction + (uint64_t)count * PIT_HZ_;
+    return (FistClock){g_clock + numerator / CPU_HZ_, (unsigned)(numerator % CPU_HZ_)};
+}
 static int clock_before(FistClock a, FistClock b){
     return a.counts < b.counts || (a.counts == b.counts && a.fraction < b.fraction);
 }
@@ -305,6 +312,7 @@ static unsigned long long fist_sequence_part_clock(unsigned part)
 static void fist_sequence_mode_set(void)
 {
     if (g_vmode != 0x13 && g_vmode != 3) return;
+    g_cpu_time.counts = UINT64_MAX;
     if (g_vmode == 0x13 && g_sequence_mode == 3 && g_sequence_next) {
         g_sequence_resize_ready = g_clock + (50ull * PIT_HZ_ + 500) / 1000;
         g_sequence_blank = 1;
@@ -435,10 +443,9 @@ static void pic_slice_vga(unsigned *slice, uint64_t tick, unsigned index,
         }
     }
 }
-unsigned fist_clock_cpu_slice(uint64_t *cycle)
+static unsigned cpu_next_slice(uint64_t cpu)
 {
-    uint64_t cpu = clock_cpu_cycles(clock_now()), tick = cpu / 30000u;
-    if (cycle) *cycle = cpu;
+    uint64_t tick = cpu / 30000u;
     unsigned index = cpu % 30000u, slice = 30000u - index;
     uint64_t pit = clock_cpu_cycles(pit_next_wrap());
     if (pit > cpu && pit - cpu < slice) slice = (unsigned)(pit - cpu);
@@ -457,6 +464,17 @@ unsigned fist_clock_cpu_slice(uint64_t *cycle)
         if (resize > cpu && resize - cpu < slice) slice = (unsigned)(resize - cpu);
     }
     return slice;
+}
+unsigned fist_clock_cpu_slice(uint64_t *cycle)
+{
+    uint64_t cpu = clock_cpu_cycles(clock_now());
+    if (cycle) *cycle = cpu;
+    return clock_equal(g_cpu_time, clock_now()) ? g_cpu_remaining : cpu_next_slice(cpu);
+}
+static void cpu_slice_start(void)
+{
+    g_cpu_remaining = cpu_next_slice(clock_cpu_cycles(clock_now()));
+    g_cpu_time = clock_now();
 }
 /* Step the clock to `target`, firing the channel-0 interrupt at every wrap on the way (the ISR may
  * re-program the channel, which restarts the count from that instant, as on the 8253). */
@@ -512,10 +530,28 @@ static void clock_advance_to(FistClock target){
 }
 void fist_clock_advance_to(unsigned long long target){ clock_advance_to((FistClock){target, 0}); }
 void fist_clock_advance(unsigned n){ clock_advance_to((FistClock){g_clock + n, g_clock_fraction}); }
+void fist_clock_advance_cpu_cycles(unsigned count)
+{
+    clock_advance_to(clock_after_cpu(count));
+}
 void fist_clock_charge_cpu_instructions(unsigned count)
 {
-    uint64_t numerator = (uint64_t)g_clock_fraction + (uint64_t)count * PIT_HZ_;
-    clock_advance_to((FistClock){g_clock + numerator / CPU_HZ_, (unsigned)(numerator % CPU_HZ_)});
+    if (!count) return;
+    if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
+    while (count) {
+        if (!g_cpu_remaining) {
+            /* The normal-loop decrement survives PIC dispatch but is reset by TIMER_AddTick. */
+            if (clock_cpu_cycles(clock_now()) % 30000u) fist_clock_advance_cpu_cycles(1);
+            cpu_slice_start();
+        }
+        unsigned take = count < g_cpu_remaining ? count : g_cpu_remaining;
+        g_cpu_remaining -= take;
+        FistClock target = clock_after_cpu(take);
+        clock_advance_to(target);
+        count -= take;
+        if (clock_equal(clock_now(), target)) g_cpu_time = clock_now();
+        else if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
+    }
 }
 void fist_clock_wait_bios_ticks(unsigned count)
 {
