@@ -25,5 +25,12 @@ FIST.DAT → tools/decompile.sh → make patch → make native / make wasm → t
   State: `board/open` · `board/active` · `board/closed`.
 - **patches/** — every asm-verified engine correction, applied `-F0 --fuzz=0` onto `re_out/`.
 
-Original game files live under `armoredfist/` at run time (read-only); `third_party/` and extracted images
-are gitignored.
+Install the original game with `make provision` (Python 3, network access). The
+[provisioning script](tools/provision_game.py) downloads `Armored-Fist_DOS_EN.zip` from the supplied
+My Abandonware URL, checks its pinned SHA-256, and installs the complete archive into `armoredfist/`.
+It preserves any existing installation. For an offline installation, use
+`python3 tools/provision_game.py --archive /path/to/Armored-Fist_DOS_EN.zip`;
+`--url` accepts a refreshed download link for the same archive if the original link expires.
+
+Original game files under `armoredfist/` are gitignored and read-only during development; run isolated
+copies for captures. `third_party/` and the runtime-kernel image (`make kernel-image`) are also ignored.

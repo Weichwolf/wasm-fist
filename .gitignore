@@ -1,4 +1,6 @@
-# extracted memory image (regenerate via `make image`)
+# Original game assets (install with `make provision`)
+/armoredfist/
+# extracted runtime-kernel image (regenerate via `make kernel-image`)
 re_out/fist_image.bin
 # build outputs
 build/

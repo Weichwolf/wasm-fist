@@ -22,7 +22,7 @@ EMCC    := $(firstword $(wildcard $(HOME)/Git/emsdk/upstream/emscripten/emcc) em
 NATIVE  ?= /tmp/fist_native
 OUTJS   ?= /tmp/fisttest/fistrun.js
 
-.PHONY: all pipeline image image-drivers kernel-image decompile decompile-kernel decompile-drivers assemble symbols patch check native wasm web verify verify-wasm refcapture clean help
+.PHONY: all pipeline provision image image-drivers kernel-image decompile decompile-kernel decompile-drivers assemble symbols patch check native wasm web verify verify-wasm refcapture clean help
 
 all: wasm             ## default: patch + WASM build
 
@@ -31,6 +31,9 @@ pipeline: image decompile assemble patch native verify wasm verify-wasm ## FULL 
 
 help:                 ## list targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n",$$1,$$2}'
+
+provision: ## download and verify the original game into ignored armoredfist/ (preserve existing files)
+	python3 $(ROOT)/tools/provision_game.py
 
 image: ## extract the flat ENGINE image (FIST.DAT, 16-bit, relocs applied) -> re_out/fist_dat_image.bin
 	python3 $(ROOT)/tools/extract_dat_image.py $(GAMEDIR)/FIST.DAT $(ROOT)/re_out/fist_dat_image.bin
