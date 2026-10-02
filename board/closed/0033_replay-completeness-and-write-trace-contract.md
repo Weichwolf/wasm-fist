@@ -23,6 +23,14 @@ Implementation follows baseline 22dfff2; see this item's closing commit for the 
 - `bash tools/check_flow.sh '^intro$'` exits 0: all tests, `make check`, native/WASM builds and
   original-reference/cross-target intro comparison. Evidence: `scratch/verify/run.9V9tB0/`.
   Reproduce the complete matrix with `bash tools/check_flow.sh` (no filter).
+- Build prerequisite regression at base `0e211fa`: system-installed `EMCC=emcc` made the WASM
+  builders invoke `./em++`, so the real C++ compilation failed in `run.FOoxMo/wasm-build.log`.
+  Both builders now resolve the compiler through PATH before selecting its sibling `em++`.
+  `test_compiler_on_path_compiles_cpp_and_links` covers the command-name invocation on both scripts.
+  `bash tools/check_flow.sh '^(intro|mainmenu)$'` passes 47 tests, all 586 exact engine patches,
+  native/WASM builds and both selected reference/cross-target flows (2 passed, 0 failed).
+  Evidence: `scratch/verify/run.GItDVW/` (base plus saved patch). This is bounded build/flow proof;
+  the broad matrix was stopped after four passing flows and is not counted as full coverage.
 
 ## Remaining scope
 

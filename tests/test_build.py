@@ -36,7 +36,7 @@ class BuildTest(unittest.TestCase):
         for script in ('build.sh', 'build_web.sh'):
             shutil.copyfile(ROOT / 'tools' / script, self.root / 'tools' / script)
 
-    def build(self, script, source):
+    def build(self, script, source, compiler_on_path=False):
         objects = self.root / (script + source + '.objects')
         objects.mkdir()
         prefix = 'wasm_' if script == 'build.sh' else ''
@@ -44,6 +44,8 @@ class BuildTest(unittest.TestCase):
         output = objects / 'output.js'
         env = dict(os.environ, EMCC=str(self.root / 'compiler/emcc'),
                    OBJDIR=str(objects), FAIL_SOURCE=source)
+        if compiler_on_path:
+            env.update(EMCC='emcc', PATH=str(self.root / 'compiler') + os.pathsep + env['PATH'])
         result = subprocess.run(['bash', str(self.root / 'tools' / script), str(output)],
                                 env=env, capture_output=True, text=True, timeout=10)
         return result, output
@@ -60,6 +62,13 @@ class BuildTest(unittest.TestCase):
         for script in ('build.sh', 'build_web.sh'):
             with self.subTest(script=script):
                 result, output = self.build(script, 'no-failure.c')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue(output.exists())
+
+    def test_compiler_on_path_compiles_cpp_and_links(self):
+        for script in ('build.sh', 'build_web.sh'):
+            with self.subTest(script=script):
+                result, output = self.build(script, 'no-failure.c', compiler_on_path=True)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertTrue(output.exists())
 

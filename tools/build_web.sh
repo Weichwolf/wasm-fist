@@ -8,6 +8,7 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-$ROOT/web/fist.js}"; mkdir -p "$(dirname "$OUT")"
 EMCC="${EMCC:-$(ls "$HOME"/Git/emsdk/upstream/emscripten/emcc 2>/dev/null || echo emcc)}"
+EMCC="$(command -v "$EMCC")"
 EMXX="$(dirname "$EMCC")/em++"
 if [ -f "$ROOT/build/fist.c" ]; then SRCDIR="$ROOT/build"; else SRCDIR="$ROOT/re_out"; fi
 echo "[build_web] sources from $SRCDIR"

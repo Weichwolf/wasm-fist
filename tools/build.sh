@@ -14,6 +14,7 @@ OUTJS="${1:-/tmp/fisttest/fistrun.js}"
 mkdir -p "$(dirname "$OUTJS")"
 
 EMCC="${EMCC:-$(ls "$HOME"/Git/emsdk/upstream/emscripten/emcc 2>/dev/null || echo emcc)}"
+EMCC="$(command -v "$EMCC")"
 
 if [ -f "$ROOT/build/fist.c" ]; then SRCDIR="$ROOT/build"; else SRCDIR="$ROOT/re_out"; fi
 echo "[build.sh] wasm sources from $SRCDIR  (emcc=$EMCC)"
