@@ -6,6 +6,10 @@
 #include <string.h>
 
 #ifndef ORIGINAL_SB
+#include "fist_pic.h"
+/* Device-only fixture: timed reset is covered by the real shared clock fixture. */
+void fist_clock_add_event(FistPicEvent h, float d, unsigned v) { abort(); }
+void fist_clock_remove_events(FistPicEvent h) { abort(); }
 uint8_t g_mem[0x1000000];
 uint32_t fist_ext_base;
 extern unsigned short m_ext_FUN_0000_2810(void);

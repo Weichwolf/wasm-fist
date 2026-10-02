@@ -39,10 +39,45 @@ static void initialize_queue(void) {
     pic_queue.free_entry = pic_queue.entries;
 }
 
+#ifdef FIST_SB_EVENT_CLOCK
+extern "C" void original_sb_init(void);
+extern "C" void fist_sb_out(int,int);
+extern "C" int fist_sb_in(int);
+#endif
+
+static float repeat_delay;
+static void event_record(Bitu value) {
+    printf("event 0 %u %llu\n", (unsigned)value,
+           (unsigned long long)(PIC_Ticks * 30000u + PIC_TickIndexND()));
+}
+static void event_repeat(Bitu value) {
+    printf("event 1 %u %llu\n", (unsigned)value,
+           (unsigned long long)(PIC_Ticks * 30000u + PIC_TickIndexND()));
+    if (value) PIC_AddEvent(event_repeat, repeat_delay, value - 1);
+}
+static void event_equal(Bitu value) {
+    printf("event 2 %u %llu\n", (unsigned)value,
+           (unsigned long long)(PIC_Ticks * 30000u + PIC_TickIndexND()));
+    PIC_AddEvent(event_record, 0, value);
+    PIC_AddEvent(event_record, 0, value + 1);
+}
+static PIC_EventHandler event_handler(unsigned id) {
+    assert(id < 3);
+    return id == 0 ? event_record : id == 1 ? event_repeat : event_equal;
+}
+
 int main(int argc, char **argv) {
-    if (argc == 4 && !strcmp(argv[1], "device-io")) {
+    if (argc == 4 && (!strcmp(argv[1], "device-io")
+#ifdef FIST_SB_EVENT_CLOCK
+                     || !strcmp(argv[1], "device-sb")
+#endif
+                     )) {
         PIC_8259A controller(NULL);
         initialize_queue();
+#ifdef FIST_SB_EVENT_CLOCK
+        bool devices = !strcmp(argv[1], "device-sb");
+        if (devices) original_sb_init();
+#endif
         char *tail;
         unsigned long long start = strtoull(argv[2], &tail, 10);
         if (*tail) return 2;
@@ -55,9 +90,23 @@ int main(int argc, char **argv) {
         while ((fields = fscanf(script, " %c %x %x", &op, &port, &value)) == 3) {
             while (CPU_Cycles-- <= 0) while (!PIC_RunQueue()) TIMER_AddTick();
             unsigned long long fetched = PIC_Ticks * 30000u + PIC_TickIndexND();
-            if (op == 'r') source_io_read_delay();
+            if (op == 't') {
+                for (unsigned instruction = 0; instruction < value; ++instruction)
+                    while (CPU_Cycles-- <= 0) while (!PIC_RunQueue()) TIMER_AddTick();
+            } else if (op == 'a') {
+                unsigned event_value; if (fscanf(script, " %x", &event_value) != 1) return 2;
+                float delay; memcpy(&delay, &value, sizeof delay);
+                if (port == 1) repeat_delay = delay;
+                PIC_AddEvent(event_handler(port), delay, event_value);
+            } else if (op == 'd') PIC_RemoveEvents(event_handler(port));
+            else if (op == 'k') PIC_RemoveSpecificEvents(event_handler(port), value);
+            else if (op == 'r') source_io_read_delay();
             else if (op == 'w') source_io_write_delay();
             else if (op != 'n') return 2;
+#ifdef FIST_SB_EVENT_CLOCK
+            if (devices && op == 'r') assert((unsigned)fist_sb_in(port) == value);
+            else if (devices && op == 'w') fist_sb_out(port, value);
+#endif
             printf("%llu %llu %d\n", fetched,
                    (unsigned long long)(PIC_Ticks * 30000u + PIC_TickIndexND()), CPU_Cycles);
             ++count;

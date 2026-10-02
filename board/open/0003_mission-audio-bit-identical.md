@@ -401,6 +401,27 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   shared event ordering/cancellation and instruction polling before integrating
   startup. The observed iteration counts are diagnostic, never fixed delays.
 
+- Current base `b70ebd4`: the handwritten DSP owner now resets
+  on rising bit zero, cancels an outstanding readiness callback, enters WAIT
+  on the falling edge and queues AA from the shared clock callback. Empty data
+  reads retain the original last-byte latch; reset/WAIT write status is ff and
+  NORMAL follows the original 7f/ff busy counter. One shared event owner and its
+  50 target-phase proof belong to 0026; consume `sb-reset-event/check-source.py`
+  and `check-proof.py`, not another sound clock or a fixed polling count.
+  The actual source PIC/DSP functions match all 218 reached reset rows and reads.
+  The old device owner fails both complete reset phases and all six reset-variant
+  phases. Source capture scaffolding is explicitly excluded.
+- `bash tools/check_flow.sh` passes 81 tests, exact patches, both sequential
+  builds and all 178 existing flows, with separately recorded exit 0;
+  `scratch/verify/run.WZhm7Z/`. All three existing audio flows additionally pass
+  on the same frozen binaries with recorded exit 0. Consume the strict bounded
+  proof in `scratch/sequence-capture/sb-reset-event/proof.json`. Explicit matched
+  SB-enabled full 30000-ms captures retain all 2100 frame bytes/endpoints and
+  43 sound-register packets. The actual 133a startup routine is still missing,
+  as are protected CLI/STI/IRQ/vector services and remaining initialization.
+  Source reset scheduling is a dependency proof, not complete sound startup,
+  final mixed PCM or original video acceptance.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover

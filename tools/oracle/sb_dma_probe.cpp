@@ -22,8 +22,9 @@ static bool irq_delivered;
 static void (*irq_cb)(void);
 static MixerChannel channel;
 
-void E_Exit(const char *format, ...) { abort(); }
 void DEBUG_ShowMsg(const char *format, ...) {}
+#ifndef FIST_SB_EVENT_CLOCK
+void E_Exit(const char *format, ...) { abort(); }
 void GFX_ShowMsg(const char *format, ...) { abort(); }
 IO_ReadHandleObject::~IO_ReadHandleObject() {}
 IO_WriteHandleObject::~IO_WriteHandleObject() {}
@@ -35,6 +36,7 @@ void PIC_AddEvent(PIC_EventHandler handler, float delay, Bitu val) {
      * contract must fail here until a real event endpoint is provided. */
     abort();
 }
+#endif
 void MixerChannel::FillUp(void) {}
 void MixerChannel::SetFreq(Bitu freq) { freq_add=freq; }
 /* Retained by the original port switch, outside these DMA/IRQ cases. */
@@ -68,9 +70,13 @@ extern "C" void original_sb_init(void) {
     sb.hw.irq=7;
     sb.freq=22050;
     sb.chan=&channel;
+#ifdef FIST_SB_EVENT_CLOCK
+    sb.dsp.state=DSP_S_NORMAL;
+#endif
 }
 
 extern "C" void fist_sb_out(int port, int val) {
+    if (port==0x226) { write_sb(port,val,1); return; }
     if (port==0x224) { write_sb(port,val,1); return; }
     if (port!=0x22c) { DMA_Write_Port(port,val,1); return; }
     /* Feed only the captured PCM8 commands. The actual DSP DMA preparation,

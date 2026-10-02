@@ -252,12 +252,66 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   Generic PIC events, delayed SB reset, protected IRQ/IF, producer instruction
   work and final mixer integration remain open (0003).
 
+- Current base `b70ebd4`: the shared CPU clock now owns
+  generic PIC callbacks, with the source's 512 float-index entries, stable
+  equal-time ordering, per-tick float subtraction, callback-relative re-arming,
+  cancellation and active-budget requeue. Callbacks run at CPU dispatch after
+  instruction effects. Existing PIT/VGA calendars are retained; interleaving,
+  IRQ/IF and raw cooperative advancement with pending callbacks remain open.
+- `test_sb_io_clock.py` now links the actual original PIC queue with the actual
+  `DSP_DoReset`/`read_sb` through `sb_dma_probe.cpp`. Its complete 133a fixture
+  contains all 218 instruction/I/O rows, all 55 reads and their remaining CPU
+  budgets. Reset AddEvent returns 1052 cycles to CycleLeft at index 28948;
+  the float deadline is 0.9849333167076111 and service occurs at index 29549.
+  Read-only GDB snapshots preserve the complete 600-ms source outputs bytewise
+  (39 frames / 27518 mixed PCM samples). Initial pointer/float-cast scaffold
+  failures are retained and excluded from source proof.
+- Six regressions cover 50 target phases: the existing high/thin-budget phases,
+  complete reached reset, rising-bit cancellation/read latches/write status,
+  stable equal-time callback insertion, specific/all cancellation, late relative
+  re-arming, tick boundaries and queue capacity. The parent device owner fails
+  all eight complete-reset/cancellation target phases. A separate native reaching
+  failure at full capacity exposes x87 excess precision: store the original
+  Float32 product before comparison/subtraction, as the source oracle does.
+  Both targets now retain all 512 accepted events and match every timeline.
+  An initial long capacity fixture crossed an uninstalled oracle PIT event;
+  it is excluded and the isolated queue fixture stays inside its stated scope.
+- `scratch/sequence-capture/sb-reset-event/{check-source.py,red-final-reaching.log,
+  red-native-float-width.log,green-unit.log,tested-source-hashes.json,
+  capture-configuration.json,check-proof.py,proof.json}` retains provenance and
+  regressions. `bash tools/check_flow.sh` passes 81 tests, exact patches, both
+  sequential builds and all 178 existing flows, with separately recorded exit 0;
+  `scratch/verify/run.WZhm7Z/`. Every tested source/binary hash is retained.
+  Separate read-only verification of the same frozen binaries passes all three
+  existing audio flows with recorded exit 0. Existing masked/no-reference flows
+  retain their limited scope; this is not the final full original-parity gate.
+- Fresh complete SB-enabled 30000-ms native/WASM captures retain all 2100 prior
+  frame bytes, endpoints and 43 sound-register packets. The first attempts with
+  missing start/device settings are excluded from matching-source claims; the
+  explicit manifest fixes the compared configuration. Device-off matched parent
+  captures are additional diagnostics only. Final mixed port PCM, actual 133a
+  producer ABI/CLI/STI, protected vectors/IRQs, complete PIT/VGA/event interaction
+  and sound startup remain open; no full original-parity acceptance is claimed.
+
+- Additional read-only next-dependency evidence:
+  `scratch/sequence-capture/sb-writer-132f/{check-source.py,proof.json}` validates
+  seven actual 132f entry/RET snapshots against the complete 534:536-ms trace.
+  PUSH/IN/JMP/OR/JS/POP/OUT/RET are eight normal fetches per observed ready call;
+  every GP register is preserved and RET advances ESP by four. The original
+  write-busy counter runs 0..7; all seven reads return 7f. Original `flags.cpp`
+  resolves the captured lazy state to EFLAGS 3202 at all fourteen boundaries:
+  IF is enabled, and cached raw CF is stale. Do not assume the earlier 138d CLI
+  survives protected kernel services. The complete CPU trace and 600-ms original
+  frames/PCM/endpoint stay byte-identical. This recovers the next instruction/
+  register/flag dependency; no 132f producer fix or IRQ integration is accepted.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
    Continue 0034's first remaining pixel difference at event 817 in the 30000-ms capture.
-   Recover 0003's delayed DSP reset on the shared PIC event clock, then SB IRQ/mixer
-   state and instruction work; preserve the proved 7120
+   Consume the proved shared PIC/reset timing contract. Recover
+   0003's actual 133a producer, CLI/STI and protected SB IRQ/mixer state/instruction
+   work; preserve the proved 7120
    REP copy. Do not inject elapsed delays or change capture phase.
 2. Recover production pre-speaker work (23 mask reads, 720/721), 07b7's polling/CLI/STI and ISR return.
    Derive calibration arguments from operations and budget; never inject 90 or a measured total delay.

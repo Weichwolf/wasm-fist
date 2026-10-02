@@ -7,6 +7,7 @@
  */
 #include "ghidra_compat.h"
 #include "fist_sb.h"
+#include "fist_pic.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -291,7 +292,10 @@ static int  g_dsp_args_left;          /* bytes still expected for the current co
 static int  g_dsp_cmd;                /* current command byte */
 static unsigned char g_dsp_arg[4];
 static int  g_dsp_argi;
-static int  g_reset_step;             /* DSP reset write sequence */
+enum { DSP_RESET, DSP_RESET_WAIT, DSP_NORMAL };
+static int g_dsp_state = DSP_NORMAL;
+static unsigned g_dsp_write_busy;
+static unsigned char g_last_read;
 static int  g_read_val = -1;          /* pending DSP data-read byte (0xAA after reset, version, ...) */
 static int  g_irq_pending;            /* completion bits: 1 = PCM8, 2 = PCM16 */
 static unsigned char g_mixer_index;
@@ -452,6 +456,34 @@ static void dsp_command(int val)
     }
 }
 
+static void dsp_finish_reset(unsigned value)
+{
+    (void)value;
+    g_read_val = 0xaa;
+    g_dsp_state = DSP_NORMAL;
+}
+static void dsp_reset(int value)
+{
+    /* Original DSP_DoReset tests bit zero, not literal byte values. */
+    if ((value & 1) && g_dsp_state != DSP_RESET) {
+        fist_clock_remove_events(dsp_finish_reset);
+        g_read_val = -1;
+        g_dsp_args_left = g_dsp_argi = 0;
+        g_dsp_write_busy = 0;
+        g_playing = g_dma_active = 0;
+        g_dsp_total = g_dsp_left = 0;
+        g_dsp_autoinit = g_paused = g_block16 = 0;
+        g_irq_pending = g_irq_delivered = 0;
+        g_dma1.request = 0;
+        g_rate = 22050;
+        g_dsp_state = DSP_RESET;
+    } else if (!(value & 1) && g_dsp_state == DSP_RESET) {
+        g_dsp_state = DSP_RESET_WAIT;
+        fist_clock_remove_events(dsp_finish_reset);
+        fist_clock_add_event(dsp_finish_reset, 20.0f / 1000.0f, 0);
+    }
+}
+
 /* ================= port dispatch ================= */
 int fist_sb_owns(int port)
 {
@@ -472,8 +504,7 @@ void fist_sb_out(int port, int val)
         switch (port - g_base) {
         case 0x4: g_mixer_index=(unsigned char)val; break;
         case 0x6:                                                           /* DSP reset */
-            if (val==1) g_reset_step=1;
-            else if (val==0 && g_reset_step==1){ g_reset_step=0; g_read_val=0xAA; g_dsp_args_left=0; g_playing=0; g_dsp_total=g_dsp_left=0; g_dsp_autoinit=g_paused=0; g_irq_pending=g_irq_delivered=0; g_dma1.request=0; g_rate=22050; }
+            dsp_reset(val);
             break;
         case 0xc: dsp_command(val); break;                                  /* DSP write command/data */
         }
@@ -500,10 +531,13 @@ int fist_sb_in(int port)
             return (g_read_val>=0) ? 0xff : 0x7f;
         case 0xf: g_irq_pending &= ~2; return 0xff;                       /* only the 16-bit completion */
         case 0xa: {                                                         /* DSP data read */
-            int v = (g_read_val>=0)? g_read_val : 0xff;
+            int v = (g_read_val>=0)? g_read_val : g_last_read;
+            g_last_read = (unsigned char)v;
             g_read_val = (g_dsp_cmd==0xe1 && v==4) ? 0x05 : -1;            /* version minor after major */
             return v; }
-        case 0xc: return 0x00;                                             /* write-buffer status: bit7=0 -> ready */
+        case 0xc:
+            if (g_dsp_state != DSP_NORMAL) return 0xff;
+            return (++g_dsp_write_busy & 8) ? 0xff : 0x7f;                                             /* write-buffer status: bit7=0 -> ready */
         }
         return 0xff;
     }

@@ -36,13 +36,14 @@ def patched_unit(directory, filename):
     return unit.read_text()
 
 
-def build_pic_probe(directory):
+def build_pic_probe(directory, sb_events=False):
     tree = ROOT / 'third_party/dosbox-build/dosbox-0.74-3'
     dos_source = (tree / 'src/dos/dos.cpp').read_text()
     signature = 'static inline void modify_cycles(Bits value) {'
     helper = signature + dos_source.split(signature, 1)[1].split('\n#else', 1)[0]
     (directory / 'dos_modify_cycles.h').write_text(helper + '\n')
-    output = str(directory / 'pic-probe')
+    output = str(directory / ('pic-sb-probe' if sb_events else 'pic-probe'))
+    device = ['-DFIST_SB_EVENT_CLOCK', str(ROOT / 'tools/oracle/sb_dma_probe.cpp')] if sb_events else []
     subprocess.run(['g++', '-std=gnu++11',
                     *subprocess.check_output(['sdl-config', '--cflags'], text=True).split(),
                     '-I' + str(tree / 'include'), '-I' + str(tree), '-I' + str(directory),
@@ -50,7 +51,7 @@ def build_pic_probe(directory):
                     str(ROOT / 'tools/oracle/pic_slice_probe.cpp'),
                     str(ROOT / 'tools/oracle/io_delay_probe.cpp'),
                     str(ROOT / 'tools/oracle/dos_delay_probe.cpp'),
-                    str(ROOT / 'tools/oracle/rep_probe.cpp'), '-Wl,--gc-sections', '-lm',
+                    str(ROOT / 'tools/oracle/rep_probe.cpp'), *device, '-Wl,--gc-sections', '-lm',
                     '-o', output], check=True, capture_output=True, text=True)
     return output
 

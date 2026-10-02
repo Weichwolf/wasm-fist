@@ -7,6 +7,7 @@
  * writes it + the palette to a PPM so the rendered frame is observable.
  */
 #include "ghidra_compat.h"
+#include "fist_pic.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -460,6 +461,95 @@ static void pic_slice_vga(unsigned *slice, uint64_t tick, unsigned index,
         }
     }
 }
+/* DOSBox pic.cpp: 512 float-index entries, stable equal-time insertion and
+ * callback-relative re-arming. The active CPU budget is the shared owner above;
+ * queue callbacks run at PIC dispatch, after instruction/REP effects finish. */
+#define PIC_QUEUE_SIZE 512u
+typedef struct FistPicEntry {
+    float index;
+    FistPicEvent handler;
+    unsigned value;
+    struct FistPicEntry *next;
+} FistPicEntry;
+static FistPicEntry g_pic_entries[PIC_QUEUE_SIZE];
+static FistPicEntry *g_pic_free, *g_pic_events;
+static uint64_t g_pic_tick;
+static int g_pic_initialized, g_pic_service;
+static float g_pic_service_lag;
+static void cpu_slice_start(void);
+static void pic_tick_sync(uint64_t cpu)
+{
+    if (!g_pic_initialized) {
+        for (unsigned i = 0; i + 1 < PIC_QUEUE_SIZE; ++i)
+            g_pic_entries[i].next = &g_pic_entries[i + 1];
+        g_pic_free = g_pic_entries;
+        g_pic_tick = cpu / 30000u;
+        g_pic_initialized = 1;
+    }
+    /* TIMER_AddTick subtracts one float per tick, not a rounded total. DOS
+     * callback credits can move virtual time back without reversing PIC_Ticks. */
+    while (g_pic_tick < cpu / 30000u) {
+        for (FistPicEntry *entry = g_pic_events; entry; entry = entry->next)
+            entry->index -= 1.0f;
+        ++g_pic_tick;
+    }
+}
+static int64_t pic_index(uint64_t cpu) { return (int64_t)cpu - (int64_t)(g_pic_tick * 30000u); }
+static void pic_service_events(uint64_t cpu)
+{
+    if (g_pic_service) return;
+    int64_t index = pic_index(cpu);
+    g_pic_service = 1;
+    while (g_pic_events) {
+        /* Store the original float product before comparing it. Native x87
+         * excess precision must not postpone entries at the rounded deadline. */
+        float deadline = g_pic_events->index * 30000.0f;
+        if (deadline > index) break;
+        FistPicEntry *entry = g_pic_events;
+        g_pic_events = entry->next;
+        g_pic_service_lag = entry->index;
+        entry->handler(entry->value);
+        entry->next = g_pic_free;
+        g_pic_free = entry;
+    }
+    g_pic_service = 0;
+}
+void fist_clock_add_event(FistPicEvent handler, float delay, unsigned value)
+{
+    if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
+    if (!g_pic_free) { fprintf(stderr, "[pic] Event queue full\n"); return; }
+    FistPicEntry *entry = g_pic_free;
+    g_pic_free = entry->next;
+    uint64_t cpu = clock_cpu_cycles(clock_now());
+    float index = (float)pic_index(cpu) / 30000.0f;
+    entry->index = delay + (g_pic_service ? g_pic_service_lag : index);
+    entry->handler = handler;
+    entry->value = value;
+    FistPicEntry **place = &g_pic_events;
+    while (*place && (*place)->index <= entry->index) place = &(*place)->next;
+    entry->next = *place;
+    *place = entry;
+    /* AddEntry may return the remaining budget to CPU_CycleLeft. The failed
+     * normal-core decrement is charged on the next fetch, never in this call. */
+    float delta = g_pic_events->index - index;
+    int cycles = (int)(30000.0 * (double)delta);
+    if (cycles < (int)g_cpu_remaining) g_cpu_remaining = 0;
+}
+static void pic_remove(FistPicEvent handler, int specific, unsigned value)
+{
+    FistPicEntry **place = &g_pic_events;
+    while (*place) {
+        FistPicEntry *entry = *place;
+        if (entry->handler == handler && (!specific || entry->value == value)) {
+            *place = entry->next;
+            entry->next = g_pic_free;
+            g_pic_free = entry;
+        } else place = &entry->next;
+    }
+}
+void fist_clock_remove_events(FistPicEvent handler) { pic_remove(handler, 0, 0); }
+void fist_clock_remove_specific_events(FistPicEvent handler, unsigned value) { pic_remove(handler, 1, value); }
+
 static unsigned cpu_next_slice(uint64_t cpu)
 {
     uint64_t tick = cpu / 30000u;
@@ -480,6 +570,15 @@ static unsigned cpu_next_slice(uint64_t cpu)
         uint64_t resize = clock_cpu_cycles((FistClock){g_sequence_resize_ready, 0});
         if (resize > cpu && resize - cpu < slice) slice = (unsigned)(resize - cpu);
     }
+    if (g_pic_events) {
+        float deadline = g_pic_events->index * 30000.0f;
+        float distance = deadline - pic_index(cpu);
+        if (distance > 0) {
+            unsigned cycles = (unsigned)distance;
+            if (!cycles) cycles = 1;
+            if (cycles < slice) slice = cycles;
+        }
+    }
     return slice;
 }
 unsigned fist_clock_cpu_slice(uint64_t *cycle)
@@ -490,6 +589,9 @@ unsigned fist_clock_cpu_slice(uint64_t *cycle)
 }
 static void cpu_slice_start(void)
 {
+    uint64_t cpu = clock_cpu_cycles(clock_now());
+    pic_tick_sync(cpu);
+    pic_service_events(cpu);
     g_cpu_remaining = cpu_next_slice(clock_cpu_cycles(clock_now()));
     g_cpu_time = clock_now();
 }
