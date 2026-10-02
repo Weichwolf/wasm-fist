@@ -52,7 +52,9 @@ static void check_endpoint(void)
 
 int main(int argc, char **argv)
 {
-    if (argc == 5 && !strcmp(argv[1], "mixer")) {
+    if ((argc == 5 && !strcmp(argv[1], "mixer")) ||
+        (argc == 8 && !strcmp(argv[1], "channel"))) {
+        extern ushort *m_ext_FUN_0000_22ab(ushort *,uint,byte,byte);
         extern void m_ext_FUN_0000_2630(void);
         const unsigned size = 0x100000, dma = 0x2de0;
         const unsigned pointers[] = {0x15d7,0x15db,0x15df,0x15fb,0x15ff,0x1603,0x23dc,0x23e0,0x2716};
@@ -68,8 +70,21 @@ int main(int argc, char **argv)
             else { assert(linear<FIST_MEM_SIZE); pointer=g_mem+linear; }
             *field=(uint32_t)(uintptr_t)pointer;
         }
-        m_ext_FUN_0000_2630();
-        assert(g_mixer_callbacks == strtoul(argv[4], NULL, 0));
+        if (!strcmp(argv[1], "channel")) {
+            unsigned sample = strtoul(argv[4], NULL, 0);
+            assert(sample + 4 <= size);
+            ushort *result = m_ext_FUN_0000_22ab((ushort *)(g_mem+fist_ext_base+sample),
+                                               strtoul(argv[5], NULL, 0),
+                                               strtoul(argv[6], NULL, 0),
+                                               strtoul(argv[7], NULL, 0));
+            assert(g_mixer_callbacks == 0);
+            uintptr_t relative = (uintptr_t)result - (uintptr_t)(g_mem+fist_ext_base);
+            assert(relative < size);
+            printf("%u\n", (unsigned)relative);
+        } else {
+            m_ext_FUN_0000_2630();
+            assert(g_mixer_callbacks == strtoul(argv[4], NULL, 0));
+        }
         /* Report logical guest offsets; verify each actual host pointer before
          * translating it back. Representational rebasing never masks a wrong value. */
         for (unsigned i=0;i<sizeof pointers/sizeof *pointers;++i) {

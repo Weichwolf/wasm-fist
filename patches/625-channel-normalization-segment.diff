@@ -1,0 +1,38 @@
+PATCH 625: preserve the direct digital channel setter's DS-relative byte lookup (board:0003).
+
+Original 22ab assigns sample pointer/length, default or supplied pitch and cursor
+before storing the byte SHR/ADD operands for the selected channel. Instructions
+233c, 2354 and 2367 read BYTE DS:(1e8b+zero_extend(DL)), not a host address 1e8b.
+Resolve this module operand through the existing shared fist_ext_addr owner.
+Patch 623 already establishes byte-only writes; do not change their contract.
+
+The first actual scripted channel-two assignment at tick 553 supplies sample
+679d6, ECX=0, DL=3 and BL=2. Same-process paging-aware snapshots and a complete
+25-instruction trace before RET 2376 prove nine module-byte changes, four saved
+ESI stack bytes and no intervening interrupt. The complete sample matches the
+provisioned DSOUNDS.BIN by offset/hash. The probe retains all original 600-ms
+frames, final PCM and endpoint. The regression compares all isolated one-MiB
+module bytes, full normalization instructions, the returned sample pointer and
+the untouched 2048-byte physical DMA ring on native and WASM. Parent native
+segfaults at the unbased lookup; WASM stores the wrong ADD operand.
+
+This corrects the direct setter only. Queued/automatic channel allocation,
+register transport, device initialization, IRQ/IF, elapsed instruction work and
+final shared PCM remain open; no measured delay or missing producer is added.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -2600,3 +2600,3 @@
+   if (param_4 == 0) {
+-    uRam0000268b = *(undefined1 *)(uVar1 + 0x1e8b);
++    uRam0000268b = *fist_ext_addr(uVar1 + 0x1e8b);
+     bRam00002689 = param_3;
+@@ -2604,3 +2604,3 @@
+   else if (param_4 == 1) {
+-    uRam000026b6 = *(undefined1 *)(uVar1 + 0x1e8b);
++    uRam000026b6 = *fist_ext_addr(uVar1 + 0x1e8b);
+     bRam000026b3 = param_3;
+@@ -2608,3 +2608,3 @@
+   else {
+-    uRam000026e2 = *(undefined1 *)(uVar1 + 0x1e8b);
++    uRam000026e2 = *fist_ext_addr(uVar1 + 0x1e8b);
+     bRam000026df = param_3;

@@ -194,9 +194,35 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   `python3 scratch/sequence-capture/digital-init/paired-proof.py` and `analyze.py`
   reproduce the provenance checks; no port implementation or parity acceptance is claimed.
 
+- Current base `f54bc8c`, patch 625: direct channel setter 22ab now resolves its
+  normalization byte through the shared extender operand owner. Original instructions
+  233c/2354/2367 use DS:(1e8b+zero_extend(DL)); the previous C read the bare host address.
+  Existing patch 623 retains byte-only operand stores. Generated engine C remains pristine.
+- `tools/oracle/channel_22ab_case.json` records the actual first assignment from the
+  same-process tick-553 pair above. The reaching test compiles the ordered-patched original
+  setter, reconstructs its sample from provisioned DSOUNDS.BIN, checks the returned pointer,
+  every isolated one-MiB module byte, complete normalization instructions and all untouched
+  2048 DMA bytes on both targets. Parent native faults at 1e8e; WASM stores unequal state.
+  The setter and all three previous complete mixer cases now pass. Shared fixture loading
+  preserves the existing mixer expectations and source hashes.
+- `scratch/sequence-capture/digital-init/{red.log,red-producer/,red-address.log,
+  green-channel-mixers.log,check-channel-proof.py,channel-proof.json}` reproduces source
+  provenance, reaching failure, fixture equality and production diagnostics. All 418
+  provisioned original files remain unchanged. `bash tools/check_flow.sh '^(intro|mainmenu)$'`
+  passes 69 tests, exact patches, sequential native/WASM builds and both selected flows
+  / zero failures, exit 0; `scratch/verify/run.AGmXvE/`. This is a filtered gate, not a new
+  full-matrix or original-parity acceptance.
+- Fresh complete 10/30-second captures retain every previous port frame byte and endpoint.
+  All 698 original frames match at 10 seconds. At 30 seconds all 2100 cross-target frames
+  match, all original times/layouts/palettes match, and the same 27 pixel events differ,
+  first 817. Strict comparison still fails absent final mixed port PCM. The production
+  gate still does not dispatch op 64 or initialize the DSP. Direct setter storage is
+  proved; queued/automatic allocation, register transport, initialization, IRQ/IF,
+  elapsed instruction work and final shared mixer output remain open.
+
 ## Next
 
-1. Restore the reached channel setter and script register transport, then wire the original
+1. Restore script register transport, then wire the original
    device initialization and 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts,
    including device setup and DMA cadence. Supply actual instruction/event work to 0026 so
    0034 can recheck frame 817. Add original-backed buffer/state regressions on both targets;

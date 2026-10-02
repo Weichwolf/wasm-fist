@@ -40,8 +40,9 @@ class PortIoTest(unittest.TestCase):
         text = unit.read_text()
         declarations = '\n'.join(line for line in text.splitlines() if line.startswith('#define '))
         bodies = []
-        for address in ('7120', '2630', '2294'):
-            signature = f'void __allregs FUN_0000_{address}(void)'
+        for address in ('7120', '2630', '2294', '22ab'):
+            signature = (f'void __allregs FUN_0000_{address}(void)' if address != '22ab' else
+                         'ushort * __allregs FUN_0000_22ab(ushort *param_1,uint param_2,byte param_3,byte param_4)')
             body = text.split(signature+'\n\n{', 1)[1].split('\n}\n', 1)[0]
             bodies.append(signature+'\n{'+body+'\n}\n')
         blit = cls.directory / 'ext_producers.c'
@@ -247,6 +248,40 @@ class PortIoTest(unittest.TestCase):
                     self.assertEqual(output.read_bytes(), memory)
                     self.assertEqual(result.stdout, expected)
 
+    def original_module_memory(self, proof, ring):
+        asset = (ROOT / proof['sample_asset']).read_bytes()
+        self.assertEqual(hashlib.sha256(asset).hexdigest(), proof['sample_asset_sha256'])
+        image = (ROOT / 're_out/fist_image.bin').read_bytes()
+        memory = bytearray(b'\xa5' * (0x100000 + 0x800))
+        memory[:len(image)] = image
+        memory[ring:ring+proof['ring_length']] = bytes([proof['ring_initial_fill']])*proof['ring_length']
+        for index, value in proof.get('ring_initial_exceptions', []): memory[ring+index] = value
+        for clip in proof['clips']:
+            data = asset[clip['asset_offset']:clip['asset_offset']+clip['length']]
+            self.assertEqual(hashlib.sha256(data).hexdigest(), clip['sha256'])
+            memory[clip['module_offset']:clip['module_offset']+clip['length']] = data
+        for field in proof['before']:
+            data = bytes.fromhex(field['hex']); memory[field['offset']:field['offset']+len(data)] = data
+        return memory
+
+    def test_22ab_first_scripted_channel_matches_original_assignment_and_instruction_bytes(self):
+        proof = json.loads((ROOT / 'tools/oracle/channel_22ab_case.json').read_text())
+        memory = self.original_module_memory(proof, 0x100000)
+        expected = memory.copy()
+        for field in proof['after']:
+            data = bytes.fromhex(field['hex']); expected[field['offset']:field['offset']+len(data)] = data
+        source = self.directory / 'channel-input.memory'; source.write_bytes(memory)
+        args = proof['arguments']
+        for target, run in self.commands:
+            with self.subTest(target=target):
+                output = self.directory / f'{target}-channel.memory'
+                result = subprocess.run([*run, 'channel', str(source), str(output),
+                                         *(str(args[key]) for key in ('sample', 'pitch', 'normalization', 'channel'))],
+                                        capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(int(result.stdout), proof['returned_sample'])
+                self.assertEqual(output.read_bytes(), expected)
+
     def test_2630_active_channels_match_complete_original_buffer_and_state(self):
         self.check_original_mixer_case('mixer_2630_case.json')
 
@@ -258,22 +293,11 @@ class PortIoTest(unittest.TestCase):
 
     def check_original_mixer_case(self, filename):
         proof = json.loads((ROOT / 'tools/oracle' / filename).read_text())
-        asset = (ROOT / proof['sample_asset']).read_bytes()
-        self.assertEqual(hashlib.sha256(asset).hexdigest(), proof['sample_asset_sha256'])
         image = (ROOT / 're_out/fist_image.bin').read_bytes()
         self.assertEqual(hashlib.sha256(image[proof['lookup_offset']:proof['lookup_offset']+512]).hexdigest(),
                          proof['lookup_sha256'])
-        memory = bytearray(b'\xa5' * (0x100000 + 0x800))
-        memory[:len(image)] = image
         ring = 0x1621
-        memory[ring:ring+proof['ring_length']] = bytes([proof['ring_initial_fill']])*proof['ring_length']
-        for index, value in proof['ring_initial_exceptions']: memory[ring+index] = value
-        for clip in proof['clips']:
-            data = asset[clip['asset_offset']:clip['asset_offset']+clip['length']]
-            self.assertEqual(hashlib.sha256(data).hexdigest(), clip['sha256'])
-            memory[clip['module_offset']:clip['module_offset']+clip['length']] = data
-        for field in proof['before']:
-            data = bytes.fromhex(field['hex']); memory[field['offset']:field['offset']+len(data)] = data
+        memory = self.original_module_memory(proof, ring)
         expected = memory.copy()
         for field in proof['after']:
             data = bytes.fromhex(field['hex']); expected[field['offset']:field['offset']+len(data)] = data
