@@ -310,6 +310,39 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   when restoring startup; verify the generated caller's DWORD result and CF,
   rather than adding a separate raw sample loader.
 
+- Current base `89c6ba6`, patch 628: successful FILEMGR 6032 reads now retain the
+  resident kernel's full EAX shadow. Original 608d stores DWORD EAX at 937;
+  60a3/60a8 return that saved DWORD after closing the file. The generated caller
+  combined AX with an uninitialized high word. The existing shared DOS file/read
+  owner supplies the result; no separate sample loader is added, and generated
+  engine C stays pristine.
+- `tools/oracle/file_loader_6032_case.json` records the original HIGH.DTL return
+  (2052 bytes), DSOUNDS.BIN query/full read (134240 bytes, EAX=00020c60), raw
+  original instructions and image/asset/register-trace hashes. The read-only
+  source probe retains all 39 frames, 27518 mixed PCM samples and the complete
+  600-ms endpoint bytewise. Originals remain provisioned and ignored by Git.
+- The regression compiles the complete ordered-patched extender with actual
+  6032/5cc2/5d50 and the real DOS/VGA owners. Parent native returns garbage high
+  words for both assets; WASM returns only 3168 for DSOUNDS. Both already copy
+  the entire DSOUNDS asset correctly. Both targets now match full query/load
+  counts, the saved DWORD, every file byte and all destination guards. The
+  query leaves the entire destination untouched. Fixture endpoints outside
+  file service abort if reached; no interrupt vector is installed and timing
+  is not asserted by this isolated regression.
+- `scratch/sequence-capture/file-loader/{red-reaching.log,green-unit.log,
+  check-proof.py,proof.json}` preserves source provenance and reaching failure.
+  `bash tools/check_flow.sh '^(intro|mainmenu)$'`, using separate outputs, passes
+  73 tests, exact patches, sequential native/WASM builds and both selected flows,
+  with separately recorded exit 0; `scratch/verify/run.ThgEmA/`. This is a filtered
+  gate, not a new complete existing-matrix or original-parity acceptance.
+- Fresh complete 30000-ms captures retain every prior port frame byte and all
+  43 sound-register packets: 2100 frames and the endpoint on each target, with
+  byte-identical native/WASM register logs. Strict original comparison still
+  fails absent final mixed port PCM. All 418 original files remain unchanged.
+  Error CF/other file-service register contracts, actual sound startup and
+  service dispatch, protected IRQ/IF, device variants, instruction/event timing
+  and the final shared mixer remain open.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover
