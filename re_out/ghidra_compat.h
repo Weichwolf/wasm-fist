@@ -287,6 +287,14 @@ void  fist_clock_wait_bios_ticks(unsigned count);
 #define FIST_EXTGATE_LIN 0x08799u
 int fist_extender_gate(void);         /* native_main: the extender create-task/service handler */
 
+/* Original op-64 consumed register lanes. Producers publish before the PM gate;
+ * one shared owner retains AX, full ECX and DL across both build targets. */
+typedef struct { uint16_t ax; uint32_t ecx; uint8_t dl; } FistSoundRegisters;
+void fist_sound_registers(uint16_t ax, uint32_t ecx, uint8_t dl);
+FistSoundRegisters fist_sound_get_registers(void);
+void fist_sound_trace(void);
+
+
 /* ---- DOS loader environment (native_main sets these up before app_entry) ----
  * The Doug-Huffman extender/DOS loads the engine with a PSP + environment block and installs the
  * DGROUP service-vector table (relocated far-ptrs into the CRT service segment 0xf69). In our flat

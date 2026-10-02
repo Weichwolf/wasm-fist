@@ -22,6 +22,20 @@ def tool(name, pattern):
     return os.environ.get(name.upper()) or shutil.which(name) or str(next(Path.home().glob(pattern)))
 
 
+def patched_unit(directory, filename):
+    unit = directory / filename
+    unit.write_bytes((ROOT / 're_out' / filename).read_bytes())
+    for patch in sorted((ROOT / 'patches').glob('*.diff')):
+        sections = re.findall(r'^--- a/' + re.escape(filename) + r'(?:[ \t][^\n]*)?\n.*?(?=^--- a/|\Z)',
+                              patch.read_text(), re.M | re.S)
+        if sections:
+            result = subprocess.run(['patch', '--batch', '-s', '-p1', '-F0', '--fuzz=0', '-d', directory],
+                                    input=''.join(sections), text=True, capture_output=True)
+            if result.returncode:
+                raise RuntimeError(f'{patch.name}: {result.stdout}{result.stderr}')
+    return unit.read_text()
+
+
 class PortIoTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -29,15 +43,7 @@ class PortIoTest(unittest.TestCase):
         cls.addClassCleanup(cls.tmp.cleanup)
         cls.directory = Path(cls.tmp.name)
         # Compile the reached producer bodies after their ordered, exact Extender patches.
-        unit = cls.directory / 'fist_ext.c'
-        unit.write_bytes((ROOT / 're_out/fist_ext.c').read_bytes())
-        for patch in sorted((ROOT / 'patches').glob('*.diff')):
-            sections = re.findall(r'^--- a/fist_ext\.c\n.*?(?=^--- a/|\Z)',
-                                  patch.read_text(), re.M | re.S)
-            if sections:
-                subprocess.run(['patch', '--batch', '-s', '-p1', '-F0', '--fuzz=0', '-d', cls.directory],
-                               input=''.join(sections), text=True, check=True, capture_output=True)
-        text = unit.read_text()
+        text = patched_unit(cls.directory, 'fist_ext.c')
         declarations = '\n'.join(line for line in text.splitlines() if line.startswith('#define '))
         bodies = []
         for address in ('7120', '2630', '2294', '22ab'):
@@ -48,8 +54,16 @@ class PortIoTest(unittest.TestCase):
         blit = cls.directory / 'ext_producers.c'
         blit.write_text('#include "ghidra_compat.h"\nextern uint32_t fist_ext_base;\n' + declarations +
                         '\n'+'\n'.join(bodies))
+        engine_text = patched_unit(cls.directory, 'fist.c')
+        sound = cls.directory / 'sound_script.c'
+        helpers = []
+        for signature in ('static void fist_intro_sound(uint16_t cur)',
+                          'static void fist_intro_stop(undefined4 inbox)'):
+            body = engine_text.split(signature+'\n{', 1)[1].split('\n}\n', 1)[0]
+            helpers.append(signature.removeprefix('static ')+'\n{'+body+'\n}\n')
+        sound.write_text('#include "ghidra_compat.h"\nvoid FUN_0000_e2c2(undefined4);\n'+''.join(helpers))
         sources = [str(ROOT / 'tests/port_io.c'), str(ROOT / 're_out/fist_vga.c'),
-                   str(ROOT / 're_out/fist_dos.c'), str(blit)]
+                   str(ROOT / 're_out/fist_dos.c'), str(blit), str(sound)]
         flags = ['-I' + str(ROOT / 're_out'), '-ffunction-sections', '-fdata-sections', '-Wno-int-conversion']
         native, wasm = (str(cls.directory / name) for name in ('ports', 'ports.js'))
         targets = [('native', ['gcc', '-m32', *flags, *sources, '-Wl,--gc-sections', '-lm', '-o', native], [native]),
@@ -247,6 +261,29 @@ class PortIoTest(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(output.read_bytes(), memory)
                     self.assertEqual(result.stdout, expected)
+
+    def test_intro_script_forwards_every_original_sound_register_packet(self):
+        proof = json.loads((ROOT / 'tools/oracle/sound_script_case.json').read_text())
+        source = self.directory / 'sound-script.input'
+        source.write_bytes(b''.join(struct.pack('<HBBI', row['ax'], row['pitch_offset'], row['dl'], row['ecx'])
+                                    for row in proof['commands'][:-3]))
+        expected = [(row['ax'], row['ecx'], row['dl']) for row in proof['commands']]
+        partial = self.directory / 'sound-script.partial'
+        partial.write_bytes(source.read_bytes()+b'\0')
+        for target, run in self.commands:
+            with self.subTest(target=target):
+                output = self.directory / f'{target}-sound-script.log'
+                result = subprocess.run([*run, 'sound-script', str(source)],
+                                        env=dict(os.environ, FIST_SOUND_REGLOG=str(output)),
+                                        capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                actual = [tuple(int(value, 16) for value in line.split()[1:])
+                          for line in output.read_text().splitlines()]
+                self.assertEqual(actual, expected)
+                incomplete = subprocess.run([*run, 'sound-script', str(partial)],
+                                            env=dict(os.environ, FIST_SOUND_REGLOG=str(output)+'.partial'),
+                                            capture_output=True, text=True, timeout=30)
+                self.assertNotEqual(incomplete.returncode, 0, 'partial input packet was accepted')
 
     def original_module_memory(self, proof, ring):
         asset = (ROOT / proof['sample_asset']).read_bytes()

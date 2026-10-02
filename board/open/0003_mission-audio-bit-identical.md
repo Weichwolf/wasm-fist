@@ -220,11 +220,54 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   proved; queued/automatic allocation, register transport, initialization, IRQ/IF,
   elapsed instruction work and final shared mixer output remain open.
 
+- Current base `aec8f0c`, patch 626: the actual intro loop now publishes its consumed
+  AX/ECX/DL lanes before e2c2 enters the PM gate. Original e61e/e626 loads sound, channel
+  and normalization from separate ES bytes; e62f loads full ECX from the DWORD table at
+  DGROUP:(f772+byte[cur+5]). The script byte is a table offset. One shared shim retains
+  these widths for both targets. The alternative translated entry shares this decoder
+  and the original six-byte cursor advance. e684/e6a5 queues stops 82ff/81ff/80ff with
+  zero ECX/DL. Generated engine C remains pristine. The full EBX inbox model, original
+  register returns/flags and other control-loop paths are outside this bounded proof.
+- `tools/oracle/sound_script_case.json` records all 43 consumed packets from the complete
+  original 30000-ms trace: 40 script requests plus three stops. Every complete original
+  frame/PCM/endpoint byte matches the unprobed original (2100 frames / 1324058 PCM samples).
+  Read-only lane capture on the unchanged parent engine reaches all 43 gates on both
+  targets but records zeros in every packet. Initial failed native compilation/capture
+  is excluded; the corrected diagnostic builds and complete red runs prove this failure.
+- The source-backed decoder regression replays all original packets into a recording
+  poster endpoint; unexpected inbox values or request counts fail. Separate complete
+  production captures verify all 43 packets at the real PM gate on both targets, with
+  byte-identical native/WASM logs. Shared ordered patch preparation remains exact and
+  now handles timestamped engine diff headers. The regression driver rejects partial
+  input records. `FIST_SOUND_REGLOG` records CPU cycle, AX, ECX and DL; it is diagnostic
+  metadata, not digital PCM or a sound-producer substitute.
+- `scratch/sequence-capture/sound-script/{red.json,red-native-complete-30s/,red-wasm-30s/,
+  green-unit.log,check-proof.py,proof.json}` retains source provenance and red/green
+  evidence. `bash tools/check_flow.sh '^(intro|mainmenu)$'` passes 70 tests, exact patches,
+  sequential native/WASM builds and both selected flows / zero failures, exit 0;
+  `scratch/verify/run.XkKiXu/`. The sound regression is rerun after requiring partial
+  test-input records to fail. All 418 original files remain unchanged. This filtered
+  gate is not a new full existing-matrix or original-parity acceptance.
+- Fresh complete 10/30-second frames retain every previous port byte and endpoint,
+  including all 698 matching original frames at 10 seconds and the same 27 original
+  pixel differences at 30 seconds, first 817. Strict sequence comparison still fails
+  absent mixed PCM. First original 786a trace cycle is 16611902; port gate cycle is
+  16579231. The original trace has fetched its instruction while the port records the
+  service gate; this is clock attribution, not a permitted aggregate delay. Original
+  startup/device/instruction work must supply the missing progression. The port still
+  has no actual op-64 producer dispatch, initialized DSP or SB IRQ callback.
+- Remaining caller provenance: be8b reads sound/channel and normalization from descriptor
+  9fe1/9fe3, overriding DL with 3 when byte 6ce6 exceeds 1; befb/bf15/bf3c select secondary
+  sound bank/channel two, zero ECX/DL; c00c uses (zero_extend(CX)<<9)+f000 and DL=2;
+  c035 stops the descriptor's channel; c047 halves descriptor normalization and uses
+  zero ECX. These asm contracts guide their future reaching regressions; their missing
+  register transport is not fixed or accepted here.
+
 ## Next
 
-1. Restore script register transport, then wire the original
-   device initialization and 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts,
-   including device setup and DMA cadence. Supply actual instruction/event work to 0026 so
+1. Wire original device initialization and consume the recovered intro registers. Recover
+   the 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts; restore
+   remaining mission/damage/weapon transport as reached. Supply actual instruction/event work to 0026 so
    0034 can recheck frame 817. Add original-backed buffer/state regressions on both targets;
    do not charge an aggregate measured delay or invent a sample source.
 2. Recover speaker synthesis against a captured original event schedule. Prove its first sample;

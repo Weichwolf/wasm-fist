@@ -1899,6 +1899,7 @@ static inline uint32_t fist_hm_index(uint32_t y, uint32_t x, unsigned d) {
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
+    if (op == 0x64) fist_sound_trace();
     /* board:0034 Original intro op-0x6c yields across the next IRQ before MGAVIDEO 04a3. */
     if (op == 0x6c && !g_kdv_done) {
         uint16_t tick = *(volatile uint16_t *)(dg + 0x452);

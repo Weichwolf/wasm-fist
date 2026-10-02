@@ -1,0 +1,304 @@
+{
+  "source": "Every 786a entry in the complete independently matched original 30000-ms register trace; only consumed AX/ECX/DL lanes, not fitted timestamps or full-register/IRQ/device state.",
+  "trace_sha256": "13258fb7fb53918f48c6b625bd33901a9aa9b9d9a326cb4f6a9656767eb06a16",
+  "commands": [
+    {
+      "ax": 522,
+      "ecx": 0,
+      "dl": 3,
+      "original_time_ms": "553.7301",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 33280,
+      "ecx": 0,
+      "dl": 3,
+      "original_time_ms": "2690.3581",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 7,
+      "ecx": 49152,
+      "dl": 4,
+      "original_time_ms": "3888.8650",
+      "pitch_offset": 4
+    },
+    {
+      "ax": 7,
+      "ecx": 49152,
+      "dl": 5,
+      "original_time_ms": "4416.7834",
+      "pitch_offset": 4
+    },
+    {
+      "ax": 263,
+      "ecx": 45056,
+      "dl": 4,
+      "original_time_ms": "5015.2430",
+      "pitch_offset": 8
+    },
+    {
+      "ax": 7,
+      "ecx": 49152,
+      "dl": 3,
+      "original_time_ms": "5215.7950",
+      "pitch_offset": 4
+    },
+    {
+      "ax": 263,
+      "ecx": 45056,
+      "dl": 4,
+      "original_time_ms": "5415.5500",
+      "pitch_offset": 8
+    },
+    {
+      "ax": 7,
+      "ecx": 40960,
+      "dl": 3,
+      "original_time_ms": "5886.8534",
+      "pitch_offset": 12
+    },
+    {
+      "ax": 263,
+      "ecx": 49152,
+      "dl": 3,
+      "original_time_ms": "6295.1508",
+      "pitch_offset": 4
+    },
+    {
+      "ax": 7,
+      "ecx": 45056,
+      "dl": 4,
+      "original_time_ms": "6559.6900",
+      "pitch_offset": 8
+    },
+    {
+      "ax": 263,
+      "ecx": 49152,
+      "dl": 2,
+      "original_time_ms": "6756.1284",
+      "pitch_offset": 4
+    },
+    {
+      "ax": 7,
+      "ecx": 40960,
+      "dl": 3,
+      "original_time_ms": "6827.5431",
+      "pitch_offset": 12
+    },
+    {
+      "ax": 263,
+      "ecx": 45056,
+      "dl": 2,
+      "original_time_ms": "7226.9127",
+      "pitch_offset": 8
+    },
+    {
+      "ax": 7,
+      "ecx": 49152,
+      "dl": 3,
+      "original_time_ms": "7483.7763",
+      "pitch_offset": 4
+    },
+    {
+      "ax": 263,
+      "ecx": 45056,
+      "dl": 2,
+      "original_time_ms": "7754.8825",
+      "pitch_offset": 8
+    },
+    {
+      "ax": 263,
+      "ecx": 40960,
+      "dl": 2,
+      "original_time_ms": "8154.4914",
+      "pitch_offset": 12
+    },
+    {
+      "ax": 263,
+      "ecx": 40960,
+      "dl": 2,
+      "original_time_ms": "8425.6293",
+      "pitch_offset": 12
+    },
+    {
+      "ax": 263,
+      "ecx": 40960,
+      "dl": 2,
+      "original_time_ms": "8625.4382",
+      "pitch_offset": 12
+    },
+    {
+      "ax": 263,
+      "ecx": 40960,
+      "dl": 2,
+      "original_time_ms": "8753.8676",
+      "pitch_offset": 12
+    },
+    {
+      "ax": 263,
+      "ecx": 45056,
+      "dl": 2,
+      "original_time_ms": "9025.3713",
+      "pitch_offset": 8
+    },
+    {
+      "ax": 33281,
+      "ecx": 0,
+      "dl": 3,
+      "original_time_ms": "9482.7186",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 263,
+      "ecx": 40960,
+      "dl": 2,
+      "original_time_ms": "9552.9808",
+      "pitch_offset": 12
+    },
+    {
+      "ax": 263,
+      "ecx": 45056,
+      "dl": 2,
+      "original_time_ms": "10152.4561",
+      "pitch_offset": 8
+    },
+    {
+      "ax": 263,
+      "ecx": 49152,
+      "dl": 2,
+      "original_time_ms": "10551.9429",
+      "pitch_offset": 4
+    },
+    {
+      "ax": 263,
+      "ecx": 45056,
+      "dl": 2,
+      "original_time_ms": "10823.0189",
+      "pitch_offset": 8
+    },
+    {
+      "ax": 3,
+      "ecx": 0,
+      "dl": 1,
+      "original_time_ms": "11351.0151",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 263,
+      "ecx": 49152,
+      "dl": 2,
+      "original_time_ms": "11493.6576",
+      "pitch_offset": 4
+    },
+    {
+      "ax": 3,
+      "ecx": 0,
+      "dl": 1,
+      "original_time_ms": "11550.7482",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 263,
+      "ecx": 45056,
+      "dl": 2,
+      "original_time_ms": "11750.7456",
+      "pitch_offset": 8
+    },
+    {
+      "ax": 3,
+      "ecx": 0,
+      "dl": 1,
+      "original_time_ms": "11822.1819",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 3,
+      "ecx": 0,
+      "dl": 1,
+      "original_time_ms": "12093.6176",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 263,
+      "ecx": 40960,
+      "dl": 2,
+      "original_time_ms": "12150.5826",
+      "pitch_offset": 12
+    },
+    {
+      "ax": 263,
+      "ecx": 49152,
+      "dl": 2,
+      "original_time_ms": "12421.2048",
+      "pitch_offset": 4
+    },
+    {
+      "ax": 4,
+      "ecx": 0,
+      "dl": 2,
+      "original_time_ms": "12549.7412",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 33281,
+      "ecx": 0,
+      "dl": 2,
+      "original_time_ms": "12692.5717",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 4,
+      "ecx": 0,
+      "dl": 1,
+      "original_time_ms": "15359.8916",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 33281,
+      "ecx": 0,
+      "dl": 1,
+      "original_time_ms": "15887.8034",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 4,
+      "ecx": 0,
+      "dl": 1,
+      "original_time_ms": "18760.8893",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 33535,
+      "ecx": 0,
+      "dl": 0,
+      "original_time_ms": "21955.2328",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 4,
+      "ecx": 0,
+      "dl": 0,
+      "original_time_ms": "22026.6229",
+      "pitch_offset": 0
+    },
+    {
+      "ax": 33535,
+      "ecx": 0,
+      "dl": 0,
+      "original_time_ms": "26885.8121"
+    },
+    {
+      "ax": 33279,
+      "ecx": 0,
+      "dl": 0,
+      "original_time_ms": "26885.8209"
+    },
+    {
+      "ax": 33023,
+      "ecx": 0,
+      "dl": 0,
+      "original_time_ms": "26885.8297"
+    }
+  ]
+}

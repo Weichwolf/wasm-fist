@@ -50,8 +50,42 @@ static void check_endpoint(void)
     assert(g_irqs == (g_end_clock - 1) / 0x10000);
 }
 
+/* Recording endpoint for the source-backed script decoder only. Separate full
+ * production captures verify that every real PM gate receives these same lanes. */
+static unsigned g_sound_posts;
+static uint32_t g_sound_inbox;
+void FUN_0000_e2c2(undefined4 inbox)
+{
+    assert(inbox == g_sound_inbox);
+    ++g_sound_posts;
+    fist_sound_trace();
+}
+
 int main(int argc, char **argv)
 {
+    if (argc == 3 && !strcmp(argv[1], "sound-script")) {
+        extern void fist_intro_sound(uint16_t), fist_intro_stop(undefined4);
+        uint8_t *dg = g_mem + 0x1c000, *resource = g_mem + 0x30000;
+        *(uint16_t *)(dg+0x70) = 0x3000;
+        FILE *input = fopen(argv[2], "rb");
+        assert(input);
+        uint8_t row[8]; unsigned count = 0; size_t received;
+        while ((received = fread(row, 1, sizeof row, input)) == sizeof row) {
+            uint16_t cur = 0x880 + count*6;
+            resource[cur+2] = row[0]; resource[cur+3] = row[1];
+            resource[cur+4] = row[3]; resource[cur+5] = row[2];
+            memcpy(dg+0xf772+row[2], row+4, 4);
+            g_sound_inbox = row[2];
+            fist_intro_sound(cur);
+            ++count;
+        }
+        assert(received == 0 && feof(input) && !ferror(input) && !fclose(input));
+        assert(count == 40 && g_sound_posts == count);
+        g_sound_inbox = 0xdeadbeef;
+        fist_intro_stop(g_sound_inbox);
+        assert(g_sound_posts == 43);
+        return 0;
+    }
     if ((argc == 5 && !strcmp(argv[1], "mixer")) ||
         (argc == 8 && !strcmp(argv[1], "channel"))) {
         extern ushort *m_ext_FUN_0000_22ab(ushort *,uint,byte,byte);

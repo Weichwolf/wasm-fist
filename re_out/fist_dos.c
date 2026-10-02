@@ -613,6 +613,39 @@ int g_fist_ext_int = 0;                 /* set by native_main around the extende
 #define R_EDX32 (*(uint32_t*)RF(0x2c))
 static uint8_t *g_ext_dta;              /* current DTA (host pointer), set by AH=1A set-DTA */
 
+/* Original digital service consumes these register lanes, independently of the
+ * TCB inbox. Device initialization and final mixed output have separate owners. */
+static FistSoundRegisters g_sound_registers;
+void fist_sound_registers(uint16_t ax, uint32_t ecx, uint8_t dl)
+{
+    g_sound_registers.ax = ax;
+    g_sound_registers.ecx = ecx;
+    g_sound_registers.dl = dl;
+}
+FistSoundRegisters fist_sound_get_registers(void) { return g_sound_registers; }
+void fist_sound_trace(void)
+{
+    static FILE *log;
+    static int initialized;
+    if (!initialized) {
+        initialized = 1;
+        const char *path = getenv("FIST_SOUND_REGLOG");
+        if (path && *path) {
+            log = fopen(path, "wb");
+            if (!log) { perror(path); abort(); }
+        }
+    }
+    if (log) {
+        extern unsigned fist_clock_cpu_slice(uint64_t *);
+        uint64_t cycle;
+        fist_clock_cpu_slice(&cycle);
+        if (fprintf(log, "%llu %04x %08x %02x\n", (unsigned long long)cycle,
+                    g_sound_registers.ax, g_sound_registers.ecx,
+                    g_sound_registers.dl) < 0 || fflush(log)) abort();
+    }
+}
+
+
 /* Resolve an extender flat operand to a host pointer.  Small values are module offsets (image is
  * base-0, placed at fist_ext_base); large values are already host pointers into g_mem (heap /
  * framebuffer / TCB, all seeded as host addresses with [0x807]=0 identity). */
