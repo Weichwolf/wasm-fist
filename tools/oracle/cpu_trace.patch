@@ -1,6 +1,7 @@
 --- a/src/cpu/core_normal.cpp
 +++ b/src/cpu/core_normal.cpp
-@@ -138,5 +138,6 @@
+@@ -137,6 +137,7 @@
+ #define EALookupTable (core.ea_table)
  
  #include <cstdlib>
 +#include "fist_cpu_trace.h"
@@ -14,4 +15,4 @@
 +		fist_cpu_trace();
  		static int fist_kdv_stage_init = 0;
  		static FILE *fist_kdv_stage_file = 0;
- 		static unsigned fist_kdv_stage_count[7] = {0};
+ 		static unsigned fist_kdv_stage_limit = 3;

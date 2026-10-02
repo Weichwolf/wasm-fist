@@ -1,6 +1,9 @@
 --- a/src/cpu/core_normal.cpp
 +++ b/src/cpu/core_normal.cpp
-@@ -147,0 +148,41 @@
+@@ -145,6 +145,47 @@
+ Bits CPU_Core_Normal_Run(void) {
+ 	while (CPU_Cycles-->0) {
+ 		LOADIP;
 +		static int fist_kdv_profile_init = 0, fist_kdv_profile_active = 0;
 +		static int fist_kdv_profile_calls = 0, fist_kdv_profile_max = 1;
 +		static FILE *fist_kdv_profile_file = 0;
@@ -42,3 +45,6 @@
 +				}
 +			}
 +		}
+ 		core.opcode_index=cpu.code.big*0x200;
+ 		core.prefixes=cpu.code.big;
+ 		core.ea_table=&EATable[cpu.code.big*256];

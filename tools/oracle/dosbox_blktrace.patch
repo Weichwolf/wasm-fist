@@ -8,10 +8,9 @@ normal core's per-instruction loop (after the 0a28 hook), before the C_DEBUG blo
 third_party/dosbox-build/dosbox-0.74-3/src/cpu/core_normal.cpp then `make`.
 --- a/src/cpu/core_normal.cpp
 +++ b/src/cpu/core_normal.cpp
-@@ after the fist_0a28 hook in CPU_Core_Normal_Run() @@
- 		if (fist_0a28_f && SegValue(cs)==(Bitu)fist_0a28_seg && (reg_eip&0xffff)==0x0a28) {
+@@ -157,6 +157,85 @@
  			fist_0a28_count++;
- 			fprintf(fist_0a28_f,"%.4f\n", PIC_FullIndex());
+ 			if ((fist_0a28_count % 50)==0) { fprintf(fist_0a28_f,"%lu %.3f\n", fist_0a28_count, PIC_FullIndex()); fflush(fist_0a28_f); }
  		}
 +		/* board:0013 FIST_BLKTRACE=<path>: dump every executed instruction ONCE (dedup by linear via a
 +		 * bitmap) as "cs:eip linear <16 opcode bytes>" -> offline reassemble the EXECUTED program (the
@@ -92,3 +91,6 @@ third_party/dosbox-build/dosbox-0.74-3/src/cpu/core_normal.cpp then `make`.
 +						else fwrite(MemBase, 1, bytes, df);
 +						fclose(df); fprintf(stderr, "[regtrace] RAM dumped at lin=%08x hit %ld -> %s\n", (unsigned)lin, dump_hits, fn); } } }
 +		}
+ #if C_DEBUG
+ #if C_HEAVY_DEBUG
+ 		if (DEBUG_HeavyIsBreakpoint()) {
