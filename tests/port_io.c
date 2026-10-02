@@ -42,6 +42,63 @@ static void check_endpoint(void)
 
 int main(int argc, char **argv)
 {
+    if (argc == 9 && !strcmp(argv[1], "rep")) {
+        extern void fist_text_init(void), fist_vga_set_mode(int), fist_clock_advance_cpu_cycles(unsigned);
+        extern unsigned fist_clock_cpu_slice(uint64_t *);
+        unsigned tick = strtoul(argv[2], NULL, 0), index = strtoul(argv[3], NULL, 0);
+        unsigned count = strtoul(argv[4], NULL, 0), width = strtoul(argv[5], NULL, 0);
+        int direction = strtol(argv[6], NULL, 0), displacement = strtol(argv[7], NULL, 0);
+        assert((width==1 || width==2 || width==4) && (direction==1 || direction==-1));
+        fist_text_init(); fist_vga_set_mode(0x13);
+        uint64_t current;
+        fist_clock_cpu_slice(&current);
+        uint64_t target = (uint64_t)tick*30000+index;
+        assert(target >= current && target-current <= UINT32_MAX);
+        fist_clock_advance_cpu_cycles((unsigned)(target-current));
+        uint8_t *memory = g_mem + 0x100000;
+        for (unsigned i=0;i<0x40000;++i) memory[i]=(i*37+(i>>8)+11)&255;
+        unsigned start = 0x8000 + (direction < 0 && count ? (count-1)*width : 0);
+        fist_clock_rep_movs(memory+start+displacement,memory+start,width,count,direction);
+        uint64_t cycle; unsigned remaining = fist_clock_cpu_slice(&cycle);
+        FILE *output = fopen(argv[8],"wb");
+        assert(output && fwrite(memory,1,0x40000,output)==0x40000 && !fclose(output));
+        printf("%llu %u\n",(unsigned long long)cycle,remaining);
+        return 0;
+    }
+    if (argc == 7 && !strcmp(argv[1], "ext-read")) {
+        extern void fist_text_init(void), fist_vga_set_mode(int), fist_clock_advance_cpu_cycles(unsigned);
+        extern unsigned fist_clock_cpu_slice(uint64_t *);
+        extern int g_fist_ext_int;
+        unsigned tick = strtoul(argv[2],NULL,0), index = strtoul(argv[3],NULL,0);
+        unsigned requested = strtoul(argv[4],NULL,0);
+        assert(tick>=76 && tick<=10000 && index<30000 && requested<=0x20000);
+        fist_text_init(); fist_vga_set_mode(0x13);
+        uint64_t current;
+        fist_clock_cpu_slice(&current);
+        uint64_t target=(uint64_t)tick*30000+index;
+        assert(target>=current && target-current<=UINT32_MAX);
+        fist_clock_advance_cpu_cycles((unsigned)(target-current));
+        uint16_t *rf=(uint16_t*)(g_mem+0xf0000);
+        uint32_t *shadow=(uint32_t*)(g_mem+0xf0020);
+        fist_ext_base=0x100000; g_fist_ext_int=1;
+        strcpy((char*)g_mem+fist_ext_base+0x2000,"READ.BIN");
+        rf[0]=0x3d00; rf[10]=0x21; shadow[3]=0x2000;
+        fist_int_dispatch(); assert(!rf[9]);
+        unsigned handle=!strcmp(argv[5],"invalid")?99:rf[0];
+        uint32_t pointer=(uint32_t)(uintptr_t)(g_mem+fist_ext_base+0x30000);
+        rf[0]=0x3f00; rf[1]=handle; rf[2]=(uint16_t)requested; rf[3]=(uint16_t)pointer;
+        shadow[0]=0xaa003f00; shadow[1]=0x20000|handle; shadow[2]=requested; shadow[3]=pointer;
+        memset(g_mem+fist_ext_base+0x30000,0xa5,requested+16);
+        fist_int_dispatch();
+        assert(shadow[1]==(0x20000|handle) && rf[1]==handle);
+        assert(rf[0]==(uint16_t)shadow[0] && rf[2]==(uint16_t)shadow[2] && rf[3]==(uint16_t)shadow[3]);
+        if (rf[9]) assert(shadow[3]==(pointer&0xffff0000));
+        uint64_t cycle; unsigned remaining=fist_clock_cpu_slice(&cycle);
+        FILE *output=fopen(argv[6],"wb");
+        assert(output && fwrite(g_mem+fist_ext_base+0x30000,1,requested+16,output)==requested+16 && !fclose(output));
+        printf("%llu %u %u %u %u\n",(unsigned long long)cycle,remaining,shadow[0],shadow[2],rf[9]);
+        return 0;
+    }
     if (argc == 7 && !strcmp(argv[1], "dos-cap")) {
         extern void fist_text_init(void), fist_vga_set_mode(int), fist_clock_advance_cpu_cycles(unsigned);
         extern unsigned fist_clock_cpu_slice(uint64_t *);

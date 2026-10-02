@@ -57,14 +57,24 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   Original mixed PCM contains 1324058 samples; port PCM is absent. The last original/port menu
   frame matches bytewise and was visually checked (`dos-transfer/original-last.png`). Complete
   scope: `scratch/sequence-capture/dos-transfer/{check-30s.py,30s-proof.json}`.
+- Current base `159ea34`, reached VCPI packet/gateway/SS/REP step (0026): fresh complete
+  10000-ms native/WASM streams now match the original over all 698 frames, including every
+  indexed pixel, palette entry and presentation time. Event 443 is fixed without a phase offset.
+  Fresh 30000-ms native/WASM frame streams match one another over all 2100 records; every
+  original time/layout/palette matches. Pixel differences occur at 27 events, first 817 at
+  11704156 us, byte 8754 (16 vs 212), 965 unequal pixels. Scope and exact event list:
+  `scratch/sequence-capture/kernel-read/{check-proof.py,proof.json}`.
+  Corrected frame 443, original/port frame 817 and final menu were visually inspected.
+  Original mixed PCM has 1324058 samples at 30000 ms; the port sequence PCM file is absent.
+  Strict comparison fails at both endpoints. The 60-test/two-flow gate and source provenance
+  belong to 0026. This is bounded video progress; complete frame/audio acceptance remains open.
 
 ## Next
 
-1. Implement shared PIC event/slice ownership and the recovered DOS/Extender kernel transfer
-   and instruction-time contract in 0026, including the attributed DOS-load handoff (0036).
-   Fix callback 88's premature copy and compare every 10000-ms record on both targets.
-   Do not adjust capture phase, inject a fitted delay or mask fields.
-2. After the first difference is fixed, compare every 30000-ms record through the stable menu.
+1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete
+   30000-ms capture. Preserve the now-equal 10000-ms video and 0036's attributed MZ handoff.
+   Timing fixes belong to 0026. Do not adjust capture phase, inject a fitted delay or mask fields.
+2. Compare every 30000-ms record through the stable menu after fixing that producer.
    Then add matched timed inputs. Retain the first unequal producer; reuse the versioned 0036 fixture.
 3. Implement the final mixer in 0003 on 0026's shared device time; require complete mixed stereo PCM.
 

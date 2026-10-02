@@ -553,16 +553,45 @@ void fist_clock_advance_cpu_cycles(unsigned count)
 {
     clock_advance_to(clock_after_cpu(count));
 }
+static void cpu_prepare_instruction(void)
+{
+    if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
+    if (!g_cpu_remaining) {
+        /* The failed normal-loop decrement survives PIC dispatch; TIMER_AddTick resets it. */
+        if (clock_cpu_cycles(clock_now()) % 30000u) fist_clock_advance_cpu_cycles(1);
+        cpu_slice_start();
+    }
+}
+void fist_clock_cpu_ss_instruction(void)
+{
+    /* Normal core MOV/POP SS refunds its fetch and forces the following instruction. */
+    cpu_prepare_instruction();
+}
+void fist_clock_rep_movs(uint8_t *dst, const uint8_t *src, unsigned width, uint32_t count, int direction)
+{
+    /* DOSBox DoString: fetch is refunded, a chunk reserves the available CPU budget,
+     * and all chunk writes complete before PIC resumes. Zero/one count at budget one
+     * consumes one cycle. Forward overlap therefore cannot be replaced by memmove. */
+    do {
+        cpu_prepare_instruction();
+        unsigned take = count < g_cpu_remaining ? count : g_cpu_remaining;
+        unsigned cost = count <= 1 && g_cpu_remaining <= 1 ? 1 : take;
+        for (unsigned i = 0; i < take; ++i) {
+            uint32_t value = 0;
+            memcpy(&value, src, width);
+            memcpy(dst, &value, width);
+            src += direction * (int)width;
+            dst += direction * (int)width;
+        }
+        fist_clock_charge_cpu_instructions(cost);
+        count -= take;
+    } while (count);
+}
 void fist_clock_charge_cpu_instructions(unsigned count)
 {
     if (!count) return;
-    if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
     while (count) {
-        if (!g_cpu_remaining) {
-            /* The normal-loop decrement survives PIC dispatch but is reset by TIMER_AddTick. */
-            if (clock_cpu_cycles(clock_now()) % 30000u) fist_clock_advance_cpu_cycles(1);
-            cpu_slice_start();
-        }
+        cpu_prepare_instruction();
         unsigned take = count < g_cpu_remaining ? count : g_cpu_remaining;
         g_cpu_remaining -= take;
         FistClock target = clock_after_cpu(take);

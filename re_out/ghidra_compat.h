@@ -261,6 +261,8 @@ void  fist_timer_pump(void);
 void  fist_set_int8_handler(uint32_t linear);
 void  fist_clock_charge_cpu_instructions(unsigned count);
 void  fist_clock_charge_dos_transfer(uint16_t value);
+void  fist_clock_cpu_ss_instruction(void);
+void  fist_clock_rep_movs(uint8_t *dst, const uint8_t *src, unsigned width, uint32_t count, int direction);
 void  fist_text_clock_init(void);
 void  fist_clock_wait_bios_ticks(unsigned count);
 

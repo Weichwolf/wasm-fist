@@ -1,6 +1,7 @@
 import base64
 import gzip
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -54,6 +55,7 @@ class PortIoTest(unittest.TestCase):
                         '-ffunction-sections', '-fdata-sections', str(ROOT / 'tools/oracle/pic_slice_probe.cpp'),
                         str(ROOT / 'tools/oracle/io_delay_probe.cpp'),
                         str(ROOT / 'tools/oracle/dos_delay_probe.cpp'),
+                        str(ROOT / 'tools/oracle/rep_probe.cpp'),
                         '-Wl,--gc-sections', '-lm', '-o', cls.pic_probe], check=True, capture_output=True, text=True)
 
     def test_pit_latches_match_original_float_period_and_rounding(self):
@@ -178,6 +180,70 @@ class PortIoTest(unittest.TestCase):
                                                 capture_output=True, text=True, timeout=30)
                         self.assertEqual(result.returncode, 0, result.stderr)
                         self.assertEqual(result.stdout, expected)
+
+    def test_rep_movs_matches_original_budget_chunks_zero_count_direction_and_overlap(self):
+        prefix,state=self.pic_fixture()
+        cases=[(6354,index,count,width,direction,displacement)
+               for index,count in ((1198,0),(1198,1),(2295,0),(2295,1),(2295,2),
+                                   (2296,4096),(29999,16000))
+               for width,direction,displacement in ((1,1,0x10000),(4,1,0x10000),(2,-1,0x10000),
+                                                    (1,1,1),(4,1,1),(4,-1,-1))]
+        for tick,index,count,width,direction,displacement in cases:
+            oracle=self.directory/'rep-original.memory'
+            args=list(map(str,(count,width,direction,displacement)))
+            expected=subprocess.check_output([self.pic_probe,str(state),str(tick),str(index),'rep',*args,str(oracle)],text=True)
+            memory=oracle.read_bytes()
+            for target,run in self.commands:
+                with self.subTest(target=target,index=index,count=count,width=width,direction=direction,overlap=displacement):
+                    output=self.directory/f'{target}-rep.memory'
+                    result=subprocess.run([*run,'rep',str(tick),str(index),*args,str(output)],
+                                          env=dict(os.environ,FIST_TEXT_STATE=str(prefix)),capture_output=True,text=True,timeout=30)
+                    self.assertEqual(result.returncode,0,result.stderr)
+                    self.assertEqual(result.stdout,expected)
+                    self.assertEqual(output.read_bytes(),memory)
+
+    def test_extender_reads_match_original_callback_88_cpu_and_register_contract(self):
+        prefix,state=self.pic_fixture()
+        data=self.directory/'ext-read'; data.mkdir()
+        proof=json.loads((ROOT/'tools/oracle/kernel_read_cases.json').read_text())
+        for case in proof['cases']:
+            n=case['requested']; raw=bytes((i*37+(i>>8)+11)&255 for i in range(n))
+            (data/'READ.BIN').write_bytes(raw)
+            tick,index=divmod(case['start_cycle'],30000)
+            for target,run in self.commands:
+                with self.subTest(target=target,case=case):
+                    output=self.directory/f'{target}-ext-read.memory'
+                    result=subprocess.run([*run,'ext-read',str(tick),str(index),str(n),'valid',str(output)],
+                                          env=dict(os.environ,FIST_TEXT_STATE=str(prefix),FIST_DATADIR=str(data)),
+                                          capture_output=True,text=True,timeout=30)
+                    self.assertEqual(result.returncode,0,result.stderr)
+                    self.assertEqual(list(map(int,result.stdout.split())),
+                                     [case['end_cycle'],case['end_remaining'],case['returned_eax'],case['returned_ecx'],0])
+                    self.assertEqual(output.read_bytes(),raw+b'\xa5'*16)
+
+    def test_extender_disk_reads_preserve_full_eax_short_eof_and_error_results(self):
+        prefix,state=self.pic_fixture()
+        data=self.directory/'ext-eof'; data.mkdir()
+        cases=((0,100,False),(8,0,False),(16384,16384,False),(16385,3,False),
+               (32768,16384,False),(70000,70000,False),(131072,70001,False),(8,8,True))
+        for requested,length,invalid in cases:
+            raw=bytes((i*37+(i>>8)+11)&255 for i in range(length))
+            (data/'READ.BIN').write_bytes(raw)
+            returned=6 if invalid else min(requested,length)
+            # 18fe computes unrequested remainder before the DOS result, not after actual bytes.
+            if invalid:remaining=requested if requested<=16384 else 16384
+            elif returned==requested:remaining=0
+            else:remaining=max(0,requested-(returned//16384+1)*16384)
+            for target,run in self.commands:
+                with self.subTest(target=target,requested=requested,length=length,invalid=invalid):
+                    output=self.directory/f'{target}-eof.memory'
+                    result=subprocess.run([*run,'ext-read','6354','1110',str(requested),'invalid' if invalid else 'valid',str(output)],
+                                          env=dict(os.environ,FIST_TEXT_STATE=str(prefix),FIST_DATADIR=str(data)),
+                                          capture_output=True,text=True,timeout=30)
+                    self.assertEqual(result.returncode,0,result.stderr)
+                    self.assertEqual(list(map(int,result.stdout.split()))[2:],[returned,remaining,int(invalid)])
+                    expected=b'\xa5'*(requested+16) if invalid else raw[:requested]+b'\xa5'*(requested+16-returned)
+                    self.assertEqual(output.read_bytes(),expected)
 
     def test_dos_caps_and_credits_match_original_active_slice(self):
         prefix, state = self.pic_fixture()

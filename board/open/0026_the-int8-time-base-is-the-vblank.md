@@ -139,13 +139,45 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   Snapshot occurs at tick 6882, after callback 88, and establishes resident bytes/fields only.
   `kernel-map/{map.gdb,check-map.py,proof.json,phase-original/}`; the complete probed original
   10000-ms frame and PCM streams match `pic-mask/original-complete/` bytewise.
+- Current base `159ea34`: Extender AH=3f now follows the resident VCPI kernel's 16384-byte
+  packet loop, reached real/protected-mode gateway and installed INT 21h wrapper path.
+  Each packet uses the existing local-file PIC access and DOS budget cap, then copies dwords
+  and remaining bytes before testing the original unrequested remainder/short-read condition.
+  Full EAX, residual ECX, EDX and CF follow 18de..197b; EBX is preserved. The packet buffer
+  belongs to private kernel memory, not the caller's flat-module offset a000.
+- `fist_kernel_read.h` records original instruction blocks by IP and module offset, rather
+  than a measured total delay. MOV SS refunds its normal-core fetch. Shared REP MOVS reserves
+  a budget chunk and completes its writes before PIC dispatch, including the original
+  zero/one-count budget-one exception and sequential forward/backward overlap behavior.
+  `rep_probe.cpp` executes original `core_normal/string.h` verbatim alongside the original PIC.
+  Four complete pre-88 syscalls from the independently captured trace are versioned in
+  `kernel_read_cases.json`: 8/768/8/19456 bytes, exact start/end cycle and budget, EAX/ECX/EDX.
+  All eight target cases fail on the parent shim (`kernel-read/red-proof.json`) and now pass.
+  Original-source REP memory/budget regressions cover 84 target cases; another 16 cover
+  zero/short/packet-boundary EOF, 70000-byte EAX results and invalid handles.
+- Scope is the reached 16-MiB VCPI boot, normal wrapper flags and clear-DF disk-read ABI.
+  Memory-limit packet reduction, other gateways, critical-error branches, guest interrupt
+  effects and complete generated caller register marshaling remain open. Source provenance:
+  `kernel-map/trace-code-proof.json` matches 115 reached kernel opcode locations; the far JMP
+  at 1432 has its observed relocated selector 02dd instead of file selector 006f.
+  Its initialization remains unattributed; no operand mask is used to accept parity.
+- `bash tools/check_flow.sh '^(intro|mainmenu)$'`: 60 tests, exact patches, sequential
+  native/WASM builds and two selected flows pass / zero failures, exit 0;
+  `scratch/verify/run.YW9ejP/`. This filtered gate proves its stated scope only.
+  `kernel-read/{check-proof.py,proof.json,native-10s/,wasm-10s/}`: all 698 complete frames,
+  indexed pixels, palettes and times now match the original, including event 443.
+  All 1151 MZ read budgets and application entry cycle 629918/budget 82 are retained.
+- Fresh `kernel-read/{native-30s/,wasm-30s/}`: all 2100 native/WASM frames match bytewise;
+  every original time/layout/palette matches. There are 27 pixel-difference events, first 817
+  at 11704156 us, byte 8754 (original 16 / port 212), 965 unequal pixels. Event 443 stays fixed.
+  The corrected frame, first remaining difference and final menu were visually checked.
+  Mixed port PCM is still absent; complete comparison fails. Frame diagnostics are not acceptance.
 
 ## Next
 
-1. Preserve 0036's now-proved MZ load/application-fetch phase. Preserve the shared DOS cap/credit and
-   16-bit disk-read primitives; implement Extender packet splits, gateway instructions and REP
-   from the now-mapped original resident kernel.
-   Preserve callback ordering and PIC tick state. Match every 10000-ms event, especially 443.
+1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
+   Continue 0034's first remaining pixel difference at event 817 in the 30000-ms capture.
+   Recover its original producer and missing work; do not inject elapsed delays or change capture phase.
 2. Recover production pre-speaker work (23 mask reads, 720/721), 07b7's polling/CLI/STI and ISR return.
    Derive calibration arguments from operations and budget; never inject 90 or a measured total delay.
    Prove reload/re-arm/IRQ order. Supply events to 0003/0034; neither owns another clock.

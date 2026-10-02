@@ -8,6 +8,9 @@ Segments Segs;
 void source_io_read_delay(void);
 void source_io_write_delay(void);
 void source_dos_transfer(unsigned value);
+void source_rep_setup(unsigned,unsigned,int,int);
+bool source_rep_step(unsigned);
+void source_rep_dump(const char *);
 CPU_Regs cpu_regs;
 CPU_Decoder *cpudecoder;
 Bits CPU_Core_Normal_Trap_Run(void) { abort(); }
@@ -35,7 +38,8 @@ int main(int argc, char **argv) {
         (argc != 6 || (strcmp(argv[4], "retire") && strcmp(argv[4], "file-read") &&
                        strcmp(argv[4], "masked-read"))) &&
         (argc != 7 || (strcmp(argv[4], "dos-cap") && strcmp(argv[4], "dos-read"))) &&
-        (argc != 8 || strcmp(argv[4], "dos-cap"))) return 2;
+        (argc != 8 || strcmp(argv[4], "dos-cap")) &&
+        (argc != 10 || strcmp(argv[4], "rep"))) return 2;
     PIC_8259A controller(NULL);
     unsigned long long start, scanout, tick;
     float lag;
@@ -69,6 +73,17 @@ int main(int argc, char **argv) {
     CPU_Cycles = 0;
     CPU_CycleLeft = 30000 - index;
     assert(PIC_RunQueue());
+    if (argc == 10) {
+        unsigned count = strtoul(argv[5], NULL, 0), width = strtoul(argv[6], NULL, 0);
+        int direction = strtol(argv[7], NULL, 0), displacement = strtol(argv[8], NULL, 0);
+        source_rep_setup(count, width, direction, displacement);
+        do {
+            while (CPU_Cycles-- <= 0) while (!PIC_RunQueue()) TIMER_AddTick();
+        } while (source_rep_step(width));
+        source_rep_dump(argv[9]);
+        printf("%llu %d\n", (unsigned long long)(PIC_Ticks * CPU_CycleMax + PIC_TickIndexND()), CPU_Cycles);
+        return 0;
+    }
     if (argc == 7 || argc == 8) {
         unsigned value = strtoul(argv[5], &tail, 10);
         if (*tail || value > 65535) return 2;

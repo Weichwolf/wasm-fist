@@ -25,6 +25,7 @@
 #include <setjmp.h>
 #include <dirent.h>
 #include <unistd.h>
+#include "fist_kernel_read.h"
 
 /* ---- reg-file accessors (alias the exact g_mem the engine marshals through) ---- */
 #define RF(off)  (g_mem + 0xf0000u + (off))
@@ -606,6 +607,7 @@ void fist_int_chain(unsigned vec)
  * here with flat addressing.  This is the extender's OWN FILEMGR file I/O (find/open/read TITLE.KDV);
  * no faked behaviour -- real files under $FIST_DATADIR via open_ci(), honest CF on failure. */
 int g_fist_ext_int = 0;                 /* set by native_main around the extender KDV player */
+#define R_EAX32 (*(uint32_t*)RF(0x20))
 #define R_EBX32 (*(uint32_t*)RF(0x24))
 #define R_ECX32 (*(uint32_t*)RF(0x28))
 #define R_EDX32 (*(uint32_t*)RF(0x2c))
@@ -617,6 +619,72 @@ static uint8_t *g_ext_dta;              /* current DTA (host pointer), set by AH
 static uint8_t *ext_addr(uint32_t v){
     if (v < 0x10000u) return g_mem + fist_ext_base + v;
     return (uint8_t*)(uintptr_t)v;
+}
+
+static void kernel_retire(unsigned count) { fist_clock_charge_cpu_instructions(count); }
+static uint16_t kernel_read_packet(int handle, uint8_t *packet, uint16_t requested, int *failed)
+{
+    kernel_retire(K_GATE_A);
+    fist_clock_cpu_ss_instruction();
+    kernel_retire(K_GATE_B);
+    kernel_retire(1); /* f000:14a1 DOS callback fetch, before localFile::Read */
+    uint16_t actual;
+    if (handle < 5 || handle >= MAXH || !g_htab[handle]) { actual = 6; *failed = 1; }
+    else { actual = local_file_read(g_htab[handle], packet, requested); *failed = 0; }
+    trace_read_slice(handle, requested, *failed ? 0 : actual);
+    fist_clock_charge_dos_transfer(actual);
+    kernel_retire(K_DOS_RETURN);
+    kernel_retire(*failed ? K_WRAPPER_ERROR : K_WRAPPER_OK);
+    kernel_retire(K_GATE_C);
+    fist_clock_cpu_ss_instruction();
+    kernel_retire(K_GATE_D);
+    return actual;
+}
+static void kernel_disk_read(void)
+{
+    /* FIST.RUN's initial fs:6e4 dword is 0x4000 (module offset c8e). The matched
+     * 16-MiB VCPI boot retains it; its memory-limit reduction path is still open.
+     * Internal packet memory is in the kernel DS, outside the caller's flat module. */
+    static uint8_t packet[0x4000];
+    const uint32_t maximum = sizeof packet;
+    uint32_t left = R_ECX32, original_edx = R_EDX32, total = 0;
+    uint8_t *destination = ext_addr(original_edx);
+    int handle = R_BX, failed;
+    uint16_t actual;
+    uint32_t ecx, edx = original_edx & 0xffff0000u;
+    kernel_retire(1); /* caller INT 21h */
+    kernel_retire(K_READ_DISPATCH);
+    kernel_retire(K_READ_SETUP);
+    do {
+        ecx = left > maximum ? maximum : left;
+        kernel_retire(left > maximum ? 7 : 6); /* 18fe..1916, optional MOV ECX,fs:6e4 */
+        left -= ecx;
+        actual = kernel_read_packet(handle, packet, (uint16_t)ecx, &failed);
+        kernel_retire(2); /* 191b MOVZX EAX,AX / 191f JC */
+        if (failed) break;
+        total += actual;
+        kernel_retire(K_COPY_SETUP);
+        fist_clock_rep_movs(destination, packet, 4, actual >> 2, 1);
+        kernel_retire(K_COPY_TAIL);
+        fist_clock_rep_movs(destination + (actual & ~3u), packet + (actual & ~3u), 1, actual & 3, 1);
+        destination += actual;
+        edx = 0;
+        ecx = left;
+        kernel_retire(K_AFTER_COPY);
+        if (!left) break;
+        kernel_retire(2); /* 1952 CMP AX,fs:6e4 / 1957 JE */
+        if (actual == maximum) continue;
+        kernel_retire(1); /* 1959 CLC: short read succeeds */
+        break;
+    } while (1);
+    kernel_retire(3); /* 195a RCR EBX / 195d OR EBP / 1960 JZ */
+    if (total) kernel_retire(2); /* 1964 MOV EAX,EBP / 1967 XOR EBX,EBX clears CF */
+    R_EAX32 = total ? total : actual;
+    R_AX = (uint16_t)R_EAX32;
+    R_ECX32 = ecx; R_CX = (uint16_t)ecx;
+    R_EDX32 = edx; R_DX = (uint16_t)edx;
+    set_cf(failed && !total);
+    kernel_retire(K_READ_FINISH - 3);
 }
 
 static void dos_int_ext(void)
@@ -651,19 +719,8 @@ static void dos_int_ext(void)
         if (!f) { R_AX = 2; set_cf(1); return; }
         int h = alloc_handle(f); if (h < 0) { fclose(f); R_AX = 4; set_cf(1); return; }
         R_AX = (uint16_t)h; set_cf(0); return; }
-    case 0x3f: { /* read, BX=handle ECX=count EDX=buf -> AX=bytes */
-        int h = R_BX; uint32_t n = R_ECX32; uint8_t *buf = ext_addr(R_EDX32);
-        if (h < 5 || h >= MAXH || !g_htab[h]) { R_AX = 6; set_cf(1); return; }
-        long pos = ftell(g_htab[h]);
-        size_t r = fread(buf, 1, n, g_htab[h]);
-        trace_read_slice(h, n, r);
-        if (getenv("FIST_OPENLOG")) {
-            uint32_t rel = (uint32_t)(buf - (g_mem + 0x100000));
-            fprintf(stderr,"[readlog] h=%d filepos=%ld n=%u -> %zu  destEXT+0x%x%s\n",
-                h, pos, n, r, rel, (rel>=0x5598 && rel<0x5598+0x800)?"  <== [5598]!":"");
-        }
-        TRACE("[ext] 3F read h=%d n=%u -> %zu\n", h, n, r);
-        R_AX = (uint16_t)r; set_cf(0); return; }
+    case 0x3f: /* resident kernel's packetized flat read -> EAX=total, CF=status */
+        kernel_disk_read(); return;
     case 0x3e: { /* close, BX=handle */
         int h = R_BX; if (h >= 5 && h < MAXH && g_htab[h]) { fclose(g_htab[h]); g_htab[h] = NULL; }
         set_cf(0); return; }
