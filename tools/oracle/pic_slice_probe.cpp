@@ -88,6 +88,14 @@ int main(int argc, char **argv) {
         if (!script) return 2;
         char op; unsigned port, value, count = 0; int fields;
         while ((fields = fscanf(script, " %c %x %x", &op, &port, &value)) == 3) {
+#ifdef FIST_SB_EVENT_CLOCK
+            /* Matched fixture initialization, outside guest instruction time. */
+            if (devices && op == 'v') { fist_sb_out(port, value); ++count; continue; }
+            if (devices && op == 'u') {
+                for (unsigned i = 0; i < value; ++i) fist_sb_in(port);
+                ++count; continue;
+            }
+#endif
             while (CPU_Cycles-- <= 0) while (!PIC_RunQueue()) TIMER_AddTick();
             unsigned long long fetched = PIC_Ticks * 30000u + PIC_TickIndexND();
             if (op == 't') {

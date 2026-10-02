@@ -422,6 +422,17 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   Source reset scheduling is a dependency proof, not complete sound startup,
   final mixed PCM or original video acceptance.
 
+- Current base `6ed1aa0`: consume 0026's patch-629 132f instruction/I/O contract.
+  Fourteen complete original ready/controlled-busy calls recover the leaf's
+  fetches, full EAX result and actual lazy flags; 44 reaching target phases fail
+  on the parent and pass after the correction. `sb-writer-132f/check-proof.py`
+  verifies all 83 tests, exact patches, both builds and five selected flows
+  (`scratch/verify/run.Bir92a/`, exit 0). Complete matched 30000-ms captures retain
+  all 2100 prior frames and 43 register packets. Final port PCM is still absent
+  and all 27 original frame differences remain, starting at event 817. The leaf
+  is a dependency proof; actual startup, protected vectors, caller flags and
+  completion IRQ/mixer integration remain open. Reuse the shared clock owner.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover

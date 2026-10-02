@@ -293,17 +293,44 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   producer ABI/CLI/STI, protected vectors/IRQs, complete PIT/VGA/event interaction
   and sound startup remain open; no full original-parity acceptance is claimed.
 
-- Additional read-only next-dependency evidence:
-  `scratch/sequence-capture/sb-writer-132f/{check-source.py,proof.json}` validates
-  seven actual 132f entry/RET snapshots against the complete 534:536-ms trace.
-  PUSH/IN/JMP/OR/JS/POP/OUT/RET are eight normal fetches per observed ready call;
-  every GP register is preserved and RET advances ESP by four. The original
-  write-busy counter runs 0..7; all seven reads return 7f. Original `flags.cpp`
-  resolves the captured lazy state to EFLAGS 3202 at all fourteen boundaries:
-  IF is enabled, and cached raw CF is stale. Do not assume the earlier 138d CLI
-  survives protected kernel services. The complete CPU trace and 600-ms original
-  frames/PCM/endpoint stay byte-identical. This recovers the next instruction/
-  register/flag dependency; no 132f producer fix or IRQ integration is accepted.
+- Current base `6ed1aa0`: patch 629 retires actual 132f's normal-core
+  PUSH/IN/JMP/OR/JS/POP/OUT/RET fetches at their original I/O boundaries through
+  the shared PIC owner. The ready path has eight fetches and each busy iteration
+  adds four; the live signed status branch determines polling. Full DWORD EAX
+  is retained. No fixed loop count or measured aggregate delay is charged.
+- `tools/oracle/sb_writer_132f_cases.json` records fourteen complete original
+  calls: seven reached ready calls and seven from a controlled device fixture
+  that sets only the first entry's write-busy counter to seven. Its eight ff
+  reads then 7f produce forty fetches. All GP registers are preserved; RET
+  advances ESP by four. Actual original `flags.cpp` resolves all twenty-eight
+  captured lazy states to EFLAGS 3202, including IF enabled; raw cached CF is
+  stale. Do not assume the earlier 138d CLI survives protected kernel services.
+  Both complete 600-ms original captures retain all 39 frames, 27518 mixed PCM
+  samples and endpoints bytewise. Source code/assets stay unchanged.
+- `test_sb_writer.py` compiles the complete ordered-patched Extender module with
+  real I/O/PIC/DSP owners. The independent oracle compiles original PIC/DSP/I/O
+  source, replays every captured fetch and first matches every original byte,
+  timestamp and remaining budget. All fourteen producer calls and eight
+  ready/busy thin-budget/tick-boundary phases preserve full EAX on both targets.
+  The parent fails all 44 target phases; first IN begins at 16067116 instead of
+  16067118. Both targets now match each complete leaf timeline and active budget.
+  This proves byte I/O/fetch/EAX, not guest-stack/caller flag transport or IRQ/IF.
+- `scratch/sequence-capture/sb-writer-132f/{check-writer-source.py,
+  source-contract-proof.json,parent-red.log,green-unit.log,check-proof.py,
+  proof-final.json}` retains the reaching proof. `bash tools/check_flow.sh
+  '^(intro|mainmenu|audio-.*)$'` passes 83 tests, exact patches, both sequential
+  builds and all five selected flows with recorded exit 0;
+  `scratch/verify/run.Bir92a/`. Initial compiler-flag, patch-header and conditional
+  breakpoint scaffolds are explicitly excluded. Full frozen-source/binary
+  hashes and the matched device/start-state capture configuration are retained.
+- Fresh complete SB-enabled 30000-ms captures retain all 2100 prior port frames,
+  endpoints and 43 sound-register packets bytewise on both targets; all 418
+  original assets stay unchanged. All 27 original frame differences remain,
+  first at event 817 / 11704156 us / pixel byte 8754. Strict original mixed-PCM
+  comparison still fails because the final port stream is absent. This filtered
+  regression does not accept the full matrix or final original parity. Actual
+  133a/138d/startup, protected services, CLI/STI/IRQ and mixer integration remain
+  open; restore their original producers, not their observed total elapsed time.
 
 ## Next
 

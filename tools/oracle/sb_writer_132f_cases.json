@@ -1,0 +1,1638 @@
+{
+  "scope": "Actual compiled 132f byte I/O timeline, full EAX return and CPU retirement. Original GPs/flags are source evidence; guest stack, caller flag transport and IRQ delivery remain open.",
+  "image_sha256": "102a5465e03f3b0397041b1bd783d33992ac2c14bb6e42a713af610ec08c3ab1",
+  "code_offset": 4911,
+  "code_bytes": "50eceb000ac078f958eec3",
+  "originals": [
+    {
+      "name": "captured_ready",
+      "initial_write_busy": 0,
+      "source_trace_sha256": "a235052f248f2030d6919ca539d676d03a2160bce9659115eca659bec410a5e1",
+      "source_snapshot_sha256": "527d68776c439e03157c4770e5690cf99bd4c814da903337977faa284112d9d4",
+      "cases": [
+        {
+          "start_cycle_before_fetch": 16067116,
+          "eax": 32576,
+          "port": 556,
+          "initial_write_busy": 0,
+          "final_write_busy": 1,
+          "registers_before": [
+            32576,
+            1,
+            556,
+            11744,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32576,
+            1,
+            556,
+            11744,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067174,
+          "ret_remaining": 12826,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 64
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067118,
+              "after_cycle": 16067147,
+              "remaining": 12853
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 64,
+              "before_cycle": 16067152,
+              "after_cycle": 16067173,
+              "remaining": 12827
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067176,
+          "eax": 32678,
+          "port": 556,
+          "initial_write_busy": 1,
+          "final_write_busy": 2,
+          "registers_before": [
+            32678,
+            1,
+            556,
+            11744,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32678,
+            1,
+            556,
+            11744,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067234,
+          "ret_remaining": 12766,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 166
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067178,
+              "after_cycle": 16067207,
+              "remaining": 12793
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 166,
+              "before_cycle": 16067212,
+              "after_cycle": 16067233,
+              "remaining": 12767
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067236,
+          "eax": 32721,
+          "port": 556,
+          "initial_write_busy": 2,
+          "final_write_busy": 3,
+          "registers_before": [
+            32721,
+            1,
+            556,
+            11744,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32721,
+            1,
+            556,
+            11744,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067294,
+          "ret_remaining": 12706,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 209
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067238,
+              "after_cycle": 16067267,
+              "remaining": 12733
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 209,
+              "before_cycle": 16067272,
+              "after_cycle": 16067293,
+              "remaining": 12707
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067296,
+          "eax": 32584,
+          "port": 556,
+          "initial_write_busy": 3,
+          "final_write_busy": 4,
+          "registers_before": [
+            32584,
+            1,
+            556,
+            11744,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32584,
+            1,
+            556,
+            11744,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067354,
+          "ret_remaining": 12646,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 72
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067298,
+              "after_cycle": 16067327,
+              "remaining": 12673
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 72,
+              "before_cycle": 16067332,
+              "after_cycle": 16067353,
+              "remaining": 12647
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067357,
+          "eax": 32767,
+          "port": 556,
+          "initial_write_busy": 4,
+          "final_write_busy": 5,
+          "registers_before": [
+            32767,
+            1,
+            556,
+            1023,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32767,
+            1,
+            556,
+            1023,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067415,
+          "ret_remaining": 12585,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 255
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067359,
+              "after_cycle": 16067388,
+              "remaining": 12612
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 255,
+              "before_cycle": 16067393,
+              "after_cycle": 16067414,
+              "remaining": 12586
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067417,
+          "eax": 32515,
+          "port": 556,
+          "initial_write_busy": 5,
+          "final_write_busy": 6,
+          "registers_before": [
+            32515,
+            1,
+            556,
+            1023,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32515,
+            1,
+            556,
+            1023,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067475,
+          "ret_remaining": 12525,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 3
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067419,
+              "after_cycle": 16067448,
+              "remaining": 12552
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 3,
+              "before_cycle": 16067453,
+              "after_cycle": 16067474,
+              "remaining": 12526
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067477,
+          "eax": 32540,
+          "port": 556,
+          "initial_write_busy": 6,
+          "final_write_busy": 7,
+          "registers_before": [
+            32540,
+            1,
+            556,
+            1023,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32540,
+            1,
+            556,
+            1023,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067535,
+          "ret_remaining": 12465,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 28
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067479,
+              "after_cycle": 16067508,
+              "remaining": 12492
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 28,
+              "before_cycle": 16067513,
+              "after_cycle": 16067534,
+              "remaining": 12466
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "controlled_busy",
+      "initial_write_busy": 7,
+      "source_trace_sha256": "6eb44c0e34a50f1e2d9ac26dbdf86a0793dd38dc98e10cc3565e94a646090e90",
+      "source_snapshot_sha256": "693d04b0e0e631068c5e812749ae2aa4851d3805d4c7dc4ffd3394047bb79a85",
+      "cases": [
+        {
+          "start_cycle_before_fetch": 16067116,
+          "eax": 32576,
+          "port": 556,
+          "initial_write_busy": 7,
+          "final_write_busy": 16,
+          "registers_before": [
+            32576,
+            1,
+            556,
+            11744,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32576,
+            1,
+            556,
+            11744,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067438,
+          "ret_remaining": 12562,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 255
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 255
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 255
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 255
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 255
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 255
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 255
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 255
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 64
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 255,
+              "before_cycle": 16067118,
+              "after_cycle": 16067147,
+              "remaining": 12853
+            },
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 255,
+              "before_cycle": 16067151,
+              "after_cycle": 16067180,
+              "remaining": 12820
+            },
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 255,
+              "before_cycle": 16067184,
+              "after_cycle": 16067213,
+              "remaining": 12787
+            },
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 255,
+              "before_cycle": 16067217,
+              "after_cycle": 16067246,
+              "remaining": 12754
+            },
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 255,
+              "before_cycle": 16067250,
+              "after_cycle": 16067279,
+              "remaining": 12721
+            },
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 255,
+              "before_cycle": 16067283,
+              "after_cycle": 16067312,
+              "remaining": 12688
+            },
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 255,
+              "before_cycle": 16067316,
+              "after_cycle": 16067345,
+              "remaining": 12655
+            },
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 255,
+              "before_cycle": 16067349,
+              "after_cycle": 16067378,
+              "remaining": 12622
+            },
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067382,
+              "after_cycle": 16067411,
+              "remaining": 12589
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 64,
+              "before_cycle": 16067416,
+              "after_cycle": 16067437,
+              "remaining": 12563
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067440,
+          "eax": 32678,
+          "port": 556,
+          "initial_write_busy": 16,
+          "final_write_busy": 17,
+          "registers_before": [
+            32678,
+            1,
+            556,
+            11744,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32678,
+            1,
+            556,
+            11744,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067498,
+          "ret_remaining": 12502,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 166
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067442,
+              "after_cycle": 16067471,
+              "remaining": 12529
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 166,
+              "before_cycle": 16067476,
+              "after_cycle": 16067497,
+              "remaining": 12503
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067500,
+          "eax": 32721,
+          "port": 556,
+          "initial_write_busy": 17,
+          "final_write_busy": 18,
+          "registers_before": [
+            32721,
+            1,
+            556,
+            11744,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32721,
+            1,
+            556,
+            11744,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067558,
+          "ret_remaining": 12442,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 209
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067502,
+              "after_cycle": 16067531,
+              "remaining": 12469
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 209,
+              "before_cycle": 16067536,
+              "after_cycle": 16067557,
+              "remaining": 12443
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067560,
+          "eax": 32584,
+          "port": 556,
+          "initial_write_busy": 18,
+          "final_write_busy": 19,
+          "registers_before": [
+            32584,
+            1,
+            556,
+            11744,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32584,
+            1,
+            556,
+            11744,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067618,
+          "ret_remaining": 12382,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 72
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067562,
+              "after_cycle": 16067591,
+              "remaining": 12409
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 72,
+              "before_cycle": 16067596,
+              "after_cycle": 16067617,
+              "remaining": 12383
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067621,
+          "eax": 32767,
+          "port": 556,
+          "initial_write_busy": 19,
+          "final_write_busy": 20,
+          "registers_before": [
+            32767,
+            1,
+            556,
+            1023,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32767,
+            1,
+            556,
+            1023,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067679,
+          "ret_remaining": 12321,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 255
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067623,
+              "after_cycle": 16067652,
+              "remaining": 12348
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 255,
+              "before_cycle": 16067657,
+              "after_cycle": 16067678,
+              "remaining": 12322
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067681,
+          "eax": 32515,
+          "port": 556,
+          "initial_write_busy": 20,
+          "final_write_busy": 21,
+          "registers_before": [
+            32515,
+            1,
+            556,
+            1023,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32515,
+            1,
+            556,
+            1023,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067739,
+          "ret_remaining": 12261,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 3
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067683,
+              "after_cycle": 16067712,
+              "remaining": 12288
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 3,
+              "before_cycle": 16067717,
+              "after_cycle": 16067738,
+              "remaining": 12262
+            }
+          ]
+        },
+        {
+          "start_cycle_before_fetch": 16067741,
+          "eax": 32540,
+          "port": 556,
+          "initial_write_busy": 21,
+          "final_write_busy": 22,
+          "registers_before": [
+            32540,
+            1,
+            556,
+            1023,
+            249850,
+            0,
+            11744,
+            4026545632
+          ],
+          "registers_after": [
+            32540,
+            1,
+            556,
+            1023,
+            249854,
+            0,
+            11744,
+            4026545632
+          ],
+          "ret_cycle": 16067799,
+          "ret_remaining": 12201,
+          "instructions": [
+            {
+              "ip": 4911,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4912,
+              "op": "r",
+              "port": 556,
+              "value": 127
+            },
+            {
+              "ip": 4913,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4915,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4917,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4919,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            },
+            {
+              "ip": 4920,
+              "op": "w",
+              "port": 556,
+              "value": 28
+            },
+            {
+              "ip": 4921,
+              "op": "n",
+              "port": 0,
+              "value": 0
+            }
+          ],
+          "io": [
+            {
+              "direction": "r",
+              "port": 556,
+              "value": 127,
+              "before_cycle": 16067743,
+              "after_cycle": 16067772,
+              "remaining": 12228
+            },
+            {
+              "direction": "w",
+              "port": 556,
+              "value": 28,
+              "before_cycle": 16067777,
+              "after_cycle": 16067798,
+              "remaining": 12202
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
