@@ -1,23 +1,18 @@
 /* sb_selftest.c -- unit-verify the fist_sb.c SB DSP + 8237 DMA -> PCM path WITHOUT the engine.
  * Synthesizes the exact port sequence the SB driver issues for an 8-bit single-cycle DMA playback of a
  * 1 kHz sine placed in g_mem, then checks fist_sb decoded it into the ring at the right rate/length.
- *   build: cc -DFIST_SB_SELFTEST tools/oracle/sb_selftest.c re_out/fist_sb.c -I re_out -o /tmp/sb_selftest -lm
+ *   build: cc -ffunction-sections -fdata-sections tools/oracle/sb_selftest.c re_out/fist_sb.c
+ *          -I re_out -Wl,--gc-sections -o /tmp/sb_selftest -lm
  */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include "fist_sb.h"
 
 /* Minimal g_mem so fist_sb.c links standalone (it derefs g_mem + FIST_MEM_SIZE from ghidra_compat.h). */
 uint8_t g_mem[0x1000000u];
-
-int  fist_sb_owns(int);
-int  fist_sb_in(int);
-void fist_sb_out(int, int);
-void fist_sb_flush(void);
-unsigned fist_sb_ring_count(void);
-int  fist_sb_rate(void);
 
 #define BASE 0x220
 static void dsp(int v){ fist_sb_out(BASE+0xc, v); }
@@ -50,13 +45,17 @@ int main(void){
     /* DSP 0x14 = 8-bit single-cycle DMA output, length-1 lo/hi. */
     dsp(0x14); dsp((N-1)&0xff); dsp(((N-1)>>8)&0xff);
 
+    if (fist_sb_ring_count()!=0) { puts("FAIL: output before mixer demand"); return 1; }
+    static unsigned char data[65536];
+    unsigned read=fist_sb_read_pcm8(N,data);
+    int bytes_equal=read==N && memcmp(data,g_mem+phys,N)==0;
     unsigned got = fist_sb_ring_count();
     int rate = fist_sb_rate();
     fist_sb_flush();
 
     printf("[selftest] rate=%d got=%u expected=%u\n", rate, got, N);
-    int ok = (got==N) && (rate>=21000 && rate<=23000);
-    /* verify a non-trivial waveform landed in the WAV (peak > half scale) */
+    int ok = bytes_equal && got==N && rate==1000000/(1000000/22050)
+             && fist_sb_read_pcm8(1,data)==0;
     printf("[selftest] %s\n", ok?"PASS":"FAIL");
     return ok?0:1;
 }

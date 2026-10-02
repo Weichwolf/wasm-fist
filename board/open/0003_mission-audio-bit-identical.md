@@ -124,6 +124,50 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   finish snapshot is claimed (the finish breakpoint was not reached). Restore actual mixer
   demand/DMA/PIC lifecycle; these observed intervals must not become a fitted timer.
 
+
+- Current base `b3d4e72`, PCM8 device ownership/consumption correction: DSP 48/14/1c
+  retain separate block total/remaining state and no longer overwrite the programmed DMA
+  ring or its auto-init flag. Starting the captured PCM8 transfer consumes no bytes.
+  `fist_sb_read_pcm8()` supplies actual mixer demand in DMA bytes; current address/count,
+  controller-wide flip-flops, mask callbacks and terminal-count reload follow original
+  `dma.cpp`. DSP block completion latches an IRQ independently of DMA terminal count;
+  single-cycle completion is delivered even after playback stops, and only DSP ACK clears
+  the latch. Pause/resume and exit-auto-init retain the original remaining block.
+  The device diagnostic ring/WAV is not the final stereo PCM owner.
+- `tools/oracle/sb_pcm8_demand.gdb` and `sb_pcm8_demand_case.json` record every original
+  request over 1000 ms: 470 demands, first tick 536 / five bytes after the channel's
+  25-sample silence fill, and IRQs at 628/720/812/905/997. All 67 complete frames,
+  45158 final mixed samples and the endpoint match an independent unprobed original.
+  The tracked probe reproduces every event and output byte in a separate isolated run.
+  A concurrent 31-second host-timeout capture was incomplete and remains excluded;
+  the complete tracked-probe replay uses a 90-second host limit, with the same 1000-ms
+  emulated endpoint. Observed request times are fixture provenance, not an injected clock.
+- Four reaching tests compile the actual original `DmaChannel::Read`, controller registers,
+  `DSP_PrepareDMA_Old`, `DSP_DMA_CallBack` and `GenerateDMASound` producers, with a PCM8
+  mixer-input recording endpoint. Native and WASM match every captured pre-demand DMA/DSP
+  state and every synthetic DMA input byte. Additional cases cover shared flip-flops,
+  physical page addressing, terminal status clearing, separate auto-init modes, mask/pause,
+  IRQ acknowledgement and single-cycle/exit-auto completion. Other sample formats and
+  scheduled PIC events fail the source test endpoint; final mixer fill/interpolation and
+  PIC event-clock behavior are explicitly outside this device-input proof.
+- `scratch/sequence-capture/sb-demand/{check-red.py,red.json,green.log,check-proof.py,
+  proof.json,production-proof.json}` retains the parent failure on both targets: 1024 PCM
+  samples emitted before any mixer demand, and missing DMA counter readback. All four new
+  tests and the demand-driven standalone selftest pass. All 418 provisioned originals
+  remain unchanged. `bash tools/check_flow.sh` at `scratch/verify/run.RDIm2R/` has passed
+  68 tests, exact patches, sequential native/WASM builds and all 178 existing flows pass
+  / zero failures, exit 0. The four reaching device tests were also rerun with scheduled
+  PIC events required to fail the source endpoint. Tested binary/script hashes remain
+  unchanged. This full existing-matrix gate does not establish full original PCM parity.
+- Fresh complete 10/30-second production captures retain every previous port frame byte:
+  698 original frames match at 10 seconds; all 2100 cross-target frames, original times,
+  layouts and palettes match at 30 seconds, with the same 27 pixel-difference events,
+  first 817. Strict comparison still fails missing mixed PCM. The production intro
+  currently starts no digital DSP and has no SB IRQ callback registration: actual device
+  initialization, mixer demand/IRQ dispatch and instruction/event ordering remain open,
+  as do the legacy PCM16/SB16-command path and final shared mixed output. This change is
+  device-input progress, not first-817 or full audio acceptance.
+
 ## Next
 
 1. Recover the original 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts,

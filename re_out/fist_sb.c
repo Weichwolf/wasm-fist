@@ -1,23 +1,12 @@
-/* re_out/fist_sb.c -- Armored Fist platform shim: Sound Blaster DSP + 8237 DMA + IRQ -> PCM.
- *
- * The 1994 engine plays digital audio (menu music, in-mission SFX/voice) by programming the Sound
- * Blaster DSP directly (port base 0x2x0), setting up an 8237 DMA transfer of PCM out of a fixed
- * conventional-memory buffer, and refilling on the SB completion IRQ.  This shim is the runtime target
- * of the Ghidra `in`/`out` port intrinsics for that hardware -- the DOS analog of DD2's DirectSound
- * shim.  It models the DSP command FSM + the 8237 channel state, and on a "start DMA output" command it
- * decodes the PCM the engine placed in g_mem and appends it (converted to signed-16 LE) to a PCM ring,
- * optionally written to a WAV sink (native) / dumped for node.  Auto-init streaming closes the loop via
- * the completion IRQ: fist_sb_pump() (driven from the timer pump) raises the SB IRQ at block boundaries
- * so the engine's ISR runs and refills -- the same cooperative-tick discipline the PIT ISR uses.
- *
- * STATUS (iteration 1): the SOUND driver (SOUNDDVR.DVR) is not yet wired on the port -- its init vector
- * (+0x2 -> body @0x78) is not in the fmap, so the engine's `call far load_seg:0x2` no-ops and NO sound
- * port is touched yet.  This shim is therefore the READY platform layer: correct per the SB16 protocol,
- * env-gated (default OFF -> zero effect on the 26 video flows), and unit-verified with a synthetic DMA
- * block (tools/oracle/sb_selftest).  It produces real engine PCM the moment SOUNDDVR is wired
- * (SeedDriverVecs re-decompile + the DSP/DMA base-loss reconstruction; see docs/audio.md).
+/* Armored Fist Sound Blaster platform shim.
+ * PCM8 DMA consumption follows DOSBox 0.74-3 dma.cpp/sblaster.cpp: the mixer
+ * requests bytes; DSP completion and DMA terminal count have separate owners.
+ * The PCM ring/WAV is a device diagnostic, not the final stereo mixer. Device
+ * initialization, shared mixer demand/timing and the legacy PCM16 path remain
+ * under board/0003; no complete SB16 or original-output parity is claimed.
  */
 #include "ghidra_compat.h"
+#include "fist_sb.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -187,7 +176,7 @@ static int g_base = SB_BASE_DEFAULT;
 #define RING_CAP (4u*1024u*1024u)     /* 4M samples ~ 95 s @ 44.1k -- ample for a menu-music capture */
 static short  *g_ring;
 static unsigned g_ring_n;             /* samples written */
-static int    g_rate = 11025;         /* last DSP-programmed output rate (Hz) */
+static int    g_rate = 22050;         /* last DSP-programmed output rate (Hz) */
 
 static FILE  *g_wav;                  /* WAV sink (FIST_AUDIO_WAV or default) */
 static long   g_wav_data_off;         /* byte offset of the data chunk length field */
@@ -227,35 +216,74 @@ static void emit(short s)
 }
 
 /* ================= 8237 DMA channel state ================= */
-/* We track the two channels the SB uses: channel 1 (8-bit) and channel 5 (16-bit). */
-typedef struct { unsigned addr, count, page; int ff; int autoinit; } dmach_t;
-static dmach_t g_dma1, g_dma5;        /* g_dma1 = ch1 (8-bit), g_dma5 = ch5 (16-bit) */
+typedef struct {
+    unsigned addr, count, page, curraddr, currcnt;
+    int autoinit, masked, tcount, request;
+} dmach_t;
+static dmach_t g_dma[8];
+static int g_dma_ff[2], g_dma_initialized;
+#define g_dma1 g_dma[1]
+#define g_dma5 g_dma[5]
+static void dma_mask(unsigned channel, int masked);
 
-/* 8237 controller #1 (ch0-3): ports 0x00-0x0F.  ff = high/low byte flip-flop, per-controller. */
-static void dma1_out(int port, int val)
+static void dma_init(void)
 {
-    switch (port) {
-    case 0x00: case 0x02:            /* ch0/1 base addr (we only use ch1) */
-        if (port==0x02){ g_dma1.addr = g_dma1.ff ? ((g_dma1.addr&0x00ff)|(val<<8)) : ((g_dma1.addr&0xff00)|val); g_dma1.ff^=1; }
+    if (g_dma_initialized) return;
+    for (unsigned i=0; i<8; ++i) g_dma[i].masked=1;
+    g_dma_initialized=1;
+}
+
+/* The low/high flip-flop belongs to the controller, including unrelated channels. */
+static void dma_out(unsigned controller, unsigned reg, unsigned val)
+{
+    if (reg<8) {
+        dmach_t *dc=&g_dma[controller*4+(reg>>1)];
+        unsigned *base=(reg&1) ? &dc->count : &dc->addr;
+        unsigned *current=(reg&1) ? &dc->currcnt : &dc->curraddr;
+        unsigned shift=g_dma_ff[controller] ? 8 : 0;
+        *base=(*base & (0xffffu ^ (0xffu<<shift))) | (val<<shift);
+        *current=(*current & (0xffffu ^ (0xffu<<shift))) | (val<<shift);
+        g_dma_ff[controller]^=1;
+        return;
+    }
+    switch (reg) {
+    case 0xa: dma_mask(controller*4+(val&3), !!(val&4)); break;
+    case 0xb: g_dma[controller*4+(val&3)].autoinit=!!(val&0x10); break;
+    case 0xc: g_dma_ff[controller]=0; break;
+    case 0xd:
+        for (unsigned i=0; i<4; ++i) {
+            dma_mask(controller*4+i,1);
+            g_dma[controller*4+i].tcount=0;
+        }
+        g_dma_ff[controller]=0;
         break;
-    case 0x03:                       /* ch1 count */
-        g_dma1.count = g_dma1.ff ? ((g_dma1.count&0x00ff)|(val<<8)) : ((g_dma1.count&0xff00)|val); g_dma1.ff^=1; break;
-    case 0x0b:                       /* mode: bit4 = auto-init */
-        if ((val&3)==1) g_dma1.autoinit = (val>>4)&1; break;
-    case 0x0c: g_dma1.ff = 0; break; /* clear flip-flop */
-    case 0x0a: break;                /* single mask */
+    case 0xe: case 0xf:
+        for (unsigned i=0; i<4; ++i)
+            dma_mask(controller*4+i, reg==0xf ? !!(val&(1u<<i)) : 0);
+        break;
     }
 }
-/* 8237 controller #2 (ch4-7, 16-bit): ports 0xC0-0xDF; page for ch5 = 0x8B. */
-static void dma5_out(int port, int val)
+
+static int dma_in(unsigned controller, unsigned reg)
 {
-    switch (port) {
-    case 0xc4: g_dma5.addr = g_dma5.ff ? ((g_dma5.addr&0x00ff)|(val<<8)) : ((g_dma5.addr&0xff00)|val); g_dma5.ff^=1; break;
-    case 0xc6: g_dma5.count = g_dma5.ff ? ((g_dma5.count&0x00ff)|(val<<8)) : ((g_dma5.count&0xff00)|val); g_dma5.ff^=1; break;
-    case 0xd6: if ((val&3)==1) g_dma5.autoinit = (val>>4)&1; break;
-    case 0xd8: g_dma5.ff = 0; break;
-    case 0xd4: break;
+    if (reg<8) {
+        dmach_t *dc=&g_dma[controller*4+(reg>>1)];
+        unsigned value=(reg&1) ? dc->currcnt : dc->curraddr;
+        unsigned shift=g_dma_ff[controller] ? 8 : 0;
+        g_dma_ff[controller]^=1;
+        return (value>>shift)&0xff;
     }
+    if (reg==8) {
+        int status=0;
+        for (unsigned i=0; i<4; ++i) {
+            dmach_t *dc=&g_dma[controller*4+i];
+            if (dc->tcount) status|=1u<<i;
+            if (dc->request) status|=1u<<(i+4);
+            dc->tcount=0;
+        }
+        return status;
+    }
+    return 0xff;
 }
 
 /* ================= SB DSP command FSM ================= */
@@ -269,17 +297,105 @@ static int  g_irq_pending;            /* SB completion IRQ latched (acked by rea
 static int  g_speaker;                /* DSP speaker enable (D1/D3) */
 static int  g_block16;                /* current transfer is 16-bit */
 static int  g_playing;
+static unsigned g_dsp_total, g_dsp_left;
+static int g_dsp_autoinit, g_paused, g_irq_delivered, g_dma_active;
+static unsigned char g_pcm8_scratch[65536];
 
 static void (*g_irq_cb)(void);        /* engine SB-ISR invoker (set by native_main); may be NULL */
 void fist_sb_set_irq_cb(void (*cb)(void)) { g_irq_cb = cb; }
+
+static unsigned read_pcm8(unsigned want, unsigned char *data);
+
+static void dma_mask(unsigned channel, int masked)
+{
+    dmach_t *dc=&g_dma[channel];
+    dc->masked=masked;
+    /* DOSBox's DMA_MASKED callback drains its 3-ms minimum before stopping. */
+    if (channel==1 && !g_block16 && g_playing && g_dma_active && masked) {
+        read_pcm8((unsigned)g_rate*3/1000, g_pcm8_scratch);
+        g_dma_active=0;
+    } else if (channel==1 && !g_block16 && !masked && g_playing && !g_paused) {
+        g_dma_active=1;
+    }
+}
+
+static void start_pcm8(int autoinit)
+{
+    g_block16=0;
+    g_dsp_autoinit=autoinit;
+    g_dsp_left=g_dsp_total;
+    g_playing=1;
+    g_paused=0;
+    g_dma_active=!g_dma1.masked;
+    g_irq_pending=g_irq_delivered=0;
+    g_dma1.request=1;
+}
+
+/* DOSBox DmaChannel::Read increments current registers and reloads the DMA ring
+ * independently of the DSP block. The reached PCM8 callback clips to DSP left. */
+static unsigned read_pcm8(unsigned want, unsigned char *data)
+{
+    dmach_t *dc=&g_dma1;
+    unsigned read=0;
+    if (g_dsp_autoinit) {
+        if (want>=g_dsp_left) want=g_dsp_left;
+    } else if (g_dsp_left<=(unsigned)g_rate*3/1000) want=g_dsp_left;
+    dc->curraddr&=0xffff;
+    while (want) {
+        unsigned left=dc->currcnt+1;
+        /* The original DMA reader accesses want bytes before handling terminal
+         * count, even when only left bytes are returned in single-cycle mode. */
+        if (dc->curraddr+want>0x10000) {
+            fprintf(stderr,"[sb] DMA segbound wrapping (read)\n");
+            abort();
+        }
+        memcpy(data+read, g_mem+(dc->page<<16)+dc->curraddr, want);
+        if (want<left) {
+            dc->curraddr+=want;
+            dc->currcnt-=want;
+            read+=want;
+            break;
+        }
+        read+=left;
+        want-=left;
+        dc->tcount=1;
+        if (dc->autoinit) {
+            dc->curraddr=dc->addr;
+            dc->currcnt=dc->count;
+        } else {
+            dc->curraddr+=left;
+            dc->currcnt=0xffff;
+            dc->masked=1;
+            break;
+        }
+    }
+    for (unsigned i=0; i<read; ++i) emit((short)(((int)data[i]-128)*256));
+    g_dsp_left-=read;
+    if (!g_dsp_left) {
+        if (g_dsp_autoinit) g_dsp_left=g_dsp_total;
+        else g_playing=0;
+        if (!g_irq_pending) { g_irq_pending=1; g_irq_delivered=0; }
+    }
+    return read;
+}
+
+unsigned fist_sb_read_pcm8(unsigned want, unsigned char *data)
+{
+    dma_init();
+    if (!fist_sb_enabled() || !g_playing || g_block16 || g_paused || !g_dma_active)
+        return 0;
+    if (want>g_dsp_left) want=g_dsp_left; /* SBLASTER_CallBack */
+    return read_pcm8(want,data);
+}
+unsigned fist_sb_dma_left(void) { return g_dsp_left; }
 
 /* Decode+emit the PCM block the engine placed at the DMA-programmed address. len = transfer bytes. */
 static void run_dma_block(void)
 {
     dmach_t *dc = g_block16 ? &g_dma5 : &g_dma1;
     unsigned phys, bytes;
-    if (g_block16) { phys = (dc->page<<16) | (dc->addr<<1); bytes = ((dc->count+1)&0xffff)*2; }
-    else           { phys = (dc->page<<16) |  dc->addr;      bytes =  (dc->count+1)&0xffff;    }
+    if (g_block16) { phys = (dc->page<<16) | (dc->addr<<1); bytes = g_dsp_total*2; }
+    else           { phys = (dc->page<<16) |  dc->addr;      bytes = g_dsp_total;    }
     if (sbtrace())
         fprintf(stderr,"[sb] DMA %s play: phys=0x%05x bytes=%u rate=%d ai=%d\n",
                 g_block16?"16":"8", phys, bytes, g_rate, dc->autoinit);
@@ -291,7 +407,7 @@ static void run_dma_block(void)
             for (unsigned i=0;i<bytes;i++){ short s = (short)((int)(g_mem[phys+i]-128) << 8); emit(s); } /* u8 -> s16 */
         }
     }
-    g_playing = dc->autoinit;         /* auto-init keeps running until DSP 0xDA */
+    g_playing = g_dsp_autoinit;         /* auto-init keeps running until DSP 0xDA */
     g_irq_pending = 1;                /* completion IRQ */
 }
 
@@ -306,13 +422,13 @@ static void dsp_command(int val)
         case 0x40: g_rate = 1000000 / (256 - g_dsp_arg[0]); break;           /* time constant */
         case 0x41: g_rate = (g_dsp_arg[0]<<8) | g_dsp_arg[1]; break;         /* SB16 output rate */
         case 0x42: g_rate = (g_dsp_arg[0]<<8) | g_dsp_arg[1]; break;         /* SB16 input rate (ignore) */
-        case 0x48: g_dma1.count = (g_dsp_arg[0]) | (g_dsp_arg[1]<<8); break; /* set 8-bit block size */
+        case 0x48: g_dsp_total = 1+g_dsp_arg[0]+(g_dsp_arg[1]<<8); break; /* set 8-bit block size */
         case 0x14: case 0x15: case 0x91:                                     /* 8-bit single-cycle out */
-            g_dma1.count = (g_dsp_arg[0]) | (g_dsp_arg[1]<<8); g_block16=0; g_dma1.autoinit=0; run_dma_block(); break;
+            g_dsp_total=1+g_dsp_arg[0]+(g_dsp_arg[1]<<8); start_pcm8(0); break;
         case 0xb0: case 0xb2: case 0xb4: case 0xb6:                          /* SB16 16-bit out: mode,lenlo,lenhi */
-            g_block16=1; g_dma5.count = (g_dsp_arg[1]) | (g_dsp_arg[2]<<8); g_dma5.autoinit=(g_dsp_cmd&0x04)?0:1; run_dma_block(); break;
+            g_block16=1; g_dsp_total=1+g_dsp_arg[1]+(g_dsp_arg[2]<<8); g_dsp_autoinit=!!(g_dsp_cmd&0x04); run_dma_block(); break;
         case 0xc0: case 0xc2: case 0xc4: case 0xc6:                          /* SB16 8-bit out: mode,lenlo,lenhi */
-            g_block16=0; g_dma1.count = (g_dsp_arg[1]) | (g_dsp_arg[2]<<8); g_dma1.autoinit=(g_dsp_cmd&0x04)?0:1; run_dma_block(); break;
+            g_block16=0; g_dsp_total=1+g_dsp_arg[1]+(g_dsp_arg[2]<<8); g_dsp_autoinit=!!(g_dsp_cmd&0x04); run_dma_block(); break;
         }
         return;
     }
@@ -323,12 +439,12 @@ static void dsp_command(int val)
     case 0xb0: case 0xb2: case 0xb4: case 0xb6:
     case 0xc0: case 0xc2: case 0xc4: case 0xc6: g_dsp_args_left = 3; break;
     case 0x1c: case 0x90:                                                    /* 8-bit auto-init out (block from 0x48) */
-        g_block16=0; g_dma1.autoinit=1; run_dma_block(); break;
+        start_pcm8(1); break;
     case 0xd1: g_speaker = 1; break;                                         /* speaker on */
     case 0xd3: g_speaker = 0; break;                                         /* speaker off */
-    case 0xd0: g_playing = 0; break;                                         /* pause 8-bit DMA */
-    case 0xd4: g_playing = 1; break;                                         /* resume 8-bit DMA */
-    case 0xda: g_playing = 0; break;                                         /* exit 8-bit auto-init */
+    case 0xd0: g_paused = 1; g_dma_active=0; break;                                         /* pause 8-bit DMA */
+    case 0xd4: g_paused = 0; g_dma_active=g_playing && !g_dma1.masked; break;                                         /* resume 8-bit DMA */
+    case 0xda: g_dsp_autoinit = 0; break;                                         /* exit 8-bit auto-init */
     case 0xd9: g_playing = 0; break;                                         /* exit 16-bit auto-init */
     case 0xe1: g_read_val = 4; break;                                        /* DSP version major (SB16=4); minor next read */
     default: break;
@@ -349,12 +465,13 @@ int fist_sb_owns(int port)
 
 void fist_sb_out(int port, int val)
 {
+    dma_init();
     port &= 0xffff; val &= 0xff;
     if (port >= g_base && port <= g_base+0xf) {
         switch (port - g_base) {
         case 0x6:                                                           /* DSP reset */
             if (val==1) g_reset_step=1;
-            else if (val==0 && g_reset_step==1){ g_reset_step=0; g_read_val=0xAA; g_dsp_args_left=0; g_playing=0; }
+            else if (val==0 && g_reset_step==1){ g_reset_step=0; g_read_val=0xAA; g_dsp_args_left=0; g_playing=0; g_dsp_total=g_dsp_left=0; g_dsp_autoinit=g_paused=0; g_irq_pending=g_irq_delivered=0; g_dma1.request=0; g_rate=22050; }
             break;
         case 0xc: dsp_command(val); break;                                  /* DSP write command/data */
         }
@@ -362,12 +479,13 @@ void fist_sb_out(int port, int val)
     }
     if (port==0x83){ g_dma1.page=val; return; }
     if (port==0x8b){ g_dma5.page=val; return; }
-    if (port<=0x0f) dma1_out(port,val);
-    else if (port>=0xc0 && port<=0xdf) dma5_out(port,val);
+    if (port<=0x0f) dma_out(0,port,val);
+    else if (port>=0xc0 && port<=0xdf) dma_out(1,(port-0xc0)>>1,val);
 }
 
 int fist_sb_in(int port)
 {
+    dma_init();
     port &= 0xffff;
     if (port >= g_base && port <= g_base+0xf) {
         switch (port - g_base) {
@@ -383,15 +501,22 @@ int fist_sb_in(int port)
         }
         return 0xff;
     }
+    if (port==0x83) return g_dma1.page;
+    if (port==0x8b) return g_dma5.page;
+    if (port<=0xf) return dma_in(0,port);
+    if (port>=0xc0 && port<=0xdf) return dma_in(1,(port-0xc0)>>1);
     return 0xff;
 }
 
-/* Called from the cooperative timer pump: while an auto-init stream is running, re-raise the completion
- * IRQ so the engine's SB ISR refills the next block.  No-op until SOUNDDVR is wired + an ISR is set. */
+/* Deliver a latched completion once. Only the DSP ACK clears the latch; a
+ * single-cycle transfer also delivers its IRQ after playback has stopped. */
 void fist_sb_pump(void)
 {
-    if (!fist_sb_enabled() || !g_playing) return;
-    if (g_irq_pending && g_irq_cb) { g_irq_pending = 0; g_irq_cb(); }
+    if (!fist_sb_enabled()) return;
+    if (g_irq_pending && !g_irq_delivered && g_irq_cb) {
+        g_irq_delivered=1;
+        g_irq_cb();
+    }
 }
 
 /* Finalize the WAV (patch the RIFF/data sizes) + report. */

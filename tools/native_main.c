@@ -9,6 +9,7 @@
  * Build: tools/build_native.sh   (gcc -m32)
  */
 #include "ghidra_compat.h"
+#include "fist_sb.h"
 #include <setjmp.h>
 #include <signal.h>
 #include <sys/time.h>
@@ -498,7 +499,7 @@ static void fist_dump_and_exit(const char *why){
       extern long g_min_los; fprintf(stderr,"[range] min cross-unit |dx|+|dy| after first kills = %ld (0x40000=%d threshold)\n",g_min_los,0x40000);
       extern long g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis; fprintf(stderr,"[op58] LOS calls=%ld  out-of-range=%ld  occluded=%ld  VISIBLE=%ld\n",g_op58_n,g_op58_oor,g_op58_occ,g_op58_vis);
  }
-            { extern void fist_sb_flush(void); fist_sb_flush(); }   /* finalize any SB PCM/WAV capture */
+            fist_sb_flush();   /* finalize any SB device diagnostic capture */
             { extern void fist_opl_flush(void); fist_opl_flush(); } /* finalize any OPL FM PCM/WAV capture */
             { extern void fist_snd_diag(void); fist_snd_diag(); }   /* sequencer-fed diagnostic */
             /* board:0001 cause-3: dump g_mem so native vs wasm can be diffed to locate where the sound
@@ -923,7 +924,7 @@ static void fist_pump_slow(void){
     }
 #endif
     { extern void fbtrap_arm_hook(void); fbtrap_arm_hook(); }
-    { extern void fist_sb_pump(void); fist_sb_pump(); }   /* SB auto-init stream: raise completion IRQ (FIST_SB) */
+    fist_sb_pump();   /* deliver a latched SB completion IRQ (FIST_SB) */
     { extern void fist_opl_pump(void); fist_opl_pump(); }  /* OPL FM: advance the synth in emulated time (FIST_OPL/FIST_SB) */
     /* Dev watchdog: FIST_RUNMS=<ms> dumps the framebuffer (FIST_FBDUMP) and exits after a wall-clock
      * deadline -- lets a first-light frame be captured while the engine is in its (non-returning) main

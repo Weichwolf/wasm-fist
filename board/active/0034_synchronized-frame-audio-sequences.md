@@ -105,6 +105,18 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   1119 frames and 706658 PCM samples over 16000 ms. The 64-test/two-flow gate belongs to 0003;
   this is callback-buffer progress, not SB IRQ/timing or complete frame/audio acceptance.
 
+
+- PCM8 DMA/DSP consumption correction (0003), base `b3d4e72`: fresh complete 10/30-second
+  native/WASM captures retain every preceding port frame byte. All 698 original frames
+  match at 10 seconds; 30 seconds retains the same 27 pixel differences, first 817,
+  with 2100 identical cross-target records and equal original times/layouts/palettes.
+  Strict comparison still fails missing mixed port PCM. The original demand fixture and
+  isolated device-input regression are owned by 0003; production device setup, IRQ dispatch
+  and clock ordering stay open. `scratch/sequence-capture/sb-demand/production-proof.json`
+  records this unchanged capture scope. The 68-test/full-178-flow gate `run.RDIm2R/`
+  passes with zero failures, exit 0; its bounded device-input proof remains with 0003.
+  Production IRQ/timing and complete frame/audio acceptance remain open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

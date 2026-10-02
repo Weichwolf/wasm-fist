@@ -53,9 +53,7 @@ static void fist_sequence_mode_set(void);
 
 /* Sound Blaster shim (fist_sb.c): SB port window trapping.  Default OFF (FIST_SB unset) -> fist_sb_owns
  * returns 0 for every port -> the switch below runs exactly as before -> zero effect on the video flows. */
-int  fist_sb_owns(int port);
-int  fist_sb_in(int port);
-void fist_sb_out(int port, int val);
+#include "fist_sb.h"
 
 /* OPL FM shim (fist_opl.c): port 0x388/0x389 trapping.  Default OFF (FIST_OPL/FIST_SB unset) ->
  * fist_opl_owns returns 0 -> zero effect on the video flows. */
