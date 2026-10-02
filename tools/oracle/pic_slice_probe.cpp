@@ -36,7 +36,7 @@ static void resize(Bitu) { pixel_clock = 25175000u / 8u; PIC_RemoveEvents(part);
 int main(int argc, char **argv) {
     if (argc != 4 && (argc != 5 || strcmp(argv[4], "transition")) &&
         (argc != 6 || (strcmp(argv[4], "retire") && strcmp(argv[4], "file-read") &&
-                       strcmp(argv[4], "masked-read"))) &&
+                       strcmp(argv[4], "masked-read") && strcmp(argv[4], "blit"))) &&
         (argc != 7 || (strcmp(argv[4], "dos-cap") && strcmp(argv[4], "dos-read"))) &&
         (argc != 8 || strcmp(argv[4], "dos-cap")) &&
         (argc != 10 || strcmp(argv[4], "rep"))) return 2;
@@ -49,13 +49,13 @@ int main(int argc, char **argv) {
         scanout > start || tick > 10000 || !(lag >= 0 && lag < 1)) return 2;
     char *tail;
     unsigned long target = strtoul(argv[2], &tail, 10);
-    if (!*argv[2] || *tail || target > 10000 || target < tick) return 2;
+    if (!*argv[2] || *tail || target > UINT32_MAX || target < tick) return 2;
     unsigned long index = strtoul(argv[3], &tail, 10);
     if (!*argv[3] || *tail || index >= 30000) return 2;
     for (unsigned i = 0; i < PIC_QUEUESIZE - 1; ++i) pic_queue.entries[i].next = &pic_queue.entries[i + 1];
     pic_queue.free_entry = pic_queue.entries;
     PIC_Ticks = tick;
-    if (argc == 5 || (argc == 6 && strcmp(argv[4], "retire")) ||
+    if (argc == 5 || (argc == 6 && strcmp(argv[4], "retire") && strcmp(argv[4], "blit")) ||
         (argc == 7 && !strcmp(argv[4], "dos-read")))
         pixel_clock = 28322000u / 9u;
     PIC_AddEvent(vertical, lag);
@@ -73,6 +73,19 @@ int main(int argc, char **argv) {
     CPU_Cycles = 0;
     CPU_CycleLeft = 30000 - index;
     assert(PIC_RunQueue());
+    if (argc == 6 && !strcmp(argv[4], "blit")) {
+        source_rep_setup(16000, 4, 1, 0x10000);
+        /* 7120 CLD, 7121 MOV ESI, 7127 MOV EDI, 712d MOV ECX. */
+        for (unsigned instruction = 0; instruction < 4; ++instruction)
+            while (CPU_Cycles-- <= 0) while (!PIC_RunQueue()) TIMER_AddTick();
+        do {
+            while (CPU_Cycles-- <= 0) while (!PIC_RunQueue()) TIMER_AddTick();
+        } while (source_rep_step(4));
+        while (CPU_Cycles-- <= 0) while (!PIC_RunQueue()) TIMER_AddTick(); /* 7134 RET */
+        source_rep_dump(argv[5]);
+        printf("%llu %d\n", (unsigned long long)(PIC_Ticks * CPU_CycleMax + PIC_TickIndexND()), CPU_Cycles);
+        return 0;
+    }
     if (argc == 10) {
         unsigned count = strtoul(argv[5], NULL, 0), width = strtoul(argv[6], NULL, 0);
         int direction = strtol(argv[7], NULL, 0), displacement = strtol(argv[8], NULL, 0);

@@ -68,12 +68,24 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   Original mixed PCM has 1324058 samples at 30000 ms; the port sequence PCM file is absent.
   Strict comparison fails at both endpoints. The 60-test/two-flow gate and source provenance
   belong to 0026. This is bounded video progress; complete frame/audio acceptance remains open.
+- Current base `5b8f0fd`, 7120 REP-copy step (0026): all 698 complete 10000-ms original frames
+  still match both targets. The fresh 30000-ms native/WASM streams match all 2100 frame records;
+  all original time/layout/palette records match, with 27 pixel-difference events and first still
+  817 (11704156 us / byte 8754 / 965 pixels). Final menu is equal and visually checked.
+  `scratch/sequence-capture/pixel-817/{check-proof.py,proof.json}` retains full scope and event list.
+  The reaching copy regression fails all ten parent cases and passes on both targets; the
+  61-test/two-flow gate is in `run.deIWNB/`. The copy contract is fixed; first-817 parity is open.
+  An IRQ-7-armed original snapshot preserves all 908 frames and 574358 PCM samples over 13000 ms
+  and exposes the software mixer running before the decoder. Its state owner is 0003, shared
+  time/interrupt owner 0026. Full comparison still fails missing port mixed PCM.
 
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete
    30000-ms capture. Preserve the now-equal 10000-ms video and 0036's attributed MZ handoff.
-   Timing fixes belong to 0026. Do not adjust capture phase, inject a fitted delay or mask fields.
+   Recover the reached SB IRQ/software-mixer state in 0003 and its CPU/event ordering in 0026.
+   Preserve 7120's now-proved REP contract. Do not adjust capture phase, inject a fitted delay
+   or mask fields.
 2. Compare every 30000-ms record through the stable menu after fixing that producer.
    Then add matched timed inputs. Retain the first unequal producer; reuse the versioned 0036 fixture.
 3. Implement the final mixer in 0003 on 0026's shared device time; require complete mixed stereo PCM.

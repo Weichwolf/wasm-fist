@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import struct
 import subprocess
@@ -26,9 +27,26 @@ class PortIoTest(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.tmp.cleanup)
         cls.directory = Path(cls.tmp.name)
+        # Compile the production 7120 body after its ordered, exact Extender patches.
+        unit = cls.directory / 'fist_ext.c'
+        unit.write_bytes((ROOT / 're_out/fist_ext.c').read_bytes())
+        for patch in sorted((ROOT / 'patches').glob('*.diff')):
+            sections = re.findall(r'^--- a/fist_ext\.c\n.*?(?=^--- a/|\Z)',
+                                  patch.read_text(), re.M | re.S)
+            if sections:
+                subprocess.run(['patch', '--batch', '-s', '-p1', '-F0', '--fuzz=0', '-d', cls.directory],
+                               input=''.join(sections), text=True, check=True, capture_output=True)
+        text = unit.read_text()
+        body = text.split('void __allregs FUN_0000_7120(void)\n\n{', 1)[1].split('\n}\n', 1)[0]
+        declarations = '\n'.join(line for line in text.splitlines()
+                                 if line.startswith(('#define DAT_0000_6e88 ', '#define DAT_0000_0917 ',
+                                                     '#define FUN_0000_7120 ')))
+        blit = cls.directory / 'kdv_blit.c'
+        blit.write_text('#include "ghidra_compat.h"\nextern uint32_t fist_ext_base;\n' + declarations +
+                        '\nvoid __allregs FUN_0000_7120(void)\n{'+body+'\n}\n')
         sources = [str(ROOT / 'tests/port_io.c'), str(ROOT / 're_out/fist_vga.c'),
-                   str(ROOT / 're_out/fist_dos.c')]
-        flags = ['-I' + str(ROOT / 're_out'), '-ffunction-sections', '-fdata-sections']
+                   str(ROOT / 're_out/fist_dos.c'), str(blit)]
+        flags = ['-I' + str(ROOT / 're_out'), '-ffunction-sections', '-fdata-sections', '-Wno-int-conversion']
         native, wasm = (str(cls.directory / name) for name in ('ports', 'ports.js'))
         targets = [('native', ['gcc', '-m32', *flags, *sources, '-Wl,--gc-sections', '-lm', '-o', native], [native]),
                    ('wasm', [tool('emcc', 'Git/emsdk/upstream/emscripten/emcc'), *flags, *sources,
@@ -201,6 +219,30 @@ class PortIoTest(unittest.TestCase):
                     self.assertEqual(result.returncode,0,result.stderr)
                     self.assertEqual(result.stdout,expected)
                     self.assertEqual(output.read_bytes(),memory)
+
+    def test_kdv_frame_blit_matches_original_copy_budget_and_aperture(self):
+        prefix, state = self.pic_fixture()
+        proof = json.loads((ROOT / 'tools/oracle/kdv_blit_cases.json').read_text())
+        captured = proof['case']
+        tick, index = divmod(captured['start_cycle'], 30000)
+        cases = [(tick, index), (6354, 1198), (6354, 2295), (6354, 2296), (6354, 29999)]
+        for tick, index in cases:
+            oracle = self.directory / 'blit-original.memory'
+            expected = subprocess.check_output([self.pic_probe, str(state), str(tick), str(index),
+                                                'blit', str(oracle)], text=True)
+            if (tick, index) == cases[0]:
+                self.assertEqual(list(map(int, expected.split())),
+                                 [captured['end_cycle'], captured['end_remaining']])
+            memory = oracle.read_bytes()
+            for target, run in self.commands:
+                with self.subTest(target=target, tick=tick, index=index):
+                    output = self.directory / f'{target}-blit.memory'
+                    result = subprocess.run([*run, 'blit', str(tick), str(index), str(output)],
+                                            env=dict(os.environ, FIST_TEXT_STATE=str(prefix)),
+                                            capture_output=True, text=True, timeout=30)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(output.read_bytes(), memory)
+                    self.assertEqual(result.stdout, expected)
 
     def test_extender_reads_match_original_callback_88_cpu_and_register_contract(self):
         prefix,state=self.pic_fixture()

@@ -26,15 +26,33 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
 - Digital mixer: op `0x64 → 786a → 22ab` assigns channels; `2630` advances cursor `0x15ef`
   by pitch `0x15cb`, releasing it when `cursor>>16` reaches length `0x15e3`.
   Old unreachable-mission investigations predate PIT/patch 610; they are stale.
+- Reached by 0034's first remaining video difference (event 817): original Sound Blaster IRQ 7
+  invokes protected handler 14e0 and its 2630 software mixer before KDV callback 168.
+  The port defines `fist_sb_set_irq_cb` but never calls it. The full original 11686:11696 CPU
+  trace proves 1024 mixer outputs without channel rollover: 12 setup + 44/sample + RET = 45069
+  instructions, with a 609-instruction nested timer interrupt. The combined interval consumes
+  46373 cycles. These are attribution counts, not a permitted fixed-delay replacement.
+- `scratch/sequence-capture/pixel-817/{mixer-snapshot.gdb,mixer-registers.json,mixer-physical.bin,
+  proof.json}` captures original state immediately before 2630: DS=33/base 10000000,
+  IRQ 7/base 220, channel pitch/cursor/length/pointers and self-modified normalization operands
+  (SHR 1/2/3, ADD 40/60/70 hex). Read all guest data through paging; physical pages are not
+  contiguous flat-module offsets. The probe's complete 13000-ms frame and PCM streams match
+  the unprobed original bytewise (908 frames / 574358 samples); this is source-state provenance,
+  not port synthesis or final-mixer acceptance. The existing generated 2630 byte sums omit
+  these actual SHR/ADD operations. Preserve their width/flag contract and rollover callbacks.
 
 ## Next
 
-1. Recover speaker synthesis against a captured original event schedule. Prove its first sample;
+1. Recover the reached 2630 channel/normalization/rollover contract and 14e0 completion IRQ,
+   including device setup and DMA cadence. Supply actual instruction/event work to 0026 so
+   0034 can recheck frame 817. Add original-backed buffer/state regressions on both targets;
+   do not charge an aggregate measured delay or invent a sample source.
+2. Recover speaker synthesis against a captured original event schedule. Prove its first sample;
    let 0026 repair event timing. Reuse 0036's start fixture and 0034's capture/comparison tools.
-2. Route speaker/OPL/SB into one mixer driven by the shared clock. Test simultaneous emission,
+3. Route speaker/OPL/SB into one mixer driven by the shared clock. Test simultaneous emission,
    silence and saturation. Remove duplicate WAV/sequence/browser writers after their inputs are wired.
-3. Recover original channel allocation/pitch/completion; test overlap, exhaustion and release.
-4. Capture complete matched menu and AZER1 output, then cockpit loss/debrief and device variants.
+4. Recover original channel allocation/pitch/completion; test overlap, exhaustion and release.
+5. Capture complete matched menu and AZER1 output, then cockpit loss/debrief and device variants.
    Hand reusable content fixtures to 0011; report the first unequal final sample.
 
 ## Accept

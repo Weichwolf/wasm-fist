@@ -172,12 +172,41 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   at 11704156 us, byte 8754 (original 16 / port 212), 965 unequal pixels. Event 443 stays fixed.
   The corrected frame, first remaining difference and final menu were visually checked.
   Mixed port PCM is still absent; complete comparison fails. Frame diagnostics are not acceptance.
+- Current base `5b8f0fd`, patch 621: reached KDV 7120 clears DF, retires its four setup
+  instructions, copies 16000 dwords through the shared original-backed REP path, then retires RET.
+  The old C loop writes all pixels without time. At callback 168, original before-call state is
+  cycle 350841173/budget 8827 and before the next caller fetch is 350857178/budget 22822.
+  REP splits into 8823/7177 dwords at TIMER_AddTick. `kdv_blit_cases.json` records the complete
+  original CPU-trace hash and copy opcode bytes, independently confirmed through guest paging
+  in original resident memory. No fitted elapsed delay is charged.
+- `test_kdv_frame_blit_matches_original_copy_budget_and_aperture` compiles the actual 7120 body
+  after every ordered Extender patch, without touching `build/`. Original DoString/PIC supplies
+  the full 262144-byte memory image and cycle/budget results for five initial states on both
+  targets, including budget-one and tick boundaries. Parent code fails all ten cases; patch 621
+  passes all ten. `bash tools/check_flow.sh '^(intro|mainmenu)$'`: 61 tests, exact patches,
+  sequential builds and two selected flows pass / zero failures, exit 0; `run.deIWNB/`.
+- `pixel-817/{check-proof.py,proof.json,native-blit-10s/,wasm-blit-10s/}`: complete 10000-ms
+  streams retain all 698 original frame/palette/time records. Both new 30000-ms streams contain
+  2100 identical cross-target frames and preserve every original time/layout/palette; 27 pixel
+  events differ, first still 817. This fixes the reached copy contract; upstream timing is open.
+  Loader budgets/app entry are retained. Port mixed PCM remains absent; strict comparisons fail.
+- The fresh complete original 11686:11696 trace attributes a missing Sound Blaster IRQ path
+  before callback 168: protected handler 14e0 calls software mixer 2630, whose reached path
+  emits 1024 bytes, with 12 setup + 44 instructions/sample + RET = 45069 instructions.
+  Another 609 instructions belong to the nested timer interrupt; the combined interval consumes
+  46373 cycles. No channel rollover is reached here. Port `fist_sb_set_irq_cb` has no caller.
+  Do not inject this measured total: recover mixer/device state and its actual IRQ cadence in 0003.
+  The read-only IRQ-7-armed GDB snapshot captures paging, cursors, pitches, buffers and actual
+  self-modified channel SHR/ADD operands; its complete 13000-ms frame/PCM stream matches the
+  unprobed original (908 frames / 574358 samples). Evidence: `pixel-817/{mixer-snapshot.gdb,
+  mixer-registers.json,mixer-physical.bin,mixer-original-13s/,proof.json}`.
 
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
    Continue 0034's first remaining pixel difference at event 817 in the 30000-ms capture.
-   Recover its original producer and missing work; do not inject elapsed delays or change capture phase.
+   Recover 0003's now-reaching SB IRQ/mixer state and instruction work; preserve the proved 7120
+   REP copy. Do not inject elapsed delays or change capture phase.
 2. Recover production pre-speaker work (23 mask reads, 720/721), 07b7's polling/CLI/STI and ISR return.
    Derive calibration arguments from operations and budget; never inject 90 or a measured total delay.
    Prove reload/re-arm/IRQ order. Supply events to 0003/0034; neither owns another clock.
