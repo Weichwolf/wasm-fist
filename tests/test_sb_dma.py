@@ -136,7 +136,9 @@ class SoundBlasterDmaTest(unittest.TestCase):
             self.assertEqual(bytes.fromhex(data[2]),
                              bytes(((i * 29) ^ (i >> 8)) & 255 for i in range(addr, addr + n)))
             if n == left:
-                self.assertEqual(lines.pop(0), 'read 22e 0')
+                # The original read_sb returns 7f for an empty DSP read buffer,
+                # independently of clearing the pending 8-bit completion IRQ.
+                self.assertEqual(lines.pop(0), 'read 22e 7f')
         self.assertEqual(lines, [f'state {remaining} {consumed} {completions} 11111'])
         self.assertEqual(completions, len(case['irq_ticks']))
 
@@ -161,6 +163,32 @@ class SoundBlasterDmaTest(unittest.TestCase):
                     + 'd 1024\np\ns\nr 22e\nd 1024\np\ns\n')
         self.run_case(commands)
 
+    def test_irq_status_and_wrong_width_ack_follow_original_hardware_reads(self):
+        # Original 14e0 selects mixer index 82 at 152a/152c and tests bit 1
+        # of the read at 152f to choose the DSP acknowledgement width. Reading
+        # the 16-bit acknowledgement must leave a pending 8-bit IRQ intact.
+        case = json.loads((ROOT / 'tools/oracle/sb_irq_ack_case.json').read_text())
+        image = (ROOT / 're_out/fist_image.bin').read_bytes()
+        self.assertEqual(hashlib.sha256(image).hexdigest(), case['image_sha256'])
+        code = bytes.fromhex(case['irq_code_bytes'])
+        self.assertEqual(image[case['irq_code_offset']:case['irq_code_offset']+len(code)], code)
+        self.assertEqual([(row['port'], row['value']) for row in case['original_reads']],
+                         [(0x225, 1), (0x22e, 0x7f)])
+        commands = (write(0x224, 0x82) + 'r 224\nr 225\nr 22e\nr 22f\n'
+                    + program() + dsp(0x40, 0xa6, 0x48, 0xff, 3, 0x1c)
+                    + 'd 1024\np\ns\nr 225\nr 22f\nr 225\n'
+                    + 'd 1024\np\ns\nr 225\nr 22e\nr 225\n'
+                    + 'd 1024\np\ns\nr 225\nr 22e\nr 225\n')
+        lines = self.run_case(commands)
+        reads = [line for line in lines if line.startswith('read ')]
+        self.assertEqual(reads, ['read 224 82', 'read 225 0', 'read 22e 7f', 'read 22f ff',
+                                'read 225 1', 'read 22f ff', 'read 225 1',
+                                'read 225 1', 'read 22e 7f', 'read 225 0',
+                                'read 225 1', 'read 22e 7f', 'read 225 0'])
+        self.assertEqual([line for line in lines if line.startswith('state ')],
+                         ['state 1024 1024 1 11111', 'state 1024 2048 1 11111',
+                          'state 1024 3072 2 11111'])
+
     def test_single_cycle_and_exit_auto_init_finish_on_demand(self):
         for command in (0x14, 0x15, 0x91):
             self.run_case(program() + dsp(0x40, 0xa6, command, 99, 0)
@@ -168,6 +196,15 @@ class SoundBlasterDmaTest(unittest.TestCase):
                           + registers())
         self.run_case(program() + dsp(0x40, 0xa6, 0x48, 0xff, 3, 0x1c)
                       + 'd 100\n' + dsp(0xda) + 'd 924\np\ns\nd 1024\ns\n')
+
+    def test_irq_ack_preserves_complete_available_dsp_data(self):
+        commands = (program() + dsp(0x40, 0xa6, 0x48, 0xff, 3, 0x1c)
+                    + 'd 1024\np\n' + write(0x224, 0x82) + dsp(0xe1)
+                    + 'r 225\nr 22e\nr 225\nr 22a\nr 22e\nr 22a\nr 22e\n')
+        lines = self.run_case(commands)
+        self.assertEqual([line for line in lines if line.startswith('read ')],
+                         ['read 225 1', 'read 22e ff', 'read 225 0',
+                          'read 22a 4', 'read 22e ff', 'read 22a 5', 'read 22e 7f'])
 
 
 if __name__ == '__main__':

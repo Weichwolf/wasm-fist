@@ -343,6 +343,44 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   service dispatch, protected IRQ/IF, device variants, instruction/event timing
   and the final shared mixer remain open.
 
+- Current base `3d548a3`: the handwritten SB owner now retains the mixer index,
+  exposes register 82's separate PCM8/PCM16 completion bits and acknowledges only
+  the selected width. DSP read status preserves the complete original 7f/ff byte;
+  reading status clears the PCM8 completion without consuming available data.
+  Original 14e0's 152a/152c select mixer 82; 152f/1530 choose the acknowledgement
+  port from bit 1. The old default ff would select the wrong acknowledgement width,
+  and either port incorrectly cleared the same completion flag.
+- `tools/oracle/sb_irq_ack_case.json` records the complete original handler bytes,
+  image/device-source hashes and both reached SB reads from the independent
+  11686:11696-ms trace: 152f reads 225=01; 1539 reads 22e=7f. Rechecking the
+  historical read-only source capture retains all 908 frames, 574358 mixed PCM
+  samples and the complete 13000-ms endpoint bytewise.
+- The oracle endpoint now invokes DOSBox's actual `read_sb`/`CTMIXER_Read` and the
+  real version-byte producer. Its prior synthesized zero acknowledgement only
+  established DMA input/state, not complete hardware status bytes. Existing test
+  expectations change from 00 to 7f because both original code and the actual
+  reached trace prove that value. Unreached mixer/audio/MIDI endpoints abort;
+  no event timing or protected PIC delivery is supplied by this device fixture.
+- Two new regressions fail on both parent targets and pass on both current
+  targets. Three complete 1024-byte demands preserve the original DMA state,
+  status reads and IRQ counts 1/1/2: the unrelated 16-bit acknowledgement leaves
+  PCM8 pending, PCM8 acknowledgement clears it, and the next completion is raised.
+  The second regression retains every available version byte (4/5) while the
+  IRQ acknowledgement changes status from ff to 7f only after data is consumed.
+  All seven SB/DMA regressions pass. Initial oracle link/unconfigured-base
+  scaffold failures are retained and excluded from reaching proof.
+- `scratch/sequence-capture/sb-irq-status/{red-final-reaching.log,green-unit.log,
+  check-proof.py,proof.json}` retains this scope. `bash tools/check_flow.sh
+  '^(intro|mainmenu)$'` passes 75 tests, exact patches, sequential native/WASM
+  builds and both selected flows, with separately recorded exit 0;
+  `scratch/verify/run.S3PCy0/`. Fresh complete 30000-ms captures retain all 2100
+  prior port frames and 43 sound-register packets on each target. All 418 original
+  files remain unchanged. This filtered gate is not a complete-matrix or original
+  output acceptance: strict comparison still rejects absent final mixed PCM.
+  Actual startup/service dispatch, protected IRQ/IF, reset and event timing,
+  other mixer registers/device variants, the legacy PCM16 producer and final
+  shared mixer remain open. No measured instruction interval is inserted as a delay.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover

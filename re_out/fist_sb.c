@@ -293,7 +293,8 @@ static unsigned char g_dsp_arg[4];
 static int  g_dsp_argi;
 static int  g_reset_step;             /* DSP reset write sequence */
 static int  g_read_val = -1;          /* pending DSP data-read byte (0xAA after reset, version, ...) */
-static int  g_irq_pending;            /* SB completion IRQ latched (acked by reading base+0xE/0xF) */
+static int  g_irq_pending;            /* completion bits: 1 = PCM8, 2 = PCM16 */
+static unsigned char g_mixer_index;
 static int  g_speaker;                /* DSP speaker enable (D1/D3) */
 static int  g_block16;                /* current transfer is 16-bit */
 static int  g_playing;
@@ -374,7 +375,7 @@ static unsigned read_pcm8(unsigned want, unsigned char *data)
     if (!g_dsp_left) {
         if (g_dsp_autoinit) g_dsp_left=g_dsp_total;
         else g_playing=0;
-        if (!g_irq_pending) { g_irq_pending=1; g_irq_delivered=0; }
+        if (!(g_irq_pending & 1)) { g_irq_pending |= 1; g_irq_delivered=0; }
     }
     return read;
 }
@@ -408,7 +409,7 @@ static void run_dma_block(void)
         }
     }
     g_playing = g_dsp_autoinit;         /* auto-init keeps running until DSP 0xDA */
-    g_irq_pending = 1;                /* completion IRQ */
+    g_irq_pending |= g_block16 ? 2 : 1; /* acknowledgement width is independent */
 }
 
 /* DSP command byte (base+0xC) + its argument bytes. */
@@ -469,6 +470,7 @@ void fist_sb_out(int port, int val)
     port &= 0xffff; val &= 0xff;
     if (port >= g_base && port <= g_base+0xf) {
         switch (port - g_base) {
+        case 0x4: g_mixer_index=(unsigned char)val; break;
         case 0x6:                                                           /* DSP reset */
             if (val==1) g_reset_step=1;
             else if (val==0 && g_reset_step==1){ g_reset_step=0; g_read_val=0xAA; g_dsp_args_left=0; g_playing=0; g_dsp_total=g_dsp_left=0; g_dsp_autoinit=g_paused=0; g_irq_pending=g_irq_delivered=0; g_dma1.request=0; g_rate=22050; }
@@ -489,10 +491,14 @@ int fist_sb_in(int port)
     port &= 0xffff;
     if (port >= g_base && port <= g_base+0xf) {
         switch (port - g_base) {
+        case 0x4: return g_mixer_index;
+        case 0x5:
+            if (g_mixer_index==0x82) return g_irq_pending;
+            return 0xff; /* other mixer-register contracts remain open */
         case 0xe:                                                           /* read-buffer status: bit7 = data avail */
-            g_irq_pending = 0;                                              /* reading DSP status/ack clears the 8-bit IRQ */
-            return (g_read_val>=0) ? 0x80 : 0x00;
-        case 0xf: g_irq_pending = 0; return 0x80;                          /* 16-bit IRQ ack */
+            g_irq_pending &= ~1;                                           /* only the 8-bit completion */
+            return (g_read_val>=0) ? 0xff : 0x7f;
+        case 0xf: g_irq_pending &= ~2; return 0xff;                       /* only the 16-bit completion */
         case 0xa: {                                                         /* DSP data read */
             int v = (g_read_val>=0)? g_read_val : 0xff;
             g_read_val = (g_dsp_cmd==0xe1 && v==4) ? 0x05 : -1;            /* version minor after major */

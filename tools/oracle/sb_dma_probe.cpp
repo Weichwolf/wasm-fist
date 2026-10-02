@@ -12,6 +12,8 @@ HostPt MemBase;
 PagingBlock paging;
 volatile int fist_memread_armed=0;
 extern "C" void fist_memread(Bit8u *) { abort(); }
+volatile int fist_mem_armed=0;
+extern "C" void fist_memrec(Bit8u *, Bit8u) { abort(); }
 Bit8u MixTemp[MIXER_BUFSIZE];
 extern "C" { unsigned char *g_mem; }
 static unsigned consumed, produced;
@@ -26,6 +28,7 @@ void GFX_ShowMsg(const char *format, ...) { abort(); }
 IO_ReadHandleObject::~IO_ReadHandleObject() {}
 IO_WriteHandleObject::~IO_WriteHandleObject() {}
 void PIC_ActivateIRQ(Bitu irq) { if (irq!=7) abort(); irq_delivered=false; }
+void PIC_DeActivateIRQ(Bitu irq) { if (irq!=7) abort(); }
 void PIC_RemoveEvents(PIC_EventHandler handler) {}
 void PIC_AddEvent(PIC_EventHandler handler, float delay, Bitu val) {
     /* These cases reach no scheduled PIC event. Expanding into the clock
@@ -34,6 +37,11 @@ void PIC_AddEvent(PIC_EventHandler handler, float delay, Bitu val) {
 }
 void MixerChannel::FillUp(void) {}
 void MixerChannel::SetFreq(Bitu freq) { freq_add=freq; }
+/* Retained by the original port switch, outside these DMA/IRQ cases. */
+void MixerChannel::Enable(bool) { abort(); }
+void MixerChannel::SetVolume(float, float) { abort(); }
+MixerChannel *MIXER_FindChannel(const char *) { abort(); }
+void MIDI_RawOutByte(Bit8u) { abort(); }
 void MixerChannel::AddSamples_m8(Bitu len, const Bit8u *data) {
     produced+=len;
     if (destination) { memcpy(destination+consumed,data,len); consumed+=len; }
@@ -55,6 +63,7 @@ extern "C" void original_sb_init(void) {
     DmaControllers[0]=new DmaController(0);
     DmaControllers[1]=new DmaController(1);
     sb.type=SBT_16;
+    sb.hw.base=0x220;
     sb.hw.dma8=1;
     sb.hw.irq=7;
     sb.freq=22050;
@@ -62,6 +71,7 @@ extern "C" void original_sb_init(void) {
 }
 
 extern "C" void fist_sb_out(int port, int val) {
+    if (port==0x224) { write_sb(port,val,1); return; }
     if (port!=0x22c) { DMA_Write_Port(port,val,1); return; }
     /* Feed only the captured PCM8 commands. The actual DSP DMA preparation,
      * callback, byte consumption, terminal count and IRQ producers run above. */
@@ -86,11 +96,12 @@ extern "C" void fist_sb_out(int port, int val) {
     case 0xd0: sb.mode=MODE_DMA_PAUSE; break;
     case 0xd4: sb.mode=sb.dma.chan->masked ? MODE_DMA_MASKED : MODE_DMA; break;
     case 0xda: sb.dma.autoinit=false; break;
+    case 0xe1: write_sb(port,val,1); break; /* actual version-byte producer */
     default: abort();
     }
 }
 extern "C" int fist_sb_in(int port) {
-    if (port==0x22e) { sb.irq.pending_8bit=false; return 0; }
+    if (port>=0x220 && port<=0x22f) return read_sb(port,1);
     return DMA_Read_Port(port,1)&0xff;
 }
 extern "C" unsigned fist_sb_read_pcm8(unsigned want, unsigned char *data) {
