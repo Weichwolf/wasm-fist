@@ -168,9 +168,36 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   as do the legacy PCM16/SB16-command path and final shared mixed output. This change is
   device-input progress, not first-817 or full audio acceptance.
 
+- Original startup/channel provenance at `1d050a8`: op 64 dispatches to 786a, op 68 to
+  76fd (effects mode), and op 6c to 77e2 (DSOUNDS load/device initialization). The first
+  scripted call retains AL=0a, AH=02, DL=03 and ECX=0 through e60b/e637 and e2c2; EBX
+  alone is the task inbox. Patch 075 currently transports only the script's pitch-table
+  byte offset, losing the live sound/channel/normalization/pitch register contract.
+  The production gate has no op-64 handler, and 23ec's initial mixer call still resolves
+  to an empty generated 2630 placeholder. These missing producers remain open.
+- `scratch/sequence-capture/digital-init/{paired.gdb,paired-proof.py,paired-first-channel/}`
+  proves the first actual 22ab assignment using same-process paging-aware before/after
+  snapshots and an independent complete instruction trace. At tick 553, channel two
+  selects module sample 679d6, length 29999 and default pitch 65535; all sample bytes
+  match DSOUNDS.BIN at asset offset 79830. The entire 134240-byte asset is mapped at
+  54200. Exactly 25 instructions precede RET 2376: nine module-byte changes plus four
+  saved-ESI stack bytes, with no interrupt. Unallocated DS pages are neither read nor
+  zero-filled. Separate-process snapshots have additional host-address differences
+  and are not used to establish this write footprint.
+- Both probed 600-ms runs retain all 39 frames, 27518 final PCM samples and the endpoint;
+  the complete 30-second register trace also retains the unprobed original output.
+  `init-cpu-proof.json` attributes 1024 initial mixer stores and 45120 instruction rows
+  (one channel rollover, no callback), leaving the physical 2048-byte DMA ring at 128.
+  These counts are source attribution, not an injected delay. The reached 22ab setter
+  reads DS:(1e8b+DL); its C currently omits DS. A reaching port regression/fix is next,
+  followed by the actual register transport, device initialization and IRQ producer.
+  `python3 scratch/sequence-capture/digital-init/paired-proof.py` and `analyze.py`
+  reproduce the provenance checks; no port implementation or parity acceptance is claimed.
+
 ## Next
 
-1. Recover the original 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts,
+1. Restore the reached channel setter and script register transport, then wire the original
+   device initialization and 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts,
    including device setup and DMA cadence. Supply actual instruction/event work to 0026 so
    0034 can recheck frame 817. Add original-backed buffer/state regressions on both targets;
    do not charge an aggregate measured delay or invent a sample source.
