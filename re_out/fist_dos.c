@@ -282,11 +282,16 @@ static void ff_fill_dta(int idx)
 
 /* DOSBox localFile::Read performs the PIC access after fread, including zero-byte EOF reads.
  * DOS_Execute uses DOS_ReadFile directly, so INT 21h's separate 4*AX budget cap is not involved. */
-static size_t mz_read(FILE *f, void *buffer, uint16_t requested)
+static size_t local_file_read(FILE *f, void *buffer, uint16_t requested)
 {
     size_t actual = fread(buffer, 1, requested, f);
     unsigned mask = in(0x21);
     if (mask & 4) out(0x21, mask & 0xfb);
+    return actual;
+}
+static size_t mz_read(FILE *f, void *buffer, uint16_t requested)
+{
+    size_t actual = local_file_read(f, buffer, requested);
     trace_read_slice(-1, requested, actual);
     return actual;
 }
@@ -419,11 +424,20 @@ static void dos_int(void)
         set_cf(0); return; }
     case 0x3f: { /* read, BX=handle CX=count DS:DX=buf -> AX=bytes */
         int h=R_BX; uint16_t n=R_CX; uint32_t p=lin(R_DS,R_DX);
-        if(h<5||h>=MAXH||!g_htab[h]){ R_AX=6; set_cf(1); return; }  /* 6 = invalid handle */
-        size_t r = (p<FIST_MEM_SIZE) ? fread(g_mem+p,1,n,g_htab[h]) : 0;
-        trace_read_slice(h, n, r);
-        TRACE("[dos] 3F read  h=%d n=%u -> %zu\n", h, n, r);
-        R_AX=(uint16_t)r; set_cf(0); return; }
+        if(h<5||h>=MAXH||!g_htab[h]) { R_AX=6; set_cf(1); }
+        else {
+            /* INT 21h reads into dos_copybuf, accesses PIC, then writes guest memory
+             * and return registers before modify_cycles(reg_ax). Internal MZ reads
+             * share localFile::Read but do not execute the callback budget cap. */
+            static uint8_t dos_copybuf[65536];
+            size_t r = local_file_read(g_htab[h], dos_copybuf, n);
+            memcpy(g_mem+p, dos_copybuf, r);
+            R_AX=(uint16_t)r; set_cf(0);
+            trace_read_slice(h, n, r);
+            TRACE("[dos] 3F read  h=%d n=%u -> %zu\n", h, n, r);
+        }
+        fist_clock_charge_dos_transfer(R_AX);
+        return; }
     case 0x40: { /* write, BX=handle CX=count DS:DX=buf -> AX=bytes */
         int h=R_BX; uint16_t n=R_CX; uint32_t p=lin(R_DS,R_DX);
         if(h<5||h>=MAXH||!g_htab[h]){ R_AX=6; set_cf(1); return; }

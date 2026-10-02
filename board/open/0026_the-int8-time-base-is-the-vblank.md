@@ -40,7 +40,9 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   `pic-slices/{decoder-88-retirement,palette-copy-88-source}-proof.json`.
 - Normal core costs one cycle/instruction with SS/REP exceptions. I/O extra costs:
   `30000/1024 = 29` per read, `30000/1365 = 21` per write; suppress below three delay costs.
-  Port per-I/O/pump and indirect-call charges remain approximations (patches 576/582).
+  Remaining ports/pumps still charge whole PIT counts (`fist_vga.c`, `native_main.c`).
+  Decoder instructions are charged by patch 617, startup/sound calibration by 618/620.
+  Full instruction, REP and interrupt timing remains open; the old 576/582 references were incorrect.
 - Current base `7426275`: PIC data ports 0x21/0xa1 retain their independent mask bytes, initialized
   from DOSBox's enabled timer/keyboard/cascade/RTC IRQs. Their I/O delay consumes the active CPU
   budget before the register access and suppresses below three delay costs. Remaining ports still
@@ -96,10 +98,53 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   Full mixed port PCM remains absent. The loader/start-phase step is proved; pre-decoder DOS caps,
   kernel packet/gateway/REP work, remaining port I/O and full timing acceptance remain open.
 
+
+- Current base `ce89956`: `fist_clock_charge_dos_transfer` implements DOSBox `dos.cpp`
+  `modify_cycles(reg_ax)` on the shared active CPU budget: strict `4*AX+5 < remaining`, otherwise
+  five cycles, including exact fractional-clock credits from budgets zero through four. Credits
+  retain the current slice and do not call TIMER_AddTick. The actual original helper is extracted
+  verbatim for `dos_delay_probe.cpp`, linked beside the original PIC queue and I/O helper.
+  `test_dos_caps_and_credits_match_original_active_slice`: 109 cases on both targets (218),
+  including empty budgets, intra-tick deadlines, tick-end credits and subsequent retirement.
+- Ordinary 16-bit disk reads now share `local_file_read` with MZ reads: fread into DOS scratch,
+  PIC mask access, guest copy, AX/CF writes, then callback cap; invalid handles return AX=6/CF=1
+  and still charge the error AX without a PIC access. EOF/zero-length reads still access PIC.
+  `test_dos_file_reads_match_original_buffer_register_and_budget_contract`: 11 cases on both
+  targets (22), covering full/short/zero EOF, 65535 bytes, tiny budgets and invalid handles.
+  The old production code fails all 22 cases (`dos-read-red.log`); both targets now pass.
+  Extender packet/gateway/REP work, write callbacks, other file/device errors and complete PIC
+  event/IRQ ordering remain open; this is the disk-read primitive, not complete DOS acceptance.
+- `scratch/sequence-capture/dos-transfer/{check-proof.py,proof.json,native-10s/,wasm-10s/}`:
+  both complete 10000-ms streams contain 698 frames and match the previous port bytewise.
+  All original times/layouts/palettes match; pixel event 443 remains the only differing frame.
+  All 1151 application read-budget records retain the previously proved trajectory; entry remains
+  cycle 629918/budget 82. Mixed port PCM is absent.
+- Fresh `dos-transfer/{original-30s/,native-30s/,wasm-30s/,30s-proof.json}` extends the diagnostic
+  to 30000 ms: 2100 complete frames on each target, 1324058 mixed original PCM samples. Native/WASM
+  frame bytes match, all original times/layouts/palettes match, and 23 pixel events differ (first 443).
+  The final menu frame matches bytewise and was visually inspected. Port mixed PCM remains absent;
+  this does not accept complete original parity.
+- `bash tools/check_flow.sh`: 57 tests, exact patches, sequential native/WASM builds and the
+  entire existing matrix pass (178 flows / 0 failures), exit 0; `scratch/verify/run.KtGi9K/`.
+  No filter was used. Complete source replay patch (including the new probe wrapper) is
+  `scratch/sequence-capture/dos-transfer/production.patch`; source hashes were checked unchanged
+  after the gate. This validates the bounded primitive and existing matrix scope, not complete
+  original frame/PCM parity or the final ten-run gate.
+- Resident kernel provenance for the next Extender step: `FIST.RUN` has a 48-byte MZ header;
+  module offsets 2578..2615 equal runtime CS=8 IP 18de..197b bytewise (delta c9a).
+  Paging-aware GDB memory reads confirm 16-bit code, FS=10 base 26e0, fs:6e4=16384,
+  fs:1f0=a000, and cs:1612=1614 (gateway module offset 22ae). The original file's initial
+  packet field at module c8e is already 4000; memory-limit initialization can reduce it.
+  Do not use the alternative DPMI gateway 168d or the decoded high-module `fist_image.bin`.
+  Snapshot occurs at tick 6882, after callback 88, and establishes resident bytes/fields only.
+  `kernel-map/{map.gdb,check-map.py,proof.json,phase-original/}`; the complete probed original
+  10000-ms frame and PCM streams match `pic-mask/original-complete/` bytewise.
+
 ## Next
 
-1. Preserve 0036's now-proved MZ load/application-fetch phase. Implement production DOS caps/credits,
-   kernel packet splits, gateway instructions and REP from the original source/assembly.
+1. Preserve 0036's now-proved MZ load/application-fetch phase. Preserve the shared DOS cap/credit and
+   16-bit disk-read primitives; implement Extender packet splits, gateway instructions and REP
+   from the now-mapped original resident kernel.
    Preserve callback ordering and PIC tick state. Match every 10000-ms event, especially 443.
 2. Recover production pre-speaker work (23 mask reads, 720/721), 07b7's polling/CLI/STI and ISR return.
    Derive calibration arguments from operations and budget; never inject 90 or a measured total delay.

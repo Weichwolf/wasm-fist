@@ -45,9 +45,15 @@ class PortIoTest(unittest.TestCase):
                         '-ffunction-sections', '-fdata-sections', str(ROOT / 'tools/oracle/pit_latch_probe.cpp'),
                         '-Wl,--gc-sections', '-lm', '-o', cls.pit_probe], check=True, capture_output=True, text=True)
         cls.pic_probe = str(cls.directory / 'pic-probe')
+        dos_source = (tree / 'src/dos/dos.cpp').read_text()
+        signature = 'static inline void modify_cycles(Bits value) {'
+        helper = signature + dos_source.split(signature, 1)[1].split('\n#else', 1)[0]
+        (cls.directory / 'dos_modify_cycles.h').write_text(helper + '\n')
         subprocess.run(['g++', '-std=gnu++11', *sdl_flags, '-I' + str(tree / 'include'), '-I' + str(tree),
+                        '-I' + str(cls.directory),
                         '-ffunction-sections', '-fdata-sections', str(ROOT / 'tools/oracle/pic_slice_probe.cpp'),
                         str(ROOT / 'tools/oracle/io_delay_probe.cpp'),
+                        str(ROOT / 'tools/oracle/dos_delay_probe.cpp'),
                         '-Wl,--gc-sections', '-lm', '-o', cls.pic_probe], check=True, capture_output=True, text=True)
 
     def test_pit_latches_match_original_float_period_and_rounding(self):
@@ -172,6 +178,53 @@ class PortIoTest(unittest.TestCase):
                                                 capture_output=True, text=True, timeout=30)
                         self.assertEqual(result.returncode, 0, result.stderr)
                         self.assertEqual(result.stdout, expected)
+
+    def test_dos_caps_and_credits_match_original_active_slice(self):
+        prefix, state = self.pic_fixture()
+        cases = [(6354, index, value, 0, 0)
+                 for index in (1198, 2296, 29900, 29995, 29996, 29997, 29998, 29999)
+                 for value in (0, 1, 6, 8, 768, 3072, 16384, 65535)]
+        cases += [(6354, index, value, retire, after)
+                  for index, retire in ((29999, 1), (29998, 2), (2296, 1))
+                  for value in (0, 6, 16384) for after in (0, 1, 5, 6, 25)]
+        for tick, index, value, retire, after in cases:
+            expected = subprocess.check_output([self.pic_probe, str(state), str(tick), str(index),
+                                                'dos-cap', str(value), str(retire), str(after)], text=True)
+            for target, run in self.commands:
+                with self.subTest(target=target, tick=tick, index=index, value=value, retire=retire, after=after):
+                    result = subprocess.run([*run, 'dos-cap', str(tick), str(index), str(value), str(retire), str(after)],
+                                            env=dict(os.environ, FIST_TEXT_STATE=str(prefix)),
+                                            capture_output=True, text=True, timeout=30)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout, expected)
+
+    def test_dos_file_reads_match_original_buffer_register_and_budget_contract(self):
+        prefix, state = self.pic_fixture()
+        data = self.directory / 'dos-read'
+        data.mkdir()
+        cases = ((28814, 8, 8, False), (28814, 768, 768, False),
+                 (28814, 16384, 16384, False), (28814, 65535, 65535, False),
+                 (28814, 32, 7, False), (28814, 8, 0, False), (28814, 0, 32, False),
+                 (29990, 8, 8, False), (29999, 8, 8, False),
+                 (28814, 8, 8, True), (29999, 8, 8, True))
+        for index, requested, length, invalid in cases:
+            raw = bytes((i * 37 + 11) & 255 for i in range(length))
+            (data / 'READ.BIN').write_bytes(raw)
+            returned = 6 if invalid else min(length, requested)
+            phase = subprocess.check_output([self.pic_probe, str(state), '20', str(index),
+                                             'dos-read', str(returned), 'invalid' if invalid else '0'],
+                                            text=True).strip()
+            expected_memory = b'\xa5' * (requested + 16) if invalid else raw[:requested] + b'\xa5' * (requested + 16 - returned)
+            for target, run in self.commands:
+                with self.subTest(target=target, index=index, requested=requested, length=length, invalid=invalid):
+                    output = self.directory / f'{target}-read.memory'
+                    result = subprocess.run([*run, 'dos-read', '20', str(index), str(requested),
+                                             'invalid' if invalid else 'valid', str(output)],
+                                            env=dict(os.environ, FIST_TEXT_STATE=str(prefix), FIST_DATADIR=str(data)),
+                                            capture_output=True, text=True, timeout=30)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.strip(), f'{phase} {returned} {int(invalid)}')
+                    self.assertEqual(output.read_bytes(), expected_memory)
 
     def test_mz_loader_matches_original_reads_relocations_and_short_eof(self):
         prefix, state = self.pic_fixture()

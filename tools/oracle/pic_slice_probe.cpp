@@ -7,6 +7,7 @@ MachineType machine = MCH_VGA;
 Segments Segs;
 void source_io_read_delay(void);
 void source_io_write_delay(void);
+void source_dos_transfer(unsigned value);
 CPU_Regs cpu_regs;
 CPU_Decoder *cpudecoder;
 Bits CPU_Core_Normal_Trap_Run(void) { abort(); }
@@ -32,7 +33,9 @@ static void resize(Bitu) { pixel_clock = 25175000u / 8u; PIC_RemoveEvents(part);
 int main(int argc, char **argv) {
     if (argc != 4 && (argc != 5 || strcmp(argv[4], "transition")) &&
         (argc != 6 || (strcmp(argv[4], "retire") && strcmp(argv[4], "file-read") &&
-                       strcmp(argv[4], "masked-read")))) return 2;
+                       strcmp(argv[4], "masked-read"))) &&
+        (argc != 7 || (strcmp(argv[4], "dos-cap") && strcmp(argv[4], "dos-read"))) &&
+        (argc != 8 || strcmp(argv[4], "dos-cap"))) return 2;
     PIC_8259A controller(NULL);
     unsigned long long start, scanout, tick;
     float lag;
@@ -48,7 +51,8 @@ int main(int argc, char **argv) {
     for (unsigned i = 0; i < PIC_QUEUESIZE - 1; ++i) pic_queue.entries[i].next = &pic_queue.entries[i + 1];
     pic_queue.free_entry = pic_queue.entries;
     PIC_Ticks = tick;
-    if (argc == 5 || (argc == 6 && strcmp(argv[4], "retire")))
+    if (argc == 5 || (argc == 6 && strcmp(argv[4], "retire")) ||
+        (argc == 7 && !strcmp(argv[4], "dos-read")))
         pixel_clock = 28322000u / 9u;
     PIC_AddEvent(vertical, lag);
     /* Post-resize queue snapshot; the resize timestamp itself is outside this proof. */
@@ -65,6 +69,37 @@ int main(int argc, char **argv) {
     CPU_Cycles = 0;
     CPU_CycleLeft = 30000 - index;
     assert(PIC_RunQueue());
+    if (argc == 7 || argc == 8) {
+        unsigned value = strtoul(argv[5], &tail, 10);
+        if (*tail || value > 65535) return 2;
+        unsigned count = 0;
+        if (strcmp(argv[6], "invalid")) {
+            count = strtoul(argv[6], &tail, 10);
+            if (*tail) return 2;
+        }
+        while (count) {
+            while (CPU_Cycles-- > 0) if (!--count) break;
+            if (!count) break;
+            while (!PIC_RunQueue()) TIMER_AddTick();
+        }
+        if (!strcmp(argv[4], "dos-read") && count == 0 && strcmp(argv[6], "invalid")) {
+            source_io_read_delay();
+            unsigned mask = read_data(0x21, 1);
+            if (mask & 4) { source_io_write_delay(); write_data(0x21, mask & 0xfb, 1); }
+        }
+        source_dos_transfer(value);
+        if (argc == 8) {
+            count = strtoul(argv[7], &tail, 10);
+            if (*tail) return 2;
+            while (count) {
+                while (CPU_Cycles-- > 0) if (!--count) break;
+                if (!count) break;
+                while (!PIC_RunQueue()) TIMER_AddTick();
+            }
+        }
+        printf("%llu %d\n", (unsigned long long)(PIC_Ticks * CPU_CycleMax + PIC_TickIndexND()), CPU_Cycles);
+        return 0;
+    }
     if (argc == 6) {
         if (!strcmp(argv[4], "masked-read")) {
             source_io_write_delay();

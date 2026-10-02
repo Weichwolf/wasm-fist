@@ -46,6 +46,18 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   `scratch/sequence-capture/mz-load/{proof.json,final-native-10s/,final-wasm-10s/}`.
   Mixed port PCM and pre-decoder DOS/kernel work remain unresolved; complete comparison still fails.
 
+
+- Current DOS disk-read step at base `ce89956` (0026): new complete 10000-ms native/WASM streams
+  still match one another and the preceding port frames bytewise; every original time/layout/palette
+  matches, with pixel event 443 the sole differing frame. Evidence: `dos-transfer/proof.json` under
+  `scratch/sequence-capture/`. The MZ/app-entry phase is retained. Extender packet/gateway/REP work
+  and mixed port PCM remain open; complete comparison continues to fail.
+- The same step's fresh 30000-ms captures reach the stable menu: 2100 native/WASM frames match
+  bytewise; all original times/layouts/palettes match, 23 pixel events differ, first still 443.
+  Original mixed PCM contains 1324058 samples; port PCM is absent. The last original/port menu
+  frame matches bytewise and was visually checked (`dos-transfer/original-last.png`). Complete
+  scope: `scratch/sequence-capture/dos-transfer/{check-30s.py,30s-proof.json}`.
+
 ## Next
 
 1. Implement shared PIC event/slice ownership and the recovered DOS/Extender kernel transfer

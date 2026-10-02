@@ -572,6 +572,28 @@ void fist_clock_charge_cpu_instructions(unsigned count)
         else if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
     }
 }
+void fist_clock_charge_dos_transfer(uint16_t value)
+{
+    /* DOSBox dos.cpp modify_cycles: the five-cycle floor can credit a callback's
+     * active budget. It does not dispatch PIC or roll TIMER_AddTick forward. */
+    if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
+    unsigned cost = 4u * value;
+    unsigned remaining = cost + 5u < g_cpu_remaining ? g_cpu_remaining - cost : 5u;
+    if (remaining <= g_cpu_remaining) {
+        fist_clock_charge_cpu_instructions(g_cpu_remaining - remaining);
+    } else {
+        uint64_t credit = (uint64_t)(remaining - g_cpu_remaining) * PIT_HZ_;
+        FistClock time = clock_now();
+        if (credit > time.fraction) {
+            --time.counts;
+            time.fraction += CPU_HZ_;
+        }
+        time.fraction -= (unsigned)credit;
+        clock_set(time);
+        g_cpu_time = time;
+        g_cpu_remaining = remaining;
+    }
+}
 static void cpu_io_delay(int write)
 {
     /* DOSBox iohandler.cpp: callback I/O subtracts budget, without retiring an instruction. */

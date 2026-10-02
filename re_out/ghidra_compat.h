@@ -260,6 +260,7 @@ int  fist_load_mz(const char *name, uint16_t load_seg, uint16_t reloc, uint32_t 
 void  fist_timer_pump(void);
 void  fist_set_int8_handler(uint32_t linear);
 void  fist_clock_charge_cpu_instructions(unsigned count);
+void  fist_clock_charge_dos_transfer(uint16_t value);
 void  fist_text_clock_init(void);
 void  fist_clock_wait_bios_ticks(unsigned count);
 

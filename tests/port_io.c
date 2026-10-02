@@ -3,6 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <setjmp.h>
+jmp_buf g_fist_exit;
+volatile int g_fist_exit_code;
+uint32_t fist_ext_base;
+/* Unrelated interrupt routes must never be reached by the file-read regression. */
+void fist_set_int8_handler(uint32_t p) { (void)p; abort(); }
+void fist_input_set_mouse_handler(uint32_t p, unsigned mask) { (void)p; (void)mask; abort(); }
+void fist_input_mouse_state(unsigned *x, unsigned *y, unsigned *b) { (void)x; (void)y; (void)b; abort(); }
+void fist_input_mouse_setpos(unsigned x, unsigned y) { (void)x; (void)y; abort(); }
 
 uint8_t g_mem[FIST_MEM_SIZE];
 void fist_timer_pump(void) { extern void fist_clock_advance(unsigned); fist_clock_advance(1); }
@@ -33,6 +42,56 @@ static void check_endpoint(void)
 
 int main(int argc, char **argv)
 {
+    if (argc == 7 && !strcmp(argv[1], "dos-cap")) {
+        extern void fist_text_init(void), fist_vga_set_mode(int), fist_clock_advance_cpu_cycles(unsigned);
+        extern unsigned fist_clock_cpu_slice(uint64_t *);
+        unsigned tick = strtoul(argv[2], NULL, 10), index = strtoul(argv[3], NULL, 10);
+        unsigned value = strtoul(argv[4], NULL, 10), retire = strtoul(argv[5], NULL, 10);
+        unsigned after = strtoul(argv[6], NULL, 10);
+        assert(tick >= 76 && tick <= 10000 && index < 30000 && value <= 65535);
+        fist_text_init();
+        fist_vga_set_mode(0x13);
+        uint64_t current;
+        fist_clock_cpu_slice(&current);
+        uint64_t target = (uint64_t)tick * 30000 + index;
+        assert(target >= current && target - current <= UINT32_MAX);
+        fist_clock_advance_cpu_cycles((unsigned)(target - current));
+        fist_clock_charge_cpu_instructions(retire);
+        fist_clock_charge_dos_transfer(value);
+        fist_clock_charge_cpu_instructions(after);
+        uint64_t cycle;
+        unsigned remaining = fist_clock_cpu_slice(&cycle);
+        printf("%llu %u\n", (unsigned long long)cycle, remaining);
+        return 0;
+    }
+    if (argc == 7 && !strcmp(argv[1], "dos-read")) {
+        extern void fist_text_init(void), fist_clock_advance_cpu_cycles(unsigned);
+        extern unsigned fist_clock_cpu_slice(uint64_t *);
+        unsigned tick = strtoul(argv[2], NULL, 10), index = strtoul(argv[3], NULL, 10);
+        unsigned requested = strtoul(argv[4], NULL, 10);
+        assert(tick >= 20 && tick <= 10000 && index < 30000 && requested <= 65535);
+        fist_text_init();
+        uint64_t current;
+        fist_clock_cpu_slice(&current);
+        uint64_t target = (uint64_t)tick * 30000 + index;
+        assert(target >= current && target - current <= UINT32_MAX);
+        fist_clock_advance_cpu_cycles((unsigned)(target - current));
+        uint16_t *rf = (uint16_t*)(g_mem + 0xf0000);
+        strcpy((char*)g_mem + 0x20000, "READ.BIN");
+        rf[0] = 0x3d00; rf[7] = 0x2000; rf[3] = 0; rf[10] = 0x21;
+        fist_int_dispatch();
+        assert(!rf[9]);
+        rf[1] = !strcmp(argv[5], "invalid") ? 99 : rf[0];
+        rf[0] = 0x3f00; rf[2] = requested; rf[7] = 0x3000;
+        memset(g_mem + 0x30000, 0xa5, requested + 16);
+        fist_int_dispatch();
+        uint64_t cycle;
+        unsigned remaining = fist_clock_cpu_slice(&cycle);
+        FILE *output = fopen(argv[6], "wb");
+        assert(output && fwrite(g_mem + 0x30000, 1, requested + 16, output) == requested + 16 && !fclose(output));
+        printf("%llu %u %u %u\n", (unsigned long long)cycle, remaining, rf[0], rf[9]);
+        return 0;
+    }
     if (argc == 4 && !strcmp(argv[1], "mz-start")) {
         extern void fist_text_init(void);
         extern unsigned fist_clock_cpu_slice(uint64_t *);
