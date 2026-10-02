@@ -201,6 +201,13 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   unprobed original (908 frames / 574358 samples). Evidence: `pixel-817/{mixer-snapshot.gdb,
   mixer-registers.json,mixer-physical.bin,mixer-original-13s/,proof.json}`.
 
+- Current base `bb25d36`, 0003's bounded active-mixer step restores the reached 2630 byte
+  normalization/feedback/lookup contract. Its paired original state/output regression passes on
+  both targets; shared extender operand resolution is reused. The 62-test/two-flow gate is
+  `run.woiVQD/`. All 1151 loader budgets and application entry cycle 629918/budget 82 remain
+  unchanged in fresh complete 10/30-second captures (`mixer-2630/proof.json`). This step adds
+  no mixer timing: SB completion IRQ/device lifecycle and actual interrupt work remain open.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.

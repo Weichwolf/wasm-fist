@@ -79,6 +79,15 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   and exposes the software mixer running before the decoder. Its state owner is 0003, shared
   time/interrupt owner 0026. Full comparison still fails missing port mixed PCM.
 
+- Current base `bb25d36`, active no-rollover mixer fix (0003): complete fresh 10000-ms native/WASM
+  captures match all 698 original frames/palettes/times. Complete 30000-ms captures retain all
+  2100 previous frame records bytewise; native/WASM match, every original time/layout/palette
+  matches, with the same 27 pixel-difference events, first 817. Mixed port PCM remains absent
+  and strict complete comparisons fail at both endpoints. The source paired probe retains all
+  908 original frames and 574358 PCM samples over 13000 ms. Exact scope/proof:
+  `scratch/sequence-capture/mixer-2630/{check-proof.py,proof.json,native-10s/,wasm-10s/,
+  native-30s/,wasm-30s/}`. The mixer block is corrected; production SB IRQ ordering stays open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

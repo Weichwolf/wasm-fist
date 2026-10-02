@@ -1,0 +1,55 @@
+PATCH 622: preserve active-channel SHR/ADD bytes and DS-relative mixer storage (board:0003).
+
+Original 2630 reads each channel byte, shifts AL/DL by the self-modified immediate
+at 2689/26b3/26df, adds the byte at 268b/26b6/26e2, then accumulates AX. Shift
+counts use the original x86 low-five-bit contract; the widened byte shift is
+zero for effective counts 8..31, and the result/addition wraps to eight bits.
+The old C skips all six operations. At the reached IRQ before KDV callback 168,
+original operands are SHR 1/2/3 and ADD 40/60/70 hex.
+
+26fe/270b read/write the feedback byte at DS:(1621+(1619 & 161d)); the previous
+host address 1621 loses DS. 2714 reads a BYTE at EAX plus the mutable displacement
+stored at 2716. Use the shared flat-operand resolver for either an original
+module offset or the port's existing host-pointer representation. Never apply
+Ghidra's four-byte DAT_2093 indexing or hard-code the selected lookup table.
+
+The paired paging-aware original snapshot and complete trace prove this active
+1024-output block without channel rollover. Samples are read from provisioned
+DSOUNDS.BIN by hash/offset; no game sample assets are added to Git. The regression
+checks the full one-MiB module state, every mixed byte and the untouched DMA half.
+Channel rollover/register callbacks, IRQ/device setup and elapsed mixer work
+remain open. This patch does not replace any of them with an aggregate delay.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -2902,3 +2902,3 @@
+     uVar7 = (undefined2)((uint)uVar5 >> 0x10);
+-    uVar3 = (ushort)(byte)PTR_DAT_0000_15d7[uVar10];
++    uVar3 = (uint8_t)(((uint32_t)PTR_DAT_0000_15d7[uVar10] >> (g_mem[fist_ext_base+0x2689] & 31u)) + g_mem[fist_ext_base+0x268b]);
+     DAT_0000_15ef = DAT_0000_15ef + iVar14;
+@@ -2922,3 +2922,3 @@
+     iVar6 = DAT_0000_160f;
+-    uVar9 = CONCAT31((int3)((uint)uVar9 >> 8),PTR_DAT_0000_15db[uVar10]);
++    uVar9 = CONCAT31((int3)((uint)uVar9 >> 8),(uint8_t)(((uint32_t)PTR_DAT_0000_15db[uVar10] >> (g_mem[fist_ext_base+0x26b3] & 31u)) + g_mem[fist_ext_base+0x26b6]));
+     sVar4 = uVar3 + (short)uVar9;
+@@ -2942,3 +2942,3 @@
+     }
+-    uVar9 = CONCAT31((int3)((uint)uVar9 >> 8),PTR_DAT_0000_15df[uVar10]);
++    uVar9 = CONCAT31((int3)((uint)uVar9 >> 8),(uint8_t)(((uint32_t)PTR_DAT_0000_15df[uVar10] >> (g_mem[fist_ext_base+0x26df] & 31u)) + g_mem[fist_ext_base+0x26e2]));
+     sVar4 = sVar4 + (short)uVar9;
+@@ -2947,3 +2947,3 @@
+     DAT_0000_1619 = DAT_0000_1619 + 1;
+-    pbVar1 = (byte *)(uVar11 + 0x1621);
++    pbVar1 = g_mem + fist_ext_base + uVar11 + 0x1621;
+     bVar2 = (byte)sVar4;
+@@ -2951,7 +2951,8 @@
+                                      bVar2 + *pbVar1)) + 1;
+-    *(char *)(uVar11 + 0x1621) = (char)(uVar10 >> 2);
++    *pbVar1 = (uint8_t)(uVar10 >> 2);
+     iVar6 = CONCAT22((ushort)(uVar10 >> 0x12),
+                      (short)(uVar10 >> 2) << 1 | (ushort)((uVar10 >> 1 & 1) != 0));
+-    uVar5 = CONCAT31((int3)((uint)iVar6 >> 8),(&DAT_0000_2093)[iVar6]);
+-    *puVar15 = (&DAT_0000_2093)[iVar6];
++    uint8_t *lookup = fist_ext_addr((uint32_t)(uintptr_t)puRam00002716);
++    uVar5 = CONCAT31((int3)((uint)iVar6 >> 8),lookup[iVar6]);
++    *puVar15 = (uint8_t)uVar5;
+     puVar15 = puVar15 + 1;

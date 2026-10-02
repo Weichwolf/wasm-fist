@@ -7,6 +7,9 @@
 jmp_buf g_fist_exit;
 volatile int g_fist_exit_code;
 uint32_t fist_ext_base;
+/* The captured active-channel block reaches no rollover/callback. Unexpected
+ * dispatcher work must fail instead of being replaced by a probe no-op. */
+code *fist_icall(uint32_t address) { (void)address; abort(); }
 /* Unrelated interrupt routes must never be reached by the file-read regression. */
 void fist_set_int8_handler(uint32_t p) { (void)p; abort(); }
 void fist_input_set_mouse_handler(uint32_t p, unsigned mask) { (void)p; (void)mask; abort(); }
@@ -42,6 +45,35 @@ static void check_endpoint(void)
 
 int main(int argc, char **argv)
 {
+    if (argc == 4 && !strcmp(argv[1], "mixer")) {
+        extern void m_ext_FUN_0000_2630(void);
+        const unsigned size = 0x100000, dma = 0x2de0;
+        const unsigned pointers[] = {0x15d7,0x15db,0x15df,0x15fb,0x15ff,0x1603,0x23dc,0x23e0,0x2716};
+        fist_ext_base = 0x100000;
+        FILE *input = fopen(argv[2], "rb");
+        assert(input && fread(g_mem+fist_ext_base,1,size,input)==size && fread(g_mem+dma,1,0x800,input)==0x800);
+        assert(fgetc(input)==EOF && !fclose(input));
+        for (unsigned i=0;i<sizeof pointers/sizeof *pointers;++i) {
+            uint32_t *field=(uint32_t *)(g_mem+fist_ext_base+pointers[i]), offset=*field;
+            uint32_t linear=0x10000000u+offset;
+            uint8_t *pointer;
+            if (linear>=0x10000000u && linear-0x10000000u<size) pointer=g_mem+fist_ext_base+offset;
+            else { assert(linear<FIST_MEM_SIZE); pointer=g_mem+linear; }
+            *field=(uint32_t)(uintptr_t)pointer;
+        }
+        m_ext_FUN_0000_2630();
+        /* Report logical guest offsets; verify each actual host pointer before
+         * translating it back. Representational rebasing never masks a wrong value. */
+        for (unsigned i=0;i<sizeof pointers/sizeof *pointers;++i) {
+            uint32_t *field=(uint32_t *)(g_mem+fist_ext_base+pointers[i]);
+            uint32_t relative=*field-(uint32_t)(uintptr_t)g_mem;
+            assert(relative<FIST_MEM_SIZE);
+            *field=relative>=fist_ext_base && relative-fist_ext_base<size ? relative-fist_ext_base : relative-0x10000000u;
+        }
+        FILE *output=fopen(argv[3], "wb");
+        assert(output && fwrite(g_mem+fist_ext_base,1,size,output)==size && fwrite(g_mem+dma,1,0x800,output)==0x800 && !fclose(output));
+        return 0;
+    }
     if (argc == 5 && !strcmp(argv[1], "blit")) {
         extern void fist_text_init(void), fist_vga_set_mode(int), fist_clock_advance_cpu_cycles(unsigned);
         extern unsigned fist_clock_cpu_slice(uint64_t *);

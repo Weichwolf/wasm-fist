@@ -616,7 +616,7 @@ static uint8_t *g_ext_dta;              /* current DTA (host pointer), set by AH
 /* Resolve an extender flat operand to a host pointer.  Small values are module offsets (image is
  * base-0, placed at fist_ext_base); large values are already host pointers into g_mem (heap /
  * framebuffer / TCB, all seeded as host addresses with [0x807]=0 identity). */
-static uint8_t *ext_addr(uint32_t v){
+uint8_t *fist_ext_addr(uint32_t v){
     if (v < 0x10000u) return g_mem + fist_ext_base + v;
     return (uint8_t*)(uintptr_t)v;
 }
@@ -648,7 +648,7 @@ static void kernel_disk_read(void)
     static uint8_t packet[0x4000];
     const uint32_t maximum = sizeof packet;
     uint32_t left = R_ECX32, original_edx = R_EDX32, total = 0;
-    uint8_t *destination = ext_addr(original_edx);
+    uint8_t *destination = fist_ext_addr(original_edx);
     int handle = R_BX, failed;
     uint16_t actual;
     uint32_t ecx, edx = original_edx & 0xffff0000u;
@@ -692,12 +692,12 @@ static void dos_int_ext(void)
     unsigned ah = R_AH;
     switch (ah) {
     case 0x1a: /* set DTA: the extender points its DTA at EDX (== [0x927], a seeded host pointer) */
-        g_ext_dta = ext_addr(R_EDX32);
+        g_ext_dta = fist_ext_addr(R_EDX32);
         set_cf(0); return;
     case 0x4e:   /* find first: stat the file, fill the DTA (size at +0x1a) as DOS would */
     case 0x4f: { /* find next: the KDV opens a single file -> no more matches */
         if (ah == 0x4f) { R_AX = 18; set_cf(1); return; }
-        char *nm = (char*)ext_addr(R_EDX32);
+        char *nm = (char*)fist_ext_addr(R_EDX32);
         FILE *f = open_ci(nm, "rb");
         TRACE("[ext] 4E find-first '%s' -> %s\n", nm, f ? "ok" : "FAIL");
         if (!f) { R_AX = 18; set_cf(1); return; }   /* 18 = no more files */
@@ -711,7 +711,7 @@ static void dos_int_ext(void)
         }
         R_AX = 0; set_cf(0); return; }
     case 0x3d: { /* open, AL=mode, EDX=name -> AX=handle */
-        char *nm = (char*)ext_addr(R_EDX32);
+        char *nm = (char*)fist_ext_addr(R_EDX32);
         const char *mode = (R_AL & 3) ? "rb+" : "rb";
         FILE *f = open_ci(nm, mode);
         if (!f && (R_AL & 3)) f = open_ci(nm, "rb");

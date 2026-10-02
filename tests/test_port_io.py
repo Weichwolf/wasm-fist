@@ -1,5 +1,6 @@
 import base64
 import gzip
+import hashlib
 import importlib.util
 import json
 import os
@@ -27,7 +28,7 @@ class PortIoTest(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.tmp.cleanup)
         cls.directory = Path(cls.tmp.name)
-        # Compile the production 7120 body after its ordered, exact Extender patches.
+        # Compile the reached producer bodies after their ordered, exact Extender patches.
         unit = cls.directory / 'fist_ext.c'
         unit.write_bytes((ROOT / 're_out/fist_ext.c').read_bytes())
         for patch in sorted((ROOT / 'patches').glob('*.diff')):
@@ -37,13 +38,15 @@ class PortIoTest(unittest.TestCase):
                 subprocess.run(['patch', '--batch', '-s', '-p1', '-F0', '--fuzz=0', '-d', cls.directory],
                                input=''.join(sections), text=True, check=True, capture_output=True)
         text = unit.read_text()
-        body = text.split('void __allregs FUN_0000_7120(void)\n\n{', 1)[1].split('\n}\n', 1)[0]
-        declarations = '\n'.join(line for line in text.splitlines()
-                                 if line.startswith(('#define DAT_0000_6e88 ', '#define DAT_0000_0917 ',
-                                                     '#define FUN_0000_7120 ')))
-        blit = cls.directory / 'kdv_blit.c'
+        declarations = '\n'.join(line for line in text.splitlines() if line.startswith('#define '))
+        bodies = []
+        for address in ('7120', '2630'):
+            signature = f'void __allregs FUN_0000_{address}(void)'
+            body = text.split(signature+'\n\n{', 1)[1].split('\n}\n', 1)[0]
+            bodies.append(signature+'\n{'+body+'\n}\n')
+        blit = cls.directory / 'ext_producers.c'
         blit.write_text('#include "ghidra_compat.h"\nextern uint32_t fist_ext_base;\n' + declarations +
-                        '\nvoid __allregs FUN_0000_7120(void)\n{'+body+'\n}\n')
+                        '\n'+'\n'.join(bodies))
         sources = [str(ROOT / 'tests/port_io.c'), str(ROOT / 're_out/fist_vga.c'),
                    str(ROOT / 're_out/fist_dos.c'), str(blit)]
         flags = ['-I' + str(ROOT / 're_out'), '-ffunction-sections', '-fdata-sections', '-Wno-int-conversion']
@@ -243,6 +246,41 @@ class PortIoTest(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(output.read_bytes(), memory)
                     self.assertEqual(result.stdout, expected)
+
+    def test_2630_active_channels_match_complete_original_buffer_and_state(self):
+        proof = json.loads((ROOT / 'tools/oracle/mixer_2630_case.json').read_text())
+        asset = (ROOT / proof['sample_asset']).read_bytes()
+        self.assertEqual(hashlib.sha256(asset).hexdigest(), proof['sample_asset_sha256'])
+        image = (ROOT / 're_out/fist_image.bin').read_bytes()
+        self.assertEqual(hashlib.sha256(image[proof['lookup_offset']:proof['lookup_offset']+512]).hexdigest(),
+                         proof['lookup_sha256'])
+        memory = bytearray(b'\xa5' * (0x100000 + 0x800))
+        memory[:len(image)] = image
+        ring = 0x1621
+        memory[ring:ring+proof['ring_length']] = bytes([proof['ring_initial_fill']])*proof['ring_length']
+        for index, value in proof['ring_initial_exceptions']: memory[ring+index] = value
+        for clip in proof['clips']:
+            data = asset[clip['asset_offset']:clip['asset_offset']+clip['length']]
+            self.assertEqual(hashlib.sha256(data).hexdigest(), clip['sha256'])
+            memory[clip['module_offset']:clip['module_offset']+clip['length']] = data
+        for field in proof['before']:
+            data = bytes.fromhex(field['hex']); memory[field['offset']:field['offset']+len(data)] = data
+        expected = memory.copy()
+        for field in proof['after']:
+            data = bytes.fromhex(field['hex']); expected[field['offset']:field['offset']+len(data)] = data
+        for index, value in proof['ring_final_changes']: expected[ring+index] = value
+        source = self.directory / 'mixer-input.memory'; source.write_bytes(memory)
+        for target, run in self.commands:
+            with self.subTest(target=target):
+                output = self.directory / f'{target}-mixer.memory'
+                result = subprocess.run([*run, 'mixer', str(source), str(output)],
+                                        capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                actual = output.read_bytes()
+                self.assertEqual(len(actual), len(expected))
+                self.assertEqual(actual[:0x100000], expected[:0x100000])
+                self.assertEqual(hashlib.sha256(actual[0x100000:0x100400]).hexdigest(), proof['output_sha256'])
+                self.assertEqual(actual[0x100400:], expected[0x100400:])
 
     def test_extender_reads_match_original_callback_88_cpu_and_register_contract(self):
         prefix,state=self.pic_fixture()

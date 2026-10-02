@@ -41,9 +41,33 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   not port synthesis or final-mixer acceptance. The existing generated 2630 byte sums omit
   these actual SHR/ADD operations. Preserve their width/flag contract and rollover callbacks.
 
+- Current base `bb25d36`, patch 622: the reached active-channel 2630 block now preserves
+  self-modified byte SHR/ADD normalization, DS-relative feedback storage and byte lookup/output
+  through the actual mutable 2716 operand. The existing extender operand resolver has one shared
+  implementation; its DOS callers retain their previous behavior. Generated engine C stays pristine.
+- `tools/oracle/mixer_2630_case.json` comes from paired paging-aware original snapshots before
+  2630 and after its return, independently checked against the complete original CPU trace.
+  The original mixed 1024-byte output SHA-256 is
+  `af7fdff52ebb047412d65148e6b88a39cf75d1fe8319de9415c273ef5276f908` (1016 non-128 bytes).
+  Three actual sample blocks match provisioned DSOUNDS.BIN bytewise; asset hashes/offsets are
+  recorded without adding game samples to Git. The paired read-only probe retains all original
+  13000-ms output: 908 frames, 574358 mixed PCM samples and the complete endpoint.
+- `test_2630_active_channels_match_complete_original_buffer_and_state` compiles the actual
+  ordered-patched producer and compares the entire isolated one-MiB module state, every original
+  mixed byte and the untouched DMA half on both targets. The parent fails on both targets:
+  native SIGSEGV at the unbased feedback address, WASM wrong state. Both now pass.
+  `scratch/sequence-capture/mixer-2630/{red.log,green.log,make-case.py,check-proof.py,proof.json}`
+  preserves provenance, the reaching failure and full production capture scope.
+- `bash tools/check_flow.sh '^(intro|mainmenu)$'`: 62 tests, exact patches, sequential native/WASM
+  builds and two selected flows pass / zero failures, exit 0; `scratch/verify/run.woiVQD/`.
+  Fresh 10/30-second frame diagnostics retain the prior results (0034). All 418 provisioned
+  original files remain unchanged. Scope is this active no-rollover block: rollover byte writes,
+  callback register contracts, SB DMA/IRQ lifecycle, elapsed mixer work and final mixed PCM
+  remain open. No aggregate measured delay was added.
+
 ## Next
 
-1. Recover the reached 2630 channel/normalization/rollover contract and 14e0 completion IRQ,
+1. Recover 2630 channel rollover byte writes/register callbacks and the 14e0 completion IRQ,
    including device setup and DMA cadence. Supply actual instruction/event work to 0026 so
    0034 can recheck frame 817. Add original-backed buffer/state regressions on both targets;
    do not charge an aggregate measured delay or invent a sample source.
