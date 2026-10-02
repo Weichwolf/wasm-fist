@@ -1,0 +1,361 @@
+{
+  "scope": "Actual original 14e0 PIC ISR query and EOI, shared I/O costs and actual PIC/SB request/source producers. CPU protected-frame delivery, PIT wiring, startup and final mixed output remain open.",
+  "image_sha256": "102a5465e03f3b0397041b1bd783d33992ac2c14bb6e42a713af610ec08c3ab1",
+  "code_offset": 5344,
+  "code_bytes": "1e06502ea1330900008ed88ec0f705c4120000080000007404b020e6a0803d9322000000745d833dc412000007750ab00be620e420a880744a535152565755668b15cc1200006683c204b082ee6642eca8027402fec280c209ecb020e620",
+  "source_trace_sha256": "ea9d28ab999959839711f15d5e2283aeab52048e8d7bb66e0320d7786e05eb69",
+  "pic_source_sha256": "0fc7198e98ef69e7d9b1f0268f7a87bee733db34d49151f2850f5fe698eb777a",
+  "device_source_sha256": "dfa9a1ba23cd84311e4becb3cc29fd85935e695f295cae11753fa9949f7bb67b",
+  "original_rows": [
+    {
+      "ip": 5344,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700134,
+      "remaining": 7152
+    },
+    {
+      "ip": 5345,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700135,
+      "remaining": 7151
+    },
+    {
+      "ip": 5346,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700136,
+      "remaining": 7150
+    },
+    {
+      "ip": 5347,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700137,
+      "remaining": 7149
+    },
+    {
+      "ip": 5353,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700138,
+      "remaining": 7148
+    },
+    {
+      "ip": 5355,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700139,
+      "remaining": 7147
+    },
+    {
+      "ip": 5357,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700140,
+      "remaining": 7146
+    },
+    {
+      "ip": 5367,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700141,
+      "remaining": 7145
+    },
+    {
+      "ip": 5373,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700142,
+      "remaining": 7144
+    },
+    {
+      "ip": 5380,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700143,
+      "remaining": 7143
+    },
+    {
+      "ip": 5382,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700144,
+      "remaining": 7142
+    },
+    {
+      "ip": 5389,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700145,
+      "remaining": 7141
+    },
+    {
+      "ip": 5391,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700146,
+      "remaining": 7140
+    },
+    {
+      "ip": 5393,
+      "op": "w",
+      "port": 32,
+      "value": 11,
+      "cycle": 350700147,
+      "remaining": 7139
+    },
+    {
+      "ip": 5395,
+      "op": "r",
+      "port": 32,
+      "value": 128,
+      "cycle": 350700169,
+      "remaining": 7117
+    },
+    {
+      "ip": 5397,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700199,
+      "remaining": 7087
+    },
+    {
+      "ip": 5399,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700200,
+      "remaining": 7086
+    },
+    {
+      "ip": 5401,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700201,
+      "remaining": 7085
+    },
+    {
+      "ip": 5402,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700202,
+      "remaining": 7084
+    },
+    {
+      "ip": 5403,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700203,
+      "remaining": 7083
+    },
+    {
+      "ip": 5404,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700204,
+      "remaining": 7082
+    },
+    {
+      "ip": 5405,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700205,
+      "remaining": 7081
+    },
+    {
+      "ip": 5406,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700206,
+      "remaining": 7080
+    },
+    {
+      "ip": 5407,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700207,
+      "remaining": 7079
+    },
+    {
+      "ip": 5414,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700208,
+      "remaining": 7078
+    },
+    {
+      "ip": 5418,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700209,
+      "remaining": 7077
+    },
+    {
+      "ip": 5420,
+      "op": "w",
+      "port": 548,
+      "value": 130,
+      "cycle": 350700210,
+      "remaining": 7076
+    },
+    {
+      "ip": 5421,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700232,
+      "remaining": 7054
+    },
+    {
+      "ip": 5423,
+      "op": "r",
+      "port": 549,
+      "value": 1,
+      "cycle": 350700233,
+      "remaining": 7053
+    },
+    {
+      "ip": 5424,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700263,
+      "remaining": 7023
+    },
+    {
+      "ip": 5426,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700264,
+      "remaining": 7022
+    },
+    {
+      "ip": 5430,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700265,
+      "remaining": 7021
+    },
+    {
+      "ip": 5433,
+      "op": "r",
+      "port": 558,
+      "value": 127,
+      "cycle": 350700266,
+      "remaining": 7020
+    },
+    {
+      "ip": 5434,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700296,
+      "remaining": 6990
+    },
+    {
+      "ip": 5436,
+      "op": "w",
+      "port": 32,
+      "value": 32,
+      "cycle": 350700297,
+      "remaining": 6989
+    },
+    {
+      "ip": 5438,
+      "op": "n",
+      "port": 0,
+      "value": 0,
+      "cycle": 350700319,
+      "remaining": 6967
+    }
+  ],
+  "original_io": [
+    {
+      "ip": 5393,
+      "op": "w",
+      "port": 32,
+      "value": 11,
+      "cycle": 350700147,
+      "remaining": 7139,
+      "after_cycle": 350700168,
+      "after_remaining": 7118
+    },
+    {
+      "ip": 5395,
+      "op": "r",
+      "port": 32,
+      "value": 128,
+      "cycle": 350700169,
+      "remaining": 7117,
+      "after_cycle": 350700198,
+      "after_remaining": 7088
+    },
+    {
+      "ip": 5420,
+      "op": "w",
+      "port": 548,
+      "value": 130,
+      "cycle": 350700210,
+      "remaining": 7076,
+      "after_cycle": 350700231,
+      "after_remaining": 7055
+    },
+    {
+      "ip": 5423,
+      "op": "r",
+      "port": 549,
+      "value": 1,
+      "cycle": 350700233,
+      "remaining": 7053,
+      "after_cycle": 350700262,
+      "after_remaining": 7024
+    },
+    {
+      "ip": 5433,
+      "op": "r",
+      "port": 558,
+      "value": 127,
+      "cycle": 350700266,
+      "remaining": 7020,
+      "after_cycle": 350700295,
+      "after_remaining": 6991
+    },
+    {
+      "ip": 5436,
+      "op": "w",
+      "port": 32,
+      "value": 32,
+      "cycle": 350700297,
+      "remaining": 6989,
+      "after_cycle": 350700318,
+      "after_remaining": 6968
+    }
+  ]
+}

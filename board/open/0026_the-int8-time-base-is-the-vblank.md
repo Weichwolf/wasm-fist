@@ -352,6 +352,24 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   window scaffold is retained and excluded. No port reset producer, caller flag
   transport, privilege/IF owner or protected IRQ integration is accepted here.
 
+- Additional original completion-IRQ evidence, current base `1afdf78`:
+  `tools/oracle/pic_irq_case.json` records the complete reached 14e0..153e
+  prefix: 36 original fetch rows and all six byte I/O boundaries, with the
+  original module-image, trace, PIC-source and DSP-source hashes. The prior
+  SB acknowledgement fixture omitted immediate-port IN20 (E4); this case
+  retains it. OUT20=0b selects ISR, IN20 returns 80 for the real IRQ7 service,
+  OUT224=82/IN225=01 select PCM8 status, IN22e=7f acknowledges it, and
+  OUT20=20 issues EOI. Command PIC ports have the same original I/O costs as
+  data ports: 21 cycles per write and 29 per read at these reached budgets.
+- `scratch/sequence-capture/pic-controller/{check-source.py,source-proof.json}`
+  independently rechecks every captured opcode location, register-derived I/O
+  byte, timestamp and before/after budget. Entry is cycle 350700134; the 153e
+  boundary is 350700319. The complete original 13000-ms endpoint, all 908
+  indexed frames/palettes/times and 574358 mixed PCM samples remain bytewise
+  equal to the unprobed capture. Originals stay unchanged. This proves the
+  original PIC query/acknowledgement prefix, not port controller state, CPU
+  interrupt-frame construction, handler execution or complete output parity.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.

@@ -433,6 +433,13 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   is a dependency proof; actual startup, protected vectors, caller flags and
   completion IRQ/mixer integration remain open. Reuse the shared clock owner.
 
+- Consume 0026's original 14e0 PIC prefix in `tools/oracle/pic_irq_case.json`
+  and `scratch/sequence-capture/pic-controller/source-proof.json`: actual
+  immediate-port IN20 reads ISR=80 before the PCM8 acknowledgement and EOI.
+  All six reached I/O bytes and budgets are retained, as are the complete
+  13000-ms original frame/PCM/end bytes. Restore actual request/service state;
+  do not replace that byte with a fixed 80 or bypass the protected IRQ path.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover
