@@ -440,6 +440,15 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   13000-ms original frame/PCM/end bytes. Restore actual request/service state;
   do not replace that byte with a fixed 80 or bypass the protected IRQ path.
 
+- Consume 0026's `sb_irq_frame_case.json` original route: the reached IRQ7
+  interrupts real-mode BIOS, enters the resident kernel, and uses an outer
+  operand-32 IRET to invoke 14e0/CPL3 with a 16-bit stack. Handler IRET returns
+  through BF15 and a call gate before the resident real-mode BIOS return.
+  A direct protected-ISR callback omits this reached frame/segment/flag work.
+  All 15 boundary snapshots/six IRETs and complete original 13-second outputs
+  are revalidated; target CPU ownership, actual startup/mixer dispatch and
+  other IRQ contexts remain open. Reuse 0026's time/interrupt owner.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover

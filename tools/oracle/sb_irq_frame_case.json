@@ -1,0 +1,996 @@
+{
+  "scope": "One actual reached IRQ7 at11690ms interrupts a real-mode BIOS call. Recover its real16/protected32 frames, resident return trampoline and six IRET transitions. All-context IRQ integration and target CPU ownership remain open.",
+  "base_revision": "28d01da",
+  "image_sha256": "102a5465e03f3b0397041b1bd783d33992ac2c14bb6e42a713af610ec08c3ab1",
+  "resident_asset_sha256": "af55ca08d62561de94c14d06ae48458a071032d2757f39337864ad9a192de563",
+  "source_binary_sha256": "137f2f5e15a3f021eb9a071f3952cfa6814140103b88d833a12d9d71df776e17",
+  "source_cpu_sha256": "05e78850c3b64ba38825b000e92d7c01aa8ce743b4872d4f8e2e04c7420412bf",
+  "source_flags_sha256": "d9a36589f9ad2bf1f06d82d1e89b5fbf8461164f94edf514ccf96491bcf553be",
+  "source_pic_sha256": "0fc7198e98ef69e7d9b1f0268f7a87bee733db34d49151f2850f5fe698eb777a",
+  "source_trace_sha256": "ea9d28ab999959839711f15d5e2283aeab52048e8d7bb66e0320d7786e05eb69",
+  "source_snapshots_sha256": "67264af0d5eb8ecfaf345b99c9ccee8d6305b9fd5ea22d3c058a6dce5d8b78c4",
+  "original_states": [
+    {
+      "kind": "before-hardware",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 7286,
+      "CPU_CycleLeft": 22714,
+      "cpu_regs.ip.dword[0]": 58991,
+      "cpu.cr0": 0,
+      "paging.cr3": 22698,
+      "cpu.pmode": 0,
+      "cpu.cpl": 0,
+      "cpu.code.big": 0,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        3,
+        0,
+        320,
+        524957,
+        65160,
+        960,
+        542816,
+        4027251200
+      ],
+      "segments": [
+        {
+          "value": 16013,
+          "base": 256208
+        },
+        {
+          "value": 4377,
+          "base": 70032
+        },
+        {
+          "value": 11545,
+          "base": 184720
+        },
+        {
+          "value": 11545,
+          "base": 184720
+        },
+        {
+          "value": 25352,
+          "base": 405632
+        },
+        {
+          "value": 4096,
+          "base": 65536
+        }
+      ],
+      "stack64": "51e4191119cbe0003400023d192de03a070000000000e03a0c00e03a00000000c80040012800e13aff7fff7fff7fff7f0e00e43aff7fff7fff7fff7f00000000",
+      "code32": "3b06e0f672f5ff06e4f6e96dffc60671f7ffe8ddf2b482b0ff32d26633c9e832",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350700000,
+      "effective_flags": 12822,
+      "num": 15,
+      "type": 0,
+      "oldeip": 58991
+    },
+    {
+      "kind": "after-hardware",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 7286,
+      "CPU_CycleLeft": 22714,
+      "cpu_regs.ip.dword[0]": 21420,
+      "cpu.cr0": 0,
+      "paging.cr3": 22698,
+      "cpu.pmode": 0,
+      "cpu.cpl": 0,
+      "cpu.code.big": 0,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        3,
+        0,
+        320,
+        524957,
+        65154,
+        960,
+        542816,
+        4027251200
+      ],
+      "segments": [
+        {
+          "value": 16013,
+          "base": 256208
+        },
+        {
+          "value": 733,
+          "base": 11728
+        },
+        {
+          "value": 11545,
+          "base": 184720
+        },
+        {
+          "value": 11545,
+          "base": 184720
+        },
+        {
+          "value": 25352,
+          "base": 405632
+        },
+        {
+          "value": 4096,
+          "base": 65536
+        }
+      ],
+      "stack64": "6fe61911163251e4191119cbe0003400023d192de03a070000000000e03a0c00e03a00000000c80040012800e13aff7fff7fff7fff7f0e00e43aff7fff7fff7f",
+      "code32": "e88dd801e889d800e885d800e881d800e87dd800e879d800e875d800e871d800",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350700000,
+      "effective_flags": 12310
+    },
+    {
+      "kind": "before-iret",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 7153,
+      "CPU_CycleLeft": 22714,
+      "cpu_regs.ip.dword[0]": 14223,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "cpu.pmode": 1,
+      "cpu.cpl": 0,
+      "cpu.code.big": 0,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        3,
+        0,
+        320,
+        524957,
+        22614,
+        960,
+        542816,
+        4027251200
+      ],
+      "segments": [
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 8,
+          "base": 11728
+        },
+        {
+          "value": 16,
+          "base": 9952
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "stack64": "e01400002b000000163000006a5800001b00f63715bf00002b003300163000008e58000078f8ffdf3300000000fa0af0c003f52c8e58000003000000192d8d3e",
+      "code32": "66cf660fb7e467668d64241667872c248f460066897efc668f46ec8d7eec8be7",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 1,
+        "vector": 15
+      },
+      "cycle": 350700133,
+      "effective_flags": 12290,
+      "iret_index": 0,
+      "oldeip": 14225,
+      "use32": 1
+    },
+    {
+      "kind": "after-iret",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 7153,
+      "CPU_CycleLeft": 22714,
+      "cpu_regs.ip.dword[0]": 5344,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        3,
+        0,
+        320,
+        524957,
+        22634,
+        960,
+        542816,
+        4027251200
+      ],
+      "segments": [
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 27,
+          "base": 9952
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "stack64": "15bf00002b003300163000008e58000078f8ffdf3300000000fa0af0c003f52c8e58000003000000192d8d3e086300100f0001006fe600001911163216300000",
+      "code32": "1e06502ea1330900008ed88ec0f705c4120000080000007404b020e6a0803d93",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 1,
+        "vector": 15
+      },
+      "cycle": 350700133,
+      "effective_flags": 12310,
+      "iret_index": 0
+    },
+    {
+      "kind": "handler-entry",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 7152,
+      "CPU_CycleLeft": 22714,
+      "cpu_regs.ip.dword[0]": 5344,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        3,
+        0,
+        320,
+        524957,
+        22634,
+        960,
+        542816,
+        4027251200
+      ],
+      "segments": [
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 27,
+          "base": 9952
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "stack64": "15bf00002b003300163000008e58000078f8ffdf3300000000fa0af0c003f52c8e58000003000000192d8d3e086300100f0001006fe600001911163216300000",
+      "code32": "1e06502ea1330900008ed88ec0f705c4120000080000007404b020e6a0803d93",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 1,
+        "vector": 15
+      },
+      "cycle": 350700134,
+      "effective_flags": 12310
+    },
+    {
+      "kind": "before-iret",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 1434,
+      "CPU_CycleLeft": 20020,
+      "cpu_regs.ip.dword[0]": 15138,
+      "cpu.cr0": 0,
+      "paging.cr3": 22190,
+      "cpu.pmode": 0,
+      "cpu.cpl": 0,
+      "cpu.code.big": 0,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        12020,
+        49152,
+        129,
+        1,
+        22182,
+        65535,
+        65535,
+        4026543742
+      ],
+      "segments": [
+        {
+          "value": 16,
+          "base": 256
+        },
+        {
+          "value": 8322,
+          "base": 133152
+        },
+        {
+          "value": 622,
+          "base": 9952
+        },
+        {
+          "value": 2068,
+          "base": 33088
+        },
+        {
+          "value": 16,
+          "base": 9952
+        },
+        {
+          "value": 16,
+          "base": 9952
+        }
+      ],
+      "stack64": "f62edd021230a72fdd0213300000000033008c01000033000800232700002b00000083320000425800001b0000002b00000080588658c0580000000000000000",
+      "code32": "cffa9cff1e3204075f5e5d1f5a595b58cffcff064e04d12e5004fe063807fb75",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350708546,
+      "effective_flags": 12870,
+      "iret_index": 1,
+      "oldeip": 15139,
+      "use32": 0
+    },
+    {
+      "kind": "after-iret",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 1434,
+      "CPU_CycleLeft": 20020,
+      "cpu_regs.ip.dword[0]": 12022,
+      "cpu.cr0": 0,
+      "paging.cr3": 22190,
+      "cpu.pmode": 0,
+      "cpu.cpl": 0,
+      "cpu.code.big": 0,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        12020,
+        49152,
+        129,
+        1,
+        22188,
+        65535,
+        65535,
+        4026543742
+      ],
+      "segments": [
+        {
+          "value": 16,
+          "base": 256
+        },
+        {
+          "value": 733,
+          "base": 11728
+        },
+        {
+          "value": 622,
+          "base": 9952
+        },
+        {
+          "value": 2068,
+          "base": 33088
+        },
+        {
+          "value": 16,
+          "base": 9952
+        },
+        {
+          "value": 16,
+          "base": 9952
+        }
+      ],
+      "stack64": "a72fdd0213300000000033008c01000033000800232700002b00000083320000425800001b0000002b00000080588658c0580000000000000000c003c0580000",
+      "code32": "cfcd09cfcd0acfcd0bcfcd0ccfcd0dcfcd0ecfcd0fcfcd70cfcd71cfcd72cfcd",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350708546,
+      "effective_flags": 12306,
+      "iret_index": 1
+    },
+    {
+      "kind": "before-iret",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 1433,
+      "CPU_CycleLeft": 20020,
+      "cpu_regs.ip.dword[0]": 12022,
+      "cpu.cr0": 0,
+      "paging.cr3": 22190,
+      "cpu.pmode": 0,
+      "cpu.cpl": 0,
+      "cpu.code.big": 0,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        12020,
+        49152,
+        129,
+        1,
+        22188,
+        65535,
+        65535,
+        4026543742
+      ],
+      "segments": [
+        {
+          "value": 16,
+          "base": 256
+        },
+        {
+          "value": 733,
+          "base": 11728
+        },
+        {
+          "value": 622,
+          "base": 9952
+        },
+        {
+          "value": 2068,
+          "base": 33088
+        },
+        {
+          "value": 16,
+          "base": 9952
+        },
+        {
+          "value": 16,
+          "base": 9952
+        }
+      ],
+      "stack64": "a72fdd0213300000000033008c01000033000800232700002b00000083320000425800001b0000002b00000080588658c0580000000000000000c003c0580000",
+      "code32": "cfcd09cfcd0acfcd0bcfcd0ccfcd0dcfcd0ecfcd0fcfcd70cfcd71cfcd72cfcd",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350708547,
+      "effective_flags": 12306,
+      "iret_index": 2,
+      "oldeip": 12023,
+      "use32": 0
+    },
+    {
+      "kind": "after-iret",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 1433,
+      "CPU_CycleLeft": 20020,
+      "cpu_regs.ip.dword[0]": 12199,
+      "cpu.cr0": 0,
+      "paging.cr3": 22190,
+      "cpu.pmode": 0,
+      "cpu.cpl": 0,
+      "cpu.code.big": 0,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        12020,
+        49152,
+        129,
+        1,
+        22194,
+        65535,
+        65535,
+        4026543742
+      ],
+      "segments": [
+        {
+          "value": 16,
+          "base": 256
+        },
+        {
+          "value": 733,
+          "base": 11728
+        },
+        {
+          "value": 622,
+          "base": 9952
+        },
+        {
+          "value": 2068,
+          "base": 33088
+        },
+        {
+          "value": 16,
+          "base": 9952
+        },
+        {
+          "value": 16,
+          "base": 9952
+        }
+      ],
+      "stack64": "0000000033008c01000033000800232700002b00000083320000425800001b0000002b00000080588658c0580000000000000000c003c0580000000000000000",
+      "code32": "2eff1616140fa90fa10766581f83c40266cf676b7c2406062e8e1e1210ffb510",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350708547,
+      "effective_flags": 12307,
+      "iret_index": 2
+    },
+    {
+      "kind": "before-iret",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 1392,
+      "CPU_CycleLeft": 20020,
+      "cpu_regs.ip.dword[0]": 12215,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "cpu.pmode": 1,
+      "cpu.cpl": 0,
+      "cpu.code.big": 0,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        396,
+        49152,
+        129,
+        1,
+        22208,
+        65535,
+        65535,
+        4026543742
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 8,
+          "base": 11728
+        },
+        {
+          "value": 16,
+          "base": 9952
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "stack64": "232700002b00000083320000425800001b0000002b00000080588658c0580000000000000000c003c05800000000000000000000000000000000000000000000",
+      "code32": "66cf676b7c2406062e8e1e1210ffb5100666ffb50c06678e5c240a678b7c2406",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350708588,
+      "effective_flags": 12310,
+      "iret_index": 3,
+      "oldeip": 12217,
+      "use32": 1
+    },
+    {
+      "kind": "after-iret",
+      "PIC_Ticks": 11690,
+      "CPU_Cycles": 1392,
+      "CPU_CycleLeft": 20020,
+      "cpu_regs.ip.dword[0]": 10019,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        396,
+        49152,
+        129,
+        1,
+        22594,
+        65535,
+        65535,
+        4026543742
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 27,
+          "base": 9952
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "stack64": "53150000c003000000fa0af06048080040010000000000009d02080003000000000000003300000015bf00002b003300163000008e58000078f8ffdf33000000",
+      "code32": "0f8541ffffffc32e8bc02e8bc0508b1dff1500000fb703a3e71500008b0d0b16",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350708588,
+      "effective_flags": 12931,
+      "iret_index": 3
+    },
+    {
+      "kind": "before-iret",
+      "PIC_Ticks": 11691,
+      "CPU_Cycles": 13293,
+      "CPU_CycleLeft": 0,
+      "cpu_regs.ip.dword[0]": 5474,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        3,
+        0,
+        320,
+        524957,
+        22634,
+        960,
+        542816,
+        4027251200
+      ],
+      "segments": [
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 27,
+          "base": 9952
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "stack64": "15bf00002b003300163000008e58000078f8ffdf3300000000fa0af0c003f52c8e58000003000000192d8d3e086300100f0001006fe600001911163216300000",
+      "code32": "cfb020e62058071fcf0f00000080808080808080808080808094220000942200",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350746707,
+      "effective_flags": 12870,
+      "iret_index": 4,
+      "oldeip": 5475,
+      "use32": 1
+    },
+    {
+      "kind": "after-iret",
+      "PIC_Ticks": 11691,
+      "CPU_Cycles": 13293,
+      "CPU_CycleLeft": 0,
+      "cpu_regs.ip.dword[0]": 48917,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        3,
+        0,
+        320,
+        524957,
+        22646,
+        960,
+        542816,
+        4027251200
+      ],
+      "segments": [
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 27,
+          "base": 9952
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "stack64": "8e58000078f8ffdf3300000000fa0af0c003f52c8e58000003000000192d8d3e086300100f0001006fe60000191116321630000088fe0000192d0000405a0000",
+      "code32": "2eff1d84bf00000e170e170e170e170e170e170e170e170e1700004b594c451c",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350746707,
+      "effective_flags": 12310,
+      "iret_index": 4
+    },
+    {
+      "kind": "before-iret",
+      "PIC_Ticks": 11691,
+      "CPU_Cycles": 13195,
+      "CPU_CycleLeft": 0,
+      "cpu_regs.ip.dword[0]": 11611,
+      "cpu.cr0": 0,
+      "paging.cr3": 22666,
+      "cpu.pmode": 0,
+      "cpu.cpl": 0,
+      "cpu.code.big": 0,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        3,
+        0,
+        320,
+        524957,
+        65154,
+        960,
+        542816,
+        4027251200
+      ],
+      "segments": [
+        {
+          "value": 16013,
+          "base": 256208
+        },
+        {
+          "value": 733,
+          "base": 11728
+        },
+        {
+          "value": 11545,
+          "base": 184720
+        },
+        {
+          "value": 11545,
+          "base": 184720
+        },
+        {
+          "value": 25352,
+          "base": 405632
+        },
+        {
+          "value": 4096,
+          "base": 65536
+        }
+      ],
+      "stack64": "6fe61911163251e4191119cbe0003400023d192de03a070000000000e03a0c00e03a00000000c80040012800e13aff7fff7fff7fff7f0e00e43aff7fff7fff7f",
+      "code32": "cf1e6653bb6e028edb812e14018001668b1e14011e161f176687dc66ff770c66",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350746805,
+      "effective_flags": 12418,
+      "iret_index": 5,
+      "oldeip": 11612,
+      "use32": 0
+    },
+    {
+      "kind": "after-iret",
+      "PIC_Ticks": 11691,
+      "CPU_Cycles": 13195,
+      "CPU_CycleLeft": 0,
+      "cpu_regs.ip.dword[0]": 58991,
+      "cpu.cr0": 0,
+      "paging.cr3": 22666,
+      "cpu.pmode": 0,
+      "cpu.cpl": 0,
+      "cpu.code.big": 0,
+      "cpu.stack.big": 0,
+      "cpu.stack.mask": 65535,
+      "cpu.stack.notmask": 4294901760,
+      "registers": [
+        3,
+        0,
+        320,
+        524957,
+        65160,
+        960,
+        542816,
+        4027251200
+      ],
+      "segments": [
+        {
+          "value": 16013,
+          "base": 256208
+        },
+        {
+          "value": 4377,
+          "base": 70032
+        },
+        {
+          "value": 11545,
+          "base": 184720
+        },
+        {
+          "value": 11545,
+          "base": 184720
+        },
+        {
+          "value": 25352,
+          "base": 405632
+        },
+        {
+          "value": 4096,
+          "base": 65536
+        }
+      ],
+      "stack64": "51e4191119cbe0003400023d192de03a070000000000e03a0c00e03a00000000c80040012800e13aff7fff7fff7fff7f0e00e43aff7fff7fff7fff7f00000000",
+      "code32": "3b06e0f672f5ff06e4f6e96dffc60671f7ffe8ddf2b482b0ff32d26633c9e832",
+      "irq7": {
+        "masked": 0,
+        "active": 0,
+        "inservice": 0,
+        "vector": 15
+      },
+      "cycle": 350746805,
+      "effective_flags": 12822,
+      "iret_index": 5
+    }
+  ],
+  "real_ivt15": "ac53dd02",
+  "protected_descriptors": {
+    "08": "ffffd02d009b0000",
+    "10": "ffffe02600930000",
+    "1b": "ffffe02600f30000",
+    "2b": "ffff000000fbcf10",
+    "33": "7f00000000f74010",
+    "78": "9137080000ec0000"
+  },
+  "resident_entry_region": {
+    "ip": 14018,
+    "bytes": "2e8e1e1810558bec6657660fb77e0436660fb6450c66c1e00336f6450e0275d336660306100267ff70061e665066573666ff751867812424ffbc67810c2400302e66ff361610666815bf000036803efc04c0740d668bc46766ff3582bf0000665036668b451880e4bc80cc306650668b46f46766ff70046766ff3067668d842480feffff3666ff36140124fc3666a314013667668f40083667896806571e36f6450e0175135836ff7504368e4506368e6508368e6d0a33ff668b46f4678978061f5f36668b05668b7efc8b6e0066cf",
+    "asset_file_offset": 17292
+  },
+  "runtime_irq_stub": {
+    "cs": 733,
+    "ip": 21420,
+    "bytes": "e88dd801",
+    "provenance": "Read-only original resident memory; creation of this runtime stub remains open."
+  },
+  "return_trampoline": {
+    "ip": 48917,
+    "bytes": "2eff1d84bf0000",
+    "far_pointer_at": 49028,
+    "far_pointer_bytes": "f63700007800",
+    "call_gate_selector": 120,
+    "call_gate_target_selector": 8,
+    "call_gate_target_offset": 14225
+  },
+  "packed_frame_fields": {
+    "return_cs_dword": 3342379,
+    "outer_ss_dword": 938868763
+  },
+  "full_source_output": {
+    "end_ms": 13000,
+    "frames": 908,
+    "mixed_pcm_samples": 574358,
+    "unchanged_against": "scratch/sequence-capture/pixel-817/original-13s/sequence"
+  },
+  "excluded_probe": "scratch/sequence-capture/sb-irq-frame: initial callbacks lacked Python-side breakpoint guards and captured boot interrupt21; excluded completely."
+}

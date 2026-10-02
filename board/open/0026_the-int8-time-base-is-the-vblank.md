@@ -370,6 +370,39 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   original PIC query/acknowledgement prefix, not port controller state, CPU
   interrupt-frame construction, handler execution or complete output parity.
 
+- Additional read-only IRQ-frame provenance, current base `28d01da`:
+  `tools/oracle/sb_irq_frame_case.json` and
+  `scratch/sequence-capture/sb-irq-frame/guarded/{check-source.py,proof.json}`
+  recover the actual IRQ7 surrounding the first remaining video difference.
+  Hardware vector 0f arrives at cycle 350700000 in real-mode BIOS 1119:e66f,
+  EFLAGS=3216, SS:SP=2d19:fe88. The original CPU pushes a six-byte frame and
+  enters IVT target 2dd:53ac with IF cleared. Its resident stub calls 2c3c;
+  runtime stub creation remains unproved, not replaced by an invented vector.
+- At cycle 350700133, resident 8:378f executes operand-32 IRET from CPL0 with
+  a 16-bit stack. Its five DWORDs are 14e0/2b/3016/586a/37f6001b; the CPU
+  selects SS=1b and enters CPL3, 32-bit CS=2b/base10000000, retaining a 16-bit
+  stack. The full SS DWORD comes from packed BF82/BF84 fields. The handler's
+  return CS DWORD is 0033002b, from packed resident CS/DS fields at 1016.
+  Keep their complete original bytes; do not normalize upper words in evidence.
+- Handler 2b:1562 executes IRET at cycle 350746707 and restores BF15/2b/3016,
+  advancing ESP by 12. BF15 calls far through BF84: its stored pointer is
+  78:37f6, but selector 78 is a DPL3 386 call gate targeting 8:3791. The
+  descriptor supplies the destination offset. The resident return eventually
+  performs real-mode IRET at cycle 350746805 to BIOS 1119:e66f/2d19:fe88.
+  All eight GP registers, six segments and effective flags are restored.
+  Cached CR3 changes 58aa→588a with CR0=0; complete CPU-state restoration is
+  not claimed. All six IRET transitions, including the nested timer route,
+  are retained in 15 source boundary snapshots and matched to actual fetches.
+- The 207-byte resident entry region equals original FIST.RUN bytes at file
+  offset 438c; the BF15 trampoline and BF84 pointer match the original flat
+  module and paging-aware runtime reads. The complete new 13000-ms capture,
+  all 908 frames, 574358 mixed PCM samples, endpoint and bounded CPU trace are
+  byte-identical to the previous unprobed original. The initial debugger probe
+  captured boot INT21 because its Python callbacks lacked explicit condition
+  guards; it is retained and wholly excluded. This proves one original route,
+  not other real/protected/V86 interrupt contexts, a target CPU/IF owner,
+  actual ISR execution or complete video/audio parity.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
