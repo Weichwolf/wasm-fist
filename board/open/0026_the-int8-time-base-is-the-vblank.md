@@ -208,6 +208,12 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   unchanged in fresh complete 10/30-second captures (`mixer-2630/proof.json`). This step adds
   no mixer timing: SB completion IRQ/device lifecycle and actual interrupt work remain open.
 
+- Byte-operand step (0003, patch 623) preserves all loader budgets/app entry and the
+  complete existing 10/30-second video results (`mixer-rollover/proof.json`). The 63-test builds
+  and all 178 existing flows pass, exit 0 (`run.N3Lzlt/`). New original SB provenance belongs to 0003:
+  DSP 1024-byte blocks differ from the DMA 2048-byte ring, and 11111-Hz/Q14 mixer demand gives
+  92/93-ms IRQ tick intervals. Recover demand/DMA/PIC ordering, not a periodic measured delay.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.

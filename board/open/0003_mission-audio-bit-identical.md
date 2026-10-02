@@ -65,6 +65,44 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   callback register contracts, SB DMA/IRQ lifecycle, elapsed mixer work and final mixed PCM
   remain open. No aggregate measured delay was added.
 
+- Current base `7eeb072`, patch 623: original MOV moffs8,AL writes at 25f0/25fa,
+  2750/275a and 27b0/27ba establish byte-only widths for all six normalization operands.
+  Correcting their shared symbol accessors protects each following opcode across all entries
+  into the original rollover blocks. Generated engine C stays pristine.
+- `mixer_2630_rollover_case.json` records a read-only paging-aware original invocation at tick
+  11782, before 2630 through its final RET at 2729. The independent complete 11780:11790 trace
+  proves 1024 writes and one third-channel rollover to the same sample, without a callback.
+  The original selected DMA half's SHA-256 is
+  `01983e5c6c20450e6a49bde2a7772f2648c0e5cd2a8a8872ffe98923ed7d327f` (1008 non-128 bytes).
+  Whole normalization instructions are included in the fixture. The regression compares the
+  entire isolated one-MiB state, every mixed byte in the selected half and the untouched other
+  half. It fails on both parent targets due to opcode corruption and passes with patch 623.
+  Both source captures retain all original 13000-ms frames/PCM/endpoints bytewise.
+- `scratch/sequence-capture/mixer-rollover/{red.log,green.log,make-case.py,reaching-proof.json,
+  check-proof.py,proof.json}` records this scope. `bash tools/check_flow.sh` (no filter): all 63
+  tests, exact patches, sequential native/WASM builds and the entire existing matrix pass
+  (178 flows / zero failures), exit 0; `scratch/verify/run.N3Lzlt/`. The complete replay patch
+  and tested binary hashes are retained; all 418 provisioned original files remain unchanged.
+  Fresh complete 10/30-second frame diagnostics retain the prior video results (0034).
+  This validates byte-only storage; callback/IRQ/DMA/timing and complete original PCM stay open.
+- Next callback evidence is isolated, not a production fix: at tick 13257 channel two rolls
+  to the original silence sample and invokes default callback 2294 (actual RET). Its seven
+  non-stack GP registers are preserved; ESP advances four bytes. Paired source snapshots and
+  a complete independent CPU trace retain all 1119 frames / 706658 PCM samples over 16000 ms.
+  `scratch/sequence-capture/mixer-callback/protected/` includes the state/asset provenance and
+  isolated prototype. The parent emits unequal mixed bytes on native and traps on WASM due
+  to the C function signature mismatch; the prototype matches complete state and all 1024
+  original mixed bytes on both targets. Production repair, other callback variants and timing
+  remain open. The earlier probe using a non-protected page root failed and is excluded.
+- Read-only original device provenance: `scratch/sequence-capture/sb-lifecycle/{probe-final.gdb,
+  device-events-final.jsonl,proof.json,final-original-30s/}` preserves every complete baseline
+  30000-ms frame/PCM/endpoint byte. Commands are timeconstant A6, speaker enable, block size
+  03ff and auto-init 1c: 11111 Hz, a 1024-byte DSP block and a separate 2048-byte DMA ring.
+  The 319 IRQs alternate DMA halves; Q14 mixer increment is 4127. Tick intervals are 92/93 ms,
+  not a fixed 92-ms period. The port incorrectly conflates DSP and DMA lengths. No post-transfer
+  finish snapshot is claimed (the finish breakpoint was not reached). Restore actual mixer
+  demand/DMA/PIC lifecycle; these observed intervals must not become a fitted timer.
+
 ## Next
 
 1. Recover 2630 channel rollover byte writes/register callbacks and the 14e0 completion IRQ,

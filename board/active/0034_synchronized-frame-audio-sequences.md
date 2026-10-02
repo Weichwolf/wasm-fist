@@ -88,6 +88,14 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   `scratch/sequence-capture/mixer-2630/{check-proof.py,proof.json,native-10s/,wasm-10s/,
   native-30s/,wasm-30s/}`. The mixer block is corrected; production SB IRQ ordering stays open.
 
+- Patch 623 (0003): fresh complete native/WASM 10/30-second captures retain every
+  preceding port frame byte. All 698 original 10-second frames match both targets; 30 seconds
+  still has the same 27 pixel differences (first 817), with equal original times/layouts/palettes
+  and 2100 identical native/WASM frames. Strict comparison still fails missing mixed port PCM.
+  `scratch/sequence-capture/mixer-rollover/{check-proof.py,proof.json}` distinguishes these frame
+  diagnostics from the successful 63-test/full-178-flow gate `run.N3Lzlt/`. Callback/DMA/IRQ source-state
+  evidence and remaining work belong to 0003; the first-817 producer is still unresolved.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

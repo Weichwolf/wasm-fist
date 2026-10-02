@@ -248,7 +248,13 @@ class PortIoTest(unittest.TestCase):
                     self.assertEqual(result.stdout, expected)
 
     def test_2630_active_channels_match_complete_original_buffer_and_state(self):
-        proof = json.loads((ROOT / 'tools/oracle/mixer_2630_case.json').read_text())
+        self.check_original_mixer_case('mixer_2630_case.json')
+
+    def test_2630_rollover_preserves_normalization_instruction_bytes(self):
+        self.check_original_mixer_case('mixer_2630_rollover_case.json')
+
+    def check_original_mixer_case(self, filename):
+        proof = json.loads((ROOT / 'tools/oracle' / filename).read_text())
         asset = (ROOT / proof['sample_asset']).read_bytes()
         self.assertEqual(hashlib.sha256(asset).hexdigest(), proof['sample_asset_sha256'])
         image = (ROOT / 're_out/fist_image.bin').read_bytes()
@@ -279,8 +285,11 @@ class PortIoTest(unittest.TestCase):
                 actual = output.read_bytes()
                 self.assertEqual(len(actual), len(expected))
                 self.assertEqual(actual[:0x100000], expected[:0x100000])
-                self.assertEqual(hashlib.sha256(actual[0x100000:0x100400]).hexdigest(), proof['output_sha256'])
-                self.assertEqual(actual[0x100400:], expected[0x100400:])
+                start = 0x100000 + proof.get('output_offset', 0)
+                end = start + proof['output_length']
+                self.assertEqual(hashlib.sha256(actual[start:end]).hexdigest(), proof['output_sha256'])
+                self.assertEqual(actual[0x100000:start], expected[0x100000:start])
+                self.assertEqual(actual[end:], expected[end:])
 
     def test_extender_reads_match_original_callback_88_cpu_and_register_contract(self):
         prefix,state=self.pic_fixture()

@@ -1,0 +1,172 @@
+{
+  "source": "Read-only paging-aware original snapshots before 002b:2630 at tick 11782 and before its final RET at 2729. This block reaches a third-channel rollover to the same sample pointer, without a callback. Whole normalization instructions are included to verify byte-only self-modification. Complete 13000-ms probe and trace captures must match baseline frame/PCM bytes.",
+  "fist_run_sha256": "af55ca08d62561de94c14d06ae48458a071032d2757f39337864ad9a192de563",
+  "sample_asset": "armoredfist/FISTDATA/DSOUNDS.BIN",
+  "sample_asset_sha256": "eb83b59727f23ab6abc0427d9428ab860fcb03523205b922a93583a3a2d6f615",
+  "clips": [
+    {
+      "module_offset": 353032,
+      "length": 17895,
+      "asset_offset": 8456,
+      "sha256": "37adb5c49cdd07bb42e45d80b0935b987dede46e5853117251bd22237e65e340"
+    },
+    {
+      "module_offset": 396624,
+      "length": 7201,
+      "asset_offset": 52048,
+      "sha256": "35c2df4cddaadb556d5d271798ede513b6ffcca6faa519464b470d61df75d3c6"
+    },
+    {
+      "module_offset": 347332,
+      "length": 3891,
+      "asset_offset": 2756,
+      "sha256": "c783e98d7b3a77f3997703259587a0045977803b0128c3bd2f2173169616303c"
+    }
+  ],
+  "before": [
+    {
+      "offset": 9863,
+      "hex": "c0e801044032e4"
+    },
+    {
+      "offset": 9905,
+      "hex": "c0ea0280c260"
+    },
+    {
+      "offset": 9949,
+      "hex": "c0ea0380c270"
+    },
+    {
+      "offset": 5579,
+      "hex": "ffff000000b00000ffff000008630500500d0600c44c0500e7450000211c0000330f000000f803080000040064f39f0c6b1500006b150000c44c05000000000000000000ffff000000007000000300e80100010000006c6e"
+    },
+    {
+      "offset": 9180,
+      "hex": "e02d00f0e03100f000000000"
+    },
+    {
+      "offset": 9865,
+      "hex": "01"
+    },
+    {
+      "offset": 9867,
+      "hex": "40"
+    },
+    {
+      "offset": 9907,
+      "hex": "02"
+    },
+    {
+      "offset": 9910,
+      "hex": "60"
+    },
+    {
+      "offset": 9951,
+      "hex": "03"
+    },
+    {
+      "offset": 9954,
+      "hex": "70"
+    },
+    {
+      "offset": 10006,
+      "hex": "93200000"
+    }
+  ],
+  "after": [
+    {
+      "offset": 9863,
+      "hex": "c0e801044032e4"
+    },
+    {
+      "offset": 9905,
+      "hex": "c0ea0280c260"
+    },
+    {
+      "offset": 9949,
+      "hex": "c0ea0380c270"
+    },
+    {
+      "offset": 5579,
+      "hex": "ffff000000b00000ffff000008630500500d0600c44c0500e7450000211c0000330f000000f4030c0000c40294fe6f016b1500006b150000c44c05000000000000000000ffff000000007000000300ec0100010000008f8f"
+    },
+    {
+      "offset": 9180,
+      "hex": "e02d00f0e03500f000040000"
+    },
+    {
+      "offset": 9865,
+      "hex": "01"
+    },
+    {
+      "offset": 9867,
+      "hex": "40"
+    },
+    {
+      "offset": 9907,
+      "hex": "02"
+    },
+    {
+      "offset": 9910,
+      "hex": "60"
+    },
+    {
+      "offset": 9951,
+      "hex": "03"
+    },
+    {
+      "offset": 9954,
+      "hex": "70"
+    },
+    {
+      "offset": 10006,
+      "hex": "93200000"
+    }
+  ],
+  "output_sha256": "01983e5c6c20450e6a49bde2a7772f2648c0e5cd2a8a8872ffe98923ed7d327f",
+  "output_length": 1024,
+  "output_offset": 1024,
+  "lookup_offset": 8339,
+  "lookup_sha256": "d680581648bb79d2141c9c16972289abd794685eb47b5f266e3eaba59fe406fb",
+  "pointer_fields": [
+    5591,
+    5595,
+    5599,
+    5627,
+    5631,
+    5635,
+    9180,
+    9184,
+    10006
+  ],
+  "ring_length": 2048,
+  "ring_initial_fill": 128,
+  "ring_initial_exceptions": [
+    [
+      0,
+      108
+    ],
+    [
+      1,
+      110
+    ]
+  ],
+  "ring_final_changes": [
+    [
+      0,
+      143
+    ],
+    [
+      1,
+      143
+    ]
+  ],
+  "before_snapshot_sha256": "6573765077ee7326a253533d1d2e51e3a870c3c3d7559366f3ea865ab8db3e71",
+  "after_snapshot_sha256": "26d5f3c1550e7669f06e775a89799144cebfa37b369c669af55fc1dfbdd21f23",
+  "cpu_trace_sha256": "a7e155f22e2c4a64a302c5a6028070853fdff6adda5ad60d912a86a1ba372617",
+  "source_start_trace_cycle_after_fetch": 353460324,
+  "source_ret_trace_cycle_after_fetch": 353505410,
+  "third_channel_rollovers": 1,
+  "callbacks": 0,
+  "mixed_output_bytes": 1024
+}

@@ -1,0 +1,34 @@
+PATCH 623: preserve byte-only software-mixer normalization operands (board:0003).
+
+Original 25f0/25fa, 2750/275a and 27b0/27ba execute MOV moffs8,AL at
+2689/268b, 26b3/26b6 and 26df/26e2. Each operand belongs to a SHR/ADD
+instruction; a word store also destroys its following opcode. Correct the
+six shared symbol accessors to byte width so every decompiled entry into the
+same original rollover blocks uses one storage contract.
+
+The read-only paired original invocation at tick 11782 reaches a third-channel
+rollover to its existing sample without a callback. The complete CPU trace
+proves one rollover and 1024 stores. The regression compares full normalization
+instruction bytes, the one-MiB isolated module state, every original mixed byte
+in the selected DMA half and the untouched other half on native and WASM.
+The parent corrupts adjacent code bytes on both targets. All six accessor widths
+are backed by the original opcodes; the reaching fixture covers channel three.
+Callback/register effects, other rollover variants, IRQ/device cadence and
+elapsed mixer work remain open; no measured delay or callback substitute is added.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -715,8 +715,8 @@
+ #define sRam000f000c (*(short *)(g_mem+0xf000c))
+-#define uRam00002689 (*(undefined2 *)(g_mem+fist_ext_base+0x2689))
+-#define uRam0000268b (*(undefined2 *)(g_mem+fist_ext_base+0x268b))
+-#define uRam000026b3 (*(undefined2 *)(g_mem+fist_ext_base+0x26b3))
+-#define uRam000026b6 (*(undefined2 *)(g_mem+fist_ext_base+0x26b6))
+-#define uRam000026df (*(undefined2 *)(g_mem+fist_ext_base+0x26df))
+-#define uRam000026e2 (*(undefined2 *)(g_mem+fist_ext_base+0x26e2))
++#define uRam00002689 (*(undefined1 *)(g_mem+fist_ext_base+0x2689))
++#define uRam0000268b (*(undefined1 *)(g_mem+fist_ext_base+0x268b))
++#define uRam000026b3 (*(undefined1 *)(g_mem+fist_ext_base+0x26b3))
++#define uRam000026b6 (*(undefined1 *)(g_mem+fist_ext_base+0x26b6))
++#define uRam000026df (*(undefined1 *)(g_mem+fist_ext_base+0x26df))
++#define uRam000026e2 (*(undefined1 *)(g_mem+fist_ext_base+0x26e2))
+ #define uRam00006ad2 (*(undefined2 *)(g_mem+fist_ext_base+0x6ad2))
