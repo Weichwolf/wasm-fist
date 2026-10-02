@@ -660,10 +660,11 @@ static int vga_status(unsigned long long c){   /* port 0x3da at clock c: bit3 vs
 int in(int port)
 {
     port &= 0xffff;
-    if (port == 0x21 || port == 0xa1) cpu_io_delay(0);
+    int sb = fist_sb_owns(port);
+    if (port == 0x21 || port == 0xa1 || sb) cpu_io_delay(0);
     else fist_timer_pump();   /* remaining port costs are owned by board:0026 */
     if (fist_opl_owns(port)) return fist_opl_in(port);  /* OPL FM 0x388 status (FIST_OPL/FIST_SB) */
-    if (fist_sb_owns(port)) return fist_sb_in(port);   /* SB DSP + 8237 DMA window (FIST_SB, default off) */
+    if (sb) return fist_sb_in(port);   /* SB DSP + 8237 DMA window (FIST_SB, default off) */
     switch (port) {
     case 0x3c7: return 0;
     case 0x3c8: return g_dac_widx & 0xff;
@@ -695,10 +696,11 @@ int in(int port)
 void out(int port, int val)
 {
     port &= 0xffff; val &= 0xff;
-    if (port == 0x21 || port == 0xa1) cpu_io_delay(1);
+    int sb = fist_sb_owns(port);
+    if (port == 0x21 || port == 0xa1 || sb) cpu_io_delay(1);
     else fist_timer_pump();   /* remaining port costs are owned by board:0026 */
     if (fist_opl_owns(port)) { fist_opl_out(port, val); return; }  /* OPL FM 0x388/0x389 (FIST_OPL/FIST_SB) */
-    if (fist_sb_owns(port)) { fist_sb_out(port, val); return; }   /* SB DSP + 8237 DMA (FIST_SB, default off) */
+    if (sb) { fist_sb_out(port, val); return; }   /* SB DSP + 8237 DMA (FIST_SB, default off) */
     switch (port) {
     case 0x3c8:
         if (getenv("FIST_VGA_TRACE") && g_vmode == 0x13 && val == 0)

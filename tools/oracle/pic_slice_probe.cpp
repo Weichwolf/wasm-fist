@@ -33,7 +33,38 @@ static void vertical(Bitu) {
 }
 static void resize(Bitu) { pixel_clock = 25175000u / 8u; PIC_RemoveEvents(part); }
 
+static void initialize_queue(void) {
+    for (unsigned i = 0; i < PIC_QUEUESIZE - 1; ++i)
+        pic_queue.entries[i].next = &pic_queue.entries[i + 1];
+    pic_queue.free_entry = pic_queue.entries;
+}
+
 int main(int argc, char **argv) {
+    if (argc == 4 && !strcmp(argv[1], "device-io")) {
+        PIC_8259A controller(NULL);
+        initialize_queue();
+        char *tail;
+        unsigned long long start = strtoull(argv[2], &tail, 10);
+        if (*tail) return 2;
+        PIC_Ticks = start / 30000u;
+        CPU_CycleLeft = 30000 - start % 30000u;
+        assert(PIC_RunQueue());
+        FILE *script = fopen(argv[3], "r");
+        if (!script) return 2;
+        char op; unsigned port, value, count = 0; int fields;
+        while ((fields = fscanf(script, " %c %x %x", &op, &port, &value)) == 3) {
+            while (CPU_Cycles-- <= 0) while (!PIC_RunQueue()) TIMER_AddTick();
+            unsigned long long fetched = PIC_Ticks * 30000u + PIC_TickIndexND();
+            if (op == 'r') source_io_read_delay();
+            else if (op == 'w') source_io_write_delay();
+            else if (op != 'n') return 2;
+            printf("%llu %llu %d\n", fetched,
+                   (unsigned long long)(PIC_Ticks * 30000u + PIC_TickIndexND()), CPU_Cycles);
+            ++count;
+        }
+        if (fields != EOF || ferror(script) || fclose(script) || !count) return 2;
+        return 0;
+    }
     if (argc != 4 && (argc != 5 || strcmp(argv[4], "transition")) &&
         (argc != 6 || (strcmp(argv[4], "retire") && strcmp(argv[4], "file-read") &&
                        strcmp(argv[4], "masked-read") && strcmp(argv[4], "blit"))) &&
@@ -52,8 +83,7 @@ int main(int argc, char **argv) {
     if (!*argv[2] || *tail || target > UINT32_MAX || target < tick) return 2;
     unsigned long index = strtoul(argv[3], &tail, 10);
     if (!*argv[3] || *tail || index >= 30000) return 2;
-    for (unsigned i = 0; i < PIC_QUEUESIZE - 1; ++i) pic_queue.entries[i].next = &pic_queue.entries[i + 1];
-    pic_queue.free_entry = pic_queue.entries;
+    initialize_queue();
     PIC_Ticks = tick;
     if (argc == 5 || (argc == 6 && strcmp(argv[4], "retire") && strcmp(argv[4], "blit")) ||
         (argc == 7 && !strcmp(argv[4], "dos-read")))

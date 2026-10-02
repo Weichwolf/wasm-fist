@@ -222,11 +222,42 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   (`mixer-callback/proof.json`). This adds no timing: `fist_icall`'s old pump, full instruction
   retirement and actual SB DMA/PIC/ISR work remain unresolved.
 
+- Current base `a88d3e2`: enabled SB/DMA byte ports now use the existing shared
+  CPU I/O delay before device access, alongside PIC mask ports. Ownership is
+  resolved once per access. Normal instruction fetch remains the caller's work;
+  no second clock, fixed reset-loop count or fitted elapsed delay is added.
+  Other ports still use the cooperative pump and remain open.
+- `tools/oracle/sb_io_clock_case.json` records all 68 original 133a instructions
+  through the reset-high phase, their opcodes/cycles and all 20 reads of 226=ff.
+  The independently captured complete 525:526-ms CPU trace and 600-ms original
+  frames/PCM/endpoint are revalidated by `sb-io-clock/check-proof.py`.
+  This phase ends before the falling reset; reset readiness and IRQ/IF are not
+  accepted. The original normal-core fetch and actual `IO_*_Delay`/PIC source
+  independently supply all remaining-budget results.
+- `test_sb_io_clock.py` links real port/SB/DOS owners on both targets. The reached
+  phase plus four thin-budget/tick-boundary starts produce ten matching full
+  68-row timelines, device reads and active budgets, without cooperative pumping.
+  Parent code fails all ten cases: its first OUT ends at 15778287 instead of
+  original 15778283 and routes 21 accesses through the unrelated PIT pump.
+  Existing tests reuse one `build_pic_probe` owner; the original timing endpoint
+  does not emulate SB data, whose reads are checked against the actual capture.
+- `scratch/sequence-capture/sb-io-clock/{red-final-reaching.log,green-unit.log,
+  check-proof.py,proof.json}` retains the bounded reaching proof. `bash
+  tools/check_flow.sh '^(intro|mainmenu|audio-.*)$'` passes 77 tests, exact patches,
+  sequential native/WASM builds and all five selected flows, with separately
+  recorded exit 0; `scratch/verify/run.rjEjwk/`. Fresh complete 30000-ms captures
+  retain all 2100 prior port frames and 43 register packets bytewise on both
+  targets. All 418 original files remain unchanged. This filtered gate does not
+  accept the full matrix, original video parity or absent final mixed port PCM.
+  Generic PIC events, delayed SB reset, protected IRQ/IF, producer instruction
+  work and final mixer integration remain open (0003).
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
    Continue 0034's first remaining pixel difference at event 817 in the 30000-ms capture.
-   Recover 0003's now-reaching SB IRQ/mixer state and instruction work; preserve the proved 7120
+   Recover 0003's delayed DSP reset on the shared PIC event clock, then SB IRQ/mixer
+   state and instruction work; preserve the proved 7120
    REP copy. Do not inject elapsed delays or change capture phase.
 2. Recover production pre-speaker work (23 mask reads, 720/721), 07b7's polling/CLI/STI and ISR return.
    Derive calibration arguments from operations and budget; never inject 90 or a measured total delay.

@@ -36,6 +36,25 @@ def patched_unit(directory, filename):
     return unit.read_text()
 
 
+def build_pic_probe(directory):
+    tree = ROOT / 'third_party/dosbox-build/dosbox-0.74-3'
+    dos_source = (tree / 'src/dos/dos.cpp').read_text()
+    signature = 'static inline void modify_cycles(Bits value) {'
+    helper = signature + dos_source.split(signature, 1)[1].split('\n#else', 1)[0]
+    (directory / 'dos_modify_cycles.h').write_text(helper + '\n')
+    output = str(directory / 'pic-probe')
+    subprocess.run(['g++', '-std=gnu++11',
+                    *subprocess.check_output(['sdl-config', '--cflags'], text=True).split(),
+                    '-I' + str(tree / 'include'), '-I' + str(tree), '-I' + str(directory),
+                    '-ffunction-sections', '-fdata-sections',
+                    str(ROOT / 'tools/oracle/pic_slice_probe.cpp'),
+                    str(ROOT / 'tools/oracle/io_delay_probe.cpp'),
+                    str(ROOT / 'tools/oracle/dos_delay_probe.cpp'),
+                    str(ROOT / 'tools/oracle/rep_probe.cpp'), '-Wl,--gc-sections', '-lm',
+                    '-o', output], check=True, capture_output=True, text=True)
+    return output
+
+
 class PortIoTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -81,18 +100,7 @@ class PortIoTest(unittest.TestCase):
         subprocess.run(['g++', '-std=gnu++11', *sdl_flags, '-I' + str(tree / 'include'), '-I' + str(tree),
                         '-ffunction-sections', '-fdata-sections', str(ROOT / 'tools/oracle/pit_latch_probe.cpp'),
                         '-Wl,--gc-sections', '-lm', '-o', cls.pit_probe], check=True, capture_output=True, text=True)
-        cls.pic_probe = str(cls.directory / 'pic-probe')
-        dos_source = (tree / 'src/dos/dos.cpp').read_text()
-        signature = 'static inline void modify_cycles(Bits value) {'
-        helper = signature + dos_source.split(signature, 1)[1].split('\n#else', 1)[0]
-        (cls.directory / 'dos_modify_cycles.h').write_text(helper + '\n')
-        subprocess.run(['g++', '-std=gnu++11', *sdl_flags, '-I' + str(tree / 'include'), '-I' + str(tree),
-                        '-I' + str(cls.directory),
-                        '-ffunction-sections', '-fdata-sections', str(ROOT / 'tools/oracle/pic_slice_probe.cpp'),
-                        str(ROOT / 'tools/oracle/io_delay_probe.cpp'),
-                        str(ROOT / 'tools/oracle/dos_delay_probe.cpp'),
-                        str(ROOT / 'tools/oracle/rep_probe.cpp'),
-                        '-Wl,--gc-sections', '-lm', '-o', cls.pic_probe], check=True, capture_output=True, text=True)
+        cls.pic_probe = build_pic_probe(cls.directory)
 
     def test_pit_latches_match_original_float_period_and_rounding(self):
         for mode in (2, 3):

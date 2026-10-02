@@ -381,6 +381,26 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   other mixer registers/device variants, the legacy PCM16 producer and final
   shared mixer remain open. No measured instruction interval is inserted as a delay.
 
+- Current base `a88d3e2`: 0026 owns the SB/DMA I/O timing correction and its
+  full original-backed 68-instruction reset-high regression. Both targets retain
+  all 20 original 226=ff reads and exact active CPU budgets at the reached phase
+  and four thin-budget/tick boundaries; all ten parent phases fail and now pass.
+  Consume `scratch/sequence-capture/sb-io-clock/proof.json`; do not add a device
+  clock or charge normal fetch twice. The 77-test/five-selected-flow gate exits
+  zero (`scratch/verify/run.rjEjwk/`), retaining complete 2100-frame/43-packet
+  production captures and every original asset byte. Original output acceptance
+  remains open, including absent final mixed PCM.
+- Revalidated original 133a executes 217 instructions before RET and returns
+  full EAX=ffffffff on ready AA, not a CF success result. Its reset-low phase
+  reads 22e=7f 33 times, then ff and 22a=aa. Original DSP reset clears state on
+  high bit 0 and schedules `DSP_FinishReset` at 0.020 ms after the low write;
+  PIC may requeue the active CPU slice before that callback. Evidence:
+  `scratch/sequence-capture/sb-reset-probe/{check-source.py,proof.json}`; the
+  complete 600-ms original outputs are unchanged. Current port reset still
+  queues AA immediately, and the actual producer body is missing. Recover
+  shared event ordering/cancellation and instruction polling before integrating
+  startup. The observed iteration counts are diagnostic, never fixed delays.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover
