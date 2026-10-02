@@ -7,9 +7,16 @@
 jmp_buf g_fist_exit;
 volatile int g_fist_exit_code;
 uint32_t fist_ext_base;
-/* The captured active-channel block reaches no rollover/callback. Unexpected
- * dispatcher work must fail instead of being replaced by a probe no-op. */
-code *fist_icall(uint32_t address) { (void)address; abort(); }
+/* Bind only the captured original default RET callback, using its actual
+ * production body. Every other dispatcher target fails instead of being stubbed. */
+extern void m_ext_FUN_0000_2294(void);
+static unsigned g_mixer_callbacks;
+code *fist_icall(uint32_t address)
+{
+    assert(address == fist_ext_base + 0x2294);
+    ++g_mixer_callbacks;
+    return (code *)m_ext_FUN_0000_2294;
+}
 /* Unrelated interrupt routes must never be reached by the file-read regression. */
 void fist_set_int8_handler(uint32_t p) { (void)p; abort(); }
 void fist_input_set_mouse_handler(uint32_t p, unsigned mask) { (void)p; (void)mask; abort(); }
@@ -45,7 +52,7 @@ static void check_endpoint(void)
 
 int main(int argc, char **argv)
 {
-    if (argc == 4 && !strcmp(argv[1], "mixer")) {
+    if (argc == 5 && !strcmp(argv[1], "mixer")) {
         extern void m_ext_FUN_0000_2630(void);
         const unsigned size = 0x100000, dma = 0x2de0;
         const unsigned pointers[] = {0x15d7,0x15db,0x15df,0x15fb,0x15ff,0x1603,0x23dc,0x23e0,0x2716};
@@ -62,6 +69,7 @@ int main(int argc, char **argv)
             *field=(uint32_t)(uintptr_t)pointer;
         }
         m_ext_FUN_0000_2630();
+        assert(g_mixer_callbacks == strtoul(argv[4], NULL, 0));
         /* Report logical guest offsets; verify each actual host pointer before
          * translating it back. Representational rebasing never masks a wrong value. */
         for (unsigned i=0;i<sizeof pointers/sizeof *pointers;++i) {

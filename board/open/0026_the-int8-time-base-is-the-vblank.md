@@ -214,6 +214,14 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   DSP 1024-byte blocks differ from the DMA 2048-byte ring, and 11111-Hz/Q14 mixer demand gives
   92/93-ms IRQ tick intervals. Recover demand/DMA/PIC ordering, not a periodic measured delay.
 
+- Default-RET callback step (0003, patch 624) fixes a reached native wrong-buffer/WASM-signature
+  failure. The original CALL/RET preserves seven GP registers and pops four ESP bytes; do not
+  assign decompiler extraouts to the live pitch/partial sample. The private 64-test/two-flow gate
+  passes (`scratch/callback-worktree/scratch/verify/run.ZRagJp/`); canonical source inputs match.
+  Fresh complete 10/30-second captures retain all loader budgets/app entry and frame bytes
+  (`mixer-callback/proof.json`). This adds no timing: `fist_icall`'s old pump, full instruction
+  retirement and actual SB DMA/PIC/ISR work remain unresolved.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.

@@ -96,6 +96,15 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   diagnostics from the successful 63-test/full-178-flow gate `run.N3Lzlt/`. Callback/DMA/IRQ source-state
   evidence and remaining work belong to 0003; the first-817 producer is still unresolved.
 
+- Patch 624 (0003), reached default-RET callback: new complete 10/30-second native/WASM
+  captures retain all preceding port frame bytes. All 698 original 10-second frames match;
+  2100 cross-target 30-second frames match, every original time/layout/palette matches,
+  and the same 27 pixel-difference events remain (first 817). Port mixed PCM is absent and
+  strict comparison fails at both endpoints. `scratch/sequence-capture/mixer-callback/{
+  check-proof.py,proof.json}` retains exact scope; its paired original probe preserves all
+  1119 frames and 706658 PCM samples over 16000 ms. The 64-test/two-flow gate belongs to 0003;
+  this is callback-buffer progress, not SB IRQ/timing or complete frame/audio acceptance.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

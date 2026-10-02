@@ -1,0 +1,55 @@
+PATCH 624: preserve the original default mixer completion callback ABI (board:0003).
+
+CALL [157b/157f/1583] reaches the original 2294 RET callback. It has no C
+arguments or return value. The source trace at 13257 proves channel two's
+rollover CALL/RET preserves EAX/ECX/EDX/EBX/EBP/ESI/EDI and pops four bytes
+from ESP. The rollover routine separately saves/restores EAX. In particular,
+ECX keeps the new pitch (zero for the original silence sample), while EDX
+keeps the preceding partial sample. Do not overwrite either with Ghidra's
+uninitialized extraout locals after a call. The same original default RET
+vector is installed in all three channel slots.
+
+Call the resolved actual void(void) function and retain the live C values.
+The old int-returning call type traps on WASM; native proceeds but emits
+unequal mixed bytes. The paging-aware paired original buffer/state fixture
+and complete independent trace prove one rollover, one default RET callback
+and 1024 stores. Both original 16000-ms captures retain every frame/PCM byte.
+The regression binds the actual translated 2294 body, counts calls, compares
+all one-MiB module bytes, every mixed byte and the untouched DMA half.
+No callback is stubbed or skipped. Register-mutating custom callback ABIs,
+other channel-switch variants, IRQ/device cadence and elapsed work remain
+unproved; this patch adds no fixed delay or guessed register value.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -2859,10 +2859,4 @@
+   int iVar6;
+-  int extraout_ECX;
+-  int extraout_ECX_00;
+-  int extraout_ECX_01;
+   int iVar8;
+-  undefined4 extraout_EDX;
+   undefined4 uVar9;
+-  undefined4 extraout_EDX_00;
+-  undefined4 extraout_EDX_01;
+   uint uVar10;
+@@ -2893,5 +2887,3 @@
+       if (PTR_DAT_0000_15fb != PTR_DAT_0000_15d7) {
+-        (*(code *)fist_icall(fist_ext_base+0x0u+(uint16_t)(PTR_FUN_0000_157b)))(uVar5);
+-        iVar8 = extraout_ECX;
+-        uVar9 = extraout_EDX;
++        ((void (*)(void))fist_icall(fist_ext_base+0x0u+(uint16_t)(PTR_FUN_0000_157b)))();
+       }
+@@ -2914,5 +2906,3 @@
+       if (PTR_DAT_0000_15ff != PTR_DAT_0000_15db) {
+-        (*(code *)fist_icall(fist_ext_base+0x0u+(uint16_t)(PTR_FUN_0000_157f)))();
+-        iVar8 = extraout_ECX_00;
+-        uVar9 = extraout_EDX_00;
++        ((void (*)(void))fist_icall(fist_ext_base+0x0u+(uint16_t)(PTR_FUN_0000_157f)))();
+       }
+@@ -2934,5 +2924,3 @@
+       if (PTR_DAT_0000_1603 != PTR_DAT_0000_15df) {
+-        (*(code *)fist_icall(fist_ext_base+0x0u+(uint16_t)(PTR_FUN_0000_1583)))();
+-        iVar8 = extraout_ECX_01;
+-        uVar9 = extraout_EDX_01;
++        ((void (*)(void))fist_icall(fist_ext_base+0x0u+(uint16_t)(PTR_FUN_0000_1583)))();
+       }

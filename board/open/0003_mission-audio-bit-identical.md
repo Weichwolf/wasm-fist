@@ -85,15 +85,36 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   and tested binary hashes are retained; all 418 provisioned original files remain unchanged.
   Fresh complete 10/30-second frame diagnostics retain the prior video results (0034).
   This validates byte-only storage; callback/IRQ/DMA/timing and complete original PCM stay open.
-- Next callback evidence is isolated, not a production fix: at tick 13257 channel two rolls
-  to the original silence sample and invokes default callback 2294 (actual RET). Its seven
-  non-stack GP registers are preserved; ESP advances four bytes. Paired source snapshots and
-  a complete independent CPU trace retain all 1119 frames / 706658 PCM samples over 16000 ms.
-  `scratch/sequence-capture/mixer-callback/protected/` includes the state/asset provenance and
-  isolated prototype. The parent emits unequal mixed bytes on native and traps on WASM due
-  to the C function signature mismatch; the prototype matches complete state and all 1024
-  original mixed bytes on both targets. Production repair, other callback variants and timing
-  remain open. The earlier probe using a non-protected page root failed and is excluded.
+- Current base `105026b`, patch 624: the reached channel-two rollover invokes the actual
+  original default callback 2294 (RET). Its seven non-stack GP registers are preserved and
+  ESP advances four bytes; the rollover separately saves/restores EAX. All three channel
+  vectors contain this original default callback. Calls now use its actual void(void) C ABI
+  and retain live ECX/EDX values instead of assigning uninitialized decompiler extraouts.
+  The callback is dispatched, not skipped or replaced with a stub; generated C stays pristine.
+- `mixer_2630_callback_case.json` records the paired paging-aware invocation at tick 13257
+  and the complete independent CPU trace: one channel-two silence rollover, one RET callback
+  and 1024 stores. Both source captures retain all 1119 frames / 706658 PCM samples over
+  16000 ms. The selected original mixed-buffer SHA-256 is
+  `54a44a1cb1590fb87a9303b635ac18d63362bd3eb62b6518e4f5fe003caf52a4` (984 non-128 bytes).
+  Samples match provisioned DSOUNDS.BIN and the silence sentinel matches the original image.
+  Earlier non-protected-page-root probe failed and remains excluded.
+- `test_2630_default_callback_preserves_original_registers_and_mixed_bytes` binds the actual
+  translated 2294 body, counts callback invocations and compares full isolated one-MiB state,
+  every original mixed byte and the untouched DMA half. The reaching parent regression fails
+  on native (unequal PCM bytes) and WASM (function signature mismatch). The new producer and
+  both previous complete mixer cases pass on both targets. Evidence under
+  `scratch/sequence-capture/mixer-callback/` includes source snapshots/trace, production red/green,
+  `check-proof.py`, `proof.json`, complete 10/30-second captures and canonical source hashes.
+- A separate checkout and separate executables preserve the byte-fix's full-matrix run.
+  `NATIVE=.../mixer-callback/native OUTJS=.../mixer-callback/wasm/fistrun.js
+  bash tools/check_flow.sh '^(intro|mainmenu)$'`: 64 tests, exact patches, sequential native/WASM
+  builds and two selected flows pass / zero failures, exit 0;
+  `scratch/callback-worktree/scratch/verify/run.ZRagJp/`. All 734 relevant source/build inputs
+  are identical in the canonical checkout, whose three reaching mixer regressions also pass.
+  All 418 provisioned originals in both checkouts remain unchanged. New full frame diagnostics
+  retain the previous results (0034); strict comparison still fails missing mixed port PCM.
+  Custom register-mutating callbacks, other switch variants, actual IRQ/DMA setup and elapsed
+  instruction/event work stay open. No guessed register value or aggregate delay was added.
 - Read-only original device provenance: `scratch/sequence-capture/sb-lifecycle/{probe-final.gdb,
   device-events-final.jsonl,proof.json,final-original-30s/}` preserves every complete baseline
   30000-ms frame/PCM/endpoint byte. Commands are timeconstant A6, speaker enable, block size
@@ -105,7 +126,7 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
 
 ## Next
 
-1. Recover 2630 channel rollover byte writes/register callbacks and the 14e0 completion IRQ,
+1. Recover the original 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts,
    including device setup and DMA cadence. Supply actual instruction/event work to 0026 so
    0034 can recheck frame 817. Add original-backed buffer/state regressions on both targets;
    do not charge an aggregate measured delay or invent a sample source.

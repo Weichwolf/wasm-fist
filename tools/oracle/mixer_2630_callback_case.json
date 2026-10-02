@@ -1,0 +1,179 @@
+{
+  "source": "Read-only paging-aware original snapshots at 13257: before 002b:2630 and before final RET 2729. Channel two rolls to the original silence sample with one default callback at 2294. Trace proves RET preserves seven GP registers and pops four bytes from ESP. Complete 16000-ms probe and independent trace captures match bytewise.",
+  "fist_run_sha256": "af55ca08d62561de94c14d06ae48458a071032d2757f39337864ad9a192de563",
+  "sample_asset": "armoredfist/FISTDATA/DSOUNDS.BIN",
+  "sample_asset_sha256": "eb83b59727f23ab6abc0427d9428ab860fcb03523205b922a93583a3a2d6f615",
+  "clips": [
+    {
+      "module_offset": 370938,
+      "length": 15423,
+      "asset_offset": 26362,
+      "sha256": "88aa94100fa1263ef5cc8235890389d46d4b2cd5e2919ce0f3667f3131a52a53"
+    },
+    {
+      "module_offset": 396624,
+      "length": 7201,
+      "asset_offset": 52048,
+      "sha256": "35c2df4cddaadb556d5d271798ede513b6ffcca6faa519464b470d61df75d3c6"
+    },
+    {
+      "module_offset": 347332,
+      "length": 3891,
+      "asset_offset": 2756,
+      "sha256": "c783e98d7b3a77f3997703259587a0045977803b0128c3bd2f2173169616303c"
+    }
+  ],
+  "before": [
+    {
+      "offset": 9863,
+      "hex": "c0e802046032e4"
+    },
+    {
+      "offset": 9905,
+      "hex": "c0ea0280c260"
+    },
+    {
+      "offset": 9949,
+      "hex": "c0ea0280c260"
+    },
+    {
+      "offset": 5579,
+      "hex": "ffff000000c00000ffff0000faa80500500d0600c44c05003f3c0000211c0000330f000000e4031c0000041b54ffaf006b1500006b150000c44c05000000000000000000ffff000000006000000200280200010000008888"
+    },
+    {
+      "offset": 9180,
+      "hex": "e02d00f0e03100f000000000"
+    },
+    {
+      "offset": 9865,
+      "hex": "02"
+    },
+    {
+      "offset": 9867,
+      "hex": "60"
+    },
+    {
+      "offset": 9907,
+      "hex": "02"
+    },
+    {
+      "offset": 9910,
+      "hex": "60"
+    },
+    {
+      "offset": 9951,
+      "hex": "02"
+    },
+    {
+      "offset": 9954,
+      "hex": "60"
+    },
+    {
+      "offset": 10006,
+      "hex": "93200000"
+    }
+  ],
+  "after": [
+    {
+      "offset": 9863,
+      "hex": "c0e802046032e4"
+    },
+    {
+      "offset": 9905,
+      "hex": "c0ea0080c200"
+    },
+    {
+      "offset": 9949,
+      "hex": "c0ea0280c260"
+    },
+    {
+      "offset": 5579,
+      "hex": "ffff000000000000ffff0000faa805006b150000c44c05003f3c00000f000000330f000000e003200000040054fbaf046b1500006b150000c44c05000000000000000000ffff0000000060000002002c0200010000007f7d"
+    },
+    {
+      "offset": 9180,
+      "hex": "e02d00f0e03500f000040000"
+    },
+    {
+      "offset": 9865,
+      "hex": "02"
+    },
+    {
+      "offset": 9867,
+      "hex": "60"
+    },
+    {
+      "offset": 9907,
+      "hex": "00"
+    },
+    {
+      "offset": 9910,
+      "hex": "00"
+    },
+    {
+      "offset": 9951,
+      "hex": "02"
+    },
+    {
+      "offset": 9954,
+      "hex": "60"
+    },
+    {
+      "offset": 10006,
+      "hex": "93200000"
+    }
+  ],
+  "output_sha256": "54a44a1cb1590fb87a9303b635ac18d63362bd3eb62b6518e4f5fe003caf52a4",
+  "output_length": 1024,
+  "output_offset": 1024,
+  "lookup_offset": 8339,
+  "lookup_sha256": "d680581648bb79d2141c9c16972289abd794685eb47b5f266e3eaba59fe406fb",
+  "pointer_fields": [
+    5591,
+    5595,
+    5599,
+    5627,
+    5631,
+    5635,
+    9180,
+    9184,
+    10006
+  ],
+  "ring_length": 2048,
+  "ring_initial_fill": 128,
+  "ring_initial_exceptions": [
+    [
+      0,
+      136
+    ],
+    [
+      1,
+      136
+    ]
+  ],
+  "ring_final_changes": [
+    [
+      0,
+      127
+    ],
+    [
+      1,
+      125
+    ]
+  ],
+  "before_snapshot_sha256": "23169802ddee9dbb3bc82ab1edde3f8c48ad32c3216ddba5c7db9b3397bea541",
+  "after_snapshot_sha256": "75b8d294b0ce8d22420a36242b9ad61e058043b8926ce8afaafb71fd73fdc07d",
+  "scope": "Reached channel-two silence rollover with original default RET callback; state/byte/register provenance, not port acceptance.",
+  "original_16000ms_full_frames_pcm_endpoint_unchanged": true,
+  "frames": 1119,
+  "pcm_samples": 706658,
+  "cpu_trace_sha256": "58c2901d097615317261219c863d7549a9594f7159ae66f4869c145ee5a316c6",
+  "source_tick": 13257,
+  "mixer_writes": 1024,
+  "rollovers": 1,
+  "default_callback_count": 1,
+  "default_callback_module_address": 8852,
+  "default_callback_gp_registers_preserved_except_esp": true,
+  "default_callback_esp_return_pop_bytes": 4,
+  "default_callback_return_ip": "2b:2777"
+}

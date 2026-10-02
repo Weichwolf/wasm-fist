@@ -40,7 +40,7 @@ class PortIoTest(unittest.TestCase):
         text = unit.read_text()
         declarations = '\n'.join(line for line in text.splitlines() if line.startswith('#define '))
         bodies = []
-        for address in ('7120', '2630'):
+        for address in ('7120', '2630', '2294'):
             signature = f'void __allregs FUN_0000_{address}(void)'
             body = text.split(signature+'\n\n{', 1)[1].split('\n}\n', 1)[0]
             bodies.append(signature+'\n{'+body+'\n}\n')
@@ -253,6 +253,9 @@ class PortIoTest(unittest.TestCase):
     def test_2630_rollover_preserves_normalization_instruction_bytes(self):
         self.check_original_mixer_case('mixer_2630_rollover_case.json')
 
+    def test_2630_default_callback_preserves_original_registers_and_mixed_bytes(self):
+        self.check_original_mixer_case('mixer_2630_callback_case.json')
+
     def check_original_mixer_case(self, filename):
         proof = json.loads((ROOT / 'tools/oracle' / filename).read_text())
         asset = (ROOT / proof['sample_asset']).read_bytes()
@@ -279,7 +282,8 @@ class PortIoTest(unittest.TestCase):
         for target, run in self.commands:
             with self.subTest(target=target):
                 output = self.directory / f'{target}-mixer.memory'
-                result = subprocess.run([*run, 'mixer', str(source), str(output)],
+                result = subprocess.run([*run, 'mixer', str(source), str(output),
+                                         str(proof.get('default_callback_count', 0))],
                                         capture_output=True, text=True, timeout=30)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 actual = output.read_bytes()
