@@ -403,6 +403,58 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   not other real/protected/V86 interrupt contexts, a target CPU/IF owner,
   actual ISR execution or complete video/audio parity.
 
+- PIC controller implementation, frozen producer base `1afdf78`:
+  handwritten `fist_pic.c` now owns both 8259 controllers, IRQ masks/requests/
+  service state and vector programming on both targets. PIC command ports
+  20/a0 use the same shared I/O budget as data ports 21/a1. The old duplicate
+  mask bytes, constant-zero command reads and ignored EOI writes are removed.
+  Mask/OCW3 changes return the active budget to the shared clock, as original
+  `pic.cpp` does. Eligibility retains actual IF/trap gating, all 16 priorities,
+  cascade masks, special masks, ICW single/auto-EOI and nested EOI order.
+- Real PCM8 completion now activates the matched hardware IRQ7; reset high and
+  a pending PCM8 acknowledgement deactivate its request. The wrong-width
+  acknowledgement leaves it pending. This is request/service state; taking an
+  eligible vector does not construct a CPU frame or execute a handler. The
+  cooperative PIT route and legacy completion callback still need the actual
+  CPU/IF/privilege/vector/IRET owner. Other hardware IRQ selections, mixer80/81,
+  device variants and the legacy PCM16 producer remain unproved.
+- `test_pic_controller.py` links actual original PIC/DSP/DMA/I/O producers.
+  Eight methods cover 24 target phases, including all priorities, five thin
+  budgets and the complete 36-row reached 14e0 PIC/SB I/O prefix. Every byte,
+  fixture timestamp/budget, demanded device byte and pump count is compared.
+  The prefix reproduces captured original I/O bytes/times; its empty event
+  fixture has a different deadline calendar, so original captured active
+  budgets are not claimed as matched. Three old-producer methods fail all
+  14 target phases; first failures include ICW mask 01 instead of f8 and real
+  PCM8 completion IRR=00 instead of 80. Both targets now pass.
+- The PIT2 regression still checks all 17 ports and both speaker states. Its
+  command-port expectations now use actual original 21-cycle write delay and
+  `timer.cpp` float latches, proved by original I/O source and reached OUT20.
+  The earlier eight obsolete expectation failures are retained; no port or
+  speaker assertion was removed. `scratch/sequence-capture/pic-controller/`
+  contains `parent-final-red.log`, `green-unit.log`, source provenance,
+  the tracked/untracked frozen source archive and `check-proof.py`/
+  `proof-final.json`. Separate short-transfer END_DMA_Event failure remains
+  open in 0003; it is not excluded from reaching evidence or counted as fixed.
+- `bash tools/check_flow.sh`, without a filter, passes 91 tests, exact patches,
+  both sequential builds and all 178 existing flows with separately recorded
+  terminal exit 0 (`scratch/verify/run.YUVdxO/`). The isolated browser build
+  also compiles and links the same new PIC unit, exit 0, with JS/WASM/data hashes
+  retained; browser execution/pacing is not accepted. The producer source
+  hashes stayed unchanged throughout; intervening source-evidence commits
+  28d01da/4fd0a54 do not alter these tested inputs.
+- Complete matched SB-enabled 30000-ms captures contain 2100 identical
+  cross-target frames/endpoints and identical 43 sound-register packets. All
+  original times/layouts/palettes match. The PIC command I/O correction changes
+  parent frame 1555: a visually checked scanline split, 1793 pixels from byte
+  32000, adds one original pixel-difference event (28 total, first still 817 /
+  11704156 us / byte 8754). All packet payloads match the parent; 22 timestamps
+  change by -9..+21 cycles. Do not claim previous complete frame/packet bytes
+  are retained or fit a delay to restore them. All 418 original assets remain
+  unchanged. Strict comparison still rejects missing final mixed port PCM.
+  This proves the bounded controller contract and existing matrix coverage,
+  not full original output parity or the final ten-run WASM acceptance.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.

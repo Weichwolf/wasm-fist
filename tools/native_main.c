@@ -924,7 +924,7 @@ static void fist_pump_slow(void){
     }
 #endif
     { extern void fbtrap_arm_hook(void); fbtrap_arm_hook(); }
-    fist_sb_pump();   /* deliver a latched SB completion IRQ (FIST_SB) */
+    fist_sb_pump();   /* legacy completion callback; protected PIC/vector dispatch remains open */
     { extern void fist_opl_pump(void); fist_opl_pump(); }  /* OPL FM: advance the synth in emulated time (FIST_OPL/FIST_SB) */
     /* Dev watchdog: FIST_RUNMS=<ms> dumps the framebuffer (FIST_FBDUMP) and exits after a wall-clock
      * deadline -- lets a first-light frame be captured while the engine is in its (non-returning) main

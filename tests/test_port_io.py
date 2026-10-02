@@ -82,7 +82,7 @@ class PortIoTest(unittest.TestCase):
             body = engine_text.split(signature+'\n{', 1)[1].split('\n}\n', 1)[0]
             helpers.append(signature.removeprefix('static ')+'\n{'+body+'\n}\n')
         sound.write_text('#include "ghidra_compat.h"\nvoid FUN_0000_e2c2(undefined4);\n'+''.join(helpers))
-        sources = [str(ROOT / 'tests/port_io.c'), str(ROOT / 're_out/fist_vga.c'),
+        sources = [str(ROOT / 'tests/port_io.c'), str(ROOT / 're_out/fist_vga.c'), str(ROOT / 're_out/fist_pic.c'),
                    str(ROOT / 're_out/fist_dos.c'), str(blit), str(sound)]
         flags = ['-I' + str(ROOT / 're_out'), '-ffunction-sections', '-fdata-sections', '-Wno-int-conversion']
         native, wasm = (str(cls.directory / name) for name in ('ports', 'ports.js'))
@@ -119,9 +119,11 @@ class PortIoTest(unittest.TestCase):
         # Original float latches include fractional I/O time; whole-count subtraction is invalid.
         before = int(subprocess.check_output([self.pit_probe, '2', '50000', '1'], text=True))
         expected = {}
-        for mask in (False, True):
-            elapsed = 4 + 21 * 1193182 / 30000000 if mask else 5
-            expected[mask] = int(subprocess.check_output([self.pit_probe, '2', '50000', str(elapsed)], text=True))
+        # Actual iohandler.cpp write delay applies to command and data PIC
+        # ports alike; the captured 14e0 OUT20/EOI confirms the same 21 cycles.
+        for pic in (False, True):
+            elapsed = 4 + 21 * 1193182 / 30000000 if pic else 5
+            expected[pic] = int(subprocess.check_output([self.pit_probe, '2', '50000', str(elapsed)], text=True))
         for target, run in self.commands:
             with self.subTest(target=target):
                 result = subprocess.run(run, capture_output=True, text=True, timeout=30)
@@ -132,7 +134,7 @@ class PortIoTest(unittest.TestCase):
                     port, mode, actual_before, actual_after = map(int, line.split())
                     with self.subTest(target=target, port=port, speaker=mode):
                         self.assertEqual(actual_before, before)
-                        self.assertEqual(actual_after, expected[port in (0x21, 0xa1)])
+                        self.assertEqual(actual_after, expected[port in (0x20, 0x21, 0xa0, 0xa1)])
 
     def test_pit_latches_preserve_sub_count_cpu_time(self):
         for mode in (2, 3):

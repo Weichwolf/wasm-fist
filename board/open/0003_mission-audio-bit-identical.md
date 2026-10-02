@@ -449,6 +449,25 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   are revalidated; target CPU ownership, actual startup/mixer dispatch and
   other IRQ contexts remain open. Reuse 0026's time/interrupt owner.
 
+- Consume 0026's shared PIC controller proof in
+  `scratch/sequence-capture/pic-controller/proof-final.json`: real PCM8
+  completion asserts IRQ7, wrong-width acknowledgement preserves its request,
+  matching acknowledgement/reset clear it, and actual PIC masks/service/EOI
+  retain original register bytes. The 91-test/unfiltered 178-flow gate exits
+  zero (`run.YUVdxO/`); native/WASM complete 30000-ms frames/end and 43 packet
+  logs match each other. Original first pixel failure remains 817; corrected
+  command-port I/O adds differing frame1555. Final mixed port PCM is absent.
+  CPU privilege/IF/frame/IRET, actual ISR/startup/mixer work and device variants
+  remain open; a returned eligible vector is not protected delivery.
+- A separate reaching short-transfer regression, `pic-controller/`
+  `reproduce-short-event.py` and `current-short-event-red.log`, uses actual
+  original four-byte auto-init PCM8 at 11111 Hz, then 12000 normal fetches.
+  Original `CheckDMAEnd` schedules END_DMA_Event because left4<min33 and
+  produces IRR80/mixer82=01; both current targets still read 00/00. The sole
+  method fails both targets without setup failures. This producer event remains
+  missing, including its original cancellation/remaining-DMA behavior. Do not
+  hide it by demanding bytes manually or substituting a periodic IRQ delay.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover

@@ -48,7 +48,7 @@ class SoundBlasterDmaTest(unittest.TestCase):
         producer = cls.directory / 'dma_init.c'
         producer.write_text('#include "ghidra_compat.h"\nextern uint32_t fist_ext_base;\n'+
                             declarations+'\n'+''.join(bodies))
-        sources = [str(ROOT / 'tests/sb_dma.c'), str(ROOT / 're_out/fist_sb.c'),
+        sources = [str(ROOT / 'tests/sb_dma.c'), str(ROOT / 're_out/fist_sb.c'), str(ROOT / 're_out/fist_pic.c'),
                    str(ROOT / 're_out/fist_dos.c'), str(producer)]
         native, wasm = (str(cls.directory / name) for name in ('sb', 'sb.js'))
         emcc = os.environ.get('EMCC') or shutil.which('emcc')

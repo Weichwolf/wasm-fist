@@ -298,6 +298,7 @@ static unsigned g_dsp_write_busy;
 static unsigned char g_last_read;
 static int  g_read_val = -1;          /* pending DSP data-read byte (0xAA after reset, version, ...) */
 static int  g_irq_pending;            /* completion bits: 1 = PCM8, 2 = PCM16 */
+static unsigned g_hw_irq = 7;        /* matched DOSBox/default device configuration */
 static unsigned char g_mixer_index;
 static int  g_speaker;                /* DSP speaker enable (D1/D3) */
 static int  g_block16;                /* current transfer is 16-bit */
@@ -306,8 +307,17 @@ static unsigned g_dsp_total, g_dsp_left;
 static int g_dsp_autoinit, g_paused, g_irq_delivered, g_dma_active;
 static unsigned char g_pcm8_scratch[65536];
 
-static void (*g_irq_cb)(void);        /* engine SB-ISR invoker (set by native_main); may be NULL */
+static void (*g_irq_cb)(void);        /* legacy completion callback; protected PIC/CPU delivery is open */
 void fist_sb_set_irq_cb(void (*cb)(void)) { g_irq_cb = cb; }
+
+static void raise_irq(unsigned bit)
+{
+    /* Original SB_RaiseIRQ coalesces each width before activating its PIC line. */
+    if (g_irq_pending & bit) return;
+    g_irq_pending |= bit;
+    g_irq_delivered = 0;
+    fist_pic_activate_irq(g_hw_irq);
+}
 
 static unsigned read_pcm8(unsigned want, unsigned char *data);
 
@@ -379,7 +389,7 @@ static unsigned read_pcm8(unsigned want, unsigned char *data)
     if (!g_dsp_left) {
         if (g_dsp_autoinit) g_dsp_left=g_dsp_total;
         else g_playing=0;
-        if (!(g_irq_pending & 1)) { g_irq_pending |= 1; g_irq_delivered=0; }
+        raise_irq(1);
     }
     return read;
 }
@@ -413,7 +423,7 @@ static void run_dma_block(void)
         }
     }
     g_playing = g_dsp_autoinit;         /* auto-init keeps running until DSP 0xDA */
-    g_irq_pending |= g_block16 ? 2 : 1; /* acknowledgement width is independent */
+    raise_irq(g_block16 ? 2 : 1); /* acknowledgement width is independent */
 }
 
 /* DSP command byte (base+0xC) + its argument bytes. */
@@ -466,6 +476,7 @@ static void dsp_reset(int value)
 {
     /* Original DSP_DoReset tests bit zero, not literal byte values. */
     if ((value & 1) && g_dsp_state != DSP_RESET) {
+        fist_pic_deactivate_irq(g_hw_irq);
         fist_clock_remove_events(dsp_finish_reset);
         g_read_val = -1;
         g_dsp_args_left = g_dsp_argi = 0;
@@ -527,6 +538,7 @@ int fist_sb_in(int port)
             if (g_mixer_index==0x82) return g_irq_pending;
             return 0xff; /* other mixer-register contracts remain open */
         case 0xe:                                                           /* read-buffer status: bit7 = data avail */
+            if (g_irq_pending & 1) fist_pic_deactivate_irq(g_hw_irq);
             g_irq_pending &= ~1;                                           /* only the 8-bit completion */
             return (g_read_val>=0) ? 0xff : 0x7f;
         case 0xf: g_irq_pending &= ~2; return 0xff;                       /* only the 16-bit completion */

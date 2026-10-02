@@ -43,10 +43,6 @@ static unsigned char *const g_text_cells = g_mem + 0xb8000u;
 /* DAC state machine (ports 0x3C8 write-index, 0x3C7 read-index, 0x3C9 data) */
 static int g_dac_widx, g_dac_wsub;    /* write index + sub-component (0=R,1=G,2=B) */
 static int g_dac_ridx, g_dac_rsub;
-/* DOSBox PIC_8259A starts with timer, keyboard, cascade and RTC IRQs unmasked. */
-static unsigned char g_pic_mask[2] = {
-    0xffu & ~((1u << 0) | (1u << 1) | (1u << 2)), 0xffu & ~(1u << 0)
-};
 
 static int g_trace = -1;
 static int traceon(void){ if(g_trace<0){ extern char*getenv(const char*); g_trace=getenv("FIST_TRACE_TRAPS")?1:0;} return g_trace; }
@@ -595,6 +591,13 @@ static void cpu_slice_start(void)
     g_cpu_remaining = cpu_next_slice(clock_cpu_cycles(clock_now()));
     g_cpu_time = clock_now();
 }
+void fist_clock_pic_requeue(void)
+{
+    /* write_data/PIC_SetIRQMask/OCW3 return the active budget to CycleLeft.
+     * The next failed normal-core fetch owns the decrement and dispatch. */
+    if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
+    g_cpu_remaining = 0;
+}
 /* Step the clock to `target`, firing the channel-0 interrupt at every wrap on the way (the ISR may
  * re-program the channel, which restarts the count from that instant, as on the 8253). */
 int g_int8_replay;   /* board:0017 FIST_FRAME_SCHEDULE: the INT-8s come from the schedule, not the clock */
@@ -763,7 +766,7 @@ int in(int port)
 {
     port &= 0xffff;
     int sb = fist_sb_owns(port);
-    if (port == 0x21 || port == 0xa1 || sb) cpu_io_delay(0);
+    if (port == 0x20 || port == 0x21 || port == 0xa0 || port == 0xa1 || sb) cpu_io_delay(0);
     else fist_timer_pump();   /* remaining port costs are owned by board:0026 */
     if (fist_opl_owns(port)) return fist_opl_in(port);  /* OPL FM 0x388 status (FIST_OPL/FIST_SB) */
     if (sb) return fist_sb_in(port);   /* SB DSP + 8237 DMA window (FIST_SB, default off) */
@@ -787,8 +790,7 @@ int in(int port)
     case 0x61: g_port61 ^= 0x30; return g_port61;
     case 0x64: return 0x00;     /* keyboard status: no data available */
     case 0x201: return 0xf0;    /* joystick: no buttons pressed, timers low */
-    case 0x20: case 0xa0: return 0;   /* PIC */
-    case 0x21: case 0xa1: return g_pic_mask[port == 0xa1];
+    case 0x20: case 0x21: case 0xa0: case 0xa1: return fist_pic_read(port);
     default:
         if (traceon()) fprintf(stderr, "[port] in  0x%03x -> 0\n", port);
         return 0;
@@ -799,7 +801,7 @@ void out(int port, int val)
 {
     port &= 0xffff; val &= 0xff;
     int sb = fist_sb_owns(port);
-    if (port == 0x21 || port == 0xa1 || sb) cpu_io_delay(1);
+    if (port == 0x20 || port == 0x21 || port == 0xa0 || port == 0xa1 || sb) cpu_io_delay(1);
     else fist_timer_pump();   /* remaining port costs are owned by board:0026 */
     if (fist_opl_owns(port)) { fist_opl_out(port, val); return; }  /* OPL FM 0x388/0x389 (FIST_OPL/FIST_SB) */
     if (sb) { fist_sb_out(port, val); return; }   /* SB DSP + 8237 DMA (FIST_SB, default off) */
@@ -854,9 +856,8 @@ void out(int port, int val)
     case 0x3ce: case 0x3cf: /* graphics controller */
     case 0x3d4: case 0x3d5: /* CRTC */
     case 0x3d8: case 0x3d9: /* mode/color select */
-    case 0x20: case 0xa0:   /* PIC EOI */
         return;
-    case 0x21: case 0xa1: g_pic_mask[port == 0xa1] = val; return;
+    case 0x20: case 0x21: case 0xa0: case 0xa1: fist_pic_write(port, val); return;
     case 0x61:
         if (((g_port61 ^ val) & 3) && getenv("FIST_SPEAKER_TRACE"))
             fprintf(stderr, "FIST_SPEAKER type %.9f type=%u previous=%u\n",

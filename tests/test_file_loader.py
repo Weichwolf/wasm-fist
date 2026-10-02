@@ -21,7 +21,7 @@ class FileLoaderTest(unittest.TestCase):
                  '-Wno-int-conversion', '-Wno-incompatible-pointer-types',
                  '-Wno-implicit-function-declaration', '-Wno-return-mismatch', '-w']
         sources = [str(ROOT / 'tests/file_loader.c'), str(cls.directory / 'fist_ext.c'),
-                   str(ROOT / 're_out/fist_dos.c'), str(ROOT / 're_out/fist_vga.c')]
+                   str(ROOT / 're_out/fist_dos.c'), str(ROOT / 're_out/fist_vga.c'), str(ROOT / 're_out/fist_pic.c')]
         native, wasm = (str(cls.directory / name) for name in ('loader', 'loader.js'))
         targets = [('native', ['gcc', '-m32', '-O0', *flags, *sources,
                                '-Wl,--gc-sections', '-lm', '-o', native], [native]),

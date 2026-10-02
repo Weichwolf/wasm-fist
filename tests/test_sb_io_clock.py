@@ -20,7 +20,7 @@ class SoundBlasterIoClockTest(unittest.TestCase):
         cls.original_sb = build_pic_probe(cls.directory, sb_events=True)
         flags = ['-I' + str(ROOT / 're_out'), '-ffunction-sections', '-fdata-sections',
                  '-fno-strict-aliasing', '-Wno-int-conversion']
-        sources = [str(ROOT / 'tests/sb_io_clock.c'), str(ROOT / 're_out/fist_vga.c'),
+        sources = [str(ROOT / 'tests/sb_io_clock.c'), str(ROOT / 're_out/fist_vga.c'), str(ROOT / 're_out/fist_pic.c'),
                    str(ROOT / 're_out/fist_sb.c'), str(ROOT / 're_out/fist_dos.c')]
         native, wasm = (str(cls.directory / name) for name in ('clock', 'clock.js'))
         cls.commands = []

@@ -26,7 +26,7 @@ class SoundBlasterWriterTest(unittest.TestCase):
                  '-fno-strict-aliasing', '-Wno-int-conversion', '-Wno-incompatible-pointer-types',
                  '-Wno-implicit-function-declaration', '-Wno-return-mismatch', '-w']
         sources = [str(ROOT / 'tests/sb_writer.c'), str(wrapper),
-                   *(str(ROOT / 're_out' / name) for name in ('fist_vga.c', 'fist_sb.c', 'fist_dos.c'))]
+                   *(str(ROOT / 're_out' / name) for name in ('fist_vga.c', 'fist_pic.c', 'fist_sb.c', 'fist_dos.c'))]
         native, wasm = (str(cls.directory / name) for name in ('writer', 'writer.js'))
         cls.commands = []
         for target, build, run in [
