@@ -332,6 +332,26 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   133a/138d/startup, protected services, CLI/STI/IRQ and mixer integration remain
   open; restore their original producers, not their observed total elapsed time.
 
+- Additional read-only reset producer ABI evidence, current base `fa57275`:
+  `scratch/sequence-capture/sb-reset-producer/{check-source.py,abi-proof.json}`
+  validates both complete 218-row original 133a branches. The normal source
+  trace/output stays byte-identical. A controlled isolated fixture changes only
+  the queued DSP response AA to AB before actual IN22A; the unchanged original
+  executes its failure branch and returns EAX=0 instead of FFFFFFFF. Both return
+  ECX=1f1e, EDX=22a, ESP+4 and effective EFLAGS=3246. This is an EAX result;
+  neither branch returns success/failure through CF.
+- Seven normal and eight controlled entry/CLI/STI/branch/RET/caller snapshots
+  recover actual lazy flags through original `flags.cpp`. Entry EFLAGS=3293;
+  CLI changes it to 3093. Immediately before STI it is 3002 and immediately
+  after STI 3202. Success CMP and failure XOR both end at 3246. CPL=3, IOPL=3
+  permit these original protected instructions. PIC_IRQCheck=0 and no IRQ is in
+  service at every snapshot: this capture cannot establish pending IRQ delivery.
+  Both captures complete 600 ms / 39 frames / 27518 mixed PCM samples. The wrong
+  response changes frame bytes; PCM/end remain byte-identical. Never use that
+  controlled failure as a normal-reference capture. The initial missing trace-
+  window scaffold is retained and excluded. No port reset producer, caller flag
+  transport, privilege/IF owner or protected IRQ integration is accepted here.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
