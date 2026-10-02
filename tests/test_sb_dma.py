@@ -5,6 +5,9 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import hashlib
+
+from test_port_io import patched_unit
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,12 +37,24 @@ class SoundBlasterDmaTest(unittest.TestCase):
         cls.addClassCleanup(cls.tmp.cleanup)
         cls.directory = Path(cls.tmp.name)
         flags = ['-I' + str(ROOT / 're_out'), '-ffunction-sections', '-fdata-sections']
-        sources = [str(ROOT / 'tests/sb_dma.c'), str(ROOT / 're_out/fist_sb.c')]
+        text = patched_unit(cls.directory, 'fist_ext.c')
+        declarations = '\n'.join(line for line in text.splitlines() if line.startswith('#define '))
+        signatures = ['undefined4 __allregs FUN_0000_12eb(int *param_1,char param_2,undefined4 param_3,char *param_4)',
+                      'ushort __allregs FUN_0000_2810(void)']
+        bodies = []
+        for signature in signatures:
+            body = text.split(signature+'\n\n{',1)[1].split('\n}\n',1)[0]
+            bodies.append(signature+'\n{'+body+'\n}\n')
+        producer = cls.directory / 'dma_init.c'
+        producer.write_text('#include "ghidra_compat.h"\nextern uint32_t fist_ext_base;\n'+
+                            declarations+'\n'+''.join(bodies))
+        sources = [str(ROOT / 'tests/sb_dma.c'), str(ROOT / 're_out/fist_sb.c'),
+                   str(ROOT / 're_out/fist_dos.c'), str(producer)]
         native, wasm = (str(cls.directory / name) for name in ('sb', 'sb.js'))
         emcc = os.environ.get('EMCC') or shutil.which('emcc')
         node = os.environ.get('NODE') or shutil.which('node')
         targets = [(['gcc', '-m32', *flags, *sources, '-Wl,--gc-sections', '-lm', '-o', native], [native]),
-                   ([emcc, *flags, *sources, '-sNODERAWFS=1', '-sEXIT_RUNTIME=1',
+                   ([emcc, '-O2', *flags, *sources, '-sNODERAWFS=1', '-sEXIT_RUNTIME=1',
                      '-sASSERTIONS=1', '-o', wasm], [node, wasm])]
         cls.commands = []
         for build, run in targets:
@@ -67,6 +82,31 @@ class SoundBlasterDmaTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout, expected)
         return expected.splitlines()
+
+    def test_original_2810_programs_complete_dma_ring_and_device_input(self):
+        case = json.loads((ROOT / 'tools/oracle/dma_2810_case.json').read_text())
+        image = ROOT / 're_out/fist_image.bin'
+        self.assertEqual(hashlib.sha256(image.read_bytes()).hexdigest(), case['image_sha256'])
+        writes = ''.join(write(row['port'],row['value']) for row in case['outputs'])
+        log = ''.join(f"out {row['port']:x} {row['value']:x}\n" for row in case['outputs'])
+        log += f"return {case['return_ax']:x}\n"
+        log += '[sb] WAV finalized: 4096 PCM bytes (2048 samples @ 11111 Hz, 0.18s)\n'
+        # The independent original DMA/DSP owners receive the captured original
+        # OUTs. Port owners receive the actual translated 2810 invocation.
+        tail = (registers()+'r 83\ns\n'+dsp(0x40,0xa6,0xd1,0x48,0xff,3,0x1c)+'s\n'+
+                'd 1024\np\ns\n'+registers()+'r 22e\n'+
+                'd 1024\np\ns\n'+registers()+'r 22e\n')
+        expected = subprocess.run([self.original], input=writes+tail, capture_output=True,
+                                  text=True, check=True, timeout=30).stdout
+        for run in self.commands:
+            with self.subTest(target=run[0]):
+                commands = f"i {case['channel']:x} {case['physical_address']:x} {image}\n"+tail
+                result = subprocess.run(run,input=commands,capture_output=True,text=True,
+                                        env=dict(os.environ,FIST_AUDIO_WAV=str(self.directory/'init.wav')),
+                                        timeout=30)
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertEqual(result.stderr,log)
+                self.assertEqual(result.stdout,expected)
 
     def test_every_captured_original_pcm8_demand_preserves_dma_and_dsp_state(self):
         case = json.loads((ROOT / 'tools/oracle/sb_pcm8_demand_case.json').read_text())

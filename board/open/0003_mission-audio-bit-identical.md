@@ -263,6 +263,53 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   zero ECX. These asm contracts guide their future reaching regressions; their missing
   register transport is not fixed or accepted here.
 
+- Current base `2b4bbe6`, patch 627: the reached 2810 DMA initializer now resolves
+  its WORD port-table reads through the shared extender operand owner. Original
+  281b/282a/2837/2854/2866/2897 use DS-relative data; the count table is 12ef,
+  not a host function address derived from 12eb. The existing module-based page
+  access at 12cc+3 was already correct. Byte OUT widths, word-channel address/count
+  conversion and AX return remain intact; generated engine C stays pristine.
+- `tools/oracle/dma_2810_case.json` records all nine original byte OUTs, AX=1 and
+  immutable port tables from the complete 534:536-ms CPU trace and paging-aware
+  original snapshot. The 2810-to-28a4 interval has 48 instructions before RET;
+  its measured cycle interval is attribution only. The probe retains all original
+  600-ms output bytes: 39 frames, 27518 mixed PCM samples and the endpoint.
+- The reaching regression invokes the actual ordered-patched 2810 and shared
+  SB/DMA owner. An independent endpoint compiles DOSBox's original DMA/DSP owners
+  and receives the captured original OUTs. Both targets compare every OUT, AX,
+  the entire untouched isolated module, both complete 1024-byte PCM8 input halves,
+  DMA registers/reload, DSP state and IRQ acknowledgements. Parent native faults;
+  parent WASM emits eight wrong port addresses. Both now pass, as do the previous
+  four device regressions. This is device input/state evidence, not final mixed PCM.
+- `scratch/sequence-capture/dma-init/{red-reaching.log,green-unit.log,
+  check-proof.py,proof.json}` preserves provenance and the reaching failure/fix.
+  `bash tools/check_flow.sh '^(intro|mainmenu)$'`, with separate outputs, passes
+  71 tests, exact patches, sequential native/WASM builds and both selected flows,
+  with an independently recorded exit 0; `scratch/verify/run.alvyDo/`.
+  The earlier unfiltered log reports all 178 existing flows passing, but its outer
+  process returns 143; `scratch/verify/run.LPAVCP/`. It is retained as diagnostic
+  evidence and excluded from clean full-gate acceptance. No new full-matrix gate
+  or original-parity acceptance is claimed.
+- Fresh complete 30000-ms captures retain every previous port frame byte and all
+  43 sound-register packets; native/WASM register logs remain byte-identical.
+  All 2100 frames and endpoints are complete; strict comparison still rejects
+  absent final mixed port PCM. All 418 provisioned originals remain unchanged.
+  Production startup/op-64 dispatch, protected IRQ/IF, other device variants,
+  instruction/event timing and the final shared mixer remain open.
+- Additional read-only startup diagnosis under `digital-init/paired-initial-mixer/`
+  captures the first actual 2630 before DSP start through RET in one process.
+  It proves 45119 instructions before RET (45120 rows including RET), 1024 stores,
+  one rollover, no callback and six changed module bytes. The physical ring remains
+  entirely 128. Complete original 600-ms frame/PCM/endpoint bytes are unchanged.
+  The existing translated producer matches this isolated initial state on both
+  targets; 23ec's generated call still resolves to its empty 2630 placeholder.
+- `digital-init/file-loader/{registers.txt,proof.json,capture/}` independently
+  retains the same complete original 600-ms outputs. Original 6032 queries and
+  loads the entire 134240-byte DSOUNDS.BIN; its read/return EAX is 00020c60 and
+  ECX/EDX are zero after the resident kernel read. Reuse this file/memory ownership
+  when restoring startup; verify the generated caller's DWORD result and CF,
+  rather than adding a separate raw sample loader.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover

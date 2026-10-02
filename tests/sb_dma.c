@@ -2,9 +2,22 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <assert.h>
+#include <string.h>
 
 #ifndef ORIGINAL_SB
 uint8_t g_mem[0x1000000];
+uint32_t fist_ext_base;
+extern unsigned short m_ext_FUN_0000_2810(void);
+/* Record the actual translated producer's byte OUTs, then let the real device
+ * owner consume them. This endpoint checks device state, not I/O clock costs. */
+void out(int port, int value)
+{
+    port &= 0xffff; value &= 0xff;
+    fprintf(stderr, "out %x %x\n", port, value);
+    fist_sb_out(port, value);
+}
+int in(int port) { return fist_sb_in(port); }
 #else
 extern uint8_t *g_mem;
 void original_sb_init(void);
@@ -27,6 +40,22 @@ int main(void)
     char op;
     unsigned a,b;
     while (scanf(" %c", &op)==1) {
+#ifndef ORIGINAL_SB
+        if (op=='i') {
+            char path[512];
+            if (scanf("%x %x %511s", &a, &b, path)!=3) return 2;
+            fist_ext_base=0x100000;
+            uint8_t *module=g_mem+fist_ext_base;
+            FILE *image=fopen(path,"rb");
+            assert(image);
+            size_t size=fread(module,1,0x10000,image);
+            assert(size && feof(image) && !ferror(image) && !fclose(image));
+            memcpy(module+0x12c8,&a,4); memcpy(module+0x23e8,&b,4);
+            static uint8_t before[0x10000]; memcpy(before,module,sizeof before);
+            fprintf(stderr,"return %x\n",m_ext_FUN_0000_2810());
+            assert(!memcmp(before,module,sizeof before));
+        } else
+#endif
         if (op=='w') {
             if (scanf("%x %x", &a, &b)!=2) return 2;
             fist_sb_out(a,b);
