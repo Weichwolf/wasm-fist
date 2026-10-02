@@ -34,20 +34,34 @@ int main(int argc, char **argv)
         return 0;
     }
     if ((argc == 4 && !strcmp(argv[1], "pic-slice")) ||
-        (argc == 5 && !strcmp(argv[1], "pic-retire"))) {
+        (argc == 5 && (!strcmp(argv[1], "pic-retire") || !strcmp(argv[1], "pic-file-read") ||
+                       !strcmp(argv[1], "pic-masked-read")))) {
         extern void fist_text_init(void), fist_clock_charge_cpu_instructions(unsigned);
         extern void fist_clock_advance_cpu_cycles(unsigned);
         extern void fist_vga_set_mode(int);
         extern unsigned fist_clock_cpu_slice(uint64_t *);
         unsigned tick = strtoul(argv[2], NULL, 10), index = strtoul(argv[3], NULL, 10);
-        assert(tick >= 76 && tick <= 10000 && index < 30000);
+        int file_read = strcmp(argv[1], "pic-slice") && strcmp(argv[1], "pic-retire");
+        assert(tick >= (file_read ? 20u : 76u) && tick <= 10000 && index < 30000);
         fist_text_init();
-        fist_vga_set_mode(0x13);
+        if (!file_read) fist_vga_set_mode(0x13);
         uint64_t current;
         fist_clock_cpu_slice(&current);
         uint64_t target = (uint64_t)tick * 30000u + index;
-        assert(target > current && target - current <= UINT32_MAX);
+        assert(target >= current && target - current <= UINT32_MAX);
         fist_clock_advance_cpu_cycles((unsigned)(target - current));
+        if (file_read) {
+            if (!strcmp(argv[1], "pic-masked-read")) out(0x21, 0xfc);
+            unsigned count = strtoul(argv[4], NULL, 10), mask = 0;
+            while (count--) {
+                mask = in(0x21);
+                if (mask & 4) { mask &= 0xfb; out(0x21, mask); }
+            }
+            uint64_t cycle;
+            unsigned slice = fist_clock_cpu_slice(&cycle);
+            printf("%llu %u %u\n", (unsigned long long)cycle, slice, mask);
+            return 0;
+        }
         if (argc == 5) {
             const char *input = argv[4];
             do {
@@ -94,13 +108,16 @@ int main(int argc, char **argv)
         for (int mode = 0; mode < 4; ++mode) {
             out(0x61, mode);
             assert((in(0x61) & 3) == mode);
-            out(0x43, 0x90);
-            out(0x42, 200);
-            int before = in(0x42);
-            unsigned long long time = fist_clock_now();
+            out(0x43, 0xb4);   /* channel 2, low/high bytes, mode 2 */
+            out(0x42, 50000 & 0xff);
+            out(0x42, 50000 >> 8);
+            out(0x43, 0x80);
+            int before_low = in(0x42), before_high = in(0x42);
             out(ports[i], mode ^ 3);
-            int after = in(0x42);
-            if (mode & 1) assert(after == before - (int)(fist_clock_now() - time));
+            out(0x43, 0x80);
+            int after_low = in(0x42), after_high = in(0x42);
+            if (mode & 1) printf("%u %d %u %u\n", ports[i], mode,
+                                before_low | (before_high << 8), after_low | (after_high << 8));
             assert((in(0x61) & 3) == mode);
         }
     }

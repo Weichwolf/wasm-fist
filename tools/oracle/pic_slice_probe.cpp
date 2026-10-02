@@ -2,13 +2,19 @@
 #include <assert.h>
 
 Bit32s CPU_Cycles = 0, CPU_CycleLeft = 30000, CPU_CycleMax = 30000;
+Bit64s CPU_IODelayRemoved = 0;
+MachineType machine = MCH_VGA;
+Segments Segs;
+void source_io_read_delay(void);
+void source_io_write_delay(void);
 CPU_Regs cpu_regs;
 CPU_Decoder *cpudecoder;
 Bits CPU_Core_Normal_Trap_Run(void) { abort(); }
 void CPU_Interrupt(Bitu, Bitu, Bitu) { abort(); }
 void E_Exit(const char *, ...) { abort(); }
+void GFX_ShowMsg(const char *, ...) { abort(); }
 
-/* PIC and no-op normal-loop retirement only; guest instructions, VGA effects and IRQs are excluded. */
+/* Original PIC queue/masks and I/O delays; retirement is no-op, VGA effects and IRQs are excluded. */
 static void latch(Bitu) {}
 static unsigned pixel_clock = 25175000u / 8u;
 static void part(Bitu count) {
@@ -25,7 +31,9 @@ static void resize(Bitu) { pixel_clock = 25175000u / 8u; PIC_RemoveEvents(part);
 
 int main(int argc, char **argv) {
     if (argc != 4 && (argc != 5 || strcmp(argv[4], "transition")) &&
-        (argc != 6 || strcmp(argv[4], "retire"))) return 2;
+        (argc != 6 || (strcmp(argv[4], "retire") && strcmp(argv[4], "file-read") &&
+                       strcmp(argv[4], "masked-read")))) return 2;
+    PIC_8259A controller(NULL);
     unsigned long long start, scanout, tick;
     float lag;
     FILE *fixture = fopen(argv[1], "rb");
@@ -40,7 +48,8 @@ int main(int argc, char **argv) {
     for (unsigned i = 0; i < PIC_QUEUESIZE - 1; ++i) pic_queue.entries[i].next = &pic_queue.entries[i + 1];
     pic_queue.free_entry = pic_queue.entries;
     PIC_Ticks = tick;
-    if (argc == 5) pixel_clock = 28322000u / 9u;
+    if (argc == 5 || (argc == 6 && strcmp(argv[4], "retire")))
+        pixel_clock = 28322000u / 9u;
     PIC_AddEvent(vertical, lag);
     /* Post-resize queue snapshot; the resize timestamp itself is outside this proof. */
     if (argc == 5) PIC_AddEvent(resize, 51.0f);
@@ -57,11 +66,28 @@ int main(int argc, char **argv) {
     CPU_CycleLeft = 30000 - index;
     assert(PIC_RunQueue());
     if (argc == 6) {
+        if (!strcmp(argv[4], "masked-read")) {
+            source_io_write_delay();
+            write_data(0x21, 0xfc, 1);
+        }
         const char *input = argv[5];
         do {
             char *end;
             unsigned long count = strtoul(input, &end, 10);
             if (!*input || end == input || !count || count > 0xfffffffful || (*end && *end != ',')) return 2;
+            if (strcmp(argv[4], "retire")) {
+                while (count--) {
+                    source_io_read_delay();
+                    unsigned mask = read_data(0x21, 1);
+                    if (mask & 4) {
+                        source_io_write_delay();
+                        write_data(0x21, mask & 0xfb, 1);
+                    }
+                }
+                printf("%llu %d %u\n", (unsigned long long)(PIC_Ticks * CPU_CycleMax + PIC_TickIndexND()),
+                       CPU_Cycles, (unsigned)read_data(0x21, 1));
+                return 0;
+            }
             while (count) {
                 while (CPU_Cycles-- > 0) if (!--count) break;
                 if (!count) break;

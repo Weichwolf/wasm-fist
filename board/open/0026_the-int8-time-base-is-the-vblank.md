@@ -41,6 +41,30 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
 - Normal core costs one cycle/instruction with SS/REP exceptions. I/O extra costs:
   `30000/1024 = 29` per read, `30000/1365 = 21` per write; suppress below three delay costs.
   Port per-I/O/pump and indirect-call charges remain approximations (patches 576/582).
+- Current base `7426275`: PIC data ports 0x21/0xa1 retain their independent mask bytes, initialized
+  from DOSBox's enabled timer/keyboard/cascade/RTC IRQs. Their I/O delay consumes the active CPU
+  budget before the register access and suppresses below three delay costs. Remaining ports still
+  use the old pump; IRQ delivery, ICW/command handling and production file-read integration remain open.
+  Actual-source `pic_slice_probe.cpp` now links `io_delay_probe.cpp` and constructs PIC_8259A;
+  15 budget/read-count cases × unmasked/masked IRQ2 × both targets = 60 matching cases. The old
+  code fails all 30 unmasked cases. `test_file_read_mask_io_matches_original_budget_and_suppression`
+  includes the full 1151-read loader count, read/write suppression and IRQ2 unmasking.
+- Fresh read-only GDB capture confirms all 1151 original FIST.DAT reads: first budget 1186 at
+  cycle 628814, 38 costed reads, then 1113 suppressed reads at cycle 629916/budget 84/mask 0xf8.
+  Application fetch remains cycle 629918. All complete 10000-ms frames/palettes/times and PCM match
+  `resume-a469760-original/`. Proof: `pic-mask/{read-mask.gdb,dosbox-gdb,original-read-mask.json,
+  original-start-cpu-complete.txt,original-complete/,source-proof.json}`. The broad first probe timed
+  out; its incomplete capture is excluded. The successful probe arms only at DOS_Execute(FIST.DAT)
+  and disarms after the loader's 1151 reads.
+- The old unrelated-port PIT2 assertion subtracts whole PIT timestamps; fractional I/O exposes
+  that invalid expectation on both targets (`run.e6degJ/`). Its replacement retains all 17 ports
+  and both enabled speaker states, comparing complete latched PIT2 words against actual original
+  `timer.cpp` at the recovered relative times. Speaker-state assertions remain intact.
+  `bash tools/check_flow.sh '^(intro|mainmenu)$'`: 52 tests, exact patches, native/WASM builds,
+  2 selected flows pass / 0 fail, exit 0; `run.JYGlHR/`. New complete 10000-ms native/WASM frames
+  match each other and the prior native capture bytewise; first original pixel failure remains
+  event 443 / byte 32004 (13 vs 14). Evidence: `pic-mask/{native,wasm}/`. This is bounded PIC data
+  port evidence, not complete timing or PCM acceptance.
 - Speaker logs 811/812 reproduce 803/804's 27 counter/54 type commands and all 2100 frames.
   First counter: `404.283671728−404.277133346 = 0.006538382` ms late. Logs omit CPU fractions;
   read-only probe 813 gives `min(port_phase−original) = −0.123809266` ms, with unchanged frame bytes.
@@ -53,8 +77,10 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
 
 ## Next
 
-1. Restore 0036's DOS-load handoff with real MZ reads and active budget. Reuse `start-epoch/prototype/`:
-   288 source-budget cases, real images/relocations, 32-KiB boundary and short EOF pass both targets.
+1. Restore 0036's DOS-load handoff with real MZ reads and active budget. Historical
+   `start-epoch/prototype/` files are absent in this checkout; recover the loader from DOS_Execute
+   and localFile::Read. Reuse the verified PIC data-port budget path and regress real images,
+   relocations, the 32-KiB boundary and short EOF on both targets.
    Wire production, then implement DOS caps/credits, packet splits, gateway instructions and REP.
    Preserve callback ordering and PIC tick state. Match every 10000-ms event, especially 443.
 2. Recover production pre-speaker work (23 mask reads, 720/721), 07b7's polling/CLI/STI and ISR return.

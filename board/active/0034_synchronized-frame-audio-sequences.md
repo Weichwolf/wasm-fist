@@ -34,6 +34,11 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   `cpu-retirement/complete-30s-proof.json` under `scratch/sequence-capture/`. Timing belongs to 0026.
 - PCM length follows 0003's mixer: `1103 + floor((end_ms−1)×722534/16384)`.
   Ports still lack final mixed sequence PCM. `--frames-only` is diagnostic, never acceptance.
+- Current PIC data-port change at base `7426275` (0026): fresh complete 10000-ms native/WASM
+  frames match each other and the previous native capture; first original pixel failure is still
+  event 443 / byte 32004 (13 vs 14). A fresh original GDB startup probe preserves every frame and
+  PCM record against `resume-a469760-original/`. Evidence: `scratch/sequence-capture/pic-mask/`.
+  These frame diagnostics do not prove full PCM equality or a corrected DOS-load handoff.
 
 ## Next
 

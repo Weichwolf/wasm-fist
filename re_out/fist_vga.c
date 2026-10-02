@@ -42,6 +42,10 @@ static unsigned char *const g_text_cells = g_mem + 0xb8000u;
 /* DAC state machine (ports 0x3C8 write-index, 0x3C7 read-index, 0x3C9 data) */
 static int g_dac_widx, g_dac_wsub;    /* write index + sub-component (0=R,1=G,2=B) */
 static int g_dac_ridx, g_dac_rsub;
+/* DOSBox PIC_8259A starts with timer, keyboard, cascade and RTC IRQs unmasked. */
+static unsigned char g_pic_mask[2] = {
+    0xffu & ~((1u << 0) | (1u << 1) | (1u << 2)), 0xffu & ~(1u << 0)
+};
 
 static int g_trace = -1;
 static int traceon(void){ if(g_trace<0){ extern char*getenv(const char*); g_trace=getenv("FIST_TRACE_TRAPS")?1:0;} return g_trace; }
@@ -555,6 +559,12 @@ void fist_clock_charge_cpu_instructions(unsigned count)
         else if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
     }
 }
+static void cpu_io_delay(int write)
+{
+    /* DOSBox iohandler.cpp: callback I/O subtracts budget, without retiring an instruction. */
+    unsigned delay = 30000u / (write ? (unsigned)(1024 / 0.75) : 1024u);
+    if (fist_clock_cpu_slice(NULL) >= 3u * delay) fist_clock_charge_cpu_instructions(delay);
+}
 void fist_clock_wait_bios_ticks(unsigned count)
 {
     const uint16_t *tick = (const uint16_t *)(g_mem + 0x46c);
@@ -587,8 +597,9 @@ static int vga_status(unsigned long long c){   /* port 0x3da at clock c: bit3 vs
 
 int in(int port)
 {
-    fist_timer_pump();   /* one PIT count of machine time, and the INT-8 it may bring (board:0026) */
     port &= 0xffff;
+    if (port == 0x21 || port == 0xa1) cpu_io_delay(0);
+    else fist_timer_pump();   /* remaining port costs are owned by board:0026 */
     if (fist_opl_owns(port)) return fist_opl_in(port);  /* OPL FM 0x388 status (FIST_OPL/FIST_SB) */
     if (fist_sb_owns(port)) return fist_sb_in(port);   /* SB DSP + 8237 DMA window (FIST_SB, default off) */
     switch (port) {
@@ -612,6 +623,7 @@ int in(int port)
     case 0x64: return 0x00;     /* keyboard status: no data available */
     case 0x201: return 0xf0;    /* joystick: no buttons pressed, timers low */
     case 0x20: case 0xa0: return 0;   /* PIC */
+    case 0x21: case 0xa1: return g_pic_mask[port == 0xa1];
     default:
         if (traceon()) fprintf(stderr, "[port] in  0x%03x -> 0\n", port);
         return 0;
@@ -620,8 +632,9 @@ int in(int port)
 
 void out(int port, int val)
 {
-    fist_timer_pump();   /* one PIT count of machine time (see in()) */
     port &= 0xffff; val &= 0xff;
+    if (port == 0x21 || port == 0xa1) cpu_io_delay(1);
+    else fist_timer_pump();   /* remaining port costs are owned by board:0026 */
     if (fist_opl_owns(port)) { fist_opl_out(port, val); return; }  /* OPL FM 0x388/0x389 (FIST_OPL/FIST_SB) */
     if (fist_sb_owns(port)) { fist_sb_out(port, val); return; }   /* SB DSP + 8237 DMA (FIST_SB, default off) */
     switch (port) {
@@ -676,8 +689,8 @@ void out(int port, int val)
     case 0x3d4: case 0x3d5: /* CRTC */
     case 0x3d8: case 0x3d9: /* mode/color select */
     case 0x20: case 0xa0:   /* PIC EOI */
-    case 0x21: case 0xa1:   /* PIC mask */
         return;
+    case 0x21: case 0xa1: g_pic_mask[port == 0xa1] = val; return;
     case 0x61:
         if (((g_port61 ^ val) & 3) && getenv("FIST_SPEAKER_TRACE"))
             fprintf(stderr, "FIST_SPEAKER type %.9f type=%u previous=%u\n",

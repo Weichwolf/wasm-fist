@@ -35,6 +35,10 @@ Device time belongs to 0026, mixed output to 0003, complete capture/comparison t
   Accepted: 46 tests, both builds, 178 flows, exit 0; `run.6eoNh3/` (0026).
   Original 802 confirms all 38 costed loader reads see mask `0xf8` (IRQ2 clear); no extra mask write.
   Its complete 30000-ms frame/PCM streams match 797. Proof: `cpu-retirement/read-mask-30s-proof.json`.
+- Fresh base `7426275` proof in 0026 independently confirms all 1151 FIST.DAT mask reads and the
+  cycle-629918 application fetch, preserving every original 10000-ms frame/PCM byte. PIC data-port
+  budget/register behavior now matches actual-source probes on native/WASM; the production harness
+  still reads the extracted image directly and omits the original loader reads. The handoff remains open.
 - Original fixture/capture provenance: `pic-dispatch-362/`; current content/timing comparisons are in 0034.
 - Audio origin remains unresolved: original first nonzero stereo sample 18,887 at 428,276 us
   comes from `SPKR`; the port's first counter is 6.538382 us late. Continue in 0003/0026.

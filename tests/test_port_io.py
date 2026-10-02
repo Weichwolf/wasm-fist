@@ -45,6 +45,7 @@ class PortIoTest(unittest.TestCase):
         cls.pic_probe = str(cls.directory / 'pic-probe')
         subprocess.run(['g++', '-std=gnu++11', *sdl_flags, '-I' + str(tree / 'include'), '-I' + str(tree),
                         '-ffunction-sections', '-fdata-sections', str(ROOT / 'tools/oracle/pic_slice_probe.cpp'),
+                        str(ROOT / 'tools/oracle/io_delay_probe.cpp'),
                         '-Wl,--gc-sections', '-lm', '-o', cls.pic_probe], check=True, capture_output=True, text=True)
 
     def test_pit_latches_match_original_float_period_and_rounding(self):
@@ -60,10 +61,23 @@ class PortIoTest(unittest.TestCase):
                             self.assertEqual(result.stdout, expected)
 
     def test_unrelated_ports_preserve_speaker_and_pit2(self):
+        # Original float latches include fractional I/O time; whole-count subtraction is invalid.
+        before = int(subprocess.check_output([self.pit_probe, '2', '50000', '1'], text=True))
+        expected = {}
+        for mask in (False, True):
+            elapsed = 4 + 21 * 1193182 / 30000000 if mask else 5
+            expected[mask] = int(subprocess.check_output([self.pit_probe, '2', '50000', str(elapsed)], text=True))
         for target, run in self.commands:
             with self.subTest(target=target):
                 result = subprocess.run(run, capture_output=True, text=True, timeout=30)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                lines = result.stdout.splitlines()
+                self.assertEqual(len(lines), 34)   # all 17 ports, both speaker-gate-on states
+                for line in lines:
+                    port, mode, actual_before, actual_after = map(int, line.split())
+                    with self.subTest(target=target, port=port, speaker=mode):
+                        self.assertEqual(actual_before, before)
+                        self.assertEqual(actual_after, expected[port in (0x21, 0xa1)])
 
     def test_pit_latches_preserve_sub_count_cpu_time(self):
         for mode in (2, 3):
@@ -139,6 +153,23 @@ class PortIoTest(unittest.TestCase):
                                         capture_output=True, text=True, timeout=30)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout, expected)
+
+    def test_file_read_mask_io_matches_original_budget_and_suppression(self):
+        prefix, state = self.pic_fixture()
+        cases = [(28814, count) for count in (1, 37, 38, 39, 1151)]
+        cases += [(index, count) for index in (29900, 29913, 29914, 29937, 29999)
+                  for count in (1, 8)]
+        for scenario in ('file-read', 'masked-read'):
+            for index, count in cases:
+                expected = subprocess.check_output([self.pic_probe, str(state), '20', str(index),
+                                                    scenario, str(count)], text=True)
+                for target, run in self.commands:
+                    with self.subTest(target=target, index=index, reads=count, scenario=scenario):
+                        result = subprocess.run([*run, 'pic-' + scenario, '20', str(index), str(count)],
+                                                env=dict(os.environ, FIST_TEXT_STATE=str(prefix)),
+                                                capture_output=True, text=True, timeout=30)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(result.stdout, expected)
 
     def test_cpu_retirement_matches_original_queue(self):
         prefix, state = self.pic_fixture()
