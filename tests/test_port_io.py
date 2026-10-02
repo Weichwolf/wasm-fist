@@ -4,6 +4,7 @@ import importlib.util
 import os
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -24,7 +25,8 @@ class PortIoTest(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.tmp.cleanup)
         cls.directory = Path(cls.tmp.name)
-        sources = [str(ROOT / 'tests/port_io.c'), str(ROOT / 're_out/fist_vga.c')]
+        sources = [str(ROOT / 'tests/port_io.c'), str(ROOT / 're_out/fist_vga.c'),
+                   str(ROOT / 're_out/fist_dos.c')]
         flags = ['-I' + str(ROOT / 're_out'), '-ffunction-sections', '-fdata-sections']
         native, wasm = (str(cls.directory / name) for name in ('ports', 'ports.js'))
         targets = [('native', ['gcc', '-m32', *flags, *sources, '-Wl,--gc-sections', '-lm', '-o', native], [native]),
@@ -170,6 +172,103 @@ class PortIoTest(unittest.TestCase):
                                                 capture_output=True, text=True, timeout=30)
                         self.assertEqual(result.returncode, 0, result.stderr)
                         self.assertEqual(result.stdout, expected)
+
+    def test_mz_loader_matches_original_reads_relocations_and_short_eof(self):
+        prefix, state = self.pic_fixture()
+        data = self.directory / 'mz-data'
+        data.mkdir()
+        cases = []
+        for name, segment, relocation in (('FIST.DAT', 0, 0), ('MGAVIDEO.DVR', 0x3400, 0x3400),
+                                          ('SOUNDDVR.DVR', 0x4000, 0x4000)):
+            raw = (ROOT / 'armoredfist' / name).read_bytes()
+            (data / name).write_bytes(raw)
+            header = struct.unpack_from('<14H', raw)
+            module = bytearray(raw[header[4] * 16:])
+            for offset in range(header[3]):
+                off, seg = struct.unpack_from('<HH', raw, header[12] + 4 * offset)
+                site = seg * 16 + off
+                struct.pack_into('<H', module, site,
+                                 (struct.unpack_from('<H', module, site)[0] + relocation) & 0xffff)
+            rounded = (header[2] & 0x7ff) * 512 - header[4] * 16
+            reads = 1 + (rounded + 0x7fff) // 0x8000 + header[3]
+            cases.append((name, segment, relocation, bytes(module), reads))
+
+        # The original ignores last-page byte count during reads and tolerates short EOF.
+        for name, length, pages in (('BOUNDARY.DVR', 0x8000 + 13, 65),
+                                    ('SHORT.DVR', 71, 65), ('ZM.DVR', 19, 0x8001)):
+            module = bytes((i * 37 + 11) & 0xff for i in range(length))
+            header = struct.pack('<14H', 0x5a4d if name != 'ZM.DVR' else 0x4d5a,
+                                 (length + 32) % 512, pages, 0, 2, 0, 0, 0, 0, 0, 0, 0, 28, 0)
+            (data / name).write_bytes(header + b'\0' * 4 + module)
+            reads = 1 + (((pages & 0x7ff) * 512 - 32) + 0x7fff) // 0x8000
+            cases.append((name, 0x3400, 0, module, reads))
+
+        for name, segment, relocation, expected, reads in cases:
+            expected_phase = subprocess.check_output([self.pic_probe, str(state), '20', '28814',
+                                                     'file-read', str(reads)], text=True).split()
+            base = segment << 4
+            for target, run in self.commands:
+                with self.subTest(target=target, file=name):
+                    output = self.directory / f'{target}-{name}.memory'
+                    result = subprocess.run([*run, 'mz-overlay', name, str(segment), str(relocation),
+                                             str(base + len(expected) + 512), str(output)],
+                                            env=dict(os.environ, FIST_TEXT_STATE=str(prefix),
+                                                     FIST_DATADIR=str(data)),
+                                            capture_output=True, text=True, timeout=30)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    status, cycle, remaining, span, registered = map(int, result.stdout.split())
+                    self.assertEqual(status, 0, result.stderr)
+                    self.assertEqual((cycle, remaining), tuple(map(int, expected_phase[:2])))
+                    self.assertEqual((span, registered), (len(expected), 1))
+                    memory = output.read_bytes()
+                    self.assertEqual(memory[:base], b'\xa5' * base)
+                    self.assertEqual(memory[base:base + len(expected)], expected)
+                    self.assertEqual(memory[base + len(expected):], b'\xa5' * 512)
+
+    def test_mz_relocation_segment_addition_wraps_at_16_bits(self):
+        prefix, state = self.pic_fixture()
+        data = self.directory / 'mz-wrap'
+        data.mkdir()
+        header = struct.pack('<14H', 0x5a4d, 64, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 28, 0)
+        (data / 'WRAP.DVR').write_bytes(header + struct.pack('<HH', 0, 0x2000) + b'Q' * 32)
+        phase = subprocess.check_output([self.pic_probe, str(state), '20', '28814',
+                                         'file-read', '3'], text=True).split()
+        for target, run in self.commands:
+            with self.subTest(target=target):
+                output = self.directory / f'{target}-wrap.memory'
+                result = subprocess.run([*run, 'mz-overlay', 'WRAP.DVR', '0xf000', '0xf000',
+                                         '0x110002', str(output)],
+                                        env=dict(os.environ, FIST_TEXT_STATE=str(prefix),
+                                                 FIST_DATADIR=str(data)),
+                                        capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(tuple(map(int, result.stdout.split())),
+                                 (0, int(phase[0]), int(phase[1]), 32, 1))
+                expected = bytearray(b'\xa5' * 0x110002)
+                expected[0xf0000:0xf0020] = b'Q' * 32
+                struct.pack_into('<H', expected, 0x10000, 0x95a5)
+                self.assertEqual(output.read_bytes(), expected)
+
+    def test_real_application_load_preserves_fixture_clock_and_bios_memory(self):
+        prefix, state = self.pic_fixture()
+        phase = subprocess.check_output([self.pic_probe, str(state), '20', '28814',
+                                         'file-read', '1151'], text=True).split()
+        cycle, remaining = map(int, phase[:2])
+        raw = (ROOT / 'armoredfist/FIST.DAT').read_bytes()
+        header_size = struct.unpack_from('<H', raw, 8)[0] * 16
+        expected = bytearray(raw[header_size:])
+        expected[0x400:0x500] = Path(str(prefix) + '.bda').read_bytes()
+        for target, run in self.commands:
+            with self.subTest(target=target):
+                output = self.directory / f'{target}-startup.memory'
+                result = subprocess.run([*run, 'mz-start', 'FIST.DAT', str(output)],
+                                        env=dict(os.environ, FIST_TEXT_STATE=str(prefix),
+                                                 FIST_DATADIR=str(ROOT / 'armoredfist')),
+                                        capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout,
+                                 f'{cycle} {remaining}\n{cycle} {remaining}\n{cycle+2} {remaining-2}\n')
+                self.assertEqual(output.read_bytes(), expected)
 
     def test_cpu_retirement_matches_original_queue(self):
         prefix, state = self.pic_fixture()

@@ -7,6 +7,15 @@
 uint8_t g_mem[FIST_MEM_SIZE];
 void fist_timer_pump(void) { extern void fist_clock_advance(unsigned); fist_clock_advance(1); }
 static unsigned g_irqs;
+static uint32_t g_loaded_size;
+static unsigned g_registered;
+int fist_ovl_register(const char *name, uint32_t base, uint32_t size)
+{
+    (void)name; (void)base;
+    g_loaded_size = size;
+    ++g_registered;
+    return 0;
+}
 void fist_int8_fire(void) { ++g_irqs; }
 int fist_opl_owns(int port) { (void)port; return 0; }
 int fist_opl_in(int port) { (void)port; return 0; }
@@ -24,6 +33,40 @@ static void check_endpoint(void)
 
 int main(int argc, char **argv)
 {
+    if (argc == 4 && !strcmp(argv[1], "mz-start")) {
+        extern void fist_text_init(void);
+        extern unsigned fist_clock_cpu_slice(uint64_t *);
+        fist_text_clock_init();
+        uint32_t loaded;
+        assert(!fist_load_mz(argv[2], 0, 0, &loaded));
+        for (unsigned stage = 0; stage < 3; ++stage) {
+            if (stage == 1) fist_text_init();
+            if (stage == 2) fist_clock_charge_cpu_instructions(2);
+            uint64_t cycle;
+            unsigned remaining = fist_clock_cpu_slice(&cycle);
+            printf("%llu %u\n", (unsigned long long)cycle, remaining);
+        }
+        FILE *output = fopen(argv[3], "wb");
+        assert(output && fwrite(g_mem, 1, loaded, output) == loaded && !fclose(output));
+        return 0;
+    }
+    if (argc == 7 && !strcmp(argv[1], "mz-overlay")) {
+        extern void fist_text_init(void);
+        extern unsigned fist_clock_cpu_slice(uint64_t *);
+        fist_text_init();
+        memset(g_mem, 0xa5, sizeof g_mem);
+        unsigned segment = strtoul(argv[3], NULL, 0), relocation = strtoul(argv[4], NULL, 0);
+        unsigned length = strtoul(argv[5], NULL, 0);
+        assert(length <= FIST_MEM_SIZE);
+        int result = fist_load_overlay(argv[2], segment, relocation);
+        uint64_t cycle;
+        unsigned remaining = fist_clock_cpu_slice(&cycle);
+        FILE *output = fopen(argv[6], "wb");
+        assert(output && fwrite(g_mem, 1, length, output) == length && !fclose(output));
+        printf("%d %llu %u %u %u\n", result, (unsigned long long)cycle, remaining,
+               g_loaded_size, g_registered);
+        return 0;
+    }
     if (argc == 2 && !strcmp(argv[1], "start-cpu")) {
         extern void fist_text_init(void);
         extern unsigned fist_clock_cpu_slice(uint64_t *);

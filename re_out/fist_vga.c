@@ -179,6 +179,41 @@ static void fist_sequence_pic_part(unsigned part)
     g_sequence_event_cycles = g_sequence_pic_part_tick * 30000u + fractional;
 }
 
+static int g_text_clock_initialized;
+void fist_text_clock_init(void)
+{
+    if (g_text_clock_initialized) return;
+    const char *prefix = getenv("FIST_TEXT_STATE");
+    if (prefix) {
+        char path[1024];
+        FILE *f;
+        unsigned long long start_ns, vertical_ns;
+        if (snprintf(path, sizeof path, "%s.vga", prefix) >= (int)sizeof path) abort();
+        f = fopen(path, "rb");
+        if (!f || fscanf(f, "FISTVGA1\n%llu %llu\n%llu %a", &start_ns, &vertical_ns,
+                         &g_text_pic_tick, &g_text_pic_lag) != 4 ||
+            fgetc(f) != '\n' || fgetc(f) != EOF || fclose(f) ||
+            g_text_pic_tick > UINT32_MAX || !(g_text_pic_lag >= 0 && g_text_pic_lag < 1) ||
+            vertical_ns > start_ns ||
+            start_ns > (UINT64_MAX - 500000000ull) / PIT_HZ_) abort();
+        /* The fixture rounds a fixed-core CPU timestamp to nanoseconds. */
+        uint64_t start_cpu = (start_ns / 100) * 3 + ((start_ns % 100) * 3 + 50) / 100;
+        uint64_t start_num = start_cpu * PIT_HZ_;
+        clock_set((FistClock){start_num / CPU_HZ_, start_num % CPU_HZ_});
+        unsigned long long vertical_num = vertical_ns * PIT_HZ_;
+        unsigned long long whole = vertical_num / 1000000000ull;
+        unsigned long long frac = vertical_num % 1000000000ull;
+        if (whole > (UINT64_MAX - VGA_CLOCK_) / VGA_CLOCK_) abort();
+        g_text_vertical_num = whole * VGA_CLOCK_ +
+            (frac * VGA_CLOCK_ + 500000000ull) / 1000000000ull;
+        g_text_phase_set = 1;
+    }
+    g_vmode = 3;
+    memcpy(g_pal, fist_text_dac, sizeof g_pal);
+    fist_sequence_mode_set();
+    g_text_clock_initialized = 1;
+}
+
 void fist_text_init(void)
 {
     for (unsigned i = 0; i < 80 * 25; ++i) {
@@ -207,30 +242,8 @@ void fist_text_init(void)
         if (bda[0x49] != 3 || bda[0x4a] != 80 || bda[0x4b] || bda[0x62] ||
             bda[0x51] >= 25 || bda[0x50] >= 80) abort();
         memcpy(g_mem + 0x400, bda, sizeof bda);
-        unsigned long long start_ns, vertical_ns;
-        if (snprintf(path, sizeof path, "%s.vga", prefix) >= (int)sizeof path) abort();
-        f = fopen(path, "rb");
-        if (!f || fscanf(f, "FISTVGA1\n%llu %llu\n%llu %a", &start_ns, &vertical_ns,
-                         &g_text_pic_tick, &g_text_pic_lag) != 4 ||
-            fgetc(f) != '\n' || fgetc(f) != EOF || fclose(f) ||
-            g_text_pic_tick > UINT32_MAX || !(g_text_pic_lag >= 0 && g_text_pic_lag < 1) ||
-            vertical_ns > start_ns ||
-            start_ns > (UINT64_MAX - 500000000ull) / PIT_HZ_) abort();
-        /* The fixture rounds a fixed-core CPU timestamp to nanoseconds. */
-        uint64_t start_cpu = (start_ns / 100) * 3 + ((start_ns % 100) * 3 + 50) / 100;
-        uint64_t start_num = start_cpu * PIT_HZ_;
-        clock_set((FistClock){start_num / CPU_HZ_, start_num % CPU_HZ_});
-        unsigned long long vertical_num = vertical_ns * PIT_HZ_;
-        unsigned long long whole = vertical_num / 1000000000ull;
-        unsigned long long frac = vertical_num % 1000000000ull;
-        if (whole > (UINT64_MAX - VGA_CLOCK_) / VGA_CLOCK_) abort();
-        g_text_vertical_num = whole * VGA_CLOCK_ +
-            (frac * VGA_CLOCK_ + 500000000ull) / 1000000000ull;
-        g_text_phase_set = 1;
     }
-    g_vmode = 3;
-    memcpy(g_pal, fist_text_dac, sizeof g_pal);
-    fist_sequence_mode_set();
+    fist_text_clock_init();
 }
 
 void fist_text_write(unsigned ch)

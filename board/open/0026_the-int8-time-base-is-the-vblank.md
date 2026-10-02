@@ -74,14 +74,32 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   `390 + 76×29 + 43×21 + 1 = 3498` cycles; 18 reads/eight writes suppress delay, one failed-loop cycle.
   `start-epoch/warmup-original-proof.json`. Isolated native/WASM `prototype/*-warmup` derives 90
   from the original warm-start fixture and shared clock; production prefix and CLI/STI effects are open.
+- Current base `cbbda64`: `fist_load_mz` is the shared original-backed application/overlay loader.
+  It reads the 28-byte MZ/ZM header, uses DOSBox's 0x7ff page mask and page rounding rather than e_cblp,
+  reads 32-KiB blocks (including short/zero EOF results), then reads each four-byte relocation after
+  one seek. Only actual file bytes are written; PhysMake's 16-bit segment addition is preserved.
+  The obsolete load_seg >= 0x3400 guard is removed: original DOS overlays accept segment zero.
+  The overlay registry retains actual loaded extent rather than claiming unwritten EOF padding.
+  Every read performs localFile::Read's PIC access after fread, before guest-memory copying.
+  This internal DOS_Execute path has no INT 21h 4*AX budget cap.
+- `test_mz_loader_matches_original_reads_relocations_and_short_eof` fails all 12 target/file cases
+  on the old loader (`mz-load/red.log`). It now checks complete FIST.DAT/MGAVIDEO/SOUNDDVR memory,
+  real relocations, a 32-KiB boundary, short EOF and ZM/high-page-mask cases. Separate regressions
+  cover segment wrapping (f000 + 2000 -> 1000) and application clock/BIOS initialization on both targets.
+  Original read-budget provenance is `pic-mask/source-proof.json`; all 1151 individual production
+  read budgets match it, and both application entries are cycle 629918/budget 82 (0036).
+  `bash tools/check_flow.sh '^(intro|mainmenu)$'`: 55 tests, exact patches, native/WASM builds,
+  2 selected flows pass / 0 fail, exit 0; `scratch/verify/run.y8zSMD/`.
+- `mz-load/{final-native-10s,final-wasm-10s}/` retain 698 complete frames/endpoints and match each
+  other and their preceding port captures bytewise. Every original palette/time matches; only pixel
+  event 443 differs over these 10000 ms. `mz-load/proof.json` records the complete diagnostic scope.
+  Full mixed port PCM remains absent. The loader/start-phase step is proved; pre-decoder DOS caps,
+  kernel packet/gateway/REP work, remaining port I/O and full timing acceptance remain open.
 
 ## Next
 
-1. Restore 0036's DOS-load handoff with real MZ reads and active budget. Historical
-   `start-epoch/prototype/` files are absent in this checkout; recover the loader from DOS_Execute
-   and localFile::Read. Reuse the verified PIC data-port budget path and regress real images,
-   relocations, the 32-KiB boundary and short EOF on both targets.
-   Wire production, then implement DOS caps/credits, packet splits, gateway instructions and REP.
+1. Preserve 0036's now-proved MZ load/application-fetch phase. Implement production DOS caps/credits,
+   kernel packet splits, gateway instructions and REP from the original source/assembly.
    Preserve callback ordering and PIC tick state. Match every 10000-ms event, especially 443.
 2. Recover production pre-speaker work (23 mask reads, 720/721), 07b7's polling/CLI/STI and ISR return.
    Derive calibration arguments from operations and budget; never inject 90 or a measured total delay.

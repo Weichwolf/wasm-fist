@@ -39,6 +39,12 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   event 443 / byte 32004 (13 vs 14). A fresh original GDB startup probe preserves every frame and
   PCM record against `resume-a469760-original/`. Evidence: `scratch/sequence-capture/pic-mask/`.
   These frame diagnostics do not prove full PCM equality or a corrected DOS-load handoff.
+- Current MZ load/start-phase change at base `cbbda64` (0026/0036): production native/WASM entries
+  match the original's cycle 629918/budget 82 and all 1151 loader-read budgets. Complete 10000-ms
+  native/WASM captures retain 698 frames and match each other and the preceding port byte streams.
+  Every original palette/time matches; only pixel event 443 differs. Evidence:
+  `scratch/sequence-capture/mz-load/{proof.json,final-native-10s/,final-wasm-10s/}`.
+  Mixed port PCM and pre-decoder DOS/kernel work remain unresolved; complete comparison still fails.
 
 ## Next
 

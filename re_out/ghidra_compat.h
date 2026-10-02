@@ -250,6 +250,7 @@ extern const struct fist_ovl_known fist_ovl_known[];  /* NULL-name terminated; e
 int  fist_ovl_register(const char *name, uint32_t base, uint32_t size);
 /* Load a 16-bit MZ overlay file at load_seg<<4, apply its relocs (factor), register it (fist_dos.c). */
 int  fist_load_overlay(const char *name, uint16_t load_seg, uint16_t reloc);
+int  fist_load_mz(const char *name, uint16_t load_seg, uint16_t reloc, uint32_t *loaded_size);
 
 /* Cooperative timer pump (tools/native_main.c): runs the engine's installed INT-8 (PIT) ISR when a
  * host SIGALRM tick is pending, guarded against re-entry. Called from the engine's timer busy-waits
@@ -259,6 +260,7 @@ int  fist_load_overlay(const char *name, uint16_t load_seg, uint16_t reloc);
 void  fist_timer_pump(void);
 void  fist_set_int8_handler(uint32_t linear);
 void  fist_clock_charge_cpu_instructions(unsigned count);
+void  fist_text_clock_init(void);
 void  fist_clock_wait_bios_ticks(unsigned count);
 
 /* Saved-INT-vector MAGIC: INT 21h AH=35 (get-vector) hands the engine a synthetic, CALLABLE

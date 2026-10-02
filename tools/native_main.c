@@ -287,9 +287,6 @@ void fbtrap_arm_hook(void) { }
 
 uint8_t g_mem[FIST_MEM_SIZE];
 
-#define IMAGE_PATH "re_out/fist_dat_image.bin"
-#define IMAGE_SIZE 0x3390c   /* 211212 bytes, the extracted flat FIST.DAT image */
-
 /* ---- INT-exit unwind target (set by fist_dos.c on INT 21h/4Ch or the FIST_MAXINTS cap) ---- */
 jmp_buf g_fist_exit;
 volatile int g_fist_exit_code;
@@ -1281,11 +1278,12 @@ void fist_input_pump(void){
 }
 
 static void load_image(void) {
-    FILE *f = fopen(IMAGE_PATH, "rb");
-    if (!f) { fprintf(stderr, "FATAL: cannot open %s (run from repo root)\n", IMAGE_PATH); exit(1); }
-    size_t n = fread(g_mem, 1, IMAGE_SIZE, f);
-    fclose(f);
-    fprintf(stderr, "[fist] loaded %zu bytes of engine image into g_mem[0..0x%zx]\n", n, n);
+    uint32_t n;
+    if (fist_load_mz("FIST.DAT", 0, 0, &n)) {
+        fprintf(stderr, "FATAL: cannot load the original FIST.DAT MZ image\n");
+        exit(1);
+    }
+    fprintf(stderr, "[fist] loaded %u bytes of engine image into g_mem[0..0x%x]\n", n, n);
 }
 
 /* ---- DOS-loader role: DGROUP service-vector table + PSP + environment block ----
@@ -4085,6 +4083,7 @@ int main(int argc, char **argv) {
             sigaction(SIGTRAP,&st,NULL); }
     }
 #endif
+    fist_text_clock_init();     /* fixture is at DOS EXEC, before the real MZ reads */
     load_image();
     setup_dos_env();
     extern void fist_text_init(void);
@@ -4099,6 +4098,15 @@ int main(int argc, char **argv) {
     start_timer();
     int reason = setjmp(g_fist_exit);
     if (reason == 0) {
+        /* Original normal-core fetches after DOS EXEC: f000:14a6 RETF, then 1119:0004 MOV AX.
+         * The fixture already includes the EXEC callback fetch; account for these two next fetches. */
+        fist_clock_charge_cpu_instructions(2);
+        if (getenv("FIST_OPENLOG")) {
+            extern unsigned fist_clock_cpu_slice(uint64_t *);
+            uint64_t cycle;
+            unsigned remaining = fist_clock_cpu_slice(&cycle);
+            fprintf(stderr, "[entry-cycles] cpu=%llu slice=%u\n", (unsigned long long)cycle, remaining);
+        }
         fprintf(stderr, "[fist] calling app_entry()\n");
         app_entry(0, 0, 0, 0, 0, 0);
         fprintf(stderr, "[fist] app_entry returned normally\n");

@@ -39,14 +39,24 @@ Device time belongs to 0026, mixed output to 0003, complete capture/comparison t
   cycle-629918 application fetch, preserving every original 10000-ms frame/PCM byte. PIC data-port
   budget/register behavior now matches actual-source probes on native/WASM; the production harness
   still reads the extracted image directly and omits the original loader reads. The handoff remains open.
+- Current base `cbbda64`: the production harness now loads FIST.DAT through the same MZ path as
+  overlays. All 1151 reads match the fresh original's budget trajectory on both targets: 28 header
+  bytes, six 32768-byte reads, one 14848-byte request/14604-byte result, and 1143 relocation reads.
+  Reads finish at cycle 629916/budget 84. The original's next two normal-core fetches are
+  f000:14a6 RETF and 1119:0004 MOV AX; production reaches app_entry at cycle 629918/budget 82.
+  No measured total is injected. `fist_text_clock_init` owns the initial fixture clock/calendar;
+  later BIOS/text initialization preserves elapsed loader time and the existing rebased memory layout.
+  Source, memory/phase regressions and 55-test scoped validation belong to 0026. Proof:
+  `scratch/sequence-capture/mz-load/{proof.json,final-native-10s/,final-wasm-10s/}`.
+  The full mixer origin and remaining startup instruction/device effects are still unproved.
 - Original fixture/capture provenance: `pic-dispatch-362/`; current content/timing comparisons are in 0034.
 - Audio origin remains unresolved: original first nonzero stereo sample 18,887 at 428,276 us
   comes from `SPKR`; the port's first counter is 6.538382 us late. Continue in 0003/0026.
 
 ## Next
 
-1. Execute the real MZ header/image/relocation reads in 0026: 1151 reads, I/O suppression at budget 84,
-   then RETF/application fetch. Share the overlay loader; preserve page rounding/EOF and this fixture.
+1. Preserve the now-proved MZ reads and application-fetch phase while completing 0026's production
+   DOS/kernel reads, pre-speaker instructions and interrupt effects. Recheck the first sample in 0003.
 2. Reproduce this fixture after device-time/mixer changes, including the first frame and sample.
 3. Use 0034's `FIST_SEQUENCE_END_MS` for matched captures. Investigate start-state defects here.
 

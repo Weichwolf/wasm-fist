@@ -280,69 +280,75 @@ static void ff_fill_dta(int idx)
     strncpy((char*)(d + 0x1e), g_ff_names[idx], 12); d[0x1e + 12] = 0;
 }
 
-/* ---- INT 21h AH=4B AL=03 : load-overlay (faithful 16-bit MZ overlay loader) ----
- * The engine EXEC-loads its driver overlays (MGAVIDEO.DVR video, SOUNDDVR.DVR sound) into a segment
- * it has already allocated (AH=48), passing the load segment + relocation factor in the ES:BX param
- * block. AL=03 is the "load, do NOT create a PSP, do NOT run" sub-function: DOS just reads the MZ
- * load-module, copies it to load_seg:0000, and adds the reloc factor to each MZ relocation site --
- * then returns; the caller far-calls the module entry itself. We replicate exactly that, reading the
- * REAL .DVR file (its MZ header carries the reloc table) so nothing is faked. Faithful failure (return
- * -1 -> CF) if the file is missing or the MZ is malformed. */
-int fist_load_overlay(const char *name, uint16_t load_seg, uint16_t reloc)
+/* DOSBox localFile::Read performs the PIC access after fread, including zero-byte EOF reads.
+ * DOS_Execute uses DOS_ReadFile directly, so INT 21h's separate 4*AX budget cap is not involved. */
+static size_t mz_read(FILE *f, void *buffer, uint16_t requested)
+{
+    size_t actual = fread(buffer, 1, requested, f);
+    unsigned mask = in(0x21);
+    if (mask & 4) out(0x21, mask & 0xfb);
+    trace_read_slice(-1, requested, actual);
+    return actual;
+}
+static uint16_t mz_word(const uint8_t *p) { return p[0] | ((uint16_t)p[1] << 8); }
+
+/* Shared DOS_Execute MZ path for the rebased application and AL=03 overlays. The original reads
+ * 28 header bytes, rounds the page count (not e_cblp), then reads 32-KiB blocks and each relocation.
+ * Only actual file bytes are copied: rounded EOF padding retains the destination's previous state.
+ * PhysMake takes a uint16_t segment, including wrap when adding a relocation's segment to load_seg. */
+int fist_load_mz(const char *name, uint16_t load_seg, uint16_t reloc, uint32_t *loaded_size)
 {
     FILE *f = open_ci(name, "rb");
-    if (!f) { TRACE("[dos] 4B03 overlay '%s' NOT FOUND\n", name); return -1; }
-    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return -1; }
-    long fsz = ftell(f); fseek(f, 0, SEEK_SET);
-    if (fsz < 0x20) { fclose(f); return -1; }
-    uint8_t hdr[0x40];
-    if (fread(hdr, 1, sizeof hdr, f) != sizeof hdr) { fclose(f); return -1; }
-    if (hdr[0] != 'M' || hdr[1] != 'Z') { fclose(f); TRACE("[dos] 4B03 '%s' not MZ\n", name); return -1; }
-    uint16_t cblp    = *(uint16_t*)(hdr + 0x02);
-    uint16_t cp      = *(uint16_t*)(hdr + 0x04);
-    uint16_t crlc    = *(uint16_t*)(hdr + 0x06);
-    uint16_t cparhdr = *(uint16_t*)(hdr + 0x08);
-    uint16_t lfarlc  = *(uint16_t*)(hdr + 0x18);
+    if (!f) { TRACE("[dos] MZ '%s' NOT FOUND\n", name); return -1; }
+    uint8_t hdr[28], buffer[0x8000];
+    uint32_t copied = 0;
+    if (mz_read(f, hdr, sizeof hdr) != sizeof hdr || ferror(f)) goto fail;
+    uint16_t signature = mz_word(hdr);
+    if (signature != 0x5a4d && signature != 0x4d5a) goto fail;
+    uint16_t cp = mz_word(hdr + 0x04) & 0x07ff;   /* DOSBox's explicit maximum-page mask */
+    uint16_t crlc = mz_word(hdr + 0x06);
+    uint16_t cparhdr = mz_word(hdr + 0x08);
+    uint16_t lfarlc = mz_word(hdr + 0x18);
     uint32_t hdr_bytes = (uint32_t)cparhdr * 16;
-    uint32_t img_bytes = cblp ? (uint32_t)(cp - 1) * 512 + cblp : (uint32_t)cp * 512;
-    if (img_bytes > (uint32_t)fsz || hdr_bytes >= img_bytes) { fclose(f); return -1; }
-    uint32_t lm_bytes = img_bytes - hdr_bytes;               /* load-module size */
+    uint32_t image_bytes = (cp ? (uint32_t)cp * 512 : 512) - hdr_bytes;
     uint32_t dst = (uint32_t)load_seg << 4;
-    /* Honest invalid-load-target check: the load segment comes from the engine's driver-object struct
-     * (ES:BX param-block word0 = struct[0] = the AH=48-allocated segment). If it lands inside the loaded
-     * engine image (< image top paragraph) it would overwrite the running engine / IVT -- never a real
-     * value (the real struct holds an alloc'd segment ABOVE the image, e.g. 0x3400). This is exactly
-     * BLOCKER #1 leg (b): the driver-struct load-segment field is not yet populated (it is set by the
-     * FUN_1000_184b/0a31 allocator reached through the still-unthreaded DGROUP:0xd0/0xd8 method vectors),
-     * so load_seg arrives 0. Fail LOUDLY here rather than corrupting g_mem at linear 0. */
-    if (load_seg < 0x3400u) {   /* 0x3400 = fist_dos.c heap base = first paragraph above the engine image */
-        fclose(f);
-        TRACE("[dos] 4B03 '%s' REJECT load_seg=%04x (< heap base 0x3400) -- driver-struct load segment "
-              "not populated (BLOCKER #1 leg b: 184b/0a31 allocator not yet threaded)\n", name, load_seg);
-        return -1;
+    if (image_bytes > FIST_MEM_SIZE - dst || fseek(f, hdr_bytes, SEEK_SET)) goto fail;
+    uint32_t position = dst;
+    while (image_bytes) {
+        uint16_t requested = image_bytes > 0x7fff ? 0x8000 : (uint16_t)image_bytes;
+        size_t actual = mz_read(f, buffer, requested);
+        if (ferror(f)) goto fail;
+        memcpy(g_mem + position, buffer, actual);
+        if (actual) copied = position - dst + actual;
+        position += requested;
+        image_bytes -= requested;
     }
-    if (dst + lm_bytes > FIST_MEM_SIZE) { fclose(f); TRACE("[dos] 4B03 '%s' load 0x%x+0x%x overflows\n",
-                                                            name, dst, lm_bytes); return -1; }
-    /* copy the load-module into g_mem at load_seg:0000 */
-    fseek(f, hdr_bytes, SEEK_SET);
-    if (fread(g_mem + dst, 1, lm_bytes, f) != lm_bytes) { fclose(f); return -1; }
-    /* apply the MZ relocations: word at (load_seg<<4)+(seg<<4)+off += reloc */
-    int applied = 0;
+    if (fseek(f, lfarlc, SEEK_SET)) goto fail;
     for (uint16_t i = 0; i < crlc; ++i) {
         uint8_t rb[4];
-        if (fseek(f, lfarlc + i * 4, SEEK_SET) != 0 || fread(rb, 1, 4, f) != 4) { fclose(f); return -1; }
-        uint16_t r_off = *(uint16_t*)rb, r_seg = *(uint16_t*)(rb + 2);
-        uint32_t site = dst + ((uint32_t)r_seg << 4) + r_off;
-        if (site + 2 > FIST_MEM_SIZE) { fclose(f); return -1; }
-        *(uint16_t*)(g_mem + site) = (uint16_t)(*(uint16_t*)(g_mem + site) + reloc);
-        ++applied;
+        if (mz_read(f, rb, sizeof rb) != sizeof rb || ferror(f)) goto fail;
+        uint32_t site = ((uint32_t)(uint16_t)(mz_word(rb + 2) + load_seg) << 4) + mz_word(rb);
+        if (site + 2 > FIST_MEM_SIZE) goto fail;
+        uint16_t value = mz_word(g_mem + site) + reloc;
+        g_mem[site] = value;
+        g_mem[site + 1] = value >> 8;
     }
+    if (fclose(f)) return -1;
+    if (loaded_size) *loaded_size = copied;
+    TRACE("[dos] MZ loaded '%s' at %04x (%u bytes, %u relocs, factor %04x)\n",
+          name, load_seg, copied, crlc, reloc);
+    return 0;
+fail:
     fclose(f);
-    /* strip DOS path to the bare basename for the registry / fmap wiring */
+    return -1;
+}
+
+int fist_load_overlay(const char *name, uint16_t load_seg, uint16_t reloc)
+{
+    uint32_t loaded_size;
+    if (fist_load_mz(name, load_seg, reloc, &loaded_size)) return -1;
     const char *bn = name; for (const char *p = name; *p; ++p) if (*p == '\\' || *p == '/') bn = p + 1;
-    fist_ovl_register(bn, dst, lm_bytes);
-    TRACE("[dos] 4B03 loaded '%s' at seg %04x (linear 0x%05x, %u bytes, %d relocs, factor %04x)\n",
-          bn, load_seg, dst, lm_bytes, applied, reloc);
+    fist_ovl_register(bn, (uint32_t)load_seg << 4, loaded_size);
     return 0;
 }
 
