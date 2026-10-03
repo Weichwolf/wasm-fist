@@ -968,6 +968,20 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   Strict comparison fails absent final mixed port PCM. Device init/IRQ/mixer,
   full GP/ES/flags/farstack and instruction/device time are not accepted.
 
+- Consume0009's accepted patch638 source module DTA storage/addressing.
+  `tools/oracle/dta_production_case.json` records four reaching parent
+  failures, eight target cases and actual corrected constructor/startup
+  slots. The unfiltered126-test/exact-patch/sequential-build/six-startup/
+  full178-flow gate passes with durable0 and419 pristine originals.
+  All2100 fresh30000-ms frame/end bytes and43 sound register rows retain
+  parent637 behavior; every original palette/layout/time matches. The same
+  28 original pixel failures start817/11704156us/byte8754. All47 packets
+  are retained without masks: Native op68 is now `f6680005`, WASM remains
+  `00000005`; its full register producer remains open in0009/0014.
+  Strict comparison still rejects absent final mixed port PCM. DTA
+  storage/addressing does not accept op44 dispatch/CF/errors, device setup,
+  original GP/flags/stack/IRQ/time or complete original output.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.

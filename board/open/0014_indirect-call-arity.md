@@ -194,6 +194,16 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   Port CF/errors, all returned GP/flags and instruction/device time remain
   separate unaccepted contracts.
 
+- Consume0009's accepted patch638 module DTA storage/address contract in
+  `tools/oracle/dta_production_case.json`: four parent failures become
+  eight real-DOS target cases; actual constructor/both startup slots hold
+  source080b. The frozen1030-input full126-test/six-startup/178-flow gate
+  passes0. All2100 parent frame/end bytes and43 sound rows are retained;
+  full47 packets expose Native op68 `f6680005` versus WASM `00000005`.
+  The upper-word difference, stale6de2 transport and omitted configuration
+  AX are unresolved. No CF/errors, archive parsing, GP/flags/stack/IRQ/time
+  or complete original frame/audio acceptance follows.
+
 ## Next
 
 1. Recover0009's actual op44 FILEMGR/DTA initialization and returned GP lanes;

@@ -1807,7 +1807,6 @@ int         g_ext_eof;        /* KDV read-chunk CF-out: set by patch-084 (708b E
 static int  g_kdv_done;       /* intro finished (EOF reached) -> op 0x78 returns "animation complete" */
 extern int  g_fist_ext_int;   /* fist_dos.c: route INT 21h through the flat-mode FILEMGR while set */
 static const char g_ext_path_root[1] = { 0 };  /* FILEMGR path-root = empty string */
-static uint8_t    g_ext_dta_buf[128];           /* FILEMGR DTA (find-first result buffer) */
 static uint8_t    g_ext_kdv_tcb[0x1000];        /* dedicated extender current-TCB (see gate below) */
 
 static void ext_module_init(void) {
@@ -1840,12 +1839,13 @@ static void ext_module_init(void) {
      * issues INT 21h find/open.  Seed the path-root to an EMPTY string (host pointer to a NUL) so the
      * branch is taken but no prefix is prepended -> the bare filename ("TITLE.KDV") is opened, which
      * open_ci() resolves under $FIST_DATADIR/FISTDATA.  Resource-dir [0x622c] and alt-drive [0x6238]
-     * are cleared (skip the secondary search).  The DTA pointer [0x927] is a real host buffer that
-     * find-first fills (file size at +0x1a, read by the KDV OPEN). */
+     * are cleared (skip the secondary search). Original a88/a8d stores module
+     * offset080b in [927]; find-first fills that reserved module buffer. Resolve
+     * its logical address at each field access, sharing the flat DOS owner. */
     *(uint32_t *)(xb + 0x6234) = (uint32_t)(uintptr_t)g_ext_path_root;   /* path root = "" */
     *(uint32_t *)(xb + 0x622c) = 0;                                      /* resource dir: none */
     *(uint32_t *)(xb + 0x6238) = 0;                                      /* alt drive/path: none */
-    *(uint32_t *)(xb + 0x0927) = (uint32_t)(uintptr_t)g_ext_dta_buf;     /* DTA buffer */
+    *(uint32_t *)(xb + 0x0927) = 0x080b;                         /* a88/a8d: module DTA offset */
     g_ext_ready = (n == FIST_EXT_IMG_SIZE);
     fprintf(stderr, "[ext] KDV module loaded @g_mem+0x%x (%zu B), heap 0x%x..0x%x, fb->0x%x TCB->0x%x %s\n",
             FIST_EXT_BASE, n, FIST_EXT_HEAP, FIST_EXT_HEAP_TOP, 0xA0000, 0x90000,

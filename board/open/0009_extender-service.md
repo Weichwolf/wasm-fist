@@ -74,6 +74,34 @@ inventory must not be used as a patch list.
   evidence does not accept port transport, loader interval memory/CF/errors,
   original instruction/device time or complete frame/audio sequences.
 
+- Patch638 restores the original DWORD module DTA offset080b in927 and
+  resolves every patched DTA+1a field access through the existing
+  `fist_ext_addr` owner. The host-only buffer is removed. Four reaching
+  parent failures (Native invalid pointer/WASM unrelated query size) become
+  eight target cases with complete HIGH.DTL/DSOUNDS.BIN contents and
+  unchanged legacy expectations. Actual Native constructor and both
+  production startup dumps at cooperative tick120 retain080b; the initial
+  reserved buffer/code bytes match the image. These dumps diagnose DTA
+  storage/addressing, not original clock or whole-memory equality.
+  The frozen1030-input unfiltered `run.6bEeNV` passes126 tests, exact
+  patches, sequential builds, six startup cases and all178 existing flows,
+  durable0; all419 original hashes/inventory are unchanged. Complete fresh
+  30000-ms captures retain every2100 parent637 frame/end byte and43 sound
+  register rows on both targets. All47 unmasked packets are recorded:
+  Native op68 changes `f6e80005` to `f6680005`; WASM retains `00000005`.
+  The upper-word producer is still unaccepted. Original palettes/layouts/
+  times match;28 pixel failures start817/11704156us/byte8754, and strict
+  comparison rejects absent final mixed port PCM. Receipt/reproduction:
+  `tools/oracle/dta_production_case.json`; `python3 -B
+  tools/capture_dta_startup.py --native /tmp/wasm-fist-638-complete/production/native
+  --wasm /tmp/wasm-fist-638-complete/production/wasm/fistrun.js --node /usr/bin/node
+  --output /tmp/wasm-fist-dta-startup`. Recreate the unfiltered gate with
+  `FIST_WORKDIR=/tmp/wasm-fist-dta-check bash tools/check_flow.sh`.
+  This accepts storage/addressing only. Actual op44 FILEMGR dispatch,
+  resource archive paths, CF/errors, full GP/flags/farstack/IRQ/time and
+  complete original output remain open; configuration AX/returned EBX
+  transport belongs to0014 with the original operands above.
+
 ## Next
 
 1. Build a current inventory from the original table and the shim's branches. For each op record

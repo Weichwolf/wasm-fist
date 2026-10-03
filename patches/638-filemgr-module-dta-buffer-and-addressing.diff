@@ -1,0 +1,57 @@
+PATCH 638: keep the FILEMGR DTA in its original module buffer (board:0009).
+
+Actual original2b:a88 MOV EDX,080b /a8d MOV [927],EDX initializes a
+logical module offset, not a host pointer outside guest RAM. Source whole
+16-MiB/GP/segment/control/raw+lazyflag proof and the natural6032 DWORD
+operand provenance are in tools/oracle/detail_loader_case.json. Replace
+native_main's host-only buffer with that observed offset. Keep the DWORD
+value intact; translate it through the existing fist_ext_addr owner only
+when dereferencing the DTA +1a field. Both reads and resource-member
+writes need this resolution; actual604a/7038/6397 load [927] and address
+[EBX+1a]. Ghidra duplicates the member-size store in its resource paths.
+
+The real6032/5cc2/5d50/DOS regression reaches four parent failures using
+that actual module-offset input: Native invalid-address reads and WASM
+unrelated-memory query sizes for HIGH.DTL and DSOUNDS.BIN. Existing
+host-pointer operand cases retain their prior count/content expectations.
+All files are isolated under /tmp. This accepts DTA storage/addressing
+only, not resource archive parsing, CF/error paths, full GP/register
+transport, original instructions/IRQ/device time or whole frame/PCM parity.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -9269,7 +9269,7 @@
+   DAT_0000_556c = param_1;
+   uVar1 = FUN_0000_5cc2(0x4e00,0x33,param_3,param_4,param_5,param_6);
+   if (!(bool)in_CF) {
+-    DAT_0000_0937 = *(uint *)(DAT_0000_0927 + 0x1a);
++    DAT_0000_0937 = *(uint *)(fist_ext_addr(DAT_0000_0927) + 0x1a);
+     bVar4 = false;
+     if (DAT_0000_556c == 0) {
+       return DAT_0000_0937;
+@@ -9575,7 +9575,7 @@
+           if ((char)((ushort)DAT_0000_5cbc >> 8) == 'N') {
+             uVar6 = puVar9[0xb];
+             uVar2 = puVar9[7];
+-            *(uint *)(DAT_0000_0927 + 0x1a) = uVar6 - uVar2;
++            *(uint *)(fist_ext_addr(DAT_0000_0927) + 0x1a) = uVar6 - uVar2;
+             if (DAT_0000_5cc0 != 0) {
+               uRam000f0000 = CONCAT11(0x3e,(char)(uVar6 - uVar2));
+               uRam000f0014 = 0x21;
+@@ -9728,7 +9728,7 @@
+     if ((char)((ushort)DAT_0000_5cbc >> 8) == 'N') {
+       uVar8 = puVar11[0xb];
+       uVar9 = puVar11[7];
+-      *(uint *)(DAT_0000_0927 + 0x1a) = uVar8 - uVar9;
++      *(uint *)(fist_ext_addr(DAT_0000_0927) + 0x1a) = uVar8 - uVar9;
+       if (DAT_0000_5cc0 != 0) {
+         uRam000f0000 = CONCAT11(0x3e,(char)(uVar8 - uVar9));
+         uRam000f0014 = 0x21;
+@@ -12155,7 +12155,7 @@
+   uVar2 = 0x33;
+   uVar1 = FUN_0000_5cc2(0x4e00,0x33,param_2,param_3,param_4,param_5);
+   if (!bVar3) {
+-    DAT_0000_0937 = *(undefined4 *)(DAT_0000_0927 + 0x1a);
++    DAT_0000_0937 = *(undefined4 *)(fist_ext_addr(DAT_0000_0927) + 0x1a);
+     uVar1 = FUN_0000_5cc2(0x3d00,uVar2,(short)DAT_0000_0927,param_3,param_4,param_5);
+     if (!bVar3) {
+       DAT_0000_701c = DAT_0000_5cc0;

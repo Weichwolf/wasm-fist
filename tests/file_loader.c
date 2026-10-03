@@ -30,13 +30,13 @@ code *fist_icall(uint32_t a) { abort(); }
 extern unsigned m_ext_FUN_0000_6032(int,unsigned short,unsigned short,unsigned short,unsigned,unsigned short);
 extern int g_fist_ext_int;
 int main(int argc,char **argv) {
- assert(argc==5);
+ assert(argc==5 || argc==6);
  fist_ext_base=0x100000;
  uint8_t *module=g_mem+fist_ext_base,*destination=g_mem+0x200000;
  FILE *image=fopen(argv[1],"rb");assert(image);
  size_t n=fread(module,1,0x10000,image);assert(n && !ferror(image) && feof(image) && !fclose(image));
  static const char root[1]={0};static unsigned char dta[128],tcb[0x1000];
- *(uint32_t *)(module+0x927)=(uint32_t)(uintptr_t)dta;
+ *(uint32_t *)(module+0x927)=argc==6 ? (uint32_t)strtoul(argv[5],0,0) : (uint32_t)(uintptr_t)dta;
  *(uint32_t *)(module+0xc93)=(uint32_t)(uintptr_t)tcb;
  *(uint32_t *)(module+0x6234)=(uint32_t)(uintptr_t)root;
  *(uint32_t *)(module+0x6238)=0;*(uint32_t *)(module+0x622c)=0;
