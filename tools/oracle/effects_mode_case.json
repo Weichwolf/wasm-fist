@@ -1,0 +1,3738 @@
+{
+  "scope": "Source-only actual mode-2 effects calls: ready0 skips23ec; ready1/mixer0 reaches23ec with fullEAX74e01 and enters actual138d. Direct fetched instructions prove BYTE mode/ready/active, fullEAX pointer and DWORD near CALL/RET. Nested23ec/device execution is bracketed only, not interpreted or accepted as a port implementation. No port fix or full output acceptance.",
+  "states": {
+    "02-7702": {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28887,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30466,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 24,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478816,
+      "lflags.var2.dword[0]": 478816,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279746,
+      "fetched_code_hex": "3c00740a3c01740f3c027430eb5132c0e8d5acffffeb48803de0770000017510",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "02-773e": {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28881,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30526,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478722,
+      "lflags.var2.dword[0]": 478722,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279806,
+      "fetched_code_hex": "803de0770000017510803d93220000007507b001e895acffffb893200000a316",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "02-7757": {
+      "PIC_Ticks": 535,
+      "CPU_Cycles": 12459,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30551,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12803,
+      "lflags.type": 4,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 639,
+      "lflags.var2.dword[0]": 127,
+      "lflags.res.dword[0]": 4294902399,
+      "registers": [
+        32540,
+        1,
+        556,
+        48280,
+        249866,
+        0,
+        11744,
+        4026545632
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279831,
+      "fetched_code_hex": "b893200000a316270000c3033507080000e801000000c3c1e9037430bdaddee4",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 1,
+      "mixer_pointer": 8339
+    },
+    "01-775c": {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26216,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30556,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196607,
+      "registers": [
+        8339,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279836,
+      "fetched_code_hex": "a316270000c3033507080000e801000000c3c1e9037430bdaddee4acb8ad2bde",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "02-23ec": {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28875,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 9196,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478720,
+      "lflags.var2.dword[0]": 478720,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478721,
+        0,
+        1,
+        48280,
+        249862,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1258476,
+      "fetched_code_hex": "5350a0932200000ac07406ff15b3150000a12b090000c1e0040510000000a3e8",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "02-7750": {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28877,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30544,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478720,
+      "lflags.var2.dword[0]": 478720,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279824,
+      "fetched_code_hex": "b001e895acffffb893200000a316270000c3033507080000e801000000c3c1e9",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "01-0f57": {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26214,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 3927,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196607,
+      "registers": [
+        8339,
+        0,
+        0,
+        5,
+        249868,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1249111,
+      "fetched_code_hex": "8b25600f0000cb87db0cd003008915820d00008b1d930c000066c703ffffebe0",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "02-76fd": {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28888,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30461,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 24,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478816,
+      "lflags.var2.dword[0]": 478816,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279741,
+      "fetched_code_hex": "a2e17700003c00740a3c01740f3c027430eb5132c0e8d5acffffeb48803de077",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "02-7761": {
+      "PIC_Ticks": 535,
+      "CPU_Cycles": 12457,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30561,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12803,
+      "lflags.type": 4,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 639,
+      "lflags.var2.dword[0]": 127,
+      "lflags.res.dword[0]": 4294902399,
+      "registers": [
+        8339,
+        1,
+        556,
+        48280,
+        249866,
+        0,
+        11744,
+        4026545632
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279841,
+      "fetched_code_hex": "c3033507080000e801000000c3c1e9037430bdaddee4acb8ad2bdefad1e09981",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 1,
+      "mixer_pointer": 8339
+    },
+    "02-138d": {
+      "PIC_Ticks": 535,
+      "CPU_Cycles": 13690,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 5005,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 24,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 5483,
+      "lflags.var2.dword[0]": 5483,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        5266,
+        0,
+        128,
+        1,
+        249854,
+        0,
+        0,
+        4026545632
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1254285,
+      "fetched_code_hex": "fa8b0dc4120000f6c108740380c16080c1085166b80325cd2159891dc0120000",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 1,
+      "mixer_pointer": 8339
+    },
+    "01-7757": {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26217,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30551,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196607,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279831,
+      "fetched_code_hex": "b893200000a316270000c3033507080000e801000000c3c1e9037430bdaddee4",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "01-7761": {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26215,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30561,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196607,
+      "registers": [
+        8339,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279841,
+      "fetched_code_hex": "c3033507080000e801000000c3c1e9037430bdaddee4acb8ad2bdefad1e09981",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "01-7702": {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26225,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30466,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 0,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 192,
+      "lflags.res.dword[0]": 196416,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279746,
+      "fetched_code_hex": "3c00740a3c01740f3c027430eb5132c0e8d5acffffeb48803de0770000017510",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "01-773e": {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26219,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30526,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 2,
+      "lflags.var2.dword[0]": 2,
+      "lflags.res.dword[0]": 196352,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279806,
+      "fetched_code_hex": "803de0770000017510803d93220000007507b001e895acffffb893200000a316",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "02-774e": {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28878,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30542,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478720,
+      "lflags.var2.dword[0]": 478720,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279822,
+      "fetched_code_hex": "7507b001e895acffffb893200000a316270000c3033507080000e801000000c3",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "02-7745": {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28880,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30533,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478721,
+      "lflags.var2.dword[0]": 478721,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279813,
+      "fetched_code_hex": "7510803d93220000007507b001e895acffffb893200000a316270000c3033507",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "02-7869": {
+      "PIC_Ticks": 535,
+      "CPU_Cycles": 12456,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30825,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12803,
+      "lflags.type": 4,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 639,
+      "lflags.var2.dword[0]": 127,
+      "lflags.res.dword[0]": 4294902399,
+      "registers": [
+        8339,
+        1,
+        556,
+        48280,
+        249870,
+        0,
+        11744,
+        4026545632
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1280105,
+      "fetched_code_hex": "c3803d93220000007501c38adc3cff744051b9b08500000ac07905247f83c104",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 1,
+      "mixer_pointer": 8339
+    },
+    "02-775c": {
+      "PIC_Ticks": 535,
+      "CPU_Cycles": 12458,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30556,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12803,
+      "lflags.type": 4,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 639,
+      "lflags.var2.dword[0]": 127,
+      "lflags.res.dword[0]": 4294902399,
+      "registers": [
+        8339,
+        1,
+        556,
+        48280,
+        249866,
+        0,
+        11744,
+        4026545632
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279836,
+      "fetched_code_hex": "a316270000c3033507080000e801000000c3c1e9037430bdaddee4acb8ad2bde",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 1,
+      "mixer_pointer": 8339
+    },
+    "02-7752": {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28876,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30546,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478720,
+      "lflags.var2.dword[0]": 478720,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478721,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279826,
+      "fetched_code_hex": "e895acffffb893200000a316270000c3033507080000e801000000c3c1e90374",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "01-7745": {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26218,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30533,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196607,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279813,
+      "fetched_code_hex": "7510803d93220000007507b001e895acffffb893200000a316270000c3033507",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "01-76fd": {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26226,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30461,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 0,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 192,
+      "lflags.res.dword[0]": 196416,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279741,
+      "fetched_code_hex": "a2e17700003c00740a3c01740f3c027430eb5132c0e8d5acffffeb48803de077",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    "02-7747": {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28879,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30535,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478721,
+      "lflags.var2.dword[0]": 478721,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279815,
+      "fetched_code_hex": "803d93220000007507b001e895acffffb893200000a316270000c30335070800",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    }
+  },
+  "fetches": [
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26226,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30461,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 0,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 192,
+      "lflags.res.dword[0]": 196416,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279741,
+      "fetched_code_hex": "a2e17700003c00740a3c01740f3c027430eb5132c0e8d5acffffeb48803de077",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26225,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30466,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 0,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 192,
+      "lflags.res.dword[0]": 196416,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279746,
+      "fetched_code_hex": "3c00740a3c01740f3c027430eb5132c0e8d5acffffeb48803de0770000017510",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26224,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30468,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 2,
+      "lflags.var2.dword[0]": 0,
+      "lflags.res.dword[0]": 196354,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279748,
+      "fetched_code_hex": "740a3c01740f3c027430eb5132c0e8d5acffffeb48803de0770000017510803d",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26223,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30470,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 2,
+      "lflags.var2.dword[0]": 0,
+      "lflags.res.dword[0]": 196354,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279750,
+      "fetched_code_hex": "3c01740f3c027430eb5132c0e8d5acffffeb48803de0770000017510803d9322",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26222,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30472,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 2,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196353,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279752,
+      "fetched_code_hex": "740f3c027430eb5132c0e8d5acffffeb48803de0770000017510803d93220000",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26221,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30474,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 2,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196353,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279754,
+      "fetched_code_hex": "3c027430eb5132c0e8d5acffffeb48803de0770000017510803d932200000075",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26220,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30476,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 2,
+      "lflags.var2.dword[0]": 2,
+      "lflags.res.dword[0]": 196352,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279756,
+      "fetched_code_hex": "7430eb5132c0e8d5acffffeb48803de0770000017510803d93220000007507b0",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26219,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30526,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 2,
+      "lflags.var2.dword[0]": 2,
+      "lflags.res.dword[0]": 196352,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279806,
+      "fetched_code_hex": "803de0770000017510803d93220000007507b001e895acffffb893200000a316",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26218,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30533,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196607,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279813,
+      "fetched_code_hex": "7510803d93220000007507b001e895acffffb893200000a316270000c3033507",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26217,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30551,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196607,
+      "registers": [
+        2,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279831,
+      "fetched_code_hex": "b893200000a316270000c3033507080000e801000000c3c1e9037430bdaddee4",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26216,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30556,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196607,
+      "registers": [
+        8339,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279836,
+      "fetched_code_hex": "a316270000c3033507080000e801000000c3c1e9037430bdaddee4acb8ad2bde",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26215,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30561,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196607,
+      "registers": [
+        8339,
+        0,
+        0,
+        5,
+        249864,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1279841,
+      "fetched_code_hex": "c3033507080000e801000000c3c1e9037430bdaddee4acb8ad2bdefad1e09981",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 525,
+      "CPU_Cycles": 26214,
+      "CPU_CycleLeft": 2826,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 3927,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 0,
+      "lflags.var1.dword[0]": 0,
+      "lflags.var2.dword[0]": 1,
+      "lflags.res.dword[0]": 196607,
+      "registers": [
+        8339,
+        0,
+        0,
+        5,
+        249868,
+        5912,
+        30451,
+        24281
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 1,
+      "fetched_code_physical": 1249111,
+      "fetched_code_hex": "8b25600f0000cb87db0cd003008915820d00008b1d930c000066c703ffffebe0",
+      "ready": 0,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28888,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30461,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 24,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478816,
+      "lflags.var2.dword[0]": 478816,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279741,
+      "fetched_code_hex": "a2e17700003c00740a3c01740f3c027430eb5132c0e8d5acffffeb48803de077",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28887,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30466,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 24,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478816,
+      "lflags.var2.dword[0]": 478816,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279746,
+      "fetched_code_hex": "3c00740a3c01740f3c027430eb5132c0e8d5acffffeb48803de0770000017510",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28886,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30468,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478722,
+      "lflags.var2.dword[0]": 478720,
+      "lflags.res.dword[0]": 2,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279748,
+      "fetched_code_hex": "740a3c01740f3c027430eb5132c0e8d5acffffeb48803de0770000017510803d",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28885,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30470,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478722,
+      "lflags.var2.dword[0]": 478720,
+      "lflags.res.dword[0]": 2,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279750,
+      "fetched_code_hex": "3c01740f3c027430eb5132c0e8d5acffffeb48803de0770000017510803d9322",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28884,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30472,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478722,
+      "lflags.var2.dword[0]": 478721,
+      "lflags.res.dword[0]": 1,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279752,
+      "fetched_code_hex": "740f3c027430eb5132c0e8d5acffffeb48803de0770000017510803d93220000",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28883,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30474,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478722,
+      "lflags.var2.dword[0]": 478721,
+      "lflags.res.dword[0]": 1,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279754,
+      "fetched_code_hex": "3c027430eb5132c0e8d5acffffeb48803de0770000017510803d932200000075",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28882,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30476,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478722,
+      "lflags.var2.dword[0]": 478722,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279756,
+      "fetched_code_hex": "7430eb5132c0e8d5acffffeb48803de0770000017510803d93220000007507b0",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28881,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30526,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478722,
+      "lflags.var2.dword[0]": 478722,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279806,
+      "fetched_code_hex": "803de0770000017510803d93220000007507b001e895acffffb893200000a316",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28880,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30533,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478721,
+      "lflags.var2.dword[0]": 478721,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279813,
+      "fetched_code_hex": "7510803d93220000007507b001e895acffffb893200000a316270000c3033507",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28879,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30535,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478721,
+      "lflags.var2.dword[0]": 478721,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279815,
+      "fetched_code_hex": "803d93220000007507b001e895acffffb893200000a316270000c30335070800",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28878,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30542,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478720,
+      "lflags.var2.dword[0]": 478720,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279822,
+      "fetched_code_hex": "7507b001e895acffffb893200000a316270000c3033507080000e801000000c3",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28877,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30544,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478720,
+      "lflags.var2.dword[0]": 478720,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478722,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279824,
+      "fetched_code_hex": "b001e895acffffb893200000a316270000c3033507080000e801000000c3c1e9",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28876,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30546,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478720,
+      "lflags.var2.dword[0]": 478720,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478721,
+        0,
+        1,
+        48280,
+        249866,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279826,
+      "fetched_code_hex": "e895acffffb893200000a316270000c3033507080000e801000000c3c1e90374",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 534,
+      "CPU_Cycles": 28875,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 9196,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12870,
+      "lflags.type": 22,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 478720,
+      "lflags.var2.dword[0]": 478720,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        478721,
+        0,
+        1,
+        48280,
+        249862,
+        0,
+        8,
+        24284
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1258476,
+      "fetched_code_hex": "5350a0932200000ac07406ff15b3150000a12b090000c1e0040510000000a3e8",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 0,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 535,
+      "CPU_Cycles": 13690,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 5005,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12818,
+      "lflags.type": 24,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 5483,
+      "lflags.var2.dword[0]": 5483,
+      "lflags.res.dword[0]": 0,
+      "registers": [
+        5266,
+        0,
+        128,
+        1,
+        249854,
+        0,
+        0,
+        4026545632
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1254285,
+      "fetched_code_hex": "fa8b0dc4120000f6c108740380c16080c1085166b80325cd2159891dc0120000",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 1,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 535,
+      "CPU_Cycles": 12459,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30551,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12803,
+      "lflags.type": 4,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 639,
+      "lflags.var2.dword[0]": 127,
+      "lflags.res.dword[0]": 4294902399,
+      "registers": [
+        32540,
+        1,
+        556,
+        48280,
+        249866,
+        0,
+        11744,
+        4026545632
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279831,
+      "fetched_code_hex": "b893200000a316270000c3033507080000e801000000c3c1e9037430bdaddee4",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 1,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 535,
+      "CPU_Cycles": 12458,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30556,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12803,
+      "lflags.type": 4,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 639,
+      "lflags.var2.dword[0]": 127,
+      "lflags.res.dword[0]": 4294902399,
+      "registers": [
+        8339,
+        1,
+        556,
+        48280,
+        249866,
+        0,
+        11744,
+        4026545632
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279836,
+      "fetched_code_hex": "a316270000c3033507080000e801000000c3c1e9037430bdaddee4acb8ad2bde",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 1,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 535,
+      "CPU_Cycles": 12457,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30561,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12803,
+      "lflags.type": 4,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 639,
+      "lflags.var2.dword[0]": 127,
+      "lflags.res.dword[0]": 4294902399,
+      "registers": [
+        8339,
+        1,
+        556,
+        48280,
+        249866,
+        0,
+        11744,
+        4026545632
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1279841,
+      "fetched_code_hex": "c3033507080000e801000000c3c1e9037430bdaddee4acb8ad2bdefad1e09981",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 1,
+      "mixer_pointer": 8339
+    },
+    {
+      "PIC_Ticks": 535,
+      "CPU_Cycles": 12456,
+      "CPU_CycleLeft": 0,
+      "CPU_CycleMax": 30000,
+      "cpu_regs.ip.dword[0]": 30825,
+      "cpu.cr0": 2147483649,
+      "paging.cr3": 57344,
+      "paging.enabled": 1,
+      "cpu.code.big": 1,
+      "cpu.stack.big": 1,
+      "cpu.pmode": 1,
+      "cpu.cpl": 3,
+      "cpu_regs.flags": 12803,
+      "lflags.type": 4,
+      "lflags.prev_type": 0,
+      "lflags.oldcf": 1,
+      "lflags.var1.dword[0]": 639,
+      "lflags.var2.dword[0]": 127,
+      "lflags.res.dword[0]": 4294902399,
+      "registers": [
+        8339,
+        1,
+        556,
+        48280,
+        249870,
+        0,
+        11744,
+        4026545632
+      ],
+      "segments": [
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 43,
+          "base": 268435456
+        },
+        {
+          "value": 35,
+          "base": 0
+        },
+        {
+          "value": 51,
+          "base": 268435456
+        },
+        {
+          "value": 0,
+          "base": 0
+        },
+        {
+          "value": 0,
+          "base": 0
+        }
+      ],
+      "call": 2,
+      "fetched_code_physical": 1280105,
+      "fetched_code_hex": "c3803d93220000007501c38adc3cff744051b9b08500000ac07905247f83c104",
+      "ready": 1,
+      "mode": 2,
+      "mixer_active": 1,
+      "mixer_pointer": 8339
+    }
+  ],
+  "instruction_transitions": [
+    [
+      "01-76fd",
+      "01-7702"
+    ],
+    [
+      "01-7702",
+      "01-7704"
+    ],
+    [
+      "01-7704",
+      "01-7706"
+    ],
+    [
+      "01-7706",
+      "01-7708"
+    ],
+    [
+      "01-7708",
+      "01-770a"
+    ],
+    [
+      "01-770a",
+      "01-770c"
+    ],
+    [
+      "01-770c",
+      "01-773e"
+    ],
+    [
+      "01-773e",
+      "01-7745"
+    ],
+    [
+      "01-7745",
+      "01-7757"
+    ],
+    [
+      "01-7757",
+      "01-775c"
+    ],
+    [
+      "01-775c",
+      "01-7761"
+    ],
+    [
+      "01-7761",
+      "01-0f57"
+    ],
+    [
+      "02-76fd",
+      "02-7702"
+    ],
+    [
+      "02-7702",
+      "02-7704"
+    ],
+    [
+      "02-7704",
+      "02-7706"
+    ],
+    [
+      "02-7706",
+      "02-7708"
+    ],
+    [
+      "02-7708",
+      "02-770a"
+    ],
+    [
+      "02-770a",
+      "02-770c"
+    ],
+    [
+      "02-770c",
+      "02-773e"
+    ],
+    [
+      "02-773e",
+      "02-7745"
+    ],
+    [
+      "02-7745",
+      "02-7747"
+    ],
+    [
+      "02-7747",
+      "02-774e"
+    ],
+    [
+      "02-774e",
+      "02-7750"
+    ],
+    [
+      "02-7750",
+      "02-7752"
+    ],
+    [
+      "02-7752",
+      "02-23ec"
+    ],
+    [
+      "02-7757",
+      "02-775c"
+    ],
+    [
+      "02-775c",
+      "02-7761"
+    ],
+    [
+      "02-7761",
+      "02-7869"
+    ]
+  ],
+  "whole_RAM_transitions": [
+    [
+      "01-76fd",
+      "01-7702"
+    ],
+    [
+      "01-770c",
+      "01-773e"
+    ],
+    [
+      "01-773e",
+      "01-7745"
+    ],
+    [
+      "01-7745",
+      "01-7757"
+    ],
+    [
+      "01-7757",
+      "01-775c"
+    ],
+    [
+      "01-775c",
+      "01-7761"
+    ],
+    [
+      "01-7761",
+      "01-0f57"
+    ],
+    [
+      "02-76fd",
+      "02-7702"
+    ],
+    [
+      "02-770c",
+      "02-773e"
+    ],
+    [
+      "02-773e",
+      "02-7745"
+    ],
+    [
+      "02-7745",
+      "02-7747"
+    ],
+    [
+      "02-7747",
+      "02-774e"
+    ],
+    [
+      "02-774e",
+      "02-7750"
+    ],
+    [
+      "02-7750",
+      "02-7752"
+    ],
+    [
+      "02-7752",
+      "02-23ec"
+    ],
+    [
+      "02-7757",
+      "02-775c"
+    ],
+    [
+      "02-775c",
+      "02-7761"
+    ],
+    [
+      "02-7761",
+      "02-7869"
+    ]
+  ],
+  "memory_sha256": {
+    "02-7702": "7196afbf4fa0208f3ab6b9f4360d8bf861bf0ddce3367336c6e522ce19e3df34",
+    "02-773e": "7196afbf4fa0208f3ab6b9f4360d8bf861bf0ddce3367336c6e522ce19e3df34",
+    "02-7757": "521ffa839ec8b281d188148e8f22995465bc37141f28de7a0e2836912b14f743",
+    "01-775c": "29b37c6ab17e540941376178cd85aa33724ddadcea48a0c39979722501be33e6",
+    "02-23ec": "c4b7667e8476af3852a425106da0bbc7a88add3ed43d79456d3e7c8d791e3886",
+    "02-7750": "7196afbf4fa0208f3ab6b9f4360d8bf861bf0ddce3367336c6e522ce19e3df34",
+    "01-0f57": "29b37c6ab17e540941376178cd85aa33724ddadcea48a0c39979722501be33e6",
+    "02-76fd": "7196afbf4fa0208f3ab6b9f4360d8bf861bf0ddce3367336c6e522ce19e3df34",
+    "02-7761": "521ffa839ec8b281d188148e8f22995465bc37141f28de7a0e2836912b14f743",
+    "02-138d": "7759dff95344474d1e8f46c6a7dae1c025781f80c2b5927e052283f92f6a941f",
+    "01-7757": "29b37c6ab17e540941376178cd85aa33724ddadcea48a0c39979722501be33e6",
+    "01-7761": "29b37c6ab17e540941376178cd85aa33724ddadcea48a0c39979722501be33e6",
+    "01-7702": "29b37c6ab17e540941376178cd85aa33724ddadcea48a0c39979722501be33e6",
+    "01-773e": "29b37c6ab17e540941376178cd85aa33724ddadcea48a0c39979722501be33e6",
+    "02-774e": "7196afbf4fa0208f3ab6b9f4360d8bf861bf0ddce3367336c6e522ce19e3df34",
+    "02-7745": "7196afbf4fa0208f3ab6b9f4360d8bf861bf0ddce3367336c6e522ce19e3df34",
+    "02-7869": "521ffa839ec8b281d188148e8f22995465bc37141f28de7a0e2836912b14f743",
+    "02-775c": "521ffa839ec8b281d188148e8f22995465bc37141f28de7a0e2836912b14f743",
+    "02-7752": "7196afbf4fa0208f3ab6b9f4360d8bf861bf0ddce3367336c6e522ce19e3df34",
+    "01-7745": "29b37c6ab17e540941376178cd85aa33724ddadcea48a0c39979722501be33e6",
+    "01-76fd": "29b37c6ab17e540941376178cd85aa33724ddadcea48a0c39979722501be33e6",
+    "02-7747": "7196afbf4fa0208f3ab6b9f4360d8bf861bf0ddce3367336c6e522ce19e3df34"
+  },
+  "capture_sha256": {
+    "frames": "a290aa1a719f55760c7b67f0c5a7a31937e7795495c374bf926c973b0b811993",
+    "pcm": "7e1f2cc2e2e11d0b44f10441bc3412e061cf9b32443d9ed22fed1a1a4f873a53",
+    "end": "b07ec7261b6b6d3f8d5940321882ca94f9a7594bfbaff154027edce3a5c5a12f"
+  },
+  "frames": 39,
+  "mixed_samples": 27518,
+  "endpoint_ms": 600,
+  "originals_unchanged": 419,
+  "producers": {
+    "/home/cosmo/Git/wasm-fist/tools/oracle/capture_effects_mode.py": "668d1423209f911c532514e381f92b67eb71d387e760aa5675b71dc30914839f",
+    "/home/cosmo/Git/wasm-fist/tools/oracle/effects_mode.gdb": "d840f3f9ffcd768ee696c987b82d3e84c6d098825698a651074981350ce900eb",
+    "/home/cosmo/Git/wasm-fist/tools/oracle/verify_effects_mode.py": "e40f7ac6286a708685b935992174cb75f1b7336a52374adc98dd22ecc22152de",
+    "/home/cosmo/Git/wasm-fist/third_party/dosbox-fist": "137f2f5e15a3f021eb9a071f3952cfa6814140103b88d833a12d9d71df776e17",
+    "/home/cosmo/Git/wasm-fist/tools/oracle/file_error.gdb": "45e16443e0c4181c914090b61858d5aca29e36502ebca39682806fd5671b6c1a",
+    "/home/cosmo/Git/wasm-fist/tools/oracle/capture_sequence.sh": "a0e0ce2e1098e764eceea60799d9f51379faccf28e191b70edabcf2328cc0c9c",
+    "/home/cosmo/Git/wasm-fist/tools/oracle/sequence_format.py": "888b2d604bdab1ca700928decff476099026b36450393abd3441012e33b3545f",
+    "/home/cosmo/Git/wasm-fist/re_out/fist_image.bin": "102a5465e03f3b0397041b1bd783d33992ac2c14bb6e42a713af610ec08c3ab1",
+    "/home/cosmo/Git/wasm-fist/tools/oracle/detail_return_state_case.json": "b51dc1e16d2ae7ee6a7a6145874ebaf64efbb7bde0ac30aef184d14482e277bf",
+    "/home/cosmo/Git/wasm-fist/third_party/dosbox-build/dosbox-0.74-3/src/cpu/lazyflags.h": "ce75d1039dba8e989fffdd2d54cf032de714f890abda36f1b82230385a98f0ff"
+  },
+  "original_binary_sha256": "137f2f5e15a3f021eb9a071f3952cfa6814140103b88d833a12d9d71df776e17",
+  "image_sha256": "102a5465e03f3b0397041b1bd783d33992ac2c14bb6e42a713af610ec08c3ab1",
+  "code_hex": "a2e17700003c00740a3c01740f3c027430eb5132c0e8d5acffffeb48803de0770000017510803d93220000007507b001e8baacffffb8931e0000a316270000eb23803de0770000017510803d93220000007507b001e895acffffb893200000a316270000c3",
+  "verifier_sha256": "e40f7ac6286a708685b935992174cb75f1b7336a52374adc98dd22ecc22152de",
+  "lazyflags_sha256": "ce75d1039dba8e989fffdd2d54cf032de714f890abda36f1b82230385a98f0ff",
+  "complete_original_acceptance": false,
+  "reproduction": "python3 -B tools/oracle/capture_effects_mode.py --repo /home/cosmo/Git/wasm-fist --output /tmp/wasm-fist-effects-mode-source",
+  "verify_only": "python3 -B tools/oracle/capture_effects_mode.py --repo /home/cosmo/Git/wasm-fist --output /tmp/wasm-fist-effects-mode-source --verify-only",
+  "negative_verifier_cases": [
+    {
+      "case": "missing-memory",
+      "exit": 1,
+      "last_error": "FileNotFoundError: [Errno 2] No such file or directory: '/tmp/wasm-fist-effects-mode-source-negative/missing-memory/source/02-7752.memory'"
+    },
+    {
+      "case": "wide-mode-store",
+      "exit": 1,
+      "last_error": "AssertionError: ('01-76fd', '01-7702', 'whole RAM')"
+    },
+    {
+      "case": "ready-branch",
+      "exit": 1,
+      "last_error": "AssertionError: ('02-773e', 'lflags.var1.dword[0]', '0x74e01', '0x74e00')"
+    },
+    {
+      "case": "lost-EAX-upper",
+      "exit": 1,
+      "last_error": "AssertionError: ('02-7750', '02-7752', 'GP/IP')"
+    },
+    {
+      "case": "corrupt-instruction",
+      "exit": 1,
+      "last_error": "AssertionError: 01-76fd"
+    }
+  ],
+  "negative_mutations": {
+    "missing-memory": "Remove02-7752.memory from an isolated capture copy.",
+    "wide-mode-store": "In01-7702.memory zero77e2..77e4, the extra bytes that a DWORD mode store would overwrite.",
+    "ready-branch": "Set77e0 to0 in all call2 RAM boundaries, and update every call2 ready state/fetch summary consistently; retain the actual instruction and flags sequence.",
+    "lost-EAX-upper": "Clear EAX high WORD in both02-7752.json and the matching complete fetch row.",
+    "corrupt-instruction": "Change the fetched76fd opcode A2 to A3 in01-76fd RAM, snapshot and matching fetch-code bytes."
+  }
+}

@@ -1004,6 +1004,39 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   original startup evidence only: no port77e2/bank/device/IRQ/time or final
   mixedPCM/full original output acceptance follows.
 
+- Original76fd default effects-mode startup is now reproducible with
+  `python3 -B tools/oracle/capture_effects_mode.py --repo /home/cosmo/Git/wasm-fist --output /tmp/wasm-fist-effects-mode-source`;
+  receipt: `tools/oracle/effects_mode_case.json`. Actual op68's image table
+  resolves directly to76fd. The first real entry carries EAX2/EBX5 from
+  0014's independently recovered detail return; ready BYTE0 skips23ec and
+  returns fullEAX2093. After actual77e2 sets ready BYTE1, the second entry
+  carries fullEAX74e02/EBXbc98. The real BYTE[2293]==0 branch changes only
+  AL to1, calls23ec with fullEAX74e01 and subsequently reaches138d. Its
+  eventual return is bracketed at7757 with EAX7f1c/ECX1/EDX22c/EBXbc98;
+  original7757/775c then set fullEAX and DWORD[2716] to2093 before the
+  actual DWORD near return to7869. No guessed callback input is supplied.
+  Both original calls retain all GP/segments/raw+lazyflags/control/time
+  fields:32 observed fetches,22 whole16MiB boundaries,28 direct instruction
+  transitions and18 whole-RAM transitions. State and guest paging reuse
+  the existing file-error owner. Exact source instructions prove BYTE
+  stores/tests at77e1/77e0/2293; unintegrated generated77e0/77e1 DWORD
+  aliases remain defective. Nested23ec/device work is bracketed only and
+  remains unaccepted in the port. Fresh baseline/observer pairs and
+  verify-only replay retain every39 frame/27518 mixed-sample/end600ms byte,
+  matching the independent detail-return source fixture; all419 original
+  files and their inventory remain unchanged. Five isolated negative
+  cases reject missing boundary RAM, a widened mode store, a coherently
+  changed ready input, lost upper EAX bits and a coherently corrupted
+  fetched instruction. Evidence:
+  `/tmp/wasm-fist-effects-mode-source-public-final` and
+  `/tmp/wasm-fist-effects-mode-source-negative/proof.json`.
+  This accepts original default mode2 source evidence only, not other
+  effects modes, production76fd/77e2/23ec/device/IRQ/IF/time, a fix for
+  first frame817, final mixed port PCM or complete original output.
+  The concurrent642 candidate's1078 frozen runtime inputs/archive remain
+  byte-identical; its full135-test/build/six-startup/178-flow gate is
+  separate and still running, with no production acceptance yet.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
@@ -1016,6 +1049,10 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
    EBX transport. Consume the original
    normal/controlled/CRT/return-branch pairs above; scratch prototypes are not
    production acceptance. Keep abnormal overflow and unproved CF producers explicit.
+   Consume `effects_mode_case.json` for actual76fd BYTE conditions and full
+   incoming/returned GP, including the ready1 call into23ec/138d. Prove a
+   reaching two-target regression before changing its aliases or wiring
+   op68; do not supply zero callback arguments or a safe-zero device return.
    Consume `sound_bank_startup_case.json` to restore the actual77e2
    size/allocate/read/checkpoint path rather than inserting a fitted bank
    allocation. Wire original device initialization and consume the recovered intro registers. Recover
