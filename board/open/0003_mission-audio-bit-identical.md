@@ -646,6 +646,44 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   Recover that original live call and register widths before moving installation
   or accepting a dynamic153c return. Never pad unknown inputs with zero.
 
+- Base `1472e73`, patch 632 fixes the reached resource-open width defect.
+  The actual original boot `222f -> 26fc` opens `BACKLAND.BIN`, not a guessed
+  font resource. All three AH43 probes miss with DI 0/1/2 and inherited
+  BP `1718`; the complete 115 boundary records cover 114 fetches, and the
+  normal return preserves BP and restores the whole 64-byte filename.
+  Original GP/segments/raw and lazy flags, all 18 changed bytes in the
+  complete 16-MiB memory pair, 39 frames, 27518 mixed samples and endpoint
+  600 ms are retained in `engine-font-loader/{check-source.py,source-proof.json}`.
+- The parent reads DWORD DI spanning the adjacent BP bridge lane after the
+  first miss, causing two reaching target failures. Patch 632 uses WORD
+  DI/DX/SI accesses and preserves the existing ES bridge lane instead of an
+  uninitialized C local. The real DOS attribute dispatcher now returns all
+  three source-backed probe rows on Native and WASM. Both complete 16-MiB
+  outputs match the specified bridge/data writes without masks; original
+  CPU return flags and the legacy DOS bridge's last INT result are distinct
+  scopes. Successful loader variants, live caller BP/ES, early installation,
+  stack/flags and instruction integration remain open. The explicit void
+  test bridge declaration repairs an excluded fixture ABI error; it is not
+  a production WASM fix.
+- The unfiltered canonical gate `scratch/verify/run.dkymjy/` completed
+  with a durable exit0: all 101 tests, exact patch checks, both sequential
+  builds and all 178 existing flows pass. `engine-font-loader/check-proof.py`
+  rechecks every one of the 890 frozen source/input files and whole Native,
+  JS and WASM binary identity between the earlier capture builds and this
+  canonical gate. Complete matched SB-enabled 30000-ms captures retain the
+  previous 2100 frame/end bytes and 43 register packets on both targets.
+  First original failure remains 817, with 28 differing frames; strict full
+  comparison still fails because final mixed port PCM is absent. All 418
+  original assets remain unchanged. These checks accept only patch632's
+  failed-variant WORD bridge/data repair, not startup or full output parity.
+- `engine-font-loader/proof.json` and `proof-final.log` retain the full
+  parent-red/current-green and source/target/binary proof. Earlier gates
+  are excluded: `run.VPN4nz/` reached 178/0 but its outer session ended143
+  without a durable terminal receipt; `run.rAmTNP/` ended2 because the new
+  output directory was missing. Both failures and the directory correction
+  are retained separately. `run.P3o3M4/` was deliberately canceled143 to
+  remove patch-context whitespace; its emitted C was byte-identical.
+
 - Additional original live-BP provenance is complete in
   `engine-live-bp/{check-source.py,source-proof.json}`. The 2293 fetched
   instructions to boot222f take 2363 cycles, including 70 recorded callback
@@ -682,8 +720,9 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
 
 ## Next
 
-1. Restore the reached early resource installation and `222f -> 26fc` live caller/width
-   contracts, then153c return and its fullEBX transport intoe2fc. Consume the original
+1. Restore the reached early resource installation and `222f -> 26fc` live caller
+   contract after the bounded WORD-access fix above, then153c return and its
+   fullEBX transport intoe2fc. Consume the original
    normal/controlled/CRT pairs above; scratch prototypes are not production acceptance.
    Wire original device initialization and consume the recovered intro registers. Recover
    the 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts; restore

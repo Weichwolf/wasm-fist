@@ -1,0 +1,56 @@
+{
+  "scope": "Original222f ->26fc failed-variant marshalling: three actual AH43 probes, consumed WORD registers and complete filename/data restoration. This diagnostic fixture does not establish live CPU/flags/guest-stack/fetch timing or successful loader variants.",
+  "image_sha256": "d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5",
+  "code_offset": 75516,
+  "code_bytes": "8bf28b440a2ea27e2b5033ffeb01472e8a857e2b0ac0741b88440a8bd6b800435351cd21595b72e6568bd603ff2eff95822b5e8f440acb",
+  "filename_offset": 27518,
+  "filename_bytes": "4241434b4c414e442e42494e00565200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "descriptor_offset": 27512,
+  "source_cx": 11545,
+  "port_dgroup_segment": 7168,
+  "source_bp": 5912,
+  "source_es": 11545,
+  "variant_table_offset": 74254,
+  "variant_bytes": "20214000",
+  "probes": [
+    {
+      "di": 0,
+      "bp": 5912,
+      "ax": 17152,
+      "dx": 27518,
+      "bx": 27512,
+      "cx": 11545,
+      "filename": "BACKLAND.BIN"
+    },
+    {
+      "di": 1,
+      "bp": 5912,
+      "ax": 17152,
+      "dx": 27518,
+      "bx": 27512,
+      "cx": 11545,
+      "filename": "BACKLAND.B!N"
+    },
+    {
+      "di": 2,
+      "bp": 5912,
+      "ax": 17152,
+      "dx": 27518,
+      "bx": 27512,
+      "cx": 11545,
+      "filename": "BACKLAND.B@N"
+    }
+  ],
+  "original_returns": {
+    "ax": 0,
+    "di": 3,
+    "carry": false
+  },
+  "provenance": {
+    "root": "scratch/sequence-capture/engine-font-loader",
+    "capture_exit": 0,
+    "normal_frames": 39,
+    "normal_mixed_samples": 27518,
+    "normal_endpoint_ms": 600
+  }
+}

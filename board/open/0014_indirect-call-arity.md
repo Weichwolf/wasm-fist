@@ -23,6 +23,18 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   preservation of a controlled89ab upperEBX word. Source proof and complete
   frame/PCM capture scope belong to0003; no two-target repair is accepted yet.
 
+- Patch 632 at base `1472e73` verifies the narrower failed-variant callee
+  width contract in 0003: actual original `BACKLAND.BIN`, three AH43 misses
+  with nonzero BP `1718`, two reaching parent failures, and whole 16-MiB
+  current Native/WASM comparisons. DI no longer includes adjacent BP;
+  DX/SI use WORD bridge lanes and the existing ES lane is preserved.
+  The original caller still sets CX=DS, DX=`6b7e`, BX=`6b78` and inherits BP;
+  the arg-less port caller and live ambient CPU/return state remain unresolved.
+  Recover those owners before restoring early installation. Consume 0003's
+  `engine-font-loader/` evidence: canonical `run.dkymjy/` completed 101 tests,
+  exact patches, both builds and 178 existing flows, with durable exit0.
+  The narrower repair does not establish full startup/output parity.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and

@@ -1,0 +1,54 @@
+PATCH 632: resource-open 26fc keeps the variant index and DOS bridge lanes WORD-sized.
+
+Actual original boot 222f calls 26fc for BACKLAND.BIN with DI initially zero
+and inherited BP=1718. All three variants fail attribute probes; INC DI visits
+0, 1, 2 and reaches the terminator at 3. The original preserves BP, restores the
+filename WORD and returns without loader dispatch. Instructions 12706/1270a
+operate on 16-bit DI, not a DWORD spanning the adjacent BP bridge lane.
+
+The port read iRam000f000a after a failed probe, combining DI with BP and using
+that DWORD as a table index. The reaching regression with the actual filename,
+variant bytes and nonzero BP fails on both targets. Keep DI and the DX/SI bridge
+writes/readback WORD-sized. The source does not write ES before AH43; preserve
+the existing bridge lane instead of overwriting it from an uninitialized C local.
+No guessed BP/ES, bounds guard or fallback loader is added.
+
+Source root: scratch/sequence-capture/engine-font-loader/. The actual normal-core
+222f -> 26fc -> caller 21a7 snapshots and all 115 boundary records capture three
+original AH43 misses, unchanged BP and restored filename. The fixture runs the
+real port DOS attribute dispatcher, records consumed WORD operands, and compares
+the entire 16-MiB diagnostic memory, including every bridge byte. This does not
+establish CPU flags, guest stack, instruction/event integration, successful loader
+variants, early vector installation or final frame/PCM parity. Those startup
+dependencies remain with 0003/0014/0026; the first event817 difference stays open.
+--- a/fist.c
++++ b/fist.c
+@@ -48612,2 +48612 @@
+-  int iVar2;
+-  undefined2 unaff_ES;
++  uint16_t iVar2;
+@@ -48625 +48624 @@
+-   * table[idx]).  param_2 stays the raw DGROUP offset for the INT-21 DX slot iRam000f0006. */
++   * table[idx]).  param_2 stays the raw DGROUP offset for the INT-21 DX slot uRam000f0006. */
+@@ -48643,3 +48642,3 @@
+-    iRam000f0006 = param_2;
+-    iRam000f0008 = param_2;
+-    iRam000f000a = iVar2;
++    uRam000f0006 = param_2;
++    uRam000f0008 = param_2;
++    uRam000f000a = iVar2;
+@@ -48647 +48645,0 @@
+-    uRam000f0010 = unaff_ES;
+@@ -48649 +48647 @@
+-    param_2 = iRam000f0008;
++    param_2 = uRam000f0008;
+@@ -48652,2 +48650 @@
+-      /* iRam000f000a = the DI reg-file slot (0x0a) = a 16-bit reg; the int-wide accessor aliases the
+-         adjacent BP slot (0x0c, = 0x1c00 here) in its high word -> mask to 16 bits (asm `di` is WORD). */
++      /* Original DI is WORD-sized; the next bridge lane is inherited BP. */
+@@ -48657 +48654 @@
+-       fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b82 + ((uint16_t)iRam000f000a) * 2)))
++       fist_icall_near(0xf69u,*(uint16_t *)(CX + 0x2b82 + ((uint16_t)uRam000f000a) * 2)))
+@@ -48661 +48658 @@
+-    iVar2 = iRam000f000a + 1;
++    iVar2 = uRam000f000a + 1;

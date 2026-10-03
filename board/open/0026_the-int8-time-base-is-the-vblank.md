@@ -489,6 +489,17 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   source39frames/27518mixed samples/end600ms remain byte-identical. No port CPU,
   protected IRQ, final mixer or first817 acceptance follows from these pairs.
 
+- Base `1472e73`, consume 0003's actual boot `222f -> 26fc` source pair:
+  all 115 boundaries account for 114 fetches and three missing BACKLAND
+  variants with inherited BP `1718`, unchanged segments and complete
+  normal-return raw/lazy flags. The retained whole 16-MiB source pair has
+  18 changed bytes; all 39 source frames/27518 mixed samples/end600ms match.
+  Patch 632's two-target WORD bridge/data regression repairs DI aliasing BP;
+  it does not execute those fetches on the shared clock or own CPU flags,
+  stack, IF or guest IRQ delivery. The unfiltered canonical `run.dkymjy/`
+  completed 101 tests, exact patches, both builds and 178 existing flows,
+  durable exit0. Production startup, first817 and final mixed PCM remain open.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
