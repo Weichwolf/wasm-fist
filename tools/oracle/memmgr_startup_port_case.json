@@ -1,0 +1,140 @@
+{
+  "scope": "Actual Native constructor/first KDV snapshots and real0f64 callback observations; both complete600-ms frame/end streams and final16MiB guest dumps. WASM additionally observes the unmodified live linear heap at exit to resolve the actual task, including historical private storage. Source startup allocation/task ownership is a reference, not an assumed result. No original GP/flags/time or final mixed PCM/full surface acceptance.",
+  "source_receipt_sha256": "39f15cfd050d127882f4c438e2a0e9b7734a75fabb611117cdc215503e37f412",
+  "producers": {
+    "/tmp/wasm-fist-639-complete/production/native": "aee088aac1209419948edde4ead45a1a4220a0e30b3ffadb7e9753d5a9ea1a12",
+    "/tmp/wasm-fist-639-complete/production/wasm/fistrun.js": "74e07d347d0afdf30b5177d38c086fb695547f17c492d295ce6417d04354b423",
+    "/tmp/wasm-fist-639-complete/production/wasm/fistrun.wasm": "564ada4adba38d3fdbeac53b5ee96afe3f1bc0a67dbc997ecfab67653de27cb1",
+    "/usr/bin/node": "ca0728526aa1cc4e3056decec848ecc6d2c5391cecdd4e21a0ebd221d665c84e",
+    "/home/cosmo/Git/wasm-fist/tools/memmgr_startup_native.gdb": "9883784fe3442e7fdfec4b0aa1ae349498fdd8cdd49e3c08b694f53ccdcfcba8",
+    "/home/cosmo/Git/wasm-fist/tools/wasm_heap_dump.cjs": "b710aa913fb24b1c4b6c819f56b7201765fab8c9dadd283c39bce31f2550f820",
+    "/home/cosmo/Git/wasm-fist/tools/capture_memmgr_startup_ports.py": "35e43c1d7631074c393d3e236669ab87c86b8a06090d24e00cb48c8e68e9cc1d",
+    "/home/cosmo/Git/wasm-fist/tools/capture_port_sequence.sh": "fcd65b11def0dce6a8f991da0bf518f2b80399b007e9e1af8234571bdb1d8c55",
+    "/home/cosmo/Git/wasm-fist/tools/oracle/memmgr_startup_case.json": "39f15cfd050d127882f4c438e2a0e9b7734a75fabb611117cdc215503e37f412",
+    "/tmp/wasm-fist-memmgr-port-parent-current/native-wrapper": "272d8e647c84db089afebe0b2c56cb881314f77e0aa74651f02a26dfbe92dd51",
+    "/tmp/wasm-fist-memmgr-port-parent-current/node-wrapper": "b29b8105eb5d1e84529f98226547a81102c39c892ab2258d9b1f865b9e497437",
+    "/tmp/wasm-fist-memmgr-port-parent-current/start-state.text": "95497cd569be155a0efb76408a22f54fbe00dc8a267d19e7ad9375b70088bacb",
+    "/tmp/wasm-fist-memmgr-port-parent-current/start-state.bda": "5c1a8ad522ad0d6019ccb91847f7eff7fd611e9f710eed350e80afa77fe799d7",
+    "/tmp/wasm-fist-memmgr-port-parent-current/start-state.vga": "2b15a5e6f618bce966ae54fd0cb101009ce54041f65eb3fa2f28bcf40aed0d65"
+  },
+  "cases": [
+    {
+      "target": "native",
+      "constructor": {
+        "g_mem_host": 136200896,
+        "module_offset": 1048576,
+        "block_count": 0,
+        "checkpoint": 0,
+        "reason": 0,
+        "current_TCB": 136790720,
+        "task_status": 0,
+        "engine_task_far": {
+          "offset": 0,
+          "segment": 0,
+          "address": 136200896
+        },
+        "blocks": []
+      },
+      "kdv_entry": {
+        "g_mem_host": 136200896,
+        "module_offset": 1048576,
+        "block_count": 0,
+        "checkpoint": 0,
+        "reason": 0,
+        "current_TCB": 152979168,
+        "task_status": 0,
+        "engine_task_far": {
+          "offset": 0,
+          "segment": 36864,
+          "address": 136790720
+        },
+        "blocks": []
+      },
+      "actual_native_errors": [
+        {
+          "reason": 14333,
+          "backtrace": "#0  m_ext_FUN_0000_0f64 (param_1=14333) at /tmp/wasm-fist-639-complete/build/fist_ext.c:1630\n#1  0x0817e29e in m_ext_thunk_FUN_0000_0f64 (param_1=14333) at /tmp/wasm-fist-639-complete/build/fist_ext.c:4361\n#2  0x0817d196 in m_ext_FUN_0000_3661 (param_1=0x82eff58 <g_mem+1096856>) at /tmp/wasm-fist-639-complete/build/fist_ext.c:3979\n#3  0x0817ba74 in m_ext_FUN_0000_3322 (param_1=137297752, param_2=152979354, param_3=28326) at /tmp/wasm-fist-639-complete/build/fist_ext.c:3564\n#4  0x0819d684 in m_ext_FUN_0000_6e95 (param_1=0 '\\000', param_2=0, param_3=0, param_4=0, param_5=152979354, param_6=0) at /tmp/wasm-fist-639-complete/build/fist_ext.c:11954\n#5  0x081740a5 in m_ext_FUN_0000_11cb (param_1=0 '\\000', param_2=0, param_3=0, param_4=0, param_5=0) at /tmp/wasm-fist-639-complete/build/fist_ext.c:1687\n#6  0x08124c8e in fist_extender_gate () at /home/cosmo/Git/wasm-fist/tools/native_main.c:3375\n#7  0x08093733 in FUN_0000_e339 () at /tmp/wasm-fist-639-complete/build/fist.c:39208\n#8  0x08090a73 in FUN_0000_d944 (param_1=1) at /tmp/wasm-fist-639-complete/build/fist.c:38149\n#9  0x080943fb in FUN_0000_e584 (param_1=17412) at /tmp/wasm-fist-639-complete/build/fist.c:39595\n#10 0x08093bf5 in FUN_0000_e446 (param_1=399) at /tmp/wasm-fist-639-complete/build/fist.c:39370\n#11 0x0808b211 in FUN_0000_cae6 (param_1=0, param_2=0, param_3=0, param_4=0, param_5=0) at /tmp/wasm-fist-639-complete/build/fist.c:35734\n#12 0x0804a6e4 in FUN_0000_00d0 (param_1=0, param_2=15520, param_3=0, param_4=0, param_5=0, param_6=0) at /tmp/wasm-fist-639-complete/build/fist.c:4467\n#13 0x08049ae9 in app_entry (param_1=0, param_2=15520, param_3=0, param_4=0, param_5=0, param_6=0) at /tmp/wasm-fist-639-complete/build/fist.c:4225\n#14 0x08128abe in main (argc=1, argv=0xffffcbe4) at /home/cosmo/Git/wasm-fist/tools/native_main.c:4099\n"
+        }
+      ],
+      "g_mem_host": 136200896,
+      "current_TCB": 152979168,
+      "actual_task_status": 255,
+      "engine_task": {
+        "segment": 36864,
+        "offset": 0,
+        "address": 136790720
+      },
+      "shared_task": false,
+      "actual_reason": 14333,
+      "frames": {
+        "records": 39,
+        "samples": 0,
+        "first": 32879,
+        "last": 589334,
+        "modes": [
+          [
+            320,
+            200,
+            8
+          ],
+          [
+            640,
+            400,
+            8
+          ]
+        ],
+        "rates": []
+      },
+      "endpoint_ms": 600,
+      "guest_sha256": "4b2518e3420eae2fe958ca69fc45b671c5485f42df5e439c2173fae135045167",
+      "frame_sha256": "a290aa1a719f55760c7b67f0c5a7a31937e7795495c374bf926c973b0b811993",
+      "end_sha256": "b07ec7261b6b6d3f8d5940321882ca94f9a7594bfbaff154027edce3a5c5a12f"
+    },
+    {
+      "target": "wasm",
+      "constructor": null,
+      "kdv_entry": null,
+      "actual_native_errors": null,
+      "g_mem_host": 16839744,
+      "current_TCB": 33835264,
+      "actual_task_status": 255,
+      "engine_task": {
+        "segment": 36864,
+        "offset": 0,
+        "address": 17429568
+      },
+      "shared_task": false,
+      "actual_reason": 14333,
+      "frames": {
+        "records": 39,
+        "samples": 0,
+        "first": 32879,
+        "last": 589334,
+        "modes": [
+          [
+            320,
+            200,
+            8
+          ],
+          [
+            640,
+            400,
+            8
+          ]
+        ],
+        "rates": []
+      },
+      "endpoint_ms": 600,
+      "guest_sha256": "7cf77394a0a8f474182da9d3f4cb016fefb691424eb072a60c92eb3f4b02dd96",
+      "frame_sha256": "a290aa1a719f55760c7b67f0c5a7a31937e7795495c374bf926c973b0b811993",
+      "end_sha256": "b07ec7261b6b6d3f8d5940321882ca94f9a7594bfbaff154027edce3a5c5a12f",
+      "linear_sha256": "494912e793e7b818d47709ba3b259d97295bc12c6a6a1bac416005ca4265ce68",
+      "address_anchor": {
+        "tick": 120,
+        "guest_sha256": "29b96d23f9e3d9e9f534ce9cb1ed70a1b967e8d8aa8a92b6d8549cf66a25db02",
+        "linear_sha256": "d0e997583b0801098ce0fa4e19bbcc99342480c1779b09b6b7bace72b83f3d9b"
+      }
+    }
+  ],
+  "complete_original_acceptance": false
+}

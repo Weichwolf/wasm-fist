@@ -86,6 +86,7 @@ def verify(root, repo):
         'code': [{'image_offset': a, 'bytes': image[a:b].hex()} for a,b in
                  ((0x84c0,0x85a4), (0x6e95,0x6ebd), (0x3322,0x3352), (0x3661,0x36bf), (0x36bf,0x38e8))],
         'allocations': allocations, 'states': states,
+        'normal_KDV_task_status': struct.unpack_from('<H', memory['kdv-entry'], opened['tcb_physical'])[0],
         'memory_sha256': {name: digest(folder/(name+'.memory')) for name in states},
         'frames': 39, 'mixed_samples': 27518, 'endpoint_ms': 600,
         'capture_sha256': {s: digest(root/'baseline'/('sequence.'+s)) for s in ('frames','pcm','end')},

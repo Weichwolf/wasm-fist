@@ -44,6 +44,35 @@ resize/compaction, and implement the original exhaustion/swap outcomes without s
   transport, false-error removal, nonlocal continuation, clocks/IRQ and
   complete original output remain open.
 
+
+- Fresh accepted639 production diagnostics now reproduce the startup
+  failure on both targets without supplying allocator/CF results:
+  `tools/oracle/memmgr_startup_port_case.json`; reproduce with
+  `python3 -B tools/capture_memmgr_startup_ports.py --native /tmp/wasm-fist-639-complete/production/native --wasm /tmp/wasm-fist-639-complete/production/wasm/fistrun.js --node /usr/bin/node --output /tmp/wasm-fist-memmgr-port-parent`.
+  Actual Native constructor and first6e95 have zero descriptors; the
+  real6e95→3322→3661→0f64 stack raises37fd. Both complete600-ms outputs
+  have39 identical frame records/end bytes, but the actual final current
+  task is private rather than the engine far task and has WORD00ff/reason37fd.
+  Native GDB observes its private memory directly; WASM's unchanged
+  JS/WASM producer exposes its live linear heap through an exit observer.
+  The WASM g_mem address is derived from a unique exact tick12016MiB
+  guest/linear pair, then used for the same immutable producer's complete
+ 600-ms heap. This is an address/state diagnostic, not a matched original
+  CPU boundary. The generated error helper uses an undefined1 pointer and
+  writes only a BYTE; original0f64 stores WORDffff. Source0009's nonlocal
+  continuation remains required. The original source receipt now also
+  records healthy KDV task status from its whole-memory snapshot.
+
+- Candidate startup/shared-task regression has three reaching parent
+  failures with zero setup errors: Native lacks the eight actual startup
+  allocations and both targets own the wrong KDV task. Isolated Native/
+  WASM experiments using the real84c0 before KDV plus the engine far task
+  remove the false37fd/00ff state and retain all complete600-ms parent
+  frame/end bytes. Source first KDV still has an additional sky allocation;
+  no full table/GP/IRQ/time or production correction is accepted from this
+  experiment. Keep the actual startup allocation, task ownership and
+  follow-up error/sky contracts distinct.
+
 ## Next
 
 1. Compare current allocation/free/open traces under matched memory availability. Check list order,

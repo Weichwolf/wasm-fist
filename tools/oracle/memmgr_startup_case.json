@@ -2912,6 +2912,7 @@
       "stack_return": 34102
     }
   },
+  "normal_KDV_task_status": 0,
   "memory_sha256": {
     "alloc-02-entry": "8c852d727c1fbcb4f2cbe7b843575add6b512cf111c52ba0f10c7e8072137fbf",
     "alloc-03-return": "631847967c7e9a7ed510317a7987e954f989d16396be6a799bb26a3e41389a33",
@@ -2947,7 +2948,7 @@
     "end": "b07ec7261b6b6d3f8d5940321882ca94f9a7594bfbaff154027edce3a5c5a12f"
   },
   "script_sha256": {
-    "tools/oracle/capture_memmgr_startup.py": "1d74bcd58655ab03b5037a6a7a08e03a2ef0866699a1b7f9056e2dba23783deb",
+    "tools/oracle/capture_memmgr_startup.py": "f75706fdfc043e0a6f8b28ccf2ae4ca6b8920b2a32d2c05e2788f0a99894486f",
     "tools/oracle/memmgr_startup.gdb": "95069fce3bac8b3d00bdd82e3e8c8264e835131b226eb6497cc1cc9aeeb201c9",
     "tools/oracle/capture_sequence.sh": "a0e0ce2e1098e764eceea60799d9f51379faccf28e191b70edabcf2328cc0c9c",
     "tools/oracle/sequence_format.py": "888b2d604bdab1ca700928decff476099026b36450393abd3441012e33b3545f"
