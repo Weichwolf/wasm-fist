@@ -1049,6 +1049,29 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   actual instruction/event work, rather than inventing a successful service
   return, callback argument or measured delay.
 
+- Accepted643 corrects the original77e0/77e1 BYTE accessors without changing
+  generated sources. Receipt: `tools/oracle/effects_width_production_case.json`.
+  At base123547c, actual76fd reaches four Native/WASM failures: ready0 zeros
+  adjacent77e2..77e4 instruction bytes; ready1 misses required138d entry.
+  Three methods/six target cases pass after only the two BYTE corrections,
+  comparing the complete isolated1MiB module and2048 DMA bytes through real
+  76fd/23ec/2630/24c8. No device return is supplied. The unused active0
+  callback C argument is poisoned; it proves no register ABI. The original
+  effects RAM independently matches all20 shared mixer fields and both
+  complete DMA boundaries through `verify_effects_width.py`.
+  The frozen1089-input unfiltered gate `run.apuwXz` passes137 tests in
+  342.497s, exact patches, sequential Native/WASM builds, six startup cases
+  and all178 existing flows, durable0. Bound additional600-ms startup/error
+  and full30s captures also finish0. All2100 parent frame/end bytes,
+  43 sound rows and47 full packets retain642 behavior; first10s original
+  video and all original palettes/layouts/times stay equal. The same28
+  pixel failures start at817/11704156us/byte8754. Final mixed PCM remains
+  absent and strict original comparisons fail. Complete missing-HIGH still
+  differs at560798us/F36/palettebyte5 with39 versus38 frames. This accepts
+  shared storage width only: actual production op68, full GP/return/stack/
+  flags/device/IF/IRQ/time, other modes and complete original output remain
+  open. Concurrent source-only8bb21de changes none of the1089 frozen inputs.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
@@ -1062,9 +1085,10 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
    normal/controlled/CRT/return-branch pairs above; scratch prototypes are not
    production acceptance. Keep abnormal overflow and unproved CF producers explicit.
    Consume `effects_mode_case.json` for actual76fd BYTE conditions and full
-   incoming/returned GP, including the ready1 call into23ec/138d. Prove a
-   reaching two-target regression before changing its aliases or wiring
-   op68; do not supply zero callback arguments or a safe-zero device return.
+   incoming/returned GP, including the ready1 call into23ec/138d. Preserve
+   accepted643 BYTE aliases and its fullmodule/DMA regressions. Prove the
+   actual register/return/device producer before wiring production op68;
+   do not supply zero callback arguments or a safe-zero device return.
    Consume `sound_bank_startup_case.json` to restore the actual77e2
    size/allocate/read/checkpoint path rather than inserting a fitted bank
    allocation. Wire original device initialization and consume the recovered intro registers. Recover

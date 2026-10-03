@@ -309,6 +309,19 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   Native-WASM/six-startup/178-flow gate is green with durable0; complete
   original output and all-surface acceptance remain open.
 
+- Consume0003's accepted643 effects BYTE storage correction and
+  `tools/oracle/effects_width_production_case.json`. The frozen1089-input
+  137-test/exact-patch/sequential-build/six-startup/full178-flow gate and
+  additional600-ms/30s captures finish0. Every2100 fresh Native/WASM
+  frame/end byte,43 sound rows and47 full unmasked packets retains642
+  behavior; all cross-target records agree. Original first10s video and
+  every original layout/palette/time still match. The same28 pixel failures
+  begin817/11704156us/byte8754, final mixed PCM is absent, and strict original
+  comparisons fail. Missing-HIGH error output retains39 versus38 frames and
+  first560798us/F36/palettebyte5. The isolated actual76fd-to138d regression
+  proves storage width only; production effects/device/CPU/IF/IRQ/time and
+  complete original sequence/surface acceptance remain open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

@@ -1,0 +1,36 @@
+PATCH 643: preserve original effects BYTE state and neighboring code (board:0003).
+
+Original op68 dispatches directly to76fd. Its first instruction A2 E1 77 00 00
+stores AL into one BYTE at77e1. The ready tests at7719/773e are80 3D E0 77
+00 00 01: CMP BYTE[77e0],1. Both generated DWORD accessors violate that
+contract. The mode store zeros actual77e2's C6 05 E0 instruction prefix;
+the ready read includes mode2 and the following code bytes, so ready1 fails
+the comparison and never calls the existing23ec initial mixer.
+
+tools/oracle/effects_mode_case.json proves the actual ready0/ready1 mode2
+entries and full original fetched BYTE instructions. The ready1 module and
+DMA fields at76fd/138d equal initial_mixer_call_case.json's before/after
+fields, verified against paging-aware original whole-RAM snapshots. Reuse
+that regression's one-MiB module, 2048-byte DMA fixture, actual ordered76fd,
+23ec,2630 and24c8 bodies, and device-entry observer. No initializer result
+is supplied. Parent123547c fails four Native/WASM cases: ready0 corrupts
+77e2..77e4; ready1 omits required138d entry. With only these two BYTE
+accessors corrected, complete module/DMA output matches on both targets.
+
+This fixes shared storage width only. Production op68 is not yet wired;
+76fd's return/full GP,23ec's register ABI, actual138d device/IF/IRQ work,
+other effects modes, CPU time and final mixed PCM remain open. The poison
+second C argument is unused on these active0 paths and proves no ABI.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -531,8 +531,8 @@
+ #define DAT_0000_6e90 (*(undefined4 *)(g_mem+fist_ext_base+0x6e90))
+ #define DAT_0000_6e94 (*(undefined4 *)(g_mem+fist_ext_base+0x6e94))
+ #define DAT_0000_701c (*(undefined4 *)(g_mem+fist_ext_base+0x701c))
+-#define DAT_0000_77e0 (*(undefined4 *)(g_mem+fist_ext_base+0x77e0))
+-#define DAT_0000_77e1 (*(undefined4 *)(g_mem+fist_ext_base+0x77e1))
++#define DAT_0000_77e0 (*(undefined1 *)(g_mem+fist_ext_base+0x77e0))
++#define DAT_0000_77e1 (*(undefined1 *)(g_mem+fist_ext_base+0x77e1))
+ #define DAT_0000_7b24 (*(undefined4 *)(g_mem+fist_ext_base+0x7b24))
+ #define DAT_0000_7b28 (*(undefined4 *)(g_mem+fist_ext_base+0x7b28))
+ #define DAT_0000_7b2c (*(undefined4 *)(g_mem+fist_ext_base+0x7b2c))

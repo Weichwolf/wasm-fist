@@ -36,7 +36,7 @@ class InitialMixerTest(unittest.TestCase):
                 raise RuntimeError(result.stdout + result.stderr)
             cls.commands.append((target, run))
 
-    def test_mode1_setup_runs_original_initial_mixer_before_entering_device(self):
+    def initial_memory(self):
         case = json.loads((ROOT / 'tools/oracle/initial_mixer_call_case.json').read_text())
         image = (ROOT / 're_out/fist_image.bin').read_bytes()
         self.assertEqual(hashlib.sha256(image).hexdigest(), case['image_sha256'])
@@ -56,14 +56,21 @@ class InitialMixerTest(unittest.TestCase):
         for field in case['after']:
             data = bytes.fromhex(field['hex'])
             expected[field['offset']:field['offset'] + len(data)] = data
+        return case, memory, expected
+
+    def check_memory(self, memory, expected, eax, entries=None):
         source = self.directory / 'initial.memory'; source.write_bytes(memory)
         for target, run in self.commands:
             with self.subTest(target=target):
                 output = self.directory / f'{target}.memory'
-                result = subprocess.run([*run, str(source), str(output), str(case['param_ax'])],
+                args = [str(source), str(output), str(eax)]
+                if entries is not None:
+                    args.append(str(entries))
+                result = subprocess.run([*run, *args],
                                         capture_output=True, text=True, timeout=30)
                 self.assertEqual(result.returncode, 0,
-                                 '\n'.join((result.stdout + result.stderr).splitlines()[:4]))
+                                 '\n'.join(line[:500] for line in
+                                           (result.stdout + result.stderr).splitlines()[:4]))
                 actual = output.read_bytes()
                 self.assertEqual(len(actual), len(expected))
                 differences = [index for index, (found, wanted) in
@@ -71,5 +78,40 @@ class InitialMixerTest(unittest.TestCase):
                 self.assertFalse(differences,
                                  f'Unequal bytes (offset, actual, original): '
                                  f'{[(hex(i), actual[i], expected[i]) for i in differences[:24]]}')
+
+    def test_mode1_setup_runs_original_initial_mixer_before_entering_device(self):
+        case, memory, expected = self.initial_memory()
+        self.check_memory(memory, expected, case['param_ax'])
+        for target, _ in self.commands:
+            actual = (self.directory / f'{target}.memory').read_bytes()
+            with self.subTest(target=target):
                 self.assertEqual(hashlib.sha256(actual[0x100000:]).hexdigest(),
                                  case['ring_sha256'])
+
+    def effects_source(self):
+        source = json.loads((ROOT / 'tools/oracle/effects_mode_case.json').read_text())
+        image = (ROOT / 're_out/fist_image.bin').read_bytes()
+        self.assertEqual(hashlib.sha256(image).hexdigest(), source['image_sha256'])
+        code = bytes.fromhex(source['code_hex'])
+        self.assertEqual(image[0x76fd:0x76fd + len(code)], code)
+        self.assertEqual(int.from_bytes(image[0xcb3+0x68:0xcb3+0x68+4], 'little'), 0x76fd)
+        return source['states']
+
+    def test_effects_ready_zero_preserves_neighboring_instructions(self):
+        _, memory, _ = self.initial_memory()
+        source = self.effects_source()['01-76fd']
+        self.assertEqual(source['ready'], 0)
+        memory[0x77e0] = source['ready']
+        memory[0x77e1] = source['mode']
+        self.check_memory(memory, memory.copy(), source['registers'][0], 0)
+
+    def test_effects_ready_one_reaches_real_initial_mixer_and_device_boundary(self):
+        _, memory, expected = self.initial_memory()
+        states = self.effects_source()
+        source = states['02-76fd']
+        self.assertEqual((source['ready'], source['mixer_active']), (1, 0))
+        self.assertEqual(states['02-138d']['mixer_active'], 1)
+        for data in (memory, expected):
+            data[0x77e0] = source['ready']
+            data[0x77e1] = source['mode']
+        self.check_memory(memory, expected, source['registers'][0], 1)
