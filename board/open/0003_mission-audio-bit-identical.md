@@ -952,6 +952,22 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   or complete frame/PCM parity. Temporary raw
   artifacts are disposable under the user's storage instruction.
 
+- Consume0014's accepted patch637 saved config/overlay handles and existing
+  read-CF lane. Actual startup releases SOUND.CFG and both driver-query
+  handles before reading FIST.SET. Seven real-DOS tests turn16 reaching
+  parent failures into20 target cases; the frozen1023-input unfiltered gate
+  `run.8EVxkQ` passes124 tests, exact patches, both sequential builds,
+  six startup cases and all178 existing flows, durable0. Source/production
+  receipts are `tools/oracle/file_close{,_production}_case.json`;419 original
+  files retain their hashes/inventory. Fresh complete30000-ms captures
+  retain all2100 parent636 frame/end bytes and43 sound register rows on
+  both targets. Only op68's low saved handle changes8→5 in each complete
+  47-packet stream (`f6e80005` Native /`00000005` WASM). Its actual full
+  register producer remains open, owned by0009/0014. All original palettes/
+  layouts/times match;28 pixel failures still begin817/11704156us/byte8754.
+  Strict comparison fails absent final mixed port PCM. Device init/IRQ/mixer,
+  full GP/ES/flags/farstack and instruction/device time are not accepted.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.

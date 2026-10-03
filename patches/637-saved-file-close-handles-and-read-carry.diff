@@ -1,0 +1,66 @@
+PATCH 637: retain saved DOS handles across config reads and overlay size queries (board:0014).
+
+Actual fefb is module0f69:086b, not a main-module CS inferred from its name.
+Original ff0d saves open AX; ff1c restores it, ff21 moves it to BX for AH3e.
+ff20 PUSHF /ff27 POPF retain read flags even after successful close. Preserve
+that CF result in the existing interrupt return slot; full port flags/GP,
+ES/caller state, stack, IRQ and instruction/device time remain open.
+Original150d0 saves open AX and150dc restores BX after seek-to-end, then
+150dd..150e4 preserve returned DX:AX around close. Use the saved handle,
+not unrelated fefb param9 or50c8 param7. No guessed handle5 or high-word mask.
+
+Fresh source reproduction: python3 -B tools/oracle/capture_file_close.py
+--output /tmp/wasm-fist-file-close-source. The compact file_close_case.json
+binds actual code, complete fetches, original sizes and unchanged39 frames/
+27518 mixed samples/end600. The real DOS/file-owner regression reaches16
+parent failures across Native/WASM: leaked handles, an unrelated peer closed,
+wrong AX and lost read CF. Tests include independent handles, missing files,
+short/full/empty reads and both seek size words. File lifetime/carry only;
+no full original frames/PCM/CPU/time or settings op44 return acceptance.
+--- a/fist.c
++++ b/fist.c
+@@ -43120,6 +43120,7 @@
+ 
+ {
+   undefined2 unaff_ES;
++  undefined2 file_handle, read_carry;
+   
+   FUN_1000_4c9a(param_5);
+   uRam000f0014 = 0x21;
+@@ -43134,6 +43135,7 @@
+   uRam000f0010 = unaff_ES;
+   fist_int_dispatch();
+   if (!(bool)uRam000f0012) {
++    file_handle = uRam000f0000;  /* ff0d: PUSH AX */
+     uRam000f0014 = 0x21;
+     uRam000f0002 = uRam000f0000;
+     uRam000f0004 = 0x40;
+@@ -43143,15 +43145,17 @@
+     uRam000f0000 = CONCAT11(0x3f,(char)uRam000f0000);
+     uRam000f000c = param_7;
+     fist_int_dispatch();
++    read_carry = uRam000f0012;  /* ff20: PUSHF after the read */
+     uRam000f0014 = 0x21;
+-    uRam000f0002 = param_9;
++    uRam000f0002 = file_handle;  /* ff1c/ff21: POP AX / MOV BX,AX */
+     uRam000f0004 = uRam000f0000;
+     uRam000f0008 = 0xb4;
+     uRam000f000e = 0x1c00;
+-    uRam000f0000 = CONCAT11(0x3e,(char)param_9);
++    uRam000f0000 = CONCAT11(0x3e,(char)file_handle);
+     uRam000f000c = param_7;
+     uRam000f0010 = unaff_ES;
+     fist_int_dispatch();
++    uRam000f0012 = read_carry;  /* ff27: POPF, existing CF lane only */
+   }
+   return uRam000f0000;
+ }
+@@ -54503,7 +54507,7 @@
+     f_size_lo = (undefined2)uRam000f0000;
+     uRam000f0000 = CONCAT11(0x3e,(char)uRam000f0000);
+     uRam000f0014 = 0x21;
+-    uRam000f0002 = param_7;
++    uRam000f0002 = uStack0002;  /* 150dc: POP BX, saved open handle */
+     uRam000f000e = 0x1c00;
+     uRam000f000c = param_4;
+     uRam000f0010 = unaff_ES;

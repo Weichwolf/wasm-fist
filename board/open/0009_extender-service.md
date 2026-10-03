@@ -35,6 +35,15 @@ inventory must not be used as a patch list.
   for op44; 0014 owns the stale caller/result transport. Loader raw flags,
   errors, instruction/device time and complete output remain unresolved.
 
+- Consume0014's accepted patch637 saved config/overlay handles and existing
+  read-CF lane. The actual startup no longer leaks SOUND.CFG/SOUNDDVR/
+  MGAVIDEO. Seven real-DOS tests turn16 reaching parent failures into20
+  target cases; the unfiltered124-test/six-startup/full178-flow gate passes0.
+  Receipt: `tools/oracle/file_close_production_case.json`. op68 now carries
+  low handle5, but its Native/WASM upperDWORD still differs. Actual op44
+  FILEMGR/DTA initialization and full returned register transport remain
+  unresolved; this does not accept the generic service or full output.
+
 ## Next
 
 1. Build a current inventory from the original table and the shim's branches. For each op record

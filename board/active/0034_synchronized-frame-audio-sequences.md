@@ -242,6 +242,17 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   does not accept upper GP/flags/farstack/IRQ/time, live INT9 input consumption
   or complete original frame/audio sequences.
 
+- Consume0014's accepted patch637 saved startup file handles/read CF.
+  The unfiltered124-test/exact-patch/sequential-build/six-startup/full178-flow
+  gate passes with durable0. All2100 fresh30000-ms Native/WASM frame/end
+  bytes and43 sound register rows remain equal to636; all original layouts/
+  palettes/times match and the same28 pixel failures begin817/11704156us.
+  All47 extender packets is retained without masking: only op68's low
+  handle changes8→5 per target; its full upperDWORD still differs. Strict
+  comparison still rejects absent final mixed port PCM. Source/production
+  receipts: `tools/oracle/file_close{,_production}_case.json`. No complete
+  original video/audio, CPU/IRQ/time or full surface acceptance follows.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

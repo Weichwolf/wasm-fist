@@ -154,16 +154,39 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   current6de2 still posts its pre-de89 parameter unchanged; source provenance
   constrains the next typed result transport but does not accept that repair.
 
+- Patch637 accepts the reached saved-handle WORD/read-CF contract above.
+  Actual fefb saves open AX across the read and restores its read CF after
+  close;50c8 closes its saved handle while retaining both seek-size words.
+  Seven real-DOS tests reach16 failures on the parent and20 successful
+  target/case runs after the repair, including unrelated peer handles,
+  short/full/empty/error/missing reads and sparse sizes above64KiB. Actual
+  Native startup releases SOUND.CFG/SOUNDDVR/MGAVIDEO before FIST.SET;
+  its handle allocation now agrees with the original. The frozen1023-input
+  basec4cf756 unfiltered gate `run.8EVxkQ` passes124 tests, exact patches,
+  sequential Native/WASM builds, six startup cases and all178 existing
+  flows, durable gate/runner0; all419 original files are unchanged.
+  Compact receipt and portable actual-startup observation:
+  `tools/oracle/file_close_production_case.json`,
+  `python3 -B tools/capture_file_close_native.py --native
+  /tmp/wasm-fist-637-complete/production/native --output
+  /tmp/wasm-fist-file-close-native`. Fresh30s frames/end/sound bytes remain
+  unchanged; only op68's saved handle changes8→5 in each full47-packet
+  stream. Its upperDWORD still differs Native/WASM. Full GP/ES/raw+lazyflags,
+  farstack/IRQ/time, loader errors and complete original output remain open.
+
 ## Next
 
-1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and
+1. Recover0009's actual op44 FILEMGR/DTA initialization and returned GP lanes;
+   replace6de2's stale pre-de89 forwarding with its real result. Keep full
+   op68 packets; do not mask upper words or post a fitted handle5.
+2. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and
    a declaration terminator; the earlier regex counted commas inside definitions and invented bugs.
-2. Classify sites: missing/extra arguments, correct count but wrong register values, ambient-register
+3. Classify sites: missing/extra arguments, correct count but wrong register values, ambient-register
    calls, and far-segment constants leaked into arguments. Cover all classes; arg-less grep misses
    short nonempty lists.
-3. For one screen/cockpit group, read caller and callee asm. Thread explicit register carriers with
+4. For one screen/cockpit group, read caller and callee asm. Thread explicit register carriers with
    correct widths and a typed call. Preserve non-AX returns and CF; never pad unknown inputs with zero.
-4. Drive the screen that reaches each repaired site, then run both target matrices. Use 0027's
+5. Drive the screen that reaches each repaired site, then run both target matrices. Use 0027's
    vehicle coverage; an AZER1 census cannot clear unseen screens.
 
 ## Accept
