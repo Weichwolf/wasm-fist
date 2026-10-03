@@ -7,7 +7,7 @@
 # SIGALRM/setitimer host timer are #ifdef'd out; the tick runs cooperatively (one INT-8 tick per pump).
 #
 # Usage: tools/build.sh [out.js]    (default /tmp/fisttest/fistrun.js)
-# Sources come from build/ if `make patch` produced it, else straight from re_out/.
+# Sources come from the temporary build directory if `make patch` produced it, else straight from re_out/.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTJS="${1:-/tmp/fisttest/fistrun.js}"
@@ -16,7 +16,8 @@ mkdir -p "$(dirname "$OUTJS")"
 EMCC="${EMCC:-$(ls "$HOME"/Git/emsdk/upstream/emscripten/emcc 2>/dev/null || echo emcc)}"
 EMCC="$(command -v "$EMCC")"
 
-if [ -f "$ROOT/build/fist.c" ]; then SRCDIR="$ROOT/build"; else SRCDIR="$ROOT/re_out"; fi
+source "$ROOT/tools/work_dir.sh"
+if [ -f "$FIST_BUILDDIR/fist.c" ]; then SRCDIR="$FIST_BUILDDIR"; else SRCDIR="$ROOT/re_out"; fi
 echo "[build.sh] wasm sources from $SRCDIR  (emcc=$EMCC)"
 
 # Same compiler looseness as the native build: the decompile is faithful C with Ghidra type slack

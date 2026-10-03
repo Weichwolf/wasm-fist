@@ -25,15 +25,17 @@ class BuildTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        for folder in ('tools', 'build', 're_out', 'armoredfist', 'compiler'):
+        for folder in ('tools', 're_out', 'armoredfist', 'compiler'):
             (self.root / folder).mkdir()
-        (self.root / 'build/fist.c').write_text('')
+        self.work = self.root / 'temporary-work'
+        (self.work / 'build').mkdir(parents=True)
+        (self.work / 'build/fist.c').write_text('')
         (self.root / 're_out/image.bin').write_bytes(b'image')
         compiler = self.root / 'compiler/emcc'
         compiler.write_text(COMPILER)
         compiler.chmod(0o755)
         (self.root / 'compiler/em++').symlink_to('emcc')
-        for script in ('build.sh', 'build_web.sh'):
+        for script in ('build.sh', 'build_web.sh', 'patch.sh', 'work_dir.sh', 'clean.sh'):
             shutil.copyfile(ROOT / 'tools' / script, self.root / 'tools' / script)
 
     def build(self, script, source, compiler_on_path=False):
@@ -43,12 +45,52 @@ class BuildTest(unittest.TestCase):
         (objects / (prefix + Path(source).stem + '.o')).write_bytes(b'previous-object')
         output = objects / 'output.js'
         env = dict(os.environ, EMCC=str(self.root / 'compiler/emcc'),
-                   OBJDIR=str(objects), FAIL_SOURCE=source)
+                   OBJDIR=str(objects), FAIL_SOURCE=source, FIST_WORKDIR=str(self.work))
         if compiler_on_path:
             env.update(EMCC='emcc', PATH=str(self.root / 'compiler') + os.pathsep + env['PATH'])
         result = subprocess.run(['bash', str(self.root / 'tools' / script), str(output)],
                                 env=env, capture_output=True, text=True, timeout=10)
         return result, output
+
+    def test_patch_stages_sources_outside_checkout(self):
+        (self.root / 're_out/fist.c').write_text('int source_owner;\n')
+        env = dict(os.environ, FIST_WORKDIR=str(self.work))
+        result = subprocess.run(['bash', str(self.root / 'tools/patch.sh')],
+                                env=env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertEqual((self.work / 'build/fist.c').read_text(), 'int source_owner;\n')
+        self.assertFalse((self.root / 'build').exists())
+
+    def test_clean_removes_only_owned_temporary_artifacts(self):
+        for name in ('verify/run.completed', 'sequence-capture/original'):
+            directory = self.work / name
+            directory.mkdir(parents=True)
+            (directory / 'old.log').write_text('obsolete')
+        outside = self.root / 'keep.txt'
+        outside.write_text('source')
+        result = subprocess.run(['bash', str(self.root / 'tools/clean.sh')],
+                                env=dict(os.environ, FIST_WORKDIR=str(self.work)),
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        for name in ('build', 'verify', 'sequence-capture'):
+            self.assertFalse((self.work / name).exists())
+        self.assertEqual(outside.read_text(), 'source')
+
+    def test_default_work_directory_is_external_and_workspace_specific(self):
+        env = os.environ.copy()
+        env.pop('FIST_WORKDIR', None)
+        directories = []
+        for root in (self.root, self.root / 'other-workspace'):
+            command = 'ROOT="$1"; source "$2"; printf "%s\n" "$FIST_WORKDIR"'
+            result = subprocess.run(['bash', '-c', command, 'paths', str(root),
+                                     str(self.root / 'tools/work_dir.sh')],
+                                    env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            directory = Path(result.stdout.strip())
+            self.assertTrue(directory.is_relative_to('/tmp'))
+            self.assertFalse(directory.is_relative_to(self.root))
+            directories.append(directory)
+        self.assertNotEqual(*directories)
 
     def test_compiler_failure_cannot_link_stale_objects(self):
         for script in ('build.sh', 'build_web.sh'):

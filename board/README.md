@@ -11,8 +11,12 @@ Follow explicit priorities first; otherwise continue 0034.
 3. Add the reaching regression and fix the cause. Implementation recommendations remain hypotheses.
 4. Run `bash tools/check_flow.sh '^flow-name$'`; omit the filter for the entire existing matrix.
    It runs tests, exact patch checks, both builds and cross-target comparisons. Keep artifacts under
-   `scratch/verify/run.*`. Do not edit running scripts or overwrite tested binaries.
-5. Record command, revision, result and evidence path. Complete required coverage, commit and push.
+   `/tmp/wasm-fist-<uid>-<workspace>/verify/run.*` (override with `FIST_WORKDIR`).
+   Do not edit running scripts or overwrite tested binaries.
+5. Keep disposable builds, captures, isolated games and logs under `/tmp`. Delete obsolete raw
+   artifacts after each bounded success and retain compact result summaries; temporary files may
+   disappear between sessions, so version the source fixture and reproduction command.
+6. Record command, revision, result and evidence path. Complete required coverage, commit and push.
    Close only when **Accept** is proved; matching prefixes and historical gates do not establish it.
 
 ## Contracts and work order

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 URL = ('https://d1.xp.myabandonware.com/t/07386d7a-4319-4bcf-9eef-dd85b0f3d41b/'
        'Armored-Fist_DOS_EN.zip')
 SHA256 = 'a8d8fcb64cc525ddb1562cccfef4cbe94cc3c8d3fcb380d638ce59c28527ea8c'
-CACHE = ROOT / 'scratch/provision-game/Armored-Fist_DOS_EN.zip'
+CACHE = Path('/tmp/wasm-fist-provision/Armored-Fist_DOS_EN.zip')
 
 
 def verify_archive(path):

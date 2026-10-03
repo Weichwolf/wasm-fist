@@ -3,7 +3,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET="${1:?target native or wasm}"
 TICK="${2:-120}"
-OUT="${3:-$ROOT/scratch/sequence-capture/port-$TARGET-$TICK}"
+source "$ROOT/tools/work_dir.sh"
+OUT="${3:-$FIST_WORKDIR/sequence-capture/port-$TARGET-$TICK}"
 case "$TARGET" in native|wasm) ;; *) echo "invalid target: $TARGET" >&2; exit 2;; esac
 dumpenv=(FIST_DUMPTICK="$TICK")
 if [ -n "${FIST_SEQUENCE_END_MS:-}" ]; then dumpenv=(); fi

@@ -3,7 +3,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DOSBOX="${DOSBOX:-$ROOT/third_party/dosbox-build/dosbox-0.74-3/src/dosbox}"
 DURATION_SEC="${1:-50}"
-OUT="${2:-$ROOT/scratch/sequence-capture/run}"
+source "$ROOT/tools/work_dir.sh"
+OUT="${2:-$FIST_WORKDIR/sequence-capture/run}"
 if [[ ! "$DURATION_SEC" =~ ^[0-9]{1,7}$ ]]; then echo 'invalid emulated duration' >&2; exit 2; fi
 DURATION_SEC=$((10#$DURATION_SEC))
 export FIST_SEQUENCE_END_MS="${FIST_SEQUENCE_END_MS:-$((DURATION_SEC*1000))}"

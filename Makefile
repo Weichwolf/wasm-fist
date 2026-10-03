@@ -3,10 +3,10 @@
 #   make image       FIST.RUN --[extract_image.py, static Huffman-bound parse]--> re_out/fist_image.bin
 #   make decompile   fist_image.bin --[Ghidra headless, raw x86:LE:32 @ load base]--> re_out/fist_decomp.c
 #   make assemble    re_out/fist_decomp.c --[assemble_fist.py, mechanical]--> re_out/fist.c (engine unit)
-#   make patch       re_out/*.c|h + patches/NNN-*.diff (ordered, commented) --> build/
-#   make native      build/ --[gcc -m32]--> $(NATIVE)         (primary debug target)
-#   make wasm        build/ --[emcc]--> $(OUTJS)              (browser/node target)
-#   make web         build/ --[emcc]--> web/fist              (interactive browser build)
+#   make patch       re_out/*.c|h + patches/NNN-*.diff (ordered, commented) --> temporary build directory
+#   make native      temporary build --[gcc -m32]--> $(NATIVE)         (primary debug target)
+#   make wasm        temporary build --[emcc]--> $(OUTJS)              (browser/node target)
+#   make web         temporary build --[emcc]--> web/fist              (interactive browser build)
 #   make verify / verify-wasm   run the crash-free matrix on the target, print N/M
 #
 # Every engine correction is a patches/NNN-*.diff with its rationale in the file header.
@@ -81,7 +81,7 @@ assemble: ## mechanical: re_out/*_decomp.c -> re_out/fist{,_mga,_snd}.c (engine 
 symbols: ## regenerate re_out/fist_symbols.h from the Ghidra symbol export
 	python3 $(ROOT)/tools/gen_symbols.py $(ROOT)/re_out/data_symbols.txt $(ROOT)/re_out/fist_symbols.h
 
-patch: ## apply patches/NNN-*.diff onto re_out/ -> build/ (exact match; drift fails loudly)
+patch: ## apply patches/NNN-*.diff onto re_out/ -> temporary build (exact match; drift fails loudly)
 	bash $(ROOT)/tools/patch.sh
 
 check: ## dry-run the patch series against the pristine decompile (anchor check)
@@ -107,5 +107,6 @@ verify-wasm: wasm ## crash-free check on the WASM build (node)
 refcapture: ## Stage-2 reference capture: run the original under DOSBox/QEMU, dump framebuffer + memory
 	bash $(ROOT)/tools/refcapture.sh
 
-clean: ## remove generated build/ and outputs
-	rm -rf $(ROOT)/build $(OUTJS) $(OUTJS:.js=.wasm) $(ROOT)/web/fist
+clean: ## remove disposable builds, captures, verification runs and outputs
+	bash $(ROOT)/tools/clean.sh
+	rm -rf $(OUTJS) $(OUTJS:.js=.wasm) $(ROOT)/web/fist

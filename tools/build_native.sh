@@ -3,13 +3,14 @@
 # (tools/native_main.c). gcc -m32, matching the 16-bit engine's <=32-bit pointer model and the
 # wasm32 target. For the `assemble` stage the bar is COMPILE + LINK; running crash-free is Stage 1.
 #
-# Sources come from build/ if `make patch` produced it, else straight from re_out/ (no patches yet).
+# Sources come from the temporary build directory if `make patch` produced it, else straight from re_out/ (no patches yet).
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-/tmp/fist_native}"
 ASAN="${ASAN:-}"
 
-if [ -f "$ROOT/build/fist.c" ]; then SRCDIR="$ROOT/build"; else SRCDIR="$ROOT/re_out"; fi
+source "$ROOT/tools/work_dir.sh"
+if [ -f "$FIST_BUILDDIR/fist.c" ]; then SRCDIR="$FIST_BUILDDIR"; else SRCDIR="$ROOT/re_out"; fi
 echo "[build_native] sources from $SRCDIR"
 
 # -m32: 16-bit engine composes 20-bit linear / far pointers into 32-bit ints -> 32-bit host.

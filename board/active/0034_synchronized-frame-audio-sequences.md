@@ -163,6 +163,21 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   exit0. Consume `resource-bx/proof.json`; complete sequence acceptance,
   startup CPU/IRQ/IF and final mixer work remain open.
 
+- Temporary storage cleanup at user request: removed the64-GiB ignored
+  repository scratch history and obsolete raw logs/captures. The checkout
+  is188MiB including the installed original and local DOSBox source/build.
+  One `tools/work_dir.sh` owner now defaults disposable engine staging,
+  captures and verification to `/tmp/wasm-fist-<uid>-<workspace>/`;
+  `FIST_WORKDIR` overrides it. The provision ZIP cache is also in `/tmp`.
+  `make clean` removes owned temporary build/capture/verification directories.
+  Six build/path/cleanup tests, four provisioning tests, shell syntax and
+  exact full patch staging pass; emitted635 engine bytes equal the previous
+  candidate. This verifies storage behavior only. Historical raw artifacts
+  are retired; source fixtures and commands remain versioned. Current635's
+  earlier107-test/two-build/six-start-case gate was interrupted with runner129
+  before all178 flows completed and is unaccepted. Recreate its source/output
+  evidence under `/tmp` before its production acceptance.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

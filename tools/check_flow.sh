@@ -2,11 +2,12 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-mkdir -p scratch/verify
-RUN="$(mktemp -d "$ROOT/scratch/verify/run.XXXXXX")"
+source "$ROOT/tools/work_dir.sh"
+mkdir -p "$FIST_WORKDIR/verify"
+RUN="$(mktemp -d "$FIST_WORKDIR/verify/run.XXXXXX")"
 export FIST_FLOWS="${1:-}"
-export NATIVE="${NATIVE:-/tmp/fist_native}"
-export OUTJS="${OUTJS:-/tmp/fisttest/fistrun.js}"
+export NATIVE="${NATIVE:-$FIST_WORKDIR/native}"
+export OUTJS="${OUTJS:-$FIST_WORKDIR/wasm/fistrun.js}"
 printf 'evidence: %s\n' "$RUN"
 { git rev-parse HEAD; printf 'flows: %s\n' "${FIST_FLOWS:-all}"; git status --short; } > "$RUN/revision.txt"
 git diff --binary HEAD > "$RUN/worktree.patch"
