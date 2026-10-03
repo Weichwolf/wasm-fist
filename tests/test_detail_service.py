@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -31,12 +32,14 @@ class DetailServiceTest(unittest.TestCase):
         operation = block(main, '    if (op == 0x44 && g_ext_ready) {')
         helper = (block(main, 'static uint32_t fist_detail_load(')
                   if 'static uint32_t fist_detail_load(' in main else '')
+        owner = re.search(r'^FistDetailRegisters g_fist_detail_registers;[^\n]*',main,re.M)
         wrapper = cls.directory/'gate.c'
         wrapper.write_text('#include "ghidra_compat.h"\n'
                            '#define FIST_EXT_BASE 0x100000u\n'
                            'extern int g_fist_ext_int;\n'
                            'extern unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi;\n'
                            'extern unsigned m_ext_FUN_0000_6032(int,unsigned short,unsigned short,unsigned short,unsigned,unsigned short);\n'
+                           +(owner.group(0)+'\n' if owner else '')
                            +helper+'\nint detail_service_gate(void) {\n'
                            'uint8_t *dg=g_mem+0x1c000; unsigned op=*(uint16_t *)(dg+0xea10); int g_ext_ready=1;\n'
                            +operation+'\nabort();\n}\n')

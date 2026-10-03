@@ -1037,6 +1037,18 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   byte-identical; its full135-test/build/six-startup/178-flow gate is
   separate and still running, with no production acceptance yet.
 
+- Consume0014's accepted642 transport from actual FILEMGR into the effects
+  input: `tools/oracle/detail_return_production_case.json`. Production now
+  carries fullEBX5 and separateEAX2, agreeing with the first original76fd
+  input recovered above; all47 full packets agree between targets. The
+  existing full gate and additional output captures pass scoped checks,
+  while all2100 frame/end bytes and43 sound rows retain the parent. No
+  actual76fd/77e2/23ec/device/IF/IRQ implementation follows from this input
+  fix. Final mixed PCM remains absent and the same first817 pixel failure
+  remains. Restore the source-proven BYTE/state/device producers and their
+  actual instruction/event work, rather than inventing a successful service
+  return, callback argument or measured delay.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.

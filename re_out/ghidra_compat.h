@@ -300,6 +300,13 @@ void fist_sound_trace(void);
 /* Resource registrar153c's actual WORD BX output; callers retain incoming EBX high bits. */
 extern uint16_t g_fist_153c_bx;
 
+/* Original successful op44 return, published by its actual FILEMGR producer.
+ * The void engine/gateway ABI retains these explicit full register lanes. */
+typedef struct { uint32_t eax, ebx; } FistDetailRegisters;
+extern FistDetailRegisters g_fist_detail_registers;
+/* e2df carries EAX independently of the full EBX task inbox. */
+extern uint32_t g_fist_effects_eax;
+
 
 /* ---- DOS loader environment (native_main sets these up before app_entry) ----
  * The Doug-Huffman extender/DOS loads the engine with a PSP + environment block and installs the

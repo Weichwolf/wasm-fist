@@ -1020,7 +1020,7 @@ static unsigned long long g_int8_last_clock;
     X(g_fist_ctx_bx) X(g_fist_03a9_dx) X(g_fist_fp_dx) X(g_fist_fp_cx) X(g_fist_r48_dx) X(g_fist_r48_cx) \
     X(g_fist_3e29_cx) X(g_fist_ext_esi) X(g_fist_ext_ecx) X(g_fist_ext_edx) X(g_fist_ext_edi) \
     X(g_fist_op50_si) X(g_fist_op50_dx) X(g_fist_op50_cx) X(g_fist_op50_edx) X(g_fist_op50_esi) X(g_fist_op50_edi) X(g_ext_edx) \
-    X(g_fist_ext_edx_out) X(g_fist_1345_bp) X(g_fist_153c_bx) X(g_fist_054c_bx) X(g_fist_054c_cx) X(g_fist_054c_dx) \
+    X(g_fist_ext_edx_out) X(g_fist_1345_bp) X(g_fist_153c_bx) X(g_fist_detail_registers) X(g_fist_effects_eax) X(g_fist_054c_bx) X(g_fist_054c_cx) X(g_fist_054c_dx) \
     X(g_fist_render_di) X(g_fist_render_dx) X(g_mga_fade_es)
 #define FIST_ISR_SAVE(v)   __typeof__(v) isr_##v = v;
 #define FIST_ISR_RESTORE(v) v = isr_##v;
@@ -1734,6 +1734,8 @@ unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi;   /* PATCH 471: o
 uint32_t g_fist_ext_edx_out;       /* PATCH 573: op-0x3c (e115) EDX result = the uploaded record's address in the model block */
 unsigned short g_fist_1345_bp;     /* PATCH 471: 1345 BP out = the MEMMGR list header (0x16d4/0x16f6/0x1718) */
 uint16_t g_fist_153c_bx;           /* PATCH 634: incoming/restored BX or the last reached resource product */
+FistDetailRegisters g_fist_detail_registers; /* Actual op44 FILEMGR EAX/full EBX return. */
+uint32_t g_fist_effects_eax;       /* PATCH 642: independently loaded EAX at e2df/op68. */
 unsigned short g_fist_054c_bx;     /* PATCH 473: 054c/bbc6 BX out = the pitch (077e over the Z delta) */
 /* PATCH 542: 054c also returns the 32-bit RANGE in CX:DX -- asm 0x558 `push %ax ; push %dx` then
  * 0x56f `pop %dx ; pop %cx`, so at return CX = the range LOW word and DX = the range HIGH word.
@@ -1917,6 +1919,8 @@ static uint32_t fist_detail_load(uint16_t cx, uint16_t dx, uint16_t di) {
     g_fist_ext_int = 1;
     uint32_t result = m_ext_FUN_0000_6032(0x3a20, cx, dx, (uint16_t)(uintptr_t)task,
                                          (uint32_t)(uintptr_t)(module + filename), di);
+    g_fist_detail_registers.eax = result;
+    g_fist_detail_registers.ebx = *(uint32_t *)(g_mem + 0xf0024);
     g_fist_ext_int = previous_flat;
     return result;
 }
@@ -3731,10 +3735,14 @@ int fist_extender_gate(void) {
         return 0;
     }
     { static int extlog = -1; if (extlog < 0) extlog = getenv("FIST_EXTLOG") ? 1 : 0;
-      if (extlog)
+      if (extlog) {
         fprintf(stderr, "[ext] service op 0x%02x (display-list cmd) inbox=%08x args %04x/%04x/%04x\n", op,
             *(uint32_t *)(g_mem + ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c) + 0x3f2),
-            *(uint16_t *)(dg + 0xea1a), *(uint16_t *)(dg + 0xea1c), *(uint16_t *)(dg + 0xea1e)); }
+            *(uint16_t *)(dg + 0xea1a), *(uint16_t *)(dg + 0xea1c), *(uint16_t *)(dg + 0xea1e));
+        if (op == 0x68)
+            fprintf(stderr, "[effects] eax=%08x detail-eax=%08x detail-ebx=%08x\n",
+                    g_fist_effects_eax, g_fist_detail_registers.eax, g_fist_detail_registers.ebx);
+      } }
 #ifdef __EMSCRIPTEN__
     /* LIVE web play: the mission loop does NOT re-enter fist_timer_pump (see FIST_R3D_DUMP note above),
        so input/frame-post starve in-mission.  op 0x24 is the per-frame cockpit render -- post one frame

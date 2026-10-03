@@ -296,6 +296,19 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   complete original output, GP/flags/stack/IRQ/time or full surface
   acceptance follows from this width correction.
 
+- Consume0014's accepted642 normal return/configuration transport and its
+  `tools/oracle/detail_return_production_case.json`. Complete fresh30s
+  Native/WASM streams retain all2100 parent frame/end bytes and43 sound
+  rows. Every original layout/palette/time and first10s video remain equal;
+  the same28 pixel failures begin817/11704156us/byte8754. All47 unmasked
+  cross-target service packets now agree, including op68 EBX5 with separate
+  source-backed EAX2; this fixes the data input, not its missing effects
+  body. Strict original comparison still fails absent final mixed PCM.
+  Complete missing-HIGH error output still differs at560798us/F36/palette
+  byte5 and has39 versus38 frames. The full135-test/exact-patch/sequential
+  Native-WASM/six-startup/178-flow gate is green with durable0; complete
+  original output and all-surface acceptance remain open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

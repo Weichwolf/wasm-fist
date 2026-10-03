@@ -223,13 +223,49 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   SHR supply AX1/2, with the first value stored by c008. All39 original
   frames/27518PCM/end600 remain unchanged; four negative verifier cases
   fail. This strengthens the source contract for typed transport; the
-  production6de2 stale EBX/config AX and full port GP/flags/stack stay open.
+  source contract feeds642 below; remaining full GP/flags/stack stay open.
+
+
+- Accepted patch642 normal return/configuration transport at tested runtime
+  parent3935ac3: actual op44 publishes its real FILEMGR EAX/full EBX once;
+ 6de2 consumes it afterde89 and preserves EBX across actualc008. Original
+  WORD[8b4b]/SHR supplies EAX separately to e2df, preserving its high WORD.
+  Existing void de89/generic gateway signatures remain; the shim ISR saves
+  include both explicit lanes. Two meaningful regression methods reach
+  eight parent failures with no errors, then eight candidate cases pass on
+  Native/WASM. Actual6de2/de89/e339/c008/e2df, op44/6032/DOS, guarded complete
+  tables, six DOS commands, real peer handles6..8 and independent WORD
+  configurations are exercised. The existing eight op44 cases also pass.
+  Observation stops at the actual op68 input, without a missing service
+  body or fabricated return. Portable scoped receipt:
+  `tools/oracle/detail_return_production_case.json`.
+  All1078 frozen runtime inputs/archive and419 originals retain their bytes.
+  The full `run.1Tq3ru` gate passes135 tests in219.304s, exact patches,
+  sequential Native/WASM builds, six startup cases and all178 existing
+  flows with zero failures. Gate/runner and every additional600-ms/30s
+  capture terminate0. Concurrent5ae2938/db7e81b source-only commits do not
+  change these tested runtime inputs. Staged Extender bytes retain parent.
+  Fresh complete2100-frame/end sequences and43 sound-register rows match
+  parent; every original palette/layout/time and the entire first10s video
+  remain equal. All47 full packets now agree across targets without masks;
+  actual op68 is EBX00000005, with separate EAX00000002 and actual loader
+  result EAX00000804/EBX00000005, matching the source. Native's previous
+  e6480005 inbox is eliminated by the actual producer, not by truncation.
+  The same28 pixel failures begin817/11704156us/byte8754; strict original
+  parity still fails absent final mixed port PCM. Complete missing-HIGH
+  output retains39 versus38 source frames and the first560798us/F36/
+  palettebyte5 failure, although reason1/WORDffff diagnostics agree. This
+  accepts normal EAX/fullEBX/config data transport only: complete incoming
+  and returned GP/flags/segments/stack/nonlocal error/CPU/IRQ/device time,
+  actual76fd/77e2/23ec execution and complete output remain open.
 
 ## Next
 
-1. Recover0009's actual op44 FILEMGR/DTA initialization and returned GP lanes;
-   replace6de2's stale pre-de89 forwarding with its real result. Keep full
-   op68 packets; do not mask upper words or post a fitted handle5.
+1. Preserve642's actual normal EAX/fullEBX and independent configuration
+   input. Recover0009's remaining GP/flags/segment/stack/error contract and
+   the next reached effects/device input using0003's `effects_mode_case.json`
+   and0026's `sound_vector_init_case.json`. Keep all full op68 packets;
+   do not mask upper words, post a fitted handle or pad unknown inputs.
 2. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and
    a declaration terminator; the earlier regex counted commas inside definitions and invented bugs.
 3. Classify sites: missing/extra arguments, correct count but wrong register values, ambient-register

@@ -1,0 +1,67 @@
+PATCH 642: carry actual detail FILEMGR results into the engine effects input (board:0014).
+
+Original7660/6032 returns full EAX/EBX through0f57/0f5d/e339/de89. The source
+normal result is EAX804/EBX5, produced by the real file read/close, not a fixed
+handle or upper-word policy. Hand-written op44 publishes those actual return
+lanes once; retain the existing void de89 and generic gateway signatures.
+6de2 consumes that typed result after de89, retaining EBX across the realc008.
+Original6e05 MOV AX,[8b4b] and6e08 SHR AX,1 load the second independent config
+WORD. Preserve EAX's high WORD as the original MOV AX does; pass full EAX and
+full EBX separately into e2df instead of its stale pre-de89 parameter. e2df
+publishes its explicit EAX input before its actual task-inbox/selector/callback
+sequence. The shim includes both lanes in its existing transparent ISR saves.
+
+Sources: detail_return_case.json and detail_return_state_case.json; complete
+original89-fetch trace,25 full GP/segment/raw+lazyflag/control/time/16MiB
+boundaries and23 exact instruction/RAM transitions. Kernel image6032/7660,
+engine image6de2/de89/e339/e2df constrain the register and WORD contracts.
+
+The regression executes real ordered-patched6de2/de89/e339/c008/e2df and the
+actual op44 branch/6032/DOS against isolated original detail tables. Eight
+parent target failures become eight cases; real extra DOS peer opens retain
+handles5..7 while detail close returns6..8, proving the result is not fitted5.
+Full guarded table bytes and actual DOS commands remain checked. Independent
+WORD configs include0/2/4 and values with the high bit set. The observer stops
+at the actual op68 gateway input without inventing the effects handler/return.
+This accepts normal EAX/EBX/configuration data transport only. Complete incoming
+GP, flags, segments/stack, nonlocal error continuation, op68/77e2 device/IRQ
+execution, instruction/device time and full frame/mixed PCM parity remain open.
+--- a/fist.c
++++ b/fist.c
+@@ -1476,7 +1476,7 @@
+ int __allregs FUN_0000_e21c(int *param_1,int param_2,int *param_3);   /* PATCH 334: returns e339's op-0x58 result */
+ undefined4 __allregs FUN_0000_e2a5(undefined4 param_1);
+ void __allregs FUN_0000_e2c2(undefined4 param_1);
+-void __allregs FUN_0000_e2df(undefined4 param_1);
++void __allregs FUN_0000_e2df(undefined4 param_1,undefined4 eax);
+ void __allregs FUN_0000_e2fc(undefined4 param_1);
+ undefined2 __allregs FUN_0000_e339(void);
+ void __allregs FUN_0000_e38a(undefined2 param_1);
+@@ -19467,8 +19467,12 @@
+   *(undefined1 *)(DAT_2000_aa2c + 0xcc) = DAT_2000_4b46;
+   *(undefined1 *)(iVar1 + 0xd1) = (char)DAT_2000_4b47;
+   FUN_0000_de89(param_1);
++  /* Original6dfd receives the actual op44 result; c008 preserves EBX.
++   * MOV AX,[8b4b]/SHR AX,1 supplies EAX independently of that task inbox. */
++  FistDetailRegisters returned = g_fist_detail_registers;
+   FUN_0000_c008(DAT_2000_4b49 >> 1);
+-  FUN_0000_e2df(param_1);
++  FUN_0000_e2df(returned.ebx,
++                (returned.eax & 0xffff0000u) | (DAT_2000_4b4b >> 1));
+   return;
+ }
+ 
+@@ -39160,9 +39164,10 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_0000_e2df) @ 0000:e2df ===== */
+ 
+-void __allregs FUN_0000_e2df(undefined4 param_1)
+-
+-{
++void __allregs FUN_0000_e2df(undefined4 param_1,undefined4 eax)
++
++{
++  g_fist_effects_eax = eax; /* Original EAX crosses e339 separately from EBX. */
+   *(undefined4 *)(DAT_2000_aa2c + 0x3f2) = param_1;
+   DAT_2000_aa10 = 0x68;
+   FUN_0000_e339();

@@ -39,11 +39,10 @@ void detail_service_int_dispatch(void) {
     fist_int_dispatch();
 }
 
-int main(int argc, char **argv) {
-    assert(argc == 5);
+static void detail_service_prepare(const char *image_name, unsigned sky, unsigned detail) {
     fist_ext_base = 0x100000;
     uint8_t *module = g_mem+fist_ext_base, *task = g_mem+0x90000;
-    FILE *image = fopen(argv[1], "rb");
+    FILE *image = fopen(image_name, "rb");
     assert(image);
     size_t bytes = fread(module, 1, 0x10000, image);
     assert(bytes && !ferror(image) && feof(image) && !fclose(image));
@@ -56,13 +55,19 @@ int main(int argc, char **argv) {
     *(uint16_t *)(g_mem+0x2aa2c) = 0;
     *(uint16_t *)(g_mem+0x2aa2e) = 0x9000;
     *(uint16_t *)(g_mem+0x2aa10) = 0x44;
-    task[0xcc] = strtoul(argv[2], 0, 0);
-    task[0xd1] = strtoul(argv[3], 0, 0);
+    task[0xcc] = sky;
+    task[0xd1] = detail;
     /* A prior alternate-sky selection must be reset on the next default op44. */
     *(uint32_t *)(module+0x3958) = 0x689a;
     *(uint32_t *)(module+0x937) = 0x89ab7654;
     *(uint32_t *)(g_mem+0xf0024) = 0x89ab7654;
     memset(module+0x3a20-4, 0xa5, 2052+8);
+}
+
+int main(int argc, char **argv) {
+    assert(argc == 5);
+    detail_service_prepare(argv[1], strtoul(argv[2], 0, 0), strtoul(argv[3], 0, 0));
+    uint8_t *module = g_mem+fist_ext_base, *task = g_mem+0x90000;
     int result = detail_service_gate();
     printf("result %u size %u ebx %u sky %u mode %u task %u flat %u\n",
            (unsigned)result, *(uint32_t *)(module+0x937),

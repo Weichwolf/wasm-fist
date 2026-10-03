@@ -293,12 +293,24 @@ inventory must not be used as a patch list.
   flags/stack/IRQ/device-time or complete output acceptance. Consume it
   alongside the dispatcher/error contracts before typed engine transport.
 
+- Consume0014's accepted642 normal EAX/fullEBX/configuration transport in
+  `tools/oracle/detail_return_production_case.json`. Actual6032/DOS return
+  data now crossesde89/6de2 into the real op68 input; no handle or upper
+  word is fabricated. Its full135-test/sequential-build/six-startup/178-flow
+  gate and additional captures pass their scoped checks, with all1078
+  frozen inputs and419 originals unchanged. All47 full cross-target packets
+  now agree. Ordinary error continuation still produces39 versus38 original
+  frames; first error remains560798us/F36/palettebyte5. Complete incoming/
+  returned GP, flags/segments/stack, nonlocal error/CPU/IRQ/device time and
+  original output remain open. Source/default effects and protected-vector
+  contracts belong to0003/0026;642 does not implement those services.
+
 ## Next
 
 1. Consume0025's accepted640 startup allocations/shared task and preserve
    the reaching regressions for the removed false normal37fd. Drive
-   actual op44 FILEMGR/full returned EBX and0f64→0f57→0f5d/main-loop
-   continuation. Preserve638 DTA, accepted639 CF branches and641's original
+   remaining op44 GP/flags/segment/stack and0f64→0f57→0f5d/main-loop
+   continuation; preserve0014's642 normal EAX/fullEBX/config inputs. Preserve638 DTA, accepted639 CF branches and641's original
    WORDffff task store;0014 owns the independent configuration AX
    input. Require complete original error output as well as the normal
    sequence; a normal error-helper return does not implement the source.
