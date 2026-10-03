@@ -955,9 +955,9 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
-   Recover the actual46b6 callback segment/exchange contract through a fresh
-   original caller pair and reaching regressions on both targets; the current
-   uninitialized ES and stale CS owners do not implement it. Preserve632/633
+   The reached46b6 writer is the keyboard callback, now owned by0030; consume
+   its source fixture and require the pointer/typed-caller repair without
+   treating it as an audio callback or timer-consumer proof. Preserve632/633
    callee widths, early resource
    installation, typed `222f -> 26fc` and634's dynamic WORD BX/full incoming
    EBX transport. Consume the original

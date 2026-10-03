@@ -15,6 +15,14 @@ produced widespread signature/body conflicts. Context fixes do not subsume point
 Patch 610 resolved CS reads in the existing tree; board:0012 records its bounded parity evidence.
 Remaining ES and other unresolved lanes need per-use evidence, not a blanket CS-cluster rule.
 
+- Actual original3446-to46b6 keyboard-hook exchange disproves the generic
+  claim in610 that a FUN1000 name implies runtime/rebased CS1000. The original
+  executes CS2082 with main load1119, giving rebased CS0f69 and actual callback
+  owner image14628/1462a. Four source cases prove explicit incoming ES, full
+  pointer exchange and old AX/BX/ES outputs, not a blanket zero/cluster seed.
+  Source owner0030 and compact fixture `tools/oracle/callback_exchange_case.json`.
+  Existing610 target-parity evidence does not establish every original segment.
+
 ## Next
 
 1. Reproduce an actually reached unresolved segment read and its original register value. Prefer a

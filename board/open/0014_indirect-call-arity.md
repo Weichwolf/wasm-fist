@@ -112,6 +112,15 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   typed transport only; CPU upperEAX/flags/farstack, handler depth/error,
   op68 ambient registers and46b6 callback ES/exchange remain open.
 
+- The reached46b6 exchange is the keyboard hook, owned by0030. Actual
+  original3446 supplies ES=CS and BX=3e0b; helper XCHG returns old AX/ES
+  and BX, with all upper register bits/flags preserved. Its callback WORDs
+  are the inline FAR-CALL operands at image14628/1462a, not14f98/14f9a.
+  Consume `tools/oracle/callback_exchange_case.json` and0030's four fresh
+  source cases. The current one-argument C callee uses uninitialized ES and
+  loses the old offset; production pointer/typed-caller and INT9 dispatch
+  are still open. A function name or passing target matrix does not prove CS.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and

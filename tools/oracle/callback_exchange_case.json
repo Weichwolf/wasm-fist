@@ -1,0 +1,1297 @@
+{
+  "scope": "Actual scheduler PUSH-CS/near-CALL and keyboard FAR-CALL operand exchange. All original GP/segments/control/raw+lazyflags and16-MiB writes, including high-word and IF variants. Controlled inputs are explicitly restored after observation without changing clock/budget. Source-only evidence; no port CPU/IRQ/time or full output acceptance.",
+  "image_sha256": "d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5",
+  "callback_image_address": 83496,
+  "rebased_module_segment": 3945,
+  "stale_image_address": 85912,
+  "stale_bytes": "740e8bcb",
+  "initial_image_callback": "01000000",
+  "original": {
+    "scope": "Actual scheduler PUSH-CS/near-CALL and keyboard FAR-CALL operand exchange. All original GP/segments/control/raw+lazyflags and16-MiB writes, including high-word and IF variants. Controlled inputs are explicitly restored after observation without changing clock/budget. Source-only evidence; no port CPU/IRQ/time or full output acceptance.",
+    "image_sha256": "d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5",
+    "original_binary_sha256": "137f2f5e15a3f021eb9a071f3952cfa6814140103b88d833a12d9d71df776e17",
+    "callback_image_address": 83496,
+    "rebased_module_segment": 3945,
+    "code": [
+      {
+        "offset": 78970,
+        "bytes": "bb0b3e0e070ee83312f8cb"
+      },
+      {
+        "offset": 83638,
+        "bytes": "9cfa8cc02e87069a4f8ec02e871e984f9dcb"
+      },
+      {
+        "offset": 83495,
+        "bytes": "9a010000005bcb"
+      },
+      {
+        "offset": 83223,
+        "bytes": "e8deff1ebaa74eb8690f8ed8b80925cd211fc3"
+      },
+      {
+        "offset": 83255,
+        "bytes": "501eb8001c8ed8e4608ae0e4610c80e661247fe661b020e620"
+      }
+    ],
+    "frames": 39,
+    "mixed_samples": 27518,
+    "endpoint_ms": 600,
+    "cases": [
+      {
+        "case": "natural",
+        "inputs": {
+          "state": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25104,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 20518,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12806,
+            "lflags.type": 2,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              7512,
+              3359571968,
+              1572,
+              15883,
+              65160,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "callback_address": 153528,
+          "callback": "01001911"
+        },
+        "states": {
+          "caller-before": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25106,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15855,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12806,
+            "lflags.type": 2,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              7512,
+              3359571968,
+              1572,
+              15883,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "helper-before": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25104,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 20518,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12806,
+            "lflags.type": 2,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              7512,
+              3359571968,
+              1572,
+              15883,
+              65160,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "caller-after": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25096,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15859,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12802,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              4377,
+              3359571968,
+              1572,
+              1,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 4377,
+                "base": 70032
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "restored-after": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25096,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15859,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12802,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              4377,
+              3359571968,
+              1572,
+              1,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 4377,
+                "base": 70032
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          }
+        },
+        "fetches": 10,
+        "cycles": [
+          13414894,
+          13414904
+        ],
+        "measured": {
+          "old_offset": 1,
+          "old_segment": 4377,
+          "new_offset": 15883,
+          "new_segment": 8322,
+          "effective_flags": 12802
+        },
+        "memory_sha256": {
+          "caller-before": "29712475a9bbc838ae1401c163bdb67b9986802cd303f0e1c0842dbb9b2da1bc",
+          "helper-before": "854dedbe875e7d77968ec0730d31f90c6a79d60dfd038f6d18685a39e781f262",
+          "caller-after": "9b3a03765b467da5f99f760381f9098286d23ce8a91a8baf8d4c36219dcc02cc",
+          "restored-after": "9b3a03765b467da5f99f760381f9098286d23ce8a91a8baf8d4c36219dcc02cc"
+        },
+        "capture_sha256": {
+          "frames": "a290aa1a719f55760c7b67f0c5a7a31937e7795495c374bf926c973b0b811993",
+          "pcm": "7e1f2cc2e2e11d0b44f10441bc3412e061cf9b32443d9ed22fed1a1a4f873a53",
+          "end": "b07ec7261b6b6d3f8d5940321882ca94f9a7594bfbaff154027edce3a5c5a12f"
+        }
+      },
+      {
+        "case": "exchange-if1",
+        "inputs": {
+          "state": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25104,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 20518,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12806,
+            "lflags.type": 2,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              7512,
+              3359571968,
+              1572,
+              15883,
+              65160,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "callback_address": 153528,
+          "callback": "01001911"
+        },
+        "states": {
+          "caller-before": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25106,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15855,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12806,
+            "lflags.type": 2,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              7512,
+              3359571968,
+              1572,
+              15883,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "helper-before": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25104,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 20518,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12803,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              2309692760,
+              3359571968,
+              1572,
+              3455041263,
+              65160,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 17767,
+                "base": 284272
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "caller-after": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25096,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15859,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12803,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              2309698646,
+              3359571968,
+              1572,
+              3455014520,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 13398,
+                "base": 214368
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "restored-after": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25096,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15859,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12802,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              4377,
+              3359571968,
+              1572,
+              1,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 4377,
+                "base": 70032
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          }
+        },
+        "fetches": 10,
+        "cycles": [
+          13414894,
+          13414904
+        ],
+        "measured": {
+          "old_offset": 22136,
+          "old_segment": 13398,
+          "new_offset": 48879,
+          "new_segment": 17767,
+          "effective_flags": 12803
+        },
+        "memory_sha256": {
+          "caller-before": "dd890c45c30ad0db8754dfa4912db0810eaedae1ef2ccdf3160517018dd624af",
+          "helper-before": "3340babcb9d87b128baf3cf0e1811ee42ef93aa10ad2e73320aba8ea3d13278e",
+          "caller-after": "ed653025a009eb89149953f0150b23adc7b5f748e54cc4a96cd73ccaad8c4678",
+          "restored-after": "a49337ed5fdeb54da3f162c3a777d7b1716c23bd55502dd3901bcb561aa2aea5"
+        },
+        "capture_sha256": {
+          "frames": "a290aa1a719f55760c7b67f0c5a7a31937e7795495c374bf926c973b0b811993",
+          "pcm": "7e1f2cc2e2e11d0b44f10441bc3412e061cf9b32443d9ed22fed1a1a4f873a53",
+          "end": "b07ec7261b6b6d3f8d5940321882ca94f9a7594bfbaff154027edce3a5c5a12f"
+        }
+      },
+      {
+        "case": "exchange-if0",
+        "inputs": {
+          "state": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25104,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 20518,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12806,
+            "lflags.type": 2,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              7512,
+              3359571968,
+              1572,
+              15883,
+              65160,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "callback_address": 153528,
+          "callback": "01001911"
+        },
+        "states": {
+          "caller-before": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25106,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15855,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12806,
+            "lflags.type": 2,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              7512,
+              3359571968,
+              1572,
+              15883,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "helper-before": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25104,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 20518,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12291,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              2309692760,
+              3359571968,
+              1572,
+              3455041263,
+              65160,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 17767,
+                "base": 284272
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "caller-after": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25096,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15859,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12291,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              2309698646,
+              3359571968,
+              1572,
+              3455014520,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 13398,
+                "base": 214368
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "restored-after": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25096,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15859,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12802,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              4377,
+              3359571968,
+              1572,
+              1,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 4377,
+                "base": 70032
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          }
+        },
+        "fetches": 10,
+        "cycles": [
+          13414894,
+          13414904
+        ],
+        "measured": {
+          "old_offset": 22136,
+          "old_segment": 13398,
+          "new_offset": 48879,
+          "new_segment": 17767,
+          "effective_flags": 12291
+        },
+        "memory_sha256": {
+          "caller-before": "2ea91771249ebc2fe9eead7fca981641232dac59234d393974e1f0955c06b673",
+          "helper-before": "dd501a093be846de5510a7d258e52fadd98ebee2d94dc633c56d2333644bd877",
+          "caller-after": "0de514de732c01934c40923c7d6cc61569322a309b30041b55aa284b23a015c0",
+          "restored-after": "deef6e5016bf45574ef2d8232e5d87e6109eb880d5a555bbf099384b739061b7"
+        },
+        "capture_sha256": {
+          "frames": "a290aa1a719f55760c7b67f0c5a7a31937e7795495c374bf926c973b0b811993",
+          "pcm": "7e1f2cc2e2e11d0b44f10441bc3412e061cf9b32443d9ed22fed1a1a4f873a53",
+          "end": "b07ec7261b6b6d3f8d5940321882ca94f9a7594bfbaff154027edce3a5c5a12f"
+        }
+      },
+      {
+        "case": "null-install",
+        "inputs": {
+          "state": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25104,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 20518,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12806,
+            "lflags.type": 2,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              7512,
+              3359571968,
+              1572,
+              15883,
+              65160,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "callback_address": 153528,
+          "callback": "01001911"
+        },
+        "states": {
+          "caller-before": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25106,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15855,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12806,
+            "lflags.type": 2,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              7512,
+              3359571968,
+              1572,
+              15883,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "helper-before": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25104,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 20518,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12803,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              2309692760,
+              3359571968,
+              1572,
+              3454992384,
+              65160,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 0,
+                "base": 0
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "caller-after": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25096,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15859,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12803,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              2309698646,
+              3359571968,
+              1572,
+              3455014520,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 13398,
+                "base": 214368
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          },
+          "restored-after": {
+            "PIC_Ticks": 447,
+            "CPU_Cycles": 25096,
+            "CPU_CycleLeft": 0,
+            "CPU_CycleMax": 30000,
+            "cpu_regs.ip.dword[0]": 15859,
+            "cpu.cr0": 0,
+            "paging.cr3": 23042,
+            "cpu.code.big": 0,
+            "cpu.stack.big": 0,
+            "cpu.pmode": 0,
+            "cpu.cpl": 0,
+            "cpu_regs.flags": 12802,
+            "lflags.type": 0,
+            "lflags.prev_type": 0,
+            "lflags.oldcf": 1,
+            "lflags.var1.dword[0]": 7494,
+            "lflags.var2.dword[0]": 18,
+            "lflags.res.dword[0]": 7512,
+            "registers": [
+              4377,
+              3359571968,
+              1572,
+              1,
+              65164,
+              5844,
+              512,
+              1058
+            ],
+            "segments": [
+              {
+                "value": 4377,
+                "base": 70032
+              },
+              {
+                "value": 8322,
+                "base": 133152
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 11545,
+                "base": 184720
+              },
+              {
+                "value": 16,
+                "base": 9952
+              },
+              {
+                "value": 16,
+                "base": 9952
+              }
+            ]
+          }
+        },
+        "fetches": 10,
+        "cycles": [
+          13414894,
+          13414904
+        ],
+        "measured": {
+          "old_offset": 22136,
+          "old_segment": 13398,
+          "new_offset": 0,
+          "new_segment": 0,
+          "effective_flags": 12803
+        },
+        "memory_sha256": {
+          "caller-before": "865bce79cbd03c96ea4f65bb79c4394627950fc6f18a5d7318083dcf3c59c39a",
+          "helper-before": "5d73f5d021f51ce38e34cf2e3d9c6d7b4cac4a3bba707fd1418419a83cdba488",
+          "caller-after": "39e196509c0f0b0dd5fc741097f7fc514f804726a8e5fdaa13c979f2c274a2f9",
+          "restored-after": "491e77628a7e42dd391f806803163d734fa6f3e9d9fb3e52ac3e1a1cdd29bab1"
+        },
+        "capture_sha256": {
+          "frames": "a290aa1a719f55760c7b67f0c5a7a31937e7795495c374bf926c973b0b811993",
+          "pcm": "7e1f2cc2e2e11d0b44f10441bc3412e061cf9b32443d9ed22fed1a1a4f873a53",
+          "end": "b07ec7261b6b6d3f8d5940321882ca94f9a7594bfbaff154027edce3a5c5a12f"
+        }
+      }
+    ],
+    "reproduction": "python3 -B tools/oracle/capture_callback_exchange.py --output /tmp/wasm-fist-callback-exchange",
+    "script_sha256": {
+      "tools/oracle/callback_exchange.gdb": "2a0d936811de91bdf8cd6bbf033681730e764bde8cbddcad47293c7df47abc2b",
+      "tools/oracle/callback_exchange_gdb.sh": "00f36c4df2507982b95c36bcf62f8369ac9df6752e81e22feb86c15379edd4eb",
+      "tools/oracle/capture_callback_exchange.py": "271c9f7251d16819e7bc99fb61217b2b7e431efe3abe676831f7ca951aec4375"
+    }
+  }
+}
