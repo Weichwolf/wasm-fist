@@ -982,6 +982,28 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   storage/addressing does not accept op44 dispatch/CF/errors, device setup,
   original GP/flags/stack/IRQ/time or complete original output.
 
+- Original77e2 sound-bank startup is now reproducible with
+  `python3 -B tools/oracle/capture_sound_bank_startup.py --output /tmp/wasm-fist-sound-bank-source`;
+  receipt: `tools/oracle/sound_bank_startup_case.json`. The collector uses
+  local `third_party/dosbox-fist` and reuses0025's paged snapshot owner.
+  Ten full GP/segments/raw+lazyflags/control/time and whole16MiB boundaries
+  show1280 device configuration, actualbc98 checkpoint free,6032 size
+  query,36bf entry/return, complete6032 bank read, checkpoint re-registration
+  and first KDV entry. The85a4 filename is `dsounds.bin`; actual85b0 holds
+  all134240 asset bytes, verified through guest paging. Allocation size
+  comes from the real query, alignment4/AL3 from the original entry. The
+  zero-sizebc98 descriptor moves behind the bank; the final table has9
+  blocks and the engine/extender tasks resolve to the same physical owner.
+  Segment role is inferred at the actual fetch, not from a fixed selector
+  or a partially updated DOSBox CS-write state. Every reached code boundary
+  matches the original image. Fresh baseline/observer pairs retain every
+ 39 frame/27518 mixed-sample/end600ms byte. Verify-only replay passes;
+  missing-snapshot and corrupted-instruction probes both fail. Evidence:
+  `/tmp/wasm-fist-sound-bank-source-public` and
+  `/tmp/wasm-fist-sound-bank-source-negative/proof.json`. This accepts
+  original startup evidence only: no port77e2/bank/device/IRQ/time or final
+  mixedPCM/full original output acceptance follows.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
@@ -994,7 +1016,9 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
    EBX transport. Consume the original
    normal/controlled/CRT/return-branch pairs above; scratch prototypes are not
    production acceptance. Keep abnormal overflow and unproved CF producers explicit.
-   Wire original device initialization and consume the recovered intro registers. Recover
+   Consume `sound_bank_startup_case.json` to restore the actual77e2
+   size/allocate/read/checkpoint path rather than inserting a fitted bank
+   allocation. Wire original device initialization and consume the recovered intro registers. Recover
    the 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts; restore
    remaining mission/damage/weapon transport as reached. Supply actual instruction/event work to 0026 so
    0034 can recheck frame 817. Add original-backed buffer/state regressions on both targets;

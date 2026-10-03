@@ -75,9 +75,11 @@ resize/compaction, and implement the original exhaustion/swap outcomes without s
   disproved: original77e2 calls6032 with the image's85a4 `dsounds.bin`, then
   actual36bf receives EDX85b0, ECX134240, EBX4 and AL3 and returns at7832. A fresh
   original baseline/observer pair preserves every39 frame/27518 mixed
-  sample/end600ms byte (`/tmp/wasm-fist-sky-allocation-source`). The named
-  directory retains its historical diagnostic label; sound-bank startup
-  belongs to0003, not the sky renderer. Restore the actual service and DOS
+  sample/end600ms byte. The earlier sky-named diagnostic is superseded by
+  0003's portable `sound_bank_startup_case.json`: ten actual device/free/
+  query/allocation/full-bank/checkpoint/KDV boundaries and complete paged
+  asset verification. Sound-bank startup belongs to0003, not the sky
+  renderer. Restore the actual service and DOS
   size/read contracts instead of inserting a fitted allocation.
 
 - Accepted production step640 drives the existing84c0 in the module
