@@ -629,6 +629,20 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   frame/mixedPCM parity remain open. The separate643 candidate's1089
   frozen runtime inputs remain unchanged while its full178-flow gate runs.
 
+- Consume0003's `device_reset_case.json`: the actual original23c4 tail JMP
+  and133a reset match all218 existing PIC/SB/I/O clock rows, with full224
+  register/segment/raw-lazyflag/control/CPU-budget transitions. The real
+  falling reset write requeues CPU_Cycles into CPU_CycleLeft and exits the
+  normal core; FillFlags materializes XORb. Later natural exhaustion after
+  TESTb causes a second FillFlags before PIC_RunQueue. The next observed
+  budgets are598/Left452 and450/Left0, derived by the existing original
+  clock owner and normal-core post-decrement, not fitted elapsed delays.
+  CLI clears IF and STI restores it; neither discards lazy flags. Seven
+  behavioral verifier negatives and fresh39-frame/27518-PCM/end600 pairs
+  pass; all419 originals remain unchanged. The existing six clock tests
+  pass Native/WASM in15.080s. Port producer/CPU/IRQ/IF execution and full
+  original frame/audio parity remain open; source proof is not integration.
+
 ## Next
 
 Consume `sound_vector_init_case.json` before implementing the reached AX2503/2506
@@ -643,7 +657,9 @@ resident setup branches, other vectors and errors need their own reaching proof.
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
    Continue 0034's first remaining pixel difference at event 817 in the 30000-ms capture.
    Consume the proved shared PIC/reset timing contract. Recover
-   0003's actual 133a producer, CLI/STI and protected SB IRQ/mixer state/instruction
+   0003's actual133a producer using `device_reset_case.json`: shared raw/lazy
+   flags must follow both normal-core exits as well as CLI/STI. Recover
+   protected SB IRQ/mixer state/instruction
    work; preserve the proved 7120
    REP copy. Do not inject elapsed delays or change capture phase.
 2. Recover production pre-speaker work (23 mask reads, 720/721), 07b7's polling/CLI/STI and ISR return.

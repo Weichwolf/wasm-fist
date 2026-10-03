@@ -1072,6 +1072,36 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   flags/device/IF/IRQ/time, other modes and complete original output remain
   open. Concurrent source-only8bb21de changes none of the1089 frozen inputs.
 
+- Actual original23c4/133a reset source proof: `device_reset_case.json`, reproduced
+  with `python3 -B tools/oracle/capture_device_reset.py --repo /home/cosmo/Git/wasm-fist --output /tmp/wasm-fist-device-reset-source`.
+  At the real77fa DWORD near CALL, incoming EAX1/EBXf0010000/ESP3d00a
+  enters23c4. MOV BL,AL preserves upper EBX before MOVZX EBX,BL clears it;
+  actual DWORD table159f+EBX*4 selects133a. FF E0 is a tail JMP, so133a
+  receives EAX133a/EBX1 and the original77ff return frame without another
+  stack entry. CLI/STI alter raw IF with lazy flags preserved. WORD DX
+  loads/adds and BYTE AL operations preserve all untouched upper fields.
+  The reset body reads its original20/8000 loop immediates; LOOPE updates
+  full ECX and stops on actual device ZF. All218 reset fetches and57 I/O
+  operations match the existing original PIC/SB/I/O clock case; no fixed
+  readiness poll count or elapsed total is substituted. OUT-low queues
+  the original20us reset event and requeues the CPU budget. Normal-core
+  exit materializes XORb flags there, and TESTb flags at later natural
+  budget exhaustion. Actual RET consumes one DWORD, returning to77ff
+  with EAXffffffff/ECX1f1e/EDX22a/EBX1/ESP3d00e and rawFLAGS3246,
+  lazyCMPb after the AA check. Full224 GP/segment/raw-lazyflag/control/
+  CPU-budget transitions and eight unchanged whole16MiB RAM boundaries
+  pass. Fresh independent original baseline/observer captures and replay
+  retain all39 frames/27518 mixed samples/end600 bytes and all419 original
+  files/inventory. Seven negatives reject missing return RAM, coherently
+  lost upper EBX, an extra dispatch frame, omitted CLI, either omitted
+  core FillFlags and a wrong DSP byte. The existing six original clock
+  regression methods pass Native/WASM in15.080s; they do not execute a
+  restored port133a body. Evidence: `/tmp/wasm-fist-device-reset-source-public`
+  and `/tmp/wasm-fist-device-reset-source-negative/proof.json`.
+  This accepts default mode1 original source evidence only. Other modes,
+  failed-AA branch, production77e2/23c4/133a/138d, full CPU/IF/IRQ/time,
+  first817, final mixed portPCM and complete original acceptance remain open.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
@@ -1089,6 +1119,10 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
    accepted643 BYTE aliases and its fullmodule/DMA regressions. Prove the
    actual register/return/device producer before wiring production op68;
    do not supply zero callback arguments or a safe-zero device return.
+   Consume `device_reset_case.json` before restoring typed23c4/133a:
+   preserve the tail jump, actual caller frame, full EAX/EBX/ECX/EDX, raw
+   and lazy flags and original PIC-driven core exits. Regress the reaching
+   producer on both targets with shared CPU/FLAGS/time ownership.
    Consume `sound_bank_startup_case.json` to restore the actual77e2
    size/allocate/read/checkpoint path rather than inserting a fitted bank
    allocation. Wire original device initialization and consume the recovered intro registers. Recover
