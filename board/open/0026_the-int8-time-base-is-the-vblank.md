@@ -593,13 +593,52 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   complete original parity remain open. The separate642 candidate's1078
   frozen runtime inputs/archive remain unchanged while its full gate runs.
 
+- Original resident CALL-stub creation is now reproducible with
+  `python3 -B tools/oracle/capture_resident_stub_creation.py --repo /home/cosmo/Git/wasm-fist --output /tmp/wasm-fist-resident-stub-source`;
+  receipt: `tools/oracle/resident_stub_creation_case.json`. From actual4242,
+  the resident derives ES from its DS:0114 stack size and actual SS, saves
+  WORD DS:0204, computes the table's code-relative base and saves WORD
+  DS:0206/CS:2c3a. One shared resident-image owner recovers the nested MZ
+  header from the existing IRQ asset anchor and applies all33 WORD
+  relocations using actual code base and initialCS. In particular425d's
+  raw6f operand is relocated to2dd by actual load segment26e; no code-byte
+  mask substitutes for relocation. The actual non-C0 branch forms its
+  initial DWORD via WORD SUB/WORD MOV and DWORD SHL/ROR. The loop at429b
+  executes256 STOS DWORD/SUB EAX,400h/LOOP operations with real16-bit DI/CX.
+  Upper EDI remains1:0000 through1:0400 rather than being cleared. Complete
+  table RAM equals all256 modeled writes; every CALL rel16 reaches2c3c
+  with a zero activation byte. The derived table is here physical8140 /
+  code-relative5370, explaining vector0f's prior e88dd800 stub at817c
+  without fitting that address or those bytes. Registration/activation
+  remain owned by the preceding sound-vector proof.
+  All794 actual fetches are checked against complete relocated code;
+  793 direct instruction transitions preserve full GP/segments/raw and lazy
+  flags/control state and retire one cycle each. Eleven complete16MiB
+  snapshots supply ten whole-RAM transitions, including initial pointer
+  stores and the complete table. No aggregate793-cycle delay is supplied.
+  Fresh independent baseline/observer captures and verify-only replay
+  preserve every39 frame/27518 mixed-sample/end600 byte, also matching the
+  earlier vector source. All419 original files/inventory remain unchanged.
+  Five negatives reject missing terminal RAM, a narrowed first STOS,
+  coherently lost upper DI, coherently lost SUBD lazy flags and coherently
+  unrelocated code operands. Evidence:
+  `/tmp/wasm-fist-resident-stub-source-public` and
+  `/tmp/wasm-fist-resident-stub-source-negative/proof.json`.
+  This accepts original default resident creation only. Alternate C0/error
+  branches, port resident/MZ/CPU/IRQ/time execution and complete original
+  frame/mixedPCM parity remain open. The separate643 candidate's1089
+  frozen runtime inputs remain unchanged while its full178-flow gate runs.
+
 ## Next
 
 Consume `sound_vector_init_case.json` before implementing the reached AX2503/2506
 services or sound CPU/IF integration: getter leaves IF clear, actual setter kernel
 STI enables it. Preserve original full EBX, WORD selector/DWORD offset and BYTE
-stub activation. Recover the prior creation of the existing resident stub bytes;
-other vectors and error paths require their own reaching evidence.
+stub activation. Consume `resident_stub_creation_case.json` and the shared
+`resident_image.py` owner for prior stub creation, actual MZ relocations and
+real16-bit address/loop widths; implement their actual instruction work with
+the shared CPU/IRQ state rather than planting a fitted CALL grid. Alternate
+resident setup branches, other vectors and errors need their own reaching proof.
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
    Continue 0034's first remaining pixel difference at event 817 in the 30000-ms capture.
