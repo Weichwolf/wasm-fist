@@ -468,6 +468,49 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   missing, including its original cancellation/remaining-DMA behavior. Do not
   hide it by demanding bytes manually or substituting a periodic IRQ delay.
 
+- Current base `428b416`, patch 630: actual mode-1 setup 23ec now calls the
+  existing translated 2630 mixer instead of its empty generated placeholder;
+  the unused placeholder is removed by the patch. Original 23ee/2496 access
+  mode 2293 as a BYTE. Its former DWORD accessor read the neighboring RET
+  opcode as status and overwrote following code bytes when selecting a mode.
+- The same reached setup exposes six more byte-width contracts at 1613..1618:
+  original 2507/250e/2515/251c/2523/252a store separate BYTE normalization
+  parameters. DWORD stores at 1617/1618 erased the original mixer counter's
+  low bytes after synthesis. Shared BYTE accessors preserve counter 00010400,
+  original queued stores 2394/23a3 and the rollover reads. Other queued-channel
+  behavior, register/IF transport and variants remain unproved.
+- `tools/oracle/initial_mixer_call.gdb` and `initial_mixer_call_case.json`
+  bracket the actual first 23ec/AX=4e01 through entry into 138d before CLI
+  changes IF, with same-process paging-aware snapshots. The complete independent
+  534:536-ms trace matches the earlier unprobed source bytewise: 45185 prefix
+  instructions, 1024 mixer stores, one rollover and no callback. All 39 frames,
+  27518 final mixed samples and the complete 600-ms endpoint retain their bytes.
+  These counts are attribution, never an injected delay.
+- The reaching regression compiles the complete ordered-patched module and
+  stops at its actual dispatch to 138d; every other indirect target fails.
+  Parent native/WASM dispatch the wrong previous handler 2294. Correcting
+  only mode width reaches 138d but omits six original mixer-state bytes;
+  correcting mode/call still erases counter byte 161a. All three reaching
+  stages fail both targets. Current native/WASM match the entire isolated
+  one-MiB module, all 18 original changed bytes and both complete DMA halves,
+  including unchanged adjacent code. No device initializer is replaced or
+  accepted by that test boundary, and no final PCM or timing parity is claimed.
+- `python3 scratch/sequence-capture/initial-mixer-call/check-proof.py` verifies
+  the source pair, all reaching stages, 649 frozen source/archive hashes,
+  unchanged 418 provisioned assets, binaries and complete production captures.
+  `NATIVE=.../initial-mixer-call/native OUTJS=.../initial-mixer-call/wasm/fistrun.js
+  bash tools/check_flow.sh '^(intro|mainmenu)$'`: 92 tests, exact patches,
+  sequential native/WASM builds and both selected flows pass / zero failures,
+  outer exit 0; `scratch/verify/run.2p0ZmT/`. This filtered gate is not a new
+  full-matrix or original-output acceptance.
+- Explicit SB-enabled complete 30000-ms captures retain all 2100 prior frame
+  records/endpoints and all 43 register packets bytewise on both targets.
+  Original 28 pixel failures, first 817, and absent final mixed port PCM remain.
+  Actual startup/service dispatch, 133a/138d, CPU privilege/IF/IRQ/frame/IRET,
+  setup/mixer instruction retirement and the final shared mixer remain open.
+  The initial setup producer is restored; it is not yet wired into production
+  sound startup. Incomplete host-timeout source scaffolding is excluded.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover

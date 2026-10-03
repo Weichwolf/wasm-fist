@@ -117,6 +117,17 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   passes with zero failures, exit 0; its bounded device-input proof remains with 0003.
   Production IRQ/timing and complete frame/audio acceptance remain open.
 
+- Patch 630 (0003), initial mixer setup: complete matched SB-enabled 30000-ms
+  native/WASM captures retain every previous PIC-controller frame/end byte
+  and all 43 register packets. All 2100 cross-target records match; original
+  times/layouts/palettes remain equal, with the same 28 pixel differences,
+  first 817. Strict comparison still rejects missing final mixed port PCM.
+  The restored isolated 23ec-to-138d producer and its original paired state
+  belong to 0003. Consume `initial-mixer-call/proof.json`; the 92-test/two-flow
+  filtered gate (`run.2p0ZmT/`, exit 0) is not full-matrix or sequence acceptance.
+  Actual startup/IRQ/IF/mixer instruction work still must reach the production
+  clock before this first differing video event can be repaired.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete
