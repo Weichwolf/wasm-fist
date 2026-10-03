@@ -154,6 +154,31 @@ inventory must not be used as a patch list.
   `/tmp/wasm-fist-639-complete`; no production acceptance yet. Actual op44
   dispatch, nonlocal continuation and original output remain required.
 
+
+- Original startup/KDV ownership is now observed end-to-end before any
+  port repair: `tools/oracle/memmgr_startup_case.json`, reproduced with
+  `python3 -B tools/oracle/capture_memmgr_startup.py --output /tmp/wasm-fist-memmgr-startup-source`.
+  Actual84c0 starts with an empty registry and makes eight36bf calls;
+  every EDX slot, ECX size, EBX alignment, AL flag and returned descriptor
+  is recorded. The eighth is the zero-sized bc98 checkpoint. Whole16MiB
+  tcb-clear→init-return writes contain only the TCB+488 zero-store.
+  First6e95→3322→3661 sees nine registered blocks including the moved
+  checkpoint, returns its found index in ESI and frees only that suffix.
+  Actual3661 does not store the found index in2f60; the port's extra store
+  is a transport shim, not an original memory write. The engine's far
+  task at its actual DGROUP:ea2c and extender[0c93] resolve to the same
+  physical task at KDV entry/lookup/free. The old Native comment claiming
+  a separate original KDV TCB is disproved. All39 complete frame records,
+  27518 mixed PCM samples and end600ms match a fresh unobserved original
+  baseline. Snapshot GP/segments/raw+lazyflags/control/time and whole RAM
+  are retained. Native638 independently reaches6e95→3322→3661→0f64(37fd)
+  with zero registered blocks (`/tmp/wasm-fist-normal-file-error-caller/errors.jsonl`);
+  original ownership comes from84c0 before program execution, whereas
+  current Native setup runs it only at map-load. This accepts source
+  startup/task ownership evidence only. Port initialization, full GP
+  transport, false-error removal, nonlocal continuation, clocks/IRQ and
+  complete original output remain open.
+
 ## Next
 
 1. Recover the missing-file producer through actual6032/5cc2 and the
