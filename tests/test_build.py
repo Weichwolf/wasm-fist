@@ -10,10 +10,19 @@ COMPILER = '''#!/usr/bin/env python3
 import os
 from pathlib import Path
 import sys
+import subprocess
 args = sys.argv[1:]
 if '-c' in args and any(Path(a).name == os.environ.get('FAIL_SOURCE') for a in args):
     print('compiler terminated unsuccessfully', file=sys.stderr)
     sys.exit(23)
+if '-c' in args and os.environ.get('CHECK_CAPTURE_HEADERS'):
+    source = next((a for a in args if Path(a).name == 'fist_vga.c'), None)
+    if source:
+        result = subprocess.run(['/usr/bin/gcc', '-E',
+                                 *(a for a in args if a.startswith('-I')), source],
+                                stdout=subprocess.DEVNULL)
+        if result.returncode:
+            sys.exit(result.returncode)
 if '-c' not in args:
     assert all(Path(a).is_file() for a in args if a.endswith('.o'))
 Path(args[args.index('-o') + 1]).write_bytes(b'object-compatible-fixture')
@@ -35,10 +44,12 @@ class BuildTest(unittest.TestCase):
         compiler.write_text(COMPILER)
         compiler.chmod(0o755)
         (self.root / 'compiler/em++').symlink_to('emcc')
-        for script in ('build.sh', 'build_web.sh', 'patch.sh', 'work_dir.sh', 'clean.sh'):
+        for compiler_name in ('gcc', 'g++'):
+            (self.root / 'compiler' / compiler_name).symlink_to('emcc')
+        for script in ('build_native.sh', 'build.sh', 'build_web.sh', 'patch.sh', 'work_dir.sh', 'clean.sh'):
             shutil.copyfile(ROOT / 'tools' / script, self.root / 'tools' / script)
 
-    def build(self, script, source, compiler_on_path=False):
+    def build(self, script, source, compiler_on_path=False, check_headers=False):
         objects = self.root / (script + source + '.objects')
         objects.mkdir()
         prefix = 'wasm_' if script == 'build.sh' else ''
@@ -48,9 +59,26 @@ class BuildTest(unittest.TestCase):
                    OBJDIR=str(objects), FAIL_SOURCE=source, FIST_WORKDIR=str(self.work))
         if compiler_on_path:
             env.update(EMCC='emcc', PATH=str(self.root / 'compiler') + os.pathsep + env['PATH'])
+        if check_headers:
+            env['CHECK_CAPTURE_HEADERS'] = '1'
         result = subprocess.run(['bash', str(self.root / 'tools' / script), str(output)],
                                 env=env, capture_output=True, text=True, timeout=10)
         return result, output
+
+    def test_external_staging_resolves_the_actual_shared_capture_headers(self):
+        shutil.copyfile(ROOT / 're_out/fist_vga.c', self.work / 'build/fist_vga.c')
+        for header in (ROOT / 're_out').glob('*.h'):
+            shutil.copyfile(header, self.work / 'build' / header.name)
+        oracle = self.root / 'tools/oracle'
+        oracle.mkdir()
+        for name in ('fist_sequence_capture.h', 'fist_sequence_endpoint.h'):
+            shutil.copyfile(ROOT / 'tools/oracle' / name, oracle / name)
+        for script in ('build_native.sh', 'build.sh', 'build_web.sh'):
+            with self.subTest(script=script):
+                result, output = self.build(script, 'no-failure.c',
+                                            compiler_on_path=True, check_headers=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue(output.exists())
 
     def test_patch_stages_sources_outside_checkout(self):
         (self.root / 're_out/fist.c').write_text('int source_owner;\n')

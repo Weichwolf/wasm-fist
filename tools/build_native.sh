@@ -21,7 +21,7 @@ F="-m32 -no-pie -g -O0 $ASAN -std=gnu11 -w ${FIST_XCFLAGS:-} \
   -Wno-builtin-declaration-mismatch -Wno-return-type -Wno-return-mismatch -Wno-incompatible-pointer-types"
 
 # -I so #include "ghidra_compat.h" resolves next to fist.c
-INCL="-I$SRCDIR -I$ROOT/tools/oracle"
+INCL="-I$SRCDIR -I$ROOT/re_out"
 
 set -x
 gcc $F $INCL -c "$SRCDIR/fist.c"          -o ${OBJDIR:-/tmp}/fist_engine.o

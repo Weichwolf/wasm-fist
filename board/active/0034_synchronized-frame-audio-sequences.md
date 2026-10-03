@@ -191,6 +191,21 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   does not accept635 or the interrupted full flow matrix; rebuild and run the
   complete current gate before production acceptance.
 
+- Shared-header compatibility follow-up: the first635 gate at
+  `/tmp/wasm-fist-635-check/verify/run.vt9Ag5/` ended1 during tests with nine
+  compile errors. The prior renamed header worked in full builds but omitted
+  the include directory from existing direct test compilations. Restore the
+  original source-relative include and add the source header directory to
+  all three build tools. The new behavior test preprocesses the actual VGA
+  shim staged externally through Native/Node-WASM/browser tool invocations:
+  all three original16699ed scripts fail, all corrected scripts pass. Seven
+  build tests pass; the entire previous110-test suite passes in141.836s,
+  exit0. Full sequential Native, Node-WASM and browser builds/linking also
+  pass, exit0, under `/tmp/wasm-fist-include-check/`. This verifies the shared
+  header search contract for both source-local tests and external builds;
+  pending635 still requires a complete111-test/full178-flow gate. Raw failed
+  snapshots/logs are disposable; no production output is accepted from them.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

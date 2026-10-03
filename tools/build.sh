@@ -30,7 +30,7 @@ FOPT="-O2"; [ -n "${FIST_DEBUG:-}" ] && FOPT="-O0 -g"
 F="$FOPT -std=gnu11 -w \
   -fno-strict-aliasing -Wno-int-conversion -Wno-implicit-function-declaration \
   -Wno-builtin-declaration-mismatch -Wno-return-type -Wno-incompatible-pointer-types"
-INCL="-I$SRCDIR -I$ROOT/tools/oracle"
+INCL="-I$SRCDIR -I$ROOT/re_out"
 
 # Engine unit + harness (native_main is reused as the wasm main via #ifdef __EMSCRIPTEN__).
 UNITS_C="$SRCDIR/fist.c $ROOT/tools/native_main.c $SRCDIR/fist_dos.c $SRCDIR/fist_vga.c $SRCDIR/fist_pic.c \
