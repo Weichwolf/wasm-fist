@@ -800,6 +800,18 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   the actual dynamic successful WORD output and carry/CPU owners without
   seeding018f, clearing unknown high bits or hiding these branch contracts.
 
+- At base `fc14eb4`, the unmodified original controlled-dimension pair in
+  `resource-bx/source-dimensions/` changes only the last loaded MSPRITE0
+  dimension WORD from1315 to0705. Actual153c returns BX=35 from5*7;
+  all other complete GP/segments/raw+lazyflags/control fields match the
+  original normal return. Every whole16-MiB loop write is accounted for,
+  including all40 descriptors, header and retained stack words. The loop
+  still takes854 fetches; the whole registrar takes1410/16043cycles.
+  All39 complete frames/27518 mixed samples/end600ms retain the normal
+  original bytes. `resource-bx/check-source-dimensions.py` verifies this
+  source-only proof; it does not accept a production patch or CPU/device
+  timing. Consume the existing normal, empty and high89ab pairs alongside it.
+
 ## Next
 
 1. Preserve the verified632/633 callee widths, early resource installation and

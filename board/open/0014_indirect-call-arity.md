@@ -54,6 +54,13 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   streams fail full capture acceptance. Do not infer a generic normal return
   from the generated void signature or publish a fixed018f result.
 
+- Consume0003's new original controlled-dimension pair at base `fc14eb4`:
+  actual153c returns35 from0705, with the complete40-record loop memory
+  and every other return-state field verified. Original600-ms frame/PCM/end
+  bytes remain unchanged. This strengthens the dynamic output contract;
+  the pending production transport repair still needs its reaching two-target
+  regression and complete existing matrix. Proof: `resource-bx/source-dimensions/`.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and
