@@ -61,6 +61,14 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   the pending production transport repair still needs its reaching two-target
   regression and complete existing matrix. Proof: `resource-bx/source-dimensions/`.
 
+- Consume0003's original settings e2df/op68 pair in `settings-poster/`:
+  eight fetches publish full EBX=5 independently of AX=2, with complete
+  16-MiB/register/segment/raw+lazyflags proof and unchanged600-ms frame/PCM/end.
+  The pending634 candidate exposes a separate6e0e high-word constructor:
+  op68 inbox `f6e80008` Native versus `00000008` WASM. Low8 also differs
+  from the original5; retain full packets and recover upstream DOS/ambient
+  registers. Source/probe evidence is not a production or generic-call repair.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and

@@ -812,6 +812,24 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   source-only proof; it does not accept a production patch or CPU/device
   timing. Consume the existing normal, empty and high89ab pairs alongside it.
 
+- At base `dd58003`, the original settings op68 poster is now paired in
+  `settings-poster/{check-source.py,source-proof.json}`. The actual e2df
+  entry has full EBX=5 and independent AX=2. Eight fetches store the complete
+  EBX to the task inbox, preserve the raw/lazy flags and unrelated registers,
+  update FS/GS, set the WORD command68 and retain the near-CALL stack word.
+  Every whole16-MiB write matches; all39 complete frames/27518 mixed samples/
+  end600ms and the complete525 CPU trace retain the normal source bytes.
+- The frozen634 candidate's 30-second diagnostics retain633's2100 frame/end
+  bytes and43 full sound-register rows. Its first6c inbox is now0000018f
+  on both targets, but its47 complete extender packets contain one remaining
+  cross-target inequality: op68 inbox `f6e80008` versus `00000008`.
+  Original op68 inbox is5; neither port's low8 is established as original
+  ambient BX. Preserve both complete rows. Recover the preceding settings/DOS
+  handle/return-register producer and independent AX consumption before any
+  generic op68 claim; clearing a high word or substituting5 is not its owner.
+  This source/probe evidence does not accept the pending634 production patch,
+  original CPU/IRQ/clock or final mixedPCM; the full existing matrix is still live.
+
 ## Next
 
 1. Preserve the verified632/633 callee widths, early resource installation and
