@@ -187,25 +187,40 @@ inventory must not be used as a patch list.
   full GP/flags/stack/instruction/device-time transport. Returning normally
   from6032, or using AL0 as the carry result, does not implement this path.
 
-## Next
+- Accepted patch641 restores actual0f64's WORDffff task store without
+  changing the byte-addressed pointer owner. The reaching regression has
+  two methods/four Native/WASM parent failures and no setup errors; all15
+  file-test methods pass after the fix. Real DOS find/open/CF and actual
+  post-store observation preserve existing command expectations and guarded
+  destinations; the exact4096-byte task dump changes only its firstWORD.
+  Real task inputs stay zero, with bytes2..3 guarded: original5ce5 reads
+  TCB+496 as an alternate drive. The earlier whole-task A5 guard incorrectly
+  changed that input and is superseded. Receipt:
+  `tools/oracle/file_error_status_production_case.json`; reproduce with
+  `FIST_WORKDIR=/tmp/wasm-fist-error-status-check bash tools/check_flow.sh`.
+  The frozen1061-input unfiltered `run.RGoCka` under
+  `/tmp/wasm-fist-641-complete` passes132 tests, exact patches, sequential
+  Native/WASM builds, six startup cases and all178 flows with durable0.
+  All419 original hashes/inventory stay unchanged. The independentf2d01ac
+  source-only sound-bank commit changes none of these running inputs.
+  Every2100 fresh30000-ms frame/end byte,43 sound-register rows and all47
+  unmasked service packets retain640 behavior. Native/WASM op68 remains
+  e6480005/00000005. All original palettes/layouts/times match, but28 pixel
+  failures still start817/11704156us/byte8754 and final mixed port PCM is
+  absent. Complete600-ms startup captures retain healthy shared task0 and
+  no Native0f64 callback. Missing-HIGH production still first differs at
+  560798us/F36/palettebyte5, with actual task/reason0: manualop44 bypasses
+  6032. This accepts the task-store width only; no nonlocal service/CRT/
+  main-loop continuation, full GP/flags/stack/IRQ/time or original full
+  output acceptance follows.
 
-Current follow-up evidence: `/tmp/wasm-fist-error-width-red/proof.json`
-reaches the real6032/DOS find and controlled-open failures on Native and
-WASM. The observer stops after the unchanged0f64 reason/status stores,
-before its unaccepted ordinary return; both stages/targets store WORD00ff
-instead of the original at-f57 WORDffff. All four cases preserve the guarded
-destination and actual command sequence, with no supplied CF/size/status
-result. Its staged engine is byte-identical to accepted639. The final
-diagnostic has four reaching failures and no setup errors; earlier compiler
-flag/tool-path setup failures are retained separately. This proves the
-width defect only; service/task nonlocal continuation and full output are
-still required. Accepted step640's startup/shared-task change is owned by0025.
+## Next
 
 1. Consume0025's accepted640 startup allocations/shared task and preserve
    the reaching regressions for the removed false normal37fd. Drive
-   actual op44 FILEMGR/full returned EBX and original WORDffff
-   task store plus0f64→0f57→0f5d/main-loop continuation. Preserve638 DTA and
-   accepted639 CF branches;0014 owns the independent configuration AX
+   actual op44 FILEMGR/full returned EBX and0f64→0f57→0f5d/main-loop
+   continuation. Preserve638 DTA, accepted639 CF branches and641's original
+   WORDffff task store;0014 owns the independent configuration AX
    input. Require complete original error output as well as the normal
    sequence; a normal error-helper return does not implement the source.
 2. Build a current inventory from the original table and the shim's branches. For each op record

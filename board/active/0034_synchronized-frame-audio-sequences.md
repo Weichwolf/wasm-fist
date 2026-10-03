@@ -282,6 +282,20 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   `tools/oracle/file_carry_production_case.json`. Loader CF acceptance does
   not prove task error/GP/stack/CPU/IRQ/device time or original output.
 
+- Consume0009's accepted patch641 task-error WORD store. The frozen1061
+  inputs pass132 tests/exact patches/sequential builds/six startup cases/
+  all178 flows with durable0. Every2100 fresh30000-ms frame/end byte,
+  43 sound-register rows and all47 unmasked packets retain640 behavior.
+  Original palettes/layouts/times match;28 pixel differences remain,
+  first817/11704156us/byte8754. Native/WASM op68 remains e6480005/00000005,
+  and strict comparison still fails absent final mixed port PCM. Complete
+  missing-HIGH production still first differs at560798us/F36/palettebyte5
+  because manualop44 bypasses6032. The error-helper observation stops after
+  its stores before unaccepted nonlocal continuation. Source/production
+  receipt belongs to0009's `file_error_status_production_case.json`; no
+  complete original output, GP/flags/stack/IRQ/time or full surface
+  acceptance follows from this width correction.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

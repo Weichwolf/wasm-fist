@@ -11,6 +11,8 @@ from test_port_io import ROOT, patched_unit, tool
 
 
 class FileLoaderCarryTest(unittest.TestCase):
+    OBSERVE_AFTER_STORES = False
+
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
@@ -20,9 +22,19 @@ class FileLoaderCarryTest(unittest.TestCase):
         entry = 'undefined4 __allregs FUN_0000_0f64(undefined4 param_1)\n\n{'
         if text.count(entry) != 1:
             raise RuntimeError('Missing actual error-helper entry')
-        # Diagnostic adapters observe the actual0f64 entry and the real DOS commands.
-        # They do not supply find/open/CF results or emulate the nonlocal error body.
-        text = text.replace(entry, entry+'\n  file_cf_error_entry(param_1);', 1)
+        # Observe the selected original boundary and real DOS commands. No
+        # adapter supplies find/open/CF/store results or a nonlocal continuation.
+        if cls.OBSERVE_AFTER_STORES:
+            start = text.index(entry)
+            end = text.index('\n}', start)+2
+            body = text[start:end]
+            boundary = '  return;\n}'
+            if body.count(boundary) != 1:
+                raise RuntimeError('Missing actual error-helper post-store boundary')
+            observed = body.replace(boundary, '  file_cf_error_entry(param_1);\n'+boundary, 1)
+            text = text[:start]+observed+text[end:]
+        else:
+            text = text.replace(entry, entry+'\n  file_cf_error_entry(param_1);', 1)
         text = '#define fist_int_dispatch file_cf_int_dispatch\nvoid file_cf_error_entry(unsigned);\n'+text
         (cls.directory/'fist_ext.c').write_text(text)
         flags = ['-I'+str(ROOT/'re_out'), '-ffunction-sections', '-fdata-sections',
@@ -69,9 +81,12 @@ class FileLoaderCarryTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
                 size = len(original) if stage == 'open' else initial_size
                 commands = 'dos 1a 4e 1a 3d' if stage == 'open' else 'dos 1a 4e'
+                status = case['task_status'] if self.OBSERVE_AFTER_STORES else 0
                 self.assertEqual(result.stdout.splitlines(), [
-                    f"error reason {case['reason']} size {size} cf 1 task 0", commands])
+                    f"error reason {case['reason']} size {size} cf 1 task {status}", commands])
                 self.assertEqual(output.read_bytes(), bytes([0xa5])*(len(original)+32))
+                self.assertEqual(Path(str(output)+'.task').read_bytes(),
+                                 status.to_bytes(2, 'little')+bytes([0xa5])*2+bytes(0x1000-4))
 
     def test_failed_find_does_not_consume_stale_dta_or_open_or_read(self):
         self.check_failure('find', 0x89ab7654)

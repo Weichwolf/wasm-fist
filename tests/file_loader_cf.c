@@ -47,8 +47,11 @@ void file_cf_error_entry(unsigned reason) {
  printf("error reason %u size %u cf %u task %u\n",reason,*(uint32_t *)(module+0x937),g_ext_find_cf,*(uint16_t *)tcb);
  printf("dos");for(unsigned i=0;i<count;i++)printf(" %02x",commands[i]);printf("\n");
  FILE *out=fopen(output,"wb");assert(out && fwrite(g_mem+0x200000-16,1,size+32,out)==size+32 && !fclose(out));
- /* Observe before the real0f64 body, matching the original at-0f64 boundary.
-  * Its writes, nonlocal exit, caller continuation and timing are not accepted here. */
+ char task_output[1024];assert(snprintf(task_output,sizeof task_output,"%s.task",output)<sizeof task_output);
+ out=fopen(task_output,"wb");assert(out && fwrite(tcb,1,sizeof tcb,out)==sizeof tcb && !fclose(out));
+ /* The test adapter selects original at-0f64 or post-store at-f57.
+  * No I/O/CF/store result is supplied. Nonlocal exit, caller continuation
+  * and timing remain outside this observation. */
  exit(0);
 }
 int main(int argc,char **argv) {
@@ -64,6 +67,9 @@ int main(int argc,char **argv) {
  *(uint32_t *)(module+0x937)=(uint32_t)strtoul(argv[7],0,0);
  strcpy((char *)(module+0x85a4),argv[2]);
  size=strtoul(argv[3],0,0);assert(size+32<0x100000);output=argv[4];opening_failure=!strcmp(argv[6],"open");
+ /* Original5ce5 reads TCB+496 as an alternate drive. Keep real inputs zero;
+  * guard only the two adjacent bytes against an over-wide status store. */
+ memset(tcb,0,sizeof tcb);memset(tcb+2,0xa5,2);
  memset(destination-16,0xa5,size+32);g_fist_ext_int=1;
  m_ext_FUN_0000_6032(opening_failure?(int)(uintptr_t)destination:0,0,0,0,(uint32_t)(uintptr_t)(module+0x85a4),0);
  fputs("FAIL: file query returned instead of reaching the original error boundary\n",stderr);
