@@ -1,0 +1,55 @@
+PATCH 635: restore the task-mode BYTE owner, SS task pointer and actual getter-to-setter AL.
+
+Original startup DA47 CALL FAR SS:[354] reads MOV AL,CS:[2d59]; DA4b
+CALL FAR SS:[358] consumes that returned AL. Getter2082:2d2a maps to
+image123ba; actual engine callerCS1119 derives image basef690, so CS:2d59
+maps to123e9. The emitted WORD at12d59 instead aliases code bytesff78.
+Both MOV AL and XCHG AL operands are BYTE, as is22ec's TEST CS:[2d59].
+Correct the shared mode definition, retaining neighboring bytes and reusing
+that owner for existing reads. Setter reads SS:ea2c/ea2e through rebased
+SS1c00, not old129's placeholder2ba9. LES/task store writes incomingAL to
+ES:[DI+496] only when the far pointer is non-null, with WORD offset wrap;
+XCHG returns the old mode byte regardless of the task pointer.
+Use typed byte calls in the actual post-create d99b pair; no seeded mode
+value or incomingEA substitutes for the measured getter result.
+
+Sources: image123ba..123df andDA47..DA4f. Reproduce the original natural,
+nonzero, independent-input and null-pointer cases with
+python3 -B tools/oracle/capture_task_mode.py --output /tmp/wasm-fist-task-source.
+The compact receipt in tools/oracle/task_mode_case.json binds original
+CS mapping, full architectural states and16-MiB writes to the source image
+and capture scripts. Actual getter entry through setter return spans
+14/14/14/12 fetches; restored controls preserve all39 original frames,
+27518 mixed samples and600-ms endpoint without clock adjustment.
+Eight parent failures and both-target all-memory behavior cases cover this
+BYTE contract. Original raw/lazy flags, preserved upperEAX and far CALL/RETF
+guest-stack effects remain separate port CPU contracts. Handler depth/error
+owners2d58/2d5a, generic DOS IRQ behavior,
+production instruction/device time and complete frame/mixed PCM stay open.
+--- a/fist.c
++++ b/fist.c
+@@ -2431,5 +2431,5 @@
+ #define DAT_1000_2d57 (*(undefined2 *)(g_mem+0x12d57))
+ #define DAT_1000_2d58 (*(undefined2 *)(g_mem+0x12d58))
+-#define DAT_1000_2d59 (*(undefined2 *)(g_mem+0x12d59))
++#define DAT_1000_2d59 (*(undefined1 *)(g_mem+0x123e9))
+ #define DAT_1000_2d5a (*(undefined2 *)(g_mem+0x12d5a))
+ #define DAT_1000_2d79 (*(undefined2 *)(g_mem+0x12d79))
+@@ -38227,6 +38227,6 @@
+     *(uint16_t *)(dg+0x790) = tseg;
+     *(uint16_t *)(dg+0x78e) = 0xea; }
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c354)))();
+-  (*(code *)fist_icall_far((uint32_t)(DAT_1000_c358)))();
++  { undefined1 mode = ((undefined1 (*)(void))fist_icall_far((uint32_t)DAT_1000_c354))();
++    ((undefined1 (*)(undefined1))fist_icall_far((uint32_t)DAT_1000_c358))(mode); }
+   { uint16_t s = *(uint16_t *)(dg+0xea2e), o = *(uint16_t *)(dg+0xea2c);
+     *(uint32_t *)(g_mem + ((uint32_t)s<<4) + o + 0x3f2) = 0; }
+@@ -48021,6 +48021,6 @@
+      Ghidra composed the far ptr (di|es<<16) as a flat host pointer -> base-loss. */
+   undefined1 uVar1;
+-  uint16_t di = *(uint16_t*)(g_mem+0x3a4bc);   /* SS:0xea2c off  */
+-  uint16_t es = *(uint16_t*)(g_mem+0x3a4be);   /* SS:0xea2e seg  */
++  uint16_t di = *(uint16_t*)(g_mem+0x2aa2c);   /* SS:0xea2c off  */
++  uint16_t es = *(uint16_t*)(g_mem+0x2aa2e);   /* SS:0xea2e seg  */
+   if ((di | es) != 0) {
+     *(uint8_t*)(g_mem + ((uint32_t)es<<4) + (uint16_t)(di + 0x496)) = param_1;

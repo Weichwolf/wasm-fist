@@ -223,6 +223,17 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   and those compared outputs only; no full-matrix or635 production acceptance.
   Recreate the complete current112-test/full178-flow gate before acceptance.
 
+- Patch635 (0003) restores the reached task-mode BYTE/SS/typed-caller contract.
+  The current unfiltered gate at base6c0d89d completes112 tests, exact patches,
+  sequential builds, six startup cases and all178 existing flows, durable0.
+  Fresh complete30000-ms Native/WASM captures retain all2100 parent634 frame/end
+  bytes,43 register rows and47 full packets per target; all cross-target frame
+  records match. Every original time/layout/palette matches,28 pixel events
+  still differ, first817/11704156us/byte8754. Strict comparison fails absent
+  mixed port PCM; op68 retains its full Native/WASM inequality. Receipt and
+  reproduction commands: `tools/oracle/task_mode_production_case.json`.
+  No original CPU/IRQ/time or complete surface/frame/audio acceptance follows.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

@@ -102,6 +102,16 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   `resource-bx/proof.json`; op68, task-mode caller/owner, loaderCF/overflow
   stack, CPU/device/instruction timing and full mixed output remain open.
 
+- Patch635 consumes0003's original CS BYTE mode/SS task-pointer contract.
+  Actual d99b threads getter354's returned byte into typed setter358 instead
+  of an argument-less call. Eight whole16-MiB parent failures become eight
+  exact target cases; the actual Native caller/store is independently observed.
+  Base6c0d89d's unfiltered112-test/sequential-build/six-startup/full178-flow
+  gate passes with durable exit0. Consume the portable command and compact
+  receipt in `tools/oracle/task_mode_production_case.json`. This accepts that
+  typed transport only; CPU upperEAX/flags/farstack, handler depth/error,
+  op68 ambient registers and46b6 callback ES/exchange remain open.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and

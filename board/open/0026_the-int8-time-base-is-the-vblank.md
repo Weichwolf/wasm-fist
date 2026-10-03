@@ -544,6 +544,17 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   final mixed PCM still fails strict sequence acceptance. Consume
   `resource-bx/proof.json`; retain the unequal op68 full packets.
 
+- Patch635's accepted task-mode BYTE/SS/caller contract belongs to0003.
+  The frozen1005-input unfiltered112-test/sequential-build/six-startup/full178
+  gate passes, exit0. Actual Native getter/setter leaves retain port clock
+  individually, but the inherited resolver between them charges8 PIT counts;
+  no whole-pair clock or original CPU/IRQ/IF/farstack/flags acceptance follows.
+  Complete30000-ms captures retain every parent634 frame/end byte and43
+  sound-register rows, with first817/28 original pixel errors, unequal full
+  op68 packets and absent final mixed PCM. Consume the compact portable
+  receipt `tools/oracle/task_mode_production_case.json`; do not add a measured
+  aggregate delay or infer time correctness from the passing target matrix.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.

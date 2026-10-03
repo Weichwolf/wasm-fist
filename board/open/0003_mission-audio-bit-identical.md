@@ -906,6 +906,36 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   accepted by this leaf/post-create-fragment proof. Source and scoped target
   proofs: `task-mode-prototype/{mode-mapping-proof.json,proof.json}`.
 
+- Patch635 restores the original CS BYTE mode owner at image123e9,
+  rebased SS:ea2c/ea2e task pointer and typed d99b getter354-to-setter358
+  transport. Four behavior cases fail on both parent targets and now match
+  all16-MiB bytes, including nonzero adjacent-byte, independent exchange
+  return and null-pointer behavior. Actual Native d99b returns/passes0 and
+  stores only at task90496/CS123e9, preserving codeff78 at the stale owner.
+  The portable probe/check command is `python3 -B tools/capture_task_mode_native.py
+  --native <tested-native> --output /tmp/wasm-fist-task-mode-native`.
+  Fresh original natural/nonzero/exchange/null cases and an unobserved
+  baseline remain reproducible through `tools/oracle/capture_task_mode.py`;
+  the source receipt in `task_mode_case.json` covers all architectural fields
+  and16-MiB interval writes,14/14/14/12 fetches and unchanged39 frames/27518
+  mixed samples/end600ms after explicit control restoration without time changes.
+  Base6c0d89d's frozen1005-input unfiltered gate at
+  `/tmp/wasm-fist-635-final/verify/run.gPjbE0/` completes112 tests, exact
+  patches, sequential Native/WASM builds, six complete startup cases and
+  all178 existing flows with zero failures. Durable gate/runner/proof exits
+  are0; all419 original files retain their hashes/inventory. Compact receipt
+  and reproduction commands: `tools/oracle/task_mode_production_case.json`.
+  Fresh full30000-ms captures retain the parent634's2100 frame/end bytes,
+  43 sound-register rows and all47 full extender packets per target. Every
+  original time/layout/palette matches;28 pixel failures remain, first817
+  /11704156us/byte8754. op68 still differs in full (`f6e80008` Native versus
+  `00000008` WASM); originalEBX5/AX2 remains independently owned. Strict
+  comparison fails absent final mixed port PCM. Leaves retain port clock
+  individually; the inherited resolver charges8 PIT counts between them.
+  Broader handler depth/error CS owners, preserved CPU upperEAX/flags/farstack,
+  IRQ/IF and actual instruction/device time are open. This accepts only the
+  reaching BYTE/pointer/typed-caller contract, not complete original output.
+
 - Reproducible original task-mode evidence now lives in
   `tools/oracle/capture_task_mode.py`, `task_mode.gdb` and `task_mode_gdb.sh`.
   Command: `python3 -B tools/oracle/capture_task_mode.py --output
@@ -918,16 +948,17 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   samples/end600ms equal the unobserved original. Compact source states,
   measured fields, script/image/binary digests and reproduction command are
   retained in `tools/oracle/task_mode_case.json`; retired source digests are
-  historical records. This source-only receipt does not accept pending635,
-  port CPU/flags/stack/time or complete frame/PCM parity. Temporary raw
+  historical records. This source-only receipt does not establish port CPU/flags/stack/time
+  or complete frame/PCM parity. Temporary raw
   artifacts are disposable under the user's storage instruction.
 
 ## Next
 
-1. Restore actual get354/put358 byte transport, the rebased SS pointer and
-   the source-proven CS BYTE owner through the original pairs and scratch
-   regressions above. Verify complete startup and both target matrices before
-   production acceptance. Preserve632/633 callee widths, early resource
+1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
+   Recover the actual46b6 callback segment/exchange contract through a fresh
+   original caller pair and reaching regressions on both targets; the current
+   uninitialized ES and stale CS owners do not implement it. Preserve632/633
+   callee widths, early resource
    installation, typed `222f -> 26fc` and634's dynamic WORD BX/full incoming
    EBX transport. Consume the original
    normal/controlled/CRT/return-branch pairs above; scratch prototypes are not
