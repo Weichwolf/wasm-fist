@@ -6,12 +6,8 @@
 #include <string.h>
 
 #ifndef ORIGINAL_SB
-#include "fist_pic.h"
-/* Device-only fixture: timed reset is covered by the real shared clock fixture. */
-void fist_clock_add_event(FistPicEvent h, float d, unsigned v) { abort(); }
-void fist_clock_remove_events(FistPicEvent h) { abort(); }
-uint8_t g_mem[0x1000000];
-uint32_t fist_ext_base;
+#define FIST_TEST_EXT_BASE
+#include "sb_clock_fixture.h"
 extern unsigned short m_ext_FUN_0000_2810(void);
 /* Record the actual translated producer's byte OUTs, then let the real device
  * owner consume them. This endpoint checks device state, not I/O clock costs. */

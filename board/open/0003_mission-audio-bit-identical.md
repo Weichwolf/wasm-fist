@@ -563,6 +563,58 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   The configuration producer is available but production sound startup is not
   wired by this step. Generated engine C remains pristine.
 
+- Current base `21a422f`, verified short PCM8 end-event step: the shared
+  DSP owner now schedules original `END_DMA_Event` when nonzero remainder is
+  strictly below the transfer's latched three-ms minimum. Its callback uses
+  the existing DMA/sample producer, retains auto-init remainder/IRQ coalescing,
+  and does not schedule a periodic replacement. Completion, new transfer,
+  pause and reset remove outstanding end events; unmask/resume schedule from
+  the source's DMA transition. Command 41 leaves the active DMA rate latched.
+- `scratch/sequence-capture/sb-short-event/phases/` retains 16 original phases
+  and 32 native/WASM phases: every normal fetch clock/budget, DSP remainder,
+  diagnostic sample count, complete sample bytes and PIC request/ACK match.
+  Sampling state on each of 2000 fetches around the deadline proves the first
+  emitted sample boundary. The parent has 30 reaching failures; the strict
+  minimum-equality case already passes. All 13 PIC tests and seven existing
+  DMA tests pass. The event probe executes the actual original command
+  dispatcher; its mixer endpoint records complete unsigned-mono PCM8 input,
+  not the final stereo mix or guest interrupt frame.
+- The older demand fixture's abort-only clock endpoints were replaced by
+  the existing shared queue/clock fixture; its untimed port recording and
+  original behavioral expectations are preserved. Missing-assert, command-40
+  expectation, WASM WAV-path, recording-count and link scaffolding are excluded.
+  Original command 40 restarts active auto-init DMA; that separate uncovered
+  command contract remains open, rather than being mistaken for command 41.
+- All 100 tests, exact patch checks, sequential production builds and all
+  178 existing flows pass with zero failures and terminal exit0 in
+  `scratch/verify/run.bpay5o/`. The frozen 886-source archive, full phase
+  outputs, binaries, gate and captures are independently rechecked by
+  `scratch/sequence-capture/sb-short-event/{check-proof.py,proof.json}`.
+  Complete matched SB-enabled 30000-ms native/WASM captures retain all 2100
+  preceding frame/end bytes and 43 packets. All original times/layouts/palettes
+  remain equal; the same 28 pixel failures start at 817. Final mixed port PCM
+  is absent. This fixes a required device event, not the first-817 producer,
+  original-output acceptance or production startup/CPU/IRQ integration.
+
+- Startup producer provenance additionally captured at real engine `e2fc` and
+  entry `e339`: 16 original fetches copy DS WORD port/IRQ/DMA through GS:SI to
+  the TCB, store full EBX into inbox3f2 and select WORD service6c. The full
+  16-MiB memory delta, partial AX/BX/SI, FS/GS and CALL stack write are exact;
+  all raw/lazy flags remain unchanged. Consume
+  `scratch/sequence-capture/engine-device-poster/{check-source.py,source-proof.json}`.
+  Its whole525:526 trace and all39 frames/27518 mixed samples/end600ms match
+  the previous original capture bytewise. An early probe matched an earlier
+  e339 before the poster and is explicitly excluded.
+- A native production diagnostic at actual op6c, using the frozen current
+  binary and isolated game copy, confirms configuration220/7/1 is already
+  posted correctly. Its inbox is 5806e816 instead of original18f. Existing
+  cae6 passes CONCAT22(param2.high,e816) after 153c; original 153c leaves the
+  final resource descriptor's byte-product in BX. This is reaching native
+  register-transport evidence, not a synchronized video/audio comparison or
+  a new two-target fix. Recover the dynamic producer result and upper register
+  contract; do not inject18f as a constant. The setup and protected CPU/IRQ
+  work still remain ahead of first817 acceptance.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover

@@ -23,6 +23,9 @@ void original_sb_init(void);
 void fist_sb_out(int,int);
 int fist_sb_in(int);
 unsigned fist_sb_read_pcm8(unsigned,unsigned char *);
+unsigned fist_sb_dma_left(void);
+unsigned fist_sb_ring_count(void);
+int fist_sb_rate(void);
 extern unsigned char *g_mem;
 }
 
@@ -85,6 +88,8 @@ int main(int argc, char **argv)
         } else if (op=='g') {
             assert(value<=sizeof data); unsigned n=fist_sb_read_pcm8(value,data);
             printf("data %u ",n); for (unsigned i=0;i<n;++i) printf("%02x",data[i]); puts("");
+        } else if (op=='s') {
+            printf("state %u %u %d\n",fist_sb_dma_left(),fist_sb_ring_count(),fist_sb_rate());
         } else assert(op=='n');
         printf("clock %llu %llu %d\n",fetched,
                (unsigned long long)(PIC_Ticks*30000u+PIC_TickIndexND()),CPU_Cycles);

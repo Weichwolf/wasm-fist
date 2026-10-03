@@ -11,6 +11,11 @@ void fist_clock_pic_requeue(void) { abort(); }
 
 int main(int argc, char **argv)
 {
+    assert(argc>=3 && argc<=5);
+    if (!strncmp(argv[argc-1],"wav:",4)) {
+        setenv("FIST_AUDIO_WAV",argv[argc-1]+4,1);
+        --argc;
+    }
     assert(argc==3 || argc==4);
     setenv("FIST_SB","1",1);
     for (unsigned i=0;i<0x10000;++i) g_mem[i]=(unsigned char)((i*29)^(i>>8));
@@ -43,6 +48,8 @@ int main(int argc, char **argv)
         } else if (op=='g') {
             assert(value<=sizeof data); unsigned n=fist_sb_read_pcm8(value,data);
             printf("data %u ",n); for (unsigned i=0;i<n;++i) printf("%02x",data[i]); puts("");
+        } else if (op=='s') {
+            printf("state %u %u %d\n",fist_sb_dma_left(),fist_sb_ring_count(),fist_sb_rate());
         } else assert(op=='n');
         uint64_t after; unsigned remaining=fist_clock_cpu_slice(&after);
         printf("clock %llu %llu %u\n",(unsigned long long)fetched,(unsigned long long)after,remaining);

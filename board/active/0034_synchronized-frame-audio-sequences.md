@@ -138,6 +138,18 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   (`run.UvWOM4/`, exit0) is not full-matrix or sequence acceptance. Actual startup,
   CPU/IRQ/IF context and mixer instruction work still must reach production.
 
+- Current base `21a422f`, short PCM8 end-event recovery (0003): fresh complete
+  matched SB-enabled 30000-ms native/WASM captures retain all 2100 preceding
+  frame/end bytes and 43 packets. Original times/layouts/palettes match; the
+  same 28 pixel failures start at 817 / 11704156 us / byte 8754. Final mixed
+  port PCM remains absent. Original device-event/sample proofs belong to
+  0003; they do not establish protected delivery, startup or sequence parity.
+  The 100-test/exact-patch/sequential-build gate passes all 178 existing
+  flows in `run.bpay5o/`, zero failures and terminal exit0.
+  `sb-short-event/proof.json` checks the frozen 886-source archive, complete
+  captures and first remaining original failure. This establishes the bounded
+  device change and existing matrix coverage; original sequence parity stays open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

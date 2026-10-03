@@ -48,7 +48,13 @@ class SoundBlasterDmaTest(unittest.TestCase):
         producer = cls.directory / 'dma_init.c'
         producer.write_text('#include "ghidra_compat.h"\nextern uint32_t fist_ext_base;\n'+
                             declarations+'\n'+''.join(bodies))
+        clock = cls.directory / 'clock.c'
+        # Demand-only cases feed device ports without instruction I/O costs.
+        # Keep their recording endpoint and link the real queue/clock owner.
+        clock.write_text('#define in sb_demand_clock_in\n'
+                         '#define out sb_demand_clock_out\n#include "fist_vga.c"\n')
         sources = [str(ROOT / 'tests/sb_dma.c'), str(ROOT / 're_out/fist_sb.c'), str(ROOT / 're_out/fist_pic.c'),
+                   str(clock),
                    str(ROOT / 're_out/fist_dos.c'), str(producer)]
         native, wasm = (str(cls.directory / name) for name in ('sb', 'sb.js'))
         emcc = os.environ.get('EMCC') or shutil.which('emcc')

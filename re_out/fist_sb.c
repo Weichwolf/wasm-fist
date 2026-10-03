@@ -304,6 +304,7 @@ static int  g_speaker;                /* DSP speaker enable (D1/D3) */
 static int  g_block16;                /* current transfer is 16-bit */
 static int  g_playing;
 static unsigned g_dsp_total, g_dsp_left;
+static unsigned g_dma_rate, g_dma_min; /* latched by DSP_DoDMATransfer */
 static int g_dsp_autoinit, g_paused, g_irq_delivered, g_dma_active;
 static unsigned char g_pcm8_scratch[65536];
 
@@ -320,6 +321,20 @@ static void raise_irq(unsigned bit)
 }
 
 static unsigned read_pcm8(unsigned want, unsigned char *data);
+static void end_dma_event(unsigned size)
+{
+    /* Original END_DMA_Event calls GenerateDMASound, including DMA registers,
+     * sample output, completion and IRQ; it does not repeat itself. */
+    read_pcm8(size, g_pcm8_scratch);
+}
+static void check_dma_end(void)
+{
+    /* Matched SB16 PCM8: speaker state does not select silent DMA events. */
+    if (g_dsp_left && g_dsp_left < g_dma_min) {
+        float delay = (g_dsp_left * 1000.0f) / g_dma_rate;
+        fist_clock_add_event(end_dma_event, delay, g_dsp_left);
+    }
+}
 
 static void dma_mask(unsigned channel, int masked)
 {
@@ -327,10 +342,11 @@ static void dma_mask(unsigned channel, int masked)
     dc->masked=masked;
     /* DOSBox's DMA_MASKED callback drains its 3-ms minimum before stopping. */
     if (channel==1 && !g_block16 && g_playing && g_dma_active && masked) {
-        read_pcm8((unsigned)g_rate*3/1000, g_pcm8_scratch);
+        read_pcm8(g_dma_min, g_pcm8_scratch);
         g_dma_active=0;
-    } else if (channel==1 && !g_block16 && !masked && g_playing && !g_paused) {
+    } else if (channel==1 && !g_block16 && !masked && g_playing && !g_paused && !g_dma_active) {
         g_dma_active=1;
+        check_dma_end();
     }
 }
 
@@ -339,11 +355,15 @@ static void start_pcm8(int autoinit)
     g_block16=0;
     g_dsp_autoinit=autoinit;
     g_dsp_left=g_dsp_total;
+    g_dma_rate=g_rate;
+    g_dma_min=(g_dma_rate*3)/1000;
     g_playing=1;
     g_paused=0;
     g_dma_active=!g_dma1.masked;
     g_irq_pending=g_irq_delivered=0;
     g_dma1.request=1;
+    fist_clock_remove_events(end_dma_event);
+    if (g_dma_active) check_dma_end();
 }
 
 /* DOSBox DmaChannel::Read increments current registers and reloads the DMA ring
@@ -354,7 +374,7 @@ static unsigned read_pcm8(unsigned want, unsigned char *data)
     unsigned read=0;
     if (g_dsp_autoinit) {
         if (want>=g_dsp_left) want=g_dsp_left;
-    } else if (g_dsp_left<=(unsigned)g_rate*3/1000) want=g_dsp_left;
+    } else if (g_dsp_left<=g_dma_min) want=g_dsp_left;
     dc->curraddr&=0xffff;
     while (want) {
         unsigned left=dc->currcnt+1;
@@ -387,6 +407,7 @@ static unsigned read_pcm8(unsigned want, unsigned char *data)
     for (unsigned i=0; i<read; ++i) emit((short)(((int)data[i]-128)*256));
     g_dsp_left-=read;
     if (!g_dsp_left) {
+        fist_clock_remove_events(end_dma_event);
         if (g_dsp_autoinit) g_dsp_left=g_dsp_total;
         else g_playing=0;
         raise_irq(1);
@@ -457,8 +478,16 @@ static void dsp_command(int val)
         start_pcm8(1); break;
     case 0xd1: g_speaker = 1; break;                                         /* speaker on */
     case 0xd3: g_speaker = 0; break;                                         /* speaker off */
-    case 0xd0: g_paused = 1; g_dma_active=0; break;                                         /* pause 8-bit DMA */
-    case 0xd4: g_paused = 0; g_dma_active=g_playing && !g_dma1.masked; break;                                         /* resume 8-bit DMA */
+    case 0xd0:                                                             /* pause 8-bit DMA */
+        g_paused=1; g_dma_active=0;
+        fist_clock_remove_events(end_dma_event);
+        break;
+    case 0xd4:                                                             /* resume 8-bit DMA */
+        if (g_paused) {
+            g_paused=0; g_dma_active=g_playing && !g_dma1.masked;
+            if (g_dma_active) check_dma_end();
+        }
+        break;
     case 0xda: g_dsp_autoinit = 0; break;                                         /* exit 8-bit auto-init */
     case 0xd9: g_playing = 0; break;                                         /* exit 16-bit auto-init */
     case 0xe1: g_read_val = 4; break;                                        /* DSP version major (SB16=4); minor next read */
@@ -478,6 +507,7 @@ static void dsp_reset(int value)
     if ((value & 1) && g_dsp_state != DSP_RESET) {
         fist_pic_deactivate_irq(g_hw_irq);
         fist_clock_remove_events(dsp_finish_reset);
+        fist_clock_remove_events(end_dma_event);
         g_read_val = -1;
         g_dsp_args_left = g_dsp_argi = 0;
         g_dsp_write_busy = 0;

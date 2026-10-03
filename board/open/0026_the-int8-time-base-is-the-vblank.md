@@ -455,6 +455,28 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   This proves the bounded controller contract and existing matrix coverage,
   not full original output parity or the final ten-run WASM acceptance.
 
+- Current base `21a422f`: consume 0003's short PCM8 `END_DMA_Event` recovery
+  in `scratch/sequence-capture/sb-short-event/phases/`. Sixteen actual source
+  phases and 32 target phases match every fetch budget, first sample boundary,
+  complete diagnostic samples, remainder and request/ACK. The existing shared
+  queue supplies the source float delay, requeue and cancellation; no private
+  device clock, periodic IRQ or fitted instruction interval is introduced.
+  All 100 tests, exact patch checks, sequential builds and all 178 existing
+  flows pass in `run.bpay5o/`, zero failures and terminal exit0. Consume
+  `sb-short-event/proof.json` for the frozen 886-source and capture checks.
+  CPU privilege/IF/frame/IRET and actual startup remain open.
+
+- Original CPU helper contract additionally executed from complete `cpu.cpp`
+  in `scratch/sequence-capture/cpu-cli-sti/source.cpp`: all 256 synthetic
+  CLI/STI caller contexts preserve whole CPU registers, segments and CPU block
+  except the IF bit or prepared exception. The 72 denied contexts preserve
+  flags and set GP13/error0; the 184 permitted contexts change only IF and
+  preserve the prior exception payload. `source-proof.json` records original
+  source/harness/output hashes. This is helper evidence, not guest exception
+  delivery or a port CPU owner. The actual normal-core STI source branches to
+  `decode_end` immediately when IF and PIC_IRQCheck are set under CPU_PIC_CHECK1;
+  do not invent a one-instruction inhibit. Startup/CPU/IRQ integration stays open.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.

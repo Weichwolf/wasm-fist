@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 HostPt MemBase;
 PagingBlock paging;
@@ -21,6 +22,9 @@ static unsigned char *destination;
 static bool irq_delivered;
 static void (*irq_cb)(void);
 static MixerChannel channel;
+#ifdef FIST_SB_EVENT_CLOCK
+static FILE *sample_sink;
+#endif
 
 void DEBUG_ShowMsg(const char *format, ...) {}
 #ifndef FIST_SB_EVENT_CLOCK
@@ -47,6 +51,16 @@ void MIDI_RawOutByte(Bit8u) { abort(); }
 void MixerChannel::AddSamples_m8(Bitu len, const Bit8u *data) {
     produced+=len;
     if (destination) { memcpy(destination+consumed,data,len); consumed+=len; }
+#ifdef FIST_SB_EVENT_CLOCK
+    if (sample_sink) {
+        for (Bitu i=0; i<len; ++i) {
+            unsigned sample=(Bit16u)((data[i]-128)*256);
+            assert(fputc(sample&255,sample_sink)!=EOF);
+            assert(fputc(sample>>8,sample_sink)!=EOF);
+        }
+        assert(!fflush(sample_sink));
+    }
+#endif
 }
 #define UNREACHED(name, type) \
     void MixerChannel::name(Bitu, const type *) { abort(); }
@@ -72,10 +86,17 @@ extern "C" void original_sb_init(void) {
     sb.chan=&channel;
 #ifdef FIST_SB_EVENT_CLOCK
     sb.dsp.state=DSP_S_NORMAL;
+    const char *samples=getenv("FIST_SB_PROBE_PCM");
+    if (samples) { sample_sink=fopen(samples,"wb"); assert(sample_sink); }
 #endif
 }
 
 extern "C" void fist_sb_out(int port, int val) {
+#ifdef FIST_SB_EVENT_CLOCK
+    /* Event cases execute the actual command dispatcher, including pause,
+     * restart and reset cancellation, rather than the demand-only adapter. */
+    if (port>=0x220 && port<=0x22f) { write_sb(port,val,1); return; }
+#endif
     if (port==0x226) { write_sb(port,val,1); return; }
     if (port==0x224) { write_sb(port,val,1); return; }
     if (port!=0x22c) { DMA_Write_Port(port,val,1); return; }

@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import wave
 
 from test_port_io import ROOT, tool
 from test_sb_dma import program, dsp
@@ -48,12 +49,15 @@ class PicControllerTest(unittest.TestCase):
             run = [output] if target == 'native' else [tool('node', 'Git/emsdk/node/*/bin/node'), output]
             cls.commands.append((target, run))
 
-    def check_script(self, script, start=525*30000+100, serviced=False, reached=None):
+    def check_script(self, script, start=525*30000+100, serviced=False, reached=None,
+                     samples=False):
         path = self.directory / 'script.txt'
         path.write_text(script)
         extra = ['sb-irq'] if serviced else []
+        sample_path = self.directory / 'original.pcm'
         original = subprocess.run([self.original, str(start), str(path), *extra], check=True,
-                                  capture_output=True, text=True, timeout=30).stdout
+                                  capture_output=True, text=True, timeout=30,
+                                  env=dict(os.environ, FIST_SB_PROBE_PCM=str(sample_path))).stdout
         if reached:
             clocks = [list(map(int, line.split()[1:])) for line in original.splitlines()
                       if line.startswith('clock ')]
@@ -63,13 +67,25 @@ class PicControllerTest(unittest.TestCase):
             # tests its bytes/times; all fixture budgets are compared below.
         for target, run in self.commands:
             with self.subTest(target=target, start=start):
-                result = subprocess.run([*run, str(start), str(path), *extra], capture_output=True,
+                wav_path = self.directory / 'device.wav'
+                wav_path.unlink(missing_ok=True)
+                output_args = ['wav:' + str(wav_path)] if samples else []
+                result = subprocess.run([*run, str(start), str(path), *extra, *output_args], capture_output=True,
                                         text=True, timeout=30,
-                                        env=dict(os.environ, FIST_AUDIO_WAV=str(self.directory/'device.wav')))
+                                        env=dict(os.environ, FIST_AUDIO_WAV=str(wav_path)))
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual([s for s in result.stdout.splitlines() if s.startswith('read ')],
                                  [s for s in original.splitlines() if s.startswith('read ')])
                 self.assertEqual(result.stdout, original + 'pumps 0\n')
+                if samples:
+                    actual = b''
+                    if wav_path.exists():
+                        with wave.open(str(wav_path), 'rb') as audio:
+                            self.assertEqual((audio.getnchannels(),audio.getsampwidth()), (1,2))
+                            actual = audio.readframes(audio.getnframes())
+                    # Complete DMA-produced diagnostic samples, including event
+                    # callbacks; this does not compare the final stereo mixer.
+                    self.assertEqual(actual, sample_path.read_bytes())
         return [line for line in original.splitlines() if not line.startswith('clock ')]
 
     def test_icw_data_programs_vectors_and_keeps_initial_masks(self):
@@ -143,3 +159,75 @@ class PicControllerTest(unittest.TestCase):
         self.assertEqual(len(rows), 36)
         script = ''.join(f"{r['op']} {r['port']:x} {r['value']:x}\n" for r in rows)
         self.check_script(script, rows[0]['cycle']-1, serviced=True, reached=rows)
+
+    def test_short_pcm8_event_generates_complete_samples_and_coalesced_irq(self):
+        script = program() + dsp(0x40,0xa6,0xd1,0x48,3,0,0x1c)
+        script += 's 0 0\nr 20 0\n' + 'n 0 0\n'*12000
+        script += ('s 0 0\nr 20 80\nw 224 82\nr 225 1\nr 22f ff\nr 20 80\n'
+                   'r 22e 7f\nr 20 0\n')
+        # END_DMA_Event is one scheduled completion, not a repeating source.
+        script += 'n 0 0\n'*40000 + 's 0 0\nr 20 0\ng 0 4\ns 0 0\nr 20 80\n'
+        for index in (100,29950,29998):
+            lines = self.check_script(script,525*30000+index,samples=True)
+            self.assertEqual([r for r in lines if r.startswith('state ')],
+                             ['state 4 0 11111','state 4 4 11111',
+                              'state 4 4 11111','state 4 8 11111'])
+            self.assertEqual(len((self.directory/'original.pcm').read_bytes()),16)
+
+    def test_short_event_threshold_is_strict_and_transfer_rate_is_latched(self):
+        for size in (32,33):
+            script = program() + dsp(0x40,0xa6,0x48,size-1,0,0x1c)
+            script += 'n 0 0\n'*100000 + 's 0 0\n'
+            lines = self.check_script(script,samples=True)
+            self.assertIn(f'state {size} {32 if size==32 else 0} 11111',lines)
+        # Command 41 changes sb.freq, while the existing DMA rate stays latched.
+        # Command 40 instead restarts an active auto-init transfer in the source.
+        script = program() + dsp(0x40,0xa6,0x48,3,0,0x1c,0xd0,0x41,0x0f,0x42,0xd4)
+        script += 'n 0 0\n'*12000 + 's 0 0\nr 20 80\n'
+        self.assertIn('state 4 4 3906',self.check_script(script,samples=True))
+
+    def test_short_event_first_sample_and_irq_fetch_boundary_matches_original(self):
+        script = program() + dsp(0x40,0xa6,0x48,3,0,0x1c)
+        script += 'n 0 0\n'*10000 + 's 0 0\n'*2000 + 'r 20 80\n'
+        for index in (100,29998):
+            states = [r for r in self.check_script(script,525*30000+index,samples=True)
+                      if r.startswith('state ')]
+            self.assertEqual(len(states),2000)
+            self.assertEqual(set(states),{'state 4 0 11111','state 4 4 11111'})
+            first = states.index('state 4 4 11111')
+            self.assertTrue(all(r=='state 4 0 11111' for r in states[:first]))
+            self.assertTrue(all(r=='state 4 4 11111' for r in states[first:]))
+
+    def test_short_events_cancel_on_restart_reset_pause_and_demand_completion(self):
+        prefix = program() + dsp(0x40,0xa6,0x48,3,0,0x1c)
+        cases = [
+            (dsp(0x48,63,0,0x1c),'state 64 0 11111'),
+            ('w 226 1\n','state 0 0 22050'),
+            (dsp(0xd0),'state 4 0 11111'),
+            ('g 0 4\nr 22e 7f\n','state 4 4 11111'),
+        ]
+        for suffix,state in cases:
+            script = prefix + suffix + 'n 0 0\n'*16000 + 's 0 0\nr 20 0\n'
+            self.assertIn(state,self.check_script(script,samples=True))
+
+    def test_short_events_follow_mask_resume_and_single_cycle_lifetimes(self):
+        prefix = program(masked=True) + dsp(0x40,0xa6,0x48,3,0,0x1c)
+        script = prefix + 'n 0 0\n'*12000 + 's 0 0\nr 20 0\nw a 1\n'
+        script += 'n 0 0\n'*12000 + 's 0 0\nr 20 80\n'
+        self.assertEqual([r for r in self.check_script(script,samples=True)
+                          if r.startswith('state ')],
+                         ['state 4 0 11111','state 4 4 11111'])
+        # Mask drains the original minimum and cancels the old end event upon
+        # completion; unmask enters DMA again and schedules its new short block.
+        script = program() + dsp(0x40,0xa6,0x48,3,0,0x1c) + 'w a 5\nr 22e 7f\n'
+        script += 'n 0 0\n'*12000 + 's 0 0\nr 20 0\nw a 1\n'
+        script += 'n 0 0\n'*12000 + 's 0 0\nr 20 80\n'
+        self.assertEqual([r for r in self.check_script(script,samples=True)
+                          if r.startswith('state ')],
+                         ['state 4 4 11111','state 4 8 11111'])
+        for command in (dsp(0x14,3,0),dsp(0x48,3,0,0x1c,0xda)):
+            script = program() + dsp(0x40,0xa6) + command
+            script += 'n 0 0\n'*12000 + 's 0 0\nr 20 80\ng 0 4\n'
+            lines = self.check_script(script,samples=True)
+            self.assertIn('state 0 4 11111',lines)
+            self.assertIn('data 0 ',lines)
