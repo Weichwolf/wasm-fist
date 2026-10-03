@@ -129,6 +129,22 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   does not accept upper GP/flags/farstack/IRQ/time, live INT9 input consumption
   or complete original frame/audio sequences.
 
+- File lifetime provenance reached through0003's settings/op68 startup:
+  original fefb actually executes0f69:086b (runtime2082), and50c8 executes
+  0f69:5a38. Names do not establish CS. The config helper saves open AX,
+  reads at most64 bytes, restores that handle for BX/AH3e and preserves the
+  read flags with PUSHF/POPF. Natural SOUND.CFG returns ten read bytes and
+  close AX3e05; the missing second config returns AX2 and skips read/close.
+  Both actual overlay size paths close saved handle5 and return DX:AX sizes
+  0000:433c /0000:7c9c. Fresh bounded CPU traces have complete footers and
+  retain all39 original frames/27518 mixed samples/end600ms. Source fixture
+  and reproduction: `tools/oracle/file_close_case.json`,
+  `python3 -B tools/oracle/capture_file_close.py --output
+  /tmp/wasm-fist-file-close-source`. Production still supplies unrelated
+  fefb param9 /50c8 param7 to close, leaking SOUND.CFG/SOUNDDVR/MGAVIDEO;
+  repair and full target regressions are pending. This source proof accepts
+  no port CPU/flags/stack/IRQ/time or complete original output.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and
