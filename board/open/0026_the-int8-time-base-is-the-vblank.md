@@ -555,7 +555,51 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   receipt `tools/oracle/task_mode_production_case.json`; do not add a measured
   aggregate delay or infer time correctness from the passing target matrix.
 
+- Original sound138d vector initialization is now reproducible with
+  `python3 -B tools/oracle/capture_sound_vector_init.py --repo /home/cosmo/Git/wasm-fist --output /tmp/wasm-fist-sound-vector-source`;
+  receipt: `tools/oracle/sound_vector_init_case.json`. From0003's actual
+  first138d entry, CLI clears IF. DWORD[12c4]=7 and the actual CL test/add
+  select vector0f. AX2503 returns the original real-IVT DWORD in fullEBX
+  (f0001060 here), preserves other GP/segments and leaves IF cleared. The
+  caller saves that DWORD at12c0; PUSH DS/MOV CS,EAX/MOV DS,AX present
+  original CS2b and fullEDX14e0 to AX2506. Actual resident1fba POP WORD
+  installs the protected selector without overwriting its upper padding;
+  resident1fbe writes the fullDWORD handler offset. Its real guest paging
+  resolves that slot to physical13f878. Resident1fd6 OR BYTE activates
+  the original existing stub at physical817c+3. The reached resident
+ 2237/223b/223e/2241 sequence builds the real-IVT pointer with DWORD SHL,
+  WORD MOVZX/SHL/ADD preserving the segment high WORD; its base comes from
+  the actual ES:0206 table, not a fitted stub address. AX2506 eventually
+  installs that computed2dd:53ac in the real IVT. Crucially, actual
+  resident225b STI enables IF before the service returns; all caller GP,
+  including full savedEBX, remain intact. The remaining initial creation
+  of the stub's CALL bytes is still unproved: it exists before this setter,
+  while the original asset has zero bytes at that region. Do not invent it.
+  Thirty complete16MiB/GP/segment/raw+lazyflag/control/time boundaries and
+  all507 observed fetches supply23 direct instruction/whole-RAM transitions.
+  Actual stack masks and GDT/IDT base/limit are also captured. Paging/state
+  reuse the file-error owner; resident code provenance consumes the previous
+  IRQ-frame asset offset and verifies each complete reached instruction.
+  Fresh independent baseline/observer pairs, verify-only replay and the
+  prior effects source match every39 frame/27518 mixed-sample/end600 byte.
+  All419 original files and their inventory remain unchanged. Five isolated
+  negatives reject missing handler RAM, a widened selector write, omitted
+  stub activation, coherently lost kernel IF and coherently lost upperEBX.
+  Evidence: `/tmp/wasm-fist-sound-vector-source-public` and
+  `/tmp/wasm-fist-sound-vector-source-negative/proof.json`.
+  This accepts the reached default IRQ7 original vector/IF prefix only.
+  Other vectors/errors, initial stub creation, port protected DOS services,
+  CPU/IRET/IF ownership, actual138d/DMA/IRQ/time execution and final mixedPCM/
+  complete original parity remain open. The separate642 candidate's1078
+  frozen runtime inputs/archive remain unchanged while its full gate runs.
+
 ## Next
+
+Consume `sound_vector_init_case.json` before implementing the reached AX2503/2506
+services or sound CPU/IF integration: getter leaves IF clear, actual setter kernel
+STI enables it. Preserve original full EBX, WORD selector/DWORD offset and BYTE
+stub activation. Recover the prior creation of the existing resident stub bytes;
+other vectors and error paths require their own reaching evidence.
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
    Continue 0034's first remaining pixel difference at event 817 in the 30000-ms capture.
