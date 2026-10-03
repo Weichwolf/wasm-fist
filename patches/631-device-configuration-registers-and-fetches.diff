@@ -1,0 +1,106 @@
+PATCH 631: restore original device-configuration leaf 1280 (board:0003).
+
+Original startup 77e9 CALLs 1280. Its eight instructions load full EBX from
+TCB owner 0c93, copy WORD TCB+490 into WORD base12cc, zero-extend WORD+492
+into DWORD IRQ12c4, and zero-extend WORD+494 into DWORD DMA12c8. Final EAX
+is the DMA word; intermediate MOV AX preserves incoming EAX's upper word.
+Register this actual entry in the sorted extender function map. Existing
+12a7 remains outside this bounded recovery; it is not substituted for 1280.
+
+Use the shared extender operand resolver for the TCB host binding and the
+existing shared clock for each original fetch at its actual data boundary.
+The EAX/EBX packet expresses this leaf's explicit live register/result lanes;
+there is no private CPU/flag/device/memory owner and no fitted elapsed delay.
+Original MOV/RET preserve all flags. Guest return-stack and higher CPU/IRQ
+context transport, actual77e2 startup and subsequent133a/138d remain open.
+
+The paging-aware original pair and complete525:526 trace prove TCB operand
+f0010000 (DS addition wraps to guest linear10000; physical mapping must be
+resolved), eight fetched instructions and EAX1/EBXf0010000 on return77ee.
+The default image already holds220/7/1, so these real stores change no module
+bytes. Full original GP/segment/lazy-flag state is preserved apart from the
+explicit EAX/EBX and ESP+4 on guestRET. All39frames,27518mixed samples and
+complete600ms endpoint retain their bytes. tools/oracle/device_config_1280*
+records original instructions, registers, data widths and probe provenance.
+
+The regression compiles the complete ordered-patched extender and invokes
+1280 through its actual sorted function map. The parent has no entry and
+fails on both targets. Compare every original fetch's live EAX/EBX, current
+clock/budget, the entire isolated1MiB module and complete guarded TCB.
+An additional controlled original run changes only incoming EAX/EBX, three
+consumed TCB words and two adjacent table bytes for those eight instructions,
+then restores original state before caller77ee. The original MOV AX retains
+89ab in EAX's high word; MOVZX yields0000ffa5/0000f123; six module bytes change,
+with5ac3 adjacent table guard untouched. All complete source outputs and the
+full trace outside that controlled interval retain their original bytes.
+These are register/width probes, not hardware/device-variant acceptance.
+Additional thin-budget phases retain the same original fetch/register/memory
+contract and adjacent table bytes after the WORD store. This is a startup dependency, not full device initialization,
+protected interrupt delivery, final PCM or complete original parity.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -31,6 +31,7 @@
+ #define FUN_0000_11f0 m_ext_FUN_0000_11f0
+ #define FUN_0000_11f1 m_ext_FUN_0000_11f1
+ #define FUN_0000_11f4 m_ext_FUN_0000_11f4
++#define FUN_0000_1280 m_ext_FUN_0000_1280
+ #define FUN_0000_12a7 m_ext_FUN_0000_12a7
+ #define FUN_0000_12ac m_ext_FUN_0000_12ac
+ #define FUN_0000_12b4 m_ext_FUN_0000_12b4
+@@ -238,6 +239,7 @@
+ undefined4 __allregs FUN_0000_11f0(void);
+ undefined4 __allregs FUN_0000_11f1(void);
+ undefined4 __allregs FUN_0000_11f4(uint param_1,uint param_2,uint param_3);
++void __allregs FUN_0000_1280(struct fist_ext_device_registers *registers);
+ void __allregs FUN_0000_12a7(void);
+ void __allregs FUN_0000_12ac(ushort param_1,undefined4 param_2);
+ undefined4 __allregs FUN_0000_12b4(char *param_1,char *param_2,char *param_3,char *param_4);
+@@ -430,6 +432,7 @@
+ #define DAT_0000_0caf (*(undefined4 *)(g_mem+fist_ext_base+0xcaf))
+ #define DAT_0000_0d82 (*(undefined4 *)(g_mem+fist_ext_base+0xd82))
+ #define DAT_0000_0f60 (*(undefined4 *)(g_mem+fist_ext_base+0xf60))
++#define DAT_0000_12c4 (*(undefined4 *)(g_mem+fist_ext_base+0x12c4))
+ #define DAT_0000_12c8 (*(undefined4 *)(g_mem+fist_ext_base+0x12c8))
+ #define DAT_0000_12cc (*(undefined4 *)(g_mem+fist_ext_base+0x12cc))
+ #define DAT_0000_156b (*(undefined4 *)(g_mem+fist_ext_base+0x156b))
+@@ -1749,6 +1752,32 @@
+ }
+ 
+ 
++/* ===== original device configuration @ 0000:1280 ===== */
++void __allregs FUN_0000_1280(struct fist_ext_device_registers *registers)
++{
++  uint16_t value;
++  fist_clock_charge_cpu_instructions(1); /* 1280 MOV EBX,[0c93] */
++  registers->ebx = (uint32_t)(uintptr_t)DAT_0000_0c93;
++  uint8_t *packet = fist_ext_addr(registers->ebx);
++  fist_clock_charge_cpu_instructions(1); /* 1286 MOV AX,[EBX+0490] */
++  memcpy(&value, packet + 0x490, sizeof value);
++  registers->eax = (registers->eax & 0xffff0000u) | value;
++  fist_clock_charge_cpu_instructions(1); /* 128d MOV [12cc],AX */
++  *(uint16_t *)(g_mem + fist_ext_base + 0x12cc) = (uint16_t)registers->eax;
++  fist_clock_charge_cpu_instructions(1); /* 1293 MOVZX EAX,WORD[EBX+0492] */
++  memcpy(&value, packet + 0x492, sizeof value);
++  registers->eax = value;
++  fist_clock_charge_cpu_instructions(1); /* 129a MOV [12c4],EAX */
++  DAT_0000_12c4 = registers->eax;
++  fist_clock_charge_cpu_instructions(1); /* 129f MOVZX EAX,WORD[EBX+0494] */
++  memcpy(&value, packet + 0x494, sizeof value);
++  registers->eax = value;
++  fist_clock_charge_cpu_instructions(1); /* 12a6 MOV [12c8],EAX */
++  DAT_0000_12c8 = registers->eax;
++  fist_clock_charge_cpu_instructions(1); /* 12ab RET fetch; C return ABI */
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_12a7) @ 0000:12a7 ===== */
+ 
+ void __allregs FUN_0000_12a7(void)
+@@ -17724,6 +17753,7 @@
+   {0x11f0u,(void*)&FUN_0000_11f0},
+   {0x11f1u,(void*)&FUN_0000_11f1},
+   {0x11f4u,(void*)&FUN_0000_11f4},
++  {0x1280u,(void*)&FUN_0000_1280},
+   {0x12a7u,(void*)&FUN_0000_12a7},
+   {0x12acu,(void*)&FUN_0000_12ac},
+   {0x12b4u,(void*)&FUN_0000_12b4},

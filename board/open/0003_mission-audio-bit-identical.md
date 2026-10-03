@@ -511,6 +511,58 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   The initial setup producer is restored; it is not yet wired into production
   sound startup. Incomplete host-timeout source scaffolding is excluded.
 
+- Current base `95a7d1d`, patch 631: missing startup leaf 1280 is restored and
+  registered in the actual sorted extender function map. Original 77e9 calls
+  it to load full EBX from current TCB owner 0c93, write WORD TCB+490 to port
+  WORD12cc, and zero-extend WORD+492/+494 to IRQ/DMA DWORD12c4/12c8. Intermediate
+  MOV AX preserves EAX's high word; final full EAX is the DMA word. The explicit
+  EAX/EBX packet supplies those translated lanes without another CPU/flag owner.
+  Every original fetch uses 0026's shared clock at its actual data boundary.
+  The existing shared extender operand resolver owns the TCB host binding.
+- `tools/oracle/device_config_1280.gdb` and both `device_config_1280*_case.json`
+  fixtures retain same-process paging-aware before/after snapshots and complete
+  525:526-ms traces. The actual TCB operand is f0010000: adding DS wraps to
+  guest linear10000; physical addressing still requires paging. The unmodified
+  source executes eight instructions and returns EAX1/EBXf0010000; all other
+  original GP/segment/lazy-flag state is preserved except ESP+4 on guest RET.
+  The default image already holds220/7/1, so stores execute without changing
+  module bytes. The complete trace and all39frames/27518PCM/end600ms match the
+  preceding unprobed source bytewise. No guessed elapsed interval is inserted.
+- A controlled original run changes only incoming EAX/EBX, the three consumed
+  TCB words and two adjacent table bytes during this same eight-instruction
+  interval. MOV AX retains high89ab; MOVZX yields0000ffa5/0000f123; six module
+  bytes change and adjacent5ac3 remains untouched. Original state is restored
+  before caller77ee, verified against the saved full16MiB before image. Every
+  source trace record outside this controlled interval and all complete original
+  600-ms frame/PCM/end bytes remain equal. These are width probes, not supported
+  hardware/device-variant acceptance. Code and provisioned assets remain intact.
+- The regression compiles the complete ordered-patched module and dispatches
+  through its actual function map. Parent has no1280 entry and fails all16
+  target phases across three methods. Both targets now match every original
+  live EAX/EBX pair, instruction time/budget, the entire isolated1MiB module and
+  complete guarded TCB, including upper-word preservation, zero-extension and
+  neighboring byte protection at thin-budget/tick boundaries. The return clock
+  is matched at the RET fetch; the original caller77ee snapshot includes one
+  additional fetch, so those boundaries are kept distinct. Guest return-stack
+  and CPU flag/context transport are separate open contracts, not accepted by
+  the explicit C return interface.
+- `python3 scratch/sequence-capture/device-config/check-proof.py` verifies both
+  source profiles, parent16red/current16green,655 frozen source/archive hashes,
+  actual binaries, unchanged418assets and complete production captures.
+  `NATIVE=.../device-config/native OUTJS=.../device-config/wasm/fistrun.js
+  bash tools/check_flow.sh '^(intro|mainmenu)$'`:95 tests, exact patches,
+  sequential native/WASM builds and both selected flows pass / zero failures,
+  outer exit0; `scratch/verify/run.UvWOM4/`. This is a filtered gate, not a new
+  full-matrix or original-output acceptance. Compile/link scaffolding and an
+  earlier unmatched caller-fetch boundary assertion are explicitly excluded.
+- Explicit SB-enabled complete30000-ms captures retain all2100 prior frame/end
+  bytes and43register packets on both targets. All original times/layouts/
+  palettes remain equal, with the same28pixel failures, first817, and absent
+  final mixed port PCM. Actual77e2 startup,133a/138d, CPU privilege/IF/vector/
+  IRQ/frame/IRET, complete mixer work and final shared output remain open.
+  The configuration producer is available but production sound startup is not
+  wired by this step. Generated engine C remains pristine.
+
 ## Next
 
 1. Wire original device initialization and consume the recovered intro registers. Recover

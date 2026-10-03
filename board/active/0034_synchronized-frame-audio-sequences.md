@@ -128,6 +128,16 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   Actual startup/IRQ/IF/mixer instruction work still must reach the production
   clock before this first differing video event can be repaired.
 
+- Patch631 (0003), original1280 device-configuration leaf: complete matched
+  SB-enabled30000-ms native/WASM captures retain every previous initial-mixer
+  frame/end byte and all43register packets. All2100 cross-target records match;
+  original times/layouts/palettes remain equal, with the same28pixel failures,
+  first817. Strict comparison still rejects absent final mixed port PCM.
+  Original/source-controlled eight-fetch register/storage proofs belong to0003;
+  consume `device-config/proof.json`. The95-test/two-flow filtered gate
+  (`run.UvWOM4/`, exit0) is not full-matrix or sequence acceptance. Actual startup,
+  CPU/IRQ/IF context and mixer instruction work still must reach production.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete
