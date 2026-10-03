@@ -166,6 +166,27 @@ inventory must not be used as a patch list.
   paths, full GP/configuration transport, task WORD/error stack/main-loop
   continuation, clocks/IRQ and complete original output remain open.
 
+- Original find/open error continuation is now recovered beyond0f5d:
+  `tools/oracle/file_error_main_case.json`, reproduced by
+  `python3 -B tools/oracle/capture_file_error_main.py --output /tmp/wasm-fist-file-error-main-source`.
+  The GDB extension reuses the existing file-error CF/body/page-walk owner;
+  its separate caller trace retains281 actual fetches and eight full
+  GP/segments/raw+lazyflags/control/time plus whole16MiB boundaries per
+  failure. Actuale339 jumps through the original DGROUP:58 vector into
+  runtime-relocated CRT314. Whole RAM CRT-entry→00e0-resume changes only
+  two stack WORDs and BYTE[DGROUP:6a]=ff. The saved near-return word and
+  PUSHSS/POPDS overwrite follow the fetched instructions; f69e rebases SS
+  while preserving the stack's physical address. Full register upper
+  halves are preserved, with AX/BX/SP derived from the original segment
+  arithmetic rather than copied observed constants. Actual5c5f executes
+  STC, returning CF1 to00e5: JAE skips00d8 and reaches00e7 shutdown.
+  Both independent complete error pairs retain38 frames/27518 mixed
+  samples/end600ms. Relocated code is checked against FIST.DAT image bytes.
+  This accepts original continuation evidence only. The port still lacks
+  the nonlocal service boundary, CRT/main-loop resume, real poll carry and
+  full GP/flags/stack/instruction/device-time transport. Returning normally
+  from6032, or using AL0 as the carry result, does not implement this path.
+
 ## Next
 
 Current follow-up evidence: `/tmp/wasm-fist-error-width-red/proof.json`
