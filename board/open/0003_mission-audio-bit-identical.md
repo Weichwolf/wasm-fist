@@ -615,9 +615,43 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   contract; do not inject18f as a constant. The setup and protected CPU/IRQ
   work still remain ahead of first817 acceptance.
 
+- Fresh base `965beb8` source recovery expands that dependency before any
+  port fix: `engine-resource-registers/{check-source.py,source-proof.json}`
+  captures actual153c entry, returned resource-open state, descriptor-loop
+  entry and callerCB13. It opens the complete4523-byte `MSPRITE0.BIN` and
+  registers40 entries. The whole interval has1410 actual fetches/16043 cycles
+  (14633 extra original callback cycles); the descriptor loop has854 fetches.
+  The descriptor loop's complete16-MiB memory delta, GP registers and segments
+  match the decoded writes, including count40, finalBX018f/SI11ab/DI0140 and two-byte stack work.
+  A controlled original caller sets only incoming EBX's upper word to89ab:
+  every interval register/segment/fetch matches with that upper word retained,
+  giving89ab018f at return. The restored return and trace outside the interval
+  match. Ten unrelated low-DOS bytes differ between processes already at input;
+  all complete within-run memory deltas match, with those differences retained.
+- The missing startup resource precedes that BX transport: at original tick329,
+  CRT223c's far applier receivesBX0/SI0174, resolves SS:[74] to table segment446b,
+  and installs16 original far-vector pairs in140 actual fetches, including
+  vector388=2082:306c. `engine-resource-relocation/paired/` retains the whole
+  register/segment/flag/memory pair. BX0 is not an inert return: old091/098/133
+  reasoning is disproved by the executed original and f7c3/f842 retry path.
+  All three normal/controlled/CRT source captures retain39 complete frames,
+  27518 mixed samples and endpoint600ms bytewise against the existing original.
+- Current frozen native op6c evidence has vector388=0 and resource descriptor
+  at actual portDGROUP:E816 (`g_mem+2a816`) with segment0. An isolated scratch
+  prototype restores only the early0174 application through the existing loader
+  helper; it reaches an earlier `222f -> 26fc` SIGSEGV before op6c. The backtrace
+  proves the untyped caller supplies stale CX/DX/BX/BP, and the failed-variant
+  path reads DI as a DWORD spanning BP. This is a diagnostic failure, not a
+  verified production fix; generated C and production binaries remain unchanged.
+  Recover that original live call and register widths before moving installation
+  or accepting a dynamic153c return. Never pad unknown inputs with zero.
+
 ## Next
 
-1. Wire original device initialization and consume the recovered intro registers. Recover
+1. Restore the reached early resource installation and `222f -> 26fc` live caller/width
+   contracts, then153c return and its fullEBX transport intoe2fc. Consume the original
+   normal/controlled/CRT pairs above; scratch prototypes are not production acceptance.
+   Wire original device initialization and consume the recovered intro registers. Recover
    the 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts; restore
    remaining mission/damage/weapon transport as reached. Supply actual instruction/event work to 0026 so
    0034 can recheck frame 817. Add original-backed buffer/state regressions on both targets;

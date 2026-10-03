@@ -13,6 +13,16 @@ sites. Historical remaining examples: cdc4 → vector 0x6b4 with a short list; w
 in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/6730/684e/
 688a/6909/d27e/d2bd/d2f5/d443/d480/6448/6beb/8fb6/9774/9a68. Re-audit the current tree.
 
+- Base `965beb8`, actual sound-start dependency in0003: original CRT installs
+  resource vector388 before boot222f and153c. The frozen port delays installation;
+  a scratch early-install prototype reaches an arg-less222f ->26fc call with
+  stale CX/DX/BX/BP and a failed-variant DI read spanning BP. Original222f assembly
+  sets BX6b78, CXDS and DX6b7e before the far call; BP is an inherited lane, not
+  permission to invent zero. Preserve the source's register widths and all live
+  return/flag lanes. The source153c pair additionally proves dynamicBX018f and
+  preservation of a controlled89ab upperEBX word. Source proof and complete
+  frame/PCM capture scope belong to0003; no two-target repair is accepted yet.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and

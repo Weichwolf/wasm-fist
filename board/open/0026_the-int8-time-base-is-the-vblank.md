@@ -477,6 +477,18 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   `decode_end` immediately when IF and PIC_IRQCheck are set under CPU_PIC_CHECK1;
   do not invent a one-instruction inhibit. Startup/CPU/IRQ integration stays open.
 
+- Base `965beb8`, consume0003's actual early CRT relocation pair:
+  `engine-resource-relocation/paired/` proves140 actual fetches for f842 withBX0,
+  including f7c3's table resolution, PUSHF/CLI,16 vector pairs and POPF/RETF.
+  The complete16-MiB memory delta, GP/segments and saved/restored flags match.
+  BX0 does not skip installation. These fetches and real inherited IF/privilege
+  state belong to future production integration, not an aggregate elapsed charge.
+  The startup153c interval additionally attributes1410 fetches/16043 cycles,
+  including14633 original callback cycles and854 descriptor-loop fetches. These
+  measured totals are diagnostic; never add them as fitted delays. All complete
+  source39frames/27518mixed samples/end600ms remain byte-identical. No port CPU,
+  protected IRQ, final mixer or first817 acceptance follows from these pairs.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
