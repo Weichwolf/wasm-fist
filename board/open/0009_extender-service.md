@@ -59,6 +59,21 @@ inventory must not be used as a patch list.
   not accept port transport, raw flags, whole memory or instruction/device
   time. Recover the actual configuration input instead of fitting AL2.
 
+- Actual7660 detail/sky producer operands now have five fresh original
+  cases in `tools/oracle/detail_operands_case.json`: natural, LOW, MEDIUM,
+  HIGH and sky-off, with two reached6032 calls each. The selected files'
+  complete2052 bytes match the module tables; returned EAX804/EBX5 and
+  ECX/EDX0 are observed in every case. The default sky branch stores6877
+  in3958 and BYTE1 in395c; nonzero sky selects689a and copies its BYTE.
+  Full GP/segments/raw+lazyflags/controls are recorded at handler entry,
+  loader entry and handler return. Controlled TCB writes affect exactly
+  the requested detail/sky bytes and preserve architectural state/time.
+  All39 frames/27518 mixed samples/end600ms equal a fresh unobserved
+  baseline. Reproduce `python3 -B tools/oracle/capture_detail_operands.py
+  --output /tmp/wasm-fist-detail-operands-source-final`. This source-only
+  evidence does not accept port transport, loader interval memory/CF/errors,
+  original instruction/device time or complete frame/audio sequences.
+
 ## Next
 
 1. Build a current inventory from the original table and the shim's branches. For each op record

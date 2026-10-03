@@ -184,6 +184,16 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   generated6de2 currently omits the8b4b load/shift before op68. Port repair
   and complete original output/CPU/flags/time acceptance remain open.
 
+- Consume0009's `detail_operands_case.json`: five original detail/sky
+  cases, two reached6032 calls per case, complete selected file bytes and
+  observed EAX804/EBX5/ECX0/EDX0. The natural upper EBX result comes from
+  the real FILEMGR DTA DWORD/handle WORD path. The sky-zero branch also
+  supplies its omitted default6877 store. Do not clear an upper word or
+  substitute fixed5; wire the actual producer and the independently
+  loaded/shifted configuration AX from `detail_return_case.json`.
+  Port CF/errors, all returned GP/flags and instruction/device time remain
+  separate unaccepted contracts.
+
 ## Next
 
 1. Recover0009's actual op44 FILEMGR/DTA initialization and returned GP lanes;
