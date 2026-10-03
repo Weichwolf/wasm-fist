@@ -3,7 +3,7 @@ set confirm off
 python
 import gdb,json,os,struct
 from pathlib import Path
-root=Path(os.environ['FIST_DETAIL_OPERANDS_DIR']);repo=Path(os.environ['FIST_DETAIL_REPO']);level=os.environ.get('FIST_DETAIL_LEVEL');sky=os.environ.get('FIST_DETAIL_SKY');count=0
+root=Path(os.environ['FIST_DETAIL_OPERANDS_DIR']);repo=Path(os.environ['FIST_DETAIL_REPO']);opening=os.environ.get('FIST_FILE_ERROR_STAGE','find')=='open';observe=os.environ.get('FIST_FILE_ERROR_OBSERVE','1')=='1'
 fields=('PIC_Ticks','CPU_Cycles','CPU_CycleLeft','CPU_CycleMax','cpu_regs.ip.dword[0]','cpu.cr0','paging.cr3','paging.enabled','cpu.code.big','cpu.stack.big','cpu.pmode','cpu.cpl','cpu_regs.flags','lflags.type','lflags.prev_type','lflags.oldcf','lflags.var1.dword[0]','lflags.var2.dword[0]','lflags.res.dword[0]')
 def state():
  q={n:int(gdb.parse_and_eval(n)) for n in fields};q['registers']=[int(gdb.parse_and_eval('cpu_regs.regs[%d].dword[0]'%i)) for i in range(8)];q['segments']=[{'value':int(gdb.parse_and_eval('Segs.val[%d]'%i)),'base':int(gdb.parse_and_eval('Segs.phys[%d]'%i))} for i in range(6)];return q
@@ -31,11 +31,17 @@ class CodeRead(gdb.Breakpoint):
  def stop(self):
   q=state();cs=q['segments'][1]['value'];ip=q['cpu_regs.ip.dword[0]']
   if cs!=43 or ip!=self.expected:return False
-  snapshot('at-%04x'%ip);self.enabled=False
+  if observe or ip==0x6065:snapshot('at-%04x'%ip)
+  self.enabled=False
   m=memory();base=int(gdb.parse_and_eval('MemBase'));code=q['segments'][1]['base']
   if ip==0x6032:
-   for entry in (0x6044,0x5e3a,0x0f64):watches.append(CodeRead(base+physical((code+entry)&0xffffffff,m,q),entry))
-  elif ip==0x6044:watches.append(CodeRead(base+physical((code+0xf57)&0xffffffff,m,q),0xf57))
+   for entry in ((0x6044,0x5e3a,0x0f64) if observe else (0x6044,)):watches.append(CodeRead(base+physical((code+entry)&0xffffffff,m,q),entry))
+  elif ip==0x6044:
+   if observe:watches.append(CodeRead(base+physical((code+0xf57)&0xffffffff,m,q),0xf57))
+   if opening:watches.append(CodeRead(base+physical((code+0x6065)&0xffffffff,m,q),0x6065))
+  elif ip==0x6065:
+   (root/'game/FISTDATA/HIGH.DTL').rename(root/'removed.HIGH.DTL');snapshot('after-open-control')
+   if observe:watches.append(CodeRead(base+physical((code+0x606a)&0xffffffff,m,q),0x606a))
   elif ip==0x5e3a:watches.append(CodeRead(base+physical((code+0xf5d)&0xffffffff,m,q),0xf5d))
   elif ip==0xf64:fetch.enabled=True
   elif ip==0xf5d:fetch.enabled=False

@@ -126,6 +126,34 @@ inventory must not be used as a patch list.
   step accepts no port fix, error inventory, caller/IRQ/device time or
   complete original frame/audio behavior.
 
+
+- The second6032 CF boundary is now observed in the original too. The
+  shared `capture_file_error.py --failure open` / `file_error.gdb` removes
+  only the isolated HIGH.DTL at6065 after successful find-first. Both the
+  control-only baseline and observed run preserve the entire16MiB RAM,
+  architectural state and time across that filesystem action. Actual606a
+  has CF1 before the3f read, branches to5e3a, and reaches the same nonlocal
+  reason1/taskffff/ESP-restoration sequence. All38 frame records,27518
+  mixed PCM samples and end600ms match between the pair. Whole-memory
+  error writes and all preserved register/flag/control fields are verified
+  again for both find/open cases. Receipts: `tools/oracle/file_error_case.json`
+  and `tools/oracle/file_open_error_case.json`. Reproduce with `python3 -B
+  tools/oracle/capture_file_error.py --failure find --output /tmp/wasm-fist-file-find-error-source`
+  and `--failure open --output /tmp/wasm-fist-file-open-error-source`.
+  `file_error_port_case.json` is freshly rebound to the find receipt using
+  unchanged638 binaries; both still fail at560798us/F36/palette byte5 and
+  retain task0/reason37fd in the independent tick120 diagnostics. This
+  accepts original find/open branch evidence only, not a port correction.
+
+- Pending patch639 reuses the existing5cc2/5d50 CF owner at6044 and606a.
+  Real DOS I/O produces four parent target failures (find returns after
+  consuming stale DTA; failed open issues3f). The candidate passes all six
+  file-loader methods on both targets, preserving legacy file-content
+  expectations. Tests observe actual0f64 entry before its unaccepted body.
+  The frozen1046-input128-test/full178-flow gate is still running under
+  `/tmp/wasm-fist-639-complete`; no production acceptance yet. Actual op44
+  dispatch, nonlocal continuation and original output remain required.
+
 ## Next
 
 1. Recover the missing-file producer through actual6032/5cc2 and the

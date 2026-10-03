@@ -1,19 +1,19 @@
 {
   "scope": "Complete600-ms missing-HIGH.DTL port frame streams versus the original error case. Independent cooperative tick120 memory diagnostics do not match the original CPU/memory boundary. Observed states only: no corrected error/GP/flags/stack/IRQ/time or complete frame/PCM acceptance.",
-  "source_receipt_sha256": "74bc2fc98f44d2726e3da8875d5862f134e0e9f462c503731df8481c0f687c47",
+  "source_receipt_sha256": "55c80af69db97cfbfae0f56e7dc8cb59672e07589705a1fe72f417ec9500e25a",
   "producers": {
     "/tmp/wasm-fist-638-complete/production/native": "0ef8d8a174f9debe3fbd728e08c1db67bf7af8b2d9b9abf2963e22044bf0d3d5",
     "/tmp/wasm-fist-638-complete/production/wasm/fistrun.js": "74e07d347d0afdf30b5177d38c086fb695547f17c492d295ce6417d04354b423",
     "/tmp/wasm-fist-638-complete/production/wasm/fistrun.wasm": "22f41d68d7115c2a0517a32e4a11e0e41f02d1b8f079821ad0ef36d29cce3766",
     "/usr/bin/node": "ca0728526aa1cc4e3056decec848ecc6d2c5391cecdd4e21a0ebd221d665c84e",
-    "/tmp/wasm-fist-file-error-ports-final/native-wrapper": "a78990045355e26d6aff24f968419e87f69d77f1ea4bbef59ed40f41c506d60d",
-    "/tmp/wasm-fist-file-error-ports-final/node-wrapper": "171ef1a3a8517e121c1553e8f46134bdb6381a0b7579edd9da8345389a9fea0e",
+    "/tmp/wasm-fist-file-error-ports-cf-parent/native-wrapper": "a78990045355e26d6aff24f968419e87f69d77f1ea4bbef59ed40f41c506d60d",
+    "/tmp/wasm-fist-file-error-ports-cf-parent/node-wrapper": "171ef1a3a8517e121c1553e8f46134bdb6381a0b7579edd9da8345389a9fea0e",
     "/home/cosmo/Git/wasm-fist/tools/capture_file_error_ports.py": "34b95e520cdfe9efb60795e7c435ce1d5b59d2cb55b24fb1329e2f44cff9cbdb",
     "/home/cosmo/Git/wasm-fist/tools/capture_port_sequence.sh": "fcd65b11def0dce6a8f991da0bf518f2b80399b007e9e1af8234571bdb1d8c55",
-    "/home/cosmo/Git/wasm-fist/tools/oracle/file_error_case.json": "74bc2fc98f44d2726e3da8875d5862f134e0e9f462c503731df8481c0f687c47",
-    "/tmp/wasm-fist-file-error-ports-final/start-state.text": "95497cd569be155a0efb76408a22f54fbe00dc8a267d19e7ad9375b70088bacb",
-    "/tmp/wasm-fist-file-error-ports-final/start-state.bda": "5c1a8ad522ad0d6019ccb91847f7eff7fd611e9f710eed350e80afa77fe799d7",
-    "/tmp/wasm-fist-file-error-ports-final/start-state.vga": "2b15a5e6f618bce966ae54fd0cb101009ce54041f65eb3fa2f28bcf40aed0d65"
+    "/home/cosmo/Git/wasm-fist/tools/oracle/file_error_case.json": "55c80af69db97cfbfae0f56e7dc8cb59672e07589705a1fe72f417ec9500e25a",
+    "/tmp/wasm-fist-file-error-ports-cf-parent/start-state.text": "95497cd569be155a0efb76408a22f54fbe00dc8a267d19e7ad9375b70088bacb",
+    "/tmp/wasm-fist-file-error-ports-cf-parent/start-state.bda": "5c1a8ad522ad0d6019ccb91847f7eff7fd611e9f710eed350e80afa77fe799d7",
+    "/tmp/wasm-fist-file-error-ports-cf-parent/start-state.vga": "2b15a5e6f618bce966ae54fd0cb101009ce54041f65eb3fa2f28bcf40aed0d65"
   },
   "cases": [
     {
