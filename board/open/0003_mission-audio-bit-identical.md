@@ -906,6 +906,22 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   accepted by this leaf/post-create-fragment proof. Source and scoped target
   proofs: `task-mode-prototype/{mode-mapping-proof.json,proof.json}`.
 
+- Reproducible original task-mode evidence now lives in
+  `tools/oracle/capture_task_mode.py`, `task_mode.gdb` and `task_mode_gdb.sh`.
+  Command: `python3 -B tools/oracle/capture_task_mode.py --output
+  /tmp/wasm-fist-task-source`. Four fresh natural/nonzero/exchange/null cases
+  prove actual getter-to-setter BYTE transport, module CS mapping and the SS
+  task pointer over complete architectural states and all16-MiB interval
+  writes. The14/14/14/12 fetches cover actual getter entry through setter
+  return. Controlled architectural inputs are restored after observation;
+  clock and budget remain unchanged by restoration. All39 frames/27518 mixed
+  samples/end600ms equal the unobserved original. Compact source states,
+  measured fields, script/image/binary digests and reproduction command are
+  retained in `tools/oracle/task_mode_case.json`; retired source digests are
+  historical records. This source-only receipt does not accept pending635,
+  port CPU/flags/stack/time or complete frame/PCM parity. Temporary raw
+  artifacts are disposable under the user's storage instruction.
+
 ## Next
 
 1. Restore actual get354/put358 byte transport, the rebased SS pointer and
