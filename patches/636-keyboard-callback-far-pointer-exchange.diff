@@ -1,0 +1,97 @@
+PATCH 636: restore the keyboard callback FAR-CALL operand exchange (board:0030).
+
+Original3446 sets BX=3e0b and ES=CS, then PUSH CS/near CALL46b6.
+Actual CS2082 minus main load1119 gives rebased module CS0f69, not
+Ghidra's naming segment1000. Helper146b6 exchanges WORD CS:[4f9a]
+with AX/ES and WORD CS:[4f98] with BX. These are the operands of the
+keyboard ISR's inline FAR-CALL at image14627, hence image14628/1462a;
+the old14f98/14f9a aliases overwrite instruction bytes740e8bcb.
+Supply the actual segment explicitly and return both old WORDs as a
+packed far pointer (old BX offset, old AX/ES segment). Null replacement
+still exchanges both words. The two emitted builder tails share actual
+3446's asm;3436 is its legacy data-as-code entry, not a second source
+initializer. The actual13483 CLC clears the shared carry on builder return.
+
+Reproduce four complete original cases with
+python3 -B tools/oracle/capture_callback_exchange.py --output /tmp/wasm-fist-callback-exchange.
+The compact source receipt in tools/oracle/callback_exchange_case.json
+binds the code/image/binary/scripts and all architecture/16-MiB writes.
+Ten source fetches preserve upper GP bits and saved flags for IF0/IF1;
+controlled state restoration preserves all39 frames/27518 mixed samples/
+end600ms without time adjustment. The port fix accepts WORD pointer data,
+explicit caller segment and its existing carry lane only. Original upper
+EAX/EBX, raw/lazy flags, far stack, IRQ/IF/instruction time and actual INT9
+consumer dispatch remain open; no audio-callback or full-output claim.
+--- a/fist.c
++++ b/fist.c
+@@ -1939,7 +1939,7 @@
+ void __allregs FUN_1000_44f8(void);
+ undefined2 __allregs FUN_1000_4517(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+ undefined2 __allregs FUN_1000_452a(undefined2 param_1,undefined2 param_2,undefined2 param_3,undefined2 param_4, undefined2 param_5);
+-undefined2 __allregs FUN_1000_46b6(undefined2 param_1);
++undefined4 __allregs FUN_1000_46b6(undefined2 param_1,undefined2 param_2);
+ uint __allregs FUN_1000_46c8(uint param_1);
+ byte __allregs FUN_1000_46f9(byte param_1);
+ void __allregs FUN_1000_4a2c(undefined2 param_1,undefined2 param_2,undefined2 param_3,char *param_4,int param_5, char *param_6,char *param_7);
+@@ -2454,8 +2454,8 @@
+ #define DAT_1000_382c (*(undefined2 *)(g_mem+0x1382c))
+ #define DAT_1000_4660 (*(undefined2 *)(g_mem+0x14660))
+ #define DAT_1000_4e0a (*(undefined2 *)(g_mem+0x14e0a))
+-#define DAT_1000_4f98 (*(undefined2 *)(g_mem+0x14f98))
+-#define DAT_1000_4f9a (*(undefined2 *)(g_mem+0x14f9a))
++#define DAT_1000_4f98 (*(undefined2 *)(g_mem+0x14628))
++#define DAT_1000_4f9a (*(undefined2 *)(g_mem+0x1462a))
+ #define DAT_1000_5951 (*(undefined2 *)(g_mem+0x15951))
+ #define DAT_1000_5953 (*(undefined2 *)(g_mem+0x15953))
+ #define DAT_1000_5955 (*(undefined2 *)(g_mem+0x15955))
+@@ -50890,7 +50890,8 @@
+     *(uint16_t *)(g_mem + 0x1d8e0) = ax;
+   }
+   (void)puVar1; (void)iVar2;
+-  FUN_1000_46b6(0x3e0b);
++  FUN_1000_46b6(0x3e0b,0x0f69);  /* 1347d: ES=actual rebased module CS */
++  { extern unsigned char g_fist_cf; g_fist_cf = 0; }  /* 13483: CLC */
+   return;
+ }
+ 
+@@ -50931,7 +50932,8 @@
+     *(uint16_t *)(g_mem + 0x1d8e0) = ax;
+   }
+   (void)puVar1; (void)iVar2;
+-  FUN_1000_46b6(0x3e0b);
++  FUN_1000_46b6(0x3e0b,0x0f69);  /* 1347d: ES=actual rebased module CS */
++  { extern unsigned char g_fist_cf; g_fist_cf = 0; }  /* 13483: CLC */
+   return;
+ }
+ 
+@@ -52800,20 +52802,17 @@
+ 
+ /* ===== ((uint)(uintptr_t)&FUN_1000_46b6) @ 1000:46b6 ===== */
+ 
+-undefined2 __allregs FUN_1000_46b6(undefined2 param_1)
+-
+-{
+-  undefined2 uVar1;
+-  undefined2 unaff_ES;
+-  
+-  uVar1 = DAT_1000_4f9a;
+-  LOCK();
+-  DAT_1000_4f9a = unaff_ES;
+-  UNLOCK();
+-  LOCK();
++undefined4 __allregs FUN_1000_46b6(undefined2 param_1,undefined2 param_2)
++
++{
++  /* 146b6: XCHG WORD CS:[4f9a],AX / XCHG WORD CS:[4f98],BX.
++   * The returned far pointer carries old BX and old AX/ES. No port clock
++   * advances between these stores; original CPU/IRQ/flags remain separate. */
++  undefined2 old_segment = DAT_1000_4f9a;
++  undefined2 old_offset = DAT_1000_4f98;
++  DAT_1000_4f9a = param_2;
+   DAT_1000_4f98 = param_1;
+-  UNLOCK();
+-  return uVar1;
++  return CONCAT22(old_segment,old_offset);
+ }
+ 
+ 

@@ -117,9 +117,17 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   and BX, with all upper register bits/flags preserved. Its callback WORDs
   are the inline FAR-CALL operands at image14628/1462a, not14f98/14f9a.
   Consume `tools/oracle/callback_exchange_case.json` and0030's four fresh
-  source cases. The current one-argument C callee uses uninitialized ES and
-  loses the old offset; production pointer/typed-caller and INT9 dispatch
-  are still open. A function name or passing target matrix does not prove CS.
+  source cases. The parent one-argument C callee used uninitialized ES and
+  lost the old offset; patch636 accepts its bounded WORD pointer/typed-caller
+  repair. Full CPU/register transport and actual INT9 dispatch remain open. A function name or passing target matrix does not prove CS.
+
+- Consume0030's accepted patch636 WORD callback exchange, explicit actual
+  caller CS and packed old pointer; source/production receipts live in
+  `tools/oracle/callback_exchange{,_production}_case.json`. The unfiltered
+  117-test/six-startup/full178-flow gate passes with durable exit0; actual
+  Native writes only the four callback bytes and preserves stale code. This
+  does not accept upper GP/flags/farstack/IRQ/time, live INT9 input consumption
+  or complete original frame/audio sequences.
 
 ## Next
 

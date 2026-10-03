@@ -23,6 +23,14 @@ Remaining ES and other unresolved lanes need per-use evidence, not a blanket CS-
   Source owner0030 and compact fixture `tools/oracle/callback_exchange_case.json`.
   Existing610 target-parity evidence does not establish every original segment.
 
+- Consume0030's accepted patch636 WORD callback exchange, explicit actual
+  caller CS and packed old pointer; source/production receipts live in
+  `tools/oracle/callback_exchange{,_production}_case.json`. The unfiltered
+  117-test/six-startup/full178-flow gate passes with durable exit0; actual
+  Native writes only the four callback bytes and preserves stale code. This
+  does not accept upper GP/flags/farstack/IRQ/time, live INT9 input consumption
+  or complete original frame/audio sequences.
+
 ## Next
 
 1. Reproduce an actually reached unresolved segment read and its original register value. Prefer a

@@ -234,6 +234,14 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   reproduction commands: `tools/oracle/task_mode_production_case.json`.
   No original CPU/IRQ/time or complete surface/frame/audio acceptance follows.
 
+- Consume0030's accepted patch636 WORD callback exchange, explicit actual
+  caller CS and packed old pointer; source/production receipts live in
+  `tools/oracle/callback_exchange{,_production}_case.json`. The unfiltered
+  117-test/six-startup/full178-flow gate passes with durable exit0; actual
+  Native writes only the four callback bytes and preserves stale code. This
+  does not accept upper GP/flags/farstack/IRQ/time, live INT9 input consumption
+  or complete original frame/audio sequences.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete
