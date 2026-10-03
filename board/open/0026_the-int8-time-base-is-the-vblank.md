@@ -500,6 +500,15 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   completed 101 tests, exact patches, both builds and 178 existing flows,
   durable exit0. Production startup, first817 and final mixed PCM remain open.
 
+- Original153c controlled branch boundaries belong to0003's
+  `resource-return-branches/`. Empty/CF-consumer cases take14/5 fetches and
+  return normally; first/second table-overflow cases take14/35 but RET consumes
+  savedDS=`2d19`, leaving DS at the resource and SP two bytes below the normal
+  return. Complete GP/segments/raw+lazyflags/control and16-MiB pairs are kept.
+  No total delay, repaired guest stack or full-output success is injected.
+  All four intentional debugger stops explicitly fail complete stream/end
+  validation; actual loader failure and full CPU/event integration stay open.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.

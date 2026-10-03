@@ -35,6 +35,14 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   exact patches, both builds and 178 existing flows, with durable exit0.
   The narrower repair does not establish full startup/output parity.
 
+- Consume0003's four original153c return-branch pairs in
+  `resource-return-branches/`: empty and controlled carry exits preserve BX;
+  one emitted descriptor leaves the dynamic dimensions product121. Both
+  source overflow exits consume a savedDS word as IP rather than return to
+  CB13. Complete-memory/register proofs bound those inputs; partial observer
+  streams fail full capture acceptance. Do not infer a generic normal return
+  from the generated void signature or publish a fixed018f result.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and

@@ -728,6 +728,31 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   controlled `89ab` upper-word preservation remains required; the Native
   scratch typed222f/early-install prototype is not a two-target repair.
 
+- Original153c return branches are now directly measured in
+  `resource-return-branches/{check-source.py,source-proof.json}`. Controlled
+  empty first-length input takes14 fetches and returns toCB13 with unchanged
+  lowBX=`e816`; a controlled callee-return CF input takes5 fetches, restores
+  AX/CX/BX and also preserves `e816`. The latter proves the carry consumer,
+  not a real loader-failure producer. Both complete16-MiB branch deltas match.
+- Controlled incoming DX at the source1630 table limit and one descriptor
+  below it take14/35 fetches. The second case computes BX=121 from the actual
+  first MSPRITE0 dimensions0b*0b; neither exit stores the resource entry count.
+  Both execute15bf POP DS / STC / RET with one earlier saved DS still on the
+  stack. RET therefore consumes `2d19` as IP, leaving DS at resource54c2 and
+  SP two bytes below the normal CB13 return. This is an observed abnormal
+  original return, not a guessed normal overflow contract or a proved crash.
+  Do not describe the port's simple C overflow return as guest-stack parity.
+- All four cases retain complete GP/segments/raw+lazyflags/control state,
+  instruction boundaries and whole memory; every interprocess entry-memory
+  difference is retained. Debugger exit0 is an intentional branch stop;
+  complete frame/PCM/end validation explicitly fails for these partial runs.
+  Two observer timeouts are excluded. The corrected Python arming callback
+  records ticks0..524 and explicitly gates524; a breakpoint condition property
+  alone did not bound the failed observers. Normal full-output and controlled
+  high89ab evidence remain separate in `engine-resource-registers/`. Recover
+  the actual dynamic successful WORD output and carry/CPU owners without
+  seeding018f, clearing unknown high bits or hiding these branch contracts.
+
 ## Next
 
 1. Restore the reached early resource installation and `222f -> 26fc` live caller
