@@ -178,6 +178,19 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   before all178 flows completed and is unaccepted. Recreate its source/output
   evidence under `/tmp` before its production acceptance.
 
+- External staging compile correction: the first unfiltered635 attempt
+  under `/tmp/wasm-fist-production635/verify/run.uKaKE6/` passed110 tests and
+  exact patches, then failed Native compilation with exit2 because the VGA
+  shim's relative `../tools/oracle/fist_sequence_endpoint.h` include assumed
+  a repository-local build. The shared endpoint header now resolves through
+  explicit oracle include directories in Native, Node-WASM and browser builds.
+  Six build/path/cleanup tests and shell syntax pass. Full sequential Native,
+  Node-WASM and browser compilation/linking succeeds from the external staged
+  source; logs are temporary `storage-{native,wasm,web}.log` under that root.
+  Generated engine sources remain unchanged. This bounded build-path repair
+  does not accept635 or the interrupted full flow matrix; rebuild and run the
+  complete current gate before production acceptance.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

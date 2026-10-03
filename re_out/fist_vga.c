@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include "../tools/oracle/fist_sequence_endpoint.h"
+#include "fist_sequence_endpoint.h"
 #include "fist_vga_bios_palette.h"
 #include "fist_vga_text_font.h"
 #include "fist_vga_text_palette.h"
