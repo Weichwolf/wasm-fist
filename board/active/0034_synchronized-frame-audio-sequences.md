@@ -267,6 +267,21 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   storage/addressing does not accept op44 dispatch/CF/errors, device setup,
   original GP/flags/stack/IRQ/time or complete original output.
 
+
+- Consume0009's accepted patch6396032 find/open carry branches. The
+  frozen1046-input gate passes128 tests/exact patches/both sequential
+  builds/six startup cases/all178 flows with durable0 and419 unchanged
+  originals. Fresh complete30000-ms captures retain every2100 parent638
+  frame/end byte,43 sound-register rows and all47 service packets. All
+  original palettes/layouts/times match;28 pixel failures still begin
+  817/11704156us/byte8754. Full op68 Native/WASM inboxes remain unequal
+  f6680005/00000005, and final mixed port PCM is absent. Complete fresh
+  missing-HIGH error captures retain the first560798us/F36/palette-byte5
+  failure because manual op44 still bypasses6032. Source/production
+  receipt and reproduction belong to0009's
+  `tools/oracle/file_carry_production_case.json`. Loader CF acceptance does
+  not prove task error/GP/stack/CPU/IRQ/device time or original output.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

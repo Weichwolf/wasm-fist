@@ -145,47 +145,37 @@ inventory must not be used as a patch list.
   retain task0/reason37fd in the independent tick120 diagnostics. This
   accepts original find/open branch evidence only, not a port correction.
 
-- Pending patch639 reuses the existing5cc2/5d50 CF owner at6044 and606a.
-  Real DOS I/O produces four parent target failures (find returns after
-  consuming stale DTA; failed open issues3f). The candidate passes all six
-  file-loader methods on both targets, preserving legacy file-content
-  expectations. Tests observe actual0f64 entry before its unaccepted body.
-  The frozen1046-input128-test/full178-flow gate is still running under
-  `/tmp/wasm-fist-639-complete`; no production acceptance yet. Actual op44
-  dispatch, nonlocal continuation and original output remain required.
-
-
-- Original startup/KDV ownership is now observed end-to-end before any
-  port repair: `tools/oracle/memmgr_startup_case.json`, reproduced with
-  `python3 -B tools/oracle/capture_memmgr_startup.py --output /tmp/wasm-fist-memmgr-startup-source`.
-  Actual84c0 starts with an empty registry and makes eight36bf calls;
-  every EDX slot, ECX size, EBX alignment, AL flag and returned descriptor
-  is recorded. The eighth is the zero-sized bc98 checkpoint. Whole16MiB
-  tcb-clear→init-return writes contain only the TCB+488 zero-store.
-  First6e95→3322→3661 sees nine registered blocks including the moved
-  checkpoint, returns its found index in ESI and frees only that suffix.
-  Actual3661 does not store the found index in2f60; the port's extra store
-  is a transport shim, not an original memory write. The engine's far
-  task at its actual DGROUP:ea2c and extender[0c93] resolve to the same
-  physical task at KDV entry/lookup/free. The old Native comment claiming
-  a separate original KDV TCB is disproved. All39 complete frame records,
-  27518 mixed PCM samples and end600ms match a fresh unobserved original
-  baseline. Snapshot GP/segments/raw+lazyflags/control/time and whole RAM
-  are retained. Native638 independently reaches6e95→3322→3661→0f64(37fd)
-  with zero registered blocks (`/tmp/wasm-fist-normal-file-error-caller/errors.jsonl`);
-  original ownership comes from84c0 before program execution, whereas
-  current Native setup runs it only at map-load. This accepts source
-  startup/task ownership evidence only. Port initialization, full GP
-  transport, false-error removal, nonlocal continuation, clocks/IRQ and
-  complete original output remain open.
+- Patch639 now consumes the original6032 CF at6044 and606a from the
+  existing5cc2/5d50 owner. Four real-DOS-I/O parent target failures become
+  four corrected find/open cases; all eight existing complete-file cases
+  retain their expectations. The six loader methods exercise12 Native/WASM
+  cases and observe actual0f64 entry before its unaccepted body. The frozen
+  1046-input unfiltered `run.fWjgrl` passes128 tests, exact patches, both
+  sequential builds, six startup cases and all178 flows with durable exit0;
+  all419 original hashes/inventory are unchanged. Every2100 frame/end byte,
+  43 sound-register rows and all47 unmasked service packets retain638's
+  behavior. Original palettes/layouts/times match, but28 pixel failures
+  still start817/11704156us/byte8754; final mixed port PCM remains absent.
+  Native/WASM full op68 inboxes remain f6680005/00000005. Fresh complete
+  missing-HIGH production captures still first fail at560798us/F36/palette
+  byte5, with engine task0/reason37fd in separate tick120 diagnostics:
+  manual op44 still bypasses6032. Receipt:
+  `tools/oracle/file_carry_production_case.json`; reproduce with
+  `FIST_WORKDIR=/tmp/wasm-fist-file-carry-check bash tools/check_flow.sh`.
+  This accepts both loader CF branches only. Actual op44, resource archive
+  paths, full GP/configuration transport, task WORD/error stack/main-loop
+  continuation, clocks/IRQ and complete original output remain open.
 
 ## Next
 
-1. Recover the missing-file producer through actual6032/5cc2 and the
-   nonlocal error boundary above. Preserve638's DTA storage/addressing;
-   do not force CF clear, return ordinary success after a task error, or
-   fit the observed palette deadline. Wire actual op44 FILEMGR and full
-   returned EBX;0014 owns the independent configuration AX input.
+1. Restore0025's observed84c0 startup allocation before the first KDV
+   lookup and original shared-task ownership. Prove both targets stop
+   raising the false normal37fd before wiring the nonlocal error boundary.
+   Then drive actual op44 FILEMGR/full returned EBX and original WORDffff
+   task store plus0f64→0f57→0f5d/main-loop continuation. Preserve638 DTA and
+   accepted639 CF branches;0014 owns the independent configuration AX
+   input. Require complete original error output as well as the normal
+   sequence; a normal error-helper return does not implement the source.
 2. Build a current inventory from the original table and the shim's branches. For each op record
    implemented/original-no-op/missing, the asm contract and a reaching scenario.
 3. Run `FIST_OPHIST` across boot, missions, editor, campaign and link surfaces. A missing op in one
