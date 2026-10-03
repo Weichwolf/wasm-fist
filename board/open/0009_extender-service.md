@@ -214,6 +214,36 @@ inventory must not be used as a patch list.
   main-loop continuation, full GP/flags/stack/IRQ/time or original full
   output acceptance follows.
 
+- Source-only dispatcher stack proof at parent04e571d:
+  `tools/oracle/file_service_stack_case.json` and
+  `python3 -B tools/oracle/capture_file_service_stack.py --output /tmp/wasm-fist-file-service-stack-source`.
+  Fresh four isolated600-ms original runs plus `--verify-only` pass. Both
+  find/open observations retain all38 frames/27518 mixed samples/end600ms
+  against their complete error baselines. The observer shares0009's existing
+  error/main state, RAM and guest-page translation owners. Nine actual
+  fetch boundaries begin at0f30, not the nominal decompiler label0f23;
+  no execution or time is inferred for the preceding marker padding.
+  Actual0f30 saves DWORD ESP at0f60, MOVZX EBX/BX selects44, DWORD[cb3+44]
+  supplies near handler10da, and DWORD[caf] receives that target. The
+  dispatcher then loads the shared task and its full DWORD inbox before
+  near CALL[caf] and handler10da's near CALL7660. Eight individual fetched
+  instructions preserve complete GP/segments/raw+lazyflags/control state
+  except their specified GP changes; whole16MiB transitions contain only
+  the exact saved-stack/handler DWORD stores and near return pushes.
+  The loader6032 is12 stack bytes below entry. Errorf57 restores actual
+  entry ESP; f5d consumes its unchanged8-byte far frame, whose CS DWORD
+  has nonzero upper padding. The first caller selects the low CS WORD and
+  advances ESP by8. Original incoming EBXf0010044 becomes selector44 only
+  at MOVZX; handler inboxf0010005 is retained in full. These are observed
+  values, not replacement constants. Complete error/CRT/main continuation
+  proof is embedded. Four negative probes independently reject a corrupt
+  saved ESP store, corrupt near return push, corrupt fetched CALL opcode
+  and missing full RAM boundary. Canonical raw proof:
+  `/tmp/wasm-fist-file-service-stack-public/`; compact negative receipt:
+  `/tmp/wasm-fist-file-service-stack-negative/proof.json`. No port dispatch,
+  nonlocal continuation, instruction/device time or complete output
+  acceptance follows from this original evidence.
+
 ## Next
 
 1. Consume0025's accepted640 startup allocations/shared task and preserve
@@ -223,6 +253,9 @@ inventory must not be used as a patch list.
    WORDffff task store;0014 owns the independent configuration AX
    input. Require complete original error output as well as the normal
    sequence; a normal error-helper return does not implement the source.
+   Consume the actual0f30 dispatcher/near-stack/full-inbox proof above;
+   do not use a far16:16 callback, invent an ESP, clear register upper
+   halves or charge time for unobserved0f23 marker padding.
 2. Build a current inventory from the original table and the shim's branches. For each op record
    implemented/original-no-op/missing, the asm contract and a reaching scenario.
 3. Run `FIST_OPHIST` across boot, missions, editor, campaign and link surfaces. A missing op in one
