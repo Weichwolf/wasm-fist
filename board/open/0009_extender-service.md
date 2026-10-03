@@ -244,6 +244,35 @@ inventory must not be used as a patch list.
   nonlocal continuation, instruction/device time or complete output
   acceptance follows from this original evidence.
 
+- Actual production op44 FILEMGR step at parent28f4cc1:
+  `tests/test_detail_service.py` executes the actual shim branch and real
+  6032/DOS/clock against isolated LOW/MEDIUM/HIGH files. Eight reaching
+  parent failures become eight successful target/settings cases, verifying
+  complete guarded2052-byte tables, real size/handle/byte count and six
+  DOS commands. Original7660 filename offsets and default6877 sky selection
+  feed the loader; map-load consumes those settings. The selector remains
+  available to e339's actual task-error test.
+  The frozen1070-input full gate
+  `/tmp/wasm-fist-detail-filemgr-candidate/verify/run.lJ9mV1` passes133 tests
+  in283.688s, exact patches, sequential Native/WASM builds, six startup
+  cases and all178 existing flows with zero failures; gate/runner and all
+  additional600-ms/30s captures terminate0. Staged engine/extender bytes
+  equal641, all419 originals remain unchanged. Portable scoped receipt:
+  `tools/oracle/detail_service_production_case.json`.
+  Complete normal30s streams retain every parent641 frame/end byte, all43
+  sound-register rows and47 unmasked packets. Both2100-frame streams agree,
+  all original palettes/layouts/times match and the first10s video is equal;
+  the same28 pixel failures begin817/11704156us/byte8754. Strict comparison
+  still rejects missing final mixedPCM. Fresh actual missing-HIGH runs now
+  reach reason1 and WORD taskffff on both targets, versus parent641's0/0.
+  Their tick120 diagnostics do not equal the original CPU boundary;
+  complete error output still has39 versus38 frames, first failure
+  560798us/F36/palettebyte5. Ordinaryf64 return/CRT restart remains wrong.
+  This accepts normal detail FILEMGR/table/size/handle/sky ownership only.
+  Complete incoming/returned GP, raw/lazy flags, stack and instruction/device
+  time are open; CX/DX/DI gate lanes do not prove original incoming values.
+  Engine6de2 still drops the returned EBX and independent configuration AX.
+
 ## Next
 
 1. Consume0025's accepted640 startup allocations/shared task and preserve

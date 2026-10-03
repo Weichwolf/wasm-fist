@@ -1897,6 +1897,30 @@ static inline uint32_t fist_hm_index(uint32_t y, uint32_t x, unsigned d) {
     return ((y >> (32 - d)) << d) | (x >> (32 - d));
 }
 
+/* Original7660: select the sky function and detail filename, then execute6032.
+ * File size, DOS handle, carry branches and error stores belong to FILEMGR;
+ * no host file read supplies a replacement result. Source: detail_loader_case.
+ * Full GP/flags/stack and nonlocal continuation remain separate contracts. */
+static uint32_t fist_detail_load(uint16_t cx, uint16_t dx, uint16_t di) {
+    uint8_t *module = g_mem + FIST_EXT_BASE;
+    uint8_t *task = (uint8_t *)(uintptr_t)(*(uint32_t *)(module + 0xc93));
+    *(uint32_t *)(module + 0x3958) = 0x6877;                    /* 7666/766b */
+    module[0x395c] = 1;                                       /* 7670 */
+    if (task[0xcc] != 0) {                                    /* 7677/767e */
+        *(uint32_t *)(module + 0x3958) = 0x689a;              /* 7680/7685 */
+        module[0x395c] = task[0xcc];                          /* 768a/7690 */
+    }
+    uint32_t filename = task[0xd1] == 0 ? 0x76b6 :
+                        task[0xd1] == 1 ? 0x76d5 : 0x76f3;   /* 76a1/76c0 */
+    extern unsigned m_ext_FUN_0000_6032(int, uint16_t, uint16_t, uint16_t, unsigned, uint16_t);
+    int previous_flat = g_fist_ext_int;
+    g_fist_ext_int = 1;
+    uint32_t result = m_ext_FUN_0000_6032(0x3a20, cx, dx, (uint16_t)(uintptr_t)task,
+                                         (uint32_t)(uintptr_t)(module + filename), di);
+    g_fist_ext_int = previous_flat;
+    return result;
+}
+
 int fist_extender_gate(void) {
     uint8_t *dg = g_mem + DGROUP_LIN;
     uint16_t op = *(uint16_t *)(dg + 0xea10);
@@ -2010,39 +2034,7 @@ int fist_extender_gate(void) {
      * branch and never dispatches through the pointer.  Writing it changes nothing today and keeps the
      * transcription faithful. */
     if (op == 0x44 && g_ext_ready) {
-        uint8_t  *xb44 = g_mem + FIST_EXT_BASE;
-        uint32_t  tcb44_lin = ((uint32_t)(*(uint16_t*)(dg+0xea2e))<<4) + *(uint16_t*)(dg+0xea2c);
-        uint8_t  *tcb44 = g_mem + tcb44_lin;
-        xb44[0x395c] = 1;                                        /* 7670 */
-        if (tcb44[0xcc] != 0) {                                  /* 7677 */
-            *(uint32_t*)(xb44 + 0x3958) = 0x689a;                /* 7680/7685 */
-            xb44[0x395c] = tcb44[0xcc];                          /* 768a/7690 */
-        }
-        {   static const char *const dtl_lc[3] = { "low.dtl", "medium.dtl", "high.dtl" };
-            static const char *const dtl_uc[3] = { "LOW.DTL", "MEDIUM.DTL", "HIGH.DTL" };
-            unsigned lvl = tcb44[0xd1];                           /* 769b */
-            if (lvl > 2) lvl = 2;                                 /* 76a1/76c0: 0 -> low, 1 -> medium, anything else -> high */
-            {
-                const char *dd = getenv("FIST_DATADIR"); if (!dd) dd = "armoredfist";
-                char pth[512]; FILE *f = 0;
-                const char *const *cand[2] = { dtl_lc, dtl_uc };
-                for (int c = 0; c < 2 && !f; c++) {
-                    snprintf(pth, sizeof pth, "%s/FISTDATA/%s", dd, cand[c][lvl]); f = fopen(pth, "rb");
-                    if (!f) { snprintf(pth, sizeof pth, "%s/%s", dd, cand[c][lvl]); f = fopen(pth, "rb"); }
-                }
-                if (f) {
-                    size_t n = fread(xb44 + 0x3a20, 1, 2052, f);  /* 76aa/76af: count + both tables */
-                    fclose(f);
-                    if (getenv("FIST_DTLLOG"))
-                        fprintf(stderr, "[dtl] op44 loaded %s (%zu B) -> ext+0x3a20; count=%u\n",
-                                cand[0][lvl], n, *(uint32_t*)(xb44 + 0x3a20));
-                } else if (getenv("FIST_DTLLOG")) {
-                    fprintf(stderr, "[dtl] op44: %s not found under '%s'\n", dtl_uc[lvl], dd);
-                }
-            }
-        }
-        *(uint16_t*)(dg + 0xea10) = 0;
-        return 0;
+        return (int)fist_detail_load(g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi);
     }
     /* board:0025 op 0x3c -- MESH-RECORD UPLOAD (ext 0x11f4, patch 573).  The engine's 1a45 posts every
      * record of a .M00/.M08/.M16/.M32 file with cx = the byte count and dx:si = the record's scratch
@@ -3094,20 +3086,8 @@ int fist_extender_gate(void) {
              * (colormap-groundtruth part 2).  Measures the reduce source's distinct-count.  Corrupts the tile
              * build (bc9c writes to blockA), so tile metrics are invalid under this flag -- reduce-only test. */
             if (tile3918 && !getenv("FIST_NOTILEALIAS")) *(uint32_t *)(xb + 0xbc90) = tile3918;   /* bc90 REUSED = tile aligned base */
-            /* SKY-SETUP reconstruction (FUN_0000_7660).  89b0's tail builds the 5.SKY source [0x3911] only
-             * when [0x395c]!=0, and [0x3958] selects the sky-resample fn.  Both are set by the extender op
-             * op-table[0x22] -> 0x10da -> 0x7660, which lives in a Ghidra decompile GAP (0x7490..0x76fd not
-             * decompiled) so the port never ran it -> [0x395c] stayed 0 -> no windshield sky.  The original
-             * posts this op before op-0x18 map-load (dosbox-fist guest-RAM: original [0x395c]=1 while all
-             * four N.MEG find-firsts fail -- so the .MEG probe was NOT the setter).  Reconstructed verbatim
-             * from the pinned asm (objdump 0x7660): from the current TCB's +0xcc detail byte, pick the
-             * sky-render fn ptr [0x3958] and the sky flag [0x395c].  (oracle AZER1: TCB[+0xcc]=1.) */
-            {
-                uint8_t *t7660 = (uint8_t*)(uintptr_t)(*(uint32_t*)(xb+0xc93));   /* [0xc93] = current TCB */
-                uint8_t cc = t7660[0xcc];
-                if (cc == 0) { *(uint32_t*)(xb+0x3958)=0x6877; g_mem[FIST_EXT_BASE+0x395c]=1; }
-                else         { *(uint32_t*)(xb+0x3958)=0x689a; g_mem[FIST_EXT_BASE+0x395c]=cc; }
-            }
+            /* Original op44/7660 owns3958/395c before map-load. Consume those
+             * actual settings;89b0 is not a second sky-configuration owner. */
             if (getenv("FIST_FORCE395C"))       /* diagnostic override of the reconstruction above */
                 g_mem[FIST_EXT_BASE+0x395c] = (uint8_t)strtoul(getenv("FIST_FORCE395C"),0,0);
             g_fist_ext_int = 1;                    /* extender-mode flat FILEMGR INT 21h */
