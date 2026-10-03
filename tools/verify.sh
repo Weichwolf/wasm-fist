@@ -489,8 +489,8 @@ FLOWS=(
 # engine's 6a9c(read+checksum) / 6ade(create+write) INT-21h AH=3C/40 (a .FPL under FISTDATA/).  The
 # port resolves file paths through $FIST_DATADIR (re_out/fist_dos.c: datadir(), default "armoredfist"),
 # and DOSBox resolves them through the mounted directory -- so BOTH sides can be isolated purely at the
-# HARNESS level, without touching the faithful engine path.  For every WRITE flow we run the port
-# against a FRESH per-run cp -a copy of armoredfist/ (a scratch datadir) so:
+# HARNESS level, without touching the faithful engine path. Every engine run uses a fresh copy of
+# armoredfist/, including terrain, audio and other read-only flows, so:
 #   * the run starts from the identical pristine initial state every time (determinism), and
 #   * the repo's armoredfist/ is never mutated (`git status` stays clean after a full verify).
 # The DOSBox reference for these flows is captured the SAME way (tools/refcapture_ok.sh mounts a fresh
@@ -501,7 +501,10 @@ is_write_flow() { case "$WRITEFLOWS" in *" $1 "*) return 0;; *) return 1;; esac;
 
 run_target() { # $1=target $2=hz $3=ms/dumptick $4=mouse-script $5=out.ppm $6=datadir(optional) ; echo rc
   local t="$1" hz="$2" ms="$3" mouse="$4" out="$5" dd="${6:-}"
-  local ddenv=(); [ -n "$dd" ] && ddenv=(FIST_DATADIR="$dd")
+  if [ -z "$dd" ]; then
+    dd="$(fresh_datadir "$name.$t")" || { echo 2; return; }
+  fi
+  local ddenv=(FIST_DATADIR="$dd")
   # The 3rd flow field is normally FIST_RUNMS (wall-clock dump deadline).  For screens whose frame has a
   # TICK-PHASE-dependent layer (e.g. the campaign mission-marker blink FUN_1000_be47, gated on the engine
   # frame-timer [0x452]&0xf / &0x10), a wall-clock dump lands at a target-dependent [0x452] -> native and
@@ -530,9 +533,12 @@ run_target() { # $1=target $2=hz $3=ms/dumptick $4=mouse-script $5=out.ppm $6=da
   fi
 }
 
-# Fresh per-run scratch copy of the data dir for a WRITE flow (isolates engine writes from the repo).
+# One owner for fresh per-run data copies; edited round-trip inputs remain explicitly supplied.
 fresh_datadir() { # $1=tag ; echo path
-  local dd="$TMP/data.$1"; rm -rf "$dd"; cp -a "$ROOT/armoredfist" "$dd"; echo "$dd"
+  local dd="$TMP/data.$1"
+  rm -rf "$dd" || return 1
+  cp -a "$ROOT/armoredfist" "$dd" || return 1
+  echo "$dd"
 }
 
 # ---- EDITOR .FSG load->save ROUND-TRIP (file-level fixed-point, not framebuffer) ----
@@ -662,9 +668,10 @@ run_mission() { # $1=target $2=datadir [$3=battle] [$4=mode: ""=op-0x24 spawn, "
 run_terrain() { # $1=target $2=battle ; echo full-framebuffer ppm or ""  -- FIST_TERRAIN voxel render
   # The in-mission VOXEL TERRAIN render (689a sky/tile + 6980 raycaster, env-gated via FIST_TERRAIN so it
   # runs on the map-load spawn state).  Asserts the FULL 320x200 framebuffer is native<->wasm bit-identical
-  # -- terrain coverage for the hard invariant (board:0002).  READ-ONLY (no edit) -> use the repo datadir.
+  # -- terrain coverage for the hard invariant (board:0002).
   local t="$1" bt="${2:-}"
   local out="$TMP/tr.$t.ppm"
+  local dd; dd="$(fresh_datadir "$name.$t.terrain")" || { echo ""; return 1; }
   local bexp=(); [ -n "$bt" ] && bexp=(FIST_FSG_BATTLE="$bt")
   if [ "$t" = native ]; then
     # FIST_SIMRUN=1 on the NATIVE side is what makes this flow's comparison MEAN anything.  The capture
@@ -678,9 +685,9 @@ run_terrain() { # $1=target $2=battle ; echo full-framebuffer ppm or ""  -- FIST
     # gated on d549==0x1c, the cockpit view, which is not yet active); what it changes here is only the
     # tick source: no SIGALRM, one cooperative tick per pump, exactly like wasm.  The assertion below is
     # unchanged.  board:0002
-    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_SIMRUN=1 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >"$out.log" 2>&1 || { echo ""; return 1; }
+    timeout 90  env FIST_DATADIR="$dd" FIST_SIMRUN=1 FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NATIVE" >"$out.log" 2>&1 || { echo ""; return 1; }
   else
-    timeout 220 env FIST_DATADIR="$ROOT/armoredfist" FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >"$out.log" 2>&1 || { echo ""; return 1; }
+    timeout 220 env FIST_DATADIR="$dd" FIST_TERRAIN=1 "${bexp[@]}" FIST_MOUSE="$MC_MOUSE" FIST_MISSFB="$out" "$NODE" "$OUTJS" >"$out.log" 2>&1 || { echo ""; return 1; }
   fi
   output_check frame "$out" >/dev/null || { echo ""; return 1; }
   echo "$out"
@@ -693,10 +700,11 @@ run_audio() { # $1=target $2=dumptick(default 120) ; echo wav or ""  -- OPL FM a
   # [0x452]=120 OPL-init window.
   local t="$1" dt="${2:-120}"
   local out="$TMP/au.$t.$dt.wav"
+  local dd; dd="$(fresh_datadir "$name.$t.audio")" || { echo ""; return 1; }
   if [ "$t" = native ]; then
-    timeout 90  env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK="$dt" FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NATIVE" >"$out.log" 2>&1 || { echo ""; return 1; }
+    timeout 90  env FIST_DATADIR="$dd" FIST_DUMPTICK="$dt" FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NATIVE" >"$out.log" 2>&1 || { echo ""; return 1; }
   else
-    timeout 240 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK="$dt" FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NODE" "$OUTJS" >"$out.log" 2>&1 || { echo ""; return 1; }
+    timeout 240 env FIST_DATADIR="$dd" FIST_DUMPTICK="$dt" FIST_OPL=1 FIST_SB=1 FIST_AUDIO_WAV="$out" FIST_FBDUMP="$TMP/au.$t.$dt.ppm" "$NODE" "$OUTJS" >"$out.log" 2>&1 || { echo ""; return 1; }
   fi
   output_check pcm "$out" >/dev/null || { echo ""; return 1; }
   echo "$out"
@@ -708,10 +716,11 @@ run_audio_reglog() { # $1=target ; echo reglog-path or ""  -- port engine OPL no
   # menu music has played; FIST_SB/FIST_OPL select the OPL device-3 sequencer (behaviour-neutral otherwise).
   local t="$1"
   local out="$TMP/aureg.$t.reglog"          # NB separate line: $t must be set before it is used (set -u)
+  local dd; dd="$(fresh_datadir "$name.$t.reglog")" || { echo ""; return 1; }
   if [ "$t" = native ]; then
-    timeout 120 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK=30000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NATIVE" >"$out.log" 2>&1 || { echo ""; return 1; }
+    timeout 120 env FIST_DATADIR="$dd" FIST_DUMPTICK=30000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NATIVE" >"$out.log" 2>&1 || { echo ""; return 1; }
   else
-    timeout 300 env FIST_DATADIR="$ROOT/armoredfist" FIST_DUMPTICK=30000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NODE" "$OUTJS" >"$out.log" 2>&1 || { echo ""; return 1; }
+    timeout 300 env FIST_DATADIR="$dd" FIST_DUMPTICK=30000 FIST_OPL=1 FIST_SB=1 FIST_OPL_REGLOG="$out" "$NODE" "$OUTJS" >"$out.log" 2>&1 || { echo ""; return 1; }
   fi
   [ -s "$out" ] || { echo ""; return 1; }
   echo "$out"
@@ -903,7 +912,7 @@ for row in "${FLOWS[@]}"; do
     continue
   fi
   # WRITE-ISOLATION: write flows run against a fresh cp -a scratch datadir (repo stays clean, run is
-  # deterministic from pristine initial state).  Read-only flows use the repo armoredfist/ directly.
+  # deterministic from pristine initial state). Other flows receive fresh data in run_target.
   ddN=""; ddW=""
   if is_write_flow "$name"; then detail+=" [isolated]"
     [ "$WHICH" != wasm ] && ddN="$(fresh_datadir "$name.nat")"

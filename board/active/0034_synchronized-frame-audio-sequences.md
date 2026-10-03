@@ -206,6 +206,23 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   pending635 still requires a complete111-test/full178-flow gate. Raw failed
   snapshots/logs are disposable; no production output is accepted from them.
 
+- Verification isolation correction: the111-test/exact-patch/two-build,
+  six-resource-start attempt `run.66aX8a/` was explicitly stopped with143
+  while the178-flow matrix was incomplete. Source audit found the inherited
+  normal, terrain, audio and OPL-register capture routes could still execute
+  directly against repository originals. All verification engine runs now
+  consume fresh per-target temporary data copies through the existing shared
+  copy owner; editor reload/simulation still receives its explicitly edited
+  isolated copy. Parent33bb8d6 fails the new mutation/pristine-input behavior
+  test; both corrected targets retain original input for six independent
+  normal/terrain/audio runs and leave fixture originals unchanged. All12
+  verifier tests pass. Real command `FIST_FLOWS='^(mainmenu|terrain-azer1|audio-opl-init)$'
+  bash tools/verify.sh both` passes3/0 with the frozen635 candidate binaries
+  from that attempt, using `/tmp/wasm-fist-isolation-check/`. All419 repository
+  original file hashes and inventory remain unchanged. This proves isolation
+  and those compared outputs only; no full-matrix or635 production acceptance.
+  Recreate the complete current112-test/full178-flow gate before acceptance.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

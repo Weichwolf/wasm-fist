@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 import shutil
 import struct
@@ -32,6 +33,15 @@ import os
 from pathlib import Path
 import sys
 import wave
+import json
+if os.environ.get('ISOLATION_LOG'):
+    datadir = Path(os.environ.get('FIST_DATADIR', os.environ['ORIGINAL_DATA']))
+    marker = datadir / 'isolation-marker'
+    before = marker.read_text()
+    assert before == 'original'
+    with open(os.environ['ISOLATION_LOG'], 'a') as log:
+        log.write(json.dumps({'datadir': str(datadir), 'before': before}) + '\\n')
+    marker.write_text('changed by this run')
 mode = os.environ.get('CAPTURE_MODE_WASM' if len(sys.argv) > 1 else 'CAPTURE_MODE', 'frame')
 if mode != 'missing':
     out = os.environ.get('FIST_MISSFB') or os.environ.get('FIST_FBDUMP')
@@ -50,12 +60,31 @@ sys.exit(7 if mode == 'failed' else 0)
 ''')
         self.fake.chmod(0o755)
 
-    def run_flow(self, flow, mode, target='native', wasm_mode='frame'):
+    def run_flow(self, flow, mode, target='native', wasm_mode='frame', isolation_log=None):
         env = dict(os.environ, NATIVE=str(self.fake), NODE=str(self.fake), OUTJS='wasm',
                    FIST_FLOWS=flow, CAPTURE_MODE=mode, CAPTURE_MODE_WASM=wasm_mode)
         env.pop('FIST_VERIFY_OUT', None)
+        if isolation_log:
+            env['ISOLATION_LOG'] = str(isolation_log)
+            env['ORIGINAL_DATA'] = str(self.root / 'armoredfist')
         return subprocess.run(['bash', str(self.root / 'tools/verify.sh'), target], env=env,
                               capture_output=True, text=True, timeout=15)
+
+    def test_every_read_only_run_uses_fresh_data_on_both_targets(self):
+        marker = self.root / 'armoredfist/isolation-marker'
+        marker.write_text('original')
+        log = Path(self.tmp.name) / 'isolation.jsonl'
+        for flow in ('mainmenu', 'terrain-azer1', 'audio-opl-init'):
+            with self.subTest(flow=flow):
+                result = self.run_flow('^'+flow+'$', 'frame', 'both', isolation_log=log)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(marker.read_text(), 'original')
+        rows = [json.loads(line) for line in log.read_text().splitlines()]
+        self.assertEqual(len(rows), 6)
+        self.assertEqual(len({row['datadir'] for row in rows}), 6)
+        self.assertTrue(all(row['before'] == 'original' for row in rows))
+        self.assertTrue(all(not Path(row['datadir']).is_relative_to(self.root / 'armoredfist')
+                            for row in rows))
 
     def test_empty_selection_fails(self):
         self.assertNotEqual(self.run_flow('^not-a-real-flow$', 'frame').returncode, 0)
