@@ -85,6 +85,13 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   architectural test inputs; no CPU time is adjusted. These source-only cases
   constrain the next typed get/put transport and pointer fix.
 
+- Consume0003's original CS/image mapping: task mode is a BYTE at123e9,
+  not the emitted WORD at12d59. The scratch typed-caller/SS/BYTE-owner
+  repair passes eight whole-memory target cases after eight parent failures,
+  including exchange-return, null pointer and nonzero adjacent byte inputs.
+  `task-mode-prototype/` remains a leaf/post-create-fragment proof;
+  production startup, broader handler and CPU/time acceptance stay open.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and

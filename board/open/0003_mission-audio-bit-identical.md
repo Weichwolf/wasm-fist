@@ -868,6 +868,22 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   acceptance. Thread the actual getter output; neither zero nor incomingAL
   can replace the measured exchange return contract.
 
+- The task-mode CS owner is also wrong in the emitted image: original
+  `MOV AL,CS:[2d59]` and `XCHG AL,CS:[2d59]` address image123e9,
+  while `DAT_1000_2d59` currently declares a WORD at code bytes12d59=ff78.
+  `task-mode-prototype/check-mode-mapping.py` verifies the complete56-byte
+  original code/data region against the image and derives the base from
+  the actual caller/getter segments. A scratch-only repair of this shared
+  BYTE owner, rebased SS pointer and typed get/put transport gives eight
+  complete16-MiB Native/WASM cases after eight reaching parent failures.
+  Cases include a nonzero adjacent-byte input, independent exchange return
+  and null pointer. The first pointer/caller-only prototype failed because
+  the stale WORD owner overwrote adjacent code; its artifacts remain in
+  `task-mode-prototype-excluded-missing-width-cs-base/`. No production code,
+  complete startup, handler depth/error fields, CPU/flags/time or PCM is
+  accepted by this leaf/post-create-fragment proof. Source and scoped target
+  proofs: `task-mode-prototype/{mode-mapping-proof.json,proof.json}`.
+
 ## Next
 
 1. Preserve the verified632/633 callee widths, early resource installation and
