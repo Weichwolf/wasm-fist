@@ -666,6 +666,20 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   the actual MEMMGR output when recovering the reached caller; do not seed BP
   from this measured value or claim an unproved general CPU-register owner.
 
+- Additional controlled original `222f` loaded-bit evidence is complete in
+  `engine-resource-skip/{check-source.py,source-proof.json}`: one descriptor
+  flag byte is set before the interval and restored only after the recorded
+  return. Actual TEST/JNZ/RET has three fetches/four boundaries, leaves the
+  whole 16-MiB guest memory unchanged and changes only ESP by two among GP
+  registers. Segments and raw flag cell are preserved; lazy state is TESTb
+  with operands/result80, not a materialized CPU flag return. All 39 frames,
+  27518 mixed samples and endpoint600ms still match the normal source output.
+  All interprocess baseline-memory differences are retained. This verifies
+  the caller's skip branch, not a general loaded-resource flow or port CPU
+  integration. The initial verifier transcribed C388 from a symbol name;
+  actual image/runtime instruction bytes both prove far operand0388. That
+  excluded verifier did not change a producer, source input or trace.
+
 ## Next
 
 1. Restore the reached early resource installation and `222f -> 26fc` live caller/width
