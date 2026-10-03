@@ -1807,7 +1807,16 @@ int         g_ext_eof;        /* KDV read-chunk CF-out: set by patch-084 (708b E
 static int  g_kdv_done;       /* intro finished (EOF reached) -> op 0x78 returns "animation complete" */
 extern int  g_fist_ext_int;   /* fist_dos.c: route INT 21h through the flat-mode FILEMGR while set */
 static const char g_ext_path_root[1] = { 0 };  /* FILEMGR path-root = empty string */
-static uint8_t    g_ext_kdv_tcb[0x1000];        /* dedicated extender current-TCB (see gate below) */
+
+/* Original KDV entry resolves extender[0xc93] and engine DGROUP:ea2c to
+ * the same task. Keep its filename, status and working state in that owner. */
+static uint8_t *ext_bind_engine_task(uint8_t *dg) {
+    uint32_t linear = ((uint32_t)*(uint16_t *)(dg + 0xea2e) << 4)
+                    + *(uint16_t *)(dg + 0xea2c);
+    uint8_t *task = g_mem + linear;
+    *(uint32_t *)(g_mem + FIST_EXT_BASE + 0xc93) = (uint32_t)(uintptr_t)task;
+    return task;
+}
 
 static void ext_module_init(void) {
     FILE *f = fopen("re_out/fist_image.bin", "rb");
@@ -1846,6 +1855,12 @@ static void ext_module_init(void) {
     *(uint32_t *)(xb + 0x622c) = 0;                                      /* resource dir: none */
     *(uint32_t *)(xb + 0x6238) = 0;                                      /* alt drive/path: none */
     *(uint32_t *)(xb + 0x0927) = 0x080b;                         /* a88/a8d: module DTA offset */
+    /* Original 84c0 runs before program execution, not first map-load.
+     * Its eight real allocations end with the bc98 release checkpoint.
+     * MOV AL,1 supplies allocation flags at every 36bf call; upper EAX,
+     * CPU transport and elapsed original execution remain separate contracts.
+     * Evidence: tools/oracle/memmgr_startup_case.json. */
+    m_ext_FUN_0000_84c0(1);
     g_ext_ready = (n == FIST_EXT_IMG_SIZE);
     fprintf(stderr, "[ext] KDV module loaded @g_mem+0x%x (%zu B), heap 0x%x..0x%x, fb->0x%x TCB->0x%x %s\n",
             FIST_EXT_BASE, n, FIST_EXT_HEAP, FIST_EXT_HEAP_TOP, 0xA0000, 0x90000,
@@ -3026,20 +3041,20 @@ int fist_extender_gate(void) {
              * 3772 ([0x90b]/[0x90f]), the persistent palette-reduction working buffers -- the 64 KB
              * color-distance MATRIX at [0xbc90] (0x10000-aligned, so bc9c's low-16 (col<<8|row) index math
              * lands in the 64 KB block), bc94/85c0/85c4/3909/390d/3918 -- and sets the bc98 FREE-CHECKPOINT
-             * that 89b0's opening 3322(&bc98) releases to.  This port had never driven 84c0, so [0xbc90]=0
-             * -> bc9c wrote through a near-NULL ptr (SIGSEGV).  [0xc93] is still the extender task here
-             * (0x90000), so 84c0's TCB+0x488 reset lands on the extender task, not the engine mission TCB.
+             * that 89b0's opening 3322(&bc98) releases to. Module initialization now also drives
+             * 84c0 before the intro; this existing map-load reinitialization binds [0xc93] to the
+             * engine mission task above, so 84c0's TCB+0x488 reset uses that task.
              * Runs once (map_loaded guard).  84c0 does no INT-21 (pure allocation) -> no ext-mode needed. */
             /* Task-load reinit of the extender bump allocator (FUN_0000_2f7c): the original runs 84c0 at
              * a FRESH task-load (registry empty), so bc90..bc98 register at indices 0..7 with the bc98
              * FREE-CHECKPOINT LAST -> 89b0's opening 3322(&bc98) then frees only per-map blocks ABOVE the
-             * checkpoint, keeping the matrix.  This port reaches op 0x18 with a STALE size-0 bc98 already
-             * registered at index 0 (a leftover checkpoint from the intro/menu heap), so without the reset
-             * 84c0's own bc98 registration DEDUPES away, bc98 stays at index 0, and 3322(&bc98) frees the
+             * checkpoint, keeping the matrix. Historically op 0x18 reached a stale size-0 bc98 at
+             * index 0; without the reset, 84c0's registration deduped that marker and 3322 freed the
              * whole registry (indices 0..7) -> zeroes [0xbc90] -> bc9c NULL-writes (SIGSEGV).  Forcing
              * 2f50=0 makes 84c0's first 36bf call 2f7c (2f50=[0x90b], 2f54=0) -> fresh registry, bc98 at
-             * index 7.  Verified: 3661(&bc98)->idx 7, 3322 preserves bc90.  The KDV intro heap is done by
-             * op 0x18 (2f54 was already 1, cursor already at base) -> the reset only drops the stale marker. */
+             * index 7. Verified: 3661(&bc98)->idx 7, 3322 preserves bc90. The intro startup repair
+             * does not establish the original map-load lifetime contract; keep this reset scoped
+             * to the existing map-load path until its original allocation/free trace is recovered. */
             *(uint32_t*)(xb+0x2f50) = 0;
             m_ext_FUN_0000_84c0(inbox);
             /* PRELOAD BLOCK A -- the extender's `rep movsd` memcpy (@lin 0x4708, src fs:[0x1f0]) fills
@@ -3331,11 +3346,8 @@ int fist_extender_gate(void) {
         if (df == -2) { const char *e = getenv("FIST_KDV_DUMPFRAME"); df = e ? atol(e) : -1; }
         if (df > 0) {
             g_fist_ext_int = 1;                    /* extender-mode INT 21h (flat FILEMGR) for the player */
-            /* OPEN: point the extender current-TCB [0xc93] at a dedicated block and copy the engine-written
-             * asset name (intro task +0xBA = "TITLE.KDV") into it (same OPEN as the op-0x78 path below). */
-            memcpy(g_ext_kdv_tcb + 0xBA, g_mem + 0x90000 + 0xBA, 16);
-            *(uint32_t *)(g_mem + FIST_EXT_BASE + 0xc93) = (uint32_t)(uintptr_t)g_ext_kdv_tcb;
-            fprintf(stderr, "[ext] KDV_DUMPFRAME setup-drive: OPEN (asset '%.13s')\n", g_ext_kdv_tcb + 0xBA);
+            uint8_t *task = ext_bind_engine_task(dg);
+            fprintf(stderr, "[ext] KDV_DUMPFRAME setup-drive: OPEN (asset '%.13s')\n", task + 0xBA);
             m_ext_FUN_0000_11cb(0, 0, 0, 0, 0);
             g_kdv_open = 1;
             while (g_kdv_frames < df && !g_ext_eof) {
@@ -3356,15 +3368,8 @@ int fist_extender_gate(void) {
         if (g_kdv_done) return (op == 0x78) ? 1 : 0;
         g_fist_ext_int = 1;                    /* extender-mode INT 21h (flat FILEMGR) for the player */
         if (!g_kdv_open) {
-            /* Point the extender current-TCB [0xc93] at a DEDICATED control block (not the engine's
-             * 16-bit intro task) and copy the engine-written asset name (intro task +0xBA) into it.
-             * Faithful: in the original the extender's current-TCB is a separate block from the engine
-             * intro task.  This matters because the player's MEMMGR error handler FUN_0000_0f64 does
-             * `*[0xc93] = 0xffff` -- with [0xc93] aliased to the engine intro task that would poison
-             * the task[0] abort flag e339 checks (spurious ljmp to the extender abort at 0xf9a4). */
-            memcpy(g_ext_kdv_tcb + 0xBA, g_mem + 0x90000 + 0xBA, 16);
-            *(uint32_t *)(g_mem + FIST_EXT_BASE + 0xc93) = (uint32_t)(uintptr_t)g_ext_kdv_tcb;
-            fprintf(stderr, "[ext] KDV OPEN (asset '%.13s' via extender TCB+0xBA)\n", g_ext_kdv_tcb + 0xBA);
+            uint8_t *task = ext_bind_engine_task(dg);
+            fprintf(stderr, "[ext] KDV OPEN (asset '%.13s' via extender TCB+0xBA)\n", task + 0xBA);
             if (getenv("FIST_KDV_TRACE")) {
                 extern unsigned long long fist_clock_now(void);
                 fprintf(stderr, "[ext] KDV open t=%.6f c452=%u b6e0=%u b6e6=%u\n",

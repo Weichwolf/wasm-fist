@@ -168,10 +168,21 @@ inventory must not be used as a patch list.
 
 ## Next
 
-1. Restore0025's observed84c0 startup allocation before the first KDV
-   lookup and original shared-task ownership. Prove both targets stop
-   raising the false normal37fd before wiring the nonlocal error boundary.
-   Then drive actual op44 FILEMGR/full returned EBX and original WORDffff
+Current follow-up evidence: `/tmp/wasm-fist-error-width-red/proof.json`
+reaches the real6032/DOS find and controlled-open failures on Native and
+WASM. The observer stops after the unchanged0f64 reason/status stores,
+before its unaccepted ordinary return; both stages/targets store WORD00ff
+instead of the original at-f57 WORDffff. All four cases preserve the guarded
+destination and actual command sequence, with no supplied CF/size/status
+result. Its staged engine is byte-identical to accepted639. The final
+diagnostic has four reaching failures and no setup errors; earlier compiler
+flag/tool-path setup failures are retained separately. This proves the
+width defect only; service/task nonlocal continuation and full output are
+still required. Accepted step640's startup/shared-task change is owned by0025.
+
+1. Consume0025's accepted640 startup allocations/shared task and preserve
+   the reaching regressions for the removed false normal37fd. Drive
+   actual op44 FILEMGR/full returned EBX and original WORDffff
    task store plus0f64→0f57→0f5d/main-loop continuation. Preserve638 DTA and
    accepted639 CF branches;0014 owns the independent configuration AX
    input. Require complete original error output as well as the normal

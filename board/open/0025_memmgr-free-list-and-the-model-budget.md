@@ -68,10 +68,40 @@ resize/compaction, and implement the original exhaustion/swap outcomes without s
   allocations and both targets own the wrong KDV task. Isolated Native/
   WASM experiments using the real84c0 before KDV plus the engine far task
   remove the false37fd/00ff state and retain all complete600-ms parent
-  frame/end bytes. Source first KDV still has an additional sky allocation;
+  frame/end bytes. Source first KDV still has an additional sound-bank allocation;
   no full table/GP/IRQ/time or production correction is accepted from this
   experiment. Keep the actual startup allocation, task ownership and
-  follow-up error/sky contracts distinct.
+  follow-up error/audio contracts distinct. The earlier sky attribution is
+  disproved: original77e2 calls6032 with the image's85a4 `dsounds.bin`, then
+  actual36bf receives EDX85b0, ECX134240, EBX4 and AL3 and returns at7832. A fresh
+  original baseline/observer pair preserves every39 frame/27518 mixed
+  sample/end600ms byte (`/tmp/wasm-fist-sky-allocation-source`). The named
+  directory retains its historical diagnostic label; sound-bank startup
+  belongs to0003, not the sky renderer. Restore the actual service and DOS
+  size/read contracts instead of inserting a fitted allocation.
+
+- Accepted production step640 drives the existing84c0 in the module
+  constructor and binds both KDV OPEN paths to the actual engine far task
+  through one owner; the private task and filename copy are removed.
+  `tests/test_memmgr_startup.py` has two passing methods (parent: three
+  failures, no setup errors); all six previous loader methods still pass.
+  The frozen1055-input unfiltered gate `run.p0jEr5` under
+  `/tmp/wasm-fist-640-complete` passes130 tests, exact patches, sequential
+  Native/WASM builds, six startup cases and all178 existing flows, durable0.
+  All419 original hashes/inventory remain unchanged. Receipt:
+  `tools/oracle/memmgr_initialization_production_case.json`; reproduce with
+  `FIST_WORKDIR=/tmp/wasm-fist-startup-check bash tools/check_flow.sh`. Actual Native constructor descriptors match
+  the source slot/size/alignment/AL flags and zero-size checkpoint. Both
+  complete600-ms outputs use the engine task with status/reason0; Native
+  has no0f64 callback. All2100 fresh30000-ms frame/end bytes and43 sound
+  register rows retain639 output. Full47 packets remain unmasked: Native
+  op68's upper word changes `f6680005` to `e6480005`, whereas WASM retains
+  `00000005`; full GP transport is still unaccepted. The same28 original
+  pixel failures start817 and strict comparison rejects missing final PCM.
+  Missing-HIGH production still first differs at560798us/F36/palettebyte5:
+  manualop44 bypasses6032, now with no false MEMMGR error. Existing map-load
+  reinitialization, original77e2 sound-bank allocation/device work, actual
+  file-service/nonlocal errors and complete original output remain open.
 
 ## Next
 
