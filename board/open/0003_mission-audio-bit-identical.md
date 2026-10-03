@@ -853,6 +853,28 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   This is an intentional Native debugger stop, not two-target architectural
   memory, complete output or pending634 production acceptance.
 
+- Patch634 exposes153c's actual WORD BX owner after every reached MUL
+  and preserves incoming BX on the empty chain; cae6 consumes it after
+  return. Explicit full incoming DWORDs replace uninitialized high-word
+  construction in app_entry,0007 and00d0. The void registrar signature stays.
+  `resource-bx/check-proof.py` verifies five reaching parent transport failures
+  plus three cross-target packet failures, then six complete startup cases
+  on both targets under original and default start fixtures. Normal/changed
+  0705/empty inputs produce018f/0023/e816; every600-ms frame/end byte agrees.
+  No startup producer is replaced with a test stub. All895 frozen code/input
+  files and captured/tested binary bindings agree. The unfiltered canonical
+  `scratch/verify/run.9hkvAE/` completes103 tests, exact patch checks, sequential
+  Native/WASM builds, the six new cases and all178 existing flows with zero
+  failures; durable `gate.exit` and `proof-final.exit` are0. Proof:
+  `resource-bx/proof.json`. This accepts only the BX/full-EBX data contract.
+  Complete30000-ms captures retain all2100 prior frame/end bytes and43 full
+  sound-register rows. All47 extender packets remain recorded; op68 still
+  differs (`f6e80008` Native / `00000008` WASM), also differing from original5.
+  Original palettes/layouts/times agree,28 pixel differences remain first817
+  /11704156us/byte8754, and strict comparison rejects absent final mixed port
+  PCM. Original loaderCF/overflow gueststack, CPU/IRQ/IF and instruction/device
+  work stay open; this gate does not establish complete original parity.
+
 - At base `a28706d`, controlled original mode-byte cases in
   `task-mode-controlled/{check-source.py,source-proof.json}` prove the
   getter preserves all upper24 EAX bits and returns mode42. The setter stores
@@ -886,9 +908,12 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
 
 ## Next
 
-1. Preserve the verified632/633 callee widths, early resource installation and
-   typed `222f -> 26fc` call. Recover153c's dynamic successful WORD output and
-   full incoming EBX through app_entry/00d0 intoe2fc. Consume the original
+1. Restore actual get354/put358 byte transport, the rebased SS pointer and
+   the source-proven CS BYTE owner through the original pairs and scratch
+   regressions above. Verify complete startup and both target matrices before
+   production acceptance. Preserve632/633 callee widths, early resource
+   installation, typed `222f -> 26fc` and634's dynamic WORD BX/full incoming
+   EBX transport. Consume the original
    normal/controlled/CRT/return-branch pairs above; scratch prototypes are not
    production acceptance. Keep abnormal overflow and unproved CF producers explicit.
    Wire original device initialization and consume the recovered intro registers. Recover

@@ -317,7 +317,7 @@ int swi(int intno) {
 }
 
 /* engine entry: app_entry @ linear 0x4 (Ghidra 0000:0004). __allregs -> 6 GP-register params. */
-extern void app_entry(undefined2, undefined2, undefined2, undefined2, undefined2, undefined2);
+extern undefined2 app_entry(undefined2, undefined2, undefined4, undefined2, undefined2, undefined2);
 
 void fist_input_pump(void);              /* scripted deterministic input (defined below) */
 extern int g_menu_ready;
@@ -1020,7 +1020,7 @@ static unsigned long long g_int8_last_clock;
     X(g_fist_ctx_bx) X(g_fist_03a9_dx) X(g_fist_fp_dx) X(g_fist_fp_cx) X(g_fist_r48_dx) X(g_fist_r48_cx) \
     X(g_fist_3e29_cx) X(g_fist_ext_esi) X(g_fist_ext_ecx) X(g_fist_ext_edx) X(g_fist_ext_edi) \
     X(g_fist_op50_si) X(g_fist_op50_dx) X(g_fist_op50_cx) X(g_fist_op50_edx) X(g_fist_op50_esi) X(g_fist_op50_edi) X(g_ext_edx) \
-    X(g_fist_ext_edx_out) X(g_fist_1345_bp) X(g_fist_054c_bx) X(g_fist_054c_cx) X(g_fist_054c_dx) \
+    X(g_fist_ext_edx_out) X(g_fist_1345_bp) X(g_fist_153c_bx) X(g_fist_054c_bx) X(g_fist_054c_cx) X(g_fist_054c_dx) \
     X(g_fist_render_di) X(g_fist_render_dx) X(g_mga_fade_es)
 #define FIST_ISR_SAVE(v)   __typeof__(v) isr_##v = v;
 #define FIST_ISR_RESTORE(v) v = isr_##v;
@@ -1733,6 +1733,7 @@ uint32_t g_fist_ext_esi;           /* PATCH 471: op-0x40 (e132) ESI lane = polyg
 unsigned short g_fist_ext_ecx, g_fist_ext_edx, g_fist_ext_edi;   /* PATCH 471: op-0x40 CX/DX/DI lanes */
 uint32_t g_fist_ext_edx_out;       /* PATCH 573: op-0x3c (e115) EDX result = the uploaded record's address in the model block */
 unsigned short g_fist_1345_bp;     /* PATCH 471: 1345 BP out = the MEMMGR list header (0x16d4/0x16f6/0x1718) */
+uint16_t g_fist_153c_bx;           /* PATCH 634: incoming/restored BX or the last reached resource product */
 unsigned short g_fist_054c_bx;     /* PATCH 473: 054c/bbc6 BX out = the pitch (077e over the Z delta) */
 /* PATCH 542: 054c also returns the 32-bit RANGE in CX:DX -- asm 0x558 `push %ax ; push %dx` then
  * 0x56f `pop %dx ; pop %cx`, so at return CX = the range LOW word and DX = the range HIGH word.

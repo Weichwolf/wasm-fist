@@ -297,6 +297,9 @@ void fist_sound_registers(uint16_t ax, uint32_t ecx, uint8_t dl);
 FistSoundRegisters fist_sound_get_registers(void);
 void fist_sound_trace(void);
 
+/* Resource registrar153c's actual WORD BX output; callers retain incoming EBX high bits. */
+extern uint16_t g_fist_153c_bx;
+
 
 /* ---- DOS loader environment (native_main sets these up before app_entry) ----
  * The Doug-Huffman extender/DOS loads the engine with a PSP + environment block and installs the

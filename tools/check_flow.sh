@@ -15,5 +15,6 @@ make check > "$RUN/patch.log" 2>&1
 make native NATIVE="$NATIVE" > "$RUN/native-build.log" 2>&1
 make wasm OUTJS="$OUTJS" > "$RUN/wasm-build.log" 2>&1
 sha256sum "$NATIVE" "$OUTJS" "${OUTJS%.js}.wasm" tools/verify.sh tools/compare_output.py > "$RUN/sha256.txt"
+python3 -B tools/check_resource_start.py --output "$RUN/resource-start" > "$RUN/resource-start.log" 2>&1
 # board:0033: preserve the compared buffers and the producer's exit status, including failed runs.
 FIST_VERIFY_OUT="$RUN" bash tools/verify.sh both 2>&1 | tee "$RUN/verify.log"

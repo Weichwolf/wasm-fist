@@ -92,6 +92,16 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   `task-mode-prototype/` remains a leaf/post-create-fragment proof;
   production startup, broader handler and CPU/time acceptance stay open.
 
+- Patch634 consumes0003's original153c normal/dynamic/empty WORD output
+  and full incoming EBX through app_entry/0007/00d0 into the first6c poster.
+  The void registrar ABI remains unchanged. Five parent transport failures
+  plus three cross-target failures become six complete startup cases on both
+  targets under both start fixtures. The frozen895-source unfiltered gate
+  `run.9hkvAE/` passes103 tests, exact patches, both sequential builds,
+  six new cases and all178 existing flows, durable exit0. Bounded proof:
+  `resource-bx/proof.json`; op68, task-mode caller/owner, loaderCF/overflow
+  stack, CPU/device/instruction timing and full mixed output remain open.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and

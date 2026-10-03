@@ -150,6 +150,19 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   captures and first remaining original failure. This establishes the bounded
   device change and existing matrix coverage; original sequence parity stays open.
 
+- Patch634 (0003), actual registrar BX/full incoming EBX data transport:
+  fresh complete matched SB-enabled30000-ms Native/WASM captures retain
+  all2100 previous frame/end bytes and43 complete sound-register rows.
+  Original palettes/layouts/times match; the same28 pixel failures start at
+  817/11704156us/byte8754. Final mixed port PCM remains absent and fails
+  strict comparison. Every47 extender packet is retained; only op68 differs
+  cross-target (`f6e80008` / `00000008`), also differing from original5.
+  The source/transport proofs belong to0003. The frozen895-source unfiltered
+  `run.9hkvAE/` passes103 tests, exact patches, sequential builds, six new
+  complete startup cases and all178 existing flows, zero failures and durable
+  exit0. Consume `resource-bx/proof.json`; complete sequence acceptance,
+  startup CPU/IRQ/IF and final mixer work remain open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

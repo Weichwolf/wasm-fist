@@ -535,6 +535,15 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   Complete600-ms frames/PCM/end then match. This is controlled source evidence,
   not unchanged-state startup or port CPU/IRQ/time/mixed-output acceptance.
 
+- Patch634's bounded BX/full incoming EBX data transport belongs to0003.
+  Its frozen895-source gate `run.9hkvAE/` passes103 tests, exact patches,
+  sequential builds, six complete startup cases and all178 existing flows,
+  durable exit0. Complete30000-ms captures keep all2100 frames/end bytes,
+  43 full sound-register rows and the first817 original pixel difference.
+  No clock, IRQ/IF, guest-stack overflow or CPU flag claim follows; absent
+  final mixed PCM still fails strict sequence acceptance. Consume
+  `resource-bx/proof.json`; retain the unequal op68 full packets.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
