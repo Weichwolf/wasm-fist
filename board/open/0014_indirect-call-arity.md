@@ -213,6 +213,18 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   real FILEMGR results; do not infer a universal returned handle or upper
   GP policy from the successful HIGH.DTL case.
 
+
+- Consume0009's original full normal-return proof in
+  `tools/oracle/detail_return_state_case.json`:89 fetched instructions,
+  25 complete register/segment/raw+lazyflag/control/time/16MiB boundaries
+  and23 exact instruction/RAM transitions retain EBX5 through e339/de89.
+  The successful task-status branch restores saved EAX/ESI with WORD
+  stack operations;6dfd receives EAX804. Actual WORD config loads2/4 then
+  SHR supply AX1/2, with the first value stored by c008. All39 original
+  frames/27518PCM/end600 remain unchanged; four negative verifier cases
+  fail. This strengthens the source contract for typed transport; the
+  production6de2 stale EBX/config AX and full port GP/flags/stack stay open.
+
 ## Next
 
 1. Recover0009's actual op44 FILEMGR/DTA initialization and returned GP lanes;

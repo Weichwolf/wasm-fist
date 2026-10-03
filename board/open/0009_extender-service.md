@@ -273,6 +273,26 @@ inventory must not be used as a patch list.
   time are open; CX/DX/DI gate lanes do not prove original incoming values.
   Engine6de2 still drops the returned EBX and independent configuration AX.
 
+
+- Original successful detail return/full-state proof at parent9f31777:
+  `tools/oracle/detail_return_state_case.json` and
+  `python3 -B tools/oracle/capture_detail_return_state.py --repo . --output
+  /tmp/wasm-fist-detail-return-state-public` recover all89 actual return
+  fetches and25 complete GP/segment/raw+lazyflags/control/time/16MiB
+  boundaries. The shared state/paging owner remains `file_error.gdb`.
+  Twenty-three original instruction transitions verify exact whole RAM:
+  DWORD near RETs7660→10df→0f57, saved service ESP,8-byte far frame,
+  e339's WORD stack saves/restores and actual zero-task branch, near returns
+  to6dfd, then independent WORD[8b49]/WORD[8b4b] loads/SHRs and c008 store.
+  Full EBX5 persists through the original gateway; EAX804 returns from
+  de89, while the config words2 and4 supply AX1 andAX2 separately.
+  Whole original39-frame/27518-PCM/end600 baseline/observer pairs agree;
+  a verify-only replay passes. Four verifier negatives reject a changed
+  saved ESP, wrong high near-return WORD, coherently changed raw flag and
+  missing boundary RAM. This is original source evidence, not port return,
+  flags/stack/IRQ/device-time or complete output acceptance. Consume it
+  alongside the dispatcher/error contracts before typed engine transport.
+
 ## Next
 
 1. Consume0025's accepted640 startup allocations/shared task and preserve
