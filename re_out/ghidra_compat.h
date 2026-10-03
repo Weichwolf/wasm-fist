@@ -310,7 +310,7 @@ void fist_sound_trace(void);
                                          tail points at the hardware/OS detection script (board:0017) */
 #define FIST_HWCFG_SEG 0x9b00u        /* linear 0x9b000: that script, byte-exact from the oracle machine */
 void fist_install_dgroup(void);       /* native_main: (re)install DGROUP service table after CRT clear */
-void fist_ensure_dlist_vecs(void);    /* native_main: install display-list element method vectors (si=0x174) */
+void fist_menu_enter(void);         /* native_main: enable scripted input at e714 screen-enter */
 
 /* ---- other Ghidra pseudo-intrinsics the decompile emits ---- */
 #define LOCK()   ((void)0)        /* x86 bus-LOCK prefix: no-op on a single-threaded host */

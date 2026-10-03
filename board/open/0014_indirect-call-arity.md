@@ -35,6 +35,17 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   exact patches, both builds and 178 existing flows, with durable exit0.
   The narrower repair does not establish full startup/output parity.
 
+- Patch 633 restores boot222f's source-proven four-argument far call:
+  CX=rebased DS, DX=`6b7e`, BX=`6b78`, BP from actual1345's existing output.
+  It also consumes0003's original early CRT0174 vector installation and
+  removes the delayed menu installation/retry. Four reaching parent failures
+  and eight complete-memory Native/WASM phase cases are retained in
+  `engine-boot-resource/`; unfiltered `run.Hw6Cpn/` completes 103 tests,
+  exact patches, both builds and 178 existing flows, durable exit0.
+  No dynamic153c return or full incoming-EBX transport repair is included.
+  Actual Native backtrace also exposes00d0's separate uninitialized high-word
+  reconstruction; app_entry alone cannot own the complete caller transport.
+
 - Consume0003's four original153c return-branch pairs in
   `resource-return-branches/`: empty and controlled carry exits preserve BX;
   one emitted descriptor leaves the dynamic dimensions product121. Both

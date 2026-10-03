@@ -728,6 +728,53 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   controlled `89ab` upper-word preservation remains required; the Native
   scratch typed222f/early-install prototype is not a two-target repair.
 
+- Patch 633 at base `cadd1fa` restores the original CRT223c
+  early0174 installation through the existing relocation-table owner and
+  boot222f's typed CX/DX/BX/BP arguments. BP consumes actual1345's published
+  output; no constant1718 is injected. The source-proven loaded-bit skip
+  remains. Delayed098 installation and133 MSPRITE0 retry are removed from
+  e714; its harness presentation boundary still enables scripted input there.
+  Original e714 starts with BE0E(4), without either inserted resource operation.
+- `engine-boot-resource/{check-partial.py,partial-proof.json}` reproduces four
+  reaching parent failures: Native misses all16 CRT vectors and passes invalid
+  boot-call arguments, while WASM traps at both wrong production signatures.
+  Eight current Native/WASM phase cases pass, including the existing three
+  failed variants and loaded-bit skip. Every 16-MiB target output is checked;
+  CRT comparison starts immediately after the last preceding DOS call and
+  accounts for every vector write. Earlier legacy interrupt/ES stores are
+  retained as input; they are not accepted as original CPU behavior. The actual
+  emitted RET helpers and real DOS dispatcher execute, and unexpected recovery
+  or successful-variant loader paths fail instead of being replaced with stubs.
+  All 892 frozen code/input files match. The unfiltered canonical gate
+  `scratch/verify/run.Hw6Cpn/` completed with durable exit0: all 103 tests,
+  exact patches, both sequential builds and 178 existing flows pass.
+  `engine-boot-resource/{check-proof.py,proof.json,proof-final.log}` rechecks
+  the full source archive and captured/tested binary bindings. Accept only the
+  early vector/data and boot-call arity repair. Dynamic153c BX output,
+  uninitialized incoming high EBX, guest CPU/flags/stack/IRQ/time, first817
+  and final mixed PCM remain open.
+
+- Fresh patch 633 production captures in `engine-boot-resource/` reach
+  end 30000 ms with 2100 full frames on each target, retaining every632 frame/end
+  byte. All original palettes/layouts/times agree; the same 28 pixel failures
+  remain, first817 at11704156us/byte8754. Strict full comparison still fails
+  absent final port PCM. All 43 complete sound-register records match between
+  Native/WASM. Their payloads retain632's values, but 15 timestamps change;
+  every old/new record is retained in `capture-diagnostic-proof.json`, not
+  discarded or accepted as original timing. The first gate shifts 2593 cycles;
+  the actual early4523-byte read consumes 9130 cycles from budget 9135 to5.
+  This is measured existing DOS/clock behavior, not a fitted total delay.
+- The verified 633 Native binary reaches boot222f with the source-backed
+  filename and CX/DX/BX/BP lanes, installs vector388=`0f69:306c`, and loads
+  MSPRITE0 with 40 registered entries before selector6c. Config220/7/1 remains.
+  The retained whole16-MiB debugger snapshot still posts inbox`5806e816`,
+  proving the remaining descriptor-offset transport. Backtrace shows both
+  app_entry and00d0 reconstruct uninitialized high words. Recover both full
+  incoming DWORD paths and actual153c's dynamic WORD output; neither may be
+  replaced by a fixed018f or cleared unknown high bits. The debugger's exit0
+  is an intentional observation stop, not a complete game run. All 418 assets
+  remain unchanged. These diagnostic limits also apply after the green full gate.
+
 - Original153c return branches are now directly measured in
   `resource-return-branches/{check-source.py,source-proof.json}`. Controlled
   empty first-length input takes14 fetches and returns toCB13 with unchanged
@@ -755,10 +802,11 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
 
 ## Next
 
-1. Restore the reached early resource installation and `222f -> 26fc` live caller
-   contract after the bounded WORD-access fix above, then153c return and its
-   fullEBX transport intoe2fc. Consume the original
-   normal/controlled/CRT pairs above; scratch prototypes are not production acceptance.
+1. Preserve the verified632/633 callee widths, early resource installation and
+   typed `222f -> 26fc` call. Recover153c's dynamic successful WORD output and
+   full incoming EBX through app_entry/00d0 intoe2fc. Consume the original
+   normal/controlled/CRT/return-branch pairs above; scratch prototypes are not
+   production acceptance. Keep abnormal overflow and unproved CF producers explicit.
    Wire original device initialization and consume the recovered intro registers. Recover
    the 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts; restore
    remaining mission/damage/weapon transport as reached. Supply actual instruction/event work to 0026 so

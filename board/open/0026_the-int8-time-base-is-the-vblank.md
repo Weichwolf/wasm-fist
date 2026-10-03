@@ -500,6 +500,15 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   completed 101 tests, exact patches, both builds and 178 existing flows,
   durable exit0. Production startup, first817 and final mixed PCM remain open.
 
+- Patch 633 consumes0003's actual original early CRT0174 install and
+  boot222f live operands. Four reaching parent failures now pass across eight
+  Native/WASM phase cases with complete16-MiB comparisons. Existing clock/DOS
+  owners execute; no total140-cycle charge or incomingBP constant is inserted.
+  All 892 frozen inputs match; unfiltered `run.Hw6Cpn/` completes 103 tests,
+  exact patches, both builds and 178 existing flows, durable exit0.
+  The shared relocation helper owns data writes, not original CPU flags,
+  guest stack, fetch retirement/CLI/IRQ delivery or final mixer timing.
+
 - Original153c controlled branch boundaries belong to0003's
   `resource-return-branches/`. Empty/CF-consumer cases take14/5 fetches and
   return normally; first/second table-overflow cases take14/35 but RET consumes

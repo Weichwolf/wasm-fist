@@ -1139,14 +1139,14 @@ void fist_queue_check(const char *where){
  *
  * DETERMINISM: the menu idle loop is a fixed point (renders the same frame every iteration -- proven
  * native<->wasm bit-identical), so injecting an event during it gives a timing-independent result.  We
- * key the script on the pump count AFTER menu-enter (fist_ensure_dlist_vecs); the exact count differs
+ * key the script on the pump count AFTER menu-enter (fist_menu_enter); the exact count differs
  * native vs wasm but the *outcome* (which item, which sub-screen) does not, so both converge to the same
  * stable sub-screen frame.  FIST_MOUSE selects the script:
  *   FIST_MOUSE="t:x:y:b; t:x:y:b; ..."   t = vblanks (INT-8s, 70.09 Hz) after the menu entry; x,y = PIXEL pos (0..319,0..199);
  *   b = button mask (bit0=left, bit1=right).  Steps fire in order as t is crossed; each move/button
  *   transition is delivered as the corresponding event(s).  A step with the same pos+buttons re-asserts
  *   position (idempotent).  't' can be scaled by FIST_INPUT_SCALE (default 1). */
-int      g_menu_ready = 0;                 /* set by fist_ensure_dlist_vecs (menu-enter) */
+int      g_menu_ready = 0;                 /* set by fist_menu_enter (menu-enter) */
 static uint32_t g_mouse_handler_lin = 0;   /* captured INT 33h fn 0x14/0x0c handler (linear) */
 static unsigned g_mouse_mask = 0;
 static unsigned g_vx = 0, g_vy = 0, g_vbtn = 0;   /* driver virtual mouse state (CX/DX/BX for fn 3) */
@@ -1741,26 +1741,11 @@ unsigned short g_fist_054c_cx, g_fist_054c_dx;
 unsigned short g_fist_render_di;   /* 2471<->writers: dest node cursor (in/out, advanced by ca2f/c962) */
 unsigned short g_fist_render_dx;   /* c4df->method->c962: per-type record code (dl=byte[type-0x1b74]) */
 
-/* fist_ensure_dlist_vecs(): install reloc section si=0x174 -- the DISPLAY-LIST ELEMENT method vectors
- * DGROUP:0x344..0x394 (far pointers into the engine service seg 0f69, incl. DGROUP:0x388 = 0f69:0x306c
- * = FUN_1000_26fc, the RESOURCE OPEN the driver's element-load thunk calls to open+alloc+read a screen
- * resource -- e.g. MAINMENU.MRL -- and store its loaded segment into the display-list descriptor's
- * word0).  In the original the Doug-Huffman CRT installs this at load (via the working far applier
- * f842) from FUN_1000_223c; in our port f842's C body is inert (Ghidra dropped its string-op segment
- * bases) AND applying it at the 223c CRT-init point corrupts the not-yet-ready DGROUP (breaks a later
- * f842 caller FUN_1000_5c3a -- see patch 091).  So install it in the loader role at the correct, later
- * time: menu/screen-enter (FUN_0000_e714), after all boot+intro init, before the first element paint
- * that dispatches through these vectors.  Idempotent (applies once; the section values are base-0
- * identity, so re-apply would be harmless anyway). */
-static int g_dlist_vecs_done;
-void fist_ensure_dlist_vecs(void) {
-    if (g_dlist_vecs_done) return;
-    g_dlist_vecs_done = 1;
-    g_menu_ready = 1;           /* menu-enter: scripted input may now be delivered */
-    int n = fist_apply_reloc_section(0x174, 1);
-    fprintf(stderr, "[fist] display-list element method vectors installed "
-                    "(reloc section si=0x174: DGROUP:0x344..0x394 -> seg 0f69; %d entries; "
-                    "0x388 = resource-open FUN_1000_26fc)\n", n);
+/* e714 is the presentation boundary at which scripted menu input is deliverable.
+ * Resource vectors are installed at their original early CRT223c site through
+ * fist_apply_reloc_section; common sprites are loaded by the startup153c call. */
+void fist_menu_enter(void) {
+    g_menu_ready = 1;
 }
 
 /* ---- Doug-Huffman EXTENDER SERVICE GATE (extender role of the shim) ----------------------------
