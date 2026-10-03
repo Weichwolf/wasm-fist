@@ -526,6 +526,15 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   SS resolves task1000:0. The port still discards the getter and uses stale
   SS literals in23bf. No total cycle charge or production CPU/IRQ proof follows.
 
+- Consume0003's controlled original mode/pointer paths in
+  `task-mode-controlled/`:15/15/13 fetches account for the exact BYTE
+  getter/exchange and nullable task-store branches. Full raw/lazy flags,
+  GP/segments/control and16-MiB writes are retained; the null path keeps its
+  two-cycle advance without a fitted delay. Architectural test state is
+  explicitly restored after observation, while time/budget remain untouched.
+  Complete600-ms frames/PCM/end then match. This is controlled source evidence,
+  not unchanged-state startup or port CPU/IRQ/time/mixed-output acceptance.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.

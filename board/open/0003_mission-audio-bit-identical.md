@@ -853,6 +853,21 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   This is an intentional Native debugger stop, not two-target architectural
   memory, complete output or pending634 production acceptance.
 
+- At base `a28706d`, controlled original mode-byte cases in
+  `task-mode-controlled/{check-source.py,source-proof.json}` prove the
+  getter preserves all upper24 EAX bits and returns mode42. The setter stores
+  incoming42/a5 to the task and CS byte but returns old42, preserving89ab7b.
+  Null SS task-pointer input skips the LES/task store and still exchanges the
+  CS mode. All complete GP/segments/raw+lazyflags/control states and16-MiB
+  interval writes match. Reached paths take15/15/13 fetches; the shorter null
+  path's two-cycle difference is retained, without a time or budget adjustment.
+  Architectural test inputs and, for the null case, observed normal flags are
+  restored only after the controlled return. All39 frames/27518 mixed samples/
+  end600ms then retain normal bytes. These are controlled byte/pointer proofs,
+  not natural unchanged-state startup, a port repair or full CPU/device/PCM
+  acceptance. Thread the actual getter output; neither zero nor incomingAL
+  can replace the measured exchange return contract.
+
 ## Next
 
 1. Preserve the verified632/633 callee widths, early resource installation and

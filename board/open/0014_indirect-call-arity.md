@@ -77,6 +77,14 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   and recover its pointer owner before restoring startup mode behavior.
   Source: `task-mode-registers/`; Native writer proof: `resource-bx/native-diagnostic/`.
 
+- Original controlled task-mode cases in0003's `task-mode-controlled/`
+  prove byte-width aliases explicitly: upper24 EAX bits89ab7b survive both
+  calls, getter returns42 and setter returns old42 after storing incominga5.
+  A null SS pointer skips only the packet path, retaining the CS exchange.
+  Complete source states/memory are checked before explicitly restoring the
+  architectural test inputs; no CPU time is adjusted. These source-only cases
+  constrain the next typed get/put transport and pointer fix.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and
