@@ -646,6 +646,26 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   Recover that original live call and register widths before moving installation
   or accepting a dynamic153c return. Never pad unknown inputs with zero.
 
+- Additional original live-BP provenance is complete in
+  `engine-live-bp/{check-source.py,source-proof.json}`. The 2293 fetched
+  instructions to boot222f take 2363 cycles, including 70 recorded callback
+  cycles. All 127 hardware BP changes from tick300 are retained. The last
+  BP producer is actual1345's third-list `MOV BP,1718` at image11355/runtime
+  2082:1cc5; whole GP/segments/flags match the single assignment, and the
+  remaining 29 fetches to222f preserve BP. Entry GP/segments/flags and all
+  39 frames/27518 samples/end600ms match the earlier source capture. Twelve
+  low-DOS bytes differ between the processes' complete entry memory snapshots;
+  all are retained explicitly and whole entry-memory equality is not claimed.
+- A debugger stop at current frozen Native222f confirms the existing
+  `g_fist_1345_bp` producer is1718, while2144's incoming parameter is0 and
+  vector388 is still0. That parameter cannot represent the updated live BP.
+  `engine-live-bp/port-entry-complete/diagnostic-proof.json` retains the entire
+  16-MiB target snapshot, state and binary hash. Debugger exit0 means the
+  intended stop, not a successful complete game run. The late TIMER519 hook
+  (exit124) and first GDB array-address fixture (exit1) are excluded. Reuse
+  the actual MEMMGR output when recovering the reached caller; do not seed BP
+  from this measured value or claim an unproved general CPU-register owner.
+
 ## Next
 
 1. Restore the reached early resource installation and `222f -> 26fc` live caller/width
