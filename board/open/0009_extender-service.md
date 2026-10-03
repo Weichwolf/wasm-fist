@@ -102,15 +102,44 @@ inventory must not be used as a patch list.
   complete original output remain open; configuration AX/returned EBX
   transport belongs to0014 with the original operands above.
 
+- Missing HIGH.DTL is now an original-backed reaching error case, not a
+  hypothetical service inventory entry. `tools/oracle/file_error_case.json`
+  proves CF1 at6044, the5e3a error branch, and nonlocal38e8→0f64→0f57→0f5d.
+  Four observed0f64 fetches store DWORD reason1 at0d82, load full TCB EBX
+  and store WORDffff in its status, preserving every other GP/segment/
+  raw+lazyflag/control field. Complete16-MiB interval writes contain only
+  those reason/status changes. The next fetch restores ESP from0f60;
+  the nested6032/7660 stack is abandoned. A normal helper return cannot
+  implement this contract. A fresh unobserved/observed error pair retains
+  all38 frames/27518 mixed samples/end600ms. Reproduce with `python3 -B
+  tools/oracle/capture_file_error.py --output /tmp/wasm-fist-file-error-source-final`.
+  Both accepted638 production targets still expose the failure: complete
+  error captures first differ at560798us/F event36/palette byte5 (170/0),
+  and independent cooperative tick120 memory diagnostics retain task0/
+  reason37fd rather thanffff/1. Their corrected DTA080b is preserved.
+  These memory ticks are not a matched original CPU boundary. Receipt:
+  `tools/oracle/file_error_port_case.json`; reproduce with `python3 -B
+  tools/capture_file_error_ports.py --native /tmp/wasm-fist-638-complete/production/native
+  --wasm /tmp/wasm-fist-638-complete/production/wasm/fistrun.js --node /usr/bin/node
+  --original /tmp/wasm-fist-file-error-source-final/baseline/sequence
+  --output /tmp/wasm-fist-file-error-ports-final`. This source/diagnostic
+  step accepts no port fix, error inventory, caller/IRQ/device time or
+  complete original frame/audio behavior.
+
 ## Next
 
-1. Build a current inventory from the original table and the shim's branches. For each op record
+1. Recover the missing-file producer through actual6032/5cc2 and the
+   nonlocal error boundary above. Preserve638's DTA storage/addressing;
+   do not force CF clear, return ordinary success after a task error, or
+   fit the observed palette deadline. Wire actual op44 FILEMGR and full
+   returned EBX;0014 owns the independent configuration AX input.
+2. Build a current inventory from the original table and the shim's branches. For each op record
    implemented/original-no-op/missing, the asm contract and a reaching scenario.
-2. Run `FIST_OPHIST` across boot, missions, editor, campaign and link surfaces. A missing op in one
+3. Run `FIST_OPHIST` across boot, missions, editor, campaign and link surfaces. A missing op in one
    battle's trace proves nothing about other surfaces.
-3. Audit the remaining candidates first: 0x04/10c9, 0x68/76fd, 0x6c/77e2, 0x74/6f17, 0x7c/77a4.
+4. Audit the remaining candidates first: 0x04/10c9, 0x68/76fd, 0x6c/77e2, 0x74/6f17, 0x7c/77a4.
    Confirm current handling and reachability before implementing. Mission sound 0x64 belongs to 0003.
-4. Recommendation: keep dispatch and operation bodies separate, with explicit TCB inputs/outputs;
+5. Recommendation: keep dispatch and operation bodies separate, with explicit TCB inputs/outputs;
    port one observed operation at a time and compare its memory writes and return lanes.
 
 ## Accept

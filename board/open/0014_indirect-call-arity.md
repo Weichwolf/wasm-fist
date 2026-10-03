@@ -204,6 +204,15 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   AX are unresolved. No CF/errors, archive parsing, GP/flags/stack/IRQ/time
   or complete original frame/audio acceptance follows.
 
+- Consume0009's original missing-file `file_error_case.json`: CF1 jumps
+  through5e3a/38e8 to0f64; its reason DWORD andffff task WORD precede
+  restoration of the saved service ESP and far return. A normal6032 or
+  error-helper return would preserve the wrong caller continuation.
+  Both638 targets still fail this reached case, recorded without masks in
+  `file_error_port_case.json`. Recover that service boundary alongside
+  real FILEMGR results; do not infer a universal returned handle or upper
+  GP policy from the successful HIGH.DTL case.
+
 ## Next
 
 1. Recover0009's actual op44 FILEMGR/DTA initialization and returned GP lanes;
