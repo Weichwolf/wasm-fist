@@ -69,6 +69,14 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   from the original5; retain full packets and recover upstream DOS/ambient
   registers. Source/probe evidence is not a production or generic-call repair.
 
+- Consume0003's original task-mode getter354/setter358 pair: actual returned
+  AL, inherited SS pointer and exchange outputs are proved over15 fetches
+  and whole16-MiB pairs. The current d99b discards the getter then calls358
+  without AL; Native receives stack-residue144. Old129 also uses stale SS
+  literals. Thread the actual getter output through the setter's byte type
+  and recover its pointer owner before restoring startup mode behavior.
+  Source: `task-mode-registers/`; Native writer proof: `resource-bx/native-diagnostic/`.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and

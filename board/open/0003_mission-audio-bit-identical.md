@@ -830,6 +830,29 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   This source/probe evidence does not accept the pending634 production patch,
   original CPU/IRQ/clock or final mixedPCM; the full existing matrix is still live.
 
+- Base `c18f2d6`, actual original task-mode get354/put358 startup pair:
+  `task-mode-registers/{check-source.py,source-proof.json}` accounts for all
+  15 fetches and16 boundaries. Getter354 reads the existing CS mode byte0
+  into AL, replacing incoming AX=`00ea`; setter358 consumes that returned
+  byte and exchanges it with CS mode2d59. Its SS:ea2c/ea2e resolves actual
+  task1000:0 and writes the byte at task+496. Every whole16-MiB stack/task/
+  exchange write and complete GP/segments/raw+lazyflags/control field matches.
+  Original far CALL/RETF materialize pending WORD ADD/OR flags; MOV itself
+  does not clear them. All39 frames/27518 mixed samples/end600ms and the
+  complete500..526 CPU trace retain normal bytes. Nonzero/null-pointer
+  cases and production CPU/IRQ/clock integration remain unproved.
+- The frozen634 Native first6c watchpoint diagnostic attributes all three
+  other whole-memory differences. 46b6 stores an uninitialized ES. d99b
+  discards getter354's byte and its argument-less vector358 calls23bf with
+  observed stack-residue AL144. The old129 SS literals `3a4bc/3a4be` resolve
+  another resource's packet and write physical76386, then CS mode12d59.
+  Original SS is a recovered operand; neither a guessed mode0 nor the stale
+  literal owns this contract. `resource-bx/native-diagnostic/proof.json`
+  retains all seven full16-MiB differences, the three writer backtraces,
+  actual first6c inbox018f and every4523 resource/5688 directory byte.
+  This is an intentional Native debugger stop, not two-target architectural
+  memory, complete output or pending634 production acceptance.
+
 ## Next
 
 1. Preserve the verified632/633 callee widths, early resource installation and

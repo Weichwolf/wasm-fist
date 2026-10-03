@@ -518,6 +518,14 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   All four intentional debugger stops explicitly fail complete stream/end
   validation; actual loader failure and full CPU/event integration stay open.
 
+- Original task-mode get354/put358 startup proof belongs to0003:
+  `task-mode-registers/` accounts for15 fetches and every stack/task write,
+  all GP/segments/raw+lazyflags/control fields and unchanged600-ms frame/PCM/end.
+  Far CALL/RETF materialize the pending original WORD ADD/OR flag state;
+  the byte getter/exchange do not justify clearing unrelated flags. Actual
+  SS resolves task1000:0. The port still discards the getter and uses stale
+  SS literals in23bf. No total cycle charge or production CPU/IRQ proof follows.
+
 ## Next
 
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
