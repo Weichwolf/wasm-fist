@@ -15,6 +15,26 @@ inside graphics machinery, while op 0x78's table entry is 0x11dd. Intro and seve
 have implementations. Current code handles 0x08, 0x44, 0x50, 0x5c and 0x60; the old missing-op
 inventory must not be used as a patch list.
 
+- Original detail-loader provenance, production base `c4cf756`: startup `2b:a88`
+  loads full EDX=`0000080b`, then `a8d` stores that DWORD in `ds:927`.
+  The paging-aware physical address is `130927`, not the guest flat address.
+  Both MOVs preserve every other GP/segment/control/raw+lazyflag field;
+  complete 16-MiB snapshots differ only at the pointer slot. The natural
+  `7660` op44 handler loads HIGH.DTL through actual6032. At `604a`, loading
+  the full DTA pointer changes EBX=`f0010000` to `0000080b`; WORD MOV BX
+  at `607c` then produces `00000005`. This is a FILEMGR operand contract,
+  not a generic mode-gate rule for clearing register upper words. The loader
+  returns EAX=`804`, ECX/EDX=`0`, EBX=`5`; actual de89 returns EAX=`2`
+  independently before e2df posts op68 with full EBX=`5`. Two natural
+  handlers and the caller path are in a complete 32,009-fetch source trace.
+  Three fresh 600-ms runs retain all39 original frames/27518 mixed samples.
+  Source receipt: `tools/oracle/detail_loader_case.json`; reproduce with
+  `python3 -B tools/oracle/capture_detail_loader.py --output
+  /tmp/wasm-fist-detail-loader-source`. This accepts no port behavior:
+  the shim still seeds a host DTA outside guest RAM and uses manual fread
+  for op44; 0014 owns the stale caller/result transport. Loader raw flags,
+  errors, instruction/device time and complete output remain unresolved.
+
 ## Next
 
 1. Build a current inventory from the original table and the shim's branches. For each op record

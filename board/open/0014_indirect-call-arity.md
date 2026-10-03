@@ -145,6 +145,15 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   repair and full target regressions are pending. This source proof accepts
   no port CPU/flags/stack/IRQ/time or complete original output.
 
+- Consume0009's fresh source-only detail-loader contract in
+  `tools/oracle/detail_loader_case.json`: actual initialization stores the
+  full DTA offset080b, and6032 loads that DWORD before replacing BX with
+  the saved WORD handle. Thus natural full EBX becomes5 through its actual
+  producer; the generic mode gate does not merely clear upper words.
+  Handler EAX804 and subsequent de89 EAX2 are independent returns. The
+  current6de2 still posts its pre-de89 parameter unchanged; source provenance
+  constrains the next typed result transport but does not accept that repair.
+
 ## Next
 
 1. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and
