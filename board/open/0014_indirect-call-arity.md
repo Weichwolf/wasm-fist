@@ -150,7 +150,8 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   full DTA offset080b, and6032 loads that DWORD before replacing BX with
   the saved WORD handle. Thus natural full EBX becomes5 through its actual
   producer; the generic mode gate does not merely clear upper words.
-  Handler EAX804 and subsequent de89 EAX2 are independent returns. The
+  Handler and actual de89 return EAX804. The later AX2 is a separate
+  configuration WORD load/shift in6de2, corrected by0009 below. The
   current6de2 still posts its pre-de89 parameter unchanged; source provenance
   constrains the next typed result transport but does not accept that repair.
 
@@ -173,6 +174,15 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   unchanged; only op68's saved handle changes8→5 in each full47-packet
   stream. Its upperDWORD still differs Native/WASM. Full GP/ES/raw+lazyflags,
   farstack/IRQ/time, loader errors and complete original output remain open.
+
+- Consume0009's corrected op44 return/configuration provenance in
+  `tools/oracle/detail_return_case.json`: actual de89 returns EAX804,
+  while6de2 later loads2→1 for c008 and4→2 for e2df from independent
+  configuration WORDs. The old6e00 row was mislabelled as a leaf return.
+  Keep both the returned full EBX and the actual shifted AX input; neither
+  a fitted handle5 nor a constant AL2 restores their producers. The
+  generated6de2 currently omits the8b4b load/shift before op68. Port repair
+  and complete original output/CPU/flags/time acceptance remain open.
 
 ## Next
 

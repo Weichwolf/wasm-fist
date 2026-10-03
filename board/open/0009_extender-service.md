@@ -24,8 +24,9 @@ inventory must not be used as a patch list.
   the full DTA pointer changes EBX=`f0010000` to `0000080b`; WORD MOV BX
   at `607c` then produces `00000005`. This is a FILEMGR operand contract,
   not a generic mode-gate rule for clearing register upper words. The loader
-  returns EAX=`804`, ECX/EDX=`0`, EBX=`5`; actual de89 returns EAX=`2`
-  independently before e2df posts op68 with full EBX=`5`. Two natural
+  returns EAX=`804`, ECX/EDX=`0`, EBX=`5`; actual de89 retains EAX=`804`.
+  The caller subsequently loads/shifts its configuration WORDs before e2df
+  posts op68 with full EBX=`5` and AX=`2`. Two natural
   handlers and the caller path are in a complete 32,009-fetch source trace.
   Three fresh 600-ms runs retain all39 original frames/27518 mixed samples.
   Source receipt: `tools/oracle/detail_loader_case.json`; reproduce with
@@ -43,6 +44,20 @@ inventory must not be used as a patch list.
   low handle5, but its Native/WASM upperDWORD still differs. Actual op44
   FILEMGR/DTA initialization and full returned register transport remain
   unresolved; this does not accept the generic service or full output.
+
+- Correct the earlier de89 EAX attribution with
+  `tools/oracle/detail_return_case.json`. The old detail-loader fixture's
+  `returned` row at6e00 is after MOV AX,[8b49], not the leaf return.
+  Actual6032/76fc/e339/de89 retain EAX804 through the true6dfd caller
+  boundary. The first configuration WORD2 shifts to1 for c008. A separate
+  MOV AX,[8b4b] at6e05 loads4 and SHR AX,1 gives2 before e2df/op68.
+  Full EBX5 and ECX/EDX0 persist through this path. The fresh complete
+  32,009-fetch trace and39-frame/27518-mixed-sample baseline/caller pair
+  preserve the600-ms endpoint. Reproduce:
+  `python3 -B tools/oracle/capture_detail_return.py --output
+  /tmp/wasm-fist-detail-return-source`. This source-only correction does
+  not accept port transport, raw flags, whole memory or instruction/device
+  time. Recover the actual configuration input instead of fitting AL2.
 
 ## Next
 
