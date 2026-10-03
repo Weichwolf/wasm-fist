@@ -526,7 +526,7 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   source executes eight instructions and returns EAX1/EBXf0010000; all other
   original GP/segment/lazy-flag state is preserved except ESP+4 on guest RET.
   The default image already holds220/7/1, so stores execute without changing
-  module bytes. The complete trace and all39frames/27518PCM/end600ms match the
+  module bytes. The complete trace and all 39 frames/27518PCM/end600ms match the
   preceding unprobed source bytewise. No guessed elapsed interval is inserted.
 - A controlled original run changes only incoming EAX/EBX, the three consumed
   TCB words and two adjacent table bytes during this same eight-instruction
@@ -717,6 +717,16 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   integration. The initial verifier transcribed C388 from a symbol name;
   actual image/runtime instruction bytes both prove far operand0388. That
   excluded verifier did not change a producer, source input or trace.
+
+- Consume0036's fresh original application fetch-state proof in
+  `engine-entry-registers/`: full EBX is `00000000` at cycle629918/budget82.
+  The complete original MZ image, all 1143 relocations and both DOS EXEC stack
+  stores account for every loaded-image byte; all 39 frames/27518 mixed samples
+  and end600ms match. Generated app_entry currently combines its WORD BX
+  parameter with an uninitialized high-word local. Recover a full incoming
+  DWORD owner rather than clearing unknown caller bits. The original153c
+  controlled `89ab` upper-word preservation remains required; the Native
+  scratch typed222f/early-install prototype is not a two-target repair.
 
 ## Next
 

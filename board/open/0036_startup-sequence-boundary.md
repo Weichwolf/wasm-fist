@@ -49,6 +49,23 @@ Device time belongs to 0026, mixed output to 0003, complete capture/comparison t
   Source, memory/phase regressions and 55-test scoped validation belong to 0026. Proof:
   `scratch/sequence-capture/mz-load/{proof.json,final-native-10s/,final-wasm-10s/}`.
   The full mixer origin and remaining startup instruction/device effects are still unproved.
+- Fresh unmodified original full-register capture at base `1d2e673` observes
+  stable application fetch `1119:0004` at cycle629918/budget82, with full
+  EBX=`00000000`. All eight complete GPRs, six segment values/bases, raw and
+  lazy flags, mode/control registers and whole 16-MiB memory are retained in
+  `engine-entry-registers/{check-source.py,source-proof.json}`. This is an
+  observed incoming DWORD, not permission to discard a caller's upper word.
+  DOS EXEC assigns WORD BX=0; the measurement also establishes the actual
+  inherited upper word for this normal start. Controlled `89ab` transport
+  evidence for153c remains with0003.
+- The complete 211212-byte loaded image matches FIST.DAT after all 1143
+  original MZ relocations and DOS EXEC's two CS/IP stack stores. Those stores
+  account for every three changed image bytes; both whole 16-MiB observer
+  snapshots are byte-identical. The earlier CS hardware watch fires inside
+  CPU_RET before its physical CS base/IP and final SP updates; it is explicitly
+  a transient implementation checkpoint, not an architectural return state.
+  Complete 39 frames/27518 mixed samples/end600ms are identical to the normal
+  baseline. No port full-register, final mixer or full-run parity follows.
 - Original fixture/capture provenance: `pic-dispatch-362/`; current content/timing comparisons are in 0034.
 - Audio origin remains unresolved: original first nonzero stereo sample 18,887 at 428,276 us
   comes from `SPKR`; the port's first counter is 6.538382 us late. Continue in 0003/0026.
