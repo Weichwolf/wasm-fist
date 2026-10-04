@@ -691,6 +691,25 @@ void fist_clock_cpu_ss_instruction(void)
     /* Normal core MOV/POP SS refunds its fetch and forces the following instruction. */
     cpu_prepare_instruction();
 }
+static void cpu_credit_cycles(unsigned count)
+{
+    uint64_t credit = (uint64_t)count * PIT_HZ_;
+    FistClock time = clock_now();
+    if (credit > time.fraction) {
+        --time.counts;
+        time.fraction += CPU_HZ_;
+    }
+    time.fraction -= (unsigned)credit;
+    clock_set(time);
+    g_cpu_time = time;
+    g_cpu_remaining += count;
+}
+void fist_clock_credit_cpu_fetch(void)
+{
+    /* Original CPU_Cycles++: do not dispatch PIC, rewind PIC_Ticks, or
+     * materialize flags. The caller has charged this instruction's fetch. */
+    cpu_credit_cycles(1);
+}
 void fist_clock_rep_movs(uint8_t *dst, const uint8_t *src, unsigned width, uint32_t count, int direction)
 {
     /* DOSBox DoString: fetch is refunded, a chunk reserves the available CPU budget,
@@ -735,16 +754,7 @@ void fist_clock_charge_dos_transfer(uint16_t value)
     if (remaining <= g_cpu_remaining) {
         fist_clock_charge_cpu_instructions(g_cpu_remaining - remaining);
     } else {
-        uint64_t credit = (uint64_t)(remaining - g_cpu_remaining) * PIT_HZ_;
-        FistClock time = clock_now();
-        if (credit > time.fraction) {
-            --time.counts;
-            time.fraction += CPU_HZ_;
-        }
-        time.fraction -= (unsigned)credit;
-        clock_set(time);
-        g_cpu_time = time;
-        g_cpu_remaining = remaining;
+        cpu_credit_cycles(remaining - g_cpu_remaining);
     }
 }
 static void cpu_io_delay(int write)

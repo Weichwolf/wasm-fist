@@ -57,6 +57,48 @@ class CpuSoftwareDosTest(unittest.TestCase):
         self.assertEqual(self.events[0]['arguments']['type'],kind)
         self.assertIn('FIST_INT_SOFTWARE=0x%xu'%kind,(ROOT/'re_out/fist_interrupt.h').read_text())
 
+    def test_continuous_actual_byte_execution_matches_complete_startup_and_both_handlers(self):
+        from cpu_execute_fixture import build, replay
+        directory=self.directory/'continuous'
+        source=self.original/'source'
+        receipts=replay(directory,source,build(directory,source))
+        self.assertEqual(len(receipts),2)
+        self.assertEqual([q['CPU_time'] for q in receipts],[1034,1034])
+
+    def test_missing_movss_fetch_credit_reaches_first_wrong_original_budget(self):
+        from cpu_execute_fixture import build, inputs, read
+        header=(ROOT/'re_out/fist_exec.h').read_text()
+        old='if(index==2)e->credit(e->opaque);'
+        self.assertEqual(header.count(old),1)
+        directory=self.directory/'missing-MOVSS-credit';source=self.original/'source'
+        runs=build(directory,source,header.replace(old,'/* Deliberate negative: lose CPU_Cycles++. */'))
+        packet,expected,_,_=inputs(directory,source)
+        rows=[q for name in ('prefix-fetches.jsonl','software-fetches.jsonl','following/fetches.jsonl','findfirst/fetches.jsonl') for q in read(source/name)]
+        def movss(q):
+            code=bytes.fromhex(q['fetched_code_hex']);at=0
+            while code[at] in (0x66,0x67,0x2e,0x36,0x3e,0x26,0x64,0x65,0xf2,0xf3):at+=1
+            return code[at]==0x8e and ((code[at+1]>>3)&7)==2
+        expected_rows=expected.splitlines()
+        reached=next(q for q in rows if movss(q))
+        first=next(i for i,line in enumerate(expected_rows) if line.startswith('fetch ') and
+                   int(line.split()[13],16)==reached['cpu_regs.ip.dword[0]'] and
+                   int(line.split()[16],16)==reached['segments'][1]['value'])+1
+        for target,run in runs:
+            with self.subTest(target=target,first=first):
+                output=directory/(target+'-output')
+                try:
+                    result=subprocess.run([*run,str(packet),str(source/'77e2.memory'),str(output),str(source/'game/FISTDATA')],
+                                          capture_output=True,text=True,timeout=30)
+                    actual=result.stdout.splitlines()
+                    self.assertGreater(len(actual),first)
+                    self.assertEqual(actual[:first],expected_rows[:first])
+                    a,b=actual[first].split(),expected_rows[first].split()
+                    self.assertEqual(int(a[1]),int(b[1])+1)
+                    self.assertEqual(int(a[3]),int(b[3])-1)
+                    self.assertEqual(a[5:],b[5:])
+                finally:
+                    for p in directory.glob(target+'-output-*'):p.unlink()
+
     def build_mutant(self,name,header):
         directory=self.directory/name;directory.mkdir()
         (directory/'fist_interrupt.h').write_text(header)

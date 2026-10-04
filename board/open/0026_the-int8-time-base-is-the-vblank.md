@@ -1171,16 +1171,54 @@ and47 unmasked service packets. Original palettes/layouts/times match;
 missing final mixedPCM. This accepts source/flag ownership, not application
 startup/IRQ execution, first817, complete audio/video or any broader WI.
 
+
+### Shared actual-byte instruction execution
+
+The shared `re_out/fist_exec.h` decodes the reached original instructions against
+one CPU/system/physical-memory owner. I/O, budget and callback adapters carry
+actual external owners; observer snapshots, source addresses, stopping and DOS
+host-service composition remain in tests. No captured state initializes runtime
+production. Unsupported instruction/control/fault paths fail explicitly.
+
+The public continuous regression executes1014 actual fetches through both DOS
+handlers/caller5df6 without intermediate reseeding. Both optimized Native32 and
+WASM match1034 complete CPU/time observations,52 whole RAM/provider/cache/VGA
+states and four host states. The actual shared clock owns MOVSS/REP fetch credits;
+its existing DOS-floor credit uses the same state update. The legacy translated
+SS entry still owns no decoded fetch. Losing MOVSS credit first differs at
+observation446/CS02dd:143f: time+1,budget-1,all58 CPU/system words unchanged.
+
+Verbatim original branch bodies/macros and DoString prove2112 operand-width/
+sequential-IP compositions and336 REP budget/address-wrap/direction/overlap
+compositions, including both REP prefixes. All19 observed words and whole256KiB
+physical memory match both release targets. A code-segment-sized sequential EIP
+substitution reaches10002->0002 with every other byte equal; a whole REP instead
+of one budget chunk loses the original remaining count4 and restart2000.
+Controlled budgets are not production PIC/IRQ evidence.
+
+The frozen1494-input gate run.X6VJuk passes165 tests in383.821s and exact patches.
+Two custom-output-directory setup failures are retained; frozen source remains
+unchanged through the recorded resumption. Sequential Native/WASM builds, six
+resource-start cases and all178 flows finish with no failures and durable0;
+419 originals remain unchanged. Full commands, source/binary hashes, causal
+scope and cleanup live in `tools/oracle/cpu_execute_production_case.json`.
+Fresh complete30000-ms streams retain all2100 previous frame/end bytes,43 sound
+rows and47 unmasked service packets. Original palettes/layouts/times match;
+28 pixel errors still begin817/11704156us/byte8754 and strict parity rejects
+missing final mixedPCM. This adopts the instruction owner into reproducible
+regression, not real application startup/IRQ execution or complete output.
+
 ## Next
 
-Version a reusable actual-byte producer using the current complete startup/DOS
-fixture and shared CPU flags/control, physical memory and real clock owners.
-Keep observer snapshots, stopping conditions and proof serialization in tests.
-Regress complete CPU/RAM/host contracts and the reached REP/MOVSS budgets on
-both targets before public execution adoption. Then transport actual
-CPU/system/RAM/provider/cache/VGA state from real application startup through
-handlers and IRQs before replacing legacy outer77e2/op6c transport.
-Captured snapshots are diagnostic inputs, never runtime initialization.
+Recover normal-core retirement at budget exhaustion and STI/POPF/IRET with
+actual pending PIC/device events before adopting the shared actual-byte producer
+in runtime startup. Preserve the public complete startup/DOS regression and
+original operand/address/IP-width and REP/MOVSS contracts. Keep snapshots,
+stopping and proof serialization in tests. Transport actual CPU/system/RAM/
+provider/cache/VGA state from real application startup through handlers and IRQs
+before replacing legacy outer77e2/op6c transport; recover each additionally
+reached instruction/control/host-service path from the original. Captured
+snapshots are diagnostic inputs, never runtime initialization.
 
 Consume physical_provider_case.json together with paging_control_case.json.
 Adopt the one CPU/system/physical owner only after actual callers, provider

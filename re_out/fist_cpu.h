@@ -176,6 +176,9 @@ static inline void fist_cpu_set_if(FistCpuState *cpu, int enabled)
  * context; it never initializes register/flag values or supplies guest work. */
 FistCpuState *fist_clock_bind_cpu(FistCpuState *cpu);
 void fist_clock_charge_cpu_instructions(unsigned count);
+/* MOV/POP SS and REP return the already charged normal-core fetch to
+ * CPU_Cycles. The translated C-only SS entry still owns no charged fetch. */
+void fist_clock_credit_cpu_fetch(void);
 static inline void fist_cpu_fetch(FistCpuState *cpu, uint32_t ip)
 {
     cpu->eip=ip;

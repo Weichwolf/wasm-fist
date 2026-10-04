@@ -428,6 +428,22 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   Every original layout/palette/time matches;28 pixel failures still start817/
   11704156us/byte8754 and strict parity rejects missing final mixedPCM.
 
+
+- Consume0026's shared actual-byte instruction/fetch-credit owner and
+  `tools/oracle/cpu_execute_production_case.json`. Public release regressions
+  match1014 actual fetches,1034 CPU/time observations,52 complete memory and
+  four host states without intermediate reseeding; original branch/REP source
+  compositions and reaching substitutions distinguish their width/budget causes.
+  The frozen1494 inputs pass165 tests/exact patches, then the documented
+  output-directory resumption passes both sequential builds/six startup cases/
+  all178 flows with durable0 and419 unchanged originals. Complete fresh30-second
+  Native/WASM production retains every2100 preceding frame/end byte,43 sound rows
+  and47 unmasked packets. Every original palette/layout/time matches;28 pixel
+  failures still begin817/11704156us/byte8754, and final mixedPCM is absent.
+  Actual application startup, thin-boundary PIC/IRQ retirement and complete
+  original sequence/surface acceptance remain open; this accepts a shared
+  instruction regression owner, not those runtime paths.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete
