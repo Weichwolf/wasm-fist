@@ -1,4 +1,4 @@
-# Read-only first IRQ0 frame at each distinct actual IVT/IDT destination.
+# Read-only first IRQ0 at each distinct IVT/IDT destination and reached system loads.
 set pagination off
 set confirm off
 python
@@ -10,7 +10,7 @@ program=shared.read_text().split('\npython\n',1)[1].rsplit('\nend\nrun',1)[0]
 nodes=[n for n in ast.parse(program).body if isinstance(n,ast.FunctionDef) and n.name in ('state','memory','physical') or isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='fields' for t in n.targets)]
 assert len(nodes)==4
 exec(compile(ast.fix_missing_locations(ast.Module(body=nodes,type_ignores=[])),str(shared),'exec'),globals())
-fields=fields+('cpu.stack.mask','cpu.stack.notmask','cpu.idt.table_base','cpu.idt.table_limit','cpu.gdt.table_base','cpu.gdt.table_limit','cpu.mpl','cpu.trap_skip','PIC_IRQActive','PIC_IRQCheck','CPU_IODelayRemoved','cpu.gdt.ldt_base','cpu.gdt.ldt_limit','cpu.gdt.ldt_value','cpu_tss.base','cpu_tss.limit','cpu_tss.selector','cpu_tss.is386','cpu_tss.valid','CPU_flag_id_toggle','cpu.direction','lastint')
+fields=fields+('cpu.stack.mask','cpu.stack.notmask','cpu.idt.table_base','cpu.idt.table_limit','cpu.gdt.table_base','cpu.gdt.table_limit','cpu.mpl','cpu.trap_skip','PIC_IRQActive','PIC_IRQCheck','CPU_IODelayRemoved','cpu.gdt.ldt_base','cpu.gdt.ldt_limit','cpu.gdt.ldt_value','cpu_tss.base','cpu_tss.limit','cpu_tss.selector','cpu_tss.is386','cpu_tss.desc.saved.fill[0]','cpu_tss.desc.saved.fill[1]','cpu.exception.which','cpu.exception.error','cpu_tss.valid','CPU_flag_id_toggle','cpu.direction','lastint')
 selected={};active=[];events=0;serial=0;seen=set();sparse=bytearray(16777216)
 def save(kind,index,full=False,extra=None):
  global serial
@@ -91,10 +91,36 @@ class TailCopy(gdb.Breakpoint):
          source_hex=raw.hex(),caller=caller.name(),source_line=caller.find_sal().line)
   TailReturned(q);self.enabled=False;return False
 TailCopy('MEM_BlockWrite')
+system_events=0;system_seen=set()
+class SystemReturned(gdb.FinishBreakpoint):
+ def __init__(self,label):
+  self.label=label;super().__init__(gdb.newest_frame(),internal=True)
+ def stop(self):
+  q=state();q.update(kind='after-system',label=self.label)
+  q['memory_file']='system-after-%d.memory'%self.label
+  (root/q['memory_file']).write_bytes(memory())
+  if self.return_value is not None:q['return_value']=int(self.return_value)
+  with (root/'system-events.jsonl').open('a') as f:f.write(json.dumps(q)+'\n')
+  return False
+class System(gdb.Breakpoint):
+ def __init__(self,name):
+  self.operation=name;super().__init__(name,internal=True)
+ def stop(self):
+  global system_events
+  args={k:int(gdb.parse_and_eval(k)) for k in (('limit','base') if self.operation in ('CPU_LGDT','CPU_LIDT') else ('selector',))}
+  key=(self.operation,tuple(args.items()))
+  if key in system_seen:return False
+  system_seen.add(key);system_events+=1;q=state();q.update(kind='before-system',label=system_events,operation=self.operation,arguments=args)
+  q['memory_file']='system-before-%d.memory'%system_events
+  (root/q['memory_file']).write_bytes(memory())
+  with (root/'system-events.jsonl').open('a') as f:f.write(json.dumps(q)+'\n')
+  SystemReturned(system_events);return False
+for name in ('CPU_LGDT','CPU_LIDT','CPU_LLDT','CPU_LTR'):System(name)
+
 trace=Fetch('fist_cpu_trace');trace.enabled=False
 Hardware('CPU_Interrupt');Iret('CPU_IRET')
 def exited(event):
- (root/'irq-completion.json').write_text(json.dumps(dict(exit_code=event.exit_code,hardware_events=events,selected=list(selected),active=active,serial=serial,fetches=sum(1 for line in (root/'irq-fetches.jsonl').open())))+'\n')
+ (root/'irq-completion.json').write_text(json.dumps(dict(exit_code=event.exit_code,hardware_events=events,selected=list(selected),active=active,serial=serial,system_events=system_events,fetches=sum(1 for line in (root/'irq-fetches.jsonl').open())))+'\n')
 gdb.events.exited.connect(exited)
 end
 run

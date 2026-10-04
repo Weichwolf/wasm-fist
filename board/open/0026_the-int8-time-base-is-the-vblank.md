@@ -785,15 +785,38 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   c71c533. The six strict PIT budget failures still reproduce per target;
   no port IRQ/IF/IRET/time, first817 or final mixedPCM fix is claimed.
 
+- Original system-load source extension at parent83bca05:
+  The source observer and `pit_irq_frame_case.json` retain four reached system loads
+  plus nine IRQ/IRET transitions,26 complete16MiB boundaries and all58 CPU/system
+  words, including cached TSS descriptors and exception fields. At15ms the actual
+  resident calls CPU_LGDT/LIDT/LTR and later restores the real IDT. LTR reloads
+  the descriptor, preserves raw TSS kind8 and writes its busy bit to the cache
+  and actual GDT. No LLDT call is reached. The complete137-frame/89258-sample/
+  end2000 output is unchanged. Eleven verifier negatives reject incomplete
+  system output, missing busy writes, cache corruption and the previous IRQ
+  defects. Evidence: /tmp/wasm-fist-cpu-irq-system; source/control capture,
+  fresh test-driven source replays and negatives finish0. Actual128-byte boot
+  tail input and per-run raw RAM hashes retain the previous attributed-input
+  scope; no cross-run RAM normalization or identical boot RAM is claimed.
+  The capture wall timeout is configurable and80s for this observer; emulated
+  endpoint remains2000ms. A preparatory32s wall timeout failed and is superseded,
+  not accepted. A private13-pair CPU/system prototype matches all58 words and
+  every16MiB on Native/WASM. Shared production helper integration and the full
+  existing matrix are separate pending work; no complete original video/PCM
+  improvement, actual caller/handler transport or timing acceptance is claimed.
+
 ## Next
 
-Consume pit_irq_frame_case.json for the actual CPU interrupt/return owner
-before connecting timer dispatch. Reuse FistCpuState and transport the real
-IDT/GDT/LDT/TSS, raw/lazy flags, CPL, direction and stack-width state. Recover
-actual descriptor reads, TSS inward stack selection, real16-bit and protected
-outer32-bit returns; retain complete field values (the reached tss.is386 is8,
-not a normalized1). Legacy scalar callers and zero-argument ISR calls do not
-supply that context. Regress complete CPU/RAM boundaries on both targets.
+Implement and finish the shared CPU/system owner's complete required gate.
+Then transport the complete CPU/system state through the actual startup callers,
+descriptor-table construction and handler execution before connecting timer
+dispatch. Consume pit_irq_frame_case.json for actual GDT/IDT/TSS loads and
+IRQ/IRET operations, including cached descriptors, lazy flags, CPL, direction
+and stack width. The reached tss.is386 is8, not a normalized1. Legacy scalar
+callers and zero-argument ISR calls do not supply that context. Cold paging,
+remaining handler instructions, task/V86/exception routes and alternate system
+loads need their original paths and reaching evidence. Regress complete CPU/RAM
+and timed full-output boundaries on both targets.
 
 Consume pit_event_case.json before changing PIT0 dispatch. Reuse the existing
 shared float PIC queue for actual timer initialization, control cancellation,

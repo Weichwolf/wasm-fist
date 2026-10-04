@@ -32,6 +32,9 @@ def main():
                            ('unfinished-IRQ-return', 'incomplete IRQ observer'),
                            ('changed-TSS-kernel-stack', 'complete CPU transition'),
                            ('missing-interrupt-stack-write', 'complete IRQ RAM transition'),
+                           ('missing-system-load', 'incomplete system load output'),
+                           ('missing-TSS-busy-write', 'complete system RAM transition'),
+                           ('changed-TSS-cache', 'complete system CPU transition'),
                            ('coherent-changed-caller-register', 'complete original IRQ reference changed')]:
         with tempfile.TemporaryDirectory(dir=root, prefix=name+'-') as temporary:
             clone = Path(temporary)/'evidence'; shutil.copytree(source, clone)
@@ -61,6 +64,24 @@ def main():
                 address = physical(after['segments'][2]['base']+(after['registers'][4] & after['cpu.stack.mask']), memory, after)
                 assert memory[address] != old[address]
                 memory[address] = old[address]; path.write_bytes(memory)
+            elif name == 'missing-system-load':
+                rows = lines(folder/'system-events.jsonl'); rows.pop()
+                write(folder/'system-events.jsonl', rows)
+            elif name == 'missing-TSS-busy-write':
+                rows = lines(folder/'system-events.jsonl')
+                a = next(q for q in rows if q.get('operation') == 'CPU_LTR')
+                b = next(q for q in rows if q['kind'] == 'after-system' and q['label'] == a['label'])
+                path = folder/b['memory_file']; memory = bytearray(path.read_bytes())
+                old = (folder/a['memory_file']).read_bytes(); physical = shared_physical(repo)
+                address = physical(a['cpu.gdt.table_base']+(a['arguments']['selector'] & ~7)+5, memory, a)
+                assert memory[address] != old[address]
+                memory[address] = old[address]; path.write_bytes(memory)
+            elif name == 'changed-TSS-cache':
+                rows = lines(folder/'system-events.jsonl')
+                a = next(q for q in rows if q.get('operation') == 'CPU_LTR')
+                b = next(q for q in rows if q['kind'] == 'after-system' and q['label'] == a['label'])
+                b['cpu_tss.desc.saved.fill[1]'] ^= 0x200
+                write(folder/'system-events.jsonl', rows)
             else:
                 # All boundary/fetch/header register records change together: semantic transitions
                 # still hold, but the immutable complete original observation must reject the claim.
@@ -91,7 +112,7 @@ def main():
                  source_fixture_sha256=digest(repo/'tools/oracle/pit_irq_frame_case.json'),
                  source_manifest_sha256=digest(source/'producers.json'), complete_original_acceptance=False)
     (root/'proof.json').write_text(json.dumps(proof, indent=2)+'\n')
-    print('PASS: all eight original IRQ completion/boot/TSS/frame/coherent-state/destination negatives reject; clones retired')
+    print('PASS: all eleven original IRQ/system completion/boot/TSS/frame/cache/coherent-state/destination negatives reject; clones retired')
 
 
 if __name__ == '__main__': main()

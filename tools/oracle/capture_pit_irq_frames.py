@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Recover original IRQ0 frames, TSS stack changes and IRET from matched captures."""
+"""Recover original system loads, IRQ0 frames and IRET from matched captures."""
 import argparse
 import ast
 import copy
@@ -17,6 +17,67 @@ ROOT = Path(__file__).resolve().parents[2]
 END_MS = 2000
 META = {'kind', 'index', 'serial', 'memory_file', 'num', 'type', 'oldeip',
         'vector_hex', 'vector_physical', 'use32'}
+SYSTEM_FIELDS = ('cpu.idt.table_base', 'cpu.idt.table_limit', 'cpu.gdt.table_base',
+                 'cpu.gdt.table_limit', 'cpu.gdt.ldt_base', 'cpu.gdt.ldt_limit',
+                 'cpu.gdt.ldt_value', 'cpu_tss.base', 'cpu_tss.limit', 'cpu_tss.selector',
+                 'cpu_tss.is386', 'cpu_tss.valid', 'cpu.mpl', 'cpu.trap_skip',
+                 'CPU_flag_id_toggle', 'cpu.direction', 'lastint',
+                 'cpu_tss.desc.saved.fill[0]', 'cpu_tss.desc.saved.fill[1]',
+                 'cpu.exception.which', 'cpu.exception.error')
+
+
+def system_transition(repo, folder, before, after, physical, constants):
+    """Verify reached original LGDT/LIDT/LTR and every CPU/RAM side effect."""
+    meta = {'kind', 'label', 'operation', 'arguments', 'memory_file', 'return_value'}
+    q = {k: copy.deepcopy(v) for k, v in before.items() if k not in meta}
+    memory = bytearray((folder/before['memory_file']).read_bytes())
+    assert len(memory) == 16777216
+    reads, writes = [], []
+
+    def read(address, width):
+        addresses = [physical((address+i)&0xffffffff, memory, q) for i in range(width)]
+        value = int.from_bytes(bytes(memory[p] for p in addresses), 'little')
+        reads.append(dict(linear=address, physical=addresses, width=width, value=value))
+        return value
+
+    operation = before['operation']; args = before['arguments']
+    assert before['kind'] == 'before-system' and after['kind'] == 'after-system'
+    assert before['label'] == after['label']
+    if operation in ('CPU_LGDT', 'CPU_LIDT'):
+        table = 'gdt' if operation == 'CPU_LGDT' else 'idt'
+        q['cpu.'+table+'.table_base'] = args['base']
+        q['cpu.'+table+'.table_limit'] = args['limit']
+        assert 'return_value' not in after
+    else:
+        assert operation == 'CPU_LTR' and after['return_value'] == 0
+        selector = args['selector']; address = q['cpu.gdt.table_base']+(selector & ~7)
+        assert selector & 0xfffc and not selector & 4
+        assert selector & ~7 < q['cpu.gdt.table_limit']
+        q['cpu.mpl'] = 0; raw = read(address, 8); q['cpu.mpl'] = 3
+        assert (raw >> 40) & 31 == constants['DESC_386_TSS_A'] and raw & (1 << 47)
+        # TaskStateSegment::SetSelector reloads the cache before making it busy.
+        q['cpu_tss.valid'] = 0
+        q['cpu.mpl'] = 0; assert read(address, 8) == raw; q['cpu.mpl'] = 3
+        q['cpu_tss.selector'] = selector; q['cpu_tss.valid'] = 1
+        q['cpu_tss.base'] = ((raw >> 16) & 0xffffff) | ((raw >> 32) & 0xff000000)
+        limit = (raw & 0xffff) | ((raw >> 32) & 0xf0000)
+        q['cpu_tss.limit'] = (limit << 12) | 0xfff if raw & (1 << 55) else limit
+        q['cpu_tss.is386'] = ((raw >> 40) & 31) & 8
+        raw |= 2 << 40
+        q['cpu_tss.desc.saved.fill[0]'] = raw & 0xffffffff
+        q['cpu_tss.desc.saved.fill[1]'] = raw >> 32
+        q['cpu.mpl'] = 0
+        for offset in (0, 4):
+            addresses = [physical(address+offset+i, memory, q) for i in range(4)]
+            value = (raw >> (offset*8)) & 0xffffffff
+            for i, p in enumerate(addresses): memory[p] = (value >> (i*8)) & 255
+            writes.append(dict(linear=address+offset, physical=addresses, width=4, value=value))
+        q['cpu.mpl'] = 3
+    expected = {k: v for k, v in after.items() if k not in meta}
+    assert q == expected, ('complete system CPU transition', before['label'],
+                           {k:(v, expected.get(k)) for k,v in q.items() if v != expected.get(k)})
+    assert memory == (folder/after['memory_file']).read_bytes(), ('complete system RAM transition', before['label'])
+    return dict(label=before['label'], operation=operation, reads=reads, writes=writes)
 
 
 def shared_physical(repo):
@@ -217,25 +278,29 @@ def verify(repo, root, reference=True):
         assert (root/'baseline'/('start-state.'+suffix)).read_bytes() == (root/'source'/('start-state.'+suffix)).read_bytes()
     folder = root/'source'; events = lines(folder/'irq-events.jsonl'); fetches = lines(folder/'irq-fetches.jsonl')
     completion = json.loads((folder/'irq-completion.json').read_text())
-    assert completion == dict(exit_code=0, hardware_events=128, selected=[1, 7, 56], active=[], serial=146, fetches=2196), 'incomplete IRQ observer'
+    assert completion == dict(exit_code=0, hardware_events=128, selected=[1, 7, 56], active=[], serial=146, system_events=4, fetches=2196), 'incomplete IRQ observer'
     assert len(events) == completion['serial'] and [q['serial'] for q in events] == list(range(1, len(events)+1)), 'incomplete IRQ events'
     hardware = [q for q in events if q['kind'] == 'hardware']
     boundaries = [q for q in events if 'memory_file' in q]
+    system = lines(folder/'system-events.jsonl')
+    assert len(system) == 8 and [q['label'] for q in system] == [1,1,2,2,3,3,4,4], 'incomplete system load output'
     assert len(hardware) == 128 and [q['index'] for q in hardware] == list(range(1, 129))
     assert len(boundaries) == 18 and len(fetches) == completion['fetches'], 'incomplete IRQ frame/fetch output'
-    assert {p.name for p in folder.glob('*.memory')} == {q['memory_file'] for q in boundaries}
+    assert {p.name for p in folder.glob('*.memory')} == {q['memory_file'] for q in boundaries+system}
     assert all(q['kind'] == 'fetch' and q['index'] in completion['selected'] and len(bytes.fromhex(q['fetched_code_hex'])) == 32 for q in fetches)
     tail = json.loads((folder/'shell-tail-copy.json').read_text())
     assert tail['caller'] == 'SHELL_Init' and tail['physical'] == tail['psp_segment']*16+128
     assert tail['size'] == 128 and tail['initialized_bytes'] == tail['count']+2
     assert tail['source_hex'] == tail['after_hex'] and len(bytes.fromhex(tail['source_hex'])) == tail['size']
     assert bytes.fromhex(tail['source_hex'])[:tail['initialized_bytes']].hex() == tail['defined_prefix_hex']
-    for q in boundaries:
+    for q in boundaries+system:
         memory = (folder/q['memory_file']).read_bytes()
         assert memory[tail['physical']:tail['physical']+tail['size']].hex() == tail['source_hex'], 'captured boot tail input changed'
     physical = shared_physical(repo); constants, offsets = source_constants(repo)
     transitions = [transition(repo, folder, a, b, physical, constants, offsets)
                    for a, b in zip(boundaries[::2], boundaries[1::2])]
+    system_transitions = [system_transition(repo, folder, a, b, physical, constants)
+                          for a,b in zip(system[::2], system[1::2])]
     for index in completion['selected']:
         selected = [q for q in boundaries if q['index'] == index]
         observed = [q for q in fetches if q['index'] == index]
@@ -251,6 +316,7 @@ def verify(repo, root, reference=True):
                 address = physical(q['segments'][1]['base']+q['cpu_regs.ip.dword[0]'], memory, q)
                 assert any(r['fetched_code_physical'] == address and bytes.fromhex(r['fetched_code_hex']) == memory[address:address+32] for r in match)
     original = dict(events=events, fetches=fetches, completion=completion, transitions=transitions,
+                    system_events=system, system_transitions=system_transitions,
                     boot_tail_contract={k:v for k,v in tail.items() if k not in ('source_hex', 'after_hex')},
                     capture_sha256=captures['source'], frames=137, mixed_samples=89258, endpoint_ms=END_MS)
     if reference:
@@ -258,7 +324,9 @@ def verify(repo, root, reference=True):
         assert case['original'] == original, 'complete original IRQ reference changed'
     proof = dict(scope='Read-only original IRQ0 at first distinct BIOS, loader and protected IDT destinations. '
                  'Complete matched 2000ms output, 128 hardware entries, 2196 handler fetches, 18 full16MiB boundaries '
-                 'and nine CPU_Interrupt/IRET transitions. Protected entry switches CPL3 to0 through the actual TSS; '
+                 'and nine CPU_Interrupt/IRET transitions. Four reached GDT/IDT/TSS loads preserve another eight '
+                 'full16MiB boundaries, cached descriptors and exception fields. No LLDT call is reached. '
+                 'Protected entry switches CPL3 to0 through the actual TSS; '
                  'return restores CPL3 with a32-bit frame and16-bit stack. Handler instructions are traced, not fully '
                  'interpreted. SHELL_Init copies uninitialized CommandTail suffix bytes from the host stack: '
                  'the raw per-run boot input and every full-RAM hash are retained separately from the stable '
@@ -268,13 +336,13 @@ def verify(repo, root, reference=True):
                  commit_parent=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip(),
                  original=original, original_source_inputs={str(p.relative_to(repo)): digest(p) for p in source_paths(repo)},
                  producer_manifest_sha256=digest(root/'producers.json'), original_files=len(originals), originals_unchanged=True,
-                 memory_sha256={q['memory_file']:digest(folder/q['memory_file']) for q in boundaries},
+                 memory_sha256={q['memory_file']:digest(folder/q['memory_file']) for q in boundaries+system},
                  boot_command_tail_copy=tail,
                  complete_original_acceptance=False,
                  reproduction=['python3 -B tools/oracle/capture_pit_irq_frames.py --repo . --output /tmp/wasm-fist-pit-irq-replay',
                                'python3 -B tools/oracle/capture_pit_irq_frames.py --repo . --output /tmp/wasm-fist-pit-irq-replay --verify-only'])
     (root/'proof.json').write_text(format_case(proof)+'\n')
-    print('PASS: original128 hardware entries/2196 fetches/18 full-RAM boundaries/nine IRQ-IRET transitions; complete137frame/89258PCM/end2000 retained')
+    print('PASS: original128 hardware entries/2196 fetches/26 full-RAM boundaries/13 IRQ-IRET-system transitions; complete137frame/89258PCM/end2000 retained')
     return proof
 
 
@@ -290,7 +358,7 @@ def capture(repo, root):
         command = (['gdb', '-q', '-batch', '-x', str(repo/'tools/oracle/pit_irq_frame.gdb'), '--args'] if name == 'source' else [])+[str(repo/'third_party/dosbox-fist')]
         wrapper.write_text('#!/usr/bin/env bash\nset -euo pipefail\nexec '+shlex.join(command)+' "$@"\n'); wrapper.chmod(0o755)
         env = {k:v for k,v in os.environ.items() if not k.startswith('FIST_') and k != 'DOSBOX'}
-        env.update(FIST_SEQUENCE_END_MS=str(END_MS), DOSBOX=str(wrapper), FIST_DETAIL_REPO=str(repo), FIST_DETAIL_OPERANDS_DIR=str(folder))
+        env.update(FIST_SEQUENCE_END_MS=str(END_MS), FIST_ORACLE_WALL_SECONDS='80', DOSBOX=str(wrapper), FIST_DETAIL_REPO=str(repo), FIST_DETAIL_OPERANDS_DIR=str(folder))
         with (root/(name+'.log')).open('w') as log:
             result = subprocess.run(['bash', 'tools/oracle/capture_sequence.sh', '2', str(folder)], cwd=repo,
                                     env=env, stdout=log, stderr=subprocess.STDOUT, timeout=90)
