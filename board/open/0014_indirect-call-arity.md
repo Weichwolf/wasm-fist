@@ -286,6 +286,17 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
  77e2/op6c/op68, GP/flags/nonlocal returns/IRQ/time and complete output remain
   unresolved. A host pointer is still not a guest logical register value.
 
+- Consume0003's complete original checkpoint source contract in
+  tools/oracle/device_checkpoint_case.json. Actual CALL7809 targets3322
+  and pushes DWORD780e; RET restores the actual ESP after two3661 calls
+  and one3376 call. Every126 added CPU/code/time transition and all eleven
+  full RAM boundaries are verified by the original ALU/condition owner.
+ 3661 supplies its index in ESI; the old DS:2f60 shim publication is not an
+  original store. Eight coherent/missing negatives and6/3/3 clock/reset/
+  configuration methods pass; full original output and419 files remain
+  unchanged. This accepts source contracts, not production77e2 checkpoint/
+  bank/task/CPU/IRQ/return transport or a new full matrix.
+
 ## Next
 
 1. Preserve642's actual normal EAX/fullEBX and independent configuration

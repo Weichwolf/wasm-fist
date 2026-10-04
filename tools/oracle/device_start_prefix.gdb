@@ -12,6 +12,9 @@ exec(compile(ast.fix_missing_locations(ast.Module(body=nodes,type_ignores=[])),s
 fields=fields+('cpu.stack.mask','cpu.stack.notmask')
 image=(repo/'re_out/fist_image.bin').read_bytes();ext_cs=None;cached=None;return_ip=None;watches=[]
 boundaries={0x77e2,0x77e9,0x1280,0x12ab,0x77ee,0x23c4,0x133a,0x77ff,0x7809}
+stop_ip=int(os.environ.get('FIST_DEVICE_PREFIX_END','0x7809'),0)
+assert stop_ip in (0x7809,0x780e)
+if stop_ip==0x780e:boundaries.update((0x3322,0x780e))
 def observe(q):
  ip=q['cpu_regs.ip.dword[0]'];base=int(gdb.parse_and_eval('MemBase'))
  address=physical((q['segments'][1]['base']+ip)&0xffffffff,cached,q)
@@ -26,7 +29,7 @@ class Fetch(gdb.Breakpoint):
  def stop(self):
   q=state();assert q['segments'][1]['value']==ext_cs
   observe(q)
-  if q['cpu_regs.ip.dword[0]']==0x7809:self.enabled=False
+  if q['cpu_regs.ip.dword[0]']==stop_ip:self.enabled=False
   return False
 trace=Fetch('fist_cpu_trace');trace.enabled=False
 class Entry(gdb.Breakpoint):

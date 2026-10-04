@@ -688,6 +688,20 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   unsupported memory/privilege paths and complete original time/output
   remain open; full flow coverage is not original sequence acceptance.
 
+- Consume0003's device_checkpoint_case.json for126 additional actual
+  startup/checkpoint instructions beyond the242-state prefix. All368 full
+  CPU states and eleven whole-RAM boundaries are verified; the decoder
+  uses actual original ALU/condition producers for all75 flag operations.
+  INC/DEC materialize incoming CF before changing the lazy tag, retaining
+  untouched var2/oldcf/prev_type. Raw CF and the INC/DEC operand state must
+  survive later normal-core exits. Eight coherent/missing-output negatives
+  reject invalid evidence, and fresh original39frame/27518PCM/end600 pairs
+  plus post-cleanup replay retain all output. Six clock/three reset/three
+  configuration methods pass both targets; accepted645 runtime is unchanged.
+  No new production gate, full caller/IRQ/IF timing or sequence acceptance
+  is claimed. The reached DWORD arithmetic/logical and INC/DEC flag types
+  still require integration in the shared CPU owner.
+
 ## Next
 
 Consume `sound_vector_init_case.json` before implementing the reached AX2503/2506

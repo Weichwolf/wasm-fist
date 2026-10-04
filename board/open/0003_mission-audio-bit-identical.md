@@ -1193,6 +1193,34 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   actual77e2/op6c/op68 task transport, post-reset ORb, bank/device/IRQ/IRET/
   IF, unsupported guest-memory paths and complete original parity stay open.
 
+- Original checkpoint-free source contract at645 parent2cdaf3a:
+  tools/oracle/device_checkpoint_case.json extends the same startup observer
+  through CALL7809 to actual3322 and return780e. All368 complete CPU states
+  consume the existing242-state prefix owner; every126 added transition
+  preserves full GP/segments/raw and lazy flags/control/code/address/time.
+  The decoded original opcodes and actual instructions.h/flags.cpp prove
+  all75 ALU/condition calls and every guest store; eleven complete16MiB
+  boundaries prove the full RAM footprint. Original3661 returns its index
+  in ESI and does not publish it into DS:2f60; the legacy C shim's store is
+  not an original operation. Eight missing/coherent negatives reject missing
+ 3322 RAM, short780e RAM, missing mixedPCM, false index publication, lostINC
+  carry/changed untouched var2, corrupted upperECX and a WORD-sized RET.
+  Fresh independent original captures and post-cleanup replay preserve all
+ 39 frames/27518 mixedPCM samples/end600 and419 originals. All complete
+  CPU/output records match the earlier preparation. Ten initial RAM bytes
+  differ across processes; no cross-process RAM equality is claimed. Each
+  complete current RAM transition uses its own original input without masks.
+  Six clock/three reset/three configuration regression methods pass both
+  targets in19.739/31.552/34.511s. All645 runtime sources remain unchanged;
+  its140-test/178-flow gate is prior evidence, not a new integration gate.
+  Commands live in the source case; evidence:
+  /tmp/wasm-fist-device-checkpoint-source-public and
+  /tmp/wasm-fist-device-checkpoint-negative-public. Superseded preparation
+  and completed isolated game copies retired241,356,811 bytes. This accepts
+  the reached original source path only. Production checkpoint/task/bank,
+  missing flag operations, device/IRQ/IRET/IF, first817 and final mixedPCM
+  remain open.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
@@ -1221,7 +1249,11 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
    through its real task owner: the guest f0010000 value and a port host
    pointer are different representations. Do not derive a full CPU state
    from legacy scalar callers or substitute a fitted guest pointer.
-   Consume `sound_bank_startup_case.json` to restore the actual77e2
+   Consume `device_checkpoint_case.json` for actual3322/3661/3376
+   instruction work, ESI index ownership and full RAM; preserve INC/DEC
+   carry and untouched lazy operand fields. Restore the reached missing
+   flag operations in the shared CPU owner. Then consume
+   `sound_bank_startup_case.json` to restore the actual77e2
    size/allocate/read/checkpoint path rather than inserting a fitted bank
    allocation. Wire original device initialization and consume the recovered intro registers. Recover
    the 14e0 completion IRQ, DMA/mixer demand and other channel-switch contracts; restore
