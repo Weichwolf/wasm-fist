@@ -12,6 +12,8 @@ assert len(nodes)==4
 exec(compile(ast.fix_missing_locations(ast.Module(body=nodes,type_ignores=[])),str(shared),'exec'),globals())
 fields=fields+('cpu.stack.mask','cpu.stack.notmask','cpu.idt.table_base','cpu.idt.table_limit','cpu.gdt.table_base','cpu.gdt.table_limit','cpu.mpl','cpu.trap_skip','PIC_IRQActive','PIC_IRQCheck','CPU_IODelayRemoved','cpu.gdt.ldt_base','cpu.gdt.ldt_limit','cpu.gdt.ldt_value','cpu_tss.base','cpu_tss.limit','cpu_tss.selector','cpu_tss.is386','cpu_tss.desc.saved.fill[0]','cpu_tss.desc.saved.fill[1]','cpu.exception.which','cpu.exception.error','cpu_tss.valid','CPU_flag_id_toggle','cpu.direction','lastint')
 selected={};active=[];events=0;serial=0;seen=set();sparse=bytearray(16777216)
+bootstrap=os.environ.get('FIST_ORACLE_BOOTSTRAP')=='1'
+boot_active=False;boot_finished=set();boot_context=0;boot_group=0;boot_fetches=0
 def save(kind,index,full=False,extra=None):
  global serial
  serial+=1
@@ -31,7 +33,7 @@ class Returned(gdb.FinishBreakpoint):
    first=selected[self.index]
    if q['cpu_regs.ip.dword[0]']==first['cpu_regs.ip.dword[0]'] and q['segments'][1]==first['segments'][1] and q['registers'][4]==first['registers'][4]:
     active.remove(self.index)
-    if not active:trace.enabled=False
+    if not active and not boot_active:trace.enabled=False
   return False
 class Hardware(gdb.Breakpoint):
  def stop(self):
@@ -55,6 +57,19 @@ class Iret(gdb.Breakpoint):
   Returned(index,'after-iret');return False
 class Fetch(gdb.Breakpoint):
  def stop(self):
+  global boot_fetches
+  if boot_active:
+   boot_fetches+=1
+   q=state();q.update(kind='boot-fetch',ordinal=boot_fetches,context=boot_context,group=boot_group,
+       architecture=int(gdb.parse_and_eval('CPU_ArchitectureType')),
+       auto_determine=int(gdb.parse_and_eval('CPU_AutoDetermineMode')),
+       normal_core=bool(gdb.parse_and_eval('cpudecoder == &CPU_Core_Normal_Run')))
+   m=memory();linear=(q['segments'][1]['base']+q['cpu_regs.ip.dword[0]'])&0xffffffff
+   address=physical(linear,m,q)
+   q.update(fetched_code_physical=address,fetched_code_hex=m[address:address+32].hex(),
+       memory_file='boot-fetch-%d-%d.memory'%(boot_group,boot_fetches))
+   (root/q['memory_file']).write_bytes(m)
+   with (root/'boot-fetches.jsonl').open('a') as f:f.write(json.dumps(q)+'\n')
   if not active:return False
   q=state();base=int(gdb.parse_and_eval('MemBase'));linear=(q['segments'][1]['base']+q['cpu_regs.ip.dword[0]'])&0xffffffff
   inferior=gdb.selected_inferior()
@@ -91,12 +106,17 @@ class TailCopy(gdb.Breakpoint):
          source_hex=raw.hex(),caller=caller.name(),source_line=caller.find_sal().line)
   TailReturned(q);self.enabled=False;return False
 TailCopy('MEM_BlockWrite')
-system_events=0;system_seen=set()
+system_events=0;system_seen=set();system_contexts={}
 class SystemReturned(gdb.FinishBreakpoint):
- def __init__(self,label):
-  self.label=label;super().__init__(gdb.newest_frame(),internal=True)
+ def __init__(self,label,operation):
+  self.label=label;self.operation=operation;super().__init__(gdb.newest_frame(),internal=True)
  def stop(self):
+  global boot_active
+  if boot_active and self.operation=='CPU_LTR':
+   boot_active=False;boot_finished.add(boot_context)
+   if not active:trace.enabled=False
   q=state();q.update(kind='after-system',label=self.label)
+  if bootstrap:q['context']=system_contexts[self.label]
   q['memory_file']='system-after-%d.memory'%self.label
   (root/q['memory_file']).write_bytes(memory())
   if self.return_value is not None:q['return_value']=int(self.return_value)
@@ -106,21 +126,29 @@ class System(gdb.Breakpoint):
  def __init__(self,name):
   self.operation=name;super().__init__(name,internal=True)
  def stop(self):
-  global system_events
+  global system_events,boot_active,boot_context,boot_group,boot_fetches
   args={k:int(gdb.parse_and_eval(k)) for k in (('limit','base') if self.operation in ('CPU_LGDT','CPU_LIDT') else ('selector',))}
-  key=(self.operation,tuple(args.items()))
+  context=active[-1] if bootstrap and active and selected[active[-1]]['cpu.pmode'] else 0
+  key=(context,self.operation,tuple(args.items()))
   if key in system_seen:return False
-  system_seen.add(key);system_events+=1;q=state();q.update(kind='before-system',label=system_events,operation=self.operation,arguments=args)
+  system_seen.add(key);system_events+=1;system_contexts[system_events]=context
+  if bootstrap and self.operation=='CPU_LGDT' and context not in boot_finished:
+   assert not boot_active
+   boot_active=True;boot_context=context;boot_group+=1;boot_fetches=0;trace.enabled=True
+  q=state();q.update(kind='before-system',label=system_events,operation=self.operation,arguments=args)
+  if bootstrap:q['context']=context
   q['memory_file']='system-before-%d.memory'%system_events
   (root/q['memory_file']).write_bytes(memory())
   with (root/'system-events.jsonl').open('a') as f:f.write(json.dumps(q)+'\n')
-  SystemReturned(system_events);return False
+  SystemReturned(system_events,self.operation);return False
 for name in ('CPU_LGDT','CPU_LIDT','CPU_LLDT','CPU_LTR'):System(name)
 
 trace=Fetch('fist_cpu_trace');trace.enabled=False
 Hardware('CPU_Interrupt');Iret('CPU_IRET')
 def exited(event):
- (root/'irq-completion.json').write_text(json.dumps(dict(exit_code=event.exit_code,hardware_events=events,selected=list(selected),active=active,serial=serial,system_events=system_events,fetches=sum(1 for line in (root/'irq-fetches.jsonl').open())))+'\n')
+ q=dict(exit_code=event.exit_code,hardware_events=events,selected=list(selected),active=active,serial=serial,system_events=system_events,fetches=sum(1 for line in (root/'irq-fetches.jsonl').open()))
+ if bootstrap:q.update(boot_fetches=boot_fetches,boot_finished=sorted(boot_finished),boot_groups=boot_group)
+ (root/'irq-completion.json').write_text(json.dumps(q)+'\n')
 gdb.events.exited.connect(exited)
 end
 run

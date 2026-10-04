@@ -28,7 +28,7 @@ SYSTEM_FIELDS = ('cpu.idt.table_base', 'cpu.idt.table_limit', 'cpu.gdt.table_bas
 
 def system_transition(repo, folder, before, after, physical, constants):
     """Verify reached original LGDT/LIDT/LTR and every CPU/RAM side effect."""
-    meta = {'kind', 'label', 'operation', 'arguments', 'memory_file', 'return_value'}
+    meta = {'kind', 'label', 'operation', 'arguments', 'memory_file', 'return_value', 'context'}
     q = {k: copy.deepcopy(v) for k, v in before.items() if k not in meta}
     memory = bytearray((folder/before['memory_file']).read_bytes())
     assert len(memory) == 16777216
@@ -258,7 +258,7 @@ def source_paths(repo):
                    'hardware/memory.cpp', 'shell/shell.cpp'))})
 
 
-def verify(repo, root, reference=True):
+def verify(repo, root, reference=True, bootstrap=False):
     producers = json.loads((root/'producers.json').read_text())
     for p, h in producers.items(): assert digest(p) == h, p
     originals = json.loads((root/'original-hashes.json').read_text())
@@ -278,22 +278,26 @@ def verify(repo, root, reference=True):
         assert (root/'baseline'/('start-state.'+suffix)).read_bytes() == (root/'source'/('start-state.'+suffix)).read_bytes()
     folder = root/'source'; events = lines(folder/'irq-events.jsonl'); fetches = lines(folder/'irq-fetches.jsonl')
     completion = json.loads((folder/'irq-completion.json').read_text())
-    assert completion == dict(exit_code=0, hardware_events=128, selected=[1, 7, 56], active=[], serial=146, system_events=4, fetches=2196), 'incomplete IRQ observer'
+    expected_completion = dict(exit_code=0, hardware_events=128, selected=[1, 7, 56], active=[], serial=146, system_events=4, fetches=2196)
+    if bootstrap: expected_completion.update(system_events=8, boot_fetches=9, boot_finished=[0,56], boot_groups=2)
+    assert completion == expected_completion, 'incomplete IRQ observer'
     assert len(events) == completion['serial'] and [q['serial'] for q in events] == list(range(1, len(events)+1)), 'incomplete IRQ events'
     hardware = [q for q in events if q['kind'] == 'hardware']
     boundaries = [q for q in events if 'memory_file' in q]
     system = lines(folder/'system-events.jsonl')
-    assert len(system) == 8 and [q['label'] for q in system] == [1,1,2,2,3,3,4,4], 'incomplete system load output'
+    count=completion['system_events']
+    assert len(system) == count*2 and [q['label'] for q in system] == [i for i in range(1,count+1) for _ in range(2)], 'incomplete system load output'
+    boot = lines(folder/'boot-fetches.jsonl') if bootstrap else []
     assert len(hardware) == 128 and [q['index'] for q in hardware] == list(range(1, 129))
     assert len(boundaries) == 18 and len(fetches) == completion['fetches'], 'incomplete IRQ frame/fetch output'
-    assert {p.name for p in folder.glob('*.memory')} == {q['memory_file'] for q in boundaries+system}
+    assert {p.name for p in folder.glob('*.memory')} == {q['memory_file'] for q in boundaries+system+boot}
     assert all(q['kind'] == 'fetch' and q['index'] in completion['selected'] and len(bytes.fromhex(q['fetched_code_hex'])) == 32 for q in fetches)
     tail = json.loads((folder/'shell-tail-copy.json').read_text())
     assert tail['caller'] == 'SHELL_Init' and tail['physical'] == tail['psp_segment']*16+128
     assert tail['size'] == 128 and tail['initialized_bytes'] == tail['count']+2
     assert tail['source_hex'] == tail['after_hex'] and len(bytes.fromhex(tail['source_hex'])) == tail['size']
     assert bytes.fromhex(tail['source_hex'])[:tail['initialized_bytes']].hex() == tail['defined_prefix_hex']
-    for q in boundaries+system:
+    for q in boundaries+system+boot:
         memory = (folder/q['memory_file']).read_bytes()
         assert memory[tail['physical']:tail['physical']+tail['size']].hex() == tail['source_hex'], 'captured boot tail input changed'
     physical = shared_physical(repo); constants, offsets = source_constants(repo)
@@ -319,9 +323,20 @@ def verify(repo, root, reference=True):
                     system_events=system, system_transitions=system_transitions,
                     boot_tail_contract={k:v for k,v in tail.items() if k not in ('source_hex', 'after_hex')},
                     capture_sha256=captures['source'], frames=137, mixed_samples=89258, endpoint_ms=END_MS)
+    if bootstrap:
+        from capture_resident_bootstrap import bootstrap_contract
+        original['bootstrap'] = bootstrap_contract(repo, folder, boot, system, events, fetches, physical)
+    if bootstrap:
+        shared=json.loads((repo/'tools/oracle/pit_irq_frame_case.json').read_text())['original']
+        for key in ('events','fetches','transitions','boot_tail_contract','capture_sha256','frames','mixed_samples','endpoint_ms'):
+            assert original[key]==shared[key], ('shared original IRQ reference changed',key)
+        assert [{k:v for k,v in q.items() if k!='context'} for q in system if q['context']==0]==shared['system_events']
+        bootstrap_original={k:original[k] for k in ('completion','system_events','system_transitions','bootstrap')}
+        bootstrap_original['shared_irq_case_sha256']=digest(repo/'tools/oracle/pit_irq_frame_case.json')
     if reference:
-        case = json.loads((repo/'tools/oracle/pit_irq_frame_case.json').read_text())
-        assert case['original'] == original, 'complete original IRQ reference changed'
+        filename = 'resident_bootstrap_case.json' if bootstrap else 'pit_irq_frame_case.json'
+        case = json.loads((repo/'tools/oracle'/filename).read_text())
+        assert case['original'] == (bootstrap_original if bootstrap else original), 'complete original IRQ reference changed'
     proof = dict(scope='Read-only original IRQ0 at first distinct BIOS, loader and protected IDT destinations. '
                  'Complete matched 2000ms output, 128 hardware entries, 2196 handler fetches, 18 full16MiB boundaries '
                  'and nine CPU_Interrupt/IRET transitions. Four reached GDT/IDT/TSS loads preserve another eight '
@@ -336,21 +351,25 @@ def verify(repo, root, reference=True):
                  commit_parent=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip(),
                  original=original, original_source_inputs={str(p.relative_to(repo)): digest(p) for p in source_paths(repo)},
                  producer_manifest_sha256=digest(root/'producers.json'), original_files=len(originals), originals_unchanged=True,
-                 memory_sha256={q['memory_file']:digest(folder/q['memory_file']) for q in boundaries+system},
+                 memory_sha256={q['memory_file']:digest(folder/q['memory_file']) for q in boundaries+system+boot},
                  boot_command_tail_copy=tail,
                  complete_original_acceptance=False,
                  reproduction=['python3 -B tools/oracle/capture_pit_irq_frames.py --repo . --output /tmp/wasm-fist-pit-irq-replay',
                                'python3 -B tools/oracle/capture_pit_irq_frames.py --repo . --output /tmp/wasm-fist-pit-irq-replay --verify-only'])
+    if bootstrap:proof['bootstrap_original']=bootstrap_original
     (root/'proof.json').write_text(format_case(proof)+'\n')
-    print('PASS: original128 hardware entries/2196 fetches/26 full-RAM boundaries/13 IRQ-IRET-system transitions; complete137frame/89258PCM/end2000 retained')
+    print('PASS: original128 hardware entries/2196 fetches/%d full-RAM boundaries/%d IRQ-IRET-system transitions; complete137frame/89258PCM/end2000 retained' % (len(boundaries)+len(system)+len(boot),len(transitions)+len(system_transitions)))
     return proof
 
 
-def capture(repo, root):
+def capture(repo, root, bootstrap=False):
     assert root.is_relative_to(Path('/tmp')); root.mkdir(parents=True, exist_ok=False)
     originals = {str(p.relative_to(repo)): digest(p) for p in (repo/'armoredfist').rglob('*') if p.is_file()}
     (root/'original-hashes.json').write_text(json.dumps(originals, indent=2)+'\n')
     paths = source_paths(repo)
+    if bootstrap:
+        paths += [repo/'tools/oracle'/name for name in ('capture_resident_bootstrap.py','resident_image.py','sb_irq_frame_case.json','pit_irq_frame_case.json')]
+        paths += [repo/'third_party/dosbox-build/dosbox-0.74-3/src/cpu'/name for name in ('lazyflags.h','core_normal/prefix_none.h')]
     paths += [Path(subprocess.check_output(['which', n], text=True).strip()).resolve() for n in ('gdb', 'python3')]
     (root/'producers.json').write_text(json.dumps({str(p): digest(p) for p in paths}, indent=2)+'\n')
     for name in ('baseline', 'source'):
@@ -359,11 +378,12 @@ def capture(repo, root):
         wrapper.write_text('#!/usr/bin/env bash\nset -euo pipefail\nexec '+shlex.join(command)+' "$@"\n'); wrapper.chmod(0o755)
         env = {k:v for k,v in os.environ.items() if not k.startswith('FIST_') and k != 'DOSBOX'}
         env.update(FIST_SEQUENCE_END_MS=str(END_MS), FIST_ORACLE_WALL_SECONDS='80', DOSBOX=str(wrapper), FIST_DETAIL_REPO=str(repo), FIST_DETAIL_OPERANDS_DIR=str(folder))
+        if bootstrap: env['FIST_ORACLE_BOOTSTRAP']='1'
         with (root/(name+'.log')).open('w') as log:
             result = subprocess.run(['bash', 'tools/oracle/capture_sequence.sh', '2', str(folder)], cwd=repo,
                                     env=env, stdout=log, stderr=subprocess.STDOUT, timeout=90)
         (root/(name+'.exit')).write_text(str(result.returncode)+'\n'); assert result.returncode == 0, (name, result.returncode)
-    return verify(repo, root, reference=False)
+    return verify(repo, root, reference=False, bootstrap=bootstrap)
 
 
 def main():

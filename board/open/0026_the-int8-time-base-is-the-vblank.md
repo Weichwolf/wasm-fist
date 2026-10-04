@@ -837,8 +837,51 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   prove the original MOV-SS budget credit and fully-linked read dirty-bit
   effects. Evidence:/tmp/wasm-fist-cpu-system-caller-preparation. Its CPL0/MIXED
   writable/user-page prototype is not a general paging owner or production
-  startup integration. The same instruction path is also reached in the
-  selected protected IRQ; its repeated busy-TSS path needs full-RAM boundaries.
+  startup integration. The repeated protected-IRQ busy-TSS
+  boundaries are now supplied by the accepted source extension below.
+
+
+- Accepted resident bootstrap source extension at parent531549e:
+  The existing IRQ observer has an optional bootstrap mode; the default keeps
+  its previous source contract. First startup and the actual selected protected
+  IRQ retain eighteen complete16MiB fetch boundaries and eight system API pairs,
+  alongside all128 hardware entries/2196 handler fetches/nine IRQ-IRET pairs.
+  Complete original137-frame/89258-PCM/end2000 output and419 originals remain
+  unchanged. Relocated resident bytes, complete reached SS AND CPU/RAM effects
+  and MOV-SS budget credit verify; other instruction interpretations remain open.
+  `resident_bootstrap_case.json` consumes the shared IRQ case rather than copying
+  its full trace. Reproduce with `python3 -B tools/oracle/capture_resident_bootstrap.py
+  --repo . --output /tmp/wasm-fist-resident-bootstrap-replay`; its --verify-only
+  mode verifies the same source. Five negatives finish0 and reject incomplete
+  fetch/RAM output, omitted busy clear, wrong AND tag and omitted MOV-SS credit.
+  Evidence:/tmp/wasm-fist-resident-bootstrap-source and
+  /tmp/wasm-fist-bootstrap-negatives-retry. A private decoder matches every58-word
+  CPU/system, four-clock and intermediate/final16MiB boundary on both targets
+  for both contexts. Omitting only the AND RAM write passes first startup but
+  fails repeated LTR with GP on both targets; final RAM alone still agrees.
+  Evidence:/tmp/wasm-fist-cpu-system-repeat-preparation. Duplicate private RAM
+  and games retired1563036796bytes after canonical replay. Prototype paging
+  remains CPL0/MIXED/present/writable/user only and is not a production bus.
+  Frozen1415 inputs bind run.7hF5Di:147 tests in260.263s pass, exact patches and
+  both sequential builds, six startup cases and all178 existing flows pass
+  with zero failures and terminal0. Completed matrix/build/game data retired
+  4862223653bytes; bound logs, compact startup records, frozen binaries and source
+  archive remain. Source verifies0 after cleanup. Receipt:
+  tools/oracle/resident_bootstrap_production_case.json. No production
+  startup/PIC/handler/first817/PCM improvement is claimed.
+  A private cache-aware InitPage observer now records six actual bootstrap
+  reads and twelve whole16MiB API boundaries. First startup sets PDE accessed
+  and PTE accessed/dirty on reads; repeated PG enable leaves those RAM bits
+  unchanged but starts with an empty linked-page list and invalid read/write
+  handlers, then relinks the actual RAM pages. Raw host pointers, physical
+  slots, lists and handler types remain per-run diagnostic evidence. Complete
+  CPU/time/RAM/cache transitions and original137/89258/end2000 output verify0.
+  Evidence:/tmp/wasm-fist-resident-paging-cache-preparation/page-proof.json.
+  Scope remains MIXED/CPL0/present writable user pages. Other permissions,
+  architectures, faults/MMIO and the mutable production bus remain open.
+  Older no-cache source and completed mutant RAM retired1764363388bytes;
+  current canonical source boundaries remain. This preparation is not runtime
+  integration or full original-output acceptance.
 
 ## Next
 
