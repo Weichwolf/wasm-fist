@@ -773,9 +773,15 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   Evidence: /tmp/wasm-fist-pit-irq-frame-source-accepted; capture, independent
   replay, negatives and post-cleanup verification exit0. Superseded prototypes,
   duplicate replay and isolated games retired1876048815bytes. The current
-  full check_flow.sh run.pTyl5c has143 tests in225.200s, exact patches, both
-  sequential builds and resource-start checks passing; the full178-flow
-  matrix is still running and has no final acceptance yet. Runtime remains
+  full check_flow.sh run.pTyl5c finishes0:143 tests in225.200s, exact patches,
+  both sequential builds, six resource-start cases and all178 existing flows
+  with zero failures. Immutable1409 source inputs and their archive remain
+  unchanged; full-matrix-receipt.json binds the tested binaries and logs.
+  Completed matrix captures and isolated resource-start data retired
+  4823073684bytes; compact logs, producer summaries, source archive and tested
+  binaries remain. All1409 source inputs, logs and retained binaries verify
+  unchanged; the source fixture verifies0 again after cleanup. Existing
+  filter/no-reference scopes retain their limits. Runtime remains
   c71c533. The six strict PIT budget failures still reproduce per target;
   no port IRQ/IF/IRET/time, first817 or final mixedPCM fix is claimed.
 
