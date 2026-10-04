@@ -1,21 +1,13 @@
 #ifndef FIST_INTERRUPT_H
 #define FIST_INTERRUPT_H
-#include "fist_cpu.h"
+#include "fist_ram.h"
 
 /* Recovered original cpu.cpp CPU_LGDT/LIDT/LTR, CPU_HW_Interrupt and CPU_IRET
  * operations. Caller owns and transports the complete CPU/system context.
- * Task/V86/fault delivery and cold/MMIO pages require their original paths;
+ * Task/V86/fault delivery and other physical device handlers require their original paths;
  * unsupported execution terminates rather than supplying successful guest work.
  * See board/0026 and tools/oracle/pit_irq_frame_case.json for reached coverage. */
-typedef struct {
-    uint32_t idt_base, idt_limit, gdt_base, gdt_limit;
-    uint32_t ldt_base, ldt_limit, ldt_value;
-    uint32_t tss_base, tss_limit, tss_selector, tss_is386, tss_valid;
-    uint32_t mpl, trap_skip, flag_id_toggle;
-    int32_t direction;
-    uint32_t lastint;
-    uint32_t tss_desc_low, tss_desc_high, exception_which, exception_error;
-} FistCpuSystem;
+
 
 enum {
     FIST_FLAG_IF=0x200u, FIST_FLAG_TF=0x100u, FIST_FLAG_DF=0x400u,
@@ -33,12 +25,12 @@ static inline uint32_t fist_descriptor_base(FistCpuDescriptor d)
 {
     return (d.low>>16) | ((d.high&255)<<16) | (d.high&0xff000000u);
 }
-static inline FistCpuDescriptor fist_cpu_load_descriptor(FistCpuState *cpu,
-        FistCpuSystem *sys, const uint8_t *ram, size_t size, uint32_t address)
+static inline FistCpuDescriptor fist_cpu_load_descriptor(FistCpuRam *bus, uint32_t address)
 {
+    FistCpuSystem *sys=bus->system;
     sys->mpl=0;
-    FistCpuDescriptor d={fist_cpu_ram_read(cpu,ram,size,address,4),
-                         fist_cpu_ram_read(cpu,ram,size,address+4,4)};
+    FistCpuDescriptor d={fist_ram_read(bus,address,4),
+                         fist_ram_read(bus,address+4,4)};
     sys->mpl=3;
     return d;
 }
@@ -60,33 +52,33 @@ static inline int fist_cpu_prepare_exception(FistCpuSystem *sys,unsigned num,uin
     sys->exception_which=num;sys->exception_error=error;
     return 1;
 }
-static inline int fist_cpu_descriptor(FistCpuState *cpu, FistCpuSystem *sys,
-        const uint8_t *ram, size_t size, uint32_t selector, FistCpuDescriptor *out)
+static inline int fist_cpu_descriptor(FistCpuRam *bus, uint32_t selector, FistCpuDescriptor *out)
 {
+    FistCpuSystem *sys=bus->system;
     uint32_t index=selector&~7u;
     uint32_t base=(selector&4) ? sys->ldt_base : sys->gdt_base;
     uint32_t limit=(selector&4) ? sys->ldt_limit : sys->gdt_limit;
     if(index>=limit) return 0;
-    *out=fist_cpu_load_descriptor(cpu,sys,ram,size,base+index);
+    *out=fist_cpu_load_descriptor(bus,base+index);
     return 1;
 }
-static inline int fist_cpu_ltr(FistCpuState *cpu,FistCpuSystem *sys,
-                               uint8_t *ram,size_t size,uint32_t selector)
+static inline int fist_cpu_ltr(FistCpuRam *bus,uint32_t selector)
 {
+    FistCpuSystem *sys=bus->system;
     if(!(selector&0xfffcu)) {
         sys->tss_valid=0;sys->tss_selector=0;sys->tss_base=0;
         sys->tss_limit=0;sys->tss_is386=1;
         return 0;
     }
     FistCpuDescriptor d;
-    if((selector&4) || !fist_cpu_descriptor(cpu,sys,ram,size,selector,&d))
+    if((selector&4) || !fist_cpu_descriptor(bus,selector,&d))
         return fist_cpu_prepare_exception(sys,13,selector);
     unsigned type=fist_descriptor_type(d);
     if(type!=1 && type!=9)return fist_cpu_prepare_exception(sys,13,selector);
     if(!fist_descriptor_present(d))return fist_cpu_prepare_exception(sys,11,selector);
     /* TaskStateSegment::SetSelector reloads its cached descriptor. */
     sys->tss_valid=0;
-    fist_cpu_require(fist_cpu_descriptor(cpu,sys,ram,size,selector,&d));
+    fist_cpu_require(fist_cpu_descriptor(bus,selector,&d));
     fist_cpu_require(fist_descriptor_present(d));
     sys->tss_selector=selector;sys->tss_valid=1;
     sys->tss_base=fist_descriptor_base(d);sys->tss_limit=fist_descriptor_limit(d);
@@ -95,10 +87,10 @@ static inline int fist_cpu_ltr(FistCpuState *cpu,FistCpuSystem *sys,
     sys->tss_desc_low=d.low;sys->tss_desc_high=d.high;
     uint32_t address=sys->gdt_base+(selector&~7u);
     sys->mpl=0;
-    for(unsigned i=0;i<8;++i) {
-        uint32_t value=i<4 ? d.low : d.high;
-        ram[fist_cpu_ram_address(cpu,ram,size,address+i,1)]=(uint8_t)(value>>((i&3)*8));
-    }
+    /* TaskStateSegment::SaveSelector -> GDTDescriptorTable::SetDescriptor ->
+     * Descriptor::Save performs two mem_writed calls, including on devices. */
+    fist_ram_write(bus,address,4,d.low);
+    fist_ram_write(bus,address+4,4,d.high);
     sys->mpl=3;
     return 0;
 }
@@ -106,23 +98,25 @@ static inline uint32_t fist_cpu_stack_advance(const FistCpuState *cpu, uint32_t 
 {
     return (esp & cpu->stack_notmask) | ((esp+delta) & cpu->stack_mask);
 }
-static inline void fist_cpu_push(FistCpuState *cpu, uint8_t *ram, size_t size,
+static inline void fist_cpu_push(FistCpuRam *bus,
                                  unsigned width, uint32_t value)
 {
+    FistCpuState *cpu=bus->cpu;
     uint32_t next=fist_cpu_stack_advance(cpu,cpu->esp,-(int)width);
-    fist_cpu_resident_write(cpu,ram,size,2,next&cpu->stack_mask,width,value);
+    fist_ram_resident_write(bus,2,next&cpu->stack_mask,width,value);
     cpu->esp=next;
 }
-static inline uint32_t fist_cpu_stack_read(FistCpuState *cpu,const uint8_t *ram,
-        size_t size,unsigned width,uint32_t *esp)
+static inline uint32_t fist_cpu_stack_read(FistCpuRam *bus,unsigned width,uint32_t *esp)
 {
-    uint32_t value=fist_cpu_resident_read(cpu,ram,size,2,*esp&cpu->stack_mask,width);
+    FistCpuState *cpu=bus->cpu;
+    uint32_t value=fist_ram_resident_read(bus,2,*esp&cpu->stack_mask,width);
     *esp=fist_cpu_stack_advance(cpu,*esp,width);
     return value;
 }
-static inline uint32_t fist_cpu_pop(FistCpuState *cpu,const uint8_t *ram,size_t size,unsigned width)
+static inline uint32_t fist_cpu_pop(FistCpuRam *bus,unsigned width)
 {
-    return fist_cpu_stack_read(cpu,ram,size,width,&cpu->esp);
+    FistCpuState *cpu=bus->cpu;
+    return fist_cpu_stack_read(bus,width,&cpu->esp);
 }
 static inline void fist_cpu_select_real_cs(FistCpuState *cpu,uint32_t cs)
 {
@@ -163,31 +157,33 @@ static inline int fist_descriptor_writable_stack(FistCpuDescriptor d)
     unsigned t=fist_descriptor_type(d);
     return t==0x12 || t==0x13 || t==0x16 || t==0x17;
 }
-static inline void fist_cpu_hw_interrupt(FistCpuState *cpu,FistCpuSystem *sys,
-        uint8_t *ram,size_t size,uint32_t num)
+static inline void fist_cpu_hw_interrupt(FistCpuRam *bus,uint32_t num)
 {
+    FistCpuState *cpu=bus->cpu;
+    FistCpuSystem *sys=bus->system;
     sys->lastint=(uint8_t)num;
     fist_cpu_fill_flags(cpu);
     uint32_t oldeip=cpu->eip;
     if(!cpu->pmode) {
-        fist_cpu_push(cpu,ram,size,2,cpu->flags.flags);
-        fist_cpu_push(cpu,ram,size,2,cpu->segments[1].value);
-        fist_cpu_push(cpu,ram,size,2,oldeip);
+        fist_cpu_push(bus,2,cpu->flags.flags);
+        fist_cpu_push(bus,2,cpu->segments[1].value);
+        fist_cpu_push(bus,2,oldeip);
         cpu->flags.flags&=~(FIST_FLAG_IF|FIST_FLAG_TF);
-        cpu->eip=fist_cpu_ram_read(cpu,ram,size,sys->idt_base+num*4,2);
-        fist_cpu_select_real_cs(cpu,fist_cpu_ram_read(cpu,ram,size,sys->idt_base+num*4+2,2));
+        cpu->eip=fist_ram_read(bus,sys->idt_base+num*4,2);
+        fist_cpu_select_real_cs(cpu,fist_ram_read(bus,sys->idt_base+num*4+2,2));
         cpu->code_big=0;
         return;
     }
     fist_cpu_require(!(cpu->flags.flags&FIST_FLAG_VM));
     fist_cpu_require(num*8<sys->idt_limit);
-    FistCpuDescriptor gate=fist_cpu_load_descriptor(cpu,sys,ram,size,sys->idt_base+num*8);
+    FistCpuDescriptor gate=fist_cpu_load_descriptor(bus,sys->idt_base+num*8);
     unsigned type=fist_descriptor_type(gate);
     fist_cpu_require(type==6 || type==7 || type==14 || type==15);
     fist_cpu_require(fist_descriptor_present(gate));
     uint32_t selector=gate.low>>16;
     FistCpuDescriptor cs;
-    fist_cpu_require((selector&0xfffc)!=0 && fist_cpu_descriptor(cpu,sys,ram,size,selector,&cs));
+    fist_cpu_require((selector&0xfffc)!=0);
+    fist_cpu_require(fist_cpu_descriptor(bus,selector,&cs));
     unsigned dpl=fist_descriptor_dpl(cs);
     fist_cpu_require(dpl<=cpu->cpl && fist_descriptor_code(cs) && fist_descriptor_present(cs));
     unsigned width=(type&8) ? 4 : 2;
@@ -197,22 +193,23 @@ static inline void fist_cpu_hw_interrupt(FistCpuState *cpu,FistCpuSystem *sys,
             fist_cpu_require(sys->tss_valid);
             uint32_t tss=sys->tss_base+(sys->tss_is386 ? 4+dpl*8 : 2+dpl*4);
             sys->mpl=0;
-            uint32_t esp=fist_cpu_ram_read(cpu,ram,size,tss,sys->tss_is386 ? 4 : 2);
-            uint32_t ss=fist_cpu_ram_read(cpu,ram,size,tss+(sys->tss_is386 ? 4 : 2),2);
+            uint32_t esp=fist_ram_read(bus,tss,sys->tss_is386 ? 4 : 2);
+            uint32_t ss=fist_ram_read(bus,tss+(sys->tss_is386 ? 4 : 2),2);
             sys->mpl=3;
             FistCpuDescriptor sd;
-            fist_cpu_require((ss&0xfffc)!=0 && fist_cpu_descriptor(cpu,sys,ram,size,ss,&sd));
+            fist_cpu_require((ss&0xfffc)!=0);
+            fist_cpu_require(fist_cpu_descriptor(bus,ss,&sd));
             fist_cpu_require((ss&3)==dpl && fist_descriptor_dpl(sd)==dpl);
             fist_cpu_require(fist_descriptor_writable_stack(sd) && fist_descriptor_present(sd));
             fist_cpu_select_stack(cpu,ss,esp,sd);
             cpu->cpl=dpl;
-            fist_cpu_push(cpu,ram,size,width,old_ss);
-            fist_cpu_push(cpu,ram,size,width,old_esp);
+            fist_cpu_push(bus,width,old_ss);
+            fist_cpu_push(bus,width,old_esp);
         } else fist_cpu_require(dpl==cpu->cpl);
     }
-    fist_cpu_push(cpu,ram,size,width,cpu->flags.flags);
-    fist_cpu_push(cpu,ram,size,width,cpu->segments[1].value);
-    fist_cpu_push(cpu,ram,size,width,oldeip);
+    fist_cpu_push(bus,width,cpu->flags.flags);
+    fist_cpu_push(bus,width,cpu->segments[1].value);
+    fist_cpu_push(bus,width,oldeip);
     cpu->segments[1].value=(selector&0xfffc) | cpu->cpl;
     cpu->segments[1].base=fist_descriptor_base(cs);
     cpu->code_big=fist_descriptor_big(cs);
@@ -220,13 +217,13 @@ static inline void fist_cpu_hw_interrupt(FistCpuState *cpu,FistCpuSystem *sys,
     if(!(type&1))cpu->flags.flags&=~FIST_FLAG_IF;
     cpu->flags.flags&=~(FIST_FLAG_TF|FIST_FLAG_NT|FIST_FLAG_VM);
 }
-static inline void fist_cpu_check_segments(FistCpuState *cpu,FistCpuSystem *sys,
-                                          const uint8_t *ram,size_t size)
+static inline void fist_cpu_check_segments(FistCpuRam *bus)
 {
+    FistCpuState *cpu=bus->cpu;
     const unsigned segments[]={0,3,4,5};
     for(unsigned i=0;i<4;++i) {
         unsigned s=segments[i];FistCpuDescriptor d;
-        int invalid=!fist_cpu_descriptor(cpu,sys,ram,size,cpu->segments[s].value,&d);
+        int invalid=!fist_cpu_descriptor(bus,cpu->segments[s].value,&d);
         if(!invalid) {
             unsigned type=fist_descriptor_type(d);
             if(type>=0x10 && type<=0x1b)invalid=cpu->cpl>fist_descriptor_dpl(d);
@@ -234,28 +231,30 @@ static inline void fist_cpu_check_segments(FistCpuState *cpu,FistCpuSystem *sys,
         if(invalid) {cpu->segments[s].value=0;cpu->segments[s].base=0;}
     }
 }
-static inline void fist_cpu_iret(FistCpuState *cpu,FistCpuSystem *sys,
-        const uint8_t *ram,size_t size,unsigned use32)
+static inline void fist_cpu_iret(FistCpuRam *bus,unsigned use32)
 {
+    FistCpuState *cpu=bus->cpu;
+    FistCpuSystem *sys=bus->system;
     unsigned width=use32 ? 4 : 2;
     if(!cpu->pmode) {
-        cpu->eip=fist_cpu_pop(cpu,ram,size,width);
-        fist_cpu_select_real_cs(cpu,fist_cpu_pop(cpu,ram,size,width));
-        fist_cpu_load_flags(cpu,sys,fist_cpu_pop(cpu,ram,size,width),
+        cpu->eip=fist_cpu_pop(bus,width);
+        fist_cpu_select_real_cs(cpu,fist_cpu_pop(bus,width));
+        fist_cpu_load_flags(cpu,sys,fist_cpu_pop(bus,width),
                            FIST_FMASK_ALL & (use32 ? UINT32_MAX : 0xffff));
         cpu->code_big=0;
         return;
     }
     fist_cpu_require(!(cpu->flags.flags&(FIST_FLAG_VM|FIST_FLAG_NT)));
     uint32_t esp=cpu->esp;
-    uint32_t ip=fist_cpu_stack_read(cpu,ram,size,width,&esp);
-    uint32_t cs=fist_cpu_stack_read(cpu,ram,size,width,&esp)&0xffff;
-    uint32_t flags=fist_cpu_stack_read(cpu,ram,size,width,&esp);
+    uint32_t ip=fist_cpu_stack_read(bus,width,&esp);
+    uint32_t cs=fist_cpu_stack_read(bus,width,&esp)&0xffff;
+    uint32_t flags=fist_cpu_stack_read(bus,width,&esp);
     if(!use32)flags|=cpu->flags.flags&0xffff0000u;
     fist_cpu_require(!(flags&FIST_FLAG_VM));
     uint32_t rpl=cs&3;
     FistCpuDescriptor cd;
-    fist_cpu_require((cs&0xfffc)!=0 && rpl>=cpu->cpl && fist_cpu_descriptor(cpu,sys,ram,size,cs,&cd));
+    fist_cpu_require((cs&0xfffc)!=0 && rpl>=cpu->cpl);
+    fist_cpu_require(fist_cpu_descriptor(bus,cs,&cd));
     fist_cpu_require(fist_descriptor_code(cd) && fist_descriptor_present(cd));
     if(fist_descriptor_nonconforming_code(cd))fist_cpu_require(rpl==fist_descriptor_dpl(cd));
     else fist_cpu_require(fist_descriptor_dpl(cd)<=rpl);
@@ -267,17 +266,18 @@ static inline void fist_cpu_iret(FistCpuState *cpu,FistCpuSystem *sys,
         cpu->code_big=fist_descriptor_big(cd);cpu->eip=ip;
         fist_cpu_load_flags(cpu,sys,flags,mask);
     } else {
-        uint32_t new_esp=fist_cpu_stack_read(cpu,ram,size,width,&esp);
-        uint32_t ss=fist_cpu_stack_read(cpu,ram,size,width,&esp)&0xffff;
+        uint32_t new_esp=fist_cpu_stack_read(bus,width,&esp);
+        uint32_t ss=fist_cpu_stack_read(bus,width,&esp)&0xffff;
         FistCpuDescriptor sd;
-        fist_cpu_require((ss&0xfffc)!=0 && (ss&3)==rpl && fist_cpu_descriptor(cpu,sys,ram,size,ss,&sd));
+        fist_cpu_require((ss&0xfffc)!=0 && (ss&3)==rpl);
+        fist_cpu_require(fist_cpu_descriptor(bus,ss,&sd));
         fist_cpu_require(fist_descriptor_dpl(sd)==rpl && fist_descriptor_writable_stack(sd) && fist_descriptor_present(sd));
         cpu->segments[1].value=cs;cpu->segments[1].base=fist_descriptor_base(cd);
         cpu->code_big=fist_descriptor_big(cd);
         fist_cpu_load_flags(cpu,sys,flags,mask);
         cpu->cpl=rpl;cpu->eip=ip;
         fist_cpu_select_stack(cpu,ss,new_esp,sd);
-        fist_cpu_check_segments(cpu,sys,ram,size);
+        fist_cpu_check_segments(bus);
     }
 }
 #endif

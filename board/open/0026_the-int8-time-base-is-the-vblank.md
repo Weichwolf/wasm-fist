@@ -1020,7 +1020,75 @@ Evidence:/tmp/wasm-fist-vga-memory-preparation/proof.json. Private provider,
 outer-caller and VGA preparation remains unadopted; other VGA/LFB/MMIO handlers,
 register transitions, faults and first817/final mixedPCM remain open.
 
+Current base `eea3cf6`, patch646: one mutable
+CPU/system/physical-memory context now replaces the previous hot-page-only RAM
+helper in descriptor/stack/IRQ/IRET and the three typed1280/23c4/133a producers.
+Original provider/cache/VGA inputs are captured at every selected full boundary,
+including52 first/repeated bootstrap/IRQ boundaries and nine device boundaries.
+The original complete output/CPU/code/time/RAM verifiers remain unchanged;
+only added metadata is removed from their view. No zero system, identity
+first-MB or all-writable physical-map fallback is supplied.
+
+The stricter device cache regression reaches an omitted normal-core opcode
+Fetchb at23c4: complete CPU/RAM still match while page65538/physical307 is
+missing from the final linked list. Restoring the actual CS opcode read makes
+both targets match; an omitted-read mutant retains the original reaching
+failure. Earlier byte-store claims for LTR's busy descriptor are disproven:
+original CPU_LTR -> SaveSelector -> GDT SetDescriptor -> Descriptor::Save
+uses two mem_writed calls (cpu.cpp:128), not MEM_BlockWrite/eight bytes.
+A controlled relocation of the actual available descriptor into the captured
+chained VGA aperture reaches the width defect. Both widths preserve all58
+CPU/system words and full16MiB RAM, but eight byte callbacks produce different
+VGA fastmem. The corrected owner uses two DWORD stores; the callback regression
+binds the actual original Descriptor::Save source. This controlled API case is
+not an independently captured changed whole-VM execution.
+
+Selected candidate regressions passed seven CPU/system/interrupt tests and
+six device tests on Native/WASM. First/repeated original-byte bootstrap also
+matches all58 words/four clocks/nine intermediate and final full RAM/cache/VGA
+boundaries. Independent extracted-source provider and VGA compositions were
+rerun with current public headers:24 provider results/five causal mutants and
+20 VGA results/four mutants pass. These compositions retain their declared
+controlled-input scope, not full application acceptance. Evidence:
+/tmp/wasm-fist-cpu-memory-adoption/{interrupt-unit.log,provider-replay/provider-proof.json,vga-replay/proof.json}.
+Canonical current captures use tools/oracle/capture_memory_context.py;
+temporary proofs retain exact generated probes, producer hashes and raw inputs.
+Remaining task/V86/fault/other-device routes, LFB/MMIO/register transitions,
+actual outer77e2/op6c state transport, first817 and final mixedPCM stay open.
+
+Complete gate `run.VBHRax` under
+`/tmp/wasm-fist-cpu-memory-adoption-gate`: `bash tools/check_flow.sh` with
+that root's production Native/WASM binaries and sequential builds passed151
+tests in290.404s, exact patches, six resource-start cases and178 existing flows
+with no failures and durable terminal0. All1474 frozen source inputs remained
+unchanged, and the separate419-original inventory matches. See the versioned
+`tools/oracle/cpu_memory_production_case.json` for exact command, implementation,
+archive/binary/log hashes and source reproduction. Canonical irq/device/config
+captures were reverified after the full gate. Completed matrix/build/object
+artifacts retired4862221095bytes; compact receipt and tested binaries remain.
+
+Complete fresh SB-enabled30000-ms Native/WASM captures preserve all2100 parent
+frame/end bytes,43 sound rows and47 unmasked service packets. Every original
+layout/palette/time matches;28 pixel failures remain, first817/11704156us/
+byte8754. Final mixed portPCM is absent and strict original comparison fails.
+This dependency adoption does not establish actual application startup/IRQ
+transport or any first817/finalPCM improvement.
+
 ## Next
+
+Private following-call preparation, not public adoption: original-byte
+77e2->780e now replays all368 complete58-word/time fetches and eleven whole
+RAM/provider/cache/VGA boundaries on Native/WASM. Source CALL3322 reaches3661
+and3376, then actual caller780e; LOOP preserves lazy flags and JBE reads them
+without filling. Three full-reaching mutants reject LOOP flags, eager JBE
+flags and opcode reads before the observation boundary. A second per-capture
+replay reaches first DOS file-service wrapper5cc2 with375 fetches/fourteen full
+boundaries. Different captures retain their own complete start RAM, including
+unchanged per-run boot-input differences; no bytes are normalized. Temporary
+proofs are under `/tmp/wasm-fist-cpu-memory-adoption/after-reset-{replay,dos-replay}`.
+Version the reached source fixture and original-byte producer before public
+adoption, recover the actual DOS handoff at5cdd, and complete the caller through
+its real return. This preparation still does not provide production start state.
 
 Consume physical_provider_case.json together with paging_control_case.json.
 Adopt the one CPU/system/physical owner only after actual callers, provider

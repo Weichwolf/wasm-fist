@@ -92,15 +92,10 @@ def verify(root, repo, baseline):
     return result
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--repo',type=Path,required=True);parser.add_argument('--baseline',type=Path,required=True)
-    parser.add_argument('--output',type=Path,required=True);parser.add_argument('--verify-only',action='store_true')
-    args = parser.parse_args();repo = args.repo.resolve(strict=True);baseline = args.baseline.resolve(strict=True);root = args.output.resolve()
-    if args.verify_only:return verify(root,repo,baseline)
+def capture(repo, root, baseline, probe=None, extra_producers=(), verifier=verify):
     assert root.is_relative_to(Path('/tmp'));root.mkdir(parents=True,exist_ok=False)
-    probe = Path(__file__).resolve().with_name('device_config_cpu.gdb')
-    producers = (*producer_paths(repo),Path(__file__).resolve(),probe,repo/'tools/oracle/device_config_1280_widths_case.json',repo/'third_party/dosbox-build/dosbox-0.74-3/src/cpu/paging.cpp',repo/'third_party/dosbox-build/dosbox-0.74-3/include/paging.h',baseline/'proof.json')
+    probe = probe or Path(__file__).resolve().with_name('device_config_cpu.gdb')
+    producers = (*producer_paths(repo),Path(__file__).resolve(),probe,repo/'tools/oracle/device_config_1280_widths_case.json',repo/'third_party/dosbox-build/dosbox-0.74-3/src/cpu/paging.cpp',repo/'third_party/dosbox-build/dosbox-0.74-3/include/paging.h',baseline/'proof.json',*extra_producers)
     (root/'producers.json').write_text(json.dumps({str(p):digest(p) for p in producers},indent=2)+'\n')
     folder = root/'source';folder.mkdir();wrapper = root/'dosbox-source'
     command = ['gdb','-q','-batch','-x',str(probe),'--args',str(repo/'third_party/dosbox-fist')]
@@ -110,7 +105,16 @@ def main():
     with (root/'source.log').open('w') as log:
         result = subprocess.run(['bash','tools/oracle/capture_sequence.sh','1',str(folder)],cwd=repo,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=90)
     (root/'source.exit').write_text(str(result.returncode)+'\n');assert result.returncode == 0
-    return verify(root,repo,baseline)
+    return verifier(root,repo,baseline)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--repo',type=Path,required=True);parser.add_argument('--baseline',type=Path,required=True)
+    parser.add_argument('--output',type=Path,required=True);parser.add_argument('--verify-only',action='store_true')
+    args = parser.parse_args();repo = args.repo.resolve(strict=True);baseline = args.baseline.resolve(strict=True);root = args.output.resolve()
+    if args.verify_only:return verify(root,repo,baseline)
+    return capture(repo,root,baseline)
 
 
 if __name__ == '__main__':main()

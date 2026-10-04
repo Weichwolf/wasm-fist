@@ -14,11 +14,11 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def capture(repo,root,stop=0x7809,extra_producers=()):
+def capture(repo,root,stop=0x7809,extra_producers=(),probe=None):
     assert stop in (0x7809,0x780e)
     assert root.is_relative_to(Path('/tmp')), 'disposable captures must be under /tmp'
     root.mkdir(parents=True,exist_ok=False)
-    probe=Path(__file__).resolve().with_name('device_start_prefix.gdb')
+    probe=probe or Path(__file__).resolve().with_name('device_start_prefix.gdb')
     binary=repo/'third_party/dosbox-fist'
     files=(*producer_paths(repo),*extra_producers)
     originals={str(p.relative_to(repo)):digest(p) for p in (repo/'armoredfist').rglob('*') if p.is_file()}

@@ -37,6 +37,22 @@ def portable(provider):
     return p
 
 
+def validate_provider(repo,p):
+    header=(repo/'third_party/dosbox-build/dosbox-0.74-3/include/paging.h').read_text()
+    flags={k:int(v,0) for k,v in re.findall(r'^#define\s+(PFLAG_[A-Z]+)\s+(0x[0-9a-f]+)',header,re.M)}
+    types={'RAMPageHandler *':flags['PFLAG_READABLE']|flags['PFLAG_WRITEABLE'],
+           'ROMPageHandler *':flags['PFLAG_READABLE']|flags['PFLAG_HASROM'],
+           'VGA_Map_Handler *':flags['PFLAG_READABLE']|flags['PFLAG_WRITEABLE']|flags['PFLAG_NOCODE'],
+           'VGA_ChainedVGA_Handler *':flags['PFLAG_NOCODE']}
+    assert p['pages']==len(p['slots'])==16777216//4096,'incomplete physical-provider slots'
+    assert set(p['handlers'])=={str(v) for v in p['slots']},'incomplete physical-handler inventory'
+    for h in p['handlers'].values():
+        assert h['type'] in types and h['flags']==types[h['type']],'physical handler class/flags'
+    assert len(p['firstmb'])==272 and all(type(v)==int and 0<=v<1048576 for v in p['firstmb']),'incomplete first-MB map'
+    assert type(p['a20_enabled'])==bool and type(p['a20_controlport'])==int and 0<=p['a20_controlport']<256,'incomplete A20 state'
+    assert p['firstmb'][256:272]==list(range(256 if p['a20_enabled'] else 0,272 if p['a20_enabled'] else 16)),'A20 first-MB mapping'
+
+
 def crx_view(repo,evidence,rows):
     """Reverify the unchanged complete CRX owner, stripping only added provider metadata."""
     with tempfile.TemporaryDirectory(prefix='physical-provider-crx-',dir='/tmp') as temp:
@@ -58,20 +74,10 @@ def verify(repo,evidence,reference=True):
     assert len(rows)==8,'incomplete physical-provider boundaries'
     header=(repo/'third_party/dosbox-build/dosbox-0.74-3/include/paging.h').read_text()
     flags={k:int(v,0) for k,v in re.findall(r'^#define\s+(PFLAG_[A-Z]+)\s+(0x[0-9a-f]+)',header,re.M)}
-    types={'RAMPageHandler *':flags['PFLAG_READABLE']|flags['PFLAG_WRITEABLE'],
-           'ROMPageHandler *':flags['PFLAG_READABLE']|flags['PFLAG_HASROM'],
-           'VGA_Map_Handler *':flags['PFLAG_READABLE']|flags['PFLAG_WRITEABLE']|flags['PFLAG_NOCODE'],
-           'VGA_ChainedVGA_Handler *':flags['PFLAG_NOCODE']}
     states=[]
     for row in rows:
         p=row['provider']
-        assert p['pages']==len(p['slots'])==16777216//4096,'incomplete physical-provider slots'
-        assert set(p['handlers'])=={str(v) for v in p['slots']},'incomplete physical-handler inventory'
-        for h in p['handlers'].values():
-            assert h['type'] in types and h['flags']==types[h['type']],'physical handler class/flags'
-        assert len(p['firstmb'])==272 and all(type(v)==int and 0<=v<1048576 for v in p['firstmb']),'incomplete first-MB map'
-        assert type(p['a20_enabled'])==bool and type(p['a20_controlport'])==int and 0<=p['a20_controlport']<256,'incomplete A20 state'
-        assert p['firstmb'][256:272]==list(range(256 if p['a20_enabled'] else 0,272 if p['a20_enabled'] else 16)),'A20 first-MB mapping'
+        validate_provider(repo,p)
         lfb=p['lfb']
         assert lfb['end_page']==lfb['start_page']+lfb['pages'],'incomplete LFB range'
         assert set(lfb['handlers'])=={'handler','mmiohandler'},'incomplete LFB handler inventory'

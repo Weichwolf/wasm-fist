@@ -380,6 +380,15 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   startup/IRQ/IF/handler integration and full original output remain open.
   Completed raw matrix artifacts and isolated games were retired under/tmp.
 
+- Consume0026's shared physical-memory adoption receipt,
+  `tools/oracle/cpu_memory_production_case.json`: full151-test/178-flow/six-resource
+  gate passes with terminal0. Fresh complete30000-ms Native/WASM captures retain
+  all2100 previous frame/end bytes,43 sound rows and47 unmasked service packets.
+  Original layout/palette/time still match; the same28 pixel differences start
+  at817/11704156us/byte8754. Final mixed portPCM remains absent and strict parity
+  fails. Actual application startup/IRQ transport remains with0026; complete
+  original output is not accepted by these API/producer regressions.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

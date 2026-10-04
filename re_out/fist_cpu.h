@@ -26,10 +26,20 @@ typedef struct {
     uint32_t pmode, cpl, cr0, cr3, paging_enabled;
 } FistCpuState;
 
+typedef struct {
+    uint32_t idt_base, idt_limit, gdt_base, gdt_limit;
+    uint32_t ldt_base, ldt_limit, ldt_value;
+    uint32_t tss_base, tss_limit, tss_selector, tss_is386, tss_valid;
+    uint32_t mpl, trap_skip, flag_id_toggle;
+    int32_t direction;
+    uint32_t lastint;
+    uint32_t tss_desc_low, tss_desc_high, exception_which, exception_error;
+} FistCpuSystem;
+
 /* Original lazyflags.h enum values for the operations recovered here. */
 enum {
     FIST_LAZY_UNKNOWN=0, FIST_LAZY_ADDW=2, FIST_LAZY_ADDD=3,
-    FIST_LAZY_ORB=4, FIST_LAZY_ORD=6, FIST_LAZY_SUBD=18, FIST_LAZY_XORB=19,
+    FIST_LAZY_ORB=4, FIST_LAZY_ANDB=13, FIST_LAZY_ORD=6, FIST_LAZY_SUBD=18, FIST_LAZY_XORB=19,
     FIST_LAZY_XORD=21, FIST_LAZY_CMPB=22, FIST_LAZY_CMPW=23,
     FIST_LAZY_CMPD=24, FIST_LAZY_INCD=27, FIST_LAZY_DECD=30, FIST_LAZY_TESTB=31
 };
@@ -52,7 +62,7 @@ static inline void fist_cpu_alu(FistCpuState *cpu, unsigned type, unsigned bits,
 static inline unsigned fist_cpu_flag_width(const FistCpuFlags *f)
 {
     switch (f->type) {
-    case FIST_LAZY_CMPB: case FIST_LAZY_XORB: case FIST_LAZY_TESTB: case FIST_LAZY_ORB: return 8;
+    case FIST_LAZY_ANDB: case FIST_LAZY_CMPB: case FIST_LAZY_XORB: case FIST_LAZY_TESTB: case FIST_LAZY_ORB: return 8;
     case FIST_LAZY_ADDW: case FIST_LAZY_CMPW: return 16;
     case FIST_LAZY_XORD: case FIST_LAZY_ADDD: case FIST_LAZY_ORD:
     case FIST_LAZY_SUBD: case FIST_LAZY_CMPD: case FIST_LAZY_INCD: case FIST_LAZY_DECD: return 32;
@@ -77,7 +87,7 @@ static inline int fist_cpu_cf(const FistCpuState *cpu)
     case FIST_LAZY_SUBD: case FIST_LAZY_CMPD: return f->var1 < f->var2;
     case FIST_LAZY_INCD: case FIST_LAZY_DECD: return !!(f->flags & 1);
     case FIST_LAZY_XORB: case FIST_LAZY_XORD: case FIST_LAZY_TESTB:
-    case FIST_LAZY_ORB: case FIST_LAZY_ORD: return 0;
+    case FIST_LAZY_ANDB: case FIST_LAZY_ORB: case FIST_LAZY_ORD: return 0;
     default: abort();
     }
 }
@@ -122,78 +132,9 @@ static inline void fist_cpu_fill_flags(FistCpuState *cpu)
 static inline void fist_cpu_set_if(FistCpuState *cpu, int enabled)
 {
     unsigned iopl=(cpu->flags.flags>>12)&3;
-    assert(!cpu->pmode || (!(cpu->flags.flags & 0x20000) ? iopl>=cpu->cpl : iopl==3));
+    fist_cpu_require(!cpu->pmode || (!(cpu->flags.flags & 0x20000) ? iopl>=cpu->cpl : iopl==3));
     cpu->flags.flags=(cpu->flags.flags & ~0x200u) | (enabled ? 0x200u : 0u);
 }
-/* Resident RAM accesses use the actual guest segment, CR3 and page entries.
- * Original paging.cpp InitPage/PAGING_GetPhysicalAddress supplies this contract.
- * These recovered producers enter with their RAM pages already linked, accessed
- * and dirty. Cold pages, faults and MMIO need their original execution paths;
- * they are not supplied a substitute value or silently treated as flat memory. */
-static inline uint32_t fist_cpu_physical_dword(const uint8_t *memory, size_t size,
-                                              uint32_t address)
-{
-    fist_cpu_require(size>=4 && address<=size-4);
-    return (uint32_t)memory[address] | ((uint32_t)memory[address+1]<<8) |
-           ((uint32_t)memory[address+2]<<16) | ((uint32_t)memory[address+3]<<24);
-}
-static inline uint32_t fist_cpu_ram_address(const FistCpuState *cpu,
-        const uint8_t *memory, size_t size, uint32_t linear, int writing)
-{
-    uint32_t physical=linear;
-    if (cpu->paging_enabled) {
-        uint32_t directory=(cpu->cr3 & 0xfffff000u)+4*(linear>>22);
-        uint32_t table=fist_cpu_physical_dword(memory,size,directory);
-        fist_cpu_require((table & 0x21u)==0x21u);
-        uint32_t entry_address=(table & 0xfffff000u)+4*((linear>>12)&1023u);
-        uint32_t entry=fist_cpu_physical_dword(memory,size,entry_address);
-        fist_cpu_require((entry & 0x61u)==0x61u);
-        if (writing) fist_cpu_require((table & 2u) && (entry & 2u));
-        physical=(entry & 0xfffff000u) | (linear & 4095u);
-    }
-    fist_cpu_require(physical<size);
-    return physical;
-}
-static inline uint32_t fist_cpu_resident_address(const FistCpuState *cpu,
-        const uint8_t *memory, size_t size, unsigned segment, uint32_t offset,
-        int writing)
-{
-    fist_cpu_require(segment<6);
-    return fist_cpu_ram_address(cpu,memory,size,cpu->segments[segment].base+offset,writing);
-}
-static inline uint32_t fist_cpu_ram_read(const FistCpuState *cpu,
-        const uint8_t *memory, size_t size, uint32_t linear, unsigned width)
-{
-    fist_cpu_require(width==1 || width==2 || width==4);
-    uint32_t value=0;
-    for(unsigned i=0;i<width;++i)
-        value|=(uint32_t)memory[fist_cpu_ram_address(cpu,memory,size,linear+i,0)]<<(i*8);
-    return value;
-}
-static inline uint32_t fist_cpu_resident_read(const FistCpuState *cpu,
-        const uint8_t *memory, size_t size, unsigned segment, uint32_t offset,
-        unsigned width)
-{
-    fist_cpu_require(segment<6);
-    return fist_cpu_ram_read(cpu,memory,size,cpu->segments[segment].base+offset,width);
-}
-static inline void fist_cpu_resident_write(const FistCpuState *cpu,
-        uint8_t *memory, size_t size, unsigned segment, uint32_t offset,
-        unsigned width, uint32_t value)
-{
-    fist_cpu_require(width==1 || width==2 || width==4);
-    for (unsigned i=0;i<width;++i)
-        memory[fist_cpu_resident_address(cpu,memory,size,segment,offset+i,1)]=
-            (uint8_t)(value>>(8*i));
-}
-static inline void fist_cpu_near_ret(FistCpuState *cpu, const uint8_t *memory,
-                                     size_t size)
-{
-    assert(cpu->code_big);
-    cpu->eip=fist_cpu_resident_read(cpu,memory,size,2,cpu->esp & cpu->stack_mask,4);
-    cpu->esp=(cpu->esp & cpu->stack_notmask) | ((cpu->esp+4) & cpu->stack_mask);
-}
-
 /* The shared clock owns core exits. Binding transfers the caller's actual
  * context; it never initializes register/flag values or supplies guest work. */
 FistCpuState *fist_clock_bind_cpu(FistCpuState *cpu);

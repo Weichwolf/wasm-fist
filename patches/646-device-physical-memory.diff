@@ -1,0 +1,271 @@
+PATCH 646: shared mutable CPU/system/physical memory for device and IRQ consumers.
+
+Original core_normal.cpp Fetchb reads CS:EIP after the trace/clock boundary.
+The reached 23c4 dispatch has no cached linear page65538 on entry; its first
+opcode links physical page307. The previous translated fetch charged the
+clock but omitted this memory operation. Both targets matched all CPU/RAM
+words while retaining nine links instead of the original ten at caller77ff.
+Perform the actual opcode read through the same bus as data and guest RET.
+Remaining encoded operands are translated from the recovered assembly in
+644/645; this is not a general instruction decoder or arbitrary-code proof.
+
+The actual1280/23c4/133a assembly keeps all prior byte/word/dword, segment,
+flag and CALL/RET contracts. The only typed carrier is now FistCpuRam,
+referencing the complete37-word CPU and21-word system state, physical RAM,
+providers, first-MB/A20 and mutable linked cache. Descriptor loads, TSS
+busy-descriptor stores, hardware IRQ and IRET use this same owner. No synthetic
+system fields, identity map or all-writable RAM fallback is introduced.
+Original paging.cpp InitPage, PAGING_LinkPage/MapPage/ClearTLB and original
+RAM/ROMPageHandler and VGA_Map/ChainedVGA providers back the shared helper.
+Normal MIXED/386FAST reached present-page paths set actual PDE/PTE access
+and dirty bits. Physical page-table operations bypass logical handlers,
+including ROM. Original Descriptor::Save uses two mem_writed calls, not
+eight bytes: CPU_LTR through a chained VGA descriptor reaches the old error
+even when all58 CPU/system words and complete RAM still match. The actual
+recorded callback widths and whole-width fastmem replication reject it.
+Logical same-page accesses preserve handler widths; only
+cross-page accesses split bytes. Chained VGA preserves planar addresses
+and whole-width first-line replication in fastmem.
+
+Source captures keep actual provider/cache and complete2MiB/4MiB VGA inputs
+at each selected full-RAM boundary. The existing complete original output,
+CPU/code/time and RAM owners are reused unchanged; only added metadata is
+removed from their view. Tests compare all58 words, complete16MiB RAM,
+the entire observed linked cache and all VGA storage on both targets.
+Cold bootstrap, device default/control and existing thin PIC budgets use
+real captured system state. Other architectures/providers/fault/task/V86,
+actual outer77e2/op6c transport, timer handler execution, first817, final
+mixedPCM and full application parity remain open.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -3,6 +3,7 @@
+  * Corrections go in patches/NNN-*.diff (applied by `make patch`); regenerate with `make assemble`.
+  */
+ #include "ghidra_compat.h"
++#include "fist_ram.h"
+ 
+ /* runtime load base (module-relative accessors add it); defined at end, declared here */
+ extern uint32_t fist_ext_base;
+@@ -241,13 +242,13 @@
+ undefined4 __allregs FUN_0000_11f0(void);
+ undefined4 __allregs FUN_0000_11f1(void);
+ undefined4 __allregs FUN_0000_11f4(uint param_1,uint param_2,uint param_3);
+-void __allregs FUN_0000_1280(FistCpuState *cpu);
++void __allregs FUN_0000_1280(FistCpuRam *bus);
+ void __allregs FUN_0000_12a7(void);
+ void __allregs FUN_0000_12ac(ushort param_1,undefined4 param_2);
+ undefined4 __allregs FUN_0000_12b4(char *param_1,char *param_2,char *param_3,char *param_4);
+ undefined4 __allregs FUN_0000_12eb(int *param_1,char param_2,undefined4 param_3,char *param_4);
+ undefined4 __allregs FUN_0000_132f(undefined4 param_1,undefined2 param_2);
+-void __allregs FUN_0000_133a(FistCpuState *cpu);
++void __allregs FUN_0000_133a(FistCpuRam *bus);
+ undefined1 __allregs FUN_0000_161d(int *param_1,int *param_2,int *param_3,char *param_4,int *param_5);
+ undefined4 __allregs FUN_0000_1e75(int param_1,undefined2 param_2,undefined4 param_3,undefined4 *param_4, undefined4 param_5,undefined4 param_6);
+ void __allregs FUN_0000_201a(void);
+@@ -259,7 +260,7 @@
+ ushort * __allregs FUN_0000_22ab(ushort *param_1,uint param_2,byte param_3,byte param_4);
+ ushort * __allregs FUN_0000_2377(ushort *param_1,uint param_2,byte param_3,byte param_4);
+ ushort * __allregs FUN_0000_23b4(undefined4 param_1,undefined1 param_2,undefined1 param_3,ushort *param_4);
+-void __allregs FUN_0000_23c4(FistCpuState *cpu);
++void __allregs FUN_0000_23c4(FistCpuRam *bus);
+ undefined4 __allregs FUN_0000_23ec(ushort param_1,undefined4 param_2);
+ undefined4 __allregs FUN_0000_24c8(undefined4 param_1);
+ void __allregs FUN_0000_2625(void);
+@@ -1757,25 +1758,26 @@
+ 
+ 
+ /* ===== original device configuration @ 0000:1280 ===== */
+-void __allregs FUN_0000_1280(FistCpuState *cpu)
+-{
++void __allregs FUN_0000_1280(FistCpuRam *bus)
++{
++  FistCpuState *cpu=bus->cpu;
+   FistCpuState *previous=fist_clock_bind_cpu(cpu);
+-  fist_cpu_fetch(cpu,0x1280);
+-  cpu->ebx=fist_cpu_resident_read(cpu,g_mem,FIST_MEM_SIZE,3,0xc93,4);
+-  fist_cpu_fetch(cpu,0x1286);
+-  uint32_t value=fist_cpu_resident_read(cpu,g_mem,FIST_MEM_SIZE,3,cpu->ebx+0x490,2);
++  fist_ram_opcode_fetch(bus,0x1280);
++  cpu->ebx=fist_ram_resident_read(bus,3,0xc93,4);
++  fist_ram_opcode_fetch(bus,0x1286);
++  uint32_t value=fist_ram_resident_read(bus,3,cpu->ebx+0x490,2);
+   cpu->eax=fist_cpu_low(cpu->eax,value,16);
+-  fist_cpu_fetch(cpu,0x128d);
+-  fist_cpu_resident_write(cpu,g_mem,FIST_MEM_SIZE,3,0x12cc,2,cpu->eax);
+-  fist_cpu_fetch(cpu,0x1293);
+-  cpu->eax=fist_cpu_resident_read(cpu,g_mem,FIST_MEM_SIZE,3,cpu->ebx+0x492,2);
+-  fist_cpu_fetch(cpu,0x129a);
+-  fist_cpu_resident_write(cpu,g_mem,FIST_MEM_SIZE,3,0x12c4,4,cpu->eax);
+-  fist_cpu_fetch(cpu,0x129f);
+-  cpu->eax=fist_cpu_resident_read(cpu,g_mem,FIST_MEM_SIZE,3,cpu->ebx+0x494,2);
+-  fist_cpu_fetch(cpu,0x12a6);
+-  fist_cpu_resident_write(cpu,g_mem,FIST_MEM_SIZE,3,0x12c8,4,cpu->eax);
+-  fist_cpu_fetch(cpu,0x12ab); fist_cpu_near_ret(cpu,g_mem,FIST_MEM_SIZE);
++  fist_ram_opcode_fetch(bus,0x128d);
++  fist_ram_resident_write(bus,3,0x12cc,2,cpu->eax);
++  fist_ram_opcode_fetch(bus,0x1293);
++  cpu->eax=fist_ram_resident_read(bus,3,cpu->ebx+0x492,2);
++  fist_ram_opcode_fetch(bus,0x129a);
++  fist_ram_resident_write(bus,3,0x12c4,4,cpu->eax);
++  fist_ram_opcode_fetch(bus,0x129f);
++  cpu->eax=fist_ram_resident_read(bus,3,cpu->ebx+0x494,2);
++  fist_ram_opcode_fetch(bus,0x12a6);
++  fist_ram_resident_write(bus,3,0x12c8,4,cpu->eax);
++  fist_ram_opcode_fetch(bus,0x12ab); fist_ram_near_ret(bus);
+   fist_clock_bind_cpu(previous);
+ }
+ 
+@@ -1903,101 +1905,103 @@
+ 
+ 
+ /* Original 133a reset body; the shared CPU context owns every live register. */
+-void __allregs FUN_0000_133a(FistCpuState *cpu)
+-{
++void __allregs FUN_0000_133a(FistCpuRam *bus)
++{
++  FistCpuState *cpu=bus->cpu;
+   FistCpuState *previous=fist_clock_bind_cpu(cpu);
+   uint16_t value;
+-  fist_cpu_fetch(cpu,0x133a); fist_cpu_set_if(cpu,0);
+-  fist_cpu_fetch(cpu,0x133b);
+-  value=(uint16_t)fist_cpu_resident_read(cpu,g_mem,FIST_MEM_SIZE,3,0x12cc,2);
++  fist_ram_opcode_fetch(bus,0x133a); fist_cpu_set_if(cpu,0);
++  fist_ram_opcode_fetch(bus,0x133b);
++  value=(uint16_t)fist_ram_resident_read(bus,3,0x12cc,2);
+   cpu->edx=fist_cpu_low(cpu->edx,value,16);
+-  fist_cpu_fetch(cpu,0x1342);
++  fist_ram_opcode_fetch(bus,0x1342);
+   value=(uint16_t)cpu->edx;
+   fist_cpu_alu(cpu,FIST_LAZY_ADDW,16,value,6,value+6);
+   cpu->edx=fist_cpu_low(cpu->edx,value+6,16);
+-  fist_cpu_fetch(cpu,0x1346); cpu->eax=fist_cpu_low(cpu->eax,1,8);
+-  fist_cpu_fetch(cpu,0x1348); out((uint16_t)cpu->edx,(uint8_t)cpu->eax);
+-  fist_cpu_fetch(cpu,0x1349); /* JMP134b */
+-  fist_cpu_fetch(cpu,0x134b); cpu->ecx=20;
++  fist_ram_opcode_fetch(bus,0x1346); cpu->eax=fist_cpu_low(cpu->eax,1,8);
++  fist_ram_opcode_fetch(bus,0x1348); out((uint16_t)cpu->edx,(uint8_t)cpu->eax);
++  fist_ram_opcode_fetch(bus,0x1349); /* JMP134b */
++  fist_ram_opcode_fetch(bus,0x134b); cpu->ecx=20;
+   do {
+-    fist_cpu_fetch(cpu,0x1350); cpu->eax=fist_cpu_low(cpu->eax,in((uint16_t)cpu->edx),8);
+-    fist_cpu_fetch(cpu,0x1351); /* JMP1353 */
+-    fist_cpu_fetch(cpu,0x1353); --cpu->ecx;
++    fist_ram_opcode_fetch(bus,0x1350); cpu->eax=fist_cpu_low(cpu->eax,in((uint16_t)cpu->edx),8);
++    fist_ram_opcode_fetch(bus,0x1351); /* JMP1353 */
++    fist_ram_opcode_fetch(bus,0x1353); --cpu->ecx;
+   } while (cpu->ecx);
+-  fist_cpu_fetch(cpu,0x1355);
++  fist_ram_opcode_fetch(bus,0x1355);
+   value=(uint8_t)cpu->eax;
+   fist_cpu_alu(cpu,FIST_LAZY_XORB,8,value,value,0);
+   cpu->eax=fist_cpu_low(cpu->eax,0,8);
+-  fist_cpu_fetch(cpu,0x1357); out((uint16_t)cpu->edx,(uint8_t)cpu->eax);
+-  fist_cpu_fetch(cpu,0x1358); /* JMP135a; shared core exit owns FillFlags */
+-  fist_cpu_fetch(cpu,0x135a); cpu->ecx=8000;
+-  fist_cpu_fetch(cpu,0x135f);
+-  value=(uint16_t)fist_cpu_resident_read(cpu,g_mem,FIST_MEM_SIZE,3,0x12cc,2);
++  fist_ram_opcode_fetch(bus,0x1357); out((uint16_t)cpu->edx,(uint8_t)cpu->eax);
++  fist_ram_opcode_fetch(bus,0x1358); /* JMP135a; shared core exit owns FillFlags */
++  fist_ram_opcode_fetch(bus,0x135a); cpu->ecx=8000;
++  fist_ram_opcode_fetch(bus,0x135f);
++  value=(uint16_t)fist_ram_resident_read(bus,3,0x12cc,2);
+   cpu->edx=fist_cpu_low(cpu->edx,value,16);
+-  fist_cpu_fetch(cpu,0x1366);
++  fist_ram_opcode_fetch(bus,0x1366);
+   value=(uint16_t)cpu->edx;
+   fist_cpu_alu(cpu,FIST_LAZY_ADDW,16,value,14,value+14);
+   cpu->edx=fist_cpu_low(cpu->edx,value+14,16);
+   do {
+-    fist_cpu_fetch(cpu,0x136a); cpu->eax=fist_cpu_low(cpu->eax,in((uint16_t)cpu->edx),8);
+-    fist_cpu_fetch(cpu,0x136b); /* JMP136d */
+-    fist_cpu_fetch(cpu,0x136d);
++    fist_ram_opcode_fetch(bus,0x136a); cpu->eax=fist_cpu_low(cpu->eax,in((uint16_t)cpu->edx),8);
++    fist_ram_opcode_fetch(bus,0x136b); /* JMP136d */
++    fist_ram_opcode_fetch(bus,0x136d);
+     value=(uint8_t)cpu->eax;
+     fist_cpu_alu(cpu,FIST_LAZY_TESTB,8,value,0x80,value & 0x80);
+-    fist_cpu_fetch(cpu,0x136f); --cpu->ecx;
++    fist_ram_opcode_fetch(bus,0x136f); --cpu->ecx;
+   } while (cpu->ecx && fist_cpu_zf(cpu));
+-  fist_cpu_fetch(cpu,0x1371);
+-  value=(uint16_t)fist_cpu_resident_read(cpu,g_mem,FIST_MEM_SIZE,3,0x12cc,2);
++  fist_ram_opcode_fetch(bus,0x1371);
++  value=(uint16_t)fist_ram_resident_read(bus,3,0x12cc,2);
+   cpu->edx=fist_cpu_low(cpu->edx,value,16);
+-  fist_cpu_fetch(cpu,0x1378);
++  fist_ram_opcode_fetch(bus,0x1378);
+   value=(uint16_t)cpu->edx;
+   fist_cpu_alu(cpu,FIST_LAZY_ADDW,16,value,10,value+10);
+   cpu->edx=fist_cpu_low(cpu->edx,value+10,16);
+-  fist_cpu_fetch(cpu,0x137c); cpu->eax=fist_cpu_low(cpu->eax,in((uint16_t)cpu->edx),8);
+-  fist_cpu_fetch(cpu,0x137d); /* JMP137f */
+-  fist_cpu_fetch(cpu,0x137f); fist_cpu_set_if(cpu,1);
+-  fist_cpu_fetch(cpu,0x1380);
++  fist_ram_opcode_fetch(bus,0x137c); cpu->eax=fist_cpu_low(cpu->eax,in((uint16_t)cpu->edx),8);
++  fist_ram_opcode_fetch(bus,0x137d); /* JMP137f */
++  fist_ram_opcode_fetch(bus,0x137f); fist_cpu_set_if(cpu,1);
++  fist_ram_opcode_fetch(bus,0x1380);
+   value=(uint8_t)cpu->eax;
+   fist_cpu_alu(cpu,FIST_LAZY_CMPB,8,value,0xaa,value-0xaa);
+-  fist_cpu_fetch(cpu,0x1382);
++  fist_ram_opcode_fetch(bus,0x1382);
+   if (fist_cpu_zf(cpu)) {
+-    fist_cpu_fetch(cpu,0x1387); cpu->eax=UINT32_MAX;
+-    fist_cpu_fetch(cpu,0x138c); fist_cpu_near_ret(cpu,g_mem,FIST_MEM_SIZE);
++    fist_ram_opcode_fetch(bus,0x1387); cpu->eax=UINT32_MAX;
++    fist_ram_opcode_fetch(bus,0x138c); fist_ram_near_ret(bus);
+   } else {
+-    fist_cpu_fetch(cpu,0x1384);
++    fist_ram_opcode_fetch(bus,0x1384);
+     fist_cpu_alu(cpu,FIST_LAZY_XORD,32,cpu->eax,cpu->eax,0);
+     cpu->eax=0;
+-    fist_cpu_fetch(cpu,0x1386); fist_cpu_near_ret(cpu,g_mem,FIST_MEM_SIZE);
++    fist_ram_opcode_fetch(bus,0x1386); fist_ram_near_ret(bus);
+   }
+   fist_clock_bind_cpu(previous);
+ }
+ 
+ /* Original 23c4 byte dispatch followed by a tail JMP, not another CALL. */
+-void __allregs FUN_0000_23c4(FistCpuState *cpu)
+-{
++void __allregs FUN_0000_23c4(FistCpuRam *bus)
++{
++  FistCpuState *cpu=bus->cpu;
+   FistCpuState *previous=fist_clock_bind_cpu(cpu);
+-  fist_cpu_fetch(cpu,0x23c4); cpu->ebx=fist_cpu_low(cpu->ebx,cpu->eax,8);
+-  fist_cpu_fetch(cpu,0x23c6);
++  fist_ram_opcode_fetch(bus,0x23c4); cpu->ebx=fist_cpu_low(cpu->ebx,cpu->eax,8);
++  fist_ram_opcode_fetch(bus,0x23c6);
+   uint32_t index=(uint8_t)cpu->ebx;
+   fist_cpu_alu(cpu,FIST_LAZY_CMPB,8,index,4,index-4);
+-  fist_cpu_fetch(cpu,0x23c9);
++  fist_ram_opcode_fetch(bus,0x23c9);
+   if (!(fist_cpu_cf(cpu) || fist_cpu_zf(cpu))) {
+-    fist_cpu_fetch(cpu,0x23cb);
++    fist_ram_opcode_fetch(bus,0x23cb);
+     fist_cpu_alu(cpu,FIST_LAZY_XORD,32,cpu->eax,cpu->eax,0);
+     cpu->eax=0;
+-    fist_cpu_fetch(cpu,0x23cd); fist_cpu_near_ret(cpu,g_mem,FIST_MEM_SIZE);
++    fist_ram_opcode_fetch(bus,0x23cd); fist_ram_near_ret(bus);
+   } else {
+-    fist_cpu_fetch(cpu,0x23ce); cpu->ebx=(uint8_t)cpu->ebx;
+-    fist_cpu_fetch(cpu,0x23d1);
+-    cpu->eax=fist_cpu_resident_read(cpu,g_mem,FIST_MEM_SIZE,3,0x159f+cpu->ebx*4,4);
+-    fist_cpu_fetch(cpu,0x23d8); cpu->eip=cpu->eax;
++    fist_ram_opcode_fetch(bus,0x23ce); cpu->ebx=(uint8_t)cpu->ebx;
++    fist_ram_opcode_fetch(bus,0x23d1);
++    cpu->eax=fist_ram_resident_read(bus,3,0x159f+cpu->ebx*4,4);
++    fist_ram_opcode_fetch(bus,0x23d8); cpu->eip=cpu->eax;
+     if (cpu->eip==0x2294) {
+       /* This original table entry is the existing bare RET callback; with
+        * an explicit CPU context it consumes the same guest near frame. */
+-      fist_cpu_fetch(cpu,0x2294); fist_cpu_near_ret(cpu,g_mem,FIST_MEM_SIZE);
++      fist_ram_opcode_fetch(bus,0x2294); fist_ram_near_ret(bus);
+     } else {
+-      void (*target)(FistCpuState *)=(void (*)(FistCpuState *))fist_icall(fist_ext_base+cpu->eip);
+-      target(cpu);
++      void (*target)(FistCpuRam *)=(void (*)(FistCpuRam *))fist_icall(fist_ext_base+cpu->eip);
++      target(bus);
+     }
+   }
+   fist_clock_bind_cpu(previous);

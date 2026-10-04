@@ -362,11 +362,12 @@ def verify(repo, root, reference=True, bootstrap=False):
     return proof
 
 
-def capture(repo, root, bootstrap=False):
+def capture(repo, root, bootstrap=False, probe=None, extra_producers=(), verifier=verify):
     assert root.is_relative_to(Path('/tmp')); root.mkdir(parents=True, exist_ok=False)
     originals = {str(p.relative_to(repo)): digest(p) for p in (repo/'armoredfist').rglob('*') if p.is_file()}
     (root/'original-hashes.json').write_text(json.dumps(originals, indent=2)+'\n')
-    paths = source_paths(repo)
+    paths = source_paths(repo)+list(extra_producers)
+    probe = probe or repo/'tools/oracle/pit_irq_frame.gdb'
     if bootstrap:
         paths += [repo/'tools/oracle'/name for name in ('capture_resident_bootstrap.py','resident_image.py','sb_irq_frame_case.json','pit_irq_frame_case.json')]
         paths += [repo/'third_party/dosbox-build/dosbox-0.74-3/src/cpu'/name for name in ('lazyflags.h','core_normal/prefix_none.h')]
@@ -374,7 +375,7 @@ def capture(repo, root, bootstrap=False):
     (root/'producers.json').write_text(json.dumps({str(p): digest(p) for p in paths}, indent=2)+'\n')
     for name in ('baseline', 'source'):
         folder = root/name; folder.mkdir(); wrapper = root/('dosbox-'+name)
-        command = (['gdb', '-q', '-batch', '-x', str(repo/'tools/oracle/pit_irq_frame.gdb'), '--args'] if name == 'source' else [])+[str(repo/'third_party/dosbox-fist')]
+        command = (['gdb', '-q', '-batch', '-x', str(probe), '--args'] if name == 'source' else [])+[str(repo/'third_party/dosbox-fist')]
         wrapper.write_text('#!/usr/bin/env bash\nset -euo pipefail\nexec '+shlex.join(command)+' "$@"\n'); wrapper.chmod(0o755)
         env = {k:v for k,v in os.environ.items() if not k.startswith('FIST_') and k != 'DOSBOX'}
         env.update(FIST_SEQUENCE_END_MS=str(END_MS), FIST_ORACLE_WALL_SECONDS='80', DOSBOX=str(wrapper), FIST_DETAIL_REPO=str(repo), FIST_DETAIL_OPERANDS_DIR=str(folder))
@@ -383,7 +384,7 @@ def capture(repo, root, bootstrap=False):
             result = subprocess.run(['bash', 'tools/oracle/capture_sequence.sh', '2', str(folder)], cwd=repo,
                                     env=env, stdout=log, stderr=subprocess.STDOUT, timeout=90)
         (root/(name+'.exit')).write_text(str(result.returncode)+'\n'); assert result.returncode == 0, (name, result.returncode)
-    return verify(repo, root, reference=False, bootstrap=bootstrap)
+    return verifier(repo, root, reference=False, bootstrap=bootstrap)
 
 
 def main():

@@ -1,0 +1,262 @@
+{
+  "commit_parent": "eea3cf60dafbf4168b27ad605294d0382c7f053c",
+  "change": "Adopt one mutable CPU/system/physical-memory owner for actual typed device, descriptor, IRQ/IRET and reached bootstrap consumers; recover actual opcode Fetchb and two-DWORD LTR descriptor stores.",
+  "scope": "Shared dependency and reached API/producer regression only. Actual application outer77e2/op6c startup state transport, handler execution, first817, final mixedPCM, fault/task/V86, other architectures/providers and VGA register/LFB/MMIO transitions remain open.",
+  "tested_implementation": {
+    "re_out/fist_cpu.h": "59287b91d6f4cf0ea461f97395eb3b0fec52d2343da1ca2d4cd8127bf7f6e94d",
+    "re_out/fist_interrupt.h": "38d4a4c389dd317c0f073fdfa8e69f2bcb808bcf3260f6d35011b582043203fb",
+    "tests/cpu_interrupt.c": "370f215489dceb25acb4ba74cdf006e2d2d84d24e3a4a176e3c91e196266220a",
+    "tests/device_cpu.c": "452f284a8b0cdbc120440c6c8ad7d1df89de05e34b08bef1aa301232dc459886",
+    "tests/device_cpu_fixture.py": "63942980e53e42ee7f94f65c7de01d0b63620e23856bbb7d274c7993d79f88a3",
+    "tests/test_cpu_interrupt.py": "5fb64626f8aef9273da28c18a00cc37c547de045aa6e3c1519db6c2e88a0a7b6",
+    "tests/test_device_reset.py": "034cd6dcb57d612562a6d1426226d37ea0f1781e9034d9eef46e98252bb243e9",
+    "tools/oracle/capture_device_config_cpu.py": "7ffe75424f4f16961d86f69a24515b08bf27737d1f1545d9260f893ff5b8fb26",
+    "tools/oracle/capture_device_start_prefix.py": "aeb9bec3d1b0fb6701d82b051fc06284af04e1569b7832b0d9637ca76ac5a608",
+    "tools/oracle/capture_physical_provider.py": "6002fe1de8473f91ede0fc244bce54b8c6f0a46ff744169bf2f1e304cc9d4d93",
+    "tools/oracle/capture_pit_irq_frames.py": "b8a0bf252015776f8a292ba0c3937d83131008ed61bf62cfb701cbddebb4daed",
+    "patches/646-device-physical-memory.diff": "b5139d249b55de3851488f5ed7722da053967a620d4cfbb422e7154007a924b0",
+    "re_out/fist_ram.h": "32f4b83c0c162a741be03b7c034b0acdc0bf845e8f04da689a1c68dda8044d0d",
+    "re_out/fist_vga_memory.h": "6702ef7f8d4255339b7ad55c203fa9745178ec5b769a1764ff03a707f3c4268c",
+    "tests/cpu_bootstrap.c": "cfa72de04ddc0a7668d80cae7466ad99c761142e5afc57cc62444dcabdea5579",
+    "tests/memory_context_fixture.h": "c240e3926e774449210eef8b8d891aeb63154cc5f011a3721ab4c60312594fe0",
+    "tests/memory_context_fixture.py": "c3b687b6ed0ff34a5b33f5046a33585f705a12f47fe314221361533b46268164",
+    "tools/oracle/capture_memory_context.py": "80f31fd9d703e7e2e60dd123af873c39ad95f87f0185535e025272a5b7119e42",
+    "tools/oracle/memory_context.gdb.inc": "b7a3717a0b15f6731b68d0c5545755f51cdf40197f388b188664ca591bbd9846",
+    "tools/oracle/memory_context.py": "825b311f6afee4b3d6e0a4e9076dcd248d1cb3414311a6ad716bc55d6d7af8c9"
+  },
+  "tested_input_manifest_sha256": "b7168618636a279cd4f3c67cab9669748b3a3068f165297e6ca9b05aeef82634",
+  "original_hash_manifest_sha256": "6b5ef26a2243566e57de00a6e1fb6f90416186e5db6906b064e09e610b3234e9",
+  "source_reproduction": {
+    "irq": {
+      "command": "python3 tools/oracle/capture_memory_context.py --repo /home/cosmo/Git/wasm-fist --output /tmp/wasm-fist-memory-irq --kind irq",
+      "contexts": 52,
+      "proof_sha256": "496af9e6eb6eed5a64d8d12ab27d033e7530d2a95db86ededc3290ab13023c5f",
+      "producer_manifest_sha256": "243968e1c1c3dc12db54c25a931e1e0facad184b15c8c1e9152ae258c281d5d2",
+      "post_gate_verifier_exit": 0,
+      "post_gate_verifier_log_sha256": "d9b66d6e232dbabad220994c7cc8da632bae0bdbb18ad6c3e7e2ed36ea78396a"
+    },
+    "device": {
+      "command": "python3 tools/oracle/capture_memory_context.py --repo /home/cosmo/Git/wasm-fist --output /tmp/wasm-fist-memory-device --kind device",
+      "contexts": 9,
+      "proof_sha256": "bfa68aa6e860c0eae6a19fd0aa90a70b51bc015ad030497fe2aca80f5efd613d",
+      "producer_manifest_sha256": "978936a413a5640e4bf7faca63e68fc45f62ebeb129ed29bf5498bf2f02da72d",
+      "post_gate_verifier_exit": 0,
+      "post_gate_verifier_log_sha256": "2d54e19d2e85802e940ca3061fcfd035a7ab246dd107f5af81ac6bf3813cbec1"
+    },
+    "config": {
+      "command": "python3 tools/oracle/capture_memory_context.py --repo /home/cosmo/Git/wasm-fist --output /tmp/wasm-fist-memory-config --kind config --baseline /tmp/wasm-fist-memory-device",
+      "contexts": 3,
+      "proof_sha256": "33a9d5936e1c0d65650743e27e0f09b5af9f7940b6897a9edeb8f1a2bb2af3e6",
+      "producer_manifest_sha256": "560986c5be241a7a92bc62b724dc82775e98303ef3484326a6beb42c254e4043",
+      "post_gate_verifier_exit": 0,
+      "post_gate_verifier_log_sha256": "aa0941d6ddd2d1d4ebc3321a0d3ce1748bee4253e3f4ea67e759edd4e868ff21"
+    }
+  },
+  "source_replay_contract": {
+    "CPU_system_words": 58,
+    "whole_RAM_bytes": 16777216,
+    "whole_VGA_linear_bytes": 2097152,
+    "whole_VGA_fastmem_bytes": 4194304,
+    "provider_pages": 4096,
+    "firstMB_entries": 272,
+    "full_linked_cache": true,
+    "first_and_repeated_bootstrap": true,
+    "actual_API_pairs": 17
+  },
+  "reaching_fixes": {
+    "opcode_fetch": "Omitted normal-core Fetchb at23c4 leaves linear65538/physical307 absent from original final ten-link cache while complete CPU/RAM still match. Actual CS opcode read corrects both targets; omitted-read mutant is rejected.",
+    "LTR_width": "Original Descriptor::Save performs two mem_writed calls. Controlled relocation of actual available descriptor into captured chained VGA at318 reaches eight-byte-callback defect despite identical all58 CPU/system words and wholeRAM; complete fastmem differs. Callback widths are source-backed; controlled composition is not an independent changed whole-VM capture."
+  },
+  "extracted_original_component_proofs": {
+    "scope": "Controlled source compositions with declared actual source inputs, not complete original application or independent whole-VM execution.",
+    "provider_results": 24,
+    "provider_mutants": 5,
+    "provider_proof_sha256": "0510148d88be30a471e966dbab879b348f4c3b1eb2c14ba0d9893e4e6f1b2d16",
+    "VGA_results": 20,
+    "VGA_mutants": 4,
+    "VGA_proof_sha256": "69f8715d38dc5dc1b8a4febcc93137eab0d372875f1810108b9131bc8ec335d8"
+  },
+  "full_matrix": {
+    "scope": "Verified shared CPU/system/physical-memory adoption and actual typed device/IRQ/bootstrap regressions. Complete existing matrix retains its reference/filter/tick scopes; complete original application video/PCM acceptance remains open.",
+    "parent": "eea3cf60dafbf4168b27ad605294d0382c7f053c",
+    "command": "FIST_WORKDIR=/tmp/wasm-fist-cpu-memory-adoption-gate NODE=/usr/bin/node OBJDIR=/tmp/wasm-fist-cpu-memory-adoption-gate/objects NATIVE=/tmp/wasm-fist-cpu-memory-adoption-gate/production/native OUTJS=/tmp/wasm-fist-cpu-memory-adoption-gate/production/wasm/fistrun.js bash tools/check_flow.sh",
+    "run": "/tmp/wasm-fist-cpu-memory-adoption-gate/verify/run.VBHRax",
+    "exec_session": 76196,
+    "terminal_exit": 0,
+    "tests": 151,
+    "test_seconds": 290.404,
+    "flows": 178,
+    "failed_flows": 0,
+    "resource_start_cases": 6,
+    "exact_patches": true,
+    "sequential_native_wasm_builds": true,
+    "source_inputs": 1474,
+    "source_inputs_unchanged": true,
+    "all419_originals_unchanged": true,
+    "source_archive_sha256": "acacbafb1dc0049e973147bee4e9e0fd70bf5f6ca90a52492cc63ae39e18e0be",
+    "proof_hashes": {
+      "gate.log": "d77560c487e36e08d0e7ffad89c927dcdf13da0fcf603dc91a74c4243f6ef1c0",
+      "verify/run.VBHRax/tests.log": "b1dd9cf9a0e17d0f6dc2a6001f3ca86d4fbaf2e006877fca4a25ea23cf1d2605",
+      "verify/run.VBHRax/patch.log": "e07876d0504bf9589ee383facdfc8121212135010bc1fbdd0b13857223839fbb",
+      "verify/run.VBHRax/native-build.log": "3dd9279108fb3a949da9d5a83827b23ed903c33db23a2b491499613a55d464c6",
+      "verify/run.VBHRax/wasm-build.log": "87954c4559cf324d2143a7e44b8e981668382fc3620e486390ad836f4122f645",
+      "verify/run.VBHRax/sha256.txt": "171125adeee1882f5c1df38390fa43adc92ab45c04b0a45bb6154f6a716d9b21",
+      "verify/run.VBHRax/resource-start/proof.json": "2640be92003a8ba71f0a2611e83910e09cb721f865732eacbe32983e677fd625",
+      "original-hashes.json": "6b5ef26a2243566e57de00a6e1fb6f90416186e5db6906b064e09e610b3234e9"
+    },
+    "complete_original_acceptance": false
+  },
+  "output_diagnostics": {
+    "scope": "Complete frozen current646 30-second production diagnostic. All required original video fields are compared; missing final mixedPCM fails strict parity. Shared typed-consumer fixes do not yet change actual application startup/IRQ transport.",
+    "captures": {
+      "native": {
+        "exit": 0,
+        "frames": 2100,
+        "endpoint_ms": 30000,
+        "frames_sha256": "6145256c96764d53addb30d5dc47fca06829b695fcf80926cb72d59d7f34daa9",
+        "end_sha256": "d9a0d931e601a226af27dbfe7ebb2f7edfeafbd7b297f908a32f675a1a0e3245",
+        "all_previous_frame_end_bytes_equal": true,
+        "original_differences": [
+          817,
+          943,
+          948,
+          952,
+          962,
+          966,
+          980,
+          985,
+          1237,
+          1242,
+          1251,
+          1261,
+          1265,
+          1270,
+          1275,
+          1303,
+          1312,
+          1326,
+          1331,
+          1335,
+          1373,
+          1466,
+          1546,
+          1555,
+          1569,
+          1578,
+          1620,
+          1939
+        ],
+        "first_original_error": [
+          11704156,
+          "F event 817 pixels byte 8754: 16 != 212"
+        ],
+        "original_layout_palette_times_equal": true,
+        "sound_register_rows": 43,
+        "all_previous_sound_rows_equal": true,
+        "unmasked_service_packets": 47,
+        "all_previous_service_packets_equal": true,
+        "final_mixed_pcm_present": false,
+        "strict_original_exit": 1,
+        "strict_original_output": "FAIL: [Errno 2] No such file or directory: '/tmp/wasm-fist-cpu-memory-adoption/native-30s-traced/sequence.pcm'\n"
+      },
+      "wasm": {
+        "exit": 0,
+        "frames": 2100,
+        "endpoint_ms": 30000,
+        "frames_sha256": "6145256c96764d53addb30d5dc47fca06829b695fcf80926cb72d59d7f34daa9",
+        "end_sha256": "d9a0d931e601a226af27dbfe7ebb2f7edfeafbd7b297f908a32f675a1a0e3245",
+        "all_previous_frame_end_bytes_equal": true,
+        "original_differences": [
+          817,
+          943,
+          948,
+          952,
+          962,
+          966,
+          980,
+          985,
+          1237,
+          1242,
+          1251,
+          1261,
+          1265,
+          1270,
+          1275,
+          1303,
+          1312,
+          1326,
+          1331,
+          1335,
+          1373,
+          1466,
+          1546,
+          1555,
+          1569,
+          1578,
+          1620,
+          1939
+        ],
+        "first_original_error": [
+          11704156,
+          "F event 817 pixels byte 8754: 16 != 212"
+        ],
+        "original_layout_palette_times_equal": true,
+        "sound_register_rows": 43,
+        "all_previous_sound_rows_equal": true,
+        "unmasked_service_packets": 47,
+        "all_previous_service_packets_equal": true,
+        "final_mixed_pcm_present": false,
+        "strict_original_exit": 1,
+        "strict_original_output": "FAIL: [Errno 2] No such file or directory: '/tmp/wasm-fist-cpu-memory-adoption/wasm-30s-traced/sequence.pcm'\n"
+      }
+    },
+    "original_pcm": {
+      "records": 2587,
+      "samples": 1324058,
+      "first": 0,
+      "last": 30023401,
+      "modes": [],
+      "rates": [
+        44100
+      ]
+    },
+    "cross_target_complete_frames_equal": true,
+    "producers": {
+      "/tmp/wasm-fist-cpu-memory-adoption-gate/production/native": "58595832b5b583fe47b072e0c13d7a254049a2ae325d68248137785d6a743248",
+      "/tmp/wasm-fist-cpu-memory-adoption-gate/production/wasm/fistrun.js": "74e07d347d0afdf30b5177d38c086fb695547f17c492d295ce6417d04354b423",
+      "/tmp/wasm-fist-cpu-memory-adoption-gate/production/wasm/fistrun.wasm": "6b8f22a7cfc169eba2542247cc8ba8d9d8df9adad1b701c651c98f743290539a",
+      "/home/cosmo/Git/wasm-fist/tools/capture_port_sequence.sh": "fcd65b11def0dce6a8f991da0bf518f2b80399b007e9e1af8234571bdb1d8c55",
+      "/tmp/wasm-fist-production635/original-30s/sequence.frames": "25dade690f8fcd972e006e59bb21624de7059176e89f9efd4b01a31f4bd22bf6",
+      "/tmp/wasm-fist-production635/original-30s/sequence.pcm": "91510ead86b009740851001519f40e09d00d01042f7238a4b10c5d7f5b5a8ed6",
+      "/tmp/wasm-fist-production635/original-30s/sequence.end": "d9a0d931e601a226af27dbfe7ebb2f7edfeafbd7b297f908a32f675a1a0e3245",
+      "/tmp/wasm-fist-production635/original-30s/start-state.text": "95497cd569be155a0efb76408a22f54fbe00dc8a267d19e7ad9375b70088bacb",
+      "/tmp/wasm-fist-production635/original-30s/start-state.bda": "5c1a8ad522ad0d6019ccb91847f7eff7fd611e9f710eed350e80afa77fe799d7",
+      "/tmp/wasm-fist-production635/original-30s/start-state.vga": "2b15a5e6f618bce966ae54fd0cb101009ce54041f65eb3fa2f28bcf40aed0d65",
+      "/tmp/wasm-fist-cpu-memory-adoption/production-diagnostic.py": "2c20681da04cf84d2ab57057a8f6c2451af6ce9e8701e7ef08c2078f386081ab"
+    },
+    "complete_original_acceptance": false
+  },
+  "cleanup": {
+    "/tmp/wasm-fist-cpu-memory-adoption-gate/matrix-retired-output.json": {
+      "retired_bytes": 4862221095,
+      "files": 202931,
+      "receipt_sha256": "ef9c14784c27d358d1d8c733dc3c9fab396097f44fd37357f1ddc49a7f93305a"
+    },
+    "/tmp/wasm-fist-cpu-memory-adoption/after-reset-replay/retired-output.json": {
+      "retired_bytes": 2217869424,
+      "files": 192,
+      "receipt_sha256": "84e15bc5029155ddfd83369f38c4b082fbd777a506e6b43c042c445148b8b3fc"
+    },
+    "/tmp/wasm-fist-cpu-memory-adoption/after-reset-dos-replay/retired-output.json": {
+      "retired_bytes": 3120249356,
+      "files": 282,
+      "receipt_sha256": "b7a8e0dcd5ca884aea0526554a161f493e7b1e652f9230b80a25522975ff196c"
+    },
+    "/tmp/wasm-fist-cpu-memory-adoption/production-diagnostic-retired-output.json": {
+      "retired_bytes": 474891690,
+      "files": 1683,
+      "receipt_sha256": "92df0dd75accfe3b147850f0a89065297a298ab97b9eb2cab350267331dbc5db"
+    }
+  },
+  "complete_original_acceptance": false
+}
