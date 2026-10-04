@@ -1074,6 +1074,57 @@ byte8754. Final mixed portPCM is absent and strict original comparison fails.
 This dependency adoption does not establish actual application startup/IRQ
 transport or any first817/finalPCM improvement.
 
+Actual first DOS software entry and outer return adoption, parent `2fdaeee`:
+`tools/oracle/capture_software_dos.py` captures380 complete startup fetches,
+158 complete handler/caller observations and20 whole16MiB RAM/provider/cache/VGA
+boundaries. Original INT21 atCS2b:5cdd passes type1 and explicit return5cdf;
+the final protected handler instruction is66cb atCS8:1b41, invoking
+CPU_RET(use32=1,bytes=0), not IRET. Shared software entry materializes the
+reached lazy DWORD XOR and saves the explicit post-operand return. Shared
+RETF restores callerCS2b/CPL3/SS23/ESP3d006 without touching flags. Both API
+pairs match all58 CPU/system words, complete RAM and provider/cache/VGA on
+release Native32/WASM. Hardware substitution saves5cdd instead of5cdf at
+physical7f8c while all58 output words match; near-return substitution leaves
+CS/CPL/ESP wrong while complete RAM matches. Four selected regressions pass
+(19.243s), including missing RAM/VGA and coherently wrong return/clock
+rejection. Reproduce source: `python3 -B tools/oracle/capture_software_dos.py
+--repo . --output /tmp/wasm-fist-software-dos-source`. Complete original
+39-frame/27518-PCM/end600 output remains equal to its unprobed baseline;
+419 original assets remain unchanged. Evidence:
+`/tmp/wasm-fist-software-dos-entry/public-original/proof.json` and
+`/tmp/wasm-fist-software-dos-entry/software-unit.log`. The full existing matrix
+passes155 tests (310.186s), exact patches, sequential Native/WASM builds, six
+resource-start cases and178 flows with no failures and terminal0. All1480
+frozen source inputs and419 originals remained unchanged at terminal. Consume
+`tools/oracle/software_dos_production_case.json` for command, hashes, source
+reference and fresh30-second diagnostics. Both production targets retain all
+2100 prior frames/end,43 sound rows and47 unmasked service packets. Original
+layout/palette/time match;28 pixel errors begin817/11704156us/byte8754 and
+strict comparison rejects missing final mixedPCM. Observing158 handler fetches
+and replaying these two public APIs does not execute the handler or transport
+production startup, fix first817 or supply final mixedPCM. Recover its real paging/control,
+DOS service, REP and MOVSS execution next; no fitted handler budget.
+
+Private following execution preparation, excluded from this public API adoption:
+`/tmp/wasm-fist-software-handler-preparation/full/{proof.json,mutant-proof.json}`
+replays the complete first reached handler through caller5cdf:158 instruction
+observations plus software return and DOS callback observations give161 complete
+58-word/budget comparisons;20 full RAM/provider/cache/VGA boundaries match
+Native/WASM. Source-derived REP budget, MOVSS holds, protected/real segments,
+CR0/CR3, LGDT/LIDT/LTR and DOS21 AH1a PSP-stack/DTA writes execute. Three
+full-reaching substitutions reject omitted MOVSS holds, PSP stack writes and
+REP cost. Separate following-caller source/replay under
+`/tmp/wasm-fist-software-following-caller/replay/{proof.json,mutant-proof.json}`
+reaches the actual nextINT21 at5df4, AH4e FindFirst forDSOUNDS.BIN, with258
+complete58-word/CPU/PIC-time observations across525->526 and complete same-
+capture RAM/provider/cache/VGA. It uses the shared production clock; read-only
+observer access to its actual PIC epoch replaces the invalid modulo-derived
+CPU_CycleLeft at the zero-budget fetch. Both full-reaching eagerSETNC and
+unfilled-core-exit substitutions preserve final RAM/cache/VGA yet fail complete
+CPU states at5dc2/5da2 on both targets. The initial handler replay still uses
+its bounded same-tick budget observer; combine the real clock and following
+caller before public execution adoption. No production startup state is supplied.
+
 ## Next
 
 Private following-call preparation, not public adoption: original-byte
@@ -1087,8 +1138,10 @@ boundaries. Different captures retain their own complete start RAM, including
 unchanged per-run boot-input differences; no bytes are normalized. Temporary
 proofs are under `/tmp/wasm-fist-cpu-memory-adoption/after-reset-{replay,dos-replay}`.
 Version the reached source fixture and original-byte producer before public
-adoption, recover the actual DOS handoff at5cdd, and complete the caller through
-its real return. This preparation still does not provide production start state.
+adoption. The software-entry adoption above proves the actual API pairs
+at5cdd and final outer RETF; complete all intervening handler instructions
+and the caller through its real return. This preparation still does not
+provide production start state.
 
 Consume physical_provider_case.json together with paging_control_case.json.
 Adopt the one CPU/system/physical owner only after actual callers, provider

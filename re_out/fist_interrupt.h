@@ -157,13 +157,16 @@ static inline int fist_descriptor_writable_stack(FistCpuDescriptor d)
     unsigned t=fist_descriptor_type(d);
     return t==0x12 || t==0x13 || t==0x16 || t==0x17;
 }
-static inline void fist_cpu_hw_interrupt(FistCpuRam *bus,uint32_t num)
+/* Original CPU_HW_Interrupt and CPU_SW_Interrupt share CPU_Interrupt. The
+ * software caller supplies GETIP after fetching its encoded INT operand. */
+enum { FIST_INT_SOFTWARE=0x1u };
+static inline void fist_cpu_interrupt(FistCpuRam *bus,uint32_t num,uint32_t type,uint32_t oldeip)
 {
     FistCpuState *cpu=bus->cpu;
     FistCpuSystem *sys=bus->system;
     sys->lastint=(uint8_t)num;
     fist_cpu_fill_flags(cpu);
-    uint32_t oldeip=cpu->eip;
+    fist_cpu_require(type==0 || type==FIST_INT_SOFTWARE);
     if(!cpu->pmode) {
         fist_cpu_push(bus,2,cpu->flags.flags);
         fist_cpu_push(bus,2,cpu->segments[1].value);
@@ -177,8 +180,9 @@ static inline void fist_cpu_hw_interrupt(FistCpuRam *bus,uint32_t num)
     fist_cpu_require(!(cpu->flags.flags&FIST_FLAG_VM));
     fist_cpu_require(num*8<sys->idt_limit);
     FistCpuDescriptor gate=fist_cpu_load_descriptor(bus,sys->idt_base+num*8);
-    unsigned type=fist_descriptor_type(gate);
-    fist_cpu_require(type==6 || type==7 || type==14 || type==15);
+    fist_cpu_require(!(type&FIST_INT_SOFTWARE) || fist_descriptor_dpl(gate)>=cpu->cpl);
+    unsigned gate_type=fist_descriptor_type(gate);
+    fist_cpu_require(gate_type==6 || gate_type==7 || gate_type==14 || gate_type==15);
     fist_cpu_require(fist_descriptor_present(gate));
     uint32_t selector=gate.low>>16;
     FistCpuDescriptor cs;
@@ -186,7 +190,7 @@ static inline void fist_cpu_hw_interrupt(FistCpuRam *bus,uint32_t num)
     fist_cpu_require(fist_cpu_descriptor(bus,selector,&cs));
     unsigned dpl=fist_descriptor_dpl(cs);
     fist_cpu_require(dpl<=cpu->cpl && fist_descriptor_code(cs) && fist_descriptor_present(cs));
-    unsigned width=(type&8) ? 4 : 2;
+    unsigned width=(gate_type&8) ? 4 : 2;
     if(fist_descriptor_nonconforming_code(cs)) {
         if(dpl<cpu->cpl) {
             uint32_t old_ss=cpu->segments[2].value,old_esp=cpu->esp;
@@ -214,8 +218,16 @@ static inline void fist_cpu_hw_interrupt(FistCpuRam *bus,uint32_t num)
     cpu->segments[1].base=fist_descriptor_base(cs);
     cpu->code_big=fist_descriptor_big(cs);
     cpu->eip=(gate.low&0xffff) | (gate.high&0xffff0000u);
-    if(!(type&1))cpu->flags.flags&=~FIST_FLAG_IF;
+    if(!(gate_type&1))cpu->flags.flags&=~FIST_FLAG_IF;
     cpu->flags.flags&=~(FIST_FLAG_TF|FIST_FLAG_NT|FIST_FLAG_VM);
+}
+static inline void fist_cpu_hw_interrupt(FistCpuRam *bus,uint32_t num)
+{
+    fist_cpu_interrupt(bus,num,0,bus->cpu->eip);
+}
+static inline void fist_cpu_sw_interrupt(FistCpuRam *bus,uint32_t num,uint32_t oldeip)
+{
+    fist_cpu_interrupt(bus,num,FIST_INT_SOFTWARE,oldeip);
 }
 static inline void fist_cpu_check_segments(FistCpuRam *bus)
 {
@@ -230,6 +242,47 @@ static inline void fist_cpu_check_segments(FistCpuRam *bus)
         }
         if(invalid) {cpu->segments[s].value=0;cpu->segments[s].base=0;}
     }
+}
+/* Original CPU_RET valid descriptor paths; unlike IRET, no flags are popped
+ * or materialized. The reached DOS return is32-bit to outer privilege. */
+static inline void fist_cpu_far_ret(FistCpuRam *bus,unsigned use32,uint32_t bytes)
+{
+    FistCpuState *cpu=bus->cpu;
+    unsigned width=use32 ? 4 : 2;
+    if(!cpu->pmode || (cpu->flags.flags&FIST_FLAG_VM)) {
+        uint32_t ip=fist_cpu_pop(bus,width),cs=fist_cpu_pop(bus,width)&0xffff;
+        cpu->esp+=bytes;
+        fist_cpu_select_real_cs(cpu,cs);cpu->eip=ip;cpu->code_big=0;
+        return;
+    }
+    uint32_t cs=fist_ram_resident_read(bus,2,(cpu->esp&cpu->stack_mask)+width,width)&0xffff;
+    uint32_t rpl=cs&3;FistCpuDescriptor cd;
+    fist_cpu_require(rpl>=cpu->cpl && (cs&0xfffc)!=0);
+    fist_cpu_require(fist_cpu_descriptor(bus,cs,&cd));
+    fist_cpu_require(fist_descriptor_code(cd) && fist_descriptor_present(cd));
+    if(fist_descriptor_nonconforming_code(cd))fist_cpu_require(fist_descriptor_dpl(cd)==rpl);
+    else fist_cpu_require(fist_descriptor_dpl(cd)<=rpl);
+    uint32_t ip=fist_cpu_pop(bus,width);cs=fist_cpu_pop(bus,width)&0xffff;
+    if(rpl==cpu->cpl) {
+        cpu->segments[1].value=cs;cpu->segments[1].base=fist_descriptor_base(cd);
+        cpu->code_big=fist_descriptor_big(cd);cpu->eip=ip;
+        cpu->esp=fist_cpu_stack_advance(cpu,cpu->esp,bytes);
+        return;
+    }
+    /* CPU_RET adjusts full ESP before reading outer stack fields, even when
+     * the old stack is16-bit. The restored stack's width applies afterwards. */
+    cpu->esp+=bytes;
+    uint32_t esp=fist_cpu_pop(bus,width),ss=fist_cpu_pop(bus,width)&0xffff;
+    FistCpuDescriptor sd;
+    fist_cpu_require((ss&0xfffc)!=0 && fist_cpu_descriptor(bus,ss,&sd));
+    fist_cpu_require((ss&3)==rpl && fist_descriptor_dpl(sd)==rpl);
+    fist_cpu_require(fist_descriptor_writable_stack(sd) && fist_descriptor_present(sd));
+    cpu->cpl=rpl;cpu->segments[1].value=(cs&0xfffc)|rpl;
+    cpu->segments[1].base=fist_descriptor_base(cd);
+    cpu->code_big=fist_descriptor_big(cd);cpu->eip=ip;
+    fist_cpu_select_stack(cpu,ss,esp,sd);
+    cpu->esp=fist_cpu_stack_advance(cpu,cpu->esp,bytes);
+    fist_cpu_check_segments(bus);
 }
 static inline void fist_cpu_iret(FistCpuRam *bus,unsigned use32)
 {

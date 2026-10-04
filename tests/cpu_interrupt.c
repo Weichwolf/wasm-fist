@@ -31,6 +31,8 @@ int main(int argc,char **argv)
     int result=0;
     if(op[0]==0)fist_cpu_hw_interrupt(&context.bus,op[1]);
     else if(op[0]==1)fist_cpu_iret(&context.bus,op[1]);
+    else if(op[0]==7)fist_cpu_sw_interrupt(&context.bus,op[1],op[2]);
+    else if(op[0]==8)fist_cpu_far_ret(&context.bus,op[1],op[2]);
     else if(op[0]==2)fist_cpu_lgdt(&sys,op[1],op[2]);
     else if(op[0]==3)fist_cpu_lidt(&sys,op[1],op[2]);
     else if(op[0]==5 || op[0]==6) {

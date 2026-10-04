@@ -15,7 +15,7 @@ def digest(path):
 
 
 def capture(repo,root,stop=0x7809,extra_producers=(),probe=None):
-    assert stop in (0x7809,0x780e)
+    assert stop in (0x7809,0x780e,0x5cdd)
     assert root.is_relative_to(Path('/tmp')), 'disposable captures must be under /tmp'
     root.mkdir(parents=True,exist_ok=False)
     probe=probe or Path(__file__).resolve().with_name('device_start_prefix.gdb')

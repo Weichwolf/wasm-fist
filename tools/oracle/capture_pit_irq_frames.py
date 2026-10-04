@@ -16,7 +16,7 @@ from sequence_format import validate, validate_endpoint
 ROOT = Path(__file__).resolve().parents[2]
 END_MS = 2000
 META = {'kind', 'index', 'serial', 'memory_file', 'num', 'type', 'oldeip',
-        'vector_hex', 'vector_physical', 'use32'}
+        'vector_hex', 'vector_physical', 'use32', 'arguments', 'memory_context'}
 SYSTEM_FIELDS = ('cpu.idt.table_base', 'cpu.idt.table_limit', 'cpu.gdt.table_base',
                  'cpu.gdt.table_limit', 'cpu.gdt.ldt_base', 'cpu.gdt.ldt_limit',
                  'cpu.gdt.ldt_value', 'cpu_tss.base', 'cpu_tss.limit', 'cpu_tss.selector',
@@ -171,17 +171,48 @@ def transition(repo, folder, before, after, physical, constants, offsets):
         q['cpu.direction'] = 1-((q['cpu_regs.flags'] & constants['FLAG_DF']) >> 9)
         q['lflags.type'] = 0  # DestroyConditionFlags, retaining operands/oldcf/prev_type.
 
-    if before['kind'] == 'before-hardware':
-        # All three actually reached hardware entries exit the normal core with materialized flags.
-        assert q['lflags.type'] == 0 and before['type'] == 0
-        num = before['num']; q['lastint'] = num
-        assert before['oldeip'] == q['cpu_regs.ip.dword[0]']
+    def check_data_segments():
+        for segment in (0, 3, 4, 5):
+            d = descriptor(q['segments'][segment]['value'])
+            types = [constants[n] for n in ('DESC_DATA_EU_RO_NA', 'DESC_DATA_EU_RO_A',
+                     'DESC_DATA_EU_RW_NA', 'DESC_DATA_EU_RW_A', 'DESC_DATA_ED_RO_NA',
+                     'DESC_DATA_ED_RO_A', 'DESC_DATA_ED_RW_NA', 'DESC_DATA_ED_RW_A',
+                     'DESC_CODE_N_NC_A', 'DESC_CODE_N_NC_NA', 'DESC_CODE_R_NC_A', 'DESC_CODE_R_NC_NA')]
+            assert d['type'] not in types or q['cpu.cpl'] <= d['dpl']
+
+    if before['kind'] in ('before-hardware', 'before-software'):
+        software = before['kind'] == 'before-software'
+        args = before['arguments'] if software else before
+        if software:
+            header = (repo/'third_party/dosbox-build/dosbox-0.74-3/include/cpu.h').read_text()
+            assert args['type'] == int(re.search(r'^#define CPU_INT_SOFTWARE\s+(0x\w+)',header,re.M)[1],16)
+            image = (repo/'re_out/fist_image.bin').read_bytes(); ip = q['cpu_regs.ip.dword[0]']
+            assert image[ip:ip+2] == bytes((0xcd,args['num'])) and args['oldeip'] == ip+2
+            # The reached caller has lazy DWORD XOR. FillFlags retains every
+            # operand, previous tag and old carry while replacing status bits.
+            lazy = (repo/'third_party/dosbox-build/dosbox-0.74-3/src/cpu/lazyflags.h').read_text()
+            tags = re.findall(r'\bt_[A-Za-z0-9_]+\b',lazy.split('//Types of Flag changing instructions',1)[1].split('enum {',1)[1].split('};',1)[0])
+            assert q['lflags.type'] == tags.index('t_XORd')
+            result = q['lflags.res.dword[0]']
+            assert result == q['lflags.var1.dword[0]'] ^ q['lflags.var2.dword[0]']
+            mask = sum(constants[n] for n in ('FLAG_CF','FLAG_PF','FLAG_AF','FLAG_ZF','FLAG_SF','FLAG_OF'))
+            flags = (constants['FLAG_PF'] if (result&255).bit_count()%2==0 else 0)
+            flags |= constants['FLAG_ZF'] if result==0 else 0
+            flags |= constants['FLAG_SF'] if result&(1<<31) else 0
+            q['cpu_regs.flags'] = (q['cpu_regs.flags']&~mask)|flags
+            q['lflags.type'] = 0
+        else:
+            # All reached hardware entries already have materialized flags.
+            assert q['lflags.type'] == 0 and args['type'] == 0
+            assert args['oldeip'] == q['cpu_regs.ip.dword[0]']
+        num = args['num']; q['lastint'] = num
         width = 2
         if q['cpu.pmode']:
             assert not q['cpu_regs.flags'] & constants['FLAG_VM']
             assert num*8 < q['cpu.idt.table_limit']
             gate = read(q['cpu.idt.table_base']+num*8, 8)
-            assert gate.to_bytes(8, 'little').hex() == before['vector_hex']
+            if not software:assert gate.to_bytes(8, 'little').hex() == before['vector_hex']
+            else:assert (gate>>45)&3 >= q['cpu.cpl']
             gate_type = (gate >> 40) & 31
             assert gate_type == constants['DESC_386_INT_GATE'] and gate & (1 << 47)
             selector = (gate >> 16) & 0xffff
@@ -208,10 +239,27 @@ def transition(repo, folder, before, after, physical, constants, offsets):
             assert (destination.to_bytes(2, 'little')+cs.to_bytes(2, 'little')).hex() == before['vector_hex']
             new_cs = dict(value=cs, base=cs << 4); q['cpu.code.big'] = 0
         push(q['cpu_regs.flags'] & ((1 << (width*8))-1), width)
-        push(q['segments'][1]['value'], width); push(before['oldeip'] & ((1 << (width*8))-1), width)
+        push(q['segments'][1]['value'], width); push(args['oldeip'] & ((1 << (width*8))-1), width)
         q['cpu_regs.flags'] &= ~(constants['FLAG_IF'] | constants['FLAG_TF'])
         if q['cpu.pmode']: q['cpu_regs.flags'] &= ~(constants['FLAG_NT'] | constants['FLAG_VM'])
         q['segments'][1] = new_cs; q['cpu_regs.ip.dword[0]'] = destination
+    elif before['kind'] == 'before-software-ret':
+        assert after['kind'] == 'after-software-ret'
+        args = before['arguments']; assert args['use32']==1 and args['bytes']==0
+        assert q['cpu.pmode'] and not q['cpu_regs.flags']&constants['FLAG_VM']
+        width = 4
+        selector = read(q['segments'][2]['base']+(q['registers'][4]&q['cpu.stack.mask'])+width,width)&0xffff
+        desc = descriptor(selector);rpl=selector&3
+        assert desc['present'] and rpl>q['cpu.cpl'] and rpl==desc['dpl']
+        assert desc['type'] in [constants[n] for n in ('DESC_CODE_N_NC_A','DESC_CODE_N_NC_NA','DESC_CODE_R_NC_A','DESC_CODE_R_NC_NA')]
+        ip,cs=pop(width),pop(width)&0xffff
+        esp,ss=pop(width),pop(width)&0xffff
+        sd=descriptor(ss);assert (ss&3)==sd['dpl']==rpl
+        q['cpu.cpl']=rpl;q['segments'][1]=dict(value=cs,base=desc['base'])
+        q['cpu.code.big']=desc['big'];q['cpu_regs.ip.dword[0]']=ip
+        set_stack(ss,esp,sd);q['cpu.mpl']=3
+        check_data_segments()
+        # RETF consumes offset/CS/outer ESP/SS; every flag word survives.
     else:
         assert before['kind'] == 'before-iret' and after['kind'] == 'after-iret'
         width = 4 if before['use32'] else 2
@@ -234,13 +282,7 @@ def transition(repo, folder, before, after, physical, constants, offsets):
             q['segments'][1] = dict(value=cs, base=desc['base']); q['cpu.code.big'] = desc['big']
             set_stack(ss, esp, sd)
             # Actual outer return checks all four data segments, including null selectors.
-            for segment in (0, 3, 4, 5):
-                d = descriptor(q['segments'][segment]['value'])
-                types = [constants[n] for n in ('DESC_DATA_EU_RO_NA', 'DESC_DATA_EU_RO_A',
-                         'DESC_DATA_EU_RW_NA', 'DESC_DATA_EU_RW_A', 'DESC_DATA_ED_RO_NA',
-                         'DESC_DATA_ED_RO_A', 'DESC_DATA_ED_RW_NA', 'DESC_DATA_ED_RW_A',
-                         'DESC_CODE_N_NC_A', 'DESC_CODE_N_NC_NA', 'DESC_CODE_R_NC_A', 'DESC_CODE_R_NC_NA')]
-                assert d['type'] not in types or q['cpu.cpl'] <= d['dpl']
+            check_data_segments()
         q['cpu_regs.ip.dword[0]'] = ip
     expected = {k: v for k, v in after.items() if k not in META}
     assert q == expected, ('complete CPU transition', before['serial'], {k:(v, expected.get(k)) for k,v in q.items() if v != expected.get(k)})

@@ -389,6 +389,16 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   fails. Actual application startup/IRQ transport remains with0026; complete
   original output is not accepted by these API/producer regressions.
 
+- Consume0026 software-DOS API adoption, parent2fdaeee: actual firstINT21
+  and final outer32-bit RETF with complete58-word/RAM/provider/cache/VGA parity
+  on Native/WASM. Full155-test/178-flow/six-resource regression passes with
+  terminal0;1480 source inputs and419 originals unchanged at terminal. Consume
+  `tools/oracle/software_dos_production_case.json` for command, hashes and scope.
+  Complete kernel execution and production startup/IRQ transport remain open. Fresh candidate30-second Native/WASM
+  captures retain2100 previous frames/end,43 sound rows and47 full service
+  packets. All original palettes/layouts/times match;28 pixel failures begin817
+  and strict comparison rejects missing final mixed portPCM.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete
