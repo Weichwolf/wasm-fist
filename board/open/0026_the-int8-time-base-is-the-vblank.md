@@ -1208,17 +1208,53 @@ rows and47 unmasked service packets. Original palettes/layouts/times match;
 missing final mixedPCM. This adopts the instruction owner into reproducible
 regression, not real application startup/IRQ execution or complete output.
 
+
+### Original normal-core exits and PIC frame ordering
+
+The shared actual-byte producer now returns the original instruction-specific
+PIC/trap/core-return checks. CLI/ordinary instructions do not acquire STI's
+pending-IRQ check. Decoder selection remains machine metadata distinct from TF.
+The PIC owns one raw pending mask; a blocked lower-priority request still causes
+STI/POPF/IRET to leave the core. The shared early-return clock materializes flags
+and requeues at the same CPU time, without the failed-loop fetch decrement.
+
+The actual first reaching IRET at original PIC tick531 retains seven complete
+58-word CPU/system and16MiB RAM/provider/cache/VGA/PIC observations through the
+first IRQ0 handler fetch. Both optimized Native32 and WASM match continuously
+from one observed input seed. The original binary32 calendar is input, with no
+event reached in this bounded chain; fixture events fail if reached. The actual
+IRQ request is cleared before CPU frame construction; the in-service mark is
+applied after it. One PIC selector supplies dispatch and the existing vector-only
+API. Full39-frame/27518-sample/end600 original output equals the unprobed run.
+
+Verbatim original control bodies, flag operations and PIC match480 controlled
+real-mode CLI/STI/POPF/IRET width/stack/IF/TF/DF/pending/priority/budget cases on
+both release targets. These end at vector selection; guest trap execution and
+protected paths remain unproved. The extra-fetch substitution preserves every
+58-word/memory/context/PIC observation but first after-core time+1,budget-1 fails.
+Marking service before frame construction preserves complete CPU/time/RAM and
+final controller state but fails both original hardware-boundary PIC records.
+
+The frozen1505-input unfiltered gate passes169 tests, exact patches, sequential
+builds, six resource-start cases and all178 flows with durable0 and419 unchanged
+originals. Fresh complete30s captures preserve all2100 previous frame/end bytes,
+43 sound rows and47 unmasked packets. Original palettes/layouts/times agree;
+28 pixel failures still begin817/11704156us/byte8754 and mixed final portPCM is
+absent. Commands, source/binary hashes and complete scope are recorded in
+`tools/oracle/core_exit_production_case.json`. This adopts the reaching core/PIC
+frame owner in regression, not real application startup or full device time.
+
 ## Next
 
-Recover normal-core retirement at budget exhaustion and STI/POPF/IRET with
-actual pending PIC/device events before adopting the shared actual-byte producer
-in runtime startup. Preserve the public complete startup/DOS regression and
-original operand/address/IP-width and REP/MOVSS contracts. Keep snapshots,
-stopping and proof serialization in tests. Transport actual CPU/system/RAM/
-provider/cache/VGA state from real application startup through handlers and IRQs
-before replacing legacy outer77e2/op6c transport; recover each additionally
-reached instruction/control/host-service path from the original. Captured
-snapshots are diagnostic inputs, never runtime initialization.
+Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
+calendar from real application startup before replacing legacy outer77e2/op6c
+transport. Preserve the continuous startup/DOS and first reaching IRET/core/PIC
+frame proofs. Recover the next additionally reached instruction, host callback,
+far-transfer/trap retirement and pending PIT/device-event path before runtime
+adoption. Keep the raw pending mask separate from eligibility and mark service
+only after the CPU frame owner returns. Snapshots, stopping and serialization
+belong in tests; captured states are never runtime initialization. Regress
+complete CPU/RAM/device/output boundaries and both targets for each adoption.
 
 Consume physical_provider_case.json together with paging_control_case.json.
 Adopt the one CPU/system/physical owner only after actual callers, provider

@@ -1,0 +1,60 @@
+"""Complete source-observed first IRET/PIC/IRQ composition on both release targets."""
+import json
+from pathlib import Path
+import struct
+import subprocess
+from device_cpu_fixture import words,clock
+from memory_context_fixture import system_words,memory_packet,expected_memory_context
+from test_port_io import ROOT,tool
+
+def pic_packet(q):
+    data=[]
+    for irq in q['pic']['irqs']:data += [irq[k] for k in ('masked','active','inservice','vector')]
+    for pic in q['pic']['controllers']:data += [pic[k] for k in ('icw_words','icw_index','special','auto_eoi','rotate_on_auto_eoi','single','request_issr')]
+    data += [q['PIC_IRQCheck'],q['PIC_IRQActive']]
+    assert len(data)==80
+    return struct.pack('<80I',*data)
+
+def build(directory,pic=None,clock_source=None,driver=None):
+    flags=['-O2','-DNDEBUG','-I'+str(ROOT/'tests'),'-I'+str(ROOT/'re_out'),'-ffunction-sections','-fdata-sections','-fno-strict-aliasing','-w']
+    sources=[driver or ROOT/'tests/cpu_core_exit.c',clock_source or ROOT/'tests/cpu_core_exit_clock.c',pic or ROOT/'tests/cpu_core_exit_pic.c',ROOT/'re_out/fist_dos.c',ROOT/'re_out/fist_sb.c']
+    runs=[]
+    for target,compiler,options,output,runner in (
+        ('native',['gcc','-m32'],['-Wl,--gc-sections','-lm'],directory/'core-exit',[]),
+        ('wasm',[tool('emcc','Git/emsdk/upstream/emscripten/emcc')],['-sNODERAWFS=1','-sEXIT_RUNTIME=1','-sALLOW_MEMORY_GROWTH=1'],directory/'core-exit.js',[tool('node','Git/emsdk/node/*/bin/node')])):
+        p=subprocess.run([*compiler,*flags,*map(str,sources),*options,'-o',str(output)],capture_output=True,text=True,timeout=120)
+        (directory/(target+'-build.log')).write_text(p.stdout+p.stderr);assert p.returncode==0,p.stderr
+        runs.append((target,[*runner,str(output)]))
+    return runs
+
+def replay(directory,source,runs,strict=True):
+    folder=source/'source';rows=[json.loads(s) for s in (folder/'events.jsonl').read_text().splitlines()]
+    before=rows[0];data=words(before)+system_words(before)
+    calendar=before['calendar'];extra=[before['PIC_Ticks'],before['CPU_Cycles'],before['CPU_CycleLeft'],len(calendar)]
+    for entry in calendar:extra += [entry['index_bits'],entry['value']]
+    packet=directory/'initial.input';packet.write_bytes(struct.pack('<58I',*data)+memory_packet(before,folder)+pic_packet(before)+struct.pack('<%dI'%len(extra),*extra))
+    expected=[]
+    for row in rows:expected.append(row['kind']+' '+str(clock(row))+' '+str(row['PIC_Ticks'])+' '+str(row['CPU_Cycles'])+' '+str(row['CPU_CycleLeft'])+' '+' '.join('%08x'%w for w in words(row)+system_words(row)))
+    expected='\n'.join(expected)+'\n';results=[]
+    for target,run in runs:
+        output=directory/target
+        p=subprocess.run([*run,str(packet),str(folder/before['memory_file']),str(output)],capture_output=True,text=True,timeout=30)
+        (directory/(target+'.log')).write_text(p.stdout+p.stderr)
+        same=p.returncode==0 and p.stdout==expected;errors=[]
+        try:
+            if p.returncode==0:
+                for row in rows:
+                    kind=row['kind']
+                    for suffix,original in (('memory',(folder/row['memory_file']).read_bytes()),('context',expected_memory_context(row,folder)),('pic',pic_packet(row))):
+                        if Path(str(output)+'-'+kind+'.'+suffix).read_bytes()!=original:errors.append((kind,suffix))
+            if strict:
+                assert p.returncode==0,p.stderr
+                assert p.stdout==expected,(target,p.stdout,expected)
+                assert not errors,(target,errors)
+            results.append(dict(target=target,terminal_exit=p.returncode,complete_CPU_time_equal=same,memory_context_pic_errors=errors))
+        finally:
+            # Compact observations suffice after complete comparison; never retain
+            # duplicate112MiB target RAM per replay.
+            for row in rows:
+                for suffix in ('memory','context','pic'):Path(str(output)+'-'+row['kind']+'.'+suffix).unlink(missing_ok=True)
+    return results

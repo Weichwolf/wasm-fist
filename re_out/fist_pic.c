@@ -150,7 +150,13 @@ void fist_pic_write(unsigned port, unsigned value)
     } else if (!(value & 0x40)) pic->rotate_auto_eoi = !!(value & 0x80);
     else if (value & 0x80) fprintf(stderr, "[pic] set priority command not handled\n");
 }
-int fist_pic_take_irq(unsigned flags, int trap_decoder, unsigned *vector)
+unsigned fist_pic_pending_irqs(void)
+{
+    initialize();
+    return pending;
+}
+static int select_irq(unsigned flags,int trap_decoder,unsigned *vector,
+                      FistPicDeliver deliver,void *context)
 {
     initialize();
     if (!(flags & 0x200) || !pending || trap_decoder) return -1;
@@ -163,9 +169,20 @@ int fist_pic_take_irq(unsigned flags, int trap_decoder, unsigned *vector)
         irqs[i].active = 0;
         pending &= ~(1u << i);
         *vector = irqs[i].vector;
+        if (deliver) deliver(context,*vector);
         if (!pics[i/8].auto_eoi) { active_irq = i; irqs[i].inservice = 1; }
         else if (pics[i/8].rotate_auto_eoi) unsupported("rotate on auto EOI not handled");
         return (int)i;
     }
     return -1;
+}
+int fist_pic_take_irq(unsigned flags,int trap_decoder,unsigned *vector)
+{
+    return select_irq(flags,trap_decoder,vector,NULL,NULL);
+}
+int fist_pic_dispatch_irq(unsigned flags,int trap_decoder,unsigned *vector,
+                          FistPicDeliver deliver,void *context)
+{
+    if (!deliver) abort();
+    return select_irq(flags,trap_decoder,vector,deliver,context);
 }

@@ -609,6 +609,12 @@ static void cpu_slice_start(void)
     g_cpu_remaining = cpu_next_slice(clock_cpu_cycles(clock_now()));
     g_cpu_time = clock_now();
 }
+void fist_clock_cpu_core_exit(void)
+{
+    fist_cpu_require(g_cpu_context != NULL);
+    fist_cpu_fill_flags(g_cpu_context);
+    cpu_slice_start();
+}
 void fist_clock_pic_requeue(void)
 {
     /* write_data/PIC_SetIRQMask/OCW3 return the active budget to CycleLeft.

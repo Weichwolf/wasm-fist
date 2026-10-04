@@ -444,6 +444,21 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   original sequence/surface acceptance remain open; this accepts a shared
   instruction regression owner, not those runtime paths.
 
+
+- Consume0026's source-backed instruction retirement, raw PIC pending query and
+  CPU-frame-before-service dispatch in `tools/oracle/core_exit_production_case.json`.
+  One matched initial seed reproduces all seven full58-word/RAM/provider/cache/
+  VGA/PIC states through first IRQ0 handler fetch on both release targets; actual
+  original39frames/27518PCM/end600 remain unchanged. The480 controlled original
+  core/PIC cases and reaching extra-fetch/early-service substitutions distinguish
+  the time/controller contracts. The frozen1505-input169-test/exact-patch/both-
+  build/six-startup/full178-flow gate finishes0 with419 unchanged originals.
+  Complete30s production retains all2100 preceding frame/end bytes,43 sound rows
+  and47 unmasked packets. Original palettes/layouts/times match;28 pixel errors
+  still begin817/11704156us/byte8754 and final mixedPCM remains absent. Real
+  startup/device calendar/PIT integration and complete original sequence/surface
+  acceptance remain open; the observed source seed belongs to regression only.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

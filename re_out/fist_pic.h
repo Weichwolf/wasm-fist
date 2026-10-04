@@ -15,4 +15,11 @@ void fist_pic_activate_irq(unsigned irq);
 void fist_pic_deactivate_irq(unsigned irq);
 void fist_pic_set_irq_mask(unsigned irq, int masked);
 int fist_pic_take_irq(unsigned flags, int trap_decoder, unsigned *vector);
+/* Original PIC_IRQCheck is a raw pending mask, not an eligibility query. */
+unsigned fist_pic_pending_irqs(void);
+/* PIC_startIRQ clears the request, calls the CPU frame owner, then marks the
+ * selected IRQ in service. Callback memory/device effects observe that order. */
+typedef void (*FistPicDeliver)(void *context,unsigned vector);
+int fist_pic_dispatch_irq(unsigned flags,int trap_decoder,unsigned *vector,
+                          FistPicDeliver deliver,void *context);
 #endif

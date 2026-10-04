@@ -8,7 +8,9 @@
  * prefix_66_0f,string,support}.h and the shared CPU/control/memory owners.
  * This executes one already charged fetch, including one REP chunk. The
  * caller must handle normal-core exits, trap/PIC dispatch and host callbacks;
- * this function neither initializes a machine nor supplies missing opcodes. */
+ * the return value identifies original retirement checks, rather than inferring
+ * a core exit from flags after every opcode. It neither initializes a machine
+ * nor supplies missing opcodes. */
 typedef struct FistExec FistExec;
 struct FistExec {
  FistCpuRam *bus; void *opaque;
@@ -24,6 +26,19 @@ enum {FIST_EXEC_INT_BEFORE,FIST_EXEC_INT_AFTER,FIST_EXEC_RET_BEFORE,FIST_EXEC_RE
  FIST_EXEC_CALLBACK_BEFORE,FIST_EXEC_CALLBACK_AFTER};
 static inline void fist_exec_observe(FistExec *e,unsigned event,uint32_t a,uint32_t b) {
  if(e->observe)e->observe(e,event,a,b);
+}
+/* Normal-core decoder choice is machine metadata distinct from EFLAGS.TF.
+ * Only original checked instructions can select the trap decoder. A raw PIC
+ * pending mask causes a core exit even if priority blocks actual delivery. */
+enum {FIST_EXEC_CHECK_PIC=1,FIST_EXEC_CHECK_TRAP=2,FIST_EXEC_RETURN_CORE=4};
+static inline int fist_exec_core_exit(FistExec *e,unsigned checks,
+                                     unsigned pending,unsigned *trap_decoder) {
+ fist_cpu_require(trap_decoder!=NULL && *trap_decoder<=1);
+ if((checks&FIST_EXEC_CHECK_TRAP) && (e->bus->cpu->flags.flags&0x100u)) {
+  *trap_decoder=1;return 1;
+ }
+ return (checks&FIST_EXEC_RETURN_CORE) ||
+   ((checks&FIST_EXEC_CHECK_PIC) && (e->bus->cpu->flags.flags&FIST_FLAG_IF) && pending);
 }
 static uint32_t *fist_exec_reg(FistExec *e,unsigned i) {
  switch(i){case 0:return &e->bus->cpu->eax;case 1:return &e->bus->cpu->ecx;case 2:return &e->bus->cpu->edx;
@@ -134,7 +149,7 @@ static void fist_exec_conditional(FistExec *e,uint32_t *ip,unsigned width,unsign
  uint32_t next=saved+delta+displacement;
  *ip=width==2?(saved&0xffff0000u)|(next&0xffffu):next;
 }
-static void fist_exec_fetched(FistExec *e) {
+static unsigned fist_exec_fetched(FistExec *e) {
   uint32_t ip=e->bus->cpu->eip;unsigned width=e->bus->cpu->code_big?4:2,address=width,seg=6,rep=0,op;
   for(;;){op=fist_exec_fetch_code(e,&ip,1);if(op==0x66)width=e->bus->cpu->code_big?2:4;
    else if(op==0x67)address=e->bus->cpu->code_big?2:4;
@@ -160,7 +175,7 @@ static void fist_exec_fetched(FistExec *e) {
   else if(op==0x88){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);fist_exec_write_op(e,q,1,fist_exec_reg_read(e,(m>>3)&7,1));}
   else if(op==0xc6){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);fist_cpu_require(((m>>3)&7)==0);fist_exec_write_op(e,q,1,fist_exec_fetch_code(e,&ip,1));}
   else if(op==0x0a||op==0x0b){unsigned m=fist_exec_fetch_code(e,&ip,1),w=op==0x0a?1:width;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);unsigned i=(m>>3)&7;fist_exec_reg_write(e,i,w,fist_exec_alu(e,1,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w)));}
-  else if(op==0xe8){uint32_t d=fist_exec_fetch_code(e,&ip,width);fist_cpu_push(e->bus,width,ip);e->bus->cpu->eip=width==2?(uint16_t)(ip+d):ip+d;return;}
+  else if(op==0xe8){uint32_t d=fist_exec_fetch_code(e,&ip,width);fist_cpu_push(e->bus,width,ip);e->bus->cpu->eip=width==2?(uint16_t)(ip+d):ip+d;return 0;}
   else if(op==0xa3){unsigned offset=fist_exec_fetch_code(e,&ip,address);fist_ram_resident_write(e->bus,seg<6?seg:3,offset,width,fist_exec_reg_read(e,0,width));}
   else if(op==0xac){uint32_t offset=address==4?e->bus->cpu->esi:e->bus->cpu->esi&0xffff;fist_exec_reg_write(e,0,1,fist_ram_resident_read(e->bus,seg<6?seg:3,offset,1));fist_exec_reg_write(e,6,address,offset+e->bus->system->direction);}
   else if(op==0xc0){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);unsigned count=fist_exec_fetch_code(e,&ip,1)&31;fist_cpu_require(((m>>3)&7)==4);uint32_t a=fist_exec_read_op(e,q,1);
@@ -170,10 +185,10 @@ static void fist_exec_fetched(FistExec *e) {
   else if(op==0x07 || op==0x1f){unsigned which=op==0x07?0:3;
    uint32_t value=fist_ram_resident_read(e->bus,2,e->bus->cpu->esp&e->bus->cpu->stack_mask,2);fist_exec_select_segment(e,which,value);
    e->bus->cpu->esp=fist_cpu_stack_advance(e->bus->cpu,e->bus->cpu->esp,width);
-  }else if(op==0x9d)fist_exec_pop_flags(e,width);
+  }else if(op==0x9d){fist_exec_pop_flags(e,width);e->bus->cpu->eip=ip;return FIST_EXEC_CHECK_TRAP|FIST_EXEC_CHECK_PIC;}
   else if(op==0x9e){fist_cpu_fill_flags(e->bus->cpu);fist_cpu_load_flags(e->bus->cpu,e->bus->system,fist_exec_reg_read(e,4,1),FIST_FMASK_NORMAL&255);}
   else if(op==0xfa)fist_cpu_set_if(e->bus->cpu,0);
-  else if(op==0xfb)fist_cpu_set_if(e->bus->cpu,1);
+  else if(op==0xfb){fist_cpu_set_if(e->bus->cpu,1);e->bus->cpu->eip=ip;return FIST_EXEC_CHECK_PIC;}
   else if(op==0x0f){
    unsigned second=fist_exec_fetch_code(e,&ip,1);
    if(second==0xa0||second==0xa8)fist_cpu_push(e->bus,width,e->bus->cpu->segments[second==0xa0?4:5].value);
@@ -199,11 +214,11 @@ static void fist_exec_fetched(FistExec *e) {
   }else if(op==0xff){unsigned m=fist_exec_fetch_code(e,&ip,1),which=(m>>3)&7;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);uint32_t v=fist_exec_read_op(e,q,width);
    if(which==0||which==1)fist_exec_write_op(e,q,width,fist_exec_incdec(e,which,width,v));
    else if(which==6)fist_cpu_push(e->bus,width,v);
-   else if(which==2){fist_cpu_push(e->bus,width,ip);e->bus->cpu->eip=v;return;}
+   else if(which==2){fist_cpu_push(e->bus,width,ip);e->bus->cpu->eip=v;return 0;}
    else if(which==3){fist_cpu_require(!q.direct && !e->bus->cpu->pmode);q.offset+=width;unsigned cs=fist_exec_read_op(e,q,2);
     fist_cpu_fill_flags(e->bus->cpu);fist_cpu_push(e->bus,width,e->bus->cpu->segments[1].value);fist_cpu_push(e->bus,width,ip);
-    fist_exec_jump_far(e,cs,v,width);return;
-   }else {fist_cpu_require(which==4);e->bus->cpu->eip=v;return;}
+    fist_exec_jump_far(e,cs,v,width);return FIST_EXEC_CHECK_TRAP;
+   }else {fist_cpu_require(which==4);e->bus->cpu->eip=v;return 0;}
   }else if(op==0x3c){uint32_t a=fist_exec_reg_read(e,0,1),b=fist_exec_fetch_code(e,&ip,1);fist_cpu_alu(e->bus->cpu,FIST_LAZY_CMPB,8,a,b,a-b);}
   else if(op==0x76||op==0x77||op==0x74||op==0x75||op==0x72||op==0x73){
    int take=op==0x76?fist_cpu_cf(e->bus->cpu)||fist_cpu_zf(e->bus->cpu):op==0x77?!fist_cpu_cf(e->bus->cpu)&&!fist_cpu_zf(e->bus->cpu):op==0x74?fist_cpu_zf(e->bus->cpu):op==0x75?!fist_cpu_zf(e->bus->cpu):op==0x72?fist_cpu_cf(e->bus->cpu):!fist_cpu_cf(e->bus->cpu);
@@ -223,14 +238,14 @@ static void fist_exec_fetched(FistExec *e) {
    else if(op==0x09)fist_exec_write_op(e,q,width,fist_exec_alu(e,1,width,fist_exec_read_op(e,q,width),fist_exec_reg_read(e,index,width)));
    else if(op==0x2a)fist_exec_reg_write(e,index,1,fist_exec_alu(e,5,1,fist_exec_reg_read(e,index,1),fist_exec_read_op(e,q,1)));
    else {fist_cpu_require(op!=0x8d || !q.direct);fist_exec_reg_write(e,index,width,op==0x8b?fist_exec_read_op(e,q,width):q.offset);}
-  }else if(op==0xc3){e->bus->cpu->eip=fist_cpu_pop(e->bus,width);return;}
+  }else if(op==0xc3){e->bus->cpu->eip=fist_cpu_pop(e->bus,width);return 0;}
   else if(op==0xcb){fist_cpu_fill_flags(e->bus->cpu);fist_exec_observe(e,FIST_EXEC_RET_BEFORE,width==4,0);
-   fist_cpu_far_ret(e->bus,width==4,0);fist_exec_observe(e,FIST_EXEC_RET_AFTER,width==4,0);return;}
-  else if(op==0xcf){fist_cpu_iret(e->bus,width==4);return;}
+   fist_cpu_far_ret(e->bus,width==4,0);fist_exec_observe(e,FIST_EXEC_RET_AFTER,width==4,0);return 0;}
+  else if(op==0xcf){fist_cpu_iret(e->bus,width==4);return FIST_EXEC_CHECK_TRAP|FIST_EXEC_CHECK_PIC;}
   else if(op==0xcd){unsigned num=fist_exec_fetch_code(e,&ip,1);
    fist_exec_observe(e,FIST_EXEC_INT_BEFORE,num,ip);
-   fist_cpu_sw_interrupt(e->bus,num,ip);fist_exec_observe(e,FIST_EXEC_INT_AFTER,num,ip);return;}
-  else if(op==0xea){uint32_t offset=fist_exec_fetch_code(e,&ip,width),selector=fist_exec_fetch_code(e,&ip,2);fist_cpu_fill_flags(e->bus->cpu);fist_exec_jump_far(e,selector,offset,width);return;}
+   fist_cpu_sw_interrupt(e->bus,num,ip);fist_exec_observe(e,FIST_EXEC_INT_AFTER,num,ip);return 0;}
+  else if(op==0xea){uint32_t offset=fist_exec_fetch_code(e,&ip,width),selector=fist_exec_fetch_code(e,&ip,2);fist_cpu_fill_flags(e->bus->cpu);fist_exec_jump_far(e,selector,offset,width);return FIST_EXEC_CHECK_TRAP;}
   else if(op==0xa1){unsigned offset=fist_exec_fetch_code(e,&ip,address);fist_exec_reg_write(e,0,width,fist_ram_resident_read(e->bus,seg<6?seg:3,offset,width));}
   else if(op==0x25){fist_exec_reg_write(e,0,width,fist_exec_alu(e,4,width,fist_exec_reg_read(e,0,width),fist_exec_fetch_code(e,&ip,width)));}
   else if(op>=0x40 && op<=0x4f){fist_exec_reg_write(e,op&7,width,fist_exec_incdec(e,op>=0x48,width,fist_exec_reg_read(e,op&7,width)));}
@@ -245,7 +260,7 @@ static void fist_exec_fetched(FistExec *e) {
    if(which==7){fist_cpu_require(m==0x38);unsigned callback=fist_exec_fetch_code(e,&ip,2);
     fist_cpu_fill_flags(e->bus->cpu);e->bus->cpu->eip=ip;fist_exec_observe(e,FIST_EXEC_CALLBACK_BEFORE,callback,0);
     fist_cpu_require(e->callback!=NULL);e->callback(e,callback);
-    fist_exec_observe(e,FIST_EXEC_CALLBACK_AFTER,callback,0);return;
+    fist_exec_observe(e,FIST_EXEC_CALLBACK_AFTER,callback,0);return FIST_EXEC_RETURN_CORE;
    }else{fist_cpu_require(which<=1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);fist_exec_write_op(e,q,1,fist_exec_incdec(e,which,1,fist_exec_read_op(e,q,1)));}
   }
   else if(op>=0xb8 && op<=0xbf)fist_exec_reg_write(e,op&7,width,fist_exec_fetch_code(e,&ip,width));
@@ -266,6 +281,6 @@ static void fist_exec_fetched(FistExec *e) {
     e->charge(e->opaque,cost);
    }
   }else abort();
-  e->bus->cpu->eip=ip;
+  e->bus->cpu->eip=ip;return 0;
 }
 #endif
