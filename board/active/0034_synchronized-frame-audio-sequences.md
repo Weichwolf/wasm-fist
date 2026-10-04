@@ -337,6 +337,22 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   IRQ/IRET/IF transport and complete original sequence/surface acceptance
   remain open.
 
+- Consume0003's accepted645 full configuration CPU/resident-RAM receipt,
+  tools/oracle/device_config_cpu_production_case.json. The immutable1154
+  source inputs plus248 original references and419 unchanged originals
+  bind140 tests in289.911s, exact patches, sequential builds, six startup
+  cases and178 existing flows with zero failures and terminal0. Complete
+  additional captures and post-cleanup replays finish0. All2100 fresh
+ 30s Native/WASM frame/end bytes,43 sound rows and47 unmasked packets
+  retain644 output and agree across targets. Original first10s video and
+  every original layout/palette/time match; the same28 pixel failures
+  begin817/11704156us/byte8754. Final mixed portPCM is absent; strict
+  original parity still fails. Missing-HIGH retains39 versus38 frames and
+  first560798us/F36/palettebyte5. Full resident configuration/reset CPU/RAM
+  regressions establish a startup dependency, not production77e2/device/
+  IRQ/time integration or complete sequence/surface acceptance. Completed
+  raw matrix/build/game artifacts were retired in/tmp after verification.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

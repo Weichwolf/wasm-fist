@@ -674,6 +674,20 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   This is original-source evidence; full startup CPU/guest-address/IF/IRQ
   execution and complete frame/mixedPCM parity remain open.
 
+- Consume0003's accepted645 full configuration/resident-RAM contract in
+  tools/oracle/device_config_cpu_production_case.json. Configuration and
+  reset borrow one actual full CPU context and use one segment/paging RAM
+  owner, including real nearRET. All nine configuration and225/219 reset
+  fetch states and complete16MiB physical RAM match on Native/WASM; no
+  synthetic guest address supplies the clock. Thin-budget configuration
+  cases consume original PIC reference timing. The immutable1154-input/
+  248-reference/419-original gate passes140 tests, exact patches, both
+  sequential builds, six startup cases and178 existing flows; additional
+  complete captures and post-cleanup replays finish0. This preserves the
+  reached reset core exits. Post-reset ORb, actual77e2/138d/IRQ/IRET/IF,
+  unsupported memory/privilege paths and complete original time/output
+  remain open; full flow coverage is not original sequence acceptance.
+
 ## Next
 
 Consume `sound_vector_init_case.json` before implementing the reached AX2503/2506

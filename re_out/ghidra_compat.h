@@ -265,9 +265,6 @@ void  fist_clock_charge_dos_transfer(uint16_t value);
 void  fist_clock_cpu_ss_instruction(void);
 void  fist_clock_rep_movs(uint8_t *dst, const uint8_t *src, unsigned width, uint32_t count, int direction);
 uint8_t *fist_ext_addr(uint32_t value);
-/* Explicit EAX/EBX lanes for original device-configuration leaf 1280.
- * Guest return-stack and CPU context transport are separate contracts. */
-struct fist_ext_device_registers { uint32_t eax, ebx; };
 void  fist_text_clock_init(void);
 void  fist_clock_wait_bios_ticks(unsigned count);
 

@@ -1132,7 +1132,7 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   `tools/oracle/device_start_prefix_case.json`, reproduced with
   `python3 -B tools/oracle/capture_device_start_prefix.py --repo . --output /tmp/wasm-fist-device-start-prefix-source`.
   Observation starts at actual77e2 with the protected service's DWORD0f57
-  return frame and stops before CALL331c at7809. All242 full fetch states
+  return frame and stops before CALL3322 at7809. All242 full fetch states
   and241 CPU transitions pass: consume the existing225 reset rows with
   every architectural/code/address/time field unchanged, then prove the
   17 additional caller/configuration transitions. Nine complete16MiB RAM
@@ -1162,6 +1162,37 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   actual77e2 bank/device/IRQ/time execution and complete original output
   remain open.
 
+- Patch645 replaces1280's two-lane carrier with the shared full CPU context
+  and original guest DWORD RET. One resident-RAM owner resolves actual
+  segment addition/wrap and4KiB CR3/PDE/PTE translation for1280,23c4,133a
+  and nearRET. The logical TCB remainsf0010000: DSbase10000000 wraps it
+  to linear10000; no host pointer or fitted page table replaces it.
+  Default/controlled configuration compares all nine complete CPU fetches
+  and all16MiB original physical RAM, including upperAX, MOVZX words,
+  adjacent store guards and caller77ee. Reset consumes the same raw RAM
+  owner and preserves all225/219 complete dispatch/direct fetch states.
+  Sixteen parent configuration cases fail with zero errors; all16 repaired
+  configuration and four reset target cases pass, as do1029 original flag
+  cases per target. Removing only segment-base addition causes16 failures
+  at the first DS:c93 access, while the initial full CPU/time fetch matches.
+  Six controlled-source missing/corruption negatives reject incomplete RAM,
+  wrong upperAX/logicalTCB/RET width and corrupt live code lookahead.
+  The frozen1154 Git-visible inputs plus248 original source references,
+  419 unchanged originals and immutable binaries bind the unfiltered
+  run.VqAt0H:140 tests in289.911s, exact patches, sequential Native/WASM
+  builds, six startup cases and178 flows, zero failures and terminal0.
+  All additional startup/error/30s captures and post-cleanup replays pass.
+  Receipt/reproduction: tools/oracle/device_config_cpu_production_case.json.
+  Complete2100-frame streams,43 sound rows and47 full packets retain644
+  behavior and agree across targets. Original first10s video and every
+  layout/palette/time match;28 pixel failures still begin817/11704156us/
+  byte8754, mixed portPCM is absent and strict comparisons fail. Missing-
+  HIGH retains39 versus38 frames and560798us/F36/palettebyte5. Retired
+  4,846,818,622 bytes of completed raw matrix/build/game artifacts in/tmp.
+  This accepts the reached resident configuration/reset CPU/RAM contract;
+  actual77e2/op6c/op68 task transport, post-reset ORb, bank/device/IRQ/IRET/
+  IF, unsupported guest-memory paths and complete original parity stay open.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
@@ -1182,13 +1213,14 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
    Consume accepted644's `device_reset_production_case.json` and the shared
    `FistCpuState` owner when connecting actual77e2 to23c4/133a. Preserve
    the real tail jump, guest caller frame and complete incoming raw/lazy
-   CPU state; legacy C-only callers still lack that transport. Extend1280's
-   accepted EAX/EBX leaf to the same full context and original guest RET,
-   using `device_start_prefix_case.json` for all actual inputs and the caller
-   instructions/post-reset ORb flags. Recover the TCB operand/address binding
+   CPU state; legacy C-only callers still lack that transport. Consume
+   accepted645 full1280 CPU/resident-RAM/guestRET and its shared raw-memory
+   regressions. Use `device_start_prefix_case.json` for the actual caller
+   instructions/post-reset ORb flags and CALL7809 target3322. Recover the
+   production TCB operand/address binding
    through its real task owner: the guest f0010000 value and a port host
    pointer are different representations. Do not derive a full CPU state
-   from the old two-lane carrier or substitute a fitted guest pointer.
+   from legacy scalar callers or substitute a fitted guest pointer.
    Consume `sound_bank_startup_case.json` to restore the actual77e2
    size/allocate/read/checkpoint path rather than inserting a fitted bank
    allocation. Wire original device initialization and consume the recovered intro registers. Recover

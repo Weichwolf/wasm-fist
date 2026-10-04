@@ -26,7 +26,7 @@ code *fist_icall(uint32_t address)
     abort();
 }
 _Static_assert(sizeof(FistCpuState) == 37*sizeof(uint32_t), "portable CPU record");
-void fist_reset_test_charge(unsigned count)
+void fist_cpu_test_charge(unsigned count)
 {
     assert(count == 1);
     fist_clock_charge_cpu_instructions(count);
@@ -37,6 +37,7 @@ void fist_reset_test_charge(unsigned count)
     for (unsigned i=0; i<37; ++i) printf(" %08x", words[i]);
     putchar('\n');
     ++fetches;
+    fflush(stdout);
 }
 int main(int argc, char **argv)
 {
@@ -74,9 +75,11 @@ int main(int argc, char **argv)
            fgetc(input)==EOF && !fclose(input));
     fist_ext_base=0x100000;
     assert(cpu.eip==entry);
+    FistCpuState *previous=fist_clock_bind_cpu(&cpu);
     run(&cpu);
     /* Observe the next actual caller fetch, like the original capture boundary. */
-    fist_reset_test_charge(1);
+    fist_cpu_test_charge(1);
+    fist_clock_bind_cpu(previous);
     printf("pumps %u fetches %u\n", pumps, fetches);
     FILE *output=fopen(argv[2], "wb");
     assert(output && fwrite(g_mem, 1, FIST_MEM_SIZE, output)==FIST_MEM_SIZE && !fclose(output));

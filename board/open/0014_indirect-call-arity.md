@@ -273,6 +273,19 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   reset/config methods pass both targets; all1353 accepted runtime inputs
   remain unchanged. No production77e2/full CPU/guest-address acceptance.
 
+- Consume0003's accepted645 actual1280 full CPU signature and resident
+  RAM owner: tools/oracle/device_config_cpu_production_case.json. The
+  obsolete EAX/EBX-only carrier is removed. The raw logical TCBf0010000
+  and actual DWORD caller77ee RET are retained, with all37 CPU words and
+  all16MiB source RAM compared on both targets. Sixteen reaching parent
+  failures become16 passing configuration cases; the shared reset's four
+  target cases and1029 original flag cases per target remain green. Full
+ 140-test/exact-patch/sequential-build/six-startup/178-flow gate and all
+  additional captures/post-cleanup replays finish0. This proves the mapped
+  leaf ABI and resident accesses; production task/gateway context, original
+ 77e2/op6c/op68, GP/flags/nonlocal returns/IRQ/time and complete output remain
+  unresolved. A host pointer is still not a guest logical register value.
+
 ## Next
 
 1. Preserve642's actual normal EAX/fullEBX and independent configuration
@@ -280,9 +293,10 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
    the next reached effects/device input using0003's `effects_mode_case.json`
    and0026's `sound_vector_init_case.json`. Keep all full op68 packets;
    do not mask upper words, post a fitted handle or pad unknown inputs.
-   Consume the complete startup-prefix inputs above before extending1280
-   to the shared CPU context and original guest RET. Resolve its actual TCB
-   address binding through the task owner rather than narrowing a host pointer.
+   Consume accepted645 full1280 CPU/resident-RAM/guestRET and the
+   complete startup-prefix inputs above. Recover the production task owner
+   and its actual TCB binding when threading full CPU state through77e2;
+   retain guest logical addresses rather than narrowing a host pointer.
 2. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and
    a declaration terminator; the earlier regex counted commas inside definitions and invented bugs.
 3. Classify sites: missing/extra arguments, correct count but wrong register values, ambient-register
