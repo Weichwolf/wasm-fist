@@ -367,6 +367,19 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   Scope is the shared flag dependency, not actual77e2/checkpoint/task/bank/
   device/IRQ/IF time integration or complete original sequence acceptance.
 
+
+- Consume0026's shared CPU/system helper receipt,
+  tools/oracle/cpu_interrupt_production_case.json. The frozen1412-input gate
+  run.g2L0Tw passes147 tests, exact patches, sequential builds, six startup
+  cases and all178 flows with zero failures and terminal0. Complete additional
+  30s Native/WASM captures preserve all2100 preceding frame/end bytes,43 sound
+  rows and47 unmasked service packets. Original layouts/palettes/times and
+  first10s video match;28 pixel differences remain, first817/11704156us/
+  byte8754. Strict original comparison rejects absent final mixed portPCM.
+  Complete CPU/system/RAM API proofs establish a shared dependency; actual
+  startup/IRQ/IF/handler integration and full original output remain open.
+  Completed raw matrix artifacts and isolated games were retired under/tmp.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

@@ -808,10 +808,41 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   existing matrix are separate pending work; no complete original video/PCM
   improvement, actual caller/handler transport or timing acceptance is claimed.
 
+- Shared CPU/system helper dependency at parent5a7507d:
+  `re_out/fist_interrupt.h` and the existing `fist_cpu.h` implement the reached
+  system/IRQ/IRET operations with one RAM/descriptor/stack owner. CPU ABI remains
+  37 words; system state has21. Complete thirteen-pair CPU/RAM regression and
+  four causal mutants pass on both targets with NDEBUG. Frozen1412 inputs bind
+  run.g2L0Tw:147 tests in357.144s, exact patches, sequential Native/WASM builds,
+  six resource-start cases and all178 existing flows pass with zero failures
+  and terminal0. Source150 producers and419 originals remain unchanged.
+  Additional complete30s Native/WASM captures preserve all2100 preceding
+  frame/end bytes,43 sound-register rows and47 unmasked service packets.
+  Every original layout/palette/time and first10s video remain equal; the same
+  28 pixel differences begin817/11704156us/byte8754. Final mixed portPCM is
+  absent and strict original comparison fails. The first extra WASM attempt
+  failed automatic Node discovery before execution; explicit NODE=/usr/bin/node
+  completes the fresh retry. No partial run is accepted. Completed matrix raw
+  captures/games retired4823073685bytes, with compact startup records, bound
+  logs, frozen tested binaries and source archive retained. Additional obsolete
+  isolated games retired48832310bytes. Source verifies0 after cleanup.
+  Receipt: tools/oracle/cpu_interrupt_production_case.json; evidence:
+  /tmp/wasm-fist-cpu-irq-system. This accepts the shared helper dependency only.
+  Actual caller/PIC/handler integration, task/V86/fault/MMIO and cold-page
+  paths remain open; no first817/time/mixedPCM improvement is claimed.
+  A separate private original-byte LGDT-to-LTR decoder matches nine reached
+  normal-core fetches, three API exits, all58 CPU/system words, four clock
+  fields and every intermediate/final16MiB on both targets. Its source/control
+  output remains137 frames/89258 samples/end2000. Two causal mutants per target
+  prove the original MOV-SS budget credit and fully-linked read dirty-bit
+  effects. Evidence:/tmp/wasm-fist-cpu-system-caller-preparation. Its CPL0/MIXED
+  writable/user-page prototype is not a general paging owner or production
+  startup integration. The same instruction path is also reached in the
+  selected protected IRQ; its repeated busy-TSS path needs full-RAM boundaries.
+
 ## Next
 
-Implement and finish the shared CPU/system owner's complete required gate.
-Then transport the complete CPU/system state through the actual startup callers,
+Transport the complete CPU/system state through the actual startup callers,
 descriptor-table construction and handler execution before connecting timer
 dispatch. Consume pit_irq_frame_case.json for actual GDT/IDT/TSS loads and
 IRQ/IRET operations, including cached descriptors, lazy flags, CPL, direction

@@ -6,6 +6,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Unsupported CPU/RAM paths must fail in release builds as well. */
+static inline void fist_cpu_require(int condition)
+{
+    if (!condition) abort();
+}
+
 /* Explicit original CPU context for recovered instruction producers. Register
  * and lazy-flag words retain all bits, including untouched upper byte/word data.
  * Legacy C-only callers still require recovered context transport. */
@@ -127,45 +133,55 @@ static inline void fist_cpu_set_if(FistCpuState *cpu, int enabled)
 static inline uint32_t fist_cpu_physical_dword(const uint8_t *memory, size_t size,
                                               uint32_t address)
 {
-    assert(size>=4 && address<=size-4);
+    fist_cpu_require(size>=4 && address<=size-4);
     return (uint32_t)memory[address] | ((uint32_t)memory[address+1]<<8) |
            ((uint32_t)memory[address+2]<<16) | ((uint32_t)memory[address+3]<<24);
+}
+static inline uint32_t fist_cpu_ram_address(const FistCpuState *cpu,
+        const uint8_t *memory, size_t size, uint32_t linear, int writing)
+{
+    uint32_t physical=linear;
+    if (cpu->paging_enabled) {
+        uint32_t directory=(cpu->cr3 & 0xfffff000u)+4*(linear>>22);
+        uint32_t table=fist_cpu_physical_dword(memory,size,directory);
+        fist_cpu_require((table & 0x21u)==0x21u);
+        uint32_t entry_address=(table & 0xfffff000u)+4*((linear>>12)&1023u);
+        uint32_t entry=fist_cpu_physical_dword(memory,size,entry_address);
+        fist_cpu_require((entry & 0x61u)==0x61u);
+        if (writing) fist_cpu_require((table & 2u) && (entry & 2u));
+        physical=(entry & 0xfffff000u) | (linear & 4095u);
+    }
+    fist_cpu_require(physical<size);
+    return physical;
 }
 static inline uint32_t fist_cpu_resident_address(const FistCpuState *cpu,
         const uint8_t *memory, size_t size, unsigned segment, uint32_t offset,
         int writing)
 {
-    assert(segment<6);
-    uint32_t linear=cpu->segments[segment].base+offset, physical=linear;
-    if (cpu->paging_enabled) {
-        uint32_t directory=(cpu->cr3 & 0xfffff000u)+4*(linear>>22);
-        uint32_t table=fist_cpu_physical_dword(memory,size,directory);
-        assert((table & 0x21u)==0x21u);
-        uint32_t entry_address=(table & 0xfffff000u)+4*((linear>>12)&1023u);
-        uint32_t entry=fist_cpu_physical_dword(memory,size,entry_address);
-        assert((entry & 0x61u)==0x61u);
-        if (writing) assert((table & 2u) && (entry & 2u));
-        physical=(entry & 0xfffff000u) | (linear & 4095u);
-    }
-    assert(physical<size);
-    return physical;
+    fist_cpu_require(segment<6);
+    return fist_cpu_ram_address(cpu,memory,size,cpu->segments[segment].base+offset,writing);
+}
+static inline uint32_t fist_cpu_ram_read(const FistCpuState *cpu,
+        const uint8_t *memory, size_t size, uint32_t linear, unsigned width)
+{
+    fist_cpu_require(width==1 || width==2 || width==4);
+    uint32_t value=0;
+    for(unsigned i=0;i<width;++i)
+        value|=(uint32_t)memory[fist_cpu_ram_address(cpu,memory,size,linear+i,0)]<<(i*8);
+    return value;
 }
 static inline uint32_t fist_cpu_resident_read(const FistCpuState *cpu,
         const uint8_t *memory, size_t size, unsigned segment, uint32_t offset,
         unsigned width)
 {
-    assert(width==1 || width==2 || width==4);
-    uint32_t value=0;
-    for (unsigned i=0;i<width;++i)
-        value |= (uint32_t)memory[fist_cpu_resident_address(cpu,memory,size,
-                                segment,offset+i,0)]<<(8*i);
-    return value;
+    fist_cpu_require(segment<6);
+    return fist_cpu_ram_read(cpu,memory,size,cpu->segments[segment].base+offset,width);
 }
 static inline void fist_cpu_resident_write(const FistCpuState *cpu,
         uint8_t *memory, size_t size, unsigned segment, uint32_t offset,
         unsigned width, uint32_t value)
 {
-    assert(width==1 || width==2 || width==4);
+    fist_cpu_require(width==1 || width==2 || width==4);
     for (unsigned i=0;i<width;++i)
         memory[fist_cpu_resident_address(cpu,memory,size,segment,offset+i,1)]=
             (uint8_t)(value>>(8*i));
