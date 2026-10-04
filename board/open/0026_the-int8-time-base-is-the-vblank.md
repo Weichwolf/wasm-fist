@@ -800,7 +800,10 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   scope; no cross-run RAM normalization or identical boot RAM is claimed.
   The capture wall timeout is configurable and80s for this observer; emulated
   endpoint remains2000ms. A preparatory32s wall timeout failed and is superseded,
-  not accepted. A private13-pair CPU/system prototype matches all58 words and
+  not accepted. Superseded unmanifested system captures and old private output
+  RAM retired1649678584bytes; compact records remain. Current source inputs and
+  originals verify unchanged and the source fixture verifies0 after cleanup.
+  A private13-pair CPU/system prototype matches all58 words and
   every16MiB on Native/WASM. Shared production helper integration and the full
   existing matrix are separate pending work; no complete original video/PCM
   improvement, actual caller/handler transport or timing acceptance is claimed.
