@@ -1102,6 +1102,32 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   failed-AA branch, production77e2/23c4/133a/138d, full CPU/IF/IRQ/time,
   first817, final mixed portPCM and complete original acceptance remain open.
 
+- Patch644 restores the actual mapped23c4 tail dispatcher and133a reset
+  with one explicit full CPU context and the shared clock's normal-core
+  flag materialization. The original guest DWORD return frame is consumed;
+  WORD DX/BYTE AL and every untouched GP/segment/control field retain their
+  bits. Actual shared DSP reads, reset readiness and CPU requeue determine
+  the loops. All225 dispatch/219 direct fetch states match the original
+  on Native/WASM, including raw/lazy flags and complete CPU budgets; all
+  isolated16MiB memory bytes remain unchanged as in the original reset path.
+  The exact accepted643 parent fails four absent-entry cases. Removing only
+  the shared core FillFlags causes four failures first at1358: raw3006
+  versus3046, lazy19 versus0, with preceding registers/time unchanged.
+  The actual original flags.cpp independently verifies1029 primitive cases
+  per target. The frozen1353-input/419-original gate `run.9fdN3p` passes140
+  tests in344.018s, exact patches, sequential Native/WASM builds, six
+  startup cases and all178 existing flows, zero failures. All additional
+  startup/error/full30s captures terminate0; receipt:
+  `tools/oracle/device_reset_production_case.json`. Fresh2100-frame streams,
+  all43 sound rows and47 unmasked packets retain643 output and agree across
+  targets. Original first10s video and every original layout/palette/time
+  match; the same28 pixel failures begin817/11704156us/byte8754. Final
+  mixed portPCM is absent and strict comparisons fail. Missing-HIGH error
+  output retains39 versus38 frames and first560798us/F36/palettebyte5.
+  This accepts the isolated default-mode reset and its shared core exits,
+  not actual77e2/op6c/op68, alternate reset paths, protected IRQ/IRET/IF
+  transport or complete original frame/audio parity.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
@@ -1119,10 +1145,12 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
    accepted643 BYTE aliases and its fullmodule/DMA regressions. Prove the
    actual register/return/device producer before wiring production op68;
    do not supply zero callback arguments or a safe-zero device return.
-   Consume `device_reset_case.json` before restoring typed23c4/133a:
-   preserve the tail jump, actual caller frame, full EAX/EBX/ECX/EDX, raw
-   and lazy flags and original PIC-driven core exits. Regress the reaching
-   producer on both targets with shared CPU/FLAGS/time ownership.
+   Consume accepted644's `device_reset_production_case.json` and the shared
+   `FistCpuState` owner when connecting actual77e2 to23c4/133a. Preserve
+   the real tail jump, guest caller frame and complete incoming raw/lazy
+   CPU state; legacy C-only callers still lack that transport. Extend1280's
+   accepted EAX/EBX leaf to the same full context and original guest RET,
+   then recover the caller's actual instructions and post-reset flags.
    Consume `sound_bank_startup_case.json` to restore the actual77e2
    size/allocate/read/checkpoint path rather than inserting a fitted bank
    allocation. Wire original device initialization and consume the recovered intro registers. Recover

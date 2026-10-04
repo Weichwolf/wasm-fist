@@ -643,6 +643,23 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   pass Native/WASM in15.080s. Port producer/CPU/IRQ/IF execution and full
   original frame/audio parity remain open; source proof is not integration.
 
+- Accepted644 consumes0003's complete reset source states with one
+  `FistCpuState` owner. Binding borrows the actual caller context; it seeds
+  no registers or flags. The existing shared clock materializes lazy flags
+  at a bound normal-core exit before PIC_RunQueue, preserving all dirty
+  operand words, prev_type, oldcf and unrelated raw flags. Both reset exits
+  and all225 dispatch/219 direct fetch states match the original on both
+  targets. A causal missing-FillFlags negative fails four complete traces
+  first at1358, with preceding registers and budgets unchanged; actual
+  original flags.cpp verifies1029 primitive cases per target. Full gate
+  `run.9fdN3p` passes140 tests, exact patches, both sequential builds,
+  six startup cases and all178 flows. Additional full captures terminate0
+  and retain the prior first817/missing mixedPCM diagnostics. Consume
+  `tools/oracle/device_reset_production_case.json` for immutable1353-source,
+  419-original, binary and capture bindings. Legacy unbound C paths and
+  actual77e2/138d, privilege exceptions, IRQ/IRET/IF transport and complete
+  original frame/audio parity remain open.
+
 ## Next
 
 Consume `sound_vector_init_case.json` before implementing the reached AX2503/2506
@@ -657,8 +674,9 @@ resident setup branches, other vectors and errors need their own reaching proof.
 1. Preserve the proved MZ/application phase, disk-read cap and reached VCPI packet/SS/REP contracts.
    Continue 0034's first remaining pixel difference at event 817 in the 30000-ms capture.
    Consume the proved shared PIC/reset timing contract. Recover
-   0003's actual133a producer using `device_reset_case.json`: shared raw/lazy
-   flags must follow both normal-core exits as well as CLI/STI. Recover
+   0003's accepted644 actual133a producer and shared full CPU context:
+   retain both normal-core flag exits and CLI/STI when connecting the
+   actual startup caller. Recover
    protected SB IRQ/mixer state/instruction
    work; preserve the proved 7120
    REP copy. Do not inject elapsed delays or change capture phase.

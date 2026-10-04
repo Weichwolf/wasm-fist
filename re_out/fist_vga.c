@@ -473,6 +473,13 @@ static uint64_t g_pic_tick;
 static int g_pic_initialized, g_pic_service;
 static float g_pic_service_lag;
 static void cpu_slice_start(void);
+static FistCpuState *g_cpu_context;
+FistCpuState *fist_clock_bind_cpu(FistCpuState *cpu)
+{
+    FistCpuState *previous=g_cpu_context;
+    g_cpu_context=cpu;
+    return previous;
+}
 static void pic_tick_sync(uint64_t cpu)
 {
     if (!g_pic_initialized) {
@@ -662,6 +669,9 @@ static void cpu_prepare_instruction(void)
     if (!g_cpu_remaining) {
         /* The failed normal-loop decrement survives PIC dispatch; TIMER_AddTick resets it. */
         if (clock_cpu_cycles(clock_now()) % 30000u) fist_clock_advance_cpu_cycles(1);
+        /* CPU_Core_Normal_Run materializes lazy flags after its failed
+         * decrement and before PIC_RunQueue resumes the next slice. */
+        if (g_cpu_context) fist_cpu_fill_flags(g_cpu_context);
         cpu_slice_start();
     }
 }

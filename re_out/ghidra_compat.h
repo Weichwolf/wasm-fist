@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "fist_cpu.h"
 
 /* ---- Ghidra base integer typedefs (widths per the doctrine above) ---- */
 typedef uint8_t  undefined;

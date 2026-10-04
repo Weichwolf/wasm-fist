@@ -1,0 +1,182 @@
+PATCH 644: restore actual device tail dispatch and DSP reset (board:0003/0026).
+
+Source receipt tools/oracle/device_reset_case.json proves the actual77fa CALL
+into23c4, byte MOV/CMP, DWORD dispatch table and tail JMP to133a. Original
+modes1..4 select133a; mode0 selects the existing bare RET at2294. The out-of-
+range branch is XOR EAX,EAX/RET. Dispatch creates no additional guest frame.
+
+133a preserves all untouched full GP/segment/control fields, uses WORD DX and
+BYTE AL, CLI/STI, actual20/8000 loop immediates and device-driven LOOPE. It
+performs every original fetch and actual shared I/O; no poll count, AA sample,
+success result or aggregate elapsed time is supplied. Both real return paths
+consume the original DWORD caller frame. The shared CPU context carries raw
+and lazy flags. Normal-core exits in the existing clock materialize flags,
+including the reset event's requeue and natural polling-budget exhaustion.
+
+The reaching regression calls both new sorted map entries and compares all
+225 dispatch/219 direct original fetch states, complete GP/segments/raw-lazy
+flags/control/CPU budgets and all16MiB isolated memory. Parent entries are
+absent on both targets. Original mode1 source is the dynamic proof; alternate
+modes/error-AA branches require independent reaching coverage. Production
+77e2/op6c, effects/op68, protected IRQ/IRET/IF transport, final mixed PCM and
+complete original frame/audio parity remain open. No legacy C-only caller is
+assigned guessed full registers or raw flags.
+--- a/fist_ext.c
++++ b/fist_ext.c
+@@ -37,6 +37,7 @@
+ #define FUN_0000_12b4 m_ext_FUN_0000_12b4
+ #define FUN_0000_12eb m_ext_FUN_0000_12eb
+ #define FUN_0000_132f m_ext_FUN_0000_132f
++#define FUN_0000_133a m_ext_FUN_0000_133a
+ #define FUN_0000_161d m_ext_FUN_0000_161d
+ #define FUN_0000_1e75 m_ext_FUN_0000_1e75
+ #define FUN_0000_201a m_ext_FUN_0000_201a
+@@ -48,6 +49,7 @@
+ #define FUN_0000_22ab m_ext_FUN_0000_22ab
+ #define FUN_0000_2377 m_ext_FUN_0000_2377
+ #define FUN_0000_23b4 m_ext_FUN_0000_23b4
++#define FUN_0000_23c4 m_ext_FUN_0000_23c4
+ #define FUN_0000_23ec m_ext_FUN_0000_23ec
+ #define FUN_0000_24c8 m_ext_FUN_0000_24c8
+ #define FUN_0000_2625 m_ext_FUN_0000_2625
+@@ -245,6 +247,7 @@
+ undefined4 __allregs FUN_0000_12b4(char *param_1,char *param_2,char *param_3,char *param_4);
+ undefined4 __allregs FUN_0000_12eb(int *param_1,char param_2,undefined4 param_3,char *param_4);
+ undefined4 __allregs FUN_0000_132f(undefined4 param_1,undefined2 param_2);
++void __allregs FUN_0000_133a(FistCpuState *cpu);
+ undefined1 __allregs FUN_0000_161d(int *param_1,int *param_2,int *param_3,char *param_4,int *param_5);
+ undefined4 __allregs FUN_0000_1e75(int param_1,undefined2 param_2,undefined4 param_3,undefined4 *param_4, undefined4 param_5,undefined4 param_6);
+ void __allregs FUN_0000_201a(void);
+@@ -256,6 +259,7 @@
+ ushort * __allregs FUN_0000_22ab(ushort *param_1,uint param_2,byte param_3,byte param_4);
+ ushort * __allregs FUN_0000_2377(ushort *param_1,uint param_2,byte param_3,byte param_4);
+ ushort * __allregs FUN_0000_23b4(undefined4 param_1,undefined1 param_2,undefined1 param_3,ushort *param_4);
++void __allregs FUN_0000_23c4(FistCpuState *cpu);
+ undefined4 __allregs FUN_0000_23ec(ushort param_1,undefined4 param_2);
+ undefined4 __allregs FUN_0000_24c8(undefined4 param_1);
+ void __allregs FUN_0000_2625(void);
+@@ -1900,6 +1904,108 @@
+ }
+ 
+ 
++/* Original 133a reset body; the shared CPU context owns every live register. */
++void __allregs FUN_0000_133a(FistCpuState *cpu)
++{
++  FistCpuState *previous=fist_clock_bind_cpu(cpu);
++  uint16_t value;
++  fist_cpu_fetch(cpu,0x133a); fist_cpu_set_if(cpu,0);
++  fist_cpu_fetch(cpu,0x133b);
++  memcpy(&value,g_mem+fist_ext_base+0x12cc,2);
++  cpu->edx=fist_cpu_low(cpu->edx,value,16);
++  fist_cpu_fetch(cpu,0x1342);
++  value=(uint16_t)cpu->edx;
++  fist_cpu_alu(cpu,FIST_LAZY_ADDW,16,value,6,value+6);
++  cpu->edx=fist_cpu_low(cpu->edx,value+6,16);
++  fist_cpu_fetch(cpu,0x1346); cpu->eax=fist_cpu_low(cpu->eax,1,8);
++  fist_cpu_fetch(cpu,0x1348); out((uint16_t)cpu->edx,(uint8_t)cpu->eax);
++  fist_cpu_fetch(cpu,0x1349); /* JMP134b */
++  fist_cpu_fetch(cpu,0x134b); cpu->ecx=20;
++  do {
++    fist_cpu_fetch(cpu,0x1350); cpu->eax=fist_cpu_low(cpu->eax,in((uint16_t)cpu->edx),8);
++    fist_cpu_fetch(cpu,0x1351); /* JMP1353 */
++    fist_cpu_fetch(cpu,0x1353); --cpu->ecx;
++  } while (cpu->ecx);
++  fist_cpu_fetch(cpu,0x1355);
++  value=(uint8_t)cpu->eax;
++  fist_cpu_alu(cpu,FIST_LAZY_XORB,8,value,value,0);
++  cpu->eax=fist_cpu_low(cpu->eax,0,8);
++  fist_cpu_fetch(cpu,0x1357); out((uint16_t)cpu->edx,(uint8_t)cpu->eax);
++  fist_cpu_fetch(cpu,0x1358); /* JMP135a; shared core exit owns FillFlags */
++  fist_cpu_fetch(cpu,0x135a); cpu->ecx=8000;
++  fist_cpu_fetch(cpu,0x135f);
++  memcpy(&value,g_mem+fist_ext_base+0x12cc,2);
++  cpu->edx=fist_cpu_low(cpu->edx,value,16);
++  fist_cpu_fetch(cpu,0x1366);
++  value=(uint16_t)cpu->edx;
++  fist_cpu_alu(cpu,FIST_LAZY_ADDW,16,value,14,value+14);
++  cpu->edx=fist_cpu_low(cpu->edx,value+14,16);
++  do {
++    fist_cpu_fetch(cpu,0x136a); cpu->eax=fist_cpu_low(cpu->eax,in((uint16_t)cpu->edx),8);
++    fist_cpu_fetch(cpu,0x136b); /* JMP136d */
++    fist_cpu_fetch(cpu,0x136d);
++    value=(uint8_t)cpu->eax;
++    fist_cpu_alu(cpu,FIST_LAZY_TESTB,8,value,0x80,value & 0x80);
++    fist_cpu_fetch(cpu,0x136f); --cpu->ecx;
++  } while (cpu->ecx && fist_cpu_zf(cpu));
++  fist_cpu_fetch(cpu,0x1371);
++  memcpy(&value,g_mem+fist_ext_base+0x12cc,2);
++  cpu->edx=fist_cpu_low(cpu->edx,value,16);
++  fist_cpu_fetch(cpu,0x1378);
++  value=(uint16_t)cpu->edx;
++  fist_cpu_alu(cpu,FIST_LAZY_ADDW,16,value,10,value+10);
++  cpu->edx=fist_cpu_low(cpu->edx,value+10,16);
++  fist_cpu_fetch(cpu,0x137c); cpu->eax=fist_cpu_low(cpu->eax,in((uint16_t)cpu->edx),8);
++  fist_cpu_fetch(cpu,0x137d); /* JMP137f */
++  fist_cpu_fetch(cpu,0x137f); fist_cpu_set_if(cpu,1);
++  fist_cpu_fetch(cpu,0x1380);
++  value=(uint8_t)cpu->eax;
++  fist_cpu_alu(cpu,FIST_LAZY_CMPB,8,value,0xaa,value-0xaa);
++  fist_cpu_fetch(cpu,0x1382);
++  if (fist_cpu_zf(cpu)) {
++    fist_cpu_fetch(cpu,0x1387); cpu->eax=UINT32_MAX;
++    fist_cpu_fetch(cpu,0x138c); fist_cpu_near_ret(cpu,g_mem);
++  } else {
++    fist_cpu_fetch(cpu,0x1384);
++    fist_cpu_alu(cpu,FIST_LAZY_XORD,32,cpu->eax,cpu->eax,0);
++    cpu->eax=0;
++    fist_cpu_fetch(cpu,0x1386); fist_cpu_near_ret(cpu,g_mem);
++  }
++  fist_clock_bind_cpu(previous);
++}
++
++/* Original 23c4 byte dispatch followed by a tail JMP, not another CALL. */
++void __allregs FUN_0000_23c4(FistCpuState *cpu)
++{
++  FistCpuState *previous=fist_clock_bind_cpu(cpu);
++  fist_cpu_fetch(cpu,0x23c4); cpu->ebx=fist_cpu_low(cpu->ebx,cpu->eax,8);
++  fist_cpu_fetch(cpu,0x23c6);
++  uint32_t index=(uint8_t)cpu->ebx;
++  fist_cpu_alu(cpu,FIST_LAZY_CMPB,8,index,4,index-4);
++  fist_cpu_fetch(cpu,0x23c9);
++  if (!(fist_cpu_cf(cpu) || fist_cpu_zf(cpu))) {
++    fist_cpu_fetch(cpu,0x23cb);
++    fist_cpu_alu(cpu,FIST_LAZY_XORD,32,cpu->eax,cpu->eax,0);
++    cpu->eax=0;
++    fist_cpu_fetch(cpu,0x23cd); fist_cpu_near_ret(cpu,g_mem);
++  } else {
++    fist_cpu_fetch(cpu,0x23ce); cpu->ebx=(uint8_t)cpu->ebx;
++    fist_cpu_fetch(cpu,0x23d1);
++    memcpy(&cpu->eax,g_mem+fist_ext_base+0x159f+cpu->ebx*4,4);
++    fist_cpu_fetch(cpu,0x23d8); cpu->eip=cpu->eax;
++    if (cpu->eip==0x2294) {
++      /* This original table entry is the existing bare RET callback; with
++       * an explicit CPU context it consumes the same guest near frame. */
++      fist_cpu_fetch(cpu,0x2294); fist_cpu_near_ret(cpu,g_mem);
++    } else {
++      void (*target)(FistCpuState *)=(void (*)(FistCpuState *))fist_icall(fist_ext_base+cpu->eip);
++      target(cpu);
++    }
++  }
++  fist_clock_bind_cpu(previous);
++}
++
++
+ /* ===== ((uint)(uintptr_t)&FUN_0000_132f) @ 0000:132f ===== */
+ 
+ undefined4 __allregs FUN_0000_132f(undefined4 param_1,undefined2 param_2)
+@@ -17762,6 +17868,7 @@
+   {0x12b4u,(void*)&FUN_0000_12b4},
+   {0x12ebu,(void*)&FUN_0000_12eb},
+   {0x132fu,(void*)&FUN_0000_132f},
++  {0x133au,(void*)&FUN_0000_133a},
+   {0x161du,(void*)&FUN_0000_161d},
+   {0x1e75u,(void*)&FUN_0000_1e75},
+   {0x201au,(void*)&FUN_0000_201a},
+@@ -17773,6 +17880,7 @@
+   {0x22abu,(void*)&FUN_0000_22ab},
+   {0x2377u,(void*)&FUN_0000_2377},
+   {0x23b4u,(void*)&FUN_0000_23b4},
++  {0x23c4u,(void*)&FUN_0000_23c4},
+   {0x23ecu,(void*)&FUN_0000_23ec},
+   {0x24c8u,(void*)&FUN_0000_24c8},
+   {0x2625u,(void*)&FUN_0000_2625},

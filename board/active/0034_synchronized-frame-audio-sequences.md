@@ -322,6 +322,21 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   proves storage width only; production effects/device/CPU/IF/IRQ/time and
   complete original sequence/surface acceptance remain open.
 
+- Consume0003's accepted644 actual reset/full-CPU-context correction and
+  `tools/oracle/device_reset_production_case.json`. The frozen1353-input
+  140-test/exact-patch/sequential-build/six-startup/full178-flow gate
+  `run.9fdN3p` and all additional600-ms/30s captures finish0. Every2100
+  fresh Native/WASM frame/end byte,43 sound rows and47 full unmasked
+  packets retains643 behavior; all cross-target records agree. Original
+  first10s video and every original layout/palette/time still match.
+  The same28 pixel failures begin817/11704156us/byte8754; final mixedPCM
+  is absent and strict original comparisons fail. Missing-HIGH error
+  output retains39 versus38 frames and first560798us/F36/palettebyte5.
+  The isolated reset's complete register/flag/core-exit proof supplies
+  the actual startup dependency; production77e2/op6c/op68, protected
+  IRQ/IRET/IF transport and complete original sequence/surface acceptance
+  remain open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete
