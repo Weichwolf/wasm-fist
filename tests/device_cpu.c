@@ -41,6 +41,43 @@ void fist_cpu_test_charge(unsigned count)
 }
 int main(int argc, char **argv)
 {
+    if (argc==2 && !strcmp(argv[1],"flags-full")) {
+        uint32_t words[37]; size_t count;
+        while ((count=fread(words,1,sizeof words,stdin))==sizeof words) {
+            memcpy(&cpu,words,sizeof cpu);
+            unsigned cf=fist_cpu_cf(&cpu),zf=fist_cpu_zf(&cpu);
+            fist_cpu_fill_flags(&cpu);
+            memcpy(words,&cpu,sizeof words);
+            printf("%u %u",cf,zf);
+            for (unsigned i=0;i<37;++i) printf(" %08x",words[i]);
+            putchar('\n');
+        }
+        assert(!count && feof(stdin) && !ferror(stdin));
+        return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"instructions")) {
+        FistCpuFlags *f=&cpu.flags; int fields; unsigned a,b; char op;
+        while ((fields=scanf(" %c %x %x %x %x %x %x %x %x %x",&op,&f->flags,
+            &f->type,&f->prev_type,&f->oldcf,&f->var1,&f->var2,&f->res,&a,&b))==10) {
+            uint32_t result;
+            switch (op) {
+            case 'N':break;
+            case 'X':result=a^b;fist_cpu_alu(&cpu,FIST_LAZY_XORD,32,a,b,result);a=result;break;
+            case 'O':result=a|b;fist_cpu_alu(&cpu,FIST_LAZY_ORD,32,a,b,result);a=result;break;
+            case 'C':result=a-b;fist_cpu_alu(&cpu,FIST_LAZY_CMPD,32,a,b,result);break;
+            case 'A':result=a+b;fist_cpu_alu(&cpu,FIST_LAZY_ADDD,32,a,b,result);a=result;break;
+            case 'S':result=a-b;fist_cpu_alu(&cpu,FIST_LAZY_SUBD,32,a,b,result);a=result;break;
+            case 'I':a=fist_cpu_incdec(&cpu,FIST_LAZY_INCD,a);break;
+            case 'D':a=fist_cpu_incdec(&cpu,FIST_LAZY_DECD,a);break;
+            default:abort();
+            }
+            printf("%08x %x %x %x %08x %08x %08x %08x %u %u\n",f->flags,
+                   f->type,f->prev_type,f->oldcf,f->var1,f->var2,f->res,a,
+                   fist_cpu_cf(&cpu),fist_cpu_zf(&cpu));
+        }
+        assert(fields==EOF && !ferror(stdin));
+        return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"flags")) {
         FistCpuFlags *f=&cpu.flags; int fields;
         while ((fields=scanf("%x %x %x %x %x %x %x",&f->flags,&f->type,&f->prev_type,

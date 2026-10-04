@@ -702,6 +702,21 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   is claimed. The reached DWORD arithmetic/logical and INC/DEC flag types
   still require integration in the shared CPU owner.
 
+- Accepted startup/checkpoint CPU flag dependency from0003:
+  tools/oracle/cpu_startup_flags_case.json supplies seven reached missing
+  lazy types with actual original CF/ZF/FillFlags and ALU references.
+  Native/WASM pass2426 flag records, all368 complete37-word CPU contexts
+  and75 checkpoint ALU/condition calls. INC/DEC preserve incoming CF and
+  untouched var2/oldcf/prev_type; a var2 mutation fails both reaching paths.
+  This is a primitive/context dependency, not new CPU/event integration.
+  Consume cpu_startup_flags_production_case.json for the immutable143-test/
+  178-flow gate and complete additional captures. No new clock work is
+  claimed. All fresh2100-frame output,43 sound rows and47 unmasked service
+  packets retain645; original first817, missing final mixedPCM and
+  missing-HIGH error output remain unequal. Post-cleanup capture/source
+  verification passes. The six prior one-cycle PIT budget differences
+  remain a separate unresolved clock diagnostic.
+
 ## Next
 
 Consume `sound_vector_init_case.json` before implementing the reached AX2503/2506

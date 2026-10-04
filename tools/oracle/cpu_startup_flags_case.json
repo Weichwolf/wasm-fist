@@ -1,0 +1,144 @@
+{
+  "scope": "Recovered shared CPU lazy flags for actual startup ORb and checkpoint ADDd/ORd/SUBd/CMPd/INCd/DECd. Primitive/fullCPU-state/instruction-owner proof only; production77e2/checkpoint/bank/device/IRQ/IRET/IF, known PIT budget diagnostic and complete output remain open.",
+  "commit_parent": "08db640f5b530a4a3c37656865a2fa09c3c5931d",
+  "original_checkpoint_case": "tools/oracle/device_checkpoint_case.json",
+  "original_checkpoint_case_sha256": "b9f7a2599addb226d09dcc8b5c437437908d99d7792b0ce12bb6a55cab9cf42b",
+  "primitive_cases_per_target": 2426,
+  "existing_primitive_cases_retained": 1029,
+  "full_CPU_states_per_target": 368,
+  "complete_CPU_words_per_state": 37,
+  "original_instruction_calls_per_target": 75,
+  "reached_missing_flag_types": {
+    "t_ADDd": 3,
+    "t_ORb": 4,
+    "t_ORd": 6,
+    "t_SUBd": 18,
+    "t_CMPd": 24,
+    "t_INCd": 27,
+    "t_DECd": 30
+  },
+  "INC_DEC_contract": "LoadCF preserves the effective incoming carry in rawFLAGS before changing the lazy type. var2, oldcf and prev_type remain untouched. FillFlags retains CF from rawFLAGS, derives AF/OF from the actual result, and preserves all unrelated raw/lazy/CPU words.",
+  "red": {
+    "scope": "Reaching current08db640 full checkpoint flag records, seven unsupported operations on both targets plus complete boundary/observed reference. Actual original flag owner succeeds; current port aborts with incomplete output. Flag primitive failure only; no clock/caller/full-output claim.",
+    "base_revision": "08db640f5b530a4a3c37656865a2fa09c3c5931d",
+    "methods": 2,
+    "failures": 16,
+    "errors": 0,
+    "log_sha256": "7164ec373ba3f94dfa344a7f5423407b26e112f18a036160b6a4667f879cc3c6",
+    "inputs": {
+      "tests/test_cpu_flags.py": "beb1b3d1dfe5abdc72535da0cbf7963d662a53453a3b8ec9d528265cded33f4f",
+      "tests/device_cpu.c": "1bfab393585dec862c3d2a7ebd18f66212a09e1dedf31dd162352bd46bc59476",
+      "tests/device_cpu_fixture.py": "7d4386cf7fda4da417e9bcd1304aed4f37e21910465ccb51b2791d52b46aa98c",
+      "re_out/fist_cpu.h": "3b7181047bacbdda667cee9a4fd92dfd88c537fa9990f3697b3279c22737a0e4",
+      "tools/oracle/cpu_flags_probe.cpp": "25f49a6ffdd69f233d216ed2349b7767ef9079b0649fb007867c06c46c83281f",
+      "tools/oracle/device_checkpoint_case.json": "b9f7a2599addb226d09dcc8b5c437437908d99d7792b0ce12bb6a55cab9cf42b"
+    }
+  },
+  "green": {
+    "methods": 4,
+    "seconds": 13.612,
+    "targets": [
+      "native",
+      "wasm"
+    ]
+  },
+  "causal_var2_negative": {
+    "scope": "Only an invented INC/DEC second operand1 is added to the current production flag helper. Both complete75-operation original sequences fail at the first reaching INC/DEC, with preceding records and every other field equal. Actual original trace supplies the untouched operand; no caller/device/clock acceptance.",
+    "cases": [
+      {
+        "target": "native",
+        "first_unequal_operation": 5,
+        "source_ip": 13948,
+        "previous_complete_rows_equal": true,
+        "port_record": [
+          12871,
+          27,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          0
+        ],
+        "original_record": [
+          12871,
+          27,
+          0,
+          0,
+          0,
+          48280,
+          1,
+          1,
+          1,
+          0
+        ],
+        "only_unequal_field": "lflags.var2.dword[0]"
+      },
+      {
+        "target": "wasm",
+        "first_unequal_operation": 5,
+        "source_ip": 13948,
+        "previous_complete_rows_equal": true,
+        "port_record": [
+          12871,
+          27,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          0
+        ],
+        "original_record": [
+          12871,
+          27,
+          0,
+          0,
+          0,
+          48280,
+          1,
+          1,
+          1,
+          0
+        ],
+        "only_unequal_field": "lflags.var2.dword[0]"
+      }
+    ],
+    "header_sha256": "3d15ea6c550ed29ce2657f8afe1cd49e4a4f6656e10b689909f28e91cc927fb9",
+    "broken_header_sha256": "f89a6af4181d6c0f4fe367ff46f7b4340d119637999a309ea942e7aeea0ef7c1",
+    "regressions": {
+      "tests/device_cpu.c": "0ff45fb861fe36f4d7a4bd259ecd86021e3ef22cb404844a73f7c60d3de2ea01",
+      "tools/oracle/device_checkpoint_case.json": "b9f7a2599addb226d09dcc8b5c437437908d99d7792b0ce12bb6a55cab9cf42b"
+    },
+    "checker_sha256": "2e40242cda32ad14b5422f7dacb126a2a34ffc2c1f2f54d1aabe367c6d68fb19",
+    "temporary_build_retired": true
+  },
+  "evidence_log_sha256": {
+    "red-final": "7164ec373ba3f94dfa344a7f5423407b26e112f18a036160b6a4667f879cc3c6",
+    "green-final": "60d42a69c27ffedf34369f6e0979d777454460e1208dd4e8b724be7d1ea42f3d",
+    "reset-green": "c8878993c87932db0ffc427a6c40e589292b9ba4fe2b8045252f3c4bd48d4a0b",
+    "config-green": "ea147f0140dfec4439709fb79541cb18b4544f44ae708744fc40fedde401863e",
+    "clock-green": "b900f0fc9e3395950d453e5d20a9411f312cb2f3043f69fff234b052662cd20a",
+    "var2-negative-final": "f080f19f148a5b8f8a0a0bfb0ac90690f6f3dfd6b268776e31aecb03316b82dd"
+  },
+  "verification_inputs": {
+    "re_out/fist_cpu.h": "3d15ea6c550ed29ce2657f8afe1cd49e4a4f6656e10b689909f28e91cc927fb9",
+    "tests/test_cpu_flags.py": "f2ddb5feab57c8835df6e05b4b597f6876797818f022a8b1e1f068a0c4229a08",
+    "tests/device_cpu.c": "0ff45fb861fe36f4d7a4bd259ecd86021e3ef22cb404844a73f7c60d3de2ea01",
+    "tools/oracle/cpu_flags_probe.cpp": "25f49a6ffdd69f233d216ed2349b7767ef9079b0649fb007867c06c46c83281f",
+    "tools/oracle/cpu_instructions_probe.cpp": "c6d16cf9ff842a820b1f3640b0e383f842a99f0cd71f718ce9d7bb7e4ce951ea",
+    "third_party/dosbox-build/dosbox-0.74-3/src/cpu/flags.cpp": "d9a36589f9ad2bf1f06d82d1e89b5fbf8461164f94edf514ccf96491bcf553be",
+    "third_party/dosbox-build/dosbox-0.74-3/src/cpu/instructions.h": "7ee66f013c2016a82fe07f23ff036d80b6518a9fad22d6a20881a08e1d7f02bc",
+    "third_party/dosbox-build/dosbox-0.74-3/src/cpu/lazyflags.h": "ce75d1039dba8e989fffdd2d54cf032de714f890abda36f1b82230385a98f0ff"
+  },
+  "production_gate_accepted": false,
+  "complete_original_acceptance": false,
+  "reproduction": [
+    "python3 -B -m unittest discover -s tests -p test_cpu_flags.py -v",
+    "FIST_WORKDIR=/tmp/wasm-fist-cpu-flags-replay OBJDIR=/tmp/wasm-fist-cpu-flags-replay/objects NATIVE=/tmp/wasm-fist-cpu-flags-replay/production/native OUTJS=/tmp/wasm-fist-cpu-flags-replay/production/wasm/fistrun.js bash tools/check_flow.sh"
+  ]
+}

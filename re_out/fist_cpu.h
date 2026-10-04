@@ -22,9 +22,10 @@ typedef struct {
 
 /* Original lazyflags.h enum values for the operations recovered here. */
 enum {
-    FIST_LAZY_UNKNOWN=0, FIST_LAZY_ADDW=2, FIST_LAZY_XORB=19,
+    FIST_LAZY_UNKNOWN=0, FIST_LAZY_ADDW=2, FIST_LAZY_ADDD=3,
+    FIST_LAZY_ORB=4, FIST_LAZY_ORD=6, FIST_LAZY_SUBD=18, FIST_LAZY_XORB=19,
     FIST_LAZY_XORD=21, FIST_LAZY_CMPB=22, FIST_LAZY_CMPW=23,
-    FIST_LAZY_TESTB=31
+    FIST_LAZY_CMPD=24, FIST_LAZY_INCD=27, FIST_LAZY_DECD=30, FIST_LAZY_TESTB=31
 };
 
 static inline uint32_t fist_cpu_low(uint32_t old, uint32_t value, unsigned bits)
@@ -45,9 +46,10 @@ static inline void fist_cpu_alu(FistCpuState *cpu, unsigned type, unsigned bits,
 static inline unsigned fist_cpu_flag_width(const FistCpuFlags *f)
 {
     switch (f->type) {
-    case FIST_LAZY_CMPB: case FIST_LAZY_XORB: case FIST_LAZY_TESTB: return 8;
+    case FIST_LAZY_CMPB: case FIST_LAZY_XORB: case FIST_LAZY_TESTB: case FIST_LAZY_ORB: return 8;
     case FIST_LAZY_ADDW: case FIST_LAZY_CMPW: return 16;
-    case FIST_LAZY_XORD: return 32;
+    case FIST_LAZY_XORD: case FIST_LAZY_ADDD: case FIST_LAZY_ORD:
+    case FIST_LAZY_SUBD: case FIST_LAZY_CMPD: case FIST_LAZY_INCD: case FIST_LAZY_DECD: return 32;
     default: abort();
     }
 }
@@ -65,9 +67,26 @@ static inline int fist_cpu_cf(const FistCpuState *cpu)
     case FIST_LAZY_CMPB: return (uint8_t)f->var1 < (uint8_t)f->var2;
     case FIST_LAZY_CMPW: return (uint16_t)f->var1 < (uint16_t)f->var2;
     case FIST_LAZY_ADDW: return (uint16_t)f->res < (uint16_t)f->var1;
-    case FIST_LAZY_XORB: case FIST_LAZY_XORD: case FIST_LAZY_TESTB: return 0;
+    case FIST_LAZY_ADDD: return f->res < f->var1;
+    case FIST_LAZY_SUBD: case FIST_LAZY_CMPD: return f->var1 < f->var2;
+    case FIST_LAZY_INCD: case FIST_LAZY_DECD: return !!(f->flags & 1);
+    case FIST_LAZY_XORB: case FIST_LAZY_XORD: case FIST_LAZY_TESTB:
+    case FIST_LAZY_ORB: case FIST_LAZY_ORD: return 0;
     default: abort();
     }
+}
+/* Original INCD/DECD LoadCF modifies the raw CF bit before replacing the
+ * lazy tag. var2, oldcf and prev_type remain exactly as received. */
+static inline uint32_t fist_cpu_incdec(FistCpuState *cpu, unsigned type, uint32_t a)
+{
+    assert(type==FIST_LAZY_INCD || type==FIST_LAZY_DECD);
+    FistCpuFlags *f=&cpu->flags;
+    unsigned cf=fist_cpu_cf(cpu);
+    f->flags=(f->flags & ~1u) | cf;
+    f->var1=a;
+    f->res=type==FIST_LAZY_INCD ? a+1u : a-1u;
+    f->type=type;
+    return f->res;
 }
 static inline void fist_cpu_fill_flags(FistCpuState *cpu)
 {
@@ -76,11 +95,17 @@ static inline void fist_cpu_fill_flags(FistCpuState *cpu)
     unsigned bits=fist_cpu_flag_width(f);
     uint32_t a=fist_cpu_low(0,f->var1,bits), b=fist_cpu_low(0,f->var2,bits);
     uint32_t result=fist_cpu_low(0,f->res,bits), sign=1u<<(bits-1);
-    int arithmetic=f->type==FIST_LAZY_ADDW || f->type==FIST_LAZY_CMPB || f->type==FIST_LAZY_CMPW;
-    int overflow=arithmetic && ((f->type==FIST_LAZY_ADDW ? (a^b^sign) : (a^b)) & (result^a) & sign);
+    int adding=f->type==FIST_LAZY_ADDW || f->type==FIST_LAZY_ADDD;
+    int arithmetic=adding || f->type==FIST_LAZY_CMPB || f->type==FIST_LAZY_CMPW ||
+                   f->type==FIST_LAZY_SUBD || f->type==FIST_LAZY_CMPD;
+    int increment=f->type==FIST_LAZY_INCD, decrement=f->type==FIST_LAZY_DECD;
+    int overflow=increment ? result==0x80000000u : decrement ? result==0x7fffffffu :
+        arithmetic && ((adding ? (a^b^sign) : (a^b)) & (result^a) & sign);
+    int auxiliary=increment ? !(result & 15u) : decrement ? (result & 15u)==15u :
+        arithmetic && ((a^b^result) & 0x10);
     uint32_t flags=(fist_cpu_cf(cpu) ? 1u : 0u) |
         (!__builtin_parity(result & 255) ? 4u : 0u) |
-        (arithmetic && ((a^b^result) & 0x10) ? 0x10u : 0u) |
+        (auxiliary ? 0x10u : 0u) |
         (!result ? 0x40u : 0u) | (result & sign ? 0x80u : 0u) |
         (overflow ? 0x800u : 0u);
     /* FillFlags updates exactly CF/PF/AF/ZF/SF/OF and clears the lazy tag;

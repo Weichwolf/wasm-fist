@@ -1221,6 +1221,34 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   missing flag operations, device/IRQ/IRET/IF, first817 and final mixedPCM
   remain open.
 
+- Accepted shared startup/checkpoint flag owner at parent08db640:
+  tools/oracle/cpu_startup_flags_case.json recovers actualORb/ADDd/ORd/
+  SUBd/CMPd/INCd/DECd in the existing CPU owner. Original flags.cpp and
+  instructions.h verify2426 complete flag records, all368 full37-word
+  CPU materializations and every75 captured checkpoint ALU/condition call
+  on Native/WASM. All1029 previous primitive cases remain in the expanded
+  owner. The prior header fails16 reaching target cases with no errors.
+  INC/DEC LoadCF preserves incoming effective carry before changing type;
+  var2/oldcf/prev_type stay untouched. An invented var2=1 mutation fails
+  both complete75-operation sequences at the firstINC, with preceding
+  complete rows and all other fields equal. Four flag regression methods,
+  the configuration/reset regressions and six existing clock methods pass.
+  tools/oracle/cpu_startup_flags_production_case.json binds1163 frozen
+  source inputs,248 original source references and419 unchanged originals
+  to run.A056Yn:143 tests in279.322s, exact patches, sequential builds,
+  six startup cases and178 existing flows with zero failures and terminal0.
+  Complete additional startup/error/30s captures finish0. Every2100 fresh
+  Native/WASM frame/end byte,43 sound rows and47 unmasked service packets
+  preserve645 output. Original layouts/palettes/times and first10s video
+  match;28 pixel failures still begin817/11704156us/byte8754. Final mixed
+  portPCM is absent and strict full-original comparison fails. Missing-HIGH
+  retains39 versus38 frames and first560798us/F36/palettebyte5. Obsolete
+  terminal raw matrix/object/game artifacts are retired under/tmp;
+  complete output, source and post-cleanup verification remains available.
+  Scope is the shared flag owner and existing regressions. Actual77e2/
+  checkpoint/bank/task/device/IRQ/IRET/IF, the known PIT budget difference,
+  first817 and final mixedPCM remain open.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
@@ -1251,8 +1279,8 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
    from legacy scalar callers or substitute a fitted guest pointer.
    Consume `device_checkpoint_case.json` for actual3322/3661/3376
    instruction work, ESI index ownership and full RAM; preserve INC/DEC
-   carry and untouched lazy operand fields. Restore the reached missing
-   flag operations in the shared CPU owner. Then consume
+   carry and untouched lazy operand fields. Consume the accepted shared
+   flag owner and cpu_startup_flags_production_case.json. Then consume
    `sound_bank_startup_case.json` to restore the actual77e2
    size/allocate/read/checkpoint path rather than inserting a fitted bank
    allocation. Wire original device initialization and consume the recovered intro registers. Recover

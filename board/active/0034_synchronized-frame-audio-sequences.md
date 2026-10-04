@@ -353,6 +353,20 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   IRQ/time integration or complete sequence/surface acceptance. Completed
   raw matrix/build/game artifacts were retired in/tmp after verification.
 
+- Consume0003's accepted shared startup/checkpoint flag receipt,
+  tools/oracle/cpu_startup_flags_production_case.json. Immutable1163 source
+  inputs,248 original source references and419 unchanged originals bind
+  run.A056Yn:143 tests in279.322s, exact patches, both sequential builds,
+  six startup cases and178 existing flows with zero failures and terminal0.
+  Complete additional startup/error/30s captures and post-cleanup replays
+  finish0. Every2100 Native/WASM frame/end byte,43 sound rows and47 unmasked
+  packets preserve645 output. Original layouts/palettes/times and first10s
+  video still match. The same28 pixel failures begin817/11704156us/byte8754;
+  final mixed portPCM is absent and strict original comparison fails.
+  Missing-HIGH retains39 versus38 frames and first560798us/F36/palettebyte5.
+  Scope is the shared flag dependency, not actual77e2/checkpoint/task/bank/
+  device/IRQ/IF time integration or complete original sequence acceptance.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete
