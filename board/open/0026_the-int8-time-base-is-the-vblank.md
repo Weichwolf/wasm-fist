@@ -959,7 +959,77 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   consumer proof. Physical RAM/ROM/device providers, outer startup transport
   and public adoption remain open; it is not production or complete original acceptance.
 
+Eight original CRX boundaries now retain all4096 physical provider slots,
+actual RAM/ROM/VGA handler classes and flags, the complete272-entry first-MB
+map, separate A20 enabled/controlport and LFB handler/range state. The first
+context has4064 RAM/24 ROM/8 mapped VGA pages; the repeat context has4056
+RAM/24 ROM/16 chained VGA pages. All four first-MB remaps224..227 to304..307
+persist. A20 is enabled while its controlport is0. Source CPU/system/time,
+all eight16MiB CRX buffers, every initially linked cache entry/list and
+137 complete frames/89258 mixed samples/end2000 reverify unchanged. Seven
+negatives reject missing boundaries/slots/map entries, writable ROM, a
+cache/provider mismatch, A20 derived from controlport and an invented identity
+first-MB map. Evidence:/tmp/wasm-fist-physical-provider-source/proof.json and
+/tmp/wasm-fist-physical-provider-negatives/proof.json. This is observation only;
+physical read/write execution, A20 transitions and production adoption remain
+open. Physical PDE/PTE primitives bypass handlers through MemBase; logical
+same-page word/dword accesses retain handler width, while page-crossing
+accesses split into bytes. Recover and regress those actual routes rather than
+flatten all accesses into writable RAM or byte-only device callbacks.
+The original provider observation is accepted with the complete existing
+147-test/178-flow matrix, exact patches, sequential Native/WASM builds and six
+resource-start cases, terminal0 on unchanged1464 frozen inputs. Receipt:
+tools/oracle/physical_provider_production_case.json. Matrix raw captures and
+disposable builds retired4862223374bytes; current canonical eight source RAM
+boundaries and compact evidence remain. Source/control game copies and
+completed private result buffers also retired; all three current original
+source verifiers replay0 after cleanup. Originals419 unchanged.
+Private physical-owner preparation now retains independently initialized
+handler mappings even when direct pointers are zero; ROM writes remain ignored,
+first-MB maps are restored rather than synthesized and A20 changes only its
+enabled/map state. Direct physical PDE/PTE primitives bypass providers, and
+logical same-page word/dword device calls retain width. The first/repeated
+bootstrap, seventeen API pairs, six cold-page pairs and four CRX pairs match
+both targets. Five source-composition mutants reject writable ROM, identity
+first-MB, byte-only callbacks, coupled A20 controlport and guarded physical-ROM
+primitives. These controlled operations compose extracted original routines;
+they are not independent whole-DOSBox captures. Evidence:
+/tmp/wasm-fist-physical-ram-preparation/{trace,owner,crx,provider}-proof.json.
+The actual outer77e2->7809 caller now privately executes its original instruction
+bytes through the one CPU/system/physical owner and the three typed device
+producers. Both targets match all242 complete58-word fetch states, original
+clocks and nine whole16MiB boundaries. Widened CMP, synthetic zero system and
+eager JE flag-filling mutants reach the complete prefix but reject even though
+all RAM still matches. An additional actual source observation records physical
+providers at all nine prefix boundaries, preserving39/27518/end600 and the
+existing CPU/RAM/system proof. Controlled configuration and three existing PIC
+thin budgets still pass both targets. Evidence:
+/tmp/wasm-fist-device-physical-consumer-preparation/{producer,controlled,outer}-proof.json.
+An additional original prefix observer now retains the actual VGA aperture,
+banks, wrap,2MiB linear storage and4MiB fastmem at all nine boundaries; buffers
+and fields remain unchanged across this reached prefix. Private extracted-source
+VGA_ChainedVGA_Handler and controlled VGA_Map_Handler composition match both
+targets on complete16MiB RAM/all VGA buffers/read/cache/state/clock outputs.
+Original whole-width first-line replication at start offsets318/319 is required:
+byte-only writes can match RAM and linear storage but differ in fastmem.
+Four mutants reject RAM aliasing, byte-only callbacks, omitted first-line
+replication and a lost mapped-page base in the modes that reach each failure.
+This combines explicitly declared source substates from independent boundaries;
+it is not an independently captured whole VM state or visual/frame acceptance.
+Evidence:/tmp/wasm-fist-vga-memory-preparation/proof.json. Private provider,
+outer-caller and VGA preparation remains unadopted; other VGA/LFB/MMIO handlers,
+register transitions, faults and first817/final mixedPCM remain open.
+
 ## Next
+
+Consume physical_provider_case.json together with paging_control_case.json.
+Adopt the one CPU/system/physical owner only after actual callers, provider
+execution and full required cross-target regression are proved. Preserve the
+reached outer77e2->7809 byte/word/CALL/flag contracts; recover alternate branches
+and the following CALL3322. Transport real system state instead of creating a
+zero fallback. Connect actual VGA provider/register transitions to the same
+owner before whole-address-space acceptance; other VGA/LFB/MMIO and fault
+routes require reaching original evidence.
 
 Consume paging_control_case.json for the real nonempty cache before CR3/PG
 changes and retained physical slots. Complete the one mutable CPU/system/RAM
