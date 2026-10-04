@@ -717,7 +717,45 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   verification passes. The six prior one-cycle PIT budget differences
   remain a separate unresolved clock diagnostic.
 
+- Original PIT0 event lifecycle source receipt at parentc71c533:
+  tools/oracle/pit_event_case.json and capture_pit_events.py replay actual
+  timer.cpp/PIC producers, not port timer math. All736 complete default
+  budget states and nine synthetic counter/control/latch sequences retain
+  all15 stored PIT fields plus output level, queue float bits/deadlines, PIC request state, CPU debt
+  and read returns. The forwarding IRQ observer leaves every baseline state
+  unchanged;23 complete IRQ observations are retained. Mode2 count changes
+  are deferred until the old event, mode0 is one-shot/reloads remove old
+  events, and mode3 can retain its first queued deadline after a count write.
+  Partial writes, mode aliases, BCD-zero, value/status latches and low-output
+  control are captured. The latter activates IRQ0 and raises a21-cycle
+  budget to25; the source virtual index moves25186 to25182. No guest IRQ
+  construction is executed: the timing reference has rawFLAGS0; port
+  diagnostics receive the368 complete original37-word CPU contexts.
+  This is a device/time property fixture, not a synchronized caller replay.
+  Native/WASM each expose the same six one-cycle failures, first case53/
+  step1 at1620001 cycles: port27761 versus original27760. Original queue
+  deadline27761.994140625 minus index1 truncates27760. The original timer
+  schedules its float delay through the PIC queue and callback-relative
+  residual; port cpu_next_slice instead limits by the rational counter wrap.
+  Both budget diagnostics explicitly record six attempted legacy INT8
+  deliveries; missing guest IRQ effects are not emulated or accepted.
+  The strict --require-budget-parity command exits1. Five verifier negatives
+  reject missing original/port output, a coherent one-cycle adjustment,
+  a changed float deadline and changed IRQ request. Existing24 port-I/O
+  methods in217.736s and six clock methods in24.613s pass. Source captures
+  are under/tmp/wasm-fist-pit-events-source-public; superseded preparations
+  are retired. Runtime/generated engine/patches remainc71c533; no new
+  production gate or full clock/IRQ/IF/IRET/frame/PCM acceptance is claimed.
+
 ## Next
+
+Consume pit_event_case.json before changing PIT0 dispatch. Reuse the existing
+shared float PIC queue for actual timer initialization, control cancellation,
+deferred reload, one-shot/periodic and low-output IRQ/budget behavior. Keep
+counter/latch state separate. Deliver the actual request through the existing
+PIC and real CPU IF/interrupt/IRET owner; do not fit a rate, subtract one or
+create a shadow event queue. Regress the strict complete budget command and
+all source-backed lifecycle cases on both targets before complete captures.
 
 Consume `sound_vector_init_case.json` before implementing the reached AX2503/2506
 services or sound CPU/IF integration: getter leaves IF clear, actual setter kernel

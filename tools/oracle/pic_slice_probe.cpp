@@ -248,4 +248,5 @@ int main(int argc, char **argv) {
         } while (1);
     }
     printf("%llu %d\n", (unsigned long long)(PIC_Ticks * CPU_CycleMax + PIC_TickIndexND()), CPU_Cycles);
+    return 0;
 }

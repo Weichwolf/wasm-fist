@@ -1249,6 +1249,12 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   checkpoint/bank/task/device/IRQ/IRET/IF, the known PIT budget difference,
   first817 and final mixedPCM remain open.
 
+- Consume0026's pit_event_case.json for the actual default PIT0 queue and
+  counter/control event lifecycle. The source-backed budget diagnostics
+  still fail on both targets; the port rational timer boundary differs
+  from the original float PIC deadline. This does not establish the audio
+  caller/IRQ/IF/IRET transport or explain away first817/final mixedPCM.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
