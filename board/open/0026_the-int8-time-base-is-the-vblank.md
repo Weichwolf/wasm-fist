@@ -883,7 +883,94 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   current canonical source boundaries remain. This preparation is not runtime
   integration or full original-output acceptance.
 
+
+- Accepted paging-control source extension at parentddc0363:
+  `capture_paging_control.py` reuses the accepted bootstrap observer and retains
+  only eight new whole16MiB CPU_WRITE_CRX entry/return boundaries. The actual
+  non-inlined entry is required: CPU_SET_CRX resolves optimized inline/clone
+  locations and did not provide complete pairs in the discarded first attempt.
+  Four actual CR3/CR0 pairs preserve every CPU/system/time field and whole RAM.
+  CR3 with PG disabled preserves the complete linked-page list; PG enable clears
+  read/write pointers and replaces handlers for all161 first-startup and20
+  repeated-bootstrap linked pages, while retaining physical slots. Raw host
+  pointers/types/flags remain per-run evidence; the source fixture compares
+  portable validity, slots, handler properties and lists. All shared128/2196
+  IRQ and18 bootstrap fetch metadata and complete137-frame/89258-sample/end2000
+  output remain unchanged;419 originals verify unchanged. Five negatives reject
+  incomplete CRX/RAM, omitted invalidation, lost physical slots and premature
+  CR3 invalidation. Reproduce with `python3 -B tools/oracle/capture_paging_control.py
+  --repo . --output /tmp/wasm-fist-paging-control-replay`; use --verify-only
+  to check the same source. Evidence:/tmp/wasm-fist-paging-control-source and
+  /tmp/wasm-fist-paging-control-negatives. Frozen1421 complete source inputs
+  bind run.q4wSw6:147 tests in535.083s and exact patches pass. Initial native
+  compilation failed2 because the supplied OBJDIR was absent; after creating
+  staging directories, resumed sequential Native/WASM builds, six startup cases
+  and all178 existing flows pass with zero failures and terminal0. Sources remain
+  unchanged; the failed initial build and exact resume command are retained.
+  Completed matrix/build/game raw data retired4862222187bytes; bound logs,
+  compact startup records, frozen tested binaries and source archives remain.
+  Source verifies0 after cleanup; isolated source games retired19532924bytes.
+  Receipt:tools/oracle/paging_control_production_case.json. This is source
+  observation only; no production RAM/startup/IRQ/first817/PCM fix is claimed.
+  Private typed mutable RAM preparation now shares one CPU/system/cache owner
+  across resident accesses and IRQ/system/stack helpers. Both targets match all
+  seventeen actual API pairs, six InitPage pairs and both complete original-byte
+  LGDT-to-LTR paths, including58 CPU/system words, four clocks where observed,
+  all intermediate/final16MiB, touched InitPage cache slots/list and all initially
+  linked CRX cache slots/list. Three causal CRX mutants reject omitted cache
+  invalidation, lost physical slots and premature CR3 invalidation even though
+  CPU/clock and RAM still agree. A separate omitted-read-dirty mutant fails all
+  three first-startup RAM pairs on both targets; repeated pairs alone still pass
+  because input PTEs are already dirty. Evidence:
+  /tmp/wasm-fist-typed-ram-preparation/{trace,owner,crx,dirty-mutant}-proof.json.
+  Completed duplicate output RAM retired905969664bytes; canonical original RAM,
+  compact proofs/logs, code and binaries remain. Unsupported permissions/models,
+  faults/device paths and production RAM/startup/IRQ integration remain open.
+  This preparation does not fix first817 or supply final mixedPCM.
+  A reaching probe against the unmodified production hot-only RAM helper now
+  aborts all three actual first-bootstrap cold-page inputs on Native/WASM; the
+  original InitPage succeeds and sets full-RAM accessed/dirty. Repeated inputs
+  alone pass its address/RAM check because bits are already set, while required
+  cache relinking is not represented. Evidence:
+  /tmp/wasm-fist-typed-ram-preparation/cold-legacy-proof.json. This establishes
+  the reached migration defect, not an attribution of first817 or mixedPCM.
+  Actual device-prefix system-context preparation now records all21 system
+  words at every242 original startup/configuration/reset fetch. The existing
+  complete CPU/code/time/RAM contract is reverified unchanged in a metadata view
+  containing its original fields; the added system words are independently
+  recorded, not a full58-word port regression. Paired39-frame/27518-sample/end600
+  output and419 originals remain unchanged. MPL is3, cached TSS kind is8 and
+  exception.error remains2 throughout this reached prefix; transport the actual
+  recorded inputs rather than synthesize a zero system context. Evidence:
+  /tmp/wasm-fist-device-system-preparation/source-proof.json. Nine current full
+  RAM boundaries remain for additional shared-owner consumer regression.
+  Private direct typed-RAM migration of1280 configuration,23c4 dispatch and
+  133a reset now accepts one RAM context with actual37 CPU and21 system words.
+  Both targets match all9/225/219 complete58-word fetch states, original times
+  and full result16MiB through shared resident/RET access. Input generated C
+  is frozen privately; repository generated sources remain pristine. Evidence:
+  /tmp/wasm-fist-device-ram-consumer-preparation/producer-proof.json. Duplicate
+  input/output buffers retired50331880bytes. An additional actual controlled
+  source retains all21 system words and restored39/27518/end600 output. Both
+  targets now match all58-word controlled configuration fetches and complete
+  RAM at its original phase plus three thin budgets supplied by the existing
+  source-backed PIC owner. Alternate budgets are composition evidence, not new
+  independent hardware captures. Evidence:controlled-proof.json beside the
+  consumer proof. Physical RAM/ROM/device providers, outer startup transport
+  and public adoption remain open; it is not production or complete original acceptance.
+
 ## Next
+
+Consume paging_control_case.json for the real nonempty cache before CR3/PG
+changes and retained physical slots. Complete the one mutable CPU/system/RAM
+owner, then regress the actual first/repeated bootstrap and existing device
+producers together. The device system-context preparation supplies actual MPL,
+TSS and exception inputs; never construct a zero system record for legacy
+37-word callers. Source first-startup cache includes158 RAM and3 ROM handler
+entries; a16MiB byte buffer alone does not prove every physical page writable.
+Recover physical RAM/ROM/device providers and first-MB/A20 state before whole
+address-space acceptance. Private success remains a hypothesis until production callers,
+complete CPU/RAM/output regression and the existing full matrix are proved.
 
 Transport the complete CPU/system state through the actual startup callers,
 descriptor-table construction and handler execution before connecting timer
