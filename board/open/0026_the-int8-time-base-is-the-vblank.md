@@ -660,6 +660,20 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   actual77e2/138d, privilege exceptions, IRQ/IRET/IF transport and complete
   original frame/audio parity remain open.
 
+- Consume0003's `device_start_prefix_case.json` for the real77e2 caller
+  around the accepted reset. All242 complete states include raw/lazy flags,
+  full GP/segments/control fields and exact CPU budgets. The two DWORD near
+  CALLs and1280 RET have actual guest-frame transitions; the additional17
+  caller/configuration instructions retire individually. The225 reset rows
+  reuse the existing source owner without narrowing any architectural bits.
+  Post-reset OR AL,AL creates lazyORb/type4, which must survive the caller's
+  next fetch and any later core exit. Nine whole-RAM boundaries and fresh
+  39-frame/27518-PCM/end600 pairs pass; six coherent negatives are rejected.
+  Six clock, three reset and three configuration regression methods pass
+  both targets, while every1353 accepted644 runtime input retains its bytes.
+  This is original-source evidence; full startup CPU/guest-address/IF/IRQ
+  execution and complete frame/mixedPCM parity remain open.
+
 ## Next
 
 Consume `sound_vector_init_case.json` before implementing the reached AX2503/2506
@@ -676,7 +690,8 @@ resident setup branches, other vectors and errors need their own reaching proof.
    Consume the proved shared PIC/reset timing contract. Recover
    0003's accepted644 actual133a producer and shared full CPU context:
    retain both normal-core flag exits and CLI/STI when connecting the
-   actual startup caller. Recover
+   actual startup caller. Consume `device_start_prefix_case.json` for its
+   full1280/guest CALL/RET/TCB binding and post-reset ORb contract. Recover
    protected SB IRQ/mixer state/instruction
    work; preserve the proved 7120
    REP copy. Do not inject elapsed delays or change capture phase.

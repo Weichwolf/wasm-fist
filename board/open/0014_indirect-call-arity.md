@@ -259,6 +259,20 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
   and returned GP/flags/segments/stack/nonlocal error/CPU/IRQ/device time,
   actual76fd/77e2/23ec execution and complete output remain open.
 
+- Consume0003's complete original startup-prefix fixture
+  `device_start_prefix_case.json`: actual77e2 arrives with a DWORD0f57
+  service-return frame, calls1280 with a77ee frame, then tail-dispatches
+  23c4/133a with a77ff frame. All242 fetched full CPU states and nine whole
+  RAM boundaries retain original widths, raw/lazy flags and untouched
+  registers. Actual1280 loads logical EBXf0010000, whose DS addition wraps
+  to linear10000 and follows guest paging. Its current port carrier instead
+  transports a host TCB pointer and omits guest RET/full CPU state. Preserve
+  this unresolved coordinate/ABI distinction when threading the shared
+  CPU context; the fixture does not authorize zero-filled ambient registers
+  or fitted pointers. Six source-verifier negatives and6/3/3 existing clock/
+  reset/config methods pass both targets; all1353 accepted runtime inputs
+  remain unchanged. No production77e2/full CPU/guest-address acceptance.
+
 ## Next
 
 1. Preserve642's actual normal EAX/fullEBX and independent configuration
@@ -266,6 +280,9 @@ in 6350/6453; arg-less fill/outline sites in 3de2/3de5/4937/57a9/6612/664e/66b1/
    the next reached effects/device input using0003's `effects_mode_case.json`
    and0026's `sound_vector_init_case.json`. Keep all full op68 packets;
    do not mask upper words, post a fitted handle or pad unknown inputs.
+   Consume the complete startup-prefix inputs above before extending1280
+   to the shared CPU context and original guest RET. Resolve its actual TCB
+   address binding through the task owner rather than narrowing a host pointer.
 2. Resolve live vectors to modules/offsets. Extract real prototypes with balanced parentheses and
    a declaration terminator; the earlier regex counted commas inside definitions and invented bugs.
 3. Classify sites: missing/extra arguments, correct count but wrong register values, ambient-register

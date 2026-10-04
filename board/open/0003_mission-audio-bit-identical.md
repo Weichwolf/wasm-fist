@@ -1128,6 +1128,40 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   not actual77e2/op6c/op68, alternate reset paths, protected IRQ/IRET/IF
   transport or complete original frame/audio parity.
 
+- Full original startup-prefix source contract:
+  `tools/oracle/device_start_prefix_case.json`, reproduced with
+  `python3 -B tools/oracle/capture_device_start_prefix.py --repo . --output /tmp/wasm-fist-device-start-prefix-source`.
+  Observation starts at actual77e2 with the protected service's DWORD0f57
+  return frame and stops before CALL331c at7809. All242 full fetch states
+  and241 CPU transitions pass: consume the existing225 reset rows with
+  every architectural/code/address/time field unchanged, then prove the
+  17 additional caller/configuration transitions. Nine complete16MiB RAM
+  boundaries prove the two CALL stores and unchanged configuration/reset
+  data. CALL77e9 pushes77ee; CALL77fa overwrites that same DWORD with77ff,
+  each at the paging-resolved SS/ESP address. Actual1280 RET advances ESP
+  by4 and preserves raw/lazy flags and every untouched GP/segment/control
+  field. The DWORD TCB operand isf0010000; DSbase10000000 wraps it to
+  linear10000, here physical10000. The port's existing90000/host-pointer
+  binding is a different representation, not an original register value.
+  After the reset, OR AL,AL at77ff leaves lazyORb/type4 at7801; the current
+  full CPU flag owner still needs this operation when its caller is restored.
+  Effective ZF is clear although rawFLAGS still contains ZF from the AA
+  comparison: the actual JE7801 falls through to7803. Raw flags alone
+  cannot supply this branch condition.
+  Independent original baseline/observer captures retain all39 frames,
+  27518 mixed samples/end600 bytes and all419 original files/inventory.
+  Six verifier negatives reject missing terminal RAM, a wrong actual CALL
+  frame, corrupted upperEAX, coherently lost ORb, a narrowed logical TCB
+  and WORD-sized RET advancement. Existing Native/WASM clock/reset/config
+  regressions pass6/3/3 methods in6.844/10.253/7.561s. Every1353 accepted644
+  runtime input remains unchanged; its prior full gate is not new integration
+  evidence. Canonical captures/replay/post-cleanup proof:
+  `/tmp/wasm-fist-device-start-prefix-source-public`; negatives:
+  `/tmp/wasm-fist-device-start-prefix-source-negative/proof.json`.
+  This accepts the original prefix only. Full1280 CPU/address transport,
+  actual77e2 bank/device/IRQ/time execution and complete original output
+  remain open.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
@@ -1150,7 +1184,11 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
    the real tail jump, guest caller frame and complete incoming raw/lazy
    CPU state; legacy C-only callers still lack that transport. Extend1280's
    accepted EAX/EBX leaf to the same full context and original guest RET,
-   then recover the caller's actual instructions and post-reset flags.
+   using `device_start_prefix_case.json` for all actual inputs and the caller
+   instructions/post-reset ORb flags. Recover the TCB operand/address binding
+   through its real task owner: the guest f0010000 value and a port host
+   pointer are different representations. Do not derive a full CPU state
+   from the old two-lane carrier or substitute a fitted guest pointer.
    Consume `sound_bank_startup_case.json` to restore the actual77e2
    size/allocate/read/checkpoint path rather than inserting a fitted bank
    allocation. Wire original device initialization and consume the recovered intro registers. Recover
