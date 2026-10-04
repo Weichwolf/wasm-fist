@@ -1123,48 +1123,64 @@ service packets. Original layouts/palettes/times match;28 pixel failures begin
 817/11704156us/byte8754 and strict comparison rejects missing final mixedPCM.
 Full original video/PCM and actual startup/IRQ transport remain open.
 
-Private continuous preparation now combines actual77e2/configuration/reset,
-CALL3322, first INT21/AH1a/full handler/RETF, following caller and second
-INT21/AH4e/FindFirst/full handler/RETF through actual callerCS2b:5df6. One
-CPU/system/RAM/provider/cache/VGA input executes1014 fetches,1034 complete
-CPU/PIC-time observations,52 full memory contexts and four complete host-state
-contexts on release Native32/WASM, without intermediate CPU/RAM reseeding. The current parent-clock
-negative reaches the whole path and all52 equal memory contexts, but rejects
-budget597 versus598 at observation89. The earlier421/22 first-handler and
-654/37 two-handler proofs are historical preparation with the parent clock.
-Their reaching MOVSS/REP/PSP/LOOP/DTA substitutions are not public adoption.
-A new full-reaching omission of initial directory slots preserves all1034
-CPU/time observations on both targets, but fails directory-ID RAM writes and
-all four host contexts. The same original run observes initial77e2 directory
-slots0/1 occupied, unchanged before FindFirst; it allocates2 and advances the
-next free pointer to3. Inputs come from that initial observation.
+Complete startup/both-DOS observation and shared narrow flags, parent2d67006:
+`tools/oracle/capture_software_startup_dos.py` now reproduces the actual77e2,
+CALL3322, first INT21/AH1a/handler/RETF, following caller and second
+INT21/AH4e/FindFirst/handler/RETF through actual callerCS2b:5df6. Its versioned
+`software_startup_dos_case.json` references the unchanged first software-DOS
+fixture instead of duplicating its contract. Strict verification preserves
+380+158+257+219 fetches,20 first-owner plus34 added full RAM/provider/cache/VGA
+contexts, four complete host states and39frames/27518PCM/end600 against the
+unprobed original. Seven additional negatives reject missing/short FindFirst
+RAM, missing VGA, truncated following fetches, wrong directory allocation,
+changed raw host-name tail and wrong explicit software return. Initial drive2,
+CWD FISTDATA and occupied directory slots0/1 are observed before startup;
+FindFirst allocates2 and advances nextFree to3. Real isolated file metadata
+and all13 original host name-buffer bytes are matched inputs; the final byte
+is uninitialized by localDrive::FindNext and is never normalized to zero.
 
-The same-capture original supplies219 second-handler fetches and15 complete
-FindFirst memory/VGA contexts. Strict source verification preserves the full
-380+158+257+219 fetch sequence, exact callback argument/order/return contracts
-and39frames/27518PCM/end600 baseline. Reached DSOUNDS.BIN uses real isolated
-file size/date/time, original DOS drive and existing directory slots. All13
-host SetResult name-buffer bytes are matched inputs: the last byte is
-uninitialized in original localDrive::FindNext and is not normalized or
-claimed universally zero. Evidence:
-`/tmp/wasm-fist-software-dos-host-source/continuous-preparation-receipt.json`,
-`complete-source-proof.json` and `replay/{proof.json,negative-pic-proof.json,
-mutant-host-proof.json}` under the same root.
-The interpreter, capture extension and expanded flag support remain private.
-Version their source fixture and reusable producer before public execution
-adoption; transport the real runtime CPU/system/RAM/clock through startup
-and IRQ. No captured snapshot may be planted as runtime initialization.
+One public CPU flag owner now handles the reached narrow OR/AND/XOR/SUB/TEST,
+INC/DEC and SHL contracts. INC/DEC preserve raw CF and untouched upper lazy
+storage; even word SHL writes only the byte count. Original flags.cpp and
+instructions.h supply2814 boundary lazy states,3738 instruction calls and1014
+whole-capture lazy states. Materialization preserves all37 CPU words over1382
+original checkpoint/startup/DOS states. INCw is an extracted-source composition,
+not a reached operation in this whole-DOSBox capture. The optimized release
+parent reaches396 observations then rejects original SHLw atCS8:19ab;
+both corrected release targets match all1014 original lazy-state outputs.
+
+Fresh private continuous preparation now consumes the public flags and new
+public source. One CPU/system/RAM/provider/cache/VGA input matches1014 fetches,
+1034 complete CPU/PIC-time observations,52 complete memory contexts and four
+host contexts on Native32/WASM O2 NDEBUG, without intermediate reseeding.
+Lost upper INC storage and word-sized shift-count substitutions both reach
+the complete path and retain all52 memory/four host states, but reject CPU
+flags first at observations468/819 respectively. Earlier MOVSS/REP/PSP/LOOP/
+DTA, parent PIC and missing initial directory-slot proofs remain historical
+preparation with their recorded inputs; superseded raw captures are retired.
+The interpreter, DOS provider and runtime startup/IRQ transport remain private.
+
+The frozen1485-input gate run.UGEIUm passes159 tests in468.130s, exact patches,
+sequential Native/WASM builds, six resource-start cases and all178 flows with
+no failures and durable0;419 originals remain unchanged. Command, source,
+binary/proof hashes, causal scope and cleanup receipts live in
+`tools/oracle/software_startup_dos_production_case.json`. Fresh complete
+30000-ms production streams retain all2100 prior frames/end,43 sound rows
+and47 unmasked service packets. Original palettes/layouts/times match;
+28 pixel errors still begin817/11704156us/byte8754 and strict parity rejects
+missing final mixedPCM. This accepts source/flag ownership, not application
+startup/IRQ execution, first817, complete audio/video or any broader WI.
 
 ## Next
 
-Version the current complete same-capture startup/DOS fixture and reusable
-original-byte producer before public execution adoption. Consolidate its
-reached byte/word flag operations with the existing shared CPU owner; reuse
-the shared control, physical-memory and real clock paths. Transport actual
+Version a reusable actual-byte producer using the current complete startup/DOS
+fixture and shared CPU flags/control, physical memory and real clock owners.
+Keep observer snapshots, stopping conditions and proof serialization in tests.
+Regress complete CPU/RAM/host contracts and the reached REP/MOVSS budgets on
+both targets before public execution adoption. Then transport actual
 CPU/system/RAM/provider/cache/VGA state from real application startup through
-handlers and IRQs. Captured private inputs are diagnostic fixtures, never
-runtime initialization. Prove complete CPU/RAM/host/output contracts on both
-targets before replacing the legacy outer77e2/op6c context transport.
+handlers and IRQs before replacing legacy outer77e2/op6c transport.
+Captured snapshots are diagnostic inputs, never runtime initialization.
 
 Consume physical_provider_case.json together with paging_control_case.json.
 Adopt the one CPU/system/physical owner only after actual callers, provider

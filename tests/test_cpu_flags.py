@@ -17,6 +17,11 @@ OPERATIONS = (('t_UNKNOWN', 8, 'unknown'), ('t_ADDw', 16, 'add'),
               ('t_ADDd', 32, 'add'), ('t_ORb', 8, 'or'), ('t_ORd', 32, 'or'),
               ('t_SUBd', 32, 'sub'), ('t_CMPd', 32, 'cmp'),
               ('t_INCd', 32, 'inc'), ('t_DECd', 32, 'dec'))
+DOS_OPERATIONS = (('t_ANDb', 8, 'and'), ('t_ANDw', 16, 'and'),
+                  ('t_ORw', 16, 'or'), ('t_XORw', 16, 'xor'),
+                  ('t_SUBb', 8, 'sub'), ('t_INCb', 8, 'inc'), ('t_INCw', 16, 'inc'),
+                  ('t_DECb', 8, 'dec'), ('t_DECw', 16, 'dec'), ('t_TESTw', 16, 'test'),
+                  ('t_SHLb', 8, 'shl'), ('t_SHLw', 16, 'shl'))
 
 
 class CpuFlagsTest(unittest.TestCase):
@@ -24,6 +29,9 @@ class CpuFlagsTest(unittest.TestCase):
     def setUpClass(cls):
         cls.commands = commands()
         cls.case = json.loads((ROOT/'tools/oracle/device_checkpoint_case.json').read_text())
+        first = json.loads((ROOT/'tools/oracle/software_dos_case.json').read_text())
+        complete = json.loads((ROOT/'tools/oracle/software_startup_dos_case.json').read_text())
+        cls.dos_rows = first['prefix']+first['fetches']+complete['following']+complete['find_fetches']
         tree = ROOT/'third_party/dosbox-build/dosbox-0.74-3'
         lazy = (tree/'src/cpu/lazyflags.h').read_text()
         cls.types = re.findall(r'\bt_[A-Za-z0-9_]+\b', lazy.split(
@@ -85,8 +93,9 @@ class CpuFlagsTest(unittest.TestCase):
                 self.compare_flags([[q[k] for k in FLAG_FIELDS]])
 
     def test_flag_materialization_preserves_all_complete_original_cpu_words(self):
-        rows = self.case['fetches']
-        self.assertEqual(len(rows), 368)
+        self.assertEqual(len(self.case['fetches']), 368)
+        self.assertEqual(len(self.dos_rows), 1014)
+        rows = self.case['fetches']+self.dos_rows
         script = ''.join(' '.join(f'{q[k]:x}' for k in FLAG_FIELDS)+'\n' for q in rows)
         original = subprocess.run([self.flags_probe], input=script, text=True,
                                   check=True, capture_output=True, timeout=30).stdout.splitlines()
@@ -122,3 +131,54 @@ class CpuFlagsTest(unittest.TestCase):
                                         capture_output=True, timeout=30)
                 self.assertEqual(result.returncode, 0, result.stderr[:1000])
                 self.assertEqual(result.stdout, expected)
+
+    def test_complete_startup_dos_flags_match_original_including_narrow_operations(self):
+        self.assertEqual(len(self.dos_rows), 1014)
+        # INCw uses the same original width owner, but is a controlled source
+        # composition here; this capture reaches INCb/INCd and all DEC widths.
+        expected = {self.types.index(name) for name,_,_ in OPERATIONS+DOS_OPERATIONS
+                    if name!='t_INCw'}
+        self.assertEqual({q['lflags.type'] for q in self.dos_rows},expected)
+        self.compare_flags([[q[k] for k in FLAG_FIELDS] for q in self.dos_rows])
+
+    def test_dos_byte_word_boundaries_and_all_shift_counts_match_original(self):
+        inputs = []
+        for name, bits, kind in DOS_OPERATIONS:
+            mask = (1<<bits)-1
+            values = (0,1,15,mask//2,mask//2+1,mask-1,mask)
+            for a in values:
+                for b in range(32) if kind=='shl' else values:
+                    result = (a-b if kind=='sub' else a+1 if kind=='inc' else a-1 if kind=='dec'
+                              else a|b if kind=='or' else a^b if kind=='xor'
+                              else a<<b if kind=='shl' else a&b)
+                    for raw in (0x3206,0xffffffff,0x20460202):
+                        widths = (bits,8 if kind=='shl' else bits,bits)
+                        operands = [((dirty & ~((1<<width)-1)) | (v & ((1<<width)-1))) & 0xffffffff
+                                    for dirty,v,width in zip((0x89abcdef,0x76543210,0x12345678),
+                                                             (a,b,result),widths)]
+                        inputs.append([raw,self.types.index(name),0x31,1,*operands])
+        self.assertEqual(len(inputs), 2814)
+        self.compare_flags(inputs)
+
+    def test_dos_instruction_writes_preserve_original_lazy_upper_bits_and_carry(self):
+        operations = ('XW','OW','HB','HW','SB','IB','IW','DB','DW','TW','LB','LW')
+        scripts = []
+        for operation in operations:
+            bits = 8 if operation[-1]=='B' else 16
+            mask = (1<<bits)-1
+            for a in (0,1,15,mask//2,mask//2+1,mask-1,mask):
+                for b in range(64) if operation[0]=='L' else (0,1,15,mask//2,mask):
+                    for tag in ('t_UNKNOWN','t_CMPb','t_ADDw'):
+                        flags = [0x20460203,self.types.index(tag),0x31,1,0x89abcdef,0x76543210,0x12345678]
+                        scripts.append(operation+' '+' '.join(f'{v:x}' for v in [*flags,a,b])+'\n')
+        self.assertEqual(len(scripts), 3738)
+        script = ''.join(scripts)
+        expected = subprocess.run([self.instructions_probe],input=script,text=True,
+                                  check=True,capture_output=True,timeout=30).stdout
+        self.assertEqual(len(expected.splitlines()),len(scripts))
+        for target,run in self.commands:
+            with self.subTest(target=target):
+                result = subprocess.run([*run,'instructions'],input=script,text=True,
+                                        capture_output=True,timeout=30)
+                self.assertEqual(result.returncode,0,result.stderr[:1000])
+                self.assertEqual(result.stdout,expected)

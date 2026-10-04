@@ -14,7 +14,7 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def capture(repo,root,stop=0x7809,extra_producers=(),probe=None):
+def capture(repo,root,stop=0x7809,extra_producers=(),probe=None,wall_seconds=None):
     assert stop in (0x7809,0x780e,0x5cdd)
     assert root.is_relative_to(Path('/tmp')), 'disposable captures must be under /tmp'
     root.mkdir(parents=True,exist_ok=False)
@@ -32,9 +32,12 @@ def capture(repo,root,stop=0x7809,extra_producers=(),probe=None):
         wrapper.chmod(0o755)
         env={k:v for k,v in os.environ.items() if not k.startswith('FIST_') and k!='DOSBOX'}
         env.update(FIST_SEQUENCE_END_MS='600',DOSBOX=str(wrapper),FIST_DETAIL_REPO=str(repo),FIST_DETAIL_OPERANDS_DIR=str(folder))
+        if wall_seconds is not None:
+            assert wall_seconds > 0
+            env['FIST_ORACLE_WALL_SECONDS']=str(wall_seconds)
         env['FIST_DEVICE_PREFIX_END']=hex(stop)
         with (root/(name+'.log')).open('w') as log:
-            result=subprocess.run(['bash','tools/oracle/capture_sequence.sh','1',str(folder)],cwd=repo,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=90)
+            result=subprocess.run(['bash','tools/oracle/capture_sequence.sh','1',str(folder)],cwd=repo,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=max(90,(wall_seconds or 0)+10))
         (root/(name+'.exit')).write_text(str(result.returncode)+'\n')
         assert result.returncode==0,(name,result.returncode)
 

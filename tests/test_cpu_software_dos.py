@@ -13,7 +13,8 @@ from device_cpu_fixture import words
 from memory_context_fixture import system_words,memory_packet,expected_memory_context
 from test_port_io import ROOT
 sys.path.insert(0,str(ROOT/'tools/oracle'))
-from capture_software_dos import capture,verify
+from capture_software_dos import verify
+from capture_software_startup_dos import capture,verify as verify_complete
 from capture_pit_irq_frames import shared_physical
 
 
@@ -115,6 +116,34 @@ class CpuSoftwareDosTest(unittest.TestCase):
                     rows=copy.deepcopy(self.events);rows[3]['CPU_Cycles']-=1
                     replace('software-events.jsonl',(''.join(json.dumps(q)+'\n' for q in rows)).encode())
                 with self.assertRaises((AssertionError,OSError,ValueError)):verify(ROOT,folder,reference=False)
+
+    def test_complete_startup_source_rejects_missing_or_incorrect_findfirst_context(self):
+        source=self.original/'source'
+        find=[json.loads(l) for l in (source/'findfirst/events.jsonl').read_text().splitlines()]
+        cases=(('missing-FindFirst-RAM',source/find[9]['memory_file']),
+               ('short-FindFirst-RAM',source/find[9]['memory_file']),
+               ('missing-FindFirst-VGA',source/find[9]['memory_context']['vga']['fastmem']['file']),
+               ('short-following',source/'following/fetches.jsonl'),
+               ('wrong-directory-slot',source/'host-events.jsonl'),
+               ('wrong-host-name-tail',source/'host-events.jsonl'),
+               ('wrong-FindFirst-return',source/'findfirst/events.jsonl'))
+        for name,path in cases:
+            with self.subTest(case=name):
+                original=path.read_bytes()
+                try:
+                    if name.startswith('missing-'):path.unlink()
+                    elif name=='short-FindFirst-RAM':path.write_bytes(original[:-1])
+                    elif name=='short-following':path.write_bytes(b'\n'.join(original.splitlines()[:-1])+b'\n')
+                    else:
+                        rows=[json.loads(l) for l in original.decode().splitlines()]
+                        if name=='wrong-directory-slot':rows[2]['occupied'][3]=True
+                        elif name=='wrong-host-name-tail':
+                            args=rows[3]['arguments'];args['name_raw_hex']=args['name_raw_hex'][:-2]+'ff'
+                        else:rows[12]['arguments']['oldeip']-=1
+                        path.write_text(''.join(json.dumps(q)+'\n' for q in rows))
+                    with self.assertRaises((AssertionError,OSError,ValueError)):verify_complete(ROOT,self.original)
+                finally:path.write_bytes(original)
+        verify_complete(ROOT,self.original)
 
 
 if __name__=='__main__':unittest.main()

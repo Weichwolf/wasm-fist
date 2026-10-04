@@ -413,6 +413,21 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   same original run. This supports later production adoption; actual startup/
   IRQ transport, first817 and complete original sequence acceptance stay open.
 
+- Consume0026's versioned complete startup/both-DOS observation and shared
+  narrow flag receipt, `tools/oracle/software_startup_dos_production_case.json`.
+  The frozen1485-input run.UGEIUm passes159 tests, exact patches, sequential
+  builds, six resource-start cases and all178 flows with durable0;419 original
+  assets remain unchanged. The public capture retains1014 original fetches,
+  complete memory/provider/cache/VGA and four host states; original39frames/
+  27518PCM/end600 remain equal to the unprobed run. Private continuous
+  preparation using public flags matches1034 CPU/time,52 memory and four host
+  contexts on both release targets. Reaching flag substitutions retain complete
+  RAM/host outputs but reject complete CPU state. The interpreter and actual
+  production startup/IRQ transport remain open. Fresh complete30000-ms streams
+  retain all2100 prior frames/end,43 sound rows and47 unmasked service packets.
+  Every original layout/palette/time matches;28 pixel failures still start817/
+  11704156us/byte8754 and strict parity rejects missing final mixedPCM.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

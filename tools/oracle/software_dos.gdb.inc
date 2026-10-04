@@ -1,6 +1,20 @@
 # Actual reached INT21 API and final RETF pair; observation never writes guest state.
 software_active=False;software_done=False;software_serial=0
 software_sparse=bytearray(16777216)
+def software_fetch_state():
+ q=state()
+ base=int(gdb.parse_and_eval('MemBase'));inferior=gdb.selected_inferior()
+ linear=(q['segments'][1]['base']+q['cpu_regs.ip.dword[0]'])&0xffffffff
+ if q['paging.enabled']:
+  directory=(q['paging.cr3']&0xfffff000)+4*(linear>>22)
+  software_sparse[directory:directory+4]=bytes(inferior.read_memory(base+directory,4))
+  pde=struct.unpack_from('<I',software_sparse,directory)[0]
+  if not pde&128:
+   table=(pde&0xfffff000)+4*((linear>>12)&1023)
+   software_sparse[table:table+4]=bytes(inferior.read_memory(base+table,4))
+ address=physical(linear,software_sparse,q)
+ q.update(fetched_code_physical=address,fetched_code_hex=bytes(inferior.read_memory(base+address,32)).hex())
+ return q
 def software_record(kind,arguments=None):
  global software_serial
  software_serial+=1
@@ -43,18 +57,7 @@ class SoftwareCaller(gdb.Breakpoint):
  def stop(self):
   global software_active
   if not software_active:return False
-  q=state()
-  base=int(gdb.parse_and_eval('MemBase'));inferior=gdb.selected_inferior()
-  linear=(q['segments'][1]['base']+q['cpu_regs.ip.dword[0]'])&0xffffffff
-  if q['paging.enabled']:
-   directory=(q['paging.cr3']&0xfffff000)+4*(linear>>22)
-   software_sparse[directory:directory+4]=bytes(inferior.read_memory(base+directory,4))
-   pde=struct.unpack_from('<I',software_sparse,directory)[0]
-   if not pde&128:
-    table=(pde&0xfffff000)+4*((linear>>12)&1023)
-    software_sparse[table:table+4]=bytes(inferior.read_memory(base+table,4))
-  address=physical(linear,software_sparse,q)
-  q.update(fetched_code_physical=address,fetched_code_hex=bytes(inferior.read_memory(base+address,32)).hex())
+  q=software_fetch_state()
   with (root/'software-fetches.jsonl').open('a') as out:out.write(json.dumps(q)+'\n')
   if q['segments'][1]['value']!=ext_cs or q['cpu_regs.ip.dword[0]']!=0x5cdf:return False
   software_record('software-caller');software_active=False;self.enabled=False;return False

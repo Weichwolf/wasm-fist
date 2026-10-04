@@ -10,7 +10,10 @@ int main(void)
         assert(type==t_UNKNOWN || type==t_ADDw || type==t_XORb || type==t_XORd ||
                type==t_CMPb || type==t_CMPw || type==t_TESTb || type==t_ADDd ||
                type==t_ORb || type==t_ORd || type==t_SUBd || type==t_CMPd ||
-               type==t_INCd || type==t_DECd);
+               type==t_INCd || type==t_DECd || type==t_ANDb || type==t_ANDw ||
+               type==t_ORw || type==t_XORw || type==t_SUBb || type==t_INCb ||
+               type==t_INCw || type==t_DECb || type==t_DECw || type==t_TESTw ||
+               type==t_SHLb || type==t_SHLw);
         cpu_regs.flags=flags; lflags.type=type; lflags.prev_type=previous; lflags.oldcf=oldcf;
         lflags.var1.dword[0]=a; lflags.var2.dword[0]=b; lflags.res.dword[0]=result;
         unsigned cf=!!get_CF(),zf=!!get_ZF();

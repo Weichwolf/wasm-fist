@@ -58,11 +58,22 @@ int main(int argc, char **argv)
         return 0;
     }
     if (argc==2 && !strcmp(argv[1],"instructions")) {
-        FistCpuFlags *f=&cpu.flags; int fields; unsigned a,b; char op;
-        while ((fields=scanf(" %c %x %x %x %x %x %x %x %x %x",&op,&f->flags,
+        FistCpuFlags *f=&cpu.flags; int fields; unsigned a,b; char op[3];
+        while ((fields=scanf(" %2s %x %x %x %x %x %x %x %x %x",op,&f->flags,
             &f->type,&f->prev_type,&f->oldcf,&f->var1,&f->var2,&f->res,&a,&b))==10) {
             uint32_t result;
-            switch (op) {
+            unsigned bits=op[1]=='B' ? 8 : 16;
+            if (!strcmp(op,"XW")) { result=a^b;fist_cpu_alu(&cpu,FIST_LAZY_XORW,16,a,b,result);a=(uint16_t)result; }
+            else if (!strcmp(op,"OW")) { result=a|b;fist_cpu_alu(&cpu,FIST_LAZY_ORW,16,a,b,result);a=(uint16_t)result; }
+            else if (!strcmp(op,"HB") || !strcmp(op,"HW")) {
+                result=a&b;fist_cpu_alu(&cpu,bits==8?FIST_LAZY_ANDB:FIST_LAZY_ANDW,bits,a,b,result);a=fist_cpu_low(0,result,bits);
+            }
+            else if (!strcmp(op,"SB")) { result=a-b;fist_cpu_alu(&cpu,FIST_LAZY_SUBB,8,a,b,result);a=(uint8_t)result; }
+            else if (!strcmp(op,"IB") || !strcmp(op,"IW")) { a=fist_cpu_incdec(&cpu,bits==8?FIST_LAZY_INCB:FIST_LAZY_INCW,a); }
+            else if (!strcmp(op,"DB") || !strcmp(op,"DW")) { a=fist_cpu_incdec(&cpu,bits==8?FIST_LAZY_DECB:FIST_LAZY_DECW,a); }
+            else if (!strcmp(op,"TW")) { result=a&b;fist_cpu_alu(&cpu,FIST_LAZY_TESTW,16,a,b,result); }
+            else if (!strcmp(op,"LB") || !strcmp(op,"LW")) { if (b&31) a=fist_cpu_shl(&cpu,bits,a,b&31); }
+            else { assert(!op[1]);switch (op[0]) {
             case 'N':break;
             case 'X':result=a^b;fist_cpu_alu(&cpu,FIST_LAZY_XORD,32,a,b,result);a=result;break;
             case 'O':result=a|b;fist_cpu_alu(&cpu,FIST_LAZY_ORD,32,a,b,result);a=result;break;
@@ -72,7 +83,7 @@ int main(int argc, char **argv)
             case 'I':a=fist_cpu_incdec(&cpu,FIST_LAZY_INCD,a);break;
             case 'D':a=fist_cpu_incdec(&cpu,FIST_LAZY_DECD,a);break;
             default:abort();
-            }
+            }}
             printf("%08x %x %x %x %08x %08x %08x %08x %u %u\n",f->flags,
                    f->type,f->prev_type,f->oldcf,f->var1,f->var2,f->res,a,
                    fist_cpu_cf(&cpu),fist_cpu_zf(&cpu));
