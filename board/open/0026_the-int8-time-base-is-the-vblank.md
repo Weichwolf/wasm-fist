@@ -747,7 +747,47 @@ Proof paths are under `scratch/sequence-capture/`; matrix runs are under `scratc
   are retired. Runtime/generated engine/patches remainc71c533; no new
   production gate or full clock/IRQ/IF/IRET/frame/PCM acceptance is claimed.
 
+- Original IRQ0 frame/return source receipt at parentf320fcc:
+  `pit_irq_frame_case.json`, `pit_irq_frame.gdb` and `capture_pit_irq_frames.py`
+  retain128 actual hardware entries,2196 complete handler fetch states and18
+  full16MiB boundaries over2000ms. The first distinct BIOS, loader and
+  protected IDT destinations are selected from actual PIC/vector state;
+  no fitted selector, handler address or interrupt time selects them.
+  Nine reached CPU_Interrupt/IRET transitions preserve all CPU/system words
+  and compare every RAM byte. Protected IRQ0 at1089ms enters from CPL3,
+  reads the actual TSS stack, constructs a32-bit inward frame on a16-bit
+  stack and returns through two real16-bit IRETs plus the protected32-bit
+  outer return to CPL3. The complete original137-frame/89258-mixed-sample/
+  end2000 output matches the unobserved control and an independent fresh
+  replay;148 original producer inputs and419 unchanged game files bind it.
+  SHELL_Init's actual128-byte CommandTail copy leaves108 suffix bytes
+  uninitialized. Its raw source/guest copy is observed; all cross-replay
+  RAM differences are attributed to that input. Per-run full-RAM hashes
+  remain visible, and every API transition stays strict without normalization.
+  This is a CPU/event/output property reference, not identical whole boot
+  RAM across runs or interpretation of every handler instruction.
+  Eight negatives reject missing fetch/completion/boot-producer output,
+  unfinished returns, changed TSS/frame state, coherently changed register
+  records and recursive negative destinations. Initial preparation failures
+  and the corrected reference scope are retained in preparation-errors.json.
+  Evidence: /tmp/wasm-fist-pit-irq-frame-source-accepted; capture, independent
+  replay, negatives and post-cleanup verification exit0. Superseded prototypes,
+  duplicate replay and isolated games retired1876048815bytes. The current
+  full check_flow.sh run.pTyl5c has143 tests in225.200s, exact patches, both
+  sequential builds and resource-start checks passing; the full178-flow
+  matrix is still running and has no final acceptance yet. Runtime remains
+  c71c533. The six strict PIT budget failures still reproduce per target;
+  no port IRQ/IF/IRET/time, first817 or final mixedPCM fix is claimed.
+
 ## Next
+
+Consume pit_irq_frame_case.json for the actual CPU interrupt/return owner
+before connecting timer dispatch. Reuse FistCpuState and transport the real
+IDT/GDT/LDT/TSS, raw/lazy flags, CPL, direction and stack-width state. Recover
+actual descriptor reads, TSS inward stack selection, real16-bit and protected
+outer32-bit returns; retain complete field values (the reached tss.is386 is8,
+not a normalized1). Legacy scalar callers and zero-argument ISR calls do not
+supply that context. Regress complete CPU/RAM boundaries on both targets.
 
 Consume pit_event_case.json before changing PIT0 dispatch. Reuse the existing
 shared float PIC queue for actual timer initialization, control cancellation,

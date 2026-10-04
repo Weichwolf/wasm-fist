@@ -1255,6 +1255,16 @@ at the same rate, devices, time and scenario boundary. Device streams are diagno
   from the original float PIC deadline. This does not establish the audio
   caller/IRQ/IF/IRET transport or explain away first817/final mixedPCM.
 
+- Consume0026's original IRQ0 frame source dependency, pit_irq_frame_case.json:
+  protected delivery reaches an actual TSS inward stack switch/CPL3-to0 and
+  real16-bit plus protected32-bit outer returns. Nine full CPU/16MiB API
+  transitions,2196 observed handler fetches and complete137frame/89258PCM/
+  end2000 controls/replay pass; eight verifier negatives reject. The observed
+  uninitialized DOS shell CommandTail is a per-run raw input, not a fixed
+  whole-boot RAM reference. No port interrupt owner, production sound setup,
+  first817/final mixedPCM fix or full original acceptance follows. Reuse
+  0026's actual CPU/PIC/IF/IRET owner for SB delivery instead of legacy lanes.
+
 ## Next
 
 1. Preserve635's accepted task-mode BYTE/SS pointer and typed get/put caller.
