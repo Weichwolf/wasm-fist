@@ -1105,43 +1105,66 @@ and replaying these two public APIs does not execute the handler or transport
 production startup, fix first817 or supply final mixedPCM. Recover its real paging/control,
 DOS service, REP and MOVSS execution next; no fitted handler budget.
 
-Private following execution preparation, excluded from this public API adoption:
-`/tmp/wasm-fist-software-handler-preparation/full/{proof.json,mutant-proof.json}`
-replays the complete first reached handler through caller5cdf:158 instruction
-observations plus software return and DOS callback observations give161 complete
-58-word/budget comparisons;20 full RAM/provider/cache/VGA boundaries match
-Native/WASM. Source-derived REP budget, MOVSS holds, protected/real segments,
-CR0/CR3, LGDT/LIDT/LTR and DOS21 AH1a PSP-stack/DTA writes execute. Three
-full-reaching substitutions reject omitted MOVSS holds, PSP stack writes and
-REP cost. Separate following-caller source/replay under
-`/tmp/wasm-fist-software-following-caller/replay/{proof.json,mutant-proof.json}`
-reaches the actual nextINT21 at5df4, AH4e FindFirst forDSOUNDS.BIN, with258
-complete58-word/CPU/PIC-time observations across525->526 and complete same-
-capture RAM/provider/cache/VGA. It uses the shared production clock; read-only
-observer access to its actual PIC epoch replaces the invalid modulo-derived
-CPU_CycleLeft at the zero-budget fetch. Both full-reaching eagerSETNC and
-unfilled-core-exit substitutions preserve final RAM/cache/VGA yet fail complete
-CPU states at5dc2/5da2 on both targets. The initial handler replay still uses
-its bounded same-tick budget observer; combine the real clock and following
-caller before public execution adoption. No production startup state is supplied.
+Original PIC binary32 rounding, parent4aa0cc3: the optimized Native32 x87
+path retained excess precision in PIC_TickIndex, event-index multiplication
+and subtraction before integer conversion. The reached DSP-reset budget at
+CS2b:1358/cycle15778950 became597 instead of the original598. The shared clock
+now rounds at the original float return/expression boundaries, using one
+helper for queue service and next-slice deadlines. Existing expectations are
+unchanged. All six source-backed SB/PIC tests run Native32 O0/O2 and WASM O2;
+the parent fails the optimized reset case and the candidate passes all six.
+The full existing matrix run.RZjRij passes155 tests in310.614s, exact
+patches, sequential Native/WASM builds, six resource-start cases and178 flows
+with no failures and terminal0. All1481 frozen source inputs and419 originals
+remained unchanged. Consume `tools/oracle/pic_float_production_case.json` for
+command, hashes, source provenance and complete30s production diagnostics.
+Both targets retain all2100 prior frame/end bytes,43 sound rows and47 unmasked
+service packets. Original layouts/palettes/times match;28 pixel failures begin
+817/11704156us/byte8754 and strict comparison rejects missing final mixedPCM.
+Full original video/PCM and actual startup/IRQ transport remain open.
+
+Private continuous preparation now combines actual77e2/configuration/reset,
+CALL3322, first INT21/AH1a/full handler/RETF, following caller and second
+INT21/AH4e/FindFirst/full handler/RETF through actual callerCS2b:5df6. One
+CPU/system/RAM/provider/cache/VGA input executes1014 fetches,1034 complete
+CPU/PIC-time observations,52 full memory contexts and four complete host-state
+contexts on release Native32/WASM, without intermediate CPU/RAM reseeding. The current parent-clock
+negative reaches the whole path and all52 equal memory contexts, but rejects
+budget597 versus598 at observation89. The earlier421/22 first-handler and
+654/37 two-handler proofs are historical preparation with the parent clock.
+Their reaching MOVSS/REP/PSP/LOOP/DTA substitutions are not public adoption.
+A new full-reaching omission of initial directory slots preserves all1034
+CPU/time observations on both targets, but fails directory-ID RAM writes and
+all four host contexts. The same original run observes initial77e2 directory
+slots0/1 occupied, unchanged before FindFirst; it allocates2 and advances the
+next free pointer to3. Inputs come from that initial observation.
+
+The same-capture original supplies219 second-handler fetches and15 complete
+FindFirst memory/VGA contexts. Strict source verification preserves the full
+380+158+257+219 fetch sequence, exact callback argument/order/return contracts
+and39frames/27518PCM/end600 baseline. Reached DSOUNDS.BIN uses real isolated
+file size/date/time, original DOS drive and existing directory slots. All13
+host SetResult name-buffer bytes are matched inputs: the last byte is
+uninitialized in original localDrive::FindNext and is not normalized or
+claimed universally zero. Evidence:
+`/tmp/wasm-fist-software-dos-host-source/continuous-preparation-receipt.json`,
+`complete-source-proof.json` and `replay/{proof.json,negative-pic-proof.json,
+mutant-host-proof.json}` under the same root.
+The interpreter, capture extension and expanded flag support remain private.
+Version their source fixture and reusable producer before public execution
+adoption; transport the real runtime CPU/system/RAM/clock through startup
+and IRQ. No captured snapshot may be planted as runtime initialization.
 
 ## Next
 
-Private following-call preparation, not public adoption: original-byte
-77e2->780e now replays all368 complete58-word/time fetches and eleven whole
-RAM/provider/cache/VGA boundaries on Native/WASM. Source CALL3322 reaches3661
-and3376, then actual caller780e; LOOP preserves lazy flags and JBE reads them
-without filling. Three full-reaching mutants reject LOOP flags, eager JBE
-flags and opcode reads before the observation boundary. A second per-capture
-replay reaches first DOS file-service wrapper5cc2 with375 fetches/fourteen full
-boundaries. Different captures retain their own complete start RAM, including
-unchanged per-run boot-input differences; no bytes are normalized. Temporary
-proofs are under `/tmp/wasm-fist-cpu-memory-adoption/after-reset-{replay,dos-replay}`.
-Version the reached source fixture and original-byte producer before public
-adoption. The software-entry adoption above proves the actual API pairs
-at5cdd and final outer RETF; complete all intervening handler instructions
-and the caller through its real return. This preparation still does not
-provide production start state.
+Version the current complete same-capture startup/DOS fixture and reusable
+original-byte producer before public execution adoption. Consolidate its
+reached byte/word flag operations with the existing shared CPU owner; reuse
+the shared control, physical-memory and real clock paths. Transport actual
+CPU/system/RAM/provider/cache/VGA state from real application startup through
+handlers and IRQs. Captured private inputs are diagnostic fixtures, never
+runtime initialization. Prove complete CPU/RAM/host/output contracts on both
+targets before replacing the legacy outer77e2/op6c context transport.
 
 Consume physical_provider_case.json together with paging_control_case.json.
 Adopt the one CPU/system/physical owner only after actual callers, provider

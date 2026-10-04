@@ -399,6 +399,20 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   packets. All original palettes/layouts/times match;28 pixel failures begin817
   and strict comparison rejects missing final mixed portPCM.
 
+- Consume0026's original PIC binary32 rounding receipt,
+  `tools/oracle/pic_float_production_case.json`. Frozen1481-input run.RZjRij
+  passes155 tests, exact patches, sequential builds, six startup cases and
+  all178 flows with no failures and terminal0;419 originals remain unchanged.
+  Existing source-backed SB/PIC expectations now also run optimized Native32.
+  Complete fresh30000-ms Native/WASM captures retain all2100 preceding
+  frame/end bytes,43 sound rows and47 unmasked service packets. Original
+  layouts/palettes/times match;28 pixel errors begin817/11704156us/byte8754
+  and strict comparison rejects missing final mixedPCM. The private continuous
+  startup/both-DOS proof matches1034 CPU/time,52 complete memory and four host
+  contexts on both release targets, with initial host inputs observed in the
+  same original run. This supports later production adoption; actual startup/
+  IRQ transport, first817 and complete original sequence acceptance stay open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

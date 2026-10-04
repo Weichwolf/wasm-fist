@@ -22,11 +22,13 @@ class SoundBlasterIoClockTest(unittest.TestCase):
                  '-fno-strict-aliasing', '-Wno-int-conversion']
         sources = [str(ROOT / 'tests/sb_io_clock.c'), str(ROOT / 're_out/fist_vga.c'), str(ROOT / 're_out/fist_pic.c'),
                    str(ROOT / 're_out/fist_sb.c'), str(ROOT / 're_out/fist_dos.c')]
-        native, wasm = (str(cls.directory / name) for name in ('clock', 'clock.js'))
+        native, optimized, wasm = (str(cls.directory / name) for name in ('clock', 'clock-optimized', 'clock.js'))
         cls.commands = []
         for target, build, run in [
             ('native', ['gcc', '-m32', '-O0', *flags, *sources, '-Wl,--gc-sections', '-lm',
                         '-o', native], [native]),
+            ('native-optimized', ['gcc', '-m32', '-O2', *flags, *sources, '-Wl,--gc-sections', '-lm',
+                                  '-o', optimized], [optimized]),
             ('wasm', [tool('emcc', 'Git/emsdk/upstream/emscripten/emcc'), '-O2', *flags,
                       *sources, '-sNODERAWFS=1', '-sASSERTIONS=1', '-sEXIT_RUNTIME=1',
                       '-o', wasm], [tool('node', 'Git/emsdk/node/*/bin/node'), wasm])]:

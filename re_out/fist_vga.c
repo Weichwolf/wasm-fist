@@ -498,6 +498,15 @@ static void pic_tick_sync(uint64_t cpu)
     }
 }
 static int64_t pic_index(uint64_t cpu) { return (int64_t)cpu - (int64_t)(g_pic_tick * 30000u); }
+static float pic_event_cycles(float index)
+{
+    /* Original PIC_RunQueue multiplies float index by CPU_CycleMax before
+     * subtracting its integer tick index. Round that product to binary32:
+     * optimized x87 may otherwise retain an extended-precision result and
+     * truncate the reached DSP-reset budget from 598 to 597 cycles. */
+    volatile float cycles = index * 30000.0f;
+    return cycles;
+}
 static void pic_service_events(uint64_t cpu)
 {
     if (g_pic_service) return;
@@ -506,7 +515,7 @@ static void pic_service_events(uint64_t cpu)
     while (g_pic_events) {
         /* Store the original float product before comparing it. Native x87
          * excess precision must not postpone entries at the rounded deadline. */
-        float deadline = g_pic_events->index * 30000.0f;
+        float deadline = pic_event_cycles(g_pic_events->index);
         if (deadline > index) break;
         FistPicEntry *entry = g_pic_events;
         g_pic_events = entry->next;
@@ -524,7 +533,8 @@ void fist_clock_add_event(FistPicEvent handler, float delay, unsigned value)
     FistPicEntry *entry = g_pic_free;
     g_pic_free = entry->next;
     uint64_t cpu = clock_cpu_cycles(clock_now());
-    float index = (float)pic_index(cpu) / 30000.0f;
+    /* PIC_TickIndex returns binary32 before PIC_AddEvent adds its delay. */
+    volatile float index = (float)pic_index(cpu) / 30000.0f;
     entry->index = delay + (g_pic_service ? g_pic_service_lag : index);
     entry->handler = handler;
     entry->value = value;
@@ -534,7 +544,8 @@ void fist_clock_add_event(FistPicEvent handler, float delay, unsigned value)
     *place = entry;
     /* AddEntry may return the remaining budget to CPU_CycleLeft. The failed
      * normal-core decrement is charged on the next fetch, never in this call. */
-    float delta = g_pic_events->index - index;
+    /* AddEntry converts the binary32 difference to PIC_MakeCycles' double. */
+    volatile float delta = g_pic_events->index - index;
     int cycles = (int)(30000.0 * (double)delta);
     if (cycles < (int)g_cpu_remaining) g_cpu_remaining = 0;
 }
@@ -574,8 +585,8 @@ static unsigned cpu_next_slice(uint64_t cpu)
         if (resize > cpu && resize - cpu < slice) slice = (unsigned)(resize - cpu);
     }
     if (g_pic_events) {
-        float deadline = g_pic_events->index * 30000.0f;
-        float distance = deadline - pic_index(cpu);
+        float deadline = pic_event_cycles(g_pic_events->index);
+        volatile float distance = deadline - pic_index(cpu);
         if (distance > 0) {
             unsigned cycles = (unsigned)distance;
             if (!cycles) cycles = 1;
