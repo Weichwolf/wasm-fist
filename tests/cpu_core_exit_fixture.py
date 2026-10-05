@@ -15,8 +15,11 @@ def pic_packet(q):
     assert len(data)==80
     return struct.pack('<80I',*data)
 
-def build(directory,pic=None,clock_source=None,driver=None):
-    flags=['-O2','-DNDEBUG','-I'+str(ROOT/'tests'),'-I'+str(ROOT/'re_out'),'-ffunction-sections','-fdata-sections','-fno-strict-aliasing','-w']
+def observation(row):
+    return row['kind']+' '+str(clock(row))+' '+str(row['PIC_Ticks'])+' '+str(row['CPU_Cycles'])+' '+str(row['CPU_CycleLeft'])+' '+' '.join('%08x'%w for w in words(row)+system_words(row))
+
+def build(directory,pic=None,clock_source=None,driver=None,include_dirs=()):
+    flags=['-O2','-DNDEBUG',*['-I'+str(p) for p in include_dirs],'-I'+str(ROOT/'tests'),'-I'+str(ROOT/'re_out'),'-ffunction-sections','-fdata-sections','-fno-strict-aliasing','-w']
     sources=[driver or ROOT/'tests/cpu_core_exit.c',clock_source or ROOT/'tests/cpu_core_exit_clock.c',pic or ROOT/'tests/cpu_core_exit_pic.c',ROOT/'re_out/fist_dos.c',ROOT/'re_out/fist_sb.c']
     runs=[]
     for target,compiler,options,output,runner in (
@@ -27,18 +30,20 @@ def build(directory,pic=None,clock_source=None,driver=None):
         runs.append((target,[*runner,str(output)]))
     return runs
 
-def replay(directory,source,runs,strict=True):
+def replay(directory,source,runs,strict=True,fetches=()):
     folder=source/'source';rows=[json.loads(s) for s in (folder/'events.jsonl').read_text().splitlines()]
     before=rows[0];data=words(before)+system_words(before)
     calendar=before['calendar'];extra=[before['PIC_Ticks'],before['CPU_Cycles'],before['CPU_CycleLeft'],len(calendar)]
     for entry in calendar:extra += [entry['index_bits'],entry['value']]
     packet=directory/'initial.input';packet.write_bytes(struct.pack('<58I',*data)+memory_packet(before,folder)+pic_packet(before)+struct.pack('<%dI'%len(extra),*extra))
     expected=[]
-    for row in rows:expected.append(row['kind']+' '+str(clock(row))+' '+str(row['PIC_Ticks'])+' '+str(row['CPU_Cycles'])+' '+str(row['CPU_CycleLeft'])+' '+' '.join('%08x'%w for w in words(row)+system_words(row)))
+    for row in rows:
+        expected.append(observation(row))
+        if row['kind']=='handler-fetch':expected.extend(observation(q) for q in fetches)
     expected='\n'.join(expected)+'\n';results=[]
     for target,run in runs:
         output=directory/target
-        p=subprocess.run([*run,str(packet),str(folder/before['memory_file']),str(output)],capture_output=True,text=True,timeout=30)
+        p=subprocess.run([*run,str(packet),str(folder/before['memory_file']),str(output)],cwd=directory,capture_output=True,text=True,timeout=30)
         (directory/(target+'.log')).write_text(p.stdout+p.stderr)
         same=p.returncode==0 and p.stdout==expected;errors=[]
         try:

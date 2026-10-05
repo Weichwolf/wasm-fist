@@ -12,13 +12,17 @@ static FistCpuState cpu;
 static FistCpuSystem sys;
 static FistMemoryFixture context;
 static const char *output;
-static void state(const char *kind)
+static void observe_cpu(const char *kind)
 {
     uint32_t q[58];memcpy(q,&cpu,sizeof cpu);memcpy(q+37,&sys,sizeof sys);
     uint64_t time,tick;unsigned budget=fist_clock_cpu_slice(&time),left;
     observe_core_clock(&tick,&left);
     printf("%s %llu %llu %u %u",kind,(unsigned long long)time,(unsigned long long)tick,budget,left);
-    for(unsigned i=0;i<58;i++)printf(" %08x",q[i]);puts("");
+    for(unsigned i=0;i<58;i++)printf(" %08x",q[i]);puts("");fflush(stdout);
+}
+static void state(const char *kind)
+{
+    observe_cpu(kind);
     char path[1024];snprintf(path,sizeof path,"%s-%s.memory",output,kind);FILE *f=fopen(path,"wb");
     fist_cpu_require(f && fwrite(g_mem,16777216,1,f)==1 && !fclose(f));
     snprintf(path,sizeof path,"%s-%s.context",output,kind);f=fopen(path,"wb");
@@ -30,6 +34,9 @@ static void deliver(void *opaque,unsigned vector)
 {
     state("before-hardware");fist_cpu_hw_interrupt(&context.bus,vector);state("after-hardware");
 }
+#ifdef FIST_CORE_EXIT_CONTINUE
+static void handler_prefix(void);
+#endif
 int main(int argc,char **argv)
 {
     fist_cpu_require(argc==4);FILE *f=fopen(argv[1],"rb");fist_cpu_require(f!=NULL);
@@ -44,5 +51,8 @@ int main(int argc,char **argv)
     fist_clock_cpu_core_exit();state("after-core");unsigned vector;
     fist_cpu_require(fist_pic_dispatch_irq(cpu.flags.flags,trap_decoder,&vector,deliver,NULL)==0 && vector==8);
     state("after-queue");fist_clock_charge_cpu_instructions(1);state("handler-fetch");
+#ifdef FIST_CORE_EXIT_CONTINUE
+    handler_prefix();
+#endif
     fixture_destroy(&context);return 0;
 }

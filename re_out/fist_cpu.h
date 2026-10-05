@@ -38,7 +38,7 @@ typedef struct {
 
 /* Original lazyflags.h enum values for the operations recovered here. */
 enum {
-    FIST_LAZY_UNKNOWN=0, FIST_LAZY_ADDW=2, FIST_LAZY_ADDD=3,
+    FIST_LAZY_UNKNOWN=0, FIST_LAZY_ADDB=1, FIST_LAZY_ADDW=2, FIST_LAZY_ADDD=3,
     FIST_LAZY_ORB=4, FIST_LAZY_ORW=5, FIST_LAZY_ORD=6,
     FIST_LAZY_ANDB=13, FIST_LAZY_ANDW=14,
     FIST_LAZY_SUBB=16, FIST_LAZY_SUBD=18,
@@ -67,7 +67,7 @@ static inline void fist_cpu_alu(FistCpuState *cpu, unsigned type, unsigned bits,
 static inline unsigned fist_cpu_flag_width(const FistCpuFlags *f)
 {
     switch (f->type) {
-    case FIST_LAZY_ANDB: case FIST_LAZY_CMPB: case FIST_LAZY_XORB:
+    case FIST_LAZY_ADDB: case FIST_LAZY_ANDB: case FIST_LAZY_CMPB: case FIST_LAZY_XORB:
     case FIST_LAZY_TESTB: case FIST_LAZY_ORB: case FIST_LAZY_SUBB:
     case FIST_LAZY_INCB: case FIST_LAZY_DECB: case FIST_LAZY_SHLB: return 8;
     case FIST_LAZY_ADDW: case FIST_LAZY_CMPW: case FIST_LAZY_XORW:
@@ -91,6 +91,7 @@ static inline int fist_cpu_cf(const FistCpuState *cpu)
     case FIST_LAZY_UNKNOWN: return !!(f->flags & 1);
     case FIST_LAZY_SUBB: case FIST_LAZY_CMPB: return (uint8_t)f->var1 < (uint8_t)f->var2;
     case FIST_LAZY_CMPW: return (uint16_t)f->var1 < (uint16_t)f->var2;
+    case FIST_LAZY_ADDB: return (uint8_t)f->res < (uint8_t)f->var1;
     case FIST_LAZY_ADDW: return (uint16_t)f->res < (uint16_t)f->var1;
     case FIST_LAZY_ADDD: return f->res < f->var1;
     case FIST_LAZY_SUBD: case FIST_LAZY_CMPD: return f->var1 < f->var2;
@@ -144,7 +145,7 @@ static inline void fist_cpu_fill_flags(FistCpuState *cpu)
     unsigned bits=fist_cpu_flag_width(f);
     uint32_t a=fist_cpu_low(0,f->var1,bits), b=fist_cpu_low(0,f->var2,bits);
     uint32_t result=fist_cpu_low(0,f->res,bits), sign=1u<<(bits-1);
-    int adding=f->type==FIST_LAZY_ADDW || f->type==FIST_LAZY_ADDD;
+    int adding=f->type==FIST_LAZY_ADDB || f->type==FIST_LAZY_ADDW || f->type==FIST_LAZY_ADDD;
     int arithmetic=adding || f->type==FIST_LAZY_SUBB || f->type==FIST_LAZY_CMPB || f->type==FIST_LAZY_CMPW ||
                    f->type==FIST_LAZY_SUBD || f->type==FIST_LAZY_CMPD;
     int increment=f->type>=FIST_LAZY_INCB && f->type<=FIST_LAZY_INCD;

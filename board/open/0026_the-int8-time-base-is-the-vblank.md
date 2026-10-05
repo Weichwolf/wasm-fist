@@ -1244,14 +1244,47 @@ absent. Commands, source/binary hashes and complete scope are recorded in
 `tools/oracle/core_exit_production_case.json`. This adopts the reaching core/PIC
 frame owner in regression, not real application startup or full device time.
 
+
+### First reached IRQ0 instruction prefix
+
+The actual-byte producer now supports original ADDb lazy width/CF/FillFlags and
+NOP retirement. Byte ADD updates only var1/var2/res low bytes, preserves their
+upper bits, oldcf and prev_type, and leaves raw flags lazy. The following INCb
+loads that original carry before replacing its tag. NOP changes only the
+already charged fetch/EIP; it does not acquire a PIC/trap check.
+
+One original initial IRET seed now runs continuously through core return, PIC
+hardware frame and21 first-IRQ0-handler fetches, stopping before IN AL,DX.
+Optimized Native32 and WASM match all8 complete58-word CPU/system and16MiB
+RAM/provider/cache/VGA/PIC/calendar boundaries plus every fetch. Original
+39frame/27518PCM/end600 output equals the unprobed run. The first raw memory
+changes are actual handler stack/data writes; no guest DGROUP is rebased.
+
+Verbatim original ADDB/INCB/get_CF/get_ZF/FillFlags agrees with131072 complete
+byte-operand/raw-flag cases,524288 full lazy observations on both targets.
+Version5f13624 headers match all preceding7 boundary/16 fetch CPU states and
+then fail at ADD DL,6 /2082:3a82. Omitting only NOP matches7 boundaries/20
+fetches and fails at2082:3a8f. The public capture/fixture/build/serialization
+owners are reused; raw snapshots remain test inputs, never runtime startup.
+
+The frozen1511-input unfiltered gate passes173 tests, exact patches, sequential
+builds, six resource-start cases and all178 flows with durable0 and419 unchanged
+originals. Complete30s production preserves all2100 parent frame/end bytes,
+43 sound rows and47 unmasked packets. Original palettes/layouts/times agree;
+28 pixel failures still begin817/11704156us/byte8754 and final mixedPCM is absent.
+Commands, complete source/binary hashes and scope are recorded in
+`tools/oracle/cpu_irq_prefix_production_case.json`. First I/O, whole IRQ handler,
+queued devices/PIT/mixer and actual runtime CPU/state transport remain open.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
 calendar from real application startup before replacing legacy outer77e2/op6c
 transport. Preserve the continuous startup/DOS and first reaching IRET/core/PIC
-frame proofs. Recover the next additionally reached instruction, host callback,
-far-transfer/trap retirement and pending PIT/device-event path before runtime
-adoption. Keep the raw pending mask separate from eligibility and mark service
+frame proofs. Consume `cpu_irq_prefix_production_case.json` for the actual21-fetch first
+IRQ0 prefix. Recover the first IN AL,DX I/O budget and VGA status/device state,
+remaining handler instructions, host callbacks, far-transfer/trap retirement
+and pending PIT/device-event paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service
 only after the CPU frame owner returns. Snapshots, stopping and serialization
 belong in tests; captured states are never runtime initialization. Regress
 complete CPU/RAM/device/output boundaries and both targets for each adoption.

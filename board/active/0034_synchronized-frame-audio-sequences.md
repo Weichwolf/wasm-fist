@@ -459,6 +459,20 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   startup/device calendar/PIT integration and complete original sequence/surface
   acceptance remain open; the observed source seed belongs to regression only.
 
+
+- Consume0026's actual first-IRQ0 prefix in
+  `tools/oracle/cpu_irq_prefix_production_case.json`: shared byteADD lazy flags
+  and NOP reproduce all8 complete58-word/RAM/provider/cache/VGA/PIC/calendar
+  boundaries and21 fetches continuously from one initial IRET seed. The original
+  full39frames/27518PCM/end600 remain unchanged. All131072 controlled byteADD/
+  INC carry/FillFlags cases and reaching missing-ADD/NOP substitutions distinguish
+  the instruction contracts on both optimized targets. The frozen1511-input
+  173-test/exact-patch/both-build/six-startup/full178-flow gate finishes0 with419
+  unchanged originals. Complete30s captures retain all2100 parent frame/end
+  bytes,43 sound rows and47 unmasked packets; original palettes/layouts/times
+  match. The same28 pixel failures start817/11704156us/byte8754, final mixedPCM
+  is absent, and actual runtime/I/O/PIT/whole-handler integration remains open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

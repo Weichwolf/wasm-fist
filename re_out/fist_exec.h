@@ -126,7 +126,7 @@ static void fist_exec_jump_far(FistExec *e,uint32_t selector,uint32_t offset,uns
 static uint32_t fist_exec_alu(FistExec *e,unsigned operation,unsigned width,uint32_t a,uint32_t b) {
  uint32_t result;unsigned type;
  switch(operation){
- case 0:fist_cpu_require(width==2||width==4);result=a+b;type=width==4?FIST_LAZY_ADDD:FIST_LAZY_ADDW;break;
+ case 0:fist_cpu_require(width==1||width==2||width==4);result=a+b;type=width==1?FIST_LAZY_ADDB:width==2?FIST_LAZY_ADDW:FIST_LAZY_ADDD;break;
  case 1:result=a|b;type=width==1?FIST_LAZY_ORB:width==2?FIST_LAZY_ORW:FIST_LAZY_ORD;break;
  case 4:fist_cpu_require(width==1||width==2);result=a&b;type=width==1?FIST_LAZY_ANDB:FIST_LAZY_ANDW;break;
  case 5:result=a-b;fist_cpu_require(width==1||width==4);type=width==1?FIST_LAZY_SUBB:FIST_LAZY_SUBD;break;
@@ -157,7 +157,8 @@ static unsigned fist_exec_fetched(FistExec *e) {
    else if(op==0x26)seg=0;else if(op==0x64)seg=4;else if(op==0x65)seg=5;
    else if(op==0xf3||op==0xf2)rep=1;else break;
   }
-  if(op==0xfc){e->bus->cpu->flags.flags&=~0x400u;e->bus->system->direction=1;}
+  if(op==0x90){}
+  else if(op==0xfc){e->bus->cpu->flags.flags&=~0x400u;e->bus->system->direction=1;}
   else if(op==0xee)e->out(e->opaque,(uint16_t)e->bus->cpu->edx,(uint8_t)e->bus->cpu->eax);
   else if(op==0xec)fist_exec_reg_write(e,0,1,e->in(e->opaque,(uint16_t)e->bus->cpu->edx));
   else if(op==0x32||op==0x39||op==0x2b){unsigned m=fist_exec_fetch_code(e,&ip,1),i=(m>>3)&7,w=op==0x32?1:width;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);

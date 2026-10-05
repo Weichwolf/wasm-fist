@@ -23,7 +23,7 @@ def observer(repo):
  assert text.count('# CORE_MEMORY_CONTEXT')==1
  return text.replace('# CORE_MEMORY_CONTEXT is composed by the capture tool from the existing owner.',extra)
 
-def verify(repo,root):
+def verify(repo,root,additional_kinds=()):
  assert (root/'source.exit').read_text()=='0\n'
  for p,h in json.loads((root/'inputs.json').read_text()).items():assert digest(p)==h,p
  originals=json.loads((root/'originals.json').read_text())
@@ -39,12 +39,12 @@ def verify(repo,root):
   assert (folder/('sequence.'+suffix)).read_bytes()==(baseline/('sequence.'+suffix)).read_bytes(),suffix
  rows=[json.loads(s) for s in (folder/'events.jsonl').read_text().splitlines()]
  kinds=['before-iret','after-iret','after-core','before-hardware','after-hardware','after-queue','handler-fetch']
- assert [q['kind'] for q in rows]==kinds
+ assert [q['kind'] for q in rows]==kinds+list(additional_kinds)
  for q in rows:
   validate_context(q['memory_context'],folder,repo)
   assert (folder/q['memory_file']).stat().st_size==16777216
   assert not q['trap_decoder'] and q['CPU_CycleMax']==30000
- before,iret,core,hardware,after,queue,fetch=rows
+ before,iret,core,hardware,after,queue,fetch=rows[:len(kinds)]
  assert before['opcode_hex'].startswith('cf') and before['use32']==0
  assert before['PIC_IRQCheck'] and iret['PIC_IRQCheck'] and iret['cpu_regs.flags']&0x200
  for q in (iret,core,hardware,after,queue):
@@ -61,7 +61,7 @@ def verify(repo,root):
  print('PASS full original pending-IRQ IRET/core/PIC/first-fetch chain and unchanged complete600ms output',flush=True)
  return result
 
-def capture(repo,root,baseline=None):
+def capture(repo,root,baseline=None,*,make_observer=None,check_capture=None,additional_inputs=()):
  assert root.is_relative_to(Path('/tmp'));root.mkdir(exist_ok=False,parents=True)
  if baseline is None:
   baseline=root/'baseline';baseline.mkdir()
@@ -72,10 +72,11 @@ def capture(repo,root,baseline=None):
   assert validate_endpoint(baseline/'sequence',600)==600
   assert validate(str(baseline/'sequence.frames'),'F')['records']==39
   assert validate(str(baseline/'sequence.pcm'),'A')['samples']==27518
- folder=root/'source';folder.mkdir();probe=root/'observer.gdb';probe.write_text(observer(repo))
+ folder=root/'source';folder.mkdir();probe=root/'observer.gdb';probe.write_text((make_observer or observer)(repo))
  paths=[Path(__file__),probe,*[repo/'tools/oracle'/name for name in ('core_exit.gdb','capture_sequence.sh','file_error.gdb','physical_provider.gdb.inc','paging_control.gdb.inc','memory_context.gdb.inc','memory_context.py','capture_pit_irq_frames.py')],repo/'third_party/dosbox-fist']
  tree=repo/'third_party/dosbox-build/dosbox-0.74-3'
  paths += [tree/name for name in ('src/cpu/core_normal.cpp','src/cpu/core_normal/prefix_none.h','src/cpu/core_normal/prefix_66.h','src/cpu/cpu.cpp','src/cpu/flags.cpp','src/cpu/paging.cpp','src/hardware/pic.cpp','include/cpu.h','include/regs.h','include/mem.h')]
+ paths += list(additional_inputs)
  (root/'inputs.json').write_text(json.dumps({str(p):digest(p) for p in paths},indent=2)+'\n')
  (root/'originals.json').write_text(json.dumps({str(p):digest(p) for p in (repo/'armoredfist').rglob('*') if p.is_file()},indent=2)+'\n')
  (root/'baseline.json').write_text(json.dumps(dict(path=str(baseline),sha256={s:digest(baseline/('sequence.'+s)) for s in ('frames','pcm','end')}),indent=2)+'\n')
@@ -84,7 +85,7 @@ def capture(repo,root,baseline=None):
  env.update(DOSBOX=str(wrapper),FIST_SEQUENCE_END_MS='600',FIST_ORACLE_WALL_SECONDS='120',FIST_DETAIL_REPO=str(repo),FIST_DETAIL_OPERANDS_DIR=str(folder))
  with (root/'source.log').open('w') as out: p=subprocess.run(['bash','tools/oracle/capture_sequence.sh','1',str(folder)],cwd=repo,env=env,stdout=out,stderr=subprocess.STDOUT,timeout=130)
  (root/'source.exit').write_text(str(p.returncode)+'\n');assert p.returncode==0,p.returncode
- return verify(repo,root)
+ return (check_capture or verify)(repo,root)
 
 if __name__=='__main__':
  parser=argparse.ArgumentParser(description=__doc__)
