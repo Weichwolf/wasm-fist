@@ -8,6 +8,7 @@ void fist_int8_fire(void){abort();}
 #include "fist_exec.h"
 extern unsigned fist_clock_cpu_slice(uint64_t *);
 extern void fist_clock_cpu_ss_instruction(void);
+extern void prepare_core_queue(void);
 extern void observe_core_clock(uint64_t *,unsigned *);
 extern unsigned observe_core_active(void);
 
@@ -27,7 +28,7 @@ int main(int argc,char **argv){
  fist_pic_set_irq_mask(7,0);
  if(pending==2){unsigned vector;fist_pic_activate_irq(1);fist_cpu_require(fist_pic_take_irq(0x200,0,&vector)==1 && vector==9);}
  if(pending)fist_pic_activate_irq(7);
- fist_clock_cpu_ss_instruction();fist_clock_add_event(marker,(float)budget/30000.0f,0);fist_clock_cpu_ss_instruction();
+ prepare_core_queue();fist_clock_add_event(marker,(float)budget/30000.0f,0);prepare_core_queue();
  cpu=(FistCpuState){.eax=0x7fffffff,.esp=0x8000,.eip=0x2000,.code_big=big,.stack_big=stackbig,.stack_mask=stackbig?0xffffffff:0xffff,.stack_notmask=stackbig?0:0xffff0000,.flags={.flags=0x3003,.type=FIST_LAZY_UNKNOWN,.prev_type=FIST_LAZY_CMPD,.oldcf=1,.var1=0xdeadbeef,.var2=0x12345678,.res=0x87654321}};
  cpu.segments[1].value=0x2000;cpu.segments[1].base=0x20000;sys.direction=1;
  memset(g_mem,0x40,262144);unsigned a=0x22001;if(flip)g_mem[a++]=0x66;g_mem[a]=op;memcpy(g_mem+0x8000,&flags,4);if(op==0xcf){unsigned width=(big!=flip)?4:2;unsigned frame[]={0x2400,0x2000,flags};for(unsigned i=0;i<3;i++)memcpy(g_mem+0x8000+i*width,&frame[i],width);}

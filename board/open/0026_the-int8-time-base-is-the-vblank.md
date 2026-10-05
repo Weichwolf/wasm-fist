@@ -1276,6 +1276,43 @@ Commands, complete source/binary hashes and scope are recorded in
 `tools/oracle/cpu_irq_prefix_production_case.json`. First I/O, whole IRQ handler,
 queued devices/PIT/mixer and actual runtime CPU/state transport remain open.
 
+
+### Bound original PIT producers and first actual timer writes
+
+The shared timer owner implements all3 original timer.cpp counters, raw latch/
+status/global-lock state, binary32 frequency/delay, binary32 PIC phase promoted
+to double, counter2 gate, retained TIMER construction, callback-relative rearm,
+mode2 deferred reload and original control cancellation/IRQ/budget behavior.
+Binding supplies the CPU/PIC clock and actual counter/type speaker callbacks;
+it never initializes a runtime from snapshots or installs a second event queue.
+TIMER detachment retains the actual PIC calendar and removes owned callbacks.
+Original failed-fetch debt and29/21 I/O costs retain complete budget/IO metadata.
+Real-mode E6 OUT transports the actual first control/low/high write. Port61
+uses its existing byte owner: toggle bits4/5 on read; on changed low bits, gate
+first, speaker type second, byte assignment last. Speaker bodies remain open.
+
+One original before-control seed reaches all6 complete58-word CPU/system,
+16MiB RAM/provider/cache/VGA/PIC/calendar/all3 PIT/IO boundaries continuously
+on Native32/WASM. All13 source observations preserve39frames/27518PCM/end600.
+Controlled source agrees on736 full budget states and15 complete programs:
+all256 controls,240 counter2 mode/access/BCD/count combinations, retained
+constructor/detach, all256 port61 bytes from each of4 prior low-bit states and
+all240 combinations through actual port61. Silent request observers preserve
+all original states/reads. Complete endpoints1/60/110ms and markers agree.
+Reaching substitutions distinguish decoder, calendar cancellation, latch
+clearing, phase/frequency rounding, fetch debt, detached calendar and port61
+gate defects. Original480 control-exit cases retain their expected results;
+their setup now prepares PIC_RunQueue without an invented MOV-SS fetch.
+
+The frozen unfiltered gate passes189 tests, exact patches, sequential builds,
+six resource-start cases and all178 flows with419 unchanged originals. Complete
+30s captures preserve every2100 parent frame/end byte,43 sound rows and47 full
+packets. Original palettes/layouts/times agree;28 pixel failures still start
+817/11704156us/byte8754 and final mixedPCM remains absent. Commands/hashes/scope
+are in `tools/oracle/cpu_pit_production_case.json`. Actual application startup,
+remaining IRQ instructions/VGA/device callbacks, protected/V86 I/O exceptions,
+speaker bodies and final mixer remain open; this is not full sequence acceptance.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
@@ -1319,13 +1356,12 @@ remaining handler instructions, task/V86/exception routes and alternate system
 loads need their original paths and reaching evidence. Regress complete CPU/RAM
 and timed full-output boundaries on both targets.
 
-Consume pit_event_case.json before changing PIT0 dispatch. Reuse the existing
-shared float PIC queue for actual timer initialization, control cancellation,
-deferred reload, one-shot/periodic and low-output IRQ/budget behavior. Keep
-counter/latch state separate. Deliver the actual request through the existing
-PIC and real CPU IF/interrupt/IRET owner; do not fit a rate, subtract one or
-create a shadow event queue. Regress the strict complete budget command and
-all source-backed lifecycle cases on both targets before complete captures.
+Consume `cpu_pit_production_case.json` for the shared original PIT producers,
+complete budget/lifecycle/port61/endpoint proofs and first actual E6 writes.
+Recover the next reached instruction and original VGA/PIC device callbacks,
+then transport actual startup CPU/system/memory and IRQ/IRET state before
+runtime adoption. Deliver requests through the existing PIC and CPU IF owner;
+recover speaker bodies/final mixing without another clock or fitted delays.
 
 Consume `sound_vector_init_case.json` before implementing the reached AX2503/2506
 services or sound CPU/IF integration: getter leaves IF clear, actual setter kernel

@@ -4,6 +4,12 @@
 #include "fist_vga.c"
 #include <stdio.h>
 static void unsupported_calendar_event(unsigned value) {abort();}
+void prepare_core_queue(void)
+{
+    /* Controlled source initialization calls PIC_RunQueue before entering the
+     * normal core. No failed fetch or MOV/POP SS has occurred at this boundary. */
+    cpu_slice_start();
+}
 void restore_core_clock(FILE *input)
 {
     uint32_t q[4];fist_cpu_require(fread(q,sizeof q,1,input)==1);

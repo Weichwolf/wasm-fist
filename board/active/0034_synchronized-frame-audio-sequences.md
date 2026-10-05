@@ -473,6 +473,21 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   match. The same28 pixel failures start817/11704156us/byte8754, final mixedPCM
   is absent, and actual runtime/I/O/PIT/whole-handler integration remains open.
 
+
+- Consume0026's shared actual PIT/CPU/PIC producer in
+  `tools/oracle/cpu_pit_production_case.json`: one before-control seed reaches
+  all6 complete CPU/system/RAM/provider/cache/VGA/PIC/calendar/all3 PIT/IO
+  boundaries for the first original control/low/high writes. Source13 observations
+  preserve all39frames/27518PCM/end600. Both targets reproduce736 budgets,
+  all15 controlled timer/port61 programs and complete1/60/110ms endpoints.
+  Original480 control-exit expectations are unchanged after matching their
+  initial PIC_RunQueue boundary. The unfiltered189-test/exact-patch/both-build/
+  six-startup/full178-flow gate finishes0 with419 unchanged originals. Complete
+  30s captures retain every2100 parent frame/end byte,43 sound rows and47 packets;
+  original palettes/layouts/times match. The same28 pixel failures start817/
+  11704156us/byte8754 and final mixedPCM remains absent. Actual runtime startup,
+  whole IRQ/VGA/device and speaker/mixer integration remain open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

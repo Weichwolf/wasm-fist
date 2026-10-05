@@ -159,6 +159,7 @@ static unsigned fist_exec_fetched(FistExec *e) {
   }
   if(op==0x90){}
   else if(op==0xfc){e->bus->cpu->flags.flags&=~0x400u;e->bus->system->direction=1;}
+  else if(op==0xe6){unsigned port=fist_exec_fetch_code(e,&ip,1);e->out(e->opaque,port,(uint8_t)e->bus->cpu->eax);}
   else if(op==0xee)e->out(e->opaque,(uint16_t)e->bus->cpu->edx,(uint8_t)e->bus->cpu->eax);
   else if(op==0xec)fist_exec_reg_write(e,0,1,e->in(e->opaque,(uint16_t)e->bus->cpu->edx));
   else if(op==0x32||op==0x39||op==0x2b){unsigned m=fist_exec_fetch_code(e,&ip,1),i=(m>>3)&7,w=op==0x32?1:width;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);

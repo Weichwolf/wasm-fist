@@ -37,7 +37,7 @@ static void deliver(void *opaque,unsigned vector)
 #ifdef FIST_CORE_EXIT_CONTINUE
 static void handler_prefix(void);
 #endif
-int main(int argc,char **argv)
+static void load_core_inputs(int argc,char **argv)
 {
     fist_cpu_require(argc==4);FILE *f=fopen(argv[1],"rb");fist_cpu_require(f!=NULL);
     fist_cpu_require(fread(&cpu,sizeof cpu,1,f)==1 && fread(&sys,sizeof sys,1,f)==1);
@@ -45,6 +45,10 @@ int main(int argc,char **argv)
     fist_cpu_require(memory && fread(g_mem,16777216,1,memory)==1 && fgetc(memory)==EOF && !fclose(memory));
     fixture_restore(&context,f,&cpu,&sys,g_mem,16777216);restore_core_pic(f);restore_core_clock(f);
     fist_cpu_require(fgetc(f)==EOF && !fclose(f));fist_clock_bind_cpu(&cpu);output=argv[3];
+}
+int main(int argc,char **argv)
+{
+    load_core_inputs(argc,argv);
     FistExec engine={.bus=&context.bus};state("before-iret");
     unsigned checks=fist_exec_fetched(&engine);state("after-iret");unsigned trap_decoder=0;
     fist_cpu_require(fist_exec_core_exit(&engine,checks,fist_pic_pending_irqs(),&trap_decoder) && !trap_decoder);

@@ -8,6 +8,7 @@
  */
 #include "ghidra_compat.h"
 #include "fist_pic.h"
+#include "fist_pit.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -382,6 +383,8 @@ void fist_kdv_instruction_count(uint64_t count)
     fprintf(log, "%u %llu\n", ++frame, (unsigned long long)count);
     fflush(log);
 }
+static FistPit *g_pit_context;
+static int g_pic_machine_calendar;
 static unsigned short g_pit_reload[3] = {0,0,0};   /* 0 == 65536 */
 static unsigned char  g_pit_mode[3] = {3,0,0}, g_pit_rw[3];  /* BIOS channel 0 starts in mode 3 */
 static unsigned char  g_pit_wsub[3], g_pit_rsub[3];
@@ -389,7 +392,11 @@ static unsigned short g_pit_wlatch[3];
 static FistClock g_pit_base[3];
 static int            g_pit_latched[3]; static unsigned short g_pit_latch[3];
 static unsigned char g_port61;
-int fist_vga_pit0_div(void){ return g_pit_reload[0] ? g_pit_reload[0] : 0x10000; }
+int fist_vga_pit0_div(void){
+    if(g_pit_context)return g_pit_context->counters[0].cntr;
+    fist_cpu_require(!g_pic_machine_calendar);
+    return g_pit_reload[0] ? g_pit_reload[0] : 0x10000;
+}
 unsigned long long fist_clock_now(void){ return g_clock; }
 unsigned fist_clock_frame_counts(void){ return FRAME_COUNTS; }
 static unsigned pit_period(int ch){ return g_pit_reload[ch] ? g_pit_reload[ch] : 0x10000u; }
@@ -474,8 +481,56 @@ static int g_pic_initialized, g_pic_service;
 static float g_pic_service_lag;
 static void cpu_slice_start(void);
 static FistCpuState *g_cpu_context;
+static void *g_pit_speaker_context;
+static void (*g_pit_speaker)(void *,unsigned,unsigned);
+static void (*g_pit_speaker_type)(void *,unsigned);
+static uint64_t g_cpu_io_removed;
+static void cpu_credit_cycles(unsigned count);
+static int64_t pic_index(uint64_t cpu);
+static void fist_clock_pit_event(unsigned value);
+double fist_clock_full_index(void)
+{
+    fist_cpu_require(g_pic_initialized);
+    uint64_t cpu=clock_cpu_cycles(clock_now());
+    volatile float phase=(float)pic_index(cpu)/30000.0f;
+    return (double)g_pic_tick+(double)phase;
+}
+uint64_t fist_clock_io_delay_removed(void) {return g_cpu_io_removed;}
+static double pit_host_time(void *context) {return fist_clock_full_index();}
+static void pit_host_add(void *context,float delay)
+{fist_clock_add_event(fist_clock_pit_event,delay,0);}
+static void pit_host_remove(void *context)
+{fist_clock_remove_events(fist_clock_pit_event);}
+static void pit_host_irq(void *context,unsigned irq,int active)
+{if(active)fist_pic_activate_irq(irq);else fist_pic_deactivate_irq(irq);}
+static void pit_host_budget(void *context,unsigned minimum)
+{if(g_cpu_remaining<minimum)cpu_credit_cycles(minimum-g_cpu_remaining);}
+static void pit_host_speaker(void *context,unsigned count,unsigned mode)
+{fist_cpu_require(g_pit_speaker!=NULL);g_pit_speaker(g_pit_speaker_context,count,mode);}
+static const FistPitHost g_pit_host={NULL,pit_host_time,pit_host_add,pit_host_remove,
+                                   pit_host_irq,pit_host_budget,pit_host_speaker};
+const FistPitHost *fist_clock_pit_host(void) {return &g_pit_host;}
+void fist_clock_bind_pit(FistPit *pit,void *speaker_context,
+                         void (*speaker)(void *,unsigned,unsigned),
+                         void (*speaker_type)(void *,unsigned))
+{
+    fist_cpu_require(!pit || (g_cpu_context && speaker && speaker_type));
+    /* Retiring/replacing the timer owner removes its original callbacks, as
+     * TIMER destruction does; pending entries cannot acquire another state. */
+    if(g_pit_context && g_pit_context!=pit)
+        fist_clock_remove_events(fist_clock_pit_event);
+    if(pit)g_pic_machine_calendar=1;
+    g_pit_context=pit;g_pit_speaker_context=speaker_context;g_pit_speaker=speaker;
+    g_pit_speaker_type=speaker_type;
+}
+static void fist_clock_pit_event(unsigned value)
+{
+    fist_cpu_require(g_pit_context && value==0);
+    fist_pit_event(g_pit_context,&g_pit_host);
+}
 FistCpuState *fist_clock_bind_cpu(FistCpuState *cpu)
 {
+    fist_cpu_require(cpu || !g_pit_context);
     FistCpuState *previous=g_cpu_context;
     g_cpu_context=cpu;
     return previous;
@@ -495,6 +550,10 @@ static void pic_tick_sync(uint64_t cpu)
         for (FistPicEntry *entry = g_pic_events; entry; entry = entry->next)
             entry->index -= 1.0f;
         ++g_pic_tick;
+        if (g_pic_machine_calendar && fist_sequence_end_ms() &&
+                g_pic_tick>=fist_sequence_end_ms()) {
+            fist_sequence_endpoint_complete();exit(0);
+        }
     }
 }
 static int64_t pic_index(uint64_t cpu) { return (int64_t)cpu - (int64_t)(g_pic_tick * 30000u); }
@@ -568,8 +627,10 @@ static unsigned cpu_next_slice(uint64_t cpu)
 {
     uint64_t tick = cpu / 30000u;
     unsigned index = cpu % 30000u, slice = 30000u - index;
-    uint64_t pit = clock_cpu_cycles(pit_next_wrap());
-    if (pit > cpu && pit - cpu < slice) slice = (unsigned)(pit - cpu);
+    if (!g_pic_machine_calendar) {
+        uint64_t pit = clock_cpu_cycles(pit_next_wrap());
+        if (pit > cpu && pit - cpu < slice) slice = (unsigned)(pit - cpu);
+    }
     if (g_sequence_pic_ready) {
         pic_slice_vga(&slice, tick, index, g_sequence_pic_tick, g_sequence_pic_vertical_lag, g_sequence_mode, 1);
         if (g_sequence_pic_previous_ready)
@@ -631,6 +692,12 @@ static void clock_advance_to(FistClock target){
     uint64_t end_ms = fist_sequence_end_ms();
     uint64_t end_clock = end_ms ? (end_ms * PIT_HZ_ + 999) / 1000 : 0;
     int complete = end_clock && !clock_before(target, (FistClock){end_clock, 0});
+    if (g_pic_machine_calendar) {
+        /* The bound machine owns its actual PIT/VGA callbacks in the PIC
+         * calendar. A legacy outer-render schedule cannot substitute for it. */
+        fist_cpu_require(!g_sequence_next && !g_sequence_resize_ready);
+        clock_set(target);return;
+    }
     if (complete) target = (FistClock){end_clock - 1, 0};
     while (clock_before(clock_now(), target)) {
         FistClock w = pit_next_wrap();
@@ -685,7 +752,8 @@ static void cpu_prepare_instruction(void)
     if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
     if (!g_cpu_remaining) {
         /* The failed normal-loop decrement survives PIC dispatch; TIMER_AddTick resets it. */
-        if (clock_cpu_cycles(clock_now()) % 30000u) fist_clock_advance_cpu_cycles(1);
+        if (pic_index(clock_cpu_cycles(clock_now())) < 30000)
+            fist_clock_advance_cpu_cycles(1);
         /* CPU_Core_Normal_Run materializes lazy flags after its failed
          * decrement and before PIC_RunQueue resumes the next slice. */
         if (g_cpu_context) fist_cpu_fill_flags(g_cpu_context);
@@ -767,7 +835,10 @@ static void cpu_io_delay(int write)
 {
     /* DOSBox iohandler.cpp: callback I/O subtracts budget, without retiring an instruction. */
     unsigned delay = 30000u / (write ? (unsigned)(1024 / 0.75) : 1024u);
-    if (fist_clock_cpu_slice(NULL) >= 3u * delay) fist_clock_charge_cpu_instructions(delay);
+    if (fist_clock_cpu_slice(NULL) >= 3u * delay) {
+        g_cpu_io_removed+=delay;
+        fist_clock_charge_cpu_instructions(delay);
+    }
 }
 void fist_clock_wait_bios_ticks(unsigned count)
 {
@@ -803,10 +874,12 @@ int in(int port)
 {
     port &= 0xffff;
     int sb = fist_sb_owns(port);
-    if (port == 0x20 || port == 0x21 || port == 0xa0 || port == 0xa1 || sb) cpu_io_delay(0);
+    if (g_cpu_context || port == 0x20 || port == 0x21 || port == 0xa0 || port == 0xa1 || sb) cpu_io_delay(0);
     else fist_timer_pump();   /* remaining port costs are owned by board:0026 */
     if (fist_opl_owns(port)) return fist_opl_in(port);  /* OPL FM 0x388 status (FIST_OPL/FIST_SB) */
     if (sb) return fist_sb_in(port);   /* SB DSP + 8237 DMA window (FIST_SB, default off) */
+    if (g_pit_context && port>=0x40 && port<=0x42)
+        return fist_pit_counter_read(g_pit_context,&g_pit_host,port-0x40);
     switch (port) {
     case 0x3c7: return 0;
     case 0x3c8: return g_dac_widx & 0xff;
@@ -838,10 +911,27 @@ void out(int port, int val)
 {
     port &= 0xffff; val &= 0xff;
     int sb = fist_sb_owns(port);
-    if (port == 0x20 || port == 0x21 || port == 0xa0 || port == 0xa1 || sb) cpu_io_delay(1);
+    if (g_cpu_context || port == 0x20 || port == 0x21 || port == 0xa0 || port == 0xa1 || sb) cpu_io_delay(1);
     else fist_timer_pump();   /* remaining port costs are owned by board:0026 */
     if (fist_opl_owns(port)) { fist_opl_out(port, val); return; }  /* OPL FM 0x388/0x389 (FIST_OPL/FIST_SB) */
     if (sb) { fist_sb_out(port, val); return; }   /* SB DSP + 8237 DMA (FIST_SB, default off) */
+    if (g_pit_context) {
+        if (port==0x43) {fist_pit_control(g_pit_context,&g_pit_host,val);return;}
+        if (port==0x40 || port==0x42) {
+            fist_pit_counter_write(g_pit_context,&g_pit_host,port-0x40,val);return;
+        }
+        /* Original TIMER maps no channel1 write handler. */
+        if (port==0x41)return;
+        if (port==0x61) {
+            /* keyboard.cpp write_p61: gate first, then speaker type, then the
+             * byte register. Reads share g_port61 and toggle bits4/5 only. */
+            if ((g_port61^val)&3) {
+                if ((g_port61^val)&1)fist_pit_gate2(g_pit_context,&g_pit_host,val&1);
+                g_pit_speaker_type(g_pit_speaker_context,val&3);
+            }
+            g_port61=(unsigned char)val;return;
+        }
+    }
     switch (port) {
     case 0x3c8:
         if (getenv("FIST_VGA_TRACE") && g_vmode == 0x13 && val == 0)

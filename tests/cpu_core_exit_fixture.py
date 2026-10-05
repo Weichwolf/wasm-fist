@@ -30,12 +30,18 @@ def build(directory,pic=None,clock_source=None,driver=None,include_dirs=()):
         runs.append((target,[*runner,str(output)]))
     return runs
 
-def replay(directory,source,runs,strict=True,fetches=()):
-    folder=source/'source';rows=[json.loads(s) for s in (folder/'events.jsonl').read_text().splitlines()]
-    before=rows[0];data=words(before)+system_words(before)
-    calendar=before['calendar'];extra=[before['PIC_Ticks'],before['CPU_Cycles'],before['CPU_CycleLeft'],len(calendar)]
-    for entry in calendar:extra += [entry['index_bits'],entry['value']]
-    packet=directory/'initial.input';packet.write_bytes(struct.pack('<58I',*data)+memory_packet(before,folder)+pic_packet(before)+struct.pack('<%dI'%len(extra),*extra))
+def core_packet(before,folder,clock_packet=None):
+    if clock_packet is None:
+        extra=[before['PIC_Ticks'],before['CPU_Cycles'],before['CPU_CycleLeft'],len(before['calendar'])]
+        for entry in before['calendar']:extra += [entry['index_bits'],entry['value']]
+        clock_packet=struct.pack('<%dI'%len(extra),*extra)
+    return struct.pack('<58I',*words(before),*system_words(before))+memory_packet(before,folder)+pic_packet(before)+clock_packet
+
+def replay(directory,source,runs,strict=True,fetches=(),rows=None,initial=None,extra_parts=None,compare_failed=False):
+    folder=source/'source'
+    if rows is None:rows=[json.loads(s) for s in (folder/'events.jsonl').read_text().splitlines()]
+    before=rows[0];packet=directory/'initial.input'
+    packet.write_bytes(core_packet(before,folder) if initial is None else initial)
     expected=[]
     for row in rows:
         expected.append(observation(row))
@@ -47,10 +53,12 @@ def replay(directory,source,runs,strict=True,fetches=()):
         (directory/(target+'.log')).write_text(p.stdout+p.stderr)
         same=p.returncode==0 and p.stdout==expected;errors=[]
         try:
-            if p.returncode==0:
+            if p.returncode==0 or compare_failed:
                 for row in rows:
                     kind=row['kind']
-                    for suffix,original in (('memory',(folder/row['memory_file']).read_bytes()),('context',expected_memory_context(row,folder)),('pic',pic_packet(row))):
+                    parts=[('memory',(folder/row['memory_file']).read_bytes()),('context',expected_memory_context(row,folder)),('pic',pic_packet(row))]
+                    if extra_parts:parts.extend(extra_parts(row,folder))
+                    for suffix,original in parts:
                         if Path(str(output)+'-'+kind+'.'+suffix).read_bytes()!=original:errors.append((kind,suffix))
             if strict:
                 assert p.returncode==0,p.stderr
@@ -61,5 +69,7 @@ def replay(directory,source,runs,strict=True,fetches=()):
             # Compact observations suffice after complete comparison; never retain
             # duplicate112MiB target RAM per replay.
             for row in rows:
-                for suffix in ('memory','context','pic'):Path(str(output)+'-'+row['kind']+'.'+suffix).unlink(missing_ok=True)
+                suffixes=['memory','context','pic']
+                if extra_parts:suffixes.extend(suffix for suffix,_ in extra_parts(row,folder))
+                for suffix in suffixes:Path(str(output)+'-'+row['kind']+'.'+suffix).unlink(missing_ok=True)
     return results
