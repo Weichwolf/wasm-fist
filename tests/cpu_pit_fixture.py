@@ -18,7 +18,7 @@ def status_packet(q):
     return b''.join(bytes.fromhex(p[key]) for key in STATUS)+struct.pack('<2I',p['attrindex'],p['pcjr_flipflop'])
 
 def identity(e):
-    for i,name in enumerate(('VGA_PanningLatch','VGA_VerticalTimer','PIT0_Event')):
+    for i,name in enumerate(('VGA_PanningLatch','VGA_VerticalTimer','PIT0_Event','VGA_DrawPart','VGA_VertInterrupt','VGA_DisplayStartLatch')):
         if name in e['handler']:return i
     raise AssertionError(e)
 

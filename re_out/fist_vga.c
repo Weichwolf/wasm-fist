@@ -9,6 +9,7 @@
 #include "ghidra_compat.h"
 #include "fist_pic.h"
 #include "fist_pit.h"
+#include "fist_vga_draw.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -485,6 +486,38 @@ static void *g_pit_speaker_context;
 static void (*g_pit_speaker)(void *,unsigned,unsigned);
 static void (*g_pit_speaker_type)(void *,unsigned);
 static uint64_t g_cpu_io_removed;
+static FistVgaDraw *g_vga_draw_context;
+static FistVgaStatus *g_vga_status_context;
+static FistVgaDrawHost g_vga_draw_host;
+static void vga_host_add(void *context,float delay,uint64_t lines)
+{
+    /* The existing PIC transport owns unsigned event parameters. A larger
+     * source request must fail rather than silently narrow to another line. */
+    fist_cpu_require(lines<=UINT32_MAX);
+    fist_clock_add_event(fist_clock_vga_draw_part,delay,(unsigned)lines);
+}
+static void vga_host_irq(void *context,unsigned irq) {fist_pic_activate_irq(irq);}
+void fist_clock_vga_draw_part(unsigned value)
+{fist_cpu_require(g_vga_draw_context!=NULL);fist_vga_draw_part(g_vga_draw_context,&g_vga_draw_host,value);}
+void fist_clock_vga_vert_interrupt(unsigned value)
+{fist_cpu_require(g_vga_draw_context && value==0);fist_vga_vert_interrupt(g_vga_draw_context,&g_vga_draw_host);}
+void fist_clock_vga_display_start(unsigned value)
+{fist_cpu_require(g_vga_draw_context && value==0);fist_vga_display_start_latch(g_vga_draw_context);}
+void fist_clock_bind_vga(FistVgaDraw *drawing,FistVgaStatus *status,void *context,
+                         const uint8_t *(*line)(void *,uint64_t,uint64_t),
+                         void (*emit)(void *,const uint8_t *),void (*end)(void *,int))
+{
+    fist_cpu_require((drawing!=NULL)==(status!=NULL));
+    fist_cpu_require(!drawing || (g_cpu_context && line && emit && end));
+    if(g_vga_draw_context && g_vga_draw_context!=drawing) {
+        fist_clock_remove_events(fist_clock_vga_draw_part);
+        fist_clock_remove_events(fist_clock_vga_vert_interrupt);
+        fist_clock_remove_events(fist_clock_vga_display_start);
+    }
+    if(drawing)g_pic_machine_calendar=1;
+    g_vga_draw_context=drawing;g_vga_status_context=status;
+    g_vga_draw_host=(FistVgaDrawHost){context,line,emit,end,vga_host_add,vga_host_irq};
+}
 static void cpu_credit_cycles(unsigned count);
 static int64_t pic_index(uint64_t cpu);
 static void fist_clock_pit_event(unsigned value);
@@ -530,7 +563,7 @@ static void fist_clock_pit_event(unsigned value)
 }
 FistCpuState *fist_clock_bind_cpu(FistCpuState *cpu)
 {
-    fist_cpu_require(cpu || !g_pit_context);
+    fist_cpu_require(cpu || (!g_pit_context && !g_vga_draw_context));
     FistCpuState *previous=g_cpu_context;
     g_cpu_context=cpu;
     return previous;
@@ -587,7 +620,10 @@ static void pic_service_events(uint64_t cpu)
 }
 void fist_clock_add_event(FistPicEvent handler, float delay, unsigned value)
 {
-    if (!clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
+    /* PIC_AddEvent re-arms relative to srv_lag during PIC_RunQueue. The
+     * queue still owns its zero CPU budget until every due callback returns;
+     * starting a slice here would assign the next budget inside the callback. */
+    if (!g_pic_service && !clock_equal(g_cpu_time, clock_now())) cpu_slice_start();
     if (!g_pic_free) { fprintf(stderr, "[pic] Event queue full\n"); return; }
     FistPicEntry *entry = g_pic_free;
     g_pic_free = entry->next;
@@ -660,7 +696,10 @@ unsigned fist_clock_cpu_slice(uint64_t *cycle)
 {
     uint64_t cpu = clock_cpu_cycles(clock_now());
     if (cycle) *cycle = cpu;
-    return clock_equal(g_cpu_time, clock_now()) ? g_cpu_remaining : cpu_next_slice(cpu);
+    /* PIC_RunQueue returns the current CPU budget to CycleLeft before calling
+     * events. Queries inside that service observe the zero budget, not the
+     * next deadline whose slice has not been assigned yet. */
+    return (g_pic_service || clock_equal(g_cpu_time, clock_now())) ? g_cpu_remaining : cpu_next_slice(cpu);
 }
 static void cpu_slice_start(void)
 {
@@ -887,7 +926,9 @@ int in(int port)
         int v = g_pal[g_dac_ridx & 0xff][g_dac_rsub];
         if (++g_dac_rsub==3){ g_dac_rsub=0; g_dac_ridx=(g_dac_ridx+1)&0xff; }
         return v & 0x3f; }
-    case 0x3da: case 0x3ba: return vga_status(g_clock);
+    case 0x3da: case 0x3ba:
+        if(g_vga_status_context)return fist_vga_read_status(g_vga_status_context,fist_clock_full_index());
+        return vga_status(g_clock);
     case 0x40: case 0x41: case 0x42: { /* PIT counter read: the latched value, else the live count */
         int ch=port-0x40; unsigned v = g_pit_latched[ch] ? g_pit_latch[ch] : pit_count(ch);
         int b;

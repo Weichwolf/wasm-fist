@@ -165,9 +165,11 @@ static unsigned fist_exec_fetched(FistExec *e) {
   else if(op==0x32||op==0x39||op==0x2b){unsigned m=fist_exec_fetch_code(e,&ip,1),i=(m>>3)&7,w=op==0x32?1:width;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);
    if(op==0x39)fist_exec_alu(e,7,w,fist_exec_read_op(e,q,w),fist_exec_reg_read(e,i,w));
    else fist_exec_reg_write(e,i,w,fist_exec_alu(e,op==0x32?6:5,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w)));
-  }else if(op==0xa8){fist_exec_alu(e,8,1,fist_exec_reg_read(e,0,1),fist_exec_fetch_code(e,&ip,1));}
+  }else if(op==0x24)fist_exec_reg_write(e,0,1,fist_exec_alu(e,4,1,fist_exec_reg_read(e,0,1),fist_exec_fetch_code(e,&ip,1)));
+  else if(op==0xa8){fist_exec_alu(e,8,1,fist_exec_reg_read(e,0,1),fist_exec_fetch_code(e,&ip,1));}
   else if(op==0x03){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);unsigned i=(m>>3)&7;fist_exec_reg_write(e,i,width,fist_exec_alu(e,0,width,fist_exec_reg_read(e,i,width),fist_exec_read_op(e,q,width)));}
   else if(op==0xc4){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);fist_cpu_require(!q.direct);FistExecOperand sel=q;sel.offset+=width;fist_exec_select_segment(e,0,fist_exec_read_op(e,sel,2));fist_exec_reg_write(e,(m>>3)&7,width,fist_exec_read_op(e,q,width));}
+  else if(op==0xe3)fist_exec_conditional(e,&ip,width,1,!fist_exec_reg_read(e,1,address));
   else if(op==0xe1||op==0xe2){fist_exec_reg_write(e,1,address,fist_exec_reg_read(e,1,address)-1);fist_exec_conditional(e,&ip,width,1,fist_exec_reg_read(e,1,address) && (op==0xe2 || fist_cpu_zf(e->bus->cpu)));}
   else if(op==0xe9){int32_t d=width==4?(int32_t)fist_exec_fetch_code(e,&ip,4):(int16_t)fist_exec_fetch_code(e,&ip,2);ip=width==2?(uint16_t)(ip+d):ip+d;}
   else if(op>=0xb0 && op<=0xb7)fist_exec_reg_write(e,op&7,1,fist_exec_fetch_code(e,&ip,1));

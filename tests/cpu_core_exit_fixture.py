@@ -18,8 +18,8 @@ def pic_packet(q):
 def observation(row):
     return row['kind']+' '+str(clock(row))+' '+str(row['PIC_Ticks'])+' '+str(row['CPU_Cycles'])+' '+str(row['CPU_CycleLeft'])+' '+' '.join('%08x'%w for w in words(row)+system_words(row))
 
-def build(directory,pic=None,clock_source=None,driver=None,include_dirs=()):
-    flags=['-O2','-DNDEBUG',*['-I'+str(p) for p in include_dirs],'-I'+str(ROOT/'tests'),'-I'+str(ROOT/'re_out'),'-ffunction-sections','-fdata-sections','-fno-strict-aliasing','-w']
+def build(directory,pic=None,clock_source=None,driver=None,include_dirs=(),extra_flags=()):
+    flags=['-O2','-DNDEBUG',*extra_flags,*['-I'+str(p) for p in include_dirs],'-I'+str(ROOT/'tests'),'-I'+str(ROOT/'re_out'),'-ffunction-sections','-fdata-sections','-fno-strict-aliasing','-w']
     sources=[driver or ROOT/'tests/cpu_core_exit.c',clock_source or ROOT/'tests/cpu_core_exit_clock.c',pic or ROOT/'tests/cpu_core_exit_pic.c',ROOT/'re_out/fist_dos.c',ROOT/'re_out/fist_sb.c']
     runs=[]
     for target,compiler,options,output,runner in (

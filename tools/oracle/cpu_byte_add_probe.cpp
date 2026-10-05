@@ -16,7 +16,13 @@ int main(int argc,char **argv) {
  for(unsigned a=0;a<256;a++)for(unsigned b=0;b<256;b++)for(unsigned mode=0;mode<2;mode++) {
   reg_flags=mode?0xffffffff:0x20460202;lflags.type=t_CMPw;lflags.prev_type=t_SHLw;lflags.oldcf=1;
   lflags.var1.dword[0]=0x89abcdef;lflags.var2.dword[0]=0x76543210;lflags.res.dword[0]=0x12345678;
-  Bit8u value=a;ADDB(value,b,ProbeLoad,ProbeSave);observe(value);
+  Bit8u value=a;
+#ifdef FIST_BYTE_AND
+  ANDB(value,b,ProbeLoad,ProbeSave);
+#else
+  ADDB(value,b,ProbeLoad,ProbeSave);
+#endif
+  observe(value);
   LazyFlags saved=lflags;unsigned flags=reg_flags;FillFlags();observe(value);
   lflags=saved;reg_flags=flags;INCB(value,ProbeLoad,ProbeSave);observe(value);FillFlags();observe(value);
  }

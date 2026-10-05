@@ -488,6 +488,22 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   11704156us/byte8754 and final mixedPCM remains absent. Actual runtime startup,
   whole IRQ/VGA/device and speaker/mixer integration remain open.
 
+
+- Consume0026's bound original VGA/status/PIC and continuous first-handler prefix
+  in `tools/oracle/cpu_vga_production_case.json`: one IRET seed reproduces21
+  complete CPU/system/RAM/provider/cache/VGA/PIC/PIT/calendar/drawing/service
+  boundaries,2968 fetches and50 full line/end requests on both targets. Source
+ 39frames/27518PCM/end600 remain unchanged. Complete controlled source coverage
+  includes428044 status quanta,3474 drawing programs, exhaustive byteAND flags,
+ 8192 AND and5472 JCXZ instructions, plus five actual PIC/drawing lifecycle
+  programs. Re-arms preserve the original zero service budget; replace/detach
+  removes owned callbacks and retains unrelated events. The frozen1539-input
+ 197-test/exact-patch/both-build/six-startup/full178-flow gate finishes0 with419
+  unchanged originals. Complete30s production retains2100 parent frame/end
+  bytes,43 sound rows and47 packets; all original palettes/layouts/times match.
+  The same28 pixel failures start817/11704156us/byte8754 and final mixedPCM is
+  absent. Real startup, whole handler/devices/renderer/mixer remain open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

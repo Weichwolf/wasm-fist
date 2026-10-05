@@ -1313,15 +1313,51 @@ are in `tools/oracle/cpu_pit_production_case.json`. Actual application startup,
 remaining IRQ instructions/VGA/device callbacks, protected/V86 I/O exceptions,
 speaker bodies and final mixer remain open; this is not full sequence acceptance.
 
+
+### Bound original VGA callbacks and continuous first-handler prefix
+
+At parent `f6b1b5d`, the shared device now supplies original status reads,
+64-bit host drawing arithmetic, LinearLine/ProcessSplit/DrawPart, vertical
+interrupt and display-start latch through the existing CPU/PIC calendar.
+AND AL,Ib and JCXZ use the existing ALU/branch owners. One matched original
+seed reproduces all21 complete CPU/system/RAM/provider/cache/VGA/PIC/PIT/
+calendar/drawing/service boundaries,2968 fetches and50 full line/end requests
+on both release targets; the probed original retains39frames/27518PCM/end600.
+
+Eight targeted tests pass. Controlled coverage includes all428044 CPU quanta
+of the actual status period,3474 full drawing programs,131072 byteAND flag
+programs,8192 AND instructions and5472 JCXZ cases. Five additional actual
+PIC_RunQueue/DrawPart programs finish all four parts or explicitly retire the
+owner. They expose and regress premature CPU budget assignment inside re-arm:
+the original budget stays0; the prior port assigns29699 at the first request.
+Replace/detach removes the three owned callbacks and preserves a reaching
+unrelated event. Positive comparisons include complete state/RAM/calendars
+and every request; six deliberate re-arm/removal faults are distinguished.
+
+Reproduce with `python3 -B -m unittest discover -s tests -p test_cpu_vga.py -v`.
+Fresh source and bound-PIC commands are `tools/oracle/capture_cpu_vga_callbacks.py`
+and `tools/oracle/capture_vga_pic_rearm.py`, each with `--repo . --output /tmp/...`.
+The frozen1539-input unfiltered gate passes197 tests, exact patches, sequential
+Native/WASM builds, six resource-start cases and all178 flows, exit0, with419
+unchanged originals. Complete30s captures retain all2100 parent frame/end bytes,
+43 sound rows and47 unmasked packets. Original palettes/layouts/times agree;
+28 pixel failures still start817/11704156us/byte8754 and final mixedPCM is absent.
+Commands, original contracts, packet/trace hashes, controlled scope and complete
+matrix/production results are in `tools/oracle/cpu_vga_production_case.json`.
+Actual startup, remaining handler/callbacks, renderer/scaler bodies and final
+mixedPCM remain open. These proofs do not establish complete sequence acceptance.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
 calendar from real application startup before replacing legacy outer77e2/op6c
 transport. Preserve the continuous startup/DOS and first reaching IRET/core/PIC
 frame proofs. Consume `cpu_irq_prefix_production_case.json` for the actual21-fetch first
-IRQ0 prefix. Recover the first IN AL,DX I/O budget and VGA status/device state,
-remaining handler instructions, host callbacks, far-transfer/trap retirement
-and pending PIT/device-event paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service
+IRQ0 prefix. Consume `cpu_vga_production_case.json` for the continuous21-state/
+2968-fetch/50-line VGA/status/PIT prefix and actual service-relative re-arms.
+Recover following handler instructions (next reached PUSH CS), panning/vertical
+setup and renderer bodies, far-transfer/trap retirement and pending device-event
+paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service
 only after the CPU frame owner returns. Snapshots, stopping and serialization
 belong in tests; captured states are never runtime initialization. Regress
 complete CPU/RAM/device/output boundaries and both targets for each adoption.

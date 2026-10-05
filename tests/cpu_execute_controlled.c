@@ -1,6 +1,21 @@
 /* Explicit controlled CPU/budget/physical inputs for original-core composition
  * cases. Continuous source tests separately exercise the real shared clock. */
+#ifdef FIST_EXECUTE_FETCH_TRACE
+#include "fist_interrupt.h"
+static unsigned fetch_count,fetch_reads[13];
+static uint32_t observed_read(FistCpuRam *bus,unsigned segment,uint32_t offset,unsigned width) {
+ if(segment==1) {
+  fist_cpu_require(fetch_count<4);unsigned *r=fetch_reads+1+3*fetch_count++;
+  r[0]=segment;r[1]=offset;r[2]=width;fetch_reads[0]=fetch_count;
+ }
+ return fist_ram_resident_read(bus,segment,offset,width);
+}
+#define fist_ram_resident_read observed_read
+#endif
 #include "fist_exec.h"
+#ifdef FIST_EXECUTE_FETCH_TRACE
+#undef fist_ram_resident_read
+#endif
 #include <stdio.h>
 static unsigned remaining;
 static unsigned budget(void *p) {return remaining;}
@@ -22,15 +37,24 @@ int main(void) {
   memcpy(&cpu,q+4,8*sizeof *q);cpu.eip=q[2];cpu.flags.flags=q[3];
   cpu.flags=(FistCpuFlags){.flags=q[3],.type=FIST_LAZY_UNKNOWN,.prev_type=FIST_LAZY_CMPD,.oldcf=1,
    .var1=0x12345678,.var2=0x87654321,.res=0xabcdef01};
+#ifdef FIST_EXECUTE_LAZY_INPUT
+  cpu.flags.type=q[14];
+#endif
   cpu.code_big=q[0];cpu.stack_big=q[1];cpu.stack_mask=q[1]?UINT32_MAX:0xffff;
   cpu.stack_notmask=~cpu.stack_mask;sys.direction=(int32_t)q[12];remaining=q[13]-1;
   fist_ram_create(&bus,&cpu,&sys,memory,sizeof memory,FIST_ARCH_MIXED);
   fist_ram_restore_provider(&bus,providers,sizeof providers/sizeof *providers,firstmb,1,2);
   FistExec engine={.bus=&bus,.budget=budget,.credit=credit,.charge=charge};
+#ifdef FIST_EXECUTE_FETCH_TRACE
+  fetch_count=0;memset(fetch_reads,0,sizeof fetch_reads);
+#endif
   fist_exec_fetched(&engine);
   uint32_t out[19];memcpy(out,&cpu,9*sizeof *out);memcpy(out+9,&cpu.flags,sizeof cpu.flags);
   out[16]=remaining;out[17]=(uint32_t)sys.direction;out[18]=cpu.code_big;
   fist_cpu_require(fwrite(out,sizeof out,1,stdout)==1 && fwrite(memory,sizeof memory,1,stdout)==1);
+#ifdef FIST_EXECUTE_FETCH_TRACE
+  fist_cpu_require(fwrite(fetch_reads,sizeof fetch_reads,1,stdout)==1);
+#endif
   free(bus.tlb);
  }
  fist_cpu_require(!ferror(stdin));return 0;
