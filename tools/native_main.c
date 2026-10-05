@@ -368,8 +368,6 @@ EM_JS(void, fist_web_post_frame_js, (unsigned char *fb, unsigned char *pal), {
   postMessage({ t:'frame', fb:f.buffer, pal:p.buffer }, [f.buffer, p.buffer]);
 });
 void fist_web_post_frame(void){   /* posts unconditionally; the caller sets the ~60Hz cadence */
-  extern void fist_web_force_palette(void);
-  fist_web_force_palette();        /* in-mission the retrace-poll DAC upload may lag the render; force it */
   extern void fist_sequence_present(void);
   fist_sequence_present();
   fist_web_post_frame_js(g_mem + 0xA0000, fist_web_palette());

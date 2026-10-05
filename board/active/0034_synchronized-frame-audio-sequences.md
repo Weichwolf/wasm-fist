@@ -566,6 +566,17 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   remains absent. Real startup/remaining handler/devices/renderer/mixer and
   complete original frame/audio acceptance remain open.
 
+- Consume0026 OUTSB/DAC/renderer evidence in
+  `tools/oracle/cpu_outsb_production_case.json`,parente18a05b: all6048 string,
+  671224 DAC and259316 renderer-palette programs and their causal faults match
+  both targets. Actual production ports match33 complete reaching states/2998
+  fetches/1544 I/O states;actual startup matches all3635 palette bytes (0036).
+  The complete217-test/611-patch/both-build/six-startup/all178-flow gate exits0
+  with419 unchanged originals. Fresh public30s production preserves2100 parent
+  frame/end bytes,43 sound rows and47 unmasked packets. Original palettes/layouts/
+  times agree;the same28 pixel failures start817/11704156us/byte8754 and final
+  mixedPCM remains absent. Complete original frame/audio acceptance stays open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

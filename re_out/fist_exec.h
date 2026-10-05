@@ -273,22 +273,23 @@ static unsigned fist_exec_fetched(FistExec *e) {
    }else{fist_cpu_require(which<=1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);fist_exec_write_op(e,q,1,fist_exec_incdec(e,which,1,fist_exec_read_op(e,q,1)));}
   }
   else if(op>=0xb8 && op<=0xbf)fist_exec_reg_write(e,op&7,width,fist_exec_fetch_code(e,&ip,width));
-  else if(op==0xa4||op==0xa5){
-   unsigned w=op==0xa4?1:width;
+  else if(op==0x6e||op==0xa4||op==0xa5){
+   unsigned w=op==0xa5?width:1;
    unsigned count=rep?fist_exec_reg_read(e,1,address):1, take=count,cost=0;
+   unsigned si=fist_exec_reg_read(e,6,address),di=fist_exec_reg_read(e,7,address);
    if(rep){e->credit(e->opaque);unsigned budget=e->budget(e->opaque);
     take=count<budget?count:budget;
     cost=count>budget?budget:count<=1&&budget<=1?1:count;
-   }
-   for(unsigned i=0;i<take;i++){
-    unsigned si=fist_exec_reg_read(e,6,address),di=fist_exec_reg_read(e,7,address);
-    uint32_t v=fist_ram_resident_read(e->bus,seg<6?seg:3,si,w);
-    fist_ram_resident_write(e->bus,0,di,w,v);
-    fist_exec_reg_write(e,6,address,si+e->bus->system->direction*w);fist_exec_reg_write(e,7,address,di+e->bus->system->direction*w);
-   }
-   if(rep){fist_exec_reg_write(e,1,address,count-take);if(count>take)ip=e->bus->cpu->eip;
     e->charge(e->opaque,cost);
    }
+   for(unsigned i=0;i<take;i++){
+    uint32_t v=fist_ram_resident_read(e->bus,seg<6?seg:3,si,w);
+    if(op==0x6e)e->out(e->opaque,(uint16_t)e->bus->cpu->edx,v);
+    else{fist_ram_resident_write(e->bus,0,di,w,v);di=fist_cpu_low(0,di+e->bus->system->direction*w,8*address);}
+    si=fist_cpu_low(0,si+e->bus->system->direction*w,8*address);
+   }
+   fist_exec_reg_write(e,6,address,si);fist_exec_reg_write(e,7,address,di);
+   if(rep){fist_exec_reg_write(e,1,address,count-take);if(count>take)ip=e->bus->cpu->eip;}
   }else abort();
   e->bus->cpu->eip=ip;return 0;
 }

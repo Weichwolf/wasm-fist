@@ -1507,6 +1507,63 @@ Commands, provenance and complete coverage are in
 `tools/oracle/cpu_jns_production_case.json`. Actual startup/remaining handler/
 devices/renderer/final mixer and full sequence acceptance remain open.
 
+
+### Reached OUTSB and complete hardware/renderer palette owners
+
+Parent `e18a05b95838cada8ac9a017e6dc0581f1bf8dd7` reaches REP OUTSB at
+4ec3:0bff after the proved JNS. The shared MOVS/OUTSB owner reserves REP
+work before I/O, retains SI/DI until cleanup and uses original address/operand/
+segment/direction/count/budget contracts. One complete hardware DAC and one
+renderer-palette owner serve default and bound production ports3c6..3c9.
+The renderer receives original ordered color notifications; forced browser/
+dump palette injection is removed. Generated engine C and419 originals stay
+pristine. Protected I/O permission faults,actual BIOS CPU costs,complete
+caller/reset/frame-consumer transport and whole runtime acceptance remain open.
+
+Reproduce the versioned contracts:
+
+```
+python3 -B tools/oracle/capture_cpu_vga_callbacks.py --repo . --output /tmp/wasm-fist-outsb-source --through-outsb
+python3 -B tools/oracle/capture_cpu_outsb.py --repo . --output /tmp/wasm-fist-outsb-programs
+python3 -B tools/oracle/capture_dac.py --repo . --output /tmp/wasm-fist-dac-programs
+python3 -B tools/oracle/capture_render_palette.py --repo . --output /tmp/wasm-fist-render-palette-programs
+python3 -B -m unittest discover -s tests -p test_cpu_outsb.py -v
+python3 -B -m unittest discover -s tests -p test_dac_palette.py -v
+python3 -B -m unittest discover -s tests -p test_dac_startup.py -v
+```
+
+All6048 complete OUTSB programs/12 causal results,671224 complete DAC
+programs/8 causal results and259316 renderer-palette programs/8 causal results
+match both release targets. One fresh source seed matches33 complete CPU/
+system/RAM/provider/cache/VGA/PIC/PIT/calendar/drawing/service/DAC/renderer
+states,2998 fetches,50 line/end requests and1544 before/after I/O states.
+Parente18a05b fails OUTSB after32 equal states/2997 fetches/8 I/O states.
+A deliberate duplicate production I/O charge differs at observation7 only in
+time/budget while every complete palette state stays equal. The actual
+`fist_text_clock_init` constructor matches all3635 original startup palette
+bytes on both targets; its fixture contains no initialization recipe (0036).
+Original39frames/27518PCM/end600 remain unchanged. The first host120-second
+source attempt ended124 without the output footer and is excluded; the larger
+GDB observation set now has a300-second host timeout with unchanged guest
+endpoint/input contracts. The fresh complete source run supplies acceptance.
+
+The frozen unfiltered gate passes217 tests,611 exact patches,sequential Native/
+WASM builds,six startup cases and all178 flows,exit0,with419 unchanged originals.
+Fresh public30s production retains2100 parent frame/end bytes,43 sound rows
+and47 unmasked packets. Original palettes/layouts/times agree;the same28 pixel
+failures start817/11704156us/byte8754 and final mixedPCM is absent.
+Commands,full scoped provenance and cleanup are in
+`tools/oracle/cpu_outsb_production_case.json`. This proves this bounded adoption,
+not complete original frame/audio parity.
+
+Whole-handler diagnosis retains44 source boundaries,3383 fetches and1546 I/O
+states through actual interrupted-code resume,with unchanged39frame/27518PCM/
+end600 output. The coupled candidate matches3045 initial fetches before missing
+CMP3b at4ec3:2f3b;remaining whole-handler memory/device execution is unaccepted.
+Private source/diagnostic reproduction is
+`/tmp/wasm-fist-outsb-whole-handler-capture.py` and
+`/tmp/wasm-fist-whole-handler-diagnostic.py`. Recover that reaching contract next.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
@@ -1518,8 +1575,8 @@ IRQ0 prefix. Consume `cpu_vga_production_case.json` for the continuous21-state/
 Consume `cpu_segment_push_production_case.json` for the reached PUSH CS and
 complete segment-push contract. Consume `cpu_shr_production_case.json` for
 reached SHR word DS:0450,1 at2082:3b38 and complete shift contracts. Recover
-following handler instructions after the JNS contract in
-`cpu_jns_production_case.json` (next reached REP OUTSB at4ec3:0bff),
+following handler instructions after the OUTSB/DAC contract in
+`cpu_outsb_production_case.json` (next reached CMP3b at4ec3:2f3b),
 panning/vertical setup and renderer
 bodies, far-transfer/trap retirement and pending device-event
 paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service

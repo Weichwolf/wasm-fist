@@ -61,7 +61,7 @@ def verify(repo,root,additional_kinds=()):
  print('PASS full original pending-IRQ IRET/core/PIC/first-fetch chain and unchanged complete600ms output',flush=True)
  return result
 
-def capture(repo,root,baseline=None,*,make_observer=None,check_capture=None,additional_inputs=()):
+def capture(repo,root,baseline=None,*,make_observer=None,check_capture=None,additional_inputs=(),source_wall_seconds=120):
  assert root.is_relative_to(Path('/tmp'));root.mkdir(exist_ok=False,parents=True)
  if baseline is None:
   baseline=root/'baseline';baseline.mkdir()
@@ -82,8 +82,9 @@ def capture(repo,root,baseline=None,*,make_observer=None,check_capture=None,addi
  (root/'baseline.json').write_text(json.dumps(dict(path=str(baseline),sha256={s:digest(baseline/('sequence.'+s)) for s in ('frames','pcm','end')}),indent=2)+'\n')
  wrapper=root/'dosbox-gdb';wrapper.write_text('#!/usr/bin/env bash\nexec '+shlex.join(['gdb','-q','-batch','-x',str(probe),'--args',str(repo/'third_party/dosbox-fist')])+' "$@"\n');wrapper.chmod(0o755)
  env={k:v for k,v in os.environ.items() if not k.startswith('FIST_') and k!='DOSBOX'}
- env.update(DOSBOX=str(wrapper),FIST_SEQUENCE_END_MS='600',FIST_ORACLE_WALL_SECONDS='120',FIST_DETAIL_REPO=str(repo),FIST_DETAIL_OPERANDS_DIR=str(folder))
- with (root/'source.log').open('w') as out: p=subprocess.run(['bash','tools/oracle/capture_sequence.sh','1',str(folder)],cwd=repo,env=env,stdout=out,stderr=subprocess.STDOUT,timeout=130)
+ assert isinstance(source_wall_seconds,int) and source_wall_seconds>0
+ env.update(DOSBOX=str(wrapper),FIST_SEQUENCE_END_MS='600',FIST_ORACLE_WALL_SECONDS=str(source_wall_seconds),FIST_DETAIL_REPO=str(repo),FIST_DETAIL_OPERANDS_DIR=str(folder))
+ with (root/'source.log').open('w') as out: p=subprocess.run(['bash','tools/oracle/capture_sequence.sh','1',str(folder)],cwd=repo,env=env,stdout=out,stderr=subprocess.STDOUT,timeout=source_wall_seconds+10)
  (root/'source.exit').write_text(str(p.returncode)+'\n');assert p.returncode==0,p.returncode
  return (check_capture or verify)(repo,root)
 

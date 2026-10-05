@@ -4,7 +4,7 @@ import re
 import subprocess
 
 
-def build(repo, directory, *, extra_opcodes=(), byte_opcodes=(), trace=False, lazy_input=False, segment_input=False, group_shift=False, ram_trace=False):
+def build(repo, directory, *, extra_opcodes=(), byte_opcodes=(), trace=False, lazy_input=False, segment_input=False, group_shift=False, ram_trace=False, source_file=None):
     tree = repo/'third_party/dosbox-build/dosbox-0.74-3'
     core = tree/'src/cpu/core_normal'
     support = (core/'support.h').read_text().split('#include "helpers.h"', 1)[0]
@@ -56,7 +56,7 @@ def build(repo, directory, *, extra_opcodes=(), byte_opcodes=(), trace=False, la
     result = subprocess.run(['g++', '-O2', '-std=gnu++11', *options,
                     *subprocess.check_output(['sdl-config', '--cflags'], text=True).split(),
                     '-I'+str(tree/'include'), '-I'+str(tree), '-I'+str(directory), '-I'+str(repo/'tools/oracle'),
-                    '-ffunction-sections', '-fdata-sections', str(repo/'tools/oracle/cpu_execute_probe.cpp'),
+                    '-ffunction-sections', '-fdata-sections', str(source_file or repo/'tools/oracle/cpu_execute_probe.cpp'),
                     '-Wl,--gc-sections', '-o', str(output)], capture_output=True, text=True, timeout=60)
     if result.returncode:raise RuntimeError(result.stderr)
     return str(output)

@@ -70,6 +70,31 @@ Device time belongs to 0026, mixed output to 0003, complete capture/comparison t
 - Audio origin remains unresolved: original first nonzero stereo sample 18,887 at 428,276 us
   comes from `SPKR`; the port's first counter is 6.538382 us late. Continue in 0003/0026.
 
+
+- Bounded initial palette adoption, parent `e18a05b`: fresh read-only
+  `DOS_Execute(FIST.RUN)` and `DOS_Execute(FIST.DAT)` entry/return snapshots retain
+  every named DAC field,full RGB/xlat/combine arrays,the complete renderer
+  palette,attribute mapping and actual32-bit surface/scaler fields. FIST.DAT
+  loader entry has mode9/machine5/S3Trio,state WRITE,shared cursor0,write_index64
+  and the literal BIOS64-color hardware table. Attribute mapping is
+  `00..05,14,07,38..3f`. The old `fist_vga_text_palette.h` stores16 remapped
+  renderer colors plus zeros;its hardware-DAC claim was disproved at byte19.
+  Hardware and renderer now have separate shared owners. Original text mode
+  writes64 hardware entries and retains the other192 entries and unmapped
+  renderer colors;complete controlled dirty-state coverage belongs to0026.
+- `tools/oracle/dac_startup.gdb` and `capture_dac_startup.py` share the complete
+  DAC/renderer snapshot owner with0026's reaching probe. Reproduce with
+  `python3 -B tools/oracle/capture_dac_startup.py --repo . --output /tmp/wasm-fist-dac-startup`
+  and `python3 -B -m unittest discover -s tests -p test_dac_startup.py -v`.
+  The actual production `fist_text_clock_init` constructor matches all3635
+  hardware/renderer palette bytes at FIST.DAT loader entry on both targets.
+  The fixture calls that constructor and contains no copied palette recipe.
+  Fresh original39frames/27518mixedPCM/end600 equal unobserved output.
+  The complete217-test/611-patch/both-build/six-startup/all178-flow gate passes
+  with419 unchanged originals;bounded provenance is in
+  `tools/oracle/cpu_outsb_production_case.json`. Actual BIOS CPU costs,full mode/
+  drawing/scaler/frame-consumer transport and mixer origin remain open.
+
 ## Next
 
 1. Preserve the now-proved MZ reads and application-fetch phase while completing 0026's production

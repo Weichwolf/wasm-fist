@@ -1,7 +1,7 @@
 /* re_out/fist_vga.c -- Armored Fist platform shim: VGA + port I/O.
  *
  * Runtime target of the Ghidra `in`/`out` port intrinsics. Implements the pieces the engine's boot
- * path touches: VGA DAC palette (ports 0x3C8/0x3C9), CRTC/Sequencer/GC/Attr (accepted), input-status
+ * path touches: original VGA DAC and renderer palette (ports 0x3C6..0x3C9), CRTC/Sequencer/GC/Attr (accepted), input-status
  * retrace poll (0x3DA, toggles so busy-waits terminate), PIT (0x40-0x43), keyboard (0x60/0x64), PIC
  * (0x20/0xA0). The framebuffer is linear 0xA0000 inside g_mem (VGA mode 13h). fist_dump_framebuffer()
  * writes it + the palette to a PPM so the rendered frame is observable.
@@ -17,34 +17,52 @@
 #include "../tools/oracle/fist_sequence_endpoint.h"
 #include "fist_vga_bios_palette.h"
 #include "fist_vga_text_font.h"
-#include "fist_vga_text_palette.h"
 
 #define VGA_FB   0xA0000u
 #define FB_W 320
 #define FB_H 200
 #define FB_SZ (FB_W*FB_H)
 
-static unsigned char g_pal[256][3];   /* DAC palette, 6-bit components (0..63) */
+#include "fist_dac.h"
+/* Hardware state and notifications have one implementation for every caller. */
+static FistDac g_default_dac={.bits=6,.pel_mask=255,.first_changed=256};
+static FistDac *g_dac_context=&g_default_dac;
+#include "fist_render_palette.h"
+#include "fist_vga_text_dac.h"
+static FistRenderPalette g_default_render_pal={.first=256};
+static FistRenderPalette *g_dac_render_context=&g_default_render_pal;
+static unsigned g_dac_mode=17; /* Original M_ERROR before VGA initialization. */
+static uint32_t palette_surface_rgb(void *context,uint8_t red,uint8_t green,uint8_t blue)
+{return ((uint32_t)red<<16)|((uint32_t)green<<8)|blue;}
+static void dac_text_initialize(void)
+{
+    g_dac_mode=9;
+    for(unsigned i=0;i<16;i++) {
+        unsigned pal=i<8?i:i+0x30;if(i==6)pal=0x14;
+        fist_dac_combine(g_dac_context,9,1,0,g_dac_render_context,fist_render_set_pal,i,pal);
+    }
+    fist_dac_write(g_dac_context,9,g_dac_render_context,fist_render_set_pal,0x3c6,255);
+    fist_dac_write(g_dac_context,9,g_dac_render_context,fist_render_set_pal,0x3c8,0);
+    for(unsigned i=0;i<192;i++)fist_dac_write(g_dac_context,9,g_dac_render_context,fist_render_set_pal,0x3c9,text_palette[i]);
+    fist_render_palette_reset(g_dac_render_context);
+    fist_render_check_palette(g_dac_render_context,3,NULL,palette_surface_rgb,NULL);
+}
+#define g_pal (*(unsigned char (*)[256][3])g_dac_context->rgb)
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
-EMSCRIPTEN_KEEPALIVE unsigned char *fist_web_palette(void){ return &g_pal[0][0]; } /* 256*3 6-bit RGB */
-/* Force the present MGAVIDEO palette buffer (word[DGROUP:0x782]) into g_pal, exactly like FIST_PALNOW
- * before a native dump.  In-mission the DAC-upload retrace-poll may not have run at the instant the web
- * frame is posted, leaving g_pal stale/black though the render + palette buffer are valid.  board:0001 */
-EMSCRIPTEN_KEEPALIVE void fist_web_force_palette(void){
-    unsigned pseg = *(unsigned short *)(g_mem + 0x1c782);
-    if (!pseg) return;
-    const unsigned char *pb = g_mem + ((unsigned)pseg << 4);
-    for (int i = 0; i < 256; i++){ g_pal[i][0]=pb[i*3+0]&0x3f; g_pal[i][1]=pb[i*3+1]&0x3f; g_pal[i][2]=pb[i*3+2]&0x3f; }
+/* Browser serialization is derived from the committed renderer palette. */
+EMSCRIPTEN_KEEPALIVE unsigned char *fist_web_palette(void){
+    static unsigned char bytes[768];
+    for(unsigned i=0;i<256;i++){bytes[3*i]=g_dac_render_context->rgb[i].red>>2;bytes[3*i+1]=g_dac_render_context->rgb[i].green>>2;bytes[3*i+2]=g_dac_render_context->rgb[i].blue>>2;}
+    return bytes;
 }
+
 #endif
 static int g_vmode = -1;              /* last video mode set via INT 10h / this shim */
 #define TEXT_SZ (80u * 25u * 2u)
 static unsigned char *const g_text_cells = g_mem + 0xb8000u;
 
-/* DAC state machine (ports 0x3C8 write-index, 0x3C7 read-index, 0x3C9 data) */
-static int g_dac_widx, g_dac_wsub;    /* write index + sub-component (0=R,1=G,2=B) */
-static int g_dac_ridx, g_dac_rsub;
+
 
 static int g_trace = -1;
 static int traceon(void){ if(g_trace<0){ extern char*getenv(const char*); g_trace=getenv("FIST_TRACE_TRAPS")?1:0;} return g_trace; }
@@ -75,7 +93,12 @@ void fist_vga_set_mode(int mode)
         g_vmode==0x13 ? "320x200x256 linear" : "other");
     /* mode set clears the display in real VGA; zero the aperture the engine will draw into. */
     if (g_vmode==0x13) {
-        memcpy(g_pal, fist_mode13_dac, sizeof g_pal);
+        g_dac_mode=3;
+        for(unsigned i=0;i<16;i++)fist_dac_combine(g_dac_context,3,1,0,g_dac_render_context,fist_render_set_pal,i,i);
+        fist_dac_write(g_dac_context,3,g_dac_render_context,fist_render_set_pal,0x3c6,255);
+        fist_dac_write(g_dac_context,3,g_dac_render_context,fist_render_set_pal,0x3c8,0);
+        for(unsigned i=0;i<768;i++)fist_dac_write(g_dac_context,3,g_dac_render_context,fist_render_set_pal,0x3c9,((const unsigned char *)fist_mode13_dac)[i]);
+        fist_render_palette_reset(g_dac_render_context);
         memset(g_mem+VGA_FB, 0, FB_SZ);
         if (getenv("FIST_VGA_TRACE"))
             fprintf(stderr, "[vga] mode13 DAC17=%u,%u,%u\n",
@@ -206,7 +229,7 @@ void fist_text_clock_init(void)
         g_text_phase_set = 1;
     }
     g_vmode = 3;
-    memcpy(g_pal, fist_text_dac, sizeof g_pal);
+    dac_text_initialize();
     fist_sequence_mode_set();
     g_text_clock_initialized = 1;
 }
@@ -357,10 +380,6 @@ void fist_sequence_present(void)
 {
     if (!g_sequence_dispatch || !getenv("FIST_SEQUENCE") ||
         (g_vmode != 0x13 && g_vmode != 3)) return;
-    unsigned char palette[256][4];
-    for (unsigned i = 0; i < 256; ++i)
-        for (unsigned lane = 0; lane < 3; ++lane)
-            palette[i][lane] = (unsigned char)((g_pal[i][lane] << 2) | (g_pal[i][lane] >> 4));
     unsigned width = g_sequence_mode == 3 ? 640 : FB_W, height = g_sequence_mode == 3 ? 400 : FB_H;
     unsigned long long time = (g_sequence_event_cycles + 15u) / 30u;
     if (g_sequence_pic_ready) {
@@ -368,7 +387,7 @@ void fist_sequence_present(void)
         float fraction = (float)(g_sequence_event_cycles % 30000u) / 30000.0f;
         time = (unsigned long long)(((double)milliseconds + (double)fraction) * 1000.0 + 0.5);
     }
-    fist_sequence_frame_us(time, width, height, width, g_sequence_pixels, &palette[0][0]);
+    fist_sequence_frame_us(time, width, height, width, g_sequence_pixels, (unsigned char *)g_dac_render_context->rgb);
 }
 void fist_sequence_finish(void){ fist_sequence_close(); }
 void fist_kdv_instruction_count(uint64_t count)
@@ -489,6 +508,19 @@ static uint64_t g_cpu_io_removed;
 static FistVgaDraw *g_vga_draw_context;
 static FistVgaStatus *g_vga_status_context;
 static FistVgaDrawHost g_vga_draw_host;
+void fist_clock_bind_dac(FistDac *dac,FistRenderPalette *palette)
+{
+    fist_cpu_require((dac!=NULL)==(palette!=NULL));
+    fist_cpu_require(!dac || g_cpu_context);
+    g_dac_context=dac?dac:&g_default_dac;
+    g_dac_render_context=palette?palette:&g_default_render_pal;
+}
+static unsigned dac_mode(void)
+{
+    if(g_vga_draw_context)return g_vga_draw_context->vga_mode;
+    return g_dac_mode;
+}
+
 static void vga_host_add(void *context,float delay,uint64_t lines)
 {
     /* The existing PIC transport owns unsigned event parameters. A larger
@@ -920,12 +952,8 @@ int in(int port)
     if (g_pit_context && port>=0x40 && port<=0x42)
         return fist_pit_counter_read(g_pit_context,&g_pit_host,port-0x40);
     switch (port) {
-    case 0x3c7: return 0;
-    case 0x3c8: return g_dac_widx & 0xff;
-    case 0x3c9: { /* DAC data read */
-        int v = g_pal[g_dac_ridx & 0xff][g_dac_rsub];
-        if (++g_dac_rsub==3){ g_dac_rsub=0; g_dac_ridx=(g_dac_ridx+1)&0xff; }
-        return v & 0x3f; }
+    case 0x3c6: case 0x3c7: case 0x3c8: case 0x3c9:
+        return fist_dac_read(g_dac_context,port);
     case 0x3da: case 0x3ba:
         if(g_vga_status_context)return fist_vga_read_status(g_vga_status_context,fist_clock_full_index());
         return vga_status(g_clock);
@@ -974,21 +1002,8 @@ void out(int port, int val)
         }
     }
     switch (port) {
-    case 0x3c8:
-        if (getenv("FIST_VGA_TRACE") && g_vmode == 0x13 && val == 0)
-#ifndef __EMSCRIPTEN__
-            fprintf(stderr, "[vga] DAC reset t=%.6f c452=%u caller=%p\n",
-                (double)g_clock * 1000.0 / PIT_HZ_, *(uint16_t *)(g_mem + 0x1c452),
-                __builtin_return_address(0));
-#else
-            fprintf(stderr, "[vga] DAC reset t=%.6f c452=%u\n",
-                (double)g_clock * 1000.0 / PIT_HZ_, *(uint16_t *)(g_mem + 0x1c452));
-#endif
-        g_dac_widx = val; g_dac_wsub = 0; return;     /* set DAC write index */
-    case 0x3c7: g_dac_ridx = val; g_dac_rsub = 0; return;     /* set DAC read index */
-    case 0x3c9: /* DAC data write: R,G,B (6-bit) */
-        g_pal[g_dac_widx & 0xff][g_dac_wsub] = (unsigned char)(val & 0x3f);
-        if (++g_dac_wsub==3){ g_dac_wsub=0; g_dac_widx=(g_dac_widx+1)&0xff; }
+    case 0x3c6: case 0x3c7: case 0x3c8: case 0x3c9:
+        fist_dac_write(g_dac_context,dac_mode(),g_dac_render_context,fist_render_set_pal,port,val);
         return;
     case 0x40: case 0x41: case 0x42: { /* PIT counter load: the new period starts when the write completes */
         int ch=port-0x40; int done = 0;
@@ -1046,18 +1061,6 @@ void out(int port, int val)
  * Returns the number of non-zero pixels (a cheap "did the engine draw anything" signal). */
 long fist_dump_framebuffer(const char *path)
 {
-    /* FIST_PALNOW: force the MGAVIDEO palette buffer (word[DGROUP:0x782]) into the DAC before dumping,
-       to observe a frame whose render completed but whose retrace-poll palette upload has not yet fired
-       (e.g. a crash later in the same frame).  Diagnostic only. */
-    if (getenv("FIST_PALNOW")) {
-        unsigned pseg = *(unsigned short *)(g_mem + 0x1c782);
-        const unsigned char *pb = g_mem + ((unsigned)pseg << 4);
-        for (int i = 0; i < 256; i++) {
-            g_pal[i][0] = pb[i*3+0] & 0x3f;
-            g_pal[i][1] = pb[i*3+1] & 0x3f;
-            g_pal[i][2] = pb[i*3+2] & 0x3f;
-        }
-    }
     FILE *f = fopen(path, "wb");
     if(!f){ fprintf(stderr,"[fb] cannot write %s\n", path); return -1; }
     fprintf(f, "P6\n%d %d\n255\n", FB_W, FB_H);
@@ -1071,9 +1074,9 @@ long fist_dump_framebuffer(const char *path)
             /* 6-bit DAC -> 8-bit via VGA hardware bit-replication (v<<2)|(v>>4) -- the same expansion
              * DOSBox/real VGA use for a screenshot (e.g. 0x33 -> 0xCF=207), so the dump is pixel-comparable
              * to the DOSBox reference.  (v*255/63 truncation was off-by-one on most non-saturated values.) */
-            row[x*3+0] = (unsigned char)((g_pal[idx][0]<<2)|(g_pal[idx][0]>>4));
-            row[x*3+1] = (unsigned char)((g_pal[idx][1]<<2)|(g_pal[idx][1]>>4));
-            row[x*3+2] = (unsigned char)((g_pal[idx][2]<<2)|(g_pal[idx][2]>>4));
+            row[x*3+0] = g_dac_render_context->rgb[idx].red;
+            row[x*3+1] = g_dac_render_context->rgb[idx].green;
+            row[x*3+2] = g_dac_render_context->rgb[idx].blue;
         }
         fwrite(row,1,sizeof row,f);
     }
