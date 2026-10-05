@@ -635,6 +635,19 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   transport, whole device/IRQ/mixer and complete original acceptance stay open.
 
 
+- Consume0026 shared reached DOS DTA/FindFirst evidence in
+  `tools/oracle/cpu_task_gate_dos_production_case.json`,parentaba6b4c:
+  both targets match39 complete states,1125 fetches and40 host packets.
+  Missing AH4e and six further reaching causes expose original DOS contracts;
+  original39frames/27518PCM/end600 bytes remain unchanged. The frozen1597-input
+  unfiltered252-test/611-patch/two-build/six-startup/all178-flow gate exits0
+  with419 unchanged originals. Fresh30s production retains2100 parent frame/
+  end bytes,43 sound rows and47 unmasked packets. Original palettes/layouts/
+  times agree;the same28 pixel failures start817/11704156us/byte8754 and final
+  mixedPCM remains absent. Actual startup/CPU/calendar/IRQ/mixer transport
+  and complete original acceptance remain open.
+
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

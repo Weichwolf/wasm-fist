@@ -1707,6 +1707,44 @@ Actual application CPU/calendar transport, remaining initialization, whole
 device/IRQ/mixer integration and complete original parity remain open.
 
 
+## Verified shared reached DOS DTA/FindFirst owner
+
+Parent `aba6b4c` reaches the actual AH1a DTA and successful exact-name AH4e
+FindFirst calls after the DSP reset. One shared original-layout DOS owner
+saves PSP SS:SP-18, stores real-selector DTA, and writes the directory-cache
+cursor/ID, WORD date/time, DWORD size and13-byte result name. Successful
+return clears saved WORD CF and WORD AX while preserving upper register bits.
+The existing CPU execution fixture consumes the same owner. Host drive/cache
+and prior result-name bytes are explicit matched test inputs. Other path,
+device,wildcard,volume,error handling and actual runtime mounting remain open.
+
+Original31-code/10-DOS observations preserve39frames/27518PCM/end600 bytes.
+Both targets match39 complete CPU/system/time/16MiB RAM/provider/cache/VGA/PIC
+states,1125 fetches and40 host packets. Missing AH4e fails after27 equal states
+and1042 fetches. Six further reaching causes expose PSP page linkage,result
+widths,cache cursor and AX return contracts;17 original packed-layout checks
+and the existing1014-fetch startup regression pass. All12 public DOS tests
+include additional original DTA stack/selector regressions.
+
+The frozen1597-input unfiltered gate passes252 tests,611 exact patches,
+sequential Native/WASM builds,six startup cases and all178 flows,exit0.
+All419 originals remain unchanged. Fresh complete30s production preserves
+2100 parent frame/end bytes,43 sound rows and47 unmasked packets. Original
+palettes/layouts/times agree;the same28 pixel failures start817/11704156us/
+byte8754 and final mixedPCM is absent. This accepts only the bounded DOS
+owner;actual application CPU/calendar,whole IRQ/device/mixer integration
+and complete original output parity remain open.
+Receipt: `tools/oracle/cpu_task_gate_dos_production_case.json`.
+
+Reproduce:
+
+```sh
+python3 -B tools/oracle/capture_cpu_task_gate.py --repo . --output /tmp/wasm-fist-task-gate-dos-source --through-dos
+python3 -B -m unittest discover -s tests -p test_cpu_task_gate_dos.py -v
+bash tools/check_flow.sh
+```
+
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device

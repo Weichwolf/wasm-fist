@@ -1,6 +1,7 @@
 /* Continuous actual-byte startup regression. Captured state is test input only.
  * Original host DOS services and observation/stopping remain test adapters. */
 #include "fist_interrupt.h"
+#include "fist_dos_cpu.h"
 #define fist_int8_fire fist_cpu_execute_unbound_int8
 #include "sb_clock_fixture.h"
 #undef fist_int8_fire
@@ -21,10 +22,14 @@ static FistMemoryFixture context;
 static unsigned remaining;
 static const char *output;
 static int find_active;
-static unsigned host_next_free,host_drive;
-static uint8_t host_occupied[2048],host_name_prior[13];
-static const char *host_directory;
+static FistDosFindHost host;
+#define host_next_free host.next_free
+#define host_drive host.drive
+#define host_occupied host.occupied
+#define host_name_prior host.name_prior
+#define host_directory host.directory
 #include "fist_exec.h"
+#include "fist_dos_cpu.h"
 static FistExec engine;
 static uint32_t reg_read(unsigned i,unsigned width) { return fist_exec_reg_read(&engine,i,width); }
 static void reg_write(unsigned i,unsigned width,uint32_t value) { fist_exec_reg_write(&engine,i,width,value); }
@@ -41,16 +46,7 @@ static void snapshot(const char *label) {
  fist_cpu_require(f!=NULL);fixture_cache(&context,f);fist_cpu_require(!fclose(f));
 }
 
-static void dos21_initial(void) {
- /* DOS_21Handler saves PSP's stack then executes reached AH1a SetDTA.
-  * Layout is derived from original packed structs, not observed byte deltas. */
- fist_cpu_require(reg_read(4,1)==0x1a);
- unsigned psp=fist_ram_read(&context.bus,SOURCE_SDA+SOURCE_SDA_PSP,2);
- fist_ram_write(&context.bus,(psp<<4)+SOURCE_PSP_STACK,4,
-                (cpu.segments[2].value<<16)|(uint16_t)(cpu.esp-18));
- fist_ram_write(&context.bus,SOURCE_SDA+SOURCE_SDA_DTA,4,
-                (cpu.segments[3].value<<16)|(uint16_t)cpu.edx);
-}
+static void dos21_initial(void) {fist_dos_cpu_set_dta(&context.bus);}
 
 static void write_host_state(const char *label) {
  char path[1024];snprintf(path,sizeof path,"%s-%s.host",output,label);
@@ -63,46 +59,10 @@ static void find_state(const char *label) {
  char full[64];snprintf(full,sizeof full,"find-%s",label);state(full);snapshot(full);
  if(!strcmp(label,"before-directory") || !strcmp(label,"after-directory") || !strcmp(label,"before-SetResult"))write_host_state(full);
 }
+static void find_observer(void *opaque,const char *kind) {find_state(kind);}
 static void dos21(void) {
  if(!find_active){dos21_initial();return;}
- fist_cpu_require(reg_read(4,1)==0x4e);
- unsigned psp=fist_ram_read(&context.bus,SOURCE_SDA+SOURCE_SDA_PSP,2);
- fist_ram_write(&context.bus,(psp<<4)+SOURCE_PSP_STACK,4,(cpu.segments[2].value<<16)|(uint16_t)(cpu.esp-18));
- char search[256];unsigned n=0;
- do {search[n]=fist_ram_resident_read(&context.bus,3,(uint16_t)(cpu.edx+n),1);if(!search[n])break;n++;}while(n<255);
- fist_cpu_require(n<255);find_state("before-FindFirst");
- uint32_t real=fist_ram_read(&context.bus,SOURCE_SDA+SOURCE_SDA_DTA,4);
- uint32_t pt=(real>>16)*16+(real&0xffff);
- find_state("before-SetupSearch");
- fist_ram_write(&context.bus,pt+SOURCE_DTA_sdrive,1,host_drive);
- fist_ram_write(&context.bus,pt+SOURCE_DTA_sattr,1,cpu.ecx);
- for(unsigned i=0;i<11;i++)fist_ram_write(&context.bus,pt+SOURCE_DTA_sname+i,1,' ');
- char *dot=strchr(search,'.');unsigned base=dot?(unsigned)(dot-search):(unsigned)strlen(search);if(base>8)base=8;
- for(unsigned i=0;i<base;i++)fist_ram_write(&context.bus,pt+SOURCE_DTA_sname+i,1,search[i]);
- if(dot){unsigned ext=strlen(dot+1);if(ext>3)ext=3;for(unsigned i=0;i<ext;i++)fist_ram_write(&context.bus,pt+SOURCE_DTA_sext+i,1,dot[1+i]);}
- find_state("after-SetupSearch");
- find_state("before-directory");
- unsigned scans=0;while(scans<2048 && host_occupied[host_next_free]){host_next_free=(host_next_free+1)%2048;scans++;}
- fist_cpu_require(scans<2048);unsigned id=host_next_free;host_occupied[id]=1;host_next_free=(id+1)%2048;
- find_state("after-directory");fist_ram_write(&context.bus,pt+SOURCE_DTA_dirID,2,id);
- /* Reached exact-name host search. Wildcard, device/error and alternate paths
-  * remain open; unsupported paths fail instead of supplying missing work. */
- fist_cpu_require(!strchr(search,'*') && !strchr(search,'?') && !strchr(search,'\\') && !strchr(search,':'));
- char path[1024];snprintf(path,sizeof path,"%s/%s",host_directory,search);
- struct stat st;fist_cpu_require(stat(path,&st)==0 && S_ISREG(st.st_mode));
- struct tm *t=localtime(&st.st_mtime);fist_cpu_require(t!=NULL);
- unsigned date=((t->tm_year+1900-1980)<<9)|((t->tm_mon+1)<<5)|t->tm_mday;
- unsigned clock=(t->tm_hour<<11)|(t->tm_min<<5)|(t->tm_sec/2);
- char name[13];memcpy(name,host_name_prior,sizeof name);fist_cpu_require(strlen(search)<sizeof name);strcpy(name,search);
- for(unsigned i=0;name[i];i++)name[i]=toupper((unsigned char)name[i]);
- find_state("before-SetResult");
- for(unsigned i=0;i<sizeof name;i++)fist_ram_write(&context.bus,pt+SOURCE_DTA_name+i,1,(uint8_t)name[i]);
- fist_ram_write(&context.bus,pt+SOURCE_DTA_size,4,(uint32_t)st.st_size);
- fist_ram_write(&context.bus,pt+SOURCE_DTA_date,2,date);fist_ram_write(&context.bus,pt+SOURCE_DTA_time,2,clock);
- fist_ram_write(&context.bus,pt+SOURCE_DTA_attr,1,32);
- find_state("after-SetResult");find_state("after-FindFirst");
- uint32_t at=cpu.segments[2].base+(cpu.esp&0xffff)+4;
- uint32_t flags=fist_ram_read(&context.bus,at,2);fist_ram_write(&context.bus,at,2,flags&~1u);reg_write(0,2,0);
+ fist_dos_cpu_find_first(&context.bus,&host);
 }
 
 static void observed_snapshot(void) {
@@ -158,7 +118,7 @@ static void execute(void) {
  printf("fetches %u\n",fetches);
 }
 int main(int argc,char **argv){
- fist_cpu_require(argc==5);fist_cpu_require(setenv("FIST_SB","1",1)==0);host_directory=argv[4];FILE *f=fopen(argv[1],"rb");fist_cpu_require(f!=NULL);
+ fist_cpu_require(argc==5);fist_cpu_require(setenv("FIST_SB","1",1)==0);host_directory=argv[4];host.observe=find_observer;FILE *f=fopen(argv[1],"rb");fist_cpu_require(f!=NULL);
  fist_cpu_require(fread(&cpu,sizeof cpu,1,f)==1 && fread(&sys,sizeof sys,1,f)==1);
  uint8_t *ram=g_mem;FILE *memory=fopen(argv[2],"rb");
  fist_cpu_require(memory && fread(ram,16777216,1,memory)==1 && fgetc(memory)==EOF && !fclose(memory));
