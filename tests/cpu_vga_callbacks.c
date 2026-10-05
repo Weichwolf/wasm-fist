@@ -20,21 +20,37 @@ static void handler_prefix(void)
  FistExec engine={.bus=&context.bus,.in=read_byte,.out=write_byte};
  const char *names[]={"pit-control","pit-low","pit-high"};
  unsigned writes=0,after=0,jcxz=0;
-#ifdef FIST_VGA_PUSH_CS_CONTINUE
+#if defined(FIST_VGA_PUSH_CS_CONTINUE) || defined(FIST_VGA_SHR_WORD_CONTINUE)
  unsigned pushed=0;
+#ifdef FIST_VGA_SHR_WORD_CONTINUE
+ unsigned after_shr=0;
+#endif
 #endif
  for(unsigned count=0;;count++) {
   fist_cpu_require(count<10000);observe_cpu_to(trace,"fetch");char kind[64];
   if(after) {snprintf(kind,sizeof kind,"after-%s",names[writes-1]);state(kind);after=0;}
-#ifdef FIST_VGA_PUSH_CS_CONTINUE
+#if defined(FIST_VGA_PUSH_CS_CONTINUE) || defined(FIST_VGA_SHR_WORD_CONTINUE)
   if(jcxz==1) {state("after-jcxz");jcxz=2;}
-  if(pushed) {state("after-push-cs");break;}
+  if(pushed) {
+   state("after-push-cs");
+#ifdef FIST_VGA_SHR_WORD_CONTINUE
+   pushed=0;
+#else
+   break;
+#endif
+  }
+#ifdef FIST_VGA_SHR_WORD_CONTINUE
+  if(after_shr) {state("after-shr-word-1");break;}
+#endif
 #else
   if(jcxz) {state("after-jcxz");break;}
 #endif
   unsigned op=fist_ram_resident_read(&context.bus,1,cpu.eip,1);
-#ifdef FIST_VGA_PUSH_CS_CONTINUE
+#if defined(FIST_VGA_PUSH_CS_CONTINUE) || defined(FIST_VGA_SHR_WORD_CONTINUE)
   if(op==0x0e) {state("before-push-cs");pushed=1;}
+#endif
+#ifdef FIST_VGA_SHR_WORD_CONTINUE
+  if(cpu.segments[1].value==0x2082 && cpu.eip==0x3b38) {state("before-shr-word-1");after_shr=1;}
 #endif
   if(op==0xe6) {
    fist_cpu_require(writes<3);snprintf(kind,sizeof kind,"before-%s",names[writes]);state(kind);writes++;after=1;

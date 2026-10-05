@@ -46,7 +46,7 @@ enum {
     FIST_LAZY_XORD=21, FIST_LAZY_CMPB=22, FIST_LAZY_CMPW=23,
     FIST_LAZY_CMPD=24, FIST_LAZY_INCB=25, FIST_LAZY_INCW=26, FIST_LAZY_INCD=27,
     FIST_LAZY_DECB=28, FIST_LAZY_DECW=29, FIST_LAZY_DECD=30,
-    FIST_LAZY_TESTB=31, FIST_LAZY_TESTW=32, FIST_LAZY_SHLB=34, FIST_LAZY_SHLW=35
+    FIST_LAZY_TESTB=31, FIST_LAZY_TESTW=32, FIST_LAZY_SHLB=34, FIST_LAZY_SHLW=35, FIST_LAZY_SHRB=37, FIST_LAZY_SHRW=38, FIST_LAZY_SHRD=39
 };
 
 static inline uint32_t fist_cpu_low(uint32_t old, uint32_t value, unsigned bits)
@@ -69,12 +69,12 @@ static inline unsigned fist_cpu_flag_width(const FistCpuFlags *f)
     switch (f->type) {
     case FIST_LAZY_ADDB: case FIST_LAZY_ANDB: case FIST_LAZY_CMPB: case FIST_LAZY_XORB:
     case FIST_LAZY_TESTB: case FIST_LAZY_ORB: case FIST_LAZY_SUBB:
-    case FIST_LAZY_INCB: case FIST_LAZY_DECB: case FIST_LAZY_SHLB: return 8;
+    case FIST_LAZY_INCB: case FIST_LAZY_DECB: case FIST_LAZY_SHLB: case FIST_LAZY_SHRB: return 8;
     case FIST_LAZY_ADDW: case FIST_LAZY_CMPW: case FIST_LAZY_XORW:
     case FIST_LAZY_ORW: case FIST_LAZY_ANDW: case FIST_LAZY_TESTW:
-    case FIST_LAZY_INCW: case FIST_LAZY_DECW: case FIST_LAZY_SHLW: return 16;
+    case FIST_LAZY_INCW: case FIST_LAZY_DECW: case FIST_LAZY_SHLW: case FIST_LAZY_SHRW: return 16;
     case FIST_LAZY_XORD: case FIST_LAZY_ADDD: case FIST_LAZY_ORD:
-    case FIST_LAZY_SUBD: case FIST_LAZY_CMPD: case FIST_LAZY_INCD: case FIST_LAZY_DECD: return 32;
+    case FIST_LAZY_SUBD: case FIST_LAZY_CMPD: case FIST_LAZY_INCD: case FIST_LAZY_DECD: case FIST_LAZY_SHRD: return 32;
     default: abort();
     }
 }
@@ -97,6 +97,11 @@ static inline int fist_cpu_cf(const FistCpuState *cpu)
     case FIST_LAZY_SUBD: case FIST_LAZY_CMPD: return f->var1 < f->var2;
     case FIST_LAZY_INCB: case FIST_LAZY_INCW: case FIST_LAZY_INCD:
     case FIST_LAZY_DECB: case FIST_LAZY_DECW: case FIST_LAZY_DECD: return !!(f->flags & 1);
+    case FIST_LAZY_SHRB: case FIST_LAZY_SHRW: case FIST_LAZY_SHRD: {
+        unsigned bits=fist_cpu_flag_width(f),count=(uint8_t)f->var2;
+        fist_cpu_require(count>=1 && count<=31);
+        return (fist_cpu_low(0,f->var1,bits)>>(count-1)) & 1;
+    }
     case FIST_LAZY_SHLB: case FIST_LAZY_SHLW: {
         unsigned bits=fist_cpu_flag_width(f), count=(uint8_t)f->var2;
         return count>bits ? 0 : (fist_cpu_low(0,f->var1,bits)>>(bits-count)) & 1;
@@ -138,6 +143,44 @@ static inline uint32_t fist_cpu_shl(FistCpuState *cpu, unsigned bits, uint32_t a
     f->type=bits==8 ? FIST_LAZY_SHLB : FIST_LAZY_SHLW;
     return fist_cpu_low(0,f->res,bits);
 }
+/* SHRB/SHRW/SHRD assign var1/res at operand width and var2 at byte width. */
+static inline uint32_t fist_cpu_shr(FistCpuState *cpu,unsigned bits,uint32_t a,unsigned count)
+{
+    fist_cpu_require((bits==8 || bits==16 || bits==32) && count<=31);
+    if (!count) return fist_cpu_low(0,a,bits);
+    FistCpuFlags *f=&cpu->flags;a=fist_cpu_low(0,a,bits);
+    f->var1=fist_cpu_low(f->var1,a,bits);f->var2=fist_cpu_low(f->var2,count,8);
+    f->res=fist_cpu_low(f->res,a>>count,bits);
+    f->type=bits==8 ? FIST_LAZY_SHRB : bits==16 ? FIST_LAZY_SHRW : FIST_LAZY_SHRD;
+    return fist_cpu_low(0,f->res,bits);
+}
+/* Original SHR get_OF excludes the exact sign value; FillFlags includes it.
+ * Other recovered tags use the same overflow condition in both routes. */
+static inline int fist_cpu_overflow(const FistCpuState *cpu, int materialize)
+{
+    const FistCpuFlags *f=&cpu->flags;
+    if (f->type==FIST_LAZY_UNKNOWN) return !!(f->flags & 0x800u);
+    unsigned bits=fist_cpu_flag_width(f);
+    uint32_t a=fist_cpu_low(0,f->var1,bits), b=fist_cpu_low(0,f->var2,bits);
+    uint32_t result=fist_cpu_low(0,f->res,bits), sign=1u<<(bits-1);
+    if (f->type>=FIST_LAZY_INCB && f->type<=FIST_LAZY_INCD) return result==sign;
+    if (f->type>=FIST_LAZY_DECB && f->type<=FIST_LAZY_DECD) return result==sign-1;
+    if (f->type==FIST_LAZY_SHRB || f->type==FIST_LAZY_SHRW || f->type==FIST_LAZY_SHRD)
+        return (f->var2 & 31u)==1 && (materialize ? a>=sign : a>sign);
+    if (f->type==FIST_LAZY_SHLB || f->type==FIST_LAZY_SHLW) return !!((result^a) & sign);
+    int adding=f->type==FIST_LAZY_ADDB || f->type==FIST_LAZY_ADDW || f->type==FIST_LAZY_ADDD;
+    int arithmetic=adding || f->type==FIST_LAZY_SUBB || f->type==FIST_LAZY_CMPB || f->type==FIST_LAZY_CMPW ||
+                   f->type==FIST_LAZY_SUBD || f->type==FIST_LAZY_CMPD;
+    return !!(arithmetic && ((adding ? (a^b^sign) : (a^b)) & (result^a) & sign));
+}
+static inline int fist_cpu_of(const FistCpuState *cpu) {return fist_cpu_overflow(cpu,0);}
+static inline int fist_cpu_sf(const FistCpuState *cpu)
+{
+    const FistCpuFlags *f=&cpu->flags;
+    if (f->type==FIST_LAZY_UNKNOWN) return !!(f->flags & 0x80u);
+    unsigned bits=fist_cpu_flag_width(f);
+    return !!(f->res & (1u<<(bits-1)));
+}
 static inline void fist_cpu_fill_flags(FistCpuState *cpu)
 {
     FistCpuFlags *f=&cpu->flags;
@@ -151,9 +194,9 @@ static inline void fist_cpu_fill_flags(FistCpuState *cpu)
     int increment=f->type>=FIST_LAZY_INCB && f->type<=FIST_LAZY_INCD;
     int decrement=f->type>=FIST_LAZY_DECB && f->type<=FIST_LAZY_DECD;
     int shift=f->type==FIST_LAZY_SHLB || f->type==FIST_LAZY_SHLW;
-    int overflow=increment ? result==sign : decrement ? result==sign-1 :
-        shift ? ((result^a) & sign) :
-        arithmetic && ((adding ? (a^b^sign) : (a^b)) & (result^a) & sign);
+    int right=f->type==FIST_LAZY_SHRB || f->type==FIST_LAZY_SHRW || f->type==FIST_LAZY_SHRD;
+    shift=shift || right;
+    int overflow=fist_cpu_overflow(cpu,1);
     int auxiliary=increment ? !(result & 15u) : decrement ? (result & 15u)==15u :
         shift ? (f->var2 & 31u) :
         arithmetic && ((a^b^result) & 0x10);

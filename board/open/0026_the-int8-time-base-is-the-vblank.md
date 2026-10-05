@@ -1385,6 +1385,51 @@ mixedPCM is absent. Commands, original provenance, complete states and coverage
 are in `tools/oracle/cpu_segment_push_production_case.json`. Actual startup/whole
 handler/device/renderer/final mixer acceptance remains open.
 
+
+### Reached SHR and complete shift contracts
+
+The next reaching instruction is WORD SHR DS:0450,1 at2082:3b38
+(`d1 2e 50 04`). SHRB/W/D use the existing CPU/lazy-state owner: var1/res
+assign at operand width, var2 only at byte width, zero count preserves all
+state, and INC preserves the resulting carry. Original `get_OF` uses a
+strict sign comparison while `FillFlags` includes the exact sign value;
+these distinct original contracts are retained rather than normalized.
+The D0/D1 decoder uses byte or decoded operand width and the existing
+segment/address owner. Its code-fetch observer distinguishes displacement
+fetches from data reads through CS; every RAM access remains observable.
+
+The versioned flags command
+`python3 -B tools/oracle/capture_cpu_shr_flags.py --repo . --output /tmp/wasm-fist-shr-flags`
+compares148672 programs/594688 complete records, including full original-width
+64-bit raw flags/type/prev/oldcf, six boolean flag queries and following INC.
+Both optimized release targets match the original and distinguish10 causal
+fault results. The encoded command
+`python3 -B tools/oracle/capture_cpu_shr_instructions.py --repo . --output /tmp/wasm-fist-shr-instructions`
+checks actual original D0/D1 CASE/GRP2/EA/ModRM owners, complete CPU/cache/stack/
+2MiB RAM/code-fetch/ordered RAM read-write records and deliberate causal faults.
+All7936 encoded programs and16 causal fault results pass on both release
+targets. The original cached segment/address width contracts and every code
+fetch plus every physical RAM read/write/address/width/value match completely.
+The shared code-fetch observer is also used by the previous controlled tests;
+their formats and full original comparisons remain intact.
+
+Fresh source reproduction extends the existing unchanged-output owner:
+`python3 -B tools/oracle/capture_cpu_vga_callbacks.py --repo . --output /tmp/wasm-fist-shr-source --through-shr-word`.
+The fixture retains27 source boundaries/2976 fetches, including before/after
+first SHR. Both targets match25 complete continuous boundaries and50 line/end
+requests from one initial seed. Complete39frames/27518PCM/end600 remain equal
+to the unobserved original. Parent07b34ff reaches the missing SHR after24
+matching full states and2975 fetches.
+Run `python3 -B -m unittest discover -s tests -p test_cpu_shr.py -v`.
+The frozen unfiltered gate passes204 tests, exact patches, sequential
+Native/WASM builds, six startup cases and all178 flows, terminal exit0, with419
+unchanged originals. Fresh30s production retains2100 parent frame/end bytes,
+43 sound rows and47 unmasked service packets. Original palettes/layouts/times
+match; the same28 pixel failures begin817/11704156us/byte8754 and final mixedPCM
+is absent. Complete commands, provenance, states and controlled/full coverage
+are in `tools/oracle/cpu_shr_production_case.json`. Actual startup/whole handler/
+device/renderer/final mixer and full original sequence acceptance remain open.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
@@ -1394,8 +1439,9 @@ frame proofs. Consume `cpu_irq_prefix_production_case.json` for the actual21-fet
 IRQ0 prefix. Consume `cpu_vga_production_case.json` for the continuous21-state/
 2968-fetch/50-line VGA/status/PIT prefix and actual service-relative re-arms.
 Consume `cpu_segment_push_production_case.json` for the reached PUSH CS and
-complete segment-push contract. Recover following handler instructions (next
-reached SHR word DS:0450,1 at2082:3b38), panning/vertical setup and renderer
+complete segment-push contract. Consume `cpu_shr_production_case.json` for
+reached SHR word DS:0450,1 at2082:3b38 and complete shift contracts. Recover
+following handler instructions (MOV AL,moffs8 at2082:3b43), panning/vertical setup and renderer
 bodies, far-transfer/trap retirement and pending device-event
 paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service
 only after the CPU frame owner returns. Snapshots, stopping and serialization

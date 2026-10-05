@@ -6,13 +6,19 @@ from cpu_execute_probe import build as original_build
 
 def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
-def target_build(repo,root,header=None,*,segment_input=False,stack_header=None):
+def target_build(repo,root,header=None,*,segment_input=False,stack_header=None,group_shift=False,ram_trace=False,controlled_source=None):
     sys.path.insert(0,str(repo/'tests'));from test_port_io import tool
     root.mkdir(parents=True,exist_ok=True)
-    (root/'controlled.c').write_bytes((repo/'tests/cpu_execute_controlled.c').read_bytes())
+    (root/'controlled.c').write_text(controlled_source if controlled_source is not None else (repo/'tests/cpu_execute_controlled.c').read_text())
     if header is not None:(root/'fist_exec.h').write_text(header)
     if stack_header is not None:(root/'fist_interrupt.h').write_text(stack_header)
     flags=['-DFIST_EXECUTE_SEGMENT_INPUT'] if segment_input else []
+    if group_shift:
+        assert segment_input
+        flags.append('-DFIST_EXECUTE_GROUP_SHIFT')
+    if ram_trace:
+        assert group_shift
+        flags.append('-DFIST_EXECUTE_RAM_TRACE')
     commands=[]
     for name,compiler,options,output,runner in (
         ('native',['gcc','-m32'],[],root/'native',[]),

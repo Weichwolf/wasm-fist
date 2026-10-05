@@ -21,6 +21,9 @@ struct FistExec {
  void (*charge)(void *,unsigned);
  void (*callback)(FistExec *,unsigned);
  void (*observe)(FistExec *,unsigned,uint32_t,uint32_t);
+ /* Observe the explicit instruction fetch, including displacement reads.
+  * A data operand using CS is still an ordinary RAM access. */
+ void (*code_fetch)(FistExec *,uint32_t,unsigned);
 };
 enum {FIST_EXEC_INT_BEFORE,FIST_EXEC_INT_AFTER,FIST_EXEC_RET_BEFORE,FIST_EXEC_RET_AFTER,
  FIST_EXEC_CALLBACK_BEFORE,FIST_EXEC_CALLBACK_AFTER};
@@ -53,6 +56,7 @@ static void fist_exec_reg_write(FistExec *e,unsigned i,unsigned w,uint32_t v) {
  else {*fist_exec_reg(e,i)=fist_cpu_low(*fist_exec_reg(e,i),v,8*w);}
 }
 static uint32_t fist_exec_fetch_code(FistExec *e,uint32_t *ip,unsigned w) {
+ if(e->code_fetch)e->code_fetch(e,*ip,w);
  uint32_t v=fist_ram_resident_read(e->bus,1,*ip,w);*ip+=w;return v;
 }
 typedef struct {unsigned index,seg;uint32_t offset;int direct;} FistExecOperand;
@@ -229,8 +233,9 @@ static unsigned fist_exec_fetched(FistExec *e) {
    fist_exec_conditional(e,&ip,width,1,take);
   }
   else if(op==0xeb){int8_t d=fist_exec_fetch_code(e,&ip,1);ip=width==2?(uint16_t)(ip+d):ip+d;}
-  else if(op==0xd1){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);fist_cpu_require(((m>>3)&7)==4 && width==2);uint32_t v=fist_exec_read_op(e,q,width);
-   fist_exec_write_op(e,q,width,fist_cpu_shl(e->bus->cpu,16,v,1));
+  else if(op==0xd0||op==0xd1){unsigned m=fist_exec_fetch_code(e,&ip,1),which=(m>>3)&7,bytes=op==0xd0?1:width;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);
+   fist_cpu_require(which==5 || (op==0xd1 && which==4 && width==2));uint32_t v=fist_exec_read_op(e,q,bytes);
+   fist_exec_write_op(e,q,bytes,which==5?fist_cpu_shr(e->bus->cpu,bytes*8,v,1):fist_cpu_shl(e->bus->cpu,16,v,1));
   }else if(op==0x8b||op==0x8d||op==0x8e||op==0x89||op==0x8a||op==0x86||op==0x33||op==0x09||op==0x2a){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);
    unsigned index=(m>>3)&7;
    if(op==0x8e){fist_exec_select_segment(e,index,fist_exec_read_op(e,q,2));

@@ -2,19 +2,41 @@
  * cases. Continuous source tests separately exercise the real shared clock. */
 #ifdef FIST_EXECUTE_FETCH_TRACE
 #include "fist_interrupt.h"
-static unsigned fetch_count,fetch_reads[13];
-static uint32_t observed_read(FistCpuRam *bus,unsigned segment,uint32_t offset,unsigned width) {
- if(segment==1) {
-  fist_cpu_require(fetch_count<4);unsigned *r=fetch_reads+1+3*fetch_count++;
-  r[0]=segment;r[1]=offset;r[2]=width;fetch_reads[0]=fetch_count;
- }
- return fist_ram_resident_read(bus,segment,offset,width);
+#ifdef FIST_EXECUTE_GROUP_SHIFT
+#define FIST_FETCH_LIMIT 16
+#else
+#define FIST_FETCH_LIMIT 4
+#endif
+static unsigned fetch_count,fetch_reads[1+3*FIST_FETCH_LIMIT];
+static void observe_fetch(unsigned segment,uint32_t offset,unsigned width) {
+ fist_cpu_require(fetch_count<FIST_FETCH_LIMIT);unsigned *r=fetch_reads+1+3*fetch_count++;
+ r[0]=segment;r[1]=offset;r[2]=width;fetch_reads[0]=fetch_count;
 }
-#define fist_ram_resident_read observed_read
+#ifdef FIST_EXECUTE_RAM_TRACE
+static unsigned ram_count,ram_accesses[65];
+static void ram_observe(unsigned kind,unsigned address,unsigned width,unsigned value) {
+ fist_cpu_require(ram_count<16);unsigned *r=ram_accesses+1+4*ram_count++;
+ r[0]=kind;r[1]=address;r[2]=width;r[3]=fist_cpu_low(0,value,width*8);ram_accesses[0]=ram_count;
+}
+static uint32_t observed_ram_read(FistCpuRam *bus,unsigned segment,uint32_t offset,unsigned width) {
+ uint32_t value=fist_ram_resident_read(bus,segment,offset,width);
+ ram_observe(1,bus->cpu->segments[segment].base+offset,width,value);return value;
+}
+static void observed_ram_write(FistCpuRam *bus,unsigned segment,uint32_t offset,unsigned width,uint32_t value) {
+ fist_ram_resident_write(bus,segment,offset,width,value);
+ ram_observe(2,bus->cpu->segments[segment].base+offset,width,value);
+}
+#define fist_ram_resident_read observed_ram_read
+#define fist_ram_resident_write observed_ram_write
+#endif
 #endif
 #include "fist_exec.h"
 #ifdef FIST_EXECUTE_FETCH_TRACE
 #undef fist_ram_resident_read
+#undef fist_ram_resident_write
+static void observe_code_fetch(FistExec *engine,uint32_t offset,unsigned width) {
+ observe_fetch(1,offset,width);
+}
 #endif
 #include <stdio.h>
 static unsigned remaining;
@@ -62,6 +84,10 @@ int main(void) {
   FistExec engine={.bus=&bus,.budget=budget,.credit=credit,.charge=charge};
 #ifdef FIST_EXECUTE_FETCH_TRACE
   fetch_count=0;memset(fetch_reads,0,sizeof fetch_reads);
+  engine.code_fetch=observe_code_fetch;
+#endif
+#ifdef FIST_EXECUTE_RAM_TRACE
+  ram_count=0;memset(ram_accesses,0,sizeof ram_accesses);
 #endif
   fist_exec_fetched(&engine);
   uint32_t out[19];memcpy(out,&cpu,9*sizeof *out);memcpy(out+9,&cpu.flags,sizeof cpu.flags);
@@ -74,6 +100,9 @@ int main(void) {
   fist_cpu_require(fwrite(memory,sizeof memory,1,stdout)==1);
 #ifdef FIST_EXECUTE_FETCH_TRACE
   fist_cpu_require(fwrite(fetch_reads,sizeof fetch_reads,1,stdout)==1);
+#endif
+#ifdef FIST_EXECUTE_RAM_TRACE
+  fist_cpu_require(fwrite(ram_accesses,sizeof ram_accesses,1,stdout)==1);
 #endif
   free(bus.tlb);
  }

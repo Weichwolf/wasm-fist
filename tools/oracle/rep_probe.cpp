@@ -11,15 +11,29 @@ static unsigned char memory[0x200000];
 #else
 static unsigned char memory[0x40000];
 #endif
+#ifdef FIST_EXECUTE_RAM_TRACE
+static unsigned ram_count,ram_accesses[65];
+static void ram_observe(unsigned kind,unsigned address,unsigned width,unsigned value) {
+    assert(ram_count<16);unsigned *r=ram_accesses+1+4*ram_count++;
+    r[0]=kind;r[1]=address;r[2]=width;r[3]=width==4?value:value&((1u<<(width*8))-1);
+    ram_accesses[0]=ram_count;
+}
+#endif
 static unsigned load(unsigned address, unsigned width) {
     assert(address + width <= sizeof memory);
     unsigned value = 0;
     memcpy(&value, memory + address, width);
+#ifdef FIST_EXECUTE_RAM_TRACE
+    ram_observe(1,address,width,value);
+#endif
     return value;
 }
 static void save(unsigned address, unsigned value, unsigned width) {
     assert(address + width <= sizeof memory);
     memcpy(memory + address, &value, width);
+#ifdef FIST_EXECUTE_RAM_TRACE
+    ram_observe(2,address,width,value);
+#endif
 }
 static void unused_route(...) { abort(); }
 #define LoadMb(a) load(a,1)
@@ -43,9 +57,17 @@ static void unused_route(...) { abort(); }
 #define TEST_PREFIX_REP (core.prefixes & PREFIX_REP)
 #define SegBase(s) SegPhys(s)
 #define BaseDS core.base_ds
+#ifdef FIST_EXECUTE_GROUP_SHIFT
+#define BaseSS core.base_ss
+#define EALookupTable (core.ea_table)
+#endif
 #define LOADIP core.cseip = SegBase(cs) + reg_eip
 static const Bit32u AddrMaskTable[2] = {0xffff,0xffffffff};
+#ifdef FIST_EXECUTE_GROUP_SHIFT
+#include "original_core_state.h"
+#else
 static struct { unsigned prefixes; PhysPt base_ds,cseip; bool rep_zero; } core;
+#endif
 #include "../../third_party/dosbox-build/dosbox-0.74-3/src/cpu/core_normal/string.h"
 
 void source_rep_setup(unsigned count, unsigned width, int direction, int displacement) {

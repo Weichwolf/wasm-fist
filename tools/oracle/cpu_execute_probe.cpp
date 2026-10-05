@@ -9,17 +9,32 @@ Bit32s CPU_Cycles;
 #define mem_writew(a,v) save(a,v,2)
 #define mem_writed(a,v) save(a,v,4)
 #ifdef FIST_EXECUTE_FETCH_TRACE
-static unsigned fetch_count,fetch_reads[13];
+#ifdef FIST_EXECUTE_GROUP_SHIFT
+#define FIST_FETCH_LIMIT 16
+#else
+#define FIST_FETCH_LIMIT 4
+#endif
+static unsigned fetch_count,fetch_reads[1+3*FIST_FETCH_LIMIT];
 static void observe_fetch(unsigned segment,unsigned offset,unsigned width) {
- assert(fetch_count<4);unsigned *r=fetch_reads+1+3*fetch_count++;
+ assert(fetch_count<FIST_FETCH_LIMIT);unsigned *r=fetch_reads+1+3*fetch_count++;
  r[0]=segment;r[1]=offset-SegPhys(cs);r[2]=width;fetch_reads[0]=fetch_count;
 }
 static Bit8u Fetchb(void) {observe_fetch(1,core.cseip,1);return load(core.cseip++,1);}
 #else
 static Bit8u Fetchb(void) {return load(core.cseip++,1);}
 #endif
-static Bit16u Fetchw(void) { Bit16u v=load(core.cseip,2);core.cseip+=2;return v; }
-static Bit32u Fetchd(void) { Bit32u v=load(core.cseip,4);core.cseip+=4;return v; }
+static Bit16u Fetchw(void) {
+#ifdef FIST_EXECUTE_FETCH_TRACE
+ observe_fetch(1,core.cseip,2);
+#endif
+ Bit16u v=load(core.cseip,2);core.cseip+=2;return v;
+}
+static Bit32u Fetchd(void) {
+#ifdef FIST_EXECUTE_FETCH_TRACE
+ observe_fetch(1,core.cseip,4);
+#endif
+ Bit32u v=load(core.cseip,4);core.cseip+=4;return v;
+}
 #undef LOADIP
 #include "original_branch_support.h"
 #define Push_16 CPU_Push16
@@ -55,16 +70,32 @@ int main(void) {
   /* cpu.cpp's real stack constructor uses Bitu values 0/0xffff0000,
    * rather than the 64-bit complement of a 32-bit mask on this host. */
   cpu.stack.notmask=q[1]?0:0xffff0000;cpu.direction=(int)q[12];
-  core.base_ds=0;core.prefixes=q[0]?PREFIX_ADDR:0;
+  core.base_ds=SegPhys(ds);core.prefixes=q[0]?PREFIX_ADDR:0;
+#ifdef FIST_EXECUTE_GROUP_SHIFT
+  core.base_ss=SegPhys(ss);core.base_val_ds=ds;core.ea_table=&EATable[(core.prefixes&1)*256];
+#endif
 #ifdef FIST_EXECUTE_FETCH_TRACE
   fetch_count=0;memset(fetch_reads,0,sizeof fetch_reads);
+#endif
+#ifdef FIST_EXECUTE_RAM_TRACE
+  ram_count=0;memset(ram_accesses,0,sizeof ram_accesses);
 #endif
   CPU_Cycles=q[13]-1;LOADIP;
   unsigned width=q[0]?4:2,op;
   for(;;) {
    op=Fetchb();
    if(op==0x66)width=q[0]?2:4;
-   else if(op==0x67)core.prefixes=(core.prefixes&~PREFIX_ADDR)|(q[0]?0:PREFIX_ADDR);
+   else if(op==0x67){core.prefixes=(core.prefixes&~PREFIX_ADDR)|(q[0]?0:PREFIX_ADDR);
+#ifdef FIST_EXECUTE_GROUP_SHIFT
+    core.ea_table=&EATable[(core.prefixes&1)*256];
+#endif
+   }
+#ifdef FIST_EXECUTE_GROUP_SHIFT
+   else if(op==0x26||op==0x2e||op==0x36||op==0x3e||op==0x64||op==0x65){
+    SegNames s=op==0x26?es:op==0x2e?cs:op==0x36?ss:op==0x3e?ds:op==0x64?fs:gs;
+    core.base_ds=SegPhys(s);core.base_ss=SegPhys(s);core.base_val_ds=s;
+   }
+#endif
    else if(op==0xf2||op==0xf3)core.prefixes|=PREFIX_REP;
    else break;
   }
@@ -94,6 +125,9 @@ int main(void) {
   assert(fwrite(memory,sizeof memory,1,stdout)==1);
 #ifdef FIST_EXECUTE_FETCH_TRACE
   assert(fwrite(fetch_reads,sizeof fetch_reads,1,stdout)==1);
+#endif
+#ifdef FIST_EXECUTE_RAM_TRACE
+  assert(fwrite(ram_accesses,sizeof ram_accesses,1,stdout)==1);
 #endif
  }
  assert(!ferror(stdin));

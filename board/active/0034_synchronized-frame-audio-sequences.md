@@ -519,6 +519,22 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   start817/11704156us/byte8754 and final mixedPCM remains absent. Real startup,
   remaining handler/device/renderer/mixer and full sequence acceptance are open.
 
+
+- Consume0026's reached SHR in `tools/oracle/cpu_shr_production_case.json`:
+  one initial IRET seed matches25 complete CPU/system/RAM/provider/cache/VGA/
+  PIC/PIT/calendar/drawing/service states,2976 full fetches and50 line/end
+  requests through2082:3b38 on both release targets. Original39frames/27518PCM/
+  end600 remain unchanged. All148672 flag programs and7936 actual encoded
+  programs match complete original records;26 causal fault results distinguish
+  width/segment/address/wrap/flag/count/code-versus-data causes. Parent07b34ff
+  fails at the reached missing SHR after24 equal states/2975 fetches. The full
+  unfiltered204-test/exact-patch/both-build/six-startup/all178-flow gate exits0
+  with419 unchanged originals. Fresh30s production retains2100 parent frame/end
+  bytes,43 sound rows and47 packets. Original palettes/layouts/times agree;
+  the same28 pixel differences start817/11704156us/byte8754 and final mixedPCM
+  remains absent. Real startup/remaining handler/device/renderer/mixer and full
+  original frame/audio acceptance remain open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

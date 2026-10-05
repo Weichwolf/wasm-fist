@@ -11,7 +11,8 @@ CALLBACK_KINDS=tuple(k for name in ('draw-part','vert-interrupt','display-start'
                      for k in ('before-'+name,'after-'+name))
 ADDITIONAL=(*CALLBACK_KINDS,*KINDS,'before-jcxz','after-jcxz','before-panning','after-panning')
 
-def observer(repo,*,through_push_cs=False):
+def observer(repo,*,through_push_cs=False,through_shr_word=False):
+    through_push_cs=through_push_cs or through_shr_word
     text=pit_observer(repo)
     old='  if not started:save(\'handler-fetch\');started=True\n'
     assert text.count(old)==1
@@ -34,19 +35,27 @@ def observer(repo,*,through_push_cs=False):
    elif ip==0x3abb:save('before-push-cs')
    elif ip==0x3abc:save('after-push-cs');self.enabled=False;return False"""
         assert text.count(old)==1;text=text.replace(old,new)
+    if through_shr_word:
+        old="elif ip==0x3abc:save('after-push-cs');self.enabled=False;return False"
+        new="""elif ip==0x3abc:save('after-push-cs');return False
+   elif ip==0x3b38:save('before-shr-word-1')
+   elif ip==0x3b3c:save('after-shr-word-1');self.enabled=False;return False"""
+        assert text.count(old)==1;text=text.replace(old,new)
     extra=(repo/'tools/oracle/vga_callbacks.gdb.inc').read_text()
     assert text.count('\nend\nrun')==1
     return text.replace('\nend\nrun','\n'+extra+'\nend\nrun')
 
-def verify(repo,folder,*,through_push_cs=False):
+def verify(repo,folder,*,through_push_cs=False,through_shr_word=False):
+    through_push_cs=through_push_cs or through_shr_word
     kinds=ADDITIONAL[:-2]+('before-push-cs','after-push-cs')+ADDITIONAL[-2:] if through_push_cs else ADDITIONAL
+    if through_shr_word:kinds=kinds[:-2]+('before-shr-word-1','after-shr-word-1')+kinds[-2:]
     result=verify_core(repo,folder,kinds)
     fetches=[json.loads(s) for s in (folder/'source/handler-fetches.jsonl').read_text().splitlines()]
     lines=[json.loads(s) for s in (folder/'source/draw-lines.jsonl').read_text().splitlines()]
-    assert len(fetches)==(2972 if through_push_cs else 2968) and len(lines)==50
-    rows=result['events'];assert len(rows)==(25 if through_push_cs else 23)
+    assert len(fetches)==(2976 if through_shr_word else 2972 if through_push_cs else 2968) and len(lines)==50
+    rows=result['events'];assert len(rows)==(27 if through_shr_word else 25 if through_push_cs else 23)
     assert fetches[0]['segments'][1]['value']==fetches[-1]['segments'][1]['value']==0x2082
-    assert fetches[0]['cpu_regs.ip.dword[0]']==0x3a68 and fetches[-1]['cpu_regs.ip.dword[0]']==(0x3abc if through_push_cs else 0x3aac)
+    assert fetches[0]['cpu_regs.ip.dword[0]']==0x3a68 and fetches[-1]['cpu_regs.ip.dword[0]']==(0x3b3c if through_shr_word else 0x3abc if through_push_cs else 0x3aac)
     for before,after in zip(rows[7:13:2],rows[8:13:2]):
         assert before['CPU_Cycles']==after['CPU_Cycles']==0
         assert before['CPU_CycleLeft']==after['CPU_CycleLeft']
@@ -74,24 +83,41 @@ def verify(repo,folder,*,through_push_cs=False):
         a,b=words(before),words(after)
         assert [i for i,(x,y) in enumerate(zip(a,b)) if x!=y]==[4,8]
         assert b[8]==a[8]+1 and clock(after)==clock(before)+1
+    if through_shr_word:
+        before,after=rows[23:25]
+        assert before['cpu.code.big']==0 and not before['paging.enabled']
+        assert next(q for q in fetches if q['cpu_regs.ip.dword[0]']==0x3b38)['code_hex'].startswith('d12e5004')
+        memory=bytearray((folder/'source'/before['memory_file']).read_bytes())
+        address=before['segments'][3]['base']+0x450
+        operand=int.from_bytes(memory[address:address+2],'little');result_word=operand>>1
+        memory[address:address+2]=result_word.to_bytes(2,'little')
+        assert bytes(memory)==(folder/'source'/after['memory_file']).read_bytes()
+        expected=words(before);actual=words(after)
+        expected[8]+=4
+        expected[22]=(expected[22]&0xffff0000)|operand
+        expected[23]=(expected[23]&0xffffff00)|1
+        expected[24]=(expected[24]&0xffff0000)|result_word
+        expected[25]=38
+        assert actual==expected and clock(after)==clock(before)+1
     scope='Actual original one-seed IRET/core/PIC/IRQ prefix, complete CPU/RAM/device/calendar/drawing/service observations, every fetch and50 complete linear-line outputs. Full39frame/27518mixedPCM/end600 output equals unobserved original. Renderer metadata is diagnostic; port renderer/scaler/startup/whole handler/full-sequence acceptance remains open.'
-    result.update(scope=scope,through_push_cs=through_push_cs,fetches=fetches,draw_lines=lines,complete_original_acceptance=False)
+    result.update(scope=scope,through_push_cs=through_push_cs,through_shr_word=through_shr_word,fetches=fetches,draw_lines=lines,complete_original_acceptance=False)
     (folder/'proof.json').write_text(json.dumps(result,indent=2)+'\n')
     print('PASS original',len(rows),'boundaries/',len(fetches),'fetches/50 drawn lines and unchanged complete output',flush=True)
     return result
 
-def capture(repo,root,baseline=None,*,through_push_cs=False):
+def capture(repo,root,baseline=None,*,through_push_cs=False,through_shr_word=False):
     tree=repo/'third_party/dosbox-build/dosbox-0.74-3'
-    return capture_core(repo,root,baseline,make_observer=lambda repo:observer(repo,through_push_cs=through_push_cs),
-                        check_capture=lambda repo,root:verify(repo,root,through_push_cs=through_push_cs),
+    return capture_core(repo,root,baseline,make_observer=lambda repo:observer(repo,through_push_cs=through_push_cs,through_shr_word=through_shr_word),
+                        check_capture=lambda repo,root:verify(repo,root,through_push_cs=through_push_cs,through_shr_word=through_shr_word),
                         additional_inputs=(Path(__file__),repo/'tools/oracle/capture_cpu_pit_writes.py',repo/'tools/oracle/vga_callbacks.gdb.inc',
-                        *[tree/p for p in ('src/hardware/timer.cpp','src/hardware/vga_draw.cpp','src/hardware/vga_misc.cpp','include/vga.h','src/gui/render.cpp')]))
+                        *[tree/p for p in ('src/hardware/timer.cpp','src/hardware/vga_draw.cpp','src/hardware/vga_misc.cpp','include/vga.h','src/gui/render.cpp','src/cpu/instructions.h','src/cpu/lazyflags.h','src/cpu/core_normal/prefix_none.h')]))
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--repo',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
     p.add_argument('--baseline',type=Path);p.add_argument('--verify-only',action='store_true')
     p.add_argument('--through-push-cs',action='store_true')
+    p.add_argument('--through-shr-word',action='store_true')
     a=p.parse_args();repo=a.repo.resolve();root=a.output.resolve()
-    if a.verify_only:verify(repo,root,through_push_cs=a.through_push_cs)
-    else:capture(repo,root,a.baseline.resolve() if a.baseline else None,through_push_cs=a.through_push_cs)
+    if a.verify_only:verify(repo,root,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word)
+    else:capture(repo,root,a.baseline.resolve() if a.baseline else None,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word)
