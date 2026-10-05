@@ -599,6 +599,29 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   original frame/audio acceptance remain open;opcode fixtures alone do not
   change production output.
 
+- Consume0026 JS evidence in `tools/oracle/cpu_js_production_case.json`,
+  parentcc74876: all8448 original programs/8 causal results and complete
+  37-state/3052-fetch/1544-I/O replay match both targets. Parent CMP fails
+  the actual JS after36 equal states/3051 fetches; eager flags first differ
+  only in raw EFLAGS/lazy type. Original39frames/27518PCM/end600 remain
+  unchanged. The frozen1583-input unfiltered225-test/611-patch/two-build/
+  six-startup/all178-flow gate exits0 with419 unchanged originals. Fresh
+  complete30s production preserves2100 parent frame/end bytes,43 sound
+  rows and47 packets. Original palettes/layouts/times agree;the same28
+  pixel failures start817/11704156us/byte8754 and final mixedPCM is absent.
+  Actual startup/whole IRQ/mixer and complete original acceptance remain
+  open;standalone opcode fixtures do not change production output.
+- Read-only current device-start diagnostic atcc74876 in
+  `/tmp/wasm-fist-device-runtime-private/verified/proof.json`: fresh original
+  77e2 and actual Native op6c receive identical220/IRQ7/DMA1 task packets.
+  The original starts auto-init DMA,unmasks IRQ7 and loads DSOUNDS;Native
+  returns with inactive DSP/DMA,masked IRQ7,ready byte0 and no bound CPU or
+  machine calendar. All39 complete600ms frames match original/Native and
+  unobserved controls;original27518 mixedPCM samples remain unchanged.
+  The prepared reusable capture/verifier is not yet versioned;this is a
+  diagnosis,not an accepted runtime fix. Recover actual task-gate CPU transport
+  before wiring initialization;never seed CPU from legacy scalar arguments.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

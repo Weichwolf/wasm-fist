@@ -1610,6 +1610,50 @@ end600 output. The coupled diagnostic after CMP matches3051 initial
 fetches before missing JS78 at4ec3:2f50. This next instruction is excluded
 from CMP acceptance;recover its original contract before runtime adoption.
 
+### Reached JS conditional branch adoption
+
+Parent `cc748762fef2cbd9fb92ee09ce67c593e6229684` reaches missing
+`7816a0b5` at `4ec3:2f50`. Original CASE_W/D78/TFLG_S uses the existing
+lazy sign getter and shared conditional branch retirement. It preserves
+raw flags and lazy operand/type fields; no new sign owner is introduced.
+
+Reproduce the versioned contracts:
+
+```
+python3 -B tools/oracle/capture_cpu_vga_callbacks.py --repo . --output /tmp/wasm-fist-js-source --through-js
+python3 -B tools/oracle/capture_cpu_js.py --repo . --output /tmp/wasm-fist-js-programs
+python3 -B -m unittest discover -s tests -p test_cpu_js.py -v
+```
+
+All8448 original encoded programs/8 causal results match both release
+targets: every19 CPU/budget/lazy words,all256KiB RAM and all13 code-read
+words are compared. The original release default remains false for
+unhandled lazy tags. Shared conditional programs cover both polarities;
+existing JNS still proves2236720 sign records/8448 programs/8 faults.
+Every previous observer program remains byte-identical.
+
+One fresh source seed matches37 complete CPU/system/time/RAM/provider/
+cache/VGA/PIC/PIT/calendar/drawing/service/DAC/renderer states,3052 fetches,
+50 drawing requests and1544 I/O states. The published CMP predecessor
+fails JS after36 equal states/3051 fetches. Eager flags first differ only
+in actual raw EFLAGS/lazy type;all complete RAM/device states remain equal.
+All39 original frames/27518 mixedPCM samples/end600 remain unchanged.
+
+The frozen1583-input unfiltered gate passes225 tests,611 exact patches,
+sequential Native/WASM builds,six startup cases and all178 flows,exit0.
+Fresh complete30s production preserves2100 parent frame/end bytes,43
+sound rows and47 unmasked packets. Original palettes/layouts/times agree;
+the same28 pixel failures start817/11704156us/byte8754 and final mixedPCM
+remains absent. The complete scoped receipt is
+`tools/oracle/cpu_js_production_case.json`. Actual startup/whole IRQ/mixer,
+protected faults,renderer/scaler timing and complete original parity stay
+open. The instruction owner still has no application production consumer.
+
+Historical whole-handler diagnosis supplies its own complete original
+seed and3383 fetches;after JS it matches3053 initial fetches before
+CMPB3a at4ec3:2f55. This diagnosis is excluded from JS acceptance.
+
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
@@ -1621,8 +1665,8 @@ IRQ0 prefix. Consume `cpu_vga_production_case.json` for the continuous21-state/
 Consume `cpu_segment_push_production_case.json` for the reached PUSH CS and
 complete segment-push contract. Consume `cpu_shr_production_case.json` for
 reached SHR word DS:0450,1 at2082:3b38 and complete shift contracts. Recover
-following handler instructions after the CMP contract in
-`cpu_cmp_production_case.json` (next reached JS78 at4ec3:2f50),
+following handler instructions after the JS contract in
+`cpu_js_production_case.json` (next observed CMPB3a at4ec3:2f55),
 panning/vertical setup and renderer
 bodies, far-transfer/trap retirement and pending device-event
 paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service

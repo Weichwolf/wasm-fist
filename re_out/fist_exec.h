@@ -229,8 +229,8 @@ static unsigned fist_exec_fetched(FistExec *e) {
     fist_exec_jump_far(e,cs,v,width);return FIST_EXEC_CHECK_TRAP;
    }else {fist_cpu_require(which==4);e->bus->cpu->eip=v;return 0;}
   }else if(op==0x3c){uint32_t a=fist_exec_reg_read(e,0,1),b=fist_exec_fetch_code(e,&ip,1);fist_cpu_alu(e->bus->cpu,FIST_LAZY_CMPB,8,a,b,a-b);}
-  else if(op==0x76||op==0x77||op==0x74||op==0x75||op==0x72||op==0x73||op==0x79){
-   int take=op==0x79?!fist_cpu_sf(e->bus->cpu):op==0x76?fist_cpu_cf(e->bus->cpu)||fist_cpu_zf(e->bus->cpu):op==0x77?!fist_cpu_cf(e->bus->cpu)&&!fist_cpu_zf(e->bus->cpu):op==0x74?fist_cpu_zf(e->bus->cpu):op==0x75?!fist_cpu_zf(e->bus->cpu):op==0x72?fist_cpu_cf(e->bus->cpu):!fist_cpu_cf(e->bus->cpu);
+  else if(op==0x76||op==0x77||op==0x74||op==0x75||op==0x72||op==0x73||op==0x78||op==0x79){
+   int take=op==0x78?fist_cpu_sf(e->bus->cpu):op==0x79?!fist_cpu_sf(e->bus->cpu):op==0x76?fist_cpu_cf(e->bus->cpu)||fist_cpu_zf(e->bus->cpu):op==0x77?!fist_cpu_cf(e->bus->cpu)&&!fist_cpu_zf(e->bus->cpu):op==0x74?fist_cpu_zf(e->bus->cpu):op==0x75?!fist_cpu_zf(e->bus->cpu):op==0x72?fist_cpu_cf(e->bus->cpu):!fist_cpu_cf(e->bus->cpu);
    fist_exec_conditional(e,&ip,width,1,take);
   }
   else if(op==0xeb){int8_t d=fist_exec_fetch_code(e,&ip,1);ip=width==2?(uint16_t)(ip+d):ip+d;}

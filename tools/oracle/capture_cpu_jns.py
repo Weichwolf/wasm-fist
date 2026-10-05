@@ -108,10 +108,12 @@ def sign_queries(repo,root,contract):
     return proof
 
 
-def programs(repo,root,contract):
+def programs(repo,root,contract,opcode=0x79):
+    assert opcode in (0x78,0x79)
+    label="JS" if opcode==0x78 else "JNS"
     from test_cpu_execute import packet
     work=root/'programs';work.mkdir()
-    source=work/'source';source.mkdir();original=original_build(repo,source,extra_opcodes=(0x79,),trace=True,lazy_input=True)
+    source=work/'source';source.mkdir();original=original_build(repo,source,extra_opcodes=(opcode,),trace=True,lazy_input=True)
     header=(repo/'re_out/fist_exec.h').read_text();cpu=(repo/'re_out/fist_cpu.h').read_text()
     controlled='#include "fist_cpu.h"\n'+(repo/'tests/cpu_execute_controlled.c').read_text()
     def compile_(folder,exec_header,cpu_header=None):
@@ -125,7 +127,7 @@ def programs(repo,root,contract):
     cases=[]
     for big,width,address,stack,tag,(ip,delta) in itertools.product((0,1),(2,4),(2,4),(0,1),recognized,shapes):
      default=4 if big else 2;prefix=(b'\x66' if width!=default else b'')+(b'\x67' if address!=default else b'')
-     cases.append(make(prefix+bytes((0x79,delta&255)),big,stack,ip,tag,(0x3206,0x3286)[len(cases)&1]))
+     cases.append(make(prefix+bytes((opcode,delta&255)),big,stack,ip,tag,(0x3206,0x3286)[len(cases)&1]))
     assert len(cases)==8448
     size=19*4+0x40000+13*4;hashes={name:hashlib.sha256() for name,_ in [('original',[original]),*commands]}
     for start in range(0,len(cases),128):
@@ -135,15 +137,15 @@ def programs(repo,root,contract):
       if expected is None:expected=p.stdout
       else:assert p.stdout==expected,(target,start,next(i for i,(a,b) in enumerate(zip(p.stdout,expected)) if a!=b))
       hashes[target].update(p.stdout)
-     if start%1024==0:print('Matched actual original JNS',min(start+128,len(cases)),'/',len(cases),flush=True)
-    branch='op==0x79?!fist_cpu_sf(e->bus->cpu):';assert header.count(branch)==1
-    marker='else if(op==0x76||op==0x77||op==0x74||op==0x75||op==0x72||op==0x73||op==0x79){';assert header.count(marker)==1
+     if start%1024==0:print('Matched actual original',label,min(start+128,len(cases)),'/',len(cases),flush=True)
+    branch='op==%#x?%sfist_cpu_sf(e->bus->cpu):'%(opcode,'!' if opcode==0x79 else '');assert header.count(branch)==1
+    start=header.index('else if(op==0x76||');marker=header[start:header.index('{',start)+1];assert header.count(marker)==1
     mutations=[
-     ('raw-sf',header.replace(branch,'op==0x79?!(e->bus->cpu->flags.flags&0x80u):'),[8]),
-     ('operand-sized-sf',header.replace(branch,'op==0x79?!(e->bus->cpu->flags.res&(width==2?0x8000u:0x80000000u)):'),[8]),
-     ('materialized-flags',header.replace(marker,marker+'if(op==0x79)fist_cpu_fill_flags(e->bus->cpu);'),[9,13]),
+     ('raw-sf',header.replace(branch,'op==%#x?%s(e->bus->cpu->flags.flags&0x80u):'%(opcode,'!' if opcode==0x79 else '!!')),[8]),
+     ('operand-sized-sf',header.replace(branch,'op==%#x?%s(e->bus->cpu->flags.res&(width==2?0x8000u:0x80000000u)):'%(opcode,'!' if opcode==0x79 else '!!')),[8]),
+     ('materialized-flags',header.replace(marker,marker+'if(op==%#x)fist_cpu_fill_flags(e->bus->cpu);'%opcode),[9,13]),
     ]
-    results=[];data=make(b'\x79\x7f')
+    results=[];data=make(bytes((opcode,0x7f)))
     def run(command):
      p=subprocess.run(command,input=data,capture_output=True,timeout=30);assert p.returncode==0,p.stderr.decode();assert len(p.stdout)==size;return p.stdout
     expected=run([original]);a=struct.unpack_from('<19I',expected);trace=struct.unpack_from('<13I',expected,size-52)
@@ -155,11 +157,11 @@ def programs(repo,root,contract):
       fields=[i for i,(x,y) in enumerate(zip(a,b)) if x!=y];assert fields==wanted,(name,target,fields)
       assert actual[76:size-52]==expected[76:size-52]
       if name=='materialized-flags':assert other==trace
-      else:assert trace[0]==2 and other[0]==1
+      else:assert trace[0]==1+(opcode==0x79) and other[0]==1+(opcode==0x78)
       results.append(dict(fault=name,target=target,differing_CPU_words=fields,all256KiB_RAM_equal=True,original_code_reads=list(trace),mutant_code_reads=list(other)))
-     print('PASS distinguish original JNS',name,'on both targets',flush=True)
+     print('PASS distinguish original',label,name,'on both targets',flush=True)
     # Omitting the original release diagnostic fallback must fail even with unchanged raw SF.
-    data=make(b'\x79\x7f',tag=contract['enum']['t_ROLb'])
+    data=make(bytes((opcode,0x7f)),tag=contract['enum']['t_ROLb'])
     expected=run([original])
     old='return width?!!(f->res & (1u<<(width-1))):0;'
     assert cpu.count(old)==1
@@ -171,8 +173,9 @@ def programs(repo,root,contract):
      (work/(target+'-missing-default.log')).write_bytes(p.stderr)
      results.append(dict(fault='missing-release-default',target=target,terminal_exit=p.returncode,original_complete_bytes=len(expected),mutant_bytes=len(p.stdout),unmodified_positive_source_bytes_equal=True))
     proof=dict(scope='Actual CASE_W/D JNS/TFLG_NS programs match19 CPU/budget/raw/lazy words,all256KiB RAM and13 ordered code-read words. All65 tags plus LASTFLAG,both code/operand/address/stack modes,displacements and16-bit IP-high preservation/wrap are covered. Raw SF,operand-sized SF,eager flags and omitted release fallback faults fail both targets after their unmodified positives match.',cases=len(cases),record_size=size,outputs_sha256={name:h.hexdigest() for name,h in hashes.items()},causal_negatives=results)
+    if opcode==0x78:proof['scope']=proof['scope'].replace('JNS/TFLG_NS','JS/TFLG_S')
     (work/'proof.json').write_text(json.dumps(proof,indent=2)+'\n')
-    print('PASS original8448 JNS programs/8 causal results',flush=True)
+    print('PASS original8448',label,'programs/8 causal results',flush=True)
     return proof
 
 
