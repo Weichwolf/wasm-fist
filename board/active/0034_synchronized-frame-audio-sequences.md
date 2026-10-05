@@ -550,6 +550,22 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   final mixedPCM remains absent. Real startup/remaining handler/devices/
   renderer/mixer and complete original frame/audio acceptance remain open.
 
+
+- Consume0026's reached JNS in `tools/oracle/cpu_jns_production_case.json`:
+  one fresh initial IRET seed matches29 complete CPU/system/RAM/provider/cache/
+  VGA/PIC/PIT/calendar/drawing/service states,2982 full fetches and50 line/end
+  requests through2082:3b48 on both release targets. Original39frames/27518PCM/
+  end600 remain unchanged. All2236720 original sign-query records and8448
+  actual JNS programs match complete records;8 causal results distinguish
+  raw/operand sign,eager flags and missing release fallback. Parentaa4b1dd
+  reaches missing JNS after28 equal states/2981 fetches. The complete
+  unfiltered210-test/exact-patch/both-build/six-startup/all178-flow gate exits0
+  with419 unchanged originals. Fresh30s production retains2100 parent frame/
+  end bytes,43 sound rows and47 packets. Original palettes/layouts/times agree;
+  the same28 pixel differences start817/11704156us/byte8754 and final mixedPCM
+  remains absent. Real startup/remaining handler/devices/renderer/mixer and
+  complete original frame/audio acceptance remain open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

@@ -1,5 +1,8 @@
 /* One original before-IRET seed through the complete reaching device chain. */
 #include "fist_pit.h"
+#ifdef FIST_VGA_JNS_CONTINUE
+#define FIST_VGA_MOFFS_CONTINUE 1
+#endif
 #ifdef FIST_VGA_MOFFS_CONTINUE
 #define FIST_VGA_SHR_WORD_CONTINUE 1
 #endif
@@ -33,6 +36,9 @@ static void handler_prefix(void)
 #endif
 #ifdef FIST_VGA_MOFFS_CONTINUE
  unsigned after_moffs=0;
+#ifdef FIST_VGA_JNS_CONTINUE
+ unsigned after_jns=0;
+#endif
 #endif
 #endif
  for(unsigned count=0;;count++) {
@@ -59,7 +65,17 @@ static void handler_prefix(void)
   }
 #endif
 #ifdef FIST_VGA_MOFFS_CONTINUE
-  if(after_moffs) {state("after-moffs-byte");break;}
+  if(after_moffs) {
+   state("after-moffs-byte");
+#ifdef FIST_VGA_JNS_CONTINUE
+   after_moffs=0;
+#else
+   break;
+#endif
+  }
+#ifdef FIST_VGA_JNS_CONTINUE
+  if(after_jns) {state("after-jns");break;}
+#endif
 #endif
 #else
   if(jcxz) {state("after-jcxz");break;}
@@ -73,6 +89,9 @@ static void handler_prefix(void)
 #endif
 #ifdef FIST_VGA_SHR_WORD_CONTINUE
   if(cpu.segments[1].value==0x2082 && cpu.eip==0x3b38) {state("before-shr-word-1");after_shr=1;}
+#endif
+#ifdef FIST_VGA_JNS_CONTINUE
+  if(cpu.segments[1].value==0x2082 && cpu.eip==0x3b48) {state("before-jns");after_jns=1;}
 #endif
   if(op==0xe6) {
    fist_cpu_require(writes<3);snprintf(kind,sizeof kind,"before-%s",names[writes]);state(kind);writes++;after=1;

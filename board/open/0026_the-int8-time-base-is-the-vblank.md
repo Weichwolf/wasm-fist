@@ -1466,6 +1466,47 @@ and final mixedPCM is absent. Commands, provenance and complete coverage are
 in `tools/oracle/cpu_moffs_production_case.json`. Actual startup/remaining
 handler/devices/renderer/final mixer and full sequence acceptance remain open.
 
+
+### Reached JNS and original release sign queries
+
+Parent `aa4b1ddd5dbbe50299ff466316031fc23d43ac60` reaches JNS at2082:3b48
+following the proved A0. The candidate adds opcode79 to the existing
+conditional/IP owner and queries original lazy sign without materializing
+flags. Original `get_SF` reads raw SF for UNKNOWN;49 result-type branches
+use byte/word/dword sign; DIV/MUL and the release diagnostic fallback return
+false. The13 rotate/NOTDONE tags and LASTFLAG sentinel are included. Original
+`config.h` disables C_DEBUG and its logging overloads have no effect. The
+shared result-width owner supplies this query; existing CF/OF/ZF/FillFlags
+retain their previously proved tag scope.
+
+Reproduce the complete original source and controlled contracts:
+
+```
+python3 -B tools/oracle/capture_cpu_vga_callbacks.py --repo . --output /tmp/wasm-fist-jns-source --through-jns
+python3 -B tools/oracle/capture_cpu_jns.py --repo . --output /tmp/wasm-fist-jns-instructions
+python3 -B -m unittest discover -s tests -p test_cpu_jns.py -v
+```
+
+Require31 source boundaries/2982 fetches/50 complete line/end requests and
+unchanged original39frames/27518mixedPCM/end600. Both targets must match29
+complete CPU/system/RAM/provider/cache/VGA/PIC/PIT/calendar/drawing/service
+states continuously from one fresh IRET seed; parentA0 must fail at JNS after
+28 matching states/2981 fetches. Controlled coverage requires2236720 complete
+sign-query records,8448 actual CASE_W/D/TFLG_NS programs and8 causal results.
+All2236720 complete sign-query records,8448 actual original JNS programs and
+8 causal results pass both release targets. Fresh source retains31 full
+boundaries/2982 fetches/50 line/end requests; both targets match29 complete
+states continuously from one initial seed. Parentaa4b1dd fails JNS after28
+equal states/2981 fetches. Original39frames/27518PCM/end600 remain unchanged.
+The frozen unfiltered gate passes210 tests, exact patches, sequential Native/
+WASM builds, six startup cases and all178 flows, exit0, with419 unchanged
+originals. Fresh30s production retains2100 parent frame/end bytes,43 sound
+rows and47 unmasked packets. Original layouts/palettes/times agree; the same
+28 pixel failures start817/11704156us/byte8754 and final mixedPCM is absent.
+Commands, provenance and complete coverage are in
+`tools/oracle/cpu_jns_production_case.json`. Actual startup/remaining handler/
+devices/renderer/final mixer and full sequence acceptance remain open.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
@@ -1477,8 +1518,9 @@ IRQ0 prefix. Consume `cpu_vga_production_case.json` for the continuous21-state/
 Consume `cpu_segment_push_production_case.json` for the reached PUSH CS and
 complete segment-push contract. Consume `cpu_shr_production_case.json` for
 reached SHR word DS:0450,1 at2082:3b38 and complete shift contracts. Recover
-following handler instructions after the A0 contract in
-`cpu_moffs_production_case.json` (next JNS at2082:3b48), panning/vertical setup and renderer
+following handler instructions after the JNS contract in
+`cpu_jns_production_case.json` (next reached REP OUTSB at4ec3:0bff),
+panning/vertical setup and renderer
 bodies, far-transfer/trap retirement and pending device-event
 paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service
 only after the CPU frame owner returns. Snapshots, stopping and serialization
