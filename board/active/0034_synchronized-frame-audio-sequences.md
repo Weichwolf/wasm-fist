@@ -535,6 +535,21 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   remains absent. Real startup/remaining handler/device/renderer/mixer and full
   original frame/audio acceptance remain open.
 
+
+- Consume0026's reached A0 in `tools/oracle/cpu_moffs_production_case.json`:
+  one initial IRET seed matches27 complete CPU/system/RAM/provider/cache/VGA/
+  PIC/PIT/calendar/drawing/service states,2980 full fetches and50 line/end
+  requests through2082:3b43 on both release targets. Original39frames/27518PCM/
+  end600 remain unchanged. All1120 encoded A0/A1 programs match complete
+  original records;8 causal results distinguish width/address/segment/flag
+  causes. Parent8f13c93 reaches missing A0 after26 equal states/2979 fetches.
+  The complete unfiltered207-test/exact-patch/both-build/six-startup/all178-flow
+  gate exits0 with419 unchanged originals. Fresh30s production retains2100
+  parent frame/end bytes,43 sound rows and47 packets. Original palettes/layouts/
+  times agree; the same28 pixel differences start817/11704156us/byte8754 and
+  final mixedPCM remains absent. Real startup/remaining handler/devices/
+  renderer/mixer and complete original frame/audio acceptance remain open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

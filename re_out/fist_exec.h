@@ -255,7 +255,7 @@ static unsigned fist_exec_fetched(FistExec *e) {
    fist_exec_observe(e,FIST_EXEC_INT_BEFORE,num,ip);
    fist_cpu_sw_interrupt(e->bus,num,ip);fist_exec_observe(e,FIST_EXEC_INT_AFTER,num,ip);return 0;}
   else if(op==0xea){uint32_t offset=fist_exec_fetch_code(e,&ip,width),selector=fist_exec_fetch_code(e,&ip,2);fist_cpu_fill_flags(e->bus->cpu);fist_exec_jump_far(e,selector,offset,width);return FIST_EXEC_CHECK_TRAP;}
-  else if(op==0xa1){unsigned offset=fist_exec_fetch_code(e,&ip,address);fist_exec_reg_write(e,0,width,fist_ram_resident_read(e->bus,seg<6?seg:3,offset,width));}
+  else if(op==0xa0||op==0xa1){unsigned offset=fist_exec_fetch_code(e,&ip,address),bytes=op==0xa0?1:width;fist_exec_reg_write(e,0,bytes,fist_ram_resident_read(e->bus,seg<6?seg:3,offset,bytes));}
   else if(op==0x25){fist_exec_reg_write(e,0,width,fist_exec_alu(e,4,width,fist_exec_reg_read(e,0,width),fist_exec_fetch_code(e,&ip,width)));}
   else if(op>=0x40 && op<=0x4f){fist_exec_reg_write(e,op&7,width,fist_exec_incdec(e,op>=0x48,width,fist_exec_reg_read(e,op&7,width)));}
   else if(op==0x80||op==0x81||op==0x83||op==0xf6||op==0xf7||op==0xc7){unsigned m=fist_exec_fetch_code(e,&ip,1),w=(op==0x80||op==0xf6)?1:width;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);

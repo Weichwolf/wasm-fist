@@ -11,7 +11,8 @@ CALLBACK_KINDS=tuple(k for name in ('draw-part','vert-interrupt','display-start'
                      for k in ('before-'+name,'after-'+name))
 ADDITIONAL=(*CALLBACK_KINDS,*KINDS,'before-jcxz','after-jcxz','before-panning','after-panning')
 
-def observer(repo,*,through_push_cs=False,through_shr_word=False):
+def observer(repo,*,through_push_cs=False,through_shr_word=False,through_moffs=False):
+    through_shr_word=through_shr_word or through_moffs
     through_push_cs=through_push_cs or through_shr_word
     text=pit_observer(repo)
     old='  if not started:save(\'handler-fetch\');started=True\n'
@@ -41,21 +42,29 @@ def observer(repo,*,through_push_cs=False,through_shr_word=False):
    elif ip==0x3b38:save('before-shr-word-1')
    elif ip==0x3b3c:save('after-shr-word-1');self.enabled=False;return False"""
         assert text.count(old)==1;text=text.replace(old,new)
+    if through_moffs:
+        old="elif ip==0x3b3c:save('after-shr-word-1');self.enabled=False;return False"
+        new="""elif ip==0x3b3c:save('after-shr-word-1');return False
+   elif ip==0x3b43:save('before-moffs-byte')
+   elif ip==0x3b46:save('after-moffs-byte');self.enabled=False;return False"""
+        assert text.count(old)==1;text=text.replace(old,new)
     extra=(repo/'tools/oracle/vga_callbacks.gdb.inc').read_text()
     assert text.count('\nend\nrun')==1
     return text.replace('\nend\nrun','\n'+extra+'\nend\nrun')
 
-def verify(repo,folder,*,through_push_cs=False,through_shr_word=False):
+def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_moffs=False):
+    through_shr_word=through_shr_word or through_moffs
     through_push_cs=through_push_cs or through_shr_word
     kinds=ADDITIONAL[:-2]+('before-push-cs','after-push-cs')+ADDITIONAL[-2:] if through_push_cs else ADDITIONAL
     if through_shr_word:kinds=kinds[:-2]+('before-shr-word-1','after-shr-word-1')+kinds[-2:]
+    if through_moffs:kinds=kinds[:-2]+('before-moffs-byte','after-moffs-byte')+kinds[-2:]
     result=verify_core(repo,folder,kinds)
     fetches=[json.loads(s) for s in (folder/'source/handler-fetches.jsonl').read_text().splitlines()]
     lines=[json.loads(s) for s in (folder/'source/draw-lines.jsonl').read_text().splitlines()]
-    assert len(fetches)==(2976 if through_shr_word else 2972 if through_push_cs else 2968) and len(lines)==50
-    rows=result['events'];assert len(rows)==(27 if through_shr_word else 25 if through_push_cs else 23)
+    assert len(fetches)==(2980 if through_moffs else 2976 if through_shr_word else 2972 if through_push_cs else 2968) and len(lines)==50
+    rows=result['events'];assert len(rows)==(29 if through_moffs else 27 if through_shr_word else 25 if through_push_cs else 23)
     assert fetches[0]['segments'][1]['value']==fetches[-1]['segments'][1]['value']==0x2082
-    assert fetches[0]['cpu_regs.ip.dword[0]']==0x3a68 and fetches[-1]['cpu_regs.ip.dword[0]']==(0x3b3c if through_shr_word else 0x3abc if through_push_cs else 0x3aac)
+    assert fetches[0]['cpu_regs.ip.dword[0]']==0x3a68 and fetches[-1]['cpu_regs.ip.dword[0]']==(0x3b46 if through_moffs else 0x3b3c if through_shr_word else 0x3abc if through_push_cs else 0x3aac)
     for before,after in zip(rows[7:13:2],rows[8:13:2]):
         assert before['CPU_Cycles']==after['CPU_Cycles']==0
         assert before['CPU_CycleLeft']==after['CPU_CycleLeft']
@@ -99,18 +108,27 @@ def verify(repo,folder,*,through_push_cs=False,through_shr_word=False):
         expected[24]=(expected[24]&0xffff0000)|result_word
         expected[25]=38
         assert actual==expected and clock(after)==clock(before)+1
+    if through_moffs:
+        before,after=rows[25:27]
+        assert before['cpu.code.big']==0 and not before['paging.enabled']
+        assert next(q for q in fetches if q['cpu_regs.ip.dword[0]']==0x3b43)['code_hex'].startswith('a03b07')
+        memory=(folder/'source'/before['memory_file']).read_bytes()
+        value=memory[before['segments'][3]['base']+0x73b]
+        assert memory==(folder/'source'/after['memory_file']).read_bytes()
+        expected=words(before);expected[0]=(expected[0]&0xffffff00)|value;expected[8]+=3
+        assert words(after)==expected and clock(after)==clock(before)+1
     scope='Actual original one-seed IRET/core/PIC/IRQ prefix, complete CPU/RAM/device/calendar/drawing/service observations, every fetch and50 complete linear-line outputs. Full39frame/27518mixedPCM/end600 output equals unobserved original. Renderer metadata is diagnostic; port renderer/scaler/startup/whole handler/full-sequence acceptance remains open.'
-    result.update(scope=scope,through_push_cs=through_push_cs,through_shr_word=through_shr_word,fetches=fetches,draw_lines=lines,complete_original_acceptance=False)
+    result.update(scope=scope,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,fetches=fetches,draw_lines=lines,complete_original_acceptance=False)
     (folder/'proof.json').write_text(json.dumps(result,indent=2)+'\n')
     print('PASS original',len(rows),'boundaries/',len(fetches),'fetches/50 drawn lines and unchanged complete output',flush=True)
     return result
 
-def capture(repo,root,baseline=None,*,through_push_cs=False,through_shr_word=False):
+def capture(repo,root,baseline=None,*,through_push_cs=False,through_shr_word=False,through_moffs=False):
     tree=repo/'third_party/dosbox-build/dosbox-0.74-3'
-    return capture_core(repo,root,baseline,make_observer=lambda repo:observer(repo,through_push_cs=through_push_cs,through_shr_word=through_shr_word),
-                        check_capture=lambda repo,root:verify(repo,root,through_push_cs=through_push_cs,through_shr_word=through_shr_word),
+    return capture_core(repo,root,baseline,make_observer=lambda repo:observer(repo,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs),
+                        check_capture=lambda repo,root:verify(repo,root,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs),
                         additional_inputs=(Path(__file__),repo/'tools/oracle/capture_cpu_pit_writes.py',repo/'tools/oracle/vga_callbacks.gdb.inc',
-                        *[tree/p for p in ('src/hardware/timer.cpp','src/hardware/vga_draw.cpp','src/hardware/vga_misc.cpp','include/vga.h','src/gui/render.cpp','src/cpu/instructions.h','src/cpu/lazyflags.h','src/cpu/core_normal/prefix_none.h')]))
+                        *[tree/p for p in ('src/hardware/timer.cpp','src/hardware/vga_draw.cpp','src/hardware/vga_misc.cpp','include/vga.h','src/gui/render.cpp','src/cpu/instructions.h','src/cpu/lazyflags.h','src/cpu/core_normal/prefix_none.h','src/cpu/core_normal/table_ea.h')]))
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
@@ -118,6 +136,7 @@ if __name__=='__main__':
     p.add_argument('--baseline',type=Path);p.add_argument('--verify-only',action='store_true')
     p.add_argument('--through-push-cs',action='store_true')
     p.add_argument('--through-shr-word',action='store_true')
+    p.add_argument('--through-moffs',action='store_true')
     a=p.parse_args();repo=a.repo.resolve();root=a.output.resolve()
-    if a.verify_only:verify(repo,root,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word)
-    else:capture(repo,root,a.baseline.resolve() if a.baseline else None,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word)
+    if a.verify_only:verify(repo,root,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word,through_moffs=a.through_moffs)
+    else:capture(repo,root,a.baseline.resolve() if a.baseline else None,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word,through_moffs=a.through_moffs)

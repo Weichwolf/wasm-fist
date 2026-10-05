@@ -1,5 +1,11 @@
 /* One original before-IRET seed through the complete reaching device chain. */
 #include "fist_pit.h"
+#ifdef FIST_VGA_MOFFS_CONTINUE
+#define FIST_VGA_SHR_WORD_CONTINUE 1
+#endif
+#ifdef FIST_VGA_SHR_WORD_CONTINUE
+#define FIST_VGA_PUSH_CS_CONTINUE 1
+#endif
 #define FIST_CORE_EXIT_CONTINUE 1
 #define FIST_CORE_EXIT_HOOKS 1
 #include "cpu_core_exit.c"
@@ -20,16 +26,19 @@ static void handler_prefix(void)
  FistExec engine={.bus=&context.bus,.in=read_byte,.out=write_byte};
  const char *names[]={"pit-control","pit-low","pit-high"};
  unsigned writes=0,after=0,jcxz=0;
-#if defined(FIST_VGA_PUSH_CS_CONTINUE) || defined(FIST_VGA_SHR_WORD_CONTINUE)
+#ifdef FIST_VGA_PUSH_CS_CONTINUE
  unsigned pushed=0;
 #ifdef FIST_VGA_SHR_WORD_CONTINUE
  unsigned after_shr=0;
 #endif
+#ifdef FIST_VGA_MOFFS_CONTINUE
+ unsigned after_moffs=0;
+#endif
 #endif
  for(unsigned count=0;;count++) {
-  fist_cpu_require(count<10000);observe_cpu_to(trace,"fetch");char kind[64];
+  fist_cpu_require(count<10000);observe_cpu_to(trace,"fetch");fflush(NULL);char kind[64];
   if(after) {snprintf(kind,sizeof kind,"after-%s",names[writes-1]);state(kind);after=0;}
-#if defined(FIST_VGA_PUSH_CS_CONTINUE) || defined(FIST_VGA_SHR_WORD_CONTINUE)
+#ifdef FIST_VGA_PUSH_CS_CONTINUE
   if(jcxz==1) {state("after-jcxz");jcxz=2;}
   if(pushed) {
    state("after-push-cs");
@@ -40,14 +49,27 @@ static void handler_prefix(void)
 #endif
   }
 #ifdef FIST_VGA_SHR_WORD_CONTINUE
-  if(after_shr) {state("after-shr-word-1");break;}
+  if(after_shr) {
+   state("after-shr-word-1");
+#ifdef FIST_VGA_MOFFS_CONTINUE
+   after_shr=0;
+#else
+   break;
+#endif
+  }
+#endif
+#ifdef FIST_VGA_MOFFS_CONTINUE
+  if(after_moffs) {state("after-moffs-byte");break;}
 #endif
 #else
   if(jcxz) {state("after-jcxz");break;}
 #endif
   unsigned op=fist_ram_resident_read(&context.bus,1,cpu.eip,1);
-#if defined(FIST_VGA_PUSH_CS_CONTINUE) || defined(FIST_VGA_SHR_WORD_CONTINUE)
+#ifdef FIST_VGA_PUSH_CS_CONTINUE
   if(op==0x0e) {state("before-push-cs");pushed=1;}
+#endif
+#ifdef FIST_VGA_MOFFS_CONTINUE
+  if(cpu.segments[1].value==0x2082 && cpu.eip==0x3b43) {state("before-moffs-byte");after_moffs=1;}
 #endif
 #ifdef FIST_VGA_SHR_WORD_CONTINUE
   if(cpu.segments[1].value==0x2082 && cpu.eip==0x3b38) {state("before-shr-word-1");after_shr=1;}

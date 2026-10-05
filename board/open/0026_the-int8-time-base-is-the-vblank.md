@@ -1430,6 +1430,42 @@ is absent. Complete commands, provenance, states and controlled/full coverage
 are in `tools/oracle/cpu_shr_production_case.json`. Actual startup/whole handler/
 device/renderer/final mixer and full original sequence acceptance remain open.
 
+### Reached A0 and shared A0/A1 load contract
+
+At parent `8f13c93`, the next missing instruction is `A0 3B 07` at2082:3b43:
+MOV AL,DS:073b. Original CASE_B/W/D and `GetEADirect` fetch the offset at
+address width, use the selected cached data-segment base and load at byte or
+operand width. MOV preserves every lazy/raw flag field and the untouched
+accumulator bits. A0 now shares the existing A1 execution and memory owner.
+
+The versioned controlled command is
+`python3 -B tools/oracle/capture_cpu_moffs.py --repo . --output /tmp/wasm-fist-moffs-instructions`.
+It compares1120 original programs with complete CPU/cache/64-bit stack/2MiB
+RAM/code-fetch/ordered RAM records. Both code/address/stack sizes, all segment
+overrides, unaligned/16-bit edge offsets, dirty upper EAX, byte66 independence
+and all65 incoming lazy tags are covered. Four causal substitutions cover
+widened byte loads, operand-sized offsets, lost CS override and eager flags.
+
+Fresh source capture extends the existing unchanged-output owner:
+`python3 -B tools/oracle/capture_cpu_vga_callbacks.py --repo . --output /tmp/wasm-fist-moffs-source --through-moffs`.
+It requires29 complete source boundaries/2980 fetches and50 line/end requests,
+including the actual before/after A0 CPU, time and full16MiB RAM contract.
+The continuous release replay requires27 full states; parent8f13c93 must fail
+at A0 after26 equal states/2979 fetches. Run
+`python3 -B -m unittest discover -s tests -p test_cpu_moffs.py -v`.
+All1120 complete original programs and8 causal results pass both release
+targets. Fresh source retains29 full boundaries/2980 fetches/50 line requests;
+both targets match27 complete states continuously from one initial seed, and
+parent8f13c93 fails A0 after26 equal states/2979 fetches. Original39frames/
+27518PCM/end600 remain unchanged. The frozen unfiltered gate passes207 tests,
+exact patches, sequential Native/WASM builds, six startup cases and all178
+flows, exit0, with419 unchanged originals. Fresh30s production retains2100
+parent frame/end bytes,43 sound rows and47 unmasked packets. Original layouts/
+palettes/times agree; the same28 pixel failures start817/11704156us/byte8754,
+and final mixedPCM is absent. Commands, provenance and complete coverage are
+in `tools/oracle/cpu_moffs_production_case.json`. Actual startup/remaining
+handler/devices/renderer/final mixer and full sequence acceptance remain open.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
@@ -1441,7 +1477,8 @@ IRQ0 prefix. Consume `cpu_vga_production_case.json` for the continuous21-state/
 Consume `cpu_segment_push_production_case.json` for the reached PUSH CS and
 complete segment-push contract. Consume `cpu_shr_production_case.json` for
 reached SHR word DS:0450,1 at2082:3b38 and complete shift contracts. Recover
-following handler instructions (MOV AL,moffs8 at2082:3b43), panning/vertical setup and renderer
+following handler instructions after the A0 contract in
+`cpu_moffs_production_case.json` (next JNS at2082:3b48), panning/vertical setup and renderer
 bodies, far-transfer/trap retirement and pending device-event
 paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service
 only after the CPU frame owner returns. Snapshots, stopping and serialization
