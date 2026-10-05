@@ -1654,6 +1654,59 @@ seed and3383 fetches;after JS it matches3053 initial fetches before
 CMPB3a at4ec3:2f55. This diagnosis is excluded from JS acceptance.
 
 
+## Verified actual startup task-gate bootstrap
+
+Parent `3b094c7` reaches unsupported operand-prefixed PUSH6a at actual
+op6c enginee339. The shared CPU/stack/EA/flag owners now execute PUSH6a/68,
+PUSH SS, WORD SUB, POP SS, WORD/DWORD XCHG and C0/C1 SHL/SAL with original
+width, sign, flags, stack-mask, SS fetch-credit and register-before-store
+contracts. Zero-count shifts preserve flags and perform no operand access.
+
+All54929 original encoded programs/70 causal results and131360 SUBW/INCW
+plus410816 SHL/INC flag programs/22 causal results pass both release targets.
+Complete CPU/cache/budget/lazy words, full stack metadata,2MiB RAM, ordered
+code/RAM accesses and GP registers at RAM accesses agree. Original programs
+without GP observation retain all prior record bytes. POP SS controls cover
+real mode; protected fault paths remain open.
+
+One fresh original seed matches17 complete CPU/system/time/RAM/provider/
+cache/VGA/PIC boundaries and137 fetches through the actual first DSP reset
+OUT at002b:1348. Physical CodeRead boundaries are matched after page linking;
+no extra warm-up fetch is used. Missing SS credit changes only reached time
+and budget; missing I/O binding fails at the real OUT. Parent fails the first
+PUSH after one equal boundary/fetch. Truncated source evidence fails.
+All19 original boundaries retain named SB scalar/buffer evidence, without
+claiming a complete portable SB comparison or supplying runtime seeds.
+Original39frames/27518mixedPCM/end600 bytes remain unchanged.
+
+The initial native build exited2 because its custom OBJDIR did not exist,
+after all240 tests and611 patch checks passed. The original failure logs
+are retained. Auditing all1594 frozen inputs and419 unchanged originals
+permits directory-only resumption of both sequential builds,six startup
+cases and all178 flows;no test/source contract changed.
+
+The frozen1594-input unfiltered gate passes240 tests,611 exact patches,
+sequential Native/WASM builds,six startup cases and all178 flows,exit0.
+The tracked1320-input inventory is supplemented by274 unchanged original
+build inputs retained from the published JS archive. All419 originals stay
+unchanged. Fresh complete30s production preserves2100 parent frame/end bytes,
+43 sound rows and47 unmasked packets. Original palettes/layouts/times agree;
+the same28 pixel failures start817/11704156us/byte8754 and mixedPCM is absent.
+Receipt: `tools/oracle/cpu_task_gate_production_case.json`.
+
+Reproduce:
+
+```sh
+python3 -B tools/oracle/capture_cpu_task_gate.py --repo . --output /tmp/wasm-fist-task-gate-source
+python3 -B tools/oracle/capture_cpu_task_gate_programs.py --repo . --mode xchg --output /tmp/wasm-fist-task-gate-xchg
+python3 -B tools/oracle/capture_cpu_task_gate_flags.py --repo . --mode shl --output /tmp/wasm-fist-task-gate-shl-flags
+python3 -B -m unittest discover -s tests -p test_cpu_task_gate.py -v
+```
+
+Actual application CPU/calendar transport, remaining initialization, whole
+device/IRQ/mixer integration and complete original parity remain open.
+
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device

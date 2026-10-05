@@ -56,12 +56,12 @@ def run(command,data):
 def negative(repo,root,original):
     header=(repo/'re_out/fist_exec.h').read_text()
     stack_header=(repo/'re_out/fist_interrupt.h').read_text()
-    route='else if(op==0x06||op==0x0e||op==0x1e)fist_cpu_push(e->bus,width,e->bus->cpu->segments[op==0x06?0:op==0x0e?1:3].value);'
+    route='else if(op==0x06||op==0x0e||op==0x16||op==0x1e)fist_cpu_push(e->bus,width,e->bus->cpu->segments[op==0x06?0:op==0x0e?1:op==0x16?2:3].value);'
     assert header.count(route)==1
     mutations=[
-        ('wrong-cs-selector',header.replace('op==0x0e?1:3','op==0x0e?3:3'),stack_header,packet(b'\x0e')),
+        ('wrong-cs-selector',header.replace('op==0x0e?1:op==0x16?2:3','op==0x0e?3:op==0x16?2:3'),stack_header,packet(b'\x0e')),
         ('fixed16-operand',header.replace(route,route.replace('fist_cpu_push(e->bus,width,','fist_cpu_push(e->bus,op==0x0e?2:width,')),stack_header,packet(b'\x66\x0e')),
-        ('address-controls-stack',header.replace(route,'else if(op==0x06||op==0x0e||op==0x1e) {if(op==0x0e)e->bus->cpu->stack_mask=address==4?UINT32_MAX:0xffff;fist_cpu_push(e->bus,width,e->bus->cpu->segments[op==0x06?0:op==0x0e?1:3].value);}'),stack_header,packet(b'\x67\x0e',sp=0x10080)),
+        ('address-controls-stack',header.replace(route,'else if(op==0x06||op==0x0e||op==0x16||op==0x1e) {if(op==0x0e)e->bus->cpu->stack_mask=address==4?UINT32_MAX:0xffff;fist_cpu_push(e->bus,width,e->bus->cpu->segments[op==0x06?0:op==0x0e?1:op==0x16?2:3].value);}'),stack_header,packet(b'\x67\x0e',sp=0x10080)),
         ('word-only-dword-write',header,stack_header.replace('fist_ram_resident_write(bus,2,next&cpu->stack_mask,width,value);','fist_ram_resident_write(bus,2,next&cpu->stack_mask,width==4?2:width,value);'),packet(b'\x66\x0e')),
         ('materialized-flags',header.replace(route,route.replace('fist_cpu_push(e->bus,','{fist_cpu_fill_flags(e->bus->cpu);fist_cpu_push(e->bus,')+'}'),stack_header,packet(b'\x0e')),
         ('lost-upper-esp',header,stack_header.replace('cpu->esp=next;','cpu->esp=next&cpu->stack_mask;'),packet(b'\x0e',sp=0xcafe0080)),

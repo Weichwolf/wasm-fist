@@ -622,6 +622,19 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   diagnosis,not an accepted runtime fix. Recover actual task-gate CPU transport
   before wiring initialization;never seed CPU from legacy scalar arguments.
 
+- Consume0026 task-gate bootstrap evidence in
+  `tools/oracle/cpu_task_gate_production_case.json`,parent3b094c7: all54929
+  original programs/70 causal results,542176 flag programs/22 causal results
+  and complete17-state/137-fetch reaching replay match both targets through
+  the first actual DSP reset OUT. Original39frames/27518PCM/end600 remain
+  unchanged. The frozen1594-input unfiltered240-test/611-patch/two-build/
+  six-startup/all178-flow gate exits0 with419 unchanged originals. Fresh30s
+  production retains2100 parent frame/end bytes,43 sound rows and47 packets;
+  original palettes/layouts/times agree. The same28 pixel failures start817/
+  11704156us/byte8754 and final mixedPCM is absent. Application CPU/calendar
+  transport, whole device/IRQ/mixer and complete original acceptance stay open.
+
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

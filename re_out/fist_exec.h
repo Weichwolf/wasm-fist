@@ -133,7 +133,7 @@ static uint32_t fist_exec_alu(FistExec *e,unsigned operation,unsigned width,uint
  case 0:fist_cpu_require(width==1||width==2||width==4);result=a+b;type=width==1?FIST_LAZY_ADDB:width==2?FIST_LAZY_ADDW:FIST_LAZY_ADDD;break;
  case 1:result=a|b;type=width==1?FIST_LAZY_ORB:width==2?FIST_LAZY_ORW:FIST_LAZY_ORD;break;
  case 4:fist_cpu_require(width==1||width==2);result=a&b;type=width==1?FIST_LAZY_ANDB:FIST_LAZY_ANDW;break;
- case 5:result=a-b;fist_cpu_require(width==1||width==4);type=width==1?FIST_LAZY_SUBB:FIST_LAZY_SUBD;break;
+ case 5:result=a-b;type=width==1?FIST_LAZY_SUBB:width==2?FIST_LAZY_SUBW:FIST_LAZY_SUBD;break;
  case 6:result=a^b;type=width==1?FIST_LAZY_XORB:width==2?FIST_LAZY_XORW:FIST_LAZY_XORD;break;
  case 7:result=a-b;type=width==1?FIST_LAZY_CMPB:width==2?FIST_LAZY_CMPW:FIST_LAZY_CMPD;break;
  case 8:fist_cpu_require(width==1||width==2);result=a&b;type=width==1?FIST_LAZY_TESTB:FIST_LAZY_TESTW;break;
@@ -178,8 +178,9 @@ static unsigned fist_exec_fetched(FistExec *e) {
   else if(op==0xe1||op==0xe2){fist_exec_reg_write(e,1,address,fist_exec_reg_read(e,1,address)-1);fist_exec_conditional(e,&ip,width,1,fist_exec_reg_read(e,1,address) && (op==0xe2 || fist_cpu_zf(e->bus->cpu)));}
   else if(op==0xe9){int32_t d=width==4?(int32_t)fist_exec_fetch_code(e,&ip,4):(int16_t)fist_exec_fetch_code(e,&ip,2);ip=width==2?(uint16_t)(ip+d):ip+d;}
   else if(op>=0xb0 && op<=0xb7)fist_exec_reg_write(e,op&7,1,fist_exec_fetch_code(e,&ip,1));
+  else if(op==0x68||op==0x6a)fist_cpu_push(e->bus,width,op==0x6a?(uint32_t)(int32_t)(int8_t)fist_exec_fetch_code(e,&ip,1):fist_exec_fetch_code(e,&ip,width));
   else if(op>=0x50 && op<=0x57)fist_cpu_push(e->bus,width,fist_exec_reg_read(e,op&7,width));
-  else if(op==0x06||op==0x0e||op==0x1e)fist_cpu_push(e->bus,width,e->bus->cpu->segments[op==0x06?0:op==0x0e?1:3].value);
+  else if(op==0x06||op==0x0e||op==0x16||op==0x1e)fist_cpu_push(e->bus,width,e->bus->cpu->segments[op==0x06?0:op==0x0e?1:op==0x16?2:3].value);
   else if(op==0x9c){fist_cpu_require(!e->bus->cpu->pmode || !(e->bus->cpu->flags.flags&FIST_FLAG_VM) || (e->bus->cpu->flags.flags&FIST_FLAG_IOPL)==FIST_FLAG_IOPL);fist_cpu_fill_flags(e->bus->cpu);fist_cpu_push(e->bus,width,e->bus->cpu->flags.flags&(width==4?0xfcffffu:0xffffu));}
   else if(op==0x88){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);fist_exec_write_op(e,q,1,fist_exec_reg_read(e,(m>>3)&7,1));}
   else if(op==0xc6){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);fist_cpu_require(((m>>3)&7)==0);fist_exec_write_op(e,q,1,fist_exec_fetch_code(e,&ip,1));}
@@ -187,13 +188,14 @@ static unsigned fist_exec_fetched(FistExec *e) {
   else if(op==0xe8){uint32_t d=fist_exec_fetch_code(e,&ip,width);fist_cpu_push(e->bus,width,ip);e->bus->cpu->eip=width==2?(uint16_t)(ip+d):ip+d;return 0;}
   else if(op==0xa3){unsigned offset=fist_exec_fetch_code(e,&ip,address);fist_ram_resident_write(e->bus,seg<6?seg:3,offset,width,fist_exec_reg_read(e,0,width));}
   else if(op==0xac){uint32_t offset=address==4?e->bus->cpu->esi:e->bus->cpu->esi&0xffff;fist_exec_reg_write(e,0,1,fist_ram_resident_read(e->bus,seg<6?seg:3,offset,1));fist_exec_reg_write(e,6,address,offset+e->bus->system->direction);}
-  else if(op==0xc0){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);unsigned count=fist_exec_fetch_code(e,&ip,1)&31;fist_cpu_require(((m>>3)&7)==4);uint32_t a=fist_exec_read_op(e,q,1);
-   if(count)fist_exec_write_op(e,q,1,fist_cpu_shl(e->bus->cpu,8,a,count));
+  else if(op==0xc0||op==0xc1){unsigned m=fist_exec_fetch_code(e,&ip,1),w=op==0xc0?1:width;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);unsigned count=fist_exec_fetch_code(e,&ip,1)&31;fist_cpu_require(((m>>3)&7)==4 || ((m>>3)&7)==6);
+   if(count){uint32_t a=fist_exec_read_op(e,q,w);fist_exec_write_op(e,q,w,fist_cpu_shl(e->bus->cpu,w*8,a,count));}
   }
   else if(op>=0x58 && op<=0x5f)fist_exec_reg_write(e,op&7,width,fist_cpu_pop(e->bus,width));
-  else if(op==0x07 || op==0x1f){unsigned which=op==0x07?0:3;
+  else if(op==0x07 || op==0x17 || op==0x1f){unsigned which=op==0x07?0:op==0x17?2:3;
    uint32_t value=fist_ram_resident_read(e->bus,2,e->bus->cpu->esp&e->bus->cpu->stack_mask,2);fist_exec_select_segment(e,which,value);
    e->bus->cpu->esp=fist_cpu_stack_advance(e->bus->cpu,e->bus->cpu->esp,width);
+   if(op==0x17)e->credit(e->opaque);
   }else if(op==0x9d){fist_exec_pop_flags(e,width);e->bus->cpu->eip=ip;return FIST_EXEC_CHECK_TRAP|FIST_EXEC_CHECK_PIC;}
   else if(op==0x9e){fist_cpu_fill_flags(e->bus->cpu);fist_cpu_load_flags(e->bus->cpu,e->bus->system,fist_exec_reg_read(e,4,1),FIST_FMASK_NORMAL&255);}
   else if(op==0xfa)fist_cpu_set_if(e->bus->cpu,0);
@@ -237,13 +239,13 @@ static unsigned fist_exec_fetched(FistExec *e) {
   else if(op==0xd0||op==0xd1){unsigned m=fist_exec_fetch_code(e,&ip,1),which=(m>>3)&7,bytes=op==0xd0?1:width;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);
    fist_cpu_require(which==5 || (op==0xd1 && which==4 && width==2));uint32_t v=fist_exec_read_op(e,q,bytes);
    fist_exec_write_op(e,q,bytes,which==5?fist_cpu_shr(e->bus->cpu,bytes*8,v,1):fist_cpu_shl(e->bus->cpu,16,v,1));
-  }else if(op==0x8b||op==0x8d||op==0x8e||op==0x89||op==0x8a||op==0x86||op==0x33||op==0x09||op==0x2a){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);
+  }else if(op==0x8b||op==0x8d||op==0x8e||op==0x89||op==0x8a||op==0x86||op==0x87||op==0x33||op==0x09||op==0x2a){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);
    unsigned index=(m>>3)&7;
    if(op==0x8e){fist_exec_select_segment(e,index,fist_exec_read_op(e,q,2));
     if(index==2)e->credit(e->opaque);
    }else if(op==0x89)fist_exec_write_op(e,q,width,fist_exec_reg_read(e,index,width));
    else if(op==0x8a)fist_exec_reg_write(e,index,1,fist_exec_read_op(e,q,1));
-   else if(op==0x86){uint32_t v=fist_exec_read_op(e,q,1);fist_exec_write_op(e,q,1,fist_exec_reg_read(e,index,1));fist_exec_reg_write(e,index,1,v);}
+   else if(op==0x86||op==0x87){unsigned w=op==0x86?1:width;uint32_t v=fist_exec_read_op(e,q,w),old=fist_exec_reg_read(e,index,w);fist_exec_reg_write(e,index,w,v);fist_exec_write_op(e,q,w,old);}
    else if(op==0x33)fist_exec_reg_write(e,index,width,fist_exec_alu(e,6,width,fist_exec_reg_read(e,index,width),fist_exec_read_op(e,q,width)));
    else if(op==0x09)fist_exec_write_op(e,q,width,fist_exec_alu(e,1,width,fist_exec_read_op(e,q,width),fist_exec_reg_read(e,index,width)));
    else if(op==0x2a)fist_exec_reg_write(e,index,1,fist_exec_alu(e,5,1,fist_exec_reg_read(e,index,1),fist_exec_read_op(e,q,1)));
