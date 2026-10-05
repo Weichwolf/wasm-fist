@@ -1,5 +1,8 @@
 /* One original before-IRET seed through the complete reaching device chain. */
 #include "fist_pit.h"
+#ifdef FIST_VGA_CMP_CONTINUE
+#define FIST_VGA_OUTSB_CONTINUE 1
+#endif
 #ifdef FIST_VGA_OUTSB_CONTINUE
 #define FIST_VGA_JNS_CONTINUE 1
 #endif
@@ -62,6 +65,9 @@ static void handler_prefix(void)
  snprintf(path,sizeof path,"%s.io-dac",output);io_dac=fopen(path,"wb");fist_cpu_require(io_cpu && io_dac);
  engine.budget=producer_budget;engine.credit=producer_credit;engine.charge=producer_charge;
  unsigned after_byte=0,after_outsb=0;
+#ifdef FIST_VGA_CMP_CONTINUE
+ unsigned after_cmp=0;
+#endif
 #endif
  const char *names[]={"pit-control","pit-low","pit-high"};
  unsigned writes=0,after=0,jcxz=0;
@@ -125,15 +131,28 @@ static void handler_prefix(void)
 #endif
 #ifdef FIST_VGA_OUTSB_CONTINUE
   if(after_byte) {state("after-shr-byte");after_byte=0;}
-  if(after_outsb) {state("after-outsb");break;}
+  if(after_outsb) {
+   state("after-outsb");
+#ifdef FIST_VGA_CMP_CONTINUE
+   after_outsb=0;
+#else
+   break;
+#endif
+  }
+#ifdef FIST_VGA_CMP_CONTINUE
+  if(after_cmp) {state("after-cmp");break;}
+#endif
 #endif
   unsigned op=fist_ram_resident_read(&context.bus,1,cpu.eip,1);
 #ifdef FIST_VGA_OUTSB_CONTINUE
   if(cpu.segments[1].value==0x4ec3 && cpu.eip==0xbe6) {state("before-shr-byte");after_byte=1;}
   if(cpu.segments[1].value==0x4ec3 && cpu.eip==0xbff) {state("before-outsb");after_outsb=1;}
+#ifdef FIST_VGA_CMP_CONTINUE
+  if(cpu.segments[1].value==0x4ec3 && cpu.eip==0x2f3b) {state("before-cmp");after_cmp=1;}
+#endif
 #endif
 #ifdef FIST_VGA_PUSH_CS_CONTINUE
-  if(op==0x0e) {state("before-push-cs");pushed=1;}
+  if(op==0x0e && cpu.segments[1].value==0x2082 && cpu.eip==0x3abb) {state("before-push-cs");pushed=1;}
 #endif
 #ifdef FIST_VGA_MOFFS_CONTINUE
   if(cpu.segments[1].value==0x2082 && cpu.eip==0x3b43) {state("before-moffs-byte");after_moffs=1;}

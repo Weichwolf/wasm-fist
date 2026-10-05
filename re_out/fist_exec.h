@@ -166,8 +166,9 @@ static unsigned fist_exec_fetched(FistExec *e) {
   else if(op==0xe6){unsigned port=fist_exec_fetch_code(e,&ip,1);e->out(e->opaque,port,(uint8_t)e->bus->cpu->eax);}
   else if(op==0xee)e->out(e->opaque,(uint16_t)e->bus->cpu->edx,(uint8_t)e->bus->cpu->eax);
   else if(op==0xec)fist_exec_reg_write(e,0,1,e->in(e->opaque,(uint16_t)e->bus->cpu->edx));
-  else if(op==0x32||op==0x39||op==0x2b){unsigned m=fist_exec_fetch_code(e,&ip,1),i=(m>>3)&7,w=op==0x32?1:width;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);
+  else if(op==0x32||op==0x39||op==0x3b||op==0x2b){unsigned m=fist_exec_fetch_code(e,&ip,1),i=(m>>3)&7,w=op==0x32?1:width;FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);
    if(op==0x39)fist_exec_alu(e,7,w,fist_exec_read_op(e,q,w),fist_exec_reg_read(e,i,w));
+   else if(op==0x3b)fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));
    else fist_exec_reg_write(e,i,w,fist_exec_alu(e,op==0x32?6:5,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w)));
   }else if(op==0x24)fist_exec_reg_write(e,0,1,fist_exec_alu(e,4,1,fist_exec_reg_read(e,0,1),fist_exec_fetch_code(e,&ip,1)));
   else if(op==0xa8){fist_exec_alu(e,8,1,fist_exec_reg_read(e,0,1),fist_exec_fetch_code(e,&ip,1));}

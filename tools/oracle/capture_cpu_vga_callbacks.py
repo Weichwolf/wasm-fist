@@ -11,7 +11,8 @@ CALLBACK_KINDS=tuple(k for name in ('draw-part','vert-interrupt','display-start'
                      for k in ('before-'+name,'after-'+name))
 ADDITIONAL=(*CALLBACK_KINDS,*KINDS,'before-jcxz','after-jcxz','before-panning','after-panning')
 
-def observer(repo,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False):
+def observer(repo,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False,through_cmp=False):
+    through_outsb=through_outsb or through_cmp
     through_jns=through_jns or through_outsb
     through_moffs=through_moffs or through_jns
     through_shr_word=through_shr_word or through_moffs
@@ -67,13 +68,20 @@ def observer(repo,*,through_push_cs=False,through_shr_word=False,through_moffs=F
    elif q['cpu_regs.ip.dword[0]']==0xc01:save('after-outsb');self.enabled=False;return False
 """
         assert text.count(old)==1;text=text.replace(old,new)
+    if through_cmp:
+        old="elif q['cpu_regs.ip.dword[0]']==0xc01:save('after-outsb');self.enabled=False;return False"
+        new="""elif q['cpu_regs.ip.dword[0]']==0xc01:save('after-outsb')
+   elif q['cpu_regs.ip.dword[0]']==0x2f3b:save('before-cmp')
+   elif q['cpu_regs.ip.dword[0]']==0x2f3f:save('after-cmp');self.enabled=False;return False"""
+        assert text.count(old)==1;text=text.replace(old,new)
     extra=(repo/'tools/oracle/vga_callbacks.gdb.inc').read_text()
     if through_outsb:
         extra+='\n'+(repo/'tools/oracle/dac_state.gdb.inc').read_text()+'\n'+(repo/'tools/oracle/dac_io.gdb.inc').read_text()
     assert text.count('\nend\nrun')==1
     return text.replace('\nend\nrun','\n'+extra+'\nend\nrun')
 
-def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False):
+def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False,through_cmp=False):
+    through_outsb=through_outsb or through_cmp
     through_jns=through_jns or through_outsb
     through_moffs=through_moffs or through_jns
     through_shr_word=through_shr_word or through_moffs
@@ -83,14 +91,15 @@ def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_mo
     if through_moffs:kinds=kinds[:-2]+('before-moffs-byte','after-moffs-byte')+kinds[-2:]
     if through_jns:kinds=kinds[:-2]+('before-jns','after-jns')+kinds[-2:]
     if through_outsb:kinds=kinds[:-2]+('before-shr-byte','after-shr-byte','before-outsb','after-outsb')+kinds[-2:]
+    if through_cmp:kinds=kinds[:-2]+('before-cmp','after-cmp')+kinds[-2:]
     result=verify_core(repo,folder,kinds)
     fetches=[json.loads(s) for s in (folder/'source/handler-fetches.jsonl').read_text().splitlines()]
     lines=[json.loads(s) for s in (folder/'source/draw-lines.jsonl').read_text().splitlines()]
-    assert len(fetches)==(2998 if through_outsb else 2982 if through_jns else 2980 if through_moffs else 2976 if through_shr_word else 2972 if through_push_cs else 2968) and len(lines)==50
-    rows=result['events'];assert len(rows)==(35 if through_outsb else 31 if through_jns else 29 if through_moffs else 27 if through_shr_word else 25 if through_push_cs else 23)
+    assert len(fetches)==(3046 if through_cmp else 2998 if through_outsb else 2982 if through_jns else 2980 if through_moffs else 2976 if through_shr_word else 2972 if through_push_cs else 2968) and len(lines)==50
+    rows=result['events'];assert len(rows)==(37 if through_cmp else 35 if through_outsb else 31 if through_jns else 29 if through_moffs else 27 if through_shr_word else 25 if through_push_cs else 23)
     assert fetches[0]['segments'][1]['value']==0x2082
     assert fetches[-1]['segments'][1]['value']==(0x4ec3 if through_outsb else 0x2082)
-    assert fetches[0]['cpu_regs.ip.dword[0]']==0x3a68 and fetches[-1]['cpu_regs.ip.dword[0]']==(0xc01 if through_outsb else 0x3b63 if through_jns else 0x3b46 if through_moffs else 0x3b3c if through_shr_word else 0x3abc if through_push_cs else 0x3aac)
+    assert fetches[0]['cpu_regs.ip.dword[0]']==0x3a68 and fetches[-1]['cpu_regs.ip.dword[0]']==(0x2f3f if through_cmp else 0xc01 if through_outsb else 0x3b63 if through_jns else 0x3b46 if through_moffs else 0x3b3c if through_shr_word else 0x3abc if through_push_cs else 0x3aac)
     for before,after in zip(rows[7:13:2],rows[8:13:2]):
         assert before['CPU_Cycles']==after['CPU_Cycles']==0
         assert before['CPU_CycleLeft']==after['CPU_CycleLeft']
@@ -162,7 +171,7 @@ def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_mo
         assert [q['port'] for q in writes]==[0x43,0x40,0x40,0x3c8]+[0x3c9]*768
         before,end=rows[31:33]
         assert (before['segments'][1]['value'],before['cpu_regs.ip.dword[0]'])==(0x4ec3,0xbff)
-        assert bytes.fromhex(fetches[-2]['code_hex'])[:2]==bytes.fromhex('f36e')
+        assert bytes.fromhex(next(q for q in fetches if q['segments'][1]['value']==0x4ec3 and q['cpu_regs.ip.dword[0]']==0xbff)['code_hex'])[:2]==bytes.fromhex('f36e')
         memory=(folder/'source'/before['memory_file']).read_bytes()
         assert memory==(folder/'source'/end['memory_file']).read_bytes()
         start=before['segments'][3]['base']+(before['registers'][6]&0xffff)
@@ -178,17 +187,35 @@ def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_mo
         assert rgb==bytes(value&0x3f for value in memory[start:start+768])
         assert end['dac']['fields']['write_index']==0 and end['dac']['fields']['pel_index']==0
         result['io_writes']=io
+    if through_cmp:
+        before,after=rows[33:35]
+        assert (before['segments'][1]['value'],before['cpu_regs.ip.dword[0]'])==(0x4ec3,0x2f3b)
+        assert before['cpu.code.big']==0 and not before['paging.enabled']
+        memory=(folder/'source'/before['memory_file']).read_bytes()
+        assert memory==(folder/'source'/after['memory_file']).read_bytes()
+        code=before['segments'][1]['base']+before['cpu_regs.ip.dword[0]']
+        assert memory[code:code+4]==bytes.fromhex('3b06ba15')
+        address=before['segments'][3]['base']+0x15ba
+        operand=int.from_bytes(memory[address:address+2],'little')
+        expected=words(before);expected[8]+=4
+        expected[22]=(expected[22]&0xffff0000)|(expected[0]&0xffff)
+        expected[23]=(expected[23]&0xffff0000)|operand
+        expected[24]=(expected[24]&0xffff0000)|((expected[0]-operand)&0xffff)
+        expected[25]=23  # Original t_CMPw; raw flags/prev/oldcf stay unchanged.
+        assert words(after)==expected and clock(after)==clock(before)+1
+        assert before['CPU_Cycles']==after['CPU_Cycles']+1
+        result['cmp_operand']=operand
     scope='Actual original one-seed IRET/core/PIC/IRQ prefix, complete CPU/RAM/device/calendar/drawing/service observations, every fetch and50 complete linear-line outputs. Full39frame/27518mixedPCM/end600 output equals unobserved original. Renderer metadata is diagnostic; port renderer/scaler/startup/whole handler/full-sequence acceptance remains open.'
-    result.update(scope=scope,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb,fetches=fetches,draw_lines=lines,complete_original_acceptance=False)
+    result.update(scope=scope,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb,through_cmp=through_cmp,fetches=fetches,draw_lines=lines,complete_original_acceptance=False)
     (folder/'proof.json').write_text(json.dumps(result,indent=2)+'\n')
     print('PASS original',len(rows),'boundaries/',len(fetches),'fetches/50 drawn lines and unchanged complete output',flush=True)
     return result
 
-def capture(repo,root,baseline=None,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False):
+def capture(repo,root,baseline=None,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False,through_cmp=False):
     tree=repo/'third_party/dosbox-build/dosbox-0.74-3'
-    return capture_core(repo,root,baseline,make_observer=lambda repo:observer(repo,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb),
-                        check_capture=lambda repo,root:verify(repo,root,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb),
-                        source_wall_seconds=300 if through_outsb else 120,
+    return capture_core(repo,root,baseline,make_observer=lambda repo:observer(repo,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb,through_cmp=through_cmp),
+                        check_capture=lambda repo,root:verify(repo,root,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb,through_cmp=through_cmp),
+                        source_wall_seconds=300 if through_outsb or through_cmp else 120,
                         additional_inputs=(Path(__file__),repo/'tools/oracle/capture_cpu_pit_writes.py',repo/'tools/oracle/vga_callbacks.gdb.inc',repo/'tools/oracle/dac_state.gdb.inc',repo/'tools/oracle/dac_io.gdb.inc',
                         *[tree/p for p in ('src/hardware/vga_dac.cpp','src/hardware/iohandler.cpp','src/cpu/core_normal/string.h','include/render.h','src/hardware/timer.cpp','src/hardware/vga_draw.cpp','src/hardware/vga_misc.cpp','include/vga.h','src/gui/render.cpp','src/cpu/instructions.h','src/cpu/lazyflags.h','src/cpu/flags.cpp','include/logging.h','config.h','src/cpu/core_normal/prefix_none.h','src/cpu/core_normal/table_ea.h')]))
 
@@ -201,6 +228,7 @@ if __name__=='__main__':
     p.add_argument('--through-moffs',action='store_true')
     p.add_argument('--through-jns',action='store_true')
     p.add_argument('--through-outsb',action='store_true')
+    p.add_argument('--through-cmp',action='store_true')
     a=p.parse_args();repo=a.repo.resolve();root=a.output.resolve()
-    if a.verify_only:verify(repo,root,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word,through_moffs=a.through_moffs,through_jns=a.through_jns,through_outsb=a.through_outsb)
-    else:capture(repo,root,a.baseline.resolve() if a.baseline else None,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word,through_moffs=a.through_moffs,through_jns=a.through_jns,through_outsb=a.through_outsb)
+    if a.verify_only:verify(repo,root,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word,through_moffs=a.through_moffs,through_jns=a.through_jns,through_outsb=a.through_outsb,through_cmp=a.through_cmp)
+    else:capture(repo,root,a.baseline.resolve() if a.baseline else None,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word,through_moffs=a.through_moffs,through_jns=a.through_jns,through_outsb=a.through_outsb,through_cmp=a.through_cmp)

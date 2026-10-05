@@ -1564,6 +1564,52 @@ Private source/diagnostic reproduction is
 `/tmp/wasm-fist-outsb-whole-handler-capture.py` and
 `/tmp/wasm-fist-whole-handler-diagnostic.py`. Recover that reaching contract next.
 
+### Reached CMP register/r/m adoption
+
+Parent `b96686e92a5d4b4b3cfcf3bde774a6291c2d3a4c` reaches missing
+`3b06ba15` at `4ec3:2f3b` after the complete OUTSB prefix. Actual
+`CASE_W/D(0x3b)`, `RMGwEw/RMGdEd` and `CMPW/CMPD` subtract r/m from
+the register operand without register/RAM stores or eager flags. The
+existing ALU owner preserves dirty upper lazy words and raw flags/prev/oldcf.
+Generated engine C and all419 originals remain pristine.
+
+Reproduce the versioned contracts:
+
+```
+python3 -B tools/oracle/capture_cpu_vga_callbacks.py --repo . --output /tmp/wasm-fist-cmp-source --through-cmp
+python3 -B tools/oracle/capture_cpu_cmp.py --repo . --output /tmp/wasm-fist-cmp-programs
+python3 -B -m unittest discover -s tests -p test_cpu_cmp.py -v
+```
+
+All9760 complete original programs and14 controlled causal results match
+both release targets. Every31 CPU/cache words,three64-bit stack metadata
+words,all2MiB RAM and every ordered code/RAM access are compared. Coverage
+includes both code/operand/address/stack sizes,all segment overrides,all
+direct pairs/SIB forms,dirty lazy upper words and65 incoming lazy types.
+One fresh public source seed matches35 complete CPU/system/RAM/provider/
+cache/VGA/PIC/PIT/calendar/drawing/service/DAC/renderer states,3046 fetches,
+50 drawing requests and1544 I/O states on both targets. Parentb96686e fails
+the actual missing CMP after34 equal states/3045 fetches. Eager result flags
+first change only lazy type at the actual next fetch;all complete RAM/device
+states remain equal. Original39frames/27518mixedPCM/end600 remain unchanged.
+
+The frozen1580-input unfiltered gate passes221 tests,611 exact patches,
+sequential Native/WASM builds,six startup cases and all178 flows,exit0.
+Fresh complete30s production retains all2100 parent frame/end bytes,
+43 sound rows and47 unmasked packets. Original palettes/layouts/times
+agree;the same28 pixel failures start817/11704156us/byte8754 and final
+mixedPCM is absent. Commands and complete scoped provenance are in
+`tools/oracle/cpu_cmp_production_case.json`. This proves the bounded
+execution contract;actual application startup/whole IRQ transport,
+protected faults,renderer/scaler timing and original frame/audio parity
+remain open. The execution owner has no production consumer yet.
+
+Historical full-handler diagnosis supplies its own original seed and3383
+fetches through interrupted-code resume,with unchanged39frame/27518PCM/
+end600 output. The coupled diagnostic after CMP matches3051 initial
+fetches before missing JS78 at4ec3:2f50. This next instruction is excluded
+from CMP acceptance;recover its original contract before runtime adoption.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
@@ -1575,8 +1621,8 @@ IRQ0 prefix. Consume `cpu_vga_production_case.json` for the continuous21-state/
 Consume `cpu_segment_push_production_case.json` for the reached PUSH CS and
 complete segment-push contract. Consume `cpu_shr_production_case.json` for
 reached SHR word DS:0450,1 at2082:3b38 and complete shift contracts. Recover
-following handler instructions after the OUTSB/DAC contract in
-`cpu_outsb_production_case.json` (next reached CMP3b at4ec3:2f3b),
+following handler instructions after the CMP contract in
+`cpu_cmp_production_case.json` (next reached JS78 at4ec3:2f50),
 panning/vertical setup and renderer
 bodies, far-transfer/trap retirement and pending device-event
 paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service

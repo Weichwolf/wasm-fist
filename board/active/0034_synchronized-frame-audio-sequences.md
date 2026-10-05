@@ -577,6 +577,28 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   times agree;the same28 pixel failures start817/11704156us/byte8754 and final
   mixedPCM remains absent. Complete original frame/audio acceptance stays open.
 
+- Read-only current OUTSB production attribution at `b96686e`: the new
+  `/tmp/wasm-fist-pixel817-current/{run.py,proof.json}` reproduces event817
+  without changing any of the908 full 13-second native frame records or
+  original908-frame/574358-PCM/end13000 bytes. All five scan-band deadlines
+  agree. Both copies write the correct pixel212; native writes before the
+  first band and original after it, leaving original cached pixel16.
+  This confirms copy/band ordering, not a fitted delay or full parity.
+  Recover the preceding original protected SB IRQ/mixer/startup work in0003/0026.
+- Consume0026 CMP evidence in `tools/oracle/cpu_cmp_production_case.json`,
+  parentb96686e: all9760 original programs/14 causal results and complete
+  35-state/3046-fetch/1544-I/O replay match both targets. The parent reaches
+  missing CMP after34 equal states/3045 fetches; eager flags first differ
+  only at the actual lazy-type boundary. Fresh original39frame/27518PCM/
+  end600 output remains unchanged. The frozen1580-input unfiltered221-test/
+  611-patch/two-build/six-startup/all178-flow gate exits0 with419 unchanged
+  originals. Fresh complete30s production retains2100 parent frame/end bytes,
+  43 sound rows and47 unmasked packets;original palettes/layouts/times agree.
+  The same28 pixel failures start817/11704156us/byte8754 and final mixedPCM
+  remains absent. Actual startup/whole IRQ/mixer integration and complete
+  original frame/audio acceptance remain open;opcode fixtures alone do not
+  change production output.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete
