@@ -4,7 +4,7 @@ import re
 import subprocess
 
 
-def build(repo, directory, *, extra_opcodes=(), byte_opcodes=(), trace=False, lazy_input=False):
+def build(repo, directory, *, extra_opcodes=(), byte_opcodes=(), trace=False, lazy_input=False, segment_input=False):
     tree = repo/'third_party/dosbox-build/dosbox-0.74-3'
     core = tree/'src/cpu/core_normal'
     support = (core/'support.h').read_text().split('#include "helpers.h"', 1)[0]
@@ -38,6 +38,7 @@ def build(repo, directory, *, extra_opcodes=(), byte_opcodes=(), trace=False, la
     (directory/'original_branch_support.h').write_text(macros+'\n'+support+'\n'+pushes+'\n')
     output = directory/'original-execute'
     options=(['-DFIST_EXECUTE_FETCH_TRACE'] if trace else [])+(['-DFIST_EXECUTE_LAZY_INPUT'] if lazy_input else [])
+    if segment_input:options.append('-DFIST_EXECUTE_SEGMENT_INPUT')
     result = subprocess.run(['g++', '-O2', '-std=gnu++11', *options,
                     *subprocess.check_output(['sdl-config', '--cflags'], text=True).split(),
                     '-I'+str(tree/'include'), '-I'+str(tree), '-I'+str(directory), '-I'+str(repo/'tools/oracle'),

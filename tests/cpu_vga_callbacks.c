@@ -20,11 +20,22 @@ static void handler_prefix(void)
  FistExec engine={.bus=&context.bus,.in=read_byte,.out=write_byte};
  const char *names[]={"pit-control","pit-low","pit-high"};
  unsigned writes=0,after=0,jcxz=0;
+#ifdef FIST_VGA_PUSH_CS_CONTINUE
+ unsigned pushed=0;
+#endif
  for(unsigned count=0;;count++) {
   fist_cpu_require(count<10000);observe_cpu_to(trace,"fetch");char kind[64];
   if(after) {snprintf(kind,sizeof kind,"after-%s",names[writes-1]);state(kind);after=0;}
+#ifdef FIST_VGA_PUSH_CS_CONTINUE
+  if(jcxz==1) {state("after-jcxz");jcxz=2;}
+  if(pushed) {state("after-push-cs");break;}
+#else
   if(jcxz) {state("after-jcxz");break;}
+#endif
   unsigned op=fist_ram_resident_read(&context.bus,1,cpu.eip,1);
+#ifdef FIST_VGA_PUSH_CS_CONTINUE
+  if(op==0x0e) {state("before-push-cs");pushed=1;}
+#endif
   if(op==0xe6) {
    fist_cpu_require(writes<3);snprintf(kind,sizeof kind,"before-%s",names[writes]);state(kind);writes++;after=1;
   }

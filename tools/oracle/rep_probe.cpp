@@ -6,7 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 CPUBlock cpu;
+#ifdef FIST_EXECUTE_SEGMENT_INPUT
+static unsigned char memory[0x200000];
+#else
 static unsigned char memory[0x40000];
+#endif
 static unsigned load(unsigned address, unsigned width) {
     assert(address + width <= sizeof memory);
     unsigned value = 0;

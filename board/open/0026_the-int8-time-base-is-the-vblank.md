@@ -1347,6 +1347,44 @@ matrix/production results are in `tools/oracle/cpu_vga_production_case.json`.
 Actual startup, remaining handler/callbacks, renderer/scaler bodies and final
 mixedPCM remain open. These proofs do not establish complete sequence acceptance.
 
+
+### Reached PUSH CS and complete segment-push contracts
+
+At parent `cbaee6d`, the first unsupported instruction after the accepted VGA/
+PIT/JCXZ prefix is PUSH CS at `2082:3abb` (opcode `0e`). The new decoder route
+uses the existing operand-width stack owner and cached CS selector. Original
+CASE_W/CASE_D bodies and CPU_Push16/32 define the contract; address-size prefixes
+never select stack width. The source before/after pair changes only ESP/EIP,
+one CPU quantum and the two bytes at cached SS plus the decremented SP. Raw
+and lazy flags, other CPU/segment state and the rest of the full16MiB RAM survive.
+
+The fresh versioned source command
+`python3 -B tools/oracle/capture_cpu_vga_callbacks.py --repo . --output /tmp/wasm-fist-push-cs-source --through-push-cs`
+retains25 full source boundaries and2972 fetches, including before/after PUSH.
+Complete39-frame/27518-PCM/end600 output equals the unobserved original.
+Both optimized targets continuously match23 complete states,2972 full fetches
+and50 full line/end requests from one original initial seed. The previous
+decoder reaches the actual missing PUSH CS after22 equal states/2971 fetches.
+All3072 controlled programs and12 deliberate selector/operand/address/write/
+flag/upperESP fault comparisons pass, including silent original observations.
+
+Reproduce controlled coverage with
+`python3 -B tools/oracle/capture_cpu_segment_push.py --repo . --output /tmp/wasm-fist-segment-push`;
+run the reaching regression with
+`python3 -B -m unittest discover -s tests -p test_cpu_segment_push.py -v`.
+The controlled fixture explicitly supplies all cached segments and preserves
+all19 CPU/budget/lazy words,12 segment words, three original-width64-bit stack
+metadata words, all2MiB RAM and byte-fetch trace. Its original stack masks use
+the actual cpu.cpp constructor values, including zero DWORD notmask. Default
+controlled formats remain unchanged. The frozen full gate passes200 tests,
+exact patches, sequential Native/WASM builds, six startup cases and all178 flows,
+exit0, with419 unchanged originals. Complete30s production retains2100 parent
+frame/end bytes,43 sound rows and47 unmasked packets; original palettes/layouts/
+times agree. The same28 pixel failures begin817/11704156us/byte8754 and final
+mixedPCM is absent. Commands, original provenance, complete states and coverage
+are in `tools/oracle/cpu_segment_push_production_case.json`. Actual startup/whole
+handler/device/renderer/final mixer acceptance remains open.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
@@ -1355,8 +1393,10 @@ transport. Preserve the continuous startup/DOS and first reaching IRET/core/PIC
 frame proofs. Consume `cpu_irq_prefix_production_case.json` for the actual21-fetch first
 IRQ0 prefix. Consume `cpu_vga_production_case.json` for the continuous21-state/
 2968-fetch/50-line VGA/status/PIT prefix and actual service-relative re-arms.
-Recover following handler instructions (next reached PUSH CS), panning/vertical
-setup and renderer bodies, far-transfer/trap retirement and pending device-event
+Consume `cpu_segment_push_production_case.json` for the reached PUSH CS and
+complete segment-push contract. Recover following handler instructions (next
+reached SHR word DS:0450,1 at2082:3b38), panning/vertical setup and renderer
+bodies, far-transfer/trap retirement and pending device-event
 paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service
 only after the CPU frame owner returns. Snapshots, stopping and serialization
 belong in tests; captured states are never runtime initialization. Regress

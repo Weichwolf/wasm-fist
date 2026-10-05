@@ -504,6 +504,21 @@ Report the first unequal event/byte/sample. Missing, truncated or masked output 
   The same28 pixel failures start817/11704156us/byte8754 and final mixedPCM is
   absent. Real startup, whole handler/devices/renderer/mixer remain open.
 
+
+- Consume0026's actual PUSH CS in `tools/oracle/cpu_segment_push_production_case.json`:
+  one initial IRET seed matches23 complete CPU/system/RAM/provider/cache/VGA/PIC/
+  PIT/calendar/drawing/service states,2972 full fetches and50 line/end requests
+  through2082:3abb on both release targets. Original39frames/27518PCM/end600
+  remain unchanged. All3072 original segment-push programs and12 causal faults
+  pass with full CPU/cache/64-bit stack metadata/2MiB RAM/fetch comparisons and
+  silent-source equivalence. The previous decoder fails at the reached missing
+  opcode after22 equal states/2971 fetches. The unfiltered200-test/exact-patch/
+  both-build/six-startup/all178-flow gate exits0 with419 unchanged originals.
+  Fresh30s production retains2100 parent frame/end bytes,43 sound rows and47
+  packets; original palettes/layouts/times agree. The same28 pixel differences
+  start817/11704156us/byte8754 and final mixedPCM remains absent. Real startup,
+  remaining handler/device/renderer/mixer and full sequence acceptance are open.
+
 ## Next
 
 1. Recover the first remaining pixel producer at event 817 / 11704156 us in the complete

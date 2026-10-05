@@ -6,16 +6,18 @@ from cpu_execute_probe import build as original_build
 
 def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
-def target_build(repo,root,header=None):
+def target_build(repo,root,header=None,*,segment_input=False,stack_header=None):
     sys.path.insert(0,str(repo/'tests'));from test_port_io import tool
     root.mkdir(parents=True,exist_ok=True)
     (root/'controlled.c').write_bytes((repo/'tests/cpu_execute_controlled.c').read_bytes())
     if header is not None:(root/'fist_exec.h').write_text(header)
+    if stack_header is not None:(root/'fist_interrupt.h').write_text(stack_header)
+    flags=['-DFIST_EXECUTE_SEGMENT_INPUT'] if segment_input else []
     commands=[]
     for name,compiler,options,output,runner in (
         ('native',['gcc','-m32'],[],root/'native',[]),
         ('wasm',[tool('emcc','Git/emsdk/upstream/emscripten/emcc')],['-sNODERAWFS=1','-sEXIT_RUNTIME=1','-sALLOW_MEMORY_GROWTH=1'],root/'wasm.js',[tool('node','Git/emsdk/node/*/bin/node')])):
-        p=subprocess.run([*compiler,'-O2','-DNDEBUG','-DFIST_EXECUTE_FETCH_TRACE','-DFIST_EXECUTE_LAZY_INPUT','-I'+str(root),'-I'+str(repo/'re_out'),str(root/'controlled.c'),*options,'-o',str(output)],capture_output=True,text=True,timeout=120)
+        p=subprocess.run([*compiler,'-O2','-DNDEBUG','-DFIST_EXECUTE_FETCH_TRACE','-DFIST_EXECUTE_LAZY_INPUT',*flags,'-I'+str(root),'-I'+str(repo/'re_out'),str(root/'controlled.c'),*options,'-o',str(output)],capture_output=True,text=True,timeout=120)
         (root/(name+'-build.log')).write_text(p.stdout+p.stderr);assert p.returncode==0,p.stderr
         commands.append((name,[*runner,str(output)]))
     return commands

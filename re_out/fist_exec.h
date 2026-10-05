@@ -174,7 +174,7 @@ static unsigned fist_exec_fetched(FistExec *e) {
   else if(op==0xe9){int32_t d=width==4?(int32_t)fist_exec_fetch_code(e,&ip,4):(int16_t)fist_exec_fetch_code(e,&ip,2);ip=width==2?(uint16_t)(ip+d):ip+d;}
   else if(op>=0xb0 && op<=0xb7)fist_exec_reg_write(e,op&7,1,fist_exec_fetch_code(e,&ip,1));
   else if(op>=0x50 && op<=0x57)fist_cpu_push(e->bus,width,fist_exec_reg_read(e,op&7,width));
-  else if(op==0x06||op==0x1e)fist_cpu_push(e->bus,width,e->bus->cpu->segments[op==0x06?0:3].value);
+  else if(op==0x06||op==0x0e||op==0x1e)fist_cpu_push(e->bus,width,e->bus->cpu->segments[op==0x06?0:op==0x0e?1:3].value);
   else if(op==0x9c){fist_cpu_require(!e->bus->cpu->pmode || !(e->bus->cpu->flags.flags&FIST_FLAG_VM) || (e->bus->cpu->flags.flags&FIST_FLAG_IOPL)==FIST_FLAG_IOPL);fist_cpu_fill_flags(e->bus->cpu);fist_cpu_push(e->bus,width,e->bus->cpu->flags.flags&(width==4?0xfcffffu:0xffffu));}
   else if(op==0x88){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);fist_exec_write_op(e,q,1,fist_exec_reg_read(e,(m>>3)&7,1));}
   else if(op==0xc6){unsigned m=fist_exec_fetch_code(e,&ip,1);FistExecOperand q=fist_exec_operand(e,&ip,m,address,seg);fist_cpu_require(((m>>3)&7)==0);fist_exec_write_op(e,q,1,fist_exec_fetch_code(e,&ip,1));}
