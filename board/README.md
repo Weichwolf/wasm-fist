@@ -11,6 +11,7 @@ frozen reconstruction, not rewrite completion.
 | --- | --- |
 | 0040 | Reference freeze, reproducible softgl integration, strict tooling and rewrite boundaries. |
 | 0041 | First playable mission through bounded asset/world/control/HUD/audio steps. |
+| 0048 → 0049 | Scenario metadata/framing delivered → original KLC planes/palette and real terrain. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

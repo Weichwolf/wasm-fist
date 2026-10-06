@@ -16,8 +16,9 @@ and verification tools remain available without participating in the rewrite bui
 | `deps/softgl/` | Pinned renderer dependency, with no game state. |
 | `board/reference/`, `re_out/`, `patches/`, legacy shims/tools | Historical evidence only. |
 
-Only the renderer and diagnostic browser presentation exist so far. Other directories document
-ownership, not implemented subsystems. No placeholder game APIs promise behavior they lack.
+The renderer, diagnostic browser presentation and shared FSG envelope/metadata decoder exist so
+far. See `docs/scenario-format.md`; unit/chunk views retain undecoded gameplay records honestly.
+Other directories document ownership, not implemented subsystems. No placeholder game APIs promise behavior they lack.
 The diagnostic triangle uses fixture geometry and colors, not reconstructed game assets.
 
 The runtime and renderer are C11 throughout. meshoptimizer belongs to softgl's offline tools

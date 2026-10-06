@@ -25,6 +25,18 @@ target_compile_options(fist_build_options INTERFACE
     -fno-strict-aliasing -ffast-math)
 target_link_libraries(softgl PRIVATE fist_build_options)
 
+add_library(fist_assets STATIC src/assets/scenario.c)
+target_include_directories(fist_assets PUBLIC src)
+target_link_libraries(fist_assets PRIVATE fist_build_options)
+target_compile_options(fist_assets PRIVATE -Werror)
+add_executable(fist_scenario_probe tools/rewrite/scenario_probe.c)
+target_link_libraries(fist_scenario_probe PRIVATE fist_assets fist_build_options)
+target_compile_options(fist_scenario_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    set_target_properties(fist_scenario_probe PROPERTIES SUFFIX ".js")
+    target_link_options(fist_scenario_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
+endif()
+
 add_library(fist_render STATIC src/render/renderer.c)
 target_include_directories(fist_render PUBLIC src)
 target_link_libraries(fist_render PRIVATE softgl fist_build_options)
@@ -48,5 +60,9 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME renderer_integration COMMAND fist_renderer_probe)
+    add_test(NAME scenario_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_scenario.py
+        --target native --native-probe $<TARGET_FILE:fist_scenario_probe>)
 endif()

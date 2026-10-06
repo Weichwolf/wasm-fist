@@ -1,0 +1,190 @@
+{
+  "AZER1.FSG": {
+    "size": 10762,
+    "sha256": "d4d925290eac96939464a84bf1b71d2b43ec65fd5b397566953b7051f5b909c6"
+  },
+  "AZER2.FSG": {
+    "size": 15136,
+    "sha256": "97be2ede2af79ec672052b4b5e68699571633c076567a784452dc5a58abae789"
+  },
+  "AZER3.FSG": {
+    "size": 12670,
+    "sha256": "a21b93699e4d5af9a9eaa9a1f7dfaa834d334fcc16afbc69d043fb52425a1724"
+  },
+  "AZER4.FSG": {
+    "size": 10570,
+    "sha256": "34456316ec90e3e7e6b7b7db616a835fc77dd6f060dbfde7b5f3b5d3940282ef"
+  },
+  "AZER5.FSG": {
+    "size": 10535,
+    "sha256": "8278bfa474162ad2b6e5d5c6c3cb4d1c107db09399fbf730d7ebc63123a3de8d"
+  },
+  "AZER6.FSG": {
+    "size": 13293,
+    "sha256": "08700eb3925e300e21e65b3897349d12074d0dfa1f1d5a30b78d4a53088524c9"
+  },
+  "AZER7.FSG": {
+    "size": 11729,
+    "sha256": "fcc23a011ec0a53ec56f05898b4890ca2bba041bc7a5bfcb56ec26bd6505dbf5"
+  },
+  "CYPRUS1.FSG": {
+    "size": 14892,
+    "sha256": "dd68afdff4c696e91b42bc67ad0c99a2df1ed921b3ebba87c906dfb338fcb1b2"
+  },
+  "CYPRUS2.FSG": {
+    "size": 13062,
+    "sha256": "3e91355ac4dab0af43343f4336a5dc67775daf76c0890aaf1320cca91e8f910a"
+  },
+  "CYPRUS3.FSG": {
+    "size": 12879,
+    "sha256": "b9927b5f0dd34f2bd3885f9d5eaa9e9387d1a65fc4af97650352f63ad93315c0"
+  },
+  "CYPRUS4.FSG": {
+    "size": 11546,
+    "sha256": "29571983658edf856c39495653224fcc10c8c30c3c78d0288acc0e4951f12a2d"
+  },
+  "CYPRUS5.FSG": {
+    "size": 12992,
+    "sha256": "360c52c828aa1fbbed2d1d45842ce776efcc1644b344dff635cfb085d7b49b12"
+  },
+  "CYPRUS6.FSG": {
+    "size": 13489,
+    "sha256": "5e9a9561fb89a77b5ebb72805805687cc98b5348767412c5dcddc8f9d4def856"
+  },
+  "CYPRUS7.FSG": {
+    "size": 14831,
+    "sha256": "1c04186d0af933073155903dd4b9e7dca9b6a6385fe806abc9899051c04acc65"
+  },
+  "INDIA1.FSG": {
+    "size": 8819,
+    "sha256": "504de932328cc2f537bad4caa6f8e1f14cdb76b043d883406949409612ae1b9a"
+  },
+  "INDIA2.FSG": {
+    "size": 9089,
+    "sha256": "e7decb608a651eee2d185dfd1c9db1d144965a500d427e6d4fbebcbbb2682e7a"
+  },
+  "INDIA3.FSG": {
+    "size": 8244,
+    "sha256": "772dcf52195748ae780feb994150437624d8c6b2f56768b0bd88718a11c3b54b"
+  },
+  "INDIA4.FSG": {
+    "size": 10614,
+    "sha256": "6226cf77285c7c5fc216d01cb22e970fd8085b83aaffcb8ecb9b22d5148da309"
+  },
+  "INDIA5.FSG": {
+    "size": 12243,
+    "sha256": "104a684c07dc384cf49120865eca9dd4e1a2429a302cb0d338cbbd65414d344d"
+  },
+  "INDIA6.FSG": {
+    "size": 12304,
+    "sha256": "52dab9633730ab21d5fcd3d08885be5c3681c35633d6a4afdc639cb969864a5d"
+  },
+  "INDIA7.FSG": {
+    "size": 12191,
+    "sha256": "310e7b853377fb274c5a3e9046ee49518e72c85298d1d63b6dbbfb52bef57239"
+  },
+  "SAUDI1.FSG": {
+    "size": 9930,
+    "sha256": "d96e10eca6f52852f32c2e713da52cd269ce8efd45752c0ff52a4a3180859d2b"
+  },
+  "SAUDI2.FSG": {
+    "size": 9869,
+    "sha256": "c8e1b8c0a8d427845aebb6181556009f637312cab85be8049bea5e841cea33e1"
+  },
+  "SAUDI3.FSG": {
+    "size": 10091,
+    "sha256": "8a9d3f96a11a34f1170fe06fdd6a182210efb4bcae667b926e2101f95364339b"
+  },
+  "SAUDI4.FSG": {
+    "size": 10927,
+    "sha256": "c1a609e00ff1a4c25a9e5091216b9e0e7d7c4eba4f8df9e50a5a470d5726c713"
+  },
+  "SAUDI5.FSG": {
+    "size": 9638,
+    "sha256": "6126a499284e25934b964810833f15f5b99be8552fa79706fd4b189908999573"
+  },
+  "SAUDI6.FSG": {
+    "size": 11472,
+    "sha256": "c762865aca9391ce7ca99950f776c834fcbbc8369cb9f148ca1d890aafe8fa79"
+  },
+  "SAUDI7.FSG": {
+    "size": 12670,
+    "sha256": "2d516e85091406236d319d89055e677293f7414d1bd7a429bb2ec377c5fe7237"
+  },
+  "SYRIA1.FSG": {
+    "size": 13611,
+    "sha256": "ab4a34c6b9cb2101cbe7dc4092cc270e4b52b5a3ad4f19fd80ca264325b4f6d4"
+  },
+  "SYRIA2.FSG": {
+    "size": 13489,
+    "sha256": "27fe3df008907543f6dae78af0724aae7be57db73aa009699e34cc97c2c9e5aa"
+  },
+  "SYRIA3.FSG": {
+    "size": 15807,
+    "sha256": "0b9a822a6f8f6a489c8092ff39f8994984e01ca04715e82e5122962f56e2b1b4"
+  },
+  "SYRIA4.FSG": {
+    "size": 9773,
+    "sha256": "91f961c2b0052632ae54bcbc3c602657d2e9f0b4b0a6e321895c70837c5b29e2"
+  },
+  "SYRIA5.FSG": {
+    "size": 13672,
+    "sha256": "7ca74bed8e0081721b640d3fef37f5dbb1a8c0fb3bf988ef45059aafb9387989"
+  },
+  "SYRIA6.FSG": {
+    "size": 12574,
+    "sha256": "1b24ed20fcaf80fa95ebe6c36c7ee378308df383438f159d203743faca5cf24a"
+  },
+  "SYRIA7.FSG": {
+    "size": 13855,
+    "sha256": "567ad1fa1f535a7f65f177505c675a9919f925f25defbd3e62312dd7bb3e72d9"
+  },
+  "TRAIN1.FSG": {
+    "size": 8519,
+    "sha256": "0ad41551bf9f752ad8e02068540f8443fcffab55db62a5e4b75d2d1dae0a30b2"
+  },
+  "TRAIN2.FSG": {
+    "size": 9686,
+    "sha256": "7f9dbafc5c11983a63858b05edd933c1cc4325a41fc8106cfa7c71e247680fb8"
+  },
+  "TRAIN3.FSG": {
+    "size": 7856,
+    "sha256": "23b90903cc2e84ad5bf14ecaf150e39e91f28c10f626dba2785f91aa9e8ff7bd"
+  },
+  "TRAIN4.FSG": {
+    "size": 10113,
+    "sha256": "7d8c34ba0c163eab14678ccac76b302f3f7fa80c454c453a112f288beac57b59"
+  },
+  "UKRAINE1.FSG": {
+    "size": 12635,
+    "sha256": "c75ac71dcb09b0da93f483da23f348ec3a0b255c81dc0a800b0790dc3e9c85e8"
+  },
+  "UKRAINE2.FSG": {
+    "size": 16077,
+    "sha256": "c146038a61de5476f2eea42d359a747db933282dd7b6622e3c53e222d404efa6"
+  },
+  "UKRAINE3.FSG": {
+    "size": 15101,
+    "sha256": "5f11c8cddf15ecc845250d6a540f7cbe93c2f5867ee8860be9813f282e5819da"
+  },
+  "UKRAINE4.FSG": {
+    "size": 12940,
+    "sha256": "d059a3e647cec6b99b82d2a2c342ccaee434947c0ce5f08c70b41006139ce6d2"
+  },
+  "UKRAINE5.FSG": {
+    "size": 13297,
+    "sha256": "d217dac8f555e215a1b98d8e2f4fbf3ffffec4d15ee12ea1f82ff4d1ce4ffabf"
+  },
+  "UKRAINE6.FSG": {
+    "size": 14391,
+    "sha256": "7b50aeb4e4188f4de8ac9df3aece09560ab93fe3a9ac6200f6f7b5347edb246c"
+  },
+  "UKRAINE7.FSG": {
+    "size": 15310,
+    "sha256": "8ea78412cd05c579a31a6e9f7fe648d873f8877ddc7394ebca0f2b3d8f1ec3a5"
+  },
+  "UKRAINE8.FSG": {
+    "size": 19022,
+    "sha256": "c60a47493513e94abe51039ba589740220ff6f7c222199b8d13ae3273934245a"
+  }
+}

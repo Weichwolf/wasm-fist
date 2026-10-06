@@ -6,8 +6,9 @@ Development lives on `rewrite/softgl`. The reconstruction is frozen at annotated
 target; original frame and PCM bit identity is no longer required. Visual quality improves
 throughout development.
 
-**Current scope:** a working native/WASM renderer integration probe and the rewrite work plan.
-No playable game, asset decoder, simulation or audio engine exists yet. See
+**Current scope:** a native/WASM renderer integration probe and a shared C11 decoder for original
+scenario envelopes, metadata and unit-record framing, verified against all 47 local missions.
+Terrain/models, simulation, playable missions and audio are not implemented yet. See
 [architecture](docs/architecture.md), [reference status](docs/reference-status.md),
 [work queue](board/README.md) and [goal](docs/rewrite-goal.md).
 
@@ -62,6 +63,12 @@ This local reference worktree already exists after preparation. The existing Mak
 `re_out/`, `patches/`, shims and legacy tools remain reference material; new CMake targets do not
 link them. Legacy instructions are archived in [reconstruction README](docs/reconstruction-README.md).
 Historical acceptance claims remain scoped to that revision. New work follows [AGENTS.md](AGENTS.md).
+
+The scenario decoder and its bounded coverage are documented in [scenario format](docs/scenario-format.md).
+Synthetic scenarios run in the normal build gates. To verify the complete provisioned original
+corpus explicitly, run `python3 tools/rewrite/test_scenario.py --originals`; missing originals,
+changed hashes, incomplete output or skipped original coverage fail. This does not claim gameplay
+completion. Original binaries remain ignored.
 
 ## Browser verification
 
