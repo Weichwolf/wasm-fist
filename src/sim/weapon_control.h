@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-enum { FIST_WEAPON_NO_REQUEST = 255 };
+enum { FIST_WEAPON_NO_REQUEST = 255, FIST_WEAPON_MAX_STATIONS = 5 };
 
 typedef struct {
     uint8_t station_changed;
@@ -16,6 +16,19 @@ typedef struct {
     uint8_t notice_request;
     uint16_t notice_ticks;
 } fist_weapon_events;
+
+typedef struct {
+    uint16_t ammunition;
+    uint8_t station_count;
+    uint8_t selected;
+    uint8_t countdown;
+    uint8_t continuous;
+    uint8_t reserve;
+    uint8_t has_reserve;
+} fist_weapon_status;
+
+/* Read the selected store and mechanical timer, not firing eligibility. */
+int fist_weapon_inspect(const fist_vehicle_state *vehicle, fist_weapon_status *out);
 
 /* Recover complete original station setters for all four ground classes.
  * station is the original even code, including T80 code 8. Re-selecting the

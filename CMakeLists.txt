@@ -124,7 +124,7 @@ if(EMSCRIPTEN)
     target_link_options(fist_terrain_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
 endif()
 
-add_library(fist_render STATIC src/render/renderer.c src/render/terrain_scene.c src/render/vehicle_scene.c)
+add_library(fist_render STATIC src/render/renderer.c src/render/terrain_scene.c src/render/vehicle_scene.c src/render/hud.c)
 target_include_directories(fist_render PUBLIC src)
 target_link_libraries(fist_render PRIVATE softgl fist_assets fist_build_options)
 target_compile_options(fist_render PRIVATE -Werror)

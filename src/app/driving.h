@@ -22,8 +22,24 @@ enum {
     FIST_DRIVE_TURRET_RIGHT = 32,
     FIST_DRIVE_THROTTLE_OFF = 64,
     FIST_DRIVE_PAUSE = 128,
-    FIST_DRIVE_KEYS = 255
+    FIST_DRIVE_WEAPON_1 = 256,
+    FIST_DRIVE_WEAPON_2 = 512,
+    FIST_DRIVE_WEAPON_3 = 1024,
+    FIST_DRIVE_WEAPON_4 = 2048,
+    FIST_DRIVE_WEAPON_5 = 4096,
+    FIST_DRIVE_NEXT_WEAPON = 8192,
+    FIST_DRIVE_KEYS = 16383
 };
+
+typedef struct {
+    uint64_t selections;
+    uint64_t reloads;
+    uint64_t voice_requests;
+    uint64_t notice_deadline;
+    /* Feedback/verification of requests. This is not an audio playback queue. */
+    uint8_t voice_request;
+    uint8_t notice;
+} fist_driving_feedback;
 
 typedef struct {
     uint32_t height_side;
@@ -37,6 +53,7 @@ typedef struct {
     fist_vehicle_visual visual;
     fist_klc_image installed_height;
     fist_vehicle_state player;
+    fist_driving_feedback feedback;
     uint64_t clock_phase;
     uint64_t ticks;
     uint16_t keys;
@@ -58,7 +75,8 @@ void fist_driving_destroy(fist_driving *driving);
 /* Advance the prior input through the full elapsed interval, then install new
  * keys at its boundary. Integer rational PIT cadence is independent of drawing.
  * Rising pause edges freeze simulation time; paused intervals do not accumulate.
- * Return -1 on invalid state/input, preserving player/clock/keys/pause. */
+ * Weapon press edges select/cycle at the boundary only while unpaused.
+ * Invalid state/input preserves player, feedback, clock, keys and pause. */
 int fist_driving_advance(fist_driving *driving, fist_driving_interval interval);
 /* Canonical ASCII keyboard bindings are shared, including case folding. */
 uint16_t fist_driving_key(int key);

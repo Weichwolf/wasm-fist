@@ -29,6 +29,8 @@ async function startDrivingPreview() {
     }
     function ascii(event) {
         if (/^Key[A-Z]$/.test(event.code)) return event.code.charCodeAt(3);
+        if (/^Digit[1-5]$/.test(event.code)) return event.code.charCodeAt(5);
+        if (event.code === 'Tab') return 9;
         return event.code === 'Space' ? 32 : 0;
     }
     function key(event) {

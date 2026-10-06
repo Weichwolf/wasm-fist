@@ -1,5 +1,6 @@
 #include "render/renderer.h"
 #include "assets/terrain.h"
+#include "render/hud.h"
 #include "render/terrain_scene.h"
 
 #include <GL/softgl.h>
@@ -35,6 +36,14 @@ void fist_renderer_destroy(fist_renderer *renderer) {
 
 const uint8_t *fist_renderer_pixels(fist_renderer *renderer) {
     return softgl_read_rgba8(renderer->context);
+}
+
+int fist_renderer_draw_hud(fist_renderer *renderer, const fist_hud *hud) {
+    if (renderer == NULL) {
+        return -1;
+    }
+    softgl_make_current(renderer->context);
+    return fist_draw_hud(hud);
 }
 
 int fist_renderer_draw_probe(fist_renderer *renderer) {

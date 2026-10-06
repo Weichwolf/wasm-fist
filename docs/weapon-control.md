@@ -3,9 +3,10 @@
 `src/sim/weapon_control.c` owns the recovered station selection, pending fire command,
 gun/recoil prefix and reload phase for all four ground classes. It consumes the typed actor
 from `vehicle_state.c`, preserving all unrelated fields and ammunition. Native and WASM use
-the same implementation. These methods are not yet connected to the driving session; firing
-eligibility, live projectiles/hits, ready-rack replenishment and audible playback remain open
-within WI 0065/0041.
+the same implementation. Selection, gun/recoil and reload stages are connected to the shared
+driving session and its C/softgl display. Firing eligibility, live projectiles/hits, ready-rack
+replenishment and audible playback remain open within WI 0065/0041. The pending fire command
+has no device binding until its consuming stages exist.
 
 Initialization now preserves original selected station `+91`, loaded station `+a5`, pending
 trigger `+92`, recoil `+3c`, gun elevation word `+38` and authored elevation byte `+a7`.
@@ -57,6 +58,31 @@ selected ready cue only when its store is nonempty; M3/BMP mark completion regar
 ammunition. A ready cue of 255 requests no voice. Timer expiry does not create ammunition.
 Voice/notice IDs are boundary requests. Original selected-player/side/mute/time gates and
 actual sample playback require their later shared owners; these events do not imply sound.
+
+## Driving feedback
+
+`fist_weapon_inspect` is the single read owner for the selected ammunition, station count,
+continuous-station distinction, mechanical countdown and class reserve. It rejects invalid
+station codes and preserves its output on failure. This query does not claim firing eligibility.
+
+The shared driving clock executes the gun/recoil prefix before motion and reload dispatch after
+the actual phase increment. Digit 1–5 press edges select existing stations; Tab cycles. Paused
+presses are consumed without deferred selection. Multiple simultaneous edges select ascending
+digits, then cycle; held/repeated keys never restart a selection. Each mapped command also runs
+the original aae8 take-control refresh, including a re-selection. A fifth-station press on a
+four-station class has no mapped command.
+
+The session retains selection/reload/request counters, the last requested voice ID and a notice
+with its deadline in simulation ticks. A failed interval preserves feedback together with the
+complete player, clock and held input. These observations are not an audio playback queue;
+audible timing and complete sample-event delivery remain separate work.
+
+`render/hud.c` draws the station ordinal, its actual ammunition, applicable reserve and bindings
+with authored glyphs in softgl. EMPTY, RELOADING, SELECTED and PAUSED describe the delivered
+mechanical state. SELECTED deliberately does not promise that a fire command is eligible.
+The opaque panel retains complete frame alpha and appears identically through the shared C
+renderer in SDL and browser presentation. See [driving scene](driving-scene.md) for end-to-end
+commands, original comparisons and visual evidence.
 
 ## Original evidence and verification
 

@@ -4,6 +4,7 @@
 #include "assets/source.h"
 #include "probe_io.h"
 #include "probe_source.h"
+#include "sim/weapon_control.h"
 #include "vehicle_probe_io.h"
 #include <inttypes.h>
 #include <stddef.h>
@@ -26,10 +27,22 @@ static uint8_t *read_path(const char *path, size_t *size) {
     return bytes;
 }
 
-static void write_state(const fist_driving *driving) {
+static int write_state(const fist_driving *driving) {
+    fist_weapon_status weapon = {0};
+    if (fist_weapon_inspect(&driving->player, &weapon) != 0) {
+        return -1;
+    }
     printf("clock %" PRIu64 " %" PRIu64 " %u %u\n", driving->ticks, driving->clock_phase,
            (unsigned)driving->keys, (unsigned)driving->paused);
     fist_probe_write_vehicle_state(&driving->player);
+    const fist_driving_feedback *feedback = &driving->feedback;
+    printf("feedback %" PRIu64 " %" PRIu64 " %" PRIu64 " %u %u %" PRIu64 "\n", feedback->selections,
+           feedback->reloads, feedback->voice_requests, (unsigned)feedback->voice_request,
+           (unsigned)feedback->notice, feedback->notice_deadline);
+    printf("weapon_status %u %u %u %u %u %u %u\n", (unsigned)weapon.ammunition,
+           (unsigned)weapon.station_count, (unsigned)weapon.selected, (unsigned)weapon.countdown,
+           (unsigned)weapon.continuous, (unsigned)weapon.reserve, (unsigned)weapon.has_reserve);
+    return 0;
 }
 
 int main(int argc, char **argv) {
@@ -60,15 +73,16 @@ int main(int argc, char **argv) {
         free(request);
         return EXIT_FAILURE;
     }
-    write_state(&driving);
-    for (size_t offset = HEADER_BYTES; offset < request_size; offset += INTERVAL_BYTES) {
+    int result = write_state(&driving);
+    for (size_t offset = HEADER_BYTES; offset < request_size && result == 0;
+         offset += INTERVAL_BYTES) {
         const fist_driving_interval interval = {fist_read_u32le(request + offset),
                                                 fist_read_u16le(request + offset + KEYS_OFFSET)};
         printf("advance %d\n", fist_driving_advance(&driving, interval));
-        write_state(&driving);
+        result = write_state(&driving);
     }
     free(request);
     fist_driving_destroy(&driving);
     fist_driving_destroy(&driving);
-    return EXIT_SUCCESS;
+    return result == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

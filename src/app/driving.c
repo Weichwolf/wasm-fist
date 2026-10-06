@@ -12,6 +12,7 @@
 #include "sim/ground.h"
 #include "sim/random.h"
 #include "sim/vehicle_state.h"
+#include "sim/weapon_control.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -33,11 +34,17 @@ int fist_driving_load(const fist_scenario *scenario, const fist_asset_source *so
         return -1;
     }
     fist_driving driving = {0};
+    driving.feedback.voice_request = FIST_WEAPON_NO_REQUEST;
+    driving.feedback.notice = FIST_WEAPON_NO_REQUEST;
     fist_random random = options->random;
     int status = fist_units_decode(scenario, &driving.units);
     const fist_unit_definition *player = fist_units_roster_get(&driving.units, 0);
     if (status == 0) {
         status = fist_vehicle_initialize(player, &random, 0, &driving.player);
+    }
+    fist_weapon_status weapon = {0};
+    if (status == 0) {
+        status = fist_weapon_inspect(&driving.player, &weapon);
     }
     if (status == 0) {
         status = fist_vehicle_visual_decode(player, &driving.visual);
@@ -67,6 +74,66 @@ static int direction(uint16_t keys, uint16_t positive, uint16_t negative) {
     return ((keys & positive) != 0) - ((keys & negative) != 0);
 }
 
+typedef struct {
+    fist_vehicle_state player;
+    fist_driving_feedback feedback;
+    uint64_t tick;
+} driving_update;
+
+static int record_weapon_events(driving_update *update, const fist_weapon_events *events) {
+    fist_driving_feedback *feedback = &update->feedback;
+    if ((events->station_changed != 0 && feedback->selections == UINT64_MAX) ||
+        (events->timer_expired != 0 && feedback->reloads == UINT64_MAX) ||
+        (events->voice_request != FIST_WEAPON_NO_REQUEST &&
+         feedback->voice_requests == UINT64_MAX) ||
+        (events->notice_request != FIST_WEAPON_NO_REQUEST &&
+         update->tick > UINT64_MAX - events->notice_ticks)) {
+        return -1;
+    }
+    feedback->selections += events->station_changed;
+    feedback->reloads += events->timer_expired;
+    if (events->voice_request != FIST_WEAPON_NO_REQUEST) {
+        ++feedback->voice_requests;
+        feedback->voice_request = events->voice_request;
+    }
+    if (events->notice_request != FIST_WEAPON_NO_REQUEST) {
+        feedback->notice = events->notice_request;
+        feedback->notice_deadline = update->tick + events->notice_ticks;
+    }
+    if (update->tick >= feedback->notice_deadline) {
+        feedback->notice = FIST_WEAPON_NO_REQUEST;
+    }
+    return 0;
+}
+
+static int weapon_edges(driving_update *update, uint16_t edges) {
+    static const uint16_t keys[] = {FIST_DRIVE_WEAPON_1, FIST_DRIVE_WEAPON_2, FIST_DRIVE_WEAPON_3,
+                                    FIST_DRIVE_WEAPON_4, FIST_DRIVE_WEAPON_5};
+    fist_weapon_status status = {0};
+    if (fist_weapon_inspect(&update->player, &status) != 0) {
+        return -1;
+    }
+    for (size_t slot = 0; slot < sizeof(keys) / sizeof(keys[0]); ++slot) {
+        if ((edges & keys[slot]) != 0 && slot < status.station_count) {
+            fist_weapon_events events = {0};
+            if (fist_weapon_select(&update->player, (uint8_t)(slot * 2), &events) != 0 ||
+                fist_driver_take_control(&update->player) != 0 ||
+                record_weapon_events(update, &events) != 0) {
+                return -1;
+            }
+        }
+    }
+    if ((edges & FIST_DRIVE_NEXT_WEAPON) != 0) {
+        fist_weapon_events events = {0};
+        if (fist_weapon_cycle(&update->player, &events) != 0 ||
+            fist_driver_take_control(&update->player) != 0 ||
+            record_weapon_events(update, &events) != 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 int fist_driving_advance(fist_driving *driving, fist_driving_interval interval) {
     const uint16_t keys = interval.keys;
     const uint64_t microseconds = UINT64_C(1000000);
@@ -94,18 +161,29 @@ int fist_driving_advance(fist_driving *driving, fist_driving_interval interval) 
     if (driving->ticks > UINT64_MAX - count) {
         return -1;
     }
-    fist_vehicle_state player = driving->player;
+    driving_update update = {driving->player, driving->feedback, driving->ticks};
     for (uint64_t tick = 0; tick < count; ++tick) {
-        if (fist_driver_step(&player, &driving->installed_height, &controls) != 0) {
+        fist_weapon_events events = {0};
+        if (fist_driver_step(&update.player, &driving->installed_height, &controls, &events) != 0) {
+            return -1;
+        }
+        ++update.tick;
+        if (record_weapon_events(&update, &events) != 0) {
             return -1;
         }
     }
-    driving->player = player;
-    driving->clock_phase = phase;
-    driving->ticks += count;
+    uint8_t paused = driving->paused;
     if ((keys & FIST_DRIVE_PAUSE) != 0 && (driving->keys & FIST_DRIVE_PAUSE) == 0) {
-        driving->paused ^= 1;
+        paused ^= 1;
     }
+    if (paused == 0 && weapon_edges(&update, keys & (uint16_t)~driving->keys) != 0) {
+        return -1;
+    }
+    driving->player = update.player;
+    driving->feedback = update.feedback;
+    driving->clock_phase = phase;
+    driving->ticks = update.tick;
+    driving->paused = paused;
     driving->keys = keys;
     return 0;
 }
@@ -131,6 +209,18 @@ uint16_t fist_driving_key(int key) {
         return FIST_DRIVE_THROTTLE_OFF;
     case 'P':
         return FIST_DRIVE_PAUSE;
+    case '1':
+        return FIST_DRIVE_WEAPON_1;
+    case '2':
+        return FIST_DRIVE_WEAPON_2;
+    case '3':
+        return FIST_DRIVE_WEAPON_3;
+    case '4':
+        return FIST_DRIVE_WEAPON_4;
+    case '5':
+        return FIST_DRIVE_WEAPON_5;
+    case '\t':
+        return FIST_DRIVE_NEXT_WEAPON;
     default:
         return 0;
     }

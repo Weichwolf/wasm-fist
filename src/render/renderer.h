@@ -3,6 +3,7 @@
 
 #include "assets/terrain.h"
 #include "assets/units.h"
+#include "render/hud.h"
 #include "render/model_bitmap.h"
 
 #include <stdint.h>
@@ -36,6 +37,7 @@ const uint8_t *fist_renderer_pixels(fist_renderer *renderer);
 
 /* Diagnostic geometry for dependency/presentation verification, not gameplay. */
 int fist_renderer_draw_probe(fist_renderer *renderer);
+int fist_renderer_draw_hud(fist_renderer *renderer, const fist_hud *hud);
 
 /* Render a successfully loaded fist_terrain bundle around a finite camera pose.
  * The bundle is borrowed only during the draw; queued work is completed before

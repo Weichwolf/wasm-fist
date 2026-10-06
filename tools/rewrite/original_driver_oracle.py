@@ -1,21 +1,22 @@
-"""Execute complete original manual actions/movement/turret and contact stages.
+"""Execute original manual, gun/recoil, reload, selection and contact stages.
 
 This verifies the declared driving subset, not a full original class/mission tick.
-Actual class-entry altitude MOVs execute at their declared boundary; the
-caller's phase progression is explicit.
+Actual class-entry altitude MOVs and phase ADD/index instructions execute at
+their declared boundaries. Selection also runs the complete control refresh.
 """
 import struct
 
-from original_vehicle_motion_oracle import OriginalVehicleMotionOracle, MOTION, TURRET
+from original_vehicle_motion_oracle import MOTION, TURRET
 from original_ground_oracle import OriginalGroundOracle
 from original_unit_oracle import DGROUP
+from original_weapon_control_oracle import OriginalWeaponControlOracle
 
 CLASS_ENTRY = (0x7c1d, 0x87df, 0x902c, 0x97d5)
 
 
 class OriginalDriverOracle:
     def __init__(self, side, pixels):
-        self.motion = OriginalVehicleMotionOracle()
+        self.motion = OriginalWeaponControlOracle()
         self.machine = self.motion.machine()
         self.ground = OriginalGroundOracle()
         self.field = self.ground.prepare(side, pixels)
@@ -60,8 +61,18 @@ class OriginalDriverOracle:
         if self.motion.image[entry:entry + len(transfer)] != transfer:
             raise RuntimeError('Original class altitude transfer differs from its pin')
         self.motion.execute(machine, entry, entry + len(transfer), 0)
+        self.motion.begin(machine, kind)
         self.motion.call(machine, MOTION[kind])
         self.motion.call(machine, TURRET[kind])
+        self.motion.reload_phase(machine, kind, advance=True)
         current = bytearray(machine.mem_read(DGROUP + 0x7000, 251))
-        current[0x3d] = (current[0x3d] + 2) % 256
         return self.ground.contact(self.field, [(identity, generation, bytes(current))])[0]
+
+    def select(self, record, operation, argument):
+        from unicorn.x86_const import UC_X86_REG_DI
+        identity, generation, raw = record
+        selected = self.motion.transitions([(raw, 1, operation, argument)])[0][0]
+        self.machine.mem_write(DGROUP + 0x7000, selected)
+        self.machine.reg_write(UC_X86_REG_DI, 0x7000)
+        self.take_control(self.machine)
+        return identity, generation, bytes(self.machine.mem_read(DGROUP + 0x7000, 251))

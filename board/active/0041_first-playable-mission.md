@@ -56,7 +56,12 @@ no displayed frame or mission/control clock. Closed 0064 connects those stages t
 continuous controlled native SDL2/browser scene with current model/camera inputs, rational PIT
 clock, held keys/pause/focus, all-47-player manual stage traces, actual visual and sanitizer
 evidence. Only the player is displayed; targeting, full class tick, other-unit AI, combat,
-objectives, HUD and audio remain open.
+objectives and audio remain open. Active 0065 now supplies recovered station selection,
+gun/recoil and mechanical reload stages in that shared clock, with press-edge digit/Tab input
+and a C/softgl weapon/ammunition/reserve panel. Complete timed traces for all four classes and
+all 47 original players, original method comparisons, actual native/browser visual/device gates
+and sanitizer checks pass. Live firing/projectiles/hits and audible event delivery remain open;
+this does not yet make the mission playable to completion.
 
 ## Next
 

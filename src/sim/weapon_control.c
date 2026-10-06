@@ -9,7 +9,7 @@
 enum {
     STATION_STEP = 2,
     LAST_CYCLE_STATION = 6,
-    STATION_COUNT = 5,
+    STATION_COUNT = FIST_WEAPON_MAX_STATIONS,
     REFRESH_COMPONENTS = 6,
     COMPONENT_REFRESH = 3,
     RELOAD_PHASE_MASK = 0x1e,
@@ -84,6 +84,25 @@ static uint16_t ammunition(const fist_vehicle_state *vehicle, size_t slot) {
     /* Only the fifth T80 station uses the separate initialized word +b4. */
     return slot < FIST_VEHICLE_WEAPON_SLOTS ? vehicle->weapons.rounds[slot]
                                             : vehicle->weapons.class_parameter;
+}
+
+int fist_weapon_inspect(const fist_vehicle_state *vehicle, fist_weapon_status *out) {
+    if (!valid_vehicle(vehicle) || out == NULL) {
+        return -1;
+    }
+    const weapon_profile *profile = &profiles[vehicle->type];
+    const uint8_t selected = vehicle->weapons.selected;
+    if (selected % STATION_STEP != 0 || selected / STATION_STEP >= profile->station_count) {
+        return -1;
+    }
+    *out = (fist_weapon_status){.ammunition = ammunition(vehicle, selected / STATION_STEP),
+                                .station_count = profile->station_count,
+                                .selected = selected,
+                                .countdown = vehicle->reload_countdown,
+                                .continuous = selected == profile->continuous_station,
+                                .reserve = vehicle->weapons.ready_stock,
+                                .has_reserve = profile->stock_station != FIST_WEAPON_NO_REQUEST};
+    return 0;
 }
 
 static void start_reload(fist_vehicle_state *vehicle, uint8_t station, fist_weapon_events *events) {

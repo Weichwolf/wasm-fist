@@ -6,6 +6,7 @@
 #include "probe_source.h"
 #include "render/renderer.h"
 #include "sim/vehicle_state.h"
+#include "sim/weapon_control.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -104,9 +105,19 @@ enum {
     VALUE_THROTTLE,
     VALUE_PAUSED,
     VALUE_KEYS,
-    VALUE_HEIGHT
+    VALUE_HEIGHT,
+    VALUE_WEAPON,
+    VALUE_AMMUNITION,
+    VALUE_RELOAD,
+    VALUE_SELECTIONS,
+    VALUE_RELOADS,
+    VALUE_TYPE
 };
 double fist_preview_value(int field) {
+    fist_weapon_status weapon = {0};
+    if (renderer == NULL || fist_weapon_inspect(&driving.player, &weapon) != 0) {
+        return -1;
+    }
     switch (field) {
     case VALUE_TICKS:
         return (double)driving.ticks;
@@ -128,6 +139,18 @@ double fist_preview_value(int field) {
         return driving.keys;
     case VALUE_HEIGHT:
         return driving.player.ground_height;
+    case VALUE_WEAPON:
+        return weapon.selected;
+    case VALUE_AMMUNITION:
+        return weapon.ammunition;
+    case VALUE_RELOAD:
+        return weapon.countdown;
+    case VALUE_SELECTIONS:
+        return (double)driving.feedback.selections;
+    case VALUE_RELOADS:
+        return (double)driving.feedback.reloads;
+    case VALUE_TYPE:
+        return driving.player.type;
     default:
         return -1;
     }
@@ -260,9 +283,9 @@ static int native_display(void) {
         SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         return -1;
     }
-    SDL_Window *window =
-        SDL_CreateWindow("Armored Fist | W/S A/D Q/E Space P", SDL_WINDOWPOS_CENTERED,
-                         SDL_WINDOWPOS_CENTERED, FRAME_WIDTH, FRAME_HEIGHT, SDL_WINDOW_RESIZABLE);
+    SDL_Window *window = SDL_CreateWindow("Armored Fist | W/S A/D Q/E Space P | 1-5 Tab weapons",
+                                          SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                          FRAME_WIDTH, FRAME_HEIGHT, SDL_WINDOW_RESIZABLE);
     SDL_Renderer *display =
         window == NULL ? NULL : SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
     SDL_Texture *texture =

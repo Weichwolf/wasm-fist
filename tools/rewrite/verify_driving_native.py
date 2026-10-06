@@ -16,7 +16,11 @@ def main():
     parser.add_argument('--native-preview', type=pathlib.Path,
                         default=pathlib.Path('/tmp/wasm-fist-rewrite/native/fist_driving_preview'))
     parser.add_argument('--output-dir', type=pathlib.Path)
+    parser.add_argument('--settle-seconds', type=float, default=.25,
+                        help='Allow display publication after input; use 1 for sanitizer builds')
     args = parser.parse_args()
+    if not 0 < args.settle_seconds <= 5:
+        parser.error('Display settlement must be positive and at most five seconds')
     with tempfile.TemporaryDirectory(prefix='wasm-fist-driving-display-', dir='/tmp') as temporary:
         output = args.output_dir.resolve() if args.output_dir else pathlib.Path(temporary)
         if not output.is_relative_to(pathlib.Path('/tmp')) or output == pathlib.Path('/tmp'):
@@ -46,9 +50,9 @@ def main():
             if window is None:
                 raise RuntimeError('Native scene did not create its window')
             xdo('windowfocus', '--sync', window)
-            time.sleep(.1)
+            time.sleep(args.settle_seconds)
             xdo('key', '--window', window, 'p')
-            time.sleep(.1)
+            time.sleep(args.settle_seconds)
             def capture(name):
                 path = output / (name + '.png')
                 subprocess.run(['import', '-window', window, str(path)], env=env, check=True, timeout=5)
@@ -66,13 +70,33 @@ def main():
             time.sleep(1.5)
             xdo('keyup', '--window', window, 'w', 'd', 'e')
             xdo('key', '--window', window, 'p')
-            time.sleep(.1)
+            time.sleep(args.settle_seconds)
             after = capture('native-after')
             assert after != before, 'Actual held SDL inputs must change the displayed scene'
+            xdo('key', '--window', window, '2')
+            time.sleep(args.settle_seconds)
+            assert capture('native-weapon-paused') == after, 'Paused weapon presses must not change the scene'
+            xdo('key', '--window', window, 'p')
+            xdo('key', '--window', window, '1', '2')
+            xdo('keydown', '--window', window, '1')
+            time.sleep(.1)
+            xdo('keydown', '--window', window, '1')
+            xdo('keyup', '--window', window, '1')
+            xdo('key', '--window', window, 'p')
+            time.sleep(args.settle_seconds)
+            selected = capture('native-weapon-selected')
+            assert selected != after, 'Actual SDL weapon selection must reach the displayed HUD'
+            time.sleep(.15)
+            assert capture('native-weapon-stable') == selected, 'Paused reload/weapon display remains stable'
+            xdo('key', '--window', window, 'p')
+            xdo('key', '--window', window, 'Tab')
+            xdo('key', '--window', window, 'p')
+            time.sleep(args.settle_seconds)
+            assert capture('native-weapon-cycled') != selected, 'SDL Tab must update the displayed weapon and store'
             xdo('key', '--window', window, 'p')
             xdo('keydown', '--window', window, 'w')
             xdo('windowfocus', '0')
-            time.sleep(.15)
+            time.sleep(args.settle_seconds)
             frozen = capture('native-focus-lost')
             xdo('windowfocus', '--sync', window)
             xdo('keyup', '--window', window, 'w')

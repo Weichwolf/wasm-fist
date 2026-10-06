@@ -71,18 +71,63 @@ Verified on 2026-10-06:
 
 Temporary verification logs and the sanitizer executable are removed after commit/push.
 
-The continuous scene still has no firing command, ammunition/reload feedback, live projectile,
-hit, audio or outcome behavior. These stage implementations do not satisfy this item's Accept.
+The stage-only verification above did not integrate device commands or visible feedback. The
+following step connects selection, gun/recoil and reload to the continuous session.
+
+### Shared driving integration and visible weapon panel
+
+The driving session now applies digit 1–5 and Tab press edges through the recovered selectors
+and aae8 take-control refresh. Only T80 maps digit 5; its fifth store remains the distinct +b4
+word. Held/repeated inputs do not restart selection, paused inputs are ignored without deferral,
+and simultaneous edges execute ascending digits then Tab. The rational PIT owner runs gun/recoil
+before motion and reload after the phase increment. Complete player/clock/input/feedback
+publication is transactional on interval failure.
+
+One read-only weapon query supplies the selected store, class station count, countdown,
+continuous-station distinction and reserve. One C/softgl overlay supplies readable station,
+ammunition/reserve, mechanical status and bindings on both platforms. It uses an authored font
+and opaque panel, preserving complete framebuffer alpha. SELECTED is not firing eligibility.
+The session records selection/reload/request counts, last voice ID and notice deadline; these
+are feedback observations, not a sound playback queue. See `docs/driving-scene.md` and
+`docs/weapon-control.md` for exact contracts and reproduction commands.
+
+Verified on 2026-10-06:
+
+- `bash tools/rewrite/build.sh all`: all 15 native CTest gates and complete WASM gates pass.
+- `python3 tools/rewrite/check_style.py`: strict format/tidy pass for all 43 owned C units.
+- Pinned `test_driving.py --originals --oracle`: all nine groups pass in 25.934 seconds,
+  without skips. Complete typed player/clock/input/feedback/store traces cover all four classes,
+  selection/repeat/pause/capability edges, reload partitioning, malformed station rejection and
+  all 47 original players over eight installed 2048-square fields on both targets. Original
+  setters/control refresh, gun/recoil, phase ADD/index and reload methods join the complete
+  motion/turret/contact returns at the explicitly declared manual boundary.
+- Production-flags ASan/UBSan/LSan driving probe: all nine groups and the original corpus pass
+  in 5.162 seconds, without skips. Actual sanitizer SDL runs in isolated AZER1/INDIA3 copies
+  also pass complete-frame, input/pause/weapon/focus and clean-shutdown assertions.
+- Actual production SDL and Chromium gates pass with isolated AZER1/INDIA3 originals and
+  constructed M1/T80 fixtures. Chromium checks every canvas byte against the current complete
+  C RGBA frame, reload expiry, station stores, T80's fifth store, worker startup/failure/teardown
+  and input/focus behavior. Native gates inject real SDL keys and check complete changing/stable
+  frames and clean exit. Native/browser images were viewed, including the M1 RELOADING→SELECTED
+  panel, M3 reserve 10 and T80 station 5/ammunition 20. Compact reviewed captures remain under
+  `/tmp/wasm-fist-0065-scene-*-review`; temporary input copies, builds and logs are removed.
+
+Original snapshots may already select/load station 2. The new device tests explicitly switch
+stores before timing a reload; they do not change originals or presume a default station.
+Sanitizer rendering required longer display settlement before capture. The SDL verifier exposes
+that wait without changing pixel/state assertions, after observed captures showed the preceding
+unpaused frame rather than the published paused frame.
+
+The scene still has no firing command binding, live projectile, hit, audio or outcome behavior.
+This verified integration stage does not satisfy the complete item Accept; 0065 remains active.
 
 ## Next
 
-Connect the delivered selection/pose/reload stages to the shared driving clock and input owner
-with visible verified feedback and explicit event ownership. Recover command eligibility and
-phase-driven fire from original class/input routines and real mission state. Use the complete
-M1 primary-handler oracle to reproduce ammunition,
-allocation and launch boundaries before implementing the owned live projectile state. Implement
-shared state transitions and truthful visible ammunition/weapon feedback, replay timed inputs
-on both targets and verify complete output/state/error behavior, visuals and memory.
+Recover command eligibility and phase-driven fire from original class/input routines and real
+mission state. Use the complete M1 primary-handler oracle to reproduce ammunition, allocation
+failure and launch boundaries before implementing the owned live projectile state and binding
+fire input. Preserve the delivered selection/reload clock and truthful display. Replay timed
+inputs on both targets and verify complete output/state/error behavior, visuals and memory.
 Keep 0041 active until projectiles/hits, objectives/outcomes and audible events form a complete
 playable mission; continue subsequent bounded stages without substituting invented rules.
 

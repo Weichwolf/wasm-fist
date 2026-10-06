@@ -5,6 +5,7 @@
 #include "sim/ground.h"
 #include "sim/vehicle_motion.h"
 #include "sim/vehicle_state.h"
+#include "sim/weapon_control.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -24,6 +25,15 @@ static void take_control(fist_vehicle_state *vehicle) {
         vehicle->control_flags &= (uint16_t)~CONTROL_REFRESH_FLAG;
         vehicle->components[component_indices[vehicle->type]] = COMPONENT_REFRESH;
     }
+}
+
+int fist_driver_take_control(fist_vehicle_state *vehicle) {
+    if (vehicle == NULL || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
+        return -1;
+    }
+    take_control(vehicle);
+    return 0;
 }
 
 static void apply_controls(fist_vehicle_state *vehicle, const fist_driver_controls *controls) {
@@ -54,8 +64,8 @@ static void transfer_altitude(fist_vehicle_state *vehicle) {
 }
 
 int fist_driver_step(fist_vehicle_state *vehicle, const fist_klc_image *height,
-                     const fist_driver_controls *controls) {
-    if (vehicle == NULL || controls == NULL || controls->throttle_change < -1 ||
+                     const fist_driver_controls *controls, fist_weapon_events *events) {
+    if (vehicle == NULL || controls == NULL || events == NULL || controls->throttle_change < -1 ||
         controls->throttle_change > 1 || controls->steering < -1 || controls->steering > 1 ||
         controls->throttle_off > 1 || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
         vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
@@ -64,14 +74,17 @@ int fist_driver_step(fist_vehicle_state *vehicle, const fist_klc_image *height,
     fist_vehicle_state next = *vehicle;
     apply_controls(&next, controls);
     transfer_altitude(&next);
-    fist_vehicle_motion_events events = {0};
-    if (fist_vehicle_motion_step(&next, &events) != 0) {
+    fist_vehicle_motion_events motion = {0};
+    if (fist_weapon_begin_tick(&next) != 0 || fist_vehicle_motion_step(&next, &motion) != 0) {
         return -1;
     }
     next.drive.update_phase = (uint8_t)(next.drive.update_phase + CLASS_PHASE_STEP);
-    if (fist_vehicle_ground_update(&next, height) != 0) {
+    fist_weapon_events emitted = {0};
+    if (fist_weapon_reload_phase(&next, &emitted) != 0 ||
+        fist_vehicle_ground_update(&next, height) != 0) {
         return -1;
     }
     *vehicle = next;
+    *events = emitted;
     return 0;
 }
