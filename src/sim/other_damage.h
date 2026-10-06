@@ -22,12 +22,14 @@ typedef struct {
     uint8_t limit;
     /* Original unsigned +1c destruction word; later updates are separate. */
     uint16_t destruction_parameter;
+    uint8_t emission_counter;
 } fist_type26_state;
 
 typedef struct {
     uint8_t damage;
     uint16_t debris_parameter;
     uint16_t animation_counter;
+    uint16_t emission_counter;
 } fist_type27_state;
 
 typedef struct {

@@ -150,6 +150,7 @@ clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-functi
   -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
   src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
+  src/sim/smoke_animation.c \
   src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c \
   tools/rewrite/probe_io.c tools/rewrite/object_pool_probe_io.c tools/rewrite/other_damage_probe.c \
   -o /tmp/wasm-fist-0071-sanitizer/other_damage_probe
@@ -159,9 +160,11 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
 ```
 
 No presentation code changes in this step; the reviewed driving scene remains the visual baseline.
-Later 5/6 death animation, type-26 target/type-27/wreck class updates, selected-player loss, full live
-world scheduling, fire commands/eligibility, effect rendering, PCM, AI and mission outcomes remain
-required. No complete playable mission or final full-WASM acceptance is claimed. Temporary inputs,
+Type-23 wreck, destroyed type-26 modes 4..7, complete type-27 updates and type-17 smoke
+creation/drift/retirement are delivered separately in [destruction smoke](destruction-smoke.md).
+Aircraft 5/6 death animation, live type-26 firing, selected-player loss, full live world scheduling,
+fire commands/eligibility, effect rendering, PCM, AI and mission outcomes remain required.
+No complete playable mission or final full-WASM acceptance is claimed. Temporary inputs,
 logs and sanitizer binaries stay in `/tmp` and are removed after commit/push; compact verified
 results are recorded in closed 0071.
 

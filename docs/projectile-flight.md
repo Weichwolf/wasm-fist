@@ -149,6 +149,7 @@ clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-functi
   -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
   src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
+  src/sim/smoke_animation.c \
   tools/rewrite/probe_io.c tools/rewrite/object_pool_probe_io.c \
   tools/rewrite/projectile_flight_probe.c -o /tmp/wasm-fist-0069-sanitizer/projectile_flight_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \

@@ -148,6 +148,7 @@ clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-functi
   -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
   src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
+  src/sim/smoke_animation.c \
   src/sim/vehicle_damage.c src/sim/damage_common.c \
   tools/rewrite/probe_io.c tools/rewrite/vehicle_probe_io.c \
   tools/rewrite/object_pool_probe_io.c tools/rewrite/vehicle_damage_probe.c \
@@ -178,3 +179,9 @@ The complete current nine-group production-flags ASan/UBSan/leak gate passes tho
 and the required corpus in 18.222 seconds with no skips. The shared-creation refactor's complete
 flight/effect original regression also passes both targets: 37,947 fixtures/41,925 updates in
 277.461 seconds, with no skips. These are kernel/build gates, not full playable mission runs.
+
+Type-23 wreck counter/emission updates and complete type-17 smoke creation, wind drift,
+low-word altitude rise and natural release are delivered in [destruction smoke](destruction-smoke.md)
+(WI 0072). New wrecks retain their constructor-zero emission counter. The ground damage test
+above covers the actual constructor; the separate smoke gate covers restored wreck updates.
+The combined ground launch/hit sequence above does not yet schedule those wreck updates.

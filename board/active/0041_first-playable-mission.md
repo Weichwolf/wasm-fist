@@ -97,8 +97,10 @@ the remaining collision-reachable M1 actions for 5/6/23/26/27 with typed snapsho
 shared source/word-width arithmetic and exact census/reaction/effect/retained-release semantics.
 Both targets compare complete original methods and reaching collision/damage/impact/natural
 effect cleanup; all 47 occupancy/roster contexts include every current remaining target snapshot.
-Subsequent death/debris/type-26 target/wreck updates remain open; see docs/other-damage.md.
-Live scheduling,
+0072 supplies persistent wreck, destroyed type-26 modes 4..7, complete type-27 updates and
+low-priority type-17 smoke admission, drift and natural release. Reaching critical-hit successors
+retain distinct emission counters and all original parameter/flag rules; see docs/destruction-smoke.md.
+Aircraft death, live type-26 firing and selected-player flows remain open. Live scheduling,
 input eligibility, visible battle, AI and mission outcome remain open.
 
 Continue with 0065: recover and deliver primary player weapon firing, ammunition/reload and

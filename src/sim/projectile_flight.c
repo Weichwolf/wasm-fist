@@ -7,6 +7,7 @@
 #include "sim/object_pool.h"
 #include "sim/projectile_launch.h"
 #include "sim/random.h"
+#include "sim/smoke_animation.h"
 #include "sim/world.h"
 
 #include <stddef.h>
@@ -263,16 +264,12 @@ int fist_muzzle_smoke_advance(fist_object_pool *pool, fist_muzzle_smoke *muzzle)
         return -1;
     }
     fist_muzzle_smoke updated = *muzzle;
-    updated.animation_counter = (uint16_t)(updated.animation_counter + 1);
-    if (updated.animation_counter >= MUZZLE_PERIOD) {
-        updated.animation_counter = 0;
-        updated.animation_frame = (uint8_t)(updated.animation_frame + 1);
-        if (updated.animation_frame >= MUZZLE_LAST_FRAME) {
-            if (retire(pool, updated.allocation) != 0) {
-                return -1;
-            }
-            updated.flags |= DELETED_FLAG;
+    const fist_smoke_animation_rule rule = {MUZZLE_PERIOD, MUZZLE_LAST_FRAME};
+    if (fist_smoke_animation_step(&updated.animation_counter, &updated.animation_frame, rule)) {
+        if (retire(pool, updated.allocation) != 0) {
+            return -1;
         }
+        updated.flags |= DELETED_FLAG;
     }
     *muzzle = updated;
     return 0;

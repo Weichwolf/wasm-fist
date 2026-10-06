@@ -53,6 +53,7 @@ typedef struct {
     uint8_t member;
     uint8_t flags;
     uint8_t secondary_flags;
+    uint16_t emission_counter;
 } fist_vehicle_wreck;
 
 typedef struct {

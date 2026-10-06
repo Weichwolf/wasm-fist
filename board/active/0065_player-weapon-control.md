@@ -182,11 +182,17 @@ docs/vehicle-damage.md for the explicit selected-player/UI/audio/wreck-update bo
 reaching launch→flight→damage→impact cleanup evidence. 0071 supplies the remaining collision-reachable
 M1 target actions for 5/6/23/26/27, typed short snapshot restoration, shared word-width arithmetic,
 exact reactions/census/effects and retained/released identities. See docs/other-damage.md for
-complete original/corpus/reaching evidence and the required subsequent actor/debris/type-26 target
-updates. Recover those updates and consuming selected-player/wreck flows. Integrate the delivered
-launch, flight, damage and
-effect owners into typed live-world scheduling, with damage before impact continuation and
-correct same-pass allocation/update order, before binding fire input. Import actual mission
+complete original/corpus/reaching evidence. 0072 supplies persistent type-23 wreck updates,
+destroyed type-26 modes 4..7, complete type-27 updates and owned type-17 smoke creation, wind
+drift, low-word altitude rise and natural release. See docs/destruction-smoke.md for the distinct
+artillery counters, disabled/exhausted parameter decay and reaching critical-hit successors.
+Recover aircraft 5/6 death and live type-26 firing updates plus consuming selected-player flows.
+Integrate the delivered launch, flight, damage and effect owners into typed live-world scheduling,
+with damage before impact continuation and correct same-pass allocation/update order, before
+binding fire input. Rechecked c105..c120
+visits the 182 live registry entries in ascending registry order, reading the pointer/type on
+arrival; later-entry allocations can update during the same pass. Do not replace this with a
+snapshot or physical-slot loop. Import actual mission
 occupancy instead of presuming an empty short arena.
 Preserve the delivered selection/reload clock and truthful display. Replay timed
 inputs on both targets and verify complete output/state/error behavior, visuals and memory.

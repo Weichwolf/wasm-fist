@@ -60,14 +60,19 @@ class Pool:
         self.slots[slot] = 0, 0
         self.registry[index] = NONE, (value - 1) % 65536
 
-    def explosion(self):
+    def allocate_short(self, kind, *, low_priority=False):
+        if low_priority and sum(used for used, _ in self.slots[:150]) >= 120:
+            return None
         slot = next((slot for slot in range(150) if not self.slots[slot][0]), None)
         index = next((index for index in range(182) if self.registry[index] == (NONE, 0)), None)
         if slot is None or index is None:
             return None
-        self.slots[slot] = 1, 4
+        self.slots[slot] = 1, kind
         self.registry[index] = slot, 1
-        return 4, slot, index, 1
+        return kind, slot, index, 1
+
+    def explosion(self):
+        return self.allocate_short(4)
 
     def state(self):
         counts = sum(used for used, _ in self.slots[:150]), sum(used for used, _ in self.slots[150:])

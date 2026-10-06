@@ -25,6 +25,8 @@ enum {
     DAMAGE_OFFSET = 26,
     LIMIT_OFFSET = 27,
     DESTRUCTION_OFFSET = 28,
+    TYPE26_EMISSION_OFFSET = 30,
+    TYPE27_EMISSION_OFFSET = 27,
     PARAMETER_OFFSET = 29,
     COUNTER_OFFSET = 31,
     BEHAVIOR_OFFSET = 37,
@@ -93,11 +95,12 @@ int fist_other_actor_restore(const fist_unit_definition *definition,
             return -1;
         }
         actor.state.type26 = (fist_type26_state){raw[DAMAGE_OFFSET], raw[LIMIT_OFFSET],
-                                                 fist_read_u16le(raw + DESTRUCTION_OFFSET)};
+                                                 fist_read_u16le(raw + DESTRUCTION_OFFSET),
+                                                 raw[TYPE26_EMISSION_OFFSET]};
     } else {
-        actor.state.type27 =
-            (fist_type27_state){raw[DAMAGE_OFFSET], fist_read_u16le(raw + PARAMETER_OFFSET),
-                                fist_read_u16le(raw + COUNTER_OFFSET)};
+        actor.state.type27 = (fist_type27_state){
+            raw[DAMAGE_OFFSET], fist_read_u16le(raw + PARAMETER_OFFSET),
+            fist_read_u16le(raw + COUNTER_OFFSET), fist_read_u16le(raw + TYPE27_EMISSION_OFFSET)};
     }
     *out = actor;
     return 0;
