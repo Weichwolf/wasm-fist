@@ -24,6 +24,7 @@ frozen reconstruction, not rewrite completion.
 | 0063 | Ground height/slope queries and typed independent hull/turret contact state delivered. |
 | 0064 | Continuous controlled native SDL2/browser scene, shared PIT/input/live actor rendering delivered. |
 | 0065 | Primary player firing/ammunition/reload and visible feedback; next bounded step within 0041. |
+| 0066 | Shared runtime arena/registry allocation, low-priority admission and proved exhaustion repairs delivered for 0065. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

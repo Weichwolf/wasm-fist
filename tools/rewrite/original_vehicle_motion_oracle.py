@@ -52,13 +52,15 @@ class OriginalVehicleMotionOracle(OriginalVehicleStartOracle):
                           machine.reg_read(UC_X86_REG_CX))))
         return values
 
-    def m1_primary_shots(self, cases):
+    def m1_primary_shots(self, cases, *, short_fill=0):
         """Complete manual station-0 handlers, including actual pool/launch/muzzle calls.
 
         This is the already-eligible station handler, not the class/input gate.
         Return complete actor and newly allocated object records, plus carry.
         """
-        from unicorn.x86_const import UC_X86_REG_DI, UC_X86_REG_EFLAGS
+        from unicorn.x86_const import UC_X86_REG_AX, UC_X86_REG_DI, UC_X86_REG_EFLAGS
+        if not 0 <= short_fill <= 150:
+            raise ValueError('Short-pool fixture occupancy is outside its actual arena')
         machine = self.machine()
         observed = []
         for raw in cases:
@@ -66,6 +68,11 @@ class OriginalVehicleMotionOracle(OriginalVehicleStartOracle):
                     struct.unpack_from('<H', raw, 0x97)[0] != 0):
                 raise RuntimeError('M1 primary oracle requires a complete untargeted M1 actor')
             self.far_call(machine, 0x1b176)  # Complete actual pool/registry reset.
+            for _ in range(short_fill):
+                machine.reg_write(UC_X86_REG_AX, 8)
+                self.far_call(machine, 0x1b1df)
+                if machine.reg_read(UC_X86_REG_EFLAGS) & 1:
+                    raise RuntimeError('Original short-pool fixture allocation failed')
             machine.mem_write(DGROUP + 0x7000, raw)
             machine.reg_write(UC_X86_REG_DI, 0x7000)
             self.far_call(machine, 0x17745)

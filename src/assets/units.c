@@ -19,9 +19,17 @@ enum {
     MEMBER_OFFSET = 28,
     PLACEHOLDER_PLATOON_OFFSET = 35,
     PLACEHOLDER_MEMBER_OFFSET = 36,
-    ROSTER_FLAG = 32,
-    EXTENDED_RESERVED_TYPE = 19
+    ROSTER_FLAG = 32
 };
+
+size_t fist_unit_state_size(uint16_t type) {
+    if (type >= FIST_UNIT_TYPE_COUNT) {
+        return 0;
+    }
+    return type < FIST_UNIT_GROUND_VEHICLE_COUNT || type == FIST_UNIT_EXTENDED_RESERVED_TYPE
+               ? FIST_UNIT_EXTENDED_SIZE
+               : FIST_UNIT_SHORT_SIZE;
+}
 
 static int decode_definition(const fist_scenario_unit *record, fist_unit_definition *out) {
     if (record->state.size < FIST_UNIT_SHORT_SIZE ||
@@ -30,11 +38,8 @@ static int decode_definition(const fist_scenario_unit *record, fist_unit_definit
     }
     const uint8_t *state = record->state.data;
     const uint16_t type = fist_read_u16le(state);
-    const size_t expected_size =
-        type < FIST_UNIT_GROUND_VEHICLE_COUNT || type == EXTENDED_RESERVED_TYPE
-            ? FIST_UNIT_EXTENDED_SIZE
-            : FIST_UNIT_SHORT_SIZE;
-    if (type >= FIST_UNIT_TYPE_COUNT || record->state.size != expected_size) {
+    const size_t expected_size = fist_unit_state_size(type);
+    if (expected_size == 0 || record->state.size != expected_size) {
         return -1;
     }
     *out = (fist_unit_definition){

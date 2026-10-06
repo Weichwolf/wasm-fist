@@ -25,9 +25,13 @@ objdump -D -b binary -m i386 -M intel,addr16,data16 \
 ```
 
 `d7e1/d81e` reads count, six-byte record header, then the first state word as constructor type.
-Header words are **state length, registry index, generation**. Constructor `1b1a2` receives the
-type in AX, registry index in BX and generation in CX. It stores DI and generation in the
+Header words are **state length, registry index, saved registry word**. The historical typed
+field `generation` preserves that last word. Constructor `1b1a2` receives the
+type in AX, registry index in BX and saved word in CX. It stores DI and that word in the
 four-byte DGROUP registry at `dfbc + index*4`; reset `1b197` clears 182 slots.
+Runtime release decrements the saved word; a remaining nonzero value reserves an empty entry.
+It is not a monotonic generation ID. See [runtime allocation](object-pool.md) for the recovered
+identity/reuse contract and explicit exhaustion repairs.
 
 Allocator `1b21d` uses bit 0 of the 28 type flags at DGROUP `e614`. Types 0, 1, 2, 3 and 19 allocate
 251-byte objects; all other types 0..27 allocate 55-byte objects. Pool bases are `a022` and `c05c`.

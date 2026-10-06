@@ -121,12 +121,25 @@ unpaused frame rather than the published paused frame.
 The scene still has no firing command binding, live projectile, hit, audio or outcome behavior.
 This verified integration stage does not satisfy the complete item Accept; 0065 remains active.
 
+### Runtime allocation prerequisite
+
+Closed 0066 delivers shared runtime object occupancy, registry binding/reuse, normal and
+low-priority allocation, release and reset. Actual complete M1 primary handlers prove that
+ammunition decrements before projectile allocation fails and that muzzle smoke uses the
+120-short-object admission boundary. Two reaching original memory corruptions are explicitly
+repaired: extended allocation beyond its actual 32 slots and registry search beyond 182 entries.
+Both targets pass complete metadata traces for all 4,213 original snapshot imports over 47
+missions, every type/admission route and allocator boundary, plus original, strict-tooling and
+sanitizer gates. See `board/closed/0066_runtime-object-allocation.md` and `docs/object-pool.md`.
+This allocator owns metadata; live typed projectile/effect/world payloads remain open.
+
 ## Next
 
 Recover command eligibility and phase-driven fire from original class/input routines and real
-mission state. Use the complete M1 primary-handler oracle to reproduce ammunition, allocation
-failure and launch boundaries before implementing the owned live projectile state and binding
-fire input. Preserve the delivered selection/reload clock and truthful display. Replay timed
+mission state. Use the delivered runtime allocator and proved M1 ammunition/allocation failure
+boundaries to implement owned projectile/effect payloads and complete launch/flight before
+binding fire input. Import actual mission occupancy instead of presuming an empty short arena.
+Preserve the delivered selection/reload clock and truthful display. Replay timed
 inputs on both targets and verify complete output/state/error behavior, visuals and memory.
 Keep 0041 active until projectiles/hits, objectives/outcomes and audible events form a complete
 playable mission; continue subsequent bounded stages without substituting invented rules.

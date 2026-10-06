@@ -1,0 +1,76 @@
+#ifndef FIST_SIM_OBJECT_POOL_H
+#define FIST_SIM_OBJECT_POOL_H
+
+#include "assets/units.h"
+
+#include <stdint.h>
+
+enum {
+    FIST_POOL_SHORT_SLOTS = 150,
+    FIST_POOL_EXTENDED_SLOTS = 32,
+    FIST_POOL_LOW_PRIORITY_LIMIT = 120,
+    FIST_POOL_NO_SLOT = UINT16_MAX,
+    FIST_POOL_OK = 0,
+    FIST_POOL_UNAVAILABLE = 1
+};
+
+typedef struct {
+    uint16_t type;
+    uint8_t used;
+} fist_pool_slot;
+
+typedef struct {
+    /* Flat slot: short 0..149, extended 150..181, or NO_SLOT. */
+    uint16_t slot;
+    /* Original saved registry word. It is not a monotonic generation ID. */
+    uint16_t value;
+} fist_pool_entry;
+
+typedef struct {
+    fist_pool_slot slots[FIST_UNIT_REGISTRY_COUNT];
+    fist_pool_entry registry[FIST_UNIT_REGISTRY_COUNT];
+    uint16_t short_count;
+    uint16_t extended_count;
+} fist_object_pool;
+
+typedef struct {
+    uint16_t type;
+    uint8_t low_priority;
+} fist_pool_request;
+
+typedef struct {
+    uint16_t type;
+    uint16_t registry_index;
+    uint16_t value;
+} fist_pool_import;
+
+typedef struct {
+    uint16_t type;
+    uint16_t slot;
+    uint16_t registry_index;
+    uint16_t value;
+} fist_pool_allocation;
+
+/* Metadata/identity owner only; typed object payloads belong to their simulation
+ * owners. Reset invalidates every allocation, including orphaned imports. */
+void fist_object_pool_reset(fist_object_pool *pool);
+
+/* Allocate the first physical slot of the original type class and first registry
+ * vacancy whose pointer and saved word are both empty. Low priority uses the
+ * original 120-short-object admission gate. Returns OK, UNAVAILABLE or -1 for
+ * invalid input/state. Failure preserves the complete pool and output. */
+int fist_object_pool_allocate(fist_object_pool *pool, fist_pool_request request,
+                              fist_pool_allocation *out);
+
+/* Snapshot loader's explicit registry binding. A duplicate overwrites the
+ * registry entry but retains its older physical allocation until reset. */
+int fist_object_pool_import(fist_object_pool *pool, fist_pool_import request,
+                            fist_pool_allocation *out);
+
+/* Detach a live registry entry, free its physical slot and decrement its saved
+ * word modulo 65536. UNAVAILABLE is an absent entry. The returned allocation
+ * identifies the payload whose owner must apply its deletion/flag semantics. */
+int fist_object_pool_release(fist_object_pool *pool, uint16_t registry_index,
+                             fist_pool_allocation *out);
+
+#endif

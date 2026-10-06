@@ -17,6 +17,7 @@ enum {
     FIST_UNIT_ROSTER_PLACEHOLDER = 23,
     FIST_UNIT_SHORT_SIZE = 55,
     FIST_UNIT_EXTENDED_SIZE = 251,
+    FIST_UNIT_EXTENDED_RESERVED_TYPE = 19,
     FIST_UNIT_NO_DEFINITION = UINT16_MAX
 };
 
@@ -46,6 +47,9 @@ typedef struct {
     uint16_t registry[FIST_UNIT_REGISTRY_COUNT];
     uint16_t roster[FIST_UNIT_ROSTER_COUNT];
 } fist_units;
+
+/* Original type allocation class. Zero means an invalid type. */
+size_t fist_unit_state_size(uint16_t type);
 
 /* Requires a decoded scenario with live input. Copies all DCBS bytes; no input
  * views survive. Decodes definitions and normal-side roster without executing

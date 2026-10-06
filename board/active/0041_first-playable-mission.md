@@ -62,6 +62,9 @@ and a C/softgl weapon/ammunition/reserve panel. Complete timed traces for all fo
 all 47 original players, original method comparisons, actual native/browser visual/device gates
 and sanitizer checks pass. Live firing/projectiles/hits and audible event delivery remain open;
 this does not yet make the mission playable to completion.
+Closed 0066 supplies the shared runtime arena/registry metadata owner and normal/low-priority
+allocation boundaries, with original corpus/reuse/exhaustion, corruption repair and memory
+evidence. Typed live projectile/effect/world payload installation remains under active 0065.
 
 ## Next
 

@@ -6,7 +6,7 @@ and verification tools remain available without participating in the rewrite bui
 
 | Location | Owner and boundary |
 | --- | --- |
-| `src/sim/` | Typed vehicle state, deterministic random/motion/contact, weapon control and manual driving stages. |
+| `src/sim/` | Runtime object allocation, typed vehicle state, deterministic random/motion/contact, weapon control and manual driving stages. |
 | `src/app/` | Owned scenario/player session, integer input/time controller and common scene drawing. |
 | `src/assets/` | Validated original-format decoders producing typed host data. |
 | `src/render/` | softgl context, camera, terrain/models, HUD and framebuffer ownership. |
@@ -69,4 +69,7 @@ and exclude offline tools, including their meshoptimizer sources. Verification i
 The continuous driving preview is documented in [driving scene](driving-scene.md). Its native
 device loop currently lives in the preview tool; production platform packaging follows the
 complete mission interface. It supplies no alternate simulation. This manual stage displays
-only the player and has no targeting, other-unit AI, combat/HUD/objective or audio completion.
+only the player, with weapon/ammunition/reload feedback. Targeting, other-unit AI, combat,
+objectives and audio remain open. The [runtime object pool](object-pool.md) now owns arena
+occupancy and registry binding; typed live projectile/effect/world payloads remain subsequent
+simulation work.
