@@ -17,4 +17,5 @@ if [[ $target == wasm || $target == all ]]; then
     cmake --build "$output/wasm"
     timeout 30s node "$root/tools/rewrite/check_wasm.cjs" "$output/wasm/fist_renderer_probe.js"
     python3 "$root/tools/rewrite/test_scenario.py" --target wasm --build-root "$output"
+    python3 "$root/tools/rewrite/test_terrain_assets.py" --target wasm --build-root "$output"
 fi

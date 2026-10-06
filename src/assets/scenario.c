@@ -1,4 +1,6 @@
 #include "assets/scenario.h"
+#include "assets/bytes.h"
+#include "assets/view.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -9,7 +11,6 @@ enum {
     TAG_SIZE = 4,
     WORD_SIZE = 2,
     DWORD_SIZE = 4,
-    BYTE_BITS = 8,
     MODE_OFFSET = 2,
     LIMIT_OFFSET = 5,
     POSITIONS_OFFSET = 6,
@@ -19,15 +20,8 @@ enum {
     DOS_FILENAME_SIZE = DOS_BASENAME_SIZE + 1 + DOS_EXTENSION_SIZE
 };
 
-static uint16_t read_word(const uint8_t *data) {
-    return (uint16_t)((uint16_t)data[0] | ((uint16_t)data[1] << BYTE_BITS));
-}
-
 static int32_t read_position(const uint8_t *data) {
-    uint32_t value = 0;
-    for (unsigned index = 0; index < DWORD_SIZE; ++index) {
-        value |= (uint32_t)data[index] << (index * BYTE_BITS);
-    }
+    const uint32_t value = fist_read_u32le(data);
     /* Convert two's complement without an implementation-defined unsigned cast. */
     if (value <= INT32_MAX) {
         return (int32_t)value;
@@ -49,7 +43,7 @@ static int chunk_kind(const uint8_t *tag) {
 static int read_chunks(fist_asset_view input, fist_scenario *scenario) {
     while (input.size >= FIST_SCENARIO_CHUNK_HEADER_SIZE) {
         const int kind = chunk_kind(input.data);
-        const size_t size = read_word(input.data + TAG_SIZE);
+        const size_t size = fist_read_u16le(input.data + TAG_SIZE);
         if (size > input.size - FIST_SCENARIO_CHUNK_HEADER_SIZE) {
             return -1;
         }
@@ -113,13 +107,13 @@ int fist_scenario_units_next(fist_scenario_unit_iterator *iterator, fist_scenari
     if (input.data == NULL || input.size < FIST_SCENARIO_CHUNK_HEADER_SIZE) {
         return -1;
     }
-    const size_t size = read_word(input.data);
+    const size_t size = fist_read_u16le(input.data);
     if (size < WORD_SIZE || size > input.size - FIST_SCENARIO_CHUNK_HEADER_SIZE) {
         return -1;
     }
     const uint8_t *state = input.data + FIST_SCENARIO_CHUNK_HEADER_SIZE;
-    const fist_scenario_unit unit = {read_word(input.data + WORD_SIZE),
-                                     read_word(input.data + CATALOG_VALUE_OFFSET),
+    const fist_scenario_unit unit = {fist_read_u16le(input.data + WORD_SIZE),
+                                     fist_read_u16le(input.data + CATALOG_VALUE_OFFSET),
                                      {state, size}};
     iterator->remaining =
         (fist_asset_view){state + size, input.size - FIST_SCENARIO_CHUNK_HEADER_SIZE - size};
@@ -140,14 +134,14 @@ static int decode_metadata(fist_scenario *scenario) {
         scenario->chunks[FIST_SCENARIO_BATTLE_INFO].size != FIST_SCENARIO_INFO_SIZE) {
         return -1;
     }
-    scenario->version = read_word(header.data);
+    scenario->version = fist_read_u16le(header.data);
     scenario->mode = header.data[MODE_OFFSET];
     scenario->limit = header.data[LIMIT_OFFSET];
     for (size_t index = 0; index < FIST_SCENARIO_POSITION_COUNT; ++index) {
         scenario->map_positions[index] =
             read_position(header.data + POSITIONS_OFFSET + (index * DWORD_SIZE));
     }
-    scenario->unit_count = read_word(units.data);
+    scenario->unit_count = fist_read_u16le(units.data);
     fist_scenario_unit_iterator iterator = fist_scenario_units_begin(scenario);
     fist_scenario_unit unit = {0};
     int result = 0;

@@ -16,8 +16,9 @@ and verification tools remain available without participating in the rewrite bui
 | `deps/softgl/` | Pinned renderer dependency, with no game state. |
 | `board/reference/`, `re_out/`, `patches/`, legacy shims/tools | Historical evidence only. |
 
-The renderer, diagnostic browser presentation and shared FSG envelope/metadata decoder exist so
-far. See `docs/scenario-format.md`; unit/chunk views retain undecoded gameplay records honestly.
+The renderer, diagnostic browser presentation, shared FSG envelope/metadata decoder and
+KLC/resource/palette readers exist so far. See `docs/scenario-format.md` and
+`docs/terrain-format.md`; unit/chunk views retain undecoded gameplay records honestly.
 Other directories document ownership, not implemented subsystems. No placeholder game APIs promise behavior they lack.
 The diagnostic triangle uses fixture geometry and colors, not reconstructed game assets.
 
@@ -34,7 +35,7 @@ do not belong in new game state. Validate original format adapters where compati
 platform persistence owns storage only. Define behavioral replay assertions before broad coverage.
 Visual evolution may deliberately change frames; original frame/PCM identity is not required.
 
-The first playable milestone decodes a real map and vehicle, renders terrain through softgl,
+The first playable milestone installs decoded terrain and a real vehicle, renders them through softgl,
 then adds movement, controls, camera/HUD, weapons/objectives and audible events. Every step needs
 original behavior/data evidence and bounded cross-platform verification. Missing asset/gameplay
 knowledge must remain an explicit open task.

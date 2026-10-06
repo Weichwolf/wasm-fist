@@ -52,7 +52,9 @@ bytes and BINF's tail are preserved in their chunk views.
 BINF fields may terminate with NUL or fill all 16 bytes with DOS space padding: INDIA4's sky is
 `5.SKY` followed by eleven spaces without NUL. Spaces are removed like the reference DOS filename
 layer; names must remain nonempty and fit the 8+dot+3 basename length. Case is preserved; future
-platform/resource lookup must be case-insensitive. Embedded directory lookup is not implemented.
+platform lookup must be case-insensitive. Embedded resource lookup is now provided by
+`src/assets/resource.c`; its original DOS folding and validation are documented in
+[terrain format](terrain-format.md). Scenario asset bundle installation remains open.
 
 DCBS bodies in the current corpus have lengths 55 or 251 bytes. The envelope decoder follows the
 declared length and requires at least the original first state word, rather than guessing a unit

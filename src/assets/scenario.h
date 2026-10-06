@@ -1,6 +1,8 @@
 #ifndef FIST_ASSETS_SCENARIO_H
 #define FIST_ASSETS_SCENARIO_H
 
+#include "assets/view.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -23,11 +25,6 @@ typedef enum {
     FIST_SCENARIO_END,
     FIST_SCENARIO_CHUNK_COUNT
 } fist_scenario_chunk;
-
-typedef struct {
-    const uint8_t *data;
-    size_t size;
-} fist_asset_view;
 
 typedef struct {
     uint16_t catalog_index;

@@ -6,9 +6,10 @@ Development lives on `rewrite/softgl`. The reconstruction is frozen at annotated
 target; original frame and PCM bit identity is no longer required. Visual quality improves
 throughout development.
 
-**Current scope:** a native/WASM renderer integration probe and a shared C11 decoder for original
-scenario envelopes, metadata and unit-record framing, verified against all 47 local missions.
-Terrain/models, simulation, playable missions and audio are not implemented yet. See
+**Current scope:** a native/WASM renderer integration probe and shared C11 readers for scenario
+envelopes/metadata/unit framing (all 47 missions), KLC height/colormap/stamp/sky planes (all 22
+files), resource members and VGA palettes (all 32 palettes). Terrain scene rendering, models,
+simulation, playable missions and audio are not implemented yet. See
 [architecture](docs/architecture.md), [reference status](docs/reference-status.md),
 [work queue](board/README.md) and [goal](docs/rewrite-goal.md).
 
@@ -71,6 +72,12 @@ Synthetic scenarios run in the normal build gates. To verify the complete provis
 corpus explicitly, run `python3 tools/rewrite/test_scenario.py --originals`; missing originals,
 changed hashes, incomplete output or skipped original coverage fail. This does not claim gameplay
 completion. Original binaries remain ignored.
+
+The [terrain format](docs/terrain-format.md) documents the shared KLC/resource/palette readers
+and the optional pinned instruction oracle. Synthetic terrain contracts run in both build gates;
+`test_terrain_assets.py --originals` requires every pinned original and compares complete outputs
+against actual original decoder instructions on native/WASM. Unicorn is an optional verification
+dependency, outside the game and renderer builds.
 
 ## Browser verification
 

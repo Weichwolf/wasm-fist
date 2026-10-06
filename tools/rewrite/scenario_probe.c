@@ -1,4 +1,5 @@
 #include "assets/scenario.h"
+#include "probe_io.h"
 
 #include <inttypes.h>
 #include <stddef.h>
@@ -6,38 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* Read through EOF rather than guessing an asset's size or truncating a prefix. */
-static uint8_t *read_file(FILE *file, size_t *size) {
-    enum { INITIAL_CAPACITY = 1024 };
-    size_t capacity = INITIAL_CAPACITY;
-    uint8_t *data = malloc(capacity);
-    *size = 0;
-    if (data == NULL) {
-        return NULL;
-    }
-    for (;;) {
-        *size += fread(data + *size, 1, capacity - *size, file);
-        if (ferror(file) != 0) {
-            free(data);
-            return NULL;
-        }
-        if (feof(file) != 0) {
-            return data;
-        }
-        if (capacity > SIZE_MAX / 2) {
-            free(data);
-            return NULL;
-        }
-        capacity *= 2;
-        uint8_t *grown = realloc(data, capacity);
-        if (grown == NULL) {
-            free(data);
-            return NULL;
-        }
-        data = grown;
-    }
-}
 
 static int is_empty(const fist_scenario *scenario) {
     if (scenario->version != 0 || scenario->mode != 0 || scenario->limit != 0 ||
@@ -84,7 +53,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
     size_t size = 0;
-    uint8_t *data = read_file(file, &size);
+    uint8_t *data = fist_probe_read_file(file, &size);
     const int closed = fclose(file);
     fist_scenario scenario = {0};
     if (data == NULL || closed != 0 || fist_scenario_decode(data, size, &scenario) != 0) {

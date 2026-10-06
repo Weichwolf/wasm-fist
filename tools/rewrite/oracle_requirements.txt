@@ -1,0 +1,2 @@
+# Optional verification of original decoder instructions; never a runtime dependency.
+unicorn==2.1.4
