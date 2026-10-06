@@ -101,6 +101,8 @@ def state_lines(records):
                      signed(0x55), signed(0x57), signed(0x34), signed(0x59), signed(0x5b),
                      word(0x26), word(0x30), word(0x5d), raw[0x19], raw[0x3d],
                      word(0x10), word(0x89), word(0x8b)])))
+        lines.append('ground ' + ' '.join(map(str, [raw[0x1d], signed(0x32),
+                     signed(0x22), signed(0x24)])))
         lines.append('control ' + ' '.join(map(str, [word(0x12), word(0x14), word(0x87),
                      word(0x40), raw[0x16], raw[0x17], raw[0x1a], raw[0x6d], raw[0x42],
                      raw[0x90], raw[0x86], raw[0x8d], raw[0x3e], raw[0xa8],

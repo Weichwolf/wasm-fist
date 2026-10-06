@@ -20,8 +20,8 @@ Ground op 1c consumes this expanded plane; the static renderer currently uses th
 
 ## Next
 
-Complete. Continue open 0063 with height/slope queries and typed ground contact, then connect
-installed motion to the interactive scene. Colormap resampling, terrain collision and full
+Complete. Closed 0063 supplies height/slope queries and typed ground contact. Continue 0064
+with installed motion in the controlled scene. Colormap resampling, terrain collision and full
 vehicle/mission timing remain separate work within parent 0041.
 
 ## Accept

@@ -86,8 +86,12 @@ complete component templates and explicit deterministic random input. Its
 The [vehicle motion](docs/vehicle-motion.md) implements speed/hull control, both velocity lanes,
 position integration and manual turret slew. `test_vehicle_motion.py --originals --oracle`
 checks complete original motion returns, every heading, all four slope profiles to their
-actual speed caps and sustained driving on both targets. Terrain/collision and interactive
+actual speed caps and sustained driving on both targets. Collision and interactive
 input integration remain open.
+The [ground contact](docs/ground-contact.md) supplies installed height and independent hull/
+turret slopes in shared typed state. `test_ground.py --originals --oracle` checks every heading,
+all height-byte differences and all 960 ground snapshots at each original detail level against
+complete original returns. Class altitude transfer and controlled scene integration are next.
 The [model format](docs/model-format.md) documents complete directional sprite families and
 their ownership/validation. `python3 tools/rewrite/test_models.py --originals` requires all 170
 model files; optional `--oracle` compares all texels and lookup fields with original instructions.
@@ -99,7 +103,8 @@ completion. Original binaries remain ignored.
 The [height-field resampler](docs/heightfield-resampling.md) supplies owned periodic height
 expansion and exact knot reduction before ground installation. Its `test_heightfield.py --originals`
 gate compares all square original fields and all eight height maps at runtime sizes through 4096
-with complete original returns on both targets. Ground sampling and installation remain open.
+with complete original returns on both targets. Ground queries/contact are delivered; live
+scene integration remains open.
 The [terrain format](docs/terrain-format.md) documents the shared KLC/resource/palette readers
 and the optional pinned instruction oracle. Synthetic terrain contracts run in both build gates;
 `test_terrain_assets.py --originals` requires every pinned original and compares complete outputs

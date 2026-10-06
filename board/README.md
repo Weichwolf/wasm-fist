@@ -21,7 +21,8 @@ frozen reconstruction, not rewrite completion.
 | 0060 | Typed ground-class initialization, owned component templates and deterministic original RNG. |
 | 0061 | Shared ground motion, exact speed profiles/rotation and manual turret refresh updates. |
 | 0062 | Owned original numerical height expansion/reduction before ground installation delivered. |
-| 0063 | Ground height/slope queries and typed contact state; next bounded step within 0041. |
+| 0063 | Ground height/slope queries and typed independent hull/turret contact state delivered. |
+| 0064 | First controlled moving native/browser scene; next bounded integration within 0041. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

@@ -5,6 +5,7 @@
 #include "assets/units.h"
 #include "render/model_bitmap.h"
 #include "render/renderer.h"
+#include "sim/world.h"
 
 #include <GL/softgl.h>
 #include <limits.h>

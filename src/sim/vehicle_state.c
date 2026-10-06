@@ -54,6 +54,10 @@ static void restore_motion(const uint8_t *snapshot, fist_vehicle_state *vehicle)
         HULL_HEADING = 38,
         REQUESTED_HEADING = 48,
         TERRAIN_PITCH = 52,
+        TERRAIN_ROLL = 50,
+        TURRET_ROLL = 34,
+        TURRET_PITCH = 36,
+        GROUND_HEIGHT = 29,
         UPDATE_PHASE = 61,
         SPEED = 85,
         THROTTLE = 87,
@@ -64,6 +68,7 @@ static void restore_motion(const uint8_t *snapshot, fist_vehicle_state *vehicle)
     vehicle->drive =
         (fist_vehicle_drive){.speed = fist_read_i16le(snapshot + SPEED),
                              .throttle = fist_read_i16le(snapshot + THROTTLE),
+                             .terrain_roll = fist_read_i16le(snapshot + TERRAIN_ROLL),
                              .terrain_pitch = fist_read_i16le(snapshot + TERRAIN_PITCH),
                              .velocity_x = fist_read_i16le(snapshot + VELOCITY_X),
                              .velocity_y = fist_read_i16le(snapshot + VELOCITY_Y),
@@ -72,8 +77,12 @@ static void restore_motion(const uint8_t *snapshot, fist_vehicle_state *vehicle)
                              .movement_gate = UINT16_MAX,
                              .motion_flags = snapshot[MOTION_FLAGS],
                              .update_phase = snapshot[UPDATE_PHASE]};
-    vehicle->turret = (fist_vehicle_turret){.heading = fist_read_u16le(snapshot + TURRET_HEADING),
-                                            .offset = fist_read_u16le(snapshot + TURRET_OFFSET)};
+    vehicle->ground_height = snapshot[GROUND_HEIGHT];
+    vehicle->turret =
+        (fist_vehicle_turret){.heading = fist_read_u16le(snapshot + TURRET_HEADING),
+                              .offset = fist_read_u16le(snapshot + TURRET_OFFSET),
+                              .terrain_roll = fist_read_i16le(snapshot + TURRET_ROLL),
+                              .terrain_pitch = fist_read_i16le(snapshot + TURRET_PITCH)};
 }
 
 int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random *random,

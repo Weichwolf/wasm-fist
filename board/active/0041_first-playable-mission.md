@@ -47,12 +47,17 @@ clock, terrain/collision installation, targeting or platform input loop.
 Closed 0062 supplies owned periodic numerical height expansion and exact knot reduction.
 Both targets compare complete original resampler returns for all square original planes, all
 eight height maps at four runtime sizes through 4096 and repeated size changes. Ground
-height/slope sampling and contact publication are the next bounded step in open 0063.
+height/slope sampling and contact publication are delivered by closed 0063.
+Closed 0063 supplies shared installed contact for all four classes, retaining independent hull/
+turret slopes and preserving altitude until the class transfer stage. Both targets pass all
+headings, byte differences, all 960 original ground snapshots at four field sizes, full original
+returns, initialization/motion regressions, strict tooling and memory checks. This still changes
+no displayed frame or mission/control clock; open 0064 integrates the first controlled moving scene.
 
 ## Next
 
-Continue 0063 with original ground height/slope queries and contact publication. Recover
-terrain/suspension installation and input/controller updates; connect the owned
+Continue 0064 with the first controlled moving scene. Recover class altitude transfer,
+controller cadence and current model/camera inputs; connect the owned
 initialized moving vehicle to the first interactive scene. Recover other-class selection and optional
 original model mission-palette mapping as reached; current vehicle rendering intentionally
 retains MAL colors.

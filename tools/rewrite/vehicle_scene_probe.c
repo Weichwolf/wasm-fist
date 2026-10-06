@@ -2,7 +2,7 @@
 #include "assets/terrain.h"
 #include "render/model_bitmap.h"
 #include "render/renderer.h"
-#include "render/terrain_scene.h"
+#include "sim/world.h"
 
 #include <stddef.h>
 #include <stdint.h>

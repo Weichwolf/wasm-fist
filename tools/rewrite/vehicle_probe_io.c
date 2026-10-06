@@ -15,6 +15,8 @@ void fist_probe_write_vehicle_state(const fist_vehicle_state *state) {
            (unsigned)drive->requested_heading, (unsigned)drive->movement_gate,
            (unsigned)drive->motion_flags, (unsigned)drive->update_phase, (unsigned)turret->heading,
            (unsigned)turret->offset, (unsigned)turret->requested_offset);
+    printf("ground %u %d %d %d\n", (unsigned)state->ground_height, drive->terrain_roll,
+           turret->terrain_roll, turret->terrain_pitch);
     printf("control %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n",
            (unsigned)state->projection_extent, (unsigned)state->projection_scale,
            (unsigned)state->camera_height, (unsigned)state->control_flags,

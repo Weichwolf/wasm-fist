@@ -17,6 +17,7 @@ typedef struct {
     int16_t speed;
     int16_t throttle;
     int16_t terrain_pitch;
+    int16_t terrain_roll;
     int16_t velocity_x;
     int16_t velocity_y;
     uint16_t heading;
@@ -30,6 +31,8 @@ typedef struct {
     uint16_t heading;
     uint16_t offset;
     uint16_t requested_offset;
+    int16_t terrain_roll;
+    int16_t terrain_pitch;
 } fist_vehicle_turret;
 
 typedef struct {
@@ -50,6 +53,7 @@ typedef struct {
     int32_t map_x;
     int32_t map_y;
     int32_t altitude;
+    uint8_t ground_height;
     fist_vehicle_drive drive;
     fist_vehicle_turret turret;
     fist_vehicle_weapons weapons;

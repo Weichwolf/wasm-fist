@@ -8,7 +8,6 @@
 int fist_draw_terrain_scene(fist_renderer *renderer, const fist_terrain *terrain,
                             const fist_terrain_view *view, const fist_scene_vehicle *vehicle);
 
-enum { FIST_MAP_PERIOD = 524288, FIST_POSITION_SCALE = 256, FIST_TURN_SIZE = 65536 };
 float fist_map_coordinate(int32_t position);
 float fist_map_y_coordinate(int32_t position);
 int32_t fist_map_delta(int32_t subject, int32_t observer);
