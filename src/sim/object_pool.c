@@ -53,6 +53,21 @@ void fist_object_pool_reset(fist_object_pool *pool) {
     }
 }
 
+int fist_object_pool_find(const fist_object_pool *pool, uint16_t slot, fist_pool_allocation *out) {
+    if (!fist_object_pool_is_valid(pool) || out == NULL || slot >= FIST_UNIT_REGISTRY_COUNT) {
+        return -1;
+    }
+    for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
+        const fist_pool_entry entry = pool->registry[index];
+        if (entry.slot == slot) {
+            *out =
+                (fist_pool_allocation){pool->slots[slot].type, slot, (uint16_t)index, entry.value};
+            return FIST_POOL_OK;
+        }
+    }
+    return FIST_POOL_UNAVAILABLE;
+}
+
 static uint16_t free_slot(const fist_object_pool *pool, uint16_t type) {
     const size_t begin = extended(type) != 0 ? FIST_POOL_SHORT_SLOTS : 0;
     const size_t end = extended(type) != 0 ? FIST_UNIT_REGISTRY_COUNT : FIST_POOL_SHORT_SLOTS;

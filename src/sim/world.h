@@ -21,4 +21,10 @@ typedef struct {
     uint16_t heading;
 } fist_object_pose;
 
+/* Original DWORD position addition, with portable signed conversion. */
+static inline int32_t fist_position_add(int32_t position, int32_t offset) {
+    const uint32_t value = (uint32_t)position + (uint32_t)offset;
+    return value <= INT32_MAX ? (int32_t)value : -1 - (int32_t)(UINT32_MAX - value);
+}
+
 #endif

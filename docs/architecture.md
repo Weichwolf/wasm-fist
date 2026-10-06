@@ -6,7 +6,7 @@ and verification tools remain available without participating in the rewrite bui
 
 | Location | Owner and boundary |
 | --- | --- |
-| `src/sim/` | Runtime object allocation, typed vehicle state, deterministic random/motion/contact, weapon control, untargeted M1 launch, ordered unit collision and manual driving stages. |
+| `src/sim/` | Runtime object allocation, typed vehicle state, deterministic random/motion/contact, weapon control, untargeted M1 launch, ordered unit collision, untargeted shell flight/effect lifecycle and manual driving stages. |
 | `src/app/` | Owned scenario/player session, integer input/time controller and common scene drawing. |
 | `src/assets/` | Validated original-format decoders producing typed host data. |
 | `src/render/` | softgl context, camera, terrain/models, HUD and framebuffer ownership. |
@@ -74,5 +74,8 @@ objectives and audio remain open. The [runtime object pool](object-pool.md) now 
 occupancy and registry binding. [Untargeted M1 launch](projectile-launch.md) now returns typed
 initialized shell and muzzle payloads using that owner. [Ordered unit collision](unit-collision.md)
 borrows live typed poses through the common `sim/world.h` pose and preserves type/registry/random
-contracts. Live world installation, flight, ground impact, damage, effect lifecycle and audible
-PCM remain subsequent simulation work.
+contracts. [Untargeted shell flight](projectile-flight.md) now consumes launch payloads through
+current-position ground/unit queries and expiry, keeps impacts pending until actual damage, and
+owns post-damage explosion allocation and complete explosion/muzzle retirement. Live world
+installation/scheduling, real damage/destruction, fire command/eligibility, effect drawing and
+audible PCM remain subsequent simulation work.

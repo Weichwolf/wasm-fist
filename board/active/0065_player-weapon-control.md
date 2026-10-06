@@ -159,12 +159,27 @@ gate. See `docs/unit-collision.md` and closed 0068. Flight must check the first 
 against its origin only after the query; it must not search past an origin hit. Projectile
 advance, ground impact, damage, retirement, live world/input/audio delivery remain open.
 
+### Consuming shell and transient-effect lifecycle
+
+Closed 0069 delivers shared untargeted type-8 flight/expiry, current-position ground contact,
+collision grace and the actual first-hit/origin rule. Ground/unit impacts retain the allocated
+shell at a pending boundary; real damage must execute before continuation allocates the exact
+normal-priority explosion and releases the shell. Type-4/type-18 complete animation/retirement
+uses the same pool owner. Distinct required coverage totals 37,947 valid fixtures and 41,925
+updates per target, including the complete reached ground-byte matrix and all 179 M1 launch
+positions over 47 complete mission collision worlds. Production gates, strict LLVM and memory
+checks pass. See docs/projectile-flight.md and closed 0069 for the staged original boundaries,
+expanded-period verification and truthful request-only notice/voice/sound scope. No fire command,
+live damage/world/render/audio behavior is claimed by this kernel.
+
 ## Next
 
 Recover command eligibility and phase-driven fire from original class/input routines and real
-mission state. Use the delivered allocator and launch payloads to implement consuming projectile flight,
-hit/effect lifecycle and live world installation before binding fire input. Reuse the delivered
-ordered unit-collision query; recover the actual ground-impact and retirement stages. Import actual mission occupancy instead of presuming an empty short arena.
+mission state. Recover the reached bbb7/c31e damage dispatch with its actual profile/parameter/aspect, component
+updates, randomness and destruction/release effects. Integrate the delivered launch, flight and
+effect owners into typed live-world scheduling, with damage before impact continuation and
+correct same-pass allocation/update order, before binding fire input. Import actual mission
+occupancy instead of presuming an empty short arena.
 Preserve the delivered selection/reload clock and truthful display. Replay timed
 inputs on both targets and verify complete output/state/error behavior, visuals and memory.
 Keep 0041 active until projectiles/hits, objectives/outcomes and audible events form a complete

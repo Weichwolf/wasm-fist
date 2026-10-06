@@ -31,6 +31,9 @@ typedef struct {
     uint8_t aspect;
 } fist_collision_hit;
 
+/* Read-only validation of every live physical body and the shared pool. */
+int fist_collision_world_is_valid(const fist_collision_world *world);
+
 /* Complete original bb1b unit-interaction query. Walk current registry bindings
  * in order, excluding self and bodies without flag 40; test inclusive wrapped
  * XY bounds (scale+256 modulo a word), then the actual per-type vertical or

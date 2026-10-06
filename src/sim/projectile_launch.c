@@ -4,6 +4,7 @@
 #include "sim/object_pool.h"
 #include "sim/rotation.h"
 #include "sim/vehicle_state.h"
+#include "sim/world.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -28,18 +29,13 @@ enum {
     SOUND_REQUEST = 12
 };
 
-static int32_t add_position(int32_t position, int32_t offset) {
-    const uint32_t value = (uint32_t)position + (uint32_t)offset;
-    return value <= INT32_MAX ? (int32_t)value : -1 - (int32_t)(UINT32_MAX - value);
-}
-
 static fist_projectile initialize_projectile(const fist_vehicle_state *vehicle,
                                              fist_launch_request request,
                                              fist_pool_allocation allocation) {
     return (fist_projectile){
         .allocation = allocation,
-        .pose = {vehicle->map_x, vehicle->map_y, add_position(vehicle->altitude, PROJECTILE_HEIGHT),
-                 vehicle->turret.heading},
+        .pose = {vehicle->map_x, vehicle->map_y,
+                 fist_position_add(vehicle->altitude, PROJECTILE_HEIGHT), vehicle->turret.heading},
         .velocity = fist_rotate_spatial((fist_spatial_rotation){vehicle->turret.heading,
                                                                 (uint16_t)vehicle->turret.elevation,
                                                                 PROJECTILE_SPEED, request.coarse}),
@@ -57,9 +53,9 @@ static fist_muzzle_smoke initialize_muzzle(const fist_vehicle_state *vehicle,
     const fist_velocity forward =
         fist_rotate((fist_rotation){vehicle->turret.heading, MUZZLE_FORWARD, request.coarse});
     return (fist_muzzle_smoke){.allocation = allocation,
-                               .pose = {add_position(vehicle->map_x, forward.x),
-                                        add_position(vehicle->map_y, forward.y),
-                                        add_position(vehicle->altitude, MUZZLE_HEIGHT),
+                               .pose = {fist_position_add(vehicle->map_x, forward.x),
+                                        fist_position_add(vehicle->map_y, forward.y),
+                                        fist_position_add(vehicle->altitude, MUZZLE_HEIGHT),
                                         (uint16_t)(vehicle->turret.heading + HALF_TURN)},
                                .projection_scale = MUZZLE_SCALE};
 }

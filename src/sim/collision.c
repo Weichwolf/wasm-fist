@@ -36,7 +36,7 @@ static const uint16_t helicopter_heights[HELICOPTER_MODES] = {4096, 4608, 2816, 
 static const uint8_t hit_thresholds[FIST_UNIT_TYPE_COUNT] = {
     0, 0, 0, 0, 0, 0, 0, 128, 38, 38, 38, 76, 38, 38, 0, 253, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-static int valid_world(const fist_collision_world *world) {
+int fist_collision_world_is_valid(const fist_collision_world *world) {
     if (world == NULL || !fist_object_pool_is_valid(world->pool) || world->bodies == NULL ||
         world->body_count != FIST_UNIT_REGISTRY_COUNT) {
         return 0;
@@ -86,7 +86,7 @@ static int interacts(const fist_collision_body *source, uint16_t source_type,
 
 int fist_collision_find(const fist_collision_world *world, uint16_t source_slot,
                         fist_random *random, fist_collision_hit *out) {
-    if (!valid_world(world) || random == NULL || out == NULL ||
+    if (!fist_collision_world_is_valid(world) || random == NULL || out == NULL ||
         random->next_stream >= FIST_RANDOM_STREAMS || source_slot >= FIST_UNIT_REGISTRY_COUNT ||
         world->pool->slots[source_slot].used == 0) {
         return -1;

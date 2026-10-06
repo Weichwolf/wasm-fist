@@ -78,6 +78,14 @@ first-hit ordering pass complete original-method and all-47-snapshot-world verif
 targets, required builds/style and memory checks. Projectile advance, ground impact, damage,
 effect retirement and full live mission/input/audio behavior remain open under 0065.
 
+Closed 0069 consumes untargeted type-8 shells through age, wrapped flight, current-position ground
+contact, grace, ordered collision and expiry. Pending impacts keep the shell alive for actual
+damage before original normal-priority explosion allocation and release. Complete type-4/type-18
+animation/retirement also passes both-target original-method, full terrain-byte matrix, all-47
+collision-world, strict-tooling and memory gates. See docs/projectile-flight.md for the explicit
+DOS/PM service and damage boundaries. Live scheduling, actual unit damage/destruction, drawing,
+fire commands, audible events and outcomes remain required; no complete mission is claimed.
+
 ## Next
 
 Continue with 0065: recover and deliver primary player weapon firing, ammunition/reload and

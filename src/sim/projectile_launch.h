@@ -16,17 +16,30 @@ enum {
     FIST_LAUNCH_NO_SOUND = UINT8_MAX
 };
 
+enum {
+    FIST_PROJECTILE_FLYING = 0,
+    FIST_PROJECTILE_GROUND_IMPACT = 1,
+    FIST_PROJECTILE_UNIT_IMPACT = 2,
+    FIST_PROJECTILE_RETIRED = 3
+};
+
 typedef struct {
     fist_pool_allocation allocation;
     fist_object_pose pose;
     fist_spatial_velocity velocity;
     int16_t speed;
     uint16_t collision_grace;
+    uint16_t age;
     /* Physical actor slot, independent of overwritten registry bindings. */
     uint16_t origin_slot;
     uint16_t target_slot;
     int32_t target_height_offset;
     uint8_t flags;
+    uint8_t secondary_flags;
+    uint8_t ground_height;
+    uint8_t mode;
+    /* Owned update protocol; no additional original record field. */
+    uint8_t phase;
     uint8_t collision_profile;
     /* Original +2a is initialized to 5. Its flight meaning is still open. */
     uint8_t launch_parameter;

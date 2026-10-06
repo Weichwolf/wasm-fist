@@ -59,6 +59,10 @@ void fist_object_pool_reset(fist_object_pool *pool);
  * Orphaned physical allocations from duplicate snapshot imports are valid. */
 int fist_object_pool_is_valid(const fist_object_pool *pool);
 
+/* Resolve the current registry binding of a physical slot (original b354).
+ * Orphans/unused slots return UNAVAILABLE; failure preserves output. */
+int fist_object_pool_find(const fist_object_pool *pool, uint16_t slot, fist_pool_allocation *out);
+
 /* Allocate the first physical slot of the original type class and first registry
  * vacancy whose pointer and saved word are both empty. Low priority uses the
  * original 120-short-object admission gate. Returns OK, UNAVAILABLE or -1 for
