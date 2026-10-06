@@ -1745,6 +1745,18 @@ bash tools/check_flow.sh
 ```
 
 
+- Startup frame source at parent `7dcfbb5`: `capture_cpu_startup_vga_frame.py`
+  reuses the task/PIT/drawing observation owners and captures both first real
+  VGA callbacks, all100 returned lines and five complete CPU/RAM/device/PF/CR2
+  boundaries. Cache/palette/aspect/changed-line/frameskip snapshots prove the
+  unchanged-line path and the end-update frameskip4→5 transition. Frame34 at
+  532261us equals its complete original indexed cache and all256 palette entries.
+  All39 frames/27518 mixedPCM samples/end600 remain bytewise equal to a fresh
+  unprobed original. Missing last callback/line and corrupted cache are rejected.
+  `cpu_startup_vga_frame_case.json` records provenance and reproduction; raw
+  captures stay under `/tmp`. This is an original source fixture, not production
+  clock/renderer adoption, a runtime startup seed or full video/audio acceptance.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device

@@ -1,0 +1,50 @@
+{
+  "scope": "Original capture only: real startup engine seed, first two VGA_DrawPart callbacks, renderer unchanged-line/frameskip effects and first complete indexed frame/palette/time. Native/WASM runtime adoption and complete frame/audio parity remain open.",
+  "command": "python3 -B tools/oracle/capture_cpu_startup_vga_frame.py --repo \"$PWD\" --output /tmp/wasm-fist-startup-vga-source",
+  "parent": "7dcfbb5920c4b9a6398b0ecd94c3ce2737583eab",
+  "evidence": "/tmp/wasm-fist-startup-vga-public-capture",
+  "source_terminal_exit": 0,
+  "source_inputs": 48,
+  "original_assets": 419,
+  "normal_task_boundaries": 31,
+  "vga_boundaries": 5,
+  "line_outputs": 100,
+  "source_trace_records": 369187,
+  "frame_index": 34,
+  "frame_time_us": 532261,
+  "complete_unprobed_original_output": {
+    "endpoint_ms": 600,
+    "frames": 39,
+    "pcm_samples": 27518,
+    "sha256": {
+      "frames": "a290aa1a719f55760c7b67f0c5a7a31937e7795495c374bf926c973b0b811993",
+      "pcm": "7e1f2cc2e2e11d0b44f10441bc3412e061cf9b32443d9ed22fed1a1a4f873a53",
+      "end": "b07ec7261b6b6d3f8d5940321882ca94f9a7594bfbaff154027edce3a5c5a12f"
+    }
+  },
+  "negative_source_checks": [
+    {
+      "mode": "missing-last-callback",
+      "rejected": true
+    },
+    {
+      "mode": "missing-last-line",
+      "rejected": true
+    },
+    {
+      "mode": "corrupt-renderer-cache",
+      "rejected": true
+    }
+  ],
+  "proof_sha256": {
+    "/tmp/wasm-fist-startup-vga-public-capture/proof.json": "366a2f9c1c829abff168a3f96b0a541d41956fd4e965cacc3fd0962839e851ff",
+    "/tmp/wasm-fist-startup-vga-public-capture/inputs.json": "70c46ab1625f1552cc93f5868f9fd00fee1c8056ea77912d08aedba6c7acf76d",
+    "/tmp/wasm-fist-startup-vga-public-capture/originals.json": "a63b01eca8ec853a4f281810422e4e86cbaadf9d46a172ad176258db6b1ad3ec",
+    "/tmp/wasm-fist-startup-vga-capture-negatives-checked/proof.json": "51e0a5a25b110fe504aadee37b485b7c8f491fa89411780f0e7eb0f40496af5a"
+  },
+  "producer_sha256": {
+    "tools/oracle/capture_cpu_startup_vga_frame.py": "03e44d6f9cba6318fc1a136af590f22123c7c30c2c3c78763c978e2c0fb5bf06",
+    "tools/oracle/startup_vga_frame.gdb.inc": "2e7d7c99841b7cbe0e58f43c7677c0cf7d7896ef0fec22fc9a178fd855667075"
+  },
+  "complete_original_acceptance": false
+}
