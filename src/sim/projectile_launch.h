@@ -4,6 +4,7 @@
 #include "sim/object_pool.h"
 #include "sim/rotation.h"
 #include "sim/vehicle_state.h"
+#include "sim/world.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -14,13 +15,6 @@ enum {
     FIST_LAUNCH_CAPACITY = 2,
     FIST_LAUNCH_NO_SOUND = UINT8_MAX
 };
-
-typedef struct {
-    int32_t x;
-    int32_t y;
-    int32_t altitude;
-    uint16_t heading;
-} fist_object_pose;
 
 typedef struct {
     fist_pool_allocation allocation;

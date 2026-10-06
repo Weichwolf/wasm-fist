@@ -72,6 +72,12 @@ and sound-dispatch request. Both targets pass actual original-method and full-mi
 corpus comparisons, required builds/style and memory checks. Consuming world installation,
 projectile flight/hits, smoke lifecycle, command eligibility and audible PCM remain under 0065.
 
+Closed 0068 supplies complete shared ordered unit collision and hit aspect for consuming flight.
+All per-type rules, wrapped XY admission, encounter RNG, registry/physical association and
+first-hit ordering pass complete original-method and all-47-snapshot-world verification on both
+targets, required builds/style and memory checks. Projectile advance, ground impact, damage,
+effect retirement and full live mission/input/audio behavior remain open under 0065.
+
 ## Next
 
 Continue with 0065: recover and deliver primary player weapon firing, ammunition/reload and

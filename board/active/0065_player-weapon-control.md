@@ -146,11 +146,25 @@ See `docs/projectile-launch.md` and closed 0067 for exact evidence and scope. Th
 returns initialized payloads to their caller; it does not install live world payloads, advance
 flight/smoke, resolve hits, bind fire input or produce audible PCM.
 
+### Ordered collision dependency for consuming flight
+
+Closed 0068 supplies complete bb1b unit collision, inclusive wrapped XY admission, every e518
+interaction method, encounter-ordered shared randomness and word-width hit aspect. Borrowed
+physical pose views use the existing pool owner; current registry order, overwritten bindings
+and orphaned sources remain correct. Type 21 is the actual clc/ret method, and probabilistic
+classes 5/6 remain unnamed beyond their proved contract. Both targets pass 35,271 full query
+observations, all 47 snapshot worlds/4,213 sources and 179 M1 shell queries, complete original
+methods, strict tooling, all 18 native and complete WASM gates, and the production-flags memory
+gate. See `docs/unit-collision.md` and closed 0068. Flight must check the first returned hit
+against its origin only after the query; it must not search past an origin hit. Projectile
+advance, ground impact, damage, retirement, live world/input/audio delivery remain open.
+
 ## Next
 
 Recover command eligibility and phase-driven fire from original class/input routines and real
 mission state. Use the delivered allocator and launch payloads to implement consuming projectile flight,
-hit/effect lifecycle and live world installation before binding fire input. Import actual mission occupancy instead of presuming an empty short arena.
+hit/effect lifecycle and live world installation before binding fire input. Reuse the delivered
+ordered unit-collision query; recover the actual ground-impact and retirement stages. Import actual mission occupancy instead of presuming an empty short arena.
 Preserve the delivered selection/reload clock and truthful display. Replay timed
 inputs on both targets and verify complete output/state/error behavior, visuals and memory.
 Keep 0041 active until projectiles/hits, objectives/outcomes and audible events form a complete

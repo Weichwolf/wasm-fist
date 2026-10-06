@@ -1,6 +1,8 @@
 #ifndef FIST_SIM_WORLD_H
 #define FIST_SIM_WORLD_H
 
+#include <stdint.h>
+
 /* Original map coordinates: 32-bit sampler inputs after a 13-bit shift.
  * Rendering divides map positions/altitudes by 256; headings use full u16 turns. */
 enum {
@@ -10,5 +12,13 @@ enum {
     FIST_POSITION_SCALE = 256,
     FIST_TURN_SIZE = 65536
 };
+
+/* Shared typed world pose, borrowed by collision and owned by live payloads. */
+typedef struct {
+    int32_t x;
+    int32_t y;
+    int32_t altitude;
+    uint16_t heading;
+} fist_object_pose;
 
 #endif
