@@ -17,8 +17,9 @@ and verification tools remain available without participating in the rewrite bui
 | `board/reference/`, `re_out/`, `patches/`, legacy shims/tools | Historical evidence only. |
 
 The renderer, diagnostic browser presentation, shared FSG envelope/metadata decoder and
-KLC/resource/palette readers exist so far. See `docs/scenario-format.md` and
-`docs/terrain-format.md`; unit/chunk views retain undecoded gameplay records honestly.
+KLC/resource/palette readers and complete terrain bundle loader exist so far. See
+`docs/scenario-format.md`, `docs/terrain-format.md` and `docs/terrain-loading.md`; unit/chunk
+views retain undecoded gameplay records honestly.
 Other directories document ownership, not implemented subsystems. No placeholder game APIs promise behavior they lack.
 The diagnostic triangle uses fixture geometry and colors, not reconstructed game assets.
 

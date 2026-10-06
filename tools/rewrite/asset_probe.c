@@ -65,7 +65,7 @@ static int probe_resource(const uint8_t *data, size_t size, const char *name) {
     return fwrite(member.data, 1, member.size, stdout) == member.size ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-static int probe_palette(const uint8_t *data, size_t size) {
+static int probe_palette(int prepared, const uint8_t *data, size_t size) {
     fist_palette palette = {0};
     for (size_t index = 0; index < FIST_PALETTE_SIZE; ++index) {
         palette.rgb6[index] = MARKER_COMPONENT;
@@ -78,19 +78,42 @@ static int probe_palette(const uint8_t *data, size_t size) {
         }
         return EXIT_FAILURE;
     }
+    if (prepared != 0 && fist_palette_prepare(&palette, &palette) != 0) {
+        return CONTRACT_FAILURE;
+    }
     return fwrite(palette.rgb6, 1, FIST_PALETTE_SIZE, stdout) == FIST_PALETTE_SIZE ? EXIT_SUCCESS
                                                                                    : EXIT_FAILURE;
+}
+
+static int probe_palette_map(const uint8_t *data, size_t size) {
+    fist_palette palette = {0};
+    fist_palette_map map = {0};
+    if (size != (size_t)FIST_PALETTE_SIZE * 2 ||
+        fist_palette_decode(data, FIST_PALETTE_SIZE, &palette) != 0 ||
+        fist_palette_prepare(&palette, &palette) != 0 ||
+        fist_palette_build_map(data + FIST_PALETTE_SIZE, &palette, &map) != 0) {
+        return EXIT_FAILURE;
+    }
+    return fwrite(palette.rgb6, 1, FIST_PALETTE_SIZE, stdout) == FIST_PALETTE_SIZE &&
+                   fwrite(map.indices, 1, FIST_PALETTE_COLORS, stdout) == FIST_PALETTE_COLORS
+               ? EXIT_SUCCESS
+               : EXIT_FAILURE;
 }
 
 static int probe_null_contracts(void) {
     fist_klc_image image = image_marker();
     fist_palette palette = {0};
+    fist_palette_map map = {0};
     fist_asset_view member = {NULL, 0};
     const uint8_t data[] = {0};
     if (fist_klc_decode(NULL, 0, &image) != -1 || is_image_marker(&image) == 0 ||
         fist_klc_decode(data, sizeof(data), NULL) != -1 ||
         fist_palette_decode(NULL, 0, &palette) != -1 ||
         fist_palette_decode(data, sizeof(data), NULL) != -1 ||
+        fist_palette_prepare(NULL, &palette) != -1 || fist_palette_prepare(&palette, NULL) != -1 ||
+        fist_palette_build_map(NULL, &palette, &map) != -1 ||
+        fist_palette_build_map(palette.rgb6, NULL, &map) != -1 ||
+        fist_palette_build_map(palette.rgb6, &palette, NULL) != -1 ||
         fist_resource_find(NULL, 0, "A.PAL", &member) != -1 ||
         fist_resource_find(data, sizeof(data), NULL, &member) != -1 ||
         fist_resource_find(data, sizeof(data), "A.PAL", NULL) != -1) {
@@ -131,8 +154,11 @@ int main(int argc, char **argv) {
     int result = EXIT_FAILURE;
     if (argc == 3 && (strcmp(argv[1], "klc") == 0 || strcmp(argv[1], "klc-prefixes") == 0)) {
         result = probe_image(strcmp(argv[1], "klc-prefixes") == 0, data, size);
-    } else if (argc == 3 && strcmp(argv[1], "palette") == 0) {
-        result = probe_palette(data, size);
+    } else if (argc == 3 &&
+               (strcmp(argv[1], "palette") == 0 || strcmp(argv[1], "palette-prepared") == 0)) {
+        result = probe_palette(strcmp(argv[1], "palette-prepared") == 0, data, size);
+    } else if (argc == 3 && strcmp(argv[1], "palette-map") == 0) {
+        result = probe_palette_map(data, size);
     } else if (argc == 4 && strcmp(argv[1], "resource") == 0) {
         result = probe_resource(data, size, argv[3]);
     }

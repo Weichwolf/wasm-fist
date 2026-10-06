@@ -11,15 +11,17 @@ into validated typed assets shared by native and WASM, enabling a real softgl te
 ## Evidence
 
 0048 supplies scenario BINF names and position metadata. There are 18 local KLC files and PAL.RES;
-47 scenarios use 28 height/colormap/palette/sky combinations. Closed 0051 supplies shared KLC1,
+47 scenarios use 19 case-normalized height/colormap/palette/sky combinations (28 spelling variants).
+Closed 0051 supplies shared KLC1,
 RESOURCE1 and six-bit palette readers: all 22 KLC/SKY planes and all 32 palettes match complete
-original instruction output on native/WASM. See `docs/terrain-format.md`. Scenario bundle resolution,
-mission palette remapping, terrain geometry/world units/camera and vehicle models remain open.
+original instruction output on native/WASM. Closed 0052 supplies complete scenario bundle loading,
+original mission palette sorting and color/sky mapping, verified for all 47 scenarios and 38 mapping
+pairs. See `docs/terrain-format.md` and `docs/terrain-loading.md`. Terrain geometry/world units/camera
+and vehicle models remain open.
 
 ## Next
 
-Resolve scenario asset names into a complete typed bundle, recover mission palette remapping at
-9ec0 and world height/axis units from original map setup/sampling. Recover camera placement from
+Recover world height/axis units from original map setup/sampling. Recover camera placement from
 scenario/player evidence; decoded row order alone does not prove world axes. Render the resulting
 real terrain and review actual native/browser output before accepting this scene milestone.
 

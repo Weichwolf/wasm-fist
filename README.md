@@ -8,7 +8,8 @@ throughout development.
 
 **Current scope:** a native/WASM renderer integration probe and shared C11 readers for scenario
 envelopes/metadata/unit framing (all 47 missions), KLC height/colormap/stamp/sky planes (all 22
-files), resource members and VGA palettes (all 32 palettes). Terrain scene rendering, models,
+files), resource members and VGA palettes (all 32 palettes). Complete terrain bundles and mission
+palette maps are verified for all 47 scenarios. Terrain scene rendering, models,
 simulation, playable missions and audio are not implemented yet. See
 [architecture](docs/architecture.md), [reference status](docs/reference-status.md),
 [work queue](board/README.md) and [goal](docs/rewrite-goal.md).
@@ -78,6 +79,8 @@ and the optional pinned instruction oracle. Synthetic terrain contracts run in b
 `test_terrain_assets.py --originals` requires every pinned original and compares complete outputs
 against actual original decoder instructions on native/WASM. Unicorn is an optional verification
 dependency, outside the game and renderer builds.
+The [terrain loader](docs/terrain-loading.md) also validates all required scenario asset references,
+direct/archive palette resolution, original mission palette preparation and full bundle ownership.
 
 ## Browser verification
 

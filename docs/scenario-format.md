@@ -54,7 +54,8 @@ BINF fields may terminate with NUL or fill all 16 bytes with DOS space padding: 
 layer; names must remain nonempty and fit the 8+dot+3 basename length. Case is preserved; future
 platform lookup must be case-insensitive. Embedded resource lookup is now provided by
 `src/assets/resource.c`; its original DOS folding and validation are documented in
-[terrain format](terrain-format.md). Scenario asset bundle installation remains open.
+[terrain format](terrain-format.md). Shared terrain bundle loading is now implemented; see
+[terrain loading](terrain-loading.md). Installing mission objects and terrain in a scene remains open.
 
 DCBS bodies in the current corpus have lengths 55 or 251 bytes. The envelope decoder follows the
 declared length and requires at least the original first state word, rather than guessing a unit
@@ -78,5 +79,6 @@ again for unchanged hashes after use. Every truncated prefix of the synthetic co
 must fail and leave output unchanged; malformed counts/lengths/names/termination also fail.
 
 On 2026-10-06 all eight test groups passed on both targets without skips in the original gate,
-covering 574215 original scenario bytes and 4213 unit records across 28 asset combinations.
+covering 574215 original scenario bytes and 4213 unit records across 28 asset-name spelling variants
+(19 distinct tuples after DOS case normalization, verified during terrain bundle loading).
 This proves the documented envelope/metadata contract, not a playable mission or full game.

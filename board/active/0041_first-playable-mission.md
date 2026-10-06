@@ -13,10 +13,12 @@ Renderer integration and the original scenario envelope/metadata decoder are del
 KLC/SKY planes and 32 resource palettes with complete original-instruction output comparison on
 both targets. Terrain installation/rendering, models, simulation, interactive native presentation
 and audio delivery remain unimplemented.
+Closed 0052 supplies complete owned terrain bundles and original mission palette mappings for all
+47 scenarios, with native/WASM instruction-oracle and allocation/error-path evidence.
 
 ## Next
 
-Continue 0049 with scenario asset resolution, mission palette remapping and terrain placement/rendering.
+Continue 0049 with terrain placement/rendering and a supported inspection camera.
 Follow with model catalog
 and geometry, actual terrain/model rendering, native SDL2/browser loops, fixed-step controls,
 HUD, combat/outcome and shared sound events as separate verified steps. Scenario-state, path,

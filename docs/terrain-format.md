@@ -74,8 +74,9 @@ It validates the entire directory before returning: the first payload begins aft
 offsets never decrease or escape the input, and the sentinel ends the file. Zero-length generic
 members are permitted. A palette member must contain exactly 768 bytes, each at most 63.
 
-Terrain rendering still needs original world placement and mission palette selection/remapping.
-These readers do not yet install terrain, stamps, sky or vehicles in a scene.
+Scenario bundle loading and original mission palette preparation/remapping are now supplied by
+`src/assets/terrain.c` and `palette.c`; see [terrain loading](terrain-loading.md). Terrain rendering
+still needs world placement. These readers do not yet install terrain, stamps, sky or vehicles in a scene.
 
 ## Verification
 
@@ -88,8 +89,9 @@ selection, zero-size members, six-bit palette bounds and repeated destruction.
 The optional original gate executes actual original x86 instructions through pinned Unicorn 2.1.4.
 No instruction hook implements or replaces decoding. It begins with buffered files and stops before
 DOS close; the resource oracle executes original name encoding, header reads, directory search,
-offset selection and length subtraction. DOS transport/refill, paging, terrain resampling, palette
-remapping and full gameplay are outside that oracle's scope. The pinned manifest contains only
+offset selection and length subtraction. The expanded gate also executes original mission palette
+preparation/mapping as documented in terrain loading. DOS transport/refill, paging, terrain resampling
+and full gameplay are outside that oracle's scope. The pinned manifest contains only
 names, dimensions, sizes and hashes; original bytes remain ignored and read-only.
 
 ```sh

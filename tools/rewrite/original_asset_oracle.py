@@ -1,8 +1,9 @@
 """Execute frozen original decoder instructions with already buffered input.
 
 This is an independent data oracle, not a port of the KLC algorithm. No instruction
-hooks replace decoding. DOS open/read/close, paging/refill, terrain resampling and
-mission palette remapping are outside this buffered-decoder contract.
+hooks replace decoding. DOS open/read/close, paging/refill and terrain resampling
+are outside this buffered-decoder contract. Mission palette preparation/mapping
+are executed separately with original register inputs and the normal terrain band.
 """
 import hashlib
 import importlib.metadata
@@ -84,3 +85,21 @@ class OriginalAssetOracle:
         if offset < 16 or length == 0 or offset + length > len(data):
             raise RuntimeError("Original selected an invalid pinned resource member")
         return bytes(machine.mem_read(INPUT + offset, length))
+
+    def mission_palette(self, palette, rgb8):
+        from unicorn.x86_const import UC_X86_REG_EDI, UC_X86_REG_ESI
+        if len(palette) != 768 or len(rgb8) != 768 or max(palette) > 63:
+            raise RuntimeError("Expected complete DAC6 and embedded RGB8 palettes")
+        machine = self.machine(palette, 4096)
+        machine.mem_write(0x28a5, struct.pack("<I", 80))  # Engine db47 normal mission band.
+        machine.mem_write(0x5598, palette)
+        self.execute(machine, 0x9f10, 0x9f65)  # Actual luminance selection sort.
+        prepared = bytes(machine.mem_read(0x5598, 768))
+        machine.mem_write(0x5260, prepared)
+        self.execute(machine, 0xa033, 0xa052)  # Actual reduced search palette.
+        machine.mem_write(0x5598, rgb8)
+        self.execute(machine, 0x4a3c, 0x4a59)  # Actual embedded RGB8 -> DAC6 conversion.
+        machine.reg_write(UC_X86_REG_ESI, 0x5598)  # Original 9ecc caller supplies ESI.
+        machine.reg_write(UC_X86_REG_EDI, OUTPUT)
+        self.execute(machine, 0x9e60, 0x9eaa)  # Actual map builder and ac70 search/SMC.
+        return prepared + bytes(machine.mem_read(OUTPUT, 256))
