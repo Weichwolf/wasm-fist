@@ -51,20 +51,22 @@ height/slope sampling and contact publication are delivered by closed 0063.
 Closed 0063 supplies shared installed contact for all four classes, retaining independent hull/
 turret slopes and preserving altitude until the class transfer stage. Both targets pass all
 headings, byte differences, all 960 original ground snapshots at four field sizes, full original
-returns, initialization/motion regressions, strict tooling and memory checks. This still changes
-no displayed frame or mission/control clock; open 0064 integrates the first controlled moving scene.
+returns, initialization/motion regressions, strict tooling and memory checks. This contact stage changes
+no displayed frame or mission/control clock. Closed 0064 connects those stages to an owned
+continuous controlled native SDL2/browser scene with current model/camera inputs, rational PIT
+clock, held keys/pause/focus, all-47-player manual stage traces, actual visual and sanitizer
+evidence. Only the player is displayed; targeting, full class tick, other-unit AI, combat,
+objectives, HUD and audio remain open.
 
 ## Next
 
-Continue 0064 with the first controlled moving scene. Recover class altitude transfer,
-controller cadence and current model/camera inputs; connect the owned
-initialized moving vehicle to the first interactive scene. Recover other-class selection and optional
-original model mission-palette mapping as reached; current vehicle rendering intentionally
-retains MAL colors.
-Install the selected vehicle using the owned definitions. Follow with native SDL2/browser
-interactive loops and vehicle/terrain rendering, fixed-step controls,
-HUD, combat/outcome and shared sound events as separate verified steps. Scenario-state, path,
-stamp and player semantics still need typed decoding before object installation.
+Continue with 0065: recover and deliver primary player weapon firing, ammunition/reload and
+visible feedback, then projectile/hit rules, mission objectives/outcome and shared sound events
+in verified bounded steps. Preserve the working continuous driving baseline. Recover targeting,
+other-unit class/AI behavior and complete world/object installation as reached; current sprites
+intentionally retain MAL colors. Scenario path/stamp/player mission semantics still need typed
+decoding. Every stage requires real native/browser behavior and visual evidence before claiming
+a complete playable mission.
 
 ## Accept
 

@@ -40,7 +40,9 @@ diagnostic presentation; all 6432 complete corpus bitmap byte comparisons still 
 earlier upside-down contact sheets are not evidence of final scene orientation.
 
 The inspection camera is 64 render units behind the selected vehicle along the requested
-heading and 32 units above its interpolated ground origin; pitch points at that origin. These
+heading. In 0059 it was 32 units above its interpolated ground origin; 0064 raises it to
+32 above the higher surface at the actor or camera, after INDIA3 exposed a view beneath a
+steep slope. Pitch still points at the actor origin. These
 are explicit framing choices. The quad faces the camera, uses recovered origin-relative bounds,
 nearest texture sampling and the original MAL RGB6 colors expanded to RGB8. Retaining MAL
 colors is intentional; original mission-palette remapping/shading is not applied to the vehicle.

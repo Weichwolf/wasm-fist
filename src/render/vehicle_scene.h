@@ -4,7 +4,9 @@
 #include "assets/model.h"
 #include "assets/terrain.h"
 #include "assets/units.h"
+#include "assets/vehicle.h"
 #include "render/renderer.h"
+#include "sim/vehicle_state.h"
 
 #include <stdint.h>
 
@@ -19,5 +21,18 @@ int fist_vehicle_inspection_view(const fist_terrain *terrain, const fist_unit_de
 int fist_scene_vehicle_prepare(const fist_terrain *terrain, const fist_unit_definition *definition,
                                const fist_model *model, const fist_terrain_view *view,
                                fist_scene_vehicle *out);
+
+typedef struct {
+    const fist_vehicle_state *state;
+    const fist_vehicle_visual *visual;
+    const fist_model *model;
+} fist_scene_actor;
+
+/* The same inspection framing and mesh placement, driven by current owned
+ * position/headings/selectors. Asset definitions remain immutable. */
+int fist_vehicle_follow_view(const fist_terrain *terrain, const fist_vehicle_state *state,
+                             fist_terrain_view *out);
+int fist_scene_actor_prepare(const fist_terrain *terrain, const fist_scene_actor *actor,
+                             const fist_terrain_view *view, fist_scene_vehicle *out);
 
 #endif

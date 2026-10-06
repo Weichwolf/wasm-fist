@@ -1,8 +1,13 @@
 #include "assets/palette.h"
 #include "assets/terrain.h"
+#include "assets/units.h"
 #include "render/model_bitmap.h"
 #include "render/renderer.h"
+#include "render/terrain_scene.h"
+#include "render/vehicle_scene.h"
+#include "sim/vehicle_state.h"
 #include "sim/world.h"
+#include <math.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -113,6 +118,49 @@ static int check_vehicle(fist_renderer *renderer, const fist_terrain *terrain,
                : -1;
 }
 
+static int check_follow_camera(void) {
+    static const float height_tolerance = 0.001F;
+    enum {
+        HILL_SIDE = 256,
+        HILL_START = 8,
+        PLAYER_HEIGHT = 10,
+        HILL_HEIGHT = 250,
+        FOLLOW_CLEARANCE = 32
+    };
+    uint8_t *heights = calloc((size_t)HILL_SIDE * HILL_SIDE, 1);
+    if (heights == NULL) {
+        return -1;
+    }
+    for (size_t row = 0; row < HILL_SIDE; ++row) {
+        for (size_t column = 0; column < HILL_SIDE; ++column) {
+            heights[(row * HILL_SIDE) + column] = row >= HILL_START ? HILL_HEIGHT : PLAYER_HEIGHT;
+        }
+    }
+    const fist_terrain terrain = {
+        .heightmap = {.width = HILL_SIDE, .height = HILL_SIDE, .pixels = heights}};
+    const fist_vehicle_state player = {.type = 0};
+    const fist_unit_definition definition = {.type = 0};
+    fist_terrain_view live = {0};
+    fist_terrain_view reference = {0};
+    int result = -1;
+    if (fist_vehicle_follow_view(&terrain, &player, &live) == 0 &&
+        fist_vehicle_inspection_view(&terrain, &definition, 0, &reference) == 0) {
+        const float ground = fist_terrain_surface(&terrain, live.map_x, live.map_y);
+        const float altitude = fist_terrain_surface(&terrain, player.map_x, player.map_y);
+        const float aimed_height = live.altitude + (tanf(live.pitch) * CAMERA_DISTANCE);
+        /* A reached hill places the old camera below its own terrain sample.
+         * Both immutable/live adapters must clear it and aim at the actor. */
+        if (ground > altitude + FOLLOW_CLEARANCE && live.altitude >= ground + FOLLOW_CLEARANCE &&
+            fabsf(aimed_height - altitude) < height_tolerance && live.map_x == reference.map_x &&
+            live.map_y == reference.map_y && live.altitude == reference.altitude &&
+            live.pitch == reference.pitch) {
+            result = 0;
+        }
+    }
+    free(heights);
+    return result;
+}
+
 int main(void) {
     uint8_t heights[PLANE_SIDE * PLANE_SIDE] = {0};
     uint8_t colors[PLANE_SIDE * PLANE_SIDE] = {0};
@@ -132,9 +180,9 @@ int main(void) {
     int result = EXIT_FAILURE;
     if (renderer != NULL && background != NULL &&
         draw_copy(renderer, &terrain, &view, background) == 0 &&
-        check_vehicle(renderer, &terrain, &view, background) == 0) {
+        check_vehicle(renderer, &terrain, &view, background) == 0 && check_follow_camera() == 0) {
         puts("vehicle scene: complete transparency, terrain depth, vertical orientation and state "
-             "reuse pass");
+             "reuse and hill-safe follow camera pass");
         result = EXIT_SUCCESS;
     }
     free(background);

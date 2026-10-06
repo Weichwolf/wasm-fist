@@ -30,10 +30,21 @@ add_library(fist_assets STATIC src/assets/scenario.c src/assets/units.c src/asse
 target_include_directories(fist_assets PUBLIC src)
 target_link_libraries(fist_assets PRIVATE fist_build_options)
 target_compile_options(fist_assets PRIVATE -Werror)
-add_library(fist_sim STATIC src/sim/random.c src/sim/ground.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/vehicle_motion.c)
+add_library(fist_sim STATIC src/sim/random.c src/sim/ground.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/vehicle_motion.c src/sim/driver.c)
 target_include_directories(fist_sim PUBLIC src)
 target_link_libraries(fist_sim PRIVATE fist_build_options)
 target_compile_options(fist_sim PRIVATE -Werror)
+add_library(fist_app STATIC src/app/driving.c src/app/driving_view.c)
+target_include_directories(fist_app PUBLIC src)
+target_link_libraries(fist_app PUBLIC fist_assets fist_sim fist_render PRIVATE fist_build_options)
+target_compile_options(fist_app PRIVATE -Werror)
+add_executable(fist_driving_probe tools/rewrite/driving_probe.c)
+target_link_libraries(fist_driving_probe PRIVATE fist_app fist_probe_io fist_build_options)
+target_compile_options(fist_driving_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    set_target_properties(fist_driving_probe PROPERTIES SUFFIX ".js")
+    target_link_options(fist_driving_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
+endif()
 add_executable(fist_vehicle_start_probe tools/rewrite/vehicle_start_probe.c)
 target_link_libraries(fist_vehicle_start_probe PRIVATE fist_sim fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_vehicle_start_probe PRIVATE -Werror)
@@ -111,6 +122,28 @@ target_include_directories(fist_render PUBLIC src)
 target_link_libraries(fist_render PRIVATE softgl fist_assets fist_build_options)
 target_compile_options(fist_render PRIVATE -Werror)
 
+add_executable(fist_driving_preview tools/rewrite/driving_preview.c)
+target_link_libraries(fist_driving_preview PRIVATE fist_app fist_probe_io fist_build_options)
+target_compile_options(fist_driving_preview PRIVATE -Werror)
+if(EMSCRIPTEN)
+    target_compile_options(fist_driving_preview PRIVATE -msimd128 -pthread)
+    target_link_options(fist_driving_preview PRIVATE
+        "--js-library=${CMAKE_SOURCE_DIR}/src/platform/wasm/present.js"
+        -msimd128 -pthread -sPTHREAD_POOL_SIZE=3 -sEXIT_RUNTIME=0
+        -sALLOW_MEMORY_GROWTH=1 -sMODULARIZE=1 -sINVOKE_RUN=0
+        -sEXPORT_NAME=createFistDrivingPreview -sENVIRONMENT=web,node
+        "-sEXPORTED_RUNTIME_METHODS=['FS','callMain','PThread']"
+        "-sEXPORTED_FUNCTIONS=['_main','_fist_preview_advance','_fist_preview_key','_fist_preview_freeze','_fist_preview_frame','_fist_preview_pixels','_fist_preview_value','_fist_preview_destroy']")
+    set_target_properties(fist_driving_preview PROPERTIES SUFFIX ".js")
+    configure_file(src/platform/wasm/driving.html driving.html COPYONLY)
+    configure_file(src/platform/wasm/driving.js driving.js COPYONLY)
+    configure_file(src/platform/wasm/preview_assets.js preview_assets.js COPYONLY)
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+    target_link_libraries(fist_driving_preview PRIVATE PkgConfig::SDL2)
+endif()
+
 add_executable(fist_terrain_preview tools/rewrite/terrain_preview.c)
 target_link_libraries(fist_terrain_preview PRIVATE fist_render fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_terrain_preview PRIVATE -Werror)
@@ -156,6 +189,9 @@ endif()
 include(CTest)
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME driving_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_driving.py
+        --target native --native-probe $<TARGET_FILE:fist_driving_probe>)
     add_test(NAME ground_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_ground.py
         --target native --native-probe $<TARGET_FILE:fist_ground_probe>)

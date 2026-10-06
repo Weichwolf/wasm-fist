@@ -16,19 +16,19 @@ normal-side registry/platoon mappings are verified for all 4213 original snapsho
 model loader decodes all 34 original directional sprite families, with original model selection
 and complete owned sprite assembly. Typed ground-vehicle initialization and the deterministic
 four-stream RNG, ground motion and manual turret updates are shared between targets.
-Interactive controls, full simulation, playable
-missions and audio remain open. See
+A continuous native SDL2/browser driving scene now connects owned player state, installed
+height/contact, timed keyboard controls and live model/camera rendering. Full simulation,
+playable missions and audio remain open. See
 [architecture](docs/architecture.md), [reference status](docs/reference-status.md),
 [work queue](board/README.md) and [goal](docs/rewrite-goal.md).
 
 ## Dependencies and build
 
 On Debian, install `clang`, `clang-format-19`, `clang-tidy-19`, `cmake`, `ninja-build`, `nodejs`,
-`emscripten`, `python3` and `git`. Strict style checks require LLVM **19.1.x**;
+`emscripten`, `python3`, `git`, `pkg-config` and `libsdl2-dev`. Strict style checks require LLVM **19.1.x**;
 set `CLANG_FORMAT=clang-format-19` and `CLANG_TIDY=clang-tidy-19` if unversioned commands differ.
 Native softgl requires SSE4.1; WASM requires SIMD128. The WASM build uses softgl pthread workers; the browser requires
-cross-origin isolation headers supplied by the included local server. SDL2 is planned for the native interactive milestone
-and is not required by this headless probe.
+cross-origin isolation headers supplied by the included local server. SDL2 supplies the native driving preview window/input and presentation.
 
 ```sh
 git submodule update --init --recursive
@@ -86,12 +86,12 @@ complete component templates and explicit deterministic random input. Its
 The [vehicle motion](docs/vehicle-motion.md) implements speed/hull control, both velocity lanes,
 position integration and manual turret slew. `test_vehicle_motion.py --originals --oracle`
 checks complete original motion returns, every heading, all four slope profiles to their
-actual speed caps and sustained driving on both targets. Collision and interactive
-input integration remain open.
+actual speed caps and sustained driving on both targets. Collision and full targeting/weapon integration remain open.
 The [ground contact](docs/ground-contact.md) supplies installed height and independent hull/
 turret slopes in shared typed state. `test_ground.py --originals --oracle` checks every heading,
 all height-byte differences and all 960 ground snapshots at each original detail level against
-complete original returns. Class altitude transfer and controlled scene integration are next.
+complete original returns. The [controlled scene](docs/driving-scene.md) supplies class altitude transfer, a shared rational
+controller clock and live input/rendering.
 The [model format](docs/model-format.md) documents complete directional sprite families and
 their ownership/validation. `python3 tools/rewrite/test_models.py --originals` requires all 170
 model files; optional `--oracle` compares all texels and lookup fields with original instructions.
@@ -103,8 +103,8 @@ completion. Original binaries remain ignored.
 The [height-field resampler](docs/heightfield-resampling.md) supplies owned periodic height
 expansion and exact knot reduction before ground installation. Its `test_heightfield.py --originals`
 gate compares all square original fields and all eight height maps at runtime sizes through 4096
-with complete original returns on both targets. Ground queries/contact are delivered; live
-scene integration remains open.
+with complete original returns on both targets. Ground queries/contact and live
+scene integration are delivered; full mission behavior remains open.
 The [terrain format](docs/terrain-format.md) documents the shared KLC/resource/palette readers
 and the optional pinned instruction oracle. Synthetic terrain contracts run in both build gates;
 `test_terrain_assets.py --originals` requires every pinned original and compares complete outputs
@@ -135,4 +135,5 @@ After preparing terrain inputs, `verify_browser.py --terrain` checks every canva
 the complete shared C scene output. CI prepares constructed terrain without original content.
 CI runs the builds, strict style checks and both actual-browser gates; remote results are separate
 from local verification. The pinned dependency currently emits infinity/fast-math warnings under
-Clang 19; owned code is warning-free with `-Werror`. Interactive rendering remains open.
+Clang 19; owned code is warning-free with `-Werror`. Controlled driving is verified through `verify_browser.py --driving` and
+`verify_driving_native.py`; see [driving scene commands and scope](docs/driving-scene.md).

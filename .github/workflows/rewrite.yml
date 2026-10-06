@@ -14,7 +14,7 @@ jobs:
       - name: Install toolchain
         run: |
           apt-get update
-          apt-get install -y git ca-certificates clang clang-format clang-tidy cmake ninja-build emscripten nodejs npm python3 chromium
+          apt-get install -y git ca-certificates clang clang-format clang-tidy cmake ninja-build emscripten nodejs npm python3 chromium pkg-config libsdl2-dev xvfb xdotool imagemagick
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -33,3 +33,9 @@ jobs:
         run: |
           python3 tools/rewrite/prepare_terrain_preview.py
           python3 tools/rewrite/verify_browser.py --terrain
+      - name: Controlled scene input and complete native/browser presentation
+        run: |
+          rm -rf /tmp/wasm-fist-rewrite/wasm/assets
+          python3 tools/rewrite/prepare_driving_preview.py
+          python3 tools/rewrite/verify_browser.py --driving
+          python3 tools/rewrite/verify_driving_native.py --scenario /tmp/wasm-fist-rewrite/wasm/assets/TEST.FSG --assets /tmp/wasm-fist-rewrite/wasm/assets

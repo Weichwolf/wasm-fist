@@ -6,7 +6,8 @@ and verification tools remain available without participating in the rewrite bui
 
 | Location | Owner and boundary |
 | --- | --- |
-| `src/game/` | Typed world/vehicle/mission state, fixed-step simulation, AI, rules and outcomes. |
+| `src/sim/` | Typed vehicle state, deterministic random/motion/contact and manual driving stages. |
+| `src/app/` | Owned scenario/player session, integer input/time controller and common scene drawing. |
 | `src/assets/` | Validated original-format decoders producing typed host data. |
 | `src/render/` | softgl context, camera, terrain/models, HUD and framebuffer ownership. |
 | `src/audio/` | Shared sound events, sample decoding and final PCM mixing. |
@@ -26,7 +27,8 @@ snapshots; typed identity/pose fields do not initialize or simulate vehicles. Ot
 retain undecoded gameplay records honestly.
 Models own palettes, complete raw streams, validated sprite/part views and all 32 directional
 record mappings. The model loader copies data before storage sources reuse their buffers;
-catalog selection, mission model palette mapping and vehicle rendering remain open.
+catalog selection and vehicle composition/rendering are delivered; original mission model
+palette mapping remains open.
 Other directories document ownership, not implemented subsystems. No placeholder game APIs promise behavior they lack.
 The diagnostic triangle uses fixture geometry and colors, not reconstructed game assets.
 
@@ -35,7 +37,8 @@ and is neither compiled nor linked by the rewrite.
 RGBA8 pixels are tightly packed, bottom row first; browser presentation flips them for ImageData.
 The render thread owns the context and borrowed framebuffer view. softgl_read_rgba8 flushes worker
 output before exposing the view. WASM uses SIMD128 and pthread tile workers, with a prestarted three-worker pool
-matching the renderer's automatic WASM helper-worker limit; native softgl also uses tile workers. Context access remains single-owner. SDL2 interactive native integration is next.
+matching the renderer's automatic WASM helper-worker limit; native softgl also uses tile workers. Context access remains single-owner. The controlled preview has SDL2 native and browser
+input/time/presentation loops; shared `app/driving` owns all simulation and held-key state.
 
 The terrain scene owns its temporary mesh/texture until framebuffer readback completes workers.
 The inspection camera uses recovered periodic coordinates and an explicit preview pose; it does
@@ -62,3 +65,8 @@ Renderer pin: `7963be1d5b5e1bebbe97ece2c655228c8bc0a838` (latest published `orig
 rechecked on 2026-10-06). CMake includes `libsoftgl` directly. Both target build graphs are pure C
 and exclude offline tools, including their meshoptimizer sources. Verification is recorded in
 [WI 0050](../board/closed/0050_softgl-dependency-verification.md).
+
+The continuous driving preview is documented in [driving scene](driving-scene.md). Its native
+device loop currently lives in the preview tool; production platform packaging follows the
+complete mission interface. It supplies no alternate simulation. This manual stage displays
+only the player and has no targeting, other-unit AI, combat/HUD/objective or audio completion.

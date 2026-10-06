@@ -19,7 +19,13 @@ def main():
     parser.add_argument("--port", type=int, default=8127)
     parser.add_argument("--screenshot", type=pathlib.Path)
     parser.add_argument("--terrain", action="store_true", help="Check prepared terrain.html instead of the triangle")
+    parser.add_argument("--driving", action="store_true", help="Check timed input and complete controlled scene presentation")
+    parser.add_argument("--output-dir", type=pathlib.Path, help="Driving frame captures under /tmp")
     args = parser.parse_args()
+    if args.terrain and args.driving:
+        parser.error("Choose one browser scene")
+    if args.output_dir and not args.output_dir.resolve().is_relative_to(pathlib.Path("/tmp")):
+        parser.error("Driving captures belong under /tmp")
     module = args.browser_tools / "node_modules/playwright"
     if not module.is_dir():
         parser.error("Install the pinned browser tooling first; see README.md")
@@ -43,6 +49,9 @@ def main():
                    url + ("/terrain.html" if args.terrain else "/"),
                    str(args.screenshot) if args.screenshot else "",
                    "terrain" if args.terrain else "triangle"]
+        if args.driving:
+            command = ["node", str(ROOT / "tools/rewrite/check_driving_browser.cjs"),
+                       url + "/driving.html", str(args.output_dir) if args.output_dir else ""]
         subprocess.run(command, check=True, timeout=30, env=env)
     finally:
         server.terminate()
