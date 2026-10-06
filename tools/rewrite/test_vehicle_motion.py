@@ -30,23 +30,32 @@ def signed(value):
     return (value + 32768) % 65536 - 32768
 
 
+def coefficient(angle, coarse):
+    folded = angle % 32768
+    folded = min(folded, 32768 - folded)
+    if folded == 16384:
+        return 65536
+    index, fraction = divmod(folded, 64)
+    result = KNOTS[index]
+    if not coarse:
+        result += ((KNOTS[index + 1] - KNOTS[index]) * fraction * 4 + 128) // 256
+    return result
+
+
 def rotate(heading, magnitude, coarse):
     def lane(angle):
-        angle %= 65536
-        folded = angle % 32768
-        folded = min(folded, 32768 - folded)
-        if folded == 16384:
-            coefficient = 65536
-        else:
-            index, fraction = divmod(folded, 64)
-            coefficient = KNOTS[index]
-            if not coarse:
-                coefficient += ((KNOTS[index + 1] - KNOTS[index]) * fraction * 4 + 128) // 256
-        value = abs(magnitude) * coefficient // 65536
-        if (angle >= 32768) != (magnitude < 0):
-            value = -value
-        return signed(value)
+        value = abs(magnitude) * coefficient(angle, coarse) // 65536
+        return signed(-value if (angle % 65536 >= 32768) != (magnitude < 0) else value)
     return lane(heading), lane(16384 - heading)
+
+
+def rotate_spatial(heading, elevation, magnitude, coarse):
+    # Original 0487 destroys the coefficient's full-scale carry, so the
+    # horizontal stage uses the returned 16-bit coefficient even at the pole.
+    horizontal = abs(magnitude) * min(65535, coefficient(16384 - elevation, coarse)) // 65536
+    if ((16384 - elevation) % 65536 >= 32768) != (magnitude < 0):
+        horizontal = -horizontal
+    return (*rotate(heading, horizontal, coarse), rotate(elevation, magnitude, coarse)[0])
 
 
 def start(kind=0, **fields):
@@ -159,6 +168,100 @@ class MotionTests(unittest.TestCase):
             self.assertEqual(ORACLE.rotations(cases), values)
         data = struct.pack('<I', len(cases)) + b''.join(struct.pack('<HhB', *case) for case in cases)
         self.run_probe('rotation', data, ''.join(f'velocity {x} {y}\n' for x, y in values))
+
+    def spatial_rotations(self, cases):
+        values = [rotate_spatial(*case) for case in cases]
+        if ORACLE is not None:
+            self.assertEqual(ORACLE.spatial_rotations(cases), values)
+        data = struct.pack('<I', len(cases)) + b''.join(struct.pack('<HHhB', *case) for case in cases)
+        self.run_probe('spatial', data, ''.join(f'velocity {x} {y} {z}\n' for x, y, z in values))
+        return values
+
+    def test_spatial_rotation_complete_heading_and_elevation_turns(self):
+        for coarse in (0, 1):
+            self.spatial_rotations([(heading, 7312 if coarse == 0 else 58224, 853, coarse)
+                                    for heading in range(65536)])
+            self.spatial_rotations([(49999, elevation, -32768, coarse)
+                                    for elevation in range(65536)])
+
+    def test_spatial_rotation_every_signed_magnitude_and_truncation_boundaries(self):
+        self.spatial_rotations([(65501, 32799, magnitude, 0)
+                                for magnitude in range(-32768, 32768)])
+        angles = (0, 1, 31, 32, 33, 63, 64, 8192, 16351, 16352, 16383, 16384,
+                  16385, 32767, 32768, 49151, 49152, 49153, 65535)
+        self.spatial_rotations([(heading, elevation, magnitude, coarse)
+                                for heading in angles for elevation in angles
+                                for magnitude in (-32768, -32767, -1, 0, 1, 2, 853, 32767)
+                                for coarse in (0, 1)])
+        cases = [(0, 0, 853, 0), (0, 0, 1, 0), (8192, 32768, -32768, 0),
+                 (8192, 8192, 2, 0), (0, 16384, 853, 0), (0, 49152, 853, 0)]
+        self.assertEqual(self.spatial_rotations(cases),
+                         [(0, 852, 0), (0, 0, 0), (23169, 23169, 0), (0, 0, 1),
+                          (0, 0, 853), (0, 0, -853)])
+        # These represent the reaching mistakes made by substituting the planar
+        # routine or keeping one real-valued product until the final rounding.
+        self.assertNotEqual(rotate(0, 853, 0), (0, 852))
+        self.assertNotEqual((math.floor(math.sin(math.pi / 4) ** 2 * 7),) * 2,
+                            rotate_spatial(8192, 8192, 7, 0)[:2])
+
+    def test_spatial_rotation_rejects_incomplete_and_invalid_requests(self):
+        record = struct.pack('<HHhB', 0, 0, 853, 0)
+        valid = struct.pack('<I', 1) + record
+        for data in (b'', valid[:-1], valid + b'x', struct.pack('<I', 2) + record,
+                     struct.pack('<I', 0xffffffff) + record,
+                     struct.pack('<I', 2) + record + record[:-1] + b'\x02'):
+            self.run_probe('spatial', data, '', valid=False)
+        self.run_probe('spatial', struct.pack('<I', 0), '')
+
+    def test_primary_m1_launch_velocity_from_complete_original_shots(self):
+        cases = [(heading, elevation, 853, 0)
+                 for heading in (0, 1, 8192, 16384, 32768, 49152, 65535)
+                 for elevation in (0, 1, 8192, 16384, 32768, 49152, 65535)]
+        # A weapon handler uses the normal interpolated mode. Coarse rotation is
+        # checked separately above; do not change its original machine boundary.
+        originals = []
+        for heading, elevation, _, _ in cases:
+            raw = bytearray(start())
+            struct.pack_into('<H', raw, 0x10, heading)
+            struct.pack_into('<H', raw, 0x38, elevation)
+            raw[0x92] = 48
+            originals.append(bytes(raw))
+        if ORIGINALS:
+            manifest = json.loads((ROOT / 'tools/rewrite/scenario_originals.json').read_text())
+            files = sorted((ROOT / 'armoredfist/FISTDATA').glob('*.FSG'))
+            self.assertEqual([path.name for path in files], sorted(manifest))
+            for path in files:
+                data = path.read_bytes()
+                self.assertEqual(hashlib.sha256(data).hexdigest(), manifest[path.name]['sha256'])
+                states, _ = initialized(records_from_scenario(data), (0, 0, 0, 0), 0, 0)
+                for _, _, original in states:
+                    if struct.unpack_from('<H', original)[0] != 0:
+                        continue
+                    raw = bytearray(original)
+                    struct.pack_into('<H', raw, 0x97, 0)  # Explicit untargeted handler boundary.
+                    raw[0x92] = 48
+                    originals.append(bytes(raw))
+                    heading, = struct.unpack_from('<H', raw, 0x10)
+                    elevation, = struct.unpack_from('<H', raw, 0x38)
+                    cases.append((heading, elevation, 853, 0))
+            self.assertEqual(len(cases), 49 + 179)
+        values = self.spatial_rotations(cases)
+        if ORACLE is not None:
+            shots = ORACLE.m1_primary_shots(originals)
+            self.assertEqual(len(shots), len(cases))
+            for ordinal, (actor, objects, carry) in enumerate(shots):
+                self.assertEqual(carry, 0)
+                self.assertEqual([(index, generation, struct.unpack_from('<H', raw)[0])
+                                  for index, generation, raw in objects], [(0, 1, 8), (1, 1, 18)])
+                shell = objects[0][2]
+                self.assertEqual(struct.unpack_from('<hhh', shell, 0x1d), values[ordinal])
+                self.assertEqual(struct.unpack_from('<H', shell, 0x1b)[0], 853)
+                self.assertEqual(struct.unpack_from('<H', actor, 0xad)[0], 14)
+                self.assertEqual((actor[0xa8], actor[0x3c], actor[0x92]), (20, 16, 0))
+            empty = bytearray(start())
+            struct.pack_into('<H', empty, 0xad, 0)
+            empty[0x92] = 48
+            self.assertEqual(ORACLE.m1_primary_shots([bytes(empty)]), [(bytes(empty), [], 1)])
 
     def motion(self, cases):
         expected = []

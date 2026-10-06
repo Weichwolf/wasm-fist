@@ -16,6 +16,7 @@
 enum {
     HEADER_BYTES = 4,
     ROTATION_BYTES = 5,
+    SPATIAL_BYTES = 7,
     MOTION_BYTES = FIST_UNIT_EXTENDED_SIZE + 2,
     PHASE_STEP = 2,
     MARKER = 123
@@ -103,6 +104,25 @@ static int rotations(const uint8_t *data, size_t count) {
     return 0;
 }
 
+static int spatial_rotations(const uint8_t *data, size_t count) {
+    enum { ELEVATION = 2, MAGNITUDE = 4 };
+    for (size_t index = 0; index < count; ++index) {
+        if (data[(index * SPATIAL_BYTES) + SPATIAL_BYTES - 1] > 1) {
+            return -1;
+        }
+    }
+    for (size_t index = 0; index < count; ++index) {
+        const uint8_t *record = data + (index * SPATIAL_BYTES);
+        const fist_spatial_velocity velocity = fist_rotate_spatial(
+            (fist_spatial_rotation){.heading = fist_read_u16le(record),
+                                    .elevation = fist_read_u16le(record + ELEVATION),
+                                    .magnitude = fist_read_i16le(record + MAGNITUDE),
+                                    .coarse = record[SPATIAL_BYTES - 1] != 0});
+        printf("velocity %d %d %d\n", velocity.x, velocity.y, velocity.z);
+    }
+    return 0;
+}
+
 static int prepare(const uint8_t *raw, motion_case *out) {
     enum {
         MAP_X = 4,
@@ -185,16 +205,25 @@ int main(int argc, char **argv) {
     }
     const size_t count = fist_read_u32le(data);
     const int rotation = strcmp(argv[1], "rotation") == 0;
+    const int spatial = strcmp(argv[1], "spatial") == 0;
     const int motion = strcmp(argv[1], "motion") == 0;
-    const size_t record_bytes = rotation != 0 ? ROTATION_BYTES : MOTION_BYTES;
-    if ((rotation == 0 && motion == 0) || count != (size - HEADER_BYTES) / record_bytes ||
+    size_t record_bytes = MOTION_BYTES;
+    if (rotation != 0) {
+        record_bytes = ROTATION_BYTES;
+    }
+    if (spatial != 0) {
+        record_bytes = SPATIAL_BYTES;
+    }
+    if ((rotation == 0 && spatial == 0 && motion == 0) ||
+        count != (size - HEADER_BYTES) / record_bytes ||
         (size - HEADER_BYTES) % record_bytes != 0) {
         free(data);
         return EXIT_FAILURE;
     }
     int result = -1;
-    if (rotation != 0) {
-        result = rotations(data + HEADER_BYTES, count);
+    if (rotation != 0 || spatial != 0) {
+        result = spatial != 0 ? spatial_rotations(data + HEADER_BYTES, count)
+                              : rotations(data + HEADER_BYTES, count);
         free(data);
     } else {
         result = drive_cases(data, count);

@@ -61,6 +61,11 @@ The independent reference reconstructs the original knot values as rounded sampl
 in both math modes, signed extrema/cardinal/interpolation cases and every signed magnitude at
 quarter turn. Both returned velocity lanes are observed, including the -32768 word wrap.
 
+The same coefficient owner now also supplies spatial weapon-launch direction; its separate
+horizontal truncation and full-scale contract are documented in
+[projectile direction](projectile-direction.md). Planar vehicle motion retains its existing
+full-scale behavior.
+
 Drive magnitude is signed speed divided down by two. Exactly one of direction flags 02h/04h
 adds -8/+8 times that magnitude to hull heading and copies it to requested heading. The rotation
 then overwrites **both** velocity words. X/Y integrate those signed words with defined 32-bit

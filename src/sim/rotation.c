@@ -55,12 +55,16 @@ static uint32_t coefficient(uint16_t angle, bool coarse) {
     return lower + (((uint32_t)difference * fraction + FRACTION_ROUND) / FRACTION_SCALE);
 }
 
-static int16_t lane(uint16_t angle, const fist_rotation *rotation) {
-    const int32_t magnitude = rotation->magnitude;
-    const uint32_t absolute = (uint32_t)(magnitude < 0 ? -magnitude : magnitude);
-    const uint32_t product = coefficient(angle, rotation->coarse) * absolute;
+typedef struct {
+    uint32_t magnitude;
+    bool negative;
+    bool coarse;
+} scaled_rotation;
+
+static int16_t lane(uint16_t angle, const scaled_rotation *rotation) {
+    const uint32_t product = coefficient(angle, rotation->coarse) * rotation->magnitude;
     int32_t value = (int32_t)(product / FULL_COEFFICIENT);
-    if ((angle >= HALF_TURN) != (magnitude < 0)) {
+    if ((angle >= HALF_TURN) != rotation->negative) {
         value = -value;
     }
     /* Only magnitude -32768 can produce +32768: the original word wraps. */
@@ -71,6 +75,32 @@ static int16_t lane(uint16_t angle, const fist_rotation *rotation) {
 }
 
 fist_velocity fist_rotate(fist_rotation rotation) {
-    return (fist_velocity){.x = lane(rotation.heading, &rotation),
-                           .y = lane((uint16_t)(QUARTER_TURN - rotation.heading), &rotation)};
+    const int32_t magnitude = rotation.magnitude;
+    const scaled_rotation scaled = {.magnitude = (uint32_t)(magnitude < 0 ? -magnitude : magnitude),
+                                    .negative = magnitude < 0,
+                                    .coarse = rotation.coarse};
+    return (fist_velocity){.x = lane(rotation.heading, &scaled),
+                           .y = lane((uint16_t)(QUARTER_TURN - rotation.heading), &scaled)};
+}
+
+fist_spatial_velocity fist_rotate_spatial(fist_spatial_rotation rotation) {
+    const int32_t magnitude = rotation.magnitude;
+    const scaled_rotation scaled = {.magnitude = (uint32_t)(magnitude < 0 ? -magnitude : magnitude),
+                                    .negative = magnitude < 0,
+                                    .coarse = rotation.coarse};
+    const uint16_t cosine_angle = (uint16_t)(QUARTER_TURN - rotation.elevation);
+    uint32_t horizontal_coefficient = coefficient(cosine_angle, rotation.coarse);
+    /* 0487 XOR clears the full-scale carry before 048d tests it. Unlike the
+     * Z/XY lanes, this stage multiplies the returned word FFFF at the pole. */
+    if (horizontal_coefficient == FULL_COEFFICIENT) {
+        horizontal_coefficient = UINT16_MAX;
+    }
+    const scaled_rotation horizontal = {.magnitude = horizontal_coefficient * scaled.magnitude /
+                                                     FULL_COEFFICIENT,
+                                        .negative = (cosine_angle >= HALF_TURN) != scaled.negative,
+                                        .coarse = rotation.coarse};
+    return (fist_spatial_velocity){
+        .x = lane(rotation.heading, &horizontal),
+        .y = lane((uint16_t)(QUARTER_TURN - rotation.heading), &horizontal),
+        .z = lane(rotation.elevation, &scaled)};
 }

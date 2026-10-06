@@ -37,6 +37,53 @@ class OriginalVehicleMotionOracle(OriginalVehicleStartOracle):
                           machine.reg_read(UC_X86_REG_AX), machine.reg_read(UC_X86_REG_DX))))
         return values
 
+    def spatial_rotations(self, cases):
+        from unicorn.x86_const import UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_DX
+        machine = self.machine()
+        values = []
+        for heading, elevation, magnitude, coarse in cases:
+            machine.mem_write(DGROUP + 0x2040, bytes([coarse]))
+            machine.reg_write(UC_X86_REG_AX, heading)
+            machine.reg_write(UC_X86_REG_CX, elevation)
+            machine.reg_write(UC_X86_REG_DX, magnitude % 65536)
+            self.call(machine, 0x459)
+            values.append(struct.unpack('<hhh', struct.pack('<HHH',
+                          machine.reg_read(UC_X86_REG_AX), machine.reg_read(UC_X86_REG_DX),
+                          machine.reg_read(UC_X86_REG_CX))))
+        return values
+
+    def m1_primary_shots(self, cases):
+        """Complete manual station-0 handlers, including actual pool/launch/muzzle calls.
+
+        This is the already-eligible station handler, not the class/input gate.
+        Return complete actor and newly allocated object records, plus carry.
+        """
+        from unicorn.x86_const import UC_X86_REG_DI, UC_X86_REG_EFLAGS
+        machine = self.machine()
+        observed = []
+        for raw in cases:
+            if len(raw) != 251 or struct.unpack_from('<H', raw)[0] != 0 or (
+                    struct.unpack_from('<H', raw, 0x97)[0] != 0):
+                raise RuntimeError('M1 primary oracle requires a complete untargeted M1 actor')
+            self.far_call(machine, 0x1b176)  # Complete actual pool/registry reset.
+            machine.mem_write(DGROUP + 0x7000, raw)
+            machine.reg_write(UC_X86_REG_DI, 0x7000)
+            self.far_call(machine, 0x17745)
+            if machine.reg_read(UC_X86_REG_DI) != 0x7000:
+                raise RuntimeError('Original primary weapon changed its actor')
+            carry = machine.reg_read(UC_X86_REG_EFLAGS) & 1
+            objects = []
+            for index in range(182):
+                pointer, generation = struct.unpack('<HH', machine.mem_read(
+                    DGROUP + 0xdfbc + index * 4, 4))
+                if pointer != 0:
+                    kind, = struct.unpack('<H', machine.mem_read(DGROUP + pointer, 2))
+                    size = 251 if self.type_flags[kind] & 1 else 55
+                    objects.append((index, generation,
+                                    bytes(machine.mem_read(DGROUP + pointer, size))))
+            observed.append((bytes(machine.mem_read(DGROUP + 0x7000, 251)), objects, carry))
+        return observed
+
     def motion(self, cases):
         from unicorn.x86_const import UC_X86_REG_DI, UC_X86_REG_EFLAGS
         machine = self.machine()
