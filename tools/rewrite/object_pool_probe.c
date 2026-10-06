@@ -1,5 +1,6 @@
 #include "assets/bytes.h"
 #include "assets/units.h"
+#include "object_pool_probe_io.h"
 #include "probe_io.h"
 #include "sim/object_pool.h"
 
@@ -82,20 +83,6 @@ static int invalid_inputs(void) {
     return invalid_state(bad);
 }
 
-static void write_pool(const fist_object_pool *pool) {
-    printf("counts %u %u\n", (unsigned)pool->short_count, (unsigned)pool->extended_count);
-    printf("slots");
-    for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
-        printf(" %u:%u", (unsigned)pool->slots[index].used, (unsigned)pool->slots[index].type);
-    }
-    printf("\nregistry");
-    for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
-        printf(" %u:%u", (unsigned)pool->registry[index].slot,
-               (unsigned)pool->registry[index].value);
-    }
-    printf("\n");
-}
-
 static int command(fist_object_pool *pool, const uint8_t *input, fist_pool_allocation *output) {
     enum {
         RESET = 0,
@@ -149,12 +136,12 @@ int main(int argc, char **argv) {
     fist_object_pool_reset(&pool);
     fist_pool_allocation output = {FIST_UNIT_TYPE_COUNT, FIST_POOL_NO_SLOT,
                                    FIST_UNIT_REGISTRY_COUNT, UINT16_MAX};
-    write_pool(&pool);
+    fist_probe_write_object_pool(&pool);
     for (size_t offset = HEADER_BYTES; offset < size; offset += COMMAND_BYTES) {
         const int result = command(&pool, input + offset, &output);
         printf("result %d %u %u %u %u\n", result, (unsigned)output.type, (unsigned)output.slot,
                (unsigned)output.registry_index, (unsigned)output.value);
-        write_pool(&pool);
+        fist_probe_write_object_pool(&pool);
     }
     free(input);
     return ferror(stdout) == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

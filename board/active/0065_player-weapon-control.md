@@ -133,12 +133,24 @@ missions, every type/admission route and allocator boundary, plus original, stri
 sanitizer gates. See `board/closed/0066_runtime-object-allocation.md` and `docs/object-pool.md`.
 This allocator owns metadata; live typed projectile/effect/world payloads remain open.
 
+### Complete untargeted M1 primary launch
+
+Closed 0067 now supplies the complete already-eligible station-0 launch transaction using the
+shared allocator: consumption/marker before allocation, typed shell pose/velocity/origin/profile,
+optional low-priority muzzle initialization, reload/recoil/trigger and sound-dispatch request.
+The physical origin remains valid when duplicate imports overwrite its registry binding.
+Both targets pass 1,308 complete handler-boundary transitions, all 179 M1 actors with full mission
+occupancy, complete actual original actor/new-record/metadata comparisons, repaired reservation
+exhaustion cases, all 17 native and complete WASM gates, strict tooling and sanitizer checks.
+See `docs/projectile-launch.md` and closed 0067 for exact evidence and scope. This transaction
+returns initialized payloads to their caller; it does not install live world payloads, advance
+flight/smoke, resolve hits, bind fire input or produce audible PCM.
+
 ## Next
 
 Recover command eligibility and phase-driven fire from original class/input routines and real
-mission state. Use the delivered runtime allocator and proved M1 ammunition/allocation failure
-boundaries to implement owned projectile/effect payloads and complete launch/flight before
-binding fire input. Import actual mission occupancy instead of presuming an empty short arena.
+mission state. Use the delivered allocator and launch payloads to implement consuming projectile flight,
+hit/effect lifecycle and live world installation before binding fire input. Import actual mission occupancy instead of presuming an empty short arena.
 Preserve the delivered selection/reload clock and truthful display. Replay timed
 inputs on both targets and verify complete output/state/error behavior, visuals and memory.
 Keep 0041 active until projectiles/hits, objectives/outcomes and audible events form a complete

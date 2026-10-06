@@ -66,6 +66,12 @@ Closed 0066 supplies the shared runtime arena/registry metadata owner and normal
 allocation boundaries, with original corpus/reuse/exhaustion, corruption repair and memory
 evidence. Typed live projectile/effect/world payload installation remains under active 0065.
 
+Closed 0067 supplies the complete typed untargeted M1 station-0 launch transaction, including
+ammunition/capacity ordering, optional muzzle initialization, physical origin, mechanical state
+and sound-dispatch request. Both targets pass actual original-method and full-mission-occupancy
+corpus comparisons, required builds/style and memory checks. Consuming world installation,
+projectile flight/hits, smoke lifecycle, command eligibility and audible PCM remain under 0065.
+
 ## Next
 
 Continue with 0065: recover and deliver primary player weapon firing, ammunition/reload and

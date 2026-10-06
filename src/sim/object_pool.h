@@ -55,6 +55,10 @@ typedef struct {
  * owners. Reset invalidates every allocation, including orphaned imports. */
 void fist_object_pool_reset(fist_object_pool *pool);
 
+/* Read-only metadata validation, including arena occupancy and live bindings.
+ * Orphaned physical allocations from duplicate snapshot imports are valid. */
+int fist_object_pool_is_valid(const fist_object_pool *pool);
+
 /* Allocate the first physical slot of the original type class and first registry
  * vacancy whose pointer and saved word are both empty. Low priority uses the
  * original 120-short-object admission gate. Returns OK, UNAVAILABLE or -1 for

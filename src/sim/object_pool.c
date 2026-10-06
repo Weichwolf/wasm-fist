@@ -11,7 +11,7 @@ static int extended(uint16_t type) {
     return fist_unit_state_size(type) == FIST_UNIT_EXTENDED_SIZE;
 }
 
-static int valid_pool(const fist_object_pool *pool) {
+int fist_object_pool_is_valid(const fist_object_pool *pool) {
     if (pool == NULL || pool->short_count > FIST_POOL_SHORT_SLOTS ||
         pool->extended_count > FIST_POOL_EXTENDED_SLOTS) {
         return 0;
@@ -82,7 +82,8 @@ static int bind_slot(fist_object_pool *pool, fist_pool_import request, fist_pool
 
 int fist_object_pool_import(fist_object_pool *pool, fist_pool_import request,
                             fist_pool_allocation *out) {
-    if (!valid_pool(pool) || out == NULL || fist_unit_state_size(request.type) == 0 ||
+    if (!fist_object_pool_is_valid(pool) || out == NULL ||
+        fist_unit_state_size(request.type) == 0 ||
         request.registry_index >= FIST_UNIT_REGISTRY_COUNT) {
         return -1;
     }
@@ -91,8 +92,8 @@ int fist_object_pool_import(fist_object_pool *pool, fist_pool_import request,
 
 int fist_object_pool_allocate(fist_object_pool *pool, fist_pool_request request,
                               fist_pool_allocation *out) {
-    if (!valid_pool(pool) || out == NULL || fist_unit_state_size(request.type) == 0 ||
-        request.low_priority > 1) {
+    if (!fist_object_pool_is_valid(pool) || out == NULL ||
+        fist_unit_state_size(request.type) == 0 || request.low_priority > 1) {
         return -1;
     }
     if (request.low_priority != 0 && pool->short_count >= FIST_POOL_LOW_PRIORITY_LIMIT) {
@@ -110,7 +111,8 @@ int fist_object_pool_allocate(fist_object_pool *pool, fist_pool_request request,
 
 int fist_object_pool_release(fist_object_pool *pool, uint16_t registry_index,
                              fist_pool_allocation *out) {
-    if (!valid_pool(pool) || out == NULL || registry_index >= FIST_UNIT_REGISTRY_COUNT) {
+    if (!fist_object_pool_is_valid(pool) || out == NULL ||
+        registry_index >= FIST_UNIT_REGISTRY_COUNT) {
         return -1;
     }
     fist_pool_entry *entry = &pool->registry[registry_index];
