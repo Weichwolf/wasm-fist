@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 from prepare_terrain_preview import original_inputs, synthetic_inputs
+from test_models import family_files, stream_records
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BUILD = pathlib.Path("/tmp/wasm-fist-rewrite")
@@ -41,6 +42,39 @@ def unit_state_offsets(data):
     raise ValueError("Missing unit snapshots in test scenario")
 
 
+def fixture_models(directory, *, transparent=False):
+    files = family_files()
+    palette = bytearray(768)
+    palette[3:6] = bytes((63, 0, 0))
+    palette[6:9] = bytes((0, 0, 63))
+    files['MAL'] = bytes(palette)
+    for suffix in ('M00', 'M08', 'M16', 'M32'):
+        records = []
+        for original in stream_records(files[suffix]):
+            data = bytearray(original)
+            header = struct.unpack_from('<8H', data)
+            if suffix != 'M00':
+                for table in set(header[3:5]):
+                    for part in range(2):
+                        variants, = struct.unpack_from('<H', data, table + part * 2)
+                        pointer, = struct.unpack_from('<H', data, variants)
+                        data[pointer] = 1
+                        struct.pack_into('<Hbb', data, pointer + 2, part, -16, 0)
+            atlas = header[7]
+            start = atlas + 12
+            pixels = bytes(0 if transparent or column == 16 else (1 if row < 12 else 2)
+                           for column in range(32) for row in range(24))
+            data = (data[:atlas] + struct.pack('<HBBHBBHH', start, 32, 24,
+                    start + len(pixels), 32, 24, start + 2 * len(pixels), 0) +
+                    pixels + bytes(len(pixels)))
+            struct.pack_into('<H', data, 0, len(data))
+            records.append(data)
+        files[suffix] = b''.join(records) + b'\0\0'
+    for name in ('M1_C', 'M3_C', 'T80_C', 'BMP_C'):
+        for suffix, data in files.items():
+            (directory / (name + '.' + suffix)).write_bytes(data)
+
+
 class TerrainSceneTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -55,11 +89,13 @@ class TerrainSceneTests(unittest.TestCase):
             cls.commands.append(["node", str(ROOT / "tools/rewrite/check_terrain_wasm.cjs"),
                                  str(BUILD / "wasm/fist_terrain_preview.js")])
 
-    def render(self, command, scenario=None, directory=None, heading=None, valid=True):
+    def render(self, command, scenario=None, directory=None, heading=None, valid=True, vehicle=False):
         output = self.directory / "frame.ppm"
         output.unlink(missing_ok=True)
         args = [*command, str(scenario or self.scenario), str(directory or self.directory), str(output)]
-        if heading is not None:
+        if vehicle:
+            args += [str(heading) if heading is not None else 'default', 'vehicle']
+        elif heading is not None:
             args.append(str(heading))
         result = subprocess.run(args, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0 if valid else 1, result.stderr)
@@ -189,6 +225,86 @@ class TerrainSceneTests(unittest.TestCase):
                 self.render(command, valid=False)
         finally:
             sky.write_bytes(data)
+
+
+    def test_vehicle_transparency_scale_and_wrapped_scene_placement(self):
+        with tempfile.TemporaryDirectory(prefix='vehicles-', dir=self.temp.name) as directory:
+            directory = pathlib.Path(directory)
+            scenario = directory / synthetic_inputs(directory, flat=True)
+            original = bytearray(scenario.read_bytes())
+            player = unit_state_offsets(original)[1]
+            original[player + 169:player + 171] = bytes((128, 0))
+            struct.pack_into('<H', original, player + 38, 0)
+            original = bytes(original)
+            scenario.write_bytes(original)
+            for command in self.commands:
+                fixture_models(directory, transparent=True)
+                background = self.render(command, scenario=scenario, directory=directory, vehicle=True)
+                fixture_models(directory)
+                frames = []
+                for kind in range(4):
+                    data = bytearray(original)
+                    struct.pack_into('<H', data, player, kind)
+                    scenario.write_bytes(data)
+                    frame = self.render(command, scenario=scenario, directory=directory, vehicle=True)
+                    self.assertNotEqual(frame, background)
+                    frames.append(frame)
+                self.assertEqual(frames[0], frames[1])  # Equal original C-model world scale.
+                counts = [sum(frame[index:index + 3] != background[index:index + 3]
+                              for index in range(0, len(frame), 3)) for frame in frames]
+                self.assertGreater(counts[2], counts[3])
+                self.assertGreater(counts[3], counts[0])
+                data = bytearray(original)
+                x, y = struct.unpack_from('<2i', data, player + 4)
+                struct.pack_into('<2i', data, player + 4, x + 524288, y - 524288)
+                scenario.write_bytes(data)
+                self.assertEqual(frames[0], self.render(command, scenario=scenario,
+                                 directory=directory, vehicle=True))
+                scenario.write_bytes(original)
+                missing = directory / 'M1_C.M16'
+                saved = missing.read_bytes()
+                missing.unlink()
+                self.render(command, scenario=scenario, directory=directory, vehicle=True, valid=False)
+                missing.write_bytes(saved)
+                data = bytearray(original)
+                data[player + 169] = 127  # Absent variant; never clamp it into a valid pose.
+                scenario.write_bytes(data)
+                self.render(command, scenario=scenario, directory=directory, vehicle=True, valid=False)
+                scenario.write_bytes(original)
+
+    def test_pinned_original_vehicle_models_in_scene(self):
+        if not ORIGINALS:
+            self.skipTest('Local provisioned original vehicles requested separately')
+        for name in ('AZER1.FSG', 'TRAIN1.FSG', 'INDIA3.FSG'):
+            with tempfile.TemporaryDirectory(prefix='models-', dir=self.temp.name) as directory:
+                directory = pathlib.Path(directory)
+                scenario = directory / original_inputs(ROOT / 'armoredfist/FISTDATA' / name,
+                              directory, BUILD, vehicle=True)
+                saved_models = {path: path.read_bytes() for path in directory.iterdir()
+                                if path.suffix in ('.M00', '.M08', '.M16', '.M32')}
+                for command in self.commands:
+                    for path, data in saved_models.items():
+                        path.write_bytes(data)
+                    frames = [self.render(command, scenario=scenario, directory=directory,
+                                          heading=heading, vehicle=True)
+                              for heading in (0, 16384, 32768, 49152)]
+                    self.assertEqual(len(set(frames)), 4)
+                    # Isolated input changes only: remove all model texels so the
+                    # same four camera views prove the original vehicle was drawn.
+                    for path, data in saved_models.items():
+                        records = []
+                        for record in stream_records(data):
+                            cleared = bytearray(record)
+                            atlas, = struct.unpack_from('<H', cleared, 14)
+                            start, = struct.unpack_from('<H', cleared, atlas)
+                            cleared[start:] = bytes(len(cleared) - start)
+                            records.append(cleared)
+                        path.write_bytes(b''.join(records) + b'\0\0')
+                    empty = [self.render(command, scenario=scenario, directory=directory,
+                                         heading=heading, vehicle=True)
+                             for heading in (0, 16384, 32768, 49152)]
+                    self.assertTrue(any(left != right for left, right in zip(frames, empty)),
+                                    'Original vehicle must contribute visible texels')
 
     def test_pinned_original_vehicle_views(self):
         if not ORIGINALS:

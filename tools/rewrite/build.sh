@@ -23,5 +23,6 @@ if [[ $target == wasm || $target == all ]]; then
     python3 "$root/tools/rewrite/test_model_bitmap.py" --target wasm --build-root "$output"
     python3 "$root/tools/rewrite/test_models.py" --target wasm --build-root "$output"
     python3 "$root/tools/rewrite/test_terrain_assets.py" --target wasm --build-root "$output"
+    timeout 30s node "$root/tools/rewrite/check_wasm.cjs" "$output/wasm/fist_vehicle_scene_probe.js"
     python3 "$root/tools/rewrite/test_terrain_scene.py" --target wasm --build-root "$output"
 fi

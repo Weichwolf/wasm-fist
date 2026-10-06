@@ -3,8 +3,8 @@
 The shared C11 renderer draws the decoded original height field through softgl, with the
 scenario's colormap and prepared mission palette. Native emits a complete 640×400 P6 frame;
 WASM renders the same scene into a canvas using its browser-compatible MEMFS input provider.
-This is a static inspection preview. Vehicle/object placement, controls, collision, HUD,
-gameplay and audio remain under WI 0041.
+This is a static inspection preview. WI 0059 adds an optional [ground vehicle scene](vehicle-scene.md).
+Runtime installation, controls, collision, HUD, gameplay and audio remain under WI 0041.
 
 ## World coordinates and original evidence
 

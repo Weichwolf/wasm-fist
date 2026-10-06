@@ -14,7 +14,7 @@ enum { CONTRACT_FAILURE = 2, MARKER_WIDTH = 137, WORD_SIZE = 2, SECONDARY_FACE_O
 
 static int marker_intact(const fist_model_bitmap *bitmap) {
     if (bitmap->indices != NULL || bitmap->width != MARKER_WIDTH || bitmap->height != 0 ||
-        bitmap->left != 0 || bitmap->top != 0) {
+        bitmap->left != 0 || bitmap->bottom != 0) {
         return 0;
     }
     for (size_t index = 0; index < FIST_PALETTE_SIZE; ++index) {
@@ -88,7 +88,7 @@ static int check_invalid(fist_model *model, fist_model_pose *poses) {
 }
 
 static int write_bitmap(const fist_model_bitmap *bitmap) {
-    printf("bitmap %d %d %u %u", (int)bitmap->left, (int)bitmap->top, (unsigned)bitmap->width,
+    printf("bitmap %d %d %u %u", (int)bitmap->left, (int)bitmap->bottom, (unsigned)bitmap->width,
            (unsigned)bitmap->height);
     write_bytes(bitmap->indices, (size_t)bitmap->width * bitmap->height);
     return ferror(stdout) == 0 ? 0 : -1;

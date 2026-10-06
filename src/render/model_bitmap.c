@@ -10,7 +10,7 @@
 typedef struct {
     const fist_model_sprite *sprite;
     int left;
-    int top;
+    int lower_y;
     uint8_t mirrored;
 } selected_piece;
 
@@ -22,14 +22,14 @@ typedef struct {
 
 typedef struct {
     int left;
-    int top;
+    int lower_y;
     int right;
-    int bottom;
+    int upper_y;
     int populated;
 } bitmap_bounds;
 
 /* ad47 negates DH as a byte before MOVSX, including -128 wrapping to itself. */
-static int piece_top(int8_t offset) {
+static int piece_bottom(int8_t offset) {
     return offset == INT8_MIN ? INT8_MIN : -(int)offset;
 }
 
@@ -50,28 +50,28 @@ static int select_piece(const fist_model *model, const fist_model_record *record
         sprite->pixels.size != (size_t)sprite->width * sprite->height) {
         return -1;
     }
-    *out = (selected_piece){sprite, piece.offset_x, piece_top(piece.offset_y), piece.mirrored};
+    *out = (selected_piece){sprite, piece.offset_x, piece_bottom(piece.offset_y), piece.mirrored};
     return 0;
 }
 
 static void include_piece(bitmap_bounds *bounds, const selected_piece *piece) {
     const int right = piece->left + piece->sprite->width;
-    const int bottom = piece->top + piece->sprite->height;
+    const int upper_y = piece->lower_y + piece->sprite->height;
     if (bounds->populated == 0) {
-        *bounds = (bitmap_bounds){piece->left, piece->top, right, bottom, 1};
+        *bounds = (bitmap_bounds){piece->left, piece->lower_y, right, upper_y, 1};
         return;
     }
     if (piece->left < bounds->left) {
         bounds->left = piece->left;
     }
-    if (piece->top < bounds->top) {
-        bounds->top = piece->top;
+    if (piece->lower_y < bounds->lower_y) {
+        bounds->lower_y = piece->lower_y;
     }
     if (right > bounds->right) {
         bounds->right = right;
     }
-    if (bottom > bounds->bottom) {
-        bounds->bottom = bottom;
+    if (upper_y > bounds->upper_y) {
+        bounds->upper_y = upper_y;
     }
 }
 
@@ -118,13 +118,13 @@ static int select_parts(const fist_model *model, const fist_model_selection *sel
 static void draw_piece(const selected_piece *piece, fist_model_bitmap *bitmap) {
     const fist_model_sprite *sprite = piece->sprite;
     const size_t left = (size_t)(piece->left - bitmap->left);
-    const size_t top = (size_t)(piece->top - bitmap->top);
+    const size_t lower_y = (size_t)(piece->lower_y - bitmap->bottom);
     for (size_t column = 0; column < sprite->width; ++column) {
         const size_t source = piece->mirrored != 0 ? sprite->width - column - 1 : column;
         for (size_t row = 0; row < sprite->height; ++row) {
             const uint8_t value = sprite->pixels.data[(source * sprite->height) + row];
             if (value != 0) {
-                bitmap->indices[((top + row) * bitmap->width) + left + column] = value;
+                bitmap->indices[((lower_y + row) * bitmap->width) + left + column] = value;
             }
         }
     }
@@ -172,9 +172,9 @@ int fist_model_compose(const fist_model *model, const fist_model_selection *sele
     fist_model_bitmap bitmap = {.palette = model->palette};
     if (bounds.populated != 0) {
         bitmap.left = (int16_t)bounds.left;
-        bitmap.top = (int16_t)bounds.top;
+        bitmap.bottom = (int16_t)bounds.lower_y;
         bitmap.width = (uint16_t)(bounds.right - bounds.left);
-        bitmap.height = (uint16_t)(bounds.bottom - bounds.top);
+        bitmap.height = (uint16_t)(bounds.upper_y - bounds.lower_y);
         bitmap.indices = calloc((size_t)bitmap.width * bitmap.height, sizeof(*bitmap.indices));
         if (bitmap.indices == NULL) {
             destroy_parts(parts, selection->count);

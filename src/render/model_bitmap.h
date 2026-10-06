@@ -8,13 +8,13 @@
 #include <stdint.h>
 
 typedef struct {
-    /* Owned top-row-first indices; index zero is transparent. */
+    /* Owned bottom-row-first indices; index zero is transparent. */
     uint8_t *indices;
     uint16_t width;
     uint16_t height;
-    /* Authored texel coordinates relative to the model origin. */
+    /* Authored left/minimum Y coordinates relative to the model origin; Y is up. */
     int16_t left;
-    int16_t top;
+    int16_t bottom;
     fist_palette palette;
 } fist_model_bitmap;
 

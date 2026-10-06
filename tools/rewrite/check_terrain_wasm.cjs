@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 async function main() {
-    const [program, scenario, directory, output, heading] = process.argv.slice(2);
+    const [program, scenario, directory, output, heading, mode] = process.argv.slice(2);
     const create = require(path.resolve(program));
     let exitCode;
     const module = await create({
@@ -24,6 +24,7 @@ async function main() {
     module.FS.writeFile('/scenario.fsg', fs.readFileSync(scenario));
     const args = ['/scenario.fsg', '/assets', '/frame.ppm'];
     if (heading !== undefined) args.push(heading);
+    if (mode !== undefined) args.push(mode);
     const returned = module.callMain(args);
     assert.equal(exitCode, returned, 'C run must report its completed exit status');
     if (exitCode !== 0) {

@@ -71,5 +71,16 @@ int fist_renderer_draw_terrain(fist_renderer *renderer, const fist_terrain *terr
         return -1;
     }
     softgl_make_current(renderer->context);
-    return fist_draw_terrain_scene(renderer, terrain, view);
+    return fist_draw_terrain_scene(renderer, terrain, view, NULL);
+}
+
+int fist_renderer_draw_vehicle(fist_renderer *renderer, const fist_terrain *terrain,
+                               const fist_terrain_view *view, const fist_scene_vehicle *vehicle) {
+    if (renderer == NULL || vehicle == NULL || vehicle->bitmap.indices == NULL ||
+        vehicle->bitmap.width == 0 || vehicle->bitmap.height == 0 || vehicle->texel_width <= 0 ||
+        vehicle->texel_height <= 0) {
+        return -1;
+    }
+    softgl_make_current(renderer->context);
+    return fist_draw_terrain_scene(renderer, terrain, view, vehicle);
 }

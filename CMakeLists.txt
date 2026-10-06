@@ -72,7 +72,7 @@ if(EMSCRIPTEN)
     target_link_options(fist_terrain_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
 endif()
 
-add_library(fist_render STATIC src/render/renderer.c src/render/terrain_scene.c)
+add_library(fist_render STATIC src/render/renderer.c src/render/terrain_scene.c src/render/vehicle_scene.c)
 target_include_directories(fist_render PUBLIC src)
 target_link_libraries(fist_render PRIVATE softgl fist_assets fist_build_options)
 target_compile_options(fist_render PRIVATE -Werror)
@@ -91,6 +91,16 @@ if(EMSCRIPTEN)
     set_target_properties(fist_terrain_preview PROPERTIES SUFFIX ".js")
     configure_file(src/platform/wasm/terrain.html terrain.html COPYONLY)
     configure_file(src/platform/wasm/terrain.js terrain.js COPYONLY)
+endif()
+
+add_executable(fist_vehicle_scene_probe tools/rewrite/vehicle_scene_probe.c)
+target_link_libraries(fist_vehicle_scene_probe PRIVATE fist_render fist_assets fist_build_options)
+target_compile_options(fist_vehicle_scene_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    target_compile_options(fist_vehicle_scene_probe PRIVATE -msimd128 -pthread)
+    target_link_options(fist_vehicle_scene_probe PRIVATE -msimd128 -pthread
+        -sPTHREAD_POOL_SIZE=3 -sEXIT_RUNTIME=1 -sMODULARIZE=1 -sENVIRONMENT=node)
+    set_target_properties(fist_vehicle_scene_probe PROPERTIES SUFFIX ".js")
 endif()
 
 add_executable(fist_renderer_probe tools/rewrite/renderer_probe.c)
@@ -112,6 +122,7 @@ endif()
 include(CTest)
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME vehicle_scene_pixels COMMAND fist_vehicle_scene_probe)
     add_test(NAME renderer_integration COMMAND fist_renderer_probe)
     add_test(NAME scenario_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_scenario.py

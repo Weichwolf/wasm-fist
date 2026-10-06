@@ -269,7 +269,7 @@ class BitmapTests(unittest.TestCase):
                     upper = row * 100 + (100 - lines * scale) // 2
                     for y in range(lines * scale):
                         for x in range(columns * scale):
-                            value = pixels[(y // scale) * columns + x // scale]
+                            value = pixels[(lines - 1 - (y // scale)) * columns + x // scale]
                             color = bytes((palette[value * 3 + channel] * 255 + 31) // 63
                                           for channel in range(3)) if value else background
                             offset = ((upper + y) * width + left + x) * 3

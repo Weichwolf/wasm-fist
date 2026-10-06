@@ -66,3 +66,8 @@ Complete native/WASM bitmap outputs, bounds and all original source-list/pixel d
 verified; malformed/absent selections fail atomically. Originals remain unchanged. Memory and
 strict style/build checks pass. Actual assembled ground vehicles are visually inspected. The
 scene is unchanged; perspective vehicle rendering, animation and gameplay remain under 0041.
+
+WI 0059 correction: complete original object projection proves frame Y increases upward.
+The composed bytes are bottom-row-first; the old top-row-first API description and diagnostic
+contact-sheet orientation were inverted. Storage/anchor/byte expectations remain valid;
+see `docs/vehicle-scene.md` for the corrected API and actual scene verification.

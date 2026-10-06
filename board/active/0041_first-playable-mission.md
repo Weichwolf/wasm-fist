@@ -29,13 +29,19 @@ all 960 original ground snapshots, with independent hull/turret direction and co
 facing-rounding proof. Closed 0058 supplies owned authored-resolution model bitmaps with original
 part/piece order, anchors, column-major texels, mirroring and zero transparency: all 6432 corpus
 bitmaps pass native/WASM and original-instruction checks, with reviewed actual C vehicle assets.
-These steps do not install/draw vehicles into the scene or execute gameplay initialization.
+Closed 0059 draws the roster-zero ground vehicle in the shared terrain scene using recovered
+world texel scale and direction, alpha/depth/fog and an explicit follow inspection camera.
+Actual native/browser AZER1/TRAIN1/INDIA3 views and complete both-target original/constructed
+scene, instruction-oracle, strict-style and sanitizer checks pass. It also corrects the earlier
+asset-preview row orientation: original sprite rows run upward, bottom row first.
+These steps do not execute runtime gameplay initialization or provide interactive controls.
 
 ## Next
 
-Recover vehicle world scale/view bearing and model mission-palette selection; project and draw
-the verified origin-relative composed ground-vehicle bitmaps in the shared scene. Recover
-animation updates and other-class selection;
+Recover vehicle runtime installation/initialization and animation updates; decode movement and
+control rules for the first interactive vehicle. Recover other-class selection and optional
+original model mission-palette mapping as reached; current vehicle rendering intentionally
+retains MAL colors.
 initialize/install the selected vehicle using the owned definitions. Follow with native SDL2/browser
 interactive loops and vehicle/terrain rendering, fixed-step controls,
 HUD, combat/outcome and shared sound events as separate verified steps. Scenario-state, path,

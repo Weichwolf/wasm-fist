@@ -1,11 +1,11 @@
 # Authored-resolution model composition
 
 `src/render/model_bitmap.c` composes a loaded original model's complete selected parts into an
-owned top-row-first palette-index bitmap. This supplies texture data for the shared softgl
+owned bottom-row-first palette-index bitmap. This supplies texture data for the shared softgl
 renderer. Each selection contains exactly one valid facing/variant pose per part, in part
 order. The input model and poses are borrowed only during the call.
 
-The bitmap retains the complete original DAC6 palette, signed left/top coordinates relative to
+The bitmap retains the complete original DAC6 palette, signed left/bottom coordinates relative to
 the model origin, width/height and independently allocated indices. Palette index zero is
 transparent. Model/source destruction does not affect the composed output. Failed selections
 and allocations preserve the caller output; destruction resets all state and is idempotent.
@@ -43,6 +43,12 @@ so the bitmap's uint16 dimensions and int16 offsets cover the complete format.
 A selection whose lists explicitly contain no pieces succeeds with a copied palette, zero
 width/height and NULL indices. Missing model data or invalid selections fail. This distinguishes
 an authored empty animation frame from absent output/data.
+
+WI 0059's complete original object projections establish that frame Y increases upward.
+The public minimum-Y field is therefore `bottom` and the storage is bottom-row-first.
+The original WI 0058 description/contact-sheet orientation was inverted; composition bytes,
+anchors, bounds and complete byte expectations are unchanged. The corrected diagnostic review
+and actual scene evidence live in [vehicle scene](vehicle-scene.md).
 
 ## Deliberate rendering scope
 

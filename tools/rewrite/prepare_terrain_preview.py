@@ -65,7 +65,7 @@ def synthetic_inputs(directory, *, flat=False, positions=(128 * 256, 1024 * 256)
     return "TEST.FSG"
 
 
-def original_inputs(scenario, directory, build_root=BUILD):
+def original_inputs(scenario, directory, build_root=BUILD, *, vehicle=False):
     """Let the shared C readers resolve and validate every required original input."""
     scenario = scenario.resolve()
     source = scenario.parent
@@ -93,6 +93,15 @@ def original_inputs(scenario, directory, build_root=BUILD):
         shutil.copyfile(source / name, directory / name)
         verify_file(source / name, asset_manifest[name])
         verify_file(directory / name, asset_manifest[name])
+    if vehicle:
+        models = json.loads((ROOT / 'tools/rewrite/model_originals.json').read_text())
+        for family in ('M1_C', 'M3_C', 'T80_C', 'BMP_C'):
+            for suffix in ('MAL', 'M00', 'M08', 'M16', 'M32'):
+                name = family + '.' + suffix
+                verify_file(source / name, models[name])
+                shutil.copyfile(source / name, directory / name)
+                verify_file(directory / name, models[name])
+                verify_file(source / name, models[name])
     verify_file(scenario, expected)
     verify_file(directory / scenario.name.upper(), expected)
     return scenario.name.upper()
@@ -104,13 +113,15 @@ def verify_file(path, expected):
         raise ValueError(f"Changed or incomplete original: {path}")
 
 
-def write_manifest(directory, scenario, heading=None):
+def write_manifest(directory, scenario, heading=None, *, vehicle=False):
     files = []
     for path in sorted(directory.iterdir()):
-        if path.is_file() and path.suffix.upper() in (".FSG", ".KLC", ".SKY", ".PAL", ".RES"):
+        if path.is_file() and path.suffix.upper() in (".FSG", ".KLC", ".SKY", ".PAL", ".RES", ".MAL", ".M00", ".M08", ".M16", ".M32"):
             data = path.read_bytes()
             files.append(dict(name=path.name, size=len(data), sha256=hashlib.sha256(data).hexdigest()))
     manifest = dict(scenario=scenario, files=files)
+    if vehicle:
+        manifest["vehicle"] = True
     if heading is not None:
         manifest["heading"] = heading
     (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -118,6 +129,7 @@ def write_manifest(directory, scenario, heading=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--vehicle", action="store_true", help="Draw the selected original ground vehicle; requires --scenario")
     parser.add_argument("--scenario", type=pathlib.Path, help="Pinned local original; default: constructed scene")
     parser.add_argument("--output-dir", type=pathlib.Path, default=BUILD / "wasm/assets")
     parser.add_argument("--build-root", type=pathlib.Path, default=BUILD)
@@ -128,8 +140,10 @@ def main():
         parser.error("Preview inputs belong in a dedicated directory under /tmp")
     if output.exists() and any(output.iterdir()):
         parser.error("Output directory must be empty; do not mix old or unrelated inputs")
-    scenario = original_inputs(args.scenario, output, args.build_root) if args.scenario else synthetic_inputs(output)
-    write_manifest(output, scenario, args.heading)
+    if args.vehicle and args.scenario is None:
+        parser.error("Original vehicle preview requires a pinned --scenario")
+    scenario = original_inputs(args.scenario, output, args.build_root, vehicle=args.vehicle) if args.scenario else synthetic_inputs(output)
+    write_manifest(output, scenario, args.heading, vehicle=args.vehicle)
     print(f"Prepared {scenario} in {output}")
 
 

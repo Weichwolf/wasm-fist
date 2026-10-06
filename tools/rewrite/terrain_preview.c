@@ -1,10 +1,14 @@
+#include "assets/model.h"
 #include "assets/scenario.h"
 #include "assets/source.h"
 #include "assets/terrain.h"
 #include "assets/units.h"
+#include "assets/vehicle.h"
 #include "probe_io.h"
 #include "probe_source.h"
+#include "render/model_bitmap.h"
 #include "render/renderer.h"
+#include "render/vehicle_scene.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -13,6 +17,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef __EMSCRIPTEN__
 #include "platform/wasm/present.h"
@@ -25,6 +30,7 @@ enum {
     RGB_CHANNELS = 3,
     OPAQUE_ALPHA = 255,
     HEADING_ARGUMENT_COUNT = 5,
+    VEHICLE_ARGUMENT_COUNT = 6,
     DECIMAL_BASE = 10
 };
 
@@ -69,12 +75,13 @@ static int write_frame(const char *path, const uint8_t *pixels) {
 }
 
 static int draw_preview(const char *heading, const fist_terrain *terrain,
-                        const fist_unit_definition *vehicle, const char *output) {
+                        const fist_unit_definition *vehicle, const char *output,
+                        const fist_model *model) {
     fist_terrain_view view = {0};
     if (fist_terrain_inspection_view(terrain, vehicle, &view) != 0) {
         return -1;
     }
-    if (heading != NULL) {
+    if (heading != NULL && strcmp(heading, "default") != 0) {
         errno = 0;
         char *end = NULL;
         const unsigned long value = strtoul(heading, &end, 10);
@@ -83,11 +90,22 @@ static int draw_preview(const char *heading, const fist_terrain *terrain,
         }
         view.heading = (uint16_t)value;
     }
-    fist_renderer *renderer = fist_renderer_create(PREVIEW_WIDTH, PREVIEW_HEIGHT);
-    if (renderer == NULL) {
+    fist_scene_vehicle scene_vehicle = {0};
+    if (model != NULL &&
+        (fist_vehicle_inspection_view(terrain, vehicle, view.heading, &view) != 0 ||
+         fist_scene_vehicle_prepare(terrain, vehicle, model, &view, &scene_vehicle) != 0)) {
         return -1;
     }
-    if (fist_renderer_draw_terrain(renderer, terrain, &view) != 0) {
+    fist_renderer *renderer = fist_renderer_create(PREVIEW_WIDTH, PREVIEW_HEIGHT);
+    if (renderer == NULL) {
+        fist_model_bitmap_destroy(&scene_vehicle.bitmap);
+        return -1;
+    }
+    const int drawn = model == NULL
+                          ? fist_renderer_draw_terrain(renderer, terrain, &view)
+                          : fist_renderer_draw_vehicle(renderer, terrain, &view, &scene_vehicle);
+    fist_model_bitmap_destroy(&scene_vehicle.bitmap);
+    if (drawn != 0) {
         fist_renderer_destroy(renderer);
         return -1;
     }
@@ -119,7 +137,9 @@ static int draw_preview(const char *heading, const fist_terrain *terrain,
 }
 
 int main(int argc, char **argv) {
-    if (argc < 4 || argc > HEADING_ARGUMENT_COUNT) {
+    if (argc < 4 || argc > VEHICLE_ARGUMENT_COUNT ||
+        (argc == VEHICLE_ARGUMENT_COUNT &&
+         strcmp(argv[VEHICLE_ARGUMENT_COUNT - 1], "vehicle") != 0)) {
         return EXIT_FAILURE;
     }
     FILE *file = fopen(argv[1], "rb");
@@ -141,12 +161,23 @@ int main(int argc, char **argv) {
     const int loaded = fist_units_decode(&scenario, &units) == 0
                            ? fist_terrain_load(&scenario, &source, &terrain)
                            : -1;
+    const fist_unit_definition *vehicle = fist_units_roster_get(&units, 0);
+    fist_model model = {0};
+    int model_loaded = 0;
+    if (loaded == 0 && argc == VEHICLE_ARGUMENT_COUNT) {
+        fist_vehicle_visual visual = {0};
+        model_loaded = fist_vehicle_visual_decode(vehicle, &visual) == 0
+                           ? fist_model_load(visual.model_name, &source, &model)
+                           : -1;
+    }
     fist_probe_source_close(&storage);
     free(data);
-    const fist_unit_definition *vehicle = fist_units_roster_get(&units, 0);
-    const int result = loaded == 0 ? draw_preview(argc == HEADING_ARGUMENT_COUNT ? argv[4] : NULL,
-                                                  &terrain, vehicle, argv[3])
-                                   : -1;
+    const int result =
+        loaded == 0 && model_loaded == 0
+            ? draw_preview(argc >= HEADING_ARGUMENT_COUNT ? argv[4] : NULL, &terrain, vehicle,
+                           argv[3], argc == VEHICLE_ARGUMENT_COUNT ? &model : NULL)
+            : -1;
+    fist_model_destroy(&model);
     fist_terrain_destroy(&terrain);
     fist_units_destroy(&units);
     return result == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

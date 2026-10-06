@@ -3,6 +3,7 @@
 #include "assets/palette.h"
 #include "assets/terrain.h"
 #include "assets/units.h"
+#include "render/model_bitmap.h"
 #include "render/renderer.h"
 
 #include <GL/softgl.h>
@@ -16,10 +17,7 @@ enum {
     /* 11bb/11be shift integer map coordinates by 13 before the 32-bit sampler.
      * The repeated domain is therefore 2^(32-13). Render coordinates divide
      * original positions/altitudes by 256; one decoded height byte is one unit. */
-    MAP_PERIOD = 524288,
-    POSITION_SCALE = 256,
-    WORLD_SIDE = MAP_PERIOD / POSITION_SCALE,
-    TURN_SIZE = 65536,
+    WORLD_SIDE = FIST_MAP_PERIOD / FIST_POSITION_SCALE,
     RGBA_CHANNELS = 4,
     OPAQUE_ALPHA = 255,
     TRIANGLE_INDICES_PER_CELL = 6,
@@ -45,12 +43,21 @@ typedef struct {
     uint8_t *texture;
 } terrain_mesh;
 
-static float map_coordinate(int32_t position) {
-    return (float)((uint32_t)position % MAP_PERIOD) / POSITION_SCALE;
+float fist_map_coordinate(int32_t position) {
+    return (float)((uint32_t)position % FIST_MAP_PERIOD) / FIST_POSITION_SCALE;
 }
 
-static float map_y_coordinate(int32_t position) {
-    return map_coordinate(-(int32_t)((uint32_t)position % MAP_PERIOD));
+float fist_map_y_coordinate(int32_t position) {
+    return fist_map_coordinate(-(int32_t)((uint32_t)position % FIST_MAP_PERIOD));
+}
+
+int32_t fist_map_delta(int32_t subject, int32_t observer) {
+    const int64_t half = FIST_MAP_PERIOD / 2;
+    int64_t delta = ((int64_t)subject - observer + half) % FIST_MAP_PERIOD;
+    if (delta < 0) {
+        delta += FIST_MAP_PERIOD;
+    }
+    return (int32_t)(delta - half);
 }
 
 static float height_at(const fist_klc_image *image, int32_t column, int32_t row) {
@@ -58,6 +65,26 @@ static float height_at(const fist_klc_image *image, int32_t column, int32_t row)
     const size_t offset =
         (((size_t)(uint32_t)row & mask) * image->width) + ((size_t)(uint32_t)column & mask);
     return image->pixels[offset];
+}
+
+float fist_terrain_surface(const fist_terrain *terrain, int32_t map_x, int32_t map_y) {
+    const float step = (float)WORLD_SIDE / (float)terrain->heightmap.width;
+    const float local_x = fist_map_coordinate(map_x) / step;
+    const float local_z = fist_map_y_coordinate(map_y) / step;
+    const int32_t column = (int32_t)floorf(local_x);
+    const int32_t row = (int32_t)floorf(local_z);
+    const float fraction_x = local_x - (float)column;
+    const float fraction_z = local_z - (float)row;
+    const float top_left = height_at(&terrain->heightmap, column, row);
+    const float top_right = height_at(&terrain->heightmap, column + 1, row);
+    const float bottom_left = height_at(&terrain->heightmap, column, row + 1);
+    const float bottom_right = height_at(&terrain->heightmap, column + 1, row + 1);
+    if (fraction_x + fraction_z <= 1.0F) {
+        return top_left + (fraction_x * (top_right - top_left)) +
+               (fraction_z * (bottom_left - top_left));
+    }
+    return bottom_right + ((1.0F - fraction_x) * (bottom_left - bottom_right)) +
+           ((1.0F - fraction_z) * (top_right - bottom_right));
 }
 
 static uint8_t display_component(uint8_t component) {
@@ -130,9 +157,9 @@ static int build_mesh(const fist_terrain *terrain, const fist_terrain_view *view
     }
     const float step = (float)WORLD_SIDE / (float)side;
     const int32_t base_x =
-        (int32_t)floorf(map_coordinate(view->map_x) / step) - (int32_t)(side / 2);
+        (int32_t)floorf(fist_map_coordinate(view->map_x) / step) - (int32_t)(side / 2);
     const int32_t base_z =
-        (int32_t)floorf(map_y_coordinate(view->map_y) / step) - (int32_t)(side / 2);
+        (int32_t)floorf(fist_map_y_coordinate(view->map_y) / step) - (int32_t)(side / 2);
     for (size_t row = 0; row < stride; ++row) {
         for (size_t column = 0; column < stride; ++column) {
             const int32_t sample_x = base_x + (int32_t)column;
@@ -168,7 +195,7 @@ static int build_mesh(const fist_terrain *terrain, const fist_terrain_view *view
 
 static void camera_matrix(const fist_terrain_view *view, GLfloat *matrix) {
     static const float full_turn = 6.2831853071795864769F;
-    const float angle = (float)view->heading * full_turn / TURN_SIZE;
+    const float angle = (float)view->heading * full_turn / FIST_TURN_SIZE;
     const float sine = sinf(angle);
     const float cosine = cosf(angle);
     const float pitch_sine = sinf(view->pitch);
@@ -176,8 +203,8 @@ static void camera_matrix(const fist_terrain_view *view, GLfloat *matrix) {
     const float right[] = {cosine, 0.0F, sine};
     const float up[] = {-sine * pitch_sine, pitch_cosine, cosine * pitch_sine};
     const float forward[] = {sine * pitch_cosine, pitch_sine, -cosine * pitch_cosine};
-    const float position[] = {map_coordinate(view->map_x), view->altitude,
-                              map_y_coordinate(view->map_y)};
+    const float position[] = {fist_map_coordinate(view->map_x), view->altitude,
+                              fist_map_y_coordinate(view->map_y)};
     for (size_t axis = 0; axis < 3; ++axis) {
         matrix[axis * RGBA_CHANNELS] = right[axis];
         matrix[(axis * RGBA_CHANNELS) + 1] = up[axis];
@@ -190,10 +217,89 @@ static void camera_matrix(const fist_terrain_view *view, GLfloat *matrix) {
     matrix[HOMOGENEOUS_CORNER] = 1.0F;
 }
 
+static uint8_t *vehicle_texture(const fist_model_bitmap *bitmap) {
+    const size_t count = (size_t)bitmap->width * bitmap->height;
+    uint8_t *rgba = malloc(count * RGBA_CHANNELS);
+    if (rgba == NULL) {
+        return NULL;
+    }
+    for (size_t index = 0; index < count; ++index) {
+        const size_t palette_index = bitmap->indices[index];
+        for (size_t channel = 0; channel < FIST_PALETTE_CHANNELS; ++channel) {
+            rgba[(index * RGBA_CHANNELS) + channel] = display_component(
+                bitmap->palette.rgb6[(palette_index * FIST_PALETTE_CHANNELS) + channel]);
+        }
+        rgba[(index * RGBA_CHANNELS) + RGBA_CHANNELS - 1] = palette_index == 0 ? 0 : OPAQUE_ALPHA;
+    }
+    return rgba;
+}
+
+static void vehicle_vertices(const fist_terrain_view *view, const fist_scene_vehicle *vehicle) {
+    static const GLfloat corners[4][2] = {{0, 0}, {0, 1}, {1, 1}, {1, 0}};
+    GLfloat matrix[MATRIX_ELEMENTS] = {0};
+    camera_matrix(view, matrix);
+    const float center[] = {
+        fist_map_coordinate(view->map_x) +
+            ((float)fist_map_delta(vehicle->map_x, view->map_x) / FIST_POSITION_SCALE),
+        vehicle->altitude,
+        fist_map_y_coordinate(view->map_y) -
+            ((float)fist_map_delta(vehicle->map_y, view->map_y) / FIST_POSITION_SCALE)};
+    glBegin(GL_QUADS);
+    for (size_t corner = 0; corner < RGBA_CHANNELS; ++corner) {
+        const GLfloat *texture = corners[corner];
+        const float local_x =
+            ((float)vehicle->bitmap.left + (texture[0] * (float)vehicle->bitmap.width)) *
+            vehicle->texel_width;
+        const float local_y =
+            ((float)vehicle->bitmap.bottom + (texture[1] * (float)vehicle->bitmap.height)) *
+            vehicle->texel_height;
+        GLfloat position[3] = {0};
+        for (size_t axis = 0; axis < 3; ++axis) {
+            position[axis] = center[axis] + (matrix[axis * RGBA_CHANNELS] * local_x) +
+                             (matrix[(axis * RGBA_CHANNELS) + 1] * local_y);
+        }
+        glTexCoord2fv(texture);
+        glVertex3fv(position);
+    }
+    glEnd();
+}
+
+static int draw_vehicle(const fist_terrain_view *view, const fist_scene_vehicle *vehicle) {
+    uint8_t *rgba = vehicle_texture(&vehicle->bitmap);
+    if (rgba == NULL) {
+        return -1;
+    }
+    /* Reuse depth, fog and camera state. A zero texel neither covers terrain
+     * nor occludes later objects. Nearest filtering preserves authored edges. */
+    glDisable(GL_LIGHTING);
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vehicle->bitmap.width, vehicle->bitmap.height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    glColor4f(1, 1, 1, 1);
+    glEnable(GL_ALPHA_TEST);
+    glAlphaFunc(GL_GREATER, 0);
+    vehicle_vertices(view, vehicle);
+    const GLenum error = glGetError();
+    glDisable(GL_ALPHA_TEST);
+    glDeleteTextures(1, &texture);
+    free(rgba);
+    return error == GL_NO_ERROR ? 0 : -1;
+}
+
 /* Context selection is handled by renderer.c; this internal scene owner uses
  * the current softgl context and returns only after queued workers complete. */
 int fist_draw_terrain_scene(fist_renderer *renderer, const fist_terrain *terrain,
-                            const fist_terrain_view *view) {
+                            const fist_terrain_view *view, const fist_scene_vehicle *vehicle) {
     if (terrain == NULL || view == NULL || terrain->heightmap.pixels == NULL ||
         terrain->colormap.pixels == NULL || terrain->sky.pixels == NULL) {
         return -1;
@@ -256,6 +362,7 @@ int fist_draw_terrain_scene(fist_renderer *renderer, const fist_terrain *terrain
     glNormalPointer(GL_FLOAT, sizeof(terrain_vertex), mesh.vertices[0].normal);
     glTexCoordPointer(2, GL_FLOAT, sizeof(terrain_vertex), mesh.vertices[0].texture);
     glDrawElements(GL_TRIANGLES, mesh.index_count, GL_UNSIGNED_INT, mesh.indices);
+    const int vehicle_result = vehicle == NULL ? 0 : draw_vehicle(view, vehicle);
     const uint8_t *frame = fist_renderer_pixels(renderer);
     glDisableClientState(GL_VERTEX_ARRAY);
     glDisableClientState(GL_NORMAL_ARRAY);
@@ -267,7 +374,7 @@ int fist_draw_terrain_scene(fist_renderer *renderer, const fist_terrain *terrain
     glDisable(GL_DEPTH_TEST);
     glDeleteTextures(1, &texture);
     destroy_mesh(&mesh);
-    return frame != NULL && glGetError() == GL_NO_ERROR ? 0 : -1;
+    return vehicle_result == 0 && frame != NULL && glGetError() == GL_NO_ERROR ? 0 : -1;
 }
 
 int fist_terrain_inspection_view(const fist_terrain *terrain, const fist_unit_definition *vehicle,
@@ -280,8 +387,8 @@ int fist_terrain_inspection_view(const fist_terrain *terrain, const fist_unit_de
     const float step = (float)WORLD_SIDE / (float)terrain->heightmap.width;
     const int32_t map_x = vehicle->map_x;
     const int32_t map_y = vehicle->map_y;
-    const int32_t column = (int32_t)floorf(map_coordinate(map_x) / step);
-    const int32_t row = (int32_t)floorf(map_y_coordinate(map_y) / step);
+    const int32_t column = (int32_t)floorf(fist_map_coordinate(map_x) / step);
+    const int32_t row = (int32_t)floorf(fist_map_y_coordinate(map_y) / step);
     *out = (fist_terrain_view){map_x, map_y,
                                height_at(&terrain->heightmap, column, row) + INSPECTION_ALTITUDE,
                                vehicle->heading, downward_pitch};

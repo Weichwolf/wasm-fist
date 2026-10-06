@@ -28,7 +28,11 @@ async function startTerrainPreview() {
     module.FS.mkdir('/assets');
     for (const [name, bytes] of inputs) module.FS.writeFile(`/assets/${name}`, bytes);
     const args = [`/assets/${manifest.scenario}`, '/assets', '/frame.ppm'];
-    if (manifest.heading !== undefined) args.push(String(manifest.heading));
+    if (manifest.vehicle) {
+        args.push(manifest.heading === undefined ? 'default' : String(manifest.heading), 'vehicle');
+    } else if (manifest.heading !== undefined) {
+        args.push(String(manifest.heading));
+    }
     const returned = module.callMain(args);
     if (exitCode !== 0 || returned !== 0 || !completion?.startsWith('terrain inspection:')) {
         throw new Error(`Terrain preview did not complete (${exitCode})`);
