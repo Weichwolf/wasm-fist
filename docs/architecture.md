@@ -6,7 +6,7 @@ and verification tools remain available without participating in the rewrite bui
 
 | Location | Owner and boundary |
 | --- | --- |
-| `src/sim/` | Runtime object allocation, typed vehicle/short-actor state, deterministic random/motion/contact, weapon control, untargeted M1 launch, ordered unit collision, shell/effect lifecycle, all collision-reachable M1 target damage, ground retirement and manual driving stages. |
+| `src/sim/` | Runtime object allocation, typed vehicle/short-actor state, deterministic random/motion/contact, weapon control, untargeted M1 launch, ordered unit collision, shell/effect lifecycle, all collision-reachable M1 target damage, ground retirement, world tick prefix/current-registry traversal and manual driving stages. |
 | `src/app/` | Owned scenario/player session, integer input/time controller and common scene drawing. |
 | `src/assets/` | Validated original-format decoders producing typed host data. |
 | `src/render/` | softgl context, camera, terrain/models, HUD and framebuffer ownership. |

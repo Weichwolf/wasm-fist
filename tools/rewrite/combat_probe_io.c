@@ -4,6 +4,7 @@
 #include "sim/other_damage.h"
 #include "sim/projectile_flight.h"
 #include "sim/smoke.h"
+#include "sim/vehicle_damage.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -55,4 +56,15 @@ void fist_probe_write_smoke(const fist_drifting_smoke *smoke) {
            (unsigned)smoke->projection_scale, (unsigned)smoke->flags,
            (unsigned)smoke->secondary_flags, (unsigned)smoke->ground_height,
            (unsigned)smoke->animation_frame, (unsigned)smoke->animation_counter);
+}
+
+void fist_probe_write_wreck(const fist_vehicle_wreck *wreck) {
+    printf("wreck %u %u %u %ld %ld %ld %u %u %u %u %u %u %u %u %u %u\n",
+           (unsigned)wreck->allocation.slot, (unsigned)wreck->allocation.registry_index,
+           (unsigned)wreck->allocation.value, (long)wreck->pose.x, (long)wreck->pose.y,
+           (long)wreck->pose.altitude, (unsigned)wreck->pose.heading, (unsigned)wreck->model_code,
+           (unsigned)wreck->original_type, (unsigned)wreck->projection_scale,
+           (unsigned)wreck->parameter, (unsigned)wreck->platoon, (unsigned)wreck->member,
+           (unsigned)wreck->flags, (unsigned)wreck->secondary_flags,
+           (unsigned)wreck->emission_counter);
 }

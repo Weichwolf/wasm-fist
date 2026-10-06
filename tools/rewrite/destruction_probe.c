@@ -196,15 +196,7 @@ static int prepare(destruction_case *value, const uint8_t *input, size_t size) {
 
 static void write_parent(const destruction_case *value) {
     if (value->primary.type == WRECK) {
-        const fist_vehicle_wreck *wreck = &value->wreck;
-        printf("wreck %u %u %u %ld %ld %ld %u %u %u %u %u %u %u %u %u %u\n",
-               (unsigned)wreck->allocation.slot, (unsigned)wreck->allocation.registry_index,
-               (unsigned)wreck->allocation.value, (long)wreck->pose.x, (long)wreck->pose.y,
-               (long)wreck->pose.altitude, (unsigned)wreck->pose.heading,
-               (unsigned)wreck->model_code, (unsigned)wreck->original_type,
-               (unsigned)wreck->projection_scale, (unsigned)wreck->parameter,
-               (unsigned)wreck->platoon, (unsigned)wreck->member, (unsigned)wreck->flags,
-               (unsigned)wreck->secondary_flags, (unsigned)wreck->emission_counter);
+        fist_probe_write_wreck(&value->wreck);
         return;
     }
     fist_probe_write_other_actor(&value->actor);

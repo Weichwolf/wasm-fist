@@ -189,16 +189,21 @@ artillery counters, disabled/exhausted parameter decay and reaching critical-hit
 0073 supplies complete retained aircraft 5/6 behavior-12 updates, post-release motion/emission
 and the independently proved emitter lifetime repair; see docs/aircraft-death.md. Living
 aircraft AI/other behaviors, live type-26 firing and selected-player flows remain required.
+0074 supplies shared world time, scheduled voice production/consumption and resumable current
+registry traversal, with complete existing-class mutable-pass lifetimes; see docs/world-step.md.
+Its all-47-context corpus proves traversal at class-call boundaries, not living class execution.
 Integrate the delivered launch, flight, damage and effect owners into typed live-world scheduling,
 with damage before impact continuation and correct same-pass allocation/update order, before
-binding fire input. Rechecked c105..c120
-visits the 182 live registry entries in ascending registry order, reading the pointer/type on
-arrival; later-entry allocations can update during the same pass. Do not replace this with a
-snapshot or physical-slot loop. Import actual mission
+binding fire input. Reuse 0074's current-entry iterator rather than adding another scheduling
+owner. It reads each current pointer/type on arrival; later-entry allocations can update during
+the same pass. Import actual mission
 occupancy instead of presuming an empty short arena.
-Prioritize connecting the delivered combat owners to the first mission. Recover the complete
-reached world installation/pass and command eligibility before extending later all-mission AI
-coverage; do not replace unknown living-class methods with no-op dispatch.
+Prioritize connecting the delivered combat owners to the first mission. Recover complete
+reached payload installation and post-initialization RNG, living class methods and command
+eligibility before extending later all-mission AI
+coverage; do not replace unknown living-class methods with no-op dispatch. TRAIN1 also reaches
+type-21's conditional 9c4f animation and live type-26 modes 0..3; their collision/destruction
+owners do not supply those living updates.
 Preserve the delivered selection/reload clock and truthful display. Replay timed
 inputs on both targets and verify complete output/state/error behavior, visuals and memory.
 Keep 0041 active until projectiles/hits, objectives/outcomes and audible events form a complete

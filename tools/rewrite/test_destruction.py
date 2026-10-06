@@ -77,6 +77,44 @@ def parent_lines(raw, allocation):
     return actor_lines(raw, allocation)
 
 
+def advance_parent(raw, spawn):
+    """Shared independent parent state arithmetic; the caller owns admission."""
+    kind = struct.unpack_from('<H', raw)[0]
+    parameter_offset, counter_offset = {23: (33, 31), 26: (28, 30), 27: (29, 27)}[kind]
+    created = None
+    if kind == 26 and raw[25] in (5, 7):
+        raw[22] |= 8
+    else:
+        counter = (raw[counter_offset] + 1) % 256 if kind == 26 else (struct.unpack_from('<H', raw, counter_offset)[0] + 1) % 65536
+        if kind == 26: raw[counter_offset] = counter
+        else: struct.pack_into('<H', raw, counter_offset, counter)
+        parameter, = struct.unpack_from('<H', raw, parameter_offset)
+        emit = counter & 63 == 0 and parameter > 128
+        created = spawn(parameter) if emit else None
+        if emit and kind != 23:
+            parameter -= 1
+            if kind == 26 and parameter > 768: parameter -= 4
+            struct.pack_into('<H', raw, parameter_offset, parameter)
+    if kind == 23: raw[22] |= 64; raw[23] |= 68
+    if kind == 27 and raw[25] == 1: raw[22] = raw[22] & 249 | 1; raw[23] &= 231
+    return created
+
+
+def advance_smoke(raw, wind, enabled):
+    """Shared independent smoke state arithmetic; the caller owns release."""
+    released = enabled != 1
+    if not released:
+        x, y, z = struct.unpack_from('<3i', raw, 4)
+        bits = z % 2**32; bits = (bits & 0xffff0000) | ((bits + 8) & 65535)
+        struct.pack_into('<3i', raw, 4, delta(x + wind[0], 0), delta(y + wind[1], 0), delta(bits, 0))
+        counter = (struct.unpack_from('<H', raw, 26)[0] + 1) % 65536
+        if counter >= 12:
+            counter = 0; raw[25] = (raw[25] + 1) % 256; released = raw[25] >= 30
+        struct.pack_into('<H', raw, 26, counter)
+    if released: raw[22] |= 1
+    return released
+
+
 def expected(case):
     pool = Pool(case['bindings'])
     primary = pool.allocations[case['target']]
@@ -135,35 +173,12 @@ def expected(case):
     output += shared()
     for tick in range(case['ticks']):
         if case['operation'] >= 2 and tick < case['parent_ticks']:
-            parameter_offset, counter_offset = {23: (33, 31), 26: (28, 30), 27: (29, 27)}[primary[0]]
-            if primary[0] == 26 and raw[25] in (5, 7):
-                raw[22] |= 8; created = None
-            else:
-                counter = (raw[counter_offset] + 1) % 256 if primary[0] == 26 else (struct.unpack_from('<H', raw, counter_offset)[0] + 1) % 65536
-                if primary[0] == 26: raw[counter_offset] = counter
-                else: struct.pack_into('<H', raw, counter_offset, counter)
-                parameter, = struct.unpack_from('<H', raw, parameter_offset)
-                emit = counter & 63 == 0 and parameter > 128
-                created = spawn(parameter) if emit else None
-                if emit and primary[0] != 23:
-                    parameter -= 1
-                    if primary[0] == 26 and parameter > 768: parameter -= 4
-                    struct.pack_into('<H', raw, parameter_offset, parameter)
-            if primary[0] == 23: raw[22] |= 64; raw[23] |= 68
-            if primary[0] == 27 and raw[25] == 1: raw[22] = raw[22] & 249 | 1; raw[23] &= 231
+            created = advance_parent(raw, spawn)
             output += f'emission {int(created is not None)}\n' + parent_lines(raw, primary) + (created or '')
         for slot, (allocation, smoke) in sorted(list(smokes.items())):
-            released = case['enabled'] != 1
-            if not released:
-                x, y, z = struct.unpack_from('<3i', smoke, 4)
-                bits = z % 2**32; bits = (bits & 0xffff0000) | ((bits + 8) & 65535)
-                struct.pack_into('<3i', smoke, 4, delta(x + case['wind'][0], 0), delta(y + case['wind'][1], 0), delta(bits, 0))
-                counter = (struct.unpack_from('<H', smoke, 26)[0] + 1) % 65536
-                if counter >= 12:
-                    counter = 0; smoke[25] = (smoke[25] + 1) % 256; released = smoke[25] >= 30
-                struct.pack_into('<H', smoke, 26, counter)
+            released = advance_smoke(smoke, case['wind'], case['enabled'])
             if released:
-                smoke[22] |= 1; pool.release(allocation); del smokes[slot]
+                pool.release(allocation); del smokes[slot]
             output += smoke_lines(smoke, allocation)
         for effect in effects:
             if effect[1]:

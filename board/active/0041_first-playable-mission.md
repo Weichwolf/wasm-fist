@@ -104,14 +104,19 @@ retain distinct emission counters and all original parameter/flag rules; see doc
 ground destruction, post-release emission/motion and natural effect cleanup, with the original
 emitter lifetime defect proved and repaired. See docs/aircraft-death.md for complete state and
 caller boundaries. Other aircraft behaviors, live type-26 firing and selected-player flows
-remain open. Live scheduling, input eligibility, visible battle, AI and mission outcome remain open.
+remain open. 0074 supplies the common world tick prefix and current registry traversal, proved
+against original instructions and full existing-class mutable-pass lifetimes. See docs/world-step.md
+for the separate voice producer and traversal-only mission corpus boundaries. This does not
+install live mission payloads or execute unknown living methods. Input eligibility, visible
+battle, AI, audible events and mission outcome remain open.
 
 Continue with 0065: recover and deliver primary player weapon firing, ammunition/reload and
 visible feedback, then projectile/hit rules, mission objectives/outcome and shared sound events
 in verified bounded steps. Preserve the working continuous driving baseline. Prioritize
 actual mission integration of the delivered combat owners before later all-mission
-coverage. Recover the complete reached installation/pass and living methods without no-op
-dispatch; preserve registry mutation order and damage-before-impact continuation. Recover
+coverage. Recover complete reached payload installation and post-initialization RNG, and living
+methods without no-op dispatch; reuse the current-entry iterator and preserve damage-before-impact
+continuation. Recover
 targeting, other-unit class/AI behavior and complete world/object installation as reached; current sprites
 intentionally retain MAL colors. Scenario path/stamp/player mission semantics still need typed
 decoding. Every stage requires real native/browser behavior and visual evidence before claiming
