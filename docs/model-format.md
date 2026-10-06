@@ -143,3 +143,7 @@ gates deliberately skip the separately requested original corpus. This is model-
 coverage; existing terrain presentation is unchanged and no vehicle rendering or playable mission
 is claimed. All temporary fixtures, build logs and sanitizer binaries stay under `/tmp` and
 obsolete scratch is removed after acceptance.
+
+The complete catalog and default ground-vehicle selector/part-pose contract are documented in
+[vehicle-model-selection.md](vehicle-model-selection.md) (WI 0057). Sprite projection, palette
+translation and vehicle drawing remain separate steps.

@@ -7,6 +7,7 @@ bounded unit/chunk views; see `docs/scenario-format.md` and WI 0048. KLC/resourc
 and owned terrain bundles are delivered (0051/0052); see `docs/terrain-format.md` and
 `docs/terrain-loading.md`. `units.c` owns typed snapshot identity/pose and the original normal-side
 roster (0054, `docs/unit-definitions.md`). `model.c` owns complete directional sprite families,
-atlases and part variants (0056, `docs/model-format.md`). Runtime unit-to-model selection, model
-palette translation, gameplay initialization, paths/stamps/PINF and audio decoding remain open
+atlases and part variants (0056, `docs/model-format.md`). The complete model-code catalog and
+default ground-vehicle part pose are supplied by `vehicle.c` (0057, `docs/vehicle-model-selection.md`). Model palette translation, sprite projection/drawing,
+other-class selection, gameplay initialization, paths/stamps/PINF and audio decoding remain open
 under milestone 0041. Source views are ephemeral; owned loaders copy before the next read.

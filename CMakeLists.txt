@@ -25,7 +25,7 @@ target_compile_options(fist_build_options INTERFACE
     -fno-strict-aliasing -ffast-math)
 target_link_libraries(softgl PRIVATE fist_build_options)
 
-add_library(fist_assets STATIC src/assets/scenario.c src/assets/units.c src/assets/model.c src/assets/klc.c
+add_library(fist_assets STATIC src/assets/scenario.c src/assets/units.c src/assets/model.c src/assets/vehicle.c src/assets/klc.c
     src/assets/palette.c src/assets/resource.c src/assets/terrain.c)
 target_include_directories(fist_assets PUBLIC src)
 target_link_libraries(fist_assets PRIVATE fist_build_options)
@@ -49,7 +49,12 @@ target_compile_options(fist_unit_probe PRIVATE -Werror)
 add_executable(fist_model_probe tools/rewrite/model_probe.c)
 target_link_libraries(fist_model_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_model_probe PRIVATE -Werror)
+add_executable(fist_vehicle_probe tools/rewrite/vehicle_probe.c)
+target_link_libraries(fist_vehicle_probe PRIVATE fist_assets fist_probe_io fist_build_options)
+target_compile_options(fist_vehicle_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
+    set_target_properties(fist_vehicle_probe PROPERTIES SUFFIX ".js")
+    target_link_options(fist_vehicle_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
     set_target_properties(fist_model_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_model_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
     set_target_properties(fist_unit_probe PROPERTIES SUFFIX ".js")
@@ -109,6 +114,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME unit_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_units.py
         --target native --native-probe $<TARGET_FILE:fist_unit_probe>)
+    add_test(NAME vehicle_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_vehicle.py
+        --target native --native-probe $<TARGET_FILE:fist_vehicle_probe>)
     add_test(NAME model_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_models.py
         --target native --native-probe $<TARGET_FILE:fist_model_probe>)

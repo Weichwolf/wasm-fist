@@ -24,13 +24,15 @@ Closed 0055 uses the roster-zero vehicle's position and heading for the inspecti
 missing-player failures and reviewed original TRAIN1/AZER1 native/browser frames.
 Closed 0056 supplies owned original directional sprite model families: all 34 families/170 files,
 612 records and 1679860 texels pass native/WASM original-instruction, ownership and memory checks.
-This decodes models; it does not resolve a runtime unit's catalog entry or draw vehicles yet.
+Closed 0057 supplies all 34 model-code names and default ground-vehicle visual selection for
+all 960 original ground snapshots, with independent hull/turret direction and complete 16-bit
+facing-rounding proof. Neither step draws vehicles or executes gameplay initialization.
 
 ## Next
 
-Resolve the original unit-to-model catalog, part pose/animation and model palette selection,
-recover sprite anchor/projection; initialize/install and render the selected vehicle
-using the owned definitions; follow with native SDL2/browser
+Recover sprite anchor/projection and model palette selection; draw original parts using the
+verified ground-vehicle catalog/pose. Recover animation updates and other-class selection;
+initialize/install the selected vehicle using the owned definitions. Follow with native SDL2/browser
 interactive loops and vehicle/terrain rendering, fixed-step controls,
 HUD, combat/outcome and shared sound events as separate verified steps. Scenario-state, path,
 stamp and player semantics still need typed decoding before object installation.
