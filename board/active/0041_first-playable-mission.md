@@ -38,11 +38,16 @@ Closed 0060 supplies typed ground-class c296 initialization, complete owned comp
 and explicit original four-stream random stepping. All 960 ground snapshots and complete original
 class/template returns are compared on native/WASM. This initializes one stage; full terrain/
 suspension installation, target references and interactive controls remain open.
+Closed 0061 supplies complete shared ground-motion and manual turret stages: speed/hull servos,
+four complete slope profiles, both velocity lanes, wrapped XY integration and component/part
+refresh. Both targets pass sustained driving, every speed cap, all 960 original ground snapshots,
+complete original near/far returns, strict tooling and memory checks. This stage owns no mission
+clock, terrain/collision installation, targeting or platform input loop.
 
 ## Next
 
-Recover original movement/controller updates and terrain/suspension installation; connect the
-owned initialized vehicle to the first interactive scene. Recover other-class selection and optional
+Recover terrain/suspension installation and input/controller updates; connect the owned
+initialized moving vehicle to the first interactive scene. Recover other-class selection and optional
 original model mission-palette mapping as reached; current vehicle rendering intentionally
 retains MAL colors.
 Install the selected vehicle using the owned definitions. Follow with native SDL2/browser

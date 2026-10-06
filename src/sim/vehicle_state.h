@@ -7,7 +7,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-enum { FIST_VEHICLE_WEAPON_SLOTS = 4, FIST_VEHICLE_COMPONENT_BYTES = 62 };
+enum {
+    FIST_VEHICLE_WEAPON_SLOTS = 4,
+    FIST_VEHICLE_COMPONENT_BYTES = 62,
+    FIST_VEHICLE_ANIMATION_SELECTORS = 3
+};
 
 typedef struct {
     int16_t speed;
@@ -62,6 +66,8 @@ typedef struct {
     uint8_t hull_view_mode;
     uint8_t behavior;
     uint8_t reload_countdown;
+    /* Original +a9/+aa part selectors and +ab companion animation byte. */
+    uint8_t animation_selectors[FIST_VEHICLE_ANIMATION_SELECTORS];
     /* Complete original initialized component payload. Owned format data;
      * individual component damage/animation semantics remain to be decoded. */
     size_t component_size;
@@ -76,5 +82,8 @@ typedef struct {
  * and random on failure. No allocation is needed. */
 int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random *random,
                             uint8_t link_mode, fist_vehicle_state *out);
+
+/* Complete original component payload size; 0 for unsupported classes. */
+size_t fist_vehicle_component_size(uint16_t type);
 
 #endif

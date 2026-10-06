@@ -113,6 +113,7 @@ def state_lines(records):
         lines.append('weapons ' + ' '.join(map(str, [*rounds, parameter, *cycle, stock])))
         offset = COMPONENT_OFFSET[kind]
         lines.append('components ' + raw[offset:offset + len(COMPONENTS[kind])].hex(' '))
+        lines.append('selectors ' + ' '.join(map(str, raw[0xa9:0xac])))
     return '\n'.join(lines) + ('\n' if lines else '')
 
 

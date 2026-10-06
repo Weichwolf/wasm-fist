@@ -38,6 +38,7 @@ DI and stack. There are no instruction hooks, patches or substitute calls.
 | Random phases | Low bytes of successive 0291 results, at +6dh / +42h |
 | Control mode / turret-view mode / hull-view mode | Bytes +90h = 0 / +86h = 1 / +8dh = 1 |
 | Behavior / reload countdown | Bytes +3eh = 0 / +a8h = 0 |
+| Animation selectors | Preserved bytes +a9h/+aah/+abh, added for WI 0061 motion updates |
 
 Original 7d0f/8917/9911 set +10h = +26h + +89h. The oracle additionally checks
 27 complete wrapper returns with distinct directions, relative offsets and turn wrap. This establishes the independent hull and
@@ -65,6 +66,11 @@ decoded before use. The oracle compares complete 251-byte original results with 
 expected write footprint, including preserved bytes outside the currently typed fields.
 
 ## Deterministic random state
+
+`fist_vehicle_component_size` exposes the one owned class-size contract for motion-state
+validation; unsupported types return zero. WI 0061 also moves probe output into shared
+`vehicle_probe_io.c` and observes all three preserved animation selector bytes. The full
+original initialization/ownership gate remains required after these additions.
 
 `src/sim/random.c` implements complete original 0291 stepping. Four caller-provided 16-bit
 LFSR words are visited in round-robin order. Advance the selected word by a right shift,

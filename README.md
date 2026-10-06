@@ -15,7 +15,8 @@ Owned unit definitions and
 normal-side registry/platoon mappings are verified for all 4213 original snapshots. The shared
 model loader decodes all 34 original directional sprite families, with original model selection
 and complete owned sprite assembly. Typed ground-vehicle initialization and the deterministic
-four-stream RNG are shared between targets. Interactive movement, full simulation, playable
+four-stream RNG, ground motion and manual turret updates are shared between targets.
+Interactive controls, full simulation, playable
 missions and audio remain open. See
 [architecture](docs/architecture.md), [reference status](docs/reference-status.md),
 [work queue](board/README.md) and [goal](docs/rewrite-goal.md).
@@ -82,6 +83,11 @@ The [vehicle start state](docs/vehicle-start-state.md) documents typed controls,
 complete component templates and explicit deterministic random input. Its
 `test_vehicle_start.py --originals --oracle` gate compares all 960 ground snapshots and every
 16-bit random input in every stream with complete original routine execution on both targets.
+The [vehicle motion](docs/vehicle-motion.md) implements speed/hull control, both velocity lanes,
+position integration and manual turret slew. `test_vehicle_motion.py --originals --oracle`
+checks complete original motion returns, every heading, all four slope profiles to their
+actual speed caps and sustained driving on both targets. Terrain/collision and interactive
+input integration remain open.
 The [model format](docs/model-format.md) documents complete directional sprite families and
 their ownership/validation. `python3 tools/rewrite/test_models.py --originals` requires all 170
 model files; optional `--oracle` compares all texels and lookup fields with original instructions.

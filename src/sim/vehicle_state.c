@@ -88,7 +88,8 @@ int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random 
         LINK_OPERATING_FLAG = 16,
         LINK_MODE = 2,
         PROJECTION_EXTENT = 40,
-        PROJECTION_SCALE = 1024
+        PROJECTION_SCALE = 1024,
+        ANIMATION_SELECTORS = 169
     };
     if (definition == NULL || random == NULL || out == NULL ||
         definition->type >= FIST_UNIT_GROUND_VEHICLE_COUNT || definition->snapshot.data == NULL ||
@@ -137,7 +138,14 @@ int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random 
     for (size_t index = 0; index < parameters->component_size; ++index) {
         vehicle.components[index] = parameters->components[index];
     }
+    for (size_t index = 0; index < FIST_VEHICLE_ANIMATION_SELECTORS; ++index) {
+        vehicle.animation_selectors[index] = snapshot[ANIMATION_SELECTORS + index];
+    }
     *out = vehicle;
     *random = advanced;
     return 0;
+}
+
+size_t fist_vehicle_component_size(uint16_t type) {
+    return type < FIST_UNIT_GROUND_VEHICLE_COUNT ? defaults[type].component_size : 0;
 }
