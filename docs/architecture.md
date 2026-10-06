@@ -17,12 +17,16 @@ and verification tools remain available without participating in the rewrite bui
 | `board/reference/`, `re_out/`, `patches/`, legacy shims/tools | Historical evidence only. |
 
 The renderer, diagnostic browser presentation, shared FSG envelope/metadata decoder and
-KLC/resource/palette readers, owned unit definitions/registry/roster, complete terrain bundle
-loader and terrain inspection scene exist so far. See
-`docs/scenario-format.md`, `docs/terrain-format.md`, `docs/terrain-loading.md` and
-`docs/terrain-scene.md` and `docs/unit-definitions.md`. Unit definitions own immutable complete
+KLC/resource/palette readers, owned unit definitions/registry/roster and directional sprite models,
+complete terrain bundle loader and terrain inspection scene exist so far. See
+`docs/scenario-format.md`, `docs/terrain-format.md`, `docs/terrain-loading.md`,
+`docs/terrain-scene.md`, `docs/unit-definitions.md` and `docs/model-format.md`.
+Unit definitions own immutable complete
 snapshots; typed identity/pose fields do not initialize or simulate vehicles. Other chunk views
 retain undecoded gameplay records honestly.
+Models own palettes, complete raw streams, validated sprite/part views and all 32 directional
+record mappings. The model loader copies data before storage sources reuse their buffers;
+catalog selection, mission model palette mapping and vehicle rendering remain open.
 Other directories document ownership, not implemented subsystems. No placeholder game APIs promise behavior they lack.
 The diagnostic triangle uses fixture geometry and colors, not reconstructed game assets.
 

@@ -12,8 +12,9 @@ files), resource members and VGA palettes (all 32 palettes). Complete terrain bu
 palette maps are verified for all 47 scenarios. A shared softgl terrain inspection scene now
 renders original AZER1/TRAIN1 terrain from the roster-zero vehicle pose in native output and
 the browser. Owned unit definitions and
-normal-side registry/platoon mappings are verified for all 4213 original snapshots. Models,
-simulation, playable missions and audio remain open. See
+normal-side registry/platoon mappings are verified for all 4213 original snapshots. The shared
+model loader decodes all 34 original directional sprite families; unit-to-model selection,
+vehicle rendering, simulation, playable missions and audio remain open. See
 [architecture](docs/architecture.md), [reference status](docs/reference-status.md),
 [work queue](board/README.md) and [goal](docs/rewrite-goal.md).
 
@@ -75,6 +76,9 @@ The scenario decoder and its bounded coverage are documented in [scenario format
 The [unit definitions](docs/unit-definitions.md) document owned typed poses, identity and roster
 assignment. `python3 tools/rewrite/test_units.py --originals` checks all 47 missions on native and
 WASM; its optional `--oracle` gate executes pinned original assignment instructions.
+The [model format](docs/model-format.md) documents complete directional sprite families and
+their ownership/validation. `python3 tools/rewrite/test_models.py --originals` requires all 170
+model files; optional `--oracle` compares all texels and lookup fields with original instructions.
 Synthetic scenarios run in the normal build gates. To verify the complete provisioned original
 corpus explicitly, run `python3 tools/rewrite/test_scenario.py --originals`; missing originals,
 changed hashes, incomplete output or skipped original coverage fail. This does not claim gameplay

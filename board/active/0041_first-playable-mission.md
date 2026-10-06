@@ -11,7 +11,7 @@ Decode one real map and vehicle into typed C state; render and play a full missi
 Renderer integration and the original scenario envelope/metadata decoder are delivered. See closed
 0048 for complete 47-mission, 4213-record native/WASM evidence. Closed 0051 supplies all 22 original
 KLC/SKY planes and 32 resource palettes with complete original-instruction output comparison on
-both targets. Models, simulation, interactive native presentation and audio delivery remain open.
+both targets. Vehicle rendering, simulation, interactive native presentation and audio delivery remain open.
 Closed 0052 supplies complete owned terrain bundles and original mission palette mappings for all
 47 scenarios, with native/WASM instruction-oracle and allocation/error-path evidence.
 Closed 0053/0049 supplies recovered world coordinates and a shared C original-terrain inspection
@@ -22,10 +22,14 @@ registry/platoon mappings for all 4213 records, compared with actual original al
 pose-copy and roster instructions on native/WASM. Vehicle initialization is still open.
 Closed 0055 uses the roster-zero vehicle's position and heading for the inspection view, with
 missing-player failures and reviewed original TRAIN1/AZER1 native/browser frames.
+Closed 0056 supplies owned original directional sprite model families: all 34 families/170 files,
+612 records and 1679860 texels pass native/WASM original-instruction, ownership and memory checks.
+This decodes models; it does not resolve a runtime unit's catalog entry or draw vehicles yet.
 
 ## Next
 
-Recover model catalog and composed sprite-part layouts, initialize/install the selected vehicle
+Resolve the original unit-to-model catalog, part pose/animation and model palette selection,
+recover sprite anchor/projection; initialize/install and render the selected vehicle
 using the owned definitions; follow with native SDL2/browser
 interactive loops and vehicle/terrain rendering, fixed-step controls,
 HUD, combat/outcome and shared sound events as separate verified steps. Scenario-state, path,

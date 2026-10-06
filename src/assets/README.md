@@ -3,5 +3,10 @@
 Decode validated original map/model/texture/palette/mission/audio data into typed host structures.
 Original files remain ignored under `armoredfist/`. Tests use reproducible synthetic fixtures or
 local provisioned originals. `scenario.c` now decodes complete FSG envelopes, typed metadata and
-bounded unit/chunk views; see `docs/scenario-format.md` and WI 0048. Terrain, palette, models and
-gameplay-state decoding remain open; continue WI 0049 under milestone 0041.
+bounded unit/chunk views; see `docs/scenario-format.md` and WI 0048. KLC/resource/palette readers
+and owned terrain bundles are delivered (0051/0052); see `docs/terrain-format.md` and
+`docs/terrain-loading.md`. `units.c` owns typed snapshot identity/pose and the original normal-side
+roster (0054, `docs/unit-definitions.md`). `model.c` owns complete directional sprite families,
+atlases and part variants (0056, `docs/model-format.md`). Runtime unit-to-model selection, model
+palette translation, gameplay initialization, paths/stamps/PINF and audio decoding remain open
+under milestone 0041. Source views are ephemeral; owned loaders copy before the next read.
