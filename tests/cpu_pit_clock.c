@@ -7,9 +7,9 @@ static FistVgaStatus status;
 static void unsupported_panning(unsigned value) {abort();}
 static void unsupported_vertical(unsigned value) {abort();}
 #ifdef FIST_CPU_VGA_CLOCK
-static void actual_draw_part(unsigned),actual_vert_interrupt(unsigned),actual_display_start(unsigned);
+static void actual_panning(unsigned),actual_draw_part(unsigned),actual_vert_interrupt(unsigned),actual_display_start(unsigned);
 static void restore_drawing(FILE *);
-static FistPicEvent events[]={unsupported_panning,unsupported_vertical,fist_clock_pit_event,
+static FistPicEvent events[]={actual_panning,unsupported_vertical,fist_clock_pit_event,
     actual_draw_part,actual_vert_interrupt,actual_display_start};
 #else
 static FistPicEvent events[]={unsupported_panning,unsupported_vertical,fist_clock_pit_event};

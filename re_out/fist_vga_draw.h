@@ -72,6 +72,9 @@ static inline void fist_vga_vert_interrupt(FistVgaDraw *v,const FistVgaDrawHost 
   v->vret_triggered=1;if(v->machine==4)h->irq(h->context,9);
  }
 }
+/* Original VGA_PanningLatch copies the BYTE configuration into full Bitu state. */
+static inline void fist_vga_panning_latch(FistVgaDraw *v)
+{v->panning=v->pel_panning;}
 static inline void fist_vga_display_start_latch(FistVgaDraw *v)
 {v->real_start=v->display_start&(uint32_t)(v->vmemwrap-1);v->bytes_skip=v->config_bytes_skip;}
 /* Device line production and host rendering are distinct original contracts.
@@ -84,4 +87,5 @@ void fist_clock_bind_vga(FistVgaDraw *,FistVgaStatus *,void *,
 void fist_clock_vga_draw_part(unsigned value);
 void fist_clock_vga_vert_interrupt(unsigned value);
 void fist_clock_vga_display_start(unsigned value);
+void fist_clock_vga_panning(unsigned value);
 #endif

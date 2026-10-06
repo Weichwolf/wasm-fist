@@ -1,5 +1,8 @@
 /* One original before-IRET seed through the complete reaching device chain. */
 #include "fist_pit.h"
+#ifdef FIST_VGA_PANNING_CONTINUE
+#define FIST_VGA_CMP_BYTE_CONTINUE 1
+#endif
 #ifdef FIST_VGA_CMP_BYTE_CONTINUE
 #define FIST_VGA_JS_CONTINUE 1
 #endif
@@ -170,7 +173,17 @@ static void handler_prefix(void)
 #endif
   }
 #ifdef FIST_VGA_CMP_BYTE_CONTINUE
-  if(after_cmp_byte) {state("after-cmp-byte");break;}
+  if(after_cmp_byte) {
+   state("after-cmp-byte");
+#ifdef FIST_VGA_PANNING_CONTINUE
+   after_cmp_byte=0;
+#else
+   break;
+#endif
+  }
+#ifdef FIST_VGA_PANNING_CONTINUE
+  if(cpu.segments[1].value==0x4ec3 && cpu.eip==0x2f79) {state("before-test-word");break;}
+#endif
 #endif
 #endif
 #endif

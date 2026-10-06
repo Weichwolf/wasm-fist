@@ -17,6 +17,8 @@ static void actual_draw_part(unsigned value)
 {observe_callback_state("before-draw-part");fist_clock_vga_draw_part(value);observe_callback_state("after-draw-part");}
 static void actual_vert_interrupt(unsigned value)
 {observe_callback_state("before-vert-interrupt");fist_clock_vga_vert_interrupt(value);observe_callback_state("after-vert-interrupt");}
+static void actual_panning(unsigned value)
+{observe_callback_state("before-panning");fist_clock_vga_panning(value);observe_callback_state("after-panning");}
 static void actual_display_start(unsigned value)
 {observe_callback_state("before-display-start");fist_clock_vga_display_start(value);observe_callback_state("after-display-start");}
 static void restore_drawing(FILE *input)

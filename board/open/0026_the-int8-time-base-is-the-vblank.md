@@ -1773,7 +1773,35 @@ bash tools/check_flow.sh
   open. The diagnostic whole-startup continuation reaches TEST85c0 at4ec3:2f79;
   its independent complete renderer/DAC/panning proof remains private.
 
+
+## Prepared shared original panning callback adoption
+
+The reached `VGA_PanningLatch` now copies BYTE configuration into full Bitu drawing
+state through one shared helper and the bound CPU/PIC/VGA calendar. Its callback
+argument is ignored as in the original; detachment removes the owned event.
+The existing reaching fixture maps the real callback and observes its boundaries.
+No original seed initializes runtime state and no clock behavior changed here.
+
+A fresh same-run IRET source records42 complete CPU/system/time/16MiB RAM/provider/
+cache/VGA/PIC/PIT/status/calendar/drawing/service/DAC boundaries and3057 full fetches.
+Both targets match every field and all50 line/end plus1544 I/O observations. The old
+unmapped calendar fails after39 equal states and3055 fetches. Missing source fetch
+and panning-return records fail. All6144 original latch programs cover256 valid BYTE
+values,dirty64-bit drawing words and ignored callback arguments;three causes fail
+on both targets after complete positives. Four public tests pass. The original
+39frames/27518 mixedPCM/end600 bytes remain unchanged.
+
+`cpu_vga_panning_production_case.json` retains provenance and reproduction. This
+bounded callback requires the unfiltered260-test/611-patch/two-build/
+six-startup/178-flow gate. Complete application startup,vertical setup,renderer,
+IRQ/device/mixer integration and full original output parity remain open.
+
 ## Next
+
+Consume `cpu_vga_panning_production_case.json` for the shared original callback and
+complete reaching/control/source-completeness regressions. Continue at reached
+TEST85 (`4ec3:2f79`) and transport the actual application startup/system/calendar
+through the existing canonical page-fault and renderer owners before full parity.
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
 calendar from real application startup before replacing legacy outer77e2/op6c

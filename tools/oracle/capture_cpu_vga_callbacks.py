@@ -11,7 +11,8 @@ CALLBACK_KINDS=tuple(k for name in ('draw-part','vert-interrupt','display-start'
                      for k in ('before-'+name,'after-'+name))
 ADDITIONAL=(*CALLBACK_KINDS,*KINDS,'before-jcxz','after-jcxz','before-panning','after-panning')
 
-def observer(repo,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False,through_cmp=False,through_js=False,through_cmp_byte=False):
+def observer(repo,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False,through_cmp=False,through_js=False,through_cmp_byte=False,through_panning=False):
+    through_cmp_byte=through_cmp_byte or through_panning
     through_js=through_js or through_cmp_byte
     through_cmp=through_cmp or through_js
     through_outsb=through_outsb or through_cmp
@@ -88,13 +89,18 @@ def observer(repo,*,through_push_cs=False,through_shr_word=False,through_moffs=F
    elif q['cpu_regs.ip.dword[0]']==0x2f55:save('before-cmp-byte')
    elif q['cpu_regs.ip.dword[0]']==0x2f59:save('after-cmp-byte');self.enabled=False;return False"""
         assert text.count(old)==1;text=text.replace(old,new)
+    if through_panning:
+        old="elif q['cpu_regs.ip.dword[0]']==0x2f59:save('after-cmp-byte');self.enabled=False;return False"
+        new="elif q['cpu_regs.ip.dword[0]']==0x2f59:save('after-cmp-byte')\n   elif q['cpu_regs.ip.dword[0]']==0x2f79:save('before-test-word');self.enabled=False;return False"
+        assert text.count(old)==1;text=text.replace(old,new)
     extra=(repo/'tools/oracle/vga_callbacks.gdb.inc').read_text()
     if through_outsb:
         extra+='\n'+(repo/'tools/oracle/dac_state.gdb.inc').read_text()+'\n'+(repo/'tools/oracle/dac_io.gdb.inc').read_text()
     assert text.count('\nend\nrun')==1
     return text.replace('\nend\nrun','\n'+extra+'\nend\nrun')
 
-def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False,through_cmp=False,through_js=False,through_cmp_byte=False):
+def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False,through_cmp=False,through_js=False,through_cmp_byte=False,through_panning=False):
+    through_cmp_byte=through_cmp_byte or through_panning
     through_js=through_js or through_cmp_byte
     through_cmp=through_cmp or through_js
     through_outsb=through_outsb or through_cmp
@@ -110,14 +116,15 @@ def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_mo
     if through_cmp:kinds=kinds[:-2]+('before-cmp','after-cmp')+kinds[-2:]
     if through_js:kinds=kinds[:-2]+('before-js','after-js')+kinds[-2:]
     if through_cmp_byte:kinds=kinds[:-2]+('before-cmp-byte','after-cmp-byte')+kinds[-2:]
+    if through_panning:kinds+=('before-test-word',)
     result=verify_core(repo,folder,kinds)
     fetches=[json.loads(s) for s in (folder/'source/handler-fetches.jsonl').read_text().splitlines()]
     lines=[json.loads(s) for s in (folder/'source/draw-lines.jsonl').read_text().splitlines()]
-    assert len(fetches)==(3054 if through_cmp_byte else 3052 if through_js else 3046 if through_cmp else 2998 if through_outsb else 2982 if through_jns else 2980 if through_moffs else 2976 if through_shr_word else 2972 if through_push_cs else 2968) and len(lines)==50
-    rows=result['events'];assert len(rows)==(41 if through_cmp_byte else 39 if through_js else 37 if through_cmp else 35 if through_outsb else 31 if through_jns else 29 if through_moffs else 27 if through_shr_word else 25 if through_push_cs else 23)
+    assert len(fetches)==(3057 if through_panning else 3054 if through_cmp_byte else 3052 if through_js else 3046 if through_cmp else 2998 if through_outsb else 2982 if through_jns else 2980 if through_moffs else 2976 if through_shr_word else 2972 if through_push_cs else 2968) and len(lines)==50
+    rows=result['events'];assert len(rows)==(42 if through_panning else 41 if through_cmp_byte else 39 if through_js else 37 if through_cmp else 35 if through_outsb else 31 if through_jns else 29 if through_moffs else 27 if through_shr_word else 25 if through_push_cs else 23)
     assert fetches[0]['segments'][1]['value']==0x2082
     assert fetches[-1]['segments'][1]['value']==(0x4ec3 if through_outsb else 0x2082)
-    assert fetches[0]['cpu_regs.ip.dword[0]']==0x3a68 and fetches[-1]['cpu_regs.ip.dword[0]']==(0x2f59 if through_cmp_byte else 0x2f52 if through_js else 0x2f3f if through_cmp else 0xc01 if through_outsb else 0x3b63 if through_jns else 0x3b46 if through_moffs else 0x3b3c if through_shr_word else 0x3abc if through_push_cs else 0x3aac)
+    assert fetches[0]['cpu_regs.ip.dword[0]']==0x3a68 and fetches[-1]['cpu_regs.ip.dword[0]']==(0x2f79 if through_panning else 0x2f59 if through_cmp_byte else 0x2f52 if through_js else 0x2f3f if through_cmp else 0xc01 if through_outsb else 0x3b63 if through_jns else 0x3b46 if through_moffs else 0x3b3c if through_shr_word else 0x3abc if through_push_cs else 0x3aac)
     for before,after in zip(rows[7:13:2],rows[8:13:2]):
         assert before['CPU_Cycles']==after['CPU_Cycles']==0
         assert before['CPU_CycleLeft']==after['CPU_CycleLeft']
@@ -254,6 +261,18 @@ def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_mo
         assert before['CPU_Cycles']==after['CPU_Cycles']+1
         result['cmp_byte_operand']=operand
         result['through_cmp_byte']=True
+    if through_panning:
+        before,after=rows[39:41]
+        assert [q['kind'] for q in (before,after)]==['before-panning','after-panning']
+        assert words(before)==words(after) and clock(before)==clock(after)
+        assert before['CPU_Cycles']==after['CPU_Cycles']==0
+        assert before['CPU_CycleLeft']==after['CPU_CycleLeft']
+        assert before['PIC_event_service']==after['PIC_event_service'] and before['PIC_event_service']['active']==1
+        expected=dict(before['vga_draw']);expected['panning']=expected['config']['pel_panning'];assert after['vga_draw']==expected
+        assert before['dac']==after['dac']
+        assert (folder/'source'/before['memory_file']).read_bytes()==(folder/'source'/after['memory_file']).read_bytes()
+        assert rows[41]['kind']=='before-test-word' and words(rows[41])==words(fetches[-1]) and clock(rows[41])==clock(fetches[-1])
+        result['through_panning']=True
     scope='Actual original one-seed IRET/core/PIC/IRQ prefix, complete CPU/RAM/device/calendar/drawing/service observations, every fetch and50 complete linear-line outputs. Full39frame/27518mixedPCM/end600 output equals unobserved original. Renderer metadata is diagnostic; port renderer/scaler/startup/whole handler/full-sequence acceptance remains open.'
     result.update(scope=scope,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb,through_cmp=through_cmp,fetches=fetches,draw_lines=lines,complete_original_acceptance=False)
     if through_js:result['through_js']=True
@@ -261,12 +280,12 @@ def verify(repo,folder,*,through_push_cs=False,through_shr_word=False,through_mo
     print('PASS original',len(rows),'boundaries/',len(fetches),'fetches/50 drawn lines and unchanged complete output',flush=True)
     return result
 
-def capture(repo,root,baseline=None,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False,through_cmp=False,through_js=False,through_cmp_byte=False):
+def capture(repo,root,baseline=None,*,through_push_cs=False,through_shr_word=False,through_moffs=False,through_jns=False,through_outsb=False,through_cmp=False,through_js=False,through_cmp_byte=False,through_panning=False):
     tree=repo/'third_party/dosbox-build/dosbox-0.74-3'
-    return capture_core(repo,root,baseline,make_observer=lambda repo:observer(repo,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb,through_cmp=through_cmp,through_js=through_js,through_cmp_byte=through_cmp_byte),
-                        check_capture=lambda repo,root:verify(repo,root,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb,through_cmp=through_cmp,through_js=through_js,through_cmp_byte=through_cmp_byte),
-                        source_wall_seconds=300 if through_outsb or through_cmp or through_js or through_cmp_byte else 120,
-                        additional_inputs=(Path(__file__),repo/'tools/oracle/capture_cpu_pit_writes.py',repo/'tools/oracle/vga_callbacks.gdb.inc',repo/'tools/oracle/dac_state.gdb.inc',repo/'tools/oracle/dac_io.gdb.inc',
+    return capture_core(repo,root,baseline,make_observer=lambda repo:observer(repo,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb,through_cmp=through_cmp,through_js=through_js,through_cmp_byte=through_cmp_byte,through_panning=through_panning),
+                        check_capture=lambda repo,root:verify(repo,root,through_push_cs=through_push_cs,through_shr_word=through_shr_word,through_moffs=through_moffs,through_jns=through_jns,through_outsb=through_outsb,through_cmp=through_cmp,through_js=through_js,through_cmp_byte=through_cmp_byte,through_panning=through_panning),
+                        source_wall_seconds=300 if through_outsb or through_cmp or through_js or through_cmp_byte or through_panning else 120,
+                        additional_inputs=(Path(__file__),repo/'tests/device_cpu_fixture.py',repo/'tests/memory_context_fixture.py',repo/'tests/test_port_io.py',repo/'tools/oracle/capture_cpu_pit_writes.py',repo/'tools/oracle/vga_callbacks.gdb.inc',repo/'tools/oracle/dac_state.gdb.inc',repo/'tools/oracle/dac_io.gdb.inc',
                         *[tree/p for p in ('src/hardware/vga_dac.cpp','src/hardware/iohandler.cpp','src/cpu/core_normal/string.h','include/render.h','src/hardware/timer.cpp','src/hardware/vga_draw.cpp','src/hardware/vga_misc.cpp','include/vga.h','src/gui/render.cpp','src/cpu/instructions.h','src/cpu/lazyflags.h','src/cpu/flags.cpp','include/logging.h','config.h','src/cpu/core_normal/prefix_none.h','src/cpu/core_normal/table_ea.h')]))
 
 if __name__=='__main__':
@@ -281,6 +300,7 @@ if __name__=='__main__':
     p.add_argument('--through-cmp',action='store_true')
     p.add_argument('--through-js',action='store_true')
     p.add_argument('--through-cmp-byte',action='store_true')
+    p.add_argument('--through-panning',action='store_true')
     a=p.parse_args();repo=a.repo.resolve();root=a.output.resolve()
-    if a.verify_only:verify(repo,root,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word,through_moffs=a.through_moffs,through_jns=a.through_jns,through_outsb=a.through_outsb,through_cmp=a.through_cmp,through_js=a.through_js,through_cmp_byte=a.through_cmp_byte)
-    else:capture(repo,root,a.baseline.resolve() if a.baseline else None,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word,through_moffs=a.through_moffs,through_jns=a.through_jns,through_outsb=a.through_outsb,through_cmp=a.through_cmp,through_js=a.through_js,through_cmp_byte=a.through_cmp_byte)
+    if a.verify_only:verify(repo,root,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word,through_moffs=a.through_moffs,through_jns=a.through_jns,through_outsb=a.through_outsb,through_cmp=a.through_cmp,through_js=a.through_js,through_cmp_byte=a.through_cmp_byte,through_panning=a.through_panning)
+    else:capture(repo,root,a.baseline.resolve() if a.baseline else None,through_push_cs=a.through_push_cs,through_shr_word=a.through_shr_word,through_moffs=a.through_moffs,through_jns=a.through_jns,through_outsb=a.through_outsb,through_cmp=a.through_cmp,through_js=a.through_js,through_cmp_byte=a.through_cmp_byte,through_panning=a.through_panning)

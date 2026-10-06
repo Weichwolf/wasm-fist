@@ -533,6 +533,8 @@ void fist_clock_vga_draw_part(unsigned value)
 {fist_cpu_require(g_vga_draw_context!=NULL);fist_vga_draw_part(g_vga_draw_context,&g_vga_draw_host,value);}
 void fist_clock_vga_vert_interrupt(unsigned value)
 {fist_cpu_require(g_vga_draw_context && value==0);fist_vga_vert_interrupt(g_vga_draw_context,&g_vga_draw_host);}
+void fist_clock_vga_panning(unsigned value)
+{fist_cpu_require(g_vga_draw_context!=NULL);fist_vga_panning_latch(g_vga_draw_context);}
 void fist_clock_vga_display_start(unsigned value)
 {fist_cpu_require(g_vga_draw_context && value==0);fist_vga_display_start_latch(g_vga_draw_context);}
 void fist_clock_bind_vga(FistVgaDraw *drawing,FistVgaStatus *status,void *context,
@@ -545,6 +547,7 @@ void fist_clock_bind_vga(FistVgaDraw *drawing,FistVgaStatus *status,void *contex
         fist_clock_remove_events(fist_clock_vga_draw_part);
         fist_clock_remove_events(fist_clock_vga_vert_interrupt);
         fist_clock_remove_events(fist_clock_vga_display_start);
+        fist_clock_remove_events(fist_clock_vga_panning);
     }
     if(drawing)g_pic_machine_calendar=1;
     g_vga_draw_context=drawing;g_vga_status_context=status;
