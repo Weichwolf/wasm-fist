@@ -104,4 +104,3 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   python3 tools/rewrite/test_collision.py --originals --target native \
   --native-probe /tmp/wasm-fist-collision-sanitizer/collision_probe
 ```
-
