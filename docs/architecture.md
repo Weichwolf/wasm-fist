@@ -17,10 +17,12 @@ and verification tools remain available without participating in the rewrite bui
 | `board/reference/`, `re_out/`, `patches/`, legacy shims/tools | Historical evidence only. |
 
 The renderer, diagnostic browser presentation, shared FSG envelope/metadata decoder and
-KLC/resource/palette readers, complete terrain bundle loader and terrain inspection scene exist so far. See
+KLC/resource/palette readers, owned unit definitions/registry/roster, complete terrain bundle
+loader and terrain inspection scene exist so far. See
 `docs/scenario-format.md`, `docs/terrain-format.md`, `docs/terrain-loading.md` and
-`docs/terrain-scene.md`; unit/chunk
-views retain undecoded gameplay records honestly.
+`docs/terrain-scene.md` and `docs/unit-definitions.md`. Unit definitions own immutable complete
+snapshots; typed identity/pose fields do not initialize or simulate vehicles. Other chunk views
+retain undecoded gameplay records honestly.
 Other directories document ownership, not implemented subsystems. No placeholder game APIs promise behavior they lack.
 The diagnostic triangle uses fixture geometry and colors, not reconstructed game assets.
 

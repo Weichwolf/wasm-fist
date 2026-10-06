@@ -18,4 +18,13 @@ static inline uint32_t fist_read_u32le(const uint8_t *data) {
     return value;
 }
 
+static inline int32_t fist_read_i32le(const uint8_t *data) {
+    const uint32_t value = fist_read_u32le(data);
+    /* Convert two's complement without an implementation-defined unsigned cast. */
+    if (value <= INT32_MAX) {
+        return (int32_t)value;
+    }
+    return -1 - (int32_t)(UINT32_MAX - value);
+}
+
 #endif

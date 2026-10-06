@@ -25,7 +25,7 @@ target_compile_options(fist_build_options INTERFACE
     -fno-strict-aliasing -ffast-math)
 target_link_libraries(softgl PRIVATE fist_build_options)
 
-add_library(fist_assets STATIC src/assets/scenario.c src/assets/klc.c
+add_library(fist_assets STATIC src/assets/scenario.c src/assets/units.c src/assets/klc.c
     src/assets/palette.c src/assets/resource.c src/assets/terrain.c)
 target_include_directories(fist_assets PUBLIC src)
 target_link_libraries(fist_assets PRIVATE fist_build_options)
@@ -43,7 +43,12 @@ target_compile_options(fist_asset_probe PRIVATE -Werror)
 add_executable(fist_terrain_probe tools/rewrite/terrain_probe.c)
 target_link_libraries(fist_terrain_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_terrain_probe PRIVATE -Werror)
+add_executable(fist_unit_probe tools/rewrite/unit_probe.c)
+target_link_libraries(fist_unit_probe PRIVATE fist_assets fist_probe_io fist_build_options)
+target_compile_options(fist_unit_probe PRIVATE -Werror)
 if(EMSCRIPTEN)
+    set_target_properties(fist_unit_probe PROPERTIES SUFFIX ".js")
+    target_link_options(fist_unit_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
     set_target_properties(fist_scenario_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_scenario_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1)
     set_target_properties(fist_asset_probe PROPERTIES SUFFIX ".js")
@@ -96,6 +101,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME scenario_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_scenario.py
         --target native --native-probe $<TARGET_FILE:fist_scenario_probe>)
+    add_test(NAME unit_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_units.py
+        --target native --native-probe $<TARGET_FILE:fist_unit_probe>)
     add_test(NAME terrain_asset_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_terrain_assets.py
         --target native --native-probe $<TARGET_FILE:fist_asset_probe>

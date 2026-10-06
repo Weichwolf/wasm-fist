@@ -25,7 +25,9 @@ it does not invent units or reinterpret zero-limit gameplay behavior.
 
 `d7e1` reads a 16-bit unit count, then a six-byte record header; d808/d81e consume the declared
 state body. The writer d6e4 and reference patch 360 identify header words as state size, catalog
-index and catalog value. The reader validates lengths/counts and returns state views, without
+index and catalog value. Constructor evidence now resolves the latter two as registry index
+and generation; the envelope API retains its historical names. The reader validates
+lengths/counts and returns state views, without
 claiming to implement vehicle/AI state semantics.
 
 ## Wire layout
@@ -59,8 +61,10 @@ platform lookup must be case-insensitive. Embedded resource lookup is now provid
 
 DCBS bodies in the current corpus have lengths 55 or 251 bytes. The envelope decoder follows the
 declared length and requires at least the original first state word, rather than guessing a unit
-kind from size. Typed state decoding, model catalog resolution and object installation are next
-contracts. No objects are fabricated from metadata alone.
+kind from size. The separate [unit definition decoder](unit-definitions.md) now provides owned
+typed identities/poses and normal-side registry/roster assignments while retaining every snapshot
+byte. Model catalog resolution, runtime object installation, vehicle initialization and simulation
+remain open. No objects are fabricated from metadata alone.
 
 ## Verification
 

@@ -27,6 +27,7 @@ typedef enum {
 } fist_scenario_chunk;
 
 typedef struct {
+    /* Original registry index and generation; historical envelope field names. */
     uint16_t catalog_index;
     uint16_t catalog_value;
     fist_asset_view state;

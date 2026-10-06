@@ -10,7 +10,8 @@ throughout development.
 envelopes/metadata/unit framing (all 47 missions), KLC height/colormap/stamp/sky planes (all 22
 files), resource members and VGA palettes (all 32 palettes). Complete terrain bundles and mission
 palette maps are verified for all 47 scenarios. A shared softgl terrain inspection scene now
-renders original AZER1 terrain in native output and the browser. Models,
+renders original AZER1 terrain in native output and the browser. Owned unit definitions and
+normal-side registry/platoon mappings are verified for all 4213 original snapshots. Models,
 simulation, playable missions and audio remain open. See
 [architecture](docs/architecture.md), [reference status](docs/reference-status.md),
 [work queue](board/README.md) and [goal](docs/rewrite-goal.md).
@@ -70,6 +71,9 @@ link them. Legacy instructions are archived in [reconstruction README](docs/reco
 Historical acceptance claims remain scoped to that revision. New work follows [AGENTS.md](AGENTS.md).
 
 The scenario decoder and its bounded coverage are documented in [scenario format](docs/scenario-format.md).
+The [unit definitions](docs/unit-definitions.md) document owned typed poses, identity and roster
+assignment. `python3 tools/rewrite/test_units.py --originals` checks all 47 missions on native and
+WASM; its optional `--oracle` gate executes pinned original assignment instructions.
 Synthetic scenarios run in the normal build gates. To verify the complete provisioned original
 corpus explicitly, run `python3 tools/rewrite/test_scenario.py --originals`; missing originals,
 changed hashes, incomplete output or skipped original coverage fail. This does not claim gameplay

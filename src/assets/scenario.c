@@ -2,7 +2,6 @@
 #include "assets/bytes.h"
 #include "assets/view.h"
 
-#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -19,15 +18,6 @@ enum {
     DOS_EXTENSION_SIZE = 3,
     DOS_FILENAME_SIZE = DOS_BASENAME_SIZE + 1 + DOS_EXTENSION_SIZE
 };
-
-static int32_t read_position(const uint8_t *data) {
-    const uint32_t value = fist_read_u32le(data);
-    /* Convert two's complement without an implementation-defined unsigned cast. */
-    if (value <= INT32_MAX) {
-        return (int32_t)value;
-    }
-    return -1 - (int32_t)(UINT32_MAX - value);
-}
 
 static int chunk_kind(const uint8_t *tag) {
     static const char tags[FIST_SCENARIO_CHUNK_COUNT][TAG_SIZE] = {"SHDR", "DCBS", "PATH", "STMP",
@@ -139,7 +129,7 @@ static int decode_metadata(fist_scenario *scenario) {
     scenario->limit = header.data[LIMIT_OFFSET];
     for (size_t index = 0; index < FIST_SCENARIO_POSITION_COUNT; ++index) {
         scenario->map_positions[index] =
-            read_position(header.data + POSITIONS_OFFSET + (index * DWORD_SIZE));
+            fist_read_i32le(header.data + POSITIONS_OFFSET + (index * DWORD_SIZE));
     }
     scenario->unit_count = fist_read_u16le(units.data);
     fist_scenario_unit_iterator iterator = fist_scenario_units_begin(scenario);
