@@ -2,8 +2,9 @@
 
 The shared C11 loader in `src/assets/model.c` owns a complete original model family: DAC6 palette
 `.MAL`, base atlas `.M00`, and directional streams `.M08`, `.M16`, `.M32`. These are composed
-sprite assets, not triangle/vertex meshes. Runtime unit-to-model catalog selection, mission
-palette translation, sprite placement/rendering and vehicle simulation are subsequent contracts.
+sprite assets, not triangle/vertex meshes. Unit catalog/ground part selection are delivered in
+0057; authored sprite composition in 0058. Mission palette mapping, scene projection/drawing
+and vehicle simulation remain subsequent contracts.
 
 The source callback may reuse/free its view at the next read. Each file copies all input bytes;
 record, pixel, part/variant and piece views borrow that owned storage. The family owns every file
@@ -147,3 +148,6 @@ obsolete scratch is removed after acceptance.
 The complete catalog and default ground-vehicle selector/part-pose contract are documented in
 [vehicle-model-selection.md](vehicle-model-selection.md) (WI 0057). Sprite projection, palette
 translation and vehicle drawing remain separate steps.
+
+Authored-resolution ordering, anchor, column-major texel, mirror and transparent assembly are
+documented in [model-composition.md](model-composition.md) (WI 0058).

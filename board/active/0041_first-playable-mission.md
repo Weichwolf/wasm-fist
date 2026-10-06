@@ -26,12 +26,16 @@ Closed 0056 supplies owned original directional sprite model families: all 34 fa
 612 records and 1679860 texels pass native/WASM original-instruction, ownership and memory checks.
 Closed 0057 supplies all 34 model-code names and default ground-vehicle visual selection for
 all 960 original ground snapshots, with independent hull/turret direction and complete 16-bit
-facing-rounding proof. Neither step draws vehicles or executes gameplay initialization.
+facing-rounding proof. Closed 0058 supplies owned authored-resolution model bitmaps with original
+part/piece order, anchors, column-major texels, mirroring and zero transparency: all 6432 corpus
+bitmaps pass native/WASM and original-instruction checks, with reviewed actual C vehicle assets.
+These steps do not install/draw vehicles into the scene or execute gameplay initialization.
 
 ## Next
 
-Recover sprite anchor/projection and model palette selection; draw original parts using the
-verified ground-vehicle catalog/pose. Recover animation updates and other-class selection;
+Recover vehicle world scale/view bearing and model mission-palette selection; project and draw
+the verified origin-relative composed ground-vehicle bitmaps in the shared scene. Recover
+animation updates and other-class selection;
 initialize/install the selected vehicle using the owned definitions. Follow with native SDL2/browser
 interactive loops and vehicle/terrain rendering, fixed-step controls,
 HUD, combat/outcome and shared sound events as separate verified steps. Scenario-state, path,

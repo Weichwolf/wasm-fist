@@ -12,7 +12,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { CONTRACT_FAILURE = 2, MARKER_COUNT = 137, MARKER_COMPONENT = 165, PIECE_SIZE = 4 };
+enum {
+    CONTRACT_FAILURE = 2,
+    MARKER_COUNT = 137,
+    MARKER_COMPONENT = 165,
+    PIECE_SIZE = FIST_MODEL_PIECE_BYTES
+};
 
 static void write_bytes(fist_asset_view bytes) {
     for (size_t index = 0; index < bytes.size; ++index) {

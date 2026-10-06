@@ -20,6 +20,7 @@ if [[ $target == wasm || $target == all ]]; then
     python3 "$root/tools/rewrite/test_scenario.py" --target wasm --build-root "$output"
     python3 "$root/tools/rewrite/test_units.py" --target wasm --build-root "$output"
     python3 "$root/tools/rewrite/test_vehicle.py" --target wasm --build-root "$output"
+    python3 "$root/tools/rewrite/test_model_bitmap.py" --target wasm --build-root "$output"
     python3 "$root/tools/rewrite/test_models.py" --target wasm --build-root "$output"
     python3 "$root/tools/rewrite/test_terrain_assets.py" --target wasm --build-root "$output"
     python3 "$root/tools/rewrite/test_terrain_scene.py" --target wasm --build-root "$output"
