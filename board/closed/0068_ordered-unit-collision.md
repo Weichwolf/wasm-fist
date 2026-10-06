@@ -19,7 +19,7 @@ must retain this ordering rather than filtering the origin out of the collision 
 
 Actual bb1b walks all 182 registry entries in order, excludes absent/self/noncollidable entries,
 uses 0ea9's inclusive independent XY bounds and tail-dispatches c14f through e518. The complete
-source/type threshold table, all class-specific height methods and helicopter modes were rechecked.
+source/type threshold table, all class-specific height methods and type-26 modes were rechecked.
 Type 21's method is the clc/ret at 9c97, not the adjacent height-table method. Type-5/6 gameplay
 identity remains unclaimed; their proved rule consumes RNG before height/threshold acceptance.
 See `docs/unit-collision.md` for all instructions, fields, rules and scope.
@@ -37,7 +37,7 @@ Verified on 2026-10-06:
 - `python3 tools/rewrite/check_style.py`: strict LLVM 19.1.7 format/tidy passes all 50 owned C units.
 - Pinned `test_collision.py --originals --oracle`: all seven groups pass in 132.596 seconds on
   both production targets, without skips. 35,271 query observations per target cover every
-  source/target type, all eight helicopter modes, all collidable flag bytes, inclusive XY/height
+  source/target type, all eight type-26 modes, all collidable flag bytes, inclusive XY/height
   edges, dword/word wraps, every source-type/random-byte pair at all four cursors, encounter
   randomness, current/overwritten/orphan bindings and first-hit/aspect ordering. The corpus
   includes all 4,213 source queries in all 47 pinned snapshot worlds plus 179 M1 launch-position
@@ -51,6 +51,10 @@ Verified on 2026-10-06:
 No displayed frame, device firing command, damage, effect or PCM changes. Active 0065/0041 remain
 open. Temporary logs, sanitizer binary and the generated repository Python cache are removed
 following commit/push; compact evidence remains under `/tmp/wasm-fist-0068-collision-review`.
+
+0071 corrects the former type-26 helicopter label using actual byte-indexed render table `e48c`:
+type 26 selects `TARGETS`, while types 5/6 select `APACHE`/`HIND`. Height values, query ordering,
+coverage and acceptance above are unchanged. See docs/other-damage.md for the pinned assignments.
 
 ## Next
 

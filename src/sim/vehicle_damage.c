@@ -2,6 +2,7 @@
 
 #include "assets/units.h"
 #include "sim/collision.h"
+#include "sim/damage_common.h"
 #include "sim/object_pool.h"
 #include "sim/projectile_flight.h"
 #include "sim/projectile_launch.h"
@@ -13,8 +14,6 @@
 #include <stdint.h>
 
 enum {
-    PRIMARY_PROJECTILE = 8,
-    PRIMARY_PARAMETER = 5,
     SIDE_FLAG = 8,
     DELETED_FLAG = 1,
     HIT_CONTROL_FLAG = 32,
@@ -58,41 +57,15 @@ static const uint8_t aspect_factors[FIST_UNIT_GROUND_VEHICLE_COUNT][ASPECTS] = {
 static const uint8_t fire_flags[FIRE_CHOICES] = {2, 4, 2, 4, 2, 4, 2, 6};
 static const uint16_t wreck_models[FIST_UNIT_GROUND_VEHICLE_COUNT] = {10, 22, 34, 46};
 
-static int valid_environment(const fist_damage_environment *environment) {
-    if (environment == NULL || !fist_object_pool_is_valid(environment->pool) ||
-        environment->random == NULL || environment->random->next_stream >= FIST_RANDOM_STREAMS ||
-        environment->state == NULL) {
-        return 0;
-    }
-    const fist_combat_state *state = environment->state;
-    if (state->selected_slot != FIST_POOL_NO_SLOT &&
-        (state->selected_slot >= FIST_UNIT_REGISTRY_COUNT ||
-         environment->pool->slots[state->selected_slot].used == 0)) {
-        return 0;
-    }
-    for (size_t index = 0; index < FIST_UNIT_ROSTER_COUNT; ++index) {
-        const uint16_t slot = state->roster[index];
-        if (slot != FIST_POOL_NO_SLOT &&
-            (slot >= FIST_UNIT_REGISTRY_COUNT || environment->pool->slots[slot].used == 0)) {
-            return 0;
-        }
-    }
-    return 1;
-}
-
 static int valid_request(const fist_vehicle_state *vehicle,
                          const fist_damage_environment *environment,
                          fist_vehicle_damage_request request) {
-    const fist_projectile *source = request.projectile;
-    if (vehicle == NULL || !valid_environment(environment) || source == NULL ||
+    if (vehicle == NULL || !fist_damage_source_is_valid(environment, request) ||
         vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
         vehicle->component_size != fist_vehicle_component_size(vehicle->type) ||
-        (vehicle->object_flags & DELETED_FLAG) != 0 || request.hit.aspect >= ASPECTS ||
+        (vehicle->object_flags & DELETED_FLAG) != 0 ||
         request.hit.registry_index != vehicle->registry_index ||
-        request.hit.value != vehicle->generation || source->allocation.type != PRIMARY_PROJECTILE ||
-        source->collision_profile != 0 || source->launch_parameter != PRIMARY_PARAMETER ||
-        source->phase != FIST_PROJECTILE_UNIT_IMPACT || (source->flags & DELETED_FLAG) != 0 ||
-        !fist_object_pool_is_current(environment->pool, source->allocation)) {
+        request.hit.value != vehicle->generation) {
         return 0;
     }
     const fist_pool_allocation target = {vehicle->type, request.hit.slot,
@@ -100,29 +73,17 @@ static int valid_request(const fist_vehicle_state *vehicle,
     return fist_object_pool_is_current(environment->pool, target);
 }
 
-static uint16_t next_random(fist_random *random) {
-    uint16_t value = 0;
-    (void)fist_random_next(random, &value);
-    return value;
-}
-
-static uint16_t scaled_word(uint16_t value, uint16_t factor) {
-    return (uint16_t)((uint16_t)((uint32_t)value * factor) >> FIXED_SCALE_SHIFT);
-}
-
 static uint8_t damage_roll(fist_random *random, uint16_t type, fist_vehicle_damage_request request,
                            const fist_combat_state *state) {
-    const uint16_t value = (uint8_t)next_random(random);
-    const uint16_t rolled = (uint16_t)(((value * damage_records[type][1]) >> FIXED_SCALE_SHIFT) +
-                                       damage_records[type][0] + 1);
-    const uint16_t angled = scaled_word(rolled, aspect_factors[type][request.hit.aspect]);
-    const size_t side = (request.projectile->flags & SIDE_FLAG) != 0;
-    return (uint8_t)scaled_word(angled, state->source_scale[side]);
+    const uint16_t rolled = fist_damage_base_roll(random, damage_records[type]);
+    const uint16_t angled =
+        fist_damage_scale_word(rolled, aspect_factors[type][request.hit.aspect]);
+    return fist_damage_scale_source(angled, state, request.projectile);
 }
 
 static uint16_t fire_reaction(fist_vehicle_state *vehicle, fist_random *random,
                               fist_vehicle_damage_result *result) {
-    uint16_t value = next_random(random);
+    uint16_t value = fist_damage_next_random(random);
     if ((value & FIRE_ROLL_MASK) == 0) {
         if ((vehicle->drive.motion_flags & FIRE_FLAGS) == 0) {
             result->voice_requests[result->voice_count++] = FIRE_VOICE;
@@ -141,7 +102,7 @@ static uint16_t fire_reaction(fist_vehicle_state *vehicle, fist_random *random,
 static void turret_reaction(fist_vehicle_state *vehicle, fist_random *random,
                             fist_vehicle_damage_result *result) {
     if ((vehicle->drive.motion_flags & TURRET_FLAG) == 0 &&
-        (next_random(random) & TURRET_ROLL_MASK) == 0) {
+        (fist_damage_next_random(random) & TURRET_ROLL_MASK) == 0) {
         result->voice_requests[result->voice_count++] = TURRET_VOICE;
         vehicle->drive.motion_flags |= TURRET_FLAG;
     }
@@ -150,7 +111,7 @@ static void turret_reaction(fist_vehicle_state *vehicle, fist_random *random,
 static void track_reaction(fist_vehicle_state *vehicle, fist_random *random,
                            fist_vehicle_damage_result *result) {
     if ((vehicle->drive.motion_flags & TRACK_FLAG) == 0 &&
-        (next_random(random) & FIRE_ROLL_MASK) == 0) {
+        (fist_damage_next_random(random) & FIRE_ROLL_MASK) == 0) {
         result->voice_requests[result->voice_count++] = TRACK_VOICE;
         vehicle->drive.motion_flags |= TRACK_FLAG;
         vehicle->operating_flags =
@@ -162,7 +123,7 @@ static void track_reaction(fist_vehicle_state *vehicle, fist_random *random,
 static void reactions(fist_vehicle_state *vehicle, fist_random *random,
                       fist_vehicle_damage_result *result) {
     const uint8_t *factors = aspect_factors[vehicle->type];
-    uint16_t value = next_random(random);
+    uint16_t value = fist_damage_next_random(random);
     /* BX was popped back to the aspect table before these admissions. */
     if ((uint8_t)value <= factors[2]) {
         value = fire_reaction(vehicle, random, result);
@@ -170,7 +131,7 @@ static void reactions(fist_vehicle_state *vehicle, fist_random *random,
     if ((value >> FIXED_SCALE_SHIFT) <= factors[3]) {
         turret_reaction(vehicle, random, result);
     }
-    value = next_random(random);
+    value = fist_damage_next_random(random);
     if ((uint8_t)value <= factors[4]) {
         track_reaction(vehicle, random, result);
     }

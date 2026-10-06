@@ -14,8 +14,8 @@ enum {
     PROBABILISTIC_HEIGHT = 512,
     PROBABILISTIC_TYPE_A = 5,
     PROBABILISTIC_TYPE_B = 6,
-    HELICOPTER_TYPE = 26,
-    HELICOPTER_MODES = 8,
+    TYPE26_TYPE = 26,
+    TYPE26_MODES = 8,
     REDUCED_HEIGHT_FLAG = 4,
     REDUCED_HEIGHT_DIVISOR = 4,
     ASPECT_SHIFT = 12
@@ -27,10 +27,10 @@ static const uint16_t height_limits[FIST_UNIT_TYPE_COUNT] = {
     2048, 2304, 2048, 1792, 0, 0, 0, 0, 0, 0,    0, 0, 0, 0,
     0,    0,    0,    0,    0, 0, 0, 0, 0, 1280, 0, 0, 0, 3072};
 
-/* Complete 9ebf..9ece table: destroyed helicopter modes retain the height
+/* Complete 9ebf..9ece table: destroyed type-26 modes retain the height
  * of their corresponding live subtype. Following 9ecf begins the next table. */
-static const uint16_t helicopter_heights[HELICOPTER_MODES] = {4096, 4608, 2816, 3328,
-                                                              4096, 4608, 2816, 3328};
+static const uint16_t type26_heights[TYPE26_MODES] = {4096, 4608, 2816, 3328,
+                                                      4096, 4608, 2816, 3328};
 
 /* Type-5/6 handler a0a1 indexes 95e4 by the SOURCE type, not the candidate. */
 static const uint8_t hit_thresholds[FIST_UNIT_TYPE_COUNT] = {
@@ -45,7 +45,7 @@ int fist_collision_world_is_valid(const fist_collision_world *world) {
         const fist_pool_slot slot = world->pool->slots[index];
         if (slot.used != 0 &&
             (world->bodies[index].pose == NULL ||
-             (slot.type == HELICOPTER_TYPE && world->bodies[index].mode >= HELICOPTER_MODES))) {
+             (slot.type == TYPE26_TYPE && world->bodies[index].mode >= TYPE26_MODES))) {
             return 0;
         }
     }
@@ -75,8 +75,8 @@ static int interacts(const fist_collision_body *source, uint16_t source_type,
                (height <= PROBABILISTIC_HEIGHT || height >= 0U - PROBABILISTIC_HEIGHT);
     }
     uint16_t limit = height_limits[target_type];
-    if (target_type == HELICOPTER_TYPE) {
-        limit = helicopter_heights[target->mode];
+    if (target_type == TYPE26_TYPE) {
+        limit = type26_heights[target->mode];
         if ((source->mode & REDUCED_HEIGHT_FLAG) != 0) {
             limit /= REDUCED_HEIGHT_DIVISOR;
         }

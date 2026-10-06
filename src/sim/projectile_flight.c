@@ -149,9 +149,10 @@ typedef struct {
     uint8_t period;
 } explosion_template;
 
-/* Exact 9c1d/9c4d/9c5d/9c3d authored templates; creation is one shared owner. */
+/* Exact 9c1d/9c4d/9c5d/9c3d/9c65/9c6d/9c2d authored templates. */
 static const explosion_template explosion_templates[FIST_EXPLOSION_TEMPLATE_COUNT] = {
-    {16, 768, 0, 22, 6}, {20, 256, 4, 10, 5}, {20, 448, 4, 10, 7}, {19, 768, 2, 21, 6}};
+    {16, 768, 0, 22, 6}, {20, 256, 4, 10, 5},   {20, 448, 4, 10, 7},  {19, 768, 2, 21, 6},
+    {20, 768, 4, 10, 9}, {20, 1280, 4, 10, 11}, {16, 2048, 0, 22, 10}};
 
 int fist_explosion_create(fist_object_pool *pool, const fist_object_pose *pose, uint8_t template_id,
                           fist_explosion *out) {

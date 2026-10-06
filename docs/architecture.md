@@ -6,7 +6,7 @@ and verification tools remain available without participating in the rewrite bui
 
 | Location | Owner and boundary |
 | --- | --- |
-| `src/sim/` | Runtime object allocation, typed vehicle state, deterministic random/motion/contact, weapon control, untargeted M1 launch, ordered unit collision, shell/effect lifecycle, M1 ground damage/destruction/retirement and manual driving stages. |
+| `src/sim/` | Runtime object allocation, typed vehicle/short-actor state, deterministic random/motion/contact, weapon control, untargeted M1 launch, ordered unit collision, shell/effect lifecycle, all collision-reachable M1 target damage, ground retirement and manual driving stages. |
 | `src/app/` | Owned scenario/player session, integer input/time controller and common scene drawing. |
 | `src/assets/` | Validated original-format decoders producing typed host data. |
 | `src/render/` | softgl context, camera, terrain/models, HUD and framebuffer ownership. |
@@ -77,9 +77,14 @@ borrows live typed poses through the common `sim/world.h` pose and preserves typ
 contracts. [Untargeted shell flight](projectile-flight.md) now consumes launch payloads through
 current-position ground/unit queries and expiry, keeps impacts pending until actual damage, and
 owns post-damage explosion allocation and complete explosion/muzzle retirement. Live world
-installation/scheduling, remaining target damage rules, fire command/eligibility, effect drawing
+installation/scheduling, later target class updates, fire command/eligibility, effect drawing
 and audible PCM remain subsequent simulation work. [M1 ground damage](vehicle-damage.md) consumes
 pending primary hits against all four ground classes, preserving source/aspect scaling, ordered
 random reactions, selected-player feedback, immediate destruction/effects/wreck/roster/census and
 four-update type-19 retirement. Selected-player loss/UI/takeover, later wreck updates and audible
 producer consumers remain explicit required boundaries; no complete playable battle is claimed.
+[Remaining M1 targets](other-damage.md) share source validation and word-width arithmetic with
+ground damage. They own typed 5/6/26/27 snapshot fields, preserve the real wreck no-op and expose
+exact reactions, distinct census, authored effects and retained/released identities. Snapshot
+restoration does not replace class initialization/AI, and subsequent death/debris/type-26 target
+updates remain open before live scheduling can consume those states.

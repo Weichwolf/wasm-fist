@@ -30,6 +30,8 @@ typedef struct {
     /* Side-bit-clear count is 799e; side-bit-set count is 799a. */
     uint16_t destroyed_by_side[FIST_DAMAGE_SIDES];
     uint16_t clear_side_destroyed_by_clear_source;
+    /* Type-5/6 critical census: clear side 79a0, set side 799c. */
+    uint16_t pair_destroyed_by_side[FIST_DAMAGE_SIDES];
     uint8_t damage_flash;
 } fist_combat_state;
 

@@ -148,7 +148,8 @@ clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-functi
   -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
   src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
-  src/sim/vehicle_damage.c tools/rewrite/probe_io.c tools/rewrite/vehicle_probe_io.c \
+  src/sim/vehicle_damage.c src/sim/damage_common.c \
+  tools/rewrite/probe_io.c tools/rewrite/vehicle_probe_io.c \
   tools/rewrite/object_pool_probe_io.c tools/rewrite/vehicle_damage_probe.c \
   -o /tmp/wasm-fist-0070-sanitizer/vehicle_damage_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
@@ -160,6 +161,11 @@ No presentation code changes in this step. Earlier driving-scene review remains 
 baseline; no new combat visualization or audio verification is claimed. Compact accepted
 results are recorded in closed 0070. Temporary logs, inputs, transcripts and sanitizer binaries
 belong under `/tmp` and are removed after commit/push.
+
+[Remaining M1 targets](other-damage.md) reuse the ground contract's validation and word-width
+roll/source scaling through `sim/damage_common`. Their separate 5/6 census lives in the same
+combat owner; ground damage retains its existing counters and reactions. Later wreck updates
+remain a consuming class stage; the actual type-23 damage method is a no-op.
 
 Verified on 2026-10-06: all 20 native CTest and complete WASM build gates pass; strict LLVM
 19.1.7 format/tidy passes all 54 owned C units. The nine-group original comparison passes both

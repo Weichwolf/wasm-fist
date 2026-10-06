@@ -20,7 +20,7 @@ NATIVE_PROBE = None
 ORIGINALS = False
 ORACLE = None
 HEIGHTS = {0: 2048, 1: 2304, 2: 2048, 3: 1792, 23: 1280, 27: 3072}
-HELICOPTERS = (4096, 4608, 2816, 3328) * 2
+TYPE26_HEIGHTS = (4096, 4608, 2816, 3328) * 2
 CHANCES = {7: 128, 8: 38, 9: 38, 10: 38, 11: 76, 12: 38, 13: 38, 15: 253}
 
 
@@ -74,7 +74,7 @@ def expected(case):
             else:
                 limit = HEIGHTS.get(target_kind, 0)
                 if target_kind == 26:
-                    limit = HELICOPTERS[target_mode] // (4 if mode & 4 else 1)
+                    limit = TYPE26_HEIGHTS[target_mode] // (4 if mode & 4 else 1)
                 collides = height < limit
             if collides:
                 hit = slots[target_ordinal], index, value, ((-heading - target_heading) % 65536) // 4096
@@ -119,12 +119,12 @@ class CollisionTests(unittest.TestCase):
         self.run_probe(encode(cases), wanted)
         return wanted
 
-    def test_all_type_dispatches_vertical_boundaries_and_helicopter_modes(self):
+    def test_all_type_dispatches_vertical_boundaries_and_type26_modes(self):
         cases = []
         for kind in range(28):
             for mode in range(8) if kind == 26 else (0,):
                 for source_mode in (0, 4, 255):
-                    limit = HELICOPTERS[mode] // (4 if source_mode & 4 else 1) if kind == 26 else HEIGHTS.get(kind, 0)
+                    limit = TYPE26_HEIGHTS[mode] // (4 if source_mode & 4 else 1) if kind == 26 else HEIGHTS.get(kind, 0)
                     for altitude in (-2147483648, -513, -512, -1, 0, 1, 511, 512, 513,
                                      limit - 1, limit, limit + 1, 2147483647):
                         cases.append(fixture([body(8, index=1, altitude=altitude, mode=source_mode),

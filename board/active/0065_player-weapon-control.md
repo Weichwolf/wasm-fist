@@ -179,8 +179,12 @@ mission state. 0070 supplies M1 primary damage to all four ground classes, inclu
 aspect/source scaling, ordered reactions, selected-player feedback, immediate destruction,
 normal-priority effects/wreck, roster/census and four-update retirement. See
 docs/vehicle-damage.md for the explicit selected-player/UI/audio/wreck-update boundaries and
-reaching launch→flight→damage→impact cleanup evidence. Recover the remaining reached M1 target
-actions and consuming selected-player/wreck flows. Integrate the delivered launch, flight, damage and
+reaching launch→flight→damage→impact cleanup evidence. 0071 supplies the remaining collision-reachable
+M1 target actions for 5/6/23/26/27, typed short snapshot restoration, shared word-width arithmetic,
+exact reactions/census/effects and retained/released identities. See docs/other-damage.md for
+complete original/corpus/reaching evidence and the required subsequent actor/debris/type-26 target
+updates. Recover those updates and consuming selected-player/wreck flows. Integrate the delivered
+launch, flight, damage and
 effect owners into typed live-world scheduling, with damage before impact continuation and
 correct same-pass allocation/update order, before binding fire input. Import actual mission
 occupancy instead of presuming an empty short arena.

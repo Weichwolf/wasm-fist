@@ -92,6 +92,11 @@ updates. Original type-18 muzzle smoke increments its word counter, resets it at
 then increments the byte frame and retires at ≥7. Naturally created smoke lasts 56 updates;
 word/byte wrap cases are retained rather than clamped.
 
+The same creation/animation owner also supplies the ground-destruction templates in
+[ground damage](vehicle-damage.md) and three additional authored templates in
+[remaining M1 target damage](other-damage.md). Different extents and periods preserve their
+actual natural lifetimes; no second effect updater is introduced.
+
 An impact returns sound-dispatch request 15 and a typed ground/unit notice request. Unit impact
 also requests the separate hit-voice path. This preserves dispatch intent only: original selected
 player notice, 120-tick display, 420-tick hit-voice rate limit, further player/side/speech gates,

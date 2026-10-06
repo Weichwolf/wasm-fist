@@ -92,7 +92,13 @@ fire commands, audible events and outcomes remain required; no complete mission 
 selected-player feedback and immediate destruction/effects/wreck/roster/census plus type-19
 retirement. Independent original comparisons and a reaching launch/flight/damage/impact/cleanup
 sequence cover this bounded kernel. See docs/vehicle-damage.md for the required remaining target
-actions, selected-player loss/UI/takeover, later wreck updates and audio consumers. Live scheduling,
+actions, selected-player loss/UI/takeover, later wreck updates and audio consumers. 0071 delivers
+the remaining collision-reachable M1 actions for 5/6/23/26/27 with typed snapshot restoration,
+shared source/word-width arithmetic and exact census/reaction/effect/retained-release semantics.
+Both targets compare complete original methods and reaching collision/damage/impact/natural
+effect cleanup; all 47 occupancy/roster contexts include every current remaining target snapshot.
+Subsequent death/debris/type-26 target/wreck updates remain open; see docs/other-damage.md.
+Live scheduling,
 input eligibility, visible battle, AI and mission outcome remain open.
 
 Continue with 0065: recover and deliver primary player weapon firing, ammunition/reload and

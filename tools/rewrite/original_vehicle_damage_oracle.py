@@ -71,9 +71,9 @@ class OriginalVehicleDamageOracle(OriginalObjectPoolOracle):
         machine.mem_write(DGROUP + 0x9fea, b'\xff')
         return machine, pointers
 
-    def dispatch(self, machine, source):
+    def dispatch(self, machine, source, *, voice_entries=(0xbf3c,)):
         from unicorn.x86_const import UC_X86_REG_CS, UC_X86_REG_IP, UC_X86_REG_DI, UC_X86_REG_SP, UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_DS, UC_X86_REG_SS
-        exits = (0xbf3c, 0xc047, 0xbe8b, 0xa97a, 0xeff0)
+        exits = (*voice_entries, 0xc047, 0xbe8b, 0xa97a, 0xeff0)
         machine.reg_write(UC_X86_REG_CS, 0)
         machine.reg_write(UC_X86_REG_IP, 0xbbb7)
         machine.reg_write(UC_X86_REG_DI, source)
@@ -95,7 +95,7 @@ class OriginalVehicleDamageOracle(OriginalObjectPoolOracle):
             if reached not in exits:
                 raise AssertionError(f'Original damage stopped unexpectedly at {reached:#x}')
             value = machine.reg_read(UC_X86_REG_AX)
-            if reached == 0xbf3c:
+            if reached in voice_entries:
                 voices.append(value % 256)
             elif reached == 0xc047:
                 sounds.append(value)
@@ -140,7 +140,9 @@ class OriginalVehicleDamageOracle(OriginalObjectPoolOracle):
         if raw != expected or scale != 2048 or height != 0 or raw[0x19] or raw[0x20] != raw[0x1f]:
             raise AssertionError('Unexpected original complete initial explosion payload')
         if (model, extent, callback, raw[0x1e], raw[0x1f]) not in (
-            (20, 448, 4, 10, 7), (19, 768, 2, 21, 6), (20, 256, 4, 10, 5)):
+            (20, 448, 4, 10, 7), (19, 768, 2, 21, 6), (20, 256, 4, 10, 5),
+            (20, 768, 4, 10, 9), (20, 1280, 4, 10, 11), (16, 2048, 0, 22, 10),
+            (16, 768, 0, 22, 6)):
             raise AssertionError('Original effect differs from reached template')
         return line('effect', [self.slot(address), index, value, *pose, model, extent, scale,
                               callback, height, raw[0x19], raw[0x1e], raw[0x1f], raw[0x20], raw[0x16]])

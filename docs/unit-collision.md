@@ -37,6 +37,11 @@ The original caches signed Z but delegates its acceptance to the type method.
 | 5 / 6 | First advance 0291 RNG; its low byte must be below the 95e4 threshold indexed by the **source type**, then signed wrapped height must lie in inclusive -512..512. |
 | Every other type | The actual dispatched method returns no interaction. |
 
+Type 26's earlier helicopter label was wrong. Byte-indexed render table `e48c`, read by
+`c4fb..c503`, assigns it code 62 (`TARGETS`); codes 50/52 (`APACHE`/`HIND`) belong to types 5/6.
+The original heights and interaction behavior above are unchanged. Internal names now describe
+type 26 without asserting unsupported subtype semantics; see [remaining damage](other-damage.md).
+
 The type-5/6 thresholds are 128 for source 7; 38 for 8/9/10/12/13; 76 for 11; 253 for 15; zero
 otherwise. A reached type-5/6 candidate always consumes its random stream even if its threshold
 or height fails. Out-of-range/noncollidable candidates consume no random value. Encounter order
@@ -44,9 +49,9 @@ therefore affects future randomness even on a miss. No wall-clock/random-device 
 Their further gameplay identity is not claimed by this module.
 
 Type 21 (trees) dispatches to **9c97's clc/ret**, not adjacent 9c99's height-table method. Source
-mode mask 0x04, rather than the helicopter target mode, chooses the reduced helicopter height.
+mode mask 0x04, rather than the type-26 target's mode, chooses the reduced height.
 The complete eight-word height table ends at 9ecf, where the next table starts. The actual corpus
-has helicopter modes 0/1/2/3/7; tests cover all eight supported values, including destroyed modes.
+has type-26 modes 0/1/2/3/7; tests cover all eight supported values, including destroyed modes.
 An unsupported mode fails explicitly instead of indexing unrelated following data or masking it.
 
 First accepted candidate wins, including the firing actor. The flight routine only compares the
@@ -57,7 +62,7 @@ It is useful on hits other than the origin when the flight owner reaches damage 
 
 A valid miss returns NO_SLOT for both slot/index and zero value/aspect. The original's stale last-hit
 global on a miss is internal caching, not a new hit. Invalid/null/short views, inconsistent pool,
-missing live poses, unsupported helicopter modes, missing source or invalid random cursor return
+missing live poses, unsupported type-26 target modes, missing source or invalid random cursor return
 -1 without changing random/output. The complete pool and body views remain unchanged on every
 query. Prevalidation prevents a late malformed candidate from consuming random values first.
 
@@ -72,7 +77,7 @@ python3 tools/rewrite/check_style.py
 
 The seven-group collision gate is required by native CTest and WASM Node. Its 35,271 valid query
 observations on each target cover every target/source type, deterministic height boundaries,
-all eight helicopter modes and source reduction bit, inclusive XY edges/corners, word-bound wraps,
+all eight type-26 target modes and source reduction bit, inclusive XY edges/corners, word-bound wraps,
 signed-dword endpoints, every source-type/random-byte pair at all four stream cursors, type-5/6
 height/order/consumption, all collidable flag bytes, registry vs storage order, duplicate/orphan
 bindings, origin hits and aspect wrap/sector boundaries. Invalid world/API/file cases preserve
