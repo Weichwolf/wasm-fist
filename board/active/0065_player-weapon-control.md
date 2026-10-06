@@ -175,8 +175,12 @@ live damage/world/render/audio behavior is claimed by this kernel.
 ## Next
 
 Recover command eligibility and phase-driven fire from original class/input routines and real
-mission state. Recover the reached bbb7/c31e damage dispatch with its actual profile/parameter/aspect, component
-updates, randomness and destruction/release effects. Integrate the delivered launch, flight and
+mission state. 0070 supplies M1 primary damage to all four ground classes, including original
+aspect/source scaling, ordered reactions, selected-player feedback, immediate destruction,
+normal-priority effects/wreck, roster/census and four-update retirement. See
+docs/vehicle-damage.md for the explicit selected-player/UI/audio/wreck-update boundaries and
+reaching launch→flight→damage→impact cleanup evidence. Recover the remaining reached M1 target
+actions and consuming selected-player/wreck flows. Integrate the delivered launch, flight, damage and
 effect owners into typed live-world scheduling, with damage before impact continuation and
 correct same-pass allocation/update order, before binding fire input. Import actual mission
 occupancy instead of presuming an empty short arena.

@@ -22,14 +22,6 @@ enum {
     TERRAIN_GATE = 128,
     SUBTRACTION_SIGN = 128,
     IMPACT_SOUND = 15,
-    GROUND_MODEL = 16,
-    UNIT_MODEL = 20,
-    GROUND_LAST_FRAME = 22,
-    UNIT_LAST_FRAME = 10,
-    GROUND_PERIOD = 6,
-    UNIT_PERIOD = 5,
-    GROUND_EXTENT = 768,
-    UNIT_EXTENT = 256,
     EXPLOSION_SCALE = 2048,
     UNIT_CALLBACK = 4,
     CALLBACK_MASK = 6,
@@ -47,11 +39,7 @@ enum {
 
 static int live_binding(const fist_object_pool *pool, fist_pool_allocation allocation,
                         uint16_t type) {
-    fist_pool_allocation current = {0};
-    return allocation.type == type &&
-           fist_object_pool_find(pool, allocation.slot, &current) == FIST_POOL_OK &&
-           current.type == allocation.type && current.registry_index == allocation.registry_index &&
-           current.value == allocation.value;
+    return allocation.type == type && fist_object_pool_is_current(pool, allocation);
 }
 
 static int retire(fist_object_pool *pool, fist_pool_allocation allocation) {
@@ -153,19 +141,40 @@ int fist_projectile_advance(fist_projectile *projectile,
     return 0;
 }
 
-static fist_explosion initialize_explosion(const fist_projectile *projectile,
-                                           fist_pool_allocation allocation) {
-    const int unit = projectile->phase == FIST_PROJECTILE_UNIT_IMPACT;
-    return (fist_explosion){
-        .allocation = allocation,
-        .pose = {projectile->pose.x, projectile->pose.y, projectile->pose.altitude, 0},
-        .model_code = unit != 0 ? UNIT_MODEL : GROUND_MODEL,
-        .extent = unit != 0 ? UNIT_EXTENT : GROUND_EXTENT,
-        .projection_scale = EXPLOSION_SCALE,
-        .callback_selector = unit != 0 ? UNIT_CALLBACK : 0,
-        .last_frame = unit != 0 ? UNIT_LAST_FRAME : GROUND_LAST_FRAME,
-        .period = unit != 0 ? UNIT_PERIOD : GROUND_PERIOD,
-        .countdown = unit != 0 ? UNIT_PERIOD : GROUND_PERIOD};
+typedef struct {
+    uint16_t model_code;
+    uint16_t extent;
+    uint16_t callback_selector;
+    uint8_t last_frame;
+    uint8_t period;
+} explosion_template;
+
+/* Exact 9c1d/9c4d/9c5d/9c3d authored templates; creation is one shared owner. */
+static const explosion_template explosion_templates[FIST_EXPLOSION_TEMPLATE_COUNT] = {
+    {16, 768, 0, 22, 6}, {20, 256, 4, 10, 5}, {20, 448, 4, 10, 7}, {19, 768, 2, 21, 6}};
+
+int fist_explosion_create(fist_object_pool *pool, const fist_object_pose *pose, uint8_t template_id,
+                          fist_explosion *out) {
+    if (pose == NULL || out == NULL || template_id >= FIST_EXPLOSION_TEMPLATE_COUNT) {
+        return -1;
+    }
+    fist_pool_allocation allocation = {0};
+    const int status =
+        fist_object_pool_allocate(pool, (fist_pool_request){EXPLOSION_TYPE, 0}, &allocation);
+    if (status != FIST_POOL_OK) {
+        return status;
+    }
+    const explosion_template *parameters = &explosion_templates[template_id];
+    *out = (fist_explosion){.allocation = allocation,
+                            .pose = {pose->x, pose->y, pose->altitude, 0},
+                            .model_code = parameters->model_code,
+                            .extent = parameters->extent,
+                            .projection_scale = EXPLOSION_SCALE,
+                            .callback_selector = parameters->callback_selector,
+                            .last_frame = parameters->last_frame,
+                            .period = parameters->period,
+                            .countdown = parameters->period};
+    return 0;
 }
 
 int fist_projectile_finish_impact(fist_object_pool *pool, fist_projectile *projectile,
@@ -181,14 +190,15 @@ int fist_projectile_finish_impact(fist_object_pool *pool, fist_projectile *proje
     fist_projectile_impact result = {.notice = projectile->phase,
                                      .sound_request = IMPACT_SOUND,
                                      .hit_voice = projectile->phase == FIST_PROJECTILE_UNIT_IMPACT};
-    fist_pool_allocation allocation = {0};
+    const uint8_t template_id = projectile->phase == FIST_PROJECTILE_UNIT_IMPACT
+                                    ? FIST_EXPLOSION_SHELL_UNIT
+                                    : FIST_EXPLOSION_SHELL_GROUND;
     const int status =
-        fist_object_pool_allocate(&updated, (fist_pool_request){EXPLOSION_TYPE, 0}, &allocation);
+        fist_explosion_create(&updated, &projectile->pose, template_id, &result.explosion);
     if (status < 0 || retire(&updated, projectile->allocation) != 0) {
         return -1;
     }
     if (status == FIST_POOL_OK) {
-        result.explosion = initialize_explosion(projectile, allocation);
         result.has_explosion = true;
     }
     projectile->flags |= DELETED_FLAG;

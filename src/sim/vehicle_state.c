@@ -60,7 +60,11 @@ static void restore_motion(const uint8_t *snapshot, fist_vehicle_state *vehicle)
         GUN_ELEVATION = 56,
         ELEVATION_FRAME = 167,
         GROUND_HEIGHT = 29,
+        PLATOON = 27,
+        MEMBER = 28,
         UPDATE_PHASE = 61,
+        DAMAGE = 58,
+        DAMAGE_ALARM = 149,
         SPEED = 85,
         THROTTLE = 87,
         VELOCITY_X = 89,
@@ -80,6 +84,10 @@ static void restore_motion(const uint8_t *snapshot, fist_vehicle_state *vehicle)
                              .motion_flags = snapshot[MOTION_FLAGS],
                              .update_phase = snapshot[UPDATE_PHASE]};
     vehicle->ground_height = snapshot[GROUND_HEIGHT];
+    vehicle->platoon = snapshot[PLATOON];
+    vehicle->member = snapshot[MEMBER];
+    vehicle->damage = snapshot[DAMAGE];
+    vehicle->damage_alarm_countdown = snapshot[DAMAGE_ALARM];
     vehicle->turret =
         (fist_vehicle_turret){.heading = fist_read_u16le(snapshot + TURRET_HEADING),
                               .offset = fist_read_u16le(snapshot + TURRET_OFFSET),

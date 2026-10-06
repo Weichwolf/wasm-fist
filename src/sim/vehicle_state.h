@@ -61,6 +61,8 @@ typedef struct {
     int32_t map_y;
     int32_t altitude;
     uint8_t ground_height;
+    uint8_t platoon;
+    uint8_t member;
     fist_vehicle_drive drive;
     fist_vehicle_turret turret;
     fist_vehicle_weapons weapons;
@@ -77,6 +79,8 @@ typedef struct {
     uint8_t hull_view_mode;
     uint8_t behavior;
     uint8_t reload_countdown;
+    uint8_t damage;
+    uint8_t damage_alarm_countdown;
     /* Original +a9/+aa part selectors and +ab companion animation byte. */
     uint8_t animation_selectors[FIST_VEHICLE_ANIMATION_SELECTORS];
     /* Complete original initialized component payload. Owned format data;

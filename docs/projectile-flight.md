@@ -152,7 +152,7 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
 ```
 
 The shared continuous driving scene remains without a fire command. Typed live-world scheduling,
-actual damage/components/destruction, effect/projection drawing, notifications, audible audio and
+remaining target damage/destruction rules, effect/projection drawing, notifications, audible audio and
 outcomes remain required under 0065/0041. This kernel alone supplies neither a complete playable
 mission nor the final ten full WASM acceptance runs. No presentation change is claimed.
 
@@ -167,5 +167,7 @@ passes the current complete seven-group corpus and those same distinct totals in
 without skips. The sanitizer command includes the scenario reader dependency required by the
 complete unit decoder. No presented frame changes, so the earlier reviewed driving scene remains
 the presentation evidence; this verification supplies no new combat visuals or audible PCM.
+The consuming M1 primary damage/destruction kernel for ground classes 0..3 is delivered separately
+in [vehicle damage](vehicle-damage.md), with a reaching launch→flight→damage→impact/retirement test.
 Temporary transcripts, fixture files, build logs and sanitizer binaries are removed after commit;
 only a compact verification summary remains under /tmp/wasm-fist-0069-flight-review.

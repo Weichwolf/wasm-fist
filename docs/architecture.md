@@ -6,7 +6,7 @@ and verification tools remain available without participating in the rewrite bui
 
 | Location | Owner and boundary |
 | --- | --- |
-| `src/sim/` | Runtime object allocation, typed vehicle state, deterministic random/motion/contact, weapon control, untargeted M1 launch, ordered unit collision, untargeted shell flight/effect lifecycle and manual driving stages. |
+| `src/sim/` | Runtime object allocation, typed vehicle state, deterministic random/motion/contact, weapon control, untargeted M1 launch, ordered unit collision, shell/effect lifecycle, M1 ground damage/destruction/retirement and manual driving stages. |
 | `src/app/` | Owned scenario/player session, integer input/time controller and common scene drawing. |
 | `src/assets/` | Validated original-format decoders producing typed host data. |
 | `src/render/` | softgl context, camera, terrain/models, HUD and framebuffer ownership. |
@@ -77,5 +77,9 @@ borrows live typed poses through the common `sim/world.h` pose and preserves typ
 contracts. [Untargeted shell flight](projectile-flight.md) now consumes launch payloads through
 current-position ground/unit queries and expiry, keeps impacts pending until actual damage, and
 owns post-damage explosion allocation and complete explosion/muzzle retirement. Live world
-installation/scheduling, real damage/destruction, fire command/eligibility, effect drawing and
-audible PCM remain subsequent simulation work.
+installation/scheduling, remaining target damage rules, fire command/eligibility, effect drawing
+and audible PCM remain subsequent simulation work. [M1 ground damage](vehicle-damage.md) consumes
+pending primary hits against all four ground classes, preserving source/aspect scaling, ordered
+random reactions, selected-player feedback, immediate destruction/effects/wreck/roster/census and
+four-update type-19 retirement. Selected-player loss/UI/takeover, later wreck updates and audible
+producer consumers remain explicit required boundaries; no complete playable battle is claimed.

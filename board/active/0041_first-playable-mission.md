@@ -88,6 +88,13 @@ fire commands, audible events and outcomes remain required; no complete mission 
 
 ## Next
 
+0070 supplies shared M1 primary damage to ground classes 0..3, ordered random reactions,
+selected-player feedback and immediate destruction/effects/wreck/roster/census plus type-19
+retirement. Independent original comparisons and a reaching launch/flight/damage/impact/cleanup
+sequence cover this bounded kernel. See docs/vehicle-damage.md for the required remaining target
+actions, selected-player loss/UI/takeover, later wreck updates and audio consumers. Live scheduling,
+input eligibility, visible battle, AI and mission outcome remain open.
+
 Continue with 0065: recover and deliver primary player weapon firing, ammunition/reload and
 visible feedback, then projectile/hit rules, mission objectives/outcome and shared sound events
 in verified bounded steps. Preserve the working continuous driving baseline. Recover targeting,

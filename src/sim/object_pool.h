@@ -63,6 +63,15 @@ int fist_object_pool_is_valid(const fist_object_pool *pool);
  * Orphans/unused slots return UNAVAILABLE; failure preserves output. */
 int fist_object_pool_find(const fist_object_pool *pool, uint16_t slot, fist_pool_allocation *out);
 
+/* Validate the exact current allocation identity, without changing it. */
+int fist_object_pool_is_current(const fist_object_pool *pool, fist_pool_allocation allocation);
+
+/* Original in-place type-19 conversion keeps its arena and binding occupied.
+ * Only types in the same storage class may replace a current allocation.
+ * Return 0, or -1 preserving pool/output on invalid input. */
+int fist_object_pool_retype(fist_object_pool *pool, fist_pool_allocation allocation, uint16_t type,
+                            fist_pool_allocation *out);
+
 /* Allocate the first physical slot of the original type class and first registry
  * vacancy whose pointer and saved word are both empty. Low priority uses the
  * original 120-short-object admission gate. Returns OK, UNAVAILABLE or -1 for

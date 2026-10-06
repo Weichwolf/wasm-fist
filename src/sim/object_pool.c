@@ -68,6 +68,26 @@ int fist_object_pool_find(const fist_object_pool *pool, uint16_t slot, fist_pool
     return FIST_POOL_UNAVAILABLE;
 }
 
+int fist_object_pool_is_current(const fist_object_pool *pool, fist_pool_allocation allocation) {
+    fist_pool_allocation current = {0};
+    return fist_object_pool_find(pool, allocation.slot, &current) == FIST_POOL_OK &&
+           current.type == allocation.type && current.registry_index == allocation.registry_index &&
+           current.value == allocation.value;
+}
+
+int fist_object_pool_retype(fist_object_pool *pool, fist_pool_allocation allocation, uint16_t type,
+                            fist_pool_allocation *out) {
+    if (out == NULL || fist_unit_state_size(type) == 0 ||
+        !fist_object_pool_is_current(pool, allocation) ||
+        extended(type) != extended(allocation.type)) {
+        return -1;
+    }
+    allocation.type = type;
+    pool->slots[allocation.slot].type = type;
+    *out = allocation;
+    return 0;
+}
+
 static uint16_t free_slot(const fist_object_pool *pool, uint16_t type) {
     const size_t begin = extended(type) != 0 ? FIST_POOL_SHORT_SLOTS : 0;
     const size_t end = extended(type) != 0 ? FIST_UNIT_REGISTRY_COUNT : FIST_POOL_SHORT_SLOTS;

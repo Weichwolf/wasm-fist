@@ -23,6 +23,14 @@ typedef struct {
     uint8_t phase;
 } fist_projectile_step;
 
+enum {
+    FIST_EXPLOSION_SHELL_GROUND = 0,
+    FIST_EXPLOSION_SHELL_UNIT = 1,
+    FIST_EXPLOSION_VEHICLE_SHOCK = 2,
+    FIST_EXPLOSION_VEHICLE_FIRE = 3,
+    FIST_EXPLOSION_TEMPLATE_COUNT = 4
+};
+
 typedef struct {
     fist_pool_allocation allocation;
     fist_object_pose pose;
@@ -58,6 +66,11 @@ typedef struct {
 int fist_projectile_advance(fist_projectile *projectile,
                             const fist_projectile_environment *environment,
                             fist_projectile_step *out);
+
+/* Normal-priority creation from the exact original fixed templates. Returns
+ * OK, UNAVAILABLE or -1; failure preserves pool/output. No deletion occurs. */
+int fist_explosion_create(fist_object_pool *pool, const fist_object_pose *pose, uint8_t template_id,
+                          fist_explosion *out);
 
 /* Continue a pending impact AFTER the caller completes unit damage. Allocate
  * the original type-4 template at normal priority BEFORE releasing the shell.
