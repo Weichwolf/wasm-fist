@@ -16,14 +16,16 @@ Closed 0051 supplies shared KLC1,
 RESOURCE1 and six-bit palette readers: all 22 KLC/SKY planes and all 32 palettes match complete
 original instruction output on native/WASM. Closed 0052 supplies complete scenario bundle loading,
 original mission palette sorting and color/sky mapping, verified for all 47 scenarios and 38 mapping
-pairs. See `docs/terrain-format.md` and `docs/terrain-loading.md`. Terrain geometry/world units/camera
-and vehicle models remain open.
+pairs. Closed 0053 supplies recovered world axes/scale and a shared C/softgl original-terrain
+inspection scene, with complete native/WASM frame contracts and actual native/Chromium visual
+review. See `docs/terrain-format.md`, `docs/terrain-loading.md` and `docs/terrain-scene.md`.
+Vehicle models, playable camera and simulation remain under 0041.
 
 ## Next
 
-Recover world height/axis units from original map setup/sampling. Recover camera placement from
-scenario/player evidence; decoded row order alone does not prove world axes. Render the resulting
-real terrain and review actual native/browser output before accepting this scene milestone.
+Terrain data and the first real inspection scene are complete through 0051/0052/0053. Continue
+0041 with player/unit semantics, vehicle geometry and interactive native/browser presentation.
+The preview makes its camera/quality choices explicit; it does not promise vehicle/cockpit behavior.
 
 ## Accept
 

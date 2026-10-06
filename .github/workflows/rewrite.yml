@@ -6,6 +6,8 @@ on:
     branches: [rewrite/softgl]
 jobs:
   native-and-wasm:
+    env:
+      PYTHONPYCACHEPREFIX: /tmp/wasm-fist-python-cache
     runs-on: ubuntu-24.04
     container: debian:13
     steps:
@@ -27,3 +29,7 @@ jobs:
           npm ci --prefix /tmp/wasm-fist-browser-tools --ignore-scripts --no-audit --no-fund
       - name: Actual browser rendering and worker startup
         run: python3 tools/rewrite/verify_browser.py
+      - name: Constructed terrain scene and complete browser presentation
+        run: |
+          python3 tools/rewrite/prepare_terrain_preview.py
+          python3 tools/rewrite/verify_browser.py --terrain

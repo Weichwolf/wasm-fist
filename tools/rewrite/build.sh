@@ -2,6 +2,7 @@
 set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 output=${FIST_REWRITE_BUILD_ROOT:-/tmp/wasm-fist-rewrite}
+export PYTHONPYCACHEPREFIX=${PYTHONPYCACHEPREFIX:-/tmp/wasm-fist-python-cache}
 case "${1:-all}" in
     native|wasm|all) target=${1:-all} ;;
     *) echo "Usage: $0 [native|wasm|all]" >&2; exit 2 ;;
@@ -18,4 +19,5 @@ if [[ $target == wasm || $target == all ]]; then
     timeout 30s node "$root/tools/rewrite/check_wasm.cjs" "$output/wasm/fist_renderer_probe.js"
     python3 "$root/tools/rewrite/test_scenario.py" --target wasm --build-root "$output"
     python3 "$root/tools/rewrite/test_terrain_assets.py" --target wasm --build-root "$output"
+    python3 "$root/tools/rewrite/test_terrain_scene.py" --target wasm --build-root "$output"
 fi

@@ -1,4 +1,6 @@
 #include "render/renderer.h"
+#include "assets/terrain.h"
+#include "render/terrain_scene.h"
 
 #include <GL/softgl.h>
 #include <stdint.h>
@@ -61,4 +63,13 @@ int fist_renderer_draw_probe(fist_renderer *renderer) {
     glVertex2fv(top);
     glEnd();
     return glGetError() == GL_NO_ERROR ? 0 : -1;
+}
+
+int fist_renderer_draw_terrain(fist_renderer *renderer, const fist_terrain *terrain,
+                               const fist_terrain_view *view) {
+    if (renderer == NULL) {
+        return -1;
+    }
+    softgl_make_current(renderer->context);
+    return fist_draw_terrain_scene(renderer, terrain, view);
 }

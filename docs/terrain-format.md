@@ -75,8 +75,9 @@ offsets never decrease or escape the input, and the sentinel ends the file. Zero
 members are permitted. A palette member must contain exactly 768 bytes, each at most 63.
 
 Scenario bundle loading and original mission palette preparation/remapping are now supplied by
-`src/assets/terrain.c` and `palette.c`; see [terrain loading](terrain-loading.md). Terrain rendering
-still needs world placement. These readers do not yet install terrain, stamps, sky or vehicles in a scene.
+`src/assets/terrain.c` and `palette.c`; see [terrain loading](terrain-loading.md). The
+[terrain scene](terrain-scene.md) now uses them for an original-map inspection preview. Stamps,
+sky panorama and vehicles remain open; decoding these planes does not implement gameplay.
 
 ## Verification
 

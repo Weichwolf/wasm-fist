@@ -9,8 +9,9 @@ throughout development.
 **Current scope:** a native/WASM renderer integration probe and shared C11 readers for scenario
 envelopes/metadata/unit framing (all 47 missions), KLC height/colormap/stamp/sky planes (all 22
 files), resource members and VGA palettes (all 32 palettes). Complete terrain bundles and mission
-palette maps are verified for all 47 scenarios. Terrain scene rendering, models,
-simulation, playable missions and audio are not implemented yet. See
+palette maps are verified for all 47 scenarios. A shared softgl terrain inspection scene now
+renders original AZER1 terrain in native output and the browser. Models,
+simulation, playable missions and audio remain open. See
 [architecture](docs/architecture.md), [reference status](docs/reference-status.md),
 [work queue](board/README.md) and [goal](docs/rewrite-goal.md).
 
@@ -81,6 +82,9 @@ against actual original decoder instructions on native/WASM. Unicorn is an optio
 dependency, outside the game and renderer builds.
 The [terrain loader](docs/terrain-loading.md) also validates all required scenario asset references,
 direct/archive palette resolution, original mission palette preparation and full bundle ownership.
+The [terrain scene](docs/terrain-scene.md) documents the recovered world axes/scale, inspection
+camera, quality choices and native/browser preview commands. `prepare_terrain_preview.py` copies
+only required pinned inputs into an empty `/tmp` directory; original files stay read-only.
 
 ## Browser verification
 
@@ -97,6 +101,8 @@ python3 tools/rewrite/verify_browser.py --screenshot /tmp/wasm-fist-rewrite/brow
 This starts/stops its own isolated local server and checks worker startup, completed output,
 canvas size, alpha and vertical color orientation, plus browser runtime errors. `CHROMIUM` may
 select another installed Chromium executable. It is renderer integration coverage only.
-CI runs the builds, strict style checks and this actual-browser gate; remote results are separate
+After preparing terrain inputs, `verify_browser.py --terrain` checks every canvas pixel against
+the complete shared C scene output. CI prepares constructed terrain without original content.
+CI runs the builds, strict style checks and both actual-browser gates; remote results are separate
 from local verification. The pinned dependency currently emits infinity/fast-math warnings under
-Clang 19; owned code is warning-free with `-Werror`. Broader depth/rendering coverage remains open.
+Clang 19; owned code is warning-free with `-Werror`. Models and interactive rendering remain open.

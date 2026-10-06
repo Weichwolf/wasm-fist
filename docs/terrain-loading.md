@@ -61,5 +61,6 @@ PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
 ```
 
 See [oracle setup](terrain-format.md#verification). Native/WASM, LLVM 19.1.7 formatting/tidy and
-the complete original suite passed on 2026-10-06. Terrain geometry, camera, mission installation,
-stamps and simulation remain separate work; loading a terrain bundle is not gameplay completion.
+the complete original suite passed on 2026-10-06. The renderer now consumes these bundles in the
+[terrain inspection scene](terrain-scene.md). Mission/vehicle installation, stamps and simulation
+remain separate work; loading or inspecting a terrain bundle is not gameplay completion.

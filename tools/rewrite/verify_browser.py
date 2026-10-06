@@ -18,6 +18,7 @@ def main():
                         default=pathlib.Path("/tmp/wasm-fist-browser-tools"))
     parser.add_argument("--port", type=int, default=8127)
     parser.add_argument("--screenshot", type=pathlib.Path)
+    parser.add_argument("--terrain", action="store_true", help="Check prepared terrain.html instead of the triangle")
     args = parser.parse_args()
     module = args.browser_tools / "node_modules/playwright"
     if not module.is_dir():
@@ -38,9 +39,10 @@ def main():
                 time.sleep(0.1)
         else:
             parser.error("Preview server did not become ready")
-        command = ["node", str(ROOT / "tools/rewrite/check_browser.cjs"), url]
-        if args.screenshot:
-            command.append(str(args.screenshot))
+        command = ["node", str(ROOT / "tools/rewrite/check_browser.cjs"),
+                   url + ("/terrain.html" if args.terrain else "/"),
+                   str(args.screenshot) if args.screenshot else "",
+                   "terrain" if args.terrain else "triangle"]
         subprocess.run(command, check=True, timeout=30, env=env)
     finally:
         server.terminate()

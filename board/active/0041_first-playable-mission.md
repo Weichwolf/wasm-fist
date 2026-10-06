@@ -11,16 +11,17 @@ Decode one real map and vehicle into typed C state; render and play a full missi
 Renderer integration and the original scenario envelope/metadata decoder are delivered. See closed
 0048 for complete 47-mission, 4213-record native/WASM evidence. Closed 0051 supplies all 22 original
 KLC/SKY planes and 32 resource palettes with complete original-instruction output comparison on
-both targets. Terrain installation/rendering, models, simulation, interactive native presentation
-and audio delivery remain unimplemented.
+both targets. Models, simulation, interactive native presentation and audio delivery remain open.
 Closed 0052 supplies complete owned terrain bundles and original mission palette mappings for all
 47 scenarios, with native/WASM instruction-oracle and allocation/error-path evidence.
+Closed 0053/0049 supplies recovered world coordinates and a shared C original-terrain inspection
+scene reviewed as native output and actual Chromium canvas. This static preview has no playable
+controls, vehicle/cockpit, objectives or audio; its sky uses only the mapped average color.
 
 ## Next
 
-Continue 0049 with terrain placement/rendering and a supported inspection camera.
-Follow with model catalog
-and geometry, actual terrain/model rendering, native SDL2/browser loops, fixed-step controls,
+Establish player/unit semantics, model catalog and geometry; follow with native SDL2/browser
+interactive loops and vehicle/terrain rendering, fixed-step controls,
 HUD, combat/outcome and shared sound events as separate verified steps. Scenario-state, path,
 stamp and player semantics still need typed decoding before object installation.
 

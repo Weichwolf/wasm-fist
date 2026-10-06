@@ -17,8 +17,9 @@ and verification tools remain available without participating in the rewrite bui
 | `board/reference/`, `re_out/`, `patches/`, legacy shims/tools | Historical evidence only. |
 
 The renderer, diagnostic browser presentation, shared FSG envelope/metadata decoder and
-KLC/resource/palette readers and complete terrain bundle loader exist so far. See
-`docs/scenario-format.md`, `docs/terrain-format.md` and `docs/terrain-loading.md`; unit/chunk
+KLC/resource/palette readers, complete terrain bundle loader and terrain inspection scene exist so far. See
+`docs/scenario-format.md`, `docs/terrain-format.md`, `docs/terrain-loading.md` and
+`docs/terrain-scene.md`; unit/chunk
 views retain undecoded gameplay records honestly.
 Other directories document ownership, not implemented subsystems. No placeholder game APIs promise behavior they lack.
 The diagnostic triangle uses fixture geometry and colors, not reconstructed game assets.
@@ -29,6 +30,11 @@ RGBA8 pixels are tightly packed, bottom row first; browser presentation flips th
 The render thread owns the context and borrowed framebuffer view. softgl_read_rgba8 flushes worker
 output before exposing the view. WASM uses SIMD128 and pthread tile workers, with a prestarted three-worker pool
 matching the renderer's automatic WASM helper-worker limit; native softgl also uses tile workers. Context access remains single-owner. SDL2 interactive native integration is next.
+
+The terrain scene owns its temporary mesh/texture until framebuffer readback completes workers.
+The inspection camera uses recovered periodic coordinates and an explicit preview pose; it does
+not supply missing vehicle/cockpit behavior. Browser preview inputs use MEMFS on both Node and
+Chromium; platform JavaScript fetches/hash-checks files and presents completed C output only.
 
 Use explicit typed units and a fixed simulation step independent of display pacing as simulation
 is reached. Both platforms consume one simulation/audio path; guest registers and memory layouts
