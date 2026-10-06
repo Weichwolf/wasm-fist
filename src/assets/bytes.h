@@ -9,6 +9,14 @@ static inline uint16_t fist_read_u16le(const uint8_t *data) {
     return (uint16_t)((uint16_t)data[0] | ((uint16_t)data[1] << BYTE_BITS));
 }
 
+static inline int16_t fist_read_i16le(const uint8_t *data) {
+    const uint16_t value = fist_read_u16le(data);
+    if (value <= INT16_MAX) {
+        return (int16_t)value;
+    }
+    return (int16_t)(-1 - (int)(UINT16_MAX - value));
+}
+
 static inline uint32_t fist_read_u32le(const uint8_t *data) {
     enum { DWORD_SIZE = 4, BYTE_BITS = 8 };
     uint32_t value = 0;

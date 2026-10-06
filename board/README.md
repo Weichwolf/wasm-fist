@@ -16,8 +16,9 @@ frozen reconstruction, not rewrite completion.
 | 0055 | Terrain inspection placed at the roster-zero vehicle's position and heading. |
 | 0056 | Owned original model atlases, directional sprite parts and complete family loading. |
 | 0057 | Complete model-code catalog and original default ground-vehicle part pose. |
-| 0059 | Shared ground-vehicle scene, recovered world scale/bearing and bottom-row-first orientation. |
 | 0058 | Owned original sprite assembly with stable part order, anchors, mirror and transparent texels. |
+| 0059 | Shared ground-vehicle scene, recovered world scale/bearing and bottom-row-first orientation. |
+| 0060 | Typed ground-class initialization, owned component templates and deterministic original RNG. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

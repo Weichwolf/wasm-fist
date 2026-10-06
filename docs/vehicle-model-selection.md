@@ -39,13 +39,13 @@ the DOS image uses the existing `OriginalUnitOracle` version/hash pin.
 
 All four supported types have 251-byte snapshots. The original c5fc wrapper calls c91c, which
 constructs a two-part kind-1eh node through ca6b. It temporarily replaces snapshot heading +10h
-with turret heading +26h, then restores +10h and appends that hull heading after the part bytes.
+with hull heading +26h, then restores +10h and appends that turret heading after the part bytes.
 The source snapshot is unchanged after construction.
 
 | Visual field | Original source |
 | --- | --- |
-| Primary heading | Little-endian word +26h, turret heading |
-| Secondary heading | Little-endian word +10h, hull heading |
+| Primary heading | Little-endian word +26h, hull heading |
+| Secondary heading | Little-endian word +10h, absolute turret heading |
 | Scale | High byte of little-endian word +14h |
 | Two part selector bytes | Snapshot bytes +a9h/+aah, each XOR 80h |
 
@@ -54,6 +54,10 @@ all living ground-model families decoded by WI 0056. XOR 80h reproduces the c91c
 In the emitted byte, bit 7 selects the secondary heading. The remaining seven bits address the
 part's variant table. Renderer instructions 2fa0..2fb5 select the heading; 2fc5..2fcc double BL
 as an 8-bit value, which removes the selector bit before the variant pointer lookup.
+
+WI 0060 corrects the earlier reversed hull/turret labels. Original ground update wrappers
+7d0f/8917/9911 store +10h = +26h + relative turret offset +89h. The reader's numeric offsets,
+node ordering and complete bitmap expectations were already correct and remain unchanged.
 
 `fist_vehicle_part_pose` returns the corresponding `fist_model_pose`; use that pose with
 `fist_model_variant_get` to validate that the chosen variant exists in the loaded model.

@@ -10,11 +10,13 @@ throughout development.
 envelopes/metadata/unit framing (all 47 missions), KLC height/colormap/stamp/sky planes (all 22
 files), resource members and VGA palettes (all 32 palettes). Complete terrain bundles and mission
 palette maps are verified for all 47 scenarios. A shared softgl terrain inspection scene now
-renders original AZER1/TRAIN1 terrain from the roster-zero vehicle pose in native output and
-the browser. Owned unit definitions and
+renders original terrain and the roster-zero ground vehicle in native output and the browser.
+Owned unit definitions and
 normal-side registry/platoon mappings are verified for all 4213 original snapshots. The shared
-model loader decodes all 34 original directional sprite families; unit-to-model selection,
-vehicle rendering, simulation, playable missions and audio remain open. See
+model loader decodes all 34 original directional sprite families, with original model selection
+and complete owned sprite assembly. Typed ground-vehicle initialization and the deterministic
+four-stream RNG are shared between targets. Interactive movement, full simulation, playable
+missions and audio remain open. See
 [architecture](docs/architecture.md), [reference status](docs/reference-status.md),
 [work queue](board/README.md) and [goal](docs/rewrite-goal.md).
 
@@ -76,6 +78,10 @@ The scenario decoder and its bounded coverage are documented in [scenario format
 The [unit definitions](docs/unit-definitions.md) document owned typed poses, identity and roster
 assignment. `python3 tools/rewrite/test_units.py --originals` checks all 47 missions on native and
 WASM; its optional `--oracle` gate executes pinned original assignment instructions.
+The [vehicle start state](docs/vehicle-start-state.md) documents typed controls, class defaults,
+complete component templates and explicit deterministic random input. Its
+`test_vehicle_start.py --originals --oracle` gate compares all 960 ground snapshots and every
+16-bit random input in every stream with complete original routine execution on both targets.
 The [model format](docs/model-format.md) documents complete directional sprite families and
 their ownership/validation. `python3 tools/rewrite/test_models.py --originals` requires all 170
 model files; optional `--oracle` compares all texels and lookup fields with original instructions.
@@ -114,4 +120,4 @@ After preparing terrain inputs, `verify_browser.py --terrain` checks every canva
 the complete shared C scene output. CI prepares constructed terrain without original content.
 CI runs the builds, strict style checks and both actual-browser gates; remote results are separate
 from local verification. The pinned dependency currently emits infinity/fast-math warnings under
-Clang 19; owned code is warning-free with `-Werror`. Models and interactive rendering remain open.
+Clang 19; owned code is warning-free with `-Werror`. Interactive rendering remains open.

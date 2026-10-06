@@ -61,3 +61,12 @@ All 34 catalog names and all 960 original ground-vehicle snapshots match origina
 on native/WASM; every 16-bit relative angle is checked. Meaningful synthetic tests cover separate
 headings, both direction selectors and all variant bytes, signed poses, zero/max scale, absent
 inputs and unsupported/malformed definitions. Required builds/style pass. No rendering claims.
+
+## Heading-label correction
+
+2026-10-06, WI 0060: original 7d0f/8917/9911 establish word +10h = word +26h +
+relative turret offset +89h. The primary +26h heading is the hull; secondary +10h is
+the absolute turret heading. The earlier descriptions reversed those names. Correct the
+public header/documentation; numeric offsets, node ordering and complete bitmap
+expectations remain unchanged. The complete initialization oracle confirms both independent
+preserved directions.

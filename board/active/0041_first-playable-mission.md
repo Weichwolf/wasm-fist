@@ -11,7 +11,7 @@ Decode one real map and vehicle into typed C state; render and play a full missi
 Renderer integration and the original scenario envelope/metadata decoder are delivered. See closed
 0048 for complete 47-mission, 4213-record native/WASM evidence. Closed 0051 supplies all 22 original
 KLC/SKY planes and 32 resource palettes with complete original-instruction output comparison on
-both targets. Vehicle rendering, simulation, interactive native presentation and audio delivery remain open.
+both targets. Simulation, interactive native presentation and audio delivery remain open.
 Closed 0052 supplies complete owned terrain bundles and original mission palette mappings for all
 47 scenarios, with native/WASM instruction-oracle and allocation/error-path evidence.
 Closed 0053/0049 supplies recovered world coordinates and a shared C original-terrain inspection
@@ -19,7 +19,7 @@ scene reviewed as native output and actual Chromium canvas. This static preview 
 controls, vehicle/cockpit, objectives or audio; its sky uses only the mapped average color.
 Closed 0054 supplies owned typed unit identities/poses, complete snapshots and normal-side
 registry/platoon mappings for all 4213 records, compared with actual original allocation,
-pose-copy and roster instructions on native/WASM. Vehicle initialization is still open.
+pose-copy and roster instructions on native/WASM.
 Closed 0055 uses the roster-zero vehicle's position and heading for the inspection view, with
 missing-player failures and reviewed original TRAIN1/AZER1 native/browser frames.
 Closed 0056 supplies owned original directional sprite model families: all 34 families/170 files,
@@ -34,15 +34,18 @@ world texel scale and direction, alpha/depth/fog and an explicit follow inspecti
 Actual native/browser AZER1/TRAIN1/INDIA3 views and complete both-target original/constructed
 scene, instruction-oracle, strict-style and sanitizer checks pass. It also corrects the earlier
 asset-preview row orientation: original sprite rows run upward, bottom row first.
-These steps do not execute runtime gameplay initialization or provide interactive controls.
+Closed 0060 supplies typed ground-class c296 initialization, complete owned component templates
+and explicit original four-stream random stepping. All 960 ground snapshots and complete original
+class/template returns are compared on native/WASM. This initializes one stage; full terrain/
+suspension installation, target references and interactive controls remain open.
 
 ## Next
 
-Recover vehicle runtime installation/initialization and animation updates; decode movement and
-control rules for the first interactive vehicle. Recover other-class selection and optional
+Recover original movement/controller updates and terrain/suspension installation; connect the
+owned initialized vehicle to the first interactive scene. Recover other-class selection and optional
 original model mission-palette mapping as reached; current vehicle rendering intentionally
 retains MAL colors.
-initialize/install the selected vehicle using the owned definitions. Follow with native SDL2/browser
+Install the selected vehicle using the owned definitions. Follow with native SDL2/browser
 interactive loops and vehicle/terrain rendering, fixed-step controls,
 HUD, combat/outcome and shared sound events as separate verified steps. Scenario-state, path,
 stamp and player semantics still need typed decoding before object installation.

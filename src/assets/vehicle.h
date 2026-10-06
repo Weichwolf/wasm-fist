@@ -13,7 +13,7 @@ typedef struct {
     uint8_t model_code;
     const char *model_name;
     uint16_t scale;
-    /* Original primary heading is the turret; secondary heading is the hull. */
+    /* Original primary heading is the hull; secondary heading is the turret. */
     uint16_t headings[FIST_MODEL_ORIENTATIONS];
     /* Bit 7 selects the secondary heading, low 7 bits select the variant. */
     uint8_t parts[FIST_VEHICLE_MODEL_PARTS];
