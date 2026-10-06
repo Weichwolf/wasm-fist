@@ -1,0 +1,47 @@
+{
+  "parent": "7dcfbb5920c4b9a6398b0ecd94c3ce2737583eab",
+  "scope": "Reached original CMPB3a uses the shared register/memory/byte-lazy-flag owner. Whole39-state/3054-fetch/1544-I/O source reaching replay and11840 encoded original programs are proved on both targets. Actual startup CPU/calendar/IRQ/renderer/mixer transport and complete original output acceptance remain open.",
+  "source_command": "python3 -B tools/oracle/capture_cpu_vga_callbacks.py --repo . --output /tmp/wasm-fist-cmp-byte-source --through-cmp-byte",
+  "program_command": "python3 -B tools/oracle/capture_cpu_cmp_byte.py --repo . --output /tmp/wasm-fist-cmp-byte-programs",
+  "regression_command": "python3 -B -m unittest discover -s tests -p test_cpu_cmp_byte.py -v",
+  "required_gate_command": "FIST_WORKDIR=/tmp/wasm-fist-cmp-byte-gate bash tools/check_flow.sh",
+  "reaching": {
+    "states": 39,
+    "fetches": 3054,
+    "io_states": 1544,
+    "drawn_lines": 50,
+    "original_frames": 39,
+    "original_mixed_pcm_samples": 27518,
+    "endpoint_ms": 600,
+    "missing_parent_rejected": true,
+    "eager_flags_rejected": true,
+    "evidence": "/tmp/wasm-fist-cmp-byte-adoption-evidence/proof.json"
+  },
+  "programs": {
+    "cases": 11840,
+    "causal_results": 16,
+    "all31_cpu_cache_words": true,
+    "all2MiB_RAM": true,
+    "all_ordered_code_RAM_accesses": true,
+    "source_byte_operand_contract": "Original CASE_B3a/RMGbEb/CMPB: reg BYTE first, r/m BYTE second; operand-size prefix does not widen the byte; no GPR/RAM writeback; only low bytes of lazy operands/result change and type becomes22. Raw flags/prev/oldcf stay unchanged.",
+    "test_terminal_exit": 0,
+    "test_log": "/tmp/wasm-fist-cmp-byte-adoption-unit.log"
+  },
+  "source_inputs": 40,
+  "original_assets": 419,
+  "proof_sha256": {
+    "/tmp/wasm-fist-cmp-byte-adoption-evidence/proof.json": "fc70d497da05be557a0cfb9a7f80643e3777e5f0c29a1a33c5746fe9c4f30fce",
+    "/tmp/wasm-fist-cmp-byte-adoption-evidence/source/proof.json": "21018be0518795adc3e589412a6d3722da5a6677d1bd3a21ce16a9c66a1dda8a",
+    "/tmp/wasm-fist-cmp-byte-adoption-evidence/source/inputs.json": "fe5f2a0344e0f14693cc99561acbeda21d4226826fe011a8286aae2665159ea9",
+    "/tmp/wasm-fist-cmp-byte-adoption-evidence/source/originals.json": "50a80248aacaf400d680a1bf41703be10162ef4eaf33d5c5c2f6e254bb321cfc",
+    "/tmp/wasm-fist-cmp-byte-adoption-unit.log": "9fc7924be80a5c0cee7efbad1281516a4ffc6cfd646bb6bfa2ea13d917373873"
+  },
+  "implementation_sha256": {
+    "re_out/fist_exec.h": "df491a47bee104f0e6903bb515260c8e834abfd4419128980302643c202f4984",
+    "tests/test_cpu_cmp_byte.py": "b0b98d5efcf4ebc6f7bf314c825961f4f865f412d13dbb2f954296991439d013",
+    "tests/cpu_vga_callbacks.c": "1bad02d62ab304974bf02ea569c5d584e19e9d1d83125cb94677cb03d51d71e6",
+    "tools/oracle/capture_cpu_vga_callbacks.py": "66f80f1998f49246dbacf14c4140b3da94716b444f057950775e5ce819a9b365",
+    "tools/oracle/capture_cpu_cmp_byte.py": "1639d266c793b1a68871b9c43623cba642c077b8787cabcfa823c6a248889ef0"
+  },
+  "complete_original_acceptance": false
+}

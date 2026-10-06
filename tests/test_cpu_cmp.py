@@ -90,10 +90,10 @@ class CmpPrefixTest(unittest.TestCase):
         directory = self.directory / 'eager-flags'
         directory.mkdir()
         source = (ROOT / 're_out/fist_exec.h').read_text()
-        branch = 'else if(op==0x3b)fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));'
+        branch = 'else if(op==0x3b||op==0x3a)fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));'
         self.assertEqual(source.count(branch), 1)
         source = source.replace(branch,
-            'else if(op==0x3b){fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),'
+            'else if(op==0x3b||op==0x3a){fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),'
             'fist_exec_read_op(e,q,w));fist_cpu_fill_flags(e->bus->cpu);}')
         (directory / 'fist_exec.h').write_text(source)
         results = replay(directory, self.source, self.build(directory, (directory,)),

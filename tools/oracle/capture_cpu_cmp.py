@@ -51,16 +51,16 @@ def negative(repo,root,original_command,commands):
      q=[0,0,0x2f3b,0xfedcba98,*regs,1,17,1,len(code)]
      segments=[v for selector in (0x10,0x2082,0x26e,0x2d19,0x4000,0x6000) for v in (selector,selector<<4)]
      return struct.pack('<28I',*q,*segments)+code
-    branch='else if(op==0x3b)fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));'
+    branch='else if(op==0x3b||op==0x3a)fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));'
     assert header.count(branch)==1
     mutations=[
-     ('reversed-operands',header.replace(branch,'else if(op==0x3b)fist_exec_alu(e,7,w,fist_exec_read_op(e,q,w),fist_exec_reg_read(e,i,w));'),packet(b'\x3b\xc1')),
-     ('register-writeback',header.replace(branch,'else if(op==0x3b)fist_exec_reg_write(e,i,w,fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w)));'),packet(b'\x3b\xc1')),
-     ('eager-result-flags',header.replace(branch,'else if(op==0x3b){fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));fist_cpu_fill_flags(e->bus->cpu);}'),packet(b'\x3b\xc1')),
+     ('reversed-operands',header.replace(branch,'else if(op==0x3b||op==0x3a)fist_exec_alu(e,7,w,fist_exec_read_op(e,q,w),fist_exec_reg_read(e,i,w));'),packet(b'\x3b\xc1')),
+     ('register-writeback',header.replace(branch,'else if(op==0x3b||op==0x3a)fist_exec_reg_write(e,i,w,fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w)));'),packet(b'\x3b\xc1')),
+     ('eager-result-flags',header.replace(branch,'else if(op==0x3b||op==0x3a){fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));fist_cpu_fill_flags(e->bus->cpu);}'),packet(b'\x3b\xc1')),
      ('word-only-operand',header.replace(branch,branch.replace('7,w,','7,2,').replace('read(e,i,w)','read(e,i,2)').replace('read_op(e,q,w)','read_op(e,q,2)')),packet(b'\x66\x3b\xc1')),
-     ('cleared-dirty-lazy-upper',header.replace(branch,'else if(op==0x3b){e->bus->cpu->flags.var1=0;e->bus->cpu->flags.var2=0;e->bus->cpu->flags.res=0;fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));}'),packet(b'\x3b\xc1')),
+     ('cleared-dirty-lazy-upper',header.replace(branch,'else if(op==0x3b||op==0x3a){e->bus->cpu->flags.var1=0;e->bus->cpu->flags.var2=0;e->bus->cpu->flags.res=0;fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));}'),packet(b'\x3b\xc1')),
      ('bp-uses-ds',operand_mutation(header,'q.seg=2','q.seg=3'),packet(b'\x3b\x46\x00')),
-     ('cmp-writes-ram',header.replace(branch,'else if(op==0x3b){uint32_t v=fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));fist_exec_write_op(e,q,w,v);}'),packet(b'\x3b\x06\xba\x15')),
+     ('cmp-writes-ram',header.replace(branch,'else if(op==0x3b||op==0x3a){uint32_t v=fist_exec_alu(e,7,w,fist_exec_reg_read(e,i,w),fist_exec_read_op(e,q,w));fist_exec_write_op(e,q,w,v);}'),packet(b'\x3b\x06\xba\x15')),
     ]
     def run(command,data):
      p=subprocess.run(command,input=data,capture_output=True,timeout=30)

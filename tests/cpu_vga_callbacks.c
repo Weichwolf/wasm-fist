@@ -1,5 +1,8 @@
 /* One original before-IRET seed through the complete reaching device chain. */
 #include "fist_pit.h"
+#ifdef FIST_VGA_CMP_BYTE_CONTINUE
+#define FIST_VGA_JS_CONTINUE 1
+#endif
 #ifdef FIST_VGA_JS_CONTINUE
 #define FIST_VGA_CMP_CONTINUE 1
 #endif
@@ -72,6 +75,9 @@ static void handler_prefix(void)
  unsigned after_cmp=0;
 #ifdef FIST_VGA_JS_CONTINUE
  unsigned after_js=0;
+#ifdef FIST_VGA_CMP_BYTE_CONTINUE
+ unsigned after_cmp_byte=0;
+#endif
 #endif
 #endif
 #endif
@@ -155,7 +161,17 @@ static void handler_prefix(void)
 #endif
   }
 #ifdef FIST_VGA_JS_CONTINUE
-  if(after_js) {state("after-js");break;}
+  if(after_js) {
+   state("after-js");
+#ifdef FIST_VGA_CMP_BYTE_CONTINUE
+   after_js=0;
+#else
+   break;
+#endif
+  }
+#ifdef FIST_VGA_CMP_BYTE_CONTINUE
+  if(after_cmp_byte) {state("after-cmp-byte");break;}
+#endif
 #endif
 #endif
 #endif
@@ -167,6 +183,9 @@ static void handler_prefix(void)
   if(cpu.segments[1].value==0x4ec3 && cpu.eip==0x2f3b) {state("before-cmp");after_cmp=1;}
 #ifdef FIST_VGA_JS_CONTINUE
   if(cpu.segments[1].value==0x4ec3 && cpu.eip==0x2f50) {state("before-js");after_js=1;}
+#ifdef FIST_VGA_CMP_BYTE_CONTINUE
+  if(cpu.segments[1].value==0x4ec3 && cpu.eip==0x2f55) {state("before-cmp-byte");after_cmp_byte=1;}
+#endif
 #endif
 #endif
 #endif

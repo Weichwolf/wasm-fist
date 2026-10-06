@@ -1757,6 +1757,22 @@ bash tools/check_flow.sh
   captures stay under `/tmp`. This is an original source fixture, not production
   clock/renderer adoption, a runtime startup seed or full video/audio acceptance.
 
+- Reached CMPB3a at4ec3:2f55, parent7dcfbb5: the shared decoder now uses
+  the existing byte register/memory/lazy-flag owner with no writeback or eager
+  flag materialization. `tools/oracle/cpu_cmp_byte_production_case.json` records
+  the versioned original `--through-cmp-byte` producer, one-seed39 complete
+  states/3054 fetches/1544 I/O observations/50 drawn lines on both targets,
+  parent38-state/3053-fetch failure and eager-flag failure. All11840 encoded
+  original programs and16 causal results cover code/address/stack sizes,
+  prefixes/segments/SIBs/high BYTE aliases and65 dirty incoming lazy types;
+  all31 CPU/cache words,full2MiB RAM and ordered code/RAM accesses are compared.
+  The four reaching/program tests pass; original39frames/27518mixedPCM/end600
+  remain unchanged. Reproduce with the commands in the case and run the full
+  unfiltered `tools/check_flow.sh` before publication. Actual application
+  startup/CPU/calendar/IRQ/renderer/mixer and complete original parity remain
+  open. The diagnostic whole-startup continuation reaches TEST85c0 at4ec3:2f79;
+  its independent complete renderer/DAC/panning proof remains private.
+
 ## Next
 
 Transport the actual initial CPU/system/RAM/provider/cache/VGA/PIC and device
@@ -1769,7 +1785,7 @@ Consume `cpu_segment_push_production_case.json` for the reached PUSH CS and
 complete segment-push contract. Consume `cpu_shr_production_case.json` for
 reached SHR word DS:0450,1 at2082:3b38 and complete shift contracts. Recover
 following handler instructions after the JS contract in
-`cpu_js_production_case.json` (next observed CMPB3a at4ec3:2f55),
+`cpu_cmp_byte_production_case.json` (next observed TEST85c0 at4ec3:2f79),
 panning/vertical setup and renderer
 bodies, far-transfer/trap retirement and pending device-event
 paths before runtime adoption. Keep the raw pending mask separate from eligibility and mark service
