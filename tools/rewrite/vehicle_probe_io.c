@@ -3,7 +3,13 @@
 #include "sim/vehicle_state.h"
 
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
+
+size_t fist_probe_component_offset(uint16_t type) {
+    static const size_t offsets[] = {191, 188, 190, 188};
+    return type < sizeof(offsets) / sizeof(offsets[0]) ? offsets[type] : 0;
+}
 
 void fist_probe_write_vehicle_state(const fist_vehicle_state *state) {
     const fist_vehicle_drive *drive = &state->drive;
@@ -33,6 +39,9 @@ void fist_probe_write_vehicle_state(const fist_vehicle_state *state) {
     printf(" %u %u %u %u\n", (unsigned)state->weapons.class_parameter,
            (unsigned)state->weapons.cycle[0], (unsigned)state->weapons.cycle[1],
            (unsigned)state->weapons.ready_stock);
+    printf("weapon_control %u %u %u %u %d %u\n", (unsigned)state->weapons.selected,
+           (unsigned)state->weapons.loaded, (unsigned)state->weapons.trigger,
+           (unsigned)state->weapons.recoil, turret->elevation, (unsigned)turret->elevation_frame);
     printf("components");
     for (size_t index = 0; index < state->component_size; ++index) {
         printf(" %02x", (unsigned)state->components[index]);

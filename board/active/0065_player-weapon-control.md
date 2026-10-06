@@ -43,14 +43,43 @@ Verified on 2026-10-06:
 This changes numerical simulation only; scene pixels and device behavior are unchanged.
 Temporary verification logs and the sanitizer executable are removed after commit/push.
 
+### Weapon state, selection and reload stages
+
+Typed start state now retains selected/loaded station, pending trigger, recoil, signed gun
+elevation and its authored high-byte pose. Shared `sim/weapon_control` supplies complete
+M1/M3/T80/BMP setters, cycling, the 48-step fire request, the class-entry gun/recoil prefix
+and phase-driven reload dispatch. T80's separately selectable fifth station reads its actual
+word +b4 ammunition. Class-specific empty-store/reserve behavior and complete component marks
+are retained, with explicit voice/notice requests. See `docs/weapon-control.md` for ownership,
+actual instruction/table locations, bounded original comparisons and reproduction commands.
+
+Verified on 2026-10-06:
+
+- `bash tools/rewrite/build.sh all`: all 15 native CTest gates and complete WASM gates pass.
+  The new weapon gate is required on both targets; its eight groups cover every class.
+- `python3 tools/rewrite/check_style.py`: strict format/tidy pass for all 42 owned C units.
+- Pinned `test_weapon_control.py --originals --oracle`: all eight groups pass in 148.616
+  seconds, without skips. 606,611 complete state transitions include all 960 ground actors
+  across all 47 original missions, full byte countdown/phase domains, all signed elevations,
+  recoil/trigger bytes, class station/stock boundaries and long timed sequences. Actual original
+  phase ADD/index instructions, complete method returns, HUD bytes and notices are observed.
+- Native ASan/UBSan/LSan weapon probe with production flags: all eight groups and the original
+  corpus pass in 33.571 seconds, without skips. No scene/presentation code changes in this step.
+- Pinned `test_vehicle_start.py --originals --oracle`: all seven groups pass in 85.861 seconds,
+  without skips. The extended typed fields survive source release and match complete original
+  initialization, alongside unchanged full RNG/class/corpus regression coverage.
+
+Temporary verification logs and the sanitizer executable are removed after commit/push.
+
 The continuous scene still has no firing command, ammunition/reload feedback, live projectile,
-hit, audio or outcome behavior. This prerequisite does not satisfy this item's Accept.
+hit, audio or outcome behavior. These stage implementations do not satisfy this item's Accept.
 
 ## Next
 
-Preserve selected/loaded station, pending trigger, gun elevation and recoil in typed actor state.
-Recover command eligibility and phase-driven fire/reload from original class/input routines and
-real mission state. Use the complete M1 primary-handler oracle to reproduce ammunition,
+Connect the delivered selection/pose/reload stages to the shared driving clock and input owner
+with visible verified feedback and explicit event ownership. Recover command eligibility and
+phase-driven fire from original class/input routines and real mission state. Use the complete
+M1 primary-handler oracle to reproduce ammunition,
 allocation and launch boundaries before implementing the owned live projectile state. Implement
 shared state transitions and truthful visible ammunition/weapon feedback, replay timed inputs
 on both targets and verify complete output/state/error behavior, visuals and memory.

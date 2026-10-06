@@ -22,9 +22,6 @@ enum {
     MARKER = 123
 };
 
-/* Original class-specific serialized template starts; their ends differ. */
-static const size_t component_offsets[FIST_UNIT_GROUND_VEHICLE_COUNT] = {191, 188, 190, 188};
-
 typedef struct {
     fist_vehicle_state state;
     uint16_t steps;
@@ -150,7 +147,7 @@ static int prepare(const uint8_t *raw, motion_case *out) {
     state->turret.requested_offset = fist_read_u16le(raw + TURRET_REQUEST);
     state->control_mode = raw[CONTROL_MODE];
     for (size_t index = 0; index < state->component_size; ++index) {
-        state->components[index] = raw[component_offsets[state->type] + index];
+        state->components[index] = raw[fist_probe_component_offset(state->type) + index];
     }
     out->steps = fist_read_u16le(raw + FIST_UNIT_EXTENDED_SIZE);
     return out->steps != 0 ? 0 : -1;

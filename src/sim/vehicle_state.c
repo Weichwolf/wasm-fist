@@ -57,6 +57,8 @@ static void restore_motion(const uint8_t *snapshot, fist_vehicle_state *vehicle)
         TERRAIN_ROLL = 50,
         TURRET_ROLL = 34,
         TURRET_PITCH = 36,
+        GUN_ELEVATION = 56,
+        ELEVATION_FRAME = 167,
         GROUND_HEIGHT = 29,
         UPDATE_PHASE = 61,
         SPEED = 85,
@@ -82,7 +84,17 @@ static void restore_motion(const uint8_t *snapshot, fist_vehicle_state *vehicle)
         (fist_vehicle_turret){.heading = fist_read_u16le(snapshot + TURRET_HEADING),
                               .offset = fist_read_u16le(snapshot + TURRET_OFFSET),
                               .terrain_roll = fist_read_i16le(snapshot + TURRET_ROLL),
-                              .terrain_pitch = fist_read_i16le(snapshot + TURRET_PITCH)};
+                              .terrain_pitch = fist_read_i16le(snapshot + TURRET_PITCH),
+                              .elevation = fist_read_i16le(snapshot + GUN_ELEVATION),
+                              .elevation_frame = snapshot[ELEVATION_FRAME]};
+}
+
+static void restore_weapon_control(const uint8_t *snapshot, fist_vehicle_state *vehicle) {
+    enum { SELECTED = 145, LOADED = 165, TRIGGER = 146, RECOIL = 60 };
+    vehicle->weapons.selected = snapshot[SELECTED];
+    vehicle->weapons.loaded = snapshot[LOADED];
+    vehicle->weapons.trigger = snapshot[TRIGGER];
+    vehicle->weapons.recoil = snapshot[RECOIL];
 }
 
 int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random *random,
@@ -128,6 +140,7 @@ int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random 
         .hull_view_mode = 1,
         .component_size = parameters->component_size};
     restore_motion(snapshot, &vehicle);
+    restore_weapon_control(snapshot, &vehicle);
     vehicle.object_flags = parameters->opposing_side != 0
                                ? (uint8_t)(vehicle.object_flags | SIDE_FLAG)
                                : (uint8_t)(vehicle.object_flags & (uint8_t)~SIDE_FLAG);

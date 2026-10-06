@@ -6,7 +6,7 @@ and verification tools remain available without participating in the rewrite bui
 
 | Location | Owner and boundary |
 | --- | --- |
-| `src/sim/` | Typed vehicle state, deterministic random/motion/contact and manual driving stages. |
+| `src/sim/` | Typed vehicle state, deterministic random/motion/contact, weapon control and manual driving stages. |
 | `src/app/` | Owned scenario/player session, integer input/time controller and common scene drawing. |
 | `src/assets/` | Validated original-format decoders producing typed host data. |
 | `src/render/` | softgl context, camera, terrain/models, HUD and framebuffer ownership. |
