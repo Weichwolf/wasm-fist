@@ -26,7 +26,7 @@ target_compile_options(fist_build_options INTERFACE
 target_link_libraries(softgl PRIVATE fist_build_options)
 
 add_library(fist_assets STATIC src/assets/scenario.c src/assets/units.c src/assets/model.c src/assets/vehicle.c src/assets/klc.c
-    src/assets/palette.c src/assets/resource.c src/assets/terrain.c src/render/model_bitmap.c)
+    src/assets/palette.c src/assets/resource.c src/assets/terrain.c src/assets/heightfield.c src/render/model_bitmap.c)
 target_include_directories(fist_assets PUBLIC src)
 target_link_libraries(fist_assets PRIVATE fist_build_options)
 target_compile_options(fist_assets PRIVATE -Werror)
@@ -58,6 +58,15 @@ target_compile_options(fist_scenario_probe PRIVATE -Werror)
 add_executable(fist_asset_probe tools/rewrite/asset_probe.c)
 target_link_libraries(fist_asset_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_asset_probe PRIVATE -Werror)
+add_executable(fist_heightfield_probe tools/rewrite/heightfield_probe.c)
+target_link_libraries(fist_heightfield_probe PRIVATE fist_assets fist_probe_io fist_build_options)
+target_compile_options(fist_heightfield_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    set_target_properties(fist_heightfield_probe PROPERTIES SUFFIX ".js")
+    # A bounded probe heap makes real allocation-failure cases reproducible.
+    target_link_options(fist_heightfield_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1
+        -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=67108864 -sABORTING_MALLOC=0)
+endif()
 add_executable(fist_terrain_probe tools/rewrite/terrain_probe.c)
 target_link_libraries(fist_terrain_probe PRIVATE fist_assets fist_probe_io fist_build_options)
 target_compile_options(fist_terrain_probe PRIVATE -Werror)
@@ -140,6 +149,9 @@ endif()
 include(CTest)
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME heightfield_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_heightfield.py
+        --target native --native-probe $<TARGET_FILE:fist_heightfield_probe>)
     add_test(NAME vehicle_motion_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_vehicle_motion.py
         --target native --native-probe $<TARGET_FILE:fist_vehicle_motion_probe>)

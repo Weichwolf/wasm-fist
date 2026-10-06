@@ -96,6 +96,10 @@ corpus explicitly, run `python3 tools/rewrite/test_scenario.py --originals`; mis
 changed hashes, incomplete output or skipped original coverage fail. This does not claim gameplay
 completion. Original binaries remain ignored.
 
+The [height-field resampler](docs/heightfield-resampling.md) supplies owned periodic height
+expansion and exact knot reduction before ground installation. Its `test_heightfield.py --originals`
+gate compares all square original fields and all eight height maps at runtime sizes through 4096
+with complete original returns on both targets. Ground sampling and installation remain open.
 The [terrain format](docs/terrain-format.md) documents the shared KLC/resource/palette readers
 and the optional pinned instruction oracle. Synthetic terrain contracts run in both build gates;
 `test_terrain_assets.py --originals` requires every pinned original and compares complete outputs

@@ -44,9 +44,15 @@ refresh. Both targets pass sustained driving, every speed cap, all 960 original 
 complete original near/far returns, strict tooling and memory checks. This stage owns no mission
 clock, terrain/collision installation, targeting or platform input loop.
 
+Closed 0062 supplies owned periodic numerical height expansion and exact knot reduction.
+Both targets compare complete original resampler returns for all square original planes, all
+eight height maps at four runtime sizes through 4096 and repeated size changes. Ground
+height/slope sampling and contact publication are the next bounded step in open 0063.
+
 ## Next
 
-Recover terrain/suspension installation and input/controller updates; connect the owned
+Continue 0063 with original ground height/slope queries and contact publication. Recover
+terrain/suspension installation and input/controller updates; connect the owned
 initialized moving vehicle to the first interactive scene. Recover other-class selection and optional
 original model mission-palette mapping as reached; current vehicle rendering intentionally
 retains MAL colors.
