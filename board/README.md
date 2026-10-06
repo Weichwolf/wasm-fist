@@ -13,6 +13,7 @@ frozen reconstruction, not rewrite completion.
 | 0041 | First playable mission through bounded asset/world/control/HUD/audio steps. |
 | 0048 → 0051 → 0052 → 0053/0049 | Scenario readers, terrain bundles/palette maps and first real inspection scene delivered. |
 | 0054 | Owned unit identity/pose snapshots and original normal-side registry/platoon roster delivered. |
+| 0055 | Terrain inspection placed at the roster-zero vehicle's position and heading. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

@@ -11,6 +11,7 @@ import subprocess
 
 from test_scenario import envelope, synthetic_chunks
 from test_terrain_assets import make_klc
+from test_units import snapshot
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BUILD = pathlib.Path("/tmp/wasm-fist-rewrite")
@@ -23,6 +24,12 @@ def synthetic_inputs(directory, *, flat=False, positions=(128 * 256, 1024 * 256)
     header = bytearray(chunks[0][1])
     struct.pack_into("<2i", header, 6, *positions)
     chunks[0] = (b"SHDR", header)
+    # Static object first, player vehicle second: record order is not player identity.
+    records = [(7, 11, snapshot(26, flags=0, pose=(100 * 256, 64 * 256, 0), heading=16384)),
+               (9, 12, snapshot(0, pose=(*positions, 1280), heading=0))]
+    chunks[1] = (b"DCBS", struct.pack("<H", len(records)) + b"".join(
+        struct.pack("<3H", len(state), index, generation) + state
+        for index, generation, state in records))
     (directory / "TEST.FSG").write_bytes(envelope(chunks))
     colors = [(0, 0, 0)] * 256
     colors[80:88] = [(34, 24, 12), (12, 32, 12), (16, 26, 40), (38, 16, 12),
@@ -77,6 +84,8 @@ def original_inputs(scenario, directory, build_root=BUILD):
     for name in names:
         verify_file(source / name, asset_manifest[name])
     subprocess.run([str(build_root / "native/fist_terrain_probe"), str(scenario), str(source)],
+                   check=True, stdout=subprocess.DEVNULL, timeout=15)
+    subprocess.run([str(build_root / "native/fist_unit_probe"), str(scenario)],
                    check=True, stdout=subprocess.DEVNULL, timeout=15)
     directory.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(scenario, directory / scenario.name.upper())

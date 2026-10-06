@@ -23,6 +23,24 @@ def ppm_rgb(data):
     return pixels
 
 
+def unit_state_offsets(data):
+    offset = 0
+    while offset < len(data):
+        tag, length = struct.unpack_from("<4sH", data, offset)
+        if tag == b"DCBS":
+            count, = struct.unpack_from("<H", data, offset + 6)
+            offsets = []
+            cursor = offset + 8
+            for _ in range(count):
+                size, = struct.unpack_from("<H", data, cursor)
+                offsets.append(cursor + 6)
+                cursor += 6 + size
+            assert cursor == offset + 6 + length
+            return offsets
+        offset += 6 + length
+    raise ValueError("Missing unit snapshots in test scenario")
+
+
 class TerrainSceneTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -66,9 +84,9 @@ class TerrainSceneTests(unittest.TestCase):
     def test_heading_changes_view_and_full_map_period_repeats(self):
         shifted = self.directory / "SHIFT.FSG"
         data = bytearray(self.scenario.read_bytes())
-        # SHDR begins at byte 6; original position fields begin at header byte 6.
-        x, y = struct.unpack_from("<2i", data, 12)
-        struct.pack_into("<2i", data, 12, x + 524288, y - 524288)
+        player = unit_state_offsets(data)[1]
+        x, y = struct.unpack_from("<2i", data, player + 4)
+        struct.pack_into("<2i", data, player + 4, x + 524288, y - 524288)
         shifted.write_bytes(data)
         try:
             for command in self.commands:
@@ -96,7 +114,7 @@ class TerrainSceneTests(unittest.TestCase):
         for name, positions in [("LIMIT.FSG", (-(2**31), 2**31 - 1)),
                                 ("DOMAIN.FSG", (0, 524287))]:
             data = bytearray(self.scenario.read_bytes())
-            struct.pack_into("<2i", data, 12, *positions)
+            struct.pack_into("<2i", data, unit_state_offsets(data)[1] + 4, *positions)
             path = self.directory / name
             path.write_bytes(data)
             scenarios.append(path)
@@ -108,6 +126,55 @@ class TerrainSceneTests(unittest.TestCase):
         finally:
             for scenario in scenarios:
                 scenario.unlink()
+
+    def test_roster_pose_and_heading_control_view_not_header_or_first_record(self):
+        changed = self.directory / "POSE.FSG"
+        original = self.scenario.read_bytes()
+        first, player = unit_state_offsets(original)
+        try:
+            for command in self.commands:
+                with self.subTest(target=command[0]):
+                    frame = self.render(command)
+                    data = bytearray(original)
+                    struct.pack_into("<2i", data, 12, -1234567, 2345678)  # Header only.
+                    struct.pack_into("<3iH", data, first + 4, -1, 1, 99, 50000)
+                    changed.write_bytes(data)
+                    self.assertEqual(frame, self.render(command, scenario=changed))
+                    data = bytearray(original)
+                    struct.pack_into("<2i", data, player + 4, 80000, 90000)
+                    changed.write_bytes(data)
+                    self.assertNotEqual(frame, self.render(command, scenario=changed))
+                    data = bytearray(original)
+                    struct.pack_into("<H", data, player + 16, 16384)
+                    changed.write_bytes(data)
+                    turned = self.render(command, scenario=changed)
+                    self.assertEqual(turned, self.render(command, heading=16384))
+                    self.assertNotEqual(frame, turned)
+        finally:
+            changed.unlink(missing_ok=True)
+
+    def test_missing_or_nonvehicle_roster_zero_fails_without_publishing(self):
+        changed = self.directory / "NO_PLAYER.FSG"
+        original = self.scenario.read_bytes()
+        first, player = unit_state_offsets(original)
+        cases = []
+        data = bytearray(original)
+        data[player + 22] = 0  # Vehicle does not participate in the roster.
+        cases.append(data)
+        data = bytearray(original)
+        data[player + 27] = 1  # Slot four exists, slot zero is absent.
+        cases.append(data)
+        data = bytearray(original)
+        data[player + 22] = 0
+        data[first + 22] = 32  # Static object is assigned to slot zero instead.
+        cases.append(data)
+        try:
+            for data in cases:
+                changed.write_bytes(data)
+                for command in self.commands:
+                    self.render(command, scenario=changed, valid=False)
+        finally:
+            changed.unlink(missing_ok=True)
 
     def test_invalid_heading_and_missing_required_input_fail(self):
         for command in self.commands:
@@ -123,16 +190,19 @@ class TerrainSceneTests(unittest.TestCase):
         finally:
             sky.write_bytes(data)
 
-    def test_pinned_original_azer1_scene(self):
+    def test_pinned_original_vehicle_views(self):
         if not ORIGINALS:
             self.skipTest("Local provisioned original scene requested separately")
-        with tempfile.TemporaryDirectory(prefix="original-", dir=self.temp.name) as directory:
-            directory = pathlib.Path(directory)
-            scenario = directory / original_inputs(ROOT / "armoredfist/FISTDATA/AZER1.FSG", directory, BUILD)
-            for command in self.commands:
-                with self.subTest(target=command[0]):
-                    frame = self.render(command, scenario=scenario, directory=directory, heading=26729)
-                    self.assertGreater(len({frame[x:x + 3] for x in range(0, len(frame), 3)}), 256)
+        for name, heading in [("AZER1.FSG", 26729), ("TRAIN1.FSG", 51700)]:
+            with tempfile.TemporaryDirectory(prefix="original-", dir=self.temp.name) as directory:
+                directory = pathlib.Path(directory)
+                scenario = directory / original_inputs(ROOT / "armoredfist/FISTDATA" / name, directory, BUILD)
+                for command in self.commands:
+                    with self.subTest(target=command[0], scenario=name):
+                        frame = self.render(command, scenario=scenario, directory=directory)
+                        self.assertEqual(frame, self.render(command, scenario=scenario,
+                                                           directory=directory, heading=heading))
+                        self.assertGreater(len({frame[x:x + 3] for x in range(0, len(frame), 3)}), 256)
 
 
 if __name__ == "__main__":

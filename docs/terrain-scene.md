@@ -50,10 +50,13 @@ not an assertion of original-frame identity.
 
 ## Deliberate preview quality
 
-The inspection camera uses SHDR X/Y, 64 render units above the nearest decoded ground sample,
-north heading by default, pitch -0.25 radians and a 60-degree vertical field of view. An optional
-unsigned 16-bit heading overrides north. These are explicit inspection choices, not recovered
-vehicle/cockpit values. Camera altitude is expressed in height units and must be finite.
+The inspection camera uses X/Y and heading of the ground vehicle at explicit roster slot zero,
+resolved by the [owned unit definitions](unit-definitions.md), 64 render units above the nearest
+decoded ground sample, pitch -0.25 radians and a 60-degree vertical field of view. An optional
+unsigned 16-bit heading overrides the vehicle heading. Missing/nonvehicle slot zero fails;
+neither SHDR nor the first DCBS record supplies a fallback. The height/pitch/field of view are
+explicit inspection choices, not recovered vehicle/cockpit initialization. Snapshot altitude
+is not a substitute for initialized ground placement. Camera altitude uses finite height units.
 
 Every base height cell contributes two triangles with shared vertices. Central-difference
 normals, a fixed sun, linear texture filtering and depth testing produce a readable relief view.
@@ -76,12 +79,12 @@ bash tools/rewrite/build.sh all
 python3 tools/rewrite/check_style.py
 # Complete original scene on both targets; inputs are copied and hash-verified:
 python3 tools/rewrite/test_terrain_scene.py --originals
-# Native output, with AZER1's explicitly selected unit-zero heading:
+# Native output, using AZER1's roster-zero vehicle position and heading:
 /tmp/wasm-fist-rewrite/native/fist_terrain_preview \
-  armoredfist/FISTDATA/AZER1.FSG armoredfist/FISTDATA /tmp/azer1.ppm 26729
+  armoredfist/FISTDATA/AZER1.FSG armoredfist/FISTDATA /tmp/azer1.ppm
 # Output directory must be empty. The tool copies only required pinned inputs.
 python3 tools/rewrite/prepare_terrain_preview.py \
-  --scenario armoredfist/FISTDATA/AZER1.FSG --heading 26729
+  --scenario armoredfist/FISTDATA/AZER1.FSG
 python3 tools/rewrite/verify_browser.py --terrain \
   --screenshot /tmp/wasm-fist-rewrite/azer1-terrain-browser.png
 python3 tools/rewrite/serve.py
@@ -93,8 +96,11 @@ inputs, manifests, builds and captures stay under `/tmp`. The manifest lists com
 SHA-256; the browser rejects changed, missing or incomplete input before shared C decodes it.
 
 Both build gates test complete output size/alpha, textured ground and sky, heading changes,
-height-field changes, map-period repeats, signed coordinate limits, invalid headings and missing
-required inputs. `--originals` additionally requires pinned AZER1 assets without skips. The
+height-field changes, actual unit-position map-period repeats, signed coordinate limits, invalid
+headings and missing required inputs. They prove that changing only SHDR/first-object coordinates
+does not move the camera, selected-unit coordinates do, and unit heading equals the matching
+explicit override. Missing/nonvehicle player definitions fail without publishing a frame.
+`--originals` additionally requires pinned AZER1 and TRAIN1 assets without skips. The
 browser gate checks every emitted RGB pixel against the canvas RGBA output, including row
 orientation and opaque alpha, along with worker isolation, completed execution and runtime errors.
 
@@ -105,3 +111,16 @@ in 239 components (237 by one, two by two); this records normal target rasteriza
 without a new cross-target bit-identity requirement. Native AddressSanitizer/UBSan passes all six
 scene groups including original inputs. No claim covers a native interactive window or a playable
 mission. The original triangle browser gate still passes independently.
+
+WI 0055 changes the camera source from SHDR/north to roster-zero unit pose. Actual native/browser
+AZER1 and TRAIN1 frames are reviewed; AZER1 retains the recorded outputs above because its unit
+position matched SHDR and its explicit old heading already matched the vehicle. TRAIN1 now
+uses registry index 32 at `(-1061797, 1816527)` heading `51700`. The reviewed view shows textured
+hills and sky from that location: native FNV1a `8b721dac`, Chromium WASM `afb2be08`, complete PPM
+SHA-256 `50805f5cdbd13a765cf1d6cba615d192619717de1346f5d99dac0fd2ecd66501` and 38318 RGB colors.
+All eight scene groups pass on both targets with originals; strict format/tidy passes.
+An external ASan/UBSan build also passes all eight native groups, including original inputs,
+missing-player paths and copied-input lifetime checks, with leak detection enabled.
+Both browser views pass full C-frame/canvas equality, isolation and absence of runtime errors.
+This is a vehicle-positioned inspection scene; vehicle models, native interactive window,
+cockpit/control/simulation, sky panorama and audio remain open.

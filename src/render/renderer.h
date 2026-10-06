@@ -1,8 +1,8 @@
 #ifndef FIST_RENDER_RENDERER_H
 #define FIST_RENDER_RENDERER_H
 
-#include "assets/scenario.h"
 #include "assets/terrain.h"
+#include "assets/units.h"
 
 #include <stdint.h>
 
@@ -32,10 +32,10 @@ int fist_renderer_draw_probe(fist_renderer *renderer);
  * return. Returns 0 on success or -1 on missing inputs, allocation or GL errors. */
 int fist_renderer_draw_terrain(fist_renderer *renderer, const fist_terrain *terrain,
                                const fist_terrain_view *view);
-/* Deliberate inspection camera: scenario start X/Y, north heading, altitude
+/* Deliberate inspection camera: selected ground vehicle's X/Y and heading, altitude
  * 64 render units above the decoded ground sample and a slight downward pitch.
  * This is a preview view, not reconstructed vehicle/cockpit camera behavior. */
-int fist_terrain_inspection_view(const fist_terrain *terrain, const fist_scenario *scenario,
+int fist_terrain_inspection_view(const fist_terrain *terrain, const fist_unit_definition *vehicle,
                                  fist_terrain_view *out);
 
 #endif

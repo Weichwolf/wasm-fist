@@ -10,7 +10,8 @@ throughout development.
 envelopes/metadata/unit framing (all 47 missions), KLC height/colormap/stamp/sky planes (all 22
 files), resource members and VGA palettes (all 32 palettes). Complete terrain bundles and mission
 palette maps are verified for all 47 scenarios. A shared softgl terrain inspection scene now
-renders original AZER1 terrain in native output and the browser. Owned unit definitions and
+renders original AZER1/TRAIN1 terrain from the roster-zero vehicle pose in native output and
+the browser. Owned unit definitions and
 normal-side registry/platoon mappings are verified for all 4213 original snapshots. Models,
 simulation, playable missions and audio remain open. See
 [architecture](docs/architecture.md), [reference status](docs/reference-status.md),

@@ -20,11 +20,13 @@ controls, vehicle/cockpit, objectives or audio; its sky uses only the mapped ave
 Closed 0054 supplies owned typed unit identities/poses, complete snapshots and normal-side
 registry/platoon mappings for all 4213 records, compared with actual original allocation,
 pose-copy and roster instructions on native/WASM. Vehicle initialization is still open.
+Closed 0055 uses the roster-zero vehicle's position and heading for the inspection view, with
+missing-player failures and reviewed original TRAIN1/AZER1 native/browser frames.
 
 ## Next
 
-Install the selected roster vehicle using the owned definitions, recover model catalog and
-composed sprite-part layouts; follow with native SDL2/browser
+Recover model catalog and composed sprite-part layouts, initialize/install the selected vehicle
+using the owned definitions; follow with native SDL2/browser
 interactive loops and vehicle/terrain rendering, fixed-step controls,
 HUD, combat/outcome and shared sound events as separate verified steps. Scenario-state, path,
 stamp and player semantics still need typed decoding before object installation.

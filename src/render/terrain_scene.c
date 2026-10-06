@@ -1,8 +1,8 @@
 #include "render/terrain_scene.h"
 #include "assets/klc.h"
 #include "assets/palette.h"
-#include "assets/scenario.h"
 #include "assets/terrain.h"
+#include "assets/units.h"
 #include "render/renderer.h"
 
 #include <GL/softgl.h>
@@ -270,20 +270,20 @@ int fist_draw_terrain_scene(fist_renderer *renderer, const fist_terrain *terrain
     return frame != NULL && glGetError() == GL_NO_ERROR ? 0 : -1;
 }
 
-int fist_terrain_inspection_view(const fist_terrain *terrain, const fist_scenario *scenario,
+int fist_terrain_inspection_view(const fist_terrain *terrain, const fist_unit_definition *vehicle,
                                  fist_terrain_view *out) {
-    if (terrain == NULL || scenario == NULL || out == NULL || terrain->heightmap.pixels == NULL ||
-        terrain->heightmap.width == 0) {
+    if (terrain == NULL || vehicle == NULL || out == NULL || terrain->heightmap.pixels == NULL ||
+        terrain->heightmap.width == 0 || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT) {
         return -1;
     }
     static const float downward_pitch = -0.25F;
     const float step = (float)WORLD_SIDE / (float)terrain->heightmap.width;
-    const int32_t map_x = scenario->map_positions[0];
-    const int32_t map_y = scenario->map_positions[1];
+    const int32_t map_x = vehicle->map_x;
+    const int32_t map_y = vehicle->map_y;
     const int32_t column = (int32_t)floorf(map_coordinate(map_x) / step);
     const int32_t row = (int32_t)floorf(map_y_coordinate(map_y) / step);
     *out = (fist_terrain_view){map_x, map_y,
-                               height_at(&terrain->heightmap, column, row) + INSPECTION_ALTITUDE, 0,
-                               downward_pitch};
+                               height_at(&terrain->heightmap, column, row) + INSPECTION_ALTITUDE,
+                               vehicle->heading, downward_pitch};
     return 0;
 }

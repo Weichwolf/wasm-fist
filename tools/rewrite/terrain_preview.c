@@ -1,6 +1,7 @@
 #include "assets/scenario.h"
 #include "assets/source.h"
 #include "assets/terrain.h"
+#include "assets/units.h"
 #include "probe_io.h"
 #include "probe_source.h"
 #include "render/renderer.h"
@@ -68,9 +69,9 @@ static int write_frame(const char *path, const uint8_t *pixels) {
 }
 
 static int draw_preview(const char *heading, const fist_terrain *terrain,
-                        const fist_scenario *scenario, const char *output) {
+                        const fist_unit_definition *vehicle, const char *output) {
     fist_terrain_view view = {0};
-    if (fist_terrain_inspection_view(terrain, scenario, &view) != 0) {
+    if (fist_terrain_inspection_view(terrain, vehicle, &view) != 0) {
         return -1;
     }
     if (heading != NULL) {
@@ -136,12 +137,17 @@ int main(int argc, char **argv) {
     fist_probe_source storage = {.directory = argv[2]};
     const fist_asset_source source = {fist_probe_source_read, &storage};
     fist_terrain terrain = {0};
-    const int loaded = fist_terrain_load(&scenario, &source, &terrain);
+    fist_units units = {0};
+    const int loaded = fist_units_decode(&scenario, &units) == 0
+                           ? fist_terrain_load(&scenario, &source, &terrain)
+                           : -1;
     fist_probe_source_close(&storage);
+    free(data);
+    const fist_unit_definition *vehicle = fist_units_roster_get(&units, 0);
     const int result = loaded == 0 ? draw_preview(argc == HEADING_ARGUMENT_COUNT ? argv[4] : NULL,
-                                                  &terrain, &scenario, argv[3])
+                                                  &terrain, vehicle, argv[3])
                                    : -1;
     fist_terrain_destroy(&terrain);
-    free(data);
+    fist_units_destroy(&units);
     return result == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
