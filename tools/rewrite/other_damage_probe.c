@@ -1,5 +1,6 @@
 #include "assets/bytes.h"
 #include "assets/units.h"
+#include "combat_probe_io.h"
 #include "object_pool_probe_io.h"
 #include "probe_io.h"
 #include "sim/collision.h"
@@ -199,41 +200,6 @@ static int prepare(other_case *value, const uint8_t *input, size_t size) {
     return 0;
 }
 
-static void write_actor(const fist_other_actor *actor) {
-    const fist_pool_allocation allocation = actor->allocation;
-    printf("actor %u %u %u %u %ld %ld %ld %u %u %u %u %u %u %u\n", (unsigned)allocation.type,
-           (unsigned)allocation.slot, (unsigned)allocation.registry_index,
-           (unsigned)allocation.value, (long)actor->pose.x, (long)actor->pose.y,
-           (long)actor->pose.altitude, (unsigned)actor->pose.heading,
-           (unsigned)actor->projection_extent, (unsigned)actor->projection_scale,
-           (unsigned)actor->flags, (unsigned)actor->secondary_flags, (unsigned)actor->ground_height,
-           (unsigned)actor->mode);
-    if (allocation.type == PAIR_FIRST || allocation.type == PAIR_SECOND) {
-        const fist_pair_actor_state *state = &actor->state.pair;
-        printf("pair %u %u %u %u\n", (unsigned)state->animation_parameter,
-               (unsigned)state->behavior, (unsigned)state->animation_frame,
-               (unsigned)state->damage);
-    } else if (allocation.type == TYPE26_TYPE) {
-        const fist_type26_state *state = &actor->state.type26;
-        printf("type26 %u %u %u\n", (unsigned)state->damage, (unsigned)state->limit,
-               (unsigned)state->destruction_parameter);
-    } else if (allocation.type == LAST_TYPE) {
-        const fist_type27_state *state = &actor->state.type27;
-        printf("type27 %u %u %u\n", (unsigned)state->damage, (unsigned)state->debris_parameter,
-               (unsigned)state->animation_counter);
-    }
-}
-
-static void write_effect(const fist_explosion *effect) {
-    printf("effect %u %u %u %ld %ld %ld %u %u %u %u %u %u %u %u %u %u\n",
-           (unsigned)effect->allocation.slot, (unsigned)effect->allocation.registry_index,
-           (unsigned)effect->allocation.value, (long)effect->pose.x, (long)effect->pose.y,
-           (long)effect->pose.altitude, (unsigned)effect->model_code, (unsigned)effect->extent,
-           (unsigned)effect->projection_scale, (unsigned)effect->callback_selector,
-           (unsigned)effect->height_offset, (unsigned)effect->frame, (unsigned)effect->last_frame,
-           (unsigned)effect->period, (unsigned)effect->countdown, (unsigned)effect->flags);
-}
-
 static void write_shared(const other_case *value) {
     const fist_combat_state *state = &value->combat;
     printf("combat %u %u %u %u %u %u %u\nroster", (unsigned)state->selected_slot,
@@ -379,7 +345,7 @@ static int finish_and_animate(other_case *value, fist_other_damage_result *resul
         printf("impact %u %u %u %u\n", (unsigned)impact.has_explosion, (unsigned)impact.notice,
                (unsigned)impact.sound_request, (unsigned)impact.hit_voice);
         if (impact.has_explosion) {
-            write_effect(&impact.explosion);
+            fist_probe_write_explosion(&impact.explosion);
         }
         fist_probe_write_object_pool(&value->pool);
     }
@@ -392,7 +358,7 @@ static int finish_and_animate(other_case *value, fist_other_damage_result *resul
                     fist_explosion_advance(&value->pool, effects[index]) != 0) {
                     return -1;
                 }
-                write_effect(effects[index]);
+                fist_probe_write_explosion(effects[index]);
             }
         }
         fist_probe_write_object_pool(&value->pool);
@@ -417,9 +383,9 @@ static int observe(other_case *value) {
                (unsigned)result.has_explosion, (unsigned)result.sound_request,
                (unsigned)result.voice_request, (unsigned)result.refresh_damage_display);
         if (result.has_explosion) {
-            write_effect(&result.explosion);
+            fist_probe_write_explosion(&result.explosion);
         }
-        write_actor(&value->actor);
+        fist_probe_write_other_actor(&value->actor);
         write_shared(value);
         if (result.destroyed || result.released) {
             if (check_destroyed_transition(value, &environment, &result) != 0) {

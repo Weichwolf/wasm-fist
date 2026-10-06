@@ -64,6 +64,8 @@ int fist_drifting_smoke_create(fist_object_pool *pool, fist_random *random,
     if (request.enabled != SMOKE_ENABLED) {
         return FIST_POOL_UNAVAILABLE;
     }
+    /* Preserve emitter lifetime before allocation can reuse its world slot. */
+    const fist_object_pose source = *pose;
     fist_pool_allocation allocation = {0};
     const int status =
         fist_object_pool_allocate(pool, (fist_pool_request){SMOKE_TYPE, 1}, &allocation);
@@ -75,7 +77,7 @@ int fist_drifting_smoke_create(fist_object_pool *pool, fist_random *random,
     const uint16_t extent = (uint16_t)(request.extent_base + (value & EXTENT_RANDOM_MASK));
     *out = (fist_drifting_smoke){
         .allocation = allocation,
-        .pose = {pose->x, pose->y, fist_position_add(pose->altitude, SMOKE_HEIGHT), 0},
+        .pose = {source.x, source.y, fist_position_add(source.altitude, SMOKE_HEIGHT), 0},
         .extent = extent,
         .projection_scale = (uint16_t)(extent << SCALE_SHIFT)};
     return 0;

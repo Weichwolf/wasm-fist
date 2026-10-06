@@ -31,6 +31,7 @@ frozen reconstruction, not rewrite completion.
 | 0070 | M1 primary damage to all four ground classes, ordered reactions, immediate destruction/effects/wreck/roster/census and four-tick retirement delivered; remaining target/player/world/audio consumers stay under 0065. |
 | 0071 | Remaining collision-reachable M1 damage for 5/6/23/26/27, typed short snapshot restoration, exact reactions/census/destruction effects and retained/released bindings delivered; subsequent class/world/input/audio consumers stay under 0065. |
 | 0072 | Persistent type-23 wreck, destroyed type-26 and complete type-27 smoke updates, owned type-17 creation/drift/natural release and reaching damage successors; live world/render/audio consumers remain under 0065. |
+| 0073 | Retained type-5/6 behavior-12 updates, complete flight/death/effect lifetimes and the proved smoke emitter lifetime repair; living aircraft AI and consuming world/input/render/audio flows remain under 0065. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

@@ -25,6 +25,11 @@ enum {
     DAMAGE_OFFSET = 26,
     LIMIT_OFFSET = 27,
     DESTRUCTION_OFFSET = 28,
+    PAIR_SPEED_OFFSET = 27,
+    PAIR_COUNTDOWN_OFFSET = 35,
+    PAIR_HEADING_OFFSET = 46,
+    PAIR_MOTION_HEADING_OFFSET = 48,
+    PAIR_ROTOR_OFFSET = 26,
     TYPE26_EMISSION_OFFSET = 30,
     TYPE27_EMISSION_OFFSET = 27,
     PARAMETER_OFFSET = 29,
@@ -87,9 +92,16 @@ int fist_other_actor_restore(const fist_unit_definition *definition,
         .ground_height = raw[GROUND_OFFSET],
         .mode = raw[MODE_OFFSET]};
     if (pair_type(allocation.type)) {
-        actor.state.pair =
-            (fist_pair_actor_state){fist_read_u16le(raw + PARAMETER_OFFSET), raw[BEHAVIOR_OFFSET],
-                                    raw[FRAME_OFFSET], raw[PAIR_DAMAGE_OFFSET]};
+        actor.state.pair = (fist_pair_actor_state){
+            .target_speed = fist_read_i16le(raw + PARAMETER_OFFSET),
+            .behavior = raw[BEHAVIOR_OFFSET],
+            .altitude_offset = raw[FRAME_OFFSET],
+            .damage = raw[PAIR_DAMAGE_OFFSET],
+            .speed = fist_read_i16le(raw + PAIR_SPEED_OFFSET),
+            .behavior_countdown = fist_read_u16le(raw + PAIR_COUNTDOWN_OFFSET),
+            .target_heading = fist_read_u16le(raw + PAIR_HEADING_OFFSET),
+            .motion_heading = raw[PAIR_MOTION_HEADING_OFFSET],
+            .rotor_frame = raw[PAIR_ROTOR_OFFSET]};
     } else if (allocation.type == TYPE26_TYPE) {
         if (actor.mode >= TYPE26_MODES) {
             return -1;
@@ -144,7 +156,7 @@ static int pair_damage(fist_other_actor *actor, const fist_damage_environment *e
         if ((actor->flags & SIDE_FLAG) == 0 && (actor->secondary_flags & REACTED_FLAG) == 0) {
             actor->secondary_flags |= REACTED_FLAG;
             state->behavior = PAIR_REACTION_BEHAVIOR;
-            state->animation_parameter = PAIR_REACTION_PARAMETER;
+            state->target_speed = PAIR_REACTION_PARAMETER;
             result->voice_request = FRIENDLY_REACTION_VOICE;
         }
         return 0;
@@ -155,8 +167,8 @@ static int pair_damage(fist_other_actor *actor, const fist_damage_environment *e
         (uint16_t)(environment->state->pair_destroyed_by_side[side] + 1);
     if ((uint8_t)fist_damage_next_random(environment->random) < PAIR_RELEASE_THRESHOLD) {
         state->behavior = PAIR_DEATH_BEHAVIOR;
-        state->animation_parameter = PAIR_DEATH_PARAMETER;
-        state->animation_frame = 0;
+        state->target_speed = PAIR_DEATH_PARAMETER;
+        state->altitude_offset = 0;
         return 0;
     }
     if (create_effect(&actor->pose, environment->pool, FIST_EXPLOSION_PAIR_DESTRUCTION, result) !=

@@ -63,13 +63,14 @@ aspect factors. M1 profile zero uses the following parameter-5 records:
 | 27 | 120, 90 | Byte carry or updated byte at least 80. |
 
 For noncritical 5/6 hits, clear target-side flag 8 and clear secondary bit 2 admit the sole
-reaction: set secondary bit 2, behavior 4 and animation parameter 56, and request voice 38 through
+reaction: set secondary bit 2, behavior 4 and target speed 56, and request voice 38 through
 `befb`. This producer has no selected-player gate. Critical damage increments `79a0` or `799c`
 according to the victim side, without changing ground counters or source credit. A second RNG
 low byte at least 128 creates the normal-priority effect, requests sound 9 and immediately releases
-the target. Otherwise behavior becomes 12, animation parameter 32 and animation frame zero;
+the target. Otherwise behavior becomes 12, target speed 32 and altitude offset zero;
 the binding stays occupied. The behavior byte is original +0x25, distinct from common mode +0x19.
-The animation parameter is not asserted to be a generic model code.
+The consuming [aircraft death method](aircraft-death.md) proves the signed target-speed word
+and altitude-offset byte identities; both names replace the earlier provisional animation names.
 
 Type-26 target restoration accepts original modes 0..7; modes 4..7 are destroyed no-ops. Critical
 active modes set flags `(old | 1) & ~6`, clear secondary bit 8, set mode bit 4 and unsigned
@@ -152,7 +153,8 @@ clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-functi
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
   src/sim/smoke_animation.c \
   src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c \
-  tools/rewrite/probe_io.c tools/rewrite/object_pool_probe_io.c tools/rewrite/other_damage_probe.c \
+  tools/rewrite/probe_io.c tools/rewrite/object_pool_probe_io.c tools/rewrite/combat_probe_io.c \
+  tools/rewrite/other_damage_probe.c \
   -o /tmp/wasm-fist-0071-sanitizer/other_damage_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_other_damage.py \
@@ -162,7 +164,9 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
 No presentation code changes in this step; the reviewed driving scene remains the visual baseline.
 Type-23 wreck, destroyed type-26 modes 4..7, complete type-27 updates and type-17 smoke
 creation/drift/retirement are delivered separately in [destruction smoke](destruction-smoke.md).
-Aircraft 5/6 death animation, live type-26 firing, selected-player loss, full live world scheduling,
+Aircraft 5/6 retained behavior-12 updates and the reaching emitter lifetime repair are delivered
+in [aircraft death](aircraft-death.md). Other aircraft behaviors, live type-26 firing,
+selected-player loss, full live world scheduling,
 fire commands/eligibility, effect rendering, PCM, AI and mission outcomes remain required.
 No complete playable mission or final full-WASM acceptance is claimed. Temporary inputs,
 logs and sanitizer binaries stay in `/tmp` and are removed after commit/push; compact verified

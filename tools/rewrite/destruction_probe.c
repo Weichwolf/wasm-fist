@@ -1,5 +1,6 @@
 #include "assets/bytes.h"
 #include "assets/units.h"
+#include "combat_probe_io.h"
 #include "object_pool_probe_io.h"
 #include "probe_io.h"
 #include "sim/destruction_updates.h"
@@ -193,16 +194,6 @@ static int prepare(destruction_case *value, const uint8_t *input, size_t size) {
     return definition_restore(value, input + HEADER);
 }
 
-static void write_smoke(const fist_drifting_smoke *smoke) {
-    printf("smoke %u %u %u %ld %ld %ld %u %u %u %u %u %u %u %u\n", (unsigned)smoke->allocation.slot,
-           (unsigned)smoke->allocation.registry_index, (unsigned)smoke->allocation.value,
-           (long)smoke->pose.x, (long)smoke->pose.y, (long)smoke->pose.altitude,
-           (unsigned)smoke->pose.heading, (unsigned)smoke->extent,
-           (unsigned)smoke->projection_scale, (unsigned)smoke->flags,
-           (unsigned)smoke->secondary_flags, (unsigned)smoke->ground_height,
-           (unsigned)smoke->animation_frame, (unsigned)smoke->animation_counter);
-}
-
 static void write_parent(const destruction_case *value) {
     if (value->primary.type == WRECK) {
         const fist_vehicle_wreck *wreck = &value->wreck;
@@ -216,24 +207,7 @@ static void write_parent(const destruction_case *value) {
                (unsigned)wreck->secondary_flags, (unsigned)wreck->emission_counter);
         return;
     }
-    const fist_other_actor *actor = &value->actor;
-    printf("actor %u %u %u %u %ld %ld %ld %u %u %u %u %u %u %u\n", (unsigned)actor->allocation.type,
-           (unsigned)actor->allocation.slot, (unsigned)actor->allocation.registry_index,
-           (unsigned)actor->allocation.value, (long)actor->pose.x, (long)actor->pose.y,
-           (long)actor->pose.altitude, (unsigned)actor->pose.heading,
-           (unsigned)actor->projection_extent, (unsigned)actor->projection_scale,
-           (unsigned)actor->flags, (unsigned)actor->secondary_flags, (unsigned)actor->ground_height,
-           (unsigned)actor->mode);
-    if (actor->allocation.type == TARGET) {
-        const fist_type26_state *state = &actor->state.type26;
-        printf("target %u %u %u %u\n", (unsigned)state->damage, (unsigned)state->limit,
-               (unsigned)state->destruction_parameter, (unsigned)state->emission_counter);
-    } else {
-        const fist_type27_state *state = &actor->state.type27;
-        printf("artillery %u %u %u %u\n", (unsigned)state->damage,
-               (unsigned)state->debris_parameter, (unsigned)state->animation_counter,
-               (unsigned)state->emission_counter);
-    }
+    fist_probe_write_other_actor(&value->actor);
 }
 
 static void write_shared(const destruction_case *value) {
@@ -374,7 +348,7 @@ static int smoke_advance(destruction_case *value) {
                 0) {
                 return -1;
             }
-            write_smoke(&value->smoke[slot]);
+            fist_probe_write_smoke(&value->smoke[slot]);
             value->present[slot] =
                 fist_object_pool_is_current(&value->pool, value->smoke[slot].allocation);
         }
@@ -403,10 +377,10 @@ static int begin(destruction_case *value, fist_explosion effects[2], bool effect
         if (!status) {
             value->smoke[smoke.allocation.slot] = smoke;
             value->present[smoke.allocation.slot] = true;
-            write_smoke(&smoke);
+            fist_probe_write_smoke(&smoke);
         }
     } else if (value->operation == 1) {
-        write_smoke(&value->smoke[value->primary.slot]);
+        fist_probe_write_smoke(&value->smoke[value->primary.slot]);
     } else {
         write_parent(value);
         if (invalid_parent(value) != 0) {
@@ -441,7 +415,7 @@ static int advance_parent(destruction_case *value,
     if (result.has_smoke) {
         value->smoke[result.smoke.allocation.slot] = result.smoke;
         value->present[result.smoke.allocation.slot] = true;
-        write_smoke(&result.smoke);
+        fist_probe_write_smoke(&result.smoke);
     }
     return 0;
 }

@@ -37,11 +37,11 @@ class OriginalProjectileFlightOracle(OriginalObjectPoolOracle):
         if ground_templates[8] != 0x9c1d:
             raise AssertionError('Original type-8 ground template selection changed')
 
-    def height(self, near_position, raw, heights):
+    def height(self, near_position, raw, heights, *, side=2):
         from unicorn.x86_const import UC_X86_REG_DI, UC_X86_REG_EAX
-        key = bytes(heights)
+        key = (side, bytes(heights))
         if key not in self.height_cache:
-            self.height_cache[key] = self.ground.prepare(2, key)
+            self.height_cache[key] = self.ground.prepare(side, key[1])
         machine = self.height_cache[key]
         machine.mem_write(KERNEL_DGROUP + near_position, raw)
         machine.reg_write(UC_X86_REG_DI, near_position)

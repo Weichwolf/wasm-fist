@@ -11,10 +11,15 @@
 #include <stdint.h>
 
 typedef struct {
-    uint16_t animation_parameter;
+    int16_t target_speed;
     uint8_t behavior;
-    uint8_t animation_frame;
+    uint8_t altitude_offset;
     uint8_t damage;
+    int16_t speed;
+    uint16_t behavior_countdown;
+    uint16_t target_heading;
+    uint8_t motion_heading;
+    uint8_t rotor_frame;
 } fist_pair_actor_state;
 
 typedef struct {

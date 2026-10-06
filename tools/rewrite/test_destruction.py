@@ -10,7 +10,7 @@ import tempfile
 import unittest
 
 from test_collision import delta
-from test_other_damage import fixture as damage_fixture, expected as damage_expected
+from test_other_damage import fixture as damage_fixture, expected as damage_expected, actor_lines
 from test_projectile_flight import Pool, line
 from test_units import records_from_scenario
 from test_vehicle_start import step
@@ -74,11 +74,7 @@ def parent_lines(raw, allocation):
                               *struct.unpack_from('<2H', raw, 27), struct.unpack_from('<H', raw, 20)[0],
                               struct.unpack_from('<H', raw, 33)[0], raw[35], raw[36], raw[22], raw[23],
                               struct.unpack_from('<H', raw, 31)[0]])
-    result = line('actor', [*allocation, *struct.unpack_from('<3iH2H', raw, 4), *raw[22:26]])
-    if kind == 26:
-        return result + line('target', [raw[26], raw[27], struct.unpack_from('<H', raw, 28)[0], raw[30]])
-    return result + line('artillery', [raw[26], struct.unpack_from('<H', raw, 29)[0],
-                                      struct.unpack_from('<H', raw, 31)[0], struct.unpack_from('<H', raw, 27)[0]])
+    return actor_lines(raw, allocation)
 
 
 def expected(case):
@@ -116,7 +112,7 @@ def expected(case):
             raw[26], raw[27] = values[:2]; struct.pack_into('<H', raw, 28, values[2])
         else:
             values = next(list(map(int, text.split()[1:])) for text in transcript if text.startswith('type27 '))
-            raw[26] = values[0]; struct.pack_into('<2H', raw, 29, *values[1:])
+            raw[26] = values[0]; struct.pack_into('<2H', raw, 29, *values[1:3])
         for text in transcript:
             if text.startswith('effect '):
                 fields = list(map(int, text.split()[1:])); effects.append([(4, *fields[:3]), fields[-3] * (fields[-4] + 1)])

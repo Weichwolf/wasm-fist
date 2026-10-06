@@ -100,13 +100,19 @@ effect cleanup; all 47 occupancy/roster contexts include every current remaining
 0072 supplies persistent wreck, destroyed type-26 modes 4..7, complete type-27 updates and
 low-priority type-17 smoke admission, drift and natural release. Reaching critical-hit successors
 retain distinct emission counters and all original parameter/flag rules; see docs/destruction-smoke.md.
-Aircraft death, live type-26 firing and selected-player flows remain open. Live scheduling,
-input eligibility, visible battle, AI and mission outcome remain open.
+0073 supplies complete retained aircraft 5/6 behavior-12 updates through airborne spin,
+ground destruction, post-release emission/motion and natural effect cleanup, with the original
+emitter lifetime defect proved and repaired. See docs/aircraft-death.md for complete state and
+caller boundaries. Other aircraft behaviors, live type-26 firing and selected-player flows
+remain open. Live scheduling, input eligibility, visible battle, AI and mission outcome remain open.
 
 Continue with 0065: recover and deliver primary player weapon firing, ammunition/reload and
 visible feedback, then projectile/hit rules, mission objectives/outcome and shared sound events
-in verified bounded steps. Preserve the working continuous driving baseline. Recover targeting,
-other-unit class/AI behavior and complete world/object installation as reached; current sprites
+in verified bounded steps. Preserve the working continuous driving baseline. Prioritize
+actual mission integration of the delivered combat owners before later all-mission
+coverage. Recover the complete reached installation/pass and living methods without no-op
+dispatch; preserve registry mutation order and damage-before-impact continuation. Recover
+targeting, other-unit class/AI behavior and complete world/object installation as reached; current sprites
 intentionally retain MAL colors. Scenario path/stamp/player mission semantics still need typed
 decoding. Every stage requires real native/browser behavior and visual evidence before claiming
 a complete playable mission.

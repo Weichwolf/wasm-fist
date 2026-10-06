@@ -84,6 +84,21 @@ def line(label, values):
     return label + ' ' + ' '.join(map(str, values)) + '\n'
 
 
+def advance_explosion(frame, last, period, countdown, callback, height_offset):
+    """Shared independent effect arithmetic; the caller owns metadata/release."""
+    countdown = (countdown - 1) % 256
+    released = False
+    if countdown == 0:
+        countdown = period
+        if frame == last:
+            released = True
+        else:
+            frame = (frame + 1) % 256
+            offsets = {0: {13: 768, 16: 512, 19: 256}, 4: {6: 512, 8: 256}}
+            height_offset = offsets.get(callback & 6, {}).get(frame, height_offset)
+    return frame, countdown, height_offset, released
+
+
 def expected(case):
     pool = Pool(case['bodies'])
     kind, _, _, x, y, altitude, heading, scale, flags, mode = case['bodies'][0]
@@ -140,18 +155,11 @@ def expected(case):
                 shell[-1], shell[9] = phase, flags
                 output += line('shell', shell)
         elif case['operation'] == 1:
-            countdown = (countdown - 1) % 256
-            if countdown == 0:
-                countdown = period
-                if frame == last:
-                    flags |= 1
-                    pool.release(allocation)
-                else:
-                    frame = (frame + 1) % 256
-                    if grace & 6 == 0:
-                        height_offset = {13: 768, 16: 512, 19: 256}.get(frame, height_offset)
-                    elif grace & 6 == 4:
-                        height_offset = {6: 512, 8: 256}.get(frame, height_offset)
+            frame, countdown, height_offset, released = advance_explosion(
+                frame, last, period, countdown, grace, height_offset)
+            if released:
+                flags |= 1
+                pool.release(allocation)
             output += line('explosion', [*allocation, x, y, altitude, heading, 512, scale,
                                          grace, height_offset, frame, last, period, countdown, flags])
         else:

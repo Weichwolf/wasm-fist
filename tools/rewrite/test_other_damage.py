@@ -11,7 +11,7 @@ import unittest
 
 from test_collision import delta
 from test_object_pool import NONE
-from test_projectile_flight import Pool, line
+from test_projectile_flight import Pool, line, advance_explosion
 from test_units import expected as unit_expected, records_from_scenario
 from test_vehicle_damage import effect_line, seed_for
 from test_vehicle_start import step
@@ -72,11 +72,13 @@ def actor_lines(raw, allocation):
     output = line('actor', [*allocation, *struct.unpack_from('<3iH', raw, 4),
                             *struct.unpack_from('<2H', raw, 18), *raw[22:26]])
     if kind in (5, 6):
-        output += line('pair', [struct.unpack_from('<H', raw, 29)[0], raw[37], raw[50], raw[51]])
+        output += line('pair', [struct.unpack_from('<H', raw, 29)[0], raw[37], raw[50], raw[51],
+                                struct.unpack_from('<h', raw, 27)[0], struct.unpack_from('<H', raw, 35)[0],
+                                struct.unpack_from('<H', raw, 46)[0], raw[48], raw[26]])
     elif kind == 26:
-        output += line('type26', [raw[26], raw[27], struct.unpack_from('<H', raw, 28)[0]])
+        output += line('type26', [raw[26], raw[27], struct.unpack_from('<H', raw, 28)[0], raw[30]])
     elif kind == 27:
-        output += line('type27', [raw[26], *struct.unpack_from('<2H', raw, 29)])
+        output += line('type27', [raw[26], *struct.unpack_from('<2H', raw, 29), struct.unpack_from('<H', raw, 27)[0]])
     return output
 
 
@@ -171,16 +173,10 @@ def expected(case):
         for effect in created:
             model, extent, callback, last, period = effect['template']
             if not effect['flags'] & 1:
-                effect['countdown'] = (effect['countdown'] - 1) % 256
-                if effect['countdown'] == 0:
-                    effect['countdown'] = period
-                    if effect['frame'] == last:
-                        effect['flags'] |= 1; pool.release(effect['allocation'])
-                    else:
-                        effect['frame'] = (effect['frame'] + 1) % 256
-                        offsets = {13: 768, 16: 512, 19: 256} if callback == 0 else {6: 512, 8: 256}
-                        if effect['frame'] in offsets:
-                            effect['height'] = offsets[effect['frame']]
+                effect['frame'], effect['countdown'], effect['height'], released = advance_explosion(
+                    effect['frame'], last, period, effect['countdown'], callback, effect['height'])
+                if released:
+                    effect['flags'] |= 1; pool.release(effect['allocation'])
             output += line('effect', [*effect['allocation'][1:], *effect['pose'], model, extent, 2048,
                                       callback, effect['height'], effect['frame'], last, period,
                                       effect['countdown'], effect['flags']])

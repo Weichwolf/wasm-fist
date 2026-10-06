@@ -186,7 +186,9 @@ complete original/corpus/reaching evidence. 0072 supplies persistent type-23 wre
 destroyed type-26 modes 4..7, complete type-27 updates and owned type-17 smoke creation, wind
 drift, low-word altitude rise and natural release. See docs/destruction-smoke.md for the distinct
 artillery counters, disabled/exhausted parameter decay and reaching critical-hit successors.
-Recover aircraft 5/6 death and live type-26 firing updates plus consuming selected-player flows.
+0073 supplies complete retained aircraft 5/6 behavior-12 updates, post-release motion/emission
+and the independently proved emitter lifetime repair; see docs/aircraft-death.md. Living
+aircraft AI/other behaviors, live type-26 firing and selected-player flows remain required.
 Integrate the delivered launch, flight, damage and effect owners into typed live-world scheduling,
 with damage before impact continuation and correct same-pass allocation/update order, before
 binding fire input. Rechecked c105..c120
@@ -194,6 +196,9 @@ visits the 182 live registry entries in ascending registry order, reading the po
 arrival; later-entry allocations can update during the same pass. Do not replace this with a
 snapshot or physical-slot loop. Import actual mission
 occupancy instead of presuming an empty short arena.
+Prioritize connecting the delivered combat owners to the first mission. Recover the complete
+reached world installation/pass and command eligibility before extending later all-mission AI
+coverage; do not replace unknown living-class methods with no-op dispatch.
 Preserve the delivered selection/reload clock and truthful display. Replay timed
 inputs on both targets and verify complete output/state/error behavior, visuals and memory.
 Keep 0041 active until projectiles/hits, objectives/outcomes and audible events form a complete

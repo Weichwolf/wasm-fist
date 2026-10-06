@@ -7,7 +7,7 @@ randomness and pose arithmetic reuse their existing owners. The word-counter/fra
 also owns existing type-18 muzzle animation, retaining its distinct period and last frame.
 
 These are simulation methods and explicit integration sequences. The continuous driving scene
-still needs live world installation/scheduling, player firing eligibility/input, aircraft death,
+still needs live world installation/scheduling, player firing eligibility/input, other aircraft behaviors,
 live type-26 firing, selected-player loss, battle presentation, audible PCM, AI and objectives.
 The unchanged reviewed driving scene is the presentation baseline; this step claims no new
 visible smoke or complete playable mission.
@@ -40,7 +40,8 @@ objdump -D -b binary -m i386 -M intel,addr16,data16 \
 Flag masks and offsets in this table are hexadecimal; thresholds are decimal. Counters wrap
 at their actual widths. Type-26/type-27 parameter decay executes even with smoke disabled or
 admission exhausted. Wrecks and these targets remain allocated; flags 1 alone does not release
-their storage. Aircraft classes 5/6 remain separate required update methods.
+their storage. Retained aircraft 5/6 death behavior is delivered separately in
+[aircraft death](aircraft-death.md); their living AI and other behaviors remain required.
 
 Type 27's word **+1b** is distinct from **+1f**, reset by critical damage b396. Typed state
 retains both counters. Reaching hit→class-update tests prove that the emission counter survives
@@ -60,7 +61,9 @@ complete 55-byte original constructor comparison.
 with the existing 120-short-object admission rule. Disabled/full creation consumes no RNG and
 preserves output. Successful allocation draws exactly once from the shared RNG. Extent is
 `(parameter + (random & 63))` modulo 65536; scale is extent shifted left two modulo 65536.
-XYZ copy the emitter and add 768 to the full altitude dword with wrap. Heading, frame, counter,
+XYZ copy the captured emitter and add 768 to the full altitude dword with wrap. The
+[aircraft death step](aircraft-death.md) proves an original retired-emitter reuse defect and
+captures this pose before admission to preserve the crash position. Heading, frame, counter,
 flags, secondary flags, ground byte and remaining constructor fields start at zero. The oracle
 checks the entire new 55-byte payload, not just these exposed fields.
 
@@ -136,7 +139,8 @@ clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-functi
   src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
   src/sim/smoke_animation.c src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c \
   src/sim/smoke.c src/sim/destruction_updates.c tools/rewrite/probe_io.c \
-  tools/rewrite/object_pool_probe_io.c tools/rewrite/destruction_probe.c \
+  tools/rewrite/object_pool_probe_io.c tools/rewrite/combat_probe_io.c \
+  tools/rewrite/destruction_probe.c \
   -o /tmp/wasm-fist-0072-sanitizer/destruction_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_destruction.py \
