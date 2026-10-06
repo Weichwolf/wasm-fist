@@ -37,9 +37,11 @@ Compiler flags for owned C and softgl are `-Wall -Wextra -Wpedantic -Wno-unused-
 -Wno-unused-function -fno-strict-aliasing -ffast-math`. Owned code additionally uses `-Werror`.
 clang-format and clang-tidy are mandatory CI checks. Dependencies and historical reconstruction
 sources are excluded from rewrite style changes. softgl is pinned at
-`7963be1d5b5e1bebbe97ece2c655228c8bc0a838`, the latest published master at preparation.
-meshoptimizer belongs to offline tools and is not a runtime dependency. Simulation and audio tests must verify behavior
-under these production flags, including fast-math.
+`7963be1d5b5e1bebbe97ece2c655228c8bc0a838`, verified as the latest published `origin/master`
+on 2026-10-06. CMake includes only `deps/softgl/libsoftgl`; meshoptimizer lives under
+`deps/softgl/tools/third_party/meshoptimizer` for offline tools and is not required by softgl or
+the rewrite build. See [dependency verification](board/closed/0050_softgl-dependency-verification.md).
+Simulation and audio tests must verify behavior under these production flags, including fast-math.
 
 ## Original files and reference
 

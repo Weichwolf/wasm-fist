@@ -44,5 +44,7 @@ configuration retains a nonzero expected worker count after failed thread creati
 flush. The rewrite selects the dependency's supported pthread build. Browser serving therefore
 requires COOP/COEP headers from `tools/rewrite/serve.py`. Main remains the render-context owner.
 
-Renderer pin: `7963be1d5b5e1bebbe97ece2c655228c8bc0a838` (latest origin/master at preparation).
-Its build graph is pure C and excludes offline meshoptimizer/tools.
+Renderer pin: `7963be1d5b5e1bebbe97ece2c655228c8bc0a838` (latest published `origin/master`,
+rechecked on 2026-10-06). CMake includes `libsoftgl` directly. Both target build graphs are pure C
+and exclude offline tools, including their meshoptimizer sources. Verification is recorded in
+[WI 0050](../board/closed/0050_softgl-dependency-verification.md).
