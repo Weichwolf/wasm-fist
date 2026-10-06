@@ -1,0 +1,36 @@
+# wasm-fist — Armored Fist (1994) → native + WebAssembly
+
+A faithful, **bit-identical** port of NovaLogic's 1994 *Armored Fist* (`FIST.DAT` — a 16-bit segmented
+DOS protected-mode engine with **Voxel-Space** terrain, hand-written 386 assembly by Kyle Freeman) to
+reproducible C compiling to native and WebAssembly. The target: given the same mission, RNG seed and
+input, produce the same 320×200 palette framebuffer and audio stream as the original running under DOSBox/QEMU —
+every frame, every menu, every mission — with native and WebAssembly output byte-identical to each
+other. That is a falsifiable target: two byte streams either match or they do not.
+
+The engine C is **mechanically derived from the binary via Ghidra** (`make image` → decompile → assemble
+into a flat `g_mem[]` model → patch → native/wasm). `re_out/` stays pristine; every engine correction is a
+single commented, asm-verified `patches/NNN-*.diff`; only the platform **shim** is hand-written — VGA
+(linear `0xA0000` + DAC → framebuffer), DOS/FILEMGR (INT 21h), mouse/keyboard/joystick, SB/GUS + OPL audio,
+the PIT/INT-8 cooperative timer, and the Doug-Huffman DOS-extender.
+
+The method is inherited verbatim from [`wasm-dd2`](../wasm-dd2) (Destruction Derby 2), which took a DOS-era
+commercial game all the way to a complete, bit-verified native+WebAssembly port.
+
+```
+FIST.DAT → tools/decompile.sh → make patch → make native / make wasm → tools/verify.sh
+```
+
+- **[AGENTS.md](AGENTS.md)** — target, architecture and working rules (start here; `make help` is the map).
+- **[board/README.md](board/README.md)** — work order, developer instructions and capability ownership.
+  State: `board/open` · `board/active` · `board/closed`.
+- **patches/** — every asm-verified engine correction, applied `-F0 --fuzz=0` onto `re_out/`.
+
+Install the original game with `make provision` (Python 3, network access). The
+[provisioning script](tools/provision_game.py) downloads `Armored-Fist_DOS_EN.zip` from the supplied
+My Abandonware URL, checks its pinned SHA-256, and installs the complete archive into `armoredfist/`.
+It preserves any existing installation. For an offline installation, use
+`python3 tools/provision_game.py --archive /path/to/Armored-Fist_DOS_EN.zip`;
+`--url` accepts a refreshed download link for the same archive if the original link expires.
+
+Original game files under `armoredfist/` are gitignored and read-only during development; run isolated
+copies for captures. `third_party/` and the runtime-kernel image (`make kernel-image`) are also ignored.

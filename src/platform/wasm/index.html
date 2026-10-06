@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Armored Fist rewrite — renderer integration</title>
+<style>
+body { background: #15191d; color: #e7e9ec; font: 18px system-ui; margin: 3rem; }
+canvas { width: min(100%, 960px); height: auto; image-rendering: pixelated; }
+pre { white-space: pre-wrap; }
+</style>
+<h1>Armored Fist rewrite</h1>
+<p>softgl renderer integration preview. The game is not implemented yet.</p>
+<canvas id="preview" aria-label="Renderer diagnostic triangle"></canvas>
+<pre id="status">Loading WASM…</pre>
+<script src="fist_renderer_probe.js"></script>
+<script>
+const status = document.getElementById('status');
+createFistRewrite({ print: text => { status.textContent = text; } })
+    .catch(error => { status.textContent = String(error); });
+</script>
+</html>

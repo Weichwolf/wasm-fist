@@ -1,0 +1,3 @@
+[submodule "deps/softgl"]
+	path = deps/softgl
+	url = https://github.com/weichwolf/softgl.git

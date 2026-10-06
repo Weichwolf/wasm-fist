@@ -1,3 +1,6 @@
+# Rewrite defaults to the external CMake build and strict checks. Other targets below
+# retain the frozen reconstruction tooling; see docs/reconstruction-README.md.
+#
 # Armored Fist -> FIST.RUN 1:1 rebuild — make-driven pipeline; the target chain IS the documentation:
 #
 #   make image       FIST.RUN --[extract_image.py, static Huffman-bound parse]--> re_out/fist_image.bin
@@ -24,7 +27,15 @@ OUTJS   ?= /tmp/fisttest/fistrun.js
 
 .PHONY: all pipeline provision image image-drivers kernel-image decompile decompile-kernel decompile-drivers assemble symbols patch check native wasm web verify verify-wasm refcapture clean help
 
-all: wasm             ## default: patch + WASM build
+.PHONY: rewrite-check legacy-all
+
+all: rewrite-check    ## default: readable C rewrite, both builds and strict checks
+
+rewrite-check: ## native/WASM renderer probes and strict clang-format/clang-tidy
+	bash tools/rewrite/build.sh all
+	python3 tools/rewrite/check_style.py --build-dir "$${FIST_REWRITE_BUILD_ROOT:-/tmp/wasm-fist-rewrite}/native"
+
+legacy-all: wasm      ## historical reconstruction default
 
 pipeline: image decompile assemble patch native verify wasm verify-wasm ## FULL from-binary chain: FIST.RUN -> image -> Ghidra -> assemble -> patch -> native+WASM -> crash test (both targets)
 	@echo "pipeline OK: FIST.RUN -> image -> decompile -> assemble -> patch -> compile (native + WASM) -> run"

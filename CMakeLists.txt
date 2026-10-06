@@ -1,0 +1,52 @@
+cmake_minimum_required(VERSION 3.20)
+project(fist_rewrite VERSION 0.1.0 LANGUAGES C)
+
+file(REAL_PATH "${CMAKE_SOURCE_DIR}" source_path)
+file(REAL_PATH "${CMAKE_BINARY_DIR}" build_path)
+string(FIND "${build_path}/" "${source_path}/" inside_source)
+if(inside_source EQUAL 0)
+    message(FATAL_ERROR "Use an external build directory under /tmp.")
+endif()
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/softgl/libsoftgl/CMakeLists.txt")
+    message(FATAL_ERROR "Run git submodule update --init --recursive first.")
+endif()
+add_subdirectory(deps/softgl/libsoftgl)
+target_compile_definitions(softgl PRIVATE _POSIX_C_SOURCE=200809L)
+
+add_library(fist_build_options INTERFACE)
+target_compile_options(fist_build_options INTERFACE
+    -Wall -Wextra -Wpedantic
+    -Wno-unused-parameter -Wno-unused-function
+    -fno-strict-aliasing -ffast-math)
+target_link_libraries(softgl PRIVATE fist_build_options)
+
+add_library(fist_render STATIC src/render/renderer.c)
+target_include_directories(fist_render PUBLIC src)
+target_link_libraries(fist_render PRIVATE softgl fist_build_options)
+target_compile_options(fist_render PRIVATE -Werror)
+
+add_executable(fist_renderer_probe tools/rewrite/renderer_probe.c)
+target_link_libraries(fist_renderer_probe PRIVATE fist_render fist_build_options)
+target_compile_options(fist_renderer_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    target_compile_options(softgl PRIVATE -msimd128 -pthread)
+    target_compile_options(fist_render PRIVATE -msimd128 -pthread)
+    target_compile_options(fist_renderer_probe PRIVATE -msimd128 -pthread)
+    target_link_options(fist_renderer_probe PRIVATE
+        "--js-library=${CMAKE_SOURCE_DIR}/src/platform/wasm/present.js"
+        -msimd128 -pthread -sPTHREAD_POOL_SIZE=3 -sEXIT_RUNTIME=1
+        -sALLOW_MEMORY_GROWTH=1 -sMODULARIZE=1
+        -sEXPORT_NAME=createFistRewrite -sENVIRONMENT=web,node)
+    set_target_properties(fist_renderer_probe PROPERTIES SUFFIX ".js")
+    configure_file(src/platform/wasm/index.html index.html COPYONLY)
+endif()
+
+include(CTest)
+if(BUILD_TESTING AND NOT EMSCRIPTEN)
+    add_test(NAME renderer_integration COMMAND fist_renderer_probe)
+endif()
