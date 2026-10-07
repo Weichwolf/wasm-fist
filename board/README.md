@@ -41,6 +41,7 @@ frozen reconstruction, not rewrite completion.
 | 0080 | Complete per-class movement-word/speed-counter/component maintenance and six-update reached original M1 prefix delivered; both-target full-domain/corpus/timed/build/style/memory/scene gates pass. |
 | 0081 | Active heading/RNG/nested command recovery: actual banks and complete all-47 PATH/PINF original I/O/consumer checkpoint verified; closed 0082 supplies the canonical order input; full command C acceptance remains open. |
 | 0082 | Complete owned PATH/PINF descriptors/waypoint storage and canonical installation delivered, with both-target original/source-release/atomicity/build/style/memory/scene gates. |
+| 0083 | Complete nested ground command selection using canonical orders/RNG, owned saved selectors and conditional extra random consumption delivered; both-target original/domain/world/build/style/memory/scene gates pass. Full 0081 remains open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

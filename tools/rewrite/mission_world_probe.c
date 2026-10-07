@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum {
     HEADER = 15,
@@ -31,25 +32,6 @@ enum {
     MARKER = 123
 };
 
-static void capture(const void *object, size_t size, void *out) {
-    const unsigned char *bytes = object;
-    unsigned char *snapshot = out;
-    for (size_t index = 0; index < size; ++index) {
-        snapshot[index] = bytes[index];
-    }
-}
-
-static int unchanged(const void *object, size_t size, const void *before) {
-    const unsigned char *bytes = object;
-    const unsigned char *snapshot = before;
-    for (size_t index = 0; index < size; ++index) {
-        if (bytes[index] != snapshot[index]) {
-            return 0;
-        }
-    }
-    return 1;
-}
-
 static uint8_t *read_file(const char *path, size_t *size) {
     FILE *file = fopen(path, "rb");
     if (file == NULL) {
@@ -65,7 +47,7 @@ static uint8_t *read_file(const char *path, size_t *size) {
 
 static int invalid(const fist_units *units, fist_mission_world *before, const fist_random *random,
                    fist_mission_world *world) {
-    capture(world, sizeof(*world), before);
+    fist_probe_capture(world, sizeof(*world), before);
     fist_random bad = *random;
     bad.next_stream = FIST_RANDOM_STREAMS;
     return fist_mission_world_initialize(NULL, random, 0, world) == -1 &&
@@ -74,7 +56,7 @@ static int invalid(const fist_units *units, fist_mission_world *before, const fi
                    fist_mission_world_initialize(units, &bad, 0, world) == -1 &&
                    fist_mission_world_object(NULL, 0) == NULL &&
                    fist_mission_world_object(world, FIST_UNIT_REGISTRY_COUNT) == NULL &&
-                   unchanged(world, sizeof(*world), before)
+                   fist_probe_unchanged(world, sizeof(*world), before)
                ? 0
                : -1;
 }
@@ -88,22 +70,22 @@ static int tree_commands(fist_mission_world *world, const uint8_t *input, size_t
         if (slot < FIST_UNIT_REGISTRY_COUNT && world->pool.slots[slot].used != 0 &&
             world->pool.slots[slot].type == TREE) {
             fist_tree *tree = &world->objects[slot].tree;
-            capture(world, sizeof(*world), before);
+            fist_probe_capture(world, sizeof(*world), before);
             const fist_tree_update update = {request[2], request[3]};
             if (fist_tree_advance(NULL, tree, update) != -1 ||
                 fist_tree_advance(&world->pool, NULL, update) != -1 ||
-                !unchanged(world, sizeof(*world), before)) {
+                !fist_probe_unchanged(world, sizeof(*world), before)) {
                 return -1;
             }
             const uint8_t old_variant = tree->variant;
             status = fist_tree_advance(&world->pool, tree, update);
-            if (status != 0 && !unchanged(world, sizeof(*world), before)) {
+            if (status != 0 && !fist_probe_unchanged(world, sizeof(*world), before)) {
                 return -1;
             }
             if (status == 0) {
                 const uint8_t new_variant = tree->variant;
                 tree->variant = old_variant;
-                const int preserved = unchanged(world, sizeof(*world), before);
+                const int preserved = fist_probe_unchanged(world, sizeof(*world), before);
                 tree->variant = new_variant;
                 if (!preserved) {
                     return -1;
@@ -126,7 +108,7 @@ static int reset_checked(fist_mission_world *world) {
     fist_mission_world_reset(world);
     const fist_mission_orders empty_orders = {0};
     if (world->orders_loaded != 0 ||
-        !unchanged(&world->orders, sizeof(world->orders), &empty_orders)) {
+        !fist_probe_unchanged(&world->orders, sizeof(world->orders), &empty_orders)) {
         return -1;
     }
     if (!fist_object_pool_is_valid(&world->pool)) {
@@ -146,7 +128,41 @@ static int reset_checked(fist_mission_world *world) {
     return 0;
 }
 
-static int run(fist_units *units, const uint8_t *request, size_t request_size) {
+static int command_selections(fist_mission_world *world, const uint8_t *input, size_t count,
+                              fist_mission_world *before) {
+    for (size_t index = 0; index < count; ++index) {
+        const uint16_t slot = fist_read_u16le(input + (index * COMMAND));
+        const uint16_t random = fist_read_u16le(input + (index * COMMAND) + 2);
+        fist_probe_capture(world, sizeof(*world), before);
+        const int status =
+            fist_mission_world_select_command(world, (fist_command_selection){slot, random});
+        if (status == 0) {
+            before->objects[slot].vehicle.command.mode = world->objects[slot].vehicle.command.mode;
+            before->objects[slot].vehicle.control_flags =
+                world->objects[slot].vehicle.control_flags;
+            before->random = world->random;
+        }
+        if (!fist_probe_unchanged(world, sizeof(*world), before)) {
+            return -1;
+        }
+        printf("select %u %d\n", (unsigned)slot, status);
+        if (fist_probe_write_mission_world(world) != 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static void install_orders(fist_mission_world *world, const fist_mission_orders *orders,
+                           int status) {
+    if (status == 0 && orders != NULL) {
+        world->orders = *orders;
+        world->orders_loaded = 1;
+    }
+}
+
+static int run(fist_units *units, const uint8_t *request, size_t request_size,
+               const fist_mission_orders *orders) {
     if (request_size < HEADER || request[STREAM] >= FIST_RANDOM_STREAMS || request[RELOAD] > 1 ||
         fist_read_u32le(request + COUNT) != (request_size - HEADER) / COMMAND ||
         (request_size - HEADER) % COMMAND != 0) {
@@ -166,14 +182,14 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size) {
     }
     fist_mission_world_reset(world);
     world->random.words[0] = MARKER;
-    capture(world, sizeof(*world), before);
+    fist_probe_capture(world, sizeof(*world), before);
     if (invalid(units, before, &random, world) != 0) {
         free(before);
         free(world);
         return -1;
     }
     const int status = fist_mission_world_initialize(units, &random, request[LINK], world);
-    if (status != 0 && !unchanged(world, sizeof(*world), before)) {
+    if (status != 0 && !fist_probe_unchanged(world, sizeof(*world), before)) {
         free(before);
         free(world);
         return -1;
@@ -184,6 +200,7 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size) {
         free(world);
         return -1;
     }
+    install_orders(world, orders, status);
     if (status == 0 && request[RELOAD] != 0) {
         printf("status 0\n");
         result = fist_probe_write_mission_world(world);
@@ -193,6 +210,7 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size) {
             free(world);
             return -1;
         }
+        install_orders(world, orders, 0);
         printf("reload 0\n");
     }
     /* Runtime payloads must survive release of every immutable source view. */
@@ -205,7 +223,8 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size) {
     }
     result = status == 0 ? fist_probe_write_mission_world(world) : 0;
     if (result == 0 && status == 0) {
-        result = tree_commands(world, request + HEADER, count, before);
+        result = orders == NULL ? tree_commands(world, request + HEADER, count, before)
+                                : command_selections(world, request + HEADER, count, before);
     }
     if (reset_checked(world) != 0) {
         result = -1;
@@ -216,24 +235,29 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
+    if (argc != 3 && (argc != 4 || strcmp(argv[3], "--commands") != 0)) {
         return EXIT_FAILURE;
     }
     size_t size = 0;
     uint8_t *data = read_file(argv[2], &size);
     fist_scenario scenario = {0};
     fist_units units = {0};
+    fist_mission_orders orders = {0};
     int status = data == NULL ? -1 : fist_scenario_decode(data, size, &scenario);
     if (status == 0) {
         status = fist_units_decode(&scenario, &units);
     }
+    if (status == 0 && argc == 4) {
+        status = fist_mission_orders_decode(&scenario, &orders);
+    }
     free(data);
     if (status != 0) {
+        fist_units_destroy(&units);
         return EXIT_FAILURE;
     }
     size_t request_size = 0;
     uint8_t *request = read_file(argv[1], &request_size);
-    status = request == NULL ? -1 : run(&units, request, request_size);
+    status = request == NULL ? -1 : run(&units, request, request_size, argc == 4 ? &orders : NULL);
     free(request);
     fist_units_destroy(&units);
     return status == 0 && ferror(stdout) == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

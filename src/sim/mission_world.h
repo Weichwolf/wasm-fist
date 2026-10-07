@@ -76,4 +76,17 @@ const fist_mission_object *fist_mission_world_object(const fist_mission_world *w
 int fist_mission_world_fire_untargeted(fist_mission_world *world, fist_fire_history *history,
                                        fist_fire_request request, fist_fire_result *out);
 
+/* Complete original ab82 mode selection. Uses the installed platoon descriptor
+ * and canonical RNG; phase_random is the caller's already consumed ab03 value.
+ * Does not run the parent phase, advance counters, resolve targets or dispatch
+ * subsequent commands. Reject a used descriptor selector outside the original
+ * UI's four choices; unused retained words do not restrict earlier branches.
+ * Returns 0 or -1; every failure preserves the complete world. */
+typedef struct {
+    uint16_t slot;
+    uint16_t phase_random;
+} fist_command_selection;
+
+int fist_mission_world_select_command(fist_mission_world *world, fist_command_selection request);
+
 #endif

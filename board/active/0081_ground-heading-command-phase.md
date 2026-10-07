@@ -87,3 +87,12 @@ retain every order field at complete canonical timed boundaries; payload-only wo
 remain unloaded. Return to the first ab03/ab82 heading/RNG/nested command difference using that
 canonical state. No heading-only acceptance or complete command/class return follows from the
 delivered input owner; this WI's Contract and Accept remain unchanged.
+
+WI 0083 supplies the complete ab82 mode-selection return using the canonical descriptor and
+world RNG, including its conditional additional 0291 call. Owned saved +43/+45/+97 state is
+retained rather than fabricating absent targets; +42 remains the existing counter owner.
+See docs/ground-command-selection.md. No partial parent dispatch is wired. Continue with
+the complete remaining goal, bearing/range, waypoint, target-discovery, physical roster and
+diagnostic presentation callbacks, plus the heading sample/admission/caller contract. This
+WI's full Contract and Accept are unchanged; 0083 alone does not advance the living prefix
+past the original tick-seven difference.

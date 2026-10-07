@@ -65,6 +65,15 @@ typedef struct {
 } fist_vehicle_position_sample;
 
 typedef struct {
+    /* Original +43/+45 selectors, retained across class initialization. */
+    uint8_t mode;
+    uint8_t maneuver;
+    /* Original +97 saved reference. Mode selection tests presence only;
+     * target discovery/resolution must not treat this word as a C pointer. */
+    uint16_t target_reference;
+} fist_vehicle_command;
+
+typedef struct {
     uint16_t type;
     uint16_t registry_index;
     uint16_t generation;
@@ -77,6 +86,7 @@ typedef struct {
     fist_vehicle_drive drive;
     fist_vehicle_turret turret;
     fist_vehicle_weapons weapons;
+    fist_vehicle_command command;
     uint16_t projection_extent;
     uint16_t projection_scale;
     uint16_t camera_height;

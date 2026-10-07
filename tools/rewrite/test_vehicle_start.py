@@ -120,6 +120,7 @@ def state_lines(records):
         lines.append('selectors ' + ' '.join(map(str, raw[0xa9:0xac])))
         lines.append('behavior_flags ' + str(raw[0x63]))
         lines.append('speed_counter ' + str(raw[0x5f]))
+        lines.append('command ' + ' '.join(map(str, [raw[0x43], raw[0x45], word(0x97)])))
         lines.append('position_history ' + ' '.join(map(str, struct.unpack_from('<12H', raw, 0x6e))))
     return '\n'.join(lines) + ('\n' if lines else '')
 
@@ -198,6 +199,8 @@ class StartTests(unittest.TestCase):
                     raw = bytearray(snapshot(kind, flags=value, heading=65535 - value))
                     raw[0x17] = 255 - value
                     raw[0x19] = value
+                    raw[0x43], raw[0x45] = value, 255 - value
+                    struct.pack_into('<H', raw, 0x97, value * 257)
                     raw[0x3d] = 255 - value
                     for offset, number in ((0x26, value * 257), (0x30, 65535 - value * 257),
                                            (0x34, value * 257), (0x55, 65535 - value * 257),

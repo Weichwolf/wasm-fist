@@ -2,8 +2,9 @@
 
 WI 0081 remains open. The native/WASM controller currently consumes motion, reload, position
 history and maintenance, but not the complete heading/command callback. This document records
-the verified original input and dispatch contracts needed for that implementation. The next
-owned input milestone is WI 0082; it does not replace the full 0081 acceptance requirements.
+the verified original input and dispatch contracts needed for that implementation. Closed
+WI 0082 supplies owned orders; WI 0083 implements the complete nested mode selector. Neither
+milestone replaces the full 0081 acceptance requirements.
 
 ## Original phase and callback banks
 
@@ -121,3 +122,10 @@ remain required; the complete ten-run streak stays zero.
 The shared owned decoder and canonical mission installation are documented in
 [mission orders](mission-orders.md) (WI 0082). Saved-object-only worlds remain explicitly unloaded;
 complete command consumption must use the canonical order owner rather than private empty input.
+
+The complete ab82 mode selector and its conditional additional RNG call are documented in
+[ground command selection](ground-command-selection.md) (WI 0083). Saved mode/maneuver/target
+presence now survive owned restoration and initialization. The existing +42 counter remains
+the sole owner; no parent-phase heading update or partial callback bank is installed. Remaining
+goal, bearing/range, navigation, target-discovery, roster and presentation calls still require
+complete consumption before accepting 0081.

@@ -65,3 +65,22 @@ void fist_probe_write_orders(const fist_mission_orders *orders) {
         printf("\n");
     }
 }
+
+void fist_probe_capture(const void *object, size_t size, void *out) {
+    const unsigned char *bytes = object;
+    unsigned char *snapshot = out;
+    for (size_t index = 0; index < size; ++index) {
+        snapshot[index] = bytes[index];
+    }
+}
+
+int fist_probe_unchanged(const void *object, size_t size, const void *before) {
+    const unsigned char *bytes = object;
+    const unsigned char *snapshot = before;
+    for (size_t index = 0; index < size; ++index) {
+        if (bytes[index] != snapshot[index]) {
+            return 0;
+        }
+    }
+    return 1;
+}
