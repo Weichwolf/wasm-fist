@@ -21,8 +21,6 @@ enum {
     AUTOMATIC = 1,
     LINK_OPERATING = 16,
     LINK_THRESHOLD = 2,
-    TARGET = 26,
-    VARIANT_MASK = 3,
     DISTANCE_SHIFT = 8,
     DISTANCE_LIMIT = 1 << 24,
     PRIORITY_AH = 0xff00,
@@ -38,13 +36,6 @@ static const uint8_t preferences[2][FIST_UNIT_TYPE_COUNT] = {
      99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 2,  2}};
 static const uint16_t ranges[3][FIST_UNIT_GROUND_VEHICLE_COUNT] = {
     {1000, 1000, 1000, 1000}, {150, 150, 150, 150}, {625, 625, 450, 450}};
-/* Actual e21c source e5c0, target e588 and type-26 9eaf word tables. */
-static const uint16_t source_heights[FIST_UNIT_GROUND_VEHICLE_COUNT] = {2048, 2560, 2048, 1920};
-static const uint16_t target_heights[FIST_UNIT_TYPE_COUNT] = {
-    1792, 2048, 1792, 1536, 0, 256, 256, 0, 0, 0, 0, 0, 0, 0,
-    0,    0,    0,    0,    0, 0,   0,   0, 0, 0, 0, 0, 0, 2048};
-static const uint16_t variant_heights[VARIANT_MASK + 1] = {3840, 4352, 2560, 3072};
-
 static uint16_t range_limit(const fist_vehicle_state *actor, uint8_t link) {
     size_t bank = 0;
     if (link >= LINK_THRESHOLD) {
@@ -82,9 +73,6 @@ static int scan(const fist_mission_world *world, const fist_klc_image *height,
                 fist_target_discovery_result *result) {
     const uint16_t limit = range_limit(actor, request.link_mode);
     const uint8_t *preference = preferences[actor->type & 1];
-    const fist_object_pose source = {
-        actor->map_x, actor->map_y, fist_position_add(actor->altitude, source_heights[actor->type]),
-        0};
     for (size_t index = 0; index < FIST_UNIT_REGISTRY_COUNT; ++index) {
         const uint16_t slot = world->pool.registry[index].slot;
         if (slot == FIST_POOL_NO_SLOT || slot == request.slot) {
@@ -100,10 +88,11 @@ static int scan(const fist_mission_world *world, const fist_klc_image *height,
             continue;
         }
         const uint16_t type = world->pool.slots[slot].type;
-        const uint16_t aim =
-            type == TARGET ? variant_heights[view.mode & VARIANT_MASK] : target_heights[type];
-        fist_object_pose target = *view.pose;
-        target.altitude = fist_position_add(target.altitude, aim);
+        fist_object_pose source = {0};
+        fist_object_pose target = {0};
+        if (fist_mission_world_target_positions(world, request.slot, slot, &source, &target) != 0) {
+            return -1;
+        }
         bool visible = false;
         if (fist_ground_visible(height, &source, &target, &visible) != 0) {
             return -1;

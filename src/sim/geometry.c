@@ -1,6 +1,7 @@
 #include "sim/geometry.h"
 
 #include "assets/orders.h"
+#include "sim/world.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -148,6 +149,16 @@ fist_planar_measurement fist_planar_measure(fist_order_waypoint source, fist_ord
     const uint32_t delta_x = (uint32_t)target.x - (uint32_t)source.x;
     const uint32_t delta_y = (uint32_t)target.y - (uint32_t)source.y;
     return (fist_planar_measurement){heading(delta_x, delta_y, coarse), distance(delta_x, delta_y)};
+}
+
+fist_spatial_measurement fist_spatial_measure(fist_object_pose source, fist_object_pose target,
+                                              bool coarse) {
+    const fist_planar_measurement planar =
+        fist_planar_measure((fist_order_waypoint){source.x, source.y},
+                            (fist_order_waypoint){target.x, target.y}, coarse);
+    const uint32_t vertical = (uint32_t)target.altitude - (uint32_t)source.altitude;
+    return (fist_spatial_measurement){planar.heading, heading(vertical, planar.distance, coarse),
+                                      planar.distance};
 }
 
 uint32_t fist_planar_proximity(fist_order_waypoint source, fist_order_waypoint target) {

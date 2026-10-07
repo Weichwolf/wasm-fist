@@ -67,6 +67,53 @@ bands at 45/60/90. C must reuse the existing turret.elevation owner for +38, ret
 reuse the established
 geometry, physical reference, descriptor, RNG, throttle and profile owners.
 
+## Shared C transaction
+
+Closed WI 0097 implements `fist_mission_world_acquire_target` and
+`fist_mission_world_aim_target` in `src/sim/target_acquisition.c`. Discovery and aiming now
+share `fist_mission_world_target_positions`; the established geometry owner supplies both
+horizontal and vertical angles. The existing turret elevation remains the only +38 owner.
+Restoration, class start and readiness retain independent +9b heading, +99 target range
+and +53 navigation range.
+
+Acquisition computes actor, random, notice and voice changes locally and publishes them
+together. Used invalid descriptors, projections, height inputs or selected type-26 message
+variants return an error with complete world/output preservation. Earlier branches do not
+validate unused behavior, height or message mode. A selected visible type-26 mode above 3
+has no authored typed message and fails atomically; an unselected/ineligible/deleted/invisible
+candidate does not read that message input.
+
+Canonical runtime references preserve live physical orphans and in-place retypes. Released,
+reused and reset lifetimes cannot install successors. Automatic acquisition retains the actual
+conditional draw and attempt flag even when its stale candidate has been invalidated. Null or
+lost aim references retain the existing heading/elevation/range while clearing the stale runtime
+reference. Selected notices contain duration, class, variant and side; logical requests use
+the existing shared voice-history owner. Display consumption, PCM and the complete living
+parent are still pending.
+
+The extended existing target probe restores canonical typed payloads, poisons their raw source
+records and checks whole-world preservation at acquisition, aiming and throttle boundaries.
+Its optional mission argument loads real FSG/orders/readiness before the original discovery
+and subsequent child sequence. Every original physical record, registry binding, pose and
+conditional RNG state is checked before consumption. Constructed numeric tests that place a
+short target in an original long fixture are projected into the correct C arena; real missions
+require no relocation. Actual C release/reuse and orphan/retype/reset tests separately prove
+the deliberate lifetime repair.
+
+    PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/test_target_acquisition.py --target all --oracle --originals --review-dir /tmp/wasm-fist-0097-review
+    PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_target_aim_retention.py --originals --review-dir /tmp/wasm-fist-0097-review
+
+Both-target required replay passes seven groups without skips: 586641 C cases and 26880
+canonical returns per target, including the complete unchanged eight-group original checkpoint.
+Output SHA256: `4a5cdd4cd24808dd9e905b6fc14b581d286b523b2a83f3d6d022f9138e79160b`.
+The complete production-build retry passes all 42 native CTests, 40 WASM unittest suites and
+both Node probes. LLVM 19.1 formatting/tidy passes all 88 owned units/headers. ASan/UBSan
+passes the same seven required groups without skips, with identical counts and output hash;
+actual production SDL/Chromium and sanitized SDL scenes pass. Both production after images
+were visually reviewed. Compact commands/source/program hashes and excluded-attempt summaries
+remain in `/tmp/wasm-fist-0097-review/receipt.json`; obsolete owned builds, isolated scenes and
+logs are removed. Full parent/class consumption, display/PCM and living battle remain open.
+
 ## Verification
 
     PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache /tmp/wasm-fist-decoder-oracle/bin/python tests/test_original_target_acquisition.py --originals --review-dir /tmp/wasm-fist-0096-required
@@ -106,7 +153,8 @@ paired-observer gate passes 7168 complete sequences without skips in 39.075 seco
 terminated full attempt and failed/filtered pilots are excluded. Exact hashes, commands and
 results remain in /tmp/wasm-fist-0096-review; see board/closed/0096_original-target-acquisition.md.
 
-Shared C acquisition/aim is open 0097; complete 0081 remains pending. Production source,
-configuration, current scene artifacts, originals, immutable reference and pinned softgl are
-unchanged. No new build/style/rendering or audible PCM acceptance is claimed by this original
-checkpoint. The independent complete-game WASM streak is zero.
+At the original-only 0096 checkpoint, production source/configuration and scene artifacts were
+unchanged; that research added no build/style/rendering or audible PCM acceptance. Closed 0097
+now supplies shared C consumption as described above; complete 0081 remains pending. Originals,
+immutable reference and pinned softgl remain unchanged. The independent complete-game WASM
+streak is zero.

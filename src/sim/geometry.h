@@ -2,6 +2,7 @@
 #define FIST_SIM_GEOMETRY_H
 
 #include "assets/orders.h"
+#include "sim/world.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -16,6 +17,17 @@ typedef struct {
  * the lower atan knot. Numeric scratch is local; inputs/state are unchanged. */
 fist_planar_measurement fist_planar_measure(fist_order_waypoint source, fist_order_waypoint target,
                                             bool coarse);
+
+typedef struct {
+    uint16_t heading;
+    uint16_t elevation;
+    uint32_t distance;
+} fist_spatial_measurement;
+
+/* Complete original 0578: planar heading/distance plus wrapped signed altitude
+ * bearing. Reuses the same angle and distance owners; no visibility or state. */
+fist_spatial_measurement fist_spatial_measure(fist_object_pose source, fist_object_pose target,
+                                              bool coarse);
 
 /* Complete original a17e/08e8 proximity return used by target discovery.
  * Uses wrapped target-minus-source DWORDs, one's-complement negative lanes,

@@ -95,6 +95,8 @@ typedef struct {
     /* Original +99 target feedback range, independent of navigation +53.
      * Restored/retained here; later aiming produces it. Throttle consumes it. */
     uint16_t target_range;
+    /* Original +9b target bearing; independent of navigation heading. */
+    uint16_t target_heading;
     /* Original +28/+2a/+2c newest-first samples and +2e average. The parent
      * heading phase owns future sampling; restoration retains all words. */
     uint16_t heading_history[FIST_VEHICLE_HEADING_SAMPLES];

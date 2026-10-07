@@ -62,6 +62,15 @@ typedef struct {
     uint8_t prepared;
 } fist_mission_preparation;
 
+/* Selected target message producer: typed class/side/variant, never a guest
+ * text address. duration is the original shared display countdown. */
+typedef struct {
+    uint16_t duration;
+    uint16_t type;
+    uint8_t variant;
+    bool enemy;
+} fist_target_notice;
+
 typedef struct {
     fist_object_pool pool;
     fist_random random;
@@ -77,6 +86,7 @@ typedef struct {
     uint16_t pending_player_impact;
     fist_mission_preparation preparation;
     fist_voice_history voice;
+    fist_target_notice target_notice;
 } fist_mission_world;
 
 /* Borrowed read-only physical projection shared by collision and target search.
@@ -118,6 +128,44 @@ typedef struct {
 int fist_mission_world_discover_targets(fist_mission_world *world, const fist_klc_image *height,
                                         fist_target_discovery_request request,
                                         fist_target_discovery_result *out);
+
+/* Actual shared e21c class/variant aim offsets. Inputs are canonical physical
+ * projections; outputs own their poses. No visibility, references or mutation. */
+int fist_mission_world_target_positions(const fist_mission_world *world, uint16_t actor,
+                                        uint16_t target, fist_object_pose *source,
+                                        fist_object_pose *destination);
+
+typedef struct {
+    uint16_t slot;
+    fist_object_reference candidate;
+    uint16_t tick;
+    uint16_t voice_gate;
+    bool automatic;
+} fist_target_acquisition_request;
+
+typedef struct {
+    bool attempted;
+    bool installed;
+    bool message;
+    fist_voice_request voice;
+} fist_target_acquisition_result;
+
+/* Complete ae32/a6e3 from prepared canonical orders/RNG/lifetimes. Direct
+ * rejects preserve a valid old target; attempted invisible candidates clear it.
+ * Automatic admission sets bit 128 even after a failed attempt. Stale references
+ * cannot address successors. Selected live type-26 modes outside the authored
+ * four-message domain fail atomically rather than read adjacent text. Unused
+ * behavior/height/variant inputs do not restrict original early branches.
+ * All failures preserve complete world/output; no parent, aiming or PCM. */
+int fist_mission_world_acquire_target(fist_mission_world *world, const fist_klc_image *height,
+                                      fist_target_acquisition_request request,
+                                      fist_target_acquisition_result *out);
+
+/* Complete f69:abd5/a18e target geometry. Produce +9b heading, existing +38
+ * turret elevation and packed +99 range; retain all on null/lost target except
+ * invalidating its runtime reference. No RNG, throttle or parent dispatch.
+ * Invalid used projection/state fails atomically. */
+int fist_mission_world_aim_target(fist_mission_world *world, uint16_t slot, bool coarse);
 
 void fist_mission_world_reset(fist_mission_world *world);
 

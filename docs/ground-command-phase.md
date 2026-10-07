@@ -3,14 +3,17 @@
 Closed WI 0096 proves complete original [target acquisition and later aim feedback](target-acquisition.md),
 including genuine ab03 entry-eight returns, conditional RNG, actual visibility, selected
 message/voice tails, target geometry and consuming throttle. Required full-domain/all-47 and
-paired-observer gates pass. Shared C consumption is open 0097; full 0081 remains pending.
+paired-observer gates pass. Closed 0097 supplies complete shared C acquisition/aim/notification
+consumption, with required both-target/corpus/build/style/memory and actual scene gates.
+Full 0081 remains pending.
 
 Closed WI 0095 supplies complete shared [command throttle and drive-profile transitions](ground-command-throttle.md),
 including independent retained target feedback +99 and actual class/component/display setters.
 Required native/WASM and ASan/UBSan gates prove the complete bank, all-47 prepared worlds and
 actual C target-loss repair followed by throttle/motion. Full build/style and actual native/
-browser/sanitized scenes pass. Target feedback production/acquisition, remaining sixteen-entry
-parent callbacks and full heading/RNG/class consumption remain open under 0081.
+browser/sanitized scenes pass. Target feedback production/acquisition is delivered by 0097;
+remaining sixteen-entry parent callbacks and full heading/RNG/class consumption remain open
+under 0081.
 
 Closed WI 0094 supplies complete shared [command bearing/range and retreat-cycle state](ground-command-bearing.md).
 Its actual bank puts retreat in mode 4 and approach in mode 6. Both use packed unsigned range;
@@ -175,8 +178,8 @@ The complete ab82 mode selector and its conditional additional RNG call are docu
 presence now survive owned restoration and initialization. The existing +42 counter remains
 the sole owner; no parent-phase heading update or partial callback bank is installed. Bearing/range and target discovery now have their complete shared child owners in 0094 and
 0093, while throttle/profile is delivered by 0095. Original acquisition/aim is proved by
-0096; its shared C consumer (0097), roster/maneuver/presentation and full parent consumption
-are still required before accepting 0081.
+0096 and consumed by closed 0097. Remaining roster/maneuver/presentation callbacks and full
+heading/counter/RNG parent and class consumption are still required before accepting 0081.
 
 The complete ac75 route/formation goal helper is documented in
 [ground command goals](ground-command-goals.md) (WI 0084). It shares canonical orders and the

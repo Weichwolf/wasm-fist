@@ -85,6 +85,9 @@ class TargetAcquisitionTests(unittest.TestCase):
         type(self).throttles += 1
         self.digest.update(actual)
 
+    def begin_corpus_mission(self, name, side):
+        """Attach a consuming C loader to the unchanged original world boundary."""
+
     def test_every_rng_word_four_behavior_choices_all_cursors(self):
         from unicorn.x86_const import UC_X86_REG_DI
         machine, actor, _ = self.prepare()
@@ -291,6 +294,7 @@ class TargetAcquisitionTests(unittest.TestCase):
                 self.assertEqual(installed, side)
                 kernel = self.owner.visibility.prepare(side, pixels)
                 for name, data in missions:
+                    self.begin_corpus_mission(name, side)
                     machine, objects = self.owner.prepare_saved(records_from_scenario(data), SEEDS, 3, 0,
                                                                 scenario_order_blocks(data))
                     self.owner.reset(machine, pixels, side=side)

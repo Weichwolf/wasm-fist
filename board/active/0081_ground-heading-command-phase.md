@@ -211,8 +211,24 @@ four details reach discovery -> acquisition -> aim -> throttle. Separate complet
 ab03 entry-eight evidence verifies 16384 parent returns in both control banks and all class/
 behavior/RNG-byte contexts. Required cache-policy replay matches 7168 complete sequences.
 See docs/target-acquisition.md and closed 0096 for exact boundaries/exclusions. C acquisition/
-aim and selected notifications are defined in open 0097. Use the existing turret elevation
-owner, one aim-position/visibility table owner, canonical RNG and opaque target lifetimes;
+aim and selected notifications are delivered by closed 0097 below. Use the existing turret
+elevation owner, one aim-position/visibility table owner, canonical RNG and opaque target lifetimes;
 do not copy adjacent variant text words or install a reused candidate's successor. This
 parent's Contract/Accept remain unchanged. Full class/living battle/PCM/outcomes and the final
 independent complete WASM streak remain open; the streak is zero.
+
+Closed 0097 supplies complete shared direct/automatic target installation, later aiming and
+typed selected notifications. It shares class/variant aim positions with discovery and uses
+the existing geometry, turret elevation, RNG, physical lifetimes and voice-history owners.
+Required production native/WASM and ASan/UBSan replay each pass seven groups without skips:
+586641 cases, 3028 atomic rejections and 26880 canonical returns per target through all 47
+missions/four details. The unchanged eight-group original checkpoint and separate 192-return
+start/readiness aim-field retention gate pass. Full build (42 native CTests, 40 WASM suites,
+two Node probes), strict LLVM 19.1 style/tidy (88 units/headers), actual SDL/Chromium and
+sanitized SDL scenes pass. Source release/reuse cannot install a successor; live orphans and
+retypes remain valid. Selected type-26 variants outside the authored message domain fail
+atomically; unused variant/behavior/height inputs retain the proved early branches. See
+docs/target-acquisition.md and closed 0097. This parent's Contract/Accept remain unchanged.
+Continue remaining maneuver/roster/diagnostic callbacks and complete heading/counter/RNG
+parent and class consumption. First playable battle/PCM/outcomes and the independent final
+complete WASM streak remain open; streak zero.
