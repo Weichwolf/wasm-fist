@@ -1,8 +1,9 @@
 # Rewrite boundaries
 
 The annotated tag `reference/reconstruction-v1` records the reconstruction at `349ad31`.
-Development proceeds on `rewrite/softgl`; master remains unchanged. Historical source, patches
-and verification tools remain available without participating in the rewrite build graph.
+Development proceeds on `master`; `ghidra` retains that decompiled and patched reconstruction.
+The former `rewrite/softgl` branch remains available as history. Historical source, patches and
+verification tools remain available without participating in the rewrite build graph.
 
 | Location | Owner and boundary |
 | --- | --- |

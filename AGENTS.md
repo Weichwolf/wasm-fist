@@ -5,6 +5,8 @@ softgl. Preserve complete functional behavior and continuously improve visual qu
 Original pixel/palette/PCM bit identity is no longer an acceptance target.
 
 - Follow `board/README.md`, one bounded step at a time. Verify evidence and keep WIs current.
+- Active rewrite development uses `master`. Branch `ghidra` retains the frozen decompiled and
+  patched reconstruction; do not move the immutable reference tag.
 - Own code lives in `src/`. Platform code handles presentation/devices/storage only. Share
   simulation, asset decoding, rendering and audio across targets. One owner per contract.
 - Recover formats and gameplay rules from original files/behavior and frozen reconstruction.

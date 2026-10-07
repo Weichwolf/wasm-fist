@@ -1,7 +1,7 @@
 # Rewrite goal
 
-Implement Armored Fist on `rewrite/softgl` as readable, maintainable hand-written C11 for native
-and WASM using pinned softgl, with `reference/reconstruction-v1` and read-only original assets
+Implement Armored Fist on `master` as readable, maintainable hand-written C11 for native
+and WASM using pinned softgl, with `ghidra`, the immutable `reference/reconstruction-v1` tag and read-only original assets
 as behavioral/format evidence; deliver a playable mission first, then complete all menus,
 missions/maps/vehicles, AI/combat/objectives/outcomes, settings/devices, input/link, campaign,
 save/load and editor create→save→reload→simulate functionality, continuously improving visual

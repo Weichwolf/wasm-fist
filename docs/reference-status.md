@@ -4,6 +4,9 @@ Tag `reference/reconstruction-v1` points to `349ad31a9fd21b350d435651bb2e90afda4
 "Execute reached VGA panning through shared original drawing and calendar owners".
 This is a reference snapshot, not a declaration of full original compatibility.
 
+Branch `ghidra` retains exactly this decompiled and patched revision. Active rewrite development
+uses `master`; the annotated reference tag and historical code remain unchanged.
+
 The publication receipt recorded 260 tests, 611 exact patch checks, six resource-start cases and
 178 flows without failures. Native/WASM builds ran sequentially and all 419 original files were
 unchanged. The receipt explicitly leaves whole runtime startup/frame/audio acceptance open.

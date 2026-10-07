@@ -1,7 +1,8 @@
 # Armored Fist — readable C rewrite
 
-Development lives on `rewrite/softgl`. The reconstruction is frozen at annotated tag
-`reference/reconstruction-v1` (`349ad31`). The rewrite uses hand-written C11 and pinned
+Development lives on `master`. The decompiled and patched reconstruction is available on
+`ghidra` at the unchanged annotated tag `reference/reconstruction-v1` (`349ad31`).
+The rewrite uses hand-written C11 and pinned
 [softgl](https://github.com/weichwolf/softgl) for rendering. Complete functional behavior is the
 target; original frame and PCM bit identity is no longer required. Visual quality improves
 throughout development.

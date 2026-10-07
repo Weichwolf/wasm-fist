@@ -1,9 +1,9 @@
 name: Rewrite checks
 on:
   push:
-    branches: [rewrite/softgl]
+    branches: [master]
   pull_request:
-    branches: [rewrite/softgl]
+    branches: [master]
 jobs:
   native-and-wasm:
     env:
