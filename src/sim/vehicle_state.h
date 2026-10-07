@@ -78,6 +78,8 @@ typedef struct {
     uint8_t turret_view_mode;
     uint8_t hull_view_mode;
     uint8_t behavior;
+    /* Original +63, separate from the behavior selector at +3e. */
+    uint8_t behavior_flags;
     uint8_t reload_countdown;
     uint8_t damage;
     uint8_t damage_alarm_countdown;

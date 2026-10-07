@@ -118,6 +118,7 @@ def state_lines(records):
         offset = COMPONENT_OFFSET[kind]
         lines.append('components ' + raw[offset:offset + len(COMPONENTS[kind])].hex(' '))
         lines.append('selectors ' + ' '.join(map(str, raw[0xa9:0xac])))
+        lines.append('behavior_flags ' + str(raw[0x63]))
     return '\n'.join(lines) + ('\n' if lines else '')
 
 

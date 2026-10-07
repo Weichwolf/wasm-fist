@@ -120,8 +120,11 @@ visible feedback, then projectile/hit rules, mission objectives/outcome and shar
 in verified bounded steps. Preserve the working continuous driving baseline. Prioritize
 actual mission integration of the delivered combat owners before later all-mission
 coverage. Consume the saved world through terrain/contact and take-control installation, recover
-living ground methods and command eligibility without no-op dispatch, and install dynamic combat
-payloads. Reuse the current-entry iterator and preserve damage-before-impact continuation and one
+living ground methods and command eligibility without no-op dispatch. 0076 now consumes the
+untargeted M1 station-zero fire branch and publishes canonical shell/muzzle payloads into the
+owned world, including shared cooldown and actual TRAIN1 source-release evidence on both targets;
+see docs/primary-fire.md. Connect their flight/damage and remaining effect/retirement publication
+through the current-entry iterator, preserving damage-before-impact continuation and one
 physical roster owner. Recover targeting, other-unit class/AI behavior, the shared tree-change
 producer and live type-26 updates as reached; current sprites
 intentionally retain MAL colors. Scenario path/stamp/player mission semantics still need typed

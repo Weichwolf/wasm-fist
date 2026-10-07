@@ -68,6 +68,11 @@ typedef struct {
     uint8_t sound_request;
 } fist_launch_result;
 
+/* Shared validity contract for the physical untargeted M1 launch source.
+ * A current registry binding is not required: the origin may be an orphan. */
+bool fist_m1_launch_source_valid(const fist_object_pool *pool, const fist_vehicle_state *vehicle,
+                                 fist_launch_request request);
+
 /* Complete already-eligible, untargeted M1 station-0 launch transaction.
  * The caller owns eligibility/targets and transfers returned initialized
  * payloads to its world at their allocated slots. No input binding or flight

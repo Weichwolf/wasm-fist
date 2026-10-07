@@ -116,6 +116,7 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         SECONDARY_FLAGS = 23,
         OPERATING_FLAGS = 26,
         BEHAVIOR = 62,
+        BEHAVIOR_FLAGS = 99,
         CONTROL_FLAGS = 64,
         SECOND_PHASE = 66,
         FIRST_PHASE = 109,
@@ -158,6 +159,7 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
                                   .turret_view_mode = raw[TURRET_VIEW],
                                   .hull_view_mode = raw[HULL_VIEW],
                                   .behavior = raw[BEHAVIOR],
+                                  .behavior_flags = raw[BEHAVIOR_FLAGS],
                                   .reload_countdown = raw[RELOAD],
                                   .component_size = defaults[type].component_size};
     restore_motion(raw, &vehicle);

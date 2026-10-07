@@ -52,4 +52,5 @@ void fist_probe_write_vehicle_state(const fist_vehicle_state *state) {
         printf(" %u", (unsigned)state->animation_selectors[index]);
     }
     puts("");
+    printf("behavior_flags %u\n", (unsigned)state->behavior_flags);
 }

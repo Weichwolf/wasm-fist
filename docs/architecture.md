@@ -91,6 +91,10 @@ world tick/current-entry traversal are delivered in [world stepping](world-step.
 [Saved-mission installation](mission-world.md) now owns typed payloads, the physical roster and
 retained file-order initialization RNG, including all TRAIN1 objects and overwritten orphans.
 It reuses the existing allocation and typed state owners; unsupported classes reject the whole
-installation. The app still uses its player-only baseline. Terrain/contact/take-control of the
-installed world, complete living methods/command eligibility, dynamic combat payload publication,
+installation. [Primary fire dispatch](primary-fire.md) consumes the untargeted M1 station-zero
+branch and publishes complete shell/muzzle payloads into canonical physical world slots. It
+shares failure history and retains the actual panel/component/reload ordering; voice/sound
+candidates still require their audio consumers. The app still uses its player-only baseline.
+Terrain/contact/take-control of the installed world, complete living methods/command eligibility,
+flight/damage dispatch and remaining dynamic effect/retirement publication,
 battle drawing, audible PCM and mission outcomes remain required before a playable battle.

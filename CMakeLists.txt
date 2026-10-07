@@ -30,7 +30,7 @@ add_library(fist_assets STATIC src/assets/scenario.c src/assets/units.c src/asse
 target_include_directories(fist_assets PUBLIC src)
 target_link_libraries(fist_assets PRIVATE fist_build_options)
 target_compile_options(fist_assets PRIVATE -Werror)
-add_library(fist_sim STATIC src/sim/random.c src/sim/ground.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/vehicle_motion.c src/sim/driver.c src/sim/weapon_control.c src/sim/object_pool.c src/sim/projectile_launch.c src/sim/collision.c src/sim/projectile_flight.c src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c src/sim/smoke_animation.c src/sim/smoke.c src/sim/destruction_updates.c src/sim/aircraft_death.c src/sim/world_step.c src/sim/tree.c src/sim/mission_world.c)
+add_library(fist_sim STATIC src/sim/random.c src/sim/ground.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/vehicle_motion.c src/sim/driver.c src/sim/weapon_control.c src/sim/object_pool.c src/sim/projectile_launch.c src/sim/collision.c src/sim/projectile_flight.c src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c src/sim/smoke_animation.c src/sim/smoke.c src/sim/destruction_updates.c src/sim/aircraft_death.c src/sim/world_step.c src/sim/tree.c src/sim/mission_world.c src/sim/primary_fire.c)
 target_include_directories(fist_sim PUBLIC src)
 target_link_libraries(fist_sim PUBLIC fist_assets PRIVATE fist_build_options)
 target_compile_options(fist_sim PRIVATE -Werror)
@@ -266,6 +266,9 @@ endif()
 include(CTest)
 if(BUILD_TESTING AND NOT EMSCRIPTEN)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME primary_fire_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_primary_fire.py
+        --target native --native-probe $<TARGET_FILE:fist_projectile_launch_probe>)
     add_test(NAME mission_world_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_mission_world.py
         --target native --native-probe $<TARGET_FILE:fist_mission_world_probe>)

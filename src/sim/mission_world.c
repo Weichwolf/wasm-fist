@@ -5,6 +5,8 @@
 #include "sim/destruction_updates.h"
 #include "sim/object_pool.h"
 #include "sim/other_damage.h"
+#include "sim/primary_fire.h"
+#include "sim/projectile_launch.h"
 #include "sim/random.h"
 #include "sim/smoke.h"
 #include "sim/tree.h"
@@ -140,4 +142,29 @@ const fist_mission_object *fist_mission_world_object(const fist_mission_world *w
         return NULL;
     }
     return &world->objects[slot];
+}
+
+int fist_mission_world_fire_untargeted(fist_mission_world *world, fist_fire_history *history,
+                                       fist_fire_request request, fist_fire_result *out) {
+    if (world == NULL || out == NULL ||
+        fist_mission_world_object(world, request.launch.origin_slot) == NULL ||
+        world->pool.slots[request.launch.origin_slot].type != 0) {
+        return -1;
+    }
+    fist_vehicle_state *actor = &world->objects[request.launch.origin_slot].vehicle;
+    fist_fire_result result = {0};
+    if (fist_m1_fire_untargeted(&world->pool, actor, history, request, &result) != 0) {
+        return -1;
+    }
+    if (result.dispatched && result.launch.outcome == FIST_LAUNCH_FIRED) {
+        const fist_projectile *projectile = &result.launch.projectile;
+        world->objects[projectile->allocation.slot] =
+            (fist_mission_object){.projectile = *projectile};
+        if (result.launch.has_muzzle) {
+            const fist_muzzle_smoke *muzzle = &result.launch.muzzle;
+            world->objects[muzzle->allocation.slot] = (fist_mission_object){.muzzle = *muzzle};
+        }
+    }
+    *out = result;
+    return 0;
 }

@@ -197,6 +197,12 @@ file-order initialization RNG, including every TRAIN1 record and complete condit
 see docs/mission-world.md. Ten complete supported contexts install correctly; 37 other complete
 inputs fail explicitly for undelivered classes. Installation does not supply a living dispatcher
 or connect the player-only driving baseline to a complete battle.
+0076 supplies the consuming untargeted M1 station-zero fire branch, panel/component refresh,
+reload blocking and shared failed-attempt cooldown. The mission wrapper publishes complete
+shell/muzzle payloads at their actual physical slots while preserving unrelated payloads,
+roster and RNG. Both targets compare the original branch and a real owned TRAIN1 selection,
+reload and fire sequence. See docs/primary-fire.md for the declared post-behavior boundary;
+this does not supply complete living ticks, targeted/other-station fire or audible PCM.
 Integrate the delivered launch, flight, damage and effect owners into typed live-world scheduling,
 with damage before impact continuation and correct same-pass allocation/update order, before
 binding fire input. Reuse 0074's current-entry iterator rather than adding another scheduling
@@ -206,8 +212,10 @@ occupancy instead of presuming an empty short arena.
 Prioritize connecting the delivered combat owners to the first mission. Consume the owned saved
 world through terrain/contact and take-control installation; recover complete reached living
 ground methods and command eligibility before extending later all-mission AI coverage. Install
-dynamic projectile/effect/retirement payloads before publishing allocations, keeping one physical
-roster owner. Do not replace unknown living-class methods with no-op dispatch. TRAIN1 also needs
+remaining dynamic effect/retirement payloads before the next registry visit, keeping one physical
+roster owner. Shell/muzzle birth already uses the canonical world; consume those values through
+flight and damage before impact continuation. Do not replace unknown living-class methods with
+no-op dispatch. TRAIN1 also needs
 the shared 9c5d tree-change producer and live type-26 modes 0..3; its delivered conditional 9c4f
 tree method and collision/destruction owners do not supply those remaining behaviors.
 Preserve the delivered selection/reload clock and truthful display. Replay timed

@@ -60,15 +60,19 @@ static fist_muzzle_smoke initialize_muzzle(const fist_vehicle_state *vehicle,
                                .projection_scale = MUZZLE_SCALE};
 }
 
+bool fist_m1_launch_source_valid(const fist_object_pool *pool, const fist_vehicle_state *vehicle,
+                                 fist_launch_request request) {
+    return fist_object_pool_is_valid(pool) && vehicle != NULL && vehicle->type == M1_TYPE &&
+           vehicle->component_size == fist_vehicle_component_size(M1_TYPE) &&
+           request.origin_slot >= FIST_POOL_SHORT_SLOTS &&
+           request.origin_slot < FIST_UNIT_REGISTRY_COUNT &&
+           pool->slots[request.origin_slot].used != 0 &&
+           pool->slots[request.origin_slot].type == M1_TYPE;
+}
+
 int fist_m1_launch_untargeted(fist_object_pool *pool, fist_vehicle_state *vehicle,
                               fist_launch_request request, fist_launch_result *out) {
-    if (!fist_object_pool_is_valid(pool) || vehicle == NULL || out == NULL ||
-        vehicle->type != M1_TYPE ||
-        vehicle->component_size != fist_vehicle_component_size(M1_TYPE) ||
-        request.origin_slot < FIST_POOL_SHORT_SLOTS ||
-        request.origin_slot >= FIST_UNIT_REGISTRY_COUNT ||
-        pool->slots[request.origin_slot].used == 0 ||
-        pool->slots[request.origin_slot].type != M1_TYPE) {
+    if (out == NULL || !fist_m1_launch_source_valid(pool, vehicle, request)) {
         return -1;
     }
     fist_launch_result result = {.outcome = FIST_LAUNCH_EMPTY,
