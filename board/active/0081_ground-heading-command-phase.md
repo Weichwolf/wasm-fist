@@ -28,6 +28,11 @@ their support. Original observation rejects reserved address-zero/one device sca
 
 ## Next
 
+Closed 0100 proves complete obstacle maneuver, predictive collision and idle turret returns,
+including the reaching motion producer and genuine parent entries seven, eleven and fifteen.
+Consume its complete contract under open 0101 before remaining firing/diagnostic callbacks and
+full parent/class consumption. This Contract and Accept remain unchanged.
+
 Reproduce the complete first difference and recover the nested callback plus caller/global
 contract. Add the required saved heading/counter state and connect the shared RNG transaction
 to actual canonical control and any still-delivered standalone boundary. Consume complete
@@ -259,3 +264,16 @@ Full build (43 native CTests, 41 WASM suites and two Node probes), strict LLVM 1
 no partial bank is installed. Continue remaining maneuver/fire/diagnostic callbacks and full
 heading/counter/RNG parent and living class consumption. First playable battle/PCM/outcomes
 and independent complete-game WASM acceptance remain open; final streak zero.
+
+Closed 0100 proves complete original ae66/af1c/f69:b2a0, reaching b059 and b017 without nested
+substitutions. Five required groups pass without skips: 528022 complete returns, including
+38376 genuine parent returns; all 47 missions at four prepared details consume 42240 returns
+through 188 worlds/3840 ground actors. Separate retention/presence gates verify 6144 complete
+class-start/readiness returns, all new maneuver byte values and 512 real target lifecycle/clear
+returns. A nonzero retained target is a presence gate, not a dereference; release/reuse alone
+consumes no idle RNG. A separate 200-return gate verifies every search exit 0..15 and ordered
+competing bodies through actual allocation. The full b112 half-turn and distinct +46/+51
+owners are proved. See docs/ground-maneuver.md and closed 0100. Production C/programs remain
+unchanged from accepted 0099; shared C consumption is open 0101. This parent's Contract/Accept
+remain unchanged. Complete remaining firing/diagnostic callbacks and full heading/counter/RNG
+parent and living class/battle/PCM/outcomes; independent full-game WASM streak zero.

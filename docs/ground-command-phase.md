@@ -1,5 +1,11 @@
 # Ground command phase: recovered input and pending consumption
 
+Closed WI 0100 proves complete [obstacle maneuvers and idle turret](ground-maneuver.md),
+including the reaching motion producer, actual ordered predictive collision, every search exit
+and genuine parent entries seven, eleven and fifteen. Required full-domain/all-47, retention
+and target-presence gates pass. Shared C is open 0101; remaining firing/diagnostic callbacks
+and full 0081 parent/class work remain open.
+
 Closed WI 0098 proves complete original [physical roster promotion](roster-promotion.md),
 including genuine parent entry thirteen, actual allocated registry-overwritten actors and
 all-47 prepared sequential world returns. Closed 0099 supplies shared canonical C consumption
@@ -184,7 +190,7 @@ The complete ab82 mode selector and its conditional additional RNG call are docu
 presence now survive owned restoration and initialization. The existing +42 counter remains
 the sole owner; no parent-phase heading update or partial callback bank is installed. Bearing/range and target discovery now have their complete shared child owners in 0094 and
 0093, while throttle/profile is delivered by 0095. Original acquisition/aim is proved by
-0096 and consumed by closed 0097. Remaining roster/maneuver/presentation callbacks and full
+0096 and consumed by closed 0097. Remaining maneuver/fire/presentation callbacks and full
 heading/counter/RNG parent and class consumption are still required before accepting 0081.
 
 The complete ac75 route/formation goal helper is documented in

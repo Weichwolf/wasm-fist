@@ -58,6 +58,8 @@ frozen reconstruction, not rewrite completion.
 | 0097 | Complete shared target installation, aim feedback and selected typed notifications delivered. Both-target required original/domain/all-47 canonical, full-build/style/memory and actual scene gates pass; remaining callbacks/full 0081 and living battle/PCM remain open. |
 | 0098 | Complete original physical roster promotion and genuine parent entry-thirteen evidence delivered. All-47 prepared worlds, flag domains, actual allocated orphans and used-domain repair evidence pass; shared C is open 0099 and full 0081 remains open. |
 | 0099 | Complete shared canonical physical roster promotion delivered. Required native/WASM original/domain/all-47, full-build/style/memory and actual scene gates pass; remaining callbacks/full 0081 and living battle/PCM remain open. |
+| 0100 | Complete original maneuver/idle turret/predictive collision and genuine parent-entry evidence delivered. Full domains/all-47 prepared worlds, retention, release/reuse presence and every search exit pass; shared C is open 0101 and full 0081 remains open. |
+| 0101 | Own canonical shared obstacle maneuver, predictive collision and idle turret callbacks, retaining existing actor/world/reference/geometry/RNG owners. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |
