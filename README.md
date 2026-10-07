@@ -88,6 +88,9 @@ The [vehicle motion](docs/vehicle-motion.md) implements speed/hull control, both
 position integration and manual turret slew. `test_vehicle_motion.py --originals --oracle`
 checks complete original motion returns, every heading, all four slope profiles to their
 actual speed caps and sustained driving on both targets. Collision and full targeting/weapon integration remain open.
+The shared [planar geometry](docs/planar-geometry.md) supplies original navigation bearing and
+distance precision for the pending command phase; its required original gate checks 397671
+returns and all 960 saved actor/goal pairs on both targets. Full navigation dispatch remains open.
 The [ground contact](docs/ground-contact.md) supplies installed height and independent hull/
 turret slopes in shared typed state. `test_ground.py --originals --oracle` checks every heading,
 all height-byte differences and all 960 ground snapshots at each original detail level against

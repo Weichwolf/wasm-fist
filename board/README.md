@@ -44,6 +44,7 @@ frozen reconstruction, not rewrite completion.
 | 0083 | Complete nested ground command selection using canonical orders/RNG, owned saved selectors and conditional extra random consumption delivered; both-target original/domain/world/build/style/memory/scene gates pass. Full 0081 remains open. |
 | 0084 | Complete nested route/formation goal assignment using canonical orders/physical roster and retained heading/goal ownership delivered; both-target original/domain/world/build/style/memory/scene gates pass. Full 0081 remains open. |
 | 0085 | Rewrite development and CI moved to master; ghidra retains the exact frozen decompiled/patched reconstruction. Both refs published without rewriting history. |
+| 0086 | Complete shared planar navigation bearing/distance and local numeric scratch delivered; both-target original/domain/corpus/build/style/memory and canonical regressions pass. Existing scene binaries/evidence are unchanged; full 0081 remains open. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

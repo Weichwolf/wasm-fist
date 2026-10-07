@@ -104,3 +104,11 @@ pass required original/domain/corpus/whole-world comparisons and build/style/mem
 Future sampling remains in this parent's contract; no heading-only update or partial dispatch
 is wired. 0083/0084 provide two complete prerequisites, not acceptance of this full phase or a
 playable battle. Development continues on master under closed 0085; requirements are unchanged.
+
+WI 0086 supplies the complete semantic 0541 planar bearing/distance return in shared C11,
+including original quadrant/fold/normalized interpolation and distance precision. See
+docs/planar-geometry.md. Required both-target and sanitizer coverage checks 397671 complete
+returns and all 960 saved actor/goal pairs without skips. This prerequisite adds no ab88
+target-reference interpretation, callback bank or parent scheduling; existing scene binaries
+are unchanged. Continue the complete remaining command and caller contract using this numeric
+owner, keeping this WI's Contract and Accept intact.

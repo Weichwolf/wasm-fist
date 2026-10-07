@@ -135,3 +135,8 @@ The complete ac75 route/formation goal helper is documented in
 physical roster, retains saved heading history/average and signed goals, and preserves RNG and
 all unrelated world state. Parent heading sampling and callback scheduling remain pending;
 no partial bank or new living-prefix acceptance follows from the isolated complete helper.
+
+The complete semantic 0541 planar bearing/distance prerequisite is documented in
+[planar geometry](planar-geometry.md) (WI 0086). It owns original numeric rules and local scratch;
+it does not implement ab88 target resolution or its full dispatch. Use that shared owner when
+recovering remaining command handlers. Parent/callback/battle/PCM acceptance remains open.
