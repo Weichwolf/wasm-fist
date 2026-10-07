@@ -123,3 +123,10 @@ builds and existing original selector/goal/start/timed canonical regressions pas
 does not produce bearing/range, translate saved targets, wire a partial parent bank or advance the
 living tick-seven prefix. Continue the complete remaining callbacks and caller contract; this
 WI's Contract and Accept remain unchanged.
+
+WI 0088 proves complete original d755 preparation, which the current C loader does not
+implement. All 47 originals account for saved target clearing, non-ground reset, temporary
+release and tree RNG; TRAIN1 adds 98 values before its complete first controlled ab03 call.
+See docs/mission-ready-boundary.md. Add separate canonical readiness and explicit runtime
+identities before interpreting saved near references or claiming a real mission start.
+Keep c296's accepted boundary and this parent's complete command/class requirements intact.

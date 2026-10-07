@@ -6,6 +6,11 @@ the verified original input and dispatch contracts needed for that implementatio
 WI 0082 supplies owned orders; WI 0083 implements the complete nested mode selector and WI 0084
 the complete route/formation goal return. These milestones do not replace full 0081 acceptance.
 
+Closed WI 0088 proves the later [original mission-ready reset](mission-ready-boundary.md):
+saved target clearing, class reset, temporary registry release and tree RNG. TRAIN1 adds 98
+RNG calls. The current C loader/prefix ends before this stage; canonical readiness is required
+before accepting an actual mission start or interpreting runtime targets.
+
 ## Original phase and callback banks
 
 Frozen DOS image SHA256 `d46f480dd2214b2693b4192a42aa79fb7bffb8d692fd67ddc3d746dfdea9c5e5`.
