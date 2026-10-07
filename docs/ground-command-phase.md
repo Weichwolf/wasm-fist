@@ -208,3 +208,13 @@ The complete ad08 route progress and proved count-32 storage repair are document
 [ground route progress](ground-route-progress.md). This callback shares canonical route and
 retained unsigned range ownership. It does not consume target references, produce bearing/range
 or supply a partial parent callback bank. Full 0081 acceptance remains unchanged.
+
+## Complete original fire handoff
+
+Closed 0102 proves complete af97/afa2, genuine M3/BMP readiness/rack loading, type-15
+allocation/construction and selected display/c047 request admission. Required whole-domain/
+allocated/all-47 tests verify 608968 complete original returns, including 29439 genuine ab03
+returns at entries five/ten/fourteen in both banks. Separate full-DGROUP retention verifies
+3072 class-start/readiness returns and both new rack-state fields. See automatic-fire.md.
+Shared consumption is open 0103; ae5c/b0be, selected b152 and full parent/class/missile flight/
+battle/PCM/outcomes still prevent full 0081 acceptance. No partial C bank is installed.

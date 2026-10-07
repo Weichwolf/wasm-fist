@@ -141,5 +141,6 @@ SDL/Chromium scenes and sanitized SDL all pass. Two after images were visually r
 An externally terminated partial build is excluded and superseded by the terminal complete
 replay. Compact evidence, exact commands, source/program/corpus/original/reference hashes
 and exclusions live in `/tmp/wasm-fist-0101-review/receipt.json`; obsolete owned artifacts are
-cleaned. Continue af97 under open 0102, then remaining callbacks and full parent/class/battle/
-PCM/outcomes. No complete-game acceptance follows; final WASM streak zero.
+cleaned. Closed 0102 proves complete original automatic fire and missile launch; shared
+consumption is open 0103. Then finish remaining callbacks and full parent/class/battle/PCM/
+outcomes. No complete-game acceptance follows; final WASM streak zero.

@@ -60,7 +60,8 @@ frozen reconstruction, not rewrite completion.
 | 0099 | Complete shared canonical physical roster promotion delivered. Required native/WASM original/domain/all-47, full-build/style/memory and actual scene gates pass; remaining callbacks/full 0081 and living battle/PCM remain open. |
 | 0100 | Complete original maneuver/idle turret/predictive collision and genuine parent-entry evidence delivered. Full domains/all-47 prepared worlds, retention, release/reuse presence and every search exit pass; shared C is delivered by 0101 and full 0081 remains open. |
 | 0101 | Complete shared obstacle maneuvers, idle turret and predictive collision delivered; both-target required original/domain/all-47, full-build/style/memory and actual scene gates pass. Full 0081 and living battle/PCM remain open. |
-| 0102 | Recover complete original af97 and genuine parent entries five/fourteen before shared consumption and remaining callbacks. |
+| 0102 | Complete original af97/afa2, missile readiness/launch and genuine parent entries five/ten/fourteen delivered; required full domains/allocations/all-47/retention gates pass. Shared C is open 0103 and full 0081 remains open. |
+| 0103 | Own complete shared automatic fire, M3/BMP missile readiness/constructor and logical notifications using canonical state. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

@@ -30,9 +30,10 @@ their support. Original observation rejects reserved address-zero/one device sca
 
 Closed 0100 proves complete obstacle maneuver, predictive collision and idle turret returns,
 including the reaching motion producer and genuine parent entries seven, eleven and fifteen.
-Closed 0101 supplies its complete shared C consumption. Continue af97 under open 0102,
-then remaining callbacks/selected diagnostics and full parent/class consumption. This
-Contract and Accept remain unchanged.
+Closed 0101 supplies its complete shared C consumption. Closed 0102 proves complete original
+af97/afa2, missile readiness/launch and genuine parent entries five/ten/fourteen. Continue
+shared fire consumption under open 0103, then ae5c/b0be, selected diagnostics and full parent/
+class consumption. This Contract and Accept remain unchanged.
 
 Reproduce the complete first difference and recover the nested callback plus caller/global
 contract. Add the required saved heading/counter state and connect the shared RNG transaction
@@ -285,8 +286,23 @@ ownership. Required native/WASM and ASan/UBSan gates pass without skips: 954287 
 19200 actual prepared-world callbacks per target across all 47 missions/four details; every
 search exit, presence-only release/reuse, initialization/readiness retention, atomic failures
 and unchanged unrelated world bytes are proved. Strict style, complete build and current
-SDL/Chromium/sanitized scenes pass. No partial parent bank is installed. Continue complete
-af97 and genuine entries five/fourteen under open 0102, then ae5c/afa2/b0be, selected b152 and
-full heading/counter/RNG parent/class consumption. This Contract/Accept remain unchanged.
+SDL/Chromium/sanitized scenes pass. No partial parent bank is installed. Closed 0102 proves
+original af97/afa2 and genuine entries five/ten/fourteen; shared consumption is open 0103.
+Then finish ae5c/b0be, selected b152 and full heading/counter/RNG parent/class consumption.
+This Contract/Accept remain unchanged.
 First playable battle/PCM/outcomes and independent complete-game WASM acceptance remain open;
 final streak zero.
+
+Closed 0102 proves complete original af97/afa2 and genuine parent entries five/ten/fourteen
+without nested gameplay replacements. Six required groups pass without skips: 608968
+whole returns, including 29439 genuine parents; all 47 missions/four details contribute
+30720 returns through 188 worlds/3840 ground actors. Actual allocations cover all 28 target
+types/full flag bytes, physical orphans, capacity/freed holes/reserved bindings and complete
+wrapped type-15 construction. Ordered rack state/reserve domains, sequential differences,
+selected display, c047 audio request admission and unsafe original target release/reuse are
+verified. A separate full-DGROUP retention group proves 3072 complete class-start/readiness
+returns and single-owner requirements for +b7/+b8 beside existing +b5/+b6. Production C/
+programs and original/reference/dependency pins remain unchanged. Complete shared consumption
+is open 0103; then finish ae5c/b0be, selected b152 and full heading/counter/RNG parent/class.
+First playable battle/missile flight/PCM/outcomes and independent full-game WASM acceptance
+remain open; final streak zero. This Contract/Accept remain unchanged.
