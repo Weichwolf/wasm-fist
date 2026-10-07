@@ -37,6 +37,8 @@ frozen reconstruction, not rewrite completion.
 | 0076 | Consuming untargeted M1 station-zero fire, shared failure cooldown and canonical shell/muzzle publication delivered. Both-target original/real-TRAIN1/full-build/style/memory gates pass; flight/damage scheduling, command eligibility and playable battle remain under 0065. |
 | 0077 | Canonical combat visits and complete ordered payload publication delivered; one physical roster and selected-loss suspension before impact. Both-target original/build/style/memory gates pass; living dispatch, UI/device/PCM and playable battle remain under 0065. |
 | 0078 | Canonical player control/render ownership in complete installed worlds delivered, with both-target original/visual/memory/build/style gates; living battle/PCM/outcomes remain under 0041/0065. |
+| 0079 | Canonical ground position histories and reached phase consumption delivered; all counter/phase/corpus, original timed, build/style/memory and real scene gates pass. |
+| 0080 | Next reached living update: per-class movement-word/speed-counter/component maintenance, before complete world behavior and battle. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

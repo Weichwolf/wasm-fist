@@ -53,4 +53,10 @@ void fist_probe_write_vehicle_state(const fist_vehicle_state *state) {
     }
     puts("");
     printf("behavior_flags %u\n", (unsigned)state->behavior_flags);
+    printf("position_history");
+    for (size_t index = 0; index < FIST_VEHICLE_POSITION_SAMPLES; ++index) {
+        printf(" %u %u", (unsigned)state->position_history[index].x,
+               (unsigned)state->position_history[index].y);
+    }
+    puts("");
 }

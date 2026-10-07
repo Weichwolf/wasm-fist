@@ -235,6 +235,16 @@ all pass. See docs/driving-scene.md and closed 0078. Complete living dispatch an
 eligibility, canonical battle scheduling/drawing, audible PCM, selected-loss UI and outcomes
 remain required; this controlled subset does not complete a playable mission.
 
+
+Closed 0079 adds the six owned saved ground position samples and original phase-selected
+sampling counter to the canonical controlled actor. Both targets pass complete original counter,
+phase and 960-snapshot comparisons, reaching TRAIN1 prefix returns, timed control regressions,
+strict builds/style, memory and actual native/browser scenes. See docs/vehicle-history.md.
+The next reached living-prefix difference is TRAIN1 tick five, phase 42: movement word +5d
+is consumed by the original class maintenance callback. Open 0080 owns its complete per-class
+budget/speed-counter/component stage. Other phase/behavior, contacts, living world scheduling,
+visible battle, audible PCM and outcomes remain required; this does not complete a mission.
+
 ## Accept
 
 Both running platforms handle primary player weapon commands, ammunition and reload timing

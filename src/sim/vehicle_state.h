@@ -10,7 +10,8 @@
 enum {
     FIST_VEHICLE_WEAPON_SLOTS = 4,
     FIST_VEHICLE_COMPONENT_BYTES = 62,
-    FIST_VEHICLE_ANIMATION_SELECTORS = 3
+    FIST_VEHICLE_ANIMATION_SELECTORS = 3,
+    FIST_VEHICLE_POSITION_SAMPLES = 6
 };
 
 typedef struct {
@@ -54,6 +55,12 @@ typedef struct {
 } fist_vehicle_weapons;
 
 typedef struct {
+    /* Original middle coordinate words, retaining bits 8..23. */
+    uint16_t x;
+    uint16_t y;
+} fist_vehicle_position_sample;
+
+typedef struct {
     uint16_t type;
     uint16_t registry_index;
     uint16_t generation;
@@ -74,6 +81,8 @@ typedef struct {
     uint8_t secondary_flags;
     uint8_t operating_flags;
     uint8_t random_phases[2];
+    /* Newest first; +6d in random_phases[0] is the shared sampling counter. */
+    fist_vehicle_position_sample position_history[FIST_VEHICLE_POSITION_SAMPLES];
     uint8_t control_mode;
     uint8_t turret_view_mode;
     uint8_t hull_view_mode;
@@ -104,6 +113,12 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
  * and random on failure. No allocation is needed. */
 int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random *random,
                             uint8_t link_mode, fist_vehicle_state *out);
+
+/* Execute the position-history callback when the current class phase selects
+ * it. Does not advance the class phase or execute other callbacks. The original
+ * byte counter wraps, and every twelfth call inserts the current position.
+ * Invalid ground type/component size preserves the complete vehicle. */
+int fist_vehicle_history_phase(fist_vehicle_state *vehicle);
 
 /* Complete original component payload size; 0 for unsupported classes. */
 size_t fist_vehicle_component_size(uint16_t type);

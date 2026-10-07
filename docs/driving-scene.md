@@ -7,7 +7,7 @@ borrow the selected physical ground actor directly from `world->objects`; there 
 second player. The canonical combat owner owns selection and the physical roster. All other
 objects and the final file-order initialization RNG survive controlled intervals unchanged. `sim/driver` connects
 manual commands, altitude transfer, gun/recoil, movement/manual turret, phase progression,
-reload dispatch and ground contact. `app/driving_view` draws the current actor through the
+reload/history dispatch and ground contact. `app/driving_view` draws the current actor through the
 common sprite compositor and follow camera, then its C/softgl weapon display. Native SDL2
 (software renderer and software window framebuffer) and browser events provide
 storage, monotonic elapsed time and
@@ -58,9 +58,11 @@ supplies all class profiles, ammunition queries and selection/reload events.
 
 Each step transfers only ground byte +1dh to altitude byte +0dh, preserving the other three
 altitude lanes. It then runs the gun/recoil prefix and complete motion/manual turret stages,
-adds 2 to phase +3dh, dispatches the reload method on phase & 1eh == 0, and publishes height and
-independent hull/turret slopes at the new pose. Failure preserves the complete actor, feedback
-and controller clock/input state. Other class firing/damage/AI stages remain separate work.
+adds 2 to phase +3dh, dispatches reload on phase & 1eh == 0 and position history on phase &
+1eh == 6, then publishes height and independent hull/turret slopes at the new pose. Failure
+preserves the complete actor, feedback and controller clock/input state. The
+[position-history owner](vehicle-history.md) retains all six saved samples and the shared
+initialized counter. Other phase callbacks and class firing/damage/AI stages remain separate work.
 
 The session owns selection/reload/voice-request counts, the last requested voice ID and the
 active notice with its simulation-tick deadline. This is mechanical feedback and verification,

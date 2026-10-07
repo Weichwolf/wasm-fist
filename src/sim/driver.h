@@ -23,7 +23,7 @@ typedef struct {
 } fist_driver_controls;
 
 /* Manual driving stage: actions, altitude-byte transfer, gun/recoil prefix,
- * movement/manual turret, phase +2, reload dispatch and final ground contact.
+ * movement/manual turret, phase +2, reload/history dispatch and final ground contact.
  * Caller owns elapsed time and roster participation. Firing/AI/damage remain
  * separate. Invalid input preserves both vehicle and weapon events. */
 int fist_driver_step(fist_vehicle_state *vehicle, const fist_klc_image *height,

@@ -321,6 +321,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME heightfield_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_heightfield.py
         --target native --native-probe $<TARGET_FILE:fist_heightfield_probe>)
+    add_test(NAME vehicle_history_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_vehicle_history.py
+        --target native --native-probe $<TARGET_FILE:fist_vehicle_motion_probe>)
     add_test(NAME vehicle_motion_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_vehicle_motion.py
         --target native --native-probe $<TARGET_FILE:fist_vehicle_motion_probe>)

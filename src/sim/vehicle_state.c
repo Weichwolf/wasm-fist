@@ -120,6 +120,7 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         CONTROL_FLAGS = 64,
         SECOND_PHASE = 66,
         FIRST_PHASE = 109,
+        POSITION_HISTORY = 110,
         TURRET_VIEW = 134,
         CAMERA_HEIGHT = 135,
         HULL_VIEW = 141,
@@ -164,6 +165,11 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
                                   .component_size = defaults[type].component_size};
     restore_motion(raw, &vehicle);
     restore_weapon_control(raw, &vehicle);
+    for (size_t index = 0; index < FIST_VEHICLE_POSITION_SAMPLES; ++index) {
+        const uint8_t *sample = raw + POSITION_HISTORY + (index * 2 * sizeof(uint16_t));
+        vehicle.position_history[index] = (fist_vehicle_position_sample){
+            fist_read_u16le(sample), fist_read_u16le(sample + sizeof(uint16_t))};
+    }
     const size_t rounds = type == 2 ? T80_ROUNDS : OTHER_ROUNDS;
     for (size_t index = 0; index < FIST_VEHICLE_WEAPON_SLOTS; ++index) {
         vehicle.weapons.rounds[index] = fist_read_u16le(raw + rounds + (index * sizeof(uint16_t)));
@@ -251,4 +257,29 @@ int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random 
 
 size_t fist_vehicle_component_size(uint16_t type) {
     return type < FIST_UNIT_GROUND_VEHICLE_COUNT ? defaults[type].component_size : 0;
+}
+
+int fist_vehicle_history_phase(fist_vehicle_state *vehicle) {
+    enum { PHASE_MASK = 0x1e, HISTORY_PHASE = 6, SAMPLE_INTERVAL = 12, COORDINATE_SHIFT = 8 };
+    if (vehicle == NULL || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
+        return -1;
+    }
+    if ((vehicle->drive.update_phase & PHASE_MASK) != HISTORY_PHASE) {
+        return 0;
+    }
+    /* aa37 -> f69:b038 (raw 1a6c8..1a721): unsigned byte INC/CMP, then
+     * descending word copies. The initialized random byte is the same counter. */
+    vehicle->random_phases[0] = (uint8_t)(vehicle->random_phases[0] + 1);
+    if (vehicle->random_phases[0] < SAMPLE_INTERVAL) {
+        return 0;
+    }
+    vehicle->random_phases[0] = 0;
+    for (size_t index = FIST_VEHICLE_POSITION_SAMPLES - 1; index > 0; --index) {
+        vehicle->position_history[index] = vehicle->position_history[index - 1];
+    }
+    vehicle->position_history[0] = (fist_vehicle_position_sample){
+        .x = (uint16_t)((uint32_t)vehicle->map_x >> COORDINATE_SHIFT),
+        .y = (uint16_t)((uint32_t)vehicle->map_y >> COORDINATE_SHIFT)};
+    return 0;
 }

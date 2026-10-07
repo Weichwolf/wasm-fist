@@ -80,7 +80,7 @@ int fist_driver_step(fist_vehicle_state *vehicle, const fist_klc_image *height,
     }
     next.drive.update_phase = (uint8_t)(next.drive.update_phase + CLASS_PHASE_STEP);
     fist_weapon_events emitted = {0};
-    if (fist_weapon_reload_phase(&next, &emitted) != 0 ||
+    if (fist_weapon_reload_phase(&next, &emitted) != 0 || fist_vehicle_history_phase(&next) != 0 ||
         fist_vehicle_ground_update(&next, height) != 0) {
         return -1;
     }

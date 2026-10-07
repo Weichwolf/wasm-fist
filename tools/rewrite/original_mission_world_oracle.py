@@ -22,7 +22,7 @@ class OriginalMissionWorldOracle(OriginalObjectPoolOracle):
             output+=line('object',[slot,allocation[0]])+payload_lines(raw,allocation)
         return output
 
-    def install(self, records, seeds, cursor, link, commands, reload=False):
+    def prepare(self, records, seeds, cursor, link):
         from unicorn.x86_const import UC_X86_REG_AX,UC_X86_REG_BX,UC_X86_REG_CX,UC_X86_REG_DI,UC_X86_REG_EFLAGS
         status,golden=install(records,seeds,cursor,link)
         if status: raise AssertionError('Unsupported/invalid/exhausted inputs are explicit C-only gates')
@@ -50,6 +50,11 @@ class OriginalMissionWorldOracle(OriginalObjectPoolOracle):
             actual=bytes(machine.mem_read(DGROUP+pointer,size))
             if actual!=bytes(golden[1][slot][1]): raise AssertionError('Complete original saved/init payload differs')
         if self.random_state(machine)!=(golden[3],golden[4]): raise AssertionError('Original complete installation RNG differs')
+        return machine, objects
+
+    def install(self, records, seeds, cursor, link, commands, reload=False):
+        from unicorn.x86_const import UC_X86_REG_DI
+        machine, objects = self.prepare(records, seeds, cursor, link)
         output=line('status',[0])+self.world_lines(machine,objects)
         if reload:
             words,end=self.random_state(machine)

@@ -30,17 +30,19 @@ enum {
     MARKER = 123
 };
 
-static void capture(const void *object, uint8_t *out, size_t size) {
+static void capture(const void *object, size_t size, void *out) {
     const unsigned char *bytes = object;
+    unsigned char *snapshot = out;
     for (size_t index = 0; index < size; ++index) {
-        out[index] = bytes[index];
+        snapshot[index] = bytes[index];
     }
 }
 
-static int unchanged(const void *object, const uint8_t *before, size_t size) {
+static int unchanged(const void *object, size_t size, const void *before) {
     const unsigned char *bytes = object;
+    const unsigned char *snapshot = before;
     for (size_t index = 0; index < size; ++index) {
-        if (bytes[index] != before[index]) {
+        if (bytes[index] != snapshot[index]) {
             return 0;
         }
     }
@@ -60,9 +62,9 @@ static uint8_t *read_file(const char *path, size_t *size) {
     return data;
 }
 
-static int invalid(const fist_units *units, const fist_random *random, fist_mission_world *world) {
-    uint8_t before[sizeof(*world)];
-    capture(world, before, sizeof(before));
+static int invalid(const fist_units *units, fist_mission_world *before, const fist_random *random,
+                   fist_mission_world *world) {
+    capture(world, sizeof(*world), before);
     fist_random bad = *random;
     bad.next_stream = FIST_RANDOM_STREAMS;
     return fist_mission_world_initialize(NULL, random, 0, world) == -1 &&
@@ -71,12 +73,13 @@ static int invalid(const fist_units *units, const fist_random *random, fist_miss
                    fist_mission_world_initialize(units, &bad, 0, world) == -1 &&
                    fist_mission_world_object(NULL, 0) == NULL &&
                    fist_mission_world_object(world, FIST_UNIT_REGISTRY_COUNT) == NULL &&
-                   unchanged(world, before, sizeof(before))
+                   unchanged(world, sizeof(*world), before)
                ? 0
                : -1;
 }
 
-static int tree_commands(fist_mission_world *world, const uint8_t *input, size_t count) {
+static int tree_commands(fist_mission_world *world, const uint8_t *input, size_t count,
+                         fist_mission_world *before) {
     for (size_t index = 0; index < count; ++index) {
         const uint8_t *request = input + (index * COMMAND);
         const uint16_t slot = fist_read_u16le(request);
@@ -84,23 +87,22 @@ static int tree_commands(fist_mission_world *world, const uint8_t *input, size_t
         if (slot < FIST_UNIT_REGISTRY_COUNT && world->pool.slots[slot].used != 0 &&
             world->pool.slots[slot].type == TREE) {
             fist_tree *tree = &world->objects[slot].tree;
-            uint8_t before[sizeof(*world)];
-            capture(world, before, sizeof(before));
+            capture(world, sizeof(*world), before);
             const fist_tree_update update = {request[2], request[3]};
             if (fist_tree_advance(NULL, tree, update) != -1 ||
                 fist_tree_advance(&world->pool, NULL, update) != -1 ||
-                !unchanged(world, before, sizeof(before))) {
+                !unchanged(world, sizeof(*world), before)) {
                 return -1;
             }
             const uint8_t old_variant = tree->variant;
             status = fist_tree_advance(&world->pool, tree, update);
-            if (status != 0 && !unchanged(world, before, sizeof(before))) {
+            if (status != 0 && !unchanged(world, sizeof(*world), before)) {
                 return -1;
             }
             if (status == 0) {
                 const uint8_t new_variant = tree->variant;
                 tree->variant = old_variant;
-                const int preserved = unchanged(world, before, sizeof(before));
+                const int preserved = unchanged(world, sizeof(*world), before);
                 tree->variant = new_variant;
                 if (!preserved) {
                     return -1;
@@ -147,24 +149,29 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size) {
         random.words[index] = fist_read_u16le(request + (index * sizeof(uint16_t)));
     }
     fist_mission_world *world = calloc(1, sizeof(*world));
-    if (world == NULL) {
+    fist_mission_world *before = malloc(sizeof(*before));
+    if (world == NULL || before == NULL) {
+        free(before);
+        free(world);
         return -1;
     }
     fist_mission_world_reset(world);
     world->random.words[0] = MARKER;
-    uint8_t before[sizeof(*world)];
-    capture(world, before, sizeof(before));
-    if (invalid(units, &random, world) != 0) {
+    capture(world, sizeof(*world), before);
+    if (invalid(units, before, &random, world) != 0) {
+        free(before);
         free(world);
         return -1;
     }
     const int status = fist_mission_world_initialize(units, &random, request[LINK], world);
-    if (status != 0 && !unchanged(world, before, sizeof(before))) {
+    if (status != 0 && !unchanged(world, sizeof(*world), before)) {
+        free(before);
         free(world);
         return -1;
     }
     int result = 0;
-    if (status == 0 && invalid(units, &random, world) != 0) {
+    if (status == 0 && invalid(units, before, &random, world) != 0) {
+        free(before);
         free(world);
         return -1;
     }
@@ -173,6 +180,7 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size) {
         result = fist_probe_write_mission_world(world);
         if (result != 0 ||
             fist_mission_world_initialize(units, &world->random, request[LINK], world) != 0) {
+            free(before);
             free(world);
             return -1;
         }
@@ -188,11 +196,12 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size) {
     }
     result = status == 0 ? fist_probe_write_mission_world(world) : 0;
     if (result == 0 && status == 0) {
-        result = tree_commands(world, request + HEADER, count);
+        result = tree_commands(world, request + HEADER, count, before);
     }
     if (reset_checked(world) != 0) {
         result = -1;
     }
+    free(before);
     free(world);
     return result;
 }
