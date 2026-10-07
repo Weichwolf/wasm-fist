@@ -138,13 +138,10 @@ Compile the memory probe sequentially after production builds are terminal:
 mkdir -p /tmp/wasm-fist-0075-sanitizer
 clang -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-unused-function -Werror \
   -fno-strict-aliasing -ffast-math -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 \
-  -Isrc -Itools/rewrite src/assets/units.c src/assets/scenario.c src/assets/vehicle.c src/assets/klc.c \
-  src/sim/random.c src/sim/rotation.c src/sim/vehicle_state.c src/sim/ground.c \
-  src/sim/object_pool.c src/sim/collision.c src/sim/projectile_launch.c src/sim/projectile_flight.c \
-  src/sim/smoke_animation.c src/sim/vehicle_damage.c src/sim/damage_common.c src/sim/other_damage.c \
-  src/sim/smoke.c src/sim/destruction_updates.c src/sim/tree.c src/sim/mission_world.c \
+  -Isrc -Itools/rewrite src/assets/*.c src/sim/*.c \
   tools/rewrite/probe_io.c tools/rewrite/object_pool_probe_io.c tools/rewrite/combat_probe_io.c \
-  tools/rewrite/vehicle_probe_io.c tools/rewrite/mission_world_probe.c \
+  tools/rewrite/vehicle_probe_io.c tools/rewrite/mission_probe_io.c \
+  tools/rewrite/mission_world_probe.c -lm \
   -o /tmp/wasm-fist-0075-sanitizer/mission_world_probe
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache python3 tools/rewrite/test_mission_world.py \
@@ -161,3 +158,7 @@ gates retain their explicitly optional corpus/device groups; required gates have
 See [WI 0075](../board/closed/0075_mission-world-installation.md) for exact timings and limits;
 compact hashes/results remain under `/tmp/wasm-fist-0075-world-review`, and obsolete owned logs
 and memory binaries are removed after verified commit/push.
+
+Canonical combat visits now share `world.combat.roster` with this loader and publish dynamic
+payloads before further traversal. See [mission combat](mission-combat.md) for delivered visits
+and remaining living-class/UI/device boundaries.

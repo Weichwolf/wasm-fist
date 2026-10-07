@@ -123,13 +123,21 @@ coverage. Consume the saved world through terrain/contact and take-control insta
 living ground methods and command eligibility without no-op dispatch. 0076 now consumes the
 untargeted M1 station-zero fire branch and publishes canonical shell/muzzle payloads into the
 owned world, including shared cooldown and actual TRAIN1 source-release evidence on both targets;
-see docs/primary-fire.md. Connect their flight/damage and remaining effect/retirement publication
-through the current-entry iterator, preserving damage-before-impact continuation and one
-physical roster owner. Recover targeting, other-unit class/AI behavior, the shared tree-change
-producer and live type-26 updates as reached; current sprites
+see docs/primary-fire.md. Canonical combat consumption is described below. Recover targeting,
+other-unit class/AI behavior, the shared tree-change producer and live type-26 updates as reached;
+current sprites
 intentionally retain MAL colors. Scenario path/stamp/player mission semantics still need typed
 decoding. Every stage requires real native/browser behavior and visual evidence before claiming
 a complete playable mission.
+
+0077 integrates canonical shell flight, actual reached damage and post-damage impact with all
+delivered dynamic/death/tree visits. Every returned effect/smoke/wreck installs at its actual
+physical slot before further current-entry traversal; combat and installation share one
+physical roster. Selected fatal hits suspend visits/fire until the explicit player-loss
+consumer acknowledgement, then continue impact once. See docs/mission-combat.md for the
+complete state/raw-record gates and explicit living-method, UI/device and constructed-height
+boundaries. Full living dispatch, installed terrain/contact/take-control, actual command
+eligibility, battle drawing, audible events and mission outcomes remain next requirements.
 
 ## Accept
 

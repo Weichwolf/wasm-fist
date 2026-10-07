@@ -37,7 +37,7 @@ def fire_initial(case):
     return raw, index, value, origin
 
 
-def expected(case, tick=0, failed=0, state=None):
+def expected(case, tick=0, failed=0, state=None, pool=None):
     _, bindings, _, steps, coarse, *_ = case
     raw, index, value, origin = fire_initial(case) if state is None else state
     commands = [bind(*entry) for entry in bindings] + [release(entry) for entry in case[-1]]
@@ -58,9 +58,9 @@ def expected(case, tick=0, failed=0, state=None):
                 struct.pack_into('<H', raw, 0xad, ammo - 1)
                 raw[0xe4] = 3
                 outcome = 2
-                shell = allocation(commands, 8)
+                shell = allocation(commands, 8) if pool is None else pool.allocate_short(8)
                 if shell:
-                    smoke = allocation(commands, 18, low=1)
+                    smoke = allocation(commands, 18, low=1) if pool is None else pool.allocate_short(18, low_priority=True)
                     raw[0xa8], raw[0x3c], raw[0x92] = 20, 16, 0
                     outcome = 0
                     voice = 12
@@ -68,7 +68,7 @@ def expected(case, tick=0, failed=0, state=None):
                 failed = tick
                 voice = 13
         parts, objects = payloads(raw, origin, coarse, shell, smoke)
-        metadata = '\n'.join(trace(commands).splitlines()[-3:]) + '\n'
+        metadata = '\n'.join(trace(commands).splitlines()[-3:]) + '\n' if pool is None else pool.state()
         output += f'fire {int(requested)} {int(dispatched)} {int(requested)} {voice} {failed}\n'
         output += f'launch {outcome} {int(smoke is not None)} {12 if shell else 255}\n' + parts
         output += state_lines([(index, value, bytes(raw))]) + f'damage {raw[58]} {raw[149]}\n' + metadata

@@ -1,4 +1,5 @@
 #include "combat_probe_io.h"
+#include "sim/projectile_launch.h"
 
 #include "sim/object_pool.h"
 #include "sim/other_damage.h"
@@ -10,6 +11,32 @@
 #include <stdio.h>
 
 enum { PAIR_FIRST = 5, PAIR_SECOND = 6, TYPE26_TYPE = 26, LAST_TYPE = 27 };
+
+void fist_probe_write_projectile(const fist_projectile *projectile) {
+    const fist_pool_allocation allocation = projectile->allocation;
+    printf("shell %u %u %u %u %ld %ld %ld %u %d %d %d %d %u %u %u %u %ld %u %u %u %u %u %u %u\n",
+           (unsigned)allocation.type, (unsigned)allocation.slot,
+           (unsigned)allocation.registry_index, (unsigned)allocation.value,
+           (long)projectile->pose.x, (long)projectile->pose.y, (long)projectile->pose.altitude,
+           (unsigned)projectile->pose.heading, (int)projectile->velocity.x,
+           (int)projectile->velocity.y, (int)projectile->velocity.z, (int)projectile->speed,
+           (unsigned)projectile->collision_grace, (unsigned)projectile->age,
+           (unsigned)projectile->origin_slot, (unsigned)projectile->target_slot,
+           (long)projectile->target_height_offset, (unsigned)projectile->flags,
+           (unsigned)projectile->secondary_flags, (unsigned)projectile->ground_height,
+           (unsigned)projectile->mode, (unsigned)projectile->phase,
+           (unsigned)projectile->collision_profile, (unsigned)projectile->launch_parameter);
+}
+
+void fist_probe_write_muzzle(const fist_muzzle_smoke *muzzle) {
+    const fist_pool_allocation allocation = muzzle->allocation;
+    printf("muzzle %u %u %u %u %ld %ld %ld %u %u %u %u %u\n", (unsigned)allocation.type,
+           (unsigned)allocation.slot, (unsigned)allocation.registry_index,
+           (unsigned)allocation.value, (long)muzzle->pose.x, (long)muzzle->pose.y,
+           (long)muzzle->pose.altitude, (unsigned)muzzle->pose.heading,
+           (unsigned)muzzle->projection_scale, (unsigned)muzzle->animation_counter,
+           (unsigned)muzzle->animation_frame, (unsigned)muzzle->flags);
+}
 
 void fist_probe_write_other_actor(const fist_other_actor *actor) {
     const fist_pool_allocation allocation = actor->allocation;

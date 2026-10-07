@@ -35,6 +35,7 @@ frozen reconstruction, not rewrite completion.
 | 0074 | Shared world tick prefix and mutable current-registry traversal, complete existing-class pass lifetimes and all-47 occupancy traversal; live payload installation/class dispatch/fire/audio remain under 0065. |
 | 0075 | Typed saved-mission installation, physical roster/orphans, retained ordered initialization RNG and conditional tree updates; all 85 TRAIN1 objects and ten supported contexts delivered. Living class dispatch, dynamic combat installation and playable battle remain under 0065. |
 | 0076 | Consuming untargeted M1 station-zero fire, shared failure cooldown and canonical shell/muzzle publication delivered. Both-target original/real-TRAIN1/full-build/style/memory gates pass; flight/damage scheduling, command eligibility and playable battle remain under 0065. |
+| 0077 | Canonical combat visits and complete ordered payload publication delivered; one physical roster and selected-loss suspension before impact. Both-target original/build/style/memory gates pass; living dispatch, UI/device/PCM and playable battle remain under 0065. |
 | 0042 | Menus, settings, campaign/profile progression and persistent save/load. |
 | 0043 | All missions/maps/vehicles, AI, combat, objectives and resolved outcomes. |
 | 0044 | Keyboard/mouse/joystick, devices, audio timing and link behavior on both platforms. |

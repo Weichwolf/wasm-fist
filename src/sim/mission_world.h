@@ -5,6 +5,7 @@
 #include "sim/object_pool.h"
 #include "sim/other_damage.h"
 #include "sim/primary_fire.h"
+#include "sim/projectile_flight.h"
 #include "sim/projectile_launch.h"
 #include "sim/random.h"
 #include "sim/smoke.h"
@@ -18,8 +19,9 @@ enum { FIST_MISSION_UNSUPPORTED = 2 };
 
 /* The existing pool's physical type is the payload tag. Ground 0..3, other
  * 5/6/26/27, smoke 17, tree 21 and wreck 23 have delivered typed restoration.
- * Primary launch also installs dynamic shell 8 and muzzle 18. Their flight,
- * damage/effect/retirement dispatcher remains a later consumer. */
+ * Primary launch installs dynamic shell 8 and muzzle 18. Canonical combat visits
+ * publish explosion 4 and consume delivered death/effect/retirement classes.
+ * Saved restoration of dynamic classes and living dispatch remain separate. */
 typedef union {
     fist_vehicle_state vehicle;
     fist_other_actor other;
@@ -28,14 +30,18 @@ typedef union {
     fist_vehicle_wreck wreck;
     fist_projectile projectile;
     fist_muzzle_smoke muzzle;
+    fist_explosion explosion;
 } fist_mission_object;
 
 typedef struct {
     fist_object_pool pool;
     fist_random random;
     fist_mission_object objects[FIST_UNIT_REGISTRY_COUNT];
-    /* Physical slots, including possible overwritten registry orphans. */
-    uint16_t roster[FIST_UNIT_ROSTER_COUNT];
+    /* Owns the sole physical roster, including overwritten registry orphans.
+     * Reset/import do not configure mission combat factors/census/player UI. */
+    fist_combat_state combat;
+    /* Scheduler handoff after selected fatal damage; not an original record. */
+    uint16_t pending_player_impact;
 } fist_mission_world;
 
 void fist_mission_world_reset(fist_mission_world *world);

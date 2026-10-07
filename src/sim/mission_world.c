@@ -36,8 +36,10 @@ void fist_mission_world_reset(fist_mission_world *world) {
     }
     *world = (fist_mission_world){0};
     fist_object_pool_reset(&world->pool);
+    world->combat.selected_slot = FIST_POOL_NO_SLOT;
+    world->pending_player_impact = FIST_POOL_NO_SLOT;
     for (size_t index = 0; index < FIST_UNIT_ROSTER_COUNT; ++index) {
-        world->roster[index] = FIST_POOL_NO_SLOT;
+        world->combat.roster[index] = FIST_POOL_NO_SLOT;
     }
 }
 
@@ -105,7 +107,7 @@ static int install(const fist_units *units, uint8_t link_mode, fist_mission_worl
             if (definition >= units->count) {
                 return -1;
             }
-            world->roster[index] = physical[definition];
+            world->combat.roster[index] = physical[definition];
         }
     }
     return 0;
@@ -146,7 +148,7 @@ const fist_mission_object *fist_mission_world_object(const fist_mission_world *w
 
 int fist_mission_world_fire_untargeted(fist_mission_world *world, fist_fire_history *history,
                                        fist_fire_request request, fist_fire_result *out) {
-    if (world == NULL || out == NULL ||
+    if (world == NULL || out == NULL || world->pending_player_impact != FIST_POOL_NO_SLOT ||
         fist_mission_world_object(world, request.launch.origin_slot) == NULL ||
         world->pool.slots[request.launch.origin_slot].type != 0) {
         return -1;

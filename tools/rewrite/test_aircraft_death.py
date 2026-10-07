@@ -82,7 +82,7 @@ def new_effect(allocation, pose, template):
     return allocation, raw
 
 
-def expected(case):
+def expected(case, *, prepared=None, capture=None, class_only=False):
     pool = Pool(case['bindings'])
     primary = pool.allocations[case['target']]
     for ordinal in case['releases']:
@@ -93,6 +93,9 @@ def expected(case):
     smokes, effects = {}, {}
     output = ''
     live = True
+
+    if prepared is not None:
+        pool, raw, primary, words, cursor = prepared
 
     def random():
         nonlocal cursor
@@ -190,6 +193,11 @@ def expected(case):
         if updated: output += actor_lines(raw, primary)
         if created_effect: output += effect_lines(created_effect)
         if created_smoke: output += smoke_lines(created_smoke[1], created_smoke[0])
+        if capture is not None:
+            capture(dict(raw=raw, words=words, cursor=cursor, smoke=created_smoke,
+                         effect=created_effect, released=released, sound=sound))
+        if class_only:
+            return output + shared()
         for slot, (allocation, smoke) in sorted(list(smokes.items())):
             gone = case['enabled'] != 1
             if not gone:

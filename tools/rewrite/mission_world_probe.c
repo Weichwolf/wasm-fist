@@ -1,14 +1,12 @@
 #include "assets/bytes.h"
 #include "assets/scenario.h"
 #include "assets/units.h"
-#include "combat_probe_io.h"
-#include "object_pool_probe_io.h"
+#include "mission_probe_io.h"
 #include "probe_io.h"
 #include "sim/mission_world.h"
 #include "sim/object_pool.h"
 #include "sim/random.h"
 #include "sim/tree.h"
-#include "vehicle_probe_io.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -62,69 +60,6 @@ static uint8_t *read_file(const char *path, size_t *size) {
     return data;
 }
 
-static void write_tree(const fist_tree *tree) {
-    printf("tree %u %u %u %ld %ld %ld %u %u %u %u %u %u %u\n", (unsigned)tree->allocation.slot,
-           (unsigned)tree->allocation.registry_index, (unsigned)tree->allocation.value,
-           (long)tree->pose.x, (long)tree->pose.y, (long)tree->pose.altitude,
-           (unsigned)tree->pose.heading, (unsigned)tree->extent, (unsigned)tree->projection_scale,
-           (unsigned)tree->flags, (unsigned)tree->secondary_flags, (unsigned)tree->ground_height,
-           (unsigned)tree->variant);
-}
-
-static int write_world(const fist_mission_world *world) {
-    fist_probe_write_object_pool(&world->pool);
-    printf("random %u", (unsigned)world->random.next_stream);
-    for (size_t index = 0; index < FIST_RANDOM_STREAMS; ++index) {
-        printf(" %u", (unsigned)world->random.words[index]);
-    }
-    printf("\nroster");
-    for (size_t index = 0; index < FIST_UNIT_ROSTER_COUNT; ++index) {
-        printf(" %u", (unsigned)world->roster[index]);
-    }
-    printf("\n");
-    for (size_t slot = 0; slot < FIST_UNIT_REGISTRY_COUNT; ++slot) {
-        const fist_mission_object *object = fist_mission_world_object(world, (uint16_t)slot);
-        if (world->pool.slots[slot].used == 0) {
-            if (object != NULL) {
-                return -1;
-            }
-            continue;
-        }
-        if (object == NULL) {
-            return -1;
-        }
-        printf("object %u %u\n", (unsigned)slot, (unsigned)world->pool.slots[slot].type);
-        switch (world->pool.slots[slot].type) {
-        case 0:
-        case 1:
-        case 2:
-        case 3:
-            fist_probe_write_vehicle_state(&object->vehicle);
-            printf("damage %u %u\n", (unsigned)object->vehicle.damage,
-                   (unsigned)object->vehicle.damage_alarm_countdown);
-            break;
-        case FIRST_AIRCRAFT:
-        case SECOND_AIRCRAFT:
-        case TARGET:
-        case ARTILLERY:
-            fist_probe_write_other_actor(&object->other);
-            break;
-        case SMOKE:
-            fist_probe_write_smoke(&object->smoke);
-            break;
-        case TREE:
-            write_tree(&object->tree);
-            break;
-        case WRECK:
-            fist_probe_write_wreck(&object->wreck);
-            break;
-        default:
-            return -1;
-        }
-    }
-    return 0;
-}
-
 static int invalid(const fist_units *units, const fist_random *random, fist_mission_world *world) {
     uint8_t before[sizeof(*world)];
     capture(world, before, sizeof(before));
@@ -172,12 +107,12 @@ static int tree_commands(fist_mission_world *world, const uint8_t *input, size_t
                 }
             }
             printf("update %u %d\n", (unsigned)slot, status);
-            write_tree(tree);
+            fist_probe_write_tree(tree);
         } else {
             printf("update %u %d\n", (unsigned)slot, status);
         }
     }
-    return write_world(world);
+    return fist_probe_write_mission_world(world);
 }
 
 static int reset_checked(fist_mission_world *world) {
@@ -192,7 +127,7 @@ static int reset_checked(fist_mission_world *world) {
         }
     }
     for (size_t index = 0; index < FIST_UNIT_ROSTER_COUNT; ++index) {
-        if (world->roster[index] != FIST_POOL_NO_SLOT) {
+        if (world->combat.roster[index] != FIST_POOL_NO_SLOT) {
             return -1;
         }
     }
@@ -235,7 +170,7 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size) {
     }
     if (status == 0 && request[RELOAD] != 0) {
         printf("status 0\n");
-        result = write_world(world);
+        result = fist_probe_write_mission_world(world);
         if (result != 0 ||
             fist_mission_world_initialize(units, &world->random, request[LINK], world) != 0) {
             free(world);
@@ -251,7 +186,7 @@ static int run(fist_units *units, const uint8_t *request, size_t request_size) {
     if (status != 0 || request[RELOAD] == 0) {
         printf("status %d\n", status);
     }
-    result = status == 0 ? write_world(world) : 0;
+    result = status == 0 ? fist_probe_write_mission_world(world) : 0;
     if (result == 0 && status == 0) {
         result = tree_commands(world, request + HEADER, count);
     }

@@ -96,5 +96,9 @@ branch and publishes complete shell/muzzle payloads into canonical physical worl
 shares failure history and retains the actual panel/component/reload ordering; voice/sound
 candidates still require their audio consumers. The app still uses its player-only baseline.
 Terrain/contact/take-control of the installed world, complete living methods/command eligibility,
-flight/damage dispatch and remaining dynamic effect/retirement publication,
 battle drawing, audible PCM and mission outcomes remain required before a playable battle.
+[Canonical combat visits](mission-combat.md) consume the delivered flight/damage/lifetime owners,
+publish every returned payload before another current entry and share one physical roster.
+Selected fatal damage suspends before impact continuation for actual player-loss UI/takeover.
+Unknown living methods reject explicitly; the continuous scene still uses its player-only
+baseline, so these class-boundary probes do not establish a playable battle.

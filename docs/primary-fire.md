@@ -9,9 +9,10 @@ remains authoritative; overwritten registry bindings do not invalidate a physica
 This is a consuming fire stage and payload publication, not a complete living-class tick or
 playable battle. The caller must establish an untargeted M1 with station zero selected and
 supply the actual class state/current simulation tick. Living ground methods, target resolution,
-other stations/classes, input/link eligibility, dynamic flight/damage/effect dispatch, battle
-drawing, audible events and mission outcomes remain required under 0065/0041. The device fire
-command remains unbound until its live flight/damage/update consumer is connected.
+other stations/classes, input/link eligibility, battle drawing, audible events and mission
+outcomes remain required under 0065/0041. [Canonical combat visits](mission-combat.md) now
+consume the published shell/muzzle and reached damage/effects. The device fire command remains
+unbound until complete living dispatch and actual eligibility are connected.
 
 ## Original evidence
 

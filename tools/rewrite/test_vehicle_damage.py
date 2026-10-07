@@ -77,7 +77,7 @@ def effect_line(allocation, pose, template):
     return line('effect', [*allocation[1:], *pose, model, extent, 2048, callback, 0, 0, last, period, period, 0])
 
 
-def expected(case):
+def expected(case, *, prepared=None, capture=None):
     pool = Pool([(*record, 0, 0, 0, 0, 0, 0, 0) for record in case['bindings']])
     raw = bytearray(case['raw'])
     kind, = struct.unpack_from('<H', raw)
@@ -88,6 +88,8 @@ def expected(case):
     counters = list(case['counters'])
     selected = case.get('selected_slot', target[1] if case['selected'] else NONE)
     flash, cursor, words = case['flash'], case['cursor'], list(case['seeds'])
+    if prepared is not None:
+        pool, raw, target, source, roster, sizes, counters, selected, flash, words, cursor = prepared
     output = ''
     destroyed = False
     def random():
@@ -162,6 +164,12 @@ def expected(case):
         output += vehicle_lines(raw, kind, target[2], target[3])
         output += line('combat', [selected, flash, *counters]) + line('roster', roster) + line('platoons', sizes)
         output += line('random', [cursor, *words]) + pool.state()
+        if capture is not None:
+            capture(dict(raw=raw, roster=roster, sizes=sizes, counters=counters, flash=flash,
+                         words=words, cursor=cursor, effects=effects, wreck=wreck,
+                         event=(damage, int(destroyed), int(wreck is not None),
+                                int(destroyed and selected == target[1]), 1, sound,
+                                destruction_sound, len(effects), len(voices)), voices=voices))
         if destroyed:
             break
     if case['finish']:

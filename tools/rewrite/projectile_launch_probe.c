@@ -336,8 +336,8 @@ static int unrelated_preserved(const fist_mission_world *world, const uint8_t *b
                                fist_fire_request request, const fist_fire_result *result) {
     if (!same_bytes(&world->random, sizeof(world->random),
                     before + offsetof(fist_mission_world, random)) ||
-        !same_bytes(world->roster, sizeof(world->roster),
-                    before + offsetof(fist_mission_world, roster))) {
+        !same_bytes(&world->combat, sizeof(world->combat),
+                    before + offsetof(fist_mission_world, combat))) {
         return 0;
     }
     const bool fired = result->dispatched && result->launch.outcome == FIST_LAUNCH_FIRED;
@@ -460,11 +460,11 @@ static int mission_fire_case(const char *path) {
     }
     fist_units_destroy(&units);
     free(data);
-    if (status != 0 || world->roster[0] == FIST_POOL_NO_SLOT) {
+    if (status != 0 || world->combat.roster[0] == FIST_POOL_NO_SLOT) {
         free(world);
         return -1;
     }
-    const uint16_t slot = world->roster[0];
+    const uint16_t slot = world->combat.roster[0];
     fist_vehicle_state *actor = &world->objects[slot].vehicle;
     fist_weapon_events events = {0};
     if (world->pool.slots[slot].type != 0 || fist_weapon_select(actor, 0, &events) != 0 ||

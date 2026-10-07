@@ -82,7 +82,7 @@ def actor_lines(raw, allocation):
     return output
 
 
-def expected(case):
+def expected(case, *, prepared=None, capture=None):
     pool = Pool(case['bindings'])
     raw = bytearray(case['raw'])
     kind, = struct.unpack_from('<H', raw)
@@ -92,6 +92,9 @@ def expected(case):
     pose = struct.unpack_from('<3i', raw, 4)
     selected = NONE if case['selected'] == NONE else pool.allocations[case['selected']][1]
     roster = [NONE if ordinal == NONE else pool.allocations[ordinal][1] for ordinal in case['roster']]
+    if prepared is not None:
+        pool, raw, target, source, counters, words, cursor, selected, roster = prepared
+        pose = struct.unpack_from('<3i', raw, 4)
     output, created = '', []
     def random():
         nonlocal cursor
@@ -160,6 +163,10 @@ def expected(case):
         output += actor_lines(raw, target)
         output += line('combat', [selected, case['flash'], *counters]) + line('roster', roster) + 'platoons 0 0 0 0\n'
         output += line('random', [cursor, *words]) + pool.state()
+        if capture is not None:
+            capture(dict(raw=raw, counters=counters, words=words, cursor=cursor,
+                         effects=list(created), event=(damage, int(destroyed), int(released),
+                         1, sound, voice, int(explosion is not None))))
         if destroyed or released:
             break
     if case['finish']:

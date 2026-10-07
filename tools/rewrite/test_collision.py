@@ -44,7 +44,7 @@ def delta(first, second):
     return (first - second + 2**31) % 2**32 - 2**31
 
 
-def expected(case):
+def expected(case, *, physical=None, bindings=None):
     bodies, queries, seeds, cursor = case
     words = list(seeds)
     slots = []
@@ -58,6 +58,10 @@ def expected(case):
             short += 1
         slots.append(slot)
         registry[index] = len(slots) - 1
+    if physical is not None:
+        slots = physical
+    if bindings is not None:
+        registry = bindings
     output = ''
     for ordinal in queries:
         kind, _, _, x, y, altitude, heading, _, _, mode = bodies[ordinal]

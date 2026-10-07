@@ -6,6 +6,8 @@
 #include "sim/smoke.h"
 #include "sim/vehicle_damage.h"
 
+void fist_probe_write_projectile(const fist_projectile *projectile);
+void fist_probe_write_muzzle(const fist_muzzle_smoke *muzzle);
 void fist_probe_write_other_actor(const fist_other_actor *actor);
 void fist_probe_write_explosion(const fist_explosion *effect);
 void fist_probe_write_smoke(const fist_drifting_smoke *smoke);
