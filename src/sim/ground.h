@@ -18,6 +18,11 @@ typedef struct {
     int16_t pitch;
 } fist_ground_contact;
 
+/* Complete original op-54 center height. Same installed plane, wrapping and
+ * index contract as contact; no slope/actor publication. Failure preserves out. */
+int fist_ground_height_sample(const fist_klc_image *height, int32_t map_x, int32_t map_y,
+                              uint8_t *out);
+
 /* Original installed height/7fa0 slope query. Borrows a complete positive
  * square power-of-two height plane, with at most 16 index bits per axis.
  * Coordinates wrap at the original 524288-unit map period. Heading selects

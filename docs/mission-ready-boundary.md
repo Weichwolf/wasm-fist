@@ -2,7 +2,8 @@
 
 The C saved-world loader ends at d84a/43c1 and participating c296 initialization. A later
 original registry reset is required before a real mission start. WI 0088 proves that boundary;
-it does not implement C readiness or extend complete gameplay acceptance.
+WI 0090 adds separate shared C preparation and its canonical driving consumer; neither item
+establishes complete gameplay acceptance.
 
 ## Actual dispatch and fields
 
@@ -87,9 +88,34 @@ The required original-only gate is outside production C gates. Missing originals
 returns, missing groups and skips fail. Closed 0088 records exact coverage and both-target
 regressions. Existing loader/prefix contracts retain their earlier boundaries.
 
-Add a separate shared canonical readiness owner using existing templates, RNG, terrain sampling
-and pool release. Own +36/+9d, static types 16/25, tree reset and bounded artillery lists;
-preserve registry order, physical orphans and atomic failures. Then consume complete bearing,
-range, target discovery and the remaining WI 0081 callbacks using actual runtime identities.
+`sim/mission_ready.c` stages the complete world using existing class templates, RNG, center
+terrain sampling and pool release, then publishes after every current binding succeeds. It owns
++36/+9d, static types 16/25, tree reset and four typed artillery identities per side. Input height
+views never survive. Repeat preparation resets caller census/list counts and consumes tree RNG
+again. Physical orphans and unrelated payload fields survive; invalid used variants/identities,
+terrain, pending selected-impact handoffs and artillery overflow preserve the previous world.
+Undelivered current classes fail explicitly; all original saved mission classes are delivered.
+Ground classes retain ammunition/motion/orders/history while resetting only actual fields.
+Non-ground height writes replace altitude byte +0d and retain fractional/upper bytes.
+
+Canonical driving prepares after expanded height installation and before take-control/contact.
+Tests execute actual original d755 with complete DGROUP observations; all 14 saved ground
+targets clear at that boundary, including CYPRUS4/INDIA5 selected players. No arena-offset
+translation or fixture target clearing is used. Saved restoration remains a distinct stage.
+
+```sh
+PYTHONPYCACHEPREFIX=/tmp/wasm-fist-python-cache \
+  /tmp/wasm-fist-decoder-oracle/bin/python tests/test_mission_ready.py \
+  --target all --originals --oracle
+```
+
+The delivered artillery lifecycle uses mode 0 for the fresh zeroed b2df/b32f allocation and
+mode 1 after b3db destruction; these select the two original extent words 9cdf/9ce1. All
+236 saved artillery records use these modes. Other used variants reject explicitly, rather
+than reading neighboring original scratch storage as a new model table. This is the delivered
+normal/destroyed lifecycle, not acceptance of unknown editor-authored extensions.
+
+Next consume complete bearing/range, target discovery and the remaining WI 0081 callbacks
+using actual runtime identities.
 Do not fold readiness into c296 or silently clear targets in fixtures. Battle, PCM, outcomes,
 all other surfaces and the independently verified ten-run WASM gate remain open; streak zero.

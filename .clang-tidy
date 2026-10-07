@@ -1,6 +1,6 @@
 Checks: '-*,clang-diagnostic-*,clang-analyzer-*,bugprone-*,cert-*,misc-*,performance-*,portability-*,readability-*'
 WarningsAsErrors: '*'
-HeaderFilterRegex: '(^|/)(src|tools/rewrite)/'
+HeaderFilterRegex: '(^|/)(src|tests)/'
 SystemHeaders: false
 CheckOptions:
   readability-identifier-naming.FunctionCase: lower_case

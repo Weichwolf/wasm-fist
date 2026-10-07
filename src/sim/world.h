@@ -27,4 +27,13 @@ static inline int32_t fist_position_add(int32_t position, int32_t offset) {
     return value <= INT32_MAX ? (int32_t)value : -1 - (int32_t)(UINT32_MAX - value);
 }
 
+/* Original byte +0d altitude publication. Replace only bits 8..15;
+ * fractional byte, upper word and signed representation all survive. */
+static inline int32_t fist_altitude_set_height(int32_t altitude, uint8_t height) {
+    enum { HEIGHT_SHIFT = 8, HEIGHT_MASK = 0xff00 };
+    const uint32_t bits =
+        ((uint32_t)altitude & ~(uint32_t)HEIGHT_MASK) | ((uint32_t)height << HEIGHT_SHIFT);
+    return bits <= INT32_MAX ? (int32_t)bits : -1 - (int32_t)(UINT32_MAX - bits);
+}
+
 #endif

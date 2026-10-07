@@ -8,6 +8,7 @@
 #include "sim/object_pool.h"
 #include "sim/random.h"
 #include "sim/tree.h"
+#include "sim/vehicle_damage.h"
 #include "vehicle_probe_io.h"
 
 #include <stddef.h>
@@ -23,6 +24,10 @@ enum {
     SMOKE = 17,
     TREE = 21,
     WRECK = 23,
+    TEMPORARY_FIRST = 11,
+    TEMPORARY_SECOND = 13,
+    COUNTED_STATIC = 16,
+    HEIGHT_STATIC = 25,
     TARGET = 26,
     ARTILLERY = 27
 };
@@ -51,6 +56,20 @@ int fist_probe_write_mission_world(const fist_mission_world *world) {
     }
     printf("\n");
     fist_probe_write_orders(world->orders_loaded != 0 ? &world->orders : NULL);
+    if (world->preparation.prepared != 0) {
+        const fist_mission_preparation *state = &world->preparation;
+        printf("preparation %u %u %u %u\n", (unsigned)state->trees, (unsigned)state->counted_static,
+               (unsigned)state->artillery_count[0], (unsigned)state->artillery_count[1]);
+        for (size_t side = 0; side < FIST_DAMAGE_SIDES; ++side) {
+            printf("artillery %zu", side);
+            for (size_t entry = 0; entry < FIST_MISSION_ARTILLERY_SIDE_SLOTS; ++entry) {
+                const fist_pool_allocation allocation = state->artillery[side][entry];
+                printf(" %u %u %u %u", (unsigned)allocation.type, (unsigned)allocation.slot,
+                       (unsigned)allocation.registry_index, (unsigned)allocation.value);
+            }
+            puts("");
+        }
+    }
     for (size_t slot = 0; slot < FIST_UNIT_REGISTRY_COUNT; ++slot) {
         const fist_mission_object *object = fist_mission_world_object(world, (uint16_t)slot);
         if (world->pool.slots[slot].used == 0) {
@@ -82,6 +101,21 @@ int fist_probe_write_mission_world(const fist_mission_world *world) {
         case MUZZLE:
             fist_probe_write_muzzle(&object->muzzle);
             break;
+        case TEMPORARY_FIRST:
+        case TEMPORARY_SECOND:
+        case COUNTED_STATIC:
+        case HEIGHT_STATIC: {
+            const fist_saved_object_base *base = &object->saved_base;
+            printf("saved_base %u %u %u %u %ld %ld %ld %u %u %u %u %u %u %u\n",
+                   (unsigned)base->allocation.type, (unsigned)base->allocation.slot,
+                   (unsigned)base->allocation.registry_index, (unsigned)base->allocation.value,
+                   (long)base->pose.x, (long)base->pose.y, (long)base->pose.altitude,
+                   (unsigned)base->pose.heading, (unsigned)base->projection_extent,
+                   (unsigned)base->projection_scale, (unsigned)base->flags,
+                   (unsigned)base->secondary_flags, (unsigned)base->ground_height,
+                   (unsigned)base->variant);
+            break;
+        }
         case FIRST_AIRCRAFT:
         case SECOND_AIRCRAFT:
         case TARGET:

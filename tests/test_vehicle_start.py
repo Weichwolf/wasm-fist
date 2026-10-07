@@ -123,6 +123,7 @@ def state_lines(records):
         lines.append('command ' + ' '.join(map(str, [raw[0x43], raw[0x45], word(0x97),
                      *struct.unpack_from('<2i', raw, 0x49), *struct.unpack_from('<4H', raw, 0x28), word(0x53)])))
         lines.append('position_history ' + ' '.join(map(str, struct.unpack_from('<12H', raw, 0x6e))))
+        lines.append(f'readiness_fields {raw[0x36]} {word(0x9d)}')
     return '\n'.join(lines) + ('\n' if lines else '')
 
 

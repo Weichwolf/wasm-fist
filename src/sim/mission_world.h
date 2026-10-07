@@ -1,6 +1,7 @@
 #ifndef FIST_SIM_MISSION_WORLD_H
 #define FIST_SIM_MISSION_WORLD_H
 
+#include "assets/klc.h"
 #include "assets/orders.h"
 #include "assets/units.h"
 #include "sim/object_pool.h"
@@ -16,13 +17,28 @@
 
 #include <stdint.h>
 
-enum { FIST_MISSION_UNSUPPORTED = 2 };
+enum { FIST_MISSION_UNSUPPORTED = 2, FIST_MISSION_ARTILLERY_SIDE_SLOTS = 4 };
+
+/* Owned common saved-format fields for static 16/25 and temporary 11/13.
+ * Their later methods are distinct: readiness counts 16, samples 25 and
+ * releases 11/13. Restoration does not substitute for those methods. */
+typedef struct {
+    fist_pool_allocation allocation;
+    fist_object_pose pose;
+    uint16_t projection_extent;
+    uint16_t projection_scale;
+    uint8_t flags;
+    uint8_t secondary_flags;
+    uint8_t ground_height;
+    uint8_t variant;
+} fist_saved_object_base;
 
 /* The existing pool's physical type is the payload tag. Ground 0..3, other
- * 5/6/26/27, smoke 17, tree 21 and wreck 23 have delivered typed restoration.
+ * 5/6/26/27, saved base 11/13/16/25, smoke 17/18, tree 21 and wreck 23 have
+ * delivered typed restoration.
  * Primary launch installs dynamic shell 8 and muzzle 18. Canonical combat visits
  * publish explosion 4 and consume delivered death/effect/retirement classes.
- * Saved restoration of dynamic classes and living dispatch remain separate. */
+ * Saved restoration of shell/explosion classes and living dispatch remain separate. */
 typedef union {
     fist_vehicle_state vehicle;
     fist_other_actor other;
@@ -32,7 +48,18 @@ typedef union {
     fist_projectile projectile;
     fist_muzzle_smoke muzzle;
     fist_explosion explosion;
+    fist_saved_object_base saved_base;
 } fist_mission_object;
+
+typedef struct {
+    uint16_t trees;
+    uint16_t counted_static;
+    uint16_t artillery_count[FIST_DAMAGE_SIDES];
+    /* Actual runtime identities, in original registry order; no saved near
+     * pointer translation. After preparation, entries beyond each count are NO_SLOT. */
+    fist_pool_allocation artillery[FIST_DAMAGE_SIDES][FIST_MISSION_ARTILLERY_SIDE_SLOTS];
+    uint8_t prepared;
+} fist_mission_preparation;
 
 typedef struct {
     fist_object_pool pool;
@@ -47,6 +74,7 @@ typedef struct {
     fist_combat_state combat;
     /* Scheduler handoff after selected fatal damage; not an original record. */
     uint16_t pending_player_impact;
+    fist_mission_preparation preparation;
 } fist_mission_world;
 
 void fist_mission_world_reset(fist_mission_world *world);
@@ -62,6 +90,18 @@ void fist_mission_world_reset(fist_mission_world *world);
  * owns neither terrain/contact installation nor living class dispatch/devices. */
 int fist_mission_world_initialize(const fist_units *units, const fist_random *random,
                                   uint8_t link_mode, fist_mission_world *out);
+
+/* Original mission-start census/list zeros followed by complete d755 dispatch
+ * for every delivered current binding. Visit registry order, including deleted
+ * nonparticipants; preserve physical orphans. Reset ground fields, initialize
+ * tree/target/artillery preparation, sample actual op-54 heights and release
+ * temporary objects. Height is borrowed; no views survive. Reuses class defaults,
+ * canonical RNG and pool release. Repeated preparation consumes tree RNG again.
+ * Invalid used variants/identities/terrain or >4 artillery entries per side fail
+ * atomically. An undelivered current type returns UNSUPPORTED. Does not configure
+ * full e006 devices, take player control, install contact or dispatch living AI. */
+int fist_mission_world_prepare(fist_mission_world *world, const fist_klc_image *height,
+                               uint8_t link_mode);
 
 /* Borrow a physical payload, including an orphan, or NULL for invalid/unused
  * slots. The allocation owner remains the authority for current bindings. */

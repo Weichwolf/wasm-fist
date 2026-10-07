@@ -27,7 +27,17 @@ enum {
     TARGET = 26,
     ARTILLERY = 27,
     SMOKE = 17,
-    FLAGS = 22
+    MUZZLE = 18,
+    SAVED_TEMPORARY_FIRST = 11,
+    SAVED_TEMPORARY_SECOND = 13,
+    COUNTED_STATIC = 16,
+    HEIGHT_STATIC = 25,
+    FLAGS = 22,
+    EXTENT = 18,
+    SCALE = 20,
+    SECONDARY = 23,
+    GROUND = 24,
+    VARIANT = 25
 };
 
 void fist_mission_world_reset(fist_mission_world *world) {
@@ -56,6 +66,23 @@ static int restore(fist_mission_world *world, const fist_unit_definition *defini
         return -1;
     }
     switch (definition->type) {
+    case SAVED_TEMPORARY_FIRST:
+    case SAVED_TEMPORARY_SECOND:
+    case COUNTED_STATIC:
+    case HEIGHT_STATIC: {
+        const uint8_t *raw = definition->snapshot.data;
+        object->saved_base =
+            (fist_saved_object_base){.allocation = allocation,
+                                     .pose = {definition->map_x, definition->map_y,
+                                              definition->altitude, definition->heading},
+                                     .projection_extent = fist_read_u16le(raw + EXTENT),
+                                     .projection_scale = fist_read_u16le(raw + SCALE),
+                                     .flags = raw[FLAGS],
+                                     .secondary_flags = raw[SECONDARY],
+                                     .ground_height = raw[GROUND],
+                                     .variant = raw[VARIANT]};
+        return 0;
+    }
     case FIRST_AIRCRAFT:
     case SECOND_AIRCRAFT:
     case TARGET:
@@ -63,6 +90,8 @@ static int restore(fist_mission_world *world, const fist_unit_definition *defini
         return fist_other_actor_restore(definition, allocation, &object->other);
     case SMOKE:
         return fist_drifting_smoke_restore(definition, allocation, &object->smoke);
+    case MUZZLE:
+        return fist_muzzle_smoke_restore(definition, allocation, &object->muzzle);
     case TREE:
         return fist_tree_restore(definition, allocation, &object->tree);
     case WRECK: {

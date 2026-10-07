@@ -5,8 +5,8 @@ normal-side physical roster and retained initialization RNG. It installs the com
 DCBS sequence, including every actor that is not currently reachable from the registry.
 This is the saved-object installation stage. Terrain/contact, camera/take-control, mission
 settings/objectives, complete living class dispatch, dynamic combat installation, rendering
-and audio remain separate required stages. The continuous driving scene still owns its existing
-player-only baseline; this delivery does not claim an integrated playable battle.
+and audio remain separate required stages. The continuous driving scene now consumes the canonical
+world and separate [mission preparation](mission-ready-boundary.md) before player control.
 
 ## Original loader evidence
 
@@ -57,8 +57,11 @@ and finite exhaustion repairs. The pool's physical type is the union tag. Old ph
 remain populated; the roster resolves immutable definition ordinals to physical slots, so an
 overwritten registry binding does not destroy an independently assigned roster reference.
 
-Delivered payload tags are ground 0..3, aircraft 5/6, smoke 17, tree 21, wreck 23 and targets
-26/27. Existing typed restoration owns aircraft/wreck/smoke/target fields. `fist_vehicle_restore`
+Delivered saved payload tags are ground 0..3, aircraft 5/6, common saved classes 11/13/16/25,
+smoke 17/18, tree 21, wreck 23 and targets 26/27. The common owner preserves pose, projection
+fields, flags, ground byte and variant; muzzle restoration reuses the existing typed owner.
+These are saved data owners; preparation counts/samples/releases them using separate actual
+methods. Existing typed restoration owns aircraft/wreck/smoke/target fields. `fist_vehicle_restore`
 now owns modeled saved ground fields without initialization or RNG consumption, including stored
 ammunition/components, flags/control state, both headings/offsets, movement gate and random
 phases. `fist_vehicle_initialize` reuses that decoder, then applies its already-proved actual
@@ -104,10 +107,9 @@ errors and source release. The C probe checks the entire world is unchanged apar
 allowed variant byte after each successful tree update. Failure comparisons capture bytes from
 the same output object, rather than comparing padding copied through different structs.
 
-The required corpus gate hashes all 47 complete original files. Ten complete missions contain
-only delivered payload tags, totaling 671 installed objects, including all 85 TRAIN1 records.
-The remaining 37 files are checked for explicit whole-transaction unsupported rejection. They
-are not counted as installed, partially simulated, skipped tests or completed missions.
+The required corpus gate hashes all 47 complete original files and installs all 4213 records,
+including all 85 TRAIN1 records. Unsupported classes outside this corpus still reject the
+complete transaction. Installing and preparing a world does not establish complete gameplay.
 
 `original_mission_world_oracle.py` runs actual complete pool/roster resets and constructors,
 supplies only the declared DOS saved-byte read boundary while preserving the fresh pool word,

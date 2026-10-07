@@ -15,7 +15,8 @@ from orders_contract import constructed_blocks, orders_lines, scenario_order_blo
 from prepare_terrain_preview import synthetic_inputs
 from test_ground import installed
 from test_heightfield import resize
-from test_mission_world import install, record, world_lines
+from test_mission_world import install, record as saved_record, world_lines
+from mission_ready_contract import observed_world, original_prepare, prepare
 from test_terrain_scene import fixture_models
 from test_units import records_from_scenario, scenario_data
 from test_vehicle_motion import start
@@ -31,6 +32,17 @@ INTERVALS = [(0, 521), (166670, 33), (166670, 8210), (166670, 64), (166670, 0),
              (0, 128), (1000000, 256), (0, 384), (0, 0), (166670, 16384), (166670, 0)]
 
 
+def record(kind, *args, **kwargs):
+    value = saved_record(kind, *args, **kwargs)
+    if kind in (21, 27):
+        # These constructed mission inputs use an authored variant. The generic
+        # saved-format fixture deliberately contains arbitrary retained bytes.
+        raw = bytearray(value[2])
+        raw[25] = 0
+        return value[0], value[1], bytes(raw)
+    return value
+
+
 def expected(records, intervals, side, pixels, seeds=SEEDS, cursor=0, orders=None):
     status, world = install(records, seeds, cursor)
     if status:
@@ -39,21 +51,22 @@ def expected(records, intervals, side, pixels, seeds=SEEDS, cursor=0, orders=Non
         orders_lines(orders)
     except ValueError:
         return -1, None
+    if ORACLE:
+        from original_mission_ready_oracle import OriginalMissionReadyOracle
+        owner = OriginalMissionReadyOracle()
+        machine, allocations = owner.prepare_saved(records, seeds, cursor, 0, orders)
+        if world_lines(observed_world(owner, machine, allocations), orders) != world_lines(world, orders):
+            raise AssertionError('Original complete world installation differs')
+    status, world = prepare(world, side, pixels)
+    if status:
+        return status, None
+    if ORACLE and world_lines(original_prepare(owner, machine, allocations, side, pixels), orders) != world_lines(world, orders):
+        raise AssertionError('Original complete prepared world differs')
     pool, objects, roster, _, _ = world
     selected = roster[0]
     if selected == 65535 or objects[selected][0][0] >= 4:
         return -1, None
-    if ORACLE:
-        from original_mission_world_oracle import OriginalMissionWorldOracle
-        observed = OriginalMissionWorldOracle().install(records, seeds, cursor, 0, (), orders=orders)
-        wanted = 'status 0\n' + world_lines(world, orders) * 2
-        if observed != wanted:
-            raise AssertionError('Original complete world installation differs')
     allocation, raw = objects[selected]
-    # The delivered manual stage has no targeting owner. Supply its explicit
-    # untargeted original-oracle boundary, as in the standalone driving gate.
-    raw = bytearray(raw)
-    struct.pack_into('<H', raw, 0x97, 0)
     controlled = allocation[2], allocation[3], driving.take_control(raw)
     if ORACLE:
         from original_driver_oracle import OriginalDriverOracle
@@ -242,7 +255,7 @@ class MissionDrivingTests(unittest.TestCase):
             if name == 'TRAIN1.FSG':
                 self.assertEqual(len(records), 85)
                 self.assertTrue('selection 151 65535\n' in output[:2000], 'Canonical player must occupy physical slot 151')
-        self.assertEqual((supported, objects, rejected), (10, 671, 37))
+        self.assertEqual((supported, objects, rejected), (47, 4213, 0))
 
 
 if __name__ == '__main__':

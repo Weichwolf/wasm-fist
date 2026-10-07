@@ -73,6 +73,9 @@ typedef struct {
     /* Original +97 saved reference. Mode selection tests presence only;
      * target discovery/resolution must not treat this word as a C pointer. */
     uint16_t target_reference;
+    /* Original +9d candidate reference, cleared by mission preparation.
+     * Retained saved words are not runtime allocation identities. */
+    uint16_t candidate_reference;
     /* Original +49/+4d navigation goal. Validity remains control bit 2. */
     fist_order_waypoint goal;
     /* Original +53 unsigned navigation range; the bearing callback produces it
@@ -105,6 +108,8 @@ typedef struct {
     uint8_t object_flags;
     uint8_t secondary_flags;
     uint8_t operating_flags;
+    /* Saved +36 byte; readiness clears it. Later class meaning is separate. */
+    uint8_t reset_state;
     uint8_t random_phases[2];
     /* Newest first; +6d in random_phases[0] is the shared sampling counter. */
     fist_vehicle_position_sample position_history[FIST_VEHICLE_POSITION_SAMPLES];
@@ -138,6 +143,12 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
  * and random on failure. No allocation is needed. */
 int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random *random,
                             uint8_t link_mode, fist_vehicle_state *out);
+
+/* Complete ground methods selected by the original d755 readiness bank.
+ * Reset targets/candidate/+36, link operating bit, camera, automatic control
+ * and class components only. Preserve ammunition, motion, goals and RNG.
+ * Failure preserves the complete actor. */
+int fist_vehicle_prepare(fist_vehicle_state *vehicle, uint8_t link_mode);
 
 /* Execute the position-history callback when the current class phase selects
  * it. Does not advance the class phase or execute other callbacks. The original

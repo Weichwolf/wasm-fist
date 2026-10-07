@@ -67,4 +67,6 @@ void fist_probe_write_vehicle_state(const fist_vehicle_state *state) {
                (unsigned)state->position_history[index].y);
     }
     puts("");
+    printf("readiness_fields %u %u\n", (unsigned)state->reset_state,
+           (unsigned)state->command.candidate_reference);
 }

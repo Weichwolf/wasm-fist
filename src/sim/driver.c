@@ -6,17 +6,12 @@
 #include "sim/vehicle_motion.h"
 #include "sim/vehicle_state.h"
 #include "sim/weapon_control.h"
+#include "sim/world.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
-enum {
-    CONTROL_REFRESH_FLAG = 1,
-    COMPONENT_REFRESH = 3,
-    ALTITUDE_HEIGHT_SHIFT = 8,
-    ALTITUDE_HEIGHT_MASK = 0xff00,
-    CLASS_PHASE_STEP = 2
-};
+enum { CONTROL_REFRESH_FLAG = 1, COMPONENT_REFRESH = 3, CLASS_PHASE_STEP = 2 };
 
 static void take_control(fist_vehicle_state *vehicle) {
     /* Complete 784d/7faf/8cc8/9407 methods selected by aae8/995a. */
@@ -58,9 +53,7 @@ static void apply_controls(fist_vehicle_state *vehicle, const fist_driver_contro
 
 static void transfer_altitude(fist_vehicle_state *vehicle) {
     /* Original class entry MOV byte +1dh -> byte +0dh, preserving other lanes. */
-    const uint32_t bits = ((uint32_t)vehicle->altitude & ~(uint32_t)ALTITUDE_HEIGHT_MASK) |
-                          ((uint32_t)vehicle->ground_height << ALTITUDE_HEIGHT_SHIFT);
-    vehicle->altitude = bits <= INT32_MAX ? (int32_t)bits : -1 - (int32_t)(UINT32_MAX - bits);
+    vehicle->altitude = fist_altitude_set_height(vehicle->altitude, vehicle->ground_height);
 }
 
 int fist_driver_step(fist_vehicle_state *vehicle, const fist_klc_image *height,

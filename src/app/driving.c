@@ -73,7 +73,7 @@ static int load_player(fist_driving *driving, const fist_driving_options *option
         driving->world->orders_loaded = 1;
         driving->world->combat.selected_slot = driving->world->combat.roster[0];
         fist_vehicle_state *actor = player_state(driving);
-        return actor == NULL ? -1 : fist_driver_take_control(actor);
+        return actor == NULL ? -1 : 0;
     }
     driving->preview_player = malloc(sizeof(*driving->preview_player));
     if (driving->preview_player == NULL) {
@@ -110,6 +110,12 @@ static int load(const fist_scenario *scenario, const fist_asset_source *source,
     if (status == 0) {
         status = fist_heightfield_resample(&driving.terrain.heightmap, options->height_side,
                                            &driving.installed_height);
+    }
+    if (status == 0 && mission != 0) {
+        status = fist_mission_world_prepare(driving.world, &driving.installed_height, 0);
+        if (status == 0) {
+            status = fist_driver_take_control(actor);
+        }
     }
     if (status == 0) {
         status = fist_vehicle_ground_update(actor, &driving.installed_height);

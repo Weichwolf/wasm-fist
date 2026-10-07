@@ -109,8 +109,10 @@ against original instructions and full existing-class mutable-pass lifetimes. Se
 for the separate voice producer and traversal-only mission corpus boundaries. This does not
 install live mission payloads or execute unknown living methods. Closed 0075 now supplies typed
 saved-mission installation, physical roster/orphans, retained file-order initialization RNG and
-complete conditional tree updates. All 85 TRAIN1 records and ten supported contexts install
-correctly; 37 other complete inputs are explicit unsupported failures. See docs/mission-world.md
+complete conditional tree updates. Its initial delivery covered all 85 TRAIN1 records and ten
+contexts. WI 0090 extends restoration to all 47 original contexts/4213 records and adds separate
+mission preparation before player control, with full tree RNG, height/reset/list/release state.
+See docs/mission-world.md and docs/mission-ready-boundary.md
 for original, ownership, reload and memory evidence. Closed 0078 connects this world owner to the controlled scene described below. Input eligibility, visible battle, AI, audible events and mission outcome
 remain open.
 

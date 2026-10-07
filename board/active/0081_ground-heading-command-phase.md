@@ -130,3 +130,13 @@ release and tree RNG; TRAIN1 adds 98 values before its complete first controlled
 See docs/mission-ready-boundary.md. Add separate canonical readiness and explicit runtime
 identities before interpreting saved near references or claiming a real mission start.
 Keep c296's accepted boundary and this parent's complete command/class requirements intact.
+
+Closed 0090 now supplies separate shared canonical preparation after complete all-47 saved
+restoration and before player control. Ground target/candidate/reset fields, full tree RNG,
+non-ground height/reset, census/artillery lists and temporary release are actual owned state.
+Both targets pass required complete original returns, all 47 worlds/4213 records, timed controls,
+strict full builds/style, sanitizer and real TRAIN1/AZER1/CYPRUS4 device/pixel gates. Canonical
+fixtures no longer clear saved targets themselves. TRAIN1 begins control with the actual extra
+98 RNG draws. This prerequisite does not supply runtime target discovery/lifetimes, the full
+heading/command bank, device initialization or living battle. Continue this unchanged Contract
+and Accept from the prepared canonical world; complete-game/final WASM streak remains zero.

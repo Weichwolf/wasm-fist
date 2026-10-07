@@ -201,9 +201,10 @@ The mission gate compares complete unfiltered timed session/world streams and by
 Its C probe additionally checks the actual canonical pointer, every invalid physical selection,
 dual-owner rejection, selected-loss suspension, failure atomicity, unchanged options and complete
 nonplayer/world preservation. Source buffers are released before the first observed state.
-The required original gate executes complete saved-object installation, immediate control
-refresh, initial ground contact and each declared manual stage. All ten supported contexts
-(671 objects) and all 37 explicit whole-world rejections are required. The standalone original
+The required original gate executes complete saved-object installation, separate mission
+preparation, control refresh, initial ground contact and each declared manual stage. All 47
+contexts (4213 records) are required. Saved targets are cleared by actual preparation rather
+than by the oracle fixture. The standalone original
 47-player gate remains a separate regression. Actual SDL/browser device and pixel gates exercise
 movement, independent turret, pause, weapon HUD/reload, focus loss, shutdown and startup failure.
 The SDL gate acknowledges visible pause/resume through the reviewed authored PAUSED label

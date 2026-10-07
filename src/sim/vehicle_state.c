@@ -124,6 +124,8 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         COMMAND_MODE = 67,
         MANEUVER = 69,
         TARGET_REFERENCE = 151,
+        CANDIDATE_REFERENCE = 157,
+        RESET_STATE = 54,
         GOAL = 73,
         RANGE = 83,
         HEADING_HISTORY = 40,
@@ -165,10 +167,12 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         .object_flags = raw[OBJECT_FLAGS],
         .secondary_flags = raw[SECONDARY_FLAGS],
         .operating_flags = raw[OPERATING_FLAGS],
+        .reset_state = raw[RESET_STATE],
         .random_phases = {raw[FIRST_PHASE], raw[SECOND_PHASE]},
         .command = {.mode = raw[COMMAND_MODE],
                     .maneuver = raw[MANEUVER],
                     .target_reference = fist_read_u16le(raw + TARGET_REFERENCE),
+                    .candidate_reference = fist_read_u16le(raw + CANDIDATE_REFERENCE),
                     .goal = {fist_read_i32le(raw + GOAL), fist_read_i32le(raw + GOAL + 4)},
                     .range = fist_read_u16le(raw + RANGE),
                     .heading_average = fist_read_u16le(raw + HEADING_AVERAGE)},
@@ -277,6 +281,26 @@ int fist_vehicle_initialize(const fist_unit_definition *definition, fist_random 
 
 size_t fist_vehicle_component_size(uint16_t type) {
     return type < FIST_UNIT_GROUND_VEHICLE_COUNT ? defaults[type].component_size : 0;
+}
+
+int fist_vehicle_prepare(fist_vehicle_state *vehicle, uint8_t link_mode) {
+    enum { LINK_FLAG = 16, LINK_MODE = 2, OPERATING_FLAG = 1, AUTOMATIC_FLAG = 1 };
+    if (vehicle == NULL || vehicle->type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        vehicle->component_size != fist_vehicle_component_size(vehicle->type)) {
+        return -1;
+    }
+    const vehicle_defaults *parameters = &defaults[vehicle->type];
+    vehicle->operating_flags = (uint8_t)((vehicle->operating_flags & ~LINK_FLAG) | OPERATING_FLAG |
+                                         (link_mode == LINK_MODE ? LINK_FLAG : 0));
+    vehicle->camera_height = parameters->camera_height;
+    vehicle->command.target_reference = 0;
+    vehicle->command.candidate_reference = 0;
+    vehicle->control_flags |= AUTOMATIC_FLAG;
+    vehicle->reset_state = 0;
+    for (size_t index = 0; index < parameters->component_size; ++index) {
+        vehicle->components[index] = parameters->components[index];
+    }
+    return 0;
 }
 
 int fist_vehicle_history_phase(fist_vehicle_state *vehicle) {

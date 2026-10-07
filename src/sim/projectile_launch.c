@@ -1,5 +1,6 @@
 #include "sim/projectile_launch.h"
 
+#include "assets/bytes.h"
 #include "assets/units.h"
 #include "sim/object_pool.h"
 #include "sim/rotation.h"
@@ -45,6 +46,29 @@ static fist_projectile initialize_projectile(const fist_vehicle_state *vehicle,
         .target_slot = FIST_POOL_NO_SLOT,
         .flags = (uint8_t)(vehicle->object_flags & SIDE_FLAG),
         .launch_parameter = PROJECTILE_PARAMETER};
+}
+
+int fist_muzzle_smoke_restore(const fist_unit_definition *definition,
+                              fist_pool_allocation allocation, fist_muzzle_smoke *out) {
+    enum { SCALE = 20, FLAGS = 22, FRAME = 25, COUNTER = 26 };
+    if (definition == NULL || out == NULL || definition->type != MUZZLE_TYPE ||
+        allocation.type != MUZZLE_TYPE || allocation.slot >= FIST_POOL_SHORT_SLOTS ||
+        allocation.registry_index != definition->registry_index ||
+        allocation.registry_index >= FIST_UNIT_REGISTRY_COUNT ||
+        allocation.value != definition->generation || definition->snapshot.data == NULL ||
+        definition->snapshot.size != FIST_UNIT_SHORT_SIZE ||
+        fist_read_u16le(definition->snapshot.data) != MUZZLE_TYPE) {
+        return -1;
+    }
+    const uint8_t *raw = definition->snapshot.data;
+    *out = (fist_muzzle_smoke){
+        .allocation = allocation,
+        .pose = {definition->map_x, definition->map_y, definition->altitude, definition->heading},
+        .projection_scale = fist_read_u16le(raw + SCALE),
+        .animation_counter = fist_read_u16le(raw + COUNTER),
+        .animation_frame = raw[FRAME],
+        .flags = raw[FLAGS]};
+    return 0;
 }
 
 static fist_muzzle_smoke initialize_muzzle(const fist_vehicle_state *vehicle,

@@ -8,8 +8,9 @@ the complete route/formation goal return. These milestones do not replace full 0
 
 Closed WI 0088 proves the later [original mission-ready reset](mission-ready-boundary.md):
 saved target clearing, class reset, temporary registry release and tree RNG. TRAIN1 adds 98
-RNG calls. The current C loader/prefix ends before this stage; canonical readiness is required
-before accepting an actual mission start or interpreting runtime targets.
+RNG calls. WI 0090 supplies the separate shared C preparation and canonical player-start
+consumer. The standalone saved-loader/prefix remains an earlier declared boundary; target
+discovery and the complete command/class caller still require actual runtime identities.
 
 ## Original phase and callback banks
 

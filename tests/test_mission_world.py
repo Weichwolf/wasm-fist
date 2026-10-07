@@ -22,7 +22,7 @@ TARGET = 'all'
 NATIVE_PROBE = None
 ORIGINALS = False
 ORACLE = None
-DELIVERED = {0, 1, 2, 3, 5, 6, 17, 21, 23, 26, 27}
+DELIVERED = {0, 1, 2, 3, 5, 6, 11, 13, 16, 17, 18, 21, 23, 25, 26, 27}
 EXTENDED = {0, 1, 2, 3, 19}
 SEEDS = (1, 2, 32768, 65535)
 
@@ -46,6 +46,12 @@ def payload_lines(raw, allocation):
     if kind == 17: return smoke_lines(raw, allocation)
     if kind == 21: return tree_lines(raw, allocation)
     if kind == 23: return parent_lines(raw, allocation)
+    if kind in (11, 13, 16, 25):
+        return line('saved_base', [*allocation, *struct.unpack_from('<3i3H', raw, 4), *raw[22:26]])
+    if kind == 18:
+        return line('muzzle', [*allocation, *struct.unpack_from('<3iH', raw, 4),
+                              struct.unpack_from('<H', raw, 20)[0],
+                              struct.unpack_from('<H', raw, 26)[0], raw[25], raw[22]])
     raise AssertionError('No invented payload fallback')
 
 
@@ -77,9 +83,12 @@ def install(records, seeds=SEEDS, cursor=0, link=0):
 
 def world_lines(world, orders=None):
     pool, objects, roster, words, cursor = world
-    output = pool.state() + random_line(words, cursor) + line('roster', roster) + orders_lines(orders)
+    from mission_ready_contract import preparation_lines
+    output = (pool.state() + random_line(words, cursor) + line('roster', roster) +
+              orders_lines(orders) + preparation_lines(pool))
     for slot, (allocation, raw) in sorted(objects.items()):
-        output += line('object', [slot, allocation[0]]) + payload_lines(raw, allocation)
+        if pool.slots[slot][0] != 0:
+            output += line('object', [slot, allocation[0]]) + payload_lines(raw, allocation)
     return output
 
 
@@ -170,6 +179,24 @@ class MissionWorldTests(unittest.TestCase):
         for mode in range(256): self.run_records([record(0,0),record(26,1,mode=mode)])
         self.run_records([record(21,0,flags=32)])
 
+    def test_new_saved_classes_full_flags_coordinates_and_orphan_restoration(self):
+        for value in range(256):
+            records = []
+            for ordinal, kind in enumerate((11, 13, 16, 18, 25)):
+                raw = bytearray(snapshot(kind, flags=value & ~32))
+                struct.pack_into('<3i3H', raw, 4,
+                                 -2147483648 + value * 65537,
+                                 2147483647 - value * 65537,
+                                 value * 16843009 - 2147483648,
+                                 value * 257, 65535 - value * 257, value * 257)
+                raw[23:27] = bytes((value, 255 - value, value, 255 - value))
+                records.append((ordinal * 7, value * 257, bytes(raw)))
+            # The new base and muzzle owners retain duplicate-binding orphans.
+            records.append((0, 65535 - value * 257, records[0][2]))
+            self.run_records(records, cursor=value % 4, link=value)
+        for kind in (11, 13, 16, 18, 25):
+            self.run_records([record(0), record(kind, 1, flags=32)])
+
     def test_tree_complete_byte_domains_and_live_identity(self):
         commands = [(0,changed,variant) for changed in range(256) for variant in range(256)]
         self.run_records([record(21,0,flags=255 & ~32)], commands=commands)
@@ -187,9 +214,9 @@ class MissionWorldTests(unittest.TestCase):
             if status == 0: complete.append(name);installed+=len(records)
             else: self.assertEqual(status,2);rejected+=1
             self.run_data(data, cursor=len(complete) % 4)
-        self.assertEqual((len(complete),installed,rejected),(10,671,37))
+        self.assertEqual((len(complete),installed,rejected),(47,4213,0))
         self.assertIn('TRAIN1.FSG',complete)
-        print('Mission corpus: all 47 complete inputs; 10 complete typed installations/671 objects, 37 explicit unsupported rejections; no skipped records or class-dispatch claim',flush=True)
+        print('Mission corpus: all 47 complete typed installations/4213 objects; no skipped records or class-dispatch claim',flush=True)
 
     def test_malformed_request_and_scenario_have_no_output(self):
         scenario=self.path/'input.fsg';scenario.write_bytes(scenario_data([record(0)]))

@@ -111,6 +111,11 @@ typedef struct {
     uint32_t y;
 } sample_point;
 
+static sample_point position_point(int32_t map_x, int32_t map_y) {
+    return (sample_point){.x = (uint32_t)map_x << FIST_MAP_FIXED_SHIFT,
+                          .y = 0U - ((uint32_t)map_y << FIST_MAP_FIXED_SHIFT)};
+}
+
 static uint8_t sample(const fist_klc_image *height, sample_point point, unsigned bits) {
     if (bits == 0) {
         return height->pixels[0];
@@ -126,14 +131,23 @@ static int16_t slope(uint8_t first, uint8_t second) {
     return (int16_t)(difference * SLOPE_SCALE);
 }
 
+int fist_ground_height_sample(const fist_klc_image *height, int32_t map_x, int32_t map_y,
+                              uint8_t *out) {
+    unsigned bits = 0;
+    if (out == NULL || index_bits(height, &bits) != 0) {
+        return -1;
+    }
+    *out = sample(height, position_point(map_x, map_y), bits);
+    return 0;
+}
+
 int fist_ground_sample(const fist_klc_image *height, const fist_ground_pose *pose,
                        fist_ground_contact *out) {
     unsigned bits = 0;
     if (pose == NULL || out == NULL || index_bits(height, &bits) != 0) {
         return -1;
     }
-    const sample_point point = {.x = (uint32_t)pose->map_x << FIST_MAP_FIXED_SHIFT,
-                                .y = 0U - ((uint32_t)pose->map_y << FIST_MAP_FIXED_SHIFT)};
+    const sample_point point = position_point(pose->map_x, pose->map_y);
     const uint16_t inverse_heading = (uint16_t)(0U - pose->heading);
     const size_t direction = inverse_heading / HEADING_BIN;
     const uint32_t sine = (uint32_t)sample_offsets[direction];

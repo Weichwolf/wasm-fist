@@ -54,6 +54,12 @@ typedef struct {
     uint8_t flags;
 } fist_muzzle_smoke;
 
+/* Restore every owned type-18 field from a complete saved short record.
+ * No constructor/animation/RNG is run and no source views survive. Invalid
+ * data or allocation preserves out. Mission readiness releases this class. */
+int fist_muzzle_smoke_restore(const fist_unit_definition *definition,
+                              fist_pool_allocation allocation, fist_muzzle_smoke *out);
+
 typedef struct {
     uint16_t origin_slot;
     bool coarse;

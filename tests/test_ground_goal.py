@@ -216,7 +216,7 @@ class GoalTests(unittest.TestCase):
             self.run_cases(cases)
             self.complete_world(data, original=True)
             self.assertEqual(hashlib.sha256((directory / name).read_bytes()).hexdigest(), info['sha256'])
-        self.assertEqual((count, self.supported, self.unsupported), (960, 10, 37))
+        self.assertEqual((count, self.supported, self.unsupported), (960, 47, 0))
         self.__class__.saved = count
 
     def complete_world(self, data, original=False):
