@@ -1,6 +1,7 @@
 #ifndef FIST_SIM_VEHICLE_STATE_H
 #define FIST_SIM_VEHICLE_STATE_H
 
+#include "assets/orders.h"
 #include "assets/units.h"
 #include "sim/random.h"
 
@@ -12,6 +13,7 @@ enum {
     FIST_VEHICLE_COMPONENT_BYTES = 62,
     FIST_VEHICLE_ANIMATION_SELECTORS = 3,
     FIST_VEHICLE_POSITION_SAMPLES = 6,
+    FIST_VEHICLE_HEADING_SAMPLES = 3,
     FIST_VEHICLE_PHASE_MASK = 0x1e
 };
 
@@ -71,6 +73,12 @@ typedef struct {
     /* Original +97 saved reference. Mode selection tests presence only;
      * target discovery/resolution must not treat this word as a C pointer. */
     uint16_t target_reference;
+    /* Original +49/+4d navigation goal. Validity remains control bit 2. */
+    fist_order_waypoint goal;
+    /* Original +28/+2a/+2c newest-first samples and +2e average. The parent
+     * heading phase owns future sampling; restoration retains all words. */
+    uint16_t heading_history[FIST_VEHICLE_HEADING_SAMPLES];
+    uint16_t heading_average;
 } fist_vehicle_command;
 
 typedef struct {

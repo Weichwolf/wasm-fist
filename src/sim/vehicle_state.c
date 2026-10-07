@@ -124,6 +124,9 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         COMMAND_MODE = 67,
         MANEUVER = 69,
         TARGET_REFERENCE = 151,
+        GOAL = 73,
+        HEADING_HISTORY = 40,
+        HEADING_AVERAGE = 46,
         FIRST_PHASE = 109,
         POSITION_HISTORY = 110,
         TURRET_VIEW = 134,
@@ -164,7 +167,9 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         .random_phases = {raw[FIRST_PHASE], raw[SECOND_PHASE]},
         .command = {.mode = raw[COMMAND_MODE],
                     .maneuver = raw[MANEUVER],
-                    .target_reference = fist_read_u16le(raw + TARGET_REFERENCE)},
+                    .target_reference = fist_read_u16le(raw + TARGET_REFERENCE),
+                    .goal = {fist_read_i32le(raw + GOAL), fist_read_i32le(raw + GOAL + 4)},
+                    .heading_average = fist_read_u16le(raw + HEADING_AVERAGE)},
         .control_mode = raw[CONTROL_MODE],
         .turret_view_mode = raw[TURRET_VIEW],
         .hull_view_mode = raw[HULL_VIEW],
@@ -174,6 +179,10 @@ int fist_vehicle_restore(const fist_unit_definition *definition, fist_vehicle_st
         .component_size = defaults[type].component_size};
     restore_motion(raw, &vehicle);
     restore_weapon_control(raw, &vehicle);
+    for (size_t index = 0; index < FIST_VEHICLE_HEADING_SAMPLES; ++index) {
+        vehicle.command.heading_history[index] =
+            fist_read_u16le(raw + HEADING_HISTORY + (index * sizeof(uint16_t)));
+    }
     for (size_t index = 0; index < FIST_VEHICLE_POSITION_SAMPLES; ++index) {
         const uint8_t *sample = raw + POSITION_HISTORY + (index * 2 * sizeof(uint16_t));
         vehicle.position_history[index] = (fist_vehicle_position_sample){

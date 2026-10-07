@@ -120,7 +120,8 @@ def state_lines(records):
         lines.append('selectors ' + ' '.join(map(str, raw[0xa9:0xac])))
         lines.append('behavior_flags ' + str(raw[0x63]))
         lines.append('speed_counter ' + str(raw[0x5f]))
-        lines.append('command ' + ' '.join(map(str, [raw[0x43], raw[0x45], word(0x97)])))
+        lines.append('command ' + ' '.join(map(str, [raw[0x43], raw[0x45], word(0x97),
+                     *struct.unpack_from('<2i', raw, 0x49), *struct.unpack_from('<4H', raw, 0x28)])))
         lines.append('position_history ' + ' '.join(map(str, struct.unpack_from('<12H', raw, 0x6e))))
     return '\n'.join(lines) + ('\n' if lines else '')
 
@@ -201,6 +202,9 @@ class StartTests(unittest.TestCase):
                     raw[0x19] = value
                     raw[0x43], raw[0x45] = value, 255 - value
                     struct.pack_into('<H', raw, 0x97, value * 257)
+                    struct.pack_into('<4H', raw, 0x28, value * 257, (255 - value) * 257,
+                                     value * 911 % 65536, value * 379 % 65536)
+                    struct.pack_into('<ii', raw, 0x49, -value * 8388608, value * 8388608)
                     raw[0x3d] = 255 - value
                     for offset, number in ((0x26, value * 257), (0x30, 65535 - value * 257),
                                            (0x34, value * 257), (0x55, 65535 - value * 257),

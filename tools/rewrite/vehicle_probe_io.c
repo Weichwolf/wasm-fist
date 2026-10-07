@@ -54,8 +54,13 @@ void fist_probe_write_vehicle_state(const fist_vehicle_state *state) {
     puts("");
     printf("behavior_flags %u\n", (unsigned)state->behavior_flags);
     printf("speed_counter %u\n", (unsigned)drive->speed_counter);
-    printf("command %u %u %u\n", (unsigned)state->command.mode, (unsigned)state->command.maneuver,
-           (unsigned)state->command.target_reference);
+    printf("command %u %u %u %d %d", (unsigned)state->command.mode,
+           (unsigned)state->command.maneuver, (unsigned)state->command.target_reference,
+           state->command.goal.x, state->command.goal.y);
+    for (size_t index = 0; index < FIST_VEHICLE_HEADING_SAMPLES; ++index) {
+        printf(" %u", (unsigned)state->command.heading_history[index]);
+    }
+    printf(" %u\n", (unsigned)state->command.heading_average);
     printf("position_history");
     for (size_t index = 0; index < FIST_VEHICLE_POSITION_SAMPLES; ++index) {
         printf(" %u %u", (unsigned)state->position_history[index].x,

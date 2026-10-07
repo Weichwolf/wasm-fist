@@ -89,4 +89,12 @@ typedef struct {
 
 int fist_mission_world_select_command(fist_mission_world *world, fist_command_selection request);
 
+/* Complete ac75 goal assignment for all eight mode entries: first waypoint or
+ * automatic formation offset from the physical platoon leader; the other six
+ * original entries are genuine returns. Uses fine shared rotation and retained
+ * leader heading average. Does not sample headings, advance routes, resolve
+ * targets or consume RNG. Invalid used selectors/roster metadata fail without
+ * changing any world state. */
+int fist_mission_world_assign_command_goal(fist_mission_world *world, uint16_t slot);
+
 #endif

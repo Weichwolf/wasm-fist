@@ -92,7 +92,15 @@ WI 0083 supplies the complete ab82 mode-selection return using the canonical des
 world RNG, including its conditional additional 0291 call. Owned saved +43/+45/+97 state is
 retained rather than fabricating absent targets; +42 remains the existing counter owner.
 See docs/ground-command-selection.md. No partial parent dispatch is wired. Continue with
-the complete remaining goal, bearing/range, waypoint, target-discovery, physical roster and
+the complete remaining bearing/range, waypoint, target-discovery, physical roster and
 diagnostic presentation callbacks, plus the heading sample/admission/caller contract. This
 WI's full Contract and Accept are unchanged; 0083 alone does not advance the living prefix
 past the original tick-seven difference.
+
+WI 0084 supplies the complete ac75 route/formation goal return using canonical routes,
+descriptors and the physical platoon leader. Saved goal XY and three heading words plus their
+average are now owned and retained. See docs/ground-command-goals.md. Both production targets
+pass required original/domain/corpus/whole-world comparisons and build/style/memory/scene gates.
+Future sampling remains in this parent's contract; no heading-only update or partial dispatch
+is wired. 0083/0084 provide two complete prerequisites, not acceptance of this full phase or a
+playable battle. Development continues on master under closed 0085; requirements are unchanged.

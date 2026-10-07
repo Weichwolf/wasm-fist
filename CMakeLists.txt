@@ -80,6 +80,13 @@ if(EMSCRIPTEN)
     set_target_properties(fist_ground_command_probe PROPERTIES SUFFIX ".js")
     target_link_options(fist_ground_command_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
 endif()
+add_executable(fist_ground_goal_probe tools/rewrite/ground_goal_probe.c)
+target_link_libraries(fist_ground_goal_probe PRIVATE fist_sim fist_probe_io fist_build_options)
+target_compile_options(fist_ground_goal_probe PRIVATE -Werror)
+if(EMSCRIPTEN)
+    set_target_properties(fist_ground_goal_probe PROPERTIES SUFFIX ".js")
+    target_link_options(fist_ground_goal_probe PRIVATE -sNODERAWFS=1 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
+endif()
 add_executable(fist_world_step_probe tools/rewrite/world_step_probe.c)
 target_link_libraries(fist_world_step_probe PRIVATE fist_sim fist_probe_io fist_build_options)
 target_compile_options(fist_world_step_probe PRIVATE -Werror)
@@ -292,6 +299,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     add_test(NAME ground_command_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_ground_command.py
         --target native --native-probe $<TARGET_FILE:fist_ground_command_probe>)
+    add_test(NAME ground_goal_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/tools/rewrite/test_ground_goal.py
+        --target native --native-probe $<TARGET_FILE:fist_ground_goal_probe>)
     add_test(NAME world_step_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/tools/rewrite/test_world_step.py
         --target native --native-probe $<TARGET_FILE:fist_world_step_probe>)

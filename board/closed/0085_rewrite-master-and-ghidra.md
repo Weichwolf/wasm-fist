@@ -27,3 +27,14 @@ reference commit. Documentation identifies these branches and both rewrite CI tr
 master. Publish both refs with a normal atomic push, then independently inspect remote refs.
 This branch-only change does not claim acceptance of unfinished 0084 implementation or full
 gameplay. Existing production and strict checks continue for that separate work item.
+
+## Verified publication
+
+Commit 765d0144bac729184984af5736bea2b4557716dc contains only the branch/documentation/CI
+migration. `git push --atomic origin master ghidra` returns zero without force. Independent
+`git ls-remote --heads origin master ghidra rewrite/softgl` confirms master at that commit,
+ghidra at 349ad31a9fd21b350d435651bb2e90afda40cf60 and the former rewrite branch at 52d3f66.
+The immutable annotated tag still resolves to the exact ghidra commit. Both CI branch triggers
+select master, and no unfinished 0084 source is included in the migration commit. A compact
+receipt remains under /tmp/wasm-fist-0085-review/summary.json. Subsequent rewrite commits advance
+master normally; ghidra and the frozen reference stay unchanged.

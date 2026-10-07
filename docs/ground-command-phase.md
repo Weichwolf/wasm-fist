@@ -3,8 +3,8 @@
 WI 0081 remains open. The native/WASM controller currently consumes motion, reload, position
 history and maintenance, but not the complete heading/command callback. This document records
 the verified original input and dispatch contracts needed for that implementation. Closed
-WI 0082 supplies owned orders; WI 0083 implements the complete nested mode selector. Neither
-milestone replaces the full 0081 acceptance requirements.
+WI 0082 supplies owned orders; WI 0083 implements the complete nested mode selector and WI 0084
+the complete route/formation goal return. These milestones do not replace full 0081 acceptance.
 
 ## Original phase and callback banks
 
@@ -127,5 +127,11 @@ The complete ab82 mode selector and its conditional additional RNG call are docu
 [ground command selection](ground-command-selection.md) (WI 0083). Saved mode/maneuver/target
 presence now survive owned restoration and initialization. The existing +42 counter remains
 the sole owner; no parent-phase heading update or partial callback bank is installed. Remaining
-goal, bearing/range, navigation, target-discovery, roster and presentation calls still require
+bearing/range, navigation, target-discovery, roster and presentation calls still require
 complete consumption before accepting 0081.
+
+The complete ac75 route/formation goal helper is documented in
+[ground command goals](ground-command-goals.md) (WI 0084). It shares canonical orders and the
+physical roster, retains saved heading history/average and signed goals, and preserves RNG and
+all unrelated world state. Parent heading sampling and callback scheduling remain pending;
+no partial bank or new living-prefix acceptance follows from the isolated complete helper.

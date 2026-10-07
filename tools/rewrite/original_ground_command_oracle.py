@@ -51,20 +51,26 @@ class OriginalGroundCommandOracle(OriginalVehicleStartOracle):
 
     def choice_cycles(self):
         """Execute complete original increment/decrement UI tails for both words."""
+        return self._choice_cycles(((0, 0x620c, 0x621c, 4), (2, 0x626f, 0x6282, 4)))
+
+    def formation_cycles(self):
+        return self._choice_cycles(((4, 0x62cf, 0x62e2, 6),))
+
+    def _choice_cycles(self, choices):
         from unicorn.x86_const import UC_X86_REG_BX
         machine = self.machine((0, 0, 0, 0), 0)
         results = []
         for platoon in range(8):
             pointer = 0x85b6 + platoon * 22
-            for offset, up, down in ((0, 0x620c, 0x621c), (2, 0x626f, 0x6282)):
-                for value in range(4):
+            for offset, up, down, count in choices:
+                for value in range(count):
                     for entry, delta in ((up, 1), (down, -1)):
                         raw = bytearray(range(22))
                         struct.pack_into('<H', raw, offset, value)
                         machine.mem_write(DGROUP + pointer, bytes(raw))
                         machine.reg_write(UC_X86_REG_BX, pointer)
                         self.call(machine, entry)
-                        struct.pack_into('<H', raw, offset, (value + delta) % 4)
+                        struct.pack_into('<H', raw, offset, (value + delta) % count)
                         actual = bytes(machine.mem_read(DGROUP + pointer, 22))
                         if actual != bytes(raw):
                             raise AssertionError('Original four-choice UI cycle differs')

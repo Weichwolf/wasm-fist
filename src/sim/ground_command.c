@@ -2,8 +2,11 @@
 
 #include "assets/orders.h"
 #include "assets/units.h"
+#include "sim/object_pool.h"
 #include "sim/random.h"
+#include "sim/rotation.h"
 #include "sim/vehicle_state.h"
+#include "sim/world.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -24,6 +27,24 @@ enum {
     MODE_MOTION = 12,
     MODE_BEHAVIOR_THREE = 14
 };
+
+enum { GOAL_VALID = 2, FORMATIONS = 6, FORMATION_SCALE = 32, WRECK = 23 };
+
+typedef struct {
+    uint16_t heading;
+    int16_t distance;
+} formation_offset;
+
+/* Original DS:9830 points to six consecutive four-member tables. Original UI
+ * 62cf/62e2 cycles PINF word +4 through six choices; each member selects four
+ * bytes. Keep the authored turn words rather than guessing idealized angles. */
+static const formation_offset formations[FORMATIONS][FIST_UNIT_MEMBERS_PER_PLATOON] = {
+    {{0, 0}, {47320, 512}, {18200, 512}, {0, 512}},
+    {{0, 0}, {49140, 512}, {16380, 512}, {16380, 1024}},
+    {{0, 0}, {32760, 512}, {32760, 1024}, {0, 512}},
+    {{0, 0}, {43680, 512}, {43680, 1024}, {10920, 512}},
+    {{0, 0}, {21840, 512}, {21840, 1024}, {54600, 512}},
+    {{0, 0}, {43680, 848}, {21840, 848}, {32760, 912}}};
 
 /* Original DS:9946 and DS:9956, indexed by PINF words +0 and +2.
  * Original UI 61f0/6253 cycles each word through exactly four choices. */
@@ -82,17 +103,24 @@ static int automatic_mode(fist_vehicle_state *actor, const fist_order_descriptor
     return 0;
 }
 
-int fist_mission_world_select_command(fist_mission_world *world, fist_command_selection request) {
-    const uint16_t slot = request.slot;
+static fist_vehicle_state *command_actor(fist_mission_world *world, uint16_t slot) {
     if (world == NULL || world->orders_loaded != 1 ||
         world->random.next_stream >= FIST_RANDOM_STREAMS ||
         fist_mission_world_object(world, slot) == NULL ||
         world->pool.slots[slot].type >= FIST_UNIT_GROUND_VEHICLE_COUNT) {
-        return -1;
+        return NULL;
     }
     fist_vehicle_state *actor = &world->objects[slot].vehicle;
     if (actor->type != world->pool.slots[slot].type || actor->platoon >= FIST_UNIT_PLATOON_COUNT ||
         actor->component_size != fist_vehicle_component_size(actor->type)) {
+        return NULL;
+    }
+    return actor;
+}
+
+int fist_mission_world_select_command(fist_mission_world *world, fist_command_selection request) {
+    fist_vehicle_state *actor = command_actor(world, request.slot);
+    if (actor == NULL) {
         return -1;
     }
     fist_vehicle_state next = *actor;
@@ -105,5 +133,65 @@ int fist_mission_world_select_command(fist_mission_world *world, fist_command_se
     }
     *actor = next;
     world->random = random;
+    return 0;
+}
+
+static int formation_goal(const fist_mission_world *world, fist_vehicle_state *actor) {
+    if ((actor->control_flags & AUTOMATIC) == 0) {
+        return 0;
+    }
+    const uint16_t formation = world->orders.descriptors[actor->platoon].words[2];
+    if (formation >= FORMATIONS || actor->member >= FIST_UNIT_MEMBERS_PER_PLATOON) {
+        return -1;
+    }
+    const uint16_t leader_slot =
+        world->combat.roster[(size_t)actor->platoon * FIST_UNIT_MEMBERS_PER_PLATOON];
+    if (leader_slot == FIST_POOL_NO_SLOT) {
+        return 0;
+    }
+    const fist_mission_object *leader_object = fist_mission_world_object(world, leader_slot);
+    if (leader_object == NULL) {
+        return -1;
+    }
+    if (world->pool.slots[leader_slot].type == WRECK) {
+        return 0;
+    }
+    const fist_vehicle_state *leader = &leader_object->vehicle;
+    if (world->pool.slots[leader_slot].type >= FIST_UNIT_GROUND_VEHICLE_COUNT ||
+        leader->type != world->pool.slots[leader_slot].type ||
+        leader->component_size != fist_vehicle_component_size(leader->type)) {
+        return -1;
+    }
+    const formation_offset offset = formations[formation][actor->member];
+    const fist_velocity rotated = fist_rotate(
+        (fist_rotation){.heading = (uint16_t)(leader->command.heading_average + offset.heading),
+                        .magnitude = offset.distance});
+    actor->command.goal = (fist_order_waypoint){
+        fist_position_add(leader->map_x, (int32_t)rotated.x * FORMATION_SCALE),
+        fist_position_add(leader->map_y, (int32_t)rotated.y * FORMATION_SCALE)};
+    actor->control_flags |= GOAL_VALID;
+    return 0;
+}
+
+int fist_mission_world_assign_command_goal(fist_mission_world *world, uint16_t slot) {
+    fist_vehicle_state *actor = command_actor(world, slot);
+    if (actor == NULL || actor->command.mode > MODE_BEHAVIOR_THREE ||
+        actor->command.mode % 2 != 0) {
+        return -1;
+    }
+    fist_vehicle_state next = *actor;
+    if (next.command.mode == MODE_LEADER) {
+        const fist_order_route *route = &world->orders.routes[next.platoon];
+        if (route->count > FIST_ORDER_WAYPOINTS) {
+            return -1;
+        }
+        if (route->count != 0) {
+            next.command.goal = route->points[0];
+            next.control_flags |= GOAL_VALID;
+        }
+    } else if (next.command.mode == MODE_FOLLOWER && formation_goal(world, &next) != 0) {
+        return -1;
+    }
+    *actor = next;
     return 0;
 }
